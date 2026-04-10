@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MyCloud Gallery</string>
+    <string name="widget_label">MyCloud Gallery</string>
+    <string name="widget_description">Mostra stato sync e foto in attesa di upload</string>
+</resources>

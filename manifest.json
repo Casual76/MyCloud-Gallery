@@ -1,0 +1,29 @@
+{
+    "app": {
+        "id": "MyCloud-Gallery",
+        "name": "MyCloud Gallery",
+        "description": "",
+        "packageName": "com.mycloudgallery",
+        "iconUrl": "",
+        "category": "General",
+        "developer": "Pampa",
+        "screenshots": [],
+        "repository": {
+            "repoOwner": "Casual76",
+            "repoName": "MyCloud-Gallery",
+            "manifestPath": "manifest.json",
+            "ref": ""
+        },
+        "stable": null,
+        "beta": {
+            "version": "1.0.0",
+            "releaseDate": "2026-04-10",
+            "changelog": "Bozza generata automaticamente dal profilo MyCloud Gallery per la versione 1.0.0. Asset rilevati: app-release.apk.",
+            "releaseTag": "beta-MyCloud-Gallery-v1.0.0",
+            "apkAsset": "MyCloud-Gallery-1.0.0.apk",
+            "exeAsset": "",
+            "sizeBytes": 0
+        },
+        "history": []
+    }
+}

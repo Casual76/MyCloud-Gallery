@@ -1,0 +1,21 @@
+{
+    "app": {
+        "id": "MyCloud-Gallery",
+        "name": "MyCloud Gallery",
+        "description": "",
+        "packageName": "",
+        "iconUrl": "",
+        "category": "General",
+        "developer": "Pampa",
+        "screenshots": [],
+        "repository": {
+            "repoOwner": "Casual76",
+            "repoName": "MyCloud-Gallery",
+            "manifestPath": "manifest.json",
+            "ref": ""
+        },
+        "stable": null,
+        "beta": null,
+        "history": []
+    }
+}

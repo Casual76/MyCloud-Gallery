@@ -172,13 +172,12 @@ class SharedAlbumRepositoryImpl @Inject constructor(
         val entity = sharedAlbumDao.getById(albumId) ?: return
         val currentUserId = tokenManager.username.orEmpty()
 
-        // Determina il ruolo dell'utente corrente
+        val isOwner = entity.ownerId == currentUserId
         val members = parseMembers(entity.membersJson)
         val myRole = members.find { it.userId == currentUserId }?.role ?: SharedAlbumRole.VIEWER
 
-        val updated: SharedAlbumEntity = when (myRole) {
-            SharedAlbumRole.EDITOR, SharedAlbumRole.VIEWER -> {
-                if (myRole == SharedAlbumRole.VIEWER) return // nessun permesso
+        val updated: SharedAlbumEntity = when {
+            isOwner || myRole == SharedAlbumRole.EDITOR -> {
                 val currentPaths = parseStringList(entity.mediaPathsJson).toMutableList()
                 currentPaths.addAll(mediaPaths)
                 entity.copy(
@@ -186,9 +185,9 @@ class SharedAlbumRepositoryImpl @Inject constructor(
                     lastSyncedAt = System.currentTimeMillis(),
                 )
             }
-            SharedAlbumRole.EDITOR_WITH_APPROVAL -> {
+            myRole == SharedAlbumRole.EDITOR_WITH_APPROVAL -> {
                 val pendingRequests = parsePendingRequests(entity.pendingRequestsJson).toMutableList()
-                val newRequest = PendingRequestDto(
+                val newRequest = PendingRequest(
                     requestId = UUID.randomUUID().toString(),
                     requestedBy = currentUserId,
                     mediaPaths = mediaPaths,
@@ -196,10 +195,13 @@ class SharedAlbumRepositoryImpl @Inject constructor(
                 )
                 pendingRequests.add(newRequest)
                 entity.copy(
-                    pendingRequestsJson = json.encodeToString(pendingRequests),
+                    pendingRequestsJson = json.encodeToString(pendingRequests.map {
+                        PendingRequestDto(it.requestId, it.requestedBy, it.mediaPaths, it.requestedAt)
+                    }),
                     lastSyncedAt = System.currentTimeMillis(),
                 )
             }
+            else -> return
         }
 
         sharedAlbumDao.upsert(updated)

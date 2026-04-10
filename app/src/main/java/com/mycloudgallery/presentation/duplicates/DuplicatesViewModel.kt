@@ -43,7 +43,8 @@ class DuplicatesViewModel @Inject constructor(
         viewModelScope.launch {
             mediaItemDao.getAllDuplicates().collectLatest { entities ->
                 val groups = entities
-                    .groupBy { it.duplicateGroupId ?: return@groupBy }
+                    .filter { it.duplicateGroupId != null }
+                    .groupBy { it.duplicateGroupId!! }
                     .filter { (_, items) -> items.size > 1 }
                     .map { (groupId, items) ->
                         DuplicateGroup(

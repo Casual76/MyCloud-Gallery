@@ -160,8 +160,11 @@ fun SearchScreen(
                         }
                         items(uiState.results, key = { it.id }) { item ->
                             MediaThumbnail(
-                                item = item,
+                                mediaItem = item,
+                                isSelected = false,
+                                isSelectionMode = false,
                                 onClick = { onMediaClick(item.id) },
+                                onLongClick = { /* No-op in search if not needed */ },
                             )
                         }
                     }

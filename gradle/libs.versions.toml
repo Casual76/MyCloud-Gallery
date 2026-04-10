@@ -6,7 +6,7 @@ ksp = "2.1.0-1.0.29"
 # Compose
 composeBom = "2025.01.00"
 material3Expressive = "1.5.0-alpha11"
-activityCompose = "1.12.0-alpha06"
+activityCompose = "1.10.0-alpha03"
 navigationCompose = "2.8.5"
 adaptiveNavSuite = "1.5.0-alpha16"
 
@@ -57,6 +57,11 @@ exifinterface = "1.3.7"
 
 # Glance (Fase 3 — widget homescreen)
 glance = "1.1.1"
+
+# Kotlin Multiplatform + Compose Desktop (Fase 5)
+composeMultiplatform = "1.7.3"
+coroutines = "1.9.0"
+sqliteJdbc = "3.46.1.3"
 
 # Testing
 junit5 = "5.11.3"
@@ -154,6 +159,12 @@ exifinterface = { group = "androidx.exifinterface", name = "exifinterface", vers
 glance-appwidget = { group = "androidx.glance", name = "glance-appwidget", version.ref = "glance" }
 glance-material3 = { group = "androidx.glance", name = "glance-material3", version.ref = "glance" }
 
+# KMP / Desktop (Fase 5)
+kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
+kotlinx-coroutines-swing = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-swing", version.ref = "coroutines" }
+sqlite-jdbc = { group = "org.xerial", name = "sqlite-jdbc", version.ref = "sqliteJdbc" }
+coil-core = { group = "io.coil-kt.coil3", name = "coil-core", version.ref = "coil" }
+
 # Testing
 junit5-api = { group = "org.junit.jupiter", name = "junit-jupiter-api", version.ref = "junit5" }
 junit5-engine = { group = "org.junit.jupiter", name = "junit-jupiter-engine", version.ref = "junit5" }
@@ -170,3 +181,5 @@ kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "ko
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
+kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "composeMultiplatform" }

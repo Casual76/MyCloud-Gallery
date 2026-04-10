@@ -21,6 +21,15 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("../mycloudgallery.jks")
+            storePassword = "MyCloudGallery2024!"
+            keyAlias = "mycloudgallery_key"
+            keyPassword = "MyCloudGallery2024!"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -28,6 +37,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("release")
         }
         debug {
             isMinifyEnabled = false
@@ -68,6 +78,11 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+    }
+
+    lint {
+        // Work around an AndroidX lifecycle lint crash with Kotlin 2.1 on release builds.
+        disable += "NullSafeMutableLiveData"
     }
 }
 
@@ -156,6 +171,9 @@ dependencies {
     // Glance — widget homescreen (Fase 3)
     implementation(libs.glance.appwidget)
     implementation(libs.glance.material3)
+
+    // Shared domain layer (Fase 5)
+    implementation(project(":shared"))
 
     // Testing — Unit
     testImplementation(libs.junit5.api)

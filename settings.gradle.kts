@@ -9,6 +9,8 @@ pluginManagement {
         }
         mavenCentral()
         gradlePluginPortal()
+        // JetBrains Compose Multiplatform
+        maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
     }
 }
 
@@ -22,3 +24,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "MyCloudGallery"
 include(":app")
+include(":shared")
+include(":desktop")

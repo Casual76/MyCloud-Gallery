@@ -213,11 +213,13 @@ private fun DuplicateGroupCard(
                             color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
                             shape = MaterialTheme.shapes.small,
                         )
-                        .clickable { onToggleSelect(item.id) },
                 ) {
                     MediaThumbnail(
-                        item = item,
+                        mediaItem = item,
+                        isSelected = isSelected,
+                        isSelectionMode = true,
                         onClick = { onMediaClick(item.id) },
+                        onLongClick = { onToggleSelect(item.id) },
                         modifier = Modifier.aspectRatio(1f),
                     )
                     if (isOriginal) {
@@ -238,7 +240,8 @@ private fun DuplicateGroupCard(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .padding(4.dp)
-                            .size(20.dp),
+                            .size(20.dp)
+                            .clickable { onToggleSelect(item.id) },
                     )
                 }
             }

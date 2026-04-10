@@ -29,6 +29,10 @@ import javax.net.ssl.X509TrustManager
 @Retention(AnnotationRetention.BINARY)
 annotation class WebDavOkHttp
 
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class DefaultOkHttp
+
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
@@ -43,6 +47,7 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    @DefaultOkHttp
     fun provideOkHttpClient(authInterceptor: AuthInterceptor): OkHttpClient {
         val builder = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
@@ -83,7 +88,7 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideRetrofit(
-        okHttpClient: OkHttpClient,
+        @DefaultOkHttp okHttpClient: OkHttpClient,
         json: Json,
         networkDetector: NetworkDetector,
     ): Retrofit {

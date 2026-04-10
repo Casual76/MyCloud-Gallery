@@ -14,7 +14,12 @@ import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Response
 import java.util.concurrent.TimeUnit
+import javax.inject.Qualifier
 import javax.inject.Singleton
+
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class CoilOkHttp
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -26,6 +31,7 @@ object CoilModule {
      */
     @Provides
     @Singleton
+    @CoilOkHttp
     fun provideCoilOkHttpClient(tokenManager: TokenManager): OkHttpClient =
         OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
@@ -37,7 +43,7 @@ object CoilModule {
     @Singleton
     fun provideImageLoader(
         @ApplicationContext context: Context,
-        coilHttpClient: OkHttpClient,
+        @CoilOkHttp coilHttpClient: OkHttpClient,
     ): ImageLoader =
         ImageLoader.Builder(context)
             .crossfade(true)

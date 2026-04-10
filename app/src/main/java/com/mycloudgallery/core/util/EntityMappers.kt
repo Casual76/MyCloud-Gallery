@@ -5,6 +5,7 @@ import com.mycloudgallery.core.database.entity.MediaItemEntity
 import com.mycloudgallery.domain.model.Album
 import com.mycloudgallery.domain.model.MediaItem
 import com.mycloudgallery.domain.model.MediaType
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 private val json = Json { ignoreUnknownKeys = true }
@@ -95,5 +96,4 @@ private fun String.parseJsonStringList(): List<String> = try {
     split(",").map { it.trim() }.filter { it.isNotBlank() }
 }
 
-private fun List<String>.toJsonString(): String =
-    json.encodeToString(kotlinx.serialization.builtins.ListSerializer(kotlinx.serialization.builtins.serializer()), this)
+private fun List<String>.toJsonString(): String = json.encodeToString(this)

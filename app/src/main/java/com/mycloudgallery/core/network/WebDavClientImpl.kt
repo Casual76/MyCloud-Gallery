@@ -4,6 +4,7 @@ import com.mycloudgallery.core.security.TokenManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -23,7 +24,7 @@ import javax.xml.parsers.DocumentBuilderFactory
  */
 @Singleton
 class WebDavClientImpl @Inject constructor(
-    private val httpClient: OkHttpClient,
+    @com.mycloudgallery.core.di.WebDavOkHttp private val httpClient: OkHttpClient,
     private val networkDetector: NetworkDetector,
     private val tokenManager: TokenManager,
 ) : WebDavClient {
@@ -31,7 +32,13 @@ class WebDavClientImpl @Inject constructor(
     private fun buildUrl(path: String): String {
         val base = networkDetector.getWebDavBaseUrl()
         val cleanPath = path.removePrefix("/")
-        return "$base$cleanPath"
+        
+        // Usa HttpUrl.Builder per gestire correttamente l'encoding di spazi e caratteri speciali
+        val baseUrl = base.toHttpUrlOrNull() ?: return "$base$cleanPath"
+        return baseUrl.newBuilder()
+            .addPathSegments(cleanPath)
+            .build()
+            .toString()
     }
 
     private fun authHeaders(builder: Request.Builder): Request.Builder {

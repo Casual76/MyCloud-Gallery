@@ -2,6 +2,8 @@ package com.mycloudgallery.presentation.auth
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.mycloudgallery.core.network.normalizeServerAddress
+import com.mycloudgallery.core.security.TokenManager
 import com.mycloudgallery.domain.model.AuthState
 import com.mycloudgallery.domain.repository.AuthRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -15,15 +17,31 @@ import javax.inject.Inject
 @HiltViewModel
 class LoginViewModel @Inject constructor(
     private val authRepository: AuthRepository,
+    private val tokenManager: TokenManager,
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(LoginUiState())
+    private val _uiState = MutableStateFlow(
+        LoginUiState(
+            serverAddress = tokenManager.nasLocalIp.orEmpty(),
+        ),
+    )
     val uiState: StateFlow<LoginUiState> = _uiState.asStateFlow()
 
     init {
         if (authRepository.isLoggedIn()) {
-            _uiState.update { it.copy(authState = AuthState.Authenticated("", null)) }
+            _uiState.update {
+                it.copy(
+                    authState = AuthState.Authenticated(
+                        username = tokenManager.username.orEmpty(),
+                        deviceName = tokenManager.deviceName,
+                    ),
+                )
+            }
         }
+    }
+
+    fun onServerAddressChanged(serverAddress: String) {
+        _uiState.update { it.copy(serverAddress = serverAddress, authState = AuthState.Idle) }
     }
 
     fun onUsernameChanged(username: String) {
@@ -36,11 +54,19 @@ class LoginViewModel @Inject constructor(
 
     fun login() {
         val state = _uiState.value
-        if (state.username.isBlank() || state.password.isBlank()) {
-            _uiState.update { it.copy(authState = AuthState.Error("Inserisci email e password")) }
+        val serverAddress = normalizeServerAddress(state.serverAddress)
+
+        if (serverAddress.isBlank()) {
+            _uiState.update { it.copy(authState = AuthState.Error("Inserisci IP o hostname del NAS")) }
             return
         }
 
+        if (state.username.isBlank() || state.password.isBlank()) {
+            _uiState.update { it.copy(authState = AuthState.Error("Inserisci username e password")) }
+            return
+        }
+
+        tokenManager.nasLocalIp = serverAddress
         _uiState.update { it.copy(authState = AuthState.Loading) }
 
         viewModelScope.launch {
@@ -58,6 +84,7 @@ class LoginViewModel @Inject constructor(
 }
 
 data class LoginUiState(
+    val serverAddress: String = "",
     val username: String = "",
     val password: String = "",
     val authState: AuthState = AuthState.Idle,

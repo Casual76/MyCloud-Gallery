@@ -18,6 +18,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -32,6 +33,7 @@ class NetworkDetector @Inject constructor(
     @ApplicationContext private val context: Context,
     private val tokenManager: TokenManager,
 ) {
+    private val started = AtomicBoolean(false)
     private val _networkMode = MutableStateFlow(NetworkMode.OFFLINE)
     val networkMode: StateFlow<NetworkMode> = _networkMode.asStateFlow()
 
@@ -39,13 +41,18 @@ class NetworkDetector @Inject constructor(
     private val connectivityManager =
         context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
+    val nasLocalIp: String?
+        get() = tokenManager.nasLocalIp
+
     private val probeClient = OkHttpClient.Builder()
-        .connectTimeout(2, TimeUnit.SECONDS)
-        .readTimeout(2, TimeUnit.SECONDS)
+        .connectTimeout(5, TimeUnit.SECONDS)
+        .readTimeout(5, TimeUnit.SECONDS)
         .build()
 
     fun start() {
+        if (!started.compareAndSet(false, true)) return
         registerNetworkCallback()
+        scope.launch { probeNasConnection() }
         scope.launch { periodicProbe() }
     }
 
@@ -76,12 +83,12 @@ class NetworkDetector @Inject constructor(
     }
 
     private suspend fun probeNasConnection() {
-        val localIp = tokenManager.nasLocalIp
-        if (localIp != null && tryReach("https://$localIp/api/2.1/")) {
+        val configuredServer = configuredServerAddress()
+        if (configuredServer != null && tryReach(buildApiBaseUrl(configuredServer))) {
             _networkMode.value = NetworkMode.LOCAL
             return
         }
-        if (tryReach("https://wdmycloud.com/api/2.1/")) {
+        if (tryReach(RELAY_API_BASE_URL)) {
             _networkMode.value = NetworkMode.RELAY
             return
         }
@@ -96,22 +103,32 @@ class NetworkDetector @Inject constructor(
     }
 
     /** URL base corrente per le API REST WD */
-    fun getBaseUrl(): String {
-        val localIp = tokenManager.nasLocalIp
-        return when (_networkMode.value) {
-            NetworkMode.LOCAL -> "https://$localIp/api/2.1/"
-            NetworkMode.RELAY -> "https://wdmycloud.com/api/2.1/"
-            NetworkMode.OFFLINE -> "https://wdmycloud.com/api/2.1/"
+    fun getApiBaseUrl(): String =
+        when {
+            _networkMode.value == NetworkMode.RELAY -> RELAY_API_BASE_URL
+            configuredServerAddress() != null -> buildApiBaseUrl(configuredServerAddress().orEmpty())
+            else -> RELAY_API_BASE_URL
         }
-    }
+
+    fun getApiUrl(endpoint: String): String = getApiBaseUrl() + endpoint.trimStart('/')
 
     /** URL base WebDAV corrente */
     fun getWebDavBaseUrl(): String {
-        val localIp = tokenManager.nasLocalIp
-        return when (_networkMode.value) {
-            NetworkMode.LOCAL -> "https://$localIp/webdav/"
-            NetworkMode.RELAY -> "https://wdmycloud.com/webdav/"
-            NetworkMode.OFFLINE -> ""
+        val configuredServer = configuredServerAddress()
+        return when {
+            _networkMode.value == NetworkMode.RELAY -> RELAY_WEB_DAV_BASE_URL
+            configuredServer != null -> buildWebDavBaseUrl(configuredServer)
+            else -> ""
         }
+    }
+
+    private fun configuredServerAddress(): String? =
+        tokenManager.nasLocalIp
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+
+    private companion object {
+        const val RELAY_API_BASE_URL = "https://wdmycloud.com/api/2.1/"
+        const val RELAY_WEB_DAV_BASE_URL = "https://wdmycloud.com/webdav/"
     }
 }

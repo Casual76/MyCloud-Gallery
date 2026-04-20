@@ -22,22 +22,26 @@ class MediaRepositoryImpl @Inject constructor(
 
     override fun getAllMedia(): Flow<PagingData<MediaItem>> = Pager(
         config = PagingConfig(
-            pageSize = 60,
-            prefetchDistance = 30,
-            enablePlaceholders = false,
+            pageSize = 80,
+            prefetchDistance = 40,
+            enablePlaceholders = true, // Placeholders help with fast scrolling
+            initialLoadSize = 100,
         ),
     ) { mediaItemDao.getAllPaged() }
         .flow
         .map { pagingData -> pagingData.map { it.toDomain() } }
 
     override fun getFavorites(): Flow<PagingData<MediaItem>> = Pager(
-        config = PagingConfig(pageSize = 60, prefetchDistance = 30),
+        config = PagingConfig(pageSize = 80, prefetchDistance = 40),
     ) { mediaItemDao.getFavoritesPaged() }
         .flow
         .map { pagingData -> pagingData.map { it.toDomain() } }
 
+    override fun getFavoritesList(): Flow<List<MediaItem>> =
+        mediaItemDao.getFavoritesList().map { list -> list.map { it.toDomain() } }
+
     override fun getTrash(): Flow<PagingData<MediaItem>> = Pager(
-        config = PagingConfig(pageSize = 60, prefetchDistance = 30),
+        config = PagingConfig(pageSize = 80, prefetchDistance = 40),
     ) { mediaItemDao.getTrashPaged() }
         .flow
         .map { pagingData -> pagingData.map { it.toDomain() } }
@@ -51,17 +55,51 @@ class MediaRepositoryImpl @Inject constructor(
     }
 
     override suspend fun moveToTrash(id: String) {
+        val item = mediaItemDao.getById(id) ?: return
         mediaItemDao.moveToTrash(id)
-        // TODO: WebDAV MOVE verso cartella /Trash/ del NAS
+        
+        // Tentativo di spostamento sul NAS in una cartella nascosta .trash
+        try {
+            val fileName = item.webDavPath.substringAfterLast('/')
+            val parentDir = item.webDavPath.substringBeforeLast('/', "")
+            val trashDir = if (parentDir.isEmpty()) "/.trash" else "$parentDir/.trash"
+            
+            try { webDavClient.mkcol(trashDir) } catch (_: Exception) {}
+            webDavClient.move(item.webDavPath, "$trashDir/$fileName")
+        } catch (_: Exception) {
+            // Se fallisce (es. offline), l'item rimane segnato come isInTrash localmente
+            // e verrà riconciliato alla prossima sync o rimosso se non più presente.
+        }
     }
 
     override suspend fun moveToTrashBatch(ids: List<String>) {
         mediaItemDao.moveToTrashBatch(ids)
+        // Batch move sul NAS non è banale via WebDAV standard (richiede loop)
+        // Lo lasciamo gestire alla sync di riconciliazione se necessario, 
+        // o implementiamo un loop qui per piccoli batch.
+        ids.forEach { id ->
+            val item = mediaItemDao.getById(id) ?: return@forEach
+            try {
+                val fileName = item.webDavPath.substringAfterLast('/')
+                val parentDir = item.webDavPath.substringBeforeLast('/', "")
+                val trashDir = if (parentDir.isEmpty()) "/.trash" else "$parentDir/.trash"
+                try { webDavClient.mkcol(trashDir) } catch (_: Exception) {}
+                webDavClient.move(item.webDavPath, "$trashDir/$fileName")
+            } catch (_: Exception) {}
+        }
     }
 
     override suspend fun restoreFromTrash(id: String) {
+        val item = mediaItemDao.getById(id) ?: return
         mediaItemDao.restoreFromTrash(id)
-        // TODO: WebDAV COPY da /Trash/ alla cartella originale
+        
+        // Tenta di riportare fuori dal .trash sul NAS
+        try {
+            if (item.webDavPath.contains("/.trash/")) {
+                val restoredPath = item.webDavPath.replace("/.trash/", "/")
+                webDavClient.move(item.webDavPath, restoredPath)
+            }
+        } catch (_: Exception) {}
     }
 
     override suspend fun deletePermanently(id: String) {

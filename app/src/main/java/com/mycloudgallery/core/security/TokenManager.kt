@@ -52,6 +52,10 @@ class TokenManager @Inject constructor(
         get() = prefs.getString(KEY_DEVICE_NAME, null)
         set(value) = prefs.edit().putString(KEY_DEVICE_NAME, value).apply()
 
+    var password: String?
+        get() = prefs.getString(KEY_PASSWORD, null)
+        set(value) = prefs.edit().putString(KEY_PASSWORD, value).apply()
+
     val isLoggedIn: Boolean
         get() = !accessToken.isNullOrBlank()
 
@@ -75,5 +79,6 @@ class TokenManager @Inject constructor(
         const val KEY_USERNAME = "username"
         const val KEY_NAS_LOCAL_IP = "nas_local_ip"
         const val KEY_DEVICE_NAME = "device_name"
+        const val KEY_PASSWORD = "password"
     }
 }

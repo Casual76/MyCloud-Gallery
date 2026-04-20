@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -22,9 +23,10 @@ import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -39,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -62,23 +65,26 @@ fun LoginScreen(
     }
 
     LoginScreenContent(
+        serverAddress = uiState.serverAddress,
         username = uiState.username,
         password = uiState.password,
         isLoading = uiState.authState is AuthState.Loading,
         errorMessage = (uiState.authState as? AuthState.Error)?.message,
+        onServerAddressChanged = viewModel::onServerAddressChanged,
         onUsernameChanged = viewModel::onUsernameChanged,
         onPasswordChanged = viewModel::onPasswordChanged,
         onLogin = viewModel::login,
     )
 }
 
-/** Versione testabile di LoginScreen senza dipendenza da ViewModel/Hilt. */
 @Composable
 fun LoginScreenContent(
+    serverAddress: String,
     username: String,
     password: String,
     isLoading: Boolean,
     errorMessage: String?,
+    onServerAddressChanged: (String) -> Unit,
     onUsernameChanged: (String) -> Unit,
     onPasswordChanged: (String) -> Unit,
     onLogin: () -> Unit,
@@ -96,19 +102,27 @@ fun LoginScreenContent(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // Logo / Icona
-            Icon(
-                imageVector = Icons.Default.Cloud,
-                contentDescription = null,
-                modifier = Modifier.size(80.dp),
-                tint = MaterialTheme.colorScheme.primary,
-            )
+            // Logo / Icona Expressive
+            Surface(
+                modifier = Modifier.size(100.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                shape = CircleShape
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.Cloud,
+                        contentDescription = null,
+                        modifier = Modifier.size(56.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                }
+            }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             Text(
                 text = "MyCloud Gallery",
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.onBackground,
             )
 
@@ -116,17 +130,19 @@ fun LoginScreenContent(
 
             Text(
                 text = "Accedi al tuo NAS WD MyCloud",
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
             Spacer(modifier = Modifier.height(48.dp))
 
             LoginForm(
+                serverAddress = serverAddress,
                 username = username,
                 password = password,
                 isLoading = isLoading,
                 errorMessage = errorMessage,
+                onServerAddressChanged = onServerAddressChanged,
                 onUsernameChanged = onUsernameChanged,
                 onPasswordChanged = onPasswordChanged,
                 onLogin = onLogin,
@@ -137,10 +153,12 @@ fun LoginScreenContent(
 
 @Composable
 private fun LoginForm(
+    serverAddress: String,
     username: String,
     password: String,
     isLoading: Boolean,
     errorMessage: String?,
+    onServerAddressChanged: (String) -> Unit,
     onUsernameChanged: (String) -> Unit,
     onPasswordChanged: (String) -> Unit,
     onLogin: () -> Unit,
@@ -149,12 +167,32 @@ private fun LoginForm(
     var passwordVisible by remember { mutableStateOf(false) }
 
     OutlinedTextField(
-        value = username,
-        onValueChange = onUsernameChanged,
-        label = { Text("Email o username") },
+        value = serverAddress,
+        onValueChange = onServerAddressChanged,
+        label = { Text("IP o host del NAS") },
         singleLine = true,
         enabled = !isLoading,
         modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        keyboardOptions = KeyboardOptions(
+            keyboardType = KeyboardType.Uri,
+            imeAction = ImeAction.Next,
+        ),
+        keyboardActions = KeyboardActions(
+            onNext = { focusManager.moveFocus(FocusDirection.Down) },
+        ),
+    )
+
+    Spacer(modifier = Modifier.height(16.dp))
+
+    OutlinedTextField(
+        value = username,
+        onValueChange = onUsernameChanged,
+        label = { Text("Username") },
+        singleLine = true,
+        enabled = !isLoading,
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
         keyboardOptions = KeyboardOptions(
             keyboardType = KeyboardType.Email,
             imeAction = ImeAction.Next,
@@ -173,6 +211,7 @@ private fun LoginForm(
         singleLine = true,
         enabled = !isLoading,
         modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
         visualTransformation = if (passwordVisible) VisualTransformation.None
         else PasswordVisualTransformation(),
         trailingIcon = {
@@ -221,15 +260,18 @@ private fun LoginForm(
         contentAlignment = Alignment.Center,
     ) {
         if (isLoading) {
-            LoadingIndicator()
+            CircularProgressIndicator()
         } else {
             Button(
                 onClick = onLogin,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = username.isNotBlank() && password.isNotBlank(),
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                enabled = serverAddress.isNotBlank() && username.isNotBlank() && password.isNotBlank(),
+                shape = MaterialTheme.shapes.large,
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
             ) {
-                Text("Accedi")
+                Text("Accedi", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
             }
         }
     }
 }
+

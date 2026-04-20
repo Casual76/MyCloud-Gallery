@@ -1,16 +1,16 @@
 -- Merging decision tree log ---
 manifest
-ADDED from C:\VibeCoded projects\MyCloud Gallery\shared\build\intermediates\tmp\ProcessLibraryManifest\release\tempAndroidManifest6754519594987427126.xml:2:13-83
-INJECTED from C:\VibeCoded projects\MyCloud Gallery\shared\build\intermediates\tmp\ProcessLibraryManifest\release\tempAndroidManifest6754519594987427126.xml:2:13-83
+ADDED from C:\VibeCoded projects\MyCloud Gallery\shared\build\intermediates\tmp\ProcessLibraryManifest\release\tempAndroidManifest237611142855888976.xml:2:13-83
+INJECTED from C:\VibeCoded projects\MyCloud Gallery\shared\build\intermediates\tmp\ProcessLibraryManifest\release\tempAndroidManifest237611142855888976.xml:2:13-83
 	package
-		INJECTED from C:\VibeCoded projects\MyCloud Gallery\shared\build\intermediates\tmp\ProcessLibraryManifest\release\tempAndroidManifest6754519594987427126.xml
+		INJECTED from C:\VibeCoded projects\MyCloud Gallery\shared\build\intermediates\tmp\ProcessLibraryManifest\release\tempAndroidManifest237611142855888976.xml
 	xmlns:android
-		ADDED from C:\VibeCoded projects\MyCloud Gallery\shared\build\intermediates\tmp\ProcessLibraryManifest\release\tempAndroidManifest6754519594987427126.xml:2:23-81
+		ADDED from C:\VibeCoded projects\MyCloud Gallery\shared\build\intermediates\tmp\ProcessLibraryManifest\release\tempAndroidManifest237611142855888976.xml:2:23-81
 uses-sdk
-INJECTED from C:\VibeCoded projects\MyCloud Gallery\shared\build\intermediates\tmp\ProcessLibraryManifest\release\tempAndroidManifest6754519594987427126.xml reason: use-sdk injection requested
-INJECTED from C:\VibeCoded projects\MyCloud Gallery\shared\build\intermediates\tmp\ProcessLibraryManifest\release\tempAndroidManifest6754519594987427126.xml
-INJECTED from C:\VibeCoded projects\MyCloud Gallery\shared\build\intermediates\tmp\ProcessLibraryManifest\release\tempAndroidManifest6754519594987427126.xml
+INJECTED from C:\VibeCoded projects\MyCloud Gallery\shared\build\intermediates\tmp\ProcessLibraryManifest\release\tempAndroidManifest237611142855888976.xml reason: use-sdk injection requested
+INJECTED from C:\VibeCoded projects\MyCloud Gallery\shared\build\intermediates\tmp\ProcessLibraryManifest\release\tempAndroidManifest237611142855888976.xml
+INJECTED from C:\VibeCoded projects\MyCloud Gallery\shared\build\intermediates\tmp\ProcessLibraryManifest\release\tempAndroidManifest237611142855888976.xml
 	android:targetSdkVersion
-		INJECTED from C:\VibeCoded projects\MyCloud Gallery\shared\build\intermediates\tmp\ProcessLibraryManifest\release\tempAndroidManifest6754519594987427126.xml
+		INJECTED from C:\VibeCoded projects\MyCloud Gallery\shared\build\intermediates\tmp\ProcessLibraryManifest\release\tempAndroidManifest237611142855888976.xml
 	android:minSdkVersion
-		INJECTED from C:\VibeCoded projects\MyCloud Gallery\shared\build\intermediates\tmp\ProcessLibraryManifest\release\tempAndroidManifest6754519594987427126.xml
+		INJECTED from C:\VibeCoded projects\MyCloud Gallery\shared\build\intermediates\tmp\ProcessLibraryManifest\release\tempAndroidManifest237611142855888976.xml

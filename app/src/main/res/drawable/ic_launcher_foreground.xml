@@ -4,11 +4,16 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Icona galleria stilizzata (montagne + sole) -->
+    <path
+        android:fillColor="#E6FFFFFF"
+        android:pathData="M26,68c0,-9.39 7.61,-17 17,-17 2.05,0 4.02,0.36 5.85,1.02C52.16,43.36 60.24,37 69.8,37c12.13,0 22.06,10.06 22.2,22.35 6.02,1.48 10,6.7 10,13.66 0,8.05 -6.52,14.58 -14.57,14.58H40.58C32.53,87.59 26,81.06 26,73.01V68z" />
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M30,72 L42,52 L50,62 L62,42 L78,72 Z" />
+        android:pathData="M39,54h34c3.31,0 6,2.69 6,6v19c0,3.31 -2.69,6 -6,6H39c-3.31,0 -6,-2.69 -6,-6V60c0,-3.31 2.69,-6 6,-6z" />
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M66,38 A6,6 0 1,0 66,38.01 Z" />
+        android:fillColor="#1B6B4F"
+        android:pathData="M41,77l8,-9 7,6 8,-11 11,14z" />
+    <path
+        android:fillColor="#1B6B4F"
+        android:pathData="M61,66m-4,0a4,4 0 1,0 8,0a4,4 0 1,0 -8,0" />
 </vector>

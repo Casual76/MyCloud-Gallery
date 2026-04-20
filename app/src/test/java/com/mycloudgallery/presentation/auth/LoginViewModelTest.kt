@@ -1,10 +1,12 @@
 package com.mycloudgallery.presentation.auth
 
+import com.mycloudgallery.core.security.TokenManager
 import com.mycloudgallery.domain.model.AuthState
 import com.mycloudgallery.domain.repository.AuthRepository
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -23,14 +25,19 @@ class LoginViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
     private lateinit var authRepository: AuthRepository
+    private lateinit var tokenManager: TokenManager
     private lateinit var viewModel: LoginViewModel
 
     @BeforeEach
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
         authRepository = mockk()
+        tokenManager = mockk(relaxed = true)
         every { authRepository.isLoggedIn() } returns false
-        viewModel = LoginViewModel(authRepository)
+        every { tokenManager.nasLocalIp } returns null
+        every { tokenManager.username } returns null
+        every { tokenManager.deviceName } returns null
+        viewModel = LoginViewModel(authRepository, tokenManager)
     }
 
     @AfterEach
@@ -39,57 +46,70 @@ class LoginViewModelTest {
     }
 
     @Test
-    fun `stato iniziale è Idle`() {
+    fun `stato iniziale e Idle`() {
         assertInstanceOf(AuthState.Idle::class.java, viewModel.uiState.value.authState)
     }
 
     @Test
-    fun `se già loggato stato è Authenticated`() {
+    fun `se gia loggato stato e Authenticated`() {
         every { authRepository.isLoggedIn() } returns true
-        val vm = LoginViewModel(authRepository)
+        every { tokenManager.username } returns "utente@test.com"
+        every { tokenManager.deviceName } returns "NAS-Family"
+
+        val vm = LoginViewModel(authRepository, tokenManager)
+
         assertInstanceOf(AuthState.Authenticated::class.java, vm.uiState.value.authState)
     }
 
     @Test
     fun `login con campi vuoti produce errore`() = runTest {
         viewModel.login()
+
         assertInstanceOf(AuthState.Error::class.java, viewModel.uiState.value.authState)
     }
 
     @Test
+    fun `login senza host NAS produce errore dedicato`() = runTest {
+        viewModel.onUsernameChanged("utente@test.com")
+        viewModel.onPasswordChanged("password123")
+
+        viewModel.login()
+
+        val state = viewModel.uiState.value.authState
+        assertInstanceOf(AuthState.Error::class.java, state)
+        assertEquals("Inserisci IP o hostname del NAS", (state as AuthState.Error).message)
+    }
+
+    @Test
     fun `login con credenziali corrette produce Loading poi Authenticated`() = runTest {
-        // Arrange
+        viewModel.onServerAddressChanged("https://192.168.1.100/api/2.1/")
         viewModel.onUsernameChanged("utente@test.com")
         viewModel.onPasswordChanged("password123")
         val authenticated = AuthState.Authenticated("utente@test.com", "NAS-Family")
         coEvery { authRepository.login(any(), any()) } returns Result.success(authenticated)
 
-        // Act
         viewModel.login()
 
-        // Loading immediato prima della coroutine
         assertInstanceOf(AuthState.Loading::class.java, viewModel.uiState.value.authState)
+        verify { tokenManager.nasLocalIp = "192.168.1.100" }
 
         advanceUntilIdle()
 
-        // Assert
         assertEquals(authenticated, viewModel.uiState.value.authState)
     }
 
     @Test
     fun `login fallito produce stato Error con messaggio`() = runTest {
-        // Arrange
+        viewModel.onServerAddressChanged("192.168.1.100")
         viewModel.onUsernameChanged("utente@test.com")
         viewModel.onPasswordChanged("password_sbagliata")
         coEvery { authRepository.login(any(), any()) } returns Result.failure(
             Exception("Credenziali non valide"),
         )
 
-        // Act
         viewModel.login()
         advanceUntilIdle()
 
-        // Assert
         val state = viewModel.uiState.value.authState
         assertInstanceOf(AuthState.Error::class.java, state)
         assertEquals("Credenziali non valide", (state as AuthState.Error).message)
@@ -97,17 +117,15 @@ class LoginViewModelTest {
 
     @Test
     fun `cambio username resetta errore`() = runTest {
-        // Arrange — produci errore
+        viewModel.onServerAddressChanged("192.168.1.100")
         viewModel.onUsernameChanged("x")
         viewModel.onPasswordChanged("y")
         coEvery { authRepository.login(any(), any()) } returns Result.failure(Exception("Errore"))
         viewModel.login()
         advanceUntilIdle()
 
-        // Act — modifica username
         viewModel.onUsernameChanged("nuovo@test.com")
 
-        // Assert
         assertInstanceOf(AuthState.Idle::class.java, viewModel.uiState.value.authState)
     }
 }

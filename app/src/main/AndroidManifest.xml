@@ -60,6 +60,11 @@
                 android:resource="@xml/gallery_widget_info" />
         </receiver>
 
+        <!-- ML Kit unbundled: OCR + face detection + image labeling models downloaded by Play Services -->
+        <meta-data
+            android:name="com.google.mlkit.vision.DEPENDENCIES"
+            android:value="ocr,face,label" />
+
     </application>
 
 </manifest>

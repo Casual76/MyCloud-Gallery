@@ -12,7 +12,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -77,13 +76,9 @@ class AlbumDetailViewModel @Inject constructor(
 
     private fun loadFavorites() {
         viewModelScope.launch {
-            mediaRepository.getFavorites()
-                // Colleziona il primo PagingData e si ferma (per semplicità nella vista Album)
-                .collect { _ ->
-                    // Il Pager emette dati paginati; per AlbumDetail usiamo una lista flat
-                    // dal DAO direttamente — MediaRepository.getFavoritesList() non è ancora
-                    // esposta, quindi qui lo stato rimane gestito con il DAO via flow separato
-                }
+            mediaRepository.getFavoritesList().collect { items ->
+                _extraState.update { it.copy(media = items, isLoading = false) }
+            }
         }
     }
 

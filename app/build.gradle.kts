@@ -15,8 +15,8 @@ android {
         applicationId = "com.mycloudgallery"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 4
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -75,6 +75,7 @@ android {
     }
 
     packaging {
+        jniLibs.useLegacyPackaging = true
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
@@ -151,6 +152,9 @@ dependencies {
     // DataStore Preferences
     implementation(libs.datastore.preferences)
 
+    // SMBJ for local NAS access
+    implementation(libs.smbj)
+
     // Paging 3
     implementation(libs.paging.runtime)
     implementation(libs.paging.compose)
@@ -158,9 +162,15 @@ dependencies {
     // Accompanist Permissions
     implementation(libs.accompanist.permissions)
 
-    // ML Kit — indicizzazione AI on-device (Fase 2)
-    implementation(libs.mlkit.image.labeling)
-    implementation(libs.mlkit.text.recognition)
+    // ML Kit — unbundled via Play Services (Step 1: APK size reduction)
+    implementation(libs.play.services.mlkit.text.recognition)
+    implementation(libs.play.services.mlkit.face.detection)
+    implementation(libs.play.services.mlkit.image.labeling)
+    // TFLite — custom models (MobileFaceNet, future Gemma 4)
+    implementation(libs.tensorflow.lite)
+    implementation(libs.tensorflow.lite.support)
+    // Coroutines Play Services bridge (.await() on Tasks)
+    implementation(libs.kotlinx.coroutines.play.services)
 
     // MapLibre — vista mappa GPS (Fase 2)
     implementation(libs.maplibre.android)
@@ -171,6 +181,9 @@ dependencies {
     // Glance — widget homescreen (Fase 3)
     implementation(libs.glance.appwidget)
     implementation(libs.glance.material3)
+
+    // MediaPipe Tasks GenAI — Gemma 4 on-device inference
+    implementation(libs.mediapipe.tasks.genai)
 
     // Shared domain layer (Fase 5)
     implementation(project(":shared"))

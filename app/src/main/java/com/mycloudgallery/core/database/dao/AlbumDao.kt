@@ -1,6 +1,8 @@
 package com.mycloudgallery.core.database.dao
 
+import androidx.room.ColumnInfo
 import androidx.room.Dao
+import androidx.room.Embedded
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
@@ -11,11 +13,25 @@ import com.mycloudgallery.core.database.entity.AlbumMediaCrossRef
 import com.mycloudgallery.core.database.entity.MediaItemEntity
 import kotlinx.coroutines.flow.Flow
 
+data class AlbumWithCount(
+    @Embedded val album: AlbumEntity,
+    @ColumnInfo(name = "mediaCount") val mediaCount: Int,
+)
+
 @Dao
 interface AlbumDao {
 
     @Query("SELECT * FROM albums ORDER BY sortOrder ASC, name ASC")
     fun getAll(): Flow<List<AlbumEntity>>
+
+    @Query("""
+        SELECT a.*, COUNT(ami.mediaItemId) AS mediaCount
+        FROM albums a
+        LEFT JOIN album_media_items ami ON a.id = ami.albumId
+        GROUP BY a.id
+        ORDER BY a.sortOrder ASC, a.name ASC
+    """)
+    fun getAllWithCounts(): Flow<List<AlbumWithCount>>
 
     @Query("SELECT * FROM albums WHERE id = :id")
     suspend fun getById(id: String): AlbumEntity?

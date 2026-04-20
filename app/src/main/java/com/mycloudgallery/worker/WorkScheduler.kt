@@ -74,7 +74,7 @@ class WorkScheduler @Inject constructor(
         workManager.cancelAllWork()
     }
 
-    /** Avvia indicizzazione AI immediata */
+    /** Avvia indicizzazione AI immediata e schedula il clustering volti a seguire */
     fun startImmediateIndexing() {
         val request = OneTimeWorkRequestBuilder<IndexingWorker>()
             .build()
@@ -83,11 +83,34 @@ class WorkScheduler @Inject constructor(
             ExistingWorkPolicy.KEEP,
             request,
         )
+        scheduleFaceClustering()
     }
 
-    /** Schedula indicizzazione AI periodica (ogni 30 min, no vincolo WiFi) */
+    /** Schedula clustering volti (one-shot, richiede ricarica) */
+    fun scheduleFaceClustering() {
+        val request = OneTimeWorkRequestBuilder<FaceClusteringWorker>()
+            .setConstraints(
+                Constraints.Builder()
+                    .setRequiresCharging(true)
+                    .build()
+            )
+            .addTag(FaceClusteringWorker.WORK_NAME)
+            .build()
+        workManager.enqueueUniqueWork(
+            FaceClusteringWorker.WORK_NAME,
+            ExistingWorkPolicy.KEEP,
+            request,
+        )
+    }
+
+    /** Schedula indicizzazione AI periodica (ogni 30 min, richiede ricarica) */
     fun schedulePeriodicIndexing() {
         val request = PeriodicWorkRequestBuilder<IndexingWorker>(30, TimeUnit.MINUTES)
+            .setConstraints(
+                Constraints.Builder()
+                    .setRequiresCharging(true)
+                    .build()
+            )
             .build()
         workManager.enqueueUniquePeriodicWork(
             "${IndexingWorker.WORK_NAME}_periodic",

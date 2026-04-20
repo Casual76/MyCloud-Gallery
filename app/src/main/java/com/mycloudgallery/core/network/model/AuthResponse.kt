@@ -5,10 +5,13 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class AuthTokenResponse(
-    @SerialName("access_token") val accessToken: String,
-    @SerialName("refresh_token") val refreshToken: String,
-    @SerialName("expires_in") val expiresIn: Long,
-    @SerialName("token_type") val tokenType: String = "Bearer",
+    @SerialName("access_token") val accessToken: String? = null,
+    @SerialName("refresh_token") val refreshToken: String? = null,
+    @SerialName("expires_in") val expiresIn: Long? = null,
+    @SerialName("token_type") val tokenType: String? = null,
+    // Campi per OS 5
+    val error: String? = null,
+    @SerialName("eula_status") val eulaStatus: String? = null,
 )
 
 @Serializable

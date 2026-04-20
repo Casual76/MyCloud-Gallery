@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.Flow
 interface MediaRepository {
     fun getAllMedia(): Flow<PagingData<MediaItem>>
     fun getFavorites(): Flow<PagingData<MediaItem>>
+    fun getFavoritesList(): Flow<List<MediaItem>>
     fun getTrash(): Flow<PagingData<MediaItem>>
     suspend fun getMediaById(id: String): MediaItem?
     suspend fun toggleFavorite(id: String)

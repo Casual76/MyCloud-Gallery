@@ -1,6 +1,7 @@
 package com.mycloudgallery.presentation.search
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Arrangement
@@ -51,6 +52,7 @@ import com.mycloudgallery.presentation.gallery.components.MediaThumbnail
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SearchScreen(
+    animatedVisibilityScope: AnimatedVisibilityScope,
     onMediaClick: (String) -> Unit,
     onBack: () -> Unit,
     viewModel: SearchViewModel = hiltViewModel(),
@@ -165,6 +167,7 @@ fun SearchScreen(
                                 isSelectionMode = false,
                                 onClick = { onMediaClick(item.id) },
                                 onLongClick = { /* No-op in search if not needed */ },
+                                animatedVisibilityScope = animatedVisibilityScope
                             )
                         }
                     }

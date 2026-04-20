@@ -41,11 +41,12 @@ class AlbumsViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(AlbumsUiState())
     val uiState: StateFlow<AlbumsUiState> = combine(
+        _uiState,
         albumRepository.getAll(),
         albumRepository.getFavoritesCount(),
         sharedAlbumRepository.getPendingRequestsCount(),
-    ) { albums, favCount, pendingCount ->
-        _uiState.value.copy(
+    ) { currentState, albums, favCount, pendingCount ->
+        currentState.copy(
             albums = albums,
             favoritesCount = favCount,
             pendingRequestsCount = pendingCount,
@@ -53,7 +54,7 @@ class AlbumsViewModel @Inject constructor(
         )
     }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5_000),
+        started = SharingStarted.Eagerly,
         initialValue = AlbumsUiState(isLoading = true),
     )
 
@@ -97,7 +98,7 @@ class AlbumsViewModel @Inject constructor(
     // --- Rinomina ---
 
     fun onStartRename(albumId: String) {
-        val currentName = _uiState.value.albums.find { it.id == albumId }?.name.orEmpty()
+        val currentName = uiState.value.albums.find { it.id == albumId }?.name.orEmpty()
         _uiState.update {
             it.copy(
                 renameAlbumId = albumId,

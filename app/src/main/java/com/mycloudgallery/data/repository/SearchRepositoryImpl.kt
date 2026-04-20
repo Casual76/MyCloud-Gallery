@@ -19,7 +19,19 @@ class SearchRepositoryImpl @Inject constructor(
 
     override suspend fun search(query: String, filter: SearchFilter): List<MediaItem> {
         val rawItems: List<MediaItemEntity> = if (query.isBlank()) {
-            mediaItemDao.getAll()
+            mediaItemDao.searchFiltered(
+                isVideo = when (filter.mediaType) {
+                    MediaType.VIDEO -> true
+                    MediaType.IMAGE -> false
+                    else -> null
+                },
+                isFavorite = if (filter.favoritesOnly) true else null,
+                hasGps = filter.hasGps,
+                hasOcr = filter.hasOcr,
+                isDuplicate = if (filter.duplicatesOnly) true else null,
+                from = filter.fromTimestamp ?: 0L,
+                to = filter.toTimestamp ?: Long.MAX_VALUE
+            )
         } else {
             val ftsQuery = buildFtsQuery(query)
             val ftsIds: List<String> = try {
@@ -31,11 +43,11 @@ class SearchRepositoryImpl @Inject constructor(
             if (ftsIds.isNotEmpty()) {
                 mediaItemDao.getByIds(ftsIds)
             } else {
-                // Fallback: ricerca LIKE (se l'indice FTS non è ancora popolato)
                 mediaItemDao.searchLike(query)
             }
         }
 
+        // Se query è non-null, dobbiamo comunque applicare il filtro residuo (RAW non è gestito da SQL)
         return rawItems
             .filter { applyFilter(it, filter) }
             .map { it.toDomain() }
@@ -43,11 +55,19 @@ class SearchRepositoryImpl @Inject constructor(
     }
 
     override suspend fun searchByDateRange(from: Long, to: Long, filter: SearchFilter): List<MediaItem> {
-        return mediaItemDao.getAll()
-            .filter { it.createdAt in from..to }
-            .filter { applyFilter(it, filter) }
-            .map { it.toDomain() }
-            .sortedByDescending { it.createdAt }
+        return mediaItemDao.searchFiltered(
+            isVideo = when (filter.mediaType) {
+                MediaType.VIDEO -> true
+                MediaType.IMAGE -> false
+                else -> null
+            },
+            isFavorite = if (filter.favoritesOnly) true else null,
+            hasGps = filter.hasGps,
+            hasOcr = filter.hasOcr,
+            isDuplicate = if (filter.duplicatesOnly) true else null,
+            from = from,
+            to = to
+        ).map { it.toDomain() }
     }
 
     /**

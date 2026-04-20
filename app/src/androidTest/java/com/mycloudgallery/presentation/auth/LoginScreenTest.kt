@@ -4,8 +4,6 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performTextInput
 import com.mycloudgallery.ui.theme.MyCloudGalleryTheme
 import org.junit.Rule
 import org.junit.Test
@@ -19,36 +17,41 @@ class LoginScreenTest {
     fun loginScreen_mostraTitolo() {
         composeTestRule.setContent {
             MyCloudGalleryTheme {
-                // LoginScreen standalone senza ViewModel reale
                 LoginScreenContent(
+                    serverAddress = "",
                     username = "",
                     password = "",
                     isLoading = false,
                     errorMessage = null,
+                    onServerAddressChanged = {},
                     onUsernameChanged = {},
                     onPasswordChanged = {},
                     onLogin = {},
                 )
             }
         }
+
         composeTestRule.onNodeWithText("MyCloud Gallery").assertExists()
     }
 
     @Test
-    fun loginScreen_pulsanteDisabilitoConCampiVuoti() {
+    fun loginScreen_pulsanteDisabilitatoConCampiVuoti() {
         composeTestRule.setContent {
             MyCloudGalleryTheme {
                 LoginScreenContent(
+                    serverAddress = "",
                     username = "",
                     password = "",
                     isLoading = false,
                     errorMessage = null,
+                    onServerAddressChanged = {},
                     onUsernameChanged = {},
                     onPasswordChanged = {},
                     onLogin = {},
                 )
             }
         }
+
         composeTestRule.onNodeWithText("Accedi").assertIsNotEnabled()
     }
 
@@ -57,16 +60,19 @@ class LoginScreenTest {
         composeTestRule.setContent {
             MyCloudGalleryTheme {
                 LoginScreenContent(
+                    serverAddress = "192.168.1.100",
                     username = "utente@test.com",
                     password = "password123",
                     isLoading = false,
                     errorMessage = null,
+                    onServerAddressChanged = {},
                     onUsernameChanged = {},
                     onPasswordChanged = {},
                     onLogin = {},
                 )
             }
         }
+
         composeTestRule.onNodeWithText("Accedi").assertIsEnabled()
     }
 
@@ -75,16 +81,19 @@ class LoginScreenTest {
         composeTestRule.setContent {
             MyCloudGalleryTheme {
                 LoginScreenContent(
+                    serverAddress = "192.168.1.100",
                     username = "utente@test.com",
                     password = "sbagliata",
                     isLoading = false,
                     errorMessage = "Credenziali non valide",
+                    onServerAddressChanged = {},
                     onUsernameChanged = {},
                     onPasswordChanged = {},
                     onLogin = {},
                 )
             }
         }
+
         composeTestRule.onNodeWithText("Credenziali non valide").assertExists()
     }
 }

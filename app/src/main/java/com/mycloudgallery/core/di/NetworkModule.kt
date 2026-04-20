@@ -1,7 +1,9 @@
 package com.mycloudgallery.core.di
 
+import com.mycloudgallery.core.network.media3.SmbDataSourceFactory
 import com.mycloudgallery.core.network.AuthInterceptor
 import com.mycloudgallery.core.network.NetworkDetector
+import com.mycloudgallery.core.network.SmbClientImpl
 import com.mycloudgallery.core.network.WdRestApiService
 import com.mycloudgallery.core.network.WebDavClient
 import com.mycloudgallery.core.network.WebDavClientImpl
@@ -13,6 +15,7 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.ResponseBody.Companion.toResponseBody
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
@@ -49,11 +52,40 @@ object NetworkModule {
     @Singleton
     @DefaultOkHttp
     fun provideOkHttpClient(authInterceptor: AuthInterceptor): OkHttpClient {
+        val cookieJar = object : okhttp3.CookieJar {
+            private val cookieStore = mutableMapOf<String, List<okhttp3.Cookie>>()
+            override fun saveFromResponse(url: okhttp3.HttpUrl, cookies: List<okhttp3.Cookie>) {
+                cookieStore[url.host] = cookies
+            }
+            override fun loadForRequest(url: okhttp3.HttpUrl): List<okhttp3.Cookie> {
+                return cookieStore[url.host] ?: emptyList()
+            }
+        }
+
         val builder = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
+            .cookieJar(cookieJar)
             .addInterceptor(authInterceptor)
+            .addInterceptor { chain ->
+                val request = chain.request()
+                val body = request.body
+                if (body != null && body.contentType()?.type == "application" && body.contentType()?.subtype == "json") {
+                    val newBody = object : okhttp3.RequestBody() {
+                        override fun contentType() = "application/json".toMediaType()
+                        override fun contentLength() = body.contentLength()
+                        override fun writeTo(sink: okio.BufferedSink) {
+                            body.writeTo(sink)
+                        }
+                    }
+                    val newRequest = request.newBuilder()
+                        .method(request.method, newBody)
+                        .build()
+                    return@addInterceptor chain.proceed(newRequest)
+                }
+                chain.proceed(request)
+            }
 
         // Logging solo in debug
         if (com.mycloudgallery.BuildConfig.DEBUG) {
@@ -90,11 +122,11 @@ object NetworkModule {
     fun provideRetrofit(
         @DefaultOkHttp okHttpClient: OkHttpClient,
         json: Json,
-        networkDetector: NetworkDetector,
     ): Retrofit {
         val contentType = "application/json".toMediaType()
         return Retrofit.Builder()
-            .baseUrl(networkDetector.getBaseUrl())
+            // Runtime requests provide the full NAS URL via @Url.
+            .baseUrl("https://localhost/")
             .client(okHttpClient)
             .addConverterFactory(json.asConverterFactory(contentType))
             .build()
@@ -108,10 +140,14 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideWebDavClient(
-        @WebDavOkHttp httpClient: OkHttpClient,
-        networkDetector: NetworkDetector,
-        tokenManager: TokenManager,
-    ): WebDavClient = WebDavClientImpl(httpClient, networkDetector, tokenManager)
+        tripleModeClient: com.mycloudgallery.core.network.TripleModeClient
+    ): WebDavClient = tripleModeClient
+
+    @Provides
+    @Singleton
+    fun provideSmbDataSourceFactory(
+        webDavClient: WebDavClient
+    ): SmbDataSourceFactory = SmbDataSourceFactory(webDavClient)
 
     /**
      * Il NAS WD MyCloud usa spesso certificati self-signed sulla rete locale.

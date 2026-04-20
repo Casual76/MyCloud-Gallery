@@ -41,8 +41,9 @@ class AuthRepositoryTest {
             refreshToken = "refresh_123",
             expiresIn = 3600,
         )
-        coEvery { apiService.login(any()) } returns Response.success(tokenResponse)
-        coEvery { apiService.getDeviceList() } returns Response.success(DeviceListResponse())
+        every { tokenManager.nasLocalIp } returns "192.168.1.100"
+        coEvery { apiService.login(any(), any()) } returns Response.success(tokenResponse)
+        coEvery { apiService.getDeviceList(any()) } returns Response.success(DeviceListResponse())
 
         // Act
         val result = repository.login("utente@test.com", "password123")
@@ -56,7 +57,8 @@ class AuthRepositoryTest {
     @Test
     fun `login con credenziali errate restituisce errore 401`() = runTest {
         // Arrange
-        coEvery { apiService.login(any()) } returns Response.error(
+        every { tokenManager.nasLocalIp } returns "192.168.1.100"
+        coEvery { apiService.login(any(), any()) } returns Response.error(
             401,
             "Unauthorized".toResponseBody(),
         )
@@ -72,7 +74,8 @@ class AuthRepositoryTest {
     @Test
     fun `login con errore server 500 restituisce messaggio errore`() = runTest {
         // Arrange
-        coEvery { apiService.login(any()) } returns Response.error(
+        every { tokenManager.nasLocalIp } returns "192.168.1.100"
+        coEvery { apiService.login(any(), any()) } returns Response.error(
             500,
             "Internal Server Error".toResponseBody(),
         )
@@ -94,7 +97,7 @@ class AuthRepositoryTest {
             refreshToken = "refresh_new",
             expiresIn = 3600,
         )
-        coEvery { apiService.refreshToken(any()) } returns Response.success(tokenResponse)
+        coEvery { apiService.refreshToken(any(), any()) } returns Response.success(tokenResponse)
 
         // Act
         val result = repository.refreshToken()
@@ -108,7 +111,7 @@ class AuthRepositoryTest {
     fun `refreshToken fallito cancella sessione`() = runTest {
         // Arrange
         every { tokenManager.refreshToken } returns "refresh_scaduto"
-        coEvery { apiService.refreshToken(any()) } returns Response.error(
+        coEvery { apiService.refreshToken(any(), any()) } returns Response.error(
             401,
             "Unauthorized".toResponseBody(),
         )

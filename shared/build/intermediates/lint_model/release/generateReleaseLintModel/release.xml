@@ -26,6 +26,6 @@
       applicationId="com.mycloudgallery.shared"
       generatedSourceFolders="build\generated\ap_generated_sources\release\out"
       generatedResourceFolders="build\generated\res\resValues\release"
-      desugaredMethodsFiles="C:\Users\pampa\scoop\apps\gradle\current\.gradle\caches\8.13\transforms\ade7e98dd03e17bf43f6c3c17b900aa5\transformed\D8BackportedDesugaredMethods.txt">
+      desugaredMethodsFiles="C:\Users\pampa\scoop\apps\gradle\current\.gradle\caches\8.13\transforms\533b1bdeeef70b0ae6cd28d954ed9fec\transformed\D8BackportedDesugaredMethods.txt">
   </artifact>
 </variant>

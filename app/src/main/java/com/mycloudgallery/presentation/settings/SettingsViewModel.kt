@@ -2,8 +2,12 @@ package com.mycloudgallery.presentation.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import com.mycloudgallery.core.database.dao.MediaItemDao
 import com.mycloudgallery.domain.repository.SettingsRepository
+import com.mycloudgallery.worker.IndexingWorker
+import com.mycloudgallery.worker.SyncWorker
 import com.mycloudgallery.worker.WorkScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,6 +26,11 @@ data class SettingsUiState(
     val totalMediaCount: Int = 0,
     val unindexedCount: Int = 0,
     val isForcingSyncNow: Boolean = false,
+    val isIndexing: Boolean = false,
+    val indexingProgress: Int = 0,
+    val lastSyncTime: Long = 0,
+    val lastSyncResult: String = "",
+    val aiEngineProvider: String = "none",
 )
 
 @HiltViewModel
@@ -29,6 +38,7 @@ class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val mediaItemDao: MediaItemDao,
     private val workScheduler: WorkScheduler,
+    private val workManager: WorkManager,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -36,7 +46,40 @@ class SettingsViewModel @Inject constructor(
 
     init {
         observeSettings()
+        observeAiEngineProvider()
         refreshIndexingStats()
+        observeSyncWorker()
+        observeIndexingWorker()
+    }
+
+    private fun observeIndexingWorker() {
+        viewModelScope.launch {
+            workManager.getWorkInfosByTagFlow(IndexingWorker.WORK_NAME).collect { workInfos ->
+                val activeWork = workInfos.find { it.state == WorkInfo.State.RUNNING }
+                _uiState.update { state ->
+                    state.copy(
+                        isIndexing = activeWork != null,
+                        indexingProgress = activeWork?.progress?.getInt(IndexingWorker.KEY_INDEXED, 0) ?: 0
+                    )
+                }
+                if (workInfos.any { it.state == WorkInfo.State.SUCCEEDED }) {
+                    refreshIndexingStats()
+                }
+            }
+        }
+    }
+
+    private fun observeSyncWorker() {
+        viewModelScope.launch {
+            workManager.getWorkInfosForUniqueWorkFlow("${SyncWorker.WORK_NAME}_manual")
+                .collect { workInfos ->
+                    val isSyncing = workInfos.any { it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED }
+                    _uiState.update { it.copy(isForcingSyncNow = isSyncing) }
+                    if (workInfos.any { it.state == WorkInfo.State.SUCCEEDED }) {
+                        refreshIndexingStats()
+                    }
+                }
+        }
     }
 
     private fun observeSettings() {
@@ -46,18 +89,38 @@ class SettingsViewModel @Inject constructor(
                 settingsRepository.wifiOnlyUpload,
                 settingsRepository.autoIndex,
                 settingsRepository.indexingPaused,
+                settingsRepository.lastSyncTime,
+                settingsRepository.lastSyncResult,
                 mediaItemDao.getTotalCount(),
-            ) { uploadEnabled, wifiOnly, autoIndex, indexPaused, total ->
+            ) { array ->
+                val uploadEnabled = array[0] as Boolean
+                val wifiOnly = array[1] as Boolean
+                val autoIndex = array[2] as Boolean
+                val indexPaused = array[3] as Boolean
+                val syncTime = array[4] as Long
+                val syncResult = array[5] as String
+                val total = array[6] as Int
+
                 _uiState.update { state ->
                     state.copy(
                         cameraUploadEnabled = uploadEnabled,
                         wifiOnlyUpload = wifiOnly,
                         autoIndex = autoIndex,
                         indexingPaused = indexPaused,
+                        lastSyncTime = syncTime,
+                        lastSyncResult = syncResult,
                         totalMediaCount = total,
                     )
                 }
             }.collect {}
+        }
+    }
+
+    private fun observeAiEngineProvider() {
+        viewModelScope.launch {
+            settingsRepository.aiEngineProvider.collect { provider ->
+                _uiState.update { it.copy(aiEngineProvider = provider) }
+            }
         }
     }
 
@@ -94,15 +157,15 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun onForceSyncNow() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isForcingSyncNow = true) }
-            workScheduler.forceSync()
-            _uiState.update { it.copy(isForcingSyncNow = false) }
-        }
+        workScheduler.forceSync()
     }
 
     fun onForceIndexNow() {
         workScheduler.startImmediateIndexing()
         refreshIndexingStats()
+    }
+
+    fun onAiEngineProviderSelected(provider: String) {
+        viewModelScope.launch { settingsRepository.setAiEngineProvider(provider) }
     }
 }

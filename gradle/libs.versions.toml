@@ -45,18 +45,28 @@ paging = "3.3.4"
 # Permissions
 accompanist = "0.36.0"
 
-# ML Kit (Fase 2 — indicizzazione AI on-device)
-mlkitLabeling = "17.0.9"
-mlkitTextRecognition = "16.0.1"
+# ML Kit unbundled via Play Services (Step 1: APK size reduction)
+playServicesMlkitTextRecognition = "19.0.1"
+playServicesMlkitFaceDetection = "17.1.0"
+playServicesMlkitImageLabeling = "16.0.8"
+tensorflowLite = "2.16.1"
+tensorflowLiteSupport = "0.4.4"
+coroutinesPlayServices = "1.9.0"
 
 # MapLibre (Fase 2 — vista mappa GPS)
 maplibre = "11.8.1"
+
+# SMB (Samba) for local NAS access
+smbj = "0.13.0"
 
 # AndroidX ExifInterface
 exifinterface = "1.3.7"
 
 # Glance (Fase 3 — widget homescreen)
 glance = "1.1.1"
+
+# MediaPipe Tasks GenAI — Gemma 4 on-device inference (Fase 4/5)
+mediapipeTasks = "0.10.14"
 
 # Kotlin Multiplatform + Compose Desktop (Fase 5)
 composeMultiplatform = "1.7.3"
@@ -145,12 +155,19 @@ paging-compose = { group = "androidx.paging", name = "paging-compose", version.r
 # Accompanist
 accompanist-permissions = { group = "com.google.accompanist", name = "accompanist-permissions", version.ref = "accompanist" }
 
-# ML Kit
-mlkit-image-labeling = { group = "com.google.mlkit", name = "image-labeling", version.ref = "mlkitLabeling" }
-mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition", version.ref = "mlkitTextRecognition" }
+# ML Kit unbundled via Play Services
+play-services-mlkit-text-recognition = { group = "com.google.android.gms", name = "play-services-mlkit-text-recognition", version.ref = "playServicesMlkitTextRecognition" }
+play-services-mlkit-face-detection = { group = "com.google.android.gms", name = "play-services-mlkit-face-detection", version.ref = "playServicesMlkitFaceDetection" }
+play-services-mlkit-image-labeling = { group = "com.google.android.gms", name = "play-services-mlkit-image-labeling", version.ref = "playServicesMlkitImageLabeling" }
+tensorflow-lite = { group = "org.tensorflow", name = "tensorflow-lite", version.ref = "tensorflowLite" }
+tensorflow-lite-support = { group = "org.tensorflow", name = "tensorflow-lite-support", version.ref = "tensorflowLiteSupport" }
+kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-play-services", version.ref = "coroutinesPlayServices" }
 
 # MapLibre
 maplibre-android = { group = "org.maplibre.gl", name = "android-sdk", version.ref = "maplibre" }
+
+# SMBJ (Samba)
+smbj = { group = "com.hierynomus", name = "smbj", version.ref = "smbj" }
 
 # ExifInterface
 exifinterface = { group = "androidx.exifinterface", name = "exifinterface", version.ref = "exifinterface" }
@@ -158,6 +175,9 @@ exifinterface = { group = "androidx.exifinterface", name = "exifinterface", vers
 # Glance
 glance-appwidget = { group = "androidx.glance", name = "glance-appwidget", version.ref = "glance" }
 glance-material3 = { group = "androidx.glance", name = "glance-material3", version.ref = "glance" }
+
+# MediaPipe Tasks GenAI
+mediapipe-tasks-genai = { group = "com.google.mediapipe", name = "tasks-genai", version.ref = "mediapipeTasks" }
 
 # KMP / Desktop (Fase 5)
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }

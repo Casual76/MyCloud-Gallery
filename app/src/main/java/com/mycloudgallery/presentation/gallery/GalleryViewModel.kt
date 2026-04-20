@@ -4,10 +4,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import com.mycloudgallery.domain.model.MediaItem
 import com.mycloudgallery.domain.model.NetworkMode
 import com.mycloudgallery.domain.repository.MediaRepository
 import com.mycloudgallery.core.network.NetworkDetector
+import com.mycloudgallery.worker.SyncWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +24,7 @@ import javax.inject.Inject
 class GalleryViewModel @Inject constructor(
     private val mediaRepository: MediaRepository,
     private val networkDetector: NetworkDetector,
+    private val workManager: WorkManager,
 ) : ViewModel() {
 
     val mediaItems: Flow<PagingData<MediaItem>> = mediaRepository.getAllMedia()
@@ -32,9 +36,30 @@ class GalleryViewModel @Inject constructor(
     val networkMode: StateFlow<NetworkMode> = networkDetector.networkMode
 
     init {
+        observeMediaCount()
+        observeSyncStatus()
+    }
+
+    private fun observeMediaCount() {
         viewModelScope.launch {
             mediaRepository.getTotalCount().collect { count ->
                 _uiState.update { it.copy(totalMediaCount = count) }
+            }
+        }
+    }
+
+    private fun observeSyncStatus() {
+        viewModelScope.launch {
+            workManager.getWorkInfosByTagFlow(SyncWorker.WORK_NAME).collect { workInfos ->
+                val activeWork = workInfos.find { it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED }
+                
+                _uiState.update { state ->
+                    state.copy(
+                        isSyncing = activeWork != null,
+                        syncProgress = activeWork?.progress?.getFloat(SyncWorker.KEY_PROCESSED, 0f) ?: 0f,
+                        syncTotal = activeWork?.progress?.getInt(SyncWorker.KEY_TOTAL, 0) ?: 0
+                    )
+                }
             }
         }
     }
@@ -87,4 +112,7 @@ data class GalleryUiState(
     val selectedIds: Set<String> = emptySet(),
     val isSelectionMode: Boolean = false,
     val totalMediaCount: Int = 0,
+    val isSyncing: Boolean = false,
+    val syncProgress: Float = 0f,
+    val syncTotal: Int = 0,
 )

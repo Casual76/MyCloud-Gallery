@@ -7,152 +7,278 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.mycloudgallery.core.database.dao.MediaItemDao
 import com.mycloudgallery.core.database.entity.MediaItemEntity
-import com.mycloudgallery.core.network.WebDavClient
+import com.mycloudgallery.core.network.SmbClientImpl
 import com.mycloudgallery.core.network.WebDavResource
+import com.mycloudgallery.core.security.TokenManager
+import com.mycloudgallery.domain.repository.SettingsRepository
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.UUID
 
 /**
- * Worker di sincronizzazione che confronta i file sul NAS (via WebDAV PROPFIND)
+ * Worker di sincronizzazione che confronta i file sul NAS (via SMB)
  * con l'indice Room locale.
- *
- * Algoritmo:
- * 1. PROPFIND ricorsivo per sottocartelle (max 4 coroutine parallele)
- * 2. Confronto con l'indice locale
- * 3. Nuovi file → insert in Room
- * 4. File mancanti → soft delete (cestino 30gg)
- * 5. File modificati → aggiorna metadati
  */
 @HiltWorker
 class SyncWorker @AssistedInject constructor(
     @Assisted context: Context,
     @Assisted params: WorkerParameters,
-    private val webDavClient: WebDavClient,
+    private val smbClient: SmbClientImpl,
+    private val webDavClient: com.mycloudgallery.core.network.WebDavClient,
+    private val networkDetector: com.mycloudgallery.core.network.NetworkDetector,
     private val mediaItemDao: MediaItemDao,
+    private val tokenManager: TokenManager,
+    private val settingsRepository: SettingsRepository,
 ) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+        val mode = networkDetector.networkMode.value
+        if (mode == com.mycloudgallery.domain.model.NetworkMode.OFFLINE) {
+            return@withContext Result.retry()
+        }
+
         try {
             setProgress(workDataOf(KEY_STATUS to "scanning"))
 
-            // 1. Scansiona NAS via PROPFIND
-            val remoteResources = scanRemoteFiles(ROOT_PATHS)
-            val remotePathSet = remoteResources.map { it.path }.toSet()
+            val rootPaths = mutableListOf("/Public/")
+            tokenManager.username?.let { rootPaths.add("/$it/") }
 
-            setProgress(
-                workDataOf(
-                    KEY_STATUS to "syncing",
-                    KEY_TOTAL to remoteResources.size,
-                ),
-            )
+            // 1. Carica metadati locali per confronto differenziale
+            val localMetadata = mediaItemDao.getAllSyncMetadata().associateBy { it.webDavPath }
+            val localPaths = localMetadata.keys.toSet()
+            val remotePathSet = mutableSetOf<String>()
 
-            // 2. Confronta con l'indice locale
-            val localPaths = mediaItemDao.getAllWebDavPaths().toSet()
-            val newFiles = remoteResources.filter { it.path !in localPaths }
-            val deletedPaths = localPaths.filter { it !in remotePathSet }
+            val newEntities = mutableListOf<MediaItemEntity>()
+            val updatedEntities = mutableListOf<MediaItemEntity>()
+            var scannedCount = 0
 
-            // 3. Inserisci nuovi file (batch di 100)
-            var processed = 0
-            newFiles.chunked(100).forEach { batch ->
-                val entities = batch.map { it.toEntity() }
-                mediaItemDao.insertAll(entities)
-                processed += batch.size
-                setProgress(
-                    workDataOf(
-                        KEY_STATUS to "syncing",
-                        KEY_TOTAL to remoteResources.size,
-                        KEY_PROCESSED to processed,
-                        KEY_CURRENT_FILE to batch.lastOrNull()?.displayName,
-                    ),
-                )
+            // 2. Scansione streaming via Channel
+            val resourceChannel = Channel<WebDavResource>(capacity = 256)
+            
+            coroutineScope {
+                // Produttore: scansiona NAS (SMB se locale, WebDAV se remoto)
+                val scanJob = launch {
+                    try {
+                        if (mode == com.mycloudgallery.domain.model.NetworkMode.LOCAL) {
+                            smbClient.withPersistentSession { session ->
+                                scanRemoteFilesStreaming(session, rootPaths, resourceChannel)
+                            }
+                        } else {
+                            scanRemoteFilesStreamingWebDav(rootPaths, resourceChannel)
+                        }
+                    } finally {
+                        resourceChannel.close()
+                    }
+                }
+
+                // Consumatore: confronta e prepara batch Room
+                for (res in resourceChannel) {
+                    remotePathSet.add(res.path)
+                    scannedCount++
+
+                    val local = localMetadata[res.path]
+                    if (local == null) {
+                        newEntities.add(res.toEntity())
+                    } else if (local.modifiedAt != res.lastModified || local.fileSize != res.contentLength) {
+                        // File modificato: aggiorna e resetta l'indicizzazione
+                        updatedEntities.add(res.toEntity(local))
+                    }
+
+                    // Flush batch ogni 100 per risparmiare memoria e dare feedback
+                    if (newEntities.size >= 100 || updatedEntities.size >= 100) {
+                        flushBatches(newEntities, updatedEntities)
+                        setProgress(workDataOf(
+                            KEY_STATUS to "syncing",
+                            KEY_TOTAL to scannedCount,
+                            KEY_PROCESSED to scannedCount,
+                            KEY_CURRENT_FILE to res.displayName,
+                        ))
+                    }
+                }
+                scanJob.join()
             }
 
-            // 4. Segna file eliminati dal NAS come cestino
+            // Flush finale
+            flushBatches(newEntities, updatedEntities)
+
+            // 3. Gestisci file eliminati (sposta in cestino)
+            val deletedPaths = localPaths.filter { it !in remotePathSet }
             if (deletedPaths.isNotEmpty()) {
+                val trashedAt = System.currentTimeMillis()
                 deletedPaths.chunked(100).forEach { batch ->
-                    mediaItemDao.deleteByWebDavPaths(batch)
+                    mediaItemDao.moveToTrashByWebDavPaths(batch, trashedAt)
                 }
             }
 
-            setProgress(workDataOf(KEY_STATUS to "completed", KEY_TOTAL to remoteResources.size))
+            settingsRepository.setSyncResult(
+                System.currentTimeMillis(),
+                "Completata: $scannedCount file trovati"
+            )
+            setProgress(workDataOf(KEY_STATUS to "completed", KEY_TOTAL to scannedCount))
             Result.success()
         } catch (e: Exception) {
+            settingsRepository.setSyncResult(
+                System.currentTimeMillis(),
+                "Errore: ${e.message ?: "Errore sconosciuto"}"
+            )
             setProgress(workDataOf(KEY_STATUS to "error", KEY_ERROR to (e.message ?: "Errore sync")))
             Result.retry()
         }
     }
 
-    /**
-     * Scansiona cartelle del NAS in parallelo (max 4 coroutine).
-     */
-    private suspend fun scanRemoteFiles(rootPaths: List<String>): List<WebDavResource> =
-        coroutineScope {
-            rootPaths.map { path ->
-                async { scanDirectory(path) }
-            }.awaitAll().flatten()
+    private suspend fun flushBatches(
+        newEntities: MutableList<MediaItemEntity>,
+        updatedEntities: MutableList<MediaItemEntity>
+    ) {
+        if (newEntities.isNotEmpty()) {
+            mediaItemDao.insertAll(newEntities.toList())
+            newEntities.clear()
         }
+        if (updatedEntities.isNotEmpty()) {
+            mediaItemDao.insertAll(updatedEntities.toList()) // insertAll usa REPLACE, ok anche per update
+            updatedEntities.clear()
+        }
+    }
 
-    private suspend fun scanDirectory(path: String): List<WebDavResource> {
-        val resources = webDavClient.propFind(path, depth = "1")
-        val files = mutableListOf<WebDavResource>()
+    private suspend fun scanRemoteFilesStreaming(
+        session: SmbClientImpl.PersistentSmbSession,
+        rootPaths: List<String>,
+        channel: Channel<WebDavResource>
+    ) = coroutineScope {
+        rootPaths.forEach { path ->
+            launch { scanDirectoryStreaming(session, path, channel) }
+        }
+    }
+
+    private suspend fun scanRemoteFilesStreamingWebDav(
+        rootPaths: List<String>,
+        channel: Channel<WebDavResource>
+    ) = coroutineScope {
+        rootPaths.forEach { path ->
+            launch { scanDirectoryStreamingWebDav(path, channel) }
+        }
+    }
+
+    private suspend fun scanDirectoryStreaming(
+        session: SmbClientImpl.PersistentSmbSession,
+        path: String,
+        channel: Channel<WebDavResource>
+    ) {
+        val resources = try {
+            session.list(path)
+        } catch (e: Exception) {
+            emptyList()
+        }
+        
         val subdirectories = mutableListOf<String>()
 
+        val normalizedCurrentPath = path.trimEnd('/')
         for (res in resources) {
-            if (res.path == path) continue // Salta la directory stessa
+            val normalizedResPath = res.path.trimEnd('/')
+            if (normalizedResPath == normalizedCurrentPath) continue
+            
+            if (res.displayName.startsWith(".")) continue
+            
             if (res.isDirectory) {
                 subdirectories.add(res.path)
-            } else if (isMediaFile(res.contentType)) {
-                files.add(res)
+            } else if (isMediaFile(res.contentType, res.displayName)) {
+                channel.send(res)
             }
         }
 
-        // Scansiona sottocartelle in parallelo (max 4)
+        // Parallelizza sottocartelle
         if (subdirectories.isNotEmpty()) {
             coroutineScope {
-                subdirectories.chunked(4).forEach { chunk ->
-                    chunk.map { dir ->
-                        async { scanDirectory(dir) }
-                    }.awaitAll().forEach { files.addAll(it) }
+                subdirectories.forEach { dir ->
+                    launch { scanDirectoryStreaming(session, dir, channel) }
                 }
             }
         }
-
-        return files
     }
 
-    private fun isMediaFile(contentType: String?): Boolean {
-        if (contentType == null) return false
-        return contentType.startsWith("image/") || contentType.startsWith("video/")
+    private suspend fun scanDirectoryStreamingWebDav(
+        path: String,
+        channel: Channel<WebDavResource>
+    ) {
+        val resources = try {
+            webDavClient.propFind(path, "1")
+        } catch (e: Exception) {
+            emptyList()
+        }
+        
+        val subdirectories = mutableListOf<String>()
+
+        val normalizedCurrentPath = path.trimEnd('/')
+        for (res in resources) {
+            val normalizedResPath = res.path.trimEnd('/')
+            if (normalizedResPath == normalizedCurrentPath) continue
+            
+            if (res.displayName.startsWith(".")) continue
+            
+            if (res.isDirectory) {
+                subdirectories.add(res.path)
+            } else if (isMediaFile(res.contentType, res.displayName)) {
+                channel.send(res)
+            }
+        }
+
+        // Parallelizza sottocartelle
+        if (subdirectories.isNotEmpty()) {
+            coroutineScope {
+                subdirectories.forEach { dir ->
+                    launch { scanDirectoryStreamingWebDav(dir, channel) }
+                }
+            }
+        }
     }
 
-    private fun WebDavResource.toEntity(): MediaItemEntity = MediaItemEntity(
-        id = path,
-        fileName = displayName,
-        mimeType = contentType ?: "application/octet-stream",
-        fileSize = contentLength,
-        createdAt = lastModified,
-        modifiedAt = lastModified,
-        webDavPath = path,
-        thumbnailCachePath = null,
-        isVideo = contentType?.startsWith("video/") == true,
-        videoDuration = null,
-        width = null,
-        height = null,
-        exifLatitude = null,
-        exifLongitude = null,
-        exifCameraModel = null,
-        exifIso = null,
-        exifFocalLength = null,
-        aiLabels = null,
-        aiScenes = null,
-        aiOcrText = null,
-    )
+    private fun isMediaFile(contentType: String?, fileName: String): Boolean {
+        val extension = fileName.substringAfterLast('.', "").lowercase()
+        val mediaExtensions = setOf("jpg", "jpeg", "png", "webp", "heic", "heif", "gif", "mp4", "mkv", "mov", "avi")
+        if (mediaExtensions.contains(extension)) return true
+        
+        val mime = contentType?.lowercase() ?: return false
+        return mime.startsWith("image/") || mime.startsWith("video/") || mime == "application/octet-stream"
+    }
+
+    private fun WebDavResource.toEntity(local: MediaItemDao.SyncMetadata? = null): MediaItemEntity {
+        val extension = displayName.substringAfterLast('.', "").lowercase()
+        val isVideoFile = contentType?.startsWith("video/") == true || 
+                setOf("mp4", "mkv", "mov", "avi").contains(extension)
+        
+        return MediaItemEntity(
+            id = path,
+            fileName = displayName,
+            mimeType = contentType ?: "application/octet-stream",
+            fileSize = contentLength,
+            createdAt = local?.createdAt ?: lastModified,
+            modifiedAt = lastModified,
+            webDavPath = path,
+            thumbnailCachePath = null, // Reset thumbnails on change or new file
+            isVideo = isVideoFile,
+            videoDuration = null,
+            width = null,
+            height = null,
+            exifLatitude = null,
+            exifLongitude = null,
+            exifCameraModel = null,
+            exifIso = null,
+            exifFocalLength = null,
+            aiLabels = null,
+            aiScenes = null,
+            aiOcrText = null,
+            isIndexed = false, // Always (re)index new or modified files
+            isInTrash = false,
+            trashedAt = null,
+            isFavorite = local?.isFavorite ?: false,
+            perceptualHash = null,
+            duplicateGroupId = null,
+        )
+    }
 
     companion object {
         const val WORK_NAME = "sync_worker"
@@ -161,11 +287,5 @@ class SyncWorker @AssistedInject constructor(
         const val KEY_PROCESSED = "processed"
         const val KEY_CURRENT_FILE = "current_file"
         const val KEY_ERROR = "error"
-
-        // Cartelle root da scansionare sul NAS
-        val ROOT_PATHS = listOf(
-            "/Public/",
-            "/SmartWare/",
-        )
     }
 }

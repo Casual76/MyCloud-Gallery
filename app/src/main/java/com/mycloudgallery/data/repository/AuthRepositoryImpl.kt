@@ -1,12 +1,18 @@
 package com.mycloudgallery.data.repository
 
+import com.hierynomus.smbj.SMBClient
+import com.hierynomus.smbj.auth.AuthenticationContext
+import com.hierynomus.smbj.connection.Connection
+import com.hierynomus.smbj.session.Session
 import com.mycloudgallery.core.network.NetworkDetector
 import com.mycloudgallery.core.network.WdRestApiService
-import com.mycloudgallery.core.network.model.AuthTokenRequest
+import com.mycloudgallery.core.network.normalizeServerAddress
 import com.mycloudgallery.core.network.model.RefreshTokenRequest
 import com.mycloudgallery.core.security.TokenManager
 import com.mycloudgallery.domain.model.AuthState
 import com.mycloudgallery.domain.repository.AuthRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -19,31 +25,45 @@ class AuthRepositoryImpl @Inject constructor(
 
     override suspend fun login(username: String, password: String): Result<AuthState.Authenticated> =
         runCatching {
-            val response = apiService.login(AuthTokenRequest(username, password))
+            val serverAddress = tokenManager.nasLocalIp
+                ?.trim()
+                ?.takeIf { normalizeServerAddress(it).isNotBlank() }
+                ?: throw AuthException("Inserisci l'indirizzo del NAS")
+            
+            val hostOnly = normalizeServerAddress(serverAddress)
 
-            if (!response.isSuccessful) {
-                val errorMsg = when (response.code()) {
-                    401 -> "Credenziali non valide"
-                    403 -> "Accesso negato"
-                    else -> "Errore del server (${response.code()})"
+            withContext(Dispatchers.IO) {
+                val client = SMBClient()
+                val connection: Connection = try {
+                    client.connect(hostOnly)
+                } catch (e: Exception) {
+                    throw AuthException("Impossibile connettersi al NAS ($hostOnly): ${e.message}")
                 }
-                throw AuthException(errorMsg)
+
+                try {
+                    val auth = AuthenticationContext(username, password.toCharArray(), null)
+                    val session: Session = try {
+                        connection.authenticate(auth)
+                    } catch (e: Exception) {
+                        throw AuthException("Credenziali locali non valide")
+                    }
+                    session.close()
+                } finally {
+                    connection.close()
+                }
             }
 
-            val body = response.body() ?: throw AuthException("Risposta vuota dal server")
-
-            tokenManager.saveTokens(
-                accessToken = body.accessToken,
-                refreshToken = body.refreshToken,
-                expiresInSeconds = body.expiresIn,
-            )
+            // Se siamo qui, la connessione SMB è riuscita. Salviamo le credenziali.
             tokenManager.username = username
+            tokenManager.password = password // Salviamo la password in modo sicuro per le operazioni sui file
+            tokenManager.accessToken = "smb_session_active" // Usiamo un dummy per indicare che siamo loggati
+            tokenManager.nasLocalIp = hostOnly
 
-            // Prova a ottenere il nome del dispositivo
-            val deviceName = fetchDeviceName()
+            // TODO: In futuro aggiungere supporto per accesso Cloud/Relay qui.
+            // Al momento funziona solo in rete locale via SMB.
+
+            val deviceName = fetchDeviceName() ?: "MyCloud NAS"
             tokenManager.deviceName = deviceName
-
-            // Prova a rilevare l'IP locale del NAS
             networkDetector.start()
 
             AuthState.Authenticated(
@@ -57,6 +77,7 @@ class AuthRepositoryImpl @Inject constructor(
             ?: throw AuthException("Nessun refresh token disponibile")
 
         val response = apiService.refreshToken(
+            networkDetector.getApiUrl("auth/token"),
             RefreshTokenRequest(refreshToken = currentRefreshToken),
         )
 
@@ -68,9 +89,9 @@ class AuthRepositoryImpl @Inject constructor(
         val body = response.body() ?: throw AuthException("Risposta vuota dal server")
 
         tokenManager.saveTokens(
-            accessToken = body.accessToken,
-            refreshToken = body.refreshToken,
-            expiresInSeconds = body.expiresIn,
+            accessToken = body.accessToken ?: "os5_dummy_access",
+            refreshToken = body.refreshToken ?: "os5_dummy_refresh",
+            expiresInSeconds = body.expiresIn ?: 3600,
         )
     }
 
@@ -81,7 +102,7 @@ class AuthRepositoryImpl @Inject constructor(
     override fun isLoggedIn(): Boolean = tokenManager.isLoggedIn
 
     private suspend fun fetchDeviceName(): String? = try {
-        val response = apiService.getDeviceList()
+        val response = apiService.getDeviceList(networkDetector.getApiUrl("device/list"))
         if (response.isSuccessful) {
             val devices = response.body()?.devices.orEmpty()
             val device = devices.firstOrNull()

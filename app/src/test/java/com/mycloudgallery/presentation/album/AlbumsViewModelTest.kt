@@ -74,6 +74,7 @@ class AlbumsViewModelTest {
     fun `onShowCreateDialog apre il dialog`() = runTest {
         advanceUntilIdle()
         viewModel.onShowCreateDialog()
+        advanceUntilIdle()
 
         assertTrue(viewModel.uiState.value.showCreateDialog)
         assertEquals("", viewModel.uiState.value.dialogInputName)
@@ -110,6 +111,7 @@ class AlbumsViewModelTest {
         coEvery { albumRepository.deleteAlbum("1") } returns Unit
 
         viewModel.onRequestDelete("1")
+        advanceUntilIdle()
         assertEquals("1", viewModel.uiState.value.deleteAlbumId)
 
         viewModel.onConfirmDelete()
@@ -123,6 +125,7 @@ class AlbumsViewModelTest {
     fun `onStartRename popola il dialog con il nome corrente`() = runTest {
         advanceUntilIdle()
         viewModel.onStartRename("1")
+        advanceUntilIdle()
 
         assertEquals("1", viewModel.uiState.value.renameAlbumId)
         assertEquals("Estate 2024", viewModel.uiState.value.dialogInputName)

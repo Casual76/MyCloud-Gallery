@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs grep:*)",
+      "Bash(grep -n \"TopAppBar\\\\|LargeTopAppBar\\\\|MediumTopAppBar\" \"/c/VibeCoded projects/MyCloud Gallery/app/src/main/java/com/mycloudgallery/presentation\"/**/*.kt)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(echo \"exit: $?\")"
+    ]
+  }
+}

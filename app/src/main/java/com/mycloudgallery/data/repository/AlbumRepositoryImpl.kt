@@ -1,16 +1,15 @@
 package com.mycloudgallery.data.repository
 
 import com.mycloudgallery.core.database.dao.AlbumDao
+import com.mycloudgallery.core.database.dao.AlbumWithCount
 import com.mycloudgallery.core.database.dao.MediaItemDao
 import com.mycloudgallery.core.database.entity.AlbumEntity
 import com.mycloudgallery.core.database.entity.AlbumMediaCrossRef
 import com.mycloudgallery.core.util.toDomain
-import com.mycloudgallery.core.util.toEntity
 import com.mycloudgallery.domain.model.Album
 import com.mycloudgallery.domain.model.MediaItem
 import com.mycloudgallery.domain.repository.AlbumRepository
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import java.util.UUID
 import javax.inject.Inject
@@ -23,32 +22,9 @@ class AlbumRepositoryImpl @Inject constructor(
 ) : AlbumRepository {
 
     override fun getAll(): Flow<List<Album>> =
-        albumDao.getAll().combine(
-            albumDao.getAll() // driven by outer collection — inner count joined
-        ) { albums, _ -> albums }
-            // Flatten: per ogni album leggi il conteggio reale
-            .map { albums ->
-                albums.map { entity ->
-                    entity.toDomain(mediaCount = 0)
-                }
-            }
-            // Nota: il conteggio preciso viene iniettato in getMediaCountForAlbum() separato
-            // per evitare N+1 query. La lista album usa mediaCount=0 come placeholder;
-            // la card mostra il contatore via getMediaCountForAlbum() in CollectedState.
-
-    /**
-     * Versione con conteggio reale per ogni album.
-     * Emette ogni volta che un album o il suo conteggio media cambia.
-     */
-    fun getAllWithCounts(): Flow<List<Album>> {
-        return albumDao.getAll().map { entities ->
-            entities.map { entity ->
-                // Usa una query sincrona — Room non supporta join aggregati su Flow multipli
-                // senza una view; deleghiamo la count a una query separata nella UI
-                entity.toDomain(mediaCount = 0)
-            }
+        albumDao.getAllWithCounts().map { list ->
+            list.map { it.album.toDomain(mediaCount = it.mediaCount) }
         }
-    }
 
     override fun getMediaForAlbum(albumId: String): Flow<List<MediaItem>> =
         albumDao.getMediaForAlbum(albumId).map { entities ->

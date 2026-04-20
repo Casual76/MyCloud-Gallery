@@ -9,10 +9,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
+import coil3.ImageLoader
+
 /** ViewModel leggero usato dalla BottomNavBar per osservare il badge delle richieste pendenti. */
 @HiltViewModel
 class BottomNavViewModel @Inject constructor(
     sharedAlbumRepository: SharedAlbumRepository,
+    val imageLoader: ImageLoader,
 ) : ViewModel() {
 
     val pendingRequestsCount: StateFlow<Int> = sharedAlbumRepository

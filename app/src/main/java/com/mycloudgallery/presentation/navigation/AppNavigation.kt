@@ -1,23 +1,29 @@
 package com.mycloudgallery.presentation.navigation
 
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.IntOffset
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Text
-import androidx.compose.ui.Alignment
 import com.mycloudgallery.presentation.album.AlbumDetailScreen
 import com.mycloudgallery.presentation.album.AlbumsScreen
 import com.mycloudgallery.presentation.auth.LoginScreen
@@ -37,6 +43,10 @@ private val bottomNavRoutes = setOf(
     SettingsRoute::class,
 )
 
+@OptIn(ExperimentalSharedTransitionApi::class)
+val LocalSharedTransitionScope = compositionLocalOf<SharedTransitionScope?> { null }
+
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun AppNavigation() {
     val navController = rememberNavController()
@@ -46,94 +56,123 @@ fun AppNavigation() {
         bottomNavRoutes.any { dest.hasRoute(it) }
     } ?: false
 
-    Scaffold(
-        bottomBar = {
-            if (showBottomNav) AppBottomNavBar(navController)
-        },
-    ) { innerPadding ->
-        NavHost(
-            navController = navController,
-            startDestination = LoginRoute,
-            modifier = Modifier.padding(innerPadding),
-            enterTransition = { slideInHorizontally(initialOffsetX = { it }) + fadeIn() },
-            exitTransition = { slideOutHorizontally(targetOffsetX = { -it / 3 }) + fadeOut() },
-            popEnterTransition = { slideInHorizontally(initialOffsetX = { -it / 3 }) + fadeIn() },
-            popExitTransition = { slideOutHorizontally(targetOffsetX = { it }) + fadeOut() },
-        ) {
-            composable<LoginRoute> {
-                LoginScreen(
-                    onLoginSuccess = {
-                        navController.navigate(GalleryRoute) {
-                            popUpTo(LoginRoute) { inclusive = true }
+    // Physics-based spring specs for "Apple-level" fluidity
+    val springSpec = spring<IntOffset>(
+        dampingRatio = Spring.DampingRatioLowBouncy,
+        stiffness = Spring.StiffnessMediumLow
+    )
+    val fadeSpec = spring<Float>(
+        stiffness = Spring.StiffnessMediumLow
+    )
+
+    SharedTransitionLayout {
+        CompositionLocalProvider(LocalSharedTransitionScope provides this) {
+            Scaffold(
+                bottomBar = {
+                    if (showBottomNav) AppBottomNavBar(navController)
+                },
+            ) { innerPadding ->
+                NavHost(
+                    navController = navController,
+                    startDestination = LoginRoute,
+                    modifier = Modifier.padding(innerPadding),
+                    enterTransition = {
+                        slideInHorizontally(animationSpec = springSpec) { it } + 
+                        fadeIn(animationSpec = fadeSpec)
+                    },
+                    exitTransition = {
+                        slideOutHorizontally(animationSpec = springSpec) { -it / 3 } + 
+                        fadeOut(animationSpec = fadeSpec)
+                    },
+                    popEnterTransition = {
+                        slideInHorizontally(animationSpec = springSpec) { -it / 3 } + 
+                        fadeIn(animationSpec = fadeSpec)
+                    },
+                    popExitTransition = {
+                        slideOutHorizontally(animationSpec = springSpec) { it } + 
+                        fadeOut(animationSpec = fadeSpec)
+                    },
+                ) {
+                    composable<LoginRoute> {
+                        LoginScreen(
+                            onLoginSuccess = {
+                                navController.navigate(GalleryRoute) {
+                                    popUpTo(LoginRoute) { inclusive = true }
+                                }
+                            },
+                        )
+                    }
+
+                    composable<GalleryRoute> {
+                        GalleryScreen(
+                            animatedVisibilityScope = this@composable,
+                            onMediaClick = { mediaId -> 
+                                navController.navigate(ViewerRoute(mediaId = mediaId)) 
+                            },
+                            onSearchClick = { navController.navigate(SearchRoute) },
+                            onSettingsClick = { navController.navigate(SettingsRoute) },
+                        )
+                    }
+
+                    composable<ViewerRoute>(
+                        enterTransition = {
+                            fadeIn(animationSpec = fadeSpec) + scaleIn(initialScale = 0.92f, animationSpec = fadeSpec)
+                        },
+                        exitTransition = {
+                            fadeOut(animationSpec = fadeSpec) + scaleOut(targetScale = 0.92f, animationSpec = fadeSpec)
                         }
-                    },
-                )
-            }
+                    ) {
+                        ViewerScreen(
+                            animatedVisibilityScope = this@composable,
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
 
-            composable<GalleryRoute> {
-                GalleryScreen(
-                    onMediaClick = { mediaId -> navController.navigate(ViewerRoute(mediaId = mediaId)) },
-                    onSearchClick = { navController.navigate(SearchRoute) },
-                    onSettingsClick = { navController.navigate(SettingsRoute) },
-                )
-            }
+                    composable<AlbumsRoute> {
+                        AlbumsScreen(
+                            onAlbumClick = { albumId, isFavorites ->
+                                navController.navigate(AlbumDetailRoute(albumId = albumId, isFavorites = isFavorites))
+                            },
+                        )
+                    }
 
-            composable<ViewerRoute> {
-                ViewerScreen(onBack = { navController.popBackStack() })
-            }
+                    composable<AlbumDetailRoute> {
+                        AlbumDetailScreen(
+                            onBack = { navController.popBackStack() },
+                            onMediaClick = { mediaId -> navController.navigate(ViewerRoute(mediaId = mediaId)) },
+                        )
+                    }
 
-            composable<AlbumsRoute> {
-                AlbumsScreen(
-                    onAlbumClick = { albumId, isFavorites ->
-                        navController.navigate(AlbumDetailRoute(albumId = albumId, isFavorites = isFavorites))
-                    },
-                )
-            }
+                    composable<SearchRoute> {
+                        SearchScreen(
+                            animatedVisibilityScope = this@composable,
+                            onMediaClick = { mediaId -> navController.navigate(ViewerRoute(mediaId = mediaId)) },
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
 
-            composable<AlbumDetailRoute> {
-                AlbumDetailScreen(
-                    onBack = { navController.popBackStack() },
-                    onMediaClick = { mediaId -> navController.navigate(ViewerRoute(mediaId = mediaId)) },
-                )
-            }
+                    composable<MapRoute> {
+                        MapScreen(
+                            onMediaClick = { mediaId -> navController.navigate(ViewerRoute(mediaId = mediaId)) },
+                        )
+                    }
 
-            composable<SearchRoute> {
-                SearchScreen(
-                    onMediaClick = { mediaId -> navController.navigate(ViewerRoute(mediaId = mediaId)) },
-                    onBack = { navController.popBackStack() },
-                )
-            }
+                    composable<SettingsRoute> {
+                        SettingsScreen()
+                    }
 
-            composable<MapRoute> {
-                MapScreen(
-                    onMediaClick = { mediaId -> navController.navigate(ViewerRoute(mediaId = mediaId)) },
-                )
-            }
+                    composable<TrashRoute> {
+                        TrashScreen(onBack = { navController.popBackStack() })
+                    }
 
-            composable<SettingsRoute> {
-                SettingsScreen()
-            }
-
-            composable<TrashRoute> {
-                TrashScreen(onBack = { navController.popBackStack() })
-            }
-
-            composable<DuplicatesRoute> {
-                DuplicatesScreen(
-                    onBack = { navController.popBackStack() },
-                    onMediaClick = { mediaId -> navController.navigate(ViewerRoute(mediaId = mediaId)) },
-                )
+                    composable<DuplicatesRoute> {
+                        DuplicatesScreen(
+                            onBack = { navController.popBackStack() },
+                            onMediaClick = { mediaId -> navController.navigate(ViewerRoute(mediaId = mediaId)) },
+                        )
+                    }
+                }
             }
         }
-    }
-}
-
-@Composable
-private fun PlaceholderScreen(name: String) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(text = name)
     }
 }

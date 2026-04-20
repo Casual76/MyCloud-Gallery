@@ -119,7 +119,8 @@ interface MediaItemDao {
             exifCameraModel = :cameraModel, exifIso = :iso,
             exifFocalLength = :focalLength,
             aiLabels = :labels, aiScenes = :scenes, aiOcrText = :ocrText,
-            perceptualHash = :pHash, isIndexed = 1
+            perceptualHash = :pHash, thumbnailCachePath = :thumbnailPath, 
+            isIndexed = 1
         WHERE id = :id
     """)
     suspend fun updateIndexedFields(
@@ -128,12 +129,16 @@ interface MediaItemDao {
         cameraModel: String?, iso: Int?, focalLength: Float?,
         labels: String?, scenes: String?, ocrText: String?,
         pHash: String?,
+        thumbnailPath: String?,
     )
 
     // --- Duplicati (Fase 2.4) ---
 
     @Query("SELECT * FROM media_items WHERE perceptualHash = :hash AND isInTrash = 0")
     suspend fun getByPerceptualHash(hash: String): List<MediaItemEntity>
+
+    @Query("SELECT * FROM media_items WHERE perceptualHash IS NOT NULL AND isInTrash = 0")
+    suspend fun getAllWithPHash(): List<MediaItemEntity>
 
     @Query("UPDATE media_items SET duplicateGroupId = :groupId WHERE id = :id")
     suspend fun setDuplicateGroup(id: String, groupId: String?)
@@ -149,6 +154,11 @@ interface MediaItemDao {
 
     @Query("SELECT * FROM media_items WHERE id IN (:ids) AND isInTrash = 0 ORDER BY createdAt DESC")
     suspend fun getByIds(ids: List<String>): List<MediaItemEntity>
+
+    // --- Lista semplice preferiti (usata da AlbumDetailViewModel) ---
+
+    @Query("SELECT * FROM media_items WHERE isFavorite = 1 AND isInTrash = 0 ORDER BY createdAt DESC")
+    fun getFavoritesList(): Flow<List<MediaItemEntity>>
 
     // --- Lista semplice (usata da SearchRepository) ---
 
@@ -168,6 +178,31 @@ interface MediaItemDao {
     """)
     suspend fun searchLike(query: String, limit: Int = 200): List<MediaItemEntity>
 
+    // --- Ricerca Avanzata ---
+
+    @Query("""
+        SELECT * FROM media_items
+        WHERE isInTrash = 0
+        AND (:isVideo IS NULL OR isVideo = :isVideo)
+        AND (:isFavorite IS NULL OR isFavorite = :isFavorite)
+        AND (:hasGps IS NULL OR (:hasGps = 1 AND exifLatitude IS NOT NULL) OR (:hasGps = 0 AND exifLatitude IS NULL))
+        AND (:hasOcr IS NULL OR (:hasOcr = 1 AND aiOcrText IS NOT NULL) OR (:hasOcr = 0 AND aiOcrText IS NULL))
+        AND (:isDuplicate IS NULL OR (:isDuplicate = 1 AND duplicateGroupId IS NOT NULL) OR (:isDuplicate = 0 AND duplicateGroupId IS NULL))
+        AND (createdAt BETWEEN :from AND :to)
+        ORDER BY createdAt DESC
+        LIMIT :limit
+    """)
+    suspend fun searchFiltered(
+        isVideo: Boolean?,
+        isFavorite: Boolean?,
+        hasGps: Boolean?,
+        hasOcr: Boolean?,
+        isDuplicate: Boolean?,
+        from: Long = 0L,
+        to: Long = Long.MAX_VALUE,
+        limit: Int = 1000
+    ): List<MediaItemEntity>
+
     // --- Conteggi ---
 
     @Query("SELECT COUNT(*) FROM media_items WHERE isFavorite = 1 AND isInTrash = 0")
@@ -175,9 +210,30 @@ interface MediaItemDao {
 
     // --- Sync ---
 
+    data class SyncMetadata(
+        val webDavPath: String,
+        val modifiedAt: Long,
+        val fileSize: Long,
+        val isFavorite: Boolean,
+        val createdAt: Long
+    )
+
+    @Query("SELECT webDavPath, modifiedAt, fileSize, isFavorite, createdAt FROM media_items")
+    suspend fun getAllSyncMetadata(): List<SyncMetadata>
+
+    @Query("""
+        UPDATE media_items 
+        SET fileSize = :size, modifiedAt = :modifiedAt, isIndexed = 0 
+        WHERE webDavPath = :path
+    """)
+    suspend fun updateBasicMetadata(path: String, size: Long, modifiedAt: Long)
+
     @Query("SELECT webDavPath FROM media_items")
     suspend fun getAllWebDavPaths(): List<String>
 
     @Query("DELETE FROM media_items WHERE webDavPath IN (:paths)")
     suspend fun deleteByWebDavPaths(paths: List<String>)
+
+    @Query("UPDATE media_items SET isInTrash = 1, trashedAt = :trashedAt WHERE webDavPath IN (:paths)")
+    suspend fun moveToTrashByWebDavPaths(paths: List<String>, trashedAt: Long = System.currentTimeMillis())
 }

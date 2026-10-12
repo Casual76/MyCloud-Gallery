@@ -39,31 +39,112 @@ enum class DeviceStatus(val wire: String) {
   /** Si puo' passare solo a uno stato piu' severo (relazione transitiva: vale anche saltando versioni). */
   fun canBecome(next: DeviceStatus): Boolean = next.ordinal > ordinal
 
+  /** Revocato o perso: nessun suo dato vale, qualunque data dichiari. */
+  val isBarred: Boolean get() = ordinal >= REVOKED.ordinal
+
   companion object {
     fun fromWire(text: String): DeviceStatus =
       entries.firstOrNull { it.wire == text } ?: violation(RejectReason.INVALID_FIELD, "stato del dispositivo sconosciuto")
   }
 }
 
-/** La configurazione di famiglia. Si estende in Fase 2.2 (orario del NAS, preset, aree). */
-data class FamilyConfig(
-  /** Nome o indirizzo del NAS: mai cambiato in automatico (E-R7). */
-  val nasHost: String,
-  /** La share dell'area comune: contiene il registro e le richieste. */
-  val commonShare: String,
-) {
+/** Preset e qualita' delle anteprime proposti ai dispositivi nuovi (passo 8): valori di [ConfigTokens]. */
+data class ConfigDefaults(val preset: String, val quality: String) {
   init {
-    TextRules.hostName(nasHost)
-    ShareNames.check(commonShare)
+    ConfigTokens.check(preset)
+    ConfigTokens.check(quality)
   }
 
-  internal fun toJson(): JsonObject = jsonObject("nasHost" to nasHost.json(), "commonShare" to commonShare.json())
+  internal fun toJson(): JsonObject = jsonObject("preset" to preset.json(), "quality" to quality.json())
+
+  companion object {
+    val STANDARD = ConfigDefaults(preset = "balanced", quality = "standard")
+
+    internal fun read(f: Fields): ConfigDefaults =
+      ConfigDefaults(f.string("preset", TrustLimits.MAX_ENUM_CHARS), f.string("quality", TrustLimits.MAX_ENUM_CHARS))
+  }
+}
+
+/**
+ * La configurazione di famiglia (`docs/formato-nas.md` §5.3), firmata nel registro: nasce alla fondazione
+ * (passo 12(e)) e la cambia solo l'admin. I campi facoltativi hanno un valore "assente" che nel JSON si
+ * omette (liste vuote, null): ogni configurazione ha una sola scrittura.
+ *
+ * @property nasHost l'IP **letterale** del NAS: ci si connette sempre li', mai cambiato in automatico (E-R7).
+ * @property commonShare la share dell'area comune: contiene il registro, le richieste e le segnalazioni.
+ * @property nasName il nome del NAS (informativo: non si risolve mai, E-R7).
+ * @property nasGuid il GUID del server SMB letto alla NEGOTIATE (D3). Le configurazioni scritte dall'app lo
+ *   portano sempre; un dispositivo che lo trova diverso da quello memorizzato non manda la password.
+ * @property homeUla i prefissi ULA /48 di casa ([UlaPrefix]), in ordine crescente: la "casa" (§3.2, E-R16).
+ * @property nasPower l'alimentazione del NAS ([NasPowerRule]): da qui deriva la fascia notte.
+ * @property wolMac il MAC per il Wake-on-LAN (dietro `FeatureFlags.wol`), se inserito.
+ * @property commonExclusions le cartelle dell'area comune escluse dall'indice (passo 5), percorsi di media
+ *   validati da `SharePath`, in ordine crescente.
+ * @property defaults preset e qualita' proposti ai dispositivi nuovi.
+ */
+data class FamilyConfig(
+  val nasHost: String,
+  val commonShare: String,
+  val nasName: String? = null,
+  val nasGuid: String? = null,
+  val homeUla: List<String> = emptyList(),
+  val nasPower: String = NasPowerRule.ALWAYS,
+  val wolMac: String? = null,
+  val commonExclusions: List<String> = emptyList(),
+  val defaults: ConfigDefaults = ConfigDefaults.STANDARD,
+) {
+  init {
+    TextRules.ipLiteral(nasHost)
+    ShareNames.check(commonShare)
+    nasName?.let { TextRules.hostName(it) }
+    nasGuid?.let { NasGuids.check(it) }
+    ensure(homeUla.size <= TrustLimits.MAX_HOME_ULA, RejectReason.TOO_LARGE, "configurazione: troppi prefissi ULA")
+    homeUla.forEach { UlaPrefix.check(it) }
+    ensure(homeUla.zipWithNext().all { (a, b) -> a < b }, RejectReason.INVALID_FIELD, "configurazione: ULA non ordinati o ripetuti")
+    NasPowerRule.check(nasPower)
+    wolMac?.let { MacAddresses.check(it) }
+    ensure(commonExclusions.size <= TrustLimits.MAX_COMMON_EXCLUSIONS, RejectReason.TOO_LARGE, "configurazione: troppe esclusioni")
+    for (path in commonExclusions) {
+      ensure(path.toByteArray(Charsets.UTF_8).size <= TrustLimits.MAX_EXCLUSION_UTF8_BYTES, RejectReason.TOO_LARGE, "configurazione: esclusione troppo lunga")
+      SharePath.parseMediaPath(path)
+    }
+    ensure(commonExclusions.zipWithNext().all { (a, b) -> a < b }, RejectReason.INVALID_FIELD, "configurazione: esclusioni non ordinate o ripetute")
+  }
+
+  internal fun toJson(): JsonObject = jsonObject(
+    "nasHost" to nasHost.json(),
+    "commonShare" to commonShare.json(),
+    "nasName" to nasName?.json(),
+    "nasGuid" to nasGuid?.json(),
+    "homeUla" to homeUla.takeIf { it.isNotEmpty() }?.map { it.json() }?.json(),
+    "nasPower" to nasPower.json(),
+    "wolMac" to wolMac?.json(),
+    "commonExclusions" to commonExclusions.takeIf { it.isNotEmpty() }?.map { it.json() }?.json(),
+    "defaults" to defaults.toJson(),
+  )
 
   internal companion object {
     fun read(f: Fields): FamilyConfig = FamilyConfig(
       nasHost = f.string("nasHost", TrustLimits.MAX_HOST_CHARS),
       commonShare = f.string("commonShare", TrustLimits.MAX_SHARE_NAME_CHARS),
+      nasName = f.optString("nasName", TrustLimits.MAX_HOST_CHARS),
+      nasGuid = f.optString("nasGuid", GUID_CHARS),
+      homeUla = f.optArray("homeUla", TrustLimits.MAX_HOME_ULA)
+        ?.map { Fields.asString(it, ULA_CHARS) }
+        ?.also { ensure(it.isNotEmpty(), RejectReason.NOT_CANONICAL, "configurazione: elenco vuoto") }
+        ?: emptyList(),
+      nasPower = f.string("nasPower", TrustLimits.MAX_ENUM_CHARS),
+      wolMac = f.optString("wolMac", MAC_CHARS),
+      commonExclusions = f.optArray("commonExclusions", TrustLimits.MAX_COMMON_EXCLUSIONS)
+        ?.map { Fields.asString(it, TrustLimits.MAX_EXCLUSION_UTF8_BYTES) }
+        ?.also { ensure(it.isNotEmpty(), RejectReason.NOT_CANONICAL, "configurazione: elenco vuoto") }
+        ?: emptyList(),
+      defaults = f.obj("defaults") { ConfigDefaults.read(it) },
     )
+
+    private const val GUID_CHARS = 36
+    private const val ULA_CHARS = 19
+    private const val MAC_CHARS = 17
   }
 }
 
@@ -156,12 +237,22 @@ data class FamilyRegistry(
    * ognuno resta, con la stessa chiave e lo stesso account, con uno stato uguale o piu' severo; un
    * dispositivo che resta dismesso puo' solo perdere teste congelate; l'ora di emissione non torna
    * indietro. Dispositivi nuovi e configurazione possono cambiare. Lancia [RejectReason.REGRESSION].
+   *
+   * Unica eccezione (verifica della revisione, R3): l'account di un dispositivo puo' cambiare solo se diventa
+   * (o e') revocato o perso. Di un dispositivo cosi' nessun dato vale piu', quindi l'account non da' potere a
+   * nessuno; e senza l'eccezione un dispositivo approvato in due rami con account diversi (un dispositivo
+   * compromesso che si fa approvare due volte da un admin rimasto indietro) non si potrebbe piu' revocare.
    */
   internal fun checkNoRegressionFrom(older: FamilyRegistry, checkIssuedAt: Boolean = true) {
     if (checkIssuedAt) ensure(issuedAt >= older.issuedAt, RejectReason.REGRESSION, "registro: emesso prima di quello noto")
     for (old in older.devices) {
       val now = device(old.id) ?: violation(RejectReason.REGRESSION, "registro: un dispositivo e' sparito")
-      ensure(now.key == old.key && TextRules.sameAccount(now.nasUser, old.nasUser), RejectReason.REGRESSION, "registro: identita' cambiata")
+      ensure(now.key == old.key, RejectReason.REGRESSION, "registro: identita' cambiata")
+      ensure(
+        TextRules.sameAccount(now.nasUser, old.nasUser) || now.status.isBarred,
+        RejectReason.REGRESSION,
+        "registro: account cambiato a un dispositivo che vale ancora",
+      )
       ensure(now.status == old.status || old.status.canBecome(now.status), RejectReason.REGRESSION, "registro: stato tornato indietro")
       if (now.status == DeviceStatus.RETIRED && old.status == DeviceStatus.RETIRED) {
         ensure(old.frozenHeads.containsAll(now.frozenHeads), RejectReason.REGRESSION, "registro: teste congelate aggiunte")
@@ -185,6 +276,10 @@ data class FamilyRegistry(
    * [revokeOnlyInOther] i dispositivi che esistono SOLO nel ramo entrano come revocati: e' l'uscita per un
    * ramo che l'admin non riconosce (chiave di famiglia usata da altri) senza adottarne i dispositivi. In
    * entrambi i casi il risultato [dominates] i due rami, quindi lo accettano tutti i dispositivi.
+   *
+   * Un dispositivo che nei due rami ha **account diversi** (R3: lo stesso dispositivo approvato due volte,
+   * con due account, da due admin) esce almeno revocato, con l'account di questo ramo e senza segno di
+   * admin: e' un dispositivo sospetto, e la regola anti-regressione ammette il cambio d'account solo cosi'.
    */
   internal fun joinWith(other: FamilyRegistry, revokeOnlyInOther: Boolean = false): FamilyRegistry {
     require(other.familyId == familyId) { "Rami di famiglie diverse." }
@@ -200,14 +295,18 @@ data class FamilyRegistry(
         mine == null -> theirs!!
         theirs == null -> mine
         else -> {
-          require(mine.key == theirs.key && TextRules.sameAccount(mine.nasUser, theirs.nasUser)) { "Identita' diverse nei due rami: serve il reset." }
-          val status = if (theirs.status.ordinal > mine.status.ordinal) theirs.status else mine.status
+          // L'id deriva dalla chiave: stesso id vuol dire stessa chiave.
+          require(mine.key == theirs.key) { "Chiavi diverse con lo stesso id." }
+          val accountConflict = !TextRules.sameAccount(mine.nasUser, theirs.nasUser)
+          var status = if (theirs.status.ordinal > mine.status.ordinal) theirs.status else mine.status
+          if (accountConflict && !status.isBarred) status = DeviceStatus.REVOKED
           val frozen = when {
             status != DeviceStatus.RETIRED -> emptyList()
             mine.status == DeviceStatus.RETIRED && theirs.status == DeviceStatus.RETIRED -> mine.frozenHeads.filter { it in theirs.frozenHeads }
             else -> (if (mine.status == DeviceStatus.RETIRED) mine else theirs).frozenHeads
           }
-          mine.copy(status = status, since = maxOf(mine.since, theirs.since), admin = mine.admin || theirs.admin, frozenHeads = frozen)
+          val admin = !accountConflict && (mine.admin || theirs.admin)
+          mine.copy(status = status, since = maxOf(mine.since, theirs.since), admin = admin, frozenHeads = frozen)
         }
       }
     }

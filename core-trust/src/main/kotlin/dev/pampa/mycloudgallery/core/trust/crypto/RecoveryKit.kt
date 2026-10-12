@@ -68,6 +68,9 @@ class RecoveryCode private constructor(private val secret: ByteArray) {
 /** Il contenuto aperto di un kit. */
 class OpenedRecoveryKit(val familyId: String, val familyKey: FamilyKey, val createdAt: Long)
 
+/** L'intestazione in chiaro di un kit ([RecoveryKit.inspect]): nessun segreto. */
+data class RecoveryKitHeader(val familyId: String, val keyFingerprint: String, val createdAt: Long)
+
 /**
  * Il kit di recupero della chiave di famiglia (`docs/formato-nas.md` §4.5): la chiave privata cifrata con
  * AES-256-GCM sotto una chiave derivata (HKDF-SHA256) dal [RecoveryCode]. Il file cifrato sta nell'area
@@ -168,6 +171,23 @@ object RecoveryKit {
     } finally {
       plain.fill(0)
     }
+  }
+
+  /**
+   * L'intestazione in chiaro di un kit (id della famiglia, impronta della chiave, ora di creazione), senza il
+   * codice: per elencare i kit trovati nell'area privata (recupero dell'admin) e controllare che il file stia al
+   * suo posto (`recovery/<famiglia>/<impronta>`). Non dice nulla sulla validita' del contenuto cifrato.
+   */
+  fun inspect(blob: ByteArray): Verdict<RecoveryKitHeader> = verdictOf {
+    ensure(blob.size in (HEADER_BYTES + 16)..TrustLimits.MAX_RECOVERY_KIT_BYTES, RejectReason.MALFORMED, "kit: dimensione")
+    ensure(blob.copyOf(4).contentEquals(MAGIC), RejectReason.MALFORMED, "kit: firma del formato")
+    val version = blob[4].toInt() and 0xff
+    if (version > TrustFormat.CURRENT_VERSION) violation(RejectReason.NEWER_FORMAT, "kit: formato piu' nuovo")
+    ensure(TrustFormat.isReadable(version), RejectReason.MALFORMED, "kit: versione")
+    val buffer = ByteBuffer.wrap(blob, 5, FAMILY_ID_BYTES + 32 + 8)
+    val familyId = Base32.encode(ByteArray(FAMILY_ID_BYTES).also { buffer.get(it) })
+    val fingerprint = Base32.encode(ByteArray(32).also { buffer.get(it) }).substring(0, EcPublicKey.FINGERPRINT_CHARS)
+    RecoveryKitHeader(familyId, fingerprint, buffer.long)
   }
 
   private fun deriveKey(code: RecoveryCode, salt: ByteArray, familyIdRaw: ByteArray): ByteArray {

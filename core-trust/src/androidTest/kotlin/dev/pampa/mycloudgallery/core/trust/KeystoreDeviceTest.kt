@@ -78,7 +78,7 @@ class KeystoreDeviceTest {
     val requestBytes = RegistrationRequest.sign(device, familyId, "S25 di prova", "SM-S931B", "admin", clock.nowMillis())
     val request = RegistrationRequest.verify(requestBytes, familyId, TrustIds.deviceIdOf(device.publicKey)).acceptedOrNull()
     assertNotNull(request)
-    val founded = FamilyAuthority(familyKey, clock).found(familyId, FamilyConfig("mycloudex2ultra.fritz.box", "Public"), request!!)
+    val founded = FamilyAuthority(familyKey, clock).found(familyId, FamilyConfig("192.168.178.58", "Public", nasName = "mycloudex2ultra.fritz.box"), request!!)
     val anchor = TrustAnchor.create(familyId, familyKey.publicKey.fingerprint, 1)!!
     val registry = RegistryVerifier.accept(founded.bytes, null, anchor).acceptedOrNull()!!
 

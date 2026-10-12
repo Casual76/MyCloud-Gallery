@@ -33,6 +33,7 @@ object TrustLimits {
   const val MAX_TRASH_RECORD_PAYLOAD: Int = 8 * 1024
   const val MAX_ALBUM_HEAD_PAYLOAD: Int = 256 * 1024
   const val MAX_LOST_REPORT_PAYLOAD: Int = 2 * 1024
+  const val MAX_DEVICE_STATUS_PAYLOAD: Int = 2 * 1024
 
   /** Un segmento dell'indice (contenitore `MCGB`): il resto si legge a pezzi o non si legge. */
   const val MAX_SEGMENT_BYTES: Int = 16 * 1024 * 1024
@@ -58,6 +59,19 @@ object TrustLimits {
   const val MAX_HOST_CHARS: Int = 253
   const val MAX_ENUM_CHARS: Int = 16
   const val MAX_PKCS8_BYTES: Int = 512
+
+  // --- Configurazione di famiglia (Fase 2, §5.3) -------------------------------------------------------
+  /** Prefissi ULA /48 di casa: un FRITZ!Box ne annuncia uno; quattro bastano anche dopo un cambio (E-R16). */
+  const val MAX_HOME_ULA: Int = 4
+
+  /** Cartelle dell'area comune escluse dall'indice (passo 5: musica, film, copertine). */
+  const val MAX_COMMON_EXCLUSIONS: Int = 256
+
+  /** Ogni esclusione e' un percorso relativo alla share: tetto stretto, cosi' 256 esclusioni stanno nel registro. */
+  const val MAX_EXCLUSION_UTF8_BYTES: Int = 512
+
+  /** La versione dell'app nello stato di un dispositivo (`2.0.0-debug`). */
+  const val MAX_APP_VERSION_CHARS: Int = 32
 
   /** Tetto dei numeri di versione e di generazione: oltre, il campo e' malformato. */
   const val MAX_VERSION: Long = 1_000_000_000L
@@ -101,6 +115,9 @@ object TrustLimits {
 
   /** Una richiesta di registrazione si approva solo entro 15 minuti da quando l'admin l'ha vista (revisione M2). */
   const val MAX_REQUEST_AGE_MILLIS: Long = 15L * 60 * 1000
+
+  /** Un dispositivo pubblica il proprio stato al massimo una volta in questo intervallo (§5.10). */
+  const val DEVICE_STATUS_INTERVAL_MILLIS: Long = 24L * 60 * 60 * 1000
 
   /** Tetti per giro di pulizia del cestino: oltre, ci si ferma e si chiede (E-D4, piano §7.4). */
   const val MAX_PURGE_ITEMS_PER_ROUND: Int = 200

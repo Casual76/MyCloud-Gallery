@@ -19,9 +19,24 @@ object NasLayout {
   val REGISTRY_DIR: SharePath = ROOT.child("family").child("registry")
   val REQUESTS_DIR: SharePath = ROOT.child("family").child("requests")
 
+  val REPORTS_DIR: SharePath = ROOT.child("family").child("reports")
+
   fun registryFile(version: Long): SharePath = REGISTRY_DIR.child(versionName(version))
 
   fun requestFile(deviceId: String): SharePath = REQUESTS_DIR.child(deviceId)
+
+  /**
+   * Le segnalazioni "perso" per [targetId] (tipo 7): una serie numerata, nell'area comune (per l'admin) e, con
+   * lo stesso percorso, nell'area privata dell'account (prova di possesso dell'account, revisione B6).
+   */
+  fun reportDir(targetId: String): SharePath = REPORTS_DIR.child(targetId)
+
+  fun reportFile(targetId: String, version: Long): SharePath = reportDir(targetId).child(versionName(version))
+
+  /** Lo stato pubblicato da un dispositivo (tipo 8), nell'area comune. */
+  fun statusDir(deviceId: String): SharePath = ROOT.child("devices").child(deviceId).child("status")
+
+  fun statusFile(deviceId: String, version: Long): SharePath = statusDir(deviceId).child(versionName(version))
 
   // --- Dati di un dispositivo -------------------------------------------------------------------------
   fun headDir(deviceId: String, kind: String): SharePath = ROOT.child("devices").child(deviceId).child(kind).child("head")
@@ -62,7 +77,10 @@ object NasLayout {
    * e quello vecchio si riconosce e si cancella (azione locale confermata, Fase 2.4).
    */
   fun recoveryKitFile(familyId: String, keyFingerprint: String): SharePath =
-    ROOT.child("recovery").child(familyId).child(keyFingerprint)
+    RECOVERY_DIR.child(familyId).child(keyFingerprint)
+
+  /** `recovery/`: una cartella per famiglia, un file per chiave. Il recupero dell'admin la elenca (solo nomi validi). */
+  val RECOVERY_DIR: SharePath = ROOT.child("recovery")
 
   // --- Nomi numerati ----------------------------------------------------------------------------------
   private const val VERSION_DIGITS = 20

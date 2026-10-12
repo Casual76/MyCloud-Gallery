@@ -61,14 +61,25 @@ class FakeNasFileSystem(override val shareName: String = "Public", seed: Long = 
   var reads: Int = 0
     private set
 
+  /**
+   * Se vero, l'elenco mette per primi i nomi scritti dall'attaccante: con un'inondazione oltre il tetto i nomi
+   * veri escono dall'elenco troncato (il caso peggiore di un ordine che il NAS non garantisce).
+   */
+  var adversarialListing: Boolean = false
+
+  private val attackerKeys = HashSet<String>()
+
   private fun key(path: String) = path.lowercase(java.util.Locale.ROOT)
 
   override fun list(dir: SharePath, limit: Int): NasListing {
     val prefix = key(dir.value) + "/"
-    val names = files.entries.filter { it.key.startsWith(prefix) }
-      .map { it.value.first.substring(prefix.length).substringBefore('/') }
-      .distinctBy { it.lowercase(java.util.Locale.ROOT) }
+    val entries = files.entries.filter { it.key.startsWith(prefix) }
+    val names = entries
+      .map { it.value.first.substring(prefix.length).substringBefore('/') to (it.key in attackerKeys) }
+      .distinctBy { it.first.lowercase(java.util.Locale.ROOT) }
       .shuffled(random)
+      .let { all -> if (adversarialListing) all.sortedByDescending { it.second } else all }
+      .map { it.first }
     return NasListing(names.take(limit), truncated = names.size > limit)
   }
 
@@ -90,10 +101,17 @@ class FakeNasFileSystem(override val shareName: String = "Public", seed: Long = 
 
   fun attackerWrite(rawPath: String, bytes: ByteArray) {
     files[key(rawPath)] = rawPath to bytes.copyOf()
+    attackerKeys.add(key(rawPath))
   }
 
   fun attackerDelete(path: SharePath) {
     files.remove(key(path.value))
+    attackerKeys.remove(key(path.value))
+  }
+
+  /** Riempie [dir] di [count] nomi qualunque (non numeri di versione): l'inondazione di M1/N2. */
+  fun attackerFlood(dir: SharePath, count: Int) {
+    repeat(count) { attackerWrite(dir.value + "/x" + it.toString().padStart(6, '0'), ByteArray(1)) }
   }
 
   fun paths(): Set<String> = files.values.map { it.first }.toSet()

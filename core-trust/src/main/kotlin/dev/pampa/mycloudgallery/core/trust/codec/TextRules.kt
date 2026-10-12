@@ -89,6 +89,23 @@ object TextRules {
     return text
   }
 
+  /**
+   * Un indirizzo IP **letterale** (E-R7: al NAS ci si connette sempre all'IP, mai a un nome risolto): IPv4 in
+   * forma decimale stretta (quattro numeri 0-255 senza zeri iniziali) oppure IPv6 tra parentesi quadre.
+   */
+  fun ipLiteral(text: String): String {
+    val ok = text.length in 1..TrustLimits.MAX_HOST_CHARS && (isIpv4Literal(text) || isIpv6Literal(text))
+    if (!ok) violation(RejectReason.INVALID_FIELD, "host: indirizzo IP non ammesso")
+    return text
+  }
+
+  private fun isIpv4Literal(text: String): Boolean {
+    val parts = text.split('.')
+    return parts.size == 4 && parts.all { part ->
+      part.length in 1..3 && part.all { it in '0'..'9' } && (part.length == 1 || part[0] != '0') && part.toInt() <= 255
+    }
+  }
+
   private fun isDnsName(text: String): Boolean = text.split('.').all { label ->
     label.length in 1..63 && label.first() != '-' && label.last() != '-' &&
       label.all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' || it == '-' }

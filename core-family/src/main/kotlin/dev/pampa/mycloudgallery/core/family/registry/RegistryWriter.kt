@@ -1,0 +1,172 @@
+package dev.pampa.mycloudgallery.core.family.registry
+
+import dev.pampa.mycloudgallery.core.common.log.GalleryLog
+import dev.pampa.mycloudgallery.core.family.contract.AdminActionResult
+import dev.pampa.mycloudgallery.core.family.trust.TrustEngine
+import dev.pampa.mycloudgallery.core.family.trust.UNEXPECTED
+import dev.pampa.mycloudgallery.core.family.trust.onShare
+import dev.pampa.mycloudgallery.core.nas.contract.NasError
+import dev.pampa.mycloudgallery.core.nas.contract.NasResult
+import dev.pampa.mycloudgallery.core.nas.contract.NasSessionManager
+import dev.pampa.mycloudgallery.core.nas.contract.Purpose
+import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKeyVault
+import dev.pampa.mycloudgallery.core.trust.nas.NasClock
+import dev.pampa.mycloudgallery.core.trust.nas.SharePath
+import dev.pampa.mycloudgallery.core.trust.registry.CommitResult
+import dev.pampa.mycloudgallery.core.trust.registry.DeviceStatus
+import dev.pampa.mycloudgallery.core.trust.registry.FamilyAuthority
+import dev.pampa.mycloudgallery.core.trust.registry.RegistryDraft
+import dev.pampa.mycloudgallery.core.trust.registry.RegistryFork
+import dev.pampa.mycloudgallery.core.trust.registry.RegistryState
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
+/** Cio' che serve a un'azione dell'admin: il registro fidato, chi sono, la chiave di famiglia aperta. */
+class AdminContext(val state: RegistryState, val me: String, val authority: FamilyAuthority, val commonShare: String)
+
+/**
+ * Rami in conflitto trovati da una pubblicazione, in attesa della scelta dell'admin (schermata dedicata,
+ * P7): [resolve] li unisce ([recognize] = vero) o li rifiuta, sulla **stessa** modifica.
+ */
+class PendingForks(internal val draft: RegistryDraft, val forks: List<RegistryFork>) {
+  /** I rami cambiano la configurazione (es. `nasHost`): la schermata lo dice (revisione 1.4, domanda 10). */
+  val configDiffers: Boolean get() = forks.any { it.configDiffers(draft.base.registry) }
+
+  /** I rami annunciano una rotazione: i loro dispositivi vanno riconfigurati (reset), R2. */
+  val containsRotation: Boolean get() = forks.any { it.registry.successorKey != null }
+}
+
+/**
+ * L'unico punto da cui `core-family` firma e pubblica il registro (`FamilyAuthority.commit`). Ogni chiamata
+ * parte da un gesto locale dell'admin (E-S11); la chiave di famiglia si apre dalla cassaforte solo qui, per
+ * il tempo dell'azione (a telefono sbloccato con blocco schermo sicuro: revisione M3).
+ *
+ * Esiti di `commit` → [AdminActionResult]: `Published` → `Done` (e lo stato nuovo diventa quello fidato);
+ * `NewerExists` → si rilegge il registro e si restituisce `NewerExists` (l'interfaccia riprova sulla base
+ * nuova); `Fork` → [pendingForks] per la schermata dedicata; `Blocked` → [blockedPaths] (i file esatti da
+ * cancellare dal PC, **dopo** aver cambiato la password NAS sospetta, L18); `NeedsAppUpdate`.
+ */
+class RegistryWriter(
+  private val engine: TrustEngine,
+  private val sessions: NasSessionManager,
+  private val familyKeys: FamilyKeyVault,
+  private val nasClock: NasClock,
+) {
+  private val _pendingForks = MutableStateFlow<PendingForks?>(null)
+  private val _blockedPaths = MutableStateFlow<List<SharePath>>(emptyList())
+  private val _unverifiedBeyond = MutableStateFlow(false)
+
+  val pendingForks: StateFlow<PendingForks?> = _pendingForks.asStateFlow()
+  val blockedPaths: StateFlow<List<SharePath>> = _blockedPaths.asStateFlow()
+
+  /** L'ultima pubblicazione non ha potuto controllare tutto oltre il nome usato (N2): da dire all'admin. */
+  val unverifiedBeyond: StateFlow<Boolean> = _unverifiedBeyond.asStateFlow()
+
+  /**
+   * Il contesto dell'admin, o null se questo dispositivo non lo e': registro fidato caricato, dispositivo
+   * approvato, chiave di famiglia nella cassaforte e uguale a quella che deve firmare la prossima versione.
+   */
+  suspend fun adminContext(): AdminContext? {
+    if (!engine.ensureLoaded()) return null
+    val state = engine.state ?: return null
+    val me = engine.myDeviceId() ?: return null
+    if (state.statusOf(me) != DeviceStatus.APPROVED) return null
+    val key = try {
+      familyKeys.load(state.trustedFamilyKey)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      // Telefono bloccato o senza blocco schermo sicuro: la cassaforte non si apre (M3).
+      GalleryLog.w(TAG) { "chiave di famiglia non disponibile" }
+      null
+    } ?: return null
+    val share = engine.profile()?.commonShare ?: state.registry.config.commonShare
+    return AdminContext(state, me, FamilyAuthority(key, nasClock), share)
+  }
+
+  suspend fun commit(admin: AdminContext, draft: RegistryDraft): AdminActionResult {
+    val result = try {
+      sessions.onShare(admin.commonShare, Purpose.INTERACTIVE) { fs -> admin.authority.commit(fs, draft) }
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      // Una modifica non firmabile (per esempio un registro oltre il tetto): nessun byte e' stato scritto.
+      GalleryLog.e(TAG, e) { "pubblicazione del registro non riuscita" }
+      NasResult.Err(UNEXPECTED)
+    }
+    return when (result) {
+      is NasResult.Err -> AdminActionResult.Failed(result.error)
+      is NasResult.Ok -> when (val commit = result.value) {
+        is CommitResult.Published -> {
+          engine.adopt(commit.state)
+          _pendingForks.value = null
+          _blockedPaths.value = emptyList()
+          _unverifiedBeyond.value = commit.unverifiedBeyond
+          AdminActionResult.Done
+        }
+        CommitResult.NewerExists -> {
+          engine.sync(Purpose.INTERACTIVE)
+          AdminActionResult.NewerExists
+        }
+        is CommitResult.Fork -> {
+          _pendingForks.value = PendingForks(draft, commit.forks)
+          AdminActionResult.Fork
+        }
+        is CommitResult.Blocked -> {
+          _blockedPaths.value = commit.junk
+          AdminActionResult.Blocked
+        }
+        CommitResult.NeedsAppUpdate -> AdminActionResult.NeedsAppUpdate
+      }
+    }
+  }
+
+  /** Cambia lo stato di un dispositivo (non il proprio): dismesso, revocato, perso. */
+  suspend fun changeStatus(deviceId: String, status: DeviceStatus): AdminActionResult {
+    val admin = adminContext() ?: return AdminActionResult.NotAdmin
+    val entry = admin.state.registry.device(deviceId) ?: return AdminActionResult.Failed(NasError.NotFound)
+    if (deviceId == admin.me || !entry.status.canBecome(status)) return AdminActionResult.Failed(NasError.PermissionDenied)
+    // La dismissione congela le teste gia' verificate: quali siano lo sapra' l'indice (Fase 4.1); per ora nessuna.
+    val draft = try {
+      admin.authority.changeStatus(admin.state, deviceId, status)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      return AdminActionResult.Failed(NasError.PermissionDenied)
+    }
+    return commit(admin, draft)
+  }
+
+  /** La scelta dell'admin sui rami in attesa: [recognize] li unisce, altrimenti li rifiuta (poi reset). */
+  suspend fun resolveForks(recognize: Boolean): AdminActionResult {
+    val pending = _pendingForks.value ?: return AdminActionResult.Done
+    val admin = adminContext() ?: return AdminActionResult.NotAdmin
+    if (admin.state.contentHash != pending.draft.base.contentHash) {
+      _pendingForks.value = null
+      return AdminActionResult.NewerExists
+    }
+    val joined = try {
+      if (recognize) admin.authority.mergeForks(pending.draft, pending.forks) else admin.authority.rejectForks(pending.draft, pending.forks)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      return AdminActionResult.Fork
+    }
+    return commit(admin, joined)
+  }
+
+  /**
+   * La versione fidata e' stata sostituita con spazzatura sul NAS (revisione 1.4, N3): l'admin ripubblica lo
+   * stesso contenuto con un numero nuovo. Si fa da sola quando l'allarme compare e la cassaforte si apre.
+   */
+  suspend fun reissue(): AdminActionResult {
+    val admin = adminContext() ?: return AdminActionResult.NotAdmin
+    return commit(admin, admin.authority.reissue(admin.state))
+  }
+
+  private companion object {
+    const val TAG = "RegistryWriter"
+  }
+}

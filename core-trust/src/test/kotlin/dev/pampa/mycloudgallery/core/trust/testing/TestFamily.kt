@@ -29,7 +29,7 @@ class TestFamily(
     private set
   val familyId: String = TrustIds.random()
   val adminDevice: Signer = newSigner()
-  val config = FamilyConfig(nasHost = "mycloudex2ultra.fritz.box", commonShare = "Public")
+  val config = FamilyConfig(nasHost = "192.168.178.58", commonShare = "Public", nasName = "mycloudex2ultra.fritz.box")
 
   var authority = FamilyAuthority(familyKey, clock)
     private set

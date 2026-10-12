@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Diagnostica, sezione "Fiducia" (P3, docs/famiglia-dispositivi.md). Titoli brevi: nessun dato personale. -->
+  <string name="trust_diag_state">Stato di questo dispositivo nel registro della famiglia</string>
+  <string name="trust_diag_wipe">Azzeramento del dispositivo (segnalato come perso)</string>
+  <string name="trust_diag_local_state_untrusted">Il registro salvato sul telefono non si riverifica: nessun lavoro finché non si riconfigura</string>
+  <string name="trust_diag_rejected">File del registro scartati sul NAS (firma, formato o posto non validi)</string>
+  <string name="trust_diag_newer_unverified">Sul NAS ci sono versioni del registro che non si sono potute verificare</string>
+  <string name="trust_diag_listing_truncated">La cartella del registro contiene troppi file: elenco troncato</string>
+  <string name="trust_diag_needs_app_update">Il registro è stato scritto da un\'app più nuova: aggiorna MyCloud Gallery</string>
+  <string name="trust_diag_fork">Allarme: due versioni del registro in conflitto, firmate con la chiave di famiglia</string>
+  <string name="trust_diag_version_replaced">Allarme: la versione del registro già accettata è stata sostituita sul NAS</string>
+  <string name="trust_diag_incomplete">Lettura del registro interrotta (troppi file non validi): si riprende al prossimo controllo</string>
+  <string name="trust_diag_registry_behind">Un altro dispositivo conosce un registro più nuovo di questo</string>
+  <string name="trust_diag_no_min_version">Configurato senza QR: il registro non ha una versione minima garantita</string>
+  <string name="trust_diag_not_refreshed">Il registro non si è potuto rileggere dal NAS: si usa l\'ultimo accettato</string>
+  <string name="trust_diag_lost_report_rejected">Segnalazioni di smarrimento non valide nell\'area privata (ignorate)</string>
+  <string name="trust_diag_status_rejected">Stati di dispositivi non validi sul NAS (ignorati)</string>
+  <string name="trust_diag_publish_unverified">L\'ultima modifica del registro è pubblicata, ma la cartella non si è potuta controllare tutta</string>
+  <string name="trust_diag_publish_blocked">Pubblicazione del registro bloccata da file non validi: cambia la password del NAS sospetta, poi cancellali</string>
+</resources>

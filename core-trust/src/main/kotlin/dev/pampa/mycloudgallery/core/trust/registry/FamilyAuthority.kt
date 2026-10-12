@@ -26,11 +26,30 @@ class SignedRegistry(val registry: FamilyRegistry, bytes: ByteArray) {
 class RegistryDraft internal constructor(
   val base: RegistryState,
   internal val content: FamilyRegistry,
+  /**
+   * Le impronte dei rami che l'admin ha gia' trattato ma che la modifica non puo' "contenere": i rami con un
+   * annuncio di rotazione (verifica della revisione, R2). [FamilyAuthority.commit] li scavalca invece di
+   * restituire di nuovo `Fork`.
+   */
+  internal val acknowledgedForks: Set<String> = emptySet(),
 )
 
 sealed interface CommitResult {
-  /** Pubblicata. [state] e' il nuovo registro fidato; [skipped] i nomi occupati da file non validi scavalcati (Diagnostica). */
-  class Published(val state: RegistryState, val skipped: List<SharePath>) : CommitResult
+  /**
+   * Pubblicata. [state] e' il nuovo registro fidato; [skipped] i nomi occupati da file non validi scavalcati
+   * (Diagnostica).
+   *
+   * [unverifiedBeyond]: oltre il nome usato non si e' potuto controllare tutto (elenco della cartella troncato,
+   * o troppa spazzatura tra gli indizi). Una versione piu' nuova potrebbe esistere nascosta dietro un buco, e
+   * i dispositivi che l'hanno gia' vista non vedrebbero questa (verifica della revisione, N2): non e' un
+   * errore, ma l'app lo deve **dire** all'admin ("cambia la password dell'account sospetto e pulisci la
+   * cartella del registro"), mai pubblicare in silenzio.
+   */
+  class Published(
+    val state: RegistryState,
+    val skipped: List<SharePath>,
+    val unverifiedBeyond: Boolean = false,
+  ) : CommitResult
 
   /** Sul NAS c'e' gia' una versione piu' nuova valida (un altro admin): risincronizzare e rifare la modifica. */
   data object NewerExists : CommitResult
@@ -63,11 +82,52 @@ sealed interface CommitResult {
  */
 class FamilyAuthority(private val familyKey: FamilyKey, private val clock: NasClock) {
 
-  /** Il primo registro della famiglia: l'admin che la fonda e' il primo dispositivo approvato. */
-  fun found(familyId: String, config: FamilyConfig, founder: RegistrationRequest): SignedRegistry {
+  /**
+   * Il primo registro della famiglia: l'admin che la fonda e' il primo dispositivo approvato. [version] e' 1
+   * per una famiglia nuova; dopo un reset e' il nome scelto da [refound].
+   */
+  fun found(familyId: String, config: FamilyConfig, founder: RegistrationRequest, version: Long = 1): SignedRegistry {
     require(founder.familyId == familyId) { "La richiesta del fondatore e' di un'altra famiglia." }
     val now = clock.nowMillis()
-    return sign(FamilyRegistry(familyId, 1, now, config, listOf(entryOf(founder, admin = true, now))))
+    return sign(FamilyRegistry(familyId, version, now, config, listOf(entryOf(founder, admin = true, now))))
+  }
+
+  /**
+   * Il reset della famiglia (`docs/formato-nas.md` §4.10): la fondazione della famiglia **nuova** (id e chiave
+   * nuovi, questa [FamilyAuthority]) si pubblica nella stessa cartella del registro, al primo nome libero dopo
+   * [knownVersion] (l'ultima versione della famiglia vecchia che questo dispositivo conosce, 0 se nessuna)
+   * seguito da [TrustLimits.MAX_JUNK_RUN] nomi liberi: cosi' chi parte dalla versione della fondazione (la
+   * versione minima del QR nuovo) non inciampa subito nelle versioni della famiglia vecchia, che per lui sono
+   * spazzatura firmata da un'altra chiave. Le versioni vecchie restano dove sono: ignorate, non cancellate.
+   *
+   * Si legge per nome, al massimo [TrustLimits.MAX_SERIES_READS] volte; null se non si trova posto (cartella
+   * inondata: si pulisce dal PC e si riprova). Il numero della fondazione e' `registry.version` del risultato.
+   */
+  fun refound(
+    commonShare: NasFileSystem,
+    familyId: String,
+    config: FamilyConfig,
+    founder: RegistrationRequest,
+    knownVersion: Long = 0,
+  ): SignedRegistry? {
+    val maxBytes = Envelope.maxFileBytes(DocType.FAMILY_REGISTRY)
+    var candidate = maxOf(0L, knownVersion) + 1
+    var reads = 0
+    search@ while (candidate + TrustLimits.MAX_JUNK_RUN <= TrustLimits.MAX_VERSION && reads < TrustLimits.MAX_SERIES_READS) {
+      for (version in candidate..candidate + TrustLimits.MAX_JUNK_RUN) {
+        reads++
+        if (commonShare.read(NasLayout.registryFile(version), maxBytes) !is NasRead.NotFound) {
+          candidate = version + 1
+          continue@search
+        }
+      }
+      val signed = found(familyId, config, founder, candidate)
+      when (commonShare.publishExclusive(NasLayout.registryFile(candidate), signed.bytes)) {
+        PublishResult.CREATED -> return signed
+        PublishResult.ALREADY_EXISTS -> candidate++
+      }
+    }
+    return null
   }
 
   /**
@@ -109,6 +169,35 @@ class FamilyAuthority(private val familyKey: FamilyKey, private val clock: NasCl
     return RegistryDraft(state, current.copy(devices = current.devices.map { if (it.id == deviceId) updated else it }))
   }
 
+  /**
+   * Piu' modifiche nella stessa versione (recupero dell'admin: approvarsi e segnare il vecchio admin come
+   * perso): [changeStatus] applicato a una modifica gia' preparata, con le stesse regole.
+   */
+  fun changeStatus(draft: RegistryDraft, deviceId: String, status: DeviceStatus): RegistryDraft {
+    authorized(draft.base)
+    val content = draft.content
+    val entry = requireNotNull(content.device(deviceId)) { "Dispositivo assente dal registro." }
+    require(entry.status.canBecome(status)) { "Cambio di stato non ammesso." }
+    require(status != DeviceStatus.RETIRED) { "La dismissione si prepara da sola (teste congelate)." }
+    val updated = entry.copy(status = status, since = clock.nowMillis(), frozenHeads = emptyList())
+    return RegistryDraft(draft.base, content.copy(devices = content.devices.map { if (it.id == deviceId) updated else it }), draft.acknowledgedForks)
+  }
+
+  /**
+   * Segna come admin un dispositivo gia' approvato (secondo admin su un dispositivo che era un familiare,
+   * §4.9). Il segno e' informativo, il potere e' la chiave: la regola anti-regressione lo lascia cambiare.
+   */
+  fun markAdmin(draft: RegistryDraft, deviceId: String): RegistryDraft {
+    authorized(draft.base)
+    val content = draft.content
+    val entry = requireNotNull(content.device(deviceId)) { "Dispositivo assente dal registro." }
+    require(entry.status == DeviceStatus.APPROVED) { "Solo un dispositivo approvato diventa admin." }
+    return RegistryDraft(draft.base, content.copy(devices = content.devices.map { if (it.id == deviceId) entry.copy(admin = true) else it }), draft.acknowledgedForks)
+  }
+
+  /** Una modifica vuota sulla base [state], a cui aggiungere [changeStatus]/[markAdmin]. */
+  fun edit(state: RegistryState): RegistryDraft = RegistryDraft(state, authorized(state))
+
   fun updateConfig(state: RegistryState, config: FamilyConfig): RegistryDraft =
     RegistryDraft(state, authorized(state).copy(config = config))
 
@@ -143,14 +232,26 @@ class FamilyAuthority(private val familyKey: FamilyKey, private val clock: NasCl
    */
   fun rejectForks(draft: RegistryDraft, forks: List<RegistryFork>): RegistryDraft = join(draft, forks, revokeUnknown = true)
 
+  /**
+   * Un ramo che contiene un **annuncio di rotazione** (verifica della revisione, R2) non si puo' "contenere":
+   * i dispositivi che l'hanno visto si fidano ormai di un'altra chiave e vanno comunque riconfigurati (reset
+   * della famiglia). Invece di bloccare ogni pubblicazione, si prendono da quel ramo solo gli stati piu'
+   * severi dei dispositivi gia' noti (quelli che esistono solo li' entrano revocati, anche se l'admin ha
+   * riconosciuto il ramo) e lo si scavalca: almeno il ramo dell'admin riceve la sua modifica (una revoca).
+   */
   private fun join(draft: RegistryDraft, forks: List<RegistryFork>, revokeUnknown: Boolean): RegistryDraft {
     authorized(draft.base)
     var content = draft.content
+    val acknowledged = draft.acknowledgedForks.toMutableSet()
     for (fork in forks) {
-      require(fork.registry.successorKey == null) { "Un ramo contiene una rotazione: serve il reset della famiglia." }
-      content = content.joinWith(fork.registry, revokeUnknown)
+      if (fork.registry.successorKey != null) {
+        content = content.joinWith(fork.registry.copy(successorKey = null), revokeOnlyInOther = true)
+        acknowledged += fork.contentHash
+      } else {
+        content = content.joinWith(fork.registry, revokeUnknown)
+      }
     }
-    return RegistryDraft(draft.base, content)
+    return RegistryDraft(draft.base, content, acknowledged)
   }
 
   /**
@@ -160,10 +261,15 @@ class FamilyAuthority(private val familyKey: FamilyKey, private val clock: NasCl
    * 2. i nomi dopo la base, letti per nome fino al primo libero: un registro valido piu' nuovo ferma
    *    (`NewerExists`), un registro di un'app piu' nuova ferma (`NeedsAppUpdate`), la spazzatura si scavalca
    *    (al massimo [TrustLimits.MAX_JUNK_RUN] di fila), un ramo che la modifica gia' contiene si scavalca;
-   * 3. gli indizi dell'elenco OLTRE il nome libero (revisione 1.4, verifica N2): una versione valida dopo un
-   *    buco vuol dire base vecchia (`NewerExists`), un ramo li' va considerato come al punto 2;
+   * 3. i [TrustLimits.MAX_JUNK_RUN] nomi subito dopo quello libero, **per nome** (verifica della revisione,
+   *    N2): un buco aperto da chi cancella non nasconde una versione piu' nuova nemmeno se l'elenco e'
+   *    inondato. Poi gli indizi dell'elenco oltre il nome libero (revisione 1.4, N2), con lo stesso tetto alla
+   *    spazzatura di fila di [RegistrySync] (R4). Una versione valida dopo un buco vuol dire base vecchia
+   *    (`NewerExists`), un ramo li' va considerato come al punto 2. Se l'elenco era troncato o gli indizi si
+   *    sono fermati per la spazzatura, la pubblicazione lo dice ([CommitResult.Published.unverifiedBeyond]);
    * 4. se restano rami non contenuti, `Fork` con tutti; altrimenti si firma al nome libero con l'ora di
    *    emissione non inferiore a quella di ogni ramo scavalcato, cosi' la accettano anche i loro dispositivi.
+   *    I rami con una rotazione gia' trattati da [mergeForks]/[rejectForks] si scavalcano (R2).
    */
   fun commit(commonShare: NasFileSystem, draft: RegistryDraft): CommitResult {
     authorized(draft.base)
@@ -188,7 +294,7 @@ class FamilyAuthority(private val familyKey: FamilyKey, private val clock: NasCl
     fun classify(bytes: ByteArray, reason: RejectReason): Boolean {
       if (reason != RejectReason.REGRESSION && reason != RejectReason.EQUIVOCATION) return false
       val fork = (RegistryVerifier.readFork(bytes, base) as? Verdict.Accepted)?.value ?: return false
-      if (draft.content.dominates(fork.registry)) {
+      if (draft.content.dominates(fork.registry) || fork.contentHash in draft.acknowledgedForks) {
         issuedAtFloor = maxOf(issuedAtFloor, fork.registry.issuedAt)
       } else if (forks.none { it.contentHash == fork.contentHash }) {
         forks.add(fork)
@@ -234,16 +340,50 @@ class FamilyAuthority(private val familyKey: FamilyKey, private val clock: NasCl
     }
     val target = free ?: return CommitResult.Blocked(skipped)
 
-    // 3. Indizi dell'elenco oltre il nome libero.
-    val hints = commonShare.list(NasLayout.REGISTRY_DIR, TrustLimits.MAX_LIST_REGISTRY).names
-      .mapNotNull(NasLayout::parseVersionName).filter { it > target }.sorted().take(TrustLimits.MAX_SERIES_READS)
+    // Un nome oltre quello libero: una versione valida piu' nuova (base vecchia) o di un formato piu' nuovo
+    // ferma la pubblicazione ([stop]); altrimenti il risultato dice se era un ramo (true) o spazzatura (false).
+    var stop: CommitResult? = null
+    fun beyond(bytes: ByteArray): Boolean = when (val verdict = RegistryVerifier.accept(bytes, base, anchor)) {
+      is Verdict.Accepted -> {
+        stop = CommitResult.NewerExists
+        true
+      }
+      is Verdict.Rejected -> if (verdict.reason == RejectReason.NEWER_FORMAT) {
+        stop = CommitResult.NeedsAppUpdate
+        true
+      } else {
+        classify(bytes, verdict.reason)
+      }
+    }
+
+    // 3a. I nomi subito dopo quello libero, per nome (N2): niente elenco, quindi niente inondazione.
+    val tried = HashSet<Long>()
+    val lookaheadEnd = minOf(target + TrustLimits.MAX_JUNK_RUN, TrustLimits.MAX_VERSION)
+    for (ahead in target + 1..lookaheadEnd) {
+      tried.add(ahead)
+      val read = commonShare.read(NasLayout.registryFile(ahead), maxBytes) as? NasRead.Data ?: continue
+      beyond(read.bytes)
+      stop?.let { return it }
+    }
+
+    // 3b. Indizi dell'elenco oltre: con lo stesso tetto alla spazzatura di fila di RegistrySync (R4).
+    val listing = commonShare.list(NasLayout.REGISTRY_DIR, TrustLimits.MAX_LIST_REGISTRY)
+    var unverifiedBeyond = listing.truncated
+    val hints = listing.names.mapNotNull(NasLayout::parseVersionName)
+      .filter { it > target && it !in tried }.sorted().take(TrustLimits.MAX_SERIES_READS)
+    var hintJunkRun = 0
     for (hint in hints) {
-      val read = commonShare.read(NasLayout.registryFile(hint), maxBytes) as? NasRead.Data ?: continue
-      when (val verdict = RegistryVerifier.accept(read.bytes, base, anchor)) {
-        is Verdict.Accepted -> return CommitResult.NewerExists
-        is Verdict.Rejected -> {
-          if (verdict.reason == RejectReason.NEWER_FORMAT) return CommitResult.NeedsAppUpdate
-          classify(read.bytes, verdict.reason)
+      if (hintJunkRun > TrustLimits.MAX_JUNK_RUN) {
+        unverifiedBeyond = true
+        break
+      }
+      when (val read = commonShare.read(NasLayout.registryFile(hint), maxBytes)) {
+        NasRead.NotFound -> Unit
+        NasRead.TooLarge -> hintJunkRun++
+        is NasRead.Data -> {
+          val isFork = beyond(read.bytes)
+          stop?.let { return it }
+          hintJunkRun = if (isFork) 0 else hintJunkRun + 1
         }
       }
     }
@@ -255,7 +395,7 @@ class FamilyAuthority(private val familyKey: FamilyKey, private val clock: NasCl
     return when (commonShare.publishExclusive(NasLayout.registryFile(target), signed.bytes)) {
       PublishResult.CREATED -> {
         val state = (RegistryVerifier.accept(signed.bytes, base, anchor) as Verdict.Accepted).value
-        CommitResult.Published(state, skipped)
+        CommitResult.Published(state, skipped, unverifiedBeyond)
       }
       PublishResult.ALREADY_EXISTS -> null
     }

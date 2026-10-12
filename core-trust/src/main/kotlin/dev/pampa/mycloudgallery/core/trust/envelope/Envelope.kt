@@ -36,6 +36,9 @@ enum class DocType(val code: Int, val maxPayload: Int) {
 
   /** Segnalazione "dispositivo perso" da un altro dispositivo dello stesso account (Fase 2.4). */
   LOST_REPORT(7, TrustLimits.MAX_LOST_REPORT_PAYLOAD),
+
+  /** Lo stato che un dispositivo approvato pubblica di se' (versione dell'app, ruoli, ultima attivita'). */
+  DEVICE_STATUS(8, TrustLimits.MAX_DEVICE_STATUS_PAYLOAD),
   ;
 
   companion object {

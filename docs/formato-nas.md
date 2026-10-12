@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Stato** | Fase 1.4, 12/10/2026, **aggiornato dopo la revisione di sicurezza e la sua verifica** (`docs/review/1.4-core-trust.md`, due giri). Formato **versione 1**. Nessun dato e' ancora stato scritto sul NAS. |
+| **Stato** | Fase 1.4, 12/10/2026, **aggiornato dopo la revisione di sicurezza e la sua verifica** (`docs/review/1.4-core-trust.md`, due giri) e **esteso nella Fase 2 (pacchetto P3)**: configurazione di famiglia completa (§5.3), segnalazione "perso" (tipo 7, §5.9), stato del dispositivo (tipo 8, §5.10), rifondazione dopo un reset (§4.10), residui N2, R2, R3, R4 della revisione chiusi (§2.3, §4.4). Formato **versione 1**. Nessun dato e' ancora stato scritto sul NAS. L'uso da parte dell'app: `docs/famiglia-dispositivi.md`. |
 | **Codice** | modulo `:core-trust` (`dev.pampa.mycloudgallery.core.trust`); la mappa sezione → file → test e' al §14. |
 | **Sigle** | `E-xx` = casi limite del piano; `C1`…`C23`, `L1`…`L17`, `S1`…`S12` = `docs/sicurezza.md`; `A1`…`I10` = voci della revisione. |
 | **Regola** | Ogni costante citata qui esiste identica nel codice (`TrustFormat`, `TrustLimits`). Cambiarne una vuol dire cambiare questo documento. |
@@ -69,8 +69,9 @@ sta solo nell'**area comune**, perche' tutti devono leggerlo.
 ├── family/                               solo nell'area comune
 │   ├── registry/<versione>               [1] registro di famiglia (chiave di famiglia)
 │   ├── requests/<id dispositivo>         [2] richieste di registrazione (auto-firmate)
-│   └── reports/<id dispositivo>/<vers.>  [7] segnalazioni "perso" (Fase 2.4)
+│   └── reports/<id dispositivo>/<vers.>  [7] segnalazioni "perso" (§5.9; copia anche nell'area privata)
 ├── devices/<id dispositivo>/
+│   ├── status/<versione>                 [8] stato del dispositivo (§5.10), solo nell'area comune
 │   ├── index/head/<versione>             [3] testa dell'indice di questa share
 │   ├── index/seg/<impronta>              segmenti (contenitori MCGB), nome = impronta
 │   ├── personal/head/<versione>          [3] dati personali: SOLO nell'area privata del proprietario
@@ -83,6 +84,7 @@ sta solo nell'**area comune**, perche' tutti devono leggerlo.
 └── tmp/                                  temporanei della pubblicazione atomica
 
 <area privata dell'admin>/.mycloudgallery/recovery/<id famiglia>/<impronta della chiave>   kit di recupero (§4.8)
+<area privata di un account>/.mycloudgallery/family/reports/<id dispositivo>/<vers.>   [7] copia della segnalazione (prova di possesso, §5.9)
 ```
 
 `[n]` e' il tipo del file firmato (§5.1). Ogni dispositivo scrive **solo sotto i propri id** (piu' le
@@ -113,8 +115,12 @@ Non ci sono cancellazione, spostamento o sovrascrittura (un test lo verifica, §
   uno scrittore ostile puo' imporre, B5) e chi pubblica riceve l'elenco esatto dei file da cancellare.
 - **Due scrittori sullo stesso numero: vince il primo.** L'altro trova al suo posto una versione valida piu'
   nuova e deve risincronizzarsi (due admin che approvano insieme non si sovrascrivono). Prima di firmare al
-  primo nome libero si guardano anche gli indizi dell'elenco **oltre** quel nome: una versione valida dopo un
-  buco vuol dire che la base e' vecchia, e non si pubblica nel buco (verifica N2).
+  primo nome libero si leggono **per nome** i `MAX_JUNK_RUN` (32) nomi successivi e poi gli indizi dell'elenco
+  **oltre** quel nome, con lo stesso tetto di 32 file non validi di fila (R4): una versione valida dopo un buco
+  vuol dire che la base e' vecchia, e non si pubblica nel buco (verifica N2). Se l'elenco era troncato
+  (inondazione) o gli indizi si sono fermati per la spazzatura, non si puo' escludere una versione nascosta
+  oltre un buco piu' largo di 32 nomi: si pubblica (il ramo dell'admin riceve la modifica) ma **non in
+  silenzio** (`CommitResult.Published.unverifiedBeyond`, avviso all'admin e in Diagnostica).
 - **Contenuti per impronta.** I segmenti si chiamano con lo SHA-256 del loro contenuto: immutabili, senza
   conflitti.
 - **Pulizia dei propri file vecchi** (teste superate, segmenti non piu' elencati, generazioni di
@@ -259,7 +265,10 @@ Un unico documento firmato dalla chiave di famiglia con **configurazione + dispo
    chiave e lo stesso account del NAS, con uno stato uguale o piu' severo (§4.6); un dispositivo che resta
    dismesso puo' solo perdere teste congelate; l'ora di emissione non torna indietro. Possono cambiare la
    configurazione, i nomi, il segno di admin, e possono arrivare dispositivi nuovi. Altrimenti `REGRESSION`.
-   La regola e' transitiva, quindi vale anche quando si saltano versioni;
+   **Unica eccezione** (verifica della revisione, R3): l'account di un dispositivo puo' cambiare solo se diventa
+   (o e') revocato o perso, perche' di un dispositivo cosi' nessun dato vale e l'account non da' potere; senza
+   l'eccezione un dispositivo approvato in due rami con due account non si poteva piu' revocare. La regola e'
+   transitiva, quindi vale anche quando si saltano versioni;
 7. il nome del file deve coincidere con la versione dichiarata.
 
 Senza il punto 6 bastava che un admin lavorasse su una base vecchia (il secondo dispositivo admin rimasto
@@ -286,7 +295,15 @@ N1: prima un ramo di due o piu' versioni bloccava ogni pubblicazione, revoche co
   **revocati**; poi **reset della famiglia** (§4.10).
 
 In entrambi i casi la versione pubblicata contiene i rami, quindi la accettano tutti i dispositivi, la
-modifica dell'admin esce e nessuna revoca va persa. Nessuna unione avviene da sola. I rami che lo stato
+modifica dell'admin esce e nessuna revoca va persa. Nessuna unione avviene da sola.
+
+Un dispositivo che nei due rami ha **account diversi** esce dall'unione (o dal rifiuto) almeno revocato, con
+l'account del ramo dell'admin e senza segno di admin (R3). Un ramo che contiene un **annuncio di rotazione**
+non si puo' "contenere": i dispositivi che l'hanno visto si fidano ormai di un'altra chiave e vanno comunque
+riconfigurati (reset). Unione e rifiuto ne prendono solo gli stati piu' severi dei dispositivi gia' noti (quelli
+che esistono solo li' entrano revocati) e la pubblicazione lo scavalca (`RegistryDraft.acknowledgedForks`): cosi'
+almeno il ramo dell'admin riceve la sua modifica, per esempio una revoca (R2; prima l'admin restava bloccato fino
+al reset). I rami che lo stato
 finale di un dispositivo contiene gia' sono **storia**: chi risale le versioni li attraversa senza allarme e
 senza contarli come spazzatura (N5).
 
@@ -306,9 +323,11 @@ poi controlla il nome della base (un altro contenuto firmato li' e' un ramo) e l
 …: versione valida piu' nuova → `NewerExists` (risincronizzarsi e rifare la modifica: un admin non firma mai
 su una base che sa vecchia); registro di un'app piu' nuova → `NeedsAppUpdate`; ramo che la modifica contiene
 gia' → si scavalca; spazzatura → si scavalca e si riporta; troppa spazzatura di fila → `Blocked` con
-l'elenco esatto dei file da cancellare. Al primo nome libero guarda anche gli indizi dell'elenco oltre quel
-nome (N2). Se restano rami che la modifica non contiene → `Fork` con **tutti** i rami trovati; altrimenti
-firma con l'ora di emissione non inferiore a quella di ogni ramo scavalcato e pubblica.
+l'elenco esatto dei file da cancellare. Al primo nome libero legge per nome i 32 nomi successivi e poi gli
+indizi dell'elenco oltre quel nome, con il tetto alla spazzatura (N2, R4); se non ha potuto controllare tutto lo
+dice (`unverifiedBeyond`). Se restano rami che la modifica non contiene (e che l'admin non ha gia' trattato, R2)
+→ `Fork` con **tutti** i rami trovati; altrimenti firma con l'ora di emissione non inferiore a quella di ogni
+ramo scavalcato e pubblica.
 
 **Memoria locale**: ogni dispositivo salva nello spazio privato i byte dell'ultimo registro accettato e
 l'impronta della chiave che lo ha firmato; al riavvio li riverifica (`RegistryVerifier.restore`).
@@ -316,7 +335,8 @@ l'impronta della chiave che lo ha firmato; al riavvio li riverifica (`RegistryVe
 **Le voci non si tolgono mai**: un dispositivo revocato, perso o dismesso resta nel registro (la regola del
 punto 6 lo richiede, e "sconosciuto" non deve mai poter tornare "approvato"). Il tetto e' 256 dispositivi.
 
-**Configurazione** (estesa in Fase 2.2): `nasHost` e `commonShare` (l'area comune). Indirizzo del NAS e
+**Configurazione** (estesa nella Fase 2, §5.3): IP letterale del NAS (`nasHost`), nome, GUID, prefissi ULA di
+casa, alimentazione, MAC per il WoL, area comune, esclusioni, preset e qualita' di default. Indirizzo del NAS e
 identita' (E-R7, revisione M5): una firma su un file copiabile **non prova chi lo sta servendo**, quindi "il
 NAS a quell'indirizzo serve un registro firmato" non e' un criterio. L'identita' del server sta nella sessione
 SMB 3.1.1 con firma obbligatoria (la chiave di sessione dimostra che il server conosce la password
@@ -349,9 +369,10 @@ rete.
    dispositivo nuovo rifa' la richiesta con una chiave nuova (`ApprovalWindow`).
 5. **Sosia**: le richieste il cui nome coincide, dopo NFKC, rimozione di ZWJ e selettori, minuscole e spazi,
    con un'altra richiesta o con un dispositivo gia' registrato sono segnalate all'admin (`LookAlike`).
-6. **Account del NAS**: e' dichiarato dal richiedente (revisione B6). L'admin lo vede e lo conferma; la prova
-   di possesso (una copia della richiesta nell'area privata di quell'account, dove solo lui scrive) arriva in
-   Fase 2.3 insieme alle aree private nella configurazione firmata (Fase 2.2).
+6. **Account del NAS**: e' dichiarato dal richiedente (revisione B6). L'admin lo vede e lo conferma. Il primo
+   potere legato all'account, la segnalazione "perso" del proprietario (§5.9), chiede la **prova di possesso**:
+   una copia firmata nell'area privata di quell'account, dove scrive solo chi ne ha la password. La stessa prova
+   servira' all'unione dei dati personali (Fase 4.7).
 7. L'admin firma la versione successiva del registro con il dispositivo `approved`.
 
 Fino all'approvazione il dispositivo legge soltanto: i suoi dati, se ne scrivesse, sono rifiutati da tutti
@@ -441,7 +462,9 @@ Aprire il kit (`RecoveryKit.open`) **richiede l'id della famiglia e l'impronta a
 di stato): un kit con un'altra chiave, messo nell'area dell'admin da chi conosce il codice, e' rifiutato
 prima ancora di decifrare (revisione M7). Poi controlla struttura, versione, autenticazione GCM (codice
 sbagliato o file alterato danno lo stesso errore), che la chiave dentro sia quella dichiarata e che privata e
-pubblica stiano insieme (firma di prova). Tetto: 1 KiB.
+pubblica stiano insieme (firma di prova). Tetto: 1 KiB. L'intestazione in chiaro (id, impronta, ora) si legge
+senza codice con `RecoveryKit.inspect`: il recupero elenca solo i kit la cui intestazione coincide con il nome
+del file e della cartella.
 
 **Recupero dell'admin** (E-S13, piano 2.4), senza nulla del vecchio telefono:
 
@@ -481,7 +504,11 @@ revoche dell'altro: diventa un ramo da unire (§4.4).
   La rotazione **non** protegge da una chiave gia' rubata: il ladro potrebbe annunciare un suo successore.
 - **Reset della famiglia** (chiave di famiglia persa senza kit, o rubata, o un ramo firmato che l'admin non
   riconosce): nuova chiave, **nuovo id di famiglia**, nuovo kit; ogni dispositivo deve essere riconfigurato
-  con il nuovo QR (o l'impronta digitata a mano) e riapprovato. I dati legati al vecchio id di famiglia non
+  con il nuovo QR (o l'impronta digitata a mano) e riapprovato. La fondazione della famiglia nuova sta nella
+  **stessa cartella** del registro (`FamilyAuthority.refound`): al primo nome libero dopo l'ultima versione
+  nota della famiglia vecchia, seguito da 32 nomi liberi. Il QR nuovo porta quel numero come versione minima,
+  quindi i dispositivi nuovi partono da li'; le versioni della famiglia vecchia, firmate da un'altra chiave,
+  per loro sono spazzatura (e viceversa). I dati legati al vecchio id di famiglia non
   valgono piu': ogni dispositivo, riapprovato, ripubblica le proprie teste col nuovo id (i segmenti,
   identificati per impronta, restano gli stessi e non si ricalcolano). Un dispositivo non ancora migrato
   continua a fidarsi della vecchia famiglia: la guida chiede di migrarli subito e, se la chiave e' stata
@@ -523,6 +550,7 @@ la firma. E' l'identita' usata per le versioni del registro, i segni di anti-rol
 | Record del cestino | 5 | dispositivo approvato | 8 KiB |
 | Testa di un album condiviso | 6 | dispositivo approvato | 256 KiB |
 | Segnalazione "perso" | 7 | dispositivo approvato dello stesso account | 2 KiB |
+| Stato del dispositivo | 8 | il dispositivo stesso, approvato | 2 KiB |
 
 **Ordine della lettura** (verifica prima di interpretare): dimensione del file entro il tetto del tipo →
 copia privata dei byte (chi chiama non puo' cambiarli tra verifica e lettura, I7) → firma del formato →
@@ -541,7 +569,10 @@ un dispositivo non puo' firmare dati "a nome" di un altro.
 ### 5.3 Registro di famiglia (tipo 1)
 
 ```json
-{"config":{"commonShare":"Public","nasHost":"mycloudex2ultra.fritz.box"},
+{"config":{"commonExclusions":["Film","Musica/Copertine"],"commonShare":"test-comune",
+           "defaults":{"preset":"balanced","quality":"standard"},"homeUla":["fd12:3456:789a::/48"],
+           "nasGuid":"0f8fad5b-d9cb-469f-a165-70867728950e","nasHost":"192.168.178.58",
+           "nasName":"MyCloudEX2Ultra.fritz.box","nasPower":"always"},
  "devices":[{"admin":true,"id":"…","key":"…","model":"SM-S931B","name":"Telefono di …",
              "nasUser":"…","since":1791806400000,"status":"approved"}],
  "family":"…","issuedAt":1791806400000,"version":1}
@@ -550,8 +581,22 @@ un dispositivo non puo' firmare dati "a nome" di un altro.
 (Mostrato su piu' righe per leggerlo; il file e' su una riga sola, senza spazi.) Campi facoltativi:
 `successorKey` (rotazione) e, per ogni dispositivo `retired`, `frozenHeads` (impronte in ordine crescente,
 non vuoto). Vincoli: al massimo 256 dispositivi, in ordine crescente di id, senza doppioni; `id` = id della
-`key`; `version` tra 1 e 10^9; testi da mostrare (§8.4); `nasUser` ASCII stretto; `nasHost` nome DNS o IPv6
-tra parentesi quadre.
+`key`; `version` tra 1 e 10^9; testi da mostrare (§8.4); `nasUser` ASCII stretto.
+
+**Configurazione** (`FamilyConfig`, Fase 2). Ogni campo ha **una sola scrittura**; quelli facoltativi si
+**omettono** quando sono assenti o vuoti (una lista vuota scritta e' `NOT_CANONICAL`):
+
+| Campo | Obbligatorio | Forma |
+|---|---|---|
+| `nasHost` | si' | IP **letterale** (E-R7): IPv4 decimale stretto (niente zeri iniziali) o IPv6 tra parentesi quadre. Mai un nome. |
+| `commonShare` | si' | nome di share (§8.1), al massimo 80 caratteri |
+| `nasName` | no | nome DNS informativo (mai risolto) |
+| `nasGuid` | no (l'app lo scrive sempre) | GUID del server SMB dalla NEGOTIATE, forma di `UUID.toString()` (minuscolo, 36 caratteri) |
+| `homeUla` | no | al massimo 4 prefissi ULA /48 nella forma `fdxx:xxxx:xxxx::/48` (4 cifre esadecimali minuscole per gruppo), in ordine crescente. `UlaPrefix.canonical` converte le altre scritture (compresse, maiuscole). |
+| `nasPower` | si' | `always` oppure `HH:MM-HH:MM` (inizio diverso dalla fine): da qui la fascia notte |
+| `wolMac` | no | `aa:bb:cc:dd:ee:ff` minuscolo (WoL, dietro `FeatureFlags.wol`) |
+| `commonExclusions` | no | al massimo 256 percorsi di media (§8.1, mai dentro `.mycloudgallery`), ognuno al massimo 512 byte UTF-8, in ordine crescente |
+| `defaults` | si' | `{preset, quality}`: valori `[a-z][a-z0-9_]{0,15}` (l'app traduce i suoi enum; uno sconosciuto vale il default) |
 
 ### 5.4 Richiesta di registrazione (tipo 2)
 
@@ -606,11 +651,43 @@ stesso album non si sovrascrivono (E-SH6). Il contenuto (elementi, permesso scel
 Fase 7 con una versione del formato che lo descrive. Una definizione d'album, vera o falsa, **non sposta e
 non cancella nulla**: si limita a mostrare cio' che c'e' gia' nell'area comune (E-S11).
 
-### 5.9 Segnalazione "perso" (tipo 7, Fase 2.4)
+### 5.9 Segnalazione "perso" (tipo 7)
 
-Firmata da un altro dispositivo approvato **dello stesso account** del dispositivo perso (il piano: "l'admin
-o il proprietario"). L'admin la trasforma nello stato `lost` del registro; se si conferma la decisione 3 del
-§13, il dispositivo perso la rispetta anche prima, appena si ricollega. Contenuto definito in Fase 2.4.
+`family`, `device` (chi segnala, = firmatario), `target` (il dispositivo perso), `nasUser`, `reportedAt` (ora del
+NAS). Firmata da un altro dispositivo **approvato** (non dismesso, revocato, perso o in attesa) **dello stesso
+account** del dispositivo perso: `nasUser` deve essere l'account del firmatario e quello di `target` nel registro
+accettato (`NOT_OWNER` altrimenti); `target` deve essere nel registro e diverso da `device`; `reportedAt` al
+massimo 2 minuti nel futuro. Sta in `family/reports/<target>/<n>`, una serie numerata (primo nome libero; chi
+legge va per nome da 1, spazzatura scavalcata, al massimo 32 di fila: inondare la cartella non nasconde una
+segnalazione). Una copia in un'altra cartella non vale (`WRONG_LOCATION`).
+
+La stessa segnalazione si pubblica in **due** share (`LostReports.publish`):
+- nell'**area comune**, dove la vede l'admin, che la trasforma nello stato `lost` del registro con un gesto suo;
+- nell'**area privata dell'account**, dove scrive solo chi ne ha la password: e' la **prova di possesso
+  dell'account** (revisione B6, §12 punto 10). Con la decisione 3(a) il dispositivo perso, appena si ricollega,
+  rispetta **solo** la copia che trova nella propria area privata.
+
+Cosi' un dispositivo che ha dichiarato l'account di un altro familiare non puo' farne azzerare i telefoni: non
+scrive nella sua area privata, e la copia nell'area comune la vede solo l'admin.
+
+### 5.10 Stato del dispositivo (tipo 8)
+
+`family`, `device`, `version`, `appVersion` (`[0-9A-Za-z][0-9A-Za-z.+_-]*`, al massimo 32 caratteri), `roles`
+(array, sempre presente, valori `indexer`/`preparer` in ordine crescente, senza doppioni), `lastSeenAt` (ora del
+NAS, al massimo 2 minuti nel futuro), `registryVersion`. Sta in `devices/<device>/status/<version>` dell'area
+comune; firmato dal dispositivo stesso, **approvato** (in attesa, dismesso, revocato o perso → rifiuto, E-S14).
+Serve solo all'elenco "Dispositivi" (L11): nessuna decisione dipende da qui, salvo l'avviso "registro rimasto
+indietro" quando `registryVersion` e' piu' alto del nostro.
+
+- **Anti-rollback come per le teste** (§5.5): chi legge ricorda per dispositivo l'ultima versione e l'impronta
+  del contenuto firmato (`HeadMark`); versione piu' bassa → `ROLLBACK`, stessa versione con contenuto diverso →
+  `EQUIVOCATION`, numero diverso dal nome → `WRONG_LOCATION`.
+- **Al massimo una pubblicazione al giorno** (`DEVICE_STATUS_INTERVAL_MILLIS`, ora del NAS), approfittando di
+  una sessione gia' aperta, oppure subito se cambiano versione dell'app o ruoli.
+- La serie cresce di un file al giorno: chi legge non la percorre da 1 ma cerca **per nome** l'ultimo nome
+  occupato partendo dall'ultimo stato accettato (salti doppi poi bisezione, poche letture anche dopo anni) e
+  prende il piu' recente valido, tornando indietro di al massimo 32 nomi se in cima c'e' spazzatura. Un buco o
+  un nome piantato lontano fanno vedere uno stato vecchio o nessuno: informazione persa, mai potere.
 
 ---
 
@@ -678,6 +755,10 @@ insieme, il risultato resta coerente.
 | Percorso | 4096 byte UTF-8, 64 livelli |
 | Componente di percorso | 255 byte UTF-8 |
 | Nome di share | 80 caratteri |
+| Configurazione: prefissi ULA / esclusioni | 4 / 256 (ogni esclusione 512 byte UTF-8) |
+| Versione dell'app nello stato di un dispositivo | 32 caratteri |
+| Stato di un dispositivo: pubblicazioni | al massimo una al giorno (ora del NAS), salvo cambi |
+| Pubblicazione del registro: nomi letti dopo quello libero | 32 per nome, poi indizi con 32 file non validi di fila al massimo |
 | Letture per nome di una serie in una sincronizzazione | 1024 |
 | Nomi non validi di fila scavalcati | 32 |
 | Elenco del registro (solo indizio) | 1024 nomi |
@@ -779,9 +860,13 @@ partono solo da azioni locali confermate**, con tetti per giro. Come la garantis
    "N foto verranno spostate…"; una definizione d'album letta dal NAS non sposta nulla.
 5. **Ripristino dal cestino**: azione locale confermata, percorso validato (§8.1), mai sovrascrivendo.
 6. **L'unica conseguenza distruttiva voluta di un dato remoto** e' l'auto-azzeramento di un dispositivo
-   segnato `lost` in un registro firmato (Fase 2.4): tocca solo i dati locali dell'app su quel dispositivo,
-   e con l'anti-regressione (§4.4) e i kit per chiave (§4.8) non si puo' piu' ottenere con una base vecchia
-   o con un kit della chiave ruotata lasciato in giro.
+   segnato `lost` in un registro firmato **e accettato**, oppure segnalato da un dispositivo approvato dello
+   stesso account con una copia nella propria area privata (§5.9, decisione 3(a)): tocca solo i dati locali
+   dell'app su quel dispositivo, prima le chiavi e poi i dati (`docs/famiglia-dispositivi.md` §3). Con
+   l'anti-regressione (§4.4) e i kit per chiave (§4.8) non si puo' ottenere con una base vecchia o con un kit
+   della chiave ruotata lasciato in giro; un registro non firmato dalla chiave attesa, un rollback,
+   un'equivocazione o una regressione non diventano mai lo stato accettato, quindi non fanno azzerare (test
+   `NoFalseWipeTest` di `core-family`).
 
 Le operazioni distruttive vere vivranno in moduli e interfacce separate (Fasi 2.4, 4.5, 5, 7), ciascuna con
 il suo diario locale e i suoi test "dato remoto ostile → nessuna azione".
@@ -888,11 +973,11 @@ eliminare su quel dispositivo. Un orologio all'indietro non fa eliminare nulla.
    ritardarne l'arrivo fino alla ripubblicazione dell'admin (§4.4).
 9. **Riservatezza**: l'indice non e' cifrato sul NAS; lo protegge solo il permesso della share (come i media).
    Il registro, nell'area comune, mostra a tutti i dispositivi della famiglia (L11).
-10. **Account dichiarato**: finche' non arriva la prova di possesso (Fase 2.3), l'account del NAS di un
-    dispositivo e' quello che dichiara e che l'admin conferma (B6). Vincolo: la prova di possesso deve
-    esistere **prima** di qualunque potere legato all'account (segnalazioni "perso" della decisione 3(a),
-    unione dei dati personali della Fase 4.7), altrimenti diventa un modo per azzerare i dispositivi di un
-    altro familiare.
+10. **Account dichiarato**: l'account del NAS di un dispositivo e' quello che dichiara e che l'admin conferma
+    (B6). Vincolo: la prova di possesso deve esistere **prima** di qualunque potere legato all'account. Per le
+    segnalazioni "perso" della decisione 3(a) c'e' (Fase 2, §5.9: copia nell'area privata dell'account); per
+    l'unione dei dati personali della Fase 4.7 va ripresa la stessa idea. Vale finche' le aree private sono
+    davvero private: una share privata "pubblica" (`sicurezza.md` §1) toglie la prova.
 11. **Chiave di famiglia rubata**: una versione del ladro che *aggiunge* soltanto (nessuna regressione) e
     arriva prima di quelle dell'admin viene accettata senza allarme; l'admin la vede nell'elenco dei
     dispositivi. Un allarme dedicato (l'app dell'admin ricorda le impronte delle versioni che ha firmato e
@@ -916,6 +1001,10 @@ eliminare su quel dispositivo. Un orologio all'indietro non fa eliminare nulla.
 | 6 | Approvazione di un dispositivo | **(a)** scansione della chiave quando si e' insieme, altrimenti codice di 16 caratteri digitato entro 15 minuti. (b) Aggiungere l'attestazione hardware del Keystore come requisito (piu' codice, nessun dispositivo di famiglia ne sarebbe escluso). |
 | 7 | Runner del test sul dispositivo | **(a)** aggiungere `androidx.test:runner` a `versions-app.gradle` (standard; tocca file fuori da questo modulo). (b) Tenere il runner minimo di `core-trust` (oggi; esegue l'elenco `TEST_CLASSES` e rispetta `-e class`). |
 
+**Applicate per default nella Fase 2 (P3)**, finche' l'utente non conferma: 1(a), 3(a) **con la prova di
+possesso dell'account** (§5.9), 4(a), 5(a). La 2 **non** e' applicata: la cassaforte chiede il telefono sbloccato
+con blocco schermo sicuro, non la credenziale a ogni uso (residuo M3, `docs/review/1.4-core-trust.md`).
+
 Nota per `docs/sicurezza.md` (fuori dal perimetro di questa fase): C7, C8 (codice), C9, C10 (lato formato)
 e C23 hanno ora codice e test; L11 e i limiti del §12 vanno riportati li' alla chiusura della Fase 1.
 
@@ -929,7 +1018,10 @@ e C23 hanno ora codice e test; L11 e i limiti del §12 vanno riportati li' alla 
 | §3.1 | `codec/Base32.kt` | `Base32AndTextTest` |
 | §3.2 | `codec/CanonicalJson.kt`, `codec/Fields.kt` | `CanonicalJsonTest` |
 | §4.1–4.3 | `crypto/Keys.kt` (`EcdsaDer`, `P256`), `crypto/FamilyKey.kt`, `crypto/AndroidKeystore.kt` | `EnvelopeTest`, `ReviewFixesTest` (A3, B3); sul dispositivo `KeystoreDeviceTest` (androidTest) |
-| §4.4–4.7, §4.10 | `registry/*.kt` | `RegistryTest`, `ReviewFixesTest` (A1, A2, M1, M2, B4, B5, I9), `ReviewRound2Test` (N1–N5, M7) |
+| §4.4–4.7, §4.10 | `registry/*.kt` | `RegistryTest`, `ReviewFixesTest` (A1, A2, M1, M2, B4, B5, I9), `ReviewRound2Test` (N1–N5, M7), `ReviewRound3Test` (N2, R2, R3, R4), `Phase2FormatTest` (rifondazione) |
+| §5.3 (configurazione) | `registry/FamilyRegistry.kt` (`FamilyConfig`, `ConfigDefaults`), `registry/ConfigRules.kt`, `codec/TextRules.kt` (`ipLiteral`) | `Phase2FormatTest` |
+| §5.9 | `registry/LostReport.kt` (`LostReport`, `LostReports`) | `Phase2FormatTest`; in `core-family`: `NoFalseWipeTest`, `LifecycleTest` |
+| §5.10 | `data/DeviceStatusReport.kt` (`DeviceStatusReport`, `DeviceStatusVerifier`, `DeviceStatusSeries`) | `Phase2FormatTest`; in `core-family`: `StatusAndDiagnosticsTest` |
 | §4.8–4.9 | `crypto/RecoveryKit.kt` (`RecoveryKitFiles`) | `RecoveryKitTest`, `ReviewFixesTest` (M4, M7), `ReviewRound2Test` (M4, M3: cassaforte) |
 | §5.1–5.2 | `envelope/Envelope.kt`, `registry/DeviceTrust.kt` | `EnvelopeTest`, `DeviceHeadTest`, `ReviewFixesTest` (A3) |
 | §5.5 | `data/DeviceHead.kt` | `DeviceHeadTest` |

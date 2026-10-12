@@ -1,0 +1,130 @@
+package dev.pampa.mycloudgallery.core.trust.envelope
+
+import dev.pampa.mycloudgallery.core.trust.RejectReason
+import dev.pampa.mycloudgallery.core.trust.TrustFormat
+import dev.pampa.mycloudgallery.core.trust.TrustLimits
+import dev.pampa.mycloudgallery.core.trust.codec.CanonicalJson
+import dev.pampa.mycloudgallery.core.trust.codec.JsonObject
+import dev.pampa.mycloudgallery.core.trust.crypto.EcPublicKey
+import dev.pampa.mycloudgallery.core.trust.crypto.Hashes
+import dev.pampa.mycloudgallery.core.trust.crypto.Signer
+import dev.pampa.mycloudgallery.core.trust.crypto.TrustAlgorithms
+import dev.pampa.mycloudgallery.core.trust.ensure
+import dev.pampa.mycloudgallery.core.trust.violation
+import java.nio.ByteBuffer
+
+/** I tipi di file firmati (`docs/formato-nas.md` §5). Il codice e' nel sesto byte e fa parte della firma. */
+enum class DocType(val code: Int, val maxPayload: Int) {
+  /** Registro di famiglia: configurazione + dispositivi. Firmato dalla chiave di famiglia. */
+  FAMILY_REGISTRY(1, TrustLimits.MAX_REGISTRY_PAYLOAD),
+
+  /** Richiesta di registrazione di un dispositivo nuovo. Firmata dalla sua stessa chiave. */
+  REGISTRATION_REQUEST(2, TrustLimits.MAX_REQUEST_PAYLOAD),
+
+  /** Testa dei dati di un dispositivo in una share (indice o dati personali). */
+  DEVICE_HEAD(3, TrustLimits.MAX_HEAD_PAYLOAD),
+
+  /** Prenotazione di un lavoro. */
+  LEASE(4, TrustLimits.MAX_LEASE_PAYLOAD),
+
+  /** Record di un file messo nel cestino del NAS. */
+  TRASH_RECORD(5, TrustLimits.MAX_TRASH_RECORD_PAYLOAD),
+
+  /** Testa di un album condiviso (contenuto definito in Fase 7). */
+  SHARED_ALBUM_HEAD(6, TrustLimits.MAX_ALBUM_HEAD_PAYLOAD),
+
+  /** Segnalazione "dispositivo perso" da un altro dispositivo dello stesso account (Fase 2.4). */
+  LOST_REPORT(7, TrustLimits.MAX_LOST_REPORT_PAYLOAD),
+  ;
+
+  companion object {
+    fun fromCode(code: Int): DocType? = entries.firstOrNull { it.code == code }
+  }
+}
+
+/** Un file firmato con struttura e firma verificate. CHI ha firmato va ancora giudicato dal chiamante. */
+internal class SignedEnvelope(
+  val type: DocType,
+  val signer: EcPublicKey,
+  val payload: ByteArray,
+  /** SHA-256 in base32 dell'intero file: l'identita' di questa versione. */
+  val fileHash: String,
+) {
+  /** Il payload come JSON canonico; da chiamare solo DOPO aver deciso che il firmatario e' fidato. */
+  fun payloadJson(): JsonObject {
+    val value = CanonicalJson.parseCanonical(payload)
+    return value as? JsonObject ?: violation(RejectReason.MALFORMED, "payload: oggetto atteso")
+  }
+}
+
+/**
+ * La busta binaria di ogni file firmato (`docs/formato-nas.md` §5.1):
+ *
+ * ```
+ * 0    4   "MCGS"
+ * 4    1   versione del formato
+ * 5    1   tipo (DocType)
+ * 6    91  chiave pubblica del firmatario (SPKI P-256)
+ * 97   4   lunghezza del payload N (big endian)
+ * 101  N   payload: JSON canonico UTF-8
+ * 101+N 1  lunghezza della firma S (8..72)
+ * 102+N S  firma ECDSA P-256/SHA-256 in DER
+ * ```
+ *
+ * Si firma `DOMINIO || byte[0, 101+N)`. La lettura controlla dimensioni, versione, tipo e firma PRIMA di
+ * interpretare il payload, e non alloca mai in base a lunghezze dichiarate dal file.
+ */
+internal object Envelope {
+
+  private val MAGIC = "MCGS".toByteArray(Charsets.US_ASCII)
+  private val DOMAIN = "mycloudgallery/signed\u0000".toByteArray(Charsets.US_ASCII)
+  const val HEADER_BYTES = 4 + 1 + 1 + EcPublicKey.SPKI_BYTES + 4
+  private const val MIN_SIGNATURE_BYTES = 8
+
+  fun maxFileBytes(type: DocType): Int = HEADER_BYTES + type.maxPayload + 1 + TrustAlgorithms.MAX_SIGNATURE_BYTES
+
+  fun seal(type: DocType, payload: JsonObject, signer: Signer): ByteArray {
+    val body = CanonicalJson.encode(payload)
+    require(body.size <= type.maxPayload) { "Payload oltre il tetto del tipo." }
+    val signed = ByteBuffer.allocate(HEADER_BYTES + body.size)
+      .put(MAGIC)
+      .put(TrustFormat.CURRENT_VERSION.toByte())
+      .put(type.code.toByte())
+      .put(signer.publicKey.encoded)
+      .putInt(body.size)
+      .put(body)
+      .array()
+    val signature = signer.sign(DOMAIN + signed)
+    require(signature.size in MIN_SIGNATURE_BYTES..TrustAlgorithms.MAX_SIGNATURE_BYTES) { "Firma di lunghezza inattesa." }
+    return signed + byteArrayOf(signature.size.toByte()) + signature
+  }
+
+  /** Lancia [dev.pampa.mycloudgallery.core.trust.TrustViolation]. */
+  fun open(bytes: ByteArray, expected: DocType): SignedEnvelope {
+    ensure(bytes.size <= maxFileBytes(expected), RejectReason.TOO_LARGE, "busta: file troppo grande")
+    ensure(bytes.size >= HEADER_BYTES + 1 + 1 + MIN_SIGNATURE_BYTES, RejectReason.MALFORMED, "busta: troppo corta")
+    for (i in MAGIC.indices) ensure(bytes[i] == MAGIC[i], RejectReason.MALFORMED, "busta: firma del formato")
+    val version = bytes[4].toInt() and 0xff
+    if (version > TrustFormat.CURRENT_VERSION) violation(RejectReason.NEWER_FORMAT, "busta: formato piu' nuovo")
+    ensure(TrustFormat.isReadable(version), RejectReason.MALFORMED, "busta: versione")
+    val type = DocType.fromCode(bytes[5].toInt() and 0xff) ?: violation(RejectReason.MALFORMED, "busta: tipo sconosciuto")
+    ensure(type == expected, RejectReason.WRONG_TYPE, "busta: tipo inatteso")
+    val signer = EcPublicKey.fromSpki(bytes.copyOfRange(6, 6 + EcPublicKey.SPKI_BYTES))
+    val payloadLength = ByteBuffer.wrap(bytes, 6 + EcPublicKey.SPKI_BYTES, 4).int
+    ensure(payloadLength in 1..type.maxPayload, RejectReason.TOO_LARGE, "busta: payload fuori tetto")
+    val signatureLengthAt = HEADER_BYTES + payloadLength
+    ensure(signatureLengthAt < bytes.size, RejectReason.MALFORMED, "busta: troncata")
+    val signatureLength = bytes[signatureLengthAt].toInt() and 0xff
+    ensure(signatureLength in MIN_SIGNATURE_BYTES..TrustAlgorithms.MAX_SIGNATURE_BYTES, RejectReason.MALFORMED, "busta: firma")
+    ensure(bytes.size == signatureLengthAt + 1 + signatureLength, RejectReason.MALFORMED, "busta: lunghezza totale")
+    val message = DOMAIN + bytes.copyOfRange(0, signatureLengthAt)
+    val signature = bytes.copyOfRange(signatureLengthAt + 1, bytes.size)
+    ensure(signer.verify(message, signature), RejectReason.BAD_SIGNATURE, "busta: firma non valida")
+    return SignedEnvelope(
+      type = type,
+      signer = signer,
+      payload = bytes.copyOfRange(HEADER_BYTES, signatureLengthAt),
+      fileHash = Hashes.sha256Name(bytes),
+    )
+  }
+}

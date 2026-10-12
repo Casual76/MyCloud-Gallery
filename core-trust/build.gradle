@@ -1,9 +1,12 @@
-// Formato e firme dei dati condivisi sul NAS (piano 1.4): versione del formato, chiave di famiglia,
-// registro dei dispositivi, lettura difensiva. Vede core-model e core-common.
+// Formato e firme dei dati condivisi sul NAS (piano 1.4, specifica in docs/formato-nas.md): versione del
+// formato, chiave di famiglia, registro dei dispositivi, prenotazioni, lettura difensiva.
+//
+// Niente librerie crittografiche: bastano JCA e il Keystore di Android (ECDSA P-256, AES-GCM, HMAC).
+// Niente kotlinx.serialization: i file firmati si leggono con un parser JSON canonico proprio, stretto e
+// con tetti (codec/CanonicalJson.kt), cosi' due programmi non possono leggere lo stesso file in due modi.
 plugins {
   id 'com.android.library'
   id 'org.jetbrains.kotlin.android'
-  id 'org.jetbrains.kotlin.plugin.serialization'
 }
 
 apply from: "${rootDir}/engine/versions.gradle"
@@ -12,12 +15,17 @@ apply from: "${rootDir}/gradle/android-conventions.gradle"
 
 android {
   namespace = 'dev.pampa.mycloudgallery.core.trust'
+
+  defaultConfig {
+    // Il test strumentato (solo Keystore) usa un runner minimo scritto qui, sopra JUnit 4, invece di
+    // androidx.test:runner, che non e' nell'elenco di versions-app.gradle (vedi il sorgente del runner).
+    testInstrumentationRunner = 'dev.pampa.mycloudgallery.core.trust.KeystoreTestRunner'
+  }
 }
 
 dependencies {
   api project(':core-model')
   implementation project(':core-common')
 
-  // api: i tipi @Serializable del formato compaiono nell'API pubblica del modulo.
-  api appDeps.serializationJson
+  androidTestImplementation appDeps.junit
 }

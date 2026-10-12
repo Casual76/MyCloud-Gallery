@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  I messaggi degli errori della sessione NAS (docs/fase2-progetto.md §3.4), uno per riga della tabella.
+  Li sceglie NasErrorMessages; li mostrano onboarding, impostazioni, Diagnostica e l'indicatore globale.
+  Mai dati dell'utente dentro, salvo il nome della share in nas_error_share_missing (solo a schermo).
+-->
+<resources>
+  <string name="nas_error_auth_failed">La password del NAS non è più valida (forse è stata cambiata). Inseriscila di nuovo.</string>
+  <string name="nas_error_account_locked">L\'account del NAS è bloccato: va sbloccato dalla dashboard del NAS.</string>
+  <string name="nas_error_account_disabled">Questo account è disattivato sul NAS.</string>
+  <string name="nas_error_password_expired">La password è scaduta: cambiala dal NAS.</string>
+  <string name="nas_error_account_restricted">Il NAS non permette l\'accesso a questo account adesso.</string>
+  <string name="nas_error_insecure_guest">Il NAS ha offerto un accesso ospite: rifiutato.</string>
+  <string name="nas_error_insecure_no_encryption">Il NAS non ha concesso una connessione cifrata: nessun dato inviato.</string>
+  <string name="nas_error_identity_mismatch">A questo indirizzo risponde un NAS diverso da quello configurato. Nessuna password inviata.</string>
+  <string name="nas_error_permission_denied">Non hai il permesso per questa cartella.</string>
+  <string name="nas_error_share_missing">La cartella condivisa «%1$s» non esiste più sul NAS.</string>
+  <string name="nas_error_quota_exceeded">Hai esaurito lo spazio del tuo account (quota), il NAS ha ancora spazio.</string>
+  <string name="nas_error_nas_full">Il NAS è pieno: backup in pausa, la consultazione continua.</string>
+  <string name="nas_error_file_busy">Il file è in uso dal PC: riprovo più tardi.</string>
+  <string name="nas_error_service_down">Il NAS è acceso ma la condivisione file non risponde.</string>
+  <string name="nas_error_timeout">Il NAS non risponde (forse si sta risvegliando)…</string>
+  <string name="nas_error_vpn_off_away">Fuori casa: accendi la VPN</string>
+  <string name="nas_error_untrusted_network">Rete non riconosciuta: nessuna connessione al NAS</string>
+  <string name="nas_error_foreign_vpn">VPN non di casa attiva</string>
+  <string name="nas_error_offline">Offline: nessuna connessione al NAS</string>
+  <string name="nas_error_captive_portal">Questa rete chiede un accesso dal browser: nessuna connessione al NAS</string>
+  <string name="nas_error_not_configured">Il NAS non è ancora configurato.</string>
+  <string name="nas_error_local_network_blocked">Android non permette all\'app di usare la rete locale.</string>
+  <string name="nas_error_stalled">Trasferimento bloccato: rete lenta, riprendo più tardi.</string>
+  <string name="nas_error_credentials_missing">Serve la password del NAS.</string>
+  <string name="nas_error_unexpected">Errore imprevisto del NAS (codice %1$s).</string>
+  <string name="nas_error_unexpected_no_code">Errore imprevisto del NAS.</string>
+  <string name="nas_state_waking_up">Risveglio del NAS…</string>
+  <string name="nas_state_auth_blocked">Serve la password del NAS</string>
+</resources>

@@ -23,6 +23,11 @@ dependencies {
   testImplementation appDeps.coroutinesTest
   testImplementation appDeps.turbine
 
+  // Gli adattatori che leggono Android (BatteryManager, PowerManager, ConnectivityManager) si provano
+  // con Robolectric, come in :core-security. Gia' in appDeps e con i checksum in verification-metadata.
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+
   // WorkManager e hilt-work sono solo in classpath di TEST, di proposito: i lavori veri vivono in
   // :app (che li aggiungera' quando servono) e dichiararli qui in `implementation` porterebbe nel
   // manifest dell'app il SystemJobService esportato di WorkManager. Stare qui fa si' che le loro

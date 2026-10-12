@@ -1,0 +1,212 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Le stringhe del Catalogo componenti (piano 1.2): titoli dei gruppi e delle sezioni, e i testi di
+  prova che i componenti mostrano. Sono italiane come tutto il resto; i dati di esempio (nomi, date,
+  luoghi) sono inventati: il catalogo non contiene dati veri.
+-->
+<resources>
+
+  <string name="catalog_title">Catalogo componenti</string>
+  <string name="catalog_subtitle">I componenti della galleria, in chiaro e scuro, con le loro varianti e i loro stati.</string>
+  <string name="catalog_section_components">Componenti</string>
+  <string name="catalog_open_sheet">Apri il foglio vero</string>
+  <string name="percent_value">%1$d%%</string>
+
+  <!-- Gruppi -->
+  <string name="group_theme_title">Tema</string>
+  <string name="group_theme_summary">Ametista e le sue superfici, i raggi e la tipografia: tutto dall’engine.</string>
+  <string name="group_cells_title">Celle della griglia</string>
+  <string name="group_cells_summary">Quadrata o in proporzione, segnaposto, premuta, selezionata, con i badge.</string>
+  <string name="group_badges_title">Badge</string>
+  <string name="group_badges_summary">Dieci segni compatti, leggibili sopra qualunque foto.</string>
+  <string name="group_bars_title">Barre in vetro</string>
+  <string name="group_bars_summary">Barra superiore, barra delle schede e barra azioni.</string>
+  <string name="group_menu_title">Menu ⋮</string>
+  <string name="group_menu_summary">Voci, separatori di gruppo e voce che cancella, in vetro.</string>
+  <string name="group_sheets_title">Fogli di conferma</string>
+  <string name="group_sheets_summary">Elimina, condividi con la famiglia, dati mobili, nuovo dispositivo.</string>
+  <string name="group_states_title">Stati vuoti e d’errore</string>
+  <string name="group_states_summary">Libreria vuota, nessun risultato, NAS non raggiungibile, permesso negato.</string>
+  <string name="group_status_title">Stato globale</string>
+  <string name="group_status_summary">Una pillola tappabile che dice se è tutto al sicuro.</string>
+  <string name="group_headers_title">Intestazioni della timeline</string>
+  <string name="group_headers_summary">Data e luogo, pronte per agganciarsi alla barra.</string>
+  <string name="group_motion_title">Movimento</string>
+  <string name="group_motion_summary">Espansione dalla miniatura, swipe per chiudere, pinch fra i livelli.</string>
+
+  <!-- Tema -->
+  <string name="sec_theme_accent">Accento</string>
+  <string name="sec_theme_accent_detail">Il marchio e le due tinte che nascono da lui. Cambiano con Material You o con un altro preset.</string>
+  <string name="sec_theme_surfaces">Superfici</string>
+  <string name="sec_theme_surfaces_detail">Pagina, contenitori e toni: sempre coppie, mai un colore senza il suo contenuto.</string>
+  <string name="sec_theme_radii">Raggi</string>
+  <string name="sec_theme_radii_detail">Angoli continui, mai circolari. In punti, dal più piccolo al foglio.</string>
+  <string name="sec_theme_type">Tipografia</string>
+  <string name="sec_theme_type_detail">La scala dell’engine: nessuna dimensione di testo scritta a mano.</string>
+  <string name="theme_primary">Primario</string>
+  <string name="theme_primary_detail">Il colore del marchio</string>
+  <string name="theme_secondary">Secondario</string>
+  <string name="theme_secondary_detail">La seconda tinta</string>
+  <string name="theme_tertiary">Terziario</string>
+  <string name="theme_tertiary_detail">La terza tinta</string>
+  <string name="swatch_background">Sfondo</string>
+  <string name="swatch_surface">Superficie</string>
+  <string name="swatch_container">Contenitore</string>
+  <string name="swatch_primary_container">Marchio</string>
+  <string name="swatch_secondary_container">Secondario</string>
+  <string name="swatch_tertiary_container">Terziario</string>
+  <string name="swatch_error_container">Errore</string>
+  <string name="type_title">Libreria</string>
+  <string name="type_section">Marzo 2024</string>
+  <string name="type_date">Sabato 12 marzo</string>
+  <string name="type_place">Oslo, Norvegia · 128 foto</string>
+  <string name="type_label">Solo sul NAS</string>
+
+  <!-- Celle -->
+  <string name="sec_cells_shapes">Quadrata e in proporzione</string>
+  <string name="sec_cells_shapes_detail">Angoli continui. La proporzione originale accetta da 1:2 a 2:1.</string>
+  <string name="cell_shape_square">Quadrata</string>
+  <string name="cell_shape_landscape">4:3</string>
+  <string name="cell_shape_portrait">3:4</string>
+  <string name="cell_shape_panorama">2:1</string>
+  <string name="sec_cells_states">Stati</string>
+  <string name="sec_cells_states_detail">Il segnaposto luccica piano, la cella premuta cede, la selezionata si rimpicciolisce in una cornice.</string>
+  <string name="cell_state_normal">Normale</string>
+  <string name="cell_state_loading">In caricamento</string>
+  <string name="cell_state_pressed">Premuta</string>
+  <string name="cell_state_selectable">Selezionabile</string>
+  <string name="cell_state_selected">Selezionata</string>
+  <string name="sec_cells_badges">Con i badge</string>
+  <string name="sec_cells_badges_detail">Quattro angoli, quattro slot: selezione, stato, segni, durata.</string>
+  <string name="sec_cells_grid">In una griglia</string>
+  <string name="sec_cells_grid_detail">Come in Libreria: celle quasi a contatto, con un po’ di tutto sopra.</string>
+  <string name="sample_photo">Foto di prova %1$d</string>
+
+  <!-- Badge -->
+  <string name="sec_badges_legend">Legenda</string>
+  <string name="sec_badges_legend_detail">Ogni badge sta su una miniatura, perché è lì che vive.</string>
+  <string name="legend_video">Un video: la durata sta in basso a destra.</string>
+  <string name="legend_nas_only">L’originale è solo sul NAS: l’anteprima c’è, per aprirlo serve la rete.</string>
+  <string name="legend_phone_only">Non è ancora stato salvato sul NAS.</string>
+  <string name="legend_safe">Esiste una copia privata verificata sul NAS.</string>
+  <string name="legend_uploading">Sta salendo sul NAS.</string>
+  <string name="legend_failed">Il caricamento non è riuscito.</string>
+  <string name="legend_favorite">È tra i tuoi preferiti.</string>
+  <string name="legend_shared">Sta in un album condiviso o nell’area comune.</string>
+  <string name="legend_edited">Vedi la versione modificata; l’originale resta recuperabile.</string>
+  <string name="legend_estimated_date">La data è quella del file, non quella dello scatto.</string>
+  <string name="sec_badges_photos">Sopra foto chiare e scure</string>
+  <string name="sec_badges_photos_detail">Lo scrim tiene il bianco sopra i 4,5:1 anche sulla foto più chiara.</string>
+  <string name="scene_bright">Foto chiara</string>
+  <string name="scene_dark">Foto scura</string>
+  <string name="scene_sunset">Tramonto</string>
+  <string name="scene_meadow">Prato</string>
+  <string name="scene_stripes">Righe fitte</string>
+  <string name="sec_badges_labeled">Con etichetta</string>
+  <string name="sec_badges_labeled_detail">Per i pannelli di informazioni: la stessa forma, con la frase accanto.</string>
+
+  <!-- Barre -->
+  <string name="sec_bars_library">Barra superiore della Libreria</string>
+  <string name="sec_bars_library_detail">Vetro che sfuma verso il basso. Le azioni rifrangono la barra, non la pagina.</string>
+  <string name="sec_bars_viewer">Barra superiore del viewer</string>
+  <string name="sec_bars_viewer_detail">Sopra una foto la tinta cambia: chiara o scura, resta leggibile.</string>
+  <string name="sec_bars_tabs">Barra delle schede</string>
+  <string name="sec_bars_tabs_detail">Libreria · Raccolte · Cerca: la pillola di vetro dell’engine.</string>
+  <string name="sec_bars_actions">Barra azioni</string>
+  <string name="sec_bars_actions_detail">Una capsula sola, icone da 48 dp. Quella che cancella è rossa.</string>
+  <string name="bar_action_select">Seleziona</string>
+  <string name="bar_action_info">Informazioni</string>
+  <string name="bar_action_share">Condividi</string>
+  <string name="bar_action_favorite">Preferito</string>
+  <string name="bar_action_delete">Elimina</string>
+  <string name="sample_date_long">12 marzo 2024</string>
+  <string name="sample_time_place">12:41 · Oslo</string>
+
+  <!-- Menu -->
+  <string name="sec_menu_viewer">Menu del viewer</string>
+  <string name="sec_menu_viewer_detail">Tre gruppi e, in fondo, la voce che cancella.</string>
+  <string name="sec_menu_short">Menu breve</string>
+  <string name="sec_menu_short_detail">Una voce disattivata si vede ma non si sceglie.</string>
+  <string name="menu_view_original">Vedi originale</string>
+  <string name="menu_fix_date">Correggi data e luogo</string>
+  <string name="menu_rotate">Ruota</string>
+  <string name="menu_download">Scarica sul telefono</string>
+  <string name="menu_share">Condividi</string>
+  <string name="menu_edit_with">Modifica con…</string>
+  <string name="menu_move">Sposta</string>
+  <string name="menu_rename">Rinomina</string>
+  <string name="menu_hide">Nascondi</string>
+  <string name="menu_details">Dettagli</string>
+  <string name="menu_delete">Elimina…</string>
+  <string name="menu_library_size">Dimensione delle celle</string>
+  <string name="menu_library_settings">Impostazioni</string>
+
+  <!-- Fogli -->
+  <string name="sec_sheets_delete_phone">Elimina, solo dal telefono</string>
+  <string name="sec_sheets_delete_phone_detail">Il media sta in più posti: l’utente sceglie dove. Il NAS non si tocca.</string>
+  <string name="sec_sheets_delete_everywhere">Elimina, ovunque</string>
+  <string name="sec_sheets_delete_everywhere_detail">Agisce solo dove hai i diritti, e l’elenco dice dove no.</string>
+  <string name="sec_sheets_share">Condividi con la famiglia</string>
+  <string name="sec_sheets_share_detail">Parte solo da questa conferma, mai da dati letti dal NAS.</string>
+  <string name="sec_sheets_mobile">Dati mobili</string>
+  <string name="sec_sheets_mobile_detail">Prima la stima, poi la scelta.</string>
+  <string name="sec_sheets_device">Nuovo dispositivo</string>
+  <string name="sec_sheets_device_detail">L’impronta è quella da confrontare con il dispositivo nuovo.</string>
+  <string name="sample_loc_phone">Telefono</string>
+  <string name="sample_loc_nas_private">NAS · Area privata</string>
+  <string name="sample_loc_nas_shared">NAS · Area comune</string>
+  <string name="sample_album">Oslo 2026</string>
+  <string name="sample_permission">Gli altri aggiungono soltanto</string>
+  <string name="sample_mobile_estimate">1,2 GB</string>
+  <string name="sample_mobile_budget">Ti restano 3,8 GB del tetto mensile di 5 GB</string>
+  <string name="sample_device_name">Tablet di casa</string>
+  <string name="sample_device_profile">Mamma</string>
+  <string name="sample_device_model">Galaxy Tab S10</string>
+  <string name="sample_device_ago">2 minuti fa</string>
+  <string name="sample_device_fingerprint">4F3A 91C2 7BD0 E5A8</string>
+
+  <!-- Stati -->
+  <string name="sec_states_library">Libreria vuota</string>
+  <string name="sec_states_search">Nessun risultato di ricerca</string>
+  <string name="sec_states_nas">NAS non raggiungibile</string>
+  <string name="sec_states_permission">Permesso negato</string>
+  <string name="sample_query">scontrino Esselunga</string>
+
+  <!-- Stato globale -->
+  <string name="sec_status_tonal">Pillola tonale</string>
+  <string name="sec_status_tonal_detail">Per una pagina piatta. Il tono viene dai ruoli dello schema.</string>
+  <string name="sec_status_compact">Solo glifo</string>
+  <string name="sec_status_compact_detail">Per una barra stretta: la frase resta per il lettore di schermo.</string>
+  <string name="sec_status_glass">Di vetro, sopra la timeline</string>
+  <string name="sec_status_glass_detail">Una lente da 48 dp: non copre le foto, le attraversa.</string>
+  <string name="status_error_quota">quota esaurita</string>
+
+  <!-- Intestazioni -->
+  <string name="sec_headers_levels">I quattro livelli</string>
+  <string name="sec_headers_levels_detail">Anni, mesi, giorni e tutte: la scala del titolo cambia, il luogo sta sotto.</string>
+  <string name="sec_headers_stuck">Agganciata alla barra</string>
+  <string name="sec_headers_stuck_detail">Di vetro con le foto sotto; piena del colore della pagina se manca il fondale.</string>
+  <string name="sample_year">2024</string>
+  <string name="sample_year_detail">9 luoghi</string>
+  <string name="sample_month">Marzo 2024</string>
+  <string name="sample_month_detail">Oslo e altri 3 luoghi</string>
+  <string name="sample_day">Sabato 12 marzo</string>
+  <string name="sample_day_short">12 marzo 2024</string>
+  <string name="sample_place">Oslo, Norvegia</string>
+  <string name="header_select">Seleziona</string>
+
+  <!-- Movimento -->
+  <string name="sec_motion_expand">Espansione dalla miniatura</string>
+  <string name="sec_motion_expand_detail">Tocca una miniatura: il viewer cresce da lì, opaco dal primo fotogramma. Trascina verso il basso o tocca per chiudere.</string>
+  <string name="motion_expand_hint">Il dito guida lo stesso orologio dell’apertura, al contrario.</string>
+  <string name="sec_motion_expand_frames">Fotogrammi dell’apertura</string>
+  <string name="sec_motion_expand_frames_detail">A 0, 45 e 100 per cento del viaggio: la sagoma cambia raggio, la pagina non sfuma mai.</string>
+  <string name="sec_motion_dismiss_frames">Fotogrammi dello swipe</string>
+  <string name="sec_motion_dismiss_frames_detail">Il dito a 0, 50 e 100 per cento della corsa: la foto scende e si rimpicciolisce.</string>
+  <string name="sec_motion_pinch">Pinch fra i livelli</string>
+  <string name="sec_motion_pinch_detail">Pizzica la griglia: le colonne cambiano, ancorate al dito. In alternativa, scegli il livello.</string>
+  <string name="motion_pinch_hint">Un solo orologio: la scala continua copre la differenza fra due livelli.</string>
+  <string name="sec_motion_pinch_levels">I livelli</string>
+  <string name="sec_motion_pinch_levels_detail">Più colonne, celle più piccole.</string>
+
+</resources>

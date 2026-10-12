@@ -1,53 +1,82 @@
 package dev.pampa.mycloudgallery.core.designsystem.catalog
 
 import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
-import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.performClick
 import com.github.takahirom.roborazzi.captureRoboImage
-import dev.antigravity.fluidengine.foundation.EngineSettings
-import dev.antigravity.fluidengine.foundation.ThemeMode
 import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.ParameterizedRobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Screenshot test su JVM: la pagina del catalogo, a tema Ametista, in chiaro e in scuro.
+ * Il catalogo vivo, come lo vede chi lo apre: la finestra del dispositivo (telefono 412 x 915 dp,
+ * tablet 1280 x 800 dp), l'indice dei gruppi e, dopo un tocco, la pagina di un gruppo.
  *
- * In `testDebugUnitTest` verifica che la pagina componga (il titolo c'e'); per ottenere i PNG da
- * guardare nella revisione grafica:
- *
- *     gradlew :core-designsystem:recordRoborazziDebug
- *
- * che li scrive in `core-designsystem/build/outputs/roborazzi/`.
+ * `gradlew :core-designsystem:recordRoborazziDebug` scrive i PNG in `docs/screenshots/1.2/`.
  */
-@RunWith(AndroidJUnit4::class)
-@GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(qualifiers = "w411dp-h891dp-xxhdpi")
-class ComponentCatalogScreenshotTest {
+internal abstract class CatalogShellScreenshotBase(
+  private val look: CatalogLook,
+  private val device: CatalogDevice,
+) {
 
   @get:Rule
   val composeRule = createComposeRule()
 
-  @Test
-  fun catalogoInChiaro() = cattura("catalogo-chiaro", ThemeMode.LIGHT)
-
-  @Test
-  fun catalogoInScuro() = cattura("catalogo-scuro", ThemeMode.DARK)
-
-  private fun cattura(nome: String, modo: ThemeMode) {
+  private fun show() {
     composeRule.setContent {
-      MyCloudGalleryTheme(settings = EngineSettings(themeMode = modo)) {
-        ComponentCatalogPlaceholder(onBack = {})
+      MyCloudGalleryTheme(settings = look.settings()) {
+        ComponentCatalog(onBack = {})
       }
     }
+    composeRule.waitForIdle()
+  }
 
+  @Test
+  fun indice() {
+    show()
     // Il titolo compare due volte: grande nella pagina e piccolo nella barra agganciata.
     composeRule.onAllNodesWithText("Catalogo componenti").assertCountEquals(2)
-    composeRule.onRoot().captureRoboImage("build/outputs/roborazzi/$nome.png")
+    composeRule.onRoot().captureRoboImage(CatalogShots.path("catalogo-indice-${look.slug}-${device.slug}"))
+  }
+
+  @Test
+  fun gruppo() {
+    show()
+    composeRule.onNodeWithText("Celle della griglia").performClick()
+    composeRule.waitForIdle()
+    composeRule.onRoot().captureRoboImage(CatalogShots.path("catalogo-gruppo-celle-${look.slug}-${device.slug}"))
+  }
+}
+
+@RunWith(ParameterizedRobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(qualifiers = "w412dp-h915dp-xhdpi")
+internal class CatalogShellPhoneScreenshotTest(look: CatalogLook) :
+  CatalogShellScreenshotBase(look, CatalogDevice.Phone) {
+
+  companion object {
+    @JvmStatic
+    @ParameterizedRobolectricTestRunner.Parameters(name = "{0}")
+    fun data(): List<Array<Any>> = CatalogLook.all.map { arrayOf<Any>(it) }
+  }
+}
+
+@RunWith(ParameterizedRobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(qualifiers = "w1280dp-h800dp-land-xhdpi")
+internal class CatalogShellTabletScreenshotTest(look: CatalogLook) :
+  CatalogShellScreenshotBase(look, CatalogDevice.Tablet) {
+
+  companion object {
+    @JvmStatic
+    @ParameterizedRobolectricTestRunner.Parameters(name = "{0}")
+    fun data(): List<Array<Any>> = CatalogLook.all.map { arrayOf<Any>(it) }
   }
 }

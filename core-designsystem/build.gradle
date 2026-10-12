@@ -21,6 +21,14 @@ android {
   buildFeatures {
     compose = true
   }
+
+  testOptions {
+    unitTests.all {
+      // Gli screenshot catturano pagine alte migliaia di pixel (una finestra di prova di 4800 dp a
+      // 2x): i 512 MB di default dei test non bastano, e un OutOfMemory a meta' lascia PNG a meta'.
+      maxHeapSize = '3g'
+    }
+  }
 }
 
 dependencies {

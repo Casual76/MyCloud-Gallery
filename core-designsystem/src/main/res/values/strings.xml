@@ -1,12 +1,115 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Le stringhe dei componenti della galleria (piano 1.2). Tutto in italiano: e' la lingua dell'app e
+  non c'e' una seconda lingua in questa fase, quindi niente values-xx. Le stringhe del catalogo
+  componenti stanno a parte, in catalog_strings.xml.
+-->
 <resources>
-  <string name="catalog_title">Catalogo componenti</string>
-  <string name="catalog_subtitle">Qui compariranno i componenti della galleria, in chiaro e scuro.</string>
-  <string name="catalog_section_palette">Tema Ametista</string>
-  <string name="catalog_palette_primary">Primario</string>
-  <string name="catalog_palette_primary_detail">Il colore del marchio</string>
-  <string name="catalog_palette_secondary">Secondario</string>
-  <string name="catalog_palette_secondary_detail">Tende al blu</string>
-  <string name="catalog_palette_tertiary">Terziario</string>
-  <string name="catalog_palette_tertiary_detail">Tende al rosa</string>
+
+  <!-- Azioni comuni -->
+  <string name="action_cancel">Annulla</string>
+
+  <!-- Badge. Sono anche le frasi che un lettore di schermo pronuncia. -->
+  <string name="badge_video_duration">Video, durata %1$s</string>
+  <string name="badge_nas_only">Solo sul NAS</string>
+  <string name="badge_phone_only">Solo sul telefono</string>
+  <string name="badge_safe">Al sicuro</string>
+  <string name="badge_uploading">In caricamento</string>
+  <string name="badge_uploading_progress">In caricamento, %1$d%%</string>
+  <string name="badge_failed">Errore</string>
+  <string name="badge_favorite">Preferito</string>
+  <string name="badge_shared">Condiviso</string>
+  <string name="badge_edited">Versione modificata</string>
+  <string name="badge_estimated_date">Data stimata</string>
+
+  <!-- Cella della griglia -->
+  <string name="cell_loading">Anteprima in caricamento</string>
+  <string name="cell_selected">Selezionato</string>
+  <string name="cell_not_selected">Non selezionato</string>
+
+  <!-- Livelli della griglia (pinch) -->
+  <string name="level_years">Anni</string>
+  <string name="level_months">Mesi</string>
+  <string name="level_days">Giorni</string>
+  <string name="level_all">Tutte</string>
+
+  <!-- Barra superiore -->
+  <string name="topbar_back">Indietro</string>
+  <string name="topbar_close">Chiudi</string>
+  <string name="topbar_more">Altre azioni</string>
+
+  <!-- Barra delle schede -->
+  <string name="tab_library">Libreria</string>
+  <string name="tab_collections">Raccolte</string>
+  <string name="tab_search">Cerca</string>
+
+  <!-- Indicatore di stato globale -->
+  <string name="status_all_safe">Tutto al sicuro</string>
+  <string name="status_backing_up">Backup in corso %1$d/%2$d</string>
+  <string name="status_waiting_charge">In attesa: serve la carica</string>
+  <string name="status_nas_unreachable">NAS non raggiungibile</string>
+  <string name="status_waking_nas">Risveglio del NAS…</string>
+  <string name="status_error">Errore: %1$s</string>
+
+  <!-- Stati vuoti e d'errore -->
+  <string name="state_library_empty_title">La Libreria è vuota</string>
+  <string name="state_library_empty_detail">Le foto e i video del telefono compariranno qui. Se li hai sul NAS, collegalo per vederli.</string>
+  <string name="state_library_empty_action">Collega il NAS</string>
+  <string name="state_no_results_title">Nessun risultato</string>
+  <string name="state_no_results_title_query">Nessun risultato per «%1$s»</string>
+  <string name="state_no_results_detail">Prova con altre parole, un luogo o una data. La ricerca avviene sul tuo dispositivo.</string>
+  <string name="state_no_results_action">Mostra anche risultati meno probabili</string>
+  <string name="state_nas_title">NAS non raggiungibile</string>
+  <string name="state_nas_detail">Vedi ciò che è già sul telefono. Controlla di essere a casa o che la VPN sia attiva: riprovo da solo.</string>
+  <string name="state_nas_action">Riprova ora</string>
+  <string name="state_permission_title">Serve l’accesso alle foto</string>
+  <string name="state_permission_detail">Senza questo permesso la galleria non può leggere le foto del telefono. Puoi concederlo dalle impostazioni di sistema, quando vuoi.</string>
+  <string name="state_permission_action">Apri le impostazioni</string>
+
+  <!-- Foglio: elimina, con scelta del luogo -->
+  <string name="delete_scope_phone">Solo dal telefono</string>
+  <string name="delete_scope_everywhere">Ovunque</string>
+  <plurals name="delete_title">
+    <item quantity="one">Eliminare questa foto?</item>
+    <item quantity="other">Eliminare %1$d foto?</item>
+  </plurals>
+  <string name="delete_scope_phone_detail">I file sul NAS restano.</string>
+  <string name="delete_scope_everywhere_detail">Dal telefono e dal NAS, dove puoi.</string>
+  <string name="delete_trash_note">Restano 30 giorni nel cestino: puoi ripristinarle.</string>
+  <string name="delete_confirm_phone">Elimina dal telefono</string>
+  <string name="delete_confirm_everywhere">Elimina ovunque</string>
+  <string name="delete_location_will_delete">Verrà eliminata</string>
+  <string name="delete_location_no_permission">Sola lettura</string>
+  <string name="delete_location_stays">Resta</string>
+
+  <!-- Foglio: condividi con la famiglia -->
+  <string name="share_title">Condividere con la famiglia?</string>
+  <plurals name="share_message">
+    <item quantity="one">%1$d foto verrà spostata nell’area comune e la vedranno tutti i familiari.</item>
+    <item quantity="other">%1$d foto verranno spostate nell’area comune e le vedranno tutti i familiari.</item>
+  </plurals>
+  <string name="share_row_album">Album</string>
+  <string name="share_row_permission">Permessi</string>
+  <string name="share_footnote">Lo spostamento avviene in background e in Libreria non cambia niente. I permessi dell’album li fa rispettare l’app, non il NAS.</string>
+  <string name="share_confirm">Condividi</string>
+
+  <!-- Foglio: dati mobili -->
+  <string name="mobile_data_title">Usare i dati mobili?</string>
+  <string name="mobile_data_message">Non sei collegato al Wi-Fi: per continuare adesso serve la rete mobile.</string>
+  <string name="mobile_data_estimate_caption">da trasferire, in stima</string>
+  <string name="mobile_data_confirm">Usa i dati mobili</string>
+  <string name="mobile_data_wait">Aspetta il Wi-Fi</string>
+
+  <!-- Foglio: approvazione di un nuovo dispositivo -->
+  <string name="device_title">Nuovo dispositivo</string>
+  <string name="device_message">Chiede di entrare nella famiglia. Approvalo solo se lo riconosci.</string>
+  <string name="device_row_name">Nome</string>
+  <string name="device_row_profile">Profilo</string>
+  <string name="device_row_model">Modello</string>
+  <string name="device_row_requested">Richiesta</string>
+  <string name="device_row_fingerprint">Impronta</string>
+  <string name="device_footnote">Confronta l’impronta con quella mostrata sul nuovo dispositivo. Finché non approvi, può solo leggere.</string>
+  <string name="device_approve">Approva</string>
+  <string name="device_reject">Rifiuta</string>
+
 </resources>

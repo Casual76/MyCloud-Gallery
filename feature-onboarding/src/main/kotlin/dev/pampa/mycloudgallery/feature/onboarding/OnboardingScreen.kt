@@ -3,62 +3,49 @@ package dev.pampa.mycloudgallery.feature.onboarding
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.antigravity.fluidengine.ui.fluid.FluidButton
-import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
-import dev.antigravity.fluidengine.ui.fluid.FluidScreen
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
-import dev.antigravity.fluidengine.ui.theme.FluidListGroup
-import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingProgress
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
+import dev.pampa.mycloudgallery.feature.onboarding.platform.rememberAndroidPlatform
+import dev.pampa.mycloudgallery.feature.onboarding.steps.WelcomeScreen
+import dev.pampa.mycloudgallery.feature.onboarding.ui.StepChrome
 
-/** La rotta con il suo ViewModel (Hilt). [resumeStep] e' il passo da riaprire, se si arriva da "Da completare". */
+/**
+ * La rotta con il suo ViewModel (Hilt) e la piattaforma Android (permessi, impostazioni di sistema).
+ * [resumeStep] e' il passo da riaprire, se si arriva da "Da completare" (Impostazioni): quando si finisce, si esce.
+ * [onPause] e' "Continua piu' tardi" (E-O1): lascia la configurazione cosi' com'e', salvata.
+ */
 @Composable
-internal fun OnboardingRoute(resumeStep: OnboardingStep?, onDone: () -> Unit) {
+internal fun OnboardingRoute(resumeStep: OnboardingStep?, onDone: () -> Unit, onPause: () -> Unit) {
   val viewModel: OnboardingViewModel = hiltViewModel()
-  val progress by viewModel.progress.collectAsStateWithLifecycle()
+  val platform = rememberAndroidPlatform()
   LaunchedEffect(resumeStep) {
     if (resumeStep != null) viewModel.resume(resumeStep)
   }
-  OnboardingScreen(progress = progress, onContinue = onDone)
+  OnboardingHost(
+    viewModel = viewModel,
+    platform = platform,
+    resumeStep = resumeStep,
+    onDone = onDone,
+    onPause = onPause,
+  )
 }
 
 /**
- * Scheletro P0 dell'onboarding: il passo corrente del coordinatore e un tasto per proseguire. Le schermate
- * vere dei 14 passi (e di ogni stato d'errore) sono di P6.
+ * La pagina di benvenuto da sola, senza ViewModel: e' la firma che lo scaffold di `:app` (P0, test di screenshot) gia'
+ * usa. La configurazione vera passa da [onboardingGraph] (che usa [OnboardingRoute]); [progress] qui non cambia
+ * niente, e ogni scelta chiama [onContinue].
  */
 @Composable
 fun OnboardingScreen(progress: OnboardingProgress, onContinue: () -> Unit) {
-  val step = progress.current
-  FluidScreen(
-    title = stringResource(R.string.onboarding_title),
-    subtitle = stringResource(R.string.onboarding_subtitle),
-  ) {
-    item { FluidSectionHeader(title = stringResource(R.string.onboarding_section_progress)) }
-    item {
-      FluidListGroup {
-        FluidListRow(
-          title = stringResource(step.titleRes()),
-          subtitle = stringResource(R.string.onboarding_step_of, step.number, OnboardingStep.entries.size),
-          disclosure = false,
-        )
-      }
-    }
-    item { FluidSectionFootnote(text = stringResource(R.string.onboarding_placeholder_note)) }
-    item {
-      FluidButton(
-        text = stringResource(R.string.onboarding_continue),
-        onClick = onContinue,
-        size = FluidButtonSize.Large,
-        fillWidth = true,
-      )
-    }
-  }
+  WelcomeScreen(
+    chrome = StepChrome(),
+    isSystemUser = true,
+    busy = false,
+    problem = null,
+    onChoose = { onContinue() },
+    onProblemAction = {},
+  )
 }
 
 /** Il titolo di ogni passo (§2.1), in italiano. */

@@ -1,0 +1,335 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- 1. Benvenuto -->
+  <string name="welcome_title">Benvenuto</string>
+  <string name="welcome_subtitle">La galleria privata della tua famiglia, sul NAS di casa.</string>
+  <string name="welcome_promise_telemetry">Niente telemetria</string>
+  <string name="welcome_promise_telemetry_detail">Non invio statistiche, dati d’uso o rapporti di errore a nessuno.</string>
+  <string name="welcome_promise_cloud">Nessun cloud di terzi</string>
+  <string name="welcome_promise_cloud_detail">Foto e video restano sul tuo telefono e sul NAS di casa.</string>
+  <string name="welcome_promise_home">Tutto sul tuo NAS</string>
+  <string name="welcome_promise_home_detail">Le copie vivono sul NAS e si raggiungono solo da casa o in VPN.</string>
+  <string name="welcome_profile_title">Stai usando un profilo del tablet</string>
+  <string name="welcome_profile_detail">Ogni profilo è un dispositivo a sé, con le sue chiavi e il suo account. Quando il profilo non è in uso Android può rimandare il lavoro in background: l’app recupera appena ci torni.</string>
+  <string name="welcome_section_start">Come vuoi iniziare?</string>
+  <string name="welcome_path_found">Crea la famiglia</string>
+  <string name="welcome_path_found_detail">Configura il NAS e diventa l’admin di questa famiglia.</string>
+  <string name="welcome_section_join">Ho già una famiglia</string>
+  <string name="welcome_path_join_qr">Entra con il QR</string>
+  <string name="welcome_path_join_qr_detail">Scansiona il codice che ti mostra l’admin sul suo schermo.</string>
+  <string name="welcome_path_join_manual">Entra senza QR</string>
+  <string name="welcome_path_join_manual_detail">Scrivi tu i dati che l’admin ti legge dal suo schermo.</string>
+  <string name="welcome_section_admin">Amministrazione</string>
+  <string name="welcome_path_recover">Recupera l’admin</string>
+  <string name="welcome_path_recover_detail">Hai perso il telefono dell’admin: torni admin con il codice di recupero.</string>
+  <string name="welcome_path_second_admin">Aggiungi un secondo admin</string>
+  <string name="welcome_path_second_admin_detail">Dai a questo dispositivo gli stessi poteri, con il codice di recupero.</string>
+  <string name="welcome_footnote">Fino al passo della chiave di famiglia non scrivo niente sul NAS. Quasi tutto si può cambiare dopo, dalle Impostazioni.</string>
+
+  <!-- 2. Indirizzo del NAS -->
+  <string name="address_title">Indirizzo del NAS</string>
+  <string name="address_title_admin">Il NAS di famiglia</string>
+  <string name="address_subtitle">Serve il Wi-Fi di casa: da qui cerco il tuo NAS.</string>
+  <string name="address_section_home">Rete di casa</string>
+  <string name="address_home_looking">Guardo la rete…</string>
+  <string name="address_home_looking_detail">Controllo a quale Wi-Fi sei collegato.</string>
+  <string name="address_home_ask">È la rete di casa?</string>
+  <string name="address_home_no_details">Wi-Fi collegato</string>
+  <string name="address_home_subnet">rete %1$s</string>
+  <string name="address_home_gateway">router %1$s</string>
+  <string name="address_home_consent">Se rispondi di sì, ricordo la forma di questa rete (non il nome del Wi-Fi): servirà a riconoscere casa e a non contattare mai il NAS da una rete estranea.</string>
+  <string name="address_home_yes">Sì, è casa</string>
+  <string name="address_home_no">No</string>
+  <string name="address_home_confirmed">Rete di casa confermata</string>
+  <string name="address_section_found">NAS trovati</string>
+  <string name="address_found_looking">Cerco i NAS sulla rete…</string>
+  <string name="address_found_looking_detail">Ci vogliono pochi secondi.</string>
+  <string name="address_found_none">Nessun NAS annunciato</string>
+  <string name="address_found_none_detail">Può succedere: scrivi qui sotto l’indirizzo del tuo NAS.</string>
+  <string name="address_section_manual">Oppure scrivi l’indirizzo</string>
+  <string name="address_section_manual_detail">L’indirizzo IP del NAS, come lo vedi nella dashboard o nel FRITZ!Box.</string>
+  <string name="address_ip_label">Indirizzo IP del NAS</string>
+  <string name="address_ip_placeholder">192.168.178.20</string>
+  <string name="address_ip_invalid">Non è un indirizzo IP valido (per esempio 192.168.178.20).</string>
+  <string name="address_check">Controlla il NAS</string>
+  <string name="address_checking">Controllo il NAS…</string>
+  <string name="address_checking_title">Controllo che sia davvero il tuo NAS</string>
+  <string name="address_checking_detail">Verifico che risponda, che la connessione sia cifrata e che sia sempre lo stesso NAS. In questo passo non parte nessuna password.</string>
+  <string name="address_footnote">L’indirizzo del NAS non cambia mai da solo: se un giorno cambia, te lo propongo e confermi tu.</string>
+
+  <!-- 3. Account -->
+  <string name="account_title">Account e password</string>
+  <string name="account_title_admin">Account dell’admin</string>
+  <string name="account_subtitle">Il tuo account personale sul NAS, mai quello amministratore.</string>
+  <string name="account_one_attempt_title">Un solo tentativo</string>
+  <string name="account_one_attempt_detail">Il NAS blocca l’account dopo troppi errori. Per questo provo a entrare una volta sola: controlla bene nome e password.</string>
+  <string name="account_section">Il tuo account sul NAS</string>
+  <string name="account_user_label">Nome utente</string>
+  <string name="account_user_placeholder">per esempio marta</string>
+  <string name="account_user_admin">L’account «admin» non si può usare.</string>
+  <string name="account_user_invalid">Solo lettere, numeri, punto, trattino e sottolineatura.</string>
+  <string name="account_password_label">Password</string>
+  <string name="account_password_short">Meno di 12 caratteri: funziona, ma una password più lunga protegge meglio le tue foto.</string>
+  <string name="account_submit">Accedi al NAS</string>
+  <string name="account_submitting">Accedo…</string>
+  <string name="account_footnote">La password va nel deposito sicuro del telefono e non la rivedrai più. Lo schermo è protetto: niente screenshot mentre scrivi.</string>
+
+  <!-- 4. Aree -->
+  <string name="areas_title">Aree del NAS</string>
+  <string name="areas_subtitle">Dove vive la famiglia e dove vanno le tue copie.</string>
+  <string name="areas_loading">Controllo le cartelle del NAS…</string>
+  <string name="areas_section_common">Area comune</string>
+  <string name="areas_section_common_detail">Qui tutta la famiglia vede e aggiunge foto.</string>
+  <string name="areas_section_private">Area privata</string>
+  <string name="areas_section_private_detail">Qui vanno i tuoi backup: solo tu li vedi.</string>
+  <string name="areas_state_read_write">Lettura e scrittura</string>
+  <string name="areas_state_read_only">Sola lettura: non basta</string>
+  <string name="areas_state_denied">Accesso negato</string>
+  <string name="areas_state_missing">Non esiste sul NAS</string>
+  <string name="areas_state_unreachable">Non riesco a controllarla</string>
+  <string name="areas_taken_private">Già scelta come area privata</string>
+  <string name="areas_taken_common">Già scelta come area comune</string>
+  <string name="areas_badge_public">Pubblica</string>
+  <string name="areas_badge_family">Famiglia già presente</string>
+  <string name="areas_backup_note">I tuoi backup andranno in «%1$s/Backup/questo dispositivo».</string>
+  <string name="areas_backup_note_private">la tua area privata</string>
+  <string name="areas_extra_label">Un’altra cartella condivisa</string>
+  <string name="areas_extra_placeholder">nome della cartella</string>
+  <string name="areas_extra_add">Aggiungi all’elenco</string>
+
+  <!-- 5. Cartelle -->
+  <string name="folders_title">Cartelle da escludere</string>
+  <string name="folders_subtitle">Musica, film e copertine non sono foto di famiglia.</string>
+  <string name="folders_loading">Do un’occhiata alle cartelle (al massimo due livelli)…</string>
+  <string name="folders_skip_scan">Salta la ricerca</string>
+  <string name="folders_none_title">Non c’è niente da escludere</string>
+  <string name="folders_none_detail">Non ho trovato musica, film o copertine fra le cartelle: va bene così.</string>
+  <string name="folders_section">Le propongo di escluderle</string>
+  <string name="folders_section_detail">Sono accese: l’app non le guarderà.</string>
+  <string name="folders_reason_music">Musica</string>
+  <string name="folders_reason_movies">Film e serie</string>
+  <string name="folders_reason_covers">Copertine piccole</string>
+  <string name="folders_reason_system">Cartella di sistema</string>
+  <string name="folders_reason_app">Cartella di un’app</string>
+  <plurals name="folders_scanned">
+    <item quantity="one">Ho guardato %1$,d voce.</item>
+    <item quantity="other">Ho guardato %1$,d voci.</item>
+  </plurals>
+  <plurals name="folders_scanned_truncated">
+    <item quantity="one">Mi sono fermato a %1$,d voce: se manca qualcosa lo aggiungi dalle Impostazioni.</item>
+    <item quantity="other">Mi sono fermato a %1$,d voci: se manca qualcosa lo aggiungi dalle Impostazioni.</item>
+  </plurals>
+
+  <!-- 6. Sorgenti di backup -->
+  <string name="sources_title">Da dove copiare</string>
+  <string name="sources_subtitle">Cosa mettere al sicuro sul NAS.</string>
+  <string name="sources_section">Sorgenti del backup</string>
+  <string name="sources_camera">Fotocamera</string>
+  <string name="sources_camera_detail">Foto e video che scatti con questo dispositivo.</string>
+  <string name="sources_screenshots">Screenshot</string>
+  <string name="sources_screenshots_detail">Le schermate che catturi.</string>
+  <string name="sources_none_title">Nessun backup automatico</string>
+  <string name="sources_none_detail">Con tutte e due spente non parte nessuna copia da sola. Potrai scegliere altre cartelle dalle Impostazioni.</string>
+  <string name="sources_footnote">Le altre cartelle del telefono si scelgono dopo, dalle Impostazioni.</string>
+
+  <!-- 7. Ruoli -->
+  <string name="roles_title">Che lavoro fa questo dispositivo</string>
+  <string name="roles_subtitle">Due ruoli, attivabili separatamente.</string>
+  <string name="roles_section">Ruoli</string>
+  <string name="roles_indexer">Indicizzatore</string>
+  <string name="roles_indexer_detail">Analizza le foto per la ricerca (didascalie, testi, luoghi) mentre il dispositivo è in carica.</string>
+  <string name="roles_preparer">Preparatore</string>
+  <string name="roles_preparer_detail">Prepara le anteprime per tutta la famiglia, così le foto si aprono subito su ogni dispositivo.</string>
+  <string name="roles_recommended">Consigliato</string>
+  <string name="roles_advice_phone">Sul telefono ti consiglio entrambi: è il dispositivo più potente e di notte spesso è in carica.</string>
+  <string name="roles_advice_tablet">Su un tablet ti consiglio solo il Preparatore: è più lento nell’analisi e spesso condiviso.</string>
+
+  <!-- 8. Preset e qualità -->
+  <string name="preset_title">Quando può lavorare l’app</string>
+  <string name="preset_subtitle">Scegli come bilanciare backup, batteria e dati.</string>
+  <string name="preset_section">Preset</string>
+  <string name="preset_estimates">Stime</string>
+  <string name="preset_estimates_detail">Su una libreria tipica di 15.000 foto e 300 video. La tua potrà essere diversa.</string>
+  <string name="preset_metric_battery">Batteria</string>
+  <string name="preset_metric_battery_value">%1$.1f%%</string>
+  <string name="preset_metric_battery_detail">al giorno, a regime</string>
+  <string name="preset_metric_mobile">Dati mobili</string>
+  <string name="preset_metric_mobile_none">Zero</string>
+  <string name="preset_metric_mobile_detail">al mese, a regime</string>
+  <string name="preset_metric_time">Prima copia</string>
+  <string name="preset_metric_time_detail">per mettere tutto al sicuro</string>
+  <plurals name="preset_days">
+    <item quantity="one">%1$d giorno</item>
+    <item quantity="other">%1$d giorni</item>
+  </plurals>
+  <string name="preset_days_month">Oltre un mese</string>
+  <string name="preset_days_never">Mai</string>
+  <string name="preset_quality_section">Qualità delle anteprime</string>
+  <string name="preset_quality_section_detail">Quanto sono nitide le anteprime che si scaricano.</string>
+  <string name="preset_quality_compact">Compatta</string>
+  <string name="preset_quality_standard">Standard</string>
+  <string name="preset_quality_high">Alta</string>
+  <string name="preset_quality_compact_detail">Anteprime piccole: meno spazio e meno dati, un po’ meno dettaglio.</string>
+  <string name="preset_quality_standard_detail">Il giusto equilibrio: nitide su telefono e tablet. È la consigliata.</string>
+  <string name="preset_quality_high_detail">Anteprime più grandi, anche per vedere offline: usano più spazio e più dati.</string>
+  <string name="preset_footnote">Preset e qualità si cambiano quando vuoi dalle Impostazioni. La fascia notte segue il NAS: acceso sempre, quindi dalle 23 alle 7.</string>
+
+  <!-- 9. Permessi -->
+  <string name="permissions_title">Permessi di Android</string>
+  <string name="permissions_subtitle">Solo quelli che servono, uno alla volta.</string>
+  <string name="permissions_section">Cosa chiedo ad Android</string>
+  <string name="permissions_notifications">Notifiche</string>
+  <string name="permissions_notifications_detail">Per avvisarti quando un familiare chiede di entrare o il backup si ferma.</string>
+  <string name="permissions_media">Foto e video</string>
+  <string name="permissions_media_detail">Per vedere le foto del telefono e metterle al sicuro sul NAS.</string>
+  <string name="permissions_media_location">Posizione delle foto</string>
+  <string name="permissions_media_location_detail">Per mostrare dove sono state scattate. Facoltativo.</string>
+  <string name="permissions_local_network">Rete locale</string>
+  <string name="permissions_local_network_detail">Per parlare con il NAS di casa.</string>
+  <string name="permissions_state_granted">Concesso</string>
+  <string name="permissions_state_partial">Parziale</string>
+  <string name="permissions_state_denied">Negato</string>
+  <string name="permissions_state_todo">Da concedere</string>
+  <string name="permissions_state_not_needed">Non serve</string>
+  <string name="permissions_reduced_title">Funziona, ma in modalità ridotta</string>
+  <string name="permissions_reduced_media">Senza l’accesso a foto e video non posso fare il backup né mostrare la Libreria del telefono: vedrai solo ciò che è già sul NAS.</string>
+  <string name="permissions_reduced_partial">Con «Foto selezionate» il backup copre solo le foto che scegli tu, una per una. Per metterle al sicuro tutte, concedi l’accesso completo.</string>
+  <string name="permissions_reduced_notifications">Senza notifiche non ti avviso quando un familiare chiede di entrare: dovrai aprire l’app per vederlo.</string>
+  <string name="permissions_set_screen_lock">Imposta il blocco schermo</string>
+  <string name="permissions_footnote">I permessi si cambiano in qualsiasi momento dalle impostazioni di Android.</string>
+
+  <!-- 10. Batteria -->
+  <string name="battery_title">Il backup di notte</string>
+  <string name="battery_subtitle">Samsung ferma le app che non apri spesso: tre impostazioni lo evitano.</string>
+  <string name="battery_why_title">Perché serve</string>
+  <string name="battery_why_detail">Se il telefono ferma l’app, il backup notturno può non partire senza avvisare nessuno. Con queste tre impostazioni il lavoro prosegue anche a schermo spento.</string>
+  <string name="battery_section">Tre impostazioni</string>
+  <string name="battery_unrestricted">Batteria «Illimitata»</string>
+  <string name="battery_unrestricted_detail">Impostazioni → App → MyCloud Gallery → Batteria → Illimitata.</string>
+  <string name="battery_never_sleep">App mai in sospensione</string>
+  <string name="battery_never_sleep_detail">Impostazioni → Batteria → Limiti di utilizzo in background → App mai in sospensione → aggiungi MyCloud Gallery.</string>
+  <string name="battery_unused_pause">Pausa se inutilizzata: spenta</string>
+  <string name="battery_unused_pause_detail">Impostazioni → App → MyCloud Gallery → disattiva «Metti in pausa l’attività dell’app se non utilizzata».</string>
+  <string name="battery_state_verified">Verificato</string>
+  <string name="battery_state_todo">Da fare</string>
+  <string name="battery_state_unknown">Non verificabile</string>
+  <string name="battery_state_confirmed">Fatto</string>
+  <string name="battery_manual_section">Conferme a mano</string>
+  <string name="battery_manual_section_detail">Android non mi lascia verificarle: dimmi tu quando le hai fatte.</string>
+  <string name="battery_manual_row">Ho fatto: %1$s</string>
+  <string name="battery_recheck">Ricontrolla</string>
+  <string name="battery_footnote">Dopo aver cambiato un’impostazione torna qui: la ricontrollo da sola. Alcune Android non lascia verificarle, e le conferma chi le ha cambiate.</string>
+
+  <!-- 11. VPN -->
+  <string name="vpn_title">VPN di casa</string>
+  <string name="vpn_subtitle">Fuori casa il NAS si raggiunge solo con la VPN WireGuard del FRITZ!Box.</string>
+  <string name="vpn_why_title">A casa niente, fuori la VPN</string>
+  <string name="vpn_why_detail">Il NAS non è raggiungibile da Internet: da fuori si entra solo con un tunnel WireGuard verso casa. Puoi farlo dopo, ma fino ad allora fuori casa l’app lavora solo con ciò che ha sul telefono.</string>
+  <string name="vpn_guide_section">Sul FRITZ!Box</string>
+  <string name="vpn_guide_peer">Un accesso per questo dispositivo</string>
+  <string name="vpn_guide_peer_detail">Nel FRITZ!Box: Internet → Abilitazioni → VPN (WireGuard) → aggiungi un collegamento per questo dispositivo.</string>
+  <string name="vpn_guide_ipv6">Controlla l’IPv6</string>
+  <string name="vpn_guide_ipv6_detail">Il collegamento di casa non ha un IPv4 pubblico (CGNAT): da fuori il FRITZ!Box si raggiunge solo in IPv6.</string>
+  <string name="vpn_guide_allowed">Indirizzi consentiti</string>
+  <string name="vpn_guide_allowed_detail">In WireGuard, «AllowedIPs» deve contenere la rete di casa e il prefisso IPv6 privato (ULA), non tutto il traffico.</string>
+  <string name="vpn_guide_import">Importa nell’app WireGuard</string>
+  <string name="vpn_guide_import_detail">Scansiona il QR del FRITZ!Box con l’app WireGuard, non con quest’app.</string>
+  <string name="vpn_qr_secret_title">Il QR di WireGuard è una password</string>
+  <string name="vpn_qr_secret_detail">Contiene la chiave privata di questo collegamento: chi ce l’ha entra in casa tua. Non fotografarlo, non mandarlo in chat: mostralo solo allo scanner di WireGuard. Se quest’app ne vede uno, lo rifiuta.</string>
+  <string name="vpn_control_section">Controllo automatico</string>
+  <string name="vpn_control_section_detail">Facoltativo. Lo puoi attivare quando vuoi.</string>
+  <string name="vpn_control_toggle">Accendi e spegni la VPN da sola</string>
+  <string name="vpn_control_toggle_detail">Spenta a casa (più veloce), accesa fuori. Serve WireGuard con «Consenti il controllo da altre app».</string>
+  <string name="vpn_cap_checking">Controllo WireGuard…</string>
+  <string name="vpn_cap_missing_title">WireGuard non è installato</string>
+  <string name="vpn_cap_missing_detail">Installa l’app WireGuard e importa il collegamento di casa; poi torna qui.</string>
+  <string name="vpn_cap_permission_title">Manca il permesso di controllo</string>
+  <string name="vpn_cap_permission_detail">In WireGuard apri le Impostazioni e attiva «Consenti il controllo da altre app»; poi torna qui.</string>
+  <string name="vpn_tunnel_label">Nome del tunnel in WireGuard</string>
+  <string name="vpn_tunnel_placeholder">Casa</string>
+  <string name="vpn_tunnel_hint">Esattamente come lo vedi nell’elenco dei tunnel di WireGuard.</string>
+  <string name="vpn_test_run">Prova accensione e spegnimento</string>
+  <string name="vpn_test_running">Provo…</string>
+  <string name="vpn_test_waiting_up">Accendo la VPN…</string>
+  <string name="vpn_test_waiting_down">Spengo la VPN…</string>
+  <string name="vpn_test_waiting_detail">Guardo cosa fa la rete: non dico «accesa» finché non lo vedo.</string>
+  <string name="vpn_test_ok_title">La VPN risponde ai comandi</string>
+  <string name="vpn_test_issue_title">La prova non è andata come previsto</string>
+  <string name="vpn_result_up_confirmed">Accensione osservata: la VPN di casa è comparsa.</string>
+  <string name="vpn_result_down_confirmed">Spegnimento osservato: la VPN è sparita e il Wi-Fi regge.</string>
+  <string name="vpn_result_not_observed">Non ho visto nessun cambiamento: la VPN non risulta controllabile da qui. Puoi usare WireGuard a mano.</string>
+  <string name="vpn_result_lost_connectivity">Spegnendola la rete è sparita (forse «VPN sempre attiva con blocco»): l’ho riaccesa e non spegnerò più la VPN da sola.</string>
+  <string name="vpn_result_skipped">Il comando non è partito: controlla WireGuard e il permesso.</string>
+  <string name="vpn_footnote">Ogni profilo del tablet ha il suo WireGuard e il suo permesso.</string>
+
+  <!-- 12. Chiave di famiglia e kit -->
+  <string name="key_title">Chiave di famiglia</string>
+  <string name="key_subtitle">La radice di fiducia della famiglia e il codice per ritrovarla.</string>
+  <string name="key_what_key">La chiave di famiglia</string>
+  <string name="key_what_key_detail">Firma l’elenco dei dispositivi e la configurazione. Resta nel deposito sicuro di questo telefono e non ne esce mai.</string>
+  <string name="key_what_code">Il codice di recupero</string>
+  <string name="key_what_code_detail">Se perdi questo telefono è l’unico modo per tornare admin. Lo scrivi su carta e lo custodisci.</string>
+  <string name="key_plan_section">Cosa succede adesso</string>
+  <string name="key_plan_generate">Genero la chiave e il codice</string>
+  <string name="key_plan_write">Ti mostro il codice e lo scrivi su carta</string>
+  <string name="key_plan_save">Lo riscrivi per intero: salvo il kit sul NAS e lo riapro</string>
+  <string name="key_plan_found">Solo allora creo la famiglia</string>
+  <string name="key_generate">Genera chiave e codice</string>
+  <string name="key_generating">Genero…</string>
+  <string name="key_code_title">Il codice di recupero</string>
+  <string name="key_code_subtitle">Sette gruppi: scrivili su carta, adesso.</string>
+  <string name="key_code_paper_title">Scrivilo su carta</string>
+  <string name="key_code_paper_detail">Non fotografarlo e non salvarlo nel telefono: chi lo trova può diventare admin. Lo schermo è protetto da screenshot e registrazioni.</string>
+  <string name="key_code_ack">Ho scritto il codice su carta</string>
+  <string name="key_code_ack_detail">Tutti i gruppi, nell’ordine giusto.</string>
+  <string name="key_code_written">Fatto, continua</string>
+  <string name="key_code_footnote">Tienilo lontano dal telefono e dal NAS: un cassetto, una cassaforte. Se perdi il codice e anche questo telefono, la famiglia va rifatta da capo.</string>
+  <string name="key_retype_title">Riscrivilo per intero</string>
+  <string name="key_retype_subtitle">Così sono sicuro che l’hai copiato giusto.</string>
+  <string name="key_retype_label">Codice di recupero</string>
+  <string name="key_retype_count">%1$d di %2$d caratteri</string>
+  <string name="key_retype_submit">Verifica e salva il kit</string>
+  <string name="key_retype_footnote">Spazi e trattini non contano. Se ti serve, puoi rivedere il codice.</string>
+  <string name="key_verify_title">Metto tutto al sicuro</string>
+  <string name="key_verify_subtitle">Ci vuole qualche secondo: non uscire dall’app.</string>
+  <string name="key_verify_wait">Lavoro sul NAS…</string>
+  <string name="key_verify_save">Salvo il kit nell’area privata</string>
+  <string name="key_verify_open">Lo rileggo e lo apro con il tuo codice</string>
+  <string name="key_verify_found">Creo la famiglia e la firmo</string>
+  <string name="key_verify_footnote">Se qualcosa si interrompe riparto da qui, senza rifare ciò che è già a posto.</string>
+
+  <!-- 13. Backup esterno e FRITZ!Box -->
+  <string name="notice_title">Backup esterno e FRITZ!Box</string>
+  <string name="notice_subtitle">Due cose che l’app non può fare per te.</string>
+  <string name="notice_raid_title">Il RAID non è un backup</string>
+  <string name="notice_raid_detail">I due dischi del NAS si copiano a vicenda: se cancelli una foto sparisce da tutti e due. Solo una copia esterna ti protegge davvero.</string>
+  <string name="notice_backup_section">Copia esterna del NAS</string>
+  <string name="notice_backup_done">Ho una copia esterna</string>
+  <string name="notice_backup_done_detail">Per esempio un disco USB collegato al NAS, con le app di WD.</string>
+  <string name="notice_router_section">Controlli sul FRITZ!Box</string>
+  <string name="notice_router_section_detail">Cinque minuti, una volta sola.</string>
+  <string name="notice_router_ports">Nessun inoltro di porte</string>
+  <string name="notice_router_ports_detail">Niente porte aperte né UPnP verso il NAS.</string>
+  <string name="notice_router_remote">Accesso da Internet spento</string>
+  <string name="notice_router_remote_detail">A parte WireGuard, nessun accesso remoto al FRITZ!Box.</string>
+  <string name="notice_router_dhcp">Indirizzo del NAS prenotato</string>
+  <string name="notice_router_dhcp_detail">Il NAS deve avere sempre lo stesso indirizzo nella rete.</string>
+  <string name="notice_router_guest">Rete ospiti per i dispositivi smart</string>
+  <string name="notice_router_guest_detail">TV, lampadine e telecamere nella rete ospiti, separati dal NAS.</string>
+  <string name="notice_router_wifi">Wi-Fi sicuro</string>
+  <string name="notice_router_wifi_detail">WPA2 + WPA3 attivi e WPS spento.</string>
+  <string name="notice_footnote">Quello che lasci per dopo resta nelle Impostazioni come promemoria; un avviso fisso ricorda che manca una copia esterna.</string>
+
+  <!-- 14. Riepilogo -->
+  <string name="summary_title">Riepilogo</string>
+  <string name="summary_subtitle">Ecco com’è andata.</string>
+  <string name="summary_ready">Tutto pronto</string>
+  <string name="summary_elapsed">Configurato in %1$d min %2$d s</string>
+  <string name="summary_elapsed_seconds">Configurato in %1$d s</string>
+  <string name="summary_section_done">Fatto</string>
+  <string name="summary_section_pending">Da completare</string>
+  <string name="summary_section_pending_detail">Li hai saltati: restano nelle Impostazioni.</string>
+  <string name="summary_pending_row">Lo riprendi dalle Impostazioni</string>
+  <string name="summary_finish">Vai alla Libreria</string>
+  <string name="summary_footnote">I passi saltati restano nelle Impostazioni, alla voce «Da completare».</string>
+</resources>

@@ -1,14 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <!-- Scheletro P0 dell'onboarding. Le schermate vere dei 14 passi sono di P6. -->
-  <string name="onboarding_title">Benvenuto</string>
-  <string name="onboarding_subtitle">Configuriamo MyCloud Gallery insieme</string>
-  <string name="onboarding_section_progress">Configurazione</string>
-  <string name="onboarding_step_of">Passo %1$d di %2$d</string>
-  <string name="onboarding_placeholder_note">La configurazione guidata è in preparazione. Niente viene inviato al NAS finché non la completi.</string>
-  <string name="onboarding_continue">Continua</string>
-
-  <!-- I 14 passi (docs/fase2-progetto.md §2.1) -->
+  <!-- L'ossatura: titoli dei 14 passi (docs/fase2-progetto.md §2.1), bottoni e tracce comuni -->
   <string name="onboarding_step_welcome">Benvenuto e privacy</string>
   <string name="onboarding_step_nas_address">Indirizzo del NAS</string>
   <string name="onboarding_step_account">Account e password</string>
@@ -23,4 +15,39 @@
   <string name="onboarding_step_family_key">Chiave di famiglia e kit di recupero</string>
   <string name="onboarding_step_security_notice">Backup esterno e FRITZ!Box</string>
   <string name="onboarding_step_summary">Riepilogo</string>
+
+  <string name="step_of">Passo %1$d di %2$d</string>
+  <string name="action_continue">Continua</string>
+  <string name="action_skip_step">Salta questo passo</string>
+  <string name="action_cancel">Annulla</string>
+  <string name="reveal_show">Mostra quello che scrivi</string>
+  <string name="reveal_hide">Nascondi quello che scrivi</string>
+  <string name="reveal_show_short">Mostra</string>
+  <string name="reveal_hide_short">Nascondi</string>
+
+  <!-- Barra laterale dei passi (schermi larghi) -->
+  <string name="sidebar_title">MyCloud Gallery</string>
+  <string name="sidebar_subtitle">Configurazione guidata</string>
+  <string name="sidebar_privacy">Niente telemetria e nessun cloud di terzi: quello che configuri resta fra questo dispositivo e il tuo NAS.</string>
+
+  <!-- Avvisi che non fermano il passo -->
+  <string name="warnings_section">Da sapere</string>
+  <string name="warning_short_password_title">Password un po’ corta</string>
+  <string name="warning_short_password_detail">Ha meno di 12 caratteri: funziona, ma una password più lunga protegge meglio le tue foto. Puoi cambiarla dal NAS quando vuoi.</string>
+  <string name="warning_public_share_title">Una cartella scelta è pubblica</string>
+  <string name="warning_public_share_detail">Chiunque sia nella tua rete può aprirla senza password. Dalla dashboard del NAS puoi togliere «Pubblico»: è la scelta consigliata.</string>
+  <string name="warning_other_shares_title">Questo account vede anche cartelle private di altri</string>
+  <string name="warning_other_shares_detail">L’app rispetta le aree, ma sul NAS questo account potrebbe aprirle. Conviene limitarlo dalla dashboard.</string>
+  <string name="warning_no_screen_lock_title">Il telefono non ha un blocco schermo</string>
+  <string name="warning_no_screen_lock_detail">Senza PIN, sequenza o password chiunque lo prenda in mano può aprire le tue foto e usare l’app. Impostalo dalle impostazioni di sicurezza di Android.</string>
+  <string name="warning_no_min_version_title">Senza il QR non posso controllare che il registro sia aggiornato</string>
+  <string name="warning_no_min_version_detail">Entri con la versione minima più bassa: un registro vecchio non verrebbe riconosciuto. Se puoi, aggiungi anche il QR «stato della famiglia»; l’avviso resta in Diagnostica.</string>
+
+  <!-- Conferme del passo appena riuscito -->
+  <string name="banner_nas_verified_title">NAS verificato</string>
+  <string name="banner_nas_verified_detail">La connessione è cifrata e il NAS è quello giusto: ne ho memorizzato l’identità.</string>
+  <string name="banner_credentials_saved_title">Password al sicuro</string>
+  <string name="banner_credentials_saved_detail">È nel deposito sicuro del telefono. Non la rivedrai più e non lascia mai questo dispositivo.</string>
+  <string name="banner_kit_verified_title">Chiave e kit verificati</string>
+  <string name="banner_kit_verified_detail">Il kit di recupero si apre con il tuo codice e la famiglia è stata creata.</string>
 </resources>

@@ -3,7 +3,6 @@ package dev.pampa.mycloudgallery.feature.onboarding
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingProgress
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
-import dev.pampa.mycloudgallery.core.family.testing.FakeOnboardingCoordinator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -14,6 +13,7 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 
+/** Le fondamenta: la rotta di ripresa, i titoli dei passi e il collegamento fra ViewModel e coordinatore. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class OnboardingSkeletonTest {
 
@@ -44,8 +44,8 @@ class OnboardingSkeletonTest {
   @Test
   fun ilViewModelMostraIlCoordinatoreERiapreUnPassoSaltato() = runTest {
     val skipped = OnboardingProgress.START.copy(current = OnboardingStep.SUMMARY, skipped = setOf(OnboardingStep.VPN))
-    val coordinator = FakeOnboardingCoordinator(skipped)
-    val viewModel = OnboardingViewModel(coordinator)
+    val env = TestEnv(skipped)
+    val viewModel = env.viewModel()
     assertThat(viewModel.progress.value.current).isEqualTo(OnboardingStep.SUMMARY)
     viewModel.resume(OnboardingStep.VPN)
     assertThat(viewModel.progress.value.current).isEqualTo(OnboardingStep.VPN)

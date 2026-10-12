@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- I bottoni che si possono trovare in un problema -->
+  <string name="action_retry">Riprova</string>
+  <string name="action_continue_later">Continua più tardi</string>
+  <string name="action_open_wifi_settings">Apri le impostazioni Wi-Fi</string>
+  <string name="action_open_wireguard">Apri WireGuard</string>
+  <string name="action_open_app_settings">Apri le impostazioni dell’app</string>
+  <string name="action_change_address">Cambia l’indirizzo</string>
+  <string name="action_recover_admin">Recupera l’admin</string>
+  <string name="action_join_as_member">Entra come familiare</string>
+  <string name="action_scan_again">Scansiona di nuovo</string>
+  <string name="action_enter_manually">Inserisci a mano</string>
+  <string name="action_back_to_code">Rivedi il codice</string>
+  <string name="common_dismiss">Nascondi</string>
+  <string name="code_group_spoken">Gruppo %1$d di %2$d: %3$s</string>
+
+  <!-- Passo 2: indirizzo del NAS -->
+  <string name="problem_not_on_wifi_title">Serve il Wi-Fi di casa</string>
+  <string name="problem_not_on_wifi_detail">Per trovare il NAS il telefono deve essere collegato al Wi-Fi di casa: non bastano i dati mobili né il Wi-Fi di un’altra rete. Collegati e riprova.</string>
+  <string name="problem_vpn_active_title">Spegni la VPN per questo passo</string>
+  <string name="problem_vpn_active_detail">Qui cerco il NAS sulla rete di casa, e una VPN accesa lo nasconderebbe. Spegnila da WireGuard, poi riprova: potrai riaccenderla subito dopo.</string>
+  <string name="problem_no_ula_title">Non riesco a riconoscere questa rete come casa</string>
+  <string name="problem_no_ula_detail">Questo Wi-Fi non ha un indirizzo IPv6 privato, l’unico segno sicuro per distinguere casa tua dalla casa di un altro. Controlla che il FRITZ!Box abbia l’IPv6 attivo e riprova. Finché non c’è, non posso confermare «casa».</string>
+  <string name="problem_local_network_title">Android non lascia parlare l’app con la rete di casa</string>
+  <string name="problem_local_network_detail">Il permesso per la rete locale è negato, quindi non posso sapere se il NAS è acceso. Concedilo dalle impostazioni dell’app e riprova.</string>
+  <string name="problem_nas_not_found_title">Il NAS non risponde</string>
+  <string name="problem_nas_not_found_detail">A questo indirizzo non risponde nessun NAS. Può essere l’indirizzo sbagliato, oppure il NAS è spento o si sta riavviando. Controlla le luci del NAS e l’indirizzo. Se vuoi, intanto vai avanti: i passi che non servono il NAS si fanno anche adesso, e questo lo riprendi quando è acceso.</string>
+  <string name="problem_service_down_title">Il NAS è acceso, ma la condivisione file non risponde</string>
+  <string name="problem_service_down_detail">Il NAS risponde, ma il servizio che condivide le cartelle no. Dalla dashboard del NAS controlla che la condivisione file di Windows (SMB) sia attiva, poi riprova.</string>
+  <string name="problem_insecure_title">Il NAS non offre una connessione abbastanza sicura</string>
+  <string name="problem_insecure_detail">Accetto solo connessioni cifrate (SMB 3.1.1). Questo NAS non ne offre una, quindi non ho inviato nessuna password. Dalla dashboard del NAS attiva la cifratura e imposta SMB 3.1.1 come versione minima, poi riprova.</string>
+  <string name="problem_identity_title">A questo indirizzo risponde un NAS diverso</string>
+  <string name="problem_identity_detail">L’identità del NAS non è quella attesa, e per questo non ho inviato nessuna password. Controlla l’indirizzo: se hai cambiato NAS o rifatto la configurazione, serve prima l’aiuto di un admin.</string>
+
+  <!-- Passo 3: account (E-R8, E-S12) -->
+  <string name="problem_admin_refused_title">Con l’account «admin» non si può</string>
+  <string name="problem_admin_refused_detail">L’account amministratore del NAS non si usa mai in quest’app: se la sua password trapelasse, rischieresti tutto il NAS. Usa un tuo account personale.</string>
+  <string name="problem_auth_failed_title">Nome o password non corretti</string>
+  <string name="problem_auth_failed_detail">Il NAS non ha accettato la password. Mi fermo qui e non riprovo da solo: troppi tentativi sbagliati possono bloccare l’account. Controlla di averla scritta bene (puoi mostrarla) e riprova tu, con calma.</string>
+  <string name="problem_account_locked_title">L’account del NAS è bloccato</string>
+  <string name="problem_account_locked_detail">Troppi tentativi sbagliati l’hanno bloccato. Va sbloccato dalla dashboard del NAS, alla voce Utenti. Poi torna qui e riprova.</string>
+  <string name="problem_account_disabled_title">Questo account è disattivato</string>
+  <string name="problem_account_disabled_detail">Sul NAS l’account risulta disattivato. Riattivalo dalla dashboard del NAS oppure usa un altro account.</string>
+  <string name="problem_password_expired_title">La password è scaduta</string>
+  <string name="problem_password_expired_detail">Il NAS chiede di cambiarla. Fallo dalla dashboard del NAS, poi scrivi qui quella nuova.</string>
+  <string name="problem_account_restricted_title">Il NAS non permette l’accesso a questo account adesso</string>
+  <string name="problem_account_restricted_detail">L’account ha delle restrizioni (per esempio orari o computer ammessi). Controlla le impostazioni dell’utente sulla dashboard del NAS.</string>
+  <string name="problem_credentials_title">Questo telefono non può custodire la password</string>
+  <string name="problem_credentials_detail">Il NAS ti ha accettato, ma il telefono non ha un deposito sicuro per le password. Per non lasciarla in giro non la salvo, e la configurazione non può proseguire su questo dispositivo.</string>
+
+  <!-- Passo 4: aree (E-O2, E-O3) -->
+  <string name="problem_no_share_title">Nessuna cartella condivisa è accessibile</string>
+  <string name="problem_no_share_detail">Questo account non può aprire nessuna cartella del NAS. Chiedi a chi gestisce il NAS di darti lettura e scrittura sulla cartella comune di famiglia e di creare la tua cartella personale. Poi aggiorna l’elenco.</string>
+  <string name="problem_common_area_title">Manca un’area comune in cui si può scrivere</string>
+  <string name="problem_common_area_detail">L’area comune è una cartella condivisa dove tutta la famiglia può scrivere. L’app non crea cartelle sul NAS: creane una dalla dashboard (o scegline un’altra), poi aggiorna l’elenco.</string>
+  <string name="problem_family_exists_title">Qui c’è già una famiglia</string>
+  <string name="problem_family_exists_detail">Nell’area comune scelta esiste già una famiglia di MyCloud Gallery e non ne creo una seconda sopra. Se sei un familiare, entra; se eri l’admin e hai perso il telefono, recupera l’admin con il codice di recupero.</string>
+
+  <!-- Passo 12: chiave e kit -->
+  <string name="problem_code_mismatch_title">Il codice non coincide</string>
+  <string name="problem_code_mismatch_detail">Quello che hai scritto non è uguale al codice che ti ho mostrato. Riguardalo gruppo per gruppo: lettere e numeri vanno copiati uguali. Puoi rivedere il codice e riprovare quante volte vuoi.</string>
+  <string name="problem_kit_unverified_title">Non riesco a verificare il kit di recupero</string>
+  <string name="problem_kit_unverified_detail">Ho salvato il kit sul NAS, ma rileggendolo non si apre con il tuo codice. Per sicurezza non vado avanti: un kit che non si apre non serve a niente. Riprova.</string>
+  <string name="problem_write_failed_title">Non sono riuscito a scrivere sul NAS</string>
+  <string name="problem_write_failed_detail">La scrittura non è andata a buon fine (rete caduta o permessi). Non si è rotto niente: ogni scrittura si può ripetere senza rischi.</string>
+  <string name="problem_nas_full_title">Il NAS è pieno</string>
+  <string name="problem_nas_full_detail">Non c’è spazio per scrivere. Libera un po’ di spazio dalla dashboard del NAS e riprova.</string>
+
+  <!-- Ingresso con invito (E-O5) -->
+  <string name="problem_invite_invalid_title">Questo QR non è un invito valido</string>
+  <string name="problem_invite_invalid_detail">Non è l’invito di una famiglia di MyCloud Gallery, oppure è rovinato. Chiedi all’admin di mostrarlo di nuovo sul suo schermo e scansionalo da vicino.</string>
+  <string name="problem_invite_other_title">Questo invito è di un’altra famiglia</string>
+  <string name="problem_invite_other_detail">Il QR non corrisponde alla famiglia che c’è su questo NAS, quindi lo rifiuto e non contatto niente. Controlla di aver scansionato quello giusto.</string>
+  <string name="problem_invite_expired_title">L’invito è scaduto</string>
+  <string name="problem_invite_expired_detail">Gli inviti durano 24 ore. Chiedi all’admin di mostrarne uno nuovo.</string>
+  <string name="problem_not_at_home_title">Per entrare devi essere a casa o in VPN</string>
+  <string name="problem_not_at_home_detail">Questo Wi-Fi non è quello di casa e la VPN di casa non è accesa: non contatto il NAS e non invio nessuna password. Collegati al Wi-Fi di casa oppure accendi la VPN, poi riprova.</string>
+  <string name="problem_registry_title">Non mi fido dell’elenco dei dispositivi sul NAS</string>
+  <string name="problem_registry_detail">L’elenco dei dispositivi non ha le firme giuste: potrebbe essere stato modificato o essere vecchio. Non vado avanti. Avvisa l’admin, che può controllarlo.</string>
+  <string name="problem_update_title">Serve un aggiornamento dell’app</string>
+  <string name="problem_update_detail">Sul NAS ci sono dati scritti da una versione più nuova di MyCloud Gallery. Aggiorna l’app e riprova: finché non lo fai, non tocco niente.</string>
+  <string name="problem_step_unavailable_title">Questo passo non è disponibile adesso</string>
+  <string name="problem_step_unavailable_detail">Qualcosa non è nell’ordine giusto. Riprova fra un attimo: se succede ancora, torna indietro e riparti dal passo prima.</string>
+</resources>

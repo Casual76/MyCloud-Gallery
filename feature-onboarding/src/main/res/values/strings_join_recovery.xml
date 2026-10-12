@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Entra con il QR: scansione -->
+  <string name="scan_title">Entra con il QR</string>
+  <string name="scan_subtitle">Inquadra il codice sullo schermo dell’admin.</string>
+  <string name="scan_state_title">Stato della famiglia</string>
+  <string name="scan_state_subtitle">Inquadra il QR «stato della famiglia» di un dispositivo già approvato.</string>
+  <string name="scan_tip_title">Come fare</string>
+  <string name="scan_tip_invite">Tieni il telefono fermo, a 20–30 cm dallo schermo dell’admin. Il QR non va mai fotografato né inviato: si mostra solo dal vivo.</string>
+  <string name="scan_tip_state">Lo mostra un dispositivo già approvato, dalle Impostazioni della famiglia.</string>
+  <string name="scan_footnote">La fotocamera resta dentro l’app: niente viene inviato a nessuno.</string>
+  <string name="scan_reject_not_ours_title">Non è un QR di MyCloud Gallery</string>
+  <string name="scan_reject_not_ours_detail">Inquadra il QR che l’admin mostra nelle Impostazioni della famiglia.</string>
+  <string name="scan_reject_wireguard_title">Questo è il QR di WireGuard</string>
+  <string name="scan_reject_wireguard_detail">Contiene una chiave privata: è una password, non un invito. Non scansionarlo qui e non farlo vedere a nessuno: importalo solo nell’app WireGuard.</string>
+  <string name="scan_reject_other_title">È l’invito di un’altra famiglia</string>
+  <string name="scan_reject_other_detail">Non corrisponde a questo NAS, quindi lo rifiuto. Controlla di aver inquadrato quello giusto.</string>
+  <string name="scan_reject_expired_title">Invito scaduto</string>
+  <string name="scan_reject_expired_detail">Gli inviti durano 24 ore: chiedi all’admin di mostrarne uno nuovo.</string>
+  <string name="scan_reject_malformed_title">QR rovinato o non valido</string>
+  <string name="scan_reject_malformed_detail">Avvicinati, tieni fermo il telefono e riprova.</string>
+
+  <!-- Entra senza QR -->
+  <string name="manual_title">Entra senza QR</string>
+  <string name="manual_subtitle">Scrivi i dati che l’admin ti legge dal suo schermo.</string>
+  <string name="manual_intro_title">I dati dello schermo dell’admin</string>
+  <string name="manual_intro_detail">Prendili solo dalla schermata dell’admin, mai dal NAS: è l’unico modo di essere sicuri che siano quelli giusti.</string>
+  <string name="manual_section">I dati della famiglia</string>
+  <string name="manual_family_id">Identificativo della famiglia</string>
+  <string name="manual_fingerprint">Impronta della famiglia</string>
+  <string name="manual_fingerprint_hint">Gruppi di lettere e numeri, come li legge l’admin.</string>
+  <string name="manual_device_name">Nome di questo dispositivo</string>
+  <string name="manual_device_name_placeholder">per esempio Tablet — profilo Mamma</string>
+  <string name="manual_state_section">Stato della famiglia</string>
+  <string name="manual_state_section_detail">Facoltativo: alza la versione minima del registro che accetto.</string>
+  <string name="manual_state_scan">Scansiona lo «stato della famiglia»</string>
+  <string name="manual_state_scan_detail">Un QR che mostra un dispositivo già approvato. Senza, entro con la versione minima più bassa e resta un avviso in Diagnostica.</string>
+  <string name="manual_state_scanned">Stato della famiglia letto</string>
+  <string name="manual_state_scanned_detail">Versione minima del registro: %1$d.</string>
+
+  <!-- Riepilogo dell'invito -->
+  <string name="summary_invite_title">Controlla l’invito</string>
+  <string name="summary_invite_subtitle">Prima di toccare la rete, guarda che sia quello giusto.</string>
+  <string name="summary_invite_nas">NAS</string>
+  <string name="summary_invite_account">Account</string>
+  <string name="summary_invite_device">Questo dispositivo</string>
+  <string name="summary_invite_common">Area comune</string>
+  <string name="summary_invite_private">Area privata</string>
+  <string name="summary_invite_expires">Valido fino a</string>
+  <string name="summary_invite_fingerprint">Impronta della famiglia</string>
+  <string name="summary_invite_fingerprint_detail">Se hai un dubbio, fatela leggere all’admin e confrontatela.</string>
+  <string name="summary_invite_next_title">Cosa succede dopo</string>
+  <string name="summary_invite_next_detail">Controllo che tu sia a casa (o in VPN) e che il NAS sia quello dell’invito. Solo allora ti chiedo la password: prima non parte niente.</string>
+  <string name="summary_invite_checking">Controllo…</string>
+  <string name="summary_invite_rescan">Scansiona un altro QR</string>
+
+  <!-- Password, nome, approvazione -->
+  <string name="join_password_title">La tua password</string>
+  <string name="join_password_subtitle">È l’unica cosa da scrivere.</string>
+  <string name="join_password_account_detail">Lo dice l’invito.</string>
+  <string name="join_password_submit">Entra</string>
+  <string name="join_password_footnote">Con la password entri in sola lettura: potrai guardare, ma i tuoi dati non verranno accettati finché l’admin non ti approva.</string>
+  <string name="join_name_title">Come ti chiami qui?</string>
+  <string name="join_name_subtitle">È il nome con cui l’admin vedrà questo dispositivo.</string>
+  <string name="join_name_submit">Invia la richiesta</string>
+  <string name="join_name_sending">Invio…</string>
+  <string name="join_name_hint_title">Un nome che si riconosce</string>
+  <string name="join_name_hint_detail">Per esempio «Tablet — profilo Mamma»: così l’admin sa chi sta approvando.</string>
+  <string name="approved_title">Sei dentro!</string>
+  <string name="approved_subtitle">L’admin ti ha approvato.</string>
+  <string name="approved_detail">Ora questo dispositivo fa parte della famiglia: puoi guardare e aggiungere foto.</string>
+
+  <string name="awaiting_title">In attesa dell’admin</string>
+  <string name="awaiting_subtitle">Solo lettura finché non ti approva.</string>
+  <string name="awaiting_code_section">Il tuo codice</string>
+  <string name="awaiting_code_section_detail">Mostralo all’admin: deve coincidere con quello che vede nella richiesta.</string>
+  <string name="awaiting_qr_section">Oppure fagli scansionare questo QR</string>
+  <string name="awaiting_qr_section_detail">È la chiave pubblica di questo dispositivo, non una password.</string>
+  <string name="awaiting_qr_description">QR della chiave di questo dispositivo, da far scansionare all’admin</string>
+  <string name="awaiting_steps_section">Cosa succede</string>
+  <string name="awaiting_step_request">L’admin riceve la richiesta</string>
+  <string name="awaiting_step_request_detail">Al prossimo controllo (al massimo dopo 15 minuti) o aprendo Dispositivi.</string>
+  <string name="awaiting_step_compare">Confronta il codice</string>
+  <string name="awaiting_step_compare_detail">Lo digita, oppure scansiona il QR.</string>
+  <string name="awaiting_step_approve">Ti approva</string>
+  <string name="awaiting_step_approve_detail">Con la credenziale del suo telefono.</string>
+  <string name="awaiting_waiting">In attesa…</string>
+  <string name="awaiting_waiting_detail">Ricontrollo ogni 10 secondi, solo con l’app aperta.</string>
+  <string name="awaiting_note">Puoi già guardare la Libreria comune. Le tue foto entreranno nella famiglia dopo l’approvazione.</string>
+
+  <!-- Recupero dell'admin e secondo admin -->
+  <string name="recovery_title">Recupera l’admin</string>
+  <string name="recovery_title_second">Secondo admin</string>
+  <string name="recovery_kits_subtitle">Cerco il kit di recupero nell’area privata dell’admin.</string>
+  <string name="recovery_intro_title">Ti serve il codice di recupero</string>
+  <string name="recovery_intro_detail">È quello che hai scritto su carta quando hai creato la famiglia. Con il kit sul NAS e il codice torni admin; cosa fare del vecchio admin lo scegli tu, subito dopo.</string>
+  <string name="recovery_intro_second_title">Un secondo admin</string>
+  <string name="recovery_intro_second_detail">Serve il codice di recupero. Il primo admin resta approvato: avrete due dispositivi con gli stessi poteri.</string>
+  <string name="recovery_share_label">Area privata dell’admin</string>
+  <string name="recovery_share_hint">Di solito ha il nome dell’utente.</string>
+  <string name="recovery_share_search">Cerca i kit</string>
+  <string name="recovery_kits_loading">Cerco i kit…</string>
+  <string name="recovery_none_title">Non trovo nessun kit</string>
+  <string name="recovery_none_detail">Nella cartella «recovery» di quest’area non c’è nessun kit. Controlla che l’account e l’area siano quelli dell’admin.</string>
+  <string name="recovery_kits_section">Kit trovati</string>
+  <string name="recovery_kits_section_detail">Se ce n’è più d’uno, scegli il più recente.</string>
+  <string name="recovery_kit_dated">Kit del %1$s</string>
+  <string name="recovery_kit_undated">Kit di recupero</string>
+  <string name="recovery_kit_share">Area «%1$s»</string>
+  <string name="recovery_fate_title">E il vecchio admin?</string>
+  <string name="recovery_fate_subtitle">Decidi tu cosa farne.</string>
+  <string name="recovery_fate_section">Cosa facciamo</string>
+  <string name="recovery_fate_lost">Segnalo come perso</string>
+  <string name="recovery_fate_lost_detail">Si azzera appena si ricollega al NAS: chiavi, credenziali e dati locali spariscono.</string>
+  <string name="recovery_fate_revoked">Lo revoco</string>
+  <string name="recovery_fate_revoked_detail">Il telefono resta suo, ma senza più accesso alla famiglia.</string>
+  <string name="recovery_fate_warning_title">Una scelta che non si disfa da qui</string>
+  <string name="recovery_fate_warning_detail">La fai tu, da questo telefono: nessun dato letto dal NAS può farla al posto tuo.</string>
+  <string name="recovery_fate_footnote">Se non sei sicuro, «revoca» è la più prudente: non cancella niente dal vecchio telefono.</string>
+  <string name="recovery_code_title">Il codice di recupero</string>
+  <string name="recovery_code_subtitle">Quello scritto su carta, con spazi e trattini liberi.</string>
+  <string name="recovery_code_label">Codice di recupero</string>
+  <string name="recovery_code_hint">Puoi scriverlo con o senza spazi.</string>
+  <string name="recovery_code_submit">Apri il kit</string>
+  <string name="recovery_code_opening">Apro il kit…</string>
+  <string name="recovery_wrong_title">Il codice non apre il kit</string>
+  <string name="recovery_wrong_detail">Controlla lettere e numeri. Puoi riprovare quante volte vuoi: non succede niente di male.</string>
+  <string name="recovery_state_detail">Facoltativo: lo mostra un dispositivo già approvato. Senza, la versione minima del registro resta 0 e c’è un avviso in Diagnostica.</string>
+  <string name="recovery_code_footnote">Il codice non lascia mai questo telefono e si azzera appena finito.</string>
+  <string name="recovery_done_title">Sei di nuovo admin</string>
+  <string name="recovery_done_title_second">Sei un secondo admin</string>
+  <string name="recovery_done_subtitle">Fatto, e firmato.</string>
+  <string name="recovery_done_detail">Questo dispositivo ha una chiave nuova e si è approvato da solo come admin.</string>
+  <string name="recovery_done_detail_second">Questo dispositivo ora è un admin, e il primo resta approvato.</string>
+  <string name="recovery_done_key">Chiave nuova</string>
+  <string name="recovery_done_key_detail">Sta nel deposito sicuro di questo telefono.</string>
+  <string name="recovery_done_approved">Approvato come admin</string>
+  <string name="recovery_done_approved_detail">Puoi approvare i dispositivi della famiglia.</string>
+  <string name="recovery_done_old_lost">Il vecchio admin è segnato come perso</string>
+  <string name="recovery_done_old_revoked">Il vecchio admin è revocato</string>
+  <string name="recovery_done_old_detail">Lo vedi nell’elenco dei dispositivi.</string>
+  <string name="recovery_done_footnote">Il kit di recupero resta quello di prima.</string>
+</resources>

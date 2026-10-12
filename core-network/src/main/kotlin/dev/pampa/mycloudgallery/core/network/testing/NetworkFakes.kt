@@ -32,8 +32,8 @@ import dev.pampa.mycloudgallery.core.network.contract.VpnObservation
 import dev.pampa.mycloudgallery.core.network.contract.WakeOnLan
 import dev.pampa.mycloudgallery.core.network.contract.WolOutcome
 import dev.pampa.mycloudgallery.core.network.contract.WolTarget
+import dev.pampa.mycloudgallery.core.network.policy.NetworkPolicy
 import dev.pampa.mycloudgallery.core.rules.NetworkState
-import dev.pampa.mycloudgallery.core.rules.NetworkTransport
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -88,8 +88,9 @@ object Snapshots {
 }
 
 /**
- * Ambiente di rete pilotato dal test: si cambia [current]. [toNetworkState] traduce con la regola piu'
- * semplice (casa = [NetPlace.HOME], VPN = osservata): la traduzione vera e' di P2.
+ * Ambiente di rete pilotato dal test: si cambia [current]. [toNetworkState] usa la traduzione vera
+ * ([NetworkPolicy.toNetworkState], P2): anche nei test a valle "casa" e "VPN" hanno la stessa definizione che
+ * hanno nell'app (una VPN estranea non vale come VPN, a casa senza internet la rete conta come valida).
  */
 class FakeNetworkEnvironment(initial: NetworkSnapshot = NetworkSnapshot.OFFLINE) : NetworkEnvironment {
 
@@ -110,24 +111,7 @@ class FakeNetworkEnvironment(initial: NetworkSnapshot = NetworkSnapshot.OFFLINE)
   override fun toNetworkState(): NetworkState = translate(snapshots.value)
 
   companion object {
-    fun translate(s: NetworkSnapshot): NetworkState {
-      val net = s.underlying ?: return NetworkState.OFFLINE
-      if (s.place == NetPlace.OFFLINE) return NetworkState.OFFLINE
-      val transport = when (net.transport) {
-        NetTransport.WIFI -> NetworkTransport.WIFI
-        NetTransport.CELLULAR -> NetworkTransport.CELLULAR
-        NetTransport.ETHERNET -> NetworkTransport.ETHERNET
-        NetTransport.OTHER -> NetworkTransport.NONE
-      }
-      return NetworkState(
-        transport = transport,
-        viaVpn = s.vpn == VpnObservation.HOME_TUNNEL || s.vpn == VpnObservation.FOREIGN_VPN || s.vpn == VpnObservation.UNKNOWN,
-        isHome = s.place == NetPlace.HOME,
-        metered = net.metered,
-        roaming = net.roaming,
-        validated = net.validated && !net.captivePortal,
-      )
-    }
+    fun translate(s: NetworkSnapshot): NetworkState = NetworkPolicy.toNetworkState(s)
   }
 }
 

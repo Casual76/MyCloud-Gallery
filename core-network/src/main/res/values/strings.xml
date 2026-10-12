@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="Typos">
+
+    <!--
+        Testi della Diagnostica per la sezione "Rete e NAS" (docs/fase2-progetto.md 2.6 e 3.5). Le frasi brevi sono
+        i titoli delle voci; i dettagli compaiono solo sullo schermo, mai nell'esportazione. Nessun dato personale
+        e' scritto qui: indirizzi e nomi non entrano mai in una stringa di questo modulo.
+    -->
+
+    <!-- Luogo: sono i testi dell'indicatore globale (3.5) -->
+    <string name="net_diag_place_home">In casa · rete di casa riconosciuta</string>
+    <string name="net_diag_place_away_vpn_wifi">Fuori casa · via VPN (Wi-Fi)</string>
+    <string name="net_diag_place_away_vpn_mobile">Fuori casa · via VPN (dati mobili)</string>
+    <string name="net_diag_place_roaming">Roaming · attività automatiche ferme</string>
+    <string name="net_diag_place_vpn_off">VPN spenta · fuori casa</string>
+    <string name="net_diag_place_untrusted">Rete non riconosciuta · nessuna connessione al NAS</string>
+    <string name="net_diag_place_offline">Offline · Libreria sul telefono</string>
+
+    <!-- Perché il NAS non si contatta da qui -->
+    <string name="net_diag_untrusted_network">Rete non riconosciuta</string>
+    <string name="net_diag_untrusted_network_detail">Questa rete non è quella di casa: l\'identificativo della rete locale non coincide. Se sei a casa e hai reimpostato il router, ripeti il riconoscimento della rete di casa. Altrimenti accendi la VPN: nessuna connessione al NAS parte da una rete sconosciuta.</string>
+
+    <string name="net_diag_vpn_off_away">VPN spenta fuori casa</string>
+    <string name="net_diag_vpn_off_away_detail">Per raggiungere il NAS fuori casa serve la VPN di casa. La Libreria sul telefono resta disponibile.</string>
+
+    <string name="net_diag_foreign_vpn">VPN non di casa attiva</string>
+    <string name="net_diag_foreign_vpn_detail">È attiva una VPN che non porta alla rete di casa. L\'app non contatta il NAS finché non la spegni o non accendi quella di casa.</string>
+
+    <string name="net_diag_local_network_denied">Rete locale non consentita</string>
+    <string name="net_diag_local_network_denied_detail">Android non permette all\'app di usare la rete locale: il NAS non è raggiungibile anche se acceso. Consenti l\'accesso alla rete locale nelle impostazioni dell\'app.</string>
+
+    <string name="net_diag_captive_portal">Rete con pagina di accesso</string>
+    <string name="net_diag_captive_portal_detail">Questa rete chiede un accesso (per esempio un Wi-Fi pubblico). Finché non lo completi, l\'app non contatta il NAS.</string>
+
+    <string name="net_diag_offline">Nessuna rete</string>
+    <string name="net_diag_not_configured">Rete di casa non ancora impostata</string>
+    <string name="net_diag_not_configured_detail">Completa la configurazione iniziale per far riconoscere all\'app la rete di casa.</string>
+
+    <string name="net_diag_vpn_at_home">VPN accesa in casa</string>
+    <string name="net_diag_vpn_at_home_detail">Il NAS è raggiunto attraverso il tunnel: funziona, ma è più lento. Spegni la VPN a casa, oppure abilita il controllo di WireGuard per farlo in automatico.</string>
+
+    <string name="net_diag_ipv4_only">Rete solo IPv4</string>
+    <string name="net_diag_ipv4_only_detail">Questa rete ha solo IPv4: il router di casa (collegamento con CGNAT) si raggiunge dalla VPN solo in IPv6. Prova con un\'altra rete, o con i dati mobili.</string>
+
+    <!-- Controllo di WireGuard -->
+    <string name="net_diag_vpn_control_ready">Controllo di WireGuard pronto</string>
+    <string name="net_diag_vpn_control_missing_app">WireGuard non è installato</string>
+    <string name="net_diag_vpn_control_missing_permission">Controllo di WireGuard non consentito</string>
+    <string name="net_diag_vpn_control_missing_permission_detail">Serve il permesso di controllare i tunnel e, in WireGuard, l\'opzione «Consenti il controllo da altre app». Ogni profilo Android ha il suo WireGuard e il suo permesso.</string>
+    <string name="net_diag_vpn_control_not_configured">Tunnel di casa non indicato</string>
+    <string name="net_diag_vpn_lockdown">Controllo automatico fermo: possibile «VPN sempre attiva con blocco»</string>
+    <string name="net_diag_vpn_lockdown_detail">Spegnere la VPN ha tolto la rete al telefono, quindi l\'app l\'ha riaccesa e ha fermato il controllo automatico. Disattiva «Blocca connessioni senza VPN» nelle impostazioni VPN di Android, poi riattiva il controllo.</string>
+    <string name="net_diag_vpn_not_controllable">VPN non controllabile</string>
+    <string name="net_diag_vpn_not_controllable_detail">WireGuard non ha risposto ai comandi dell\'app. Controlla che «Consenti il controllo da altre app» sia acceso e che il nome del tunnel sia giusto, poi riattiva il controllo. Intanto puoi accendere e spegnere la VPN a mano.</string>
+
+    <!-- Qualità, impronta, permesso, sonda -->
+    <string name="net_diag_quality_poor">Rete lenta o congestionata</string>
+    <string name="net_diag_quality_poor_detail">Le attività automatiche restano ferme; l\'uso diretto dell\'app continua.</string>
+
+    <string name="net_diag_home_fingerprint_set">Rete di casa memorizzata</string>
+    <string name="net_diag_home_fingerprint_missing">Nessuna rete di casa memorizzata</string>
+
+    <string name="net_diag_local_network_granted">Rete locale consentita</string>
+
+    <string name="net_diag_nas_tcp_open">Il NAS risponde sulla porta dei file</string>
+    <string name="net_diag_nas_tcp_refused">Il NAS è acceso ma la condivisione file non risponde</string>
+    <string name="net_diag_nas_tcp_timed_out">Il NAS non risponde</string>
+    <string name="net_diag_nas_tcp_no_route">Nessun percorso verso il NAS</string>
+
+</resources>

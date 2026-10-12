@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+  <!--
+      Permessi di :core-security (piano 1.5). Entrambi sono "normali": nessuna richiesta all'utente, nessun
+      accesso a dati. Vanno registrati in docs/sicurezza.md 4-bis e in releaseManifestPolicy
+      (gradle/verify-release-manifest.gradle); verifyReleaseManifest e tools/check.ps1 li controllano.
+
+      - HIDE_OVERLAY_WINDOWS: serve a Window.setHideOverlayWindows(true) (Android 12+), la difesa dal
+        tapjacking sulle conferme e sulla password: mentre quella finestra e' visibile il sistema nasconde
+        gli overlay delle altre app. Senza il permesso la chiamata non ha effetto.
+      - USE_BIOMETRIC: lo dichiara gia' androidx.biometric; resta scritto qui perche' e' il permesso con cui
+        BiometricPrompt chiede la credenziale di sistema (impronta, volto, PIN o sequenza del telefono).
+  -->
+  <uses-permission android:name="android.permission.HIDE_OVERLAY_WINDOWS" />
+  <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+
+  <!--
+      USE_FINGERPRINT e' il vecchio permesso per le API prima di Android 9: con minSdk 29 non serve a nulla
+      e androidx.biometric lo aggiungerebbe lo stesso. Lo togliamo dal manifest fuso.
+  -->
+  <uses-permission
+      android:name="android.permission.USE_FINGERPRINT"
+      tools:node="remove" />
+
+</manifest>

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!--
+      Solo per le prove sul telefono. L'activity di prova si mostra anche sopra il blocco schermo
+      (showWhenLocked + turnScreenOn) senza sbloccarlo: cosi' le prove non richiedono di toccare il PIN.
+      Non fa parte dell'app: vive solo nell'APK di test.
+  -->
+  <application>
+    <activity
+        android:name="dev.pampa.mycloudgallery.core.security.TestHostActivity"
+        android:exported="false"
+        android:showWhenLocked="true"
+        android:turnScreenOn="true"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+  </application>
+</manifest>

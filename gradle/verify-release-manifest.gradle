@@ -26,6 +26,11 @@ ext.releaseManifestPolicy = [
     // Portato da engine-ui (l'aptica di Fluid): permesso "normale", senza richiesta all'utente, che
     // permette solo di far vibrare il telefono. Da registrare in docs/sicurezza.md §4-bis.
     'android.permission.VIBRATE',
+    // Da :core-security (piano 1.5), entrambi "normali" e senza richiesta all'utente; docs/sicurezza.md 4-bis.
+    // Window.setHideOverlayWindows(true): difesa dal tapjacking sulle conferme e sulla password.
+    'android.permission.HIDE_OVERLAY_WINDOWS',
+    // BiometricPrompt con la credenziale di sistema (blocco app opzionale).
+    'android.permission.USE_BIOMETRIC',
   ],
 ]
 

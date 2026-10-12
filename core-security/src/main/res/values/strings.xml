@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Testi della schermata di sistema per lo sblocco dell'app. Li vede chiunque abbia il telefono in mano:
+       nessun dato personale. -->
+  <string name="core_security_prompt_title">Sblocca MyCloud Gallery</string>
+  <string name="core_security_prompt_subtitle">Usa l\'impronta, il volto o il blocco schermo del telefono</string>
+</resources>

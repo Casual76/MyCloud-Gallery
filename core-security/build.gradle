@@ -1,9 +1,16 @@
 // Credenziali (Keystore), blocco app opzionale, protezioni dello schermo (piano 1.5).
-// Vede core-common. Niente librerie di terze parti per la biometria: si usa quella di sistema
-// (android.hardware.biometrics, disponibile da minSdk 29); androidx.biometric NON e' in elenco.
+// Vede core-common (e engine-ui, solo per avere Compose alla stessa versione dell'app). Non usa il design system:
+// le schermate (blocco, password) le disegna chi usa questo modulo, qui vivono solo la logica e i "ganci" di
+// sicurezza (gate, flag di finestra, tastiera).
+//
+// Dipendenze di produzione, tutte dichiarate e verificate (docs/sicurezza.md, 4-bis e §8):
+//   - androidx.biometric: BiometricPrompt con la credenziale di sistema (unica aggiunta della 1.5);
+//   - Compose, tramite engine-ui (solo Compose, non il design system): per il gate e gli helper delle finestre;
+//   - DataStore Preferences: dove stanno le credenziali CIFRATE e le impostazioni del blocco.
 plugins {
   id 'com.android.library'
   id 'org.jetbrains.kotlin.android'
+  id 'org.jetbrains.kotlin.plugin.compose'
 }
 
 apply from: "${rootDir}/engine/versions.gradle"
@@ -12,13 +19,33 @@ apply from: "${rootDir}/gradle/android-conventions.gradle"
 
 android {
   namespace = 'dev.pampa.mycloudgallery.core.security'
+
+  buildFeatures {
+    compose = true
+  }
 }
 
 dependencies {
   api project(':core-common')
 
+  // Compose (runtime, ui, foundation, lifecycle-runtime-compose) arriva da engine-ui: stessa versione di
+  // tutta l'app e nessun artefatto in piu' da verificare. NON si usa il suo design system, solo Compose.
+  implementation project(':engine-ui')
+  implementation appDeps.datastorePreferences
+  // api: FragmentActivity (tipo richiesto da BiometricPrompt) compare nelle firme pubbliche del modulo.
+  api appDeps.biometric
+
   testImplementation appDeps.coroutinesTest
   testImplementation appDeps.robolectric
   testImplementation appDeps.androidxTestCore
   testImplementation appDeps.androidxTestExtJunit
+  testImplementation platform("androidx.compose:compose-bom:${engine.composeBom}")
+  testImplementation appDeps.composeUiTestJunit4
+  testImplementation appDeps.composeUiTestManifest
+
+  // Prove sul telefono vero (S25): Keystore reale, StrongBox/ripiego, flag di finestra, BiometricPrompt.
+  //   gradlew :core-security:connectedDebugAndroidTest
+  androidTestImplementation appDeps.androidxTestExtJunit
+  androidTestImplementation appDeps.androidxTestCore
+  androidTestImplementation appDeps.androidxTestRunner
 }

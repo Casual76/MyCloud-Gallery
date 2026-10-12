@@ -16,9 +16,11 @@
                                 ZERO test eseguiti risulterebbe "passato" per Gradle: qui no)
     7. APK di release           ispezione dell'APK vero con aapt2: non debuggable, backup escluso, nessun
                                 componente esportato oltre la launcher, nessun codice solo-debug dentro
+    +  permessi documentati     ogni permesso ammesso da gradle\verify-release-manifest.gradle (statico) e ogni
+                                permesso dell'APK di release deve comparire in docs\sicurezza.md 4-bis
 
 .PARAMETER SkipGradle
-  Salta i passi 5-7 (e' il controllo statico, veloce: engine, repo, checksum).
+  Salta i passi 5-7 (e' il controllo statico, veloce: engine, repo, checksum, permessi ammessi vs docs).
 
 .PARAMETER NoDaemon
   Esegue Gradle con --no-daemon (nessun processo che resta residente a fine verifica).
@@ -167,6 +169,36 @@ function Get-ApkManifestFacts([string]$aapt2, [string]$apk) {
   return $facts
 }
 
+# I permessi documentati in docs/sicurezza.md 4-bis: i nomi in maiuscolo tra apici inversi (es. `VIBRATE`),
+# esclusa la riga "Non richiesti" (i permessi che l'app promette di NON avere non contano come documentati).
+function Get-DocumentedPermissions {
+  $text = Read-TextFile (Join-Path $root "docs\sicurezza.md")
+  $start = $text.IndexOf("### 4-bis")
+  if ($start -lt 0) { throw "docs\sicurezza.md non ha la sezione '### 4-bis'" }
+  $rest = $text.Substring($start + 9)
+  $end = [regex]::Match($rest, '(?m)^(---|## )')
+  $section = if ($end.Success) { $rest.Substring(0, $end.Index) } else { $rest }
+  $names = @{}
+  foreach ($line in ($section -split '\r?\n')) {
+    if ($line -match 'Non richiesti') { continue }
+    foreach ($m in [regex]::Matches($line, '`([A-Z][A-Z0-9_]+)`')) { $names[$m.Groups[1].Value] = $true }
+  }
+  if ($names.Count -eq 0) { throw "la sezione 4-bis di docs\sicurezza.md non elenca nessun permesso" }
+  return $names
+}
+
+# Un permesso (nome completo) e' documentato se il suo nome corto (dopo l'ultimo punto) e' nella sezione 4-bis.
+# L'unico permesso ammesso senza riga e' quello `signature` che androidx.core aggiunge ai receiver dinamici.
+function Get-UndocumentedPermissions($permissions, $documented) {
+  $missing = @()
+  foreach ($permission in $permissions) {
+    if ($permission -match '\.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION$') { continue }
+    $short = $permission.Substring($permission.LastIndexOf('.') + 1)
+    if (-not $documented.ContainsKey($short)) { $missing += $permission }
+  }
+  return $missing
+}
+
 Write-Host ""
 Write-Host "MyCloud Gallery - verifica completa" -ForegroundColor Cyan
 Write-Host "  cartella: $root"
@@ -215,6 +247,23 @@ Step "verifica checksum delle dipendenze attiva" {
   if ($properties -match '(?im)^\s*org\.gradle\.dependency\.verification\s*=\s*(off|lenient)') { return "gradle.properties allenta la verifica dei checksum" }
   $wrapper = Read-TextFile (Join-Path $root "gradle\wrapper\gradle-wrapper.properties")
   if ($wrapper -notmatch '(?m)^distributionSha256Sum=[0-9a-f]{64}') { return "il wrapper non fissa distributionSha256Sum" }
+}
+
+# --- permessi: allowlist del manifest vs docs/sicurezza.md 4-bis (statico) ----------------------------------
+Step "permessi ammessi dal controllo del manifest elencati in docs/sicurezza.md 4-bis" {
+  $documented = Get-DocumentedPermissions
+  $gradle = Read-TextFile (Join-Path $root "gradle\verify-release-manifest.gradle")
+  $block = [regex]::Match($gradle, '(?s)allowedPermissions\s*:\s*\[(.*?)\n\s*\],')
+  if (-not $block.Success) { return "non trovo allowedPermissions in gradle\verify-release-manifest.gradle" }
+  $entries = @()
+  foreach ($line in ($block.Groups[1].Value -split '\r?\n')) {
+    $code = ($line -replace '//.*$', '').Trim()
+    foreach ($m in [regex]::Matches($code, "'([^']+)'")) { $entries += $m.Groups[1].Value }
+  }
+  $missing = Get-UndocumentedPermissions $entries $documented
+  if ($missing.Count -gt 0) {
+    return "permessi ammessi in verify-release-manifest.gradle ma senza riga in docs\sicurezza.md 4-bis: " + ($missing -join ", ")
+  }
 }
 
 # --- 5-7. gradle e APK ------------------------------------------------------------------------------------
@@ -309,6 +358,25 @@ Step "APK di release: non debuggable, backup escluso, nessun componente esposto"
     Write-Host "        (apkanalyzer non trovato: salto il controllo del codice solo-debug)" -ForegroundColor Yellow
   }
   if ($problems.Count -gt 0) { return ($problems -join "; ") }
+}
+
+Step "permessi dell'APK di release tutti elencati in docs/sicurezza.md 4-bis" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
+  $aapt2 = Get-Aapt2
+  if (-not $aapt2) { return "aapt2 non trovato: controlla sdk.dir in local.properties e le build-tools dell'SDK" }
+  $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if (-not $apk) { return "nessun APK di release in app\build\outputs\apk\release" }
+  $dump = Invoke-Native -File $aapt2 -Arguments @("dump", "permissions", $apk.FullName)
+  if ($dump.Code -ne 0) { return "aapt2 dump permissions fallito" }
+  $permissions = @()
+  foreach ($line in $dump.Lines) {
+    if ($line -match "^uses-permission[\w\-]*: name='([^']+)'") { $permissions += $Matches[1] }
+  }
+  Write-Host ("        permessi nell'APK: " + (($permissions | Sort-Object) -join ", ")) -ForegroundColor DarkGray
+  $missing = Get-UndocumentedPermissions $permissions (Get-DocumentedPermissions)
+  if ($missing.Count -gt 0) {
+    return "permessi nell'APK senza riga in docs\sicurezza.md 4-bis: " + ($missing -join ", ")
+  }
 }
 
 # --- Riepilogo ---------------------------------------------------------------------------------------------

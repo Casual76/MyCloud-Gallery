@@ -10,7 +10,10 @@
     fra dispositivi continua, e senza una sezione <device-transfer> la modalita' e' del tutto abilitata.
 
     Un telefono nuovo riparte da zero: nuova chiave del dispositivo, nuova approvazione dell'admin.
-    I domini device_root e device_file esistono solo per il trasferimento.
+    I domini device_root, device_file, device_database e device_sharedpref (archiviazione protetta del
+    dispositivo, quella leggibile prima dello sblocco) esistono solo per il trasferimento. L'app non li usa,
+    ma si escludono tutti lo stesso: una libreria che domani scrivesse li' non porterebbe niente al telefono nuovo.
+    Le credenziali cifrate e le impostazioni del blocco stanno in `noBackupFilesDir`, che nessun backup copia.
 -->
 <data-extraction-rules>
   <cloud-backup>
@@ -28,5 +31,7 @@
     <exclude domain="external" path="." />
     <exclude domain="device_root" path="." />
     <exclude domain="device_file" path="." />
+    <exclude domain="device_database" path="." />
+    <exclude domain="device_sharedpref" path="." />
   </device-transfer>
 </data-extraction-rules>

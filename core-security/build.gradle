@@ -1,0 +1,24 @@
+// Credenziali (Keystore), blocco app opzionale, protezioni dello schermo (piano 1.5).
+// Vede core-common. Niente librerie di terze parti per la biometria: si usa quella di sistema
+// (android.hardware.biometrics, disponibile da minSdk 29); androidx.biometric NON e' in elenco.
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.core.security'
+}
+
+dependencies {
+  api project(':core-common')
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+  testImplementation appDeps.androidxTestExtJunit
+}

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="catalog_title">Catalogo componenti</string>
+  <string name="catalog_subtitle">Qui compariranno i componenti della galleria, in chiaro e scuro.</string>
+  <string name="catalog_section_palette">Tema Ametista</string>
+  <string name="catalog_palette_primary">Primario</string>
+  <string name="catalog_palette_primary_detail">Il colore del marchio</string>
+  <string name="catalog_palette_secondary">Secondario</string>
+  <string name="catalog_palette_secondary_detail">Tende al blu</string>
+  <string name="catalog_palette_tertiary">Terziario</string>
+  <string name="catalog_palette_tertiary_detail">Tende al rosa</string>
+</resources>

@@ -1,0 +1,17 @@
+// Tipi di dominio puri (media, posizioni, versioni, dispositivi): niente Android, niente framework.
+// E' una foglia: lo vedono database, trust e rules; non vede nessuno.
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.core.model'
+}
+
+dependencies {
+}

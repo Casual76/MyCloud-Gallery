@@ -1,0 +1,139 @@
+import com.android.build.api.artifact.SingleArtifact
+
+plugins {
+  id 'com.android.application'
+  id 'org.jetbrains.kotlin.android'
+  id 'org.jetbrains.kotlin.plugin.compose'
+  id 'com.google.devtools.ksp'
+  id 'com.google.dagger.hilt.android'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+apply from: "${rootDir}/gradle/verify-release-manifest.gradle"
+
+// Firma di release (pampa.jks, condivisa con le altre app Pampa). Le quattro chiavi pampa.* stanno in
+// local.properties, fuori da git; NON vanno copiate da nessun altro progetto e non vanno mai nel repo:
+//   pampa.storeFile=C:/percorso/pampa.jks
+//   pampa.keyAlias=pampa
+//   pampa.storePassword=...
+//   pampa.keyPassword=...
+// Senza, la release si compila lo stesso ma resta NON FIRMATA (nessun errore, nessun avviso rumoroso):
+// e' la build di verifica di tools/check.ps1, non qualcosa che si installa o si pubblica.
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file('local.properties')
+if (localPropertiesFile.exists()) {
+  localPropertiesFile.withInputStream { localProperties.load(it) }
+}
+def releaseStoreFile = (localProperties.getProperty('pampa.storeFile') ?: '').trim()
+def releaseStorePassword = (localProperties.getProperty('pampa.storePassword') ?: '').trim()
+def hasReleaseKey = !releaseStoreFile.isEmpty() && !releaseStorePassword.isEmpty()
+
+android {
+  namespace = 'dev.pampa.mycloudgallery'
+
+  defaultConfig {
+    applicationId = 'dev.pampa.mycloudgallery'
+    // minSdk e compileSdk vengono da android-conventions.gradle (engine.minSdk = 29, engine.compileSdk = 36).
+    // Il target e' una decisione di prodotto e non segue il compileSdk dell'engine: vedi versions-app.gradle.
+    targetSdk = appSdk.targetSdk
+    versionCode = 1
+    versionName = '0.1.0'
+  }
+
+  signingConfigs {
+    if (hasReleaseKey) {
+      release {
+        storeFile = file(releaseStoreFile)
+        storePassword = releaseStorePassword
+        keyAlias = localProperties.getProperty('pampa.keyAlias', 'pampa')
+        keyPassword = (localProperties.getProperty('pampa.keyPassword') ?: releaseStorePassword)
+        // Anche la firma v1 (JAR): il publisher del Pampa Store la cerca per dire "firmato".
+        // Da Android 7.0 in su conta comunque la v2.
+        enableV1Signing = true
+        enableV2Signing = true
+      }
+    }
+  }
+
+  buildTypes {
+    debug {
+      // Un suffisso, cosi' la build di lavoro (firmata con la chiave di debug) convive sul telefono con
+      // la release firmata con pampa.jks: stesso id e firme diverse si rifiuterebbero a vicenda.
+      applicationIdSuffix = '.debug'
+      versionNameSuffix = '-debug'
+      debuggable = true
+      minifyEnabled = false
+    }
+    release {
+      // R8 attivo: taglio del codice morto, ottimizzazione e restringimento delle risorse.
+      // `debuggable false` e' esplicito (e' il default, ma e' proprio la riga che un controllo deve poter
+      // trovare): verify-release-manifest.gradle e tools/check.ps1 falliscono se la release risultasse
+      // debuggable.
+      debuggable = false
+      minifyEnabled = true
+      shrinkResources = true
+      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+      if (hasReleaseKey) {
+        signingConfig = signingConfigs.release
+      }
+    }
+  }
+
+  // L'app e' in italiano e basta (piano, §4 "Lingua"): le traduzioni portate dalle librerie non entrano.
+  androidResources {
+    localeFilters += ['it']
+  }
+
+  buildFeatures {
+    compose = true
+    buildConfig = true
+  }
+
+  lint {
+    checkReleaseBuilds = true
+  }
+
+  packaging {
+    resources {
+      excludes += ['/META-INF/{AL2.0,LGPL2.1}', '/META-INF/LICENSE*', '/META-INF/NOTICE*']
+    }
+  }
+}
+
+// Controllo di sicurezza del manifest fuso di release (gradle/verify-release-manifest.gradle).
+androidComponents {
+  onVariants(selector().withBuildType('release')) { variant ->
+    registerVerifyReleaseManifest(variant, variant.artifacts.get(SingleArtifact.MERGED_MANIFEST.INSTANCE))
+  }
+}
+
+dependencies {
+  // --- I moduli della galleria: l'app vede tutti -----------------------------------------------------
+  implementation project(':core-common')
+  implementation project(':core-model')
+  implementation project(':core-database')
+  implementation project(':core-designsystem') // porta con se' engine-ui (api)
+  implementation project(':core-trust')
+  implementation project(':core-security')
+  implementation project(':core-rules')
+
+  // --- Il design system (engine-ui porta Compose, Material 3, activity-compose e lifecycle) ----------
+  implementation project(':engine-ui')
+
+  // --- Hilt ---------------------------------------------------------------------------------------------
+  implementation appDeps.hiltAndroid
+  ksp appDeps.hiltCompiler
+  ksp appDeps.hiltAndroidxCompiler // genera le factory dei @HiltWorker; vuoto finche' non ce ne sono
+  implementation appDeps.hiltNavigationCompose
+
+  // --- Navigazione e stato (per le schermate delle fasi successive) ---------------------------------------
+  implementation appDeps.navigationCompose
+  implementation appDeps.lifecycleViewModelCompose
+  implementation appDeps.lifecycleRuntimeKtx
+  implementation appDeps.lifecycleRuntimeCompose
+  implementation appDeps.coroutinesAndroid // Dispatchers.Main
+
+  testImplementation appDeps.coroutinesTest
+}

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Solo build debug: l'icona di lavoro si distingue da quella della release firmata. -->
+  <string name="app_name">MyCloud Dev</string>
+  <string name="debug_section">Sviluppo</string>
+  <string name="debug_catalog_title">Catalogo componenti</string>
+  <string name="debug_catalog_detail">I componenti della galleria, in chiaro e scuro</string>
+</resources>

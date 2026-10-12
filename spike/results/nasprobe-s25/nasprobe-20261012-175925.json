@@ -1,0 +1,352 @@
+{
+  "strumento": "nasprobe",
+  "versioneRapporto": 1,
+  "modo": "tutti",
+  "inizio": "2026-10-12T17:59:25+0200",
+  "durataMs": 9557,
+  "interrotto": false,
+  "smbj": "0.15.0",
+  "dispositivo": {
+    "produttore": "samsung",
+    "modello": "SM-S931B",
+    "android": "17",
+    "sdk": 37
+  },
+  "impostazioni": {
+    "host": "MyCloudEX2Ultra.fritz.box",
+    "cartellaIndicata": false,
+    "secondaShareIndicata": true,
+    "macIndicato": false,
+    "cifraturaRichiesta": false,
+    "socketLegatoAWifi": false,
+    "vociInventario": 0
+  },
+  "risultati": [
+    {
+      "id": "1",
+      "title": "Rete",
+      "status": "OK",
+      "elapsedMs": 129,
+      "data": {
+        "reteAttivaPresente": true,
+        "retiVisibili": 2,
+        "reti": [
+          {
+            "indice": 0,
+            "attiva": false,
+            "trasporti": [
+              "CELLULAR"
+            ],
+            "vpn": false,
+            "notMetered": true,
+            "notRoaming": true,
+            "notVpn": true,
+            "internet": false,
+            "validata": true,
+            "bandaStimataGiuKbps": 39364,
+            "bandaStimataSuKbps": 22957,
+            "interfaccia": "rmnet_data2",
+            "indirizziTablet": [
+              "10.123.227.14/30"
+            ],
+            "gateway": [
+              "10.123.227.13"
+            ],
+            "dns": [],
+            "dominiRicerca": [],
+            "dnsPrivatoAttivo": false,
+            "mtu": 1280,
+            "nasNellaSottorete": false
+          },
+          {
+            "indice": 1,
+            "attiva": true,
+            "trasporti": [
+              "WIFI"
+            ],
+            "vpn": false,
+            "notMetered": true,
+            "notRoaming": true,
+            "notVpn": true,
+            "internet": true,
+            "validata": true,
+            "bandaStimataGiuKbps": 166130,
+            "bandaStimataSuKbps": 92045,
+            "wifi": {
+              "ssidDisponibile": false,
+              "rssiDbm": -40,
+              "velocitaLinkMbps": 433,
+              "velocitaRxMbps": 780,
+              "velocitaTxMbps": 433,
+              "frequenzaMhz": 5260,
+              "standardWifi": "11ac"
+            },
+            "interfaccia": "wlan0",
+            "indirizziTablet": [
+              "fe80::9c5b:ebff:fecb:fa96/64",
+              "192.168.178.79/24",
+              "2a00:6d43:904:8401:9c5b:ebff:fecb:fa96/64",
+              "2a00:6d43:904:8401:af32:ccdd:f816:9309/64",
+              "fdd1:9dcd:add8:0:9c5b:ebff:fecb:fa96/64",
+              "fdd1:9dcd:add8:0:552c:f5b3:6090:519b/64"
+            ],
+            "gateway": [
+              "fe80::3e37:12ff:feaa:534f",
+              "192.168.178.1"
+            ],
+            "dns": [
+              "fdd1:9dcd:add8:0:3e37:12ff:feaa:534f",
+              "2a00:6d43:904:8401:3e37:12ff:feaa:534f",
+              "192.168.178.1"
+            ],
+            "dominiRicerca": [
+              "fritz.box"
+            ],
+            "dnsPrivatoAttivo": false,
+            "mtu": 1500,
+            "nasNellaSottorete": true
+          }
+        ],
+        "vpnAttiva": false,
+        "reteAttivaEVpn": false,
+        "raggiungibilitaNas": {
+          "porta": 445,
+          "timeoutMs": 3000,
+          "dnsRetePredefinita": {
+            "ms": 95.6,
+            "indirizzo": "192.168.178.58",
+            "errore": null
+          },
+          "retePredefinita": {
+            "raggiungibile": true,
+            "connessioneMs": 18.1,
+            "errore": null
+          },
+          "legatoAWifi": [
+            {
+              "indice": 0,
+              "dnsMs": 1.8,
+              "indirizzo": "192.168.178.58",
+              "dnsErrore": null,
+              "raggiungibile": true,
+              "connessioneMs": 4,
+              "errore": null
+            }
+          ]
+        },
+        "nasRaggiungibileDaPredefinita": true,
+        "nasRaggiungibileLegandoWifi": true,
+        "bypassVpnPossibile": null
+      }
+    },
+    {
+      "id": "2",
+      "title": "Connessione e autenticazione",
+      "status": "OK",
+      "elapsedMs": 124,
+      "data": {
+        "firmaRichiesta": true,
+        "cifraturaRichiesta": false,
+        "socketLegatoAWifi": false,
+        "connessioneMs": 35.5,
+        "autenticazioneMs": 38.7,
+        "dialetto": "SMB_3_1_1",
+        "maxLetturaBytes": 8388608,
+        "maxScritturaBytes": 8388608,
+        "maxTransazioneBytes": 8388608,
+        "firmaObbligatoriaInSessione": true,
+        "chiaveDiFirmaPresente": true,
+        "serverRichiedeFirma": false,
+        "serverAbilitaFirma": true,
+        "cifraturaAttiva": false,
+        "serverSupportaCifratura": false,
+        "cifrario": null,
+        "cifraturaImpostaDalServer": false,
+        "sessioneGuest": false,
+        "sessioneAnonima": false,
+        "multiCredit": true,
+        "multiCanale": false,
+        "connessioneShareMs": 48.8
+      }
+    },
+    {
+      "id": "3",
+      "title": "Listing ricorsivo",
+      "status": "OK",
+      "elapsedMs": 24,
+      "data": {
+        "file": 6,
+        "cartelle": 0,
+        "voci": 6,
+        "troncatoA5000": false,
+        "byteTotaliFile": 167074916,
+        "fasceDimensione": {
+          "<1MB": 3,
+          "1-10MB": 2,
+          "10-100MB": 0,
+          ">=100MB": 1
+        },
+        "profonditaMax": 0,
+        "cartelleInterrogate": 1,
+        "cartelleNonLeggibili": 0,
+        "vociMaxInUnaCartella": 6,
+        "primaInterrogazioneMs": 23.8,
+        "interrogazioni": {
+          "n": 1,
+          "minMs": 23.8,
+          "medianaMs": 23.8,
+          "p95Ms": 23.8,
+          "maxMs": 23.8,
+          "mediaMs": 23.8
+        },
+        "estensioni": {
+          "jpg": 3,
+          "mp4": 2,
+          "png": 1
+        },
+        "fileInAltreEstensioni": 0,
+        "residuiNasprobeEsistenti": 0,
+        "vociAlSecondo": 250
+      }
+    },
+    {
+      "id": "4",
+      "title": "Lettura sequenziale",
+      "status": "OK",
+      "elapsedMs": 8641,
+      "data": {
+        "limiteByte": 209715200,
+        "note": "MB/s con 1 MB = 1.000.000 byte; se fileGiaLettiInPrecedenza e' true, la cache del NAS puo' falsare il confronto",
+        "unFlusso": {
+          "flussi": 1,
+          "byteLetti": 77770854,
+          "ms": 8638,
+          "MBs": 9,
+          "segmenti": 10,
+          "fileGiaLettiInPrecedenza": false,
+          "errori": {
+            "TransportException (causa: SocketException): Software caused connection abort": 1,
+            "SMBRuntimeException: DiskShare has already been closed": 2
+          }
+        },
+        "quattroFlussi": {
+          "flussi": 4,
+          "byteLetti": 0,
+          "ms": 2.2,
+          "MBs": 0,
+          "segmenti": 10,
+          "fileGiaLettiInPrecedenza": true,
+          "MBsPerFlusso": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "errori": {
+            "SMBRuntimeException: DiskShare has already been closed": 10
+          }
+        },
+        "rapportoQuattroSuUno": 0
+      }
+    },
+    {
+      "id": "5",
+      "title": "Accesso casuale",
+      "status": "OK",
+      "elapsedMs": 0,
+      "data": {
+        "immagini": {
+          "file": 0,
+          "byteLettiPerAccesso": 65536,
+          "erroriDiLettura": 4,
+          "aperturaMs": {
+            "n": 0
+          },
+          "primiMs": {
+            "n": 0
+          },
+          "metaMs": {
+            "n": 0
+          },
+          "ultimiMs": {
+            "n": 0
+          },
+          "totalePerFileMs": {
+            "n": 0
+          }
+        },
+        "video": {
+          "file": 0,
+          "byteLettiPerAccesso": 1048576,
+          "erroriDiLettura": 2,
+          "aperturaMs": {
+            "n": 0
+          },
+          "primiMs": {
+            "n": 0
+          },
+          "metaMs": {
+            "n": 0
+          },
+          "ultimiMs": {
+            "n": 0
+          },
+          "totalePerFileMs": {
+            "n": 0
+          }
+        }
+      }
+    },
+    {
+      "id": "6",
+      "title": "Scrittura",
+      "status": "FAIL",
+      "elapsedMs": 1,
+      "error": "SMBRuntimeException: DiskShare has already been closed; 2 file .nasprobe- non cancellati",
+      "data": {
+        "residuiSulNas": 2
+      }
+    },
+    {
+      "id": "7",
+      "title": "Copia lato server",
+      "status": "FAIL",
+      "elapsedMs": 0,
+      "error": "SMBRuntimeException: DiskShare has already been closed; 1 file .nasprobe- non cancellati",
+      "data": {
+        "residuiSulNas": 1
+      }
+    },
+    {
+      "id": "8a",
+      "title": "Connessione e autenticazione (cifratura richiesta)",
+      "status": "FAIL",
+      "elapsedMs": 2,
+      "error": "fallito in fase 'connessione': UnknownHostException: <x>",
+      "data": {
+        "firmaRichiesta": true,
+        "cifraturaRichiesta": true,
+        "socketLegatoAWifi": false,
+        "faseFallita": "connessione"
+      }
+    },
+    {
+      "id": "8b",
+      "title": "Lettura sequenziale (cifratura)",
+      "status": "SKIPPED",
+      "elapsedMs": 0,
+      "data": {
+        "motivo": "connessione cifrata non riuscita"
+      }
+    },
+    {
+      "id": "8c",
+      "title": "Scrittura (cifratura)",
+      "status": "SKIPPED",
+      "elapsedMs": 0,
+      "data": {
+        "motivo": "connessione cifrata non riuscita"
+      }
+    }
+  ]
+}

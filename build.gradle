@@ -1,0 +1,70 @@
+// Plugin con versione, dichiarati una volta sola qui e applicati dai moduli senza versione.
+//
+// AGP e Kotlin NON si scelgono: sono quelli dell'engine (engine/versions.gradle), perche' i moduli
+// dell'engine applicano gli stessi plugin senza versione e prendono quella che dichiara il root.
+// Il controllo qui sotto fa fallire il build, con un messaggio chiaro, quando l'engine viene
+// aggiornato e questo file no.
+plugins {
+  id 'com.android.application' version '8.13.2' apply false
+  id 'com.android.library' version '8.13.2' apply false
+  id 'org.jetbrains.kotlin.android' version '2.2.20' apply false
+  id 'org.jetbrains.kotlin.plugin.compose' version '2.2.20' apply false
+  id 'org.jetbrains.kotlin.plugin.serialization' version '2.2.20' apply false
+  // La parte dopo il trattino e' la versione di KSP, quella prima DEVE combaciare con Kotlin.
+  id 'com.google.devtools.ksp' version '2.2.20-2.0.4' apply false
+  // Il plugin di Room esporta gli schemi JSON (la fotografia di ogni versione del database su cui si
+  // appoggiano i test di migrazione). DEVE avere la stessa versione di appVersions.room.
+  id 'androidx.room' version '2.8.5' apply false
+  // Hilt 2.58 e' l'ultima che regge AGP 8.x: dalla 2.59 il plugin di Hilt pretende AGP 9, che
+  // l'engine (AGP 8.13.2) non ha ancora. DEVE avere la stessa versione di appVersions.hilt.
+  id 'com.google.dagger.hilt.android' version '2.58' apply false
+  // Screenshot test su JVM (Robolectric) per la revisione grafica. DEVE avere la stessa versione di
+  // appVersions.roborazzi.
+  id 'io.github.takahirom.roborazzi' version '1.76.0' apply false
+}
+
+// --- La toolchain e' quella dell'engine --------------------------------------------------------------
+def engineVersionsText = file('engine/versions.gradle').text
+def engineValue = { String key ->
+  def match = (engineVersionsText =~ /(?m)^\s*${key}\s*:\s*'([^']+)'/)
+  if (!match.find()) {
+    throw new GradleException("engine/versions.gradle non dichiara '${key}': controlla il submodule engine.")
+  }
+  return match.group(1)
+}
+def pluginAgp = '8.13.2'
+def pluginKotlin = '2.2.20'
+if (engineValue('agp') != pluginAgp || engineValue('kotlin') != pluginKotlin) {
+  throw new GradleException(
+    "La toolchain dell'engine e' cambiata (AGP ${engineValue('agp')}, Kotlin ${engineValue('kotlin')}) " +
+    "ma build.gradle dichiara AGP ${pluginAgp} e Kotlin ${pluginKotlin}. " +
+    "Aggiorna i plugin di build.gradle (e la versione di KSP) per combaciare, poi rigenera " +
+    "gradle/verification-metadata.xml."
+  )
+}
+
+// --- Comandi aggregati sui soli moduli della galleria ---------------------------------------------------
+// `gradlew testDebugUnitTest` e `lintDebug` alla radice girerebbero anche sui moduli dell'engine, che
+// hanno la loro CI nel loro repo e le loro regole di lint. Questi due coprono quello che e' nostro.
+ext.galleryModules = [
+  ':app',
+  ':core-common',
+  ':core-model',
+  ':core-database',
+  ':core-designsystem',
+  ':core-trust',
+  ':core-security',
+  ':core-rules',
+]
+
+tasks.register('galleryTest') {
+  group = 'verification'
+  description = 'Unit test (debug) di tutti i moduli della galleria, engine escluso.'
+  dependsOn galleryModules.collect { "${it}:testDebugUnitTest" }
+}
+
+tasks.register('galleryLint') {
+  group = 'verification'
+  description = 'Android lint (debug) di tutti i moduli della galleria, engine escluso.'
+  dependsOn galleryModules.collect { "${it}:lintDebug" }
+}

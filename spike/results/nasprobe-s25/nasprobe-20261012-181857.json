@@ -1,0 +1,211 @@
+{
+  "strumento": "nasprobe",
+  "versioneRapporto": 1,
+  "modo": "tutti",
+  "inizio": "2026-10-12T18:18:57+0200",
+  "durataMs": 126,
+  "interrotto": false,
+  "smbj": "0.15.0",
+  "dispositivo": {
+    "produttore": "samsung",
+    "modello": "SM-S931B",
+    "android": "17",
+    "sdk": 37
+  },
+  "impostazioni": {
+    "host": "MyCloudEX2Ultra.fritz.box",
+    "cartellaIndicata": false,
+    "secondaShareIndicata": true,
+    "macIndicato": false,
+    "cifraturaRichiesta": false,
+    "socketLegatoAWifi": false,
+    "vociInventario": 0
+  },
+  "risultati": [
+    {
+      "id": "1",
+      "title": "Rete",
+      "status": "OK",
+      "elapsedMs": 74,
+      "data": {
+        "reteAttivaPresente": true,
+        "retiVisibili": 2,
+        "reti": [
+          {
+            "indice": 0,
+            "attiva": false,
+            "trasporti": [
+              "CELLULAR"
+            ],
+            "vpn": false,
+            "notMetered": true,
+            "notRoaming": true,
+            "notVpn": true,
+            "internet": false,
+            "validata": true,
+            "bandaStimataGiuKbps": 39364,
+            "bandaStimataSuKbps": 22957,
+            "interfaccia": "rmnet_data2",
+            "indirizziTablet": [
+              "10.123.227.14/30"
+            ],
+            "gateway": [
+              "10.123.227.13"
+            ],
+            "dns": [],
+            "dominiRicerca": [],
+            "dnsPrivatoAttivo": false,
+            "mtu": 1280,
+            "nasNellaSottorete": false
+          },
+          {
+            "indice": 1,
+            "attiva": true,
+            "trasporti": [
+              "WIFI"
+            ],
+            "vpn": false,
+            "notMetered": true,
+            "notRoaming": true,
+            "notVpn": true,
+            "internet": true,
+            "validata": true,
+            "bandaStimataGiuKbps": 166054,
+            "bandaStimataSuKbps": 91890,
+            "wifi": {
+              "ssidDisponibile": false,
+              "rssiDbm": -49,
+              "velocitaLinkMbps": 780,
+              "velocitaRxMbps": 866,
+              "velocitaTxMbps": 780,
+              "frequenzaMhz": 5260,
+              "standardWifi": "11ac"
+            },
+            "interfaccia": "wlan0",
+            "indirizziTablet": [
+              "fe80::9c5b:ebff:fecb:fa96/64",
+              "192.168.178.79/24",
+              "2a00:6d43:904:8401:9c5b:ebff:fecb:fa96/64",
+              "2a00:6d43:904:8401:af32:ccdd:f816:9309/64",
+              "fdd1:9dcd:add8:0:9c5b:ebff:fecb:fa96/64",
+              "fdd1:9dcd:add8:0:552c:f5b3:6090:519b/64"
+            ],
+            "gateway": [
+              "fe80::3e37:12ff:feaa:534f",
+              "192.168.178.1"
+            ],
+            "dns": [
+              "fdd1:9dcd:add8:0:3e37:12ff:feaa:534f",
+              "2a00:6d43:904:8401:3e37:12ff:feaa:534f",
+              "192.168.178.1"
+            ],
+            "dominiRicerca": [
+              "fritz.box"
+            ],
+            "dnsPrivatoAttivo": false,
+            "mtu": 1500,
+            "nasNellaSottorete": true
+          }
+        ],
+        "vpnAttiva": false,
+        "reteAttivaEVpn": false,
+        "raggiungibilitaNas": {
+          "porta": 445,
+          "timeoutMs": 3000,
+          "dnsRetePredefinita": {
+            "ms": 58.4,
+            "indirizzo": "192.168.178.58",
+            "errore": null
+          },
+          "retePredefinita": {
+            "raggiungibile": true,
+            "connessioneMs": 5.5,
+            "errore": null
+          },
+          "legatoAWifi": [
+            {
+              "indice": 0,
+              "dnsMs": 1.3,
+              "indirizzo": "192.168.178.58",
+              "dnsErrore": null,
+              "raggiungibile": true,
+              "connessioneMs": 4,
+              "errore": null
+            }
+          ]
+        },
+        "nasRaggiungibileDaPredefinita": true,
+        "nasRaggiungibileLegandoWifi": true,
+        "bypassVpnPossibile": null
+      }
+    },
+    {
+      "id": "2",
+      "title": "Connessione e autenticazione",
+      "status": "FAIL",
+      "elapsedMs": 44,
+      "error": "AUTENTICAZIONE FALLITA, nessun nuovo tentativo: SMBApiException STATUS_LOGON_FAILURE (0xC000006D) durante SMB2_SESSION_SETUP",
+      "data": {
+        "firmaRichiesta": true,
+        "cifraturaRichiesta": false,
+        "socketLegatoAWifi": false,
+        "connessioneMs": 28.6,
+        "faseFallita": "autenticazione"
+      }
+    },
+    {
+      "id": "3",
+      "title": "Listing ricorsivo",
+      "status": "SKIPPED",
+      "elapsedMs": 0,
+      "data": {
+        "motivo": "interrotto: autenticazione fallita, nessun nuovo tentativo"
+      }
+    },
+    {
+      "id": "4",
+      "title": "Lettura sequenziale",
+      "status": "SKIPPED",
+      "elapsedMs": 0,
+      "data": {
+        "motivo": "interrotto: autenticazione fallita, nessun nuovo tentativo"
+      }
+    },
+    {
+      "id": "5",
+      "title": "Accesso casuale",
+      "status": "SKIPPED",
+      "elapsedMs": 0,
+      "data": {
+        "motivo": "interrotto: autenticazione fallita, nessun nuovo tentativo"
+      }
+    },
+    {
+      "id": "6",
+      "title": "Scrittura",
+      "status": "SKIPPED",
+      "elapsedMs": 0,
+      "data": {
+        "motivo": "interrotto: autenticazione fallita, nessun nuovo tentativo"
+      }
+    },
+    {
+      "id": "7",
+      "title": "Copia lato server",
+      "status": "SKIPPED",
+      "elapsedMs": 0,
+      "data": {
+        "motivo": "interrotto: autenticazione fallita, nessun nuovo tentativo"
+      }
+    },
+    {
+      "id": "8",
+      "title": "Ripetizione con cifratura",
+      "status": "SKIPPED",
+      "elapsedMs": 0,
+      "data": {
+        "motivo": "interrotto: autenticazione fallita, nessun nuovo tentativo"
+      }
+    }
+  ]
+}

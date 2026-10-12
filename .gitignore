@@ -1,0 +1,44 @@
+# --- Build e cache ---------------------------------------------------------------------------
+build/
+.gradle/
+.kotlin/
+.cxx/
+.externalNativeBuild/
+captures/
+out/
+*.apk
+*.aab
+*.hprof
+hs_err_pid*.log
+replay_pid*.log
+
+# --- IDE -------------------------------------------------------------------------------------
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+
+# --- Segreti e configurazione locale: MAI nel repo ------------------------------------------
+# local.properties contiene sdk.dir e le quattro chiavi di firma pampa.* (vedi app/build.gradle).
+local.properties
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+keystore.properties
+google-services.json
+
+# --- Prodotti di build delle sonde di Fase 0 (spike/ si conserva, i suoi build no) ----------
+spike/**/build/
+spike/**/.gradle/
+spike/**/.kotlin/
+spike/**/local.properties
+
+# --- Sessioni locali di Claude Code ------------------------------------------------------------
+.claude/settings.local.json
+
+# log di sistema grezzi dei dispositivi (possono contenere dati di altre app)
+spike/results/**/logcat*.txt

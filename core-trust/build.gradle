@@ -1,0 +1,23 @@
+// Formato e firme dei dati condivisi sul NAS (piano 1.4): versione del formato, chiave di famiglia,
+// registro dei dispositivi, lettura difensiva. Vede core-model e core-common.
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+  id 'org.jetbrains.kotlin.plugin.serialization'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.core.trust'
+}
+
+dependencies {
+  api project(':core-model')
+  implementation project(':core-common')
+
+  // api: i tipi @Serializable del formato compaiono nell'API pubblica del modulo.
+  api appDeps.serializationJson
+}

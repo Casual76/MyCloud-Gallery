@@ -1,0 +1,42 @@
+pluginManagement {
+  repositories {
+    google()
+    mavenCentral()
+    gradlePluginPortal()
+  }
+}
+
+dependencyResolutionManagement {
+  repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+  repositories {
+    google()
+    mavenCentral()
+  }
+}
+
+rootProject.name = "MyCloudGallery"
+
+include ':app'
+
+// I moduli della galleria. Il grafo delle dipendenze e' nel README.md: nessun ciclo, `core-common` e
+// `core-model` sono le foglie, `:app` vede tutti.
+include ':core-common'       // logger interno, dispatcher, utilita' comuni
+include ':core-model'        // tipi di dominio (media, posizioni, versioni, dispositivi)
+include ':core-database'     // Room: replica locale dell'indice
+include ':core-designsystem' // tema Ametista e componenti della galleria sopra engine-ui
+include ':core-trust'        // formato e firme dei dati sul NAS
+include ':core-security'     // credenziali, blocco app, protezioni dello schermo
+include ':core-rules'        // motore delle regole delle attivita'
+
+// --- fluid-engine (inizio) ---
+def engineDir = file('engine')
+if (engineDir.exists()) {
+  [
+   'engine-foundation',
+   'engine-ui'
+  ].each { name ->
+    include ":$name"
+    project(":$name").projectDir = new File(engineDir, name)
+  }
+}
+// --- fluid-engine (fine) ---

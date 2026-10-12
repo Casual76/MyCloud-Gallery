@@ -1,0 +1,10 @@
+# Normalizza i fine riga; i file che li vogliono per forza in un modo li dichiarano qui.
+* text=auto
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+gradlew text eol=lf
+*.sh text eol=lf
+*.jar binary
+*.png binary
+*.webp binary

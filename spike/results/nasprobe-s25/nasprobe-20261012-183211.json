@@ -1,0 +1,512 @@
+{
+  "strumento": "nasprobe",
+  "versioneRapporto": 1,
+  "modo": "tutti",
+  "inizio": "2026-10-12T18:32:11+0200",
+  "durataMs": 91714,
+  "interrotto": false,
+  "smbj": "0.15.0",
+  "dispositivo": {
+    "produttore": "samsung",
+    "modello": "SM-S931B",
+    "android": "17",
+    "sdk": 37
+  },
+  "impostazioni": {
+    "host": "MyCloudEX2Ultra.fritz.box",
+    "cartellaIndicata": false,
+    "secondaShareIndicata": true,
+    "macIndicato": false,
+    "cifraturaRichiesta": false,
+    "socketLegatoAWifi": false,
+    "vociInventario": 0
+  },
+  "risultati": [
+    {
+      "id": "1",
+      "title": "Rete",
+      "status": "OK",
+      "elapsedMs": 70,
+      "data": {
+        "reteAttivaPresente": true,
+        "retiVisibili": 2,
+        "reti": [
+          {
+            "indice": 0,
+            "attiva": false,
+            "trasporti": [
+              "CELLULAR"
+            ],
+            "vpn": false,
+            "notMetered": true,
+            "notRoaming": true,
+            "notVpn": true,
+            "internet": false,
+            "validata": true,
+            "bandaStimataGiuKbps": 39364,
+            "bandaStimataSuKbps": 22957,
+            "interfaccia": "rmnet_data2",
+            "indirizziTablet": [
+              "10.123.227.14/30"
+            ],
+            "gateway": [
+              "10.123.227.13"
+            ],
+            "dns": [],
+            "dominiRicerca": [],
+            "dnsPrivatoAttivo": false,
+            "mtu": 1280,
+            "nasNellaSottorete": false
+          },
+          {
+            "indice": 1,
+            "attiva": true,
+            "trasporti": [
+              "WIFI"
+            ],
+            "vpn": false,
+            "notMetered": true,
+            "notRoaming": true,
+            "notVpn": true,
+            "internet": true,
+            "validata": true,
+            "bandaStimataGiuKbps": 166054,
+            "bandaStimataSuKbps": 91890,
+            "wifi": {
+              "ssidDisponibile": false,
+              "rssiDbm": -47,
+              "velocitaLinkMbps": 433,
+              "velocitaRxMbps": 780,
+              "velocitaTxMbps": 433,
+              "frequenzaMhz": 5260,
+              "standardWifi": "11ac"
+            },
+            "interfaccia": "wlan0",
+            "indirizziTablet": [
+              "fe80::9c5b:ebff:fecb:fa96/64",
+              "192.168.178.79/24",
+              "2a00:6d43:904:8401:9c5b:ebff:fecb:fa96/64",
+              "2a00:6d43:904:8401:af32:ccdd:f816:9309/64",
+              "fdd1:9dcd:add8:0:9c5b:ebff:fecb:fa96/64",
+              "fdd1:9dcd:add8:0:552c:f5b3:6090:519b/64"
+            ],
+            "gateway": [
+              "fe80::3e37:12ff:feaa:534f",
+              "192.168.178.1"
+            ],
+            "dns": [
+              "fdd1:9dcd:add8:0:3e37:12ff:feaa:534f",
+              "2a00:6d43:904:8401:3e37:12ff:feaa:534f",
+              "192.168.178.1"
+            ],
+            "dominiRicerca": [
+              "fritz.box"
+            ],
+            "dnsPrivatoAttivo": false,
+            "mtu": 1500,
+            "nasNellaSottorete": true
+          }
+        ],
+        "vpnAttiva": false,
+        "reteAttivaEVpn": false,
+        "raggiungibilitaNas": {
+          "porta": 445,
+          "timeoutMs": 3000,
+          "dnsRetePredefinita": {
+            "ms": 47.6,
+            "indirizzo": "192.168.178.58",
+            "errore": null
+          },
+          "retePredefinita": {
+            "raggiungibile": true,
+            "connessioneMs": 4.9,
+            "errore": null
+          },
+          "legatoAWifi": [
+            {
+              "indice": 0,
+              "dnsMs": 1.9,
+              "indirizzo": "192.168.178.58",
+              "dnsErrore": null,
+              "raggiungibile": true,
+              "connessioneMs": 3.3,
+              "errore": null
+            }
+          ]
+        },
+        "nasRaggiungibileDaPredefinita": true,
+        "nasRaggiungibileLegandoWifi": true,
+        "bypassVpnPossibile": null
+      }
+    },
+    {
+      "id": "2",
+      "title": "Connessione e autenticazione",
+      "status": "OK",
+      "elapsedMs": 109,
+      "data": {
+        "firmaRichiesta": true,
+        "cifraturaRichiesta": false,
+        "socketLegatoAWifi": false,
+        "connessioneMs": 25.1,
+        "autenticazioneMs": 35.8,
+        "dialetto": "SMB_3_1_1",
+        "maxLetturaBytes": 8388608,
+        "maxScritturaBytes": 8388608,
+        "maxTransazioneBytes": 8388608,
+        "firmaObbligatoriaInSessione": true,
+        "chiaveDiFirmaPresente": true,
+        "serverRichiedeFirma": false,
+        "serverAbilitaFirma": true,
+        "cifraturaAttiva": false,
+        "serverSupportaCifratura": false,
+        "cifrario": null,
+        "cifraturaImpostaDalServer": false,
+        "sessioneGuest": false,
+        "sessioneAnonima": false,
+        "multiCredit": true,
+        "multiCanale": false,
+        "connessioneShareMs": 47.8
+      }
+    },
+    {
+      "id": "3",
+      "title": "Listing ricorsivo",
+      "status": "OK",
+      "elapsedMs": 1638,
+      "data": {
+        "file": 4995,
+        "cartelle": 5,
+        "voci": 5000,
+        "troncatoA5000": true,
+        "byteTotaliFile": 173738599979,
+        "fasceDimensione": {
+          "<1MB": 2242,
+          "1-10MB": 2379,
+          "10-100MB": 218,
+          ">=100MB": 156
+        },
+        "profonditaMax": 1,
+        "cartelleInterrogate": 2,
+        "cartelleNonLeggibili": 0,
+        "vociMaxInUnaCartella": 5,
+        "primaInterrogazioneMs": 75.3,
+        "interrogazioni": {
+          "n": 2,
+          "minMs": 75.3,
+          "medianaMs": 1517.8,
+          "p95Ms": 1517.8,
+          "maxMs": 1517.8,
+          "mediaMs": 796.6
+        },
+        "estensioni": {
+          "jpg": 3429,
+          "png": 834,
+          "mp4": 646,
+          "jpeg": 61,
+          "gif": 18,
+          "heic": 2,
+          "webp": 2,
+          "dng": 2,
+          "webm": 1
+        },
+        "fileInAltreEstensioni": 0,
+        "residuiNasprobeEsistenti": 0,
+        "vociAlSecondo": 3052.5
+      }
+    },
+    {
+      "id": "4",
+      "title": "Lettura sequenziale",
+      "status": "OK",
+      "elapsedMs": 32383,
+      "data": {
+        "limiteByte": 209715200,
+        "note": "MB/s con 1 MB = 1.000.000 byte; se fileGiaLettiInPrecedenza e' true, la cache del NAS puo' falsare il confronto",
+        "unFlusso": {
+          "flussi": 1,
+          "byteLetti": 209715200,
+          "ms": 21915.6,
+          "MBs": 9.57,
+          "segmenti": 54,
+          "fileGiaLettiInPrecedenza": false
+        },
+        "quattroFlussi": {
+          "flussi": 4,
+          "byteLetti": 209715200,
+          "ms": 10456.5,
+          "MBs": 20.06,
+          "segmenti": 55,
+          "fileGiaLettiInPrecedenza": false,
+          "MBsPerFlusso": [
+            4.85,
+            5.81,
+            4.66,
+            4.75
+          ]
+        },
+        "rapportoQuattroSuUno": 2.1
+      }
+    },
+    {
+      "id": "5",
+      "title": "Accesso casuale",
+      "status": "OK",
+      "elapsedMs": 3351,
+      "data": {
+        "immagini": {
+          "file": 20,
+          "byteLettiPerAccesso": 65536,
+          "erroriDiLettura": 0,
+          "aperturaMs": {
+            "n": 20,
+            "minMs": 4.2,
+            "medianaMs": 4.8,
+            "p95Ms": 8.6,
+            "maxMs": 11.5,
+            "mediaMs": 5.4
+          },
+          "primiMs": {
+            "n": 20,
+            "minMs": 21.3,
+            "medianaMs": 32.8,
+            "p95Ms": 40.8,
+            "maxMs": 53.6,
+            "mediaMs": 32.6
+          },
+          "metaMs": {
+            "n": 20,
+            "minMs": 9.3,
+            "medianaMs": 15.4,
+            "p95Ms": 27.5,
+            "maxMs": 34.9,
+            "mediaMs": 17.1
+          },
+          "ultimiMs": {
+            "n": 20,
+            "minMs": 9.8,
+            "medianaMs": 15.1,
+            "p95Ms": 36.6,
+            "maxMs": 37,
+            "mediaMs": 17.9
+          },
+          "totalePerFileMs": {
+            "n": 20,
+            "minMs": 55.1,
+            "medianaMs": 68.6,
+            "p95Ms": 107.4,
+            "maxMs": 117,
+            "mediaMs": 73
+          }
+        },
+        "video": {
+          "file": 5,
+          "byteLettiPerAccesso": 1048576,
+          "erroriDiLettura": 0,
+          "aperturaMs": {
+            "n": 5,
+            "minMs": 4.4,
+            "medianaMs": 5.1,
+            "p95Ms": 5.5,
+            "maxMs": 5.5,
+            "mediaMs": 5
+          },
+          "primiMs": {
+            "n": 5,
+            "minMs": 104.6,
+            "medianaMs": 131,
+            "p95Ms": 178.7,
+            "maxMs": 178.7,
+            "mediaMs": 137.1
+          },
+          "metaMs": {
+            "n": 5,
+            "minMs": 70.9,
+            "medianaMs": 98.5,
+            "p95Ms": 125.3,
+            "maxMs": 125.3,
+            "mediaMs": 103.5
+          },
+          "ultimiMs": {
+            "n": 5,
+            "minMs": 72.5,
+            "medianaMs": 115.5,
+            "p95Ms": 138.5,
+            "maxMs": 138.5,
+            "mediaMs": 107.9
+          },
+          "totalePerFileMs": {
+            "n": 5,
+            "minMs": 253.2,
+            "medianaMs": 376.3,
+            "p95Ms": 424.5,
+            "maxMs": 424.5,
+            "mediaMs": 353.6
+          }
+        }
+      }
+    },
+    {
+      "id": "6",
+      "title": "Scrittura",
+      "status": "OK",
+      "elapsedMs": 9899,
+      "data": {
+        "byteScritti": 52428800,
+        "aperturaMs": 44.8,
+        "scritturaMs": 5118.4,
+        "scritturaMBs": 10.24,
+        "flushMs": 85.4,
+        "rinominaMs": 6.1,
+        "byteRiletti": 52428800,
+        "riletturaMs": 4595.6,
+        "riletturaMBs": 11.41,
+        "sha256Corrisponde": true,
+        "eliminatoMs": 31.2,
+        "eliminato": true,
+        "residuiSulNas": 0
+      }
+    },
+    {
+      "id": "7",
+      "title": "Copia lato server",
+      "status": "OK",
+      "elapsedMs": 16286,
+      "data": {
+        "sorgenteByte": 52428800,
+        "sorgenteScritturaMs": 5534.3,
+        "stessaShare": {
+          "metodo": "File.remoteCopyTo di smbj (FSCTL_SRV_COPYCHUNK_WRITE)",
+          "supportata": true,
+          "copiaMs": 409.3,
+          "copiaMBs": 128.08,
+          "dimensioneCorretta": true,
+          "byteCopia": 52428800,
+          "sha256Corrisponde": true,
+          "copiaEliminata": true
+        },
+        "rapportoCopiaSuScrittura": 0.07,
+        "traShare": {
+          "metodo": "FSCTL_SRV_COPYCHUNK_WRITE manuale (smbj non lo espone tra share)",
+          "supportata": true,
+          "copiaMs": 366.3,
+          "copiaMBs": 143.14,
+          "dimensioneCorretta": true,
+          "byteCopia": 52428800,
+          "sha256Corrisponde": true,
+          "copiaEliminata": true,
+          "connessioneShare2Ms": 14.1
+        },
+        "rapportoCopiaTraShareSuScrittura": 0.07,
+        "residuiSulNas": 0
+      }
+    },
+    {
+      "id": "8a",
+      "title": "Connessione e autenticazione (cifratura richiesta)",
+      "status": "OK",
+      "elapsedMs": 103,
+      "data": {
+        "firmaRichiesta": true,
+        "cifraturaRichiesta": true,
+        "socketLegatoAWifi": false,
+        "connessioneMs": 26.2,
+        "autenticazioneMs": 32.4,
+        "dialetto": "SMB_3_1_1",
+        "maxLetturaBytes": 8388608,
+        "maxScritturaBytes": 8388608,
+        "maxTransazioneBytes": 8388608,
+        "firmaObbligatoriaInSessione": true,
+        "chiaveDiFirmaPresente": true,
+        "serverRichiedeFirma": false,
+        "serverAbilitaFirma": true,
+        "cifraturaAttiva": true,
+        "serverSupportaCifratura": true,
+        "cifrario": "AES_128_GCM",
+        "cifraturaImpostaDalServer": false,
+        "sessioneGuest": false,
+        "sessioneAnonima": false,
+        "multiCredit": true,
+        "multiCanale": false,
+        "connessioneShareMs": 42.8
+      }
+    },
+    {
+      "id": "8b",
+      "title": "Lettura sequenziale (cifratura)",
+      "status": "OK",
+      "elapsedMs": 27675,
+      "data": {
+        "limiteByte": 209715200,
+        "note": "MB/s con 1 MB = 1.000.000 byte; se fileGiaLettiInPrecedenza e' true, la cache del NAS puo' falsare il confronto",
+        "unFlusso": {
+          "flussi": 1,
+          "byteLetti": 209715200,
+          "ms": 25894.3,
+          "MBs": 8.1,
+          "segmenti": 38,
+          "fileGiaLettiInPrecedenza": false
+        },
+        "quattroFlussi": {
+          "flussi": 4,
+          "byteLetti": 19372792,
+          "ms": 1772.5,
+          "MBs": 10.93,
+          "segmenti": 32,
+          "fileGiaLettiInPrecedenza": false,
+          "MBsPerFlusso": [
+            2.34,
+            3.85,
+            2.92,
+            1.82
+          ],
+          "errori": {
+            "TransportException (causa: SocketException): Software caused connection abort": 2,
+            "SMBRuntimeException: DiskShare has already been closed": 23,
+            "SMBRuntimeException (causa: SocketException): Broken pipe": 2
+          }
+        },
+        "rapportoQuattroSuUno": 1.35
+      }
+    },
+    {
+      "id": "8c",
+      "title": "Scrittura (cifratura)",
+      "status": "FAIL",
+      "elapsedMs": 0,
+      "error": "SMBRuntimeException: DiskShare has already been closed; 2 file .nasprobe- non cancellati",
+      "data": {
+        "residuiSulNas": 2
+      }
+    },
+    {
+      "id": "8d",
+      "title": "Confronto sola firma / cifratura",
+      "status": "OK",
+      "elapsedMs": 0,
+      "data": {
+        "lettura1Flusso": {
+          "firmaMBs": 9.57,
+          "cifraturaMBs": 8.1,
+          "cifraturaSuFirma": 0.85
+        },
+        "lettura4Flussi": {
+          "firmaMBs": 20.06,
+          "cifraturaMBs": 10.93,
+          "cifraturaSuFirma": 0.54
+        },
+        "scrittura": {
+          "firmaMBs": 10.24,
+          "cifraturaMBs": null,
+          "cifraturaSuFirma": null
+        },
+        "rilettura": {
+          "firmaMBs": 11.41,
+          "cifraturaMBs": null,
+          "cifraturaSuFirma": null
+        },
+        "nota": "rapporto < 1 = la cifratura rallenta; con fileGiaLettiInPrecedenza=true i valori di lettura possono essere influenzati dalla cache del NAS"
+      }
+    }
+  ]
+}

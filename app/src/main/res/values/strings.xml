@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Il nome sotto l'icona. La build debug lo sovrascrive (src/debug/res) per distinguersi dalla release. -->
+  <string name="app_name">MyCloud Gallery</string>
+  <string name="home_title">MyCloud Gallery</string>
+</resources>

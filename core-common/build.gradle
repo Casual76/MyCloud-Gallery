@@ -1,0 +1,21 @@
+// Foglia del grafo: logger interno e utilita' comuni. Non dipende da nessun altro modulo della galleria.
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.core.common'
+}
+
+dependencies {
+  // api: i dispatcher e i Flow compaiono nelle firme pubbliche del modulo.
+  api appDeps.coroutinesCore
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+}

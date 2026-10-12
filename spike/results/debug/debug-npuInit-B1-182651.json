@@ -1,0 +1,239 @@
+{
+  "params": {
+    "textBackend": "NPU",
+    "visionBackend": "NPU",
+    "model": "M440_SM8750",
+    "tokens": 70,
+    "maxLen": 128,
+    "reps": 5,
+    "reference": "CPU",
+    "tag": "B1"
+  },
+  "device": {
+    "manufacturer": "samsung",
+    "model": "SM-S931B",
+    "device": "pa1q",
+    "hardware": "qcom",
+    "socManufacturer": "QTI",
+    "socModel": "SM8750",
+    "androidRelease": "17",
+    "sdkInt": 37,
+    "securityPatch": "2026-09-05",
+    "abis": [
+      "arm64-v8a"
+    ],
+    "cpuCores": 8,
+    "totalRamMb": 11113,
+    "app": {
+      "name": "embed-probe",
+      "version": "0.1-spike",
+      "litertlm": "0.18.0"
+    }
+  },
+  "nativeLibraryDir": "\/data\/app\/~~AhAYavATv55FXWHLcYu6xg==\/dev.pampa.mycloudgallery.spike.embedprobe-23O46m1BG3EeK_MmVcd6ow==\/lib\/arm64",
+  "nativeLibs": [
+    "libLiteRtDispatch_Qualcomm.so (435 KiB)",
+    "libQnnHtp.so (3885 KiB)",
+    "libQnnHtpPrepare.so (83033 KiB)",
+    "libQnnHtpV73Skel.so (18271 KiB)",
+    "libQnnHtpV73Stub.so (773 KiB)",
+    "libQnnHtpV79Skel.so (18079 KiB)",
+    "libQnnHtpV79Stub.so (773 KiB)",
+    "libQnnSystem.so (3972 KiB)",
+    "libandroidx.graphics.path.so (9 KiB)",
+    "liblitertlm_jni.so (21636 KiB)"
+  ],
+  "reference": {
+    "label": "ref-CPU",
+    "spec": {
+      "model": "M440",
+      "file": "embeddinggemma-2-text-vision-440m.litertlm",
+      "textBackend": "CPU",
+      "visionBackend": "CPU",
+      "tokens": 70,
+      "maxLen": 128
+    },
+    "error": null,
+    "errorLogcat": [],
+    "initMs": 327.2,
+    "pssAfterInitMb": 267.4,
+    "textMs": {
+      "n": 20,
+      "mean": 48.27,
+      "p50": 44.1,
+      "p95": 50.58,
+      "min": 42.46,
+      "max": 124.54
+    },
+    "imageMs": {
+      "n": 15,
+      "mean": 516.63,
+      "p50": 519.93,
+      "p95": 583.04,
+      "min": 450.48,
+      "max": 583.08
+    },
+    "textMsPerCall": [
+      124.5,
+      43.9,
+      43.6,
+      45.9,
+      43.6,
+      42.5,
+      44.7,
+      42.7,
+      43.3,
+      44,
+      44.1,
+      44.9,
+      44.1,
+      45.3,
+      44.6,
+      44.4,
+      44.1,
+      43.6,
+      44.8,
+      46.7
+    ],
+    "imageMsPerCall": [
+      583,
+      467,
+      450.5,
+      459.5,
+      515.2,
+      519.9,
+      515.4,
+      529.9,
+      520.9,
+      583.1,
+      508.9,
+      524.2,
+      522.9,
+      519.1,
+      530
+    ],
+    "textCpuCores": 3.68,
+    "imageCpuCores": 3.695,
+    "textNorms": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "imageNorms": [
+      1,
+      1,
+      1
+    ],
+    "badValues": 0,
+    "dim": 768
+  },
+  "test": {
+    "label": "test",
+    "spec": {
+      "model": "M440_SM8750",
+      "file": "embeddinggemma-2-text-vision-440m_Qualcomm_SM8750.litertlm",
+      "textBackend": "NPU",
+      "visionBackend": "NPU",
+      "tokens": 70,
+      "maxLen": 128
+    },
+    "error": null,
+    "errorLogcat": [],
+    "initMs": 1209.2,
+    "pssAfterInitMb": 584.6,
+    "textMs": {
+      "n": 20,
+      "mean": 6.93,
+      "p50": 6.55,
+      "p95": 8.28,
+      "min": 6.51,
+      "max": 9.79
+    },
+    "imageMs": {
+      "n": 15,
+      "mean": 72.83,
+      "p50": 72.62,
+      "p95": 75.1,
+      "min": 69.82,
+      "max": 75.12
+    },
+    "textMsPerCall": [
+      9.8,
+      7.7,
+      7.2,
+      7.7,
+      6.6,
+      6.5,
+      6.6,
+      6.6,
+      6.6,
+      8.2,
+      6.5,
+      6.5,
+      6.5,
+      6.5,
+      6.5,
+      6.5,
+      6.5,
+      6.5,
+      6.5,
+      6.6
+    ],
+    "imageMsPerCall": [
+      75.1,
+      69.8,
+      72.6,
+      75.1,
+      72.8,
+      73,
+      72.7,
+      73.6,
+      72.2,
+      72.5,
+      72.5,
+      72.5,
+      73.6,
+      72.1,
+      72.1
+    ],
+    "textCpuCores": 0.966,
+    "imageCpuCores": 0.46,
+    "textNorms": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "imageNorms": [
+      1,
+      1,
+      1
+    ],
+    "badValues": 0,
+    "dim": 768
+  },
+  "comparison": {
+    "textCosine": {
+      "n": 4,
+      "mean": 0.81514,
+      "min": 0.78123,
+      "perItem": [
+        0.83587,
+        0.78123,
+        0.81175,
+        0.8317
+      ]
+    },
+    "imageCosine": {
+      "n": 3,
+      "mean": 0.78489,
+      "min": 0.77507,
+      "perItem": [
+        0.77756,
+        0.77507,
+        0.80203
+      ]
+    }
+  }
+}

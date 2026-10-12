@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+  <!--
+      Nessun permesso dichiarato dall'app: in Fase 1.1 non parla con nessuno. (Nel manifest fuso c'e'
+      solo VIBRATE, portato da engine-ui per l'aptica.) Ogni permesso che arrivera' (rete, media,
+      notifiche...) deve avere una riga in docs/sicurezza.md §4-bis E una in releaseManifestPolicy
+      (gradle/verify-release-manifest.gradle), altrimenti la release non si assembla.
+  -->
+
+  <application
+      android:name=".MyCloudGalleryApp"
+      android:allowBackup="false"
+      android:dataExtractionRules="@xml/data_extraction_rules"
+      android:enableOnBackInvokedCallback="true"
+      android:fullBackupContent="false"
+      android:icon="@mipmap/ic_launcher"
+      android:label="@string/app_name"
+      android:supportsRtl="true"
+      android:theme="@style/Theme.MyCloudGallery"
+      android:usesCleartextTraffic="false"
+      tools:targetApi="33">
+
+    <!--
+        L'UNICO componente esportato dell'app (lo verifica verifyReleaseManifest). singleTask: un secondo
+        avvio dall'icona o da un widget riporta in primo piano l'istanza viva invece di impilarne una
+        seconda con la sua navigazione.
+    -->
+    <activity
+        android:name=".MainActivity"
+        android:exported="true"
+        android:launchMode="singleTask">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+    </activity>
+
+    <!--
+        androidx.profileinstaller (portato da Compose) dichiara questo receiver ESPORTATO, protetto dal
+        solo permesso DUMP: serve a strumenti esterni (macrobenchmark, adb) per installare un profilo
+        con un broadcast. Non ci serve e non deve restare un punto d'ingresso dell'app. L'installazione
+        automatica del profilo all'avvio (ProfileInstallerInitializer) non passa da qui e resta attiva.
+        Quando arrivera' la Fase 3.5 (benchmark), il receiver si rimette solo nella variante di benchmark.
+    -->
+    <receiver
+        android:name="androidx.profileinstaller.ProfileInstallReceiver"
+        tools:ignore="MissingClass"
+        tools:node="remove" />
+  </application>
+
+</manifest>

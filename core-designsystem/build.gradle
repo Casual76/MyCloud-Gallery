@@ -1,0 +1,40 @@
+// I componenti della galleria sopra engine-ui (piano 1.2): tema Ametista, celle, badge, barre, sheet,
+// stati vuoti. Espone engine-ui come `api`: chi usa il design system della galleria usa anche Fluid.
+//
+// Regole del design system (engine/skill, references/regole.md): nessun colore, dimensione di testo o
+// raggio scritto a mano in una schermata; angoli con ContinuousCornerShape/FluidRadius; animazioni da
+// FluidMotion; una pagina in arrivo non sfuma mai.
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+  id 'org.jetbrains.kotlin.plugin.compose'
+  id 'io.github.takahirom.roborazzi'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.core.designsystem'
+
+  buildFeatures {
+    compose = true
+  }
+}
+
+dependencies {
+  api project(':engine-ui') // porta con se' Compose, Material 3 e engine-foundation
+
+  // Screenshot test su JVM (Robolectric + Roborazzi) per la revisione grafica:
+  //   gradlew :core-designsystem:recordRoborazziDebug   -> scrive i PNG in build/outputs/roborazzi
+  testImplementation platform("androidx.compose:compose-bom:${engine.composeBom}")
+  testImplementation appDeps.composeUiTestJunit4
+  testImplementation appDeps.composeUiTestManifest
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+  testImplementation appDeps.androidxTestExtJunit
+  testImplementation appDeps.roborazzi
+  testImplementation appDeps.roborazziCompose
+  testImplementation appDeps.roborazziJunitRule
+}

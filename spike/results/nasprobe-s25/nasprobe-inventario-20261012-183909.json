@@ -1,0 +1,517 @@
+{
+  "strumento": "nasprobe",
+  "versioneRapporto": 1,
+  "modo": "inventario",
+  "inizio": "2026-10-12T18:39:09+0200",
+  "durataMs": 47837,
+  "interrotto": false,
+  "smbj": "0.15.0",
+  "dispositivo": {
+    "produttore": "samsung",
+    "modello": "SM-S931B",
+    "android": "17",
+    "sdk": 37
+  },
+  "impostazioni": {
+    "host": "MyCloudEX2Ultra.fritz.box",
+    "cartellaIndicata": false,
+    "secondaShareIndicata": true,
+    "macIndicato": false,
+    "cifraturaRichiesta": false,
+    "socketLegatoAWifi": false,
+    "vociInventario": 2
+  },
+  "risultati": [
+    {
+      "id": "INV-0",
+      "title": "Inventario: connessione e autenticazione",
+      "status": "OK",
+      "elapsedMs": 130,
+      "data": {
+        "firmaRichiesta": true,
+        "cifraturaRichiesta": false,
+        "socketLegatoAWifi": false,
+        "connessioneMs": 86,
+        "autenticazioneMs": 40.3,
+        "dialetto": "SMB_3_1_1",
+        "maxLetturaBytes": 8388608,
+        "maxScritturaBytes": 8388608,
+        "maxTransazioneBytes": 8388608,
+        "firmaObbligatoriaInSessione": true,
+        "chiaveDiFirmaPresente": true,
+        "serverRichiedeFirma": false,
+        "serverAbilitaFirma": true,
+        "cifraturaAttiva": false,
+        "serverSupportaCifratura": false,
+        "cifrario": null,
+        "cifraturaImpostaDalServer": false,
+        "sessioneGuest": false,
+        "sessioneAnonima": false,
+        "multiCredit": true,
+        "multiCanale": false
+      }
+    },
+    {
+      "id": "INV-1",
+      "title": "Inventario 1: NAS",
+      "status": "OK",
+      "elapsedMs": 45713,
+      "data": {
+        "share": "NAS",
+        "cartellaIndicata": false,
+        "completo": true,
+        "file": 20102,
+        "cartelle": 2356,
+        "voci": 22458,
+        "byteTotali": 272645378274,
+        "profonditaMax": 6,
+        "cartellaConPiuFile_numeroFile": 324,
+        "cartelleLette": 2357,
+        "fileVuoti": 0,
+        "istogrammaDimensioni": {
+          "<1MB": 6028,
+          "1-5MB": 4696,
+          "5-20MB": 7231,
+          "20-100MB": 1809,
+          "100MB-1GB": 320,
+          ">1GB": 18
+        },
+        "istogrammaNota": "1 MB = 1.000.000 byte; 100MB-1GB include 1 GB esatto",
+        "nascostiESistema": {
+          "fileNascosti": 5,
+          "fileDiSistema": 0,
+          "fileNascostiODiSistema": 5,
+          "cartelleNascosteODiSistema": 0,
+          "fileConNomeCheIniziaConPunto": 5,
+          "cartelleCheIniziaConPunto": 0,
+          "cartelleCheIniziaConChiocciola": 0,
+          "fileDentroCartellePuntoOChiocciola": 0
+        },
+        "date": {
+          "fileConDataValida": 20102,
+          "piuVecchio": "2001-02",
+          "piuRecente": "2025-09",
+          "fileSenzaDataValida": 0
+        },
+        "saltate": {
+          "vociSaltateAccessoNegato": 0,
+          "nota": "sono cartelle il cui contenuto non si e' potuto elencare per accesso negato",
+          "altriErroriCartelle": {},
+          "cartelleNonSeguite": {
+            "puntiDiRipresa": 0,
+            "oltreProfondita64": 0
+          }
+        },
+        "estensioniDistinte": 41,
+        "estensioni": {
+          "mp3": {
+            "file": 10988,
+            "byteTotali": 70387876691,
+            "medianaByte": 5653272,
+            "massimoByte": 73065900
+          },
+          "jpg": {
+            "file": 5285,
+            "byteTotali": 2662189319,
+            "medianaByte": 40971,
+            "massimoByte": 23850880
+          },
+          "flac": {
+            "file": 1906,
+            "byteTotali": 79565681911,
+            "medianaByte": 29342302,
+            "massimoByte": 711255626
+          },
+          "ini": {
+            "file": 565,
+            "byteTotali": 186257,
+            "medianaByte": 316,
+            "massimoByte": 3631
+          },
+          "mp4": {
+            "file": 371,
+            "byteTotali": 96397489957,
+            "medianaByte": 129232998,
+            "massimoByte": 2059103529
+          },
+          "m4a": {
+            "file": 222,
+            "byteTotali": 1672898024,
+            "medianaByte": 4573773,
+            "massimoByte": 39852934
+          },
+          "png": {
+            "file": 137,
+            "byteTotali": 987171809,
+            "medianaByte": 7251111,
+            "massimoByte": 41340306
+          },
+          "m3u": {
+            "file": 124,
+            "byteTotali": 107177,
+            "medianaByte": 782,
+            "massimoByte": 2359
+          },
+          "log": {
+            "file": 115,
+            "byteTotali": 1160824,
+            "medianaByte": 7741,
+            "massimoByte": 32930
+          },
+          "cue": {
+            "file": 89,
+            "byteTotali": 182454,
+            "medianaByte": 1711,
+            "massimoByte": 3740
+          },
+          "wav": {
+            "file": 44,
+            "byteTotali": 171229060,
+            "medianaByte": 1958279,
+            "massimoByte": 42903071
+          },
+          "txt": {
+            "file": 36,
+            "byteTotali": 47752,
+            "medianaByte": 1254,
+            "massimoByte": 3745
+          },
+          "gif": {
+            "file": 33,
+            "byteTotali": 317980,
+            "medianaByte": 2755,
+            "massimoByte": 113752
+          },
+          "jpeg": {
+            "file": 20,
+            "byteTotali": 3094942,
+            "medianaByte": 126106,
+            "massimoByte": 556053
+          },
+          "wv": {
+            "file": 20,
+            "byteTotali": 542499024,
+            "medianaByte": 24770241,
+            "massimoByte": 40608107
+          },
+          "htm": {
+            "file": 20,
+            "byteTotali": 191026,
+            "medianaByte": 9485,
+            "massimoByte": 19671
+          },
+          "db": {
+            "file": 19,
+            "byteTotali": 320000,
+            "medianaByte": 12288,
+            "massimoByte": 59904
+          },
+          "m3u8": {
+            "file": 14,
+            "byteTotali": 8472,
+            "medianaByte": 459,
+            "massimoByte": 1405
+          },
+          "bmp": {
+            "file": 12,
+            "byteTotali": 47697264,
+            "medianaByte": 1021760,
+            "massimoByte": 16415042
+          },
+          "nfo": {
+            "file": 11,
+            "byteTotali": 20652,
+            "medianaByte": 1812,
+            "massimoByte": 2502
+          },
+          "doc": {
+            "file": 10,
+            "byteTotali": 246272,
+            "medianaByte": 23552,
+            "massimoByte": 36352
+          },
+          "mkv": {
+            "file": 9,
+            "byteTotali": 20138141663,
+            "medianaByte": 210061677,
+            "massimoByte": 13524456580
+          },
+          "sfv": {
+            "file": 8,
+            "byteTotali": 6240,
+            "medianaByte": 776,
+            "massimoByte": 1154
+          },
+          "pdf": {
+            "file": 7,
+            "byteTotali": 29896125,
+            "medianaByte": 4130842,
+            "massimoByte": 13445632
+          },
+          "url": {
+            "file": 6,
+            "byteTotali": 1753,
+            "medianaByte": 377,
+            "massimoByte": 377
+          },
+          "md5": {
+            "file": 6,
+            "byteTotali": 7728,
+            "medianaByte": 1094,
+            "massimoByte": 2144
+          },
+          "accurip": {
+            "file": 4,
+            "byteTotali": 19370,
+            "medianaByte": 4842,
+            "massimoByte": 8077
+          },
+          "xautopf": {
+            "file": 3,
+            "byteTotali": 2239,
+            "medianaByte": 744,
+            "massimoByte": 752
+          },
+          "css": {
+            "file": 2,
+            "byteTotali": 2832,
+            "medianaByte": 1416,
+            "massimoByte": 2281
+          },
+          "js": {
+            "file": 2,
+            "byteTotali": 2363,
+            "medianaByte": 1181,
+            "massimoByte": 1733
+          },
+          "bak": {
+            "file": 2,
+            "byteTotali": 8195630,
+            "medianaByte": 4097815,
+            "massimoByte": 8192000
+          },
+          "(nessuna)": {
+            "file": 2,
+            "byteTotali": 1398,
+            "medianaByte": 699,
+            "massimoByte": 699
+          },
+          "webp": {
+            "file": 2,
+            "byteTotali": 46796,
+            "medianaByte": 23398,
+            "massimoByte": 23398
+          },
+          "tif": {
+            "file": 1,
+            "byteTotali": 806882,
+            "medianaByte": 806882,
+            "massimoByte": 806882
+          },
+          "dat": {
+            "file": 1,
+            "byteTotali": 26,
+            "medianaByte": 26,
+            "massimoByte": 26
+          },
+          "lyrics": {
+            "file": 1,
+            "byteTotali": 4096000,
+            "medianaByte": 4096000,
+            "massimoByte": 4096000
+          },
+          "upd": {
+            "file": 1,
+            "byteTotali": 443,
+            "medianaByte": 443,
+            "massimoByte": 443
+          },
+          "db3": {
+            "file": 1,
+            "byteTotali": 15341568,
+            "medianaByte": 15341568,
+            "massimoByte": 15341568
+          },
+          "mbl": {
+            "file": 1,
+            "byteTotali": 8192000,
+            "medianaByte": 8192000,
+            "massimoByte": 8192000
+          },
+          "zpl": {
+            "file": 1,
+            "byteTotali": 301,
+            "medianaByte": 301,
+            "massimoByte": 301
+          },
+          "mbp": {
+            "file": 1,
+            "byteTotali": 50,
+            "medianaByte": 50,
+            "massimoByte": 50
+          }
+        },
+        "tempoMs": 45713,
+        "vociAlSecondo": 491.3
+      }
+    },
+    {
+      "id": "INV-2",
+      "title": "Inventario 2: alessio",
+      "status": "OK",
+      "elapsedMs": 1869,
+      "data": {
+        "share": "alessio",
+        "cartellaIndicata": false,
+        "completo": true,
+        "file": 12283,
+        "cartelle": 6,
+        "voci": 12289,
+        "byteTotali": 279364398312,
+        "profonditaMax": 2,
+        "cartellaConPiuFile_numeroFile": 8910,
+        "cartelleLette": 7,
+        "fileVuoti": 0,
+        "istogrammaDimensioni": {
+          "<1MB": 5249,
+          "1-5MB": 3930,
+          "5-20MB": 2551,
+          "20-100MB": 268,
+          "100MB-1GB": 221,
+          ">1GB": 64
+        },
+        "istogrammaNota": "1 MB = 1.000.000 byte; 100MB-1GB include 1 GB esatto",
+        "nascostiESistema": {
+          "fileNascosti": 0,
+          "fileDiSistema": 0,
+          "fileNascostiODiSistema": 0,
+          "cartelleNascosteODiSistema": 0,
+          "fileConNomeCheIniziaConPunto": 0,
+          "cartelleCheIniziaConPunto": 0,
+          "cartelleCheIniziaConChiocciola": 0,
+          "fileDentroCartellePuntoOChiocciola": 0
+        },
+        "date": {
+          "fileConDataValida": 12283,
+          "piuVecchio": "1979-12",
+          "piuRecente": "2026-10",
+          "fileSenzaDataValida": 0
+        },
+        "saltate": {
+          "vociSaltateAccessoNegato": 0,
+          "nota": "sono cartelle il cui contenuto non si e' potuto elencare per accesso negato",
+          "altriErroriCartelle": {},
+          "cartelleNonSeguite": {
+            "puntiDiRipresa": 0,
+            "oltreProfondita64": 0
+          }
+        },
+        "estensioniDistinte": 14,
+        "estensioni": {
+          "jpg": {
+            "file": 8723,
+            "byteTotali": 25743192561,
+            "medianaByte": 1755360,
+            "massimoByte": 21942079
+          },
+          "mp4": {
+            "file": 1577,
+            "byteTotali": 250296378567,
+            "medianaByte": 6425167,
+            "massimoByte": 9421400050
+          },
+          "png": {
+            "file": 1573,
+            "byteTotali": 1277030454,
+            "medianaByte": 288586,
+            "massimoByte": 16789711
+          },
+          "heic": {
+            "file": 238,
+            "byteTotali": 749201041,
+            "medianaByte": 1690843,
+            "massimoByte": 11977470
+          },
+          "jpeg": {
+            "file": 86,
+            "byteTotali": 156568340,
+            "medianaByte": 1736273,
+            "massimoByte": 5555606
+          },
+          "mp3": {
+            "file": 32,
+            "byteTotali": 217317159,
+            "medianaByte": 6991223,
+            "massimoByte": 8658017
+          },
+          "gif": {
+            "file": 19,
+            "byteTotali": 79404382,
+            "medianaByte": 3710778,
+            "massimoByte": 15076844
+          },
+          "mov": {
+            "file": 17,
+            "byteTotali": 491364229,
+            "medianaByte": 18631051,
+            "massimoByte": 114420061
+          },
+          "dng": {
+            "file": 7,
+            "byteTotali": 349570083,
+            "medianaByte": 64408552,
+            "massimoByte": 72111114
+          },
+          "svg": {
+            "file": 5,
+            "byteTotali": 393956,
+            "medianaByte": 521,
+            "massimoByte": 391622
+          },
+          "webp": {
+            "file": 3,
+            "byteTotali": 689280,
+            "medianaByte": 141232,
+            "massimoByte": 406816
+          },
+          "webm": {
+            "file": 1,
+            "byteTotali": 330685,
+            "medianaByte": 330685,
+            "massimoByte": 330685
+          },
+          "ico": {
+            "file": 1,
+            "byteTotali": 229214,
+            "medianaByte": 229214,
+            "massimoByte": 229214
+          },
+          "tmp": {
+            "file": 1,
+            "byteTotali": 2728361,
+            "medianaByte": 2728361,
+            "massimoByte": 2728361
+          }
+        },
+        "tempoMs": 1869,
+        "vociAlSecondo": 6575.2
+      }
+    },
+    {
+      "id": "INV-TOT",
+      "title": "Inventario: totali",
+      "status": "OK",
+      "elapsedMs": 0,
+      "data": {
+        "shareLette": 2,
+        "file": 32385,
+        "cartelle": 2362,
+        "voci": 34747,
+        "byteTotali": 552009776586,
+        "tempoMs": 49465,
+        "vociAlSecondo": 702.5,
+        "completo": true
+      }
+    }
+  ]
+}

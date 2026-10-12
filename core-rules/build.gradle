@@ -1,0 +1,34 @@
+// Il motore delle regole delle attivita' (piano 1.6): un solo posto decide, per ogni attivita',
+// se puo' girare adesso. Vede core-model e core-common.
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.core.rules'
+}
+
+dependencies {
+  api project(':core-model')
+  implementation project(':core-common')
+
+  // Le regole e i contatori (tetti mensili, soglia batteria) si persistono qui.
+  implementation appDeps.datastorePreferences
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+
+  // WorkManager e hilt-work sono solo in classpath di TEST, di proposito: i lavori veri vivono in
+  // :app (che li aggiungera' quando servono) e dichiararli qui in `implementation` porterebbe nel
+  // manifest dell'app il SystemJobService esportato di WorkManager. Stare qui fa si' che le loro
+  // checksum siano gia' in gradle/verification-metadata.xml e che sia provato che compilano con la
+  // toolchain, cosi' chi li usera' non trova sorprese.
+  testImplementation appDeps.workRuntimeKtx
+  testImplementation appDeps.workTesting
+  testImplementation appDeps.hiltWork
+}

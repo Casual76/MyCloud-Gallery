@@ -1,0 +1,132 @@
+// Controllo di sicurezza del manifest di release (piano 1.1 e 1.5, docs/sicurezza.md C14/C16/C17/C22).
+//
+// Si applica da :app. Registra `verifyReleaseManifest`, che legge il manifest FUSO della release (quello
+// che finisce nell'APK, con i manifest di tutte le librerie dentro) e FALLISCE il build se:
+//   - la release e' debuggable;
+//   - allowBackup non e' "false", o mancano dataExtractionRules (backup cloud e Smart Switch);
+//   - il traffico in chiaro non e' vietato;
+//   - un componente e' esportato (o ha un intent-filter senza `exported` esplicito) e non e' la launcher
+//     activity: nessun servizio, receiver o provider di una libreria deve restare esposto in silenzio;
+//   - c'e' un permesso Android che non e' nell'elenco qui sotto.
+//
+// `assembleRelease` dipende dal controllo: un APK che non lo passa non si produce nemmeno.
+//
+// Per ammettere un nuovo componente esportato o un nuovo permesso NON basta aggiungere una riga qui:
+// prima serve una riga in docs/sicurezza.md (§4 per le contromisure, §4-bis per i permessi) con il
+// perche'. L'elenco e' il punto in cui la decisione diventa visibile in una revisione.
+
+ext.releaseManifestPolicy = [
+  // Gli unici componenti che possono essere esportati (nome di classe completo, come nel manifest fuso).
+  allowedExported  : ['dev.pampa.mycloudgallery.MainActivity'],
+  // Permessi ammessi nel manifest fuso. {applicationId} e' sostituito con l'id dell'app.
+  allowedPermissions: [
+    // Aggiunto in automatico da androidx.core: protegge i receiver registrati a runtime, e' un
+    // permesso `signature` proprio dell'app, non un accesso a qualcosa del telefono.
+    '{applicationId}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION',
+    // Portato da engine-ui (l'aptica di Fluid): permesso "normale", senza richiesta all'utente, che
+    // permette solo di far vibrare il telefono. Da registrare in docs/sicurezza.md §4-bis.
+    'android.permission.VIBRATE',
+  ],
+]
+
+abstract class VerifyReleaseManifest extends DefaultTask {
+
+  @InputFile
+  @PathSensitive(PathSensitivity.NONE)
+  abstract RegularFileProperty getMergedManifest()
+
+  @Input
+  abstract Property<String> getApplicationId()
+
+  @Input
+  abstract ListProperty<String> getAllowedExported()
+
+  @Input
+  abstract ListProperty<String> getAllowedPermissions()
+
+  // Il manifest fuso usa sempre il prefisso `android:`, quindi si legge senza risolvere i namespace.
+  static String attr(Object node, String name) {
+    return node.attributes()['android:' + name]
+  }
+
+  @TaskAction
+  void verify() {
+    def root = new XmlSlurper(false, false).parse(mergedManifest.get().asFile)
+    def problems = []
+
+    def applications = root.application
+    if (applications.size() == 0) {
+      problems << 'il manifest fuso non ha l\'elemento <application>'
+    } else {
+      def application = applications[0]
+      if (attr(application, 'debuggable') == 'true') {
+        problems << 'la release e\' DEBUGGABLE (android:debuggable="true")'
+      }
+      if (attr(application, 'allowBackup') != 'false') {
+        problems << 'android:allowBackup deve essere "false"'
+      }
+      if (!attr(application, 'dataExtractionRules')) {
+        problems << 'manca android:dataExtractionRules (esclusione di backup cloud e device-transfer)'
+      }
+      if (attr(application, 'usesCleartextTraffic') != 'false') {
+        problems << 'android:usesCleartextTraffic deve essere "false"'
+      }
+
+      ['activity', 'activity-alias', 'service', 'receiver', 'provider'].each { kind ->
+        application."${kind}".each { component ->
+          String name = attr(component, 'name')
+          String exported = attr(component, 'exported')
+          boolean hasFilter = component.'intent-filter'.size() > 0
+          if (exported == 'true' && !(name in allowedExported.get())) {
+            problems << "componente ESPORTATO non ammesso: <${kind}> ${name}".toString()
+          } else if (exported == null && hasFilter && !(name in allowedExported.get())) {
+            problems << "<${kind}> ${name} ha un intent-filter senza android:exported esplicito".toString()
+          }
+        }
+      }
+    }
+
+    def allowedPerms = allowedPermissions.get().collect { it.replace('{applicationId}', applicationId.get()) }
+    ['uses-permission', 'uses-permission-sdk-23', 'uses-permission-sdk-m'].each { tag ->
+      root."${tag}".each { permission ->
+        String name = attr(permission, 'name')
+        if (!(name in allowedPerms)) {
+          problems << "permesso non ammesso: ${name} (documentalo in docs/sicurezza.md 4-bis e aggiungilo a releaseManifestPolicy)".toString()
+        }
+      }
+    }
+
+    if (!problems.isEmpty()) {
+      throw new GradleException(
+        "Il manifest di release NON passa il controllo di sicurezza:\n  - " + problems.join('\n  - ') +
+          "\n(file: ${mergedManifest.get().asFile})"
+      )
+    }
+    logger.lifecycle('Manifest di release: non debuggable, backup escluso, nessun componente esposto oltre la launcher.')
+  }
+}
+
+// Lo script non puo' nominare le classi di AGP (un file applicato non vede il classpath dei plugin):
+// e' app/build.gradle a passargli il manifest fuso di ogni variante release.
+//
+//   androidComponents {
+//     onVariants(selector().withBuildType('release')) { variant ->
+//       registerVerifyReleaseManifest(variant, variant.artifacts.get(SingleArtifact.MERGED_MANIFEST.INSTANCE))
+//     }
+//   }
+ext.registerVerifyReleaseManifest = { variant, mergedManifestArtifact ->
+  def verifyTask = tasks.register("verify${variant.name.capitalize()}Manifest", VerifyReleaseManifest) {
+    group = 'verification'
+    description = "Fallisce se il manifest fuso di ${variant.name} e' debuggable, permette il backup o espone componenti."
+    mergedManifest.set(mergedManifestArtifact)
+    applicationId.set(variant.applicationId)
+    allowedExported.set(releaseManifestPolicy.allowedExported)
+    allowedPermissions.set(releaseManifestPolicy.allowedPermissions)
+  }
+  // Un APK che non passa il controllo non si produce nemmeno.
+  tasks.configureEach { task ->
+    if (task.name == "assemble${variant.name.capitalize()}") {
+      task.dependsOn(verifyTask)
+    }
+  }
+}

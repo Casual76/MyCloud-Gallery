@@ -1,0 +1,47 @@
+// La replica locale dell'indice: Room + KSP. Vede core-model (i tipi) e core-common (logger, dispatcher).
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+  id 'com.google.devtools.ksp'
+  id 'androidx.room'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.core.database'
+}
+
+// Le fotografie dello schema, una per versione, SOTTO controllo di versione: sono il riferimento contro
+// cui i test di migrazione (piano 1.3: "migrazioni testate dalla prima versione") verificano che chi
+// aggiorna non perda nulla. Il segnaposto di 1.1 non le esporta (exportSchema = false); la 1.3 le
+// accende insieme al primo schema vero.
+room {
+  schemaDirectory("$projectDir/schemas")
+}
+
+dependencies {
+  api project(':core-model')
+  implementation project(':core-common')
+
+  // api e non implementation: GalleryDatabase estende RoomDatabase, quindi chi costruisce il
+  // database (il grafo in :app) deve poter vedere la superclasse.
+  api appDeps.roomRuntime
+  implementation appDeps.roomKtx
+  ksp appDeps.roomCompiler
+
+  // Test JVM con un database vero in memoria (Robolectric).
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+  testImplementation appDeps.androidxTestExtJunit
+  testImplementation appDeps.coroutinesTest
+
+  // Test strumentati (migrazioni): runner da androidx.test.ext:junit.
+  androidTestImplementation appDeps.roomTesting
+  androidTestImplementation appDeps.androidxTestCore
+  androidTestImplementation appDeps.androidxTestExtJunit
+  androidTestImplementation appDeps.junit
+  androidTestImplementation appDeps.coroutinesAndroid
+}

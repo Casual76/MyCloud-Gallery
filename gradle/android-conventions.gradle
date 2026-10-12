@@ -1,0 +1,71 @@
+// Convenzioni comuni dei moduli Android della galleria (:app e core-*).
+//
+// Un modulo la applica DOPO i suoi plugin e dopo le due mappe di versioni. FluidWeather ripete il
+// blocco `android { ... }` in ogni modulo: qui sta in un posto solo, cosi' otto moduli scritti in
+// parallelo non possono divergere su SDK, Java, test e lint.
+//
+//   plugins { id 'com.android.library'; id 'org.jetbrains.kotlin.android' }
+//   apply from: "${rootDir}/engine/versions.gradle"
+//   apply from: "${rootDir}/versions-app.gradle"
+//   apply from: "${rootDir}/gradle/android-conventions.gradle"
+//
+//   android { namespace 'dev.pampa.mycloudgallery.core.xxx' }
+//
+// Cosa NON fa, di proposito: non dichiara dipendenze fra moduli ne' librerie di produzione (sono
+// del modulo), non abilita Compose (lo chiede chi lo usa), non applica Hilt/KSP/Room/serialization.
+
+if (!project.ext.has('engine') || !project.ext.has('appDeps')) {
+  throw new GradleException(
+    "${project.path}: applica engine/versions.gradle e versions-app.gradle PRIMA di android-conventions.gradle."
+  )
+}
+
+android {
+  compileSdk = engine.compileSdk
+
+  defaultConfig {
+    minSdk = engine.minSdk
+    testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    // Le regole R8 dei consumatori viaggiano con la libreria, se ne ha (non vale per l'app).
+    def consumerRules = file('consumer-rules.pro')
+    if (project.plugins.hasPlugin('com.android.library') && consumerRules.exists()) {
+      consumerProguardFiles consumerRules
+    }
+  }
+
+  compileOptions {
+    sourceCompatibility = engine.javaVersion
+    targetCompatibility = engine.javaVersion
+  }
+
+  kotlinOptions {
+    jvmTarget = engine.jvmTarget
+  }
+
+  testOptions {
+    unitTests {
+      // Robolectric e Roborazzi leggono risorse e manifest del modulo.
+      includeAndroidResources = true
+    }
+  }
+
+  sourceSets {
+    test {
+      // gradle/test-resources/robolectric.properties: sdk=35 per tutti i moduli (spiegazione nel file).
+      resources.srcDir "${rootDir}/gradle/test-resources"
+    }
+  }
+
+  lint {
+    abortOnError = true
+    warningsAsErrors = false
+    // Le librerie le controlla lintDebug; la release la controlla :app (che riattiva il controllo).
+    checkReleaseBuilds = false
+  }
+}
+
+dependencies {
+  // Il minimo che ogni modulo ha per scrivere un test che passa.
+  testImplementation appDeps.junit
+  testImplementation appDeps.truth
+}

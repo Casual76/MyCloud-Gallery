@@ -1,0 +1,432 @@
+{
+  "params": {
+    "textBackend": "NPU",
+    "visionBackend": "NPU",
+    "model": "M440_SM8750",
+    "tokens": 70,
+    "maxLen": 128,
+    "reps": 10,
+    "reference": "CPU",
+    "tag": "F1"
+  },
+  "device": {
+    "manufacturer": "samsung",
+    "model": "SM-S931B",
+    "device": "pa1q",
+    "hardware": "qcom",
+    "socManufacturer": "QTI",
+    "socModel": "SM8750",
+    "androidRelease": "17",
+    "sdkInt": 37,
+    "securityPatch": "2026-09-05",
+    "abis": [
+      "arm64-v8a"
+    ],
+    "cpuCores": 8,
+    "totalRamMb": 11113,
+    "app": {
+      "name": "embed-probe",
+      "version": "0.1-spike",
+      "litertlm": "0.18.0"
+    }
+  },
+  "nativeLibraryDir": "\/data\/app\/~~jy82CesKNfFgITxRZXyHWQ==\/dev.pampa.mycloudgallery.spike.embedprobe-ThkA98joFfXrFQYLRWQg2A==\/lib\/arm64",
+  "nativeLibs": [
+    "libLiteRtDispatch_Qualcomm.so (435 KiB)",
+    "libQnnHtp.so (3885 KiB)",
+    "libQnnHtpPrepare.so (83033 KiB)",
+    "libQnnHtpV73Skel.so (18271 KiB)",
+    "libQnnHtpV73Stub.so (773 KiB)",
+    "libQnnHtpV79Skel.so (18079 KiB)",
+    "libQnnHtpV79Stub.so (773 KiB)",
+    "libQnnSystem.so (3972 KiB)",
+    "libandroidx.graphics.path.so (9 KiB)",
+    "liblitertlm_jni.so (21636 KiB)"
+  ],
+  "reference": {
+    "label": "ref-CPU",
+    "spec": {
+      "model": "M440",
+      "file": "embeddinggemma-2-text-vision-440m.litertlm",
+      "textBackend": "CPU",
+      "visionBackend": "CPU",
+      "tokens": 70,
+      "maxLen": 128
+    },
+    "error": null,
+    "errorLogcat": [],
+    "initMs": 385.7,
+    "pssAfterInitMb": 307.3,
+    "textMs": {
+      "n": 40,
+      "mean": 48.32,
+      "p50": 45.64,
+      "p95": 48.38,
+      "min": 43.71,
+      "max": 146.21
+    },
+    "imageMs": {
+      "n": 30,
+      "mean": 637.33,
+      "p50": 676.4,
+      "p95": 714.31,
+      "min": 476.06,
+      "max": 737.2
+    },
+    "textMsPerCall": [
+      146.2,
+      47.3,
+      47,
+      46.2,
+      43.7,
+      44.1,
+      43.7,
+      44.5,
+      46.5,
+      44.3,
+      45.4,
+      45.4,
+      44.7,
+      44.8,
+      47.6,
+      48.4,
+      45.3,
+      44.2,
+      45.9,
+      46.6,
+      45.2,
+      46.2,
+      48.4,
+      45.8,
+      45.5,
+      45.1,
+      45.5,
+      45.9,
+      45.6,
+      48.2,
+      46,
+      46.3,
+      46.5,
+      45.9,
+      45.4,
+      47.5,
+      45.6,
+      45.3,
+      45.5,
+      45.6
+    ],
+    "imageMsPerCall": [
+      737.2,
+      489.2,
+      476.1,
+      477.5,
+      481.1,
+      497.9,
+      483.1,
+      495.7,
+      682.8,
+      686.4,
+      681.8,
+      714.5,
+      676.4,
+      675.8,
+      676.4,
+      677.2,
+      677.7,
+      676.3,
+      674.1,
+      678.1,
+      681.7,
+      680.3,
+      674.2,
+      669,
+      680.3,
+      683.2,
+      714.1,
+      673.4,
+      677.2,
+      671
+    ],
+    "textCpuCores": 3.749,
+    "imageCpuCores": 3.692,
+    "textNorms": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "imageNorms": [
+      1,
+      1,
+      1
+    ],
+    "badValues": 0,
+    "dim": 768,
+    "repeatTextCosMin": 1,
+    "repeatImageCosMin": 1,
+    "textTextMatrix": [
+      [
+        1,
+        0.6341,
+        0.773,
+        0.6311
+      ],
+      [
+        0.6341,
+        1,
+        0.6868,
+        0.6479
+      ],
+      [
+        0.773,
+        0.6868,
+        1,
+        0.6935
+      ],
+      [
+        0.6311,
+        0.6479,
+        0.6935,
+        1
+      ]
+    ],
+    "textImageMatrix": [
+      [
+        0.7303,
+        0.5363,
+        0.6226
+      ],
+      [
+        0.5875,
+        0.7778,
+        0.556
+      ],
+      [
+        0.6346,
+        0.572,
+        0.7378
+      ],
+      [
+        0.5595,
+        0.552,
+        0.5427
+      ]
+    ]
+  },
+  "test": {
+    "label": "test",
+    "spec": {
+      "model": "M440_SM8750",
+      "file": "embeddinggemma-2-text-vision-440m_Qualcomm_SM8750.litertlm",
+      "textBackend": "NPU",
+      "visionBackend": "NPU",
+      "tokens": 70,
+      "maxLen": 128
+    },
+    "error": null,
+    "errorLogcat": [],
+    "initMs": 1592.8,
+    "pssAfterInitMb": 581.3,
+    "textMs": {
+      "n": 40,
+      "mean": 6.87,
+      "p50": 6.59,
+      "p95": 8.18,
+      "min": 6.54,
+      "max": 12.35
+    },
+    "imageMs": {
+      "n": 30,
+      "mean": 82.87,
+      "p50": 80.3,
+      "p95": 96.62,
+      "min": 79.31,
+      "max": 97.95
+    },
+    "textMsPerCall": [
+      12.3,
+      7.9,
+      8.2,
+      7.5,
+      6.7,
+      6.6,
+      6.6,
+      6.6,
+      6.7,
+      6.7,
+      8.2,
+      6.6,
+      6.6,
+      6.6,
+      6.6,
+      6.6,
+      6.6,
+      6.6,
+      6.6,
+      6.6,
+      6.6,
+      6.6,
+      6.6,
+      6.6,
+      6.6,
+      6.6,
+      6.6,
+      6.6,
+      6.6,
+      6.6,
+      6.6,
+      6.5,
+      6.6,
+      6.6,
+      6.6,
+      6.6,
+      6.6,
+      6.6,
+      6.6,
+      6.5
+    ],
+    "imageMsPerCall": [
+      84.5,
+      80.3,
+      80.5,
+      80.4,
+      79.8,
+      81.9,
+      80.2,
+      80,
+      79.8,
+      82.3,
+      79.5,
+      79.7,
+      80.1,
+      81.6,
+      79.7,
+      80,
+      79.3,
+      82,
+      80.3,
+      79.6,
+      79.7,
+      82,
+      79.7,
+      79.7,
+      81.8,
+      95.8,
+      96.4,
+      84.4,
+      97.9,
+      96.8
+    ],
+    "textCpuCores": 0.979,
+    "imageCpuCores": 0.512,
+    "textNorms": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "imageNorms": [
+      1,
+      1,
+      1
+    ],
+    "badValues": 0,
+    "dim": 768,
+    "repeatTextCosMin": 1,
+    "repeatImageCosMin": 1,
+    "textTextMatrix": [
+      [
+        1,
+        0.3405,
+        0.5617,
+        0.3547
+      ],
+      [
+        0.3405,
+        1,
+        0.3688,
+        0.3229
+      ],
+      [
+        0.5617,
+        0.3688,
+        1,
+        0.4076
+      ],
+      [
+        0.3547,
+        0.3229,
+        0.4076,
+        1
+      ]
+    ],
+    "textImageMatrix": [
+      [
+        0.5356,
+        0.2235,
+        0.3386
+      ],
+      [
+        0.2262,
+        0.5818,
+        0.2067
+      ],
+      [
+        0.3606,
+        0.2495,
+        0.5291
+      ],
+      [
+        0.2322,
+        0.2155,
+        0.2105
+      ]
+    ]
+  },
+  "comparison": {
+    "textCosine": {
+      "n": 4,
+      "mean": 0.86077,
+      "min": 0.82834,
+      "perItem": [
+        0.89106,
+        0.82834,
+        0.86969,
+        0.85397
+      ]
+    },
+    "imageCosine": {
+      "n": 3,
+      "mean": 0.78489,
+      "min": 0.77507,
+      "perItem": [
+        0.77756,
+        0.77507,
+        0.80203
+      ]
+    },
+    "structure": {
+      "pearsonTextTextUpper": 0.9471,
+      "pearsonTextImage": 0.9898,
+      "bestImagePerTextRef": [
+        0,
+        1,
+        2,
+        0
+      ],
+      "bestImagePerTextTest": [
+        0,
+        1,
+        2,
+        0
+      ],
+      "bestImageAgreement": 4,
+      "texts": [
+        "un cerchio rosso su un prato verde con i",
+        "strisce verticali bianche e nere",
+        "una casetta marrone con il tetto rosso e",
+        "un gatto che dorme sul divano"
+      ]
+    }
+  }
+}

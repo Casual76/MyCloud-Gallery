@@ -1,0 +1,334 @@
+{
+  "params": {
+    "textBackend": "NPU",
+    "visionBackend": "NPU",
+    "model": "M440_SM8750",
+    "tokens": 70,
+    "maxLen": 128,
+    "reps": 3,
+    "reference": "CPU",
+    "tag": "C2"
+  },
+  "device": {
+    "manufacturer": "samsung",
+    "model": "SM-S931B",
+    "device": "pa1q",
+    "hardware": "qcom",
+    "socManufacturer": "QTI",
+    "socModel": "SM8750",
+    "androidRelease": "17",
+    "sdkInt": 37,
+    "securityPatch": "2026-09-05",
+    "abis": [
+      "arm64-v8a"
+    ],
+    "cpuCores": 8,
+    "totalRamMb": 11113,
+    "app": {
+      "name": "embed-probe",
+      "version": "0.1-spike",
+      "litertlm": "0.18.0"
+    }
+  },
+  "nativeLibraryDir": "\/data\/app\/~~yIvvK3DGjDW30KZuHf-lRA==\/dev.pampa.mycloudgallery.spike.embedprobe-J1W96QHhvcST2qXHCU-fGg==\/lib\/arm64",
+  "nativeLibs": [
+    "libLiteRtDispatch_Qualcomm.so (435 KiB)",
+    "libQnnHtp.so (3885 KiB)",
+    "libQnnHtpPrepare.so (83033 KiB)",
+    "libQnnHtpV73Skel.so (18271 KiB)",
+    "libQnnHtpV73Stub.so (773 KiB)",
+    "libQnnHtpV79Skel.so (18079 KiB)",
+    "libQnnHtpV79Stub.so (773 KiB)",
+    "libQnnSystem.so (3972 KiB)",
+    "libandroidx.graphics.path.so (9 KiB)",
+    "liblitertlm_jni.so (21636 KiB)"
+  ],
+  "reference": {
+    "label": "ref-CPU",
+    "spec": {
+      "model": "M440",
+      "file": "embeddinggemma-2-text-vision-440m.litertlm",
+      "textBackend": "CPU",
+      "visionBackend": "CPU",
+      "tokens": 70,
+      "maxLen": 128
+    },
+    "error": null,
+    "errorLogcat": [],
+    "initMs": 250.7,
+    "pssAfterInitMb": 256,
+    "textMs": {
+      "n": 12,
+      "mean": 62.63,
+      "p50": 48.46,
+      "p95": 125.2,
+      "min": 46.88,
+      "max": 214.02
+    },
+    "imageMs": {
+      "n": 9,
+      "mean": 603.97,
+      "p50": 678.07,
+      "p95": 696.8,
+      "min": 476.23,
+      "max": 697.36
+    },
+    "textMsPerCall": [
+      214,
+      52.5,
+      50.9,
+      51.7,
+      48.6,
+      48.3,
+      48.8,
+      47.3,
+      46.9,
+      47.7,
+      47,
+      47.8
+    ],
+    "imageMsPerCall": [
+      696,
+      476.2,
+      484.1,
+      481.3,
+      551.8,
+      678.1,
+      681.7,
+      689.2,
+      697.4
+    ],
+    "textCpuCores": 3.027,
+    "imageCpuCores": 3.565,
+    "textNorms": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "imageNorms": [
+      1,
+      1,
+      1
+    ],
+    "badValues": 0,
+    "dim": 768,
+    "repeatTextCosMin": 1,
+    "repeatImageCosMin": 1,
+    "textTextMatrix": [
+      [
+        1,
+        0.6216,
+        0.7192,
+        0.6451
+      ],
+      [
+        0.6216,
+        1,
+        0.703,
+        0.6759
+      ],
+      [
+        0.7192,
+        0.703,
+        1,
+        0.6897
+      ],
+      [
+        0.6451,
+        0.6759,
+        0.6897,
+        1
+      ]
+    ],
+    "textImageMatrix": [
+      [
+        0.7038,
+        0.4854,
+        0.5599
+      ],
+      [
+        0.5829,
+        0.7427,
+        0.5497
+      ],
+      [
+        0.6542,
+        0.5431,
+        0.7524
+      ],
+      [
+        0.5887,
+        0.5839,
+        0.5913
+      ]
+    ]
+  },
+  "test": {
+    "label": "test",
+    "spec": {
+      "model": "M440_SM8750",
+      "file": "embeddinggemma-2-text-vision-440m_Qualcomm_SM8750.litertlm",
+      "textBackend": "NPU",
+      "visionBackend": "NPU",
+      "tokens": 70,
+      "maxLen": 128
+    },
+    "error": null,
+    "errorLogcat": [],
+    "initMs": 1184.1,
+    "pssAfterInitMb": 580.4,
+    "textMs": {
+      "n": 12,
+      "mean": 8.03,
+      "p50": 6.79,
+      "p95": 10.89,
+      "min": 6.74,
+      "max": 10.97
+    },
+    "imageMs": {
+      "n": 9,
+      "mean": 86.6,
+      "p50": 83.11,
+      "p95": 95.86,
+      "min": 77.02,
+      "max": 96.12
+    },
+    "textMsPerCall": [
+      11,
+      10.1,
+      10.8,
+      10.3,
+      6.8,
+      6.8,
+      6.8,
+      6.8,
+      6.7,
+      6.8,
+      6.8,
+      6.8
+    ],
+    "imageMsPerCall": [
+      83.1,
+      78.6,
+      94.1,
+      95.5,
+      77,
+      78.8,
+      94.7,
+      96.1,
+      81.5
+    ],
+    "textCpuCores": 0.903,
+    "imageCpuCores": 0.577,
+    "textNorms": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "imageNorms": [
+      1,
+      1,
+      1
+    ],
+    "badValues": 0,
+    "dim": 768,
+    "repeatTextCosMin": 1,
+    "repeatImageCosMin": 1,
+    "textTextMatrix": [
+      [
+        1,
+        0.315,
+        0.5042,
+        0.4269
+      ],
+      [
+        0.315,
+        1,
+        0.4651,
+        0.4064
+      ],
+      [
+        0.5042,
+        0.4651,
+        1,
+        0.4725
+      ],
+      [
+        0.4269,
+        0.4064,
+        0.4725,
+        1
+      ]
+    ],
+    "textImageMatrix": [
+      [
+        0.5089,
+        0.1697,
+        0.2744
+      ],
+      [
+        0.2861,
+        0.6022,
+        0.2835
+      ],
+      [
+        0.4308,
+        0.2996,
+        0.6147
+      ],
+      [
+        0.3145,
+        0.3295,
+        0.3347
+      ]
+    ]
+  },
+  "comparison": {
+    "textCosine": {
+      "n": 4,
+      "mean": 0.88985,
+      "min": 0.85277,
+      "perItem": [
+        0.88889,
+        0.85277,
+        0.89742,
+        0.92032
+      ]
+    },
+    "imageCosine": {
+      "n": 3,
+      "mean": 0.78489,
+      "min": 0.77507,
+      "perItem": [
+        0.77756,
+        0.77507,
+        0.80203
+      ]
+    },
+    "structure": {
+      "pearsonTextTextUpper": 0.9075,
+      "pearsonTextImage": 0.9892,
+      "bestImagePerTextRef": [
+        0,
+        1,
+        2,
+        2
+      ],
+      "bestImagePerTextTest": [
+        0,
+        1,
+        2,
+        2
+      ],
+      "bestImageAgreement": 4,
+      "texts": [
+        "Nella foto si vede un grande cerchio ros",
+        "L'immagine mostra una successione regola",
+        "Questa fotografia ritrae una piccola cas",
+        "Il gatto di casa dorme profondamente sul"
+      ]
+    }
+  }
+}

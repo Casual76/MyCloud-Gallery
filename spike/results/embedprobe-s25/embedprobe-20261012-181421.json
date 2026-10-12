@@ -1,0 +1,336 @@
+{
+  "schema": 2,
+  "startedAtMs": 1791821661830,
+  "startedAt": "2026-10-12T18:14:21+0200",
+  "device": {
+    "manufacturer": "samsung",
+    "model": "SM-S931B",
+    "device": "pa1q",
+    "hardware": "qcom",
+    "socManufacturer": "QTI",
+    "socModel": "SM8750",
+    "androidRelease": "17",
+    "sdkInt": 37,
+    "securityPatch": "2026-09-05",
+    "abis": [
+      "arm64-v8a"
+    ],
+    "cpuCores": 8,
+    "totalRamMb": 11113,
+    "app": {
+      "name": "embed-probe",
+      "version": "0.1-spike",
+      "litertlm": "0.18.0"
+    }
+  },
+  "indexRunsByBackend": {},
+  "events": [
+    {
+      "model": "M440_SM8750",
+      "file": "embeddinggemma-2-text-vision-440m_Qualcomm_SM8750.litertlm",
+      "soc": "SM8750",
+      "bytes": 446611456,
+      "seconds": 11,
+      "resumedFromBytes": 0,
+      "sha256Verified": true,
+      "type": "download",
+      "tMs": 1791821679136
+    },
+    {
+      "models": [
+        {
+          "model": "M440",
+          "file": "embeddinggemma-2-text-vision-440m.litertlm",
+          "deviceSoc": "SM8750",
+          "fromMs": 78.7,
+          "modelType": "EMBEDDING",
+          "dimension": "768",
+          "signatureSelection": [
+            128,
+            256,
+            512,
+            1024,
+            2048,
+            8192
+          ],
+          "isDynamicContext": "true",
+          "visionSignatureSelection": [
+            70,
+            140
+          ],
+          "maxContextTokens": "8192",
+          "maxVisionTokenBudget": "140",
+          "inputModalities": "SupportedModalities(text=true, vision=true, audio=true, video=false)",
+          "minRuntimeVersion": null,
+          "supportedBackends(TEXT)": [
+            "CPU",
+            "GPU"
+          ],
+          "npuBrand(TEXT)": "UNKNOWN",
+          "socName(TEXT)": null,
+          "supportedBackends(VISION)": [
+            "CPU"
+          ],
+          "npuBrand(VISION)": "UNKNOWN",
+          "socName(VISION)": null,
+          "supportedBackends(AUDIO)": [
+            "CPU",
+            "GPU"
+          ],
+          "npuBrand(AUDIO)": "UNKNOWN",
+          "socName(AUDIO)": null,
+          "supportedBackends(VIDEO)": [],
+          "npuBrand(VIDEO)": "UNKNOWN",
+          "socName(VIDEO)": null
+        },
+        {
+          "model": "M270",
+          "file": "embeddinggemma-2-text-270m.litertlm",
+          "deviceSoc": "SM8750",
+          "fromMs": 36.2,
+          "modelType": "EMBEDDING",
+          "dimension": "768",
+          "signatureSelection": [
+            128,
+            256,
+            512,
+            1024,
+            2048,
+            8192
+          ],
+          "isDynamicContext": "true",
+          "visionSignatureSelection": null,
+          "maxContextTokens": "8192",
+          "maxVisionTokenBudget": "140",
+          "inputModalities": "SupportedModalities(text=true, vision=true, audio=true, video=false)",
+          "minRuntimeVersion": null,
+          "supportedBackends(TEXT)": [
+            "CPU",
+            "GPU"
+          ],
+          "npuBrand(TEXT)": "UNKNOWN",
+          "socName(TEXT)": null,
+          "supportedBackends(VISION)": [
+            "CPU",
+            "GPU"
+          ],
+          "npuBrand(VISION)": "UNKNOWN",
+          "socName(VISION)": null,
+          "supportedBackends(AUDIO)": [
+            "CPU",
+            "GPU"
+          ],
+          "npuBrand(AUDIO)": "UNKNOWN",
+          "socName(AUDIO)": null,
+          "supportedBackends(VIDEO)": [],
+          "npuBrand(VIDEO)": "UNKNOWN",
+          "socName(VIDEO)": null
+        },
+        {
+          "model": "M440_SM8750",
+          "file": "embeddinggemma-2-text-vision-440m_Qualcomm_SM8750.litertlm",
+          "deviceSoc": "SM8750",
+          "fromMs": 463.1,
+          "modelType": "EMBEDDING",
+          "dimension": "768",
+          "signatureSelection": [
+            128,
+            256,
+            512,
+            1024
+          ],
+          "isDynamicContext": "true",
+          "visionSignatureSelection": [
+            70,
+            140
+          ],
+          "maxContextTokens": "1024",
+          "maxVisionTokenBudget": "140",
+          "inputModalities": "SupportedModalities(text=true, vision=true, audio=true, video=false)",
+          "minRuntimeVersion": null,
+          "supportedBackends(TEXT)": [
+            "CPU",
+            "GPU"
+          ],
+          "npuBrand(TEXT)": "UNKNOWN",
+          "socName(TEXT)": null,
+          "supportedBackends(VISION)": [
+            "CPU"
+          ],
+          "npuBrand(VISION)": "UNKNOWN",
+          "socName(VISION)": null,
+          "supportedBackends(AUDIO)": [
+            "CPU",
+            "GPU"
+          ],
+          "npuBrand(AUDIO)": "UNKNOWN",
+          "socName(AUDIO)": null,
+          "supportedBackends(VIDEO)": [],
+          "npuBrand(VIDEO)": "UNKNOWN",
+          "socName(VIDEO)": null,
+          "socMatchesDevice": false
+        }
+      ],
+      "type": "model_info",
+      "tMs": 1791821691724
+    },
+    {
+      "backend": "NPU",
+      "spec": {
+        "model": "M440_SM8750",
+        "modelFile": "embeddinggemma-2-text-vision-440m_Qualcomm_SM8750.litertlm",
+        "backend": "NPU",
+        "withVision": true,
+        "visionTokens": 70,
+        "maxInputLength": 128,
+        "activation": "AUTO"
+      },
+      "error": "LiteRtLmJniException: Failed to create EmbeddingEngineImpl: UNKNOWN: ERROR: [third_party\/odml\/litert_lm\/runtime\/core\/embedding_engine_impl.cc:567]\n└ ERROR: [third_party\/odml\/litert_lm\/runtime\/components\/embedding_lookup\/embedding_lookup_text.cc:76]\n└ Failed to invoke the compiled model",
+      "npuDiag": {
+        "socModel": "SM8750",
+        "nativeLibraryDir": "\/data\/app\/~~Ev1VBvKLnCPyXvGTzK8L4Q==\/dev.pampa.mycloudgallery.spike.embedprobe-DFdO1tWMp8kehCb1Q2AkUg==\/lib\/arm64",
+        "files": [
+          "libLiteRtCompilerPlugin_Qualcomm.so (755 KiB)",
+          "libLiteRtDispatch_Qualcomm.so (435 KiB)",
+          "libQnnHtp.so (3885 KiB)",
+          "libQnnHtpPrepare.so (83033 KiB)",
+          "libQnnHtpV73Skel.so (18271 KiB)",
+          "libQnnHtpV73Stub.so (773 KiB)",
+          "libQnnHtpV79Skel.so (18079 KiB)",
+          "libQnnHtpV79Stub.so (773 KiB)",
+          "libQnnSystem.so (3972 KiB)",
+          "liblitertlm_jni.so (21636 KiB)"
+        ]
+      },
+      "logcat": [
+        "10-12 18:15:12.285 I\/litert  (26937): [qnn_compiler_plugin.cc:757] Context binary 1 generated",
+        "10-12 18:15:12.287 I\/litert  (26937): [compiled_model.cc:1397] 1 compiler plugins were applied successfully: Qualcomm compiler plugin (ver 0.1.0)",
+        "10-12 18:15:12.287 I\/litert  (26937): [compiled_model.cc:1411] JIT compilation changed model, reserializing...",
+        "10-12 18:15:12.289 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=androidx.compose.ui.platform.AndroidComposeView{81460c6 VFED..... ........ 0,0-1080,2340 aid=1073741824}, caller=android.view.ViewGroup.setRequestedFrameRate:10202 androidx.compose",
+        "10-12 18:15:12.289 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=android.view.View{cef5011 V.ED..... ........ 0,0-0,0}, caller=androidx.compose.ui.platform.Api35Impl.setRequestedFrameRate:4033 androidx.compose.ui.platform.AndroidComposeView.disp",
+        "10-12 18:15:12.293 I\/litert  (26937): [dispatch_delegate.cc:98] DispatchDelegate::DispatchDelegate",
+        "10-12 18:15:12.293 I\/litert  (26937): [dispatch_accelerator.cc:138] Dispatch delegate getting hooks.",
+        "10-12 18:15:12.293 I\/litert  (26937): [dispatch_delegate.cc:187] Lazy initializing Dispatch API for GetHooks.",
+        "10-12 18:15:12.293 I\/litert  (26937): [compiled_model.cc:1065] Accelerator returned null hooks.",
+        "10-12 18:15:12.293 I\/litert  (26937): [dispatch_delegate.cc:128] DispatchDelegate::Initialize main",
+        "10-12 18:15:12.293 I\/tflite  (26937): Replacing 2 out of 3 node(s) with delegate (DispatchDelegate) node, yielding 3 partitions for subgraph 0 (main).",
+        "10-12 18:15:12.293 I\/litert  (26937): [context_binary_info.cc:231] Context binary SDK version matches current SDK: 2.50.0",
+        "10-12 18:15:12.293 I\/litert  (26937): [context_binary_info.cc:112] Found qnn graph: qnn_partition_0",
+        "10-12 18:15:12.293 I\/litert  (26937): [litert_dispatch_device_context.cc:248] Creating new QNN context for bytecode 0xb400007a4eed8af0 (size 46344)",
+        "10-12 18:15:12.297 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=androidx.compose.ui.platform.AndroidComposeView{81460c6 VFED..... ........ 0,0-1080,2340 aid=1073741824}, caller=android.view.ViewGroup.setRequestedFrameRate:10202 androidx.compose",
+        "10-12 18:15:12.297 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=android.view.View{cef5011 V.ED..... ........ 0,0-0,0}, caller=androidx.compose.ui.platform.Api35Impl.setRequestedFrameRate:4033 androidx.compose.ui.platform.AndroidComposeView.disp",
+        "10-12 18:15:12.298 I\/litert  (26937): [context_binary_info.cc:231] Context binary SDK version matches current SDK: 2.50.0",
+        "10-12 18:15:12.298 I\/litert  (26937): [context_binary_info.cc:112] Found qnn graph: qnn_partition_1",
+        "10-12 18:15:12.298 I\/litert  (26937): [litert_dispatch_device_context.cc:248] Creating new QNN context for bytecode 0xb400007a4eecc760 (size 50064)",
+        "10-12 18:15:12.303 E\/tflite  (26937): Input tensor 2 lacks data",
+        "10-12 18:15:12.303 E\/litert  (26937): [litert_compiled_model.cc:164] Failed to invoke",
+        "10-12 18:15:12.306 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=androidx.compose.ui.platform.AndroidComposeView{81460c6 VFED..... ........ 0,0-1080,2340 aid=1073741824}, caller=android.view.ViewGroup.setRequestedFrameRate:10202 androidx.compose",
+        "10-12 18:15:12.306 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=android.view.View{cef5011 V.ED..... ........ 0,0-0,0}, caller=androidx.compose.ui.platform.Api35Impl.setRequestedFrameRate:4033 androidx.compose.ui.platform.AndroidComposeView.disp",
+        "10-12 18:15:12.314 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=androidx.compose.ui.platform.AndroidComposeView{81460c6 VFED..... ........ 0,0-1080,2340 aid=1073741824}, caller=android.view.ViewGroup.setRequestedFrameRate:10202 androidx.compose",
+        "10-12 18:15:12.314 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=android.view.View{cef5011 V.ED..... ........ 0,0-0,0}, caller=androidx.compose.ui.platform.Api35Impl.setRequestedFrameRate:4033 androidx.compose.ui.platform.AndroidComposeView.disp",
+        "10-12 18:15:12.324 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=androidx.compose.ui.platform.AndroidComposeView{81460c6 VFED..... ........ 0,0-1080,2340 aid=1073741824}, caller=android.view.ViewGroup.setRequestedFrameRate:10202 androidx.compose",
+        "10-12 18:15:12.324 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=android.view.View{cef5011 V.ED..... ........ 0,0-0,0}, caller=androidx.compose.ui.platform.Api35Impl.setRequestedFrameRate:4033 androidx.compose.ui.platform.AndroidComposeView.disp",
+        "10-12 18:15:12.331 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=androidx.compose.ui.platform.AndroidComposeView{81460c6 VFED..... ........ 0,0-1080,2340 aid=1073741824}, caller=android.view.ViewGroup.setRequestedFrameRate:10202 androidx.compose",
+        "10-12 18:15:12.331 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=android.view.View{cef5011 V.ED..... ........ 0,0-0,0}, caller=androidx.compose.ui.platform.Api35Impl.setRequestedFrameRate:4033 androidx.compose.ui.platform.AndroidComposeView.disp",
+        "10-12 18:15:12.339 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=androidx.compose.ui.platform.AndroidComposeView{81460c6 VFED..... ........ 0,0-1080,2340 aid=1073741824}, caller=android.view.ViewGroup.setRequestedFrameRate:10202 androidx.compose",
+        "10-12 18:15:12.339 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=android.view.View{cef5011 V.ED..... ........ 0,0-0,0}, caller=androidx.compose.ui.platform.Api35Impl.setRequestedFrameRate:4033 androidx.compose.ui.platform.AndroidComposeView.disp",
+        "10-12 18:15:12.344 I\/litert  (26937): [accelerator_registry.cc:43] DestroyAccelerator: ptr=0xb400007d5813e400, name=CpuAccelerator",
+        "10-12 18:15:12.344 I\/litert  (26937): [accelerator_registry.cc:43] DestroyAccelerator: ptr=0xb400007d5813eb00, name=LiteRT GPU",
+        "10-12 18:15:12.344 I\/litert  (26937): [accelerator_registry.cc:43] DestroyAccelerator: ptr=0xb400007d5813cbf0, name=NpuAccelerator",
+        "10-12 18:15:12.347 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=androidx.compose.ui.platform.AndroidComposeView{81460c6 VFED..... ........ 0,0-1080,2340 aid=1073741824}, caller=android.view.ViewGroup.setRequestedFrameRate:10202 androidx.compose",
+        "10-12 18:15:12.347 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=android.view.View{cef5011 V.ED..... ........ 0,0-0,0}, caller=androidx.compose.ui.platform.Api35Impl.setRequestedFrameRate:4033 androidx.compose.ui.platform.AndroidComposeView.disp",
+        "10-12 18:15:12.355 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=androidx.compose.ui.platform.AndroidComposeView{81460c6 VFED..... ........ 0,0-1080,2340 aid=1073741824}, caller=android.view.ViewGroup.setRequestedFrameRate:10202 androidx.compose",
+        "10-12 18:15:12.355 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=android.view.View{cef5011 V.ED..... ........ 0,0-0,0}, caller=androidx.compose.ui.platform.Api35Impl.setRequestedFrameRate:4033 androidx.compose.ui.platform.AndroidComposeView.disp",
+        "10-12 18:15:12.364 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=androidx.compose.ui.platform.AndroidComposeView{81460c6 VFED..... ........ 0,0-1080,2340 aid=1073741824}, caller=android.view.ViewGroup.setRequestedFrameRate:10202 androidx.compose",
+        "10-12 18:15:12.364 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=android.view.View{cef5011 V.ED..... ........ 0,0-0,0}, caller=androidx.compose.ui.platform.Api35Impl.setRequestedFrameRate:4033 androidx.compose.ui.platform.AndroidComposeView.disp"
+      ],
+      "type": "engine_init_failed",
+      "tMs": 1791821712635
+    },
+    {
+      "job": "Indicizzazione",
+      "error": "EngineInitException: Inizializzazione NPU fallita: LiteRtLmJniException: Failed to create EmbeddingEngineImpl: UNKNOWN: ERROR: [third_party\/odml\/litert_lm\/runtime\/core\/embedding_engine_impl.cc:567]\n└ ERROR: [third_party\/odml\/litert_lm\/runtime\/components\/embedding_lookup\/embedding_lookup_text.cc:76]\n└ Failed to invoke the compiled model",
+      "type": "error",
+      "tMs": 1791821712635
+    },
+    {
+      "backend": "NPU",
+      "spec": {
+        "model": "M440_SM8750",
+        "modelFile": "embeddinggemma-2-text-vision-440m_Qualcomm_SM8750.litertlm",
+        "backend": "NPU",
+        "withVision": true,
+        "visionTokens": 70,
+        "maxInputLength": 128,
+        "activation": "AUTO"
+      },
+      "error": "LiteRtLmJniException: Failed to create EmbeddingEngineImpl: UNKNOWN: ERROR: [third_party\/odml\/litert_lm\/runtime\/core\/embedding_engine_impl.cc:567]\n└ ERROR: [third_party\/odml\/litert_lm\/runtime\/components\/embedding_lookup\/embedding_lookup_text.cc:76]\n└ Failed to invoke the compiled model",
+      "npuDiag": {
+        "socModel": "SM8750",
+        "nativeLibraryDir": "\/data\/app\/~~Ev1VBvKLnCPyXvGTzK8L4Q==\/dev.pampa.mycloudgallery.spike.embedprobe-DFdO1tWMp8kehCb1Q2AkUg==\/lib\/arm64",
+        "files": [
+          "libLiteRtCompilerPlugin_Qualcomm.so (755 KiB)",
+          "libLiteRtDispatch_Qualcomm.so (435 KiB)",
+          "libQnnHtp.so (3885 KiB)",
+          "libQnnHtpPrepare.so (83033 KiB)",
+          "libQnnHtpV73Skel.so (18271 KiB)",
+          "libQnnHtpV73Stub.so (773 KiB)",
+          "libQnnHtpV79Skel.so (18079 KiB)",
+          "libQnnHtpV79Stub.so (773 KiB)",
+          "libQnnSystem.so (3972 KiB)",
+          "liblitertlm_jni.so (21636 KiB)"
+        ]
+      },
+      "logcat": [
+        "10-12 18:15:19.320 I\/litert  (26937): [qnn_manager.cc:408] Serialized a context bin of size (bytes): 46344",
+        "10-12 18:15:19.320 I\/litert  (26937): [qnn_compiler_plugin.cc:757] Context binary 0 generated",
+        "10-12 18:15:19.320 I\/litert  (26937): [qnn_compiler_plugin.cc:754] Generating context binary",
+        "10-12 18:15:19.320 I\/litert  (26937): [qnn_manager.cc:408] Serialized a context bin of size (bytes): 50064",
+        "10-12 18:15:19.320 I\/litert  (26937): [qnn_compiler_plugin.cc:757] Context binary 1 generated",
+        "10-12 18:15:19.322 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=androidx.compose.ui.platform.AndroidComposeView{81460c6 VFED..... ........ 0,0-1080,2340 aid=1073741824}, caller=android.view.ViewGroup.setRequestedFrameRate:10202 androidx.compose",
+        "10-12 18:15:19.322 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=android.view.View{cef5011 V.ED..... ........ 0,0-0,0}, caller=androidx.compose.ui.platform.Api35Impl.setRequestedFrameRate:4033 androidx.compose.ui.platform.AndroidComposeView.disp",
+        "10-12 18:15:19.323 I\/litert  (26937): [compiled_model.cc:1397] 1 compiler plugins were applied successfully: Qualcomm compiler plugin (ver 0.1.0)",
+        "10-12 18:15:19.323 I\/litert  (26937): [compiled_model.cc:1411] JIT compilation changed model, reserializing...",
+        "10-12 18:15:19.329 I\/litert  (26937): [dispatch_delegate.cc:98] DispatchDelegate::DispatchDelegate",
+        "10-12 18:15:19.329 I\/litert  (26937): [dispatch_accelerator.cc:138] Dispatch delegate getting hooks.",
+        "10-12 18:15:19.329 I\/litert  (26937): [dispatch_delegate.cc:187] Lazy initializing Dispatch API for GetHooks.",
+        "10-12 18:15:19.329 I\/litert  (26937): [compiled_model.cc:1065] Accelerator returned null hooks.",
+        "10-12 18:15:19.329 I\/litert  (26937): [dispatch_delegate.cc:128] DispatchDelegate::Initialize main",
+        "10-12 18:15:19.329 I\/tflite  (26937): Replacing 2 out of 3 node(s) with delegate (DispatchDelegate) node, yielding 3 partitions for subgraph 0 (main).",
+        "10-12 18:15:19.329 I\/litert  (26937): [context_binary_info.cc:231] Context binary SDK version matches current SDK: 2.50.0",
+        "10-12 18:15:19.329 I\/litert  (26937): [context_binary_info.cc:112] Found qnn graph: qnn_partition_0",
+        "10-12 18:15:19.329 I\/litert  (26937): [litert_dispatch_device_context.cc:248] Creating new QNN context for bytecode 0xb400007b4ab83760 (size 46344)",
+        "10-12 18:15:19.330 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=androidx.compose.ui.platform.AndroidComposeView{81460c6 VFED..... ........ 0,0-1080,2340 aid=1073741824}, caller=android.view.ViewGroup.setRequestedFrameRate:10202 androidx.compose",
+        "10-12 18:15:19.331 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=android.view.View{cef5011 V.ED..... ........ 0,0-0,0}, caller=androidx.compose.ui.platform.Api35Impl.setRequestedFrameRate:4033 androidx.compose.ui.platform.AndroidComposeView.disp",
+        "10-12 18:15:19.334 I\/litert  (26937): [context_binary_info.cc:231] Context binary SDK version matches current SDK: 2.50.0",
+        "10-12 18:15:19.334 I\/litert  (26937): [context_binary_info.cc:112] Found qnn graph: qnn_partition_1",
+        "10-12 18:15:19.334 I\/litert  (26937): [litert_dispatch_device_context.cc:248] Creating new QNN context for bytecode 0xb400007b4ab8ec68 (size 50064)",
+        "10-12 18:15:19.338 E\/tflite  (26937): Input tensor 2 lacks data",
+        "10-12 18:15:19.338 E\/litert  (26937): [litert_compiled_model.cc:164] Failed to invoke",
+        "10-12 18:15:19.340 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=androidx.compose.ui.platform.AndroidComposeView{81460c6 VFED..... ........ 0,0-1080,2340 aid=1073741824}, caller=android.view.ViewGroup.setRequestedFrameRate:10202 androidx.compose",
+        "10-12 18:15:19.340 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=android.view.View{cef5011 V.ED..... ........ 0,0-0,0}, caller=androidx.compose.ui.platform.Api35Impl.setRequestedFrameRate:4033 androidx.compose.ui.platform.AndroidComposeView.disp",
+        "10-12 18:15:19.346 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=androidx.compose.ui.platform.AndroidComposeView{81460c6 VFED..... ........ 0,0-1080,2340 aid=1073741824}, caller=android.view.ViewGroup.setRequestedFrameRate:10202 androidx.compose",
+        "10-12 18:15:19.346 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=android.view.View{cef5011 V.ED..... ........ 0,0-0,0}, caller=androidx.compose.ui.platform.Api35Impl.setRequestedFrameRate:4033 androidx.compose.ui.platform.AndroidComposeView.disp",
+        "10-12 18:15:19.355 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=androidx.compose.ui.platform.AndroidComposeView{81460c6 VFED..... ........ 0,0-1080,2340 aid=1073741824}, caller=android.view.ViewGroup.setRequestedFrameRate:10202 androidx.compose",
+        "10-12 18:15:19.355 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=android.view.View{cef5011 V.ED..... ........ 0,0-0,0}, caller=androidx.compose.ui.platform.Api35Impl.setRequestedFrameRate:4033 androidx.compose.ui.platform.AndroidComposeView.disp",
+        "10-12 18:15:19.363 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=androidx.compose.ui.platform.AndroidComposeView{81460c6 VFED..... ........ 0,0-1080,2340 aid=1073741824}, caller=android.view.ViewGroup.setRequestedFrameRate:10202 androidx.compose",
+        "10-12 18:15:19.363 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=android.view.View{cef5011 V.ED..... ........ 0,0-0,0}, caller=androidx.compose.ui.platform.Api35Impl.setRequestedFrameRate:4033 androidx.compose.ui.platform.AndroidComposeView.disp",
+        "10-12 18:15:19.371 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=androidx.compose.ui.platform.AndroidComposeView{81460c6 VFED..... ........ 0,0-1080,2340 aid=1073741824}, caller=android.view.ViewGroup.setRequestedFrameRate:10202 androidx.compose",
+        "10-12 18:15:19.371 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=android.view.View{cef5011 V.ED..... ........ 0,0-0,0}, caller=androidx.compose.ui.platform.Api35Impl.setRequestedFrameRate:4033 androidx.compose.ui.platform.AndroidComposeView.disp",
+        "10-12 18:15:19.375 I\/litert  (26937): [accelerator_registry.cc:43] DestroyAccelerator: ptr=0xb400007d5813f890, name=CpuAccelerator",
+        "10-12 18:15:19.375 I\/litert  (26937): [accelerator_registry.cc:43] DestroyAccelerator: ptr=0xb400007d58148960, name=LiteRT GPU",
+        "10-12 18:15:19.375 I\/litert  (26937): [accelerator_registry.cc:43] DestroyAccelerator: ptr=0xb400007d581449f0, name=NpuAccelerator",
+        "10-12 18:15:19.379 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=androidx.compose.ui.platform.AndroidComposeView{81460c6 VFED..... ........ 0,0-1080,2340 aid=1073741824}, caller=android.view.ViewGroup.setRequestedFrameRate:10202 androidx.compose",
+        "10-12 18:15:19.379 I\/View    (26937): setRequestedFrameRate frameRate=NaN, this=android.view.View{cef5011 V.ED..... ........ 0,0-0,0}, caller=androidx.compose.ui.platform.Api35Impl.setRequestedFrameRate:4033 androidx.compose.ui.platform.AndroidComposeView.disp"
+      ],
+      "type": "engine_init_failed",
+      "tMs": 1791821719640
+    },
+    {
+      "job": "Indicizzazione",
+      "error": "EngineInitException: Inizializzazione NPU fallita: LiteRtLmJniException: Failed to create EmbeddingEngineImpl: UNKNOWN: ERROR: [third_party\/odml\/litert_lm\/runtime\/core\/embedding_engine_impl.cc:567]\n└ ERROR: [third_party\/odml\/litert_lm\/runtime\/components\/embedding_lookup\/embedding_lookup_text.cc:76]\n└ Failed to invoke the compiled model",
+      "type": "error",
+      "tMs": 1791821719641
+    }
+  ]
+}

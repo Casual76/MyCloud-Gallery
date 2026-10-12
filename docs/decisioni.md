@@ -82,6 +82,10 @@
 6. Cambiare la password admin del NAS (è passata in chat).
 7. Backup esterno del NAS (app WD "USB Backups"): non previsto per scelta.
 
+## Dubbi grafici per l'utente (Fase 2)
+- P6: intensità dello sfondo colorato di ogni passo; stessa illustrazione per benvenuto ed errori a pagina intera; stime del preset su una libreria tipica (15.000 foto + 300 video); consiglio "tablet solo Preparatore".
+- P7: su tablet la colonna è a 760 dp su 1280 (pulita ma vuota ai lati): vuoi due colonne? Il testo del segmento selezionato è lilla chiaro e poco leggibile (viene dall'engine). Il testo sul pulsante Ametista pieno è scuro.
+
 ## Da confermare con l'utente a fine Fase 1 (dalla 1.6, motore delle regole)
 1. Il calcolo AI è un'attività "pesante". Senza NAS o rete lavora comunque sul buffer locale.
 2. Tetto dati mobili predefinito: 1 GB al mese (10 GB con "Massimo").
@@ -117,6 +121,8 @@
 - P1: collegare `SmbNasSessionManager` e `SmbNasFileSystem`; il cancello di P2 deve negare quando la rete locale non è consentita; F11 (release con R8) da provare. **Orologio del NAS avanti di ~53 s** rispetto all'NTP (misurato dal PC con la NEGOTIATE): da controllare la sincronizzazione NTP nella dashboard del NAS. Non è un problema per la fiducia, perché l'ora di riferimento è quella del NAS, ma è un segnale che l'NTP non sta lavorando.
 - P8: legare `AndroidBackgroundHealthReader`, `ActivityRulesEngine`, `TrafficLedger`, `ConnectionTestInputSource`, `HeartbeatSource`. I contributori di rete, NAS e famiglia usano gli ID di `DiagCodes`. Da stringere in `core-common`: `ExportValue.Enum.restore` accetta identificatori liberi dal file del log (l'esportatore li scarta comunque).
 - P4: collegare `NasAccountStore` alla sessione di P1, poi `OnboardingPorts`, `DefaultFamilySetupRepository`, `ApprovalWatcher`. Nel passo 12 il codice di recupero non viene mai salvato: se l'app si riavvia tra la generazione e la verifica, si riparte con una chiave nuova (comportamento voluto).
+- P6: collegare "Continua più tardi" (`onPause`, E-O1). Al coordinatore manca un modo per saltare al passo successivo con il NAS spento: da aggiungere. Ingresso senza QR: `FamilyInvite` costruito con GUID, ULA e share vuoti (vanno ripresi dalla configurazione firmata dopo l'autenticazione). Ricerca dei kit con `credentialSlot` = nome utente.
+- P7: legare `NasAccountSettings` (account NAS, salvataggio password, cambio indirizzo). Finché manca, quelle pagine dicono "non ancora collegata". `AdminRecovery.findKits` ha bisogno della password dell'account dell'admin, ma il contratto non dice come passarla: va aggiunto.
 - P2: usare `EnvironmentDeviceStateSource` per la rete del motore delle regole (al posto di `AndroidDeviceStateSource`). P6 e P7 usano `VpnControlConfigStore` e `NasSessionActivity` (non fake locali).
 - Residui della revisione N2, R2, R3, R4: chiusi dal P3 (`ReviewRound3Test`, verificati con mutanti, senza una terza revisione indipendente). M3 resta in attesa della decisione 2.
 

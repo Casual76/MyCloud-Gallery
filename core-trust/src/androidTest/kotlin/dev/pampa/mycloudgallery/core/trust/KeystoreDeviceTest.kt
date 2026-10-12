@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.core.trust
 
+import android.app.KeyguardManager
 import android.content.pm.PackageManager
 import dev.pampa.mycloudgallery.core.trust.crypto.AndroidKeystoreFamilyKeyVault
 import dev.pampa.mycloudgallery.core.trust.crypto.AndroidKeystoreKeyProvider
@@ -41,7 +42,11 @@ class KeystoreDeviceTest {
   private val vaultAlias = "mycloudgallery.test.family-key-wrap"
   private val provider = AndroidKeystoreKeyProvider(deviceAlias)
   private val vaultFile = File(KeystoreTestRunner.testContext.cacheDir, "family-key-vault-test")
-  private val vault = AndroidKeystoreFamilyKeyVault(vaultFile, vaultAlias)
+  private val vault = AndroidKeystoreFamilyKeyVault(
+    vaultFile,
+    isDeviceSecure = { KeystoreTestRunner.testContext.getSystemService(KeyguardManager::class.java).isDeviceSecure },
+    alias = vaultAlias,
+  )
   private val clock = NasClock { 1_791_806_400_000L }
 
   @After

@@ -153,16 +153,16 @@ class RegistryTest {
   fun rotazioneDellaChiave_ilVecchioSmetteDiValere() {
     val freshAnchor = family.anchor() // QR stampato prima della rotazione
     val oldKey = family.familyKey
-    family.rotate() // versione 2 firmata dalla vecchia chiave con il successore
-    family.approveNewDevice() // versione 3 firmata dalla nuova
+    family.rotate() // versione 2 (annuncio, chiave vecchia) e 3 (conferma, chiave nuova)
+    family.approveNewDevice() // versione 4 firmata dalla nuova
 
     // Un dispositivo che aveva visto la versione 1 risale la catena.
     val sync = RegistrySync(family.common).refresh(current = null, anchor = freshAnchor)
-    assertThat(sync.state!!.registry.version).isEqualTo(3)
+    assertThat(sync.state!!.registry.version).isEqualTo(4)
     assertThat(sync.state!!.trustedFamilyKey).isEqualTo(family.familyKey.publicKey)
 
     // La vecchia chiave non firma piu' nulla che venga accettato.
-    val byOldKey = Envelope.seal(DocType.FAMILY_REGISTRY, sync.state!!.registry.copy(version = 4).toJson(), oldKey)
+    val byOldKey = Envelope.seal(DocType.FAMILY_REGISTRY, sync.state!!.registry.copy(version = 5).toJson(), oldKey)
     assertThat(RegistryVerifier.accept(byOldKey, sync.state, freshAnchor).rejectionOrNull()).isEqualTo(RejectReason.SIGNER_NOT_APPROVED)
 
     // E l'admin con la vecchia chiave non riesce nemmeno a produrla.

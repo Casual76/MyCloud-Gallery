@@ -41,7 +41,7 @@ class RecoveryKitTest {
     val kitOfFamily = RecoveryKit.seal(family.familyKey, family.familyId, code, family.clock.now)
     family.common.publishExclusive(NasLayout.recoveryKitFile(family.familyId, family.familyKey.publicKey.fingerprint), kitOfFamily)
     // Il QR "stato della famiglia" mostrato dal tablet: id, impronta, versione corrente.
-    val stateQr = family.state.toAnchor()
+    val stateQr = family.state.toAnchor()!!
 
     // Il telefono dell'admin e' perso. Il dispositivo nuovo NON ha lo stato del vecchio: solo il foglio
     // (codice + impronta) e il QR di stato. Apre il kit, si sincronizza dal NAS, si approva da se'.

@@ -113,15 +113,26 @@ class AndroidKeystoreKeyProvider(private val alias: String = DEFAULT_ALIAS) : Ke
  * Keystore (StrongBox quando c'e'), non estraibile, usabile solo a telefono sbloccato, in un file dello
  * spazio privato dell'app.
  *
+ * "Solo a telefono sbloccato" non vale nulla su un telefono senza blocco schermo sicuro: li' il telefono e'
+ * sempre "sbloccato". Per questo la cassaforte rifiuta di lavorare se [isDeviceSecure] e' falso (revisione
+ * 1.4, verifica M3 e domanda 9): il dispositivo admin DEVE avere PIN, sequenza o password. L'app passa
+ * `KeyguardManager.isDeviceSecure`.
+ *
  * Il file ([file]) deve stare fuori da backup e trasferimenti (gia' esclusi per tutta l'app, piano 1.5).
  */
 class AndroidKeystoreFamilyKeyVault(
   private val file: File,
+  private val isDeviceSecure: () -> Boolean,
   private val alias: String = DEFAULT_ALIAS,
 ) : FamilyKeyVault {
 
   override fun store(key: FamilyKey) {
+    requireSecureDevice()
     synchronized(LOCK) { storeLocked(key) }
+  }
+
+  private fun requireSecureDevice() {
+    check(isDeviceSecure()) { "Il dispositivo admin deve avere un blocco schermo sicuro (PIN, sequenza o password)." }
   }
 
   private fun storeLocked(key: FamilyKey) {
@@ -150,6 +161,7 @@ class AndroidKeystoreFamilyKeyVault(
   }
 
   override fun load(expected: EcPublicKey): FamilyKey? {
+    requireSecureDevice()
     synchronized(LOCK) { return loadLocked(expected) }
   }
 

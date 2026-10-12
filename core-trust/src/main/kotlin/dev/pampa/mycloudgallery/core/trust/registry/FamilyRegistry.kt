@@ -157,8 +157,8 @@ data class FamilyRegistry(
    * dispositivo che resta dismesso puo' solo perdere teste congelate; l'ora di emissione non torna
    * indietro. Dispositivi nuovi e configurazione possono cambiare. Lancia [RejectReason.REGRESSION].
    */
-  internal fun checkNoRegressionFrom(older: FamilyRegistry) {
-    ensure(issuedAt >= older.issuedAt, RejectReason.REGRESSION, "registro: emesso prima di quello noto")
+  internal fun checkNoRegressionFrom(older: FamilyRegistry, checkIssuedAt: Boolean = true) {
+    if (checkIssuedAt) ensure(issuedAt >= older.issuedAt, RejectReason.REGRESSION, "registro: emesso prima di quello noto")
     for (old in older.devices) {
       val now = device(old.id) ?: violation(RejectReason.REGRESSION, "registro: un dispositivo e' sparito")
       ensure(now.key == old.key && TextRules.sameAccount(now.nasUser, old.nasUser), RejectReason.REGRESSION, "registro: identita' cambiata")
@@ -170,18 +170,33 @@ data class FamilyRegistry(
   }
 
   /**
-   * L'unione di due rami firmati dalla famiglia (per esempio da due admin che hanno lavorato su basi
-   * diverse): ogni dispositivo con lo stato piu' severo dei due, le teste congelate in comune, la
-   * configurazione e i nomi di questo ramo. Il risultato non e' una regressione per nessuno dei due, quindi
-   * lo accettano tutti i dispositivi. Si usa solo per scelta esplicita dell'admin ([FamilyAuthority.mergeFork]).
+   * Vero se questo registro contiene gia' tutto cio' che dice [other] (un ramo): stessa famiglia, nessuna
+   * rotazione nel ramo, e nessun dispositivo del ramo che qui manchi o sia meno severo. L'ora di emissione
+   * non conta (chi pubblica la porta al massimo dei rami che scavalca). Un registro cosi' e' accettato
+   * anche dai dispositivi che stanno su quel ramo (revisione 1.4, verifica N1).
    */
-  internal fun joinWith(other: FamilyRegistry): FamilyRegistry {
+  internal fun dominates(other: FamilyRegistry): Boolean =
+    other.familyId == familyId && other.successorKey == null &&
+      runCatching { checkNoRegressionFrom(other, checkIssuedAt = false) }.isSuccess
+
+  /**
+   * L'unione di questo registro con un ramo firmato dalla famiglia: ogni dispositivo con lo stato piu'
+   * severo dei due, le teste congelate in comune, la configurazione e i nomi di questo ramo. Con
+   * [revokeOnlyInOther] i dispositivi che esistono SOLO nel ramo entrano come revocati: e' l'uscita per un
+   * ramo che l'admin non riconosce (chiave di famiglia usata da altri) senza adottarne i dispositivi. In
+   * entrambi i casi il risultato [dominates] i due rami, quindi lo accettano tutti i dispositivi.
+   */
+  internal fun joinWith(other: FamilyRegistry, revokeOnlyInOther: Boolean = false): FamilyRegistry {
     require(other.familyId == familyId) { "Rami di famiglie diverse." }
     val ids = (devices.map { it.id } + other.devices.map { it.id }).distinct().sorted()
     val merged = ids.map { id ->
       val mine = device(id)
       val theirs = other.device(id)
       when {
+        mine == null && revokeOnlyInOther -> {
+          val status = if (theirs!!.status.ordinal < DeviceStatus.REVOKED.ordinal) DeviceStatus.REVOKED else theirs.status
+          theirs.copy(status = status, admin = false, frozenHeads = emptyList())
+        }
         mine == null -> theirs!!
         theirs == null -> mine
         else -> {

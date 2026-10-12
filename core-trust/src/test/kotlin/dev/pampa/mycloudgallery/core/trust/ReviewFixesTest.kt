@@ -142,9 +142,10 @@ class ReviewFixesTest {
     // L'admin prova a pubblicare: gli si mostra il ramo; lo riconosce e lo unisce.
     val attempt = family.authority.commit(family.common, family.authority.updateConfig(phoneState, family.config))
     assertThat(attempt).isInstanceOf(CommitResult.Fork::class.java)
-    val fork = (attempt as CommitResult.Fork).fork
-    assertThat(fork.devicesOnlyHere(phoneState.registry).map { it.id }).containsExactly(x.deviceId)
-    val merged = (family.authority.commit(family.common, family.authority.mergeFork(phoneState, fork)) as CommitResult.Published).state
+    val forks = (attempt as CommitResult.Fork).forks
+    assertThat(forks.flatMap { f -> f.devicesOnlyHere(phoneState.registry).map { it.id } }.distinct()).containsExactly(x.deviceId)
+    val merge = family.authority.mergeForks(family.authority.updateConfig(phoneState, family.config), forks)
+    val merged = (family.authority.commit(family.common, merge) as CommitResult.Published).state
 
     // Entrambi i rami accettano l'unione: il tablet resta revocato, il dispositivo nuovo resta approvato.
     assertThat(merged.statusOf(tablet.deviceId)).isEqualTo(DeviceStatus.REVOKED)
@@ -212,7 +213,8 @@ class ReviewFixesTest {
     val sync = RegistrySync(family.common).refresh(v1, family.anchor())
 
     assertThat(sync.rejected.count(RejectReason.EQUIVOCATION)).isEqualTo(0)
-    assertThat(sync.tamperingSuspected).isFalse()
+    assertThat(sync.forks).isEmpty() // nessun finto ramo: la copia malleata non e' un registro valido
+    assertThat(sync.trustedVersionReplaced).isTrue() // ma aver sostituito la v1 e' una manomissione (N3)
     assertThat(sync.state).isSameInstanceAs(v1)
   }
 
@@ -363,7 +365,7 @@ class ReviewFixesTest {
   fun m7_conVersioniRecentiCancellate_ilRecuperoNonPartedaUnRegistroVecchio() {
     val tablet = family.approveNewDevice()
     family.changeStatus(tablet, DeviceStatus.LOST) // v3
-    val stateQr = family.state.toAnchor() // mostrato da un dispositivo approvato
+    val stateQr = family.state.toAnchor()!! // mostrato da un dispositivo approvato
     family.common.attackerDelete(NasLayout.registryFile(3))
 
     val tooEarly = RegistrySync(family.common).refresh(null, stateQr)
@@ -411,7 +413,7 @@ class ReviewFixesTest {
   @Test
   fun b4_ilQrMostratoSubitoDopoLaRotazioneFaPartireUnDispositivoNuovo() {
     family.rotate()
-    val qr = family.state.toAnchor()
+    val qr = family.state.toAnchor()!!
 
     val sync = RegistrySync(family.common).refresh(null, qr)
 

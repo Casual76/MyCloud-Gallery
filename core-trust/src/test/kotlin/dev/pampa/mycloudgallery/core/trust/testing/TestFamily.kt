@@ -41,7 +41,7 @@ class TestFamily(
     private set
 
   /** L'ancora che il QR darebbe a un dispositivo nuovo adesso. */
-  fun anchor(): TrustAnchor = state.toAnchor()
+  fun anchor(): TrustAnchor = state.toAnchor()!!
 
   /** L'ancora di un dispositivo configurato a mano (solo impronta, nessuna versione minima). */
   fun manualAnchor(): TrustAnchor = TrustAnchor.create(familyId, familyKey.publicKey.fingerprint, 0)!!
@@ -77,7 +77,18 @@ class TestFamily(
     commit(authority.changeStatus(state, TrustIds.deviceIdOf(device.publicKey), status, frozenHeads))
   }
 
+  /** Rotazione completa: annuncio (chiave vecchia) + versione invariata firmata dalla nuova. */
   fun rotate(): FamilyKey {
+    val next = FamilyKey.generate()
+    val announced = commit(authority.rotateTo(state, next))
+    familyKey = next
+    authority = FamilyAuthority(next, clock)
+    commit(authority.reissue(announced))
+    return next
+  }
+
+  /** Solo l'annuncio, senza la versione firmata dalla chiave nuova (rotazione a meta'). */
+  fun announceRotation(): FamilyKey {
     val next = FamilyKey.generate()
     commit(authority.rotateTo(state, next))
     familyKey = next

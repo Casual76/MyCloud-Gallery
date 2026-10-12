@@ -6,6 +6,9 @@ import dev.pampa.mycloudgallery.core.trust.TrustLimits
 import dev.pampa.mycloudgallery.core.trust.Verdict
 import dev.pampa.mycloudgallery.core.trust.codec.Base32
 import dev.pampa.mycloudgallery.core.trust.ensure
+import dev.pampa.mycloudgallery.core.trust.nas.NasFileSystem
+import dev.pampa.mycloudgallery.core.trust.nas.NasLayout
+import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import dev.pampa.mycloudgallery.core.trust.verdictOf
 import dev.pampa.mycloudgallery.core.trust.violation
 import java.nio.ByteBuffer
@@ -174,6 +177,22 @@ object RecoveryKit {
     } finally {
       ikm.fill(0)
     }
+  }
+}
+
+/**
+ * I kit di recupero nell'area privata dell'admin (revisione 1.4, verifica M4): dopo una rotazione resta sul
+ * NAS il kit della chiave vecchia, che apre una chiave ancora valida per i dispositivi che non hanno visto
+ * l'annuncio. [obsolete] li elenca, cosi' l'app mostra i percorsi esatti da cancellare (la cancellazione
+ * automatica, azione locale confermata, arriva con l'interfaccia "solo i propri file" della Fase 2.4).
+ */
+object RecoveryKitFiles {
+  fun obsolete(adminShare: NasFileSystem, familyId: String, currentKeyFingerprint: String): List<SharePath> {
+    val dir = NasLayout.recoveryKitFile(familyId, currentKeyFingerprint).parent()!!
+    return adminShare.list(dir, TrustLimits.MAX_LIST_REQUESTS).names
+      .filter { it != currentKeyFingerprint && SharePath.isValidComponent(it) }
+      .sorted()
+      .map { dir.child(it) }
   }
 }
 

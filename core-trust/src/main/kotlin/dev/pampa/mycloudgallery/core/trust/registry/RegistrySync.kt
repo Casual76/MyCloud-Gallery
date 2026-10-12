@@ -46,10 +46,19 @@ class RegistrySync(private val commonShare: NasFileSystem) {
     val rejected: RejectionTally,
     /** L'elenco della cartella era oltre il tetto: le versioni dopo un buco potrebbero non essere visibili. */
     val listingTruncated: Boolean,
-    /** Rami firmati dalla famiglia ma incompatibili con quello fidato: allarme, da mostrare all'admin. */
+    /**
+     * Rami firmati dalla famiglia ma incompatibili con lo stato finale: allarme, da mostrare all'admin. I rami
+     * che lo stato finale contiene gia' (uniti in seguito) sono storia e non compaiono (revisione 1.4, N5).
+     */
     val forks: List<RegistryFork>,
     /** Il file della versione fidata mancava ed e' stato ripubblicato da qui. */
     val healed: Boolean,
+    /**
+     * Al posto della versione fidata c'e' un file non valido (revisione 1.4, verifica N3): qualcuno l'ha
+     * sostituita per nasconderla a chi non l'ha ancora vista. Allarme; sul dispositivo admin si ripubblica
+     * subito lo stesso contenuto con un numero nuovo (`FamilyAuthority.reissue`).
+     */
+    val trustedVersionReplaced: Boolean,
     /** Si e' smesso di leggere per il tetto di letture o per troppa spazzatura di fila: si continua la prossima volta. */
     val incomplete: Boolean,
   ) {
@@ -62,9 +71,11 @@ class RegistrySync(private val commonShare: NasFileSystem) {
      */
     val needsAppUpdate: Boolean get() = rejected.count(RejectReason.NEWER_FORMAT) > 0
 
-    /** Equivocazione o regressione firmate dalla famiglia: un admin su una base vecchia, o la chiave usata male. */
-    val tamperingSuspected: Boolean get() = forks.isNotEmpty() ||
-      rejected.count(RejectReason.EQUIVOCATION) > 0 || rejected.count(RejectReason.REGRESSION) > 0
+    /**
+     * Rami attuali (equivocazione o regressione firmate dalla famiglia: un admin su una base vecchia, o la
+     * chiave usata da altri) oppure versione fidata sostituita.
+     */
+    val tamperingSuspected: Boolean get() = forks.isNotEmpty() || trustedVersionReplaced
   }
 
   fun refresh(current: RegistryState?, anchor: TrustAnchor): Result {
@@ -76,21 +87,22 @@ class RegistrySync(private val commonShare: NasFileSystem) {
     var incomplete = false
     val tried = HashSet<Long>()
 
-    fun consider(version: Long, bytes: ByteArray?, tooLarge: Boolean): Boolean {
+    // Vero se il file conta come spazzatura (allunga la serie di file non validi di fila). Le versioni di
+    // un ramo firmato dalla famiglia non sono spazzatura: un ramo lungo non ferma la lettura (N5).
+    fun considerIsJunk(version: Long, bytes: ByteArray?, tooLarge: Boolean): Boolean {
       tried.add(version)
       if (bytes == null) {
         if (tooLarge) tally.add(RejectReason.TOO_LARGE)
-        return false
+        return true
       }
       return when (val verdict = acceptAt(version, bytes, state, anchor)) {
         is Verdict.Accepted -> {
           state = verdict.value
-          true
+          false
         }
         is Verdict.Rejected -> {
           tally.add(verdict.reason)
-          noteFork(verdict.reason, bytes, state, forks)
-          false
+          !noteFork(verdict.reason, bytes, state, forks)
         }
       }
     }
@@ -105,8 +117,7 @@ class RegistrySync(private val commonShare: NasFileSystem) {
       reads++
       val read = commonShare.read(NasLayout.registryFile(version), Envelope.maxFileBytes(DocType.FAMILY_REGISTRY))
       if (read is NasRead.NotFound) break
-      val accepted = consider(version, (read as? NasRead.Data)?.bytes, read is NasRead.TooLarge)
-      junkRun = if (accepted) 0 else junkRun + 1
+      junkRun = if (considerIsJunk(version, (read as? NasRead.Data)?.bytes, read is NasRead.TooLarge)) junkRun + 1 else 0
       version++
     }
 
@@ -124,14 +135,15 @@ class RegistrySync(private val commonShare: NasFileSystem) {
         reads++
         val read = commonShare.read(NasLayout.registryFile(hint), Envelope.maxFileBytes(DocType.FAMILY_REGISTRY))
         if (read is NasRead.NotFound) continue
-        val accepted = consider(hint, (read as? NasRead.Data)?.bytes, read is NasRead.TooLarge)
-        junkRun = if (accepted) 0 else junkRun + 1
+        junkRun = if (considerIsJunk(hint, (read as? NasRead.Data)?.bytes, read is NasRead.TooLarge)) junkRun + 1 else 0
       }
     }
 
     // 3. La versione fidata e' ancora al suo posto? Se e' sparita la si ripubblica; se al suo posto c'e'
     //    un altro contenuto firmato dalla famiglia, e' un'equivocazione da segnalare.
+    //    Un file non valido al suo posto e' una sostituzione: allarme (N3).
     var healed = false
+    var replaced = false
     val trusted = state
     if (trusted != null) {
       val path = NasLayout.registryFile(trusted.registry.version)
@@ -141,14 +153,20 @@ class RegistrySync(private val commonShare: NasFileSystem) {
           val verdict = RegistryVerifier.accept(read.bytes, trusted, anchor)
           if (verdict is Verdict.Rejected) {
             tally.add(verdict.reason)
-            noteFork(verdict.reason, read.bytes, trusted, forks)
+            if (!noteFork(verdict.reason, read.bytes, trusted, forks)) replaced = true
           }
         }
-        NasRead.TooLarge -> tally.add(RejectReason.TOO_LARGE)
+        NasRead.TooLarge -> {
+          tally.add(RejectReason.TOO_LARGE)
+          replaced = true
+        }
       }
     }
 
-    return Result(state, changed = state !== current, tally, listing.truncated, forks, healed, incomplete)
+    // I rami che lo stato finale contiene gia' sono storia (uniti piu' avanti): niente allarme (N5).
+    val finalRegistry = trusted?.registry
+    val liveForks = if (finalRegistry == null) forks else forks.filterNot { finalRegistry.dominates(it.registry) }
+    return Result(state, changed = state !== current, tally, listing.truncated, liveForks, healed, replaced, incomplete)
   }
 
   private fun acceptAt(version: Long, bytes: ByteArray, state: RegistryState?, anchor: TrustAnchor): Verdict<RegistryState> {
@@ -159,10 +177,12 @@ class RegistrySync(private val commonShare: NasFileSystem) {
     return verdict
   }
 
-  private fun noteFork(reason: RejectReason, bytes: ByteArray, state: RegistryState?, forks: MutableList<RegistryFork>) {
-    if (state == null || (reason != RejectReason.EQUIVOCATION && reason != RejectReason.REGRESSION)) return
-    val fork = RegistryVerifier.readFork(bytes, state)
-    if (fork is Verdict.Accepted && forks.none { it.contentHash == fork.value.contentHash }) forks.add(fork.value)
+  /** Vero se il file e' un ramo firmato dalla famiglia (e lo annota). */
+  private fun noteFork(reason: RejectReason, bytes: ByteArray, state: RegistryState?, forks: MutableList<RegistryFork>): Boolean {
+    if (state == null || (reason != RejectReason.EQUIVOCATION && reason != RejectReason.REGRESSION)) return false
+    val fork = RegistryVerifier.readFork(bytes, state) as? Verdict.Accepted ?: return false
+    if (forks.none { it.contentHash == fork.value.contentHash }) forks.add(fork.value)
+    return true
   }
 }
 

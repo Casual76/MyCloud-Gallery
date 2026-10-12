@@ -68,16 +68,33 @@ class RegistryState internal constructor(
 
   /**
    * L'ancora da mostrare in un QR (dispositivo nuovo, recupero dell'admin): id della famiglia, impronta della
-   * chiave che ha firmato QUESTA versione e questa versione come minimo. Funziona anche subito dopo una
-   * rotazione (revisione 1.4, B4): il dispositivo nuovo accetta l'annuncio e poi segue il successore.
+   * chiave che ha firmato QUESTA versione e questa versione come minimo.
+   *
+   * Null mentre la versione corrente e' un annuncio di rotazione non ancora seguito da una versione firmata
+   * dalla chiave nuova (revisione 1.4, verifica N4): un QR mostrato li' ancorerebbe i dispositivi nuovi alla
+   * chiave vecchia, forse sospetta. La rotazione si completa con [FamilyAuthority.rotate].
    */
-  fun toAnchor(): TrustAnchor = TrustAnchor.create(registry.familyId, signerKey.fingerprint, registry.version)!!
+  fun toAnchor(): TrustAnchor? =
+    if (registry.successorKey != null) null else TrustAnchor.create(registry.familyId, signerKey.fingerprint, registry.version)
+
+  /**
+   * Recupero dell'admin (revisione 1.4, verifica M7): la chiave aperta dal kit deve essere quella che firma
+   * il registro sincronizzato con l'ancora del QR di stato. Se no, il QR veniva da un dispositivo che
+   * ancora la fiducia a un'altra chiave (o il kit e' di una chiave ruotata): ci si ferma subito.
+   */
+  fun acceptsRecoveredKey(key: EcPublicKey): Boolean = trustedFamilyKey == key
 }
 
 /** Un ramo del registro firmato dalla famiglia ma incompatibile con quello fidato: da mostrare all'admin. */
 class RegistryFork(val registry: FamilyRegistry, val contentHash: String) {
   /** I dispositivi che esistono solo in questo ramo: quelli da riconoscere prima di unirlo. */
   fun devicesOnlyHere(current: FamilyRegistry): List<DeviceEntry> = registry.devices.filter { current.device(it.id) == null }
+
+  /**
+   * Il ramo ha una configurazione diversa (per esempio un altro `nasHost`): l'unione tiene quella dell'admin
+   * che unisce, quindi la schermata lo deve dire e far scegliere (revisione 1.4, domanda 10).
+   */
+  fun configDiffers(current: FamilyRegistry): Boolean = registry.config != current.config
 }
 
 /**
@@ -114,7 +131,7 @@ object RegistryVerifier {
   /**
    * Un ramo diverso firmato dalla famiglia (rifiutato per [RejectReason.EQUIVOCATION] o
    * [RejectReason.REGRESSION]): lo si legge senza accettarlo, per mostrarlo all'admin che decide se unirlo
-   * ([FamilyAuthority.mergeFork]) o, se non lo riconosce, reimpostare la famiglia (chiave rubata).
+   * ([FamilyAuthority.mergeForks]) o, se non lo riconosce, rifiutarlo ([FamilyAuthority.rejectForks]) e reimpostare la famiglia.
    */
   fun readFork(bytes: ByteArray, current: RegistryState): Verdict<RegistryFork> = verdictOf {
     val envelope = Envelope.open(bytes, DocType.FAMILY_REGISTRY)

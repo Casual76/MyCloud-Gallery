@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Stato** | Fase 1.4, 12/10/2026, **aggiornato dopo la revisione di sicurezza** (`docs/review/1.4-core-trust.md`). Formato **versione 1**. Nessun dato e' ancora stato scritto sul NAS. |
+| **Stato** | Fase 1.4, 12/10/2026, **aggiornato dopo la revisione di sicurezza e la sua verifica** (`docs/review/1.4-core-trust.md`, due giri). Formato **versione 1**. Nessun dato e' ancora stato scritto sul NAS. |
 | **Codice** | modulo `:core-trust` (`dev.pampa.mycloudgallery.core.trust`); la mappa sezione → file → test e' al §14. |
 | **Sigle** | `E-xx` = casi limite del piano; `C1`…`C23`, `L1`…`L17`, `S1`…`S12` = `docs/sicurezza.md`; `A1`…`I10` = voci della revisione. |
 | **Regola** | Ogni costante citata qui esiste identica nel codice (`TrustFormat`, `TrustLimits`). Cambiarne una vuol dire cambiare questo documento. |
@@ -112,7 +112,9 @@ Non ci sono cancellazione, spostamento o sovrascrittura (un test lo verifica, §
   `MAX_JUNK_RUN` (32) nomi non validi di fila: oltre, chi legge si ferma per quel giro (limite al lavoro che
   uno scrittore ostile puo' imporre, B5) e chi pubblica riceve l'elenco esatto dei file da cancellare.
 - **Due scrittori sullo stesso numero: vince il primo.** L'altro trova al suo posto una versione valida piu'
-  nuova e deve risincronizzarsi (due admin che approvano insieme non si sovrascrivono).
+  nuova e deve risincronizzarsi (due admin che approvano insieme non si sovrascrivono). Prima di firmare al
+  primo nome libero si guardano anche gli indizi dell'elenco **oltre** quel nome: una versione valida dopo un
+  buco vuol dire che la base e' vecchia, e non si pubblica nel buco (verifica N2).
 - **Contenuti per impronta.** I segmenti si chiamano con lo SHA-256 del loro contenuto: immutabili, senza
   conflitti.
 - **Pulizia dei propri file vecchi** (teste superate, segmenti non piu' elencati, generazioni di
@@ -212,8 +214,12 @@ chiave intera, non l'impronta (I7).
 - La **cassaforte**: AES-256-GCM con una chiave del Keystore, StrongBox se c'e', non estraibile e
   **utilizzabile solo a telefono sbloccato** (`setUnlockedDeviceRequired`, revisione M3: la chiave di famiglia
   serve solo in operazioni interattive, quindi un telefono rubato acceso e bloccato, o uno strumento forense,
-  non la decifra). Il file sta nello spazio privato dell'app, escluso da backup e trasferimenti. Chiedere in
-  piu' l'impronta o il PIN a ogni uso e' la decisione 2 del §13.
+  non la decifra). "Solo sbloccato" non vale nulla su un telefono senza blocco schermo sicuro: la cassaforte
+  **rifiuta di lavorare** se il dispositivo non ha PIN, sequenza o password (`isDeviceSecure`, verifica M3 e
+  domanda 9), quindi **il dispositivo admin deve avere un blocco schermo sicuro** (l'onboarding lo chiede
+  prima di creare la chiave di famiglia; per gli altri dispositivi resta l'avviso di E-S3). Il file sta nello
+  spazio privato dell'app, escluso da backup e trasferimenti. Chiedere in piu' l'impronta o il PIN a ogni uso
+  e' la decisione 2 del §13: protegge anche dal malware che agisce a telefono sbloccato.
 - E' **estraibile per costruzione**: deve poter stare nel kit e su un secondo dispositivo admin. In chiaro
   esiste solo in memoria, durante un'operazione dell'admin.
 - Firma **solo** il registro di famiglia. Non firma dati dell'indice: per quelli il dispositivo admin usa la
@@ -261,30 +267,48 @@ indietro, o un admin appena recuperato, e chiunque con accesso SMB poteva cancel
 revoca) perche' la versione successiva **riapprovasse in silenzio** un dispositivo revocato. Ora quella
 versione e' rifiutata da tutti i dispositivi che hanno visto la revoca, con un allarme.
 
-`EQUIVOCATION` e `REGRESSION` di un registro **firmato dalla famiglia** sono un allarme in Diagnostica
-(`tamperingSuspected`) e producono un **ramo** (`RegistryFork`), mostrato all'admin con l'elenco dei
-dispositivi che compaiono solo li'. L'admin:
+`EQUIVOCATION` e `REGRESSION` di un registro **firmato dalla famiglia** producono un **ramo**
+(`RegistryFork`): allarme in Diagnostica (`tamperingSuspected`) e, all'admin, l'elenco dei dispositivi che
+compaiono solo li' e l'avviso se il ramo ha una configurazione diversa (`configDiffers`, domanda 10).
 
-- se lo riconosce (tipicamente l'approvazione fatta dal secondo admin rimasto indietro), lo **unisce**
-  (`FamilyAuthority.mergeFork`): ogni dispositivo con lo stato piu' severo dei due rami, le teste congelate
-  in comune, la configurazione del ramo dell'admin. L'unione non e' una regressione per nessuno dei due rami,
-  quindi la accettano tutti i dispositivi e nessuna revoca va persa;
-- se non lo riconosce, la chiave di famiglia e' stata usata da qualcun altro: **reset della famiglia**
-  (§4.10). L'unione non avviene mai da sola.
+**Un registro "contiene" un ramo** (`dominates`) se nessun dispositivo del ramo manca o e' meno severo (stessa
+chiave, stesso account, stato uguale o piu' severo, teste congelate non in piu'), e il ramo non contiene una
+rotazione. Un registro che contiene un ramo e' accettato anche dai dispositivi rimasti su quel ramo. E' la
+regola che rende sempre possibile **uscire** da qualunque numero di rami, di qualunque lunghezza (verifica
+N1: prima un ramo di due o piu' versioni bloccava ogni pubblicazione, revoche comprese). L'admin, sulla
+**stessa modifica** che voleva pubblicare (per esempio una revoca):
+
+- se riconosce i rami (tipicamente il secondo admin rimasto indietro), li **unisce tutti**
+  (`FamilyAuthority.mergeForks`): ogni dispositivo con lo stato piu' severo, le teste congelate in comune, la
+  configurazione dell'admin (se il ramo ne aveva un'altra, la schermata lo mostra e l'admin sceglie);
+- se non li riconosce (la chiave di famiglia l'ha usata qualcun altro), li **rifiuta**
+  (`FamilyAuthority.rejectForks`): come l'unione, ma i dispositivi che esistono solo nei rami entrano
+  **revocati**; poi **reset della famiglia** (§4.10).
+
+In entrambi i casi la versione pubblicata contiene i rami, quindi la accettano tutti i dispositivi, la
+modifica dell'admin esce e nessuna revoca va persa. Nessuna unione avviene da sola. I rami che lo stato
+finale di un dispositivo contiene gia' sono **storia**: chi risale le versioni li attraversa senza allarme e
+senza contarli come spazzatura (N5).
 
 **Lettura dal NAS** (`RegistrySync`): per nome dalla versione successiva a quella nota (§2.3), poi gli indizi
 dell'elenco, e infine il controllo della **versione fidata**: se il suo file e' sparito dal NAS lo si
 **ripubblica** (`healed`), cosi' cancellare la versione con una revoca non basta a nasconderla a chi non l'ha
 ancora vista; se al suo posto c'e' un altro contenuto firmato dalla famiglia, e' un'equivocazione (allarme e
-ramo). **Lo stato locale non e' mai sostituito da qualcosa di piu' vecchio, non verificato o che torna
+ramo); se al suo posto c'e' un file non valido, e' una **sostituzione** (`trustedVersionReplaced`, allarme):
+sostituirla con spazzatura ne ritarda l'arrivo a chi non l'ha ancora vista fino alla ripubblicazione
+dell'admin, che l'allarme fa partire (`FamilyAuthority.reissue`: lo stesso contenuto con un numero nuovo;
+verifica N3). **Lo stato locale non e' mai sostituito da qualcosa di piu' vecchio, non verificato o che torna
 indietro**: nel caso peggiore si continua con l'ultimo registro accettato e la Diagnostica lo dice
 (`newerUnverified`, `listingTruncated`, `incomplete`, `needsAppUpdate`, `tamperingSuspected`).
 
 **Pubblicazione** (`FamilyAuthority.commit`): l'admin prepara una modifica sulla base del registro fidato,
-poi legge per nome `v+1`, `v+2`, …: nome libero → firma con quel numero e pubblica; versione valida piu'
-nuova → `NewerExists` (risincronizzarsi e rifare la modifica: un admin non firma mai su una base che sa
-vecchia); ramo firmato dalla famiglia → `Fork`; registro di un'app piu' nuova → `NeedsAppUpdate`; spazzatura
-→ si scavalca e si riporta; troppa spazzatura di fila → `Blocked` con l'elenco esatto dei file da cancellare.
+poi controlla il nome della base (un altro contenuto firmato li' e' un ramo) e legge per nome `v+1`, `v+2`,
+…: versione valida piu' nuova → `NewerExists` (risincronizzarsi e rifare la modifica: un admin non firma mai
+su una base che sa vecchia); registro di un'app piu' nuova → `NeedsAppUpdate`; ramo che la modifica contiene
+gia' → si scavalca; spazzatura → si scavalca e si riporta; troppa spazzatura di fila → `Blocked` con
+l'elenco esatto dei file da cancellare. Al primo nome libero guarda anche gli indizi dell'elenco oltre quel
+nome (N2). Se restano rami che la modifica non contiene → `Fork` con **tutti** i rami trovati; altrimenti
+firma con l'ora di emissione non inferiore a quella di ogni ramo scavalcato e pubblica.
 
 **Memoria locale**: ogni dispositivo salva nello spazio privato i byte dell'ultimo registro accettato e
 l'impronta della chiave che lo ha firmato; al riavvio li riverifica (`RegistryVerifier.restore`).
@@ -313,7 +337,9 @@ rete.
      e' nella stessa stanza);
    - **codice digitato**: 16 caratteri (`ABCD-EFGH-JKMN-PQRS`, primi 80 bit di SHA-256 della chiave,
      `ApprovalCodes`) che l'admin **digita** leggendoli sullo schermo del dispositivo nuovo; non si
-     "confrontano a vista", perche' a vista si controllano pochi caratteri.
+     "confrontano a vista", perche' a vista si controllano pochi caratteri. Requisito per la schermata della
+     Fase 2.3 (verifica N6): `ApprovalProof.TypedCode` si costruisce **solo** dal testo digitato; il campo
+     parte vuoto, non si precompila ne' si incolla dalla richiesta, e un test dell'interfaccia lo verifica.
 
    La chiave del richiedente e' leggibile nell'area comune prima dell'approvazione, quindi chi vuole farsi
    approvare al posto del dispositivo vero puo' cercare con calma una chiave con lo stesso codice: con 50 bit
@@ -369,9 +395,10 @@ Il QR dell'app (piano 2.3) porta, oltre a indirizzi, utente, aree e preset (mai 
 - l'**impronta della chiave che ha firmato la versione corrente** del registro;
 - la **versione minima del registro** (quella corrente quando il QR viene mostrato).
 
-Usare la chiave che ha firmato la versione corrente fa funzionare anche un QR mostrato subito dopo una
-rotazione (revisione B4): il dispositivo nuovo accetta l'annuncio, firmato dalla chiave vecchia, e da li'
-segue la nuova. Lo stesso QR ("stato della famiglia") lo puo' mostrare **qualunque dispositivo approvato**: e'
+La rotazione si pubblica **completa** (`FamilyAuthority.rotate`): l'annuncio firmato dalla chiave vecchia e
+subito una versione firmata dalla nuova, cosi' il QR mostra gia' la chiave nuova (B4). Finche' la versione
+corrente e' solo l'annuncio, **non c'e' QR** (`toAnchor` restituisce null, verifica N4): un QR li' ancorerebbe
+i dispositivi nuovi alla chiave vecchia, forse sospetta. Lo stesso QR ("stato della famiglia") lo puo' mostrare **qualunque dispositivo approvato**: e'
 l'ancora del recupero dell'admin (§4.8).
 
 Senza QR, la procedura manuale chiede l'id della famiglia e l'impronta, che l'utente **digita per intero
@@ -424,9 +451,11 @@ pubblica stiano insieme (firma di prova). Tetto: 1 KiB.
    corrente): cosi' chi ha cancellato le versioni recenti non fa partire l'admin recuperato da un registro
    vecchio. Se nessun dispositivo e' a portata, si parte con versione minima 0 e la Diagnostica avverte
    finche' non si vede un dispositivo aggiornato;
-3. si sincronizza il registro dal NAS e si approva il dispositivo nuovo (`admin = true`) con la scansione
-   della sua chiave; il vecchio si segna come perso o revocato. Le impronte nei QR gia' distribuiti restano
-   valide.
+3. si sincronizza il registro dal NAS e si controlla che la chiave aperta dal kit sia **quella che firma** il
+   registro sincronizzato (`RegistryState.acceptsRecoveredKey`): se no, il QR di stato veniva da un
+   dispositivo che ancora la fiducia a un'altra chiave, e ci si ferma subito (nota della verifica su M7);
+4. si approva il dispositivo nuovo (`admin = true`) con la scansione della sua chiave; il vecchio si segna
+   come perso o revocato. Le impronte nei QR gia' distribuiti restano valide.
 
 ### 4.9 Il secondo dispositivo admin
 
@@ -440,11 +469,14 @@ revoche dell'altro: diventa un ramo da unire (§4.4).
 
 - **Rotazione** (manutenzione, o il foglio del codice forse visto da qualcuno, ma il file nell'area privata
   al sicuro): la versione pubblicata dalla rotazione, firmata dalla chiave attuale, contiene `successorKey`;
-  da li' in poi firma solo la nuova (`FamilyAuthority.rotateTo`). Ogni dispositivo che accetta l'annuncio
-  smette per sempre di accettare la vecchia chiave. Subito dopo si genera e si stampa un kit nuovo, **con un
-  codice nuovo**, che si pubblica nel suo posto (`recovery/<famiglia>/<impronta nuova>`); il kit vecchio si
-  **cancella** dall'area privata dell'admin come azione locale confermata (Fase 2.4), e la guida lo dice: la
-  chiave vecchia vale ancora per i dispositivi che non hanno visto l'annuncio. Un QR mostrato subito dopo la
+  da li' in poi firma solo la nuova; la rotazione si pubblica completa, con una versione firmata dalla nuova
+  subito dopo l'annuncio (`FamilyAuthority.rotate`, §4.7). Ogni dispositivo che accetta l'annuncio smette per
+  sempre di accettare la vecchia chiave. Subito dopo si genera e si stampa un kit nuovo, **con un codice
+  nuovo**, che si pubblica nel suo posto (`recovery/<famiglia>/<impronta nuova>`); il kit vecchio va
+  **cancellato** dall'area privata dell'admin: la chiave vecchia vale ancora per i dispositivi che non hanno
+  visto l'annuncio. `RecoveryKitFiles.obsolete` elenca i percorsi esatti dei kit da cancellare; finche' la
+  Fase 2.4 non porta la cancellazione come azione locale confermata, l'app li mostra e la guida chiede di
+  cancellarli a mano dal PC, e la rotazione non risulta conclusa finche' l'elenco non e' vuoto (verifica M4). Un QR mostrato subito dopo la
   rotazione funziona (§4.7). Se qualcuno cancella l'annuncio dal NAS, chi l'aveva visto lo ripubblica (§4.4).
   La rotazione **non** protegge da una chiave gia' rubata: il ladro potrebbe annunciare un suo successore.
 - **Reset della famiglia** (chiave di famiglia persa senza kit, o rubata, o un ramo firmato che l'admin non
@@ -803,7 +835,7 @@ Malware con i privilegi dell'app (o root) su un telefono di famiglia (S5).
 
 | Puo' | Non puo' |
 |---|---|
-| Tutto quello del §11.1, nei limiti dei permessi del suo account sul NAS. In particolare **ritardare la pubblicazione della propria revoca** riempiendo o cancellando i nomi del registro, finche' la password NAS del suo account non viene cambiata (per questo la guida dice: segnalare, revocare, cambiare la password). | Firmare a nome di un altro dispositivo o della famiglia; approvare dispositivi; cambiare la configurazione. |
+| Tutto quello del §11.1, nei limiti dei permessi del suo account sul NAS. In particolare **ritardare la pubblicazione della propria revoca** riempiendo i nomi del registro di spazzatura (33 file bastano) o cancellandoli, e riscrivendoli appena vengono tolti, finche' la password NAS del suo account non viene cambiata: con la scrittura nell'area comune nessun nome prevedibile si puo' proteggere, e i nomi imprevedibili andrebbero cercati nell'elenco, che si puo' inondare. Per questo, quando la pubblicazione risponde `Blocked`, la guida fa cambiare **prima** la password NAS dell'account sospetto e solo dopo cancellare i file elencati e ripubblicare. | Firmare a nome di un altro dispositivo o della famiglia; approvare dispositivi; cambiare la configurazione. |
 | Finche' non e' revocato, **firmare dati falsi con la sua chiave**: voci dell'indice sbagliate (miniature, testo, vettori → ricerche ingannevoli), finti record del cestino (solo viste), finte definizioni di album (solo viste). | Far eliminare o spostare file tramite l'app degli altri (§9). |
 | Tenere occupate risorse con prenotazioni (al massimo un'ora alla volta, rinnovabili): rallenta l'indicizzazione. | Influire sui dati personali degli altri account (validi solo dallo stesso account). |
 | Alterare i dati personali del **suo** account. Se si conferma la decisione 3 del §13, far azzerare gli altri dispositivi del suo account (nessun file perso, solo una nuova approvazione). | Portare via la chiave dal Keystore: dopo la revoca non vale piu' nulla di cio' che ha firmato, nemmeno se retrodatato. |
@@ -851,16 +883,24 @@ eliminare su quel dispositivo. Un orologio all'indietro non fa eliminare nulla.
    operazioni dell'admin; il dispositivo admin e' il punto piu' delicato.
 7. **Revocare costa lavoro**: tutti i dati del dispositivo revocato si scartano e si ricalcolano.
 8. **Il NAS e' fidato per l'ora** (§11.4) e chiunque scriva nelle share puo' sempre fare negazione del
-   servizio, compreso ritardare la pubblicazione di una revoca finche' non gli si toglie l'accesso (§11.2).
+   servizio, compreso ritardare la pubblicazione di una revoca finche' non gli si toglie l'accesso (§11.2:
+   prima la password NAS, poi la revoca), o sostituire una versione appena pubblicata con spazzatura e
+   ritardarne l'arrivo fino alla ripubblicazione dell'admin (§4.4).
 9. **Riservatezza**: l'indice non e' cifrato sul NAS; lo protegge solo il permesso della share (come i media).
    Il registro, nell'area comune, mostra a tutti i dispositivi della famiglia (L11).
 10. **Account dichiarato**: finche' non arriva la prova di possesso (Fase 2.3), l'account del NAS di un
-    dispositivo e' quello che dichiara e che l'admin conferma (B6).
+    dispositivo e' quello che dichiara e che l'admin conferma (B6). Vincolo: la prova di possesso deve
+    esistere **prima** di qualunque potere legato all'account (segnalazioni "perso" della decisione 3(a),
+    unione dei dati personali della Fase 4.7), altrimenti diventa un modo per azzerare i dispositivi di un
+    altro familiare.
 11. **Chiave di famiglia rubata**: una versione del ladro che *aggiunge* soltanto (nessuna regressione) e
     arriva prima di quelle dell'admin viene accettata senza allarme; l'admin la vede nell'elenco dei
     dispositivi. Un allarme dedicato (l'app dell'admin ricorda le impronte delle versioni che ha firmato e
     segnala quelle che non riconosce) e' rimandato alla Fase 2.3 (B10).
 12. **I file nel cestino conservano i byte dei media** (§2.1, I6).
+13. **La protezione della cassaforte a telefono bloccato** e' verificata solo come politica della chiave
+    (non bloccando davvero il telefono nei test), e non protegge dal malware che agisce a telefono sbloccato
+    (decisione 2).
 
 ---
 
@@ -869,7 +909,7 @@ eliminare su quel dispositivo. Un orologio all'indietro non fa eliminare nulla.
 | # | Decisione | Opzioni (la prima e' quella consigliata e gia' scritta nel codice, salvo dove indicato) |
 |---|---|---|
 | 1 | Dove tenere il file cifrato del kit | **(a)** area privata dell'admin sul NAS + foglio con codice, id e impronta: servono entrambi. (b) In piu', il file stampato come QR su un secondo foglio tenuto altrove: sopravvive alla perdita dell'area privata, ma chi trova i due fogli insieme ha la chiave. (c) File e codice sullo stesso foglio in cassaforte: un solo pezzo da proteggere. |
-| 2 | Credenziale del telefono per usare la chiave di famiglia | **(a)** impronta/PIN del telefono a ogni operazione dell'admin (approvare, revocare, ruotare, unire): le operazioni sono sempre interattive; si realizza in Fase 2.2 con la cassaforte che chiede l'autenticazione. (b) Nessuna richiesta oltre al telefono sbloccato (come il codice di oggi, dopo la revisione M3). |
+| 2 | Credenziale del telefono per usare la chiave di famiglia | **(a)** impronta/PIN del telefono a ogni operazione dell'admin (approvare, revocare, ruotare, unire): le operazioni sono sempre interattive; si realizza in Fase 2.2 con la cassaforte che chiede l'autenticazione. (b) Nessuna richiesta oltre al telefono sbloccato con blocco schermo sicuro obbligatorio (come il codice di oggi, dopo la revisione M3 e la sua verifica). |
 | 3 | Segnalazione "perso" fatta dal proprietario senza l'admin | **(a)** come dice il piano ("l'admin o il proprietario"): un altro dispositivo dello stesso account puo' far azzerare il dispositivo perso appena si ricollega; un dispositivo compromesso dello stesso account potrebbe pero' far azzerare i suoi "fratelli" (nessun file perso, nuova approvazione). (b) Solo l'admin. |
 | 4 | Dati di un dispositivo revocato | **(a)** tutti scartati e ricalcolati; con la *dismissione* si congelano le teste gia' verificate. (b) Tenere quelli "firmati prima della revoca": sconsigliato, la data la scrive il dispositivo stesso. |
 | 5 | Durata massima di una prenotazione | **(a)** 1 ora con rinnovo. (b) Piu' corta (15 min: meno attesa se un dispositivo muore, piu' scritture) o piu' lunga. |
@@ -889,8 +929,8 @@ e C23 hanno ora codice e test; L11 e i limiti del §12 vanno riportati li' alla 
 | §3.1 | `codec/Base32.kt` | `Base32AndTextTest` |
 | §3.2 | `codec/CanonicalJson.kt`, `codec/Fields.kt` | `CanonicalJsonTest` |
 | §4.1–4.3 | `crypto/Keys.kt` (`EcdsaDer`, `P256`), `crypto/FamilyKey.kt`, `crypto/AndroidKeystore.kt` | `EnvelopeTest`, `ReviewFixesTest` (A3, B3); sul dispositivo `KeystoreDeviceTest` (androidTest) |
-| §4.4–4.7, §4.10 | `registry/*.kt` | `RegistryTest`, `ReviewFixesTest` (A1, A2, M1, M2, B4, B5, I9) |
-| §4.8–4.9 | `crypto/RecoveryKit.kt` | `RecoveryKitTest`, `ReviewFixesTest` (M4, M7) |
+| §4.4–4.7, §4.10 | `registry/*.kt` | `RegistryTest`, `ReviewFixesTest` (A1, A2, M1, M2, B4, B5, I9), `ReviewRound2Test` (N1–N5, M7) |
+| §4.8–4.9 | `crypto/RecoveryKit.kt` (`RecoveryKitFiles`) | `RecoveryKitTest`, `ReviewFixesTest` (M4, M7), `ReviewRound2Test` (M4, M3: cassaforte) |
 | §5.1–5.2 | `envelope/Envelope.kt`, `registry/DeviceTrust.kt` | `EnvelopeTest`, `DeviceHeadTest`, `ReviewFixesTest` (A3) |
 | §5.5 | `data/DeviceHead.kt` | `DeviceHeadTest` |
 | §5.6, §6 | `data/Leases.kt` | `LeaseTest`, `ReviewFixesTest` (M6) |

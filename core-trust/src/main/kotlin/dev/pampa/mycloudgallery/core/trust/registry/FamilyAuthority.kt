@@ -26,8 +26,6 @@ class SignedRegistry(val registry: FamilyRegistry, bytes: ByteArray) {
 class RegistryDraft internal constructor(
   val base: RegistryState,
   internal val content: FamilyRegistry,
-  /** Rami che l'admin ha scelto di unire: i loro file si scavalcano senza contarli come spazzatura. */
-  internal val mergedForks: Set<String> = emptySet(),
 )
 
 sealed interface CommitResult {
@@ -41,11 +39,13 @@ sealed interface CommitResult {
   data object NeedsAppUpdate : CommitResult
 
   /**
-   * Un ramo diverso firmato con la chiave di famiglia (un admin che ha lavorato su una base vecchia, oppure
-   * la chiave e' stata rubata). L'admin lo guarda: se lo riconosce lo unisce ([FamilyAuthority.mergeFork]),
-   * altrimenti reimposta la famiglia.
+   * Rami diversi firmati con la chiave di famiglia che la modifica non contiene ancora (un admin che ha
+   * lavorato su una base vecchia, oppure la chiave e' stata usata da altri): tutti quelli trovati, non solo
+   * il primo. L'admin li guarda e riprova con [FamilyAuthority.mergeForks] (li riconosce) o
+   * [FamilyAuthority.rejectForks] (non li riconosce: i loro dispositivi entrano revocati, poi reset). In
+   * entrambi i casi la sua modifica, per esempio una revoca, esce insieme.
    */
-  class Fork(val path: SharePath, val fork: RegistryFork) : CommitResult
+  class Fork(val forks: List<RegistryFork>) : CommitResult
 
   /**
    * Troppi nomi consecutivi occupati da file non validi ([TrustLimits.MAX_JUNK_RUN]): la revoca non si
@@ -124,67 +124,141 @@ class FamilyAuthority(private val familyKey: FamilyKey, private val clock: NasCl
   }
 
   /**
-   * Unisce un ramo che l'admin ha riconosciuto (tipicamente il secondo dispositivo admin che ha lavorato su
-   * una base vecchia): ogni dispositivo con lo stato piu' severo dei due rami. La versione che ne esce e'
-   * accettata dai dispositivi di entrambi i rami, e le revoche di nessuno dei due vanno perse.
+   * Ripubblica il registro fidato invariato con un numero nuovo: quando la versione fidata e' stata
+   * sostituita da spazzatura sul NAS (revisione 1.4, verifica N3) o per completare una rotazione.
    */
-  fun mergeFork(state: RegistryState, fork: RegistryFork): RegistryDraft {
-    val current = authorized(state)
-    require(fork.registry.successorKey == null) { "Il ramo contiene una rotazione: serve il reset della famiglia." }
-    return RegistryDraft(state, current.joinWith(fork.registry), setOf(fork.contentHash))
+  fun reissue(state: RegistryState): RegistryDraft = RegistryDraft(state, authorized(state))
+
+  /**
+   * Unisce alla modifica [draft] i rami che l'admin ha riconosciuto (tipicamente il secondo dispositivo admin
+   * rimasto indietro): ogni dispositivo con lo stato piu' severo. La versione che ne esce contiene tutti i
+   * rami, quindi la accettano i dispositivi di ogni ramo e nessuna revoca va persa.
+   */
+  fun mergeForks(draft: RegistryDraft, forks: List<RegistryFork>): RegistryDraft = join(draft, forks, revokeUnknown = false)
+
+  /**
+   * L'uscita da rami che l'admin NON riconosce (la chiave di famiglia l'ha usata qualcun altro): come
+   * [mergeForks], ma i dispositivi che esistono solo nei rami entrano revocati. Tutti i dispositivi
+   * accettano la versione e quei dispositivi non valgono per nessuno; poi si fa il reset della famiglia.
+   */
+  fun rejectForks(draft: RegistryDraft, forks: List<RegistryFork>): RegistryDraft = join(draft, forks, revokeUnknown = true)
+
+  private fun join(draft: RegistryDraft, forks: List<RegistryFork>, revokeUnknown: Boolean): RegistryDraft {
+    authorized(draft.base)
+    var content = draft.content
+    for (fork in forks) {
+      require(fork.registry.successorKey == null) { "Un ramo contiene una rotazione: serve il reset della famiglia." }
+      content = content.joinWith(fork.registry, revokeUnknown)
+    }
+    return RegistryDraft(draft.base, content)
   }
 
   /**
-   * Numera, firma e pubblica [draft]: il numero e' il primo nome libero dopo la base, letto per nome
-   * (`v+1`, `v+2`, …) e non dall'elenco. I nomi occupati da spazzatura si scavalcano (al massimo
-   * [TrustLimits.MAX_JUNK_RUN] di fila) e si riportano; un registro valido piu' nuovo o un ramo diverso
-   * fermano la pubblicazione. Le versioni possono quindi avere buchi.
+   * Numera, firma e pubblica [draft] (`docs/formato-nas.md` §4.4, "Pubblicazione"):
+   *
+   * 1. il nome della versione fidata: se c'e' un altro contenuto firmato dalla famiglia, e' un ramo;
+   * 2. i nomi dopo la base, letti per nome fino al primo libero: un registro valido piu' nuovo ferma
+   *    (`NewerExists`), un registro di un'app piu' nuova ferma (`NeedsAppUpdate`), la spazzatura si scavalca
+   *    (al massimo [TrustLimits.MAX_JUNK_RUN] di fila), un ramo che la modifica gia' contiene si scavalca;
+   * 3. gli indizi dell'elenco OLTRE il nome libero (revisione 1.4, verifica N2): una versione valida dopo un
+   *    buco vuol dire base vecchia (`NewerExists`), un ramo li' va considerato come al punto 2;
+   * 4. se restano rami non contenuti, `Fork` con tutti; altrimenti si firma al nome libero con l'ora di
+   *    emissione non inferiore a quella di ogni ramo scavalcato, cosi' la accettano anche i loro dispositivi.
    */
   fun commit(commonShare: NasFileSystem, draft: RegistryDraft): CommitResult {
     authorized(draft.base)
+    repeat(3) {
+      // Un altro scrittore puo' prendere il nome libero un istante prima: si riprova.
+      val attempt = attemptCommit(commonShare, draft)
+      if (attempt != null) return attempt
+    }
+    return CommitResult.NewerExists
+  }
+
+  /** Un tentativo di [commit]; null se il nome libero e' stato preso da altri nel frattempo. */
+  private fun attemptCommit(commonShare: NasFileSystem, draft: RegistryDraft): CommitResult? {
     val base = draft.base
-    val anchor = base.toAnchor()
+    val anchor = TrustAnchor.create(base.registry.familyId, base.signerKey.fingerprint, base.registry.version)!!
+    val maxBytes = Envelope.maxFileBytes(DocType.FAMILY_REGISTRY)
     val skipped = ArrayList<SharePath>()
+    val forks = ArrayList<RegistryFork>()
+    var issuedAtFloor = base.registry.issuedAt
+
+    // Un file che non e' un registro valido piu' nuovo: ramo gia' contenuto, ramo da mostrare, o spazzatura (false).
+    fun classify(bytes: ByteArray, reason: RejectReason): Boolean {
+      if (reason != RejectReason.REGRESSION && reason != RejectReason.EQUIVOCATION) return false
+      val fork = (RegistryVerifier.readFork(bytes, base) as? Verdict.Accepted)?.value ?: return false
+      if (draft.content.dominates(fork.registry)) {
+        issuedAtFloor = maxOf(issuedAtFloor, fork.registry.issuedAt)
+      } else if (forks.none { it.contentHash == fork.contentHash }) {
+        forks.add(fork)
+      }
+      return true
+    }
+
+    // 1. La versione fidata e' ancora quella al suo nome?
+    val atBase = commonShare.read(NasLayout.registryFile(base.registry.version), maxBytes)
+    if (atBase is NasRead.Data) {
+      val verdict = RegistryVerifier.accept(atBase.bytes, base, anchor)
+      if (verdict is Verdict.Rejected) classify(atBase.bytes, verdict.reason)
+    }
+
+    // 2. Dopo la base, per nome, fino al primo nome libero.
     var version = base.registry.version + 1
-    var collisions = 0
-    while (skipped.size <= TrustLimits.MAX_JUNK_RUN && version <= TrustLimits.MAX_VERSION) {
+    var junkRun = 0
+    var free: Long? = null
+    while (version <= TrustLimits.MAX_VERSION) {
       val path = NasLayout.registryFile(version)
-      when (val read = commonShare.read(path, Envelope.maxFileBytes(DocType.FAMILY_REGISTRY))) {
+      when (val read = commonShare.read(path, maxBytes)) {
         NasRead.NotFound -> {
-          val issuedAt = maxOf(clock.nowMillis(), base.registry.issuedAt)
-          val signed = sign(draft.content.copy(version = version, issuedAt = issuedAt))
-          when (commonShare.publishExclusive(path, signed.bytes)) {
-            PublishResult.CREATED -> {
-              val state = (RegistryVerifier.accept(signed.bytes, base, anchor) as Verdict.Accepted).value
-              return CommitResult.Published(state, skipped)
-            }
-            // Qualcuno ha scritto quel nome un istante prima: lo si rilegge (al massimo due volte).
-            PublishResult.ALREADY_EXISTS -> if (++collisions > 2) {
-              skipped.add(path)
-              version++
-            }
-          }
+          free = version
+          break
         }
         NasRead.TooLarge -> {
           skipped.add(path)
-          version++
+          junkRun++
         }
         is NasRead.Data -> when (val verdict = RegistryVerifier.accept(read.bytes, base, anchor)) {
           is Verdict.Accepted -> return CommitResult.NewerExists
           is Verdict.Rejected -> {
             if (verdict.reason == RejectReason.NEWER_FORMAT) return CommitResult.NeedsAppUpdate
-            val fork = if (verdict.reason == RejectReason.REGRESSION) RegistryVerifier.readFork(read.bytes, base) else null
-            when {
-              fork is Verdict.Accepted && fork.value.contentHash in draft.mergedForks -> Unit // ramo gia' unito: si scavalca
-              fork is Verdict.Accepted -> return CommitResult.Fork(path, fork.value)
-              else -> skipped.add(path)
+            if (!classify(read.bytes, verdict.reason)) {
+              skipped.add(path)
+              junkRun++
             }
-            version++
           }
         }
       }
+      if (junkRun > TrustLimits.MAX_JUNK_RUN) return CommitResult.Blocked(skipped)
+      version++
     }
-    return CommitResult.Blocked(skipped)
+    val target = free ?: return CommitResult.Blocked(skipped)
+
+    // 3. Indizi dell'elenco oltre il nome libero.
+    val hints = commonShare.list(NasLayout.REGISTRY_DIR, TrustLimits.MAX_LIST_REGISTRY).names
+      .mapNotNull(NasLayout::parseVersionName).filter { it > target }.sorted().take(TrustLimits.MAX_SERIES_READS)
+    for (hint in hints) {
+      val read = commonShare.read(NasLayout.registryFile(hint), maxBytes) as? NasRead.Data ?: continue
+      when (val verdict = RegistryVerifier.accept(read.bytes, base, anchor)) {
+        is Verdict.Accepted -> return CommitResult.NewerExists
+        is Verdict.Rejected -> {
+          if (verdict.reason == RejectReason.NEWER_FORMAT) return CommitResult.NeedsAppUpdate
+          classify(read.bytes, verdict.reason)
+        }
+      }
+    }
+
+    // 4. Rami non contenuti: decide l'admin. Altrimenti si firma.
+    if (forks.isNotEmpty()) return CommitResult.Fork(forks)
+    val issuedAt = maxOf(clock.nowMillis(), issuedAtFloor, draft.content.issuedAt)
+    val signed = sign(draft.content.copy(version = target, issuedAt = issuedAt))
+    return when (commonShare.publishExclusive(NasLayout.registryFile(target), signed.bytes)) {
+      PublishResult.CREATED -> {
+        val state = (RegistryVerifier.accept(signed.bytes, base, anchor) as Verdict.Accepted).value
+        CommitResult.Published(state, skipped)
+      }
+      PublishResult.ALREADY_EXISTS -> null
+    }
   }
 
   private fun authorized(state: RegistryState): FamilyRegistry {
@@ -208,6 +282,20 @@ class FamilyAuthority(private val familyKey: FamilyKey, private val clock: NasCl
     SignedRegistry(registry, Envelope.seal(DocType.FAMILY_REGISTRY, registry.toJson(), familyKey))
 
   companion object {
+    /**
+     * Rotazione completa (revisione 1.4, verifica N4): l'annuncio firmato dalla chiave attuale e subito dopo
+     * una versione invariata firmata da [next], cosi' il QR di stato ([RegistryState.toAnchor]) mostra gia'
+     * la chiave nuova. Se il secondo passo non riesce (per esempio `NewerExists`), lo si ripete con
+     * `FamilyAuthority(next, clock).reissue(...)` sullo stato risincronizzato.
+     */
+    fun rotate(commonShare: NasFileSystem, state: RegistryState, current: FamilyKey, next: FamilyKey, clock: NasClock): CommitResult {
+      val oldAuthority = FamilyAuthority(current, clock)
+      val announce = oldAuthority.commit(commonShare, oldAuthority.rotateTo(state, next))
+      if (announce !is CommitResult.Published) return announce
+      val newAuthority = FamilyAuthority(next, clock)
+      return newAuthority.commit(commonShare, newAuthority.reissue(announce.state))
+    }
+
     /** Pubblica la fondazione (versione 1). [PublishResult.ALREADY_EXISTS]: qui c'e' gia' una famiglia. */
     fun publishFounding(commonShare: NasFileSystem, signed: SignedRegistry): PublishResult {
       require(signed.registry.version == 1L) { "Solo la fondazione si pubblica cosi'." }

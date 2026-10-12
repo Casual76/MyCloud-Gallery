@@ -12,8 +12,8 @@
 | Indirizzo NAS | nome `MyCloudEX2Ultra.fritz.box` con IP memorizzato; mai cambiato in automatico (E-R7) | DHCP del FRITZ!Box; prenotazione da verificare |
 | Flussi paralleli | **4 flussi** per i trasferimenti di massa | 2,2 volte il singolo flusso; il limite è la CPU del NAS |
 | Copia lato server | **sì, anche tra share** (124–148 MB/s, hash verificato); tra share serve FSCTL_SRV_COPYCHUNK diretto | spostamenti e condivisioni senza far passare i byte dal telefono |
-| Orario NAS | oggi **08:00–22:00**; l'utente valuterà se allungarlo | fascia "notte" del preset Notte da derivare da qui |
-| Wake-on-LAN | *da provare* (sera, dopo lo spegnimento programmato) | report contrastanti nei forum |
+| Orario NAS | **sempre acceso** (12/10: l'utente ha disattivato la pianificazione dell'alimentazione; prima era 08:00–22:00) | fascia "notte" del preset Notte: 23–07 di default, derivata da `nasPower` nella configurazione di famiglia |
+| Wake-on-LAN | **non verificabile** con il NAS sempre acceso: implementato dietro `FeatureFlags.wol = false` (Fase 2.6), prova rimandata | report contrastanti nei forum |
 | Accesso da fuori | **WireGuard del FRITZ!Box solo in IPv6** (CGNAT su IPv4, accettato dall'utente) | l'app deve spiegare il caso "rete solo IPv4" (nuovo edge case) |
 | VPN in casa | **spenta dall'app quando riconosce casa** (controllo WireGuard opzionale) | WireGuard non è aggirabile (`allowBypass` assente) |
 | Riconoscere "casa" senza posizione | più indizi: **prefisso ULA IPv6 del FRITZ!Box** + gateway + dominio `fritz.box` + NAS raggiungibile | `fritz.box` e il gateway sono uguali in tutte le FRITZ!Box; l'ULA è specifico |
@@ -81,6 +81,31 @@
 5. Accesso cloud WD spento.
 6. Cambiare la password admin del NAS (è passata in chat).
 7. Backup esterno del NAS (app WD "USB Backups"): non previsto per scelta.
+
+## Da confermare con l'utente a fine Fase 1 (dalla 1.6, motore delle regole)
+1. Il calcolo AI è un'attività "pesante". Senza NAS o rete lavora comunque sul buffer locale.
+2. Tetto dati mobili predefinito: 1 GB al mese (10 GB con "Massimo").
+3. Con l'app in primo piano la sync dell'indice è consentita anche sui dati mobili, entro il tetto.
+4. Termica: SEVERE sospende il background, CRITICAL ferma anche "Fai ora".
+5. Le stime di consumo radio e di batteria per GB sono ipotesi, da calibrare con l'uso reale.
+6. Fascia "notte" predefinita 23–07: con il NAS acceso solo 08–22, i lavori notturni che servono il NAS non partirebbero. Va ricavata dall'orario del NAS (proposta 14) nella Fase 2, oppure l'utente allunga l'orario del NAS.
+
+## Da confermare con l'utente a fine Fase 1 (dalla 1.3, modello dei dati)
+1. Tolleranza prima di considerare sparita una posizione: 60 giorni sul telefono, 30 sul NAS.
+2. Il "Salva" di Samsung Gallery che crea una riga MediaStore nuova si riconosce dalla stessa data di scatto (da verificare sul dispositivo, T-16).
+3. I file dell'area comune senza autore noto non hanno proprietario, quindi per loro non c'è l'obbligo di una copia privata.
+
+## Da confermare con l'utente a fine Fase 1 (dalla 1.4, fiducia: `docs/formato-nas.md` §13; la prima opzione è la consigliata)
+1. Kit di recupero: file sul NAS + codice su carta / anche il file come QR su un altro foglio / tutto in cassaforte.
+2. PIN o impronta a ogni uso della chiave di famiglia (sì/no).
+3. Segnalazione "perso" anche dal proprietario del dispositivo (come nel piano) / solo dall'admin.
+4. Dati dei dispositivi revocati: scartati / conservati (sconsigliato).
+5. Durata massima delle prenotazioni: 1 ora.
+6. Attestazione hardware della chiave al momento dell'approvazione (sì/no).
+7. Runner dei test strumentali: `androidx.test:runner` (aggiunto dalla 1.5, quindi risolto).
+
+## Cose tecniche da sistemare dopo la 1.5
+- `:app` dovrà dichiarare `ACCESS_NETWORK_STATE` (serve al motore delle regole): aggiungerlo in `docs/sicurezza.md` §4-bis e nella policy del manifest di release.
 
 ## Aperto
 - Inventario dei media (numeri e formati).

@@ -1,0 +1,63 @@
+// Le schermate della configurazione iniziale (Fase 2: scheletro P0, schermate P6; docs/fase2-progetto.md
+// §2.1 e §2.2 lato nuovo dispositivo). Solo UI: la logica dei 14 passi e' di core-family (P4).
+//
+// D7: i `feature-*` usano @HiltViewModel (KSP). Navigazione type-safe con rotte @Serializable. I feature
+// non si conoscono tra loro: ogni uscita verso un'altra funzione e' una callback fornita da :app.
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+  id 'org.jetbrains.kotlin.plugin.compose'
+  id 'org.jetbrains.kotlin.plugin.serialization'
+  id 'com.google.devtools.ksp'
+  id 'com.google.dagger.hilt.android'
+  id 'io.github.takahirom.roborazzi'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.feature.onboarding'
+
+  buildFeatures {
+    compose = true
+  }
+
+  testOptions {
+    unitTests.all {
+      // Screenshot di ogni passo e stato (P6): pagine alte, come in core-designsystem.
+      maxHeapSize = '3g'
+    }
+  }
+}
+
+dependencies {
+  implementation project(':core-family')
+  implementation project(':core-network')
+  implementation project(':core-nas')
+  implementation project(':core-qr')
+  implementation project(':core-security')
+  implementation project(':core-rules')
+  implementation project(':core-designsystem')
+
+  implementation appDeps.hiltAndroid
+  ksp appDeps.hiltCompiler
+  implementation appDeps.hiltNavigationCompose
+  implementation appDeps.navigationCompose
+  implementation appDeps.lifecycleViewModelCompose
+  implementation appDeps.lifecycleRuntimeCompose
+  implementation appDeps.serializationCore
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+  testImplementation appDeps.androidxTestExtJunit
+  testImplementation platform("androidx.compose:compose-bom:${engine.composeBom}")
+  testImplementation appDeps.composeUiTestJunit4
+  testImplementation appDeps.composeUiTestManifest
+  testImplementation appDeps.roborazzi
+  testImplementation appDeps.roborazziCompose
+  testImplementation appDeps.roborazziJunitRule
+}

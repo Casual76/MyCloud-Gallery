@@ -1,0 +1,49 @@
+// La sessione SMB verso il NAS e il NasFileSystem reale (Fase 2: contratti P0, logica P1;
+// docs/fase2-progetto.md §3).
+//
+// Unico modulo con smbj. smbj resta `implementation`: nessun suo tipo compare nelle firme pubbliche
+// (P1 lo astrae dietro un proprio `SmbTransport`, con un adattatore sottile provato contro il NAS vero).
+// Le regole R8 per smbj/mbassador viaggiano con il modulo (consumer-rules.pro, §3.1 riga R8).
+//
+// Test d'integrazione dal PC contro il NAS vero (§5.2): girano solo con
+//   gradlew :core-nas:testDebugUnitTest -PnasIntegration
+// e, dentro, solo se esiste il file delle credenziali scritto dall'utente. Il test lo legge dalla
+// proprieta' di sistema `nasIntegration` qui sotto (Assume: senza la proprieta' il test si salta).
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.core.nas'
+
+  testOptions {
+    unitTests.all { test ->
+      test.systemProperty('nasIntegration', project.hasProperty('nasIntegration') ? 'true' : 'false')
+    }
+  }
+}
+
+dependencies {
+  api project(':core-common')
+  api project(':core-model')
+  // api: NasFileSystem, NasClock e SharePath (core-trust), NasCredentials (core-security), NasAddress,
+  // NasRoute e DenyReason (core-network), i segnali (core-rules) compaiono nelle firme pubbliche.
+  api project(':core-trust')
+  api project(':core-security')
+  api project(':core-network')
+  api project(':core-rules')
+
+  implementation appDeps.smbj
+  // L'interruttore di sicurezza e' persistente (§3.3): DataStore in noBackupFilesDir.
+  implementation appDeps.datastorePreferences
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+}

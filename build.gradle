@@ -55,6 +55,14 @@ ext.galleryModules = [
   ':core-trust',
   ':core-security',
   ':core-rules',
+  // Fase 2 (docs/fase2-progetto.md §1.1)
+  ':core-network',
+  ':core-nas',
+  ':core-family',
+  ':core-qr',
+  ':feature-onboarding',
+  ':feature-settings',
+  ':feature-diagnostics',
 ]
 
 tasks.register('galleryTest') {

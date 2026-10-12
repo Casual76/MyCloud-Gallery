@@ -4,8 +4,10 @@ plugins {
   id 'com.android.application'
   id 'org.jetbrains.kotlin.android'
   id 'org.jetbrains.kotlin.plugin.compose'
+  id 'org.jetbrains.kotlin.plugin.serialization'
   id 'com.google.devtools.ksp'
   id 'com.google.dagger.hilt.android'
+  id 'io.github.takahirom.roborazzi'
 }
 
 apply from: "${rootDir}/engine/versions.gradle"
@@ -98,6 +100,16 @@ android {
   packaging {
     resources {
       excludes += ['/META-INF/{AL2.0,LGPL2.1}', '/META-INF/LICENSE*', '/META-INF/NOTICE*']
+      // Fase 2 (docs/fase2-progetto.md §3.1, riga R8): bcprov (dipendenza di smbj) porta un manifest OSGi
+      // per Java 9 che collide con quello di un'altra libreria e non serve a niente su Android.
+      excludes += ['/META-INF/versions/9/OSGI-INF/MANIFEST.MF']
+    }
+  }
+
+  testOptions {
+    unitTests.all {
+      // Screenshot dello scaffold (Roborazzi), come in core-designsystem.
+      maxHeapSize = '3g'
     }
   }
 }
@@ -118,6 +130,14 @@ dependencies {
   implementation project(':core-trust')
   implementation project(':core-security')
   implementation project(':core-rules')
+  // Fase 2 (docs/fase2-progetto.md §1.1): l'app vede tutti i moduli nuovi e li cabla con Hilt.
+  implementation project(':core-network')
+  implementation project(':core-nas')
+  implementation project(':core-family')
+  implementation project(':core-qr')
+  implementation project(':feature-onboarding')
+  implementation project(':feature-settings')
+  implementation project(':feature-diagnostics')
 
   // --- Il design system (engine-ui porta Compose, Material 3, activity-compose e lifecycle) ----------
   implementation project(':engine-ui')
@@ -125,15 +145,35 @@ dependencies {
   // --- Hilt ---------------------------------------------------------------------------------------------
   implementation appDeps.hiltAndroid
   ksp appDeps.hiltCompiler
-  ksp appDeps.hiltAndroidxCompiler // genera le factory dei @HiltWorker; vuoto finche' non ce ne sono
+  ksp appDeps.hiltAndroidxCompiler // genera le factory dei @HiltWorker
   implementation appDeps.hiltNavigationCompose
 
-  // --- Navigazione e stato (per le schermate delle fasi successive) ---------------------------------------
+  // --- Lavori in background (Fase 2: TrustSyncWorker di P9) ----------------------------------------------
+  // Porta nel manifest SystemJobService (esportato, protetto da BIND_JOB_SERVICE: ammesso nella policy) e
+  // DiagnosticsReceiver (esportato, tolto dal manifest dell'app); vedi verify-release-manifest.gradle.
+  implementation appDeps.workRuntimeKtx
+  implementation appDeps.hiltWork
+
+  // --- Navigazione e stato -------------------------------------------------------------------------------
   implementation appDeps.navigationCompose
   implementation appDeps.lifecycleViewModelCompose
   implementation appDeps.lifecycleRuntimeKtx
   implementation appDeps.lifecycleRuntimeCompose
   implementation appDeps.coroutinesAndroid // Dispatchers.Main
+  implementation appDeps.serializationCore // rotte @Serializable
 
   testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+  testImplementation appDeps.workTesting
+  // Screenshot dello scaffold (docs/screenshots/2-P0/) e test Compose su JVM.
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+  testImplementation appDeps.androidxTestExtJunit
+  testImplementation platform("androidx.compose:compose-bom:${engine.composeBom}")
+  testImplementation appDeps.composeUiTestJunit4
+  // Niente ui-test-manifest: in un'app entra solo con debugImplementation, cioe' come activity esportata
+  // nell'APK di debug. Lo screenshot test registra la ComponentActivity in Robolectric (vedi il test).
+  testImplementation appDeps.roborazzi
+  testImplementation appDeps.roborazziCompose
+  testImplementation appDeps.roborazziJunitRule
 }

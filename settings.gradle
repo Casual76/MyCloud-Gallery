@@ -28,6 +28,15 @@ include ':core-trust'        // formato e firme dei dati sul NAS
 include ':core-security'     // credenziali, blocco app, protezioni dello schermo
 include ':core-rules'        // motore delle regole delle attivita'
 
+// Fase 2 (docs/fase2-progetto.md §1.1): rete e NAS, famiglia, QR e le tre funzioni con UI.
+include ':core-network'      // stato della rete, casa, VPN, cancello del percorso verso il NAS
+include ':core-nas'          // sessione SMB (smbj) e NasFileSystem reale
+include ':core-family'       // fiducia operativa e flussi di famiglia (solo logica)
+include ':core-qr'           // generazione e scansione dei QR (ZXing core + CameraX)
+include ':feature-onboarding'  // schermate della configurazione iniziale
+include ':feature-settings'    // impostazioni, famiglia e dispositivi
+include ':feature-diagnostics' // diagnostica locale ed esportazione senza dati personali
+
 // --- fluid-engine (inizio) ---
 def engineDir = file('engine')
 if (engineDir.exists()) {

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!--
+      Permesso di :core-qr (Fase 2, D4): la fotocamera DENTRO l'app per leggere due QR, l'invito della
+      famiglia (nuovo dispositivo) e la chiave del dispositivo (approvazione dell'admin). Chiesto solo
+      quando si apre lo scanner; negato, resta l'inserimento a mano. Le immagini non si salvano e non
+      escono dal telefono. Riga in docs/sicurezza.md 4-bis e in releaseManifestPolicy.
+  -->
+  <uses-permission android:name="android.permission.CAMERA" />
+
+  <!--
+      La fotocamera non e' obbligatoria: un tablet senza fotocamera posteriore (o un profilo che la nega)
+      installa lo stesso e usa l'inserimento manuale.
+  -->
+  <uses-feature
+      android:name="android.hardware.camera"
+      android:required="false" />
+
+</manifest>

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Scheletro P0 dell'onboarding. Le schermate vere dei 14 passi sono di P6. -->
+  <string name="onboarding_title">Benvenuto</string>
+  <string name="onboarding_subtitle">Configuriamo MyCloud Gallery insieme</string>
+  <string name="onboarding_section_progress">Configurazione</string>
+  <string name="onboarding_step_of">Passo %1$d di %2$d</string>
+  <string name="onboarding_placeholder_note">La configurazione guidata è in preparazione. Niente viene inviato al NAS finché non la completi.</string>
+  <string name="onboarding_continue">Continua</string>
+
+  <!-- I 14 passi (docs/fase2-progetto.md §2.1) -->
+  <string name="onboarding_step_welcome">Benvenuto e privacy</string>
+  <string name="onboarding_step_nas_address">Indirizzo del NAS</string>
+  <string name="onboarding_step_account">Account e password</string>
+  <string name="onboarding_step_areas">Aree</string>
+  <string name="onboarding_step_folders">Cartelle</string>
+  <string name="onboarding_step_backup_sources">Sorgenti di backup</string>
+  <string name="onboarding_step_roles">Ruoli del dispositivo</string>
+  <string name="onboarding_step_preset">Preset e qualità</string>
+  <string name="onboarding_step_permissions">Permessi</string>
+  <string name="onboarding_step_battery">Batteria</string>
+  <string name="onboarding_step_vpn">VPN WireGuard</string>
+  <string name="onboarding_step_family_key">Chiave di famiglia e kit di recupero</string>
+  <string name="onboarding_step_security_notice">Backup esterno e FRITZ!Box</string>
+  <string name="onboarding_step_summary">Riepilogo</string>
+</resources>

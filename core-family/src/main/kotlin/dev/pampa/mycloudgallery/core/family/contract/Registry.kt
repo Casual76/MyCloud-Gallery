@@ -1,0 +1,143 @@
+package dev.pampa.mycloudgallery.core.family.contract
+
+import dev.pampa.mycloudgallery.core.nas.contract.NasError
+import dev.pampa.mycloudgallery.core.nas.contract.Purpose
+import dev.pampa.mycloudgallery.core.trust.registry.ApprovalProof
+import dev.pampa.mycloudgallery.core.trust.registry.DeviceStatus
+import kotlinx.coroutines.flow.StateFlow
+
+/** Perche' quello che si sa del registro potrebbe essere vecchio. */
+enum class StaleReason {
+  /** Il NAS non si raggiunge da un po': si lavora con l'ultimo registro accettato. */
+  NOT_REFRESHED,
+
+  /** Sul NAS c'e' una versione piu' nuova che non si e' potuta verificare (Diagnostica: `newerUnverified`). */
+  NEWER_UNVERIFIED,
+
+  /** Troppi file nella cartella del registro: elenco troncato. */
+  LISTING_TRUNCATED,
+
+  /** Il registro e' di un'app piu' nuova (E-I3). */
+  NEEDS_APP_UPDATE,
+
+  /** Allarme di equivocazione: due contenuti con la stessa versione. */
+  EQUIVOCATION,
+}
+
+/** Lo stato di QUESTO dispositivo nel registro firmato. */
+sealed interface TrustStatus {
+  data object NotConfigured : TrustStatus
+
+  /** Registrato, in attesa: [code] e' quello da mostrare all'admin. */
+  data class Pending(val code: String) : TrustStatus
+
+  data class Approved(val admin: Boolean) : TrustStatus
+
+  data object Retired : TrustStatus
+
+  data object Revoked : TrustStatus
+
+  /** Segnato come perso: al prossimo controllo si azzera (C15). */
+  data object Lost : TrustStatus
+
+  data class Stale(val reason: StaleReason) : TrustStatus
+}
+
+/** Il ruolo del dispositivo, come si mostra nell'elenco. */
+enum class DeviceRoleView { INDEXER, PREPARER }
+
+/**
+ * Un dispositivo della famiglia, per l'elenco "Dispositivi" (L11). Tutti i testi vengono dal registro
+ * firmato (gia' validati da `core-trust`) o dal `DeviceStatus` pubblicato dal dispositivo.
+ *
+ * @property lastSeenAt ultima attivita' (ora del NAS), se il dispositivo ha pubblicato il proprio stato.
+ * @property lookAlikeOf l'id di un altro dispositivo con un nome che "sembra uguale" (reinstallazione, E-O7).
+ */
+data class DeviceView(
+  val id: String,
+  val name: String,
+  val model: String,
+  val nasUser: String,
+  val admin: Boolean,
+  val status: DeviceStatus,
+  val roles: Set<DeviceRoleView>,
+  val lastSeenAt: Long?,
+  val appVersion: String?,
+  val isThisDevice: Boolean,
+  val lookAlikeOf: String? = null,
+)
+
+/**
+ * Una richiesta d'ingresso in attesa, per l'admin (§2.2). L'account NAS e' **dichiarato** dal richiedente:
+ * l'admin lo conferma (B6).
+ *
+ * @property firstSeenAt quando l'app dell'admin l'ha vista la prima volta (ora del NAS): la finestra di 15
+ *   minuti parte da qui, non da `requestedAt` (lo scrive il richiedente).
+ */
+data class PendingRequestView(
+  val id: String,
+  val name: String,
+  val model: String,
+  val declaredNasUser: String,
+  val requestedAt: Long,
+  val firstSeenAt: Long,
+  val windowOpen: Boolean,
+  val lookAlikeOf: String? = null,
+)
+
+/** L'esito di un'azione dell'admin sul registro (approvare, cambiare stato). Mappa i `CommitResult`. */
+sealed interface AdminActionResult {
+  data object Done : AdminActionResult
+
+  /** C'e' una versione piu' nuova (un altro admin): risincronizzare e riprovare. */
+  data object NewerExists : AdminActionResult
+
+  /** Rami in conflitto firmati con la chiave di famiglia: schermata dedicata. */
+  data object Fork : AdminActionResult
+
+  /** Troppi file non validi nella cartella del registro: vanno tolti dal PC. */
+  data object Blocked : AdminActionResult
+
+  data object NeedsAppUpdate : AdminActionResult
+
+  /** La finestra di 15 minuti per approvare e' scaduta: il dispositivo nuovo rifa' la richiesta. */
+  data object WindowExpired : AdminActionResult
+
+  /** Il codice digitato (o la chiave scansionata) non corrisponde alla richiesta. */
+  data object ProofMismatch : AdminActionResult
+
+  /** Questo dispositivo non tiene la chiave di famiglia. */
+  data object NotAdmin : AdminActionResult
+
+  /** Il NAS non ha risposto, o ha rifiutato la scrittura. */
+  data class Failed(val error: NasError) : AdminActionResult
+}
+
+/** Cosa scegliere per invitare un familiare (Impostazioni → Famiglia → "Configura un familiare"). */
+data class InviteParams(
+  val nasUser: String,
+  val deviceName: String,
+  val privateShare: String,
+  val presetName: String?,
+)
+
+/**
+ * Il registro della famiglia visto dall'app (P3): stato proprio, dispositivi, richieste, azioni dell'admin.
+ * Ogni azione che scrive passa da `FamilyAuthority.commit` di `core-trust` e parte solo da un gesto locale
+ * confermato (E-S11).
+ */
+interface RegistryService {
+  val status: StateFlow<TrustStatus>
+  val devices: StateFlow<List<DeviceView>>
+  val pendingRequests: StateFlow<List<PendingRequestView>>
+
+  /** Rilegge il registro dal NAS (in background al massimo una volta al giorno, piu' spesso nella finestra d'invito). */
+  suspend fun refresh(purpose: Purpose)
+
+  suspend fun approve(requestId: String, proof: ApprovalProof): AdminActionResult
+
+  suspend fun changeStatus(deviceId: String, status: DeviceStatus): AdminActionResult
+
+  /** Crea l'invito e apre la finestra d'invito di 24 h (`TrustSyncScheduler.setInviteWindow`). */
+  suspend fun createInvite(params: InviteParams): FamilyInvite
+}

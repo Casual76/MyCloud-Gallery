@@ -1,0 +1,62 @@
+// La Diagnostica locale e la sua esportazione senza dati personali (Fase 2: scheletro P0, schermate P8;
+// docs/fase2-progetto.md §2.6). L'esportazione passa da ACTION_CREATE_DOCUMENT (activity-compose, gia'
+// portato da engine-ui): nessun FileProvider.
+//
+// D7: @HiltViewModel (KSP); rotte @Serializable. I dati arrivano dai `DiagnosticsContributor` dei moduli
+// core (multibinding fornito da :app) e dal `DiagnosticsLog` di core-common.
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+  id 'org.jetbrains.kotlin.plugin.compose'
+  id 'org.jetbrains.kotlin.plugin.serialization'
+  id 'com.google.devtools.ksp'
+  id 'com.google.dagger.hilt.android'
+  id 'io.github.takahirom.roborazzi'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.feature.diagnostics'
+
+  buildFeatures {
+    compose = true
+  }
+
+  testOptions {
+    unitTests.all {
+      maxHeapSize = '3g'
+    }
+  }
+}
+
+dependencies {
+  implementation project(':core-common')
+  implementation project(':core-rules')
+  implementation project(':core-network')
+  implementation project(':core-nas')
+  implementation project(':core-family')
+  implementation project(':core-designsystem')
+
+  implementation appDeps.hiltAndroid
+  ksp appDeps.hiltCompiler
+  implementation appDeps.hiltNavigationCompose
+  implementation appDeps.navigationCompose
+  implementation appDeps.lifecycleViewModelCompose
+  implementation appDeps.lifecycleRuntimeCompose
+  implementation appDeps.serializationCore
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+  testImplementation appDeps.androidxTestExtJunit
+  testImplementation platform("androidx.compose:compose-bom:${engine.composeBom}")
+  testImplementation appDeps.composeUiTestJunit4
+  testImplementation appDeps.composeUiTestManifest
+  testImplementation appDeps.roborazzi
+  testImplementation appDeps.roborazziCompose
+  testImplementation appDeps.roborazziJunitRule
+}

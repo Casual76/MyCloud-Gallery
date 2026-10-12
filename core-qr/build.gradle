@@ -1,0 +1,53 @@
+// Generazione e scansione dei QR (Fase 2: contratti P0, implementazione P5; decisione D4).
+//
+// La fotocamera e' DENTRO l'app (CameraX) e la decodifica e' ZXing core (Apache-2.0): niente ML Kit e
+// niente scanner dei Play Services, che mandano telemetria. Il QR d'invito si mostra con FLAG_SECURE
+// (ScreenProtection di core-security). Le librerie restano `implementation`: nessun loro tipo esce dal
+// modulo (il contratto parla di `QrBits`, non di `BitMatrix`).
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+  id 'org.jetbrains.kotlin.plugin.compose'
+  id 'io.github.takahirom.roborazzi'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.core.qr'
+
+  buildFeatures {
+    compose = true
+  }
+
+  testOptions {
+    unitTests.all {
+      // Screenshot con Roborazzi (schermate del permesso, QR): come in core-designsystem.
+      maxHeapSize = '3g'
+    }
+  }
+}
+
+dependencies {
+  api project(':core-common')
+  api project(':core-security')     // ScreenProtection (FLAG_SECURE sul QR d'invito)
+  api project(':core-designsystem') // porta engine-ui e Compose
+
+  implementation appDeps.zxingCore
+  implementation appDeps.cameraCamera2
+  implementation appDeps.cameraLifecycle
+  implementation appDeps.cameraCompose
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+  testImplementation appDeps.androidxTestExtJunit
+  testImplementation platform("androidx.compose:compose-bom:${engine.composeBom}")
+  testImplementation appDeps.composeUiTestJunit4
+  testImplementation appDeps.composeUiTestManifest
+  testImplementation appDeps.roborazzi
+  testImplementation appDeps.roborazziCompose
+  testImplementation appDeps.roborazziJunitRule
+}

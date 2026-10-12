@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!--
+      :core-nas: nessun permesso e nessun componente (Fase 2, P0). La rete (INTERNET, ACCESS_NETWORK_STATE) la dichiara :core-network, da cui passa ogni socket.
+      Un permesso o un componente nuovo si chiede all'orchestratore (docs/fase2-progetto.md §4.2, D8): prima
+      la riga in docs/sicurezza.md 4-bis, poi quella in releaseManifestPolicy.
+  -->
+
+</manifest>

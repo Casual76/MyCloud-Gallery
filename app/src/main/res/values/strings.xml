@@ -2,5 +2,50 @@
 <resources>
   <!-- Il nome sotto l'icona. La build debug lo sovrascrive (src/debug/res) per distinguersi dalla release. -->
   <string name="app_name">MyCloud Gallery</string>
-  <string name="home_title">MyCloud Gallery</string>
+
+  <!-- Indicatore di stato globale (docs/fase2-progetto.md §3.5) -->
+  <string name="status_home_connected">In casa · NAS collegato</string>
+  <string name="status_home_idle">In casa</string>
+  <string name="status_away_vpn_wifi">Fuori casa · via VPN (Wi-Fi)</string>
+  <string name="status_away_vpn_mobile">Fuori casa · via VPN (dati mobili)</string>
+  <string name="status_roaming">Roaming · attività automatiche ferme</string>
+  <string name="status_vpn_off">VPN spenta · Apri WireGuard</string>
+  <string name="status_untrusted">Rete non riconosciuta · nessuna connessione al NAS</string>
+  <string name="status_foreign_vpn">VPN non di casa attiva</string>
+  <string name="status_waking_nas">Risveglio del NAS…</string>
+  <string name="status_nas_unreachable">NAS non raggiungibile</string>
+  <string name="status_local_network_blocked">Rete locale non consentita da Android</string>
+  <string name="status_needs_password">Serve la password del NAS</string>
+  <string name="status_offline">Offline · Libreria sul telefono</string>
+
+  <!-- Scaffold principale (schede segnaposto: Libreria, Raccolte e Cerca arrivano con le fasi 3, 4, 6 e 7) -->
+  <string name="main_open_settings">Impostazioni</string>
+  <string name="main_collections_empty_title">Le raccolte arriveranno qui</string>
+  <string name="main_collections_empty_detail">Album, preferiti e ricordi, del telefono e del NAS, in un posto solo.</string>
+  <string name="main_search_empty_title">La ricerca arriverà qui</string>
+  <string name="main_search_empty_detail">Cercherai per parole, luoghi e date. La ricerca avverrà sul telefono.</string>
+
+  <!-- Stati del dispositivo (SetupState) -->
+  <string name="awaiting_title">In attesa di approvazione</string>
+  <string name="awaiting_subtitle">Solo lettura finché l’admin non ti approva</string>
+  <string name="awaiting_code_title">Codice da confrontare</string>
+  <string name="awaiting_code_detail">Mostralo all’admin: deve coincidere con quello che vede nella richiesta.</string>
+  <string name="awaiting_note">Puoi già guardare la Libreria comune. Le tue foto entreranno nella famiglia dopo l’approvazione.</string>
+  <string name="wiped_title">Dispositivo azzerato</string>
+  <string name="wiped_subtitle">Le chiavi e i dati di MyCloud Gallery su questo telefono sono stati cancellati</string>
+  <string name="wiped_detail">Il dispositivo era stato segnalato come perso. Per riusarlo va configurato di nuovo e approvato dall’admin.</string>
+  <string name="blocked_title">MyCloud Gallery è ferma</string>
+  <string name="blocked_update">Sul NAS ci sono dati di una versione più nuova dell’app: aggiorna l’app per continuare.</string>
+  <string name="blocked_fork">Il registro della famiglia ha versioni in conflitto: serve l’intervento dell’admin.</string>
+  <string name="blocked_wipe">Un azzeramento è in corso e riprenderà da solo.</string>
+  <string name="blocked_storage">Sblocca il telefono almeno una volta dopo l’accensione per continuare.</string>
+
+  <!-- Blocco app (AppLockGate di core-security) -->
+  <string name="locked_title">MyCloud Gallery è bloccata</string>
+  <string name="locked_subtitle">Sblocca con l’impronta, il volto o il PIN del telefono</string>
+  <string name="locked_unlock">Sblocca</string>
+  <string name="locked_no_screen_lock">Il telefono non ha un blocco schermo: senza, l’app resta chiusa. Impostane uno nelle impostazioni di sicurezza.</string>
+  <string name="locked_open_security_settings">Apri le impostazioni di sicurezza</string>
+  <string name="locked_temporarily_unavailable">Lo sblocco non è disponibile in questo momento. Riprova tra poco.</string>
+  <string name="locked_locked_out">Troppi tentativi: il telefono ha sospeso lo sblocco. Riprova più tardi.</string>
 </resources>

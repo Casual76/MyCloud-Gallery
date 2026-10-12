@@ -1,5 +1,6 @@
-// Le dipendenze PROPRIE dell'app, pre-dichiarate per tutta la Fase 1 cosi' i moduli in lavoro in
-// parallelo non devono toccare versioni ne' coordinate: basta scrivere `implementation appDeps.xxx`.
+// Le dipendenze PROPRIE dell'app, pre-dichiarate per tutta la Fase 1 (e, dal pacchetto P0, per tutta la
+// Fase 2) cosi' i moduli in lavoro in parallelo non devono toccare versioni ne' coordinate: basta scrivere
+// `implementation appDeps.xxx`.
 //
 // Quelle condivise con l'engine (Compose BOM, coroutines, DataStore, Navigation, Lifecycle, JUnit...)
 // vivono in engine/versions.gradle e si leggono dalla mappa `engine`; qui sono rimappate in appDeps
@@ -51,6 +52,20 @@ ext.appVersions = [
   androidxTestRunner     : '1.7.0',
   // DEVE combaciare con il plugin `io.github.takahirom.roborazzi` di build.gradle.
   roborazzi              : '1.76.0',
+
+  // --- Fase 2 (P0, docs/fase2-progetto.md; righe in docs/sicurezza.md §8) ------------------------------
+  // SMB 3.1.1 con cifratura, solo :core-nas. La 0.15.0 e' quella provata contro il NAS vero dallo spike
+  // (spike/nas-probe). Porta a runtime bcprov-jdk18on 1.85.2, mbassador 1.3.2, asn-one 0.6.0 e slf4j-api
+  // 2.0.18, e NESSUN provider SLF4J: le sue righe di log non vanno da nessuna parte.
+  smbj                   : '0.15.0',
+  // Lettura e scrittura dei QR, solo :core-qr (D4). Solo il nucleo Java: niente zxing-android-embedded,
+  // niente Play Services, niente ML Kit.
+  zxing                  : '3.5.4',
+  // Fotocamera dentro l'app per scansionare i QR (D4), solo :core-qr. La 1.5.3 e non la 1.6.x di proposito:
+  // dalla 1.6 camera-camera2 porta camera-camera2-pipe e Dagger 2.59 a runtime, che scavalcherebbe il
+  // Dagger 2.58 di Hilt (fissato da AGP 8, vedi build.gradle). Tre artefatti: camera2 (porta camera-core),
+  // lifecycle e compose (il mirino in Compose, senza camera-view che porterebbe camera-video e appcompat).
+  camerax                : '1.5.3',
 ]
 
 ext.appSdk = [
@@ -89,6 +104,19 @@ ext.appDeps = [
   coroutinesAndroid        : "org.jetbrains.kotlinx:kotlinx-coroutines-android:${appVersions.coroutines}",
   coroutinesTest           : "org.jetbrains.kotlinx:kotlinx-coroutines-test:${appVersions.coroutines}",
   serializationJson        : "org.jetbrains.kotlinx:kotlinx-serialization-json:${appVersions.serializationJson}",
+  // Le rotte @Serializable della navigazione (Fase 2): navigation-common non espone il runtime nelle sue API.
+  serializationCore        : "org.jetbrains.kotlinx:kotlinx-serialization-core:${appVersions.serializationJson}",
+
+  // --- AndroidX core (versione dell'engine; lo porta gia' engine-ui) ------------------------------------
+  // Per i moduli senza engine-ui che leggono Android con le API compat (core-rules: salute del background).
+  coreKtx                  : "androidx.core:core-ktx:${engine.coreKtx}",
+
+  // --- Fase 2: NAS, QR, fotocamera ---------------------------------------------------------------------
+  smbj                     : "com.hierynomus:smbj:${appVersions.smbj}",
+  zxingCore                : "com.google.zxing:core:${appVersions.zxing}",
+  cameraCamera2            : "androidx.camera:camera-camera2:${appVersions.camerax}",
+  cameraLifecycle          : "androidx.camera:camera-lifecycle:${appVersions.camerax}",
+  cameraCompose            : "androidx.camera:camera-compose:${appVersions.camerax}",
 
   // --- Test ---------------------------------------------------------------------------------------
   junit                    : "junit:junit:${engine.junit}",

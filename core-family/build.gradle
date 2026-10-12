@@ -1,0 +1,36 @@
+// Fiducia operativa e flussi di famiglia, solo logica e nessuna UI (Fase 2: contratti P0, registro e ciclo
+// di vita P3, fondazione e ingresso P4; docs/fase2-progetto.md §2.1-2.3).
+//
+// Pacchetti: `contract` (P0: le interfacce che le schermate e :app usano), `noop` (P0: i null-object che
+// :app lega finche' non arrivano le implementazioni vere), `testing` (P0: i fake, dentro src/main per
+// riusarli a valle; tools/check.ps1 li vieta nel dex di release). Il resto e' dei pacchetti P3 e P4.
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.core.family'
+}
+
+dependencies {
+  api project(':core-common')
+  api project(':core-model')
+  api project(':core-trust')
+  api project(':core-security')
+  api project(':core-network')
+  api project(':core-nas')
+  api project(':core-rules')
+
+  // Avanzamento dell'onboarding e stato fidato del registro (noBackupFilesDir).
+  implementation appDeps.datastorePreferences
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+}

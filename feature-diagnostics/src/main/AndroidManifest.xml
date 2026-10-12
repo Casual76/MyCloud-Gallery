@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!--
+      :feature-diagnostics: nessun permesso e nessun componente (Fase 2, P0). L'esportazione usa ACTION_CREATE_DOCUMENT: nessun FileProvider, nessun permesso di archiviazione.
+      Un permesso o un componente nuovo si chiede all'orchestratore (docs/fase2-progetto.md §4.2, D8): prima
+      la riga in docs/sicurezza.md 4-bis, poi quella in releaseManifestPolicy.
+  -->
+
+</manifest>

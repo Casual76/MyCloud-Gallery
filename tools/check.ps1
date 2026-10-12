@@ -15,7 +15,13 @@
     6. test eseguiti            ogni modulo ha eseguito almeno un test e nessuno e' fallito (un modulo con
                                 ZERO test eseguiti risulterebbe "passato" per Gradle: qui no)
     7. APK di release           ispezione dell'APK vero con aapt2: non debuggable, backup escluso, nessun
-                                componente esportato oltre la launcher, nessun codice solo-debug dentro
+                                componente esportato oltre quelli ammessi da gradle\verify-release-manifest.gradle
+                                (launcher e JobService di WorkManager, quest'ultimo solo con BIND_JOB_SERVICE),
+                                nessun codice solo-debug dentro
+    8. niente fake in release   nessuna classe di un package `testing` nel dex dell'APK di release (D6 di
+                                docs/fase2-progetto.md: i fake stanno in src/main per riusarli a valle, ma
+                                non devono arrivare all'APK). Lettura diretta dei classes*.dex: non dipende
+                                da apkanalyzer e, se non riesce a leggere il dex, FALLISCE (non salta)
     +  permessi documentati     ogni permesso ammesso da gradle\verify-release-manifest.gradle (statico) e ogni
                                 permesso dell'APK di release deve comparire in docs\sicurezza.md 4-bis
 
@@ -145,7 +151,7 @@ function Get-ApkManifestFacts([string]$aapt2, [string]$apk) {
     if ($line -match '^\s*E: ([\w\-]+) ') {
       $element = $Matches[1]
       if (@("activity", "activity-alias", "service", "receiver", "provider") -contains $element) {
-        $current = @{ Kind = $element; Name = ""; Exported = $false }
+        $current = @{ Kind = $element; Name = ""; Exported = $false; Permission = "" }
         $facts.Components += , $current
       } else {
         $current = $null
@@ -163,10 +169,66 @@ function Get-ApkManifestFacts([string]$aapt2, [string]$apk) {
       if ($current) {
         if ($attr -eq "name" -and $value -match '^"([^"]*)"') { $current.Name = $Matches[1] }
         if ($attr -eq "exported") { $current.Exported = $isTrue }
+        if ($attr -eq "permission" -and $value -match '^"([^"]*)"') { $current.Permission = $Matches[1] }
       }
     }
   }
   return $facts
+}
+
+# I componenti esportati ammessi da gradle\verify-release-manifest.gradle (stessa fonte di verifyReleaseManifest):
+# nome -> permesso che il componente deve dichiarare ("" = nessun obbligo).
+function Get-AllowedExported {
+  $gradle = Read-TextFile (Join-Path $root "gradle\verify-release-manifest.gradle")
+  $list = [regex]::Match($gradle, '(?s)allowedExported\s*:\s*\[(.*?)\n\s*\],')
+  if (-not $list.Success) { throw "non trovo allowedExported in gradle\verify-release-manifest.gradle" }
+  $allowed = @{}
+  foreach ($line in ($list.Groups[1].Value -split '\r?\n')) {
+    $code = ($line -replace '//.*$', '').Trim()
+    foreach ($m in [regex]::Matches($code, "'([^']+)'")) { $allowed[$m.Groups[1].Value] = "" }
+  }
+  $map = [regex]::Match($gradle, '(?s)exportedRequiresPermission\s*:\s*\[(.*?)\n\s*\],')
+  if ($map.Success) {
+    foreach ($line in ($map.Groups[1].Value -split '\r?\n')) {
+      $code = ($line -replace '//.*$', '').Trim()
+      $pair = [regex]::Match($code, "'([^']+)'\s*:\s*'([^']+)'")
+      if ($pair.Success) { $allowed[$pair.Groups[1].Value] = $pair.Groups[2].Value }
+    }
+  }
+  if ($allowed.Count -eq 0) { throw "allowedExported e' vuoto in gradle\verify-release-manifest.gradle" }
+  return $allowed
+}
+
+# Le classi definite nei classes*.dex di un APK il cui package contiene un segmento `testing`
+# (es. Ldev/pampa/mycloudgallery/core/nas/testing/FakeNasSessionManager;). Legge i byte del dex: i descrittori
+# delle classi sono stringhe ASCII nella tabella delle stringhe, quindi una lettura Latin-1 li conserva.
+# Controllo positivo: deve trovare la MainActivity, altrimenti la lettura non e' affidabile e si lancia.
+function Get-TestingClassesInApk([string]$apk) {
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $zip = [System.IO.Compression.ZipFile]::OpenRead($apk)
+  try {
+    $dexes = @($zip.Entries | Where-Object { $_.FullName -match '^classes\d*\.dex$' })
+    if ($dexes.Count -eq 0) { throw "nessun classes*.dex nell'APK" }
+    $latin1 = [System.Text.Encoding]::GetEncoding(28591)
+    $found = @{}
+    $sawMain = $false
+    foreach ($entry in $dexes) {
+      $stream = $entry.Open()
+      try {
+        $buffer = New-Object System.IO.MemoryStream
+        $stream.CopyTo($buffer)
+      } finally {
+        $stream.Dispose()
+      }
+      $text = $latin1.GetString($buffer.ToArray())
+      if ($text.Contains("Ldev/pampa/mycloudgallery/MainActivity;")) { $sawMain = $true }
+      foreach ($m in [regex]::Matches($text, 'L(?:[A-Za-z0-9_$]+/)+testing/[A-Za-z0-9_$/]*;')) { $found[$m.Value] = $true }
+    }
+    if (-not $sawMain) { throw "lettura del dex non affidabile: la MainActivity non compare in nessun classes*.dex" }
+    return @($found.Keys | Sort-Object)
+  } finally {
+    $zip.Dispose()
+  }
 }
 
 # I permessi documentati in docs/sicurezza.md 4-bis: i nomi in maiuscolo tra apici inversi (es. `VIBRATE`),
@@ -326,9 +388,12 @@ Step "APK di release: non debuggable, backup escluso, nessun componente esposto"
   if ($facts.Debuggable) { $problems += "android:debuggable=true nel manifest dell'APK" }
   if ($facts.AllowBackup -ne "false") { $problems += "android:allowBackup nell'APK e' '$($facts.AllowBackup)', deve essere false" }
   $exported = @($facts.Components | Where-Object { $_.Exported })
+  $allowedExported = Get-AllowedExported
   foreach ($component in $exported) {
-    if ($component.Name -ne "dev.pampa.mycloudgallery.MainActivity") {
+    if (-not $allowedExported.ContainsKey($component.Name)) {
       $problems += ("componente esportato non ammesso: <{0}> {1}" -f $component.Kind, $component.Name)
+    } elseif ($allowedExported[$component.Name] -and $component.Permission -ne $allowedExported[$component.Name]) {
+      $problems += ("<{0}> {1} e' esportato senza il permesso {2}" -f $component.Kind, $component.Name, $allowedExported[$component.Name])
     }
   }
   if (-not ($exported | Where-Object { $_.Name -eq "dev.pampa.mycloudgallery.MainActivity" })) {
@@ -348,7 +413,7 @@ Step "APK di release: non debuggable, backup escluso, nessun componente esposto"
     $classes = Invoke-Native -File $analyzer -Arguments @("dex", "packages", "--defined-only", $apk.FullName)
     if ($classes.Code -eq 0) {
       $text = $classes.Lines -join "`n"
-      foreach ($forbidden in @("LogcatSink", "ComponentCatalogPlaceholder", "core.designsystem.catalog")) {
+      foreach ($forbidden in @("LogcatSink", "ComponentCatalogPlaceholder", "core.designsystem.catalog", "DeveloperEntryPoint", "CatalogRoute")) {
         if ($text -match [regex]::Escape($forbidden)) { $problems += "codice solo-debug dentro la release: $forbidden" }
       }
     } else {
@@ -358,6 +423,17 @@ Step "APK di release: non debuggable, backup escluso, nessun componente esposto"
     Write-Host "        (apkanalyzer non trovato: salto il controllo del codice solo-debug)" -ForegroundColor Yellow
   }
   if ($problems.Count -gt 0) { return ($problems -join "; ") }
+}
+
+Step "nessuna classe di un package testing nel dex di release (fake solo per i test)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
+  $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if (-not $apk) { return "nessun APK di release in app\build\outputs\apk\release" }
+  $testing = @(Get-TestingClassesInApk $apk.FullName)
+  if ($testing.Count -gt 0) {
+    Show-Lines $testing 20
+    return "$($testing.Count) classi di un package testing nel dex di release: i fake (D6) non devono arrivare all'APK"
+  }
 }
 
 Step "permessi dell'APK di release tutti elencati in docs/sicurezza.md 4-bis" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {

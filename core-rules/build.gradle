@@ -20,6 +20,11 @@ dependencies {
   // Le regole e i contatori (tetti mensili, soglia batteria) si persistono qui.
   implementation appDeps.datastorePreferences
 
+  // Fase 2 (P0 per P8): la salute del background (platform/health) legge "Pausa se inutilizzata" con
+  // PackageManagerCompat.getUnusedAppRestrictionsStatus, che esiste solo in androidx.core. Stessa
+  // versione dell'engine, gia' nel grafo dell'app.
+  implementation appDeps.coreKtx
+
   testImplementation appDeps.coroutinesTest
   testImplementation appDeps.turbine
 

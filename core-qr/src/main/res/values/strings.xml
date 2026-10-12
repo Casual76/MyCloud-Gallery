@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Scheletro P0 dello scanner: le schermate vere (permesso, mirino, rifiuti) sono di P5. -->
+  <string name="qr_scanner_unavailable_title">Scansione non ancora disponibile</string>
+  <string name="qr_scanner_unavailable_detail">La fotocamera per leggere i QR arriverà con un prossimo aggiornamento. Intanto puoi inserire i dati a mano.</string>
+  <string name="qr_scanner_manual">Inserisci a mano</string>
+</resources>

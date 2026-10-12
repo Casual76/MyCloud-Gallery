@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Scheletro P0 delle Impostazioni. Le pagine vere sono di P7. -->
+  <string name="settings_title">Impostazioni</string>
+  <string name="settings_section_family">Famiglia e dispositivi</string>
+  <string name="settings_devices">Dispositivi</string>
+  <string name="settings_devices_none">Nessuna famiglia configurata</string>
+  <plurals name="settings_devices_count">
+    <item quantity="one">%1$d dispositivo</item>
+    <item quantity="other">%1$d dispositivi</item>
+  </plurals>
+  <plurals name="settings_devices_pending">
+    <item quantity="one">%1$d richiesta da approvare</item>
+    <item quantity="other">%1$d richieste da approvare</item>
+  </plurals>
+  <string name="settings_family">Famiglia</string>
+  <string name="settings_family_detail">Invita un familiare, kit di recupero, secondo admin</string>
+  <string name="settings_nas_account">Account del NAS</string>
+  <string name="settings_nas_account_detail">Password e indirizzo del NAS</string>
+  <string name="settings_network">Rete e VPN</string>
+  <string name="settings_network_detail">Rete di casa e controllo di WireGuard</string>
+  <string name="settings_security">Sicurezza</string>
+  <string name="settings_security_detail">Blocco dell’app con la credenziale del telefono</string>
+  <string name="settings_section_pending">Da completare</string>
+  <string name="settings_pending_step">Passo %1$d della configurazione</string>
+  <string name="settings_pending_detail">Saltato durante la configurazione: completalo quando vuoi</string>
+  <string name="settings_section_support">Assistenza</string>
+  <string name="settings_diagnostics">Diagnostica</string>
+  <string name="settings_diagnostics_detail">Stato della rete, del NAS e del telefono</string>
+  <string name="settings_placeholder_note">Le pagine delle impostazioni sono in preparazione.</string>
+  <string name="settings_section_developer">Sviluppo</string>
+</resources>

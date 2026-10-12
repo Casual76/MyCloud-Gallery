@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Scheletro P0 della Diagnostica. Le pagine vere e l'esportazione sono di P8. -->
+  <string name="diagnostics_title">Diagnostica</string>
+  <string name="diagnostics_section_overview">Sezioni</string>
+  <string name="diagnostics_no_items">Ancora niente da mostrare</string>
+  <plurals name="diagnostics_items">
+    <item quantity="one">%1$d voce</item>
+    <item quantity="other">%1$d voci</item>
+  </plurals>
+  <plurals name="diagnostics_recent_events">
+    <item quantity="one">%1$d evento recente ricordato sul telefono. Nessun dato lascia il telefono senza la tua conferma.</item>
+    <item quantity="other">%1$d eventi recenti ricordati sul telefono. Nessun dato lascia il telefono senza la tua conferma.</item>
+  </plurals>
+
+  <!-- Le sezioni (docs/fase2-progetto.md §2.6) -->
+  <string name="diagnostics_section_network">Rete e NAS</string>
+  <string name="diagnostics_section_connection_test">Test di connessione</string>
+  <string name="diagnostics_section_activities">Attività</string>
+  <string name="diagnostics_section_recent">Ultimi esiti ed errori</string>
+  <string name="diagnostics_section_storage">Spazio</string>
+  <string name="diagnostics_section_traffic">Consumi del mese</string>
+  <string name="diagnostics_section_android">Avvisi di Android</string>
+  <string name="diagnostics_section_trust">Fiducia</string>
+  <string name="diagnostics_section_profiles">Profili</string>
+</resources>

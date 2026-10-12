@@ -3,11 +3,28 @@
     xmlns:tools="http://schemas.android.com/tools">
 
   <!--
-      Nessun permesso dichiarato dall'app: in Fase 1.1 non parla con nessuno. (Nel manifest fuso c'e'
-      solo VIBRATE, portato da engine-ui per l'aptica.) Ogni permesso che arrivera' (rete, media,
-      notifiche...) deve avere una riga in docs/sicurezza.md §4-bis E una in releaseManifestPolicy
-      (gradle/verify-release-manifest.gradle), altrimenti la release non si assembla.
+      I permessi dell'app (Fase 2, P0). Ognuno ha una riga in docs/sicurezza.md 4-bis E una in
+      releaseManifestPolicy (gradle/verify-release-manifest.gradle), altrimenti la release non si assembla.
+      Gli altri arrivano dai moduli: rete e WireGuard da :core-network, fotocamera da :core-qr, blocco app
+      da :core-security, vibrazione da engine-ui, i quattro di WorkManager dalla libreria.
+
+      - ACCESS_NETWORK_STATE: il motore delle regole (:core-rules) legge la rete in uso (docs/decisioni.md,
+        "Cose tecniche da sistemare dopo la 1.5"). Lo dichiara anche :core-network.
+      - POST_NOTIFICATIONS: problemi del NAS, approvazione di un nuovo dispositivo (all'admin). Chiesto al
+        passo 9; facoltativo.
+      - REQUEST_IGNORE_BATTERY_OPTIMIZATIONS: la richiesta diretta "Batteria illimitata" al passo 10, con
+        verifica. Permesso normale; l'utente decide nel dialogo di sistema.
+      - READ_MEDIA_IMAGES / READ_MEDIA_VIDEO / READ_MEDIA_VISUAL_USER_SELECTED: la Libreria del telefono e
+        il backup; con "foto selezionate" l'app lavora in modalita' limitata (E-P1). Chiesti al passo 9.
+      - ACCESS_MEDIA_LOCATION: copia fedele sul NAS (senza, il GPS e' oscurato e l'hash non coincide).
   -->
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+  <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+  <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+  <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
+  <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION" />
 
   <application
       android:name=".MyCloudGalleryApp"
@@ -23,9 +40,10 @@
       tools:targetApi="33">
 
     <!--
-        L'UNICO componente esportato dell'app (lo verifica verifyReleaseManifest). singleTask: un secondo
-        avvio dall'icona o da un widget riporta in primo piano l'istanza viva invece di impilarne una
-        seconda con la sua navigazione.
+        L'unica activity e l'unico punto d'ingresso dell'utente (verifyReleaseManifest). singleTask: un
+        secondo avvio dall'icona, da una notifica o da un widget riporta in primo piano l'istanza viva
+        invece di impilarne una seconda con la sua navigazione. Il blocco app (AppLockGate) presume una
+        sola activity: con due, ogni passaggio conterebbe come uscita dall'app.
     -->
     <activity
         android:name=".MainActivity"
@@ -48,6 +66,33 @@
         android:name="androidx.profileinstaller.ProfileInstallReceiver"
         tools:ignore="MissingClass"
         tools:node="remove" />
+
+    <!--
+        WorkManager (Fase 2): stesso caso del receiver qui sopra. DiagnosticsReceiver e' ESPORTATO (permesso
+        DUMP) e serve solo a `adb shell am broadcast` per stampare lo stato dei lavori: non e' un punto
+        d'ingresso che vogliamo. La diagnostica dei lavori la fa l'app (feature-diagnostics, getStopReason).
+        SystemJobService invece resta: e' esportato ma protetto da BIND_JOB_SERVICE (solo il sistema puo'
+        legarsi) ed e' ammesso esplicitamente in releaseManifestPolicy.
+    -->
+    <receiver
+        android:name="androidx.work.impl.diagnostics.DiagnosticsReceiver"
+        tools:node="remove" />
+
+    <!--
+        WorkManager si inizializza su richiesta con la configurazione dell'app (HiltWorkerFactory, vedi
+        MyCloudGalleryApp): l'inizializzatore automatico di androidx.startup va tolto, altrimenti partirebbe
+        prima di Hilt con la fabbrica predefinita e i @HiltWorker non si costruirebbero.
+    -->
+    <provider
+        android:name="androidx.startup.InitializationProvider"
+        android:authorities="${applicationId}.androidx-startup"
+        android:exported="false"
+        tools:node="merge">
+      <meta-data
+          android:name="androidx.work.WorkManagerInitializer"
+          android:value="androidx.startup"
+          tools:node="remove" />
+    </provider>
   </application>
 
 </manifest>

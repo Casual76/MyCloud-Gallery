@@ -24,9 +24,11 @@ Esegue, in ordine, e finisce con un riepilogo OK/FAIL (codice di uscita 0 solo s
    `assembleRelease` esegue anche `verifyReleaseManifest` (vedi sotto);
 6. ogni modulo ha eseguito almeno un test e nessuno e' fallito;
 7. ispezione dell'**APK di release** con aapt2: non debuggable, backup escluso, nessun componente
-   esportato oltre la launcher, nessun codice solo-debug dentro.
+   esportato oltre quelli ammessi (la launcher e il JobService di WorkManager, solo con
+   `BIND_JOB_SERVICE`), nessun codice solo-debug dentro;
+8. nessuna classe di un package `testing` (i fake dei contratti) nel dex dell'APK di release.
 
-`-SkipGradle` salta i passi 5-7 (controllo statico, pochi secondi). `-NoDaemon` non lascia Gradle residente.
+`-SkipGradle` salta i passi 5-8 (controllo statico, pochi secondi). `-NoDaemon` non lascia Gradle residente.
 
 ## Moduli
 
@@ -43,9 +45,29 @@ segnaposto e almeno un test.
 | `:core-designsystem` | tema Ametista, componenti della galleria, catalogo componenti | `engine-ui` |
 | `:core-trust` | formato e firme dei dati sul NAS | model, common |
 | `:core-security` | credenziali (Keystore), blocco app, protezioni dello schermo | common |
-| `:core-rules` | motore delle regole delle attivita' | model, common |
+| `:core-rules` | motore delle regole delle attivita'; contratto della salute del background (`platform/health`) | model, common |
+| `:core-network` | stato della rete, casa (impronta ULA), VPN di casa, cancello del percorso verso il NAS, WoL | common, rules |
+| `:core-nas` | sessione SMB (smbj, unico modulo che la vede), errori, interruttore di sicurezza, test di connessione | common, model, trust, security, network, rules |
+| `:core-family` | fiducia operativa e flussi di famiglia (onboarding, inviti, registro, azzeramento), solo logica | common, model, trust, security, network, nas, rules |
+| `:core-qr` | QR: generazione e scansione (ZXing core + CameraX, fotocamera dentro l'app) | common, security, designsystem |
+| `:feature-onboarding` | schermate della configurazione iniziale | family, network, nas, qr, security, rules, designsystem |
+| `:feature-settings` | Impostazioni, famiglia e dispositivi | family, network, nas, qr, security, rules, designsystem |
+| `:feature-diagnostics` | Diagnostica locale ed esportazione senza dati personali | common, rules, network, nas, family, designsystem |
 
-Nessun ciclo: `core-common` e `core-model` sono le foglie. Il Fluid Engine e' in `engine/` (submodule,
+Nessun ciclo: `core-common` e `core-model` sono le foglie. I `feature-*` non si conoscono fra loro: ogni
+passaggio da una funzione all'altra e' una callback scritta da `:app` (`navigation/AppNavHost.kt`).
+
+Dalla Fase 2 ogni modulo nuovo ha tre package fissi (docs/fase2-progetto.md, D6):
+- `contract`: le interfacce e i tipi che gli altri moduli usano (con KDoc che spiega il perche');
+- `noop`: i null-object che `:app` lega finche' non arrivano le implementazioni vere (falliscono chiusi:
+  nessuna rete, nessuna autenticazione, dispositivo mai configurato). Vanno nella release;
+- `testing`: i fake, in `src/main` perche' i moduli a valle li riusano nei loro test senza cicli.
+  **Mai nella release**: `tools\check.ps1` fallisce se una classe di un package `testing` compare nel dex.
+
+I legami Hilt sono in `app/src/main/.../di/` (`PlaceholderBindingsModule`: tutti i null-object, da
+sostituire con le implementazioni vere). Lo stato del dispositivo (`FamilySetupRepository`) e' in
+`SetupStateModule`, diverso fra debug (un fake pilotabile da Impostazioni → Sviluppo) e release
+(il null-object). Il Fluid Engine e' in `engine/` (submodule,
 agganciato al tag **engine-2.10.1**); entrano nel build solo `engine-foundation` e `engine-ui`. Per
 aggiungerne altri: `engine\tools\engine-install.ps1 -AppRoot . -Modules engine-ui,engine-storage` (e
 rigenerare i checksum).
@@ -71,7 +93,8 @@ rigenerare i checksum).
 - **`debuggable false`** in release, verificato due volte: `verifyReleaseManifest` (Gradle, sul manifest
   fuso; `assembleRelease` non produce l'APK se fallisce) e `tools\check.ps1` (sull'APK vero).
   `verifyReleaseManifest` fallisce anche per backup attivo, `dataExtractionRules` mancanti, traffico in
-  chiaro, **qualunque componente esportato oltre la launcher** e **qualunque permesso non elencato** in
+  chiaro, **qualunque componente esportato non ammesso** (oltre alla launcher, solo il JobService di
+  WorkManager, protetto da `BIND_JOB_SERVICE`) e **qualunque permesso non elencato** in
   `releaseManifestPolicy` (`gradle/verify-release-manifest.gradle`). Aggiungere una riga li' e' una
   decisione di sicurezza: prima si scrive in `docs/sicurezza.md` (§4/§4-bis).
 - **Backup e trasferimento esclusi**: `allowBackup="false"` piu' `data_extraction_rules.xml` con tutti i
@@ -82,7 +105,7 @@ rigenerare i checksum).
   ```powershell
   .\gradlew.bat --write-verification-metadata sha256 --rerun-tasks --no-build-cache --no-parallel `
     assembleDebug assembleRelease assembleDebugAndroidTest galleryTest galleryLint `
-    :app:lintRelease :core-designsystem:recordRoborazziDebug
+    :app:lintRelease :core-designsystem:recordRoborazziDebug :app:recordRoborazziDebug
   ```
 
   e si **legge il diff** del file: devono comparire solo gli artefatti della dipendenza aggiunta. I
@@ -100,12 +123,15 @@ rigenerare i checksum).
 ```powershell
 .\gradlew.bat :app:installDebug                       # installa la debug (id dev.pampa.mycloudgallery.debug)
 .\gradlew.bat galleryTest                             # unit test di tutti i moduli della galleria
-.\gradlew.bat :core-designsystem:recordRoborazziDebug # PNG del catalogo in core-designsystem\build\outputs\roborazzi
+.\gradlew.bat :core-designsystem:recordRoborazziDebug # PNG del catalogo in docs\screenshots\1.2
+.\gradlew.bat :app:recordRoborazziDebug               # PNG dello scaffold della Fase 2 in docs\screenshots\2-P0
 .\gradlew.bat :app:assembleRelease                    # release (non firmata se mancano le chiavi)
 ```
 
-Nella build debug la schermata iniziale ha un ingresso **Catalogo componenti**
-(`:core-designsystem`, `ComponentCatalogPlaceholder`): nella release non esiste.
+Nella build debug, Impostazioni → **Sviluppo** ha l'ingresso al **Catalogo componenti**
+(`:core-designsystem`, `ComponentCatalogPlaceholder`) e gli interruttori dello stato finto del dispositivo
+(da configurare, in attesa, galleria, azzerato, fermo): nella release non esistono
+(`app/src/debug/.../debugtools/DeveloperTools.kt`).
 
 Test con Robolectric: girano sull'SDK 35 (`gradle/test-resources/robolectric.properties`) perche'
 l'SDK 36 richiede Java 21.

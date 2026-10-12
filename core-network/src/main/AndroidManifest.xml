@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!--
+      Permessi di :core-network (Fase 2, P0). Ognuno ha la sua riga in docs/sicurezza.md 4-bis e in
+      releaseManifestPolicy (gradle/verify-release-manifest.gradle): verifyReleaseManifest e tools/check.ps1
+      falliscono altrimenti.
+
+      - INTERNET: aprire socket verso il NAS (SMB 445, sonda TCP) e il pacchetto Wake-on-LAN. Nessun
+        traffico verso Internet: l'app parla solo con l'IP letterale del NAS, sulla rete scelta dal cancello.
+      - ACCESS_NETWORK_STATE: leggere le reti (Wi-Fi sottostante, VPN, LinkProperties) per riconoscere casa
+        e la VPN di casa, senza permesso di posizione e quindi senza SSID.
+      - CONTROL_TUNNELS (di WireGuard, livello "pericoloso"): accendere e spegnere il tunnel di casa
+        (SET_TUNNEL_UP/DOWN). Facoltativo, chiesto solo al passo 11 dell'onboarding.
+  -->
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+  <uses-permission android:name="com.wireguard.android.permission.CONTROL_TUNNELS" />
+
+  <!--
+      Visibilita' del pacchetto (Android 11+): senza questa riga l'app non vede se WireGuard e' installato
+      (VpnCapability.WIREGUARD_MISSING) e non puo' aprirlo ("Apri WireGuard"). Solo questo pacchetto, mai
+      QUERY_ALL_PACKAGES.
+  -->
+  <queries>
+    <package android:name="com.wireguard.android" />
+  </queries>
+
+</manifest>

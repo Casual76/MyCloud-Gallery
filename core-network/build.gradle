@@ -1,0 +1,33 @@
+// Stato della rete, casa, VPN e cancello del percorso verso il NAS (Fase 2: contratti P0, logica P2).
+// Vede core-common e core-rules: implementa `HomeNetworkSignal` e traduce la propria istantanea nel
+// `NetworkState` del motore delle regole. Non conosce il NAS (core-nas sta sopra, mai sotto).
+//
+// Niente Hilt (D7): chi cabla e' :app. Dipendenze di produzione: quelle gia' verificate dell'app
+// (DataStore per l'impronta di casa e la configurazione della VPN, androidx.core per le API compat).
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.core.network'
+}
+
+dependencies {
+  api project(':core-common')
+  // api: HomeNetworkSignal e NetworkState compaiono nelle firme pubbliche (NetworkEnvironment).
+  api project(':core-rules')
+
+  implementation appDeps.coreKtx
+  implementation appDeps.datastorePreferences
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+  // Lo strato Android (NetworkCallback, LinkProperties) si prova con Robolectric dove possibile (P2).
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+}

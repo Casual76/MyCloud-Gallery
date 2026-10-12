@@ -5,8 +5,10 @@
 //   - la release e' debuggable;
 //   - allowBackup non e' "false", o mancano dataExtractionRules (backup cloud e Smart Switch);
 //   - il traffico in chiaro non e' vietato;
-//   - un componente e' esportato (o ha un intent-filter senza `exported` esplicito) e non e' la launcher
-//     activity: nessun servizio, receiver o provider di una libreria deve restare esposto in silenzio;
+//   - un componente e' esportato (o ha un intent-filter senza `exported` esplicito) e non e' nell'elenco
+//     `allowedExported` (la launcher activity e, dalla Fase 2, il JobService di WorkManager): nessun
+//     servizio, receiver o provider di una libreria deve restare esposto in silenzio;
+//   - un componente ammesso perche' protetto (`exportedRequiresPermission`) non dichiara quel permesso;
 //   - c'e' un permesso Android che non e' nell'elenco qui sotto.
 //
 // `assembleRelease` dipende dal controllo: un APK che non lo passa non si produce nemmeno.
@@ -17,7 +19,18 @@
 
 ext.releaseManifestPolicy = [
   // Gli unici componenti che possono essere esportati (nome di classe completo, come nel manifest fuso).
-  allowedExported  : ['dev.pampa.mycloudgallery.MainActivity'],
+  allowedExported  : [
+    'dev.pampa.mycloudgallery.MainActivity',
+    // WorkManager (Fase 2, P0): il sistema lega il JobService di WorkManager per eseguire i lavori. E'
+    // esportato per forza (lo lega il sistema), ma solo chi ha BIND_JOB_SERVICE (cioe' il sistema stesso)
+    // puo' farlo: il controllo qui sotto pretende quel permesso sul componente. docs/sicurezza.md §8.
+    'androidx.work.impl.background.systemjob.SystemJobService',
+  ],
+  // Per i componenti esportati qui sopra che devono essere protetti: il permesso che il componente DEVE
+  // dichiarare (android:permission). Senza, o con un altro, il manifest non passa.
+  exportedRequiresPermission: [
+    'androidx.work.impl.background.systemjob.SystemJobService': 'android.permission.BIND_JOB_SERVICE',
+  ],
   // Permessi ammessi nel manifest fuso. {applicationId} e' sostituito con l'id dell'app.
   allowedPermissions: [
     // Aggiunto in automatico da androidx.core: protegge i receiver registrati a runtime, e' un
@@ -31,6 +44,32 @@ ext.releaseManifestPolicy = [
     'android.permission.HIDE_OVERLAY_WINDOWS',
     // BiometricPrompt con la credenziale di sistema (blocco app opzionale).
     'android.permission.USE_BIOMETRIC',
+
+    // --- Fase 2 (P0). Righe in docs/sicurezza.md 4-bis (le nuove sono "proposta" finche' l'utente non le
+    // approva, docs/fase2-progetto.md §6) e una riga riassuntiva in §8. -------------------------------------
+    // :core-network: socket verso l'IP del NAS (SMB, sonda TCP, Wake-on-LAN). Normale.
+    'android.permission.INTERNET',
+    // :core-network e :app (motore delle regole): leggere le reti, senza posizione. Normale.
+    'android.permission.ACCESS_NETWORK_STATE',
+    // :core-network: accendere e spegnere il tunnel di casa in WireGuard. "Pericoloso", facoltativo (passo 11).
+    'com.wireguard.android.permission.CONTROL_TUNNELS',
+    // :core-qr: la fotocamera dentro l'app per i QR (D4). Pericoloso, chiesto all'apertura dello scanner.
+    'android.permission.CAMERA',
+    // :app: notifiche (problemi del NAS, approvazioni). Runtime, facoltativo (passo 9).
+    'android.permission.POST_NOTIFICATIONS',
+    // :app: richiesta diretta "Batteria illimitata" (passo 10). Normale; decide l'utente nel dialogo.
+    'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
+    // :app: foto e video del telefono, anche solo quelli selezionati (passo 9).
+    'android.permission.READ_MEDIA_IMAGES',
+    'android.permission.READ_MEDIA_VIDEO',
+    'android.permission.READ_MEDIA_VISUAL_USER_SELECTED',
+    // :app: posizione DENTRO i media (copia fedele, hash uguale). Non e' la posizione del telefono.
+    'android.permission.ACCESS_MEDIA_LOCATION',
+    // WorkManager (dichiarati dalla libreria): tenere sveglio il telefono durante un lavoro, ripianificare i
+    // lavori dopo un riavvio, eseguirli come servizio in primo piano quando serve. Tutti normali.
+    'android.permission.WAKE_LOCK',
+    'android.permission.RECEIVE_BOOT_COMPLETED',
+    'android.permission.FOREGROUND_SERVICE',
   ],
 ]
 
@@ -45,6 +84,9 @@ abstract class VerifyReleaseManifest extends DefaultTask {
 
   @Input
   abstract ListProperty<String> getAllowedExported()
+
+  @Input
+  abstract MapProperty<String, String> getExportedRequiresPermission()
 
   @Input
   abstract ListProperty<String> getAllowedPermissions()
@@ -87,6 +129,11 @@ abstract class VerifyReleaseManifest extends DefaultTask {
           } else if (exported == null && hasFilter && !(name in allowedExported.get())) {
             problems << "<${kind}> ${name} ha un intent-filter senza android:exported esplicito".toString()
           }
+          // Un componente ammesso perche' protetto deve dichiarare ESATTAMENTE il permesso atteso.
+          String required = exportedRequiresPermission.get()[name]
+          if (required != null && exported != 'false' && attr(component, 'permission') != required) {
+            problems << "<${kind}> ${name} e' esportato senza il permesso ${required}".toString()
+          }
         }
       }
     }
@@ -107,7 +154,7 @@ abstract class VerifyReleaseManifest extends DefaultTask {
           "\n(file: ${mergedManifest.get().asFile})"
       )
     }
-    logger.lifecycle('Manifest di release: non debuggable, backup escluso, nessun componente esposto oltre la launcher.')
+    logger.lifecycle('Manifest di release: non debuggable, backup escluso, nessun componente esposto oltre quelli ammessi.')
   }
 }
 
@@ -126,6 +173,7 @@ ext.registerVerifyReleaseManifest = { variant, mergedManifestArtifact ->
     mergedManifest.set(mergedManifestArtifact)
     applicationId.set(variant.applicationId)
     allowedExported.set(releaseManifestPolicy.allowedExported)
+    exportedRequiresPermission.set(releaseManifestPolicy.exportedRequiresPermission)
     allowedPermissions.set(releaseManifestPolicy.allowedPermissions)
   }
   // Un APK che non passa il controllo non si produce nemmeno.

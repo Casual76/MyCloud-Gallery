@@ -1,7 +1,51 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
-  <!-- Scheletro P0 dello scanner: le schermate vere (permesso, mirino, rifiuti) sono di P5. -->
-  <string name="qr_scanner_unavailable_title">Scansione non ancora disponibile</string>
-  <string name="qr_scanner_unavailable_detail">La fotocamera per leggere i QR arriverà con un prossimo aggiornamento. Intanto puoi inserire i dati a mano.</string>
-  <string name="qr_scanner_manual">Inserisci a mano</string>
+<!-- Italiano: il controllo ortografico di lint conosce solo l'inglese. -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="Typos">
+  <!-- QrCode -->
+  <string name="qr_code_unavailable">Non è stato possibile creare il codice QR.</string>
+
+  <!-- Scanner: permesso della fotocamera, prima richiesta -->
+  <string name="qr_perm_ask_title">Serve la fotocamera per leggere il codice</string>
+  <string name="qr_perm_ask_detail">MyCloud Gallery usa la fotocamera solo per inquadrare il codice QR. Le immagini non vengono salvate e non lasciano il telefono.</string>
+  <string name="qr_perm_ask_allow">Consenti la fotocamera</string>
+
+  <!-- Scanner: permesso negato (si puo' richiedere) -->
+  <string name="qr_perm_denied_title">Senza la fotocamera non posso leggere il QR</string>
+  <string name="qr_perm_denied_detail">Puoi riprovare a consentirla, oppure incollare o scrivere qui sotto il codice a mano.</string>
+  <string name="qr_perm_denied_retry">Riprova con la fotocamera</string>
+
+  <!-- Scanner: permesso negato per sempre ("non chiedere più") -->
+  <string name="qr_perm_blocked_title">La fotocamera è bloccata</string>
+  <string name="qr_perm_blocked_detail">Hai scelto di non consentirla più. Puoi sbloccarla dalle impostazioni dell\'app, oppure incollare o scrivere qui sotto il codice a mano.</string>
+  <string name="qr_perm_blocked_settings">Apri le impostazioni</string>
+
+  <!-- Scanner: nessuna fotocamera, o non parte -->
+  <string name="qr_no_camera_title">Fotocamera non disponibile</string>
+  <string name="qr_no_camera_detail">Su questo dispositivo non riesco a usare la fotocamera. Incolla o scrivi qui sotto il codice a mano.</string>
+
+  <!-- Scanner: mirino -->
+  <string name="qr_viewfinder_description">Mirino della fotocamera. Inquadra il codice QR.</string>
+  <string name="qr_viewfinder_hint">Inquadra il codice QR</string>
+  <string name="qr_viewfinder_starting">Avvio della fotocamera…</string>
+  <string name="qr_torch">Torcia</string>
+  <string name="qr_torch_on">Accesa</string>
+  <string name="qr_torch_off">Spenta</string>
+  <string name="qr_read_done">Codice letto</string>
+
+  <!-- Scanner: inserimento a mano -->
+  <string name="qr_manual_open">Inserisci a mano</string>
+  <string name="qr_manual_title">Inserisci il codice a mano</string>
+  <string name="qr_manual_detail">Incolla o scrivi il testo del codice, come appare sull\'altro dispositivo.</string>
+  <string name="qr_manual_label">Codice</string>
+  <string name="qr_manual_placeholder">Incolla qui il codice</string>
+  <string name="qr_manual_submit">Usa il codice</string>
+  <string name="qr_manual_back_to_camera">Usa la fotocamera</string>
+  <string name="qr_cancel">Annulla</string>
+
+  <!-- Scanner: perche' un codice non va bene (uno per ScanRejection) -->
+  <string name="qr_reject_not_ours">Questo non è un codice di MyCloud Gallery.</string>
+  <string name="qr_reject_wireguard">È il QR di configurazione di WireGuard: contiene una chiave privata, trattalo come una password. Qui non serve.</string>
+  <string name="qr_reject_other_family">Questo codice è di un\'altra famiglia.</string>
+  <string name="qr_reject_expired">Questo invito è scaduto. Chiedine uno nuovo a chi ti ha invitato.</string>
+  <string name="qr_reject_malformed">Il codice sembra giusto ma non è valido. Riprova, o chiedine uno nuovo.</string>
 </resources>

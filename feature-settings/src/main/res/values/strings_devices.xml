@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Dispositivi: elenco, dettaglio, segnala perso, approvazione. -->
+
+  <!-- Elenco -->
+  <string name="devices_title">Dispositivi</string>
+  <string name="devices_empty_title">Nessuna famiglia</string>
+  <string name="devices_empty_detail">Questo telefono non fa ancora parte di una famiglia. Finita la configurazione, qui compariranno i dispositivi.</string>
+  <string name="devices_hero_eyebrow">Famiglia</string>
+  <plurals name="devices_active_value">
+    <item quantity="one">%1$d attivo</item>
+    <item quantity="other">%1$d attivi</item>
+  </plurals>
+  <string name="devices_hero_title">Dispositivi che scrivono sul NAS</string>
+  <string name="devices_hero_detail">Ogni telefono e ogni profilo del tablet è un dispositivo a sé, con la sua chiave.</string>
+  <string name="devices_hero_detail_admin">Ogni telefono e ogni profilo del tablet è un dispositivo a sé. Li approvi e li revochi tu.</string>
+  <string name="devices_metric_waiting">Da approvare</string>
+  <string name="devices_metric_inactive">Non più attivi</string>
+  <string name="devices_stale_title">Elenco forse non aggiornato</string>
+  <string name="devices_section_requests">Richieste da approvare</string>
+  <string name="devices_section_requests_detail">Hai 15 minuti da quando l’app le vede.</string>
+  <string name="devices_section_this">Questo dispositivo</string>
+  <string name="devices_section_others">Altri dispositivi</string>
+  <string name="devices_section_inactive">Non più attivi</string>
+  <string name="devices_section_inactive_detail">Dismessi, revocati o segnati come persi. I loro dati non sono più accettati.</string>
+  <string name="devices_section_reports">Segnalazioni</string>
+  <string name="devices_convert_reports">Controlla le segnalazioni di smarrimento</string>
+  <string name="devices_convert_reports_detail">Un familiare può segnalare un proprio dispositivo: qui le confermi</string>
+  <string name="devices_footnote">Lo stato dei dispositivi si legge dal registro firmato sul NAS: l’ultima attività la pubblica ogni dispositivo, al massimo una volta al giorno.</string>
+
+  <!-- Riga di un dispositivo -->
+  <string name="device_model_user">%1$s · account %2$s</string>
+  <string name="device_seen">Visto %1$s</string>
+  <string name="device_seen_short">%1$s</string>
+  <string name="device_never_seen">Attività non ancora pubblicata</string>
+  <string name="request_model_user">%1$s · account dichiarato: %2$s</string>
+  <string name="request_seen">Vista %1$s</string>
+  <string name="pill_this_device">Questo</string>
+  <string name="pill_admin">Admin</string>
+  <string name="pill_look_alike">Reinstallato?</string>
+  <string name="pill_to_approve">Da approvare</string>
+  <string name="pill_expired">Scaduta</string>
+  <string name="status_approved">Approvato</string>
+  <string name="status_retired">Dismesso</string>
+  <string name="status_revoked">Revocato</string>
+  <string name="status_lost">Perso</string>
+  <string name="role_indexer">Indicizzatore</string>
+  <string name="role_preparer">Preparatore</string>
+
+  <!-- Dettaglio -->
+  <string name="device_detail_title">Dispositivo</string>
+  <string name="device_not_found_title">Dispositivo non trovato</string>
+  <string name="device_not_found_detail">Non è più nell’elenco della famiglia. Torna indietro e rileggi l’elenco.</string>
+  <string name="device_info_section">Informazioni</string>
+  <string name="info_account">Account del NAS</string>
+  <string name="info_roles">Ruoli</string>
+  <string name="info_roles_none">Nessuno</string>
+  <string name="info_last_seen">Ultima attività</string>
+  <string name="info_app_version">Versione dell’app</string>
+  <string name="info_model">Modello</string>
+  <string name="info_unknown">Non disponibile</string>
+  <string name="look_alike_title">Sembra una reinstallazione</string>
+  <string name="look_alike_message">Ha lo stesso nome di «%1$s». Se è lo stesso telefono reinstallato, dismetti il vecchio: ogni installazione ha una chiave nuova.</string>
+  <string name="device_actions_section">Azioni</string>
+  <string name="action_retire">Dismetti</string>
+  <string name="action_retire_detail">Fuori uso in buono stato: restano validi i suoi dati già scritti</string>
+  <string name="action_revoke">Revoca l’accesso</string>
+  <string name="action_revoke_detail">Nessun suo dato viene più accettato</string>
+  <string name="action_lost">Segna come perso…</string>
+  <string name="action_lost_detail">Si azzera appena si ricollega al NAS</string>
+  <string name="action_lost_own">Segnala come perso…</string>
+  <string name="action_lost_own_detail">Lo segnali tu; l’admin conferma e il dispositivo si azzera</string>
+  <string name="device_actions_footnote">Nessuna azione parte da dati letti dal NAS: ognuna richiede un tuo tocco confermato.</string>
+  <string name="device_this_footnote">Questo è il dispositivo che stai usando. Per dismetterlo o revocarlo serve un altro admin.</string>
+
+  <!-- Dismettere e revocare -->
+  <string name="retire_title">Dismettere «%1$s»?</string>
+  <string name="retire_message">Il dispositivo esce dalla famiglia in buono stato: i dati che ha già scritto restano validi, ma non ne scriverà di nuovi.</string>
+  <string name="retire_confirm">Dismetti</string>
+  <string name="revoke_title">Revocare «%1$s»?</string>
+  <string name="revoke_message">Da questo momento nessun dato di questo dispositivo viene più accettato, qualunque data dichiari. Non si torna indietro: un dispositivo ritrovato si riconfigura e si riapprova.</string>
+  <string name="revoke_confirm">Revoca</string>
+
+  <!-- Segnala come perso: i due fogli -->
+  <string name="lost_first_title">Segnare «%1$s» come perso?</string>
+  <string name="lost_first_message">Ecco cosa succede. Dopo ti guido nei passi da fare fuori dall’app, nell’ordine giusto.</string>
+  <string name="lost_first_confirm">Continua</string>
+  <string name="lost_cons_wipe">Si azzera da solo</string>
+  <string name="lost_cons_wipe_detail">Appena si ricollega al NAS cancella chiavi, credenziali e dati dell’app</string>
+  <string name="lost_cons_untrusted">Non è più fidato</string>
+  <string name="lost_cons_untrusted_detail">Nessun suo dato viene più accettato dagli altri dispositivi</string>
+  <string name="lost_cons_final">Non si annulla</string>
+  <string name="lost_cons_final_detail">Un dispositivo ritrovato va riconfigurato e riapprovato da capo</string>
+  <string name="lost_second_title">Ultima conferma</string>
+  <string name="lost_second_message">Stai per segnare «%1$s» come perso. Da qui non si torna indietro.</string>
+  <string name="lost_second_confirm">Segna come perso</string>
+  <string name="lost_ack_title">Ho capito</string>
+  <string name="lost_ack_detail">Il dispositivo si azzererà e dovrà essere riapprovato</string>
+
+  <!-- La guida dopo la segnalazione -->
+  <string name="guide_eyebrow">Dispositivo perso</string>
+  <string name="guide_progress">%1$d di %2$d</string>
+  <string name="guide_title">Segnalato. Ora chiudi le altre porte</string>
+  <string name="guide_detail">«%1$s» si azzererà quando si ricollega. Se non si ricollega, la cancellazione non avviene: per questo i passi qui sotto contano.</string>
+  <string name="guide_section">Cosa fare, nell’ordine</string>
+  <string name="guide_step_report">Segnalato nel registro</string>
+  <string name="guide_step_report_detail">Fatto adesso. È l’unico passo che fa azzerare il dispositivo.</string>
+  <string name="guide_step_report_owner">Segnalazione inviata</string>
+  <string name="guide_step_report_owner_detail">L’admin la deve confermare: appena lo fa, il dispositivo risulta perso.</string>
+  <string name="guide_step_revoke">Revoca il peer WireGuard</string>
+  <string name="guide_step_revoke_detail">Sul FRITZ!Box: Internet › Accesso remoto › WireGuard, elimina la voce di «%1$s». Così non entra più da fuori casa.</string>
+  <string name="guide_step_password">Cambia la password del NAS</string>
+  <string name="guide_step_password_detail">Dalla dashboard del NAS, account «%1$s». Gli altri dispositivi con lo stesso account dovranno reinserirla.</string>
+  <string name="guide_step_find">Samsung Find</string>
+  <string name="guide_step_find_detail">Da findmymobile.samsung.com: fallo suonare, bloccalo o cancellalo.</string>
+  <string name="guide_pill_done">Fatto</string>
+  <string name="guide_pill_now">Ora</string>
+  <string name="guide_footnote">Tocca un passo quando l’hai fatto: si sbloccano uno alla volta. Prima il segnale firmato, poi le due porte (VPN e password) che il dispositivo perso potrebbe ancora usare, infine Samsung Find.</string>
+  <string name="guide_close">Chiudi la guida</string>
+  <string name="guide_reopen">Riapri la guida allo smarrimento</string>
+  <string name="guide_reopen_detail">I passi da fare fuori dall’app, nell’ordine giusto</string>
+
+  <!-- Approvazione di un dispositivo nuovo -->
+  <string name="approve_title">Nuovo dispositivo</string>
+  <string name="approve_eyebrow">Richiesta</string>
+  <string name="approve_value_open">Da approvare</string>
+  <string name="approve_value_expired">Scaduta</string>
+  <string name="approve_request_detail">%1$s · vista %2$s</string>
+  <string name="approve_step_account">1 · Chi è</string>
+  <string name="approve_step_account_detail">L’account NAS lo scrive il dispositivo che chiede: conferma tu che è quello giusto.</string>
+  <string name="approve_account_confirm">L’account «%1$s» è giusto</string>
+  <string name="approve_account_confirm_detail">Se non lo riconosci, non approvare</string>
+  <string name="approve_step_proof">2 · Il codice</string>
+  <string name="approve_step_proof_detail">Dimostra di avere davanti il dispositivo nuovo.</string>
+  <string name="approve_mode_code">Digita il codice</string>
+  <string name="approve_mode_scan">Scansiona il QR</string>
+  <string name="approve_code_explain">Sul dispositivo nuovo c’è un codice di 16 caratteri. Scrivilo qui: lo confronto io con la sua chiave.</string>
+  <string name="approve_code_label">Codice del dispositivo</string>
+  <string name="approve_code_placeholder">AAAA-BBBB-CCCC-DDDD</string>
+  <string name="approve_code_hint">Maiuscole, spazi e trattini non contano.</string>
+  <string name="approve_scan_explain">Inquadra il QR che il dispositivo nuovo mostra accanto al codice. Funziona se siete nella stessa stanza.</string>
+  <string name="approve_scan_ok_pill">Letto</string>
+  <string name="approve_scan_ok_title">QR di questo dispositivo</string>
+  <string name="approve_scan_ok_detail">La chiave letta è quella della richiesta. Puoi approvare.</string>
+  <string name="approve_scan_wrong_pill">Altro dispositivo</string>
+  <string name="approve_scan_wrong_title">QR di un altro dispositivo</string>
+  <string name="approve_scan_wrong_detail">La chiave letta non è quella di questa richiesta. Non approvare: scansiona di nuovo.</string>
+  <string name="approve_scan_again">Scansiona di nuovo</string>
+  <string name="approve_action">Approva questo dispositivo</string>
+  <string name="approve_footnote">Prima di approvare, il telefono ti chiede lo sblocco. Senza approvazione il dispositivo resta in sola lettura e nessun suo dato viene accettato.</string>
+  <string name="approve_prompt_title">Approvare il dispositivo?</string>
+  <string name="approve_prompt_subtitle">Conferma con la credenziale del telefono</string>
+  <string name="approve_done_eyebrow">Fatto</string>
+  <string name="approve_done_value">Approvato</string>
+  <string name="approve_done_title">Il dispositivo fa parte della famiglia</string>
+  <string name="approve_done_detail">Da adesso legge e scrive sul NAS con gli altri. La richiesta è chiusa.</string>
+  <string name="approve_done_back">Torna ai dispositivi</string>
+  <string name="approve_missing_title">Richiesta non trovata</string>
+  <string name="approve_missing_detail">È già stata approvata da un altro admin, oppure è scaduta e il dispositivo l’ha rifatta.</string>
+  <string name="approve_back_to_devices">Torna ai dispositivi</string>
+</resources>

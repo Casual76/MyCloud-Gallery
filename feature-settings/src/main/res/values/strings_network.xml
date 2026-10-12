@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Rete e VPN: dove sei, impronta di casa, controllo di WireGuard. -->
+
+  <string name="network_title">Rete e VPN</string>
+  <string name="network_eyebrow">Adesso</string>
+
+  <!-- Dove sei -->
+  <string name="place_home_value">In casa</string>
+  <string name="place_home_title">Sei sulla rete di casa</string>
+  <string name="place_away_value">Fuori casa</string>
+  <string name="place_away_wifi_title">Fuori casa, via VPN (Wi-Fi)</string>
+  <string name="place_away_mobile_title">Fuori casa, via VPN (dati mobili)</string>
+  <string name="place_roaming_value">Roaming</string>
+  <string name="place_roaming_title">Roaming: attività automatiche ferme</string>
+  <string name="place_vpn_off_value">VPN spenta</string>
+  <string name="place_vpn_off_title">Fuori casa, la VPN è spenta</string>
+  <string name="place_untrusted_value">Rete estranea</string>
+  <string name="place_untrusted_title">Rete non riconosciuta</string>
+  <string name="place_foreign_value">VPN estranea</string>
+  <string name="place_foreign_title">Una VPN che non è quella di casa</string>
+  <string name="place_offline_value">Offline</string>
+  <string name="place_offline_title">Nessuna rete</string>
+  <string name="network_route_home">Il NAS si raggiunge direttamente.</string>
+  <string name="network_route_home_vpn">La VPN è accesa anche a casa: il NAS passa dal tunnel, più lento.</string>
+  <string name="network_route_vpn">Il NAS si raggiunge attraverso la VPN di casa.</string>
+
+  <!-- Avvisi -->
+  <string name="network_local_denied_title">Rete locale non consentita</string>
+  <string name="network_ipv4_title">Rete solo IPv4</string>
+  <string name="network_ipv4_message">Questa rete non ha IPv6: il FRITZ!Box dietro CGNAT si raggiunge da fuori solo in IPv6. Prova con i dati mobili o un’altra rete.</string>
+
+  <!-- Impronta di casa -->
+  <string name="network_section_home">Rete di casa</string>
+  <string name="network_section_home_detail">L’app riconosce casa dall’indirizzo IPv6 locale del tuo router, non dal nome del Wi-Fi.</string>
+  <string name="network_fingerprint">Impronta di casa</string>
+  <string name="network_fingerprint_none">Non ancora raccolta</string>
+  <string name="network_fingerprint_detail">%1$s · raccolta il %2$s</string>
+  <plurals name="network_ula_count">
+    <item quantity="one">%1$d rete riconosciuta</item>
+    <item quantity="other">%1$d reti riconosciute</item>
+  </plurals>
+  <string name="network_pill_known">Nota</string>
+  <string name="network_pill_missing">Manca</string>
+  <string name="network_current">Rete attuale</string>
+  <string name="match_match">È la rete di casa</string>
+  <string name="match_weak">Somiglia a casa ma non basta</string>
+  <string name="match_none">Non è la rete di casa</string>
+  <string name="match_unknown">Non so dirlo</string>
+  <string name="network_ipv6">IPv6 globale</string>
+  <string name="network_ipv6_detail">Serve fuori casa per raggiungere il router</string>
+  <string name="network_recapture">Raccogli di nuovo l’impronta</string>
+  <string name="network_recapture_detail">Dopo un reset del router: solo dal Wi-Fi di casa</string>
+
+  <!-- Nuova raccolta -->
+  <string name="capture_reading">Leggo la rete Wi-Fi attuale…</string>
+  <string name="capture_verifying">Controllo che qui risponda il tuo NAS…</string>
+  <string name="capture_no_wifi_title">Serve il Wi-Fi di casa</string>
+  <string name="capture_no_wifi">Non c’è un Wi-Fi da leggere. Collegati al Wi-Fi di casa, spegni la VPN e riprova.</string>
+  <string name="capture_no_ula_title">Questo Wi-Fi non ha un’impronta forte</string>
+  <string name="capture_no_ula">Il router non annuncia un indirizzo IPv6 locale: senza, non posso dire che sia casa. Nome della rete e gateway non bastano, sono uguali in mezza Italia.</string>
+  <string name="capture_cannot_title">Non posso verificare il NAS</string>
+  <string name="capture_cannot">Serve l’account del NAS per controllare che qui risponda il tuo. Completa la configurazione e riprova.</string>
+  <string name="capture_ready_title">Pronta da confermare</string>
+  <string name="capture_ready_same">Coincide con quella già salvata. Se confermi, la raccolta si aggiorna.</string>
+  <string name="capture_ready_new">È diversa da quella salvata (il router è stato reimpostato?). Se è casa tua, confermala.</string>
+  <string name="capture_mismatch_title">Qui risponde un altro NAS</string>
+  <string name="capture_mismatch">Su questa rete il NAS non ha la stessa identità: non è casa tua. Non ho salvato niente.</string>
+  <string name="capture_failed_title">Non ho potuto verificare</string>
+  <string name="capture_saved_title">Impronta aggiornata</string>
+  <string name="capture_saved">Da ora questa è la rete di casa. Gli altri dispositivi la ricavano dalla configurazione firmata della famiglia.</string>
+  <string name="capture_sheet_title">È la rete di casa?</string>
+  <string name="capture_sheet_message">Il NAS qui ha la stessa identità di sempre. Se confermi, questa rete diventa la «casa» dell’app: da qui il NAS si raggiunge senza VPN.</string>
+  <string name="capture_sheet_confirm">Sì, è casa mia</string>
+
+  <!-- WireGuard -->
+  <string name="network_section_vpn">VPN di casa</string>
+  <string name="network_section_vpn_detail">Fuori casa il NAS si raggiunge solo con WireGuard. Il controllo è facoltativo.</string>
+  <string name="network_wg">WireGuard</string>
+  <string name="wg_pill_ready">Controllo attivo</string>
+  <string name="wg_pill_missing">Non installato</string>
+  <string name="wg_pill_permission">Manca il permesso</string>
+  <string name="wg_pill_not_configured">Da configurare</string>
+  <string name="wg_ready">L’app può accendere e spegnere il tunnel di casa.</string>
+  <string name="wg_missing">L’app WireGuard non è installata su questo profilo.</string>
+  <string name="wg_permission">Manca il permesso di comandare i tunnel. In WireGuard attiva «Allow remote control apps».</string>
+  <string name="wg_not_configured">Il permesso c’è, ma manca il nome del tunnel di casa.</string>
+  <string name="network_automation">Controllo automatico</string>
+  <string name="auto_off">Spento: la VPN la accendi e spegni tu</string>
+  <string name="auto_idle">Tutto a posto: spenta a casa, accesa fuori</string>
+  <string name="auto_waiting">A casa con la VPN accesa: aspetto che il NAS sia libero</string>
+  <string name="auto_commanding_up">Sto accendendo la VPN…</string>
+  <string name="auto_commanding_down">Sto spegnendo la VPN…</string>
+  <string name="auto_word_on">accesa</string>
+  <string name="auto_word_off">spenta</string>
+  <string name="auto_done">Ultimo comando: VPN %1$s · %2$s</string>
+  <string name="cmd_short_confirmed">confermato</string>
+  <string name="cmd_short_not_observed">nessun cambiamento visto</string>
+  <string name="cmd_short_lost">rete persa</string>
+  <string name="cmd_short_skipped">non inviato</string>
+  <string name="auto_suspended_lockdown">Fermo: spegnendo il tunnel è sparita la rete (forse «VPN sempre attiva con blocco»). Ho riacceso la VPN.</string>
+  <string name="auto_suspended_not_controllable">Fermo: WireGuard non risponde ai comandi.</string>
+  <string name="network_vpn_now">VPN in questo momento</string>
+  <string name="vpn_obs_none">Nessuna VPN attiva</string>
+  <string name="vpn_obs_home">VPN di casa attiva</string>
+  <string name="vpn_obs_foreign">VPN estranea attiva</string>
+  <string name="vpn_obs_unknown">VPN attiva, non so di chi</string>
+  <string name="network_try_up">Prova ad accendere la VPN</string>
+  <string name="network_try_down">Prova a spegnere la VPN</string>
+  <string name="network_open_wg">Apri WireGuard</string>
+  <string name="network_configure">Configura il controllo</string>
+  <string name="network_footnote">«Accesa» o «spenta» le dico solo dopo averlo visto sulla rete: un comando inviato non basta. Ogni profilo del tablet ha il suo WireGuard.</string>
+
+  <!-- Esito della prova -->
+  <string name="cmd_ok_title">Confermato</string>
+  <string name="cmd_ok_up">Ho visto comparire la VPN di casa.</string>
+  <string name="cmd_ok_down">Ho visto sparire la VPN: la rete è rimasta.</string>
+  <string name="cmd_none_title">Nessun cambiamento</string>
+  <string name="cmd_none">Il comando è partito ma la rete non è cambiata: la VPN non è controllabile da qui. Usa «Apri WireGuard».</string>
+  <string name="cmd_lost_title">La rete è sparita</string>
+  <string name="cmd_lost">Spegnendo il tunnel non c’è più connessione: probabile «VPN sempre attiva con blocco». L’ho riaccesa e ho fermato il controllo automatico.</string>
+  <string name="cmd_skipped_title">Comando non inviato</string>
+  <string name="skip_disabled">Il controllo automatico è spento.</string>
+  <string name="skip_already">Il tunnel è già nello stato che hai chiesto.</string>
+  <string name="skip_rate_limited">Ho già mandato un comando per questo cambio di rete: ne mando uno solo, mai in ciclo.</string>
+  <string name="skip_background">In background Android rifiuta spesso questi comandi: ci provo una volta sola.</string>
+</resources>

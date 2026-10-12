@@ -1,0 +1,216 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Famiglia: hub, invito, kit di recupero, stato, secondo admin / recupero, reset. -->
+
+  <!-- Hub -->
+  <string name="family_title">Famiglia</string>
+  <string name="family_none_title">Nessuna famiglia</string>
+  <string name="family_none_detail">Questa pagina serve quando il dispositivo è approvato. Finisci la configurazione o aspetta l’approvazione dell’admin.</string>
+  <string name="family_hero_eyebrow">Famiglia</string>
+  <plurals name="family_hero_value">
+    <item quantity="one">%1$d dispositivo</item>
+    <item quantity="other">%1$d dispositivi</item>
+  </plurals>
+  <string name="family_hero_title">Fai parte della famiglia</string>
+  <string name="family_hero_title_admin">Sei l’admin</string>
+  <plurals name="family_hero_detail">
+    <item quantity="one">C’è %1$d admin. Se lo perdi, il kit di recupero o un secondo admin rimettono tutto a posto.</item>
+    <item quantity="other">Ci sono %1$d admin. Se ne perdi uno, l’altro o il kit di recupero rimettono tutto a posto.</item>
+  </plurals>
+  <plurals name="family_hero_detail_admin">
+    <item quantity="one">Sei l’unico admin: tieni al sicuro il kit di recupero, o aggiungi un secondo admin.</item>
+    <item quantity="other">Siete in %1$d admin: se ne perdi uno, un altro può continuare.</item>
+  </plurals>
+  <string name="family_section_invite">Invita</string>
+  <string name="family_invite">Configura un familiare</string>
+  <string name="family_invite_detail">Mostra un QR sullo schermo: lui inserisce solo la sua password</string>
+  <string name="family_section_protect">Protezione</string>
+  <string name="family_kit">Kit di recupero</string>
+  <string name="family_kit_detail">Cos’è, dove sta e quando serve</string>
+  <string name="family_state">Stato della famiglia</string>
+  <string name="family_state_detail">Un QR per chi entra senza QR o recupera l’admin</string>
+  <string name="family_section_admin">Diventare admin</string>
+  <string name="family_second_admin">Aggiungi un secondo admin</string>
+  <string name="family_second_admin_detail">Con il kit: il primo admin resta com’è</string>
+  <string name="family_replace_admin">Ho perso l’admin</string>
+  <string name="family_replace_admin_detail">Con il kit: questo dispositivo prende il suo posto</string>
+  <string name="family_admin_footnote">Serve il codice del kit di recupero. Il vecchio admin può restare approvato, essere segnato come perso o essere revocato.</string>
+  <string name="family_section_danger">Zona delicata</string>
+  <string name="family_reset">Reimposta la famiglia</string>
+  <string name="family_reset_detail">Chiave nuova, famiglia nuova: tutti da riapprovare</string>
+  <string name="family_danger_footnote">Si usa solo quando non c’è più né un admin né il kit di recupero.</string>
+
+  <!-- Invito -->
+  <string name="invite_title">Configura un familiare</string>
+  <string name="invite_eyebrow">Invito</string>
+  <string name="invite_value">QR d’invito</string>
+  <string name="invite_hero_title">Un familiare, un QR</string>
+  <string name="invite_hero_detail">Lui scansiona il QR e scrive solo la sua password. Poi aspetta che tu lo approvi.</string>
+  <string name="invite_section_who">Per chi è</string>
+  <string name="invite_field_user">Utente del NAS</string>
+  <string name="invite_field_user_hint">per esempio anna</string>
+  <string name="invite_field_user_help">L’account che il familiare ha già sul NAS. Mai «admin».</string>
+  <string name="invite_field_name">Nome del dispositivo</string>
+  <string name="invite_field_name_hint">Tablet — profilo Mamma</string>
+  <string name="invite_field_name_help">Come lo vedrai nell’elenco dei dispositivi.</string>
+  <string name="invite_field_share">Area privata</string>
+  <string name="invite_field_share_hint">nome della cartella</string>
+  <string name="invite_field_share_help">Se la lasci vuota è quella con lo stesso nome dell’utente.</string>
+  <string name="invite_error_user">Solo lettere, cifre e . _ - (senza accenti né spazi).</string>
+  <string name="invite_error_admin">L’account «admin» del NAS non si usa mai nell’app.</string>
+  <string name="invite_error_name">Scrivi un nome breve, senza spazi ai bordi.</string>
+  <string name="invite_error_share">Il nome della cartella non è valido.</string>
+  <string name="invite_section_preset">Come lavora</string>
+  <string name="invite_section_preset_detail">Il preset di partenza del familiare: potrà cambiarlo.</string>
+  <string name="invite_preset_default">Come la famiglia</string>
+  <string name="invite_preset_default_detail">Il preset scelto quando hai creato la famiglia</string>
+  <string name="invite_create">Crea il QR d’invito</string>
+  <string name="invite_form_footnote">Il QR vale 24 ore e non contiene nessuna password.</string>
+  <string name="invite_failed_title">Invito non creato</string>
+  <string name="invite_failed">Non sono riuscito a creare l’invito. Non è stato scritto niente: riprova fra poco.</string>
+  <string name="invite_not_admin_title">Solo l’admin invita</string>
+  <string name="invite_not_admin_detail">Questo dispositivo non tiene la chiave di famiglia.</string>
+  <string name="invite_qr_description">QR d’invito del familiare. Non condividerlo: mostralo solo sullo schermo.</string>
+  <string name="invite_shown_section">Per chi è</string>
+  <string name="invite_summary_device">Dispositivo</string>
+  <string name="invite_summary_account">Account NAS</string>
+  <string name="invite_summary_share">Area privata</string>
+  <string name="invite_summary_expires">Vale ancora</string>
+  <plurals name="invite_expires_value">
+    <item quantity="one">%1$d ora</item>
+    <item quantity="other">%1$d ore</item>
+  </plurals>
+  <string name="invite_safe_title">Un QR fotografato non basta</string>
+  <string name="invite_safe_message">Senza la password dell’account e senza la tua approvazione non serve a niente. Non contiene password.</string>
+  <string name="invite_screen_only_title">Mostralo solo sullo schermo</string>
+  <string name="invite_screen_only_message">Lo schermo non si può fotografare né registrare da questa pagina. Non mandarlo in chat: fallo scansionare di persona.</string>
+  <string name="invite_done">Fatto, chiudi il QR</string>
+  <string name="invite_back">Torna alla famiglia</string>
+  <string name="invite_shown_footnote">Per le prossime 24 ore l’app controlla più spesso se arriva la richiesta, e ti avvisa.</string>
+
+  <!-- Kit di recupero -->
+  <string name="kit_title">Kit di recupero</string>
+  <string name="kit_eyebrow">Kit di recupero</string>
+  <string name="kit_value">Piano B</string>
+  <string name="kit_hero_title">Il codice che ti riporta admin</string>
+  <string name="kit_hero_detail">Se perdi il dispositivo admin, il kit permette a un altro di prendere il suo posto.</string>
+  <string name="kit_section_what">Cos’è</string>
+  <string name="kit_what_code">Un codice a gruppi</string>
+  <string name="kit_what_code_detail">L’hai scritto e verificato quando hai creato la famiglia. L’app non lo salva: non può rimostrartelo.</string>
+  <string name="kit_what_file">Un file cifrato sul NAS</string>
+  <string name="kit_what_file_detail">Sta nella tua area privata, cartella «recovery». Senza il codice è illeggibile.</string>
+  <string name="kit_section_when">Quando serve</string>
+  <string name="kit_when_lost">Hai perso il dispositivo admin</string>
+  <string name="kit_when_lost_detail">Da un dispositivo approvato prendi il suo posto e segni il vecchio come perso o revocato</string>
+  <string name="kit_when_second">Vuoi un secondo admin</string>
+  <string name="kit_when_second_detail">Un altro dispositivo diventa admin: il primo resta approvato</string>
+  <string name="kit_admin_footnote">Queste due strade si fanno da un altro dispositivo approvato, non da quello che è già admin.</string>
+  <string name="kit_keep_title">Dove tenere il codice</string>
+  <string name="kit_keep_message">Su un foglio in un posto sicuro di casa, o in un gestore di password. Mai in una chat, in una foto o in uno screenshot.</string>
+  <string name="kit_lost_title">Se hai perso anche il codice</string>
+  <string name="kit_lost_message">Il kit non si apre più. Se esiste un secondo admin, continua lui; altrimenti l’ultima strada è reimpostare la famiglia, e ogni dispositivo si riapprova.</string>
+
+  <!-- Stato della famiglia -->
+  <string name="state_title">Stato della famiglia</string>
+  <string name="state_eyebrow">Stato della famiglia</string>
+  <string name="state_version">Versione %1$d</string>
+  <string name="state_hero_title">Un QR per chi entra senza QR</string>
+  <string name="state_hero_detail">Alza la versione minima del registro che un dispositivo nuovo accetta: così non può essere ingannato con un registro vecchio.</string>
+  <string name="state_qr_description">QR dello stato della famiglia. Non contiene password né chiavi private.</string>
+  <string name="state_when_title">Quando mostrarlo</string>
+  <string name="state_when_message">A chi sta entrando senza il QR d’invito, o a chi sta recuperando l’admin. Si scansiona di persona.</string>
+  <string name="state_footnote">Contiene la versione del registro, l’id della famiglia e l’impronta della chiave di famiglia. Nient’altro.</string>
+  <string name="state_unavailable_title">Stato non disponibile</string>
+  <string name="state_unavailable_detail">Questo dispositivo non ha ancora un registro accettato da cui ricavarlo. Riprova dopo la prima lettura del NAS.</string>
+
+  <!-- Secondo admin e recupero -->
+  <string name="recovery_title_second">Secondo admin</string>
+  <string name="recovery_title_replace">Recupera l’admin</string>
+  <string name="recovery_eyebrow_second">Secondo admin</string>
+  <string name="recovery_eyebrow_replace">Recupero</string>
+  <string name="recovery_value">Con il kit</string>
+  <string name="recovery_hero_title_second">Un altro admin, con il kit</string>
+  <string name="recovery_hero_detail_second">Questo dispositivo diventa admin. Il primo resta approvato e potete lavorare in due.</string>
+  <string name="recovery_hero_title_replace">Prendi il posto dell’admin perso</string>
+  <string name="recovery_hero_detail_replace">Questo dispositivo diventa admin. Il vecchio lo segni come perso o lo revochi.</string>
+  <string name="recovery_unavailable_title">Funzione non ancora collegata</string>
+  <string name="recovery_unavailable_detail">Per cercare il kit serve l’account del NAS di questo dispositivo. Completa la configurazione e riprova.</string>
+  <string name="recovery_section_where">Dove sta il kit</string>
+  <string name="recovery_section_where_detail">Nell’area privata dell’admin, cartella «recovery».</string>
+  <string name="recovery_field_user">Account dell’admin</string>
+  <string name="recovery_field_user_help">L’utente NAS di chi ha creato la famiglia.</string>
+  <string name="recovery_field_share">Area privata dell’admin</string>
+  <string name="recovery_field_share_help">Se la lasci vuota è quella con lo stesso nome dell’account.</string>
+  <string name="recovery_search">Cerca il kit</string>
+  <string name="recovery_search_footnote">La ricerca legge solo i nomi dei file: nessun codice parte verso il NAS.</string>
+  <string name="recovery_error_fields_title">Controlla i campi</string>
+  <string name="recovery_error_fields">L’account o la cartella non sono validi: solo lettere, cifre e . _ -</string>
+  <string name="recovery_no_kit_title">Nessun kit trovato</string>
+  <string name="recovery_no_kit">In quell’area non c’è nessun kit di recupero. Controlla l’account e il nome della cartella.</string>
+  <string name="recovery_section_kits">Kit trovati</string>
+  <string name="recovery_section_kits_detail">Scegli quello da aprire.</string>
+  <string name="recovery_kit_row">Kit %1$d</string>
+  <string name="recovery_other_account">Cerca in un altro account</string>
+  <string name="recovery_section_code">Il codice</string>
+  <string name="recovery_section_code_detail">Quello del foglio che hai scritto alla creazione della famiglia.</string>
+  <string name="recovery_code_label">Codice di recupero</string>
+  <string name="recovery_code_placeholder">AAAA-BBBB-CCCC-…</string>
+  <string name="recovery_code_hint">Maiuscole, spazi e trattini non contano. Il codice non lascia questo telefono.</string>
+  <string name="recovery_wrong_code_title">Il codice non apre il kit</string>
+  <string name="recovery_wrong_code">Controllalo sul foglio: O e 0, I e 1 si confondono facilmente. Puoi riprovare quante volte vuoi, il NAS non viene toccato.</string>
+  <string name="recovery_state_title">Stato della famiglia</string>
+  <string name="recovery_state_message">Se un dispositivo approvato ti mostra il suo QR «Stato della famiglia», scansionalo: altrimenti non posso escludere un registro vecchio.</string>
+  <string name="recovery_state_scan">Scansiona lo stato</string>
+  <string name="recovery_state_read">Stato letto · versione %1$d</string>
+  <string name="recovery_state_read_detail">Il registro accettato non può essere più vecchio di questo</string>
+  <string name="recovery_state_remove">Togli lo stato letto</string>
+  <string name="recovery_section_old">Il vecchio admin</string>
+  <string name="recovery_section_old_detail">Cosa ne facciamo.</string>
+  <string name="recovery_old_lost">Segnalo come perso</string>
+  <string name="recovery_old_lost_detail">Se si ricollega, si azzera da solo</string>
+  <string name="recovery_old_revoked">Revocalo</string>
+  <string name="recovery_old_revoked_detail">Nessun suo dato viene più accettato; non si azzera</string>
+  <string name="recovery_action">Diventa admin</string>
+  <string name="recovery_action_footnote">Per diventare admin questo dispositivo crea una chiave nuova e si approva da solo nel registro firmato.</string>
+  <string name="recovery_done_eyebrow">Fatto</string>
+  <string name="recovery_done_value">Sei admin</string>
+  <string name="recovery_done_title_second">Ora siete in due</string>
+  <string name="recovery_done_detail_second">Questo dispositivo tiene la chiave di famiglia. Il primo admin è rimasto com’era.</string>
+  <string name="recovery_done_title_replace">Hai preso il suo posto</string>
+  <string name="recovery_done_detail_replace">Questo dispositivo tiene la chiave di famiglia. Ricordati di fare i passi per il dispositivo perso: VPN e password del NAS.</string>
+  <string name="recovery_done_back">Torna alla famiglia</string>
+
+  <!-- Reset -->
+  <string name="reset_title">Reimposta la famiglia</string>
+  <string name="reset_eyebrow">Zona delicata</string>
+  <string name="reset_value">Reimposta</string>
+  <string name="reset_hero_title">Ricominciare da una famiglia nuova</string>
+  <string name="reset_hero_detail">Si usa quando non c’è più né un admin né il kit di recupero. I dati vecchi non si cancellano.</string>
+  <string name="reset_not_admin_title">Solo l’admin reimposta</string>
+  <string name="reset_not_admin_detail">Questo dispositivo non tiene la chiave di famiglia.</string>
+  <string name="reset_section_happens">Cosa succede</string>
+  <string name="reset_happens_key">Chiave, id e kit nuovi</string>
+  <string name="reset_happens_key_detail">La famiglia vecchia non vale più; il kit vecchio non apre niente</string>
+  <string name="reset_happens_devices">Tutti da riapprovare</string>
+  <string name="reset_happens_devices_detail">Ogni dispositivo si riconfigura con il QR nuovo e aspetta la tua approvazione</string>
+  <string name="reset_happens_data">I dati restano dove sono</string>
+  <string name="reset_happens_data_detail">Foto e file sul NAS non si toccano: i dati della famiglia vecchia vengono solo ignorati</string>
+  <string name="reset_start">Reimposta la famiglia…</string>
+  <string name="reset_footnote">Prima di farlo, controlla di non avere un secondo admin o il codice del kit: sono strade meno pesanti.</string>
+  <string name="reset_sheet_title">Reimpostare la famiglia?</string>
+  <string name="reset_sheet_message">Tutti i dispositivi, te compreso, dovranno essere riapprovati con un QR nuovo. Il kit di recupero vecchio non aprirà più niente.</string>
+  <string name="reset_sheet_confirm">Continua</string>
+  <string name="reset_section_word">Seconda conferma</string>
+  <string name="reset_section_word_detail">Scrivi %1$s per procedere.</string>
+  <string name="reset_word_label">Parola di conferma</string>
+  <string name="reset_confirm">Reimposta adesso</string>
+  <string name="reset_done_eyebrow">Fatto</string>
+  <string name="reset_done_value">Rifatta</string>
+  <string name="reset_done_title">La famiglia è nuova</string>
+  <string name="reset_done_detail">Chiave, id e kit sono nuovi. I dispositivi vecchi non valgono più.</string>
+  <string name="reset_done_next">Adesso</string>
+  <string name="reset_next_save_kit">Salva il codice del kit nuovo</string>
+  <string name="reset_next_save_kit_detail">Su un foglio, in un posto sicuro. Mai in una chat</string>
+  <string name="reset_next_reconfigure">Riconfigura ogni dispositivo</string>
+  <string name="reset_next_reconfigure_detail">Mostra un QR d’invito nuovo per ciascuno e approvalo</string>
+</resources>

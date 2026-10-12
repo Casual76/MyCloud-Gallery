@@ -1,23 +1,61 @@
 package dev.pampa.mycloudgallery.feature.settings
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Backup
+import androidx.compose.material.icons.rounded.BatteryChargingFull
+import androidx.compose.material.icons.rounded.Devices
+import androidx.compose.material.icons.rounded.Dns
+import androidx.compose.material.icons.rounded.FolderOff
+import androidx.compose.material.icons.rounded.Groups
+import androidx.compose.material.icons.rounded.MonitorHeart
+import androidx.compose.material.icons.rounded.Security
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.VpnKey
+import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.antigravity.fluidengine.ui.fluid.FluidAmbient
+import dev.antigravity.fluidengine.ui.fluid.FluidHero
+import dev.antigravity.fluidengine.ui.fluid.FluidHeroMotif
+import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
+import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
+import dev.pampa.mycloudgallery.core.family.contract.StaleReason
 import dev.pampa.mycloudgallery.core.family.contract.TrustStatus
+import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
+import dev.pampa.mycloudgallery.feature.settings.ui.StatusPill
+import androidx.compose.runtime.getValue
+
+/**
+ * Le destinazioni delle Impostazioni. Con [None] (il default) le righe non portano da nessuna parte: e' la
+ * forma dello scaffold P0, che gli screenshot di `:app` usano ancora.
+ */
+class SettingsLinks(
+  val openDevices: () -> Unit = {},
+  val openFamily: () -> Unit = {},
+  val openNasAccount: () -> Unit = {},
+  val openNetwork: () -> Unit = {},
+  val openSecurity: () -> Unit = {},
+  val openBackupNotice: () -> Unit = {},
+) {
+  companion object {
+    val None = SettingsLinks()
+  }
+}
 
 @Composable
 internal fun SettingsRoute(
   onBack: () -> Unit,
+  links: SettingsLinks,
   openDiagnostics: () -> Unit,
   resumeStep: (OnboardingStep) -> Unit,
   developerSection: (@Composable () -> Unit)?,
@@ -30,12 +68,17 @@ internal fun SettingsRoute(
     openDiagnostics = openDiagnostics,
     resumeStep = resumeStep,
     developerSection = developerSection,
+    links = links,
   )
 }
 
 /**
- * Scheletro P0 delle Impostazioni: le voci che P7 riempira', la sezione "Da completare" (passi saltati) e la
- * Diagnostica. Le voci senza pagina non sono ancora toccabili.
+ * La pagina principale delle Impostazioni (P7): un'apertura con lo stato della famiglia, poi le sezioni
+ * (famiglia e dispositivi, connessione, protezione), i passi saltati dell'onboarding ("Da completare") e
+ * la Diagnostica.
+ *
+ * Le azioni da admin (richieste da approvare) compaiono solo sul dispositivo che tiene la chiave di
+ * famiglia. [developerSection] la passa :app solo in debug.
  */
 @Composable
 fun SettingsScreen(
@@ -44,68 +87,122 @@ fun SettingsScreen(
   openDiagnostics: () -> Unit,
   resumeStep: (OnboardingStep) -> Unit,
   developerSection: (@Composable () -> Unit)? = null,
+  links: SettingsLinks = SettingsLinks.None,
 ) {
-  FluidScreen(title = stringResource(R.string.settings_title), onBack = onBack) {
+  val family = familyHero(state)
+  FluidScreen(
+    title = stringResource(R.string.settings_title),
+    onBack = onBack,
+    ambient = FluidAmbient(tone = family.tone, motif = FluidHeroMotif.Glow, urgent = false),
+  ) {
+    item {
+      FluidHero(
+        tone = family.tone,
+        motif = FluidHeroMotif.Figures,
+        eyebrow = stringResource(R.string.settings_hero_eyebrow),
+        value = family.value(),
+        title = family.title(),
+        description = family.description(),
+        icon = Icons.Rounded.Groups,
+        actionLabel = if (state.isAdmin && state.pendingRequests > 0) stringResource(R.string.settings_hero_review) else null,
+        onAction = if (state.isAdmin && state.pendingRequests > 0) links.openDevices else null,
+      )
+    }
+
     item { FluidSectionHeader(title = stringResource(R.string.settings_section_family)) }
     item {
       FluidListGroup {
         FluidListRow(
           title = stringResource(R.string.settings_devices),
           subtitle = devicesSubtitle(state),
-          disclosure = false,
+          tone = if (state.pendingRequests > 0 && state.isAdmin) FluidTone.Warning else FluidTone.Primary,
+          leading = { RowGlyph(Icons.Rounded.Devices) },
+          badge = if (state.pendingRequests > 0 && state.isAdmin) {
+            { StatusPill(state.pendingRequests.toString(), FluidTone.Warning) }
+          } else {
+            null
+          },
+          onClick = links.openDevices,
         )
         FluidListDivider()
         FluidListRow(
           title = stringResource(R.string.settings_family),
-          subtitle = stringResource(R.string.settings_family_detail),
-          disclosure = false,
+          subtitle = stringResource(if (state.isAdmin) R.string.settings_family_detail_admin else R.string.settings_family_detail),
+          tone = FluidTone.Primary,
+          leading = { RowGlyph(Icons.Rounded.Groups) },
+          onClick = links.openFamily,
         )
-        FluidListDivider()
+      }
+    }
+
+    item { FluidSectionHeader(title = stringResource(R.string.settings_section_connection)) }
+    item {
+      FluidListGroup {
         FluidListRow(
           title = stringResource(R.string.settings_nas_account),
           subtitle = stringResource(R.string.settings_nas_account_detail),
-          disclosure = false,
+          tone = FluidTone.Info,
+          leading = { RowGlyph(Icons.Rounded.Dns) },
+          onClick = links.openNasAccount,
         )
         FluidListDivider()
         FluidListRow(
           title = stringResource(R.string.settings_network),
           subtitle = stringResource(R.string.settings_network_detail),
-          disclosure = false,
-        )
-        FluidListDivider()
-        FluidListRow(
-          title = stringResource(R.string.settings_security),
-          subtitle = stringResource(R.string.settings_security_detail),
-          disclosure = false,
+          tone = FluidTone.Info,
+          leading = { RowGlyph(Icons.Rounded.Wifi) },
+          onClick = links.openNetwork,
         )
       }
     }
+
+    item { FluidSectionHeader(title = stringResource(R.string.settings_section_protection)) }
+    item {
+      FluidListGroup {
+        FluidListRow(
+          title = stringResource(R.string.settings_security),
+          subtitle = stringResource(R.string.settings_security_detail),
+          tone = FluidTone.Success,
+          leading = { RowGlyph(Icons.Rounded.Security) },
+          onClick = links.openSecurity,
+        )
+        FluidListDivider()
+        FluidListRow(
+          title = stringResource(R.string.settings_backup_notice),
+          subtitle = stringResource(R.string.settings_backup_notice_detail),
+          tone = FluidTone.Warning,
+          leading = { RowGlyph(Icons.Rounded.Backup) },
+          onClick = links.openBackupNotice,
+        )
+      }
+    }
+
     if (state.pendingSteps.isNotEmpty()) {
       item { FluidSectionHeader(title = stringResource(R.string.settings_section_pending)) }
       item {
         FluidListGroup {
           state.pendingSteps.forEachIndexed { index, step ->
             if (index > 0) FluidListDivider()
-            FluidListRow(
-              title = stringResource(R.string.settings_pending_step, step.number),
-              subtitle = stringResource(R.string.settings_pending_detail),
-              onClick = { resumeStep(step) },
-            )
+            PendingStepRow(step = step, onClick = { resumeStep(step) })
           }
         }
       }
+      item { FluidSectionFootnote(text = stringResource(R.string.settings_pending_footnote)) }
     }
+
     item { FluidSectionHeader(title = stringResource(R.string.settings_section_support)) }
     item {
       FluidListGroup {
         FluidListRow(
           title = stringResource(R.string.settings_diagnostics),
           subtitle = stringResource(R.string.settings_diagnostics_detail),
+          tone = FluidTone.Neutral,
+          leading = { RowGlyph(Icons.Rounded.MonitorHeart) },
           onClick = openDiagnostics,
         )
       }
     }
-    item { FluidSectionFootnote(text = stringResource(R.string.settings_placeholder_note)) }
+
     if (developerSection != null) {
       item { FluidSectionHeader(title = stringResource(R.string.settings_section_developer)) }
       item { developerSection() }
@@ -113,9 +210,86 @@ fun SettingsScreen(
   }
 }
 
+/** Un passo saltato dell'onboarding, con un nome che dice cosa c'e' da fare (non solo "passo 10"). */
+@Composable
+private fun PendingStepRow(step: OnboardingStep, onClick: () -> Unit) {
+  val (title, detail, icon) = when (step) {
+    OnboardingStep.FOLDERS -> Triple(R.string.pending_folders, R.string.pending_folders_detail, Icons.Rounded.FolderOff)
+    OnboardingStep.BATTERY -> Triple(R.string.pending_battery, R.string.pending_battery_detail, Icons.Rounded.BatteryChargingFull)
+    OnboardingStep.VPN -> Triple(R.string.pending_vpn, R.string.pending_vpn_detail, Icons.Rounded.VpnKey)
+    else -> Triple(R.string.pending_generic, R.string.pending_generic_detail, Icons.Rounded.Tune)
+  }
+  FluidListRow(
+    title = if (title == R.string.pending_generic) stringResource(title, step.number) else stringResource(title),
+    subtitle = stringResource(detail),
+    tone = FluidTone.Warning,
+    leading = { RowGlyph(icon) },
+    onClick = onClick,
+  )
+}
+
+/** Come si presenta la famiglia in cima alla pagina: il tono dell'apertura e le tre frasi. */
+private class FamilyHero(
+  val tone: FluidHeroTone,
+  val value: @Composable () -> String,
+  val title: @Composable () -> String,
+  val description: @Composable () -> String,
+)
+
+private fun familyHero(state: SettingsUiState): FamilyHero = when {
+  state.trust is TrustStatus.NotConfigured -> FamilyHero(
+    tone = FluidHeroTone.Secondary,
+    value = { stringResource(R.string.hero_none_value) },
+    title = { stringResource(R.string.hero_none_title) },
+    description = { stringResource(R.string.hero_none_detail) },
+  )
+  state.trust is TrustStatus.Stale -> FamilyHero(
+    tone = FluidHeroTone.Alert,
+    value = { deviceCountText(state.deviceCount) },
+    title = { stringResource(R.string.hero_stale_title) },
+    description = { stringResource(staleDetail(state.trust.reason)) },
+  )
+  state.trust is TrustStatus.Revoked || state.trust is TrustStatus.Retired || state.trust is TrustStatus.Lost -> FamilyHero(
+    tone = FluidHeroTone.Alert,
+    value = { stringResource(R.string.hero_inactive_value) },
+    title = { stringResource(R.string.hero_inactive_title) },
+    description = { stringResource(R.string.hero_inactive_detail) },
+  )
+  state.trust is TrustStatus.Pending -> FamilyHero(
+    tone = FluidHeroTone.Tertiary,
+    value = { stringResource(R.string.hero_pending_value) },
+    title = { stringResource(R.string.hero_pending_title) },
+    description = { stringResource(R.string.hero_pending_detail) },
+  )
+  state.isAdmin && state.pendingRequests > 0 -> FamilyHero(
+    tone = FluidHeroTone.TertiaryToPrimary,
+    value = { pluralStringResource(R.plurals.hero_requests_value, state.pendingRequests, state.pendingRequests) },
+    title = { stringResource(R.string.hero_requests_title) },
+    description = { stringResource(R.string.hero_requests_detail) },
+  )
+  else -> FamilyHero(
+    tone = FluidHeroTone.PrimaryToSecondary,
+    value = { deviceCountText(state.deviceCount) },
+    title = { stringResource(if (state.isAdmin) R.string.hero_ok_title_admin else R.string.hero_ok_title) },
+    description = { stringResource(if (state.isAdmin) R.string.hero_ok_detail_admin else R.string.hero_ok_detail) },
+  )
+}
+
+private fun staleDetail(reason: StaleReason): Int = when (reason) {
+  StaleReason.NOT_REFRESHED -> R.string.stale_not_refreshed
+  StaleReason.NEWER_UNVERIFIED -> R.string.stale_newer_unverified
+  StaleReason.LISTING_TRUNCATED -> R.string.stale_listing_truncated
+  StaleReason.NEEDS_APP_UPDATE -> R.string.stale_needs_update
+  StaleReason.EQUIVOCATION -> R.string.stale_equivocation
+}
+
+@Composable
+private fun deviceCountText(count: Int): String = pluralStringResource(R.plurals.settings_devices_count, count, count)
+
 @Composable
 private fun devicesSubtitle(state: SettingsUiState): String = when {
   state.trust is TrustStatus.NotConfigured -> stringResource(R.string.settings_devices_none)
-  state.pendingRequests > 0 -> pluralStringResource(R.plurals.settings_devices_pending, state.pendingRequests, state.pendingRequests)
+  state.pendingRequests > 0 && state.isAdmin ->
+    pluralStringResource(R.plurals.settings_devices_pending, state.pendingRequests, state.pendingRequests)
   else -> pluralStringResource(R.plurals.settings_devices_count, state.deviceCount, state.deviceCount)
 }

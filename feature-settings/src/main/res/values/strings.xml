@@ -1,8 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <!-- Scheletro P0 delle Impostazioni. Le pagine vere sono di P7. -->
+  <!-- Impostazioni (P7): pagina principale, testi comuni, esiti delle azioni e messaggi d'errore del NAS. -->
+
+  <!-- Comuni -->
+  <string name="action_cancel">Annulla</string>
+  <string name="selected">Selezionato</string>
+  <string name="value_yes">Sì</string>
+  <string name="value_no">No</string>
+
+  <!-- Pagina principale -->
   <string name="settings_title">Impostazioni</string>
+  <string name="settings_hero_eyebrow">La tua famiglia</string>
+  <string name="settings_hero_review">Rivedi le richieste</string>
   <string name="settings_section_family">Famiglia e dispositivi</string>
+  <string name="settings_section_connection">Connessione</string>
+  <string name="settings_section_protection">Protezione</string>
   <string name="settings_devices">Dispositivi</string>
   <string name="settings_devices_none">Nessuna famiglia configurata</string>
   <plurals name="settings_devices_count">
@@ -14,19 +26,135 @@
     <item quantity="other">%1$d richieste da approvare</item>
   </plurals>
   <string name="settings_family">Famiglia</string>
-  <string name="settings_family_detail">Invita un familiare, kit di recupero, secondo admin</string>
+  <string name="settings_family_detail">Kit di recupero, stato della famiglia, secondo admin</string>
+  <string name="settings_family_detail_admin">Invita un familiare, kit di recupero, secondo admin</string>
   <string name="settings_nas_account">Account del NAS</string>
   <string name="settings_nas_account_detail">Password e indirizzo del NAS</string>
   <string name="settings_network">Rete e VPN</string>
   <string name="settings_network_detail">Rete di casa e controllo di WireGuard</string>
   <string name="settings_security">Sicurezza</string>
   <string name="settings_security_detail">Blocco dell’app con la credenziale del telefono</string>
+  <string name="settings_backup_notice">Copia esterna del NAS</string>
+  <string name="settings_backup_notice_detail">Il NAS non è un backup: cosa fare</string>
   <string name="settings_section_pending">Da completare</string>
-  <string name="settings_pending_step">Passo %1$d della configurazione</string>
-  <string name="settings_pending_detail">Saltato durante la configurazione: completalo quando vuoi</string>
+  <string name="settings_pending_footnote">Passi che hai saltato durante la configurazione. Si riprendono da dove eri rimasto.</string>
   <string name="settings_section_support">Assistenza</string>
   <string name="settings_diagnostics">Diagnostica</string>
   <string name="settings_diagnostics_detail">Stato della rete, del NAS e del telefono</string>
-  <string name="settings_placeholder_note">Le pagine delle impostazioni sono in preparazione.</string>
   <string name="settings_section_developer">Sviluppo</string>
+
+  <!-- Passi saltati -->
+  <string name="pending_folders">Cartelle da escludere</string>
+  <string name="pending_folders_detail">Scegli la musica, i film e le copertine da non mostrare</string>
+  <string name="pending_battery">Batteria senza limiti</string>
+  <string name="pending_battery_detail">Impedisci a Samsung di fermare l’app in background</string>
+  <string name="pending_vpn">VPN di casa</string>
+  <string name="pending_vpn_detail">Fuori casa il NAS si raggiunge solo con WireGuard</string>
+  <string name="pending_generic">Passo %1$d della configurazione</string>
+  <string name="pending_generic_detail">Saltato durante la configurazione: completalo quando vuoi</string>
+
+  <!-- L'apertura della pagina principale -->
+  <string name="hero_none_value">Nessuna</string>
+  <string name="hero_none_title">Nessuna famiglia su questo telefono</string>
+  <string name="hero_none_detail">Quando la configurazione sarà finita, qui compariranno i dispositivi e le azioni della famiglia.</string>
+  <string name="hero_stale_title">Il registro potrebbe essere vecchio</string>
+  <string name="hero_inactive_value">Fermo</string>
+  <string name="hero_inactive_title">Questo dispositivo non è più attivo</string>
+  <string name="hero_inactive_detail">È stato dismesso, revocato o segnato come perso: non può più scrivere sul NAS.</string>
+  <string name="hero_pending_value">In attesa</string>
+  <string name="hero_pending_title">Aspetti l’approvazione</string>
+  <string name="hero_pending_detail">Finché l’admin non approva questo dispositivo resta in sola lettura.</string>
+  <plurals name="hero_requests_value">
+    <item quantity="one">%1$d richiesta</item>
+    <item quantity="other">%1$d richieste</item>
+  </plurals>
+  <string name="hero_requests_title">Qualcuno chiede di entrare</string>
+  <string name="hero_requests_detail">Un dispositivo nuovo aspetta la tua approvazione. Confronta il codice prima di approvare.</string>
+  <string name="hero_ok_title">Fai parte della famiglia</string>
+  <string name="hero_ok_detail">Questo dispositivo è approvato: legge e scrive sul NAS insieme agli altri.</string>
+  <string name="hero_ok_title_admin">Sei l’admin della famiglia</string>
+  <string name="hero_ok_detail_admin">Tieni la chiave di famiglia: approvi i dispositivi nuovi e puoi segnalare quelli persi.</string>
+
+  <!-- Quando il registro potrebbe essere vecchio -->
+  <string name="stale_not_refreshed">Il NAS non si raggiunge da un po’: l’app lavora con l’ultimo registro che ha accettato.</string>
+  <string name="stale_newer_unverified">Sul NAS c’è una versione più nuova del registro che non è stato possibile verificare.</string>
+  <string name="stale_listing_truncated">Nella cartella del registro ci sono troppi file: l’elenco è incompleto.</string>
+  <string name="stale_needs_update">Sul NAS c’è un formato più nuovo di quello che questa versione dell’app capisce. Aggiorna l’app.</string>
+  <string name="stale_equivocation">Due registri diversi dichiarano la stessa versione. Per prudenza non si accetta nessuna modifica nuova.</string>
+
+  <!-- Esiti delle azioni dell'admin -->
+  <string name="fb_done_title">Fatto</string>
+  <string name="fb_done">La modifica è stata scritta nel registro firmato della famiglia.</string>
+  <string name="fb_newer_title">Il registro è cambiato</string>
+  <string name="fb_newer">Un altro admin ha appena fatto una modifica. Ho riletto i dati: controlla e riprova.</string>
+  <string name="fb_fork_title">Registro in conflitto</string>
+  <string name="fb_fork">Due versioni diverse del registro sono firmate con la chiave di famiglia. Da qui non si può continuare: serve l’admin per sceglierne una.</string>
+  <string name="fb_blocked_title">Registro bloccato</string>
+  <string name="fb_blocked">Nella cartella del registro ci sono troppi file non validi. Vanno tolti dal PC prima di continuare.</string>
+  <string name="fb_update_title">Serve un aggiornamento</string>
+  <string name="fb_update">Sul NAS c’è un formato più nuovo di quello che questa versione dell’app capisce. Aggiorna l’app e riprova.</string>
+  <string name="fb_expired_title">Richiesta scaduta</string>
+  <string name="fb_expired">Sono passati più di 15 minuti da quando l’app l’ha vista. Il dispositivo nuovo deve rifare la richiesta: ripartirà dall’ingresso con il QR.</string>
+  <string name="fb_mismatch_title">Il codice non corrisponde</string>
+  <string name="fb_mismatch">Il codice o il QR non sono quelli di questa richiesta. Controlla lo schermo del dispositivo nuovo: se non coincide, non approvare.</string>
+  <string name="fb_not_admin_title">Solo l’admin può farlo</string>
+  <string name="fb_not_admin">Questo dispositivo non tiene la chiave di famiglia.</string>
+  <string name="fb_failed_title">Non è andata</string>
+  <string name="fb_auth_locked_title">Sblocco bloccato dal telefono</string>
+  <string name="fb_auth_locked">Troppi tentativi sbagliati: è Android a bloccare lo sblocco per un po’. Riprova più tardi.</string>
+  <string name="fb_auth_unavailable_title">Serve il blocco schermo</string>
+  <string name="fb_auth_unavailable">Per questa azione il telefono chiede la sua credenziale (impronta, volto, PIN). Impostala nelle impostazioni di sicurezza di Android.</string>
+  <string name="fb_auth_error_title">Sblocco non riuscito</string>
+  <string name="fb_auth_error">Android non ha completato la verifica. Riprova.</string>
+
+  <!-- Problemi dei passi lunghi (recupero, reset) -->
+  <string name="problem_generic">Qualcosa non ha funzionato. Riprova fra poco.</string>
+  <string name="problem_unreachable">Il NAS non si raggiunge da qui. Controlla di essere a casa o con la VPN accesa e riprova.</string>
+  <string name="problem_write_failed">Il NAS non ha accettato la scrittura. Nulla è stato cambiato a metà: puoi riprovare.</string>
+  <string name="problem_registry_untrusted">Il registro letto dal NAS non è affidabile (firma, versione o conflitto). Non è stato cambiato niente.</string>
+  <string name="problem_not_available">Questa funzione non è ancora collegata.</string>
+
+  <!-- Errori del NAS: la colonna «Messaggio» di docs/fase2-progetto.md §3.4 -->
+  <string name="nas_error_auth_failed">La password del NAS non è più valida (forse è stata cambiata). Inseriscila di nuovo.</string>
+  <string name="nas_error_account_locked">L’account del NAS è bloccato: va sbloccato dalla dashboard del NAS.</string>
+  <string name="nas_error_account_disabled">Questo account è disattivato sul NAS.</string>
+  <string name="nas_error_password_expired">La password è scaduta: cambiala dal NAS.</string>
+  <string name="nas_error_account_restricted">Il NAS non permette l’accesso a questo account adesso.</string>
+  <string name="nas_error_guest">Il NAS ha offerto un accesso ospite: rifiutato.</string>
+  <string name="nas_error_insecure">Il NAS non ha concesso una connessione cifrata: nessun dato inviato.</string>
+  <string name="nas_error_identity">A questo indirizzo risponde un NAS diverso da quello configurato. Nessuna password inviata.</string>
+  <string name="nas_error_permission">Non hai il permesso per questa cartella.</string>
+  <string name="nas_error_share_missing">La cartella condivisa non esiste più sul NAS.</string>
+  <string name="nas_error_quota">Hai esaurito lo spazio del tuo account (quota): il NAS ha ancora spazio.</string>
+  <string name="nas_error_full">Il NAS è pieno: il backup è in pausa, la consultazione continua.</string>
+  <string name="nas_error_busy">Il file è in uso dal PC: riprovo più tardi.</string>
+  <string name="nas_error_service_down">Il NAS è acceso ma la condivisione file non risponde.</string>
+  <string name="nas_error_timeout">Il NAS non risponde (forse si sta risvegliando)…</string>
+  <string name="nas_error_local_network">Android non permette all’app di usare la rete locale.</string>
+  <string name="nas_error_stalled">Trasferimento bloccato: rete lenta, riprendo più tardi.</string>
+  <string name="nas_error_credentials_missing">Manca la password del NAS: va inserita di nuovo.</string>
+  <string name="nas_error_generic">Il NAS ha dato una risposta inattesa. Riprova fra poco.</string>
+
+  <!-- Percorso negato -->
+  <string name="deny_offline">Nessuna rete: la libreria sul telefono resta usabile.</string>
+  <string name="deny_captive_portal">La rete chiede una pagina di accesso prima di far passare il traffico.</string>
+  <string name="deny_untrusted">Rete non riconosciuta: nessuna connessione al NAS, nemmeno la password.</string>
+  <string name="deny_vpn_off">Fuori casa: accendi la VPN di casa per raggiungere il NAS.</string>
+  <string name="deny_foreign_vpn">È attiva una VPN che non è quella di casa: nessuna connessione al NAS.</string>
+  <string name="deny_not_configured">Il NAS non è ancora configurato su questo dispositivo.</string>
+
+  <!-- Quanto tempo fa -->
+  <string name="ago_now">adesso</string>
+  <plurals name="ago_minutes">
+    <item quantity="one">%1$d minuto fa</item>
+    <item quantity="other">%1$d minuti fa</item>
+  </plurals>
+  <plurals name="ago_hours">
+    <item quantity="one">%1$d ora fa</item>
+    <item quantity="other">%1$d ore fa</item>
+  </plurals>
+  <plurals name="ago_days">
+    <item quantity="one">%1$d giorno fa</item>
+    <item quantity="other">%1$d giorni fa</item>
+  </plurals>
 </resources>

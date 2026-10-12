@@ -13,17 +13,25 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 
-/** Cio' che la pagina principale delle Impostazioni mostra. */
+/**
+ * Cio' che la pagina principale delle Impostazioni mostra.
+ *
+ * Il costruttore e' quello dello scaffold P0 (lo usano gli screenshot di `:app`): i campi nuovi si calcolano
+ * da questi, non si aggiungono.
+ */
 data class SettingsUiState(
   val trust: TrustStatus,
   val deviceCount: Int,
   val pendingRequests: Int,
   val pendingSteps: List<OnboardingStep>,
-)
+) {
+  /** Questo dispositivo tiene la chiave di famiglia: vede anche le azioni da admin. */
+  val isAdmin: Boolean get() = trust is TrustStatus.Approved && trust.admin
+}
 
 /**
- * Lo stato delle Impostazioni: il registro (P3) e i passi saltati dell'onboarding (P4). Scheletro P0: P7
- * aggiunge le pagine e le azioni (approvare, segnalare perso, invitare...).
+ * Lo stato delle Impostazioni: il registro (P3) e i passi saltati dell'onboarding (P4). Le pagine che
+ * partono da qui hanno ognuna il proprio ViewModel (dispositivi, famiglia, account, rete, sicurezza).
  */
 @HiltViewModel
 class SettingsViewModel @Inject constructor(

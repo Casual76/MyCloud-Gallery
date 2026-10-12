@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Sicurezza: blocco dell'app, e avviso sul backup esterno. -->
+
+  <string name="security_title">Sicurezza</string>
+  <string name="security_eyebrow">Blocco dell’app</string>
+  <string name="security_value_on">Attivo</string>
+  <string name="security_value_off">Spento</string>
+  <string name="security_hero_on_title">L’app si chiude da sola</string>
+  <string name="security_hero_on_detail">Per riaprirla serve la credenziale del telefono. Si richiude: %1$s.</string>
+  <string name="security_hero_off_title">Chi ha il telefono sbloccato entra</string>
+  <string name="security_hero_off_detail">Con il blocco acceso, foto e NAS restano chiusi anche a telefono sbloccato.</string>
+  <string name="security_no_lock_title">Il telefono non ha un blocco schermo</string>
+  <string name="security_no_lock">Senza PIN, sequenza o impronta chiunque prenda il telefono entra, e le password dell’app sono alla sua portata. Impostalo nelle impostazioni di Android.</string>
+  <string name="security_open_system">Apri le impostazioni di sicurezza</string>
+  <string name="security_need_lock_title">Prima serve un blocco schermo</string>
+  <string name="security_need_lock">Il blocco dell’app usa la credenziale del telefono. Senza, l’app resterebbe chiusa per sempre: per questo non si accende.</string>
+  <string name="security_section_lock">Blocco</string>
+  <string name="security_lock_row">Blocca l’app</string>
+  <string name="security_lock_row_detail">Impronta, volto o PIN del telefono: mai un PIN dell’app</string>
+  <string name="security_lock_now">Blocca ora</string>
+  <string name="security_lock_now_detail">Richiude subito, senza aspettare</string>
+  <string name="security_section_timeout">Quando richiudere</string>
+  <string name="security_section_timeout_detail">Dopo quanto tempo fuori dall’app serve di nuovo lo sblocco.</string>
+  <string name="timeout_immediately">Subito, ogni volta che esco</string>
+  <string name="timeout_30s">Dopo 30 secondi</string>
+  <string name="timeout_1m">Dopo 1 minuto</string>
+  <string name="timeout_5m">Dopo 5 minuti</string>
+  <string name="timeout_15m">Dopo 15 minuti</string>
+  <string name="security_timeout_default">Consigliato</string>
+  <string name="security_section_protects">Cosa protegge</string>
+  <string name="security_protects_keys">Password e chiavi</string>
+  <string name="security_protects_keys_detail">Stanno nella cassaforte hardware del telefono, non in file né in backup</string>
+  <string name="security_protects_screens">Schermate riservate</string>
+  <string name="security_protects_screens_detail">QR d’invito, codici e password non si possono fotografare né registrare, e nei recenti l’app è oscurata</string>
+  <string name="security_section_backup">Copia esterna</string>
+  <string name="security_backup_detail">I due dischi del NAS si copiano a vicenda: non è un backup</string>
+  <string name="security_backup_pill">Da decidere</string>
+  <string name="security_footnote">Se sbagli lo sblocco più volte è Android a metterti in attesa. L’app non conta i tentativi e non cancella niente.</string>
+  <string name="security_auth_failed_title">Blocco non cambiato</string>
+  <string name="security_auth_failed">Per spegnere il blocco serve la credenziale del telefono, e non è stata confermata.</string>
+  <string name="security_disable_prompt_title">Spegnere il blocco dell’app?</string>
+  <string name="security_disable_prompt_subtitle">Conferma con la credenziale del telefono</string>
+
+  <!-- Avviso sul backup esterno -->
+  <string name="backup_title">Copia esterna del NAS</string>
+  <string name="backup_eyebrow">Attenzione</string>
+  <string name="backup_value">Senza copia</string>
+  <string name="backup_hero_title">Il NAS non è un backup</string>
+  <string name="backup_hero_detail">Foto e video della famiglia stanno in un posto solo: se si cancellano o si cifrano, spariscono ovunque.</string>
+  <string name="backup_raid_title">Perché due dischi non bastano</string>
+  <string name="backup_raid_message">I due dischi si copiano a vicenda (RAID 1): un file cancellato, o cifrato da un virus, lo è su entrambi. Solo una copia staccata dal NAS ti protegge.</string>
+  <string name="backup_section_checklist">Da fare, per importanza</string>
+  <string name="backup_section_checklist_detail">Le prime due sono quelle che contano di più.</string>
+  <string name="backup_item_copy">Una copia esterna</string>
+  <string name="backup_item_copy_detail">Un disco USB sul NAS con l’app WD «USB Backups», poi staccato e tenuto altrove, a rotazione</string>
+  <string name="backup_item_public">Togli «Pubblico» a NAS e Public</string>
+  <string name="backup_item_public_detail">Accesso solo con gli account di famiglia. Prima controlla cosa le usa senza password: TV, stampante, altri PC</string>
+  <string name="backup_item_wifi">Wi-Fi più sicuro</string>
+  <string name="backup_item_wifi_detail">WPA2 con WPA3 e WPS spento. Controlla prima che i dispositivi più vecchi reggano</string>
+  <string name="backup_item_guest">Apparecchi «smart» nella rete ospiti</string>
+  <string name="backup_item_guest_detail">Li separa dal NAS: quasi tutti funzionano con la sola Internet</string>
+  <string name="backup_item_cloud">Spegni l’accesso cloud WD</string>
+  <string name="backup_item_cloud_detail">L’app non lo usa ed è un percorso in più verso il NAS</string>
+  <string name="backup_item_dhcp">Prenota l’indirizzo del NAS nel FRITZ!Box</string>
+  <string name="backup_item_dhcp_detail">Serve per cambiarlo in sicurezza: l’app non lo aggiorna mai da sola</string>
+  <string name="backup_footnote">L’app non può verificare un disco USB né le impostazioni del router: non segna niente da sola. Le spunte si fanno nella checklist.</string>
+  <string name="backup_review">Rivedi la checklist</string>
+  <string name="backup_close">Chiudi</string>
+</resources>

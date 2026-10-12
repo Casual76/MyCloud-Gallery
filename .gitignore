@@ -45,3 +45,9 @@ spike/results/**/logcat*.txt
 
 # log temporanei degli agenti
 /*.log
+
+# Screenshot generati (Roborazzi): restano in locale per la revisione.
+# Nel repository va solo una selezione in docs/screenshots/selezione/.
+docs/screenshots/2-P7/
+docs/screenshots/2-P9/
+docs/screenshots/3-*/

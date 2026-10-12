@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Account del NAS: pagina, password, indirizzo (E-R7, E-R8). -->
+
+  <!-- Pagina -->
+  <string name="account_title">Account del NAS</string>
+  <string name="account_eyebrow">NAS</string>
+  <string name="account_unavailable_title">Funzione non ancora collegata</string>
+  <string name="account_unavailable_detail">L’account del NAS di questo dispositivo non è ancora disponibile qui. Si collega nell’integrazione finale dell’app.</string>
+  <string name="account_none_title">Nessun account</string>
+  <string name="account_none_detail">Questo dispositivo non ha ancora un account NAS configurato. Finisci la configurazione iniziale.</string>
+  <string name="account_hero_blocked_value">Password</string>
+  <string name="account_hero_blocked_title">Serve la nuova password</string>
+  <string name="account_hero_blocked_action">Inserisci la password</string>
+  <string name="account_hero_ready_value">Collegato</string>
+  <string name="account_hero_ready_title">Connessione cifrata al NAS</string>
+  <string name="account_hero_unencrypted_title">Collegato, ma non cifrato</string>
+  <string name="account_hero_via_home">Sei sulla rete di casa: il NAS si raggiunge direttamente.</string>
+  <string name="account_hero_via_home_vpn">La VPN è accesa anche a casa: il NAS passa dal tunnel, più lento.</string>
+  <string name="account_hero_via_vpn">Fuori casa: il NAS si raggiunge attraverso la VPN di casa.</string>
+  <string name="account_hero_unavailable_value">Non risponde</string>
+  <string name="account_hero_unavailable_title">Il NAS non è raggiungibile</string>
+  <string name="account_hero_waking_value">Risveglio</string>
+  <string name="account_hero_waking_title">Il NAS si sta svegliando</string>
+  <string name="account_hero_waking_detail">I dischi erano in pausa: ci mettono qualche secondo.</string>
+  <string name="account_hero_idle_value">In attesa</string>
+  <string name="account_hero_idle_title">Nessuna sessione aperta</string>
+  <string name="account_hero_idle_detail">L’app si collega al NAS quando serve e chiude la sessione dopo qualche minuto di inattività.</string>
+  <string name="account_section_account">Account</string>
+  <string name="account_user">Utente</string>
+  <string name="account_address">Indirizzo del NAS</string>
+  <string name="account_server_name">Nome</string>
+  <string name="account_section_change">Cambia</string>
+  <string name="account_change_password">Password del NAS</string>
+  <string name="account_change_password_detail">La nuova password si prova una sola volta</string>
+  <string name="account_change_password_needed">Quella salvata non vale più: inseriscila di nuovo</string>
+  <string name="account_pill_needed">Serve</string>
+  <string name="account_change_address">Indirizzo del NAS</string>
+  <string name="account_change_address_detail">Mai in automatico: lo verifichi e lo confermi tu</string>
+  <string name="account_section_link">Collegamento</string>
+  <string name="account_link_encryption">Cifratura</string>
+  <string name="account_link_dialect">Protocollo</string>
+  <string name="account_link_route">Percorso</string>
+  <string name="account_link_identity">Identità del NAS</string>
+  <string name="account_identity_pinned">Verificata</string>
+  <string name="account_identity_unpinned">Non ancora memorizzata</string>
+  <string name="account_footnote">Dopo un errore di password l’app non riprova da sola: il NAS blocca l’account dopo pochi errori. La password sta nella cassaforte del telefono e non esce mai.</string>
+  <string name="via_home">Rete di casa</string>
+  <string name="via_home_vpn">Casa, dentro la VPN</string>
+  <string name="via_vpn">VPN di casa</string>
+
+  <!-- Password -->
+  <string name="password_title">Password del NAS</string>
+  <string name="password_eyebrow">Account %1$s</string>
+  <string name="password_value">Nuova</string>
+  <string name="password_value_blocked">Bloccata</string>
+  <string name="password_hero_title">Cambia la password</string>
+  <string name="password_hero_title_blocked">Inserisci quella nuova</string>
+  <string name="password_hero_detail">Scrivi la password che hai impostato sul NAS. La provo una volta sola.</string>
+  <string name="password_section_new">Password nuova</string>
+  <string name="password_field">Password</string>
+  <string name="password_field_help">Quella che hai nella dashboard del NAS per questo account.</string>
+  <string name="password_short">Meno di 12 caratteri: funziona, ma è facile da indovinare.</string>
+  <string name="password_show">Mostra la password</string>
+  <string name="password_hide">Nascondi la password</string>
+  <string name="password_submit">Salva e prova</string>
+  <string name="password_once_title">Un solo tentativo</string>
+  <string name="password_once_message">Se la password è sbagliata il NAS conta l’errore, e dopo pochi errori blocca l’account. Per questo non riprovo da solo: se non va, ne scrivi una nuova.</string>
+  <string name="password_footnote">La password resta nella cassaforte del telefono (Keystore). Non finisce nei log né negli appunti.</string>
+  <string name="password_failed_title">Non è entrata</string>
+  <string name="password_invalid_title">Password non valida</string>
+  <string name="password_invalid">Il telefono non può salvare questa password: è vuota o troppo lunga.</string>
+  <string name="password_no_keystore_title">Cassaforte non disponibile</string>
+  <string name="password_no_keystore">Questo telefono non ha una cassaforte hardware per le chiavi: la password non viene salvata.</string>
+  <string name="password_not_saved_title">Password non salvata</string>
+  <string name="password_not_saved">La cassaforte del telefono non ha risposto (succede subito dopo un riavvio, prima dello sblocco). Riprova fra poco.</string>
+  <string name="password_done_eyebrow">Fatto</string>
+  <string name="password_done_value">Salvata</string>
+  <string name="password_done_title">La nuova password funziona</string>
+  <string name="password_done_detail">È nella cassaforte del telefono e la connessione è ripartita. Gli altri dispositivi con lo stesso account dovranno inserirla a loro volta.</string>
+  <string name="password_done_back">Torna all’account</string>
+
+  <!-- Le fasi della prova -->
+  <string name="stage_route">Percorso verso il NAS</string>
+  <string name="stage_tcp">Connessione</string>
+  <string name="stage_negotiate">Protocollo cifrato</string>
+  <string name="stage_guid">Identità del NAS</string>
+  <string name="stage_authenticate">Password</string>
+  <string name="stage_security">Controllo di sicurezza</string>
+  <string name="stage_share">Cartella condivisa</string>
+  <string name="stage_read">Lettura</string>
+  <string name="stage_passed">Ok</string>
+  <string name="stage_failed">Non riuscita</string>
+  <string name="stage_not_run">Non eseguita</string>
+
+  <!-- Indirizzo (E-R7) -->
+  <string name="address_title">Indirizzo del NAS</string>
+  <string name="address_eyebrow">Indirizzo attuale</string>
+  <string name="address_hero_title">Il NAS ha cambiato indirizzo?</string>
+  <string name="address_hero_detail">L’app non lo aggiorna mai da sola: potrebbe finire su un apparecchio estraneo. Scrivi quello nuovo, lo verifico e lo confermi tu.</string>
+  <string name="address_section_new">Indirizzo nuovo</string>
+  <string name="address_field">Indirizzo IP</string>
+  <string name="address_field_hint">192.168.178.58</string>
+  <string name="address_field_help">Solo l’indirizzo numerico, non un nome.</string>
+  <string name="address_field_error">Non è un indirizzo IP valido.</string>
+  <string name="address_verify">Verifica che sia lo stesso NAS</string>
+  <string name="address_footnote">La verifica non invia nessuna password: controlla soltanto che risponda lo stesso NAS di prima, riconoscendolo dalla sua identità.</string>
+  <string name="address_failed_title">Non ho potuto verificare</string>
+  <string name="address_mismatch_title">Risponde un NAS diverso</string>
+  <string name="address_mismatch_message">A questo indirizzo non c’è il tuo NAS. Nessuna password è stata inviata e non è cambiato niente.</string>
+  <string name="address_edit">Cambia indirizzo</string>
+  <string name="address_verified_title">È lo stesso NAS</string>
+  <string name="address_verified_message">L’identità coincide con quella memorizzata. Se confermi, da ora l’app userà questo indirizzo.</string>
+  <string name="address_confirm_open">Usa questo indirizzo…</string>
+  <string name="address_sheet_title">Cambiare l’indirizzo del NAS?</string>
+  <string name="address_sheet_message">L’identità del NAS è stata verificata. Da ora l’app si collega al nuovo indirizzo.</string>
+  <string name="address_sheet_old">Prima</string>
+  <string name="address_sheet_new">Dopo</string>
+  <string name="address_sheet_confirm">Usa il nuovo indirizzo</string>
+  <string name="address_done_value">Cambiato</string>
+  <string name="address_done_title">Indirizzo aggiornato</string>
+  <string name="address_done_detail">Le sessioni vecchie sono chiuse: la prossima connessione usa il nuovo indirizzo.</string>
+  <string name="address_done_back">Torna all’account</string>
+</resources>

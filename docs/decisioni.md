@@ -111,6 +111,15 @@
 - **R4 (basso)**: un commit legge fino a 1025 file (~256 MiB). Serve un tetto più stretto.
 - **M3**: dipende dalla decisione 2 dell'utente (PIN o impronta a ogni uso della chiave di famiglia).
 
+## Note per il pacchetto P9 (integrazione) dalla Fase 2
+- P3: collegare le porte nuove di registro e ciclo di vita. `LocalDataEraser` **non** deve cancellare `wipe-journal`, che serve a riprendere un azzeramento. `FamilyReset` espone `recoveryCodeForDisplay` per mostrare il codice del kit nuovo. `AdminRecovery.recover` senza il QR "stato della famiglia" prende l'ancora dal nome del file sul NAS: va bene, ma solo con l'avviso in Diagnostica.
+- P5: legare `QrCodec` a `ZxingQrCodec` (oggi è `UnavailableQrCodec`).
+- P1: collegare `SmbNasSessionManager` e `SmbNasFileSystem`; il cancello di P2 deve negare quando la rete locale non è consentita; F11 (release con R8) da provare. **Orologio del NAS avanti di ~53 s** rispetto all'NTP (misurato dal PC con la NEGOTIATE): da controllare la sincronizzazione NTP nella dashboard del NAS. Non è un problema per la fiducia, perché l'ora di riferimento è quella del NAS, ma è un segnale che l'NTP non sta lavorando.
+- P8: legare `AndroidBackgroundHealthReader`, `ActivityRulesEngine`, `TrafficLedger`, `ConnectionTestInputSource`, `HeartbeatSource`. I contributori di rete, NAS e famiglia usano gli ID di `DiagCodes`. Da stringere in `core-common`: `ExportValue.Enum.restore` accetta identificatori liberi dal file del log (l'esportatore li scarta comunque).
+- P4: collegare `NasAccountStore` alla sessione di P1, poi `OnboardingPorts`, `DefaultFamilySetupRepository`, `ApprovalWatcher`. Nel passo 12 il codice di recupero non viene mai salvato: se l'app si riavvia tra la generazione e la verifica, si riparte con una chiave nuova (comportamento voluto).
+- P2: usare `EnvironmentDeviceStateSource` per la rete del motore delle regole (al posto di `AndroidDeviceStateSource`). P6 e P7 usano `VpnControlConfigStore` e `NasSessionActivity` (non fake locali).
+- Residui della revisione N2, R2, R3, R4: chiusi dal P3 (`ReviewRound3Test`, verificati con mutanti, senza una terza revisione indipendente). M3 resta in attesa della decisione 2.
+
 ## Da aggiungere a `docs/sicurezza.md` dopo il P0 (per non scrivere in contemporanea)
 - ~~Limite A2~~: aggiunto come L18 in `docs/sicurezza.md`.
 - Contromisure C7–C10 e C23 da aggiornare con il modello finale di `formato-nas.md` (firme low-S, rami del registro, codice di approvazione a 80 bit).

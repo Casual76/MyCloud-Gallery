@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <!-- Scheletro P0 della Diagnostica. Le pagine vere e l'esportazione sono di P8. -->
+  <!-- La Diagnostica (P8). I testi di ogni codice (titolo e «cosa fare») sono in strings_catalog.xml. -->
   <string name="diagnostics_title">Diagnostica</string>
+  <string name="diagnostics_subtitle">Cosa succede su questo telefono. Niente esce senza la tua conferma.</string>
   <string name="diagnostics_section_overview">Sezioni</string>
   <string name="diagnostics_no_items">Ancora niente da mostrare</string>
+  <string name="diagnostics_no_items_detail">Questa parte compare quando i dati sono disponibili.</string>
   <plurals name="diagnostics_items">
     <item quantity="one">%1$d voce</item>
     <item quantity="other">%1$d voci</item>
@@ -23,4 +25,148 @@
   <string name="diagnostics_section_android">Avvisi di Android</string>
   <string name="diagnostics_section_trust">Fiducia</string>
   <string name="diagnostics_section_profiles">Profili</string>
+
+  <string name="diagnostics_hint_network">Dove sei rispetto al NAS e com\'è la connessione.</string>
+  <string name="diagnostics_hint_connection_test">Una prova a richiesta, fase per fase, con i tempi.</string>
+  <string name="diagnostics_hint_activities">Perché backup e indicizzazione girano o aspettano.</string>
+  <string name="diagnostics_hint_recent">Cosa è successo di recente, senza testi personali.</string>
+  <string name="diagnostics_hint_storage">Quanto spazio usa l\'app e quanto ne resta al telefono.</string>
+  <string name="diagnostics_hint_traffic">Quanti dati sono passati questo mese.</string>
+  <string name="diagnostics_hint_android">Cosa fa Android al lavoro dell\'app in background.</string>
+  <string name="diagnostics_hint_trust">Il registro dei dispositivi, le firme e gli allarmi.</string>
+  <string name="diagnostics_hint_profiles">Il profilo Android in cui gira l\'app.</string>
+
+  <!-- Riepilogo -->
+  <string name="diagnostics_summary_ok_title">Tutto a posto</string>
+  <string name="diagnostics_summary_ok_message">Nessun avviso su questo telefono.</string>
+  <string name="diagnostics_summary_loading_title">Controllo in corso</string>
+  <string name="diagnostics_summary_loading_message">Sto leggendo lo stato del telefono e del NAS.</string>
+  <plurals name="diagnostics_summary_attention_title">
+    <item quantity="one">%1$d voce richiede attenzione</item>
+    <item quantity="other">%1$d voci richiedono attenzione</item>
+  </plurals>
+  <string name="diagnostics_summary_attention_message">Apri una sezione per il dettaglio e per sapere cosa fare.</string>
+  <plurals name="diagnostics_section_attention">
+    <item quantity="one">%1$d da guardare</item>
+    <item quantity="other">%1$d da guardare</item>
+  </plurals>
+
+  <!-- Voci -->
+  <string name="diagnostics_severity_ok">OK</string>
+  <string name="diagnostics_severity_info">Info</string>
+  <string name="diagnostics_severity_warning">Avviso</string>
+  <string name="diagnostics_severity_error">Problema</string>
+  <string name="diagnostics_item_unknown">Voce della diagnostica</string>
+  <string name="diagnostics_passthrough">%1$s</string>
+  <string name="diagnostics_age_now">adesso</string>
+  <string name="diagnostics_age_minutes">%1$d min fa</string>
+  <string name="diagnostics_age_hours">%1$d h fa</string>
+  <string name="diagnostics_age_days">%1$d g fa</string>
+
+  <!-- Dettagli delle voci di questo modulo -->
+  <string name="diagnostics_uptime_hours">Ore dall\'accensione: %1$d</string>
+  <string name="diagnostics_heartbeat_hours">Ore dall\'ultimo lavoro: %1$d</string>
+  <string name="diagnostics_exit_count">Uscite registrate di recente: %1$d</string>
+  <string name="diagnostics_storage_detail">Database %1$s · cache %2$s · dati dell\'app %3$s</string>
+  <string name="diagnostics_storage_free">Liberi %1$s su %2$s</string>
+  <string name="diagnostics_traffic_month_detail">Totale %1$s · Wi-Fi %2$s · dati mobili %3$s</string>
+  <string name="diagnostics_traffic_activity_detail">Wi-Fi %1$s · dati mobili %2$s</string>
+  <string name="diagnostics_traffic_roaming_detail">In roaming: %1$s</string>
+  <string name="diagnostics_activity_photo_backup">Backup delle foto</string>
+  <string name="diagnostics_activity_video_backup">Backup dei video</string>
+  <string name="diagnostics_activity_index_sync">Sincronizzazione dell\'indice</string>
+  <string name="diagnostics_activity_preparation">Preparazione delle anteprime</string>
+  <string name="diagnostics_activity_ai_compute">Calcolo AI</string>
+  <string name="diagnostics_activity_hq_previews">Anteprime ad alta qualità</string>
+  <string name="diagnostics_activity_visible_content">Contenuto aperto sullo schermo</string>
+
+  <!-- Azioni -->
+  <string name="diagnostics_action_open_wireguard">Apri WireGuard</string>
+  <string name="diagnostics_action_open_battery">Apri le impostazioni della batteria</string>
+  <string name="diagnostics_action_open_app_details">Apri le impostazioni dell\'app</string>
+  <string name="diagnostics_action_open_notifications">Apri le impostazioni delle notifiche</string>
+  <string name="diagnostics_action_run_test">Esegui il test di connessione</string>
+  <string name="diagnostics_action_reenter_password">Inserisci di nuovo la password</string>
+  <string name="diagnostics_action_open_devices">Apri i dispositivi</string>
+  <string name="diagnostics_action_resume_onboarding">Riprendi la configurazione</string>
+  <string name="diagnostics_action_open_unused_apps">Apri «Pausa se inutilizzata»</string>
+  <string name="diagnostics_action_open_never_sleeping">Apri «Mai in sospensione»</string>
+  <string name="diagnostics_action_open_security">Apri le impostazioni di sicurezza</string>
+  <string name="diagnostics_action_failed">Questa schermata non esiste su questo telefono.</string>
+
+  <!-- Test di connessione -->
+  <string name="diagnostics_test_run">Avvia il test</string>
+  <string name="diagnostics_test_running">Test in corso…</string>
+  <string name="diagnostics_test_hint">Il test controlla percorso, rete, identità del NAS e cartelle, passo per passo, con i tempi. Parte solo quando lo chiedi, e non sveglia i dischi più del necessario.</string>
+  <string name="diagnostics_test_not_configured_title">Nessun NAS da provare</string>
+  <string name="diagnostics_test_not_configured_message">Questo dispositivo non ha ancora un NAS configurato.</string>
+  <string name="diagnostics_test_timed_out_title">Il test non si è concluso</string>
+  <string name="diagnostics_test_timed_out_message">Il NAS non ha risposto entro il tempo concesso. Riprova fra poco.</string>
+  <string name="diagnostics_test_breaker_title">Autenticazione non provata</string>
+  <string name="diagnostics_test_breaker_message">L\'interruttore di sicurezza è aperto: il test non autentica, per non far bloccare l\'account del NAS.</string>
+  <string name="diagnostics_test_negotiation">Cosa ha detto il NAS</string>
+  <string name="diagnostics_test_negotiation_encrypted">%1$s · cifratura offerta: sì</string>
+  <string name="diagnostics_test_negotiation_plain">%1$s · cifratura offerta: no</string>
+  <string name="diagnostics_stage_route">Percorso</string>
+  <string name="diagnostics_stage_tcp">Connessione TCP</string>
+  <string name="diagnostics_stage_negotiate">Negoziazione SMB</string>
+  <string name="diagnostics_stage_guid">Identità del NAS</string>
+  <string name="diagnostics_stage_authenticate">Autenticazione</string>
+  <string name="diagnostics_stage_security">Controllo di sicurezza</string>
+  <string name="diagnostics_stage_share">Cartella condivisa</string>
+  <string name="diagnostics_stage_read">Lettura</string>
+  <string name="diagnostics_stage_skipped">Saltata</string>
+  <string name="diagnostics_stage_not_run">Non eseguita</string>
+  <string name="diagnostics_duration_ms">%1$d ms</string>
+  <string name="diagnostics_duration_seconds">%1$s s</string>
+
+  <!-- Messaggi degli errori del NAS (docs/fase2-progetto.md §3.4) -->
+  <string name="diagnostics_nas_auth_failed">La password del NAS non è più valida (forse è stata cambiata). Inseriscila di nuovo.</string>
+  <string name="diagnostics_nas_account_locked">L\'account del NAS è bloccato: va sbloccato dalla dashboard del NAS.</string>
+  <string name="diagnostics_nas_account_disabled">Questo account è disattivato sul NAS.</string>
+  <string name="diagnostics_nas_password_expired">La password è scaduta: cambiala dal NAS.</string>
+  <string name="diagnostics_nas_account_restricted">Il NAS non permette l\'accesso a questo account adesso.</string>
+  <string name="diagnostics_nas_auth_blocked">Serve la password del NAS.</string>
+  <string name="diagnostics_nas_insecure_guest">Il NAS ha offerto un accesso ospite: rifiutato.</string>
+  <string name="diagnostics_nas_insecure_encryption">Il NAS non ha concesso una connessione cifrata: nessun dato inviato.</string>
+  <string name="diagnostics_nas_insecure_signing">Il NAS non richiede la firma dei messaggi: connessione rifiutata.</string>
+  <string name="diagnostics_nas_identity_mismatch">A questo indirizzo risponde un NAS diverso da quello configurato. Nessuna password inviata.</string>
+  <string name="diagnostics_nas_permission_denied">Non hai il permesso per questa cartella.</string>
+  <string name="diagnostics_nas_share_missing">La cartella condivisa «%1$s» non esiste più sul NAS.</string>
+  <string name="diagnostics_nas_quota_exceeded">Hai esaurito lo spazio del tuo account (quota), il NAS ha ancora spazio.</string>
+  <string name="diagnostics_nas_full">Il NAS è pieno: backup in pausa, la consultazione continua.</string>
+  <string name="diagnostics_nas_file_busy">Il file è in uso dal PC: riprovo più tardi.</string>
+  <string name="diagnostics_nas_not_found">Elemento non trovato sul NAS.</string>
+  <string name="diagnostics_nas_session_expired">Sessione scaduta: riconnessione silenziosa.</string>
+  <string name="diagnostics_nas_service_down">Il NAS è acceso ma la condivisione file non risponde.</string>
+  <string name="diagnostics_nas_timeout">Il NAS non risponde (forse si sta risvegliando)…</string>
+  <string name="diagnostics_nas_local_network_blocked">Android non permette all\'app di usare la rete locale.</string>
+  <string name="diagnostics_nas_stalled">Trasferimento bloccato: rete lenta, riprendo più tardi.</string>
+  <string name="diagnostics_nas_credentials_missing">La password del NAS va inserita di nuovo.</string>
+  <string name="diagnostics_nas_unexpected">Errore del NAS non previsto (codice SMB %1$s).</string>
+  <string name="diagnostics_denied_offline">Offline · Libreria sul telefono.</string>
+  <string name="diagnostics_denied_captive_portal">Il Wi-Fi chiede un accesso: completalo e riprova.</string>
+  <string name="diagnostics_denied_untrusted">Rete non riconosciuta: nessuna connessione al NAS.</string>
+  <string name="diagnostics_denied_vpn_off">Fuori casa: accendi la VPN.</string>
+  <string name="diagnostics_denied_foreign_vpn">VPN non di casa attiva.</string>
+  <string name="diagnostics_denied_not_configured">Nessun NAS configurato.</string>
+  <string name="diagnostics_denied_generic">Da questa rete il NAS non si contatta.</string>
+
+  <!-- Esportazione -->
+  <string name="diagnostics_export_row_title">Esporta la diagnostica</string>
+  <string name="diagnostics_export_row_subtitle">Anteprima, poi scegli dove salvare il file. Niente nomi, indirizzi o password.</string>
+  <string name="diagnostics_export_section_share">Condividi</string>
+  <string name="diagnostics_export_title">Esporta la diagnostica</string>
+  <string name="diagnostics_export_contents_title">Cosa contiene</string>
+  <string name="diagnostics_export_contents_message">Solo numeri, sì/no, nomi di costanti dell\'app e impronte che non si possono invertire. Non contiene nomi, indirizzi IP, utenti del NAS, percorsi o password.</string>
+  <string name="diagnostics_export_preview">Anteprima</string>
+  <string name="diagnostics_export_preview_footnote">Il file è esattamente questo testo. Lo salvi tu, dove vuoi: l\'app non lo invia a nessuno.</string>
+  <string name="diagnostics_export_save">Salva il file…</string>
+  <string name="diagnostics_export_saved_title">File salvato</string>
+  <string name="diagnostics_export_saved_message">Puoi condividerlo con chi ti aiuta a capire cosa succede.</string>
+  <string name="diagnostics_export_failed_title">File non salvato</string>
+  <string name="diagnostics_export_failed_message">Non è stato possibile scrivere il file nel posto scelto. Riprova in un\'altra cartella.</string>
+  <string name="diagnostics_export_refused_title">Esportazione bloccata</string>
+  <string name="diagnostics_export_refused_message">Una riga non rispettava il formato sicuro dell\'esportazione, quindi il file non viene prodotto.</string>
+  <string name="diagnostics_export_preparing">Preparo l\'anteprima…</string>
 </resources>

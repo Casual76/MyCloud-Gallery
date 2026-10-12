@@ -34,7 +34,8 @@ class DiagnosticsSkeletonTest {
     assertThat(state.loading).isFalse()
     assertThat(state.sections[DiagSection.NETWORK_AND_NAS]).hasSize(2)
     assertThat(state.sections[DiagSection.ANDROID_WARNINGS]).hasSize(1)
-    assertThat(state.sections[DiagSection.TRUST]).isNull()
+    // Il contributore rotto non toglie gli altri e non sparisce in silenzio: al suo posto c'e' la voce «non ha risposto».
+    assertThat(state.sections[DiagSection.TRUST]!!.map { it.code.id }).containsExactly("DIAG_SECTION_UNAVAILABLE")
     assertThat(state.recentEvents).isEqualTo(1)
   }
 }

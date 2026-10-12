@@ -289,7 +289,14 @@ class FakeAdminRecovery(
   var kits: NasResult<List<RecoveryKitRef>> = NasResult.Ok(emptyList()),
   var outcome: RecoveryOutcome = RecoveryOutcome.WrongCode,
 ) : AdminRecovery {
-  override suspend fun findKits(account: NasAccount, privateShare: String): NasResult<List<RecoveryKitRef>> = kits
+  /** Se l'ultima ricerca ha ricevuto una password (mai la password stessa). */
+  var lastSearchHadPassword: Boolean = false
+
+  override suspend fun findKits(account: NasAccount, privateShare: String, password: CharArray?): NasResult<List<RecoveryKitRef>> {
+    lastSearchHadPassword = password != null
+    password?.fill('\u0000')
+    return kits
+  }
 
   override suspend fun recover(
     kit: RecoveryKitRef,
@@ -302,13 +309,31 @@ class FakeAdminRecovery(
   }
 }
 
-class FakeFamilyReset(var outcome: ResetOutcome = ResetOutcome.Done("famiglia-nuova")) : FamilyReset {
+class FakeFamilyReset(
+  var outcome: ResetOutcome = ResetOutcome.Done("famiglia-nuova"),
+  /** Il codice del kit nuovo dopo un reset riuscito, a gruppi separati da `-`. */
+  var newCode: String = "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ-2345",
+) : FamilyReset {
   var attempts: Int = 0
     private set
 
+  private var pending: String? = null
+
   override suspend fun reset(confirmedTwice: Boolean): ResetOutcome {
     attempts++
-    return if (confirmedTwice) outcome else ResetOutcome.Failed(OnboardingProblem.STEP_NOT_AVAILABLE)
+    val result = if (confirmedTwice) outcome else ResetOutcome.Failed(OnboardingProblem.STEP_NOT_AVAILABLE)
+    if (result is ResetOutcome.Done) pending = newCode
+    return result
+  }
+
+  override fun recoveryCodeForDisplay(): RecoveryCodeDisplay? =
+    pending?.let { code -> RecoveryCodeDisplay(code.split('-').map { it.toCharArray() }) }
+
+  override fun confirmTypedCode(typed: CharArray): Boolean {
+    val ok = pending != null && String(typed).replace("-", "").replace(" ", "").equals(pending!!.replace("-", ""), ignoreCase = true)
+    typed.fill('\u0000')
+    if (ok) pending = null
+    return ok
   }
 }
 

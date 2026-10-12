@@ -21,7 +21,6 @@ import dev.pampa.mycloudgallery.core.family.onboarding.StoreState
 import dev.pampa.mycloudgallery.core.family.onboarding.completing
 import dev.pampa.mycloudgallery.core.family.onboarding.onShare
 import dev.pampa.mycloudgallery.core.family.setup.NasCredentialSlots
-import dev.pampa.mycloudgallery.core.nas.contract.BreakerState
 import dev.pampa.mycloudgallery.core.nas.contract.ConnectionReport
 import dev.pampa.mycloudgallery.core.nas.contract.NasAccount
 import dev.pampa.mycloudgallery.core.nas.contract.NasError
@@ -237,8 +236,8 @@ class DefaultJoinFlow(
       return JoinStep.Failed(OnboardingProblem.AUTH_FAILED)
     }
     credentials.use { c ->
-      // Una password nuova scritta dall'utente richiude l'interruttore aperto da un tentativo precedente.
-      if (ports.breaker.state.value is BreakerState.Open) ports.breaker.onNewPasswordSaved()
+      // Una password nuova scritta dall'utente richiude l'interruttore di questo account aperto da un tentativo precedente.
+      ports.reopenBreakerFor(NasAccount(s.address, user, NasCredentialSlots.PRIMARY, s.guid))
       val stages = setOf(Stage.ROUTE, Stage.TCP, Stage.NEGOTIATE, Stage.GUID, Stage.AUTHENTICATE, Stage.SECURITY_CHECK)
       val target = TestTarget(s.address, user = user, share = null, expectedGuid = s.guid, candidate = routeCandidate(s))
       val report = ports.tester.run(target, c, stages)

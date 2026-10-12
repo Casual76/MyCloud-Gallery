@@ -154,6 +154,10 @@ dependencies {
   implementation appDeps.workRuntimeKtx
   implementation appDeps.hiltWork
 
+  // --- Archivi locali (P9): i DataStore delle regole e dei consumi li crea :app (AppGraph). Stessa libreria e stessa
+  // versione che i moduli core-* usano gia' (nessun artefatto nuovo).
+  implementation appDeps.datastorePreferences
+
   // --- Navigazione e stato -------------------------------------------------------------------------------
   implementation appDeps.navigationCompose
   implementation appDeps.lifecycleViewModelCompose

@@ -27,6 +27,7 @@ import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
 import dev.pampa.mycloudgallery.core.qr.QrCode
 import dev.pampa.mycloudgallery.feature.onboarding.R
 import dev.pampa.mycloudgallery.feature.onboarding.ui.CodeGroups
+import dev.pampa.mycloudgallery.feature.onboarding.ui.DockAction
 import dev.pampa.mycloudgallery.feature.onboarding.ui.OnboardingDimens
 import dev.pampa.mycloudgallery.feature.onboarding.ui.StepChrome
 import dev.pampa.mycloudgallery.feature.onboarding.ui.StepScaffold
@@ -40,13 +41,15 @@ import dev.pampa.mycloudgallery.feature.onboarding.ui.stepAmbient
  *
  * Il QR vive su una finestra protetta (`FLAG_SECURE`, dentro `QrCode`): non finisce in uno screenshot ne' nei recenti.
  * E' pubblica per :app, che la mostra anche quando il dispositivo e' gia' registrato e l'app viene riaperta; senza il
- * QR (lo stato salvato porta solo il codice) mostra solo il codice.
+ * QR (lo stato salvato porta solo il codice) mostra solo il codice. Con [onContinue] (dentro l'onboarding) c'e' il tasto
+ * per finire intanto i passi sul telefono.
  */
 @Composable
 fun AwaitingApprovalScreen(
   code: String,
   deviceKeyQr: String?,
   modifier: Modifier = Modifier,
+  onContinue: (() -> Unit)? = null,
 ) {
   val groups = code.split('-', ' ').filter { it.isNotBlank() }.ifEmpty { code.chunked(CODE_GROUP) }
   StepScaffold(
@@ -55,6 +58,9 @@ fun AwaitingApprovalScreen(
     chrome = StepChrome(),
     ambient = stepAmbient(OnboardingStep.SUMMARY),
     modifier = modifier,
+    // Dentro l'onboarding (P9): mentre l'admin approva, si finiscono i passi sul telefono. Alla fine la radice mostra
+    // di nuovo questa pagina, che si aggiorna da sola quando arriva l'approvazione.
+    primary = onContinue?.let { DockAction(label = stringResource(R.string.awaiting_continue), onClick = it) },
   ) {
     item(key = "code-header") {
       FluidSectionHeader(

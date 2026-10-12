@@ -155,7 +155,7 @@ object NoSelfWipe : SelfWipe {
 }
 
 object NoAdminRecovery : AdminRecovery {
-  override suspend fun findKits(account: NasAccount, privateShare: String): NasResult<List<RecoveryKitRef>> =
+  override suspend fun findKits(account: NasAccount, privateShare: String, password: CharArray?): NasResult<List<RecoveryKitRef>> =
     NasResult.Err(NasError.NotAllowedHere(DenyReason.NOT_CONFIGURED))
 
   override suspend fun recover(

@@ -115,16 +115,73 @@
 - **R4 (basso)**: un commit legge fino a 1025 file (~256 MiB). Serve un tetto più stretto.
 - **M3**: dipende dalla decisione 2 dell'utente (PIN o impronta a ogni uso della chiave di famiglia).
 
-## Note per il pacchetto P9 (integrazione) dalla Fase 2
-- P3: collegare le porte nuove di registro e ciclo di vita. `LocalDataEraser` **non** deve cancellare `wipe-journal`, che serve a riprendere un azzeramento. `FamilyReset` espone `recoveryCodeForDisplay` per mostrare il codice del kit nuovo. `AdminRecovery.recover` senza il QR "stato della famiglia" prende l'ancora dal nome del file sul NAS: va bene, ma solo con l'avviso in Diagnostica.
-- P5: legare `QrCodec` a `ZxingQrCodec` (oggi è `UnavailableQrCodec`).
-- P1: collegare `SmbNasSessionManager` e `SmbNasFileSystem`; il cancello di P2 deve negare quando la rete locale non è consentita; F11 (release con R8) da provare. **Orologio del NAS avanti di ~53 s** rispetto all'NTP (misurato dal PC con la NEGOTIATE): da controllare la sincronizzazione NTP nella dashboard del NAS. Non è un problema per la fiducia, perché l'ora di riferimento è quella del NAS, ma è un segnale che l'NTP non sta lavorando.
-- P8: legare `AndroidBackgroundHealthReader`, `ActivityRulesEngine`, `TrafficLedger`, `ConnectionTestInputSource`, `HeartbeatSource`. I contributori di rete, NAS e famiglia usano gli ID di `DiagCodes`. Da stringere in `core-common`: `ExportValue.Enum.restore` accetta identificatori liberi dal file del log (l'esportatore li scarta comunque).
-- P4: collegare `NasAccountStore` alla sessione di P1, poi `OnboardingPorts`, `DefaultFamilySetupRepository`, `ApprovalWatcher`. Nel passo 12 il codice di recupero non viene mai salvato: se l'app si riavvia tra la generazione e la verifica, si riparte con una chiave nuova (comportamento voluto).
-- P6: collegare "Continua più tardi" (`onPause`, E-O1). Al coordinatore manca un modo per saltare al passo successivo con il NAS spento: da aggiungere. Ingresso senza QR: `FamilyInvite` costruito con GUID, ULA e share vuoti (vanno ripresi dalla configurazione firmata dopo l'autenticazione). Ricerca dei kit con `credentialSlot` = nome utente.
-- P7: legare `NasAccountSettings` (account NAS, salvataggio password, cambio indirizzo). Finché manca, quelle pagine dicono "non ancora collegata". `AdminRecovery.findKits` ha bisogno della password dell'account dell'admin, ma il contratto non dice come passarla: va aggiunto.
-- P2: usare `EnvironmentDeviceStateSource` per la rete del motore delle regole (al posto di `AndroidDeviceStateSource`). P6 e P7 usano `VpnControlConfigStore` e `NasSessionActivity` (non fake locali).
-- Residui della revisione N2, R2, R3, R4: chiusi dal P3 (`ReviewRound3Test`, verificati con mutanti, senza una terza revisione indipendente). M3 resta in attesa della decisione 2.
+## Note per il pacchetto P9 (integrazione) dalla Fase 2 — checklist chiusa dal P9 (13/10)
+Le implementazioni vere sono collegate in `:app` da `graph/AppGraph.kt` (un grafo per processo, lo stesso in debug, in
+release e nei test d'integrazione) esposto a Hilt da `di/GraphModule.kt`; i null-object e lo stato finto della build debug
+non sono più legati. Le modifiche ai contratti degli altri moduli sono elencate in fondo.
+- [x] P3: porte di registro e ciclo di vita collegate (`TrustEngine`, `NasRegistryService`, `RegistryWriter`, `DeviceStatusBook`,
+  `DefaultTrustGuard`, `DeviceSelfWipe` con `FileWipeJournal`, `KitAdminRecovery`, `NasFamilyReset`, `NasLostReporting`,
+  `TrustDiagnostics`). `LocalDataEraser` = `graph/AppLocalDataEraser`: svuota onboarding, account, impronta di casa, controllo
+  VPN, battito (attraverso le loro API: DataStore non tollera file tolti da sotto), cache, database, miniature; **non** tocca
+  `wipe-journal` (verificato dal test d'integrazione). `recoveryCodeForDisplay` ora è nel contratto `FamilyReset` e la pagina
+  Reimposta (P7) mostra il codice del kit nuovo e lo fa riscrivere. Recupero senza QR di stato: l'ancora viene dal nome del file e
+  la Diagnostica lo dice (`TRUST_NO_MIN_VERSION`, ora con titolo e "cosa fare" del catalogo).
+- [x] P5: `QrCodec` = `ZxingQrCodec`; codec di invito, chiave e stato = `InviteCodec`, `DeviceKeyCodec`, `FamilyStateCodec`.
+- [x] P1: `SmbNasSessionManager` (account dall'archivio di P4, `deviceId` dalla chiave, candidato di casa dell'onboarding),
+  `SmbConnectionTester`, `SmbShareProbe`, `SmbNasHousekeeping`, `NasStatusMonitor`, interruttore persistente
+  (`DataStoreBreakerStore` + `AuthBreakerRegistry`, con `AccountAuthBreaker` per chi non conosce l'account), `CredentialVault` →
+  `NasCredentialSource`. Il cancello di P2 nega già il percorso LAN con la rete locale negata. `invalidate(PROCESS_STOPPED)`
+  quando l'app va in background senza operazioni in corso (`process/ProcessWatcher`). **Da fare sul campo**: F11 (release con R8)
+  e l'NTP del NAS: la NEGOTIATE ripetuta dal P9 il 13/10 dà l'orologio del NAS **58,5 s avanti** (53 s il 12/10, quindi
+  ~5 s al giorno: l'NTP non lavora); GUID invariato, 3.1.1 con AES-128-GCM offerto.
+- [x] P8: `AndroidBackgroundHealthReader`, `ActivityRulesEngine` (con `ComposedSystemStateProvider` sopra
+  `EnvironmentDeviceStateSource`, `CombinedNetworkQuality`, `NasStatusMonitor`, ruoli dal passo 7, `AppContextSignal` del
+  processo), `TrafficLedger` (DataStore), `ConnectionTestInputSource` (account e area comune), `HeartbeatSource` (battito di
+  `TrustSyncWorker`). I codici dei contributori di rete e fiducia non erano nel catalogo di P8 (23 su 34): aggiunti a `DiagCodes`
+  come gli **stessi oggetti** dei moduli, con voci che riusano titolo e "cosa fare" equivalenti (10 testi nuovi);
+  `DiagnosticsWiringTest` verifica che non ne manchi nessuno. `ExportValue.Enum.restore` accetta solo la forma di un enum
+  dell'app (tipo `UpperCamel`, costante `MAIUSCOLO`): un evento manomesso si scarta già alla rilettura.
+- [x] P4: `NasAccountStore` collegato alla sessione (l'account salvato al passo 3 è quello della sessione), `OnboardingPorts`,
+  `DefaultOnboardingCoordinator`, `DefaultJoinFlow`, `DefaultFamilySetupRepository` (dietro un cancello `Loading` finché all'avvio
+  non sono letti il diario dell'azzeramento e lo stato fidato: anche offline lo stato è giusto), `ApprovalWatcher` (la pagina
+  d'attesa della radice lo raccoglie solo mentre è visibile, `repeatOnLifecycle(STARTED)`).
+- [x] P6: "Continua più tardi" (E-O1) chiede al coordinatore di rimandare il passo corrente con tutti quelli del NAS (ora anche
+  ai passi 3, 4 e 12, non solo al 2) e prosegue con i passi locali; il riepilogo, finché restano passi del NAS, li riprende
+  ("Riprendi i passi del NAS"); senza niente da rimandare (ingresso, recupero) l'app va in secondo piano. Ingresso senza QR: lo
+  gestisce `DefaultJoinFlow` (P4) con la configurazione firmata dopo l'autenticazione; non provato dal P9 da capo a fondo.
+  Ricerca dei kit: `KitAdminRecovery` usa la sessione (o la password digitata), mai il `credentialSlot` del parametro.
+- [x] P7: `NasAccountSettings` = `graph/AppNasAccountSettings` (account dall'archivio, password nel Keystore, indirizzo nuovo con
+  lo stesso GUID). `AdminRecovery.findKits` riceve la password dell'admin quando l'admin non è l'account del dispositivo: una
+  sessione usa e getta (`graph/OneShotForeignShares`, stessi controlli del §3.1, interruttore di quell'account) legge i kit e si
+  chiude; il recupero usa i byte già letti. La pagina "Secondo admin" chiede la password solo in quel caso e la dimentica dopo
+  una ricerca.
+- [x] P2: `EnvironmentDeviceStateSource` per la rete del motore delle regole; `VpnControlConfigStore` per la scelta del passo 11
+  (`AppOnboardingChoices`) e per la prova di WireGuard dell'onboarding (che prima non poteva riuscire: il tunnel si accende per
+  nome e il nome non era ancora salvato); `NasSessionActivity` = sessione con operazioni in corso; `VpnAutomation.attach` sul
+  processo; `onPermissionsChanged` e `refresh` di WireGuard al ritorno in primo piano.
+- [x] Residui N2, R2, R3, R4: chiusi dal P3. M3 resta in attesa della decisione 2.
+
+**Modifiche ai contratti e alle implementazioni di altri moduli fatte dal P9** (ognuna con il suo test):
+1. `core-family`: `AdminRecovery.findKits(account, privateShare, password = null)` + porta `ForeignShareAccess` di
+   `KitAdminRecovery` (`ForeignKitSearchTest`); la pagina Secondo admin di `feature-settings` chiede la password
+   (`AdminRecoveryViewModelTest`).
+2. `core-family`: `FamilyReset.recoveryCodeForDisplay()` / `confirmTypedCode()` (con default nel contratto); la pagina Reimposta
+   di `feature-settings` li usa.
+3. `core-family`: `OnboardingPorts.allowUserRetry`. La password nuova al passo 3 o all'ingresso riapre l'interruttore
+   **dell'account digitato**; prima si riapriva quello dell'account salvato, che al passo 3 non c'è: dopo una password sbagliata
+   l'onboarding restava bloccato per sempre, perché l'interruttore è persistente (`P9ContractFixesTest`).
+4. `core-family`: "Continua più tardi" anche dopo il passo 2, e senza rimbalzi da un passo del NAS all'altro quando lo si
+   riprende con il NAS ancora spento (`P9ContractFixesTest`).
+5. `core-family`: `SetupResolver`, un azzeramento finito con il motore che dice ancora "perso" è `Wiped` (prima, nello stesso
+   processo dell'azzeramento, restava "azzeramento in corso") (`P9ContractFixesTest`).
+6. `core-family`: `DataStoreOnboardingStateStore.update` pubblica subito lo snapshot scritto (prima due input dello stesso passo
+   uno dietro l'altro potevano leggere l'avanzamento vecchio) (`OnboardingStorageTest`).
+7. `core-common`: `ExportValue.Enum.restore` più stretto (`DiagnosticsTest`; `DiagnosticsExporterTest` aggiornato).
+8. `feature-diagnostics`: catalogo con i 23 codici dei contributori di rete e fiducia (`DiagCatalogTest`, `DiagnosticsWiringTest`).
+9. `feature-onboarding`: `continueLater`; riepilogo con i passi del NAS da riprendere; prova della VPN con il nome scritto;
+   "Intanto finisci la configurazione" dalla pagina d'attesa dell'ingresso (prima l'ingresso restava sulla pagina d'attesa per
+   sempre: dentro l'onboarding nessuno guardava l'approvazione); dopo la richiesta, la ripresa riparte dai passi locali e non
+   dalla scansione (`OnboardingViewModelTest`).
 
 ## Da aggiungere a `docs/sicurezza.md` dopo il P0 (per non scrivere in contemporanea)
 - ~~Limite A2~~: aggiunto come L18 in `docs/sicurezza.md`.

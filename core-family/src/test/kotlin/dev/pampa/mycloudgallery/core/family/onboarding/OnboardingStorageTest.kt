@@ -147,6 +147,17 @@ class OnboardingStorageTest {
 
   // --- DataStore -----------------------------------------------------------------------------------------------
 
+  /** P9: chi legge lo stato subito dopo una scrittura (il coordinatore al passo dopo) vede gia' l'avanzamento nuovo. */
+  @Test
+  fun dopoUnaScritturaLoStatoELoSnapshotNuovoSubito() = runBlocking {
+    val store = DataStoreOnboardingStateStore(dataStore(), scope)
+    store.ready()
+    store.update { full() }
+    assertThat((store.state.value as StoreState.Ready).snapshot).isEqualTo(full())
+    store.update { it.copy(finished = true) }
+    assertThat((store.state.value as StoreState.Ready).snapshot.finished).isTrue()
+  }
+
   @Test
   fun lAvanzamentoSopravvivePerUnNuovoProcesso() = runBlocking {
     val first = DataStoreOnboardingStateStore(dataStore(), scope)

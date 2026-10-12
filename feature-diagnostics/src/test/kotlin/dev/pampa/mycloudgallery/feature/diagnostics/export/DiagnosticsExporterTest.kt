@@ -141,23 +141,26 @@ class DiagnosticsExporterTest {
 
   @Test
   fun unValoreRiletoDalDiscoCheNonHaLaFormaDiUnEnumVieneLasciatoFuori() {
-    // L'anello degli eventi si rilegge da un file: `Enum.restore` accetta qualunque coppia di identificatori, e
-    // un file manomesso potrebbe farne passare una che e' un nome. L'esportatore la scarta.
-    val restored = dev.pampa.mycloudgallery.core.common.diagnostics.FileDiagnosticsLogStore(
-      java.io.File.createTempFile("events", ".log").apply {
-        writeText("1|NET_SAMPLE|INFO|owner=eMario.Rossi;count=n3\n")
-        deleteOnExit()
-      },
-    ).load().single()
-    assertThat(restored.values["owner"]).isNotNull() // la rilettura l'ha accettato...
+    // L'anello degli eventi si rilegge da un file, che un'app manomessa potrebbe riscrivere con un "enum" che e' un
+    // nome. Dal P9 lo scarta gia' la rilettura (`Enum.restore` accetta solo la forma di un enum dell'app)...
+    val file = java.io.File.createTempFile("events", ".log").apply {
+      writeText("1|NET_SAMPLE|INFO|owner=eMario.Rossi;count=n3\n2|NET_SAMPLE|INFO|count=n4\n")
+      deleteOnExit()
+    }
+    val restored = dev.pampa.mycloudgallery.core.common.diagnostics.FileDiagnosticsLogStore(file).load()
+    assertThat(restored.map { it.at }).containsExactly(2L)
 
+    // ...e l'esportatore resta una seconda difesa: una costante che non ha quella forma non si esporta.
     val text = DiagnosticsExporter.render(
-      snapshot(DiagSection.RECENT_EVENTS to listOf(item(DiagCodes.EVT_GENERIC, DiagSection.RECENT_EVENTS, export = restored.values))),
+      snapshot(
+        DiagSection.RECENT_EVENTS to listOf(
+          item(DiagCodes.EVT_GENERIC, DiagSection.RECENT_EVENTS, export = restored.single().values),
+        ),
+      ),
     ).text
-
     assertThat(text).doesNotContain("Mario")
     assertThat(text).doesNotContain("Rossi")
-    assertThat(text).contains("\"count\": 3") // ...ma il resto della voce c'e'
+    assertThat(text).contains("\"count\": 4")
   }
 
   @Test

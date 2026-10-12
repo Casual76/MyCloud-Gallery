@@ -84,7 +84,15 @@ sealed interface RecoveryOutcome {
  * (altrimenti versione minima 0, con avviso).
  */
 interface AdminRecovery {
-  suspend fun findKits(account: NasAccount, privateShare: String): NasResult<List<RecoveryKitRef>>
+  /**
+   * I kit di recupero nell'area privata [privateShare] dell'account [account].
+   *
+   * [password] e' la password di [account] quando **non** e' l'account di questo dispositivo (secondo admin o recupero
+   * dalle Impostazioni di un familiare: l'area privata dell'admin si apre solo con l'account dell'admin). Serve a UNA
+   * sessione che legge i kit e si chiude subito; chi implementa la azzera dopo l'uso (e il chiamante comunque). Null =
+   * la sessione di questo dispositivo (onboarding: l'account appena configurato e' gia' quello dell'admin).
+   */
+  suspend fun findKits(account: NasAccount, privateShare: String, password: CharArray? = null): NasResult<List<RecoveryKitRef>>
 
   suspend fun recover(
     kit: RecoveryKitRef,
@@ -107,6 +115,19 @@ sealed interface ResetOutcome {
  */
 interface FamilyReset {
   suspend fun reset(confirmedTwice: Boolean): ResetOutcome
+
+  /**
+   * Dopo un reset riuscito: il codice di recupero del kit **nuovo**, in 7 gruppi, da mostrare una volta con
+   * `FLAG_SECURE` finche' l'utente non lo riscrive ([confirmTypedCode]). Null se non c'e' un codice da mostrare. Senza,
+   * il kit nuovo sul NAS non si aprirebbe mai (P9: prima era solo su `NasFamilyReset`).
+   */
+  fun recoveryCodeForDisplay(): RecoveryCodeDisplay? = null
+
+  /** Vero se [typed] (azzerato dopo l'uso) e' il codice del kit nuovo: allora lo si dimentica. */
+  fun confirmTypedCode(typed: CharArray): Boolean {
+    typed.fill('\u0000')
+    return false
+  }
 }
 
 /**

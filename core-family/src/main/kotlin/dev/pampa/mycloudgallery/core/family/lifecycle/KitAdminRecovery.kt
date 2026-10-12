@@ -40,6 +40,8 @@ import dev.pampa.mycloudgallery.core.trust.registry.RegistryDraft
 import dev.pampa.mycloudgallery.core.trust.registry.RegistryState
 import dev.pampa.mycloudgallery.core.trust.registry.RegistrySync
 import dev.pampa.mycloudgallery.core.trust.registry.TrustAnchor
+import dev.pampa.mycloudgallery.core.trust.nas.NasFileSystem
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CancellationException
 
 /**
@@ -62,31 +64,58 @@ class KitAdminRecovery(
   private val keys: KeyProvider,
   private val familyKeys: FamilyKeyVault,
   private val nasClock: NasClock,
+  /** Le letture con un account diverso da quello del dispositivo (P9: una sessione usa e getta); null = solo la propria. */
+  private val foreignShares: ForeignShareAccess? = null,
 ) : AdminRecovery {
 
-  override suspend fun findKits(account: NasAccount, privateShare: String): NasResult<List<RecoveryKitRef>> =
+  /**
+   * I kit letti con l'account di un altro (l'admin): l'area privata si apre solo con la sua password, che non si
+   * conserva. Il kit e' cifrato con il codice di recupero, quindi tenerne i byte in memoria fino a [recover] non
+   * espone niente; si dimenticano a ogni nuova ricerca.
+   */
+  private val foreignKits = ConcurrentHashMap<RecoveryKitRef, ByteArray>()
+
+  override suspend fun findKits(account: NasAccount, privateShare: String, password: CharArray?): NasResult<List<RecoveryKitRef>> =
     try {
-      sessions.onShare(privateShare, Purpose.ONBOARDING) { fs ->
-        val found = ArrayList<RecoveryKitRef>()
-        val families = fs.list(NasLayout.RECOVERY_DIR, TrustLimits.MAX_LIST_REQUESTS).names.filter(TrustIds::isValid).sorted()
-        for (familyId in families) {
-          val dir = NasLayout.RECOVERY_DIR.child(familyId)
-          val prints = fs.list(dir, TrustLimits.MAX_LIST_REQUESTS).names.filter(::isFingerprint).sorted()
-          for (fingerprint in prints) {
-            if (found.size >= TrustLimits.MAX_LIST_REQUESTS) break
-            val blob = fs.read(dir.child(fingerprint), TrustLimits.MAX_RECOVERY_KIT_BYTES) as? NasRead.Data ?: continue
-            val header = RecoveryKit.inspect(blob.bytes).acceptedOrNull() ?: continue
-            if (header.familyId != familyId || header.keyFingerprint != fingerprint) continue
-            found += RecoveryKitRef(privateShare, "$familyId/$fingerprint", header.createdAt)
-          }
+      foreignKits.clear()
+      val foreign = foreignShares
+      val listed = if (password != null && foreign != null) {
+        foreign.withShare(account, password, privateShare) { fs -> listKits(fs, privateShare) }
+      } else {
+        sessions.onShare(privateShare, Purpose.ONBOARDING) { fs -> listKits(fs, privateShare) }
+      }
+      when (listed) {
+        is NasResult.Err -> listed
+        is NasResult.Ok -> {
+          if (password != null && foreign != null) listed.value.forEach { (ref, bytes) -> foreignKits[ref] = bytes }
+          NasResult.Ok(listed.value.map { it.first }.sortedByDescending { it.createdAt })
         }
-        found.sortedByDescending { it.createdAt }
       }
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
       NasResult.Err(UNEXPECTED)
+    } finally {
+      password?.fill('\u0000')
     }
+
+  /** I kit validi di una cartella `recovery/`, con i loro byte (letti comunque per l'intestazione). */
+  private fun listKits(fs: NasFileSystem, privateShare: String): List<Pair<RecoveryKitRef, ByteArray>> {
+    val found = ArrayList<Pair<RecoveryKitRef, ByteArray>>()
+    val families = fs.list(NasLayout.RECOVERY_DIR, TrustLimits.MAX_LIST_REQUESTS).names.filter(TrustIds::isValid).sorted()
+    for (familyId in families) {
+      val dir = NasLayout.RECOVERY_DIR.child(familyId)
+      val prints = fs.list(dir, TrustLimits.MAX_LIST_REQUESTS).names.filter(::isFingerprint).sorted()
+      for (fingerprint in prints) {
+        if (found.size >= TrustLimits.MAX_LIST_REQUESTS) break
+        val blob = fs.read(dir.child(fingerprint), TrustLimits.MAX_RECOVERY_KIT_BYTES) as? NasRead.Data ?: continue
+        val header = RecoveryKit.inspect(blob.bytes).acceptedOrNull() ?: continue
+        if (header.familyId != familyId || header.keyFingerprint != fingerprint) continue
+        found += RecoveryKitRef(privateShare, "$familyId/$fingerprint", header.createdAt) to blob.bytes
+      }
+    }
+    return found
+  }
 
   override suspend fun recover(
     kit: RecoveryKitRef,
@@ -105,7 +134,8 @@ class KitAdminRecovery(
     val expectedFamily = familyState?.familyId ?: pathFamily
     val expectedFingerprint = familyState?.familyKeyFingerprint ?: pathFingerprint
 
-    val blob = when (val read = guarded { sessions.onShare(kit.share, Purpose.ONBOARDING) { fs -> fs.read(NasLayout.recoveryKitFile(pathFamily, pathFingerprint), TrustLimits.MAX_RECOVERY_KIT_BYTES) } }) {
+    // Un kit letto con l'account dell'admin (findKits con la sua password) non si rilegge: la password non c'e' piu'.
+    val blob = foreignKits[kit] ?: when (val read = guarded { sessions.onShare(kit.share, Purpose.ONBOARDING) { fs -> fs.read(NasLayout.recoveryKitFile(pathFamily, pathFingerprint), TrustLimits.MAX_RECOVERY_KIT_BYTES) } }) {
       is NasResult.Err -> return RecoveryOutcome.Failed(problemOf(read.error))
       is NasResult.Ok -> (read.value as? NasRead.Data)?.bytes ?: return RecoveryOutcome.Failed(OnboardingProblem.RECOVERY_KIT_UNVERIFIED)
     }
@@ -274,4 +304,14 @@ internal fun problemOf(error: NasError): OnboardingProblem = when (error) {
   NasError.Timeout -> OnboardingProblem.NAS_NOT_FOUND
   NasError.NasFull, NasError.QuotaExceeded -> OnboardingProblem.NAS_FULL
   else -> OnboardingProblem.NAS_WRITE_FAILED
+}
+
+/**
+ * Una share letta con un account **diverso** da quello di questo dispositivo, con una password digitata dall'utente e
+ * mai salvata: serve al secondo admin (e al recupero dalle Impostazioni) per leggere i kit nell'area privata
+ * dell'admin. Chi implementa (`:app`, P9) apre una sessione usa e getta con tutti i controlli del §3.1 (percorso,
+ * GUID, cifratura, interruttore di quell'account), la chiude subito dopo [block] e azzera [password].
+ */
+interface ForeignShareAccess {
+  suspend fun <T> withShare(account: NasAccount, password: CharArray, share: String, block: (NasFileSystem) -> T): NasResult<T>
 }

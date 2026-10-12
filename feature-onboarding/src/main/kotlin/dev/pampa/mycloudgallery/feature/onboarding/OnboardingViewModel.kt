@@ -29,6 +29,8 @@ import dev.pampa.mycloudgallery.core.network.contract.LocalNetworkAccess
 import dev.pampa.mycloudgallery.core.network.contract.LocalNetworkPermission
 import dev.pampa.mycloudgallery.core.network.contract.NasAddress
 import dev.pampa.mycloudgallery.core.network.contract.VpnCommandResult
+import dev.pampa.mycloudgallery.core.network.contract.VpnControlConfig
+import dev.pampa.mycloudgallery.core.network.contract.VpnControlConfigStore
 import dev.pampa.mycloudgallery.core.network.contract.VpnController
 import dev.pampa.mycloudgallery.core.qr.contract.ScanRejection
 import dev.pampa.mycloudgallery.core.qr.contract.ScanVerdict
@@ -104,6 +106,7 @@ class OnboardingViewModel @Inject constructor(
   private val vpnController: VpnController,
   private val healthReader: BackgroundHealthReader,
   private val localNetwork: LocalNetworkPermission,
+  private val vpnConfig: VpnControlConfigStore,
 ) : ViewModel() {
 
   /** L'avanzamento, dal coordinatore (salvato a ogni passo, E-O9). */
@@ -140,8 +143,9 @@ class OnboardingViewModel @Inject constructor(
       // Un percorso "entra" scelto in una sessione precedente (il processo e' morto): si riparte dalla scansione.
       coordinator.progress.collect { p ->
         val path = p.path
+        // Solo se la richiesta non e' ancora partita (passi 2-3): dopo, i passi locali si riprendono dove erano (P9).
         if ((path == OnboardingPath.JOIN_QR || path == OnboardingPath.JOIN_MANUAL) &&
-          p.current != OnboardingStep.WELCOME && state.value.join == null && !joinClosed
+          (p.current == OnboardingStep.NAS_ADDRESS || p.current == OnboardingStep.ACCOUNT) && state.value.join == null && !joinClosed
         ) {
           state.update { it.copy(join = JoinUi(page = if (path == OnboardingPath.JOIN_MANUAL) JoinPage.Manual else JoinPage.Scan)) }
         }
@@ -212,6 +216,27 @@ class OnboardingViewModel @Inject constructor(
     viewModelScope.launch {
       val result = guardResult { coordinator.skip(step) }
       if (result is StepResult.Problem) setStepProblem(step, result.problem) else setStepProblem(step, null)
+    }
+  }
+
+  /**
+   * "Continua piu' tardi" (E-O1, NAS spento o non trovato): il passo corrente e tutti quelli che hanno bisogno del NAS
+   * aspettano, e si va avanti con i passi locali (6-11, 13); dal riepilogo si riprendono. Se non c'e' niente da rimandare
+   * (ingresso con invito, recupero, o il coordinatore non lo ammette) la configurazione resta salvata cosi' com'e' e
+   * [onNothingToDefer] (di :app) manda l'app in secondo piano.
+   */
+  fun continueLater(onNothingToDefer: () -> Unit) {
+    val step = progress.value.current
+    val current = state.value
+    if (current.join != null || current.recovery != null || step.local) {
+      onNothingToDefer()
+      return
+    }
+    viewModelScope.launch {
+      when (guardResult { coordinator.skip(step) }) {
+        is StepResult.Advanced -> setStepProblem(step, null)
+        is StepResult.Problem -> onNothingToDefer()
+      }
     }
   }
 
@@ -433,19 +458,31 @@ class OnboardingViewModel @Inject constructor(
    * solo perche' il comando e' partito. Se spegnendola la rete sparisce (probabile "VPN sempre attiva con blocco"),
    * la si riaccende subito: l'utente non deve restare senza rete per una prova.
    */
-  fun runVpnTest() {
+  fun runVpnTest(tunnelName: String) {
     viewModelScope.launch {
       state.update { it.copy(vpn = it.vpn.copy(test = VpnTestUi.Running(up = true))) }
-      val up = guard { vpnController.setTunnel(true) } ?: VpnCommandResult.NotObserved
-      if (up != VpnCommandResult.Confirmed) {
-        state.update { it.copy(vpn = it.vpn.copy(test = VpnTestUi.Done(up = up, down = null))) }
-        return@launch
+      // WireGuard accende e spegne un tunnel per nome, letto dalla configurazione del controllo (P2): per la prova si usa
+      // il nome appena scritto, poi si rimette la configurazione di prima. La scelta vera la salva "Continua".
+      val previous = vpnConfig.config.value
+      guard { vpnConfig.save(VpnControlConfig(enabled = true, tunnelName = tunnelName.trim())) }
+      try {
+        observedVpnTest()
+      } finally {
+        if (vpnConfig.config.value != previous) guard { vpnConfig.save(previous) }
       }
-      state.update { it.copy(vpn = it.vpn.copy(test = VpnTestUi.Running(up = false))) }
-      val down = guard { vpnController.setTunnel(false) } ?: VpnCommandResult.NotObserved
-      if (down == VpnCommandResult.LostConnectivity) guard { vpnController.setTunnel(true) }
-      state.update { it.copy(vpn = it.vpn.copy(test = VpnTestUi.Done(up = up, down = down))) }
     }
+  }
+
+  private suspend fun observedVpnTest() {
+    val up = guard { vpnController.setTunnel(true) } ?: VpnCommandResult.NotObserved
+    if (up != VpnCommandResult.Confirmed) {
+      state.update { it.copy(vpn = it.vpn.copy(test = VpnTestUi.Done(up = up, down = null))) }
+      return
+    }
+    state.update { it.copy(vpn = it.vpn.copy(test = VpnTestUi.Running(up = false))) }
+    val down = guard { vpnController.setTunnel(false) } ?: VpnCommandResult.NotObserved
+    if (down == VpnCommandResult.LostConnectivity) guard { vpnController.setTunnel(true) }
+    state.update { it.copy(vpn = it.vpn.copy(test = VpnTestUi.Done(up = up, down = down))) }
   }
 
   fun submitVpn(remoteControl: Boolean, tunnelName: String?) {
@@ -704,6 +741,16 @@ class OnboardingViewModel @Inject constructor(
         it.copy(busy = false, problem = step.problem, needsNewPassword = step.problem.isAuthFailure())
       }
     }
+  }
+
+  /**
+   * La richiesta e' sul NAS e il codice e' stato mostrato: mentre l'admin approva si finiscono i passi sul telefono
+   * (ruoli, preset, permessi, batteria, VPN). Alla fine dell'onboarding la radice mostra l'attesa (con il codice), che
+   * si aggiorna da sola all'approvazione (P9).
+   */
+  fun continueAfterRequest() {
+    joinClosed = true
+    state.update { it.copy(join = null) }
   }
 
   /** L'onboarding "entra" e' finito (approvato): si esce. */

@@ -5,8 +5,10 @@ import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.R
 import dev.pampa.mycloudgallery.core.nas.contract.NasConnState
 import dev.pampa.mycloudgallery.core.nas.contract.NasError
+import dev.pampa.mycloudgallery.core.network.contract.LocalNetworkAccess
 import dev.pampa.mycloudgallery.core.network.contract.NetPlace
 import dev.pampa.mycloudgallery.core.network.contract.NetworkSnapshot
+import dev.pampa.mycloudgallery.core.network.contract.ProbeResult
 import dev.pampa.mycloudgallery.core.network.contract.VpnObservation
 
 /** Cosa succede toccando l'indicatore. */
@@ -51,8 +53,14 @@ enum class GlobalStatus(@StringRes val label: Int, val tone: FluidTone, val acti
      * Lo stato da mostrare. L'ordine conta: prima cio' che chiede un gesto all'utente (la password), poi la
      * rete (senza un percorso il NAS non c'entra), poi il NAS.
      */
-    fun from(network: NetworkSnapshot, nas: NasConnState): GlobalStatus {
-      if (nas is NasConnState.AuthBlocked) return NEEDS_PASSWORD
+    fun from(
+      network: NetworkSnapshot,
+      nas: NasConnState,
+      probe: ProbeResult? = null,
+      breakerOpen: Boolean = false,
+    ): GlobalStatus {
+      // L'interruttore e' persistente: dopo un riavvio la sessione e' "a riposo" ma la password va comunque reinserita.
+      if (nas is NasConnState.AuthBlocked || breakerOpen) return NEEDS_PASSWORD
       when (network.place) {
         NetPlace.OFFLINE -> return OFFLINE
         NetPlace.UNTRUSTED -> return if (network.vpn.isForeign()) FOREIGN_VPN else UNTRUSTED
@@ -64,7 +72,14 @@ enum class GlobalStatus(@StringRes val label: Int, val tone: FluidTone, val acti
         is NasConnState.WakingUp -> return WAKING_NAS
         is NasConnState.Unavailable ->
           return if (nas.error == NasError.LocalNetworkBlocked) LOCAL_NETWORK_BLOCKED else NAS_UNREACHABLE
-        else -> Unit
+        is NasConnState.Ready -> Unit
+        NasConnState.Idle, NasConnState.Connecting -> {
+          // Senza una sessione aperta: la rete locale negata si dice prima di "NAS non raggiungibile" (android.md
+          // 7.3), poi l'esito della sonda TCP 445 sul percorso di adesso (§3.5, "percorso consentito ma la sonda fallisce").
+          if (network.place == NetPlace.HOME && network.localNetwork == LocalNetworkAccess.DENIED) return LOCAL_NETWORK_BLOCKED
+          if (probe != null && probe !is ProbeResult.Open) return NAS_UNREACHABLE
+        }
+        is NasConnState.AuthBlocked -> Unit
       }
       return when (network.place) {
         NetPlace.HOME -> if (nas is NasConnState.Ready) HOME_CONNECTED else HOME_IDLE

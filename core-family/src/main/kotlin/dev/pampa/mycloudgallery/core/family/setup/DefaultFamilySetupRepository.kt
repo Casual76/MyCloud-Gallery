@@ -73,7 +73,9 @@ object SetupResolver {
 
   fun resolve(stored: StoreState, trust: TrustStatus, wipe: WipePhase?, wipedAt: Long): SetupState {
     if (wipe != null && wipe != WipePhase.DONE) return SetupState.Blocked(BlockReason.WIPE_IN_PROGRESS)
-    if (trust == TrustStatus.Lost) return SetupState.Blocked(BlockReason.WIPE_IN_PROGRESS)
+    // "Perso" con l'azzeramento gia' finito non e' piu' "in corso": il motore della fiducia dice Lost finche' il diario
+    // c'e' (P9: senza questa riga, nello stesso processo dell'azzeramento non si arrivava mai a Wiped).
+    if (trust == TrustStatus.Lost && wipe != WipePhase.DONE) return SetupState.Blocked(BlockReason.WIPE_IN_PROGRESS)
     val snapshot = when (stored) {
       StoreState.Loading -> return SetupState.Loading
       StoreState.Unavailable -> return SetupState.Blocked(BlockReason.STORAGE_LOCKED)

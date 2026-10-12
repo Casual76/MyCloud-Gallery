@@ -15,7 +15,6 @@ import dev.pampa.mycloudgallery.core.family.contract.StepInput
 import dev.pampa.mycloudgallery.core.family.contract.StepResult
 import dev.pampa.mycloudgallery.core.family.contract.TrustStatus
 import dev.pampa.mycloudgallery.core.family.setup.NasCredentialSlots
-import dev.pampa.mycloudgallery.core.nas.contract.BreakerState
 import dev.pampa.mycloudgallery.core.nas.contract.ConnectionReport
 import dev.pampa.mycloudgallery.core.nas.contract.NasAccount
 import dev.pampa.mycloudgallery.core.nas.contract.NasError
@@ -172,14 +171,17 @@ class DefaultOnboardingCoordinator(
     val snapshot = ready() ?: return@withLock problem(OnboardingProblem.STEP_NOT_AVAILABLE)
     val p = snapshot.progress
     if (step != p.current || step !in p.plan) return@withLock problem(OnboardingProblem.STEP_NOT_AVAILABLE)
-    // E-O1, "Continua piu' tardi": se il NAS non si trova, anche i passi che ne hanno bisogno aspettano.
-    val later = step == OnboardingStep.NAS_ADDRESS && snapshot.deferrable
+    // E-O1, "Continua piu' tardi": se il NAS non si trova (al passo 2, ma anche dopo, ai passi 3, 4, 5 e 12), tutti i
+    // passi che ne hanno bisogno aspettano e si va avanti con quelli locali (6-11, 13). Si riprendono dal riepilogo.
+    val later = step in OnboardingPlans.NAS_DEPENDENT && snapshot.deferrable
     if (!step.skippable && !later) return@withLock problem(OnboardingProblem.STEP_NOT_AVAILABLE)
     val skipping = if (later) OnboardingPlans.NAS_DEPENDENT.filter { it in p.plan && it !in p.completed }.toSet() else setOf(step)
     var next: OnboardingStep? = null
     store.update { s ->
       val skipped = s.progress.skipped + skipping
-      next = OnboardingPlans.nextAfter(s.progress.plan, s.progress.completed, skipped, step, s.resuming)
+      // I passi appena rimandati non sono "il prossimo" nemmeno quando si sta riprendendo un passo dal riepilogo: con il
+      // NAS ancora spento si torna ai passi locali o al riepilogo, non al passo 3, poi al 4...
+      next = OnboardingPlans.nextAfter(s.progress.plan, s.progress.completed + (skipping - step), skipped, step, s.resuming)
       s.copy(
         progress = s.progress.copy(skipped = skipped, current = next ?: s.progress.plan.last()),
         resuming = s.resuming && next != null,
@@ -273,11 +275,11 @@ class DefaultOnboardingCoordinator(
     environmentProblem()?.let { return problem(it) }
     val stages = setOf(Stage.ROUTE, Stage.TCP, Stage.NEGOTIATE, Stage.GUID)
     val report = ports.tester.run(TestTarget(address, user = null, share = null, expectedGuid = null, candidate = candidate), null, stages)
-    reportProblem(report, stages)?.let { return failAddress(it) }
-    val facts = report.negotiation ?: return failAddress(OnboardingProblem.NAS_NOT_FOUND)
+    reportProblem(report, stages)?.let { return failNas(it) }
+    val facts = report.negotiation ?: return failNas(OnboardingProblem.NAS_NOT_FOUND)
     // Solo SMB 3.1.1 con la cifratura offerta (C3), e un GUID da memorizzare prima di mandare una password (D3).
-    if (facts.dialect != SmbDialect.SMB_3_1_1 || !facts.encryptionOffered) return failAddress(OnboardingProblem.NAS_INSECURE)
-    if (facts.serverGuid.isBlank()) return failAddress(OnboardingProblem.IDENTITY_MISMATCH)
+    if (facts.dialect != SmbDialect.SMB_3_1_1 || !facts.encryptionOffered) return failNas(OnboardingProblem.NAS_INSECURE)
+    if (facts.serverGuid.isBlank()) return failNas(OnboardingProblem.IDENTITY_MISMATCH)
 
     // Il Wi-Fi diventa "casa" solo ora: l'utente l'ha confermato e il NAS ha risposto con il suo GUID.
     ports.homeFingerprints.save(HomeFingerprint(candidate.ulaPrefixes, candidate.gatewayV4, candidate.dnsDomain, ports.deviceNow()))
@@ -295,8 +297,11 @@ class DefaultOnboardingCoordinator(
     else -> null
   }
 
-  private suspend fun failAddress(problem: OnboardingProblem): StepResult {
-    // E-O1: il NAS non si trova. Il messaggio dice di controllare l'indirizzo e offre "Continua piu' tardi".
+  /**
+   * Un passo che ha bisogno del NAS non e' riuscito. E-O1: se il NAS non si trova (spento, indirizzo sbagliato, servizio
+   * fermo) il messaggio offre "Continua piu' tardi", cioe' [skip] del passo corrente con tutti quelli che usano il NAS.
+   */
+  private suspend fun failNas(problem: OnboardingProblem): StepResult {
     val deferrable = NasProblems.isDeferrable(problem)
     store.update { it.copy(deferrable = deferrable) }
     return problem(problem)
@@ -323,8 +328,8 @@ class DefaultOnboardingCoordinator(
       return problem(OnboardingProblem.AUTH_FAILED)
     }
     credentials.use { c ->
-      // L'utente ha scritto una password nuova: l'interruttore aperto da un tentativo precedente si richiude.
-      if (ports.breaker.state.value is BreakerState.Open) ports.breaker.onNewPasswordSaved()
+      // L'utente ha scritto una password nuova: l'interruttore di QUESTO account, aperto da un tentativo precedente, si richiude.
+      ports.reopenBreakerFor(NasAccount(nas.address(), user, NasCredentialSlots.PRIMARY, nas.guid))
       val stages = ACCOUNT_STAGES
       // Il Wi-Fi del passo 2 serve finche' "casa" non e' stata registrata; dopo, il percorso lo decide il cancello di rete.
       val candidate = snapshot.homeConfirmed.takeIf { ports.homeFingerprints.fingerprint.value == null }
@@ -335,7 +340,7 @@ class DefaultOnboardingCoordinator(
       if (failure != null) {
         val error = report.firstFailure?.error
         if (error is NasError.Auth || error is NasError.AuthBlocked) rejected.remember(user, input.password)
-        return problem(failure)
+        return failNas(failure)
       }
       // Le credenziali si salvano solo ora, dopo il successo.
       when (ports.credentials.save(NasCredentialSlots.PRIMARY, c)) {
@@ -394,8 +399,8 @@ class DefaultOnboardingCoordinator(
     // Il kit di recupero sta nell'area privata e il registro in quella comune: la stessa share per tutti e due li mescola.
     if (common.equals(private, ignoreCase = true)) return problem(OnboardingProblem.STEP_NOT_AVAILABLE)
 
-    val commonAccess = accessOf(ports.shareProbe.probe(common)) ?: return problem(OnboardingProblem.NAS_NOT_FOUND)
-    val privateAccess = accessOf(ports.shareProbe.probe(private)) ?: return problem(OnboardingProblem.NAS_NOT_FOUND)
+    val commonAccess = accessOf(ports.shareProbe.probe(common)) ?: return failNas(OnboardingProblem.NAS_NOT_FOUND)
+    val privateAccess = accessOf(ports.shareProbe.probe(private)) ?: return failNas(OnboardingProblem.NAS_NOT_FOUND)
     val missing = setOf(ShareAccess.MISSING, ShareAccess.DENIED)
     // E-O2: nessuna delle due si apre. E-O3: l'area comune manca o non si scrive (l'app non crea share).
     if (commonAccess in missing && privateAccess in missing) return problem(OnboardingProblem.NO_ACCESSIBLE_SHARE)
@@ -557,7 +562,7 @@ class DefaultOnboardingCoordinator(
       }
     }
     return when (result) {
-      is FoundationResult.Failed -> problem(result.problem)
+      is FoundationResult.Failed -> failNas(result.problem)
       is FoundationResult.Founded -> {
         pending = null
         complete(OnboardingStep.FAMILY_KEY) {

@@ -1,62 +1,62 @@
 package dev.pampa.mycloudgallery.root
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import dev.antigravity.fluidengine.ui.fluid.FluidButton
+import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
-import dev.antigravity.fluidengine.ui.theme.FluidListGroup
-import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.pampa.mycloudgallery.R
+import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustration
+import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
 import dev.pampa.mycloudgallery.core.family.contract.BlockReason
 
-// Le schermate degli stati del dispositivo che non sono ne' l'onboarding ne' la galleria. Scheletro P0:
-// testi e struttura definitivi li decidono P6 (attesa) e P9 (azzerato, fermo). [extra] e' il punto in cui la
-// build debug aggiunge i suoi interruttori (DeveloperTools); in release e' vuoto.
+// Le schermate degli stati del dispositivo che non sono ne' l'onboarding ne' la galleria. L'attesa dell'approvazione
+// e' quella di feature-onboarding (codice e QR della chiave, P6); qui "azzerato" e "fermo".
 
-/** In attesa dell'approvazione: il codice da far confrontare all'admin (E-S14, sola lettura). */
+/**
+ * Il dispositivo si e' azzerato dopo la segnalazione di smarrimento (E-S2). "Configura di nuovo" dimentica il diario
+ * dell'azzeramento e riporta al benvenuto: il dispositivo rientra con una chiave nuova e va riapprovato.
+ */
 @Composable
-fun AwaitingApprovalScreen(code: String, extra: (@Composable () -> Unit)? = null) {
-  FluidScreen(
-    title = stringResource(R.string.awaiting_title),
-    subtitle = stringResource(R.string.awaiting_subtitle),
-  ) {
-    item { FluidSectionHeader(title = stringResource(R.string.awaiting_code_title)) }
-    item {
-      FluidListGroup {
-        FluidListRow(
-          title = code,
-          subtitle = stringResource(R.string.awaiting_code_detail),
-          disclosure = false,
-        )
-      }
-    }
-    item { FluidSectionFootnote(text = stringResource(R.string.awaiting_note)) }
-    if (extra != null) item { extra() }
-  }
-}
-
-/** Il dispositivo si e' azzerato dopo la segnalazione di smarrimento (E-S2). */
-@Composable
-fun WipedScreen(extra: (@Composable () -> Unit)? = null) {
+fun WipedScreen(onReconfigure: () -> Unit) {
   FluidScreen(
     title = stringResource(R.string.wiped_title),
     subtitle = stringResource(R.string.wiped_subtitle),
   ) {
     item {
-      FluidEmptyState(
-        title = stringResource(R.string.wiped_title),
-        detail = stringResource(R.string.wiped_detail),
-      )
+      Column(
+        modifier = Modifier.fillMaxWidth().padding(vertical = ScreenPadding),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(ScreenGap),
+      ) {
+        GalleryIllustration(icon = Icons.Rounded.RestartAlt, tone = GalleryIllustrationTone.Brand)
+        FluidEmptyState(
+          title = stringResource(R.string.wiped_reason_title),
+          detail = stringResource(R.string.wiped_detail),
+        )
+        FluidButton(
+          text = stringResource(R.string.wiped_reconfigure),
+          onClick = onReconfigure,
+          size = FluidButtonSize.Large,
+        )
+      }
     }
-    if (extra != null) item { extra() }
   }
 }
 
 /** Fermo per un motivo che l'utente deve conoscere. */
 @Composable
-fun BlockedScreen(reason: BlockReason, extra: (@Composable () -> Unit)? = null) {
+fun BlockedScreen(reason: BlockReason) {
   val detail = when (reason) {
     BlockReason.NEEDS_APP_UPDATE -> R.string.blocked_update
     BlockReason.REGISTRY_FORK -> R.string.blocked_fork
@@ -70,6 +70,8 @@ fun BlockedScreen(reason: BlockReason, extra: (@Composable () -> Unit)? = null) 
         detail = stringResource(detail),
       )
     }
-    if (extra != null) item { extra() }
   }
 }
+
+private val ScreenPadding = 24.dp
+private val ScreenGap = 16.dp

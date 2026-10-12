@@ -86,6 +86,7 @@
   <string name="awaiting_step_approve_detail">Con la credenziale del suo telefono.</string>
   <string name="awaiting_waiting">In attesa…</string>
   <string name="awaiting_waiting_detail">Ricontrollo ogni 10 secondi, solo con l’app aperta.</string>
+  <string name="awaiting_continue">Intanto finisci la configurazione</string>
   <string name="awaiting_note">Puoi già guardare la Libreria comune. Le tue foto entreranno nella famiglia dopo l’approvazione.</string>
 
   <!-- Recupero dell'admin e secondo admin -->

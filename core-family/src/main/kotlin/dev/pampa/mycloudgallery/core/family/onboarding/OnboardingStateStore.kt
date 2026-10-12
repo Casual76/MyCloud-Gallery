@@ -114,11 +114,17 @@ class DataStoreOnboardingStateStore(
     writes.withLock {
       try {
         var result: OnboardingSnapshot? = null
+        var encoded: String? = null
         dataStore.edit { prefs ->
           val updated = transform(prefs[KEY]?.let(OnboardingSnapshotCodec::decode) ?: OnboardingSnapshot.EMPTY)
-          prefs[KEY] = OnboardingSnapshotCodec.encode(updated)
+          encoded = OnboardingSnapshotCodec.encode(updated)
+          prefs[KEY] = encoded!!
           result = updated
         }
+        // Scritto: [state] lo dice subito, senza aspettare che l'osservatore del file lo rilegga. Chi legge lo stato
+        // subito dopo (il coordinatore al passo dopo, P9: due input dello stesso passo uno dietro l'altro) non vede
+        // l'avanzamento di prima. L'osservatore poi riemette lo stesso valore.
+        encoded?.let { mutable.value = StoreState.Ready(effective(it)) }
         result
       } catch (e: IOException) {
         GalleryLog.w(TAG) { "avanzamento non salvato (${e.javaClass.simpleName})" }

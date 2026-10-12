@@ -331,5 +331,7 @@
   <string name="summary_section_pending_detail">Li hai saltati: restano nelle Impostazioni.</string>
   <string name="summary_pending_row">Lo riprendi dalle Impostazioni</string>
   <string name="summary_finish">Vai alla Libreria</string>
+  <string name="summary_resume_nas">Riprendi i passi del NAS</string>
+  <string name="summary_subtitle_nas_pending">Hai fatto i passi sul telefono. Quando il NAS è acceso, riprendi da qui.</string>
   <string name="summary_footnote">I passi saltati restano nelle Impostazioni, alla voce «Da completare».</string>
 </resources>

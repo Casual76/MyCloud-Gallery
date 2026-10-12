@@ -45,6 +45,13 @@ internal data class RecoveryUiState(
   /** C'e' un account su cui lavorare? Senza, la pagina lo dice e non propone nulla. */
   val available: Boolean,
   val adminUser: String = "",
+  /**
+   * La password dell'account dell'admin, solo se non e' l'account di questo dispositivo (l'area privata dell'admin si
+   * apre solo con il suo account): serve a UNA ricerca e poi si dimentica. **Mai nei log**: [toString] non la stampa.
+   */
+  val adminPassword: String = "",
+  /** L'utente NAS di questo dispositivo: se l'admin e' lui, la password e' gia' salvata e non si chiede. */
+  val ownUser: String = "",
   val privateShare: String = "",
   val stage: RecoveryStage = RecoveryStage.SEARCH,
   val searching: Boolean = false,
@@ -57,7 +64,10 @@ internal data class RecoveryUiState(
   val oldAdmin: OldAdminFate = OldAdminFate.LOST,
   val feedback: Feedback? = null,
 ) {
-  val canSearch: Boolean get() = available && adminUser.isNotBlank() && !searching
+  /** L'admin indicato non e' l'account di questo dispositivo: serve la sua password (P9, contratto `findKits`). */
+  val needsAdminPassword: Boolean get() = adminUser.isNotBlank() && !adminUser.equals(ownUser, ignoreCase = true)
+
+  val canSearch: Boolean get() = available && adminUser.isNotBlank() && !searching && (!needsAdminPassword || adminPassword.isNotEmpty())
 
   val canRecover: Boolean
     get() = stage == RecoveryStage.CODE && selectedKit != null && code.isNotBlank()
@@ -92,12 +102,15 @@ internal class AdminRecoveryViewModel @Inject constructor(
     RecoveryUiState(
       mode = mode,
       available = accounts?.account?.value != null,
+      ownUser = accounts?.account?.value?.user.orEmpty(),
       oldAdmin = if (mode == RecoveryMode.SECOND_ADMIN) OldAdminFate.KEEP_APPROVED else OldAdminFate.LOST,
     ),
   )
   val state: StateFlow<RecoveryUiState> = _state.asStateFlow()
 
   fun setAdminUser(value: String) = edit { it.copy(adminUser = value.trim()) }
+
+  fun setAdminPassword(value: String) = edit { it.copy(adminPassword = value) }
 
   fun setPrivateShare(value: String) = edit { it.copy(privateShare = value.trim()) }
 
@@ -121,15 +134,18 @@ internal class AdminRecoveryViewModel @Inject constructor(
     val base = accounts?.account?.value
     if (base == null || current.searching || current.stage != RecoveryStage.SEARCH) return
     val share = current.privateShare.ifBlank { current.adminUser }
-    if (!NasUserRules.isValid(current.adminUser) || !runCatching { ShareNames.check(share) }.isSuccess) {
+    val missingPassword = current.needsAdminPassword && current.adminPassword.isEmpty()
+    if (!NasUserRules.isValid(current.adminUser) || !runCatching { ShareNames.check(share) }.isSuccess || missingPassword) {
       _state.update { it.copy(feedback = Feedback(R.string.recovery_error_fields_title, R.string.recovery_error_fields, FluidTone.Warning)) }
       return
     }
-    _state.update { it.copy(searching = true, feedback = null) }
+    // La password dell'admin vale una ricerca: si toglie subito dallo stato, il contratto azzera la sua copia.
+    val password = if (current.needsAdminPassword) current.adminPassword.toCharArray() else null
+    _state.update { it.copy(searching = true, feedback = null, adminPassword = "") }
     viewModelScope.launch {
       val account = NasAccount(base.address, current.adminUser, base.credentialSlot, base.pinnedGuid)
       try {
-        when (val result = recovery.findKits(account, share)) {
+        when (val result = recovery.findKits(account, share, password)) {
           is NasResult.Ok -> _state.update {
             when {
               result.value.isEmpty() -> it.copy(
@@ -150,6 +166,8 @@ internal class AdminRecoveryViewModel @Inject constructor(
         throw e
       } catch (_: Exception) {
         _state.update { it.copy(searching = false, feedback = Feedback(R.string.fb_failed_title, R.string.problem_generic, FluidTone.Danger)) }
+      } finally {
+        password?.fill(CLEARED)
       }
     }
   }
@@ -211,10 +229,12 @@ internal class AdminRecoveryViewModel @Inject constructor(
 
   override fun onCleared() {
     familyState = null
-    _state.value = _state.value.copy(code = "")
+    _state.value = _state.value.copy(code = "", adminPassword = "")
   }
 
   companion object {
+    private const val CLEARED = '\u0000'
+
     /** Il nome dell'argomento della rotta (`AdminRecoveryRoute.replace`). */
     const val REPLACE = "replace"
   }

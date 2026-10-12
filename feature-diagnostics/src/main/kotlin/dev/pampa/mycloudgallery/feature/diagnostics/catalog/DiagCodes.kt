@@ -1,6 +1,8 @@
 package dev.pampa.mycloudgallery.feature.diagnostics.catalog
 
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagCode
+import dev.pampa.mycloudgallery.core.family.trust.TrustDiagCodes
+import dev.pampa.mycloudgallery.core.network.diagnostics.NetworkDiagCodes
 
 /**
  * Gli identificativi canonici della Diagnostica (P8): il catalogo di tutti i [DiagCode] che l'app puo' mostrare,
@@ -177,4 +179,32 @@ object DiagCodes {
 
   // --- Rete e NAS ----------------------------------------------------------
   @JvmField val DIAG_SECTION_UNAVAILABLE = DiagCode("DIAG_SECTION_UNAVAILABLE")
+
+  // --- I codici scritti dai contributori di core-network e core-family (P9) ----------------------------------
+  // P2 e P3 hanno scelto i propri identificativi mentre P8 scriveva il catalogo: qui sono gli STESSI oggetti dei
+  // moduli (stessi id, stessi edge case), cosi' ogni voce che quei contributori producono ha titolo, "cosa fare" e
+  // azione dal catalogo. `DiagnosticsWiringTest` (in :app) verifica che non ne manchi nessuno.
+  @JvmField val NET_UNTRUSTED_NETWORK: DiagCode = NetworkDiagCodes.UNTRUSTED_NETWORK
+  @JvmField val NET_LOCAL_NETWORK: DiagCode = NetworkDiagCodes.LOCAL_NETWORK
+  @JvmField val NET_VPN_AT_HOME: DiagCode = NetworkDiagCodes.VPN_AT_HOME
+  @JvmField val NET_IPV4_ONLY: DiagCode = NetworkDiagCodes.IPV4_ONLY
+  @JvmField val NET_VPN_CONTROL: DiagCode = NetworkDiagCodes.VPN_CONTROL
+  @JvmField val NET_VPN_LOCKDOWN: DiagCode = NetworkDiagCodes.VPN_LOCKDOWN
+  @JvmField val NET_VPN_NOT_CONTROLLABLE: DiagCode = NetworkDiagCodes.VPN_NOT_CONTROLLABLE
+  @JvmField val NET_QUALITY_POOR: DiagCode = NetworkDiagCodes.QUALITY_POOR
+  @JvmField val NET_HOME_FINGERPRINT: DiagCode = NetworkDiagCodes.HOME_FINGERPRINT
+  @JvmField val NET_NAS_TCP: DiagCode = NetworkDiagCodes.NAS_TCP
+  @JvmField val TRUST_STATE: DiagCode = TrustDiagCodes.STATE
+  @JvmField val TRUST_REJECTED_FILES: DiagCode = TrustDiagCodes.REJECTED
+  @JvmField val TRUST_VERSION_REPLACED: DiagCode = TrustDiagCodes.VERSION_REPLACED
+  @JvmField val TRUST_SYNC_INCOMPLETE: DiagCode = TrustDiagCodes.INCOMPLETE
+  @JvmField val TRUST_REGISTRY_BEHIND: DiagCode = TrustDiagCodes.REGISTRY_BEHIND
+  @JvmField val TRUST_NO_MIN_VERSION: DiagCode = TrustDiagCodes.NO_MIN_VERSION
+  @JvmField val TRUST_NOT_REFRESHED: DiagCode = TrustDiagCodes.NOT_REFRESHED
+  @JvmField val TRUST_LOCAL_STATE_UNTRUSTED: DiagCode = TrustDiagCodes.LOCAL_STATE_UNTRUSTED
+  @JvmField val TRUST_WIPE: DiagCode = TrustDiagCodes.WIPE
+  @JvmField val TRUST_LOST_REPORT_REJECTED: DiagCode = TrustDiagCodes.LOST_REPORT_REJECTED
+  @JvmField val TRUST_PUBLISH_UNVERIFIED: DiagCode = TrustDiagCodes.PUBLISH_UNVERIFIED
+  @JvmField val TRUST_PUBLISH_BLOCKED: DiagCode = TrustDiagCodes.PUBLISH_BLOCKED
+  @JvmField val TRUST_STATUS_REJECTED: DiagCode = TrustDiagCodes.STATUS_REJECTED
 }

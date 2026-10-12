@@ -34,10 +34,18 @@ class AdminRecoveryViewModelTest {
     var fate: OldAdminFate? = null
     var kits: NasResult<List<RecoveryKitRef>> = NasResult.Ok(emptyList())
 
+    var searchedUser: String? = null
+    var passwordGiven: String? = null
+
     override suspend fun findKits(
       account: dev.pampa.mycloudgallery.core.nas.contract.NasAccount,
       privateShare: String,
-    ): NasResult<List<RecoveryKitRef>> = kits
+      password: CharArray?,
+    ): NasResult<List<RecoveryKitRef>> {
+      searchedUser = account.user
+      passwordGiven = password?.let { String(it) }
+      return kits
+    }
 
     override suspend fun recover(kit: RecoveryKitRef, code: CharArray, familyState: FamilyStateQr?, oldAdmin: OldAdminFate): RecoveryOutcome {
       this.code = String(code)
@@ -59,6 +67,7 @@ class AdminRecoveryViewModelTest {
     val vm = viewModel(replace = false, spy = Spy(), accounts = null)
     assertThat(vm.state.value.available).isFalse()
     vm.setAdminUser("alessio")
+    vm.setAdminPassword("password-di-alessio")
     vm.search()
     assertThat(vm.state.value.stage).isEqualTo(RecoveryStage.SEARCH)
   }
@@ -87,6 +96,7 @@ class AdminRecoveryViewModelTest {
     val spy = Spy().apply { kits = NasResult.Ok(listOf(kit)) }
     val vm = viewModel(replace = false, spy = spy)
     vm.setAdminUser("alessio")
+    vm.setAdminPassword("password-di-alessio")
     vm.search()
     assertThat(vm.state.value.stage).isEqualTo(RecoveryStage.CODE)
     assertThat(vm.state.value.selectedKit).isEqualTo(0)
@@ -98,6 +108,7 @@ class AdminRecoveryViewModelTest {
     val spy = Spy().apply { kits = NasResult.Ok(listOf(kit, kit.copy(fileName = "recovery-02.mcgkit"))) }
     val vm = viewModel(replace = false, spy = spy)
     vm.setAdminUser("alessio")
+    vm.setAdminPassword("password-di-alessio")
     vm.search()
     assertThat(vm.state.value.stage).isEqualTo(RecoveryStage.PICK)
     vm.pickKit(1)
@@ -110,11 +121,14 @@ class AdminRecoveryViewModelTest {
     val spy = Spy().apply { kits = NasResult.Ok(emptyList()) }
     val vm = viewModel(replace = false, spy = spy)
     vm.setAdminUser("alessio")
+    vm.setAdminPassword("password-di-alessio")
     vm.search()
     assertThat(vm.state.value.stage).isEqualTo(RecoveryStage.SEARCH)
     assertThat(vm.state.value.feedback?.message).isEqualTo(R.string.recovery_no_kit)
 
     spy.kits = NasResult.Err(NasError.PermissionDenied)
+    // La password dell'admin vale una ricerca (P9): per riprovare la si riscrive.
+    vm.setAdminPassword("password-di-alessio")
     vm.search()
     assertThat(vm.state.value.feedback?.message).isEqualTo(R.string.nas_error_permission)
   }
@@ -134,6 +148,7 @@ class AdminRecoveryViewModelTest {
     val spy = Spy().apply { kits = NasResult.Ok(listOf(kit)) }
     val vm = viewModel(replace = true, spy = spy)
     vm.setAdminUser("alessio")
+    vm.setAdminPassword("password-di-alessio")
     vm.search()
     vm.setCode("abcd-efgh 1234")
     assertThat(vm.state.value.code).isEqualTo("ABCD-EFGH-1234")
@@ -152,6 +167,7 @@ class AdminRecoveryViewModelTest {
     val spy = Spy(RecoveryOutcome.WrongCode).apply { kits = NasResult.Ok(listOf(kit)) }
     val vm = viewModel(replace = false, spy = spy)
     vm.setAdminUser("alessio")
+    vm.setAdminPassword("password-di-alessio")
     vm.search()
     vm.setCode("AAAA-BBBB")
     vm.recover()
@@ -172,6 +188,7 @@ class AdminRecoveryViewModelTest {
     val payload = FamilyStateQr("famiglia", "impronta", registryVersion = 12, registryHash = "hash")
     stateCodec.known["MCGS1:stato"] = payload
     vm.setAdminUser("alessio")
+    vm.setAdminPassword("password-di-alessio")
     vm.search()
 
     assertThat(vm.onStateScanned("MCGS1:stato")).isEqualTo(ScanVerdict.Accept)
@@ -186,6 +203,7 @@ class AdminRecoveryViewModelTest {
     val spy = Spy().apply { kits = NasResult.Ok(listOf(kit)) }
     val vm = viewModel(replace = false, spy = spy)
     vm.setAdminUser("alessio")
+    vm.setAdminPassword("password-di-alessio")
     vm.search()
     vm.setCode("AAAA-BBBB")
     vm.recover()
@@ -198,5 +216,36 @@ class AdminRecoveryViewModelTest {
     assertThat(vm.onStateScanned("MCG1:invito")).isEqualTo(ScanVerdict.Reject(ScanRejection.NOT_OURS))
     assertThat(vm.onStateScanned("[Interface]")).isEqualTo(ScanVerdict.Reject(ScanRejection.WIREGUARD_SECRET))
     assertThat(vm.onStateScanned("MCGS1:illeggibile")).isEqualTo(ScanVerdict.Reject(ScanRejection.MALFORMED))
+  }
+
+  /** P9: l'area privata dell'admin si apre solo con il suo account; la password vale una ricerca e non resta. */
+  @Test
+  fun conUnAdminDiversoDaQuestoDispositivoServeLaSuaPasswordUnaVolta() = runTest {
+    val spy = Spy().apply { kits = NasResult.Ok(listOf(kit)) }
+    val vm = viewModel(replace = false, spy = spy)
+    vm.setAdminUser("alessio")
+    assertThat(vm.state.value.needsAdminPassword).isTrue()
+    assertThat(vm.state.value.canSearch).isFalse()
+    vm.search()
+    assertThat(spy.searchedUser).isNull()
+
+    vm.setAdminPassword("password-di-alessio")
+    assertThat(vm.state.value.canSearch).isTrue()
+    vm.search()
+    assertThat(spy.searchedUser).isEqualTo("alessio")
+    assertThat(spy.passwordGiven).isEqualTo("password-di-alessio")
+    assertThat(vm.state.value.adminPassword).isEmpty()
+    assertThat(vm.state.value.toString()).doesNotContain("password-di-alessio")
+  }
+
+  @Test
+  fun seLAdminEQuestoDispositivoLaPasswordNonSiChiede() = runTest {
+    val spy = Spy().apply { kits = NasResult.Ok(listOf(kit)) }
+    val vm = viewModel(replace = false, spy = spy)
+    vm.setAdminUser("TEST2")
+    assertThat(vm.state.value.needsAdminPassword).isFalse()
+    vm.search()
+    assertThat(spy.passwordGiven).isNull()
+    assertThat(vm.state.value.stage).isEqualTo(RecoveryStage.CODE)
   }
 }

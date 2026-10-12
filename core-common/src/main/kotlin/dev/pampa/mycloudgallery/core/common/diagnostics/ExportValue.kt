@@ -53,11 +53,20 @@ sealed interface ExportValue {
         return Enum(declaring.simpleName, value.name)
       }
 
-      /** Solo per rileggere l'anello salvato da questo stesso modulo: i due nomi sono identificatori validati. */
+      /**
+       * Solo per rileggere l'anello salvato da questo stesso modulo. Il file e' un dato (potrebbe essere manomesso):
+       * si accetta solo la **forma** di un enum dell'app, il tipo in `UpperCamel` (almeno una minuscola) e la costante
+       * in `MAIUSCOLO_CON_TRATTINI_BASSI`, come fa l'esportatore (P8). Un nome come «Mario.Rossi» non e' una costante
+       * e l'evento si scarta gia' qui, non solo all'esportazione (P9, nota di P8 in docs/decisioni.md).
+       */
       internal fun restore(type: String, constant: String): Enum? =
-        if (IDENTIFIER.matches(type) && IDENTIFIER.matches(constant)) Enum(type, constant) else null
+        if (type.length <= MAX_NAME && TYPE.matches(type) && CONSTANT.matches(constant)) Enum(type, constant) else null
 
-      private val IDENTIFIER = Regex("[A-Za-z_][A-Za-z0-9_]{0,63}")
+      private const val MAX_NAME = 64
+
+      /** `UpperCamel` con almeno una minuscola (un tipo, non una sigla o una parola in maiuscolo). */
+      private val TYPE = Regex("[A-Z][A-Za-z0-9]*[a-z][A-Za-z0-9]*")
+      private val CONSTANT = Regex("[A-Z][A-Z0-9_]{0,63}")
     }
   }
 

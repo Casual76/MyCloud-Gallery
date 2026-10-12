@@ -26,19 +26,29 @@
   <string name="main_search_empty_detail">Cercherai per parole, luoghi e date. La ricerca avverrà sul telefono.</string>
 
   <!-- Stati del dispositivo (SetupState) -->
-  <string name="awaiting_title">In attesa di approvazione</string>
-  <string name="awaiting_subtitle">Solo lettura finché l’admin non ti approva</string>
-  <string name="awaiting_code_title">Codice da confrontare</string>
-  <string name="awaiting_code_detail">Mostralo all’admin: deve coincidere con quello che vede nella richiesta.</string>
-  <string name="awaiting_note">Puoi già guardare la Libreria comune. Le tue foto entreranno nella famiglia dopo l’approvazione.</string>
   <string name="wiped_title">Dispositivo azzerato</string>
   <string name="wiped_subtitle">Le chiavi e i dati di MyCloud Gallery su questo telefono sono stati cancellati</string>
-  <string name="wiped_detail">Il dispositivo era stato segnalato come perso. Per riusarlo va configurato di nuovo e approvato dall’admin.</string>
+  <string name="wiped_detail">Per riusarlo va configurato di nuovo, con una chiave nuova, e approvato dall’admin.</string>
   <string name="blocked_title">MyCloud Gallery è ferma</string>
   <string name="blocked_update">Sul NAS ci sono dati di una versione più nuova dell’app: aggiorna l’app per continuare.</string>
   <string name="blocked_fork">Il registro della famiglia ha versioni in conflitto: serve l’intervento dell’admin.</string>
   <string name="blocked_wipe">Un azzeramento è in corso e riprenderà da solo.</string>
   <string name="blocked_storage">Sblocca il telefono almeno una volta dopo l’accensione per continuare.</string>
+
+  <string name="wiped_reason_title">Era stato segnalato come perso</string>
+  <string name="wiped_reconfigure">Configura di nuovo</string>
+
+  <!-- Notifiche (canali e testi). Aprono solo l'app: PendingIntent immutabile, nessun'azione sulla notifica (C17). -->
+  <string name="channel_approvals_name">Approvazioni</string>
+  <string name="channel_approvals_description">Un nuovo dispositivo chiede di entrare nella famiglia (solo per l’admin).</string>
+  <string name="channel_nas_name">Problemi del NAS</string>
+  <string name="channel_nas_description">Il NAS non accetta più la password o non si raggiunge da giorni.</string>
+  <string name="notify_new_device_title">Nuovo dispositivo: %1$s. Approvare?</string>
+  <string name="notify_new_device_text">Apri MyCloud Gallery e confronta il codice con quello del dispositivo.</string>
+  <string name="notify_new_device_public">Nuovo dispositivo da approvare</string>
+  <string name="notify_new_devices_title">%1$d nuovi dispositivi da approvare</string>
+  <string name="notify_password_title">Serve la password del NAS</string>
+  <string name="notify_password_text">Il NAS non ha accettato la password salvata: inseriscila di nuovo dalle Impostazioni.</string>
 
   <!-- Blocco app (AppLockGate di core-security) -->
   <string name="locked_title">MyCloud Gallery è bloccata</string>

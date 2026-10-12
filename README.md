@@ -4,8 +4,10 @@ Galleria Android privata per una famiglia di soli adulti, complementare a Samsun
 telefono e del NAS WD My Cloud EX2 Ultra in una sola libreria, backup automatico, ricerca sul
 dispositivo, nessun cloud di terzi e nessuna telemetria. Telefono e tablet.
 
-Questo repository e' lo **scheletro della Fase 1.1**: build, moduli vuoti, tema Ametista e controlli di
-sicurezza. Nessuna funzionalita' di prodotto.
+Stato: **Fase 2 integrata (P9)**. L'app collega le implementazioni vere di rete e casa, sessione SMB verso il NAS,
+famiglia (onboarding, ingresso con invito, registro, approvazione, smarrimento e azzeramento, recupero dell'admin), QR,
+Impostazioni e Diagnostica. La galleria vera e propria (Libreria, backup, indice, ricerca) arriva dalla Fase 3: le schede
+sono ancora segnaposto.
 
 ## Verifica in un comando
 
@@ -36,9 +38,9 @@ Package base `dev.pampa.mycloudgallery`, namespace `dev.pampa.mycloudgallery.<mo
 `dev.pampa.mycloudgallery.core.trust`). Tutti i moduli sono librerie Android (Groovy DSL) con una classe
 segnaposto e almeno un test.
 
-| Modulo | Cosa conterra' | Vede |
+| Modulo | Cosa contiene | Vede |
 |---|---|---|
-| `:app` | `MainActivity`, Hilt, navigazione, lavori in background; applicationId `dev.pampa.mycloudgallery` (debug: `.debug`) | tutti + `engine-ui` |
+| `:app` | `MainActivity`, blocco app, navigazione, il grafo della Fase 2 (`graph/AppGraph`) esposto a Hilt, `TrustSyncWorker` e notifiche, ciclo di vita del processo; applicationId `dev.pampa.mycloudgallery` (debug: `.debug`) | tutti + `engine-ui` |
 | `:core-common` | logger interno (in release non scrive nulla), `Redacted`, `DispatcherProvider` | nessuno |
 | `:core-model` | tipi di dominio (media, posizioni, versioni, dispositivi) | nessuno |
 | `:core-database` | Room + KSP: replica locale dell'indice | model, common |
@@ -59,18 +61,29 @@ passaggio da una funzione all'altra e' una callback scritta da `:app` (`navigati
 
 Dalla Fase 2 ogni modulo nuovo ha tre package fissi (docs/fase2-progetto.md, D6):
 - `contract`: le interfacce e i tipi che gli altri moduli usano (con KDoc che spiega il perche');
-- `noop`: i null-object che `:app` lega finche' non arrivano le implementazioni vere (falliscono chiusi:
-  nessuna rete, nessuna autenticazione, dispositivo mai configurato). Vanno nella release;
+- `noop`: i null-object che falliscono chiusi (nessuna rete, nessuna autenticazione, dispositivo mai configurato).
+  `:app` li ha legati fino al P9; ora lega le implementazioni vere e R8 toglie i null-object non usati dalla release;
 - `testing`: i fake, in `src/main` perche' i moduli a valle li riusano nei loro test senza cicli.
   **Mai nella release**: `tools\check.ps1` fallisce se una classe di un package `testing` compare nel dex.
 
-I legami Hilt sono in `app/src/main/.../di/` (`PlaceholderBindingsModule`: tutti i null-object, da
-sostituire con le implementazioni vere). Lo stato del dispositivo (`FamilySetupRepository`) e' in
-`SetupStateModule`, diverso fra debug (un fake pilotabile da Impostazioni → Sviluppo) e release
-(il null-object). Il Fluid Engine e' in `engine/` (submodule,
-agganciato al tag **engine-2.10.1**); entrano nel build solo `engine-foundation` e `engine-ui`. Per
-aggiungerne altri: `engine\tools\engine-install.ps1 -AppRoot . -Modules engine-ui,engine-storage` (e
-rigenerare i checksum).
+I legami Hilt sono in `app/src/main/.../di/`: `AppModule` (dispatcher, blocco app, anello della Diagnostica, funzioni
+sperimentali) e `GraphModule`, che espone contratto per contratto **un solo** `AppGraph` per processo
+(`app/src/main/.../graph/`): archivi locali, rete e casa (P2), sessione SMB (P1), fiducia e ciclo di vita (P3), onboarding
+e ingresso (P4), regole e salute (P8). Debug e release usano lo stesso grafo; cambia solo `AppPlatform` (Keystore, rete
+di Android, smbj, WireGuard), che i test d'integrazione sostituiscono con il simulatore SMB di `core-nas`, una rete finta e
+chiavi in software. Intorno al grafo, in `:app`:
+- `process/ProcessWatcher`: primo piano e profilo attivo (`AppContextSignal`), `VpnAutomation` agganciata al processo,
+  sessione NAS chiusa in background, controllo del registro all'apertura e all'arrivo a casa, controllo quotidiano;
+- `work/`: `TrustSyncWorker` (WorkManager: una volta al giorno, ogni 15 minuti nella finestra d'invito, all'apertura e
+  all'arrivo a casa; rispetta il motore delle regole) e la pianificazione;
+- `notify/`: canali "Approvazioni" e "Problemi del NAS"; le notifiche aprono solo l'app (`PendingIntent` immutabile);
+- `graph/AppLocalDataEraser`: la fase dei dati locali dell'azzeramento (mai il diario dell'azzeramento);
+- `root/RootViewModel` e `status/GlobalStatus`: la prima schermata dallo stato vero del dispositivo e l'indicatore globale
+  (§3.5) da rete, sessione, sonda TCP e interruttore.
+
+Il Fluid Engine e' in `engine/` (submodule, agganciato al tag **engine-2.11.0**); entrano nel build solo
+`engine-foundation` e `engine-ui`. Per aggiungerne altri: `engine\tools\engine-install.ps1 -AppRoot . -Modules
+engine-ui,engine-storage` (e rigenerare i checksum).
 
 ## SDK e toolchain
 
@@ -124,14 +137,16 @@ rigenerare i checksum).
 .\gradlew.bat :app:installDebug                       # installa la debug (id dev.pampa.mycloudgallery.debug)
 .\gradlew.bat galleryTest                             # unit test di tutti i moduli della galleria
 .\gradlew.bat :core-designsystem:recordRoborazziDebug # PNG del catalogo in docs\screenshots\1.2
-.\gradlew.bat :app:recordRoborazziDebug               # PNG dello scaffold della Fase 2 in docs\screenshots\2-P0
+.\gradlew.bat :app:recordRoborazziDebug --tests "*Scaffold*"  # PNG dello scaffold della Fase 2 in docs\screenshots\2-P0
+.\gradlew.bat :app:recordRoborazziDebug --tests "*P9Flows*"   # PNG dei flussi integrati in docs\screenshots\2-P9 (locale)
+.\gradlew.bat :app:testDebugUnitTest --tests "*integration*"  # flussi dell'app sul grafo vero e sul NAS simulato
+.\gradlew.bat :core-nas:testDebugUnitTest -PnasIntegration    # NAS vero dal PC (NEGOTIATE; il resto solo con le credenziali)
 .\gradlew.bat :app:assembleRelease                    # release (non firmata se mancano le chiavi)
 ```
 
-Nella build debug, Impostazioni → **Sviluppo** ha l'ingresso al **Catalogo componenti**
-(`:core-designsystem`, `ComponentCatalogPlaceholder`) e gli interruttori dello stato finto del dispositivo
-(da configurare, in attesa, galleria, azzerato, fermo): nella release non esistono
-(`app/src/debug/.../debugtools/DeveloperTools.kt`).
+Nella build debug, Impostazioni → **Sviluppo** ha l'ingresso al **Catalogo componenti** (`:core-designsystem`,
+`ComponentCatalogPlaceholder`); nella release non esiste (`app/src/debug/.../debugtools/DeveloperTools.kt`). Dal P9 la
+debug non ha piu' uno stato finto del dispositivo: e' l'app vera, quella della verifica sul campo.
 
 Test con Robolectric: girano sull'SDK 35 (`gradle/test-resources/robolectric.properties`) perche'
 l'SDK 36 richiede Java 21.

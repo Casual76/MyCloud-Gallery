@@ -5,7 +5,9 @@ import dev.pampa.mycloudgallery.core.family.contract.RegistryService
 import dev.pampa.mycloudgallery.core.family.contract.TrustStateStore
 import dev.pampa.mycloudgallery.core.family.setup.NasAccountStore
 import dev.pampa.mycloudgallery.core.nas.contract.AuthCircuitBreaker
+import dev.pampa.mycloudgallery.core.nas.contract.BreakerState
 import dev.pampa.mycloudgallery.core.nas.contract.ConnectionTester
+import dev.pampa.mycloudgallery.core.nas.contract.NasAccount
 import dev.pampa.mycloudgallery.core.nas.contract.NasSessionManager
 import dev.pampa.mycloudgallery.core.nas.contract.ShareProbe
 import dev.pampa.mycloudgallery.core.network.contract.HomeCapture
@@ -85,6 +87,8 @@ object IgnoreOnboardingChoices : OnboardingChoicesSink {
  *
  * @property nasClock l'ora del NAS (`SessionNasClock`): data e firme del registro, scadenza degli inviti.
  * @property deviceNow l'ora del dispositivo (ms): solo per misurare i tempi dell'onboarding, mai per decidere.
+ * @property allowUserRetry riapre l'interruttore di un account preciso dopo una password nuova scritta dall'utente
+ *   ([reopenBreakerFor]); lo collega `:app` (P9) al registro degli interruttori di `core-nas`.
  */
 class OnboardingPorts(
   val homeCapture: HomeCapture,
@@ -110,4 +114,19 @@ class OnboardingPorts(
   val nasClock: NasClock,
   val deviceNow: () -> Long = System::currentTimeMillis,
   val random: SecureRandom = SecureRandom(),
-)
+  val allowUserRetry: (suspend (NasAccount) -> Unit)? = null,
+) {
+
+  /**
+   * L'utente ha scritto una password nuova per [account] (passo 3 o ingresso): l'interruttore di sicurezza **di
+   * quell'account** (la chiave e' `(GUID del NAS, utente)`, la stessa che usa il test di connessione), se aperto da un
+   * tentativo precedente, si richiude per un solo tentativo (E-R8: "Riprova" solo su azione dell'utente).
+   *
+   * [breaker] da solo non basta: e' l'interruttore dell'account **salvato**, che al passo 3 non c'e' ancora (o e' un
+   * altro). Senza [allowUserRetry] (i test con il fake) si usa [breaker] come prima.
+   */
+  internal suspend fun reopenBreakerFor(account: NasAccount) {
+    val retry = allowUserRetry
+    if (retry != null) retry(account) else if (breaker.state.value is BreakerState.Open) breaker.onNewPasswordSaved()
+  }
+}

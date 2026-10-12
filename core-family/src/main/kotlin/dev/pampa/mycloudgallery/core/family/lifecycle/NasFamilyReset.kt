@@ -155,13 +155,13 @@ class NasFamilyReset(
   }
 
   /** Il codice del kit nuovo in 7 gruppi, da mostrare con `FLAG_SECURE` (null se non c'e' un reset da confermare). */
-  fun recoveryCodeForDisplay(): RecoveryCodeDisplay? {
+  override fun recoveryCodeForDisplay(): RecoveryCodeDisplay? {
     val code = pendingCode ?: return null
     return RecoveryCodeDisplay(code.toDisplayString().split('-').map { it.toCharArray() })
   }
 
   /** Vero se [typed] (azzerato dopo l'uso) e' il codice del kit nuovo: allora lo si dimentica. */
-  fun confirmTypedCode(typed: CharArray): Boolean {
+  override fun confirmTypedCode(typed: CharArray): Boolean {
     val code = pendingCode
     val parsed = try {
       RecoveryCode.parse(String(typed))

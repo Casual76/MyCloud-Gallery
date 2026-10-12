@@ -32,6 +32,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
+import dev.pampa.mycloudgallery.core.security.input.SecureInput
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -63,6 +64,7 @@ internal class RecoveryActions(
   val onStateScanned: (String) -> ScanVerdict,
   val onClearState: () -> Unit,
   val onRecover: () -> Unit,
+  val onAdminPassword: (String) -> Unit = {},
 ) {
   companion object {
     val None = RecoveryActions({}, {}, {}, {}, {}, {}, {}, {}, { ScanVerdict.Ignore }, {}, {})
@@ -87,6 +89,7 @@ internal fun AdminRecoveryRoute(onBack: () -> Unit) {
       onStateScanned = viewModel::onStateScanned,
       onClearState = viewModel::clearScannedState,
       onRecover = viewModel::recover,
+      onAdminPassword = viewModel::setAdminPassword,
     ),
   )
 }
@@ -178,6 +181,18 @@ private fun androidx.compose.foundation.lazy.LazyListScope.recoverySearch(state:
         supportingText = stringResource(R.string.recovery_field_user_help),
         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None, autoCorrectEnabled = false, imeAction = ImeAction.Next),
       )
+      // L'area privata dell'admin si apre solo con il suo account: se non e' quello di questo dispositivo serve la sua
+      // password, per una sola ricerca (mai salvata).
+      if (state.needsAdminPassword) {
+        FluidTextField(
+          value = state.adminPassword,
+          onValueChange = actions.onAdminPassword,
+          label = stringResource(R.string.recovery_field_password),
+          supportingText = stringResource(R.string.recovery_field_password_help),
+          keyboardOptions = SecureInput.keyboardOptions(ImeAction.Next),
+          visualTransformation = SecureInput.hidden,
+        )
+      }
       FluidTextField(
         value = state.privateShare,
         onValueChange = actions.onPrivateShare,

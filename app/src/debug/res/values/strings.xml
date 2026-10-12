@@ -5,11 +5,4 @@
   <string name="debug_catalog_title">Catalogo componenti</string>
   <string name="debug_catalog_detail">I componenti della galleria, in chiaro e scuro</string>
 
-  <!-- Solo build debug: lo stato finto del dispositivo (Impostazioni → Sviluppo) -->
-  <string name="debug_state_onboarding">Stato finto: da configurare</string>
-  <string name="debug_state_awaiting">Stato finto: in attesa di approvazione</string>
-  <string name="debug_state_ready">Stato finto: galleria</string>
-  <string name="debug_state_wiped">Stato finto: azzerato</string>
-  <string name="debug_state_blocked">Stato finto: fermo (aggiornare l’app)</string>
-  <string name="debug_state_detail">Cambia la schermata di partenza, senza toccare il NAS</string>
 </resources>

@@ -284,6 +284,9 @@ class TestEnv {
   val choices = RecordingChoicesSink()
   var deviceDescription = DeviceDescription(model = "SM-S931B", defaultName = "Telefono di Alessio")
 
+  /** P9: la porta che riapre l'interruttore di un account preciso (null = il comportamento di prima, con [breaker]). */
+  var allowUserRetry: (suspend (NasAccount) -> Unit)? = null
+
   fun ports(): OnboardingPorts = OnboardingPorts(
     homeCapture = capture,
     homeFingerprints = fingerprints,
@@ -308,6 +311,7 @@ class TestEnv {
     nasClock = NasClock { nasNow },
     deviceNow = { deviceNow },
     random = java.security.SecureRandom(),
+    allowUserRetry = allowUserRetry,
   )
 
   val address: NasAddress = NasAddress(TEST_IP, "MyCloudEX2Ultra.fritz.box")

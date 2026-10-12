@@ -62,6 +62,22 @@ class DiagnosticsTest {
     assertThat(events.map { it.at }).containsExactly(1L)
   }
 
+  /** P9 (nota di P8): un identificatore che ha la forma di un nome non torna come costante di un enum. */
+  @Test
+  fun unNomeTravestitoDaEnumSiScartaGiaAllaRilettura() {
+    val file = File(temp.root, "events.log")
+    file.writeText(
+      "1|NET_SAMPLE|INFO|vpn=eSample.HOME_TUNNEL\n" +
+        "2|NET_SAMPLE|INFO|who=eMario.Rossi\n" +
+        "3|NET_SAMPLE|INFO|who=eMARIO.ROSSI\n" +
+        "4|NET_SAMPLE|INFO|who=emario.ROSSI\n" +
+        "5|NET_SAMPLE|INFO|who=eSample.Rossi\n",
+    )
+    val events = FileDiagnosticsLogStore(file).load()
+    assertThat(events.map { it.at }).containsExactly(1L)
+    assertThat(events.single().values["vpn"]).isEqualTo(ExportValue.Enum.of(Sample.HOME_TUNNEL))
+  }
+
   @Test
   fun lImprontaEStabileConLaStessaChiaveENonContieneIlDato() {
     val key = ByteArray(32) { it.toByte() }

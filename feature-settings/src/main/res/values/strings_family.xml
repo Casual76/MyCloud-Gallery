@@ -139,6 +139,8 @@
   <string name="recovery_section_where_detail">Nell’area privata dell’admin, cartella «recovery».</string>
   <string name="recovery_field_user">Account dell’admin</string>
   <string name="recovery_field_user_help">L’utente NAS di chi ha creato la famiglia.</string>
+  <string name="recovery_field_password">Password di questo utente</string>
+  <string name="recovery_field_password_help">Serve solo a leggere il kit nella sua area privata: non viene salvata.</string>
   <string name="recovery_field_share">Area privata dell’admin</string>
   <string name="recovery_field_share_help">Se la lasci vuota è quella con lo stesso nome dell’account.</string>
   <string name="recovery_search">Cerca il kit</string>
@@ -209,6 +211,14 @@
   <string name="reset_done_title">La famiglia è nuova</string>
   <string name="reset_done_detail">Chiave, id e kit sono nuovi. I dispositivi vecchi non valgono più.</string>
   <string name="reset_done_next">Adesso</string>
+  <string name="reset_code_section">Il codice del kit nuovo</string>
+  <string name="reset_code_section_detail">Scrivilo su carta, adesso: senza, il kit nuovo non si apre. Non comparirà più.</string>
+  <string name="reset_code_group">Gruppo %1$d di %2$d</string>
+  <string name="reset_code_label">Riscrivi il codice per intero</string>
+  <string name="reset_code_confirm">Ho scritto il codice</string>
+  <string name="reset_code_footnote">Il codice resta solo sul foglio: l’app non lo salva. Conserva il foglio insieme a quello vecchio, poi butta quello vecchio.</string>
+  <string name="reset_code_wrong_title">Il codice non coincide</string>
+  <string name="reset_code_wrong">Controlla il foglio e riscrivilo: deve essere identico a quello mostrato qui sopra.</string>
   <string name="reset_next_save_kit">Salva il codice del kit nuovo</string>
   <string name="reset_next_save_kit_detail">Su un foglio, in un posto sicuro. Mai in una chat</string>
   <string name="reset_next_reconfigure">Riconfigura ogni dispositivo</string>

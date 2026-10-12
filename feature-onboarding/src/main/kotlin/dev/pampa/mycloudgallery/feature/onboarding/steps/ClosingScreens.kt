@@ -191,21 +191,33 @@ internal fun SummaryScreen(
   onFinish: () -> Unit,
   onProblemAction: (ProblemAction) -> Unit,
   modifier: Modifier = Modifier,
+  onResume: (OnboardingStep) -> Unit = {},
 ) {
   val done = progress.doneSteps()
   val pending = progress.pending
+  // E-O1: con "Continua piu' tardi" i passi del NAS (non saltabili) restano da fare. Finche' ci sono, il tasto li
+  // riprende (dal primo) invece di provare a finire: "Vai alla Libreria" non si puo' ancora.
+  val essentialPending = pending.firstOrNull { !it.skippable }
   StepScaffold(
     title = stringResource(R.string.summary_title),
-    subtitle = stringResource(R.string.summary_subtitle),
+    subtitle = stringResource(if (essentialPending != null) R.string.summary_subtitle_nas_pending else R.string.summary_subtitle),
     chrome = chrome,
     ambient = stepAmbient(OnboardingStep.SUMMARY),
     modifier = modifier,
-    primary = DockAction(
-      label = stringResource(R.string.summary_finish),
-      onClick = onFinish,
-      enabled = !ui.submitting,
-      loading = ui.submitting,
-    ),
+    primary = if (essentialPending != null) {
+      DockAction(
+        label = stringResource(R.string.summary_resume_nas),
+        onClick = { onResume(essentialPending) },
+        enabled = !ui.submitting,
+      )
+    } else {
+      DockAction(
+        label = stringResource(R.string.summary_finish),
+        onClick = onFinish,
+        enabled = !ui.submitting,
+        loading = ui.submitting,
+      )
+    },
   ) {
     item(key = "hero") {
       Column(

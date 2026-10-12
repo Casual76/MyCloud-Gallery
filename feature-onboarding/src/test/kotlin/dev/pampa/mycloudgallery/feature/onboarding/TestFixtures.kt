@@ -12,6 +12,7 @@ import dev.pampa.mycloudgallery.core.family.testing.FakeOnboardingCoordinator
 import dev.pampa.mycloudgallery.core.family.testing.FakeQrPayloadCodec
 import dev.pampa.mycloudgallery.core.network.testing.FakeLocalNetworkPermission
 import dev.pampa.mycloudgallery.core.network.testing.FakeVpnController
+import dev.pampa.mycloudgallery.core.network.testing.InMemoryVpnControlConfigStore
 import dev.pampa.mycloudgallery.core.qr.contract.ScanVerdict
 import dev.pampa.mycloudgallery.core.rules.platform.health.testing.FakeBackgroundHealthReader
 import dev.pampa.mycloudgallery.core.security.device.ScreenLockStatus
@@ -33,6 +34,7 @@ internal class TestEnv(
   val vpn = FakeVpnController()
   val health = FakeBackgroundHealthReader()
   val localNetwork = FakeLocalNetworkPermission()
+  val vpnConfig = InMemoryVpnControlConfigStore()
   val platform = FakeOnboardingPlatform()
 
   fun viewModel(): OnboardingViewModel = OnboardingViewModel(
@@ -44,6 +46,7 @@ internal class TestEnv(
     vpnController = vpn,
     healthReader = health,
     localNetwork = localNetwork,
+    vpnConfig = vpnConfig,
   )
 }
 

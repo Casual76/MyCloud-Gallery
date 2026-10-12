@@ -23,6 +23,7 @@ import dev.pampa.mycloudgallery.core.network.contract.DiscoveredNas
 import dev.pampa.mycloudgallery.core.network.contract.HomeCandidate
 import dev.pampa.mycloudgallery.core.network.contract.NasAddress
 import dev.pampa.mycloudgallery.core.network.contract.VpnCommandResult
+import dev.pampa.mycloudgallery.core.network.contract.VpnControlConfig
 import dev.pampa.mycloudgallery.core.qr.contract.ScanRejection
 import dev.pampa.mycloudgallery.core.qr.contract.ScanVerdict
 import dev.pampa.mycloudgallery.core.rules.Preset
@@ -31,6 +32,7 @@ import dev.pampa.mycloudgallery.feature.onboarding.model.HomeUi
 import dev.pampa.mycloudgallery.feature.onboarding.model.JoinPage
 import dev.pampa.mycloudgallery.feature.onboarding.model.KeyPage
 import dev.pampa.mycloudgallery.feature.onboarding.model.OnboardingBanner
+import dev.pampa.mycloudgallery.core.family.testing.FakeOnboardingCoordinator
 import dev.pampa.mycloudgallery.feature.onboarding.model.OnboardingDestination
 import dev.pampa.mycloudgallery.feature.onboarding.model.RecoveryPage
 import dev.pampa.mycloudgallery.feature.onboarding.model.VpnTestUi
@@ -109,6 +111,52 @@ class OnboardingViewModelTest {
     val progress = OnboardingProgress.START.copy(path = OnboardingPath.JOIN_QR, current = OnboardingStep.NAS_ADDRESS)
     val vm = TestEnv(progress).viewModel()
     assertThat(vm.ui.value.join?.page).isEqualTo(JoinPage.Scan)
+  }
+
+  /** P9: con la richiesta gia' sul NAS (passi 2 e 3 fatti) si riprende dai passi locali, non dalla scansione. */
+  @Test
+  fun dopoLaRichiestaIlProcessoRiparteDaiPassiLocali() = runTest {
+    val progress = OnboardingProgress.START.copy(
+      path = OnboardingPath.JOIN_QR,
+      plan = FakeOnboardingCoordinator.planFor(OnboardingPath.JOIN_QR),
+      current = OnboardingStep.ROLES,
+    )
+    val vm = TestEnv(progress).viewModel()
+    assertThat(vm.ui.value.join).isNull()
+    assertThat(vm.destination(vm.progress.value, vm.ui.value)).isEqualTo(OnboardingDestination.Step(OnboardingStep.ROLES))
+  }
+
+  /** P9: dalla pagina d'attesa si finiscono intanto i passi sul telefono. */
+  @Test
+  fun dallAttesaSiContinuaConIPassiSulTelefono() = runTest {
+    val progress = OnboardingProgress.START.copy(path = OnboardingPath.JOIN_QR, current = OnboardingStep.NAS_ADDRESS)
+    val env = TestEnv(progress)
+    val vm = env.viewModel()
+    assertThat(vm.ui.value.join).isNotNull()
+    vm.continueAfterRequest()
+    assertThat(vm.ui.value.join).isNull()
+    // Il passo corrente lo dice il coordinatore: nessuna nuova scansione.
+    env.coordinator.progress.value = progress.copy(current = OnboardingStep.ROLES)
+    assertThat(vm.ui.value.join).isNull()
+  }
+
+  /** P9 (E-O1): "Continua piu' tardi" chiede al coordinatore di rimandare; senza niente da rimandare, l'app va in pausa. */
+  @Test
+  fun continuaPiuTardiRimandaIPassiDelNasOPassaLaMano() = runTest {
+    // Un passo locale: niente da rimandare.
+    var paused = 0
+    val local = TestEnv(OnboardingProgress.START.copy(current = OnboardingStep.PRESET)).viewModel()
+    local.continueLater { paused++ }
+    assertThat(paused).isEqualTo(1)
+    // Il passo 2 (il coordinatore finto non lo rimanda): la configurazione resta salvata e l'app va in pausa.
+    val env = TestEnv(OnboardingProgress.START.copy(path = OnboardingPath.FOUND_FAMILY, current = OnboardingStep.NAS_ADDRESS))
+    env.viewModel().continueLater { paused++ }
+    assertThat(paused).isEqualTo(2)
+    // Il passo 5 (saltabile): il coordinatore lo rimanda e si va avanti, nessuna pausa.
+    val folders = TestEnv(OnboardingProgress.START.copy(path = OnboardingPath.FOUND_FAMILY, current = OnboardingStep.FOLDERS))
+    folders.viewModel().continueLater { paused++ }
+    assertThat(paused).isEqualTo(2)
+    assertThat(folders.coordinator.progress.value.skipped).contains(OnboardingStep.FOLDERS)
   }
 
   @Test
@@ -323,11 +371,31 @@ class OnboardingViewModelTest {
   fun laProvaDellaVpnSiOsservaSiaInAccensioneSiaInSpegnimento() = runTest {
     val env = TestEnv()
     val vm = env.viewModel()
-    vm.runVpnTest()
+    vm.runVpnTest("casa")
     assertThat(env.vpn.commands).containsExactly(true, false).inOrder()
     val done = vm.ui.value.vpn.test as VpnTestUi.Done
     assertThat(done.up).isEqualTo(VpnCommandResult.Confirmed)
     assertThat(done.down).isEqualTo(VpnCommandResult.Confirmed)
+    // P9: la prova usa il nome scritto e poi rimette la configurazione di prima (la scelta la salva "Continua").
+    assertThat(env.vpnConfig.config.value).isEqualTo(VpnControlConfig.OFF)
+  }
+
+  @Test
+  fun laProvaDellaVpnUsaIlNomeDelTunnelAppenaScritto() = runTest {
+    val env = TestEnv()
+    var seen: VpnControlConfig? = null
+    val controller = object : dev.pampa.mycloudgallery.core.network.contract.VpnController by env.vpn {
+      override suspend fun setTunnel(up: Boolean, timeout: kotlin.time.Duration): VpnCommandResult {
+        seen = env.vpnConfig.config.value
+        return VpnCommandResult.NotObserved
+      }
+    }
+    val vm = OnboardingViewModel(
+      env.coordinator, env.join, env.recovery, env.inviteCodec, env.familyStateCodec, controller, env.health, env.localNetwork, env.vpnConfig,
+    )
+    vm.runVpnTest(" casa ")
+    assertThat(seen).isEqualTo(VpnControlConfig(enabled = true, tunnelName = "casa"))
+    assertThat(env.vpnConfig.config.value).isEqualTo(VpnControlConfig.OFF)
   }
 
   @Test
@@ -335,7 +403,7 @@ class OnboardingViewModelTest {
     val env = TestEnv()
     env.vpn.nextResult = VpnCommandResult.NotObserved
     val vm = env.viewModel()
-    vm.runVpnTest()
+    vm.runVpnTest("casa")
     assertThat(env.vpn.commands).containsExactly(true)
     val done = vm.ui.value.vpn.test as VpnTestUi.Done
     assertThat(done.up).isEqualTo(VpnCommandResult.NotObserved)
@@ -356,9 +424,9 @@ class OnboardingViewModelTest {
       }
     }
     val custom = OnboardingViewModel(
-      env.coordinator, env.join, env.recovery, env.inviteCodec, env.familyStateCodec, controller, env.health, env.localNetwork,
+      env.coordinator, env.join, env.recovery, env.inviteCodec, env.familyStateCodec, controller, env.health, env.localNetwork, env.vpnConfig,
     )
-    custom.runVpnTest()
+    custom.runVpnTest("casa")
     assertThat(env.vpn.commands).containsExactly(true, false, true).inOrder()
     assertThat((custom.ui.value.vpn.test as VpnTestUi.Done).down).isEqualTo(VpnCommandResult.LostConnectivity)
     assertThat(vm.ui.value.vpn.test).isEqualTo(VpnTestUi.Idle)

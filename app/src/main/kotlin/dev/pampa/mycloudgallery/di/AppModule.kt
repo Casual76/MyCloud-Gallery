@@ -13,12 +13,9 @@ import dev.pampa.mycloudgallery.core.common.diagnostics.DiagnosticsLog
 import dev.pampa.mycloudgallery.core.common.diagnostics.FileDiagnosticsLogStore
 import dev.pampa.mycloudgallery.core.common.diagnostics.RingDiagnosticsLog
 import dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags
-import dev.pampa.mycloudgallery.core.nas.contract.NasCredentialSource
-import dev.pampa.mycloudgallery.core.security.credentials.CredentialVault
 import dev.pampa.mycloudgallery.core.security.lock.AppLockController
 import dev.pampa.mycloudgallery.core.security.lock.AppLockSettings
 import dev.pampa.mycloudgallery.core.security.lock.AppLockSettingsStore
-import dev.pampa.mycloudgallery.nas.VaultNasCredentialSource
 import javax.inject.Qualifier
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
@@ -29,9 +26,9 @@ import kotlinx.coroutines.flow.Flow
 annotation class LockSettings
 
 /**
- * I legami dell'app a livello di processo: le cose VERE gia' disponibili (dispatcher, blocco app, anello
- * della Diagnostica, credenziali, funzioni sperimentali). I moduli `core-*` non conoscono Hilt (D7): li cabla
- * qui `:app`. I contratti della Fase 2 ancora senza implementazione sono in [PlaceholderBindingsModule].
+ * I legami dell'app a livello di processo che non dipendono dal grafo della Fase 2 (dispatcher, blocco app, anello
+ * della Diagnostica, funzioni sperimentali). I moduli `core-*` non conoscono Hilt (D7): li cabla qui `:app`. I
+ * contratti della Fase 2 (rete, NAS, famiglia, regole) sono in [GraphModule].
  */
 @Module
 @InstallIn(SingletonComponent::class)
@@ -61,10 +58,4 @@ object AppModule {
   @Singleton
   fun provideDiagnosticsLog(@ApplicationContext context: Context): DiagnosticsLog =
     RingDiagnosticsLog(store = FileDiagnosticsLogStore.inNoBackupDir(context))
-
-  /** Il ponte fra core-nas e il Keystore: la password si legge solo quando una sessione la chiede. */
-  @Provides
-  @Singleton
-  fun provideNasCredentialSource(@ApplicationContext context: Context): NasCredentialSource =
-    VaultNasCredentialSource { slot -> CredentialVault.getInstance(context).load(slot) }
 }

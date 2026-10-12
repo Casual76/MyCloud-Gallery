@@ -40,7 +40,10 @@ import dev.pampa.mycloudgallery.core.family.contract.RegistryService
 import dev.pampa.mycloudgallery.core.family.contract.ResetOutcome
 import dev.pampa.mycloudgallery.core.family.contract.TrustStatus
 import dev.pampa.mycloudgallery.core.security.screen.OverlayShield
+import dev.pampa.mycloudgallery.core.security.screen.SensitiveScreen
 import dev.pampa.mycloudgallery.feature.settings.R
+import dev.pampa.mycloudgallery.feature.settings.ui.CodeField
+import dev.pampa.mycloudgallery.feature.settings.ui.CodeFormat
 import dev.pampa.mycloudgallery.feature.settings.ui.ConfirmSheet
 import dev.pampa.mycloudgallery.feature.settings.ui.Feedback
 import dev.pampa.mycloudgallery.feature.settings.ui.FeedbackNote
@@ -66,7 +69,15 @@ internal data class ResetUiState(
   val stage: ResetStage = ResetStage.INTRO,
   val typed: String = "",
   val feedback: Feedback? = null,
+  /**
+   * Dopo il reset: il codice di recupero del kit **nuovo**, a gruppi, finche' l'utente non l'ha riscritto. **Mai nei
+   * log**: [toString] non lo stampa; la pagina e' sotto `FLAG_SECURE` mentre si vede.
+   */
+  val newCode: List<String> = emptyList(),
+  val codeTyped: String = "",
 ) {
+  override fun toString(): String = "ResetUiState(stage=$stage, codeShown=${newCode.isNotEmpty()})"
+
   /** La parola riscritta coincide (senza maiuscole, spazi ai bordi ignorati). */
   val wordMatches: Boolean get() = typed.trim().equals(CONFIRM_WORD, ignoreCase = true)
 
@@ -118,11 +129,40 @@ internal class FamilyResetViewModel @Inject constructor(
       val outcome = reset.reset(confirmedTwice = true)
       _state.update {
         when (outcome) {
-          is ResetOutcome.Done -> it.copy(stage = ResetStage.DONE, typed = "")
+          is ResetOutcome.Done -> it.copy(stage = ResetStage.DONE, typed = "", newCode = takeNewCode())
           is ResetOutcome.Failed -> it.copy(stage = ResetStage.TYPE_WORD, feedback = outcome.problem.toFeedback())
         }
       }
     }
+  }
+
+  /** Il codice del kit nuovo (P9: `FamilyReset.recoveryCodeForDisplay`), in gruppi; i caratteri originali si azzerano. */
+  private fun takeNewCode(): List<String> {
+    val display = reset.recoveryCodeForDisplay() ?: return emptyList()
+    return display.use { shown -> shown.groups.map { String(it) } }
+  }
+
+  fun setCodeTyped(value: String) {
+    _state.update { if (it.stage == ResetStage.DONE && it.newCode.isNotEmpty()) it.copy(codeTyped = value, feedback = null) else it }
+  }
+
+  /** Il codice riscritto per intero: se coincide, il kit nuovo e' "salvato" sul foglio e il codice si dimentica. */
+  fun confirmCode() {
+    val current = _state.value
+    if (current.newCode.isEmpty() || current.codeTyped.isBlank()) return
+    val typed = CodeFormat.normalize(current.codeTyped, CodeFormat.RECOVERY_CHARS).toCharArray()
+    val ok = reset.confirmTypedCode(typed)
+    _state.update {
+      if (ok) {
+        it.copy(newCode = emptyList(), codeTyped = "", feedback = null)
+      } else {
+        it.copy(feedback = Feedback(R.string.reset_code_wrong_title, R.string.reset_code_wrong, FluidTone.Danger))
+      }
+    }
+  }
+
+  override fun onCleared() {
+    _state.value = _state.value.copy(newCode = emptyList(), codeTyped = "")
   }
 }
 
@@ -139,6 +179,8 @@ internal fun FamilyResetRoute(onBack: () -> Unit, onInvite: () -> Unit) {
     onTyped = viewModel::setTyped,
     onConfirm = viewModel::confirm,
     onInvite = onInvite,
+    onCodeTyped = viewModel::setCodeTyped,
+    onConfirmCode = viewModel::confirmCode,
   )
 }
 
@@ -157,12 +199,20 @@ internal fun FamilyResetScreen(
   onTyped: (String) -> Unit,
   onConfirm: () -> Unit,
   onInvite: () -> Unit,
+  onCodeTyped: (String) -> Unit = {},
+  onConfirmCode: () -> Unit = {},
 ) {
+  // Il codice del kit nuovo e' un segreto: niente screenshot ne' anteprima nei recenti finche' si vede.
+  SensitiveScreen(enabled = state.newCode.isNotEmpty())
   FluidScreen(
     title = stringResource(R.string.reset_title),
     onBack = onBack,
     ambient = FluidAmbient(tone = FluidHeroTone.Alert, motif = FluidHeroMotif.Glow),
   ) {
+    if (state.stage == ResetStage.DONE && state.newCode.isNotEmpty()) {
+      newKitCode(state, onCodeTyped, onConfirmCode)
+      return@FluidScreen
+    }
     if (!state.isAdmin && state.stage != ResetStage.DONE) {
       item {
         FluidEmptyState(
@@ -317,4 +367,54 @@ internal fun FamilyResetScreen(
   )
   // La parola da riscrivere e' un campo di testo: la finestra va protetta anche quando non c'e' il foglio.
   OverlayShield(enabled = state.stage == ResetStage.TYPE_WORD || state.stage == ResetStage.WORKING)
+}
+
+/**
+ * Dopo il reset: il codice di recupero del kit nuovo (P9). Senza, il kit nuovo sul NAS non si apre: si mostra una
+ * volta, in gruppi, e si chiede di riscriverlo per intero (come al passo 12 dell'onboarding). Poi la pagina passa ai
+ * passi successivi (salvare il foglio, riconfigurare gli altri dispositivi).
+ */
+private fun androidx.compose.foundation.lazy.LazyListScope.newKitCode(
+  state: ResetUiState,
+  onCodeTyped: (String) -> Unit,
+  onConfirmCode: () -> Unit,
+) {
+  item {
+    FluidSectionHeader(
+      title = stringResource(R.string.reset_code_section),
+      detail = stringResource(R.string.reset_code_section_detail),
+    )
+  }
+  item {
+    FluidListGroup {
+      state.newCode.forEachIndexed { index, group ->
+        if (index > 0) FluidListDivider()
+        FluidListRow(
+          title = group,
+          subtitle = stringResource(R.string.reset_code_group, index + 1, state.newCode.size),
+          disclosure = false,
+        )
+      }
+    }
+  }
+  state.feedback?.let { item { FeedbackNote(it) } }
+  item {
+    FluidCard {
+      CodeField(
+        value = state.codeTyped,
+        onValueChange = onCodeTyped,
+        maxChars = CodeFormat.RECOVERY_CHARS,
+        label = stringResource(R.string.reset_code_label),
+        secret = true,
+      )
+      FluidButton(
+        text = stringResource(R.string.reset_code_confirm),
+        onClick = onConfirmCode,
+        size = FluidButtonSize.Large,
+        fillWidth = true,
+        enabled = state.codeTyped.isNotBlank(),
+      )
+    }
+  }
+  item { FluidSectionFootnote(text = stringResource(R.string.reset_code_footnote)) }
 }

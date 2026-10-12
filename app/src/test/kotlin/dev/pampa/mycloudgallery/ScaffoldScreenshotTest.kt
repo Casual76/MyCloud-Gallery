@@ -23,11 +23,11 @@ import dev.pampa.mycloudgallery.core.security.lock.LockedScreenState
 import dev.pampa.mycloudgallery.feature.diagnostics.DiagnosticsScreen
 import dev.pampa.mycloudgallery.feature.diagnostics.DiagnosticsUiState
 import dev.pampa.mycloudgallery.feature.onboarding.OnboardingScreen
+import dev.pampa.mycloudgallery.feature.onboarding.join.AwaitingApprovalScreen
 import dev.pampa.mycloudgallery.feature.settings.SettingsScreen
 import dev.pampa.mycloudgallery.feature.settings.SettingsUiState
 import dev.pampa.mycloudgallery.lock.LockedScreen
 import dev.pampa.mycloudgallery.main.MainScaffold
-import dev.pampa.mycloudgallery.root.AwaitingApprovalScreen
 import dev.pampa.mycloudgallery.root.BlockedScreen
 import dev.pampa.mycloudgallery.root.WipedScreen
 import dev.pampa.mycloudgallery.status.GlobalStatus
@@ -126,12 +126,12 @@ internal abstract class ScaffoldScreenshotBase(private val dark: Boolean, privat
 
   @Test
   fun attesa() = shoot("attesa-approvazione") {
-    AwaitingApprovalScreen(code = "K7QD-2M9X-FA4T")
+    AwaitingApprovalScreen(code = "K7QD-2M9X-FA4T", deviceKeyQr = null)
   }
 
   @Test
   fun azzerato() = shoot("azzerato") {
-    WipedScreen()
+    WipedScreen(onReconfigure = {})
   }
 
   @Test

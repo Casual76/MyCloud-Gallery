@@ -265,4 +265,25 @@
   <!-- Rete e NAS -->
   <string name="diag_diag_section_unavailable_title">Una parte della diagnostica non ha risposto</string>
   <string name="diag_diag_section_unavailable_guide">Riprova con «Aggiorna». Se si ripete, esporta la diagnostica.</string>
+
+  <!-- P9: i codici dei contributori di core-network e core-family senza una voce equivalente -->
+  <string name="diag_net_local_network_title">Rete locale</string>
+  <string name="diag_net_vpn_control_title">Controllo di WireGuard</string>
+  <string name="diag_net_home_fingerprint_title">Impronta della rete di casa</string>
+  <string name="diag_net_nas_tcp_title">NAS raggiungibile (porta 445)</string>
+  <string name="diag_trust_state_title">Stato nella famiglia</string>
+  <string name="diag_trust_version_replaced_title">Una versione del registro è stata sostituita</string>
+  <string name="diag_trust_version_replaced_guide">Sul NAS qualcuno ha cambiato un file del registro già accettato. L’app usa quello che conosceva e lo ripubblica; se si ripete, cambia la password dell’account NAS sospetto.</string>
+  <string name="diag_trust_sync_incomplete_title">Lettura del registro incompleta</string>
+  <string name="diag_trust_sync_incomplete_guide">Nella cartella del registro ci sono molti file non validi: l’app si è fermata per prudenza. Avvisa l’admin, che li può togliere dal PC.</string>
+  <string name="diag_trust_local_state_untrusted_title">Stato della famiglia sul telefono illeggibile</string>
+  <string name="diag_trust_local_state_untrusted_guide">Il registro salvato sul telefono non si riverifica: l’app lavora chiusa. Se non si risolve al prossimo avvio, riconfigura il dispositivo.</string>
+  <string name="diag_trust_lost_report_rejected_title">Segnalazioni di smarrimento non valide</string>
+  <string name="diag_trust_lost_report_rejected_guide">Nell’area privata ci sono segnalazioni “perso” non firmate da un dispositivo della famiglia: sono state ignorate. Se non le hai fatte tu, cambia la password del NAS.</string>
+  <string name="diag_trust_publish_unverified_title">Ultima pubblicazione non verificata del tutto</string>
+  <string name="diag_trust_publish_unverified_guide">Dopo il file pubblicato ce n’erano troppi da controllare. Rileggi i Dispositivi tra poco: se qualcosa non torna, avvisa l’admin.</string>
+  <string name="diag_trust_publish_blocked_title">Pubblicazione bloccata da file estranei</string>
+  <string name="diag_trust_publish_blocked_guide">Alcuni file sul NAS impediscono di pubblicare il registro. Cambia prima la password dell’account NAS sospetto, poi cancella quei file dal PC.</string>
+  <string name="diag_trust_status_rejected_title">Stati dei dispositivi non validi</string>
+  <string name="diag_trust_status_rejected_guide">Alcuni stati dei dispositivi sul NAS non erano firmati correttamente: sono stati ignorati. L’elenco dei dispositivi può mostrare un’ultima attività vecchia.</string>
 </resources>

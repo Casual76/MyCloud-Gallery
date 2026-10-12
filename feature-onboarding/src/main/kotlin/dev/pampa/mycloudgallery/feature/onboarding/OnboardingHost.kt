@@ -301,7 +301,7 @@ internal class HostEnv(
   fun onProblemAction(action: ProblemAction, retry: () -> Unit = {}) {
     when (action) {
       ProblemAction.RETRY -> retry()
-      ProblemAction.CONTINUE_LATER -> onPause()
+      ProblemAction.CONTINUE_LATER -> viewModel.continueLater(onPause)
       ProblemAction.OPEN_WIFI_SETTINGS -> platform.openWifiSettings()
       ProblemAction.OPEN_WIREGUARD -> viewModel.wireGuardIntent()?.let { platform.open(it) }
       ProblemAction.OPEN_APP_SETTINGS -> platform.openAppSettings()
@@ -492,7 +492,7 @@ private fun StepContent(page: OnboardingDestination.Step, env: HostEnv) {
         form = forms.vpn,
         actions = VpnActions(
           onOpenWireGuard = { vm.wireGuardIntent()?.let { env.platform.open(it) } },
-          onRunTest = { vm.runVpnTest() },
+          onRunTest = vm::runVpnTest,
           onContinue = vm::submitVpn,
           onSkip = { vm.skip(OnboardingStep.VPN) },
           onProblemAction = { env.onProblemAction(it) },
@@ -516,6 +516,7 @@ private fun StepContent(page: OnboardingDestination.Step, env: HostEnv) {
       progress = env.progress,
       elapsedSeconds = env.progress.startedAt?.let { ((System.currentTimeMillis() - it) / MILLIS_PER_SECOND).coerceAtLeast(0L) },
       onFinish = vm::finish,
+      onResume = vm::resume,
       onProblemAction = { env.onProblemAction(it, retry = vm::finish) },
     )
   }
@@ -625,7 +626,7 @@ private fun JoinContent(page: OnboardingDestination.Join, env: HostEnv) {
       )
     }
 
-    JoinPage.Awaiting -> AwaitingApprovalScreen(code = join.code.orEmpty(), deviceKeyQr = join.deviceKeyQr)
+    JoinPage.Awaiting -> AwaitingApprovalScreen(code = join.code.orEmpty(), deviceKeyQr = join.deviceKeyQr, onContinue = vm::continueAfterRequest)
 
     JoinPage.Approved -> JoinApprovedPage(chrome = chrome, onFinish = vm::finishJoin)
   }

@@ -1,11 +1,9 @@
 package dev.pampa.mycloudgallery.core.database
 
 import android.content.Context
-import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
-import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -19,10 +17,7 @@ class GalleryDatabaseTest {
 
   @Before
   fun setUp() {
-    val context = ApplicationProvider.getApplicationContext<Context>()
-    database = Room.inMemoryDatabaseBuilder(context, GalleryDatabase::class.java)
-      .allowMainThreadQueries()
-      .build()
+    database = GalleryDatabase.build(ApplicationProvider.getApplicationContext<Context>(), name = null)
   }
 
   @After
@@ -31,12 +26,17 @@ class GalleryDatabaseTest {
   }
 
   @Test
-  fun inserisceELeggeUnaRiga() = runBlocking {
-    val dao = database.segnapostoDao()
-    assertThat(dao.conta()).isEqualTo(0)
+  fun leChiaviEsterneSonoAttive() {
+    database.openHelper.writableDatabase.query("PRAGMA foreign_keys").use { cursor ->
+      assertThat(cursor.moveToFirst()).isTrue()
+      assertThat(cursor.getInt(0)).isEqualTo(1)
+    }
+  }
 
-    dao.inserisci(SegnapostoEntity("uno"))
-
-    assertThat(dao.conta()).isEqualTo(1)
+  @Test
+  fun unDatabaseNuovoEVuotoEIntegro() {
+    val db = database.openHelper.writableDatabase
+    db.query("PRAGMA integrity_check").use { assertThat(it.moveToFirst() && it.getString(0) == "ok").isTrue() }
+    db.query("SELECT COUNT(*) FROM media").use { assertThat(it.moveToFirst() && it.getInt(0) == 0).isTrue() }
   }
 }

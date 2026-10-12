@@ -5,7 +5,7 @@
 | **Stato** | Bozza della Fase 0.6, 12/10/2026. Si aggiorna alla chiusura di ogni fase (§7). |
 | **Come leggerlo** | Il §1 è per tutta la famiglia, senza tecnicismi. Dal §2 in poi è per chi sviluppa e per chi vuole verificare. |
 | **Cosa è già vero** | Siamo in Fase 0 e l'app non esiste ancora. Le contromisure del §4 sono impegni di progetto: diventano fatti solo quando la fase indicata è chiusa e la verifica è passata. Sono già misurati solo i fatti del §5. |
-| **Sigle** | `S1`…`S12` = scenari del §3. `C1`…`C23` = contromisure del §4. `L1`…`L17` = limiti del §6. `E-xx` = casi limite del piano. `0.1`…`10.5` = sottofasi del piano. `T-xx` = prove elencate in `android.md`. Il segno † indica una verifica aggiunta da questo documento, da inserire nel piano. |
+| **Sigle** | `S1`…`S12` = scenari del §3. `C1`…`C23` = contromisure del §4. `L1`…`L18` = limiti del §6. `E-xx` = casi limite del piano. `0.1`…`10.5` = sottofasi del piano. `T-xx` = prove elencate in `android.md`. Il segno † indica una verifica aggiunta da questo documento, da inserire nel piano. |
 
 ---
 
@@ -246,7 +246,8 @@ Cose che questo progetto non risolve, o risolve solo in parte. Nessuna è nascos
 - **L14. Volti.** Gli embedding facciali sono probabilmente dati biometrici ai sensi del GDPR (art. 9). L'uso esclusivamente domestico è fuori dal regolamento; se l'app venisse pubblicata servirebbe una valutazione legale. I modelli scelti in via provvisoria (YuNet MIT, SFace Apache-2.0) sono addestrati su dataset di ricerca di cui non abbiamo verificato i termini: rischio trascurabile in famiglia, da rivalutare prima di pubblicare. Questo documento non è consulenza legale.
 - **L15. Ciò che l'app non vede.** Secure Folder, Spazio privato e app clonate non sono salvati (E-P7, E-P17): chi li usa non deve contare sul backup. Un dispositivo riavviato resta bloccato fino al primo sblocco e il backup si ferma (E-P13).
 - **L16. L'app non può correggere la rete.** Non chiude le cartelle pubbliche, non separa i dispositivi, non fa il backup del NAS. Quelle sono le azioni del §1.
-- **L17. Disponibilità.** Il NAS è spento dalle 22 alle 8 e il Wake-on-LAN, se funziona, è utilizzabile solo da casa (E-R5, E-R6). Di notte il lavoro dell'app può fermarsi.
+- **L17. Disponibilità.** Dal 12/10 il NAS è sempre acceso: la pianificazione dell'alimentazione è stata disattivata. Se venisse riattivata, il Wake-on-LAN (dietro un interruttore spento) funzionerebbe solo da casa (E-R5, E-R6) e di notte il lavoro dell'app potrebbe fermarsi.
+- **L18. Revoca ritardabile (revisione 1.4, A2).** Un dispositivo compromesso può ritardare la propria revoca occupando i nomi del registro finché non gli si cambia la password del NAS. Se l'app segnala il blocco, prima si cambia la password, poi si cancellano i file indicati e si ripubblica. La revoca vera dell'accesso resta la password del NAS, da cambiare prima della revoca nel registro.
 
 ---
 

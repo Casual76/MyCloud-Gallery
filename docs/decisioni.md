@@ -104,8 +104,19 @@
 6. Attestazione hardware della chiave al momento dell'approvazione (sì/no).
 7. Runner dei test strumentali: `androidx.test:runner` (aggiunto dalla 1.5, quindi risolto).
 
+## Residui della revisione di `core-trust` da chiudere nel pacchetto P3 della Fase 2 (che riapre `core-trust`)
+- **N2 parziale**: con la cartella del registro inondata si può ripubblicare in un buco senza allarme.
+- **R2 (basso)**: un ramo che contiene una rotazione non si unisce né si rifiuta, e l'admin resta bloccato fino al reset.
+- **R3 (basso)**: un dispositivo approvato in due rami con account diversi diventa irrevocabile senza reset.
+- **R4 (basso)**: un commit legge fino a 1025 file (~256 MiB). Serve un tetto più stretto.
+- **M3**: dipende dalla decisione 2 dell'utente (PIN o impronta a ogni uso della chiave di famiglia).
+
+## Da aggiungere a `docs/sicurezza.md` dopo il P0 (per non scrivere in contemporanea)
+- ~~Limite A2~~: aggiunto come L18 in `docs/sicurezza.md`.
+- Contromisure C7–C10 e C23 da aggiornare con il modello finale di `formato-nas.md` (firme low-S, rami del registro, codice di approvazione a 80 bit).
+
 ## Cose tecniche da sistemare dopo la 1.5
-- `:app` dovrà dichiarare `ACCESS_NETWORK_STATE` (serve al motore delle regole): aggiungerlo in `docs/sicurezza.md` §4-bis e nella policy del manifest di release.
+- ~~`:app` dovrà dichiarare `ACCESS_NETWORK_STATE`~~: fatto nel P0 della Fase 2.
 
 ## Aperto
 - Inventario dei media (numeri e formati).

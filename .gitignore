@@ -42,3 +42,6 @@ spike/**/local.properties
 
 # log di sistema grezzi dei dispositivi (possono contenere dati di altre app)
 spike/results/**/logcat*.txt
+
+# log temporanei degli agenti
+/*.log

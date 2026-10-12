@@ -71,36 +71,47 @@ class AndroidKeystoreKeyProvider(private val alias: String = DEFAULT_ALIAS) : Ke
   }
 
   private fun generate(strongBox: Boolean) {
-    val spec = KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_SIGN)
-      .setAlgorithmParameterSpec(ECGenParameterSpec(TrustAlgorithms.CURVE))
-      .setDigests(KeyProperties.DIGEST_SHA256)
-      .setUserAuthenticationRequired(false)
-      .setIsStrongBoxBacked(strongBox)
-      .build()
     KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, ANDROID_KEYSTORE).run {
-      initialize(spec)
+      initialize(keySpec(alias, strongBox))
       generateKeyPair()
     }
   }
 
   private class KeystoreSigner(private val privateKey: PrivateKey, override val publicKey: EcPublicKey) : Signer {
+    // Il Keystore non garantisce "s basso": si normalizza sempre (EcdsaDer).
     override fun sign(message: ByteArray): ByteArray =
-      Signature.getInstance(TrustAlgorithms.SIGNATURE).run {
-        initSign(privateKey)
-        update(message)
-        sign()
-      }
+      EcdsaDer.normalize(
+        Signature.getInstance(TrustAlgorithms.SIGNATURE).run {
+          initSign(privateKey)
+          update(message)
+          sign()
+        },
+      )
   }
 
   companion object {
     const val DEFAULT_ALIAS = "mycloudgallery.device-signing.v1"
     private val LOCK = Any()
+
+    /**
+     * La politica della chiave del dispositivo: solo firma, P-256/SHA-256, StrongBox se richiesto. Di
+     * proposito NESSUN obbligo di sblocco ne' di autenticazione: i lavori notturni firmano a telefono
+     * bloccato (docs/formato-nas.md §4.3).
+     */
+    internal fun keySpec(alias: String, strongBox: Boolean): KeyGenParameterSpec =
+      KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_SIGN)
+        .setAlgorithmParameterSpec(ECGenParameterSpec(TrustAlgorithms.CURVE))
+        .setDigests(KeyProperties.DIGEST_SHA256)
+        .setUserAuthenticationRequired(false)
+        .setIsStrongBoxBacked(strongBox)
+        .build()
   }
 }
 
 /**
  * La chiave di famiglia a riposo sul dispositivo admin: PKCS#8 cifrato con AES-256-GCM da una chiave del
- * Keystore (StrongBox quando c'e'), non estraibile, in un file dello spazio privato dell'app.
+ * Keystore (StrongBox quando c'e'), non estraibile, usabile solo a telefono sbloccato, in un file dello
+ * spazio privato dell'app.
  *
  * Il file ([file]) deve stare fuori da backup e trasferimenti (gia' esclusi per tutta l'app, piano 1.5).
  */
@@ -184,18 +195,11 @@ class AndroidKeystoreFamilyKeyVault(
     }
   }
 
-  private fun generateWrappingKey(strongBox: Boolean): SecretKey {
-    val spec = KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
-      .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-      .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-      .setKeySize(256)
-      .setIsStrongBoxBacked(strongBox)
-      .build()
-    return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE).run {
-      init(spec)
+  private fun generateWrappingKey(strongBox: Boolean): SecretKey =
+    KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE).run {
+      init(wrappingKeySpec(alias, strongBox))
       generateKey()
     }
-  }
 
   companion object {
     const val DEFAULT_ALIAS = "mycloudgallery.family-key-wrap.v1"
@@ -203,6 +207,22 @@ class AndroidKeystoreFamilyKeyVault(
     private const val IV_BYTES = 12
     private val HEADER = byteArrayOf('M'.code.toByte(), 'C'.code.toByte(), 'G'.code.toByte(), 'W'.code.toByte(), 1)
     private val LOCK = Any()
+
+    /**
+     * La politica della chiave che cifra la chiave di famiglia: AES-256-GCM, StrongBox se richiesto, e
+     * utilizzabile SOLO a telefono sbloccato (revisione 1.4, M3): la chiave di famiglia serve solo in
+     * operazioni interattive dell'admin, quindi a schermo bloccato non deve potersi decifrare (telefono
+     * rubato acceso, strumenti forensi). L'obbligo di autenticazione a ogni uso e' la decisione 2 di
+     * docs/formato-nas.md §13.
+     */
+    internal fun wrappingKeySpec(alias: String, strongBox: Boolean): KeyGenParameterSpec =
+      KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+        .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+        .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+        .setKeySize(256)
+        .setUnlockedDeviceRequired(true)
+        .setIsStrongBoxBacked(strongBox)
+        .build()
   }
 }
 

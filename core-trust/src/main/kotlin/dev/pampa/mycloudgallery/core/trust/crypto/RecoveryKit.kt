@@ -110,11 +110,21 @@ object RecoveryKit {
   }
 
   /**
-   * Apre un kit. Rifiuti: [RejectReason.MALFORMED] (struttura), [RejectReason.NEWER_FORMAT],
-   * [RejectReason.BAD_SIGNATURE] (codice sbagliato o file manomesso: GCM non autentica),
-   * [RejectReason.HASH_MISMATCH] (la chiave dentro non e' quella dichiarata), [RejectReason.WRONG_FAMILY].
+   * Apre un kit. [expectedFamilyId] e [expectedKeyFingerprint] vengono da una fonte INDIPENDENTE dal NAS (il
+   * foglio del codice, che li riporta, o il QR "stato della famiglia" di un dispositivo approvato): un kit
+   * con un'altra chiave messo nell'area dell'admin da chi conosce il codice non passa (revisione 1.4, M7).
+   *
+   * Rifiuti: [RejectReason.MALFORMED] (struttura), [RejectReason.NEWER_FORMAT], [RejectReason.WRONG_FAMILY],
+   * [RejectReason.SIGNER_NOT_APPROVED] (chiave diversa da quella attesa), [RejectReason.BAD_SIGNATURE]
+   * (codice sbagliato o file manomesso: GCM non autentica), [RejectReason.HASH_MISMATCH] (la chiave dentro
+   * non e' quella dichiarata).
    */
-  fun open(blob: ByteArray, code: RecoveryCode, expectedFamilyId: String? = null): Verdict<OpenedRecoveryKit> = verdictOf {
+  fun open(
+    blob: ByteArray,
+    code: RecoveryCode,
+    expectedFamilyId: String,
+    expectedKeyFingerprint: String,
+  ): Verdict<OpenedRecoveryKit> = verdictOf {
     ensure(blob.size in (HEADER_BYTES + 16)..TrustLimits.MAX_RECOVERY_KIT_BYTES, RejectReason.MALFORMED, "kit: dimensione")
     ensure(blob.copyOf(4).contentEquals(MAGIC), RejectReason.MALFORMED, "kit: firma del formato")
     val version = blob[4].toInt() and 0xff
@@ -127,7 +137,11 @@ object RecoveryKit {
     val salt = ByteArray(SALT_BYTES).also { buffer.get(it) }
     val nonce = ByteArray(NONCE_BYTES).also { buffer.get(it) }
     val familyId = Base32.encode(familyIdRaw)
-    if (expectedFamilyId != null && expectedFamilyId != familyId) violation(RejectReason.WRONG_FAMILY, "kit: altra famiglia")
+    if (expectedFamilyId != familyId) violation(RejectReason.WRONG_FAMILY, "kit: altra famiglia")
+    val declaredFingerprint = Base32.encode(keyHash).substring(0, EcPublicKey.FINGERPRINT_CHARS)
+    if (Base32.normalizeHumanInput(expectedKeyFingerprint) != declaredFingerprint) {
+      violation(RejectReason.SIGNER_NOT_APPROVED, "kit: chiave diversa da quella attesa")
+    }
 
     val kek = deriveKey(code, salt, familyIdRaw)
     val plain = try {
@@ -206,7 +220,7 @@ internal object KeyMaterial {
     ensure(spkiLength == EcPublicKey.SPKI_BYTES && buffer.remaining() >= spkiLength + 2, RejectReason.MALFORMED, "materiale: troncato")
     val spki = ByteArray(spkiLength).also { buffer.get(it) }
     val pkcs8Length = buffer.short.toInt() and 0xffff
-    ensure(pkcs8Length in 1..512 && buffer.remaining() == pkcs8Length, RejectReason.MALFORMED, "materiale: lunghezza")
+    ensure(pkcs8Length in 1..TrustLimits.MAX_PKCS8_BYTES && buffer.remaining() == pkcs8Length, RejectReason.MALFORMED, "materiale: lunghezza")
     val pkcs8 = ByteArray(pkcs8Length).also { buffer.get(it) }
     return EcPublicKey.fromSpki(spki) to pkcs8
   }

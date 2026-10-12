@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Stato** | Fase 1.4, 12/10/2026. Formato **versione 1**. Nessun dato e' ancora stato scritto sul NAS. |
+| **Stato** | Fase 1.4, 12/10/2026, **aggiornato dopo la revisione di sicurezza** (`docs/review/1.4-core-trust.md`). Formato **versione 1**. Nessun dato e' ancora stato scritto sul NAS. |
 | **Codice** | modulo `:core-trust` (`dev.pampa.mycloudgallery.core.trust`); la mappa sezione → file → test e' al §14. |
-| **Sigle** | `E-xx` = casi limite del piano; `C1`…`C23`, `L1`…`L17`, `S1`…`S12` = `docs/sicurezza.md`. |
+| **Sigle** | `E-xx` = casi limite del piano; `C1`…`C23`, `L1`…`L17`, `S1`…`S12` = `docs/sicurezza.md`; `A1`…`I10` = voci della revisione. |
 | **Regola** | Ogni costante citata qui esiste identica nel codice (`TrustFormat`, `TrustLimits`). Cambiarne una vuol dire cambiare questo documento. |
 
 ---
@@ -20,11 +20,12 @@ dispositivo si costruisce da quei file la propria replica locale. Quindi:
    dell'app. Un dato vale solo se e' **firmato** da una chiave che la famiglia ha approvato.
 2. **La radice di fiducia e' una chiave, non il NAS.** La *chiave di famiglia* firma il *registro*: l'elenco
    dei dispositivi approvati. Ogni dispositivo firma i propri dati con la *sua* chiave, chiusa nel Keystore.
-3. **Il NAS non puo' farci tornare indietro.** Il registro ha un contatore che cresce; ogni dispositivo
-   ricorda l'ultimo visto, e un dispositivo nuovo riceve dal QR il minimo accettabile.
+3. **Il NAS non puo' farci tornare indietro.** Il registro ha un contatore che cresce e puo' solo diventare
+   piu' severo verso i dispositivi gia' noti; ogni dispositivo ricorda l'ultimo visto, e un dispositivo nuovo
+   riceve dal QR il minimo accettabile.
 4. **Leggere non deve mai far male.** Tutto cio' che arriva dal NAS si legge con tetti di dimensione, in una
-   forma unica (canonica), con percorsi validati; e nessun dato letto puo' da solo far cancellare o spostare
-   un file.
+   forma unica (canonica, firme comprese), con percorsi validati; e nessun dato letto puo' da solo far
+   cancellare o spostare un file.
 5. **Semplice di proposito.** Un algoritmo di firma, un algoritmo di cifratura, un formato di busta, nessuna
    negoziazione, nessuna sovrascrittura: ogni file si pubblica una volta con un nome nuovo.
 
@@ -34,7 +35,7 @@ dispositivo si costruisce da quei file la propria replica locale. Quindi:
 
 | Chi | Chiave | Dove vive | Che cosa firma |
 |---|---|---|---|
-| **Famiglia** (l'admin) | *chiave di famiglia*, ECDSA P-256 | Sul dispositivo admin, cifrata da una chiave AES del Keystore (§4.2). Nel kit di recupero, cifrata col codice di recupero (§4.8). | Solo il **registro di famiglia** (configurazione + dispositivi). |
+| **Famiglia** (l'admin) | *chiave di famiglia*, ECDSA P-256 | Sul dispositivo admin, cifrata da una chiave AES del Keystore usabile solo a telefono sbloccato (§4.2). Nel kit di recupero, cifrata col codice di recupero (§4.8). | Solo il **registro di famiglia** (configurazione + dispositivi). |
 | **Ogni dispositivo** (ogni profilo Android e' un dispositivo) | *chiave del dispositivo*, ECDSA P-256 | Keystore Android, StrongBox se c'e' (altrimenti TEE). **Non estraibile.** | La propria richiesta di registrazione, le proprie teste di dati (indice, dati personali), prenotazioni, record del cestino, album condivisi, segnalazioni. |
 | **Il NAS** | nessuna | – | Nulla. Fornisce solo file e l'**ora di riferimento** (§6). |
 
@@ -49,12 +50,14 @@ Un dispositivo non approvato (in attesa) **legge** ma nessuno accetta cio' che s
 Ogni share usata dall'app contiene **una** cartella `.mycloudgallery/`:
 
 - **nascosta**: il punto iniziale la nasconde su Linux e, con l'opzione di Samba `hide dot files` (attiva di
-  serie), anche ai client Windows;
+  serie; da verificare sul firmware WD, domanda aperta 5 della revisione), anche ai client Windows;
 - **nessun file ha un'estensione**: Twonky, Plex, DLNA e Foto di Windows scelgono i file per estensione, quindi
   non vedono nulla (E-I13);
-- **nessun file comincia con i byte di un'immagine**: ogni file inizia con una firma propria (`MCGS`, `MCGB`,
-  `MCGK`), cosi' nemmeno chi guarda il contenuto lo scambia per una foto. Le miniature stanno *dentro* i
-  segmenti, mai come file a se'.
+- **i file del formato iniziano con una firma propria** (`MCGS`, `MCGB`, `MCGK`), mai con i byte di
+  un'immagine: le miniature stanno *dentro* i segmenti. **Eccezione dichiarata** (I6): i file nel cestino
+  (`trash/<id>/files/`) sono le foto e i video cestinati, rinominati senza estensione, e conservano i loro
+  byte; li nascondono solo il punto iniziale della cartella e l'assenza di estensione. Se in Fase 4.5 si
+  scopre che un servizio del NAS riconosce i media dal contenuto, quei file si avvolgono in un contenitore.
 
 L'indice di una share sta **dentro quella share** (stessi permessi dei file, C19). Il registro di famiglia
 sta solo nell'**area comune**, perche' tutti devono leggerlo.
@@ -72,14 +75,14 @@ sta solo nell'**area comune**, perche' tutti devono leggerlo.
 │   ├── index/seg/<impronta>              segmenti (contenitori MCGB), nome = impronta
 │   ├── personal/head/<versione>          [3] dati personali: SOLO nell'area privata del proprietario
 │   └── personal/seg/<impronta>
-├── leases/<impronta risorsa>/<generazione>   [4] prenotazioni
+├── leases/<impronta risorsa>/<gruppo>/<generazione>   [4] prenotazioni, gruppi di 256 generazioni
 ├── trash/<id dispositivo>/
 │   ├── rec/<id elemento>                 [5] record firmato del cestino
 │   └── files/<id elemento>               il file cestinato, rinominato senza estensione
 ├── albums/<id album>/<id dispositivo>/head/<versione>   [6] album condivisi (Fase 7), area comune
 └── tmp/                                  temporanei della pubblicazione atomica
 
-<area privata dell'admin>/.mycloudgallery/recovery/<id famiglia>   kit di recupero cifrato (§4.8)
+<area privata dell'admin>/.mycloudgallery/recovery/<id famiglia>/<impronta della chiave>   kit di recupero (§4.8)
 ```
 
 `[n]` e' il tipo del file firmato (§5.1). Ogni dispositivo scrive **solo sotto i propri id** (piu' le
@@ -91,21 +94,31 @@ richieste e le prenotazioni); l'admin scrive il registro.
 
 | Operazione | Contratto |
 |---|---|
-| `list(dir, limite)` | Nomi dei figli, al massimo `limite`, con l'indicazione "troncato". Cartella assente = vuota. |
+| `list(dir, limite)` | Nomi dei figli, al massimo `limite`, con l'indicazione "troncato". Cartella assente = vuota. L'ordine non e' garantito. |
 | `read(path, maxBytes)` | Il file intero se non supera `maxBytes`, altrimenti "troppo grande". Mai allocare piu' di `maxBytes + 1` byte, qualunque dimensione dichiari il server. |
-| `publishExclusive(path, bytes)` | Crea il file **solo se il nome non esiste**; per chi legge e' atomico (un file pubblicato e' sempre completo). Su SMB (Fase 2.1): temporaneo in `tmp/` aperto con `FILE_CREATE` (in Samba `O_CREAT\|O_EXCL`, atomico), scrittura, flush, verifica della lunghezza, `rename(path, replaceIfExist = false)`; collisione = "esiste gia'". Le cartelle mancanti si creano trattando "esiste gia'" come successo. |
+| `publishExclusive(path, bytes)` | Crea il file **solo se il nome non esiste** (anche con maiuscole diverse: Samba non le distingue per i client Windows); per chi legge e' atomico. Su SMB (Fase 2.1): temporaneo in `tmp/` aperto con `FILE_CREATE` (in Samba `O_CREAT\|O_EXCL`, atomico), scrittura, flush, verifica della lunghezza, `rename(path, replaceIfExist = false)`; collisione = "esiste gia'". Le cartelle mancanti si creano trattando "esiste gia'" come successo. |
 
 Non ci sono cancellazione, spostamento o sovrascrittura (un test lo verifica, §9). Conseguenze:
 
-- **Versioni numerate.** I dati che cambiano (registro, teste, prenotazioni) sono serie di file
-  `<versione>` di 20 cifre con zeri a sinistra (l'ordine dei nomi e' l'ordine dei numeri, da 1). Chi legge
-  sceglie la versione piu' alta **valida**. Due scrittori sullo stesso numero: vince il primo, l'altro
-  riceve "esiste gia'", rilegge e riprova (due admin che approvano insieme non si sovrascrivono).
+- **Serie numerate, lette per nome.** I dati che cambiano (registro, teste, album) sono serie di file
+  `<versione>` di 20 cifre con zeri a sinistra, da 1 a `MAX_VERSION` (10^9). Chi legge **non si fida
+  dell'elenco della cartella**: legge direttamente `v+1`, `v+2`, … fino al primo nome assente (revisione M1:
+  creare migliaia di nomi non nasconde piu' una versione). L'elenco serve solo come indizio per le versioni
+  oltre un buco (una versione cancellata), e un elenco troncato e' segnalato.
+- **Il numero lo sceglie chi pubblica: il primo nome libero.** Un nome gia' occupato da un file non valido
+  (spazzatura messa da chi ha accesso SMB) si scavalca e si riporta in Diagnostica; quindi le versioni
+  **possono avere buchi** (revisione A2: prima un nome occupato bloccava per sempre la pubblicazione di una
+  revoca). Chi legge scavalca allo stesso modo i nomi non validi. Si scavalcano al massimo
+  `MAX_JUNK_RUN` (32) nomi non validi di fila: oltre, chi legge si ferma per quel giro (limite al lavoro che
+  uno scrittore ostile puo' imporre, B5) e chi pubblica riceve l'elenco esatto dei file da cancellare.
+- **Due scrittori sullo stesso numero: vince il primo.** L'altro trova al suo posto una versione valida piu'
+  nuova e deve risincronizzarsi (due admin che approvano insieme non si sovrascrivono).
 - **Contenuti per impronta.** I segmenti si chiamano con lo SHA-256 del loro contenuto: immutabili, senza
   conflitti.
-- **Pulizia dei propri file vecchi** (teste superate, generazioni di prenotazione, segmenti non piu' elencati)
-  arriva in Fase 4.1 con un'interfaccia separata e ristretta alla cartella del dispositivo stesso, dopo un
-  periodo di grazia (chi sta leggendo la testa precedente deve trovare ancora i suoi segmenti).
+- **Pulizia dei propri file vecchi** (teste superate, segmenti non piu' elencati, generazioni di
+  prenotazione superate, kit della chiave ruotata) arriva in Fase 4.1/2.4 con un'interfaccia separata, che
+  permette a ciascuno di cancellare **solo cio' che ha scritto lui** (si riconosce dal firmatario e dal
+  posto), dopo un periodo di grazia, come azione locale.
 
 ### 2.4 Nomi
 
@@ -113,8 +126,9 @@ Non ci sono cancellazione, spostamento o sovrascrittura (un test lo verifica, §
 |---|---|---|
 | id (dispositivo, famiglia, elemento del cestino, album) | 128 bit in base32 (§3.1): 26 caratteri `[0-9a-z]` | decodifica stretta di 16 byte |
 | id di un dispositivo | primi 128 bit di SHA-256(chiave pubblica): **auto-certificante** | deve coincidere con la chiave |
-| versione / generazione | 20 cifre ASCII, valore ≥ 1 | esattamente 20 cifre, entro `Long` |
+| versione / generazione / gruppo | 20 cifre ASCII, valore tra 1 e 10^9 | esattamente 20 cifre, entro il tetto |
 | impronta | SHA-256 in base32: 52 caratteri | decodifica stretta di 32 byte |
+| impronta di una chiave (kit) | 26 caratteri base32 (§4.1) | uguale all'impronta attesa |
 
 Ogni nome letto da un elenco che non rispetta la sua forma si **ignora** (e si conta in Diagnostica): un
 attaccante puo' riempire una cartella di nomi strani, ma non farli interpretare.
@@ -128,8 +142,8 @@ attaccante puo' riempire una cartella di nomi strani, ma non farli interpretare.
 L'unica codifica binario-testo del formato: Base32 di Crockford, **minuscolo, senza riempimento**, alfabeto
 `0123456789abcdefghjkmnpqrstvwxyz` (senza `i l o u`). La decodifica e' **stretta**: lunghezza esatta per il
 numero di byte e bit di coda a zero, cosi' ogni valore ha una sola scrittura. Solo per cio' che una persona
-digita (codice di recupero, impronta inserita a mano) si accettano maiuscole, spazi, trattini e gli alias
-`O→0`, `I/L→1`, e poi si passa comunque dalla decodifica stretta.
+digita (codice di recupero, codice di approvazione, impronta) si accettano maiuscole, spazi, trattini e gli
+alias `O→0`, `I/L→1`, e poi si passa comunque dalla decodifica stretta.
 
 ### 3.2 JSON canonico
 
@@ -140,9 +154,10 @@ Il contenuto dei file firmati e' un sottoinsieme di JSON con **una sola forma po
   esponente, niente `-0`, niente zeri iniziali;
 - chiavi: lettera ASCII seguita da lettere o cifre ASCII (max 32 caratteri), **in ordine crescente**,
   **mai ripetute**;
-- stringhe: si scrivono con escape solo `"` `\` e i caratteri di controllo (`\b \f \n \r \t` e la forma
-  `\u00` + due cifre esadecimali minuscole per gli altri sotto U+0020); tutto il resto letterale; un
-  surrogato spaiato e' un errore.
+- stringhe: si scrivono con escape solo `"`, la barra rovesciata e i caratteri di controllo (le forme corte
+  per backspace, form feed, a capo, ritorno, tabulazione; la forma a sei caratteri con `00` e due cifre
+  esadecimali minuscole per gli altri sotto U+0020); tutto il resto letterale; un surrogato spaiato e' un
+  errore.
 
 Chi verifica: (1) controlla la firma sui **byte**; (2) legge con il parser stretto e con i tetti (§7);
 (3) **riserializza e pretende gli stessi byte**. Cosi' due programmi (o due versioni dell'app) non possono
@@ -163,7 +178,7 @@ controllo di profondita', duplicati, numeri e forma canonica, e nessuna libreria
 
 | Uso | Algoritmo | Perche' |
 |---|---|---|
-| Firme | **ECDSA P-256 con SHA-256**, firma DER | Keystore e StrongBox lo supportano su tutti i dispositivi da Android 6; minSdk e' 29. **Ed25519** nel Keystore arriva solo da Android 13 (API 33) e StrongBox non lo supporta: con Ed25519 le chiavi dei dispositivi Android 10-12 starebbero fuori dall'hardware. |
+| Firme | **ECDSA P-256 con SHA-256**, firma DER **in forma canonica** (sotto) | Keystore e StrongBox lo supportano su tutti i dispositivi da Android 6; minSdk e' 29. **Ed25519** nel Keystore arriva solo da Android 13 (API 33) e StrongBox non lo supporta: con Ed25519 le chiavi dei dispositivi Android 10-12 starebbero fuori dall'hardware. |
 | Cifratura (kit, cassaforte) | **AES-256-GCM**, tag di 128 bit | Standard, autenticata, nel Keystore e in JCA. |
 | Derivazione dal codice di recupero | **HKDF-SHA256** | Il codice ha 128 bit casuali: una derivazione lenta (PBKDF2, scrypt) non aggiungerebbe nulla. |
 | Impronte | **SHA-256** | – |
@@ -171,19 +186,34 @@ controllo di profondita', duplicati, numeri e forma canonica, e nessuna libreria
 Tutto con JCA e il Keystore di Android: **nessuna libreria crittografica aggiunta**. Un algoritmo diverso
 vorrebbe dire una nuova versione del formato, mai un campo "algoritmo" da negoziare.
 
-Le chiavi pubbliche si accettano solo nella forma SubjectPublicKeyInfo P-256 con punto non compresso:
-91 byte, i primi 27 fissi. Qualunque altra forma (altra curva, punto compresso, parametri espliciti) e'
-rifiutata prima di arrivare al provider crittografico.
+**Forma canonica delle firme** (revisione A3). ECDSA ammette due firme valide per lo stesso messaggio,
+`(r, s)` e `(r, n − s)`, e la seconda si ottiene dalla prima **senza chiave**. Per questo:
 
-L'**impronta** di una chiave (da mostrare, da mettere nel QR, da confrontare a mano) sono i primi 26
-caratteri base32 di SHA-256(chiave): 130 bit.
+- una firma e' accettata solo come `SEQUENCE { INTEGER r, INTEGER s }` in DER minimo (lunghezze corte, interi
+  positivi senza zeri superflui), con `1 ≤ r < n` e `1 ≤ s ≤ n/2` ("s basso"); ogni altra forma e' una firma
+  non valida (`EcdsaDer`);
+- chi firma normalizza sempre (il Keystore non garantisce `s` basso: il test sull'S25 lo verifica);
+- in piu', l'**identita' di un file firmato non dipende dai byte della firma** (§5.1): anche se un giorno una
+  seconda firma valida passasse, sarebbe lo stesso dato e non un'"equivocazione".
+
+**Chiavi pubbliche.** Si accettano solo come SubjectPublicKeyInfo P-256 con punto non compresso: 91 byte, i
+primi 27 fissi, e con un punto della curva (coordinate minori di p e `y² = x³ − 3x + b mod p`, controllato
+da noi e non dal provider: JVM dei test e Conscrypt del telefono decidono allo stesso modo, e ogni chiave ha
+una sola codifica, B3).
+
+L'**impronta** di una chiave (da mostrare, da mettere nel QR, da confrontare) sono i primi 26 caratteri
+base32 di SHA-256(chiave): 130 bit. Dove la chiave intera e' nota (registro gia' accettato) si confronta la
+chiave intera, non l'impronta (I7).
 
 ### 4.2 La chiave di famiglia
 
 - Generata dall'app dell'admin all'onboarding (piano 2.2, passo 12), in software (JCA), e **subito** cifrata
-  in due posti: la *cassaforte* sul dispositivo admin (AES-256-GCM con una chiave del Keystore, StrongBox se
-  c'e', non estraibile; file nello spazio privato dell'app, escluso da backup e trasferimenti) e il **kit di
-  recupero** (§4.8).
+  in due posti: la *cassaforte* sul dispositivo admin e il **kit di recupero** (§4.8).
+- La **cassaforte**: AES-256-GCM con una chiave del Keystore, StrongBox se c'e', non estraibile e
+  **utilizzabile solo a telefono sbloccato** (`setUnlockedDeviceRequired`, revisione M3: la chiave di famiglia
+  serve solo in operazioni interattive, quindi un telefono rubato acceso e bloccato, o uno strumento forense,
+  non la decifra). Il file sta nello spazio privato dell'app, escluso da backup e trasferimenti. Chiedere in
+  piu' l'impronta o il PIN a ogni uso e' la decisione 2 del §13.
 - E' **estraibile per costruzione**: deve poter stare nel kit e su un secondo dispositivo admin. In chiaro
   esiste solo in memoria, durante un'operazione dell'admin.
 - Firma **solo** il registro di famiglia. Non firma dati dell'indice: per quelli il dispositivo admin usa la
@@ -196,7 +226,8 @@ caratteri base32 di SHA-256(chiave): 130 bit.
 - Generata nel Keystore (`PURPOSE_SIGN`, P-256, SHA-256), **StrongBox se c'e'**, altrimenti TEE. Il test
   sull'S25 verifica che la chiave privata non sia esportabile e che, se il telefono ha StrongBox, stia li'.
 - **Utilizzabile senza sblocco**: i lavori notturni (indice, prenotazioni) firmano a telefono bloccato, come
-  per le credenziali del NAS (`sicurezza.md` §8). Prezzo dichiarato in §12.
+  per le credenziali del NAS (`sicurezza.md` §8). Prezzo dichiarato in §12. Il test sul telefono verifica
+  questa politica (e quella opposta della cassaforte).
 - **L'id del dispositivo e' derivato dalla chiave** (§2.4): non si puo' rivendicare l'id di un altro senza la
   sua chiave, e un dispositivo reinstallato o ritrovato ha una chiave nuova, quindi un id nuovo (E-O7, E-O8,
   E-S2). Non esiste "riapprovare" una chiave revocata.
@@ -205,36 +236,69 @@ caratteri base32 di SHA-256(chiave): 130 bit.
 ### 4.4 Il registro di famiglia
 
 Un unico documento firmato dalla chiave di famiglia con **configurazione + dispositivi** e un contatore
-`version` che cresce di 1 a ogni modifica (un solo contatore: niente incoerenze tra "configurazione N" e
-"registro M"). Si pubblica come `family/registry/<version>` con `publishExclusive`.
+`version` che cresce a ogni modifica (un solo contatore: niente incoerenze tra "configurazione N" e
+"registro M"). Si pubblica in `family/registry/<version>` al primo nome libero (§2.3).
 
 **Accettazione** (`RegistryVerifier.accept`), in quest'ordine:
 
-1. busta integra (§5.1) e di tipo registro;
-2. la chiave che firma e' **quella attesa**: quella del registro gia' accettato (o il suo successore
-   annunciato, §4.10), oppure, per un dispositivo nuovo, quella dell'ancora del QR;
-3. firma valida;
+1. busta integra (§5.1) e di tipo registro, firma in forma canonica;
+2. se il contenuto firmato e' identico a quello gia' accettato, e' la stessa versione (nessun errore);
+3. la chiave che firma e' **quella attesa**: la chiave intera del registro gia' accettato (o il successore
+   annunciato, §4.10), oppure, per un dispositivo nuovo, quella con l'impronta dell'ancora (§4.7);
 4. contenuto canonico e ben formato (§5.3), famiglia giusta;
-5. **anti-rollback**:
-   - versione piu' bassa dell'ultima accettata → rifiuto (`ROLLBACK`);
-   - stessa versione con contenuto diverso → rifiuto (`EQUIVOCATION`: due documenti firmati con lo stesso
-     numero vogliono dire chiave di famiglia usata male o rubata; va in Diagnostica come allarme);
-   - dispositivo nuovo: versione **almeno quella del QR** (`minRegistryVersion`), cosi' chi ha accesso SMB non
-     puo' rifilargli un registro di prima di una revoca;
-6. il nome del file deve coincidere con la versione dichiarata.
+5. **anti-rollback**: versione piu' bassa dell'ultima accettata → `ROLLBACK`; stessa versione con contenuto
+   firmato diverso → `EQUIVOCATION`; dispositivo nuovo: versione almeno quella del QR (`minRegistryVersion`);
+6. **anti-regressione** (revisione A1): rispetto al registro gia' fidato, il nuovo puo' solo diventare **piu'
+   severo** verso i dispositivi che quello conosce. Ogni dispositivo noto resta presente, con la stessa
+   chiave e lo stesso account del NAS, con uno stato uguale o piu' severo (§4.6); un dispositivo che resta
+   dismesso puo' solo perdere teste congelate; l'ora di emissione non torna indietro. Possono cambiare la
+   configurazione, i nomi, il segno di admin, e possono arrivare dispositivi nuovi. Altrimenti `REGRESSION`.
+   La regola e' transitiva, quindi vale anche quando si saltano versioni;
+7. il nome del file deve coincidere con la versione dichiarata.
 
-**Lettura dal NAS** (`RegistrySync`): si elencano le versioni piu' alte di quella nota; si prova la piu'
-alta; se non e' valida (spazzatura in cima, oppure una rotazione della chiave in mezzo) si risale in ordine
-crescente accettando cio' che verifica. **Lo stato locale non e' mai sostituito da qualcosa di piu' vecchio o
-non verificato**: con la cartella manomessa, svuotata o piena di spazzatura si continua con l'ultimo registro
-accettato e la Diagnostica lo dice (`newerUnverified`, `listingTruncated`, `needsAppUpdate`).
+Senza il punto 6 bastava che un admin lavorasse su una base vecchia (il secondo dispositivo admin rimasto
+indietro, o un admin appena recuperato, e chiunque con accesso SMB poteva cancellare la versione con la
+revoca) perche' la versione successiva **riapprovasse in silenzio** un dispositivo revocato. Ora quella
+versione e' rifiutata da tutti i dispositivi che hanno visto la revoca, con un allarme.
+
+`EQUIVOCATION` e `REGRESSION` di un registro **firmato dalla famiglia** sono un allarme in Diagnostica
+(`tamperingSuspected`) e producono un **ramo** (`RegistryFork`), mostrato all'admin con l'elenco dei
+dispositivi che compaiono solo li'. L'admin:
+
+- se lo riconosce (tipicamente l'approvazione fatta dal secondo admin rimasto indietro), lo **unisce**
+  (`FamilyAuthority.mergeFork`): ogni dispositivo con lo stato piu' severo dei due rami, le teste congelate
+  in comune, la configurazione del ramo dell'admin. L'unione non e' una regressione per nessuno dei due rami,
+  quindi la accettano tutti i dispositivi e nessuna revoca va persa;
+- se non lo riconosce, la chiave di famiglia e' stata usata da qualcun altro: **reset della famiglia**
+  (§4.10). L'unione non avviene mai da sola.
+
+**Lettura dal NAS** (`RegistrySync`): per nome dalla versione successiva a quella nota (§2.3), poi gli indizi
+dell'elenco, e infine il controllo della **versione fidata**: se il suo file e' sparito dal NAS lo si
+**ripubblica** (`healed`), cosi' cancellare la versione con una revoca non basta a nasconderla a chi non l'ha
+ancora vista; se al suo posto c'e' un altro contenuto firmato dalla famiglia, e' un'equivocazione (allarme e
+ramo). **Lo stato locale non e' mai sostituito da qualcosa di piu' vecchio, non verificato o che torna
+indietro**: nel caso peggiore si continua con l'ultimo registro accettato e la Diagnostica lo dice
+(`newerUnverified`, `listingTruncated`, `incomplete`, `needsAppUpdate`, `tamperingSuspected`).
+
+**Pubblicazione** (`FamilyAuthority.commit`): l'admin prepara una modifica sulla base del registro fidato,
+poi legge per nome `v+1`, `v+2`, …: nome libero → firma con quel numero e pubblica; versione valida piu'
+nuova → `NewerExists` (risincronizzarsi e rifare la modifica: un admin non firma mai su una base che sa
+vecchia); ramo firmato dalla famiglia → `Fork`; registro di un'app piu' nuova → `NeedsAppUpdate`; spazzatura
+→ si scavalca e si riporta; troppa spazzatura di fila → `Blocked` con l'elenco esatto dei file da cancellare.
 
 **Memoria locale**: ogni dispositivo salva nello spazio privato i byte dell'ultimo registro accettato e
 l'impronta della chiave che lo ha firmato; al riavvio li riverifica (`RegistryVerifier.restore`).
 
-**Configurazione** (estesa in Fase 2.2): `nasHost` (indirizzo del NAS, che l'app **non cambia mai da sola**,
-E-R7: un indirizzo nuovo si propone e si accetta solo se il NAS a quell'indirizzo serve un registro firmato
-dalla chiave di famiglia) e `commonShare` (l'area comune).
+**Le voci non si tolgono mai**: un dispositivo revocato, perso o dismesso resta nel registro (la regola del
+punto 6 lo richiede, e "sconosciuto" non deve mai poter tornare "approvato"). Il tetto e' 256 dispositivi.
+
+**Configurazione** (estesa in Fase 2.2): `nasHost` e `commonShare` (l'area comune). Indirizzo del NAS e
+identita' (E-R7, revisione M5): una firma su un file copiabile **non prova chi lo sta servendo**, quindi "il
+NAS a quell'indirizzo serve un registro firmato" non e' un criterio. L'identita' del server sta nella sessione
+SMB 3.1.1 con firma obbligatoria (la chiave di sessione dimostra che il server conosce la password
+dell'account) su una rete riconosciuta o in VPN (C2); un indirizzo nuovo si accetta solo se arriva da una
+configurazione firmata dall'admin, oppure con la conferma esplicita dell'utente; mai dalla sola scoperta in
+rete.
 
 ### 4.5 Registrazione e approvazione (piano 2.3)
 
@@ -242,15 +306,27 @@ dalla chiave di famiglia) e `commonShare` (l'area comune).
    **richiesta firmata da se stessa** (famiglia, id, chiave, nome, modello, account del NAS, ora). La firma
    prova solo che chi la scrive possiede quella chiave.
 2. L'admin vede le richieste valide (firma giusta, id = chiave, nome del file = id, famiglia giusta; le
-   altre si scartano e si contano).
-3. **Codice di approvazione**: il dispositivo nuovo e quello dell'admin mostrano lo stesso codice di 10
-   caratteri (`ABCDE-FGHJK`), i primi 50 bit di SHA-256 della chiave del dispositivo (`ApprovalCodes`).
-   L'admin approva **solo dopo averli confrontati** (a vista, o a voce al telefono), oppure, quando sono
-   nella stessa stanza, scansionando dal dispositivo nuovo un QR con la chiave intera (schermata della
-   Fase 2.3). Senza questo passo, chiunque scriva nell'area
-   comune potrebbe infilare una richiesta "Tablet — profilo Mamma" con la propria chiave. Per far
-   coincidere il codice servirebbero circa 2^50 chiavi generate.
-4. L'admin firma la versione successiva del registro con il dispositivo `approved`.
+   altre si scartano e si contano). Se la cartella e' stata riempita di nomi, la richiesta si legge **per id**
+   (`PendingRequests.readOne`), con l'id mostrato dal dispositivo nuovo.
+3. **Prova di presenza** (revisione M2). L'admin approva solo con una di queste (`ApprovalProof`):
+   - **scansione** del QR mostrato dal dispositivo nuovo con la sua chiave intera (via consigliata quando si
+     e' nella stessa stanza);
+   - **codice digitato**: 16 caratteri (`ABCD-EFGH-JKMN-PQRS`, primi 80 bit di SHA-256 della chiave,
+     `ApprovalCodes`) che l'admin **digita** leggendoli sullo schermo del dispositivo nuovo; non si
+     "confrontano a vista", perche' a vista si controllano pochi caratteri.
+
+   La chiave del richiedente e' leggibile nell'area comune prima dell'approvazione, quindi chi vuole farsi
+   approvare al posto del dispositivo vero puo' cercare con calma una chiave con lo stesso codice: con 50 bit
+   (prima versione) bastavano giorni di GPU, con 80 bit servono circa 10^24 tentativi.
+4. **Finestra di 15 minuti**: l'app dell'admin annota quando ha visto la richiesta per la prima volta (ora del
+   NAS, in locale: non `requestedAt`, che scrive il richiedente) e oltre 15 minuti non la approva; il
+   dispositivo nuovo rifa' la richiesta con una chiave nuova (`ApprovalWindow`).
+5. **Sosia**: le richieste il cui nome coincide, dopo NFKC, rimozione di ZWJ e selettori, minuscole e spazi,
+   con un'altra richiesta o con un dispositivo gia' registrato sono segnalate all'admin (`LookAlike`).
+6. **Account del NAS**: e' dichiarato dal richiedente (revisione B6). L'admin lo vede e lo conferma; la prova
+   di possesso (una copia della richiesta nell'area privata di quell'account, dove solo lui scrive) arriva in
+   Fase 2.3 insieme alle aree private nella configurazione firmata (Fase 2.2).
+7. L'admin firma la versione successiva del registro con il dispositivo `approved`.
 
 Fino all'approvazione il dispositivo legge soltanto: i suoi dati, se ne scrivesse, sono rifiutati da tutti
 (`SIGNER_NOT_APPROVED`) e l'app non li scrive (`RegistryState.canWrite`).
@@ -260,11 +336,12 @@ Fino all'approvazione il dispositivo legge soltanto: i suoi dati, se ne scrivess
 | Stato | Si entra da | Dati del dispositivo accettati dagli altri |
 |---|---|---|
 | `approved` | approvazione | tutti (con i controlli del loro tipo) |
-| `retired` (dismesso) | `approved` | **solo le teste congelate** elencate dall'admin (`frozenHeads`): impronte dei file-testa che l'admin aveva gia' verificato. Nient'altro, nemmeno teste piu' nuove. |
+| `retired` (dismesso) | `approved` | **solo le teste congelate** elencate dall'admin (`frozenHeads`): impronte dei contenuti firmati delle teste che l'admin aveva gia' verificato. Nient'altro, nemmeno teste piu' nuove. |
 | `revoked` (revocato) | `approved`, `retired` | **nessuno**, qualunque data dichiarino |
 | `lost` (perso) | `approved`, `retired`, `revoked` | nessuno; in piu' il dispositivo stesso, quando legge il registro, distrugge la chiave e poi i dati locali (Fase 2.4) |
 
-Gli stati vanno solo avanti (`DeviceStatus.canBecome`); non si torna mai ad `approved`.
+Gli stati sono in ordine di severita' e vanno solo avanti (`DeviceStatus.canBecome`), sia per chi firma sia
+per chi verifica (§4.4 punto 6); non si torna mai ad `approved`.
 
 **Perche' "nessuno" e non "quelli firmati prima della revoca":** i dati non hanno un'ora certificata; un
 dispositivo compromesso puo' scrivere qualunque data. Distinguere "prima" e "dopo" sarebbe una promessa
@@ -280,19 +357,28 @@ falsa. Il costo e' accettabile perche' quasi tutto cio' che firma un dispositivo
 
 **Dismissione** (telefono sostituito, funzionava): l'admin la sceglie quando il dispositivo non e'
 sospetto; congela le teste che il suo dispositivo ha gia' accettato, cosi' l'indice gia' fatto non si
-ricalcola.
+ricalcola. L'impronta congelata e' quella del contenuto firmato, non dei byte del file: una copia della stessa
+testa con un'altra firma valida resta valida (A3).
 
 ### 4.7 L'ancora di fiducia di un dispositivo nuovo
 
-Il QR dell'app (piano 2.3) porta, oltre a indirizzi, utente, aree e preset (mai password):
+Il QR dell'app (piano 2.3) porta, oltre a indirizzi, utente, aree e preset (mai password), l'**ancora**
+(`RegistryState.toAnchor`):
 
 - l'**id della famiglia**;
-- l'**impronta della chiave di famiglia**;
-- la **versione minima del registro** (quella corrente quando l'admin mostra il QR).
+- l'**impronta della chiave che ha firmato la versione corrente** del registro;
+- la **versione minima del registro** (quella corrente quando il QR viene mostrato).
 
-Senza QR, la procedura manuale chiede id e impronta (inseriti o confermati a mano) e la versione minima
-vale 0: e' accettato qualunque registro firmato dalla chiave di famiglia, anche uno vecchio, e la
-Diagnostica lo segnala finche' il dispositivo non vede la versione corrente.
+Usare la chiave che ha firmato la versione corrente fa funzionare anche un QR mostrato subito dopo una
+rotazione (revisione B4): il dispositivo nuovo accetta l'annuncio, firmato dalla chiave vecchia, e da li'
+segue la nuova. Lo stesso QR ("stato della famiglia") lo puo' mostrare **qualunque dispositivo approvato**: e'
+l'ancora del recupero dell'admin (§4.8).
+
+Senza QR, la procedura manuale chiede l'id della famiglia e l'impronta, che l'utente **digita per intero
+leggendole dallo schermo dell'admin**: non si precompilano mai leggendole dal NAS (premere "Conferma" su un
+valore letto dal NAS non verifica nulla, revisione B9). La versione minima vale 0: e' accettato qualunque
+registro firmato da quella chiave, anche uno vecchio, e la Diagnostica lo segnala finche' il dispositivo non
+vede la versione corrente.
 
 Un QR di un'altra famiglia o con un'impronta diversa da quella che firma il registro sul NAS non porta a
 nulla (E-O5); una configurazione cambiata dopo il QR vale quella firmata sul NAS (E-O6).
@@ -301,12 +387,15 @@ nulla (E-O5); una configurazione cambiata dopo il QR vale quella firmata sul NAS
 
 Due pezzi, **servono entrambi**:
 
-1. **Il codice di recupero**, su carta: 128 bit casuali generati dall'app (mai scelti dall'utente) piu' 10
-   bit di controllo che scoprono gli errori di battitura (lascia passare circa un errore su mille) prima di
-   tentare la decifratura. Si stampa come 7 gruppi di 4 caratteri: `ABCD-EFGH-JKMN-PQRS-TVWX-YZ01-2345`.
-   Si mostra solo nella schermata protetta dell'onboarding e l'utente lo riscrive per verificarlo (2.2).
-2. **Il file cifrato** `recovery/<id famiglia>`, nell'**area privata dell'admin** sul NAS (gli altri
-   familiari non lo leggono):
+1. **Il foglio**: il **codice di recupero**, 128 bit casuali generati dall'app (mai scelti dall'utente) piu'
+   10 bit di controllo che scoprono gli errori di battitura (ne lascia passare circa uno su mille) prima di
+   tentare la decifratura, stampato come 7 gruppi di 4 caratteri (`ABCD-EFGH-JKMN-PQRS-TVWX-YZ01-2345`);
+   e, **non segreti, l'id della famiglia e l'impronta della chiave di famiglia**, che al recupero fanno da
+   ancora indipendente dal NAS. Si mostra solo nella schermata protetta dell'onboarding e l'utente riscrive
+   il codice per verificarlo (2.2).
+2. **Il file cifrato** `recovery/<id famiglia>/<impronta della chiave>`, nell'**area privata dell'admin** sul
+   NAS (gli altri familiari non lo leggono). Un file per chiave: dopo una rotazione il kit nuovo ha un posto
+   suo (revisione M4).
 
 ```
 0    4   "MCGK"
@@ -321,39 +410,50 @@ Due pezzi, **servono entrambi**:
                       testo = lunghezza + chiave pubblica + lunghezza + PKCS#8 della privata )
 ```
 
-Aprire il kit (`RecoveryKit.open`) controlla struttura, versione, famiglia, autenticazione GCM (codice
+Aprire il kit (`RecoveryKit.open`) **richiede l'id della famiglia e l'impronta attesi** (dal foglio, o dal QR
+di stato): un kit con un'altra chiave, messo nell'area dell'admin da chi conosce il codice, e' rifiutato
+prima ancora di decifrare (revisione M7). Poi controlla struttura, versione, autenticazione GCM (codice
 sbagliato o file alterato danno lo stesso errore), che la chiave dentro sia quella dichiarata e che privata e
 pubblica stiano insieme (firma di prova). Tetto: 1 KiB.
 
-**Recupero dell'admin** (E-S13, piano 2.4): sul dispositivo nuovo si configura l'account dell'admin, si
-legge il file, si digita il codice: torna la **stessa** chiave di famiglia. Il dispositivo nuovo si approva
-da se' (versione successiva del registro, `admin = true`) e segna il vecchio come perso o revocato. Le
-impronte nei QR gia' distribuiti restano valide.
+**Recupero dell'admin** (E-S13, piano 2.4), senza nulla del vecchio telefono:
+
+1. sul dispositivo nuovo si configura l'account dell'admin e si apre il kit con codice, id e impronta del
+   foglio: torna la **stessa** chiave di famiglia;
+2. l'ancora del registro e' il **QR di stato** mostrato da un dispositivo approvato qualunque (versione
+   corrente): cosi' chi ha cancellato le versioni recenti non fa partire l'admin recuperato da un registro
+   vecchio. Se nessun dispositivo e' a portata, si parte con versione minima 0 e la Diagnostica avverte
+   finche' non si vede un dispositivo aggiornato;
+3. si sincronizza il registro dal NAS e si approva il dispositivo nuovo (`admin = true`) con la scansione
+   della sua chiave; il vecchio si segna come perso o revocato. Le impronte nei QR gia' distribuiti restano
+   valide.
 
 ### 4.9 Il secondo dispositivo admin
 
-E' un dispositivo che possiede la chiave di famiglia: la ottiene **aprendo il kit** (stesso codice, stesso
+E' un dispositivo che possiede la chiave di famiglia: la ottiene **aprendo il kit** (stesso foglio, stesso
 file) ed e' segnato `admin = true` nel registro (informativo: il potere vero e' la chiave). Il caso previsto
 e' un profilo dell'admin sul tablet, con lo stesso account del NAS (quindi legge il file del kit). Due admin
-non si sovrascrivono: se scrivono la stessa versione vince il primo (§2.3).
+non si sovrascrivono (§2.3) e, se uno dei due lavora su una base vecchia, la sua versione non annulla le
+revoche dell'altro: diventa un ramo da unire (§4.4).
 
 ### 4.10 Rotazione e reset
 
 - **Rotazione** (manutenzione, o il foglio del codice forse visto da qualcuno, ma il file nell'area privata
-  al sicuro): l'ultima versione firmata dalla chiave attuale contiene `successorKey`; da li' in poi firma solo
-  la nuova (`FamilyAuthority.rotateTo`). Ogni dispositivo che accetta l'annuncio smette per sempre di
-  accettare la vecchia chiave. Si genera e si stampa un kit nuovo. I QR futuri portano la nuova impronta;
-  un dispositivo con un QR vecchio risale la catena dall'annuncio. Se qualcuno cancella l'annuncio dal NAS,
-  chi non l'ha visto resta alla versione precedente (e la Diagnostica lo dice): nessun danno, solo attesa
-  (l'app dell'admin, che lo ha in locale, lo ripubblica, Fase 2.4).
+  al sicuro): la versione pubblicata dalla rotazione, firmata dalla chiave attuale, contiene `successorKey`;
+  da li' in poi firma solo la nuova (`FamilyAuthority.rotateTo`). Ogni dispositivo che accetta l'annuncio
+  smette per sempre di accettare la vecchia chiave. Subito dopo si genera e si stampa un kit nuovo, **con un
+  codice nuovo**, che si pubblica nel suo posto (`recovery/<famiglia>/<impronta nuova>`); il kit vecchio si
+  **cancella** dall'area privata dell'admin come azione locale confermata (Fase 2.4), e la guida lo dice: la
+  chiave vecchia vale ancora per i dispositivi che non hanno visto l'annuncio. Un QR mostrato subito dopo la
+  rotazione funziona (§4.7). Se qualcuno cancella l'annuncio dal NAS, chi l'aveva visto lo ripubblica (§4.4).
   La rotazione **non** protegge da una chiave gia' rubata: il ladro potrebbe annunciare un suo successore.
-- **Reset della famiglia** (chiave di famiglia persa senza kit, o rubata): nuova chiave, **nuovo id di
-  famiglia**, nuovo kit; ogni dispositivo deve essere riconfigurato con il nuovo QR (o l'impronta confermata
-  a mano) e riapprovato. I dati dei dispositivi legati al vecchio id di famiglia non valgono piu': ogni
-  dispositivo, riapprovato, ripubblica le proprie teste col nuovo id (i segmenti, identificati per impronta,
-  restano gli stessi e non si ricalcolano). Un dispositivo non ancora migrato continua a fidarsi della
-  vecchia famiglia: la guida chiede di migrarli subito e, se la chiave e' stata rubata, di cambiare le
-  password del NAS.
+- **Reset della famiglia** (chiave di famiglia persa senza kit, o rubata, o un ramo firmato che l'admin non
+  riconosce): nuova chiave, **nuovo id di famiglia**, nuovo kit; ogni dispositivo deve essere riconfigurato
+  con il nuovo QR (o l'impronta digitata a mano) e riapprovato. I dati legati al vecchio id di famiglia non
+  valgono piu': ogni dispositivo, riapprovato, ripubblica le proprie teste col nuovo id (i segmenti,
+  identificati per impronta, restano gli stessi e non si ricalcolano). Un dispositivo non ancora migrato
+  continua a fidarsi della vecchia famiglia: la guida chiede di migrarli subito e, se la chiave e' stata
+  rubata, di cambiare le password del NAS.
 
 ---
 
@@ -372,11 +472,15 @@ offset  byte  contenuto
 97      4     lunghezza N del contenuto (big endian), 1 ≤ N ≤ tetto del tipo
 101     N     contenuto: JSON canonico (§3.2)
 101+N   1     lunghezza S della firma, 8 ≤ S ≤ 72
-102+N   S     firma ECDSA P-256 / SHA-256 in DER
+102+N   S     firma ECDSA P-256 / SHA-256 in DER, forma canonica (§4.1)
 ```
 
 Si firma `"mycloudgallery/signed" + byte 0x00 + byte[0, 101+N)`: tipo, versione e chiave sono dentro la
 firma (un file di un tipo non si spaccia per un altro). Il file finisce esattamente dopo la firma.
+
+**Identita' di un file firmato** (`contentHash`): SHA-256 dei soli **byte firmati** `byte[0, 101+N)`, senza
+la firma. E' l'identita' usata per le versioni del registro, i segni di anti-rollback delle teste
+(`HeadMark`), le teste congelate e le equivocazioni: "stessa versione, **contenuto firmato** diverso".
 
 | Tipo | Codice | Firmato da | Tetto del contenuto |
 |---|---|---|---|
@@ -389,16 +493,17 @@ firma (un file di un tipo non si spaccia per un altro). Il file finisce esattame
 | Segnalazione "perso" | 7 | dispositivo approvato dello stesso account | 2 KiB |
 
 **Ordine della lettura** (verifica prima di interpretare): dimensione del file entro il tetto del tipo →
-firma del formato → versione (piu' nuova = "aggiorna l'app") → tipo atteso → forma della chiave →
-lunghezze coerenti, nessun byte in piu' → firma valida → **giudizio sul firmatario** (§5.2) → solo ora il
-JSON, con i suoi tetti e la forma canonica → campi del tipo → coerenza con il posto in cui il file si
-trova. Nessuna allocazione dipende da lunghezze dichiarate dal file.
+copia privata dei byte (chi chiama non puo' cambiarli tra verifica e lettura, I7) → firma del formato →
+versione (piu' nuova = "aggiorna l'app") → tipo atteso → forma della chiave e punto sulla curva → lunghezze
+coerenti, nessun byte in piu' → firma valida e canonica → **giudizio sul firmatario** (§5.2) → solo ora il
+JSON, con i suoi tetti e la forma canonica → campi del tipo → coerenza con il posto in cui il file si trova.
+Nessuna allocazione dipende da lunghezze dichiarate dal file.
 
 ### 5.2 La regola unica per i dati dei dispositivi
 
 `DeviceTrust`: la chiave che firma deve essere nel registro accettato; `approved` → si prosegue; `retired` →
-solo una testa la cui impronta e' in `frozenHeads`; `revoked`/`lost` → rifiuto; assente (sconosciuta o in
-attesa) → rifiuto. Poi ogni contenuto deve dichiarare la famiglia giusta e **lo stesso id del firmatario**:
+solo una testa il cui `contentHash` e' in `frozenHeads`; `revoked`/`lost` → rifiuto; assente (sconosciuta o
+in attesa) → rifiuto. Poi ogni contenuto deve dichiarare la famiglia giusta e **lo stesso id del firmatario**:
 un dispositivo non puo' firmare dati "a nome" di un altro.
 
 ### 5.3 Registro di famiglia (tipo 1)
@@ -412,8 +517,9 @@ un dispositivo non puo' firmare dati "a nome" di un altro.
 
 (Mostrato su piu' righe per leggerlo; il file e' su una riga sola, senza spazi.) Campi facoltativi:
 `successorKey` (rotazione) e, per ogni dispositivo `retired`, `frozenHeads` (impronte in ordine crescente,
-non vuoto). Vincoli: al massimo 64 dispositivi, in ordine crescente di id, senza doppioni; `id` = id della
-`key`; testi da mostrare (§8.4); `nasUser` ASCII stretto.
+non vuoto). Vincoli: al massimo 256 dispositivi, in ordine crescente di id, senza doppioni; `id` = id della
+`key`; `version` tra 1 e 10^9; testi da mostrare (§8.4); `nasUser` ASCII stretto; `nasHost` nome DNS o IPv6
+tra parentesi quadre.
 
 ### 5.4 Richiesta di registrazione (tipo 2)
 
@@ -424,13 +530,17 @@ busta, `device` il suo id, e il file deve chiamarsi `requests/<device>`.
 
 `family`, `device`, `share`, `kind` (`index` o `personal`), `version`, `registryVersion`, `createdAt`,
 `segments` (al massimo 8192 elementi `{hash, size}`, in ordine crescente di impronta, ognuno al massimo
-16 MiB). Il file deve stare in `devices/<device>/<kind>/head/<version>` della share `share`.
+16 MiB). Il file deve stare in `devices/<device>/<kind>/head/<version>` della share `share`. Le teste sono una
+serie numerata con le stesse regole del registro (§2.3: primo nome libero, lettura per nome, spazzatura
+scavalcata); la lettura per nome delle teste e' codice della Fase 4.1.
 
 - **Anti-rollback per dispositivo**: chi legge ricorda per (share, dispositivo, tipo) l'ultima versione e
-  l'impronta del file accettati (`HeadMark`); versione piu' bassa → `ROLLBACK`, stessa versione con file
-  diverso → `EQUIVOCATION`.
+  l'impronta del contenuto firmato accettati (`HeadMark`); versione piu' bassa → `ROLLBACK`, stessa versione
+  con contenuto diverso → `EQUIVOCATION`. La stessa testa con un'altra firma valida non e' un'equivocazione
+  (domanda aperta 1 della revisione).
 - **Dati personali** (`personal`): validi solo se firmati da un dispositivo dello **stesso account del NAS**
-  di chi legge, e mai se stanno nell'area comune.
+  di chi legge, e mai se stanno nell'area comune. Quando la configurazione elenchera' le aree private (Fase
+  2.2), varranno solo nella share privata dichiarata per quell'account (revisione B6).
 - `registryVersion` dice quale registro conosceva chi ha scritto: se e' piu' alto del nostro, il nostro e'
   indietro (forse qualcuno ce ne nasconde uno nuovo) e lo si rilegge; se non si trova, e' un'anomalia da
   Diagnostica.
@@ -444,17 +554,16 @@ busta, `device` il suo id, e il file deve chiamarsi `requests/<device>`.
 
 `family`, `device`, `share`, `resource` (chiave del lavoro, al massimo 256 caratteri), `generation`,
 `acquiredAt` (ora del NAS), `durationMillis` (0 = rilasciata). Sta in
-`leases/<SHA-256 di resource>/<generation>`: una prenotazione copiata in un altro posto non vale. Regole al
-§6.2.
+`leases/<SHA-256 di resource>/<gruppo>/<generation>`, con `gruppo = (generation − 1) / 256 + 1`: una
+prenotazione copiata in un altro posto non vale. Regole al §6.2.
 
 ### 5.7 Record del cestino (tipo 5)
 
 `family`, `device`, `share`, `trashId`, `originalPath` (percorso di media validato, §8.1), `size`,
 `trashedAt`. Sta in `trash/<device>/rec/<trashId>`; il file cestinato e' `trash/<device>/files/<trashId>`,
-senza estensione (non compare nei servizi multimediali). Serve a mostrare "Eliminati di recente" e a sapere
-dove ripristinare; **non decide mai una cancellazione** (§9). Il ripristino e' un'azione locale confermata:
-rinomina nella stessa share verso `originalPath` senza sovrascrivere (collisione = nome alternativo, E-D3,
-E-SH4).
+senza estensione (§2.1). Serve a mostrare "Eliminati di recente" e a sapere dove ripristinare; **non decide
+mai una cancellazione** (§9). Il ripristino e' un'azione locale confermata: rinomina nella stessa share verso
+`originalPath` senza sovrascrivere (collisione = nome alternativo, E-D3, E-SH4).
 
 ### 5.8 Testa di un album condiviso (tipo 6, Fase 7)
 
@@ -478,10 +587,17 @@ o il proprietario"). L'admin la trasforma nello stato `lost` del registro; se si
 ### 6.1 L'ora del NAS
 
 Scadenze, prenotazioni e istanti firmati usano **solo** l'ora del NAS (`NasClock.nowMillis()`), mai
-l'orologio del dispositivo (E-P9): un test controlla che il codice del modulo non legga l'orologio di
-sistema. L'implementazione (Fase 2.1) somma all'orologio monotono del dispositivo lo scarto letto alla
-NEGOTIATE SMB (`getTimeOffsetMillis`, gratuito a ogni connessione); per i controlli incrociati si puo'
-leggere anche la data assegnata dal server a un file appena pubblicato.
+l'orologio del dispositivo (E-P9): un test controlla che il codice del modulo non legga l'orologio di sistema
+in nessuna delle forme note (`System`, `java.time`, `Calendar`, `SystemClock`…).
+
+L'implementazione (Fase 2.1) somma all'orologio monotono del dispositivo lo scarto letto alla NEGOTIATE SMB
+(`getTimeOffsetMillis`, gratuito a ogni connessione). Requisiti per la Fase 2.1 (revisione B8):
+
+- solo **SMB 3.1.1 con firma obbligatoria**: l'hash di pre-autenticazione copre anche l'ora della
+  NEGOTIATE (con 3.0/3.0.2 chi fa MITM in LAN potrebbe spostarla);
+- controllo incrociato con l'ora assegnata dal server a un file appena pubblicato;
+- un salto dell'ora del NAS tra due sessioni oltre una soglia (da misurare) sospende cestino e prenotazioni e
+  va in Diagnostica.
 
 Istanti plausibili: dal 2020 al 2100; fuori, il campo e' malformato.
 
@@ -491,15 +607,18 @@ Servono a non fare due volte lo stesso lavoro (E-I1); non proteggono nulla: se d
 insieme, il risultato resta coerente.
 
 - **Generazioni con `FILE_CREATE`**: prendere una risorsa libera = pubblicare la generazione successiva
-  alla piu' alta trovata; se il nome esiste gia', ha vinto un altro (`Lost`). Rilascio = generazione con
-  durata 0. Nessun file altrui viene mai toccato.
+  alla piu' alta; se il nome esiste gia', ha vinto un altro (`Lost`). Rilascio = generazione con durata 0.
+  Nessun file altrui viene mai toccato.
+- **Gruppi di 256 generazioni** (revisione M6): si elencano i gruppi (al massimo 1024) e poi solo il gruppo
+  piu' alto (al massimo 512 nomi). Prima, con una cartella sola, dopo 257 usi della stessa risorsa restava
+  solo `Contended`; ora una risorsa resta prenotabile per oltre 260 000 generazioni.
 - **Durata massima: 1 ora** (si rinnova pubblicando una generazione nuova). Una prenotazione con durata
   oltre il tetto, o che comincia piu' di **2 minuti** nel futuro rispetto all'ora del NAS, e' **ignorata**
   (la risorsa e' libera), non accorciata (E-I16). Un dispositivo che muore libera la risorsa entro l'ora
   (E-I2).
 - Valgono solo le prenotazioni firmate da dispositivi approvati e trovate nel posto giusto; tutto il resto
   (spazzatura, revocati, copie) conta come "libera".
-- Cartella con piu' di 256 generazioni, o generazione oltre 999 999 999: si lavora senza prenotazione
+- Cartelle anomale (elenchi oltre i tetti, generazione al tetto di 10^9): si lavora senza prenotazione
   (`Contended`) e la Diagnostica lo dice. E' un danno solo di efficienza.
 
 ---
@@ -510,27 +629,33 @@ insieme, il risultato resta coerente.
 |---|---|
 | Contenuto firmato per tipo | §5.1 (file intero: + 174 byte) |
 | Segmento | 16 MiB |
-| Kit di recupero | 1 KiB |
+| Kit di recupero | 1 KiB (PKCS#8 dentro: 512 byte) |
 | JSON: profondita' | 8 livelli |
 | JSON: stringa | 4096 caratteri |
 | JSON: chiave | 32 caratteri ASCII |
 | JSON: campi per oggetto | 32 |
 | JSON: elementi per array | 8192 |
-| Dispositivi nel registro | 64 |
+| Versioni, generazioni, gruppi | da 1 a 10^9 |
+| Dispositivi nel registro | 256 (le voci non si tolgono) |
 | Teste congelate per dispositivo | 64 |
 | Segmenti per testa | 8192 |
 | Testi da mostrare (nomi, modello) | 64 caratteri |
+| Account del NAS | 64 caratteri |
+| Nome del NAS | 253 caratteri |
 | Chiave di una prenotazione | 256 caratteri |
 | Percorso | 4096 byte UTF-8, 64 livelli |
 | Componente di percorso | 255 byte UTF-8 |
 | Nome di share | 80 caratteri |
-| Elenco del registro | 1024 nomi |
-| Elenco delle richieste | 64 nomi |
+| Letture per nome di una serie in una sincronizzazione | 1024 |
+| Nomi non validi di fila scavalcati | 32 |
+| Elenco del registro (solo indizio) | 1024 nomi |
+| Elenco delle richieste | 64 nomi (oltre: lettura per id) |
 | Elenco delle teste di un dispositivo | 256 nomi |
-| Generazioni di una prenotazione | 256 nomi |
+| Prenotazioni: gruppi / generazioni per gruppo | 1024 / 512 nomi |
 | Prenotazione | 1 ora; inizio al massimo 2 minuti nel futuro |
+| Richiesta di registrazione approvabile | 15 minuti da quando l'admin la vede |
 | Permanenza nel cestino | 30 giorni (ora del NAS) |
-| Pulizia del cestino per giro | 200 file e 20 GiB |
+| Pulizia del cestino per giro | 200 file e 20 GiB (il primo file del giro passa comunque) |
 | Immagini dall'indice | 4096 × 4096 pixel, 16384 per lato |
 
 Superare un tetto vuol dire rifiutare il dato (o l'elenco), contarlo in Diagnostica e proseguire con cio'
@@ -553,17 +678,22 @@ modi). Si rifiutano:
 - nomi riservati di Windows, anche con estensione e senza distinzione di maiuscole: `CON`, `PRN`, `AUX`,
   `NUL`, `COM0`…`COM9`, `LPT0`…`LPT9`, `COM¹ ² ³`, `LPT¹ ² ³`, `CONIN$`, `CONOUT$`, `CLOCK$`;
 - caratteri di controllo e invisibili (elenco esplicito, uguale su tutti i dispositivi qualunque versione di
-  Unicode abbiano): C0, DEL, C1, trattino morbido, controlli bidirezionali (U+061C, U+200E, U+200F,
-  U+202A–U+202E, U+2066–U+2069), U+200B, U+200C, U+2060–U+206F, BOM, separatori di riga e paragrafo,
-  annotazioni interlineari, non-caratteri, tag invisibili, surrogati spaiati. Restano ammessi lo ZWJ
-  (U+200D) e i selettori di variante, che servono alle emoji composte (E-N6);
+  Unicode abbiano): C0, DEL, C1, trattino morbido, combining grapheme joiner, controlli bidirezionali
+  (U+061C, U+200E, U+200F, U+202A–U+202E, U+2066–U+2069), U+200B, U+200C, U+2060–U+206F, BOM, separatori di
+  riga e paragrafo, annotazioni interlineari, non-caratteri, tag invisibili, surrogati spaiati, e i caratteri
+  che **sembrano vuoti** (riempitivi Hangul U+115F, U+1160, U+3164, U+FFA0; vocali khmer U+17B4, U+17B5;
+  selettori mongoli U+180B–U+180F; braille vuoto U+2800; controlli musicali U+1D173–U+1D17A) e i selettori di
+  variante U+FE00–U+FE0D e U+E0100–U+E01EF (revisione B2). Restano ammessi lo ZWJ (U+200D) e i selettori
+  U+FE0E/U+FE0F, che servono alle emoji composte (E-N6); i nomi che differiscono solo per questi si scoprono
+  con `LookAlike` (§4.5);
 - **Unicode di confusione**: si ripetono i controlli sulla forma NFKC di ogni componente, cosi' `．．`,
   `／`, `＼`, `：`, `ＣＯＮ` (caratteri a larghezza piena che qualche livello potrebbe trasformare in `..`,
   separatori o nomi riservati) sono rifiutati.
 
-I percorsi di **media** (cestino, album, voci dell'indice) in piu' non possono entrare nella cartella dell'app
-(`.mycloudgallery`, in qualunque combinazione di maiuscole): un dato remoto non puo' indicare come "foto da
-ripristinare" un file del registro.
+I percorsi di **media** (cestino, album, voci dell'indice) in piu' non possono entrare nella cartella dell'app:
+il primo componente si confronta **nella forma NFKC e senza maiuscole** con `.mycloudgallery`, quindi anche
+`．mycloudgallery` (punto a larghezza piena) e' rifiutato (revisione B1). Un dato remoto non puo' indicare
+come "foto da ripristinare" un file del registro.
 
 Accenti, emoji, spazi interni, nomi lunghi fino ai tetti: ammessi.
 
@@ -579,8 +709,10 @@ base32 di SHA-256 delle parti, ciascuna preceduta dalla sua lunghezza), mai test
 ### 8.4 Testi da mostrare
 
 Nomi di dispositivi, modelli, (in futuro) nomi d'album: non vuoti, senza spazi ai bordi, al massimo 64
-caratteri, senza i caratteri vietati del §8.1 (niente "fattura‹RLO›fdp.exe"). Gli account del NAS: ASCII
-`[A-Za-z0-9][A-Za-z0-9._-]{0,63}`, confrontati senza maiuscole/minuscole come fa Samba.
+caratteri, senza i caratteri vietati del §8.1 (niente "fattura‹RLO›fdp.exe", niente nomi fatti solo di
+riempitivi). Gli account del NAS: ASCII `[A-Za-z0-9][A-Za-z0-9._-]{0,63}`, confrontati senza
+maiuscole/minuscole come fa Samba. Il nome del NAS: etichette DNS (lettere, cifre, trattini non ai bordi; vale
+anche un IPv4) oppure un IPv6 tra parentesi quadre.
 
 ---
 
@@ -591,26 +723,36 @@ partono solo da azioni locali confermate**, con tetti per giro. Come la garantis
 
 1. **`core-trust` non puo' cancellare ne' spostare nulla**: l'interfaccia del NAS che usa ha solo `list`,
    `read` e `publishExclusive`. Un test (`TrustFormatTest`) fallisce se qualcuno aggiunge un'operazione.
+   L'unica scrittura fatta "per conto di un dato letto" e' la **ripubblicazione** di una versione del
+   registro gia' fidata e sparita (§4.4): crea, non cancella.
 2. **I tipi letti dal NAS sono solo informativi**: registro, teste, prenotazioni, record del cestino, album
-   producono viste e decisioni di fiducia, mai operazioni.
+   producono viste e decisioni di fiducia, mai operazioni. L'unione di un ramo del registro e' un'azione
+   esplicita dell'admin.
 3. **La pulizia del cestino** (`TrashPurgePolicy`, E-D4) ha come ingressi solo:
    - la voce del **diario locale** di questo dispositivo, che esiste solo se qui l'utente ha confermato
-     l'eliminazione (non si puo' costruire da un record remoto, e non esiste funzione che lo faccia);
+     l'eliminazione. E' una **convenzione** del codice che la usera' (Fase 4.5): `core-trust` non offre
+     alcuna funzione che costruisca la voce da un record remoto (revisione B7);
    - lo stato del file nel **proprio** cestino (`trash/<io>/files/<id>`: il percorso lo deriva la regola,
      non chi chiama);
    - l'ora del NAS.
 
    Si elimina solo se il file c'e' ancora con la stessa dimensione, sono passati 30 giorni (ora del NAS)
-   dall'ora annotata **localmente**, e il giro non ha superato 200 file o 20 GiB; un'ora locale nel futuro
-   blocca tutto. Un record remoto, vero o finto, non compare tra gli ingressi: un "finto cestino" non fa
-   eliminare nulla. Gli elementi cestinati da un dispositivo che non c'e' piu' non si eliminano mai in
-   automatico.
+   dall'ora annotata **localmente**, e il giro non ha superato 200 file o 20 GiB (il primo file di un giro
+   passa comunque, altrimenti un file da solo oltre il tetto non si eliminerebbe mai); un'ora locale nel
+   futuro blocca tutto. In Fase 4.5 la cancellazione avverra' tramite un handle aperto dopo il controllo
+   della dimensione (niente controllo-poi-uso su due aperture diverse). Un record remoto, vero o finto, non
+   compare tra gli ingressi: un "finto cestino" non fa eliminare nulla. Gli elementi cestinati da un
+   dispositivo che non c'e' piu' non si eliminano mai in automatico.
 4. **Spostamenti verso l'area comune** (album condivisi, Fase 7): partono solo dalla conferma locale
    "N foto verranno spostate…"; una definizione d'album letta dal NAS non sposta nulla.
 5. **Ripristino dal cestino**: azione locale confermata, percorso validato (§8.1), mai sovrascrivendo.
+6. **L'unica conseguenza distruttiva voluta di un dato remoto** e' l'auto-azzeramento di un dispositivo
+   segnato `lost` in un registro firmato (Fase 2.4): tocca solo i dati locali dell'app su quel dispositivo,
+   e con l'anti-regressione (§4.4) e i kit per chiave (§4.8) non si puo' piu' ottenere con una base vecchia
+   o con un kit della chiave ruotata lasciato in giro.
 
-Le operazioni distruttive vere vivranno in moduli e interfacce separate (Fasi 4.5, 5, 7), ciascuna con il
-suo diario locale e i suoi test "dato remoto ostile → nessuna azione".
+Le operazioni distruttive vere vivranno in moduli e interfacce separate (Fasi 2.4, 4.5, 5, 7), ciascuna con
+il suo diario locale e i suoi test "dato remoto ostile → nessuna azione".
 
 ---
 
@@ -620,17 +762,17 @@ suo diario locale e i suoi test "dato remoto ostile → nessuna azione".
   e legge l'intervallo `OLDEST_READABLE_VERSION..CURRENT_VERSION` (oggi 1..1).
 - Un file con versione **piu' nuova** non si interpreta: `NEWER_FORMAT` → "aggiorna l'app". Non e' un
   errore del dato e non si cancella nulla.
-- **Un'app vecchia non rompe i dati di una nuova**: ogni dispositivo scrive solo i propri file; il registro
-  e' una serie numerata con `FILE_CREATE`, quindi un admin con l'app vecchia non puo' sovrascrivere una
-  versione scritta da un'app nuova (riceve "esiste gia'") e `RegistrySync.needsAppUpdate` gli impedisce di
-  provarci; i dati che non capisce li ignora senza toccarli.
+- **Un'app vecchia non rompe i dati di una nuova**: ogni dispositivo scrive solo i propri file; un admin con
+  l'app vecchia che trova un registro di un'app piu' nuova non firma nulla (`CommitResult.NeedsAppUpdate`,
+  `RegistrySync.needsAppUpdate`) e non lo scavalca; i dati che non capisce li ignora senza toccarli.
 - Si aumenta la versione per **qualunque** cambiamento del contenuto (anche un campo in piu': nella stessa
   versione i campi sconosciuti sono errori). Le app nuove continuano a leggere le versioni vecchie per
   almeno tutto il periodo in cui in famiglia possono esserci app vecchie; quando la lettura di una versione
   viene tolta, se ne alza `OLDEST_READABLE_VERSION` e i dati vecchi vanno riscritti dai loro autori.
 - **Finche' l'app non e' rilasciata e nessun dato e' stato scritto sul NAS, la versione 1 puo' ancora
-  cambiare** (le Fasi 2.2, 4.1, 4.7 e 7 aggiungono campi alla v1). Dal primo dato scritto sull'area di prova
-  in poi, ogni modifica segue le regole sopra.
+  cambiare** (le Fasi 2.2, 4.1, 4.7 e 7 aggiungono campi alla v1; la revisione 1.4 l'ha gia' cambiata:
+  firme canoniche, codice di approvazione a 80 bit, prenotazioni a gruppi, kit per chiave). Dal primo dato
+  scritto sull'area di prova in poi, ogni modifica segue le regole sopra.
 
 ---
 
@@ -644,15 +786,16 @@ Un PC con un ransomware, un apparecchio della rete finche' `NAS` e `Public` sono
 | Puo' | Non puo' (grazie al formato) |
 |---|---|
 | Cancellare, alterare o cifrare **qualunque** file a cui ha accesso, compresi i media e `.mycloudgallery/` (L2, L3). | Far accettare a un dispositivo un dato non firmato da una chiave approvata. |
-| Rimettere file vecchi validi (rollback), cancellare le versioni nuove. | Far tornare indietro un dispositivo che ha gia' visto una versione nuova, o un dispositivo nuovo sotto la versione del suo QR. |
-| Riempire le cartelle dell'app di spazzatura, nomi strani, file enormi, JSON profondissimi. | Far allocare memoria oltre i tetti, far cadere l'app, far interpretare un nome o un percorso ostile. |
+| Rimettere file vecchi validi (rollback), cancellare le versioni nuove. | Far tornare indietro un dispositivo che ha gia' visto una versione nuova, o un dispositivo nuovo sotto la versione del suo QR; far sparire una versione per chi l'ha vista (la ripubblica). |
+| Riempire le cartelle dell'app di spazzatura, nomi strani, file enormi, JSON profondissimi. | Nascondere una versione nuova (si legge per nome), far allocare memoria oltre i tetti, far cadere l'app, far interpretare un nome o un percorso ostile. |
+| Occupare i nomi delle versioni successive del registro. | Bloccare una revoca con pochi file: si scavalcano; oltre 32 di fila l'admin riceve l'elenco esatto dei file da cancellare. |
+| Fabbricare una seconda firma valida di un file (malleabilita' di ECDSA). | Farla accettare (solo firme canoniche) o farla passare per un'equivocazione (identita' sul contenuto firmato). |
 | Copiare un file firmato valido in un altro posto (altra share, altro nome, altra risorsa). | Farlo valere li': ogni contenuto dichiara il suo posto e deve coincidere. |
-| Scrivere richieste di registrazione con nomi rassicuranti. | Farle approvare: serve il confronto del codice con il dispositivo vero. |
-| Bloccare il lavoro (prenotazioni spazzatura, cartelle inondate): solo efficienza. | Far cancellare o spostare qualcosa all'app (§9). |
+| Scrivere richieste di registrazione con nomi rassicuranti, anche sosia. | Farle approvare: serve la scansione della chiave o il codice di 80 bit digitato dall'admin entro 15 minuti; i sosia sono segnalati. |
+| Rallentare il lavoro (prenotazioni spazzatura, cartelle inondate): solo efficienza. | Far cancellare o spostare qualcosa all'app (§9). |
 
 Effetto peggiore sul formato: **negazione del servizio** (i dispositivi restano con le repliche locali e lo
-dicono in Diagnostica) e, per un dispositivo appena configurato **senza** QR, un registro vecchio ma
-autentico.
+dicono in Diagnostica) e, per un dispositivo configurato **senza** QR, un registro vecchio ma autentico.
 
 ### 11.2 Un dispositivo approvato ma compromesso
 
@@ -660,22 +803,25 @@ Malware con i privilegi dell'app (o root) su un telefono di famiglia (S5).
 
 | Puo' | Non puo' |
 |---|---|
-| Tutto quello del §11.1, nei limiti dei permessi del suo account sul NAS. | Firmare a nome di un altro dispositivo o della famiglia; approvare dispositivi; cambiare la configurazione. |
+| Tutto quello del §11.1, nei limiti dei permessi del suo account sul NAS. In particolare **ritardare la pubblicazione della propria revoca** riempiendo o cancellando i nomi del registro, finche' la password NAS del suo account non viene cambiata (per questo la guida dice: segnalare, revocare, cambiare la password). | Firmare a nome di un altro dispositivo o della famiglia; approvare dispositivi; cambiare la configurazione. |
 | Finche' non e' revocato, **firmare dati falsi con la sua chiave**: voci dell'indice sbagliate (miniature, testo, vettori → ricerche ingannevoli), finti record del cestino (solo viste), finte definizioni di album (solo viste). | Far eliminare o spostare file tramite l'app degli altri (§9). |
 | Tenere occupate risorse con prenotazioni (al massimo un'ora alla volta, rinnovabili): rallenta l'indicizzazione. | Influire sui dati personali degli altri account (validi solo dallo stesso account). |
 | Alterare i dati personali del **suo** account. Se si conferma la decisione 3 del §13, far azzerare gli altri dispositivi del suo account (nessun file perso, solo una nuova approvazione). | Portare via la chiave dal Keystore: dopo la revoca non vale piu' nulla di cio' che ha firmato, nemmeno se retrodatato. |
-| Dichiarare un `registryVersion` alto per far comparire falsi avvisi "registro indietro". | Far dimenticare a un dispositivo una revoca gia' vista. |
+| Dichiarare un `registryVersion` alto per far comparire falsi avvisi "registro indietro". | Far dimenticare a un dispositivo una revoca gia' vista, o farla annullare da un admin su una base vecchia (anti-regressione). |
 
 Risposta: revoca nel registro (o "perso"), poi cambio della password del NAS e revoca del peer WireGuard
 (nell'ordine della guida, piano 2.4); il congelamento per modifiche di massa (4.2) limita i danni ai file.
 
 ### 11.3 Dispositivo admin compromesso o chiave di famiglia rubata (S12)
 
-Chi ha la chiave di famiglia (dispositivo admin compromesso mentre la usa, oppure foglio del codice **e**
-file del kit) controlla la fiducia: approva i suoi dispositivi, revoca gli altri, cambia la configurazione.
-La nuova configurazione non cambia comunque da sola l'indirizzo del NAS usato dai dispositivi (E-R7).
-Rimedio: **reset della famiglia** (§4.10) e cambio delle password del NAS. Per questo il kit e' diviso in due
-pezzi in due posti, e la decisione 2 del §13 propone di chiedere la credenziale del telefono a ogni uso.
+Chi ha la chiave di famiglia (dispositivo admin compromesso mentre e' sbloccato, oppure foglio del codice
+**e** file del kit) controlla la fiducia: approva i suoi dispositivi, revoca gli altri, cambia la
+configurazione. La nuova configurazione non cambia comunque da sola l'indirizzo del NAS usato dai dispositivi
+(E-R7). Se pubblica una versione che contraddice quelle viste, i dispositivi la rifiutano come ramo e
+l'admin la vede (§4.4); se pubblica prima dell'admin una versione "compatibile" (che aggiunge solo i suoi
+dispositivi), viene accettata (B10, §12.11). Rimedio: **reset della famiglia** (§4.10) e cambio delle
+password del NAS. Per questo il kit e' diviso in due pezzi in due posti, la cassaforte si apre solo a
+telefono sbloccato, e la decisione 2 del §13 propone di chiedere la credenziale del telefono a ogni uso.
 
 ### 11.4 Il NAS stesso
 
@@ -690,25 +836,31 @@ eliminare su quel dispositivo. Un orologio all'indietro non fa eliminare nulla.
 
 1. **Una firma dice chi ha scritto, non che sia vero** (L3). Un dispositivo approvato puo' scrivere dati
    falsi finche' non e' revocato.
-2. **Freschezza**: un dispositivo che non riesce a leggere il registro nuovo (offline, o file nascosti da
-   chi ha accesso SMB) continua a fidarsi di un dispositivo revocato finche' non lo legge. La versione nel QR,
-   la memoria locale e `registryVersion` nelle teste riducono il problema; non lo eliminano.
+2. **Freschezza**: un dispositivo che non riesce a leggere il registro nuovo (offline, o nomi cancellati
+   prima che qualcuno li ripubblichi) continua a fidarsi di un dispositivo revocato finche' non lo legge. La
+   versione nel QR, la lettura per nome, la ripubblicazione e `registryVersion` nelle teste riducono il
+   problema; non lo eliminano.
 3. **Configurazione senza QR**: senza la versione minima, un dispositivo nuovo accetta qualunque registro
-   autentico, anche vecchio, finche' non vede quello corrente.
+   autentico, anche vecchio, finche' non vede quello corrente. Lo stesso vale per il recupero dell'admin
+   senza un QR di stato.
 4. **Nessuna attestazione delle chiavi**: l'admin non ha una prova crittografica che la chiave di un
-   dispositivo nuovo stia nell'hardware; si fida del codice di approvazione e della persona. (L'attestazione
-   del Keystore si potra' aggiungere: e' una decisione del §13.)
+   dispositivo nuovo stia nell'hardware; si fida della prova di presenza e della persona (decisione 6).
 5. **Chiavi dei dispositivi usabili senza sblocco**: un malware installato puo' far firmare la chiave finche'
    resta installato (non puo' portarla via).
 6. **La chiave di famiglia e' estraibile per costruzione** (kit, secondo admin) ed e' in memoria durante le
    operazioni dell'admin; il dispositivo admin e' il punto piu' delicato.
 7. **Revocare costa lavoro**: tutti i dati del dispositivo revocato si scartano e si ricalcolano.
-8. **Il NAS e' fidato per l'ora** (§11.4) e chiunque scriva nelle share puo' sempre fare negazione del servizio.
+8. **Il NAS e' fidato per l'ora** (§11.4) e chiunque scriva nelle share puo' sempre fare negazione del
+   servizio, compreso ritardare la pubblicazione di una revoca finche' non gli si toglie l'accesso (§11.2).
 9. **Riservatezza**: l'indice non e' cifrato sul NAS; lo protegge solo il permesso della share (come i media).
    Il registro, nell'area comune, mostra a tutti i dispositivi della famiglia (L11).
-10. **Codice di approvazione a 50 bit**: sufficiente contro chi prova a produrre una chiave con lo stesso
-    codice nei minuti dell'approvazione, non un margine "crittografico" di lungo periodo; per questo vale solo
-    per quell'approvazione.
+10. **Account dichiarato**: finche' non arriva la prova di possesso (Fase 2.3), l'account del NAS di un
+    dispositivo e' quello che dichiara e che l'admin conferma (B6).
+11. **Chiave di famiglia rubata**: una versione del ladro che *aggiunge* soltanto (nessuna regressione) e
+    arriva prima di quelle dell'admin viene accettata senza allarme; l'admin la vede nell'elenco dei
+    dispositivi. Un allarme dedicato (l'app dell'admin ricorda le impronte delle versioni che ha firmato e
+    segnala quelle che non riconosce) e' rimandato alla Fase 2.3 (B10).
+12. **I file nel cestino conservano i byte dei media** (§2.1, I6).
 
 ---
 
@@ -716,13 +868,13 @@ eliminare su quel dispositivo. Un orologio all'indietro non fa eliminare nulla.
 
 | # | Decisione | Opzioni (la prima e' quella consigliata e gia' scritta nel codice, salvo dove indicato) |
 |---|---|---|
-| 1 | Dove tenere il file cifrato del kit | **(a)** area privata dell'admin sul NAS + codice su carta: servono entrambi. (b) In piu', il file stampato come QR su un secondo foglio tenuto altrove: sopravvive alla perdita dell'area privata, ma chi trova i due fogli insieme ha la chiave. (c) File e codice sullo stesso foglio in cassaforte: un solo pezzo da proteggere. |
-| 2 | Credenziale del telefono per usare la chiave di famiglia | **(a)** impronta/PIN del telefono a ogni operazione dell'admin (approvare, revocare, ruotare): le operazioni sono sempre interattive; si realizza in Fase 2.2 con la cassaforte che chiede l'autenticazione. (b) Nessuna richiesta (come il codice di oggi). |
+| 1 | Dove tenere il file cifrato del kit | **(a)** area privata dell'admin sul NAS + foglio con codice, id e impronta: servono entrambi. (b) In piu', il file stampato come QR su un secondo foglio tenuto altrove: sopravvive alla perdita dell'area privata, ma chi trova i due fogli insieme ha la chiave. (c) File e codice sullo stesso foglio in cassaforte: un solo pezzo da proteggere. |
+| 2 | Credenziale del telefono per usare la chiave di famiglia | **(a)** impronta/PIN del telefono a ogni operazione dell'admin (approvare, revocare, ruotare, unire): le operazioni sono sempre interattive; si realizza in Fase 2.2 con la cassaforte che chiede l'autenticazione. (b) Nessuna richiesta oltre al telefono sbloccato (come il codice di oggi, dopo la revisione M3). |
 | 3 | Segnalazione "perso" fatta dal proprietario senza l'admin | **(a)** come dice il piano ("l'admin o il proprietario"): un altro dispositivo dello stesso account puo' far azzerare il dispositivo perso appena si ricollega; un dispositivo compromesso dello stesso account potrebbe pero' far azzerare i suoi "fratelli" (nessun file perso, nuova approvazione). (b) Solo l'admin. |
 | 4 | Dati di un dispositivo revocato | **(a)** tutti scartati e ricalcolati; con la *dismissione* si congelano le teste gia' verificate. (b) Tenere quelli "firmati prima della revoca": sconsigliato, la data la scrive il dispositivo stesso. |
 | 5 | Durata massima di una prenotazione | **(a)** 1 ora con rinnovo. (b) Piu' corta (15 min: meno attesa se un dispositivo muore, piu' scritture) o piu' lunga. |
-| 6 | Approvazione di un dispositivo | **(a)** confronto del codice di 10 caratteri, oppure scansione del QR del dispositivo nuovo quando si e' insieme. (b) Aggiungere l'attestazione hardware del Keystore come requisito (piu' codice, nessun dispositivo di famiglia ne sarebbe escluso). |
-| 7 | Runner del test sul dispositivo | **(a)** aggiungere `androidx.test:runner` a `versions-app.gradle` (standard; tocca file fuori da questo modulo). (b) Tenere il runner minimo di `core-trust` (oggi). |
+| 6 | Approvazione di un dispositivo | **(a)** scansione della chiave quando si e' insieme, altrimenti codice di 16 caratteri digitato entro 15 minuti. (b) Aggiungere l'attestazione hardware del Keystore come requisito (piu' codice, nessun dispositivo di famiglia ne sarebbe escluso). |
+| 7 | Runner del test sul dispositivo | **(a)** aggiungere `androidx.test:runner` a `versions-app.gradle` (standard; tocca file fuori da questo modulo). (b) Tenere il runner minimo di `core-trust` (oggi; esegue l'elenco `TEST_CLASSES` e rispetta `-e class`). |
 
 Nota per `docs/sicurezza.md` (fuori dal perimetro di questa fase): C7, C8 (codice), C9, C10 (lato formato)
 e C23 hanno ora codice e test; L11 e i limiti del §12 vanno riportati li' alla chiusura della Fase 1.
@@ -736,15 +888,18 @@ e C23 hanno ora codice e test; L11 e i limiti del §12 vanno riportati li' alla 
 | §2.3, §9 | `nas/NasFileSystem.kt`, `nas/NasLayout.kt` | `TrustFormatTest` (nessuna operazione distruttiva, nessun orologio del dispositivo) |
 | §3.1 | `codec/Base32.kt` | `Base32AndTextTest` |
 | §3.2 | `codec/CanonicalJson.kt`, `codec/Fields.kt` | `CanonicalJsonTest` |
-| §4.1–4.3 | `crypto/Keys.kt`, `crypto/FamilyKey.kt`, `crypto/AndroidKeystore.kt` | `EnvelopeTest`; sul dispositivo `KeystoreDeviceTest` (androidTest) |
-| §4.4–4.7, §4.10 | `registry/*.kt` | `RegistryTest` |
-| §4.8–4.9 | `crypto/RecoveryKit.kt` | `RecoveryKitTest` |
-| §5.1–5.2 | `envelope/Envelope.kt`, `registry/DeviceTrust.kt` | `EnvelopeTest`, `DeviceHeadTest` |
+| §4.1–4.3 | `crypto/Keys.kt` (`EcdsaDer`, `P256`), `crypto/FamilyKey.kt`, `crypto/AndroidKeystore.kt` | `EnvelopeTest`, `ReviewFixesTest` (A3, B3); sul dispositivo `KeystoreDeviceTest` (androidTest) |
+| §4.4–4.7, §4.10 | `registry/*.kt` | `RegistryTest`, `ReviewFixesTest` (A1, A2, M1, M2, B4, B5, I9) |
+| §4.8–4.9 | `crypto/RecoveryKit.kt` | `RecoveryKitTest`, `ReviewFixesTest` (M4, M7) |
+| §5.1–5.2 | `envelope/Envelope.kt`, `registry/DeviceTrust.kt` | `EnvelopeTest`, `DeviceHeadTest`, `ReviewFixesTest` (A3) |
 | §5.5 | `data/DeviceHead.kt` | `DeviceHeadTest` |
-| §5.6, §6 | `data/Leases.kt` | `LeaseTest` |
-| §5.7, §9 | `data/Trash.kt` | `TrashTest` |
+| §5.6, §6 | `data/Leases.kt` | `LeaseTest`, `ReviewFixesTest` (M6) |
+| §5.7, §9 | `data/Trash.kt` | `TrashTest`, `ReviewFixesTest` (B7) |
 | §7 | `TrustFormat.kt` (`TrustLimits`) | in tutti i test sopra |
-| §8 | `nas/SharePath.kt`, `codec/TextRules.kt`, `nas/NasLayout.kt` (`LocalNames`, `ImageBounds`) | `SharePathTest`, `Base32AndTextTest` |
+| §8 | `nas/SharePath.kt`, `codec/TextRules.kt`, `nas/NasLayout.kt` (`LocalNames`, `ImageBounds`), `registry/Registration.kt` (`LookAlike`) | `SharePathTest`, `Base32AndTextTest`, `ReviewFixesTest` (B1, B2, I7) |
+
+I test JVM usano un NAS finto volutamente scomodo: elenchi in ordine casuale e nomi senza distinzione di
+maiuscole (I3).
 
 Comandi: `gradlew.bat :core-trust:testDebugUnitTest :core-trust:lintDebug`; sul telefono
 `set ANDROID_SERIAL=<seriale>` e `gradlew.bat :core-trust:connectedDebugAndroidTest`.

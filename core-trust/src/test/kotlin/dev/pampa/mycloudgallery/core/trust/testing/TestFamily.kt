@@ -1,22 +1,25 @@
 package dev.pampa.mycloudgallery.core.trust.testing
 
 import dev.pampa.mycloudgallery.core.trust.Verdict
+import dev.pampa.mycloudgallery.core.trust.crypto.EcPublicKey
 import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKey
 import dev.pampa.mycloudgallery.core.trust.crypto.Signer
 import dev.pampa.mycloudgallery.core.trust.crypto.TrustIds
+import dev.pampa.mycloudgallery.core.trust.nas.PublishResult
+import dev.pampa.mycloudgallery.core.trust.registry.ApprovalProof
+import dev.pampa.mycloudgallery.core.trust.registry.CommitResult
 import dev.pampa.mycloudgallery.core.trust.registry.DeviceStatus
 import dev.pampa.mycloudgallery.core.trust.registry.FamilyAuthority
 import dev.pampa.mycloudgallery.core.trust.registry.FamilyConfig
 import dev.pampa.mycloudgallery.core.trust.registry.RegistrationRequest
+import dev.pampa.mycloudgallery.core.trust.registry.RegistryDraft
 import dev.pampa.mycloudgallery.core.trust.registry.RegistryState
 import dev.pampa.mycloudgallery.core.trust.registry.RegistryVerifier
-import dev.pampa.mycloudgallery.core.trust.registry.SignedRegistry
 import dev.pampa.mycloudgallery.core.trust.registry.TrustAnchor
-import dev.pampa.mycloudgallery.core.trust.nas.PublishResult
 
 /**
  * Una famiglia di prova: chiave di famiglia, telefono dell'admin (fondatore) e area comune in memoria.
- * Ogni operazione dell'admin pubblica la nuova versione del registro e aggiorna [state].
+ * Ogni operazione dell'admin pubblica la nuova versione del registro (`commit`) e aggiorna [state].
  */
 class TestFamily(
   val clock: FakeNasClock = FakeNasClock(),
@@ -28,63 +31,71 @@ class TestFamily(
   val adminDevice: Signer = newSigner()
   val config = FamilyConfig(nasHost = "mycloudex2ultra.fritz.box", commonShare = "Public")
 
-  private var authority = FamilyAuthority(familyKey, clock)
+  var authority = FamilyAuthority(familyKey, clock)
+    private set
 
-  /** Tutte le versioni firmate, in ordine. */
-  val history = ArrayList<SignedRegistry>()
+  /** I byte firmati di tutte le versioni pubblicate da questo admin, in ordine. */
+  val history = ArrayList<ByteArray>()
 
   lateinit var state: RegistryState
     private set
 
   /** L'ancora che il QR darebbe a un dispositivo nuovo adesso. */
-  fun anchor(): TrustAnchor = TrustAnchor.create(familyId, state.trustedFamilyKey.fingerprint, state.registry.version)!!
+  fun anchor(): TrustAnchor = state.toAnchor()
 
   /** L'ancora di un dispositivo configurato a mano (solo impronta, nessuna versione minima). */
   fun manualAnchor(): TrustAnchor = TrustAnchor.create(familyId, familyKey.publicKey.fingerprint, 0)!!
 
   init {
-    val founder = request(adminDevice, "Telefono di Admin", "admin")
-    publish(authority.found(familyId, config, verified(founder)))
+    val founder = verified(request(adminDevice, "Telefono di Admin", "admin"))
+    val signed = authority.found(familyId, config, founder)
+    check(FamilyAuthority.publishFounding(common, signed) == PublishResult.CREATED)
+    history.add(signed.bytes)
+    state = (RegistryVerifier.accept(signed.bytes, null, manualAnchor()) as Verdict.Accepted).value
   }
 
   fun request(device: Signer, name: String, nasUser: String): ByteArray =
     RegistrationRequest.sign(device, familyId, name, "SM-S931B", nasUser, clock.nowMillis())
 
   fun verified(requestBytes: ByteArray): RegistrationRequest {
-    val signer = RegistrationRequest.verify(requestBytes, familyId, fileNameOf(requestBytes))
-    return (signer as Verdict.Accepted).value
+    val verdict = RegistrationRequest.verify(requestBytes, familyId, fileNameOf(requestBytes))
+    return (verdict as Verdict.Accepted).value
   }
+
+  /** La prova normale: l'admin digita il codice che legge sul dispositivo nuovo. */
+  fun typed(request: RegistrationRequest) = ApprovalProof.TypedCode(request.approvalCode)
 
   /** Approva un dispositivo nuovo e restituisce il suo firmatario. */
   fun approveNewDevice(name: String = "Tablet profilo Mamma", nasUser: String = "mamma", admin: Boolean = false): Signer {
     val device = newSigner()
-    publish(authority.approve(state, verified(request(device, name, nasUser)), admin))
+    val request = verified(request(device, name, nasUser))
+    commit(authority.approve(state, request, typed(request), firstSeenAt = clock.nowMillis(), admin = admin))
     return device
   }
 
   fun changeStatus(device: Signer, status: DeviceStatus, frozenHeads: List<String> = emptyList()) {
-    publish(authority.changeStatus(state, TrustIds.deviceIdOf(device.publicKey), status, frozenHeads))
+    commit(authority.changeStatus(state, TrustIds.deviceIdOf(device.publicKey), status, frozenHeads))
   }
 
   fun rotate(): FamilyKey {
     val next = FamilyKey.generate()
-    publish(authority.rotateTo(state, next))
+    commit(authority.rotateTo(state, next))
     familyKey = next
     authority = FamilyAuthority(next, clock)
     return next
   }
 
-  fun publish(signed: SignedRegistry) {
-    check(FamilyAuthority.publish(common, signed) == PublishResult.CREATED)
-    history.add(signed)
-    val current = if (this::state.isInitialized) state else null
-    val anchor = TrustAnchor.create(familyId, familyKey.publicKey.fingerprint, 0)!!
-    state = (RegistryVerifier.accept(signed.bytes, current, anchor) as Verdict.Accepted).value
+  fun commit(draft: RegistryDraft): RegistryState {
+    val result = authority.commit(common, draft)
+    check(result is CommitResult.Published) { "pubblicazione non riuscita: $result" }
+    history.add(result.state.signedBytes)
+    state = result.state
+    return state
   }
 
   private fun fileNameOf(requestBytes: ByteArray): String {
     // La chiave pubblica sta nell'intestazione della busta (byte 6..96).
     val spki = requestBytes.copyOfRange(6, 6 + 91)
-    return TrustIds.deviceIdOf(dev.pampa.mycloudgallery.core.trust.crypto.EcPublicKey.fromSpki(spki))
+    return TrustIds.deviceIdOf(EcPublicKey.fromSpki(spki))
   }
 }

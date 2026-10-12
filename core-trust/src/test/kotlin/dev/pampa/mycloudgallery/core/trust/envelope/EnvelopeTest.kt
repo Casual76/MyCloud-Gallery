@@ -29,7 +29,7 @@ class EnvelopeTest {
 
     assertThat(opened.signer).isEqualTo(signer.publicKey)
     assertThat(opened.payloadJson()).isEqualTo(payload)
-    assertThat(opened.fileHash).hasLength(52)
+    assertThat(opened.contentHash).hasLength(52)
   }
 
   @Test

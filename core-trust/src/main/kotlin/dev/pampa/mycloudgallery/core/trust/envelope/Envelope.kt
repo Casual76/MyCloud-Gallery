@@ -6,6 +6,7 @@ import dev.pampa.mycloudgallery.core.trust.TrustLimits
 import dev.pampa.mycloudgallery.core.trust.codec.CanonicalJson
 import dev.pampa.mycloudgallery.core.trust.codec.JsonObject
 import dev.pampa.mycloudgallery.core.trust.crypto.EcPublicKey
+import dev.pampa.mycloudgallery.core.trust.crypto.EcdsaDer
 import dev.pampa.mycloudgallery.core.trust.crypto.Hashes
 import dev.pampa.mycloudgallery.core.trust.crypto.Signer
 import dev.pampa.mycloudgallery.core.trust.crypto.TrustAlgorithms
@@ -47,8 +48,12 @@ internal class SignedEnvelope(
   val type: DocType,
   val signer: EcPublicKey,
   val payload: ByteArray,
-  /** SHA-256 in base32 dell'intero file: l'identita' di questa versione. */
-  val fileHash: String,
+  /**
+   * SHA-256 (base32) dei soli byte FIRMATI (intestazione + contenuto, senza la firma): l'identita' di
+   * questa versione. Non dipende dai byte della firma, che non sono firmati (revisione 1.4, A3): due firme
+   * valide dello stesso contenuto sono lo stesso dato.
+   */
+  val contentHash: String,
 ) {
   /** Il payload come JSON canonico; da chiamare solo DOPO aver deciso che il firmatario e' fidato. */
   fun payloadJson(): JsonObject {
@@ -71,8 +76,9 @@ internal class SignedEnvelope(
  * 102+N S  firma ECDSA P-256/SHA-256 in DER
  * ```
  *
- * Si firma `DOMINIO || byte[0, 101+N)`. La lettura controlla dimensioni, versione, tipo e firma PRIMA di
- * interpretare il payload, e non alloca mai in base a lunghezze dichiarate dal file.
+ * Si firma `DOMINIO || byte[0, 101+N)`. La firma e' in forma canonica (DER minimo, `s` basso). La lettura
+ * controlla dimensioni, versione, tipo e firma PRIMA di interpretare il payload, e non alloca mai in base a
+ * lunghezze dichiarate dal file. L'identita' di un file e' l'impronta dei byte firmati ([SignedEnvelope.contentHash]).
  */
 internal object Envelope {
 
@@ -94,13 +100,18 @@ internal object Envelope {
       .putInt(body.size)
       .put(body)
       .array()
-    val signature = signer.sign(DOMAIN + signed)
+    // Forma canonica anche se il Signer non la garantisce (s basso, DER minimo).
+    val signature = EcdsaDer.normalize(signer.sign(DOMAIN + signed))
     require(signature.size in MIN_SIGNATURE_BYTES..TrustAlgorithms.MAX_SIGNATURE_BYTES) { "Firma di lunghezza inattesa." }
     return signed + byteArrayOf(signature.size.toByte()) + signature
   }
 
   /** Lancia [dev.pampa.mycloudgallery.core.trust.TrustViolation]. */
-  fun open(bytes: ByteArray, expected: DocType): SignedEnvelope {
+  fun open(input: ByteArray, expected: DocType): SignedEnvelope {
+    ensure(input.size <= maxFileBytes(expected), RejectReason.TOO_LARGE, "busta: file troppo grande")
+    // Una copia privata: verifica e interpretazione lavorano sugli stessi byte anche se il chiamante
+    // modifica il suo array nel frattempo.
+    val bytes = input.copyOf()
     ensure(bytes.size <= maxFileBytes(expected), RejectReason.TOO_LARGE, "busta: file troppo grande")
     ensure(bytes.size >= HEADER_BYTES + 1 + 1 + MIN_SIGNATURE_BYTES, RejectReason.MALFORMED, "busta: troppo corta")
     for (i in MAGIC.indices) ensure(bytes[i] == MAGIC[i], RejectReason.MALFORMED, "busta: firma del formato")
@@ -119,12 +130,13 @@ internal object Envelope {
     ensure(bytes.size == signatureLengthAt + 1 + signatureLength, RejectReason.MALFORMED, "busta: lunghezza totale")
     val message = DOMAIN + bytes.copyOfRange(0, signatureLengthAt)
     val signature = bytes.copyOfRange(signatureLengthAt + 1, bytes.size)
+    // Solo la forma canonica (EcdsaDer): la variante s → n − s di una firma valida e' rifiutata.
     ensure(signer.verify(message, signature), RejectReason.BAD_SIGNATURE, "busta: firma non valida")
     return SignedEnvelope(
       type = type,
       signer = signer,
       payload = bytes.copyOfRange(HEADER_BYTES, signatureLengthAt),
-      fileHash = Hashes.sha256Name(bytes),
+      contentHash = Hashes.sha256Name(bytes.copyOfRange(0, signatureLengthAt)),
     )
   }
 }

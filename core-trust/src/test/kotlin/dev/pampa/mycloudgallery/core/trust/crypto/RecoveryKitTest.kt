@@ -3,12 +3,16 @@ package dev.pampa.mycloudgallery.core.trust.crypto
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.trust.RejectReason
 import dev.pampa.mycloudgallery.core.trust.acceptedOrNull
+import dev.pampa.mycloudgallery.core.trust.nas.NasLayout
+import dev.pampa.mycloudgallery.core.trust.registry.ApprovalProof
+import dev.pampa.mycloudgallery.core.trust.registry.CommitResult
 import dev.pampa.mycloudgallery.core.trust.registry.FamilyAuthority
-import dev.pampa.mycloudgallery.core.trust.registry.RegistryVerifier
+import dev.pampa.mycloudgallery.core.trust.registry.RegistrySync
 import dev.pampa.mycloudgallery.core.trust.rejectionOrNull
 import dev.pampa.mycloudgallery.core.trust.testing.NAS_NOON
 import dev.pampa.mycloudgallery.core.trust.testing.SoftwareKeyProvider
 import dev.pampa.mycloudgallery.core.trust.testing.TestFamily
+import dev.pampa.mycloudgallery.core.trust.testing.deviceId
 import org.junit.Test
 
 class RecoveryKitTest {
@@ -17,10 +21,11 @@ class RecoveryKitTest {
   private val familyId = TrustIds.random()
   private val code = RecoveryCode.generate()
   private val kit = RecoveryKit.seal(familyKey, familyId, code, NAS_NOON)
+  private val fingerprint = familyKey.publicKey.fingerprint
 
   @Test
   fun kitAndataERitorno_laChiaveRecuperataFirmaComeLOriginale() {
-    val opened = RecoveryKit.open(kit, code, familyId).acceptedOrNull()!!
+    val opened = RecoveryKit.open(kit, code, familyId, fingerprint).acceptedOrNull()!!
 
     assertThat(opened.familyId).isEqualTo(familyId)
     assertThat(opened.createdAt).isEqualTo(NAS_NOON)
@@ -30,36 +35,46 @@ class RecoveryKitTest {
   }
 
   @Test
-  fun recuperoDellAdmin_conLaChiaveDelKitSiContinuaLaStessaFamiglia() {
+  fun recuperoDellAdmin_daZero_conLAncoraDelFoglioEDelQrDiStato() {
     val family = TestFamily()
+    val tablet = family.approveNewDevice()
     val kitOfFamily = RecoveryKit.seal(family.familyKey, family.familyId, code, family.clock.now)
+    family.common.publishExclusive(NasLayout.recoveryKitFile(family.familyId, family.familyKey.publicKey.fingerprint), kitOfFamily)
+    // Il QR "stato della famiglia" mostrato dal tablet: id, impronta, versione corrente.
+    val stateQr = family.state.toAnchor()
 
-    // Il telefono dell'admin e' perso: un dispositivo nuovo apre il kit e firma la versione successiva.
-    val recovered = RecoveryKit.open(kitOfFamily, RecoveryCode.parse(code.toDisplayString())!!, family.familyId).acceptedOrNull()!!
+    // Il telefono dell'admin e' perso. Il dispositivo nuovo NON ha lo stato del vecchio: solo il foglio
+    // (codice + impronta) e il QR di stato. Apre il kit, si sincronizza dal NAS, si approva da se'.
+    val sheetFingerprint = family.familyKey.publicKey.fingerprint
+    val blob = family.common.bytesAt(NasLayout.recoveryKitFile(family.familyId, sheetFingerprint))!!
+    val recovered = RecoveryKit.open(blob, RecoveryCode.parse(code.toDisplayString())!!, family.familyId, sheetFingerprint).acceptedOrNull()!!
+    val synced = RegistrySync(family.common).refresh(current = null, anchor = stateQr).state!!
     val newAdmin = SoftwareKeyProvider().deviceSigner()
     val authority = FamilyAuthority(recovered.familyKey, family.clock)
-    val signed = authority.approve(family.state, family.verified(family.request(newAdmin, "Telefono nuovo di Admin", "admin")), admin = true)
+    val request = family.verified(family.request(newAdmin, "Telefono nuovo di Admin", "admin"))
+    val result = authority.commit(family.common, authority.approve(synced, request, ApprovalProof.ScannedKey(newAdmin.publicKey), family.clock.now, admin = true))
 
-    assertThat(RegistryVerifier.accept(signed.bytes, family.state, family.anchor()).acceptedOrNull()).isNotNull()
+    assertThat(result).isInstanceOf(CommitResult.Published::class.java)
+    assertThat((result as CommitResult.Published).state.canWrite(tablet.deviceId)).isTrue()
   }
 
   @Test
   fun codiceSbagliatoOKitAlteratoRifiutati() {
-    assertThat(RecoveryKit.open(kit, RecoveryCode.generate()).rejectionOrNull()).isEqualTo(RejectReason.BAD_SIGNATURE)
+    assertThat(RecoveryKit.open(kit, RecoveryCode.generate(), familyId, fingerprint).rejectionOrNull()).isEqualTo(RejectReason.BAD_SIGNATURE)
 
     for (index in listOf(5, 30, 60, 70, 80, kit.size - 1)) {
       val tampered = kit.copyOf().also { it[index] = (it[index].toInt() xor 0x40).toByte() }
-      assertThat(RecoveryKit.open(tampered, code).rejectionOrNull()).isEqualTo(RejectReason.BAD_SIGNATURE)
+      assertThat(RecoveryKit.open(tampered, code, familyId, fingerprint).rejectionOrNull()).isIn(listOf(RejectReason.BAD_SIGNATURE, RejectReason.WRONG_FAMILY, RejectReason.SIGNER_NOT_APPROVED))
     }
   }
 
   @Test
   fun kitMalformatoOAltraFamiglia() {
-    assertThat(RecoveryKit.open(ByteArray(0), code).rejectionOrNull()).isEqualTo(RejectReason.MALFORMED)
-    assertThat(RecoveryKit.open(ByteArray(5000), code).rejectionOrNull()).isEqualTo(RejectReason.MALFORMED)
-    assertThat(RecoveryKit.open(kit.copyOf().also { it[0] = 'X'.code.toByte() }, code).rejectionOrNull()).isEqualTo(RejectReason.MALFORMED)
-    assertThat(RecoveryKit.open(kit.copyOf().also { it[4] = 9 }, code).rejectionOrNull()).isEqualTo(RejectReason.NEWER_FORMAT)
-    assertThat(RecoveryKit.open(kit, code, expectedFamilyId = TrustIds.random()).rejectionOrNull()).isEqualTo(RejectReason.WRONG_FAMILY)
+    assertThat(RecoveryKit.open(ByteArray(0), code, familyId, fingerprint).rejectionOrNull()).isEqualTo(RejectReason.MALFORMED)
+    assertThat(RecoveryKit.open(ByteArray(5000), code, familyId, fingerprint).rejectionOrNull()).isEqualTo(RejectReason.MALFORMED)
+    assertThat(RecoveryKit.open(kit.copyOf().also { it[0] = 'X'.code.toByte() }, code, familyId, fingerprint).rejectionOrNull()).isEqualTo(RejectReason.MALFORMED)
+    assertThat(RecoveryKit.open(kit.copyOf().also { it[4] = 9 }, code, familyId, fingerprint).rejectionOrNull()).isEqualTo(RejectReason.NEWER_FORMAT)
+    assertThat(RecoveryKit.open(kit, code, TrustIds.random(), fingerprint).rejectionOrNull()).isEqualTo(RejectReason.WRONG_FAMILY)
   }
 
   @Test

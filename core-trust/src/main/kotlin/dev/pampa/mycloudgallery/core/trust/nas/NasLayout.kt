@@ -32,9 +32,15 @@ object NasLayout {
     ROOT.child("devices").child(deviceId).child(kind).child("seg").child(hash)
 
   // --- Prenotazioni ---------------------------------------------------------------------------------------
+  /** `leases/<impronta della risorsa>/<gruppo>/<generazione>`: gruppi di 256 generazioni (revisione 1.4, M6). */
   fun leaseDir(resource: String): SharePath = ROOT.child("leases").child(resourceName(resource))
 
-  fun leaseFile(resource: String, generation: Long): SharePath = leaseDir(resource).child(versionName(generation))
+  fun leaseShardOf(generation: Long): Long = (generation - 1) / TrustLimits.LEASE_SHARD_SIZE + 1
+
+  fun leaseShardDir(resource: String, shard: Long): SharePath = leaseDir(resource).child(versionName(shard))
+
+  fun leaseFile(resource: String, generation: Long): SharePath =
+    leaseShardDir(resource, leaseShardOf(generation)).child(versionName(generation))
 
   fun resourceName(resource: String): String = Hashes.sha256Name(resource.toByteArray(Charsets.UTF_8))
 
@@ -51,7 +57,12 @@ object NasLayout {
     ROOT.child("albums").child(albumId).child(deviceId).child("head")
 
   // --- Kit di recupero (area privata dell'admin) ------------------------------------------------------
-  fun recoveryKitFile(familyId: String): SharePath = ROOT.child("recovery").child(familyId)
+  /**
+   * Un kit per ogni chiave di famiglia (revisione 1.4, M4): dopo una rotazione il kit nuovo ha un posto suo,
+   * e quello vecchio si riconosce e si cancella (azione locale confermata, Fase 2.4).
+   */
+  fun recoveryKitFile(familyId: String, keyFingerprint: String): SharePath =
+    ROOT.child("recovery").child(familyId).child(keyFingerprint)
 
   // --- Nomi numerati ----------------------------------------------------------------------------------
   private const val VERSION_DIGITS = 20
@@ -62,10 +73,10 @@ object NasLayout {
     return version.toString().padStart(VERSION_DIGITS, '0')
   }
 
-  /** Il numero di un nome lungo esattamente 20 cifre ASCII, oppure null. */
+  /** Il numero di un nome lungo esattamente 20 cifre ASCII, tra 1 e [TrustLimits.MAX_VERSION], oppure null. */
   fun parseVersionName(name: String): Long? {
     if (name.length != VERSION_DIGITS || !name.all { it in '0'..'9' }) return null
-    return name.toLongOrNull()?.takeIf { it >= 1 }
+    return name.toLongOrNull()?.takeIf { it in 1..TrustLimits.MAX_VERSION }
   }
 }
 

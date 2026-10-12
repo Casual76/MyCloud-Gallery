@@ -122,16 +122,16 @@ class LeaseTest {
 
   @Test
   fun cartellaDellePrenotazioniInondata_siLavoraSenza() {
-    repeat(TrustLimits.MAX_LIST_LEASE_GENERATIONS + 1) {
-      family.common.attackerWrite(NasLayout.leaseFile(resource, (it + 1).toLong()).value, ByteArray(1))
-    }
+    phoneLeases.tryAcquire(family.state, resource, quarterHour)
+    val shardDir = NasLayout.leaseShardDir(resource, 1).value
+    repeat(TrustLimits.MAX_LIST_LEASE_GENERATIONS + 1) { family.common.attackerWrite("$shardDir/spazzatura-$it", ByteArray(1)) }
 
-    assertThat(phoneLeases.tryAcquire(family.state, resource, quarterHour)).isEqualTo(AcquireResult.Contended)
+    assertThat(tabletLeases.tryAcquire(family.state, resource, quarterHour)).isEqualTo(AcquireResult.Contended)
   }
 
   @Test
   fun generazioneAlLimite_siLavoraSenza() {
-    family.common.attackerWrite(NasLayout.leaseFile(resource, 999_999_999L).value, ByteArray(1))
+    family.common.attackerWrite(NasLayout.leaseFile(resource, TrustLimits.MAX_VERSION).value, ByteArray(1))
 
     assertThat(phoneLeases.tryAcquire(family.state, resource, quarterHour)).isEqualTo(AcquireResult.Contended)
   }

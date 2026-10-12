@@ -25,11 +25,13 @@ class FamilyKey private constructor(
 ) : Signer {
 
   override fun sign(message: ByteArray): ByteArray =
-    Signature.getInstance(TrustAlgorithms.SIGNATURE).run {
-      initSign(privateKey)
-      update(message)
-      sign()
-    }
+    EcdsaDer.normalize(
+      Signature.getInstance(TrustAlgorithms.SIGNATURE).run {
+        initSign(privateKey)
+        update(message)
+        sign()
+      },
+    )
 
   /** PKCS#8 della chiave privata: SOLO per cifrarla subito (kit, cassaforte). Va azzerato dal chiamante. */
   internal fun exportPkcs8(): ByteArray = privateKey.encoded ?: error("Chiave privata non esportabile.")

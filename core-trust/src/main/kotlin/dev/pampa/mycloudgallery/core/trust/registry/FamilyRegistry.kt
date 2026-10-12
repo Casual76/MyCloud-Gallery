@@ -17,8 +17,10 @@ import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import dev.pampa.mycloudgallery.core.trust.violation
 
 /**
- * Lo stato di un dispositivo nel registro (`docs/formato-nas.md` §4.4). Non si torna mai ad
- * [APPROVED]: un dispositivo ritrovato o reinstallato ha una chiave nuova e quindi un id nuovo (E-S2, E-O7).
+ * Lo stato di un dispositivo nel registro (`docs/formato-nas.md` §4.6). Gli stati sono in ordine di
+ * severita' e si va solo avanti: non si torna mai ad [APPROVED]; un dispositivo ritrovato o reinstallato ha
+ * una chiave nuova e quindi un id nuovo (E-S2, E-O7). La regola vale per chi firma E per chi verifica
+ * ([FamilyRegistry.checkNoRegressionFrom]).
  */
 enum class DeviceStatus(val wire: String) {
   /** I suoi dati sono accettati. */
@@ -34,12 +36,8 @@ enum class DeviceStatus(val wire: String) {
   LOST("lost"),
   ;
 
-  fun canBecome(next: DeviceStatus): Boolean = when (this) {
-    APPROVED -> next == RETIRED || next == REVOKED || next == LOST
-    RETIRED -> next == REVOKED || next == LOST
-    REVOKED -> next == LOST
-    LOST -> false
-  }
+  /** Si puo' passare solo a uno stato piu' severo (relazione transitiva: vale anche saltando versioni). */
+  fun canBecome(next: DeviceStatus): Boolean = next.ordinal > ordinal
 
   companion object {
     fun fromWire(text: String): DeviceStatus =
@@ -63,7 +61,7 @@ data class FamilyConfig(
 
   internal companion object {
     fun read(f: Fields): FamilyConfig = FamilyConfig(
-      nasHost = f.string("nasHost", 253),
+      nasHost = f.string("nasHost", TrustLimits.MAX_HOST_CHARS),
       commonShare = f.string("commonShare", TrustLimits.MAX_SHARE_NAME_CHARS),
     )
   }
@@ -115,9 +113,9 @@ data class DeviceEntry(
         key = EcPublicKey.fromText(f.string("key", Base32.encodedLength(EcPublicKey.SPKI_BYTES))),
         name = f.string("name", TrustLimits.MAX_DISPLAY_TEXT_CHARS),
         model = f.string("model", TrustLimits.MAX_DISPLAY_TEXT_CHARS),
-        nasUser = f.string("nasUser", 64),
+        nasUser = f.string("nasUser", TrustLimits.MAX_NAS_ACCOUNT_CHARS),
         admin = f.bool("admin"),
-        status = DeviceStatus.fromWire(f.string("status", 16)),
+        status = DeviceStatus.fromWire(f.string("status", TrustLimits.MAX_ENUM_CHARS)),
         since = f.time("since"),
         frozenHeads = f.optArray("frozenHeads", TrustLimits.MAX_FROZEN_HEADS)
           ?.map { Fields.asString(it, 64) }
@@ -144,7 +142,7 @@ data class FamilyRegistry(
 ) {
   init {
     ensure(TrustIds.isValid(familyId), RejectReason.INVALID_FIELD, "registro: id di famiglia")
-    ensure(version >= 1, RejectReason.INVALID_FIELD, "registro: versione")
+    ensure(version in 1..TrustLimits.MAX_VERSION, RejectReason.INVALID_FIELD, "registro: versione")
     ensure(devices.size <= TrustLimits.MAX_DEVICES, RejectReason.TOO_LARGE, "registro: troppi dispositivi")
     ensure(devices.zipWithNext().all { (a, b) -> a.id < b.id }, RejectReason.INVALID_FIELD, "registro: dispositivi non ordinati o ripetuti")
   }
@@ -152,6 +150,54 @@ data class FamilyRegistry(
   fun device(id: String): DeviceEntry? = devices.firstOrNull { it.id == id }
 
   fun deviceByKey(key: EcPublicKey): DeviceEntry? = devices.firstOrNull { it.key == key }
+
+  /**
+   * Il registro puo' solo diventare piu' severo verso i dispositivi che [older] conosce (revisione 1.4, A1):
+   * ognuno resta, con la stessa chiave e lo stesso account, con uno stato uguale o piu' severo; un
+   * dispositivo che resta dismesso puo' solo perdere teste congelate; l'ora di emissione non torna
+   * indietro. Dispositivi nuovi e configurazione possono cambiare. Lancia [RejectReason.REGRESSION].
+   */
+  internal fun checkNoRegressionFrom(older: FamilyRegistry) {
+    ensure(issuedAt >= older.issuedAt, RejectReason.REGRESSION, "registro: emesso prima di quello noto")
+    for (old in older.devices) {
+      val now = device(old.id) ?: violation(RejectReason.REGRESSION, "registro: un dispositivo e' sparito")
+      ensure(now.key == old.key && TextRules.sameAccount(now.nasUser, old.nasUser), RejectReason.REGRESSION, "registro: identita' cambiata")
+      ensure(now.status == old.status || old.status.canBecome(now.status), RejectReason.REGRESSION, "registro: stato tornato indietro")
+      if (now.status == DeviceStatus.RETIRED && old.status == DeviceStatus.RETIRED) {
+        ensure(old.frozenHeads.containsAll(now.frozenHeads), RejectReason.REGRESSION, "registro: teste congelate aggiunte")
+      }
+    }
+  }
+
+  /**
+   * L'unione di due rami firmati dalla famiglia (per esempio da due admin che hanno lavorato su basi
+   * diverse): ogni dispositivo con lo stato piu' severo dei due, le teste congelate in comune, la
+   * configurazione e i nomi di questo ramo. Il risultato non e' una regressione per nessuno dei due, quindi
+   * lo accettano tutti i dispositivi. Si usa solo per scelta esplicita dell'admin ([FamilyAuthority.mergeFork]).
+   */
+  internal fun joinWith(other: FamilyRegistry): FamilyRegistry {
+    require(other.familyId == familyId) { "Rami di famiglie diverse." }
+    val ids = (devices.map { it.id } + other.devices.map { it.id }).distinct().sorted()
+    val merged = ids.map { id ->
+      val mine = device(id)
+      val theirs = other.device(id)
+      when {
+        mine == null -> theirs!!
+        theirs == null -> mine
+        else -> {
+          require(mine.key == theirs.key && TextRules.sameAccount(mine.nasUser, theirs.nasUser)) { "Identita' diverse nei due rami: serve il reset." }
+          val status = if (theirs.status.ordinal > mine.status.ordinal) theirs.status else mine.status
+          val frozen = when {
+            status != DeviceStatus.RETIRED -> emptyList()
+            mine.status == DeviceStatus.RETIRED && theirs.status == DeviceStatus.RETIRED -> mine.frozenHeads.filter { it in theirs.frozenHeads }
+            else -> (if (mine.status == DeviceStatus.RETIRED) mine else theirs).frozenHeads
+          }
+          mine.copy(status = status, since = maxOf(mine.since, theirs.since), admin = mine.admin || theirs.admin, frozenHeads = frozen)
+        }
+      }
+    }
+    return copy(devices = merged, issuedAt = maxOf(issuedAt, other.issuedAt))
+  }
 
   internal fun toJson(): JsonObject = jsonObject(
     "family" to familyId.json(),
@@ -166,7 +212,7 @@ data class FamilyRegistry(
     fun read(value: JsonValue): FamilyRegistry = Fields.read(value) { f ->
       FamilyRegistry(
         familyId = f.string("family", TrustIds.LENGTH),
-        version = f.long("version", 1..Long.MAX_VALUE),
+        version = f.long("version", 1..TrustLimits.MAX_VERSION),
         issuedAt = f.time("issuedAt"),
         config = f.obj("config") { FamilyConfig.read(it) },
         devices = f.array("devices", TrustLimits.MAX_DEVICES).map { DeviceEntry.read(it) },

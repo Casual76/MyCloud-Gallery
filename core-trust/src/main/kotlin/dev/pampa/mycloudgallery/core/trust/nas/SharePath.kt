@@ -64,7 +64,10 @@ class SharePath private constructor(val components: List<String>) {
      */
     fun parseMediaPath(raw: String): SharePath {
       val path = parse(raw)
-      if (path.components[0].equals(TrustFormat.ROOT_DIR, ignoreCase = true)) hostile("percorso dentro la cartella dell'app")
+      // Confronto sulla forma NFKC: anche "．mycloudgallery" (punto a larghezza piena) e' la cartella dell'app
+      // per un livello che normalizza (revisione 1.4, B1).
+      val first = Normalizer.normalize(path.components[0], Normalizer.Form.NFKC)
+      if (first.equals(TrustFormat.ROOT_DIR, ignoreCase = true)) hostile("percorso dentro la cartella dell'app")
       return path
     }
 

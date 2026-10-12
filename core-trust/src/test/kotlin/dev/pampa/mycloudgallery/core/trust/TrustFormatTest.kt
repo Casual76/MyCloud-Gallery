@@ -31,7 +31,11 @@ class TrustFormatTest {
   @Test
   fun ilCodiceNonLeggeLOrologioDelDispositivo() {
     val sources = java.io.File("src/main/kotlin").walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
-    val forbidden = listOf("currentTimeMillis", "nanoTime", "Instant.now", "LocalDateTime.now", "Date()", "Clock.system", "elapsedRealtime")
+    val forbidden = listOf(
+      "currentTimeMillis", "nanoTime", "Instant.now", "LocalDateTime.now", "LocalDate.now", "LocalTime.now",
+      "ZonedDateTime.now", "OffsetDateTime.now", "Date()", "Clock.system", "Calendar.getInstance",
+      "GregorianCalendar", "SystemClock", "elapsedRealtime", "uptimeMillis", "TimeSource",
+    )
 
     assertThat(sources).isNotEmpty()
     for (file in sources) {

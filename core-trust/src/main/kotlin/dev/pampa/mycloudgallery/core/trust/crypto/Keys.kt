@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.core.trust.crypto
 import dev.pampa.mycloudgallery.core.trust.RejectReason
 import dev.pampa.mycloudgallery.core.trust.codec.Base32
 import dev.pampa.mycloudgallery.core.trust.violation
+import java.math.BigInteger
 import java.security.KeyFactory
 import java.security.MessageDigest
 import java.security.PublicKey
@@ -59,9 +60,14 @@ class EcPublicKey private constructor(private val spki: ByteArray) {
 
   fun toJca(): PublicKey = KeyFactory.getInstance(TrustAlgorithms.KEY_ALGORITHM).generatePublic(X509EncodedKeySpec(spki))
 
-  /** Verifica una firma DER; un errore del provider (firma malformata) vale "non valida". */
-  fun verify(message: ByteArray, signature: ByteArray): Boolean =
-    try {
+  /**
+   * Verifica una firma. Accetta SOLO la forma canonica ([EcdsaDer.isCanonical]: DER minimo con `s` basso),
+   * cosi' a una firma valida non corrisponde una seconda firma valida ottenuta senza chiave (`s → n − s`).
+   * Un errore del provider vale "non valida".
+   */
+  fun verify(message: ByteArray, signature: ByteArray): Boolean {
+    if (!EcdsaDer.isCanonical(signature)) return false
+    return try {
       Signature.getInstance(TrustAlgorithms.SIGNATURE).run {
         initVerify(toJca())
         update(message)
@@ -76,6 +82,7 @@ class EcPublicKey private constructor(private val spki: ByteArray) {
     } catch (e: IllegalArgumentException) {
       false
     }
+  }
 
   override fun equals(other: Any?): Boolean = other is EcPublicKey && other.spki.contentEquals(spki)
 
@@ -92,18 +99,94 @@ class EcPublicKey private constructor(private val spki: ByteArray) {
       0x06, 0x08, 0x2a, 0x86.toByte(), 0x48, 0xce.toByte(), 0x3d, 0x03, 0x01, 0x07, 0x03, 0x42, 0x00, 0x04,
     )
 
-    /** Lancia una violazione [RejectReason.INVALID_FIELD] se non e' uno SPKI P-256 non compresso. */
+    /**
+     * Lancia una violazione [RejectReason.INVALID_FIELD] se non e' uno SPKI P-256 non compresso con un
+     * punto della curva: coordinate minori di p e `y² = x³ − 3x + b (mod p)`. Il controllo e' nostro e non
+     * del provider, cosi' JVM (test) e Conscrypt (telefono) decidono allo stesso modo e ogni chiave ha una
+     * sola codifica, quindi un solo id e un solo codice di approvazione.
+     */
     fun fromSpki(spki: ByteArray): EcPublicKey {
       if (spki.size != SPKI_BYTES) violation(RejectReason.INVALID_FIELD, "chiave: lunghezza non valida")
       for (i in P256_SPKI_PREFIX.indices) {
         if (spki[i] != P256_SPKI_PREFIX[i]) violation(RejectReason.INVALID_FIELD, "chiave: non e' P-256")
       }
+      val x = BigInteger(1, spki.copyOfRange(P256_SPKI_PREFIX.size, P256_SPKI_PREFIX.size + 32))
+      val y = BigInteger(1, spki.copyOfRange(P256_SPKI_PREFIX.size + 32, SPKI_BYTES))
+      if (!P256.isOnCurve(x, y)) violation(RejectReason.INVALID_FIELD, "chiave: punto fuori dalla curva")
       return EcPublicKey(spki.copyOf())
     }
 
     fun fromText(text: String): EcPublicKey = fromSpki(Base32.decodeExact(text, SPKI_BYTES))
 
     fun fromJca(key: PublicKey): EcPublicKey = fromSpki(key.encoded ?: violation(RejectReason.INVALID_FIELD, "chiave: senza codifica"))
+  }
+}
+
+/** I parametri di P-256 (FIPS 186-4, D.1.2.3) che servono ai controlli fatti da noi. */
+internal object P256 {
+  val P: BigInteger = BigInteger("ffffffff00000001000000000000000000000000ffffffffffffffffffffffff", 16)
+  val N: BigInteger = BigInteger("ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551", 16)
+  val HALF_N: BigInteger = N.shiftRight(1)
+  private val B: BigInteger = BigInteger("5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b", 16)
+  private val THREE: BigInteger = BigInteger.valueOf(3)
+
+  fun isOnCurve(x: BigInteger, y: BigInteger): Boolean {
+    if (x.signum() < 0 || x >= P || y.signum() < 0 || y >= P) return false
+    val left = y.multiply(y).mod(P)
+    val right = x.multiply(x).multiply(x).subtract(THREE.multiply(x)).add(B).mod(P)
+    return left == right
+  }
+}
+
+/**
+ * La forma canonica delle firme ECDSA del formato: `SEQUENCE { INTEGER r, INTEGER s }` in DER minimo
+ * (lunghezze corte, interi positivi senza zeri superflui), `1 ≤ r < n`, `1 ≤ s ≤ n/2` ("s basso").
+ *
+ * ECDSA ammette due firme valide, `(r, s)` e `(r, n − s)`, per lo stesso messaggio: chi firma normalizza
+ * ([normalize]) e chi verifica rifiuta l'altra forma ([isCanonical]). Il Keystore non garantisce `s` basso,
+ * quindi si normalizza sempre dopo aver firmato.
+ */
+object EcdsaDer {
+
+  /** (r, s) di una firma in DER minimo, oppure null. Non controlla `s` basso. */
+  internal fun parse(der: ByteArray): Pair<BigInteger, BigInteger>? {
+    if (der.size < 8 || der.size > TrustAlgorithms.MAX_SIGNATURE_BYTES) return null
+    if (der[0].toInt() != 0x30 || (der[1].toInt() and 0xff) != der.size - 2) return null
+    var at = 2
+    fun integer(): BigInteger? {
+      if (at + 2 > der.size || der[at].toInt() != 0x02) return null
+      val length = der[at + 1].toInt() and 0xff
+      val start = at + 2
+      if (length !in 1..33 || start + length > der.size) return null
+      val first = der[start].toInt() and 0xff
+      if (first >= 0x80) return null // negativo
+      if (length > 1 && first == 0 && (der[start + 1].toInt() and 0x80) == 0) return null // zero superfluo
+      at = start + length
+      return BigInteger(1, der.copyOfRange(start, start + length))
+    }
+    val r = integer() ?: return null
+    val s = integer() ?: return null
+    if (at != der.size) return null
+    if (r.signum() <= 0 || r >= P256.N || s.signum() <= 0 || s >= P256.N) return null
+    return r to s
+  }
+
+  fun isCanonical(der: ByteArray): Boolean {
+    val (_, s) = parse(der) ?: return false
+    return s <= P256.HALF_N
+  }
+
+  /** La stessa firma in forma canonica (`s` basso). Lancia se [der] non e' una firma DER valida. */
+  fun normalize(der: ByteArray): ByteArray {
+    val (r, s) = requireNotNull(parse(der)) { "Firma DER non valida dal provider." }
+    return encode(r, if (s > P256.HALF_N) P256.N.subtract(s) else s)
+  }
+
+  internal fun encode(r: BigInteger, s: BigInteger): ByteArray {
+    val rb = r.toByteArray()
+    val sb = s.toByteArray()
+    val body = byteArrayOf(0x02, rb.size.toByte()) + rb + byteArrayOf(0x02, sb.size.toByte()) + sb
+    return byteArrayOf(0x30, body.size.toByte()) + body
   }
 }
 
@@ -114,7 +197,7 @@ class EcPublicKey private constructor(private val spki: ByteArray) {
 interface Signer {
   val publicKey: EcPublicKey
 
-  /** Firma ECDSA P-256/SHA-256 in DER di [message]. */
+  /** Firma ECDSA P-256/SHA-256 di [message], in forma canonica ([EcdsaDer]). */
   fun sign(message: ByteArray): ByteArray
 }
 

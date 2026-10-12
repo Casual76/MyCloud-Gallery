@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.core.trust
 import android.content.pm.PackageManager
 import dev.pampa.mycloudgallery.core.trust.crypto.AndroidKeystoreFamilyKeyVault
 import dev.pampa.mycloudgallery.core.trust.crypto.AndroidKeystoreKeyProvider
+import dev.pampa.mycloudgallery.core.trust.crypto.EcdsaDer
 import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKey
 import dev.pampa.mycloudgallery.core.trust.crypto.KeyProtection
 import dev.pampa.mycloudgallery.core.trust.crypto.TrustIds
@@ -86,6 +87,30 @@ class KeystoreDeviceTest {
     // Un byte cambiato e la firma del Keystore non vale piu'.
     val tampered = head.copyOf().also { it[it.size - 10] = (it[it.size - 10].toInt() xor 1).toByte() }
     assertEquals(RejectReason.BAD_SIGNATURE, HeadVerifier.accept(tampered, registry, HeadLocation("Public", deviceId, HeadKind.INDEX, 1), null, "admin").rejectionOrNull())
+  }
+
+  /**
+   * Revisione 1.4, M3: la chiave che cifra la chiave di famiglia si usa solo a telefono sbloccato; la chiave
+   * del dispositivo no (i lavori notturni firmano a telefono bloccato) e non chiede autenticazione.
+   */
+  @Test
+  fun politicheDelleChiavi_cassafortesoloSbloccato_chiaveDelDispositivoAncheBloccato() {
+    val wrapping = AndroidKeystoreFamilyKeyVault.wrappingKeySpec("x", strongBox = false)
+    val device = AndroidKeystoreKeyProvider.keySpec("y", strongBox = false)
+
+    assertTrue(wrapping.isUnlockedDeviceRequired)
+    assertFalse(device.isUnlockedDeviceRequired)
+    assertFalse(device.isUserAuthenticationRequired)
+  }
+
+  @Test
+  fun leFirmeDelKeystoreSonoInFormaCanonica() {
+    val device = provider.deviceSigner()
+    repeat(50) {
+      val signature = device.sign("messaggio $it".toByteArray())
+      assertTrue(EcdsaDer.isCanonical(signature))
+      assertTrue(device.publicKey.verify("messaggio $it".toByteArray(), signature))
+    }
   }
 
   @Test

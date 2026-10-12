@@ -49,42 +49,52 @@ val EcPublicKey.deviceId: String get() = TrustIds.deviceIdOf(this)
 /**
  * Una share in memoria con la semantica di [NasFileSystem] (pubblicazione esclusiva, nessuna cancellazione),
  * piu' le porte di servizio di un attaccante con accesso SMB in scrittura ma senza chiavi.
+ *
+ * Volutamente scomoda come un NAS vero (revisione 1.4, I3): gli elenchi escono in ordine casuale (con un
+ * seme, quindi riproducibile) e i nomi non distinguono maiuscole e minuscole, come Samba per i client
+ * Windows: `ABC` e `abc` sono lo stesso file.
  */
-class FakeNasFileSystem(override val shareName: String = "Public") : NasFileSystem {
-  private val files = LinkedHashMap<String, ByteArray>()
+class FakeNasFileSystem(override val shareName: String = "Public", seed: Long = 1) : NasFileSystem {
+  private val files = LinkedHashMap<String, Pair<String, ByteArray>>() // chiave minuscola -> (nome vero, byte)
+  private val random = java.util.Random(seed)
 
   var reads: Int = 0
     private set
 
+  private fun key(path: String) = path.lowercase(java.util.Locale.ROOT)
+
   override fun list(dir: SharePath, limit: Int): NasListing {
-    val prefix = dir.value + "/"
-    val names = files.keys.filter { it.startsWith(prefix) }.map { it.removePrefix(prefix).substringBefore('/') }.distinct()
+    val prefix = key(dir.value) + "/"
+    val names = files.entries.filter { it.key.startsWith(prefix) }
+      .map { it.value.first.substring(prefix.length).substringBefore('/') }
+      .distinctBy { it.lowercase(java.util.Locale.ROOT) }
+      .shuffled(random)
     return NasListing(names.take(limit), truncated = names.size > limit)
   }
 
   override fun read(path: SharePath, maxBytes: Int): NasRead {
     reads++
-    val bytes = files[path.value] ?: return NasRead.NotFound
+    val bytes = files[key(path.value)]?.second ?: return NasRead.NotFound
     return if (bytes.size > maxBytes) NasRead.TooLarge else NasRead.Data(bytes.copyOf())
   }
 
   override fun publishExclusive(path: SharePath, bytes: ByteArray): PublishResult {
-    if (files.containsKey(path.value)) return PublishResult.ALREADY_EXISTS
-    files[path.value] = bytes.copyOf()
+    if (files.containsKey(key(path.value))) return PublishResult.ALREADY_EXISTS
+    files[key(path.value)] = path.value to bytes.copyOf()
     return PublishResult.CREATED
   }
 
   // --- Porte di servizio: cio' che puo' fare chiunque abbia SMB in scrittura -----------------------------
 
-  fun bytesAt(path: SharePath): ByteArray? = files[path.value]?.copyOf()
+  fun bytesAt(path: SharePath): ByteArray? = files[key(path.value)]?.second?.copyOf()
 
   fun attackerWrite(rawPath: String, bytes: ByteArray) {
-    files[rawPath] = bytes.copyOf()
+    files[key(rawPath)] = rawPath to bytes.copyOf()
   }
 
   fun attackerDelete(path: SharePath) {
-    files.remove(path.value)
+    files.remove(key(path.value))
   }
 
-  fun paths(): Set<String> = files.keys.toSet()
+  fun paths(): Set<String> = files.values.map { it.first }.toSet()
 }

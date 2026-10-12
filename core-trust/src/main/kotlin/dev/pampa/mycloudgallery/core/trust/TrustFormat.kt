@@ -48,11 +48,19 @@ object TrustLimits {
   const val MAX_JSON_ARRAY_ITEMS: Int = 8192
 
   // --- Contenuti -------------------------------------------------------------------------------------
-  const val MAX_DEVICES: Int = 64
+  /** Le voci del registro non si tolgono mai (anche revocate): 256 bastano per anni di telefoni e reinstallazioni. */
+  const val MAX_DEVICES: Int = 256
   const val MAX_FROZEN_HEADS: Int = 64
   const val MAX_HEAD_SEGMENTS: Int = 8192
   const val MAX_DISPLAY_TEXT_CHARS: Int = 64
   const val MAX_RESOURCE_KEY_CHARS: Int = 256
+  const val MAX_NAS_ACCOUNT_CHARS: Int = 64
+  const val MAX_HOST_CHARS: Int = 253
+  const val MAX_ENUM_CHARS: Int = 16
+  const val MAX_PKCS8_BYTES: Int = 512
+
+  /** Tetto dei numeri di versione e di generazione: oltre, il campo e' malformato. */
+  const val MAX_VERSION: Long = 1_000_000_000L
 
   // --- Percorsi relativi alla share --------------------------------------------------------------------
   const val MAX_PATH_UTF8_BYTES: Int = 4096
@@ -61,10 +69,25 @@ object TrustLimits {
   const val MAX_SHARE_NAME_CHARS: Int = 80
 
   // --- Elenchi di cartelle: oltre il tetto l'elenco e' "anomalo" e si lavora con cio' che si ha ----------
+  /** L'elenco del registro e' solo un indizio (versioni oltre un buco): le versioni si leggono per nome. */
   const val MAX_LIST_REGISTRY: Int = 1024
   const val MAX_LIST_REQUESTS: Int = 64
   const val MAX_LIST_HEADS: Int = 256
-  const val MAX_LIST_LEASE_GENERATIONS: Int = 256
+
+  /** Prenotazioni: generazioni raggruppate in cartelle da 256, cosi' nessuna cartella cresce senza limite. */
+  const val LEASE_SHARD_SIZE: Int = 256
+  const val MAX_LIST_LEASE_SHARDS: Int = 1024
+  const val MAX_LIST_LEASE_GENERATIONS: Int = 512
+
+  // --- Letture dirette delle serie numerate (registro) -----------------------------------------------------
+  /** Versioni lette per nome in una sincronizzazione (recupero di un ritardo lungo: si continua alla successiva). */
+  const val MAX_SERIES_READS: Int = 1024
+
+  /**
+   * Nomi consecutivi occupati da file non validi che si scavalcano prima di fermarsi e dare l'allarme:
+   * limita il lavoro (e il traffico) che uno scrittore ostile puo' imporre a ogni sincronizzazione.
+   */
+  const val MAX_JUNK_RUN: Int = 32
 
   // --- Tempo (sempre ora del NAS, in millisecondi) ------------------------------------------------------
   /** Prenotazione piu' lunga ammessa: oltre, la prenotazione e' ignorata (E-I16), non accorciata. */
@@ -75,6 +98,9 @@ object TrustLimits {
 
   /** Permanenza nel cestino del NAS prima che chi ha cestinato possa eliminare (E-D4). */
   const val TRASH_RETENTION_MILLIS: Long = 30L * 24 * 60 * 60 * 1000
+
+  /** Una richiesta di registrazione si approva solo entro 15 minuti da quando l'admin l'ha vista (revisione M2). */
+  const val MAX_REQUEST_AGE_MILLIS: Long = 15L * 60 * 1000
 
   /** Tetti per giro di pulizia del cestino: oltre, ci si ferma e si chiede (E-D4, piano §7.4). */
   const val MAX_PURGE_ITEMS_PER_ROUND: Int = 200
@@ -121,6 +147,12 @@ enum class RejectReason {
   HOSTILE_PATH,
   /** Versione piu' vecchia di una gia' accettata (anti-rollback). */
   ROLLBACK,
+  /**
+   * Registro piu' nuovo ma che "torna indietro" rispetto a quello gia' fidato: un dispositivo sparito, uno
+   * stato che regredisce (revocato → approvato), un account cambiato, teste congelate aggiunte, un'ora di
+   * emissione precedente. Allarme: base vecchia di un admin, oppure chiave di famiglia usata male.
+   */
+  REGRESSION,
   /** Due contenuti diversi con lo stesso numero di versione dallo stesso firmatario. */
   EQUIVOCATION,
   /** Dati personali firmati da un dispositivo di un altro account. */

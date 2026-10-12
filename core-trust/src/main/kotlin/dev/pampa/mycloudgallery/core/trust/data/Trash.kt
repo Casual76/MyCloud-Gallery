@@ -113,8 +113,9 @@ class PurgeRound {
   var bytes: Long = 0
     private set
 
+  /** Il primo elemento di un giro passa sempre, anche se da solo supera il tetto dei byte (revisione 1.4, B7). */
   internal fun fits(size: Long): Boolean =
-    items < TrustLimits.MAX_PURGE_ITEMS_PER_ROUND && bytes + size <= TrustLimits.MAX_PURGE_BYTES_PER_ROUND
+    items == 0 || (items < TrustLimits.MAX_PURGE_ITEMS_PER_ROUND && bytes + size <= TrustLimits.MAX_PURGE_BYTES_PER_ROUND)
 
   internal fun take(size: Long) {
     items++

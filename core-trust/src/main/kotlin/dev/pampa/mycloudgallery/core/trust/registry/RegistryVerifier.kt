@@ -4,7 +4,6 @@ import dev.pampa.mycloudgallery.core.trust.RejectReason
 import dev.pampa.mycloudgallery.core.trust.Verdict
 import dev.pampa.mycloudgallery.core.trust.codec.Base32
 import dev.pampa.mycloudgallery.core.trust.crypto.EcPublicKey
-import dev.pampa.mycloudgallery.core.trust.crypto.Hashes
 import dev.pampa.mycloudgallery.core.trust.crypto.TrustIds
 import dev.pampa.mycloudgallery.core.trust.ensure
 import dev.pampa.mycloudgallery.core.trust.envelope.DocType
@@ -47,8 +46,8 @@ class TrustAnchor private constructor(
 class RegistryState internal constructor(
   val registry: FamilyRegistry,
   signedBytes: ByteArray,
-  /** SHA-256 (base32) del file: l'identita' di questa versione. */
-  val fileHash: String,
+  /** Impronta dei byte firmati (non della firma): l'identita' di questa versione (revisione 1.4, A3). */
+  val contentHash: String,
   /** La chiave di famiglia che ha firmato questa versione. */
   val signerKey: EcPublicKey,
 ) {
@@ -66,21 +65,39 @@ class RegistryState internal constructor(
 
   /** Il registro dice che QUESTO dispositivo e' perso: deve distruggere chiave e dati locali (Fase 2.4). */
   fun mustSelfWipe(deviceId: String): Boolean = statusOf(deviceId) == DeviceStatus.LOST
+
+  /**
+   * L'ancora da mostrare in un QR (dispositivo nuovo, recupero dell'admin): id della famiglia, impronta della
+   * chiave che ha firmato QUESTA versione e questa versione come minimo. Funziona anche subito dopo una
+   * rotazione (revisione 1.4, B4): il dispositivo nuovo accetta l'annuncio e poi segue il successore.
+   */
+  fun toAnchor(): TrustAnchor = TrustAnchor.create(registry.familyId, signerKey.fingerprint, registry.version)!!
+}
+
+/** Un ramo del registro firmato dalla famiglia ma incompatibile con quello fidato: da mostrare all'admin. */
+class RegistryFork(val registry: FamilyRegistry, val contentHash: String) {
+  /** I dispositivi che esistono solo in questo ramo: quelli da riconoscere prima di unirlo. */
+  fun devicesOnlyHere(current: FamilyRegistry): List<DeviceEntry> = registry.devices.filter { current.device(it.id) == null }
 }
 
 /**
  * Accetta un registro di famiglia solo se (in quest'ordine): la busta e' integra, la chiave che firma e'
  * quella attesa (ancora del QR, oppure quella del registro gia' accettato o il suo successore), la firma
- * e' valida, il payload e' canonico e ben formato, la famiglia e' la stessa, e la versione e' piu' alta
- * dell'ultima vista (o, per un dispositivo nuovo, almeno quella del QR).
+ * e' valida, il payload e' canonico e ben formato, la famiglia e' la stessa, la versione e' piu' alta
+ * dell'ultima vista (o, per un dispositivo nuovo, almeno quella del QR) e il contenuto non "torna indietro"
+ * rispetto a quello gia' fidato ([FamilyRegistry.checkNoRegressionFrom]).
  */
 object RegistryVerifier {
 
   fun accept(bytes: ByteArray, current: RegistryState?, anchor: TrustAnchor): Verdict<RegistryState> = verdictOf {
-    if (current != null && Hashes.sha256Name(bytes) == current.fileHash) return@verdictOf current
     val envelope = Envelope.open(bytes, DocType.FAMILY_REGISTRY)
-    val expectedFingerprint = current?.trustedFamilyKey?.fingerprint ?: anchor.familyKeyFingerprint
-    ensure(envelope.signer.fingerprint == expectedFingerprint, RejectReason.SIGNER_NOT_APPROVED, "registro: chiave di famiglia inattesa")
+    // Lo stesso contenuto firmato (anche con un'altra firma valida) e' la stessa versione.
+    if (current != null && envelope.contentHash == current.contentHash) return@verdictOf current
+    if (current != null) {
+      ensure(envelope.signer == current.trustedFamilyKey, RejectReason.SIGNER_NOT_APPROVED, "registro: chiave di famiglia inattesa")
+    } else {
+      ensure(envelope.signer.fingerprint == anchor.familyKeyFingerprint, RejectReason.SIGNER_NOT_APPROVED, "registro: chiave di famiglia inattesa")
+    }
     val registry = FamilyRegistry.read(envelope.payloadJson())
     ensure(registry.familyId == (current?.registry?.familyId ?: anchor.familyId), RejectReason.WRONG_FAMILY, "registro: altra famiglia")
     ensure(registry.successorKey != envelope.signer, RejectReason.INVALID_FIELD, "registro: successore uguale")
@@ -89,8 +106,22 @@ object RegistryVerifier {
     } else {
       if (registry.version < current.registry.version) violation(RejectReason.ROLLBACK, "registro: versione piu' vecchia")
       if (registry.version == current.registry.version) violation(RejectReason.EQUIVOCATION, "registro: due contenuti con la stessa versione")
+      registry.checkNoRegressionFrom(current.registry)
     }
-    RegistryState(registry, bytes, envelope.fileHash, envelope.signer)
+    RegistryState(registry, bytes, envelope.contentHash, envelope.signer)
+  }
+
+  /**
+   * Un ramo diverso firmato dalla famiglia (rifiutato per [RejectReason.EQUIVOCATION] o
+   * [RejectReason.REGRESSION]): lo si legge senza accettarlo, per mostrarlo all'admin che decide se unirlo
+   * ([FamilyAuthority.mergeFork]) o, se non lo riconosce, reimpostare la famiglia (chiave rubata).
+   */
+  fun readFork(bytes: ByteArray, current: RegistryState): Verdict<RegistryFork> = verdictOf {
+    val envelope = Envelope.open(bytes, DocType.FAMILY_REGISTRY)
+    ensure(envelope.signer == current.trustedFamilyKey || envelope.signer == current.signerKey, RejectReason.SIGNER_NOT_APPROVED, "ramo: chiave inattesa")
+    val registry = FamilyRegistry.read(envelope.payloadJson())
+    ensure(registry.familyId == current.registry.familyId, RejectReason.WRONG_FAMILY, "ramo: altra famiglia")
+    RegistryFork(registry, envelope.contentHash)
   }
 
   /**
@@ -100,6 +131,6 @@ object RegistryVerifier {
   fun restore(signedBytes: ByteArray, trustedSignerFingerprint: String): Verdict<RegistryState> = verdictOf {
     val envelope = Envelope.open(signedBytes, DocType.FAMILY_REGISTRY)
     ensure(envelope.signer.fingerprint == trustedSignerFingerprint, RejectReason.SIGNER_NOT_APPROVED, "registro locale: chiave inattesa")
-    RegistryState(FamilyRegistry.read(envelope.payloadJson()), signedBytes, envelope.fileHash, envelope.signer)
+    RegistryState(FamilyRegistry.read(envelope.payloadJson()), signedBytes, envelope.contentHash, envelope.signer)
   }
 }

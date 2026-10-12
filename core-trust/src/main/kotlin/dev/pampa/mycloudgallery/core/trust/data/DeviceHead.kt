@@ -55,7 +55,7 @@ data class DeviceHead(
   init {
     ensure(TrustIds.isValid(familyId) && TrustIds.isValid(deviceId), RejectReason.INVALID_FIELD, "testa: id")
     ShareNames.check(share)
-    ensure(version >= 1 && registryVersion >= 1, RejectReason.INVALID_FIELD, "testa: versione")
+    ensure(version in 1..TrustLimits.MAX_VERSION && registryVersion in 1..TrustLimits.MAX_VERSION, RejectReason.INVALID_FIELD, "testa: versione")
     ensure(segments.size <= TrustLimits.MAX_HEAD_SEGMENTS, RejectReason.TOO_LARGE, "testa: troppi segmenti")
     ensure(segments.zipWithNext().all { (a, b) -> a.hash < b.hash }, RejectReason.INVALID_FIELD, "testa: segmenti non ordinati o ripetuti")
   }
@@ -79,8 +79,11 @@ data class DeviceHead(
 /** Dove si e' trovata una testa: deve coincidere con cio' che dichiara. */
 data class HeadLocation(val share: String, val deviceId: String, val kind: HeadKind, val fileVersion: Long)
 
-/** L'ultima testa accettata di un dispositivo in una share: la memoria dell'anti-rollback (in locale). */
-data class HeadMark(val version: Long, val fileHash: String)
+/**
+ * L'ultima testa accettata di un dispositivo in una share: la memoria dell'anti-rollback (in locale).
+ * [contentHash] e' l'impronta dei byte firmati, non della firma (revisione 1.4, A3).
+ */
+data class HeadMark(val version: Long, val contentHash: String)
 
 class AcceptedHead(
   val head: DeviceHead,
@@ -112,10 +115,10 @@ object HeadVerifier {
         familyId = registry.registry.familyId,
         deviceId = signed.signer.id,
         share = f.string("share", TrustLimits.MAX_SHARE_NAME_CHARS),
-        kind = f.string("kind", 16).let { wire -> HeadKind.entries.firstOrNull { it.wire == wire } }
+        kind = f.string("kind", TrustLimits.MAX_ENUM_CHARS).let { wire -> HeadKind.entries.firstOrNull { it.wire == wire } }
           ?: violation(RejectReason.INVALID_FIELD, "testa: tipo"),
-        version = f.long("version", 1..Long.MAX_VALUE),
-        registryVersion = f.long("registryVersion", 1..Long.MAX_VALUE),
+        version = f.long("version", 1..TrustLimits.MAX_VERSION),
+        registryVersion = f.long("registryVersion", 1..TrustLimits.MAX_VERSION),
         createdAt = f.time("createdAt"),
         segments = f.array("segments", TrustLimits.MAX_HEAD_SEGMENTS).map { item ->
           Fields.read(item) { s -> SegmentRef(s.string("hash", Hashes.NAME_LENGTH), s.long("size", 1..TrustLimits.MAX_SEGMENT_BYTES.toLong())) }
@@ -133,13 +136,13 @@ object HeadVerifier {
     }
     if (previous != null) {
       if (head.version < previous.version) violation(RejectReason.ROLLBACK, "testa: versione piu' vecchia")
-      if (head.version == previous.version && signed.envelope.fileHash != previous.fileHash) {
+      if (head.version == previous.version && signed.envelope.contentHash != previous.contentHash) {
         violation(RejectReason.EQUIVOCATION, "testa: due contenuti con la stessa versione")
       }
     }
     AcceptedHead(
       head = head,
-      mark = HeadMark(head.version, signed.envelope.fileHash),
+      mark = HeadMark(head.version, signed.envelope.contentHash),
       signer = signed.signer,
       registryBehind = head.registryVersion > registry.registry.version,
     )

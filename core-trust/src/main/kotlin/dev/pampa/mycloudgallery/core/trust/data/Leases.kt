@@ -42,7 +42,7 @@ data class Lease(
     ensure(TrustIds.isValid(familyId) && TrustIds.isValid(deviceId), RejectReason.INVALID_FIELD, "prenotazione: id")
     ShareNames.check(share)
     Leases.checkResource(resource)
-    ensure(generation >= 1, RejectReason.INVALID_FIELD, "prenotazione: generazione")
+    ensure(generation in 1..TrustLimits.MAX_VERSION, RejectReason.INVALID_FIELD, "prenotazione: generazione")
     ensure(durationMillis >= 0, RejectReason.INVALID_FIELD, "prenotazione: durata negativa")
   }
 
@@ -99,9 +99,13 @@ sealed interface AcquireResult {
 }
 
 /**
- * Prenotazioni sul NAS con generazioni numerate: `leases/<hash risorsa>/<generazione>`, ognuna pubblicata
- * con `FILE_CREATE`. Prendere una risorsa libera = pubblicare la generazione successiva alla piu' alta;
- * se il nome esiste gia', ha vinto un altro. Nessun file altrui viene mai cancellato o sovrascritto.
+ * Prenotazioni sul NAS con generazioni numerate: `leases/<hash risorsa>/<gruppo>/<generazione>`, ognuna
+ * pubblicata con `FILE_CREATE`. Prendere una risorsa libera = pubblicare la generazione successiva alla piu'
+ * alta; se il nome esiste gia', ha vinto un altro. Nessun file altrui viene mai cancellato o sovrascritto.
+ *
+ * Le generazioni stanno in gruppi di [TrustLimits.LEASE_SHARD_SIZE]: si elencano i gruppi e poi solo il piu'
+ * alto, cosi' nessuna cartella cresce senza limite e una risorsa usata migliaia di volte resta prenotabile
+ * (revisione 1.4, M6: con una cartella sola, dopo 257 usi restava solo `Contended`).
  */
 class LeaseManager(
   private val share: NasFileSystem,
@@ -110,12 +114,17 @@ class LeaseManager(
 ) {
   private val me: String = TrustIds.deviceIdOf(signer.publicKey)
 
-  /** Lo stato della risorsa e la generazione piu' alta trovata (0 se nessuna). */
+  /** Lo stato della risorsa e la generazione piu' alta trovata (0 se nessuna); null se le cartelle sono anomale. */
   fun inspect(registry: RegistryState, resource: String): Pair<LeaseStatus, Long>? {
     Leases.checkResource(resource)
-    val listing = share.list(NasLayout.leaseDir(resource), TrustLimits.MAX_LIST_LEASE_GENERATIONS)
-    if (listing.truncated) return null
-    val highest = listing.names.mapNotNull(NasLayout::parseVersionName).maxOrNull() ?: return LeaseStatus.Free to 0L
+    val shards = share.list(NasLayout.leaseDir(resource), TrustLimits.MAX_LIST_LEASE_SHARDS)
+    if (shards.truncated) return null
+    val shard = shards.names.mapNotNull(NasLayout::parseVersionName).maxOrNull() ?: return LeaseStatus.Free to 0L
+    val names = share.list(NasLayout.leaseShardDir(resource, shard), TrustLimits.MAX_LIST_LEASE_GENERATIONS)
+    if (names.truncated) return null
+    val highest = names.names.mapNotNull(NasLayout::parseVersionName).filter { NasLayout.leaseShardOf(it) == shard }.maxOrNull()
+      // Gruppo vuoto o pieno di spazzatura: la prossima generazione e' la prima del gruppo.
+      ?: return LeaseStatus.Free to (shard - 1) * TrustLimits.LEASE_SHARD_SIZE
     val lease = read(registry, resource, highest).let { (it as? Verdict.Accepted)?.value }
     return LeasePolicy.evaluate(lease, clock.nowMillis(), me) to highest
   }
@@ -135,7 +144,7 @@ class LeaseManager(
   }
 
   private fun publish(registry: RegistryState, resource: String, highest: Long, durationMillis: Long): AcquireResult {
-    if (highest >= MAX_GENERATION) return AcquireResult.Contended
+    if (highest >= TrustLimits.MAX_VERSION) return AcquireResult.Contended
     val generation = highest + 1
     val now = clock.nowMillis()
     val lease = Lease(registry.registry.familyId, me, share.shareName, resource, generation, now, durationMillis)
@@ -154,9 +163,6 @@ class LeaseManager(
     return Leases.verify(bytes, registry, share.shareName, resource, generation)
   }
 
-  private companion object {
-    const val MAX_GENERATION = 999_999_999L
-  }
 }
 
 object Leases {
@@ -180,7 +186,7 @@ object Leases {
         deviceId = signed.signer.id,
         share = f.string("share", TrustLimits.MAX_SHARE_NAME_CHARS),
         resource = f.string("resource", TrustLimits.MAX_RESOURCE_KEY_CHARS),
-        generation = f.long("generation", 1..Long.MAX_VALUE),
+        generation = f.long("generation", 1..TrustLimits.MAX_VERSION),
         acquiredAt = f.time("acquiredAt"),
         durationMillis = f.long("durationMillis", 0..Long.MAX_VALUE),
       )

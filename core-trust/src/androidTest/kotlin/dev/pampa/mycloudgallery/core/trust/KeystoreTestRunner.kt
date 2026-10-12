@@ -21,15 +21,18 @@ import org.junit.runner.notification.RunListener
  */
 class KeystoreTestRunner : Instrumentation() {
 
+  private var classFilter: String? = null
+
   override fun onCreate(arguments: Bundle?) {
     super.onCreate(arguments)
     testContext = context
+    classFilter = arguments?.getString("class")
     start()
   }
 
   override fun onStart() {
     super.onStart()
-    val request = Request.classes(KeystoreDeviceTest::class.java)
+    val request = buildRequest(classFilter)
     val total = request.runner.testCount()
     val core = JUnitCore()
     val reporter = StatusReporter(this, total)
@@ -39,6 +42,21 @@ class KeystoreTestRunner : Instrumentation() {
       putString(REPORT_KEY_STREAMRESULT, "\nTest: ${result.runCount}, falliti: ${result.failureCount}\n")
     }
     finish(Activity.RESULT_OK, summary)
+  }
+
+  /**
+   * Senza argomenti esegue [TEST_CLASSES]. Con `-e class A,B#metodo` (come AndroidJUnitRunner) esegue
+   * esattamente quelle classi o quei metodi; una classe che non esiste fa fallire la corsa invece di
+   * essere saltata in silenzio (revisione 1.4, I5).
+   */
+  private fun buildRequest(filter: String?): Request {
+    if (filter.isNullOrBlank()) return Request.classes(*TEST_CLASSES.toTypedArray())
+    val requests = filter.split(',').map { it.trim() }.filter { it.isNotEmpty() }.map { item ->
+      val className = item.substringBefore('#')
+      val clazz = Class.forName(className) // ClassNotFoundException: corsa fallita, non saltata
+      if ('#' in item) Request.method(clazz, item.substringAfter('#')) else Request.aClass(clazz)
+    }
+    return requests.singleOrNull() ?: Request.classes(*requests.map { it.runner.description.testClass }.toTypedArray())
   }
 
   /** Riporta ogni test come fa AndroidJUnitRunner: stato 1 all'inizio, 0 / -2 / -4 / -3 alla fine. */
@@ -93,6 +111,9 @@ class KeystoreTestRunner : Instrumentation() {
   }
 
   companion object {
+    /** Le classi dei test strumentati del modulo: una classe nuova va aggiunta qui. */
+    val TEST_CLASSES: List<Class<*>> = listOf(KeystoreDeviceTest::class.java)
+
     /** Il contesto dell'APK di test, per i file temporanei dei test. */
     lateinit var testContext: Context
       private set

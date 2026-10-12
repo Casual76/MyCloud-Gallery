@@ -9,6 +9,7 @@ import dev.pampa.mycloudgallery.core.trust.envelope.Envelope
 import dev.pampa.mycloudgallery.core.trust.nas.NasFileSystem
 import dev.pampa.mycloudgallery.core.trust.nas.NasLayout
 import dev.pampa.mycloudgallery.core.trust.nas.NasRead
+import dev.pampa.mycloudgallery.core.trust.nas.PublishResult
 
 /** Quanti file sono stati scartati e perche': per la Diagnostica (piano 2.7). */
 class RejectionTally {
@@ -26,9 +27,15 @@ class RejectionTally {
 }
 
 /**
- * Lettura del registro dall'area comune (`docs/formato-nas.md` §4.3). Non sostituisce mai lo stato locale
- * con qualcosa di piu' vecchio o non verificato: nel caso peggiore (cartella manomessa, file cancellati,
- * spazzatura) resta lo stato che si aveva e la Diagnostica lo dice.
+ * Lettura del registro dall'area comune (`docs/formato-nas.md` §4.4). Le versioni nuove si leggono **per
+ * nome** (`v+1`, `v+2`, … fino al primo nome assente), non dall'elenco della cartella: creare migliaia di
+ * file non nasconde una revoca (revisione 1.4, M1). L'elenco serve solo come indizio per le versioni oltre
+ * un buco (una versione cancellata).
+ *
+ * Lo stato locale non e' mai sostituito da qualcosa di piu' vecchio, non verificato o che "torna
+ * indietro"; nel caso peggiore resta lo stato che si aveva e la Diagnostica lo dice. Se il file della
+ * versione fidata e' sparito dal NAS, lo si ripubblica ([Result.healed]): una cancellazione non basta a
+ * far sparire una revoca per gli altri.
  */
 class RegistrySync(private val commonShare: NasFileSystem) {
 
@@ -37,8 +44,14 @@ class RegistrySync(private val commonShare: NasFileSystem) {
     val state: RegistryState?,
     val changed: Boolean,
     val rejected: RejectionTally,
-    /** La cartella aveva piu' nomi del tetto: anomalia da segnalare. */
+    /** L'elenco della cartella era oltre il tetto: le versioni dopo un buco potrebbero non essere visibili. */
     val listingTruncated: Boolean,
+    /** Rami firmati dalla famiglia ma incompatibili con quello fidato: allarme, da mostrare all'admin. */
+    val forks: List<RegistryFork>,
+    /** Il file della versione fidata mancava ed e' stato ripubblicato da qui. */
+    val healed: Boolean,
+    /** Si e' smesso di leggere per il tetto di letture o per troppa spazzatura di fila: si continua la prossima volta. */
+    val incomplete: Boolean,
   ) {
     /** Ci sono versioni piu' nuove che non si sono potute verificare (manomissione, reset, app vecchia). */
     val newerUnverified: Boolean get() = rejected.total > 0
@@ -48,46 +61,120 @@ class RegistrySync(private val commonShare: NasFileSystem) {
      * dispositivo admin, non si firmano altre versioni finche' non si aggiorna (E-I3).
      */
     val needsAppUpdate: Boolean get() = rejected.count(RejectReason.NEWER_FORMAT) > 0
+
+    /** Equivocazione o regressione firmate dalla famiglia: un admin su una base vecchia, o la chiave usata male. */
+    val tamperingSuspected: Boolean get() = forks.isNotEmpty() ||
+      rejected.count(RejectReason.EQUIVOCATION) > 0 || rejected.count(RejectReason.REGRESSION) > 0
   }
 
   fun refresh(current: RegistryState?, anchor: TrustAnchor): Result {
     val tally = RejectionTally()
-    val listing = commonShare.list(NasLayout.REGISTRY_DIR, TrustLimits.MAX_LIST_REGISTRY)
-    val floor = current?.registry?.version ?: (anchor.minRegistryVersion - 1)
-    val versions = listing.names.mapNotNull(NasLayout::parseVersionName).filter { it > floor }.sorted()
-    if (versions.isEmpty()) return Result(current, changed = false, tally, listing.truncated)
-
-    // Caso comune: la versione piu' alta e' firmata dalla chiave attesa. Le intermedie non servono.
-    val newest = tryVersion(versions.last(), current, anchor)
-    if (newest is Verdict.Accepted) return Result(newest.value, changed = true, tally, listing.truncated)
-
-    // Altrimenti (rotazione della chiave in mezzo, o spazzatura in cima) si risale in ordine.
+    val forks = ArrayList<RegistryFork>()
     var state = current
-    for (version in versions) {
-      when (val verdict = tryVersion(version, state, anchor)) {
-        is Verdict.Accepted -> state = verdict.value
-        is Verdict.Rejected -> tally.add(verdict.reason)
+    var reads = 0
+    var junkRun = 0
+    var incomplete = false
+    val tried = HashSet<Long>()
+
+    fun consider(version: Long, bytes: ByteArray?, tooLarge: Boolean): Boolean {
+      tried.add(version)
+      if (bytes == null) {
+        if (tooLarge) tally.add(RejectReason.TOO_LARGE)
+        return false
+      }
+      return when (val verdict = acceptAt(version, bytes, state, anchor)) {
+        is Verdict.Accepted -> {
+          state = verdict.value
+          true
+        }
+        is Verdict.Rejected -> {
+          tally.add(verdict.reason)
+          noteFork(verdict.reason, bytes, state, forks)
+          false
+        }
       }
     }
-    return Result(state, changed = state !== current, tally, listing.truncated)
+
+    // 1. Lettura per nome dalla versione successiva a quella nota, fino al primo nome assente.
+    var version = maxOf(1L, (current?.registry?.version ?: (anchor.minRegistryVersion - 1)) + 1)
+    while (version <= TrustLimits.MAX_VERSION) {
+      if (reads >= TrustLimits.MAX_SERIES_READS || junkRun > TrustLimits.MAX_JUNK_RUN) {
+        incomplete = true
+        break
+      }
+      reads++
+      val read = commonShare.read(NasLayout.registryFile(version), Envelope.maxFileBytes(DocType.FAMILY_REGISTRY))
+      if (read is NasRead.NotFound) break
+      val accepted = consider(version, (read as? NasRead.Data)?.bytes, read is NasRead.TooLarge)
+      junkRun = if (accepted) 0 else junkRun + 1
+      version++
+    }
+
+    // 2. Indizio dall'elenco: versioni oltre un buco (qualcuno ha cancellato una versione intermedia).
+    val listing = commonShare.list(NasLayout.REGISTRY_DIR, TrustLimits.MAX_LIST_REGISTRY)
+    if (!incomplete) {
+      val beyond = listing.names.mapNotNull(NasLayout::parseVersionName)
+        .filter { it > (state?.registry?.version ?: 0L) && it !in tried && it >= anchor.minRegistryVersion }
+        .sorted()
+      for (hint in beyond) {
+        if (reads >= TrustLimits.MAX_SERIES_READS || junkRun > TrustLimits.MAX_JUNK_RUN) {
+          incomplete = true
+          break
+        }
+        reads++
+        val read = commonShare.read(NasLayout.registryFile(hint), Envelope.maxFileBytes(DocType.FAMILY_REGISTRY))
+        if (read is NasRead.NotFound) continue
+        val accepted = consider(hint, (read as? NasRead.Data)?.bytes, read is NasRead.TooLarge)
+        junkRun = if (accepted) 0 else junkRun + 1
+      }
+    }
+
+    // 3. La versione fidata e' ancora al suo posto? Se e' sparita la si ripubblica; se al suo posto c'e'
+    //    un altro contenuto firmato dalla famiglia, e' un'equivocazione da segnalare.
+    var healed = false
+    val trusted = state
+    if (trusted != null) {
+      val path = NasLayout.registryFile(trusted.registry.version)
+      when (val read = commonShare.read(path, Envelope.maxFileBytes(DocType.FAMILY_REGISTRY))) {
+        NasRead.NotFound -> healed = commonShare.publishExclusive(path, trusted.signedBytes) == PublishResult.CREATED
+        is NasRead.Data -> {
+          val verdict = RegistryVerifier.accept(read.bytes, trusted, anchor)
+          if (verdict is Verdict.Rejected) {
+            tally.add(verdict.reason)
+            noteFork(verdict.reason, read.bytes, trusted, forks)
+          }
+        }
+        NasRead.TooLarge -> tally.add(RejectReason.TOO_LARGE)
+      }
+    }
+
+    return Result(state, changed = state !== current, tally, listing.truncated, forks, healed, incomplete)
   }
 
-  private fun tryVersion(version: Long, state: RegistryState?, anchor: TrustAnchor): Verdict<RegistryState> {
-    val bytes = when (val read = commonShare.read(NasLayout.registryFile(version), Envelope.maxFileBytes(DocType.FAMILY_REGISTRY))) {
-      is NasRead.Data -> read.bytes
-      NasRead.NotFound -> return Verdict.Rejected(RejectReason.MALFORMED)
-      NasRead.TooLarge -> return Verdict.Rejected(RejectReason.TOO_LARGE)
-    }
+  private fun acceptAt(version: Long, bytes: ByteArray, state: RegistryState?, anchor: TrustAnchor): Verdict<RegistryState> {
     val verdict = RegistryVerifier.accept(bytes, state, anchor)
     if (verdict is Verdict.Accepted && verdict.value.registry.version != version) {
       return Verdict.Rejected(RejectReason.WRONG_LOCATION)
     }
     return verdict
   }
+
+  private fun noteFork(reason: RejectReason, bytes: ByteArray, state: RegistryState?, forks: MutableList<RegistryFork>) {
+    if (state == null || (reason != RejectReason.EQUIVOCATION && reason != RejectReason.REGRESSION)) return
+    val fork = RegistryVerifier.readFork(bytes, state)
+    if (fork is Verdict.Accepted && forks.none { it.contentHash == fork.value.contentHash }) forks.add(fork.value)
+  }
 }
 
 /** Le richieste di registrazione in attesa, per la schermata dell'admin (piano 2.3). */
-class PendingRequests(val requests: List<RegistrationRequest>, val rejected: RejectionTally, val listingTruncated: Boolean) {
+class PendingRequests(
+  val requests: List<RegistrationRequest>,
+  val rejected: RejectionTally,
+  /** Troppi nomi nella cartella: una richiesta vera potrebbe non comparire; si legge per id con [readOne]. */
+  val listingTruncated: Boolean,
+  /** Gli id delle richieste il cui nome somiglia a un'altra richiesta o a un dispositivo registrato (sosia). */
+  val lookAlikes: Set<String>,
+) {
   companion object {
     fun read(commonShare: NasFileSystem, state: RegistryState): PendingRequests {
       val tally = RejectionTally()
@@ -99,17 +186,39 @@ class PendingRequests(val requests: List<RegistrationRequest>, val rejected: Rej
           continue
         }
         if (state.registry.device(name) != null) continue // gia' nel registro
-        val read = commonShare.read(NasLayout.requestFile(name), Envelope.maxFileBytes(DocType.REGISTRATION_REQUEST))
-        if (read !is NasRead.Data) {
-          if (read is NasRead.TooLarge) tally.add(RejectReason.TOO_LARGE)
-          continue
-        }
-        when (val verdict = RegistrationRequest.verify(read.bytes, state.registry.familyId, name)) {
+        when (val verdict = readVerdict(commonShare, state, name)) {
           is Verdict.Accepted -> found.add(verdict.value)
           is Verdict.Rejected -> tally.add(verdict.reason)
+          null -> Unit // sparita tra l'elenco e la lettura
         }
       }
-      return PendingRequests(found, tally, listing.truncated)
+      return PendingRequests(found, tally, listing.truncated, lookAlikes(found, state))
+    }
+
+    /**
+     * Legge direttamente la richiesta di [deviceId] (l'id mostrato dal dispositivo nuovo): funziona anche se
+     * la cartella e' stata riempita di nomi per nasconderla. Null se non c'e'.
+     */
+    fun readOne(commonShare: NasFileSystem, state: RegistryState, deviceId: String): Verdict<RegistrationRequest>? {
+      if (!TrustIds.isValid(deviceId)) return Verdict.Rejected(RejectReason.WRONG_LOCATION)
+      return readVerdict(commonShare, state, deviceId)
+    }
+
+    /** Null se il file non c'e'. */
+    private fun readVerdict(commonShare: NasFileSystem, state: RegistryState, name: String): Verdict<RegistrationRequest>? =
+      when (val read = commonShare.read(NasLayout.requestFile(name), Envelope.maxFileBytes(DocType.REGISTRATION_REQUEST))) {
+        is NasRead.Data -> RegistrationRequest.verify(read.bytes, state.registry.familyId, name)
+        NasRead.NotFound -> null
+        NasRead.TooLarge -> Verdict.Rejected(RejectReason.TOO_LARGE)
+      }
+
+    private fun lookAlikes(requests: List<RegistrationRequest>, state: RegistryState): Set<String> {
+      val registered = state.registry.devices.map { LookAlike.key(it.name) }.toSet()
+      val byKey = requests.groupBy { LookAlike.key(it.name) }
+      return requests.filter { r ->
+        val key = LookAlike.key(r.name)
+        key in registered || (byKey[key]?.size ?: 0) > 1
+      }.map { it.deviceId }.toSet()
     }
   }
 }

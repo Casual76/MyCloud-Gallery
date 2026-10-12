@@ -10,7 +10,6 @@ import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKey
 import dev.pampa.mycloudgallery.core.trust.envelope.DocType
 import dev.pampa.mycloudgallery.core.trust.envelope.Envelope
 import dev.pampa.mycloudgallery.core.trust.nas.NasLayout
-import dev.pampa.mycloudgallery.core.trust.nas.PublishResult
 import dev.pampa.mycloudgallery.core.trust.rejectionOrNull
 import dev.pampa.mycloudgallery.core.trust.testing.FakeNasFileSystem
 import dev.pampa.mycloudgallery.core.trust.testing.TestFamily
@@ -22,6 +21,9 @@ import org.junit.Test
 class RegistryTest {
 
   private val family = TestFamily()
+
+  private fun signed(registry: FamilyRegistry, key: FamilyKey = family.familyKey): ByteArray =
+    Envelope.seal(DocType.FAMILY_REGISTRY, registry.toJson(), key)
 
   @Test
   fun famigliaNuova_ilFondatoreEAdminApprovato() {
@@ -63,7 +65,7 @@ class RegistryTest {
   fun registroDiUnAltraFamigliaRifiutato() {
     val other = TestFamily()
     // Stessa chiave di famiglia attesa? No: l'altra famiglia ha un'altra chiave.
-    assertThat(RegistryVerifier.accept(other.history[0].bytes, null, family.anchor()).rejectionOrNull()).isEqualTo(RejectReason.SIGNER_NOT_APPROVED)
+    assertThat(RegistryVerifier.accept(other.history[0], null, family.anchor()).rejectionOrNull()).isEqualTo(RejectReason.SIGNER_NOT_APPROVED)
 
     // Anche firmato con la NOSTRA chiave ma con un altro id di famiglia: rifiutato.
     val wrongFamily = Envelope.seal(DocType.FAMILY_REGISTRY, family.state.registry.copy(familyId = other.familyId, version = 5).toJson(), family.familyKey)
@@ -75,7 +77,7 @@ class RegistryTest {
     val tablet = family.approveNewDevice()
     family.changeStatus(tablet, DeviceStatus.REVOKED)
     val revokedState = family.state
-    val beforeRevocation = family.history[1].bytes // versione 2: tablet ancora approvato
+    val beforeRevocation = family.history[1] // versione 2: tablet ancora approvato
 
     val verdict = RegistryVerifier.accept(beforeRevocation, revokedState, family.anchor())
 
@@ -93,7 +95,7 @@ class RegistryTest {
     val sync = RegistrySync(family.common).refresh(current = null, anchor = anchorAfterRevocation)
 
     assertThat(sync.state).isNull()
-    assertThat(RegistryVerifier.accept(family.history[1].bytes, null, anchorAfterRevocation).rejectionOrNull()).isEqualTo(RejectReason.ROLLBACK)
+    assertThat(RegistryVerifier.accept(family.history[1], null, anchorAfterRevocation).rejectionOrNull()).isEqualTo(RejectReason.ROLLBACK)
   }
 
   @Test
@@ -107,6 +109,9 @@ class RegistryTest {
 
     assertThat(sync.state).isSameInstanceAs(seen)
     assertThat(sync.state!!.statusOf(tablet.deviceId)).isEqualTo(DeviceStatus.REVOKED)
+    // E la versione cancellata torna sul NAS, ripubblicata da chi l'aveva vista (revisione 1.4, A1).
+    assertThat(sync.healed).isTrue()
+    assertThat(family.common.bytesAt(NasLayout.registryFile(3))).isEqualTo(seen.signedBytes)
   }
 
   @Test
@@ -114,13 +119,13 @@ class RegistryTest {
     val fork = Envelope.seal(DocType.FAMILY_REGISTRY, family.state.registry.copy(issuedAt = family.state.registry.issuedAt + 1).toJson(), family.familyKey)
 
     assertThat(RegistryVerifier.accept(fork, family.state, family.anchor()).rejectionOrNull()).isEqualTo(RejectReason.EQUIVOCATION)
-    assertThat(RegistryVerifier.accept(family.history[0].bytes, family.state, family.anchor()).acceptedOrNull()).isSameInstanceAs(family.state)
+    assertThat(RegistryVerifier.accept(family.history[0], family.state, family.anchor()).acceptedOrNull()).isSameInstanceAs(family.state)
   }
 
   @Test
   fun ilNomeDelFileDeveCoincidereConLaVersione() {
-    val version2 = FamilyAuthority(family.familyKey, family.clock).updateConfig(family.state, family.config.copy(nasHost = "192.168.178.20"))
-    family.common.attackerWrite(NasLayout.registryFile(7).value, version2.bytes)
+    val version2 = signed(family.state.registry.copy(version = 2, config = family.config.copy(nasHost = "192.168.178.20")))
+    family.common.attackerWrite(NasLayout.registryFile(7).value, version2)
 
     val sync = RegistrySync(family.common).refresh(current = family.state, anchor = family.anchor())
 
@@ -180,11 +185,15 @@ class RegistryTest {
 
   @Test
   fun dueAdminSullaStessaVersione_vinceIlPrimo() {
-    val second = FamilyAuthority(family.familyKey, family.clock).approve(family.state, family.verified(family.request(newSigner(), "Telefono B", "babbo")))
-    val third = FamilyAuthority(family.familyKey, family.clock).approve(family.state, family.verified(family.request(newSigner(), "Telefono C", "babbo")))
+    val base = family.state
+    val b = family.verified(family.request(newSigner(), "Telefono B", "babbo"))
+    val c = family.verified(family.request(newSigner(), "Telefono C", "babbo"))
+    val second = family.authority.approve(base, b, family.typed(b), family.clock.now)
+    val third = family.authority.approve(base, c, family.typed(c), family.clock.now)
 
-    assertThat(FamilyAuthority.publish(family.common, second)).isEqualTo(PublishResult.CREATED)
-    assertThat(FamilyAuthority.publish(family.common, third)).isEqualTo(PublishResult.ALREADY_EXISTS)
+    assertThat(family.authority.commit(family.common, second)).isInstanceOf(CommitResult.Published::class.java)
+    // Il secondo admin non sovrascrive e non salta: gli si chiede di risincronizzare.
+    assertThat(family.authority.commit(family.common, third)).isEqualTo(CommitResult.NewerExists)
   }
 
   @Test
@@ -199,7 +208,7 @@ class RegistryTest {
       assertThrows(IllegalArgumentException::class.java) { family.changeStatus(tablet, next) }
     }
     val again = family.verified(family.request(tablet, "Tablet ritrovato", "mamma"))
-    assertThrows(IllegalArgumentException::class.java) { FamilyAuthority(family.familyKey, family.clock).approve(family.state, again) }
+    assertThrows(IllegalArgumentException::class.java) { family.authority.approve(family.state, again, family.typed(again), family.clock.now) }
   }
 
   @Test
@@ -273,7 +282,7 @@ class RegistryTest {
     val result = PendingRequests.read(family.common, family.state)
 
     assertThat(result.requests.map { it.deviceId }).containsExactly(pending.deviceId)
-    assertThat(result.requests[0].approvalCode).matches("[0-9A-Z]{5}-[0-9A-Z]{5}")
+    assertThat(result.requests[0].approvalCode).matches("[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}-[0-9A-Z]{4}")
     assertThat(result.rejected.count(RejectReason.WRONG_LOCATION)).isEqualTo(2) // impostore + nome strano
     assertThat(result.rejected.count(RejectReason.WRONG_FAMILY)).isEqualTo(1)
   }
@@ -307,16 +316,15 @@ class RegistryTest {
 
   @Test
   fun registroDiUnAppPiuNuova_siChiedeLAggiornamentoESiTieneQuelloVisto() {
-    val next = FamilyAuthority(family.familyKey, family.clock).updateConfig(family.state, family.config)
-    val newerFormat = next.bytes.also { it[4] = 2 }
+    val newerFormat = signed(family.state.registry.copy(version = 2)).also { it[4] = 2 }
     family.common.attackerWrite(NasLayout.registryFile(2).value, newerFormat)
 
     val sync = RegistrySync(family.common).refresh(current = family.state, anchor = family.anchor())
 
     assertThat(sync.state).isSameInstanceAs(family.state)
     assertThat(sync.needsAppUpdate).isTrue()
-    // E un admin con l'app vecchia non puo' comunque scrivere sopra quella versione.
-    assertThat(FamilyAuthority.publish(family.common, next)).isEqualTo(PublishResult.ALREADY_EXISTS)
+    // E un admin con l'app vecchia non scrive ne' sopra ne' oltre quella versione.
+    assertThat(family.authority.commit(family.common, family.authority.updateConfig(family.state, family.config))).isEqualTo(CommitResult.NeedsAppUpdate)
   }
 
   @Test

@@ -74,7 +74,7 @@ class DeviceHeadTest {
   @Test
   fun dispositivoDismesso_valeSoloLaTestaCongelata() {
     val frozen = head(version = 3)
-    val frozenHash = Envelope.open(frozen, DocType.DEVICE_HEAD).fileHash
+    val frozenHash = Envelope.open(frozen, DocType.DEVICE_HEAD).contentHash
     val otherOld = head(version = 2)
     family.changeStatus(tablet, DeviceStatus.RETIRED, frozenHeads = listOf(frozenHash))
     val afterRetirement = head(version = 4)

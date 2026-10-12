@@ -32,7 +32,7 @@ internal class DeviceTrust(val state: RegistryState) {
     when (signer.status) {
       DeviceStatus.APPROVED -> Unit
       DeviceStatus.RETIRED -> ensure(
-        type == DocType.DEVICE_HEAD && envelope.fileHash in signer.frozenHeads,
+        type == DocType.DEVICE_HEAD && envelope.contentHash in signer.frozenHeads,
         RejectReason.SIGNER_RETIRED,
         "dato di un dispositivo dismesso",
       )

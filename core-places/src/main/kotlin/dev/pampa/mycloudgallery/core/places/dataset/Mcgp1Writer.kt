@@ -159,7 +159,7 @@ internal object Mcgp1Writer {
       buffer.putShort(at + 8, (item.place.regionKey?.let { regionIndexByKey.getValue(it) } ?: Mcgp1Format.NONE).toShort())
       buffer.putShort(at + 10, countryIndex.getValue(item.place.countryCode).toShort())
       buffer.putShort(at + 12, (item.place.zone?.let { zoneIndex.getValue(it) } ?: Mcgp1Format.NONE).toShort())
-      buffer.put(at + 14, item.place.cls.toByte())
+      buffer.put(at + 14, (item.place.cls or (if (item.place.secondary) Mcgp1Format.FLAG_SECONDARY else 0)).toByte())
       buffer.put(at + 15, Mcgp1Format.populationBucket(item.place.population).toByte())
       buffer.put(at + 16, item.nameBytes.size.toByte())
       putBytes(buffer, layout.offNames.toInt() + nameOffset, item.nameBytes)

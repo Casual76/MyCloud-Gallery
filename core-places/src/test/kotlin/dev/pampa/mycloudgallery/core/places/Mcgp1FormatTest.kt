@@ -73,6 +73,22 @@ class Mcgp1FormatTest {
   }
 
   @Test
+  fun unDistrettoNelFileNonCompete() {
+    // Un distretto e' nel file (si risolve per id, ha la sua classe) ma la ricerca lo salta, anche se e' il piu' vicino.
+    val district = TestData.place(1, 45.0, 9.0, "Distretto", pop = 2_000_000, cls = 2).asSecondary()
+    val city = TestData.place(2, 45.1, 9.0, "Citta", pop = 5_000_000, cls = 2)
+    val file = TestData.open(TestData.bytes(listOf(district, city)))
+    val index = file.indexOfPlaceId(1)
+    assertThat(file.isSecondary(index)).isTrue()
+    assertThat(file.classOf(index)).isEqualTo(2)
+    assertThat(file.isSecondary(file.indexOfPlaceId(2))).isFalse()
+    assertThat(file.placeId(file.nearest(45.0, 9.0, 100_000.0)!!.index)).isEqualTo(2)
+    assertThat(TestData.open(TestData.bytes(listOf(district))).nearest(45.0, 9.0, 100_000.0)).isNull()
+    // Il formato non cambia: il bit sta nel byte di classe e un luogo senza il bit e' quello di sempre.
+    assertThat(String(TestData.bytes(listOf(district)), 0, 5)).isEqualTo("MCGP1")
+  }
+
+  @Test
   fun unDatasetVuotoSiScriveESiLegge() {
     val file = TestData.open(TestData.bytes(emptyList()))
     assertThat(file.placeCount).isEqualTo(0)

@@ -70,6 +70,7 @@ object BuildPlacesDataset {
       out.println("Luoghi tenuti: ${stats.placesKept} (da cities1000: ${stats.placesFromCities}, da IT: ${stats.placesFromItaly})")
       out.println("Scartati: ${stats.droppedByCode} per codice, ${stats.droppedTooSmall} troppo piccoli, ${stats.droppedNotPopulatedPlace} non abitati, ${stats.droppedMalformed} malformati")
       out.println("Nomi italiani: ${stats.italianPlaceNames} luoghi, ${stats.italianRegionNames} regioni su ${stats.regions}")
+      out.println("Localita' sotto i 1000 abitanti tenute perche' molto note: ${stats.famousSmallKept}; distretti che non competono: ${stats.districts}")
       out.println("Versione del dataset (data del dump): ${stats.dumpDate} -> ${stats.version}")
       out.println("File: ${bytes.size} byte, SHA-256 $sha")
 

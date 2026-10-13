@@ -24,7 +24,9 @@ import java.nio.ByteOrder
 // Un luogo (17 byte): id GeoNames int32; dLat uint16 e dLon uint16, cioe' la distanza in 1e-5 gradi dallo spigolo
 // sud-ovest della SUA cella (quindi la posizione ha la precisione di circa 1 m con 4 byte invece di 8); regione
 // uint16 (0xFFFF = nessuna); paese uint16; fuso uint16 (0xFFFF = nessuno); classe uint8; popolazione uint8
-// (logaritmica); lunghezza del nome uint8. Il nome di un luogo si trova sommando le lunghezze dei luoghi che lo
+// (logaritmica); lunghezza del nome uint8. Nel byte di classe i due bit bassi sono la classe (0..3) e il bit 4 segna un
+// "distretto" di una citta' molto piu' grande (un luogo nel file che non compete: vedi DistrictAbsorption); un file
+// scritto prima di questo bit ha sempre 0 li', quindi resta MCGP1. Il nome di un luogo si trova sommando le lunghezze dei luoghi che lo
 // precedono nella stessa cella, a partire da cellName: la ricerca (che e' il percorso caldo) non lo legge mai.
 //
 // Perche' una griglia sparsa e non un albero: la ricerca "ad anelli" intorno alla cella del punto tocca poche celle
@@ -42,7 +44,15 @@ internal class PlaceRow(
   /** 1 = abitato con almeno 1000 abitanti, 2 = sede amministrativa (PPLA*), 3 = capitale. 0 = minore (mai scelto). */
   val cls: Int,
   val population: Long,
-)
+  /**
+   * Un distretto di una citta' molto piu' grande (un borough, una circoscrizione): nel file ma non compete (bit
+   * [Mcgp1Format.FLAG_SECONDARY] del byte di classe). Lo decide lo strumento; vedi `DistrictAbsorption`.
+   */
+  val secondary: Boolean = false,
+) {
+  /** Lo stesso luogo, segnato come distretto di una citta' piu' grande. */
+  fun asSecondary(): PlaceRow = PlaceRow(id, latitude, longitude, name, countryCode, regionKey, zone, cls, population, true)
+}
 
 /** Una regione (admin1 di GeoNames) da scrivere nel file: e' anche il "luogo" di una ricerca solo regionale. */
 internal class RegionRow(
@@ -76,6 +86,12 @@ internal object Mcgp1Format {
   const val COUNTRY_SIZE = 2
   const val NONE = 0xFFFF
   const val MAX_NAME_BYTES = 255
+
+  /** Nel byte di classe di un luogo: i due bit bassi sono la classe (0..3). */
+  const val CLASS_MASK = 3
+
+  /** Nel byte di classe: il luogo e' un distretto di una citta' piu' grande e non compete (non cambia il formato MCGP1). */
+  const val FLAG_SECONDARY = 4
 
   /** Gli id dei "luoghi" di un paese (ricerca solo per paese) stanno in questo intervallo, sopra ogni id GeoNames. */
   const val COUNTRY_ID_BASE = 2_000_000_000

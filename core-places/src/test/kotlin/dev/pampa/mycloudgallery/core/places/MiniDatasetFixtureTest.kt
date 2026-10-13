@@ -34,7 +34,7 @@ class MiniDatasetFixtureTest {
 
   private companion object {
     // Aggiornare se cambia il formato, l'algoritmo di costruzione o i dump di prova.
-    const val MINI_SHA256 = "b8e078e8ee2149b2e3e92b1922894692cdd3f613c739eded316184cac282a565"
-    const val MINI_SIZE = 25_528
+    const val MINI_SHA256 = "0d953814bb173e982de08ac71af829ba891caeb35e61d0ae8b05978a9e9193c3"
+    const val MINI_SIZE = 25_716
   }
 }

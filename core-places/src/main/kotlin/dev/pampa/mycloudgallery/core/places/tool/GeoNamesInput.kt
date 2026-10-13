@@ -109,6 +109,8 @@ internal class GeoPlace(
   val timezone: String,
   /** La data di modifica del record, `aaaa-mm-gg`. */
   val modified: String,
+  /** Quanti nomi alternativi diversi ha (nelle lingue e nelle grafie di tutto il mondo): un indice di notorieta'. */
+  val alternateNameCount: Int = 0,
 )
 
 /** Una riga di `admin1CodesASCII.txt`. */
@@ -156,6 +158,7 @@ internal object GeoNamesParser {
       population = f[14].toLongOrNull() ?: 0L,
       timezone = f[17].trim(),
       modified = if (f.size > 18) f[18].trim() else "",
+      alternateNameCount = f[3].split(',').filter { it.isNotBlank() }.toSet().size,
     )
   }
 

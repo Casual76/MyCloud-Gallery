@@ -8,107 +8,107 @@
 100008	9100186	it	Roma	1					
 100009	9100202	it	Città del Vaticano	1					
 100010	9100203	it	Napoli	1					
-100011	9100256	it	Cefalù	1					
-100012	9100319	it	Zurigo	1					
-100013	9100320	it	Ginevra	1					
-100014	9100321	it	Berna	1					
-100015	9100322	it	Basilea	1					
-100016	9100323	it	Lucerna	1					
-100017	9100332	it	Mentone	1					
-100018	9100333	it	Nizza	1					
-100019	9100336	it	Marsiglia	1					
-100020	9100337	it	Avignone	1					
-100021	9100338	it	Briançon	1					
-100022	9100339	it	Lione	1					
-100023	9100341	it	Parigi	1					
-100024	9100343	it	Strasburgo	1					
-100025	9100345	it	Tolosa	1					
-100026	9100350	it	Capodistria	1					
-100027	9100351	it	Pirano	1					
-100028	9100352	it	Lubiana	1					
-100029	9100353	it	Zagabria	1					
-100030	9100354	it	Spalato	1					
-100031	9100356	it	Pola	1					
-100032	9100357	it	Fiume	1					
-100033	9100359	it	Vienna	1					
-100034	9100360	it	Salisburgo	1					
-100035	9100362	it	Villaco	1					
-100036	9100365	it	Monaco di Baviera	1					
-100037	9100366	it	Berlino	1					
-100038	9100367	it	Francoforte sul Meno	1					
-100039	9100368	it	Amburgo	1					
-100040	9100369	it	Colonia	1					
-100041	9100370	it	Norimberga	1					
-100042	9100371	it	Dresda	1					
-100043	9100374	it	Füssen	1					
-100044	9100375	it	Londra	1					
-100045	9100376	it	Edimburgo	1					
-100046	9100385	it	Dublino	1					
-100047	9100386	it	Lisbona	1					
-100048	9100393	it	Barcellona	1					
-100049	9100394	it	Siviglia	1					
-100050	9100397	it	Saragozza	1					
-100051	9100398	it	Palma di Maiorca	1					
-100052	9100400	it	Santiago di Compostela	1					
-100053	9100401	it	Cordova	1					
-100054	9100408	it	L'Aia	1					
-100055	9100410	it	Bruxelles	1					
-100056	9100411	it	Anversa	1					
-100057	9100413	it	Lussemburgo	1					
-100058	9100416	it	Tromsø	1					
-100059	9100417	it	Stoccolma	1					
-100060	9100418	it	Göteborg	1					
-100061	9100419	it	Copenaghen	1					
-100062	9100421	it	Reykjavík	1					
-100063	9100424	it	Praga	1					
-100064	9100425	it	Varsavia	1					
-100065	9100426	it	Cracovia	1					
-100066	9100429	it	Belgrado	1					
-100067	9100430	it	Bucarest	1					
-100068	9100432	it	Atene	1					
-100069	9100433	it	Salonicco	1					
-100070	9100435	it	Corfù	1					
-100071	9100436	it	Rodi	1					
-100072	9100439	it	Mosca	1					
-100073	9100440	it	San Pietroburgo	1					
-100074	9100441	it	Kiev	1					
-100075	9100445	it	La Valletta	1					
-100076	9100447	it	Il Cairo	1					
-100077	9100449	it	Tunisi	1					
-100078	9100450	it	Gerusalemme	1					
-100079	9100454	it	Città del Capo	1					
-100080	9100457	it	Zanzibar	1					
-100081	9100461	it	Pechino	1					
-100082	9100466	it	Seul	1					
-100083	9100469	it	Katmandu	1					
-100084	9100473	it	Malé	1					
-100085	9100474	it	New York	1					
-100086	9100487	it	Montréal	1					
-100087	9100488	it	Città del Messico	1					
-100088	9100489	it	Cancún	1					
-100089	9100490	it	L'Avana	1					
-100090	9100492	it	San Paolo	1					
-100091	9100496	it	Santiago del Cile	1					
-100092	9100498	it	Bogotá	1					
-100093	9100506	it	Nuku'alofa	1					
-100094	9100365	it	Monaco		1				
-100095	9100365	de	München	1					
-100096	9100365	en	Munich	1					
-100097	9100375	fr	Londres	1					
-100098	9100375	de	London	1					
-100099	9100375	it	Londra capitale			1			
-100100	9100437	it	Costantinopoli				1		
-100101	9100437	it	Istanbul	1					
-100102	9100357	it	Sankt Veit am Flaum				1		
+100011	9100257	it	Cefalù	1					
+100012	9100321	it	Zurigo	1					
+100013	9100322	it	Ginevra	1					
+100014	9100323	it	Berna	1					
+100015	9100324	it	Basilea	1					
+100016	9100325	it	Lucerna	1					
+100017	9100334	it	Mentone	1					
+100018	9100335	it	Nizza	1					
+100019	9100338	it	Marsiglia	1					
+100020	9100339	it	Avignone	1					
+100021	9100340	it	Briançon	1					
+100022	9100341	it	Lione	1					
+100023	9100343	it	Parigi	1					
+100024	9100345	it	Strasburgo	1					
+100025	9100347	it	Tolosa	1					
+100026	9100352	it	Capodistria	1					
+100027	9100353	it	Pirano	1					
+100028	9100354	it	Lubiana	1					
+100029	9100355	it	Zagabria	1					
+100030	9100356	it	Spalato	1					
+100031	9100358	it	Pola	1					
+100032	9100359	it	Fiume	1					
+100033	9100361	it	Vienna	1					
+100034	9100362	it	Salisburgo	1					
+100035	9100364	it	Villaco	1					
+100036	9100367	it	Monaco di Baviera	1					
+100037	9100368	it	Berlino	1					
+100038	9100369	it	Francoforte sul Meno	1					
+100039	9100370	it	Amburgo	1					
+100040	9100371	it	Colonia	1					
+100041	9100372	it	Norimberga	1					
+100042	9100373	it	Dresda	1					
+100043	9100376	it	Füssen	1					
+100044	9100377	it	Londra	1					
+100045	9100378	it	Edimburgo	1					
+100046	9100387	it	Dublino	1					
+100047	9100388	it	Lisbona	1					
+100048	9100395	it	Barcellona	1					
+100049	9100396	it	Siviglia	1					
+100050	9100399	it	Saragozza	1					
+100051	9100400	it	Palma di Maiorca	1					
+100052	9100402	it	Santiago di Compostela	1					
+100053	9100403	it	Cordova	1					
+100054	9100410	it	L'Aia	1					
+100055	9100412	it	Bruxelles	1					
+100056	9100413	it	Anversa	1					
+100057	9100415	it	Lussemburgo	1					
+100058	9100418	it	Tromsø	1					
+100059	9100419	it	Stoccolma	1					
+100060	9100420	it	Göteborg	1					
+100061	9100421	it	Copenaghen	1					
+100062	9100423	it	Reykjavík	1					
+100063	9100426	it	Praga	1					
+100064	9100427	it	Varsavia	1					
+100065	9100428	it	Cracovia	1					
+100066	9100431	it	Belgrado	1					
+100067	9100432	it	Bucarest	1					
+100068	9100434	it	Atene	1					
+100069	9100435	it	Salonicco	1					
+100070	9100437	it	Corfù	1					
+100071	9100438	it	Rodi	1					
+100072	9100441	it	Mosca	1					
+100073	9100442	it	San Pietroburgo	1					
+100074	9100443	it	Kiev	1					
+100075	9100447	it	La Valletta	1					
+100076	9100449	it	Il Cairo	1					
+100077	9100451	it	Tunisi	1					
+100078	9100452	it	Gerusalemme	1					
+100079	9100456	it	Città del Capo	1					
+100080	9100459	it	Zanzibar	1					
+100081	9100463	it	Pechino	1					
+100082	9100468	it	Seul	1					
+100083	9100471	it	Katmandu	1					
+100084	9100475	it	Malé	1					
+100085	9100476	it	New York	1					
+100086	9100493	it	Montréal	1					
+100087	9100494	it	Città del Messico	1					
+100088	9100495	it	Cancún	1					
+100089	9100496	it	L'Avana	1					
+100090	9100498	it	San Paolo	1					
+100091	9100502	it	Santiago del Cile	1					
+100092	9100504	it	Bogotá	1					
+100093	9100512	it	Nuku'alofa	1					
+100094	9100367	it	Monaco		1				
+100095	9100367	de	München	1					
+100096	9100367	en	Munich	1					
+100097	9100377	fr	Londres	1					
+100098	9100377	de	London	1					
+100099	9100377	it	Londra capitale			1			
+100100	9100439	it	Costantinopoli				1		
+100101	9100439	it	Istanbul	1					
+100102	9100359	it	Sankt Veit am Flaum				1		
 100103	9100001	en	Milan	1					
 100104	9100001	link	https://it.wikipedia.org/wiki/Milano						
 100105	9100186	it	Roma capitale						
-100106	9100341	fr	Paris	1					
-100107	9100359	de	Wien	1					
+100106	9100343	fr	Paris	1					
+100107	9100361	de	Wien	1					
 100108	9100138	en	Florence	1					
 100109	9100138	post	50100						
-100110	9100386	pt	Lisboa	1					
-100111	9100414	no	Oslo	1					
+100110	9100388	pt	Lisboa	1					
+100111	9100416	no	Oslo	1					
 100112	9000001	de	Abruzzo	1					
 100113	9000002	de	Basilicata	1					
 100114	9000003	de	Calabria	1					

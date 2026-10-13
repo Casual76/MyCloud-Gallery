@@ -16,6 +16,10 @@ internal class BuildStats(
   val italianPlaceNames: Int,
   val regions: Int,
   val italianRegionNames: Int,
+  /** I luoghi sotto i 1000 abitanti tenuti perche' molto noti (almeno [PlacesDatasetBuilder.FAMOUS_MIN_ALTERNATE_NAMES] nomi). */
+  val famousSmallKept: Int,
+  /** I distretti di citta' molto piu' grandi: nel file ma non competono ([DistrictAbsorption]). */
+  val districts: Int,
   val version: Int,
   val dumpDate: String,
 )
@@ -30,13 +34,17 @@ internal class BuiltDataset(val data: DatasetData, val stats: BuildStats)
  * 2. Si tengono solo i luoghi abitati (classe `P`) con un codice che e' un luogo vero:
  *    - `PPLC` (capitale) -> classe 3; `PPLA`, `PPLA2`..`PPLA5`, `PPLG` (sedi amministrative: in Italia anche i comuni
  *      sotto i 1000 abitanti, che sono `PPLA3`) -> classe 2;
- *    - `PPL`, `PPLL`, `PPLS` con almeno 1000 abitanti -> classe 1;
+ *    - `PPL`, `PPLL`, `PPLS` con almeno 1000 abitanti -> classe 1; sotto i 1000 abitanti solo se la localita' e' **molto nota**,
+ *      cioe' ha almeno [FAMOUS_MIN_ALTERNATE_NAMES] nomi alternativi diversi (Madonna di Campiglio, Manarola, Paestum,
+ *      Saturnia: i nomi in molte lingue sono l'indice di una localita' che tutti conoscono), anch'essa classe 1;
  *    - fuori: `PPLX` (quartieri e frazioni di una citta': darebbero "Brera" invece di "Milano"), `PPLH`/`PPLQ`/`PPLW`
  *      (storici, abbandonati, distrutti), `PPLF`/`PPLR`, e i `PPL` sotto i 1000 abitanti (non potrebbero mai
- *      essere scelti: il piu' vicino conta solo fra i luoghi con almeno 1000 abitanti o sede amministrativa).
+ *      essere scelti), salvo le localita' molto note appena dette).
  * 3. Il nome e' quello italiano di `alternateNamesV2` (`isolanguage` = `it`: preferito, poi non abbreviato, poi non
  *    colloquiale, poi il piu' vecchio) se esiste, altrimenti quello di GeoNames. Lo stesso per le regioni.
- * 4. Il fuso e' quello di GeoNames. La versione del dataset e' la data di modifica piu' recente fra i luoghi tenuti,
+ * 4. I **distretti** (borough, circoscrizioni e citta' satelliti grandi dentro l'area d'influenza di una citta' molto piu'
+ *    grande: Manhattan per New York) restano nel file ma non competono: vedi [DistrictAbsorption].
+ * 5. Il fuso e' quello di GeoNames. La versione del dataset e' la data di modifica piu' recente fra i luoghi tenuti,
  *    come aaaammgg: dipende solo dall'input, quindi lo stesso input da' lo stesso file.
  */
 internal object PlacesDatasetBuilder {
@@ -47,6 +55,7 @@ internal object PlacesDatasetBuilder {
     var notPopulated = 0
     var byCode = 0
     var tooSmall = 0
+    var famous = 0
     var malformed = 0
     val kept = HashMap<Int, Pair<GeoPlace, Int>>()
 
@@ -66,7 +75,7 @@ internal object PlacesDatasetBuilder {
             malformed++
             continue
           }
-          when (val cls = classify(place.featureCode, place.population)) {
+          when (val cls = classify(place.featureCode, place.population, place.alternateNameCount)) {
             CLASS_EXCLUDED -> byCode++
             CLASS_TOO_SMALL -> tooSmall++
             else -> {
@@ -123,6 +132,11 @@ internal object PlacesDatasetBuilder {
       if (place.modified > latest) latest = place.modified
     }
 
+    // I distretti: restano nel file, ma non competono.
+    val districtIds = DistrictAbsorption.districts(places)
+    for (i in places.indices) if (places[i].id in districtIds) places[i] = places[i].asSecondary()
+    famous = kept.values.count { (place, cls) -> cls == 1 && place.population < MIN_POPULATION && place.featureCode in SETTLEMENT_CODES }
+
     var italianRegionNames = 0
     val regions = usedKeys.map { key ->
       val admin = admin1ByKey.getValue(key)
@@ -145,6 +159,8 @@ internal object PlacesDatasetBuilder {
         italianPlaceNames = italianPlaceNames,
         regions = regions.size,
         italianRegionNames = italianRegionNames,
+        famousSmallKept = famous,
+        districts = districtIds.size,
         version = version,
         dumpDate = latest,
       ),
@@ -155,14 +171,24 @@ internal object PlacesDatasetBuilder {
   private const val CLASS_TOO_SMALL = 0
 
   /** La classe del formato (1 abitato, 2 sede amministrativa, 3 capitale), [CLASS_EXCLUDED] o [CLASS_TOO_SMALL]. */
-  fun classify(featureCode: String, population: Long): Int = when (featureCode) {
+  fun classify(featureCode: String, population: Long, alternateNameCount: Int = 0): Int = when (featureCode) {
     "PPLC" -> 3
     "PPLA", "PPLA2", "PPLA3", "PPLA4", "PPLA5", "PPLG" -> 2
-    "PPL", "PPLL", "PPLS" -> if (population >= MIN_POPULATION) 1 else CLASS_TOO_SMALL
+    "PPL", "PPLL", "PPLS" ->
+      if (population >= MIN_POPULATION || alternateNameCount >= FAMOUS_MIN_ALTERNATE_NAMES) 1 else CLASS_TOO_SMALL
     else -> CLASS_EXCLUDED
   }
 
   const val MIN_POPULATION = 1000L
+
+  /**
+   * Una localita' sotto i 1000 abitanti con almeno tanti nomi alternativi diversi e' "molto nota". Dieci e' una soglia
+   * tonda sulla distribuzione di GeoNames per l'Italia (51.945 localita' sotto i 1000 abitanti: 20 con almeno 10 nomi,
+   * 56 con almeno 5, 326 con almeno 3): tiene Madonna di Campiglio, Manarola, Paestum, Bagno di Romagna.
+   */
+  const val FAMOUS_MIN_ALTERNATE_NAMES = 10
+
+  private val SETTLEMENT_CODES = setOf("PPL", "PPLL", "PPLS")
 
   /** `2026-10-13` -> 20261013. */
   fun versionOf(date: String): Int {

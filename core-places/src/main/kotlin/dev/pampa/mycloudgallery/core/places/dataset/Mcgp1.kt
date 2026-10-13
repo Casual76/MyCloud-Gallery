@@ -85,7 +85,11 @@ internal class Mcgp1 private constructor(
   /** Indice (nella tabella dei fusi) del fuso del luogo, o [Mcgp1Format.NONE]. */
   fun zoneOf(index: Int): Int = u16(recordAt(index) + 12)
 
-  fun classOf(index: Int): Int = u8(recordAt(index) + 14)
+  /** La classe del luogo (1 abitato, 2 sede amministrativa, 3 capitale; 0 minore), senza i flag. */
+  fun classOf(index: Int): Int = u8(recordAt(index) + 14) and Mcgp1Format.CLASS_MASK
+
+  /** Vero se il luogo e' un distretto di una citta' piu' grande: c'e' nel file ma non compete. */
+  fun isSecondary(index: Int): Boolean = (u8(recordAt(index) + 14) and Mcgp1Format.FLAG_SECONDARY) != 0
 
   fun populationBucketOf(index: Int): Int = u8(recordAt(index) + 15)
 
@@ -229,17 +233,27 @@ internal class Mcgp1 private constructor(
     if (enclave != null) {
       val country = countryIndexOf(enclave.countryCode)
       if (country >= 0) {
-        Probe(latitude, longitude, min(capM, ENCLAVE_SEARCH_M), country).run()?.let { return it }
+        val cap = min(capM, ENCLAVE_SEARCH_M)
+        // Dentro un micro-stato risponde l'unita' amministrativa (la capitale, il castello, il comune), non un villaggio:
+        // a San Marino, Valdragone (7.000 abitanti, un villaggio) non deve battere la citta' di San Marino (4.500).
+        Probe(latitude, longitude, cap, country, MIN_CLASS_IN_ENCLAVE).run()?.let { return it }
+        Probe(latitude, longitude, cap, country, 1).run()?.let { return it }
       }
     }
-    return Probe(latitude, longitude, capM, ALL_BUT_MICRO_STATES).run()
+    return Probe(latitude, longitude, capM, ALL_BUT_MICRO_STATES, 1).run()
   }
 
   /**
    * [onlyCountry]: l'indice del paese a cui limitare la ricerca (un'enclave), oppure [ALL_BUT_MICRO_STATES]: tutti i
    * luoghi tranne quelli dei micro-stati.
    */
-  private inner class Probe(latitude: Double, longitude: Double, private val capM: Double, private val onlyCountry: Int) {
+  private inner class Probe(
+    latitude: Double,
+    longitude: Double,
+    private val capM: Double,
+    private val onlyCountry: Int,
+    private val minClass: Int,
+  ) {
     private val qLatU = Mcgp1Format.latUnits(latitude)
     private val qLonU = Mcgp1Format.lonUnits(longitude)
     private val r0 = Mcgp1Format.rowOf(qLatU)
@@ -383,7 +397,9 @@ internal class Mcgp1 private constructor(
       val twoR = 2.0 * Mcgp1Format.EARTH_RADIUS_M
       for (i in first until last) {
         val at = recordAt(i)
-        if (u8(at + 14) == 0) continue
+        val flags = u8(at + 14)
+        // Fuori: i luoghi minori, quelli sotto la classe richiesta e i distretti di una citta' piu' grande.
+        if ((flags and Mcgp1Format.CLASS_MASK) < minClass || (flags and Mcgp1Format.FLAG_SECONDARY) != 0) continue
         val country = u16(at + 10)
         if (onlyCountry >= 0) {
           if (country != onlyCountry) continue
@@ -425,6 +441,9 @@ internal class Mcgp1 private constructor(
 
     /** Il valore di `onlyCountry` che vuol dire "tutti i paesi tranne i micro-stati". */
     private const val ALL_BUT_MICRO_STATES = -1
+
+    /** Dentro un'enclave rispondono solo le sedi amministrative e le capitali (classe 2 e 3), se ce ne sono. */
+    private const val MIN_CLASS_IN_ENCLAVE = 2
 
     /** Dentro un'enclave si cerca al massimo a questa distanza (le enclave sono piu' piccole di 20 km). */
     private const val ENCLAVE_SEARCH_M = 50_000.0

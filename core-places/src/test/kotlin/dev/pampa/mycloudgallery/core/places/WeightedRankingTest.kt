@@ -125,11 +125,49 @@ class WeightedRankingTest {
 
   @Test
   fun sanMarinoEdentroIlPoligono() {
-    assertThat(nameAt(43.9424, 12.4578)).isEqualTo("San Marino") // il centro
+    assertThat(nameAt(43.9367, 12.4464)).isEqualTo("San Marino") // Piazza della Liberta', il centro della citta'
     assertThat(nameAt(43.9680, 12.4800)).isEqualTo("Serravalle") // dentro, vince il suo luogo piu' adatto
-    assertThat(nameAt(43.9540, 12.4470)).isEqualTo("Borgo Maggiore")
-    assertThat(mini.zoneAt(GeoPoint(43.9424, 12.4578))!!.id).isEqualTo("Europe/San_Marino")
-    assertThat(mini.nearest(GeoPoint(43.9424, 12.4578))!!.place.countryName).isEqualTo("San Marino")
+    assertThat(nameAt(43.9419, 12.4474)).isEqualTo("Borgo Maggiore")
+    assertThat(mini.zoneAt(GeoPoint(43.9367, 12.4464))!!.id).isEqualTo("Europe/San_Marino")
+    assertThat(mini.nearest(GeoPoint(43.9367, 12.4464))!!.place.countryName).isEqualTo("San Marino")
+  }
+
+  @Test
+  fun dentroUnMicroStatoRispondeLUnitaAmministrativaNonUnVillaggio() {
+    // Valdragone e' un villaggio di 7.000 abitanti, piu' del capoluogo (4.500), a 1,1 km da Piazza della Liberta'. Un punto a
+    // 300 m da Valdragone non deve dare "Valdragone": dentro un micro-stato rispondono la capitale e i castelli (sedi
+    // amministrative), non i villaggi. Prima di questa regola era l'errore di T078.
+    val match = mini.nearest(GeoPoint(43.9424, 12.4578))!!
+    assertThat(match.place.name).isIn(listOf("San Marino", "Borgo Maggiore"))
+    assertThat(match.place.countryCode).isEqualTo("SM")
+    assertThat(nameAt(43.9402, 12.4562)).isNotEqualTo("Valdragone") // proprio nel villaggio
+    // Fuori dai micro-stati un villaggio qualificato resta una risposta valida (qui non ce n'e' uno in dataset di prova).
+  }
+
+  // ---- New York e i suoi borough -----------------------------------------------------------------------------------
+
+  @Test
+  fun timesSquareENewYorkNonManhattan() {
+    // Manhattan (1,5 milioni, raggio 6 km) batteva New York (8,8 milioni, raggio 8 km) di 400 m per il suo centroide piu'
+    // vicino: un borough e' un distretto della citta' e non compete (DistrictAbsorption).
+    assertThat(nameAt(40.7580, -73.9855)).isEqualTo("New York") // Times Square
+    assertThat(nameAt(40.7829, -73.9654)).isEqualTo("New York") // Central Park
+    assertThat(nameAt(40.7060, -74.0088)).isEqualTo("New York") // Wall Street
+    assertThat(nameAt(40.6501, -73.9496)).isEqualTo("New York") // centro di Brooklyn
+    assertThat(nameAt(40.6815, -73.8365)).isEqualTo("New York") // centro del Queens
+    // Il Bronx dista 19 km dal centroide di New York, oltre la somma dei due raggi: li' compete e vince il suo nome.
+    assertThat(nameAt(40.8499, -73.8664)).isEqualTo("The Bronx")
+  }
+
+  // ---- Le localita' molto note --------------------------------------------------------------------------------------
+
+  @Test
+  fun unaLocalitaSotto1000AbitantiMaMoltoNotaEUnRisultato() {
+    // Paestum: 150 abitanti, 15 nomi alternativi. Una frazione con 0 nomi alternativi (Manarola nel dataset di prova) no.
+    val paestum = mini.nearest(GeoPoint(40.4225, 15.0058))!!
+    assertThat(paestum.place.name).isEqualTo("Paestum")
+    assertThat(paestum.precision).isEqualTo(PlacePrecision.CITY)
+    assertThat(nameAt(44.1073, 9.7285)).isEqualTo("Riomaggiore")
   }
 
   @Test

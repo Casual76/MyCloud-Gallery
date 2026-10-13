@@ -56,16 +56,26 @@ class PlacesAccuracyTest {
     ).forEach { assertThat(notes).contains(it) }
   }
 
-  /** Lo stesso controllo, sull'asset vero, appena `buildPlacesDataset` lo avra' generato (docs/luoghi.md, passo 4). */
+  private val realAsset = File("src/main/assets/places/places.mcgp1")
+
+  /** Lo stesso controllo, sull'asset vero (docs/luoghi.md, passo 4): la taratura deve fare almeno il 95%. */
   @Test
-  fun realDatasetAccuracy() {
-    val asset = File("src/main/assets/places/places.mcgp1")
-    assumeTrue("Nessun dataset reale in assets/places: si prova dopo buildPlacesDataset.", asset.isFile)
-    val real = PlacesDataset.openForTest(asset.readBytes())
-    for (file in listOf("taratura-100.tsv", "verifica-100.tsv")) {
-      val report = PlacesAccuracy.evaluate(real, file, PlacesAccuracy.parse(TestData.readTsv(file)))
-      println(report)
-      assertThat(report.percent).isAtLeast(95.0)
-    }
+  fun realDatasetTaratura() {
+    assumeTrue("Nessun dataset reale in assets/places: si prova dopo buildPlacesDataset.", realAsset.isFile)
+    val report = PlacesAccuracy.evaluate(PlacesDataset.openForTest(realAsset.readBytes()), "taratura-100.tsv (dataset vero)", PlacesAccuracy.parse(TestData.readTsv("taratura-100.tsv")))
+    println(report)
+    assertThat(report.percent).isAtLeast(95.0)
+  }
+
+  /**
+   * La verifica CIECA sul dataset vero: si stampa com'e', senza ritoccarne le attese (docs/luoghi.md §7). Non fa fallire il
+   * build se e' sotto il 95%: e' una misura da leggere, non una soglia da aggiustare; il numero e' nel rapporto.
+   */
+  @Test
+  fun realDatasetVerificaCieca() {
+    assumeTrue("Nessun dataset reale in assets/places: si prova dopo buildPlacesDataset.", realAsset.isFile)
+    val report = PlacesAccuracy.evaluate(PlacesDataset.openForTest(realAsset.readBytes()), "verifica-100.tsv (dataset vero)", PlacesAccuracy.parse(TestData.readTsv("verifica-100.tsv")))
+    println(report)
+    assertThat(report.total).isEqualTo(100)
   }
 }

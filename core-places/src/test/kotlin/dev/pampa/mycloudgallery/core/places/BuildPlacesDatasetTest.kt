@@ -91,6 +91,36 @@ class BuildPlacesDatasetTest {
   }
 
   @Test
+  fun leLocalitaMoltoNoteSotto1000SiTengonoPerRegola() {
+    // Madonna di Campiglio (656 abitanti, 12 nomi alternativi) si': una localita' che tutti conoscono. Il confine e' tondo: 10.
+    assertThat(PlacesDatasetBuilder.classify("PPL", 656, 12)).isEqualTo(1)
+    assertThat(PlacesDatasetBuilder.classify("PPL", 656, PlacesDatasetBuilder.FAMOUS_MIN_ALTERNATE_NAMES)).isEqualTo(1)
+    assertThat(PlacesDatasetBuilder.classify("PPL", 656, PlacesDatasetBuilder.FAMOUS_MIN_ALTERNATE_NAMES - 1)).isEqualTo(0)
+    assertThat(PlacesDatasetBuilder.classify("PPL", 753, 0)).isEqualTo(0) // Breuil-Cervinia nei dati veri: nessun nome alternativo
+    // Un quartiere o un luogo storico resta fuori, per quanto sia noto.
+    assertThat(PlacesDatasetBuilder.classify("PPLX", 656, 99)).isEqualTo(-1)
+    assertThat(PlacesDatasetBuilder.classify("PPLH", 0, 99)).isEqualTo(-1)
+    // Nel dataset di prova: Paestum (15 nomi) entra, Manarola (nessuno) no.
+    assertThat(namesKept()).contains("Paestum")
+    assertThat(namesKept()).doesNotContain("Manarola")
+    assertThat(built.stats.famousSmallKept).isEqualTo(1)
+    // Il conteggio conta i nomi DIVERSI di una riga di GeoNames (colonna alternatenames).
+    val line = listOf("1", "Posto", "Posto", "Posto,Luogo,,Posto,Ort", "45.0", "9.0", "P", "PPL", "IT", "", "09", "", "", "", "300", "", "0", "Europe/Rome", "2024-01-01")
+      .joinToString("\t")
+    assertThat(dev.pampa.mycloudgallery.core.places.tool.GeoNamesParser.parsePlace(line)!!.alternateNameCount).isEqualTo(3)
+  }
+
+  @Test
+  fun iDistrettiDiUnaCittaMoltoPiuGrandeRestanoNelFileMaNonCompetono() {
+    val districts = built.data.places.filter { it.secondary }.map { it.name }
+    // I borough di New York dentro l'area d'influenza della citta' (almeno 150.000 abitanti, almeno 3 volte meno popolosi).
+    assertThat(districts).containsExactly("Manhattan", "Brooklyn", "Queens")
+    assertThat(built.stats.districts).isEqualTo(3)
+    // Il Bronx dista 19 km: fuori; Segrate, Sesto, Fiesole e Monza sono troppo piccoli o troppo lontani.
+    assertThat(namesKept()).containsAtLeast("The Bronx", "Manhattan", "Sesto San Giovanni", "Segrate", "Fiesole", "Monza")
+  }
+
+  @Test
   fun lePolitichedelleClassi() {
     assertThat(PlacesDatasetBuilder.classify("PPLC", 800)).isEqualTo(3)
     assertThat(PlacesDatasetBuilder.classify("PPLA3", 12)).isEqualTo(2)

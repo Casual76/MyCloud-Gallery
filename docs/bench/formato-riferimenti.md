@@ -1,0 +1,83 @@
+# Formato dei riferimenti e delle soglie (Fase 3, P9)
+
+I file di questa cartella sono letti da `tools/bench/compare.ps1`. Tre cose diverse, da non confondere:
+
+| File | Chi lo scrive | Che cos'è |
+|---|---|---|
+| `benchmark/soglie.json` | a mano (P9, poi chi cambia le soglie del §2.6) | le regole: quali prove, quali metriche, quali limiti |
+| `docs/bench/riferimento-<dispositivo>.json` | `compare.ps1 -Accept`, dopo una misura buona | i **numeri accettati** di un dispositivo, contro cui si calcola la regressione |
+| `…/connected_android_test_additional_output/…/*-benchmarkData.json` | Macrobenchmark (AGP li copia dal dispositivo) | i risultati dell'ultima corsa: ingresso di `compare.ps1` |
+
+## 1. `docs/bench/riferimento-<dispositivo>.json`
+
+`<dispositivo>` è una chiave di `soglie.json`: `s25`, `tab-s9` (gli unici con riferimenti veri). Per gli emulatori **non esiste** riferimento: non si accetta niente da un emulatore.
+
+```json
+{
+  "formato": 1,
+  "dispositivo": "s25",
+  "modello": "SM-S931B",
+  "sdk": 36,
+  "frequenzaHz": 120,
+  "data": "2026-11-02",
+  "variante": "benchmarkRelease",
+  "prove": {
+    "scroll_days_square": { "frameOverrunMs.P99": -0.4, "frameDurationCpuMs.P95": 5.2 },
+    "pinch":              { "frameOverrunMs.P99": -0.1, "frameDurationCpuMs.P95": 6.0 },
+    "coldStart":          { "timeToFullDisplayMs.p90": 860 },
+    "viewerOpen":         { "viewerOpenMs.p90": 80 }
+  }
+}
+```
+
+- `prove`: per ogni prova (il nome del metodo di test) le coppie `metrica.statistica` che le regole di `soglie.json` usano. Si scrivono **tutte** quelle presenti, anche le assolute: un riferimento serve a leggere dove stavamo, non solo a confrontare.
+- Le statistiche sono quelle di `soglie.json`: `P50`/`P90`/`P95`/`P99` per le metriche campionate (un valore per fotogramma: `FrameTimingMetric`), `min`/`max`/`median`/`mean`/`p<N>` calcolati sulle iterazioni per le altre (percentile "nearest rank").
+- `frequenzaHz` è il massimo letto in sola lettura da `check.ps1 -Bench`; `data`, `modello` e `sdk` servono a capire a che macchina si riferisce il numero.
+- **Un esempio completo** (anche di risultati e di regressione) è in `tools/bench/samples/`, ed è quello che prova `compare.ps1 -SelfTest`.
+
+### Quando si aggiorna
+
+- **Mai per far passare un test.** Una regressione si corregge. Si accetta un riferimento nuovo quando il codice è cambiato **di proposito** (per esempio un livello della griglia con più celle) e la misura è buona, con il motivo nel messaggio del commit.
+- Prima misura di un dispositivo: `compare.ps1 -Accept` dopo una corsa senza soglie fallite. Fino ad allora le regressioni risultano `NUOVO` (non falliscono).
+- Il riferimento si rifà **per dispositivo e per versione di Android**: un aggiornamento di One UI sposta i numeri, si rimisura e si accetta di nuovo.
+
+## 2. `benchmark/soglie.json`
+
+```json
+{
+  "formato": 1,
+  "dispositivi": { "s25": { "nome": "...", "classe": "telefono", "modelli": ["SM-S931"], "frequenzaMinimaHz": 120 } },
+  "scenari": [
+    {
+      "id": "scroll",
+      "prove": "^scroll_(years|months|days|all)_(square|justified)$",
+      "proveAttese": ["scroll_years_square", "..."],
+      "classiDispositivo": ["telefono", "tablet"],
+      "validita":   { "metrica": "libraryShown", "statistica": "min", "minimo": 1 },
+      "assolute":   [ { "metrica": "frameOverrunMs", "statistica": "P99", "massimo": 0.0 } ],
+      "regressione":[ { "metrica": "frameDurationCpuMs", "statistica": "P95", "aumentoMassimo": 0.10 } ]
+    }
+  ]
+}
+```
+
+| Campo | Significato |
+|---|---|
+| `dispositivi.<chiave>.modelli` | prefissi di `ro.product.model` (`SM-S931` vale per `SM-S931B`, `SM-S931U`…); gli emulatori si riconoscono dal modello (`sdk_gphone…`) e hanno `"emulatore": true` |
+| `dispositivi.<chiave>.classe` | `telefono` o `tablet`: decide quali scenari si applicano (lo zoom a 200 MP solo al tablet) |
+| `scenari[].prove` | espressione regolare sul nome della prova; `proveAttese` elenca i nomi che devono esserci (quelli che mancano risultano `MANCA`, con il motivo del rapporto JUnit se la prova è stata saltata) |
+| `validita` | la prova ha misurato quello che doveva: per l'avvio a freddo, la Libreria era visibile. Se non lo è, la prova risulta non valida e **non si confronta** con la soglia |
+| `assolute[]` | `massimo` (≤), `massimoEsclusivo` (<) o `minimo` (≥) sul valore di `metrica`/`statistica`. `massimo: null` con `calibrazione` = tetto da calibrare con la prima misura (`compare.ps1 -Calibrate`) |
+| `regressione[]` | `aumentoMassimo`: frazione massima di aumento sul riferimento accettato (`0.10` = +10%). Un riferimento non positivo non si confronta (`N/A`) |
+
+Esiti di `compare.ps1`: `OK`, `FAIL`, `MANCA` (prova attesa senza risultato), `CAL` (tetto da calibrare), `NUOVO` (nessun riferimento), `N/A`. Codice di uscita: `0` senza `FAIL` (e, con `-RequireAll`, senza `MANCA` né `CAL`); `1` altrimenti; `2` per errori d'uso o file illeggibili.
+
+## 3. I risultati di Macrobenchmark (ingresso)
+
+`*-benchmarkData.json`, un file per corsa, con `context` (modello, SDK, fingerprint…) e `benchmarks[]`:
+
+- `name`, `className`, `repeatIterations`;
+- `metrics.<nome>`: `minimum`, `maximum`, `median` e `runs[]` (un valore per iterazione): `timeToInitialDisplayMs`, `timeToFullDisplayMs`, `viewerOpenMs`, `pssPeakKb`, `processAlive`, `libraryShown`, `frameCount`;
+- `sampledMetrics.<nome>`: `P50`, `P90`, `P95`, `P99` su tutti i fotogrammi di tutte le iterazioni: `frameDurationCpuMs`, `frameOverrunMs`.
+
+Le metriche proprie (`viewerOpenMs`, `pssPeakKb`, `processAlive`, `libraryShown`) sono in `BenchMetrics.kt`.

@@ -1,0 +1,102 @@
+{
+  "formato": 1,
+  "descrizione": "Soglie della Fase 3 (docs/fase3-progetto.md §2.6, D21). Le legge tools/bench/compare.ps1. Una soglia assoluta vale sempre; la regressione si confronta con il riferimento accettato docs/bench/riferimento-<dispositivo>.json. I numeri valgono solo su S25 e Tab S9: sugli emulatori gli scenari girano per verificare che funzionino (compare.ps1 -Smoke) e nessuna soglia si applica.",
+  "dispositivi": {
+    "s25": {
+      "nome": "Galaxy S25",
+      "classe": "telefono",
+      "modelli": ["SM-S931"],
+      "frequenzaMinimaHz": 120
+    },
+    "tab-s9": {
+      "nome": "Galaxy Tab S9",
+      "classe": "tablet",
+      "modelli": ["SM-X710", "SM-X716", "SM-X718"],
+      "frequenzaMinimaHz": 120
+    },
+    "emulatore-telefono": {
+      "nome": "Emulatore telefono (Medium_Phone)",
+      "classe": "telefono",
+      "emulatore": true
+    },
+    "emulatore-tablet": {
+      "nome": "Emulatore tablet (Pampa_Tablet)",
+      "classe": "tablet",
+      "emulatore": true
+    }
+  },
+  "scenari": [
+    {
+      "id": "scroll",
+      "descrizione": "Fling e scorrimento su 100 mila elementi, ai 4 livelli e nei 2 stili (FrameTimingMetric)",
+      "prove": "^scroll_(years|months|days|all)_(square|justified)$",
+      "proveAttese": ["scroll_years_square", "scroll_months_square", "scroll_days_square", "scroll_all_square", "scroll_years_justified", "scroll_months_justified", "scroll_days_justified", "scroll_all_justified"],
+      "classi": ["LibraryScrollBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "assolute": [
+        { "metrica": "frameOverrunMs", "statistica": "P99", "massimo": 0.0, "spiega": "meno dell'1% dei fotogrammi oltre gli 8,3 ms (120 Hz)" }
+      ],
+      "regressione": [
+        { "metrica": "frameDurationCpuMs", "statistica": "P95", "aumentoMassimo": 0.10 }
+      ]
+    },
+    {
+      "id": "pinch",
+      "descrizione": "10 pinch continui fra i livelli con UiAutomator (FrameTimingMetric)",
+      "prove": "^pinch$",
+      "proveAttese": ["pinch"],
+      "classi": ["LibraryPinchBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "assolute": [
+        { "metrica": "frameOverrunMs", "statistica": "P99", "massimo": 0.0, "spiega": "meno dell'1% dei fotogrammi oltre gli 8,3 ms (120 Hz)" }
+      ],
+      "regressione": [
+        { "metrica": "frameDurationCpuMs", "statistica": "P95", "aumentoMassimo": 0.10 }
+      ]
+    },
+    {
+      "id": "avvio",
+      "descrizione": "Avvio a freddo, 15 ripetizioni, TTFD alla prima pagina di miniature (StartupTimingMetric)",
+      "prove": "^coldStart$",
+      "proveAttese": ["coldStart"],
+      "classi": ["StartupBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "validita": { "metrica": "libraryShown", "statistica": "min", "minimo": 1, "spiega": "la Libreria era visibile: altrimenti l'avvio misurato e' quello dell'onboarding" },
+      "assolute": [
+        { "metrica": "timeToFullDisplayMs", "statistica": "p90", "massimoEsclusivo": 1000.0, "spiega": "TTFD p90 sotto il secondo; l'app deve chiamare reportFullyDrawn (prima pagina di miniature o dopo 300 ms)" }
+      ],
+      "regressione": [
+        { "metrica": "timeToFullDisplayMs", "statistica": "p90", "aumentoMassimo": 0.10 }
+      ]
+    },
+    {
+      "id": "viewer",
+      "descrizione": "Apertura del viewer: dal tocco al primo fotogramma con l'immagine (sezione di traccia MCG:viewerOpen)",
+      "prove": "^viewerOpen$",
+      "proveAttese": ["viewerOpen"],
+      "classi": ["ViewerBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "assolute": [
+        { "metrica": "viewerOpenMs", "statistica": "p90", "massimoEsclusivo": 100.0, "spiega": "p90 sotto i 100 ms; la sezione la emette il viewer (P8)" }
+      ],
+      "regressione": [
+        { "metrica": "viewerOpenMs", "statistica": "p90", "aumentoMassimo": 0.15 }
+      ]
+    },
+    {
+      "id": "zoom200",
+      "descrizione": "Zoom 1:1 e pan sui quattro angoli di una foto da 200 MP, 5 cicli (tablet)",
+      "prove": "^zoom200Mp$",
+      "proveAttese": ["zoom200Mp"],
+      "classi": ["Zoom200MpBenchmark"],
+      "classiDispositivo": ["tablet"],
+      "assolute": [
+        { "metrica": "processAlive", "statistica": "min", "minimo": 1, "spiega": "nessun OOM: il processo e' lo stesso dall'inizio alla fine di ogni iterazione" },
+        { "metrica": "pssPeakKb", "statistica": "max", "massimo": null, "calibrazione": { "margine": 0.10 }, "spiega": "PSS di picco sotto il tetto calibrato alla prima misura (compare.ps1 -Calibrate lo scrive qui, in KB)" }
+      ],
+      "regressione": [
+        { "metrica": "pssPeakKb", "statistica": "max", "aumentoMassimo": 0.15 }
+      ]
+    }
+  ]
+}

@@ -30,5 +30,17 @@
         <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
       </intent-filter>
     </receiver>
+
+    <!--
+        SOLO la variante di misura (P9): crea il dataset da 100 mila righe sintetiche quando il collaudo scrive il marcatore
+        `bench-library.marker` in getExternalFilesDir (app/src/benchmarkRelease/.../bench/BenchDatasetProvider.kt).
+        Non esportato e senza dati: e' solo il punto in cui il sistema ci da' il controllo prima di Application.onCreate.
+        Senza marcatore non fa niente. `check.ps1` cerca nel dex di release qualunque classe `Bench*`.
+    -->
+    <provider
+        android:name="dev.pampa.mycloudgallery.bench.BenchDatasetProvider"
+        android:authorities="${applicationId}.bench"
+        android:exported="false"
+        android:initOrder="100" />
   </application>
 </manifest>

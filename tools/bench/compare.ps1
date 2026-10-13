@@ -1,0 +1,521 @@
+<#
+.SYNOPSIS
+  Confronta i risultati del Macrobenchmark con le soglie (benchmark/soglie.json) e con il riferimento accettato
+  (docs/bench/riferimento-<dispositivo>.json). Fase 3, P9 (docs/fase3-progetto.md par. 2.6, D21).
+
+.DESCRIPTION
+  Legge i file *-benchmarkData.json che Macrobenchmark scrive (AGP li copia in
+  benchmark\build\outputs\connected_android_test_additional_output\...), riconosce il dispositivo dal modello e, per
+  ogni scenario di soglie.json applicabile a quel tipo di dispositivo:
+
+    - soglia ASSOLUTA   metrica/statistica entro il massimo (o il minimo) di soglie.json;
+    - REGRESSIONE       metrica/statistica entro l'aumento massimo sul riferimento accettato (+10% o +15%);
+    - VALIDITA'         la prova ha misurato quello che doveva (per l'avvio: la Libreria era visibile).
+
+  Esiti per riga:  OK  FAIL  MANCA (prova attesa senza risultati: saltata o non girata)  CAL (tetto da calibrare)
+                   NUOVO (nessun riferimento per confrontare)  N/A (scenario non per questo tipo di dispositivo)
+
+  Codice di uscita: 0 se nessun FAIL (e, con -RequireAll, nessun MANCA); 1 altrimenti; 2 per errori d'uso o file illeggibili.
+
+  In -Smoke (emulatore, `check.ps1 -Bench` lo imposta da solo) NESSUNA soglia si applica: i numeri dell'emulatore non
+  valgono. Si stampa che cosa e' girato, che cosa e' stato saltato e perche', e si esce con 0 se almeno una prova e' girata
+  o se tutte le saltate hanno un motivo.
+
+.PARAMETER Results       File *-benchmarkData.json o cartella da cercare (ricorsiva). Default: la cartella di AGP.
+.PARAMETER Device        Chiave di soglie.json (s25, tab-s9, emulatore-telefono, emulatore-tablet). Default: dal modello.
+.PARAMETER Thresholds    soglie.json. Default: benchmark\soglie.json.
+.PARAMETER ReferenceDir  Dove stanno i riferimenti. Default: docs\bench.
+.PARAMETER Report        Cartella dei rapporti JUnit (TEST-*.xml) per dire perche' una prova e' stata saltata. Default: quella di AGP.
+.PARAMETER RefreshHz     Frequenza dello schermo letta da check.ps1 (solo annotazione; sotto la minima del dispositivo avvisa).
+.PARAMETER Smoke         Nessuna soglia: verifica solo che gli scenari girino.
+.PARAMETER RequireAll    Una prova attesa senza risultati e' un FAIL (chiusura della Fase 3).
+.PARAMETER Accept        Scrive docs\bench\riferimento-<dispositivo>.json con questi risultati (solo se nessuna soglia assoluta fallisce, salvo -Force).
+.PARAMETER Calibrate     Scrive in soglie.json il tetto di PSS dello zoom a 200 MP (misura + margine), se e' ancora `null`.
+.PARAMETER SummaryJson   Scrive un riassunto leggibile da macchina (una riga per verifica).
+.PARAMETER SelfTest      Prova la logica del confronto su file di esempio (tools\bench\samples): non serve un dispositivo.
+
+.EXAMPLE
+  powershell -ExecutionPolicy Bypass -File tools\bench\compare.ps1 -RequireAll
+.EXAMPLE
+  powershell -ExecutionPolicy Bypass -File tools\bench\compare.ps1 -SelfTest
+#>
+[CmdletBinding()]
+param(
+  [string]$Results,
+  [string]$Device,
+  [string]$Thresholds,
+  [string]$ReferenceDir,
+  [string]$Report,
+  [double]$RefreshHz = 0,
+  [switch]$Smoke,
+  [switch]$RequireAll,
+  [switch]$Accept,
+  [switch]$Force,
+  [switch]$Calibrate,
+  [string]$SummaryJson,
+  [switch]$SelfTest
+)
+
+$ErrorActionPreference = "Stop"
+$inv = [System.Globalization.CultureInfo]::InvariantCulture
+$root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+if (-not $Thresholds) { $Thresholds = Join-Path $root "benchmark\soglie.json" }
+if (-not $ReferenceDir) { $ReferenceDir = Join-Path $root "docs\bench" }
+if (-not $Results) { $Results = Join-Path $root "benchmark\build\outputs\connected_android_test_additional_output" }
+if (-not $Report) { $Report = Join-Path $root "benchmark\build\outputs\androidTest-results" }
+
+# --- Utilita' ---------------------------------------------------------------------------------------------
+
+function Read-Json([string]$path) {
+  $text = [System.IO.File]::ReadAllText($path, (New-Object System.Text.UTF8Encoding($false)))
+  return $text | ConvertFrom-Json
+}
+
+function Format-Number($value, [string]$pattern = "0.###") {
+  if ($null -eq $value) { return "-" }
+  return ([double]$value).ToString($pattern, $inv)
+}
+
+function Has-Property($object, [string]$name) {
+  return ($null -ne $object) -and ($null -ne $object.PSObject.Properties[$name])
+}
+
+# Percentile "nearest rank" su una lista di valori (p in 0..100). Per P50/P90/P95/P99 e per gli p90 sulle iterazioni.
+function Get-Percentile($values, [double]$p) {
+  $sorted = @($values | Sort-Object)
+  if ($sorted.Count -eq 0) { return $null }
+  $rank = [int][math]::Ceiling($p / 100.0 * $sorted.Count)
+  if ($rank -lt 1) { $rank = 1 }
+  if ($rank -gt $sorted.Count) { $rank = $sorted.Count }
+  return [double]$sorted[$rank - 1]
+}
+
+# Il valore di metrica/statistica di una prova. Le metriche "campionate" (FrameTimingMetric: un valore per fotogramma)
+# portano P50/P90/P95/P99 gia' calcolati; le altre portano le iterazioni (`runs`) da cui si calcola.
+function Get-StatValue($bench, [string]$metric, [string]$stat) {
+  if (Has-Property $bench "sampledMetrics") {
+    $sampled = $bench.sampledMetrics.PSObject.Properties[$metric]
+    if ($sampled -and $stat -match '^[Pp](\d+)$') {
+      $property = $sampled.Value.PSObject.Properties["P" + $Matches[1]]
+      if ($property) { return [double]$property.Value }
+    }
+  }
+  if (Has-Property $bench "metrics") {
+    $plain = $bench.metrics.PSObject.Properties[$metric]
+    if ($plain) {
+      $m = $plain.Value
+      $runs = @()
+      if (Has-Property $m "runs") { $runs = @($m.runs | ForEach-Object { [double]$_ }) }
+      switch -regex ($stat.ToLowerInvariant()) {
+        '^(min|minimum)$' { if (Has-Property $m "minimum") { return [double]$m.minimum }; if ($runs.Count) { return [double](($runs | Measure-Object -Minimum).Minimum) } }
+        '^(max|maximum)$' { if (Has-Property $m "maximum") { return [double]$m.maximum }; if ($runs.Count) { return [double](($runs | Measure-Object -Maximum).Maximum) } }
+        '^median$' { if (Has-Property $m "median") { return [double]$m.median }; if ($runs.Count) { return (Get-Percentile $runs 50) } }
+        '^mean$' { if ($runs.Count) { return [double](($runs | Measure-Object -Average).Average) } }
+        '^p(\d+)$' { if ($runs.Count) { return (Get-Percentile $runs ([double]$Matches[1])) } }
+      }
+    }
+  }
+  return $null
+}
+
+function Test-Emulator($context) {
+  if (-not (Has-Property $context "build")) { return $false }
+  $b = $context.build
+  $model = if (Has-Property $b "model") { [string]$b.model } else { "" }
+  $fingerprint = if (Has-Property $b "fingerprint") { [string]$b.fingerprint } else { "" }
+  return ($model -match '^(sdk_gphone|Android SDK|AOSP on|Emulator)') -or ($fingerprint -match '/generic|sdk_gphone|emulator')
+}
+
+# La chiave del dispositivo in soglie.json: dal modello (prefisso) o, per gli emulatori, dalla classe (tablet se il nome dice tablet).
+function Resolve-DeviceKey($context, $thr, [string]$forced) {
+  if ($forced) {
+    if (-not (Has-Property $thr.dispositivi $forced)) { throw "dispositivo '$forced' sconosciuto: vedi benchmark\soglie.json" }
+    return $forced
+  }
+  $model = if ((Has-Property $context "build") -and (Has-Property $context.build "model")) { [string]$context.build.model } else { "" }
+  foreach ($entry in $thr.dispositivi.PSObject.Properties) {
+    if (Has-Property $entry.Value "modelli") {
+      foreach ($prefix in $entry.Value.modelli) { if ($model.StartsWith([string]$prefix, [System.StringComparison]::OrdinalIgnoreCase)) { return $entry.Name } }
+    }
+  }
+  if (Test-Emulator $context) {
+    if ($model -match 'tablet' -or ((Has-Property $context.build "device") -and [string]$context.build.device -match 'tablet')) { return "emulatore-tablet" }
+    return "emulatore-telefono"
+  }
+  return $null
+}
+
+function New-Row([string]$scenario, [string]$test, [string]$kind, [string]$metric, $value, [string]$limit, [string]$status, [string]$note = "") {
+  return [pscustomobject]@{ Scenario = $scenario; Test = $test; Kind = $kind; Metric = $metric; Value = $value; Limit = $limit; Status = $status; Note = $note }
+}
+
+function Get-LimitText($rule) {
+  if (Has-Property $rule "massimo") { if ($null -eq $rule.massimo) { return "da calibrare" }; return "<= " + (Format-Number $rule.massimo) }
+  if (Has-Property $rule "massimoEsclusivo") { return "< " + (Format-Number $rule.massimoEsclusivo) }
+  if (Has-Property $rule "minimo") { return ">= " + (Format-Number $rule.minimo) }
+  return ""
+}
+
+# Una regola assoluta contro un valore: OK / FAIL / CAL.
+function Test-Absolute($rule, $value) {
+  if (Has-Property $rule "massimo") {
+    if ($null -eq $rule.massimo) { return "CAL" }
+    if ($value -le [double]$rule.massimo) { return "OK" } else { return "FAIL" }
+  }
+  if (Has-Property $rule "massimoEsclusivo") { if ($value -lt [double]$rule.massimoEsclusivo) { return "OK" } else { return "FAIL" } }
+  if (Has-Property $rule "minimo") { if ($value -ge [double]$rule.minimo) { return "OK" } else { return "FAIL" } }
+  return "OK"
+}
+
+# I motivi delle prove saltate, dai rapporti JUnit di AGP: nome della prova -> messaggio dell'Assume.
+function Read-SkippedTests([string]$dir) {
+  $skipped = @{}
+  if (-not $dir -or -not (Test-Path -LiteralPath $dir)) { return $skipped }
+  foreach ($file in Get-ChildItem -LiteralPath $dir -Recurse -Filter "TEST-*.xml" -ErrorAction SilentlyContinue) {
+    try {
+      [xml]$xml = [System.IO.File]::ReadAllText($file.FullName, (New-Object System.Text.UTF8Encoding($false)))
+    } catch { continue }
+    foreach ($case in $xml.SelectNodes("//testcase")) {
+      $node = $case.SelectSingleNode("skipped")
+      if ($node) {
+        $message = $node.GetAttribute("message")
+        if (-not $message) { $message = $node.InnerText }
+        $skipped[[string]$case.GetAttribute("name")] = ([string]$message).Trim()
+      }
+    }
+  }
+  return $skipped
+}
+
+# --- Valutazione ------------------------------------------------------------------------------------------
+
+# Restituisce le righe del confronto per un dispositivo. $benches = elenco delle prove lette (oggetti `benchmarks[*]`),
+# $reference = il riferimento accettato (o $null), $skipped = nome -> motivo.
+function Invoke-Evaluation($thr, $benches, [string]$deviceKey, $reference, $skipped, [bool]$smoke) {
+  $deviceClass = [string]$thr.dispositivi.$deviceKey.classe
+  $rows = New-Object System.Collections.Generic.List[object]
+  foreach ($scenario in $thr.scenari) {
+    $applies = @($scenario.classiDispositivo) -contains $deviceClass
+    $mine = @($benches | Where-Object { ([string]$_.name -replace '\[.*$', '') -match $scenario.prove })
+    $expected = @($scenario.proveAttese)
+    if (-not $applies -and $mine.Count -eq 0) {
+      $rows.Add((New-Row $scenario.id "(tutte)" "scenario" "-" $null "" "N/A" "scenario per: $(@($scenario.classiDispositivo) -join ', ')"))
+      continue
+    }
+    # Le prove attese senza risultati.
+    foreach ($name in $expected) {
+      if (-not ($mine | Where-Object { ([string]$_.name -replace '\[.*$', '') -eq $name })) {
+        $why = if ($skipped.ContainsKey($name)) { $skipped[$name] } else { "nessun risultato (prova non girata o fallita prima della misura)" }
+        $rows.Add((New-Row $scenario.id $name "presenza" "-" $null "" "MANCA" $why))
+      }
+    }
+    foreach ($bench in $mine) {
+      $test = [string]$bench.name -replace '\[.*$', ''
+      if ($smoke) {
+        $iterations = if (Has-Property $bench "repeatIterations") { [string]$bench.repeatIterations } else { "?" }
+        $rows.Add((New-Row $scenario.id $test "smoke" "-" $null "" "OK" "girata ($iterations iterazioni)"))
+        continue
+      }
+      # Validita': la prova ha misurato quello che doveva.
+      $valid = $true
+      if (Has-Property $scenario "validita") {
+        $v = $scenario.validita
+        $value = Get-StatValue $bench $v.metrica $v.statistica
+        if ($null -eq $value) {
+          $valid = $false
+          $rows.Add((New-Row $scenario.id $test "validita" $v.metrica $null ">= $(Format-Number $v.minimo)" "MANCA" "metrica di validita' assente"))
+        } elseif ($value -lt [double]$v.minimo) {
+          $valid = $false
+          $rows.Add((New-Row $scenario.id $test "validita" $v.metrica $value ">= $(Format-Number $v.minimo)" "FAIL" "NON VALIDA: $($v.spiega)"))
+        }
+      }
+      if (-not $valid) { continue }
+      foreach ($rule in @($scenario.assolute)) {
+        $value = Get-StatValue $bench $rule.metrica $rule.statistica
+        $label = "$($rule.metrica) $($rule.statistica)"
+        if ($null -eq $value) {
+          $note = "metrica assente"
+          if ($rule.metrica -eq "timeToFullDisplayMs") { $note = "TTFD assente: l'app non chiama reportFullyDrawn (P7/P11)" }
+          if ($rule.metrica -eq "viewerOpenMs") { $note = "sezione di traccia MCG:viewerOpen assente: la emette il viewer (P8)" }
+          $rows.Add((New-Row $scenario.id $test "assoluta" $label $null (Get-LimitText $rule) "MANCA" $note))
+          continue
+        }
+        $status = Test-Absolute $rule $value
+        $note = ""
+        if ($status -eq "CAL") { $note = "nessun tetto: -Calibrate lo scrive con questa misura" }
+        $rows.Add((New-Row $scenario.id $test "assoluta" $label $value (Get-LimitText $rule) $status $note))
+      }
+      foreach ($rule in @($scenario.regressione)) {
+        $value = Get-StatValue $bench $rule.metrica $rule.statistica
+        $label = "$($rule.metrica) $($rule.statistica)"
+        if ($null -eq $value) { continue }
+        $key = "$($rule.metrica).$($rule.statistica)"
+        $baseline = $null
+        if ($reference -and (Has-Property $reference "prove") -and (Has-Property $reference.prove $test) -and (Has-Property $reference.prove.$test $key)) { $baseline = [double]$reference.prove.$test.$key }
+        $pct = (Format-Number ([double]$rule.aumentoMassimo * 100) "0") + "%"
+        if ($null -eq $baseline) {
+          $rows.Add((New-Row $scenario.id $test "regressione" $label $value "ref + $pct" "NUOVO" "nessun riferimento: -Accept lo crea dopo una misura buona"))
+        } elseif ($baseline -le 0) {
+          $rows.Add((New-Row $scenario.id $test "regressione" $label $value "ref + $pct" "N/A" "riferimento non positivo ($(Format-Number $baseline))"))
+        } else {
+          $cap = $baseline * (1.0 + [double]$rule.aumentoMassimo)
+          $status = if ($value -le $cap) { "OK" } else { "FAIL" }
+          $rows.Add((New-Row $scenario.id $test "regressione" $label $value ("<= " + (Format-Number $cap) + " (ref " + (Format-Number $baseline) + " + $pct)") $status ""))
+        }
+      }
+    }
+  }
+  return $rows
+}
+
+# Il riferimento da accettare: tutte le coppie metrica.statistica che le regole di soglie.json usano, per ogni prova.
+function Build-Reference($thr, $benches, [string]$deviceKey, $context, [double]$hz) {
+  $lines = New-Object System.Collections.Generic.List[string]
+  $tests = New-Object System.Collections.Generic.List[string]
+  foreach ($scenario in $thr.scenari) {
+    foreach ($bench in @($benches | Where-Object { ([string]$_.name -replace '\[.*$', '') -match $scenario.prove })) {
+      $test = [string]$bench.name -replace '\[.*$', ''
+      $entries = New-Object System.Collections.Generic.List[string]
+      foreach ($rule in (@($scenario.assolute) + @($scenario.regressione))) {
+        $value = Get-StatValue $bench $rule.metrica $rule.statistica
+        if ($null -ne $value) { $entries.Add('"' + $rule.metrica + "." + $rule.statistica + '": ' + (Format-Number $value "0.####")) }
+      }
+      $unique = @($entries | Select-Object -Unique)
+      if ($unique.Count -gt 0) { $tests.Add('    "' + $test + '": { ' + ($unique -join ", ") + ' }') }
+    }
+  }
+  $model = ""
+  $sdk = ""
+  if (Has-Property $context "build") {
+    if (Has-Property $context.build "model") { $model = [string]$context.build.model }
+    if ((Has-Property $context.build "version") -and (Has-Property $context.build.version "sdk")) { $sdk = [string]$context.build.version.sdk }
+  }
+  $lines.Add("{")
+  $lines.Add('  "formato": 1,')
+  $lines.Add('  "dispositivo": "' + $deviceKey + '",')
+  $lines.Add('  "modello": "' + $model + '",')
+  $lines.Add('  "sdk": ' + $(if ($sdk) { $sdk } else { "null" }) + ',')
+  $lines.Add('  "frequenzaHz": ' + $(if ($hz -gt 0) { Format-Number $hz "0.#" } else { "null" }) + ',')
+  $lines.Add('  "data": "' + (Get-Date -Format "yyyy-MM-dd") + '",')
+  $lines.Add('  "variante": "benchmarkRelease",')
+  $lines.Add('  "prove": {')
+  $lines.Add(($tests -join ",`n"))
+  $lines.Add("  }")
+  $lines.Add("}")
+  return ($lines -join "`n") + "`n"
+}
+
+function Write-Table($rows) {
+  $format = "  {0,-5} {1,-24} {2,-11} {3,-26} {4,10}  {5,-34} {6}"
+  Write-Host ($format -f "ESITO", "PROVA", "TIPO", "METRICA", "VALORE", "SOGLIA", "NOTA") -ForegroundColor Cyan
+  foreach ($row in $rows) {
+    $color = switch ($row.Status) { "OK" { "Green" } "FAIL" { "Red" } "MANCA" { "Yellow" } "CAL" { "Yellow" } "NUOVO" { "DarkYellow" } default { "DarkGray" } }
+    $line = $format -f $row.Status, $row.Test, $row.Kind, $row.Metric, (Format-Number $row.Value), $row.Limit, $row.Note
+    Write-Host $line -ForegroundColor $color
+  }
+}
+
+# --- Auto-test --------------------------------------------------------------------------------------------
+
+if ($SelfTest) {
+  $samples = Join-Path $PSScriptRoot "samples"
+  $thr = Read-Json $Thresholds
+  $failures = New-Object System.Collections.Generic.List[string]
+  function Assert-That([bool]$condition, [string]$message) { if (-not $condition) { $failures.Add($message) } }
+
+  # Percentili: nearest rank.
+  Assert-That ((Get-Percentile @(1, 2, 3, 4, 5, 6, 7, 8, 9, 10) 90) -eq 9) "p90 di 1..10 deve essere 9"
+  Assert-That ((Get-Percentile @(5) 99) -eq 5) "p99 di un solo valore"
+  Assert-That ($null -eq (Get-Percentile @() 50)) "percentile di una lista vuota"
+
+  $good = Read-Json (Join-Path $samples "s25-buono.json")
+  $bad = Read-Json (Join-Path $samples "s25-regressione.json")
+  $ref = Read-Json (Join-Path $samples "riferimento-s25.esempio.json")
+  Assert-That ((Resolve-DeviceKey $good.context $thr $null) -eq "s25") "il modello SM-S931B deve dare s25"
+  Assert-That ((Resolve-DeviceKey ([pscustomobject]@{ build = [pscustomobject]@{ model = "SM-X716B"; fingerprint = "samsung/x" } }) $thr $null) -eq "tab-s9") "SM-X716B deve dare tab-s9"
+  Assert-That ((Resolve-DeviceKey ([pscustomobject]@{ build = [pscustomobject]@{ model = "sdk_gphone64_x86_64"; fingerprint = "google/sdk_gphone64" } }) $thr $null) -eq "emulatore-telefono") "sdk_gphone deve dare emulatore-telefono"
+
+  $rowsGood = Invoke-Evaluation $thr @($good.benchmarks) "s25" $ref @{} $false
+  Assert-That (@($rowsGood | Where-Object { $_.Status -eq "FAIL" }).Count -eq 0) "il campione buono non deve avere FAIL"
+  Assert-That (@($rowsGood | Where-Object { $_.Status -eq "OK" -and $_.Kind -eq "assoluta" }).Count -ge 4) "il campione buono deve passare le soglie assolute"
+  Assert-That (@($rowsGood | Where-Object { $_.Scenario -eq "zoom200" -and $_.Status -eq "N/A" }).Count -eq 1) "zoom200 su telefono deve essere N/A"
+  $missing = @($rowsGood | Where-Object { $_.Status -eq "MANCA" })
+  Assert-That ($missing.Count -ge 1) "le prove dello scroll non incluse nel campione devono risultare MANCA"
+
+  $rowsBad = Invoke-Evaluation $thr @($bad.benchmarks) "s25" $ref @{} $false
+  $badFails = @($rowsBad | Where-Object { $_.Status -eq "FAIL" })
+  Assert-That (@($badFails | Where-Object { $_.Test -eq "scroll_days_square" -and $_.Kind -eq "assoluta" }).Count -eq 1) "scroll_days_square deve fallire la soglia assoluta (frameOverrunMs P99 > 0)"
+  Assert-That (@($badFails | Where-Object { $_.Test -eq "scroll_days_square" -and $_.Kind -eq "regressione" }).Count -eq 1) "scroll_days_square deve fallire la regressione (+10%)"
+  Assert-That (@($badFails | Where-Object { $_.Test -eq "coldStart" -and $_.Kind -eq "assoluta" }).Count -eq 1) "coldStart deve fallire TTFD p90 < 1000"
+  Assert-That (@($badFails | Where-Object { $_.Test -eq "viewerOpen" -and $_.Kind -eq "regressione" }).Count -eq 1) "viewerOpen deve fallire la regressione (+15%)"
+  Assert-That (@($rowsBad | Where-Object { $_.Test -eq "pinch" -and $_.Status -eq "FAIL" }).Count -eq 0) "pinch del campione cattivo e' dentro le soglie"
+
+  # Senza Libreria visibile l'avvio non e' valido e non si confronta con 1000 ms.
+  $rowsNoLib = Invoke-Evaluation $thr @($bad.benchmarks | Where-Object { $_.name -eq "coldStartSenzaLibreria" } | ForEach-Object { $c = $_.PSObject.Copy(); $c.name = "coldStart"; $c }) "s25" $ref @{} $false
+  Assert-That (@($rowsNoLib | Where-Object { $_.Kind -eq "validita" -and $_.Status -eq "FAIL" }).Count -eq 1) "coldStart senza Libreria visibile deve essere NON VALIDA"
+  Assert-That (@($rowsNoLib | Where-Object { $_.Kind -eq "assoluta" }).Count -eq 0) "coldStart non valida non deve confrontare TTFD con la soglia"
+
+  # Smoke: nessuna soglia.
+  $rowsSmoke = Invoke-Evaluation $thr @($bad.benchmarks) "emulatore-telefono" $null @{} $true
+  Assert-That (@($rowsSmoke | Where-Object { $_.Status -eq "FAIL" }).Count -eq 0) "in smoke non ci sono FAIL"
+
+  # Il riferimento accettato si rilegge: stesso dispositivo, stesse prove.
+  $text = Build-Reference $thr @($good.benchmarks) "s25" $good.context 120
+  $parsed = $text | ConvertFrom-Json
+  Assert-That ($parsed.dispositivo -eq "s25") "il riferimento scritto si rilegge (dispositivo)"
+  Assert-That ((Has-Property $parsed.prove "scroll_days_square") -and (Has-Property $parsed.prove.scroll_days_square "frameDurationCpuMs.P95")) "il riferimento contiene scroll_days_square / frameDurationCpuMs.P95"
+
+  if ($failures.Count -gt 0) {
+    foreach ($f in $failures) { Write-Host ("[FAIL] " + $f) -ForegroundColor Red }
+    exit 1
+  }
+  Write-Host "compare.ps1: auto-test OK" -ForegroundColor Green
+  exit 0
+}
+
+# --- Esecuzione -------------------------------------------------------------------------------------------
+
+if (-not (Test-Path -LiteralPath $Thresholds)) { Write-Host "soglie non trovate: $Thresholds" -ForegroundColor Red; exit 2 }
+if (-not (Test-Path -LiteralPath $Results)) { Write-Host "nessun risultato in: $Results (il benchmark e' girato?)" -ForegroundColor Red; exit 2 }
+
+$thr = Read-Json $Thresholds
+$files = if ((Get-Item -LiteralPath $Results).PSIsContainer) {
+  @(Get-ChildItem -LiteralPath $Results -Recurse -Filter "*benchmarkData.json" | Sort-Object LastWriteTime -Descending)
+} else {
+  @(Get-Item -LiteralPath $Results)
+}
+if ($files.Count -eq 0) { Write-Host "nessun file *benchmarkData.json in: $Results" -ForegroundColor Red; exit 2 }
+
+# Un solo dispositivo per volta (check.ps1 -Bench): se ce ne sono piu', si prende la cartella piu' recente.
+$newestDir = $files[0].DirectoryName
+$files = @($files | Where-Object { $_.DirectoryName -eq $newestDir })
+
+$benches = @()
+$context = $null
+foreach ($file in $files) {
+  try { $json = Read-Json $file.FullName } catch { Write-Host ("file illeggibile: " + $file.FullName) -ForegroundColor Red; exit 2 }
+  if (-not $context -and (Has-Property $json "context")) { $context = $json.context }
+  if (Has-Property $json "benchmarks") { foreach ($b in $json.benchmarks) { $benches += $b } }
+}
+if ($benches.Count -eq 0) { Write-Host "nessuna prova nei file letti" -ForegroundColor Red; exit 2 }
+
+try { $deviceKey = Resolve-DeviceKey $context $thr $Device } catch { Write-Host $_.Exception.Message -ForegroundColor Red; exit 2 }
+if (-not $deviceKey) {
+  $m = if ((Has-Property $context "build") -and (Has-Property $context.build "model")) { $context.build.model } else { "?" }
+  Write-Host "dispositivo non riconosciuto (modello '$m'): passa -Device (s25, tab-s9, emulatore-telefono, emulatore-tablet) o aggiungilo a benchmark\soglie.json" -ForegroundColor Red
+  exit 2
+}
+$deviceInfo = $thr.dispositivi.$deviceKey
+$isEmulator = (Has-Property $deviceInfo "emulatore") -and $deviceInfo.emulatore
+# Su un emulatore e' sempre smoke: nessuna soglia, nessun riferimento.
+$smokeMode = [bool]$Smoke -or [bool]$isEmulator
+
+$referencePath = Join-Path $ReferenceDir ("riferimento-" + $deviceKey + ".json")
+$reference = $null
+if (Test-Path -LiteralPath $referencePath) { $reference = Read-Json $referencePath }
+$skipped = Read-SkippedTests $Report
+
+$model = if ((Has-Property $context "build") -and (Has-Property $context.build "model")) { [string]$context.build.model } else { "?" }
+$sdk = if ((Has-Property $context "build") -and (Has-Property $context.build "version") -and (Has-Property $context.build.version "sdk")) { [string]$context.build.version.sdk } else { "?" }
+Write-Host ""
+Write-Host ("Benchmark - {0} ({1}, modello {2}, Android SDK {3})" -f $deviceInfo.nome, $deviceKey, $model, $sdk) -ForegroundColor Cyan
+if ($RefreshHz -gt 0) {
+  $note = ""
+  if ((Has-Property $deviceInfo "frequenzaMinimaHz") -and $RefreshHz -lt [double]$deviceInfo.frequenzaMinimaHz) {
+    $note = "  <-- sotto i $($deviceInfo.frequenzaMinimaHz) Hz del dispositivo: impostare 'Fluidita' movimento: Adattiva' e rifare la misura"
+  }
+  Write-Host ("  frequenza dello schermo letta: {0} Hz{1}" -f (Format-Number $RefreshHz "0.#"), $note) -ForegroundColor $(if ($note) { "Yellow" } else { "DarkGray" })
+}
+if ($smokeMode) {
+  Write-Host "  SMOKE: i numeri dell'emulatore non valgono, nessuna soglia si applica. Si verifica solo che gli scenari girino." -ForegroundColor Yellow
+}
+Write-Host ("  riferimento: " + $(if ($reference) { $referencePath } else { "nessuno (docs\bench\riferimento-$deviceKey.json): le regressioni risultano NUOVO" })) -ForegroundColor DarkGray
+Write-Host ""
+
+$rows = Invoke-Evaluation $thr @($benches) $deviceKey $reference $skipped $smokeMode
+Write-Table $rows
+
+$fail = @($rows | Where-Object { $_.Status -eq "FAIL" })
+$manca = @($rows | Where-Object { $_.Status -eq "MANCA" })
+$cal = @($rows | Where-Object { $_.Status -eq "CAL" })
+$ok = @($rows | Where-Object { $_.Status -eq "OK" })
+Write-Host ""
+Write-Host ("  OK {0}   FAIL {1}   MANCA {2}   da calibrare {3}" -f $ok.Count, $fail.Count, $manca.Count, $cal.Count)
+
+if ($SummaryJson) {
+  $dir = Split-Path -Parent $SummaryJson
+  if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir | Out-Null }
+  $items = foreach ($row in $rows) {
+    '  { "esito": "' + $row.Status + '", "scenario": "' + $row.Scenario + '", "prova": "' + $row.Test + '", "tipo": "' + $row.Kind + '", "metrica": "' + $row.Metric + '", "valore": ' + $(if ($null -eq $row.Value) { "null" } else { Format-Number $row.Value "0.####" }) + ' }'
+  }
+  [System.IO.File]::WriteAllText($SummaryJson, "[`n" + ($items -join ",`n") + "`n]`n", (New-Object System.Text.UTF8Encoding($false)))
+}
+
+# --- Calibrazione e riferimento ---------------------------------------------------------------------------
+if ($Calibrate) {
+  $zoom = @($thr.scenari | Where-Object { $_.id -eq "zoom200" })
+  $rule = $null
+  if ($zoom.Count -gt 0) { $rule = @($zoom[0].assolute | Where-Object { $_.metrica -eq "pssPeakKb" })[0] }
+  $bench = @($benches | Where-Object { ([string]$_.name -replace '\[.*$', '') -eq "zoom200Mp" })[0]
+  if (-not $rule -or -not $bench) {
+    Write-Host "  -Calibrate: nessuna misura di zoom200Mp da cui calibrare" -ForegroundColor Yellow
+  } elseif ($null -ne $rule.massimo) {
+    Write-Host ("  -Calibrate: il tetto c'e' gia' ({0} KB): non lo cambio. Per ricalibrare rimetti `"massimo`": null in soglie.json." -f $rule.massimo) -ForegroundColor Yellow
+  } elseif ($smokeMode) {
+    Write-Host "  -Calibrate: non da un emulatore." -ForegroundColor Yellow
+  } else {
+    $peak = Get-StatValue $bench "pssPeakKb" "max"
+    $margin = [double]$rule.calibrazione.margine
+    $cap = [long]([math]::Ceiling($peak * (1.0 + $margin) / 1024.0) * 1024)
+    $text = [System.IO.File]::ReadAllText($Thresholds, (New-Object System.Text.UTF8Encoding($false)))
+    $pattern = '("metrica":\s*"pssPeakKb",\s*"statistica":\s*"max",\s*"massimo":\s*)null'
+    if ($text -notmatch $pattern) {
+      Write-Host "  -Calibrate: non trovo `"massimo`": null della PSS in soglie.json (formato cambiato?)" -ForegroundColor Red
+      exit 2
+    }
+    $text = [regex]::Replace($text, $pattern, ('${1}' + $cap.ToString($inv)))
+    [System.IO.File]::WriteAllText($Thresholds, $text, (New-Object System.Text.UTF8Encoding($false)))
+    Write-Host ("  -Calibrate: tetto di PSS scritto in soglie.json: {0} KB (misura {1} KB + {2}%, a multipli di 1 MB)" -f $cap, (Format-Number $peak "0"), (Format-Number ($margin * 100) "0")) -ForegroundColor Green
+  }
+}
+
+if ($Accept) {
+  if ($smokeMode) {
+    Write-Host "  -Accept: un riferimento non si accetta da un emulatore." -ForegroundColor Red
+    exit 2
+  }
+  if ($fail.Count -gt 0 -and -not $Force) {
+    Write-Host "  -Accept: ci sono soglie fallite; un riferimento si accetta da una misura buona (o con -Force, e va scritto perche')." -ForegroundColor Red
+    exit 1
+  }
+  if ($manca.Count -gt 0) {
+    Write-Host ("  -Accept: ATTENZIONE, il riferimento e' PARZIALE: {0} prove attese non hanno risultati e non ci saranno nel riferimento." -f $manca.Count) -ForegroundColor Yellow
+  }
+  $text = Build-Reference $thr @($benches) $deviceKey $context $RefreshHz
+  if (-not (Test-Path -LiteralPath $ReferenceDir)) { New-Item -ItemType Directory -Path $ReferenceDir | Out-Null }
+  [System.IO.File]::WriteAllText($referencePath, $text, (New-Object System.Text.UTF8Encoding($false)))
+  Write-Host ("  -Accept: riferimento scritto in " + $referencePath) -ForegroundColor Green
+}
+
+Write-Host ""
+if ($smokeMode) {
+  if ($ok.Count -gt 0 -or $manca.Count -gt 0) {
+    $ran = @($rows | Where-Object { $_.Kind -eq "smoke" }).Count
+    Write-Host ("SMOKE: {0} prove girate, {1} saltate o non girate." -f $ran, $manca.Count) -ForegroundColor $(if ($ran -gt 0) { "Green" } else { "Yellow" })
+  }
+  exit 0
+}
+if ($fail.Count -gt 0) {
+  Write-Host ("FAIL: {0} verifiche fuori soglia." -f $fail.Count) -ForegroundColor Red
+  exit 1
+}
+if ($RequireAll -and ($manca.Count -gt 0 -or $cal.Count -gt 0)) {
+  Write-Host ("FAIL: {0} prove senza risultato e {1} tetti da calibrare (-RequireAll)." -f $manca.Count, $cal.Count) -ForegroundColor Red
+  exit 1
+}
+if ($manca.Count -gt 0) {
+  Write-Host ("OK con riserve: {0} prove senza risultato (la chiusura della fase le vuole tutte: -RequireAll)." -f $manca.Count) -ForegroundColor Yellow
+} else {
+  Write-Host "OK: dentro le soglie." -ForegroundColor Green
+}
+exit 0

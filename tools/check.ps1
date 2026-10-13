@@ -27,6 +27,12 @@
                                 da apkanalyzer e, se non riesce a leggere il dex, FALLISCE (non salta)
     +  permessi documentati     ogni permesso ammesso da gradle\verify-release-manifest.gradle (statico) e ogni
                                 permesso dell'APK di release deve comparire in docs\sicurezza.md 4-bis
+    +  profilo nell'APK         (Fase 3, P9) quando il Baseline Profile esiste nei sorgenti
+                                (app\src\main\generated\baselineProfiles), l'APK di release contiene
+                                assets/dexopt/baseline.prof e AGP ha fuso le regole del profilo
+    +  benchmark compilano      (Fase 3, P9) gli scenari di :benchmark e il dataset di app/src/benchmarkRelease
+                                compilano: senza dispositivo e' tutto cio' che si puo' verificare
+    +  -Bench                   (Fase 3, P9) le misure su dispositivo, SKIP senza dispositivo (vedi -Bench)
 
 .PARAMETER SkipGradle
   Salta i passi 5-7 (e' il controllo statico, veloce: engine, repo, checksum, permessi ammessi vs docs).
@@ -34,13 +40,31 @@
 .PARAMETER NoDaemon
   Esegue Gradle con --no-daemon (nessun processo che resta residente a fine verifica).
 
+.PARAMETER Bench
+  Fase 3, P9 (docs/fase3-progetto.md par. 2.6, D21; docs/bench/README.md): esegue le misure di prestazioni (Macrobenchmark:
+  scorrimento, pinch, avvio a freddo, apertura del viewer, zoom a 200 MP) sul dispositivo collegato, sulla variante
+  benchmarkRelease, e le confronta con benchmark\soglie.json e con il riferimento docs\bench\riferimento-<dispositivo>.json
+  (tools\bench\compare.ps1). SENZA dispositivo il passo e' SKIP. Annota la frequenza dello schermo letta in sola lettura
+  (getprop, dumpsys display, settings get): a 120 Hz serve "Fluidita' movimento: Adattiva". Su un emulatore e' uno smoke:
+  gli scenari girano e basta, nessuna soglia si applica. Un dispositivo per volta.
+
+.PARAMETER BenchSerial
+  Il numero di serie del dispositivo (`adb devices`) quando ce n'e' piu' di uno.
+
+.PARAMETER BenchStrict
+  Con -Bench, una prova attesa senza risultato (saltata, non girata) o un tetto da calibrare e' un errore: e' la modalita'
+  della chiusura della Fase 3. Senza, restano un avviso ("OK con riserve").
+
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File tools\check.ps1
 #>
 [CmdletBinding()]
 param(
   [switch]$SkipGradle,
-  [switch]$NoDaemon
+  [switch]$NoDaemon,
+  [switch]$Bench,
+  [string]$BenchSerial,
+  [switch]$BenchStrict
 )
 
 $ErrorActionPreference = "Stop"
@@ -485,6 +509,213 @@ Step "permessi dell'APK di release tutti elencati in docs/sicurezza.md 4-bis" -S
   if ($missing.Count -gt 0) {
     return "permessi nell'APK senza riga in docs\sicurezza.md 4-bis: " + ($missing -join ", ")
   }
+}
+
+# --- Fase 3, P9: Baseline Profile e prestazioni misurate (docs/fase3-progetto.md par. 2.6, D21) --------------------------
+
+# Il Baseline Profile nei sorgenti, se esiste (lo scrive :app:generateBaselineProfile o tools\bench\generate-profile.ps1).
+function Get-BaselineProfileSource {
+  foreach ($relative in @("app\src\main\generated\baselineProfiles\baseline-prof.txt", "app\src\release\generated\baselineProfiles\baseline-prof.txt", "app\src\main\baseline-prof.txt")) {
+    $path = Join-Path $root $relative
+    if (Test-Path -LiteralPath $path) { return $path }
+  }
+  return $null
+}
+
+# Le regole di un profilo testuale: tutte le righe che non sono vuote ne' commenti.
+function Get-ProfileRules([string]$path) {
+  return @(Get-Content -LiteralPath $path | Where-Object { $_.Trim().Length -gt 0 -and -not $_.TrimStart().StartsWith("#") })
+}
+
+function Get-SdkDir {
+  $sdk = $null
+  $localProperties = Join-Path $root "local.properties"
+  if (Test-Path -LiteralPath $localProperties) {
+    $match = Select-String -LiteralPath $localProperties -Pattern '^\s*sdk\.dir\s*=\s*(.+)$' | Select-Object -First 1
+    if ($match) { $sdk = $match.Matches[0].Groups[1].Value.Trim().Replace("\:", ":").Replace("\\", "\") }
+  }
+  if (-not $sdk -and $env:ANDROID_HOME) { $sdk = $env:ANDROID_HOME }
+  if (-not $sdk -and $env:ANDROID_SDK_ROOT) { $sdk = $env:ANDROID_SDK_ROOT }
+  return $sdk
+}
+
+function Get-Adb {
+  $sdk = Get-SdkDir
+  if ($sdk) {
+    $path = Join-Path $sdk "platform-tools\adb.exe"
+    if (Test-Path -LiteralPath $path) { return $path }
+  }
+  $command = Get-Command adb -ErrorAction SilentlyContinue
+  if ($command) { return $command.Source }
+  return $null
+}
+
+# I numeri di serie dei dispositivi collegati e pronti (`adb devices`), nell'ordine di adb.
+function Get-AdbSerials([string]$adb) {
+  $run = Invoke-Native -File $adb -Arguments @("devices")
+  $serials = @()
+  foreach ($line in $run.Lines) {
+    if ($line -match '^(\S+)\s+device$') { $serials += $Matches[1] }
+  }
+  return $serials
+}
+
+# I fatti del dispositivo, letti in SOLA LETTURA (getprop, dumpsys, settings get): niente si cambia mai sul telefono.
+# La frequenza dello schermo conta perche' a 120 Hz serve "Fluidita' movimento: Adattiva" (par. 2.6): si leggono i modi
+# del display (il massimo disponibile e l'attivo) e le tre impostazioni che la decidono; il giudizio e' di chi legge.
+function Get-DeviceFacts([string]$adb, [string]$serial) {
+  $read = {
+    param([string]$command)
+    $run = Invoke-Native -File $adb -Arguments @("-s", $serial, "shell", $command)
+    return (($run.Lines -join "`n").Trim())
+  }
+  $facts = [ordered]@{ Serial = $serial; Model = ""; Release = ""; Sdk = ""; Emulator = $false; ActiveHz = $null; MaxHz = $null; Settings = "" }
+  $facts.Model = & $read "getprop ro.product.model"
+  $facts.Release = & $read "getprop ro.build.version.release"
+  $facts.Sdk = & $read "getprop ro.build.version.sdk"
+  $facts.Emulator = ($serial -like "emulator-*") -or ((& $read "getprop ro.kernel.qemu") -eq "1") -or ((& $read "getprop ro.boot.qemu") -eq "1")
+  $display = & $read "dumpsys display"
+  $modes = @{}
+  # I modi del display: "{id=1, [parentModeId=-1, sfModeId=0, flags=,] width=1080, height=2400, fps=60.0, ...}" (i campi
+  # in mezzo cambiano da una versione di Android all'altra).
+  foreach ($m in [regex]::Matches($display, '\bid=(\d+),[^{}]*?\bwidth=\d+,\s*height=\d+,\s*fps=([0-9.]+)')) {
+    $modes[$m.Groups[1].Value] = [double]::Parse($m.Groups[2].Value, [System.Globalization.CultureInfo]::InvariantCulture)
+  }
+  if ($modes.Count -gt 0) { $facts.MaxHz = ($modes.Values | Measure-Object -Maximum).Maximum }
+  $render = [regex]::Match($display, 'mActiveRenderFrameRate=([0-9.]+)')
+  $active = [regex]::Match($display, 'mActiveModeId=(\d+)')
+  if ($render.Success) {
+    $facts.ActiveHz = [double]::Parse($render.Groups[1].Value, [System.Globalization.CultureInfo]::InvariantCulture)
+  } elseif ($active.Success -and $modes.ContainsKey($active.Groups[1].Value)) {
+    $facts.ActiveHz = $modes[$active.Groups[1].Value]
+  }
+  $peak = & $read "settings get system peak_refresh_rate"
+  $min = & $read "settings get system min_refresh_rate"
+  $mode = & $read "settings get secure refresh_rate_mode"
+  $facts.Settings = "peak_refresh_rate=$peak min_refresh_rate=$min refresh_rate_mode=$mode"
+  return $facts
+}
+
+Step "Baseline Profile: se esiste nei sorgenti, l'APK di release lo contiene e AGP l'ha unito" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
+  $source = Get-BaselineProfileSource
+  if (-not $source) {
+    Write-Host "        nessun profilo nei sorgenti (app\src\main\generated\baselineProfiles): da generare con :app:generateBaselineProfile o tools\bench\generate-profile.ps1" -ForegroundColor Yellow
+    return
+  }
+  $rules = @(Get-ProfileRules $source)
+  if ($rules.Count -lt 50) { return "il profilo nei sorgenti ha solo $($rules.Count) regole: vuoto o troncato ($source)" }
+  $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if (-not $apk) { return "nessun APK di release in app\build\outputs\apk\release" }
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $zip = [System.IO.Compression.ZipFile]::OpenRead($apk.FullName)
+  try {
+    $prof = $zip.Entries | Where-Object { $_.FullName -eq "assets/dexopt/baseline.prof" } | Select-Object -First 1
+    $profm = $zip.Entries | Where-Object { $_.FullName -eq "assets/dexopt/baseline.profm" } | Select-Object -First 1
+    $profSize = if ($prof) { $prof.Length } else { 0 }
+    $profmSize = if ($profm) { $profm.Length } else { 0 }
+  } finally {
+    $zip.Dispose()
+  }
+  if (-not $prof) { return "l'APK di release non contiene assets/dexopt/baseline.prof pur esistendo il profilo nei sorgenti" }
+  # Le librerie (Compose, Room...) portano profili propri e producono un baseline.prof anche senza il nostro: l'unione
+  # si verifica sul testo che AGP ha fuso, che deve contenere (quasi) tutte le nostre regole.
+  $merged = Join-Path $root "app\build\intermediates\merged_art_profile\release\mergeReleaseArtProfile\baseline-prof.txt"
+  $note = ""
+  if (Test-Path -LiteralPath $merged) {
+    $set = New-Object System.Collections.Generic.HashSet[string]
+    foreach ($line in (Get-Content -LiteralPath $merged)) { [void]$set.Add($line.Trim()) }
+    $absent = @($rules | Where-Object { -not $set.Contains($_.Trim()) })
+    if ($absent.Count -gt [math]::Ceiling($rules.Count * 0.05)) {
+      return "AGP non ha unito il profilo: $($absent.Count) di $($rules.Count) regole non compaiono nel profilo fuso della release"
+    }
+    $note = ", unione verificata"
+  } else {
+    $note = ", file fuso non trovato (unione non verificata)"
+  }
+  Write-Host ("        profilo: {0} regole; APK: baseline.prof {1} byte, baseline.profm {2} byte{3}" -f $rules.Count, $profSize, $profmSize, $note) -ForegroundColor DarkGray
+}
+
+Step "benchmark: gli scenari (:benchmark) e il dataset (app/src/benchmarkRelease) compilano" -Skip:$SkipGradle -SkipReason "-SkipGradle" {
+  Ensure-Java
+  $arguments = @("--console=plain", "-q", ":app:compileBenchmarkReleaseKotlin", ":benchmark:compileBenchmarkReleaseKotlin")
+  if ($NoDaemon) { $arguments = @("--no-daemon") + $arguments }
+  $run = Invoke-Native -File (Join-Path $root "gradlew.bat") -Arguments $arguments -LogPath (Join-Path $root "build\check-bench-compile.log")
+  if ($run.Code -ne 0) {
+    Show-Lines $run.Lines 40
+    return "la variante benchmarkRelease non compila (codice $($run.Code)); log in build\check-bench-compile.log"
+  }
+}
+
+# -Bench: le misure del par. 2.6 su un dispositivo collegato. Senza -Bench o senza dispositivo il passo e' SKIP (non fallisce).
+$benchAdb = $null
+$benchSerial = $null
+$benchSkip = -not $Bench
+$benchReason = "senza -Bench"
+if ($Bench) {
+  $benchAdb = Get-Adb
+  if (-not $benchAdb) {
+    $benchSkip = $true
+    $benchReason = "adb non trovato (sdk.dir in local.properties)"
+  } else {
+    $serials = @(Get-AdbSerials $benchAdb)
+    if ($BenchSerial) { $serials = @($serials | Where-Object { $_ -eq $BenchSerial }) }
+    if ($serials.Count -eq 0) {
+      $benchSkip = $true
+      $benchReason = "nessun dispositivo collegato"
+    } elseif ($serials.Count -eq 1) {
+      $benchSerial = $serials[0]
+    } else {
+      $benchSerial = ""   # piu' dispositivi: il passo fallisce chiedendo -BenchSerial (un dispositivo per volta)
+    }
+  }
+}
+Step "benchmark su dispositivo (-Bench): scenari del par. 2.6 contro benchmark\soglie.json e riferimento" -Skip:$benchSkip -SkipReason $benchReason {
+  if ($benchSerial -eq "") { return "piu' dispositivi collegati: indica quale con -BenchSerial <numero di serie> (si misura un dispositivo per volta)" }
+  $facts = Get-DeviceFacts $benchAdb $benchSerial
+  $emulatorNote = if ($facts.Emulator) { " - EMULATORE: smoke, i numeri non valgono" } else { "" }
+  Write-Host ("        dispositivo: {0} ({1}), Android {2} (SDK {3}){4}" -f $facts.Model, $benchSerial, $facts.Release, $facts.Sdk, $emulatorNote) -ForegroundColor DarkGray
+  $hz = if ($null -ne $facts.MaxHz) { $facts.MaxHz } else { 0 }
+  $activeText = if ($null -ne $facts.ActiveHz) { $facts.ActiveHz } else { "?" }
+  $maxText = if ($null -ne $facts.MaxHz) { $facts.MaxHz } else { "?" }
+  Write-Host ("        schermo (sola lettura): attivo {0} Hz, massimo {1} Hz; {2}" -f $activeText, $maxText, $facts.Settings) -ForegroundColor DarkGray
+  if (-not $facts.Emulator) {
+    Write-Host "        a 120 Hz serve 'Fluidita' movimento: Adattiva' (Impostazioni > Display), batteria carica, schermo acceso e sbloccato" -ForegroundColor DarkGray
+  }
+  Ensure-Java
+  $gradleArguments = @(
+    "--console=plain", ":benchmark:connectedBenchmarkReleaseAndroidTest",
+    "-Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=macrobenchmark"
+  )
+  if ($facts.Emulator) {
+    $gradleArguments += "-Pandroid.testInstrumentationRunnerArguments.benchSmoke=true"
+    $gradleArguments += "-Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.suppressErrors=EMULATOR,LOW-BATTERY,NOT-PROFILEABLE"
+  }
+  if ($NoDaemon) { $gradleArguments = @("--no-daemon") + $gradleArguments }
+  Write-Host "        (puo' volerci diversi minuti; il log completo e' in build\check-bench.log)" -ForegroundColor DarkGray
+  # Un dispositivo per volta: Gradle gira su tutti quelli collegati, a meno di ANDROID_SERIAL.
+  $previousSerial = $env:ANDROID_SERIAL
+  $env:ANDROID_SERIAL = $benchSerial
+  try {
+    $run = Invoke-Native -File (Join-Path $root "gradlew.bat") -Arguments $gradleArguments -LogPath (Join-Path $root "build\check-bench.log")
+  } finally {
+    $env:ANDROID_SERIAL = $previousSerial
+  }
+  if ($run.Code -ne 0) {
+    Show-Lines $run.Lines 60
+    $hint = "vedi build\check-bench.log"
+    if (@($run.Lines | Where-Object { $_ -match 'INSTALL_FAILED_UPDATE_INCOMPATIBLE' }).Count -gt 0) {
+      $hint = "la release firmata e' installata con un'altra firma: disinstallarla prima (docs/bench/README.md)"
+    }
+    return "il benchmark e' fallito (codice $($run.Code)): $hint"
+  }
+  $compare = Join-Path $root "tools\bench\compare.ps1"
+  $compareArguments = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $compare, "-RefreshHz", ([string]$hz).Replace(",", "."))
+  if ($facts.Emulator) { $compareArguments += "-Smoke" }
+  if ($BenchStrict) { $compareArguments += "-RequireAll" }
+  $result = Invoke-Native -File "powershell" -Arguments $compareArguments -LogPath (Join-Path $root "build\check-bench-compare.log")
+  Show-Lines $result.Lines
+  if ($result.Code -ne 0) { return "i risultati non rispettano le soglie (codice $($result.Code)); dettaglio sopra e in build\check-bench-compare.log" }
 }
 
 # --- Riepilogo ---------------------------------------------------------------------------------------------

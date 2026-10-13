@@ -1,0 +1,291 @@
+{
+  "context": {
+    "build": {
+      "brand": "samsung",
+      "device": "e1s",
+      "fingerprint": "samsung/e1sxx/e1s:16/BP2A/S931BXXU1:user/release-keys",
+      "id": "BP2A",
+      "model": "SM-S931B",
+      "type": "user",
+      "version": {
+        "codename": "REL",
+        "sdk": 36
+      }
+    },
+    "cpuCoreCount": 8,
+    "cpuLocked": false,
+    "cpuMaxFreqHz": 4000000000,
+    "memTotalBytes": 11000000000,
+    "sustainedPerformanceModeEnabled": false,
+    "osCodenameAbbreviated": "REL"
+  },
+  "benchmarks": [
+    {
+      "name": "scroll_days_square",
+      "params": {},
+      "className": "dev.pampa.mycloudgallery.benchmark.LibraryScrollBenchmark",
+      "totalRunTimeNs": 41234567890,
+      "metrics": {
+        "frameCount": {
+          "minimum": 528.0,
+          "maximum": 540.0,
+          "median": 534.0,
+          "coefficientOfVariation": 0.03,
+          "runs": [
+            530.0,
+            534.0,
+            540.0,
+            528.0,
+            536.0,
+            532.0,
+            538.0,
+            531.0
+          ]
+        }
+      },
+      "sampledMetrics": {
+        "frameDurationCpuMs": {
+          "P50": 3.9,
+          "P90": 5.6,
+          "P95": 5.1,
+          "P99": 8.0
+        },
+        "frameOverrunMs": {
+          "P50": -4.1,
+          "P90": -1.9,
+          "P95": -0.8,
+          "P99": -0.4
+        }
+      },
+      "warmupIterations": 0,
+      "repeatIterations": 8,
+      "thermalThrottleSleepSeconds": 0
+    },
+    {
+      "name": "scroll_years_square",
+      "params": {},
+      "className": "dev.pampa.mycloudgallery.benchmark.LibraryScrollBenchmark",
+      "totalRunTimeNs": 41234567890,
+      "metrics": {
+        "frameCount": {
+          "minimum": 508.0,
+          "maximum": 520.0,
+          "median": 514.0,
+          "coefficientOfVariation": 0.03,
+          "runs": [
+            510.0,
+            514.0,
+            520.0,
+            508.0,
+            516.0,
+            512.0,
+            518.0,
+            511.0
+          ]
+        }
+      },
+      "sampledMetrics": {
+        "frameDurationCpuMs": {
+          "P50": 3.9,
+          "P90": 5.6,
+          "P95": 5.6,
+          "P99": 8.0
+        },
+        "frameOverrunMs": {
+          "P50": -4.1,
+          "P90": -1.9,
+          "P95": -0.8,
+          "P99": -0.2
+        }
+      },
+      "warmupIterations": 0,
+      "repeatIterations": 8,
+      "thermalThrottleSleepSeconds": 0
+    },
+    {
+      "name": "pinch",
+      "params": {},
+      "className": "dev.pampa.mycloudgallery.benchmark.LibraryPinchBenchmark",
+      "totalRunTimeNs": 41234567890,
+      "metrics": {
+        "frameCount": {
+          "minimum": 298.0,
+          "maximum": 305.0,
+          "median": 301.0,
+          "coefficientOfVariation": 0.03,
+          "runs": [
+            300.0,
+            305.0,
+            298.0,
+            301.0,
+            303.0,
+            299.0
+          ]
+        }
+      },
+      "sampledMetrics": {
+        "frameDurationCpuMs": {
+          "P50": 3.9,
+          "P90": 5.6,
+          "P95": 6.0,
+          "P99": 8.0
+        },
+        "frameOverrunMs": {
+          "P50": -4.1,
+          "P90": -1.9,
+          "P95": -0.8,
+          "P99": -0.1
+        }
+      },
+      "warmupIterations": 0,
+      "repeatIterations": 6,
+      "thermalThrottleSleepSeconds": 0
+    },
+    {
+      "name": "coldStart",
+      "params": {},
+      "className": "dev.pampa.mycloudgallery.benchmark.StartupBenchmark",
+      "totalRunTimeNs": 41234567890,
+      "metrics": {
+        "timeToInitialDisplayMs": {
+          "minimum": 420.0,
+          "maximum": 490.0,
+          "median": 455.0,
+          "coefficientOfVariation": 0.03,
+          "runs": [
+            420.0,
+            425.0,
+            430.0,
+            435.0,
+            440.0,
+            445.0,
+            450.0,
+            455.0,
+            460.0,
+            465.0,
+            470.0,
+            475.0,
+            480.0,
+            485.0,
+            490.0
+          ]
+        },
+        "timeToFullDisplayMs": {
+          "minimum": 640.0,
+          "maximum": 892.0,
+          "median": 766.0,
+          "coefficientOfVariation": 0.03,
+          "runs": [
+            640.0,
+            658.0,
+            676.0,
+            694.0,
+            712.0,
+            730.0,
+            748.0,
+            766.0,
+            784.0,
+            802.0,
+            820.0,
+            838.0,
+            856.0,
+            874.0,
+            892.0
+          ]
+        },
+        "libraryShown": {
+          "minimum": 1.0,
+          "maximum": 1.0,
+          "median": 1.0,
+          "coefficientOfVariation": 0.03,
+          "runs": [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "sampledMetrics": {},
+      "warmupIterations": 0,
+      "repeatIterations": 15,
+      "thermalThrottleSleepSeconds": 0
+    },
+    {
+      "name": "viewerOpen",
+      "params": {},
+      "className": "dev.pampa.mycloudgallery.benchmark.ViewerBenchmark",
+      "totalRunTimeNs": 41234567890,
+      "metrics": {
+        "viewerOpenMs": {
+          "minimum": 58.0,
+          "maximum": 92.0,
+          "median": 70.0,
+          "coefficientOfVariation": 0.03,
+          "runs": [
+            58.0,
+            60.0,
+            62.0,
+            64.0,
+            66.0,
+            68.0,
+            70.0,
+            72.0,
+            74.0,
+            76.0,
+            78.0,
+            92.0
+          ]
+        },
+        "frameCount": {
+          "minimum": 40.0,
+          "maximum": 40.0,
+          "median": 40.0,
+          "coefficientOfVariation": 0.03,
+          "runs": [
+            40.0,
+            40.0,
+            40.0,
+            40.0,
+            40.0,
+            40.0,
+            40.0,
+            40.0,
+            40.0,
+            40.0,
+            40.0,
+            40.0
+          ]
+        }
+      },
+      "sampledMetrics": {
+        "frameDurationCpuMs": {
+          "P50": 3.9,
+          "P90": 5.6,
+          "P95": 6.2,
+          "P99": 8.0
+        },
+        "frameOverrunMs": {
+          "P50": -4.1,
+          "P90": -1.9,
+          "P95": -0.8,
+          "P99": -0.3
+        }
+      },
+      "warmupIterations": 0,
+      "repeatIterations": 12,
+      "thermalThrottleSleepSeconds": 0
+    }
+  ]
+}

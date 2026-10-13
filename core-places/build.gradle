@@ -3,10 +3,13 @@
 //
 // Pacchetti: `contract` (P0: le interfacce che gli altri moduli usano), `noop` (P0: i null-object che :app lega
 // finche' non arriva il dataset vero), `testing` (P0: i fake, dentro src/main perche' i moduli a valle li riusano
-// nei loro test; tools/check.ps1 li vieta nel dex di release). Il resto (formato MCGP1, ricerca, strumento
-// `buildPlacesDataset`) e' di P4. I dati GeoNames (CC BY 4.0) sono un asset del modulo, non una dipendenza Gradle.
+// nei loro test; tools/check.ps1 li vieta nel dex di release). P4: `dataset` (formato MCGP1, ricerca ad anelli,
+// estrazione e mappatura dell'asset) e `tool` (lo strumento `buildPlacesDataset`, che gira su una JVM normale e non
+// entra mai nell'APK di release perche' nessuno lo referenzia: R8 lo toglie). I dati GeoNames (CC BY 4.0) sono un
+// asset del modulo (assets/places/places.mcgp1, generato da docs/luoghi.md), non una dipendenza Gradle.
 //
-// D24: nessuna rete in questo modulo (NoNetworkSourcesTest).
+// D24: nessuna rete in questo modulo (NoNetworkSourcesTest). Lo strumento NON scarica niente: legge i file che
+// l'utente ha messo in %USERPROFILE%\.mycloudgallery\geonames\.
 plugins {
   id 'com.android.library'
   id 'org.jetbrains.kotlin.android'
@@ -28,4 +31,37 @@ dependencies {
   testImplementation appDeps.coroutinesTest
   testImplementation appDeps.robolectric
   testImplementation appDeps.androidxTestCore
+}
+
+// --- Lo strumento che genera il dataset dei luoghi (docs/luoghi.md) --------------------------------------------------
+//
+//   gradlew :core-places:buildPlacesDataset                          legge %USERPROFILE%/.mycloudgallery/geonames
+//   gradlew :core-places:buildPlacesDataset -PplacesInput=D:\dump    altra cartella
+//   gradlew :core-places:buildPlacesDataset -PplacesExpectSha=<hex>  fallisce (e non scrive) se l'impronta cambia
+//   gradlew :core-places:buildPlacesDataset -PplacesOutput=<file> -PplacesPin=<file>   scrive altrove (per provare)
+//
+// Non scarica niente: se i file mancano si ferma con un messaggio chiaro. Scrive l'asset e l'impronta fissata nel
+// codice (PlacesDatasetPin.kt). Non fa parte di nessun build normale: si lancia a mano, quando cambia il dump.
+afterEvaluate {
+  def compileKotlin = tasks.named('compileDebugKotlin')
+  tasks.register('buildPlacesDataset', JavaExec) {
+    group = 'places'
+    description = 'Genera il dataset dei luoghi (MCGP1) dai dump di GeoNames scaricati a mano. Vedi docs/luoghi.md.'
+    dependsOn compileKotlin
+    // Le classi dello strumento e la sola libreria standard di Kotlin (lo strumento non usa altro): niente classpath
+    // di Android, niente risoluzione di dipendenze nuove.
+    classpath = files(
+      compileKotlin.flatMap { it.destinationDirectory },
+      compileKotlin.map { task ->
+        task.libraries.filter { it.name.startsWith('kotlin-stdlib') || it.name.startsWith('annotations-') }
+      },
+    )
+    mainClass = 'dev.pampa.mycloudgallery.core.places.tool.BuildPlacesDataset'
+    def outputFile = project.hasProperty('placesOutput') ? file(project.property('placesOutput')) : file('src/main/assets/places/places.mcgp1')
+    def pinFile = project.hasProperty('placesPin') ? file(project.property('placesPin')) : file('src/main/kotlin/dev/pampa/mycloudgallery/core/places/dataset/PlacesDatasetPin.kt')
+    def toolArgs = ['--output', outputFile.absolutePath, '--pin', pinFile.absolutePath]
+    if (project.hasProperty('placesInput')) toolArgs += ['--input', project.property('placesInput').toString()]
+    if (project.hasProperty('placesExpectSha')) toolArgs += ['--expect-sha256', project.property('placesExpectSha').toString()]
+    args = toolArgs
+  }
 }

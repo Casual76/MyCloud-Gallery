@@ -1,0 +1,163 @@
+IT.01	Abruzzo	Abruzzo	9000001
+IT.02	Basilicata	Basilicata	9000002
+IT.03	Calabria	Calabria	9000003
+IT.04	Campania	Campania	9000004
+IT.05	Emilia-Romagna	Emilia-Romagna	9000005
+IT.06	Friuli-Venezia Giulia	Friuli-Venezia Giulia	9000006
+IT.07	Latium	Latium	9000007
+IT.08	Liguria	Liguria	9000008
+IT.09	Lombardy	Lombardy	9000009
+IT.10	The Marches	The Marches	9000010
+IT.11	Molise	Molise	9000011
+IT.12	Piedmont	Piedmont	9000012
+IT.13	Apulia	Apulia	9000013
+IT.14	Sardinia	Sardinia	9000014
+IT.15	Sicily	Sicily	9000015
+IT.16	Tuscany	Tuscany	9000016
+IT.17	Trentino-Alto Adige	Trentino-Alto Adige	9000017
+IT.18	Umbria	Umbria	9000018
+IT.19	Aosta Valley	Aosta Valley	9000019
+IT.20	Veneto	Veneto	9000020
+SM.06	Borgo Maggiore	Borgo Maggiore	9000021
+SM.07	San Marino	San Marino	9000022
+SM.09	Serravalle	Serravalle	9000023
+CH.TI	Ticino	Ticino	9000024
+CH.ZH	Zurich	Zurich	9000025
+CH.GE	Geneva	Geneva	9000026
+CH.BE	Bern	Bern	9000027
+CH.BS	Basel-Stadt	Basel-Stadt	9000028
+CH.LU	Luzern	Luzern	9000029
+CH.GR	Grisons	Grisons	9000030
+CH.VS	Valais	Valais	9000031
+CH.SG	Saint Gallen	Saint Gallen	9000032
+FR.93	Provence-Alpes-Cote d'Azur	Provence-Alpes-Cote d'Azur	9000033
+FR.84	Auvergne-Rhone-Alpes	Auvergne-Rhone-Alpes	9000034
+FR.11	Ile-de-France	Ile-de-France	9000035
+FR.44	Grand Est	Grand Est	9000036
+FR.75	Nouvelle-Aquitaine	Nouvelle-Aquitaine	9000037
+FR.76	Occitania	Occitania	9000038
+FR.94	Corsica	Corsica	9000039
+AT.07	Tyrol	Tyrol	9000040
+AT.09	Vienna	Vienna	9000041
+AT.05	Salzburg	Salzburg	9000042
+AT.06	Styria	Styria	9000043
+AT.02	Carinthia	Carinthia	9000044
+DE.02	Bavaria	Bavaria	9000045
+DE.16	Berlin	Berlin	9000046
+DE.05	Hesse	Hesse	9000047
+DE.04	Hamburg	Hamburg	9000048
+DE.07	North Rhine-Westphalia	North Rhine-Westphalia	9000049
+DE.13	Saxony	Saxony	9000050
+DE.01	Baden-Wurttemberg	Baden-Wurttemberg	9000051
+GB.ENG	England	England	9000052
+GB.SCT	Scotland	Scotland	9000053
+GB.WLS	Wales	Wales	9000054
+GB.NIR	Northern Ireland	Northern Ireland	9000055
+IE.07	Leinster	Leinster	9000056
+PT.14	Lisbon	Lisbon	9000057
+PT.17	Porto	Porto	9000058
+PT.08	Faro	Faro	9000059
+PT.10	Madeira	Madeira	9000060
+PT.20	Azores	Azores	9000061
+ES.29	Madrid	Madrid	9000062
+ES.CT	Catalonia	Catalonia	9000063
+ES.AN	Andalusia	Andalusia	9000064
+ES.VC	Valencia	Valencia	9000065
+ES.AR	Aragon	Aragon	9000066
+ES.IB	Balearic Islands	Balearic Islands	9000067
+ES.PV	Basque Country	Basque Country	9000068
+ES.GA	Galicia	Galicia	9000069
+ES.CM	Castille-La Mancha	Castille-La Mancha	9000070
+ES.CN	Canary Islands	Canary Islands	9000071
+NL.07	North Holland	North Holland	9000072
+NL.11	South Holland	South Holland	9000073
+BE.BRU	Brussels	Brussels	9000074
+BE.VLG	Flanders	Flanders	9000075
+LU.LU	Luxembourg	Luxembourg	9000076
+NO.03	Oslo	Oslo	9000077
+NO.46	Vestland	Vestland	9000078
+NO.55	Troms	Troms	9000079
+SE.26	Stockholm	Stockholm	9000080
+SE.28	Vastra Gotaland	Vastra Gotaland	9000081
+DK.17	Capital Region	Capital Region	9000082
+FI.13	Uusimaa	Uusimaa	9000083
+IS.39	Capital Region	Capital Region	9000084
+CZ.52	Prague	Prague	9000085
+PL.78	Mazovia	Mazovia	9000086
+PL.77	Lesser Poland	Lesser Poland	9000087
+HU.05	Budapest	Budapest	9000088
+SK.01	Bratislava	Bratislava	9000089
+HR.21	Zagreb	Zagreb	9000090
+HR.17	Split-Dalmatia	Split-Dalmatia	9000091
+HR.18	Istria	Istria	9000092
+HR.03	Dubrovnik-Neretva	Dubrovnik-Neretva	9000093
+HR.08	Primorje-Gorski Kotar	Primorje-Gorski Kotar	9000094
+RS.00	Belgrade	Belgrade	9000095
+RO.B	Bucharest	Bucharest	9000096
+BG.42	Sofia-Capital	Sofia-Capital	9000097
+GR.35	Attica	Attica	9000098
+GR.ES	Central Macedonia	Central Macedonia	9000099
+GR.SA	South Aegean	South Aegean	9000100
+GR.IO	Ionian Islands	Ionian Islands	9000101
+TR.34	Istanbul	Istanbul	9000102
+TR.68	Ankara	Ankara	9000103
+RU.48	Moscow	Moscow	9000104
+RU.66	Saint Petersburg	Saint Petersburg	9000105
+RU.CHU	Chukotka	Chukotka	9000106
+UA.12	Kyiv	Kyiv	9000107
+EE.37	Harjumaa	Harjumaa	9000108
+LV.25	Riga	Riga	9000109
+LT.60	Vilnius	Vilnius	9000110
+EG.11	Cairo	Cairo	9000111
+MA.07	Marrakesh-Safi	Marrakesh-Safi	9000112
+TN.36	Tunis	Tunis	9000113
+IL.06	Jerusalem	Jerusalem	9000114
+IL.05	Tel Aviv	Tel Aviv	9000115
+AE.03	Dubai	Dubai	9000116
+AE.01	Abu Dhabi	Abu Dhabi	9000117
+ZA.11	Western Cape	Western Cape	9000118
+ZA.06	Gauteng	Gauteng	9000119
+KE.05	Nairobi	Nairobi	9000120
+TZ.07	Zanzibar Urban/West	Zanzibar Urban/West	9000121
+JP.40	Tokyo	Tokyo	9000122
+JP.22	Kyoto	Kyoto	9000123
+JP.32	Osaka	Osaka	9000124
+CN.22	Beijing	Beijing	9000125
+CN.23	Shanghai	Shanghai	9000126
+KR.11	Seoul	Seoul	9000127
+IN.07	Delhi	Delhi	9000128
+IN.16	Maharashtra	Maharashtra	9000129
+TH.40	Bangkok	Bangkok	9000130
+ID.02	Bali	Bali	9000131
+NP.P3	Bagmati	Bagmati	9000132
+US.NY	New York	New York	9000133
+US.CA	California	California	9000134
+US.IL	Illinois	Illinois	9000135
+US.FL	Florida	Florida	9000136
+US.DC	Washington, D.C.	Washington, D.C.	9000137
+US.NV	Nevada	Nevada	9000138
+US.MA	Massachusetts	Massachusetts	9000139
+US.WA	Washington	Washington	9000140
+US.HI	Hawaii	Hawaii	9000141
+US.AK	Alaska	Alaska	9000142
+CA.08	Ontario	Ontario	9000143
+CA.02	British Columbia	British Columbia	9000144
+CA.10	Quebec	Quebec	9000145
+MX.09	Mexico City	Mexico City	9000146
+MX.23	Quintana Roo	Quintana Roo	9000147
+CU.08	Havana	Havana	9000148
+BR.21	Rio de Janeiro	Rio de Janeiro	9000149
+BR.27	Sao Paulo	Sao Paulo	9000150
+AR.07	Buenos Aires F.D.	Buenos Aires F.D.	9000151
+PE.15	Lima	Lima	9000152
+PE.08	Cusco	Cusco	9000153
+CL.12	Santiago Metropolitan	Santiago Metropolitan	9000154
+CL.05	Valparaiso	Valparaiso	9000155
+CO.34	Bogota D.C.	Bogota D.C.	9000156
+AU.02	New South Wales	New South Wales	9000157
+AU.07	Victoria	Victoria	9000158
+NZ.E7	Auckland	Auckland	9000159
+NZ.G2	Wellington	Wellington	9000160
+FJ.01	Central	Central	9000161
+FJ.03	Northern	Northern	9000162
+FJ.05	Western	Western	9000163

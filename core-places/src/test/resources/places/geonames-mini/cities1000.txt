@@ -1,0 +1,488 @@
+9100001	Milan	Milan		45.4643	9.1895	P	PPLA	IT		09				1371498		0	Europe/Rome	2024-03-15
+9100002	Sesto San Giovanni	Sesto San Giovanni		45.5342	9.2339	P	PPLA3	IT		09				80000		0	Europe/Rome	2024-03-15
+9100003	Monza	Monza		45.5845	9.2744	P	PPLA2	IT		09				123000		0	Europe/Rome	2024-03-15
+9100004	Cinisello Balsamo	Cinisello Balsamo		45.5560	9.2160	P	PPLA3	IT		09				74000		0	Europe/Rome	2024-03-15
+9100005	Rho	Rho		45.5320	9.0400	P	PPLA3	IT		09				51000		0	Europe/Rome	2024-03-15
+9100006	Segrate	Segrate		45.4906	9.2958	P	PPLA3	IT		09				36000		0	Europe/Rome	2024-03-15
+9100007	Assago	Assago		45.4012	9.1470	P	PPLA3	IT		09				8800		0	Europe/Rome	2024-03-15
+9100008	Abbiategrasso	Abbiategrasso		45.4018	8.9186	P	PPLA3	IT		09				32000		0	Europe/Rome	2024-03-15
+9100009	Pavia	Pavia		45.1847	9.1582	P	PPLA2	IT		09				72000		0	Europe/Rome	2024-03-15
+9100010	Bergamo	Bergamo		45.6983	9.6773	P	PPLA2	IT		09				120000		0	Europe/Rome	2024-03-15
+9100011	Brescia	Brescia		45.5416	10.2118	P	PPLA2	IT		09				196000		0	Europe/Rome	2024-03-15
+9100012	Como	Como		45.8081	9.0852	P	PPLA2	IT		09				84000		0	Europe/Rome	2024-03-15
+9100013	Bellagio	Bellagio		45.9856	9.2608	P	PPLA3	IT		09				3000		0	Europe/Rome	2024-03-15
+9100014	Menaggio	Menaggio		46.0197	9.2379	P	PPLA3	IT		09				3200		0	Europe/Rome	2024-03-15
+9100016	Lecco	Lecco		45.8566	9.3977	P	PPLA2	IT		09				48000		0	Europe/Rome	2024-03-15
+9100017	Sirmione	Sirmione		45.4915	10.6072	P	PPLA3	IT		09				8000		0	Europe/Rome	2024-03-15
+9100018	Limone sul Garda	Limone sul Garda		45.8142	10.7922	P	PPLA3	IT		09				1100		0	Europe/Rome	2024-03-15
+9100019	Mantova	Mantova		45.1564	10.7914	P	PPLA2	IT		09				49000		0	Europe/Rome	2024-03-15
+9100020	Cremona	Cremona		45.1335	10.0227	P	PPLA2	IT		09				72000		0	Europe/Rome	2024-03-15
+9100021	Bormio	Bormio		46.4670	10.3700	P	PPLA3	IT		09				4000		0	Europe/Rome	2024-03-15
+9100022	Livigno	Livigno		46.5376	10.1356	P	PPLA3	IT		09				6000		0	Europe/Rome	2024-03-15
+9100023	Valfurva	Valfurva		46.4300	10.5000	P	PPLA3	IT		09				2700		0	Europe/Rome	2024-03-15
+9100024	Varese	Varese		45.8206	8.8251	P	PPLA2	IT		09				80000		0	Europe/Rome	2024-03-15
+9100025	Sondrio	Sondrio		46.1699	9.8787	P	PPLA2	IT		09				22000		0	Europe/Rome	2024-03-15
+9100026	Chiavenna	Chiavenna		46.3214	9.4007	P	PPLA3	IT		09				7300		0	Europe/Rome	2024-03-15
+9100027	Campione d'Italia	Campione d'Italia		45.9680	8.9720	P	PPLA3	IT		09				2100		0	Europe/Rome	2024-03-15
+9100029	Turin	Turin		45.0703	7.6869	P	PPLA	IT		12				870000		0	Europe/Rome	2024-03-15
+9100030	Stresa	Stresa		45.8826	8.5351	P	PPLA3	IT		12				5000		0	Europe/Rome	2024-03-15
+9100031	Orta San Giulio	Orta San Giulio		45.7969	8.4060	P	PPLA3	IT		12				1100		0	Europe/Rome	2024-03-15
+9100033	Alba	Alba		44.7000	8.0350	P	PPLA3	IT		12				31000		0	Europe/Rome	2024-03-15
+9100034	Asti	Asti		44.9000	8.2064	P	PPLA2	IT		12				76000		0	Europe/Rome	2024-03-15
+9100035	Domodossola	Domodossola		46.1157	8.2926	P	PPLA3	IT		12				18000		0	Europe/Rome	2024-03-15
+9100036	Cuneo	Cuneo		44.3844	7.5427	P	PPLA2	IT		12				55000		0	Europe/Rome	2024-03-15
+9100037	Susa	Susa		45.1370	7.0480	P	PPLA3	IT		12				6000		0	Europe/Rome	2024-03-15
+9100038	Bardonecchia	Bardonecchia		45.0786	6.7006	P	PPLA3	IT		12				3200		0	Europe/Rome	2024-03-15
+9100039	Novara	Novara		45.4469	8.6220	P	PPLA2	IT		12				105000		0	Europe/Rome	2024-03-15
+9100040	Alessandria	Alessandria		44.9122	8.6150	P	PPLA2	IT		12				94000		0	Europe/Rome	2024-03-15
+9100041	Verbania	Verbania		45.9220	8.5513	P	PPLA2	IT		12				30000		0	Europe/Rome	2024-03-15
+9100045	Aosta	Aosta		45.7370	7.3150	P	PPLA	IT		19				34000		0	Europe/Rome	2024-03-15
+9100046	Courmayeur	Courmayeur		45.7970	6.9700	P	PPLA3	IT		19				2800		0	Europe/Rome	2024-03-15
+9100047	Valtournenche	Valtournenche		45.8760	7.6260	P	PPLA3	IT		19				2200		0	Europe/Rome	2024-03-15
+9100048	Cogne	Cogne		45.6076	7.3563	P	PPLA3	IT		19				1400		0	Europe/Rome	2024-03-15
+9100052	Bolzano	Bolzano		46.4983	11.3548	P	PPLA2	IT		17				102000		0	Europe/Rome	2024-03-15
+9100053	Trento	Trento		46.0667	11.1167	P	PPLA2	IT		17				117000		0	Europe/Rome	2024-03-15
+9100054	Merano	Merano		46.6700	11.1600	P	PPLA3	IT		17				40000		0	Europe/Rome	2024-03-15
+9100055	Ortisei	Ortisei		46.5740	11.6720	P	PPLA3	IT		17				4700		0	Europe/Rome	2024-03-15
+9100056	Canazei	Canazei		46.4760	11.7700	P	PPLA3	IT		17				1900		0	Europe/Rome	2024-03-15
+9100057	Pinzolo	Pinzolo		46.1580	10.7640	P	PPLA3	IT		17				3000		0	Europe/Rome	2024-03-15
+9100059	Riva del Garda	Riva del Garda		45.8860	10.8420	P	PPLA3	IT		17				16000		0	Europe/Rome	2024-03-15
+9100060	Brunico	Brunico		46.7970	11.9360	P	PPLA3	IT		17				16000		0	Europe/Rome	2024-03-15
+9100061	Vipiteno	Vipiteno		46.8970	11.4310	P	PPLA3	IT		17				6000		0	Europe/Rome	2024-03-15
+9100062	Brennero	Brennero		47.0030	11.5070	P	PPLA3	IT		17				2100		0	Europe/Rome	2024-03-15
+9100063	Corvara in Badia	Corvara in Badia		46.5520	11.8760	P	PPLA3	IT		17				1400		0	Europe/Rome	2024-03-15
+9100064	Selva di Val Gardena	Selva di Val Gardena		46.5570	11.7640	P	PPLA3	IT		17				2700		0	Europe/Rome	2024-03-15
+9100065	Sesto	Sesto		46.7050	12.3550	P	PPLA3	IT		17				1900		0	Europe/Rome	2024-03-15
+9100066	San Candido	San Candido		46.7330	12.2810	P	PPLA3	IT		17				3200		0	Europe/Rome	2024-03-15
+9100067	Dobbiaco	Dobbiaco		46.7300	12.2200	P	PPLA3	IT		17				3300		0	Europe/Rome	2024-03-15
+9100068	Malles Venosta	Malles Venosta		46.6870	10.5430	P	PPLA3	IT		17				5100		0	Europe/Rome	2024-03-15
+9100069	Prato allo Stelvio	Prato allo Stelvio		46.6300	10.5900	P	PPLA3	IT		17				3400		0	Europe/Rome	2024-03-15
+9100070	Rovereto	Rovereto		45.8900	11.0400	P	PPLA3	IT		17				40000		0	Europe/Rome	2024-03-15
+9100071	Moena	Moena		46.3780	11.6580	P	PPLA3	IT		17				2700		0	Europe/Rome	2024-03-15
+9100072	Venice	Venice		45.4375	12.3358	P	PPLA	IT		20				260000		0	Europe/Rome	2024-03-15
+9100073	Verona	Verona		45.4386	10.9928	P	PPLA2	IT		20				257000		0	Europe/Rome	2024-03-15
+9100074	Padova	Padova		45.4064	11.8768	P	PPLA2	IT		20				210000		0	Europe/Rome	2024-03-15
+9100075	Vicenza	Vicenza		45.5455	11.5354	P	PPLA2	IT		20				111000		0	Europe/Rome	2024-03-15
+9100076	Treviso	Treviso		45.6669	12.2430	P	PPLA2	IT		20				84000		0	Europe/Rome	2024-03-15
+9100077	Belluno	Belluno		46.1406	12.2167	P	PPLA2	IT		20				35000		0	Europe/Rome	2024-03-15
+9100078	Cortina d'Ampezzo	Cortina d'Ampezzo		46.5405	12.1357	P	PPLA3	IT		20				5800		0	Europe/Rome	2024-03-15
+9100079	Auronzo di Cadore	Auronzo di Cadore		46.5550	12.4400	P	PPLA3	IT		20				3300		0	Europe/Rome	2024-03-15
+9100080	Jesolo	Jesolo		45.5000	12.6400	P	PPLA3	IT		20				26000		0	Europe/Rome	2024-03-15
+9100081	Chioggia	Chioggia		45.2190	12.2770	P	PPLA3	IT		20				49000		0	Europe/Rome	2024-03-15
+9100082	Bassano del Grappa	Bassano del Grappa		45.7660	11.7350	P	PPLA3	IT		20				43000		0	Europe/Rome	2024-03-15
+9100083	Lazise	Lazise		45.5050	10.7410	P	PPLA3	IT		20				7000		0	Europe/Rome	2024-03-15
+9100084	Malcesine	Malcesine		45.7640	10.8100	P	PPLA3	IT		20				3700		0	Europe/Rome	2024-03-15
+9100085	Caorle	Caorle		45.6000	12.8830	P	PPLA3	IT		20				11500		0	Europe/Rome	2024-03-15
+9100086	Rovigo	Rovigo		45.0700	11.7900	P	PPLA2	IT		20				51000		0	Europe/Rome	2024-03-15
+9100087	Feltre	Feltre		46.0210	11.9070	P	PPLA3	IT		20				20000		0	Europe/Rome	2024-03-15
+9100088	Asiago	Asiago		45.8760	11.5120	P	PPLA3	IT		20				6400		0	Europe/Rome	2024-03-15
+9100089	Sappada	Sappada		46.5710	12.7060	P	PPLA3	IT		20				1300		0	Europe/Rome	2024-03-15
+9100090	San Vito di Cadore	San Vito di Cadore		46.4570	12.2000	P	PPLA3	IT		20				1700		0	Europe/Rome	2024-03-15
+9100091	Livinallongo del Col di Lana	Livinallongo del Col di Lana		46.4960	11.9340	P	PPLA3	IT		20				1400		0	Europe/Rome	2024-03-15
+9100092	Peschiera del Garda	Peschiera del Garda		45.4400	10.6900	P	PPLA3	IT		20				10000		0	Europe/Rome	2024-03-15
+9100094	Trieste	Trieste		45.6495	13.7768	P	PPLA2	IT		06				205000		0	Europe/Rome	2024-03-15
+9100095	Gorizia	Gorizia		45.9400	13.6200	P	PPLA2	IT		06				35000		0	Europe/Rome	2024-03-15
+9100096	Udine	Udine		46.0626	13.2372	P	PPLA2	IT		06				99000		0	Europe/Rome	2024-03-15
+9100097	Pordenone	Pordenone		45.9565	12.6610	P	PPLA2	IT		06				51000		0	Europe/Rome	2024-03-15
+9100098	Tarvisio	Tarvisio		46.5050	13.5760	P	PPLA3	IT		06				4000		0	Europe/Rome	2024-03-15
+9100099	Grado	Grado		45.6800	13.3880	P	PPLA3	IT		06				8000		0	Europe/Rome	2024-03-15
+9100100	Muggia	Muggia		45.6080	13.7620	P	PPLA3	IT		06				13000		0	Europe/Rome	2024-03-15
+9100101	Lignano Sabbiadoro	Lignano Sabbiadoro		45.6900	13.1330	P	PPLA3	IT		06				6500		0	Europe/Rome	2024-03-15
+9100102	Aquileia	Aquileia		45.7690	13.3690	P	PPLA3	IT		06				3400		0	Europe/Rome	2024-03-15
+9100103	Cividale del Friuli	Cividale del Friuli		46.0930	13.4330	P	PPLA3	IT		06				11000		0	Europe/Rome	2024-03-15
+9100104	Genoa	Genoa		44.4056	8.9463	P	PPLA	IT		08				580000		0	Europe/Rome	2024-03-15
+9100105	La Spezia	La Spezia		44.1025	9.8241	P	PPLA2	IT		08				94000		0	Europe/Rome	2024-03-15
+9100107	Santa Margherita Ligure	Santa Margherita Ligure		44.3340	9.2120	P	PPLA3	IT		08				9500		0	Europe/Rome	2024-03-15
+9100108	Rapallo	Rapallo		44.3500	9.2300	P	PPLA3	IT		08				29000		0	Europe/Rome	2024-03-15
+9100109	Camogli	Camogli		44.3490	9.1520	P	PPLA3	IT		08				5300		0	Europe/Rome	2024-03-15
+9100110	Monterosso al Mare	Monterosso al Mare		44.1450	9.6530	P	PPLA3	IT		08				1500		0	Europe/Rome	2024-03-15
+9100112	Riomaggiore	Riomaggiore		44.0990	9.7380	P	PPLA3	IT		08				1600		0	Europe/Rome	2024-03-15
+9100114	Levanto	Levanto		44.1700	9.6130	P	PPLA3	IT		08				5600		0	Europe/Rome	2024-03-15
+9100115	Sanremo	Sanremo		43.8170	7.7760	P	PPLA3	IT		08				55000		0	Europe/Rome	2024-03-15
+9100116	Ventimiglia	Ventimiglia		43.7910	7.6070	P	PPLA3	IT		08				24000		0	Europe/Rome	2024-03-15
+9100117	Imperia	Imperia		43.8890	8.0390	P	PPLA2	IT		08				42000		0	Europe/Rome	2024-03-15
+9100118	Savona	Savona		44.3090	8.4770	P	PPLA2	IT		08				60000		0	Europe/Rome	2024-03-15
+9100119	Alassio	Alassio		44.0070	8.1730	P	PPLA3	IT		08				11000		0	Europe/Rome	2024-03-15
+9100120	Portovenere	Portovenere		44.0510	9.8360	P	PPLA3	IT		08				3700		0	Europe/Rome	2024-03-15
+9100121	Finale Ligure	Finale Ligure		44.1690	8.3440	P	PPLA3	IT		08				11000		0	Europe/Rome	2024-03-15
+9100122	Bordighera	Bordighera		43.7790	7.6600	P	PPLA3	IT		08				10000		0	Europe/Rome	2024-03-15
+9100123	Sestri Levante	Sestri Levante		44.2700	9.3970	P	PPLA3	IT		08				18000		0	Europe/Rome	2024-03-15
+9100124	Dolceacqua	Dolceacqua		43.8400	7.6190	P	PPLA3	IT		08				2000		0	Europe/Rome	2024-03-15
+9100125	Bologna	Bologna		44.4939	11.3430	P	PPLA	IT		05				390000		0	Europe/Rome	2024-03-15
+9100126	Modena	Modena		44.6471	10.9252	P	PPLA2	IT		05				185000		0	Europe/Rome	2024-03-15
+9100127	Parma	Parma		44.8015	10.3279	P	PPLA2	IT		05				195000		0	Europe/Rome	2024-03-15
+9100128	Ravenna	Ravenna		44.4184	12.2035	P	PPLA2	IT		05				159000		0	Europe/Rome	2024-03-15
+9100129	Rimini	Rimini		44.0600	12.5680	P	PPLA2	IT		05				147000		0	Europe/Rome	2024-03-15
+9100130	Riccione	Riccione		44.0000	12.6560	P	PPLA3	IT		05				35000		0	Europe/Rome	2024-03-15
+9100131	Ferrara	Ferrara		44.8378	11.6198	P	PPLA2	IT		05				132000		0	Europe/Rome	2024-03-15
+9100132	Piacenza	Piacenza		45.0526	9.6930	P	PPLA2	IT		05				103000		0	Europe/Rome	2024-03-15
+9100133	Reggio nell'Emilia	Reggio nell'Emilia		44.6989	10.6297	P	PPLA2	IT		05				172000		0	Europe/Rome	2024-03-15
+9100134	Cesenatico	Cesenatico		44.2000	12.4000	P	PPLA3	IT		05				25000		0	Europe/Rome	2024-03-15
+9100135	Cervia	Cervia		44.2620	12.3480	P	PPLA3	IT		05				28000		0	Europe/Rome	2024-03-15
+9100136	Forli	Forli		44.2225	12.0408	P	PPLA2	IT		05				118000		0	Europe/Rome	2024-03-15
+9100137	Fidenza	Fidenza		44.8650	10.0620	P	PPLA3	IT		05				27000		0	Europe/Rome	2024-03-15
+9100138	Florence	Florence		43.7696	11.2558	P	PPLA	IT		16				380000		0	Europe/Rome	2024-03-15
+9100139	Fiesole	Fiesole		43.8056	11.2931	P	PPLA3	IT		16				14000		0	Europe/Rome	2024-03-15
+9100140	Pisa	Pisa		43.7228	10.4017	P	PPLA2	IT		16				90000		0	Europe/Rome	2024-03-15
+9100141	Siena	Siena		43.3186	11.3306	P	PPLA2	IT		16				54000		0	Europe/Rome	2024-03-15
+9100142	Lucca	Lucca		43.8429	10.5027	P	PPLA2	IT		16				89000		0	Europe/Rome	2024-03-15
+9100143	Livorno	Livorno		43.5485	10.3106	P	PPLA2	IT		16				158000		0	Europe/Rome	2024-03-15
+9100144	Arezzo	Arezzo		43.4633	11.8781	P	PPLA2	IT		16				99000		0	Europe/Rome	2024-03-15
+9100145	Pistoia	Pistoia		43.9333	10.9167	P	PPLA2	IT		16				90000		0	Europe/Rome	2024-03-15
+9100146	Prato	Prato		43.8777	11.1022	P	PPLA2	IT		16				191000		0	Europe/Rome	2024-03-15
+9100147	Montepulciano	Montepulciano		43.0990	11.7830	P	PPLA3	IT		16				14000		0	Europe/Rome	2024-03-15
+9100148	San Gimignano	San Gimignano		43.4677	11.0430	P	PPLA3	IT		16				7000		0	Europe/Rome	2024-03-15
+9100149	Volterra	Volterra		43.4000	10.8600	P	PPLA3	IT		16				10000		0	Europe/Rome	2024-03-15
+9100150	Viareggio	Viareggio		43.8686	10.2510	P	PPLA3	IT		16				62000		0	Europe/Rome	2024-03-15
+9100151	Portoferraio	Portoferraio		42.8140	10.3160	P	PPLA3	IT		16				12000		0	Europe/Rome	2024-03-15
+9100152	Marciana Marina	Marciana Marina		42.8040	10.1960	P	PPLA3	IT		16				2000		0	Europe/Rome	2024-03-15
+9100153	Porto Azzurro	Porto Azzurro		42.7640	10.3970	P	PPLA3	IT		16				3500		0	Europe/Rome	2024-03-15
+9100154	Rio Marina	Rio Marina		42.8130	10.4270	P	PPLA3	IT		16				2200		0	Europe/Rome	2024-03-15
+9100155	Isola del Giglio	Isola del Giglio		42.3590	10.9080	P	PPLA3	IT		16				1400		0	Europe/Rome	2024-03-15
+9100156	Monte Argentario	Monte Argentario		42.4380	11.1190	P	PPLA3	IT		16				12000		0	Europe/Rome	2024-03-15
+9100157	Castiglione della Pescaia	Castiglione della Pescaia		42.7600	10.8840	P	PPLA3	IT		16				7000		0	Europe/Rome	2024-03-15
+9100158	Cortona	Cortona		43.2750	11.9860	P	PPLA3	IT		16				22000		0	Europe/Rome	2024-03-15
+9100159	Pienza	Pienza		43.0780	11.6780	P	PPLA3	IT		16				2100		0	Europe/Rome	2024-03-15
+9100160	Greve in Chianti	Greve in Chianti		43.5850	11.3150	P	PPLA3	IT		16				14000		0	Europe/Rome	2024-03-15
+9100161	Castelnuovo di Garfagnana	Castelnuovo di Garfagnana		44.1100	10.4100	P	PPLA3	IT		16				6000		0	Europe/Rome	2024-03-15
+9100163	Massa	Massa		44.0350	10.1380	P	PPLA2	IT		16				70000		0	Europe/Rome	2024-03-15
+9100164	Carrara	Carrara		44.0790	10.0970	P	PPLA3	IT		16				63000		0	Europe/Rome	2024-03-15
+9100165	Forte dei Marmi	Forte dei Marmi		43.9570	10.1700	P	PPLA3	IT		16				7500		0	Europe/Rome	2024-03-15
+9100166	Grosseto	Grosseto		42.7600	11.1130	P	PPLA2	IT		16				82000		0	Europe/Rome	2024-03-15
+9100167	Piombino	Piombino		42.9240	10.5300	P	PPLA3	IT		16				33000		0	Europe/Rome	2024-03-15
+9100168	Perugia	Perugia		43.1122	12.3888	P	PPLA	IT		18				166000		0	Europe/Rome	2024-03-15
+9100169	Assisi	Assisi		43.0707	12.6196	P	PPLA3	IT		18				28000		0	Europe/Rome	2024-03-15
+9100170	Orvieto	Orvieto		42.7185	12.1107	P	PPLA3	IT		18				21000		0	Europe/Rome	2024-03-15
+9100171	Spoleto	Spoleto		42.7340	12.7390	P	PPLA3	IT		18				38000		0	Europe/Rome	2024-03-15
+9100172	Terni	Terni		42.5636	12.6427	P	PPLA2	IT		18				112000		0	Europe/Rome	2024-03-15
+9100173	Gubbio	Gubbio		43.3510	12.5780	P	PPLA3	IT		18				31000		0	Europe/Rome	2024-03-15
+9100174	Norcia	Norcia		42.7920	13.0950	P	PPLA3	IT		18				5000		0	Europe/Rome	2024-03-15
+9100175	Todi	Todi		42.7800	12.4090	P	PPLA3	IT		18				17000		0	Europe/Rome	2024-03-15
+9100176	Ancona	Ancona		43.6000	13.5000	P	PPLA	IT		10				100000		0	Europe/Rome	2024-03-15
+9100177	Pesaro	Pesaro		43.9100	12.9130	P	PPLA2	IT		10				95000		0	Europe/Rome	2024-03-15
+9100178	Urbino	Urbino		43.7260	12.6360	P	PPLA3	IT		10				15000		0	Europe/Rome	2024-03-15
+9100179	Macerata	Macerata		43.3000	13.4530	P	PPLA2	IT		10				42000		0	Europe/Rome	2024-03-15
+9100180	Ascoli Piceno	Ascoli Piceno		42.8540	13.5760	P	PPLA2	IT		10				49000		0	Europe/Rome	2024-03-15
+9100181	San Benedetto del Tronto	San Benedetto del Tronto		42.9500	13.8830	P	PPLA3	IT		10				47000		0	Europe/Rome	2024-03-15
+9100182	Fermo	Fermo		43.1600	13.7200	P	PPLA2	IT		10				37000		0	Europe/Rome	2024-03-15
+9100183	Loreto	Loreto		43.4400	13.6070	P	PPLA3	IT		10				12000		0	Europe/Rome	2024-03-15
+9100184	Senigallia	Senigallia		43.7140	13.2190	P	PPLA3	IT		10				44000		0	Europe/Rome	2024-03-15
+9100185	Sirolo	Sirolo		43.5250	13.6200	P	PPLA3	IT		10				3900		0	Europe/Rome	2024-03-15
+9100186	Rome	Rome		41.8919	12.5113	P	PPLC	IT		07				2872800		0	Europe/Rome	2024-03-15
+9100187	Trastevere	Trastevere		41.8890	12.4690	P	PPLX	IT		07				15000		0	Europe/Rome	2024-03-15
+9100188	Fiumicino	Fiumicino		41.7700	12.2300	P	PPLA3	IT		07				80000		0	Europe/Rome	2024-03-15
+9100189	Tivoli	Tivoli		41.9630	12.7990	P	PPLA3	IT		07				56000		0	Europe/Rome	2024-03-15
+9100190	Frascati	Frascati		41.8100	12.6800	P	PPLA3	IT		07				22000		0	Europe/Rome	2024-03-15
+9100191	Viterbo	Viterbo		42.4200	12.1080	P	PPLA2	IT		07				67000		0	Europe/Rome	2024-03-15
+9100192	Latina	Latina		41.4670	12.9000	P	PPLA2	IT		07				126000		0	Europe/Rome	2024-03-15
+9100193	Ponza	Ponza		40.8960	12.9620	P	PPLA3	IT		07				3300		0	Europe/Rome	2024-03-15
+9100194	Anzio	Anzio		41.4480	12.6290	P	PPLA3	IT		07				55000		0	Europe/Rome	2024-03-15
+9100195	Gaeta	Gaeta		41.2130	13.5710	P	PPLA3	IT		07				21000		0	Europe/Rome	2024-03-15
+9100196	Sperlonga	Sperlonga		41.2610	13.4330	P	PPLA3	IT		07				3200		0	Europe/Rome	2024-03-15
+9100197	Terracina	Terracina		41.2920	13.2460	P	PPLA3	IT		07				46000		0	Europe/Rome	2024-03-15
+9100198	Civitavecchia	Civitavecchia		42.0930	11.7980	P	PPLA3	IT		07				52000		0	Europe/Rome	2024-03-15
+9100199	Rieti	Rieti		42.4040	12.8570	P	PPLA2	IT		07				47000		0	Europe/Rome	2024-03-15
+9100200	Frosinone	Frosinone		41.6400	13.3400	P	PPLA2	IT		07				46000		0	Europe/Rome	2024-03-15
+9100201	Castel Gandolfo	Castel Gandolfo		41.7470	12.6500	P	PPLA3	IT		07				9000		0	Europe/Rome	2024-03-15
+9100202	Vatican City	Vatican City		41.9022	12.4531	P	PPLC	VA						826		0	Europe/Vatican	2024-03-15
+9100203	Naples	Naples		40.8518	14.2681	P	PPLA	IT		04				989000		0	Europe/Rome	2024-03-15
+9100204	Pozzuoli	Pozzuoli		40.8210	14.1190	P	PPLA3	IT		04				80000		0	Europe/Rome	2024-03-15
+9100205	Ercolano	Ercolano		40.8060	14.3590	P	PPLA3	IT		04				54000		0	Europe/Rome	2024-03-15
+9100206	Pompei	Pompei		40.7460	14.4990	P	PPLA3	IT		04				25000		0	Europe/Rome	2024-03-15
+9100207	Sorrento	Sorrento		40.6263	14.3758	P	PPLA3	IT		04				16000		0	Europe/Rome	2024-03-15
+9100208	Positano	Positano		40.6280	14.4850	P	PPLA3	IT		04				4000		0	Europe/Rome	2024-03-15
+9100209	Amalfi	Amalfi		40.6340	14.6027	P	PPLA3	IT		04				5000		0	Europe/Rome	2024-03-15
+9100210	Ravello	Ravello		40.6490	14.6110	P	PPLA3	IT		04				2500		0	Europe/Rome	2024-03-15
+9100211	Capri	Capri		40.5530	14.2220	P	PPLA3	IT		04				7000		0	Europe/Rome	2024-03-15
+9100212	Anacapri	Anacapri		40.5590	14.2150	P	PPLA3	IT		04				6900		0	Europe/Rome	2024-03-15
+9100213	Ischia	Ischia		40.7300	13.9440	P	PPLA3	IT		04				20000		0	Europe/Rome	2024-03-15
+9100214	Forio	Forio		40.7360	13.8620	P	PPLA3	IT		04				17000		0	Europe/Rome	2024-03-15
+9100215	Procida	Procida		40.7630	14.0260	P	PPLA3	IT		04				10000		0	Europe/Rome	2024-03-15
+9100216	Salerno	Salerno		40.6824	14.7681	P	PPLA2	IT		04				134000		0	Europe/Rome	2024-03-15
+9100217	Caserta	Caserta		41.0730	14.3320	P	PPLA2	IT		04				76000		0	Europe/Rome	2024-03-15
+9100218	Castellammare di Stabia	Castellammare di Stabia		40.7020	14.4880	P	PPLA3	IT		04				65000		0	Europe/Rome	2024-03-15
+9100219	Maiori	Maiori		40.6460	14.6410	P	PPLA3	IT		04				5500		0	Europe/Rome	2024-03-15
+9100220	Vico Equense	Vico Equense		40.6590	14.4330	P	PPLA3	IT		04				21000		0	Europe/Rome	2024-03-15
+9100221	Benevento	Benevento		41.1300	14.7800	P	PPLA2	IT		04				59000		0	Europe/Rome	2024-03-15
+9100222	Bari	Bari		41.1177	16.8719	P	PPLA	IT		13				320000		0	Europe/Rome	2024-03-15
+9100223	Lecce	Lecce		40.3515	18.1750	P	PPLA2	IT		13				95000		0	Europe/Rome	2024-03-15
+9100224	Brindisi	Brindisi		40.6320	17.9360	P	PPLA2	IT		13				88000		0	Europe/Rome	2024-03-15
+9100225	Taranto	Taranto		40.4644	17.2470	P	PPLA2	IT		13				200000		0	Europe/Rome	2024-03-15
+9100226	Alberobello	Alberobello		40.7830	17.2370	P	PPLA3	IT		13				11000		0	Europe/Rome	2024-03-15
+9100227	Ostuni	Ostuni		40.7300	17.5770	P	PPLA3	IT		13				32000		0	Europe/Rome	2024-03-15
+9100228	Otranto	Otranto		40.1460	18.4910	P	PPLA3	IT		13				5600		0	Europe/Rome	2024-03-15
+9100229	Gallipoli	Gallipoli		40.0560	17.9930	P	PPLA3	IT		13				20000		0	Europe/Rome	2024-03-15
+9100230	Polignano a Mare	Polignano a Mare		40.9960	17.2190	P	PPLA3	IT		13				17000		0	Europe/Rome	2024-03-15
+9100231	Monopoli	Monopoli		40.9510	17.3010	P	PPLA3	IT		13				49000		0	Europe/Rome	2024-03-15
+9100232	Vieste	Vieste		41.8820	16.1770	P	PPLA3	IT		13				13700		0	Europe/Rome	2024-03-15
+9100233	Peschici	Peschici		41.9450	16.0150	P	PPLA3	IT		13				4300		0	Europe/Rome	2024-03-15
+9100234	Foggia	Foggia		41.4620	15.5440	P	PPLA2	IT		13				150000		0	Europe/Rome	2024-03-15
+9100235	Manfredonia	Manfredonia		41.6300	15.9200	P	PPLA3	IT		13				57000		0	Europe/Rome	2024-03-15
+9100236	Castrignano del Capo	Castrignano del Capo		39.8430	18.3720	P	PPLA3	IT		13				5300		0	Europe/Rome	2024-03-15
+9100237	Matera	Matera		40.6667	16.6000	P	PPLA2	IT		02				60000		0	Europe/Rome	2024-03-15
+9100238	Potenza	Potenza		40.6404	15.8056	P	PPLA2	IT		02				67000		0	Europe/Rome	2024-03-15
+9100239	Maratea	Maratea		39.9990	15.7110	P	PPLA3	IT		02				5000		0	Europe/Rome	2024-03-15
+9100240	Reggio di Calabria	Reggio di Calabria		38.1100	15.6500	P	PPLA2	IT		03				180000		0	Europe/Rome	2024-03-15
+9100241	Catanzaro	Catanzaro		38.9100	16.5870	P	PPLA	IT		03				90000		0	Europe/Rome	2024-03-15
+9100242	Cosenza	Cosenza		39.2980	16.2530	P	PPLA2	IT		03				70000		0	Europe/Rome	2024-03-15
+9100243	Tropea	Tropea		38.6770	15.8980	P	PPLA3	IT		03				6400		0	Europe/Rome	2024-03-15
+9100244	Scilla	Scilla		38.2520	15.7170	P	PPLA3	IT		03				5000		0	Europe/Rome	2024-03-15
+9100245	Crotone	Crotone		39.0800	17.1270	P	PPLA2	IT		03				62000		0	Europe/Rome	2024-03-15
+9100246	Pizzo	Pizzo		38.7330	16.1620	P	PPLA3	IT		03				9000		0	Europe/Rome	2024-03-15
+9100247	Vibo Valentia	Vibo Valentia		38.6750	16.1010	P	PPLA2	IT		03				33000		0	Europe/Rome	2024-03-15
+9100248	Ricadi	Ricadi		38.6800	15.8830	P	PPLA3	IT		03				4500		0	Europe/Rome	2024-03-15
+9100251	Palermo	Palermo		38.1157	13.3615	P	PPLA	IT		15				673000		0	Europe/Rome	2024-03-15
+9100252	Catania	Catania		37.5079	15.0830	P	PPLA2	IT		15				296000		0	Europe/Rome	2024-03-15
+9100253	Messina	Messina		38.1938	15.5540	P	PPLA2	IT		15				233000		0	Europe/Rome	2024-03-15
+9100254	Siracusa	Siracusa		37.0755	15.2866	P	PPLA2	IT		15				122000		0	Europe/Rome	2024-03-15
+9100255	Taormina	Taormina		37.8530	15.2880	P	PPLA3	IT		15				11000		0	Europe/Rome	2024-03-15
+9100256	Cefalu	Cefalu		38.0390	14.0220	P	PPLA3	IT		15				14000		0	Europe/Rome	2024-03-15
+9100257	Agrigento	Agrigento		37.3111	13.5765	P	PPLA2	IT		15				59000		0	Europe/Rome	2024-03-15
+9100258	Trapani	Trapani		38.0170	12.5370	P	PPLA2	IT		15				68000		0	Europe/Rome	2024-03-15
+9100259	Marsala	Marsala		37.7980	12.4350	P	PPLA3	IT		15				82000		0	Europe/Rome	2024-03-15
+9100260	Erice	Erice		38.0360	12.5880	P	PPLA3	IT		15				28000		0	Europe/Rome	2024-03-15
+9100261	Lampedusa e Linosa	Lampedusa e Linosa		35.5030	12.6040	P	PPLA3	IT		15				6000		0	Europe/Rome	2024-03-15
+9100262	Pantelleria	Pantelleria		36.8340	11.9460	P	PPLA3	IT		15				7000		0	Europe/Rome	2024-03-15
+9100263	Lipari	Lipari		38.4670	14.9540	P	PPLA3	IT		15				11000		0	Europe/Rome	2024-03-15
+9100267	Ustica	Ustica		38.7060	13.1830	P	PPLA3	IT		15				1300		0	Europe/Rome	2024-03-15
+9100268	Favignana	Favignana		37.9310	12.3270	P	PPLA3	IT		15				3200		0	Europe/Rome	2024-03-15
+9100269	Ragusa	Ragusa		36.9250	14.7300	P	PPLA2	IT		15				73000		0	Europe/Rome	2024-03-15
+9100270	Noto	Noto		36.8920	15.0690	P	PPLA3	IT		15				24000		0	Europe/Rome	2024-03-15
+9100271	Modica	Modica		36.8600	14.7600	P	PPLA3	IT		15				54000		0	Europe/Rome	2024-03-15
+9100272	Enna	Enna		37.5670	14.2790	P	PPLA2	IT		15				27000		0	Europe/Rome	2024-03-15
+9100273	Caltanissetta	Caltanissetta		37.4900	14.0620	P	PPLA2	IT		15				62000		0	Europe/Rome	2024-03-15
+9100274	Giardini Naxos	Giardini Naxos		37.8230	15.2680	P	PPLA3	IT		15				9000		0	Europe/Rome	2024-03-15
+9100275	Acireale	Acireale		37.6100	15.1650	P	PPLA3	IT		15				52000		0	Europe/Rome	2024-03-15
+9100276	Linguaglossa	Linguaglossa		37.8400	15.1400	P	PPLA3	IT		15				5400		0	Europe/Rome	2024-03-15
+9100277	Nicolosi	Nicolosi		37.6200	15.0200	P	PPLA3	IT		15				7300		0	Europe/Rome	2024-03-15
+9100278	Porto Empedocle	Porto Empedocle		37.2900	13.5260	P	PPLA3	IT		15				17000		0	Europe/Rome	2024-03-15
+9100279	Realmonte	Realmonte		37.2870	13.4670	P	PPLA3	IT		15				4500		0	Europe/Rome	2024-03-15
+9100280	San Vito Lo Capo	San Vito Lo Capo		38.1720	12.7360	P	PPLA3	IT		15				4800		0	Europe/Rome	2024-03-15
+9100281	Cagliari	Cagliari		39.2238	9.1217	P	PPLA	IT		14				150000		0	Europe/Rome	2024-03-15
+9100282	Sassari	Sassari		40.7259	8.5557	P	PPLA2	IT		14				127000		0	Europe/Rome	2024-03-15
+9100283	Olbia	Olbia		40.9235	9.4965	P	PPLA3	IT		14				60000		0	Europe/Rome	2024-03-15
+9100284	Alghero	Alghero		40.5580	8.3190	P	PPLA3	IT		14				40000		0	Europe/Rome	2024-03-15
+9100285	La Maddalena	La Maddalena		41.2160	9.4040	P	PPLA3	IT		14				11000		0	Europe/Rome	2024-03-15
+9100286	Palau	Palau		41.1830	9.3830	P	PPLA3	IT		14				4300		0	Europe/Rome	2024-03-15
+9100287	Arzachena	Arzachena		41.0770	9.3800	P	PPLA3	IT		14				13000		0	Europe/Rome	2024-03-15
+9100289	Santa Teresa Gallura	Santa Teresa Gallura		41.2400	9.1870	P	PPLA3	IT		14				5000		0	Europe/Rome	2024-03-15
+9100290	Nuoro	Nuoro		40.3210	9.3300	P	PPLA2	IT		14				36000		0	Europe/Rome	2024-03-15
+9100291	Oristano	Oristano		39.9060	8.5930	P	PPLA2	IT		14				31000		0	Europe/Rome	2024-03-15
+9100292	Carloforte	Carloforte		39.1460	8.3070	P	PPLA3	IT		14				6000		0	Europe/Rome	2024-03-15
+9100293	Villasimius	Villasimius		39.1430	9.5180	P	PPLA3	IT		14				3400		0	Europe/Rome	2024-03-15
+9100294	Orosei	Orosei		40.3780	9.6970	P	PPLA3	IT		14				6900		0	Europe/Rome	2024-03-15
+9100295	Dorgali	Dorgali		40.2900	9.5900	P	PPLA3	IT		14				8000		0	Europe/Rome	2024-03-15
+9100296	Stintino	Stintino		40.9370	8.2250	P	PPLA3	IT		14				1600		0	Europe/Rome	2024-03-15
+9100297	Teulada	Teulada		38.9700	8.7700	P	PPLA3	IT		14				3700		0	Europe/Rome	2024-03-15
+9100298	Iglesias	Iglesias		39.3100	8.5300	P	PPLA3	IT		14				27000		0	Europe/Rome	2024-03-15
+9100299	Bosa	Bosa		40.2990	8.4980	P	PPLA3	IT		14				8000		0	Europe/Rome	2024-03-15
+9100300	L'Aquila	L'Aquila		42.3500	13.4000	P	PPLA	IT		01				70000		0	Europe/Rome	2024-03-15
+9100301	Pescara	Pescara		42.4600	14.2100	P	PPLA2	IT		01				120000		0	Europe/Rome	2024-03-15
+9100302	Chieti	Chieti		42.3500	14.1700	P	PPLA2	IT		01				52000		0	Europe/Rome	2024-03-15
+9100303	Teramo	Teramo		42.6600	13.7000	P	PPLA2	IT		01				54000		0	Europe/Rome	2024-03-15
+9100304	Roccaraso	Roccaraso		41.8420	14.0820	P	PPLA3	IT		01				1600		0	Europe/Rome	2024-03-15
+9100305	Pescasseroli	Pescasseroli		41.8040	13.7830	P	PPLA3	IT		01				2100		0	Europe/Rome	2024-03-15
+9100306	Vasto	Vasto		42.1180	14.7080	P	PPLA3	IT		01				40000		0	Europe/Rome	2024-03-15
+9100308	Campobasso	Campobasso		41.5630	14.6560	P	PPLA	IT		11				49000		0	Europe/Rome	2024-03-15
+9100309	Isernia	Isernia		41.5930	14.2330	P	PPLA2	IT		11				21000		0	Europe/Rome	2024-03-15
+9100310	Termoli	Termoli		42.0000	14.9990	P	PPLA3	IT		11				33000		0	Europe/Rome	2024-03-15
+9100311	San Marino	San Marino		43.9424	12.4578	P	PPLC	SM		07				4000		0	Europe/San_Marino	2024-03-15
+9100312	Borgo Maggiore	Borgo Maggiore		43.9540	12.4470	P	PPLA	SM		06				6000		0	Europe/San_Marino	2024-03-15
+9100313	Serravalle	Serravalle		43.9690	12.4830	P	PPLA	SM		09				10700		0	Europe/San_Marino	2024-03-15
+9100314	Chiasso	Chiasso		45.8340	9.0300	P	PPL	CH		TI				8000		0	Europe/Zurich	2024-03-15
+9100315	Mendrisio	Mendrisio		45.8700	8.9800	P	PPLA3	CH		TI				14000		0	Europe/Zurich	2024-03-15
+9100316	Lugano	Lugano		46.0101	8.9600	P	PPLA3	CH		TI				63000		0	Europe/Zurich	2024-03-15
+9100317	Locarno	Locarno		46.1700	8.7990	P	PPLA3	CH		TI				15000		0	Europe/Zurich	2024-03-15
+9100318	Bellinzona	Bellinzona		46.1940	9.0230	P	PPLA	CH		TI				18000		0	Europe/Zurich	2024-03-15
+9100319	Zurich	Zurich		47.3769	8.5417	P	PPLA	CH		ZH				341000		0	Europe/Zurich	2024-03-15
+9100320	Geneva	Geneva		46.2044	6.1432	P	PPLA	CH		GE				183000		0	Europe/Zurich	2024-03-15
+9100321	Bern	Bern		46.9481	7.4474	P	PPLC	CH		BE				133000		0	Europe/Zurich	2024-03-15
+9100322	Basel	Basel		47.5584	7.5733	P	PPLA	CH		BS				164000		0	Europe/Zurich	2024-03-15
+9100323	Luzern	Luzern		47.0502	8.3093	P	PPLA	CH		LU				77000		0	Europe/Zurich	2024-03-15
+9100324	Sankt Moritz	Sankt Moritz		46.4908	9.8355	P	PPLA3	CH		GR				5000		0	Europe/Zurich	2024-03-15
+9100325	Davos	Davos		46.8043	9.8370	P	PPLA3	CH		GR				11000		0	Europe/Zurich	2024-03-15
+9100326	Zermatt	Zermatt		46.0207	7.7491	P	PPLA3	CH		VS				5800		0	Europe/Zurich	2024-03-15
+9100327	Sion	Sion		46.2290	7.3590	P	PPLA	CH		VS				34000		0	Europe/Zurich	2024-03-15
+9100328	Interlaken	Interlaken		46.6863	7.8632	P	PPLA3	CH		BE				5600		0	Europe/Zurich	2024-03-15
+9100329	Vaduz	Vaduz		47.1410	9.5209	P	PPLC	LI						5200		0	Europe/Vaduz	2024-03-15
+9100330	Schaan	Schaan		47.1650	9.5090	P	PPLA	LI						5900		0	Europe/Vaduz	2024-03-15
+9100331	Buchs	Buchs		47.1655	9.4789	P	PPLA3	CH		SG				12700		0	Europe/Zurich	2024-03-15
+9100332	Menton	Menton		43.7745	7.4975	P	PPLA3	FR		93				28000		0	Europe/Paris	2024-03-15
+9100333	Nice	Nice		43.7031	7.2661	P	PPLA2	FR		93				342000		0	Europe/Paris	2024-03-15
+9100334	Cannes	Cannes		43.5513	7.0128	P	PPLA3	FR		93				74000		0	Europe/Paris	2024-03-15
+9100335	Antibes	Antibes		43.5808	7.1239	P	PPLA3	FR		93				74000		0	Europe/Paris	2024-03-15
+9100336	Marseille	Marseille		43.2965	5.3698	P	PPLA2	FR		93				868000		0	Europe/Paris	2024-03-15
+9100337	Avignon	Avignon		43.9493	4.8055	P	PPLA2	FR		93				91000		0	Europe/Paris	2024-03-15
+9100338	Briancon	Briancon		44.8996	6.6414	P	PPLA3	FR		93				11000		0	Europe/Paris	2024-03-15
+9100339	Lyon	Lyon		45.7485	4.8467	P	PPLA2	FR		84				513000		0	Europe/Paris	2024-03-15
+9100340	Chamonix-Mont-Blanc	Chamonix-Mont-Blanc		45.9237	6.8694	P	PPLA3	FR		84				8900		0	Europe/Paris	2024-03-15
+9100341	Paris	Paris		48.8534	2.3488	P	PPLC	FR		11				2138000		0	Europe/Paris	2024-03-15
+9100342	Versailles	Versailles		48.8014	2.1301	P	PPLA2	FR		11				85000		0	Europe/Paris	2024-03-15
+9100343	Strasbourg	Strasbourg		48.5839	7.7455	P	PPLA2	FR		44				272000		0	Europe/Paris	2024-03-15
+9100344	Bordeaux	Bordeaux		44.8404	-0.5805	P	PPLA2	FR		75				252000		0	Europe/Paris	2024-03-15
+9100345	Toulouse	Toulouse		43.6043	1.4437	P	PPLA2	FR		76				479000		0	Europe/Paris	2024-03-15
+9100346	Ajaccio	Ajaccio		41.9192	8.7386	P	PPLA	FR		94				69000		0	Europe/Paris	2024-03-15
+9100347	Bastia	Bastia		42.7028	9.4500	P	PPLA2	FR		94				43000		0	Europe/Paris	2024-03-15
+9100348	Monaco	Monaco		43.7384	7.4246	P	PPLC	MC						36000		0	Europe/Monaco	2024-03-15
+9100349	Nova Gorica	Nova Gorica		45.9560	13.6490	P	PPLA	SI						13000		0	Europe/Ljubljana	2024-03-15
+9100350	Koper	Koper		45.5481	13.7301	P	PPLA3	SI						24000		0	Europe/Ljubljana	2024-03-15
+9100351	Piran	Piran		45.5283	13.5683	P	PPLA3	SI						4000		0	Europe/Ljubljana	2024-03-15
+9100352	Ljubljana	Ljubljana		46.0511	14.5051	P	PPLC	SI						270000		0	Europe/Ljubljana	2024-03-15
+9100353	Zagreb	Zagreb		45.8144	15.9780	P	PPLC	HR		21				698000		0	Europe/Zagreb	2024-03-15
+9100354	Split	Split		43.5081	16.4402	P	PPLA	HR		17				178000		0	Europe/Zagreb	2024-03-15
+9100355	Dubrovnik	Dubrovnik		42.6507	18.0944	P	PPLA3	HR		03				28000		0	Europe/Zagreb	2024-03-15
+9100356	Pula	Pula		44.8683	13.8481	P	PPLA3	HR		18				57000		0	Europe/Zagreb	2024-03-15
+9100357	Rijeka	Rijeka		45.3271	14.4422	P	PPLA	HR		08				128000		0	Europe/Zagreb	2024-03-15
+9100358	Innsbruck	Innsbruck		47.2625	11.3945	P	PPLA	AT		07				132000		0	Europe/Vienna	2024-03-15
+9100359	Vienna	Vienna		48.2085	16.3721	P	PPLC	AT		09				1691000		0	Europe/Vienna	2024-03-15
+9100360	Salzburg	Salzburg		47.7981	13.0465	P	PPLA	AT		05				146000		0	Europe/Vienna	2024-03-15
+9100361	Graz	Graz		47.0667	15.4500	P	PPLA	AT		06				226000		0	Europe/Vienna	2024-03-15
+9100362	Villach	Villach		46.6167	13.8500	P	PPLA3	AT		02				59000		0	Europe/Vienna	2024-03-15
+9100363	Klagenfurt	Klagenfurt		46.6247	14.3053	P	PPLA	AT		02				94000		0	Europe/Vienna	2024-03-15
+9100364	Lienz	Lienz		46.8290	12.7690	P	PPLA3	AT		07				11800		0	Europe/Vienna	2024-03-15
+9100365	Munich	Munich		48.1374	11.5755	P	PPLA	DE		02				1260000		0	Europe/Berlin	2024-03-15
+9100366	Berlin	Berlin		52.5244	13.4105	P	PPLC	DE		16				3426000		0	Europe/Berlin	2024-03-15
+9100367	Frankfurt am Main	Frankfurt am Main		50.1155	8.6842	P	PPLA3	DE		05				650000		0	Europe/Berlin	2024-03-15
+9100368	Hamburg	Hamburg		53.5753	10.0153	P	PPLA	DE		04				1739000		0	Europe/Berlin	2024-03-15
+9100369	Koeln	Koeln		50.9333	6.9500	P	PPLA3	DE		07				963000		0	Europe/Berlin	2024-03-15
+9100370	Nuernberg	Nuernberg		49.4542	11.0775	P	PPLA3	DE		02				480000		0	Europe/Berlin	2024-03-15
+9100371	Dresden	Dresden		51.0509	13.7383	P	PPLA2	DE		13				486000		0	Europe/Berlin	2024-03-15
+9100372	Stuttgart	Stuttgart		48.7823	9.1770	P	PPLA	DE		01				585000		0	Europe/Berlin	2024-03-15
+9100373	Garmisch-Partenkirchen	Garmisch-Partenkirchen		47.4920	11.0950	P	PPLA3	DE		02				26000		0	Europe/Berlin	2024-03-15
+9100374	Fuessen	Fuessen		47.5700	10.7000	P	PPLA3	DE		02				15000		0	Europe/Berlin	2024-03-15
+9100375	London	London		51.5085	-0.1257	P	PPLC	GB		ENG				7556000		0	Europe/London	2024-03-15
+9100376	Edinburgh	Edinburgh		55.9521	-3.1965	P	PPLA	GB		SCT				464000		0	Europe/London	2024-03-15
+9100377	Glasgow	Glasgow		55.8651	-4.2576	P	PPLA	GB		SCT				599000		0	Europe/London	2024-03-15
+9100378	Manchester	Manchester		53.4809	-2.2374	P	PPLA2	GB		ENG				395000		0	Europe/London	2024-03-15
+9100379	Liverpool	Liverpool		53.4106	-2.9779	P	PPLA2	GB		ENG				484000		0	Europe/London	2024-03-15
+9100380	Oxford	Oxford		51.7520	-1.2577	P	PPLA2	GB		ENG				150000		0	Europe/London	2024-03-15
+9100381	Cambridge	Cambridge		52.2053	0.1218	P	PPLA2	GB		ENG				124000		0	Europe/London	2024-03-15
+9100382	Dover	Dover		51.1279	1.3134	P	PPLA3	GB		ENG				31000		0	Europe/London	2024-03-15
+9100383	Cardiff	Cardiff		51.4800	-3.1800	P	PPLC	GB		WLS				335000		0	Europe/London	2024-03-15
+9100384	Belfast	Belfast		54.5973	-5.9301	P	PPLC	GB		NIR				280000		0	Europe/London	2024-03-15
+9100385	Dublin	Dublin		53.3331	-6.2489	P	PPLC	IE		07				1024000		0	Europe/Dublin	2024-03-15
+9100386	Lisbon	Lisbon		38.7167	-9.1333	P	PPLC	PT		14				517000		0	Europe/Lisbon	2024-03-15
+9100387	Porto	Porto		41.1496	-8.6109	P	PPLA	PT		17				237000		0	Europe/Lisbon	2024-03-15
+9100388	Faro	Faro		37.0194	-7.9304	P	PPLA	PT		08				41000		0	Europe/Lisbon	2024-03-15
+9100389	Sintra	Sintra		38.8029	-9.3817	P	PPLA3	PT		14				377000		0	Europe/Lisbon	2024-03-15
+9100390	Funchal	Funchal		32.6669	-16.9241	P	PPLA	PT		10				112000		0	Atlantic/Madeira	2024-03-15
+9100391	Ponta Delgada	Ponta Delgada		37.7412	-25.6756	P	PPLA3	PT		20				68000		0	Atlantic/Azores	2024-03-15
+9100392	Madrid	Madrid		40.4165	-3.7026	P	PPLC	ES		29				3255944		0	Europe/Madrid	2024-03-15
+9100393	Barcelona	Barcelona		41.3888	2.1590	P	PPLA	ES		CT				1620000		0	Europe/Madrid	2024-03-15
+9100394	Seville	Seville		37.3824	-5.9761	P	PPLA2	ES		AN				700000		0	Europe/Madrid	2024-03-15
+9100395	Valencia	Valencia		39.4697	-0.3774	P	PPLA2	ES		VC				800000		0	Europe/Madrid	2024-03-15
+9100396	Granada	Granada		37.1882	-3.6067	P	PPLA2	ES		AN				237000		0	Europe/Madrid	2024-03-15
+9100397	Zaragoza	Zaragoza		41.6561	-0.8773	P	PPLA2	ES		AR				674000		0	Europe/Madrid	2024-03-15
+9100398	Palma	Palma		39.5696	2.6502	P	PPLA	ES		IB				400000		0	Europe/Madrid	2024-03-15
+9100399	Bilbao	Bilbao		43.2627	-2.9253	P	PPLA3	ES		PV				345000		0	Europe/Madrid	2024-03-15
+9100400	Santiago de Compostela	Santiago de Compostela		42.8805	-8.5457	P	PPLA2	ES		GA				95000		0	Europe/Madrid	2024-03-15
+9100401	Cordoba	Cordoba		37.8916	-4.7794	P	PPLA2	ES		AN				326000		0	Europe/Madrid	2024-03-15
+9100402	Toledo	Toledo		39.8567	-4.0244	P	PPLA2	ES		CM				80000		0	Europe/Madrid	2024-03-15
+9100403	Malaga	Malaga		36.7213	-4.4214	P	PPLA2	ES		AN				569000		0	Europe/Madrid	2024-03-15
+9100404	Ibiza	Ibiza		38.9089	1.4329	P	PPLA3	ES		IB				50000		0	Europe/Madrid	2024-03-15
+9100405	Las Palmas de Gran Canaria	Las Palmas de Gran Canaria		28.1000	-15.4130	P	PPLA2	ES		CN				379000		0	Atlantic/Canary	2024-03-15
+9100406	Santa Cruz de Tenerife	Santa Cruz de Tenerife		28.4682	-16.2546	P	PPLA2	ES		CN				203000		0	Atlantic/Canary	2024-03-15
+9100407	Amsterdam	Amsterdam		52.3740	4.8897	P	PPLC	NL		07				741000		0	Europe/Amsterdam	2024-03-15
+9100408	The Hague	The Hague		52.0767	4.2986	P	PPLG	NL		11				515000		0	Europe/Amsterdam	2024-03-15
+9100409	Rotterdam	Rotterdam		51.9225	4.4792	P	PPLA3	NL		11				598000		0	Europe/Amsterdam	2024-03-15
+9100410	Brussels	Brussels		50.8505	4.3488	P	PPLC	BE		BRU				1019000		0	Europe/Brussels	2024-03-15
+9100411	Antwerp	Antwerp		51.2213	4.3997	P	PPLA2	BE		VLG				466000		0	Europe/Brussels	2024-03-15
+9100412	Bruges	Bruges		51.2093	3.2247	P	PPLA2	BE		VLG				117000		0	Europe/Brussels	2024-03-15
+9100413	Luxembourg	Luxembourg		49.6117	6.1300	P	PPLC	LU		LU				76000		0	Europe/Luxembourg	2024-03-15
+9100414	Oslo	Oslo		59.9127	10.7461	P	PPLC	NO		03				580000		0	Europe/Oslo	2024-03-15
+9100415	Bergen	Bergen		60.3930	5.3242	P	PPLA	NO		46				213000		0	Europe/Oslo	2024-03-15
+9100416	Tromso	Tromso		69.6496	18.9560	P	PPLA3	NO		55				52000		0	Europe/Oslo	2024-03-15
+9100417	Stockholm	Stockholm		59.3326	18.0649	P	PPLC	SE		26				1515000		0	Europe/Stockholm	2024-03-15
+9100418	Goteborg	Goteborg		57.7072	11.9668	P	PPLA	SE		28				504000		0	Europe/Stockholm	2024-03-15
+9100419	Copenhagen	Copenhagen		55.6759	12.5655	P	PPLC	DK		17				1153000		0	Europe/Copenhagen	2024-03-15
+9100420	Helsinki	Helsinki		60.1695	24.9355	P	PPLC	FI		13				558000		0	Europe/Helsinki	2024-03-15
+9100421	Reykjavik	Reykjavik		64.1355	-21.8954	P	PPLC	IS		39				118000		0	Atlantic/Reykjavik	2024-03-15
+9100422	Longyearbyen	Longyearbyen		78.2232	15.6267	P	PPLA	SJ						2100		0	Arctic/Longyearbyen	2024-03-15
+9100423	Nuuk	Nuuk		64.1835	-51.7216	P	PPLC	GL						14000		0	America/Nuuk	2024-03-15
+9100424	Prague	Prague		50.0880	14.4208	P	PPLC	CZ		52				1165000		0	Europe/Prague	2024-03-15
+9100425	Warsaw	Warsaw		52.2298	21.0118	P	PPLC	PL		78				1700000		0	Europe/Warsaw	2024-03-15
+9100426	Krakow	Krakow		50.0614	19.9366	P	PPLA	PL		77				755000		0	Europe/Warsaw	2024-03-15
+9100427	Budapest	Budapest		47.4984	19.0404	P	PPLC	HU		05				1741000		0	Europe/Budapest	2024-03-15
+9100428	Bratislava	Bratislava		48.1486	17.1077	P	PPLC	SK		01				424000		0	Europe/Bratislava	2024-03-15
+9100429	Belgrade	Belgrade		44.8040	20.4651	P	PPLC	RS		00				1273000		0	Europe/Belgrade	2024-03-15
+9100430	Bucharest	Bucharest		44.4323	26.1063	P	PPLC	RO		B				1883000		0	Europe/Bucharest	2024-03-15
+9100431	Sofia	Sofia		42.6975	23.3242	P	PPLC	BG		42				1152000		0	Europe/Sofia	2024-03-15
+9100432	Athens	Athens		37.9838	23.7278	P	PPLC	GR		35				664000		0	Europe/Athens	2024-03-15
+9100433	Thessaloniki	Thessaloniki		40.6403	22.9439	P	PPLA	GR		ES				354000		0	Europe/Athens	2024-03-15
+9100434	Fira	Fira		36.4167	25.4318	P	PPLA3	GR		SA				1800		0	Europe/Athens	2024-03-15
+9100435	Kerkyra	Kerkyra		39.6243	19.9217	P	PPLA3	GR		IO				28000		0	Europe/Athens	2024-03-15
+9100436	Rodos	Rodos		36.4349	28.2176	P	PPLA3	GR		SA				50000		0	Europe/Athens	2024-03-15
+9100437	Istanbul	Istanbul		41.0138	28.9497	P	PPLA	TR		34				14804000		0	Europe/Istanbul	2024-03-15
+9100438	Ankara	Ankara		39.9199	32.8543	P	PPLC	TR		68				3517000		0	Europe/Istanbul	2024-03-15
+9100439	Moscow	Moscow		55.7522	37.6156	P	PPLC	RU		48				10381000		0	Europe/Moscow	2024-03-15
+9100440	Saint Petersburg	Saint Petersburg		59.9386	30.3141	P	PPLA	RU		66				5028000		0	Europe/Moscow	2024-03-15
+9100441	Kyiv	Kyiv		50.4547	30.5238	P	PPLC	UA		12				2797000		0	Europe/Kyiv	2024-03-15
+9100442	Tallinn	Tallinn		59.4370	24.7536	P	PPLC	EE		37				394000		0	Europe/Tallinn	2024-03-15
+9100443	Riga	Riga		56.9460	24.1059	P	PPLC	LV		25				696000		0	Europe/Riga	2024-03-15
+9100444	Vilnius	Vilnius		54.6892	25.2798	P	PPLC	LT		60				542000		0	Europe/Vilnius	2024-03-15
+9100445	Valletta	Valletta		35.8978	14.5121	P	PPLC	MT						6000		0	Europe/Malta	2024-03-15
+9100446	Nicosia	Nicosia		35.1667	33.3667	P	PPLC	CY						200000		0	Asia/Nicosia	2024-03-15
+9100447	Cairo	Cairo		30.0626	31.2497	P	PPLC	EG		11				7734000		0	Africa/Cairo	2024-03-15
+9100448	Marrakech	Marrakech		31.6295	-7.9811	P	PPLA	MA		07				928000		0	Africa/Casablanca	2024-03-15
+9100449	Tunis	Tunis		36.8190	10.1658	P	PPLC	TN		36				693000		0	Africa/Tunis	2024-03-15
+9100450	Jerusalem	Jerusalem		31.7690	35.2163	P	PPLC	IL		06				801000		0	Asia/Jerusalem	2024-03-15
+9100451	Tel Aviv	Tel Aviv		32.0809	34.7806	P	PPLA	IL		05				432000		0	Asia/Jerusalem	2024-03-15
+9100452	Dubai	Dubai		25.0657	55.1713	P	PPLA	AE		03				1137000		0	Asia/Dubai	2024-03-15
+9100453	Abu Dhabi	Abu Dhabi		24.4667	54.3667	P	PPLC	AE		01				603000		0	Asia/Dubai	2024-03-15
+9100454	Cape Town	Cape Town		-33.9258	18.4232	P	PPLA	ZA		11				3433000		0	Africa/Johannesburg	2024-03-15
+9100455	Johannesburg	Johannesburg		-26.2023	28.0436	P	PPLA	ZA		06				2026000		0	Africa/Johannesburg	2024-03-15
+9100456	Nairobi	Nairobi		-1.2833	36.8167	P	PPLC	KE		05				2750000		0	Africa/Nairobi	2024-03-15
+9100457	Zanzibar City	Zanzibar City		-6.1659	39.2026	P	PPLA	TZ		07				403000		0	Africa/Dar_es_Salaam	2024-03-15
+9100458	Tokyo	Tokyo		35.6895	139.6917	P	PPLC	JP		40				8336000		0	Asia/Tokyo	2024-03-15
+9100459	Kyoto	Kyoto		35.0211	135.7538	P	PPLA	JP		22				1459000		0	Asia/Tokyo	2024-03-15
+9100460	Osaka	Osaka		34.6937	135.5022	P	PPLA	JP		32				2753000		0	Asia/Tokyo	2024-03-15
+9100461	Beijing	Beijing		39.9075	116.3972	P	PPLC	CN		22				11716000		0	Asia/Shanghai	2024-03-15
+9100462	Shanghai	Shanghai		31.2222	121.4581	P	PPLA	CN		23				22315000		0	Asia/Shanghai	2024-03-15
+9100463	Hong Kong	Hong Kong		22.2855	114.1577	P	PPLC	HK						7012000		0	Asia/Hong_Kong	2024-03-15
+9100464	Singapore	Singapore		1.2897	103.8501	P	PPLC	SG						3547000		0	Asia/Singapore	2024-03-15
+9100465	Bangkok	Bangkok		13.7540	100.5014	P	PPLC	TH		40				5104000		0	Asia/Bangkok	2024-03-15
+9100466	Seoul	Seoul		37.5683	126.9778	P	PPLC	KR		11				10349000		0	Asia/Seoul	2024-03-15
+9100467	Delhi	Delhi		28.6519	77.2315	P	PPLA	IN		07				10927000		0	Asia/Kolkata	2024-03-15
+9100468	Mumbai	Mumbai		19.0144	72.8479	P	PPLA	IN		16				12691000		0	Asia/Kolkata	2024-03-15
+9100469	Kathmandu	Kathmandu		27.7017	85.3206	P	PPLC	NP		P3				1442000		0	Asia/Kathmandu	2024-03-15
+9100470	Hanoi	Hanoi		21.0245	105.8412	P	PPLC	VN						1431000		0	Asia/Ho_Chi_Minh	2024-03-15
+9100471	Denpasar	Denpasar		-8.6500	115.2167	P	PPLA	ID		02				897000		0	Asia/Makassar	2024-03-15
+9100472	Taipei	Taipei		25.0478	121.5319	P	PPLC	TW						2704000		0	Asia/Taipei	2024-03-15
+9100473	Male	Male		4.1748	73.5089	P	PPLC	MV						103000		0	Indian/Maldives	2024-03-15
+9100474	New York City	New York City		40.7143	-74.0060	P	PPL	US		NY				8175000		0	America/New_York	2024-03-15
+9100475	Los Angeles	Los Angeles		34.0522	-118.2437	P	PPL	US		CA				3792000		0	America/Los_Angeles	2024-03-15
+9100476	San Francisco	San Francisco		37.7749	-122.4194	P	PPL	US		CA				805000		0	America/Los_Angeles	2024-03-15
+9100477	Chicago	Chicago		41.8500	-87.6500	P	PPL	US		IL				2695000		0	America/Chicago	2024-03-15
+9100478	Miami	Miami		25.7743	-80.1937	P	PPL	US		FL				399000		0	America/New_York	2024-03-15
+9100479	Washington	Washington		38.8951	-77.0364	P	PPLC	US		DC				601000		0	America/New_York	2024-03-15
+9100480	Las Vegas	Las Vegas		36.1750	-115.1372	P	PPL	US		NV				603000		0	America/Los_Angeles	2024-03-15
+9100481	Boston	Boston		42.3584	-71.0598	P	PPLA	US		MA				617000		0	America/New_York	2024-03-15
+9100482	Seattle	Seattle		47.6062	-122.3321	P	PPL	US		WA				608000		0	America/Los_Angeles	2024-03-15
+9100483	Honolulu	Honolulu		21.3069	-157.8583	P	PPLA	US		HI				371000		0	Pacific/Honolulu	2024-03-15
+9100484	Anchorage	Anchorage		61.2181	-149.9003	P	PPL	US		AK				291000		0	America/Anchorage	2024-03-15
+9100485	Toronto	Toronto		43.7001	-79.4163	P	PPLA	CA		08				2600000		0	America/Toronto	2024-03-15
+9100486	Vancouver	Vancouver		49.2497	-123.1193	P	PPL	CA		02				603000		0	America/Vancouver	2024-03-15
+9100487	Montreal	Montreal		45.5088	-73.5878	P	PPL	CA		10				1600000		0	America/Toronto	2024-03-15
+9100488	Mexico City	Mexico City		19.4285	-99.1277	P	PPLC	MX		09				12294000		0	America/Mexico_City	2024-03-15
+9100489	Cancun	Cancun		21.1743	-86.8466	P	PPLA3	MX		23				628000		0	America/Cancun	2024-03-15
+9100490	Havana	Havana		23.1333	-82.3667	P	PPLC	CU		08				2163000		0	America/Havana	2024-03-15
+9100491	Rio de Janeiro	Rio de Janeiro		-22.9028	-43.2075	P	PPLA	BR		21				6747000		0	America/Sao_Paulo	2024-03-15
+9100492	Sao Paulo	Sao Paulo		-23.5475	-46.6361	P	PPLA	BR		27				10021000		0	America/Sao_Paulo	2024-03-15
+9100493	Buenos Aires	Buenos Aires		-34.6131	-58.3772	P	PPLC	AR		07				2891000		0	America/Argentina/Buenos_Aires	2024-03-15
+9100494	Lima	Lima		-12.0432	-77.0282	P	PPLC	PE		15				6758000		0	America/Lima	2024-03-15
+9100495	Cusco	Cusco		-13.5320	-71.9675	P	PPLA	PE		08				109000		0	America/Lima	2024-03-15
+9100496	Santiago	Santiago		-33.4569	-70.6483	P	PPLC	CL		12				4837000		0	America/Santiago	2024-03-15
+9100497	Hanga Roa	Hanga Roa		-27.1500	-109.4333	P	PPLA3	CL		05				3300		0	Pacific/Easter	2024-03-15
+9100498	Bogota	Bogota		4.6097	-74.0817	P	PPLC	CO		34				7674000		0	America/Bogota	2024-03-15
+9100499	Sydney	Sydney		-33.8679	151.2073	P	PPLA	AU		02				4627000		0	Australia/Sydney	2024-03-15
+9100500	Melbourne	Melbourne		-37.8140	144.9633	P	PPLA	AU		07				4529000		0	Australia/Melbourne	2024-03-15
+9100501	Auckland	Auckland		-36.8485	174.7635	P	PPLA	NZ		E7				1346000		0	Pacific/Auckland	2025-02-14
+9100502	Wellington	Wellington		-41.2866	174.7756	P	PPLC	NZ		G2				190000		0	Pacific/Auckland	2024-03-15
+9100503	Suva	Suva		-18.1416	178.4415	P	PPLC	FJ		01				88000		0	Pacific/Fiji	2024-03-15
+9100504	Labasa	Labasa		-16.4333	179.3833	P	PPLA3	FJ		03				27000		0	Pacific/Fiji	2024-03-15
+9100505	Waiyevo	Waiyevo		-16.8167	-179.9833	P	PPLA3	FJ		03				1000		0	Pacific/Fiji	2024-03-15
+9100506	Nukualofa	Nukualofa		-21.1394	-175.2018	P	PPLC	TO						24000		0	Pacific/Tongatapu	2024-03-15
+9100507	Papeete	Papeete		-17.5350	-149.5696	P	PPLC	PF						26000		0	Pacific/Tahiti	2024-03-15
+9100508	Apia	Apia		-13.8333	-171.7667	P	PPLC	WS						37000		0	Pacific/Apia	2024-03-15
+9100509	Anadyr	Anadyr		64.7333	177.5167	P	PPLA	RU		CHU				14000		0	Asia/Anadyr	2024-03-15
+9100510	Provideniya	Provideniya		64.4333	-173.2333	P	PPL	RU		CHU				2000		0	Asia/Anadyr	2024-03-15

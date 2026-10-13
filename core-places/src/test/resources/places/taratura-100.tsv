@@ -1,0 +1,103 @@
+# taratura-100.tsv: 100 coordinate scritte a mano per il dataset dei luoghi (docs/luoghi.md).
+# Colonne separate da tabulazione: id, latitudine, longitudine, nomi accettati (separati da |), precisioni accettate
+# (CITY, NEAR, REGION_ONLY, COUNTRY_ONLY, NONE = nessun risultato), fusi accettati (- = non si controlla), nota.
+T001	45.4641	9.1919	Milano	CITY	Europe/Rome	Duomo di Milano
+T002	41.8902	12.4922	Roma	CITY	Europe/Rome	Colosseo
+T003	43.7680	11.2531	Firenze	CITY	Europe/Rome	Ponte Vecchio
+T004	45.4340	12.3388	Venezia	CITY	Europe/Rome	Piazza San Marco
+T005	40.8359	14.2487	Napoli	CITY	Europe/Rome	Piazza del Plebiscito
+T006	45.0689	7.6932	Torino	CITY	Europe/Rome	Mole Antonelliana
+T007	38.1203	13.3566	Palermo	CITY	Europe/Rome	Teatro Massimo
+T008	44.4943	11.3465	Bologna	CITY	Europe/Rome	Due Torri
+T009	44.4107	8.9272	Genova	CITY	Europe/Rome	Porto Antico
+T010	39.2155	9.1130	Cagliari	CITY	Europe/Rome	Castello di Cagliari
+T011	43.7230	10.3966	Pisa	CITY	Europe/Rome	Torre pendente
+T012	43.3188	11.3308	Siena	CITY	Europe/Rome	Piazza del Campo
+T013	41.1171	16.8719	Bari	CITY	Europe/Rome	Centro di Bari
+T014	42.3498	13.3995	L'Aquila	CITY	Europe/Rome	Centro storico
+T015	46.4983	11.3548	Bolzano	CITY	Europe/Rome	Centro di Bolzano
+T016	45.5345	9.2330	Sesto San Giovanni	CITY	Europe/Rome	Centro di Sesto San Giovanni
+T017	45.5190	9.2130	Milano|Sesto San Giovanni	CITY	Europe/Rome	Bicocca, al confine fra Milano e Sesto
+T018	45.4455	9.2767	Milano|Segrate	CITY	Europe/Rome	Aeroporto di Linate
+T019	41.8003	12.2388	Fiumicino	CITY	Europe/Rome	Aeroporto di Fiumicino
+T020	43.8076	11.2929	Fiesole	CITY	Europe/Rome	Piazza Mino a Fiesole
+T021	45.5937	9.2760	Monza	CITY	Europe/Rome	Parco di Monza
+T022	41.9009	12.5016	Roma	CITY	Europe/Rome	Stazione Termini
+T023	46.5370	12.1380	Cortina d'Ampezzo	CITY	Europe/Rome	Cortina
+T024	45.8960	8.5300	Stresa	CITY	Europe/Rome	Isola Bella sul Lago Maggiore
+T025	44.1345	9.6835	Vernazza	CITY	Europe/Rome	Cinque Terre
+T026	40.6285	14.4870	Positano	CITY	Europe/Rome	Costiera amalfitana
+T027	43.0770	11.6790	Pienza	CITY	Europe/Rome	Val d'Orcia
+T028	46.5755	11.6715	Ortisei	CITY	Europe/Rome	Val Gardena
+T029	42.7925	13.0940	Norcia	CITY	Europe/Rome	Piazza San Benedetto
+T030	38.6775	15.8975	Tropea	CITY	Europe/Rome	Costa degli Dei
+T031	40.1475	18.4905	Otranto	CITY	Europe/Rome	Salento
+T032	37.0630	15.2930	Siracusa	CITY	Europe/Rome	Ortigia
+T033	40.7845	17.2360	Alberobello	CITY	Europe/Rome	Trulli
+T034	43.4672	11.0432	San Gimignano	CITY	Europe/Rome	Le torri
+T035	40.5429	14.2431	Capri	CITY	Europe/Rome	Faraglioni
+T036	40.7313	13.9654	Ischia	CITY	Europe/Rome	Castello Aragonese
+T037	40.7578	14.0170	Procida	CITY	Europe/Rome	Marina Corricella
+T038	42.8128	10.3265	Portoferraio	CITY	Europe/Rome	Porto dell'Isola d'Elba
+T039	42.3668	10.8956	Isola del Giglio	CITY	Europe/Rome	Giglio Castello
+T040	35.5133	12.5656	Lampedusa e Linosa	CITY	Europe/Rome	Spiaggia dei Conigli
+T041	36.8295	11.9460	Pantelleria	CITY	Europe/Rome	Porto di Pantelleria
+T042	38.4175	14.9610	Lipari	CITY	Europe/Rome	Vulcano, Porto di Levante
+T043	38.7915	15.2133	Malfa|Lipari|Santa Marina Salina	NEAR	Europe/Rome	Stromboli: la frazione e piccola, il comune e Lipari
+T044	41.2150	9.4050	La Maddalena	CITY	Europe/Rome	Arcipelago di La Maddalena
+T045	38.7080	13.1850	Ustica	CITY	Europe/Rome	Isola di Ustica
+T046	37.9320	12.3290	Favignana	CITY	Europe/Rome	Isole Egadi
+T047	39.1470	8.3060	Carloforte	CITY	Europe/Rome	Isola di San Pietro
+T048	45.4850	12.4170	Venezia	CITY	Europe/Rome	Burano, comune di Venezia
+T049	40.8987	12.9617	Ponza	CITY	Europe/Rome	Porto di Ponza
+T050	44.1073	9.7285	Riomaggiore	CITY	Europe/Rome	Manarola, frazione di Riomaggiore
+T051	44.3030	9.2095	Portofino	CITY	Europe/Rome	Porto di Portofino
+T052	40.6347	14.6027	Amalfi	CITY	Europe/Rome	Duomo di Amalfi
+T053	41.2581	13.4467	Sperlonga	CITY	Europe/Rome	Grotta di Tiberio
+T054	37.8523	15.2917	Taormina	CITY	Europe/Rome	Teatro antico
+T055	38.0381	14.0225	Cefalù	CITY	Europe/Rome	Duomo di Cefalu
+T056	41.1360	9.5350	Arzachena|Palau|La Maddalena	CITY	Europe/Rome	Porto Cervo, Costa Smeralda
+T057	40.2776	9.6285	Dorgali	CITY	Europe/Rome	Cala Gonone
+T058	39.1349	9.5250	Villasimius	CITY	Europe/Rome	Spiaggia di Simius
+T059	40.9647	8.2147	Stintino	CITY	Europe/Rome	La Pelosa
+T060	38.1735	12.7350	San Vito Lo Capo	CITY	Europe/Rome	Spiaggia di San Vito
+T061	37.2900	13.4750	Realmonte|Porto Empedocle|Agrigento	CITY	Europe/Rome	Scala dei Turchi
+T062	40.6290	14.3720	Sorrento	CITY	Europe/Rome	Marina Grande
+T063	45.9368	7.8666	Macugnaga|Alagna Valsesia|Gressoney-La-Trinité|Zermatt	CITY	-	Capanna Margherita, Monte Rosa
+T064	45.8480	6.9300	Courmayeur|Chamonix-Mont-Blanc	CITY	Europe/Rome|Europe/Paris	Punta Helbronner
+T065	46.6126	12.2955	Sesto|Auronzo di Cadore|San Candido|Dobbiaco|Cortina d'Ampezzo	CITY	Europe/Rome	Rifugio Auronzo, Tre Cime di Lavaredo
+T066	37.7003	14.9966	Nicolosi	CITY	Europe/Rome	Rifugio Sapienza, Etna
+T067	46.5286	10.4535	Bormio|Valfurva	CITY	Europe/Rome	Passo dello Stelvio
+T068	45.9763	7.6586	Zermatt|Valtournenche	CITY	Europe/Zurich|Europe/Rome	Cervino
+T069	46.2300	10.8260	Pinzolo	CITY	Europe/Rome	Madonna di Campiglio, frazione (non e un luogo del dataset)
+T070	45.9340	7.6320	Valtournenche	CITY	Europe/Rome	Breuil-Cervinia, frazione
+T071	46.5870	12.2530	Cortina d'Ampezzo|Auronzo di Cadore	CITY	Europe/Rome	Misurina, frazione di Auronzo
+T072	42.4417	13.5611	Castel del Monte|L'Aquila	CITY|NEAR	Europe/Rome	Campo Imperatore, Gran Sasso
+T073	46.4890	11.8140	Canazei|Livinallongo del Col di Lana	CITY	Europe/Rome	Passo Pordoi
+T074	45.8330	9.0299	Chiasso	CITY	Europe/Zurich	Dogana di Chiasso, lato svizzero
+T075	45.8109	9.0856	Como	CITY	Europe/Rome	Duomo di Como
+T076	45.9556	13.6439	Nova Gorica|Gorizia	CITY	Europe/Rome|Europe/Ljubljana	Piazza Transalpina
+T077	43.7855	7.5300	Mentone|Ventimiglia	CITY	Europe/Paris|Europe/Rome	Ponte San Luigi
+T078	43.9424	12.4578	San Marino	CITY	Europe/San_Marino	Citta di San Marino
+T079	41.9022	12.4568	Città del Vaticano	CITY	Europe/Vatican	Piazza San Pietro
+T080	45.9680	8.9720	Campione d'Italia	CITY	Europe/Rome	Enclave italiana in Svizzera
+T081	47.0010	11.5050	Brennero	CITY	Europe/Rome	Valico del Brennero
+T082	45.5800	13.7500	Muggia|Capodistria	CITY	Europe/Rome|Europe/Ljubljana	Fra Muggia e Capodistria
+T083	46.5060	13.5770	Tarvisio	CITY	Europe/Rome	Tarvisio
+T084	43.7399	7.4276	Monaco	CITY	Europe/Monaco	Casino di Monte Carlo
+T085	46.0053	8.9511	Lugano	CITY	Europe/Zurich	Piazza della Riforma
+T086	51.5007	-0.1246	Londra	CITY	Europe/London	Big Ben
+T087	48.8584	2.2945	Parigi	CITY	Europe/Paris	Torre Eiffel
+T088	48.1372	11.5755	Monaco di Baviera	CITY	Europe/Berlin	Marienplatz
+T089	38.7139	-9.1394	Lisbona	CITY	Europe/Lisbon	Praca do Comercio
+T090	59.9139	10.7522	Oslo	CITY	Europe/Oslo	Municipio di Oslo
+T091	48.2082	16.3738	Vienna	CITY	Europe/Vienna	Stephansplatz
+T092	50.0875	14.4214	Praga	CITY	Europe/Prague	Piazza della Citta Vecchia
+T093	37.9715	23.7257	Atene	CITY	Europe/Athens	Acropoli
+T094	30.0444	31.2357	Il Cairo	CITY	Africa/Cairo	Piazza Tahrir
+T095	40.7580	-73.9855	New York	CITY	America/New_York	Times Square
+T096	35.6586	139.7454	Tokyo	CITY	Asia/Tokyo	Torre di Tokyo
+T097	30.0000	-40.0000	-	NONE	-	Oceano Atlantico
+T098	78.9200	11.9300	Svalbard e Jan Mayen	COUNTRY_ONLY	Arctic/Longyearbyen	Ny-Alesund, lontano da Longyearbyen
+T099	56.9000	-4.2000	Scozia	REGION_ONLY	Europe/London	Highlands scozzesi
+T100	64.5000	179.9000	Cukotka	REGION_ONLY	Asia/Anadyr	Cukotka, a ovest dell'antimeridiano

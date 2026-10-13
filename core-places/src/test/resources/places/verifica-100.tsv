@@ -1,0 +1,103 @@
+# verifica-100.tsv: 100 coordinate scritte a mano per il dataset dei luoghi (docs/luoghi.md).
+# Colonne separate da tabulazione: id, latitudine, longitudine, nomi accettati (separati da |), precisioni accettate
+# (CITY, NEAR, REGION_ONLY, COUNTRY_ONLY, NONE = nessun risultato), fusi accettati (- = non si controlla), nota.
+V001	45.4705	9.1795	Milano	CITY	Europe/Rome	Castello Sforzesco
+V002	41.8946	12.4831	Roma	CITY	Europe/Rome	Vittoriano
+V003	41.8992	12.4731	Roma	CITY	Europe/Rome	Piazza Navona
+V004	43.7731	11.2560	Firenze	CITY	Europe/Rome	Duomo di Firenze
+V005	45.4380	12.3359	Venezia	CITY	Europe/Rome	Ponte di Rialto
+V006	45.4390	10.9944	Verona	CITY	Europe/Rome	Arena di Verona
+V007	41.0733	14.3267	Caserta	CITY	Europe/Rome	Reggia di Caserta
+V008	37.5026	15.0870	Catania	CITY	Europe/Rome	Piazza del Duomo
+V009	40.6663	16.6115	Matera	CITY	Europe/Rome	I Sassi
+V010	45.6551	13.7756	Trieste	CITY	Europe/Rome	Piazza dell'Unita d'Italia
+V011	45.0711	7.6859	Torino	CITY	Europe/Rome	Piazza Castello
+V012	38.1143	13.3567	Palermo	CITY	Europe/Rome	Cattedrale di Palermo
+V013	45.5551	9.2146	Cinisello Balsamo	CITY	Europe/Rome	Centro di Cinisello Balsamo
+V014	45.5190	9.0860	Rho|Milano	CITY	Europe/Rome	Fiera di Milano a Rho
+V015	45.4781	9.1240	Milano	CITY	Europe/Rome	Stadio di San Siro
+V016	45.4863	9.2051	Milano	CITY	Europe/Rome	Stazione Centrale
+V017	41.9631	12.7969	Tivoli	CITY	Europe/Rome	Villa d'Este
+V018	41.8085	12.6773	Frascati	CITY	Europe/Rome	Ville tuscolane
+V019	41.7480	12.6500	Castel Gandolfo	CITY	Europe/Rome	Lago Albano
+V020	45.2570	9.1470	Pavia	CITY	Europe/Rome	Certosa di Pavia
+V021	45.9890	9.2570	Bellagio	CITY	Europe/Rome	Punta Spartivento
+V022	46.0100	9.2850	Varenna	CITY	Europe/Rome	Lungolago di Varenna
+V023	45.4915	10.6075	Sirmione	CITY	Europe/Rome	Rocca Scaligera
+V024	45.7645	10.8085	Malcesine	CITY	Europe/Rome	Castello Scaligero
+V025	45.7980	8.4030	Orta San Giulio	CITY	Europe/Rome	Isola di San Giulio
+V026	43.8401	7.6188	Dolceacqua	CITY	Europe/Rome	Ponte vecchio
+V027	44.1459	9.6535	Monterosso al Mare	CITY	Europe/Rome	Spiaggia di Fegina
+V028	43.0980	11.7860	Montepulciano	CITY	Europe/Rome	Piazza Grande
+V029	43.0757	12.6063	Assisi	CITY	Europe/Rome	Basilica di San Francesco
+V030	43.3519	12.5772	Gubbio	CITY	Europe/Rome	Palazzo dei Consoli
+V031	40.7140	13.8720	Forio	CITY	Europe/Rome	Isola di Ischia, Citara
+V032	40.5560	14.2090	Anacapri	CITY	Europe/Rome	Monte Solaro
+V033	42.7440	10.2400	Marciana Marina|Portoferraio	CITY	Europe/Rome	Marina di Campo, Elba
+V034	38.5760	14.8330	Malfa|Santa Marina Salina	CITY	Europe/Rome	Pollara, Salina
+V035	45.4580	12.3520	Venezia	CITY	Europe/Rome	Murano
+V036	41.2000	9.4400	La Maddalena	CITY	Europe/Rome	Caprera
+V037	38.6350	15.0650	Lipari|Malfa|Santa Marina Salina	NEAR	Europe/Rome	Panarea
+V038	42.3570	10.9210	Isola del Giglio	CITY	Europe/Rome	Giglio Porto
+V039	45.4040	12.3650	Venezia	CITY	Europe/Rome	Lido di Venezia
+V040	40.9100	12.9610	Ponza	CITY	Europe/Rome	Chiaia di Luna
+V041	44.1190	9.7080	Vernazza|Riomaggiore	CITY	Europe/Rome	Corniglia, Cinque Terre
+V042	44.3495	9.1515	Camogli	CITY	Europe/Rome	Porto di Camogli
+V043	40.6492	14.6120	Ravello	CITY	Europe/Rome	Villa Rufolo
+V044	39.9985	15.7115	Maratea	CITY	Europe/Rome	Centro di Maratea
+V045	38.6190	15.8310	Ricadi|Tropea	CITY	Europe/Rome	Capo Vaticano
+V046	41.8760	16.1920	Vieste	CITY	Europe/Rome	Faro di Vieste
+V047	40.9960	17.2230	Polignano a Mare	CITY	Europe/Rome	Lama Monachile
+V048	40.0560	17.9890	Gallipoli	CITY	Europe/Rome	Lungomare di Gallipoli
+V049	39.7980	18.3590	Castrignano del Capo	CITY	Europe/Rome	Santa Maria di Leuca
+V050	45.4960	12.6500	Jesolo	CITY	Europe/Rome	Lido di Jesolo
+V051	46.5190	12.0080	Livinallongo del Col di Lana|Cortina d'Ampezzo|Corvara in Badia	CITY	Europe/Rome	Rifugio Lagazuoi
+V052	46.4750	11.6420	Canazei|Moena|Ortisei|Selva di Val Gardena	CITY	Europe/Rome	Rifugio Vajolet, Catinaccio
+V053	46.4335	11.8548	Canazei|Livinallongo del Col di Lana	CITY	Europe/Rome	Punta Rocca, Marmolada
+V054	45.5173	7.2663	Ceresole Reale|Cogne	CITY	Europe/Rome	Vetta del Gran Paradiso
+V055	46.5530	11.7870	Selva di Val Gardena|Corvara in Badia	CITY	Europe/Rome	Passo Gardena
+V056	45.8326	6.8652	Courmayeur|Chamonix-Mont-Blanc	CITY	Europe/Rome|Europe/Paris	Vetta del Monte Bianco
+V057	42.4690	13.5660	Castel del Monte|L'Aquila|Teramo	CITY|NEAR	Europe/Rome	Corno Grande, Gran Sasso
+V058	37.7330	15.1200	Linguaglossa|Acireale|Nicolosi	CITY	Europe/Rome	Valle del Bove, Etna
+V059	46.5410	11.6190	Ortisei|Castelrotto	CITY	Europe/Rome	Alpe di Siusi
+V060	44.9390	6.8650	Sestriere	CITY	Europe/Rome	Monti della Luna
+V061	45.8700	8.9810	Mendrisio	CITY	Europe/Zurich	Centro di Mendrisio
+V062	46.5380	10.1355	Livigno	CITY	Europe/Rome	Livigno, zona extradoganale
+V063	45.0800	6.6850	Bardonecchia	CITY	Europe/Rome	Traforo del Frejus, lato italiano
+V064	45.5283	13.5683	Pirano	CITY	Europe/Ljubljana	Pirano
+V065	45.5470	13.7290	Capodistria	CITY	Europe/Ljubljana	Capodistria
+V066	43.7930	7.5650	Ventimiglia	CITY	Europe/Rome	Giardini Hanbury
+V067	45.9420	13.6185	Gorizia	CITY	Europe/Rome	Castello di Gorizia
+V068	45.9566	13.6505	Nova Gorica	CITY	Europe/Ljubljana	Casino di Nova Gorica
+V069	46.1160	8.2940	Domodossola	CITY	Europe/Rome	Stazione di Domodossola
+V070	47.2685	11.3933	Innsbruck	CITY	Europe/Vienna	Tettuccio d'Oro
+V071	43.9680	12.4800	Serravalle	CITY	Europe/San_Marino	Serravalle, San Marino
+V072	41.9065	12.4536	Città del Vaticano	CITY	Europe/Vatican	Musei Vaticani
+V073	55.9486	-3.1999	Edimburgo	CITY	Europe/London	Castello di Edimburgo
+V074	47.5576	10.7498	Füssen	CITY	Europe/Berlin	Castello di Neuschwanstein
+V075	41.4036	2.1744	Barcellona	CITY	Europe/Madrid	Sagrada Familia
+V076	37.3860	-5.9926	Siviglia	CITY	Europe/Madrid	Giralda
+V077	37.1770	-3.5881	Granada	CITY	Europe/Madrid	Alhambra
+V078	52.3600	4.8852	Amsterdam	CITY	Europe/Amsterdam	Rijksmuseum
+V079	52.0790	4.3133	L'Aia	CITY	Europe/Amsterdam	Binnenhof
+V080	50.8467	4.3525	Bruxelles	CITY	Europe/Brussels	Grand-Place
+V081	59.3250	18.0711	Stoccolma	CITY	Europe/Stockholm	Gamla Stan
+V082	55.6798	12.5911	Copenaghen	CITY	Europe/Copenhagen	Nyhavn
+V083	47.5071	19.0457	Budapest	CITY	Europe/Budapest	Parlamento
+V084	52.2319	21.0067	Varsavia	CITY	Europe/Warsaw	Palazzo della Cultura
+V085	50.0540	19.9355	Cracovia	CITY	Europe/Warsaw	Castello del Wawel
+V086	41.0086	28.9802	Istanbul	CITY	Europe/Istanbul	Santa Sofia
+V087	55.7539	37.6208	Mosca	CITY	Europe/Moscow	Piazza Rossa
+V088	25.1972	55.2744	Dubai	CITY|NEAR	Asia/Dubai	Burj Khalifa
+V089	31.7767	35.2345	Gerusalemme	CITY	Asia/Jerusalem	Muro del Pianto
+V090	-33.9628	18.4098	Città del Capo	CITY	Africa/Johannesburg	Table Mountain
+V091	37.8199	-122.4783	San Francisco	CITY	America/Los_Angeles	Golden Gate Bridge
+V092	-33.8568	151.2153	Sydney	CITY	Australia/Sydney	Opera House
+V093	-13.1631	-72.5450	Cusco	REGION_ONLY	America/Lima	Machu Picchu, la regione di Cusco
+V094	-22.9519	-43.2105	Rio de Janeiro	CITY	America/Sao_Paulo	Cristo Redentore
+V095	21.2793	-157.8292	Honolulu	CITY	Pacific/Honolulu	Waikiki
+V096	-16.8500	179.9700	Waiyevo	CITY	Pacific/Fiji	Taveuni, a est dell'antimeridiano
+V097	29.5000	-8.0000	Marocco	COUNTRY_ONLY	Africa/Casablanca|-	Deserto a sud di Marrakech
+V098	35.0000	-30.0000	-	NONE	-	Oceano Atlantico
+V099	72.0000	-40.0000	-	NONE	-	Calotta glaciale della Groenlandia
+V100	90.0000	0.0000	-	NONE	-	Polo Nord

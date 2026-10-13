@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="Typos">
+
+    <!--
+        Diagnostica della libreria del telefono (Fase 3, P2; DiagSection.PHONE_LIBRARY). Solo testi a schermo:
+        l'esportazione usa codici, numeri ed enumerati. Nessun nome di file, percorso, volume o luogo qui dentro.
+    -->
+
+    <!-- Accesso ai media (E-P1, E-P15) -->
+    <string name="phone_diag_access_full">Accesso a tutte le foto e i video</string>
+    <string name="phone_diag_access_partial">Accesso solo alle foto selezionate</string>
+    <string name="phone_diag_access_partial_detail">La Libreria mostra solo gli elementi scelti e non considera spariti gli altri. Per vederli tutti: Consenti tutto.</string>
+    <string name="phone_diag_access_none">Nessun accesso alle foto e ai video</string>
+    <string name="phone_diag_access_none_detail">La lettura del telefono è ferma. Togliere il permesso non cancella nulla dalla Libreria.</string>
+
+    <!-- Posizione dei media (E-P21) -->
+    <string name="phone_diag_location_ok">Posizione delle foto leggibile</string>
+    <string name="phone_diag_location_denied">Posizione delle foto non consentita</string>
+    <string name="phone_diag_location_denied_detail">Le foto nuove restano in attesa finché l’accesso alla posizione dei media non è consentito: senza, i file arrivano senza GPS e le copie non sarebbero identiche agli originali. I video proseguono.</string>
+
+    <!-- Stato della lettura -->
+    <string name="phone_diag_sync_idle">Lettura del telefono aggiornata</string>
+    <string name="phone_diag_sync_scanning">Lettura del telefono in corso</string>
+    <string name="phone_diag_sync_paused">Lettura del telefono in pausa</string>
+    <string name="phone_diag_sync_incomplete">L’ultima lettura si è fermata prima della fine</string>
+    <string name="phone_diag_sync_incomplete_detail">Ripartirà da dove era al prossimo giro.</string>
+
+    <!-- E-P3, E-P2/E-P10/E-P13 -->
+    <string name="phone_diag_disk_full">Spazio esaurito</string>
+    <string name="phone_diag_disk_full_detail">La lettura del telefono è ferma finché non si libera spazio. Non si perde nulla.</string>
+    <string name="phone_diag_storage_locked">In attesa del primo sblocco</string>
+    <string name="phone_diag_storage_locked_detail">Dopo un riavvio i file non sono leggibili finché il telefono non viene sbloccato.</string>
+
+    <!-- Volumi (E-P6) -->
+    <string name="phone_diag_volumes">Memorie del telefono</string>
+    <string name="phone_diag_volumes_unavailable">Una memoria non è raggiungibile</string>
+    <string name="phone_diag_volumes_unavailable_detail">Gli elementi di una scheda tolta non sono cancellati: tornano quando la scheda viene rimessa.</string>
+
+    <!-- Ignorati (E-M12) -->
+    <string name="phone_diag_ignored_none">Nessun file ignorato</string>
+    <string name="phone_diag_ignored">Alcuni file non sono entrati in Libreria</string>
+    <string name="phone_diag_ignored_detail">File vuoti o che non sono foto o video: non si mostrano.</string>
+
+    <!-- Protezione dalle ondate di assenze -->
+    <string name="phone_diag_absences_blocked">Assenze sospette non registrate</string>
+    <string name="phone_diag_absences_blocked_detail">Il telefono ha risposto con troppi file mancanti tutti insieme: per prudenza non sono stati considerati spariti.</string>
+
+    <!-- E-P7, E-P17 -->
+    <string name="phone_diag_other_profiles">Cartella sicura, Spazio privato e app clonate</string>
+    <string name="phone_diag_other_profiles_detail">Sono profili separati del telefono: le loro foto non sono visibili a questa app.</string>
+</resources>

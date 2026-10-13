@@ -64,6 +64,8 @@ class MediaStoreRow(
     msOrientation = orientation,
     msDurationMs = durationMs,
     scanZone = scanZone,
+    // DATE_MODIFIED (gia' in millisecondi): l'ultimo ripiego per la data (E-M8).
+    msDateModifiedMs = dateModifiedMs.takeIf { it > 0 },
   )
 
   override fun toString(): String = "MediaStoreRow($type)"

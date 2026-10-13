@@ -47,6 +47,8 @@ class MediaStoreContractTest {
     assertThat(location.relativePath).isEqualTo("DCIM/Camera/")
     assertThat(row.stamp().size).isEqualTo(2_000_000L)
     assertThat(row.toExtractHints(ZoneId.of("Europe/Rome")).msDateTakenMs).isEqualTo(1_700_000_000_000L)
+    // DATE_MODIFIED arriva all'estrattore come ultimo ripiego per la data (E-M8).
+    assertThat(row.toExtractHints(ZoneId.of("Europe/Rome")).msDateModifiedMs).isEqualTo(1_700_000_000_001L)
     // Nome e percorso sono dati personali: non escono nel toString.
     assertThat(row.toString()).doesNotContain("IMG_7")
     assertThat(row.toString()).doesNotContain("DCIM")

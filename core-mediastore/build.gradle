@@ -18,6 +18,12 @@ apply from: "${rootDir}/gradle/android-conventions.gradle"
 
 android {
   namespace = 'dev.pampa.mycloudgallery.core.mediastore'
+
+  // L'APK delle prove strumentate con il target dell'app (36): da questo dipendono il modello dei permessi dei media
+  // (READ_MEDIA_*) e `MediaStore.getVersion` per app. Riguarda solo l'APK di prova, mai la libreria.
+  testOptions {
+    targetSdk = appSdk.targetSdk
+  }
 }
 
 dependencies {

@@ -1,8 +1,112 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <!-- Viewer (P8). Stub di P0: la posizione nella barra e gli stati in cui l'immagine non c'è. -->
+  <!-- Viewer (Fase 3, P8). Un file proprio: i pacchetti paralleli non si contendono strings.xml. -->
+
+  <!-- Pagina e accessibilità -->
   <string name="viewer_position">%1$d di %2$d</string>
-  <string name="viewer_unavailable">Questo contenuto non è disponibile adesso.</string>
-  <string name="viewer_failed">Non riesco ad aprire questo contenuto.</string>
-  <string name="viewer_unsupported">Questo formato non si può mostrare.</string>
+  <string name="viewer_zoomed">Ingrandita</string>
+  <string name="viewer_kind_photo">Foto</string>
+  <string name="viewer_kind_video">Video</string>
+  <string name="viewer_kind_motion">Foto in movimento</string>
+  <string name="viewer_kind_animated">Immagine animata</string>
+  <string name="viewer_subtitle_time_place">%1$s · %2$s</string>
+
+  <!-- Azioni (menu ⋮ e barra in basso): solo quelle che funzionano -->
+  <string name="viewer_action_favorite">Aggiungi ai preferiti</string>
+  <string name="viewer_action_unfavorite">Togli dai preferiti</string>
+  <string name="viewer_action_hide">Nascondi</string>
+  <string name="viewer_action_unhide">Mostra nella Libreria</string>
+  <string name="viewer_action_share">Condividi</string>
+  <string name="viewer_action_copy">Copia</string>
+  <string name="viewer_action_info">Informazioni</string>
+  <string name="viewer_action_delete">Elimina dal telefono</string>
+  <string name="viewer_copy_label">Foto o video</string>
+  <string name="viewer_cancel">Annulla</string>
+
+  <!-- Foglio: elimina dal telefono (D14) -->
+  <string name="viewer_delete_title_photo">Eliminare la foto dal telefono?</string>
+  <string name="viewer_delete_title_video">Eliminare il video dal telefono?</string>
+  <string name="viewer_delete_message">Va nel cestino del telefono per 30 giorni: la ritrovi in «Eliminati di recente» e puoi ripristinarla. Non c’è ancora una copia sul NAS, quindi per ora questo è l’unico esemplare.</string>
+  <string name="viewer_delete_confirm">Elimina dal telefono</string>
+
+  <!-- Foglio: apri in Mappe (D18) -->
+  <string name="viewer_maps_title">Aprire in Mappe?</string>
+  <string name="viewer_maps_message">Si apre un’altra app e le viene data la posizione di questa foto. Quell’app potrebbe usare la rete.</string>
+  <string name="viewer_maps_confirm">Apri in Mappe</string>
+
+  <!-- Avvisi brevi -->
+  <string name="viewer_msg_gone_title">Questo elemento non c’è più</string>
+  <string name="viewer_msg_gone_detail">Ti ho portato a quello vicino.</string>
+  <string name="viewer_msg_hidden_title">Nascosto</string>
+  <string name="viewer_msg_hidden_detail">Lo trovi in Raccolte, Nascosti.</string>
+  <string name="viewer_msg_unhidden_title">Di nuovo nella Libreria</string>
+  <string name="viewer_msg_unhidden_detail">Non è più nascosto.</string>
+  <string name="viewer_msg_copied_title">Copiato negli appunti</string>
+  <string name="viewer_msg_failed_title">Non è andata a buon fine</string>
+  <string name="viewer_msg_failed_detail">Nessuna app disponibile per questa azione.</string>
+  <string name="viewer_msg_motion_title">Parte video non riproducibile</string>
+  <string name="viewer_msg_motion_detail">Il formato non è riconosciuto: vedi la foto ferma.</string>
+
+  <!-- Note sulla foto: perché non c’è l’originale -->
+  <string name="viewer_notice_loading_title">Carico l’originale</string>
+  <string name="viewer_notice_loading_detail">Intanto vedi l’anteprima.</string>
+  <string name="viewer_notice_nas_title">Il NAS non risponde</string>
+  <string name="viewer_notice_nas_detail">Vedi l’anteprima. L’originale arriverà quando il NAS sarà di nuovo raggiungibile.</string>
+  <string name="viewer_notice_not_allowed_title">Qui non si aprono i file del NAS</string>
+  <string name="viewer_notice_not_allowed_detail">Questa rete non è tra quelle consentite. L’anteprima resta qui.</string>
+  <string name="viewer_notice_mobile_title">Servono i dati mobili</string>
+  <string name="viewer_notice_mobile_detail_size">L’originale pesa %1$s e non è sul telefono.</string>
+  <string name="viewer_notice_mobile_detail">L’originale non è sul telefono.</string>
+  <string name="viewer_notice_mobile_action">Scarica con i dati mobili</string>
+  <string name="viewer_notice_volume_title">La scheda microSD non c’è</string>
+  <string name="viewer_notice_volume_detail">Reinseriscila per vedere l’originale.</string>
+  <string name="viewer_notice_failed_title">Non riesco ad aprire questo file</string>
+  <string name="viewer_notice_failed_decode">Il file potrebbe essere rovinato.</string>
+  <string name="viewer_notice_failed_memory">L’immagine è troppo grande per la memoria di questo dispositivo.</string>
+  <string name="viewer_notice_failed_format">Questo formato non si può mostrare su questo dispositivo.</string>
+  <string name="viewer_notice_failed_missing">Il file non c’è più sul telefono.</string>
+  <string name="viewer_notice_video_unsupported_title">Questo dispositivo non riesce a riprodurre il video</string>
+  <string name="viewer_notice_video_unsupported_detail">Il formato, per esempio l’8K o un codec nuovo, è oltre ciò che il suo decoder sa fare.</string>
+  <string name="viewer_notice_video_failed_title">Non riesco a riprodurre il video</string>
+  <string name="viewer_notice_video_failed_detail">Il file potrebbe essere rovinato o non più disponibile.</string>
+
+  <!-- Pannello informazioni -->
+  <string name="viewer_info_title">Informazioni</string>
+  <string name="viewer_info_h_place">Luogo</string>
+  <string name="viewer_info_h_camera">Fotocamera</string>
+  <string name="viewer_info_h_file">File</string>
+  <string name="viewer_info_h_phone">Sul telefono</string>
+  <string name="viewer_zone_place">ora di %1$s, %2$s</string>
+  <string name="viewer_estimated_pill">Stimata</string>
+  <string name="viewer_estimated_name">Data ricavata dal nome del file</string>
+  <string name="viewer_estimated_system">Data ricavata dal sistema</string>
+  <string name="viewer_estimated_modified">Data di modifica del file, non dello scatto</string>
+  <string name="viewer_estimated_generic">Data stimata</string>
+  <string name="viewer_edited_pill">Modificata</string>
+  <string name="viewer_dimensions">%1$d × %2$d</string>
+  <string name="viewer_megapixels">%1$s MP</string>
+  <string name="viewer_duration">Durata</string>
+  <string name="viewer_exposure_f">f/%1$s</string>
+  <string name="viewer_exposure_time">%1$s s</string>
+  <string name="viewer_exposure_iso">ISO %1$d</string>
+  <string name="viewer_focal_mm">%1$s mm</string>
+  <string name="viewer_flash_on">Flash</string>
+  <string name="viewer_flash_off">Senza flash</string>
+  <string name="viewer_coordinates">%1$s° %2$s, %3$s° %4$s</string>
+  <string name="viewer_coord_north">N</string>
+  <string name="viewer_coord_south">S</string>
+  <string name="viewer_coord_east">E</string>
+  <string name="viewer_coord_west">O</string>
+  <string name="viewer_place_open_maps">Apri in Mappe</string>
+  <string name="viewer_place_open_maps_caption">Si apre un’altra app con la posizione</string>
+  <string name="viewer_trait_ultra_hdr">Ultra HDR</string>
+  <string name="viewer_trait_hdr_video">Video HDR</string>
+  <string name="viewer_trait_panorama">Panorama</string>
+  <string name="viewer_trait_sphere">Foto a 360°</string>
+  <string name="viewer_trait_screen_recording">Registrazione dello schermo</string>
+  <string name="viewer_trait_motion">Foto in movimento</string>
+  <string name="viewer_trait_raw">RAW</string>
+  <string name="viewer_trait_animated">Immagine animata</string>
+  <string name="viewer_motion_unplayable_title">Parte video non riproducibile</string>
+  <string name="viewer_motion_unplayable_caption">Il formato di questa foto in movimento non è riconosciuto: si vede la foto ferma.</string>
 </resources>

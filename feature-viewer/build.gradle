@@ -62,6 +62,8 @@ dependencies {
   implementation appDeps.coroutinesAndroid
 
   testImplementation appDeps.coroutinesTest
+  // Per scrivere nei test i file di prova con un orientamento EXIF (E-V3, E-M15): gia' nel grafo (telephoto, core-metadata).
+  testImplementation appDeps.exifinterface
   testImplementation appDeps.turbine
   testImplementation appDeps.robolectric
   testImplementation appDeps.androidxTestCore

@@ -1,12 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   Catalogo componenti, gruppo Viewer (Fase 3). Questo file e' di P8: i pacchetti paralleli non si contendono
-  catalog_strings.xml. Stub di P0 finche' P8 non riempie CatalogViewerSections.kt.
+  catalog_strings.xml.
 -->
 <resources>
   <string name="group_viewer_title">Viewer</string>
-  <string name="group_viewer_summary">Barre di vetro sulla foto, barra del video e informazioni (Fase 3).</string>
-  <string name="sec_viewer_todo">In arrivo</string>
-  <string name="sec_viewer_todo_detail">Il viewer a tutto schermo.</string>
-  <string name="sec_viewer_todo_body">I componenti del viewer arrivano con il pacchetto P8 della Fase 3.</string>
+  <string name="group_viewer_summary">Chrome sulla foto, barra del video, informazioni e note (Fase 3).</string>
+
+  <string name="sec_viewer_chrome">Chrome sulla foto</string>
+  <string name="sec_viewer_chrome_detail">Barra in alto e azioni in basso, in vetro con la tinta «sopra una foto». Sulla foto scura e su quella chiara.</string>
+  <string name="sec_viewer_videobar">Barra del video</string>
+  <string name="sec_viewer_videobar_detail">Play, tempo, scorrimento e audio. Mentre il dito trascina la barra il video cerca il fotogramma chiave più vicino; al rilascio, quello esatto.</string>
+  <string name="sec_viewer_info">Informazioni</string>
+  <string name="sec_viewer_info_detail">Il foglio a metà sul telefono, la colonna laterale sul tablet: data e ora con il fuso, luogo, fotocamera, file.</string>
+  <string name="sec_viewer_notes">Note sulla foto</string>
+  <string name="sec_viewer_notes_detail">Quando l\'originale non c\'è: la miniatura resta e la nota dice perché e cosa si può fare.</string>
+
+  <string name="sample_info_title">Informazioni</string>
+  <string name="sample_info_date">martedì 12 marzo 2024, 12:41</string>
+  <string name="sample_info_zone">ora di Oslo, UTC+1</string>
+  <string name="sample_info_date_estimated">sabato 3 agosto 2019, 12:00</string>
+  <string name="sample_info_zone_unknown">fuso non noto</string>
+  <string name="sample_info_estimated">Stimata</string>
+  <string name="sample_info_place_header">Luogo</string>
+  <string name="sample_info_place">Oslo</string>
+  <string name="sample_info_place_detail">Oslo, Norvegia · 59,9127° N, 10,7461° E</string>
+  <string name="sample_info_camera_header">Fotocamera e file</string>
+  <string name="sample_info_camera">Samsung Galaxy S25</string>
+  <string name="sample_info_camera_detail">f/1,8 · 1/250 s · ISO 50 · 6,3 mm</string>
+  <string name="sample_info_file">4000 × 3000 · 12 MP</string>
+  <string name="sample_info_file_detail">JPEG · 3,4 MB</string>
+  <string name="sample_info_folder">DCIM/Camera</string>
+  <string name="sample_info_folder_detail">Sul telefono</string>
+
+  <string name="sample_notice_nas_title">Il NAS non risponde</string>
+  <string name="sample_notice_nas_detail">Vedi l\'anteprima. L\'originale arriverà quando il NAS sarà di nuovo raggiungibile.</string>
+  <string name="sample_notice_mobile_title">Servono i dati mobili</string>
+  <string name="sample_notice_mobile_detail">L\'originale pesa 12,4 MB e non è sul telefono.</string>
+  <string name="sample_notice_mobile_action">Scarica con i dati mobili</string>
+  <string name="sample_notice_failed_title">Non riesco ad aprire questo file</string>
+  <string name="sample_notice_failed_detail">Il formato non si può decodificare su questo dispositivo.</string>
 </resources>

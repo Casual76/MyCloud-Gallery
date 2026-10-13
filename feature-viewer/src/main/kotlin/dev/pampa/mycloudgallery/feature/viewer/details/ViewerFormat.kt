@@ -1,0 +1,193 @@
+package dev.pampa.mycloudgallery.feature.viewer.details
+
+import android.content.Context
+import android.text.format.Formatter
+import dev.pampa.mycloudgallery.core.metadata.contract.ExifDetails
+import dev.pampa.mycloudgallery.core.model.CaptureTime
+import dev.pampa.mycloudgallery.core.model.CaptureTimeSource
+import dev.pampa.mycloudgallery.core.model.GeoPoint
+import dev.pampa.mycloudgallery.core.model.MediaKind
+import dev.pampa.mycloudgallery.feature.viewer.R
+import java.time.DateTimeException
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.roundToInt
+
+/**
+ * Le frasi del viewer, costruite dai dati: la data, l'ora con il fuso dello scatto, il peso, i megapixel, l'esposizione.
+ * Niente di Compose qui: una classe sola, con la lingua ([locale]) e le risorse esplicite, cosi' si prova con dati veri
+ * e si legge in un colpo solo come il viewer parla.
+ *
+ * **Il fuso e' quello dello scatto, non quello del telefono** (E-M14): "ora di Oslo, UTC+1" dice a che ora e' stata
+ * scattata la foto dove l'ha scattata. [CaptureTime] porta lo scarto in minuti; il nome del posto, se c'e', lo mette
+ * il chiamante.
+ */
+internal class ViewerFormat(
+  private val context: Context,
+  private val locale: Locale = Locale.getDefault(),
+) {
+
+  internal val resources get() = context.resources
+
+  private val longDate: DateTimeFormatter = DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG).withLocale(locale)
+  private val fullDate: DateTimeFormatter = DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).withLocale(locale)
+  private val shortTime: DateTimeFormatter = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale)
+
+  /** La data per il titolo della barra: "12 marzo 2024". */
+  fun dateTitle(time: CaptureTime): String = longDate.format(time.localDateTime)
+
+  /** La data del giorno `aaaammgg` dell'indice, quando i dettagli non sono ancora arrivati. */
+  fun dateTitle(localDay: Int): String? = parseLocalDay(localDay)?.let { longDate.format(it) }
+
+  /** L'ora: "12:41". */
+  fun time(time: CaptureTime): String = shortTime.format(time.localDateTime)
+
+  /** La riga del pannello: "mercoledì 12 marzo 2024, 12:41". */
+  fun dateTimeLine(time: CaptureTime): String = fullDate.format(time.localDateTime) + ", " + shortTime.format(time.localDateTime)
+
+  /** Il sottotitolo della barra: "12:41 · Oslo", o solo l'ora se il luogo non e' noto. */
+  fun subtitle(time: CaptureTime?, placeName: String?): String? = when {
+    time != null && placeName != null -> resources.getString(R.string.viewer_subtitle_time_place, time(time), placeName)
+    time != null -> time(time)
+    else -> placeName
+  }
+
+  /**
+   * La didascalia sotto la data: "ora di Oslo, UTC+1", o solo "UTC+1" senza luogo. Per una data **stimata** dice da dove
+   * viene la stima (il nome del file, la data del sistema, quella di modifica): non e' un'ora dello scatto.
+   */
+  fun zoneCaption(time: CaptureTime, placeName: String?): String {
+    if (time.isEstimated) return estimatedReason(time.source)
+    val offset = offsetLabel(time.offsetMinutes)
+    return if (placeName != null) resources.getString(R.string.viewer_zone_place, placeName, offset) else offset
+  }
+
+  /** "UTC+1", "UTC+5:30", "UTC-5", "UTC". */
+  fun offsetLabel(minutes: Int): String {
+    if (minutes == 0) return "UTC"
+    val sign = if (minutes > 0) "+" else "-"
+    val hours = abs(minutes) / MINUTES_PER_HOUR
+    val rest = abs(minutes) % MINUTES_PER_HOUR
+    return if (rest == 0) "UTC$sign$hours" else "UTC$sign$hours:" + String.format(Locale.ROOT, "%02d", rest)
+  }
+
+  private fun estimatedReason(source: CaptureTimeSource): String = resources.getString(
+    when (source) {
+      CaptureTimeSource.FILE_NAME -> R.string.viewer_estimated_name
+      CaptureTimeSource.MEDIASTORE -> R.string.viewer_estimated_system
+      CaptureTimeSource.FILE_MODIFIED -> R.string.viewer_estimated_modified
+      else -> R.string.viewer_estimated_generic
+    },
+  )
+
+  /** "4000 × 3000 · 12 MP". Senza le dimensioni, null. */
+  fun dimensions(details: MediaDetails): String? {
+    val w = details.orientedWidth ?: return null
+    val h = details.orientedHeight ?: return null
+    val size = resources.getString(R.string.viewer_dimensions, w, h)
+    val mp = details.megapixels ?: return size
+    val text = if (mp >= 10.0) mp.roundToInt().toString() else String.format(locale, "%.1f", mp)
+    return size + " · " + resources.getString(R.string.viewer_megapixels, text)
+  }
+
+  /** Il peso: "3,4 MB". */
+  fun fileSize(bytes: Long): String = Formatter.formatFileSize(context, bytes)
+
+  /** Il formato per un lettore umano: JPEG, HEIC, PNG, WebP, GIF, DNG, MP4, MOV. */
+  fun formatName(mime: String?): String? {
+    val lower = mime?.lowercase(Locale.ROOT) ?: return null
+    return when (lower) {
+      "image/jpeg", "image/jpg" -> "JPEG"
+      "image/heic", "image/heif" -> "HEIC"
+      "image/png" -> "PNG"
+      "image/webp" -> "WebP"
+      "image/gif" -> "GIF"
+      "image/avif" -> "AVIF"
+      "image/x-adobe-dng", "image/dng" -> "DNG"
+      "video/mp4" -> "MP4"
+      "video/quicktime" -> "MOV"
+      "video/x-matroska" -> "MKV"
+      "video/3gpp" -> "3GP"
+      "video/webm" -> "WebM"
+      else -> lower.substringAfter('/').uppercase(Locale.ROOT).takeIf { it.isNotBlank() }
+    }
+  }
+
+  /** "Samsung Galaxy S25": marca e modello senza ripetere la marca se il modello la contiene gia'. */
+  fun camera(exif: ExifDetails): String? {
+    val make = exif.make?.trim()?.takeIf { it.isNotEmpty() }
+    val model = exif.model?.trim()?.takeIf { it.isNotEmpty() }
+    return when {
+      make != null && model != null ->
+        if (model.startsWith(make, ignoreCase = true)) model else "${prettyMake(make)} $model"
+      else -> model ?: make?.let(::prettyMake)
+    }
+  }
+
+  /** Le marche si scrivono in maiuscolo nell'EXIF ("SAMSUNG", "SONY"): si portano alla forma normale ("Samsung", "Sony"). */
+  private fun prettyMake(make: String): String =
+    if (make == make.uppercase(locale)) make.lowercase(locale).replaceFirstChar { it.titlecase(locale) } else make
+
+  /** "f/1,8 · 1/250 s · ISO 50": l'esposizione, solo i pezzi che la fotocamera ha scritto. */
+  fun exposure(exif: ExifDetails): String? {
+    val parts = listOfNotNull(
+      exif.fNumber?.let { resources.getString(R.string.viewer_exposure_f, trimmed(it)) },
+      exif.exposureTime?.takeIf { it.isNotBlank() }?.let { resources.getString(R.string.viewer_exposure_time, it) },
+      exif.iso?.let { resources.getString(R.string.viewer_exposure_iso, it) },
+    )
+    return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
+  }
+
+  /** "6,3 mm · Flash": la focale e il flash, se noti. */
+  fun lensLine(exif: ExifDetails): String? {
+    val parts = listOfNotNull(
+      exif.lens?.trim()?.takeIf { it.isNotEmpty() },
+      exif.focalLengthMm?.let { resources.getString(R.string.viewer_focal_mm, trimmed(it)) },
+      exif.flashFired?.let { resources.getString(if (it) R.string.viewer_flash_on else R.string.viewer_flash_off) },
+    )
+    return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
+  }
+
+  /** "59,9127° N, 10,7461° E". Dato sensibile: si scrive solo nel pannello, mai in un log. */
+  fun coordinates(point: GeoPoint): String {
+    val lat = String.format(locale, "%.4f", abs(point.latitude))
+    val lon = String.format(locale, "%.4f", abs(point.longitude))
+    val ns = resources.getString(if (point.latitude >= 0) R.string.viewer_coord_north else R.string.viewer_coord_south)
+    val ew = resources.getString(if (point.longitude >= 0) R.string.viewer_coord_east else R.string.viewer_coord_west)
+    return resources.getString(R.string.viewer_coordinates, lat, ns, lon, ew)
+  }
+
+  /** La descrizione di una pagina per il lettore di schermo: "Foto, 12 marzo 2024, Oslo". */
+  fun pageDescription(kind: MediaKind, localDay: Int, placeName: String?): String {
+    val kindText = resources.getString(
+      when (kind) {
+        MediaKind.VIDEO -> R.string.viewer_kind_video
+        MediaKind.MOTION_PHOTO -> R.string.viewer_kind_motion
+        MediaKind.ANIMATED_IMAGE -> R.string.viewer_kind_animated
+        else -> R.string.viewer_kind_photo
+      },
+    )
+    return listOfNotNull(kindText, dateTitle(localDay), placeName).joinToString(", ")
+  }
+
+  private fun trimmed(value: Double): String {
+    val rounded = (value * TENTH).roundToInt() / TENTH
+    return if (rounded == rounded.toInt().toDouble()) rounded.toInt().toString() else String.format(locale, "%.1f", rounded)
+  }
+
+  private fun parseLocalDay(day: Int): LocalDate? = try {
+    LocalDate.of(day / YEAR_DIVISOR, (day / MONTH_DIVISOR) % MONTH_DIVISOR, day % MONTH_DIVISOR)
+  } catch (_: DateTimeException) {
+    null
+  }
+
+  private companion object {
+    const val MINUTES_PER_HOUR = 60
+    const val TENTH = 10.0
+    const val YEAR_DIVISOR = 10_000
+    const val MONTH_DIVISOR = 100
+  }
+}

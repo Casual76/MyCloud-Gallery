@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Viewer (Fase 3, P8): le stringhe dei componenti di core-designsystem/viewer (barra del video, pannello informazioni).
+  Un file proprio di P8: i pacchetti paralleli non si contendono strings.xml ne' catalog_strings.xml.
+-->
+<resources>
+  <!-- Barra del video -->
+  <string name="videobar_play">Riproduci</string>
+  <string name="videobar_pause">Pausa</string>
+  <string name="videobar_replay">Rivedi dall\'inizio</string>
+  <string name="videobar_mute">Disattiva l\'audio</string>
+  <string name="videobar_unmute">Attiva l\'audio</string>
+  <string name="videobar_time_description">%1$s di %2$s</string>
+
+  <!-- Pannello informazioni -->
+  <string name="info_close">Chiudi le informazioni</string>
+</resources>

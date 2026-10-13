@@ -72,6 +72,9 @@ value class NasPath private constructor(val value: String) {
 
 private val VOLUME_NAME = Regex("^[a-z0-9][a-z0-9_-]{0,63}$")
 
+/** Un nome di volume MediaStore accettabile (`external_primary`, l'ID di una microSD come `1a2b-3c4d`). */
+fun isValidMediaStoreVolume(volume: String): Boolean = VOLUME_NAME.matches(volume)
+
 /**
  * Dove si trova fisicamente un media (piano §1, "Posizione"): sul telefono o sul NAS. Un media puo'
  * averne molte; ognuna contiene i byte di **una** versione.
@@ -110,7 +113,7 @@ sealed interface Location {
   ) : Location {
 
     init {
-      require(VOLUME_NAME.matches(volume)) { "Nome di volume MediaStore non valido." }
+      require(isValidMediaStoreVolume(volume)) { "Nome di volume MediaStore non valido." }
       require(isValidRelativePath(relativePath)) { "RELATIVE_PATH non valido." }
       require(displayName.isNotEmpty() && displayName.length <= 255 && '/' !in displayName && !hasForbiddenChars(displayName)) {
         "DISPLAY_NAME non valido."
@@ -207,10 +210,16 @@ data class FileStamp(
     require(size >= 0) { "Dimensione negativa." }
   }
 
-  /** Se, da fuori, il file sembra lo stesso di [previous]. Nel dubbio (generazione diversa) no. */
-  fun looksUnchangedFrom(previous: FileStamp): Boolean =
+  /**
+   * Se, da fuori, il file sembra lo stesso di [previous]. Nel dubbio (generazione diversa) no.
+   *
+   * [ignoreGeneration]: dopo un cambio di `MediaStore.getVersion()` (aggiornamento di One UI o del modulo
+   * Mainline, E-P22) le generazioni ripartono e confrontarle non ha piu' senso; restano dimensione e data
+   * di modifica, che vengono dal file system e non dal database del MediaStore.
+   */
+  fun looksUnchangedFrom(previous: FileStamp, ignoreGeneration: Boolean = false): Boolean =
     size == previous.size && modifiedAtMillis == previous.modifiedAtMillis &&
-      (generation == null || previous.generation == null || generation == previous.generation)
+      (ignoreGeneration || generation == null || previous.generation == null || generation == previous.generation)
 }
 
 /**

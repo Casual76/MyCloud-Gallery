@@ -11,6 +11,7 @@ import dev.pampa.mycloudgallery.core.database.entity.MediaPersonalEntity
 import dev.pampa.mycloudgallery.core.database.entity.StatusCount
 import dev.pampa.mycloudgallery.core.database.entity.TimelineItem
 import dev.pampa.mycloudgallery.core.database.entity.WorkStateEntity
+import dev.pampa.mycloudgallery.core.model.CellFlags
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -19,7 +20,8 @@ import kotlinx.coroutines.flow.Flow
  * che arriva nel frattempo non fa saltare o ripetere celle. E' la forma che un `PagingSource` (Paging 3,
  * quando entrera' nelle dipendenze) usera' cosi' com'e'.
  *
- * Visibile = in almeno un posto raggiungibile e non nascosto (E-H1). L'ordine e' dal piu' recente.
+ * Visibile = in almeno un posto raggiungibile e non nascosto (E-H1) e, dalla v2, non dietro la copertina
+ * del suo gruppo (D20), come nell'indice della Fase 3 ([TimelineIndexDao]). L'ordine e' dal piu' recente.
  */
 @Dao
 interface TimelineDao {
@@ -56,7 +58,8 @@ interface TimelineDao {
     private const val SELECT_ITEM: String =
       "SELECT m.media_id, m.sort_time, m.kind, m.source, m.presence, m.safety, m.group_id, " +
         "COALESCE(p.favorite, 0) AS favorite FROM media m LEFT JOIN media_personal p ON p.media_id = m.media_id"
-    private const val VISIBLE: String = "m.presence != 'none' AND COALESCE(p.hidden, 0) = 0"
+    private const val VISIBLE: String =
+      "m.presence != 'none' AND COALESCE(p.hidden, 0) = 0 AND (m.cell_flags & ${CellFlags.GROUP_MEMBER}) = 0"
 
     /** Testo della pagina verso il passato: pubblico per il test che ne controlla il piano di esecuzione. */
     internal const val PAGE_BEFORE: String =
@@ -73,6 +76,9 @@ interface WorkStateDao {
 
   @Query("SELECT * FROM work_state WHERE media_id = :mediaId ORDER BY stage")
   suspend fun forMedia(mediaId: String): List<WorkStateEntity>
+
+  @Query("SELECT status FROM work_state WHERE media_id = :mediaId AND stage = :stage")
+  suspend fun status(mediaId: String, stage: String): String?
 
   /** La coda di una fase: dal piu' recente al piu' vecchio (proposta 11). */
   @Query(

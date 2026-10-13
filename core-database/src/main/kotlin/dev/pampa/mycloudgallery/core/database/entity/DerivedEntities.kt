@@ -93,6 +93,11 @@ class EmbeddingEntity(
  * I dati personali di un media (preferito, nascosto), separati dai dati del media: non si
  * condividono mai e dalla Fase 4.7 si sincronizzano solo tra i dispositivi della stessa persona.
  * Nessuna riga = nessun flag.
+ *
+ * v2: `favorite_changed_at` e `hidden_changed_at` dicono quando **ogni** flag e' cambiato l'ultima volta
+ * (ora di riferimento). Preparano la sincronizzazione per campo della 4.7 (vince la modifica piu' recente
+ * di quel flag, non della riga) senza un'altra migrazione. La migrazione 1 -> 2 li inizializza con
+ * `updated_at`.
  */
 @Entity(
   tableName = "media_personal",
@@ -112,6 +117,8 @@ data class MediaPersonalEntity(
   @ColumnInfo(name = "favorite") val favorite: Boolean,
   @ColumnInfo(name = "hidden") val hidden: Boolean,
   @ColumnInfo(name = "updated_at") val updatedAt: Long,
+  @ColumnInfo(name = "favorite_changed_at", defaultValue = "0") val favoriteChangedAt: Long = updatedAt,
+  @ColumnInfo(name = "hidden_changed_at", defaultValue = "0") val hiddenChangedAt: Long = updatedAt,
 )
 
 /**

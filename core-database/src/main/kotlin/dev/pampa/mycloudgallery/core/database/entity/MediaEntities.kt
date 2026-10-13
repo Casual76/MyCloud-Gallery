@@ -7,7 +7,9 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.RoomWarnings
 
-// Schema v1 della replica locale (piano 1.3). Il perche' delle scelte e' in docs/modello-dati.md.
+// Schema della replica locale: v1 (piano 1.3), v2 (Fase 3: campi derivati dell'indice della timeline,
+// metadati estesi, cursori del MediaStore, numero di sequenza dei cambiamenti). Il perche' delle scelte e'
+// in docs/modello-dati.md.
 //
 // Regole comuni:
 // - le enumerazioni si salvano con il loro codice stabile (StableCode), mai con nome o ordinale;
@@ -23,6 +25,11 @@ import androidx.room.RoomWarnings
  * della versione corrente) e riscritti da `MediaCatalog` nella stessa transazione che cambia versioni
  * o posizioni. Stanno qui perche' la timeline di 100 mila elementi deve ordinarsi e filtrarsi con un
  * indice, senza unire ogni volta versioni, posizioni e metadati (piano §4: avvio < 1 s).
+ *
+ * Dalla v2 anche `local_day`, `aspect_milli`, `duration_ms`, `place_id`, `cell_flags` e `thumb_hash`
+ * (`TimelineRules`): l'indice della timeline (`TimelineIndexDao`) si legge da questa tabella sola. Le
+ * colonne NOT NULL aggiunte hanno un DEFAULT perche' `ALTER TABLE ADD COLUMN` lo richiede; il catalogo
+ * scrive sempre tutti i valori.
  *
  * La chiave esterna composta (`media_id`, `current_version_id`) garantisce nel database che la
  * versione corrente appartenga **a questo** media. Room chiederebbe un indice sulle due colonne: non
@@ -69,7 +76,29 @@ data class MediaEntity(
   @ColumnInfo(name = "sort_time") val sortTime: Long,
   @ColumnInfo(name = "presence") val presence: String,
   @ColumnInfo(name = "safety") val safety: String,
-)
+  // --- v2: derivati per l'indice della timeline ---
+  /** Giorno dello scatto nell'ora del posto, `aaaammgg` (E-P5). */
+  @ColumnInfo(name = "local_day", defaultValue = "0") val localDay: Int = 0,
+  /** Proporzione mostrata x 1000, gia' orientata (E-M15). */
+  @ColumnInfo(name = "aspect_milli", defaultValue = "1000") val aspectMilli: Int = 1000,
+  @ColumnInfo(name = "duration_ms") val durationMs: Long? = null,
+  /** `geonameId` del luogo (sensibile come il GPS). */
+  @ColumnInfo(name = "place_id") val placeId: Int? = null,
+  /** `CellFlags`. */
+  @ColumnInfo(name = "cell_flags", defaultValue = "0") val cellFlags: Int = 0,
+  @ColumnInfo(name = "thumb_hash", typeAffinity = ColumnInfo.BLOB) val thumbHash: ByteArray? = null,
+) {
+  // Un ByteArray non ha l'uguaglianza per contenuto: la si scrive a mano.
+  override fun equals(other: Any?): Boolean = other is MediaEntity && sameScalars(other) && thumbHash.contentEquals(other.thumbHash)
+
+  override fun hashCode(): Int = mediaId.hashCode() * 31 + sortTime.hashCode()
+
+  private fun sameScalars(o: MediaEntity): Boolean =
+    mediaId == o.mediaId && kind == o.kind && source == o.source && ownerAccount == o.ownerAccount && groupId == o.groupId &&
+      currentVersionId == o.currentVersionId && createdAt == o.createdAt && updatedAt == o.updatedAt && sortTime == o.sortTime &&
+      presence == o.presence && safety == o.safety && localDay == o.localDay && aspectMilli == o.aspectMilli &&
+      durationMs == o.durationMs && placeId == o.placeId && cellFlags == o.cellFlags
+}
 
 /**
  * Una versione: byte precisi (impronta) in una catena. La catena e' nel database (`parent_version_id`)
@@ -174,7 +203,11 @@ data class MediaLocationEntity(
 
 /**
  * I metadati di una versione. Latitudine e longitudine sono **dati sensibili** (`@Sensitive` nel
- * dominio): restano nello spazio privato dell'app, mai nei log o nella Diagnostica.
+ * dominio): restano nello spazio privato dell'app, mai nei log o nella Diagnostica. Lo stesso vale per il
+ * luogo (`place_id`, v2), che dal GPS deriva.
+ *
+ * v2: `mirrored` (orientamenti EXIF specchiati, E-M15), `traits` (`MediaTrait` come maschera di bit),
+ * `place_id` + `place_dataset` (`PlaceRef`), `thumb_hash` (i byte del `ThumbHash`).
  */
 @Entity(
   tableName = "version_metadata",
@@ -203,7 +236,25 @@ data class VersionMetadataEntity(
   @ColumnInfo(name = "longitude") val longitude: Double?,
   @ColumnInfo(name = "altitude") val altitude: Double?,
   @ColumnInfo(name = "updated_at") val updatedAt: Long,
-)
+  // --- v2 ---
+  @ColumnInfo(name = "mirrored", defaultValue = "0") val mirrored: Boolean = false,
+  @ColumnInfo(name = "traits", defaultValue = "0") val traits: Int = 0,
+  @ColumnInfo(name = "place_id") val placeId: Int? = null,
+  @ColumnInfo(name = "place_dataset") val placeDataset: Int? = null,
+  @ColumnInfo(name = "thumb_hash", typeAffinity = ColumnInfo.BLOB) val thumbHash: ByteArray? = null,
+) {
+  // Un ByteArray non ha l'uguaglianza per contenuto: la si scrive a mano.
+  override fun equals(other: Any?): Boolean =
+    other is VersionMetadataEntity && versionId == other.versionId && mimeType == other.mimeType && width == other.width &&
+      height == other.height && orientation == other.orientation && durationMs == other.durationMs &&
+      takenAtUtc == other.takenAtUtc && takenOffsetMinutes == other.takenOffsetMinutes &&
+      takenConfidence == other.takenConfidence && takenSource == other.takenSource && latitude == other.latitude &&
+      longitude == other.longitude && altitude == other.altitude && updatedAt == other.updatedAt &&
+      mirrored == other.mirrored && traits == other.traits && placeId == other.placeId &&
+      placeDataset == other.placeDataset && thumbHash.contentEquals(other.thumbHash)
+
+  override fun hashCode(): Int = versionId.hashCode()
+}
 
 /** Le share viste da un account con la loro area (dalla configurazione di famiglia, Fase 2). */
 @Entity(tableName = "nas_share", primaryKeys = ["account_id", "share_key"])

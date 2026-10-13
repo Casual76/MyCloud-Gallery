@@ -9,8 +9,12 @@ import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.model.AccountId
 import dev.pampa.mycloudgallery.core.model.AlbumId
 import dev.pampa.mycloudgallery.core.model.CaptureTimeSource
+import dev.pampa.mycloudgallery.core.model.CellFlags
 import dev.pampa.mycloudgallery.core.model.LocationState
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.model.NasArea
+import dev.pampa.mycloudgallery.core.model.NasShare
+import dev.pampa.mycloudgallery.core.model.PlaceRef
 import dev.pampa.mycloudgallery.core.model.SafetyStatus
 import dev.pampa.mycloudgallery.core.model.VersionKind
 import dev.pampa.mycloudgallery.core.model.WorkStage
@@ -30,8 +34,9 @@ import java.io.File
  * ([SchemaSeeds]), lo apre con il database di oggi (Room esegue le migrazioni e poi valida lo schema
  * risultante contro le entita') e verifica che i dati ci siano ancora, integri.
  *
- * Oggi c'e' solo la v1: il test dimostra che lo schema esportato coincide con le entita' e che un
- * database v1 con dati si apre senza perdere nulla. Dalla v2 lo stesso test copre 1 -> 2 da solo.
+ * Con la v2 (Fase 3) il test copre 1 -> 2 da solo: il database v1 con i dati di [SchemaSeeds] migra, i
+ * dati restano e i campi nuovi (derivati dell'indice, istanti dei flag personali) sono quelli che il
+ * catalogo stesso calcolerebbe.
  */
 @RunWith(AndroidJUnit4::class)
 class ExportedSchemaTest {
@@ -77,7 +82,7 @@ class ExportedSchemaTest {
         val sql = database.openHelper.writableDatabase
         sql.query("PRAGMA integrity_check").use { assertThat(it.moveToFirst() && it.getString(0) == "ok").isTrue() }
         sql.query("PRAGMA foreign_key_check").use { assertThat(it.count).isEqualTo(0) }
-        SchemaSeeds.verify(database)
+        SchemaSeeds.verify(database, fromVersion = version)
       } finally {
         database.close()
       }
@@ -88,7 +93,7 @@ class ExportedSchemaTest {
   @Test
   fun unDatabaseDiUnaVersioneFuturaNonVieneMaiCancellato() {
     val name = "dal-futuro.db"
-    val file = createFromSchema(GalleryDatabase.VERSION, name) { SchemaSeeds.seed(1, it) }
+    val file = createFromSchema(GalleryDatabase.VERSION, name) { SchemaSeeds.seed(GalleryDatabase.VERSION, it) }
     SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READWRITE).use { it.version = GalleryDatabase.VERSION + 1 }
 
     val database = GalleryDatabase.build(context, name)
@@ -175,8 +180,14 @@ object SchemaSeeds {
   private const val QUICK = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
   private const val FULL = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 
+  /** Il luogo e il segnaposto della v2: Oslo nel dataset 1, 25 byte di ThumbHash. */
+  private const val OSLO = 3_143_244
+  private const val THUMB_HEX = "0102030405060708090A0B0C0D0E0F10111213141516171819"
+  private const val CHANGE_SEQ_V2 = 7L
+
   fun seed(version: Int, db: SQLiteDatabase) = when (version) {
     1 -> seedV1(db)
+    2 -> seedV2(db)
     else -> error("Manca il seed della versione $version dello schema (vedi SchemaSeeds).")
   }
 
@@ -219,8 +230,62 @@ object SchemaSeeds {
     )
   }
 
-  /** Cio' che deve essere vero dopo l'apertura (e le migrazioni) di un database con i seed. */
-  suspend fun verify(database: GalleryDatabase) {
+  /**
+   * La v2: le stesse righe della v1 con le colonne nuove, piu' un cursore del MediaStore e i valori del
+   * catalogo. I derivati sono quelli che il catalogo calcolerebbe (giorno di Oslo, 3:4 perche' ruotata di
+   * 90 gradi, preferito con luogo).
+   */
+  private fun seedV2(db: SQLiteDatabase) {
+    db.execSQL(
+      "INSERT INTO media (media_id, kind, source, owner_account, group_id, current_version_id, created_at, updated_at, " +
+        "sort_time, presence, safety, local_day, aspect_milli, duration_ms, place_id, cell_flags, thumb_hash) VALUES " +
+        "('$MEDIA_ID', 'photo', 'camera', 'alessio', NULL, '$VERSION_ID', $T0, $T0, $T0, 'phone_and_nas', 'safe', " +
+        "20251009, 750, NULL, $OSLO, 136, X'$THUMB_HEX')",
+    )
+    db.execSQL(
+      "INSERT INTO media_version (version_id, media_id, kind, parent_version_id, size, quick_hash, full_hash, corrections, " +
+        "created_at) VALUES ('$VERSION_ID', '$MEDIA_ID', 'original', NULL, 300000, '$QUICK', '$FULL', '', $T0)",
+    )
+    db.execSQL(
+      "INSERT INTO version_metadata (version_id, mime_type, width, height, orientation, duration_ms, taken_at_utc, " +
+        "taken_offset_min, taken_confidence, taken_source, latitude, longitude, altitude, updated_at, mirrored, traits, " +
+        "place_id, place_dataset, thumb_hash) VALUES ('$VERSION_ID', 'image/jpeg', 4000, 3000, 90, NULL, $T0, 120, 'exact', " +
+        "'exif_offset', 59.91, 10.75, NULL, $T0, 0, 0, $OSLO, 1, X'$THUMB_HEX')",
+    )
+    db.execSQL(
+      "INSERT INTO media_location (location_id, version_id, location_type, location_key, folder_key, state, volume, " +
+        "relative_path, display_name, media_store_id, media_store_version, generation, account_id, share_name, share_key, " +
+        "nas_path, size, modified_at, absent_since, verified_at, last_seen_at) VALUES " +
+        "(1, '$VERSION_ID', 'phone', 'phone:external_primary:dcim/camera/img_0001.jpg', 'phone:external_primary:dcim/camera/', " +
+        "'present', 'external_primary', 'DCIM/Camera/', 'IMG_0001.jpg', 42, 'store-v1', 7, NULL, NULL, NULL, NULL, 300000, $T0, " +
+        "NULL, NULL, $T0), " +
+        "(2, '$VERSION_ID', 'nas', 'nas:alessio:alessio:backup/s25/img_0001.jpg', 'nas:alessio:alessio:backup/s25', 'present', " +
+        "NULL, NULL, NULL, NULL, NULL, NULL, 'alessio', 'alessio', 'alessio', 'Backup/S25/IMG_0001.jpg', 300000, $T0, NULL, $T0, $T0)",
+    )
+    db.execSQL("INSERT INTO nas_share (account_id, share_key, share_name, area) VALUES ('alessio', 'alessio', 'alessio', 'private')")
+    db.execSQL(
+      "INSERT INTO media_personal (media_id, favorite, hidden, updated_at, favorite_changed_at, hidden_changed_at) VALUES " +
+        "('$MEDIA_ID', 1, 0, $T0, ${T0 - 5}, ${T0 - 6})",
+    )
+    db.execSQL("INSERT INTO album (album_id, title, cover_media_id, created_at, updated_at) VALUES ('$ALBUM_ID', 'Oslo 2026', '$MEDIA_ID', $T0, $T0)")
+    db.execSQL("INSERT INTO album_item (album_id, media_id, position, added_at) VALUES ('$ALBUM_ID', '$MEDIA_ID', 1, $T0)")
+    db.execSQL(
+      "INSERT INTO work_state (media_id, stage, status, version_id, attempts, last_error, updated_at) VALUES " +
+        "('$MEDIA_ID', 'embed', 'done', '$VERSION_ID', 0, NULL, $T0), ('$MEDIA_ID', 'ocr', 'failed', '$VERSION_ID', 2, 'DECODE_FAILED', $T0)",
+    )
+    db.execSQL(
+      "INSERT INTO embedding (media_id, space_id, dimension, precision, vector_index, vector, version_id, created_at) VALUES " +
+        "('$MEDIA_ID', 'embeddinggemma2-float-v1', 2, 'f32', 0, X'0000803F00000040', '$VERSION_ID', $T0)",
+    )
+    db.execSQL(
+      "INSERT INTO media_store_cursor (volume, ms_version, generation, deleted_generation, scan_epoch, scan_resume_after_id, " +
+        "last_full_scan_at, last_reconcile_at) VALUES ('external_primary', 'store-v1', 7, 6, $T0, 41, NULL, ${T0 - 1})",
+    )
+    db.execSQL("INSERT INTO catalog_meta (`key`, value) VALUES ('change_seq', $CHANGE_SEQ_V2), ('places_dataset', 1)")
+  }
+
+  /** Cio' che deve essere vero dopo l'apertura (e le migrazioni) di un database con i seed della versione [fromVersion]. */
+  suspend fun verify(database: GalleryDatabase, fromVersion: Int) {
     val catalog = MediaCatalog(database, AccountId.of("alessio")) { T0 }
     val id = MediaId(MEDIA_ID)
 
@@ -242,5 +307,43 @@ object SchemaSeeds {
     assertThat(states.getValue(WorkStage.OCR).lastError!!.value).isEqualTo("DECODE_FAILED")
     val vector = database.embeddingDao().forMedia(MEDIA_ID).single().toDomain()
     assertThat(vector.toFloats().toList()).containsExactly(1f, 2f).inOrder()
+
+    // --- v2 ---
+    val row = database.mediaDao().get(MEDIA_ID)!!
+    // Scattata alle 10:53 di Oslo (UTC+2) del 9 ottobre 2025; 4000x3000 ruotata di 90 gradi = 3:4.
+    assertThat(row.localDay).isEqualTo(20251009)
+    assertThat(row.aspectMilli).isEqualTo(750)
+    assertThat(row.durationMs).isNull()
+    val personal = database.personalDao().get(MEDIA_ID)!!
+    if (fromVersion == 1) {
+      // La v1 non aveva luogo ne' segnaposto; gli istanti dei flag partono da updated_at.
+      assertThat(row.cellFlags).isEqualTo(CellFlags.FAVORITE)
+      assertThat(row.placeId).isNull()
+      assertThat(personal.favoriteChangedAt).isEqualTo(T0)
+      assertThat(personal.hiddenChangedAt).isEqualTo(T0)
+      assertThat(catalog.changeSeq()).isEqualTo(0)
+      assertThat(catalog.mediaStoreCursors()).isEmpty()
+      assertThat(catalog.placesDataset()).isNull()
+    } else {
+      assertThat(row.cellFlags).isEqualTo(CellFlags.FAVORITE or CellFlags.HAS_PLACE)
+      assertThat(row.placeId).isEqualTo(OSLO)
+      assertThat(metadata.place).isEqualTo(PlaceRef(OSLO, 1))
+      assertThat(metadata.thumbHash!!.bytes().size).isEqualTo(25)
+      assertThat(row.thumbHash!!.toList()).isEqualTo(metadata.thumbHash!!.bytes().toList())
+      assertThat(personal.favoriteChangedAt).isEqualTo(T0 - 5)
+      assertThat(personal.hiddenChangedAt).isEqualTo(T0 - 6)
+      assertThat(catalog.changeSeq()).isEqualTo(CHANGE_SEQ_V2)
+      assertThat(catalog.mediaStoreCursor("external_primary"))
+        .isEqualTo(MediaStoreCursor("external_primary", "store-v1", 7, 6, T0, 41, null, T0 - 1))
+      assertThat(catalog.placesDataset()).isEqualTo(1)
+    }
+    assertThat(catalog.indexRows(listOf(id)).map { it.mediaId }).containsExactly(MEDIA_ID)
+
+    // I derivati scritti dalla migrazione (o dal seed) sono quelli che il catalogo calcola: ricalcolarli
+    // (registrare di nuovo la share tocca il media) non cambia nulla e non annuncia nulla.
+    val seq = catalog.changeSeq()
+    catalog.registerShare(NasShare(AccountId.of("alessio"), "alessio", NasArea.PRIVATE))
+    assertThat(database.mediaDao().get(MEDIA_ID)).isEqualTo(row)
+    assertThat(catalog.changeSeq()).isEqualTo(seq)
   }
 }

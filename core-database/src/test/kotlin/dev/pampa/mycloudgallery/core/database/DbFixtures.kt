@@ -26,6 +26,7 @@ import dev.pampa.mycloudgallery.core.model.domain.WorkRules
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
+import java.time.ZoneId
 import kotlin.random.Random
 
 object Db {
@@ -65,10 +66,13 @@ abstract class CatalogTestBase {
   protected lateinit var catalog: MediaCatalog
   protected var now: Long = Db.T0
 
+  /** Il fuso del telefono "adesso" (giorno provvisorio dei media appena visti, E-P5). */
+  protected var zone: ZoneId = ZoneId.of("Europe/Rome")
+
   @Before
   fun openDatabase() {
     db = GalleryDatabase.build(ApplicationProvider.getApplicationContext<Context>(), name = null)
-    catalog = MediaCatalog(db, Db.ME) { now }
+    catalog = MediaCatalog(db, Db.ME, zone = { zone }) { now }
     runBlocking {
       catalog.registerShare(NasShare(Db.ME, "alessio", NasArea.PRIVATE))
       catalog.registerShare(NasShare(Db.ME, "NAS", NasArea.COMMON))

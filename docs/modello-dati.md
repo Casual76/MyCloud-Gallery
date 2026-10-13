@@ -1,11 +1,12 @@
-# Modello dei dati (Fase 1.3)
+# Modello dei dati (Fase 1.3, schema v2 della Fase 3)
 
 > Obiettivo (piano 1.3): un media ha **identita' stabile**, **piu' posizioni** e **piu' versioni**. Backup,
 > spostamenti, condivisioni, modifiche, correzioni e cambi di ID MediaStore non spezzano mai album,
 > preferiti, nascosti, vettori o stati di lavoro.
 >
 > Codice: tipi e regole in `core-model` (Kotlin puro, `dev.pampa.mycloudgallery.core.model` e `.domain`),
-> database Room v1 in `core-database`. Il KDoc spiega il perche' di ogni tipo; qui c'e' il quadro d'insieme.
+> database Room in `core-database` (v1 della Fase 1.3, **v2** della Fase 3: §10). Il KDoc spiega il perche' di
+> ogni tipo; qui c'e' il quadro d'insieme.
 
 ## 1. Principi
 
@@ -29,11 +30,13 @@
   | media                                                                            |
   |  media_id (UUID)  kind  source  owner_account  current_version_id               |
   |  [derivati] sort_time  presence  safety                                          |
+  |  [derivati v2] local_day aspect_milli duration_ms place_id cell_flags thumb_hash |
   +----+----------------------+-----------------------+-------------------+---------+
        | 1:N                  | 1:1                   | 1:N               | 1:N
        v                      v                       v                   v
   media_version         media_personal           work_state           embedding
    version_id (UUID)     favorite hidden          (media, fase)        (media, spazio+dim+prec, indice)
+                         [v2] *_changed_at
    kind ORIGINAL|         [dati personali]         status attempts      vector BLOB, version_id
         EDITED|CORRECTED                           last_error codice
    parent_version_id --+ (catena)                  version_id
@@ -44,11 +47,14 @@
   media_location          version_metadata
    location_key UNICA      taken_at_utc + offset + confidenza + origine
    tipo phone | nas        dimensioni, durata, mime, GPS [sensibile]
+                           [v2] specchio, tratti, luogo [sensibile], thumbhash
    phone: volume, percorso, nome, cache _ID + versione MediaStore
    nas:   account, share, percorso
    size, modified_at, state, absent_since, verified_at
 
   nas_share (account, share, area PRIVATE|COMMON)  <- configurazione di famiglia
+  media_store_cursor (volume) [v2]                 <- dove e' arrivata la lettura del MediaStore
+  catalog_meta (key, value) [v2]                   <- change_seq, places_dataset
 ```
 
 - **Media**: l'identita'. Ha una catena di versioni e una versione *corrente* (quella che si vede).
@@ -79,7 +85,12 @@
 | Vettori di spazi diversi non si mescolano (E-I4) | `EmbeddingSpace` (uguaglianza su modello+dimensione+precisione); PK e query di `embedding` |
 | Nessun codice d'errore con testo libero (niente percorsi nella Diagnostica) | `WorkErrorCode` |
 | GPS mai nel `toString()` | `GeoPoint` (`@Sensitive`) |
-| Ogni tabella che punta a `media` e' gestita dall'unione | `MergeReferencesTest` |
+| Ogni tabella che punta a `media` e' gestita dall'unione; ogni tabella e' classificata (punta a `media`, segue le versioni o non contiene identita' di media) | `MergeReferencesTest`, `MediaCatalog.TABLES_WITHOUT_MEDIA_IDS` |
+| I campi derivati di `media` sono quelli che dicono le regole, scritti nella stessa transazione | `MediaCatalog` (ricalcolo a fine transazione), `TimelineRules`; `ExportedSchemaTest` verifica che la migrazione scriva gli stessi valori del catalogo |
+| Nascosti mai nell'indice della timeline (E-H1) | `TimelineIndexDao`: il nascosto si legge da `media_personal`, non da un campo derivato |
+| Un `_ID` del MediaStore si usa per leggere i byte solo con la versione attuale del MediaStore (E-P22) | `TimelineIndexDao.phoneRefs` (unione con `media_store_cursor.ms_version`) |
+| `change_seq` sale di uno per transazione che cambia l'indice e si annuncia dopo il commit | `MediaCatalog` (`Mutex`, conteggio nella transazione, emissione dopo) |
+| Luogo mai nel `toString()` | `PlaceRef` (`@Sensitive`) |
 
 Tutte le chiavi esterne del grafo sono `DEFERRABLE INITIALLY DEFERRED`: dentro una transazione si scrive in
 qualunque ordine, il controllo avviene al commit.
@@ -147,7 +158,7 @@ sopravvissuto **prima** che il perdente sia cancellato.
 - **Tolleranze** (`LocationRules`): telefono 60 giorni (massimo del cestino Samsung), NAS 30 giorni (cestino
   della share, spostamenti visti in due scansioni). Intanto il media non conta come presente li'.
 
-## 6. Database v1
+## 6. Database (v1; le aggiunte della v2 sono nel §10)
 
 | Tabella | Chiave | Indici (per quali query) |
 |---|---|---|
@@ -213,7 +224,8 @@ entita' (il build esporta `N.json`), scrivere `Migration(N-1, N)` in `GalleryMig
   deterministica e gli alias. Da progettare con il formato firmato della 1.4.
 - **Rilevatore di doppioni**: chi chiama `merge` quando un hash completo arriva dopo (oggi lo fa da solo solo una
   terza copia identica). Fase 4.4.
-- **Cursori di sincronizzazione MediaStore** (generazione per volume, `getVersion()`): Fase 3.1.
+- ~~**Cursori di sincronizzazione MediaStore** (generazione per volume, `getVersion()`): Fase 3.1.~~ Fatto nella v2
+  (`media_store_cursor`, §10).
 - **OCR, FTS, volti**: tabelle nelle Fasi 6 e 8 (i volti nell'area privata, proposta 13). Il test delle
   referenze obblighera' ad aggiungerle all'unione.
 - **Album completi, album smart e condivisi**: Fase 7, con migrazione.
@@ -224,3 +236,98 @@ entita' (il build esporta `N.json`), scrivere `Migration(N-1, N)` in `GalleryMig
   politica si decide con la Fase 3.1/5.5.
 - **"Libera spazio" con media in errore o in caricamento** (5.5): il controllo sugli stati di lavoro si aggiunge
   quando esistera' lo stato del backup (5.2).
+
+## 10. Schema v2 (Fase 3: la galleria del telefono)
+
+Progetto: `docs/fase3-progetto.md` §1.2 (tabelle `core-model` e `core-database` di P1), §2.1, §2.2, §2.4.
+
+### 10.1 Tipi nuovi in `core-model`
+
+| Tipo | Cosa | Perche' |
+|---|---|---|
+| `MediaTrait` | panorama, sfera, Ultra HDR, video HDR, registrazione dello schermo; codice **e bit** stabili | metadati della versione, salvati come maschera (`version_metadata.traits`) |
+| `ExifOrientation`, `MediaMetadata.mirrored` | gli 8 valori EXIF come rotazione + specchio (come `getRotationDegrees`/`isFlipped`) | E-M15: 5 e 7 scambiano i lati come 90 e 270 |
+| `MediaMetadata.traits`, `.place`, `.thumbHash` | per versione, come la data | una modifica che ritaglia un panorama ha metadati suoi |
+| `PlaceRef(geonameId, dataset)` | luogo del dataset offline, `@Sensitive`, `toString` muto | deriva dal GPS: e' sensibile come il GPS |
+| `ThumbHash` | Base64 standard canonico, al massimo 48 caratteri (36 byte); nel database i byte | segnaposto del primo fotogramma (D5) |
+| `MediaRef` | `Phone(volume, mediaStoreId, mime)`, `Synthetic(seed, w, h)` | come arrivare ai byte adesso; dalla Fase 4 `Nas` |
+| `CellFlags` | bit stabili: modificata, data stimata, non leggibile, luogo, motion, panorama, Ultra HDR, preferito, membro di gruppo, copertina di gruppo | badge e filtri dall'indice senza join |
+| `FileStamp.looksUnchangedFrom(previous, ignoreGeneration)` | dopo un cambio di `getVersion` la generazione si ignora | E-P22 |
+| `domain/TimelineRules` | giorno locale, proporzione mostrata, flag della cella, copertina dei gruppi | regole pure dei derivati, usate dal catalogo **e** dalla migrazione |
+
+### 10.2 Tabelle e colonne
+
+| Dove | Aggiunta | Note |
+|---|---|---|
+| `media` (derivati) | `local_day` (aaaammgg nell'ora del posto), `aspect_milli` (mostrata, x1000, default 1000), `duration_ms`, `place_id`, `cell_flags`, `thumb_hash` (BLOB) | l'indice della timeline si legge da **una** tabella; NOT NULL con DEFAULT perche' `ALTER TABLE ADD COLUMN` lo vuole |
+| `version_metadata` | `mirrored`, `traits` (maschera), `place_id`, `place_dataset`, `thumb_hash` | vuoti finche' META (Fase 3) non li legge |
+| `media_personal` | `favorite_changed_at`, `hidden_changed_at` | sincronizzazione per campo della 4.7 senza un'altra migrazione |
+| `media_store_cursor` (nuova) | `volume` (PK), `ms_version`, `generation`, `deleted_generation`, `scan_epoch`, `scan_resume_after_id`, `last_full_scan_at`, `last_reconcile_at` | si scrive nella stessa transazione delle osservazioni |
+| `catalog_meta` (nuova) | `key` (PK), `value` (intero) | `change_seq`, `places_dataset` |
+
+**Giorno locale** (E-P5, E-M14): con la data letta, il giorno nell'ora del posto dello scatto (`CaptureTime.offsetMinutes`).
+Prima di META, il giorno provvisorio nel fuso del telefono **alla prima lettura**, salvato una volta e mai ricalcolato
+con il fuso di oggi: cambiare fuso dopo non sposta nulla. **Flag**: `EDITED` se la corrente non e' l'originale,
+`DATE_ESTIMATED`, `UNREADABLE` (META in `GAVE_UP`, E-M10), `HAS_PLACE`, `MOTION`, `PANORAMA`, `ULTRA_HDR`, `FAVORITE`
+(copia del dato personale, solo per la cella). **Gruppi** (D20): nell'indice resta chi rappresenta il gruppo, cioe' la
+copertina se si vede, altrimenti il membro visibile piu' recente (una coppia RAW+JPEG con il JPEG cancellato resta
+con il DNG); gli altri hanno `GROUP_MEMBER` e stanno fuori.
+
+### 10.3 Indice della timeline (`TimelineIndexDao`)
+
+- `indexCursor(): Cursor`: tutti i media **visibili** (presenti da qualche parte, non nascosti, non `GROUP_MEMBER`)
+  in ordine `sort_time DESC, media_id DESC`, con le colonne di `COLUMNS`; nessun oggetto per riga. 100 mila righe
+  in circa 0,8 s su JVM (Robolectric); il budget del test e' 8 s.
+- `EXPLAIN QUERY PLAN`: `SCAN m USING INDEX index_media_sort_time_media_id` piu' una ricerca per chiave su
+  `media_personal`, **senza** `USE TEMP B-TREE`, con e senza `ANALYZE` (`TimelineIndexTest`).
+- `indexRows(ids)` (al massimo 500 per chiamata; `MediaCatalog.indexRows` divide), `hiddenRows()` (solo dopo lo
+  sblocco), `groupSizes()`, `phoneRefs(ids)`, `changeSeq()`.
+- Il nascosto si legge da `media_personal` (unione per chiave primaria), **non** da un bit derivato: e' l'unico
+  flag che non puo' essere in ritardo (E-H1).
+
+### 10.4 Operazioni nuove di `MediaCatalog`
+
+| Operazione | Cosa garantisce |
+|---|---|
+| `recordAll(obs, whenUndecided, cursor?, seenAt?)` | un lotto in **una** transazione e un solo cambiamento; o tutto o niente, cursore compreso; `seenAt` = inizio della scansione |
+| `confirmPresent`, `confirmAllPresent` | scorciatoia del timbro: stesso posto, stessa dimensione e data (e generazione, salvo `ignoreGeneration`), posizione presente o non raggiungibile; aggiorna "visto a", timbro e cache del MediaStore senza leggere byte. Mai su una posizione assente |
+| `markVanishedNotSeenSince(volume, epoch, cap)` | a fine scansione completa: assenti le posizioni del volume non viste dal giro, **al massimo `cap` per chiamata** (le viste meno di recente prima); chi chiama ripete finche' torna `cap` |
+| `purgeExpiredAbsences(cap)` | pulizia delle assenze scadute con tetto per giro (E-P9) |
+| `updateMetadata(versionId, metadata, kind?)` | il tipo definitivo di META vale solo se la versione e' ancora la corrente |
+| `group(kind, members, cover)`, `ungroup(id)` | raffiche e RAW+JPEG; un gruppo rimasto con un membro solo si scioglie |
+| `setPersonalFlags(id, flags)` e per una selezione | istante del cambio per ogni flag; nascondere o mostrare e' un cambiamento strutturale |
+| `saveMediaStoreCursor`, `mediaStoreCursor(s)`, `setPlacesDataset`, `placesDataset` | stato della lettura e del dataset dei luoghi |
+| `phoneRefs(ids)` | `MediaRef.Phone` solo per copie presenti con l'`_ID` della versione attuale del MediaStore |
+| `changes: SharedFlow<CatalogChange>` | vedi sotto |
+
+**Cambiamenti.** Ogni scrittura pubblica e' una transazione: alla fine i derivati dei media toccati (e dei loro
+gruppi) si ricalcolano e, se l'indice e' cambiato, `catalog_meta.change_seq` sale di uno; **dopo il commit**
+`changes` emette `CatalogChange(seq, ids, structural)`. `structural` vuol dire che e' cambiato l'insieme o l'ordine
+(media nuovi, spariti, nascosti, uniti, raggruppati, data o giorno); altrimenti solo attributi (preferito,
+proporzione, segnaposto, presenza, riferimento ai byte). Le scritture sono in fila (`Mutex`), quindi i `seq` escono in
+ordine. Il flusso non trattiene chi resta indietro oltre 256 cambiamenti: un salto di `seq` vuol dire "ricostruisci
+l'indice". Una scrittura del catalogo dentro un'altra transazione fallisce, perche' l'annuncio arriverebbe prima del
+commit vero. Un cambio di `ms_version` di un volume annuncia tutti i media con copie su quel volume: i loro
+riferimenti ai byte scadono. Le scritture che non toccano l'indice (vettori, stati di lavoro diversi da META, cursore
+senza cambio di versione, solo "visto a") non alzano `change_seq`.
+
+### 10.5 Migrazione 1 -> 2
+
+`GalleryMigrations.migration1To2`: aggiunge le colonne (mai distruttiva), inizializza `*_changed_at` con
+`updated_at`, crea `media_store_cursor` e `catalog_meta`, e **calcola i derivati dei media esistenti con le stesse
+`TimelineRules` del catalogo** (giorno dalla data letta o, se manca, dal fuso del telefono adesso; proporzione;
+flag; ruolo nel gruppo). `ExportedSchemaTest` apre la v1 con `seedV1`, migra, verifica i dati e che un ricalcolo del
+catalogo non cambi nulla; apre la v2 con `seedV2`. Su API 29 SQLite e' la 3.22: niente `UPSERT`, `RETURNING`,
+`RENAME COLUMN` o `DROP COLUMN` nelle query e nelle migrazioni.
+
+### 10.6 Scelte e scarti della v2
+
+| Scelta | Alternative scartate e perche' |
+|---|---|
+| Derivati dell'indice in `media` | Join con versioni e metadati a ogni lettura dell'indice: tre tabelle per ognuna delle 100 mila righe. |
+| Nascosto da `media_personal` nella query dell'indice | Bit derivato in `cell_flags`: piu' semplice, ma un ritardo mostrerebbe un nascosto (E-H1). Il join e' per chiave primaria e non ordina (piano verificato). |
+| Copertina effettiva calcolata (`GROUP_MEMBER`) | Solo `media_group.cover_media_id` nella query: una copertina cancellata o nascosta farebbe sparire tutto il gruppo. |
+| Cursore del MediaStore nel database | DataStore: non atomico con le scritture del catalogo, la ripresa potrebbe saltare o ripetere un lotto. |
+| `change_seq` nel database, flusso con perdita dichiarata | Flusso senza perdita: uno scrittore bloccato da un collector lento. `seq` solo in memoria: l'istantanea su file non saprebbe se e' vecchia. |
+| `mirrored` in `version_metadata` (colonna in piu' rispetto al progetto) | Codici EXIF al posto dei gradi in `orientation`: avrebbe cambiato il significato di una colonna della v1. |
+| `traits` e `*_changed_at` NOT NULL DEFAULT 0 | Colonne nullable: un valore "sconosciuto" in piu' da gestire, senza guadagno. |

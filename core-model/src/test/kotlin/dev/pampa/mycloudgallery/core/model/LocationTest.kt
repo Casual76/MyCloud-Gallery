@@ -89,6 +89,15 @@ class LocationTest {
     assertThat(FileStamp(100, 5_000, 8).looksUnchangedFrom(stamp)).isFalse()
   }
 
+  /** E-P22: dopo un cambio di versione del MediaStore la generazione non dice piu' nulla, dimensione e data si'. */
+  @Test
+  fun dopoUnCambioDiVersioneDelMediaStoreLaGenerazioneSiIgnora() {
+    val stamp = FileStamp(100, 5_000, generation = 7)
+    assertThat(FileStamp(100, 5_000, 3).looksUnchangedFrom(stamp, ignoreGeneration = true)).isTrue()
+    assertThat(FileStamp(100, 5_001, 7).looksUnchangedFrom(stamp, ignoreGeneration = true)).isFalse()
+    assertThat(FileStamp(101, 5_000, 7).looksUnchangedFrom(stamp, ignoreGeneration = true)).isFalse()
+  }
+
   @Test
   fun unaPosizioneAssenteDichiaraDaQuando() {
     val v = Fixtures.original(Fixtures.full(1))

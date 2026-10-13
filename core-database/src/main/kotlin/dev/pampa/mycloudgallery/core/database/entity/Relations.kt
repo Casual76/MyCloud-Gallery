@@ -37,3 +37,43 @@ data class StatusCount(
   @ColumnInfo(name = "status") val status: String,
   @ColumnInfo(name = "count") val count: Int,
 )
+
+/**
+ * Una riga dell'indice della timeline (`TimelineIndexDao`): tutto cio' che serve alla griglia, letto da
+ * `media` sola. I codici (`kind`, `source`) restano testo: li traduce chi costruisce l'indice.
+ */
+data class IndexRow(
+  @ColumnInfo(name = "media_id") val mediaId: String,
+  @ColumnInfo(name = "sort_time") val sortTime: Long,
+  @ColumnInfo(name = "local_day") val localDay: Int,
+  @ColumnInfo(name = "kind") val kind: String,
+  @ColumnInfo(name = "source") val source: String,
+  @ColumnInfo(name = "cell_flags") val cellFlags: Int,
+  @ColumnInfo(name = "aspect_milli") val aspectMilli: Int,
+  @ColumnInfo(name = "duration_ms") val durationMs: Long?,
+  @ColumnInfo(name = "place_id") val placeId: Int?,
+  @ColumnInfo(name = "thumb_hash") val thumbHash: ByteArray?,
+  @ColumnInfo(name = "group_id") val groupId: String?,
+) {
+  override fun equals(other: Any?): Boolean =
+    other is IndexRow && mediaId == other.mediaId && sortTime == other.sortTime && localDay == other.localDay &&
+      kind == other.kind && source == other.source && cellFlags == other.cellFlags && aspectMilli == other.aspectMilli &&
+      durationMs == other.durationMs && placeId == other.placeId && groupId == other.groupId &&
+      thumbHash.contentEquals(other.thumbHash)
+
+  override fun hashCode(): Int = mediaId.hashCode()
+}
+
+/** Quanti membri visibili ha un gruppo (il numero sulla copertina). */
+data class GroupSizeRow(
+  @ColumnInfo(name = "group_id") val groupId: String,
+  @ColumnInfo(name = "size") val size: Int,
+)
+
+/** Una copia sul telefono leggibile adesso: l'`_ID` in cache vale per la versione attuale del MediaStore. */
+data class PhoneRefRow(
+  @ColumnInfo(name = "media_id") val mediaId: String,
+  @ColumnInfo(name = "volume") val volume: String,
+  @ColumnInfo(name = "media_store_id") val mediaStoreId: Long,
+  @ColumnInfo(name = "mime_type") val mimeType: String?,
+)

@@ -29,15 +29,18 @@ import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.MediaLocation
 import dev.pampa.mycloudgallery.core.model.MediaMetadata
 import dev.pampa.mycloudgallery.core.model.MediaSource
+import dev.pampa.mycloudgallery.core.model.MediaTrait
 import dev.pampa.mycloudgallery.core.model.MediaVersion
 import dev.pampa.mycloudgallery.core.model.NasArea
 import dev.pampa.mycloudgallery.core.model.NasPath
 import dev.pampa.mycloudgallery.core.model.NasShare
 import dev.pampa.mycloudgallery.core.model.PersonalFlags
+import dev.pampa.mycloudgallery.core.model.PlaceRef
 import dev.pampa.mycloudgallery.core.model.Presence
 import dev.pampa.mycloudgallery.core.model.QuickHash
 import dev.pampa.mycloudgallery.core.model.SafetyStatus
 import dev.pampa.mycloudgallery.core.model.Sha256
+import dev.pampa.mycloudgallery.core.model.ThumbHash
 import dev.pampa.mycloudgallery.core.model.VectorPrecision
 import dev.pampa.mycloudgallery.core.model.VersionId
 import dev.pampa.mycloudgallery.core.model.VersionKind
@@ -164,6 +167,10 @@ internal fun VersionMetadataEntity.toDomain(): MediaMetadata = MediaMetadata(
     null
   },
   location = if (latitude != null && longitude != null) GeoPoint(latitude, longitude, altitude) else null,
+  mirrored = mirrored,
+  traits = MediaTrait.fromBits(traits),
+  place = if (placeId != null && placeDataset != null) PlaceRef(placeId, placeDataset) else null,
+  thumbHash = thumbHash?.let(ThumbHash::of),
 )
 
 internal fun MediaMetadata.toEntity(versionId: VersionId, now: Long): VersionMetadataEntity = VersionMetadataEntity(
@@ -181,6 +188,11 @@ internal fun MediaMetadata.toEntity(versionId: VersionId, now: Long): VersionMet
   longitude = location?.longitude,
   altitude = location?.altitudeMeters,
   updatedAt = now,
+  mirrored = mirrored,
+  traits = MediaTrait.toBits(traits),
+  placeId = place?.geonameId,
+  placeDataset = place?.dataset,
+  thumbHash = thumbHash?.bytes(),
 )
 
 /** La data di scatto come indizio per il collegamento: solo se non e' una stima. */
@@ -228,9 +240,6 @@ internal fun EmbeddingEntity.withMedia(mediaId: String): EmbeddingEntity =
   EmbeddingEntity(mediaId, spaceId, dimension, precision, vectorIndex, vector, versionId, createdAt)
 
 internal fun MediaPersonalEntity.toDomain(): PersonalFlags = PersonalFlags(favorite = favorite, hidden = hidden)
-
-internal fun PersonalFlags.toEntity(mediaId: MediaId, now: Long): MediaPersonalEntity =
-  MediaPersonalEntity(mediaId.value, favorite, hidden, now)
 
 internal fun NasShareEntity.toDomain(): NasShare = NasShare(AccountId(accountId), shareName, enumByCode<NasArea>(area))
 

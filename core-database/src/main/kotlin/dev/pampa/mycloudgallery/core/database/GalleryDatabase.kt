@@ -4,25 +4,29 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import androidx.room.migration.Migration
 import dev.pampa.mycloudgallery.core.database.dao.AlbumDao
+import dev.pampa.mycloudgallery.core.database.dao.CatalogMetaDao
 import dev.pampa.mycloudgallery.core.database.dao.EmbeddingDao
 import dev.pampa.mycloudgallery.core.database.dao.LocationDao
 import dev.pampa.mycloudgallery.core.database.dao.MediaDao
+import dev.pampa.mycloudgallery.core.database.dao.MediaStoreCursorDao
 import dev.pampa.mycloudgallery.core.database.dao.MergeDao
 import dev.pampa.mycloudgallery.core.database.dao.NasShareDao
 import dev.pampa.mycloudgallery.core.database.dao.PersonalDao
 import dev.pampa.mycloudgallery.core.database.dao.TimelineDao
+import dev.pampa.mycloudgallery.core.database.dao.TimelineIndexDao
 import dev.pampa.mycloudgallery.core.database.dao.VersionDao
 import dev.pampa.mycloudgallery.core.database.dao.WorkStateDao
 import dev.pampa.mycloudgallery.core.database.entity.AlbumEntity
 import dev.pampa.mycloudgallery.core.database.entity.AlbumItemEntity
+import dev.pampa.mycloudgallery.core.database.entity.CatalogMetaEntity
 import dev.pampa.mycloudgallery.core.database.entity.EmbeddingEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaAliasEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaGroupEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaLocationEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaPersonalEntity
+import dev.pampa.mycloudgallery.core.database.entity.MediaStoreCursorEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaVersionEntity
 import dev.pampa.mycloudgallery.core.database.entity.NasShareEntity
 import dev.pampa.mycloudgallery.core.database.entity.VersionMetadataEntity
@@ -49,6 +53,9 @@ import dev.pampa.mycloudgallery.core.database.entity.WorkStateEntity
     MediaPersonalEntity::class,
     AlbumEntity::class,
     AlbumItemEntity::class,
+    // v2
+    MediaStoreCursorEntity::class,
+    CatalogMetaEntity::class,
   ],
   version = GalleryDatabase.VERSION,
   exportSchema = true,
@@ -75,12 +82,18 @@ abstract class GalleryDatabase : RoomDatabase() {
 
   abstract fun mergeDao(): MergeDao
 
+  abstract fun timelineIndexDao(): TimelineIndexDao
+
+  abstract fun catalogMetaDao(): CatalogMetaDao
+
+  abstract fun mediaStoreCursorDao(): MediaStoreCursorDao
+
   companion object {
     /** Nome del file del database nella cartella privata dell'app. */
     const val NAME: String = "gallery.db"
 
     /** Versione dello schema. Alzarla richiede una migrazione in [GalleryMigrations] (mai distruttiva). */
-    const val VERSION: Int = 1
+    const val VERSION: Int = 2
 
     /**
      * Il database con tutte le migrazioni. **Mai** `fallbackToDestructiveMigration`: una migrazione
@@ -97,17 +110,4 @@ abstract class GalleryDatabase : RoomDatabase() {
       return builder.addMigrations(*GalleryMigrations.ALL).build()
     }
   }
-}
-
-/**
- * Le migrazioni dello schema, dalla v1 in poi. Per aggiungerne una (vedi `docs/modello-dati.md`, §7):
- *
- * 1. alzare [GalleryDatabase.VERSION] e cambiare le entita' (il build esporta `schemas/.../N.json`);
- * 2. scrivere qui `Migration(N-1, N)` e aggiungerla ad [ALL];
- * 3. in `ExportedSchemaTest` aggiungere i dati di prova della versione N-1 (`SchemaSeeds`): il test
- *    apre ogni schema esportato, ci mette quei dati, migra fino all'ultima versione, lascia a Room la
- *    validazione dello schema risultante e controlla che i dati ci siano ancora.
- */
-object GalleryMigrations {
-  val ALL: Array<Migration> = emptyArray()
 }

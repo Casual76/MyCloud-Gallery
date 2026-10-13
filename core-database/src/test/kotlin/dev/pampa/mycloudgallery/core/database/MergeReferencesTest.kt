@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.core.database
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -41,6 +42,38 @@ class MergeReferencesTest {
       assertWithMessage("Una tabella punta a `media`: aggiungila a MediaCatalog.MEDIA_REFERENCES e all'unione (MergeDao).")
         .that(references)
         .containsExactlyElementsIn(MediaCatalog.MEDIA_REFERENCES)
+
+      // Ogni tabella e' classificata: punta a `media` (sopra), segue le versioni (`media_version`, che
+      // l'unione sposta o traduce) oppure dichiara di non contenere identita' di media. Le tabelle della v2
+      // (`media_store_cursor`, `catalog_meta`) stanno nell'ultimo gruppo: una tabella nuova non classificata
+      // fa fallire il test.
+      val parents = tables.associateWith { table ->
+        sql.query("PRAGMA foreign_key_list(`$table`)").use { cursor ->
+          buildSet { while (cursor.moveToNext()) add(cursor.getString(cursor.getColumnIndexOrThrow("table"))) }
+        }
+      }
+      val unclassified = tables.filter { table ->
+        table != "media" && "media" !in parents.getValue(table) && "media_version" !in parents.getValue(table) &&
+          table !in MediaCatalog.TABLES_WITHOUT_MEDIA_IDS
+      }
+      assertWithMessage("Tabelle non classificate per l'unione: MediaCatalog.TABLES_WITHOUT_MEDIA_IDS o un riferimento a media.")
+        .that(unclassified)
+        .isEmpty()
+      assertThat(MediaCatalog.TABLES_WITHOUT_MEDIA_IDS).containsAtLeast("media_store_cursor", "catalog_meta")
+      assertThat(tables).containsAtLeastElementsIn(MediaCatalog.TABLES_WITHOUT_MEDIA_IDS)
+
+      // Una colonna che si chiama come un'identita' di media senza chiave esterna sfuggirebbe all'unione.
+      val unmanagedIds = tables.flatMap { table ->
+        sql.query("PRAGMA table_info(`$table`)").use { cursor ->
+          buildList {
+            while (cursor.moveToNext()) {
+              val column = cursor.getString(cursor.getColumnIndexOrThrow("name"))
+              if (column.endsWith("media_id")) add("$table.$column")
+            }
+          }
+        }
+      }.filter { it != "media.media_id" && it !in MediaCatalog.MEDIA_REFERENCES }
+      assertWithMessage("Colonne con identita' di media non gestite dall'unione").that(unmanagedIds).isEmpty()
     } finally {
       database.close()
     }

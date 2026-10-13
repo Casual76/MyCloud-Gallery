@@ -98,9 +98,45 @@ class GeoPoint(
 }
 
 /**
+ * Gli 8 valori del tag EXIF `Orientation` come rotazione + specchio (E-V3, E-M15). La rotazione e'
+ * quella di `ExifInterface.getRotationDegrees()` (in senso orario), lo specchio quello di `isFlipped()`:
+ * per 5 e 7 i lati si scambiano come per 90 e 270, quindi la proporzione mostrata si inverte.
+ */
+enum class ExifOrientation(val exif: Int, val degrees: Int, val mirrored: Boolean) {
+  NORMAL(1, 0, false),
+  FLIP_HORIZONTAL(2, 0, true),
+  ROTATE_180(3, 180, false),
+  FLIP_VERTICAL(4, 180, true),
+  TRANSPOSE(5, 270, true),
+  ROTATE_90(6, 90, false),
+  TRANSVERSE(7, 90, true),
+  ROTATE_270(8, 270, false),
+  ;
+
+  /** Se, per mostrarla dritta, larghezza e altezza si scambiano. */
+  val swapsSides: Boolean get() = degrees == 90 || degrees == 270
+
+  companion object {
+    /** Il valore EXIF letto; `null` per 0 ("non definito") o valori fuori norma, che si trattano come [NORMAL]. */
+    fun fromExif(value: Int): ExifOrientation? = entries.firstOrNull { it.exif == value }
+
+    fun of(degrees: Int, mirrored: Boolean): ExifOrientation =
+      entries.firstOrNull { it.degrees == degrees && it.mirrored == mirrored }
+        ?: throw IllegalArgumentException("Rotazione non valida.")
+  }
+}
+
+/**
  * I metadati di **una versione** (non del media): una correzione di data o luogo, o una rotazione,
  * produce una versione nuova con metadati nuovi, e l'originale conserva i suoi. Il media mostra quelli
  * della versione corrente.
+ *
+ * [width] e [height] sono quelli **memorizzati** nel file, prima dell'orientamento: la proporzione
+ * mostrata si ottiene con [ExifOrientation.swapsSides] (`TimelineRules.aspectMilli`).
+ *
+ * Dalla Fase 3 (schema v2): [mirrored] completa l'orientamento EXIF (2, 4, 5, 7: E-M15), [traits] i
+ * tratti, [place] il luogo dal dataset offline (sensibile come il GPS), [thumbHash] il segnaposto
+ * sfocato della griglia.
  */
 data class MediaMetadata(
   val mimeType: String? = null,
@@ -112,11 +148,25 @@ data class MediaMetadata(
   val captureTime: CaptureTime? = null,
   @Sensitive("Posizione GPS dello scatto.")
   val location: GeoPoint? = null,
+  /** Specchiata (EXIF 2, 4, 5, 7): va applicato prima della rotazione, come fa `ExifInterface`. */
+  val mirrored: Boolean = false,
+  val traits: Set<MediaTrait> = emptySet(),
+  @Sensitive("Il luogo dello scatto, derivato dal GPS.")
+  val place: PlaceRef? = null,
+  val thumbHash: ThumbHash? = null,
 ) {
 
   init {
     require(orientationDegrees in setOf(0, 90, 180, 270)) { "Rotazione non valida." }
     require((width == null || width > 0) && (height == null || height > 0)) { "Dimensioni non valide." }
     require(durationMillis == null || durationMillis >= 0) { "Durata negativa." }
+  }
+
+  /** L'orientamento EXIF equivalente a rotazione + specchio. */
+  val orientation: ExifOrientation get() = ExifOrientation.of(orientationDegrees, mirrored)
+
+  companion object {
+    /** Rotazione e specchio da un valore EXIF `Orientation` (0 o valori fuori norma: dritta). */
+    fun orientationOf(exif: Int): ExifOrientation = ExifOrientation.fromExif(exif) ?: ExifOrientation.NORMAL
   }
 }

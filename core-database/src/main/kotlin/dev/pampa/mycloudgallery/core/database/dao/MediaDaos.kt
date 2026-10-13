@@ -56,11 +56,28 @@ interface MediaDao {
   @Query("UPDATE media SET current_version_id = :versionId, updated_at = :now WHERE media_id = :mediaId")
   suspend fun setCurrentVersion(mediaId: String, versionId: String, now: Long)
 
+  /** Riscrive i campi derivati (v2 compresi): li calcola solo `MediaCatalog`, con le regole di dominio. */
   @Query(
-    "UPDATE media SET presence = :presence, safety = :safety, sort_time = :sortTime, updated_at = :now " +
-      "WHERE media_id = :mediaId",
+    "UPDATE media SET presence = :presence, safety = :safety, sort_time = :sortTime, local_day = :localDay, " +
+      "aspect_milli = :aspectMilli, duration_ms = :durationMs, place_id = :placeId, cell_flags = :cellFlags, " +
+      "thumb_hash = :thumbHash, updated_at = :now WHERE media_id = :mediaId",
   )
-  suspend fun updateDerived(mediaId: String, presence: String, safety: String, sortTime: Long, now: Long)
+  suspend fun updateDerived(
+    mediaId: String,
+    presence: String,
+    safety: String,
+    sortTime: Long,
+    localDay: Int,
+    aspectMilli: Int,
+    durationMs: Long?,
+    placeId: Int?,
+    cellFlags: Int,
+    thumbHash: ByteArray?,
+    now: Long,
+  )
+
+  @Query("UPDATE media SET kind = :kind, updated_at = :now WHERE media_id = :mediaId")
+  suspend fun setKind(mediaId: String, kind: String, now: Long)
 
   @Query("UPDATE media SET owner_account = :account, updated_at = :now WHERE media_id = :mediaId")
   suspend fun setOwner(mediaId: String, account: String?, now: Long)
@@ -70,6 +87,16 @@ interface MediaDao {
 
   @Insert
   suspend fun insertGroup(group: MediaGroupEntity)
+
+  @Query("SELECT * FROM media_group WHERE group_id = :groupId")
+  suspend fun group(groupId: String): MediaGroupEntity?
+
+  @Query("DELETE FROM media_group WHERE group_id = :groupId")
+  suspend fun deleteGroup(groupId: String)
+
+  /** I membri di un gruppo, in ordine di identita'. */
+  @Query("SELECT * FROM media WHERE group_id = :groupId ORDER BY media_id")
+  suspend fun groupMembers(groupId: String): List<MediaEntity>
 
   /** "Tutto al sicuro" / "312 in coda": i media di un account per stato, tra quelli visibili. */
   @Query(
@@ -151,11 +178,29 @@ interface LocationDao {
   )
   suspend fun vanishedWithContent(type: String, size: Long, quickHash: String): List<MediaLocationEntity>
 
-  @Query("SELECT * FROM media_location WHERE state = 'absent' AND absent_since <= :before")
+  /** Le posizioni assenti da prima di [before], le piu' vecchie prima. */
+  @Query("SELECT * FROM media_location WHERE state = 'absent' AND absent_since <= :before ORDER BY absent_since, location_id")
   suspend fun absentSince(before: Long): List<MediaLocationEntity>
+
+  /** I media con almeno una copia su un volume del telefono (cambia la versione del MediaStore: E-P22). */
+  @Query(
+    "SELECT DISTINCT v.media_id FROM media_location l JOIN media_version v ON v.version_id = l.version_id " +
+      "WHERE l.location_type = 'phone' AND l.volume = :volume",
+  )
+  suspend fun mediaIdsOnVolume(volume: String): List<String>
 
   @Query("SELECT * FROM media_location WHERE location_type = 'phone' AND volume = :volume AND state = 'present'")
   suspend fun presentOnVolume(volume: String): List<MediaLocationEntity>
+
+  /**
+   * Le posizioni di un volume che una scansione completa iniziata a [epoch] non ha visto: presenti (o non
+   * raggiungibili) con `last_seen_at` precedente. Le piu' vecchie prima, al massimo [limit].
+   */
+  @Query(
+    "SELECT * FROM media_location WHERE location_type = 'phone' AND volume = :volume " +
+      "AND state IN ('present', 'unavailable') AND last_seen_at < :epoch ORDER BY last_seen_at, location_id LIMIT :limit",
+  )
+  suspend fun notSeenSince(volume: String, epoch: Long, limit: Int): List<MediaLocationEntity>
 
   @Query("SELECT v.media_id FROM media_location l JOIN media_version v ON v.version_id = l.version_id WHERE l.location_id = :locationId")
   suspend fun mediaIdOf(locationId: Long): String?

@@ -24,6 +24,7 @@ class StableCodesTest {
     "VectorPrecision" to VectorPrecision.entries,
     "Presence" to Presence.entries,
     "SafetyStatus" to SafetyStatus.entries,
+    "MediaTrait" to MediaTrait.entries,
   )
 
   @Test
@@ -47,6 +48,20 @@ class StableCodesTest {
     assertThat(WorkStage.entries.map { it.code }).containsAtLeast("meta", "thumb", "analysis_copy", "embed", "ocr", "faces")
     assertThat(SafetyStatus.entries.map { it.code })
       .containsAtLeast("safe", "unverified", "only_common_copy", "no_nas_copy", "not_mine", "lost")
+    assertThat(MediaTrait.entries.associate { it.code to it.bit })
+      .containsAtLeast("panorama", 1, "sphere", 2, "ultra_hdr", 4, "hdr_video", 8, "screen_recording", 16)
+  }
+
+  /** I tratti si salvano come maschera: un bit a testa, mai condiviso. */
+  @Test
+  fun ogniTrattoHaUnBitSoloENonCondiviso() {
+    MediaTrait.entries.forEach { assertWithMessage(it.name).that(Integer.bitCount(it.bit)).isEqualTo(1) }
+    assertThat(MediaTrait.entries.map { it.bit }.toSet()).hasSize(MediaTrait.entries.size)
+    val some = setOf(MediaTrait.PANORAMA, MediaTrait.HDR_VIDEO)
+    assertThat(MediaTrait.fromBits(MediaTrait.toBits(some))).isEqualTo(some)
+    // Un bit di una versione futura dell'app si ignora.
+    assertThat(MediaTrait.fromBits(MediaTrait.toBits(some) or (1 shl 30))).isEqualTo(some)
+    assertThat(MediaTrait.fromBits(0)).isEmpty()
   }
 
   @Test

@@ -21,11 +21,12 @@ fun interface PositionIds {
  * era gia' selezionata, il trascinamento deseleziona tutte quelle che attraversa.
  *
  * Il trascinamento seleziona l'intervallo fra la prima cella e quella sotto il dito, in qualunque direzione, e
- * tornando indietro l'intervallo si restringe (si calcola sempre dalla selezione di partenza). Il modello non sa
- * niente di gesti, di righe o di scorrimento automatico: quelli sono della griglia (P7); qui c'e' solo l'insieme.
+ * tornando indietro l'intervallo si restringe: le celle che escono dall'intervallo tornano **come erano prima del
+ * trascinamento**. Il modello non sa niente di gesti, di righe o di scorrimento automatico: quelli sono della griglia
+ * (P7); qui c'e' solo l'insieme.
  *
- * Questa e' l'implementazione di riferimento di P0 (e' piccola e priva di dipendenze): P5 la possiede, la prova e
- * puo' ottimizzarla senza cambiare l'API.
+ * Implementazione di P5: a ogni [dragTo] si toccano solo le celle entrate o uscite dall'intervallo (non tutto
+ * l'intervallo), e una posizione uguale alla precedente non emette niente. Si usa dal thread principale.
  */
 class SelectionModel {
 
@@ -37,10 +38,16 @@ class SelectionModel {
   /** Vero se c'e' qualcosa di selezionato (la barra delle azioni prende il posto della pillola). */
   val isActive: Boolean get() = !state.value.isEmpty
 
+  /** Vero durante un trascinamento. */
+  val isDragging: Boolean get() = dragIds != null
+
   private var dragIds: PositionIds? = null
   private var dragStart: Int = -1
+  private var dragLo: Int = -1
+  private var dragHi: Int = -1
   private var dragBase: Set<MediaId> = emptySet()
   private var dragSelects: Boolean = true
+  private var working: LinkedHashSet<MediaId> = LinkedHashSet()
 
   /** Seleziona o deseleziona un elemento (tocco in modalita' selezione). */
   fun toggle(id: MediaId) {
@@ -48,25 +55,51 @@ class SelectionModel {
     state.value = SelectionSet(if (id in current) current - id else current + id)
   }
 
+  /** Aggiunge [ids] alla selezione ("seleziona il giorno" da un'intestazione). */
+  fun selectAll(ids: Collection<MediaId>) {
+    if (ids.isEmpty()) return
+    state.value = SelectionSet(state.value.ids + ids)
+  }
+
   /** Comincia un trascinamento dalla cella [position]: se era selezionata il trascinamento deseleziona. */
   fun beginDrag(position: Int, ids: PositionIds) {
     dragIds = ids
     dragStart = position
     dragBase = state.value.ids
-    dragSelects = ids.idAt(position) !in dragBase
-    apply(position)
+    working = LinkedHashSet(dragBase)
+    val id = ids.idAt(position)
+    dragSelects = id !in dragBase
+    dragLo = position
+    dragHi = position
+    mark(id, inRange = true)
+    emit()
   }
 
   /** Il dito e' ora sulla cella [position]. */
   fun dragTo(position: Int) {
-    if (dragIds != null) apply(position)
+    val ids = dragIds ?: return
+    val lo = min(dragStart, position)
+    val hi = max(dragStart, position)
+    if (lo == dragLo && hi == dragHi) return
+    // Escono dall'intervallo: tornano come prima del trascinamento.
+    for (p in dragLo until lo) mark(ids.idAt(p), inRange = false)
+    for (p in hi + 1..dragHi) mark(ids.idAt(p), inRange = false)
+    // Entrano: seguono la prima cella.
+    for (p in lo until dragLo) mark(ids.idAt(p), inRange = true)
+    for (p in dragHi + 1..hi) mark(ids.idAt(p), inRange = true)
+    dragLo = lo
+    dragHi = hi
+    emit()
   }
 
   /** Il dito si alza: la selezione resta com'e'. */
   fun endDrag() {
     dragIds = null
     dragStart = -1
+    dragLo = -1
+    dragHi = -1
     dragBase = emptySet()
+    working = LinkedHashSet()
   }
 
   fun clear() {
@@ -74,11 +107,19 @@ class SelectionModel {
     state.value = SelectionSet()
   }
 
-  private fun apply(position: Int) {
-    val ids = dragIds ?: return
-    val from = min(dragStart, position)
-    val to = max(dragStart, position)
-    val range = (from..to).mapTo(LinkedHashSet()) { ids.idAt(it) }
-    state.value = SelectionSet(if (dragSelects) dragBase + range else dragBase - range)
+  /** Tiene solo gli elementi per cui [keep] e' vero (dopo un cambiamento dell'indice: un elemento sparito o nascosto). */
+  fun retain(keep: (MediaId) -> Boolean) {
+    val current = state.value.ids
+    val kept = current.filterTo(LinkedHashSet(), keep)
+    if (kept.size != current.size) state.value = SelectionSet(kept)
+  }
+
+  private fun mark(id: MediaId, inRange: Boolean) {
+    val selected = if (inRange) dragSelects else id in dragBase
+    if (selected) working.add(id) else working.remove(id)
+  }
+
+  private fun emit() {
+    state.value = SelectionSet(LinkedHashSet(working))
   }
 }

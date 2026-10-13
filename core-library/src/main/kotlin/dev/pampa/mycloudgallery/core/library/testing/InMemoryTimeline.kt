@@ -1,14 +1,17 @@
 package dev.pampa.mycloudgallery.core.library.testing
 
-import dev.pampa.mycloudgallery.core.model.CellFlags
-import dev.pampa.mycloudgallery.core.model.MediaRef
-import dev.pampa.mycloudgallery.core.model.ThumbHash
 import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
 import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
 import dev.pampa.mycloudgallery.core.library.contract.TimelineView
+import dev.pampa.mycloudgallery.core.library.index.ColumnarTimelineSnapshot
+import dev.pampa.mycloudgallery.core.library.index.IdTable
+import dev.pampa.mycloudgallery.core.library.index.TimelineIndexBuilder
+import dev.pampa.mycloudgallery.core.model.CellFlags
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
+import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.model.MediaSource
+import dev.pampa.mycloudgallery.core.model.ThumbHash
 import java.time.LocalDate
 import java.util.SplittableRandom
 import java.util.UUID
@@ -17,13 +20,13 @@ import kotlin.math.min
 
 // La timeline in memoria dei test (D23): in src/main, cosi' i moduli a valle (feature-library, feature-viewer, :app) la
 // riusano nei loro test e negli screenshot senza cicli. Mai nella release: tools/check.ps1 fallisce se una classe di un
-// package `testing` compare nel dex dell'APK di release. P5 possiede questo file e puo' riscriverlo (la Libreria
-// sintetica "deterministica da 100 mila" e' nel suo "Fatto quando"): le firme pubbliche di [SyntheticLibrary] restano.
+// package `testing` compare nel dex dell'APK di release. Le firme pubbliche di P0 restano; P5 ha portato la Libreria
+// sintetica alla composizione del §5.2 (100 mila elementi deterministici) e ai suoi budget.
 
 /**
  * Un [TimelineSnapshot] su array semplici: la versione dei test dell'indice a colonne. Gli id sono due `long` per
- * elemento come nell'indice vero; il ThumbHash e la [MediaRef] si ricavano dal seme dell'elemento solo quando servono,
- * cosi' 100 mila elementi occupano pochi megabyte.
+ * elemento come nell'indice vero; il ThumbHash si ricava dal seme dell'elemento solo quando serve. `indexOf` usa la
+ * stessa tabella a indirizzamento aperto dell'indice vero (niente `HashMap` da 100 mila voci).
  */
 class InMemoryTimelineSnapshot(
   override val seq: Long,
@@ -43,9 +46,7 @@ class InMemoryTimelineSnapshot(
 
   override val size: Int = idMsb.size
 
-  private val indexById: Map<MediaId, Int> by lazy {
-    HashMap<MediaId, Int>(size * 2).also { map -> for (i in 0 until size) map[idAt(i)] = i }
-  }
+  private val ids: IdTable by lazy { IdTable(idMsb, idLsb, size) }
 
   override fun idAt(i: Int): MediaId = MediaId(UUID(idMsb[i], idLsb[i]).toString())
 
@@ -69,7 +70,7 @@ class InMemoryTimelineSnapshot(
 
   override fun groupSizeAt(i: Int): Int = groupSize[i]
 
-  override fun indexOf(id: MediaId): Int = indexById[id] ?: -1
+  override fun indexOf(id: MediaId): Int = ids.find(id)
 
   /** La copia con la riga [i] senza il flag e/o con il flag cambiato (preferiti, nascosti): per i fake delle azioni. */
   fun withFlags(i: Int, newFlags: Int, newSeq: Long = seq + 1): InMemoryTimelineSnapshot {
@@ -109,12 +110,43 @@ class InMemoryTimelineView(
 }
 
 /**
- * La Libreria sintetica (docs/fase3-progetto.md §5.2): una timeline deterministica di [count] elementi su 15 anni, con
- * giorni "a raffica" (feste, viaggi), giornate vuote, video, screenshot, WhatsApp, preferiti, date stimate, luoghi e
- * viaggi con fuso diverso. Stesso seme, stessa libreria: i test, i budget e gli screenshot sono ripetibili.
+ * Un media della Libreria sintetica con tutto cio' che serve a scriverlo in un catalogo (la "Libreria sintetica" di debug
+ * di P11, la variante benchmark di P9) o a cercarlo dove non deve stare (i nascosti di P10, E-H1).
  *
- * Questa e' la versione di P0 (una libreria piccola di default, 2.000 elementi, quanto serve agli screenshot e allo
- * scaffold): P5 la porta ai 100 mila elementi del §5.2 e ai suoi budget.
+ * @property zoneOffsetMinutes il fuso dello scatto ([localDay] e' il giorno in quel fuso, E-P5, E-M14).
+ * @property groupId l'identita' del gruppo (raffica o RAW+JPEG) se il media ne fa parte; [groupCover] se lo rappresenta.
+ * @property hidden nascosto: mai nell'indice (E-H1).
+ */
+data class SyntheticMedia(
+  val id: MediaId,
+  val sortTimeMs: Long,
+  val localDay: Int,
+  val zoneOffsetMinutes: Int,
+  val kind: MediaKind,
+  val source: MediaSource,
+  val flags: Int,
+  val aspectMilli: Int,
+  val durationMs: Long,
+  val placeId: Int,
+  val thumbHash: ThumbHash?,
+  val groupId: MediaId?,
+  val groupCover: Boolean,
+  val hidden: Boolean,
+)
+
+/**
+ * La Libreria sintetica (docs/fase3-progetto.md §5.2): una timeline deterministica di [count] celle su 15 anni. Stesso
+ * seme, stessa libreria: i test, i budget e gli screenshot sono ripetibili (`SyntheticLibraryTest` fissa un'impronta).
+ *
+ * Composizione (sulle celle): video 8%, screenshot 10%, WhatsApp 20%, Quick Share 2%; raffiche e RAW+JPEG 1% (la cella
+ * e' la copertina, con il numero dei membri; i membri stanno in [groupMembers], fuori dall'indice, D20); preferiti 2%;
+ * date stimate 3%; circa il 60% con un luogo di [placeIds]; proporzioni 4:3, 3:4, 16:9, 9:16, 1:1 e panorami 3:1.
+ * Giorni "a raffica" (feste), giornate vuote, e **viaggi** di qualche giorno con un altro fuso (UTC-5...+9) in cui anche i
+ * video (data UTC del contenitore, E-M14) cadono nel giorno locale giusto. In piu' lo 0,5% di [hidden], mai nell'indice.
+ * Pochi badge in piu' per gli screenshot: modificate 1%, non leggibili 0,1%, Ultra HDR e motion photo fra le foto.
+ *
+ * [count] e' il numero di **celle** ([snapshot] ha esattamente [count] elementi); i nascosti e i membri dei gruppi
+ * sono in piu'. Il default (2.000) e' quello degli screenshot; i budget usano [FULL_COUNT].
  *
  * @property placeIds gli id dei luoghi da cui campionare `place_id` (di solito `FakePlaceData.IDS` di core-places, che
  *   questo modulo non vede); vuoto = nessun luogo.
@@ -126,11 +158,52 @@ class SyntheticLibrary(
   private val placeIds: IntArray = IntArray(0),
 ) {
 
+  private val data: Generated by lazy { generate() }
+
   /** L'indice: 0 e' il piu' recente. */
-  val snapshot: InMemoryTimelineSnapshot by lazy { build() }
+  val snapshot: InMemoryTimelineSnapshot get() = data.snapshot
+
+  /** I nascosti (0,5% di [count]): esistono nel "catalogo" sintetico ma mai nell'indice. */
+  val hidden: List<SyntheticMedia> get() = data.hidden
+
+  /** I membri dei gruppi che non li rappresentano (fuori dall'indice, D20). */
+  val groupMembers: List<SyntheticMedia> get() = data.members
 
   /** La vista senza filtro. */
   fun view(filter: LibraryFilter = LibraryFilter.ALL): TimelineView = InMemoryTimelineView(snapshot, filter)
+
+  /** Lo stesso indice nella forma vera a colonne (budget, istantanea su file, layout), senza riferimenti al telefono. */
+  fun index(seq: Long = snapshot.seq): ColumnarTimelineSnapshot {
+    val s = snapshot
+    val d = data
+    val builder = TimelineIndexBuilder(s.size.coerceAtLeast(16))
+    for (i in 0 until s.size) {
+      val group = d.coverGroup[i]
+      builder.add(
+        msb = d.idMsb[i], lsb = d.idLsb[i], sortTimeMs = s.sortTimeAt(i), localDay = s.localDayAt(i), kind = s.kindAt(i),
+        source = s.sourceAt(i), flags = s.flagsAt(i), aspectMilli = s.aspectMilliAt(i), durationMs = s.durationMsAt(i),
+        placeId = s.placeAt(i), thumbHash = thumbBytesFor(seedOf(seed, i)), groupSize = s.groupSizeAt(i),
+        groupMsb = group?.let { UUID.fromString(it.value).mostSignificantBits } ?: 0L,
+        groupLsb = group?.let { UUID.fromString(it.value).leastSignificantBits } ?: 0L,
+      )
+    }
+    return builder.build(seq)
+  }
+
+  /** La cella [i] dell'indice come [SyntheticMedia]. */
+  fun cellAt(i: Int): SyntheticMedia {
+    val s = snapshot
+    val group = data.coverGroup[i]
+    return SyntheticMedia(
+      id = s.idAt(i), sortTimeMs = s.sortTimeAt(i), localDay = s.localDayAt(i), zoneOffsetMinutes = data.zoneMinutes[i],
+      kind = s.kindAt(i), source = s.sourceAt(i), flags = s.flagsAt(i), aspectMilli = s.aspectMilliAt(i),
+      durationMs = s.durationMsAt(i), placeId = s.placeAt(i), thumbHash = s.thumbHashAt(i), groupId = group,
+      groupCover = group != null, hidden = false,
+    )
+  }
+
+  /** Tutti i media del "catalogo" sintetico: le celle, i membri dei gruppi e i nascosti. */
+  fun media(): Sequence<SyntheticMedia> = (0 until count).asSequence().map { cellAt(it) } + groupMembers.asSequence() + hidden.asSequence()
 
   /** I byte (finti) dell'elemento [i] dell'indice: stesse proporzioni e stessi colori della cella e del viewer. */
   fun refAt(i: Int): MediaRef.Synthetic {
@@ -146,25 +219,52 @@ class SyntheticLibrary(
     return if (i >= 0) refAt(i) else MediaRef.Synthetic(id.value.hashCode().toLong(), LONG_SIDE, LONG_SIDE)
   }
 
-  private fun build(): InMemoryTimelineSnapshot {
+  private class Generated(
+    val snapshot: InMemoryTimelineSnapshot,
+    val idMsb: LongArray,
+    val idLsb: LongArray,
+    val zoneMinutes: IntArray,
+    val coverGroup: Array<MediaId?>,
+    val members: List<SyntheticMedia>,
+    val hidden: List<SyntheticMedia>,
+  )
+
+  /** Un viaggio: giorni (UTC, dall'epoch) [firstDay, lastDay], un fuso e un luogo. */
+  private class Trip(val firstDay: Long, val lastDay: Long, val offsetHours: Int, val placeSlot: Int)
+
+  private fun generate(): Generated {
     val rnd = SplittableRandom(seed)
     val spanDays = YEARS * 365
+    val today = Math.floorDiv(nowMs, DAY_MS)
     // Una libreria vera ha piu' scatti recenti che vecchi: i giorni si pescano con una distribuzione quadratica verso oggi.
     fun recentDay(): Int = (spanDays * rnd.nextDouble().let { it * it }).toInt().coerceIn(0, spanDays - 1)
-    val busyDays = IntArray(max(8, count / 30)) { recentDay() }
+    val busyDays = IntArray(max(8, count / 40)) { recentDay() }
+    val trips = List(max(2, count / 2_500)) {
+      val end = today - recentDay()
+      Trip(end - 1 - rnd.nextInt(11), end, TRIP_HOURS[rnd.nextInt(TRIP_HOURS.size)], rnd.nextInt(1 shl 20))
+    }
+    fun tripOf(utcDay: Long): Trip? = trips.firstOrNull { utcDay in it.firstDay..it.lastDay }
 
-    // Gli istanti: il 70% cade in un giorno "a raffica", il resto sparso; i piu' recenti per primi.
+    // Gli istanti: 15% in viaggio, 55% in un giorno "a raffica", il resto sparso; i piu' recenti per primi.
     val times = LongArray(count) {
-      val dayOffset = if (rnd.nextInt(100) < 70) busyDays[rnd.nextInt(busyDays.size)] else recentDay()
-      val dayStart = Math.floorDiv(nowMs, DAY_MS) * DAY_MS - dayOffset * DAY_MS
-      min(dayStart + 8 * HOUR_MS + rnd.nextLong(14 * HOUR_MS), nowMs - 1)
+      val pick = rnd.nextInt(100)
+      val day = when {
+        pick < 15 -> trips[rnd.nextInt(trips.size)].let { t -> t.firstDay + rnd.nextLong(t.lastDay - t.firstDay + 1) }
+        pick < 70 -> today - busyDays[rnd.nextInt(busyDays.size)]
+        else -> today - recentDay()
+      }
+      min(day * DAY_MS + 6 * HOUR_MS + rnd.nextLong(16 * HOUR_MS), nowMs - 1)
     }
     times.sort()
     times.reverse()
+    // Istanti tutti diversi: l'ordine e' quello dell'indice vero (sort_time DESC, media_id DESC) senza pareggi da
+    // risolvere con le identita' (che dipendono dalla posizione).
+    for (i in 1 until count) if (times[i] >= times[i - 1]) times[i] = times[i - 1] - 1
 
     val idMsb = LongArray(count)
     val idLsb = LongArray(count)
     val localDay = IntArray(count)
+    val zone = IntArray(count)
     val kinds = ByteArray(count)
     val sources = ByteArray(count)
     val flags = IntArray(count)
@@ -172,56 +272,116 @@ class SyntheticLibrary(
     val duration = LongArray(count)
     val place = IntArray(count)
     val groups = IntArray(count)
+    val coverGroup = arrayOfNulls<MediaId>(count)
+    val members = ArrayList<SyntheticMedia>()
 
     for (i in 0 until count) {
       val itemSeed = seedOf(seed, i)
       val r = SplittableRandom(itemSeed)
       idMsb[i] = itemSeed
       idLsb[i] = seedOf(itemSeed, 7)
-      val dayIndex = Math.floorDiv(times[i], DAY_MS).toInt()
-      localDay[i] = dayNumber(times[i] + zoneOffsetMs(dayIndex))
+      val utcDay = Math.floorDiv(times[i], DAY_MS)
+      val trip = tripOf(utcDay)
+      val offsetMinutes = (trip?.offsetHours ?: homeOffsetHours(times[i])) * 60
+      zone[i] = offsetMinutes
+      localDay[i] = dayNumber(times[i] + offsetMinutes * 60_000L)
 
-      val pick = r.nextInt(100)
+      val pick = r.nextInt(1_000)
       val source = when {
-        pick < 10 -> MediaSource.SCREENSHOT
-        pick < 30 -> MediaSource.WHATSAPP
-        pick < 32 -> MediaSource.QUICK_SHARE
+        pick < 100 -> MediaSource.SCREENSHOT
+        pick < 300 -> MediaSource.WHATSAPP
+        pick < 320 -> MediaSource.QUICK_SHARE
         else -> MediaSource.CAMERA
       }
-      val isVideo = source == MediaSource.CAMERA && r.nextInt(100) < 11
-      val isMotion = !isVideo && source == MediaSource.CAMERA && r.nextInt(100) < 3
-      val panorama = !isVideo && source == MediaSource.CAMERA && r.nextInt(100) < 2
-      kinds[i] = (if (isVideo) MediaKind.VIDEO else if (isMotion) MediaKind.MOTION_PHOTO else MediaKind.PHOTO).ordinal.toByte()
+      // 8% di video sul totale: fra tutto cio' che non e' uno screenshot (90%).
+      val isVideo = source != MediaSource.SCREENSHOT && r.nextInt(10_000) < 889
+      val cameraPhoto = !isVideo && source == MediaSource.CAMERA
+      val isMotion = cameraPhoto && r.nextInt(100) < 3
+      val panorama = cameraPhoto && !isMotion && r.nextInt(100) < 2
+      val ultraHdr = cameraPhoto && r.nextInt(100) < 4
+      val animated = !isVideo && source == MediaSource.WHATSAPP && r.nextInt(100) < 2
+      val kind = when {
+        isVideo -> MediaKind.VIDEO
+        isMotion -> MediaKind.MOTION_PHOTO
+        animated -> MediaKind.ANIMATED_IMAGE
+        else -> MediaKind.PHOTO
+      }
+      kinds[i] = kind.ordinal.toByte()
       sources[i] = source.ordinal.toByte()
       aspect[i] = when {
         panorama -> 3000
-        source == MediaSource.SCREENSHOT -> 450
+        source == MediaSource.SCREENSHOT -> 462
+        isVideo -> if (r.nextInt(100) < 60) 1778 else 562
         else -> ASPECTS[r.nextInt(ASPECTS.size)]
       }
       duration[i] = if (isVideo) 3_000L + r.nextLong(5 * 60_000L) else 0L
 
       var f = 0
       if (r.nextInt(100) < 2) f = f or CellFlags.FAVORITE
-      if (source == MediaSource.WHATSAPP || r.nextInt(100) < 3) f = f or CellFlags.DATE_ESTIMATED
+      if (r.nextInt(100) < 3) f = f or CellFlags.DATE_ESTIMATED
+      if (r.nextInt(100) < 1) f = f or CellFlags.EDITED
+      if (r.nextInt(1_000) < 1) f = f or CellFlags.UNREADABLE
       if (isMotion) f = f or CellFlags.MOTION
       if (panorama) f = f or CellFlags.PANORAMA
-      if (placeIds.isNotEmpty() && source == MediaSource.CAMERA && r.nextInt(100) < 75) {
-        // Lo stesso giorno, lo stesso posto: un viaggio ha un luogo solo.
-        place[i] = placeIds[Math.floorMod(dayIndex, placeIds.size)]
+      if (ultraHdr) f = f or CellFlags.ULTRA_HDR
+      // Circa 60% con un luogo: quasi tutte le foto della fotocamera, poche fra le altre sorgenti. Lo stesso giorno,
+      // lo stesso posto; un viaggio ha il suo.
+      val placeChance = if (source == MediaSource.CAMERA) 85 else 10
+      if (placeIds.isNotEmpty() && r.nextInt(100) < placeChance) {
+        val slot = trip?.placeSlot ?: (utcDay * 31 + (if (r.nextInt(100) < 10) 1 else 0)).toInt()
+        place[i] = placeIds[Math.floorMod(slot, placeIds.size)]
         f = f or CellFlags.HAS_PLACE
       }
+      groups[i] = 1
+      // 1% di copertine: meta' coppie RAW+JPEG, meta' raffiche da 3 a 10 scatti.
+      if (cameraPhoto && !isMotion && !panorama && r.nextInt(1_000) < 17) {
+        val pair = r.nextBoolean()
+        val size = if (pair) 2 else 3 + r.nextInt(8)
+        val groupId = MediaId(UUID(seedOf(itemSeed, 11), seedOf(itemSeed, 13)).toString())
+        groups[i] = size
+        coverGroup[i] = groupId
+        f = f or CellFlags.GROUP_COVER
+        for (m in 1 until size) {
+          members += SyntheticMedia(
+            id = MediaId(UUID(seedOf(itemSeed, 100 + m), seedOf(itemSeed, 200 + m)).toString()),
+            sortTimeMs = times[i] - (if (pair) 0L else m * 150L), localDay = localDay[i], zoneOffsetMinutes = offsetMinutes,
+            kind = if (pair) MediaKind.RAW_PHOTO else MediaKind.PHOTO, source = source,
+            flags = (f and CellFlags.GROUP_COVER.inv()) or CellFlags.GROUP_MEMBER, aspectMilli = aspect[i], durationMs = 0L,
+            placeId = place[i], thumbHash = thumbHashFor(seedOf(itemSeed, 300 + m)), groupId = groupId, groupCover = false,
+            hidden = false,
+          )
+        }
+      }
       flags[i] = f
-      groups[i] = if (r.nextInt(100) < 1) 2 + r.nextInt(7) else 1
     }
-    return InMemoryTimelineSnapshot(
+
+    // I nascosti: 0,5% in piu' delle celle, sparsi nel tempo.
+    val hiddenRnd = SplittableRandom(seedOf(seed, HIDDEN_SALT))
+    val hidden = List(count / 200) { h ->
+      val itemSeed = seedOf(seed xor HIDDEN_SALT.toLong(), h)
+      val time = min((today - (spanDays * hiddenRnd.nextDouble()).toInt()) * DAY_MS + 8 * HOUR_MS + hiddenRnd.nextLong(12 * HOUR_MS), nowMs - 1)
+      val offset = homeOffsetHours(time) * 60
+      SyntheticMedia(
+        id = MediaId(UUID(itemSeed, seedOf(itemSeed, 7)).toString()), sortTimeMs = time, localDay = dayNumber(time + offset * 60_000L),
+        zoneOffsetMinutes = offset, kind = MediaKind.PHOTO, source = MediaSource.CAMERA, flags = 0,
+        aspectMilli = ASPECTS[hiddenRnd.nextInt(ASPECTS.size)], durationMs = 0L, placeId = 0,
+        thumbHash = thumbHashFor(itemSeed), groupId = null, groupCover = false, hidden = true,
+      )
+    }
+
+    val snapshot = InMemoryTimelineSnapshot(
       seq = 1, idMsb = idMsb, idLsb = idLsb, sortTime = times, localDay = localDay, kinds = kinds, sources = sources,
       flags = flags, aspectMilli = aspect, durationMs = duration, place = place, groupSize = groups,
       thumbHashOf = { i -> thumbHashFor(seedOf(seed, i)) },
     )
+    return Generated(snapshot, idMsb, idLsb, zone, coverGroup, members, hidden)
   }
 
   companion object {
     const val DEFAULT_COUNT: Int = 2_000
+
+    /** La Libreria sintetica dei budget e della variante benchmark (§5.2). */
+    const val FULL_COUNT: Int = 100_000
 
     /** 9 ottobre 2025, mezzogiorno UTC circa: un "adesso" fisso, cosi' le date non dipendono dall'orologio. */
     const val DEFAULT_NOW_MS: Long = 1_760_000_000_000L
@@ -230,14 +390,19 @@ class SyntheticLibrary(
     private const val HOUR_MS = 3_600_000L
     private const val DAY_MS = 24 * HOUR_MS
     private const val LONG_SIDE = 4000
+    private const val HIDDEN_SALT = 0x51DE
 
-    /** 4:3, 3:4, 16:9, 9:16, 1:1 (in millesimi). */
-    private val ASPECTS = intArrayOf(1333, 1333, 750, 1778, 562, 1000)
+    /** 4:3, 3:4, 16:9, 9:16, 1:1 (in millesimi); le foto verticali e orizzontali piu' frequenti. */
+    private val ASPECTS = intArrayOf(1333, 1333, 750, 750, 1778, 562, 1000)
 
-    /** Il fuso del giorno: l'Italia (+1 h), con un giorno su sette in viaggio (UTC-5...+9, E-M14). */
-    private val TRIP_HOURS = intArrayOf(-5, 9, 1, -8, 2, 0, 5)
+    /** I fusi dei viaggi (UTC-5...+9, E-M14). */
+    private val TRIP_HOURS = intArrayOf(-5, -4, 0, 2, 3, 5, 7, 8, 9)
 
-    private fun zoneOffsetMs(dayIndex: Int): Long = (if (Math.floorMod(dayIndex, 7) == 0) TRIP_HOURS[Math.floorMod(dayIndex / 7, TRIP_HOURS.size)] else 1) * HOUR_MS
+    /** L'Italia: +1, +2 da aprile a ottobre (approssimazione dell'ora legale, deterministica). */
+    private fun homeOffsetHours(utcMs: Long): Int {
+      val month = LocalDate.ofEpochDay(Math.floorDiv(utcMs, DAY_MS)).monthValue
+      return if (month in 4..10) 2 else 1
+    }
 
     private fun dayNumber(localMs: Long): Int {
       val date = LocalDate.ofEpochDay(Math.floorDiv(localMs, DAY_MS))
@@ -253,14 +418,17 @@ class SyntheticLibrary(
     }
 
     /** Un ThumbHash finto e valido (25 byte) derivato dal seme dell'elemento. */
-    fun thumbHashFor(itemSeed: Long): ThumbHash {
+    fun thumbHashFor(itemSeed: Long): ThumbHash = ThumbHash.of(thumbBytesFor(itemSeed))
+
+    /** I byte di [thumbHashFor], senza passare dal testo. */
+    fun thumbBytesFor(itemSeed: Long): ByteArray {
       val bytes = ByteArray(25)
       var z = itemSeed
       for (b in bytes.indices) {
         z = z * 6364136223846793005L + 1442695040888963407L
         bytes[b] = (z ushr 56).toByte()
       }
-      return ThumbHash.of(bytes)
+      return bytes
     }
   }
 }

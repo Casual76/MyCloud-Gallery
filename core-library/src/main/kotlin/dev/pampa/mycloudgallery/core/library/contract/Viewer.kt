@@ -40,6 +40,17 @@ interface ViewerItems {
 
   /** Dove stanno i byte di [id]: per la miniatura di partenza, la decodifica, la condivisione. */
   fun ref(id: MediaId): MediaRef
+
+  /**
+   * Come [ref], ma null se adesso non c'e' una copia leggibile (P5: un `_ID` del MediaStore di un'altra versione non si
+   * usa finche' la scansione non lo rilegge, E-P22; un elemento appena uscito dalla vista). La griglia e il viewer
+   * mostrano il segnaposto invece di fallire. Aggiunta compatibile: il default delega a [ref].
+   */
+  fun refOrNull(id: MediaId): MediaRef? = try {
+    ref(id)
+  } catch (e: NoSuchElementException) {
+    null
+  }
 }
 
 /**

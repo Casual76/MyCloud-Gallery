@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.IntSize
+import androidx.core.graphics.createBitmap
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.model.ThumbHash
 import dev.pampa.mycloudgallery.core.imaging.contract.AnimatedSpec
@@ -72,7 +73,7 @@ object SyntheticPixels {
 
   /** La bitmap del gradiente (richiede Android: gira in Robolectric e sul telefono). */
   fun bitmap(seed: Long, width: Int, height: Int): Bitmap {
-    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    val bitmap = createBitmap(width, height)
     bitmap.setPixels(argb(seed, width, height), 0, width, 0, 0, width, height)
     return bitmap
   }
@@ -121,7 +122,11 @@ object SyntheticPixels {
 /** La sorgente della Libreria sintetica: gradienti per [MediaRef.Synthetic], niente per tutto il resto. */
 class SyntheticThumbnailSource : ThumbnailSource {
 
-  override suspend fun load(ref: MediaRef, px: Int, cancel: CancellationSignal): Bitmap? = loadNow(ref, px)
+  override suspend fun load(ref: MediaRef, px: Int, cancel: CancellationSignal): Bitmap? {
+    // Come ogni sorgente: se la richiesta e' gia' stata annullata non si spende nemmeno il gradiente.
+    cancel.throwIfCanceled()
+    return loadNow(ref, px)
+  }
 
   /** Lo stesso senza sospendere: il gradiente costa microsecondi, e i fake sincroni ne hanno bisogno. */
   fun loadNow(ref: MediaRef, px: Int): Bitmap? {

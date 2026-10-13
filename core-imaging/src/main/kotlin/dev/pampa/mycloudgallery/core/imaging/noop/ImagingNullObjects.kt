@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.IntSize
+import androidx.core.graphics.createBitmap
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.model.ThumbHash
 import dev.pampa.mycloudgallery.core.imaging.contract.AnimatedSpec
@@ -53,7 +54,7 @@ object NoThumbnailSource : ThumbnailSource {
 
 /** Nessun segnaposto vero: una bitmap 1x1 trasparente (ogni cella mostra solo il suo fondo). */
 object NoPlaceholderCache : PlaceholderCache {
-  private val transparent: ImageBitmap by lazy { Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888).asImageBitmap() }
+  private val transparent: ImageBitmap by lazy { createBitmap(1, 1).asImageBitmap() }
 
   override fun image(h: ThumbHash): ImageBitmap = transparent
 }

@@ -1,41 +1,58 @@
 package dev.pampa.mycloudgallery.core.metadata.contract
 
-import dev.pampa.mycloudgallery.core.model.ThumbHash
+import dev.pampa.mycloudgallery.core.metadata.format.MotionCandidates
+import dev.pampa.mycloudgallery.core.metadata.format.ThumbHashAlgorithm
+import dev.pampa.mycloudgallery.core.metadata.format.XmpFacts
 import dev.pampa.mycloudgallery.core.model.GeoPoint
+import dev.pampa.mycloudgallery.core.model.ThumbHash
 
 // Segnaposto sfocato, motion photo, dettagli EXIF e video (docs/fase3-progetto.md §1.2 e §2.2). Contratti di P0; i
 // corpi di ThumbHashCodec e MotionPhotoLocator sono di P3.
 
+/** Un segnaposto decodificato con le sue dimensioni: pixel ARGB non premoltiplicati, riga per riga ([argb] ha `width * height` elementi). */
+class ThumbHashImage(val width: Int, val height: Int, val argb: IntArray)
+
 /**
- * Il segnaposto sfocato di un'immagine: ThumbHash, un'implementazione propria dall'algoritmo pubblico (nessuna
- * libreria). Una stringa di al massimo 48 caratteri nell'indice; la cella la decodifica in una bitmap 32x32 finche'
- * la miniatura vera non arriva, cosi' una griglia in scorrimento veloce non mostra mai buchi (D5).
+ * Il segnaposto sfocato di un'immagine: ThumbHash, un'implementazione propria dell'algoritmo pubblico (nessuna
+ * libreria; i byte sono quelli del formato pubblico). Una stringa di al massimo 48 caratteri nell'indice; la cella
+ * lo decodifica in una piccola bitmap finche' la miniatura vera non arriva, cosi' una griglia in scorrimento veloce non
+ * mostra mai buchi (D5).
  *
- * **Segnaposto di P0.** [encode] dice sempre "grigio uniforme" e [decode] disegna quel grigio: quanto basta per far
- * girare celle e screenshot. P3 lo sostituisce con l'algoritmo vero senza cambiare le firme.
+ * Due modi di decodificare, perche' una bitmap ha due dimensioni:
+ * - [decode] restituisce un quadrato `maxSide x maxSide` (l'array ha `maxSide * maxSide` elementi, come il segnaposto
+ *   di P0): l'anteprima e' lo stesso disegno **stirato** sul quadrato, e la cella la stira ancora sul suo rettangolo.
+ *   E' l'uso della griglia: la cella quadrata ritaglia al centro la miniatura, il segnaposto sfocato no, e a quella
+ *   scala non si vede;
+ * - [decodeImage] rispetta la proporzione dell'immagine originale (lato lungo `maxSide`) e porta le dimensioni.
  */
 object ThumbHashCodec {
 
   /** Il segnaposto di un'immagine di cui non si sa niente: un grigio medio uniforme. */
-  val NEUTRAL: ThumbHash = ThumbHash.of(ByteArray(NEUTRAL_BYTES) { 0x80.toByte() })
-
-  /** Codifica un'immagine [w] x [h] (al massimo 100 px per lato) in pixel RGBA, riga per riga. */
-  @Suppress("UNUSED_PARAMETER")
-  fun encode(w: Int, h: Int, rgba: ByteArray): ThumbHash = NEUTRAL
+  val NEUTRAL: ThumbHash = ThumbHash.of(ThumbHashAlgorithm.encode(1, 1, byteArrayOf(0x80.toByte(), 0x80.toByte(), 0x80.toByte(), 0xFF.toByte())))
 
   /**
-   * Decodifica in ARGB (come `Bitmap.setPixels`) con il lato lungo di [maxSide] pixel e la proporzione dell'immagine
-   * originale. Mai vuoto: restituisce almeno un pixel.
+   * Codifica un'immagine [w] x [h] in pixel RGBA, riga per riga. Il formato vuole al massimo 100 px per lato: un'immagine
+   * piu' grande si riduce prima, senza errori.
    */
-  @Suppress("UNUSED_PARAMETER")
+  fun encode(w: Int, h: Int, rgba: ByteArray): ThumbHash = ThumbHash.of(ThumbHashAlgorithm.encode(w, h, rgba))
+
+  /** Decodifica in ARGB (come `Bitmap.setPixels`) un quadrato [maxSide] x [maxSide]. Mai vuoto: almeno un pixel. */
   fun decode(h: ThumbHash, maxSide: Int): IntArray {
     val side = maxSide.coerceAtLeast(1)
-    return IntArray(side * side) { NEUTRAL_ARGB }
+    return ThumbHashAlgorithm.decode(h.bytes(), side, side)
   }
 
-  private const val NEUTRAL_BYTES: Int = 25
+  /** Come [decode], ma con la proporzione dell'immagine originale: il lato lungo e' [maxSide]. */
+  fun decodeImage(h: ThumbHash, maxSide: Int): ThumbHashImage {
+    val side = maxSide.coerceAtLeast(1)
+    val ratio = ThumbHashAlgorithm.aspectRatio(h.bytes())
+    val w = Math.round(if (ratio > 1) side.toDouble() else side * ratio).toInt().coerceAtLeast(1)
+    val ht = Math.round(if (ratio > 1) side / ratio else side.toDouble()).toInt().coerceAtLeast(1)
+    return ThumbHashImage(w, ht, ThumbHashAlgorithm.decode(h.bytes(), w, ht))
+  }
 
-  private const val NEUTRAL_ARGB: Int = 0xFF808080.toInt()
+  /** Il rapporto larghezza / altezza approssimato dell'immagine originale, dalla sola intestazione. */
+  fun aspectRatio(h: ThumbHash): Double = ThumbHashAlgorithm.aspectRatio(h.bytes())
 }
 
 /** Il formato in cui una motion photo porta il suo video. */
@@ -59,17 +76,20 @@ data class MotionPart(
 )
 
 /**
- * Trova la parte video di una motion photo (E-M5): Google v1, MicroVideo e trailer SEF di Samsung. Riceve l'XMP
- * (se c'e'), gli ultimi byte del file e la dimensione, e restituisce l'intervallo del video. Null = formato non
- * riconosciuto (E-M16): la UI mostra la foto ferma e scrive "parte video non riproducibile" nelle info.
+ * Trova la parte video di una motion photo (E-M5): Google v1 (directory del contenitore XMP, `Item:Length` della voce
+ * `MotionPhoto`), MicroVideo (`MicroVideoOffset`, byte dalla fine) e trailer SEF di Samsung (`MotionPhoto_Data`).
+ * Riceve l'XMP (se c'e'), gli ultimi byte del file e la dimensione, e restituisce l'intervallo del video. Null = formato
+ * non riconosciuto (E-M16): la UI mostra la foto ferma e scrive "parte video non riproducibile" nelle info.
  *
- * **Segnaposto di P0.** Non riconosce nessun formato (sempre null), che e' l'esito sicuro. P3 lo sostituisce con i
- * tre localizzatori senza cambiare la firma.
+ * **Non verifica i byte del video**: l'XMP puo' restare dopo che il video e' stato tolto. Chi ha il file (l'estrattore)
+ * controlla che nel punto indicato ci sia un MP4 (`ftyp`) e, per SEF, corregge la partenza leggendo il nome vero del blocco.
+ * L'ordine delle preferenze e': Google v1, MicroVideo, SEF. Il trailer SEF si legge dalla sola [tail], che deve quindi
+ * contenere almeno la directory (qualche centinaio di byte in fondo; 64 KiB bastano sempre).
  */
 object MotionPhotoLocator {
 
-  @Suppress("UNUSED_PARAMETER")
-  fun locate(xmp: String?, tail: ByteArray, size: Long): MotionPart? = null
+  fun locate(xmp: String?, tail: ByteArray, size: Long): MotionPart? =
+    MotionCandidates.of(XmpFacts.parse(xmp), tail, size).firstOrNull()?.part
 }
 
 /**

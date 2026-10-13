@@ -13,6 +13,10 @@ import java.time.ZoneId
  *   raggruppamento; non finisce mai in un log.
  * @property scanZone il fuso del telefono **al momento della lettura**: per le date senza fuso si salva questo e
  *   cambiare fuso dopo non sposta nulla (E-P5).
+ * @property msDateModifiedMs `DATE_MODIFIED` di MediaStore, in millisecondi: l'ultimo ripiego per la data (`FILE_MODIFIED`,
+ *   E-M8). **Aggiunto da P3**, opzionale per non rompere i chiamanti: chi costruisce gli indizi dalla riga del MediaStore
+ *   (`MediaStoreRow.toExtractHints`) deve passarlo (`dateModifiedMs`), altrimenti senza EXIF, nome e `DATE_TAKEN` la data
+ *   cade sul ripiego finale "adesso" (sempre stimata).
  */
 data class ExtractHints(
   val mime: String?,
@@ -24,6 +28,7 @@ data class ExtractHints(
   val msOrientation: Int?,
   val msDurationMs: Long?,
   val scanZone: ZoneId,
+  val msDateModifiedMs: Long? = null,
 ) {
   // Il nome del file e il percorso sono dati personali: nessuno dei due nel toString.
   override fun toString(): String = "ExtractHints(mime=$mime)"
@@ -61,7 +66,10 @@ data class GroupHint(
   val subSecondMs: Int?,
   /** Il modello della fotocamera: una raffica e' sempre di un solo modello. */
   val cameraModel: String?,
-)
+) {
+  // Il nome del file e' un dato personale: nel toString (e quindi nei log) solo il numero di scatto.
+  override fun toString(): String = "GroupHint(burstIndex=$burstIndex, isCover=$isCover)"
+}
 
 /**
  * L'esito della lettura di un file. Mai un'eccezione per un file rovinato: un file troncato o falso e' un caso

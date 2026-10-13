@@ -1,10 +1,19 @@
 // Date, tipi, EXIF, XMP, motion photo, raffiche e ThumbHash dei media del telefono (Fase 3: contratti P0,
 // logica P3; docs/fase3-progetto.md §2.2, D11).
 //
-// Pacchetti: `contract`, `noop`, `testing` (vedi core-places). Unica dipendenza di produzione nuova:
-// androidx.exifinterface (Apache-2.0, circa 60 KB, gia' nel grafo tramite CameraX). Resta `implementation`:
-// nessun suo tipo compare nelle firme pubbliche (`MediaBytes` astrae i byte, `ExifDetails` e' nostro).
+// Pacchetti: `contract`, `noop`, `testing` (vedi core-places), `format` (lettori dei contenitori, internal) ed
+// `extract` (l'estrattore vero e gli adattatori Android).
+//
+// EXIF, XMP, HEIC, DNG, PNG e WebP si leggono con codice proprio (`format/`): i byte arrivano a intervalli e in
+// modo `suspend` (`MediaBytes`), mentre ExifInterface vuole uno stream bloccante, e il suo lettore HEIF passa da
+// MediaMetadataRetriever (non gira su JVM). In produzione quindi androidx.exifinterface non serve piu': resta come
+// `testImplementation`, l'oracolo indipendente con cui i test confrontano il nostro lettore e i file di prova
+// (core-metadata/src/test/.../ExifInterfaceCrossCheckTest). Se non si vuole nemmeno quello, basta togliere la riga.
 // ThumbHash e' un'implementazione propria dall'algoritmo pubblico (nessuna libreria).
+//
+// I test usano le fixture di tools/fixtures/src (Java, solo JDK): lo stesso codice genera il set per il telefono. Si
+// compilano con un normale JavaCompile (non con la compilazione dei test di AGP, che vede solo android.jar e quindi
+// non conosce java.awt / ImageIO) e le classi finiscono nel classpath dei test.
 //
 // D24: nessuna rete in questo modulo (NoNetworkSourcesTest).
 plugins {
@@ -18,6 +27,36 @@ apply from: "${rootDir}/gradle/android-conventions.gradle"
 
 android {
   namespace = 'dev.pampa.mycloudgallery.core.metadata'
+
+  testOptions {
+    unitTests.all {
+      // ImageIO scrive i JPEG delle fixture senza display.
+      systemProperty 'java.awt.headless', 'true'
+      // FieldDocConsistencyTest legge docs/fase3-campo.md: se cambia, i test si rieseguono.
+      inputs.files("${rootDir}/docs/fase3-campo.md")
+    }
+  }
+}
+
+// Il catalogo dei file di prova e i loro scrittori (JPEG, EXIF, HEIC, DNG, WebP, motion photo...).
+def fixturesClasses = layout.buildDirectory.dir('fixtures-classes')
+def compileFixtures = tasks.register('compileFixtures', JavaCompile) {
+  group = 'verification'
+  description = 'Compila tools/fixtures/src (solo JDK) per i test di core-metadata.'
+  source(fileTree("${rootDir}/tools/fixtures/src") { include '**/*.java' })
+  classpath = files()
+  destinationDirectory = fixturesClasses
+  options.encoding = 'UTF-8'
+  options.release = 17
+}
+
+// Un jar (AGP ignora una cartella di classi fra le dipendenze dei test, non un jar).
+def fixturesJar = tasks.register('fixturesJar', Jar) {
+  group = 'verification'
+  description = 'Il jar delle fixture di tools/fixtures per i test di core-metadata.'
+  from compileFixtures
+  archiveBaseName = 'mcg-fixtures'
+  destinationDirectory = layout.buildDirectory.dir('fixtures-jar')
 }
 
 dependencies {
@@ -27,8 +66,9 @@ dependencies {
   api project(':core-places')
 
   implementation appDeps.coreKtx
-  implementation appDeps.exifinterface
 
+  testImplementation files(fixturesJar.map { it.archiveFile })
+  testImplementation appDeps.exifinterface
   testImplementation appDeps.coroutinesTest
   testImplementation appDeps.robolectric
   testImplementation appDeps.androidxTestCore

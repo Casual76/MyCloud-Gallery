@@ -83,7 +83,7 @@ class MetadataContractTest {
   }
 
   @Test
-  fun iSegnapostoDiP0DannoEsitiSicuri() {
+  fun leFirmeDelContrattoRestanoEDannoEsitiSicuri() {
     // La data ha sempre una fonte valida: DATE_TAKEN con fuso supposto, poi la data del file (sempre stimata).
     val now = 1_700_000_000_000L
     val rome = ZoneId.of("Europe/Rome")
@@ -98,19 +98,22 @@ class MetadataContractTest {
     assertThat(absurd.source).isEqualTo(CaptureTimeSource.FILE_MODIFIED)
     assertThat(absurd.isEstimated).isTrue()
 
-    assertThat(FileNameDates.parse("IMG-20240312-WA0001.jpg")).isNull()
+    // Le regole vere (P3): i nomi, le sorgenti, i gruppi e le motion photo si provano nei test di ogni oggetto.
+    assertThat(FileNameDates.parse("IMG-20240312-WA0001.jpg")).isNotNull()
     assertThat(SourceClassifier.classify("external_primary", "DCIM/Screenshots/", "Screenshot_1.png", null, "image/png").source)
-      .isEqualTo(MediaSource.OTHER)
+      .isEqualTo(MediaSource.SCREENSHOT)
+    // Due candidati uguali (stesso id) non fanno un gruppo.
     val candidate = GroupCandidate(MediaId.random(), "phone:external_primary:dcim/camera/", "a.jpg", "image/jpeg", MediaKind.PHOTO, 1L, null)
     assertThat(GroupingRules.propose(listOf(candidate, candidate))).isEmpty()
     assertThat(MotionPhotoLocator.locate(null, ByteArray(4), 100L)).isNull()
   }
 
   @Test
-  fun ilSegnapostoSfocatoDiP0EGrigioEDecodificaAlmenoUnPixel() {
-    val hash: ThumbHash = ThumbHashCodec.encode(4, 4, ByteArray(4 * 4 * 4))
-    assertThat(hash).isEqualTo(ThumbHashCodec.NEUTRAL)
+  fun ilSegnapostoSfocatoDecodificaAlmenoUnPixel() {
+    val hash: ThumbHash = ThumbHashCodec.encode(4, 4, ByteArray(4 * 4 * 4) { 0x80.toByte() })
     assertThat(ThumbHashCodec.decode(hash, 32)).hasLength(32 * 32)
     assertThat(ThumbHashCodec.decode(hash, 0)).hasLength(1)
+    // Il segnaposto "non so niente" e' un hash vero e decodifica in un grigio opaco.
+    assertThat(ThumbHashCodec.decode(ThumbHashCodec.NEUTRAL, 4).all { it ushr 24 == 0xFF }).isTrue()
   }
 }

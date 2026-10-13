@@ -1,0 +1,44 @@
+// L'indice in memoria della timeline, il layout della griglia, i filtri, la selezione e il contratto con il
+// viewer (Fase 3: contratti P0, logica P5; docs/fase3-progetto.md §1.2, D2, D3). Niente Paging 3 e niente
+// LazyVerticalGrid: righe precalcolate.
+//
+// Pacchetti: `contract`, `noop`, `testing` (vedi core-places). Vede model, common e database; NON conosce i nomi
+// dei luoghi (tiene gli id, i nomi li risolve la UI con PlaceNames).
+// Nessun @Composable e nessun tipo Compose nelle API (`PixelRect` e' nostro); solo runtime-annotation per
+// segnare @Immutable/@Stable i tipi che le schermate ricevono come parametri. DataStore per le preferenze
+// (filtro, livello, stile) in noBackupFilesDir.
+//
+// D24: nessuna rete in questo modulo (NoNetworkSourcesTest).
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.core.library'
+}
+
+dependencies {
+  api project(':core-common')
+  api project(':core-model')
+  // api: MediaCatalog e il flusso dei cambiamenti compaiono nelle firme del repository.
+  api project(':core-database')
+  // api: `ViewerAnchor.thumbKey(id): ThumbKey` (§1.2) mette ThumbKey, di core-imaging, nelle firme del contratto con
+  // il viewer. Deviazione dal grafo del §1.1 (library non vedeva imaging): nessun ciclo, imaging vede solo model e common.
+  api project(':core-imaging')
+
+  api platform("androidx.compose:compose-bom:${engine.composeBom}")
+  api appDeps.composeRuntimeAnnotation
+
+  implementation appDeps.datastorePreferences
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+  testImplementation appDeps.androidxTestExtJunit
+}

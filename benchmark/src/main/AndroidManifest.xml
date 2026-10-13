@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!--
+      :benchmark: modulo di sola misura (Macrobenchmark, UiAutomator). Non entra mai nell'APK dell'app: niente da
+      fondere nel manifest di release: i permessi che le librerie di misura dichiarassero riguardano solo l'APK di
+      test, non quello dell'app.
+  -->
+
+</manifest>

@@ -1,0 +1,35 @@
+// Date, tipi, EXIF, XMP, motion photo, raffiche e ThumbHash dei media del telefono (Fase 3: contratti P0,
+// logica P3; docs/fase3-progetto.md §2.2, D11).
+//
+// Pacchetti: `contract`, `noop`, `testing` (vedi core-places). Unica dipendenza di produzione nuova:
+// androidx.exifinterface (Apache-2.0, circa 60 KB, gia' nel grafo tramite CameraX). Resta `implementation`:
+// nessun suo tipo compare nelle firme pubbliche (`MediaBytes` astrae i byte, `ExifDetails` e' nostro).
+// ThumbHash e' un'implementazione propria dall'algoritmo pubblico (nessuna libreria).
+//
+// D24: nessuna rete in questo modulo (NoNetworkSourcesTest).
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.core.metadata'
+}
+
+dependencies {
+  api project(':core-common')
+  api project(':core-model')
+  // api: ReverseGeocoder, TimeZoneLookup e PlaceRef compaiono nelle firme pubbliche (CaptureTimeResolver, Extraction).
+  api project(':core-places')
+
+  implementation appDeps.coreKtx
+  implementation appDeps.exifinterface
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+}

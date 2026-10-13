@@ -37,6 +37,16 @@ include ':feature-onboarding'  // schermate della configurazione iniziale
 include ':feature-settings'    // impostazioni, famiglia e dispositivi
 include ':feature-diagnostics' // diagnostica locale ed esportazione senza dati personali
 
+// Fase 3 (docs/fase3-progetto.md §1.1): la galleria del telefono. Nessun modulo usa la rete (D24).
+include ':core-places'       // luoghi offline (GeoNames, CC BY 4.0) e fusi orari
+include ':core-metadata'     // date, tipi, EXIF, XMP, motion photo, ThumbHash
+include ':core-mediastore'   // lettura e sincronizzazione del MediaStore del telefono
+include ':core-imaging'      // miniature, decodifica, segnaposto
+include ':core-library'      // indice della timeline, layout, filtri, selezione, contratto con il viewer
+include ':feature-library'   // Libreria e Raccolte
+include ':feature-viewer'    // il viewer (sovrapposizione)
+include ':benchmark'         // Macrobenchmark e Baseline Profile (com.android.test, mai nell'APK)
+
 // --- fluid-engine (inizio) ---
 def engineDir = file('engine')
 if (engineDir.exists()) {

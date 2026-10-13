@@ -196,6 +196,9 @@ internal object DiagCatalogEntries {
     DiagEntry(DiagCodes.PROFILE_HEARTBEAT_OK, DiagSection.PROFILES, DiagSeverity.OK, R.string.diag_profile_heartbeat_ok_title, 0, null),
     DiagEntry(DiagCodes.PROFILE_HEARTBEAT_STALE, DiagSection.PROFILES, DiagSeverity.WARNING, R.string.diag_profile_heartbeat_stale_title, R.string.diag_profile_heartbeat_stale_guide, null),
 
+    // --- Libreria del telefono (Fase 3): lo stato; i codici dei casi limite li aggiunge P11 --------------------------
+    DiagEntry(DiagCodes.PHONE_LIBRARY_STATE, DiagSection.PHONE_LIBRARY, DiagSeverity.INFO, R.string.diag_phone_library_state_title, 0, null),
+
     // --- Rete e NAS --------------------------------------------------------
     DiagEntry(DiagCodes.DIAG_SECTION_UNAVAILABLE, DiagSection.NETWORK_AND_NAS, DiagSeverity.WARNING, R.string.diag_diag_section_unavailable_title, R.string.diag_diag_section_unavailable_guide, null),
   )

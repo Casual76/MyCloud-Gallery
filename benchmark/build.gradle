@@ -1,0 +1,70 @@
+// Macrobenchmark e generatore del Baseline Profile (Fase 3: scheletro P0, scenari e profilo P9;
+// docs/fase3-progetto.md §2.6, D21).
+//
+// E' un modulo `com.android.test` sul target `:app`: contiene SOLO codice di misura, gira da un dispositivo (o un
+// emulatore) collegato e NON entra mai nell'APK dell'app. Le sue dipendenze (benchmark-macro, uiautomator) sono
+// solo qui: `tools/check.ps1` verifica che l'APK di release non contenga ne' il ProfileInstallReceiver ne' classi
+// `Bench*`, e `verifyReleaseManifest` che il manifest di release non lo riesponga.
+//
+// Le varianti le crea il plugin `androidx.baselineprofile` partendo dalla release dell'app:
+//   - `nonMinifiedRelease`: come la release ma senza R8, per generare il profilo;
+//   - `benchmarkRelease`:   come la release (R8 attivo, profilo applicato) ma firmata con la chiave di debug e
+//                           con il ProfileInstallReceiver, per le misure. E' la variante di `check.ps1 -Bench`.
+// I sorgenti della variante di misura dell'app (inizializzatore del dataset da 100 mila righe sintetiche) stanno in
+// `app/src/benchmarkRelease/` (P9) e non esistono in nessun'altra variante.
+//
+// Niente `android-conventions.gradle`: e' per le librerie (unit test, Robolectric, lint) e un modulo di test non le ha.
+plugins {
+  id 'com.android.test'
+  id 'org.jetbrains.kotlin.android'
+  id 'androidx.baselineprofile'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.benchmark'
+  compileSdk = engine.compileSdk
+
+  defaultConfig {
+    minSdk = engine.minSdk
+    targetSdk = appSdk.targetSdk
+    testInstrumentationRunner = 'androidx.test.runner.AndroidJUnitRunner'
+  }
+
+  compileOptions {
+    sourceCompatibility = engine.javaVersion
+    targetCompatibility = engine.javaVersion
+  }
+
+  kotlinOptions {
+    jvmTarget = engine.jvmTarget
+  }
+
+  targetProjectPath = ':app'
+}
+
+// Il profilo si genera da un dispositivo collegato (S25) o dall'emulatore Medium_Phone: nessun dispositivo gestito
+// da Gradle (non c'e' una macchina CI) e nessuna generazione durante `assembleRelease` (vedi app/build.gradle).
+baselineProfile {
+  useConnectedDevices = true
+}
+
+dependencies {
+  implementation appDeps.androidxTestExtJunit
+  implementation appDeps.uiautomator
+  implementation appDeps.benchmarkMacroJunit4
+}
+
+// L'id dell'app sotto misura arriva ai test come argomento dello strumentatore (`targetAppId`): cosi' lo stesso
+// scenario gira su `benchmarkRelease` e su `nonMinifiedRelease` senza scrivere il package a mano.
+androidComponents {
+  onVariants(selector().all()) { variant ->
+    def artifactsLoader = variant.artifacts.getBuiltArtifactsLoader()
+    variant.instrumentationRunnerArguments.put(
+      'targetAppId',
+      variant.testedApks.map { artifactsLoader.load(it)?.applicationId }
+    )
+  }
+}

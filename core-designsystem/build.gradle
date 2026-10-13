@@ -34,6 +34,9 @@ android {
 dependencies {
   api project(':engine-ui') // porta con se' Compose, Material 3 e engine-foundation
 
+  // Solo per il test "nessuna rete" (D24, NoNetworkSourcesTest): core-common e' la foglia del grafo, nessun ciclo.
+  testImplementation project(':core-common')
+
   // Screenshot test su JVM (Robolectric + Roborazzi) per la revisione grafica:
   //   gradlew :core-designsystem:recordRoborazziDebug   -> scrive i PNG in build/outputs/roborazzi
   testImplementation platform("androidx.compose:compose-bom:${engine.composeBom}")

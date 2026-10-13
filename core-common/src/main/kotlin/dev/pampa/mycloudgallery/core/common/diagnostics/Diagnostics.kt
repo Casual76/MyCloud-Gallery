@@ -49,6 +49,13 @@ enum class DiagSection {
   /** Spazio occupato: database, cache, `noBackupFilesDir`. */
   STORAGE,
 
+  /**
+   * La libreria del telefono (Fase 3, §2.1): accesso ai media (completo, parziale, nessuno) e alla posizione dei
+   * media, volumi, stato della sincronizzazione, elementi ignorati e foto in attesa (E-P21), indice e luoghi.
+   * Solo numeri ed enumerati: mai nomi di file, percorsi, coordinate o luoghi (`PhoneLibraryDiagnostics`, P2).
+   */
+  PHONE_LIBRARY,
+
   /** I consumi del mese (TrafficLedger). */
   MONTHLY_TRAFFIC,
 

@@ -9,7 +9,10 @@
 //     `allowedExported` (la launcher activity e, dalla Fase 2, il JobService di WorkManager): nessun
 //     servizio, receiver o provider di una libreria deve restare esposto in silenzio;
 //   - un componente ammesso perche' protetto (`exportedRequiresPermission`) non dichiara quel permesso;
-//   - c'e' un permesso Android che non e' nell'elenco qui sotto.
+//   - c'e' un componente vietato in release (`forbiddenComponents`): dalla Fase 3, il ProfileInstallReceiver del
+//     profilo di benchmark (torna solo nella variante benchmarkRelease, che non passa da questo controllo);
+//   - c'e' un permesso Android che non e' nell'elenco qui sotto;
+//   - un permesso con un tetto di SDK (`permissionMaxSdk`) non dichiara quel `android:maxSdkVersion`.
 //
 // `assembleRelease` dipende dal controllo: un APK che non lo passa non si produce nemmeno.
 //
@@ -70,6 +73,24 @@ ext.releaseManifestPolicy = [
     'android.permission.WAKE_LOCK',
     'android.permission.RECEIVE_BOOT_COMPLETED',
     'android.permission.FOREGROUND_SERVICE',
+
+    // --- Fase 3 (P0, docs/fase3-progetto.md D22, **proposta**): riga in docs/sicurezza.md 4-bis. -----------------
+    // :app: lettura dei media su Android 10-12 (SDK 29-32), dove READ_MEDIA_* non esiste. Solo con
+    // android:maxSdkVersion="32" (vedi `permissionMaxSdk`): da Android 13 non e' nemmeno dichiarato.
+    'android.permission.READ_EXTERNAL_STORAGE',
+  ],
+  // Permessi che sono ammessi SOLO con un tetto di SDK: nome -> android:maxSdkVersion atteso. Senza l'attributo (o con un
+  // altro valore) il manifest non passa: un READ_EXTERNAL_STORAGE senza tetto chiederebbe l'accesso ai file anche su
+  // Android 13+, dove i permessi giusti sono READ_MEDIA_*.
+  permissionMaxSdk: [
+    'android.permission.READ_EXTERNAL_STORAGE': '32',
+  ],
+  // Componenti che NON devono comparire nel manifest fuso di release, nemmeno non esportati.
+  forbiddenComponents: [
+    // androidx.profileinstaller: receiver esportato (permesso DUMP) per installare un profilo con un broadcast. Serve
+    // solo al Macrobenchmark (variante benchmarkRelease, `app/src/benchmarkRelease/`, P9): non e' un punto d'ingresso
+    // che la release deve avere. AndroidManifest.xml lo toglie con tools:node="remove".
+    'androidx.profileinstaller.ProfileInstallReceiver',
   ],
 ]
 
@@ -90,6 +111,12 @@ abstract class VerifyReleaseManifest extends DefaultTask {
 
   @Input
   abstract ListProperty<String> getAllowedPermissions()
+
+  @Input
+  abstract MapProperty<String, String> getPermissionMaxSdk()
+
+  @Input
+  abstract ListProperty<String> getForbiddenComponents()
 
   // Il manifest fuso usa sempre il prefisso `android:`, quindi si legge senza risolvere i namespace.
   static String attr(Object node, String name) {
@@ -129,6 +156,9 @@ abstract class VerifyReleaseManifest extends DefaultTask {
           } else if (exported == null && hasFilter && !(name in allowedExported.get())) {
             problems << "<${kind}> ${name} ha un intent-filter senza android:exported esplicito".toString()
           }
+          if (name in forbiddenComponents.get()) {
+            problems << "componente VIETATO in release: <${kind}> ${name}".toString()
+          }
           // Un componente ammesso perche' protetto deve dichiarare ESATTAMENTE il permesso atteso.
           String required = exportedRequiresPermission.get()[name]
           if (required != null && exported != 'false' && attr(component, 'permission') != required) {
@@ -144,6 +174,10 @@ abstract class VerifyReleaseManifest extends DefaultTask {
         String name = attr(permission, 'name')
         if (!(name in allowedPerms)) {
           problems << "permesso non ammesso: ${name} (documentalo in docs/sicurezza.md 4-bis e aggiungilo a releaseManifestPolicy)".toString()
+        }
+        String expectedMax = permissionMaxSdk.get()[name]
+        if (expectedMax != null && attr(permission, 'maxSdkVersion') != expectedMax) {
+          problems << "il permesso ${name} deve avere android:maxSdkVersion=\"${expectedMax}\"".toString()
         }
       }
     }
@@ -175,6 +209,8 @@ ext.registerVerifyReleaseManifest = { variant, mergedManifestArtifact ->
     allowedExported.set(releaseManifestPolicy.allowedExported)
     exportedRequiresPermission.set(releaseManifestPolicy.exportedRequiresPermission)
     allowedPermissions.set(releaseManifestPolicy.allowedPermissions)
+    permissionMaxSdk.set(releaseManifestPolicy.permissionMaxSdk)
+    forbiddenComponents.set(releaseManifestPolicy.forbiddenComponents)
   }
   // Un APK che non passa il controllo non si produce nemmeno.
   tasks.configureEach { task ->

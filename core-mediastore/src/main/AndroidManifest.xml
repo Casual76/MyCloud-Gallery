@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!--
+      :core-mediastore: nessun permesso e nessun componente (Fase 3, P0). I permessi di lettura dei media
+      (READ_MEDIA_IMAGES, READ_MEDIA_VIDEO, READ_MEDIA_VISUAL_USER_SELECTED, ACCESS_MEDIA_LOCATION e, solo fino
+      ad Android 12, READ_EXTERNAL_STORAGE con maxSdkVersion=32) li dichiara :app: hanno la loro riga in
+      docs/sicurezza.md 4-bis e in releaseManifestPolicy. Il modulo li legge (`PhoneAccessReader`) ma non li
+      chiede: la richiesta parte solo da un tocco dell'utente, dalla Libreria (E-P1). Nessun MANAGE_MEDIA e
+      nessun accesso a tutti i file: cestino e ripristino passano dai dialoghi di sistema (D14).
+      Un permesso o un componente nuovo si chiede all'orchestratore (docs/fase3-progetto.md §4.2, D23).
+  -->
+
+</manifest>

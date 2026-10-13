@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Libreria (P7: library/). Stub di P0: titolo, accesso alle Impostazioni, riepilogo in fondo. -->
+  <string name="library_title">Libreria</string>
+  <string name="library_open_settings">Impostazioni</string>
+  <string name="library_summary">%1$d foto, %2$d video</string>
+</resources>

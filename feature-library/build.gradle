@@ -1,0 +1,70 @@
+// La Libreria del telefono (griglia, intestazioni, scrubber, pinch, selezione) e le Raccolte (Fase 3: stub e
+// firme P0, Libreria P7, Raccolte/Nascosti/cestino P10; docs/fase3-progetto.md §2.4).
+//
+// Sotto-pacchetti paralleli: `library/` e `grid/` (P7), `collections/`, `hidden/`, `trash/` (P10).
+// Stringhe in `values/strings_<area>.xml`, uno per area, per non contendersi lo stesso file.
+//
+// D7 della Fase 2: @HiltViewModel (KSP); rotte @Serializable. I feature non si conoscono fra loro: il viewer lo
+// apre una callback scritta da :app (`onOpenViewer`). D24: nessuna rete in questo modulo (NoNetworkSourcesTest).
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+  id 'org.jetbrains.kotlin.plugin.compose'
+  id 'org.jetbrains.kotlin.plugin.serialization'
+  id 'com.google.devtools.ksp'
+  id 'com.google.dagger.hilt.android'
+  id 'io.github.takahirom.roborazzi'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.feature.library'
+
+  buildFeatures {
+    compose = true
+  }
+
+  testOptions {
+    unitTests.all {
+      // Screenshot (Roborazzi) con una libreria sintetica di 2.000 elementi: i 512 MB di default non bastano.
+      maxHeapSize = '3g'
+    }
+  }
+}
+
+dependencies {
+  // api: ViewerRequest (core-library), GlassBackdropState (engine-ui) e MediaGridState compaiono nelle firme.
+  api project(':core-library')
+  api project(':core-imaging')
+  api project(':core-designsystem')
+
+  implementation project(':core-common')
+  implementation project(':core-model')
+  implementation project(':core-mediastore')
+  implementation project(':core-places')
+  implementation project(':core-security')
+
+  implementation appDeps.hiltAndroid
+  ksp appDeps.hiltCompiler
+  implementation appDeps.hiltNavigationCompose
+  implementation appDeps.navigationCompose
+  implementation appDeps.lifecycleViewModelCompose
+  implementation appDeps.lifecycleRuntimeCompose
+  implementation appDeps.coroutinesAndroid
+  implementation appDeps.serializationCore
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+  testImplementation appDeps.androidxTestExtJunit
+  testImplementation platform("androidx.compose:compose-bom:${engine.composeBom}")
+  testImplementation appDeps.composeUiTestJunit4
+  testImplementation appDeps.composeUiTestManifest
+  testImplementation appDeps.roborazzi
+  testImplementation appDeps.roborazziCompose
+  testImplementation appDeps.roborazziJunitRule
+}

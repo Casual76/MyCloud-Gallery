@@ -13,11 +13,14 @@
                                 (galleryTest/galleryLint = testDebugUnitTest/lintDebug dei soli moduli della
                                 galleria, engine escluso; in piu' assembleRelease esegue verifyReleaseManifest)
     6. test eseguiti            ogni modulo ha eseguito almeno un test e nessuno e' fallito (un modulo con
-                                ZERO test eseguiti risulterebbe "passato" per Gradle: qui no)
+                                ZERO test eseguiti risulterebbe "passato" per Gradle: qui no). `:benchmark` e'
+                                escluso: e' un modulo `com.android.test` (Macrobenchmark) senza unit test, che
+                                gira solo da un dispositivo e non entra mai nell'APK (Fase 3, D21)
     7. APK di release           ispezione dell'APK vero con aapt2: non debuggable, backup escluso, nessun
                                 componente esportato oltre quelli ammessi da gradle\verify-release-manifest.gradle
                                 (launcher e JobService di WorkManager, quest'ultimo solo con BIND_JOB_SERVICE),
-                                nessun codice solo-debug dentro
+                                nessun codice solo-debug dentro, e (Fase 3) nessun `ProfileInstallReceiver` (il
+                                receiver del Macrobenchmark torna solo nella variante benchmarkRelease)
     8. niente fake in release   nessuna classe di un package `testing` nel dex dell'APK di release (D6 di
                                 docs/fase2-progetto.md: i fake stanno in src/main per riusarli a valle, ma
                                 non devono arrivare all'APK). Lettura diretta dei classes*.dex: non dipende
@@ -199,11 +202,11 @@ function Get-AllowedExported {
   return $allowed
 }
 
-# Le classi definite nei classes*.dex di un APK il cui package contiene un segmento `testing`
-# (es. Ldev/pampa/mycloudgallery/core/nas/testing/FakeNasSessionManager;). Legge i byte del dex: i descrittori
-# delle classi sono stringhe ASCII nella tabella delle stringhe, quindi una lettura Latin-1 li conserva.
+# Le classi definite nei classes*.dex di un APK che corrispondono a [pattern] (un'espressione regolare sui
+# descrittori, es. Ldev/pampa/mycloudgallery/core/nas/testing/FakeNasSessionManager;). Legge i byte del dex: i
+# descrittori delle classi sono stringhe ASCII nella tabella delle stringhe, quindi una lettura Latin-1 li conserva.
 # Controllo positivo: deve trovare la MainActivity, altrimenti la lettura non e' affidabile e si lancia.
-function Get-TestingClassesInApk([string]$apk) {
+function Get-DexClassesMatching([string]$apk, [string]$pattern) {
   Add-Type -AssemblyName System.IO.Compression.FileSystem
   $zip = [System.IO.Compression.ZipFile]::OpenRead($apk)
   try {
@@ -222,13 +225,24 @@ function Get-TestingClassesInApk([string]$apk) {
       }
       $text = $latin1.GetString($buffer.ToArray())
       if ($text.Contains("Ldev/pampa/mycloudgallery/MainActivity;")) { $sawMain = $true }
-      foreach ($m in [regex]::Matches($text, 'L(?:[A-Za-z0-9_$]+/)+testing/[A-Za-z0-9_$/]*;')) { $found[$m.Value] = $true }
+      foreach ($m in [regex]::Matches($text, $pattern)) { $found[$m.Value] = $true }
     }
     if (-not $sawMain) { throw "lettura del dex non affidabile: la MainActivity non compare in nessun classes*.dex" }
     return @($found.Keys | Sort-Object)
   } finally {
     $zip.Dispose()
   }
+}
+
+# Le classi di un package `testing` (i fake dei contratti, D6 di Fase 2 e D23 di Fase 3).
+function Get-TestingClassesInApk([string]$apk) {
+  return Get-DexClassesMatching $apk 'L(?:[A-Za-z0-9_$]+/)+testing/[A-Za-z0-9_$/]*;'
+}
+
+# La misura (Fase 3, D21): classi `Bench*` (l'inizializzatore del dataset sintetico della variante benchmarkRelease),
+# un package `benchmark`, androidx.benchmark e UiAutomator. Nessuna deve stare nella release.
+function Get-BenchmarkClassesInApk([string]$apk) {
+  return Get-DexClassesMatching $apk 'L(?:[A-Za-z0-9_$]+/)*(?:Bench[A-Za-z0-9_$]*;|benchmark/[A-Za-z0-9_$/]*;)|Landroidx/test/uiautomator/[A-Za-z0-9_$/]*;'
 }
 
 # I permessi documentati in docs/sicurezza.md 4-bis: i nomi in maiuscolo tra apici inversi (es. `VIBRATE`),
@@ -343,9 +357,12 @@ Step "gradle: assembleDebug assembleRelease galleryTest galleryLint" -Skip:$Skip
   $script:gradleOk = $true
 }
 
+# I moduli senza unit test per costruzione: `:benchmark` e' un `com.android.test` (Macrobenchmark, D21) che non ha un
+# task testDebugUnitTest e gira solo da un dispositivo. Tutti gli altri devono avere eseguito almeno un test.
+$modulesWithoutUnitTests = @("benchmark")
 $modules = @()
 foreach ($line in (Get-Content -LiteralPath (Join-Path $root "settings.gradle"))) {
-  if ($line -match "^\s*include\s+':([A-Za-z0-9\-]+)'") { $modules += $Matches[1] }
+  if ($line -match "^\s*include\s+':([A-Za-z0-9\-]+)'" -and $modulesWithoutUnitTests -notcontains $Matches[1]) { $modules += $Matches[1] }
 }
 
 Step "test eseguiti in ogni modulo (nessuno a zero, nessuno fallito)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
@@ -396,6 +413,10 @@ Step "APK di release: non debuggable, backup escluso, nessun componente esposto"
       $problems += ("<{0}> {1} e' esportato senza il permesso {2}" -f $component.Kind, $component.Name, $allowedExported[$component.Name])
     }
   }
+  # Fase 3: il ProfileInstallReceiver (Macrobenchmark) non deve esserci neanche non esportato.
+  foreach ($component in @($facts.Components | Where-Object { $_.Name -eq "androidx.profileinstaller.ProfileInstallReceiver" })) {
+    $problems += "il ProfileInstallReceiver e' nella release (<{0}>): torna solo nella variante benchmarkRelease" -f $component.Kind
+  }
   if (-not ($exported | Where-Object { $_.Name -eq "dev.pampa.mycloudgallery.MainActivity" })) {
     $problems += "la launcher activity non risulta esportata: il lettore del manifest non funziona o l'app non si avvia"
   }
@@ -433,6 +454,17 @@ Step "nessuna classe di un package testing nel dex di release (fake solo per i t
   if ($testing.Count -gt 0) {
     Show-Lines $testing 20
     return "$($testing.Count) classi di un package testing nel dex di release: i fake (D6) non devono arrivare all'APK"
+  }
+}
+
+Step "nessuna classe di misura (Bench*, benchmark, UiAutomator) nel dex di release" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
+  $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if (-not $apk) { return "nessun APK di release in app\build\outputs\apk\release" }
+  $bench = @(Get-BenchmarkClassesInApk $apk.FullName)
+  if ($bench.Count -gt 0) {
+    Show-Lines $bench 20
+    return "$($bench.Count) classi di misura nel dex di release: la variante benchmarkRelease non deve mai arrivare all'APK (D21)"
   }
 }
 

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Catalogo componenti, gruppo Viewer (Fase 3). Questo file e' di P8: i pacchetti paralleli non si contendono
+  catalog_strings.xml. Stub di P0 finche' P8 non riempie CatalogViewerSections.kt.
+-->
+<resources>
+  <string name="group_viewer_title">Viewer</string>
+  <string name="group_viewer_summary">Barre di vetro sulla foto, barra del video e informazioni (Fase 3).</string>
+  <string name="sec_viewer_todo">In arrivo</string>
+  <string name="sec_viewer_todo_detail">Il viewer a tutto schermo.</string>
+  <string name="sec_viewer_todo_body">I componenti del viewer arrivano con il pacchetto P8 della Fase 3.</string>
+</resources>

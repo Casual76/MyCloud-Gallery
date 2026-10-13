@@ -1,6 +1,6 @@
 // Le dipendenze PROPRIE dell'app, pre-dichiarate per tutta la Fase 1 (e, dal pacchetto P0, per tutta la
-// Fase 2) cosi' i moduli in lavoro in parallelo non devono toccare versioni ne' coordinate: basta scrivere
-// `implementation appDeps.xxx`.
+// Fase 2 e la Fase 3) cosi' i moduli in lavoro in parallelo non devono toccare versioni ne' coordinate:
+// basta scrivere `implementation appDeps.xxx`.
 //
 // Quelle condivise con l'engine (Compose BOM, coroutines, DataStore, Navigation, Lifecycle, JUnit...)
 // vivono in engine/versions.gradle e si leggono dalla mappa `engine`; qui sono rimappate in appDeps
@@ -66,6 +66,40 @@ ext.appVersions = [
   // Dagger 2.58 di Hilt (fissato da AGP 8, vedi build.gradle). Tre artefatti: camera2 (porta camera-core),
   // lifecycle e compose (il mirino in Compose, senza camera-view che porterebbe camera-video e appcompat).
   camerax                : '1.5.3',
+
+  // --- Fase 3 (P0, docs/fase3-progetto.md §3.2; righe in docs/sicurezza.md §8) -------------------------------
+  // Regola: l'ultima versione STABILE che compila con compileSdk 36, AGP 8.13.2 e Kotlin 2.2.20 (controllata
+  // con aar-metadata.properties di ogni AAR: `minCompileSdk`). Una versione che chiede compileSdk 37 si scarta
+  // e si scrive qui sotto il perche'. Nessuna alpha, beta o rc.
+  //
+  // EXIF, XMP, HEIF, DNG, solo :core-metadata (e :core-imaging per gli orientamenti). 1.4.2 (minCompileSdk 34).
+  exifinterface          : '1.4.2',
+  // Video e motion photo, solo :feature-viewer (D7). 1.11.1 e' l'ultima stabile e chiede compileSdk 36 (= il
+  // nostro): nessuna scartata per l'SDK. Sorgenti SOLO locali (ContentDataSource): mai DefaultDataSource /
+  // DefaultHttpDataSource (D24, vietati da un test). NON si aggiunge media3-ui-compose: anche la 1.11.1 e'
+  // stabile, ma il suo POM importa il compose-bom 2026.05.00 (Compose 1.11.1) e alzerebbe per tutta l'app il
+  // Compose dell'engine (BOM 2026.03.00, Compose 1.10.5, Material3 1.5.0-alpha16) senza che l'engine l'abbia
+  // provato. La superficie del video e' una AndroidView(SurfaceView) di tre righe (D7 vuole comunque la
+  // SurfaceView per l'HDR). Da rivalutare quando l'engine alza il BOM.
+  media3                 : '1.11.1',
+  // Zoom e tasselli, solo :feature-viewer (D6), avvolti in ZoomableMedia. 0.19.0 e' l'ultima stabile (le
+  // 1.0.0-alphaNN sono alpha, scartate): Kotlin 2.1.21 e Compose 1.8.0, compatibili con Kotlin 2.2.20 e con
+  // il Compose 1.10.5 dell'engine (stessa libreria, ABI stabile). Porta okio 3.11.0 e poko-annotations.
+  telephoto              : '0.19.0',
+  // Macrobenchmark e Baseline Profile, SOLO :benchmark e plugin di build: mai nell'APK (D21). Famiglia 1.4.x, l'ultima
+  // che funziona con la nostra toolchain: il plugin `androidx.baselineprofile` 1.5.0 (stabile, compileSdk 34) SCARTATO
+  // perche' per le varianti generate (benchmarkRelease, nonMinifiedRelease) aggiunge ai sorgenti Kotlin un percorso
+  // sbagliato (`app/provider(?)`, un Provider convertito in stringa) e KSP 2.2.20-2.0.4 fallisce con InvalidPathException
+  // (`kspBenchmarkReleaseKotlin`); la 1.4.1 aggiunge `src/release/kotlin` correttamente. Con il plugin alla 1.4.1 anche
+  // benchmark-macro-junit4 resta alla 1.4.1 (stessa famiglia) e uiautomator alla 2.3.0 (quella con cui la 1.4.1 e'
+  // uscita); la 1.5.0 e la uiautomator 2.4.0 sono stabili e compilano con compileSdk 36, da riprovare INSIEME quando il
+  // plugin 1.5.x sistema il bug (le 1.6.0-alpha restano scartate). Il plugin DEVE avere la stessa versione qui e in
+  // build.gradle.
+  benchmarkMacro         : '1.4.1',
+  uiautomator            : '2.3.0',
+  baselineProfile        : '1.4.1',
+  // Lo legge il plugin del profilo (e Compose lo porta gia' a runtime): lo dichiariamo noi alla versione stabile.
+  profileInstaller       : '1.4.1',
 ]
 
 ext.appSdk = [
@@ -117,6 +151,22 @@ ext.appDeps = [
   cameraCamera2            : "androidx.camera:camera-camera2:${appVersions.camerax}",
   cameraLifecycle          : "androidx.camera:camera-lifecycle:${appVersions.camerax}",
   cameraCompose            : "androidx.camera:camera-compose:${appVersions.camerax}",
+
+  // --- Fase 3: metadati, video, zoom, immagini, prestazioni ----------------------------------------------
+  exifinterface            : "androidx.exifinterface:exifinterface:${appVersions.exifinterface}",
+  media3Exoplayer          : "androidx.media3:media3-exoplayer:${appVersions.media3}",
+  telephotoZoomableImage   : "me.saket.telephoto:zoomable-image:${appVersions.telephoto}",
+  telephotoSubSampling     : "me.saket.telephoto:sub-sampling-image:${appVersions.telephoto}",
+  // Versione dal BOM dell'engine (platform): qui solo le coordinate senza versione. ImageBitmap nelle API di
+  // :core-imaging; runtime-annotation per @Immutable/@Stable sui tipi di :core-library (modulo senza Compose).
+  composeUiGraphics        : "androidx.compose.ui:ui-graphics",
+  // `State` e `mutableStateOf` nelle API di :core-imaging (ui-graphics tiene il runtime come implementation).
+  composeRuntime           : "androidx.compose.runtime:runtime",
+  composeRuntimeAnnotation : "androidx.compose.runtime:runtime-annotation",
+  // SOLO :benchmark (e :app per il profilo): mai nell'APK di release.
+  benchmarkMacroJunit4     : "androidx.benchmark:benchmark-macro-junit4:${appVersions.benchmarkMacro}",
+  uiautomator              : "androidx.test.uiautomator:uiautomator:${appVersions.uiautomator}",
+  profileInstaller         : "androidx.profileinstaller:profileinstaller:${appVersions.profileInstaller}",
 
   // --- Test ---------------------------------------------------------------------------------------
   junit                    : "junit:junit:${engine.junit}",

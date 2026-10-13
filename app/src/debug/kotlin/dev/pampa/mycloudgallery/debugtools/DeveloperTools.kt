@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.debugtools
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
@@ -9,6 +10,8 @@ import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.pampa.mycloudgallery.R
 import dev.pampa.mycloudgallery.core.designsystem.catalog.ComponentCatalogPlaceholder
+import dev.pampa.mycloudgallery.feature.library.library.LibraryTabState
+import dev.pampa.mycloudgallery.feature.library.testing.syntheticLibraryTabState
 import kotlinx.serialization.Serializable
 
 /** SOLO debug: il catalogo dei componenti di core-designsystem. */
@@ -24,6 +27,15 @@ data object CatalogRoute
  * nel dex di release).
  */
 internal object DeveloperTools {
+
+  /**
+   * La Libreria sintetica (docs/fase3-progetto.md §1.4, §5.2): in debug la scheda Libreria gira su 2.000 elementi
+   * deterministici con miniature a gradiente e un viewer finto, finche' P11 non collega il grafo vero (e il suo
+   * database SEPARATO, `gallery-synthetic.db`: la Libreria sintetica non tocca mai quello vero). In release e' `null`:
+   * la Libreria resta quella vuota, sui null-object, e le classi dei fake non entrano nell'APK.
+   */
+  @Composable
+  fun libraryTabState(): LibraryTabState? = remember { syntheticLibraryTabState() }
 
   fun NavGraphBuilder.destinations(nav: NavController) {
     composable<CatalogRoute> {

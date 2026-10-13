@@ -1,0 +1,75 @@
+// Il viewer: sovrapposizione nella stessa schermata, dove la miniatura diventa il viewer (Fase 3: stub e firma P0,
+// logica P8; docs/fase3-progetto.md §2.5, D6, D7, D12).
+//
+// Dipendenze di produzione nuove (solo qui): Media3 ExoPlayer per i video e la parte video delle motion photo
+// (sorgenti SOLO locali, mai DefaultDataSource: D24) e telephoto per lo zoom a tasselli (avvolto in
+// `ZoomableMedia`, sostituibile). Restano `implementation`: nessun loro tipo compare nelle firme pubbliche.
+// Niente media3-ui-compose (vedi versions-app.gradle): la superficie del video e' una AndroidView(SurfaceView).
+//
+// D7 della Fase 2: @HiltViewModel (KSP). I feature non si conoscono fra loro. D24: nessuna rete in questo
+// modulo (NoNetworkSourcesTest).
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+  id 'org.jetbrains.kotlin.plugin.compose'
+  id 'org.jetbrains.kotlin.plugin.serialization'
+  id 'com.google.devtools.ksp'
+  id 'com.google.dagger.hilt.android'
+  id 'io.github.takahirom.roborazzi'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.feature.viewer'
+
+  buildFeatures {
+    compose = true
+  }
+
+  testOptions {
+    unitTests.all {
+      maxHeapSize = '3g'
+    }
+  }
+}
+
+dependencies {
+  // api: ViewerRequest (core-library) compare nella firma di ViewerOverlay.
+  api project(':core-library')
+  api project(':core-designsystem')
+
+  implementation project(':core-common')
+  implementation project(':core-model')
+  implementation project(':core-database')
+  implementation project(':core-imaging')
+  implementation project(':core-mediastore')
+  implementation project(':core-metadata')
+  implementation project(':core-places')
+  implementation project(':core-security')
+
+  implementation appDeps.media3Exoplayer
+  implementation appDeps.telephotoZoomableImage
+  implementation appDeps.telephotoSubSampling
+
+  implementation appDeps.hiltAndroid
+  ksp appDeps.hiltCompiler
+  implementation appDeps.hiltNavigationCompose
+  implementation appDeps.lifecycleViewModelCompose
+  implementation appDeps.lifecycleRuntimeCompose
+  implementation appDeps.coroutinesAndroid
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+  testImplementation appDeps.androidxTestExtJunit
+  testImplementation platform("androidx.compose:compose-bom:${engine.composeBom}")
+  testImplementation appDeps.composeUiTestJunit4
+  testImplementation appDeps.composeUiTestManifest
+  testImplementation appDeps.roborazzi
+  testImplementation appDeps.roborazziCompose
+  testImplementation appDeps.roborazziJunitRule
+}

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!--
+      :feature-viewer: nessun permesso e nessun componente (Fase 3, P0). Media3 non porta componenti nel manifest
+      fuso (nessun MediaSessionService: niente riproduzione in background). Nessuna rete (D24): il video si legge
+      solo da ContentDataSource.
+      Un permesso o un componente nuovo si chiede all'orchestratore (docs/fase3-progetto.md §4.2, D23): prima
+      la riga in docs/sicurezza.md 4-bis, poi quella in releaseManifestPolicy.
+  -->
+
+</manifest>

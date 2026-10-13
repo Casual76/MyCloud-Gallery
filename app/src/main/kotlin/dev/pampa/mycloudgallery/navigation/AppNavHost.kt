@@ -33,6 +33,7 @@ import dev.pampa.mycloudgallery.core.family.contract.TrustStatus
 import dev.pampa.mycloudgallery.debugtools.DeveloperTools
 import dev.pampa.mycloudgallery.feature.diagnostics.DiagnosticsGraphRoute
 import dev.pampa.mycloudgallery.feature.diagnostics.diagnosticsGraph
+import dev.pampa.mycloudgallery.feature.library.library.rememberEmptyLibraryTabState
 import dev.pampa.mycloudgallery.feature.onboarding.OnboardingGraphRoute
 import dev.pampa.mycloudgallery.feature.onboarding.OnboardingResumeRoute
 import dev.pampa.mycloudgallery.feature.onboarding.join.AwaitingApprovalScreen
@@ -198,6 +199,8 @@ private fun MainDestination(nav: NavHostController, status: GlobalStatus, openWi
       }
     },
     onOpenSettings = { nav.navigate(SettingsGraphRoute) },
+    // P0: i fake (debug: Libreria sintetica; release: Libreria vuota). P11 collega il grafo vero.
+    libraryState = DeveloperTools.libraryTabState() ?: rememberEmptyLibraryTabState(),
   )
 }
 

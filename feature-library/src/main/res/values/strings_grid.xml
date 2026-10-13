@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Griglia (P7: grid/). Stub di P0: la descrizione di una cella per i lettori di schermo. -->
+  <string name="grid_cell_photo">Foto, %1$s</string>
+  <string name="grid_cell_video">Video, %1$s</string>
+  <string name="grid_cell_motion">Foto in movimento, %1$s</string>
+</resources>

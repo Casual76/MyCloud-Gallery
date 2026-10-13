@@ -180,6 +180,11 @@ object DiagCodes {
   // --- Rete e NAS ----------------------------------------------------------
   @JvmField val DIAG_SECTION_UNAVAILABLE = DiagCode("DIAG_SECTION_UNAVAILABLE")
 
+  // --- Libreria del telefono (Fase 3) --------------------------------------------------------------------------
+  // P0 aggiunge solo il codice di stato che tiene viva la sezione PHONE_LIBRARY (un test vuole almeno una voce per
+  // sezione). I codici veri della Fase 3 (E-P1, E-P3, E-P21, E-P22, E-M12...) li scrive P11.
+  @JvmField val PHONE_LIBRARY_STATE = DiagCode("PHONE_LIBRARY_STATE")
+
   // --- I codici scritti dai contributori di core-network e core-family (P9) ----------------------------------
   // P2 e P3 hanno scelto i propri identificativi mentre P8 scriveva il catalogo: qui sono gli STESSI oggetti dei
   // moduli (stessi id, stessi edge case), cosi' ogni voce che quei contributori producono ha titolo, "cosa fare" e

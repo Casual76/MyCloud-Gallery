@@ -8,11 +8,13 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Animation
+import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.Badge
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.CloudDone
 import androidx.compose.material.icons.rounded.Dock
 import androidx.compose.material.icons.rounded.GridView
+import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Palette
@@ -49,6 +51,10 @@ enum class CatalogGroup(
   Status("stato-globale", R.string.group_status_title, R.string.group_status_summary, Icons.Rounded.CloudDone),
   Headers("intestazioni", R.string.group_headers_title, R.string.group_headers_summary, Icons.Rounded.CalendarMonth),
   Motion("movimento", R.string.group_motion_title, R.string.group_motion_summary, Icons.Rounded.Animation),
+
+  // Fase 3 (P0 li registra, P7 e P8 riempiono le sezioni nei loro file: CatalogGridSections.kt e CatalogViewerSections.kt).
+  Grid("griglia", R.string.group_grid_title, R.string.group_grid_summary, Icons.Rounded.Apps),
+  Viewer("viewer", R.string.group_viewer_title, R.string.group_viewer_summary, Icons.Rounded.Image),
 }
 
 /** Una sezione di un gruppo: un'intestazione e il suo contenuto. */
@@ -71,6 +77,8 @@ fun catalogSections(group: CatalogGroup): List<CatalogSection> = when (group) {
   CatalogGroup.Status -> statusSections()
   CatalogGroup.Headers -> headerSections()
   CatalogGroup.Motion -> motionSections()
+  CatalogGroup.Grid -> gridSections()
+  CatalogGroup.Viewer -> viewerSections()
 }
 
 /**

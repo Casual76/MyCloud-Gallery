@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Catalogo componenti, gruppo Griglia (Fase 3). Questo file e' di P7: i pacchetti paralleli non si contendono
+  catalog_strings.xml. Stub di P0 finche' P7 non riempie CatalogGridSections.kt.
+-->
+<resources>
+  <string name="group_grid_title">Griglia</string>
+  <string name="group_grid_summary">Cella leggera, scrubber, filtro e livelli per larghezza (Fase 3).</string>
+  <string name="sec_grid_todo">In arrivo</string>
+  <string name="sec_grid_todo_detail">La griglia della Libreria del telefono.</string>
+  <string name="sec_grid_todo_body">I componenti della griglia arrivano con il pacchetto P7 della Fase 3.</string>
+</resources>

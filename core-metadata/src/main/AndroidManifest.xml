@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!--
+      :core-metadata: nessun permesso e nessun componente (Fase 3, P0). Legge i byte che gli passa il chiamante
+      (`MediaBytes`): non apre file, non conosce il MediaStore e non usa la rete (D24).
+      Un permesso o un componente nuovo si chiede all'orchestratore (docs/fase3-progetto.md §4.2, D23): prima
+      la riga in docs/sicurezza.md 4-bis, poi quella in releaseManifestPolicy.
+  -->
+
+</manifest>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Sezione «Libreria del telefono» (Fase 3). P0: il minimo perché la sezione esista; P11 aggiunge le voci dei casi limite. -->
+  <string name="diagnostics_section_phone_library">Libreria del telefono</string>
+  <string name="diagnostics_hint_phone_library">Accesso ai media, lettura del telefono, elementi ignorati e foto in attesa.</string>
+  <string name="diag_phone_library_state_title">Stato della libreria del telefono</string>
+</resources>

@@ -1,0 +1,42 @@
+// Miniature, decodifica per lo schermo e segnaposto sfocati (Fase 3: contratti P0, logica P6;
+// docs/fase3-progetto.md §1.2, D5). Pipeline propria e sottile: niente Coil, niente Glide.
+//
+// Pacchetti: `contract`, `noop`, `testing` (vedi core-places). Vede solo model e common: non conosce il database
+// ne' il MediaStore (`ThumbnailSource` per il telefono usa `ContentResolver.loadThumbnail` dietro il contratto).
+// Compose entra solo con `runtime` (State), `ui-graphics` (ImageBitmap nelle API) e runtime-annotation (@Immutable): nessun
+// @Composable in questo modulo, quindi niente plugin del compilatore Compose.
+//
+// D24: nessuna rete in questo modulo (NoNetworkSourcesTest).
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.core.imaging'
+}
+
+dependencies {
+  api project(':core-common')
+  api project(':core-model')
+
+  // api: ImageBitmap, State e IntSize compaiono nelle firme pubbliche. Versioni dal BOM dell'engine.
+  api platform("androidx.compose:compose-bom:${engine.composeBom}")
+  api appDeps.composeRuntime
+  api appDeps.composeUiGraphics
+  api appDeps.composeRuntimeAnnotation
+
+  implementation appDeps.coreKtx
+  // Gli 8 orientamenti EXIF anche dove ImageDecoder non li applica da solo (DNG, HEIC), E-V3/E-M15.
+  implementation appDeps.exifinterface
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+  testImplementation appDeps.androidxTestExtJunit
+}

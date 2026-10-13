@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Viewer (P8). Stub di P0: la posizione nella barra e gli stati in cui l'immagine non c'è. -->
+  <string name="viewer_position">%1$d di %2$d</string>
+  <string name="viewer_unavailable">Questo contenuto non è disponibile adesso.</string>
+  <string name="viewer_failed">Non riesco ad aprire questo contenuto.</string>
+  <string name="viewer_unsupported">Questo formato non si può mostrare.</string>
+</resources>

@@ -21,6 +21,11 @@ plugins {
   // Screenshot test su JVM (Robolectric) per la revisione grafica. DEVE avere la stessa versione di
   // appVersions.roborazzi.
   id 'io.github.takahirom.roborazzi' version '1.76.0' apply false
+  // Fase 3 (P0, docs/fase3-progetto.md §2.6): il modulo di misura `:benchmark` (Macrobenchmark) e il Baseline
+  // Profile. `com.android.test` ha la versione di AGP; `androidx.baselineprofile` DEVE avere la stessa versione
+  // di appVersions.baselineProfile. Entrambi servono solo alla misura: mai nell'APK.
+  id 'com.android.test' version '8.13.2' apply false
+  id 'androidx.baselineprofile' version '1.4.1' apply false
 }
 
 // --- La toolchain e' quella dell'engine --------------------------------------------------------------
@@ -63,6 +68,15 @@ ext.galleryModules = [
   ':feature-onboarding',
   ':feature-settings',
   ':feature-diagnostics',
+  // Fase 3 (docs/fase3-progetto.md §1.1). `:benchmark` NON c'e': e' un `com.android.test` senza unit test, che
+  // non finisce mai nell'APK (tools/check.ps1 lo esclude dal controllo "test eseguiti").
+  ':core-places',
+  ':core-metadata',
+  ':core-mediastore',
+  ':core-imaging',
+  ':core-library',
+  ':feature-library',
+  ':feature-viewer',
 ]
 
 tasks.register('galleryTest') {

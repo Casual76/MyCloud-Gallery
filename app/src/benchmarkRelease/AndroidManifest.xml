@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+  <application>
+
+    <!--
+        SOLO la variante di misura (benchmarkRelease, Fase 3, D21): il ProfileInstallReceiver che il manifest principale
+        toglie da tutte le varianti torna qui. E' il receiver di androidx.profileinstaller (esportato, protetto dal solo
+        permesso DUMP) con cui il Macrobenchmark installa e salva il profilo con un broadcast. Non esiste nella release:
+        verifyReleaseManifest lo vieta (`forbiddenComponents`) e tools/check.ps1 lo cerca nell'APK.
+    -->
+    <receiver
+        android:name="androidx.profileinstaller.ProfileInstallReceiver"
+        android:directBootAware="false"
+        android:enabled="true"
+        android:exported="true"
+        android:permission="android.permission.DUMP"
+        tools:node="replace">
+      <intent-filter>
+        <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
+      </intent-filter>
+      <intent-filter>
+        <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
+      </intent-filter>
+      <intent-filter>
+        <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
+      </intent-filter>
+      <intent-filter>
+        <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
+      </intent-filter>
+    </receiver>
+  </application>
+</manifest>

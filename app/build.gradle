@@ -8,6 +8,9 @@ plugins {
   id 'com.google.devtools.ksp'
   id 'com.google.dagger.hilt.android'
   id 'io.github.takahirom.roborazzi'
+  // Fase 3 (P0, docs/fase3-progetto.md §2.6): crea le varianti di misura `benchmarkRelease` e `nonMinifiedRelease`
+  // partendo dalla release e collega il Baseline Profile generato da `:benchmark`.
+  id 'androidx.baselineprofile'
 }
 
 apply from: "${rootDir}/engine/versions.gradle"
@@ -121,6 +124,30 @@ androidComponents {
   }
 }
 
+// Baseline Profile (D21, §2.6). Il profilo NON si genera durante il build: serve un dispositivo (S25) o l'emulatore
+// Medium_Phone collegato, e `assembleRelease` deve riuscire anche senza (tools/check.ps1). Lo si genera a mano con
+// `gradlew :app:generateBaselineProfile` e il file si committa; `check.ps1` verifica che la release lo contenga
+// (`assets/dexopt/baseline.prof`) quando esiste nei sorgenti (P9).
+//
+// Le varianti `benchmarkRelease` (misura: R8 attivo, profilo applicato) e `nonMinifiedRelease` (generazione del profilo)
+// le crea il plugin come cloni della release e ne riusano i sorgenti (`src/release/`: AppLogging e DeveloperTools senza
+// sink di log ne' strumenti di sviluppo). `src/benchmarkRelease/` (P9) aggiunge l'inizializzatore del dataset sintetico di
+// 100 mila righe, che non esiste in nessun'altra variante; `tools/check.ps1` verifica che la release non lo contenga.
+baselineProfile {
+  automaticGenerationDuringBuild = false
+  saveInSrc = true
+}
+
+// Il plugin fa puntare il manifest di `benchmarkRelease` a quello di `src/release/` (che non c'e'): senza questa riga un
+// `src/benchmarkRelease/AndroidManifest.xml` verrebbe ignorato. Serve a rimettere il ProfileInstallReceiver, che il
+// manifest principale toglie da tutte le varianti, SOLO nella variante di misura. In finalizeDsl perche' il plugin
+// crea il build type e imposta il percorso prima, e questo e' l'ultimo momento utile prima delle varianti.
+androidComponents {
+  finalizeDsl { extension ->
+    extension.sourceSets.findByName('benchmarkRelease')?.manifest?.srcFile('src/benchmarkRelease/AndroidManifest.xml')
+  }
+}
+
 dependencies {
   // --- I moduli della galleria: l'app vede tutti -----------------------------------------------------
   implementation project(':core-common')
@@ -138,6 +165,14 @@ dependencies {
   implementation project(':feature-onboarding')
   implementation project(':feature-settings')
   implementation project(':feature-diagnostics')
+  // Fase 3 (docs/fase3-progetto.md §1.1): la galleria del telefono. `:app` vede tutti e li cabla.
+  implementation project(':core-places')
+  implementation project(':core-metadata')
+  implementation project(':core-mediastore')
+  implementation project(':core-imaging')
+  implementation project(':core-library')
+  implementation project(':feature-library')
+  implementation project(':feature-viewer')
 
   // --- Il design system (engine-ui porta Compose, Material 3, activity-compose e lifecycle) ----------
   implementation project(':engine-ui')
@@ -153,6 +188,12 @@ dependencies {
   // DiagnosticsReceiver (esportato, tolto dal manifest dell'app); vedi verify-release-manifest.gradle.
   implementation appDeps.workRuntimeKtx
   implementation appDeps.hiltWork
+
+  // --- Prestazioni (Fase 3, D21): il profilo e' generato da :benchmark (mai nell'APK) e installato all'avvio da
+  // profileinstaller. Il ProfileInstallReceiver esportato resta TOLTO dal manifest di release (AndroidManifest.xml)
+  // e torna solo nella variante benchmarkRelease (P9).
+  baselineProfile project(':benchmark')
+  implementation appDeps.profileInstaller
 
   // --- Archivi locali (P9): i DataStore delle regole e dei consumi li crea :app (AppGraph). Stessa libreria e stessa
   // versione che i moduli core-* usano gia' (nessun artefatto nuovo).

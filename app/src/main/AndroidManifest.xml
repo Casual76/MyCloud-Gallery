@@ -17,6 +17,9 @@
       - READ_MEDIA_IMAGES / READ_MEDIA_VIDEO / READ_MEDIA_VISUAL_USER_SELECTED: la Libreria del telefono e
         il backup; con "foto selezionate" l'app lavora in modalita' limitata (E-P1). Chiesti al passo 9.
       - ACCESS_MEDIA_LOCATION: copia fedele sul NAS (senza, il GPS e' oscurato e l'hash non coincide).
+      - READ_EXTERNAL_STORAGE, SOLO fino all'SDK 32 (Fase 3, D22, proposta): su Android 10-12 e' l'unico permesso di
+        lettura dei media (READ_MEDIA_* esiste da Android 13). Con maxSdkVersion=32 su Android 13+ non e' nemmeno
+        dichiarato; verifyReleaseManifest pretende l'attributo.
   -->
   <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -25,6 +28,9 @@
   <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
   <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
   <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION" />
+  <uses-permission
+      android:name="android.permission.READ_EXTERNAL_STORAGE"
+      android:maxSdkVersion="32" />
 
   <application
       android:name=".MyCloudGalleryApp"
@@ -63,7 +69,8 @@
         solo permesso DUMP: serve a strumenti esterni (macrobenchmark, adb) per installare un profilo
         con un broadcast. Non ci serve e non deve restare un punto d'ingresso dell'app. L'installazione
         automatica del profilo all'avvio (ProfileInstallerInitializer) non passa da qui e resta attiva.
-        Quando arrivera' la Fase 3.5 (benchmark), il receiver si rimette solo nella variante di benchmark.
+        Fase 3.5 (benchmark): il receiver si rimette solo nella variante benchmarkRelease, con il manifest di
+        `src/benchmarkRelease/` (P9); `tools/check.ps1` verifica che la release non lo contenga.
     -->
     <receiver
         android:name="androidx.profileinstaller.ProfileInstallReceiver"

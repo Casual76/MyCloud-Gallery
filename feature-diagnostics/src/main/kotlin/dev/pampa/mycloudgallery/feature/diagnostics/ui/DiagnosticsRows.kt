@@ -11,6 +11,7 @@ import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.NetworkCheck
 import androidx.compose.material.icons.rounded.PhoneAndroid
+import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.VerifiedUser
@@ -71,6 +72,7 @@ internal fun DiagSection.icon(): ImageVector = when (this) {
   DiagSection.CONNECTION_TEST -> Icons.Rounded.NetworkCheck
   DiagSection.ACTIVITIES -> Icons.Rounded.Schedule
   DiagSection.RECENT_EVENTS -> Icons.Rounded.History
+  DiagSection.PHONE_LIBRARY -> Icons.Rounded.PhotoLibrary
   DiagSection.STORAGE -> Icons.Rounded.Storage
   DiagSection.MONTHLY_TRAFFIC -> Icons.Rounded.DataUsage
   DiagSection.ANDROID_WARNINGS -> Icons.Rounded.PhoneAndroid
@@ -83,6 +85,7 @@ internal fun DiagSection.titleRes(): Int = when (this) {
   DiagSection.CONNECTION_TEST -> R.string.diagnostics_section_connection_test
   DiagSection.ACTIVITIES -> R.string.diagnostics_section_activities
   DiagSection.RECENT_EVENTS -> R.string.diagnostics_section_recent
+  DiagSection.PHONE_LIBRARY -> R.string.diagnostics_section_phone_library
   DiagSection.STORAGE -> R.string.diagnostics_section_storage
   DiagSection.MONTHLY_TRAFFIC -> R.string.diagnostics_section_traffic
   DiagSection.ANDROID_WARNINGS -> R.string.diagnostics_section_android
@@ -95,6 +98,7 @@ internal fun DiagSection.hintRes(): Int = when (this) {
   DiagSection.CONNECTION_TEST -> R.string.diagnostics_hint_connection_test
   DiagSection.ACTIVITIES -> R.string.diagnostics_hint_activities
   DiagSection.RECENT_EVENTS -> R.string.diagnostics_hint_recent
+  DiagSection.PHONE_LIBRARY -> R.string.diagnostics_hint_phone_library
   DiagSection.STORAGE -> R.string.diagnostics_hint_storage
   DiagSection.MONTHLY_TRAFFIC -> R.string.diagnostics_hint_traffic
   DiagSection.ANDROID_WARNINGS -> R.string.diagnostics_hint_android

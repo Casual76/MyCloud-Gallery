@@ -1,0 +1,45 @@
+// Lettura e sincronizzazione della libreria del telefono (MediaStore) con la replica locale (Fase 3: contratti
+// P0, logica P2; docs/fase3-progetto.md §2.1, D9, D10).
+//
+// Pacchetti: `contract`, `noop`, `testing` (vedi core-places). `FakeMediaStore` (testing) e' il simulatore del
+// MediaProvider per i test senza dispositivo; l'adattatore vero e' sottile (P2) e si prova con Robolectric e un
+// ContentProvider finto registrato come `media`.
+//
+// Vede il catalogo (core-database) per scrivere le osservazioni e i metadati (core-metadata) per leggerle.
+// D24: nessuna rete in questo modulo (NoNetworkSourcesTest).
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.core.mediastore'
+}
+
+dependencies {
+  api project(':core-common')
+  api project(':core-model')
+  // api: MediaCatalog compare nelle firme del sincronizzatore; MediaBytes e ExtractHints in quelle del MediaStoreSource.
+  api project(':core-database')
+  api project(':core-metadata')
+  api project(':core-places')
+
+  implementation appDeps.coreKtx
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+  testImplementation appDeps.androidxTestExtJunit
+
+  // Prove strumentate sull'emulatore (Medium_Phone, Pampa_Tablet): adattatore vero sul MediaProvider.
+  androidTestImplementation appDeps.androidxTestCore
+  androidTestImplementation appDeps.androidxTestExtJunit
+  androidTestImplementation appDeps.androidxTestRunner
+  androidTestImplementation appDeps.junit
+  androidTestImplementation appDeps.coroutinesAndroid
+}

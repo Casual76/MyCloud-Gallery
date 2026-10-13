@@ -363,6 +363,7 @@ class DiagnosticsScreensTest {
     DiagSection.CONNECTION_TEST -> R.string.diagnostics_section_connection_test
     DiagSection.ACTIVITIES -> R.string.diagnostics_section_activities
     DiagSection.RECENT_EVENTS -> R.string.diagnostics_section_recent
+    DiagSection.PHONE_LIBRARY -> R.string.diagnostics_section_phone_library
     DiagSection.STORAGE -> R.string.diagnostics_section_storage
     DiagSection.MONTHLY_TRAFFIC -> R.string.diagnostics_section_traffic
     DiagSection.ANDROID_WARNINGS -> R.string.diagnostics_section_android

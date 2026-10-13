@@ -11,6 +11,7 @@ import dev.pampa.mycloudgallery.core.nas.contract.StageOutcome
 import dev.pampa.mycloudgallery.core.nas.contract.StageResult
 import dev.pampa.mycloudgallery.core.nas.testing.FakeAuthCircuitBreaker
 import dev.pampa.mycloudgallery.core.nas.testing.FakeNasSessionManager
+import dev.pampa.mycloudgallery.core.security.credentials.NasPasswordPolicy
 import dev.pampa.mycloudgallery.core.security.credentials.SaveResult
 import dev.pampa.mycloudgallery.feature.settings.support.FakeNasAccountSettings
 import dev.pampa.mycloudgallery.feature.settings.support.MainDispatcherRule
@@ -85,7 +86,7 @@ class PasswordViewModelTest {
   fun unaPasswordSbagliataConLInterruttoreChiusoNonSostituisceQuellaBuona() = runTest {
     tester.report = failedAt(NasError.Auth(AuthBlockReason.AUTH_FAILED))
     val vm = viewModel()
-    vm.setPassword("sbagliata-1234567")
+    vm.setPassword("Chiave-Sbagliata-7")
     vm.submit()
 
     assertThat(events).containsExactly("prova")
@@ -140,14 +141,30 @@ class PasswordViewModelTest {
     assertThat(vm.state.value.feedback).isNotNull()
   }
 
+  /** Revisione 2, F1: una password che non regge un attacco offline non si prova nemmeno; l'app ne propone una forte. */
   @Test
-  fun unaPasswordCortaSiAvvisaMaNonSiImpedisce() = runTest {
+  fun unaPasswordDeboleNonSiProvaELAppNeProponeUnaForte() = runTest {
     val vm = viewModel()
     vm.setPassword("corta")
-    assertThat(vm.state.value.isShort).isTrue()
-    assertThat(vm.state.value.canSubmit).isTrue()
+    assertThat(vm.state.value.weakness).isEqualTo(NasPasswordPolicy.Weakness.TOO_SHORT)
+    assertThat(vm.state.value.canSubmit).isFalse()
+    vm.submit()
+    assertThat(events).isEmpty()
+    assertThat(tester.attempts).isEqualTo(0)
+
     vm.setPassword("questa-e-abbastanza-lunga")
-    assertThat(vm.state.value.isShort).isFalse()
+    assertThat(vm.state.value.weakness).isNull()
+    assertThat(vm.state.value.canSubmit).isTrue()
+
+    vm.generate()
+    val proposed = vm.state.value.password
+    assertThat(proposed).hasLength(NasPasswordPolicy.GENERATED_CHARS)
+    assertThat(vm.state.value.generated).isTrue()
+    assertThat(vm.state.value.visible).isTrue()
+    assertThat(vm.state.value.canSubmit).isTrue()
+    // Chi scrive di nuovo nel campo non sta piu' usando la password proposta.
+    vm.setPassword(proposed + "x")
+    assertThat(vm.state.value.generated).isFalse()
   }
 
   @Test

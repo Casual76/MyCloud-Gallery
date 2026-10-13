@@ -160,6 +160,8 @@
   <string name="recovery_code_hint">Maiuscole, spazi e trattini non contano. Il codice non lascia questo telefono.</string>
   <string name="recovery_wrong_code_title">Il codice non apre il kit</string>
   <string name="recovery_wrong_code">Controllalo sul foglio: O e 0, I e 1 si confondono facilmente. Puoi riprovare quante volte vuoi, il NAS non viene toccato.</string>
+  <string name="recovery_settings_fingerprint_label">Impronta della famiglia (dal foglio)</string>
+  <string name="recovery_settings_fingerprint_hint">Le 26 lettere e cifre scritte sul foglio sotto il codice. Senza il QR «Stato della famiglia» servono: il NAS da solo non basta a dire quale famiglia è la tua.</string>
   <string name="recovery_state_title">Stato della famiglia</string>
   <string name="recovery_state_message">Se un dispositivo approvato ti mostra il suo QR «Stato della famiglia», scansionalo: altrimenti non posso escludere un registro vecchio.</string>
   <string name="recovery_state_scan">Scansiona lo stato</string>
@@ -214,6 +216,8 @@
   <string name="reset_code_section">Il codice del kit nuovo</string>
   <string name="reset_code_section_detail">Scrivilo su carta, adesso: senza, il kit nuovo non si apre. Non comparirà più.</string>
   <string name="reset_code_group">Gruppo %1$d di %2$d</string>
+  <string name="reset_fingerprint_title">Impronta della famiglia</string>
+  <string name="reset_fingerprint_detail">Scrivila sul foglio sotto il codice. Non è segreta, ma senza il QR «Stato della famiglia» serve per recuperare l’admin.</string>
   <string name="reset_code_label">Riscrivi il codice per intero</string>
   <string name="reset_code_confirm">Ho scritto il codice</string>
   <string name="reset_code_footnote">Il codice resta solo sul foglio: l’app non lo salva. Conserva il foglio insieme a quello vecchio, poi butta quello vecchio.</string>

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Create
+import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.FindInPage
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Key
@@ -41,6 +42,7 @@ import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingProblem
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
+import dev.pampa.mycloudgallery.core.family.contract.TypedFingerprint
 import dev.pampa.mycloudgallery.core.security.input.SecureInput
 import dev.pampa.mycloudgallery.core.security.screen.SecureScreen
 import dev.pampa.mycloudgallery.core.security.screen.SensitiveScreen
@@ -216,6 +218,22 @@ internal fun KeyShowCodePage(
         verticalArrangement = Arrangement.spacedBy(OnboardingDimens.CardGap),
       ) {
         CodeGroups(groups = ui.groups, cellMinWidth = OnboardingDimens.CodeCellMinWidth)
+      }
+    }
+    // Revisione 2, F3: l'impronta della famiglia va sul foglio con il codice. Non e' segreta, ma nel recupero senza il
+    // QR "stato della famiglia" e' l'unica ancora che non viene dal NAS.
+    ui.fingerprint?.let { fingerprint ->
+      item(key = "fingerprint") {
+        FluidListGroup {
+          FluidListRow(
+            title = TypedFingerprint.grouped(fingerprint),
+            subtitle = stringResource(R.string.key_code_fingerprint_detail),
+            eyebrow = stringResource(R.string.key_code_fingerprint_title),
+            tone = FluidTone.Primary,
+            leading = { Icon(Icons.Rounded.Fingerprint, contentDescription = null) },
+            disclosure = false,
+          )
+        }
       }
     }
     item(key = "ack") {

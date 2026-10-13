@@ -113,6 +113,8 @@ fun NavGraphBuilder.diagnosticsGraph(
         if (uri != null) viewModel.saveExport(uri, ContentResolverExportSink(context.contentResolver))
       }
       DisposableEffect(Unit) {
+        // Revisione 2, F15: l'anteprima si ferma qui; si salva quella, anche se intanto finisce il test.
+        viewModel.freezeExport()
         onDispose { viewModel.clearSaveResult() }
       }
       DiagnosticsExportScreen(

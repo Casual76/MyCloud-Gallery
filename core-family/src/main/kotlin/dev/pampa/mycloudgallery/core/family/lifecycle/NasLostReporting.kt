@@ -42,7 +42,11 @@ class LostReportWatcher(
     val state = engine.state ?: return false
     val me = engine.myDeviceId() ?: return false
     if (state.registry.device(me) == null) return false // in attesa: nessuno puo' ancora segnalarlo
-    val privateShare = engine.profile()?.privateShare ?: return false
+    val profile = engine.profile() ?: return false
+    val privateShare = profile.privateShare ?: return false
+    // Revisione 2, F8: un'area "privata" che e' l'area comune non prova niente (ci scrive chiunque abbia un account):
+    // senza un'area privata vera, niente azzeramento automatico da segnalazione.
+    if (privateShare.equals(profile.commonShare, ignoreCase = true)) return false
     val now = engine.nasNow()
     val result = try {
       sessions.onShare(privateShare, purpose) { fs -> LostReports.find(fs, state, me, now) }

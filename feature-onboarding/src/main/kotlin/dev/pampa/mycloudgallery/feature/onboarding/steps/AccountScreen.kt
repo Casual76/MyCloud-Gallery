@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Key
+import androidx.compose.material.icons.rounded.Password
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -21,8 +23,13 @@ import androidx.compose.ui.text.input.VisualTransformation
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
+import dev.antigravity.fluidengine.ui.theme.FluidListGroup
+import dev.antigravity.fluidengine.ui.theme.FluidListRow
+import dev.antigravity.fluidengine.ui.theme.FluidTone
+import androidx.compose.material3.Icon
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingProblem
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
+import dev.pampa.mycloudgallery.core.security.credentials.NasPasswordPolicy
 import dev.pampa.mycloudgallery.core.security.input.SecureInput
 import dev.pampa.mycloudgallery.core.security.screen.SensitiveScreen
 import dev.pampa.mycloudgallery.feature.onboarding.R
@@ -36,10 +43,9 @@ import dev.pampa.mycloudgallery.feature.onboarding.ui.ProblemPanel
 import dev.pampa.mycloudgallery.feature.onboarding.ui.SecretFieldLabel
 import dev.pampa.mycloudgallery.feature.onboarding.ui.StepChrome
 import dev.pampa.mycloudgallery.feature.onboarding.ui.StepScaffold
+import dev.pampa.mycloudgallery.feature.onboarding.ui.passwordWeakness
 import dev.pampa.mycloudgallery.feature.onboarding.ui.stepAmbient
-
-/** Sotto questa lunghezza la password funziona ma si avvisa (§2.1 passo 3). */
-internal const val MIN_PASSWORD_LENGTH = 12
+import dev.pampa.mycloudgallery.feature.onboarding.ui.weaknessText
 
 /** Che cosa non va nel nome utente scritto (controllo subito, prima ancora di toccare la rete). */
 internal enum class UserIssue { EMPTY, ADMIN, INVALID }
@@ -67,6 +73,21 @@ internal class AccountForm(user: String = "", password: String = "", reveal: Boo
   var user: String by mutableStateOf(user)
   var password: String by mutableStateOf(password)
   var reveal: Boolean by mutableStateOf(reveal)
+
+  /** La password nel campo e' quella proposta dall'app (va impostata sul NAS prima di continuare). */
+  var generated: Boolean by mutableStateOf(false)
+
+  /** Revisione 2, F1: propone una password forte, la mette nel campo e la mostra (per copiarla sul NAS). */
+  fun generate() {
+    val chars = NasPasswordPolicy.generate()
+    try {
+      password = String(chars)
+    } finally {
+      chars.fill('\u0000')
+    }
+    reveal = true
+    generated = true
+  }
 }
 
 internal class AccountActions(
@@ -82,6 +103,10 @@ internal class AccountActions(
  * correttore, punti al posto dei caratteri, con un "mostra" a richiesta perche' un errore di battitura costa
  * un tentativo: ne basta uno per aprire l'interruttore di sicurezza, E-R8). Il tentativo e' **uno**: dopo un
  * errore d'autenticazione il bottone resta spento finche' la password non e' riscritta.
+ *
+ * Revisione 2, F1: la password deve superare `NasPasswordPolicy` (12 caratteri con tre tipi, o una frase di 16): sotto
+ * il campo si spiega che cosa manca e il tasto resta spento. "Proponimi una password forte" ne genera una da impostare
+ * sul NAS.
  */
 @Composable
 internal fun AccountScreen(
@@ -99,7 +124,8 @@ internal fun AccountScreen(
     if (ui.needsNewPassword) form.password = ""
   }
   val issue = userIssue(form.user)
-  val canSubmit = issue == null && form.password.isNotEmpty() && !ui.submitting
+  val weakness = passwordWeakness(form.user, form.password)
+  val canSubmit = issue == null && form.password.isNotEmpty() && weakness == null && !ui.submitting
   val submit = {
     if (canSubmit) actions.onSubmit(form.user.trim(), form.password.toCharArray())
   }
@@ -147,7 +173,6 @@ internal fun AccountScreen(
             imeAction = ImeAction.Next,
           ),
         )
-        val short = form.password.isNotEmpty() && form.password.length < MIN_PASSWORD_LENGTH
         SecretFieldLabel(
           label = stringResource(R.string.account_password_label),
           revealed = form.reveal,
@@ -155,14 +180,41 @@ internal fun AccountScreen(
         )
         FluidTextField(
           value = form.password,
-          onValueChange = { form.password = it },
+          onValueChange = {
+            form.password = it
+            form.generated = false
+          },
           enabled = !ui.submitting,
-          supportingText = if (short) stringResource(R.string.account_password_short) else null,
+          supportingText = when {
+            form.password.isEmpty() -> stringResource(R.string.password_rule)
+            weakness != null -> weaknessText(weakness)
+            else -> null
+          },
           keyboardOptions = SecureInput.keyboardOptions(ImeAction.Done),
           keyboardActions = KeyboardActions(onDone = { submit() }),
           visualTransformation = if (form.reveal) VisualTransformation.None else SecureInput.hidden,
           showClearButton = false,
         )
+      }
+    }
+    item(key = "generate") {
+      if (form.generated) {
+        NoticeCard(
+          tone = NoticeTone.Info,
+          icon = Icons.Rounded.Key,
+          title = stringResource(R.string.account_generated_title),
+          body = stringResource(R.string.account_generated_detail),
+        )
+      } else {
+        FluidListGroup {
+          FluidListRow(
+            title = stringResource(R.string.account_generate_title),
+            subtitle = stringResource(R.string.account_generate_detail),
+            tone = FluidTone.Primary,
+            leading = { Icon(Icons.Rounded.Password, contentDescription = null) },
+            onClick = if (ui.submitting) null else form::generate,
+          )
+        }
       }
     }
     ui.problem?.let { problem ->

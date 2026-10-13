@@ -128,4 +128,36 @@ class VpnClassifierTest {
 
     assertThat(classify(both)).isEqualTo(VpnObservation.HOME_TUNNEL)
   }
+
+  private fun route(destination: String) = LinkRoute(prefix(destination), null)
+
+  /** Revisione 2, F2: quando la VPN porta anche il traffico verso internet (e quindi non si spegne mai da sola). */
+  @Test
+  fun unaVpnCheportaInternetSiRiconosceDalleRotte() {
+    assertThat(VpnClassifier.carriesInternet(LinkFactsSamples.homeVpn())).isFalse()
+    assertThat(VpnClassifier.carriesInternet(LinkFactsSamples.homeVpnFullTunnel())).isTrue()
+    // "Escludi gli IP privati" di WireGuard: nessuna rotta predefinita, ma rotte ampie verso indirizzi pubblici.
+    val excludePrivate = LinkFactsSamples.homeVpn().let { vpn ->
+      dev.pampa.mycloudgallery.core.network.link.LinkFacts(
+        networkId = vpn.networkId,
+        transports = vpn.transports,
+        isVpn = true,
+        addresses = vpn.addresses,
+        routes = listOf("0.0.0.0/5", "8.0.0.0/7", "11.0.0.0/8", "192.168.178.0/24").map { route(it) },
+      )
+    }
+    assertThat(VpnClassifier.carriesInternet(excludePrivate)).isTrue()
+    // Solo IPv6: ::/1 + 8000::/1 come rotta predefinita spezzata.
+    val v6Halves = dev.pampa.mycloudgallery.core.network.link.LinkFacts(
+      networkId = "vpn", transports = setOf(dev.pampa.mycloudgallery.core.network.contract.NetTransport.WIFI), isVpn = true,
+      routes = listOf(route("::/1"), route("8000::/1"), route("fd12:3456:789a::/48")),
+    )
+    assertThat(VpnClassifier.carriesInternet(v6Halves)).isTrue()
+    // Il prefisso IPv6 pubblico di casa (/56) e la rete di casa non sono "internet".
+    val homeGua = dev.pampa.mycloudgallery.core.network.link.LinkFacts(
+      networkId = "vpn", transports = setOf(dev.pampa.mycloudgallery.core.network.contract.NetTransport.WIFI), isVpn = true,
+      routes = listOf(route("2a02:1234:5600::/56"), route("192.168.178.0/24"), route("fd12:3456:789a::/48")),
+    )
+    assertThat(VpnClassifier.carriesInternet(homeGua)).isFalse()
+  }
 }

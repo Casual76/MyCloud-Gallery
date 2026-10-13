@@ -256,15 +256,15 @@ class OnboardingViewModelTest {
   }
 
   @Test
-  fun unaPasswordCortaDaUnAvvisoNelPassoDopo() = runTest {
+  fun unAvvisoDelPassoArrivaNelPassoDopoESiChiude() = runTest {
     val env = TestEnv()
     val vm = env.viewModel()
-    env.coordinator.scripted += StepResult.Advanced(OnboardingStep.AREAS, setOf(OnboardingWarning.SHORT_PASSWORD))
-    vm.submitAccount("marta", "corta".toCharArray())
-    assertThat(vm.ui.value.warnings).containsExactly(OnboardingWarning.SHORT_PASSWORD)
+    env.coordinator.scripted += StepResult.Advanced(OnboardingStep.AREAS, setOf(OnboardingWarning.ACCOUNT_SEES_OTHER_PRIVATE_SHARES))
+    vm.submitAccount("marta", "Gatto-Nero-7".toCharArray())
+    assertThat(vm.ui.value.warnings).containsExactly(OnboardingWarning.ACCOUNT_SEES_OTHER_PRIVATE_SHARES)
     assertThat(vm.ui.value.banner).isEqualTo(OnboardingBanner.CREDENTIALS_SAVED)
     assertThat(vm.ui.value.account.needsNewPassword).isFalse()
-    vm.dismissWarning(OnboardingWarning.SHORT_PASSWORD)
+    vm.dismissWarning(OnboardingWarning.ACCOUNT_SEES_OTHER_PRIVATE_SHARES)
     assertThat(vm.ui.value.warnings).isEmpty()
   }
 

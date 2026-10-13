@@ -281,7 +281,7 @@ internal class HostEnv(
   private fun warningsFor(destination: OnboardingDestination): List<OnboardingWarning> {
     val wanted = when (destination) {
       is OnboardingDestination.Step -> when (destination.step) {
-        OnboardingStep.AREAS -> setOf(OnboardingWarning.SHORT_PASSWORD, OnboardingWarning.ACCOUNT_SEES_OTHER_PRIVATE_SHARES)
+        OnboardingStep.AREAS -> setOf(OnboardingWarning.ACCOUNT_SEES_OTHER_PRIVATE_SHARES)
         OnboardingStep.FOLDERS -> setOf(OnboardingWarning.SHARE_IS_PUBLIC)
         OnboardingStep.SUMMARY -> setOf(OnboardingWarning.NO_SCREEN_LOCK)
         else -> emptySet()

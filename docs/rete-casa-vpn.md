@@ -73,7 +73,16 @@ Cautele (fail-closed):
 - `HomeFingerprints.fromCandidate` rifiuta un candidato senza ULA (`canBeConfirmed`);
 - l'ULA non è autenticato (un host sulla LAN può annunciarne uno con un RA falso): per questo la **conferma finale è il
   GUID del NAS**, letto dalla NEGOTIATE prima di qualunque autenticazione (core-nas). L'ULA riduce le occasioni, il GUID
-  chiude il caso.
+  ferma gli errori e gli impostori **casuali**.
+- **Ma né l'ULA né il GUID sono segreti** (revisione 2, F1): l'ULA lo annuncia il router a ogni client, il GUID lo legge
+  chiunque raggiunga la porta 445 senza credenziali, ed entrambi stanno nel QR d'invito. Chi è stato sulla LAN di casa (un
+  ospite, un dispositivo IoT) o ha fotografato un QR d'invito può copiarli e preparare un **Wi-Fi gemello** (stesso SSID e
+  stessa password, oppure un RA con l'ULA di casa) con un NAS finto che risponde con il GUID giusto: il telefono fuori casa
+  crede di essere a casa e manda una risposta NTLMv2, da attaccare offline. Il cancello **non** ferma questo attaccante
+  mirato: lo fermano la **password forte obbligatoria** (`NasPasswordPolicy`, C5) e, per la VPN, il fatto che un tunnel che
+  porta tutto il traffico non si spegne mai da solo (§8). Limite dichiarato in `sicurezza.md` L19. Un segnale in più prima
+  della password senza permesso di posizione (per esempio il certificato TLS del FRITZ!Box) è un candidato da misurare
+  sul campo, non ancora usato; il BSSID richiederebbe la posizione.
 
 **Impronta** (`HomeFingerprintStore` → `DataStoreHomeFingerprintStore`): DataStore in `noBackupFilesDir` (né backup né
 trasferimento tra dispositivi la copiano). Si salva e si rilegge **validata**: al massimo 4 ULA, gateway solo se è un IPv4
@@ -122,8 +131,8 @@ Regola, in ordine: senza VPN → `NONE`; senza impronta (o senza ULA valido) →
   vale come casa. La configurazione della guida del passo 11 (`AllowedIPs` = sottorete di casa + ULA) ne ha di forti.
 - Il tunnel verso il FRITZ!Box **di un amico** (stessa sottorete e dominio, ULA diverso) è `FOREIGN_VPN`.
 - **Residuo noto**: due soli indizi deboli non distinguono la propria casa da un FRITZ!Box altrui *senza ULA nel tunnel*.
-  Nessuna password parte lo stesso: il GUID del NAS lo ferma (D3). Per questo la guida del passo 11 chiede di includere
-  l'ULA nelle `AllowedIPs`.
+  Per caso nessuna password parte lo stesso: il GUID del NAS lo ferma (D3); contro chi copia apposta il GUID vale quanto
+  detto nel §3 (L19). Per questo la guida del passo 11 chiede di includere l'ULA nelle `AllowedIPs`.
 - `FOREIGN_VPN` e `UNKNOWN` si trattano uguale: **negato** (`DenyReason.FOREIGN_VPN`), anche a casa — il tunnel cattura il
   traffico dell'app, quindi il NAS non si contatta (E-S16).
 - Con più VPN si giudica quella predefinita, altrimenti una di casa.
@@ -242,9 +251,20 @@ tunnel anche prima di abilitare il controllo.
 
 | Bisogno | Quando |
 |---|---|
-| **giù** | casa (`Match`) + VPN di casa accesa + rete validata |
+| **giù** | casa (`Match`) + VPN di casa accesa + rete validata + **il tunnel porta solo il traffico verso casa** |
 | **su** | fuori casa con certezza (cellulare, oppure Wi-Fi/Ethernet `NoMatch`/`Weak`) + nessuna VPN + rete validata |
 | nessuno | VPN estranea; offline; pagina di accesso; casa "sconosciuta" (nessuna impronta, o Wi-Fi sotto il tunnel non visibile) |
+
+**Mai giù con un tunnel completo** (revisione 2, F2). "Casa" si riconosce dall'ULA, che un Wi-Fi gemello può imitare
+(§3): spegnere da soli un tunnel con `AllowedIPs = 0.0.0.0/0` (la configurazione di fabbrica del FRITZ!Box) manderebbe
+**tutto** il traffico del telefono, di tutte le app, sulla rete dell'attaccante. `VpnClassifier.carriesInternet` guarda le
+rotte del tunnel (`NetworkSnapshot.vpnCarriesInternet`): la rotta predefinita, le due metà di Internet o le rotte ampie
+verso indirizzi pubblici di "escludi gli IP privati" (IPv4 pubblico fino a /16, IPv6 pubblico fino a /32) valgono "porta
+internet"; le reti private, l'ULA e un prefisso IPv6 pubblico di casa (/48-/64) no. Con un tunnel completo la VPN resta
+accesa anche a casa e il NAS si raggiunge attraverso il tunnel (`HOME_LAN_THROUGH_VPN`, un po' più lento); la guida del
+passo 11 lo dice. Con un tunnel limitato (`AllowedIPs` = sottorete di casa + ULA) lo spegnimento resta automatico: su un
+Wi-Fi gemello le altre app non perdono niente (il loro traffico non passava dal tunnel) e verso il NAS finto parte al
+massimo la risposta di una password forte (L19). Residuo dichiarato in `sicurezza.md` L20.
 
 Regole (mai in ciclo):
 1. **un comando per ogni cambio di rete**: il tentativo è identificato da (verso, rete sottostante); sulla stessa rete non si

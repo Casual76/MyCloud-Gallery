@@ -127,8 +127,9 @@ sono idempotenti.
 **Recupero** (`KitAdminRecovery`), sul dispositivo nuovo con l'account e le aree dell'admin gia' configurati da P4:
 1. `findKits`: i kit in `recovery/<famiglia>/<impronta>` dell'area privata, solo nomi validi e con l'intestazione coerente con il
    posto (`RecoveryKit.inspect`);
-2. `recover(kit, codice, qr, destino)`: codice azzerato subito; `RecoveryKit.open` con l'ancora **indipendente dal NAS** (il QR "stato
-   della famiglia", M7); registro letto con quell'ancora (versione minima del QR); stessa versione del QR ma altro contenuto → fermo; la
+2. `recover(kit, codice, qr, destino, impronta)`: codice azzerato subito; `RecoveryKit.open` con l'ancora **indipendente dal NAS** (il QR
+   "stato della famiglia", M7, oppure l'**impronta della famiglia scritta sul foglio** al passo 12 e digitata; revisione 2, F3: senza
+   nessuna delle due il recupero non parte); registro letto con quell'ancora (versione minima del QR); stessa versione del QR ma altro contenuto → fermo; la
    chiave del kit deve firmare il registro (`acceptsRecoveredKey`); chiave nella cassaforte; questo dispositivo si approva da se' come
    admin (prova: la sua stessa chiave) e gli **altri admin approvati** diventano persi o revocati, nella stessa versione.
 3. Codice sbagliato → `WrongCode`; kit di un'altra chiave → `RECOVERY_KIT_UNVERIFIED`; rami o cartella inondata → fermo (decide l'admin
@@ -183,10 +184,14 @@ fondazione nuova come un file firmato da un'altra chiave.
 
 ## 8. Limiti e punti aperti
 
-- **Recupero senza QR di stato**: il contratto `AdminRecovery.recover` non riceve l'id della famiglia e l'impronta stampati sul foglio;
-  senza QR l'ancora del kit viene dal nome del file nell'area privata. Chi conosce il codice **e** scrive nell'area privata dell'admin
-  puo' mettere un kit con una sua chiave: senza un registro firmato da quella chiave il recupero si ferma (`REGISTRY_UNTRUSTED`), ma la
-  difesa vera e' digitare id e impronta del foglio. Proposta per P0-bis: un parametro con i valori del foglio.
+- **Recupero senza QR di stato** (chiuso dalla revisione 2, F3): il foglio del passo 12 (e quello del reset) porta anche
+  l'**impronta della famiglia**; `AdminRecovery.recover` la riceve digitata (`TypedFingerprint`: spazi, trattini e maiuscole
+  tollerati) e la usa come ancora. Il nome del file nell'area privata non vale piu' come ancora: senza QR e senza impronta il
+  recupero non parte (`RECOVERY_KIT_UNVERIFIED`). L'id della famiglia viene ancora dal percorso: il kit aperto deve comunque avere
+  l'impronta attesa, e un kit con un'altra chiave non si apre.
+- **Area privata uguale all'area comune** (revisione 2, F8): l'invito la rifiuta, e un profilo che l'avesse lo stesso non
+  accetta segnalazioni "perso" (nessun azzeramento automatico da segnalazione). Una share pubblica indicata come area privata non
+  si riconosce dall'invito: limite in `sicurezza.md` L23.
 - **Contratti stretti**: `FamilyReset` non restituisce il codice del kit nuovo (c'e' `NasFamilyReset.recoveryCodeForDisplay`);
   `RegistryService` non espone rami, file bloccanti e avvisi N2 (ci sono in `RegistryWriter`/`NasRegistryService`); `LostReporting` non
   elenca le segnalazioni in attesa per l'admin (`convertReports` le converte tutte).

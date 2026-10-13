@@ -54,6 +54,30 @@ object VpnClassifier {
 
   fun classify(vpn: LinkFacts?, fingerprint: HomeFingerprint?): VpnObservation = verdict(vpn, fingerprint).observation
 
+  /**
+   * Revisione 2, F2: la VPN porta anche il traffico verso internet, non solo quello verso casa? Vero con la rotta
+   * predefinita (`AllowedIPs = 0.0.0.0/0` o `::/0`) e con le rotte ampie verso indirizzi pubblici che WireGuard usa per
+   * "escludi gli IP privati" (`0.0.0.0/5`, `8.0.0.0/7`...). Le reti di casa (private, ULA, o un prefisso IPv6 pubblico
+   * di casa, da /48 in giu') non contano.
+   */
+  fun carriesInternet(vpn: LinkFacts): Boolean = vpn.routes.any { route ->
+    val destination = route.destination
+    val private = PRIVATE_SPACE.any { it.contains(destination) }
+    val wide = if (destination.isV4) destination.length <= MAX_INTERNET_V4 else destination.length <= MAX_INTERNET_V6
+    !private && wide
+  }
+
+  /** Lo spazio privato: RFC 1918, CGNAT, link-local, ULA. */
+  private val PRIVATE_SPACE: List<IpPrefix> =
+    listOf("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "169.254.0.0/16", "fc00::/7", "fe80::/10")
+      .map { requireNotNull(IpPrefix.parse(it)) }
+
+  /** Una rotta pubblica IPv4 di /16 o piu' ampia non e' una rete di casa. */
+  private const val MAX_INTERNET_V4 = 16
+
+  /** Una rotta pubblica IPv6 piu' ampia di /32 non e' il prefisso di una casa (di solito /48-/64). */
+  private const val MAX_INTERNET_V6 = 32
+
   fun verdict(vpn: LinkFacts?, fingerprint: HomeFingerprint?): VpnVerdict {
     if (vpn == null) return VpnVerdict(VpnObservation.NONE, emptySet(), foreignUla = false)
     val homeUla = fingerprint?.let(HomePrefixes::ula).orEmpty()

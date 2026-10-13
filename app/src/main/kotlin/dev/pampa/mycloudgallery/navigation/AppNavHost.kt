@@ -54,8 +54,13 @@ import kotlinx.serialization.Serializable
 @Serializable
 data object MainRoute
 
+/**
+ * L'attesa dell'approvazione. **Senza argomenti** (revisione 2, F5): il codice da mostrare viene dallo stato del
+ * dispositivo (`SetupState.AwaitingApproval`, da `TrustStatus.Pending`, calcolato dalla chiave nel Keystore), mai da
+ * un argomento di navigazione che un'altra app potrebbe scegliere.
+ */
 @Serializable
-data class AwaitingApprovalRoute(val code: String)
+data object AwaitingApprovalRoute
 
 @Serializable
 data object WipedRoute
@@ -82,6 +87,8 @@ fun AppNavHost(
   destination: RootDestination,
   status: GlobalStatus,
   actions: RootNavActions,
+  /** Per i test: il controller della navigazione appena creato. */
+  onNavController: (NavHostController) -> Unit = {},
 ) {
   if (destination == RootDestination.Loading) {
     FluidScreenSurface(modifier = Modifier.fillMaxSize()) {}
@@ -89,6 +96,7 @@ fun AppNavHost(
   }
   key(destination) {
     val nav = rememberNavController()
+    onNavController(nav)
     NavHost(
       navController = nav,
       startDestination = startRoute(destination),
@@ -97,33 +105,41 @@ fun AppNavHost(
       popEnterTransition = { popEnter() },
       popExitTransition = { popExit() },
     ) {
-      composable<MainRoute> {
-        MainDestination(nav = nav, status = status, openWireGuard = actions.openWireGuard)
+      // Revisione 2, F5: per ogni stato si registrano solo le destinazioni raggiungibili da li'. Una richiesta di
+      // navigazione arrivata da fuori (oltre all'intent ripulito da MainActivity) non trova le altre.
+      when (destination) {
+        RootDestination.Main -> {
+          composable<MainRoute> {
+            MainDestination(nav = nav, status = status, openWireGuard = actions.openWireGuard)
+          }
+          // "Da completare" nelle Impostazioni riapre i passi saltati dell'onboarding.
+          onboardingGraph(nav = nav, onDone = {}, onPause = actions.pause)
+          settingsGraph(
+            nav = nav,
+            openDiagnostics = { nav.navigate(DiagnosticsGraphRoute) },
+            resumeStep = { step -> nav.navigate(OnboardingResumeRoute(step)) },
+            developerSection = DeveloperTools.settingsSection(nav),
+          )
+          diagnosticsGraph(
+            nav = nav,
+            appActions = DIAGNOSTICS_APP_ACTIONS,
+            onAppAction = { action -> onDiagnosticsAction(nav, action) },
+          )
+          with(DeveloperTools) { destinations(nav) }
+        }
+        is RootDestination.AwaitingApproval -> composable<AwaitingApprovalRoute> {
+          AwaitingDestination(code = destination.code, actions = actions)
+        }
+        RootDestination.Wiped -> composable<WipedRoute> {
+          WipedScreen(onReconfigure = actions.reconfigure)
+        }
+        is RootDestination.Blocked -> composable<BlockedRoute> { entry ->
+          BlockedScreen(reason = entry.toRoute<BlockedRoute>().reason)
+        }
+        // L'uscita dall'onboarding la decide lo stato (SetupState): onDone non deve fare niente. "Continua piu' tardi"
+        // quando non c'e' un passo locale da fare (ingresso, recupero) manda l'app in secondo piano, a configurazione salvata.
+        RootDestination.Onboarding, RootDestination.Loading -> onboardingGraph(nav = nav, onDone = {}, onPause = actions.pause)
       }
-      composable<AwaitingApprovalRoute> { entry ->
-        AwaitingDestination(code = entry.toRoute<AwaitingApprovalRoute>().code, actions = actions)
-      }
-      composable<WipedRoute> {
-        WipedScreen(onReconfigure = actions.reconfigure)
-      }
-      composable<BlockedRoute> { entry ->
-        BlockedScreen(reason = entry.toRoute<BlockedRoute>().reason)
-      }
-      // L'uscita dall'onboarding la decide lo stato (SetupState): onDone non deve fare niente. "Continua piu' tardi"
-      // quando non c'e' un passo locale da fare (ingresso, recupero) manda l'app in secondo piano, a configurazione salvata.
-      onboardingGraph(nav = nav, onDone = {}, onPause = actions.pause)
-      settingsGraph(
-        nav = nav,
-        openDiagnostics = { nav.navigate(DiagnosticsGraphRoute) },
-        resumeStep = { step -> nav.navigate(OnboardingResumeRoute(step)) },
-        developerSection = DeveloperTools.settingsSection(nav),
-      )
-      diagnosticsGraph(
-        nav = nav,
-        appActions = DIAGNOSTICS_APP_ACTIONS,
-        onAppAction = { action -> onDiagnosticsAction(nav, action) },
-      )
-      with(DeveloperTools) { destinations(nav) }
     }
   }
 }
@@ -188,7 +204,7 @@ private fun MainDestination(nav: NavHostController, status: GlobalStatus, openWi
 /** La rotta di partenza per ogni destinazione della radice. */
 internal fun startRoute(destination: RootDestination): Any = when (destination) {
   RootDestination.Loading, RootDestination.Onboarding -> OnboardingGraphRoute
-  is RootDestination.AwaitingApproval -> AwaitingApprovalRoute(destination.code)
+  is RootDestination.AwaitingApproval -> AwaitingApprovalRoute
   RootDestination.Main -> MainRoute
   RootDestination.Wiped -> WipedRoute
   is RootDestination.Blocked -> BlockedRoute(destination.reason.name)

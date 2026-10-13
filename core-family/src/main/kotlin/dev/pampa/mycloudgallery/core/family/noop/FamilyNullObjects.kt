@@ -163,6 +163,7 @@ object NoAdminRecovery : AdminRecovery {
     code: CharArray,
     familyState: FamilyStateQr?,
     oldAdmin: OldAdminFate,
+    typedFingerprint: String?,
   ): RecoveryOutcome {
     code.fill('\u0000')
     return RecoveryOutcome.Failed(OnboardingProblem.STEP_NOT_AVAILABLE)

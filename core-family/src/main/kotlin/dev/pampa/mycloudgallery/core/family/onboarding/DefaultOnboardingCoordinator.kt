@@ -37,6 +37,7 @@ import dev.pampa.mycloudgallery.core.rules.NightWindows
 import dev.pampa.mycloudgallery.core.rules.platform.health.HealthPermission
 import dev.pampa.mycloudgallery.core.rules.platform.health.PermissionGrant
 import dev.pampa.mycloudgallery.core.security.credentials.NasCredentials
+import dev.pampa.mycloudgallery.core.security.credentials.NasPasswordPolicy
 import dev.pampa.mycloudgallery.core.security.credentials.SaveResult
 import dev.pampa.mycloudgallery.core.trust.RejectReason
 import dev.pampa.mycloudgallery.core.trust.TrustLimits
@@ -318,6 +319,9 @@ class DefaultOnboardingCoordinator(
     // L'account admin del NAS non si usa mai nell'app (docs/sicurezza.md §8): nemmeno se l'utente insiste.
     if (user.equals("admin", ignoreCase = true)) return problem(OnboardingProblem.ADMIN_ACCOUNT_REFUSED)
     if (input.password.isEmpty() || !validAccount(user)) return problem(OnboardingProblem.AUTH_FAILED)
+    // Revisione 2, F1: una password debole non parte nemmeno (una risposta NTLMv2 catturata da un impostore si
+    // attacca offline: regge solo una password forte).
+    if (!NasPasswordPolicy.isAcceptable(user, input.password)) return problem(OnboardingProblem.PASSWORD_TOO_WEAK)
 
     // La stessa coppia gia' rifiutata non torna al NAS: si aspetta una password diversa (E-R8, E-S12).
     if (rejected.isRepeat(user, input.password)) return problem(OnboardingProblem.AUTH_FAILED)
@@ -351,8 +355,7 @@ class DefaultOnboardingCoordinator(
     rejected.clear()
     ports.accounts.save(NasAccount(nas.address(), user, NasCredentialSlots.PRIMARY, nas.guid))
     ports.breaker.onNewPasswordSaved()
-    val warnings = if (input.password.size < MIN_PASSWORD_CHARS) setOf(OnboardingWarning.SHORT_PASSWORD) else emptySet()
-    return complete(OnboardingStep.ACCOUNT, warnings) { it.copy(nasUser = user) }
+    return complete(OnboardingStep.ACCOUNT) { it.copy(nasUser = user) }
   }
 
   private fun validAccount(user: String): Boolean =
@@ -543,7 +546,7 @@ class DefaultOnboardingCoordinator(
     }
     foundationBlock = null
     val code = current.code ?: return@withLock empty
-    RecoveryCodeDisplay(code.toDisplayString().split('-').map { it.toCharArray() })
+    RecoveryCodeDisplay(code.toDisplayString().split('-').map { it.toCharArray() }, current.familyKey.publicKey.fingerprint)
   }
 
   private fun foundationReady(snapshot: OnboardingSnapshot): Boolean =
@@ -652,7 +655,6 @@ class DefaultOnboardingCoordinator(
     val ACCOUNT_STAGES = setOf(Stage.ROUTE, Stage.TCP, Stage.NEGOTIATE, Stage.GUID, Stage.AUTHENTICATE, Stage.SECURITY_CHECK)
     val REQUIRED_PERMISSIONS = setOf(HealthPermission.NOTIFICATIONS, HealthPermission.MEDIA_IMAGES, HealthPermission.MEDIA_VIDEO)
     val TUNNEL_NAME = Regex("^[A-Za-z0-9_=+.-]{1,15}$")
-    const val MIN_PASSWORD_CHARS = 12
     const val MAX_NAME_CHARS = 253
     const val PUBLIC_SHARE = "Public"
     const val COMMON_DEFAULT_SHARE = "NAS"

@@ -87,9 +87,9 @@ class TestTime(private val start: Long = NAS_START) {
 object TestNas {
   const val IP = "192.168.178.58"
   const val ADMIN_USER = "test"
-  const val ADMIN_PASSWORD = "password-di-test-1"
+  const val ADMIN_PASSWORD = "Chiave-Di-Prova-1"
   const val MEMBER_USER = "test2"
-  const val MEMBER_PASSWORD = "password-di-test2-1"
+  const val MEMBER_PASSWORD = "Chiave-Di-Prova-2"
   const val COMMON = "test-comune"
 
   fun backend(time: TestTime): InMemorySmbBackend = InMemorySmbBackend(nasTime = time::now).apply {

@@ -62,6 +62,9 @@ class NasFamilyReset(
   private val mutex = Mutex()
   private var pendingCode: RecoveryCode? = null
 
+  /** L'impronta della chiave nuova, da scrivere sul foglio con il codice (revisione 2, F3). */
+  private var pendingFingerprint: String? = null
+
   override suspend fun reset(confirmedTwice: Boolean): ResetOutcome = mutex.withLock {
     if (!confirmedTwice) return@withLock ResetOutcome.Failed(OnboardingProblem.STEP_NOT_AVAILABLE)
     if (!engine.ensureLoaded()) return@withLock ResetOutcome.Failed(OnboardingProblem.STEP_NOT_AVAILABLE)
@@ -151,13 +154,14 @@ class NasFamilyReset(
       ?: return ResetOutcome.Failed(OnboardingProblem.REGISTRY_UNTRUSTED)
     engine.install(snapshotOf(state, anchor))
     pendingCode = code
+    pendingFingerprint = newKey.publicKey.fingerprint
     return ResetOutcome.Done(newFamilyId)
   }
 
   /** Il codice del kit nuovo in 7 gruppi, da mostrare con `FLAG_SECURE` (null se non c'e' un reset da confermare). */
   override fun recoveryCodeForDisplay(): RecoveryCodeDisplay? {
     val code = pendingCode ?: return null
-    return RecoveryCodeDisplay(code.toDisplayString().split('-').map { it.toCharArray() })
+    return RecoveryCodeDisplay(code.toDisplayString().split('-').map { it.toCharArray() }, pendingFingerprint)
   }
 
   /** Vero se [typed] (azzerato dopo l'uso) e' il codice del kit nuovo: allora lo si dimentica. */

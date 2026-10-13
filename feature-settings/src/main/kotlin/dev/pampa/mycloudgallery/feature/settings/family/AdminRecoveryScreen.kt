@@ -39,6 +39,7 @@ import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.family.contract.OldAdminFate
+import dev.pampa.mycloudgallery.core.family.contract.TypedFingerprint
 import dev.pampa.mycloudgallery.core.qr.QrScanner
 import dev.pampa.mycloudgallery.core.qr.contract.ScanVerdict
 import dev.pampa.mycloudgallery.core.security.screen.SensitiveScreen
@@ -65,6 +66,8 @@ internal class RecoveryActions(
   val onClearState: () -> Unit,
   val onRecover: () -> Unit,
   val onAdminPassword: (String) -> Unit = {},
+  /** Revisione 2, F3: l'impronta della famiglia scritta dal foglio. */
+  val onFingerprint: (String) -> Unit = {},
 ) {
   companion object {
     val None = RecoveryActions({}, {}, {}, {}, {}, {}, {}, {}, { ScanVerdict.Ignore }, {}, {})
@@ -90,6 +93,7 @@ internal fun AdminRecoveryRoute(onBack: () -> Unit) {
       onClearState = viewModel::clearScannedState,
       onRecover = viewModel::recover,
       onAdminPassword = viewModel::setAdminPassword,
+      onFingerprint = viewModel::setFingerprint,
     ),
   )
 }
@@ -271,6 +275,21 @@ private fun androidx.compose.foundation.lazy.LazyListScope.recoveryCode(state: R
   }
 
   item { StateScanSection(state = state, actions = actions) }
+
+  // Revisione 2, F3: senza il QR di stato, l'impronta della famiglia scritta sul foglio accanto al codice.
+  if (state.needsFingerprint) {
+    item {
+      FluidCard {
+        FluidTextField(
+          value = state.fingerprint,
+          onValueChange = actions.onFingerprint,
+          label = stringResource(R.string.recovery_settings_fingerprint_label),
+          supportingText = stringResource(R.string.recovery_settings_fingerprint_hint),
+          isError = state.fingerprint.isNotBlank() && !TypedFingerprint.isComplete(state.fingerprint),
+        )
+      }
+    }
+  }
 
   if (state.mode == RecoveryMode.REPLACE_ADMIN) {
     item {

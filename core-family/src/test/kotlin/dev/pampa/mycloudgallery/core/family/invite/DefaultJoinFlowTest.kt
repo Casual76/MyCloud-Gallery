@@ -71,7 +71,7 @@ class DefaultJoinFlowTest {
     val family = TestFamily(env.nas.share(if (withFamily) "NAS" else "Altra"), nasGuid = familyGuid, homeUla = signedUla)
     val join = DefaultJoinFlow(store, env.ports())
     val coordinator: DefaultOnboardingCoordinator = f.coordinator()
-    val password: CharArray get() = "password-di-mamma-1".toCharArray()
+    val password: CharArray get() = "Album-del-Mare-1".toCharArray()
 
     suspend fun choose(path: OnboardingPath = OnboardingPath.JOIN_QR) {
       expectAdvanced(coordinator.submit(StepInput.ChoosePath(path)))
@@ -110,7 +110,7 @@ class DefaultJoinFlowTest {
     assertThat(j.store.snapshot.progress.current).isEqualTo(OnboardingStep.NAS_ADDRESS) // ancora nessun passo "fatto"
 
     // 2. La password: un solo tentativo, poi il registro firmato letto con l'ancora del QR.
-    val password = "password-di-mamma-1".toCharArray()
+    val password = "Album-del-Mare-1".toCharArray()
     val generation = env.breaker.state.value.generation
     val needsName = j.join.authenticate(password)
     assertThat(needsName).isEqualTo(JoinStep.NeedsName("Tablet profilo Mamma"))
@@ -120,7 +120,7 @@ class DefaultJoinFlowTest {
     assertThat(auth.target.user).isEqualTo("mamma")
     assertThat(auth.target.expectedGuid).isEqualTo(TEST_GUID)
     assertThat(auth.target.candidate).isNull() // "casa" e' gia' registrata: il percorso lo decide il cancello
-    assertThat(env.credentials.saved.single().password).isEqualTo("password-di-mamma-1")
+    assertThat(env.credentials.saved.single().password).isEqualTo("Album-del-Mare-1")
     assertThat(env.accounts.saved.single().user).isEqualTo("mamma")
     assertThat(env.accounts.saved.single().pinnedGuid).isEqualTo(TEST_GUID)
     assertThat(env.breaker.state.value.generation).isEqualTo(generation + 1)
@@ -321,11 +321,11 @@ class DefaultJoinFlowTest {
     j.env.tester.handler = { _, creds, stages ->
       if (creds == null) Reports.ok(stages) else Reports.failed(stages, Stage.AUTHENTICATE, NasError.Auth(AuthBlockReason.AUTH_FAILED), Reports.FACTS)
     }
-    val wrong = "password-sbagliata-1".toCharArray()
+    val wrong = "Chiave-Sbagliata-1".toCharArray()
     assertThat(j.join.authenticate(wrong)).isEqualTo(problem(OnboardingProblem.AUTH_FAILED))
     assertThat(wrong.all { it == '\u0000' }).isTrue()
     j.env.breaker.open(AuthBlockReason.AUTH_FAILED)
-    assertThat(j.join.authenticate("password-sbagliata-1".toCharArray())).isEqualTo(problem(OnboardingProblem.AUTH_FAILED))
+    assertThat(j.join.authenticate("Chiave-Sbagliata-1".toCharArray())).isEqualTo(problem(OnboardingProblem.AUTH_FAILED))
     assertThat(j.join.authenticate(CharArray(0))).isEqualTo(problem(OnboardingProblem.AUTH_FAILED))
     assertThat(j.env.tester.authAttempts).isEqualTo(1)
     assertThat(j.env.credentials.saved).isEmpty()
@@ -333,9 +333,27 @@ class DefaultJoinFlowTest {
 
     // Una password nuova: l'interruttore si richiude e c'e' un altro (unico) tentativo.
     j.env.tester.handler = { _, _, stages -> Reports.ok(stages) }
-    assertThat(j.join.authenticate("password-giusta-1".toCharArray())).isInstanceOf(JoinStep.NeedsName::class.java)
+    assertThat(j.join.authenticate("Chiave-Giusta-1".toCharArray())).isInstanceOf(JoinStep.NeedsName::class.java)
     assertThat(j.env.tester.authAttempts).isEqualTo(2)
     assertThat(j.env.breaker.state.value).isInstanceOf(BreakerState.Closed::class.java)
+  }
+
+  /** Revisione 2, F1: anche la password del familiare deve reggere un attacco offline; una debole non parte. */
+  @Test
+  fun unaPasswordDeboleDelFamiliareNonArrivaAlNas() = runTest(UnconfinedTestDispatcher()) {
+    val j = Fixture(this)
+    j.choose()
+    assertThat(j.join.start(j.family.invite())).isEqualTo(JoinStep.NeedsPassword)
+    j.env.tester.handler = { _, _, stages -> Reports.ok(stages) }
+    for (weak in listOf("mamma1975", "Password-2026!", "gattoneroxyz")) {
+      val typed = weak.toCharArray()
+      assertThat(j.join.authenticate(typed)).isEqualTo(problem(OnboardingProblem.PASSWORD_TOO_WEAK))
+      assertThat(typed.all { it == 0.toChar() }).isTrue()
+    }
+    assertThat(j.env.tester.authAttempts).isEqualTo(0)
+    assertThat(j.env.credentials.saved).isEmpty()
+    assertThat(j.join.authenticate("Album-del-Mare-1".toCharArray())).isInstanceOf(JoinStep.NeedsName::class.java)
+    assertThat(j.env.tester.authAttempts).isEqualTo(1)
   }
 
   @Test
@@ -352,13 +370,13 @@ class DefaultJoinFlowTest {
     var n = 0
     for ((reason, expected) in cases) {
       j.env.tester.handler = { _, _, stages -> Reports.failed(stages, Stage.AUTHENTICATE, NasError.Auth(reason), Reports.FACTS) }
-      assertThat(j.join.authenticate("password-numero-${n++}".toCharArray())).isEqualTo(problem(expected))
+      assertThat(j.join.authenticate("Chiave-Numero-${n++}".toCharArray())).isEqualTo(problem(expected))
     }
     j.env.tester.handler = { _, creds, stages -> if (creds == null) Reports.ok(stages) else Reports.authSkipped(stages) }
-    assertThat(j.join.authenticate("password-numero-${n++}".toCharArray())).isEqualTo(problem(OnboardingProblem.AUTH_FAILED))
+    assertThat(j.join.authenticate("Chiave-Numero-${n++}".toCharArray())).isEqualTo(problem(OnboardingProblem.AUTH_FAILED))
     j.env.tester.handler = { _, _, stages -> Reports.ok(stages) }
     j.env.credentials.result = SaveResult.HardwareKeyUnavailable
-    assertThat(j.join.authenticate("password-numero-${n++}".toCharArray())).isEqualTo(problem(OnboardingProblem.CREDENTIALS_NOT_SAVED))
+    assertThat(j.join.authenticate("Chiave-Numero-${n++}".toCharArray())).isEqualTo(problem(OnboardingProblem.CREDENTIALS_NOT_SAVED))
     assertThat(j.env.accounts.saved).isEmpty()
   }
 
@@ -450,9 +468,10 @@ class DefaultJoinFlowTest {
   fun ilGuidFirmatoDallAdminEUnaConfermaIndipendenteDalQr() = runTest(UnconfinedTestDispatcher()) {
     val j = Fixture(this, familyGuid = "11111111-2222-3333-4444-555555555555")
     j.choose()
-    // Il GUID del QR e quello della NEGOTIATE coincidono, ma non sono quelli che la famiglia ha firmato.
+    // Il GUID del QR e quello della NEGOTIATE coincidono, ma non sono quelli che la famiglia ha firmato: la password
+    // e' gia' arrivata a quel NAS, e il problema lo dice (revisione 2, F6).
     assertThat(j.join.start(j.family.invite())).isEqualTo(JoinStep.NeedsPassword)
-    assertThat(j.join.authenticate(j.password)).isEqualTo(problem(OnboardingProblem.IDENTITY_MISMATCH))
+    assertThat(j.join.authenticate(j.password)).isEqualTo(problem(OnboardingProblem.PASSWORD_SENT_TO_OTHER_NAS))
     assertThat(j.env.credentials.removed).containsExactly("nas-primary")
     assertThat(j.env.accounts.current()).isNull()
     assertThat(j.env.trustState.snapshot).isNull()
@@ -465,7 +484,7 @@ class DefaultJoinFlowTest {
     expectAdvanced(j.coordinator.submit(StepInput.ConfirmHome(true)))
     val manual = ManualInvite.create(j.family.familyId, j.family.fingerprint, TEST_IP, "mamma", "NAS", "mamma", "Tablet").acceptedOrNull()!!
     assertThat(j.join.start(manual)).isEqualTo(JoinStep.NeedsPassword)
-    assertThat(j.join.authenticate(j.password)).isEqualTo(problem(OnboardingProblem.IDENTITY_MISMATCH))
+    assertThat(j.join.authenticate(j.password)).isEqualTo(problem(OnboardingProblem.PASSWORD_SENT_TO_OTHER_NAS))
 
     // Una configurazione firmata senza GUID (nessuna conferma da fare) non ferma l'ingresso.
     val old = Fixture(this, familyGuid = null)

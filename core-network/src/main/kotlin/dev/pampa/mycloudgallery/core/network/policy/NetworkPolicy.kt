@@ -97,6 +97,7 @@ object NetworkPolicy {
       localNetwork = localNetwork,
       ipv6Global = underlying?.hasGlobalIpv6 == true,
       at = at,
+      vpnCarriesInternet = vpn != null && VpnClassifier.carriesInternet(vpn),
     )
     return NetworkEvaluation(
       snapshot = snapshot,

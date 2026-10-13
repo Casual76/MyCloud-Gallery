@@ -367,17 +367,26 @@ class OnboardingCoordinatorTest {
     assertThat(f.env.credentials.saved).isEmpty()
   }
 
+  /**
+   * Revisione 2, F1: una password che non regge un attacco offline non parte nemmeno. Il NAS non la vede, niente si
+   * salva, l'array si azzera; una password forte va avanti senza avvisi.
+   */
   @Test
-  fun unaPasswordSottoIDodiciCaratteriAvvisaMaVaAvanti() = runTest(UnconfinedTestDispatcher()) {
+  fun unaPasswordDeboleNonArrivaAlNas() = runTest(UnconfinedTestDispatcher()) {
     val f = OnboardingFixture(this)
     val c = f.atAccountStep()
-    val result = expectAdvanced(c.submit(credentials(password = "corta-11-ch")))
-    assertThat(result.warnings).containsExactly(OnboardingWarning.SHORT_PASSWORD)
-    assertThat(result.next).isEqualTo(OnboardingStep.AREAS)
+    val runs = f.env.tester.runs.size
+    for (weak in listOf("corta-11-ch", "password-lunga", "alessio-foto-1", "gattoneroxyz")) {
+      val input = credentials(password = weak)
+      assertThat(c.submit(input)).isEqualTo(problem(OnboardingProblem.PASSWORD_TOO_WEAK))
+      assertThat(input.password.all { it == 0.toChar() }).isTrue()
+    }
+    assertThat(f.env.tester.runs).hasSize(runs)
+    assertThat(f.env.credentials.saved).isEmpty()
 
-    val g = OnboardingFixture(this)
-    val d = g.atAccountStep()
-    assertThat(expectAdvanced(d.submit(credentials(password = "esattamente-12"))).warnings).isEmpty()
+    val result = expectAdvanced(c.submit(credentials(password = "Gatto-Nero-7")))
+    assertThat(result.warnings).isEmpty()
+    assertThat(result.next).isEqualTo(OnboardingStep.AREAS)
   }
 
   @Test
@@ -385,7 +394,7 @@ class OnboardingCoordinatorTest {
     val f = OnboardingFixture(this)
     val c = f.atAccountStep()
     failAuth(f, NasError.Auth(AuthBlockReason.AUTH_FAILED))
-    val wrong = credentials(password = "password-sbagliata-1")
+    val wrong = credentials(password = "Chiave-Sbagliata-1")
     assertThat(c.submit(wrong)).isEqualTo(problem(OnboardingProblem.AUTH_FAILED))
     assertThat(wrong.password.all { it == '\u0000' }).isTrue()
     assertThat(f.env.tester.authAttempts).isEqualTo(1)
@@ -396,18 +405,18 @@ class OnboardingCoordinatorTest {
 
     // L'interruttore (di P1) si e' aperto. Lo stesso identico tentativo non arriva al NAS: un doppio tocco bloccherebbe l'account.
     f.env.breaker.open(AuthBlockReason.AUTH_FAILED)
-    assertThat(c.submit(credentials(password = "password-sbagliata-1"))).isEqualTo(problem(OnboardingProblem.AUTH_FAILED))
-    assertThat(c.submit(credentials(user = "ALESSIO", password = "password-sbagliata-1"))).isEqualTo(problem(OnboardingProblem.AUTH_FAILED))
+    assertThat(c.submit(credentials(password = "Chiave-Sbagliata-1"))).isEqualTo(problem(OnboardingProblem.AUTH_FAILED))
+    assertThat(c.submit(credentials(user = "ALESSIO", password = "Chiave-Sbagliata-1"))).isEqualTo(problem(OnboardingProblem.AUTH_FAILED))
     assertThat(f.env.tester.authAttempts).isEqualTo(1)
 
     // Una password nuova, scritta dall'utente, richiude l'interruttore e fa un nuovo (unico) tentativo.
     val generation = f.env.breaker.state.value.generation
     f.env.tester.handler = { _, _, stages -> Reports.ok(stages) }
-    expectAdvanced(c.submit(credentials(password = "password-giusta-12")))
+    expectAdvanced(c.submit(credentials(password = "Chiave-Giusta-12")))
     assertThat(f.env.tester.authAttempts).isEqualTo(2)
     assertThat(f.env.breaker.state.value).isInstanceOf(BreakerState.Closed::class.java)
     assertThat(f.env.breaker.state.value.generation).isEqualTo(generation + 2) // richiuso + password salvata
-    assertThat(f.env.credentials.saved.single().password).isEqualTo("password-giusta-12")
+    assertThat(f.env.credentials.saved.single().password).isEqualTo("Chiave-Giusta-12")
   }
 
   @Test
@@ -427,7 +436,7 @@ class OnboardingCoordinatorTest {
     )
     cases.forEachIndexed { index, (error, expected) ->
       failAuth(f, error)
-      assertWithMessage("$error").that(c.submit(credentials(password = "password-numero-$index"))).isEqualTo(problem(expected))
+      assertWithMessage("$error").that(c.submit(credentials(password = "Chiave-Numero-$index"))).isEqualTo(problem(expected))
     }
     assertThat(f.env.credentials.saved).isEmpty()
     assertThat(f.env.accounts.saved).isEmpty()
@@ -451,7 +460,7 @@ class OnboardingCoordinatorTest {
     f.env.credentials.result = SaveResult.HardwareKeyUnavailable
     assertThat(c.submit(credentials())).isEqualTo(problem(OnboardingProblem.CREDENTIALS_NOT_SAVED))
     f.env.credentials.result = SaveResult.Unavailable
-    assertThat(c.submit(credentials(password = "un-altra-password-1"))).isEqualTo(problem(OnboardingProblem.CREDENTIALS_NOT_SAVED))
+    assertThat(c.submit(credentials(password = "Un-Altra-Chiave-1"))).isEqualTo(problem(OnboardingProblem.CREDENTIALS_NOT_SAVED))
     assertThat(f.env.accounts.saved).isEmpty()
     assertThat(f.current).isEqualTo(OnboardingStep.ACCOUNT)
   }

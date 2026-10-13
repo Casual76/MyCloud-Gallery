@@ -44,11 +44,14 @@
         secondo avvio dall'icona, da una notifica o da un widget riporta in primo piano l'istanza viva
         invece di impilarne una seconda con la sua navigazione. Il blocco app (AppLockGate) presume una
         sola activity: con due, ogni passaggio conterebbe come uscita dall'app.
+        taskAffinity vuota (revisione 2, F13): nessun task di un'altra app con la nostra affinita' puo'
+        ospitare l'activity (StrandHogg, soprattutto su Android 10).
     -->
     <activity
         android:name=".MainActivity"
         android:exported="true"
-        android:launchMode="singleTask">
+        android:launchMode="singleTask"
+        android:taskAffinity="">
       <intent-filter>
         <action android:name="android.intent.action.MAIN" />
         <category android:name="android.intent.category.LAUNCHER" />

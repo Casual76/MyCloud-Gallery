@@ -255,6 +255,34 @@ class DiagnosticsViewModelTest {
     assertThat(vm.state.value.saveResult).isEqualTo(SaveResult.SAVED)
   }
 
+  /**
+   * Revisione 2, F15: aperta la pagina dell'esportazione, l'anteprima e' ferma. Un test di connessione che finisce
+   * mentre l'utente sceglie dove salvare non cambia il file: si scrive quello che si e' visto.
+   */
+  @Test
+  fun lAnteprimaSiFermaAllaperturaESiSalvaQuellaVista() = runTest(dispatcher) {
+    tester.report = failedReport()
+    val vm = viewModel(setOf(FakeContributor(DiagSection.NETWORK_AND_NAS) { listOf(item(DiagCodes.NET_PLACE, severity = DiagSeverity.OK)) }))
+    advanceUntilIdle()
+    vm.freezeExport()
+    val seen = vm.state.value.export!!.text
+
+    vm.runConnectionTest()
+    advanceUntilIdle()
+    assertThat(vm.state.value.connectionTest).isInstanceOf(ConnectionTestUiState.Finished::class.java)
+    assertThat(vm.state.value.export!!.text).isEqualTo(seen)
+
+    val sink = Recording()
+    vm.saveExport(Uri.parse("content://documenti/diagnostica.json"), sink)
+    advanceUntilIdle()
+    assertThat(sink.written!!.second).isEqualTo(seen)
+    assertThat(sink.written!!.second).doesNotContain("Stage.TCP")
+
+    // Chiusa la pagina, l'anteprima torna a seguire lo stato (con il test).
+    vm.clearSaveResult()
+    assertThat(vm.state.value.export!!.text).contains("\"stage\": \"Stage.TCP\"")
+  }
+
   @Test
   fun unSalvataggioFallitoLoDice() = runTest(dispatcher) {
     val vm = viewModel(setOf(FakeContributor(DiagSection.NETWORK_AND_NAS) { listOf(item()) }))

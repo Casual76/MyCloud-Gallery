@@ -174,11 +174,24 @@ enum class OnboardingProblem {
   /** Il GUID non e' quello atteso (QR o configurazione): nessuna password inviata. */
   IDENTITY_MISMATCH,
 
+  /**
+   * Revisione 2, F6: dopo il login il GUID firmato dall'admin non e' quello del NAS a cui si e' mandata la password
+   * (ingresso manuale o QR con un NAS che non e' quello della famiglia). La password e' arrivata a quel dispositivo:
+   * va cambiata sul NAS vero prima di riprovare.
+   */
+  PASSWORD_SENT_TO_OTHER_NAS,
+
   /** L'account `admin` del NAS non si usa mai nell'app (§8). */
   ADMIN_ACCOUNT_REFUSED,
 
   /** E-R8: password sbagliata. L'interruttore e' aperto; "Riprova" solo su azione dell'utente. */
   AUTH_FAILED,
+
+  /**
+   * Revisione 2, F1: la password non raggiunge la soglia di `NasPasswordPolicy` (12 caratteri con 3 tipi, o una frase
+   * di 16). Non e' stata mandata al NAS: va cambiata sul NAS e riscritta qui.
+   */
+  PASSWORD_TOO_WEAK,
 
   /** E-S12. */
   ACCOUNT_LOCKED,
@@ -228,9 +241,6 @@ enum class OnboardingProblem {
 
 /** Avvisi che non fermano il passo. */
 enum class OnboardingWarning {
-  /** Password sotto i 12 caratteri. */
-  SHORT_PASSWORD,
-
   /** Una share scelta e' pubblica. */
   SHARE_IS_PUBLIC,
 
@@ -269,7 +279,15 @@ data class AreaCandidate(
  * Il codice di recupero da mostrare al passo 12(b), in 7 gruppi, con `FLAG_SECURE`. Si chiude ([close])
  * appena la schermata esce: i caratteri si azzerano.
  */
-class RecoveryCodeDisplay(val groups: List<CharArray>) : AutoCloseable {
+class RecoveryCodeDisplay(
+  val groups: List<CharArray>,
+  /**
+   * L'impronta della chiave di famiglia (26 caratteri), da scrivere **sul foglio** accanto al codice (revisione 2, F3):
+   * nel recupero senza QR di stato e' l'ancora indipendente dal NAS. Non e' un segreto. Null se non c'e' niente da
+   * mostrare.
+   */
+  val familyFingerprint: String? = null,
+) : AutoCloseable {
   override fun close() = groups.forEach { it.fill('\u0000') }
 
   override fun toString(): String = "RecoveryCodeDisplay(${groups.size} gruppi nascosti)"

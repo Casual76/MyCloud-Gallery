@@ -13,6 +13,7 @@ import dev.pampa.mycloudgallery.core.family.contract.QrPayloadCodec
 import dev.pampa.mycloudgallery.core.family.contract.QrPayloads
 import dev.pampa.mycloudgallery.core.family.contract.RecoveryKitRef
 import dev.pampa.mycloudgallery.core.family.contract.RecoveryOutcome
+import dev.pampa.mycloudgallery.core.family.contract.TypedFingerprint
 import dev.pampa.mycloudgallery.core.nas.contract.NasAccount
 import dev.pampa.mycloudgallery.core.nas.contract.NasResult
 import dev.pampa.mycloudgallery.core.qr.contract.ScanRejection
@@ -61,6 +62,11 @@ internal data class RecoveryUiState(
   val code: String = "",
   /** La versione del registro letta dal QR "stato della famiglia" (M7), se e' stato scansionato. */
   val stateVersion: Long? = null,
+  /**
+   * L'impronta della famiglia scritta dal foglio (revisione 2, F3): senza il QR di stato e' l'ancora del recupero.
+   * Non e' un segreto.
+   */
+  val fingerprint: String = "",
   val oldAdmin: OldAdminFate = OldAdminFate.LOST,
   val feedback: Feedback? = null,
 ) {
@@ -69,8 +75,12 @@ internal data class RecoveryUiState(
 
   val canSearch: Boolean get() = available && adminUser.isNotBlank() && !searching && (!needsAdminPassword || adminPassword.isNotEmpty())
 
+  /** Serve l'impronta del foglio: senza il QR di stato e' l'unica ancora che non viene dal NAS (revisione 2, F3). */
+  val needsFingerprint: Boolean get() = stateVersion == null
+
   val canRecover: Boolean
-    get() = stage == RecoveryStage.CODE && selectedKit != null && code.isNotBlank()
+    get() = stage == RecoveryStage.CODE && selectedKit != null && code.isNotBlank() &&
+      (!needsFingerprint || TypedFingerprint.isComplete(fingerprint))
 
   override fun toString(): String = "RecoveryUiState(mode=$mode, stage=$stage)"
 }
@@ -193,6 +203,10 @@ internal class AdminRecoveryViewModel @Inject constructor(
     return ScanVerdict.Accept
   }
 
+  fun setFingerprint(value: String) {
+    _state.update { it.copy(fingerprint = value.take(MAX_FINGERPRINT_INPUT)) }
+  }
+
   fun clearScannedState() {
     familyState = null
     _state.update { it.copy(stateVersion = null) }
@@ -208,7 +222,7 @@ internal class AdminRecoveryViewModel @Inject constructor(
     _state.update { it.copy(stage = RecoveryStage.WORKING, code = "", feedback = null) }
     viewModelScope.launch {
       val outcome = try {
-        recovery.recover(kit, chars, familyState, current.oldAdmin)
+        recovery.recover(kit, chars, familyState, current.oldAdmin, current.fingerprint.takeIf { familyState == null })
       } catch (e: CancellationException) {
         throw e
       } catch (_: Exception) {
@@ -234,6 +248,9 @@ internal class AdminRecoveryViewModel @Inject constructor(
 
   companion object {
     private const val CLEARED = '\u0000'
+
+    /** Spazi e trattini compresi: piu' di cosi' non e' un'impronta. */
+    private const val MAX_FINGERPRINT_INPUT = 64
 
     /** Il nome dell'argomento della rotta (`AdminRecoveryRoute.replace`). */
     const val REPLACE = "replace"

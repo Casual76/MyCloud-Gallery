@@ -8,6 +8,7 @@ import dev.pampa.mycloudgallery.core.family.contract.OnboardingProblem
 import dev.pampa.mycloudgallery.core.family.contract.RecoveryKitRef
 import dev.pampa.mycloudgallery.core.family.contract.RecoveryOutcome
 import dev.pampa.mycloudgallery.core.family.contract.TrustSnapshot
+import dev.pampa.mycloudgallery.core.family.contract.TypedFingerprint
 import dev.pampa.mycloudgallery.core.family.trust.LocalDeviceProfile
 import dev.pampa.mycloudgallery.core.family.trust.TrustEngine
 import dev.pampa.mycloudgallery.core.family.trust.UNEXPECTED
@@ -52,8 +53,8 @@ import kotlinx.coroutines.CancellationException
  * 1. [findKits]: i kit nell'area privata (`recovery/<famiglia>/<impronta>`, solo nomi validi e intestazione
  *    coerente con il posto).
  * 2. [recover]: codice digitato (azzerato subito) → `RecoveryKit.open` con l'**ancora indipendente dal NAS**:
- *    il QR "stato della famiglia" se c'e' (M7), altrimenti l'id e l'impronta del nome del file (limite: vedi
- *    `docs/famiglia-dispositivi.md`) → registro dal NAS con quell'ancora (versione minima del QR, o 0 con
+ *    il QR "stato della famiglia" se c'e' (M7), altrimenti l'impronta della famiglia **digitata dal foglio**
+ *    (revisione 2, F3: il nome del file sul NAS non vale come ancora) → registro dal NAS con quell'ancora (versione minima del QR, o 0 con
  *    avviso) → la chiave del kit deve essere quella che firma il registro (`acceptsRecoveredKey`) → chiave
  *    nella cassaforte → questo dispositivo si approva da se' come admin (prova: la sua stessa chiave) e il
  *    vecchio admin diventa perso o revocato, nella **stessa** versione.
@@ -122,6 +123,7 @@ class KitAdminRecovery(
     code: CharArray,
     familyState: FamilyStateQr?,
     oldAdmin: OldAdminFate,
+    typedFingerprint: String?,
   ): RecoveryOutcome {
     val parsed = try {
       RecoveryCode.parse(String(code))
@@ -130,9 +132,12 @@ class KitAdminRecovery(
     } ?: return RecoveryOutcome.WrongCode
     val profile = engine.profile() ?: return RecoveryOutcome.Failed(OnboardingProblem.STEP_NOT_AVAILABLE)
     val (pathFamily, pathFingerprint) = parseRef(kit) ?: return RecoveryOutcome.Failed(OnboardingProblem.RECOVERY_KIT_UNVERIFIED)
-    // L'ancora indipendente dal NAS: il QR di stato (M7). Senza, l'id e l'impronta del nome del file.
+    // L'ancora indipendente dal NAS: il QR di stato (M7) o, senza, l'impronta letta dal foglio e digitata. Il nome del
+    // file sul NAS no (revisione 2, F3): chi scrive nell'area privata puo' metterci il kit e l'impronta di un'altra
+    // chiave. L'id della famiglia puo' venire dal percorso: il kit aperto deve comunque avere l'impronta attesa.
     val expectedFamily = familyState?.familyId ?: pathFamily
-    val expectedFingerprint = familyState?.familyKeyFingerprint ?: pathFingerprint
+    val expectedFingerprint = familyState?.familyKeyFingerprint ?: typedFingerprint?.takeIf(TypedFingerprint::isComplete)?.let(TypedFingerprint::normalize)
+      ?: return RecoveryOutcome.Failed(OnboardingProblem.RECOVERY_KIT_UNVERIFIED)
 
     // Un kit letto con l'account dell'admin (findKits con la sua password) non si rilegge: la password non c'e' piu'.
     val blob = foreignKits[kit] ?: when (val read = guarded { sessions.onShare(kit.share, Purpose.ONBOARDING) { fs -> fs.read(NasLayout.recoveryKitFile(pathFamily, pathFingerprint), TrustLimits.MAX_RECOVERY_KIT_BYTES) } }) {

@@ -87,7 +87,7 @@
   <string name="wg_not_configured">Il permesso c’è, ma manca il nome del tunnel di casa.</string>
   <string name="network_automation">Controllo automatico</string>
   <string name="auto_off">Spento: la VPN la accendi e spegni tu</string>
-  <string name="auto_idle">Tutto a posto: spenta a casa, accesa fuori</string>
+  <string name="auto_idle">Tutto a posto: spenta a casa, accesa fuori (se porta tutto il traffico, a casa resta accesa)</string>
   <string name="auto_waiting">A casa con la VPN accesa: aspetto che il NAS sia libero</string>
   <string name="auto_commanding_up">Sto accendendo la VPN…</string>
   <string name="auto_commanding_down">Sto spegnendo la VPN…</string>

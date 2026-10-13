@@ -48,6 +48,9 @@ class VpnAutomationTest {
   private inner class World {
     var home = false
     var vpnOn = false
+
+    /** La VPN di casa porta tutto il traffico (`AllowedIPs = 0.0.0.0/0`, la configurazione di fabbrica del FRITZ!Box). */
+    var fullTunnel = false
     private var counter = 0
     private var networkId = "cell-0"
 
@@ -65,7 +68,8 @@ class VpnAutomationTest {
       val networks: List<LinkFacts> =
         if (home) {
           val wifi = LinkFactsSamples.homeWifi(id = networkId)
-          if (vpnOn) listOf(LinkFactsSamples.homeVpn(), wifi) else listOf(wifi)
+          val vpn = if (fullTunnel) LinkFactsSamples.homeVpnFullTunnel(over = dev.pampa.mycloudgallery.core.network.contract.NetTransport.WIFI) else LinkFactsSamples.homeVpn()
+          if (vpnOn) listOf(vpn, wifi) else listOf(wifi)
         } else {
           val cell = LinkFactsSamples.cellular(id = networkId)
           if (vpnOn) listOf(LinkFactsSamples.homeVpn(over = dev.pampa.mycloudgallery.core.network.contract.NetTransport.CELLULAR), cell) else listOf(cell)
@@ -220,6 +224,33 @@ class VpnAutomationTest {
     advanceTimeBy(21.seconds)
     runCurrent()
 
+    assertThat(wg.commands).containsExactly(false)
+  }
+
+  /**
+   * Revisione 2, F2: "casa" si riconosce dall'ULA, che un Wi-Fi gemello puo' imitare. Una VPN che porta tutto il
+   * traffico del telefono non si spegne mai da sola: il NAS si raggiunge attraverso il tunnel.
+   */
+  @Test
+  fun inCasa_unaVpnCheportaTuttoIlTrafficoNonSiSpegneDaSola() = runTest {
+    val wg = Wg(this)
+    world.fullTunnel = true
+    world.vpnOn = true
+    world.arriveHome()
+    val snapshot = world.snapshot()
+    assertThat(snapshot.home).isEqualTo(dev.pampa.mycloudgallery.core.network.contract.HomeMatch.Match)
+    assertThat(snapshot.vpn).isEqualTo(dev.pampa.mycloudgallery.core.network.contract.VpnObservation.HOME_TUNNEL)
+    assertThat(snapshot.vpnCarriesInternet).isTrue()
+    publish()
+    automation(wg)
+    settle(5.minutes)
+    assertThat(wg.commands).isEmpty()
+
+    // La stessa casa con una VPN che porta solo il traffico verso casa: si spegne (una volta).
+    world.fullTunnel = false
+    world.arriveHome()
+    publish()
+    settle(5.minutes)
     assertThat(wg.commands).containsExactly(false)
   }
 

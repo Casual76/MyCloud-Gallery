@@ -56,7 +56,11 @@ temporaneo e si ripete; caduta **durante** la rinomina: si rilegge il file final
 - 10 coroutine + 2 lavori (su un secondo gestore) con la password sbagliata → **esattamente 1** `authenticate`, anche
   dopo il "riavvio" (nuovo DataStore sullo stesso file); si richiude solo con `onNewPasswordSaved` (`AuthBreakerTest`).
   Gli errori di rete non aprono; un fallimento della generazione precedente non riapre; 2 tentativi rimasti a metà
-  (processo morto) aprono.
+  (processo morto) aprono. Quindi la promessa vera è **al massimo 2** tentativi con la stessa password dopo crash ripetuti
+  durante il login (`MAX_UNCONFIRMED`), uno solo altrimenti.
+- Revisione 2, F9: un **timeout o una connessione caduta durante l'autenticazione** (`Timeout`/`Stalled` dopo la traccia)
+  resta "non confermato": può essere un rifiuto ritardato apposta da chi sta in mezzo. Due di fila aprono l'interruttore;
+  un login riuscito toglie il segno. Un timeout prima del login (TCP, NEGOTIATE) non conta (`AuthBreakerTest`).
 - Mai più di 8 richieste in volo; una sola connessione e un solo login per molti chiamanti.
 - I lavori non chiudono mai share o sessione; le chiude solo il gestore (cambio di rete, inattività 5 min, sospetto).
 - Mai sovrascrivere, mai cancellare file altrui; `read` non alloca oltre `maxBytes+1`.

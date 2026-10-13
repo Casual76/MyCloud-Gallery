@@ -34,6 +34,10 @@
   <string name="problem_identity_detail">L’identità del NAS non è quella attesa, e per questo non ho inviato nessuna password. Controlla l’indirizzo: se hai cambiato NAS o rifatto la configurazione, serve prima l’aiuto di un admin.</string>
 
   <!-- Passo 3: account (E-R8, E-S12) -->
+  <string name="problem_password_other_nas_title">La password è arrivata a un altro NAS</string>
+  <string name="problem_password_other_nas_detail">Il NAS a cui ti sei collegato non è quello firmato dalla famiglia, e ha ricevuto la tua password. Fai cambiare la password sul NAS vero (dalla sua dashboard, o chiedi all’admin) prima di riprovare, e controlla l’indirizzo con quello letto dal FRITZ!Box.</string>
+  <string name="problem_password_weak_title">Password troppo debole</string>
+  <string name="problem_password_weak_detail">Fuori casa un dispositivo che imita il NAS potrebbe registrare la risposta della password e provare a indovinarla con un computer, senza limiti di tentativi. Cambiala sul NAS con una più forte e scrivila qui: questa non è stata mandata.</string>
   <string name="problem_admin_refused_title">Con l’account «admin» non si può</string>
   <string name="problem_admin_refused_detail">L’account amministratore del NAS non si usa mai in quest’app: se la sua password trapelasse, rischieresti tutto il NAS. Usa un tuo account personale.</string>
   <string name="problem_auth_failed_title">Nome o password non corretti</string>

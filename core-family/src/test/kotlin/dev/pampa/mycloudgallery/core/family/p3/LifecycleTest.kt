@@ -113,10 +113,11 @@ class LifecycleTest {
     val phone = newAdminPhone()
     val kit = (phone.recovery.findKits(account, "admin2") as NasResult.Ok).value.single()
 
+    val paper = world.familyKey.publicKey.fingerprint
     val other = RecoveryCode.generate().toDisplayString().toCharArray()
-    assertThat(phone.recovery.recover(kit, other, null, OldAdminFate.REVOKED)).isEqualTo(RecoveryOutcome.WrongCode)
+    assertThat(phone.recovery.recover(kit, other, null, OldAdminFate.REVOKED, paper)).isEqualTo(RecoveryOutcome.WrongCode)
     val typo = world.recoveryCode.toDisplayString().let { it.substring(0, 5) + (if (it[5] == 'X') 'Y' else 'X') + it.substring(6) }
-    assertThat(phone.recovery.recover(kit, typo.toCharArray(), null, OldAdminFate.REVOKED)).isEqualTo(RecoveryOutcome.WrongCode)
+    assertThat(phone.recovery.recover(kit, typo.toCharArray(), null, OldAdminFate.REVOKED, paper)).isEqualTo(RecoveryOutcome.WrongCode)
     assertThat(phone.vault.key).isNull()
     assertThat(world.common.exists(NasLayout.registryFile(2))).isFalse()
   }
@@ -145,13 +146,41 @@ class LifecycleTest {
     assertThat(kits).hasSize(2) // i nomi strani sono ignorati
     val fake = kits.single { it.fileName.endsWith(attackerKey.publicKey.fingerprint) }
 
-    // Con il QR di stato: rifiutato prima di decifrare. Senza: il registro firmato dalla famiglia non lo accetta.
+    // Con il QR di stato o con l'impronta del foglio: rifiutato prima di decifrare (revisione 2, F3). Prima, senza QR,
+    // l'ancora era l'impronta del nome del file: il kit dell'attaccante si apriva e fermava solo il registro.
     assertThat(phone.recovery.recover(fake, world.recoveryCode.toDisplayString().toCharArray(), stateQr(world.admin.also { it.engine.ensureLoaded() }), OldAdminFate.LOST))
       .isEqualTo(RecoveryOutcome.Failed(OnboardingProblem.RECOVERY_KIT_UNVERIFIED))
-    assertThat(phone.recovery.recover(fake, world.recoveryCode.toDisplayString().toCharArray(), null, OldAdminFate.LOST))
-      .isEqualTo(RecoveryOutcome.Failed(OnboardingProblem.REGISTRY_UNTRUSTED))
+    val paper = world.familyKey.publicKey.fingerprint.chunked(4).joinToString(" ").uppercase()
+    assertThat(phone.recovery.recover(fake, world.recoveryCode.toDisplayString().toCharArray(), null, OldAdminFate.LOST, paper))
+      .isEqualTo(RecoveryOutcome.Failed(OnboardingProblem.RECOVERY_KIT_UNVERIFIED))
+    assertThat(phone.vault.key).isNull()
     assertThat(world.admin.engine.state!!.registry.version).isEqualTo(1)
     assertThat(world.common.exists(NasLayout.registryFile(2))).isFalse()
+  }
+
+  /**
+   * Revisione 2, F3: senza QR di stato serve l'impronta della famiglia letta dal foglio. Il nome del file sul NAS non
+   * basta: chi scrive nell'area privata lo sceglie. Con l'impronta del foglio (anche a gruppi, maiuscola) si recupera.
+   */
+  @Test
+  fun recuperoDellAdmin_senzaQrServeLImprontaDelFoglio_F3() = runTest {
+    val phone = newAdminPhone()
+    val kit = (phone.recovery.findKits(account, "admin2") as NasResult.Ok).value.single()
+
+    assertThat(phone.recovery.recover(kit, world.recoveryCode.toDisplayString().toCharArray(), null, OldAdminFate.LOST))
+      .isEqualTo(RecoveryOutcome.Failed(OnboardingProblem.RECOVERY_KIT_UNVERIFIED))
+    assertThat(phone.recovery.recover(kit, world.recoveryCode.toDisplayString().toCharArray(), null, OldAdminFate.LOST, "abcd"))
+      .isEqualTo(RecoveryOutcome.Failed(OnboardingProblem.RECOVERY_KIT_UNVERIFIED))
+    val otherFamily = FamilyKey.generate().publicKey.fingerprint
+    assertThat(phone.recovery.recover(kit, world.recoveryCode.toDisplayString().toCharArray(), null, OldAdminFate.LOST, otherFamily))
+      .isEqualTo(RecoveryOutcome.Failed(OnboardingProblem.RECOVERY_KIT_UNVERIFIED))
+    assertThat(phone.vault.key).isNull()
+    assertThat(world.common.exists(NasLayout.registryFile(2))).isFalse()
+
+    val paper = world.familyKey.publicKey.fingerprint.chunked(4).joinToString(" - ").uppercase()
+    assertThat(phone.recovery.recover(kit, world.recoveryCode.toDisplayString().toCharArray(), null, OldAdminFate.LOST, paper))
+      .isEqualTo(RecoveryOutcome.Recovered)
+    assertThat(phone.vault.key!!.publicKey).isEqualTo(world.familyKey.publicKey)
   }
 
   @Test
@@ -211,6 +240,8 @@ class LifecycleTest {
     // Il codice nuovo si mostra, si riscrive e apre il kit nuovo.
     val display = world.admin.reset.recoveryCodeForDisplay()!!
     val typed = display.groups.joinToString("-") { String(it) }
+    // Revisione 2, F3: sul foglio nuovo va anche l'impronta della chiave nuova.
+    assertThat(display.familyFingerprint).isEqualTo(newKey.publicKey.fingerprint)
     val kitBytes = world.server.share("admin2").bytesAt(NasLayout.recoveryKitFile(newFamilyId, newKey.publicKey.fingerprint))!!
     assertThat(RecoveryKit.open(kitBytes, RecoveryCode.parse(typed)!!, newFamilyId, newKey.publicKey.fingerprint)).isInstanceOf(Verdict.Accepted::class.java)
     assertThat(world.admin.reset.confirmTypedCode("AAAA".toCharArray())).isFalse()

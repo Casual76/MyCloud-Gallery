@@ -16,6 +16,7 @@ import dev.pampa.mycloudgallery.core.nas.contract.Stage
 import dev.pampa.mycloudgallery.core.nas.contract.StageResult
 import dev.pampa.mycloudgallery.core.nas.contract.TestTarget
 import dev.pampa.mycloudgallery.core.security.credentials.NasCredentials
+import dev.pampa.mycloudgallery.core.security.credentials.NasPasswordPolicy
 import dev.pampa.mycloudgallery.core.security.credentials.SaveResult
 import dev.pampa.mycloudgallery.feature.settings.R
 import dev.pampa.mycloudgallery.feature.settings.port.NasAccountSettings
@@ -43,20 +44,31 @@ internal data class PasswordUiState(
   /** La password digitata. **Mai nei log**: [toString] non la stampa. */
   val password: String = "",
   val visible: Boolean = false,
+  /** La password nel campo e' quella proposta dall'app: va impostata sul NAS prima di provarla. */
+  val generated: Boolean = false,
   val phase: PasswordPhase = PasswordPhase.FORM,
   val stages: List<StageResult> = emptyList(),
   val feedback: Feedback? = null,
 ) {
-  /** Sotto i 12 caratteri si avvisa, ma non si impedisce (§2.1 passo 3). */
-  val isShort: Boolean get() = password.isNotEmpty() && password.length < SHORT_LIMIT
+  /**
+   * Revisione 2, F1: che cosa manca alla password per reggere un attacco offline (`NasPasswordPolicy`), o null se va
+   * bene o il campo e' vuoto. Una password debole non si prova nemmeno.
+   */
+  val weakness: NasPasswordPolicy.Weakness?
+    get() {
+      if (password.isEmpty()) return null
+      val chars = password.toCharArray()
+      return try {
+        NasPasswordPolicy.check(user, chars)
+      } finally {
+        chars.fill('\u0000')
+      }
+    }
 
-  val canSubmit: Boolean get() = available && user != null && password.isNotEmpty() && phase == PasswordPhase.FORM
+  val canSubmit: Boolean
+    get() = available && user != null && password.isNotEmpty() && phase == PasswordPhase.FORM && weakness == null
 
   override fun toString(): String = "PasswordUiState(phase=$phase)"
-
-  companion object {
-    const val SHORT_LIMIT = 12
-  }
 }
 
 /**
@@ -92,7 +104,19 @@ internal class PasswordViewModel @Inject constructor(
   )
 
   fun setPassword(value: String) {
-    _state.update { if (it.phase == PasswordPhase.FORM) it.copy(password = value, feedback = null) else it }
+    _state.update { if (it.phase == PasswordPhase.FORM) it.copy(password = value, generated = false, feedback = null) else it }
+  }
+
+  /** Revisione 2, F1: propone una password forte (16 caratteri a caso) da impostare sul NAS, e la mostra. */
+  fun generate() {
+    if (_state.value.phase != PasswordPhase.FORM) return
+    val chars = NasPasswordPolicy.generate()
+    try {
+      val proposed = String(chars)
+      _state.update { it.copy(password = proposed, visible = true, generated = true, feedback = null) }
+    } finally {
+      chars.fill('\u0000')
+    }
   }
 
   fun toggleVisible() {

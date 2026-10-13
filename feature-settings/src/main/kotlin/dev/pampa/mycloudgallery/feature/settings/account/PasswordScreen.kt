@@ -18,6 +18,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.antigravity.fluidengine.ui.fluid.FluidAmbient
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
+import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.theme.FluidCard
 import dev.antigravity.fluidengine.ui.fluid.FluidHero
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroMotif
@@ -34,6 +35,7 @@ import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.nas.contract.Stage
 import dev.pampa.mycloudgallery.core.nas.contract.StageOutcome
 import dev.pampa.mycloudgallery.core.nas.contract.StageResult
+import dev.pampa.mycloudgallery.core.security.credentials.NasPasswordPolicy
 import dev.pampa.mycloudgallery.core.security.input.SecureInput
 import dev.pampa.mycloudgallery.core.security.screen.SensitiveScreen
 import dev.pampa.mycloudgallery.feature.settings.R
@@ -48,6 +50,8 @@ internal class PasswordActions(
   val onPassword: (String) -> Unit,
   val onToggleVisible: () -> Unit,
   val onSubmit: () -> Unit,
+  /** Revisione 2, F1: "Proponimi una password forte". */
+  val onGenerate: () -> Unit = {},
 ) {
   companion object {
     val None = PasswordActions({}, {}, {}, {})
@@ -65,6 +69,7 @@ internal fun PasswordRoute(onBack: () -> Unit) {
       onPassword = viewModel::setPassword,
       onToggleVisible = viewModel::toggleVisible,
       onSubmit = viewModel::submit,
+      onGenerate = viewModel::generate,
     ),
   )
 }
@@ -144,7 +149,10 @@ internal fun PasswordScreen(state: PasswordUiState, actions: PasswordActions) {
           onValueChange = actions.onPassword,
           label = stringResource(R.string.password_field),
           enabled = state.phase == PasswordPhase.FORM,
-          supportingText = if (state.isShort) stringResource(R.string.password_short) else stringResource(R.string.password_field_help),
+          supportingText = when (val weakness = state.weakness) {
+            null -> stringResource(if (state.password.isEmpty()) R.string.password_settings_rule else R.string.password_field_help)
+            else -> stringResource(weakness.messageRes())
+          },
           isError = false,
           showClearButton = false,
           keyboardOptions = SecureInput.keyboardOptions(ImeAction.Done),
@@ -165,6 +173,24 @@ internal fun PasswordScreen(state: PasswordUiState, actions: PasswordActions) {
           fillWidth = true,
           enabled = state.canSubmit,
           loading = state.phase == PasswordPhase.TESTING,
+        )
+        if (!state.generated) {
+          FluidButton(
+            text = stringResource(R.string.password_generate),
+            onClick = actions.onGenerate,
+            style = FluidButtonStyle.Tinted,
+            fillWidth = true,
+            enabled = state.phase == PasswordPhase.FORM,
+          )
+        }
+      }
+    }
+    if (state.generated) {
+      item {
+        Note(
+          title = stringResource(R.string.password_generated_title),
+          message = stringResource(R.string.password_generated_message),
+          tone = FluidTone.Info,
         )
       }
     }
@@ -200,6 +226,14 @@ private fun StageResults(stages: List<StageResult>) {
       )
     }
   }
+}
+
+/** La spiegazione di che cosa manca alla password (revisione 2, F1). */
+internal fun NasPasswordPolicy.Weakness.messageRes(): Int = when (this) {
+  NasPasswordPolicy.Weakness.TOO_SHORT -> R.string.password_settings_weak_short
+  NasPasswordPolicy.Weakness.CONTAINS_USER -> R.string.password_settings_weak_user
+  NasPasswordPolicy.Weakness.PREDICTABLE -> R.string.password_settings_weak_predictable
+  NasPasswordPolicy.Weakness.TOO_SIMPLE -> R.string.password_settings_weak_simple
 }
 
 private fun Stage.labelRes(): Int = when (this) {

@@ -38,6 +38,7 @@ import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetTone
 import dev.pampa.mycloudgallery.core.family.contract.FamilyReset
 import dev.pampa.mycloudgallery.core.family.contract.RegistryService
 import dev.pampa.mycloudgallery.core.family.contract.ResetOutcome
+import dev.pampa.mycloudgallery.core.family.contract.TypedFingerprint
 import dev.pampa.mycloudgallery.core.family.contract.TrustStatus
 import dev.pampa.mycloudgallery.core.security.screen.OverlayShield
 import dev.pampa.mycloudgallery.core.security.screen.SensitiveScreen
@@ -74,6 +75,8 @@ internal data class ResetUiState(
    * log**: [toString] non lo stampa; la pagina e' sotto `FLAG_SECURE` mentre si vede.
    */
   val newCode: List<String> = emptyList(),
+  /** L'impronta della chiave nuova, da scrivere sul foglio con il codice (revisione 2, F3). Non e' un segreto. */
+  val newFingerprint: String? = null,
   val codeTyped: String = "",
 ) {
   override fun toString(): String = "ResetUiState(stage=$stage, codeShown=${newCode.isNotEmpty()})"
@@ -129,7 +132,10 @@ internal class FamilyResetViewModel @Inject constructor(
       val outcome = reset.reset(confirmedTwice = true)
       _state.update {
         when (outcome) {
-          is ResetOutcome.Done -> it.copy(stage = ResetStage.DONE, typed = "", newCode = takeNewCode())
+          is ResetOutcome.Done -> {
+            val (code, fingerprint) = takeNewCode()
+            it.copy(stage = ResetStage.DONE, typed = "", newCode = code, newFingerprint = fingerprint)
+          }
           is ResetOutcome.Failed -> it.copy(stage = ResetStage.TYPE_WORD, feedback = outcome.problem.toFeedback())
         }
       }
@@ -137,9 +143,9 @@ internal class FamilyResetViewModel @Inject constructor(
   }
 
   /** Il codice del kit nuovo (P9: `FamilyReset.recoveryCodeForDisplay`), in gruppi; i caratteri originali si azzerano. */
-  private fun takeNewCode(): List<String> {
-    val display = reset.recoveryCodeForDisplay() ?: return emptyList()
-    return display.use { shown -> shown.groups.map { String(it) } }
+  private fun takeNewCode(): Pair<List<String>, String?> {
+    val display = reset.recoveryCodeForDisplay() ?: return emptyList<String>() to null
+    return display.use { shown -> shown.groups.map { String(it) } to shown.familyFingerprint }
   }
 
   fun setCodeTyped(value: String) {
@@ -154,7 +160,7 @@ internal class FamilyResetViewModel @Inject constructor(
     val ok = reset.confirmTypedCode(typed)
     _state.update {
       if (ok) {
-        it.copy(newCode = emptyList(), codeTyped = "", feedback = null)
+        it.copy(newCode = emptyList(), newFingerprint = null, codeTyped = "", feedback = null)
       } else {
         it.copy(feedback = Feedback(R.string.reset_code_wrong_title, R.string.reset_code_wrong, FluidTone.Danger))
       }
@@ -392,6 +398,19 @@ private fun androidx.compose.foundation.lazy.LazyListScope.newKitCode(
         FluidListRow(
           title = group,
           subtitle = stringResource(R.string.reset_code_group, index + 1, state.newCode.size),
+          disclosure = false,
+        )
+      }
+    }
+  }
+  // Revisione 2, F3: l'impronta va sul foglio con il codice; nel recupero senza QR di stato e' l'ancora.
+  state.newFingerprint?.let { fingerprint ->
+    item {
+      FluidListGroup {
+        FluidListRow(
+          title = TypedFingerprint.grouped(fingerprint),
+          subtitle = stringResource(R.string.reset_fingerprint_detail),
+          eyebrow = stringResource(R.string.reset_fingerprint_title),
           disclosure = false,
         )
       }

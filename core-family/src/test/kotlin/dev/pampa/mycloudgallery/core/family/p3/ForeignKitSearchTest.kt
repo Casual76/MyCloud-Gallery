@@ -54,7 +54,7 @@ class ForeignKitSearchTest {
     // La sessione del dispositivo (account "mamma") non ha toccato l'area privata dell'admin.
     assertThat(member.sessions.calls.map { it.first }).doesNotContain("admin2")
 
-    val outcome = recovery.recover(kits.single(), world.recoveryCode.toDisplayString().toCharArray(), null, OldAdminFate.KEEP_APPROVED)
+    val outcome = recovery.recover(kits.single(), world.recoveryCode.toDisplayString().toCharArray(), null, OldAdminFate.KEEP_APPROVED, world.familyKey.publicKey.fingerprint)
     assertThat(outcome).isEqualTo(RecoveryOutcome.Recovered)
     assertThat(member.sessions.calls.map { it.first }).doesNotContain("admin2")
     assertThat(foreign.calls).hasSize(1) // la password non serve una seconda volta

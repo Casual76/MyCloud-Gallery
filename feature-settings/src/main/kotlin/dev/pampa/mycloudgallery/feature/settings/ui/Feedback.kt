@@ -41,7 +41,8 @@ internal fun OnboardingProblem.toFeedback(): Feedback = when (this) {
   OnboardingProblem.ACCOUNT_DISABLED -> Feedback(R.string.fb_failed_title, R.string.nas_error_account_disabled, FluidTone.Danger)
   OnboardingProblem.PASSWORD_EXPIRED -> Feedback(R.string.fb_failed_title, R.string.nas_error_password_expired, FluidTone.Danger)
   OnboardingProblem.ACCOUNT_RESTRICTED -> Feedback(R.string.fb_failed_title, R.string.nas_error_account_restricted, FluidTone.Danger)
-  OnboardingProblem.IDENTITY_MISMATCH -> Feedback(R.string.fb_failed_title, R.string.nas_error_identity, FluidTone.Danger)
+  OnboardingProblem.IDENTITY_MISMATCH, OnboardingProblem.PASSWORD_SENT_TO_OTHER_NAS ->
+    Feedback(R.string.fb_failed_title, R.string.nas_error_identity, FluidTone.Danger)
   OnboardingProblem.NAS_INSECURE -> Feedback(R.string.fb_failed_title, R.string.nas_error_insecure, FluidTone.Danger)
   OnboardingProblem.NAS_NOT_FOUND, OnboardingProblem.NOT_ON_WIFI, OnboardingProblem.NOT_AT_HOME ->
     Feedback(R.string.fb_failed_title, R.string.problem_unreachable, FluidTone.Warning)

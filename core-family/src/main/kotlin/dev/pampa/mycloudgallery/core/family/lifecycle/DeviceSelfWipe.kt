@@ -88,8 +88,27 @@ class DeviceSelfWipe(
   }
 
   override suspend fun resumeIfInterrupted() {
-    val record = load() ?: return
-    if (record.phase != WipePhase.DONE) run(record.reason)
+    val record = load()
+    if (record != null) {
+      if (record.phase != WipePhase.DONE) run(record.reason)
+      return
+    }
+    // Revisione 2, F7: il diario puo' mancare anche a meta' azzeramento (non si e' potuto scrivere: disco pieno, file
+    // non scrivibile; [persist] va avanti lo stesso, perche' azzerare conta di piu'). Il segno che resta e' questo: la
+    // chiave del dispositivo non c'e' piu' ma lo stato fidato si'. Nessun altro percorso toglie la chiave lasciando lo
+    // stato (la fase 5 lo cancella), quindi e' un azzeramento interrotto: si finisce.
+    if (!keys.hasDeviceKey() && hasTrustState()) {
+      GalleryLog.w(TAG) { "chiave sparita con lo stato fidato ancora presente: si completa l'azzeramento" }
+      run(WipeReason.MARKED_LOST)
+    }
+  }
+
+  private suspend fun hasTrustState(): Boolean = try {
+    trustState.load() != null
+  } catch (e: CancellationException) {
+    throw e
+  } catch (e: Exception) {
+    false
   }
 
   /**

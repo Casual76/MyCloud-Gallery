@@ -69,7 +69,17 @@
   <string name="account_user_admin">L’account «admin» non si può usare.</string>
   <string name="account_user_invalid">Solo lettere, numeri, punto, trattino e sottolineatura.</string>
   <string name="account_password_label">Password</string>
-  <string name="account_password_short">Meno di 12 caratteri: funziona, ma una password più lunga protegge meglio le tue foto.</string>
+  <string name="key_code_fingerprint_title">Impronta della famiglia</string>
+  <string name="key_code_fingerprint_detail">Scrivila sul foglio sotto il codice. Non è segreta, ma se un giorno recuperi l’admin senza il QR «Stato della famiglia» te la chiederò.</string>
+  <string name="password_rule">Almeno 12 caratteri con tre tipi fra minuscole, maiuscole, numeri e simboli, oppure una frase di almeno 16 caratteri.</string>
+  <string name="password_weak_short">Troppo corta: servono almeno 12 caratteri.</string>
+  <string name="password_weak_user">Contiene il nome dell’account: chi prova a indovinare comincia da lì. Senza il nome restano meno di 12 caratteri.</string>
+  <string name="password_weak_predictable">Troppo prevedibile: sequenze come 123456, qwerty o «password» e i caratteri ripetuti non contano.</string>
+  <string name="password_weak_simple">Con meno di 16 caratteri servono almeno tre tipi fra minuscole, maiuscole, numeri e simboli. Oppure allungala: una frase va benissimo.</string>
+  <string name="account_generate_title">Proponimi una password forte</string>
+  <string name="account_generate_detail">16 caratteri a caso, da impostare prima sul NAS.</string>
+  <string name="account_generated_title">Imposta questa password sul NAS</string>
+  <string name="account_generated_detail">Sul computer apri la dashboard del NAS, poi Utenti, il tuo utente e Modifica password, e scrivi questa (si legge a gruppi di 4, senza spazi). Poi torna qui e continua: la proverò una volta sola.</string>
   <string name="account_submit">Accedi al NAS</string>
   <string name="account_submitting">Accedo…</string>
   <string name="account_footnote">La password va nel deposito sicuro del telefono e non la rivedrai più. Lo schermo è protetto: niente screenshot mentre scrivi.</string>
@@ -231,7 +241,7 @@
   <string name="vpn_guide_ipv6">Controlla l’IPv6</string>
   <string name="vpn_guide_ipv6_detail">Il collegamento di casa non ha un IPv4 pubblico (CGNAT): da fuori il FRITZ!Box si raggiunge solo in IPv6.</string>
   <string name="vpn_guide_allowed">Indirizzi consentiti</string>
-  <string name="vpn_guide_allowed_detail">In WireGuard, «AllowedIPs» deve contenere la rete di casa e il prefisso IPv6 privato (ULA), non tutto il traffico.</string>
+  <string name="vpn_guide_allowed_detail">In WireGuard, «AllowedIPs» deve contenere la rete di casa e il prefisso IPv6 privato (ULA), non tutto il traffico. Se il tunnel porta tutto il traffico (0.0.0.0/0), l’app non lo spegne mai da sola: un Wi-Fi che imita casa potrebbe ingannarla.</string>
   <string name="vpn_guide_import">Importa nell’app WireGuard</string>
   <string name="vpn_guide_import_detail">Scansiona il QR del FRITZ!Box con l’app WireGuard, non con quest’app.</string>
   <string name="vpn_qr_secret_title">Il QR di WireGuard è una password</string>
@@ -239,7 +249,7 @@
   <string name="vpn_control_section">Controllo automatico</string>
   <string name="vpn_control_section_detail">Facoltativo. Lo puoi attivare quando vuoi.</string>
   <string name="vpn_control_toggle">Accendi e spegni la VPN da sola</string>
-  <string name="vpn_control_toggle_detail">Spenta a casa (più veloce), accesa fuori. Serve WireGuard con «Consenti il controllo da altre app».</string>
+  <string name="vpn_control_toggle_detail">Spenta a casa (più veloce), accesa fuori. Serve WireGuard con «Consenti il controllo da altre app». Se il tunnel porta tutto il traffico, a casa resta acceso.</string>
   <string name="vpn_cap_checking">Controllo WireGuard…</string>
   <string name="vpn_cap_missing_title">WireGuard non è installato</string>
   <string name="vpn_cap_missing_detail">Installa l’app WireGuard e importa il collegamento di casa; poi torna qui.</string>

@@ -25,6 +25,8 @@ import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
 import dev.pampa.mycloudgallery.core.qr.QrCode
+import dev.pampa.mycloudgallery.core.security.screen.OverlayShield
+import dev.pampa.mycloudgallery.core.security.screen.SensitiveScreen
 import dev.pampa.mycloudgallery.feature.onboarding.R
 import dev.pampa.mycloudgallery.feature.onboarding.ui.CodeGroups
 import dev.pampa.mycloudgallery.feature.onboarding.ui.DockAction
@@ -51,6 +53,10 @@ fun AwaitingApprovalScreen(
   modifier: Modifier = Modifier,
   onContinue: (() -> Unit)? = null,
 ) {
+  // Revisione 2, F5: il codice e' cio' che l'admin digita per approvare. Nessuna sovrapposizione di un'altra app
+  // (che potrebbe coprirlo con un codice falso) e niente cattura dello schermo ne' anteprima nei recenti.
+  OverlayShield()
+  SensitiveScreen()
   val groups = code.split('-', ' ').filter { it.isNotBlank() }.ifEmpty { code.chunked(CODE_GROUP) }
   StepScaffold(
     title = stringResource(R.string.awaiting_title),

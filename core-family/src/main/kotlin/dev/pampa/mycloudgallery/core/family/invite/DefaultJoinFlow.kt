@@ -37,6 +37,7 @@ import dev.pampa.mycloudgallery.core.network.contract.NasAddress
 import dev.pampa.mycloudgallery.core.network.contract.VpnObservation
 import dev.pampa.mycloudgallery.core.rules.Preset
 import dev.pampa.mycloudgallery.core.security.credentials.NasCredentials
+import dev.pampa.mycloudgallery.core.security.credentials.NasPasswordPolicy
 import dev.pampa.mycloudgallery.core.security.credentials.SaveResult
 import dev.pampa.mycloudgallery.core.trust.RejectReason
 import dev.pampa.mycloudgallery.core.trust.TrustLimits
@@ -230,6 +231,8 @@ class DefaultJoinFlow(
     val s = session ?: return JoinStep.Failed(OnboardingProblem.STEP_NOT_AVAILABLE)
     val user = s.invite.nasUser
     if (password.isEmpty() || rejected.isRepeat(user, password)) return JoinStep.Failed(OnboardingProblem.AUTH_FAILED)
+    // Revisione 2, F1: anche la password del familiare deve reggere un attacco offline; se e' debole non parte.
+    if (!NasPasswordPolicy.isAcceptable(user, password)) return JoinStep.Failed(OnboardingProblem.PASSWORD_TOO_WEAK)
     val credentials = try {
       NasCredentials(user, password)
     } catch (e: IllegalArgumentException) {
@@ -282,7 +285,8 @@ class DefaultJoinFlow(
     // Il GUID firmato dall'admin e' la conferma indipendente dal QR (e l'unica per chi entra senza QR): un NAS con un
     // altro GUID non e' quello della famiglia, qualunque cosa dica l'indirizzo.
     val signedGuid = signed.nasGuid
-    if (signedGuid != null && !signedGuid.equals(s.guid, ignoreCase = true)) return abandon(OnboardingProblem.IDENTITY_MISMATCH)
+    // Revisione 2, F6: qui la password e' gia' partita verso il NAS sbagliato: lo si dice, perche' va cambiata.
+    if (signedGuid != null && !signedGuid.equals(s.guid, ignoreCase = true)) return abandon(OnboardingProblem.PASSWORD_SENT_TO_OTHER_NAS)
     val signedAddress = NasAddress.parseOrNull(FamilyConfigFactory.ipOf(signed.nasHost), s.address.name)
     if (signedAddress != null && signedAddress != s.address) {
       val stages = setOf(Stage.ROUTE, Stage.TCP, Stage.NEGOTIATE, Stage.GUID)

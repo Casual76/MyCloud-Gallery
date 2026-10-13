@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AdminPanelSettings
 import androidx.compose.material.icons.rounded.Block
+import androidx.compose.material.icons.rounded.Password
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.ErrorOutline
@@ -113,8 +114,14 @@ internal fun OnboardingProblem.spec(): ProblemSpec = when (this) {
     Icons.Rounded.GppBad, NoticeTone.Danger, R.string.problem_identity_title, R.string.problem_identity_detail,
     listOf(ProblemAction.CHANGE_ADDRESS),
   )
+  OnboardingProblem.PASSWORD_SENT_TO_OTHER_NAS -> ProblemSpec(
+    Icons.Rounded.GppBad, NoticeTone.Danger, R.string.problem_password_other_nas_title, R.string.problem_password_other_nas_detail,
+  )
   OnboardingProblem.ADMIN_ACCOUNT_REFUSED -> ProblemSpec(
     Icons.Rounded.AdminPanelSettings, NoticeTone.Caution, R.string.problem_admin_refused_title, R.string.problem_admin_refused_detail,
+  )
+  OnboardingProblem.PASSWORD_TOO_WEAK -> ProblemSpec(
+    Icons.Rounded.Password, NoticeTone.Caution, R.string.problem_password_weak_title, R.string.problem_password_weak_detail,
   )
   OnboardingProblem.AUTH_FAILED -> ProblemSpec(
     Icons.Rounded.KeyOff, NoticeTone.Danger, R.string.problem_auth_failed_title, R.string.problem_auth_failed_detail,

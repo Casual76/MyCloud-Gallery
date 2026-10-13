@@ -29,11 +29,11 @@ class DiagnosticsExporterTest {
         DiagCodes.NET_FOREIGN_VPN,
         severity = DiagSeverity.ERROR,
         export = mapOf(
-          "ipv6" to ExportValue.Flag(true),
-          "count" to ExportValue.Num(42),
+          "ipv6Global" to ExportValue.Flag(true),
+          "total" to ExportValue.Num(42),
           "elapsed" to ExportValue.Dur.of(250.milliseconds),
-          "bucket" to ExportValue.Enum.of(Bucket.RESTRICTED),
-          "account" to testHasher.hash("mario.rossi"),
+          "standbyBucket" to ExportValue.Enum.of(Bucket.RESTRICTED),
+          "gateway" to testHasher.hash("mario.rossi"),
         ),
       ),
       item(DiagCodes.NET_PLACE, severity = DiagSeverity.OK),
@@ -61,11 +61,11 @@ class DiagnosticsExporterTest {
     val values = JSONObject(DiagnosticsExporter.render(sample).text)
       .getJSONObject("sections").getJSONArray("NETWORK_AND_NAS").getJSONObject(0).getJSONObject("values")
 
-    assertThat(values.getBoolean("ipv6")).isTrue()
-    assertThat(values.getLong("count")).isEqualTo(42L)
+    assertThat(values.getBoolean("ipv6Global")).isTrue()
+    assertThat(values.getLong("total")).isEqualTo(42L)
     assertThat(values.getString("elapsed")).isEqualTo("250ms")
-    assertThat(values.getString("bucket")).isEqualTo("Bucket.RESTRICTED")
-    assertThat(values.getString("account")).matches("#[0-9a-f]{12}")
+    assertThat(values.getString("standbyBucket")).isEqualTo("Bucket.RESTRICTED")
+    assertThat(values.getString("gateway")).matches("#[0-9a-f]{12}")
   }
 
   @Test
@@ -85,7 +85,7 @@ class DiagnosticsExporterTest {
     val line = first.lines().first { "NET_FOREIGN_VPN" in it }
     val keys = Regex("\"([a-z][A-Za-z0-9_.]*)\": ").findAll(line.substringAfter("\"values\"")).map { it.groupValues[1] }.toList()
     assertThat(keys).isInOrder()
-    assertThat(keys).containsExactly("account", "bucket", "count", "elapsed", "ipv6")
+    assertThat(keys).containsExactly("elapsed", "gateway", "ipv6Global", "standbyBucket", "total")
   }
 
   @Test
@@ -119,7 +119,7 @@ class DiagnosticsExporterTest {
       """"name": "Telefono di Mario"""",
       """"code": "x"""",
     ).forEach { pair ->
-      val tampered = clean.replace("\"count\": 42", pair)
+      val tampered = clean.replace("\"total\": 42", pair)
       assertThat(DiagnosticsExporter.conforms(tampered)).isFalse()
     }
     // Una riga in piu' che non e' nella grammatica.
@@ -144,7 +144,7 @@ class DiagnosticsExporterTest {
     // L'anello degli eventi si rilegge da un file, che un'app manomessa potrebbe riscrivere con un "enum" che e' un
     // nome. Dal P9 lo scarta gia' la rilettura (`Enum.restore` accetta solo la forma di un enum dell'app)...
     val file = java.io.File.createTempFile("events", ".log").apply {
-      writeText("1|NET_SAMPLE|INFO|owner=eMario.Rossi;count=n3\n2|NET_SAMPLE|INFO|count=n4\n")
+      writeText("1|NET_SAMPLE|INFO|owner=eMario.Rossi;total=n3\n2|NET_SAMPLE|INFO|total=n4\n")
       deleteOnExit()
     }
     val restored = dev.pampa.mycloudgallery.core.common.diagnostics.FileDiagnosticsLogStore(file).load()
@@ -160,16 +160,74 @@ class DiagnosticsExporterTest {
     ).text
     assertThat(text).doesNotContain("Mario")
     assertThat(text).doesNotContain("Rossi")
-    assertThat(text).contains("\"count\": 4")
+    assertThat(text).contains("\"total\": 4")
   }
 
   @Test
   fun unaDurataNegativaNonSiEsporta() {
     val text = DiagnosticsExporter.render(
-      snapshot(DiagSection.STORAGE to listOf(item(DiagCodes.STORAGE_USAGE, DiagSection.STORAGE, export = mapOf("age" to ExportValue.Dur(-5))))),
+      snapshot(DiagSection.STORAGE to listOf(item(DiagCodes.STORAGE_USAGE, DiagSection.STORAGE, export = mapOf("lastExitAge" to ExportValue.Dur(-5))))),
     ).text
 
     assertThat(text).doesNotContain("-5ms")
     assertThat(DiagnosticsExporter.conforms(text)).isTrue()
+  }
+
+  /**
+   * Revisione 2, F4: `DiagCode` ha un costruttore pubblico e la sola regex della forma: un codice costruito da un dato
+   * (`DiagCode(utente.uppercase())`) la supera. Esce solo un codice del catalogo; gli altri come UNKNOWN, senza valori.
+   */
+  @Test
+  fun unCodiceFuoriCatalogoEsceComeUnknownSenzaValori() {
+    val text = DiagnosticsExporter.render(
+      snapshot(
+        DiagSection.NETWORK_AND_NAS to listOf(
+          item(
+            dev.pampa.mycloudgallery.core.common.diagnostics.DiagCode("MARIO_ROSSI"),
+            export = mapOf("total" to ExportValue.Num(3232281146)),
+          ),
+        ),
+      ),
+    ).text
+
+    assertThat(text).doesNotContain("MARIO")
+    assertThat(text).doesNotContain("3232281146")
+    val entry = JSONObject(text).getJSONObject("sections").getJSONArray("NETWORK_AND_NAS").getJSONObject(0)
+    assertThat(entry.getString("code")).isEqualTo(DiagnosticsExporter.UNKNOWN_CODE)
+    assertThat(entry.has("values")).isFalse()
+    assertThat(DiagnosticsExporter.conforms(text)).isTrue()
+  }
+
+  /**
+   * Revisione 2, F4: anche le chiavi sono un elenco chiuso. `"share.${nome}"` o `"mario.rossi"` hanno la forma di una
+   * chiave, e un numero puo' portare un IPv4: fuori elenco non si esportano.
+   */
+  @Test
+  fun unaChiaveFuoriElencoNonSiEsporta() {
+    val text = DiagnosticsExporter.render(
+      snapshot(
+        DiagSection.STORAGE to listOf(
+          item(
+            DiagCodes.STORAGE_USAGE,
+            DiagSection.STORAGE,
+            export = mapOf(
+              "mario.rossi" to ExportValue.Num(1),
+              "share.mario" to ExportValue.Num(3232281146),
+              "ula9" to ExportValue.Flag(true),
+              "rejected.Mario" to ExportValue.Num(2),
+              "databaseBytes" to ExportValue.Num(4096),
+            ),
+          ),
+        ),
+      ),
+    ).text
+
+    assertThat(text).doesNotContain("mario")
+    assertThat(text).doesNotContain("Mario")
+    assertThat(text).doesNotContain("3232281146")
+    assertThat(text).doesNotContain("ula9")
+    assertThat(text).contains("\"databaseBytes\": 4096")
+    assertThat(ExportKeys.isAllowed("ula0")).isTrue()
+    assertThat(ExportKeys.isAllowed("rejected.bad_signature")).isTrue()
   }
 }

@@ -89,6 +89,9 @@ enum class LocalNetworkAccess {
  * Una fotografia della rete. Tutto cio' che serve per decidere il percorso verso il NAS e per l'indicatore.
  *
  * @property at l'istante della fotografia, orologio monotono del telefono (ms): serve a ordinare, non a datare.
+ * @property vpnCarriesInternet la VPN osservata porta anche il traffico verso internet (rotta predefinita o rotte ampie
+ *   verso indirizzi pubblici: `AllowedIPs = 0.0.0.0/0`), non solo quello verso casa. Revisione 2, F2: una VPN cosi'
+ *   l'automazione non la spegne mai da sola, perche' "casa" si riconosce da dati che un attaccante puo' imitare.
  */
 data class NetworkSnapshot(
   val place: NetPlace,
@@ -98,6 +101,7 @@ data class NetworkSnapshot(
   val localNetwork: LocalNetworkAccess,
   val ipv6Global: Boolean,
   val at: Long,
+  val vpnCarriesInternet: Boolean = false,
 ) {
   companion object {
     /** Il punto di partenza: nessuna rete osservata ancora. */

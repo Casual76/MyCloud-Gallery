@@ -32,7 +32,8 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 
 /** Come l'admin dimostra di avere davanti il dispositivo nuovo (§2.2): il codice digitato o la chiave scansionata. */
-internal enum class ProofMode { CODE, SCAN }
+/** Revisione 2, F5: la scansione della chiave e' la prova preferita (non si falsifica con un codice letto altrove). */
+internal enum class ProofMode { SCAN, CODE }
 
 /** Cosa ha letto lo scanner: niente, la chiave di questa richiesta, o la chiave di un altro dispositivo. */
 internal enum class ScanState { NONE, MATCHING, WRONG_DEVICE }
@@ -43,7 +44,7 @@ internal data class ApprovalUiState(
   /** La richiesta, o null se non c'e' piu' (approvata da un altro admin, o sparita). */
   val request: RequestUi?,
   val isAdmin: Boolean,
-  val mode: ProofMode = ProofMode.CODE,
+  val mode: ProofMode = ProofMode.SCAN,
   /** Il codice digitato, gia' a gruppi di quattro. */
   val code: String = "",
   val scan: ScanState = ScanState.NONE,
@@ -117,7 +118,8 @@ internal class ApprovalViewModel @Inject constructor(
 
   fun setCode(typed: String) {
     local.update {
-      if (it.phase != ApprovalPhase.EDITING) it else it.copy(code = CodeFormat.format(typed, CodeFormat.APPROVAL_CHARS), feedback = null)
+      // Chi scrive un codice ha scelto il codice come prova.
+      if (it.phase != ApprovalPhase.EDITING) it else it.copy(mode = ProofMode.CODE, code = CodeFormat.format(typed, CodeFormat.APPROVAL_CHARS), feedback = null)
     }
   }
 
@@ -205,7 +207,7 @@ internal class ApprovalViewModel @Inject constructor(
   }
 
   private data class Local(
-    val mode: ProofMode = ProofMode.CODE,
+    val mode: ProofMode = ProofMode.SCAN,
     val code: String = "",
     val scan: ScanState = ScanState.NONE,
     val accountConfirmed: Boolean = false,

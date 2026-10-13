@@ -227,6 +227,12 @@ class ApprovalTest {
     assertThrows(IllegalArgumentException::class.java) {
       kotlinx.coroutines.runBlocking { admin.service.createInvite(InviteParams("ma mma", "Tablet", "mamma", null)) }
     }
+    // Revisione 2, F8: l'area privata non puo' essere l'area comune.
+    assertThrows(IllegalArgumentException::class.java) {
+      kotlinx.coroutines.runBlocking { admin.service.createInvite(InviteParams("mamma", "Tablet", world.config.commonShare.uppercase(), null)) }
+    }
+    val copy = invite.copy(privateShare = invite.commonShare)
+    assertThrows(dev.pampa.mycloudgallery.core.trust.TrustViolation::class.java) { dev.pampa.mycloudgallery.core.family.invite.InviteRules.check(copy, manual = false) }
   }
 
   private companion object {

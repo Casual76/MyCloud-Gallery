@@ -135,6 +135,8 @@ class NasRegistryService(
       TextRules.nasAccount(params.nasUser)
       TextRules.displayText(params.deviceName, TrustLimits.MAX_DISPLAY_TEXT_CHARS)
       ShareNames.check(params.privateShare)
+      // Revisione 2, F8: l'area privata non puo' essere l'area comune (li' scrivono tutti).
+      require(!params.privateShare.equals(config.commonShare, ignoreCase = true))
     } catch (e: Exception) {
       throw IllegalArgumentException("invito: utente, nome o area privata non validi")
     }

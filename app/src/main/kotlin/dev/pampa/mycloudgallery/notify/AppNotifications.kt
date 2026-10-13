@@ -26,8 +26,10 @@ import java.io.IOException
  * - ogni notifica apre **soltanto l'app**: un `PendingIntent` **immutabile** verso la `MainActivity` (l'unica activity,
  *   `singleTask`), senza extra, senza azioni sulla notifica. Approvare si fa dentro l'app, dopo il blocco app e con il
  *   confronto del codice;
- * - sulla schermata di blocco non compare il nome del dispositivo: la versione pubblica dice solo "Nuovo dispositivo da
- *   approvare";
+ * - **il nome del dispositivo non compare mai** nella notifica (revisione 2, F10): lo scrive chi crea la richiesta
+ *   nell'area comune, quindi e' un testo di altri, utile al phishing ("...tocca e conferma"), e con "mostra tutti i
+ *   contenuti" Android mostrerebbe la versione privata anche sulla schermata di blocco. Il nome si vede solo dentro
+ *   l'app, dopo il blocco app;
  * - senza il permesso (negato al passo 9) non si notifica niente e non si chiede: lo dice la Diagnostica (E-O4).
  */
 class AppNotifications(context: Context) {
@@ -60,14 +62,14 @@ class AppNotifications(context: Context) {
   }
 
   /**
-   * "Nuovo dispositivo: Tablet — profilo Mamma. Approvare?" per le richieste che l'admin non ha ancora visto notificate
-   * (una volta per richiesta). Vero se ha notificato qualcosa.
+   * "Un nuovo dispositivo chiede di entrare" per le richieste che l'admin non ha ancora visto notificate (una volta per
+   * richiesta), **senza il nome** (revisione 2, F10). Vero se ha notificato qualcosa.
    */
   fun notifyNewDevices(requests: List<PendingRequestView>, alreadyNotified: Set<String>): Boolean {
     val fresh = requests.filter { it.windowOpen && it.id !in alreadyNotified }
     if (fresh.isEmpty() || !canNotify()) return false
     val title = if (fresh.size == 1) {
-      app.getString(R.string.notify_new_device_title, fresh.single().name)
+      app.getString(R.string.notify_new_device_title)
     } else {
       app.getString(R.string.notify_new_devices_title, fresh.size)
     }

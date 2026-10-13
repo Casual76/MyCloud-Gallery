@@ -31,6 +31,7 @@ class AdminRecoveryViewModelTest {
     var code: String? = null
     var codeWipedAfter: Boolean = false
     var familyState: FamilyStateQr? = null
+    var typedFingerprint: String? = null
     var fate: OldAdminFate? = null
     var kits: NasResult<List<RecoveryKitRef>> = NasResult.Ok(emptyList())
 
@@ -47,8 +48,9 @@ class AdminRecoveryViewModelTest {
       return kits
     }
 
-    override suspend fun recover(kit: RecoveryKitRef, code: CharArray, familyState: FamilyStateQr?, oldAdmin: OldAdminFate): RecoveryOutcome {
+    override suspend fun recover(kit: RecoveryKitRef, code: CharArray, familyState: FamilyStateQr?, oldAdmin: OldAdminFate, typedFingerprint: String?): RecoveryOutcome {
       this.code = String(code)
+      this.typedFingerprint = typedFingerprint
       this.familyState = familyState
       this.fate = oldAdmin
       return outcome
@@ -152,6 +154,7 @@ class AdminRecoveryViewModelTest {
     vm.search()
     vm.setCode("abcd-efgh 1234")
     assertThat(vm.state.value.code).isEqualTo("ABCD-EFGH-1234")
+    vm.setFingerprint(PAPER)
 
     vm.recover()
 
@@ -170,6 +173,7 @@ class AdminRecoveryViewModelTest {
     vm.setAdminPassword("password-di-alessio")
     vm.search()
     vm.setCode("AAAA-BBBB")
+    vm.setFingerprint(PAPER)
     vm.recover()
 
     assertThat(vm.state.value.stage).isEqualTo(RecoveryStage.CODE)
@@ -196,18 +200,33 @@ class AdminRecoveryViewModelTest {
     vm.setCode("AAAA-BBBB")
     vm.recover()
     assertThat(spy.familyState).isEqualTo(payload)
+    // Con il QR di stato l'impronta del foglio non serve e non viaggia.
+    assertThat(spy.typedFingerprint).isNull()
   }
 
+  /**
+   * Revisione 2, F3: senza il QR di stato serve l'impronta della famiglia scritta sul foglio (il nome del file sul NAS
+   * non e' un'ancora). Senza, il recupero non parte; con, viaggia fino al contratto.
+   */
   @Test
-  fun senzaLoStatoDellaFamigliaIlRecuperoParteLoStesso_conVersioneMinimaZero() = runTest {
+  fun senzaLoStatoDellaFamigliaServeLImprontaDelFoglio() = runTest {
     val spy = Spy().apply { kits = NasResult.Ok(listOf(kit)) }
     val vm = viewModel(replace = false, spy = spy)
     vm.setAdminUser("alessio")
     vm.setAdminPassword("password-di-alessio")
     vm.search()
     vm.setCode("AAAA-BBBB")
+    assertThat(vm.state.value.canRecover).isFalse()
+    vm.recover()
+    assertThat(spy.code).isNull()
+
+    vm.setFingerprint("abcd efgh")
+    assertThat(vm.state.value.canRecover).isFalse()
+    vm.setFingerprint(PAPER)
+    assertThat(vm.state.value.canRecover).isTrue()
     vm.recover()
     assertThat(spy.familyState).isNull()
+    assertThat(spy.typedFingerprint).isEqualTo(PAPER)
   }
 
   @Test
@@ -249,3 +268,6 @@ class AdminRecoveryViewModelTest {
     assertThat(vm.state.value.stage).isEqualTo(RecoveryStage.CODE)
   }
 }
+
+/** Un'impronta della famiglia come la si scrive dal foglio. */
+private const val PAPER = "ABCD EFGH JKMN PQRS TVWX YZ01 23"

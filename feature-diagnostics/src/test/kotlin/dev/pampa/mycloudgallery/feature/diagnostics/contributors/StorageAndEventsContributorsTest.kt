@@ -14,6 +14,7 @@ import dev.pampa.mycloudgallery.feature.diagnostics.catalog.DiagCodes
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
+import dev.pampa.mycloudgallery.feature.diagnostics.assertExportKeysAllowed
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -36,6 +37,7 @@ class StorageAndEventsContributorsTest {
   @Test
   fun loSpazioDellAppSiEsportaComeNumeri() = runTest {
     val items = StorageContributor { snapshot() }.collect()
+    assertExportKeysAllowed(items)
 
     val usage = items.single()
     assertThat(usage.code).isEqualTo(DiagCodes.STORAGE_USAGE)

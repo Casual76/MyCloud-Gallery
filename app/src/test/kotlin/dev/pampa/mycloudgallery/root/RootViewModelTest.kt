@@ -80,7 +80,7 @@ class RootViewModelTest {
   @Test
   fun ogniDestinazioneHaLaSuaRottaDiPartenza() {
     assertThat(startRoute(RootDestination.Onboarding)).isEqualTo(OnboardingGraphRoute)
-    assertThat(startRoute(RootDestination.AwaitingApproval("ABCD"))).isEqualTo(AwaitingApprovalRoute("ABCD"))
+    assertThat(startRoute(RootDestination.AwaitingApproval("ABCD"))).isEqualTo(AwaitingApprovalRoute)
     assertThat(startRoute(RootDestination.Main)).isEqualTo(MainRoute)
     assertThat(startRoute(RootDestination.Wiped)).isEqualTo(WipedRoute)
     val blocked = startRoute(RootDestination.Blocked(BlockReason.STORAGE_LOCKED)) as BlockedRoute

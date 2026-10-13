@@ -157,7 +157,11 @@ class AppGraph(
   val statusMonitor = NasStatusMonitor(session, routeGate, reachability, { account.value }, scope)
   val breaker = AccountAuthBreaker(account, accountStore, breakers, scope)
   val sessionActivity = SessionBusyActivity(session, scope)
-  val foreignShares: OneShotForeignShares = OneShotForeignShares(routeGate, breakers, platform.smbTransport, platform.monotonicClock, scope) { engine.myDeviceId() }
+  val foreignShares: OneShotForeignShares = OneShotForeignShares(
+    routeGate, breakers, platform.smbTransport, platform.monotonicClock, scope,
+    tester = connectionTester,
+    ownUser = { account.value?.user },
+  ) { engine.myDeviceId() }
 
   // --- Pianificazione (P9) e profilo locale ---------------------------------------------------------------------
   val scheduler: TrustSyncScheduler = schedulerFactory { nasClock.nowMillisOrNull() }

@@ -119,6 +119,8 @@ class DiagCatalogTest {
     "E-N15" to "proposta di esclusione al passo 5 dell'onboarding",
     "E-O9" to "ripresa dell'onboarding dopo un cambio di app: e' il comportamento normale, non un avviso",
     "E-S15" to "guida del passo VPN (il QR di WireGuard e' una password), non uno stato",
+    "L20" to "limite dichiarato (revisione 2, F2): la VPN a tunnel limitato si spegne su una rete che imita casa; non e' uno stato",
+    "L24" to "limite dichiarato (revisione 2, F9): al massimo 2 tentativi; l'interruttore aperto ha gia' il suo avviso (C5)",
     "M11" to "misura sul campo (rotte della VPN di casa)",
     "T-17" to "prova sul campo (rotte della VPN di casa)",
     "T-20" to "prova sul campo (profilo in primo piano)",

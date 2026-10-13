@@ -80,3 +80,9 @@ internal class InMemoryLedger : TrafficLedger {
 
   override suspend fun history(): List<CycleUsage> = listOf(CycleUsage(cycle, bytes.toMap()))
 }
+
+/** Revisione 2, F4: ogni chiave che un contributore vero produce e' nell'elenco chiuso dell'esportazione. */
+internal fun assertExportKeysAllowed(items: List<DiagItem>) {
+  val outside = items.flatMap { it.export.keys }.filterNot(dev.pampa.mycloudgallery.feature.diagnostics.export.ExportKeys::isAllowed).distinct()
+  com.google.common.truth.Truth.assertWithMessage("chiavi fuori da ExportKeys: $outside").that(outside).isEmpty()
+}

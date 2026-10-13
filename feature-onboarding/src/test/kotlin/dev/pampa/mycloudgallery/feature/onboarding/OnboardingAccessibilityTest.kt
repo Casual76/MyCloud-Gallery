@@ -141,7 +141,7 @@ internal class OnboardingAccessibilityTest : OnboardingComposeBase() {
 
   @Test
   fun gliAvvisiSiChiudonoConUnBersaglioDa48dp() {
-    show { AreasScreen(Samples.chrome(OnboardingStep.AREAS, warnings = listOf(OnboardingWarning.SHORT_PASSWORD)), AreasUi(loading = true), AreasForm(), AreasActions()) }
+    show { AreasScreen(Samples.chrome(OnboardingStep.AREAS, warnings = listOf(OnboardingWarning.ACCOUNT_SEES_OTHER_PRIVATE_SHARES)), AreasUi(loading = true), AreasForm(), AreasActions()) }
     composeRule.onNodeWithContentDescription(str(R.string.common_dismiss))
       .assertHeightIsAtLeast(48.dp)
       .assertWidthIsAtLeast(48.dp)

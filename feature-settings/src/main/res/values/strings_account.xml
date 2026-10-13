@@ -60,7 +60,14 @@
   <string name="password_section_new">Password nuova</string>
   <string name="password_field">Password</string>
   <string name="password_field_help">Quella che hai nella dashboard del NAS per questo account.</string>
-  <string name="password_short">Meno di 12 caratteri: funziona, ma è facile da indovinare.</string>
+  <string name="password_settings_rule">Almeno 12 caratteri con tre tipi fra minuscole, maiuscole, numeri e simboli, oppure una frase di almeno 16 caratteri. Fuori casa un impostore potrebbe registrare la risposta della password e provare a indovinarla con un computer: una password così regge.</string>
+  <string name="password_settings_weak_short">Troppo corta: servono almeno 12 caratteri. Cambiala prima sul NAS.</string>
+  <string name="password_settings_weak_user">Contiene il nome dell’account: senza il nome restano meno di 12 caratteri. Cambiala prima sul NAS.</string>
+  <string name="password_settings_weak_predictable">Troppo prevedibile: sequenze come 123456, qwerty o «password» e i caratteri ripetuti non contano. Cambiala prima sul NAS.</string>
+  <string name="password_settings_weak_simple">Con meno di 16 caratteri servono tre tipi fra minuscole, maiuscole, numeri e simboli; oppure allungala. Cambiala prima sul NAS.</string>
+  <string name="password_generate">Proponimi una password forte</string>
+  <string name="password_generated_title">Impostala prima sul NAS</string>
+  <string name="password_generated_message">Dalla dashboard del NAS, Utenti, questo account, Modifica password: scrivi questa (si legge a gruppi di 4, senza spazi). Poi torna qui e tocca «Salva e prova».</string>
   <string name="password_show">Mostra la password</string>
   <string name="password_hide">Nascondi la password</string>
   <string name="password_submit">Salva e prova</string>

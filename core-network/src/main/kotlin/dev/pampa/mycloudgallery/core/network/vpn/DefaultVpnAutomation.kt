@@ -64,7 +64,10 @@ data class VpnAutomationTuning(
  *
  * **Il bisogno** si ricava dalla fotografia della rete:
  *  - *giu'*: a casa ([HomeMatch.Match]) con la VPN di casa accesa e la rete validata: spegnerla (il NAS in LAN e' piu'
- *    veloce e WireGuard non si puo' aggirare con un socket legato al Wi-Fi);
+ *    veloce e WireGuard non si puo' aggirare con un socket legato al Wi-Fi). **Solo se la VPN porta soltanto il
+ *    traffico verso casa** (revisione 2, F2): "casa" si riconosce da dati non segreti (ULA), e un Wi-Fi che la imita
+ *    farebbe spegnere una VPN che protegge tutto il traffico del telefono. Con `AllowedIPs = 0.0.0.0/0`
+ *    ([NetworkSnapshot.vpnCarriesInternet]) la VPN resta accesa e il NAS si raggiunge attraverso il tunnel;
  *  - *su*: fuori casa (cellulare, oppure un Wi-Fi che non e' casa) con nessuna VPN e la rete validata: accenderla;
  *  - nessuno in tutti gli altri casi (una VPN estranea non si tocca; offline non si puo' fare niente).
  *
@@ -242,7 +245,8 @@ class DefaultVpnAutomation(
     if (!underlying.validated || underlying.captivePortal) return null to null
     val atHome = snapshot.home == HomeMatch.Match
     return when {
-      atHome && snapshot.vpn == VpnObservation.HOME_TUNNEL -> Need.DOWN to underlying.networkId
+      // Revisione 2, F2: mai spegnere da soli una VPN che porta anche il traffico verso internet.
+      atHome && snapshot.vpn == VpnObservation.HOME_TUNNEL && !snapshot.vpnCarriesInternet -> Need.DOWN to underlying.networkId
       !atHome && snapshot.vpn == VpnObservation.NONE && isAway(snapshot) -> Need.UP to underlying.networkId
       else -> null to null
     }

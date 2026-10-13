@@ -247,7 +247,7 @@ internal object ShotCatalog {
       AreasUi(loading = false, candidates = Samples.areas),
       AreasForm(commonShare = "Public", privateShare = "marta"),
       banner = OnboardingBanner.CREDENTIALS_SAVED,
-      warnings = listOf(OnboardingWarning.SHORT_PASSWORD, OnboardingWarning.ACCOUNT_SEES_OTHER_PRIVATE_SHARES),
+      warnings = listOf(OnboardingWarning.ACCOUNT_SEES_OTHER_PRIVATE_SHARES),
       main = true,
       tall = true,
     ),

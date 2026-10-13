@@ -32,8 +32,6 @@
 
   <!-- Avvisi che non fermano il passo -->
   <string name="warnings_section">Da sapere</string>
-  <string name="warning_short_password_title">Password un po’ corta</string>
-  <string name="warning_short_password_detail">Ha meno di 12 caratteri: funziona, ma una password più lunga protegge meglio le tue foto. Puoi cambiarla dal NAS quando vuoi.</string>
   <string name="warning_public_share_title">Una cartella scelta è pubblica</string>
   <string name="warning_public_share_detail">Chiunque sia nella tua rete può aprirla senza password. Dalla dashboard del NAS puoi togliere «Pubblico»: è la scelta consigliata.</string>
   <string name="warning_other_shares_title">Questo account vede anche cartelle private di altri</string>

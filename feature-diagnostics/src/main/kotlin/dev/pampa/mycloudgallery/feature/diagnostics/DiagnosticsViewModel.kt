@@ -130,6 +130,13 @@ class DiagnosticsViewModel @Inject constructor(
   private var testState: ConnectionTestUiState = ConnectionTestUiState.Idle
   private var loading = true
   private var saveResult: SaveResult? = null
+
+  /**
+   * Revisione 2, F15: il documento dell'anteprima, **fermo** da quando si apre la pagina dell'esportazione a quando si
+   * chiude. Un test di connessione che finisce o una rilettura nel frattempo non cambiano ne' l'anteprima ne' il file:
+   * si salva esattamente quello che l'utente ha visto.
+   */
+  private var frozen: ExportDocument? = null
   private var refreshJob: Job? = null
   private var testJob: Job? = null
 
@@ -178,7 +185,7 @@ class DiagnosticsViewModel @Inject constructor(
    * se per qualunque motivo non rispettasse la grammatica, non si scrive niente.
    */
   fun saveExport(uri: Uri, sink: ExportSink) {
-    val document = mutableState.value.export ?: return
+    val document = frozen ?: mutableState.value.export ?: return
     viewModelScope.launch {
       val ok = DiagnosticsExporter.conforms(document.text) && sink.write(uri, document.text)
       saveResult = if (ok) SaveResult.SAVED else SaveResult.FAILED
@@ -186,9 +193,16 @@ class DiagnosticsViewModel @Inject constructor(
     }
   }
 
-  /** Dimentica l'esito dell'ultimo salvataggio (alla chiusura della pagina dell'esportazione). */
+  /** All'apertura della pagina dell'esportazione: da qui l'anteprima (e il file) non cambiano piu'. */
+  fun freezeExport() {
+    frozen = mutableState.value.export
+    publish()
+  }
+
+  /** Dimentica l'esito dell'ultimo salvataggio e sblocca l'anteprima (alla chiusura della pagina dell'esportazione). */
   fun clearSaveResult() {
     saveResult = null
+    frozen = null
     publish()
   }
 
@@ -213,8 +227,8 @@ class DiagnosticsViewModel @Inject constructor(
         sections = merged,
         recentEvents = snapshot.recentEvents,
         connectionTest = testState,
-        export = document,
-        exportRefused = refused,
+        export = frozen ?: document,
+        exportRefused = frozen == null && refused,
         saveResult = saveResult,
         wireGuardAvailable = vpn.openWireGuardIntent() != null,
       )

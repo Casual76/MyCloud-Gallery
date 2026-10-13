@@ -106,12 +106,13 @@ class ExportPrivacyTest {
         listOf("${Personal.USER} su ${Personal.NAS_NAME} (${Personal.IP}) in ${Personal.SSID}"),
       ),
       export = mapOf(
-        "account" to testHasher.hash(Personal.USER),
-        "device" to testHasher.hash(Personal.DEVICE),
-        "ip" to testHasher.hash(Personal.IP),
-        "ula" to testHasher.hash(Personal.ULA),
-        "share" to testHasher.hash(Personal.SHARE),
-        "attempts" to ExportValue.Num(1),
+        // Chiavi dell'elenco chiuso (revisione 2, F4): quelle fuori elenco non uscirebbero comunque.
+        "gateway" to testHasher.hash(Personal.USER),
+        "domain" to testHasher.hash(Personal.DEVICE),
+        "ula0" to testHasher.hash(Personal.IP),
+        "ula1" to testHasher.hash(Personal.ULA),
+        "currentUla0" to testHasher.hash(Personal.SHARE),
+        "total" to ExportValue.Num(1),
       ),
     ),
     item(
@@ -121,7 +122,7 @@ class ExportPrivacyTest {
         dev.pampa.mycloudgallery.feature.diagnostics.R.string.diagnostics_passthrough,
         listOf(Personal.SHARE_PATH),
       ),
-      export = mapOf("path" to testHasher.hash(Personal.SHARE_PATH)),
+      export = mapOf("ula2" to testHasher.hash(Personal.SHARE_PATH)),
     ),
   )
 
@@ -161,7 +162,7 @@ class ExportPrivacyTest {
         at = 1_000L,
         code = DiagCode("NAS_AUTH_FAILED"),
         severity = DiagSeverity.ERROR,
-        values = mapOf("account" to testHasher.hash(Personal.USER), "ip" to testHasher.hash(Personal.IP), "count" to ExportValue.Num(3)),
+        values = mapOf("gateway" to testHasher.hash(Personal.USER), "domain" to testHasher.hash(Personal.IP), "total" to ExportValue.Num(3)),
       ),
     )
     val failedReport = ConnectionReport(
@@ -253,7 +254,7 @@ class ExportPrivacyTest {
       File.createTempFile("events", ".log").apply {
         deleteOnExit()
         writeText(
-          "1|NAS_TIMEOUT|WARNING|count=n2\n" +
+          "1|NAS_TIMEOUT|WARNING|total=n2\n" +
             "2|NAS_TIMEOUT|WARNING|owner=eMario.Rossi\n" +
             "3|NAS_TIMEOUT|WARNING|name=Mario Rossi\n" +
             "4|NAS_TIMEOUT|WARNING|ip=e${Personal.IP}\n",
@@ -267,7 +268,7 @@ class ExportPrivacyTest {
 
     val text = checkNotNull(viewModel.state.value.export).text
     assertNoPersonalData(text)
-    assertThat(text).contains("\"count\": 2")
+    assertThat(text).contains("\"total\": 2")
   }
 
   private fun dispatchers() = object : dev.pampa.mycloudgallery.core.common.coroutines.DispatcherProvider {

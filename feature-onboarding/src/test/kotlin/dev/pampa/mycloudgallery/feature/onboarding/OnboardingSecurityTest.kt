@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.family.contract.OldAdminFate
@@ -90,6 +91,14 @@ internal class OnboardingSecurityTest : OnboardingComposeBase() {
     assertThat(isSecure()).isTrue()
   }
 
+  /** Revisione 2, F3: sul foglio va anche l'impronta della famiglia, l'ancora del recupero senza QR di stato. */
+  @Test
+  fun ilFoglioPortaAncheLImprontaDellaFamiglia() {
+    val fingerprint = "abcdefghjkmnpqrstvwxyz0123"
+    show { KeyShowCodePage(noChrome, KeyUi(KeyPage.ShowCode, groups = Samples.codeGroups, fingerprint = fingerprint), KeyForm(), KeyActions()) }
+    composeRule.onNode(androidx.compose.ui.test.hasText("abcd efgh jkmn pqrs tvwx yz01 23")).performScrollTo().assertExists()
+  }
+
   @Test
   fun ilCodiceRiscrittoSiScriveSuUnaPaginaProtettaEConSecureInput() {
     show { KeyRetypePage(noChrome, KeyUi(KeyPage.Retype, groups = Samples.codeGroups), KeyForm(reveal = false), KeyActions()) }
@@ -136,10 +145,12 @@ internal class OnboardingSecurityTest : OnboardingComposeBase() {
     assertThat(isSecure()).isTrue()
   }
 
+  /** Revisione 2, F5: anche senza QR il codice e' cio' che l'admin digita: niente cattura, niente sovrapposizioni. */
   @Test
-  fun senzaIlQrLAttesaNonServeLaProtezione() {
+  fun ancheSenzaIlQrLAttesaEProtetta() {
     show { AwaitingApprovalScreen(code = "K7QD-2M9X-FA4T", deviceKeyQr = null) }
-    assertThat(isSecure()).isFalse()
+    assertThat(isSecure()).isTrue()
+    assertThat(discardsObscuredTouches()).isTrue()
   }
 
   @Test

@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.integration
 
 import android.Manifest
 import android.app.Application
+import android.app.Notification
 import android.app.NotificationManager
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
@@ -211,6 +212,13 @@ class AppIntegrationTest {
     assertThat(posted.channelId).isEqualTo(AppNotifications.CHANNEL_APPROVALS)
     assertThat(shadowOf(posted.contentIntent).isImmutable).isTrue()
     assertThat(shadowOf(posted.contentIntent).savedIntent.extras).isNull() // apre solo l'app
+    // Revisione 2, F10: il nome scritto da chi ha creato la richiesta non compare, nemmeno nella versione privata.
+    val requestName = phone.graph.registry.pendingRequests.value.single().name
+    val shown = listOf(posted, posted.publicVersion).flatMap { n ->
+      listOf(Notification.EXTRA_TITLE, Notification.EXTRA_TEXT, Notification.EXTRA_BIG_TEXT).mapNotNull { n?.extras?.getCharSequence(it)?.toString() }
+    }
+    assertThat(shown).isNotEmpty()
+    shown.forEach { assertThat(it).doesNotContain(requestName) }
     // Un secondo giro (cinque minuti dopo, ancora dentro la finestra di 15 minuti dell'approvazione): nessuna notifica nuova.
     time.advance(FIVE_MINUTES)
     TrustSyncRun(phone.graph, notifications, notified).execute()

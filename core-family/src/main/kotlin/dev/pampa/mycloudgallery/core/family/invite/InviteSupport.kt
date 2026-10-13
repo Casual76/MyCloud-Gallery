@@ -85,6 +85,9 @@ internal object InviteRules {
     }
     ShareNames.check(invite.commonShare)
     ShareNames.check(invite.privateShare)
+    // Revisione 2, F8: l'area privata e' quella in cui scrive solo il titolare (segnalazioni "perso", kit): non puo'
+    // essere l'area comune, dove scrivono tutti.
+    requireField(!invite.privateShare.equals(invite.commonShare, ignoreCase = true), "invito: area privata uguale all'area comune")
     TextRules.nasAccount(invite.nasUser)
     requireField(!isAdminAccount(invite.nasUser), "invito: account admin")
     TextRules.displayText(invite.deviceName, MAX_NAME_CHARS)

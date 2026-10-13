@@ -127,6 +127,8 @@ class FamilyKeyStepTest {
     val c = f.atFamilyKey()
     val first = c.recoveryCode()
     val shown = first.groups.joinToString("-") { String(it) }
+    // Revisione 2, F3: il foglio porta anche l'impronta della chiave di famiglia appena generata.
+    assertThat(first.familyFingerprint).isEqualTo(f.env.familyKeys.stored!!.publicKey.fingerprint)
     first.close()
     assertThat(first.groups.all { group -> group.all { it == '\u0000' } }).isTrue()
     // Riaprendo la schermata il codice e' lo stesso (la chiave non cambia), con gruppi nuovi.

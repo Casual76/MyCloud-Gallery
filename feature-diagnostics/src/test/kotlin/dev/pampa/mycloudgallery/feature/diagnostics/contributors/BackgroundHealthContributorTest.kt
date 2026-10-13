@@ -20,6 +20,7 @@ import dev.pampa.mycloudgallery.feature.diagnostics.healthyHealth
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.hours
 import kotlinx.coroutines.test.runTest
+import dev.pampa.mycloudgallery.feature.diagnostics.assertExportKeysAllowed
 import org.junit.Test
 
 /** «Avvisi di Android» e «Profili»: cosa dice la Diagnostica per ogni stato di [BackgroundHealth]. */
@@ -272,6 +273,7 @@ class BackgroundHealthContributorTest {
 
     val values = items.flatMap { it.export.values }
     assertThat(values).isNotEmpty()
+    assertExportKeysAllowed(items)
     // Numeri, si'/no, durate e costanti di enum: niente impronte (non ci sono dati personali da nascondere qui).
     assertThat(values.all { it is ExportValue.Num || it is ExportValue.Flag || it is ExportValue.Dur || it is ExportValue.Enum }).isTrue()
     assertThat(items.first { it.code == DiagCodes.AND_BUCKET_RESTRICTED }.export["standbyBucket"].toString())

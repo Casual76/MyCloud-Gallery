@@ -11,6 +11,9 @@
   2. la NEGOTIATE dà 3.1.1 con cifratura offerta e un GUID del NAS uguale a quello memorizzato;
   3. l'interruttore di sicurezza è chiuso.
   Dopo l'autenticazione si pretende la cifratura effettiva, e la sessione non deve essere né guest né anonima.
+  **ULA e GUID non sono segreti** (revisione 2, F1): il cancello ferma gli errori e gli impostori casuali, non un attaccante
+  mirato che li ha copiati (Wi-Fi gemello con un NAS finto). Contro quello difende la **password forte, obbligatoria**
+  (`NasPasswordPolicy`, C5): limite dichiarato in `sicurezza.md` L19.
 - **Dieci pacchetti di lavoro (P0–P9).** P0 (fondamenta e contratti) va da solo e per primo; poi P1–P8 in parallelo, su perimetri disgiunti; per ultimo P9, l'integrazione nell'app.
 - **Test senza dispositivo**: fake più un simulatore SMB con semantica Samba, test JVM, Robolectric e Roborazzi. Non esiste un server SMB locale realistico su questo PC (§5.3). I test d'integrazione girano **dal PC contro il NAS vero** (smbj è Java puro) appena l'utente fornisce le credenziali. Poi si fa la verifica sul campo.
 
@@ -135,7 +138,7 @@ Regole valide per tutti i passi:
 |---|---|---|---|
 | 1 | Benvenuto e privacy | Niente telemetria. Scelta del percorso: *Crea la famiglia*, *Entra con QR*, *Entra senza QR*, *Recupera l'admin*. Se `isSystemUser == false`, nota sui profili (2.8) | E-P19 |
 | 2 | Indirizzo NAS | **Serve il Wi-Fi di casa.** `HomeCapture` chiede "È la rete di casa?" e, con il consenso, raccoglie ULA, gateway e dominio. Scoperta via NSD `_smb._tcp`, nome risolto sul Wi-Fi o IP digitato. Poi `onboardingRoute` → TCP 445 → NEGOTIATE (3.1.1 con cifratura offerta) → **GUID memorizzato**. Prima di dire "NAS spento" si controlla il permesso di rete locale | **E-O1**: messaggio chiaro e "Continua più tardi" (i passi 6–11 e 13 sono locali). VPN accesa: chiedere di spegnerla per questo passo. Nessun ULA: spiegarlo e non confermare "casa" |
-| 3 | Account e password | `SecureInput`, `FLAG_SECURE`, protezione dalle sovrapposizioni. Rifiuta `admin`, senza distinzione di maiuscole. Avvisa sotto i 12 caratteri. **Un solo tentativo**, poi il controllo di sicurezza: cifratura effettiva, niente guest. Le credenziali si salvano solo dopo il successo. Avviso morbido se l'account apre le share private di altri | **E-R8/E-S12**: `LOGON_FAILURE` apre l'interruttore; "Riprova" solo su azione dell'utente. Messaggi specifici per account bloccato, scaduto o disattivato. Senza cifratura → rifiuto |
+| 3 | Account e password | `SecureInput`, `FLAG_SECURE`, protezione dalle sovrapposizioni. Rifiuta `admin`, senza distinzione di maiuscole. **Rifiuta le password deboli prima di mandarle** (revisione 2, F1: `NasPasswordPolicy`, 12 caratteri con tre tipi fra minuscole, maiuscole, cifre e simboli, oppure una frase di 16; il nome dell'account e le sequenze ovvie non contano) e spiega che cosa manca; "Proponimi una password forte" ne genera una di 16 caratteri da impostare sul NAS. La stessa soglia vale per il familiare che entra e per il cambio di password nelle Impostazioni. **Un solo tentativo**, poi il controllo di sicurezza: cifratura effettiva, niente guest. Le credenziali si salvano solo dopo il successo. Avviso morbido se l'account apre le share private di altri | **E-R8/E-S12**: `LOGON_FAILURE` apre l'interruttore; "Riprova" solo su azione dell'utente. Messaggi specifici per account bloccato, scaduto o disattivato. Senza cifratura → rifiuto |
 | 4 | Aree | `ShareProbe` su `<utente>`, `Public`, `NAS` e sulle share digitate. Si scelgono area comune e area privata. Il backup va in `<privata>/Backup/<dispositivo>/` (creata in Fase 5). Se l'area comune contiene già `family/registry/…1`: "Qui c'è già una famiglia" → *Recupera l'admin* / *Entra come familiare* | **E-O2**, **E-O3** (l'app non crea share). Avviso se una share è pubblica |
 | 5 | Cartelle | `FolderSurvey` limitato (2 livelli, 5000 voci, annullabile): propone di escludere le cartelle di musica e film e le copertine piccole | E-N14, E-N15; si può saltare |
 | 6 | Sorgenti di backup | Fotocamera e screenshot; le altre cartelle si scelgono dopo, nelle Impostazioni | — |
@@ -155,7 +158,7 @@ La **configurazione di famiglia** firmata nasce al passo 12(e). Contiene: IP e n
 |---|---|---|
 | Admin | Impostazioni → Famiglia → *Configura un familiare*: utente NAS (ASCII, validato), nome del dispositivo o profilo, share privata, preset. Mostra il **QR d'invito** (`FLAG_SECURE`, mai condivisibile, scade dopo 24 h secondo l'ora del NAS) e apre una "finestra d'invito" di 24 h (`setInviteWindow`): in quella finestra i controlli sono frequenti, fuori una volta al giorno (E-R15) | E-S8 |
 | Nuovo dispositivo | *Entra con QR* → scansione → `InviteCodec.decode` (`MCG1:` + base32 di JSON canonico, ≤ 600 caratteri, campi fissi) → riepilogo → **controllo casa** (l'ULA del Wi-Fi coincide con quello del QR, oppure VPN di casa) → TCP, NEGOTIATE, **GUID uguale al QR** → password (unico campo digitato, un solo tentativo) → `RegistrySync.refresh` con `TrustAnchor(famiglia, impronta, versione minima)` → si usa la configurazione **firmata** letta dal NAS → chiave del dispositivo nel Keystore → `RegistrationRequest` → mostra il **codice** e il QR della chiave (`MCGK1:`) → `AwaitingApproval`: sola lettura, il registro si rilegge ogni 10 s solo con l'app aperta | E-O5, E-O6, E-S14 |
-| Admin | Notifica "Nuovo dispositivo: Tablet — profilo Mamma. Approvare?" al prossimo controllo (≤ 15 minuti nella finestra d'invito, o aprendo Dispositivi). Dettaglio della richiesta: nome, modello, **account NAS dichiarato da confermare** (B6). Confronto del codice digitato **oppure** scansione del QR della chiave, poi la credenziale del telefono → `approve` → `commit` | Finestra di 15 minuti scaduta: il nuovo dispositivo rifà la richiesta con una **chiave nuova**. Esiti di `commit`: `NewerExists` → risincronizza e riprova; `Fork`, `Blocked` e `NeedsAppUpdate` → messaggi dedicati |
+| Admin | Notifica "Un nuovo dispositivo chiede di entrare", **senza il nome** (revisione 2, F10: il nome lo scrive chi crea la richiesta), al prossimo controllo (≤ 15 minuti nella finestra d'invito, o aprendo Dispositivi). Dettaglio della richiesta: nome, modello, **account NAS dichiarato da confermare** (B6). **Scansione del QR della chiave** nella stessa stanza (proposta per prima, revisione 2, F5) **oppure** codice letto di persona sullo schermo del dispositivo e digitato, poi la credenziale del telefono → `approve` → `commit`. La schermata d'attesa prende il codice dallo stato del dispositivo (mai da un argomento di navigazione), è sotto `FLAG_SECURE` e nasconde le sovrapposizioni; `MainActivity` ripulisce l'intent d'ingresso e registra per ogni stato solo le destinazioni raggiungibili | Finestra di 15 minuti scaduta: il nuovo dispositivo rifà la richiesta con una **chiave nuova**. Esiti di `commit`: `NewerExists` → risincronizza e riprova; `Fork`, `Blocked` e `NeedsAppUpdate` → messaggi dedicati |
 | Senza QR | Indirizzo, utente, id della famiglia e impronta **letti dalla schermata dell'admin**, mai dal NAS (B9). Versione minima 0, con avviso in Diagnostica. Facoltativo: QR "stato della famiglia" (`MCGS1:`) da un dispositivo approvato (M7) | E-O5 |
 
 Reinstallazione o telefono nuovo (E-O7, E-O8): nessuna chiave sopravvive. `LookAlike` avvisa l'admin: "Sembra la reinstallazione di 'Telefono di X': dismetti il vecchio".
@@ -174,7 +177,7 @@ Reinstallazione o telefono nuovo (E-O7, E-O8): nessuna chiave sopravvive. `LookA
 | Elenco dispositivi | Registro accettato + `DeviceStatus`: nome (con profilo), modello, stato, ruoli, ultima attività, versione | L11 |
 | Segnala perso | L'admin fa `changeStatus(LOST)` → `commit`. Il proprietario (decisione 3a) pubblica un `LostReport` firmato da un dispositivo dello stesso account, che l'admin converte. Poi la **guida, in quest'ordine**: segnala → revoca il peer WireGuard → cambia la password NAS (dovranno reinserirla anche gli altri dispositivi dello stesso account) → Samsung Find | E-S1, C15 |
 | Autodistruzione | `TrustGuard.preflight()` prima di **ogni** sessione di lavoro (al massimo ogni 15 minuti), più `TrustSyncWorker` una volta al giorno. Se `mustSelfWipe(io)` (o se esiste un `LostReport` valido, con la decisione 3a) → `SelfWipe`: (0) segno "azzeramento in corso"; (1) `destroyDeviceKey`; (2) `FamilyKeyVault.destroy` se è admin; (3) `CredentialVault.wipeAll`; (4) `invalidate` delle sessioni; (5) `LocalDataEraser`; (6) WorkManager cancellato; (7) `SetupState.Wiped`. Riprende da dove si era fermato se il processo muore | E-S2. Un registro non firmato, un rollback o un'equivocazione **non** fanno azzerare (test obbligatorio) |
-| Recupero dell'admin | Dispositivo nuovo → *Recupera l'admin* → indirizzo e account dell'admin → elenco di `recovery/` nell'area privata (solo nomi validi) → codice digitato → `RecoveryKit.open` → ancora dal kit + eventuale QR "stato della famiglia" (M7; altrimenti versione minima 0 e avviso) → nuova chiave del dispositivo → si approva da solo con `admin = true` → il vecchio admin diventa `LOST` o `REVOKED` (scelta dell'utente) | E-S13 |
+| Recupero dell'admin | Dispositivo nuovo → *Recupera l'admin* → indirizzo e account dell'admin → elenco di `recovery/` nell'area privata (solo nomi validi) → codice digitato → `RecoveryKit.open` con l'ancora **indipendente dal NAS**: il QR "stato della famiglia" (M7) oppure l'**impronta della famiglia scritta sul foglio** al passo 12 e digitata (revisione 2, F3; senza nessuna delle due il recupero non parte; senza QR la versione minima è 0, con avviso) → nuova chiave del dispositivo → si approva da solo con `admin = true` → il vecchio admin diventa `LOST` o `REVOKED` (scelta dell'utente) | E-S13 |
 | Secondo admin | Come il recupero, ma il primo admin resta approvato | proposta 15 |
 | Reset della famiglia | Doppia conferma → chiave nuova, id nuovo, kit nuovo, fondazione → guida per riconfigurare ogni dispositivo con il QR nuovo. I dati vecchi vengono ignorati, non cancellati | E-S13, `formato-nas.md` §4.10 |
 | Rotazione | Fuori dal minimo della Fase 2. Il kit vecchio si cancella solo con un'azione locale confermata, attraverso un'interfaccia ristretta (review M4) | — |
@@ -184,7 +187,7 @@ Ingressi: `NetworkSnapshot` (casa riconosciuta dal Wi-Fi sottostante, presenza e
 
 | Situazione | Azione | Verifica ed esito |
 |---|---|---|
-| Casa, VPN di casa accesa, controllo attivo | Aspetta che la sessione sia libera (al massimo 2 minuti) → `SET_TUNNEL_DOWN` | Entro 10 s non deve più esserci `TRANSPORT_VPN` e il Wi-Fi deve risultare validato. Se si perde la connettività (probabile "VPN sempre attiva con blocco"): subito `UP`, controllo automatico disattivato, spiegazione. Se non succede nulla: "VPN non controllabile" + *Apri WireGuard* |
+| Casa, VPN di casa accesa, controllo attivo, **tunnel limitato a casa** | Aspetta che la sessione sia libera (al massimo 2 minuti) → `SET_TUNNEL_DOWN`. Con un tunnel completo (`0.0.0.0/0`) **mai** (revisione 2, F2): "casa" si riconosce da un ULA che un Wi-Fi gemello può imitare, e il tunnel protegge tutto il traffico del telefono; il NAS si raggiunge attraverso il tunnel (`rete-casa-vpn.md` §8, L20) | Entro 10 s non deve più esserci `TRANSPORT_VPN` e il Wi-Fi deve risultare validato. Se si perde la connettività (probabile "VPN sempre attiva con blocco"): subito `UP`, controllo automatico disattivato, spiegazione. Se non succede nulla: "VPN non controllabile" + *Apri WireGuard* |
 | Casa, VPN accesa, nessun controllo | NAS attraverso il tunnel (`HOME_LAN_THROUGH_VPN`, più lento), con avviso | Indicatore "VPN accesa in casa" |
 | Fuori, VPN spenta, controllo attivo | `SET_TUNNEL_UP` (in primo piano; in background un solo tentativo) | Entro 10 s deve comparire una VPN **di casa**; altrimenti avviso + *Apri WireGuard* (E-R3) |
 | Fuori, VPN spenta, nessun controllo | Avviso con pulsante; la Libreria locale resta usabile | E-R3 |
@@ -221,7 +224,12 @@ Regole:
 **Esportazione**:
 - anteprima, poi `ACTION_CREATE_DOCUMENT` (nessun FileProvider);
 - solo valori `ExportValue`: numeri, enum, oppure valori **hashati** (account, nomi, IP, ULA). Nessun testo libero;
-- un test di catalogo verifica che ogni edge case di Fase 2 che produce un avviso abbia il suo `DiagCode`.
+- un test di catalogo verifica che ogni edge case di Fase 2 che produce un avviso abbia il suo `DiagCode`;
+- **elenchi chiusi** (revisione 2, F4): esce solo un codice del `DiagCatalog` (gli altri come `UNKNOWN`, senza valori) e solo
+  un valore con una chiave di `ExportKeys`; i test dei contributori veri (anche quelli di rete e fiducia collegati da `:app`)
+  verificano che nessuna loro chiave manchi dall'elenco;
+- **l'anteprima si ferma** all'apertura della pagina dell'esportazione (revisione 2, F15): un test che finisce o una
+  rilettura nel frattempo non cambiano ciò che si salva.
 
 ### 2.7 Profili Android sul tablet (piano 2.8)
 - Ogni profilo è un'installazione a sé: chiave nel proprio Keystore, credenziali, approvazione, VPN, DataStore. Niente di condiviso nel codice.
@@ -264,6 +272,7 @@ Regole:
 - Finché è aperto, **nessun** chiamante arriva a `authenticate`.
 - Si chiude solo quando l'utente salva una nuova password (`onNewPasswordSaved`, che aumenta la generazione); a quel punto si fa un solo tentativo.
 - Test obbligatorio: 10 coroutine e 2 lavori in parallelo con la password sbagliata devono produrre **esattamente 1** chiamata `authenticate`, anche dopo il riavvio del processo.
+- Revisione 2, F9: la promessa vera è **al massimo 2**. Un tentativo interrotto durante il login (processo morto, oppure timeout o connessione caduta dopo l'invio della risposta NTLM, che può essere un rifiuto ritardato apposta) resta "non confermato"; due di fila aprono l'interruttore (`MAX_UNCONFIRMED`, `nas-sessione.md`, L24).
 
 ### 3.4 Errori → messaggi
 | Stato SMB | `NasError` | Messaggio | Interruttore | Edge case |
@@ -380,7 +389,7 @@ Si procede così: simulatore in memoria per la logica, poi il NAS vero dal PC, p
    - crea la share privata `test2`;
    - verifica che `test` **non** abbia accesso a `NAS` e `Public`. Se le share sono pubbliche non si può impedire: va annotato.
 2. Sul PC crea il file delle credenziali (§5.2) per `test`.
-3. Attiva il debug USB su S25 e tablet.
+3. Attiva il debug USB su S25 e tablet. **Solo account di prova** (`test`, `test2`) con la build debug (revisione 2, F14): è `debuggable`, quindi con ADB `run-as` e il debugger si usano la chiave del Keystore e le credenziali, e le eccezioni finiscono intere nel logcat. Per l'uso vero con gli account della famiglia serve l'APK di **release** firmato (L25).
 4. Sul tablet, aggiungi l'utente "Prova".
 5. Facoltativo, per la VPN: sul FRITZ!Box crea un peer WireGuard per S25, tablet e profilo "Prova"; installa WireGuard, importa la configurazione e attiva "Allow remote control apps".
 

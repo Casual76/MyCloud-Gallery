@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.feature.diagnostics.export
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagItem
 import dev.pampa.mycloudgallery.core.common.diagnostics.ExportValue
 import dev.pampa.mycloudgallery.feature.diagnostics.aggregate.DiagnosticsSnapshot
+import dev.pampa.mycloudgallery.feature.diagnostics.catalog.DiagCatalog
 
 /**
  * Il file dell'esportazione, gia' scritto: il testo e le sue righe (per l'anteprima).
@@ -25,6 +26,9 @@ class ExportEnvironment(val sdkInt: Int? = null)
  *
  * Tre difese, una dentro l'altra:
  *
+ *  0. **Gli elenchi chiusi** (revisione 2, F4). Il codice si esporta solo se e' nel [DiagCatalog] (altrimenti la voce
+ *     esce come [UNKNOWN_CODE], senza valori: `DiagCode` ha un costruttore pubblico e un codice costruito da un dato
+ *     avrebbe la forma giusta), e un valore solo se la sua chiave e' in [ExportKeys].
  *  1. **Il tipo.** Dalle voci si legge solo il codice (scritto nel sorgente), la sezione, la gravita' e la mappa
  *     `export`, fatta di [ExportValue]: numeri, si'/no, durate, nomi di costanti di un enum dell'app e impronte
  *     HMAC. [ExportValue] non ha un caso «stringa»: un dato personale non ha un posto dove stare. Il testo che
@@ -45,6 +49,9 @@ object DiagnosticsExporter {
 
   const val FORMAT = "mycloudgallery-diagnostics"
   const val VERSION = 1
+
+  /** Il codice con cui esce una voce che il catalogo non conosce (i suoi valori non escono). */
+  const val UNKNOWN_CODE = "UNKNOWN"
 
   /** Il file per [snapshot]; lancia [IllegalStateException] se il risultato non rispetta la grammatica. */
   fun render(snapshot: DiagnosticsSnapshot, environment: ExportEnvironment = ExportEnvironment()): ExportDocument {
@@ -71,9 +78,13 @@ object DiagnosticsExporter {
   }
 
   private fun itemLine(item: DiagItem): String = buildString {
-    append("{\"code\": \"").append(item.code.id).append("\", \"severity\": \"").append(item.severity.name).append('"')
+    // Revisione 2, F4: solo i codici del catalogo e solo le chiavi dell'elenco chiuso.
+    val known = item.code in DiagCatalog
+    val code = if (known) item.code.id else UNKNOWN_CODE
+    append("{\"code\": \"").append(code).append("\", \"severity\": \"").append(item.severity.name).append('"')
     // Un valore che non ha la forma attesa si lascia fuori (vedi `encode`): l'esportazione prosegue senza.
-    val pairs = item.export.toSortedMap().mapNotNull { (key, value) -> encode(value)?.let { "\"$key\": $it" } }
+    val values = if (known) item.export.filterKeys(ExportKeys::isAllowed) else emptyMap()
+    val pairs = values.toSortedMap().mapNotNull { (key, value) -> encode(value)?.let { "\"$key\": $it" } }
     if (pairs.isNotEmpty()) {
       append(", \"values\": {")
       append(pairs.joinToString(", "))

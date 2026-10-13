@@ -292,6 +292,9 @@ class FakeAdminRecovery(
   /** Se l'ultima ricerca ha ricevuto una password (mai la password stessa). */
   var lastSearchHadPassword: Boolean = false
 
+  /** L'impronta digitata dal foglio all'ultimo recupero (revisione 2, F3). */
+  var lastTypedFingerprint: String? = null
+
   override suspend fun findKits(account: NasAccount, privateShare: String, password: CharArray?): NasResult<List<RecoveryKitRef>> {
     lastSearchHadPassword = password != null
     password?.fill('\u0000')
@@ -303,7 +306,9 @@ class FakeAdminRecovery(
     code: CharArray,
     familyState: FamilyStateQr?,
     oldAdmin: OldAdminFate,
+    typedFingerprint: String?,
   ): RecoveryOutcome {
+    lastTypedFingerprint = typedFingerprint
     code.fill('\u0000')
     return outcome
   }

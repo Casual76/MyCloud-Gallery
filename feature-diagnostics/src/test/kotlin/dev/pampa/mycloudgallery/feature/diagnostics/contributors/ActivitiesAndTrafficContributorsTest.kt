@@ -21,6 +21,7 @@ import dev.pampa.mycloudgallery.feature.diagnostics.catalog.DiagCatalog
 import dev.pampa.mycloudgallery.feature.diagnostics.InMemoryLedger
 import dev.pampa.mycloudgallery.feature.diagnostics.catalog.DiagCodes
 import kotlinx.coroutines.test.runTest
+import dev.pampa.mycloudgallery.feature.diagnostics.assertExportKeysAllowed
 import org.junit.Test
 
 /** «Attivita'» (verdetti del motore delle regole) e «Consumi del mese» (contatori di traffico). */
@@ -101,6 +102,7 @@ class ActivitiesAndTrafficContributorsTest {
         BackgroundActivity.HQ_PREVIEWS to RuleDecision.Wait(WaitReason.NetworkNotAllowed(NetworkClass.MOBILE)),
       ),
     ).collect().associateBy { it.code }
+    assertExportKeysAllowed(items.values.toList())
 
     val cap = items.getValue(DiagCodes.ACT_CAP_REACHED)
     assertThat(cap.export["usedBytes"]).isEqualTo(ExportValue.Num(1_200_000_000L))
@@ -146,6 +148,7 @@ class ActivitiesAndTrafficContributorsTest {
     ledger.record(TrafficSource.INDEX_SYNC, TrafficNetwork.HOME_WIFI, 50_000_000L)
 
     val items = TrafficContributor(ledger).collect()
+    assertExportKeysAllowed(items)
 
     val month = items.first { it.code == DiagCodes.TRAFFIC_MONTH }
     assertThat(month.export["totalBytes"]).isEqualTo(ExportValue.Num(950_000_000L))

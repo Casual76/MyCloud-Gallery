@@ -218,6 +218,23 @@ class NoFalseWipeTest {
     assertThat(tablet.lostWatcher.lastScan.value!!.rejected.total).isEqualTo(4)
   }
 
+  /**
+   * Revisione 2, F8: se l'area "privata" del profilo e' l'area comune, una segnalazione li' non prova il possesso
+   * dell'account (ci scrivono tutti): nessun azzeramento automatico, anche se firmata da un dispositivo approvato.
+   */
+  @Test
+  fun unaSegnalazioneNellAreaComuneUsataComePrivataNonFaAzzerare() = runTest {
+    val tablet = world.joinApproved("Tablet di Mamma", "mamma", privateShare = COMMON)
+    val mammaPhone = world.joinApproved("Telefono di Mamma", "mamma")
+    tablet.service.refresh(Purpose.BACKGROUND)
+
+    plantReport(COMMON, mammaPhone, tablet.id)
+
+    tablet.later(DAY)
+    assertThat(tablet.guard.preflight(Purpose.BACKGROUND)).isInstanceOf(PreflightResult.Proceed::class.java)
+    assertNotWiped(tablet)
+  }
+
   @Test
   fun unaSegnalazioneValidaNellAreaPrivataDellAccountFaAzzerare() = runTest {
     val tablet = world.joinApproved("Tablet di Mamma", "mamma")

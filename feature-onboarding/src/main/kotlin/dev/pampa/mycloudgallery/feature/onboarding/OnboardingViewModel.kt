@@ -509,7 +509,7 @@ class OnboardingViewModel @Inject constructor(
         recoveryDisplay?.close()
         recoveryDisplay = display
         val groups = display.groups.map { String(it) }
-        state.update { it.copy(key = KeyUi(page = KeyPage.ShowCode, groups = groups)) }
+        state.update { it.copy(key = KeyUi(page = KeyPage.ShowCode, groups = groups, fingerprint = display.familyFingerprint)) }
       }
     }
   }
@@ -839,13 +839,15 @@ class OnboardingViewModel @Inject constructor(
   }
 
   /** Il codice digitato apre il kit? Non si tocca il NAS per sbagliare: si puo' riprovare quante volte si vuole. */
-  fun submitRecoveryCodeForKit(code: CharArray) {
+  fun submitRecoveryCodeForKit(code: CharArray, fingerprint: String = "") {
     val recovery = state.value.recovery ?: return
     val kit: RecoveryKitRef = recovery.kits.getOrNull(recovery.selectedKit) ?: return
     updateRecovery { it.copy(busy = true, wrongCode = false, problem = null) }
     viewModelScope.launch {
       val outcome = try {
-        guard { adminRecovery.recover(kit, code, recovery.familyState, oldAdminFate ?: OldAdminFate.KEEP_APPROVED) }
+        // Revisione 2, F3: senza QR di stato l'ancora e' l'impronta scritta sul foglio.
+        val typed = fingerprint.takeIf { recovery.familyState == null && it.isNotBlank() }
+        guard { adminRecovery.recover(kit, code, recovery.familyState, oldAdminFate ?: OldAdminFate.KEEP_APPROVED, typed) }
           ?: RecoveryOutcome.Failed(OnboardingProblem.STEP_NOT_AVAILABLE)
       } finally {
         code.fill(CLEARED)

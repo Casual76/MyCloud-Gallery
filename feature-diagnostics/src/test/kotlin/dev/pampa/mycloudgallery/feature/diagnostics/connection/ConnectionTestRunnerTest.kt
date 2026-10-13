@@ -27,6 +27,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
+import dev.pampa.mycloudgallery.feature.diagnostics.assertExportKeysAllowed
 import org.junit.Test
 
 /** Il test di connessione a richiesta: mai con l'interruttore aperto, un solo tentativo, credenziali azzerate. */
@@ -210,6 +211,7 @@ class ConnectionTestRunnerTest {
   fun leFasiHannoLEtichettaELaNegoziazioneUnaVoceTutta() = runTest {
     val done = runner(FakeConnectionTester(passedReport())).run() as ConnectionTestOutcome.Done
     val items = done.toItems()
+    assertExportKeysAllowed(items)
 
     Stage.entries.forEach { assertThat(stageLabel(it)).isNotEqualTo(0) }
     val negotiation = items.first { it.export.containsKey("dialect") }
@@ -237,6 +239,7 @@ class ConnectionTestRunnerTest {
     val items = (runner(FakeConnectionTester(report)).run() as ConnectionTestOutcome.Done).toItems()
 
     assertThat(items.map { it.code }).contains(DiagCodes.NAS_NOT_ENCRYPTED)
+    assertExportKeysAllowed(items)
     assertThat(items.first { it.export.containsKey("dialect") }.severity).isEqualTo(DiagSeverity.ERROR)
   }
 }

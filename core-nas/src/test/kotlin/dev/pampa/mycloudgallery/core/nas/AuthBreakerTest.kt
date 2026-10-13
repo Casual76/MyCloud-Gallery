@@ -146,7 +146,11 @@ class AuthBreakerTest {
     h.backend.beforeOp = { op, _ -> if (op == SimOp.AUTHENTICATE) h.backend.dropAllConnections() }
     assertThat(h.manager.withShare(SHARE, Purpose.INTERACTIVE) { }.errorOrNull()).isEqualTo(NasError.Timeout)
     assertThat(h.breaker.current()).isEqualTo(BreakerState.Closed(BreakerRecord.FIRST_GENERATION))
-    // Il tentativo interrotto dalla rete non resta "non confermato".
+    // Revisione 2, F9: la connessione caduta DURANTE l'autenticazione (dopo la risposta NTLM) puo' essere un rifiuto
+    // nascosto: il tentativo resta "non confermato" finche' un login riuscito non lo toglie.
+    assertThat(h.store.read(BreakerKeys.of(h.backend.serverGuid, USER)).unconfirmed).isEqualTo(1)
+    h.backend.beforeOp = null
+    assertThat(h.manager.withShare(SHARE, Purpose.INTERACTIVE) { }.errorOrNull()).isNull()
     assertThat(h.store.read(BreakerKeys.of(h.backend.serverGuid, USER)).unconfirmed).isEqualTo(0)
   }
 
@@ -179,6 +183,39 @@ class AuthBreakerTest {
     assertThat(ran).isFalse()
     assertThat((result as AttemptResult.Blocked).reason).isEqualTo(AuthBlockReason.AUTH_FAILED)
     assertThat(breaker.current()).isEqualTo(BreakerState.Open(AuthBlockReason.AUTH_FAILED, 7L, BreakerRecord.FIRST_GENERATION))
+  }
+
+  /**
+   * Revisione 2, F9: chi sta in mezzo puo' ritardare la risposta a SESSION_SETUP oltre il tempo massimo, cosi' ogni
+   * rifiuto sembra un timeout. Un timeout dopo la traccia resta "non confermato": al massimo due tentativi, poi si apre.
+   */
+  @Test
+  fun unTimeoutDuranteLAutenticazioneNonSiCancellaEDueDiFilaAprono() = runTest {
+    val store = InMemoryBreakerStore()
+    val registry = AuthBreakerRegistry(store, backgroundScope) { 7L }
+    val breaker = registry.forKey("guid", "test")
+    var reachedNas = 0
+    repeat(5) {
+      breaker.attempt<Unit> { _ ->
+        beforeAuthenticate()
+        reachedNas++
+        AuthOutcome.Failed(NasError.Timeout)
+      }
+    }
+    assertThat(reachedNas).isEqualTo(PersistentAuthCircuitBreaker.MAX_UNCONFIRMED)
+    assertThat(breaker.current()).isEqualTo(BreakerState.Open(AuthBlockReason.AUTH_FAILED, 7L, BreakerRecord.FIRST_GENERATION))
+
+    // Un timeout PRIMA dell'autenticazione (connessione, NEGOTIATE) non conta; un altro errore dopo la traccia si toglie.
+    val other = registry.forKey("guid", "altro")
+    repeat(5) { other.attempt<Unit> { _ -> AuthOutcome.Failed(NasError.Timeout) } }
+    repeat(5) {
+      other.attempt<Unit> { _ ->
+        beforeAuthenticate()
+        AuthOutcome.Failed(NasError.ServiceDown)
+      }
+    }
+    assertThat(other.current()).isInstanceOf(BreakerState.Closed::class.java)
+    assertThat(store.read(BreakerKeys.of("guid", "altro")).unconfirmed).isEqualTo(0)
   }
 
   @Test

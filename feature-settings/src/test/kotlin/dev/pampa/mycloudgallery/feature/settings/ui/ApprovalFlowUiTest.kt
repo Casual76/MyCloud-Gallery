@@ -94,6 +94,10 @@ class ApprovalFlowUiTest {
     assertThat(authenticator.prompts).isEqualTo(0)
 
     rule.onNodeWithText("L’account «nonna» è giusto").performScrollTo().performClick()
+    // Revisione 2, F5: si parte dalla scansione della chiave; il codice si sceglie.
+    assertThat(viewModel.state.value.mode).isEqualTo(ProofMode.SCAN)
+    rule.onNodeWithText("Digita il codice").performScrollTo().performClick()
+    rule.waitForIdle()
     rule.onNode(hasSetTextAction()).performScrollTo().performTextInput("k7qd 2m9x fa4t 1b8c")
     rule.waitForIdle()
     rule.onNodeWithText("K7QD-2M9X-FA4T-1B8C").assertExists()

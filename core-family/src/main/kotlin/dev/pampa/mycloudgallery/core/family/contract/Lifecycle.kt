@@ -94,12 +94,38 @@ interface AdminRecovery {
    */
   suspend fun findKits(account: NasAccount, privateShare: String, password: CharArray? = null): NasResult<List<RecoveryKitRef>>
 
+  /**
+   * Il recupero con [kit] e il [code] del foglio. L'ancora indipendente dal NAS (revisione 2, F3) e' il QR di stato
+   * [familyState] oppure, senza, [typedFingerprint]: l'impronta della famiglia **letta dal foglio** e digitata. Senza
+   * nessuna delle due il recupero non parte ([RecoveryOutcome.Failed] con `RECOVERY_KIT_UNVERIFIED`): il nome del file
+   * sul NAS lo sceglie chi scrive nell'area privata, quindi non e' un'ancora.
+   */
   suspend fun recover(
     kit: RecoveryKitRef,
     code: CharArray,
     familyState: FamilyStateQr?,
     oldAdmin: OldAdminFate,
+    typedFingerprint: String? = null,
   ): RecoveryOutcome
+}
+
+/**
+ * L'impronta della famiglia scritta a mano, dal foglio del codice di recupero (revisione 2, F3): 26 caratteri base32
+ * minuscoli; spazi, trattini e maiuscole si tollerano.
+ */
+object TypedFingerprint {
+  const val LENGTH = 26
+  private const val ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz"
+
+  fun normalize(typed: String): String = typed.filter { it.isLetterOrDigit() }.lowercase()
+
+  /** Vero se [typed] ha la forma di un'impronta (non dice se e' quella giusta: lo dice il kit). */
+  fun isComplete(typed: String): Boolean = normalize(typed).let { it.length == LENGTH && it.all { c -> c in ALPHABET } }
+
+  /** Per mostrarla: gruppi di 4. */
+  fun grouped(fingerprint: String): String = fingerprint.chunked(GROUP).joinToString(" ")
+
+  private const val GROUP = 4
 }
 
 sealed interface ResetOutcome {

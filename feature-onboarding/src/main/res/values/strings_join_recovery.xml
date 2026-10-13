@@ -59,6 +59,9 @@
   <string name="join_password_subtitle">È l’unica cosa da scrivere.</string>
   <string name="join_password_account_detail">Lo dice l’invito.</string>
   <string name="join_password_submit">Entra</string>
+  <string name="recovery_fingerprint_label">Impronta della famiglia (dal foglio)</string>
+  <string name="recovery_fingerprint_hint">Le 26 lettere e cifre scritte sul foglio sotto il codice. Con il QR «Stato della famiglia» non servono.</string>
+  <string name="join_password_weak_ask_admin">Chiedi a chi gestisce il NAS di cambiarla: l’app la usa anche fuori casa.</string>
   <string name="join_password_footnote">Con la password entri in sola lettura: potrai guardare, ma i tuoi dati non verranno accettati finché l’admin non ti approva.</string>
   <string name="join_name_title">Come ti chiami qui?</string>
   <string name="join_name_subtitle">È il nome con cui l’admin vedrà questo dispositivo.</string>

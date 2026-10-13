@@ -43,8 +43,8 @@
   <string name="channel_approvals_description">Un nuovo dispositivo chiede di entrare nella famiglia (solo per l’admin).</string>
   <string name="channel_nas_name">Problemi del NAS</string>
   <string name="channel_nas_description">Il NAS non accetta più la password o non si raggiunge da giorni.</string>
-  <string name="notify_new_device_title">Nuovo dispositivo: %1$s. Approvare?</string>
-  <string name="notify_new_device_text">Apri MyCloud Gallery e confronta il codice con quello del dispositivo.</string>
+  <string name="notify_new_device_title">Un nuovo dispositivo chiede di entrare</string>
+  <string name="notify_new_device_text">Apri MyCloud Gallery: nome e codice li vedi lì. Se non aspettavi nessuno, non approvare.</string>
   <string name="notify_new_device_public">Nuovo dispositivo da approvare</string>
   <string name="notify_new_devices_title">%1$d nuovi dispositivi da approvare</string>
   <string name="notify_password_title">Serve la password del NAS</string>

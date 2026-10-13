@@ -51,7 +51,11 @@ internal interface AttemptScope {
  * - Si chiude solo con [onNewPasswordSaved] (generazione + 1). Un fallimento arrivato da un tentativo della
  *   generazione precedente non riapre quella nuova.
  * - Gli errori di rete non lo aprono. Un tentativo interrotto dalla morte del processo resta "non confermato": dopo
- *   [MAX_UNCONFIRMED] di fila si apre comunque.
+ *   [MAX_UNCONFIRMED] di fila si apre comunque. Quindi, dopo crash ripetuti, il NAS puo' vedere **al massimo
+ *   [MAX_UNCONFIRMED]** tentativi con la stessa password, non uno solo.
+ * - Revisione 2, F9: anche un **timeout durante l'autenticazione** ([NasError.Timeout], [NasError.Stalled] dopo
+ *   `beforeAuthenticate`) resta "non confermato": puo' essere un rifiuto ritardato apposta da chi sta in mezzo, e
+ *   prima ogni giro in background avrebbe riprovato la password. Due di fila aprono l'interruttore.
  */
 class PersistentAuthCircuitBreaker internal constructor(
   internal val key: String,
@@ -109,7 +113,8 @@ class PersistentAuthCircuitBreaker internal constructor(
       when (outcome) {
         is AuthOutcome.Rejected -> open(outcome.reason, generation)
         is AuthOutcome.Accepted -> if (marked) settle(generation, reset = true)
-        is AuthOutcome.Failed -> if (marked) settle(generation, reset = false)
+        // Revisione 2, F9: un timeout dopo la traccia non e' "nessun verdetto": il segno resta.
+        is AuthOutcome.Failed -> if (marked && !outcome.error.mayHideRefusal()) settle(generation, reset = false)
       }
       AttemptResult.Done(outcome)
     }
@@ -132,8 +137,11 @@ class PersistentAuthCircuitBreaker internal constructor(
     mutableState.value = record.toState()
   }
 
+  /** Un errore che puo' nascondere un rifiuto della password: la risposta non e' arrivata in tempo. */
+  private fun NasError.mayHideRefusal(): Boolean = this == NasError.Timeout || this == NasError.Stalled
+
   companion object {
-    /** Tentativi lasciati a meta' (processo morto) dopo i quali l'interruttore si apre da solo. */
+    /** Tentativi lasciati a meta' (processo morto o timeout durante l'autenticazione) dopo i quali si apre da solo. */
     const val MAX_UNCONFIRMED: Int = 2
   }
 }

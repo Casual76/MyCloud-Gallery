@@ -131,10 +131,10 @@
   <string name="approve_account_confirm">L’account «%1$s» è giusto</string>
   <string name="approve_account_confirm_detail">Se non lo riconosci, non approvare</string>
   <string name="approve_step_proof">2 · Il codice</string>
-  <string name="approve_step_proof_detail">Dimostra di avere davanti il dispositivo nuovo.</string>
+  <string name="approve_step_proof_detail">Dimostra di avere davanti il dispositivo nuovo. Il modo più sicuro è scansionare il QR della sua chiave, nella stessa stanza.</string>
   <string name="approve_mode_code">Digita il codice</string>
   <string name="approve_mode_scan">Scansiona il QR</string>
-  <string name="approve_code_explain">Sul dispositivo nuovo c’è un codice di 16 caratteri. Scrivilo qui: lo confronto io con la sua chiave.</string>
+  <string name="approve_code_explain">Sul dispositivo nuovo c’è un codice di 16 caratteri. Leggilo tu, sul suo schermo, e scrivilo qui: lo confronto io con la sua chiave. Un codice arrivato per messaggio o dettato da qualcuno non prova niente: un’altra app su quel telefono potrebbe mostrarne uno falso.</string>
   <string name="approve_code_label">Codice del dispositivo</string>
   <string name="approve_code_placeholder">AAAA-BBBB-CCCC-DDDD</string>
   <string name="approve_code_hint">Maiuscole, spazi e trattini non contano.</string>

@@ -9,7 +9,6 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Lock
-import androidx.compose.material.icons.rounded.LockOpen
 import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.QrCode2
 import androidx.compose.material.icons.rounded.Shield
@@ -34,8 +33,6 @@ internal data class WarningSpec(val icon: ImageVector, @param:StringRes val titl
 
 /** Un testo per ogni avviso che un passo puo' restituire: esaustivo, un avviso nuovo non compila senza. */
 internal fun OnboardingWarning.spec(): WarningSpec = when (this) {
-  OnboardingWarning.SHORT_PASSWORD ->
-    WarningSpec(Icons.Rounded.LockOpen, R.string.warning_short_password_title, R.string.warning_short_password_detail)
   OnboardingWarning.SHARE_IS_PUBLIC ->
     WarningSpec(Icons.Rounded.Public, R.string.warning_public_share_title, R.string.warning_public_share_detail)
   OnboardingWarning.ACCOUNT_SEES_OTHER_PRIVATE_SHARES ->

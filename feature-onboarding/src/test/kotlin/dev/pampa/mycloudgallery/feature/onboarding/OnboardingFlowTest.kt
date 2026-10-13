@@ -448,10 +448,13 @@ internal class OnboardingFlowTest : OnboardingComposeBase() {
     composeRule.onNode(hasText(str(R.string.action_continue)) and hasClickAction()).assertIsNotEnabled()
     clickRow(str(R.string.recovery_fate_lost))
     click(str(R.string.action_continue))
-    // il codice
+    // il codice e, senza il QR di stato, l'impronta del foglio (revisione 2, F3): senza, il tasto non parte
     assertVisible(str(R.string.recovery_code_hint))
     type(0, "K7QD2M9XFA4T")
+    composeRule.onNode(hasText(str(R.string.recovery_code_submit)) and hasClickAction()).assertIsNotEnabled()
+    type(1, PAPER_FINGERPRINT)
     click(str(R.string.recovery_code_submit))
+    assertThat(env.recovery.lastTypedFingerprint).isEqualTo(PAPER_FINGERPRINT)
     assertVisible(str(R.string.recovery_done_key))
     assertVisible(str(R.string.recovery_done_old_lost))
   }
@@ -465,6 +468,7 @@ internal class OnboardingFlowTest : OnboardingComposeBase() {
     clickRow(str(R.string.recovery_fate_revoked))
     click(str(R.string.action_continue))
     type(0, "SBAGLIATO123")
+    type(1, PAPER_FINGERPRINT)
     click(str(R.string.recovery_code_submit))
     assertVisible(str(R.string.recovery_wrong_title))
     env.recovery.outcome = RecoveryOutcome.Recovered
@@ -480,6 +484,7 @@ internal class OnboardingFlowTest : OnboardingComposeBase() {
     click(str(R.string.action_continue))
     assertVisible(str(R.string.recovery_code_hint))
     type(0, "K7QD2M9XFA4T")
+    type(1, PAPER_FINGERPRINT)
     click(str(R.string.recovery_code_submit))
     assertVisible(str(R.string.recovery_done_title_second))
   }
@@ -493,3 +498,6 @@ internal class OnboardingFlowTest : OnboardingComposeBase() {
     composeRule.onNode(hasText(str(R.string.action_continue)) and hasClickAction()).assertIsNotEnabled()
   }
 }
+
+/** Un'impronta della famiglia come la si scrive dal foglio (gruppi di 4, maiuscole). */
+private const val PAPER_FINGERPRINT = "ABCD EFGH JKMN PQRS TVWX YZ01 23"

@@ -58,6 +58,8 @@ import dev.pampa.mycloudgallery.feature.onboarding.ui.NoticeTone
 import dev.pampa.mycloudgallery.feature.onboarding.ui.OnboardingDimens
 import dev.pampa.mycloudgallery.feature.onboarding.ui.ProblemAction
 import dev.pampa.mycloudgallery.feature.onboarding.ui.ProblemPanel
+import dev.pampa.mycloudgallery.feature.onboarding.ui.passwordWeakness
+import dev.pampa.mycloudgallery.feature.onboarding.ui.weaknessText
 import dev.pampa.mycloudgallery.feature.onboarding.ui.SecretFieldLabel
 import dev.pampa.mycloudgallery.feature.onboarding.ui.StepChrome
 import dev.pampa.mycloudgallery.feature.onboarding.ui.StepScaffold
@@ -370,7 +372,9 @@ internal fun JoinPasswordPage(
   LaunchedEffect(ui.needsNewPassword) {
     if (ui.needsNewPassword) form.password = ""
   }
-  val canSubmit = form.password.isNotEmpty() && !ui.busy
+  // Revisione 2, F1: la stessa soglia dell'admin; se la password ricevuta e' debole la cambia chi gestisce il NAS.
+  val weakness = passwordWeakness(account, form.password)
+  val canSubmit = form.password.isNotEmpty() && weakness == null && !ui.busy
   val submit = { if (canSubmit) actions.onSubmit(form.password.toCharArray()) }
   StepScaffold(
     title = stringResource(R.string.join_password_title),
@@ -409,6 +413,7 @@ internal fun JoinPasswordPage(
         value = form.password,
         onValueChange = { form.password = it },
         enabled = !ui.busy,
+        supportingText = weakness?.let { weaknessText(it) + " " + stringResource(R.string.join_password_weak_ask_admin) },
         keyboardOptions = SecureInput.keyboardOptions(ImeAction.Done),
         keyboardActions = KeyboardActions(onDone = { submit() }),
         visualTransformation = if (form.reveal) VisualTransformation.None else SecureInput.hidden,

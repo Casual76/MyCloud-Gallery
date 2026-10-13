@@ -1,5 +1,7 @@
 package dev.pampa.mycloudgallery
 
+import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -17,6 +19,11 @@ import javax.inject.Inject
  * E' una `FragmentActivity` perche' il blocco app usa `BiometricPrompt`, che la richiede (estende
  * `ComponentActivity`, quindi Compose funziona come prima). Una sola activity anche perche' il blocco app
  * presume una sola activity: con due, ogni passaggio conterebbe come uscita dall'app.
+ *
+ * **L'intent d'ingresso non porta niente** (revisione 2, F5): l'activity e' esportata (launcher), quindi qualsiasi app
+ * puo' avviarla con extra scelti da lei, e Navigation Compose li leggerebbe come deep link interni
+ * (`android-support-nav:controller:deepLinkIds`/`deepLinkArgs`): per esempio l'attesa dell'approvazione con un codice
+ * falso. L'app non ha deep link: prima di `setContent`, e a ogni `onNewIntent`, l'intent si sostituisce con uno pulito.
  */
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
@@ -26,6 +33,7 @@ class MainActivity : FragmentActivity() {
   lateinit var lockController: AppLockController
 
   override fun onCreate(savedInstanceState: Bundle?) {
+    intent = launcherIntent(this)
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
     GalleryLog.d(TAG) { "MainActivity pronta" }
@@ -37,7 +45,19 @@ class MainActivity : FragmentActivity() {
     }
   }
 
-  private companion object {
-    const val TAG = "MainActivity"
+  override fun onNewIntent(intent: Intent) {
+    val clean = launcherIntent(this)
+    super.onNewIntent(clean)
+    setIntent(clean)
+  }
+
+  internal companion object {
+    private const val TAG = "MainActivity"
+
+    /** L'intent con cui l'app parte dal launcher, e nient'altro: niente extra, dati, flag o componenti di altri. */
+    fun launcherIntent(context: Context): Intent =
+      Intent(context, MainActivity::class.java)
+        .setAction(Intent.ACTION_MAIN)
+        .addCategory(Intent.CATEGORY_LAUNCHER)
   }
 }

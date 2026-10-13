@@ -43,6 +43,7 @@ import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.family.contract.OldAdminFate
+import dev.pampa.mycloudgallery.core.family.contract.TypedFingerprint
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
 import dev.pampa.mycloudgallery.core.security.input.SecureInput
 import dev.pampa.mycloudgallery.core.security.screen.SensitiveScreen
@@ -72,7 +73,9 @@ import java.util.TimeZone
 // nell'area privata, la scelta sul vecchio admin, il codice, l'esito.
 
 @Stable
-internal class RecoveryForm(code: String = "", reveal: Boolean = true, fate: OldAdminFate? = null, share: String = "") {
+internal class RecoveryForm(code: String = "", reveal: Boolean = true, fate: OldAdminFate? = null, share: String = "", fingerprint: String = "") {
+  /** Revisione 2, F3: l'impronta della famiglia scritta sul foglio (serve senza il QR di stato). */
+  var fingerprint: String by mutableStateOf(fingerprint)
   /** L'area privata in cui cercare i kit: se vuota, quella proposta (il nome dell'utente). */
   var share: String by mutableStateOf(share)
   var code: String by mutableStateOf(code)
@@ -86,7 +89,7 @@ internal class RecoveryActions(
   val onRetryKits: () -> Unit = {},
   val onSearchKits: (privateShare: String) -> Unit = {},
   val onChooseFate: (OldAdminFate) -> Unit = {},
-  val onSubmitCode: (CharArray) -> Unit = {},
+  val onSubmitCode: (code: CharArray, fingerprint: String) -> Unit = { _, _ -> },
   val onScanFamilyState: () -> Unit = {},
   val onFinish: () -> Unit = {},
   val onProblemAction: (ProblemAction) -> Unit = {},
@@ -272,8 +275,11 @@ internal fun RecoveryCodePage(
 ) {
   SensitiveScreen()
   val normalized = RecoveryCodeFormat.normalize(form.code)
-  val canSubmit = normalized.length >= MIN_RECOVERY_CODE_LENGTH && !ui.busy
-  val submit = { if (canSubmit) actions.onSubmitCode(normalized.toCharArray()) }
+  // Revisione 2, F3: senza il QR di stato serve l'impronta del foglio (il nome del file sul NAS non e' un'ancora).
+  val needsFingerprint = ui.familyState == null
+  val fingerprintOk = !needsFingerprint || TypedFingerprint.isComplete(form.fingerprint)
+  val canSubmit = normalized.length >= MIN_RECOVERY_CODE_LENGTH && fingerprintOk && !ui.busy
+  val submit = { if (canSubmit) actions.onSubmitCode(normalized.toCharArray(), if (needsFingerprint) form.fingerprint else "") }
   StepScaffold(
     title = stringResource(R.string.recovery_code_title),
     subtitle = stringResource(R.string.recovery_code_subtitle),
@@ -334,6 +340,18 @@ internal fun RecoveryCodePage(
           tone = if (ui.familyState != null) FluidTone.Success else FluidTone.Info,
           leading = { Icon(Icons.Rounded.QrCodeScanner, contentDescription = null) },
           onClick = actions.onScanFamilyState,
+        )
+      }
+    }
+    if (needsFingerprint) {
+      item(key = "fingerprint") {
+        FluidTextField(
+          value = form.fingerprint,
+          onValueChange = { form.fingerprint = it.take(MAX_FINGERPRINT_INPUT) },
+          label = stringResource(R.string.recovery_fingerprint_label),
+          supportingText = stringResource(R.string.recovery_fingerprint_hint),
+          isError = form.fingerprint.isNotBlank() && !TypedFingerprint.isComplete(form.fingerprint),
+          enabled = !ui.busy,
         )
       }
     }
@@ -420,3 +438,6 @@ internal fun RecoveryDonePage(
     item(key = "footnote") { FluidSectionFootnote(text = stringResource(R.string.recovery_done_footnote)) }
   }
 }
+
+/** Spazi e trattini compresi: piu' di cosi' non e' un'impronta. */
+private const val MAX_FINGERPRINT_INPUT = 64

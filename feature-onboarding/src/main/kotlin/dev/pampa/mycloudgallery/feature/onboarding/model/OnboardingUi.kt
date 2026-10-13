@@ -169,6 +169,8 @@ internal data class KeyUi(
   val busy: Boolean = false,
   /** Il codice di recupero, in gruppi. Presente solo fra la generazione e la fine del passo. */
   val groups: List<String> = emptyList(),
+  /** L'impronta della famiglia, da scrivere sul foglio con il codice (revisione 2, F3). */
+  val fingerprint: String? = null,
   val problem: OnboardingProblem? = null,
 )
 

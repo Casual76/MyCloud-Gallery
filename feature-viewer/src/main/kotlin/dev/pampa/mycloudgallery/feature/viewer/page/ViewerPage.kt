@@ -47,7 +47,9 @@ import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
 import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryOnPhoto
+import dev.pampa.mycloudgallery.core.imaging.contract.AnimatedSpec
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbKey
+import dev.pampa.mycloudgallery.core.imaging.contract.ZoomSpec
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.MediaRef
@@ -59,7 +61,9 @@ import dev.pampa.mycloudgallery.feature.viewer.gesture.holdToPlay
 import dev.pampa.mycloudgallery.feature.viewer.video.ViewerPlayback
 import dev.pampa.mycloudgallery.feature.viewer.video.ViewerPlayer
 import dev.pampa.mycloudgallery.feature.viewer.video.collectPlayerState
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 import me.saket.telephoto.subsamplingimage.SubSamplingImage
 import me.saket.telephoto.subsamplingimage.SubSamplingImageErrorReporter
 import me.saket.telephoto.subsamplingimage.SubSamplingImageSource
@@ -123,10 +127,9 @@ internal fun ViewerPage(
   val peeked = remember(spec.thumbKey, services.thumbnails) { services.thumbnails.peek(spec.thumbKey) }
   val placeholder = remember(spec.thumbHash, services.placeholders) { spec.thumbHash?.let { services.placeholders.image(it) } }
   val best = image.best ?: peeked
-  val zoomSpec = remember(spec.ref, services.images) { spec.ref?.let { services.images.zoomSpec(it) } }
-  val animated = remember(spec.ref, spec.kind, services.images) {
-    if (spec.kind != MediaKind.VIDEO) spec.ref?.let { services.images.animated(it) } else null
-  }
+  val facts = rememberPageFacts(spec, services)
+  val zoomSpec = facts?.zoom
+  val animated = facts?.animated
 
   // La dimensione dell'originale decide i limiti dello zoom; la proporzione e' una sola per tutte le bitmap della pagina.
   val contentSize = when {
@@ -238,6 +241,44 @@ internal fun ViewerPage(
     }
     }
   }
+}
+
+/** Cio' che si sa dell'originale di una pagina: le misure per lo zoom (e i tasselli) e, per GIF e WebP, l'animazione. */
+@Immutable
+private class PageFacts(val zoom: ZoomSpec?, val animated: AnimatedSpec?)
+
+/**
+ * Le misure dell'originale, lette **fuori dal thread principale**: `zoomSpec` e `animated` della sorgente aprono il file
+ * e ne leggono la testa (un `openFileDescriptor` del provider e un `ImageDecoder` sull'intestazione) quando non le hanno
+ * gia' in cache. Lette nella composizione, come prima, costavano dai 5 ai 10 ms per pagina nel primo fotogramma
+ * dell'espansione, con tre pagine composte insieme (la corrente e le vicine): il fotogramma da 48 ms che sull'S25 si
+ * vedeva come uno scatto all'apertura (13/10).
+ *
+ * Fino a che non arrivano la pagina usa la proporzione dell'indice e la bitmap della miniatura, che hanno la stessa
+ * forma: niente si sposta quando arrivano (cambiano solo il limite dello zoom e la scelta dei tasselli).
+ */
+@Composable
+private fun rememberPageFacts(spec: PageSpec, services: ViewerServices): PageFacts? {
+  val ref = spec.ref ?: return null
+  var facts by remember(ref, spec.kind, services.images) { mutableStateOf<PageFacts?>(null) }
+  LaunchedEffect(ref, spec.kind, services.images) {
+    facts = withContext(services.dispatchers.io) {
+      PageFacts(
+        zoom = readOrNull { services.images.zoomSpec(ref) },
+        animated = if (spec.kind != MediaKind.VIDEO) readOrNull { services.images.animated(ref) } else null,
+      )
+    }
+  }
+  return facts
+}
+
+/** Una lettura della testa del file che non riesce vale "non si sa": la pagina resta sulla bitmap, senza zoom a tasselli. */
+private inline fun <T> readOrNull(read: () -> T?): T? = try {
+  read()
+} catch (cancelled: CancellationException) {
+  throw cancelled
+} catch (_: Exception) {
+  null
 }
 
 /** I tasselli di telephoto sopra la bitmap nitida, che fa da anteprima finche' i tasselli non arrivano. */

@@ -33,8 +33,11 @@ internal object BenchDataset {
   const val SMOKE_MARKER: String = "bench-library.smoke"
   const val SMOKE_ROWS: Int = 5_000
 
-  /** Da alzare quando cambia la forma delle righe: i dataset scritti prima si rifanno. */
-  const val SHAPE_VERSION: Int = 1
+  /**
+   * Da alzare quando cambia la forma delle righe: i dataset scritti prima si rifanno. 2: `quick_hash` valido (64 cifre
+   * esadecimali); con la 1 il catalogo rifiutava le righe alla lettura dei dettagli del viewer.
+   */
+  const val SHAPE_VERSION: Int = 2
 
   private const val TAG = "BenchDataset"
 

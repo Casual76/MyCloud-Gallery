@@ -53,6 +53,10 @@ class StartupBenchmark {
         startActivityAndWait()
         // Resta nella misura fino alla prima pagina di miniature: serve alla traccia per vedere reportFullyDrawn.
         BenchState.libraryShown = BenchUi.waitForLibrary(device, if (libraryReachable) FULL_DISPLAY_WAIT_MS else NO_LIBRARY_WAIT_MS)
+        // La prima cella si vede prima di reportFullyDrawn (che aspetta le miniature, al piu' 300 ms): la traccia deve
+        // contenere anche il fotogramma che lo segue, o StartupTimingMetric non trova il fotogramma del RenderThread
+        // ("No RT frame slice ... after reportFullyDrawn", S25 13/10, quando l'avvio e' diventato piu' veloce).
+        if (BenchState.libraryShown) Thread.sleep(FULLY_DRAWN_SETTLE_MS)
       },
     )
   }
@@ -61,5 +65,6 @@ class StartupBenchmark {
     const val ITERATIONS = 15
     const val FULL_DISPLAY_WAIT_MS = 5_000L
     const val NO_LIBRARY_WAIT_MS = 500L
+    const val FULLY_DRAWN_SETTLE_MS = 1_000L
   }
 }

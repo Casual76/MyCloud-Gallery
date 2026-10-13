@@ -10,8 +10,9 @@ import org.junit.runner.RunWith
 
 /**
  * Pinch fra i livelli (§2.6, riga 2): 10 pinch continui con UiAutomator (cinque coppie di chiusura e apertura, una dopo
- * l'altra senza aspettare la quiete), sulla Libreria di 100 mila elementi. `FrameTimingMetric`: `frameOverrunMs` P99 <= 0
- * e regressione P95 di `frameDurationCpuMs` +10%.
+ * l'altra senza aspettare la quiete), sulla Libreria di 100 mila elementi. Soglia: `jankPercent` (`FrameJankMetric`, i
+ * fotogrammi davvero in ritardo secondo FrameTimeline) <= 1% in media sulle iterazioni; regressione P95 di
+ * `frameDurationCpuMs` (`FrameTimingMetric`) +10%.
  *
  * Il pinch cambia livello e l'ancoraggio tiene l'elemento sotto il dito (D3, `GridAnchors`): in questa prova conta che
  * il cambio, con il layout dei quattro livelli precalcolato fuori dal thread principale, non faccia perdere fotogrammi.
@@ -32,7 +33,7 @@ class LibraryPinchBenchmark {
   fun pinch() {
     rule.measureRepeated(
       packageName = BenchSession.targetPackage,
-      metrics = listOf(FrameTimingMetric()),
+      metrics = listOf(FrameTimingMetric(), FrameJankMetric()),
       compilationMode = BenchConfig.compilationMode,
       iterations = BenchConfig.iterations(ITERATIONS),
       setupBlock = {

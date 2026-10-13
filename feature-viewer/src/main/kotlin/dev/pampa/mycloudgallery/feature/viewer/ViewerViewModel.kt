@@ -53,7 +53,7 @@ class ViewerViewModel @Inject constructor() : ViewModel() {
       val detailsKey = "${id.value}#$seq"
       val loaded = details.getOrLoad(detailsKey) {
         sourceReads++
-        services.details.details(id)
+        readDetails(services, id)
       }
       val exifValue = if (wantExif) {
         val exifKey = "${id.value}#${loaded?.sizeBytes}"
@@ -67,6 +67,21 @@ class ViewerViewModel @Inject constructor() : ViewModel() {
       val place = loaded?.place?.let { runCatching { services.geocoder.place(PlaceId(it.geonameId)) }.getOrNull() }
       LoadedInfo(details = loaded, exif = exifValue, place = place)
     }
+
+  /**
+   * I dettagli del catalogo, o null se non si leggono: una riga che il catalogo rifiuta (un valore fuori forma) toglie
+   * le informazioni, **non** chiude l'app. L'eccezione arrivava fino al `LaunchedEffect` del viewer, senza nessuno che
+   * la prendesse, e il processo moriva al primo fotogramma dell'apertura (S25, 13/10).
+   */
+  private suspend fun readDetails(services: ViewerServices, id: MediaId): MediaDetails? {
+    return try {
+      services.details.details(id)
+    } catch (cancelled: CancellationException) {
+      throw cancelled
+    } catch (_: Exception) {
+      null
+    }
+  }
 
   private suspend fun readExif(services: ViewerServices, ref: MediaRef): ExifDetails {
     return try {

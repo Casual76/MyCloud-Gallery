@@ -324,6 +324,23 @@ class ViewerLogicTest {
     assertThat(loaded.exif).isEqualTo(ExifDetails())
   }
 
+  @Test
+  fun unaRigaCheIlCatalogoRifiutaNonChiudeIlViewer() = runTest {
+    // S25, 13/10: un valore fuori forma nel catalogo faceva lanciare la lettura dei dettagli, e l'eccezione chiudeva l'app.
+    val id = MediaId.random()
+    val ref = MediaRef.Phone("external_primary", 9L, "image/jpeg")
+    val services = ViewerServices(
+      details = object : dev.pampa.mycloudgallery.feature.viewer.details.MediaDetailsSource {
+        override suspend fun details(id: MediaId) = throw IllegalArgumentException("riga fuori forma")
+      },
+      bytes = ViewerBytes { ByteArrayMediaBytes(ByteArray(4)) },
+      dispatchers = ImmediateDispatchers,
+    )
+    val loaded = ViewerViewModel().load(services, id, ref, seq = 1, wantExif = false)
+    assertThat(loaded.details).isNull()
+    assertThat(loaded.place).isNull()
+  }
+
   // --- Stato salvato ---------------------------------------------------------------------------------------------------
 
   @Test

@@ -742,6 +742,15 @@ Step "benchmark su dispositivo (-Bench): scenari del par. 2.6 contro benchmark\s
     $run = Invoke-Native -File (Join-Path $root "gradlew.bat") -Arguments $gradleArguments -LogPath (Join-Path $root "build\check-bench.log")
   } finally {
     $env:ANDROID_SERIAL = $previousSerial
+    # Sul dispositivo non resta niente della misura: AGP disinstalla da solo la variante `.bench` e l'APK di test alla fine
+    # delle prove, ma non se Gradle si interrompe a meta'. Solo questi due id, mai la debug ne' la release.
+    foreach ($leftover in @("dev.pampa.mycloudgallery.bench", "dev.pampa.mycloudgallery.benchmark")) {
+      $listed = Invoke-Native -File $benchAdb -Arguments @("-s", $benchTarget, "shell", "pm", "list", "packages", $leftover)
+      if (@($listed.Lines | Where-Object { $_.Trim() -eq "package:$leftover" }).Count -gt 0) {
+        [void](Invoke-Native -File $benchAdb -Arguments @("-s", $benchTarget, "uninstall", $leftover))
+        Write-Host "        disinstallato $leftover (era rimasto sul dispositivo)" -ForegroundColor DarkGray
+      }
+    }
   }
   if ($run.Code -ne 0) {
     Show-Lines $run.Lines 60

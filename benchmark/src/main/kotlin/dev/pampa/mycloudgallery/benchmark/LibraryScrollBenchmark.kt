@@ -11,8 +11,10 @@ import org.junit.runner.RunWith
 
 /**
  * Fotogrammi in ritardo durante fling e scorrimento su 100 mila elementi, ai 4 livelli e nei 2 stili (§2.6, riga 1).
- * `FrameTimingMetric`: la soglia e' `frameOverrunMs` P99 <= 0, cioe' meno dell'1% dei fotogrammi oltre gli 8,3 ms
- * (120 Hz); la regressione e' P95 di `frameDurationCpuMs` +10% sul riferimento (`benchmark/soglie.json`).
+ * Soglia: `jankPercent` (`FrameJankMetric`: i fotogrammi che FrameTimeline segna "App Deadline Missed" o "Dropped Frame",
+ * sul totale) <= 1% in media sulle iterazioni, cioe' meno dell'1% di fotogrammi davvero in ritardo a 120 Hz; la
+ * regressione e' P95 di `frameDurationCpuMs` +10% sul riferimento (`benchmark/soglie.json`). `frameOverrunMs` resta nel
+ * JSON ma non e' una soglia: conta come "sforati" anche i fotogrammi in coda presentati in orario (Buffer Stuffing).
  *
  * Otto prove, una per coppia livello/stile, con il nome che `soglie.json` e `compare.ps1` si aspettano
  * (`scroll_<livello>_<stile>`). Ogni iterazione ricomincia da un'app appena avviata, sul livello e sullo stile della
@@ -50,11 +52,11 @@ class LibraryScrollBenchmark {
   private fun scroll(level: BenchLevel, style: BenchStyle) {
     // Lo stile quadrato e' quello di partenza: si prova anche senza menu. Il giustificato no (D4: lo sceglie il menu).
     if (style == BenchStyle.JUSTIFIED) {
-      Assume.assumeTrue("Menu dello stile '${style.label}' non trovato (in attesa di P7, vedi BenchLabels).", BenchSession.readiness().styleMenu)
+      Assume.assumeTrue("Menu dello stile '${style.label}' non trovato dalla sonda (vedi BenchLabels e il log MCG-Bench).", BenchSession.readiness().styleMenu)
     }
     rule.measureRepeated(
       packageName = BenchSession.targetPackage,
-      metrics = listOf(FrameTimingMetric()),
+      metrics = listOf(FrameTimingMetric(), FrameJankMetric()),
       compilationMode = BenchConfig.compilationMode,
       iterations = BenchConfig.iterations(ITERATIONS),
       setupBlock = {
@@ -62,7 +64,8 @@ class LibraryScrollBenchmark {
         startActivityAndWait()
         check(BenchUi.waitForLibrary(device, LIBRARY_TIMEOUT_MS)) { "La Libreria non si vede piu' dopo l'avvio." }
         // Lo stile e il livello si ricordano fra gli avvii: si impostano sempre, mai per abitudine.
-        BenchUi.selectStyle(device, style)
+        val styled = BenchUi.selectStyle(device, style)
+        check(styled || style == BenchStyle.SQUARE) { "Lo stile '${style.label}' non si sceglie dal menu della vista." }
         check(BenchUi.selectLevel(device, level)) { "La griglia non c'e' per cambiare livello." }
         device.waitForIdle()
       },

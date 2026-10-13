@@ -41,6 +41,54 @@
             538.0,
             531.0
           ]
+        },
+        "jankPercent": {
+          "minimum": 0.0,
+          "maximum": 0.5,
+          "median": 0.25,
+          "coefficientOfVariation": 0.6,
+          "runs": [
+            0.2,
+            0.4,
+            0.0,
+            0.3,
+            0.2,
+            0.5,
+            0.1,
+            0.3
+          ]
+        },
+        "timelineFrames": {
+          "minimum": 540.0,
+          "maximum": 540.0,
+          "median": 540.0,
+          "coefficientOfVariation": 0.0,
+          "runs": [
+            540.0,
+            540.0,
+            540.0,
+            540.0,
+            540.0,
+            540.0,
+            540.0,
+            540.0
+          ]
+        },
+        "jankFrames": {
+          "minimum": 0.0,
+          "maximum": 2.7,
+          "median": 1.35,
+          "coefficientOfVariation": 0.605,
+          "runs": [
+            1.1,
+            2.2,
+            0.0,
+            1.6,
+            1.1,
+            2.7,
+            0.5,
+            1.6
+          ]
         }
       },
       "sampledMetrics": {
@@ -82,6 +130,54 @@
             518.0,
             511.0
           ]
+        },
+        "jankPercent": {
+          "minimum": 0.0,
+          "maximum": 0.4,
+          "median": 0.25,
+          "coefficientOfVariation": 0.555,
+          "runs": [
+            0.3,
+            0.2,
+            0.4,
+            0.1,
+            0.0,
+            0.2,
+            0.3,
+            0.4
+          ]
+        },
+        "timelineFrames": {
+          "minimum": 540.0,
+          "maximum": 540.0,
+          "median": 540.0,
+          "coefficientOfVariation": 0.0,
+          "runs": [
+            540.0,
+            540.0,
+            540.0,
+            540.0,
+            540.0,
+            540.0,
+            540.0,
+            540.0
+          ]
+        },
+        "jankFrames": {
+          "minimum": 0.0,
+          "maximum": 2.2,
+          "median": 1.35,
+          "coefficientOfVariation": 0.563,
+          "runs": [
+            1.6,
+            1.1,
+            2.2,
+            0.5,
+            0.0,
+            1.1,
+            1.6,
+            2.2
+          ]
         }
       },
       "sampledMetrics": {
@@ -120,6 +216,48 @@
             301.0,
             303.0,
             299.0
+          ]
+        },
+        "jankPercent": {
+          "minimum": 0.3,
+          "maximum": 0.7,
+          "median": 0.5,
+          "coefficientOfVariation": 0.258,
+          "runs": [
+            0.5,
+            0.4,
+            0.7,
+            0.3,
+            0.6,
+            0.5
+          ]
+        },
+        "timelineFrames": {
+          "minimum": 540.0,
+          "maximum": 540.0,
+          "median": 540.0,
+          "coefficientOfVariation": 0.0,
+          "runs": [
+            540.0,
+            540.0,
+            540.0,
+            540.0,
+            540.0,
+            540.0
+          ]
+        },
+        "jankFrames": {
+          "minimum": 1.6,
+          "maximum": 3.8,
+          "median": 2.7,
+          "coefficientOfVariation": 0.258,
+          "runs": [
+            2.7,
+            2.2,
+            3.8,
+            1.6,
+            3.2,
+            2.7
           ]
         }
       },
@@ -266,6 +404,26 @@
             40.0,
             40.0,
             40.0
+          ]
+        },
+        "viewerOpenMaxFrameMs": {
+          "minimum": 6.9,
+          "maximum": 8.0,
+          "median": 7.45,
+          "coefficientOfVariation": 0.046,
+          "runs": [
+            6.9,
+            7.4,
+            7.8,
+            7.1,
+            8.0,
+            7.5,
+            7.2,
+            7.9,
+            7.6,
+            7.3,
+            7.0,
+            7.7
           ]
         }
       },

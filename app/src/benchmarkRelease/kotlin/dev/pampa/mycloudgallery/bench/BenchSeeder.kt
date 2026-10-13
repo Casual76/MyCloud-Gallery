@@ -227,7 +227,9 @@ internal object BenchSeeder {
       tVersion.text("kind", VersionKind.ORIGINAL.code)
       tVersion.text("parent_version_id", null)
       tVersion.long("size", m.size)
-      tVersion.text("quick_hash", "bench-%08x".format(Locale.ROOT, i))
+      // Un hash rapido valido (64 cifre esadecimali minuscole, `QuickHash`), diverso per riga: con "bench-%08x" il
+      // catalogo rifiutava la riga alla lettura dei dettagli e il viewer si chiudeva con un'eccezione (misura del 13/10).
+      tVersion.text("quick_hash", "%064x".format(Locale.ROOT, i))
       tVersion.text("full_hash", null)
       tVersion.text("corrections", "")
       tVersion.long("created_at", sortTime)

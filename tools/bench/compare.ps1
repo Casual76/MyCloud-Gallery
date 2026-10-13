@@ -237,6 +237,8 @@ function Invoke-Evaluation($thr, $benches, [string]$deviceKey, $reference, $skip
           $note = "metrica assente"
           if ($rule.metrica -eq "timeToFullDisplayMs") { $note = "TTFD assente: l'app non chiama reportFullyDrawn (P7/P11)" }
           if ($rule.metrica -eq "viewerOpenMs") { $note = "sezione di traccia MCG:viewerOpen assente: la emette il viewer (P8)" }
+          if ($rule.metrica -eq "viewerOpenMaxFrameMs") { $note = "nessun fotogramma dell'app nella finestra dell'apertura (ViewerOpenMetric)" }
+          if ($rule.metrica -eq "jankPercent") { $note = "FrameTimeline senza fotogrammi dell'app nel blocco misurato (FrameJankMetric): traccia senza actual_frame_timeline_slice?" }
           $rows.Add((New-Row $scenario.id $test "assoluta" $label $null (Get-LimitText $rule) "MANCA" $note))
           continue
         }
@@ -344,7 +346,10 @@ if ($SelfTest) {
 
   $rowsBad = Invoke-Evaluation $thr @($bad.benchmarks) "s25" $ref @{} $false
   $badFails = @($rowsBad | Where-Object { $_.Status -eq "FAIL" })
-  Assert-That (@($badFails | Where-Object { $_.Test -eq "scroll_days_square" -and $_.Kind -eq "assoluta" }).Count -eq 1) "scroll_days_square deve fallire la soglia assoluta (frameOverrunMs P99 > 0)"
+  Assert-That (@($badFails | Where-Object { $_.Test -eq "scroll_days_square" -and $_.Kind -eq "assoluta" -and $_.Metric -eq "jankPercent mean" }).Count -eq 1) "scroll_days_square deve fallire la soglia assoluta (jankPercent medio > 1%)"
+  Assert-That (@($rowsGood | Where-Object { $_.Test -eq "pinch" -and $_.Metric -eq "jankPercent mean" -and $_.Status -eq "OK" }).Count -eq 1) "pinch del campione buono passa il jank vero (<= 1%)"
+  Assert-That (@($badFails | Where-Object { $_.Test -eq "viewerOpen" -and $_.Metric -eq "viewerOpenMaxFrameMs max" }).Count -eq 1) "viewerOpen del campione cattivo deve fallire il fotogramma piu' lungo dell'apertura (> 16,7 ms)"
+  Assert-That (@($rowsGood | Where-Object { $_.Test -eq "viewerOpen" -and $_.Metric -eq "viewerOpenMaxFrameMs max" -and $_.Status -eq "OK" }).Count -eq 1) "viewerOpen del campione buono passa il fotogramma piu' lungo"
   Assert-That (@($badFails | Where-Object { $_.Test -eq "scroll_days_square" -and $_.Kind -eq "regressione" }).Count -eq 1) "scroll_days_square deve fallire la regressione (+10%)"
   Assert-That (@($badFails | Where-Object { $_.Test -eq "coldStart" -and $_.Kind -eq "assoluta" }).Count -eq 1) "coldStart deve fallire TTFD p90 < 1000"
   Assert-That (@($badFails | Where-Object { $_.Test -eq "viewerOpen" -and $_.Kind -eq "regressione" }).Count -eq 1) "viewerOpen deve fallire la regressione (+15%)"
@@ -364,6 +369,7 @@ if ($SelfTest) {
   $parsed = $text | ConvertFrom-Json
   Assert-That ($parsed.dispositivo -eq "s25") "il riferimento scritto si rilegge (dispositivo)"
   Assert-That ((Has-Property $parsed.prove "scroll_days_square") -and (Has-Property $parsed.prove.scroll_days_square "frameDurationCpuMs.P95")) "il riferimento contiene scroll_days_square / frameDurationCpuMs.P95"
+  Assert-That (Has-Property $parsed.prove.scroll_days_square "jankPercent.mean") "il riferimento contiene scroll_days_square / jankPercent.mean"
 
   if ($failures.Count -gt 0) {
     foreach ($f in $failures) { Write-Host ("[FAIL] " + $f) -ForegroundColor Red }

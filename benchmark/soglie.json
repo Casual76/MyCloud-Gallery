@@ -28,13 +28,13 @@
   "scenari": [
     {
       "id": "scroll",
-      "descrizione": "Fling e scorrimento su 100 mila elementi, ai 4 livelli e nei 2 stili (FrameTimingMetric)",
+      "descrizione": "Fling e scorrimento su 100 mila elementi, ai 4 livelli e nei 2 stili (FrameJankMetric e FrameTimingMetric)",
       "prove": "^scroll_(years|months|days|all)_(square|justified)$",
       "proveAttese": ["scroll_years_square", "scroll_months_square", "scroll_days_square", "scroll_all_square", "scroll_years_justified", "scroll_months_justified", "scroll_days_justified", "scroll_all_justified"],
       "classi": ["LibraryScrollBenchmark"],
       "classiDispositivo": ["telefono", "tablet"],
       "assolute": [
-        { "metrica": "frameOverrunMs", "statistica": "P99", "massimo": 0.0, "spiega": "meno dell'1% dei fotogrammi oltre gli 8,3 ms (120 Hz)" }
+        { "metrica": "jankPercent", "statistica": "mean", "massimo": 1.0, "spiega": "meno dell'1% di fotogrammi davvero in ritardo a 120 Hz: App Deadline Missed o Dropped Frame di FrameTimeline sul totale, media delle iterazioni (Buffer Stuffing escluso, vedi docs/bench/README.md)" }
       ],
       "regressione": [
         { "metrica": "frameDurationCpuMs", "statistica": "P95", "aumentoMassimo": 0.10 }
@@ -42,13 +42,13 @@
     },
     {
       "id": "pinch",
-      "descrizione": "10 pinch continui fra i livelli con UiAutomator (FrameTimingMetric)",
+      "descrizione": "10 pinch continui fra i livelli con UiAutomator (FrameJankMetric e FrameTimingMetric)",
       "prove": "^pinch$",
       "proveAttese": ["pinch"],
       "classi": ["LibraryPinchBenchmark"],
       "classiDispositivo": ["telefono", "tablet"],
       "assolute": [
-        { "metrica": "frameOverrunMs", "statistica": "P99", "massimo": 0.0, "spiega": "meno dell'1% dei fotogrammi oltre gli 8,3 ms (120 Hz)" }
+        { "metrica": "jankPercent", "statistica": "mean", "massimo": 1.0, "spiega": "meno dell'1% di fotogrammi davvero in ritardo a 120 Hz: App Deadline Missed o Dropped Frame di FrameTimeline sul totale, media delle iterazioni (Buffer Stuffing escluso, vedi docs/bench/README.md)" }
       ],
       "regressione": [
         { "metrica": "frameDurationCpuMs", "statistica": "P95", "aumentoMassimo": 0.10 }
@@ -71,13 +71,14 @@
     },
     {
       "id": "viewer",
-      "descrizione": "Apertura del viewer: dal tocco al primo fotogramma con l'immagine (sezione di traccia MCG:viewerOpen)",
+      "descrizione": "Apertura del viewer: dal tocco al primo fotogramma con l'immagine (sezione di traccia MCG:viewerOpen) e il fotogramma piu' lungo dell'espansione",
       "prove": "^viewerOpen$",
       "proveAttese": ["viewerOpen"],
       "classi": ["ViewerBenchmark"],
       "classiDispositivo": ["telefono", "tablet"],
       "assolute": [
-        { "metrica": "viewerOpenMs", "statistica": "p90", "massimoEsclusivo": 100.0, "spiega": "p90 sotto i 100 ms; la sezione la emette il viewer (P8)" }
+        { "metrica": "viewerOpenMs", "statistica": "p90", "massimoEsclusivo": 100.0, "spiega": "p90 sotto i 100 ms; la sezione la emette il viewer (P8)" },
+        { "metrica": "viewerOpenMaxFrameMs", "statistica": "max", "massimo": 16.7, "spiega": "nessun fotogramma oltre i 16,7 ms (due vsync a 120 Hz) nei primi 500 ms dell'apertura, in nessuna delle iterazioni: lo scatto dell'espansione" }
       ],
       "regressione": [
         { "metrica": "viewerOpenMs", "statistica": "p90", "aumentoMassimo": 0.15 }

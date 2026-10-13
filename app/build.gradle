@@ -136,6 +136,11 @@ androidComponents {
 baselineProfile {
   automaticGenerationDuringBuild = false
   saveInSrc = true
+  // Le classi del dataset di misura (`src/benchmarkRelease`, compilate anche in `nonMinifiedRelease` da cui si genera il
+  // profilo) non esistono nella release: le loro regole non servirebbero a niente e non devono stare nei sorgenti.
+  filter {
+    exclude("dev.pampa.mycloudgallery.bench.**")
+  }
 }
 
 // Il plugin fa puntare il manifest di `benchmarkRelease` a quello di `src/release/` (che non c'e'): senza questa riga un

@@ -119,7 +119,14 @@ fun GalleryRoot(content: @Composable () -> Unit) {
   val backdrop = rememberGlassBackdrop()
   CompositionLocalProvider(LocalFluidGlassModalHostState provides modal, LocalViewerHost provides viewer) {
     Box(modifier = Modifier.fillMaxSize()) {
-      Box(modifier = Modifier.fillMaxSize().glassBackdropSource(backdrop).fluidGlassModalObscured()) {
+      // Il fondale della radice lo campiona solo il vetro dei pop-up (`FluidGlassModalHost`): c'e' solo mentre un pop-up
+      // e' sullo schermo, dall'apertura alla fine dell'uscita (`isOnScreen`). Senza pop-up era un layer fuori schermo a
+      // tutto schermo in piu', ridisegnato a ogni fotogramma di scorrimento, pinch e apertura del viewer (che ci sta
+      // dentro), in un RenderThread gia' oltre il budget di memoria: sull'S25 le miniature si ricaricavano a ogni
+      // fotogramma. Il pop-up si compone un fotogramma dopo l'apertura (il portale scrive `visible` in un SideEffect):
+      // nello stesso fotogramma questa radice si ricompone con il fondale, che si registra prima che il vetro lo legga.
+      val rootSource = if (modal.isOnScreen) Modifier.glassBackdropSource(backdrop) else Modifier
+      Box(modifier = Modifier.fillMaxSize().then(rootSource).fluidGlassModalObscured()) {
         content()
         ViewerLayer(viewer)
       }

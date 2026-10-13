@@ -50,8 +50,7 @@ class Zoom200MpBenchmark {
       },
       measureBlock = {
         // La riga piu' recente e' il soggetto dello zoom (BenchSeeder): l'ultima cella in fondo.
-        val cell = checkNotNull(BenchUi.newestCell(device)) { "Nessuna cella in fondo alla Libreria." }
-        cell.click()
+        check(BenchUi.tapCell(device, BenchUi.newestCell(device))) { "Nessuna cella in fondo alla Libreria." }
         device.waitForIdle()
         Thread.sleep(SHARP_IMAGE_WAIT_MS)
         repeat(BenchConfig.repeats(CYCLES)) {
@@ -68,7 +67,7 @@ class Zoom200MpBenchmark {
           BenchUi.doubleTapCenter(device) // torna all'adattamento allo schermo
           device.waitForIdle()
         }
-        device.pressBack()
+        BenchUi.back(device)
         device.waitForIdle()
         BenchPss.finish()
       },

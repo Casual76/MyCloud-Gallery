@@ -23,16 +23,43 @@ Tutti con `CompilationMode.Partial(BaselineProfileMode.Require)` (si cambia con 
 
 | Prova (classe) | Cosa fa | Metrica e soglia | Regressione |
 |---|---|---|---|
-| `scroll_<livello>_<stile>` (`LibraryScrollBenchmark`), 8 prove: `years/months/days/all` × `square/justified` | App appena avviata, livello e stile impostati, fling avanti e indietro nel tempo su 100 mila elementi | `FrameTimingMetric`: `frameOverrunMs` P99 ≤ 0 (meno dell'1% oltre gli 8,3 ms) | P95 `frameDurationCpuMs` +10% |
-| `pinch` (`LibraryPinchBenchmark`) | 10 pinch continui (5 chiusure + 5 aperture) fra i livelli | `frameOverrunMs` P99 ≤ 0 | P95 `frameDurationCpuMs` +10% |
+| `scroll_<livello>_<stile>` (`LibraryScrollBenchmark`), 8 prove: `years/months/days/all` × `square/justified` | App appena avviata, livello e stile impostati, fling avanti e indietro nel tempo su 100 mila elementi | `FrameJankMetric`: `jankPercent` medio ≤ 1% (fotogrammi davvero in ritardo, vedi §2-bis) | P95 `frameDurationCpuMs` +10% |
+| `pinch` (`LibraryPinchBenchmark`) | 10 pinch continui (5 chiusure + 5 aperture) fra i livelli | `jankPercent` medio ≤ 1% | P95 `frameDurationCpuMs` +10% |
 | `coldStart` (`StartupBenchmark`) | `StartupMode.COLD`, 15 ripetizioni | `timeToFullDisplayMs` p90 < 1000 ms (serve `reportFullyDrawn`) | p90 +10% |
-| `viewerOpen` (`ViewerBenchmark`) | Tocco su una miniatura, attesa, Indietro; 12 iterazioni | sezione di traccia `MCG:viewerOpen` p90 < 100 ms | p90 +15% |
+| `viewerOpen` (`ViewerBenchmark`) | Tocco su una miniatura, attesa, Indietro; 12 iterazioni | sezione di traccia `MCG:viewerOpen` p90 < 100 ms; `viewerOpenMaxFrameMs` (il fotogramma più lungo nei primi 500 ms dell'apertura) massimo ≤ 16,7 ms | p90 +15% |
 | `zoom200Mp` (`Zoom200MpBenchmark`), solo tablet | Apre la foto più grande (la riga più recente), 5 cicli di zoom e pan sui quattro angoli | `processAlive` = 1 (nessun OOM); `pssPeakKb` sotto il tetto calibrato alla prima misura | PSS +15% |
 
 - **Se una cosa non c'è, la prova si salta con il motivo; non si inventa un numero.** Una prova senza Libreria raggiungibile, senza menu dello stile o senza la foto da 200 MP risulta `MANCA` in `compare.ps1`, con la riga del rapporto JUnit che dice perché.
 - L'avvio a freddo gira anche senza Libreria (misura l'avvio verso l'onboarding), ma la metrica `libraryShown` lo marca **non valido** e `compare.ps1` non lo confronta con i 1000 ms.
 - Il tetto di PSS dello zoom è `null` in `soglie.json` finché non c'è la prima misura sul Tab S9: `compare.ps1 -Calibrate` lo scrive (misura + 10%, a multipli di 1 MB).
-- Gli id dell'interfaccia di cui le prove si fidano (descrizioni delle celle, nomi dei livelli, menu dello stile) sono in **un solo posto**: `BenchLabels` in `BenchUi.kt`. P7 le conferma o le cambia a M1.
+- Gli id dell'interfaccia di cui le prove si fidano (descrizioni delle celle, nomi dei livelli, menu dello stile) sono in **un solo posto**: `BenchLabels` in `BenchUi.kt`. Confermati sulla Libreria vera il 13/10: celle `Foto, …`/`Video, …`, segmenti `Anni`/`Mesi`/`Giorni`/`Tutte`, menu `Vista` con `Quadrata`/`Proporzioni originali`.
+- **Perché le otto prove di scorrimento fallivano** (S25, 13/10, «La griglia non c'e' per cambiare livello»): mentre il menu della vista è aperto *e mentre si richiude*, il `FluidGlassModalHost` nasconde la pagina all'accessibilità (`fluidGlassModalObscured`), e UiAutomator non vedeva la lista. Ora `BenchUi.awaitGrid` aspetta che la griglia torni, `selectStyle` aspetta che il menu sparisca e preme Indietro solo se il menu è davvero aperto (a menu chiuso Indietro chiudeva l'app), il segmento di un livello si ricava dagli altri se non si vede, e la griglia si ricerca a ogni fling (`StaleObjectException` al livello Tutte). Il fling «verso i più vecchi» usava `Direction.DOWN`, che in UiAutomator è la direzione del *contenuto*: dal fondo della Libreria non si muoveva niente; ora è `UP`.
+- **Dispositivo condiviso.** Ogni gesto e ogni Indietro passano da `BenchUi.ensureForeground`: se in primo piano non c'è l'app sotto misura la prova si ferma invece di toccare un'altra app (il 13/10 un'altra sessione ha aperto la sua app sull'S25 nel mezzo di una prova).
+
+## 2-bis. Il jank vero: `FrameJankMetric`
+
+`frameOverrunMs` di `FrameTimingMetric` misura quanto un fotogramma finisce dopo la sua scadenza *teorica*. A 120 Hz, quando l'app produce un fotogramma dopo l'altro (scorrimento, pinch), BufferQueue tiene un buffer in coda e il fotogramma successivo parte già "in ritardo" rispetto al suo vsync anche se SurfaceFlinger lo presenta in orario: FrameTimeline lo chiama **Buffer Stuffing**. Non è uno scatto: nessun fotogramma resta sullo schermo più a lungo. Sull'S25 (13/10) erano circa 740 fotogrammi su 800 nel pinch, con `frameOverrunMs` P50 +3,1 ms e P99 +14,9 ms, mentre i fotogrammi davvero in ritardo erano lo 0,4-1,2%.
+
+`FrameJankMetric` (in `BenchMetrics.kt`) legge FrameTimeline dalla traccia Perfetto, dall'inizio del blocco misurato (la sezione `measureBlock`) alla fine della traccia, e solo per il processo dell'app. Solo l'inizio: la traccia si ferma subito dopo il blocco, e la fine della sezione si perde quando il buffer di Perfetto perde pacchetti (sull'S25 una sezione di 0,97 s per un pinch di 7 s).
+
+```sql
+SELECT COUNT(*) AS total,
+       SUM(CASE WHEN a.jank_type GLOB '*App Deadline Missed*' OR a.present_type = 'Dropped Frame' THEN 1 ELSE 0 END) AS late
+FROM actual_frame_timeline_slice a JOIN process p USING(upid)
+WHERE p.name = '<pacchetto>' AND a.ts >= <inizio di measureBlock>
+```
+
+| Misura | Che cos'è |
+|---|---|
+| `jankPercent` | `late / total × 100`: i fotogrammi che SurfaceFlinger attribuisce all'app come scadenza mancata (anche se insieme ad altri tipi, per esempio "App Deadline Missed, Buffer Stuffing") o che non arrivano allo schermo (`Dropped Frame`). Buffer Stuffing da solo, "Prediction Error", "SurfaceFlinger Scheduling" e "Display HAL" non contano: non sono colpa dell'app |
+| `jankFrames`, `timelineFrames` | Il numeratore e il denominatore, per iterazione |
+| `maxFrameCpuMs` | Il fotogramma più lungo, dall'inizio del `Choreographer#doFrame` alla fine del `DrawFrames` del RenderThread con lo stesso id di vsync (come `frameDurationCpuMs`) |
+
+La soglia (`benchmark/soglie.json`) è `jankPercent` **medio** sulle iterazioni ≤ 1% per gli otto scorrimenti e il pinch. È una `TraceMetric` di benchmark-macro 1.4.1, quindi gira sul dispositivo con il trace processor della libreria: niente calcoli sull'host.
+
+Per l'apertura del viewer `ViewerOpenMetric` usa le stesse query nella finestra di 500 ms che parte dalla sezione `MCG:viewerOpen` (l'espansione dura 300 ms): `viewerOpenMaxFrameMs` (il fotogramma più lungo) e `viewerOpenJankFrames`. La soglia è "nessun fotogramma oltre 16,7 ms" (due vsync) in nessuna delle 12 aperture.
+
+Per guardare una traccia a mano: `trace_processor_shell.exe -q query.sql traccia.perfetto-trace` (Perfetto v58.2, in `%USERPROFILE%\.mycloudgallery\tools\perfetto\`), con la query qui sopra o con `select a.jank_type, a.present_type, count(*) ...` raggruppata per tipo.
 
 ## 3. Come si usa
 
@@ -87,11 +114,12 @@ I risultati (`*-benchmarkData.json`, tracce Perfetto) li copia AGP in `benchmark
 
 ## 4. Il Baseline Profile
 
-- `baselineProfile { automaticGenerationDuringBuild = false; saveInSrc = true }` in `app/build.gradle`: il profilo **non** si genera durante il build (serve un dispositivo) e si salva in `app/src/main/generated/baselineProfiles/` (da committare).
-- Il generatore è `BaselineProfileGenerator` (scorrimento, pinch, apertura del viewer con pager, info, zoom, un video). **Non produce un profilo povero**: se la Libreria non è raggiungibile si salta.
+- `baselineProfile { automaticGenerationDuringBuild = false; saveInSrc = true; filter { exclude("dev.pampa.mycloudgallery.bench.**") } }` in `app/build.gradle`: il profilo **non** si genera durante il build (serve un dispositivo); il plugin lo salva in `app/src/release/generated/baselineProfiles/` (`baseline-prof.txt` e `startup-prof.txt`, da committare), da dove AGP lo applica alla release e alle due varianti di misura. Il filtro tiene fuori le classi del dataset di misura, che nella release non esistono.
+- **Generato il 13/10 sull'S25** con `gradlew :app:generateBaselineProfile` (`ANDROID_SERIAL=RFCY61FZDHW`, 31 minuti, profili stabili dalla nona iterazione): circa 38.300 regole, di cui 7.300 del codice della galleria (viewer 900, griglia 600, telephoto 1.040); dopo R8 restano circa 20.600 regole nell'APK.
+- Il generatore è `BaselineProfileGenerator`: scorrimento avanti e indietro, i quattro livelli dai segmenti, lo stile giustificato, i pinch, l'apertura del viewer con il pager, lo zoom e il pan, le informazioni, un video. **Non produce un profilo povero**: se la Libreria non è raggiungibile si salta. Ogni Indietro è condizionato (si chiude il viewer solo se è aperto, le informazioni solo se si sono aperte): un Indietro di troppo usciva dall'app e il resto del giro finiva sulla schermata Home.
 - Due strade, stessi file in uscita:
-  1. `gradlew :app:generateBaselineProfile`: il percorso ufficiale del plugin, sulla variante `nonMinifiedRelease`. Quella variante **non ha il dataset** (vive solo in `app/src/benchmarkRelease/`) né il `ProfileInstallReceiver`. Per usarla serve che `app/build.gradle` (P0/P11) aggiunga a `nonMinifiedRelease` lo stesso `src/benchmarkRelease` (sorgenti e manifest) nel blocco `finalizeDsl` che già c'è per `benchmarkRelease`: due righe, vedi §6.
-  2. `tools\bench\generate-profile.ps1`: lo stesso generatore sulla variante `benchmarkRelease` (R8 attivo, senza offuscamento: i nomi restano, R8 scarta da solo le regole che non trovano più il metodo). È la strada che funziona oggi.
+  1. `gradlew :app:generateBaselineProfile`: il percorso ufficiale del plugin, sulla variante `nonMinifiedRelease`, che dal P11 ha il dataset e il `ProfileInstallReceiver` (vedi §6). **È quella usata.**
+  2. `tools\bench\generate-profile.ps1`: lo stesso generatore sulla variante `benchmarkRelease` (R8 attivo, senza offuscamento). Scrive in `app/src/main/generated/baselineProfiles/`: se lo si usa, si tiene **un solo** profilo nei sorgenti.
 - `check.ps1` controlla che, **quando il profilo esiste nei sorgenti**, l'APK di release contenga `assets/dexopt/baseline.prof` (+ `.profm`) **e** che AGP abbia fuso le regole nel profilo della release (le librerie portano profili propri: la sola presenza del file non basta).
 
 ## 5. Il dataset della variante `benchmarkRelease`
@@ -163,8 +191,9 @@ extension.sourceSets.findByName('nonMinifiedRelease')?.with {
 | Dataset: 100.000 righe su Robolectric (indice letto per intero, 200 riferimenti su 200, nessun ordinamento temporaneo, sorgenti 68/10/20/2%) e 5.000 righe sull'emulatore Medium_Phone con 62 media veri, anche con R8 e senza offuscamento | verde |
 | Scenari `coldStart`, `scroll_days_square`, `pinch`, `viewerOpen`, `zoom200Mp` su Medium_Phone (API 37.1), contro un **segnaposto della Libreria** (una lista di celle "Foto, …" con `reportFullyDrawn` e la sezione asincrona `MCG:viewerOpen`): gesti, metriche proprie (`viewerOpenMs`, `pssPeakKb`, `processAlive`, `libraryShown`), JSON e `compare.ps1 -Smoke` | girano; i numeri dell'emulatore non valgono |
 | Scenari `coldStart`, `pinch`, `viewerOpen` con la **vera app** (P11, 13/10) su Medium_Phone (API 37.1), smoke (`benchSmoke=true`), senza media veri | girano tutti e tre: `libraryShown` = 1 (la Libreria vera si apre sul dataset), `timeToFullDisplayMs` misurato (`reportFullyDrawn` c'e'), `viewerOpenMs` misurato (la sezione `MCG:viewerOpen` c'e'), il pinch attraversa i livelli. I numeri dell'emulatore non valgono |
-| `check.ps1 -Bench` con un dispositivo vero | **non provato** (nessun dispositivo fisico nel P11): S25 e Tab S9 sul campo |
-| `:app:generateBaselineProfile` e `tools\bench\generate-profile.ps1` | **non provati**: si fanno sul dispositivo vero, con la Libreria ora raggiungibile |
+| `check.ps1 -Bench` con un dispositivo vero | **S25, 13/10**: tutte le prove girano (avvio, 8 scorrimenti, pinch, viewer); numeri, cause e soglie ancora fallite in `misure-s25-2026-10-13.md`. Tab S9 non provato |
+| `:app:generateBaselineProfile` e `tools\bench\generate-profile.ps1` | `:app:generateBaselineProfile` **sull'S25, 13/10**: 38.341 regole in `app/src/release/generated/baselineProfiles/` (§4). Lo script non provato |
+| Selettori delle prove e `FrameJankMetric` sull'emulatore (smoke) | le 8 prove di scorrimento, il pinch, l'avvio e il viewer girano |
 | Hooks di misura (Hilt, niente `ServiceLoader`): nel componente delle due varianti di misura, `Optional.empty()` nella release, nessun `META-INF/services/dev.pampa.*` nell'APK di release | verde (R6, §6) |
 
 ## 8. Limiti e cose da sapere

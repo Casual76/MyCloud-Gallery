@@ -8,22 +8,23 @@
   "variante": "benchmarkRelease",
   "prove": {
     "scroll_days_square": {
-      "frameOverrunMs.P99": -0.4,
+      "jankPercent.mean": 0.3,
       "frameDurationCpuMs.P95": 5.2
     },
     "scroll_years_square": {
-      "frameOverrunMs.P99": -0.2,
+      "jankPercent.mean": 0.25,
       "frameDurationCpuMs.P95": 5.5
     },
     "pinch": {
-      "frameOverrunMs.P99": -0.1,
+      "jankPercent.mean": 0.5,
       "frameDurationCpuMs.P95": 6.0
     },
     "coldStart": {
       "timeToFullDisplayMs.p90": 860
     },
     "viewerOpen": {
-      "viewerOpenMs.p90": 80
+      "viewerOpenMs.p90": 80,
+      "viewerOpenMaxFrameMs.max": 12.4
     }
   }
 }

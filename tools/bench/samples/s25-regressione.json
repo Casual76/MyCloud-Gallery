@@ -41,6 +41,54 @@
             530.0,
             530.0
           ]
+        },
+        "jankPercent": {
+          "minimum": 1.9,
+          "maximum": 3.0,
+          "median": 2.45,
+          "coefficientOfVariation": 0.141,
+          "runs": [
+            2.1,
+            2.6,
+            1.9,
+            3.0,
+            2.4,
+            2.2,
+            2.8,
+            2.5
+          ]
+        },
+        "timelineFrames": {
+          "minimum": 540.0,
+          "maximum": 540.0,
+          "median": 540.0,
+          "coefficientOfVariation": 0.0,
+          "runs": [
+            540.0,
+            540.0,
+            540.0,
+            540.0,
+            540.0,
+            540.0,
+            540.0,
+            540.0
+          ]
+        },
+        "jankFrames": {
+          "minimum": 10.3,
+          "maximum": 16.2,
+          "median": 13.25,
+          "coefficientOfVariation": 0.14,
+          "runs": [
+            11.3,
+            14.0,
+            10.3,
+            16.2,
+            13.0,
+            11.9,
+            15.1,
+            13.5
+          ]
         }
       },
       "sampledMetrics": {
@@ -79,6 +127,48 @@
             300.0,
             300.0,
             300.0
+          ]
+        },
+        "jankPercent": {
+          "minimum": 0.4,
+          "maximum": 0.8,
+          "median": 0.6,
+          "coefficientOfVariation": 0.215,
+          "runs": [
+            0.6,
+            0.5,
+            0.8,
+            0.4,
+            0.7,
+            0.6
+          ]
+        },
+        "timelineFrames": {
+          "minimum": 540.0,
+          "maximum": 540.0,
+          "median": 540.0,
+          "coefficientOfVariation": 0.0,
+          "runs": [
+            540.0,
+            540.0,
+            540.0,
+            540.0,
+            540.0,
+            540.0
+          ]
+        },
+        "jankFrames": {
+          "minimum": 2.2,
+          "maximum": 4.3,
+          "median": 3.2,
+          "coefficientOfVariation": 0.212,
+          "runs": [
+            3.2,
+            2.7,
+            4.3,
+            2.2,
+            3.8,
+            3.2
           ]
         }
       },
@@ -283,6 +373,26 @@
             40.0,
             40.0,
             40.0
+          ]
+        },
+        "viewerOpenMaxFrameMs": {
+          "minimum": 36.2,
+          "maximum": 44.0,
+          "median": 40.099999999999994,
+          "coefficientOfVariation": 0.056,
+          "runs": [
+            38.0,
+            41.5,
+            36.2,
+            44.0,
+            39.9,
+            40.3,
+            37.7,
+            42.1,
+            39.0,
+            38.8,
+            40.6,
+            43.3
           ]
         }
       },

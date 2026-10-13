@@ -22,16 +22,16 @@ I file di questa cartella sono letti da `tools/bench/compare.ps1`. Tre cose dive
   "data": "2026-11-02",
   "variante": "benchmarkRelease",
   "prove": {
-    "scroll_days_square": { "frameOverrunMs.P99": -0.4, "frameDurationCpuMs.P95": 5.2 },
-    "pinch":              { "frameOverrunMs.P99": -0.1, "frameDurationCpuMs.P95": 6.0 },
+    "scroll_days_square": { "jankPercent.mean": 0.3, "frameDurationCpuMs.P95": 5.2 },
+    "pinch":              { "jankPercent.mean": 0.6, "frameDurationCpuMs.P95": 6.0 },
     "coldStart":          { "timeToFullDisplayMs.p90": 860 },
-    "viewerOpen":         { "viewerOpenMs.p90": 80 }
+    "viewerOpen":         { "viewerOpenMs.p90": 80, "viewerOpenMaxFrameMs.max": 12.4 }
   }
 }
 ```
 
 - `prove`: per ogni prova (il nome del metodo di test) le coppie `metrica.statistica` che le regole di `soglie.json` usano. Si scrivono **tutte** quelle presenti, anche le assolute: un riferimento serve a leggere dove stavamo, non solo a confrontare.
-- Le statistiche sono quelle di `soglie.json`: `P50`/`P90`/`P95`/`P99` per le metriche campionate (un valore per fotogramma: `FrameTimingMetric`), `min`/`max`/`median`/`mean`/`p<N>` calcolati sulle iterazioni per le altre (percentile "nearest rank").
+- Le statistiche sono quelle di `soglie.json`: `P50`/`P90`/`P95`/`P99` per le metriche campionate (un valore per fotogramma: `FrameTimingMetric`), `min`/`max`/`median`/`mean`/`p<N>` calcolati sulle iterazioni per le altre (percentile "nearest rank"). `jankPercent` (`FrameJankMetric`, un valore per iterazione) si confronta come `mean`: vedi `README.md` §2-bis.
 - `frequenzaHz` è il massimo letto in sola lettura da `check.ps1 -Bench`; `data`, `modello` e `sdk` servono a capire a che macchina si riferisce il numero.
 - **Un esempio completo** (anche di risultati e di regressione) è in `tools/bench/samples/`, ed è quello che prova `compare.ps1 -SelfTest`.
 

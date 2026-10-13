@@ -44,11 +44,10 @@ class ViewerBenchmark {
         device.waitForIdle()
       },
       measureBlock = {
-        val cell = checkNotNull(BenchUi.centerCell(device)) { "Nessuna cella da toccare al centro della Libreria." }
-        cell.click()
+        check(BenchUi.tapCell(device, BenchUi.centerCell(device))) { "Nessuna cella da toccare al centro della Libreria." }
         device.waitForIdle()
         Thread.sleep(VIEWER_SETTLE_MS)
-        device.pressBack()
+        BenchUi.closeViewer(device)
         device.waitForIdle()
       },
     )

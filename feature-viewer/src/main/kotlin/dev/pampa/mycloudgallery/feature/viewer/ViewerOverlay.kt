@@ -110,6 +110,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /** I nomi con cui i test trovano i pezzi del viewer. */
@@ -272,6 +273,14 @@ private fun ViewerHost(
   val currentKind = controller.kindOf(currentId)
   val atRest by remember { derivedStateOf { transition.progress.value >= FullyOpen && !transition.dragging && !transition.progress.isRunning } }
   var resumeAfterRest by remember { mutableStateOf(false) }
+  // Il fondale di vetro delle barre: dal primo riposo in poi (vedi il disegno qui sotto).
+  var chromeBackdrop by remember { mutableStateOf(state.restored) }
+  LaunchedEffect(Unit) {
+    if (!chromeBackdrop) {
+      snapshotFlow { atRest }.first { it }
+      chromeBackdrop = true
+    }
+  }
   LaunchedEffect(currentId) {
     // Cambio pagina: il video di prima si ferma e libera il decoder.
     if (playback.videoFor != null && playback.videoFor != currentId) playback.clear()
@@ -376,7 +385,11 @@ private fun ViewerHost(
             .fluidPhysicsClip(physics) { transition.progress.value < FullyOpen || transition.dragging },
         ) {
           Box(Modifier.fillMaxSize().background(background))
-          Box(Modifier.fillMaxSize().glassBackdropSource(backdrop)) {
+          // Il fondale di vetro delle barre entra quando le barre possono comparire (la prima volta a riposo) e poi resta,
+          // anche in chiusura, mentre le barre sfumano. Durante l'espansione era un altro layer a schermo intero da
+          // ridisegnare a ogni fotogramma, in un RenderThread gia' oltre il budget di memoria (sull'S25 ogni fotogramma
+          // dell'espansione riallocava i layer e ricaricava le miniature: 25-37 ms).
+          Box(Modifier.fillMaxSize().then(if (chromeBackdrop) Modifier.glassBackdropSource(backdrop) else Modifier)) {
             PagerLayer(
               controller = controller,
               view = view,
@@ -430,6 +443,17 @@ private fun PagerLayer(
   val positionText = stringResource(R.string.viewer_position, GalleryNumbers.format(pager.currentPage + 1), GalleryNumbers.format(view.size))
   val zoomedText = stringResource(R.string.viewer_zoomed)
 
+  // Le pagine vicine entrano a meta' dell'espansione, non nel suo primo fotogramma: durante l'espansione il pager e'
+  // trasparente e non scorre (si vede la foto che cresce), e comporre tre pagine insieme nel fotogramma del tocco era
+  // gran parte dello scatto all'apertura (S25, 13/10). Una volta entrate restano, anche in chiusura.
+  var neighbors by remember { mutableStateOf(controller.state.restored) }
+  LaunchedEffect(Unit) {
+    if (!neighbors) {
+      snapshotFlow { atRest() || controller.transition.progress.value >= NeighborsAtProgress }.first { it }
+      neighbors = true
+    }
+  }
+
   Box(
     modifier = Modifier
       .fillMaxSize()
@@ -468,7 +492,7 @@ private fun PagerLayer(
       state = pager,
       modifier = Modifier.fillMaxSize().testTag(ViewerTags.Pager),
       pageSpacing = PageSpacing,
-      beyondViewportPageCount = 1,
+      beyondViewportPageCount = if (neighbors) 1 else 0,
       userScrollEnabled = atRest() && !controller.closing,
       flingBehavior = PagerDefaults.flingBehavior(state = pager, snapAnimationSpec = FluidMotion.smooth()),
       key = { index -> if (index < view.size) view.snapshot.idAt(view.snapshotIndex(index)).value else "gone-$index" },
@@ -795,3 +819,6 @@ private const val BackLiftFraction = 0.02f
 private const val INFO_CLOSED = 0.02f
 private const val INFO_BACK_END = 0.55f
 private const val MIN_SHIFT_SCALE = 0.4f
+
+/** A che punto dell'espansione entrano le pagine vicine (vedi `PagerLayer`): lontano dal primo fotogramma, prima della fine. */
+private const val NeighborsAtProgress = 0.5f

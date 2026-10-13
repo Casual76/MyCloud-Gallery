@@ -32,6 +32,7 @@ import dev.pampa.mycloudgallery.core.security.lock.AppLockTimeout
 import dev.pampa.mycloudgallery.core.family.contract.OldAdminFate
 import dev.pampa.mycloudgallery.feature.settings.SettingsScreen
 import dev.pampa.mycloudgallery.feature.settings.SettingsUiState
+import dev.pampa.mycloudgallery.feature.settings.about.AboutScreen
 import dev.pampa.mycloudgallery.feature.settings.account.AccountUi
 import dev.pampa.mycloudgallery.feature.settings.account.AddressActions
 import dev.pampa.mycloudgallery.feature.settings.account.AddressPhase
@@ -623,6 +624,9 @@ internal object ShotCatalog {
     },
     Shot("backup-avviso", large = true) {
       BackupNoticeScreen(onBack = {}, onReviewChecklist = {})
+    },
+    Shot("informazioni-licenze", large = true) {
+      AboutScreen(versionName = "1.0.0", onBack = {})
     },
   )
 

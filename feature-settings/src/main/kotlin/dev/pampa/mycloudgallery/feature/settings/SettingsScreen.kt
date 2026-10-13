@@ -7,6 +7,7 @@ import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.FolderOff
 import androidx.compose.material.icons.rounded.Groups
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.MonitorHeart
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Tune
@@ -46,6 +47,7 @@ class SettingsLinks(
   val openNetwork: () -> Unit = {},
   val openSecurity: () -> Unit = {},
   val openBackupNotice: () -> Unit = {},
+  val openAbout: () -> Unit = {},
 ) {
   companion object {
     val None = SettingsLinks()
@@ -199,6 +201,14 @@ fun SettingsScreen(
           tone = FluidTone.Neutral,
           leading = { RowGlyph(Icons.Rounded.MonitorHeart) },
           onClick = openDiagnostics,
+        )
+        FluidListDivider()
+        FluidListRow(
+          title = stringResource(R.string.settings_about),
+          subtitle = stringResource(R.string.settings_about_detail),
+          tone = FluidTone.Neutral,
+          leading = { RowGlyph(Icons.Rounded.Info) },
+          onClick = links.openAbout,
         )
       }
     }

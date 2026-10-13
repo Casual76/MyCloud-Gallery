@@ -57,7 +57,7 @@ Su un emulatore `-Bench` imposta da solo `benchSmoke=true` (2 iterazioni, un cic
 
 Prima:
 - **Impostazioni → Display → Fluidità movimento: Adattiva** (a 120 Hz); schermo acceso e sbloccato; batteria carica; tablet in orizzontale come lo si usa. `check.ps1 -Bench` annota in sola lettura i modi del display e le impostazioni (`peak_refresh_rate`, `min_refresh_rate`, `refresh_rate_mode`) e `compare.ps1` avvisa se il massimo letto è sotto i 120 Hz.
-- La variante `benchmarkRelease` ha **lo stesso `applicationId` della release** e la firma di debug: installarla **sostituisce** la release firmata (e Android rifiuta l'aggiornamento: `INSTALL_FAILED_UPDATE_INCOMPATIBLE`, quindi va disinstallata prima, e i dati locali della release si perdono). La build debug (`.debug`) non è toccata. Sull'S25 di prova si misura quando la release firmata non serve (F18 si fa dopo, reinstallandola).
+- Le varianti `benchmarkRelease` e `nonMinifiedRelease` hanno **un id proprio**, `dev.pampa.mycloudgallery.bench` (P11, `applicationIdSuffix '.bench'` in `app/build.gradle`): si installano accanto alla release firmata e alla debug (`.debug`) senza toccarle. Prima avevano l'id della release e, firmate con la chiave di debug, l'avrebbero sostituita cancellandone i dati.
 - Per lo zoom a 200 MP sul tablet: la foto generata da `tools/fixtures` (P3) copiata con `adb push` in `Pictures/MCG-prova/` (con il consenso dell'utente, §5.5 A.3).
 
 ```powershell
@@ -117,7 +117,7 @@ La variante di misura può mettere **file** e **servizi** nell'app, ma `src/main
 - `dev.pampa.mycloudgallery.core.family.contract.FamilySetupRepository` → `BenchFamilySetupRepository` (`SetupState.Ready(admin = false)`: la famiglia "pronta", senza NAS e senza rete);
 - `dev.pampa.mycloudgallery.core.mediastore.contract.PhoneLibrarySync` → `BenchPhoneLibrarySync` (ferma: la scansione vera riconcilierebbe le 100 mila righe sintetiche con i pochi media veri e le segnerebbe assenti).
 
-**Cosa deve fare P11** nel grafo (in `src/main`, 3 punti; nelle altre varianti `ServiceLoader` non trova niente e resta il comportamento vero):
+**Cosa fa P11** nel grafo (in `src/main`, 3 punti; nelle altre varianti `ServiceLoader` non trova niente e resta il comportamento vero). Fatto: `di/GraphModule.kt` (famiglia), `di/GalleryModule.kt` (sincronizzazione ferma e `gallery-bench.db`); il `ServiceLoader` riceve il classloader dell'app in modo esplicito. Lo schema di partenza era:
 
 ```kotlin
 // GraphModule: la famiglia
@@ -135,7 +135,7 @@ val database = GalleryDatabase.build(
 )
 ```
 
-**Da controllare dopo il collegamento:** R8 elimina i servizi che nessuno carica (provato su un APK minimo: senza una chiamata a `ServiceLoader.load` la classe e il file in `META-INF/services/` spariscono). Quindi, quando P11 ha messo le righe qui sopra, aprire l'APK `benchmarkRelease` e controllare che `META-INF/services/dev.pampa.mycloudgallery.core.family.contract.FamilySetupRepository` ci sia ancora e che nel dex ci siano `BenchFamilySetupRepository` e `BenchPhoneLibrarySync`; se mancano, la Libreria dello scenario resta sull'onboarding e la sonda lo dice ("In attesa di M1").
+**Controllato dal P11 (13/10):** nell'APK `benchmarkRelease` ci sono `META-INF/services/...FamilySetupRepository` e `...PhoneLibrarySync` e nel dex `BenchFamilySetupRepository` e `BenchPhoneLibrarySync`; nella release nessuno dei due. Il motivo del controllo: R8 elimina i servizi che nessuno carica (provato su un APK minimo: senza una chiamata a `ServiceLoader.load` la classe e il file in `META-INF/services/` spariscono). Quindi, quando P11 ha messo le righe qui sopra, aprire l'APK `benchmarkRelease` e controllare che `META-INF/services/dev.pampa.mycloudgallery.core.family.contract.FamilySetupRepository` ci sia ancora e che nel dex ci siano `BenchFamilySetupRepository` e `BenchPhoneLibrarySync`; se mancano, la Libreria dello scenario resta sull'onboarding e la sonda lo dice ("In attesa di M1").
 
 Altre due cose che le prove si aspettano dall'app (senza, girano lo stesso e `compare.ps1` lo dice):
 
@@ -147,7 +147,7 @@ Altre due cose che le prove si aspettano dall'app (senza, girano lo stesso e `co
   ```
   La metrica (`ViewerOpenMetric`) legge la tabella `slice` di Perfetto, dove compaiono tutte e due le forme.
 
-Per `:app:generateBaselineProfile` ufficiale (non obbligatorio, vedi §4) in `app/build.gradle`, dentro il `finalizeDsl` che c'è già:
+Per `:app:generateBaselineProfile` ufficiale (non obbligatorio, vedi §4) `app/build.gradle` ora fa, dentro il `finalizeDsl` (P11):
 ```groovy
 extension.sourceSets.findByName('nonMinifiedRelease')?.with {
   manifest.srcFile('src/benchmarkRelease/AndroidManifest.xml')
@@ -164,15 +164,16 @@ extension.sourceSets.findByName('nonMinifiedRelease')?.with {
 | Scenari e generatore compilano (`:benchmark:compileBenchmarkReleaseKotlin`); i sorgenti di `app/src/benchmarkRelease` compilano contro i moduli veri; la variante li compila e la release no; il manifest fuso di `benchmarkRelease` ha provider, receiver e `profileable`, quello di release nessuno dei tre | verde |
 | Dataset: 100.000 righe su Robolectric (indice letto per intero, 200 riferimenti su 200, nessun ordinamento temporaneo, sorgenti 68/10/20/2%) e 5.000 righe sull'emulatore Medium_Phone con 62 media veri, anche con R8 e senza offuscamento | verde |
 | Scenari `coldStart`, `scroll_days_square`, `pinch`, `viewerOpen`, `zoom200Mp` su Medium_Phone (API 37.1), contro un **segnaposto della Libreria** (una lista di celle "Foto, …" con `reportFullyDrawn` e la sezione asincrona `MCG:viewerOpen`): gesti, metriche proprie (`viewerOpenMs`, `pssPeakKb`, `processAlive`, `libraryShown`), JSON e `compare.ps1 -Smoke` | girano; i numeri dell'emulatore non valgono |
-| `check.ps1 -Bench` con un dispositivo vero e con la **vera app** | **non provato**: l'app non si assembla finché P11 non lega i `@HiltViewModel` di P7/P10 (`MissingBinding`: `ThumbnailLoader`, `GridLayoutEngine`, `PhoneMediaIntents`…). Vale anche per `assembleDebug`/`assembleRelease` |
-| `:app:generateBaselineProfile` e `toolsench\generate-profile.ps1` | **non provati** (stessa ragione, e la Libreria deve essere raggiungibile) |
-| Servizi `ServiceLoader` dopo R8 nell'app vera (`META-INF/services` nell'APK) | **da controllare** dopo il collegamento (§6) |
+| Scenari `coldStart`, `pinch`, `viewerOpen` con la **vera app** (P11, 13/10) su Medium_Phone (API 37.1), smoke (`benchSmoke=true`), senza media veri | girano tutti e tre: `libraryShown` = 1 (la Libreria vera si apre sul dataset), `timeToFullDisplayMs` misurato (`reportFullyDrawn` c'e'), `viewerOpenMs` misurato (la sezione `MCG:viewerOpen` c'e'), il pinch attraversa i livelli. I numeri dell'emulatore non valgono |
+| `check.ps1 -Bench` con un dispositivo vero | **non provato** (nessun dispositivo fisico nel P11): S25 e Tab S9 sul campo |
+| `:app:generateBaselineProfile` e `tools\bench\generate-profile.ps1` | **non provati**: si fanno sul dispositivo vero, con la Libreria ora raggiungibile |
+| Servizi `ServiceLoader` dopo R8 nell'app vera (`META-INF/services` nell'APK) | verde (P11, §6) |
 
 ## 8. Limiti e cose da sapere
 
 - **Più dispositivi collegati:** `check.ps1 -Bench` si ferma e chiede `-BenchSerial`; Gradle gira su tutti i dispositivi collegati a meno di `ANDROID_SERIAL`, e lo script lo imposta per quello scelto. Gli emulatori sono condivisi con gli altri pacchetti: la sonda tocca solo il pacchetto sotto misura e quello di test.
 - **I numeri dell'emulatore non valgono.** Servono a vedere che gli scenari girano. Medium_Phone (API 37.1) usa un'immagine con pagine da 16 KB: può comparire un avviso di compatibilità all'avvio dell'app.
-- **Ci vuole la Libreria raggiungibile**: finché P11 non lega i tre punti del §6 e P7 non consegna la griglia (M1), tutte le prove tranne `coldStart` si saltano con "In attesa di M1" e `coldStart` misura l'onboarding (marcato non valido).
+- **Ci vuole la Libreria raggiungibile**: dal P11 la variante di misura apre la Libreria vera sul dataset (famiglia "pronta" dal `ServiceLoader`). Senza il marcatore del dataset l'app va all'onboarding: tutte le prove tranne `coldStart` si saltano con il motivo e `coldStart` misura l'onboarding (marcato non valido).
 - **Il profilo è fatto su un dataset realistico, non sul tuo.** Tipi, proporzioni e rotazione vengono dai media veri del dispositivo; le date e la distribuzione sono sintetiche.
 - **Le fixture dei video**: il dataset ci mette i video veri del dispositivo (con la loro durata) ma il benchmark non li riproduce; la riproduzione si prova sul campo (F12).
 - **Niente rete**: né l'app (D24) né il collaudo la usano. `benchmark` dichiara `INTERNET` solo perché lo porta la libreria di test nel suo APK (mai in quello dell'app).

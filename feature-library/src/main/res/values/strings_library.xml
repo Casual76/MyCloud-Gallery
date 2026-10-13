@@ -67,6 +67,13 @@
   <string name="library_action_delete">Elimina dal telefono</string>
   <string name="library_delete_location_phone">Telefono</string>
   <string name="library_delete_location_phone_detail">Non c’è ancora una copia sul NAS: dopo 30 giorni nel cestino di sistema non si potrà recuperare.</string>
+  <!-- "Nascondi" con la copertina di un gruppo (P11, nota di P5): si nasconde tutto il gruppo. -->
+  <plurals name="library_hide_group_title">
+    <item quantity="one">Nascondere %1$d elemento?</item>
+    <item quantity="other">Nascondere %1$d elementi?</item>
+  </plurals>
+  <string name="library_hide_group_message">Hai scelto la copertina di un gruppo (una raffica o una coppia RAW e JPEG): si nasconde tutto il gruppo, non solo la copertina. Lo ritrovi nella raccolta Nascosti.</string>
+  <string name="library_hide_group_cancel">Annulla</string>
 
   <!-- Stati (§2.4): permessi, accesso parziale (E-P1), foto in attesa (E-P21), prima lettura. -->
   <string name="library_permission_action">Consenti accesso</string>
@@ -86,4 +93,6 @@
 
   <!-- Solo debug: la Libreria sintetica di M1 (docs/bench/M1.md). -->
   <string name="library_debug_synthetic">Sintetica: %1$s elementi</string>
+  <!-- Solo debug (P11): torna alla Libreria vera del telefono. -->
+  <string name="library_debug_phone">Libreria del telefono</string>
 </resources>

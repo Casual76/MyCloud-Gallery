@@ -34,6 +34,16 @@ object ExportKeys {
     "wifiBytes", "roamingBytes",
     // Eventi (RecentEventsContributor)
     "ageMs",
+    // Libreria del telefono (core-mediastore, PhoneLibraryDiagnostics): solo numeri, flag ed enumerati (mai nomi di
+    // file, percorsi, volumi, coordinate o luoghi). "mediaLocation" e "state" sono gia' sopra.
+    "media", "volumes", "granted", "pendingPhotos", "metaWaiting", "pauseReason", "lastReason", "lastFailure", "seen",
+    "added", "updated", "vanished", "fullScan", "completed", "deletedFiles", "fullScansCompleted", "reconcileVanished",
+    "purgedAbsences", "metaDone", "metaFailed", "mounted", "known", "unavailable", "fullScanInProgress",
+    "fullScanPending", "zeroBytes", "notMedia", "invalidName", "unreadable", "times",
+    // Libreria del telefono (:app, LibraryDiagnostics): anche qui solo numeri (conteggi e byte), flag ed enumerati;
+    // mai una stringa con un dato dell'utente (un luogo, un percorso, un nome di file).
+    "places", "placesFailure", "dataset", "items", "rebuilds", "patches", "snapshotWrites", "reconciled",
+    "cachedBytes", "budgetBytes", "started", "cancelled", "failed", "memoryHits", "misses", "inFlight",
   )
 
   /**

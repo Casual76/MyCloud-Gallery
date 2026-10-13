@@ -183,6 +183,73 @@ non sono più legati. Le modifiche ai contratti degli altri moduli sono elencate
    sempre: dentro l'onboarding nessuno guardava l'approvazione); dopo la richiesta, la ripresa riparte dai passi locali e non
    dalla scansione (`OnboardingViewModelTest`).
 
+## Fase 3: integrazione nell'app (P11, 13/10)
+La Libreria del telefono, il viewer e le Raccolte girano nell'app vera. Il collegamento sta in `app/.../gallery/`
+(`GalleryGraph`, `PhoneLibrary`, `LazyPlaces`, `PartialAccessTimeline`, `CatalogPorts`, `LibraryStates`, `LibraryDiagnostics`,
+`SyntheticLibraryStack`), esposto a Hilt da `di/GalleryModule.kt`; i lavori in `work/GalleryWork.kt`; la radice dei modali e
+del viewer in `main/GalleryRoot.kt`; le richieste dei permessi in `main/LibraryCommandHostEffect.kt`.
+
+**Decisioni**
+1. **Due tempi.** La parte che la UI usa subito (database, miniature, segnaposto, luoghi, layout, preferenze, repository della
+   timeline) nasce con il processo; il catalogo e la lettura del telefono (`core()`) nascono solo con la famiglia `Ready`,
+   perche' `MediaCatalog` vuole l'account proprietario (letto da `NasAccountStore`). Il repository e' **uno per processo** e
+   parte quando c'e' il catalogo (nota di P5); prima la Libreria mostra l'istantanea salvata o la prima lettura.
+2. **Lavori.** `PhoneSyncWorker`: trigger sui contenuti di immagini e video (ritardo 5 s, massimo 60 s, batteria non scarica),
+   giro con budget di 8 minuti, poi si rimette in coda da solo (`APPEND_OR_REPLACE`). `LibraryMaintenanceWorker`: una volta al
+   giorno in carica (riconciliazione, META 3 min, impronte complete rimandate 2 min, `flush` dell'istantanea). Si pianificano
+   solo se il motore delle regole consente il background; nella variante di misura mai (la sincronizzazione e' quella ferma).
+3. **Impronte complete rimandate** (P2): una query nuova `LocationDao.deferredFullHashes` **senza cambiare lo schema** e la classe
+   `DeferredFullHashes` di `core-mediastore` (solo con accesso completo; le foto solo con `ACCESS_MEDIA_LOCATION`).
+4. **Priorita' di META** = la finestra visibile della griglia (`WindowMetaPriority`).
+5. **Luoghi senza dataset.** `LazyPlaces` apre GeoNames su IO; se l'asset non c'e' le intestazioni restano senza luogo (nessun
+   testo vuoto) e la Diagnostica lo dice (`PHONE_PLACES`). Licenze e attribuzione in Impostazioni → Informazioni e licenze.
+6. **Date sempre in italiano**, da un solo punto: `core-library/.../text/GalleryDates.kt` (`Locale.ITALIAN`), usato da griglia e
+   viewer; provato con il dispositivo in inglese (Robolectric `en-rUS` ed emulatore in inglese).
+7. **Permessi solo da un tocco** nella Libreria ("Consenti accesso", "Consenti tutto", "Consenti" per la posizione delle foto);
+   nessun permesso nuovo.
+8. **Nascondere una copertina nasconde il gruppo**: nella selezione della Libreria, se fra gli scelti c'e' una copertina, prima
+   un foglio "Nascondere N elementi?" con il numero vero (`LibraryHideGroupSheet`).
+9. **Preferiti e nascosti non chiudono l'app**: un errore del catalogo (lanciato dallo scope della composizione) ora si registra
+   (solo il tipo dell'eccezione) e lascia tutto com'era (`GuardedMediaActions`). Trovato sull'emulatore.
+10. **Variante di misura**: `applicationIdSuffix '.bench'` per `benchmarkRelease` e `nonMinifiedRelease` (non sostituisce piu'
+    la release sul telefono); `nonMinifiedRelease` prende anche `src/benchmarkRelease`; i servizi `ServiceLoader` restano
+    nell'APK dopo R8 (controllato su `META-INF/services` e sul dex). `reportFullyDrawn` e la sezione `MCG:viewerOpen` ci sono.
+11. **Libreria sintetica (solo debug)**: database `gallery-synthetic.db` e istantanea separati, scelta da Vista; segnaposto
+    ThumbHash veri. Le Raccolte e il viewer restano sul catalogo vero / senza dettagli del catalogo.
+
+**Scostamenti**
+- `core-database`, fuori dal perimetro (solo la query delle impronte): `TimelineIndexDao.phoneRefs` con `+l.state`. Senza
+  statistiche SQLite partiva da tutte le posizioni presenti per ogni blocco di 500 media: 265 s a blocco su 100 mila, ora
+  0,13 s. Il test controlla il piano con e senza `ANALYZE`.
+- **Solo debug**: la famiglia risulta pronta se esiste `files/debug-family-ready.marker` (lo crea solo `adb`), per lo smoke
+  sull'emulatore senza NAS. In release la funzione non esiste (`DeveloperTools` di release).
+- Non fatti: il ricalcolo dei luoghi quando cambia il dataset (serve una query nuova: Fase 4), le date dedotte dai vicini
+  (`NeighborOffsetsProvider` non collegato), il ripristino del viewer dopo la ricreazione (E-V8) fuori dalla Libreria, il foglio
+  del gruppo nel viewer e nelle raccolte (lì si nasconde senza avviso).
+- Il dataset della misura scrive `quick_hash` come `bench-%08x`, non 64 cifre esadecimali (nota di P9): non tocca la Libreria,
+  da sistemare se una prova lo rilegge come `QuickHash`.
+
+**Dubbi grafici per l'utente**
+- I numeri non hanno il separatore delle migliaia: "100000 di 100000", "92019 foto, 7981 video" (il menu Vista invece dice
+  "100.000").
+- La maniglia dello scorrimento rapido si sovrappone al pulsante "Oggi".
+- Cambiando livello in fondo alla griglia, il piede ("N foto, N video") resta sotto i segmenti finche' non si scorre.
+- Entrando nella selezione la griglia si sposta in basso (la pillola sparisce e il margine cambia).
+- Il pizzico non si fa con `adb` (un dito solo): sull'emulatore l'ha fatto lo scenario `pinch` di `:benchmark` (gira, la
+  griglia cambia livello); da guardare a occhio sul telefono vero.
+
+**Modifiche ad altri moduli fatte dal P11** (firme pubbliche invariate, ognuna con il suo test)
+1. `core-database`: `LocationDao.deferredFullHashes`; `TimelineIndexDao.PHONE_REFS_SQL` con `+l.state`.
+2. `core-mediastore`: `sync/DeferredFullHashes` (nuova); test di P2 instabile corretto (`RunnerAndForegroundTest`).
+3. `core-library`: `text/GalleryDates` (nuova).
+4. `feature-library`: `LibraryStateSource` e `LibraryViewModel` iniettabile; `GridText` con `GalleryDates`; voce "Libreria del
+   telefono" nel menu di debug; foglio "Nascondi" per i gruppi; lettura e scrittura del marcatore di debug in ordine (prima la
+   scrittura del valore iniziale poteva cancellare la scelta fatta da `adb`).
+5. `feature-viewer`: `ViewerFormat` in italiano; R2 della revisione (`ImageDecoderAnimatedLoader` con lato e pixel massimi,
+   oltre il tetto il primo fotogramma fermo, `AnimatedSizing`).
+6. `feature-diagnostics`: codici della Fase 3 nel catalogo e chiavi dell'esportazione (solo numeri ed enum).
+7. `feature-settings`: pagina Informazioni e licenze (GeoNames CC BY 4.0, telephoto, Media3, ExifInterface).
+
 ## Da aggiungere a `docs/sicurezza.md` dopo il P0 (per non scrivere in contemporanea)
 - ~~Limite A2~~: aggiunto come L18 in `docs/sicurezza.md`.
 - Contromisure C7–C10 e C23 da aggiornare con il modello finale di `formato-nas.md` (firme low-S, rami del registro, codice di approvazione a 80 bit).

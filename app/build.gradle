@@ -142,9 +142,23 @@ baselineProfile {
 // `src/benchmarkRelease/AndroidManifest.xml` verrebbe ignorato. Serve a rimettere il ProfileInstallReceiver, che il
 // manifest principale toglie da tutte le varianti, SOLO nella variante di misura. In finalizeDsl perche' il plugin
 // crea il build type e imposta il percorso prima, e questo e' l'ultimo momento utile prima delle varianti.
+//
+// P11 (nota di P9, docs/bench/README.md §6):
+// - `nonMinifiedRelease` (la variante di `:app:generateBaselineProfile`) riceve lo stesso `src/benchmarkRelease` (sorgenti,
+//   servizi e manifest): senza, il generatore ufficiale del plugin non avrebbe il dataset ne' la famiglia "pronta";
+// - le due varianti di misura hanno un **id proprio** (`.bench`): sono firmate con la chiave di debug, e con lo stesso id
+//   della release installarle sul telefono vero sostituirebbe l'app firmata cancellandone i dati.
 androidComponents {
   finalizeDsl { extension ->
     extension.sourceSets.findByName('benchmarkRelease')?.manifest?.srcFile('src/benchmarkRelease/AndroidManifest.xml')
+    extension.sourceSets.findByName('nonMinifiedRelease')?.with {
+      manifest.srcFile('src/benchmarkRelease/AndroidManifest.xml')
+      kotlin.srcDir('src/benchmarkRelease/kotlin')
+      resources.srcDir('src/benchmarkRelease/resources')
+    }
+    ['benchmarkRelease', 'nonMinifiedRelease'].each { name ->
+      extension.buildTypes.findByName(name)?.applicationIdSuffix = '.bench'
+    }
   }
 }
 

@@ -122,7 +122,9 @@ class RunnerAndForegroundTest : PhoneSyncTestBase() {
       delay(200)
       assertThat(mediaCount()).isEqualTo(0)
       setAccess(MediaAccess.FULL)
-      waitUntil { mediaCount() == 1 }
+      // Il bilancio del giro si scrive alla fine: si aspetta quello, non solo la riga nel catalogo (P11: prima il test
+      // poteva leggere il motivo del giro precedente se il catalogo arrivava un attimo prima del bilancio).
+      waitUntil { mediaCount() == 1 && sync.stats.snapshot.value.lastReason != SyncReason.FOREGROUND }
       assertThat(sync.stats.snapshot.value.lastReason).isEqualTo(SyncReason.PERMISSION_CHANGED)
     } finally {
       sync.detach()

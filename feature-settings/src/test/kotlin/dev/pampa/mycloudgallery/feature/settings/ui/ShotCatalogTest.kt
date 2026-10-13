@@ -16,7 +16,7 @@ class ShotCatalogTest {
   fun ogniPaginaDelleImpostazioniHaAlmenoUnoScreenshot() {
     val prefixes = listOf(
       "home-", "dispositivi-", "dispositivo-", "perso-", "approvazione-", "famiglia-", "invito-", "kit-", "stato-famiglia-",
-      "secondo-admin-", "recupero-", "reset-", "account-", "password-", "indirizzo-", "rete-", "sicurezza-", "backup-",
+      "secondo-admin-", "recupero-", "reset-", "account-", "password-", "indirizzo-", "rete-", "sicurezza-", "backup-", "informazioni-",
     )
     prefixes.forEach { prefix ->
       assertThat(ShotCatalog.names.any { it.startsWith(prefix) }).isTrue()
@@ -26,7 +26,7 @@ class ShotCatalogTest {
   @Test
   fun ilTabletHaUnaSchermataRappresentativaPerOgniPagina() {
     val tablet = ShotCatalog.names.filter { it !in ShotCatalog.phoneOnly }
-    listOf("home-", "dispositivi-", "dispositivo-", "perso-", "approvazione-", "famiglia-", "invito-", "kit-", "stato-famiglia-", "secondo-admin-", "recupero-", "reset-", "account-", "password-", "indirizzo-", "rete-", "sicurezza-", "backup-")
+    listOf("home-", "dispositivi-", "dispositivo-", "perso-", "approvazione-", "famiglia-", "invito-", "kit-", "stato-famiglia-", "secondo-admin-", "recupero-", "reset-", "account-", "password-", "indirizzo-", "rete-", "sicurezza-", "backup-", "informazioni-")
       .forEach { prefix -> assertThat(tablet.any { it.startsWith(prefix) }).isTrue() }
   }
 

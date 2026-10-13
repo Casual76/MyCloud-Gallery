@@ -4,8 +4,10 @@ package dev.pampa.mycloudgallery.benchmark
  * Cio' che gli scenari di misura (P9) sanno dell'app sotto misura. Una costante sola per punto di contatto, cosi'
  * che l'app e il modulo di misura non si dicano cose diverse.
  *
- * L'id dell'app NON e' qui: arriva dallo strumentatore (`targetAppId`, vedi `benchmark/build.gradle`), perche'
- * la variante `benchmarkRelease` e quella `nonMinifiedRelease` hanno lo stesso id e la debug ne ha un altro.
+ * L'id dell'app NON e' qui: arriva dallo strumentatore (`targetAppId`, vedi `benchmark/build.gradle`). Le varianti
+ * `benchmarkRelease` e `nonMinifiedRelease` hanno un id proprio, `dev.pampa.mycloudgallery.bench` (P11): sono firmate con
+ * la chiave di debug e con l'id della release sostituirebbero l'app vera sul telefono, cancellandone i dati. La debug ha
+ * `.debug`. Il nome della classe dell'activity ([MAIN_ACTIVITY]) non cambia con il suffisso.
  */
 object BenchmarkTarget {
 

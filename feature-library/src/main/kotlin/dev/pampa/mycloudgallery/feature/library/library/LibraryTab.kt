@@ -136,6 +136,7 @@ private fun LibraryScreen(
   var noticesHeightPx by remember { mutableIntStateOf(0) }
   var bottomBarHeightPx by remember { mutableIntStateOf(0) }
   var deleting by remember { mutableStateOf(false) }
+  var hidingGroups by remember { mutableStateOf(false) }
 
   LibraryEffects(state)
 
@@ -212,6 +213,7 @@ private fun LibraryScreen(
         backdrop = backdrop,
         reducedMotion = reducedMotion,
         onDelete = { deleting = true },
+        onHideGroups = { hidingGroups = true },
         onBarHeight = { bottomBarHeightPx = it },
         modifier = Modifier
           .align(Alignment.BottomCenter)
@@ -239,6 +241,12 @@ private fun LibraryScreen(
       visible = deleting,
       state = state,
       onDismiss = { deleting = false },
+    )
+
+    LibraryHideGroupSheet(
+      visible = hidingGroups,
+      state = state,
+      onDismiss = { hidingGroups = false },
     )
   }
 }
@@ -313,7 +321,13 @@ private fun LibraryViewMenu(state: LibraryTabState, onOpenSettings: () -> Unit, 
   }
   val debug = state.debug?.let { hooks ->
     hooks.sizes.map { size ->
-      GalleryFilterOption(stringResource(R.string.library_debug_synthetic, "%,d".format(size).replace(',', '.')), selected = size == hooks.current) {
+      // 0 = la Libreria vera del telefono (P11: la sintetica ha un database a parte e si sceglie da qui).
+      val label = if (size == 0) {
+        stringResource(R.string.library_debug_phone)
+      } else {
+        stringResource(R.string.library_debug_synthetic, String.format(java.util.Locale.ITALIAN, "%,d", size))
+      }
+      GalleryFilterOption(label, selected = size == hooks.current) {
         hooks.select(size)
       }
     }
@@ -334,6 +348,7 @@ private fun LibraryBottomChrome(
   backdrop: GlassBackdropState,
   reducedMotion: Boolean,
   onDelete: () -> Unit,
+  onHideGroups: () -> Unit,
   onBarHeight: (Int) -> Unit,
   modifier: Modifier = Modifier,
 ) {
@@ -352,7 +367,7 @@ private fun LibraryBottomChrome(
         label = "library bottom chrome",
       ) { selecting ->
         if (selecting) {
-          LibrarySelectionBar(state = state, backdrop = backdrop, onDelete = onDelete)
+          LibrarySelectionBar(state = state, backdrop = backdrop, onDelete = onDelete, onHideGroups = onHideGroups)
         } else {
           LibraryLevelBar(
             level = grid.level,

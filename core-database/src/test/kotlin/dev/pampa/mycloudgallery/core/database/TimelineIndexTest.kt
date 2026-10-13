@@ -107,6 +107,27 @@ class TimelineIndexTest : CatalogTestBase() {
     }
   }
 
+  /**
+   * P11: i riferimenti ai byte del telefono partono dai media chiesti e scendono per `version_id`, **mai** dall'indice
+   * dello stato delle posizioni (tutte le posizioni presenti a ogni blocco di 500: minuti su 100 mila media, visto
+   * sull'emulatore con la Libreria sintetica). Senza statistiche e con.
+   */
+  @Test
+  fun iRiferimentiAiByteNonScorronoTutteLePosizioni() = runBlocking<Unit> {
+    bulkInsert(2_000)
+    val sql = TimelineIndexDao.PHONE_REFS_SQL.replace("(:ids)", "('a', 'b', 'c')")
+
+    val plain = planOf(sql)
+    db.openHelper.writableDatabase.execSQL("ANALYZE")
+    val analyzed = planOf(sql)
+
+    println("Piano dei riferimenti ai byte: $plain / dopo ANALYZE: $analyzed")
+    listOf(plain, analyzed).forEach { plan ->
+      assertThat(plan).contains("index_media_location_version_id")
+      assertThat(plan).doesNotContain("index_media_location_state_absent_since")
+    }
+  }
+
   /** 100 mila righe in un `Cursor` grezzo, nell'ordine della timeline, entro un budget largo. */
   @Test
   fun centoMilaRigheSiLegganoConUnCursorEntroIlBudget() = runBlocking<Unit> {

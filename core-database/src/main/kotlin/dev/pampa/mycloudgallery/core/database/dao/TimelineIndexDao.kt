@@ -62,16 +62,13 @@ interface TimelineIndexDao {
    * Un `_ID` di un'altra versione puo' essere di un altro file (E-P22): finche' la scansione non lo
    * rilegge, il media non ha riferimento e la griglia mostra il segnaposto. Per ogni media prima le copie
    * della versione corrente.
+   *
+   * P11: `+l.state` (il `+` toglie la colonna dalla scelta degli indici). Senza statistiche (sul telefono nessuno
+   * esegue `ANALYZE`) SQLite partiva da `media_location` con l'indice `(state, absent_since)`, cioe' da **tutte** le
+   * posizioni presenti, per ogni blocco di 500 identita': su 100 mila media un blocco costava minuti. Cosi' parte dai
+   * media chiesti e scende per `version_id` (`TimelineIndexTest` ne controlla il piano).
    */
-  @Query(
-    "SELECT m.media_id AS media_id, l.volume AS volume, l.media_store_id AS media_store_id, md.mime_type AS mime_type " +
-      "FROM media m JOIN media_version v ON v.media_id = m.media_id " +
-      "JOIN media_location l ON l.version_id = v.version_id " +
-      "JOIN media_store_cursor c ON c.volume = l.volume AND c.ms_version = l.media_store_version " +
-      "LEFT JOIN version_metadata md ON md.version_id = v.version_id " +
-      "WHERE m.media_id IN (:ids) AND l.location_type = 'phone' AND l.state = 'present' AND l.media_store_id IS NOT NULL " +
-      "ORDER BY m.media_id, CASE WHEN v.version_id = m.current_version_id THEN 0 ELSE 1 END, l.location_id",
-  )
+  @Query(PHONE_REFS_SQL)
   suspend fun phoneRefs(ids: List<String>): List<PhoneRefRow>
 
   /** Il numero di sequenza dei cambiamenti dell'ultima transazione del catalogo (0 se non ce ne sono state). */
@@ -83,6 +80,16 @@ interface TimelineIndexDao {
     const val MAX_IDS: Int = 500
 
     const val CHANGE_SEQ: String = "change_seq"
+
+    /** Testo della query di [phoneRefs]: pubblico per il test che ne controlla il piano (P11). */
+    const val PHONE_REFS_SQL: String =
+      "SELECT m.media_id AS media_id, l.volume AS volume, l.media_store_id AS media_store_id, md.mime_type AS mime_type " +
+      "FROM media m JOIN media_version v ON v.media_id = m.media_id " +
+      "JOIN media_location l ON l.version_id = v.version_id " +
+      "JOIN media_store_cursor c ON c.volume = l.volume AND c.ms_version = l.media_store_version " +
+      "LEFT JOIN version_metadata md ON md.version_id = v.version_id " +
+      "WHERE m.media_id IN (:ids) AND l.location_type = 'phone' AND +l.state = 'present' AND l.media_store_id IS NOT NULL " +
+      "ORDER BY m.media_id, CASE WHEN v.version_id = m.current_version_id THEN 0 ELSE 1 END, l.location_id"
 
     /** Le colonne di [indexCursor], in quest'ordine. */
     const val COLUMNS: String =

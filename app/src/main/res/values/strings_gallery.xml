@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 3 (P11): la galleria del telefono nell'app. -->
+
+  <!-- Diagnostica della galleria (LibraryDiagnostics): solo stati, mai nomi, percorsi o luoghi. -->
+  <string name="gallery_diag_places_ok">Luoghi offline disponibili</string>
+  <string name="gallery_diag_places_opening">Luoghi offline in preparazione</string>
+  <string name="gallery_diag_places_missing">Luoghi offline non inclusi in questa versione</string>
+  <string name="gallery_diag_places_missing_detail">La galleria funziona lo stesso: le foto non mostrano il nome del luogo finché i dati non arrivano con un aggiornamento.</string>
+  <string name="gallery_diag_places_failed">Luoghi offline non leggibili</string>
+  <string name="gallery_diag_places_failed_detail">I dati dei luoghi nell’app non si sono aperti. Le foto restano tutte; reinstallare l’aggiornamento di solito risolve.</string>
+  <string name="gallery_diag_index">Indice della Libreria pronto</string>
+  <string name="gallery_diag_index_not_started">Indice della Libreria non ancora avviato</string>
+  <string name="gallery_diag_thumbnails">Miniature in memoria</string>
+
+  <!-- Lavori in background della galleria (nessuna notifica: sono lavori brevi). -->
+</resources>

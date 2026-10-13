@@ -33,6 +33,7 @@ import dev.pampa.mycloudgallery.core.imaging.testing.FakeViewerImageSource
 import dev.pampa.mycloudgallery.core.library.contract.GridLevel
 import dev.pampa.mycloudgallery.core.library.contract.GridStyle
 import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
+import dev.pampa.mycloudgallery.core.library.contract.LocalMediaActions
 import dev.pampa.mycloudgallery.core.library.noop.EmptyTimelineSnapshot
 import dev.pampa.mycloudgallery.core.library.testing.FakeTimelineRepository
 import dev.pampa.mycloudgallery.core.library.testing.InMemoryLibraryPreferences
@@ -48,6 +49,18 @@ import dev.pampa.mycloudgallery.feature.library.grid.MediaGridState
 import dev.pampa.mycloudgallery.feature.library.grid.RegisterComponentActivity
 import dev.pampa.mycloudgallery.feature.library.grid.showThemed
 import dev.pampa.mycloudgallery.feature.library.library.testing.syntheticLibraryState
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
+import dev.antigravity.fluidengine.foundation.EngineSettings
+import dev.antigravity.fluidengine.foundation.ThemeMode
+import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalHost
+import dev.antigravity.fluidengine.ui.fluid.LocalFluidGlassModalHostState
+import dev.antigravity.fluidengine.ui.fluid.glassBackdropSource
+import dev.antigravity.fluidengine.ui.fluid.rememberFluidGlassModalHostState
+import dev.antigravity.fluidengine.ui.fluid.rememberGlassBackdrop
+import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Rule
 import org.junit.Test
@@ -227,6 +240,73 @@ class LibraryTabTest {
     composeRule.onNodeWithContentDescription("Chiudi").performClick()
     assertThat(state.grid.selecting).isFalse()
     assertThat(state.grid.selection.selected.value.isEmpty).isTrue()
+  }
+
+  /**
+   * P11 (nota di P5): nascondere la copertina di un gruppo nasconde tutto il gruppo, e il foglio "Nascondi" lo dice prima
+   * (quanti elementi spariscono davvero). Un elemento da solo si nasconde subito, senza foglio.
+   */
+  @Test
+  fun nascondereLaCopertinaDiUnGruppoLoDicePrima() {
+    val first = syntheticLibraryState(count = 400)
+    val hidden = mutableListOf<Set<MediaId>>()
+    val state = LibraryTabState(
+      grid = first.grid, viewerItems = first.viewerItems, viewerImages = first.viewerImages, photoCount = 0, videoCount = 0,
+      timeline = first.timeline, preferences = first.preferences, phone = first.phone, commands = first.commands,
+      actions = object : LocalMediaActions {
+        override suspend fun setFavorite(ids: Set<MediaId>, on: Boolean) = Unit
+
+        override suspend fun setHidden(ids: Set<MediaId>, on: Boolean) {
+          if (on) hidden += ids
+        }
+      },
+    )
+    composeRule.setContent {
+      MyCloudGalleryTheme(settings = EngineSettings(themeMode = ThemeMode.LIGHT)) {
+        val modalHost = rememberFluidGlassModalHostState()
+        val backdrop = rememberGlassBackdrop()
+        CompositionLocalProvider(LocalFluidGlassModalHostState provides modalHost) {
+          Box(Modifier.fillMaxSize().glassBackdropSource(backdrop)) {
+            LibraryTab(
+              contentPadding = PaddingValues(bottom = 96.dp),
+              backdropOut = {},
+              onOpenViewer = {},
+              onOpenSettings = {},
+              statusFooter = {},
+              state = state,
+            )
+          }
+          FluidGlassModalHost(state = modalHost, backdrop = backdrop)
+        }
+      }
+    }
+    composeRule.waitForIdle()
+    val snapshot = state.grid.view.snapshot
+    val cover = (0 until snapshot.size).first { snapshot.groupSizeAt(it) > 1 }
+    val coverId = snapshot.idAt(cover)
+    val groupSize = snapshot.groupSizeAt(cover)
+    val single = snapshot.idAt((0 until snapshot.size).first { snapshot.groupSizeAt(it) <= 1 })
+
+    // Da solo: nessun foglio, si nasconde subito.
+    composeRule.onNodeWithContentDescription("Seleziona").performClick()
+    composeRule.runOnIdle { state.grid.selection.toggle(single) }
+    composeRule.onNodeWithContentDescription("Nascondi").performClick()
+    composeRule.waitForIdle()
+    composeRule.onAllNodesWithText("Nascondere", substring = true).assertCountEquals(0)
+    assertThat(hidden).containsExactly(setOf(single))
+
+    // La copertina: prima il foglio, con il numero vero.
+    composeRule.onNodeWithContentDescription("Seleziona").performClick()
+    composeRule.runOnIdle { state.grid.selection.toggle(coverId) }
+    composeRule.onNodeWithContentDescription("Nascondi").performClick()
+    composeRule.waitForIdle()
+    composeRule.onAllNodesWithText("Nascondere $groupSize elementi?").onFirst().assertExists()
+    composeRule.onAllNodesWithText("tutto il gruppo", substring = true).onFirst().assertExists()
+    assertThat(hidden).hasSize(1)
+    composeRule.onAllNodesWithText("Nascondi").onFirst().performClick()
+    composeRule.waitForIdle()
+    assertThat(hidden).containsExactly(setOf(single), setOf(coverId)).inOrder()
+    assertThat(state.grid.selecting).isFalse()
   }
 
   @Test

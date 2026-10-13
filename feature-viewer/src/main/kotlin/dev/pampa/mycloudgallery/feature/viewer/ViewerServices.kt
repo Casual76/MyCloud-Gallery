@@ -1,7 +1,9 @@
 package dev.pampa.mycloudgallery.feature.viewer
 
 import android.content.ContentResolver
+import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
+import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.net.Uri
 import androidx.compose.runtime.Immutable
@@ -29,6 +31,9 @@ import dev.pampa.mycloudgallery.feature.viewer.details.ViewerBytes
 import dev.pampa.mycloudgallery.feature.viewer.video.BytesMotionVideoLocator
 import dev.pampa.mycloudgallery.feature.viewer.video.MotionVideoLocator
 import dev.pampa.mycloudgallery.feature.viewer.video.ViewerPlayerFactory
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.sqrt
 import kotlinx.coroutines.withContext
 
 /**
@@ -77,25 +82,93 @@ fun interface AnimatedDrawableLoader {
   suspend fun load(ref: MediaRef): Drawable?
 }
 
-/** Il decoder vero: `ImageDecoder` sull'URI `content://` di [uriOf]. Gira fuori dal thread principale. */
+/**
+ * Il decoder di ripiego: `ImageDecoder` sull'URI `content://` di [uriOf]. Gira fuori dal thread principale.
+ *
+ * **Con lo stesso tetto del percorso primario** (`PipelineViewerImageSource.drawable` di core-imaging; revisione di
+ * sicurezza della Fase 3, R2): la tela si legge dall'intestazione e si riduce a [maxSide] sul lato lungo e a un quarto di
+ * [maxPixels] (un'immagine animata tiene in memoria piu' fotogrammi). Una tela che **da sola** supera [maxPixels] (un WebP
+ * ostile puo' dichiarare 16383×16383) non si anima: si mostra il primo fotogramma, fermo, alla taglia dello schermo.
+ *
+ * @param maxSide il lato lungo dello schermo, in pixel.
+ * @param maxPixels il tetto di pixel del viewer (`ImagingBudget.viewerMaxPixels`).
+ */
 class ImageDecoderAnimatedLoader(
   private val resolver: ContentResolver,
   private val uriOf: (MediaRef.Phone) -> Uri,
   private val dispatchers: DispatcherProvider = DefaultDispatcherProvider,
+  private val maxSide: Int = AnimatedSizing.DEFAULT_MAX_SIDE,
+  private val maxPixels: Long = AnimatedSizing.DEFAULT_MAX_PIXELS,
 ) : AnimatedDrawableLoader {
 
   override suspend fun load(ref: MediaRef): Drawable? {
     val phone = ref as? MediaRef.Phone ?: return null
     return withContext(dispatchers.io) {
       try {
-        ImageDecoder.decodeDrawable(ImageDecoder.createSource(resolver, uriOf(phone)))
+        val source = ImageDecoder.createSource(resolver, uriOf(phone))
+        val bounds = boundsOf(uriOf(phone)) ?: return@withContext null
+        if (AnimatedSizing.tooLargeToAnimate(bounds.first, bounds.second, maxPixels)) {
+          // Il primo fotogramma, fermo: una bitmap sola alla taglia dello schermo, mai la tela intera.
+          val still = ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+            AnimatedSizing.stillTarget(info.size.width, info.size.height, maxSide, maxPixels)?.let { (w, h) -> decoder.setTargetSize(w, h) }
+          }
+          BitmapDrawable(null, still)
+        } else {
+          ImageDecoder.decodeDrawable(source) { decoder, info, _ ->
+            AnimatedSizing.animatedTarget(info.size.width, info.size.height, maxSide, maxPixels)?.let { (w, h) -> decoder.setTargetSize(w, h) }
+          }
+        }
       } catch (_: java.io.IOException) {
         null
       } catch (_: SecurityException) {
+        null
+      } catch (_: IllegalArgumentException) {
         null
       } catch (_: OutOfMemoryError) {
         null
       }
     }
   }
+
+  /** Le dimensioni dichiarate nell'intestazione (nessun pixel decodificato), o null se non si leggono. */
+  private fun boundsOf(uri: Uri): Pair<Int, Int>? {
+    val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) } ?: return null
+    return if (options.outWidth > 0 && options.outHeight > 0) options.outWidth to options.outHeight else null
+  }
+}
+
+/**
+ * Le taglie di decodifica delle immagini animate (R2): le stesse regole del percorso primario di core-imaging. Pura, si
+ * prova su JVM.
+ */
+object AnimatedSizing {
+
+  /** Il lato lungo di riserva quando chi costruisce il decoder non conosce lo schermo. */
+  const val DEFAULT_MAX_SIDE: Int = 2_560
+
+  /** Il tetto di riserva: 16 MP, quello di un telefono con `memoryClass` medio. */
+  const val DEFAULT_MAX_PIXELS: Long = 16L * 1024 * 1024
+
+  /** Vero se la tela supera da sola il tetto del viewer: non si anima (si mostra il primo fotogramma). */
+  fun tooLargeToAnimate(width: Int, height: Int, maxPixels: Long): Boolean = width.toLong() * height > maxPixels
+
+  /** La taglia per animare: lato lungo entro [maxSide], pixel entro un quarto di [maxPixels]; null = va bene cosi'. */
+  fun animatedTarget(width: Int, height: Int, maxSide: Int, maxPixels: Long): Pair<Int, Int>? =
+    target(width, height, maxSide, maxPixels / ANIMATED_FRAMES_IN_MEMORY)
+
+  /** La taglia del fotogramma fermo: lato lungo entro [maxSide], pixel entro [maxPixels]; null = va bene cosi'. */
+  fun stillTarget(width: Int, height: Int, maxSide: Int, maxPixels: Long): Pair<Int, Int>? = target(width, height, maxSide, maxPixels)
+
+  private fun target(width: Int, height: Int, maxSide: Int, maxPixels: Long): Pair<Int, Int>? {
+    if (width <= 0 || height <= 0) return null
+    var scale = 1.0
+    scale = min(scale, max(maxSide, 1).toDouble() / max(width, height))
+    scale = min(scale, sqrt(max(maxPixels, 1L).toDouble() / (width.toDouble() * height)))
+    if (scale >= 1.0) return null
+    return max(1, (width * scale).toInt()) to max(1, (height * scale).toInt())
+  }
+
+  /** Come in core-imaging: un'immagine animata tiene in memoria piu' fotogrammi, quindi un quarto del tetto. */
+  private const val ANIMATED_FRAMES_IN_MEMORY = 4L
 }

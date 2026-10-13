@@ -205,6 +205,25 @@ interface LocationDao {
   @Query("SELECT v.media_id FROM media_location l JOIN media_version v ON v.version_id = l.version_id WHERE l.location_id = :locationId")
   suspend fun mediaIdOf(locationId: Long): String?
 
+  /**
+   * Gli **hash completi rimandati** (Fase 3, P11; docs/fase3-progetto.md §2.1, riga "Impronta"): le copie presenti sul
+   * telefono, con un `_ID` in cache, di versioni **senza hash completo** piu' grandi di [minSize] che hanno la stessa
+   * impronta rapida (dimensione e hash rapido) di una versione di un **altro** media. Sono i media nati separati
+   * (`KEEP_SEPARATE`) perche' leggere il file intero durante la lettura del telefono costava troppo: la manutenzione
+   * in carica calcola l'hash completo e il catalogo decide. Le piu' vecchie prima, al massimo [limit].
+   *
+   * Solo una query: lo schema non cambia (l'esistenza del gemello usa l'indice `size, quick_hash`).
+   */
+  @Query(
+    "SELECT l.* FROM media_location l JOIN media_version v ON v.version_id = l.version_id " +
+      "WHERE l.location_type = 'phone' AND l.state = 'present' AND l.media_store_id IS NOT NULL " +
+      "AND v.full_hash IS NULL AND v.size > :minSize " +
+      "AND EXISTS (SELECT 1 FROM media_version o WHERE o.size = v.size AND o.quick_hash = v.quick_hash " +
+      "AND o.media_id != v.media_id) " +
+      "ORDER BY l.location_id LIMIT :limit",
+  )
+  suspend fun deferredFullHashes(minSize: Long, limit: Int): List<MediaLocationEntity>
+
   /** I media con almeno una copia in una share: sono gli unici toccati da un cambio della sua area. */
   @Query(
     "SELECT DISTINCT v.media_id FROM media_location l JOIN media_version v ON v.version_id = l.version_id " +

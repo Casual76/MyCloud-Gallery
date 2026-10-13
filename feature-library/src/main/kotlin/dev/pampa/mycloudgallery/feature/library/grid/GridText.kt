@@ -12,15 +12,14 @@ import dev.pampa.mycloudgallery.core.model.CellFlags
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.places.contract.PlaceNames
 import dev.pampa.mycloudgallery.feature.library.R
+import dev.pampa.mycloudgallery.core.library.text.GalleryDates
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 
-// Le parole della griglia: titoli delle intestazioni, durate, descrizioni per il lettore di schermo. Tutto in italiano
-// (Locale.ITALIAN, come i luoghi), con i formattatori creati una volta sola.
+// Le parole della griglia: titoli delle intestazioni, durate, descrizioni per il lettore di schermo. Tutto in italiano:
+// le date passano dall'unico punto di formattazione della galleria (`GalleryDates`, Locale.ITALIAN, come i luoghi).
 
 /** Le stringhe della griglia, risolte una volta per composizione della griglia (non per cella). */
 @Immutable
@@ -84,18 +83,11 @@ internal fun rememberGridStrings(): GridStrings {
 
 internal object GridText {
 
-  private val Italian: Locale = Locale.ITALIAN
-  private val MonthYear: DateTimeFormatter = DateTimeFormatter.ofPattern("LLLL yyyy", Italian)
-  private val DayMonth: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE d MMMM", Italian)
-  private val DayMonthYear: DateTimeFormatter = DateTimeFormatter.ofPattern("EEEE d MMMM yyyy", Italian)
-  private val FullDate: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMMM yyyy", Italian)
-  private val Time: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm", Italian)
-
   /** `aaaammgg` -> data. */
   fun date(day: Int): LocalDate = LocalDate.of(day / 10_000, (day / 100) % 100, day % 100)
 
-  /** "Marzo 2024". */
-  fun month(month: YearMonth): String = month.format(MonthYear).capitalized()
+  /** "Marzo 2024" (P11: le date passano tutte da `GalleryDates`, sempre in italiano). */
+  fun month(month: YearMonth): String = GalleryDates.monthYear(month)
 
   /**
    * Il titolo di un'intestazione (§2.4): Anni "2024"; Mesi "Marzo 2024"; Giorni "Oggi", "Ieri", "Martedì 12 marzo" (con
@@ -109,8 +101,7 @@ internal object GridText {
       when {
         day == today -> strings.today
         day == today.minusDays(1) -> strings.yesterday
-        day.year == today.year -> day.format(DayMonth).capitalized()
-        else -> day.format(DayMonthYear).capitalized()
+        else -> GalleryDates.weekdayTitle(day, withYear = day.year != today.year)
       }
     }
   }
@@ -161,9 +152,9 @@ internal object GridText {
       MediaKind.RAW_PHOTO -> strings.kindRaw
       MediaKind.ANIMATED_IMAGE -> strings.kindAnimated
     }
-    parts += day.format(FullDate)
+    parts += GalleryDates.date(day)
     val instant = Instant.ofEpochMilli(snapshot.sortTimeAt(index)).atZone(zone)
-    if (instant.toLocalDate() == day && !CellFlags.has(flags, CellFlags.DATE_ESTIMATED)) parts += instant.format(Time)
+    if (instant.toLocalDate() == day && !CellFlags.has(flags, CellFlags.DATE_ESTIMATED)) parts += GalleryDates.time(instant.toLocalDateTime())
     places.labelOfId(snapshot.placeAt(index))?.let { parts += it }
     if (kind == MediaKind.VIDEO) parts += strings.duration.format(duration(snapshot.durationMsAt(index)))
     if (CellFlags.has(flags, CellFlags.FAVORITE)) parts += if (feminine) strings.favoriteFeminine else strings.favoriteMasculine
@@ -174,6 +165,4 @@ internal object GridText {
     if (group > 1) parts += strings.group.format(group)
     return parts.joinToString(", ")
   }
-
-  private fun String.capitalized(): String = replaceFirstChar { it.titlecase(Italian) }
 }

@@ -5,6 +5,7 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.activity.compose.ReportDrawnAfter
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -14,9 +15,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
@@ -33,7 +37,14 @@ import dev.pampa.mycloudgallery.core.family.contract.TrustStatus
 import dev.pampa.mycloudgallery.debugtools.DeveloperTools
 import dev.pampa.mycloudgallery.feature.diagnostics.DiagnosticsGraphRoute
 import dev.pampa.mycloudgallery.feature.diagnostics.diagnosticsGraph
-import dev.pampa.mycloudgallery.feature.library.library.rememberEmptyLibraryTabState
+import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
+import dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess
+import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionsTab
+import dev.pampa.mycloudgallery.feature.library.collections.collectionsGraph
+import dev.pampa.mycloudgallery.feature.library.collections.openCollection
+import dev.pampa.mycloudgallery.feature.library.library.LibraryTabState
+import dev.pampa.mycloudgallery.feature.library.library.LibraryViewModel
 import dev.pampa.mycloudgallery.feature.onboarding.OnboardingGraphRoute
 import dev.pampa.mycloudgallery.feature.onboarding.OnboardingResumeRoute
 import dev.pampa.mycloudgallery.feature.onboarding.join.AwaitingApprovalScreen
@@ -42,6 +53,11 @@ import dev.pampa.mycloudgallery.feature.settings.SettingsDevicesRoute
 import dev.pampa.mycloudgallery.feature.settings.SettingsGraphRoute
 import dev.pampa.mycloudgallery.feature.settings.SettingsPasswordRoute
 import dev.pampa.mycloudgallery.feature.settings.settingsGraph
+import dev.pampa.mycloudgallery.feature.viewer.ViewerServices
+import dev.pampa.mycloudgallery.main.GalleryHostViewModel
+import dev.pampa.mycloudgallery.main.GalleryRoot
+import dev.pampa.mycloudgallery.main.LibraryCommandHostEffect
+import dev.pampa.mycloudgallery.main.LocalViewerHost
 import dev.pampa.mycloudgallery.main.MainScaffold
 import dev.pampa.mycloudgallery.root.BlockedScreen
 import dev.pampa.mycloudgallery.root.RootDestination
@@ -49,6 +65,8 @@ import dev.pampa.mycloudgallery.root.WipedScreen
 import dev.pampa.mycloudgallery.status.GlobalStatus
 import dev.pampa.mycloudgallery.status.StatusAction
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 
 /** La galleria: schede, indicatore, Impostazioni. */
@@ -98,14 +116,28 @@ fun AppNavHost(
   key(destination) {
     val nav = rememberNavController()
     onNavController(nav)
-    NavHost(
-      navController = nav,
-      startDestination = startRoute(destination),
-      enterTransition = { enter() },
-      exitTransition = { exit() },
-      popEnterTransition = { popEnter() },
-      popExitTransition = { popExit() },
-    ) {
+    if (destination == RootDestination.Main) {
+      // La galleria: host dei pop-up e del viewer sopra tutta la navigazione (Libreria, Raccolte, Impostazioni).
+      GalleryRoot { AppNavGraph(destination, nav, status, actions) }
+    } else {
+      AppNavGraph(destination, nav, status, actions)
+    }
+  }
+}
+
+@Composable
+private fun AppNavGraph(destination: RootDestination, nav: NavHostController, status: GlobalStatus, actions: RootNavActions) {
+  // Le Raccolte aprono il viewer del grafo vero sull'host della galleria (D12: il viewer non e' una rotta).
+  val viewer = LocalViewerHost.current
+  val gallery: GalleryHostViewModel? = if (destination == RootDestination.Main) hiltViewModel() else null
+  NavHost(
+    navController = nav,
+    startDestination = startRoute(destination),
+    enterTransition = { enter() },
+    exitTransition = { exit() },
+    popEnterTransition = { popEnter() },
+    popExitTransition = { popExit() },
+  ) {
       // Revisione 2, F5: per ogni stato si registrano solo le destinazioni raggiungibili da li'. Una richiesta di
       // navigazione arrivata da fuori (oltre all'intent ripulito da MainActivity) non trova le altre.
       when (destination) {
@@ -113,6 +145,8 @@ fun AppNavHost(
           composable<MainRoute> {
             MainDestination(nav = nav, status = status, openWireGuard = actions.openWireGuard)
           }
+          // Fase 3 (P10): le pagine delle Raccolte sul telefono (griglie filtrate, Nascosti, Eliminati di recente).
+          collectionsGraph(nav = nav, onOpenViewer = { request -> gallery?.let { viewer?.open(request, it.viewerServices) } })
           // "Da completare" nelle Impostazioni riapre i passi saltati dell'onboarding.
           onboardingGraph(nav = nav, onDone = {}, onPause = actions.pause)
           settingsGraph(
@@ -141,7 +175,6 @@ fun AppNavHost(
         // quando non c'e' un passo locale da fare (ingresso, recupero) manda l'app in secondo piano, a configurazione salvata.
         RootDestination.Onboarding, RootDestination.Loading -> onboardingGraph(nav = nav, onDone = {}, onPause = actions.pause)
       }
-    }
   }
 }
 
@@ -184,9 +217,24 @@ private fun onDiagnosticsAction(nav: NavHostController, action: DiagAction) {
   }
 }
 
+/**
+ * La galleria (P11): la Libreria vera dal suo ViewModel (grafo della Fase 3; in debug anche la Libreria sintetica), i
+ * comandi della Libreria legati all'activity (permessi solo da un tocco, condivisione, cestino di sistema), le Raccolte
+ * con le loro rotte, il viewer sull'host della galleria.
+ */
 @Composable
 private fun MainDestination(nav: NavHostController, status: GlobalStatus, openWireGuard: () -> Boolean) {
   var tab by rememberSaveable { mutableStateOf(GalleryTab.Library) }
+  val library: LibraryViewModel = hiltViewModel()
+  val gallery: GalleryHostViewModel = hiltViewModel()
+  val viewer = LocalViewerHost.current
+  val state by library.state.collectAsStateWithLifecycle()
+  val libraryViewer = remember(state) { gallery.viewerServicesFor(state) }
+
+  LibraryCommandHostEffect(state.commands, onAccessChanged = gallery::refreshAccess)
+  ReportLibraryDrawn(state)
+  RestoreLibraryViewer(state, libraryViewer)
+
   MainScaffold(
     status = status,
     selectedTab = tab,
@@ -199,10 +247,58 @@ private fun MainDestination(nav: NavHostController, status: GlobalStatus, openWi
       }
     },
     onOpenSettings = { nav.navigate(SettingsGraphRoute) },
-    // P0: i fake (debug: Libreria sintetica; release: Libreria vuota). P11 collega il grafo vero.
-    libraryState = DeveloperTools.libraryTabState() ?: rememberEmptyLibraryTabState(),
+    libraryState = state,
+    libraryViewer = libraryViewer,
+    collections = { slot ->
+      CollectionsTab(
+        contentPadding = slot.contentPadding,
+        backdropOut = slot.backdropOut,
+        onOpenViewer = { request -> viewer?.open(request, gallery.viewerServices) },
+        onOpenCollection = { kind -> nav.openCollection(kind) },
+        onOpenSettings = { nav.navigate(SettingsGraphRoute) },
+        statusHeader = slot.statusHeader,
+      )
+    },
   )
 }
+
+/**
+ * Il TTFD dell'avvio a freddo (§2.6, misurato da P9): `reportFullyDrawn` quando la prima pagina di miniature e' disegnata,
+ * o al piu' 300 ms dopo il primo layout della griglia. Una Libreria vuota o senza permessi lo dice subito.
+ */
+@Composable
+private fun ReportLibraryDrawn(state: LibraryTabState) {
+  ReportDrawnAfter {
+    val grid = state.grid
+    withTimeoutOrNull(LAYOUT_WAIT_MS) {
+      snapshotFlow { grid.layout != null || state.phone.value.access == MediaAccess.NONE }.first { it }
+    }
+    withTimeoutOrNull(THUMBNAILS_WAIT_MS) {
+      grid.loader.stats.first { it.inFlight == 0 && it.started + it.memoryHits > 0 }
+    }
+  }
+}
+
+/** E-V8: dopo una ricreazione la Libreria riapre il viewer sull'elemento che si stava guardando (se c'e' ancora). */
+@Composable
+private fun RestoreLibraryViewer(state: LibraryTabState, services: ViewerServices) {
+  val viewer = LocalViewerHost.current ?: return
+  val pending = viewer.pendingLibraryRestore ?: return
+  LaunchedEffect(pending, state) {
+    val id = runCatching { MediaId(pending) }.getOrNull()
+    val ready = id != null && withTimeoutOrNull(RESTORE_WAIT_MS) {
+      snapshotFlow { state.grid.layout != null && state.grid.view.viewIndexOf(id) >= 0 }.first { it }
+    } == true
+    viewer.consumeLibraryRestore()
+    if (ready && id != null) {
+      viewer.open(ViewerRequest(state.viewerItems, id, state.grid.viewerAnchor, secure = false), services, fromLibrary = true)
+    }
+  }
+}
+
+private const val LAYOUT_WAIT_MS = 5_000L
+private const val THUMBNAILS_WAIT_MS = 300L
+private const val RESTORE_WAIT_MS = 5_000L
 
 /** La rotta di partenza per ogni destinazione della radice. */
 internal fun startRoute(destination: RootDestination): Any = when (destination) {

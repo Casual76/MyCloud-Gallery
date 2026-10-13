@@ -29,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -49,7 +50,10 @@ import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridNotice
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryDeleteLocation
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryDeleteLocationKind
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryDeleteScope
+import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryConfirmSheet
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryDeleteSheet
+import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetScaffold
+import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetTone
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustration
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryStateKind
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryStateView
@@ -128,13 +132,14 @@ internal fun LibraryEffects(state: LibraryTabState) {
 @Composable
 private fun DebugSyntheticSize(hooks: LibraryDebugHooks) {
   val context = LocalContext.current
+  // Prima si legge, poi si scrive: con due effetti separati la scrittura del valore iniziale (la Libreria del telefono,
+  // P11) poteva arrivare prima della lettura e cancellare la scelta fatta da `adb`.
   LaunchedEffect(hooks) {
     val wanted = withContext(Dispatchers.IO) { debugMarker(context)?.takeIf { it.exists() }?.readText()?.trim()?.toIntOrNull() }
     if (wanted != null && wanted > 0) hooks.select(wanted)
-  }
-  LaunchedEffect(hooks, hooks.current) {
-    val size = hooks.current
-    withContext(Dispatchers.IO) { runCatching { debugMarker(context)?.writeText(size.toString()) } }
+    snapshotFlow { hooks.current }.collect { size ->
+      withContext(Dispatchers.IO) { runCatching { debugMarker(context)?.writeText(size.toString()) } }
+    }
   }
 }
 
@@ -379,7 +384,12 @@ internal fun LibraryLevelBar(level: GridLevel, backdrop: GlassBackdropState, onS
  * (D14, solo dove il cestino di sistema c'e'). Con niente di selezionato le azioni sono spente.
  */
 @Composable
-internal fun LibrarySelectionBar(state: LibraryTabState, backdrop: GlassBackdropState, onDelete: () -> Unit) {
+internal fun LibrarySelectionBar(
+  state: LibraryTabState,
+  backdrop: GlassBackdropState,
+  onDelete: () -> Unit,
+  onHideGroups: () -> Unit = {},
+) {
   val grid = state.grid
   val scope = rememberCoroutineScope()
   val selected by grid.selection.selected.collectAsState()
@@ -402,9 +412,14 @@ internal fun LibrarySelectionBar(state: LibraryTabState, backdrop: GlassBackdrop
         icon = Icons.Rounded.VisibilityOff,
         contentDescription = stringResource(R.string.library_action_hide),
         onClick = {
-          val ids = selected.ids
-          scope.launch { state.actions.setHidden(ids, true) }
-          grid.stopSelecting()
+          // P5/P11: nascondere la copertina di un gruppo nasconde tutto il gruppo; prima lo si dice (foglio).
+          if (grid.hiddenWithGroups(selected.ids) > selected.size) {
+            onHideGroups()
+          } else {
+            val ids = selected.ids
+            scope.launch { state.actions.setHidden(ids, true) }
+            grid.stopSelecting()
+          }
         },
         enabled = any,
       ),
@@ -442,6 +457,59 @@ internal fun LibraryDeleteSheet(visible: Boolean, state: LibraryTabState, onDism
     onDismissRequest = onDismiss,
     scopes = listOf(GalleryDeleteScope.PhoneOnly),
   )
+}
+
+/**
+ * Il foglio "Nascondi" quando la selezione contiene la copertina di un gruppo (raffica, RAW+JPEG): nel catalogo il
+ * nascosto vale per tutto il gruppo (E-H1, nota di P5), quindi il foglio dice quanti elementi spariscono davvero.
+ */
+@Composable
+internal fun LibraryHideGroupSheet(visible: Boolean, state: LibraryTabState, onDismiss: () -> Unit) {
+  val grid = state.grid
+  val scope = rememberCoroutineScope()
+  val selected by grid.selection.selected.collectAsState()
+  val total = remember(selected, grid.view) { grid.hiddenWithGroups(selected.ids) }
+  val title = pluralStringResource(R.plurals.library_hide_group_title, total, total)
+  GalleryConfirmSheet(visible = visible, onDismissRequest = onDismiss, paneTitle = title) {
+    GallerySheetScaffold(
+      icon = Icons.Rounded.VisibilityOff,
+      tone = GallerySheetTone.Caution,
+      title = title,
+      message = stringResource(R.string.library_hide_group_message),
+      actions = {
+        FluidButton(
+          text = stringResource(R.string.library_action_hide),
+          onClick = {
+            val ids = selected.ids
+            scope.launch { state.actions.setHidden(ids, true) }
+            onDismiss()
+            grid.stopSelecting()
+          },
+          size = FluidButtonSize.Large,
+          fillWidth = true,
+        )
+        FluidButton(
+          text = stringResource(R.string.library_hide_group_cancel),
+          onClick = onDismiss,
+          style = FluidButtonStyle.Tinted,
+          size = FluidButtonSize.Large,
+          fillWidth = true,
+        )
+      },
+    )
+  }
+}
+
+/**
+ * Quanti media nasconde davvero nascondere [ids]: una copertina porta con se' tutto il suo gruppo (`groupSizeAt`).
+ * Un id che non e' nell'indice corrente conta per uno.
+ */
+internal fun MediaGridState.hiddenWithGroups(ids: Set<MediaId>): Int {
+  val snapshot = view.snapshot
+  return ids.sumOf { id ->
+    val index = indexOf(id).takeIf { it in 0 until snapshot.size } ?: snapshot.indexOf(id)
+    if (index >= 0) snapshot.groupSizeAt(index).coerceAtLeast(1) else 1
+  }
 }
 
 /** Se [id] e' un preferito (dai flag dell'indice). */

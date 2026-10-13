@@ -196,8 +196,22 @@ internal object DiagCatalogEntries {
     DiagEntry(DiagCodes.PROFILE_HEARTBEAT_OK, DiagSection.PROFILES, DiagSeverity.OK, R.string.diag_profile_heartbeat_ok_title, 0, null),
     DiagEntry(DiagCodes.PROFILE_HEARTBEAT_STALE, DiagSection.PROFILES, DiagSeverity.WARNING, R.string.diag_profile_heartbeat_stale_title, R.string.diag_profile_heartbeat_stale_guide, null),
 
-    // --- Libreria del telefono (Fase 3): lo stato; i codici dei casi limite li aggiunge P11 --------------------------
+    // --- Libreria del telefono (Fase 3) ------------------------------------------------------------------------------
     DiagEntry(DiagCodes.PHONE_LIBRARY_STATE, DiagSection.PHONE_LIBRARY, DiagSeverity.INFO, R.string.diag_phone_library_state_title, 0, null),
+    // PhoneLibraryDiagnostics (core-mediastore).
+    DiagEntry(DiagCodes.PHONE_ACCESS, DiagSection.PHONE_LIBRARY, DiagSeverity.WARNING, R.string.diag_phone_access_title, R.string.diag_phone_access_guide, DiagAction.OPEN_APP_DETAILS),
+    DiagEntry(DiagCodes.PHONE_MEDIA_LOCATION, DiagSection.PHONE_LIBRARY, DiagSeverity.WARNING, R.string.diag_phone_media_location_title, R.string.diag_phone_media_location_guide, DiagAction.OPEN_APP_DETAILS),
+    DiagEntry(DiagCodes.PHONE_SYNC, DiagSection.PHONE_LIBRARY, DiagSeverity.INFO, R.string.diag_phone_sync_title, R.string.diag_phone_sync_guide, null),
+    DiagEntry(DiagCodes.PHONE_DISK_FULL, DiagSection.PHONE_LIBRARY, DiagSeverity.ERROR, R.string.diag_phone_disk_full_title, R.string.diag_phone_disk_full_guide, null),
+    DiagEntry(DiagCodes.PHONE_STORAGE_LOCKED, DiagSection.PHONE_LIBRARY, DiagSeverity.INFO, R.string.diag_phone_storage_locked_title, R.string.diag_phone_storage_locked_guide, null),
+    DiagEntry(DiagCodes.PHONE_VOLUMES, DiagSection.PHONE_LIBRARY, DiagSeverity.INFO, R.string.diag_phone_volumes_title, R.string.diag_phone_volumes_guide, null),
+    DiagEntry(DiagCodes.PHONE_IGNORED, DiagSection.PHONE_LIBRARY, DiagSeverity.INFO, R.string.diag_phone_ignored_title, R.string.diag_phone_ignored_guide, null),
+    DiagEntry(DiagCodes.PHONE_ABSENCES_BLOCKED, DiagSection.PHONE_LIBRARY, DiagSeverity.WARNING, R.string.diag_phone_absences_blocked_title, R.string.diag_phone_absences_blocked_guide, DiagAction.OPEN_APP_DETAILS),
+    DiagEntry(DiagCodes.PHONE_OTHER_PROFILES, DiagSection.PHONE_LIBRARY, DiagSeverity.INFO, R.string.diag_phone_other_profiles_title, R.string.diag_phone_other_profiles_guide, null),
+    // LibraryDiagnostics (:app).
+    DiagEntry(DiagCodes.PHONE_PLACES, DiagSection.PHONE_LIBRARY, DiagSeverity.INFO, R.string.diag_phone_places_title, R.string.diag_phone_places_guide, null),
+    DiagEntry(DiagCodes.PHONE_INDEX, DiagSection.PHONE_LIBRARY, DiagSeverity.INFO, R.string.diag_phone_index_title, R.string.diag_phone_index_guide, null),
+    DiagEntry(DiagCodes.PHONE_THUMBNAILS, DiagSection.PHONE_LIBRARY, DiagSeverity.INFO, R.string.diag_phone_thumbnails_title, R.string.diag_phone_thumbnails_guide, null),
 
     // --- Rete e NAS --------------------------------------------------------
     DiagEntry(DiagCodes.DIAG_SECTION_UNAVAILABLE, DiagSection.NETWORK_AND_NAS, DiagSeverity.WARNING, R.string.diag_diag_section_unavailable_title, R.string.diag_diag_section_unavailable_guide, null),

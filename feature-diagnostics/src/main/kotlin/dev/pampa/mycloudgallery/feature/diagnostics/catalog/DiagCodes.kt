@@ -181,9 +181,32 @@ object DiagCodes {
   @JvmField val DIAG_SECTION_UNAVAILABLE = DiagCode("DIAG_SECTION_UNAVAILABLE")
 
   // --- Libreria del telefono (Fase 3) --------------------------------------------------------------------------
-  // P0 aggiunge solo il codice di stato che tiene viva la sezione PHONE_LIBRARY (un test vuole almeno una voce per
-  // sezione). I codici veri della Fase 3 (E-P1, E-P3, E-P21, E-P22, E-M12...) li scrive P11.
+  // `PHONE_LIBRARY_STATE` e' il codice di stato che P0 ha messo per tenere viva la sezione; lo teniamo (nessun
+  // contributore lo produce, ma e' innocuo e il suo titolo serve alle voci senza un codice piu' preciso).
   @JvmField val PHONE_LIBRARY_STATE = DiagCode("PHONE_LIBRARY_STATE")
+
+  // I codici di `PhoneLibraryDiagnostics` (core-mediastore, P2): stessi id e stessi edge case di
+  // `PhoneLibraryDiagCodes`, scritti come letterali perche' questo modulo non dipende da core-mediastore.
+  // `Fase3CatalogTest` verifica la tabella qui sotto e un test di :app (P11) verifica l'uguaglianza con
+  // `PhoneLibraryDiagCodes`: un refuso in un id farebbe mostrare la voce senza titolo ne' "cosa fare".
+  @JvmField val PHONE_ACCESS = DiagCode("PHONE_ACCESS", setOf("E-P1", "E-P15"))
+  @JvmField val PHONE_MEDIA_LOCATION = DiagCode("PHONE_MEDIA_LOCATION", setOf("E-P21"))
+  @JvmField val PHONE_SYNC = DiagCode("PHONE_SYNC", setOf("E-P4", "E-P8", "E-P12", "E-P22"))
+  @JvmField val PHONE_DISK_FULL = DiagCode("PHONE_DISK_FULL", setOf("E-P3"))
+  @JvmField val PHONE_STORAGE_LOCKED = DiagCode("PHONE_STORAGE_LOCKED", setOf("E-P2", "E-P10", "E-P13"))
+  @JvmField val PHONE_VOLUMES = DiagCode("PHONE_VOLUMES", setOf("E-P6"))
+  @JvmField val PHONE_IGNORED = DiagCode("PHONE_IGNORED", setOf("E-M12"))
+  @JvmField val PHONE_ABSENCES_BLOCKED = DiagCode("PHONE_ABSENCES_BLOCKED", setOf("E-P1", "E-P15"))
+  @JvmField val PHONE_OTHER_PROFILES = DiagCode("PHONE_OTHER_PROFILES", setOf("E-P7", "E-P17"))
+
+  // I codici del contributore di `:app` (LibraryDiagnostics, P11): luoghi offline, indice della Libreria, miniature.
+  // PHONE_PLACES: solo se il dataset dei luoghi c'e' o no (nessun edge case: manca per scelta finche' i dati GeoNames non
+  // sono inclusi, §6 del progetto). PHONE_INDEX: dimensione, ricostruzioni, patch e scritture dell'istantanea
+  // (E-H1 riguarda i nascosti, che non entrano mai nell'indice: non e' un avviso e non si dichiara qui).
+  // PHONE_THUMBNAILS: i contatori della cache delle miniature e delle decodifiche in volo (E-V5).
+  @JvmField val PHONE_PLACES = DiagCode("PHONE_PLACES")
+  @JvmField val PHONE_INDEX = DiagCode("PHONE_INDEX")
+  @JvmField val PHONE_THUMBNAILS = DiagCode("PHONE_THUMBNAILS", setOf("E-V5"))
 
   // --- I codici scritti dai contributori di core-network e core-family (P9) ----------------------------------
   // P2 e P3 hanno scelto i propri identificativi mentre P8 scriveva il catalogo: qui sono gli STESSI oggetti dei

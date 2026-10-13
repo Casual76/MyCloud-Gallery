@@ -6,6 +6,7 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import androidx.navigation.navigation
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
+import dev.pampa.mycloudgallery.feature.settings.about.AboutRoute
 import dev.pampa.mycloudgallery.feature.settings.account.AddressRoute
 import dev.pampa.mycloudgallery.feature.settings.account.NasAccountLinks
 import dev.pampa.mycloudgallery.feature.settings.account.NasAccountRoute
@@ -80,6 +81,9 @@ data object SettingsSecurityRoute
 @Serializable
 data object SettingsBackupRoute
 
+@Serializable
+data object SettingsAboutRoute
+
 /**
  * Le Impostazioni (P7): Dispositivi (elenco, dettaglio, approvazione, segnala perso), Famiglia (invito, kit di
  * recupero, secondo admin, reset, QR "stato"), Account del NAS (password, indirizzo), Rete e VPN, Sicurezza
@@ -113,6 +117,7 @@ fun NavGraphBuilder.settingsGraph(
             openNetwork = { nav.navigate(SettingsNetworkRoute) },
             openSecurity = { nav.navigate(SettingsSecurityRoute) },
             openBackupNotice = { nav.navigate(SettingsBackupRoute) },
+            openAbout = { nav.navigate(SettingsAboutRoute) },
           ),
           openDiagnostics = openDiagnostics,
           resumeStep = resumeStep,
@@ -193,5 +198,8 @@ fun NavGraphBuilder.settingsGraph(
         BackupNoticeScreen(onBack = back, onReviewChecklist = { resumeStep(OnboardingStep.SECURITY_NOTICE) })
       }
     }
+
+    // --- Informazioni e licenze ---
+    composable<SettingsAboutRoute> { SettingsHost { AboutRoute(onBack = back) } }
   }
 }

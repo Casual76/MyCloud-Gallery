@@ -8,10 +8,9 @@ import dev.pampa.mycloudgallery.core.model.CaptureTimeSource
 import dev.pampa.mycloudgallery.core.model.GeoPoint
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.feature.viewer.R
+import dev.pampa.mycloudgallery.core.library.text.GalleryDates
 import java.time.DateTimeException
 import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.time.format.FormatStyle
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -27,26 +26,24 @@ import kotlin.math.roundToInt
  */
 internal class ViewerFormat(
   private val context: Context,
-  private val locale: Locale = Locale.getDefault(),
+  // P11: l'app e' solo in italiano. Le date passano da `GalleryDates` e i numeri (megapixel, coordinate) usano la stessa
+  // lingua, anche con il telefono in inglese.
+  private val locale: Locale = GalleryDates.LOCALE,
 ) {
 
   internal val resources get() = context.resources
 
-  private val longDate: DateTimeFormatter = DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG).withLocale(locale)
-  private val fullDate: DateTimeFormatter = DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).withLocale(locale)
-  private val shortTime: DateTimeFormatter = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT).withLocale(locale)
-
   /** La data per il titolo della barra: "12 marzo 2024". */
-  fun dateTitle(time: CaptureTime): String = longDate.format(time.localDateTime)
+  fun dateTitle(time: CaptureTime): String = GalleryDates.date(time.localDateTime)
 
   /** La data del giorno `aaaammgg` dell'indice, quando i dettagli non sono ancora arrivati. */
-  fun dateTitle(localDay: Int): String? = parseLocalDay(localDay)?.let { longDate.format(it) }
+  fun dateTitle(localDay: Int): String? = parseLocalDay(localDay)?.let { GalleryDates.date(it) }
 
   /** L'ora: "12:41". */
-  fun time(time: CaptureTime): String = shortTime.format(time.localDateTime)
+  fun time(time: CaptureTime): String = GalleryDates.time(time.localDateTime)
 
   /** La riga del pannello: "mercoledì 12 marzo 2024, 12:41". */
-  fun dateTimeLine(time: CaptureTime): String = fullDate.format(time.localDateTime) + ", " + shortTime.format(time.localDateTime)
+  fun dateTimeLine(time: CaptureTime): String = GalleryDates.weekdayDate(time.localDateTime) + ", " + GalleryDates.time(time.localDateTime)
 
   /** Il sottotitolo della barra: "12:41 · Oslo", o solo l'ora se il luogo non e' noto. */
   fun subtitle(time: CaptureTime?, placeName: String?): String? = when {
@@ -93,8 +90,15 @@ internal class ViewerFormat(
     return size + " · " + resources.getString(R.string.viewer_megapixels, text)
   }
 
-  /** Il peso: "3,4 MB". */
-  fun fileSize(bytes: Long): String = Formatter.formatFileSize(context, bytes)
+  /** Il peso: "3,4 MB" (con la virgola italiana anche se il telefono e' in un'altra lingua). */
+  fun fileSize(bytes: Long): String = Formatter.formatFileSize(localized, bytes)
+
+  /** Il contesto nella lingua della galleria, per i formattatori di Android che leggono la lingua dal contesto. */
+  private val localized: Context by lazy {
+    val configuration = android.content.res.Configuration(context.resources.configuration)
+    configuration.setLocale(locale)
+    context.createConfigurationContext(configuration)
+  }
 
   /** Il formato per un lettore umano: JPEG, HEIC, PNG, WebP, GIF, DNG, MP4, MOV. */
   fun formatName(mime: String?): String? {

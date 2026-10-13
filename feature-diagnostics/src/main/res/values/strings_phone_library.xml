@@ -1,7 +1,59 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <!-- Sezione «Libreria del telefono» (Fase 3). P0: il minimo perché la sezione esista; P11 aggiunge le voci dei casi limite. -->
+  <!-- Sezione «Libreria del telefono» (Fase 3). -->
   <string name="diagnostics_section_phone_library">Libreria del telefono</string>
   <string name="diagnostics_hint_phone_library">Accesso ai media, lettura del telefono, elementi ignorati e foto in attesa.</string>
   <string name="diag_phone_library_state_title">Stato della libreria del telefono</string>
+
+  <!-- Le voci del catalogo (titolo e «cosa fare»). Il testo che si vede nella schermata lo scrive chi contribuisce
+       (core-mediastore, :app); qui c'è quello degli eventi del registro e la guida che segue ogni avviso. Solo testi:
+       niente nomi di file, percorsi, volumi o luoghi. -->
+
+  <!-- Accesso ai media (E-P1, E-P15) -->
+  <string name="diag_phone_access_title">Accesso a foto e video</string>
+  <string name="diag_phone_access_guide">Con l\'accesso parziale la Libreria mostra solo le foto scelte; senza accesso la lettura del telefono resta ferma. In nessun caso ciò che non vede viene considerato cancellato. Per vedere tutto apri i permessi dell\'app e consenti foto e video.</string>
+
+  <!-- Posizione dei media (E-P21) -->
+  <string name="diag_phone_media_location_title">Posizione delle foto non consentita</string>
+  <string name="diag_phone_media_location_guide">Le foto nuove restano in attesa finché non consenti la posizione dei media: senza, Android ne toglie il GPS e le copie non sarebbero uguali agli originali. I video e le foto già lette vanno avanti. Apri i permessi dell\'app e consenti la posizione.</string>
+
+  <!-- Lettura del telefono (E-P4, E-P8, E-P12, E-P22) -->
+  <string name="diag_phone_sync_title">Lettura del telefono</string>
+  <string name="diag_phone_sync_guide">Se la lettura si ferma a metà, riparte da dove era arrivata. Dopo un aggiornamento di Android, o se il telefono rinumera i file, l\'app rilegge tutto senza creare doppioni: serve solo un po\' di pazienza.</string>
+
+  <!-- Disco pieno (E-P3) -->
+  <string name="diag_phone_disk_full_title">Spazio esaurito sul telefono</string>
+  <string name="diag_phone_disk_full_guide">La lettura del telefono è ferma perché lo spazio è finito. Non si perde niente e nessuna foto viene toccata. Libera un po\' di spazio e riparte da sola.</string>
+
+  <!-- In attesa dello sblocco (E-P2, E-P10, E-P13) -->
+  <string name="diag_phone_storage_locked_title">In attesa dello sblocco del telefono</string>
+  <string name="diag_phone_storage_locked_guide">Dopo un riavvio, o se il sistema ha messo l\'app in pausa, la lettura può partire in ritardo. Appena sblocchi il telefono e apri la Libreria, l\'app recupera tutto ciò che è cambiato nel frattempo.</string>
+
+  <!-- Volumi (E-P6) -->
+  <string name="diag_phone_volumes_title">Schede e memorie del telefono</string>
+  <string name="diag_phone_volumes_guide">Se togli una scheda, le sue foto non vengono cancellate: restano in Libreria come non raggiungibili e tornano normali appena la rimetti. Anche una scheda formattata si riconosce: le foto si ricollegano da sole.</string>
+
+  <!-- Ignorati (E-M12) -->
+  <string name="diag_phone_ignored_title">File ignorati</string>
+  <string name="diag_phone_ignored_guide">I file vuoti, o che non sono davvero foto o video, non entrano in Libreria e qui vengono solo contati. Non è un problema: tutto ciò che è una foto o un video si vede.</string>
+
+  <!-- Ondate di assenze (E-P1, E-P15) -->
+  <string name="diag_phone_absences_blocked_title">Troppe sparizioni tutte insieme</string>
+  <string name="diag_phone_absences_blocked_guide">Il telefono ha risposto con moltissimi file mancanti in un colpo solo e, per prudenza, l\'app non li ha considerati cancellati. Di solito succede quando cambiano i permessi. Controlla che l\'app abbia accesso a tutte le foto e i video.</string>
+
+  <!-- Altri profili (E-P7, E-P17) -->
+  <string name="diag_phone_other_profiles_title">Altri profili del telefono</string>
+  <string name="diag_phone_other_profiles_guide">Cartella sicura, Spazio privato e le app clonate sono profili separati di Android, come se fossero un altro utente: l\'app non vede le loro foto. Per portarle in Libreria vanno prima spostate fuori da quei profili.</string>
+
+  <!-- Luoghi offline -->
+  <string name="diag_phone_places_title">Luoghi offline</string>
+  <string name="diag_phone_places_guide">I nomi dei luoghi si ricavano dal telefono, senza internet, da un piccolo archivio incluso nell\'app. Se in questa versione l\'archivio non c\'è ancora, le foto restano senza luogo: la galleria funziona lo stesso.</string>
+
+  <!-- Indice della Libreria -->
+  <string name="diag_phone_index_title">Indice della Libreria</string>
+  <string name="diag_phone_index_guide">È l\'elenco veloce che permette alla Libreria di scorrere senza attese. Si aggiorna e si ricostruisce da solo quando serve: non richiede niente da parte tua.</string>
+
+  <!-- Miniature (E-V5) -->
+  <string name="diag_phone_thumbnails_title">Miniature</string>
+  <string name="diag_phone_thumbnails_guide">Le miniature si preparano mentre scorri e restano in una memoria temporanea, di dimensione limitata per non appesantire il telefono. Se il telefono è sotto pressione la memoria si svuota da sola e le miniature si ripreparano.</string>
 </resources>

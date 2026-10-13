@@ -56,6 +56,7 @@ import dev.pampa.mycloudgallery.core.rules.AppContextSignal
 import dev.pampa.mycloudgallery.core.rules.platform.health.BackgroundHealthReader
 import dev.pampa.mycloudgallery.core.rules.settings.RuleSettingsStore
 import dev.pampa.mycloudgallery.core.rules.traffic.TrafficLedger
+import dev.pampa.mycloudgallery.debugtools.DeveloperTools
 import dev.pampa.mycloudgallery.feature.diagnostics.connection.ConnectionTestInputSource
 import dev.pampa.mycloudgallery.feature.diagnostics.contributors.HeartbeatSource
 import dev.pampa.mycloudgallery.feature.settings.port.NasAccountSettings
@@ -69,6 +70,7 @@ import dev.pampa.mycloudgallery.work.InviteWindowStore
 import dev.pampa.mycloudgallery.work.WorkManagerCanceller
 import dev.pampa.mycloudgallery.work.WorkManagerTrustSyncScheduler
 import java.io.File
+import java.util.ServiceLoader
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -155,7 +157,19 @@ object GraphModule {
   @Provides fun nasCredentialSource(graph: AppGraph): NasCredentialSource = graph.credentialSource
 
   // --- core-family (P3, P4) -------------------------------------------------------------------------
-  @Provides fun familySetupRepository(graph: AppGraph): FamilySetupRepository = graph.setup
+  /**
+   * Lo stato del dispositivo. Due eccezioni, mai nella release:
+   * - la variante di misura (`benchmarkRelease`, P9) registra con `ServiceLoader` la famiglia "pronta" senza NAS
+   *   (docs/bench/README.md §6); nelle altre varianti `ServiceLoader` non trova niente;
+   * - la debug, **solo** con il marcatore scritto da `adb` sull'emulatore (`DeveloperTools.familyOverride`), per lo smoke
+   *   della Libreria senza un NAS. In release `familyOverride` e' sempre null.
+   */
+  @Provides
+  @Singleton
+  fun familySetupRepository(@ApplicationContext context: Context, graph: AppGraph): FamilySetupRepository =
+    ServiceLoader.load(FamilySetupRepository::class.java, FamilySetupRepository::class.java.classLoader).firstOrNull()
+      ?: DeveloperTools.familyOverride(context)
+      ?: graph.setup
 
   @Provides fun onboardingCoordinator(graph: AppGraph): OnboardingCoordinator = graph.coordinator
 

@@ -4,10 +4,11 @@ Galleria Android privata per una famiglia di soli adulti, complementare a Samsun
 telefono e del NAS WD My Cloud EX2 Ultra in una sola libreria, backup automatico, ricerca sul
 dispositivo, nessun cloud di terzi e nessuna telemetria. Telefono e tablet.
 
-Stato: **Fase 2 integrata (P9)**. L'app collega le implementazioni vere di rete e casa, sessione SMB verso il NAS,
-famiglia (onboarding, ingresso con invito, registro, approvazione, smarrimento e azzeramento, recupero dell'admin), QR,
-Impostazioni e Diagnostica. La galleria vera e propria (Libreria, backup, indice, ricerca) arriva dalla Fase 3: le schede
-sono ancora segnaposto.
+Stato: **Fase 3 integrata (P11)**. Oltre alla Fase 2 (rete e casa, sessione SMB verso il NAS, famiglia, QR, Impostazioni e
+Diagnostica) l'app mostra la **galleria del telefono**: Libreria (griglia della timeline su anni, mesi, giorni e tutte, con
+selezione, preferiti, nascosti ed eliminazione dal telefono), viewer (zoom, video, foto in movimento, informazioni) e Raccolte
+(Preferiti, Video, Screenshot, WhatsApp, Nascosti ed Eliminati di recente dietro lo sblocco). Tutto sul telefono, senza rete:
+il NAS nella Libreria arriva con la Fase 4.
 
 ## Verifica in un comando
 
@@ -40,7 +41,7 @@ segnaposto e almeno un test.
 
 | Modulo | Cosa contiene | Vede |
 |---|---|---|
-| `:app` | `MainActivity`, blocco app, navigazione, il grafo della Fase 2 (`graph/AppGraph`) esposto a Hilt, `TrustSyncWorker` e notifiche, ciclo di vita del processo; applicationId `dev.pampa.mycloudgallery` (debug: `.debug`) | tutti + `engine-ui` |
+| `:app` | `MainActivity`, blocco app, navigazione, il grafo della Fase 2 (`graph/AppGraph`) e quello della galleria (`gallery/GalleryGraph`) esposti a Hilt, `TrustSyncWorker`, `PhoneSyncWorker` e `LibraryMaintenanceWorker` (`work/GalleryWork.kt`), notifiche, ciclo di vita del processo; applicationId `dev.pampa.mycloudgallery` (debug: `.debug`; variante di misura: `.bench`) | tutti + `engine-ui` |
 | `:core-common` | logger interno (in release non scrive nulla), `Redacted`, `DispatcherProvider` | nessuno |
 | `:core-model` | tipi di dominio (media, posizioni, versioni, dispositivi) | nessuno |
 | `:core-database` | Room + KSP: replica locale dell'indice | model, common |
@@ -55,6 +56,14 @@ segnaposto e almeno un test.
 | `:feature-onboarding` | schermate della configurazione iniziale | family, network, nas, qr, security, rules, designsystem |
 | `:feature-settings` | Impostazioni, famiglia e dispositivi | family, network, nas, qr, security, rules, designsystem |
 | `:feature-diagnostics` | Diagnostica locale ed esportazione senza dati personali | common, rules, network, nas, family, designsystem |
+| `:core-places` | luoghi offline da GeoNames (asset `places.mcgp1`), fusi orari, nomi in italiano | common, model |
+| `:core-metadata` | lettura dei metadati (EXIF, contenitori video, foto in movimento), ThumbHash | common, model, places |
+| `:core-mediastore` | lettura del MediaStore e sincronizzazione della Libreria del telefono (scansione, META, impronte) | common, model, database, metadata, places |
+| `:core-imaging` | miniature, segnaposto, decodifica per il viewer con i tetti di memoria | common, model |
+| `:core-library` | indice della timeline, istantanea su disco, layout della griglia, raccolte, date (`text/GalleryDates`) | common, model, database, imaging |
+| `:feature-library` | Libreria, Raccolte, Nascosti ed Eliminati di recente | common, model, designsystem, imaging, library, mediastore, places, security |
+| `:feature-viewer` | viewer a schermo intero | common, model, database, designsystem, imaging, library, mediastore, metadata, places, security |
+| `:benchmark` | scenari Macrobenchmark e Baseline Profile (`docs/bench/README.md`); mai nell'APK | `:app` (variante `benchmarkRelease`) |
 
 Nessun ciclo: `core-common` e `core-model` sono le foglie. I `feature-*` non si conoscono fra loro: ogni
 passaggio da una funzione all'altra e' una callback scritta da `:app` (`navigation/AppNavHost.kt`).
@@ -147,6 +156,14 @@ engine-ui,engine-storage` (e rigenerare i checksum).
 Nella build debug, Impostazioni → **Sviluppo** ha l'ingresso al **Catalogo componenti** (`:core-designsystem`,
 `ComponentCatalogPlaceholder`); nella release non esiste (`app/src/debug/.../debugtools/DeveloperTools.kt`). Dal P9 la
 debug non ha piu' uno stato finto del dispositivo: e' l'app vera, quella della verifica sul campo.
+
+Solo nella debug (P11):
+- **Libreria sintetica**: Libreria → Vista → "Sintetica: 2.000 / 100.000 elementi" (torna con "Libreria del telefono"). Usa un
+  database a parte (`gallery-synthetic.db`), mai quello vero; la prima volta lo riempie in qualche decina di secondi. Da `adb`
+  si sceglie scrivendo il numero in `/sdcard/Android/data/dev.pampa.mycloudgallery.debug/files/m1-synthetic-count`.
+- **Famiglia "pronta" sull'emulatore** (senza NAS): `adb shell touch
+  /sdcard/Android/data/dev.pampa.mycloudgallery.debug/files/debug-family-ready.marker`, poi riavviare l'app. Lo si toglie
+  cancellando il file. In release non esiste.
 
 Test con Robolectric: girano sull'SDK 35 (`gradle/test-resources/robolectric.properties`) perche'
 l'SDK 36 richiede Java 21.

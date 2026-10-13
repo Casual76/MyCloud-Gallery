@@ -34,6 +34,7 @@ import kotlinx.coroutines.launch
 class ProcessWatcher(
   private val graph: AppGraph,
   private val notifications: AppNotifications,
+  private val gallery: GalleryLifecycle = GalleryLifecycle.None,
   private val ensureDaily: () -> Unit,
 ) : Application.ActivityLifecycleCallbacks {
 
@@ -46,6 +47,8 @@ class ProcessWatcher(
     graph.appContext.update(inForeground = false, profileActive = graph.platform.isUserForeground() ?: true)
     scope.launch { graph.start() }
     graph.vpnAutomation.attach(scope)
+    // Fase 3: la galleria del telefono vive quanto il processo (repository della timeline, lavori in background).
+    gallery.start()
     scope.launch {
       // All'arrivo a casa (non all'avvio: il primo valore e' lo stato di partenza).
       graph.environment.isAtHome.drop(1).distinctUntilChanged().collect { home ->
@@ -81,6 +84,7 @@ class ProcessWatcher(
     graph.appContext.update(inForeground = true, profileActive = true)
     graph.environment.onPermissionsChanged()
     graph.wireGuard.refresh()
+    gallery.onForeground()
     // Alla prima apertura lo stato salvato si sta ancora leggendo (AppGraph.start): si aspetta di saperlo.
     graph.scope.launch {
       val state = graph.setup.state.first { it !is SetupState.Loading }
@@ -92,6 +96,7 @@ class ProcessWatcher(
 
   private fun onBackground() {
     graph.appContext.update(inForeground = false, profileActive = graph.platform.isUserForeground() ?: true)
+    gallery.onBackground()
     graph.scope.launch {
       if (graph.session.activeOperations.value == 0) {
         graph.session.invalidate(InvalidateReason.PROCESS_STOPPED)
@@ -102,7 +107,8 @@ class ProcessWatcher(
 
   override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
 
-  override fun onActivityResumed(activity: Activity) = Unit
+  /** I permessi dei media non si memorizzano mai: si rileggono a ogni `onResume` (E-P1, E-P15). */
+  override fun onActivityResumed(activity: Activity) = gallery.onResume()
 
   override fun onActivityPaused(activity: Activity) = Unit
 
@@ -112,5 +118,30 @@ class ProcessWatcher(
 
   private companion object {
     const val TAG = "ProcessWatcher"
+  }
+}
+
+/**
+ * La galleria del telefono vista dal processo (Fase 3, docs/fase3-progetto.md §1.4): parte con il processo (appena la
+ * famiglia e' pronta), si aggancia al primo piano (D10: in primo piano la lettura gira sempre), si stacca in background e
+ * rilegge i permessi a ogni `onResume`. `None` nei test che non la riguardano.
+ */
+interface GalleryLifecycle {
+  fun start()
+
+  fun onForeground()
+
+  fun onBackground()
+
+  fun onResume()
+
+  object None : GalleryLifecycle {
+    override fun start() = Unit
+
+    override fun onForeground() = Unit
+
+    override fun onBackground() = Unit
+
+    override fun onResume() = Unit
   }
 }

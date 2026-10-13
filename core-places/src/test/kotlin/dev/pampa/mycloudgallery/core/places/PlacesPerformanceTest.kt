@@ -85,6 +85,23 @@ class PlacesPerformanceTest {
     assertThat(bytes.size / 170_000.0).isLessThan(36.0)
   }
 
+  /**
+   * L'apertura controlla gli indici di ogni luogo e di ogni cella (R3: un file alterato col CRC rifatto non deve far
+   * uscire un'eccezione di indice dalla ricerca). E' un passaggio lineare fatto una volta, accanto al CRC-32 che gia'
+   * legge tutto il file: su 170 mila luoghi deve restare nell'ordine delle decine di millisecondi, molto sotto il secondo.
+   */
+  @Test
+  fun lAperturaConLaValidazioneDegliIndiciCostaPoco() {
+    val bytes = TestData.bytes(realisticSize(Random(2027)))
+    PlacesDataset.openForTest(bytes) // riscaldamento della JIT
+    val runs = 5
+    val started = System.nanoTime()
+    repeat(runs) { PlacesDataset.openForTest(bytes) }
+    val perOpenMs = (System.nanoTime() - started) / 1_000_000.0 / runs
+    println("apertura di 170000 luoghi (CRC-32 e validazione degli indici): %.1f ms".format(perOpenMs))
+    assertThat(perOpenMs).isLessThan(1_000.0)
+  }
+
   @Test
   fun centomilaRicercheSulMiniDataset() {
     val data = PlacesDataset.openForTest(TestData.miniBytes)

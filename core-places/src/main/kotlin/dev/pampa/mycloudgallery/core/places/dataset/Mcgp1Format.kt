@@ -194,5 +194,5 @@ internal class Mcgp1Layout(
 
 /** Il file non e' un MCGP1 valido. [reason] dice dove, mai con coordinate o nomi. */
 internal class Mcgp1FormatException(val reason: Reason, message: String) : Exception(message) {
-  enum class Reason { TOO_SMALL, BAD_MAGIC, BAD_COUNTS, BAD_LAYOUT, BAD_SIZE, BAD_INDEX, BAD_CHECKSUM }
+  enum class Reason { TOO_SMALL, BAD_MAGIC, BAD_COUNTS, BAD_LAYOUT, BAD_SIZE, BAD_INDEX, BAD_CHECKSUM, BAD_RECORD }
 }

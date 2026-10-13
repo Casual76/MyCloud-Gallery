@@ -30,6 +30,12 @@ internal object Sniffer {
   /** Le marche `ftyp` (principale o compatibili) che dicono "immagine HEIF/AVIF". */
   private val IMAGE_BRANDS = setOf("heic", "heix", "heim", "heis", "hevc", "hevx", "hevm", "hevs", "mif1", "msf1", "mif2", "avif", "avis", "heif")
 
+  /**
+   * Marche compatibili lette da `ftyp` oltre alla principale. Un file vero ne dichiara da 2 a una decina; chi chiama passa
+   * oggi 64 byte, ma il tetto resta anche per una testa piu' lunga (riquadro `ftyp` dichiarato grandissimo).
+   */
+  internal const val MAX_COMPATIBLE_BRANDS = 32
+
   /** I primi riquadri che un MP4 o MOV senza `ftyp` (vecchi QuickTime) puo' avere. */
   private val BARE_ISO_BOXES = setOf("moov", "mdat", "wide", "free", "skip", "pnot")
 
@@ -76,7 +82,7 @@ internal object Sniffer {
       val major = head.fourcc(8)
       val brands = mutableListOf(major)
       var i = 16
-      while (i + 4 <= end) {
+      while (i + 4 <= end && brands.size <= MAX_COMPATIBLE_BRANDS) {
         brands += head.fourcc(i)
         i += 4
       }

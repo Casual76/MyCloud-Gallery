@@ -507,7 +507,22 @@ internal class Mcgp1 private constructor(
     private fun fail(reason: Mcgp1FormatException.Reason, message: String): Nothing = throw Mcgp1FormatException(reason, message)
   }
 
-  /** Controlli economici sull'indice: i bordi e l'ordine delle fasce (720 letture). */
+  /**
+   * Controlla tutto cio' che la lettura usa come indice o come offset: se qui passa, nessun accesso della ricerca o dei
+   * campi puo' uscire dal file o dalle tabelle (R3 della revisione di sicurezza della Fase 3: un file alterato con il
+   * CRC-32 ricalcolato, che il CRC non vede, deve dare un [Mcgp1FormatException] e non un `IndexOutOfBounds` a meta' ricerca).
+   *
+   * Un solo passaggio lineare (fasce, celle, luoghi, tabelle: nel file vero qualche centinaio di migliaia di record, pochi
+   * millisecondi accanto al CRC-32 che gia' legge tutto il file). Si paga **una volta all'apertura**: la ricerca, che e' il
+   * percorso caldo, non cambia di una riga. Controlla:
+   *
+   * - le fasce: bordi e ordine di `rowStart`; le celle: `cellCol` in `0..COLS-1` e crescente dentro la fascia, `cellFirst`
+   *   crescente e dentro `0..placeCount`;
+   * - ogni luogo: id positivo (sotto [Mcgp1Format.COUNTRY_ID_BASE]), paese `< countryCount`, regione `< regionCount` oppure [Mcgp1Format.NONE], fuso `< zoneCount` oppure
+   *   NONE, e i nomi di ogni cella dentro la tabella dei nomi;
+   * - le tabelle: paesi di due lettere maiuscole in ordine stretto (si cerca per bisezione), regioni con id crescenti, paese
+   *   valido e nome dentro il pool, fusi con il nome dentro il pool.
+   */
   private fun checkIndex() {
     if (rowStart(0) != 0 || rowStart(Mcgp1Format.ROWS) != cellCount) {
       throw Mcgp1FormatException(Mcgp1FormatException.Reason.BAD_INDEX, "Indice delle fasce non valido.")
@@ -518,5 +533,82 @@ internal class Mcgp1 private constructor(
     if (cellFirst(0) != 0 || cellFirst(cellCount) != placeCount) {
       throw Mcgp1FormatException(Mcgp1FormatException.Reason.BAD_INDEX, "Indice delle celle non valido.")
     }
+    checkCells()
+    checkPlaces()
+    checkTables()
+  }
+
+  private fun badIndex(message: String): Nothing = throw Mcgp1FormatException(Mcgp1FormatException.Reason.BAD_INDEX, message)
+
+  private fun badRecord(message: String): Nothing = throw Mcgp1FormatException(Mcgp1FormatException.Reason.BAD_RECORD, message)
+
+  /** Le colonne delle celle (in range e crescenti dentro la fascia) e i primi luoghi (crescenti, dentro il file). */
+  private fun checkCells() {
+    for (r in 0 until Mcgp1Format.ROWS) {
+      var previous = -1
+      for (cell in rowStart(r) until rowStart(r + 1)) {
+        val col = cellCol(cell)
+        if (col >= Mcgp1Format.COLS || col <= previous) badIndex("Colonne delle celle non valide.")
+        previous = col
+      }
+    }
+    for (cell in 0 until cellCount) {
+      val first = cellFirst(cell)
+      val last = cellFirst(cell + 1)
+      if (first < 0 || last < first || last > placeCount) badIndex("Primi luoghi delle celle non validi.")
+    }
+  }
+
+  /** L'id, gli indici di paese, regione e fuso di ogni luogo, e i nomi di ogni cella dentro la tabella dei nomi. */
+  private fun checkPlaces() {
+    val namesSize = layout.namesSize.toLong()
+    for (cell in 0 until cellCount) {
+      val base = i32(offCellName + cell * 4)
+      if (base < 0) badRecord("Nomi delle celle non validi.")
+      var namesEnd = base.toLong()
+      for (i in cellFirst(cell) until cellFirst(cell + 1)) {
+        val at = recordAt(i)
+        // L'id diventa un `PlaceId` (positivo) e non deve entrare nell'intervallo dei "luoghi" di un intero paese.
+        val id = i32(at)
+        if (id <= 0 || id >= Mcgp1Format.COUNTRY_ID_BASE) badRecord("Id di un luogo non valido.")
+        if (u16(at + 10) >= countryCount) badRecord("Paese di un luogo non valido.")
+        val region = u16(at + 8)
+        if (region != Mcgp1Format.NONE && region >= regionCount) badRecord("Regione di un luogo non valida.")
+        val zone = u16(at + 12)
+        if (zone != Mcgp1Format.NONE && zone >= zoneCount) badRecord("Fuso di un luogo non valido.")
+        namesEnd += u8(at + 16)
+      }
+      if (namesEnd > namesSize) badRecord("Nomi dei luoghi fuori dalla tabella.")
+    }
+  }
+
+  /** Paesi, regioni e fusi: forma, ordine (dove si cerca per bisezione) e stringhe dentro il pool. */
+  private fun checkTables() {
+    var previousCode = -1
+    for (c in 0 until countryCount) {
+      val first = u8(offCountries + c * Mcgp1Format.COUNTRY_SIZE)
+      val second = u8(offCountries + c * Mcgp1Format.COUNTRY_SIZE + 1)
+      if (first !in 'A'.code..'Z'.code || second !in 'A'.code..'Z'.code) badRecord("Codice di un paese non valido.")
+      val code = first * 256 + second
+      if (code <= previousCode) badRecord("Paesi non in ordine.")
+      previousCode = code
+    }
+    var previousId = 0
+    for (r in 0 until regionCount) {
+      val at = offRegions + r * Mcgp1Format.REGION_SIZE
+      val id = i32(at)
+      if (id <= previousId) badRecord("Regioni non in ordine.")
+      previousId = id
+      if (u16(at + 4) >= countryCount) badRecord("Paese di una regione non valido.")
+      checkPoolString(i32(at + 6), u16(at + 10))
+    }
+    for (z in 0 until zoneCount) {
+      val at = offZones + z * Mcgp1Format.ZONE_SIZE
+      checkPoolString(i32(at), u16(at + 4))
+    }
+  }
+
+  private fun checkPoolString(offset: Int, length: Int) {
+    if (offset < 0 || offset.toLong() + length > layout.poolSize) badRecord("Stringa fuori dal pool.")
   }
 }

@@ -1,7 +1,89 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <!-- Libreria (P7: library/). Stub di P0: titolo, accesso alle Impostazioni, riepilogo in fondo. -->
+  <!-- Libreria (P7: library/ e grid/, docs/fase3-progetto.md §2.4). -->
   <string name="library_title">Libreria</string>
   <string name="library_open_settings">Impostazioni</string>
   <string name="library_summary">%1$d foto, %2$d video</string>
+
+  <!-- Intestazioni e scrubber. -->
+  <string name="library_today">Oggi</string>
+  <string name="library_yesterday">Ieri</string>
+  <string name="library_scrubber">Scorri la timeline</string>
+  <string name="library_jump_today">Oggi</string>
+  <string name="library_jump_today_description">Torna ai più recenti</string>
+
+  <!-- La descrizione di una cella per il lettore di schermo: "Foto, 12 marzo 2024, 10:15, Oslo, preferita". -->
+  <string name="grid_kind_photo">Foto</string>
+  <string name="grid_kind_video">Video</string>
+  <string name="grid_kind_motion">Foto in movimento</string>
+  <string name="grid_kind_raw">Foto RAW</string>
+  <string name="grid_kind_animated">Immagine animata</string>
+  <string name="grid_desc_favorite_f">preferita</string>
+  <string name="grid_desc_favorite_m">preferito</string>
+  <string name="grid_desc_edited_f">modificata</string>
+  <string name="grid_desc_edited_m">modificato</string>
+  <string name="grid_desc_unreadable">non leggibile</string>
+  <string name="grid_desc_estimated">data stimata</string>
+  <string name="grid_desc_duration">durata %1$s</string>
+  <string name="grid_desc_group">%1$d scatti</string>
+  <string name="grid_action_open">Apri</string>
+  <string name="grid_action_select">Seleziona</string>
+  <string name="grid_action_deselect">Deseleziona</string>
+
+  <!-- Barra: vista (filtro e stile), selezione. "Vista" e' anche il nome che gli scenari di P9 cercano. -->
+  <string name="library_view_menu">Vista</string>
+  <string name="library_select">Seleziona</string>
+  <string name="library_select_items">Seleziona elementi</string>
+  <plurals name="library_selected">
+    <item quantity="one">%1$d elemento selezionato</item>
+    <item quantity="other">%1$d elementi selezionati</item>
+  </plurals>
+  <string name="library_cancel_selection">Annulla la selezione</string>
+
+  <!-- Filtro rapido (D16) e stile (D4). -->
+  <string name="library_filter_all">Tutto</string>
+  <string name="library_filter_no_screenshots_whatsapp">Senza screenshot e WhatsApp</string>
+  <string name="library_filter_screenshots">Screenshot</string>
+  <string name="library_filter_whatsapp">WhatsApp</string>
+  <string name="library_filter_videos">Video</string>
+  <string name="library_filter_favorites">Preferiti</string>
+  <string name="library_style_square">Quadrata</string>
+  <string name="library_style_justified">Proporzioni originali</string>
+
+  <!-- Un filtro senza risultati. -->
+  <string name="library_filter_empty_screenshots">Nessuno screenshot</string>
+  <string name="library_filter_empty_whatsapp">Nessuna foto di WhatsApp</string>
+  <string name="library_filter_empty_videos">Nessun video</string>
+  <string name="library_filter_empty_favorites">Nessun preferito</string>
+  <string name="library_filter_empty_no_screenshots_whatsapp">Solo screenshot e WhatsApp</string>
+  <string name="library_filter_empty_detail">Con questo filtro non c’è niente da mostrare. Il resto della Libreria è sempre lì.</string>
+  <string name="library_filter_show_all">Mostra tutto</string>
+
+  <!-- Barra delle azioni della selezione (D13, D14). -->
+  <string name="library_action_share">Condividi</string>
+  <string name="library_action_favorite">Aggiungi ai preferiti</string>
+  <string name="library_action_unfavorite">Togli dai preferiti</string>
+  <string name="library_action_hide">Nascondi</string>
+  <string name="library_action_delete">Elimina dal telefono</string>
+  <string name="library_delete_location_phone">Telefono</string>
+  <string name="library_delete_location_phone_detail">Non c’è ancora una copia sul NAS: dopo 30 giorni nel cestino di sistema non si potrà recuperare.</string>
+
+  <!-- Stati (§2.4): permessi, accesso parziale (E-P1), foto in attesa (E-P21), prima lettura. -->
+  <string name="library_permission_action">Consenti accesso</string>
+  <string name="library_partial_title">Vedi solo le foto che hai scelto</string>
+  <string name="library_partial_message">La galleria mostra solo ciò a cui le hai dato accesso, e non tocca il resto.</string>
+  <string name="library_partial_action">Consenti tutto</string>
+  <plurals name="library_pending_title">
+    <item quantity="one">%1$d foto nuova in attesa</item>
+    <item quantity="other">%1$d foto nuove in attesa</item>
+  </plurals>
+  <string name="library_pending_message">Per leggere data e luogo delle foto nuove serve l’accesso alla posizione delle foto. Finché non c’è, restano in attesa.</string>
+  <string name="library_pending_action">Consenti</string>
+  <string name="library_first_read_title">Sto leggendo la Libreria</string>
+  <string name="library_first_read_detail">Le foto e i video compaiono man mano, dai più recenti.</string>
+  <string name="library_first_read_progress">%1$d di %2$d</string>
+  <string name="library_first_read_progress_unknown">%1$d letti</string>
+
+  <!-- Solo debug: la Libreria sintetica di M1 (docs/bench/M1.md). -->
+  <string name="library_debug_synthetic">Sintetica: %1$s elementi</string>
 </resources>

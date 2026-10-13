@@ -26,6 +26,7 @@ import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryBarButton
 import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
 import dev.pampa.mycloudgallery.feature.library.R
+import dev.pampa.mycloudgallery.feature.library.countText
 import dev.pampa.mycloudgallery.feature.library.hidden.HiddenRoute
 import dev.pampa.mycloudgallery.feature.library.trash.RecentlyDeletedRoute
 
@@ -188,6 +189,6 @@ private fun rowSubtitle(row: CollectionRow): String = when (row.kind) {
   CollectionKind.RECENTLY_DELETED -> stringResource(R.string.collection_recently_deleted_subtitle)
   else -> {
     val count = row.count ?: 0
-    if (count == 0) stringResource(R.string.collection_count_none) else pluralStringResource(R.plurals.collection_count, count, count)
+    if (count == 0) stringResource(R.string.collection_count_none) else countText(R.plurals.collection_count, count)
   }
 }

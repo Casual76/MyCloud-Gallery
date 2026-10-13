@@ -84,8 +84,17 @@ internal class ViewerController(
   /** Il foglio di conferma aperto, se c'e'. */
   var sheet: ViewerSheet? by mutableStateOf(null)
 
-  /** Cosa mostrare del messaggio che ha causato la prossima sparizione dalla vista (nascosto, ripristinato). */
+  /**
+   * Cosa mostrare del messaggio che ha causato la prossima sparizione dalla vista (nascosto, ripristinato). Si imposta
+   * **solo a scrittura riuscita**: un "Nascosto" che precede l'esito direbbe una cosa non vera (R8).
+   */
   var pendingMessage: ViewerMessage? = null
+
+  /**
+   * Quanti "Nascondi"/"Mostra" sono in corso. Finche' sono in corso l'elemento che sparisce dalla vista non e' ancora una
+   * notizia: l'avviso lo da' l'esito (riuscito: "Nascosto"; fallito: "Non e' stato possibile nascondere").
+   */
+  var changingVisibility: Int = 0
 
   private var motionJob: Job? = null
 
@@ -266,16 +275,44 @@ internal class ViewerController(
     val id = state.currentId
     val on = !isFavorite(id)
     state.favoriteOverride[id] = on
-    scope.launch { actions.setFavorite(setOf(id), on) }
+    scope.launch {
+      if (!attempt { actions.setFavorite(setOf(id), on) }) {
+        // Non salvato: la stella torna com'era e lo si dice (R8).
+        state.favoriteOverride.remove(id)
+        state.message = ViewerMessage.FavoriteFailed
+      }
+    }
   }
 
-  /** Nascondi (Libreria) o Mostra (Nascosti). L'elemento sparisce dalla vista: il viewer passa al vicino con un avviso. */
+  /**
+   * Nascondi (Libreria) o Mostra (Nascosti). L'elemento sparisce dalla vista: il viewer passa al vicino con un avviso, ma
+   * solo se la scrittura e' riuscita; se non riesce l'avviso dice che non e' stato possibile e l'elemento resta com'era (R8).
+   */
   fun toggleHidden() {
     val actions = services.actions ?: return
     val id = state.currentId
     val hide = !request.secure
-    pendingMessage = if (hide) ViewerMessage.Hidden else ViewerMessage.Unhidden
-    scope.launch { actions.setHidden(setOf(id), hide) }
+    changingVisibility++
+    scope.launch {
+      val done = try {
+        attempt { actions.setHidden(setOf(id), hide) }
+      } finally {
+        changingVisibility--
+      }
+      val message = when {
+        done && hide -> ViewerMessage.Hidden
+        done -> ViewerMessage.Unhidden
+        hide -> ViewerMessage.HideFailed
+        else -> ViewerMessage.UnhideFailed
+      }
+      when {
+        !done -> state.message = message
+        // E' gia' sparito dalla vista (il viewer e' passato al vicino senza dire niente): l'avviso adesso.
+        request.items.view.value.viewIndexOf(id) < 0 -> state.message = message
+        // Sparira' fra un attimo: lo dira' la vista che cambia.
+        else -> pendingMessage = message
+      }
+    }
   }
 
   fun share() {

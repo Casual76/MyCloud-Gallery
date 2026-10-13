@@ -144,8 +144,9 @@ baselineProfile {
 // crea il build type e imposta il percorso prima, e questo e' l'ultimo momento utile prima delle varianti.
 //
 // P11 (nota di P9, docs/bench/README.md §6):
-// - `nonMinifiedRelease` (la variante di `:app:generateBaselineProfile`) riceve lo stesso `src/benchmarkRelease` (sorgenti,
-//   servizi e manifest): senza, il generatore ufficiale del plugin non avrebbe il dataset ne' la famiglia "pronta";
+// - `nonMinifiedRelease` (la variante di `:app:generateBaselineProfile`) riceve lo stesso `src/benchmarkRelease` (sorgenti e
+//   manifest; il modulo Hilt `BenchHooksModule` che lega `MeasurementHooks` sta nei sorgenti): senza, il generatore ufficiale
+//   del plugin non avrebbe il dataset ne' la famiglia "pronta". Niente `ServiceLoader` ne' `META-INF/services` (R6);
 // - le due varianti di misura hanno un **id proprio** (`.bench`): sono firmate con la chiave di debug, e con lo stesso id
 //   della release installarle sul telefono vero sostituirebbe l'app firmata cancellandone i dati.
 androidComponents {
@@ -154,7 +155,6 @@ androidComponents {
     extension.sourceSets.findByName('nonMinifiedRelease')?.with {
       manifest.srcFile('src/benchmarkRelease/AndroidManifest.xml')
       kotlin.srcDir('src/benchmarkRelease/kotlin')
-      resources.srcDir('src/benchmarkRelease/resources')
     }
     ['benchmarkRelease', 'nonMinifiedRelease'].each { name ->
       extension.buildTypes.findByName(name)?.applicationIdSuffix = '.bench'

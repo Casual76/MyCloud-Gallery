@@ -33,7 +33,7 @@ class GridTextEnglishDeviceTest {
     today = "Oggi", yesterday = "Ieri", kindPhoto = "Foto", kindVideo = "Video", kindMotion = "Foto in movimento",
     kindRaw = "Foto RAW", kindAnimated = "Immagine animata", favoriteFeminine = "preferita", favoriteMasculine = "preferito",
     editedFeminine = "modificata", editedMasculine = "modificato", unreadable = "non leggibile", estimated = "data stimata",
-    duration = "durata %1\$s", group = "%1\$d scatti", open = "Apri", select = "Seleziona", deselect = "Deseleziona",
+    duration = "durata %1\$s", group = "%1\$s scatti", open = "Apri", select = "Seleziona", deselect = "Deseleziona",
     scrubber = "Scorri la timeline",
   )
 

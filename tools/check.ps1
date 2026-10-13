@@ -21,6 +21,12 @@
                                 (launcher e JobService di WorkManager, quest'ultimo solo con BIND_JOB_SERVICE),
                                 nessun codice solo-debug dentro, e (Fase 3) nessun `ProfileInstallReceiver` (il
                                 receiver del Macrobenchmark torna solo nella variante benchmarkRelease)
+    7b. nessun resto di debug  nel dex dell'APK di release non compaiono la Libreria sintetica, il marcatore della famiglia
+                                "pronta", `DebugSyntheticSize`, il sink di logcat e il catalogo dei componenti (I4 della
+                                revisione di sicurezza): lettura diretta del dex, FALLISCE se non lo legge
+    7c. niente servizi         l'APK di release non ha nessun `META-INF/services/dev.pampa.*` (ne' un file di servizio che
+                                nomini una classe `dev.pampa.*`): le varianti di misura legano le loro classi con Hilt, mai
+                                con `ServiceLoader` (R6)
     8. niente fake in release   nessuna classe di un package `testing` nel dex dell'APK di release (D6 di
                                 docs/fase2-progetto.md: i fake stanno in src/main per riusarli a valle, ma
                                 non devono arrivare all'APK). Lettura diretta dei classes*.dex: non dipende
@@ -446,27 +452,6 @@ Step "APK di release: non debuggable, backup escluso, nessun componente esposto"
   }
   Write-Host ("        componenti: {0}, esportati: {1}" -f @($facts.Components).Count, (($exported | ForEach-Object { $_.Name }) -join ", ")) -ForegroundColor DarkGray
 
-  # Codice solo-debug dentro la release: il sink di logcat e il catalogo dei componenti non devono esserci.
-  $analyzer = $null
-  $sdkTools = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $aapt2))
-  foreach ($candidate in @("cmdline-tools\latest\bin\apkanalyzer.bat", "cmdline-tools\latest-2\bin\apkanalyzer.bat")) {
-    $path = Join-Path $sdkTools $candidate
-    if (Test-Path -LiteralPath $path) { $analyzer = $path; break }
-  }
-  if ($analyzer) {
-    Ensure-Java
-    $classes = Invoke-Native -File $analyzer -Arguments @("dex", "packages", "--defined-only", $apk.FullName)
-    if ($classes.Code -eq 0) {
-      $text = $classes.Lines -join "`n"
-      foreach ($forbidden in @("LogcatSink", "ComponentCatalogPlaceholder", "core.designsystem.catalog", "DeveloperEntryPoint", "CatalogRoute")) {
-        if ($text -match [regex]::Escape($forbidden)) { $problems += "codice solo-debug dentro la release: $forbidden" }
-      }
-    } else {
-      Write-Host "        (apkanalyzer non e' riuscito a leggere il dex: salto il controllo del codice solo-debug)" -ForegroundColor Yellow
-    }
-  } else {
-    Write-Host "        (apkanalyzer non trovato: salto il controllo del codice solo-debug)" -ForegroundColor Yellow
-  }
   if ($problems.Count -gt 0) { return ($problems -join "; ") }
 }
 
@@ -481,14 +466,71 @@ Step "nessuna classe di un package testing nel dex di release (fake solo per i t
   }
 }
 
+# I resti degli strumenti di debug (I4): nomi di classi e stringhe che nella release non devono esserci. Il passo legge il dex
+# direttamente (come i passi dei fake e della misura): se non lo legge FALLISCE, non salta (prima usava apkanalyzer e, senza,
+# saltava in silenzio).
+$debugRemnants = @(
+  # Il sink di logcat e il catalogo dei componenti (Fase 1/2).
+  "LogcatSink", "ComponentCatalogPlaceholder", "core/designsystem/catalog", "DeveloperEntryPoint", "CatalogRoute",
+  # La famiglia "pronta" per lo smoke sull'emulatore: il marcatore scritto da adb e la famiglia finta (DeveloperTools di debug).
+  "debug-family-ready", "DeveloperTools`$ReadyFamily",
+  # La Libreria sintetica (M1): il kit, i nomi del suo database e della sua istantanea, la manopola che sceglie la dimensione.
+  "SyntheticCatalogKit", "gallery-synthetic", "replica-synthetic", "libreria-sintetica", "m1-synthetic-count", "DebugSyntheticSize",
+  "LibraryDebugHooks"
+)
+Step "nessun resto degli strumenti di debug nel dex di release (Libreria sintetica, famiglia pronta, sink di logcat)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
+  $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if (-not $apk) { return "nessun APK di release in app\build\outputs\apk\release" }
+  $pattern = ($debugRemnants | ForEach-Object { [regex]::Escape($_) }) -join "|"
+  $found = @(Get-DexClassesMatching $apk.FullName $pattern)
+  if ($found.Count -gt 0) {
+    Show-Lines $found 20
+    return "$($found.Count) resti di strumenti di debug nel dex di release: " + ($found -join ", ")
+  }
+  Write-Host ("        cercati {0} nomi, nessuno nel dex" -f $debugRemnants.Count) -ForegroundColor DarkGray
+}
+
+# R6: nessun file di servizio nostro nell'APK di release. `ServiceLoader` e' un canale dichiarativo e invisibile: un file in
+# META-INF/services basta a sostituire una classe (la famiglia "pronta", la sincronizzazione ferma) senza toccare il codice.
+# Le varianti di misura (benchmarkRelease, nonMinifiedRelease) legano le loro classi con un modulo Hilt, quindi la release
+# non deve averne nemmeno uno.
+Step "APK di release: nessun file di servizio dev.pampa.* in META-INF/services" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
+  $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if (-not $apk) { return "nessun APK di release in app\build\outputs\apk\release" }
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $zip = [System.IO.Compression.ZipFile]::OpenRead($apk.FullName)
+  try {
+    $names = @($zip.Entries | ForEach-Object { $_.FullName })
+    # Controllo positivo: se l'elenco non e' quello di un APK la lettura non e' affidabile.
+    if (-not ($names -contains "AndroidManifest.xml") -or -not ($names | Where-Object { $_ -match '^classes\d*\.dex$' })) {
+      return "lettura dell'APK non affidabile: mancano AndroidManifest.xml o classes.dex"
+    }
+    $services = @($zip.Entries | Where-Object { $_.FullName -like "META-INF/services/*" -and -not $_.FullName.EndsWith("/") })
+    $problems = @()
+    foreach ($entry in $services) {
+      if ($entry.Name -match '^dev\.pampa\.') { $problems += "file di servizio nostro: " + $entry.FullName; continue }
+      # Anche un servizio con il nome di un'interfaccia di Java o di una libreria non deve registrare una classe nostra.
+      $reader = New-Object System.IO.StreamReader($entry.Open(), [System.Text.Encoding]::UTF8)
+      try { $text = $reader.ReadToEnd() } finally { $reader.Dispose() }
+      if ($text -match 'dev\.pampa\.') { $problems += ($entry.FullName + " registra una classe dev.pampa.*") }
+    }
+    Write-Host ("        servizi nell'APK: {0}" -f $(if ($services.Count -gt 0) { ($services | ForEach-Object { $_.Name }) -join ", " } else { "nessuno" })) -ForegroundColor DarkGray
+    if ($problems.Count -gt 0) { return ($problems -join "; ") }
+  } finally {
+    $zip.Dispose()
+  }
+}
+
 Step "nessuna classe di misura (Bench*, benchmark, UiAutomator) nel dex di release" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
   $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
   if (-not $apk) { return "nessun APK di release in app\build\outputs\apk\release" }
-  $bench = @(Get-BenchmarkClassesInApk $apk.FullName)
-  if ($bench.Count -gt 0) {
-    Show-Lines $bench 20
-    return "$($bench.Count) classi di misura nel dex di release: la variante benchmarkRelease non deve mai arrivare all'APK (D21)"
+  $benchClasses = @(Get-BenchmarkClassesInApk $apk.FullName)
+  if ($benchClasses.Count -gt 0) {
+    Show-Lines $benchClasses 20
+    return "$($benchClasses.Count) classi di misura nel dex di release: la variante benchmarkRelease non deve mai arrivare all'APK (D21)"
   }
 }
 
@@ -649,7 +691,7 @@ Step "benchmark: gli scenari (:benchmark) e il dataset (app/src/benchmarkRelease
 
 # -Bench: le misure del par. 2.6 su un dispositivo collegato. Senza -Bench o senza dispositivo il passo e' SKIP (non fallisce).
 $benchAdb = $null
-$benchSerial = $null
+$benchTarget = $null
 $benchSkip = -not $Bench
 $benchReason = "senza -Bench"
 if ($Bench) {
@@ -664,17 +706,17 @@ if ($Bench) {
       $benchSkip = $true
       $benchReason = "nessun dispositivo collegato"
     } elseif ($serials.Count -eq 1) {
-      $benchSerial = $serials[0]
+      $benchTarget = $serials[0]
     } else {
-      $benchSerial = ""   # piu' dispositivi: il passo fallisce chiedendo -BenchSerial (un dispositivo per volta)
+      $benchTarget = ""   # piu' dispositivi: il passo fallisce chiedendo -BenchSerial (un dispositivo per volta)
     }
   }
 }
 Step "benchmark su dispositivo (-Bench): scenari del par. 2.6 contro benchmark\soglie.json e riferimento" -Skip:$benchSkip -SkipReason $benchReason {
-  if ($benchSerial -eq "") { return "piu' dispositivi collegati: indica quale con -BenchSerial <numero di serie> (si misura un dispositivo per volta)" }
-  $facts = Get-DeviceFacts $benchAdb $benchSerial
+  if ($benchTarget -eq "") { return "piu' dispositivi collegati: indica quale con -BenchSerial <numero di serie> (si misura un dispositivo per volta)" }
+  $facts = Get-DeviceFacts $benchAdb $benchTarget
   $emulatorNote = if ($facts.Emulator) { " - EMULATORE: smoke, i numeri non valgono" } else { "" }
-  Write-Host ("        dispositivo: {0} ({1}), Android {2} (SDK {3}){4}" -f $facts.Model, $benchSerial, $facts.Release, $facts.Sdk, $emulatorNote) -ForegroundColor DarkGray
+  Write-Host ("        dispositivo: {0} ({1}), Android {2} (SDK {3}){4}" -f $facts.Model, $benchTarget, $facts.Release, $facts.Sdk, $emulatorNote) -ForegroundColor DarkGray
   $hz = if ($null -ne $facts.MaxHz) { $facts.MaxHz } else { 0 }
   $activeText = if ($null -ne $facts.ActiveHz) { $facts.ActiveHz } else { "?" }
   $maxText = if ($null -ne $facts.MaxHz) { $facts.MaxHz } else { "?" }
@@ -695,7 +737,7 @@ Step "benchmark su dispositivo (-Bench): scenari del par. 2.6 contro benchmark\s
   Write-Host "        (puo' volerci diversi minuti; il log completo e' in build\check-bench.log)" -ForegroundColor DarkGray
   # Un dispositivo per volta: Gradle gira su tutti quelli collegati, a meno di ANDROID_SERIAL.
   $previousSerial = $env:ANDROID_SERIAL
-  $env:ANDROID_SERIAL = $benchSerial
+  $env:ANDROID_SERIAL = $benchTarget
   try {
     $run = Invoke-Native -File (Join-Path $root "gradlew.bat") -Arguments $gradleArguments -LogPath (Join-Path $root "build\check-bench.log")
   } finally {

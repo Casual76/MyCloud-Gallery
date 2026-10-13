@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentSender
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.pampa.mycloudgallery.core.mediastore.android.AndroidPhoneMediaIntents
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.debugtools.DeveloperTools
@@ -33,9 +34,14 @@ interface LibraryCommandHost {
 
   fun requestMediaLocation()
 
-  fun startChooser(intent: Intent)
+  /**
+   * Apre il selettore di condivisione. Falso se Android lo rifiuta: nessuna app, o troppi URI per la transazione Binder
+   * (`TransactionTooLargeException`, che `startActivity` rilancia come `RuntimeException`): la Libreria lo dice (I8).
+   */
+  fun startChooser(intent: Intent): Boolean
 
-  fun launchTrashRequest(sender: IntentSender)
+  /** Apre il dialogo di sistema del cestino. Falso se non e' partito (I8). */
+  fun launchTrashRequest(sender: IntentSender): Boolean
 }
 
 /**
@@ -59,21 +65,44 @@ class AppLibraryCommands(
     host?.requestMediaLocation()
   }
 
-  override fun share(ids: Set<MediaId>) {
+  /** Oltre questo la Libreria avvisa senza aprire il selettore (I8): vedi [SHARE_LIMIT]. */
+  override val shareLimit: Int get() = SHARE_LIMIT
+
+  override fun share(ids: Set<MediaId>): Boolean {
+    // Difesa in profondita': la Libreria controlla il tetto prima, ma un chiamante diverso non deve poter aggirarlo.
+    if (ids.size > SHARE_LIMIT) return false
     val refs = phoneRefs(ids)
-    if (refs.isEmpty()) return
-    gallery.intents.share(refs)?.let { intent -> host?.startChooser(intent) }
+    if (refs.isEmpty()) return true
+    val intent = gallery.intents.share(refs) ?: return false
+    return host?.startChooser(intent) ?: false
   }
 
   override val canDeleteFromPhone: Boolean get() = gallery.intents.canTrash
 
-  override fun deleteFromPhone(ids: Set<MediaId>) {
+  /** Il tetto di una richiesta di cestino di sistema (Android 11+). */
+  override val deleteLimit: Int get() = DELETE_LIMIT
+
+  override fun deleteFromPhone(ids: Set<MediaId>): Boolean {
+    if (ids.size > DELETE_LIMIT) return false
     val refs = phoneRefs(ids)
-    if (refs.isEmpty()) return
-    gallery.intents.trashRequest(refs, trash = true)?.let { sender -> host?.launchTrashRequest(sender) }
+    if (refs.isEmpty()) return true
+    val sender = gallery.intents.trashRequest(refs, trash = true) ?: return false
+    return host?.launchTrashRequest(sender) ?: false
   }
 
   private fun phoneRefs(ids: Set<MediaId>): List<MediaRef.Phone> = ids.mapNotNull { refOf(it) as? MediaRef.Phone }
+
+  companion object {
+    /**
+     * Il massimo di elementi per un "Condividi" (I8). Gli URI viaggiano tre volte nella stessa transazione Binder
+     * (`EXTRA_STREAM`, `ClipData` e la copia che il selettore ne fa in `EXTRA_INTENT`): a circa 150 byte l'uno, 500 elementi
+     * sono circa 225 KB, ben dentro il megabyte che il processo condivide fra tutte le transazioni; qualche migliaio no.
+     */
+    const val SHARE_LIMIT: Int = 500
+
+    /** Il massimo di URI che `MediaStore.createTrashRequest` accetta (Android 11+): oltre, nessuna richiesta. */
+    const val DELETE_LIMIT: Int = AndroidPhoneMediaIntents.MAX_TRASH_URIS
+  }
 }
 
 /**

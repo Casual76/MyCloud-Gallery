@@ -19,8 +19,8 @@ import org.json.JSONObject
  * **Mai il database vero.** Si scrive [DATABASE_NAME] (`gallery-bench.db`), non `gallery.db`.
  *
  * Il collegamento con la UI (famiglia "pronta", database della Libreria, sincronizzazione spenta) e' descritto in
- * `docs/bench/README.md` ("Collegamento con l'app") ed e' un lavoro di P11: da qui si vedono solo i servizi
- * [BenchFamilySetupRepository] e [BenchPhoneLibrarySync], registrati con `ServiceLoader`.
+ * `docs/bench/README.md` ("Collegamento con l'app"): da qui si vedono solo [BenchFamilySetupRepository] e
+ * [BenchPhoneLibrarySync], che [BenchMeasurementHooks] consegna all'app con un binding Hilt.
  */
 internal object BenchDataset {
 

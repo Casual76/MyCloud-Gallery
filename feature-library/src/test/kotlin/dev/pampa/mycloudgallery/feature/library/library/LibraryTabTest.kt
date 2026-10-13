@@ -91,8 +91,9 @@ class LibraryTabTest {
       calls += "location"
     }
 
-    override fun share(ids: Set<MediaId>) {
+    override fun share(ids: Set<MediaId>): Boolean {
       calls += "share:${ids.size}"
+      return true
     }
 
     override val canDeleteFromPhone: Boolean get() = true
@@ -170,7 +171,7 @@ class LibraryTabTest {
   fun laPrimaLetturaDiceAChePuntoE() {
     show(emptyState(LibraryPhoneStatus(sync = SyncStatus.Scanning(done = 120, total = 6_700, full = true))))
     composeRule.onNodeWithText("Sto leggendo la Libreria").assertExists()
-    composeRule.onNodeWithText("120 di 6700").assertExists()
+    composeRule.onNodeWithText("120 di 6.700").assertExists()
   }
 
   @Test

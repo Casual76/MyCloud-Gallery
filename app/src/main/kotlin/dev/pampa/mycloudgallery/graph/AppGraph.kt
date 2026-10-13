@@ -109,6 +109,14 @@ class AppGraph(
 
   private val noBackup: File = context.noBackupFilesDir
 
+  /**
+   * Chi ferma la galleria del telefono viva prima che l'azzeramento ne cancelli i file (fase 5, revisione di sicurezza R7).
+   * La galleria nasce dopo questo grafo e dipende da lui: si registra da sola (`GalleryModule`). Nei test senza galleria
+   * resta null.
+   */
+  @Volatile
+  var galleryStopper: GalleryStopper? = null
+
   // --- Archivi locali (DataStore e file in noBackupFilesDir: fuori da backup e trasferimenti) ---------------------
   val accountStore = DataStoreNasAccountStore(SetupDataStores.account(context, scope))
   val account: StateFlow<NasAccount?> = accountStore.observe().stateIn(scope, SharingStarted.Eagerly, null)

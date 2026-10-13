@@ -47,6 +47,11 @@ class HeartbeatStore(private val file: File) : HeartbeatSource {
   }
 }
 
+/** Ferma la galleria del telefono (sincronizzazione, repository della timeline, scrittore dell'istantanea, immagini, database). */
+fun interface GalleryStopper {
+  suspend fun stop()
+}
+
 /**
  * La fase (5) dell'azzeramento (`LocalDataEraser`, docs/famiglia-dispositivi.md §3): cancella cio' che l'app sa di
  * questa famiglia sul telefono. Lo stato fidato e le richieste viste li cancella gia' `DeviceSelfWipe`; le chiavi e le
@@ -55,6 +60,12 @@ class HeartbeatStore(private val file: File) : HeartbeatSource {
  * - **attraverso le loro API** (DataStore non tollera che gli si tolga il file da sotto): avanzamento dell'onboarding,
  *   account NAS, impronta di casa, controllo di WireGuard, battito;
  * - **come file**: cache, database (la replica dell'indice, Fase 4), miniature e anteprime future.
+ *
+ * **Prima si ferma la galleria viva** (R7): la sincronizzazione del telefono, i lavori in background, il repository della
+ * timeline con il suo scrittore dell'istantanea, la pipeline delle immagini, il database. Solo dopo si cancellano
+ * `replica/` e i database, cosi' niente puo' riscrivere `replica/timeline.idx` (gli id, le date e i riferimenti del
+ * MediaStore) su un telefono azzerato. Se la fermata fallisce non si cancella niente: la fase resta da fare e si riprova
+ * al prossimo avvio (e' idempotente).
  *
  * **Mai** il diario dell'azzeramento ([FileWipeJournal.FILE_NAME]): e' quello che fa riprendere un azzeramento
  * interrotto e mostrare "dispositivo azzerato". Restano anche il registro della Diagnostica (solo codici e numeri, mai
@@ -66,14 +77,17 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
 
   override suspend fun eraseAll(): Boolean {
     var ok = true
-    suspend fun step(name: String, block: suspend () -> Unit) {
+    /** Esegue un passo; vero se e' riuscito. Un fallimento lo registra e segna l'azzeramento come non finito. */
+    suspend fun step(name: String, block: suspend () -> Unit): Boolean {
       try {
         block()
+        return true
       } catch (e: CancellationException) {
         throw e
       } catch (e: Exception) {
         GalleryLog.e(TAG, e) { "cancellazione non riuscita: $name" }
         ok = false
+        return false
       }
     }
     step("onboarding") { graph.onboardingStore.clear() }
@@ -81,15 +95,18 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
     step("casa") { graph.homeStore.clear() }
     step("vpn") { graph.vpnConfigStore.save(VpnControlConfig.OFF) }
     step("battito") { graph.heartbeat.clear() }
-    step("file") {
-      withContext(Dispatchers.IO) {
-        if (!deleteChildren(context.cacheDir)) ok = false
-        for (name in context.databaseList()) {
-          if (!context.deleteDatabase(name) && File(context.getDatabasePath(name).path).exists()) ok = false
-        }
-        for (dir in MEDIA_DIRS) {
-          val target = File(context.noBackupFilesDir, dir)
-          if (target.exists() && !target.deleteRecursively()) ok = false
+    // R7: la galleria viva si ferma (e si aspetta) PRIMA di toccare i suoi file; se non si ferma, i file restano.
+    if (step("galleria") { graph.galleryStopper?.stop() }) {
+      step("file") {
+        withContext(Dispatchers.IO) {
+          if (!deleteChildren(context.cacheDir)) ok = false
+          for (name in context.databaseList()) {
+            if (!context.deleteDatabase(name) && File(context.getDatabasePath(name).path).exists()) ok = false
+          }
+          for (dir in MEDIA_DIRS) {
+            val target = File(context.noBackupFilesDir, dir)
+            if (target.exists() && !target.deleteRecursively()) ok = false
+          }
         }
       }
     }

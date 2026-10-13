@@ -13,6 +13,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import dev.antigravity.fluidengine.foundation.EngineBuild
+import dev.antigravity.fluidengine.ui.fluid.FluidEngineLicenses
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
@@ -25,7 +27,9 @@ import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
 
 /**
  * "Informazioni e licenze" (Fase 3, P11; docs/fase3-progetto.md §1.3): cos'e' l'app, da dove vengono i nomi dei luoghi
- * (GeoNames, CC BY 4.0: l'attribuzione e' un obbligo della licenza) e quali librerie di altri autori usa.
+ * (GeoNames, CC BY 4.0: l'attribuzione e' un obbligo della licenza), **tutte** le librerie di altri autori incluse
+ * nell'APK di release con la loro licenza ([ABOUT_LIBRARIES], dalle dipendenze di runtime), le opere dentro il Fluid Engine
+ * (`FluidEngineLicenses`) e il testo breve di ogni licenza con il suo indirizzo (revisione di sicurezza, I6).
  *
  * E' una pagina di sola lettura, senza ViewModel. Gli indirizzi delle licenze sono **testo selezionabile, mai un
  * collegamento**: la Fase 3 non fa traffico di rete e nessun tocco qui apre un browser (D18, D24).
@@ -92,7 +96,7 @@ internal fun AboutScreen(versionName: String?, onBack: () -> Unit) {
     }
     item { FluidSectionFootnote(text = stringResource(R.string.about_geonames_note)) }
 
-    // --- Librerie -----------------------------------------------------------------------------------------------
+    // --- Librerie (tutte quelle dell'APK di release) -----------------------------------------------------------------
     item {
       FluidSectionHeader(
         title = stringResource(R.string.about_section_libraries),
@@ -102,40 +106,70 @@ internal fun AboutScreen(versionName: String?, onBack: () -> Unit) {
     item {
       SelectionContainer {
         FluidListGroup {
-          LIBRARIES.forEach { library ->
+          ABOUT_LIBRARIES.forEachIndexed { index, library ->
+            if (index > 0) FluidListDivider()
             FluidListRow(
-              title = stringResource(library.title),
-              subtitle = stringResource(library.detail),
-              meta = stringResource(R.string.about_license_apache),
+              title = library.name,
+              subtitle = library.subtitle,
+              meta = stringResource(library.license.shortName),
               tone = FluidTone.Neutral,
               leading = { RowGlyph(Icons.Rounded.Code) },
               disclosure = false,
             )
-            FluidListDivider()
           }
-          FluidListRow(
-            eyebrow = stringResource(R.string.about_license_label),
-            title = stringResource(R.string.about_license_apache_full),
-            subtitle = stringResource(R.string.about_license_apache_url),
-            tone = FluidTone.Neutral,
-            leading = { RowGlyph(Icons.Rounded.Description) },
-            disclosure = false,
-          )
         }
       }
     }
     item { FluidSectionFootnote(text = stringResource(R.string.about_libraries_footnote)) }
+
+    // --- Il Fluid Engine: le opere di altri che porta con se' -------------------------------------------------------------
+    item {
+      FluidSectionHeader(
+        title = stringResource(R.string.about_section_engine),
+        detail = stringResource(R.string.about_section_engine_detail, EngineBuild.VERSION),
+      )
+    }
+    item {
+      SelectionContainer {
+        FluidListGroup {
+          FluidEngineLicenses.forEachIndexed { index, work ->
+            if (index > 0) FluidListDivider()
+            FluidListRow(
+              title = work.name,
+              // Autore, licenza e indirizzo del progetto: testo da leggere, mai un collegamento (FluidLicenseGroup apre il
+              // browser al tocco; qui nessun tocco apre niente).
+              subtitle = "${work.author} · ${work.licence}\n${work.url}",
+              tone = FluidTone.Neutral,
+              leading = { RowGlyph(Icons.Rounded.Code) },
+              disclosure = false,
+            )
+          }
+        }
+      }
+    }
+
+    // --- Il testo breve delle licenze --------------------------------------------------------------------------------------
+    item { FluidSectionHeader(title = stringResource(R.string.about_section_licenses)) }
+    item {
+      SelectionContainer {
+        FluidListGroup {
+          ABOUT_LICENSES_IN_USE.forEachIndexed { index, license ->
+            if (index > 0) FluidListDivider()
+            FluidListRow(
+              eyebrow = stringResource(R.string.about_license_label),
+              title = stringResource(license.fullName),
+              subtitle = stringResource(license.url),
+              tone = FluidTone.Neutral,
+              leading = { RowGlyph(Icons.Rounded.Description) },
+              disclosure = false,
+            )
+          }
+        }
+      }
+    }
+    item { FluidSectionFootnote(text = stringResource(R.string.about_licenses_footnote)) }
   }
 }
-
-/** Una libreria di altri autori: il nome e chi/quale versione, entrambi testi della pagina. Le licenze sono tutte Apache 2.0. */
-private class LibraryCredit(val title: Int, val detail: Int)
-
-private val LIBRARIES: List<LibraryCredit> = listOf(
-  LibraryCredit(R.string.about_lib_telephoto_title, R.string.about_lib_telephoto_detail),
-  LibraryCredit(R.string.about_lib_media3_title, R.string.about_lib_media3_detail),
-  LibraryCredit(R.string.about_lib_exif_title, R.string.about_lib_exif_detail),
-)
 
 /** La versione dell'app dal gestore dei pacchetti, o null se non si legge (la riga allora non compare). */
 internal fun appVersionName(context: Context): String? =

@@ -70,7 +70,7 @@ import dev.pampa.mycloudgallery.work.InviteWindowStore
 import dev.pampa.mycloudgallery.work.WorkManagerCanceller
 import dev.pampa.mycloudgallery.work.WorkManagerTrustSyncScheduler
 import java.io.File
-import java.util.ServiceLoader
+import java.util.Optional
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -159,17 +159,19 @@ object GraphModule {
   // --- core-family (P3, P4) -------------------------------------------------------------------------
   /**
    * Lo stato del dispositivo. Due eccezioni, mai nella release:
-   * - la variante di misura (`benchmarkRelease`, P9) registra con `ServiceLoader` la famiglia "pronta" senza NAS
-   *   (docs/bench/README.md §6); nelle altre varianti `ServiceLoader` non trova niente;
+   * - le varianti di misura (`benchmarkRelease` e `nonMinifiedRelease`, P9) legano [MeasurementHooks] con un modulo Hilt
+   *   che sta solo in `src/benchmarkRelease`: la famiglia "pronta" senza NAS (docs/bench/README.md §6). Nelle altre
+   *   varianti l'`Optional` e' vuoto (revisione di sicurezza, R6: niente `ServiceLoader`);
    * - la debug, **solo** con il marcatore scritto da `adb` sull'emulatore (`DeveloperTools.familyOverride`), per lo smoke
    *   della Libreria senza un NAS. In release `familyOverride` e' sempre null.
    */
   @Provides
   @Singleton
-  fun familySetupRepository(@ApplicationContext context: Context, graph: AppGraph): FamilySetupRepository =
-    ServiceLoader.load(FamilySetupRepository::class.java, FamilySetupRepository::class.java.classLoader).firstOrNull()
-      ?: DeveloperTools.familyOverride(context)
-      ?: graph.setup
+  fun familySetupRepository(
+    @ApplicationContext context: Context,
+    graph: AppGraph,
+    hooks: @JvmSuppressWildcards Optional<MeasurementHooks>,
+  ): FamilySetupRepository = chooseFamilySetup(hooks.orElse(null), DeveloperTools.familyOverride(context), graph.setup)
 
   @Provides fun onboardingCoordinator(graph: AppGraph): OnboardingCoordinator = graph.coordinator
 

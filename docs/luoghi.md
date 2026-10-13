@@ -88,7 +88,7 @@ La tabella del §8 ha gia' i numeri del dump del 2026-10-12. Committare asset e 
 .\gradlew.bat :core-places:buildPlacesDataset -PplacesExpectSha=<SHA-256 della tabella>
 ```
 
-### Cosa deve fare P11 (integrazione)
+### Cosa ha fatto P11 (integrazione, `LazyPlaces` in `:app`)
 
 ```kotlin
 val data = (PlacesDataset.openResult(context) as? PlacesOpenResult.Opened)?.data   // fuori dal thread principale
@@ -97,7 +97,7 @@ val zones: TimeZoneLookup = data ?: NoTimeZoneLookup
 val names: PlaceNames = data ?: NoPlaceNames
 ```
 
-`PlacesData` e' insieme geocoder, cercatore di fusi e nomi per la UI sullo stesso file. `openResult` dice anche perche' manca (`NotBundled`, `Failed(ASSET_MISSING | HASH_MISMATCH | IO_ERROR | INVALID_FORMAT)`) per la Diagnostica. Un cambio di `dataset` (versione) rispetto a `catalog_meta.places_dataset` e' il segnale per il ricalcolo in manutenzione.
+`PlacesData` e' insieme geocoder, cercatore di fusi e nomi per la UI sullo stesso file. `openResult` dice anche perche' manca (`NotBundled`, `Failed(ASSET_MISSING | HASH_MISMATCH | IO_ERROR | INVALID_FORMAT)`) per la Diagnostica. Un cambio di `dataset` (versione) rispetto a `catalog_meta.places_dataset` sara' il segnale per il ricalcolo in manutenzione: **il ricalcolo non c'e' ancora** (serve una query nuova, Fase 4; `docs/decisioni.md`, "Non fatti"), quindi un dataset nuovo vale per le foto lette dopo.
 
 ## 3. Il formato `MCGP1`
 
@@ -342,11 +342,11 @@ Sono 22 accettabili su 24: 76 + 22 = **98/100**. I due scarti veri sono V041 (un
 
 ## 10. Attribuzione (CC BY 4.0)
 
-GeoNames chiede l'attribuzione e che si dica che i dati sono stati modificati. Il testo e' in `PlacesAttribution` (da mostrare in Impostazioni → Informazioni e licenze, a cura di P11):
+GeoNames chiede l'attribuzione e che si dica che i dati sono stati modificati. Il testo e' in `PlacesAttribution` ed e' mostrato, parola per parola, in Impostazioni → Informazioni e licenze (P11; `GalleryIntegrationTest` verifica che sia uguale):
 
 > Nomi e fusi orari dei luoghi: dati di GeoNames (geonames.org), licenza Creative Commons Attribuzione 4.0. I dati sono stati modificati: ridotti, in parte tradotti in italiano e convertiti in un formato compatto.
 
-Licenza: <https://creativecommons.org/licenses/by/4.0/> (si apre solo con un'azione esplicita dell'utente). Gli id sono quelli di GeoNames, il resto e' una trasformazione.
+Licenza: <https://creativecommons.org/licenses/by/4.0/>, mostrata come **testo selezionabile, mai come collegamento** (la galleria non fa rete e nessun tocco apre un browser). Gli id sono quelli di GeoNames, il resto e' una trasformazione.
 
 ## 11. Dove sta il codice
 

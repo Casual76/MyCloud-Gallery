@@ -26,6 +26,7 @@ import dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess
 import dev.pampa.mycloudgallery.core.mediastore.contract.SyncStatus
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.places.noop.NoPlaceNames
+import dev.pampa.mycloudgallery.feature.library.ActionNotice
 import dev.pampa.mycloudgallery.feature.library.grid.MediaGridState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -36,12 +37,15 @@ import kotlinx.coroutines.flow.StateFlow
  * `PhoneLibrarySync`, il bilancio dell'ultimo giro).
  *
  * @property pendingLocation le foto nuove in attesa di `ACCESS_MEDIA_LOCATION` (E-P21): mai un'impronta oscurata.
+ * @property selectionPending accesso parziale (E-P1) e la prima lettura non ha ancora detto quali foto sono accessibili:
+ *   la Libreria non mostra niente (nemmeno per un istante cio' che il permesso non da' piu') e dice che sta leggendo.
  */
 @Immutable
 data class LibraryPhoneStatus(
   val access: MediaAccess = MediaAccess.FULL,
   val sync: SyncStatus = SyncStatus.Idle(0L),
   val pendingLocation: Int = 0,
+  val selectionPending: Boolean = false,
 ) {
   /** La prima lettura (o una scansione completa): la Libreria mostra l'avanzamento in fondo. */
   val firstRead: SyncStatus.Scanning? get() = (sync as? SyncStatus.Scanning)?.takeIf { it.full }
@@ -59,14 +63,26 @@ interface LibraryCommands {
   /** "Consenti" per le foto in attesa (E-P21): `ACCESS_MEDIA_LOCATION`. */
   fun requestMediaLocation() {}
 
-  /** Condividi: l'intent di sistema con gli URI del MediaStore (`PhoneMediaIntents.share`). */
-  fun share(ids: Set<MediaId>) {}
+  /**
+   * Condividi: l'intent di sistema con gli URI del MediaStore (`PhoneMediaIntents.share`). Vero se il selettore e' partito;
+   * falso se Android lo ha rifiutato (troppi URI per la transazione Binder, nessuna app): la Libreria lo dice (I8).
+   */
+  fun share(ids: Set<MediaId>): Boolean = true
+
+  /** Il massimo di elementi che [share] accetta in una volta. Oltre, la Libreria avvisa e non chiama [share] (I8). */
+  val shareLimit: Int get() = Int.MAX_VALUE
 
   /** Se eliminare dal telefono si puo' (D14: su Android 10 il cestino di sistema non c'e', e l'azione nemmeno). */
   val canDeleteFromPhone: Boolean get() = false
 
-  /** Elimina dal telefono, nel cestino di sistema (D14): il dialogo di sistema conferma, poi 30 giorni per ripristinare. */
-  fun deleteFromPhone(ids: Set<MediaId>) {}
+  /**
+   * Elimina dal telefono, nel cestino di sistema (D14): il dialogo di sistema conferma, poi 30 giorni per ripristinare.
+   * Vero se la richiesta e' partita; falso altrimenti (I8).
+   */
+  fun deleteFromPhone(ids: Set<MediaId>): Boolean = true
+
+  /** Il massimo di elementi che una richiesta di eliminazione accetta (limite di Android). Oltre, la Libreria avvisa. */
+  val deleteLimit: Int get() = Int.MAX_VALUE
 }
 
 /** Nessuna richiesta: la Libreria vuota della release prima del grafo vero. */
@@ -128,6 +144,9 @@ class LibraryTabState(
   /** Il filtro rapido mostrato adesso (D16). */
   var filter: LibraryFilter by mutableStateOf(preferences.filter.value)
     internal set
+
+  /** L'azione che non e' riuscita o non e' partita, finche' non si chiude da solo o con "OK" (R8, I8). Null = nessuna. */
+  internal var notice: ActionNotice? by mutableStateOf(null)
 
   /**
    * Vero in modalita' selezione: la barra delle azioni in vetro prende il posto dei segmenti dei livelli. `:app` puo'

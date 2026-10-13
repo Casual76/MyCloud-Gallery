@@ -91,9 +91,9 @@ class PhoneSyncWorker @AssistedInject constructor(
 
   override suspend fun doWork(): Result {
     if (!gallery.backgroundWorkAllowed) return Result.success()
-    // Famiglia non pronta (non configurato, in attesa, azzerato): niente da fare e niente da riaccodare.
-    val core = gallery.coreIfReady() ?: return Result.success()
-    val outcome = core.phone.runner.run(BUDGET)
+    // Famiglia non pronta (non configurato, in attesa, azzerato) o galleria ferma: niente da fare e niente da riaccodare.
+    // `runIfActive` permette all'azzeramento di fermare un giro in corso e di aspettarlo (R7).
+    val outcome = gallery.runIfActive { core -> core.phone.runner.run(BUDGET) } ?: return Result.success()
     GalleryLog.d(TAG) { "lettura del telefono in background: ${outcome.javaClass.simpleName}" }
     // Il trigger di contenuto vale una volta: il prossimo cambiamento del MediaStore deve trovarne uno nuovo, accodato
     // dopo questo (APPEND: mai annullare il lavoro in corso).
@@ -122,13 +122,15 @@ class LibraryMaintenanceWorker @AssistedInject constructor(
 
   override suspend fun doWork(): Result {
     if (!gallery.backgroundWorkAllowed) return Result.success()
-    val core = gallery.coreIfReady() ?: return Result.success()
-    val phone = core.phone
-    val report = phone.sync.runWithin(SyncReason.MAINTENANCE, SYNC_BUDGET)
-    val meta = phone.metadataPass.run(META_BUDGET, NoMetaPriority)
-    val hashes = phone.deferredHashes.run(HASH_BUDGET)
-    runCatching { gallery.repository.flush() }
-    GalleryLog.d(TAG) { "manutenzione: giro ${report.completed}, META ${meta.javaClass.simpleName}, hash ${hashes.hashed}" }
+    val done = gallery.runIfActive { core ->
+      val phone = core.phone
+      val report = phone.sync.runWithin(SyncReason.MAINTENANCE, SYNC_BUDGET)
+      val meta = phone.metadataPass.run(META_BUDGET, NoMetaPriority)
+      val hashes = phone.deferredHashes.run(HASH_BUDGET)
+      GalleryLog.d(TAG) { "manutenzione: giro ${report.completed}, META ${meta.javaClass.simpleName}, hash ${hashes.hashed}" }
+    }
+    // Come tutte le scritture dell'istantanea, passa da `flush` della galleria (mai a galleria ferma).
+    if (done != null) runCatching { gallery.flush() }
     return Result.success()
   }
 

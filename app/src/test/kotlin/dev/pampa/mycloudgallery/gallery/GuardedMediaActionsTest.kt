@@ -8,7 +8,11 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
-/** Un errore del catalogo su preferiti o nascosti non chiude l'app; l'annullamento passa (P11). */
+/**
+ * Revisione di sicurezza della Fase 3, R8: un errore del catalogo su preferiti o nascosti **arriva a chi ha chiesto**, che lo
+ * dice all'utente; non e' piu' ingoiato (la selezione si chiudeva come se "Nascondi" fosse riuscito). L'annullamento passa
+ * come tale, e quando va bene non cambia niente.
+ */
 class GuardedMediaActionsTest {
 
   private val selected = setOf(MediaId("00000000-0000-4000-8000-000000000001"))
@@ -27,13 +31,26 @@ class GuardedMediaActionsTest {
     }
   }
 
+  private class Recording : LocalMediaActions {
+    val favorites = mutableListOf<Pair<Set<MediaId>, Boolean>>()
+    val hidden = mutableListOf<Pair<Set<MediaId>, Boolean>>()
+
+    override suspend fun setFavorite(ids: Set<MediaId>, on: Boolean) {
+      favorites += ids to on
+    }
+
+    override suspend fun setHidden(ids: Set<MediaId>, on: Boolean) {
+      hidden += ids to on
+    }
+  }
+
   @Test
-  fun unErroreDelCatalogoNonEsce() = runBlocking {
+  fun unErroreDelCatalogoArrivaAChiHaChiesto() {
     val inner = Failing(IllegalArgumentException("Rotazione non valida."))
     val actions = GuardedMediaActions(inner)
 
-    actions.setHidden(selected, true)
-    actions.setFavorite(selected, true)
+    assertThrows(IllegalArgumentException::class.java) { runBlocking { actions.setHidden(selected, true) } }
+    assertThrows(IllegalArgumentException::class.java) { runBlocking { actions.setFavorite(selected, true) } }
 
     assertThat(inner.calls).isEqualTo(2)
   }
@@ -43,5 +60,18 @@ class GuardedMediaActionsTest {
     val actions = GuardedMediaActions(Failing(CancellationException("via")))
 
     assertThrows(CancellationException::class.java) { runBlocking { actions.setHidden(selected, true) } }
+  }
+
+  @Test
+  fun quandoVaBeneNonCambiaNiente() = runBlocking<Unit> {
+    val inner = Recording()
+    val actions = GuardedMediaActions(inner)
+
+    actions.setHidden(selected, true)
+    actions.setHidden(selected, false)
+    actions.setFavorite(selected, true)
+
+    assertThat(inner.hidden).containsExactly(selected to true, selected to false).inOrder()
+    assertThat(inner.favorites).containsExactly(selected to true)
   }
 }

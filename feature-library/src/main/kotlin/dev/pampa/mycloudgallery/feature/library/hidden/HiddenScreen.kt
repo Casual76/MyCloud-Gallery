@@ -36,6 +36,7 @@ import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.security.lock.SystemCredentialAuthenticator
 import dev.pampa.mycloudgallery.core.security.screen.SecureScreen
+import dev.pampa.mycloudgallery.feature.library.ActionNotice
 import dev.pampa.mycloudgallery.feature.library.R
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionEmptyState
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionGridPage
@@ -90,6 +91,7 @@ internal fun HiddenHost(
   backdropOut: ((GlassBackdropState) -> Unit)? = null,
 ) {
   val state by controller.state.collectAsState()
+  val notice by controller.notice.collectAsState()
   val unlock = GatedWindow(
     texts = HiddenGateTexts,
     authenticator = authenticator,
@@ -114,6 +116,8 @@ internal fun HiddenHost(
     onBack = onBack,
     contentPadding = contentPadding,
     backdropOut = backdropOut,
+    notice = notice,
+    onDismissNotice = controller::dismissNotice,
   )
 }
 
@@ -134,6 +138,8 @@ internal fun HiddenScreen(
   onBack: (() -> Unit)? = null,
   contentPadding: PaddingValues = PaddingValues(),
   backdropOut: ((GlassBackdropState) -> Unit)? = null,
+  notice: ActionNotice? = null,
+  onDismissNotice: () -> Unit = {},
 ) {
   if (state is HiddenUiState.Content) {
     CollectionGridPage(
@@ -155,6 +161,8 @@ internal fun HiddenScreen(
       backdropOut = backdropOut,
       footnote = stringResource(R.string.hidden_footnote),
       actionsFor = { _, _ -> listOf(SelectionAction(Icons.Rounded.Visibility, R.string.selection_show, onShow)) },
+      notice = notice,
+      onDismissNotice = onDismissNotice,
     )
     return
   }

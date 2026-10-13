@@ -66,7 +66,13 @@ import dev.pampa.mycloudgallery.core.mediastore.contract.SyncStatus
 import dev.pampa.mycloudgallery.core.model.CellFlags
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
+import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
+import dev.pampa.mycloudgallery.feature.library.ActionNotice
+import dev.pampa.mycloudgallery.feature.library.ActionNoticeCard
 import dev.pampa.mycloudgallery.feature.library.R
+import dev.pampa.mycloudgallery.feature.library.attempt
+import dev.pampa.mycloudgallery.feature.library.countText
+import dev.pampa.mycloudgallery.feature.library.photoVideoSummary
 import dev.pampa.mycloudgallery.feature.library.grid.MediaGridState
 import dev.pampa.mycloudgallery.feature.library.grid.SavedGridPosition
 import java.io.File
@@ -91,6 +97,25 @@ internal suspend fun LibraryTabState.chooseFilter(filter: LibraryFilter) {
 internal suspend fun LibraryTabState.chooseStyle(style: GridStyle) {
   grid.style = style
   preferences.setStyle(style)
+}
+
+/**
+ * Nasconde [ids] e, **solo se la scrittura e' riuscita**, chiude la selezione (R8). Se non riesce (disco pieno, database in
+ * errore) la Libreria lo dice e la selezione resta aperta: non si fa credere all'utente che le foto private siano
+ * nascoste quando tornano in griglia.
+ */
+internal suspend fun LibraryTabState.hide(ids: Set<MediaId>) {
+  if (attempt { actions.setHidden(ids, true) }) grid.stopSelecting() else notice = ActionNotice.HideFailed
+}
+
+/** Condividi: oltre il tetto del selettore di sistema si avvisa senza provarci (I8); se Android non lo apre, lo si dice. */
+internal fun LibraryTabState.shareSelection(ids: Set<MediaId>) {
+  val limit = commands.shareLimit
+  when {
+    ids.isEmpty() -> Unit
+    ids.size > limit -> notice = ActionNotice.ShareTooMany(limit)
+    !commands.share(ids) -> notice = ActionNotice.ShareFailed
+  }
 }
 
 /**
@@ -294,13 +319,13 @@ private fun FirstReadProgress(scanning: SyncStatus.Scanning) {
     if (total != null && total > 0) {
       FluidProgressBar(progress = { scanning.done.toFloat() / total })
       Text(
-        text = stringResource(R.string.library_first_read_progress, scanning.done, total),
+        text = stringResource(R.string.library_first_read_progress, GalleryNumbers.format(scanning.done), GalleryNumbers.format(total)),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
     } else {
       Text(
-        text = stringResource(R.string.library_first_read_progress_unknown, scanning.done),
+        text = countText(R.plurals.library_first_read_progress_unknown, scanning.done),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
@@ -317,7 +342,7 @@ internal fun LibraryFooter(state: LibraryTabState, phone: LibraryPhoneStatus, st
     verticalArrangement = Arrangement.spacedBy(ProgressGap),
   ) {
     Text(
-      text = stringResource(R.string.library_summary, state.photoCount, state.videoCount),
+      text = photoVideoSummary(state.photoCount, state.videoCount),
       style = MaterialTheme.typography.bodyMedium,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
@@ -326,13 +351,28 @@ internal fun LibraryFooter(state: LibraryTabState, phone: LibraryPhoneStatus, st
   }
 }
 
-/** Gli avvisi sotto la barra: accesso parziale (E-P1) e foto in attesa del permesso della posizione (E-P21). */
+/** Se [LibraryNotices] mostra qualcosa: serve a chi misura la loro altezza per sapere quando e' tornata a zero. */
+internal fun hasNotices(phone: LibraryPhoneStatus, notice: ActionNotice?): Boolean =
+  phone.access == MediaAccess.PARTIAL || phone.pendingLocation > 0 || notice != null
+
+/**
+ * Gli avvisi sotto la barra: accesso parziale (E-P1), foto in attesa del permesso della posizione (E-P21) e, in cima, l'azione
+ * dell'utente che non e' riuscita o non e' partita ([notice], R8 e I8).
+ */
 @Composable
-internal fun LibraryNotices(phone: LibraryPhoneStatus, commands: LibraryCommands, backdrop: GlassBackdropState, modifier: Modifier = Modifier) {
+internal fun LibraryNotices(
+  phone: LibraryPhoneStatus,
+  commands: LibraryCommands,
+  backdrop: GlassBackdropState,
+  modifier: Modifier = Modifier,
+  notice: ActionNotice? = null,
+  onDismissNotice: () -> Unit = {},
+) {
+  if (!hasNotices(phone, notice)) return
   val partial = phone.access == MediaAccess.PARTIAL
   val pending = phone.pendingLocation > 0
-  if (!partial && !pending) return
   Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(NoticeSpacing), horizontalAlignment = Alignment.CenterHorizontally) {
+    if (notice != null) ActionNoticeCard(notice = notice, backdrop = backdrop, onDismiss = onDismissNotice)
     if (partial) {
       GalleryGridNotice(
         icon = Icons.Rounded.PhotoLibrary,
@@ -346,7 +386,7 @@ internal fun LibraryNotices(phone: LibraryPhoneStatus, commands: LibraryCommands
     if (pending) {
       GalleryGridNotice(
         icon = Icons.Rounded.LocationOn,
-        title = pluralStringResource(R.plurals.library_pending_title, phone.pendingLocation, phone.pendingLocation),
+        title = countText(R.plurals.library_pending_title, phone.pendingLocation),
         message = stringResource(R.string.library_pending_message),
         backdrop = backdrop,
         actionLabel = stringResource(R.string.library_pending_action),
@@ -398,12 +438,15 @@ internal fun LibrarySelectionBar(
   val view = grid.view
   val allFavorite = remember(selected, view) { selected.ids.isNotEmpty() && selected.ids.all { grid.isFavorite(it) } }
   val actions = buildList {
-    add(GalleryBarAction(Icons.Rounded.IosShare, stringResource(R.string.library_action_share), { state.commands.share(selected.ids) }, enabled = any))
+    add(GalleryBarAction(Icons.Rounded.IosShare, stringResource(R.string.library_action_share), { state.shareSelection(selected.ids) }, enabled = any))
     add(
       GalleryBarAction(
         icon = if (allFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
         contentDescription = stringResource(if (allFavorite) R.string.library_action_unfavorite else R.string.library_action_favorite),
-        onClick = { scope.launch { state.actions.setFavorite(selected.ids, !allFavorite) } },
+        onClick = {
+          val ids = selected.ids
+          scope.launch { if (!attempt { state.actions.setFavorite(ids, !allFavorite) }) state.notice = ActionNotice.FavoriteFailed }
+        },
         enabled = any,
       ),
     )
@@ -417,15 +460,23 @@ internal fun LibrarySelectionBar(
             onHideGroups()
           } else {
             val ids = selected.ids
-            scope.launch { state.actions.setHidden(ids, true) }
-            grid.stopSelecting()
+            scope.launch { state.hide(ids) }
           }
         },
         enabled = any,
       ),
     )
     if (state.commands.canDeleteFromPhone) {
-      add(GalleryBarAction(Icons.Rounded.DeleteOutline, stringResource(R.string.library_action_delete), onDelete, destructive = true, enabled = any))
+      add(
+        GalleryBarAction(
+          Icons.Rounded.DeleteOutline,
+          stringResource(R.string.library_action_delete),
+          // Oltre il tetto di una richiesta di sistema non si apre nemmeno il foglio: si dice subito quanti se ne possono (I8).
+          { if (selected.size > state.commands.deleteLimit) state.notice = ActionNotice.DeleteTooMany(state.commands.deleteLimit) else onDelete() },
+          destructive = true,
+          enabled = any,
+        ),
+      )
     }
   }
   GalleryActionBar(actions = actions, backdrop = backdrop)
@@ -450,9 +501,10 @@ internal fun LibraryDeleteSheet(visible: Boolean, state: LibraryTabState, onDism
       ),
     ),
     onConfirm = {
-      state.commands.deleteFromPhone(selected.ids)
+      // Se la richiesta di sistema non parte la selezione resta aperta e lo si dice (I8).
+      val started = state.commands.deleteFromPhone(selected.ids)
       onDismiss()
-      grid.stopSelecting()
+      if (started) grid.stopSelecting() else state.notice = ActionNotice.DeleteFailed
     },
     onDismissRequest = onDismiss,
     scopes = listOf(GalleryDeleteScope.PhoneOnly),
@@ -469,7 +521,7 @@ internal fun LibraryHideGroupSheet(visible: Boolean, state: LibraryTabState, onD
   val scope = rememberCoroutineScope()
   val selected by grid.selection.selected.collectAsState()
   val total = remember(selected, grid.view) { grid.hiddenWithGroups(selected.ids) }
-  val title = pluralStringResource(R.plurals.library_hide_group_title, total, total)
+  val title = countText(R.plurals.library_hide_group_title, total)
   GalleryConfirmSheet(visible = visible, onDismissRequest = onDismiss, paneTitle = title) {
     GallerySheetScaffold(
       icon = Icons.Rounded.VisibilityOff,
@@ -481,9 +533,8 @@ internal fun LibraryHideGroupSheet(visible: Boolean, state: LibraryTabState, onD
           text = stringResource(R.string.library_action_hide),
           onClick = {
             val ids = selected.ids
-            scope.launch { state.actions.setHidden(ids, true) }
             onDismiss()
-            grid.stopSelecting()
+            scope.launch { state.hide(ids) }
           },
           size = FluidButtonSize.Large,
           fillWidth = true,

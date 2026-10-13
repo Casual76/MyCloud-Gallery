@@ -7,7 +7,6 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
-import dev.pampa.mycloudgallery.BuildConfig
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagnosticsContributor
 import dev.pampa.mycloudgallery.core.database.GalleryDatabase
 import dev.pampa.mycloudgallery.core.family.contract.FamilySetupRepository
@@ -21,7 +20,6 @@ import dev.pampa.mycloudgallery.core.library.store.SnapshotStore
 import dev.pampa.mycloudgallery.core.mediastore.android.AndroidPhoneAccessReader
 import dev.pampa.mycloudgallery.core.mediastore.android.AndroidPhoneMediaIntents
 import dev.pampa.mycloudgallery.core.mediastore.android.AndroidRecentlyDeletedSource
-import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneLibrarySync
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneMediaIntents
 import dev.pampa.mycloudgallery.core.mediastore.contract.RecentlyDeletedSource
 import dev.pampa.mycloudgallery.core.model.AccountId
@@ -38,7 +36,8 @@ import dev.pampa.mycloudgallery.gallery.GalleryParts
 import dev.pampa.mycloudgallery.gallery.LibraryDiagnostics
 import dev.pampa.mycloudgallery.gallery.PhoneLibrary
 import dev.pampa.mycloudgallery.graph.AppGraph
-import java.util.ServiceLoader
+import dev.pampa.mycloudgallery.graph.GalleryStopper
+import java.util.Optional
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.first
 
@@ -47,8 +46,9 @@ import kotlinx.coroutines.flow.first
  * [GalleryGraph] per processo (docs/fase3-progetto.md §1.4). I `@HiltViewModel` di `feature-library` e `feature-viewer`
  * vedono solo i contratti.
  *
- * La variante di misura (`benchmarkRelease`, P9) registra con `ServiceLoader` una sincronizzazione ferma: la si preferisce
- * alla vera quando c'e' (docs/bench/README.md §6). Nelle altre varianti `ServiceLoader` non trova niente.
+ * Le varianti di misura (`benchmarkRelease` e `nonMinifiedRelease`, P9) legano [MeasurementHooks]: una sincronizzazione
+ * ferma, che si preferisce alla vera, e il database del loro dataset sintetico (docs/bench/README.md §6). Nelle altre
+ * varianti l'`Optional` e' vuoto: la sincronizzazione vera e `gallery.db`.
  */
 @Module
 @InstallIn(SingletonComponent::class)
@@ -56,10 +56,15 @@ object GalleryModule {
 
   @Provides
   @Singleton
-  fun gallery(@ApplicationContext context: Context, graph: AppGraph, setup: FamilySetupRepository): GalleryGraph {
-    val benchSync = ServiceLoader.load(PhoneLibrarySync::class.java, PhoneLibrarySync::class.java.classLoader).firstOrNull()
+  fun gallery(
+    @ApplicationContext context: Context,
+    graph: AppGraph,
+    setup: FamilySetupRepository,
+    hooks: @JvmSuppressWildcards Optional<MeasurementHooks>,
+  ): GalleryGraph {
+    val measurement = hooks.orElse(null)
     val parts = GalleryParts(
-      databaseName = databaseName(),
+      databaseName = databaseName(measurement),
       replicaDir = SnapshotStore.directory(context),
       preferencesFile = DataStoreLibraryPreferences.file(context),
       access = AndroidPhoneAccessReader(context),
@@ -68,7 +73,7 @@ object GalleryModule {
       phone = PhoneLibrary::android,
       syntheticThumbnails = DeveloperTools.syntheticThumbnails(),
       openPlaces = { PlacesDataset.openResult(context) },
-      benchSync = benchSync,
+      benchSync = measurement?.phoneSync,
     )
     return GalleryGraph(
       context = context,
@@ -78,14 +83,17 @@ object GalleryModule {
       ownerAccount = { graph.accountStore.observe().first()?.user?.let(AccountId::of) },
       // L'orologio di riferimento (piano §1): quello del NAS se noto, altrimenti quello del dispositivo.
       clock = { graph.nasClock.nowMillisOrNull() ?: System.currentTimeMillis() },
-    )
+    ).also { gallery ->
+      // L'azzeramento (fase 5) ferma la galleria viva prima di cancellare i file (R7).
+      graph.galleryStopper = GalleryStopper { gallery.shutdown() }
+    }
   }
 
-  /** Il catalogo: `gallery.db`; nella variante di misura il dataset sintetico di P9 sta in un file a parte. */
-  private fun databaseName(): String = if (BuildConfig.BUILD_TYPE == "benchmarkRelease") BENCH_DATABASE else GalleryDatabase.NAME
-
-  /** Lo stesso nome di `BenchDataset.DATABASE_NAME` (app/src/benchmarkRelease), che da qui non si vede. */
-  private const val BENCH_DATABASE = "gallery-bench.db"
+  /**
+   * Il catalogo: `gallery.db`; con le [MeasurementHooks] (benchmarkRelease **e** nonMinifiedRelease, I3) il dataset sintetico di
+   * P9, che sta in un file a parte: la scelta segue il fatto che le hooks ci siano, non il nome del tipo di build.
+   */
+  internal fun databaseName(hooks: MeasurementHooks?): String = hooks?.databaseName ?: GalleryDatabase.NAME
 
   @Provides fun thumbnailLoader(gallery: GalleryGraph): ThumbnailLoader = gallery.thumbnails
 

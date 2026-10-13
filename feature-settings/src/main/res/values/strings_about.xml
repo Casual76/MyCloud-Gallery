@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <!-- Informazioni e licenze (Fase 3, P11): l'app, i luoghi offline (GeoNames, CC BY 4.0) e le librerie usate.
+  <!-- Informazioni e licenze (Fase 3, P11): l'app, i luoghi offline (GeoNames, CC BY 4.0) e le librerie incluse nell’APK.
        Gli indirizzi sono testo semplice, mai un collegamento: la Fase 3 non fa traffico di rete (D18, D24). -->
 
   <string name="settings_about">Informazioni e licenze</string>
-  <string name="settings_about_detail">Versione, luoghi offline e librerie usate</string>
+  <string name="settings_about_detail">Versione, luoghi offline e licenze delle librerie</string>
 
   <string name="about_title">Informazioni e licenze</string>
 
@@ -18,21 +18,28 @@
   <string name="about_geonames_title">GeoNames</string>
   <!-- Il testo dell'attribuzione, parola per parola: :app verifica che sia uguale a PlacesAttribution.TEXT. -->
   <string name="about_geonames_attribution">Nomi e fusi orari dei luoghi: dati di GeoNames (geonames.org), licenza Creative Commons Attribuzione 4.0. I dati sono stati modificati: ridotti, in parte tradotti in italiano e convertiti in un formato compatto.</string>
-  <string name="about_geonames_note">Se in questa versione i luoghi non compaiono, i dati non sono ancora inclusi: la galleria funziona lo stesso.</string>
+  <string name="about_geonames_note">I dati dei luoghi sono dentro l’app e si leggono sul telefono, senza internet. Le foto senza posizione non hanno un luogo.</string>
   <string name="about_license_label">Licenza</string>
   <string name="about_license_cc_by">Creative Commons Attribuzione 4.0 (CC BY 4.0)</string>
   <string name="about_license_cc_by_url">https://creativecommons.org/licenses/by/4.0/</string>
 
   <string name="about_section_libraries">Librerie</string>
-  <string name="about_section_libraries_detail">Software di altri autori usato dall’app.</string>
-  <string name="about_lib_telephoto_title">telephoto</string>
-  <string name="about_lib_telephoto_detail">Saket Narayan · zoomable-image e sub-sampling-image 0.19.0</string>
-  <string name="about_lib_media3_title">AndroidX Media3 ExoPlayer</string>
-  <string name="about_lib_media3_detail">The Android Open Source Project · versione 1.11.1</string>
-  <string name="about_lib_exif_title">AndroidX ExifInterface</string>
-  <string name="about_lib_exif_detail">The Android Open Source Project · versione 1.4.2</string>
-  <string name="about_license_apache">Apache License 2.0</string>
+  <string name="about_section_libraries_detail">Tutto il software di altri autori che sta dentro l’app, con la sua licenza.</string>
+  <string name="about_section_engine">Fluid Engine</string>
+  <string name="about_section_engine_detail">Le fondamenta grafiche dell’app (versione %1$s) includono queste opere di altri.</string>
+  <string name="about_section_licenses">Licenze</string>
+  <string name="about_license_apache">Apache 2.0</string>
   <string name="about_license_apache_full">Apache License, versione 2.0</string>
   <string name="about_license_apache_url">https://www.apache.org/licenses/LICENSE-2.0</string>
-  <string name="about_libraries_footnote">Le librerie non inviano dati. Per la galleria del telefono l’app non fa nessuna connessione di rete.</string>
+  <string name="about_license_mit">MIT</string>
+  <string name="about_license_mit_full">Licenza MIT</string>
+  <string name="about_license_mit_url">https://opensource.org/license/mit</string>
+  <string name="about_license_bc">MIT (Bouncy Castle)</string>
+  <string name="about_license_bc_full">Bouncy Castle Licence (testo della licenza MIT)</string>
+  <string name="about_license_bc_url">https://www.bouncycastle.org/licence.html</string>
+  <string name="about_license_ofl">SIL OFL 1.1</string>
+  <string name="about_license_ofl_full">SIL Open Font License, versione 1.1 (font Inter)</string>
+  <string name="about_license_ofl_url">https://openfontlicense.org</string>
+  <string name="about_libraries_footnote">Le librerie non inviano dati. Per la galleria del telefono l’app non fa nessuna connessione di rete. Gli indirizzi qui sotto sono solo testo: non si aprono da soli.</string>
+  <string name="about_licenses_footnote">Il testo completo di ogni licenza e gli avvisi di copyright sono nei progetti delle librerie, agli indirizzi indicati.</string>
 </resources>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Azioni che non sono riuscite o non sono partite (revisione di sicurezza, R8 e I8): la schermata lo dice. -->
+  <string name="notice_hide_failed_title">Non è stato possibile nascondere</string>
+  <string name="notice_hide_failed_message">Gli elementi sono ancora visibili nella Libreria. Riprova fra poco.</string>
+  <string name="notice_show_failed_title">Non è stato possibile mostrarli di nuovo</string>
+  <string name="notice_show_failed_message">Gli elementi restano tra i Nascosti. Riprova fra poco.</string>
+  <string name="notice_favorite_failed_title">Preferiti non aggiornati</string>
+  <string name="notice_favorite_failed_message">La modifica non è stata salvata. Riprova fra poco.</string>
+  <string name="notice_share_too_many_title">Puoi condividere al massimo %1$s elementi alla volta</string>
+  <string name="notice_delete_too_many_title">Puoi eliminare al massimo %1$s elementi alla volta</string>
+  <string name="notice_too_many_message">Togli qualche elemento dalla selezione e riprova.</string>
+  <string name="notice_share_failed_title">Non è stato possibile condividere</string>
+  <string name="notice_share_failed_message">Android non ha aperto la condivisione. Prova con meno elementi.</string>
+  <string name="notice_delete_failed_title">Non è stato possibile eliminare</string>
+  <string name="notice_delete_failed_message">Non è stato eliminato niente. Prova con meno elementi.</string>
+  <string name="notice_dismiss">OK</string>
+</resources>

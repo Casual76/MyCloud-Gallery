@@ -61,6 +61,15 @@ internal enum class ViewerMessage(@StringRes val title: Int, @StringRes val deta
   /** Un'azione non e' riuscita (nessuna app per aprire la posizione, nessuna app per condividere). */
   ActionFailed(R.string.viewer_msg_failed_title, R.string.viewer_msg_failed_detail),
 
+  /** "Nascondi" non e' riuscito (disco pieno, database in errore): l'elemento e' ancora nella Libreria (R8). */
+  HideFailed(R.string.viewer_msg_hide_failed_title, R.string.viewer_msg_hide_failed_detail),
+
+  /** "Mostra nella Libreria" non e' riuscito: l'elemento resta tra i Nascosti. */
+  UnhideFailed(R.string.viewer_msg_unhide_failed_title, R.string.viewer_msg_unhide_failed_detail),
+
+  /** Il preferito non e' stato salvato. */
+  FavoriteFailed(R.string.viewer_msg_favorite_failed_title, R.string.viewer_msg_favorite_failed_detail),
+
   /** La foto in movimento non ha una parte video che sappiamo riprodurre (E-M16). */
   MotionUnplayable(R.string.viewer_msg_motion_title, R.string.viewer_msg_motion_detail),
 }

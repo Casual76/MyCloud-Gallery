@@ -7,6 +7,7 @@ import dev.pampa.mycloudgallery.core.common.coroutines.DispatcherProvider
 import dev.pampa.mycloudgallery.core.imaging.testing.FakePlaceholderCache
 import dev.pampa.mycloudgallery.core.imaging.testing.FakeThumbnailLoader
 import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
+import dev.pampa.mycloudgallery.core.library.contract.LocalMediaActions
 import dev.pampa.mycloudgallery.core.library.testing.FakeLocalMediaActions
 import dev.pampa.mycloudgallery.core.mediastore.testing.FakePhoneMediaIntents
 import dev.pampa.mycloudgallery.core.metadata.contract.ExifDetails
@@ -61,7 +62,7 @@ abstract class ViewerTestBase {
 
   /** I servizi di prova: tutto acceso. Chi vuole un viewer "povero" passa [actions] o [intents] a null. */
   internal fun services(
-    actions: FakeLocalMediaActions? = this.actions,
+    actions: LocalMediaActions? = this.actions,
     intents: FakePhoneMediaIntents? = this.intents,
     motion: MotionVideoLocator = FakeMotionVideoLocator(),
     withDetails: Boolean = true,

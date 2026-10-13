@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!--
+    I conteggi della galleria (GalleryNumbers, core-library): il numero arriva gia' scritto all'italiana ("92.019", mai
+    "92019" ne' "92,019") come %1$s; il numero vero serve al plurale. Foto e video sono invariabili in italiano: le due
+    forme sono uguali, ma passano comunque da qui, cosi' la forma giusta e' una scelta della risorsa e non del codice.
+  -->
+  <plurals name="count_photos">
+    <item quantity="one">%1$s foto</item>
+    <item quantity="other">%1$s foto</item>
+  </plurals>
+  <plurals name="count_videos">
+    <item quantity="one">%1$s video</item>
+    <item quantity="other">%1$s video</item>
+  </plurals>
+  <!-- "92.019 foto, 7.981 video": il riepilogo in fondo alla Libreria e alle Raccolte. -->
+  <string name="count_photos_videos">%1$s, %2$s</string>
+</resources>

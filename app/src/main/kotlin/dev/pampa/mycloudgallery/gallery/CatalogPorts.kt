@@ -46,10 +46,13 @@ internal class DeferredTimelineSource(private val source: suspend () -> CatalogT
 }
 
 /**
- * Preferiti e nascosti senza far cadere l'app: la UI li lancia nello scope della composizione (selezione, viewer,
- * raccolte), dove un errore del catalogo arrivava al thread principale e chiudeva l'app (visto sull'emulatore, P11).
- * Un errore lascia tutto com'era (il media nascosto resta visibile, il cuore non cambia) e si registra solo il tipo
- * dell'eccezione, mai identita' o percorsi.
+ * Preferiti e nascosti: un errore del catalogo si registra (solo il tipo dell'eccezione, mai identita' o percorsi) e
+ * **arriva a chi ha chiesto**, che lo dice all'utente (revisione di sicurezza, R8). Prima l'errore era ingoiato per non
+ * far cadere l'app (la UI lancia queste azioni nello scope della composizione, dove un'eccezione arrivava al thread
+ * principale e la chiudeva, visto sull'emulatore, P11): ma cosi' "Nascondi" che falliva sembrava riuscito, la selezione
+ * si chiudeva e il viewer annunciava "Nascosto" mentre le foto tornavano in griglia. Ora ogni punto che le lancia
+ * (selezione della Libreria, viewer, Raccolte, Nascosti) cattura l'errore e mostra un avviso: l'app non cade e l'utente
+ * sa com'e' andata. Solo l'annullamento passa come tale.
  */
 internal class GuardedMediaActions(private val inner: LocalMediaActions) : LocalMediaActions {
 
@@ -64,6 +67,7 @@ internal class GuardedMediaActions(private val inner: LocalMediaActions) : Local
       throw e
     } catch (e: Exception) {
       GalleryLog.e(TAG) { "Modifica dei $what non salvata: ${e.javaClass.simpleName}" }
+      throw e
     }
   }
 

@@ -5,8 +5,8 @@
   <!-- Diagnostica della galleria (LibraryDiagnostics): solo stati, mai nomi, percorsi o luoghi. -->
   <string name="gallery_diag_places_ok">Luoghi offline disponibili</string>
   <string name="gallery_diag_places_opening">Luoghi offline in preparazione</string>
-  <string name="gallery_diag_places_missing">Luoghi offline non inclusi in questa versione</string>
-  <string name="gallery_diag_places_missing_detail">La galleria funziona lo stesso: le foto non mostrano il nome del luogo finché i dati non arrivano con un aggiornamento.</string>
+  <string name="gallery_diag_places_missing">Luoghi offline non trovati nell’app</string>
+  <string name="gallery_diag_places_missing_detail">I dati dei luoghi dovrebbero essere dentro l’app, ma non si trovano. La galleria funziona lo stesso: le foto restano tutte, senza il nome del luogo; reinstallare l’app di solito risolve.</string>
   <string name="gallery_diag_places_failed">Luoghi offline non leggibili</string>
   <string name="gallery_diag_places_failed_detail">I dati dei luoghi nell’app non si sono aperti. Le foto restano tutte; reinstallare l’aggiornamento di solito risolve.</string>
   <string name="gallery_diag_index">Indice della Libreria pronto</string>

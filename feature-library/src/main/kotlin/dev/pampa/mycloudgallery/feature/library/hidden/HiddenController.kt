@@ -5,12 +5,15 @@ import dev.pampa.mycloudgallery.core.library.contract.ViewerItems
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.security.lock.AuthPromptText
 import dev.pampa.mycloudgallery.core.security.lock.SystemCredentialAuthenticator
+import dev.pampa.mycloudgallery.feature.library.ActionNotice
+import dev.pampa.mycloudgallery.feature.library.attempt
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -57,6 +60,14 @@ class HiddenController(
 
   private val content = MutableStateFlow<ViewerItems?>(null)
   private val failed = MutableStateFlow(false)
+  private val noticeFlow = MutableStateFlow<ActionNotice?>(null)
+
+  /** "Mostra di nuovo" che non e' riuscito (R8): la pagina lo dice finche' non lo si chiude. */
+  internal val notice: StateFlow<ActionNotice?> = noticeFlow.asStateFlow()
+
+  internal fun dismissNotice() {
+    noticeFlow.value = null
+  }
   private var loading: Job? = null
 
   /** Cresce a ogni lettura e a ogni uscita: l'esito di una lettura di un'epoca vecchia si butta. */
@@ -95,6 +106,7 @@ class HiddenController(
     loading = null
     content.value = null
     failed.value = false
+    noticeFlow.value = null
     if (visible) {
       visible = false
       gate.onHidden()
@@ -118,8 +130,7 @@ class HiddenController(
     if (ids.isEmpty()) return
     scope.launch {
       if (!gate.isUnlocked) return@launch
-      actions.setHidden(ids, false)
-      load()
+      if (attempt { actions.setHidden(ids, false) }) load() else noticeFlow.value = ActionNotice.ShowFailed
     }
   }
 

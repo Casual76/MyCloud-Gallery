@@ -111,31 +111,29 @@ Senza media veri (emulatore appena creato) il dataset si crea lo stesso ma lo st
 
 ## 6. Collegamento con l'app (per P11 e M1)
 
-La variante di misura può mettere **file** e **servizi** nell'app, ma `src/main` non può chiamare un `Bench*` che non c'è nelle altre varianti. Per questo il collegamento è uno `ServiceLoader` su contratti che esistono già:
-
-`app/src/benchmarkRelease/resources/META-INF/services/` registra
-- `dev.pampa.mycloudgallery.core.family.contract.FamilySetupRepository` → `BenchFamilySetupRepository` (`SetupState.Ready(admin = false)`: la famiglia "pronta", senza NAS e senza rete);
-- `dev.pampa.mycloudgallery.core.mediastore.contract.PhoneLibrarySync` → `BenchPhoneLibrarySync` (ferma: la scansione vera riconcilierebbe le 100 mila righe sintetiche con i pochi media veri e le segnerebbe assenti).
-
-**Cosa fa P11** nel grafo (in `src/main`, 3 punti; nelle altre varianti `ServiceLoader` non trova niente e resta il comportamento vero). Fatto: `di/GraphModule.kt` (famiglia), `di/GalleryModule.kt` (sincronizzazione ferma e `gallery-bench.db`); il `ServiceLoader` riceve il classloader dell'app in modo esplicito. Lo schema di partenza era:
+La variante di misura può mettere **classi** e **moduli Hilt** nell'app, ma `src/main` non può chiamare un `Bench*` che non c'è nelle altre varianti. Il collegamento è un'interfaccia che esiste in `src/main` (`di/MeasurementHooks.kt`) e un binding opzionale:
 
 ```kotlin
-// GraphModule: la famiglia
-@Provides fun familySetupRepository(graph: AppGraph): FamilySetupRepository =
-  ServiceLoader.load(FamilySetupRepository::class.java).firstOrNull() ?: graph.setup
+// src/main: una dichiarazione, nessuna implementazione
+interface MeasurementHooks { val family: FamilySetupRepository; val phoneSync: PhoneLibrarySync; val databaseName: String }
+@Module @InstallIn(SingletonComponent::class)
+abstract class MeasurementHooksModule { @BindsOptionalOf abstract fun measurementHooks(): MeasurementHooks }
 
-// dove si costruisce la sincronizzazione del telefono
-val phoneSync: PhoneLibrarySync =
-  ServiceLoader.load(PhoneLibrarySync::class.java).firstOrNull() ?: RealPhoneLibrarySync(/* ... */)
-
-// dove si apre il database della Libreria: il dataset è in un file a parte
-val database = GalleryDatabase.build(
-  context,
-  if (BuildConfig.BUILD_TYPE == "benchmarkRelease") "gallery-bench.db" else GalleryDatabase.NAME,
-)
+// src/benchmarkRelease: l'unico posto che la lega (compilato in benchmarkRelease e nonMinifiedRelease, in nessun'altra)
+@Module @InstallIn(SingletonComponent::class)
+abstract class BenchHooksModule { @Binds abstract fun measurementHooks(hooks: BenchMeasurementHooks): MeasurementHooks }
 ```
 
-**Controllato dal P11 (13/10):** nell'APK `benchmarkRelease` ci sono `META-INF/services/...FamilySetupRepository` e `...PhoneLibrarySync` e nel dex `BenchFamilySetupRepository` e `BenchPhoneLibrarySync`; nella release nessuno dei due. Il motivo del controllo: R8 elimina i servizi che nessuno carica (provato su un APK minimo: senza una chiamata a `ServiceLoader.load` la classe e il file in `META-INF/services/` spariscono). Quindi, quando P11 ha messo le righe qui sopra, aprire l'APK `benchmarkRelease` e controllare che `META-INF/services/dev.pampa.mycloudgallery.core.family.contract.FamilySetupRepository` ci sia ancora e che nel dex ci siano `BenchFamilySetupRepository` e `BenchPhoneLibrarySync`; se mancano, la Libreria dello scenario resta sull'onboarding e la sonda lo dice ("In attesa di M1").
+`BenchMeasurementHooks` consegna
+- `family`: `BenchFamilySetupRepository` (`SetupState.Ready(admin = false)`: la famiglia "pronta", senza NAS e senza rete);
+- `phoneSync`: `BenchPhoneLibrarySync` (ferma: la scansione vera riconcilierebbe le 100 mila righe sintetiche con i pochi media veri e le segnerebbe assenti);
+- `databaseName`: `gallery-bench.db` (`BenchDataset.DATABASE_NAME`), così anche `nonMinifiedRelease` (`:app:generateBaselineProfile`) apre il dataset e non `gallery.db` vuoto (I3).
+
+**Cosa fa `src/main`** (3 punti, tutti con un `Optional<MeasurementHooks>` vuoto fuori dalle varianti di misura, dove resta il comportamento vero): `di/GraphModule.kt` (famiglia, via `chooseFamilySetup`), `di/GalleryModule.kt` (sincronizzazione ferma e nome del database).
+
+**Perché non più `ServiceLoader`** (revisione di sicurezza della Fase 3, R6). Un file `META-INF/services/...` è un canale dichiarativo e invisibile: qualunque dipendenza (o un file messo per sbaglio in `src/main/resources`) poteva far partire l'app vera con la famiglia "pronta", saltando onboarding e approvazione dell'admin, e nessun controllo lo vietava (`check.ps1` cercava solo le classi `Bench*`). Ora `src/main` non nomina `ServiceLoader` (lo prova `MeasurementHooksTest`), la release non ha nessun `META-INF/services/dev.pampa.*` e `tools/check.ps1` fallisce se lo trova (passo "nessun file di servizio dev.pampa.* in META-INF/services"); un test controlla anche l'ordine di scelta (le hooks vincono, poi la scorciatoia di debug, poi la famiglia vera).
+
+**Controllato (13/10):** il modulo Hilt compare nel componente di `benchmarkRelease` e `nonMinifiedRelease` (`BenchMeasurementHooks`) e non in quello di release (`Optional.empty()`); nell'APK `benchmarkRelease` ci sono `BenchMeasurementHooks`, `BenchFamilySetupRepository` e `BenchPhoneLibrarySync` nel dex e nessun file in `META-INF/services/`.
 
 Altre due cose che le prove si aspettano dall'app (senza, girano lo stesso e `compare.ps1` lo dice):
 
@@ -167,13 +165,13 @@ extension.sourceSets.findByName('nonMinifiedRelease')?.with {
 | Scenari `coldStart`, `pinch`, `viewerOpen` con la **vera app** (P11, 13/10) su Medium_Phone (API 37.1), smoke (`benchSmoke=true`), senza media veri | girano tutti e tre: `libraryShown` = 1 (la Libreria vera si apre sul dataset), `timeToFullDisplayMs` misurato (`reportFullyDrawn` c'e'), `viewerOpenMs` misurato (la sezione `MCG:viewerOpen` c'e'), il pinch attraversa i livelli. I numeri dell'emulatore non valgono |
 | `check.ps1 -Bench` con un dispositivo vero | **non provato** (nessun dispositivo fisico nel P11): S25 e Tab S9 sul campo |
 | `:app:generateBaselineProfile` e `tools\bench\generate-profile.ps1` | **non provati**: si fanno sul dispositivo vero, con la Libreria ora raggiungibile |
-| Servizi `ServiceLoader` dopo R8 nell'app vera (`META-INF/services` nell'APK) | verde (P11, §6) |
+| Hooks di misura (Hilt, niente `ServiceLoader`): nel componente delle due varianti di misura, `Optional.empty()` nella release, nessun `META-INF/services/dev.pampa.*` nell'APK di release | verde (R6, §6) |
 
 ## 8. Limiti e cose da sapere
 
 - **Più dispositivi collegati:** `check.ps1 -Bench` si ferma e chiede `-BenchSerial`; Gradle gira su tutti i dispositivi collegati a meno di `ANDROID_SERIAL`, e lo script lo imposta per quello scelto. Gli emulatori sono condivisi con gli altri pacchetti: la sonda tocca solo il pacchetto sotto misura e quello di test.
 - **I numeri dell'emulatore non valgono.** Servono a vedere che gli scenari girano. Medium_Phone (API 37.1) usa un'immagine con pagine da 16 KB: può comparire un avviso di compatibilità all'avvio dell'app.
-- **Ci vuole la Libreria raggiungibile**: dal P11 la variante di misura apre la Libreria vera sul dataset (famiglia "pronta" dal `ServiceLoader`). Senza il marcatore del dataset l'app va all'onboarding: tutte le prove tranne `coldStart` si saltano con il motivo e `coldStart` misura l'onboarding (marcato non valido).
+- **Ci vuole la Libreria raggiungibile**: dal P11 la variante di misura apre la Libreria vera sul dataset (famiglia "pronta" dalle `MeasurementHooks`). Senza il marcatore del dataset l'app va all'onboarding: tutte le prove tranne `coldStart` si saltano con il motivo e `coldStart` misura l'onboarding (marcato non valido).
 - **Il profilo è fatto su un dataset realistico, non sul tuo.** Tipi, proporzioni e rotazione vengono dai media veri del dispositivo; le date e la distribuzione sono sintetiche.
 - **Le fixture dei video**: il dataset ci mette i video veri del dispositivo (con la loro durata) ma il benchmark non li riproduce; la riproduzione si prova sul campo (F12).
 - **Niente rete**: né l'app (D24) né il collaudo la usano. `benchmark` dichiara `INTERNET` solo perché lo porta la libreria di test nel suo APK (mai in quello dell'app).

@@ -158,7 +158,7 @@ internal fun MessageNotice(message: ViewerMessage, backdrop: GlassBackdropState,
   GalleryViewerNotice(
     icon = when (message) {
       ViewerMessage.Copied, ViewerMessage.Hidden, ViewerMessage.Unhidden -> Icons.Rounded.CheckCircle
-      ViewerMessage.ActionFailed -> Icons.Rounded.ReportProblem
+      ViewerMessage.ActionFailed, ViewerMessage.HideFailed, ViewerMessage.UnhideFailed, ViewerMessage.FavoriteFailed -> Icons.Rounded.ReportProblem
       else -> Icons.Rounded.Info
     },
     title = stringResource(message.title),

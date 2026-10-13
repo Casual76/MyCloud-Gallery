@@ -7,9 +7,13 @@ import dev.pampa.mycloudgallery.core.library.contract.LocalMediaActions
 import dev.pampa.mycloudgallery.core.library.contract.ViewerItems
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneMediaIntents
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.feature.library.ActionNotice
+import dev.pampa.mycloudgallery.feature.library.attempt
 import javax.inject.Inject
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -39,16 +43,25 @@ class CollectionsViewModel @Inject constructor(
   /** Gli elementi di una raccolta-filtro, o null per i Nascosti e gli Eliminati di recente (che non sono filtri). */
   fun items(kind: CollectionKind): ViewerItems? = kind.filter?.let(source::items)
 
-  /** Preferito acceso o spento per [ids]. */
-  fun setFavorite(ids: Set<MediaId>, on: Boolean) {
-    if (ids.isEmpty()) return
-    viewModelScope.launch { actions.setFavorite(ids, on) }
+  private val noticeFlow = MutableStateFlow<ActionNotice?>(null)
+
+  /** L'azione che non e' riuscita (preferito, nascondi), finche' la pagina non la chiude (R8). */
+  internal val notice: StateFlow<ActionNotice?> = noticeFlow.asStateFlow()
+
+  internal fun dismissNotice() {
+    noticeFlow.value = null
   }
 
-  /** Nasconde [ids]: spariscono da ogni superficie (E-H1) e si ritrovano nei Nascosti. */
+  /** Preferito acceso o spento per [ids]. Se non si salva la pagina lo dice (R8). */
+  fun setFavorite(ids: Set<MediaId>, on: Boolean) {
+    if (ids.isEmpty()) return
+    viewModelScope.launch { if (!attempt { actions.setFavorite(ids, on) }) noticeFlow.value = ActionNotice.FavoriteFailed }
+  }
+
+  /** Nasconde [ids]: spariscono da ogni superficie (E-H1) e si ritrovano nei Nascosti. Se non riesce la pagina lo dice (R8). */
   fun hide(ids: Set<MediaId>) {
     if (ids.isEmpty()) return
-    viewModelScope.launch { actions.setHidden(ids, true) }
+    viewModelScope.launch { if (!attempt { actions.setHidden(ids, true) }) noticeFlow.value = ActionNotice.HideFailed }
   }
 
   private companion object {

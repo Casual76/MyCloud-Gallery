@@ -31,6 +31,7 @@ import dev.pampa.mycloudgallery.core.library.data.DataStoreLibraryPreferences
 import dev.pampa.mycloudgallery.core.library.data.TimelineViewerItems
 import dev.pampa.mycloudgallery.core.library.layout.TimelineLayoutEngine
 import dev.pampa.mycloudgallery.core.library.store.SnapshotStore
+import dev.pampa.mycloudgallery.core.library.store.SnapshotWriter
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess
 import dev.pampa.mycloudgallery.core.mediastore.contract.MetaPriority
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneAccessReader
@@ -63,7 +64,13 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -78,6 +85,8 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -89,8 +98,9 @@ import kotlinx.coroutines.withContext
  * @property phone il montaggio della lettura del telefono quando il catalogo c'e' ([PhoneLibrary.android] o i fake).
  * @property syntheticThumbnails i gradienti della Libreria sintetica (solo debug; altrove nessuna sorgente).
  * @property openPlaces l'apertura del dataset dei luoghi (bloccante: la chiama [LazyPlaces] fuori dal thread principale).
- * @property benchSync la sincronizzazione ferma della variante di misura (`ServiceLoader`, docs/bench/README.md §6): con
+ * @property benchSync la sincronizzazione ferma della variante di misura (`MeasurementHooks`, docs/bench/README.md §6): con
  *   questa la lettura del telefono e i lavori in background non partono, perche' riconcilierebbero il dataset sintetico.
+ * @property snapshotDelayMs l'attesa dell'accorpamento dell'istantanea su file (di norma 5 s; i test la accorciano).
  */
 class GalleryParts(
   val databaseName: String?,
@@ -103,6 +113,7 @@ class GalleryParts(
   val syntheticThumbnails: ThumbnailSource = NoThumbnailSource,
   val openPlaces: () -> PlacesOpenResult = { PlacesOpenResult.NotBundled },
   val benchSync: PhoneLibrarySync? = null,
+  val snapshotDelayMs: Long = SnapshotWriter.DEFAULT_DELAY_MS,
 )
 
 /** Il catalogo e la lettura del telefono: esistono solo quando l'account del dispositivo e' noto (vedi [GalleryGraph]). */
@@ -130,6 +141,14 @@ class GalleryCore(
  * **A livello di processo** ([startWhenReady], da `ProcessWatcher`): il repository della timeline parte appena la
  * famiglia e' pronta e segue tutte le scritture del catalogo, anche quelle dei lavori in background, cosi' l'istantanea
  * su file non resta mai indietro (E-H1: un nascosto non resta sul disco).
+ *
+ * **Vita e morte** (revisione di sicurezza, R7). Tutto cio' che la galleria lancia (costruzione del catalogo, avvio del
+ * repository e del suo scrittore, sincronizzazione agganciata) vive sotto un lavoro proprio; i lavori in background
+ * passano da [runIfActive]. [shutdown] li ferma **e li aspetta**, chiude la pipeline delle immagini e il database: lo
+ * chiama l'azzeramento (`AppLocalDataEraser`) **prima** di cancellare i file, cosi' niente puo' riscriverli. Dopo, la
+ * galleria non scrive piu' e non si riavvia in questo processo (serve il prossimo avvio): meglio ferma che viva su dati
+ * che non esistono piu'. Con la famiglia non pronta (non configurata, bloccata) [core] e [coreIfReady] non danno il
+ * catalogo, anche se e' gia' in memoria.
  */
 class GalleryGraph(
   private val context: Context,
@@ -140,6 +159,21 @@ class GalleryGraph(
   val clock: () -> Long,
   private val dispatchers: DispatcherProvider = DefaultDispatcherProvider,
 ) {
+
+  // --- Vita della galleria (R7) ------------------------------------------------------------------------------------------
+
+  /** Il lavoro di cui sono figli catalogo, repository, scrittore e sincronizzazione agganciata: [shutdown] lo cancella e lo aspetta. */
+  private val galleryJob = SupervisorJob(scope.coroutineContext[Job])
+  private val galleryScope = CoroutineScope(scope.coroutineContext + galleryJob)
+
+  /** Serializza [shutdown] con le scritture brevi che toccano i file (`flush`, nascondi/preferito). */
+  private val lifecycle = Mutex()
+  private val workLock = Any()
+  private val runningWork = HashSet<Job>()
+
+  @Volatile
+  private var retired = false
+  private val retiredFlow = MutableStateFlow(false)
 
   val database: GalleryDatabase = GalleryDatabase.build(context, parts.databaseName)
 
@@ -169,27 +203,51 @@ class GalleryGraph(
   val recentlyDeleted: RecentlyDeletedSource get() = parts.recentlyDeleted
 
   // --- Il catalogo, quando l'account e' noto ---------------------------------------------------------------------------
-  private val coreDeferred: Deferred<GalleryCore> = scope.async(dispatchers.io, start = CoroutineStart.LAZY) { buildCore() }
+  private val coreDeferred: Deferred<GalleryCore> = galleryScope.async(dispatchers.io, start = CoroutineStart.LAZY) { buildCore() }
   private val coreFlow = MutableStateFlow<GalleryCore?>(null)
 
   /** Il catalogo e la lettura del telefono, se sono gia' stati costruiti (Diagnostica, `onTrimMemory`). */
   val coreOrNull: GalleryCore? get() = coreFlow.value
 
-  /** Il catalogo e la lettura del telefono: aspetta la famiglia pronta, poi li costruisce una volta sola. */
+  /**
+   * Il catalogo e la lettura del telefono: aspetta la famiglia pronta (**ogni volta**, anche con il catalogo gia' in
+   * memoria: un dispositivo bloccato o azzerato non lo riceve), poi li costruisce una volta sola. Lancia
+   * [GalleryStoppedException] se la galleria e' stata fermata da [shutdown].
+   */
   suspend fun core(): GalleryCore {
-    coreFlow.value?.let { return it }
+    checkActive()
     setup.state.first { it is SetupState.Ready }
-    return coreDeferred.await()
+    checkActive()
+    return builtCore()
   }
 
   /**
    * Come [core], ma per i lavori in background: null se la famiglia non e' pronta adesso (dispositivo non configurato,
-   * in attesa, azzerato, bloccato). Mai un'attesa senza fine in un lavoro.
+   * in attesa, azzerato, bloccato) o se la galleria e' ferma. Mai un'attesa senza fine in un lavoro.
    */
   suspend fun coreIfReady(): GalleryCore? {
-    coreFlow.value?.let { return it }
+    if (retired) return null
     val state = setup.state.first { it !is SetupState.Loading }
-    return if (state is SetupState.Ready) coreDeferred.await() else null
+    if (state !is SetupState.Ready || retired) return null
+    return try {
+      builtCore()
+    } catch (_: GalleryStoppedException) {
+      null
+    }
+  }
+
+  private suspend fun builtCore(): GalleryCore {
+    coreFlow.value?.let { return it }
+    return try {
+      coreDeferred.await()
+    } catch (e: CancellationException) {
+      // Annullato dalla chiusura della galleria (non da chi aspetta): per chi chiede e' un errore, non un annullamento.
+      if (retired) throw GalleryStoppedException() else throw e
+    }
+  }
+
+  private fun checkActive() {
+    if (retired) throw GalleryStoppedException()
   }
 
   /** L'indice letto dal catalogo, quando c'e' (prima, nessun cambiamento e nessuna riga). */
@@ -197,16 +255,28 @@ class GalleryGraph(
 
   /** Il repository della timeline: uno per processo. Parte con [startWhenReady]. */
   val repository: CatalogTimelineRepository =
-    CatalogTimelineRepository(timelineSource, SnapshotStore(parts.replicaDir), scope, dispatchers.default)
+    CatalogTimelineRepository(timelineSource, SnapshotStore(parts.replicaDir), galleryScope, dispatchers.default, parts.snapshotDelayMs)
 
   /** Preferiti e nascosti sul catalogo (nascondere toglie prima dall'indice e dall'istantanea, E-H1). */
   val actions: LocalMediaActions = GuardedMediaActions(
     object : LocalMediaActions {
-      override suspend fun setFavorite(ids: Set<MediaId>, on: Boolean) = core().actions.setFavorite(ids, on)
+      override suspend fun setFavorite(ids: Set<MediaId>, on: Boolean) {
+        val core = core()
+        writing { core.actions.setFavorite(ids, on) }
+      }
 
-      override suspend fun setHidden(ids: Set<MediaId>, on: Boolean) = core().actions.setHidden(ids, on)
+      override suspend fun setHidden(ids: Set<MediaId>, on: Boolean) {
+        val core = core()
+        writing { core.actions.setHidden(ids, on) }
+      }
     },
   )
+
+  /** Una scrittura che tocca catalogo e istantanea: mai insieme a [shutdown], e mai dopo. */
+  private suspend fun <T> writing(block: suspend () -> T): T = lifecycle.withLock {
+    checkActive()
+    block()
+  }
 
   /** La sincronizzazione che la UI e il processo vedono: quella vera, o quella ferma della variante di misura. */
   private val syncFlow: Flow<PhoneLibrarySync?> =
@@ -217,10 +287,27 @@ class GalleryGraph(
     .flatMapLatest { sync -> sync?.status ?: flowOf(SyncStatus.Idle(atMs = 0L)) }
     .stateIn(scope, SharingStarted.Eagerly, SyncStatus.Idle(atMs = 0L))
 
-  /** Con l'accesso parziale, i media accessibili adesso (E-P1); null con l'accesso completo. */
-  val partialSelection: StateFlow<Set<MediaId>?> = coreFlow
-    .flatMapLatest { core -> if (parts.benchSync != null || core == null) flowOf(null) else core.phone.sync.partialSelection }
+  /**
+   * Con l'accesso parziale, i media accessibili adesso (E-P1); null con l'accesso completo **o finche' la prima lettura non
+   * l'ha detto** (la Libreria non lo scambia per "tutto": vedi [PartialAccessTimeline]). A galleria ferma, un insieme
+   * vuoto: niente si mostra piu'.
+   */
+  val partialSelection: StateFlow<Set<MediaId>?> = combine(
+    coreFlow.flatMapLatest { core -> if (parts.benchSync != null || core == null) flowOf(null) else core.phone.sync.partialSelection },
+    retiredFlow,
+  ) { selection, stopped -> if (stopped) emptySet() else selection }
     .stateIn(scope, SharingStarted.Eagerly, null)
+
+  /**
+   * L'accesso ai media com'e' adesso (letto subito dal sistema, non dalla prima lettura del catalogo). Nella variante di
+   * misura la Libreria e' il dataset sintetico: l'accesso vero del telefono non la riguarda.
+   */
+  private val viewAccess: StateFlow<MediaAccess> =
+    if (parts.benchSync != null) {
+      MutableStateFlow(MediaAccess.FULL)
+    } else {
+      access.state.map { it.media }.stateIn(scope, SharingStarted.Eagerly, access.state.value.media)
+    }
 
   /** Le foto nuove in attesa del permesso della posizione nell'ultimo giro (E-P21). */
   private val pendingLocation: StateFlow<Int> = coreFlow
@@ -229,12 +316,25 @@ class GalleryGraph(
 
   /** Lo stato del telefono che la Libreria racconta: accesso, lettura, foto in attesa. */
   val libraryPhoneStatus: StateFlow<LibraryPhoneStatus> =
-    combine(access.state, phoneStatus, pendingLocation) { a, sync, pending ->
-      LibraryPhoneStatus(access = a.media, sync = sync, pendingLocation = if (a.media == MediaAccess.NONE) 0 else pending)
-    }.stateIn(scope, SharingStarted.Eagerly, LibraryPhoneStatus(access = access.state.value.media))
+    combine(viewAccess, phoneStatus, pendingLocation, partialSelection) { media, sync, pending, chosen ->
+      LibraryPhoneStatus(
+        access = media,
+        sync = sync,
+        pendingLocation = if (media == MediaAccess.NONE) 0 else pending,
+        // Accesso parziale e prima lettura non ancora finita: la Libreria dice che sta leggendo, non mostra niente (R5).
+        selectionPending = media == MediaAccess.PARTIAL && chosen == null,
+      )
+    }.stateIn(
+      scope,
+      SharingStarted.Eagerly,
+      viewAccess.value.let { media -> LibraryPhoneStatus(access = media, selectionPending = media == MediaAccess.PARTIAL) },
+    )
 
-  /** La Libreria con l'accesso parziale: solo cio' che e' accessibile adesso (E-P1). */
-  val visibleTimeline: TimelineRepository = PartialAccessTimeline(repository, partialSelection, scope)
+  /**
+   * La Libreria con l'accesso parziale: solo cio' che e' accessibile adesso (E-P1). **Fail closed** (R5): con l'accesso
+   * parziale, o senza accesso, e finche' la prima lettura non ha detto cosa e' accessibile, la vista e' vuota.
+   */
+  val visibleTimeline: TimelineRepository = PartialAccessTimeline(repository, partialSelection, viewAccess, scope)
 
   // --- Porte delle Raccolte, dei Nascosti e del cestino (P10) ---------------------------------------------------------
 
@@ -311,7 +411,7 @@ class GalleryGraph(
    * telefono. Idempotente.
    */
   fun startWhenReady(onStarted: () -> Unit = {}) {
-    scope.launch {
+    galleryScope.launch {
       try {
         core()
         repository.start()
@@ -330,14 +430,14 @@ class GalleryGraph(
   fun onForeground() {
     foreground = true
     refreshAccess()
-    if (startedFlow.value) attachSync()
+    if (startedFlow.value && !retired) attachSync()
   }
 
   /** L'app va in secondo piano: la lettura si ferma (resta il lavoro a trigger di contenuto) e l'istantanea si salva. */
   fun onBackground() {
     foreground = false
     currentSync()?.detach()
-    if (startedFlow.value) scope.launch { runCatching { repository.flush() } }
+    if (startedFlow.value) galleryScope.launch { runCatching { flush() } }
   }
 
   /** Ogni `onResume` e dopo ogni richiesta di permessi: l'accesso non si memorizza mai (E-P1, E-P15). */
@@ -348,13 +448,82 @@ class GalleryGraph(
 
   /** `onTrimMemory`: la cache delle miniature si riduce secondo il livello (nota di P6). */
   fun onTrimMemory(level: Int) {
+    if (retired) return
     thumbnails.trim(level)
-    if (level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND && startedFlow.value) scope.launch { runCatching { repository.flush() } }
+    if (level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND && startedFlow.value) galleryScope.launch { runCatching { flush() } }
   }
 
   /** La sincronizzazione agganciata al primo piano (quella vera o quella ferma della misura). */
   private fun attachSync() {
-    currentSync()?.attach(scope)
+    currentSync()?.attach(galleryScope)
+  }
+
+  /**
+   * Scrive subito l'istantanea in attesa (secondo piano, `onTrimMemory`, fine della manutenzione). Mai a galleria ferma e
+   * mai insieme a [shutdown]: dopo l'azzeramento niente deve riscrivere `replica/timeline.idx` (R7).
+   */
+  suspend fun flush() {
+    lifecycle.withLock {
+      if (retired) return
+      repository.flush()
+    }
+  }
+
+  /**
+   * Esegue [block] (un lavoro in background che usa il catalogo) solo se la famiglia e' pronta e la galleria viva, e in modo
+   * che [shutdown] lo possa **fermare e aspettare**. Null se non c'era niente da fare, o se la galleria si e' fermata
+   * mentre girava. Cio' che [block] solleva (tranne l'annullamento dovuto alla chiusura) arriva a chi chiama.
+   */
+  suspend fun <T> runIfActive(block: suspend (GalleryCore) -> T): T? {
+    val core = coreIfReady() ?: return null
+    return try {
+      coroutineScope {
+        val job = currentCoroutineContext()[Job]!!
+        val registered = synchronized(workLock) { if (retired) false else runningWork.add(job) }
+        if (!registered) return@coroutineScope null
+        try {
+          block(core)
+        } finally {
+          synchronized(workLock) { runningWork.remove(job) }
+        }
+      }
+    } catch (e: CancellationException) {
+      if (retired) null else throw e
+    }
+  }
+
+  /**
+   * Ferma la galleria viva, per sempre in questo processo (R7). Nell'ordine: la rende "ferma" (niente di nuovo parte e
+   * niente si mostra piu'), annulla i lavori in corso e li aspetta, stacca la sincronizzazione, annulla repository e
+   * scrittore dell'istantanea e li aspetta, chiude la pipeline delle immagini e il database. Quando ritorna nessuno puo'
+   * piu' scrivere in `replica/` o nel database: l'azzeramento li puo' cancellare. Idempotente.
+   *
+   * Se la galleria non e' mai partita (nessun catalogo costruito: dispositivo mai pronto in questo processo) non c'e'
+   * niente da fermare e resta utilizzabile, cosi' una configurazione fatta dopo l'azzeramento nello stesso processo funziona.
+   */
+  suspend fun shutdown() {
+    lifecycle.withLock {
+      if (retired) return
+      if (coreFlow.value == null && !coreDeferred.isActive) return
+      val running = synchronized(workLock) {
+        retired = true
+        runningWork.toList()
+      }
+      retiredFlow.value = true
+      running.forEach { it.cancel() }
+      currentSync()?.detach()
+      galleryJob.cancelAndJoin()
+      running.joinAll()
+      startedFlow.value = false
+      thumbnails.close()
+      withContext(dispatchers.io) {
+        try {
+          database.close()
+        } catch (e: Exception) {
+          GalleryLog.w(TAG) { "database non chiuso: ${e.javaClass.simpleName}" }
+        }
+      }
+    }
   }
 
   private fun currentSync(): PhoneLibrarySync? = parts.benchSync ?: coreFlow.value?.phone?.sync
@@ -383,6 +552,7 @@ class GalleryGraph(
       details = CatalogMediaDetailsSource(catalog, database),
       phone = parts.phone(PhoneInputs(context, database, catalog, extractor, clock, metaPriority)),
     )
+    checkActive()
     coreFlow.value = core
     core
   }
@@ -397,6 +567,9 @@ class GalleryGraph(
     val LOCAL_OWNER: AccountId = AccountId.of("questo-telefono")
   }
 }
+
+/** La galleria e' stata fermata ([GalleryGraph.shutdown], per l'azzeramento): nessuna operazione sul catalogo e' piu' possibile. */
+class GalleryStoppedException : IllegalStateException("La galleria e' ferma.")
 
 /** La finestra visibile della griglia per la fase META (D11): la Libreria la scrive, META la legge. */
 class WindowMetaPriority : MetaPriority {

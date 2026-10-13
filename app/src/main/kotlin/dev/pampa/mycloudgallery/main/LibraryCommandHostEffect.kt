@@ -53,13 +53,16 @@ internal fun LibraryCommandHostEffect(commands: LibraryCommands, onAccessChanged
 
       override fun requestMediaLocation() = request(arrayOf(Manifest.permission.ACCESS_MEDIA_LOCATION), full = arrayOf(Manifest.permission.ACCESS_MEDIA_LOCATION))
 
-      override fun startChooser(intent: Intent) {
-        tryStart(context, Intent.createChooser(intent, null))
-      }
+      override fun startChooser(intent: Intent): Boolean = tryStart(context, Intent.createChooser(intent, null))
 
-      override fun launchTrashRequest(sender: IntentSender) {
-        trash.launch(IntentSenderRequest.Builder(sender).build())
-      }
+      override fun launchTrashRequest(sender: IntentSender): Boolean =
+        try {
+          trash.launch(IntentSenderRequest.Builder(sender).build())
+          true
+        } catch (_: RuntimeException) {
+          // Troppi URI per la transazione Binder, o il sistema rifiuta la richiesta: la Libreria lo dice (I8).
+          false
+        }
 
       /** [wanted] si chiede insieme; basta che manchi uno di [full] perche' la richiesta abbia senso. */
       private fun request(wanted: Array<String>, full: Array<String>) {
@@ -109,14 +112,22 @@ private fun needsPartialUpgrade(context: Context, full: Array<String>): Boolean 
 private fun granted(context: Context, permission: String): Boolean =
   ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
 
-private fun tryStart(context: Context, intent: Intent) {
+/**
+ * Avvia [intent]; vero se e' partito. Nessuna eccezione esce da qui: `ActivityNotFoundException` e `SecurityException`, e
+ * soprattutto la `RuntimeException` con cui `startActivity` rilancia una `TransactionTooLargeException` (una condivisione di
+ * molte migliaia di foto chiudeva l'app, I8). Chi chiama dice all'utente che non e' partito.
+ */
+private fun tryStart(context: Context, intent: Intent): Boolean {
   if (context !is Activity) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-  try {
+  return try {
     context.startActivity(intent)
+    true
   } catch (_: ActivityNotFoundException) {
-    // Nessuna app per questa azione: non c'e' niente da fare (la Libreria resta com'e').
+    false
   } catch (_: SecurityException) {
-    // Idem: mai un crash per un'azione di sistema.
+    false
+  } catch (_: RuntimeException) {
+    false
   }
 }
 

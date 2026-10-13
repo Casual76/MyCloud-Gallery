@@ -4,6 +4,8 @@ import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
 import dev.pampa.mycloudgallery.core.library.contract.TimelineRepository
 import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
 import dev.pampa.mycloudgallery.core.library.contract.TimelineView
+import dev.pampa.mycloudgallery.core.library.noop.EmptyTimelineView
+import dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess
 import dev.pampa.mycloudgallery.core.model.MediaId
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
@@ -18,26 +20,52 @@ import kotlinx.coroutines.flow.stateIn
  * Il catalogo non segna assenze per gli altri (E-P1, E-P15): restano li', semplicemente non si mostrano finche'
  * l'accesso non torna completo.
  *
- * E' una vista sopra quella del repository: con l'accesso completo ([selection] null) e' la stessa vista, senza costi.
- * Con l'accesso parziale la selezione e' piccola (cio' che l'utente ha scelto), quindi la mappa si costruisce dagli id
- * selezionati, mai scorrendo l'indice intero.
+ * E' una vista sopra quella del repository: con l'accesso completo ([access] `FULL`, [selection] null) e' la stessa vista,
+ * senza costi. Con l'accesso parziale la selezione e' piccola (cio' che l'utente ha scelto), quindi la mappa si costruisce
+ * dagli id selezionati, mai scorrendo l'indice intero.
+ *
+ * **Fail closed** (revisione di sicurezza, R5). [selection] null vuol dire "accesso completo" **oppure** "la prima lettura non
+ * ha ancora detto cosa e' accessibile": le due cose si distinguono dall'[access], che il sistema dice gia' alla costruzione.
+ * Con l'accesso parziale (o senza accesso) e senza una selezione la vista e' **vuota**: nemmeno per un istante, all'avvio a
+ * freddo, la griglia, le intestazioni, i conteggi e i segnaposto sfocati riguardano foto a cui il permesso non da' piu'
+ * accesso. La Libreria, in quel tempo, mostra lo stato di caricamento (`LibraryPhoneStatus.selectionPending`).
  */
 class PartialAccessTimeline(
   private val base: TimelineRepository,
   private val selection: StateFlow<Set<MediaId>?>,
+  private val access: StateFlow<MediaAccess>,
   private val scope: CoroutineScope,
 ) : TimelineRepository {
 
   private val views = ConcurrentHashMap<LibraryFilter, StateFlow<TimelineView>>()
 
-  override val snapshot: StateFlow<TimelineSnapshot?> get() = base.snapshot
+  /**
+   * L'indice intero solo quando non c'e' niente da nascondere (accesso completo e nessuna selezione); altrimenti null, come
+   * "non ancora letto": chi lo leggesse da qui non vedrebbe elementi fuori dalla selezione.
+   */
+  override val snapshot: StateFlow<TimelineSnapshot?> by lazy {
+    combine(base.snapshot, selection, access) { snapshot, chosen, media -> restrictedSnapshot(snapshot, chosen, media) }
+      .stateIn(scope, SharingStarted.Eagerly, restrictedSnapshot(base.snapshot.value, selection.value, access.value))
+  }
 
   override suspend fun start() = base.start()
 
   override fun view(f: LibraryFilter): StateFlow<TimelineView> = views.computeIfAbsent(f) { filter ->
     val full = base.view(filter)
-    combine(full, selection) { view, chosen -> if (chosen == null) view else SubsetView(view, chosen) }
-      .stateIn(scope, SharingStarted.Eagerly, full.value.let { v -> selection.value?.let { SubsetView(v, it) } ?: v })
+    combine(full, selection, access) { view, chosen, media -> visible(view, chosen, media, filter) }
+      .stateIn(scope, SharingStarted.Eagerly, visible(full.value, selection.value, access.value, filter))
+  }
+
+  private fun restrictedSnapshot(snapshot: TimelineSnapshot?, chosen: Set<MediaId>?, media: MediaAccess): TimelineSnapshot? =
+    if (chosen == null && media == MediaAccess.FULL) snapshot else null
+
+  private companion object {
+    /** Cosa si vede con questa [chosen] e questo [media]: la selezione se c'e', tutto solo con l'accesso completo, altrimenti niente. */
+    fun visible(view: TimelineView, chosen: Set<MediaId>?, media: MediaAccess, filter: LibraryFilter): TimelineView = when {
+      chosen != null -> SubsetView(view, chosen)
+      media == MediaAccess.FULL -> view
+      else -> EmptyTimelineView(filter)
+    }
   }
 }
 

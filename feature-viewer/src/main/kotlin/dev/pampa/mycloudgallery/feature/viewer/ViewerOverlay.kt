@@ -84,6 +84,7 @@ import dev.pampa.mycloudgallery.core.imaging.contract.ViewerImageSource
 import dev.pampa.mycloudgallery.core.imaging.noop.NoViewerImageSource
 import dev.pampa.mycloudgallery.core.library.contract.TimelineView
 import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
+import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
 import dev.pampa.mycloudgallery.core.model.CellFlags
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
@@ -230,7 +231,8 @@ private fun ViewerHost(
         val oldIndex = previous.viewIndexOf(state.currentId).coerceAtLeast(0)
         val target = oldIndex.coerceAtMost(next.size - 1)
         state.currentId = next.snapshot.idAt(next.snapshotIndex(target))
-        state.message = controller.pendingMessage ?: ViewerMessage.ItemGone
+        // Con un Nascondi/Mostra in corso l'avviso lo da' l'esito, non la sparizione (R8).
+        if (controller.changingVisibility == 0) state.message = controller.pendingMessage ?: ViewerMessage.ItemGone
         controller.pendingMessage = null
       }
       previous = next
@@ -425,7 +427,7 @@ private fun PagerLayer(
   val request = controller.request
   val info = controller.info
   val stage = controller.stage
-  val positionText = stringResource(R.string.viewer_position, pager.currentPage + 1, view.size)
+  val positionText = stringResource(R.string.viewer_position, GalleryNumbers.format(pager.currentPage + 1), GalleryNumbers.format(view.size))
   val zoomedText = stringResource(R.string.viewer_zoomed)
 
   Box(

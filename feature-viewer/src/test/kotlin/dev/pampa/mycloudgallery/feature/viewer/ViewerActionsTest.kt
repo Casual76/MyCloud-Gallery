@@ -15,8 +15,11 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
 import com.google.common.truth.Truth.assertThat
+import dev.pampa.mycloudgallery.core.library.contract.LocalMediaActions
+import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.security.input.SensitiveClipboard
+import kotlinx.coroutines.CompletableDeferred
 import org.junit.Test
 import org.robolectric.Shadows.shadowOf
 
@@ -103,6 +106,111 @@ class ViewerActionsTest : ViewerTestBase() {
     composeRule.waitForIdle()
     composeRule.onNodeWithText("Nascosto").assertExists()
     composeRule.onNodeWithText("Lo trovi in Raccolte, Nascosti.").assertExists()
+  }
+
+  /** Un catalogo che non scrive (disco pieno, database in errore): ogni azione solleva. */
+  private class FailingActions : LocalMediaActions {
+    var calls = 0
+
+    override suspend fun setFavorite(ids: Set<MediaId>, on: Boolean) {
+      calls++
+      throw IllegalStateException("disco pieno")
+    }
+
+    override suspend fun setHidden(ids: Set<MediaId>, on: Boolean) {
+      calls++
+      throw IllegalStateException("disco pieno")
+    }
+  }
+
+  /** Un "Nascondi" che aspetta il via del test: il catalogo ha tolto la cella, ma la scrittura non e' ancora finita. */
+  private class GatedActions(val gate: CompletableDeferred<Boolean>) : LocalMediaActions {
+    override suspend fun setFavorite(ids: Set<MediaId>, on: Boolean) = Unit
+
+    override suspend fun setHidden(ids: Set<MediaId>, on: Boolean) {
+      check(gate.await()) { "scrittura fallita" }
+    }
+  }
+
+  /** R8: se "Nascondi" non riesce lo dice, e non annuncia "Nascosto" (ne' prima ne' dopo). */
+  @Test
+  fun nascondiCheNonRiesceLoDiceENonAnnunciaNascosto() {
+    val failing = FailingActions()
+    show(services = services(actions = failing))
+    openMenu()
+    composeRule.onNodeWithText("Nascondi").performClick()
+    composeRule.waitForIdle()
+
+    assertThat(failing.calls).isEqualTo(1)
+    composeRule.onNodeWithText("Non è stato possibile nascondere").assertExists()
+    composeRule.onNodeWithText("L’elemento è ancora nella Libreria. Riprova fra poco.").assertExists()
+    composeRule.onAllNodesWithText("Nascosto").assertCountEquals(0)
+    // Anche se la vista cambiasse dopo (la ricostruzione), non e' mai "Nascosto".
+    fixture.items.publish(fixture.without(setOf(currentId)))
+    composeRule.waitForIdle()
+    composeRule.onAllNodesWithText("Nascosto").assertCountEquals(0)
+  }
+
+  /** R8: l'elemento sparisce dalla vista prima della fine della scrittura: l'avviso lo da' l'esito, non la sparizione. */
+  @Test
+  fun lAvvisoNascostoArrivaSoloAScritturaRiuscita() {
+    val gate = CompletableDeferred<Boolean>()
+    show(services = services(actions = GatedActions(gate)))
+    openMenu()
+    composeRule.onNodeWithText("Nascondi").performClick()
+    composeRule.waitForIdle()
+    // Il catalogo ha gia' tolto la cella dall'indice, la scrittura no.
+    fixture.items.publish(fixture.without(setOf(currentId)))
+    composeRule.waitForIdle()
+    composeRule.onAllNodesWithText("Nascosto").assertCountEquals(0)
+    composeRule.onAllNodesWithText("Questo elemento non c’è più").assertCountEquals(0)
+
+    gate.complete(true)
+    composeRule.waitForIdle()
+    composeRule.onNodeWithText("Nascosto").assertExists()
+  }
+
+  @Test
+  fun unaScritturaCheFallisceDopoLaSparizioneDiceCheNonERiuscita() {
+    val gate = CompletableDeferred<Boolean>()
+    show(services = services(actions = GatedActions(gate)))
+    openMenu()
+    composeRule.onNodeWithText("Nascondi").performClick()
+    composeRule.waitForIdle()
+    fixture.items.publish(fixture.without(setOf(currentId)))
+    composeRule.waitForIdle()
+
+    gate.complete(false)
+    composeRule.waitForIdle()
+    composeRule.onNodeWithText("Non è stato possibile nascondere").assertExists()
+    composeRule.onAllNodesWithText("Nascosto").assertCountEquals(0)
+  }
+
+  @Test
+  fun unPreferitoNonSalvatoTornaComeEraEloDice() {
+    val failing = FailingActions()
+    show(services = services(actions = failing))
+    composeRule.onNodeWithContentDescription("Aggiungi ai preferiti").performClick()
+    composeRule.waitForIdle()
+
+    assertThat(failing.calls).isEqualTo(1)
+    composeRule.onNodeWithText("Preferiti non aggiornati").assertExists()
+    // La stella non resta accesa: il cuore dice ancora "Aggiungi".
+    composeRule.onNodeWithContentDescription("Aggiungi ai preferiti").assertExists()
+    composeRule.onAllNodesWithContentDescription("Togli dai preferiti").assertCountEquals(0)
+  }
+
+  @Test
+  fun mostraCheNonRiesceLoDiceEResta() {
+    val failing = FailingActions()
+    show(request = fixture.request(secure = true), services = services(actions = failing))
+    openMenu()
+    composeRule.onNodeWithText("Mostra nella Libreria").performClick()
+    composeRule.waitForIdle()
+
+    assertThat(failing.calls).isEqualTo(1)
+    composeRule.onNodeWithText("Non è stato possibile mostrarlo di nuovo").assertExists()
+    composeRule.onAllNodesWithText("Di nuovo nella Libreria").assertCountEquals(0)
   }
 
   @Test

@@ -2,12 +2,14 @@ package dev.pampa.mycloudgallery.feature.library.hidden
 
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
+import dev.pampa.mycloudgallery.core.library.contract.LocalMediaActions
 import dev.pampa.mycloudgallery.core.library.contract.ViewerItems
 import dev.pampa.mycloudgallery.core.library.testing.FakeLocalMediaActions
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.security.lock.AuthAvailability
 import dev.pampa.mycloudgallery.core.security.lock.AuthPromptText
 import dev.pampa.mycloudgallery.core.security.lock.AuthResult
+import dev.pampa.mycloudgallery.feature.library.ActionNotice
 import dev.pampa.mycloudgallery.feature.library.collections.FakeAuthenticator
 import dev.pampa.mycloudgallery.feature.library.collections.TestClock
 import dev.pampa.mycloudgallery.feature.library.collections.idsOf
@@ -226,5 +228,49 @@ class HiddenControllerTest {
 
     assertThat(actions.hidden).isEmpty()
     assertThat(world.hiddenLibrary.reads).isEqualTo(0)
+  }
+
+  /** R8: "Mostra di nuovo" che non riesce lo dice e non rilegge come se fosse andato bene. */
+  @Test
+  fun mostraCheNonRiesceLoDiceENonRilegge() = runTest(UnconfinedTestDispatcher()) {
+    val failing = object : LocalMediaActions {
+      override suspend fun setFavorite(ids: Set<MediaId>, on: Boolean) = Unit
+
+      override suspend fun setHidden(ids: Set<MediaId>, on: Boolean) {
+        throw IllegalStateException("disco pieno")
+      }
+    }
+    val c = HiddenController(gate, world.hiddenLibrary, failing, backgroundScope)
+    c.shown()
+    c.unlock(auth, prompt)
+    assertThat(world.hiddenLibrary.reads).isEqualTo(1)
+    assertThat(c.notice.value).isNull()
+
+    c.show(world.hiddenIds.take(1).toSet())
+
+    assertThat(c.notice.value).isEqualTo(ActionNotice.ShowFailed)
+    assertThat(world.hiddenLibrary.reads).isEqualTo(1)
+    c.dismissNotice()
+    assertThat(c.notice.value).isNull()
+  }
+
+  @Test
+  fun unAvvisoNonSopravvivealLUscita() = runTest(UnconfinedTestDispatcher()) {
+    val failing = object : LocalMediaActions {
+      override suspend fun setFavorite(ids: Set<MediaId>, on: Boolean) = Unit
+
+      override suspend fun setHidden(ids: Set<MediaId>, on: Boolean) {
+        throw IllegalStateException("disco pieno")
+      }
+    }
+    val c = HiddenController(gate, world.hiddenLibrary, failing, backgroundScope)
+    c.shown()
+    c.unlock(auth, prompt)
+    c.show(world.hiddenIds.take(1).toSet())
+    assertThat(c.notice.value).isEqualTo(ActionNotice.ShowFailed)
+
+    c.hidden()
+
+    assertThat(c.notice.value).isNull()
   }
 }

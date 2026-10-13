@@ -16,13 +16,12 @@
   <string name="collection_recently_deleted">Eliminati di recente</string>
 
   <plurals name="collection_count">
-    <item quantity="one">%1$d elemento</item>
-    <item quantity="other">%1$d elementi</item>
+    <item quantity="one">%1$s elemento</item>
+    <item quantity="other">%1$s elementi</item>
   </plurals>
   <string name="collection_count_none">Nessun elemento</string>
   <string name="collection_hidden_subtitle">Protetti dallo sblocco del telefono</string>
   <string name="collection_recently_deleted_subtitle">Il cestino di Android, protetto dallo sblocco</string>
-  <string name="collection_summary">%1$d foto, %2$d video</string>
 
   <!-- Raccolte: griglia filtrata, stati vuoti e azioni sulla selezione -->
   <string name="collection_empty_favorites_title">Nessun preferito</string>
@@ -40,8 +39,8 @@
   <string name="selection_hide">Nascondi</string>
   <string name="selection_show">Mostra di nuovo nella Libreria</string>
   <plurals name="selection_count">
-    <item quantity="one">%1$d selezionato</item>
-    <item quantity="other">%1$d selezionati</item>
+    <item quantity="one">%1$s selezionato</item>
+    <item quantity="other">%1$s selezionati</item>
   </plurals>
 
   <!-- Nascosti -->
@@ -102,8 +101,8 @@
   <string name="trash_cell_video_today">Video eliminato, scade oggi</string>
   <string name="trash_select_all">Seleziona tutto</string>
   <plurals name="trash_restore">
-    <item quantity="one">Ripristina %1$d elemento</item>
-    <item quantity="other">Ripristina %1$d elementi</item>
+    <item quantity="one">Ripristina %1$s elemento</item>
+    <item quantity="other">Ripristina %1$s elementi</item>
   </plurals>
   <string name="trash_error_title">Non riesco a leggere il cestino</string>
   <string name="trash_error_detail">Riprova fra poco. Se resta così, il cestino del telefono non risponde.</string>

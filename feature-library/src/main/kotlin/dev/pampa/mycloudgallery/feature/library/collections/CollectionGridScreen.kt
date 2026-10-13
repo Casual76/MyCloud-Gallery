@@ -6,6 +6,8 @@ import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -15,6 +17,7 @@ import dev.pampa.mycloudgallery.core.library.contract.TimelineView
 import dev.pampa.mycloudgallery.core.library.contract.ViewerItems
 import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.feature.library.ActionNotice
 import dev.pampa.mycloudgallery.feature.library.R
 
 /**
@@ -37,6 +40,7 @@ fun CollectionGridRoute(
 ) {
   // Nascosti ed Eliminati di recente non hanno una vista dell'indice: qui non ci si arriva (le rotte sono separate).
   val items = remember(kind, viewModel) { viewModel.items(kind) } ?: return
+  val notice by viewModel.notice.collectAsState()
   CollectionGridScreen(
     kind = kind,
     items = items,
@@ -48,6 +52,8 @@ fun CollectionGridRoute(
     onBack = onBack,
     contentPadding = contentPadding,
     backdropOut = backdropOut,
+    notice = notice,
+    onDismissNotice = viewModel::dismissNotice,
   )
 }
 
@@ -64,6 +70,8 @@ internal fun CollectionGridScreen(
   onBack: (() -> Unit)? = null,
   contentPadding: PaddingValues = PaddingValues(),
   backdropOut: ((GlassBackdropState) -> Unit)? = null,
+  notice: ActionNotice? = null,
+  onDismissNotice: () -> Unit = {},
 ) {
   CollectionGridPage(
     title = stringResource(kind.titleRes),
@@ -83,6 +91,8 @@ internal fun CollectionGridScreen(
     contentPadding = contentPadding,
     backdropOut = backdropOut,
     actionsFor = { view, ids -> collectionSelectionActions(view, ids, onFavorite, onHide) },
+    notice = notice,
+    onDismissNotice = onDismissNotice,
   )
 }
 

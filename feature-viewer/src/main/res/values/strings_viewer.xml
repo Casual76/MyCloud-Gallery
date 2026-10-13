@@ -3,7 +3,7 @@
   <!-- Viewer (Fase 3, P8). Un file proprio: i pacchetti paralleli non si contendono strings.xml. -->
 
   <!-- Pagina e accessibilità -->
-  <string name="viewer_position">%1$d di %2$d</string>
+  <string name="viewer_position">%1$s di %2$s</string>
   <string name="viewer_zoomed">Ingrandita</string>
   <string name="viewer_kind_photo">Foto</string>
   <string name="viewer_kind_video">Video</string>
@@ -44,6 +44,12 @@
   <string name="viewer_msg_copied_title">Copiato negli appunti</string>
   <string name="viewer_msg_failed_title">Non è andata a buon fine</string>
   <string name="viewer_msg_failed_detail">Nessuna app disponibile per questa azione.</string>
+  <string name="viewer_msg_hide_failed_title">Non è stato possibile nascondere</string>
+  <string name="viewer_msg_hide_failed_detail">L’elemento è ancora nella Libreria. Riprova fra poco.</string>
+  <string name="viewer_msg_unhide_failed_title">Non è stato possibile mostrarlo di nuovo</string>
+  <string name="viewer_msg_unhide_failed_detail">L’elemento resta tra i Nascosti. Riprova fra poco.</string>
+  <string name="viewer_msg_favorite_failed_title">Preferiti non aggiornati</string>
+  <string name="viewer_msg_favorite_failed_detail">La modifica non è stata salvata. Riprova fra poco.</string>
   <string name="viewer_msg_motion_title">Parte video non riproducibile</string>
   <string name="viewer_msg_motion_detail">Il formato non è riconosciuto: vedi la foto ferma.</string>
 

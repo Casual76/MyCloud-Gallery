@@ -13,6 +13,7 @@ import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.places.contract.PlaceNames
 import dev.pampa.mycloudgallery.feature.library.R
 import dev.pampa.mycloudgallery.core.library.text.GalleryDates
+import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
@@ -162,7 +163,7 @@ internal object GridText {
     if (CellFlags.has(flags, CellFlags.DATE_ESTIMATED)) parts += strings.estimated
     if (CellFlags.has(flags, CellFlags.UNREADABLE)) parts += strings.unreadable
     val group = snapshot.groupSizeAt(index)
-    if (group > 1) parts += strings.group.format(group)
+    if (group > 1) parts += strings.group.format(GalleryNumbers.format(group))
     return parts.joinToString(", ")
   }
 }

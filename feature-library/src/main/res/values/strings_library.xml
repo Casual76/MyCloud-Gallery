@@ -3,7 +3,6 @@
   <!-- Libreria (P7: library/ e grid/, docs/fase3-progetto.md §2.4). -->
   <string name="library_title">Libreria</string>
   <string name="library_open_settings">Impostazioni</string>
-  <string name="library_summary">%1$d foto, %2$d video</string>
 
   <!-- Intestazioni e scrubber. -->
   <string name="library_today">Oggi</string>
@@ -25,7 +24,7 @@
   <string name="grid_desc_unreadable">non leggibile</string>
   <string name="grid_desc_estimated">data stimata</string>
   <string name="grid_desc_duration">durata %1$s</string>
-  <string name="grid_desc_group">%1$d scatti</string>
+  <string name="grid_desc_group">%1$s scatti</string>
   <string name="grid_action_open">Apri</string>
   <string name="grid_action_select">Seleziona</string>
   <string name="grid_action_deselect">Deseleziona</string>
@@ -35,8 +34,8 @@
   <string name="library_select">Seleziona</string>
   <string name="library_select_items">Seleziona elementi</string>
   <plurals name="library_selected">
-    <item quantity="one">%1$d elemento selezionato</item>
-    <item quantity="other">%1$d elementi selezionati</item>
+    <item quantity="one">%1$s elemento selezionato</item>
+    <item quantity="other">%1$s elementi selezionati</item>
   </plurals>
   <string name="library_cancel_selection">Annulla la selezione</string>
 
@@ -69,8 +68,8 @@
   <string name="library_delete_location_phone_detail">Non c’è ancora una copia sul NAS: dopo 30 giorni nel cestino di sistema non si potrà recuperare.</string>
   <!-- "Nascondi" con la copertina di un gruppo (P11, nota di P5): si nasconde tutto il gruppo. -->
   <plurals name="library_hide_group_title">
-    <item quantity="one">Nascondere %1$d elemento?</item>
-    <item quantity="other">Nascondere %1$d elementi?</item>
+    <item quantity="one">Nascondere %1$s elemento?</item>
+    <item quantity="other">Nascondere %1$s elementi?</item>
   </plurals>
   <string name="library_hide_group_message">Hai scelto la copertina di un gruppo (una raffica o una coppia RAW e JPEG): si nasconde tutto il gruppo, non solo la copertina. Lo ritrovi nella raccolta Nascosti.</string>
   <string name="library_hide_group_cancel">Annulla</string>
@@ -81,15 +80,18 @@
   <string name="library_partial_message">La galleria mostra solo ciò a cui le hai dato accesso, e non tocca il resto.</string>
   <string name="library_partial_action">Consenti tutto</string>
   <plurals name="library_pending_title">
-    <item quantity="one">%1$d foto nuova in attesa</item>
-    <item quantity="other">%1$d foto nuove in attesa</item>
+    <item quantity="one">%1$s foto nuova in attesa</item>
+    <item quantity="other">%1$s foto nuove in attesa</item>
   </plurals>
   <string name="library_pending_message">Per leggere data e luogo delle foto nuove serve l’accesso alla posizione delle foto. Finché non c’è, restano in attesa.</string>
   <string name="library_pending_action">Consenti</string>
   <string name="library_first_read_title">Sto leggendo la Libreria</string>
   <string name="library_first_read_detail">Le foto e i video compaiono man mano, dai più recenti.</string>
-  <string name="library_first_read_progress">%1$d di %2$d</string>
-  <string name="library_first_read_progress_unknown">%1$d letti</string>
+  <string name="library_first_read_progress">%1$s di %2$s</string>
+  <plurals name="library_first_read_progress_unknown">
+    <item quantity="one">%1$s letto</item>
+    <item quantity="other">%1$s letti</item>
+  </plurals>
 
   <!-- Solo debug: la Libreria sintetica di M1 (docs/bench/M1.md). -->
   <string name="library_debug_synthetic">Sintetica: %1$s elementi</string>

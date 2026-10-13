@@ -15,9 +15,9 @@ import kotlinx.coroutines.flow.StateFlow
 // chiede un NAS) e la lettura del telefono (con quella vera, la scansione del MediaStore riconcilierebbe le 100 mila
 // righe sintetiche con i pochi media veri e le segnerebbe assenti).
 //
-// Sono registrati come servizi (`META-INF/services/` in `src/benchmarkRelease/resources/`): `:app` li trova con
-// `ServiceLoader` SOLO in questa variante. Chi cabla il grafo (P11) li preferisce ai veri quando ci sono, vedi
-// docs/bench/README.md. Classi pubbliche con costruttore vuoto perche' e' quello che ServiceLoader pretende.
+// Li lega `BenchMeasurementHooks` (BenchMeasurementHooks.kt) con un modulo Hilt che sta SOLO in questa variante: `:app`
+// riceve le `MeasurementHooks` come `Optional` (vuoto altrove) e preferisce questi ai veri quando ci sono, vedi
+// docs/bench/README.md. Niente `ServiceLoader` ne' `META-INF/services` (revisione di sicurezza, R6).
 
 /** La famiglia e' fondata e il dispositivo approvato: la Libreria si raggiunge subito, senza NAS e senza rete. */
 class BenchFamilySetupRepository : FamilySetupRepository {

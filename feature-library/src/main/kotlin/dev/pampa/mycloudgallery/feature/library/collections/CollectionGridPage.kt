@@ -45,7 +45,11 @@ import dev.pampa.mycloudgallery.core.library.contract.TimelineView
 import dev.pampa.mycloudgallery.core.library.contract.ViewerItems
 import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.feature.library.ActionNotice
+import dev.pampa.mycloudgallery.feature.library.ActionNoticeCard
 import dev.pampa.mycloudgallery.feature.library.R
+import dev.pampa.mycloudgallery.feature.library.countText
+import dev.pampa.mycloudgallery.feature.library.photoVideoSummary
 import dev.pampa.mycloudgallery.feature.library.grid.MediaGrid
 import kotlinx.coroutines.launch
 
@@ -74,6 +78,7 @@ internal class SelectionAction(
  *   la pillola non c'e' (rotte a schermo intero).
  * @param footnote una nota sotto il riepilogo (i Nascosti dicono che nascondere vale solo in app).
  * @param actionsFor le azioni della barra per la selezione di adesso; vuoto = nessuna barra.
+ * @param notice l'azione che non e' riuscita (R8: nascondi, preferito, mostra), sotto la barra finche' non si chiude.
  */
 @Composable
 internal fun CollectionGridPage(
@@ -89,6 +94,8 @@ internal fun CollectionGridPage(
   backdropOut: ((GlassBackdropState) -> Unit)? = null,
   footnote: String? = null,
   actionsFor: (TimelineView, Set<MediaId>) -> List<SelectionAction> = { _, _ -> emptyList() },
+  notice: ActionNotice? = null,
+  onDismissNotice: () -> Unit = {},
 ) {
   val view by items.view.collectAsState()
   // La griglia tiene il suo stato (scorrimento, livello, selezione) finche' gli elementi sono gli stessi: una vista nuova
@@ -144,11 +151,11 @@ internal fun CollectionGridPage(
       title = when {
         !selecting -> title
         selected.isEmpty -> stringResource(R.string.collection_select_items)
-        else -> pluralStringResource(R.plurals.selection_count, selected.size, selected.size)
+        else -> countText(R.plurals.selection_count, selected.size)
       },
       backdrop = backdrop,
       modifier = Modifier.align(Alignment.TopCenter).onSizeChanged { barHeightPx = it.height },
-      subtitle = if (selecting) null else pluralStringResource(R.plurals.collection_count, view.size, view.size),
+      subtitle = if (selecting) null else countText(R.plurals.collection_count, view.size),
       onNavigate = if (selecting) ({ grid.stopSelecting() }) else onBack,
       navigationIcon = if (selecting) GalleryNavigationIcon.Close else GalleryNavigationIcon.Back,
       actions = {
@@ -161,6 +168,15 @@ internal fun CollectionGridPage(
         }
       },
     )
+
+    if (notice != null) {
+      ActionNoticeCard(
+        notice = notice,
+        backdrop = backdrop,
+        onDismiss = onDismissNotice,
+        modifier = Modifier.align(Alignment.TopCenter).padding(top = barHeight, start = GalleryDimens.Gutter, end = GalleryDimens.Gutter),
+      )
+    }
 
     if (selecting && !selected.isEmpty) {
       val specs = actionsFor(view, selected.ids)
@@ -201,7 +217,7 @@ private fun GridFootnote(summary: Pair<Int, Int>?, footnote: String?) {
   ) {
     if (summary != null) {
       Text(
-        text = stringResource(R.string.collection_summary, summary.first, summary.second),
+        text = photoVideoSummary(summary.first, summary.second),
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = TextAlign.Center,

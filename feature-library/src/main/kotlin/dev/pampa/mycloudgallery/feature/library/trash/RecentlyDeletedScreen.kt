@@ -69,6 +69,7 @@ import dev.pampa.mycloudgallery.core.imaging.contract.ThumbnailLoader
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.security.lock.SystemCredentialAuthenticator
 import dev.pampa.mycloudgallery.feature.library.R
+import dev.pampa.mycloudgallery.feature.library.countText
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionEmptyState
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionsDimens
 import dev.pampa.mycloudgallery.feature.library.hidden.GatedWindow
@@ -271,10 +272,10 @@ internal fun RecentlyDeletedScreen(
     }
 
     GalleryTopBar(
-      title = if (selecting) pluralStringResource(R.plurals.selection_count, selection.size, selection.size) else stringResource(R.string.trash_title),
+      title = if (selecting) countText(R.plurals.selection_count, selection.size) else stringResource(R.string.trash_title),
       backdrop = backdrop,
       modifier = Modifier.align(Alignment.TopCenter).onSizeChanged { barHeightPx = it.height },
-      subtitle = if (selecting) null else loaded?.entries?.takeIf { it.isNotEmpty() }?.let { pluralStringResource(R.plurals.collection_count, it.size, it.size) },
+      subtitle = if (selecting) null else loaded?.entries?.takeIf { it.isNotEmpty() }?.let { countText(R.plurals.collection_count, it.size) },
       // Selezionando, il tasto in alto a sinistra e' "Chiudi": esce dalla selezione, non dalla pagina.
       onNavigate = if (selecting) onClearSelection else onBack,
       navigationIcon = if (selecting) GalleryNavigationIcon.Close else GalleryNavigationIcon.Back,
@@ -291,7 +292,7 @@ internal fun RecentlyDeletedScreen(
 
     if (selecting) {
       FluidButton(
-        text = pluralStringResource(R.plurals.trash_restore, selection.size, selection.size),
+        text = countText(R.plurals.trash_restore, selection.size),
         onClick = onRestore,
         size = FluidButtonSize.Large,
         modifier = Modifier

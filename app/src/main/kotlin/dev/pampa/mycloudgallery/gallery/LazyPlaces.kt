@@ -28,8 +28,9 @@ enum class PlacesStatus { OPENING, AVAILABLE, NOT_BUNDLED, FAILED }
 /**
  * I luoghi offline (P4) **senza bloccare l'avvio**: `PlacesDataset.openResult` estrae e mappa un file (bloccante), quindi
  * si apre una volta su un thread di lavoro e, finche' non e' pronto, ogni domanda ha la risposta dei null-object (nessun
- * luogo, nessun fuso, nessun nome). E' anche il comportamento a regime quando l'asset GeoNames **non c'e'** (oggi:
- * `NotBundled`, il download non e' autorizzato): la Libreria funziona senza luoghi e le intestazioni escono senza riga
+ * luogo, nessun fuso, nessun nome). E' anche il comportamento a regime quando l'asset GeoNames **non si apre** (l'asset
+ * `places.mcgp1` e' nell'APK, con l'impronta fissata in `PlacesDatasetPin`: `NotBundled` vuol dire una build senza
+ * asset, `Failed` un asset alterato o illeggibile): la Libreria funziona senza luoghi e le intestazioni escono senza riga
  * del luogo, mai vuote o rotte.
  *
  * Un solo oggetto per i tre contratti, come `PlacesData` (stesso file).

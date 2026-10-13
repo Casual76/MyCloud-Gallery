@@ -19,6 +19,7 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -59,8 +60,10 @@ import dev.pampa.mycloudgallery.core.library.contract.GridLevel
 import dev.pampa.mycloudgallery.core.library.contract.GridStyle
 import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
 import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
+import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess
 import dev.pampa.mycloudgallery.feature.library.R
+import dev.pampa.mycloudgallery.feature.library.countText
 import dev.pampa.mycloudgallery.feature.library.grid.GridText
 import dev.pampa.mycloudgallery.feature.library.grid.MediaGrid
 import dev.pampa.mycloudgallery.feature.library.grid.MediaGridStickyHeader
@@ -140,6 +143,10 @@ private fun LibraryScreen(
 
   LibraryEffects(state)
 
+  // Gli avvisi scompaiono (anche da soli, dopo qualche secondo): la loro altezza torna a zero, e con lei lo spazio sopra la griglia.
+  val noticesShown = !showPermissionNow(phone) && hasNotices(phone, state.notice)
+  LaunchedEffect(noticesShown) { if (!noticesShown) noticesHeightPx = 0 }
+
   // E-P18: la posizione sopravvive alla ricreazione dell'activity come elemento ancorato, mai come indice.
   val keeper = rememberSaveable(saver = positionSaver(grid)) { PositionKeeper(null) }
   SideEffect { keeper.restoreOnce(grid) }
@@ -169,7 +176,7 @@ private fun LibraryScreen(
           modifier = Modifier.padding(top = barHeight, bottom = pillInset),
           footer = statusFooter,
         )
-        empty && phone.firstRead != null -> LibraryFirstReadState(
+        empty && (phone.firstRead != null || phone.selectionPending) -> LibraryFirstReadState(
           progress = phone.firstRead,
           modifier = Modifier.padding(top = barHeight, bottom = pillInset),
           footer = statusFooter,
@@ -198,6 +205,8 @@ private fun LibraryScreen(
       LibraryNotices(
         phone = phone,
         commands = state.commands,
+        notice = state.notice,
+        onDismissNotice = { state.notice = null },
         backdrop = backdrop,
         modifier = Modifier
           .align(Alignment.TopCenter)
@@ -251,6 +260,9 @@ private fun LibraryScreen(
   }
 }
 
+/** Nessun permesso sui media: al posto della griglia c'e' lo stato "Consenti accesso" e nessun avviso. */
+private fun showPermissionNow(phone: LibraryPhoneStatus): Boolean = phone.access == MediaAccess.NONE
+
 /** Il tag della barra superiore della Libreria (i test ne misurano i controlli). */
 internal const val LibraryTopBarTag: String = "libreria-barra-superiore"
 
@@ -279,7 +291,7 @@ private fun LibraryTopBar(
   val title = when {
     !selecting -> stringResource(R.string.library_title)
     selected.isEmpty -> stringResource(R.string.library_select_items)
-    else -> pluralStringResource(R.plurals.library_selected, selected.size, selected.size)
+    else -> countText(R.plurals.library_selected, selected.size)
   }
   GalleryTopBar(
     title = title,
@@ -325,7 +337,7 @@ private fun LibraryViewMenu(state: LibraryTabState, onOpenSettings: () -> Unit, 
       val label = if (size == 0) {
         stringResource(R.string.library_debug_phone)
       } else {
-        stringResource(R.string.library_debug_synthetic, String.format(java.util.Locale.ITALIAN, "%,d", size))
+        stringResource(R.string.library_debug_synthetic, GalleryNumbers.format(size))
       }
       GalleryFilterOption(label, selected = size == hooks.current) {
         hooks.select(size)

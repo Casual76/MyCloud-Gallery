@@ -4,6 +4,10 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -12,6 +16,8 @@ import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
+import dev.antigravity.fluidengine.ui.fluid.FluidEngineLicenses
 import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
 import dev.pampa.mycloudgallery.feature.settings.R
 import java.io.File
@@ -23,7 +29,8 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * "Informazioni e licenze" (Fase 3, P11): l'attribuzione di GeoNames, le tre librerie di altri autori e la
+ * "Informazioni e licenze" (Fase 3, P11; I6 della revisione di sicurezza): l'attribuzione di GeoNames, **tutte** le librerie
+ * di altri autori dell'APK di release con la loro licenza, le opere del Fluid Engine, i testi brevi delle licenze e la
  * versione dell'app. Gli indirizzi delle licenze sono **testo, mai un collegamento** (la Fase 3 non fa traffico di
  * rete, D18/D24): lo prova sia la schermata (nessun tocco su quelle righe) sia il sorgente (nessun intent).
  */
@@ -60,12 +67,14 @@ class AboutScreenTest {
   }
 
   @Test
-  fun avvisaCheInQuestaVersioneIDatiDeiLuoghiPotrebberoNonEsserciAncora() {
+  fun diceCheIDatiDeiLuoghiSonoDentroLAppESenzaRete() {
     show()
 
+    // I5: l'asset e' nell'APK (SHA-256 fissato), quindi la nota non dice piu' "non ancora inclusi".
     rule.onNodeWithText(
-      "Se in questa versione i luoghi non compaiono, i dati non sono ancora inclusi: la galleria funziona lo stesso.",
+      "I dati dei luoghi sono dentro l’app e si leggono sul telefono, senza internet. Le foto senza posizione non hanno un luogo.",
     ).assertIsDisplayed()
+    rule.onAllNodesWithText("non sono ancora inclusi", substring = true).assertCountEquals(0)
   }
 
   @Test
@@ -79,34 +88,120 @@ class AboutScreenTest {
 
   // --- Le librerie ----------------------------------------------------------------------------------------------
 
-  @Test
-  fun elencaLeTreLibrerieConAutoreVersioneELicenza() {
-    show()
-
-    rule.onNodeWithText("telephoto").assertIsDisplayed()
-    rule.onNodeWithText("Saket Narayan · zoomable-image e sub-sampling-image 0.19.0").assertIsDisplayed()
-    rule.onNodeWithText("AndroidX Media3 ExoPlayer").assertIsDisplayed()
-    rule.onNodeWithText("The Android Open Source Project · versione 1.11.1").assertIsDisplayed()
-    rule.onNodeWithText("AndroidX ExifInterface").assertIsDisplayed()
-    rule.onNodeWithText("The Android Open Source Project · versione 1.4.2").assertIsDisplayed()
-    // Una riga di licenza per libreria.
-    rule.onAllNodesWithText("Apache License 2.0").assertCountEquals(3)
+  /** Porta in vista la riga con [text]: la pagina e' una lista pigra e le righe in fondo non sono ancora composte. */
+  private fun scrollTo(text: String, substring: Boolean = false) {
+    rule.onNode(hasScrollAction()).performScrollToNode(hasText(text, substring = substring))
+    rule.waitForIdle()
   }
 
   @Test
-  fun mostraLIndirizzoDellaLicenzaApacheComeTestoSenzaTocco() {
+  fun elencaTutteLeLibrerieDellApkConLaLoroLicenza() {
     show()
 
-    rule.onNodeWithText("Apache License, versione 2.0").assertIsDisplayed()
-    rule.onNodeWithText("https://www.apache.org/licenses/LICENSE-2.0").assertIsDisplayed().assertHasNoClickAction()
+    for (library in ABOUT_LIBRARIES) {
+      scrollTo(library.name)
+      rule.onAllNodesWithText(library.name).onFirst().assertIsDisplayed()
+      rule.onAllNodesWithText(library.subtitle).onFirst().assertExists()
+    }
+  }
+
+  @Test
+  fun lElencoCopreLeFamiglieDelleDipendenzeDiRuntimeDellaRelease() {
+    val names = ABOUT_LIBRARIES.map { it.name }
+    val text = ABOUT_LIBRARIES.joinToString("\n") { "${it.name} ${it.subtitle}" }
+
+    // Dall'albero `releaseRuntimeClasspath`: AndroidX, Kotlin/kotlinx, Hilt/Dagger, Room, smbj con le sue dipendenze
+    // (bcprov, mbassador, asn-one, slf4j), ZXing, CameraX, Media3, telephoto.
+    for (family in listOf(
+      "AndroidX", "Jetpack Compose", "Room", "WorkManager", "DataStore", "ExifInterface", "Media3", "CameraX", "Kotlin", "kotlinx",
+      "Dagger e Hilt", "Guava", "smbj", "asn-one", "Bouncy Castle", "mbassador", "SLF4J", "Okio", "ZXing", "telephoto", "Poko",
+    )) {
+      assertWithMessage("manca $family").that(names.any { it.contains(family) }).isTrue()
+    }
+    // E gli artefatti piccoli che arrivano da sole: annotazioni, inject, libyuv di CameraX.
+    for (small in listOf("javax.inject", "jakarta.inject", "JSR 305", "AutoValue", "JSpecify", "libyuv", "failureaccess")) {
+      assertWithMessage("manca $small").that(text).contains(small)
+    }
+  }
+
+  @Test
+  fun ogniLibreriaHaAutoreDettaglioELicenzaEUnaSolaVoltaIlNome() {
+    for (library in ABOUT_LIBRARIES) {
+      assertThat(library.name).isNotEmpty()
+      assertThat(library.author).isNotEmpty()
+      assertThat(library.detail).isNotEmpty()
+    }
+    assertThat(ABOUT_LIBRARIES.map { it.name }).containsNoDuplicates()
+    // Le licenze che chiedono la riga di copyright (MIT e Bouncy Castle) ce l'hanno nella riga della libreria.
+    val mit = ABOUT_LIBRARIES.filter { it.license == LibraryLicense.MIT || it.license == LibraryLicense.BOUNCY_CASTLE }
+    assertThat(mit.map { it.name }).containsAtLeast("Bouncy Castle Provider (bcprov)", "mbassador", "SLF4J API")
+    assertThat(mit.first { it.name.startsWith("Bouncy") }.author).contains("The Legion of the Bouncy Castle Inc.")
+    assertThat(mit.first { it.name == "SLF4J API" }.author).contains("QOS.ch")
+  }
+
+  /**
+   * La pagina non resta indietro: le versioni fissate in `versions-app.gradle` (quelle delle librerie dell'APK) sono quelle
+   * che la pagina scrive. Cambiare una versione senza aggiornare l'elenco fa fallire questa prova.
+   */
+  @Test
+  fun leVersioniDellaPaginaSonoQuelleFissateNelBuild() {
+    val gradle = File("../versions-app.gradle")
+    assertThat(gradle.isFile).isTrue()
+    val pinned = Regex("""^\s*(\w+)\s*:\s*'([^']+)'""", RegexOption.MULTILINE).findAll(gradle.readText())
+      .associate { it.groupValues[1] to it.groupValues[2] }
+
+    for (library in ABOUT_LIBRARIES.filter { it.versionKey != null }) {
+      assertWithMessage("${library.name}: ${library.versionKey}").that(pinned[library.versionKey]).isEqualTo(library.version)
+      assertThat(library.detail).contains(library.version!!)
+    }
+    // Le dipendenze di runtime fissate dall'app (non i test, non i plugin di build) compaiono con la loro versione.
+    val text = ABOUT_LIBRARIES.joinToString("\n") { "${it.name} ${it.subtitle}" }
+    for (key in listOf("hilt", "androidxHilt", "room", "work", "coroutines", "serializationJson", "biometric", "smbj", "zxing", "camerax", "exifinterface", "media3", "telephoto", "profileInstaller")) {
+      val version = pinned[key]
+      assertWithMessage("manca la chiave $key in versions-app.gradle").that(version).isNotNull()
+      assertWithMessage("la pagina non scrive $key $version").that(text).contains(version!!)
+    }
+  }
+
+  @Test
+  fun mostraLeOpereDelFluidEngineComeTestoSenzaTocco() {
+    show()
+
+    for (work in FluidEngineLicenses) {
+      scrollTo(work.name)
+      rule.onAllNodesWithText(work.name).onFirst().assertIsDisplayed()
+      // Autore, licenza e indirizzo del progetto sono una riga di testo: nessuna azione di clic (nessun browser).
+      rule.onNode(hasText("${work.author} · ${work.licence}", substring = true)).assertExists().assertHasNoClickAction()
+      rule.onNode(hasText(work.url, substring = true)).assertExists().assertHasNoClickAction()
+    }
+    // Inter e il vetro sono nell'APK: l'avviso c'e'.
+    assertThat(FluidEngineLicenses.map { it.name }).containsAtLeast("AndroidLiquidGlass (backdrop)", "Inter")
+  }
+
+  @Test
+  fun scriveNomeEIndirizzoDiOgniLicenzaComeTestoSenzaTocco() {
+    show()
+
+    assertThat(ABOUT_LICENSES_IN_USE).containsAtLeast(LibraryLicense.APACHE_2, LibraryLicense.MIT, LibraryLicense.BOUNCY_CASTLE, LibraryLicense.SIL_OFL)
+    for (license in ABOUT_LICENSES_IN_USE) {
+      val name = string(license.fullName)
+      val url = string(license.url)
+      scrollTo(name)
+      rule.onNodeWithText(name).assertIsDisplayed()
+      rule.onNodeWithText(url).assertIsDisplayed().assertHasNoClickAction()
+    }
+    rule.onNodeWithText("Apache License, versione 2.0").assertExists()
+    rule.onNodeWithText("https://www.apache.org/licenses/LICENSE-2.0").assertExists()
   }
 
   @Test
   fun dichiaraCheLeLibrerieNonInviamoDatiENonCiSonoConnessioniDiRete() {
     show()
 
+    scrollTo("Le librerie non inviano dati.", substring = true)
     rule.onNodeWithText(
-      "Le librerie non inviano dati. Per la galleria del telefono l’app non fa nessuna connessione di rete.",
+      "Le librerie non inviano dati. Per la galleria del telefono l’app non fa nessuna connessione di rete. " +
+        "Gli indirizzi qui sotto sono solo testo: non si aprono da soli.",
     ).assertIsDisplayed()
   }
 

@@ -54,12 +54,16 @@ public final class IsoFixtures {
     /** Riquadri aggiunti in fondo al file (per esempio un {@code mpvd} con il video di una motion photo). */
     public byte[] trailing;
     public String majorBrand = "heic";
+    /** Il contenuto del riquadro {@code hvcC} (configurazione HEVC) per un'immagine vera; null = nessuno (immagine finta). */
+    public byte[] hvcC;
+    /** I byte dell'immagine (campione HEVC con lunghezze davanti ai NAL) al posto dei 32 byte finti; null = finti. */
+    public byte[] imageData;
   }
 
   public static byte[] heic(HeicSpec s) {
     byte[] ftyp = box("ftyp", ascii(s.majorBrand), u32(0), ascii("mif1"), ascii(s.majorBrand));
-    byte[] image = new byte[32];
-    for (int i = 0; i < image.length; i++) image[i] = (byte) (0x40 + i);
+    byte[] image = s.imageData != null ? s.imageData : new byte[32];
+    if (s.imageData == null) for (int i = 0; i < image.length; i++) image[i] = (byte) (0x40 + i);
     byte[] exifItem = s.exif != null ? ExifWriter.heifItemPayload(s.exif) : null;
     byte[] xmpItem = s.xmp != null ? s.xmp.getBytes(java.nio.charset.StandardCharsets.UTF_8) : null;
 
@@ -103,6 +107,10 @@ public final class IsoFixtures {
 
     List<byte[]> props = new ArrayList<>();
     List<Integer> assoc = new ArrayList<>();
+    if (s.hvcC != null) {
+      props.add(box("hvcC", s.hvcC));
+      assoc.add(0x80 | props.size());
+    }
     props.add(fullBox("ispe", 0, 0, u32(s.width), u32(s.height)));
     assoc.add(props.size());
     if (s.irot != null) {

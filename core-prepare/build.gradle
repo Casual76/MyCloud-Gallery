@@ -3,7 +3,13 @@
 // HQ in WebP, fotogrammi chiave dei video senza scaricarli, hash completo delle foto). Contratti, null-object e fake di P0;
 // logica di P6. Dalla Fase 5 la usa anche il backup ("chi carica prepara") con i byte del telefono.
 //
-// Pacchetti: `contract`, `noop`, `testing` (vedi core-index).
+// Pacchetti: `contract`, `noop`, `testing` (vedi core-index); P6 aggiunge `engine` (DefaultPreparer, cancelli di memoria), `photo`
+// (lettura con hash, decodifica unica, uscite), `video` (cache a blocchi, indice del contenitore, fotogrammi), `codec` (decoder del
+// dispositivo, famiglia per D14), `spill` (temporanei in cacheDir/prep/) e `run` (DefaultPreparationRun).
+//
+// I test usano le fixture di tools/fixtures/src (Java, solo JDK) come core-metadata: PrepareFixtures per i video con indice vero,
+// l'APV finto, il DNG piccolo e l'HEIC. Robolectric (grafica NATIVE) decodifica JPEG, PNG, WebP, GIF e BMP ma non HEIC ne' DNG
+// ne' da File: quelle strade si provano con i fatti del formato iniettati, il resto sul telefono (F6).
 //
 // **Non conosce il NAS** (§1.1, test di architettura): lavora su `MediaBytes` (core-metadata) e su un file temporaneo;
 // chi apre l'originale sul NAS e' :app (`PrepInputs`). Vede l'indice (core-index: WorkUnits, IndexPublisher, BlobPut) e
@@ -22,6 +28,38 @@ apply from: "${rootDir}/gradle/android-conventions.gradle"
 
 android {
   namespace = 'dev.pampa.mycloudgallery.core.prepare'
+
+  testOptions {
+    unitTests.all {
+      // ImageIO scrive i JPEG e i PNG delle fixture senza display.
+      systemProperty 'java.awt.headless', 'true'
+      // La cartella dove i test mettono i file grandi generati una volta sola (il JPEG da 200 MP, circa 70 MB).
+      systemProperty 'mcg.fixtures.cache', layout.buildDirectory.dir('fixtures-cache').get().asFile.absolutePath
+      // Una decodifica da 200 MP e' native, ma i buffer dei test (file da 70 MB in memoria) vogliono spazio.
+      maxHeapSize = '1536m'
+    }
+  }
+}
+
+// Le fixture di tools/fixtures/src (solo JDK): lo stesso codice del generatore per il telefono. Si compilano con un
+// normale JavaCompile (come in core-metadata: la compilazione dei test di AGP non vede java.awt).
+def fixturesClasses = layout.buildDirectory.dir('fixtures-classes')
+def compileFixtures = tasks.register('compileFixtures', JavaCompile) {
+  group = 'verification'
+  description = 'Compila tools/fixtures/src (solo JDK) per i test di core-prepare.'
+  source(fileTree("${rootDir}/tools/fixtures/src") { include '**/*.java' })
+  classpath = files()
+  destinationDirectory = fixturesClasses
+  options.encoding = 'UTF-8'
+  options.release = 17
+}
+
+def fixturesJar = tasks.register('fixturesJar', Jar) {
+  group = 'verification'
+  description = 'Il jar delle fixture di tools/fixtures per i test di core-prepare.'
+  from compileFixtures
+  archiveBaseName = 'mcg-fixtures'
+  destinationDirectory = layout.buildDirectory.dir('fixtures-jar')
 }
 
 dependencies {
@@ -33,6 +71,9 @@ dependencies {
 
   implementation project(':core-imaging')
 
+  testImplementation files(fixturesJar.map { it.archiveFile })
+  // Gli otto orientamenti si scrivono nei JPEG dei test con ExifInterface (l'oracolo indipendente, come in core-imaging).
+  testImplementation appDeps.exifinterface
   testImplementation appDeps.coroutinesTest
   testImplementation appDeps.robolectric
   testImplementation appDeps.androidxTestCore

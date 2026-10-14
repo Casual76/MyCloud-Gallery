@@ -6,6 +6,7 @@ import dev.pampa.mycloudgallery.core.index.contract.VideoFrame
 import dev.pampa.mycloudgallery.core.index.contract.WorkItem
 import dev.pampa.mycloudgallery.core.metadata.contract.MediaBytes
 import dev.pampa.mycloudgallery.core.model.MediaKind
+import dev.pampa.mycloudgallery.core.model.QuickHash
 import dev.pampa.mycloudgallery.core.model.Sha256
 import dev.pampa.mycloudgallery.core.model.ThumbHash
 import dev.pampa.mycloudgallery.core.trust.data.SegmentClass
@@ -123,13 +124,18 @@ sealed interface PrepResult {
   /**
    * @property fullHash lo SHA-256 dell'intero originale, calcolato **mentre** si leggeva (foto: gratis); null per i
    *   video, che non si leggono interi.
-   * @property thumbHash il segnaposto dalla miniatura S.
+   * @property thumbHash il segnaposto dalla miniatura S (per un video, dalla copertina).
+   * @property quickHash l'impronta rapida `qh1` dei byte **letti adesso** (foto: gratis dai byte in memoria; video: due
+   *   letture da 64 KiB, che l'indice del contenitore riusa dalla cache). Chi pubblica la confronta con la chiave di
+   *   contenuto del lavoro: se differisce il file e' cambiato dopo l'elenco e **nulla** si pubblica (D8: un `fh` accanto a
+   *   un `qh` di altri byte potrebbe far unire due media diversi). Aggiunta di P6, con valore di default.
    */
   data class Done(
     val outputs: List<PrepOutput>,
     val fullHash: Sha256?,
     val facts: DecodedFacts?,
     val thumbHash: ThumbHash?,
+    val quickHash: QuickHash? = null,
   ) : PrepResult
 
   /**
@@ -153,20 +159,39 @@ interface Preparer {
 /**
  * I tetti di memoria della preparazione (§2.4, rischio "memoria con foto enormi"): **una** decodifica pesante alla volta,
  * al massimo due media in parallelo, temporanei fino a 512 MiB, pixel decodificati entro una frazione della memoria
- * dell'app. P6 raffina i numeri; P0 fissa la forma.
+ * dell'app. P6 ha fissato i numeri (vedi sotto); quelli con un valore di default si possono stringere nei test.
+ *
+ * | Tetto | Valore | Perche' |
+ * |---|---|---|
+ * | media insieme | 2 con 4+ processori, 1 sotto | la CPU del NAS e' il collo di bottiglia (16 MB/s con 4 flussi) |
+ * | decodifiche pesanti | 1 | oltre 24 MP di sorgente il codec ha un working set che non si moltiplica |
+ * | pixel di una bitmap | un quarto di `memoryClass` (ARGB_8888) | 256 MB → 16,7 MP; l'HQ ne usa 3,1 |
+ * | pixel di una sorgente | 600 MP | oltre, la decodifica campionata costerebbe minuti di CPU (E-M3): `TOO_LARGE` |
+ * | foto in memoria | fino a 64 MiB; oltre 16 MiB una per volta | il file sta in un array: 2 grandi insieme sono troppi |
+ * | temporaneo | fino a 512 MiB | oltre, `TOO_LARGE` e segnaposto |
  *
  * @param memoryClassMb `ActivityManager.memoryClass` (o `largeMemoryClass` se dichiarato).
  * @param cores i processori disponibili.
+ * @param inMemoryMaxBytes foto lette in memoria fino a qui, oltre si usa un temporaneo.
+ * @param maxTempBytes tetto dei temporanei (`cacheDir/prep/`): oltre, `TOO_LARGE`.
+ * @param maxSourcePixels oltre questi pixel (della sorgente, orientata) la foto non si decodifica nemmeno campionata: `TOO_LARGE`.
  */
-class PrepBudget(val memoryClassMb: Int, val cores: Int) {
+class PrepBudget(
+  val memoryClassMb: Int,
+  val cores: Int,
+  val inMemoryMaxBytes: Long = 64L * 1024 * 1024,
+  val maxTempBytes: Long = 512L * 1024 * 1024,
+  val maxSourcePixels: Long = 600_000_000L,
+) {
   init {
     require(memoryClassMb > 0 && cores > 0) { "Budget non valido." }
+    require(inMemoryMaxBytes in 1..Int.MAX_VALUE.toLong() && maxTempBytes >= inMemoryMaxBytes && maxSourcePixels > 0) { "Tetti non validi." }
   }
 
   /** Media preparati insieme: il collo di bottiglia e' la CPU del NAS (16 MB/s con 4 flussi). */
   val parallelMedia: Int get() = if (cores >= 4) 2 else 1
 
-  /** Decodifiche pesanti (oltre [heavyPixelThreshold] pixel) contemporanee. */
+  /** Decodifiche pesanti (oltre [heavyPixelThreshold] pixel di sorgente) contemporanee. */
   val heavyDecodes: Int get() = 1
 
   /** Pixel oltre i quali una decodifica e' "pesante": 24 MP. */
@@ -175,11 +200,25 @@ class PrepBudget(val memoryClassMb: Int, val cores: Int) {
   /** Pixel massimi di una bitmap decodificata (ARGB_8888): un quarto della memoria dell'app. */
   val maxDecodedPixels: Long get() = memoryClassMb.toLong() * 1024 * 1024 / 4 / 4
 
-  /** Foto lette in memoria fino a qui, oltre si usa un temporaneo. */
-  val inMemoryMaxBytes: Long get() = 64L * 1024 * 1024
+  /** I byte di una bitmap al tetto dei pixel. */
+  val maxDecodedBytes: Long get() = maxDecodedPixels * BYTES_PER_PIXEL
 
-  /** Tetto dei temporanei (`cacheDir/prep/`): oltre, `TOO_LARGE`. */
-  val maxTempBytes: Long get() = 512L * 1024 * 1024
+  /** Una foto in memoria piu' grande di cosi' si legge da sola: due da 64 MiB insieme sono 128 MiB di array. */
+  val largeFileBytes: Long get() = 16L * 1024 * 1024
+
+  /** Il blocco di lettura dell'originale (con l'hash che segue la lettura). */
+  val readChunkBytes: Int get() = 1024 * 1024
+
+  /** Video: la cache di lettura a intervalli sopra `MediaBytes` (§2.4) e il suo blocco. */
+  val videoCacheBytes: Int get() = 4 * 1024 * 1024
+  val videoBlockBytes: Int get() = 256 * 1024
+
+  /** Video: l'indice del contenitore (`moov`) si legge intero fino a qui; oltre non si guarda (lo guarda il sistema). */
+  val maxIndexBytes: Long get() = 64L * 1024 * 1024
+
+  companion object {
+    const val BYTES_PER_PIXEL: Long = 4L
+  }
 }
 
 /** Il risultato di un'apertura per la preparazione. */

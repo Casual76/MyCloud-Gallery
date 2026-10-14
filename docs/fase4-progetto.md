@@ -785,7 +785,7 @@ chaos.bigFileMb=200      # dimensione del file grande del runner
 2. **Ogni percorso** passa da `TestAreaFileSystem`, che avvolge `NasMediaReader`, `NasFileOps` e `NasFileSystem`: accetta solo percorsi che, dopo `SharePath.parse`, iniziano con `mcg-it/<giro>/` (confronto senza maiuscole); tutto il resto lancia `TestAreaViolation` **prima** della chiamata SMB.
 3. **L'indice di prova** usa `RootedNasFileSystem(base = mcg-it/<giro>/)`: il formato vede `.mycloudgallery/...` come sempre, sul NAS finisce sotto `mcg-it/<giro>/.mycloudgallery/`. Il registro di famiglia delle prove della Fase 2 non si tocca.
 4. **Autotest della guardia** come primo test: prova `../`, un'altra share, la radice, `.mycloudgallery` vera e un nome con maiuscole diverse; tutti rifiutati con **zero** chiamate al trasporto (contatore).
-5. **Pulizia**: solo `mcg-it/<giro>/`, con la stessa guardia; un giro interrotto si pulisce al giro dopo (solo cartelle `mcg-it/*` più vecchie di 24 ore).
+5. **Pulizia**: solo `mcg-it/<giro>/`, con la stessa guardia; un giro interrotto si pulisce al giro dopo (tutti i giri precedenti sotto `mcg-it/`, con ciascun account a turno; alla fine `mcg-it` deve essere vuota per entrambi gli account, altrimenti la suite fallisce).
 6. **Nessun accesso diretto a smbj** nei test della Fase 4 (test di architettura sui sorgenti di test).
 7. La password si verifica una volta con la sessione (interruttore condiviso): un errore nel file costa un solo tentativo.
 8. **Perché la radice `mcg-it/<giro>/` anche dentro le share di prova**: `test` contiene le foto della Fase 0 ed è leggibile da `alessio`; le prove non le toccano mai. Le prove sul campo (§5.7) usano invece cartelle dedicate (`mcg-campo/`) e la recinzione del telefono (D33).

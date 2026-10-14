@@ -256,6 +256,7 @@ class DiagCatalogTest {
       WaitReason.AndroidLimit(ForegroundBudget.DATA_SYNC),
       WaitReason.NasUnreachable,
       WaitReason.ConfirmationRequired(setOf(ConfirmationKind.MOBILE_DATA)),
+      WaitReason.Frozen(dev.pampa.mycloudgallery.core.model.FreezeReason.VANISHED),
     )
     val codes = reasons.map { ActivityReason.of(it) }
 

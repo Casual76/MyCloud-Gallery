@@ -16,6 +16,7 @@ import dev.pampa.mycloudgallery.core.database.entity.IndexRecordEntity
 import dev.pampa.mycloudgallery.core.database.entity.IndexSegmentEntity
 import dev.pampa.mycloudgallery.core.database.entity.NasOpEntity
 import dev.pampa.mycloudgallery.core.database.entity.NasOpItemEntity
+import dev.pampa.mycloudgallery.core.database.entity.NasAdoptedFingerprintEntity
 import dev.pampa.mycloudgallery.core.database.entity.NasScanStateEntity
 import dev.pampa.mycloudgallery.core.database.entity.NasTrashEntryEntity
 import dev.pampa.mycloudgallery.core.database.entity.ReplicaBlobEntity
@@ -53,6 +54,17 @@ interface NasScanDao {
 
   @Query("DELETE FROM nas_scan_state WHERE account_id = :account AND share_key = :shareKey")
   suspend fun delete(account: String, shareKey: String)
+
+  // --- R6 (revisione 4A): impronte adottate dall'indice ---------------------------------------------------------------
+
+  @Upsert
+  suspend fun upsertAdopted(rows: List<NasAdoptedFingerprintEntity>)
+
+  @Query("DELETE FROM nas_adopted_fingerprint WHERE location_id IN (:locationIds)")
+  suspend fun deleteAdopted(locationIds: List<Long>)
+
+  @Query("SELECT * FROM nas_adopted_fingerprint WHERE location_id IN (:locationIds)")
+  suspend fun adoptedAmong(locationIds: List<Long>): List<NasAdoptedFingerprintEntity>
 }
 
 /**
@@ -119,6 +131,13 @@ interface IndexPublishDao {
 
   @Query("SELECT content_key FROM index_outbox_record WHERE share_key = :shareKey AND content_key IN (:keys)")
   suspend fun pendingContentKeys(shareKey: String, keys: List<String>): List<String>
+
+  /** R2 (revisione 4A): le share con righe nell'outbox. */
+  @Query("SELECT DISTINCT share_key FROM index_outbox_record")
+  suspend fun outboxRecordShares(): List<String>
+
+  @Query("SELECT DISTINCT share_key FROM index_outbox_blob")
+  suspend fun outboxBlobShares(): List<String>
 
   @Query("SELECT handle FROM index_outbox_blob")
   suspend fun referencedHandles(): List<String>
@@ -285,6 +304,10 @@ interface ReplicaDao {
   suspend fun deleteUpToSeq(shareKey: String, deviceId: String, segment: String, upToSeq: Long)
 
   /** Le chiavi di contenuto distinte con almeno una delle classi di [mask] preparate (la stima di un livello, E-L6). */
+  /** R1 (revisione 4A): le chiavi di contenuto dei record presenti di un dispositivo in una share. */
+  @Query("SELECT DISTINCT content_key FROM index_record WHERE share_key = :shareKey AND device_id = :deviceId AND gone = 0 AND content_key IS NOT NULL")
+  suspend fun presentContentKeys(shareKey: String, deviceId: String): List<String>
+
   @Query("SELECT COUNT(DISTINCT content_key) FROM index_record WHERE gone = 0 AND (prep & :mask) != 0")
   suspend fun preparedContentCount(mask: Int): Int
 

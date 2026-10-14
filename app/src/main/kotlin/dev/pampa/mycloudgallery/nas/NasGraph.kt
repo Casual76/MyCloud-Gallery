@@ -8,6 +8,7 @@ import dev.pampa.mycloudgallery.core.database.GalleryDatabase
 import dev.pampa.mycloudgallery.core.database.MediaCatalog
 import dev.pampa.mycloudgallery.core.family.contract.PreflightResult
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbnailSource
+import dev.pampa.mycloudgallery.core.imaging.nas.NasBlobScopes
 import dev.pampa.mycloudgallery.core.imaging.nas.NasFileLocation
 import dev.pampa.mycloudgallery.core.imaging.nas.NasLocationLookup
 import dev.pampa.mycloudgallery.core.imaging.nas.NasMediaOriginalThumbnails
@@ -19,6 +20,7 @@ import dev.pampa.mycloudgallery.core.imaging.viewer.NasMediaLocation
 import dev.pampa.mycloudgallery.core.imaging.viewer.NasMediaLocator
 import dev.pampa.mycloudgallery.core.imaging.viewer.NasOriginalStore
 import dev.pampa.mycloudgallery.core.index.contract.BlobLocation
+import dev.pampa.mycloudgallery.core.index.contract.BlobScope
 import dev.pampa.mycloudgallery.core.index.contract.IndexSyncStatus
 import dev.pampa.mycloudgallery.core.index.contract.IndexWriteGate
 import dev.pampa.mycloudgallery.core.index.contract.QualityLevel
@@ -60,11 +62,15 @@ import dev.pampa.mycloudgallery.core.library.status.SyncProgress
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneMediaWriter
 import dev.pampa.mycloudgallery.core.metadata.contract.MetadataExtractor
 import dev.pampa.mycloudgallery.core.model.AccountId
+import dev.pampa.mycloudgallery.core.model.ContentKey
+import dev.pampa.mycloudgallery.core.model.Location
 import dev.pampa.mycloudgallery.core.model.FileStamp
 import dev.pampa.mycloudgallery.core.model.LocationId
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.model.NasArea
+import dev.pampa.mycloudgallery.core.model.NasPath
 import dev.pampa.mycloudgallery.core.nas.contract.NasMediaReader
+import dev.pampa.mycloudgallery.core.nas.session.ClockJumpGuard
 import dev.pampa.mycloudgallery.core.nas.contract.Purpose
 import dev.pampa.mycloudgallery.core.nasmedia.contract.Freeze
 import dev.pampa.mycloudgallery.core.nasmedia.contract.NasScanStatus
@@ -78,6 +84,7 @@ import dev.pampa.mycloudgallery.core.network.contract.NasRoute
 import dev.pampa.mycloudgallery.core.prepare.contract.PrepBudget
 import dev.pampa.mycloudgallery.core.prepare.contract.PrepControl
 import dev.pampa.mycloudgallery.core.prepare.contract.PrepStop
+import dev.pampa.mycloudgallery.core.prepare.contract.PrepStorage
 import dev.pampa.mycloudgallery.core.prepare.contract.RunResult
 import dev.pampa.mycloudgallery.core.prepare.engine.DefaultPreparer
 import dev.pampa.mycloudgallery.core.prepare.run.DefaultPreparationRun
@@ -90,12 +97,12 @@ import java.io.IOException
 import java.nio.ByteBuffer
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.math.abs
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -108,6 +115,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /**
  * Il grafo del **NAS nella Libreria** (Fase 4A, P11; docs/fase4-progetto.md §1.4): sessione → `NasMediaReader` →
@@ -158,6 +166,13 @@ class NasGraph(
 
   /** "Ferma le scritture sul NAS" di Diagnostica (§1.4): l'emergenza dell'utente, che puo' solo restringere (D31). */
   val emergency: EmergencyStop = EmergencyStop(File(noBackup, EMERGENCY_FILE))
+
+  /**
+   * D32 oltre la vita del processo (R7 della revisione 4A): ogni ancora dell'ora del NAS si confronta con l'ultima salvata,
+   * anche di un processo di prima; un salto oltre 5 minuti sospende prenotazioni e indice finche' l'utente non accetta l'ora
+   * ([acceptClockJump]) o per 24 ore di ora stabile. Il file sta sotto `replica/`, quindi l'azzeramento lo toglie con i pacchi.
+   */
+  val clockGuard: ClockJumpGuard = ClockJumpGuard(FileClockJumpStore(File(File(noBackup, REPLICA_DIR), CLOCK_FILE)))
 
   /** Le conferme "dati mobili" per media e per sessione (E-V2): una per l'app, condivisa da foto, video e "Scarica". */
   val consent: MobileDataConsent = MobileDataConsent()
@@ -222,6 +237,9 @@ class NasGraph(
     override fun locate(contentKey: Long, cls: dev.pampa.mycloudgallery.core.trust.data.SegmentClass): BlobLocation? =
       runtimeFlow.value?.replica?.locate(contentKey, cls)
 
+    override fun locate(contentKey: Long, cls: dev.pampa.mycloudgallery.core.trust.data.SegmentClass, scope: BlobScope): BlobLocation? =
+      runtimeFlow.value?.replica?.locate(contentKey, cls, scope)
+
     override fun read(location: BlobLocation): ByteBuffer = runtimeFlow.value?.replica?.read(location) ?: throw IOException("replica chiusa")
 
     override suspend fun estimate(quality: QualityLevel): SpaceEstimate = runtimeFlow.value?.replica?.estimate(quality) ?: SpaceEstimate(0, 0)
@@ -234,7 +252,7 @@ class NasGraph(
   }
 
   /** Dove sta sul NAS un media (`MediaRef.Nas.locationId` → share e percorso), dal catalogo: mai dalla UI (§1.2). */
-  val locations: CatalogNasLocations = CatalogNasLocations(catalogProvider)
+  val locations: CatalogNasLocations = CatalogNasLocations(catalogProvider) { runtimeFlow.value?.account }
 
   /** Le miniature del NAS (P7): replica → provvisoria EXIF → originale solo per il contenuto visibile, a casa (D17). */
   val thumbnails: ThumbnailSource = NasThumbnailSource(
@@ -245,6 +263,8 @@ class NasGraph(
       locations = locations,
       allowed = { foreground() && !link.isMetered() && runtimeFlow.value != null },
     ),
+    // R1 (revisione 4A): le miniature solo dalle share del media (la sua per prima) e con la chiave intera del catalogo.
+    scopes = locations,
   )
 
   /** Le foto del NAS nel viewer (P8, D19): HQ della replica, poi l'originale a intervalli con lo zoom. */
@@ -255,6 +275,7 @@ class NasGraph(
     replica = blobs,
     link = link,
     consent = consent,
+    scopes = locations,
   )
 
   /** I video del NAS in streaming (D19). */
@@ -262,7 +283,9 @@ class NasGraph(
 
   /** "Scarica sul telefono" (D20, E-L2): collegato al catalogo **prima** che il file diventi visibile. */
   val downloader: NasDownloader by lazy {
-    NasDownloader(scope, reader, locations, phoneWriter, CatalogCopyLinker(catalogProvider), link, consent)
+    // R8 (revisione 4A): il file aperto deve avere il timbro del catalogo e i byte letti l'impronta rapida della versione;
+    // il collegamento rifiuta una copia con un hash completo diverso da quello noto.
+    NasDownloader(scope, CatalogCheckedReader(reader, locations), locations, phoneWriter, CatalogCopyLinker(catalogProvider), link, consent)
   }
 
   // --- Cancelli -------------------------------------------------------------------------------------------------------
@@ -276,7 +299,7 @@ class NasGraph(
       emergency.stopped -> WriteBlock.EMERGENCY_STOP
       inputs.trust.writePermit() == null -> WriteBlock.NOT_TRUSTED
       frozenShares.value.containsKey(share.lowercase(Locale.ROOT)) -> WriteBlock.FROZEN
-      clockJumped() -> WriteBlock.CLOCK_JUMP
+      clockGuard.blocked -> WriteBlock.CLOCK_JUMP
       else -> null
     }
   }
@@ -290,7 +313,24 @@ class NasGraph(
     }
   }
 
-  private fun clockJumped(): Boolean = inputs.nasClock.lastJumpMs.value?.let { abs(it) > CLOCK_JUMP_MS } ?: false
+  /** Le ancore dell'ora del NAS alla guardia del salto (R7), con il riferimento del telefono di quell'istante. */
+  private suspend fun watchClock() {
+    inputs.nasClock.anchors.collect { anchor ->
+      withContext(Dispatchers.IO) {
+        val elapsedNow = android.os.SystemClock.elapsedRealtime()
+        // L'ora del telefono serve solo da metro largo fra due avvii (mai per decidere sui file): quella dell'istante dell'ancora.
+        val wallAtAnchor = System.currentTimeMillis() - (elapsedNow - anchor.monotonicMs)
+        val boot = runCatching {
+          android.provider.Settings.Global.getInt(context.contentResolver, android.provider.Settings.Global.BOOT_COUNT, -1)
+        }.getOrDefault(-1)
+        clockGuard.onAnchor(anchor.nasMs, ClockJumpGuard.Reference(anchor.monotonicMs, boot.takeIf { it >= 0 }?.toLong(), wallAtAnchor))
+      }
+    }
+  }
+
+  init {
+    scope.launch { runCatching { watchClock() } }
+  }
 
   // --- Stato: congelamento, Libreria ---------------------------------------------------------------------------------
 
@@ -320,8 +360,14 @@ class NasGraph(
     override suspend fun set(level: QualityLevel) = setQuality(level)
   }
 
-  /** L'ultimo salto dell'ora del NAS osservato (ms), per la Diagnostica (D32). */
-  fun clockJumpMs(): Long? = inputs.nasClock.lastJumpMs.value
+  /** Il salto dell'ora del NAS che sospende le scritture (ms), per la Diagnostica (D32, R7): salvato, vale fra i processi. */
+  fun clockJumpMs(): Long? = clockGuard.jump.value
+
+  /**
+   * "L'ora del NAS e' giusta, continua" (D32, R7): il gesto dell'utente che toglie la sospensione. Viene dalla UI (Diagnostica),
+   * mai da un dato del NAS. Falso se non c'era un salto.
+   */
+  fun acceptClockJump(): Boolean = clockGuard.accept()
 
   /** La qualita' delle anteprime (Impostazioni, E-L6): null finche' il NAS non c'e'. */
   val quality: StateFlow<ReplicaQualityState?> = runtimeFlow.flatMapLatest { rt -> rt?.quality?.state ?: flowOf(null) }
@@ -383,7 +429,12 @@ class NasGraph(
     val names = areas.associate { it.share.lowercase(Locale.ROOT) to it.share }
     val shareName: (String) -> String = { key -> names[key.lowercase(Locale.ROOT)] ?: key }
 
-    val replica = LocalReplica(replicaStore, packs, CatalogReplicaPort(catalog, { account }, shareName), deviceId)
+    val replica = LocalReplica(
+      replicaStore,
+      packs,
+      CatalogReplicaPort(catalog, { account }, shareName) { keys -> keys.forEach { provisional.forget(it) } },
+      deviceId,
+    )
     val quality = ReplicaQualityController(replicaStore, replica)
     val remote = NasRemoteIndex({ share -> inputs.session.fileSystem(share) }, { inputs.registry() }, user)
     val sync = IndexSyncEngine(
@@ -412,10 +463,16 @@ class NasGraph(
     val workUnits = LeasedWorkUnits(
       identity = identity,
       source = workSource,
-      published = RemotePublishedClasses(remote, startRound = remote::startRound),
+      // R5 (revisione 4A): le classi contano solo con la miniatura S davvero pubblicata (dalla replica, o dalla tabella).
+      published = RemotePublishedClasses(
+        remote,
+        startRound = remote::startRound,
+        localBlobKeys = { _, _, segment, cls -> replica.blobKeysOfSegment(segment, cls) },
+      ),
       leases = TrustWorkLeases({ share -> inputs.session.fileSystem(share) }, signer, inputs.nasClock, { inputs.registry() }),
       rules = rules,
       unpublished = publisher::hasPending,
+      ownDecoderFamily = dev.pampa.mycloudgallery.core.prepare.codec.DecoderFamily.ofDevice(),
     )
     val preparer = DefaultPreparer(prepBudget(), File(context.cacheDir, PREP_DIR))
     val store = MediaCatalogScanStore(catalog)
@@ -439,12 +496,15 @@ class NasGraph(
       replica.open()
       quality.load()
       publisher.recover()
+      // R2 (revisione 4A): niente outbox per le share non piu' configurate o non pubblicabili (D31, sola lettura).
+      runCatching { publisher.purgeOutbox(areas.map { it.share }.toSet()) }
       scanners.values.forEach { it.freezeState.load() }
       runCatching { preparer.sweepStale() }
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
-      GalleryLog.e(TAG, e) { "NAS della Libreria non avviato" }
+      // I5 (revisione 4A): solo la classe dell'eccezione, anche in debug (i messaggi di smbj possono avere percorsi).
+      GalleryLog.w(TAG) { "NAS della Libreria non avviato: ${e.javaClass.simpleName}" }
       return@withLock false
     }
     if (stopped.get()) return@withLock false
@@ -550,6 +610,8 @@ class NasGraph(
       decoderFamily = dev.pampa.mycloudgallery.core.prepare.codec.DecoderFamily.ofDevice(),
       attempts = attempts,
       control = control,
+      // R2 (revisione 4A): sotto 1 GiB libero sul telefono la preparazione aspetta.
+      storage = PrepStorage { noBackup.usableSpace },
     )
     val started = monotonicMs()
     var total = RunResult(0, 0, 0, 0, 0, null)
@@ -568,7 +630,11 @@ class NasGraph(
         bytesRead = total.bytesRead + result.bytesRead,
         stoppedBy = result.stoppedBy.takeUnless { it == PrepStop.NO_WORK } ?: total.stoppedBy,
       )
-      if (result.stoppedBy == PrepStop.BUDGET || result.stoppedBy == PrepStop.RULES || result.stoppedBy == PrepStop.UNAVAILABLE) break
+      if (result.stoppedBy == PrepStop.BUDGET || result.stoppedBy == PrepStop.RULES || result.stoppedBy == PrepStop.UNAVAILABLE ||
+        result.stoppedBy == PrepStop.STORAGE
+      ) {
+        break
+      }
     }
     if (total.prepared > 0) onReplicaChanged()
     lastPrep.value = total
@@ -610,7 +676,9 @@ class NasGraph(
     const val COVERS_FILE = "nas-album-covers"
     const val ORIGINALS_DIR = "nas-originals"
     const val PREP_DIR = "prep"
-    private const val CLOCK_JUMP_MS = 5 * 60 * 1000L
+
+    /** R7: l'ultima ancora dell'ora del NAS e il salto in corso, sotto `replica/` (l'azzeramento la toglie). */
+    const val CLOCK_FILE = "nas-clock"
     private const val VERIFY_EVERY_MS = 15 * 60 * 1000L
     private const val DEFAULT_MEMORY_CLASS_MB = 256
     private const val MIN_MEMORY_CLASS_MB = 64
@@ -627,7 +695,11 @@ object NoUnitPriority : UnitPriority {
  * [NasLocationLookup]) e per il viewer e "Scarica" (P8, [NasMediaLocator]). Il percorso non esce mai di qui verso la UI
  * (§1.2): passa solo a `NasMediaReader`. Null = la posizione non c'e' piu' (sparita, azzerata, E-V6).
  */
-class CatalogNasLocations(private val catalog: suspend () -> MediaCatalog?) : NasLocationLookup, NasMediaLocator {
+class CatalogNasLocations(
+  private val catalog: suspend () -> MediaCatalog?,
+  /** L'account del NAS di questo dispositivo (per trovare un posto dal percorso, R8). */
+  private val account: () -> AccountId? = { null },
+) : NasLocationLookup, NasMediaLocator, NasBlobScopes {
 
   override suspend fun locate(locationId: Long): NasFileLocation? {
     val nas = catalog()?.nasLocation(LocationId(locationId)) ?: return null
@@ -641,9 +713,53 @@ class CatalogNasLocations(private val catalog: suspend () -> MediaCatalog?) : Na
     val info = c.nasLocationAt(nas) ?: return null
     if (info.state == dev.pampa.mycloudgallery.core.model.LocationState.ABSENT) return null
     val path = runCatching { SharePath.parseMediaPath(nas.path.value) }.getOrNull() ?: return null
-    return NasMediaLocation(share = nas.share, path = path, sizeBytes = info.stamp.size, stamp = info.stamp)
+    // R8 (revisione 4A): l'hash completo della versione, se il catalogo lo conosce (calcolato qui o con `MergeRules`, mai
+    // dall'indice): lo "Scarica" lo confronta con i byte arrivati.
+    val version = c.mediaIdOfLocation(LocationId(ref.locationId))?.let { c.media(it) }
+      ?.let { media -> media.locations.firstOrNull { it.id.value == ref.locationId }?.let { media.version(it.versionId) } }
+    return NasMediaLocation(
+      share = nas.share,
+      path = path,
+      sizeBytes = info.stamp.size,
+      stamp = info.stamp,
+      knownSha256 = version?.fingerprint?.fullHash,
+    )
+  }
+
+  /** R8: il timbro e l'impronta rapida che il catalogo conosce per il posto ([share], [path]), per controllare un download. */
+  suspend fun expected(share: String, path: SharePath): CatalogExpectation? {
+    val c = catalog() ?: return null
+    val nasPath = runCatching { NasPath.of(path.value) }.getOrNull() ?: return null
+    val owner = account() ?: return null
+    val info = c.nasLocationAt(Location.Nas(owner, share, nasPath)) ?: return null
+    if (info.state == dev.pampa.mycloudgallery.core.model.LocationState.ABSENT) return null
+    val media = c.mediaIdOfLocation(info.locationId)?.let { c.media(it) } ?: return null
+    val place = media.locations.firstOrNull { it.id == info.locationId } ?: return null
+    val fingerprint = media.version(place.versionId).fingerprint
+    return CatalogExpectation(info.stamp, fingerprint.quickHash, fingerprint.fullHash)
+  }
+
+  /**
+   * R1 (revisione 4A): dove cercare le anteprime di [ref]: la share della posizione per prima, poi quelle delle altre posizioni
+   * del NAS dello stesso media, e la chiave intera della versione se i suoi primi 64 bit sono quelli di [ref].
+   */
+  override suspend fun scopeOf(ref: MediaRef.Nas): BlobScope? {
+    val c = catalog() ?: return null
+    val nas = c.nasLocation(LocationId(ref.locationId)) ?: return null
+    val media = c.mediaIdOfLocation(LocationId(ref.locationId))?.let { c.media(it) }
+    val shares = listOf(nas.share) + media?.locations.orEmpty().mapNotNull { (it.location as? Location.Nas)?.share }
+    val fingerprint = media?.locations?.firstOrNull { it.id.value == ref.locationId }?.let { media.version(it.versionId).fingerprint }
+    val full = fingerprint?.let { runCatching { ContentKey.of(it.quickHash, it.size) }.getOrNull() }?.takeIf { it.short == ref.contentKey }
+    return BlobScope(shares, full)
   }
 }
+
+/** Cio' che il catalogo sa di un file del NAS per controllare uno "Scarica" (R8): timbro, impronta rapida, hash completo. */
+class CatalogExpectation(
+  val stamp: dev.pampa.mycloudgallery.core.model.NasStamp,
+  val quickHash: dev.pampa.mycloudgallery.core.model.QuickHash,
+  val fullHash: dev.pampa.mycloudgallery.core.model.Sha256?,
+)
 
 /**
  * Il collegamento della copia scaricata al media del NAS (D20, E-L2): `attachCopy` con la posizione che il MediaStore ha
@@ -656,6 +772,9 @@ class CatalogCopyLinker(private val catalog: suspend () -> MediaCatalog?) : Copy
     val nas = c.nasLocation(LocationId(ref.locationId)) ?: throw IOException("posizione sparita")
     val media = c.media(c.mediaIdOfLocation(LocationId(ref.locationId)) ?: throw IOException("media sparito")) ?: throw IOException("media sparito")
     val place = media.locations.firstOrNull { it.location == nas || it.id.value == ref.locationId } ?: throw IOException("posizione sparita")
+    // R8 (revisione 4A): una copia con un hash completo diverso da quello noto della versione non si lega (e non compare).
+    val known = media.version(place.versionId).fingerprint.fullHash
+    if (known != null && known != copy.sha256) throw IOException("copia diversa dalla versione")
     c.attachCopy(media.id, place.versionId, copy.location, FileStamp(copy.size, System.currentTimeMillis()), verifiedAtMillis = null)
   }
 }

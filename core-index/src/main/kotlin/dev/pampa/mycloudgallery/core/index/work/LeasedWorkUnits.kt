@@ -43,6 +43,12 @@ class LeasedWorkUnits(
   private val unpublished: (suspend (share: String, keys: Set<ContentKey>) -> Boolean)? = null,
   /** Mesi guardati al massimo per chiamata (con migliaia di mesi gia' finiti non si scorre tutto l'archivio). */
   private val maxMonthsPerCall: Int = 48,
+  /**
+   * La famiglia di decoder di questo dispositivo (`DecoderFamily.ofDevice()`), se nota. R5 della revisione 4A: un altro
+   * dispositivo che dichiara "la tua famiglia ha fallito" non ferma questo dal provarci una volta da se' (D14 resta: un
+   * fallimento dichiarato da questo stesso dispositivo, o di un'altra famiglia, vale come prima). Null = come prima.
+   */
+  private val ownDecoderFamily: String? = null,
 ) : WorkUnits {
 
   /** Contatori per la Diagnostica (`INDEX_LEASES_CONTENDED` e affini): solo numeri. */
@@ -157,7 +163,11 @@ class LeasedWorkUnits(
     val p = progress[item.contentKey] ?: return item
     val missing = item.missing - p.classes
     if (missing.isEmpty()) return null
-    return item.copy(missing = missing, failedDecoders = item.failedDecoders + p.failedDecoders)
+    val me = identity.deviceId
+    val failed = p.failedDecoders.filterTo(HashSet()) { family ->
+      family != ownDecoderFamily || me in p.failedBy[family].orEmpty()
+    }
+    return item.copy(missing = missing, failedDecoders = item.failedDecoders + failed)
   }
 
   private fun remember(claim: UnitClaim): UnitClaim {

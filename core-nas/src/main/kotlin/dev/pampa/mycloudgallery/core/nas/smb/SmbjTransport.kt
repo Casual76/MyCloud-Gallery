@@ -12,6 +12,7 @@ import com.hierynomus.mssmb2.SMB2Dialect
 import com.hierynomus.mssmb2.SMB2MessageCommandCode
 import com.hierynomus.mssmb2.SMB2PacketData
 import com.hierynomus.mssmb2.SMB2ShareAccess
+import com.hierynomus.mssmb2.SMB3CompressedPacketData
 import com.hierynomus.mssmb2.SMB3EncryptedPacketData
 import com.hierynomus.mssmb2.SMBApiException
 import com.hierynomus.mssmb2.copy.CopyChunkRequest
@@ -451,6 +452,10 @@ internal class ResponseGuard {
       violation = SessionDefect.PLAINTEXT_RESPONSE
       return false
     }
+    // R3 (revisione 4A): prima del login nessuna risposta legittima e' cifrata o compressa (non ci sono ancora chiavi, e la
+    // compressione non si negozia). smbj non regge un messaggio cosi' prima della NEGOTIATE (`PacketEncryptor.canDecrypt`
+    // senza dialetto: `NullPointerException` nel thread di lettura, cioe' la chiusura dell'app): si chiude e basta.
+    if (packet is SMB3EncryptedPacketData || packet is SMB3CompressedPacketData) return false
     if (packet is SMB2PacketData) {
       val header = packet.header
       if (header.message == SMB2MessageCommandCode.SMB2_SESSION_SETUP && header.statusCode == STATUS_SUCCESS) {
@@ -479,21 +484,44 @@ internal class ResponseGuard {
   }
 }
 
-/** Il ricevitore di smbj avvolto dalla guardia: una violazione chiude la connessione invece di consegnare. */
-private class GuardedReceiver(
+/**
+ * Il ricevitore di smbj avvolto dalla guardia: una violazione chiude la connessione invece di consegnare.
+ *
+ * R3 (revisione 4A): il thread "Packet Reader" di smbj cattura solo `TransportException`; qualunque altra eccezione nata
+ * consegnando un pacchetto (un tag GCM falso iniettato dopo il login: `SMBRuntimeException`; un pacchetto che smbj non
+ * regge) sarebbe un'eccezione non catturata, e su Android chiude il processo. Qui diventa un errore della connessione:
+ * la connessione si chiude e le richieste in corso falliscono.
+ */
+internal class GuardedReceiver(
   private val delegate: PacketReceiver<SMBPacketData<*>>,
   private val guard: ResponseGuard,
 ) : PacketReceiver<SMBPacketData<*>> {
   override fun handle(packet: SMBPacketData<*>) {
-    if (guard.accept(packet)) {
-      delegate.handle(packet)
-    } else {
+    if (!guard.accept(packet)) {
       // Fallisce ogni richiesta in corso e chiude il socket (Connection.handleError).
-      delegate.handleError(TransportException("risposta in chiaro su una sessione cifrata"))
+      closeWith(TransportException("risposta non ammessa dalla guardia"))
+      return
+    }
+    try {
+      delegate.handle(packet)
+    } catch (e: VirtualMachineError) {
+      throw e
+    } catch (t: Throwable) {
+      closeWith(if (t is TransportException) t else TransportException(t))
     }
   }
 
-  override fun handleError(t: Throwable) = delegate.handleError(t)
+  override fun handleError(t: Throwable) {
+    try {
+      delegate.handleError(t)
+    } catch (e: VirtualMachineError) {
+      throw e
+    } catch (_: Throwable) {
+      // La connessione si sta gia' chiudendo: niente deve uscire dal thread di lettura.
+    }
+  }
+
+  private fun closeWith(error: TransportException) = handleError(error)
 }
 
 /** Il trasporto TCP diretto di smbj, con il ricevitore avvolto da [ResponseGuard]. */

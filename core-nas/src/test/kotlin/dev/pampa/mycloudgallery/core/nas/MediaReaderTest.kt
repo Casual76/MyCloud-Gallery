@@ -167,6 +167,18 @@ class MediaReaderTest {
   }
 
   @Test
+  fun i6_unIntervalloFinoALongMaxNonTraboccaEUnoOltre2GiBSiRifiuta() = runTest {
+    val h = harness()
+    val content = Random(11).nextBytes(5_000)
+    h.backend.put(SHARE, "a.jpg", content)
+    val file = h.manager.mediaReader().open(SHARE, SharePath.of("a.jpg"), Purpose.BACKGROUND).okOrNull()!!
+    // `range.last + 1` traboccava a Long.MIN_VALUE: niente letto invece del file intero.
+    assertThat(file.readRange(4_000L..Long.MAX_VALUE)).isEqualTo(content.copyOfRange(4_000, 5_000))
+    assertThat(file.readRange(0L..Long.MAX_VALUE)).isEqualTo(content)
+    file.close()
+  }
+
+  @Test
   fun readAllUsaQuattroFlussiEConsegnaInOrdine() {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     try {

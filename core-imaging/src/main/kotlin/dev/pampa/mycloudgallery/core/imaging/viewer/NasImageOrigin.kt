@@ -6,6 +6,8 @@ import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.imaging.contract.ImageFailure
 import dev.pampa.mycloudgallery.core.imaging.contract.UnavailableReason
 import dev.pampa.mycloudgallery.core.imaging.decode.ImageBytes
+import dev.pampa.mycloudgallery.core.imaging.nas.NasBlobScopes
+import dev.pampa.mycloudgallery.core.index.contract.BlobScope
 import dev.pampa.mycloudgallery.core.index.contract.ReplicaBlobs
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.nas.contract.NasError
@@ -99,6 +101,8 @@ class NasImageOrigin(
    * file intero in memoria); i test di JVM lo sostituiscono perche' Robolectric non decodifica da un `File`.
    */
   private val bytesOf: (File) -> ImageBytes = { FileImageBytes(it) },
+  /** R1 (revisione 4A): le share del media e la chiave intera, per prendere l'HQ solo dalla sua area. */
+  private val scopes: NasBlobScopes? = null,
 ) : ImageOrigin, OriginalFetcher {
 
   /** Le ultime posizioni risolte: servono alle risposte che non possono sospendere ([openLocal], [declaredSize]). */
@@ -124,7 +128,14 @@ class NasImageOrigin(
     } ?: return OriginResult.Missing
 
     store.get(nas.locationId, location.stamp)?.let { return OriginResult.Opened(bytesOf(it)) }
-    hq(nas)?.let { return OriginResult.Opened(it, isOriginal = false) }
+    val scope = try {
+      scopes?.scopeOf(nas)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      null
+    }
+    hq(nas, scope)?.let { return OriginResult.Opened(it, isOriginal = false) }
     return when (val fetched = fetchOriginal(nas, location, onProgress)) {
       is Fetched.Done -> OriginResult.Opened(bytesOf(fetched.file))
       is Fetched.Blocked -> OriginResult.Unreachable(fetched.reason, fetched.sizeBytes)
@@ -196,10 +207,10 @@ class NasImageOrigin(
   }
 
   /** L'HQ della replica, se c'e' e si legge; un pacco sparito nel frattempo (replica azzerata) vale "non c'e'". */
-  private fun hq(nas: MediaRef.Nas): ImageBytes? {
+  private fun hq(nas: MediaRef.Nas, scope: BlobScope?): ImageBytes? {
     val blobs = replica ?: return null
     return try {
-      val blob = blobs.locate(nas.contentKey, SegmentClass.HQ) ?: return null
+      val blob = (if (scope == null) blobs.locate(nas.contentKey, SegmentClass.HQ) else blobs.locate(nas.contentKey, SegmentClass.HQ, scope)) ?: return null
       BufferImageBytes(blobs.read(blob))
     } catch (e: IOException) {
       null

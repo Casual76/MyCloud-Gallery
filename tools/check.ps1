@@ -24,7 +24,9 @@
     7b. nessun resto di debug  nel dex dell'APK di release non compaiono la Libreria sintetica, il marcatore della famiglia
                                 "pronta", `DebugSyntheticSize`, il sink di logcat e il catalogo dei componenti (I4 della
                                 revisione di sicurezza), ne' (Fase 4A, D33) la recinzione delle prove `ShareFence` e il NAS
-                                sintetico del menu di debug: lettura diretta del dex, FALLISCE se non lo legge
+                                sintetico del menu di debug: lettura diretta del dex, FALLISCE se non lo legge; e (R11 della
+                                revisione 4A) gli esiti di R8 della release: `ShareFence` tolta per intero in usage.txt e
+                                assente da mapping.txt (una classe fusa in un'altra non lascia il suo nome nel dex)
     7c. niente servizi         l'APK di release non ha nessun `META-INF/services/dev.pampa.*` (ne' un file di servizio che
                                 nomini una classe `dev.pampa.*`): le varianti di misura legano le loro classi con Hilt, mai
                                 con `ServiceLoader` (R6)
@@ -493,6 +495,42 @@ Step "nessun resto degli strumenti di debug nel dex di release (Libreria e NAS s
     return "$($found.Count) resti di strumenti di debug nel dex di release: " + ($found -join ", ")
   }
   Write-Host ("        cercati {0} nomi, nessuno nel dex" -f $debugRemnants.Count) -ForegroundColor DarkGray
+}
+
+# R11 (revisione della Fase 4A): il passo sopra cerca nomi di classe nel dex, ma R8 sposta metodi fra classi anche senza
+# offuscare (in questa release `FinalResponseCheck.signed` sta dentro un'altra classe e il dex non contiene la stringa
+# `FinalResponseCheck`): se la recinzione D33 diventasse raggiungibile e fosse fusa, il passo sopra passerebbe lo stesso. Qui si
+# guardano gli ESITI di R8 della stessa build: ogni classe della recinzione deve risultare TOLTA per intero (una riga sola col
+# suo nome in `usage.txt`) e non comparire da nessuna parte in `mapping.txt` (ne' tenuta ne' fusa). Senza i due file il passo
+# FALLISCE (non salta).
+$fenceClasses = @("dev.pampa.mycloudgallery.core.nas.fence.ShareFence")
+Step "R8 ha tolto la recinzione D33 dalla release (usage.txt e mapping.txt)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
+  $dir = Join-Path $root "app\build\outputs\mapping\release"
+  $usage = Join-Path $dir "usage.txt"
+  $mapping = Join-Path $dir "mapping.txt"
+  if (-not (Test-Path $usage) -or -not (Test-Path $mapping)) { return "mancano usage.txt o mapping.txt in app\build\outputs\mapping\release" }
+  $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if (-not $apk) { return "nessun APK di release in app\build\outputs\apk\release" }
+  # Gli esiti di R8 vengono prima del pacchetto, mai dopo (un pacchetto rifatto senza rifare R8 puo' essere piu' nuovo).
+  if ((Get-Item $mapping).LastWriteTime -gt $apk.LastWriteTime.AddMinutes(1)) {
+    return "mapping.txt e' piu' nuovo dell'APK di release: rifare la build di release"
+  }
+  # Controllo positivo: se la lettura non trova nemmeno l'activity di avvio, i file non sono quelli giusti.
+  if (-not (Select-String -Path $mapping -SimpleMatch -Pattern "dev.pampa.mycloudgallery.MainActivity -> " -Quiet)) {
+    return "mapping.txt non leggibile: manca la riga di MainActivity"
+  }
+  $problems = @()
+  foreach ($cls in $fenceClasses) {
+    if (-not (Select-String -Path $usage -Pattern ("^" + [regex]::Escape($cls) + "$") -Quiet)) {
+      $problems += "$cls non risulta tolta per intero da R8 (usage.txt)"
+    }
+    if (Select-String -Path $mapping -SimpleMatch -Pattern $cls -Quiet) {
+      $problems += "$cls compare in mapping.txt: R8 l'ha tenuta o fusa in un'altra classe"
+    }
+  }
+  if ($problems.Count -gt 0) { return ($problems -join "; ") }
+  Write-Host ("        {0} classi della recinzione tolte da R8, nessuna in mapping.txt" -f $fenceClasses.Count) -ForegroundColor DarkGray
 }
 
 # R6: nessun file di servizio nostro nell'APK di release. `ServiceLoader` e' un canale dichiarativo e invisibile: un file in

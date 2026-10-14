@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 3,
-    "identityHash": "6bd8ef622f5db0f504dcb03da1819483",
+    "identityHash": "26bae77c13c8d3e9b506efc6baad4af6",
     "entities": [
       {
         "tableName": "media",
@@ -1310,7 +1310,7 @@
       },
       {
         "tableName": "nas_scan_state",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`account_id` TEXT NOT NULL, `share_key` TEXT NOT NULL, `share_name` TEXT NOT NULL, `epoch` INTEGER, `resume_after` TEXT, `last_full_scan_at` INTEGER, `freeze_reason` TEXT, `freeze_since` INTEGER, `freeze_known_present` INTEGER, `freeze_vanished` INTEGER, `freeze_changed` INTEGER, `freeze_not_media` INTEGER, PRIMARY KEY(`account_id`, `share_key`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`account_id` TEXT NOT NULL, `share_key` TEXT NOT NULL, `share_name` TEXT NOT NULL, `epoch` INTEGER, `resume_after` TEXT, `last_full_scan_at` INTEGER, `freeze_reason` TEXT, `freeze_since` INTEGER, `freeze_known_present` INTEGER, `freeze_vanished` INTEGER, `freeze_changed` INTEGER, `freeze_not_media` INTEGER, `window_start` INTEGER, `window_known` INTEGER, `window_vanished` INTEGER, `window_changed` INTEGER, `window_not_media` INTEGER, PRIMARY KEY(`account_id`, `share_key`))",
         "fields": [
           {
             "fieldPath": "accountId",
@@ -1373,6 +1373,31 @@
           {
             "fieldPath": "freezeNotMedia",
             "columnName": "freeze_not_media",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "windowStart",
+            "columnName": "window_start",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "windowKnown",
+            "columnName": "window_known",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "windowVanished",
+            "columnName": "window_vanished",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "windowChanged",
+            "columnName": "window_changed",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "windowNotMedia",
+            "columnName": "window_not_media",
             "affinity": "INTEGER"
           }
         ],
@@ -2589,11 +2614,35 @@
             "createSql": "CREATE INDEX IF NOT EXISTS `index_nas_trash_entry_state_trashed_at` ON `${TABLE_NAME}` (`state`, `trashed_at`)"
           }
         ]
+      },
+      {
+        "tableName": "nas_adopted_fingerprint",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`location_id` INTEGER NOT NULL, `quick_hash` TEXT NOT NULL, PRIMARY KEY(`location_id`))",
+        "fields": [
+          {
+            "fieldPath": "locationId",
+            "columnName": "location_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "quickHash",
+            "columnName": "quick_hash",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "location_id"
+          ]
+        }
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '6bd8ef622f5db0f504dcb03da1819483')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '26bae77c13c8d3e9b506efc6baad4af6')"
     ]
   }
 }

@@ -12,7 +12,14 @@ import dev.pampa.mycloudgallery.core.nas.fence.ShareFence
 import dev.pampa.mycloudgallery.core.nas.fs.SmbNasHousekeeping
 import dev.pampa.mycloudgallery.core.nas.fs.SmbServerSideCopy
 import dev.pampa.mycloudgallery.core.nas.fs.SmbShareProbe
+import dev.pampa.mycloudgallery.core.nas.contract.Stage
+import dev.pampa.mycloudgallery.core.nas.contract.TestTarget
+import dev.pampa.mycloudgallery.core.nas.session.NasSessionConfig
+import dev.pampa.mycloudgallery.core.nas.session.ShareFences
 import dev.pampa.mycloudgallery.core.nas.session.SmbNasSessionManager
+import dev.pampa.mycloudgallery.core.nas.tools.SmbConnectionTester
+import dev.pampa.mycloudgallery.core.security.credentials.NasCredentials
+import kotlinx.coroutines.Dispatchers
 import dev.pampa.mycloudgallery.core.nas.testing.InMemorySmbBackend
 import dev.pampa.mycloudgallery.core.nas.testing.SimAccess
 import dev.pampa.mycloudgallery.core.network.contract.NasAddress
@@ -127,5 +134,54 @@ class ShareFenceTest {
     val backend = backend()
     val h = Harness(backgroundScope, virtualClock(), backend = backend)
     assertThat(h.manager.withShare("Public", Purpose.INTERACTIVE) { }).isInstanceOf(NasResult.Ok::class.java)
+  }
+
+  // --- R11 (revisione 4A): le due strade che aprivano una share senza la recinzione ----------------------------------
+
+  @Test
+  fun r11_ilTestDiConnessioneDellOnboardingNonCollegaNeElencaUnaShareFuoriDallaRecinzione() = runTest {
+    val backend = backend()
+    val h = Harness(backgroundScope, virtualClock(), backend = backend)
+    val tester = SmbConnectionTester(h.gate, h.breakers, backend, h.clock, NasSessionConfig(), Dispatchers.Unconfined, shareGuard = ShareFence)
+    val target = TestTarget(NasAddress("192.168.178.58"), "test", "Public", backend.serverGuid)
+    val before = backend.shareOps.get()
+    val report = tester.run(target, NasCredentials("test", GOOD_PASSWORD.toCharArray()), setOf(Stage.SHARE, Stage.READ))
+    assertThat(report.firstFailure?.let { it.stage to it.error }).isEqualTo(Stage.SHARE to NasError.PermissionDenied)
+    // Nessun TREE_CONNECT ne' lettura della radice di `Public`.
+    assertThat(backend.shareOps.get()).isEqualTo(before)
+
+    // La share di prova passa come prima.
+    val ok = tester.run(TestTarget(NasAddress("192.168.178.58"), "test", "test", backend.serverGuid), NasCredentials("test", GOOD_PASSWORD.toCharArray()))
+    assertThat(ok.passed).isTrue()
+  }
+
+  @Test
+  fun r11_laRecinzioneDiProcessoValeAncheperIGestoriCostruitiSenzaPassarla() = runTest {
+    try {
+      ShareFences.install(ShareFence)
+      // Come la sessione "estranea" del kit di recupero (`OneShotForeignShares`): nessuna guardia passata a mano.
+      val backend = backend()
+      val h = Harness(backgroundScope, virtualClock(), backend = backend)
+      val account = NasAccount(NasAddress("192.168.178.58"), "test", "slot-nas", backend.serverGuid)
+      val foreign = SmbNasSessionManager(
+        account = { account },
+        routeGate = h.gate,
+        credentials = h.credentials,
+        breakers = h.breakers,
+        scope = backgroundScope,
+        transport = backend,
+        clock = h.clock,
+        io = Dispatchers.Unconfined,
+      )
+      assertThat(foreign.withShare("Public", Purpose.INTERACTIVE) { }.errorOrNull()).isEqualTo(NasError.PermissionDenied)
+      assertThat(backend.tcpAttempts.get()).isEqualTo(0)
+      assertThat(foreign.withShare("test", Purpose.INTERACTIVE) { }).isInstanceOf(NasResult.Ok::class.java)
+      // E il test di connessione costruito come in `AppGraph`.
+      val tester = SmbConnectionTester(h.gate, h.breakers, backend, h.clock, NasSessionConfig(), Dispatchers.Unconfined)
+      val report = tester.run(TestTarget(NasAddress("192.168.178.58"), "test", "NAS", backend.serverGuid), NasCredentials("test", GOOD_PASSWORD.toCharArray()), setOf(Stage.SHARE))
+      assertThat(report.firstFailure?.error).isEqualTo(NasError.PermissionDenied)
+    } finally {
+      ShareFences.install(null)
+    }
   }
 }

@@ -11,6 +11,7 @@ import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.MediaMetadata
 import dev.pampa.mycloudgallery.core.model.NasPath
 import dev.pampa.mycloudgallery.core.model.NasStamp
+import dev.pampa.mycloudgallery.core.model.QuickHash
 import dev.pampa.mycloudgallery.core.model.VersionId
 import dev.pampa.mycloudgallery.core.model.domain.Observation
 
@@ -33,6 +34,7 @@ import dev.pampa.mycloudgallery.core.model.domain.Observation
  *   `resumeAfter` (non quelle gia' fatte); l'ordine di quel giro lo ricorda lo scanner per tutta la durata del giro.
  * @property lastFullScanAt fine dell'ultimo giro completo (ora del NAS): la verifica "senza novita'" si decide da qui.
  * @property freeze il congelamento in corso (D10), se c'e'.
+ * @property window la finestra di piu' giri del congelamento (R9 della revisione 4A), se c'e'.
  */
 data class NasScanCursor(
   val account: AccountId,
@@ -41,6 +43,7 @@ data class NasScanCursor(
   val resumeAfter: NasPath? = null,
   val lastFullScanAt: Long? = null,
   val freeze: Freeze? = null,
+  val window: ScanWindow? = null,
 ) {
   init {
     require(resumeAfter == null || epoch != null) { "Si riprende solo un giro in corso." }
@@ -49,11 +52,18 @@ data class NasScanCursor(
   override fun toString(): String = "NasScanCursor(epoch=$epoch, ripresa=${resumeAfter != null}, congelata=${freeze != null})"
 }
 
-/** Un file gia' noto nel catalogo, per la scorciatoia del timbro (D9). */
+/**
+ * Un file gia' noto nel catalogo, per la scorciatoia del timbro (D9).
+ *
+ * @property adoptedQuickHash l'impronta rapida che il catalogo ha **adottato** da un record dell'indice senza leggere il
+ *   file (D9 passo 4), null se letta qui. R6 della revisione 4A: finche' e' adottata la scansione controlla a ogni giro che
+ *   un record valido la sostenga ancora, e se no rileva il file.
+ */
 data class KnownNasFile(
   val locationId: LocationId,
   val stamp: NasStamp,
   val state: LocationState,
+  val adoptedQuickHash: QuickHash? = null,
 )
 
 /** Un file visto con lo stesso timbro: si aggiorna solo "visto a" (nessun byte letto). */
@@ -115,12 +125,16 @@ interface NasScanStore {
    * insieme e [seenAt] (l'`epoch` del giro) come "visto a". Le decisioni sono quelle di `LinkingRules` (E-N1: spostato con
    * data di modifica **o `fileId`** uguale; D21: video con stessa impronta rapida ma senza hash completo nel gruppo
    * provvisorio). Per i media del NAS [whenUndecided] e' `KEEP_SEPARATE`: nel dubbio non si unisce.
+   *
+   * Con [fingerprintsAdopted] (R6) le impronte vengono da record dell'indice e non sono state lette qui: niente legami per
+   * contenuto e posizioni segnate come adottate ([KnownNasFile.adoptedQuickHash]); senza, il segno si toglie.
    */
   suspend fun recordAll(
     observations: List<Observation>,
     whenUndecided: MediaCatalog.WhenUndecided,
     cursor: NasScanCursor?,
     seenAt: Long,
+    fingerprintsAdopted: Boolean = false,
   ): List<MediaCatalog.RecordOutcome>
 
   /**

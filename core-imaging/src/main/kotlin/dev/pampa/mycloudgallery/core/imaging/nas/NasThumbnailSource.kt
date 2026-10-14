@@ -8,6 +8,7 @@ import dev.pampa.mycloudgallery.core.imaging.contract.ThumbBucket
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbContext
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbResult
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbnailSource
+import dev.pampa.mycloudgallery.core.index.contract.BlobScope
 import dev.pampa.mycloudgallery.core.index.contract.ProvisionalThumbnails
 import dev.pampa.mycloudgallery.core.index.contract.ReplicaBlobs
 import dev.pampa.mycloudgallery.core.model.MediaRef
@@ -45,6 +46,11 @@ import kotlinx.coroutines.withContext
  *
  * Per i video il gradino 3 non esiste (non si scaricano interi, D12): senza copertina preparata la cella resta sul
  * segnaposto.
+ *
+ * **Share e chiave intera** (R1 della revisione 4A). [MediaRef.Nas] porta solo i primi 64 bit della chiave di contenuto: con
+ * [scopes] la miniatura si cerca solo nei pacchi delle share in cui il media ha una posizione (la sua area per prima) e con
+ * la chiave intera del catalogo. La risoluzione costa una lettura del catalogo per media e si tiene in memoria (le ultime
+ * [SCOPE_CACHE] posizioni), cosi' [canUpgrade] resta un controllo in memoria.
  */
 class NasThumbnailSource(
   private val blobs: ReplicaBlobs,
@@ -52,7 +58,10 @@ class NasThumbnailSource(
   private val interactive: NasOriginalThumbnails = NoNasOriginalThumbnails,
   private val decoder: BlobDecoder = PlatformBlobDecoder,
   private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
+  private val scopes: NasBlobScopes? = null,
 ) : ThumbnailSource {
+
+  private val scopeCache = ScopeCache(SCOPE_CACHE)
 
   /** La richiesta diretta (anteprima del viewer): l'utente la guarda, quindi e' visibile. */
   override suspend fun load(ref: MediaRef, px: Int, cancel: CancellationSignal): Bitmap? =
@@ -62,7 +71,8 @@ class NasThumbnailSource(
     val nas = ref as? MediaRef.Nas ?: return null
     val side = max(px, 1)
     return try {
-      val local = withContext(dispatcher) { fromReplicaOrProvisional(nas, side, cancel) }
+      val scope = scopeOf(nas)
+      val local = withContext(dispatcher) { fromReplicaOrProvisional(nas, scope, side, cancel) }
       if (local != null) return local
       // Gli originali: solo cio' che si vede. `isVisible` si legge ora, non a inizio richiesta: la coda puo' averla fatta
       // diventare visibile, o averla persa.
@@ -77,15 +87,35 @@ class NasThumbnailSource(
   /** C'e' una miniatura preparata (non provvisoria) per [ref] a questa taglia? Un controllo in memoria. */
   override fun canUpgrade(ref: MediaRef, px: Int): Boolean {
     val nas = ref as? MediaRef.Nas ?: return false
-    return classesFor(max(px, 1)).any { blobs.locate(nas.contentKey, it) != null }
+    val scope = scopeCache[nas.locationId]
+    return classesFor(max(px, 1)).any { locate(nas, scope, it) != null }
   }
+
+  /** Il perimetro del media (R1), dal catalogo e poi dalla memoria; null se non c'e' chi lo risolve o la posizione e' sparita. */
+  private suspend fun scopeOf(ref: MediaRef.Nas): BlobScope? {
+    val resolver = scopes ?: return null
+    scopeCache[ref.locationId]?.let { return it }
+    val resolved = try {
+      resolver.scopeOf(ref)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      note("perimetro non risolto")
+      null
+    } ?: return null
+    scopeCache[ref.locationId] = resolved
+    return resolved
+  }
+
+  private fun locate(ref: MediaRef.Nas, scope: BlobScope?, cls: SegmentClass) =
+    if (scope == null) blobs.locate(ref.contentKey, cls) else blobs.locate(ref.contentKey, cls, scope)
 
   // --- I gradini 1 e 2 -------------------------------------------------------------------------------------------
 
-  private fun fromReplicaOrProvisional(ref: MediaRef.Nas, px: Int, cancel: CancellationSignal): ThumbResult? {
+  private fun fromReplicaOrProvisional(ref: MediaRef.Nas, scope: BlobScope?, px: Int, cancel: CancellationSignal): ThumbResult? {
     for (cls in classesFor(px)) {
       cancel.throwIfCanceled()
-      val location = blobs.locate(ref.contentKey, cls) ?: continue
+      val location = locate(ref, scope, cls) ?: continue
       val bytes = try {
         blobs.read(location)
       } catch (_: IOException) {
@@ -109,6 +139,9 @@ class NasThumbnailSource(
   companion object {
     private const val TAG = "NasThumbnails"
 
+    /** Le posizioni di cui si ricorda il perimetro (R1): qualche schermata di griglia, pochi KB. */
+    const val SCOPE_CACHE: Int = 4_096
+
     /**
      * Le classi della replica da provare per una taglia chiesta, dalla migliore: la S (lato corto 200 px) basta fino alla
      * taglia piccola della griglia, la M (400 px) per le altre. Se manca la prima si ripiega sull'altra: meglio una
@@ -116,5 +149,27 @@ class NasThumbnailSource(
      */
     fun classesFor(px: Int): List<SegmentClass> =
       if (px <= ThumbBucket.S.px) listOf(SegmentClass.THUMB_S, SegmentClass.THUMB_M) else listOf(SegmentClass.THUMB_M, SegmentClass.THUMB_S)
+  }
+}
+
+/**
+ * Dove cercare le anteprime di un media del NAS (R1 della revisione 4A): le share delle sue posizioni, la sua per prima, e la
+ * chiave di contenuto intera. Lo realizza `:app` dal catalogo; null = posizione sparita (si cerca come prima, solo fra i blob
+ * attestati).
+ */
+fun interface NasBlobScopes {
+  suspend fun scopeOf(ref: MediaRef.Nas): BlobScope?
+}
+
+/** Una memoria piccola (LRU, sincronizzata) dei perimetri per id di posizione. */
+internal class ScopeCache(private val capacity: Int) {
+  private val map = object : LinkedHashMap<Long, BlobScope>(64, 0.75f, true) {
+    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, BlobScope>?): Boolean = size > capacity
+  }
+
+  operator fun get(locationId: Long): BlobScope? = synchronized(map) { map[locationId] }
+
+  operator fun set(locationId: Long, scope: BlobScope) {
+    synchronized(map) { map[locationId] = scope }
   }
 }

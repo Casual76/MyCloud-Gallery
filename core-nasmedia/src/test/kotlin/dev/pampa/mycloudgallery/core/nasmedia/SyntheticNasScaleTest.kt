@@ -110,6 +110,8 @@ class SyntheticNasScaleTest {
     }
     var cursor = 0
     for (step in listOf("sotto", "sotto", "alla soglia")) {
+      // R9 (revisione 4A): i giri degli ultimi 7 giorni si sommano; qui si prova la soglia di un giro alla volta.
+      h.advance(MassChangeRule.WINDOW_MILLIS + 60_000)
       val known = h.store.countPresent(h.me, "test")
       val threshold = MassChangeRule.threshold(known)
       val count = if (step == "alla soglia") threshold else threshold - 1

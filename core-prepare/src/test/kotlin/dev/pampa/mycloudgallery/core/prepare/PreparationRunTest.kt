@@ -142,6 +142,7 @@ class PreparationRunTest {
     attempts: PrepAttempts = PrepAttempts.NONE,
     control: dev.pampa.mycloudgallery.core.prepare.contract.PrepControl = dev.pampa.mycloudgallery.core.prepare.contract.PrepControl.ALWAYS,
     clock: dev.pampa.mycloudgallery.core.prepare.contract.PrepClock = dev.pampa.mycloudgallery.core.prepare.contract.PrepClock.SYSTEM,
+    storage: dev.pampa.mycloudgallery.core.prepare.contract.PrepStorage? = null,
   ) = DefaultPreparationRun(
     workUnits = units,
     inputs = inputs,
@@ -155,6 +156,7 @@ class PreparationRunTest {
     clock = clock,
     slowPause = 20.milliseconds,
     dispatcher = Dispatchers.Default,
+    storage = storage,
   )
 
   private fun bytesOf(source: PrepareSource): ByteArray {
@@ -289,6 +291,28 @@ class PreparationRunTest {
       assertThat(record.file.prepared).isEqualTo(0)
     }
     assertThat(rig.publisher.published.single().blobs).isEmpty()
+  }
+
+  @Test
+  fun r2_conPocoSpazioSulTelefonoLaPreparazioneAspettaSenzaAprireNiente() = runTest {
+    val rig = rig()
+    val m = media("2024/a.jpg")
+    rig.offer("2024-03", 0, m)
+    val preparer = ScriptedPreparer { source, _ -> done(m.item, bytesOf(source)) }
+    val free = java.util.concurrent.atomic.AtomicLong(dev.pampa.mycloudgallery.core.prepare.contract.PrepStorage.MIN_FREE_BYTES - 1)
+
+    val result = rig.runner(preparer, storage = { free.get() }).run(share, 8.minutes, FakeUnitPriority())
+
+    // Sotto 1 GiB libero (R2 della revisione 4A) non si apre ne' si prepara niente: il giro si ferma, non e' un errore.
+    assertThat(result.stoppedBy).isEqualTo(PrepStop.STORAGE)
+    assertThat(result.prepared).isEqualTo(0)
+    assertThat(result.failed).isEqualTo(0)
+    assertThat(rig.inputs.requests).isEmpty()
+
+    // Con lo spazio tornato si riprende.
+    free.set(dev.pampa.mycloudgallery.core.prepare.contract.PrepStorage.MIN_FREE_BYTES * 2)
+    val again = rig.runner(preparer, storage = { free.get() }).run(share, 8.minutes, FakeUnitPriority())
+    assertThat(again.prepared).isEqualTo(1)
   }
 
   @Test

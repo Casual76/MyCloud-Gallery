@@ -11,7 +11,7 @@ import dev.pampa.mycloudgallery.core.nasmedia.contract.NasScanStore
 import dev.pampa.mycloudgallery.core.nasmedia.contract.ScanDiff
 import dev.pampa.mycloudgallery.core.nasmedia.contract.UserGesture
 import dev.pampa.mycloudgallery.core.nasmedia.contract.headlineCount
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,12 +30,17 @@ import kotlinx.coroutines.sync.withLock
  */
 object MassChangeGuard {
 
-  fun judge(diff: ScanDiff): FreezeVerdict {
-    val threshold = MassChangeRule.threshold(diff.knownPresent)
+  /**
+   * Il giudizio di [diff]. [allowance] (R9 della revisione 4A) sono i conteggi che l'utente ha visto e confermato con il gesto:
+   * valgono solo quelli, e si giudica cio' che li supera (con la stessa soglia). Le share piccole hanno anche la regola
+   * percentuale ([MassChangeRule.effectiveThreshold]).
+   */
+  fun judge(diff: ScanDiff, allowance: ScanDiff? = null): FreezeVerdict {
+    val threshold = MassChangeRule.effectiveThreshold(diff.knownPresent)
     val tripped = listOf(
-      FreezeReason.VANISHED to diff.vanished,
-      FreezeReason.NOT_MEDIA to diff.notMedia,
-      FreezeReason.CHANGED to diff.changed,
+      FreezeReason.VANISHED to diff.vanished - (allowance?.vanished ?: 0),
+      FreezeReason.NOT_MEDIA to diff.notMedia - (allowance?.notMedia ?: 0),
+      FreezeReason.CHANGED to diff.changed - (allowance?.changed ?: 0),
     ).filter { (_, count) -> count >= threshold }
     val worst = tripped.maxByOrNull { (_, count) -> count } ?: return FreezeVerdict.Proceed
     return FreezeVerdict.Freeze(worst.first, diff)
@@ -71,15 +76,16 @@ class CursorKeeper(val store: NasScanStore, val account: AccountId, val share: S
  * Si scongela con [release] e un [UserGesture] il cui conteggio e' quello mostrato (la "doppia conferma"), oppure da solo
  * quando una scansione completa torna sotto le soglie (`DefaultNasScanner`). Un dato letto dal NAS non scongela mai.
  *
- * Dopo un [release] il giro successivo **accetta** la situazione che l'utente ha controllato: segna le assenze e registra
- * i file cambiati senza rigiudicarli (altrimenti la stessa situazione congelerebbe di nuovo all'infinito).
+ * Dopo un [release] il giro successivo **accetta** la situazione che l'utente ha controllato, e solo quella (R9 della
+ * revisione 4A): i conteggi confermati valgono come franchigia, e cio' che li supera di nuovo della soglia congela (60
+ * file in `.locked` confermati non lasciano passare la cifratura di tutta la share prima del giro dopo).
  */
 class StoreFreezeState(private val keeper: CursorKeeper) : FreezeState {
 
   constructor(store: NasScanStore, account: AccountId, share: String) : this(CursorKeeper(store, account, share))
 
   private val state = MutableStateFlow<Freeze?>(null)
-  private val accepted = AtomicBoolean(false)
+  private val accepted = AtomicReference<ScanDiff?>(null)
 
   override val frozen: StateFlow<Freeze?> = state.asStateFlow()
 
@@ -91,21 +97,22 @@ class StoreFreezeState(private val keeper: CursorKeeper) : FreezeState {
   override suspend fun release(gesture: UserGesture): Boolean {
     val current = keeper.read().freeze ?: return false
     if (gesture.confirmedCount != current.headlineCount) return false
-    var released = false
+    var released: Freeze? = null
     keeper.update { cursor ->
       // Riletto sotto lucchetto: un giro puo' aver aggiornato il congelamento nel frattempo.
-      if (cursor.freeze?.headlineCount == gesture.confirmedCount) {
-        released = true
-        cursor.copy(freeze = null)
+      val freeze = cursor.freeze
+      if (freeze?.headlineCount == gesture.confirmedCount) {
+        released = freeze
+        // R9: la finestra dei giri ricomincia dopo il gesto (i conteggi confermati non si contano due volte).
+        cursor.copy(freeze = null, window = null)
       } else {
         cursor
       }
     }
-    if (released) {
-      accepted.set(true)
-      state.value = null
-    }
-    return released
+    val freeze = released ?: return false
+    accepted.set(freeze.diff)
+    state.value = null
+    return true
   }
 
   /** Lo scanner pubblica qui il congelamento deciso a fine giro (il cursore l'ha gia' salvato). */
@@ -113,13 +120,16 @@ class StoreFreezeState(private val keeper: CursorKeeper) : FreezeState {
     state.value = freeze
   }
 
-  /** Vero una sola volta dopo un gesto valido: il prossimo giro completo non rigiudica. */
-  internal fun consumeAcceptance(): Boolean = accepted.getAndSet(false)
+  /** I conteggi confermati dall'ultimo gesto valido, una volta sola: il prossimo giro completo li toglie dal giudizio. */
+  internal fun consumeAcceptance(): ScanDiff? = accepted.getAndSet(null)
 
-  /** C'e' un gesto non ancora consumato (il giro che lo consuma puo' essere interrotto e ripreso). */
-  internal fun hasAcceptance(): Boolean = accepted.get()
+  /** I conteggi confermati da un gesto non ancora consumato (il giro che lo consuma puo' essere interrotto e ripreso). */
+  internal fun acceptance(): ScanDiff? = accepted.get()
 
-  internal fun restoreAcceptance() {
-    accepted.set(true)
+  /** C'e' un gesto non ancora consumato. */
+  internal fun hasAcceptance(): Boolean = accepted.get() != null
+
+  internal fun restoreAcceptance(diff: ScanDiff) {
+    accepted.set(diff)
   }
 }

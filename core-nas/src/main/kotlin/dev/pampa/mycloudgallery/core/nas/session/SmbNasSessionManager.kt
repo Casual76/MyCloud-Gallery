@@ -103,7 +103,8 @@ import kotlinx.coroutines.withTimeoutOrNull
  *   (`NasRouteGate.onboardingRoute`) usato dalle operazioni con [Purpose.ONBOARDING].
  * @param io il dispatcher delle chiamate bloccanti (nei test: `Dispatchers.Unconfined`).
  * @param backoff l'attesa prima di un nuovo tentativo (nei test: istantanea).
- * @param shareGuard la recinzione D33 (solo debug, `fence.ShareFence`): consultata prima di qualunque richiesta per
+ * @param shareGuard la recinzione D33 (solo debug, `fence.ShareFence`; di default quella del processo, [ShareFences]):
+ *   consultata prima di qualunque richiesta per
  *   ogni via d'accesso a una share; null in release.
  */
 class SmbNasSessionManager(
@@ -121,7 +122,7 @@ class SmbNasSessionManager(
   internal val deviceId: () -> String? = { null },
   private val onboardingCandidate: () -> HomeCandidate? = { null },
   internal val backoff: suspend (Duration) -> Unit = { delay(it) },
-  private val shareGuard: ShareGuard? = null,
+  private val shareGuard: ShareGuard? = ShareFences.installed,
 ) : NasSessionManager {
 
   private val mutableState = MutableStateFlow<NasConnState>(NasConnState.Idle)
@@ -490,8 +491,11 @@ class SmbNasSessionManager(
       GalleryLog.w(TAG) { "connessione rifiutata prima dell'autenticazione: $refused" }
       return fail(refused)
     }
-    // L'ora del NAS solo dopo il GUID: un NAS estraneo non sposta la nostra ora.
-    negotiation.nasTimeAtNegotiateMs?.let { nasClock.anchor(it, clock.nowMillis()) }
+    // L'ora della NEGOTIATE e' solo una candidata (R4, revisione 4A): il GUID e' pubblico, quindi un impostore senza
+    // password lo sa ripetere. Si ancora solo dopo la firma finale di SESSION_SETUP e i controlli dopo il login (passo 7):
+    // allora l'hash di pre-autenticazione, che copre anche l'ora, e' provato da chi conosce la password.
+    val negotiatedNasTime = negotiation.nasTimeAtNegotiateMs
+    val negotiatedAt = clock.nowMillis()
 
     // (4) interruttore, (5) percorso, (6) una sola autenticazione.
     val attempt = breaker.attempt { _ ->
@@ -561,6 +565,8 @@ class SmbNasSessionManager(
       connection.close()
       return fail(NasError.SessionExpired)
     }
+    // Sessione provata (firma finale, cifrata, non ospite ne' anonima): ora l'ora della NEGOTIATE vale (R4).
+    negotiatedNasTime?.let { nasClock.anchor(it, negotiatedAt) }
     val info = SessionInfo(
       dialect = negotiation.dialect,
       encrypted = facts.encrypted,

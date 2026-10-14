@@ -16,6 +16,8 @@ import dev.pampa.mycloudgallery.core.nas.contract.TestTarget
 import dev.pampa.mycloudgallery.core.nas.session.ElapsedRealtimeClock
 import dev.pampa.mycloudgallery.core.nas.session.MonotonicClock
 import dev.pampa.mycloudgallery.core.nas.session.NasSessionConfig
+import dev.pampa.mycloudgallery.core.nas.session.ShareFences
+import dev.pampa.mycloudgallery.core.nas.session.ShareGuard
 import dev.pampa.mycloudgallery.core.nas.session.SmbErrors
 import dev.pampa.mycloudgallery.core.nas.smb.DirAccess
 import dev.pampa.mycloudgallery.core.nas.smb.SmbConnection
@@ -44,6 +46,10 @@ import kotlinx.coroutines.withTimeoutOrNull
  * interruttore della sessione, con la chiave `(GUID del NAS, utente)`: con l'interruttore aperto la fase e'
  * saltata (mai un `authenticate`), senza credenziali il test si ferma prima. Le fasi non chieste si eseguono lo
  * stesso se servono a quelle chieste, ma non compaiono nel rapporto.
+ *
+ * **Recinzione D33** (R11 della revisione 4A): prima della fase della share [shareGuard] (di default quella del processo,
+ * [ShareFences]) decide se l'account puo' toccare quella share; se no la fase fallisce con `PermissionDenied` senza
+ * `TREE_CONNECT` ne' letture.
  */
 class SmbConnectionTester(
   private val routeGate: NasRouteGate,
@@ -52,6 +58,7 @@ class SmbConnectionTester(
   private val clock: MonotonicClock = ElapsedRealtimeClock,
   private val config: NasSessionConfig = NasSessionConfig(),
   private val io: CoroutineDispatcher = Dispatchers.IO,
+  private val shareGuard: ShareGuard? = ShareFences.installed,
 ) : ConnectionTester {
 
   override suspend fun run(target: TestTarget, credentials: NasCredentials?, stages: Set<Stage>): ConnectionReport {
@@ -150,6 +157,7 @@ class SmbConnectionTester(
         return tracker.report(negotiation)
       }
       val connected = tracker.step(Stage.SHARE) {
+        if (shareGuard?.allows(secret.username, shareName) == false) return@step Step.Fail(NasError.PermissionDenied)
         try {
           Step.Pass(blocking(config.interactiveOpTimeout) { authenticated.connectShare(shareName) })
         } catch (e: SmbStatusException) {

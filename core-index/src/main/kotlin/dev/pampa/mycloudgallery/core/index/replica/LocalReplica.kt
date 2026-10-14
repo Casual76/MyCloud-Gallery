@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.core.index.replica
 
 import dev.pampa.mycloudgallery.core.index.contract.BlobLocation
 import dev.pampa.mycloudgallery.core.index.contract.BlobPut
+import dev.pampa.mycloudgallery.core.index.contract.BlobScope
 import dev.pampa.mycloudgallery.core.index.contract.OwnIndexSink
 import dev.pampa.mycloudgallery.core.index.contract.QualityLevel
 import dev.pampa.mycloudgallery.core.index.contract.ReplicaBlobs
@@ -20,6 +21,7 @@ import dev.pampa.mycloudgallery.core.index.replica.store.ReplicaStore
 import dev.pampa.mycloudgallery.core.index.replica.store.SegmentRow
 import dev.pampa.mycloudgallery.core.index.replica.store.SegmentState
 import dev.pampa.mycloudgallery.core.index.replica.store.StoreChange
+import dev.pampa.mycloudgallery.core.model.ContentKey
 import dev.pampa.mycloudgallery.core.model.NasStamp
 import dev.pampa.mycloudgallery.core.trust.TrustLimits
 import dev.pampa.mycloudgallery.core.trust.data.MetaRecord
@@ -88,7 +90,8 @@ class LocalReplica(
       packRows.clear()
       rows.forEach { packRows[it.id] = it }
       index.clear()
-      index.add(store.blobs())
+      val blobs = store.blobs()
+      index.add(blobs, ::shareOf, attestor(blobs))
       packs.sweep(rows.mapTo(HashSet()) { it.name })
       opened = true
     }
@@ -97,6 +100,14 @@ class LocalReplica(
   // --- ReplicaBlobs -------------------------------------------------------------------------------------------------
 
   override fun locate(contentKey: Long, cls: SegmentClass): BlobLocation? = index.locate(contentKey, cls)
+
+  override fun locate(contentKey: Long, cls: SegmentClass, scope: BlobScope): BlobLocation? = index.locate(contentKey, cls, scope)
+
+  /**
+   * Le chiavi intere che il segmento d'immagini [segment] di classe [cls] contiene davvero, attestate (R5), se la replica
+   * l'ha applicato; null se non lo conosce.
+   */
+  fun blobKeysOfSegment(segment: String, cls: SegmentClass): Set<ContentKey>? = index.keysOfSegment(segment, cls)
 
   override fun read(location: BlobLocation): ByteBuffer {
     val pack = packRows[location.packId] ?: throw IOException("pacco assente")
@@ -205,7 +216,8 @@ class LocalReplica(
     }
     store.appendOwnBlobs(pack.id, newLength, rows)
     packRows[pack.id] = pack.copy(bytes = newLength)
-    index.add(rows)
+    // Le proprie immagini: M3 (C19) le ha gia' legate a un file di questa share alla pubblicazione.
+    index.add(rows, { shareKey }, { true })
   }
 
   private fun nextOwnName(cls: SegmentClass): String {
@@ -232,6 +244,7 @@ class LocalReplica(
     return writeMutex.withLock {
       val change = store.applyHead(application)
       afterChange(change)
+      reattest(application.head.share, application.head.deviceId)
       change.touchedPathKeys.size
     }
   }
@@ -269,7 +282,9 @@ class LocalReplica(
         false
       } else {
         packRows[id] = draft.copy(id = id)
-        index.add(rows.map { it.copy(packId = id) })
+        // R1: una voce vale solo se il dispositivo ha in questa share un record presente con la stessa chiave intera.
+        val present = store.presentContentKeys(segment.share, segment.deviceId)
+        index.add(rows.map { it.copy(packId = id) }, { segment.share }, { it.contentKey in present })
         true
       }
     }
@@ -290,6 +305,7 @@ class LocalReplica(
       val gone = retained.mapTo(HashSet()) { it.hash }
       val change = store.applyHead(HeadApplication(head, segments.filter { it.hash !in gone }, emptyMap(), gone))
       afterChange(change)
+      reattest(shareKey, deviceId)
       flushLocked(shareKey)
     }
   }
@@ -328,6 +344,31 @@ class LocalReplica(
 
   /** Le voci scelte dall'indice in memoria (una per chiave e classe): per confrontare due repliche (E-I7). */
   fun chosenBlobs(): List<BlobRow> = index.chosen()
+
+  /** La share (chiave) del pacco di un blob. */
+  private fun shareOf(row: BlobRow): String? = packRows[row.packId]?.share
+
+  /**
+   * R1: per le voci di [rows] (all'apertura), se il loro dispositivo ha nella share del pacco un record presente con la stessa
+   * chiave intera. Le immagini preparate qui e non ancora rilette dalla propria testa valgono (M3 alla pubblicazione).
+   */
+  private suspend fun attestor(rows: Collection<BlobRow>): (BlobRow) -> Boolean {
+    val keys = HashMap<Pair<String, String>, Set<ContentKey>>()
+    for (row in rows) {
+      if (row.segment == RecordRow.LOCAL_SEGMENT) continue
+      val share = shareOf(row) ?: continue
+      keys.getOrPut(share to row.deviceId) { store.presentContentKeys(share, row.deviceId) }
+    }
+    return { row ->
+      row.segment == RecordRow.LOCAL_SEGMENT || shareOf(row)?.let { share -> row.contentKey in keys[share to row.deviceId].orEmpty() } == true
+    }
+  }
+
+  /** R1: i record di [deviceId] in [shareKey] sono cambiati; le sue voci valgono solo con un record presente uguale. */
+  private suspend fun reattest(shareKey: String, deviceId: String) {
+    if (!index.hasEntries(shareKey, deviceId)) return
+    index.reattest(shareKey, deviceId, store.presentContentKeys(shareKey, deviceId))
+  }
 
   private fun afterChange(change: StoreChange) {
     index.remove(change.removedBlobs)

@@ -19,6 +19,7 @@ import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.MediaMetadata
 import dev.pampa.mycloudgallery.core.model.NasPath
 import dev.pampa.mycloudgallery.core.model.NasStamp
+import dev.pampa.mycloudgallery.core.model.QuickHash
 import dev.pampa.mycloudgallery.core.model.VersionId
 import dev.pampa.mycloudgallery.core.model.WorkErrorCode
 import dev.pampa.mycloudgallery.core.model.WorkStage
@@ -70,6 +71,8 @@ class CatalogNasScanStore(
     var stamp: NasStamp,
     var state: LocationState,
     var seenAt: Long,
+    /** R6: l'impronta adottata dall'indice, non letta qui (null = letta qui). */
+    var adoptedQuickHash: QuickHash? = null,
   )
 
   /** Un'adozione d'identita' chiesta dalla scansione (D7). */
@@ -126,7 +129,7 @@ class CatalogNasScanStore(
   override suspend fun knownIn(account: AccountId, share: String, folder: NasPath?): Map<LocationKey, KnownNasFile> = synchronized(this) {
     val folderKey = Location.Nas(account, share, NasPath.of(((folder?.value?.let { "$it/" }) ?: "") + "x")).folderKey
     byFolder[folderKey].orEmpty().filterValues { inShare(it, account, share) && it.state != LocationState.ABSENT }
-      .mapValues { (_, e) -> KnownNasFile(e.locationId, e.stamp, e.state) }
+      .mapValues { (_, e) -> KnownNasFile(e.locationId, e.stamp, e.state, e.adoptedQuickHash) }
   }
 
   override suspend fun countPresent(account: AccountId, share: String): Int = synchronized(this) {
@@ -138,8 +141,9 @@ class CatalogNasScanStore(
     whenUndecided: MediaCatalog.WhenUndecided,
     cursor: NasScanCursor?,
     seenAt: Long,
+    fingerprintsAdopted: Boolean,
   ): List<MediaCatalog.RecordOutcome> {
-    val outcomes = catalog.recordAll(observations, whenUndecided, cursor = null, seenAt = seenAt)
+    val outcomes = catalog.recordAll(observations, whenUndecided, cursor = null, seenAt = seenAt, fingerprintAdopted = fingerprintsAdopted)
     synchronized(this) {
       observations.zip(outcomes).forEach { (observation, outcome) ->
         val location = observation.location as? Location.Nas ?: return@forEach
@@ -151,7 +155,7 @@ class CatalogNasScanStore(
         put(
           Entry(
             location, id, outcome.mediaId, NasStamp(observation.stamp.size, observation.stamp.modifiedAtMillis, location.fileId),
-            LocationState.PRESENT, seenAt,
+            LocationState.PRESENT, seenAt, observation.fingerprint.quickHash.takeIf { fingerprintsAdopted },
           ),
         )
       }
@@ -250,6 +254,8 @@ class CatalogNasScanStore(
   }
 
   override suspend fun retireExcluded(account: AccountId, share: String, folders: List<NasPath>, keys: List<LocationKey>): Int {
+    // Come il catalogo vero (R9): su una share congelata niente esce dalla Libreria.
+    if (synchronized(this) { cursors[shareKey(account, share)]?.freeze != null }) return 0
     val prefixes = folders.map { fold(it.value) + "/" }
     val chosen = synchronized(this) {
       entries.values.filter { e ->

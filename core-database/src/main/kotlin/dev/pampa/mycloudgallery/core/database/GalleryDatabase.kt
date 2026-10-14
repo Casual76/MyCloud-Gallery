@@ -43,6 +43,7 @@ import dev.pampa.mycloudgallery.core.database.entity.MediaLocationEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaPersonalEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaStoreCursorEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaVersionEntity
+import dev.pampa.mycloudgallery.core.database.entity.NasAdoptedFingerprintEntity
 import dev.pampa.mycloudgallery.core.database.entity.NasOpEntity
 import dev.pampa.mycloudgallery.core.database.entity.NasOpItemEntity
 import dev.pampa.mycloudgallery.core.database.entity.NasScanStateEntity
@@ -101,6 +102,8 @@ import dev.pampa.mycloudgallery.core.database.entity.WorkStateEntity
     NasOpEntity::class,
     NasOpItemEntity::class,
     NasTrashEntryEntity::class,
+    // v3, revisione 4A (R6): impronte adottate dall'indice, non lette qui
+    NasAdoptedFingerprintEntity::class,
   ],
   version = GalleryDatabase.VERSION,
   exportSchema = true,

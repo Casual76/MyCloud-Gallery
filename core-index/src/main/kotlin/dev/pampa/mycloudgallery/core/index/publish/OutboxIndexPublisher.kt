@@ -63,6 +63,16 @@ import kotlinx.coroutines.sync.withLock
  * dell'ora, area in sola lettura, emergenza); dispositivo approvato; una testa ogni 5 minuti salvo la fine di un'unita'
  * (M3); M3 sulla provenienza in [stage] (rifiuto) e di nuovo in [flush] (scarto). E-I6: con il NAS pieno si pubblica
  * per priorita' (`meta` > `thumbS` > `thumbM` > `analysis` > `frames` > `hq`) e il resto aspetta.
+ *
+ * **Niente arretrato senza tetto** (R2 della revisione 4A):
+ * - con un blocco **permanente** (D31 su una share vera, area in sola lettura: [IndexWriteRules.permanentBlockFor]) [stage]
+ *   non mette niente nell'outbox: record e immagini vanno solo alla replica locale ([OwnIndexSink], che tiene le classi del
+ *   livello di qualita': mai l'anteprima di analisi ne' i fotogrammi). Le miniature servono alla Libreria anche senza
+ *   pubblicare; quando D31 si spegnera' la preparazione si rifa' per pubblicare (nessun arretrato vecchio di mesi);
+ * - con un blocco temporaneo l'outbox aspetta, ma i byte dei blob in attesa non superano [maxOutboxBlobBytes]: oltre, le
+ *   immagini nuove vanno solo alla replica locale (gli altri dispositivi, che non credono a una classe senza il suo blob, R5,
+ *   le prepareranno loro);
+ * - [purgeOutbox] toglie l'outbox delle share non piu' configurate o non piu' pubblicabili (all'avvio).
  */
 class OutboxIndexPublisher(
   private val identity: IndexIdentity,
@@ -77,6 +87,8 @@ class OutboxIndexPublisher(
   private val io: CoroutineDispatcher = Dispatchers.IO,
   /** Byte di blob al massimo per pubblicazione (i record `meta` passano sempre): una pubblicazione non dura ore. */
   private val maxBlobBytesPerFlush: Long = DEFAULT_MAX_BLOB_BYTES_PER_FLUSH,
+  /** R2: byte di blob in attesa al massimo, in tutte le share; oltre, le immagini nuove restano solo nella replica locale. */
+  private val maxOutboxBlobBytes: Long = DEFAULT_MAX_OUTBOX_BLOB_BYTES,
 ) : IndexPublisher {
 
   /** Contatori per la Diagnostica (solo numeri). */
@@ -95,6 +107,12 @@ class OutboxIndexPublisher(
 
     /** Nomi di testa occupati da file non validi, scavalcati. */
     val junkSkipped = AtomicInteger()
+
+    /** R2: cambiamenti tenuti solo nella replica locale perche' la share non e' pubblicabile (D31, sola lettura). */
+    val localOnly = AtomicInteger()
+
+    /** R2: immagini tenute solo nella replica locale perche' l'outbox era al tetto. */
+    val overCap = AtomicInteger()
   }
 
   val stats = Stats()
@@ -135,13 +153,57 @@ class OutboxIndexPublisher(
       body?.let { put to it }
     }
     if (records.isEmpty() && bodies.isEmpty()) return
+    if (rules.permanentBlockFor(share) != null) {
+      // R2: share non pubblicabile: solo la replica locale, con i `seq` della share (nessuna riga, nessun byte nell'outbox).
+      stageLock.withLock {
+        val first = store.reserveSeqs(share, records.size)
+        val local = records.mapIndexed { i, change -> recordOf(change, first + i) }
+        sink.applyOwn(share, local, bodies.map { it.first })
+      }
+      stats.localOnly.addAndGet(records.size + bodies.size)
+      return
+    }
     stageLock.withLock {
-      val staged = bodies.map { (put, body) -> StagedBlob(put.cls, put.contentKey, body.size, blobStore.write(share, put.cls, body)) }
+      // R2: il tetto dei byte in attesa (l'ultimo conteggio, aggiornato alla fine di ogni stage, flush e recover). Oltre, le
+      // immagini vanno solo alla replica locale (i record, piccoli, passano).
+      val room = maxOutboxBlobBytes - pending.value.bytes
+      var used = 0L
+      val queued = ArrayList<Pair<BlobPut, ByteArray>>(bodies.size)
+      for (item in bodies) {
+        if (used + item.second.size > room) continue
+        used += item.second.size
+        queued += item
+      }
+      if (queued.size < bodies.size) stats.overCap.addAndGet(bodies.size - queued.size)
+      val staged = queued.map { (put, body) -> StagedBlob(put.cls, put.contentKey, body.size, blobStore.write(share, put.cls, body)) }
       val batch = store.stage(share, records, staged)
       sink.applyOwn(share, batch.records.map { it.record }, bodies.map { it.first })
       store.markSunk(share, batch.records.mapTo(HashSet()) { it.id }, batch.blobs.mapTo(HashSet()) { it.id })
     }
     refreshPending()
+  }
+
+  /**
+   * R2: toglie l'outbox (righe e byte) delle share che non vanno piu' pubblicate: non piu' configurate, o con un blocco
+   * permanente ([IndexWriteRules.permanentBlockFor]). Quello che c'era e' gia' nella replica locale (passato da [stage]).
+   * Da chiamare all'avvio, dopo [recover]. Restituisce quante righe ha tolto.
+   */
+  suspend fun purgeOutbox(configured: Set<String>): Int {
+    val keep = configured.mapTo(HashSet()) { it.lowercase(java.util.Locale.ROOT) }
+    var removed = 0
+    for (share in store.outboxShares()) {
+      if (share.lowercase(java.util.Locale.ROOT) in keep && rules.permanentBlockFor(share) == null) continue
+      locks.withLock(share) {
+        stageLock.withLock {
+          val snapshot = store.outbox(share)
+          store.discard(share, snapshot.records.mapTo(HashSet()) { it.id }, snapshot.blobs.mapTo(HashSet()) { it.id })
+          blobStore.delete(snapshot.blobs.map { it.blob.handle })
+          removed += snapshot.records.size + snapshot.blobs.size
+        }
+      }
+    }
+    refreshPending()
+    return removed
   }
 
   /** Vero se qualcuna di [keys] aspetta ancora nell'outbox di [share] (record presenti o blob): per `LeasedWorkUnits`. */
@@ -375,6 +437,11 @@ class OutboxIndexPublisher(
     pending.value = store.pending()
   }
 
+  private fun recordOf(change: MetaChange, seq: Long): MetaRecord = when (change) {
+    is MetaChange.Put -> MetaRecord.Present(change.path, seq, change.file)
+    is MetaChange.Remove -> MetaRecord.Gone(change.path, seq)
+  }
+
   private fun encodable(change: MetaChange): Boolean {
     // Con il seq piu' lungo possibile: cio' che passa qui passera' con qualunque seq.
     val record = when (change) {
@@ -387,6 +454,12 @@ class OutboxIndexPublisher(
   companion object {
     /** Un segmento di blob al massimo 12 MiB: per pubblicazione ~10 segmenti di miniature. */
     const val DEFAULT_MAX_BLOB_BYTES_PER_FLUSH: Long = 128L * 1024 * 1024
+
+    /**
+     * R2: 512 MiB di blob in attesa in tutto (circa 800 media con S, M, analisi e HQ): basta per giorni di blocco temporaneo
+     * sulle share di prova, mai i GB di una notte di preparazione dell'archivio.
+     */
+    const val DEFAULT_MAX_OUTBOX_BLOB_BYTES: Long = 512L * 1024 * 1024
 
     /** E-I6: l'ordine in cui si pubblica quando lo spazio puo' finire. */
     val PRIORITY: List<SegmentClass> =

@@ -30,6 +30,9 @@ import androidx.room.PrimaryKey
  * - `last_full_scan_at`: fine dell'ultimo giro completo (ora del NAS).
  * - `freeze_*`: il congelamento in corso (D10): motivo (`FreezeReason.code`), da quando (ora del NAS) e i conteggi visti;
  *   tutti NULL se la share non e' congelata. Con un congelamento il catalogo **non** segna assenze in quella share.
+ * - `window_*` (R9 della revisione 4A): la finestra di piu' giri (7 giorni di ora del NAS) in cui si sommano spariti,
+ *   cambiati e "non piu' media", con i file presenti all'inizio: 49 a giro non passano piu' sotto la soglia per sempre.
+ *   Tutti NULL se non c'e' una finestra aperta.
  */
 @Entity(tableName = "nas_scan_state", primaryKeys = ["account_id", "share_key"])
 data class NasScanStateEntity(
@@ -45,6 +48,24 @@ data class NasScanStateEntity(
   @ColumnInfo(name = "freeze_vanished") val freezeVanished: Int?,
   @ColumnInfo(name = "freeze_changed") val freezeChanged: Int?,
   @ColumnInfo(name = "freeze_not_media") val freezeNotMedia: Int?,
+  @ColumnInfo(name = "window_start") val windowStart: Long? = null,
+  @ColumnInfo(name = "window_known") val windowKnown: Int? = null,
+  @ColumnInfo(name = "window_vanished") val windowVanished: Int? = null,
+  @ColumnInfo(name = "window_changed") val windowChanged: Int? = null,
+  @ColumnInfo(name = "window_not_media") val windowNotMedia: Int? = null,
+)
+
+/**
+ * Le posizioni del NAS la cui impronta rapida **non** e' stata letta qui ma adottata da un record dell'indice di un altro
+ * dispositivo (R6 della revisione 4A; D8, D9 passo 4): `quick_hash` e' l'impronta adottata. Un'impronta adottata non lega mai
+ * un media del telefono ne' un altro file del NAS (niente `LinkingRules` per contenuto, niente gruppi provvisori), e la
+ * scansione la rilegge quando nessun record valido la sostiene piu' (autore revocato o record cambiato). La riga sparisce
+ * appena la scansione rileva il file qui.
+ */
+@Entity(tableName = "nas_adopted_fingerprint")
+data class NasAdoptedFingerprintEntity(
+  @PrimaryKey @ColumnInfo(name = "location_id") val locationId: Long,
+  @ColumnInfo(name = "quick_hash") val quickHash: String,
 )
 
 // --- Indice condiviso: pubblicazione (P3, §2.1) -------------------------------------------------------------------

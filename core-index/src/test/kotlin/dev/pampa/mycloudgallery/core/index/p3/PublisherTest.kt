@@ -73,14 +73,19 @@ open class PublisherTest {
     val publisher = phone.publisher()
     publisher.stage(real, listOf(file.put()), listOf(file.thumb()))
 
-    assertThat(publisher.flush(real, FlushReason.UNIT_FINISHED)).isEqualTo(PublishOutcome.Blocked(WriteBlock.LOCAL_ONLY))
+    // R2 (revisione 4A): su una share vera niente va nell'outbox; il lavoro resta nella replica locale (Libreria).
+    assertThat(publisher.flush(real, FlushReason.UNIT_FINISHED)).isEqualTo(PublishOutcome.NothingPending)
     assertThat(world.nas.share(real).fileCount()).isEqualTo(0)
-    assertThat(publisher.pending.value.records).isEqualTo(1)
+    assertThat(publisher.pending.value.records).isEqualTo(0)
     assertThat(phone.replica.locate(file.contentKey.short, SegmentClass.THUMB_S)).isNotNull()
 
-    // In debug, con la protezione spenta dall'utente, la stessa outbox si pubblica (niente si e' perso).
+    // In debug, con la protezione spenta dall'utente, non c'e' un arretrato vecchio da pubblicare: cio' che si prepara da
+    // adesso si pubblica (e la preparazione rifa' i media che gli altri non trovano nell'indice).
     phone.flags = FeatureFlags.forBuild(debugBuild = true, indexPublishTestSharesOnly = false)
-    assertThat(phone.publisher().flush(real, FlushReason.UNIT_FINISHED)).isInstanceOf(PublishOutcome.Published::class.java)
+    val open = phone.publisher()
+    assertThat(open.flush(real, FlushReason.UNIT_FINISHED)).isEqualTo(PublishOutcome.NothingPending)
+    open.stage(real, listOf(file.put()), listOf(file.thumb()))
+    assertThat(open.flush(real, FlushReason.UNIT_FINISHED)).isInstanceOf(PublishOutcome.Published::class.java)
   }
 
   @Test

@@ -156,6 +156,16 @@ interface IndexPublishStore {
 
   /** Gli handle dei blob ancora citati dall'outbox (per togliere i byte orfani dopo una morte del processo). */
   suspend fun referencedHandles(): Set<String>
+
+  /**
+   * R2 (revisione 4A): riserva [count] `seq` consecutivi della share (mai riusati) senza mettere niente nell'outbox, e
+   * restituisce il primo. Per i cambiamenti che restano solo locali (share non pubblicabile): la replica locale li ordina
+   * con gli stessi `seq` di quelli pubblicati.
+   */
+  suspend fun reserveSeqs(share: String, count: Int): Long
+
+  /** Le share (come chiavi) con righe nell'outbox: per toglierle quando non sono piu' configurate o pubblicabili (R2). */
+  suspend fun outboxShares(): Set<String>
 }
 
 /**

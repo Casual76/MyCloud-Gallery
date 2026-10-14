@@ -123,6 +123,17 @@ class RoomIndexPublishStore(private val database: GalleryDatabase) : IndexPublis
     }
   }
 
+  override suspend fun reserveSeqs(share: String, count: Int): Long = database.transaction {
+    require(count >= 0) { "Conteggio negativo." }
+    val shareKey = key(share)
+    val state = dao.publishState(shareKey) ?: IndexPublishStateEntity(shareKey = shareKey, shareName = share, nextSeq = 1)
+    check(state.nextSeq + count - 1 <= TrustLimits.MAX_RECORD_SEQ) { "seq esauriti per questa share." }
+    dao.savePublishState(state.copy(nextSeq = state.nextSeq + count))
+    state.nextSeq
+  }
+
+  override suspend fun outboxShares(): Set<String> = (dao.outboxRecordShares() + dao.outboxBlobShares()).toSet()
+
   override suspend fun pending(): PendingCounts = database.transaction {
     val blobs = dao.pendingBlobs()
     PendingCounts(records = dao.pendingRecordCount(), blobs = blobs.items, bytes = blobs.bytes)

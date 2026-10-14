@@ -146,6 +146,9 @@ class RoomReplicaStore(private val database: GalleryDatabase) : ReplicaStore {
 
   override suspend fun pathKeys(share: String): Set<String> = dao.pathKeys(share).toSet()
 
+  override suspend fun presentContentKeys(share: String, deviceId: String): Set<ContentKey> =
+    dao.presentContentKeys(share, deviceId).mapNotNullTo(HashSet()) { hex -> runCatching { ContentKey(hex) }.getOrNull() }
+
   override suspend fun putLocalRecords(share: String, rows: List<RecordRow>): Set<String> {
     rows.forEach { require(it.segment == RecordRow.LOCAL_SEGMENT) { "Solo record locali." } }
     if (rows.isEmpty()) return emptySet()

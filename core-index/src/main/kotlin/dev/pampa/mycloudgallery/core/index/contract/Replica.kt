@@ -51,12 +51,33 @@ data class BlobLocation(val packId: Long, val offset: Long, val length: Int, val
 }
 
 /**
+ * Dove cercare il blob di un media (R1 della revisione 4A): le share in cui il media ha una posizione, **la sua area per
+ * prima**, e, se chi chiama la conosce, la chiave di contenuto **intera** del media (dal catalogo). Un blob di un'altra share
+ * o con un'altra chiave intera (stessi primi 64 bit) non vale per quel media.
+ */
+class BlobScope(shares: List<String>, val fullKey: ContentKey? = null) {
+  /** Le share in minuscolo (Samba non distingue le maiuscole), nell'ordine dato, senza doppioni. */
+  val shareKeys: List<String> = shares.map { it.lowercase(java.util.Locale.ROOT) }.distinct()
+
+  override fun toString(): String = "BlobScope(${shareKeys.size} share, chiave=${fullKey != null})"
+}
+
+/**
  * I blob delle classi d'immagine nella replica locale (D15): nessun file per miniatura, pacchi letti con mappatura in
  * memoria. Chiamate **bloccanti** e veloci (indice in memoria): si fanno dal dispatcher delle miniature.
+ *
+ * Solo blob **attestati** (R1 della revisione 4A): un blob vale se il dispositivo che l'ha pubblicato ha, nella stessa share,
+ * un record presente con la stessa chiave intera.
  */
 interface ReplicaBlobs {
   /** Il blob della chiave [contentKey] (forma ridotta, `ContentKey.short`) e della classe [cls], se c'e'. */
   fun locate(contentKey: Long, cls: SegmentClass): BlobLocation?
+
+  /**
+   * Come [locate], ma solo dentro [scope] (le share del media, la sua area per prima, e la chiave intera se nota). Chi non
+   * sa distinguere le share (la replica sintetica dei benchmark) risponde come [locate].
+   */
+  fun locate(contentKey: Long, cls: SegmentClass, scope: BlobScope): BlobLocation? = locate(contentKey, cls)
 
   /**
    * I byte del blob, in sola lettura e senza copie (mappatura). Lancia `IOException` se il pacco non c'e' piu'

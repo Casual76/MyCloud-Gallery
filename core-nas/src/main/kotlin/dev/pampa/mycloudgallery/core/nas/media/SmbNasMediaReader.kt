@@ -307,9 +307,12 @@ internal class SmbRandomFile(
   override suspend fun readRange(range: LongRange): ByteArray {
     if (range.isEmpty()) return ByteArray(0)
     val start = range.first.coerceAtLeast(0)
-    val endExclusive = minOf(range.last + 1, size)
+    // I6 (revisione 4A): `range.last + 1` non deve traboccare, e un intervallo oltre 2 GiB non si tronca in silenzio.
+    val endExclusive = if (range.last == Long.MAX_VALUE) size else minOf(range.last + 1, size)
     if (start >= endExclusive) return ByteArray(0)
-    val out = ByteArray((endExclusive - start).toInt())
+    val length = endExclusive - start
+    require(length <= MAX_RANGE_BYTES) { "Intervallo troppo grande per una lettura sola." }
+    val out = ByteArray(length.toInt())
     var done = 0
     while (done < out.size) {
       val n = read(start + done, out, done, out.size - done)
@@ -420,3 +423,6 @@ private fun SmbFileInfo.toEntry(requestedName: String): NasEntry = NasEntry(
 )
 
 private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(java.util.Locale.ROOT, it.toInt() and 0xff) }
+
+/** La lettura piu' lunga che `readRange` consegna in un array solo (I6): oltre si legge a blocchi con `read`. */
+private const val MAX_RANGE_BYTES: Long = Int.MAX_VALUE.toLong() - 8

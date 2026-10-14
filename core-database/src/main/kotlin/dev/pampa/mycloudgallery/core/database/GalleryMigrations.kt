@@ -98,7 +98,10 @@ private object Migration2To3 : Migration(2, 3) {
     "CREATE TABLE IF NOT EXISTS `nas_scan_state` (`account_id` TEXT NOT NULL, `share_key` TEXT NOT NULL, " +
       "`share_name` TEXT NOT NULL, `epoch` INTEGER, `resume_after` TEXT, `last_full_scan_at` INTEGER, " +
       "`freeze_reason` TEXT, `freeze_since` INTEGER, `freeze_known_present` INTEGER, `freeze_vanished` INTEGER, " +
-      "`freeze_changed` INTEGER, `freeze_not_media` INTEGER, PRIMARY KEY(`account_id`, `share_key`))",
+      "`freeze_changed` INTEGER, `freeze_not_media` INTEGER, `window_start` INTEGER, `window_known` INTEGER, " +
+      "`window_vanished` INTEGER, `window_changed` INTEGER, `window_not_media` INTEGER, PRIMARY KEY(`account_id`, `share_key`))",
+    "CREATE TABLE IF NOT EXISTS `nas_adopted_fingerprint` (`location_id` INTEGER NOT NULL, `quick_hash` TEXT NOT NULL, " +
+      "PRIMARY KEY(`location_id`))",
     "CREATE TABLE IF NOT EXISTS `index_publish_state` (`share_key` TEXT NOT NULL, `share_name` TEXT NOT NULL, " +
       "`next_seq` INTEGER NOT NULL, `head_version` INTEGER NOT NULL DEFAULT 0, `head_hash` TEXT, " +
       "`head_published_at` INTEGER, PRIMARY KEY(`share_key`))",

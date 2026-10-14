@@ -404,6 +404,56 @@ class CatalogV3Test : CatalogTestBase() {
     assertThat(catalog.pendingWork(WorkStage.HQ, WorkPlace.NAS, 10)).containsExactly(both, nasOnly).inOrder()
   }
 
+  // --- Revisione 4A: R6 (impronte adottate), R9 (niente esce da una share congelata), R10 (chiavi ancora in uso) ---------
+
+  @Test
+  fun r6_unImprontaAdottataNonLegaUnMediaDelTelefonoESiSegnaFinoAllaLetturaQui() = runBlocking<Unit> {
+    val content = Db.content(6)
+    val quickFp = Fingerprint.ofContent(content).copy(fullHash = null)
+    val phoneVideo = catalog.recordAll(listOf(video(phone("VID_6.mp4", 6), quickFp)), MediaCatalog.WhenUndecided.KEEP_SEPARATE).single().mediaId!!
+    // Un record dell'indice dice che il video del NAS ha la stessa impronta: adottata senza leggere, niente gruppo provvisorio.
+    val adopted = catalog.recordAll(
+      listOf(video(nas("Video/VID_6.mp4"), quickFp)),
+      MediaCatalog.WhenUndecided.KEEP_SEPARATE,
+      seenAt = T0,
+      fingerprintAdopted = true,
+    ).single()
+    assertThat(adopted.mediaId).isNotEqualTo(phoneVideo)
+    assertThat(db.mediaDao().get(phoneVideo.value)!!.groupId).isNull()
+    assertThat(db.mediaDao().get(adopted.mediaId!!.value)!!.groupId).isNull()
+    assertThat(catalog.indexRows(listOf(phoneVideo, adopted.mediaId!!)).map { it.mediaId }).containsExactly(phoneVideo.value, adopted.mediaId!!.value)
+    val known = catalog.knownNasFiles(ME, "alessio", NasPath.of("Video"))
+    assertThat(known.values.single().adoptedQuickHash).isEqualTo(quickFp.quickHash)
+
+    // La scansione legge il file qui: il segno sparisce.
+    catalog.recordAll(listOf(video(nas("Video/VID_6.mp4"), quickFp)), MediaCatalog.WhenUndecided.KEEP_SEPARATE, seenAt = epoch)
+    assertThat(catalog.knownNasFiles(ME, "alessio", NasPath.of("Video")).values.single().adoptedQuickHash).isNull()
+  }
+
+  @Test
+  fun r9_suUnaShareCongelataLeEsclusioniNonTolgonoNiente() = runBlocking<Unit> {
+    catalog.recordAll(listOf(nasObs("Musica/cover.jpg", full(31))), MediaCatalog.WhenUndecided.KEEP_SEPARATE, seenAt = T0)
+    val key = nas("Musica/cover.jpg").key
+    catalog.saveNasScanState(scan(freeze = NasFreeze(FreezeReason.NOT_MEDIA, epoch, 1, 0, 0, 1)))
+    assertThat(catalog.retireNas(ME, "alessio", emptyList(), listOf(key))).isEqualTo(0)
+    assertThat(catalog.nasLocationAt(nas("Musica/cover.jpg"))!!.state).isEqualTo(LocationState.PRESENT)
+    catalog.saveNasScanState(scan())
+    assertThat(catalog.retireNas(ME, "alessio", emptyList(), listOf(key))).isEqualTo(1)
+  }
+
+  @Test
+  fun r10_leChiaviAncoraInUsoSonoQuelleDellePosizioniNonAssenti() = runBlocking<Unit> {
+    val a = catalog.recordAll(listOf(nasObs("Foto/a.jpg", full(41))), MediaCatalog.WhenUndecided.KEEP_SEPARATE, seenAt = T0).single()
+    catalog.recordAll(listOf(nasObs("Foto/b.jpg", full(42), share = "comune")), MediaCatalog.WhenUndecided.KEEP_SEPARATE, seenAt = T0)
+    val keyA = ContentKey.of(full(41).quickHash, full(41).size).short
+    val keyB = ContentKey.of(full(42).quickHash, full(42).size).short
+    assertThat(catalog.nasContentKeyOf(a.locationId!!)).isEqualTo(keyA)
+    assertThat(catalog.liveNasShortKeys()).containsAtLeast(keyA, keyB)
+    catalog.markNasVanished(listOf(nas("Foto/a.jpg").key))
+    assertThat(catalog.liveNasShortKeys()).doesNotContain(keyA)
+    assertThat(catalog.liveNasShortKeys()).contains(keyB)
+  }
+
   private companion object {
     const val PRESENCE = CellFlags.ON_PHONE or CellFlags.ON_NAS or CellFlags.SAFE or CellFlags.TO_VERIFY
   }

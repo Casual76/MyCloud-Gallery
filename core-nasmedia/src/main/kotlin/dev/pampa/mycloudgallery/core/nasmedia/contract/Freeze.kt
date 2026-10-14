@@ -14,11 +14,49 @@ object MassChangeRule {
   const val MIN_COUNT: Int = 50
   const val MIN_PERCENT: Int = 5
 
+  /**
+   * R9 della revisione 4A: le share **piccole** (meno di [SMALL_SHARE] file presenti) congelano anche con la sola regola
+   * percentuale, [SMALL_PERCENT] dei file (almeno [SMALL_MIN_COUNT]): sotto i 50 file un elenco vuoto della radice non le
+   * svuota piu' senza allarme.
+   */
+  const val SMALL_SHARE: Int = 100
+  const val SMALL_PERCENT: Int = 50
+  const val SMALL_MIN_COUNT: Int = 2
+
+  /** R9: la finestra di piu' giri in cui i conteggi si sommano (ora del NAS): 7 giorni. */
+  const val WINDOW_MILLIS: Long = 7L * 24 * 60 * 60 * 1000
+
   /** La soglia per una share con [knownPresent] file presenti (arrotondata per eccesso). */
   fun threshold(knownPresent: Int): Int {
     require(knownPresent >= 0) { "Conteggio negativo." }
     val percent = (knownPresent.toLong() * MIN_PERCENT + 99) / 100
     return maxOf(MIN_COUNT.toLong(), percent).toInt()
+  }
+
+  /** La soglia che vale davvero: [threshold], o la regola percentuale delle share piccole se e' piu' bassa (R9). */
+  fun effectiveThreshold(knownPresent: Int): Int {
+    val base = threshold(knownPresent)
+    if (knownPresent < SMALL_MIN_COUNT || knownPresent >= SMALL_SHARE) return base
+    val small = maxOf(SMALL_MIN_COUNT.toLong(), (knownPresent.toLong() * SMALL_PERCENT + 99) / 100).toInt()
+    return minOf(base, small)
+  }
+}
+
+/**
+ * La finestra di piu' giri del congelamento (R9 della revisione 4A): da [startNasMillis] (ora del NAS, inizio del primo giro
+ * contato) si sommano spariti, cambiati e "non piu' media" dei giri completi accettati, e si giudicano contro la soglia di
+ * [knownPresent] (i file presenti all'inizio). Dura [MassChangeRule.WINDOW_MILLIS]: 49 file a giro non restano piu' sotto la
+ * soglia per sempre.
+ */
+data class ScanWindow(
+  val startNasMillis: Long,
+  val knownPresent: Int,
+  val vanished: Int,
+  val changed: Int,
+  val notMedia: Int,
+) {
+  init {
+    require(knownPresent >= 0 && vanished >= 0 && changed >= 0 && notMedia >= 0) { "Conteggi negativi." }
   }
 }
 

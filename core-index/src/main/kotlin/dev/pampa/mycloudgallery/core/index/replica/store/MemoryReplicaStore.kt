@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.index.replica.store
 
 import dev.pampa.mycloudgallery.core.index.contract.QualityLevel
+import dev.pampa.mycloudgallery.core.model.ContentKey
 import dev.pampa.mycloudgallery.core.trust.data.MetaRecord
 import dev.pampa.mycloudgallery.core.trust.data.SegmentClass
 import java.util.TreeSet
@@ -157,6 +158,13 @@ class MemoryReplicaStore : ReplicaStore {
 
   override suspend fun pathKeys(share: String): Set<String> = synchronized(lock) {
     records[share]?.filterValues { it.isNotEmpty() }?.keys?.toSet().orEmpty()
+  }
+
+  override suspend fun presentContentKeys(share: String, deviceId: String): Set<ContentKey> = synchronized(lock) {
+    records[share]?.values.orEmpty().asSequence().flatten()
+      .filter { it.deviceId == deviceId }
+      .mapNotNull { (it.record as? MetaRecord.Present)?.file?.contentKey }
+      .toHashSet()
   }
 
   override suspend fun preparedContentCount(classMask: Int): Int = synchronized(lock) {

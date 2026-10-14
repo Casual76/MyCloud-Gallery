@@ -238,6 +238,15 @@ interface ReplicaStore {
   suspend fun pathKeys(share: String): Set<String>
 
   /**
+   * Le chiavi di contenuto dei record **presenti** di [deviceId] in [share] (di ogni suo segmento e dei record propri non
+   * ancora riletti): R1 della revisione 4A. Un blob di quel dispositivo in quella share vale solo se la sua chiave intera e'
+   * fra queste. La chiave di un record e' un SHA-256 di `qh1` e dimensione, non un campo libero: nessuno puo' fabbricarne una
+   * con gli stessi primi 64 bit di un'altra. SQL: `SELECT DISTINCT content_key FROM index_record WHERE share_key = ? AND
+   * device_id = ? AND gone = 0`.
+   */
+  suspend fun presentContentKeys(share: String, deviceId: String): Set<ContentKey>
+
+  /**
    * I record propri ricevuti da `OwnIndexSink` ([RecordRow.LOCAL_SEGMENT]): per (dispositivo, percorso) resta il `seq`
    * piu' alto. Restituisce i percorsi toccati.
    */

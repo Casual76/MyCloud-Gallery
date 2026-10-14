@@ -115,6 +115,22 @@ data class NasFreeze(
 }
 
 /**
+ * La finestra di piu' giri del congelamento (R9 della revisione 4A, D10): da [startNasMillis] (ora del NAS) si sommano
+ * spariti, cambiati e "non piu' media" dei giri completi, contro la soglia di [knownPresent] (i file presenti all'inizio).
+ */
+data class NasScanWindow(
+  val startNasMillis: Long,
+  val knownPresent: Int,
+  val vanished: Int,
+  val changed: Int,
+  val notMedia: Int,
+) {
+  init {
+    require(knownPresent >= 0 && vanished >= 0 && changed >= 0 && notMedia >= 0) { "Conteggi negativi." }
+  }
+}
+
+/**
  * Il cursore della scansione di una share per un account (tabella `nas_scan_state`; `NasScanCursor` della porta di
  * core-nasmedia campo per campo, con il congelamento in [freeze]). Si salva insieme alle osservazioni che lo fanno
  * avanzare. [epoch], [resumeAfter], [lastFullScanAt]: ora del NAS e percorso come nella porta.
@@ -126,6 +142,8 @@ data class NasScanState(
   val resumeAfter: NasPath? = null,
   val lastFullScanAt: Long? = null,
   val freeze: NasFreeze? = null,
+  /** R9: la finestra di piu' giri per il congelamento (null = nessuna). */
+  val window: NasScanWindow? = null,
 ) {
   init {
     require(resumeAfter == null || epoch != null) { "Si riprende solo un giro in corso." }
@@ -145,6 +163,8 @@ data class KnownNasLocation(
   val locationId: LocationId,
   val stamp: NasStamp,
   val state: LocationState,
+  /** R6: l'impronta rapida adottata da un record dell'indice e non letta qui (null = letta qui). */
+  val adoptedQuickHash: QuickHash? = null,
 )
 
 /** Una richiesta di adozione d'identita' (D7): il posto del file e l'identita' pubblicata da un altro dispositivo. */
@@ -246,6 +266,9 @@ internal fun NasScanStateEntity.toDomain(): NasScanState = NasScanState(
       notMedia = freezeNotMedia ?: 0,
     )
   },
+  window = windowStart?.let { start ->
+    NasScanWindow(start, windowKnown ?: 0, windowVanished ?: 0, windowChanged ?: 0, windowNotMedia ?: 0)
+  },
 )
 
 internal fun NasScanState.toEntity(): NasScanStateEntity = NasScanStateEntity(
@@ -261,4 +284,9 @@ internal fun NasScanState.toEntity(): NasScanStateEntity = NasScanStateEntity(
   freezeVanished = freeze?.vanished,
   freezeChanged = freeze?.changed,
   freezeNotMedia = freeze?.notMedia,
+  windowStart = window?.startNasMillis,
+  windowKnown = window?.knownPresent,
+  windowVanished = window?.vanished,
+  windowChanged = window?.changed,
+  windowNotMedia = window?.notMedia,
 )

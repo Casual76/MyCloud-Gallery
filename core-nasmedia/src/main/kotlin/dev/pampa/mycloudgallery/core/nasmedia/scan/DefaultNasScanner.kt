@@ -38,6 +38,7 @@ import dev.pampa.mycloudgallery.core.nasmedia.contract.ScanMode
 import dev.pampa.mycloudgallery.core.nasmedia.contract.ScanReport
 import dev.pampa.mycloudgallery.core.nasmedia.contract.ScanSettings
 import dev.pampa.mycloudgallery.core.nasmedia.contract.ScanStop
+import dev.pampa.mycloudgallery.core.nasmedia.contract.ScanWindow
 import dev.pampa.mycloudgallery.core.nasmedia.detect.Detection
 import dev.pampa.mycloudgallery.core.nasmedia.detect.NasDetector
 import dev.pampa.mycloudgallery.core.nasmedia.detect.ReadBudget
@@ -117,6 +118,16 @@ class DefaultNasScanner(
 
   private val runLock = Mutex()
   private var round: Round? = null
+
+  /** L'opzione "Mostra le copertine degli album" del giro di prima (R9: solo per riconoscere il gesto dell'utente). */
+  private var lastShowCovers: Boolean? = null
+
+  /**
+   * R9: l'utente ha appena spento "Mostra le copertine degli album": le copertine che escono fino alla fine del giro sono una
+   * sua scelta (E-N14), non un cambiamento di massa del NAS, e non contano per il congelamento. Le altre copertine nuove (un
+   * file audio comparso in una cartella di foto) contano.
+   */
+  private var coversHiddenByUser = false
   private var freezeLoaded = false
   private var lastEpoch = Long.MIN_VALUE
 
@@ -140,7 +151,7 @@ class DefaultNasScanner(
   // --- Tipi interni ---------------------------------------------------------------------------------------------------
 
   /** Il giro completo in corso (puo' durare piu' tappe): i conteggi che servono al congelamento. */
-  private class Round(val epoch: Long, val knownPresent: Int) {
+  private class Round(val epoch: Long, val knownPresent: Int, val window: ScanWindow? = null) {
     var changed = 0
     var notMedia = 0
     var blocked = 0
@@ -187,7 +198,10 @@ class DefaultNasScanner(
 
   private inner class Run(private val mode: ScanMode, budget: Duration) {
     private val deadline = monotonicMs() + budget.inWholeMilliseconds
-    private val current = settings()
+    private val current = settings().also { s ->
+      if (lastShowCovers == true && !s.showAlbumCovers) coversHiddenByUser = true
+      lastShowCovers = s.showAlbumCovers
+    }
     private val exclusions = Exclusions.build(current.excluded, emptyList(), current.showAlbumCovers)
     private val readBudget = ReadBudget(current.detectionByteCap)
     private val purpose = if (mode is ScanMode.Folder) Purpose.INTERACTIVE else Purpose.BACKGROUND
@@ -312,11 +326,11 @@ class DefaultNasScanner(
         val floor = maxOf(cursor.lastFullScanAt ?: Long.MIN_VALUE, lastEpoch)
         val fresh = keeper.update { it.copy(epoch = if (floor == Long.MIN_VALUE) nasNow else maxOf(nasNow, floor + 1), resumeAfter = null) }
         lastEpoch = checkNotNull(fresh.epoch)
-        activeRound = Round(checkNotNull(fresh.epoch), store.countPresent(account, share))
+        activeRound = Round(checkNotNull(fresh.epoch), store.countPresent(account, share), liveWindow(fresh.window))
       } else {
         resumed = true
         val kept = round?.takeIf { it.epoch == epoch }
-        activeRound = kept ?: Round(epoch, store.countPresent(account, share)).also { it.trusted = false }
+        activeRound = kept ?: Round(epoch, store.countPresent(account, share), liveWindow(cursor.window)).also { it.trusted = false }
       }
       round = activeRound
       seenAt = activeRound.epoch
@@ -325,6 +339,7 @@ class DefaultNasScanner(
 
     private suspend fun finishRound() {
       val r = activeRound
+      coversHiddenByUser = false
       if (r.blocked > 0 || blockedFolders > 0) {
         // Cartelle non lette: non si puo' dire che un file sia sparito da dove non si e' guardato (nessuna assenza).
         keeper.update { it.copy(epoch = null, resumeAfter = null) }
@@ -342,8 +357,26 @@ class DefaultNasScanner(
         return
       }
       val diff = ScanDiff(r.knownPresent, unseen, r.changed, r.notMedia)
-      val accepted = freezeState.hasAcceptance()
-      val verdict = if (accepted) FreezeVerdict.Proceed else MassChangeGuard.judge(diff)
+      // R9 (revisione 4A): dopo il gesto valgono solo i conteggi che l'utente ha confermato (franchigia), non "tutto"; senza
+      // gesto i conteggi dei giri accettati negli ultimi 7 giorni si sommano a questo (finestra), cosi' le gocce sotto la
+      // soglia a ogni giro arrivano comunque alla soglia.
+      val allowance = freezeState.acceptance()
+      val window = if (allowance == null) r.window else null
+      val judged = window?.let { w ->
+        ScanDiff(maxOf(w.knownPresent, diff.knownPresent), w.vanished + diff.vanished, w.changed + diff.changed, w.notMedia + diff.notMedia)
+      } ?: diff
+      val verdict = MassChangeGuard.judge(judged, allowance)
+      val nextWindow = if (allowance != null) {
+        ScanWindow(
+          r.epoch,
+          diff.knownPresent,
+          maxOf(0, diff.vanished - allowance.vanished),
+          maxOf(0, diff.changed - allowance.changed),
+          maxOf(0, diff.notMedia - allowance.notMedia),
+        )
+      } else {
+        ScanWindow(window?.startNasMillis ?: r.epoch, judged.knownPresent, judged.vanished, judged.changed, judged.notMedia)
+      }
       when (verdict) {
         is FreezeVerdict.Freeze -> {
           val before = keeper.read().freeze
@@ -362,12 +395,16 @@ class DefaultNasScanner(
           freezeState.publish(null)
           markVanished(r.epoch)
           freezeState.consumeAcceptance()
-          keeper.update { it.copy(epoch = null, resumeAfter = null, lastFullScanAt = nasNow) }
+          keeper.update { it.copy(epoch = null, resumeAfter = null, lastFullScanAt = nasNow, window = nextWindow) }
           round = null
           complete = true
         }
       }
     }
+
+    /** R9: la finestra salvata, se e' ancora aperta (meno di 7 giorni di ora del NAS). */
+    private fun liveWindow(window: ScanWindow?): ScanWindow? =
+      window?.takeIf { nasNow - it.startNasMillis in 0 until MassChangeRule.WINDOW_MILLIS }
 
     /** Le assenze, a tetti (§2.3): si ripete finche' il catalogo ne segna quante il tetto; il tempo si controlla a ogni giro. */
     private suspend fun markVanished(epoch: Long) {
@@ -512,6 +549,7 @@ class DefaultNasScanner(
       val cands = ArrayList<Cand>(media.size)
       val keys = HashSet<LocationKey>(media.size * 2)
       val coverKeys = ArrayList<LocationKey>()
+      val coverSeen = ArrayList<NasSeen>()
       for (e in media) {
         val path = try {
           if (dir == null) SharePath.of(e.name) else dir.child(e.name)
@@ -527,7 +565,10 @@ class DefaultNasScanner(
         val key = Location.Nas(account, share, nas).key
         if (exclusions.isCover(e, hasAudio)) {
           albumCovers++
-          if (known.containsKey(key)) coverKeys += key
+          known[key]?.let { k ->
+            coverKeys += key
+            coverSeen += NasSeen(Location.Nas(account, share, nas, k.stamp.fileId), k.stamp)
+          }
           continue
         }
         if (!keys.add(key)) {
@@ -541,13 +582,14 @@ class DefaultNasScanner(
       val unchangedList = ArrayList<Cand>()
       val touchList = ArrayList<Cand>()
       val resolveList = ArrayList<Cand>()
+      val adoptedList = ArrayList<Cand>()
       var folderChanged = 0
       for (c in cands) {
         files++
         val k = c.known
         val stamp = c.entry.stamp
         if (k != null && k.stamp.size == stamp.size && k.stamp.modifiedAtMillis == stamp.modifiedAtMillis) {
-          unchangedList += c
+          if (k.adoptedQuickHash != null) adoptedList += c else unchangedList += c
           continue
         }
         if (k != null) {
@@ -562,26 +604,43 @@ class DefaultNasScanner(
         }
       }
 
+      // R6 (revisione 4A): un file invariato la cui impronta era stata adottata da un record dell'indice resta tale solo se un
+      // record valido con la stessa impronta lo sostiene ancora; se no (autore revocato o dimenticato, record cambiato) si
+      // rileva qui. Non e' un "cambiato" (il file non e' cambiato): non conta per il congelamento.
+      val redetect = if (adoptedList.isEmpty()) emptyList() else unsupportedAdoptions(adoptedList, unchangedList)
+
       // "Non piu' media" (D10): file noti di questa cartella che non ci sono piu' e hanno un nome non-media con lo stesso
-      // fileId o lo stesso nome piu' un'estensione in coda (`foto.jpg.locked`).
-      val folderNotMedia = if (isRound) notMediaTransitions(known, keys, coverKeys, nonMedia) else 0
+      // fileId o lo stesso nome piu' un'estensione in coda (`foto.jpg.locked`). R9: anche i file noti che da questo elenco
+      // risultano copertine (un file audio comparso nella cartella) escono dalla Libreria: contano come "non piu' media".
+      val folderNotMedia = if (isRound) notMediaTransitions(known, keys, coverKeys, nonMedia) + (if (coversHiddenByUser) 0 else coverKeys.size) else 0
 
       if (isRound) {
         val r = activeRound
-        val threshold = MassChangeRule.threshold(r.knownPresent)
-        if (!freezeState.hasAcceptance() && (r.changed + folderChanged >= threshold || r.notMedia + folderNotMedia >= threshold)) {
-          r.suspect = true
-        }
+        val allowance = freezeState.acceptance()
+        val w = if (allowance == null) r.window else null
+        val threshold = MassChangeRule.effectiveThreshold(maxOf(r.knownPresent, w?.knownPresent ?: 0))
+        val changedSoFar = (w?.changed ?: 0) + r.changed + folderChanged - (allowance?.changed ?: 0)
+        val notMediaSoFar = (w?.notMedia ?: 0) + r.notMedia + folderNotMedia - (allowance?.notMedia ?: 0)
+        if (changedSoFar >= threshold || notMediaSoFar >= threshold) r.suspect = true
       }
 
-      if (!(isRound && activeRound.suspect)) {
+      // R9: niente esce dalla Libreria da una share sospetta o congelata (il catalogo lo rifiuta comunque, D10). Le copertine
+      // che restano sono state viste adesso: non contano anche come sparite.
+      if (!(isRound && activeRound.suspect) && freezeState.frozen.value == null) {
         if (excludedHere.isNotEmpty() || coverKeys.isNotEmpty()) {
           store.retireExcluded(account, share, excludedHere, coverKeys)
         }
+      } else if (coverSeen.isNotEmpty()) {
+        store.confirmAllPresent(coverSeen, seenAt, null)
       }
 
       // Scritture: sempre "visto a" per i file noti; la registrazione di cose nuove si ferma se la share e' sospetta.
       resolveList += confirm(unchangedList, touchList).filter { arrivals.isStable(it.key, it.name, it.entry.stamp, nasNow) }
+      if (redetect.isNotEmpty()) {
+        // Visti adesso con il timbro noto (non spariti), poi riletti qui se la share non e' sospetta.
+        confirmKnownStamp(redetect)
+        if (!(isRound && activeRound.suspect)) detect(dir, redetect)
+      }
       if (!(isRound && activeRound.suspect)) {
         resolve(dir, resolveList)
       } else {
@@ -690,6 +749,24 @@ class DefaultNasScanner(
       detect(dir, pending)
     }
 
+    /**
+     * R6: dei file invariati con l'impronta adottata, quelli che un record valido (stesso timbro, stessa impronta) sostiene
+     * ancora tornano fra gli invariati ([unchanged]); gli altri si restituiscono, da rilevare qui.
+     */
+    private suspend fun unsupportedAdoptions(adopted: List<Cand>, unchanged: MutableList<Cand>): List<Cand> {
+      val out = ArrayList<Cand>()
+      for (chunk in adopted.chunked(config.batchSize)) {
+        val stamps = LinkedHashMap<SharePath, NasStamp>(chunk.size * 2)
+        chunk.forEach { stamps[it.path] = it.entry.stamp }
+        val records = replica.matching(share, stamps)
+        for (c in chunk) {
+          val file = records[c.path]?.file
+          if (file != null && file.stamp.sameAs(c.entry.stamp) && file.quickHash == c.known?.adoptedQuickHash) unchanged += c else out += c
+        }
+      }
+      return out
+    }
+
     // --- E-N1: spostati senza leggere ---------------------------------------------------------------------------------
 
     private fun isRememberedNotMedia(c: Cand): Boolean = synchronized(notMediaMemory) {
@@ -759,7 +836,8 @@ class DefaultNasScanner(
             captureTimeHintMillis = file.capture?.takeIf { !it.isEstimated }?.utcMillis,
           )
         }
-        val outcomes = store.recordAll(observations, MediaCatalog.WhenUndecided.KEEP_SEPARATE, null, seenAt)
+        // R6: l'impronta e' del record, non letta qui: niente legami per contenuto e posizione segnata come adottata.
+        val outcomes = store.recordAll(observations, MediaCatalog.WhenUndecided.KEEP_SEPARATE, null, seenAt, fingerprintsAdopted = true)
         val metas = ArrayList<NasMetadataApply>()
         hits.forEachIndexed { i, (c, file) ->
           val outcome = outcomes[i]

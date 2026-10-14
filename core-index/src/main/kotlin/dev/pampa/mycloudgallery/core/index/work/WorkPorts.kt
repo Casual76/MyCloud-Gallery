@@ -13,6 +13,7 @@ import dev.pampa.mycloudgallery.core.index.publish.nasCall
 import dev.pampa.mycloudgallery.core.model.ContentKey
 import dev.pampa.mycloudgallery.core.trust.TrustLimits
 import dev.pampa.mycloudgallery.core.trust.data.AcquireResult
+import dev.pampa.mycloudgallery.core.trust.data.ClassedSegment
 import dev.pampa.mycloudgallery.core.trust.data.HeadMark
 import dev.pampa.mycloudgallery.core.trust.data.IndexKeys
 import dev.pampa.mycloudgallery.core.trust.data.LeaseManager
@@ -50,8 +51,17 @@ interface WorkSource {
   suspend fun monthItems(share: String, pass: WorkPass, month: String): List<WorkItem>
 }
 
-/** Cio' che i dispositivi hanno pubblicato per una chiave di contenuto (D8: vale per coordinare il lavoro). */
-data class PublishedProgress(val classes: Set<SegmentClass>, val failedDecoders: Set<String>) {
+/**
+ * Cio' che i dispositivi hanno pubblicato per una chiave di contenuto (D8: vale per coordinare il lavoro).
+ *
+ * @property failedBy per ogni famiglia di decoder fallita, i dispositivi che lo dichiarano (R5: chi prepara non crede a un
+ *   altro dispositivo che dice "la tua famiglia ha fallito", vedi `LeasedWorkUnits`).
+ */
+data class PublishedProgress(
+  val classes: Set<SegmentClass>,
+  val failedDecoders: Set<String>,
+  val failedBy: Map<String, Set<String>> = emptyMap(),
+) {
   companion object {
     val NONE = PublishedProgress(emptySet(), emptySet())
   }
@@ -70,24 +80,52 @@ interface PublishedClasses {
  * [PublishedClasses] sopra [RemoteIndex]: tiene in memoria, per dispositivo, l'ultima testa accettata e i record `meta`
  * dei suoi segmenti (D5: per percorso vince il `seq` piu' alto; le lapidi tolgono). Una testa rifiutata (revocato,
  * perso, firma: E-I15) toglie i dati di quel dispositivo: i suoi media tornano "da preparare".
+ *
+ * **Classi verificate** (R5 della revisione 4A). La maschera `prep` di un record e' solo cio' che il dispositivo dichiara: un
+ * dispositivo compromesso che dichiara "tutto preparato" senza pubblicare un blob fermerebbe per sempre la preparazione di
+ * tutta la share. Le classi di un record contano solo se **quel** dispositivo ha davvero pubblicato la miniatura S di quella
+ * chiave in un segmento `thumbS` elencato dalla sua testa: la preparazione produce tutte le classi in un passaggio solo (D12),
+ * quindi chi non ha la S non ha preparato niente. Le chiavi dei segmenti `thumbS` si prendono dalla replica locale
+ * ([localBlobKeys], senza rete) o, se la replica non li ha ancora, dalla tabella del segmento scaricato (nel budget del giro,
+ * una volta per segmento: il nome e' l'impronta). Finche' una S non e' verificata il media resta "da preparare": al peggio
+ * lavoro doppio, mai lavoro perso.
  */
 class RemotePublishedClasses(
   private val remote: RemoteIndex,
   /** Chiamata a ogni [refresh]: un giro nuovo per il budget delle letture (`NasRemoteIndex.startRound`). */
   private val startRound: () -> Unit = {},
   /**
-   * Byte di segmenti `meta` scaricati al massimo per [refresh]: un dispositivo compromesso che elenca migliaia di
-   * segmenti enormi costa al piu' questo a ogni giro (i suoi dati restano quelli di prima, il resto al giro dopo).
+   * Byte di segmenti scaricati al massimo per [refresh] (`meta` e tabelle `thumbS`): un dispositivo compromesso che elenca
+   * migliaia di segmenti enormi costa al piu' questo a ogni giro (i suoi dati restano quelli di prima, il resto al giro dopo).
    */
   private val maxBytesPerRefresh: Long = DEFAULT_MAX_BYTES_PER_REFRESH,
+  /**
+   * Le chiavi (attestate) di un segmento d'immagini che la replica locale ha gia' applicato: (share, dispositivo, impronta,
+   * classe) → chiavi, o null se non lo conosce. `:app` la lega a `LocalReplica.blobKeysOfSegment`.
+   */
+  private val localBlobKeys: (suspend (share: String, device: String, segment: String, cls: SegmentClass) -> Set<ContentKey>?)? = null,
 ) : PublishedClasses {
 
   companion object {
     const val DEFAULT_MAX_BYTES_PER_REFRESH: Long = 64L * 1024 * 1024
+
+    /** La classe che prova che un dispositivo ha preparato davvero una chiave (D12: un passaggio solo, la S c'e' sempre). */
+    val EVIDENCE_CLASS: SegmentClass = SegmentClass.THUMB_S
   }
 
-  private class DeviceState(var mark: HeadMark?, val segments: HashMap<String, List<MetaRecord>> = HashMap()) {
+  private class DeviceState(val device: String, var mark: HeadMark?, val segments: HashMap<String, List<MetaRecord>> = HashMap()) {
     var progress: Map<ContentKey, PublishedProgress> = emptyMap()
+
+    /** L'ultima testa accettata (per riscaricare una tabella `thumbS` senza rileggerla). */
+    var head: IndexHeadView? = null
+
+    /** I segmenti `thumbS` elencati dalla testa corrente. */
+    var thumbs: List<ClassedSegment> = emptyList()
+
+    /** Le chiavi verificate di ogni segmento `thumbS` (per impronta: un segmento non cambia mai). */
+    val thumbKeys: HashMap<String, Set<ContentKey>> = HashMap()
+
+    val unverified: Boolean get() = thumbs.any { it.ref.hash !in thumbKeys }
   }
 
   private val lock = Any()
@@ -95,6 +133,10 @@ class RemotePublishedClasses(
 
   /** Segmenti `meta` scaricati (per i test: quante letture). */
   @Volatile var segmentReads: Int = 0
+    private set
+
+  /** Tabelle `thumbS` scaricate per verificare le classi (R5). */
+  @Volatile var evidenceReads: Int = 0
     private set
 
   override suspend fun refresh(share: String): RemoteResult<Unit> {
@@ -107,14 +149,21 @@ class RemotePublishedClasses(
     synchronized(lock) { known.keys.retainAll(devices.toSet()) }
     val budget = longArrayOf(maxBytesPerRefresh)
     for (device in devices) {
-      val state = synchronized(lock) { known.getOrPut(device) { DeviceState(null) } }
+      val state = synchronized(lock) { known.getOrPut(device) { DeviceState(device, null) } }
       when (val r = remote.latestHead(share, device, state.mark)) {
         is RemoteResult.Failed -> return r
         is RemoteResult.Ok -> when (val fetch = r.value) {
-          HeadFetch.NoChange, HeadFetch.None -> Unit
+          HeadFetch.NoChange, HeadFetch.None -> {
+            // Una testa gia' nota con tabelle `thumbS` non ancora verificate (budget finito o replica indietro): si riprova.
+            if (synchronized(lock) { state.unverified }) {
+              val failure = verify(share, device, state, budget)
+              recompute(state)
+              if (failure != null) return RemoteResult.Failed(failure)
+            }
+          }
           is HeadFetch.Rejected -> synchronized(lock) { known.remove(device) }
           is HeadFetch.Accepted -> {
-            val failure = apply(fetch.head, state, budget)
+            val failure = apply(share, fetch.head, state, budget)
             if (failure != null) return RemoteResult.Failed(failure)
           }
         }
@@ -123,8 +172,8 @@ class RemotePublishedClasses(
     return RemoteResult.Ok(Unit)
   }
 
-  /** Applica la testa nuova; se il budget non basta a scaricarne i segmenti nuovi, si tiene lo stato di prima (null). */
-  private suspend fun apply(head: IndexHeadView, state: DeviceState, budget: LongArray): RemoteFailure? {
+  /** Applica la testa nuova; se il budget non basta a scaricarne i segmenti `meta` nuovi, si tiene lo stato di prima (null). */
+  private suspend fun apply(share: String, head: IndexHeadView, state: DeviceState, budget: LongArray): RemoteFailure? {
     val metas = head.segments.filter { it.cls == SegmentClass.META }
     val missing = metas.filter { synchronized(lock) { it.ref.hash !in state.segments } }.sumOf { it.ref.size }
     if (missing > budget[0]) return null
@@ -146,30 +195,76 @@ class RemotePublishedClasses(
         }
       }
     }
-    val byPath = HashMap<String, MetaRecord>()
-    for (record in fresh.values.flatten()) {
-      val k = IndexKeys.metaHex(record.path)
-      val previous = byPath[k]
-      if (previous == null || previous.seq < record.seq) byPath[k] = record
-    }
-    val progress = HashMap<ContentKey, PublishedProgress>()
-    for (record in byPath.values) {
-      if (record !is MetaRecord.Present) continue
-      val file = record.file
-      val contentKey = file.contentKey // calcolata a ogni accesso (SHA-256): una volta sola
-      val old = progress[contentKey] ?: PublishedProgress.NONE
-      progress[contentKey] = PublishedProgress(
-        old.classes + file.preparedClasses,
-        old.failedDecoders + listOfNotNull(file.failure?.decoder),
-      )
-    }
+    val thumbs = head.segments.filter { it.cls == EVIDENCE_CLASS }
     synchronized(lock) {
       state.mark = head.mark
+      state.head = head
       state.segments.clear()
       state.segments.putAll(fresh)
-      state.progress = progress
+      state.thumbs = thumbs
+      state.thumbKeys.keys.retainAll(thumbs.mapTo(HashSet()) { it.ref.hash })
+    }
+    val failure = verify(share, head.deviceId, state, budget)
+    recompute(state)
+    return failure
+  }
+
+  /**
+   * R5: le chiavi dei segmenti `thumbS` della testa corrente, dalla replica locale o dalla tabella del segmento (nel
+   * budget). Un segmento assente o rifiutato non verifica niente.
+   */
+  private suspend fun verify(share: String, device: String, state: DeviceState, budget: LongArray): RemoteFailure? {
+    val (head, todo) = synchronized(lock) { state.head to state.thumbs.filter { it.ref.hash !in state.thumbKeys } }
+    if (head == null) return null
+    for (segment in todo) {
+      val local = localBlobKeys?.invoke(key(share), device, segment.ref.hash, EVIDENCE_CLASS)
+      if (local != null) {
+        synchronized(lock) { state.thumbKeys[segment.ref.hash] = local }
+        continue
+      }
+      if (segment.ref.size > budget[0]) continue
+      budget[0] -= segment.ref.size
+      evidenceReads++
+      val keys = when (val r = remote.segment(head, segment)) {
+        is RemoteResult.Failed -> return r.failure
+        is RemoteResult.Ok -> when (val fetch = r.value) {
+          is SegmentFetch.Ok ->
+            (fetch.content as? SegmentContent.Blobs)?.takeIf { it.cls == EVIDENCE_CLASS }?.entries?.mapTo(HashSet()) { it.contentKey }.orEmpty()
+          SegmentFetch.Missing, is SegmentFetch.Rejected -> emptySet()
+        }
+      }
+      synchronized(lock) { state.thumbKeys[segment.ref.hash] = keys }
     }
     return null
+  }
+
+  /** I progressi del dispositivo dai suoi record correnti: classi solo per le chiavi con la S verificata (R5). */
+  private fun recompute(state: DeviceState) {
+    synchronized(lock) {
+      val byPath = HashMap<String, MetaRecord>()
+      for (record in state.segments.values.flatten()) {
+        val k = IndexKeys.metaHex(record.path)
+        val previous = byPath[k]
+        if (previous == null || previous.seq < record.seq) byPath[k] = record
+      }
+      val verified = HashSet<ContentKey>()
+      state.thumbKeys.values.forEach { verified += it }
+      val progress = HashMap<ContentKey, PublishedProgress>()
+      for (record in byPath.values) {
+        if (record !is MetaRecord.Present) continue
+        val file = record.file
+        val contentKey = file.contentKey // calcolata a ogni accesso (SHA-256): una volta sola
+        val old = progress[contentKey] ?: PublishedProgress.NONE
+        val classes = if (contentKey in verified) file.preparedClasses else emptySet()
+        val failed = file.failure?.decoder
+        progress[contentKey] = PublishedProgress(
+          old.classes + classes,
+          old.failedDecoders + listOfNotNull(failed),
+          if (failed == null) old.failedBy else old.failedBy + (failed to setOf(state.device)),
+        )
+      }
+      state.progress = progress
+    }
   }
 
   override fun progress(share: String, keys: Collection<ContentKey>): Map<ContentKey, PublishedProgress> = synchronized(lock) {
@@ -177,7 +272,9 @@ class RemotePublishedClasses(
     keys.associateWith { k ->
       devices.fold(PublishedProgress.NONE) { acc, d ->
         val p = d.progress[k] ?: return@fold acc
-        PublishedProgress(acc.classes + p.classes, acc.failedDecoders + p.failedDecoders)
+        val by = HashMap(acc.failedBy)
+        p.failedBy.forEach { (family, devices) -> by[family] = by[family].orEmpty() + devices }
+        PublishedProgress(acc.classes + p.classes, acc.failedDecoders + p.failedDecoders, by)
       }
     }
   }

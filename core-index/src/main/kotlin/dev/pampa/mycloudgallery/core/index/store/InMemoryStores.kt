@@ -92,6 +92,20 @@ class InMemoryIndexPublishStore : IndexPublishStore {
     transactions++
   }
 
+  override suspend fun reserveSeqs(share: String, count: Int): Long = synchronized(lock) {
+    require(count >= 0) { "Conteggio negativo." }
+    val s = state(share)
+    check(s.nextSeq + count - 1 <= TrustLimits.MAX_RECORD_SEQ) { "seq esauriti per questa share." }
+    val first = s.nextSeq
+    s.nextSeq += count
+    transactions++
+    first
+  }
+
+  override suspend fun outboxShares(): Set<String> = synchronized(lock) {
+    shares.filterValues { it.records.isNotEmpty() || it.blobs.isNotEmpty() }.keys.toSet()
+  }
+
   override suspend fun pending(): PendingCounts = synchronized(lock) {
     PendingCounts(
       records = shares.values.sumOf { it.records.size },

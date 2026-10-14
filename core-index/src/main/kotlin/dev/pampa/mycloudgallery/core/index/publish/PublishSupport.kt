@@ -49,6 +49,17 @@ class IndexWriteRules(private val flags: FeatureFlags, private val gate: IndexWr
     if (flags.indexPublishTestSharesOnly && !TestShares.isTestShare(share)) return WriteBlock.LOCAL_ONLY
     return gate.blockFor(share)
   }
+
+  /**
+   * Un blocco che non passa da solo (R2 della revisione 4A): D31 su una share vera ([WriteBlock.LOCAL_ONLY]) o un'area in
+   * sola lettura per questo account ([WriteBlock.READ_ONLY_AREA], E-I19). Con questi niente va nell'outbox: la preparazione
+   * resta utile in locale (replica) e non si accumula un arretrato da pubblicare mesi dopo. Gli altri blocchi (congelamento,
+   * salto dell'ora, emergenza, fiducia) sono temporanei: l'outbox aspetta, con un tetto.
+   */
+  suspend fun permanentBlockFor(share: String): WriteBlock? {
+    if (flags.indexPublishTestSharesOnly && !TestShares.isTestShare(share)) return WriteBlock.LOCAL_ONLY
+    return gate.blockFor(share)?.takeIf { it == WriteBlock.READ_ONLY_AREA }
+  }
 }
 
 /** Cio' che il catalogo locale sa di un file di una share: il timbro dell'ultimo elenco e l'impronta rapida letta qui. */

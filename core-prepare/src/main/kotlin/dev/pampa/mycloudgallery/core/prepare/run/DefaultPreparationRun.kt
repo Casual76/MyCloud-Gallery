@@ -27,6 +27,7 @@ import dev.pampa.mycloudgallery.core.prepare.contract.PrepRecordSource
 import dev.pampa.mycloudgallery.core.prepare.contract.PrepResult
 import dev.pampa.mycloudgallery.core.prepare.contract.PrepSpec
 import dev.pampa.mycloudgallery.core.prepare.contract.PrepStop
+import dev.pampa.mycloudgallery.core.prepare.contract.PrepStorage
 import dev.pampa.mycloudgallery.core.prepare.contract.PrepVerdict
 import dev.pampa.mycloudgallery.core.prepare.contract.PreparationRun
 import dev.pampa.mycloudgallery.core.prepare.contract.PrepareSource
@@ -87,6 +88,8 @@ class DefaultPreparationRun(
   private val slowPause: Duration = 300.milliseconds,
   private val onStart: () -> Unit = {},
   private val dispatcher: CoroutineDispatcher = Dispatchers.Default,
+  /** R2: lo spazio libero del telefono; sotto [PrepStorage.MIN_FREE_BYTES] il giro si ferma con [PrepStop.STORAGE]. */
+  private val storage: PrepStorage? = null,
 ) : PreparationRun {
 
   private class Tally {
@@ -225,6 +228,11 @@ class DefaultPreparationRun(
       unit.halt.compareAndSet(null, PrepStop.BUDGET)
       return false
     }
+    val space = storage
+    if (space != null && runCatching { space.usableBytes() }.getOrDefault(0L) < PrepStorage.MIN_FREE_BYTES) {
+      unit.halt.compareAndSet(null, PrepStop.STORAGE)
+      return false
+    }
     unit.renewLock.withLock {
       if ((clock.nanos() - unit.lastRenewNanos).nanoseconds >= renewEvery) {
         when (val renewed = workUnits.keepAlive(unit.claim)) {
@@ -249,6 +257,7 @@ class DefaultPreparationRun(
     PrepStop.UNAVAILABLE -> "NAS_UNREACHABLE"
     PrepStop.BLOCKED -> "BLOCKED"
     PrepStop.NO_WORK -> "NO_WORK"
+    PrepStop.STORAGE -> "PHONE_STORAGE"
   }
 
   // --- Un media ----------------------------------------------------------------------------------------------------

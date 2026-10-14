@@ -8,6 +8,7 @@ import dev.pampa.mycloudgallery.core.database.NasMetadataResult
 import dev.pampa.mycloudgallery.core.database.NasMetadataUpdate
 import dev.pampa.mycloudgallery.core.database.NasRelocation
 import dev.pampa.mycloudgallery.core.database.NasScanState
+import dev.pampa.mycloudgallery.core.database.NasScanWindow
 import dev.pampa.mycloudgallery.core.database.SeenNasFile
 import dev.pampa.mycloudgallery.core.index.publish.CatalogFile
 import dev.pampa.mycloudgallery.core.index.publish.ShareCatalog
@@ -39,6 +40,7 @@ import dev.pampa.mycloudgallery.core.nasmedia.contract.NasScanCursor
 import dev.pampa.mycloudgallery.core.nasmedia.contract.NasScanStore
 import dev.pampa.mycloudgallery.core.nasmedia.contract.NasSeen
 import dev.pampa.mycloudgallery.core.nasmedia.contract.ScanDiff
+import dev.pampa.mycloudgallery.core.nasmedia.contract.ScanWindow
 import dev.pampa.mycloudgallery.core.trust.data.MetaFile
 import dev.pampa.mycloudgallery.core.trust.data.MetaRecord
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
@@ -59,7 +61,9 @@ class MediaCatalogScanStore(private val catalog: MediaCatalog) : NasScanStore {
   override suspend fun saveCursor(cursor: NasScanCursor) = catalog.saveNasScanState(cursor.toState())
 
   override suspend fun knownIn(account: AccountId, share: String, folder: NasPath?): Map<LocationKey, KnownNasFile> =
-    catalog.knownNasFiles(account, share, folder).mapValues { (_, known) -> KnownNasFile(known.locationId, known.stamp, known.state) }
+    catalog.knownNasFiles(account, share, folder).mapValues { (_, known) ->
+      KnownNasFile(known.locationId, known.stamp, known.state, known.adoptedQuickHash)
+    }
 
   override suspend fun countPresent(account: AccountId, share: String): Int = catalog.countPresentNas(account, share)
 
@@ -68,7 +72,9 @@ class MediaCatalogScanStore(private val catalog: MediaCatalog) : NasScanStore {
     whenUndecided: MediaCatalog.WhenUndecided,
     cursor: NasScanCursor?,
     seenAt: Long,
-  ): List<MediaCatalog.RecordOutcome> = catalog.recordAll(observations, whenUndecided, seenAt = seenAt, nasCursor = cursor?.toState())
+    fingerprintsAdopted: Boolean,
+  ): List<MediaCatalog.RecordOutcome> =
+    catalog.recordAll(observations, whenUndecided, seenAt = seenAt, nasCursor = cursor?.toState(), fingerprintAdopted = fingerprintsAdopted)
 
   override suspend fun confirmAllPresent(seen: List<NasSeen>, seenAt: Long, cursor: NasScanCursor?): List<Boolean> =
     catalog.confirmAllPresentNas(seen.map { SeenNasFile(it.location, it.stamp) }, seenAt, cursor?.toState())
@@ -128,6 +134,7 @@ class MediaCatalogScanStore(private val catalog: MediaCatalog) : NasScanStore {
     resumeAfter = resumeAfter,
     lastFullScanAt = lastFullScanAt,
     freeze = freeze?.let { Freeze(it.reason, it.sinceNasMillis, ScanDiff(it.knownPresent, it.vanished, it.changed, it.notMedia)) },
+    window = window?.let { ScanWindow(it.startNasMillis, it.knownPresent, it.vanished, it.changed, it.notMedia) },
   )
 
   private fun NasScanCursor.toState(): NasScanState = NasScanState(
@@ -137,6 +144,7 @@ class MediaCatalogScanStore(private val catalog: MediaCatalog) : NasScanStore {
     resumeAfter = resumeAfter,
     lastFullScanAt = lastFullScanAt,
     freeze = freeze?.let { NasFreeze(it.reason, it.sinceNasMillis, it.diff.knownPresent, it.diff.vanished, it.diff.changed, it.diff.notMedia) },
+    window = window?.let { NasScanWindow(it.startNasMillis, it.knownPresent, it.vanished, it.changed, it.notMedia) },
   )
 }
 
@@ -149,7 +157,12 @@ class MediaCatalogScanStore(private val catalog: MediaCatalog) : NasScanStore {
  *   d'identita' del catalogo (`IdentityRules` di core-model: rifiuto se l'id remoto e' gia' legato qui ad altri byte, mai
  *   un'unione senza hash completo, media con copie sul telefono che tengono il loro id, D8);
  * - **nessun record valido**: si toglie cio' che esisteva solo per l'indice; cio' che ha visto la scansione resta;
- * - **share tolta** (E-I8): via i media che esistevano solo per l'indice.
+ * - **share tolta** (E-I8): via i media che esistevano solo per l'indice e, R10 della revisione 4A, anche le posizioni viste
+ *   dalla scansione (diventano assenti: escono dalla Libreria e dopo 30 giorni dal catalogo, con date, luoghi e nomi) e le
+ *   miniature provvisorie delle chiavi che nessun'altra posizione usa piu' ([forgetProvisional]).
+ *
+ * Le impronte dei file nati solo dall'indice sono **adottate** (R6): niente legami per contenuto, segnate nel catalogo finche'
+ * una scansione non legge il file qui.
  *
  * Le share arrivano in forma di chiave (minuscolo): [shareName] da' il nome com'e' configurato (quello che si apre via SMB).
  */
@@ -157,6 +170,8 @@ class CatalogReplicaPort(
   private val catalog: MediaCatalog,
   private val account: suspend () -> AccountId?,
   private val shareName: (String) -> String,
+  /** R10: toglie le miniature provvisorie di queste chiavi ridotte (`ProvisionalThumbnails.forget`). */
+  private val forgetProvisional: suspend (Set<Long>) -> Unit = {},
 ) : ReplicaCatalog {
 
   override suspend fun listingStamps(share: String, pathKeys: Collection<String>): Map<String, NasStamp> {
@@ -207,7 +222,7 @@ class CatalogReplicaPort(
     if (retire.isNotEmpty()) catalog.markNasVanished(retire)
     if (created.isNotEmpty()) {
       // Mai unire sulla parola dell'indice (D8): nel dubbio un media separato; "visto a" zero = nato dall'indice.
-      val recorded = catalog.recordAll(created.map { it.second }, MediaCatalog.WhenUndecided.KEEP_SEPARATE, seenAt = 0L)
+      val recorded = catalog.recordAll(created.map { it.second }, MediaCatalog.WhenUndecided.KEEP_SEPARATE, seenAt = 0L, fingerprintAdopted = true)
       val updates = created.mapIndexedNotNull { j, (i, _) ->
         recorded[j].locationId?.let { NasMetadataUpdate(it, NasMetadataResult.Read(createdMeta.getValue(i), files[i].winner!!.file.kind)) }
       }
@@ -223,8 +238,19 @@ class CatalogReplicaPort(
 
   override suspend fun dropShare(share: String) {
     val owner = account() ?: return
-    val indexOnly = catalog.nasLocationsInShare(owner, shareName(share)).filter { it.indexOnly && it.state != LocationState.ABSENT }
-    if (indexOnly.isNotEmpty()) catalog.markNasVanished(indexOnly.map { it.location.key })
+    // R10 (revisione 4A): l'account non vede piu' la share (E-I8, due giorni di rifiuti). Non solo i file nati dall'indice:
+    // tutte le posizioni della share escono dalla Libreria (assenti; dopo 30 giorni il catalogo le toglie del tutto), a lotti.
+    val live = catalog.nasLocationsInShare(owner, shareName(share)).filter { it.state != LocationState.ABSENT }
+    if (live.isEmpty()) return
+    val dropped = HashSet<Long>()
+    for (chunk in live.chunked(MediaCatalog.DEFAULT_NAS_CAP)) {
+      for (info in chunk) catalog.nasContentKeyOf(info.locationId)?.let { dropped += it }
+      catalog.markNasVanished(chunk.map { it.location.key })
+    }
+    // Le miniature provvisorie (EXIF, decodifica dell'originale) delle chiavi che nessun'altra posizione usa piu'.
+    val stillUsed = catalog.liveNasShortKeys()
+    val orphans = dropped.filterTo(HashSet()) { it !in stillUsed }
+    if (orphans.isNotEmpty()) forgetProvisional(orphans)
   }
 
   private fun outcomeOf(result: AdoptOutcome, fresh: Boolean): IdentityOutcome = when (result) {

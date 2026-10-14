@@ -37,6 +37,7 @@ import dev.pampa.mycloudgallery.core.nas.contract.NasCredentialSource
 import dev.pampa.mycloudgallery.core.nas.contract.NasHousekeeping
 import dev.pampa.mycloudgallery.core.nas.contract.NasSessionManager
 import dev.pampa.mycloudgallery.core.nas.contract.ShareProbe
+import dev.pampa.mycloudgallery.core.nas.session.ShareFences
 import dev.pampa.mycloudgallery.core.network.contract.HomeCapture
 import dev.pampa.mycloudgallery.core.network.contract.HomeFingerprintStore
 import dev.pampa.mycloudgallery.core.network.contract.LocalNetworkPermission
@@ -96,6 +97,9 @@ object GraphModule {
   @Singleton
   fun graph(@ApplicationContext context: Context, platform: AppPlatform, flags: FeatureFlags): AppGraph {
     val window = InviteWindowStore(File(context.noBackupFilesDir, WorkManagerTrustSyncScheduler.INVITE_WINDOW_FILE))
+    // D33 per tutto il processo (R11 della revisione 4A): anche il test di connessione dell'onboarding e la sessione
+    // "estranea" del kit di recupero, che aprono una share con una connessione loro, passano dalla recinzione.
+    ShareFences.install(DeveloperTools.shareGuard())
     return AppGraph(
       context = context,
       // La vita del processo: niente la cancella. Un errore in un figlio non ferma gli altri.

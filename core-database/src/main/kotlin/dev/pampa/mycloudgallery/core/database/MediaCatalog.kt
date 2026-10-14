@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.core.database
 
 import androidx.room.withTransaction
 import dev.pampa.mycloudgallery.core.database.dao.TimelineIndexDao
+import dev.pampa.mycloudgallery.core.database.entity.NasAdoptedFingerprintEntity
 import dev.pampa.mycloudgallery.core.database.entity.EmbeddingEntity
 import dev.pampa.mycloudgallery.core.database.entity.IndexRow
 import dev.pampa.mycloudgallery.core.database.entity.MediaAliasEntity
@@ -180,6 +181,12 @@ class MediaCatalog(
    *
    * [inSameTransaction], se c'e', gira nella stessa transazione dopo le osservazioni (es. P4: le righe di `index_record`
    * e il `HeadMark` del segmento applicato, con i DAO di [GalleryDatabase]): o tutto o niente.
+   *
+   * **Impronte adottate** (R6 della revisione 4A, D8). Con [fingerprintAdopted] l'impronta rapida delle osservazioni non e'
+   * stata letta qui ma viene da un record dell'indice di un altro dispositivo: niente legami per contenuto (nessun media del
+   * telefono ne' del NAS con la stessa impronta, nessuno spostamento riconosciuto dall'impronta, nessun gruppo provvisorio) e
+   * la posizione resta segnata "adottata" ([KnownNasLocation.adoptedQuickHash]) finche' la scansione non rileva il file
+   * qui. Senza, le posizioni del NAS registrate perdono il segno: l'impronta e' quella letta adesso.
    */
   suspend fun recordAll(
     observations: List<Observation>,
@@ -187,9 +194,10 @@ class MediaCatalog(
     cursor: MediaStoreCursor? = null,
     seenAt: Long? = null,
     nasCursor: NasScanState? = null,
+    fingerprintAdopted: Boolean = false,
     inSameTransaction: (suspend () -> Unit)? = null,
   ): List<RecordOutcome> = write { tx ->
-    val outcomes = observations.map { recordOne(tx, it, whenUndecided, seenAt) }
+    val outcomes = observations.map { recordOne(tx, it, whenUndecided, seenAt, fingerprintAdopted) }
     cursor?.let { saveCursor(tx, it) }
     nasCursor?.let { nasScanDao.upsert(it.toEntity()) }
     inSameTransaction?.invoke()
@@ -300,14 +308,22 @@ class MediaCatalog(
    * (`null` = la radice), per chiave di posto (`NasScanStore.knownIn`): la scansione li confronta con l'elenco senza
    * leggere byte (D9).
    */
-  suspend fun knownNasFiles(account: AccountId, share: String, folder: NasPath?): Map<LocationKey, KnownNasLocation> =
-    locationDao.knownInFolder(Location.Nas.folderKey(account, share, folder)).associate { entity ->
+  suspend fun knownNasFiles(account: AccountId, share: String, folder: NasPath?): Map<LocationKey, KnownNasLocation> {
+    val rows = locationDao.knownInFolder(Location.Nas.folderKey(account, share, folder))
+    // R6: le impronte adottate dall'indice (e non lette qui) della cartella.
+    val adopted = HashMap<Long, String>()
+    rows.map { it.locationId }.chunked(TimelineIndexDao.MAX_IDS).forEach { chunk ->
+      nasScanDao.adoptedAmong(chunk).forEach { adopted[it.locationId] = it.quickHash }
+    }
+    return rows.associate { entity ->
       LocationKey(entity.locationKey) to KnownNasLocation(
         locationId = LocationId(entity.locationId),
         stamp = NasStamp(entity.size, entity.modifiedAt, entity.fileId),
         state = enumByCode(entity.state),
+        adoptedQuickHash = adopted[entity.locationId]?.let { runCatching { QuickHash(it) }.getOrNull() },
       )
     }
+  }
 
   /** Quanti file presenti ha la share nel catalogo (le soglie del congelamento, D10; `NasScanStore.countPresent`). */
   suspend fun countPresentNas(account: AccountId, share: String): Int =
@@ -470,6 +486,9 @@ class MediaCatalog(
    * queste [keys] escono dalla Libreria **per scelta**, quindi diventano assenti subito. Una transazione; quante ne ha tolte.
    */
   suspend fun retireNas(account: AccountId, share: String, folders: List<NasPath>, keys: List<LocationKey>): Int = write { tx ->
+    // R9 (revisione 4A): come le assenze, niente esce dalla Libreria da una share congelata (D10), anche se chi chiama se
+    // ne dimentica: le copertine "nuove" (un file audio messo in ogni cartella) non devono svuotarla mentre e' ferma.
+    if (nasScanDao.get(account.value, Location.Nas.shareKeyOf(share))?.freezeReason != null) return@write 0
     val now = clock()
     val chosen = LinkedHashMap<Long, MediaLocationEntity>()
     for (folder in folders) {
@@ -532,6 +551,22 @@ class MediaCatalog(
     }
   }
 
+
+  /**
+   * R10 (revisione 4A): le chiavi di contenuto ridotte (`ContentKey.short`) delle posizioni del NAS non assenti, di ogni
+   * share: una miniatura provvisoria di una chiave che nessuna usa piu' si puo' togliere.
+   */
+  suspend fun liveNasShortKeys(): Set<Long> =
+    locationDao.liveNasFingerprints().mapNotNullTo(HashSet()) { row ->
+      runCatching { ContentKey.of(QuickHash(row.quickHash), row.size).short }.getOrNull()
+    }
+
+  /** R10: la chiave di contenuto ridotta (impronta rapida e dimensione) della versione di una posizione, se nota. */
+  suspend fun nasContentKeyOf(locationId: LocationId): Long? {
+    val entity = locationDao.get(locationId.value) ?: return null
+    val quick = versionDao.get(entity.versionId)?.quickHash ?: return null
+    return runCatching { ContentKey.of(QuickHash(quick), entity.size).short }.getOrNull()
+  }
 
   /** Il media che ha la posizione [locationId] (alias risolti), se c'e' ancora (P11: "Scarica sul telefono", D20). */
   suspend fun mediaIdOfLocation(locationId: LocationId): MediaId? = locationDao.mediaIdOf(locationId.value)?.let { resolve(MediaId(it)) }
@@ -874,12 +909,26 @@ class MediaCatalog(
     }
   }
 
-  private suspend fun recordOne(tx: Tx, observation: Observation, whenUndecided: WhenUndecided, seenAt: Long?): RecordOutcome {
-    val decided = LinkingRules.decide(observation, loadContext(observation))
+  private suspend fun recordOne(
+    tx: Tx,
+    observation: Observation,
+    whenUndecided: WhenUndecided,
+    seenAt: Long?,
+    fingerprintAdopted: Boolean = false,
+  ): RecordOutcome {
+    val decided = LinkingRules.decide(observation, loadContext(observation, byContent = !fingerprintAdopted))
     val decision = if (whenUndecided == WhenUndecided.KEEP_SEPARATE) keepSeparate(decided) else decided
     val target = apply(tx, decision, observation, seenAt ?: clock())
-    if (whenUndecided == WhenUndecided.KEEP_SEPARATE && target != null) {
+    if (whenUndecided == WhenUndecided.KEEP_SEPARATE && target != null && !fingerprintAdopted) {
       undecidedCandidates(decided)?.let { groupProbableDuplicates(tx, target.first, observation, it) }
+    }
+    // R6: il segno "impronta adottata" segue l'ultima osservazione della posizione del NAS.
+    if (target != null && observation.location is Location.Nas) {
+      if (fingerprintAdopted) {
+        nasScanDao.upsertAdopted(listOf(NasAdoptedFingerprintEntity(target.second.value, observation.fingerprint.quickHash.hex)))
+      } else {
+        nasScanDao.deleteAdopted(listOf(target.second.value))
+      }
     }
     // Un gruppo provvisorio risolto qui (hash completo appena imparato) puo' aver unito il media: vale il sopravvissuto.
     val mediaId = target?.first?.let { resolve(it) ?: it }
@@ -1045,7 +1094,7 @@ class MediaCatalog(
     }
   }
 
-  private suspend fun loadContext(observation: Observation): LinkContext {
+  private suspend fun loadContext(observation: Observation, byContent: Boolean = true): LinkContext {
     val key = observation.location.key.value
     val fingerprint = observation.fingerprint
     val atSameKey = locationDao.byKey(key)?.let { known(it) }
@@ -1054,6 +1103,8 @@ class MediaCatalog(
         locationDao.byMediaStoreId(phone.volume, id).firstOrNull { it.locationKey != key }?.let { known(it) }
       }
     }
+    // R6: un'impronta adottata dall'indice non lega niente per contenuto (D8: serve l'impronta letta qui).
+    if (!byContent) return LinkContext(atSameKey, atSameMediaStoreId)
     val sameContent = versionDao.byQuickFingerprint(fingerprint.size, fingerprint.quickHash.hex)
       .map { ContentCandidate(MediaId(it.mediaId), it.toDomain()) }
     val vanished = locationDao.vanishedWithContent(observation.location.type.code, fingerprint.size, fingerprint.quickHash.hex)
@@ -1602,6 +1653,8 @@ class MediaCatalog(
       "nas_op",
       "nas_op_item",
       "nas_trash_entry",
+      // revisione 4A (R6): per posizione, e una posizione resta la stessa anche quando il suo media si unisce a un altro.
+      "nas_adopted_fingerprint",
     )
 
     /**

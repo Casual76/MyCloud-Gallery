@@ -239,7 +239,30 @@ fun interface PrepInputs {
 }
 
 /** Perche' un giro di preparazione si e' fermato. */
-enum class PrepStop { BUDGET, RULES, NO_WORK, UNAVAILABLE, BLOCKED }
+enum class PrepStop {
+  BUDGET,
+  RULES,
+  NO_WORK,
+  UNAVAILABLE,
+  BLOCKED,
+
+  /** R2 della revisione 4A: sul telefono resta meno spazio libero di [PrepStorage.MIN_FREE_BYTES]. */
+  STORAGE,
+}
+
+/**
+ * Lo spazio libero del telefono dove finiscono le uscite della preparazione (outbox e replica in `noBackupFilesDir`), R2 della
+ * revisione 4A: sotto [MIN_FREE_BYTES] non si comincia un altro media (la fotocamera deve poter salvare). Null = non si
+ * controlla (test).
+ */
+fun interface PrepStorage {
+  fun usableBytes(): Long
+
+  companion object {
+    /** 1 GiB: sotto, la preparazione aspetta (non e' un errore: riprende quando c'e' spazio). */
+    const val MIN_FREE_BYTES: Long = 1L shl 30
+  }
+}
 
 /** Il resoconto di un giro (solo numeri). */
 data class RunResult(

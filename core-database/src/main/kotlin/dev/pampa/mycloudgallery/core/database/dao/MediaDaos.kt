@@ -283,6 +283,16 @@ interface LocationDao {
   @Query(NAS_WORK_ROWS_SQL)
   suspend fun nasWorkRows(account: String, shareKey: String): List<NasWorkRow>
 
+  /**
+   * R10 (revisione 4A): impronta rapida e dimensione delle posizioni del NAS non assenti (tutte le share, tutti gli account):
+   * le miniature provvisorie di una chiave si tengono solo se qualcuna la usa ancora.
+   */
+  @Query(
+    "SELECT v.quick_hash AS quickHash, l.size AS size FROM media_location l JOIN media_version v ON v.version_id = l.version_id " +
+      "WHERE l.share_key IS NOT NULL AND l.state != 'absent' AND v.quick_hash IS NOT NULL",
+  )
+  suspend fun liveNasFingerprints(): List<NasFingerprintRow>
+
   /** Tutte le posizioni della share per l'account (qualunque stato): la replica le confronta per percorso. */
   @Query("SELECT * FROM media_location WHERE account_id = :account AND share_key = :shareKey")
   suspend fun inShare(account: String, shareKey: String): List<MediaLocationEntity>
@@ -320,6 +330,9 @@ interface NasShareDao {
   @Query("SELECT * FROM nas_share")
   suspend fun all(): List<NasShareEntity>
 }
+
+/** Una riga di [LocationDao.liveNasFingerprints]. */
+data class NasFingerprintRow(val quickHash: String, val size: Long)
 
 /** Una riga di [LocationDao.nasWorkRows]. */
 data class NasWorkRow(

@@ -276,4 +276,52 @@ class NasThumbnailSourceTest {
     // E la richiesta diretta del telefono, senza sorgente, resta vuota (come prima).
     assertThat(router.load(MediaRef.Phone("external_primary", 1, null), 160, CancellationSignal())).isNull()
   }
+
+  // --- R1 (revisione 4A): la share del media e la chiave intera --------------------------------------------------------
+
+  /**
+   * Una replica con due blob per gli stessi primi 64 bit: quello dell'attaccante (rosso) per chi cerca senza perimetro, quello
+   * dell'area del media (verde) per chi cerca nella share giusta con la chiave intera.
+   */
+  private class TwoAreas : ReplicaBlobs {
+    val scoped = AtomicInteger()
+    val red = byteArrayOf(1, 0, 0, 0)
+    val green = byteArrayOf(2, 0, 0, 0)
+
+    override fun locate(contentKey: Long, cls: SegmentClass): BlobLocation? =
+      if (cls == SegmentClass.THUMB_S) BlobLocation(1, 0, 4, cls) else null
+
+    override fun locate(contentKey: Long, cls: SegmentClass, scope: dev.pampa.mycloudgallery.core.index.contract.BlobScope): BlobLocation? {
+      scoped.incrementAndGet()
+      if (cls != SegmentClass.THUMB_S) return null
+      return if (scope.shareKeys.firstOrNull() == "test" && scope.fullKey == key(1)) BlobLocation(2, 0, 4, cls) else null
+    }
+
+    override fun read(location: BlobLocation): ByteBuffer = ByteBuffer.wrap(if (location.packId == 2L) green else red)
+
+    override suspend fun estimate(quality: QualityLevel): SpaceEstimate = SpaceEstimate(0, 0)
+  }
+
+  @Test
+  fun r1_conIlPerimetroDelMediaLaMiniaturaVieneSoloDallaSuaAreaEConLaChiaveIntera() = runTest {
+    val blobs = TwoAreas()
+    val lookups = AtomicInteger()
+    val scopes = NasBlobScopes { r ->
+      lookups.incrementAndGet()
+      if (r.locationId == ref(1).locationId) dev.pampa.mycloudgallery.core.index.contract.BlobScope(listOf("Test", "test-comune"), key(1)) else null
+    }
+    val s = NasThumbnailSource(blobs, replica, NoNasOriginalThumbnails, NasTestSupport.ColorByFirstByte(), StandardTestDispatcher(testScheduler), scopes)
+
+    val loaded = s.loadResult(ref(1), ThumbBucket.S.px, CancellationSignal(), ThumbContext.Visible) as ThumbResult.Loaded
+    assertThat(near(center(loaded.bitmap), Color.GREEN)).isTrue()
+    // Il perimetro si risolve una volta e poi resta in memoria: `canUpgrade` non legge il catalogo.
+    assertThat(s.canUpgrade(ref(1), ThumbBucket.S.px)).isTrue()
+    s.loadResult(ref(1), ThumbBucket.S.px, CancellationSignal(), ThumbContext.Visible)
+    assertThat(lookups.get()).isEqualTo(1)
+
+    // Senza chi risolve il perimetro (benchmark) si cerca come prima.
+    val plain = NasThumbnailSource(blobs, replica, NoNasOriginalThumbnails, NasTestSupport.ColorByFirstByte(), StandardTestDispatcher(testScheduler))
+    val red = plain.loadResult(ref(1), ThumbBucket.S.px, CancellationSignal(), ThumbContext.Visible) as ThumbResult.Loaded
+    assertThat(near(center(red.bitmap), Color.RED)).isTrue()
+  }
 }

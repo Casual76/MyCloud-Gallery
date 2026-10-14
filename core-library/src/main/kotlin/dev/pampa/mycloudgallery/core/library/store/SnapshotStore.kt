@@ -29,9 +29,12 @@ import kotlinx.coroutines.withContext
 
 /**
  * L'istantanea su file dell'indice (D2, §1.2): `noBackupFilesDir/replica/timeline.idx`, per l'avvio a freddo sotto il
- * secondo (si legge in pochi millisecondi, prima di aprire il database). Formato **`MCGT1`**: "MCGT" + versione 1,
- * colonne binarie little-endian, CRC32 in coda. Un file di un'altra versione, troncato o corrotto si scarta
- * ([read] da' null) e l'indice si ricostruisce dal catalogo: mai un'eccezione verso la Libreria.
+ * secondo (si legge in pochi millisecondi, prima di aprire il database). Formato **`MCGT2`** (Fase 4, D18): "MCGT" +
+ * versione 2, colonne binarie little-endian, CRC32 in coda. Rispetto a `MCGT1` aggiunge la chiave di contenuto a 64 bit
+ * (`contentKey`) e il marcatore di riferimento al NAS in `refVolume`: la posizione NAS sta in `refId`, cosi' una cella
+ * solo-NAS parte dalla replica prima di aprire il database. Un file di un'altra versione (compreso `MCGT1`, scritto
+ * dall'app della Fase 3), troncato o corrotto si scarta ([read] da' null) e l'indice si ricostruisce dal catalogo: mai
+ * un'eccezione verso la Libreria.
  *
  * **Scrittura atomica**: si scrive `timeline.idx.tmp`, si forza su disco, poi si rinomina sopra il vecchio. Un crash a
  * meta' lascia il file precedente intero. L'accorpamento (al piu' una scrittura ogni 5 s) e' di [SnapshotWriter].
@@ -114,15 +117,24 @@ class SnapshotStore(
     /** La cartella dell'istantanea: `noBackupFilesDir/replica/` (fuori dal backup del telefono, come il database). */
     fun directory(context: Context): File = File(context.noBackupFilesDir, "replica")
 
-    /** "MCGT" e la versione del formato: un cambiamento delle colonne alza la versione, e i file vecchi si scartano. */
-    const val FORMAT_VERSION: Int = 1
+    /**
+     * "MCGT" e la versione del formato: un cambiamento delle colonne alza la versione, e i file vecchi si scartano.
+     * 1 = Fase 3 (`MCGT1`, scartato), 2 = Fase 4 (`MCGT2`).
+     */
+    const val FORMAT_VERSION: Int = 2
+
+    /** Un elemento occupa nel file almeno 68 byte di colonne a larghezza fissa (60 di margine): un conteggio che non ci sta e' un file corrotto. */
+    private const val MIN_BYTES_PER_ITEM = 60
     private val MAGIC = byteArrayOf('M'.code.toByte(), 'C'.code.toByte(), 'G'.code.toByte(), 'T'.code.toByte())
 
     private const val FLAG_PROVISIONAL = 1
     private const val BUFFER = 64 * 1024
     private const val TAG = "Library"
 
-    /** Le stesse colonne in un indice a colonne (senza riferimenti ai byte: non stanno nel contratto). */
+    /**
+     * Le stesse colonne in un indice a colonne. I riferimenti al telefono non stanno nel contratto e non si copiano;
+     * quello al NAS si'.
+     */
     fun columnarCopy(s: TimelineSnapshot): ColumnarTimelineSnapshot {
       val builder = TimelineIndexBuilder(s.size.coerceAtLeast(16))
       val id = LongArray(2)
@@ -134,6 +146,7 @@ class SnapshotStore(
           msb = id[0], lsb = id[1], sortTimeMs = s.sortTimeAt(i), localDay = s.localDayAt(i), kind = s.kindAt(i),
           source = s.sourceAt(i), flags = s.flagsAt(i), aspectMilli = s.aspectMilliAt(i), durationMs = s.durationMsAt(i),
           placeId = s.placeAt(i), thumbHash = s.thumbHashAt(i)?.bytes(), groupSize = s.groupSizeAt(i),
+          nasRef = s.nasRefAt(i),
         )
       }
       return builder.build(s.seq)
@@ -171,13 +184,14 @@ class SnapshotStore(
       w.longs(s.refId, n)
       w.bytes(s.refVolume, n)
       w.bytes(s.refMime, n)
+      w.longs(s.contentKey, n)
       w.ints(s.groupIndex, s.groupIndex.size)
       w.longs(s.groupMsb, s.groupMsb.size)
       w.longs(s.groupLsb, s.groupLsb.size)
       w.trailer()
     }
 
-    /** Legge il formato; null se non e' un `MCGT1` valido. [length] serve a rifiutare un'intestazione assurda. */
+    /** Legge il formato; null se non e' un `MCGT2` valido (un `MCGT1` si scarta). [length] serve a rifiutare un'intestazione assurda. */
     internal fun decode(input: InputStream, length: Long): Loaded? {
       val r = ColumnReader(input)
       val magic = ByteArray(4)
@@ -189,8 +203,8 @@ class SnapshotStore(
       val n = r.int()
       val thumbLength = r.int()
       val groups = r.int()
-      // Ogni elemento occupa almeno 50 byte nel file: un conteggio che non ci sta e' un file corrotto.
-      if (n < 0 || thumbLength < 0 || groups < 0 || groups > n || n.toLong() * 50 > length || thumbLength > length) return null
+      // Ogni elemento occupa almeno MIN_BYTES_PER_ITEM byte nel file: un conteggio che non ci sta e' un file corrotto.
+      if (n < 0 || thumbLength < 0 || groups < 0 || groups > n || n.toLong() * MIN_BYTES_PER_ITEM > length || thumbLength > length) return null
       val kindMap = r.strings().map { code -> MediaKind.entries.firstOrNull { it.code == code }?.ordinal ?: return null }
       val sourceMap = r.strings().map { code -> MediaSource.entries.firstOrNull { it.code == code }?.ordinal ?: return null }
       val volumes = r.strings().toTypedArray()
@@ -211,6 +225,7 @@ class SnapshotStore(
       val refId = r.longs(n)
       val refVolume = ByteArray(n).also { r.bytes(it, n) }
       val refMime = ByteArray(n).also { r.bytes(it, n) }
+      val contentKey = r.longs(n)
       val groupIndex = r.ints(groups)
       val groupMsb = r.longs(groups)
       val groupLsb = r.longs(groups)
@@ -227,14 +242,21 @@ class SnapshotStore(
       if (thumbOffsets[0] != 0 || thumbOffsets[n] != thumbLength) return null
       for (i in 0 until n) {
         if (thumbOffsets[i + 1] < thumbOffsets[i]) return null
-        if ((refVolume[i].toInt() and 0xFF) > volumes.size || (refMime[i].toInt() and 0xFF) > mimes.size) return null
+        val volume = refVolume[i].toInt() and 0xFF
+        // Un riferimento al NAS non ha un volume: ha una posizione (positiva) in refId e la sua chiave di contenuto.
+        if (volume == ColumnarTimelineSnapshot.NAS_REF) {
+          if (refId[i] <= 0L) return null
+        } else {
+          if (volume > volumes.size || contentKey[i] != 0L) return null
+        }
+        if ((refMime[i].toInt() and 0xFF) > mimes.size) return null
       }
       for (g in 0 until groups) {
         if (groupIndex[g] !in 0 until n || (g > 0 && groupIndex[g] <= groupIndex[g - 1])) return null
       }
       val snapshot = ColumnarTimelineSnapshot(
         seq, n, idMsb, idLsb, sortTime, localDay, kind, source, cellFlags, aspect, duration, place, groupSize,
-        thumbOffsets, thumbBytes, refId, refVolume, refMime, volumes, mimes, groupIndex, groupMsb, groupLsb,
+        thumbOffsets, thumbBytes, refId, refVolume, refMime, contentKey, volumes, mimes, groupIndex, groupMsb, groupLsb,
       )
       return Loaded(snapshot, provisional = flags and FLAG_PROVISIONAL != 0)
     }

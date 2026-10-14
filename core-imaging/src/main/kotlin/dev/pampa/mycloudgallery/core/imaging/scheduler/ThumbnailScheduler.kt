@@ -10,8 +10,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
-/** L'esito di un caricamento, per il pianificatore: serve solo a decidere se e quando riprovare. */
-internal enum class LoadResult { LOADED, FAILED }
+/**
+ * L'esito di un caricamento, per il pianificatore: serve solo a decidere se e quando riprovare.
+ *
+ * [DEFERRED] (Fase 4, P7): non c'e' niente da dare **adesso** e non per un errore (il contenuto del NAS non e'
+ * preparato e non e' visibile, quindi l'originale non si legge). Non e' un fallimento (non consuma i tentativi) e non si
+ * riprova da solo: si riprova alla prossima finestra, quando la richiesta puo' essere diventata visibile.
+ */
+internal enum class LoadResult { LOADED, FAILED, DEFERRED }
 
 /** Dopo quanti tentativi e con quali attese si riprova una miniatura che non e' arrivata (file corrotto, E-M10). */
 data class RetryPolicy(
@@ -103,6 +109,9 @@ internal class ThumbnailScheduler(
   private val failures = object : LinkedHashMap<ThumbKey, Failure>(16, 0.75f, true) {
     override fun removeEldestEntry(eldest: MutableMap.MutableEntry<ThumbKey, Failure>?): Boolean = size > MAX_FAILURES
   }
+
+  /** Le richieste che hanno risposto [LoadResult.DEFERRED]: si saltano finche' la finestra non cambia. */
+  private val deferred = HashSet<ThumbKey>()
   private var started = 0L
   private var cancelled = 0L
   private var failed = 0L
@@ -126,6 +135,7 @@ internal class ThumbnailScheduler(
         if (next.putIfAbsent(request.key, Wanted(request, Priority.AHEAD)) == null) aheadCount++
       }
       wanted = next
+      deferred.clear()
       for ((key, run) in running) {
         val w = next[key]
         if (w == null) {
@@ -155,6 +165,7 @@ internal class ThumbnailScheduler(
   fun clearFailures(restart: Boolean = true) {
     val toStart = synchronized(lock) {
       failures.clear()
+      deferred.clear()
       if (restart) collectStartable() else emptyList()
     }
     toStart.forEach { it.start() }
@@ -210,6 +221,7 @@ internal class ThumbnailScheduler(
       val key = w.request.key
       if (running.containsKey(key)) continue
       if (isCached(key)) continue
+      if (key in deferred) continue
       if (isBlocked(key, now)) continue
       // Niente posto per questa richiesta: ne' per le successive (le visibili vengono prima delle in arrivo).
       if (!hasRoom(w.priority == Priority.VISIBLE)) break
@@ -260,6 +272,9 @@ internal class ThumbnailScheduler(
       if (!wasCancelled) {
         if (cause == null && run.result == LoadResult.LOADED) {
           failures.remove(key)
+        } else if (cause == null && run.result == LoadResult.DEFERRED) {
+          // Non e' un errore: non consuma i tentativi. Si riprova a ogni finestra, non da solo (niente giri a vuoto).
+          deferred += key
         } else {
           failed++
           val attempts = (failures[key]?.attempts ?: 0) + 1

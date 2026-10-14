@@ -19,18 +19,22 @@ object TimelinePatcher {
   /**
    * @property removed quante identita' sono uscite dall'indice (erano dentro e non ci sono piu': nascoste, sparite,
    *   unite, dietro una copertina). Se e' piu' di zero l'istantanea su file si riscrive subito (E-H1).
-   * @property droppedRefs i riferimenti ai byte delle identita' uscite: il viewer puo' ancora chiederli per un attimo.
+   * @property droppedRefs i riferimenti ai byte del telefono delle identita' uscite: il viewer puo' ancora chiederli per
+   *   un attimo.
+   * @property droppedNasRefs lo stesso per i riferimenti al NAS (Fase 4).
    */
   class Result(
     val snapshot: ColumnarTimelineSnapshot,
     val removed: Int,
     val droppedRefs: Map<MediaId, MediaRef.Phone>,
+    val droppedNasRefs: Map<MediaId, MediaRef.Nas> = emptyMap(),
   )
 
   /**
    * Applica un cambiamento: [ids] sono le identita' annunciate, [rows] le loro righe ancora nell'indice (riletta dal
-   * catalogo dopo il commit), [refs] i loro riferimenti ai byte (per `media_id`), [groupSizes] i numeri di tutti i
-   * gruppi se sono da ricalcolare (cambiamento strutturale o righe con un gruppo), altrimenti null.
+   * catalogo dopo il commit), [refs] i loro riferimenti ai byte del telefono (per `media_id`), [nasRefs] quelli del NAS
+   * (per le righe che non hanno una copia leggibile sul telefono, Fase 4), [groupSizes] i numeri di tutti i gruppi se
+   * sono da ricalcolare (cambiamento strutturale o righe con un gruppo), altrimenti null.
    */
   fun patch(
     current: ColumnarTimelineSnapshot,
@@ -39,8 +43,11 @@ object TimelinePatcher {
     refs: Map<String, MediaRef.Phone>,
     groupSizes: Map<String, Int>?,
     newSeq: Long,
+    nasRefs: Map<String, MediaRef.Nas> = emptyMap(),
   ): Result {
-    val fresh = TimelineIndexReader.fromRows(rows.associateBy { it.mediaId }.values.toList(), newSeq, groupSizes ?: emptyMap(), refs)
+    val fresh = TimelineIndexReader.fromRows(
+      rows.associateBy { it.mediaId }.values.toList(), newSeq, groupSizes ?: emptyMap(), refs, nasRefs,
+    )
     val dropList = ArrayList<Int>(ids.size + rows.size)
     for (id in ids) current.indexOf(id).let { if (it >= 0) dropList += it }
     for (k in 0 until fresh.size) current.indexOf(fresh.idMsb[k], fresh.idLsb[k]).let { if (it >= 0) dropList += it }
@@ -48,15 +55,17 @@ object TimelinePatcher {
 
     var removed = 0
     val dropped = HashMap<MediaId, MediaRef.Phone>()
+    val droppedNas = HashMap<MediaId, MediaRef.Nas>()
     for (i in drop) {
       if (fresh.indexOf(current.idMsb[i], current.idLsb[i]) < 0) {
         removed++
         current.refAt(i)?.let { dropped[current.idAt(i)] = it }
+        current.nasRefAt(i)?.let { droppedNas[current.idAt(i)] = it }
       }
     }
     var merged = merge(current, drop, fresh, newSeq)
     if (groupSizes != null) merged = withGroupSizes(merged, groupSizes)
-    return Result(merged, removed, dropped)
+    return Result(merged, removed, dropped, droppedNas)
   }
 
   /** L'indice senza [ids], stessa sequenza: il "togli subito" prima di nascondere (E-H1). */
@@ -69,7 +78,8 @@ object TimelinePatcher {
   /** Una copia con un altro numero di sequenza (stesse colonne, condivise: sono immutabili). */
   fun withSeq(s: ColumnarTimelineSnapshot, seq: Long): ColumnarTimelineSnapshot = if (s.seq == seq) s else ColumnarTimelineSnapshot(
     seq, s.size, s.idMsb, s.idLsb, s.sortTime, s.localDay, s.kind, s.source, s.flags, s.aspect, s.duration, s.place, s.groupSize,
-    s.thumbOffsets, s.thumbBytes, s.refId, s.refVolume, s.refMime, s.volumes, s.mimes, s.groupIndex, s.groupMsb, s.groupLsb,
+    s.thumbOffsets, s.thumbBytes, s.refId, s.refVolume, s.refMime, s.contentKey, s.volumes, s.mimes, s.groupIndex, s.groupMsb,
+    s.groupLsb,
   )
 
   /** I numeri dei gruppi ricalcolati per tutte le copertine (le altre colonne sono condivise). */
@@ -82,30 +92,49 @@ object TimelinePatcher {
     }
     return ColumnarTimelineSnapshot(
       s.seq, s.size, s.idMsb, s.idLsb, s.sortTime, s.localDay, s.kind, s.source, s.flags, s.aspect, s.duration, s.place, groupSize,
-      s.thumbOffsets, s.thumbBytes, s.refId, s.refVolume, s.refMime, s.volumes, s.mimes, s.groupIndex, s.groupMsb, s.groupLsb,
+      s.thumbOffsets, s.thumbBytes, s.refId, s.refVolume, s.refMime, s.contentKey, s.volumes, s.mimes, s.groupIndex, s.groupMsb,
+      s.groupLsb,
     )
   }
 
-  /** I riferimenti ai byte riletti per tutto l'indice (lettura completa): [refs] per posizione. */
-  fun withRefs(s: ColumnarTimelineSnapshot, refs: Map<Int, MediaRef.Phone>): ColumnarTimelineSnapshot {
+  /**
+   * I riferimenti ai byte riletti per tutto l'indice (lettura completa): [refs] (telefono) e [nasRefs] (NAS, Fase 4)
+   * per posizione. Sostituiscono **tutti** i riferimenti: chi non e' in nessuna delle due mappe resta senza. Se una
+   * posizione e' in entrambe vale il telefono (D18: per un media su telefono e NAS la griglia usa la miniatura del
+   * telefono).
+   */
+  fun withRefs(
+    s: ColumnarTimelineSnapshot,
+    refs: Map<Int, MediaRef.Phone>,
+    nasRefs: Map<Int, MediaRef.Nas> = emptyMap(),
+  ): ColumnarTimelineSnapshot {
     val volumes = LinkedHashMap<String, Int>()
     val mimes = LinkedHashMap<String, Int>()
-    fun intern(table: LinkedHashMap<String, Int>, value: String): Int =
-      table[value] ?: if (table.size >= 255) 0 else (table.size + 1).also { table[value] = it }
+    fun intern(table: LinkedHashMap<String, Int>, value: String, limit: Int): Int =
+      table[value] ?: if (table.size >= limit) 0 else (table.size + 1).also { table[value] = it }
     val refId = LongArray(s.size)
     val refVolume = ByteArray(s.size)
     val refMime = ByteArray(s.size)
+    val contentKey = LongArray(s.size)
+    for ((i, ref) in nasRefs) {
+      if (i !in 0 until s.size) continue
+      refId[i] = ref.locationId
+      refVolume[i] = ColumnarTimelineSnapshot.NAS_REF.toByte()
+      refMime[i] = (ref.mime?.let { intern(mimes, it, TimelineIndexBuilder.MAX_MIMES) } ?: 0).toByte()
+      contentKey[i] = ref.contentKey
+    }
     for ((i, ref) in refs) {
       if (i !in 0 until s.size) continue
-      val v = intern(volumes, ref.volume)
+      val v = intern(volumes, ref.volume, ColumnarTimelineSnapshot.MAX_VOLUMES)
       if (v == 0) continue
       refId[i] = ref.mediaStoreId
       refVolume[i] = v.toByte()
-      refMime[i] = (ref.mime?.let { intern(mimes, it) } ?: 0).toByte()
+      refMime[i] = (ref.mime?.let { intern(mimes, it, TimelineIndexBuilder.MAX_MIMES) } ?: 0).toByte()
+      contentKey[i] = 0L
     }
     return ColumnarTimelineSnapshot(
       s.seq, s.size, s.idMsb, s.idLsb, s.sortTime, s.localDay, s.kind, s.source, s.flags, s.aspect, s.duration, s.place, s.groupSize,
-      s.thumbOffsets, s.thumbBytes, refId, refVolume, refMime, volumes.keys.toTypedArray(), mimes.keys.toTypedArray(),
+      s.thumbOffsets, s.thumbBytes, refId, refVolume, refMime, contentKey, volumes.keys.toTypedArray(), mimes.keys.toTypedArray(),
       s.groupIndex, s.groupMsb, s.groupLsb,
     )
   }
@@ -184,12 +213,13 @@ object TimelinePatcher {
     val refId = LongArray(capacity)
     val refVolume = ByteArray(capacity)
     val refMime = ByteArray(capacity)
+    val contentKey = LongArray(capacity)
 
     // I volumi e i MIME di [current] restano agli stessi indici; quelli nuovi di [fresh] si aggiungono in coda.
     private val volumes = ArrayList(current.volumes.asList())
     private val mimes = ArrayList(current.mimes.asList())
-    private val freshVolume = IntArray(fresh.volumes.size + 1) { if (it == 0) 0 else intern(volumes, fresh.volumes[it - 1]) }
-    private val freshMime = IntArray(fresh.mimes.size + 1) { if (it == 0) 0 else intern(mimes, fresh.mimes[it - 1]) }
+    private val freshVolume = IntArray(fresh.volumes.size + 1) { if (it == 0) 0 else intern(volumes, fresh.volumes[it - 1], ColumnarTimelineSnapshot.MAX_VOLUMES) }
+    private val freshMime = IntArray(fresh.mimes.size + 1) { if (it == 0) 0 else intern(mimes, fresh.mimes[it - 1], TimelineIndexBuilder.MAX_MIMES) }
 
     private var groupCount = 0
     private var groupIndex = IntArray(current.groupIndex.size + fresh.groupIndex.size)
@@ -214,6 +244,7 @@ object TimelinePatcher {
       System.arraycopy(current.refId, from, refId, at, len)
       System.arraycopy(current.refVolume, from, refVolume, at, len)
       System.arraycopy(current.refMime, from, refMime, at, len)
+      System.arraycopy(current.contentKey, from, contentKey, at, len)
       val bytesFrom = current.thumbOffsets[from]
       val bytesLen = current.thumbOffsets[to] - bytesFrom
       System.arraycopy(current.thumbBytes, bytesFrom, thumbBytes, thumbLength, bytesLen)
@@ -243,10 +274,13 @@ object TimelinePatcher {
       duration[at] = fresh.duration[j]
       place[at] = fresh.place[j]
       groupSize[at] = fresh.groupSize[j]
-      val v = freshVolume[fresh.refVolume[j].toInt() and 0xFF]
+      val freshRefVolume = fresh.refVolume[j].toInt() and 0xFF
+      // Un riferimento al NAS non passa dalla tabella dei volumi: il marcatore resta com'e'.
+      val v = if (freshRefVolume == ColumnarTimelineSnapshot.NAS_REF) freshRefVolume else freshVolume[freshRefVolume]
       refVolume[at] = v.toByte()
       refId[at] = if (v == 0) 0L else fresh.refId[j]
       refMime[at] = freshMime[fresh.refMime[j].toInt() and 0xFF].toByte()
+      contentKey[at] = fresh.contentKey[j]
       val from = fresh.thumbOffsets[j]
       val len = fresh.thumbOffsets[j + 1] - from
       if (thumbLength + len > thumbBytes.size) thumbBytes = thumbBytes.copyOf(thumbLength + len)
@@ -274,15 +308,15 @@ object TimelinePatcher {
     fun build(seq: Long): ColumnarTimelineSnapshot = ColumnarTimelineSnapshot(
       seq, size, idMsb, idLsb, sortTime, localDay, kind, source, flags, aspect, duration, place, groupSize,
       thumbOffsets, if (thumbLength == thumbBytes.size) thumbBytes else thumbBytes.copyOf(thumbLength),
-      refId, refVolume, refMime, volumes.toTypedArray(), mimes.toTypedArray(),
+      refId, refVolume, refMime, contentKey, volumes.toTypedArray(), mimes.toTypedArray(),
       groupIndex.copyOf(groupCount), groupMsb.copyOf(groupCount), groupLsb.copyOf(groupCount),
     )
 
     private companion object {
-      fun intern(list: ArrayList<String>, value: String): Int {
+      fun intern(list: ArrayList<String>, value: String, limit: Int): Int {
         val existing = list.indexOf(value)
         if (existing >= 0) return existing + 1
-        if (list.size >= 255) return 0
+        if (list.size >= limit) return 0
         list += value
         return list.size
       }

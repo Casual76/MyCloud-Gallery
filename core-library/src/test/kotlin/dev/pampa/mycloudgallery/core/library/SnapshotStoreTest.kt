@@ -19,7 +19,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Test
 
-/** L'istantanea `MCGT1`: andata e ritorno, versione, file rovinati, scrittura atomica e accorpata. */
+/** L'istantanea `MCGT2`: andata e ritorno, versione, file rovinati, scrittura atomica e accorpata. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class SnapshotStoreTest {
 
@@ -67,8 +67,10 @@ class SnapshotStoreTest {
     assertThat(store.read()!!.provisional).isTrue()
     val good = store.file.readBytes()
 
-    // Un'altra versione del formato.
-    store.file.writeBytes(good.copyOf().also { it[4] = 2 })
+    // Un'altra versione del formato: la 1 (MCGT1, Fase 3) e una futura.
+    store.file.writeBytes(good.copyOf().also { it[4] = 1 })
+    assertThat(store.read()).isNull()
+    store.file.writeBytes(good.copyOf().also { it[4] = 3 })
     assertThat(store.read()).isNull()
     // Un altro formato.
     store.file.writeBytes(good.copyOf().also { it[0] = 'X'.code.toByte() })

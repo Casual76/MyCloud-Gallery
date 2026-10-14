@@ -33,10 +33,16 @@ object ImagingPipeline {
 
   /**
    * La sorgente delle miniature: il telefono dal MediaStore. [synthetic] e' la sorgente della Libreria sintetica
-   * (`SyntheticThumbnailSource`, solo build di debug: sta in `testing`, che la release non porta).
+   * (`SyntheticThumbnailSource`, solo build di debug: sta in `testing`, che la release non porta). [nas] (Fase 4, P7) e'
+   * `NasThumbnailSource`: replica, miniatura provvisoria, originale solo se visibile; `:app` la costruisce con la replica
+   * (`ReplicaBlobs`, `ProvisionalThumbnails`) e, per l'ultimo gradino, `NasMediaOriginalThumbnails` sopra `NasMediaReader`.
    */
-  fun thumbnailSource(context: Context, synthetic: ThumbnailSource = NoThumbnailSource): ThumbnailSource =
-    RoutingThumbnailSource(phone = PhoneThumbnailSource(context.applicationContext.contentResolver), synthetic = synthetic)
+  fun thumbnailSource(
+    context: Context,
+    synthetic: ThumbnailSource = NoThumbnailSource,
+    nas: ThumbnailSource = NoThumbnailSource,
+  ): ThumbnailSource =
+    RoutingThumbnailSource(phone = PhoneThumbnailSource(context.applicationContext.contentResolver), synthetic = synthetic, nas = nas)
 
   fun thumbnailLoader(
     source: ThumbnailSource,

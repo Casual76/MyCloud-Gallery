@@ -62,6 +62,9 @@ fun assertSameIndex(actual: TimelineSnapshot, expected: TimelineSnapshot, checkS
     check("segnaposto", actual.thumbHashAt(i), expected.thumbHashAt(i))
     if (actual is ColumnarTimelineSnapshot && expected is ColumnarTimelineSnapshot) {
       check("riferimento", actual.refAt(i), expected.refAt(i))
+      check("riferimento NAS", actual.nasRefAt(i), expected.nasRefAt(i))
+      check("chiave di versione", actual.versionKeyAt(i), expected.versionKeyAt(i))
+      check("badge", actual.presenceAt(i), expected.presenceAt(i))
       check("chiave del gruppo", actual.groupKeyAt(i), expected.groupKeyAt(i))
     }
   }
@@ -74,7 +77,14 @@ fun assertSameIndex(actual: TimelineSnapshot, expected: TimelineSnapshot, checkS
  */
 class ModelSource : TimelineSource {
 
-  class Media(var row: IndexRow, var hidden: Boolean = false, var group: String? = null, var ref: MediaRef.Phone? = null)
+  class Media(
+    var row: IndexRow,
+    var hidden: Boolean = false,
+    var group: String? = null,
+    var ref: MediaRef.Phone? = null,
+    /** Fase 4: la copia sul NAS. Il catalogo la da' solo se la riga ha `ON_NAS` e il telefono non ha una copia leggibile. */
+    var nasRef: MediaRef.Nas? = null,
+  )
 
   val media = LinkedHashMap<String, Media>()
   val coverOf = HashMap<String, String>()
@@ -96,7 +106,8 @@ class ModelSource : TimelineSource {
   /** L'indice atteso adesso (come [buildIndex], senza contare una lettura). */
   fun expected(): ColumnarTimelineSnapshot {
     val rows = indexed()
-    return TimelineIndexReader.fromRows(rows, seq, groupSizesNow(), refsFor(rows.map { it.mediaId }))
+    val ids = rows.map { it.mediaId }
+    return TimelineIndexReader.fromRows(rows, seq, groupSizesNow(), refsFor(ids), nasRefsFor(ids))
   }
 
   override suspend fun indexRows(ids: Collection<MediaId>): List<IndexRow> {
@@ -107,6 +118,8 @@ class ModelSource : TimelineSource {
   override suspend fun groupSizes(): Map<String, Int> = groupSizesNow()
 
   override suspend fun phoneRefs(ids: Collection<MediaId>): Map<String, MediaRef.Phone> = refsFor(ids.map { it.value })
+
+  override suspend fun nasRefs(ids: Collection<MediaId>): Map<String, MediaRef.Nas> = nasRefsFor(ids.map { it.value })
 
   override suspend fun withGroupMates(ids: Collection<MediaId>): Set<MediaId> {
     val out = LinkedHashSet(ids)
@@ -145,4 +158,12 @@ class ModelSource : TimelineSource {
 
   private fun refsFor(ids: Collection<String>): Map<String, MediaRef.Phone> =
     ids.mapNotNull { id -> media[id]?.ref?.let { id to it } }.toMap()
+
+  /** I riferimenti al NAS come li da' il catalogo: righe con `ON_NAS` e nessuna copia leggibile sul telefono. */
+  private fun nasRefsFor(ids: Collection<String>): Map<String, MediaRef.Nas> =
+    ids.mapNotNull { id ->
+      val m = media[id] ?: return@mapNotNull null
+      val ref = m.nasRef ?: return@mapNotNull null
+      if (m.ref == null && CellFlags.has(m.row.cellFlags, CellFlags.ON_NAS)) id to ref else null
+    }.toMap()
 }

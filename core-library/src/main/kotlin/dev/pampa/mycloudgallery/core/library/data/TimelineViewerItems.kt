@@ -12,9 +12,10 @@ import kotlinx.coroutines.flow.StateFlow
  * Gli elementi del viewer sopra il repository vero: **la stessa vista** della Libreria (stesso filtro, stessa
  * `StateFlow`), quindi il viewer segue l'indice a ogni cambiamento (modifica esterna, cancellazione: E-V6).
  *
- * [ref] legge il riferimento dall'indice (o dagli elementi appena usciti, per il viewer che li mostra ancora); se il
- * telefono non ha adesso una copia leggibile (E-P22) non c'e' un riferimento: [refOrNull] da' null e [ref] lancia
- * `NoSuchElementException`. La griglia e il viewer usano [refOrNull] e mostrano il segnaposto.
+ * [ref] legge il riferimento dall'indice (o dagli elementi appena usciti, per il viewer che li mostra ancora): la copia
+ * del telefono se c'e', altrimenti quella del NAS (Fase 4, D18). Se nessuno dei due ha adesso una copia leggibile
+ * (E-P22) non c'e' un riferimento: [refOrNull] da' null e [ref] lancia `NoSuchElementException`. La griglia e il viewer
+ * usano [refOrNull] e mostrano il segnaposto.
  */
 @Stable
 class TimelineViewerItems(
@@ -26,5 +27,5 @@ class TimelineViewerItems(
 
   override fun ref(id: MediaId): MediaRef = refOrNull(id) ?: throw NoSuchElementException("Nessuna copia leggibile adesso.")
 
-  override fun refOrNull(id: MediaId): MediaRef? = repository.refOf(id)
+  override fun refOrNull(id: MediaId): MediaRef? = repository.mediaRefOf(id)
 }

@@ -10,6 +10,7 @@ import dev.pampa.mycloudgallery.core.library.index.ColumnarTimelineSnapshot
 import dev.pampa.mycloudgallery.core.library.index.TimelineIndexReader
 import dev.pampa.mycloudgallery.core.library.index.TimelinePatcher
 import dev.pampa.mycloudgallery.core.library.index.Uuids
+import dev.pampa.mycloudgallery.core.model.CellFlags
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import java.util.UUID
@@ -42,6 +43,14 @@ interface TimelineSource {
   /** I riferimenti ai byte del telefono leggibili adesso, per `media_id`. */
   suspend fun phoneRefs(ids: Collection<MediaId>): Map<String, MediaRef.Phone>
 
+  /**
+   * Fase 4 (D18): i riferimenti ai byte **sul NAS** di [ids], per `media_id`. Si chiedono solo per i media che hanno
+   * `CellFlags.ON_NAS` e nessuna copia leggibile sul telefono (per gli altri la griglia usa il telefono): al piu'
+   * `TimelineIndexDao.MAX_IDS` identita' per chiamata. Vuoto per un catalogo senza NAS (e di default: l'indice della
+   * Fase 3 non cambia).
+   */
+  suspend fun nasRefs(ids: Collection<MediaId>): Map<String, MediaRef.Nas> = emptyMap()
+
   /** Le identita' da nascondere o mostrare insieme a [ids]: i membri dei loro gruppi (la cella e' il gruppo, D20). */
   suspend fun withGroupMates(ids: Collection<MediaId>): Set<MediaId> = ids.toSet()
 }
@@ -56,6 +65,13 @@ interface TimelineSource {
 class CatalogTimelineSource(
   private val database: GalleryDatabase,
   private val catalog: MediaCatalog,
+  /**
+   * Fase 4 (D18): come leggere i riferimenti al NAS dei media [ids] (al piu' `MAX_IDS`). Lo schema v3 e `nasRefs` del
+   * catalogo sono di P2; l'integrazione (P11) lo lega: `nasRefsLookup = catalog::nasRefs`. Deve restituire anche le posizioni
+   * la cui share non e' raggiungibile adesso (NAS spento, fuori casa): le miniature vengono dalla replica (E-L4). Senza,
+   * nessun media ha un riferimento al NAS e i solo-NAS restano sul segnaposto.
+   */
+  private val nasRefsLookup: (suspend (Collection<MediaId>) -> Map<MediaId, MediaRef.Nas>)? = null,
 ) : TimelineSource {
 
   private val dao = database.timelineIndexDao()
@@ -91,7 +107,28 @@ class CatalogTimelineSource(
       }
       from = to
     }
-    return TimelinePatcher.withRefs(base, refs)
+    return TimelinePatcher.withRefs(base, refs, nasRefsFor(base, refs))
+  }
+
+  /**
+   * I riferimenti al NAS delle celle con `ON_NAS` e **senza** un riferimento leggibile sul telefono (cioe' le solo-NAS
+   * e quelle la cui copia del telefono non si legge adesso, E-P22): a blocchi, come i riferimenti del telefono.
+   */
+  private suspend fun nasRefsFor(base: ColumnarTimelineSnapshot, phone: Map<Int, MediaRef.Phone>): Map<Int, MediaRef.Nas> {
+    val lookup = nasRefsLookup ?: return emptyMap()
+    val wanted = ArrayList<Int>()
+    for (i in 0 until base.size) if (CellFlags.has(base.flagsAt(i), CellFlags.ON_NAS) && i !in phone) wanted += i
+    if (wanted.isEmpty()) return emptyMap()
+    val out = HashMap<Int, MediaRef.Nas>(wanted.size * 2)
+    val key = LongArray(2)
+    for (chunk in wanted.chunked(TimelineIndexDao.MAX_IDS)) {
+      val ids = chunk.map { MediaId(UUID(base.idMsb[it], base.idLsb[it]).toString()) }
+      for ((id, ref) in lookup(ids)) {
+        val index = if (Uuids.parse(id.value, key)) base.indexOf(key[0], key[1]) else -1
+        if (index >= 0) out[index] = ref
+      }
+    }
+    return out
   }
 
   override suspend fun indexRows(ids: Collection<MediaId>): List<IndexRow> = catalog.indexRows(ids)
@@ -100,6 +137,9 @@ class CatalogTimelineSource(
 
   override suspend fun phoneRefs(ids: Collection<MediaId>): Map<String, MediaRef.Phone> =
     catalog.phoneRefs(ids).mapKeys { it.key.value }
+
+  override suspend fun nasRefs(ids: Collection<MediaId>): Map<String, MediaRef.Nas> =
+    nasRefsLookup?.invoke(ids)?.mapKeys { it.key.value } ?: emptyMap()
 
   override suspend fun withGroupMates(ids: Collection<MediaId>): Set<MediaId> {
     val out = LinkedHashSet<MediaId>(ids)

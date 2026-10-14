@@ -36,9 +36,10 @@ class TimelineIndexBuilder(initialCapacity: Int = 1024) {
   private var refId = LongArray(capacity)
   private var refVolume = ByteArray(capacity)
   private var refMime = ByteArray(capacity)
+  private var contentKey = LongArray(capacity)
 
-  private val volumes = Interned()
-  private val mimes = Interned()
+  private val volumes = Interned(ColumnarTimelineSnapshot.MAX_VOLUMES)
+  private val mimes = Interned(MAX_MIMES)
 
   private var groupCount = 0
   private var groupIndex = IntArray(16)
@@ -48,6 +49,9 @@ class TimelineIndexBuilder(initialCapacity: Int = 1024) {
   /**
    * Una riga. [thumbHash] sono i byte del segnaposto (validati: oltre i 36 byte di un ThumbHash si scartano),
    * [groupMsb]/[groupLsb] l'identita' del gruppo se la cella e' una copertina (entrambi 0 = nessun gruppo).
+   *
+   * Un solo riferimento ai byte per cella (Fase 4, P7): [ref] (il telefono) se c'e', altrimenti [nasRef]. Se li si danno
+   * entrambi vale il telefono: per un media su telefono e NAS la griglia usa la miniatura del telefono (D18).
    */
   fun add(
     msb: Long,
@@ -65,6 +69,7 @@ class TimelineIndexBuilder(initialCapacity: Int = 1024) {
     groupMsb: Long = 0L,
     groupLsb: Long = 0L,
     ref: MediaRef.Phone? = null,
+    nasRef: MediaRef.Nas? = null,
   ) {
     ensure(size + 1)
     val i = size
@@ -86,13 +91,16 @@ class TimelineIndexBuilder(initialCapacity: Int = 1024) {
       thumbLength += thumb.size
     }
     thumbOffsets[i + 1] = thumbLength
-    setRef(i, ref)
+    if (ref != null) setRef(i, ref) else setNasRef(i, nasRef)
     if (groupMsb != 0L || groupLsb != 0L) addGroup(i, groupMsb, groupLsb)
     size = i + 1
   }
 
-  /** Una riga del catalogo (`TimelineIndexDao.indexRows`) con il numero del suo gruppo e il riferimento ai byte. */
-  fun add(row: IndexRow, groupSizes: Map<String, Int>, ref: MediaRef.Phone?) {
+  /**
+   * Una riga del catalogo (`TimelineIndexDao.indexRows`) con il numero del suo gruppo e il riferimento ai byte (il
+   * telefono, o in sua mancanza il NAS).
+   */
+  fun add(row: IndexRow, groupSizes: Map<String, Int>, ref: MediaRef.Phone?, nasRef: MediaRef.Nas? = null) {
     val id = LongArray(2)
     if (!Uuids.parse(row.mediaId, id)) return
     val group = LongArray(2)
@@ -102,12 +110,13 @@ class TimelineIndexBuilder(initialCapacity: Int = 1024) {
       kind = Codes.kind(row.kind), source = Codes.source(row.source), flags = row.cellFlags, aspectMilli = row.aspectMilli,
       durationMs = row.durationMs ?: 0L, placeId = row.placeId ?: 0, thumbHash = row.thumbHash,
       groupSize = if (hasGroup) groupSizes[row.groupId] ?: 1 else 1,
-      groupMsb = if (hasGroup) group[0] else 0L, groupLsb = if (hasGroup) group[1] else 0L, ref = ref,
+      groupMsb = if (hasGroup) group[0] else 0L, groupLsb = if (hasGroup) group[1] else 0L, ref = ref, nasRef = nasRef,
     )
   }
 
   /** Il riferimento ai byte della riga [i] gia' aggiunta (la lettura completa li legge dopo le righe). */
   fun setRef(i: Int, ref: MediaRef.Phone?) {
+    contentKey[i] = 0L
     if (ref == null) {
       refId[i] = 0L
       refVolume[i] = 0
@@ -120,6 +129,18 @@ class TimelineIndexBuilder(initialCapacity: Int = 1024) {
     refMime[i] = (ref.mime?.let { mimes.indexOf(it) } ?: 0).toByte()
   }
 
+  /** Il riferimento al NAS della riga [i] (Fase 4): la posizione nella replica, il MIME e la chiave di contenuto. */
+  fun setNasRef(i: Int, ref: MediaRef.Nas?) {
+    if (ref == null) {
+      setRef(i, null)
+      return
+    }
+    refId[i] = ref.locationId
+    refVolume[i] = ColumnarTimelineSnapshot.NAS_REF.toByte()
+    refMime[i] = (ref.mime?.let { mimes.indexOf(it) } ?: 0).toByte()
+    contentKey[i] = ref.contentKey
+  }
+
   fun build(seq: Long): ColumnarTimelineSnapshot {
     if (!isSorted()) sortInPlace()
     val n = size
@@ -129,7 +150,7 @@ class TimelineIndexBuilder(initialCapacity: Int = 1024) {
       kind = kind.copyOf(n), source = source.copyOf(n), flags = flags.copyOf(n), aspect = aspect.copyOf(n),
       duration = duration.copyOf(n), place = place.copyOf(n), groupSize = groupSize.copyOf(n),
       thumbOffsets = thumbOffsets.copyOf(n + 1), thumbBytes = thumbBytes.copyOf(thumbLength),
-      refId = refId.copyOf(n), refVolume = refVolume.copyOf(n), refMime = refMime.copyOf(n),
+      refId = refId.copyOf(n), refVolume = refVolume.copyOf(n), refMime = refMime.copyOf(n), contentKey = contentKey.copyOf(n),
       volumes = volumes.toArray(), mimes = mimes.toArray(),
       groupIndex = groupIndex.copyOf(groupCount), groupMsb = groupMsb.copyOf(groupCount), groupLsb = groupLsb.copyOf(groupCount),
     )
@@ -168,6 +189,7 @@ class TimelineIndexBuilder(initialCapacity: Int = 1024) {
     refId = refId.copyOf(c)
     refVolume = refVolume.copyOf(c)
     refMime = refMime.copyOf(c)
+    contentKey = contentKey.copyOf(c)
   }
 
   private fun isSorted(): Boolean {
@@ -198,6 +220,7 @@ class TimelineIndexBuilder(initialCapacity: Int = 1024) {
     refId = LongArray(n) { refId[order[it]] }
     refVolume = ByteArray(n) { refVolume[order[it]] }
     refMime = ByteArray(n) { refMime[order[it]] }
+    contentKey = LongArray(n) { contentKey[order[it]] }
     val oldOffsets = thumbOffsets
     val oldBytes = thumbBytes
     thumbOffsets = IntArray(n + 1)
@@ -220,12 +243,12 @@ class TimelineIndexBuilder(initialCapacity: Int = 1024) {
     capacity = n
   }
 
-  /** Una piccola tabella di stringhe (volumi, MIME): l'indice + 1 sta in un byte; oltre 255 voci, 0 = sconosciuto. */
-  private class Interned {
+  /** Una piccola tabella di stringhe (volumi, MIME): l'indice + 1 sta in un byte; oltre [limit] voci, 0 = sconosciuto. */
+  private class Interned(private val limit: Int) {
     private val map = HashMap<String, Int>()
     private val list = ArrayList<String>()
 
-    fun indexOf(value: String): Int = map[value] ?: if (list.size >= 255) 0 else {
+    fun indexOf(value: String): Int = map[value] ?: if (list.size >= limit) 0 else {
       list += value
       map[value] = list.size
       list.size
@@ -237,6 +260,9 @@ class TimelineIndexBuilder(initialCapacity: Int = 1024) {
   companion object {
     /** Un ThumbHash vero sta sotto i 36 byte (`ThumbHash.MAX_LENGTH` = 48 caratteri Base64). */
     const val MAX_THUMB_BYTES: Int = 36
+
+    /** I MIME distinti che un indice sa nominare (l'indice + 1 sta in un byte). */
+    const val MAX_MIMES: Int = 255
   }
 }
 
@@ -295,9 +321,15 @@ object TimelineIndexReader {
   }
 
   /** Lo stesso indice da righe gia' lette (test, piccole liste). */
-  fun fromRows(rows: List<IndexRow>, seq: Long, groupSizes: Map<String, Int>, refs: Map<String, MediaRef.Phone> = emptyMap()): ColumnarTimelineSnapshot {
+  fun fromRows(
+    rows: List<IndexRow>,
+    seq: Long,
+    groupSizes: Map<String, Int>,
+    refs: Map<String, MediaRef.Phone> = emptyMap(),
+    nasRefs: Map<String, MediaRef.Nas> = emptyMap(),
+  ): ColumnarTimelineSnapshot {
     val builder = TimelineIndexBuilder(rows.size.coerceAtLeast(16))
-    for (row in rows) builder.add(row, groupSizes, refs[row.mediaId])
+    for (row in rows) builder.add(row, groupSizes, refs[row.mediaId], nasRefs[row.mediaId])
     return builder.build(seq)
   }
 }

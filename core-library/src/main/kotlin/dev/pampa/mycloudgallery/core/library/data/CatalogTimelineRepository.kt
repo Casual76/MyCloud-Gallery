@@ -12,6 +12,7 @@ import dev.pampa.mycloudgallery.core.library.index.TimelinePatcher
 import dev.pampa.mycloudgallery.core.library.noop.EmptyTimelineView
 import dev.pampa.mycloudgallery.core.library.store.SnapshotStore
 import dev.pampa.mycloudgallery.core.library.store.SnapshotWriter
+import dev.pampa.mycloudgallery.core.model.CellFlags
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import java.util.concurrent.ConcurrentHashMap
@@ -78,8 +79,8 @@ class CatalogTimelineRepository(
   private val firstSnapshot = CompletableDeferred<Unit>()
   private val lock = Mutex()
   private val writer: SnapshotWriter? = store?.let { SnapshotWriter(it, scope, writeDelayMs) }
-  private val recentRefs = object : LinkedHashMap<MediaId, MediaRef.Phone>(64, 0.75f, true) {
-    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<MediaId, MediaRef.Phone>?): Boolean = size > RECENT_REFS
+  private val recentRefs = object : LinkedHashMap<MediaId, MediaRef>(64, 0.75f, true) {
+    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<MediaId, MediaRef>?): Boolean = size > RECENT_REFS
   }
 
   private val rebuildCount = AtomicInteger()
@@ -120,6 +121,20 @@ class CatalogTimelineRepository(
     if (s != null) {
       val i = s.indexOf(id)
       if (i >= 0) return s.refAt(i)
+    }
+    return synchronized(recentRefs) { recentRefs[id] as? MediaRef.Phone }
+  }
+
+  /**
+   * Come [refOf], ma con il riferimento che serve alla griglia e al viewer (Fase 4, D18): la copia del telefono se
+   * c'e', altrimenti quella del NAS (media solo-NAS, o copia del telefono non leggibile adesso). Null se non c'e' un
+   * riferimento di nessuno dei due: la cella resta sul segnaposto e il viewer lo dice.
+   */
+  fun mediaRefOf(id: MediaId): MediaRef? {
+    val s = snapshotFlow.value as? ColumnarTimelineSnapshot
+    if (s != null) {
+      val i = s.indexOf(id)
+      if (i >= 0) return s.thumbRefAt(i)
     }
     return synchronized(recentRefs) { recentRefs[id] }
   }
@@ -246,10 +261,18 @@ class CatalogTimelineRepository(
   private suspend fun patch(current: ColumnarTimelineSnapshot, ids: Set<MediaId>, structural: Boolean, seq: Long) {
     val rows = if (ids.isEmpty()) emptyList() else source.indexRows(ids)
     val refs = if (rows.isEmpty()) emptyMap() else source.phoneRefs(rows.map { MediaId(it.mediaId) })
+    // Fase 4: il NAS solo per le righe sul NAS senza una copia leggibile sul telefono (per le altre vale il telefono).
+    val onlyNas = rows.filter { CellFlags.has(it.cellFlags, CellFlags.ON_NAS) && it.mediaId !in refs }
+    val nasRefs = if (onlyNas.isEmpty()) emptyMap() else source.nasRefs(onlyNas.map { MediaId(it.mediaId) })
     val touchesGroups = rows.any { it.groupId != null } || ids.any { id -> current.indexOf(id).let { it >= 0 && current.groupSizeAt(it) > 1 } }
     val sizes = if (structural || touchesGroups) source.groupSizes() else null
-    val result = TimelinePatcher.patch(current, ids, rows, refs, sizes, seq)
-    if (result.droppedRefs.isNotEmpty()) synchronized(recentRefs) { recentRefs.putAll(result.droppedRefs) }
+    val result = TimelinePatcher.patch(current, ids, rows, refs, sizes, seq, nasRefs)
+    if (result.droppedRefs.isNotEmpty() || result.droppedNasRefs.isNotEmpty()) {
+      synchronized(recentRefs) {
+        recentRefs.putAll(result.droppedNasRefs)
+        recentRefs.putAll(result.droppedRefs)
+      }
+    }
     patchCount.incrementAndGet()
     publish(result.snapshot)
     if (result.removed > 0) writer?.writeNow(result.snapshot) else writer?.schedule(result.snapshot)

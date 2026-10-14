@@ -6,7 +6,9 @@ import dev.pampa.mycloudgallery.core.model.CellFlags
 import dev.pampa.mycloudgallery.core.model.ThumbHash
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
+import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.model.MediaSource
+import dev.pampa.mycloudgallery.core.model.PresenceBadge
 import kotlinx.coroutines.flow.StateFlow
 
 // L'indice della timeline (docs/fase3-progetto.md D2, §1.2 `core-library`). Contratti di P0; l'indice vero a colonne,
@@ -14,14 +16,17 @@ import kotlinx.coroutines.flow.StateFlow
 // timeline in memoria (100 mila elementi occupano circa 8 MB).
 
 /**
- * Le funzioni della Libreria accese o spente in Fase 3.
+ * Le funzioni della Libreria accese o spente.
  *
- * **D15: i badge di presenza (solo telefono, solo NAS, al sicuro, in caricamento) restano spenti fino alla Fase 4.**
- * Senza il NAS ogni media sarebbe "solo telefono": sarebbe rumore su ogni cella. Il flag e' una costante: lo
- * accende la Fase 4 cambiando una riga, e chi disegna le celle la legge invece di dedurre dalla fase.
+ * **Fase 3, D15: i badge di presenza (solo telefono, solo NAS, al sicuro, da verificare) restavano spenti.** Senza il
+ * NAS ogni media sarebbe "solo telefono": rumore su ogni cella.
+ *
+ * **Fase 4, D18 (P7): accesi.** Il flag e' una costante: chi disegna le celle la legge invece di dedurre dalla fase, e
+ * il badge lo da' [TimelineSnapshot.presenceAt]. Il rumore di D15 resta evitato dai dati e non dalla UI: finche' nessuna
+ * cella e' sul NAS (nessun NAS configurato, o prima scansione ancora vuota) l'indice non da' il badge "solo telefono".
  */
 object LibraryFeatures {
-  const val presenceBadges: Boolean = false
+  const val presenceBadges: Boolean = true
 }
 
 /**
@@ -29,7 +34,7 @@ object LibraryFeatures {
  * nell'ordine dell'indice: **0 e' il piu' recente** (`sort_time DESC, media_id DESC`, la query del catalogo). Il
  * senso di lettura sullo schermo (D1: i piu' recenti in fondo) lo decide il layout, non l'indice.
  *
- * Costa circa 80 byte per elemento. **Non contiene mai i nascosti** (E-H1), ne' i membri di un gruppo che non lo
+ * Costa circa 90 byte per elemento nella Fase 3 e circa 98 dalla Fase 4 (D18: la chiave di contenuto del NAS, 8 byte). **Non contiene mai i nascosti** (E-H1), ne' i membri di un gruppo che non lo
  * rappresentano (D20): ogni elemento e' una cella. Le colonne si leggono per indice, senza oggetti per riga: e' il
  * percorso caldo dello scorrimento.
  */
@@ -78,6 +83,21 @@ interface TimelineSnapshot {
 
   /** Se la cella ha il bit [flag] di [CellFlags]. */
   fun hasFlag(i: Int, flag: Int): Boolean = CellFlags.has(flagsAt(i), flag)
+
+  /**
+   * Fase 4 (D18): il riferimento ai byte **sul NAS** della cella, quando e' questo il riferimento leggibile adesso,
+   * cioe' quando il telefono non ne ha uno (media solo-NAS, o copia del telefono non leggibile, E-P22). Per un media su
+   * telefono e NAS la griglia usa la miniatura del telefono: qui non c'e' un riferimento al NAS. Null per i fake che
+   * non conoscono il NAS (`TimelineSnapshot` della Fase 3).
+   */
+  fun nasRefAt(i: Int): MediaRef.Nas? = null
+
+  /**
+   * Fase 4 (D18, §1.5): il badge di presenza della cella, ricavato dai soli flag di presenza (`CellFlags.ON_PHONE`,
+   * `ON_NAS`, `SAFE`, `TO_VERIFY`). Null se la cella non ha bit di presenza. **Come** disegnarlo e' del filone grafico.
+   * L'indice vero a colonne ([ColumnarTimelineSnapshot]) toglie "solo telefono" finche' nessuna cella e' sul NAS.
+   */
+  fun presenceAt(i: Int): PresenceBadge? = PresenceBadge.of(flagsAt(i))
 }
 
 /**

@@ -9,8 +9,10 @@ import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.imaging.budget.ImagingBudget
 import dev.pampa.mycloudgallery.core.imaging.cache.ThumbnailCache
 import dev.pampa.mycloudgallery.core.imaging.cache.TrimLevels
+import dev.pampa.mycloudgallery.core.imaging.contract.ThumbContext
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbKey
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbRequest
+import dev.pampa.mycloudgallery.core.imaging.contract.ThumbResult
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbStats
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbnailLoader
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbnailSource
@@ -19,6 +21,7 @@ import dev.pampa.mycloudgallery.core.imaging.scheduler.RetryPolicy
 import dev.pampa.mycloudgallery.core.imaging.scheduler.ThumbnailScheduler
 import dev.pampa.mycloudgallery.core.imaging.source.withCancellationSignal
 import dev.pampa.mycloudgallery.core.model.MediaRef
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -54,6 +57,11 @@ fun interface BitmapPreparer {
  * 3. la bitmap passa da [BitmapPreparer] (`prepareToDraw`) **sullo stesso thread di lavoro**;
  * 4. entra in cache e lo `State` della cella si aggiorna: si ricompone solo quella cella.
  *
+ * **Fase 4 (P7), miniature del NAS.** La sorgente riceve il contesto della richiesta ([ThumbContext]: e' visibile
+ * adesso?) e puo' rispondere "non adesso" ([ThumbResult.Deferred]: non e' un fallimento) o dare una miniatura
+ * **provvisoria** (EXIF, o dall'originale). Le provvisorie si ricordano: [refreshNas] le sostituisce con quelle
+ * preparate appena la replica le ha, **senza** far sparire quella che la cella mostra.
+ *
  * Statistiche ([stats]): si ripubblicano a ogni cambio di finestra, a ogni lavoro finito e a ogni `trim`, non a ogni
  * `image` (sarebbe una scrittura per cella per ricomposizione). `memoryHits` e `misses` contano le letture della
  * cache fatte da [image] e [peek].
@@ -79,11 +87,23 @@ class PipelineThumbnailLoader(
   @Volatile
   private var closed = false
 
+  /** Le chiavi visibili adesso: la sorgente le chiede (`ThumbContext.isVisible`) prima di un lavoro costoso. */
+  @Volatile
+  private var visibleKeys: Set<ThumbKey> = emptySet()
+
+  /** Le miniature provvisorie in cache (chiave, riferimento), le piu' recenti: [refreshNas] controlla se c'e' di meglio. */
+  private val provisional = object : LinkedHashMap<ThumbKey, MediaRef>(64, 0.75f, true) {
+    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<ThumbKey, MediaRef>?): Boolean = size > MAX_PROVISIONAL
+  }
+
+  /** Le provvisorie da ricaricare: restano in cache (la cella le mostra) ma per il pianificatore non lo sono piu'. */
+  private val stale: MutableSet<ThumbKey> = ConcurrentHashMap.newKeySet()
+
   private val scheduler = ThumbnailScheduler(
     scope = scope,
     maxConcurrent = budget.thumbnailConcurrency,
     clockMs = clockMs,
-    isCached = cache::touch,
+    isCached = { key -> cache.touch(key) && key !in stale },
     hasRoom = cache::hasRoom,
     execute = { request -> load(request) },
     retry = retry,
@@ -103,7 +123,9 @@ class PipelineThumbnailLoader(
       lastVisible = visible
       lastAhead = ahead
     }
-    cache.pin(visible.mapTo(HashSet(visible.size * 2)) { it.key }, ahead.mapTo(HashSet(ahead.size * 2)) { it.key })
+    val visibleSet = visible.mapTo(HashSet(visible.size * 2)) { it.key }
+    visibleKeys = visibleSet
+    cache.pin(visibleSet, ahead.mapTo(HashSet(ahead.size * 2)) { it.key })
     scheduler.update(visible, ahead)
   }
 
@@ -115,6 +137,30 @@ class PipelineThumbnailLoader(
     // la griglia rimanda la finestra quando torna visibile.
     if (touchedVisible && level < TrimLevels.UI_HIDDEN) scheduler.repump()
     publishStats()
+  }
+
+  /**
+   * Fase 4 (P7): la replica ha ricevuto blob nuovi, oppure il NAS e' di nuovo raggiungibile. Ogni miniatura
+   * **provvisoria** per cui adesso c'e' di meglio ([ThumbnailSource.canUpgrade]) si ricarica, e quella mostrata dalla
+   * cella resta finche' non arriva la nuova (nessun lampeggio); i fallimenti e le attese si dimenticano, cosi' le celle
+   * che non avevano niente (non preparate, NAS spento) ritentano. Si chiama dopo un giro di sincronizzazione che ha
+   * scaricato segmenti e quando il NAS torna raggiungibile; costa un controllo in memoria per miniatura provvisoria.
+   *
+   * @return quante miniature provvisorie verranno sostituite.
+   */
+  fun refreshNas(): Int {
+    if (closed) return 0
+    val candidates = synchronized(provisional) { provisional.entries.map { it.key to it.value } }
+    var upgraded = 0
+    for ((key, ref) in candidates) {
+      if (!source.canUpgrade(ref, key.bucket.px)) continue
+      stale += key
+      synchronized(provisional) { provisional.remove(key) }
+      upgraded++
+    }
+    scheduler.clearFailures(restart = true)
+    publishStats()
+    return upgraded
   }
 
   /** Vero se la miniatura di [key] non e' arrivata dopo tutti i tentativi (la cella resta sul segnaposto). */
@@ -132,14 +178,16 @@ class PipelineThumbnailLoader(
   // --- Il lavoro di una miniatura --------------------------------------------------------------------------
 
   private suspend fun load(request: ThumbRequest): LoadResult {
-    val bitmap: Bitmap? = try {
+    val key = request.key
+    val result: ThumbResult? = try {
       withCancellationSignal { signal ->
         withContext(dispatchers.io) {
-          val loaded = source.load(request.ref, request.key.bucket.px, signal)
+          val context = ThumbContext { key in visibleKeys }
+          val loaded = source.loadResult(request.ref, key.bucket.px, signal, context)
           // Tutto sul thread di lavoro: se la richiesta e' uscita dalla finestra non si prepara ne' si salva.
-          if (loaded != null) {
+          if (loaded is ThumbResult.Loaded) {
             ensureActive()
-            preparer.prepare(loaded)
+            preparer.prepare(loaded.bitmap)
           }
           loaded
         }
@@ -156,10 +204,17 @@ class PipelineThumbnailLoader(
       return LoadResult.FAILED
     }
     currentCoroutineContext().ensureActive()
-    if (bitmap == null) return LoadResult.FAILED
-    cache.put(request.key, bitmap)
-    publishStats()
-    return LoadResult.LOADED
+    return when (result) {
+      null -> LoadResult.FAILED
+      ThumbResult.Deferred -> LoadResult.DEFERRED
+      is ThumbResult.Loaded -> {
+        cache.put(key, result.bitmap)
+        stale -= key
+        synchronized(provisional) { if (result.provisional) provisional[key] = request.ref else provisional.remove(key) }
+        publishStats()
+        LoadResult.LOADED
+      }
+    }
   }
 
   private fun publishStats() {
@@ -179,5 +234,6 @@ class PipelineThumbnailLoader(
 
   private companion object {
     const val TAG = "ThumbnailLoader"
+    const val MAX_PROVISIONAL = 2048
   }
 }

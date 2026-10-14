@@ -103,15 +103,70 @@ interface ThumbnailLoader {
 /**
  * Da dove arrivano i pixel di una miniatura. Per il telefono e' `ContentResolver.loadThumbnail` (annullabile, con la
  * cache del MediaProvider, `PhoneThumbnailSource` di P6); per la Libreria sintetica sono gradienti deterministici;
- * dalla Fase 4 le miniature del NAS arrivano dalla replica locale.
+ * dalla Fase 4 le miniature del NAS arrivano dalla replica locale (`NasThumbnailSource`, P7).
  */
 interface ThumbnailSource {
 
   /**
    * Una bitmap con il lato lungo di circa [px] pixel, o null se la sorgente non puo' darla (file illeggibile,
    * riferimento di un altro tipo). Deve rispettare [cancel]. Gira su un thread di lavoro: mai sul principale.
+   *
+   * E' la richiesta **singola e diretta** (l'anteprima del viewer, un test): una sorgente che distingue il contenuto
+   * visibile da quello che sta per entrare (il NAS) la tratta come visibile. Il caricatore delle miniature usa
+   * [loadResult].
    */
   suspend fun load(ref: MediaRef, px: Int, cancel: CancellationSignal): Bitmap?
+
+  /**
+   * Fase 4 (P7): come [load], ma con il contesto della richiesta ([ThumbContext]) e un esito piu' ricco ([ThumbResult]).
+   * Serve alle sorgenti la cui qualita' dipende da cio' che c'e' adesso (il NAS: replica, poi miniatura provvisoria,
+   * poi l'originale **solo per il contenuto visibile**). Il default e' [load]: nessuna sorgente della Fase 3 cambia.
+   *
+   * @return `null` = non disponibile (un fallimento: il pianificatore riprova con attese crescenti e poi smette);
+   *   [ThumbResult.Deferred] = non adesso, riprova alla prossima finestra (non e' un fallimento).
+   */
+  suspend fun loadResult(ref: MediaRef, px: Int, cancel: CancellationSignal, context: ThumbContext): ThumbResult? =
+    load(ref, px, cancel)?.let { ThumbResult.Loaded(it) }
+
+  /**
+   * Fase 4 (P7): vero se per [ref] c'e' adesso qualcosa di meglio di una miniatura **provvisoria** gia' data (la replica
+   * ha ricevuto il blob). Chiamata bloccante e veloce (indice in memoria). Il caricatore la usa in
+   * `PipelineThumbnailLoader.refreshProvisional` per sostituire, senza lampeggi, la provvisoria con quella preparata.
+   */
+  fun canUpgrade(ref: MediaRef, px: Int): Boolean = false
+}
+
+/**
+ * Il contesto di una richiesta di miniatura, dato dal caricatore (non dalla cella): per ora solo se il contenuto e'
+ * **visibile adesso**. [isVisible] si legge nel momento in cui serve (una richiesta in arrivo puo' diventare visibile
+ * mentre e' in coda): una sorgente costosa lo chiede subito prima del lavoro caro, non all'inizio.
+ */
+class ThumbContext(val isVisible: () -> Boolean) {
+  companion object {
+    /** Una richiesta diretta: visibile (l'utente la sta guardando). */
+    val Visible: ThumbContext = ThumbContext { true }
+
+    /** Una richiesta speculativa (contenuto in arrivo): non visibile. */
+    val Ahead: ThumbContext = ThumbContext { false }
+  }
+}
+
+/** L'esito di [ThumbnailSource.loadResult] (null = non disponibile). */
+sealed interface ThumbResult {
+
+  /**
+   * La bitmap. [provisional] = viene da una fonte meno buona di quella prevista (la miniatura EXIF letta al
+   * rilevamento, o la decodifica dell'originale, D17): il caricatore la ricorda e, quando la replica riceve la
+   * miniatura preparata, la sostituisce.
+   */
+  class Loaded(val bitmap: Bitmap, val provisional: Boolean = false) : ThumbResult
+
+  /**
+   * Niente da dare **adesso**, e non per un errore: il contenuto non e' ancora preparato e non e' visibile, quindi
+   * leggere l'originale non e' ammesso. Il pianificatore non lo conta come fallimento e lo riprova a ogni cambio di
+   * finestra (quando diventa visibile).
+   */
+  data object Deferred : ThumbResult
 }
 
 /**

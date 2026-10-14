@@ -7,9 +7,10 @@ import com.google.common.truth.Truth.assertWithMessage
 import org.junit.Test
 
 /**
- * I principi misurabili della revisione grafica G1 (`docs/grafica-progetto.md` §3), come numeri: il testo sopra il vetro
- * regge 4,5:1 e le icone 3:1 sul **caso peggiore** del contenuto sotto (foto bianche, nere, grigie, sature), non sul caso
- * medio. Le direzioni A e C lo garantiscono per costruzione; qui lo si verifica.
+ * I principi misurabili della revisione grafica (`docs/grafica-progetto.md` §3, G1 e G2), come numeri: il testo sopra il
+ * vetro regge 4,5:1 e le icone 3:1 sul **caso peggiore** del contenuto sotto (foto bianche, nere, grigie, sature), non sul
+ * caso medio. Il vetro adattivo (direzione C, la chrome delle griglie dalla G2) lo garantisce per costruzione; qui lo si
+ * verifica.
  */
 class GalleryLegibilityTest {
 
@@ -28,36 +29,6 @@ class GalleryLegibilityTest {
     assertThat(GalleryLegibility.contrast(white, black)).isWithin(0.01f).of(21f)
     assertThat(GalleryLegibility.contrast(white, white)).isWithin(0.001f).of(1f)
     assertThat(GalleryLegibility.contrast(Color(0xFF777777), white)).isWithin(0.05f).of(4.48f)
-  }
-
-  /** A: il bianco sulla sfumatura nera (>= `OverPhotoTextScrim` sotto il testo) regge 4,5:1 sopra ogni foto, anche bianca. */
-  @Test
-  fun aIlTestoBiancoSullaSfumaturaReggeSopraOgniFoto() {
-    val scrim = black.copy(alpha = GalleryChromeStyles.OverPhotoTextScrim)
-    for (photo in worst) {
-      val c = GalleryLegibility.contrastOver(white, scrim, photo)
-      assertWithMessage("bianco su sfumatura sopra $photo").that(c).isAtLeast(GalleryLegibility.TextContrast)
-    }
-  }
-
-  /** A: la capsula scura (`darkFloatingTint`, nero al 48%) sopra la sfumatura: "Fine" e le icone reggono 4,5:1 ovunque. */
-  @Test
-  fun aLaCapsulaScuraSullaSfumaturaRegge() {
-    val scrim = black.copy(alpha = GalleryChromeStyles.OverPhotoTextScrim)
-    val film = black.copy(alpha = DarkFloatingFilm)
-    for (photo in worst) {
-      val under = scrim.compositeOver(photo)
-      assertWithMessage("bianco sulla capsula sopra $photo").that(GalleryLegibility.contrastOver(white, film, under)).isAtLeast(GalleryLegibility.TextContrast)
-    }
-  }
-
-  /** A: la barra delle azioni scura in basso (senza sfumatura) tiene le icone a 3:1 anche sopra il bianco. */
-  @Test
-  fun aLaBarraDelleAzioniScuraTieneLeIcone() {
-    val film = black.copy(alpha = DarkFloatingFilm)
-    for (photo in worst) {
-      assertWithMessage("icona bianca sopra $photo").that(GalleryLegibility.contrastOver(white, film, photo)).isAtLeast(GalleryLegibility.LargeContrast)
-    }
   }
 
   /** C: per ogni foto peggiore da sola, e per tutte insieme, il vetro adattivo arriva a 4,5:1 senza superare il tetto. */

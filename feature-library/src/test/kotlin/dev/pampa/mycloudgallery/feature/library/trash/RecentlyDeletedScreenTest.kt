@@ -257,7 +257,7 @@ class RecentlyDeletedScreenTest : ComposeScreenTest() {
     composeRule.onNodeWithContentDescription("Seleziona tutto").performClick()
     composeRule.waitForIdle()
     composeRule.onNodeWithText("Ripristina ${items.size} elementi").assertExists()
-    composeRule.onNodeWithContentDescription("Chiudi").performClick()
+    composeRule.onNodeWithText("Fine").performClick()
     composeRule.waitForIdle()
 
     composeRule.onAllNodesWithText("Ripristina", substring = true).assertCountEquals(0)

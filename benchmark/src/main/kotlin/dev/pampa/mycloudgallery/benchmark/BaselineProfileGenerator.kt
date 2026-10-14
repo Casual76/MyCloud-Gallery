@@ -61,7 +61,7 @@ class BaselineProfileGenerator {
     device.waitForIdle()
   }
 
-  /** I segmenti dei livelli e il menu della vista: ogni livello e lo stile giustificato si compongono e scorrono almeno una volta. */
+  /** I livelli e lo stile dal menu della vista: ogni livello e lo stile giustificato si compongono e scorrono almeno una volta. */
   private fun MacrobenchmarkScope.levelsAndStyles() {
     for (level in listOf(BenchLevel.ALL, BenchLevel.MONTHS, BenchLevel.YEARS)) {
       BenchUi.selectLevel(device, level)

@@ -186,7 +186,8 @@ class CollectionGridScreenTest : ComposeScreenTest() {
   fun mostraLeCelleDellaRaccoltaConIlTitolo() {
     showGrid(CollectionKind.VIDEOS)
 
-    composeRule.onNodeWithText("Video").assertExists()
+    // L'etichetta in alto dice la sezione in vista e, sotto, il nome della raccolta ("Video · Oslo", G2).
+    composeRule.onNodeWithText("Video", substring = true).assertExists()
     composeRule.onAllNodes(anyCell).fetchSemanticsNodes().also { assertThat(it).isNotEmpty() }
     // Tutto cio' che e' stato disegnato sta nella vista dei Video.
     val videos = idsOf(world.source.items(CollectionKind.VIDEOS.filter!!).view.value).toSet()
@@ -271,8 +272,8 @@ class CollectionGridScreenTest : ComposeScreenTest() {
     composeRule.onNodeWithContentDescription("Nascondi").performClick()
     composeRule.waitForIdle()
     assertThat(idsOf(world.source.items(CollectionKind.FAVORITES.filter!!).view.value)).hasSize(before.size - 1)
-    // Finita l'azione si esce dalla selezione: il titolo torna quello della raccolta.
-    composeRule.onNodeWithText("Preferiti").assertExists()
+    // Finita l'azione si esce dalla selezione: l'etichetta torna a dire la raccolta.
+    composeRule.onNodeWithText("Preferiti", substring = true).assertExists()
   }
 
   @Test

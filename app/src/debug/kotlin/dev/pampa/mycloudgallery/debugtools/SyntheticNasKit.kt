@@ -18,11 +18,12 @@ import dev.pampa.mycloudgallery.core.index.noop.EmptyReplicaBlobs
 import dev.pampa.mycloudgallery.core.index.noop.NoReplicaRecords
 import dev.pampa.mycloudgallery.core.index.replica.ReplicaProvisionalThumbnails
 import dev.pampa.mycloudgallery.core.index.replica.store.RoomProvisionalStore
+import dev.pampa.mycloudgallery.core.library.contract.LibraryNasStatus
 import dev.pampa.mycloudgallery.core.library.contract.LocalMediaActions
+import dev.pampa.mycloudgallery.core.library.contract.TimelineRepository
 import dev.pampa.mycloudgallery.core.library.data.CatalogLocalMediaActions
 import dev.pampa.mycloudgallery.core.library.data.CatalogTimelineRepository
 import dev.pampa.mycloudgallery.core.library.data.CatalogTimelineSource
-import dev.pampa.mycloudgallery.core.library.index.ColumnarTimelineSnapshot
 import dev.pampa.mycloudgallery.core.library.store.SnapshotStore
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess
 import dev.pampa.mycloudgallery.core.mediastore.contract.SyncStatus
@@ -63,6 +64,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -94,8 +96,17 @@ internal object SyntheticNasKit : DebugLibraryKit {
 
   override val requested: StateFlow<Boolean> = wanted
 
-  /** Impostazioni → Sviluppo → "NAS sintetico". */
-  fun request() {
+  /**
+   * G2: la "libreria mista" ([MixedPresenceRepository]): presenza, preferiti e video assegnati sopra l'indice, per vedere
+   * tutti i segni sulla griglia, e lo stato del piede scelto da `adb` ([DebugNasFooter]).
+   */
+  @Volatile
+  var mixed: Boolean = false
+    private set
+
+  /** Impostazioni → Sviluppo → "NAS sintetico" (o, con [mixed], "NAS sintetico, libreria mista"). */
+  fun request(mixed: Boolean = false) {
+    this.mixed = mixed
     wanted.value = true
   }
 
@@ -127,6 +138,12 @@ internal class SyntheticNasStack(
     scope,
   )
 
+  /** Cio' che la Libreria guarda: l'indice com'e', o la libreria mista (G2). */
+  private val timeline: TimelineRepository = if (SyntheticNasKit.mixed) MixedPresenceRepository(repository, scope) else repository
+
+  /** Lo stato del NAS del piede: nessuno, o (libreria mista) quello scelto da `adb` (G2). */
+  private val nasFooter = MutableStateFlow<LibraryNasStatus>(LibraryNasStatus.Idle)
+
   /** Le miniature provvisorie del database separato, appena e' aperto (prima: nessuna, la griglia mostra i segnaposto). */
   private val provisional = object : ProvisionalThumbnails {
     override suspend fun put(contentKey: ContentKey, jpeg: ByteArray) = thumbs?.put(contentKey, jpeg) ?: Unit
@@ -156,7 +173,7 @@ internal class SyntheticNasStack(
   init {
     val prefs = gallery.preferences
     val grid = MediaGridState(
-      view = repository.view(prefs.filter.value).value,
+      view = timeline.view(prefs.filter.value).value,
       loader = loader,
       placeholders = gallery.placeholders,
       placeNames = gallery.places,
@@ -165,8 +182,9 @@ internal class SyntheticNasStack(
       level = prefs.level.value,
       style = prefs.style.value,
       refAt = { snapshot, index ->
-        if (snapshot is ColumnarTimelineSnapshot) snapshot.thumbRefAt(index) else repository.mediaRefOf(snapshot.idAt(index))
+        snapshot.columnar()?.thumbRefAt(index) ?: repository.mediaRefOf(snapshot.idAt(index))
       },
+      versionKeyAt = { snapshot, index -> snapshot.columnar()?.versionKeyAt(index) ?: 1L },
     )
     state = LibraryTabState(
       grid = grid,
@@ -174,12 +192,13 @@ internal class SyntheticNasStack(
       viewerImages = images,
       photoCount = 0,
       videoCount = 0,
-      timeline = repository,
+      timeline = timeline,
       preferences = prefs,
       actions = actions,
       phone = phone,
       commands = NoCommands,
       debug = hooks,
+      nas = nasFooter,
     )
     viewerServices = ViewerServices(
       images = images,
@@ -189,6 +208,14 @@ internal class SyntheticNasStack(
       actions = actions,
     )
     scope.launch { open() }
+    if (SyntheticNasKit.mixed) {
+      scope.launch {
+        while (true) {
+          nasFooter.value = withContext(Dispatchers.IO) { DebugNasFooter.read(context.getExternalFilesDir(null)) }
+          delay(FOOTER_POLL_MS)
+        }
+      }
+    }
   }
 
   private suspend fun open() {
@@ -283,6 +310,7 @@ internal class SyntheticNasStack(
     private const val TAG = "SyntheticNas"
     private val OWNER: AccountId = AccountId.of("test")
     private val SCAN_BUDGET = 30.minutes
+    private const val FOOTER_POLL_MS = 1_500L
   }
 }
 

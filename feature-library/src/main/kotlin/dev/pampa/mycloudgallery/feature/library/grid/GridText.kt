@@ -10,6 +10,7 @@ import dev.pampa.mycloudgallery.core.library.contract.SectionInfo
 import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
 import dev.pampa.mycloudgallery.core.model.CellFlags
 import dev.pampa.mycloudgallery.core.model.MediaKind
+import dev.pampa.mycloudgallery.core.model.PresenceBadge
 import dev.pampa.mycloudgallery.core.places.contract.PlaceNames
 import dev.pampa.mycloudgallery.feature.library.R
 import dev.pampa.mycloudgallery.core.library.text.GalleryDates
@@ -40,6 +41,11 @@ internal class GridStrings(
   val estimated: String,
   val duration: String,
   val group: String,
+  val phoneOnly: String,
+  val nasOnly: String,
+  val both: String,
+  val safe: String,
+  val toVerify: String,
   val open: String,
   val select: String,
   val deselect: String,
@@ -66,6 +72,11 @@ internal fun rememberGridStrings(): GridStrings {
     stringResource(R.string.grid_desc_estimated),
     stringResource(R.string.grid_desc_duration),
     stringResource(R.string.grid_desc_group),
+    stringResource(R.string.grid_desc_phone_only),
+    stringResource(R.string.grid_desc_nas_only),
+    stringResource(R.string.grid_desc_both),
+    stringResource(R.string.grid_desc_safe),
+    stringResource(R.string.grid_desc_to_verify),
     stringResource(R.string.grid_action_open),
     stringResource(R.string.grid_action_select),
     stringResource(R.string.grid_action_deselect),
@@ -76,8 +87,9 @@ internal fun rememberGridStrings(): GridStrings {
       today = values[0], yesterday = values[1], kindPhoto = values[2], kindVideo = values[3], kindMotion = values[4],
       kindRaw = values[5], kindAnimated = values[6], favoriteFeminine = values[7], favoriteMasculine = values[8],
       editedFeminine = values[9], editedMasculine = values[10], unreadable = values[11], estimated = values[12],
-      duration = values[13], group = values[14], open = values[15], select = values[16], deselect = values[17],
-      scrubber = values[18],
+      duration = values[13], group = values[14], phoneOnly = values[15], nasOnly = values[16], both = values[17],
+      safe = values[18], toVerify = values[19], open = values[20], select = values[21], deselect = values[22],
+      scrubber = values[23],
     )
   }
 }
@@ -128,7 +140,8 @@ internal object GridText {
   }
 
   /**
-   * La descrizione di una cella per il lettore di schermo: "Foto, 12 marzo 2024, 10:15, Oslo, preferita". Si costruisce
+   * La descrizione di una cella per il lettore di schermo: "Foto, 12 marzo 2024, 10:15, Oslo, preferita, solo sul NAS"
+   * (la presenza in fondo: e' cio' che il disco in alto a destra dice, `PresenceBadge` dell'indice). Si costruisce
    * **solo quando qualcuno la chiede** (la semantica della cella la calcola su richiesta), mai durante lo scorrimento.
    *
    * L'ora e' quella del fuso del telefono: l'indice tiene il giorno nell'ora del posto (E-P5) ma non il fuso. Se le due
@@ -164,6 +177,14 @@ internal object GridText {
     if (CellFlags.has(flags, CellFlags.UNREADABLE)) parts += strings.unreadable
     val group = snapshot.groupSizeAt(index)
     if (group > 1) parts += strings.group.format(GalleryNumbers.format(group))
+    when (snapshot.presenceAt(index)) {
+      PresenceBadge.PHONE_ONLY -> parts += strings.phoneOnly
+      PresenceBadge.NAS_ONLY -> parts += strings.nasOnly
+      PresenceBadge.BOTH -> parts += strings.both
+      PresenceBadge.SAFE -> parts += strings.safe
+      PresenceBadge.TO_VERIFY -> parts += strings.toVerify
+      null -> Unit
+    }
     return parts.joinToString(", ")
   }
 }

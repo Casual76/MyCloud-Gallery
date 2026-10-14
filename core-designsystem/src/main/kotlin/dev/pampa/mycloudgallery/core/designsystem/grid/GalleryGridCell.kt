@@ -8,8 +8,13 @@ import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BrokenImage
+import androidx.compose.material.icons.rounded.Cloud
+import androidx.compose.material.icons.rounded.CloudDone
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.GppGood
+import androidx.compose.material.icons.rounded.HourglassTop
+import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.MaterialTheme
@@ -26,6 +31,7 @@ import androidx.compose.ui.draw.CacheDrawModifierNode
 import androidx.compose.ui.draw.CacheDrawScope
 import androidx.compose.ui.draw.DrawResult
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
@@ -39,6 +45,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.VectorPainter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.node.CompositionLocalConsumerModifierNode
@@ -104,7 +111,10 @@ import kotlinx.coroutines.launch
 //     miniatura che arriva mentre la cella e' gia' sullo schermo, e il luccichio del segnaposto non c'e' (il ThumbHash e'
 //     gia' un'anteprima).
 
-/** I segni di una cella (D15: in Fase 3 durata, preferito, modificata e non leggibile). Un valore: si confronta. */
+/**
+ * I segni di una cella: quelli della Fase 3 (D15: durata, preferito, modificata, non leggibile) e, dalla Fase 4 (G2), la
+ * **presenza** (D18): dove sta il media, telefono, NAS o tutti e due. Un valore: si confronta.
+ */
 @Immutable
 data class GalleryGridCellBadges(
   val favorite: Boolean = false,
@@ -113,10 +123,39 @@ data class GalleryGridCellBadges(
   val duration: String? = null,
   /** Il file non si legge (E-M10): niente miniatura, mai; la cella lo dice con un glifo. */
   val unreadable: Boolean = false,
+  /** Dove sta il media (`PresenceBadge` dell'indice), o null se l'indice non lo dice (nessun NAS, libreria sintetica). */
+  val presence: GalleryPresence? = null,
 ) {
   companion object {
     val None: GalleryGridCellBadges = GalleryGridCellBadges()
   }
+}
+
+/**
+ * La presenza di un media, come la cella la disegna (G2, `docs/grafica-progetto.md` §12): un disco **in alto a destra**,
+ * l'unico angolo libero (in alto a sinistra c'e' il cerchio della selezione, in basso i segni del contenuto). E' il
+ * `PresenceBadge` dell'indice (`core-model`), ripetuto qui perche' il design system non conosce i flag.
+ *
+ * La gerarchia la fa la **taglia**, non l'alfa (l'inchiostro resta pieno): [prominent] sono gli stati che dicono "guarda"
+ * (non e' ancora sul NAS, e' solo sul NAS, e' da verificare) e prendono il disco intero dei badge (22 dp, glifo 14);
+ * gli altri sono lo stato di tutti i giorni (sul telefono e sul NAS, al sicuro) e prendono un disco piu' piccolo (18 dp,
+ * glifo 12), cosi' una Libreria tutta al sicuro non e' una pioggia di segni.
+ */
+enum class GalleryPresence(val prominent: Boolean) {
+  /** Solo sul telefono: non e' ancora sul NAS. */
+  PhoneOnly(prominent = true),
+
+  /** Solo sul NAS: si apre quando il NAS risponde. */
+  NasOnly(prominent = true),
+
+  /** Video uguale sul telefono e sul NAS in attesa dell'impronta completa (D21, E-L9). */
+  ToVerify(prominent = true),
+
+  /** Sul telefono e sul NAS. */
+  Both(prominent = false),
+
+  /** Copia privata verificata sul NAS (D8): al sicuro. */
+  Safe(prominent = false),
 }
 
 /**
@@ -219,12 +258,14 @@ class GalleryGridCellStyle internal constructor(
   internal val edited: VectorPainter,
   internal val check: VectorPainter,
   internal val broken: VectorPainter,
+  /** I glifi della presenza, nell'ordine di [GalleryPresence]. */
+  internal val presenceGlyphs: List<VectorPainter>,
   internal val textMeasurer: TextMeasurer,
   internal val badgeText: TextStyle,
   internal val selectedText: String,
   internal val notSelectedText: String,
   internal val loadingText: String,
-  /** Quanto dell'angolo continuo resta (1 = quello di sempre, 0 = celle squadrate, G1 direzione A). */
+  /** Quanto dell'angolo continuo resta (1 = quello di sempre, 0 = la parete di foto squadrata della Libreria, G2). */
   internal val cornerScale: Float = 1f,
 ) {
   internal val onPhotoFilter: ColorFilter = ColorFilter.tint(badgeContent)
@@ -233,20 +274,21 @@ class GalleryGridCellStyle internal constructor(
 
   private fun Dp.px(): Float = with(density) { toPx() }
 
-  internal val badgeHeight = GalleryDimens.BadgeHeight.px()
-  internal val badgeGlyph = GalleryDimens.BadgeGlyph.px()
-  internal val badgeInset = GalleryDimens.BadgeInset.px()
-  internal val iconPadding = BadgeIconPadding.px()
-  internal val labeledPadding = BadgeLabeledPadding.px()
-  internal val glyphGap = BadgeGlyphGap.px()
-  internal val clusterGap = BadgeClusterGap.px()
-  internal val rowGap = BadgeRowGap.px()
+  /** Le misure dei segni in pixel: le legge anche [badgeSlots], che le dispone. */
+  internal val metrics = badgeMetrics(density)
+  internal val badgeHeight = metrics.badgeHeight
+  internal val badgeGlyph = metrics.glyph
+  internal val badgeInset = metrics.inset
+  internal val iconPadding = metrics.iconPadding
+  internal val labeledPadding = metrics.labeledPadding
+  internal val glyphGap = metrics.glyphGap
+  internal val clusterGap = metrics.clusterGap
   internal val hairline = BadgeHairline.px()
-  internal val indicator = GalleryDimens.SelectionIndicator.px()
+  internal val indicator = metrics.indicator
   internal val ring = SelectionRing.px()
   internal val checkSize = SelectionCheck.px()
   internal val brokenSize = BrokenGlyph.px()
-  internal val badgesMinSide = BadgesMinCell.px()
+  internal val badgesMinSide = metrics.minSide
   private val maxCorner = FluidRadius.Small.px()
   private val referenceCell = CornerReferenceCell.px()
 
@@ -270,9 +312,22 @@ class GalleryGridCellStyle internal constructor(
 }
 
 /**
+ * La **parete di foto** (G2, scelta 3 dell'utente in `docs/grafica-progetto.md` §11): celle squadrate separate da una
+ * fessura di 1 dp, come Foto e Galleria. E' la griglia della Libreria e delle Raccolte.
+ */
+object GalleryWall {
+  /** La fessura fra le celle. */
+  val Gap: Dp = 1.dp
+
+  /** Quanto dell'angolo continuo resta alle celle: niente. */
+  const val CornerScale: Float = 0f
+}
+
+/**
  * Lo stile delle celle della griglia, dal tema corrente. Uno per griglia.
  *
- * @param cornerScale quanto dell'angolo continuo resta: 1 di serie, 0 per le celle squadrate di una parete di foto (G1).
+ * @param cornerScale quanto dell'angolo continuo resta: 1 di serie, 0 per le celle squadrate della parete di foto
+ *   ([GalleryWall], la griglia della Libreria e delle Raccolte dalla G2).
  */
 @Composable
 fun rememberGalleryGridCellStyle(cornerScale: Float = 1f): GalleryGridCellStyle {
@@ -286,10 +341,11 @@ fun rememberGalleryGridCellStyle(cornerScale: Float = 1f): GalleryGridCellStyle 
   val edited = rememberVectorPainter(Icons.Rounded.Tune)
   val check = rememberVectorPainter(Icons.Rounded.Check)
   val broken = rememberVectorPainter(Icons.Rounded.BrokenImage)
+  val presenceGlyphs = GalleryPresence.entries.map { rememberVectorPainter(it.glyph) }
   val selectedText = stringResource(R.string.cell_selected)
   val notSelectedText = stringResource(R.string.cell_not_selected)
   val loadingText = stringResource(R.string.cell_loading)
-  return remember(scheme, density, direction, textMeasurer, badgeText, play, favorite, edited, check, broken, selectedText, cornerScale) {
+  return remember(scheme, density, direction, textMeasurer, badgeText, play, favorite, edited, check, broken, presenceGlyphs, selectedText, cornerScale) {
     GalleryGridCellStyle(
       density = density,
       layoutDirection = direction,
@@ -308,6 +364,7 @@ fun rememberGalleryGridCellStyle(cornerScale: Float = 1f): GalleryGridCellStyle 
       edited = edited,
       check = check,
       broken = broken,
+      presenceGlyphs = presenceGlyphs,
       textMeasurer = textMeasurer,
       badgeText = badgeText,
       selectedText = selectedText,
@@ -557,7 +614,7 @@ private class GalleryGridCellNode(
           if (pressAmount > 0f) drawOutline(outline, s.pressDim, alpha = pressAmount)
         }
 
-        // 3. I badge, agli angoli in basso.
+        // 3. I segni: quelli del contenuto agli angoli in basso, la presenza in alto a destra.
         badgeLayout?.let { drawBadges(s, it) }
 
         // 4. Il cerchio di selezione, in alto a sinistra.
@@ -609,6 +666,15 @@ private class GalleryGridCellNode(
         }
       }
     }
+    layout.presence?.let { disc ->
+      translate(disc.left, disc.top) {
+        drawPill(s, disc)
+        val glyph = disc.glyphsWidth
+        translate((disc.size.width - glyph) / 2f, (disc.size.height - glyph) / 2f) {
+          with(disc.glyphs.single()) { draw(Size(glyph, glyph), colorFilter = s.onPhotoFilter) }
+        }
+      }
+    }
   }
 
   private fun DrawScope.drawPill(s: GalleryGridCellStyle, pill: Pill) {
@@ -632,36 +698,138 @@ private class Pill(
   val glyphsWidth: Float = 0f,
 )
 
-private class BadgeLayout(val start: Pill?, val end: Pill?)
+private class BadgeLayout(val start: Pill?, val end: Pill?, val presence: Pill?)
+
+/** Le misure dei segni di una cella, in pixel. */
+@Immutable
+internal data class BadgeMetrics(
+  val badgeHeight: Float,
+  val glyph: Float,
+  val inset: Float,
+  val iconPadding: Float,
+  val labeledPadding: Float,
+  val glyphGap: Float,
+  val clusterGap: Float,
+  val rowGap: Float,
+  val indicator: Float,
+  val presenceDisc: Float,
+  val presenceGlyph: Float,
+  val quietDisc: Float,
+  val quietGlyph: Float,
+  val minSide: Float,
+)
+
+/** Le misure dei segni di una cella a una densita' (pixel): quelle dello stile, e dei test della disposizione. */
+internal fun badgeMetrics(density: Density): BadgeMetrics = with(density) {
+  BadgeMetrics(
+    badgeHeight = GalleryDimens.BadgeHeight.toPx(),
+    glyph = GalleryDimens.BadgeGlyph.toPx(),
+    inset = GalleryDimens.BadgeInset.toPx(),
+    iconPadding = BadgeIconPadding.toPx(),
+    labeledPadding = BadgeLabeledPadding.toPx(),
+    glyphGap = BadgeGlyphGap.toPx(),
+    clusterGap = BadgeClusterGap.toPx(),
+    rowGap = BadgeRowGap.toPx(),
+    indicator = GalleryDimens.SelectionIndicator.toPx(),
+    presenceDisc = GalleryDimens.BadgeHeight.toPx(),
+    presenceGlyph = GalleryDimens.BadgeGlyph.toPx(),
+    quietDisc = QuietPresenceDisc.toPx(),
+    quietGlyph = QuietPresenceGlyph.toPx(),
+    minSide = BadgesMinCell.toPx(),
+  )
+}
+
+/** Dove stanno i segni di una cella: rettangoli in pixel della cella, null dove il segno non c'e' (o non ci sta). */
+@Immutable
+internal data class BadgeSlots(
+  /** I segni del contenuto (preferito, modificata), in basso a sinistra. */
+  val start: Rect?,
+  /** La durata di un video, in basso a destra. */
+  val end: Rect?,
+  /** La presenza, in alto a destra. */
+  val presence: Rect?,
+  /** Il cerchio della selezione, in alto a sinistra: c'e' sempre, la selezione puo' cominciare in ogni momento. */
+  val indicator: Rect,
+)
 
 /**
- * La riga dei badge in basso, come in `GalleryMediaCell`: i segni a sinistra, la durata a destra. **La durata ha la
- * precedenza**: i segni compaiono solo se ci stanno per intero, mai tagliati a meta'.
+ * La **gerarchia** dei segni di una cella (G2, `docs/grafica-progetto.md` §12), in un posto solo e senza disegnare niente
+ * (la verifica `GalleryCellBadgesTest`, il test dei bordi della cella):
+ *  - in alto a sinistra il cerchio della selezione: e' un controllo, vince su tutto;
+ *  - in basso a destra la **durata** di un video, che in basso ha la precedenza;
+ *  - in basso a sinistra i segni del contenuto (preferito, modificata), solo se ci stanno per intero accanto alla durata;
+ *  - in alto a destra la **presenza** (disco intero o piccolo, [GalleryPresence.prominent]), solo se resta staccata dal
+ *    cerchio della selezione e dalla fila in basso.
+ * Sotto [BadgeMetrics.minSide] di lato corto (il livello Anni) nessun segno, come prima della G2.
  */
+internal fun badgeSlots(
+  width: Float,
+  height: Float,
+  m: BadgeMetrics,
+  contentGlyphs: Int,
+  durationTextWidth: Float?,
+  presence: GalleryPresence?,
+): BadgeSlots {
+  val indicator = Rect(m.inset, m.inset, m.inset + m.indicator, m.inset + m.indicator)
+  if (min(width, height) < m.minSide) return BadgeSlots(null, null, null, indicator)
+  val rowWidth = width - 2 * m.inset
+  val top = height - m.inset - m.badgeHeight
+  var end: Rect? = null
+  if (durationTextWidth != null) {
+    val pillWidth = max(m.badgeHeight, min(rowWidth, m.labeledPadding * 2 + m.glyph + m.glyphGap + durationTextWidth))
+    end = Rect(width - m.inset - pillWidth, top, width - m.inset, top + m.badgeHeight)
+  }
+  var start: Rect? = null
+  if (contentGlyphs > 0) {
+    val glyphsWidth = contentGlyphs * m.glyph + (contentGlyphs - 1) * m.clusterGap
+    val pillWidth = max(m.badgeHeight, glyphsWidth + 2 * m.iconPadding)
+    val room = rowWidth - (end?.let { it.width + m.rowGap } ?: 0f)
+    if (pillWidth <= room) start = Rect(m.inset, top, m.inset + pillWidth, top + m.badgeHeight)
+  }
+  var disc: Rect? = null
+  if (presence != null) {
+    val side = if (presence.prominent) m.presenceDisc else m.quietDisc
+    val candidate = Rect(width - m.inset - side, m.inset, width - m.inset, m.inset + side)
+    val clearOfIndicator = candidate.left >= indicator.right + m.rowGap
+    val clearOfRow = candidate.bottom + m.rowGap <= top
+    if (clearOfIndicator && clearOfRow) disc = candidate
+  }
+  return BadgeSlots(start, end, disc, indicator)
+}
+
+/** I segni della cella, misurati e messi al loro posto da [badgeSlots]. */
 private fun CacheDrawScope.layoutBadges(s: GalleryGridCellStyle, badges: GalleryGridCellBadges, size: Size): BadgeLayout? {
   val glyphs = buildList {
     if (badges.favorite) add(s.favorite)
     if (badges.edited) add(s.edited)
   }
-  if (glyphs.isEmpty() && badges.duration == null) return null
-  val rowWidth = size.width - 2 * s.badgeInset
-  val top = size.height - s.badgeInset - s.badgeHeight
-  var end: Pill? = null
-  if (badges.duration != null) {
-    val text = s.textMeasurer.measure(badges.duration, s.badgeText, maxLines = 1)
-    val width = min(rowWidth, s.labeledPadding * 2 + s.badgeGlyph + s.glyphGap + text.size.width)
-    val pillSize = Size(max(width, s.badgeHeight), s.badgeHeight)
-    end = Pill(size.width - s.badgeInset - pillSize.width, top, pillSize, s.capsule(pillSize), text = text)
+  val presence = badges.presence
+  if (glyphs.isEmpty() && badges.duration == null && presence == null) return null
+  val text = badges.duration?.let { s.textMeasurer.measure(it, s.badgeText, maxLines = 1) }
+  val slots = badgeSlots(size.width, size.height, s.metrics, glyphs.size, text?.size?.width?.toFloat(), presence)
+  fun pill(rect: Rect, text: TextLayoutResult? = null, glyphs: List<VectorPainter> = emptyList(), glyphsWidth: Float = 0f): Pill {
+    val pillSize = Size(rect.width, rect.height)
+    return Pill(rect.left, rect.top, pillSize, s.capsule(pillSize), text, glyphs, glyphsWidth)
   }
-  var start: Pill? = null
-  if (glyphs.isNotEmpty()) {
-    val glyphsWidth = glyphs.size * s.badgeGlyph + (glyphs.size - 1) * s.clusterGap
-    val pillSize = Size(max(s.badgeHeight, glyphsWidth + 2 * s.iconPadding), s.badgeHeight)
-    val room = rowWidth - (end?.let { it.size.width + s.rowGap } ?: 0f)
-    if (pillSize.width <= room) start = Pill(s.badgeInset, top, pillSize, s.capsule(pillSize), glyphs = glyphs, glyphsWidth = glyphsWidth)
+  val end = slots.end?.let { pill(it, text = text) }
+  val start = slots.start?.let { pill(it, glyphs = glyphs, glyphsWidth = glyphs.size * s.badgeGlyph + (glyphs.size - 1) * s.clusterGap) }
+  val disc = presence?.let { p ->
+    slots.presence?.let { rect ->
+      pill(rect, glyphs = listOf(s.presenceGlyphs[p.ordinal]), glyphsWidth = if (p.prominent) s.metrics.presenceGlyph else s.metrics.quietGlyph)
+    }
   }
-  return BadgeLayout(start, end)
+  return BadgeLayout(start, end, disc)
 }
+
+/** Il glifo di uno stato di presenza: gli stessi di `GalleryBadge` per telefono, NAS e al sicuro. */
+internal val GalleryPresence.glyph: ImageVector
+  get() = when (this) {
+    GalleryPresence.PhoneOnly -> Icons.Rounded.PhoneAndroid
+    GalleryPresence.NasOnly -> Icons.Rounded.Cloud
+    GalleryPresence.ToVerify -> Icons.Rounded.HourglassTop
+    GalleryPresence.Both -> Icons.Rounded.CloudDone
+    GalleryPresence.Safe -> Icons.Rounded.GppGood
+  }
 
 /** Un pennello che disegna [image] ritagliata al centro dentro [size] (come `ContentScale.Crop`), filtrata. */
 private fun cropBrush(image: ImageBitmap, size: Size): ShaderBrush {
@@ -687,6 +855,10 @@ private val BrokenGlyph = 24.dp
 
 /** Sotto questo lato i badge non ci stanno con garbo (il livello Anni): la cella resta pulita, come in Foto. */
 private val BadgesMinCell = 64.dp
+
+/** Il disco piccolo della presenza di tutti i giorni (sul telefono e sul NAS, al sicuro) e il suo glifo. */
+private val QuietPresenceDisc = 18.dp
+private val QuietPresenceGlyph = 12.dp
 
 /** Il lato a cui la cella prende tutto il raggio di `FluidRadius.Small`; sotto, il raggio scala col lato. */
 private val CornerReferenceCell = 100.dp

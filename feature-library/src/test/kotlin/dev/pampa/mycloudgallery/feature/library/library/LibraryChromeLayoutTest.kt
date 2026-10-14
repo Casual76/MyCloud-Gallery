@@ -20,6 +20,9 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.google.common.truth.Truth.assertThat
@@ -27,10 +30,15 @@ import com.google.common.truth.Truth.assertWithMessage
 import dev.antigravity.fluidengine.ui.fluid.FluidFloatingTabBarDefaults
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeTagPrefix
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionGridScreen
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionKind
+import dev.pampa.mycloudgallery.feature.library.collections.testing.FakeCollectionsWorld
+import dev.pampa.mycloudgallery.feature.library.collections.testing.fakeGridEnvironment
 import dev.pampa.mycloudgallery.feature.library.grid.RegisterComponentActivity
 import dev.pampa.mycloudgallery.feature.library.grid.contentUnder
 import dev.pampa.mycloudgallery.feature.library.grid.showThemed
 import dev.pampa.mycloudgallery.feature.library.library.testing.syntheticLibraryState
+import java.io.File
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.RuleChain
@@ -40,29 +48,28 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Il **test dei bordi** della revisione grafica G1 (`docs/grafica-progetto.md` §3): nelle tre direzioni, a riposo e in
- * selezione, in chiaro e con il testo a 1,3x,
- *  - nessun pezzo di chrome ne tocca un altro (titolo, capsula dei comandi, barra, scrubber, barra delle azioni e la
- *    pillola, che qui e' un rettangolo grande quanto la pillola vera, nel suo posto);
- *  - ogni controllo toccabile della chrome e' almeno 48 x 48 dp;
- *  - in selezione la barra delle azioni sta nel posto della pillola (stesso fondo, stessa altezza) e la griglia non si
- *    sposta entrando in selezione.
+ * Il **test dei bordi** della chrome delle griglie (G2, `docs/grafica-progetto.md` §3, §12): nella Libreria (telefono, testo
+ * a 1,3x, tablet) e nelle Raccolte, a riposo e in selezione,
+ *  - nessun pezzo di chrome ne tocca un altro (indietro, etichetta, capsula dei comandi, scrubber, barra delle azioni e
+ *    la pillola, che qui e' un rettangolo grande quanto la pillola vera, nel suo posto) (P2);
+ *  - ogni controllo toccabile della chrome e' almeno 48 x 48 dp (P3);
+ *  - in selezione la barra delle azioni sta nel posto della pillola, alta uguale (P5), e la griglia non si sposta (P6);
+ *  - nessun fondale a schermo intero in piu' (P4): le pagine a griglia ne registrano uno, la griglia nessuno.
  * Il vetro qui non si vede (Robolectric non sfoca): la leggibilita' e' in `GalleryLegibilityTest` e nelle misure
  * sull'emulatore.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = Application::class, qualifiers = "w412dp-h915dp-xhdpi")
-class LibraryPrototypeLayoutTest {
+class LibraryChromeLayoutTest {
 
   val composeRule = createComposeRule()
 
   @get:Rule
   val rules: RuleChain = RuleChain.outerRule(RegisterComponentActivity()).around(composeRule)
 
-  private fun show(design: LibraryDesign, fontScale: Float = 1f): LibraryTabState {
+  private fun showLibrary(fontScale: Float = 1f): LibraryTabState {
     val state = syntheticLibraryState(count = 400, debugSizes = listOf(0, 400))
-    checkNotNull(state.debug).chooseDesign(design)
     composeRule.showThemed {
       val density = LocalDensity.current
       CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
@@ -76,23 +83,26 @@ class LibraryPrototypeLayoutTest {
             state = state,
           )
           // La pillola di `:app`: c'e' fuori dalla selezione, nel suo posto e grande quanto lei (tre schede).
-          if (!state.grid.selecting) {
-            Box(
-              modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = FluidFloatingTabBarDefaults.BottomMargin)
-                .size(width = PillWidth, height = FluidFloatingTabBarDefaults.OpenHeight)
-                .testTag(PillTag),
-            )
-          }
+          if (!state.grid.selecting) Pill()
         }
       }
     }
     return state
   }
 
+  @androidx.compose.runtime.Composable
+  private fun androidx.compose.foundation.layout.BoxScope.Pill() {
+    Box(
+      modifier = Modifier
+        .align(Alignment.BottomCenter)
+        .padding(bottom = FluidFloatingTabBarDefaults.BottomMargin)
+        .size(width = PillWidth, height = FluidFloatingTabBarDefaults.OpenHeight)
+        .testTag(PillTag),
+    )
+  }
+
   private fun chrome(): List<SemanticsNode> = composeRule
-    .onAllNodes(SemanticsMatcher("chrome G1") { (it.config.getOrNull(SemanticsProperties.TestTag) ?: "").startsWith(GalleryChromeTagPrefix) }, useUnmergedTree = true)
+    .onAllNodes(SemanticsMatcher("chrome") { (it.config.getOrNull(SemanticsProperties.TestTag) ?: "").startsWith(GalleryChromeTagPrefix) }, useUnmergedTree = true)
     .fetchSemanticsNodes()
     .filter { it.boundsInRoot.width > 0f && it.boundsInRoot.height > 0f }
 
@@ -103,7 +113,7 @@ class LibraryPrototypeLayoutTest {
   private fun Rect.contains(other: Rect): Boolean =
     left <= other.left + Slack && top <= other.top + Slack && right >= other.right - Slack && bottom >= other.bottom - Slack
 
-  /** Nessuna coppia di pezzi di chrome si sovrappone, a meno che uno non contenga l'altro (un tasto nella sua barra). */
+  /** Nessuna coppia di pezzi di chrome si sovrappone, a meno che uno non contenga l'altro (un tasto nella sua capsula). */
   private fun assertNoOverlaps(where: String) {
     val nodes = chrome()
     assertWithMessage("$where: la chrome c'e'").that(nodes.map { it.tag() }).isNotEmpty()
@@ -117,7 +127,7 @@ class LibraryPrototypeLayoutTest {
     }
   }
 
-  /** Vero se il nodo, o uno dei suoi antenati, e' un pezzo di chrome G1 (non la griglia che le scorre sotto). */
+  /** Vero se il nodo, o uno dei suoi antenati, e' un pezzo di chrome (non la griglia che le scorre sotto). */
   private fun SemanticsNode.inChrome(): Boolean {
     var node: SemanticsNode? = this
     while (node != null) {
@@ -140,51 +150,98 @@ class LibraryPrototypeLayoutTest {
     }
   }
 
-  private fun check(design: LibraryDesign, fontScale: Float = 1f) {
-    val state = show(design, fontScale)
-    val label = "$design ${fontScale}x"
+  /** Una cella intera a meta' schermo: la sua descrizione e dove sta (per vedere che la griglia non si sposta). */
+  private fun probeCell(): Pair<String, Rect> {
+    val cells = composeRule.onAllNodes(SemanticsMatcher("cella") { (it.config.getOrNull(SemanticsProperties.ContentDescription)?.firstOrNull() ?: "").matches(CellPattern) })
+      .fetchSemanticsNodes()
+    fun SemanticsNode.description(): String = config[SemanticsProperties.ContentDescription].first()
+    // Una descrizione sola sullo schermo (due scatti nello stesso minuto e posto si direbbero uguali).
+    val unique = cells.groupBy { it.description() }.filterValues { it.size == 1 }.values.map { it.single() }
+    val middle = unique.minBy { kotlin.math.abs(it.boundsInRoot.center.y - 900f) }
+    return middle.description() to middle.boundsInRoot
+  }
+
+  private fun boundsOfCell(description: String): Rect = composeRule
+    .onAllNodes(SemanticsMatcher("cella $description") { it.config.getOrNull(SemanticsProperties.ContentDescription)?.firstOrNull() == description })
+    .fetchSemanticsNodes().single().boundsInRoot
+
+  /** A riposo e in selezione: bordi, bersagli, la barra nel posto della pillola, la griglia ferma. */
+  private fun checkPage(label: String, pillBottom: Float, pillHeight: Float, select: () -> Unit) {
     assertNoOverlaps("$label a riposo")
     assertTargets("$label a riposo")
-
-    val pill = composeRule.onAllNodes(SemanticsMatcher("pillola") { it.config.getOrNull(SemanticsProperties.TestTag) == PillTag }).fetchSemanticsNodes().single().boundsInRoot
-    val list = state.grid.listState
-    val before = list.firstVisibleItemIndex to list.firstVisibleItemScrollOffset
-    composeRule.runOnIdle { state.grid.startSelecting() }
+    val (cell, before) = probeCell()
+    select()
     composeRule.waitForIdle()
-    assertThat(list.firstVisibleItemIndex to list.firstVisibleItemScrollOffset).isEqualTo(before)
+    assertWithMessage("$label: la griglia non si sposta entrando in selezione").that(boundsOfCell(cell)).isEqualTo(before)
     assertNoOverlaps("$label in selezione")
     assertTargets("$label in selezione")
     val bar = chrome().single { it.tag() == "${GalleryChromeTagPrefix}azioni" }.boundsInRoot
-    assertWithMessage("$label: la barra delle azioni finisce dove finiva la pillola").that(bar.bottom).isWithin(Slack).of(pill.bottom)
-    assertWithMessage("$label: alta come la pillola").that(bar.height).isWithin(Slack).of(pill.height)
+    assertWithMessage("$label: la barra delle azioni finisce dove finiva la pillola").that(bar.bottom).isWithin(Slack).of(pillBottom)
+    assertWithMessage("$label: alta come la pillola").that(bar.height).isWithin(Slack).of(pillHeight)
+  }
+
+  private fun checkLibrary(fontScale: Float = 1f) {
+    val state = showLibrary(fontScale)
+    val pill = composeRule.onAllNodes(SemanticsMatcher("pillola") { it.config.getOrNull(SemanticsProperties.TestTag) == PillTag }).fetchSemanticsNodes().single().boundsInRoot
+    checkPage("Libreria ${fontScale}x", pill.bottom, pill.height) {
+      composeRule.runOnIdle {
+        state.grid.startSelecting()
+        state.grid.selection.toggle(checkNotNull(state.grid.idAt(0)))
+      }
+    }
   }
 
   @Test
-  fun aNessunaCompenetrazione() = check(LibraryDesign.A)
+  fun laLibreriaNonHaCompenetrazioni() = checkLibrary()
 
   @Test
-  fun bNessunaCompenetrazione() = check(LibraryDesign.B)
+  fun laLibreriaConIlTestoGrande() = checkLibrary(fontScale = LargeText)
 
   @Test
-  fun cNessunaCompenetrazione() = check(LibraryDesign.C)
+  @Config(qualifiers = "w1280dp-h800dp-xhdpi")
+  fun laLibreriaSulTablet() = checkLibrary()
 
+  /**
+   * Le Raccolte hanno la stessa chrome (indietro, etichetta, "Seleziona") e la barra delle azioni nel posto della pillola,
+   * che a schermo intero non c'e': in fondo, alla stessa altezza da terra.
+   */
   @Test
-  fun aConIlTestoGrande() = check(LibraryDesign.A, fontScale = 1.3f)
-
-  @Test
-  fun bConIlTestoGrande() = check(LibraryDesign.B, fontScale = 1.3f)
-
-  @Test
-  fun cConIlTestoGrande() = check(LibraryDesign.C, fontScale = 1.3f)
+  fun leRaccolteHannoLaStessaChrome() {
+    val world = FakeCollectionsWorld()
+    val environment = fakeGridEnvironment()
+    val items = world.source.items(CollectionKind.FAVORITES.filter!!)
+    composeRule.showThemed {
+      CollectionGridScreen(
+        kind = CollectionKind.FAVORITES,
+        items = items,
+        environment = environment,
+        onFavorite = { _, _ -> },
+        onHide = {},
+        onOpenViewer = {},
+        onBack = {},
+      )
+    }
+    composeRule.waitForIdle()
+    val height = with(composeRule.density) { FluidFloatingTabBarDefaults.OpenHeight.toPx() }
+    val root = composeRule.onRoot().fetchSemanticsNode().boundsInRoot
+    val margin = with(composeRule.density) { FluidFloatingTabBarDefaults.BottomMargin.toPx() }
+    checkPage("Preferiti", root.bottom - margin, height) {
+      composeRule.onNodeWithContentDescription("Seleziona").performClick()
+      composeRule.waitForIdle()
+      val (cell, _) = probeCell()
+      composeRule.onNodeWithContentDescription(cell).performClick()
+    }
+    assertThat(chrome().map { it.tag() }).contains("${GalleryChromeTagPrefix}titolo")
+  }
 
   /**
    * Il vetro adattivo legge che cosa passa sotto un rettangolo: anche dove sotto ci sono solo fessure o il vuoto di una
-   * riga incompleta (qui: un rettangolo fuori da ogni cella) torna almeno la pagina, mai un intervallo vuoto. Prima della
-   * correzione questo caso chiudeva l'app sulla Libreria sintetica.
+   * riga incompleta (qui: un rettangolo fuori da ogni cella) torna almeno la pagina, mai un intervallo vuoto. In G1 questo
+   * caso chiudeva l'app sulla Libreria sintetica.
    */
   @Test
-  fun cSottoUnaFessuraCeLaPagina() {
-    val state = show(LibraryDesign.C)
+  fun sottoUnaFessuraCeLaPagina() {
+    val state = showLibrary()
     val page = Color(0xFFFFFFFF)
     val text = Color(0xFF000000)
     composeRule.runOnIdle {
@@ -195,21 +252,34 @@ class LibraryPrototypeLayoutTest {
     }
   }
 
-  /** Senza le manopole di debug (la release) la Libreria e' quella di sempre: nessun prototipo. */
+  /**
+   * P4, "nessun fondale a schermo intero in piu'": una pagina a griglia registra **un** fondale (`glassBackdropSource`),
+   * quello della pagina; la griglia e la sua chrome nessuno (in Fase 3 la griglia ne registrava un secondo per
+   * l'intestazione agganciata e lo scrubber). L'host dei pop-up della Libreria ne ha uno suo solo quando `:app` non ne da'
+   * uno (i test della sola scheda).
+   */
   @Test
-  fun inReleaseLaLibreriaEQuellaDiSempre() {
-    val state = syntheticLibraryState(count = 400)
-    assertThat(state.debug).isNull()
-    composeRule.showThemed {
-      LibraryTab(contentPadding = PaddingValues(), backdropOut = {}, onOpenViewer = {}, onOpenSettings = {}, statusFooter = {}, state = state)
-    }
-    assertThat(chrome()).isEmpty()
-    composeRule.onAllNodes(SemanticsMatcher("barra") { it.config.getOrNull(SemanticsProperties.TestTag) == LibraryTopBarTag }).fetchSemanticsNodes().single()
+  fun nessunFondaleASchermoInteroInPiu() {
+    val root = File("src/main/kotlin/dev/pampa/mycloudgallery/feature/library")
+    fun sources(file: String): Int = File(root, file).readLines()
+      .map { it.substringBefore("//") }
+      .filterNot { it.trimStart().startsWith("*") || it.trimStart().startsWith("/**") }
+      .sumOf { line -> Regex("""\.glassBackdropSource\(""").findAll(line).count() }
+    val grid = File(root, "grid").listFiles().orEmpty().filter { it.extension == "kt" }
+    assertThat(grid).isNotEmpty()
+    for (file in grid) assertWithMessage("grid/${file.name}").that(sources("grid/${file.name}")).isEqualTo(0)
+    assertWithMessage("Libreria").that(sources("library/LibraryScreen.kt")).isEqualTo(1)
+    assertWithMessage("host dei pop-up della Libreria (solo senza :app)").that(sources("library/LibraryTab.kt")).isEqualTo(1)
+    assertWithMessage("Raccolte").that(sources("collections/CollectionGridPage.kt")).isEqualTo(1)
+    assertWithMessage("Eliminati di recente").that(sources("trash/RecentlyDeletedScreen.kt")).isEqualTo(1)
+    assertWithMessage("Nascosti chiusi").that(sources("hidden/HiddenScreen.kt")).isEqualTo(1)
   }
 
   private companion object {
     const val PillTag = "${GalleryChromeTagPrefix}pillola"
     val PillWidth = 264.dp
+    const val LargeText = 1.3f
+    val CellPattern = Regex("^(Foto|Video|Foto in movimento|Foto RAW|Immagine animata), .*")
 
     /** Mezzo pixel: gli arrotondamenti del layout. */
     const val Slack = 0.5f

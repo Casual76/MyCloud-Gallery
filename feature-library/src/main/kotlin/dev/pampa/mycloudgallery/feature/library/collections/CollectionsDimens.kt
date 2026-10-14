@@ -28,15 +28,6 @@ internal object CollectionsDimens {
   /** Lo spazio sopra e sotto il riepilogo in fondo a una griglia. */
   val FooterPadding: Dp = 16.dp
 
-  /** Lo spazio fra la barra delle azioni e il bordo basso (sopra la barra di navigazione). */
-  val ActionBarGap: Dp = 16.dp
-
-  /**
-   * Lo spazio che la barra delle azioni (o il pulsante "Ripristina") si prende in basso quando c'e' una selezione: la
-   * griglia lo aggiunge al fondo, cosi' l'ultima riga si puo' scorrere sopra la barra e non ci resta sotto.
-   */
-  val ActionBarSlot: Dp = 80.dp
-
   /** Il lato minimo di una cella degli Eliminati di recente: le colonne si adattano alla larghezza. */
   val TrashCellMin: Dp = 104.dp
 

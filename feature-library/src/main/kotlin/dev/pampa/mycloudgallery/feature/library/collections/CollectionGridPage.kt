@@ -6,9 +6,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircleOutline
@@ -19,27 +21,28 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.text.style.TextAlign
-import dev.antigravity.fluidengine.ui.fluid.FluidScreenDefaults
+import androidx.compose.ui.unit.Dp
+import dev.antigravity.fluidengine.ui.fluid.FluidFloatingTabBarDefaults
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.antigravity.fluidengine.ui.fluid.glassBackdropSource
 import dev.antigravity.fluidengine.ui.fluid.rememberGlassBackdrop
-import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryActionBar
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryBarAction
-import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryBarButton
-import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryNavigationIcon
-import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTopBar
+import dev.pampa.mycloudgallery.core.designsystem.design.ActionBarHeight
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeDefaults
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeIconButton
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeTextButton
+import dev.pampa.mycloudgallery.core.designsystem.design.galleryChromeTag
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.core.library.contract.TimelineView
 import dev.pampa.mycloudgallery.core.library.contract.ViewerItems
@@ -49,8 +52,15 @@ import dev.pampa.mycloudgallery.feature.library.ActionNotice
 import dev.pampa.mycloudgallery.feature.library.ActionNoticeCard
 import dev.pampa.mycloudgallery.feature.library.R
 import dev.pampa.mycloudgallery.feature.library.countText
-import dev.pampa.mycloudgallery.feature.library.photoVideoSummary
+import dev.pampa.mycloudgallery.feature.library.grid.ChromeLabelText
+import dev.pampa.mycloudgallery.feature.library.grid.GridSelectionBar
+import dev.pampa.mycloudgallery.feature.library.grid.GridScrubber
+import dev.pampa.mycloudgallery.feature.library.grid.GridTopChrome
+import dev.pampa.mycloudgallery.feature.library.grid.GridTopEdgeScrim
+import dev.pampa.mycloudgallery.feature.library.grid.gridTopChromeHeight
 import dev.pampa.mycloudgallery.feature.library.grid.MediaGrid
+import dev.pampa.mycloudgallery.feature.library.grid.rememberMediaGridSection
+import dev.pampa.mycloudgallery.feature.library.photoVideoSummary
 import kotlinx.coroutines.launch
 
 /**
@@ -65,20 +75,24 @@ internal class SelectionAction(
 )
 
 /**
- * La pagina di una griglia di raccolta: **lo stesso `MediaGrid` e lo stesso viewer** della Libreria (D17), con la barra
- * di vetro in cima, lo stato vuoto, il riepilogo in fondo e la barra delle azioni quando c'e' una selezione.
+ * La pagina di una griglia di raccolta: **lo stesso `MediaGrid`, lo stesso viewer e la stessa chrome** della Libreria
+ * (D17; G2, docs/grafica-progetto.md §12): in alto la riga di vetro adattivo (indietro, l'etichetta con la sezione in vista
+ * e il nome della raccolta, "Seleziona"), lo stato vuoto, il riepilogo in fondo, e in selezione la barra delle azioni nel
+ * posto della pillola (o sopra la pillola, dove c'e': il pannello di dettaglio del tablet). La griglia non si sposta
+ * entrando in selezione.
  *
  * E' scritta una volta e la usano le raccolte-filtro e i Nascosti. La vista viene da [items] e la segue: quando l'indice
  * cambia (un preferito tolto, un elemento nascosto) la griglia resta sullo stesso elemento.
  *
  * @param secure vero per i Nascosti: il viewer aperto da qui vale con `SecureScreen` (E-S5).
- * @param onBack il tasto indietro della barra; null nel pannello di dettaglio del tablet, dove la raccolta non e' una
- *   pagina che si chiude.
+ * @param onBack il tasto indietro; null nel pannello di dettaglio del tablet, dove la raccolta non e' una pagina che si
+ *   chiude.
+ * @param contentPadding lo spazio della pillola in basso, se la pagina ce l'ha sotto (il tablet); zero a schermo intero.
  * @param backdropOut consegna a `:app` il fondale che questa pagina disegna, perche' la pillola lo rifranga; null dove
  *   la pillola non c'e' (rotte a schermo intero).
  * @param footnote una nota sotto il riepilogo (i Nascosti dicono che nascondere vale solo in app).
  * @param actionsFor le azioni della barra per la selezione di adesso; vuoto = nessuna barra.
- * @param notice l'azione che non e' riuscita (R8: nascondi, preferito, mostra), sotto la barra finche' non si chiude.
+ * @param notice l'azione che non e' riuscita (R8: nascondi, preferito, mostra), sotto la chrome finche' non si chiude.
  */
 @Composable
 internal fun CollectionGridPage(
@@ -111,22 +125,26 @@ internal fun CollectionGridPage(
   BackHandler(enabled = selecting) { grid.stopSelecting() }
   val scope = rememberCoroutineScope()
 
-  val density = LocalDensity.current
-  var barHeightPx by remember { mutableIntStateOf(0) }
-  val barHeight = with(density) { barHeightPx.toDp() }
+  val topChrome = gridTopChromeHeight()
+  val slotBottom = collectionActionSlot(contentPadding)
+  // Lo spazio in fondo e' lo stesso dentro e fuori dalla selezione: la griglia non si sposta quando arriva la barra.
+  val gridBottom = slotBottom + ActionBarHeight + GalleryChromeDefaults.Gap
   // Una raccolta-filtro ha al piu' qualche decina di migliaia di elementi: il conteggio costa meno di un fotogramma.
   val summary = remember(view) { photoAndVideoCounts(view) }
+  val section = rememberMediaGridSection(grid, topChrome)
+  val label = when {
+    selecting && selected.isEmpty -> ChromeLabelText(stringResource(R.string.collection_select_items), null)
+    selecting -> ChromeLabelText(countText(R.plurals.selection_count, selected.size), null)
+    // Scorrendo, la sezione in vista; sotto, il nome della raccolta: si sa sempre dove si e'.
+    section != null -> ChromeLabelText(section.title, listOfNotNull(title, section.place).joinToString(" · "))
+    else -> ChromeLabelText(title, countText(R.plurals.collection_count, view.size))
+  }
 
-  // In selezione la barra delle azioni sta sopra la fine della lista: l'ultima riga deve poterci scorrere sopra.
-  val gridBottom = contentPadding.calculateBottomPadding() + if (selecting) CollectionsDimens.ActionBarSlot else CollectionsDimens.None
-
-  Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+  Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).semantics { testTagsAsResourceId = true }) {
     Box(modifier = Modifier.fillMaxSize().glassBackdropSource(backdrop)) {
       if (view.size == 0) {
         Column(
-          modifier = Modifier
-            .fillMaxSize()
-            .padding(top = barHeight, bottom = contentPadding.calculateBottomPadding()),
+          modifier = Modifier.fillMaxSize().padding(top = topChrome, bottom = contentPadding.calculateBottomPadding()),
           horizontalAlignment = Alignment.CenterHorizontally,
         ) {
           empty()
@@ -135,74 +153,91 @@ internal fun CollectionGridPage(
       } else {
         MediaGrid(
           state = grid,
-          contentPadding = PaddingValues(top = barHeight, bottom = gridBottom),
+          contentPadding = PaddingValues(top = topChrome, bottom = gridBottom),
           onOpen = { id -> onOpenViewer(ViewerRequest(items = items, start = id, anchor = grid.viewerAnchor, secure = secure)) },
           footer = { GridFootnote(summary = summary, footnote = footnote) },
-          backdrop = backdrop,
-          // L'intestazione agganciata sta subito sotto la riga dei controlli, come nella Libreria.
-          stickyTop = (barHeight - FluidScreenDefaults.GlassFadeTail).coerceAtLeast(CollectionsDimens.None),
+          stickyTop = topChrome,
           // Il livello scelto con il pinch vale per tutta la galleria: come nella Libreria, si ricorda.
           onLevelChanged = { level -> scope.launch { environment.preferences.setLevel(level) } },
         )
       }
+      GridTopEdgeScrim(topChrome, Modifier.align(Alignment.TopCenter))
     }
 
-    GalleryTopBar(
-      title = when {
-        !selecting -> title
-        selected.isEmpty -> stringResource(R.string.collection_select_items)
-        else -> countText(R.plurals.selection_count, selected.size)
-      },
+    GridTopChrome(
+      grid = grid,
       backdrop = backdrop,
-      modifier = Modifier.align(Alignment.TopCenter).onSizeChanged { barHeightPx = it.height },
-      subtitle = if (selecting) null else countText(R.plurals.collection_count, view.size),
-      onNavigate = if (selecting) ({ grid.stopSelecting() }) else onBack,
-      navigationIcon = if (selecting) GalleryNavigationIcon.Close else GalleryNavigationIcon.Back,
-      actions = {
-        if (!selecting && view.size > 0) {
-          GalleryBarButton(
-            icon = Icons.Rounded.CheckCircleOutline,
-            contentDescription = stringResource(R.string.collection_select),
-            onClick = { grid.startSelecting() },
-          )
-        }
-      },
-    )
+      label = label,
+      topChrome = topChrome,
+      modifier = Modifier.align(Alignment.TopStart),
+      // In selezione si esce con "Fine" (o con Indietro): la freccia porterebbe via dalla pagina con la selezione aperta.
+      onBack = if (selecting) null else onBack,
+      showCommands = selecting || view.size > 0,
+    ) {
+      if (selecting) {
+        GalleryChromeTextButton(label = stringResource(R.string.library_done), onClick = { grid.stopSelecting() }, modifier = Modifier.galleryChromeTag("fine"))
+      } else {
+        GalleryChromeIconButton(
+          icon = Icons.Rounded.CheckCircleOutline,
+          contentDescription = stringResource(R.string.collection_select),
+          onClick = { grid.startSelecting() },
+          modifier = Modifier.galleryChromeTag("seleziona"),
+        )
+      }
+    }
 
     if (notice != null) {
       ActionNoticeCard(
         notice = notice,
         backdrop = backdrop,
         onDismiss = onDismissNotice,
-        modifier = Modifier.align(Alignment.TopCenter).padding(top = barHeight, start = GalleryDimens.Gutter, end = GalleryDimens.Gutter),
+        modifier = Modifier
+          .align(Alignment.TopCenter)
+          .padding(top = topChrome + GalleryChromeDefaults.Gap, start = GalleryDimens.Gutter, end = GalleryDimens.Gutter),
       )
     }
 
-    if (selecting && !selected.isEmpty) {
-      val specs = actionsFor(view, selected.ids)
-      if (specs.isNotEmpty()) {
-        val actions = specs.map { spec ->
-          val label = stringResource(spec.labelRes)
-          GalleryBarAction(
-            icon = spec.icon,
-            contentDescription = label,
-            onClick = {
-              spec.run(selected.ids)
-              grid.stopSelecting()
-            },
-          )
-        }
-        GalleryActionBar(
-          actions = actions,
-          backdrop = backdrop,
-          modifier = Modifier
-            .align(Alignment.BottomCenter)
-            .navigationBarsPadding()
-            .padding(bottom = contentPadding.calculateBottomPadding() + CollectionsDimens.ActionBarGap),
+    if (view.size > 0) {
+      GridScrubber(
+        grid = grid,
+        backdrop = backdrop,
+        modifier = Modifier.align(Alignment.TopEnd).padding(top = topChrome + GalleryChromeDefaults.Gap, bottom = gridBottom),
+      )
+    }
+
+    val specs = if (selecting && !selected.isEmpty) actionsFor(view, selected.ids) else emptyList()
+    // Mentre la barra sfuma via restano le azioni di prima: una capsula che si svuota uscendo sarebbe un salto.
+    val shown = remember { mutableStateOf(specs) }
+    if (specs.isNotEmpty()) shown.value = specs
+    GridSelectionBar(
+      visible = specs.isNotEmpty(),
+      grid = grid,
+      backdrop = backdrop,
+      modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = slotBottom),
+    ) {
+      shown.value.map { spec ->
+        GalleryBarAction(
+          icon = spec.icon,
+          contentDescription = stringResource(spec.labelRes),
+          onClick = {
+            spec.run(selected.ids)
+            grid.stopSelecting()
+          },
         )
       }
     }
   }
+}
+
+/**
+ * Dove sta la barra delle azioni (o "Ripristina") in fondo: nel posto della pillola se la pagina non ne ha una sotto (la
+ * rotta a schermo intero del telefono), sopra la pillola se c'e' ([contentPadding], il pannello di dettaglio del tablet).
+ */
+@Composable
+internal fun collectionActionSlot(contentPadding: PaddingValues): Dp {
+  val navigation = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+  val pill = contentPadding.calculateBottomPadding()
+  return if (pill > CollectionsDimens.None) navigation + pill + GalleryChromeDefaults.Gap else navigation + FluidFloatingTabBarDefaults.BottomMargin
 }
 
 /** Il riepilogo "N foto, M video" e, se c'e', la nota in fondo alla griglia (o allo stato vuoto). */

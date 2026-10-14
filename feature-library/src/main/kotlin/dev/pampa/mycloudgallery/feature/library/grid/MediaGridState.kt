@@ -4,11 +4,11 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.geometry.Offset
-import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridInteractionState
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryScrubberState
 import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryGridLevel
@@ -149,14 +149,11 @@ class MediaGridState(
   internal val layouts = GridLayoutStore(engine, layoutDispatcher)
   internal var viewport: GridViewport by mutableStateOf(GridViewport())
 
-  /** Il fondale di vetro con la sola lista (lo registra [MediaGrid]): lo rifrangono l'intestazione agganciata e lo scrubber. */
-  internal var listBackdrop: GlassBackdropState? by mutableStateOf(null)
-
   /** Dove sta la griglia nella finestra (per i bordi del viewer). */
   internal var originInWindow: Offset = Offset.Zero
 
   /** L'altezza del piede (riepilogo e stato globale), per sapere dove finisce la lista. */
-  internal var footerHeight: Int = 0
+  internal var footerHeight: Int by mutableIntStateOf(0)
 
   /** L'origine della scala del pinch, in pixel della griglia. */
   internal var origin: Offset by mutableStateOf(Offset.Zero)

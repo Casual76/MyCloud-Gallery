@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -40,8 +39,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -55,9 +54,11 @@ import dev.antigravity.fluidengine.ui.fluid.rememberGlassBackdrop
 import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
 import dev.antigravity.fluidengine.ui.theme.FluidLoading
 import dev.antigravity.fluidengine.ui.theme.FluidTone
-import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryBarButton
-import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryNavigationIcon
-import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTopBar
+import dev.pampa.mycloudgallery.core.designsystem.design.ActionBarHeight
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeDefaults
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeIconButton
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeTextButton
+import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryWall
 import dev.pampa.mycloudgallery.core.designsystem.media.GalleryMediaCell
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
@@ -72,6 +73,11 @@ import dev.pampa.mycloudgallery.feature.library.R
 import dev.pampa.mycloudgallery.feature.library.countText
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionEmptyState
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionsDimens
+import dev.pampa.mycloudgallery.feature.library.collections.collectionActionSlot
+import dev.pampa.mycloudgallery.feature.library.grid.gridTopChromeHeight
+import dev.pampa.mycloudgallery.feature.library.grid.ChromeLabelText
+import dev.pampa.mycloudgallery.feature.library.grid.GridTopChrome
+import dev.pampa.mycloudgallery.feature.library.grid.GridTopEdgeScrim
 import dev.pampa.mycloudgallery.feature.library.hidden.GatedWindow
 import dev.pampa.mycloudgallery.feature.library.hidden.HiddenClosedPage
 import dev.pampa.mycloudgallery.feature.library.hidden.HiddenUiState
@@ -207,10 +213,11 @@ internal fun RecentlyDeletedScreen(
   }
   val backdrop = rememberGlassBackdrop()
   if (backdropOut != null) SideEffect { backdropOut(backdrop) }
-  val density = LocalDensity.current
-  var barHeightPx by remember { mutableIntStateOf(0) }
-  val barHeight = with(density) { barHeightPx.toDp() }
+  val barHeight = gridTopChromeHeight()
   val bottomPadding = contentPadding.calculateBottomPadding()
+  // "Ripristina" sta nel posto della barra delle azioni delle altre griglie, e la griglia non si sposta quando arriva.
+  val slotBottom = collectionActionSlot(contentPadding)
+  val gridBottom = slotBottom + ActionBarHeight + GalleryChromeDefaults.Gap
   val loaded = state as? TrashUiState.Loaded
   val selecting = selection.isNotEmpty()
 
@@ -233,7 +240,7 @@ internal fun RecentlyDeletedScreen(
             loader = loader,
             onToggle = onToggle,
             topPadding = barHeight,
-            bottomPadding = bottomPadding + if (selecting) CollectionsDimens.ActionBarSlot else CollectionsDimens.None,
+            bottomPadding = gridBottom,
           )
         }
         TrashUiState.Locked, TrashUiState.Authenticating, is TrashUiState.Denied -> Unit
@@ -269,26 +276,31 @@ internal fun RecentlyDeletedScreen(
           }
         }
       }
+      GridTopEdgeScrim(barHeight, Modifier.align(Alignment.TopCenter))
     }
 
-    GalleryTopBar(
-      title = if (selecting) countText(R.plurals.selection_count, selection.size) else stringResource(R.string.trash_title),
+    // La chrome delle griglie (G2): l'etichetta (il nome e quanti sono, o in selezione quanti sono scelti) e la capsula con
+    // "Seleziona tutto" e, selezionando, "Fine". Le miniature del cestino non hanno ThumbHash: il vetro adattivo vale per
+    // un contenuto qualunque.
+    val canSelectAll = loaded != null && loaded.entries.isNotEmpty() && selection.size < loaded.entries.size
+    GridTopChrome(
+      grid = null,
       backdrop = backdrop,
-      modifier = Modifier.align(Alignment.TopCenter).onSizeChanged { barHeightPx = it.height },
-      subtitle = if (selecting) null else loaded?.entries?.takeIf { it.isNotEmpty() }?.let { countText(R.plurals.collection_count, it.size) },
-      // Selezionando, il tasto in alto a sinistra e' "Chiudi": esce dalla selezione, non dalla pagina.
-      onNavigate = if (selecting) onClearSelection else onBack,
-      navigationIcon = if (selecting) GalleryNavigationIcon.Close else GalleryNavigationIcon.Back,
-      actions = {
-        if (loaded != null && loaded.entries.isNotEmpty() && selection.size < loaded.entries.size) {
-          GalleryBarButton(
-            icon = Icons.Rounded.SelectAll,
-            contentDescription = stringResource(R.string.trash_select_all),
-            onClick = onSelectAll,
-          )
-        }
+      label = if (selecting) {
+        ChromeLabelText(countText(R.plurals.selection_count, selection.size), null)
+      } else {
+        ChromeLabelText(stringResource(R.string.trash_title), loaded?.entries?.takeIf { it.isNotEmpty() }?.let { countText(R.plurals.collection_count, it.size) })
       },
-    )
+      topChrome = barHeight,
+      modifier = Modifier.align(Alignment.TopStart),
+      onBack = if (selecting) null else onBack,
+      showCommands = canSelectAll || selecting,
+    ) {
+      if (canSelectAll) {
+        GalleryChromeIconButton(icon = Icons.Rounded.SelectAll, contentDescription = stringResource(R.string.trash_select_all), onClick = onSelectAll)
+      }
+      if (selecting) GalleryChromeTextButton(label = stringResource(R.string.library_done), onClick = onClearSelection)
+    }
 
     if (selecting) {
       FluidButton(
@@ -297,8 +309,7 @@ internal fun RecentlyDeletedScreen(
         size = FluidButtonSize.Large,
         modifier = Modifier
           .align(Alignment.BottomCenter)
-          .navigationBarsPadding()
-          .padding(bottom = bottomPadding + CollectionsDimens.ActionBarGap),
+          .padding(bottom = slotBottom),
       )
     }
   }
@@ -353,13 +364,14 @@ private fun TrashGrid(
       }
   }
 
+  // La parete di foto delle altre griglie (G2): celle squadrate, fessura di 1 dp.
   LazyVerticalGrid(
     columns = GridCells.Adaptive(CollectionsDimens.TrashCellMin),
     modifier = Modifier.fillMaxSize(),
     state = gridState,
     contentPadding = PaddingValues(top = topPadding, bottom = bottomPadding),
-    verticalArrangement = Arrangement.spacedBy(GalleryDimens.GridGap),
-    horizontalArrangement = Arrangement.spacedBy(GalleryDimens.GridGap),
+    verticalArrangement = Arrangement.spacedBy(GalleryWall.Gap),
+    horizontalArrangement = Arrangement.spacedBy(GalleryWall.Gap),
   ) {
     item(key = "explainer", span = { GridItemSpan(maxLineSpan) }) { Explainer(hiddenNote = entries.any { it.hidden }) }
     items(entries, key = { it.id.value }) { entry ->
@@ -394,6 +406,7 @@ private fun TrashCell(
     selected = selected,
     onClick = { onToggle(entry.id) },
     onLongClick = { onToggle(entry.id) },
+    shape = RectangleShape,
     topEnd = if (entry.hidden) ({ HiddenPill() }) else null,
     bottomEnd = { DaysLeftPill(entry.daysLeft) },
   ) {

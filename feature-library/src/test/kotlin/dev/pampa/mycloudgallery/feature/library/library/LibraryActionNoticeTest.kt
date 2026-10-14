@@ -301,12 +301,12 @@ class LibraryActionNoticeTest {
   fun iConteggiHannoIlPuntoDelleMigliaiaAncheConIlTelefonoInInglese() {
     composeRule.showThemed {
       Text(photoVideoSummary(92_019, 7_981))
-      Text(countText(R.plurals.library_selected, 1_500))
+      Text(countText(R.plurals.selection_count, 1_500))
       Text(countText(R.plurals.collection_count, 12_345))
     }
 
     composeRule.onNodeWithText("92.019 foto, 7.981 video").assertExists()
-    composeRule.onNodeWithText("1.500 elementi selezionati").assertExists()
+    composeRule.onNodeWithText("1.500 selezionati").assertExists()
     composeRule.onNodeWithText("12.345 elementi").assertExists()
   }
 
@@ -315,7 +315,6 @@ class LibraryActionNoticeTest {
     composeRule.showThemed {
       Text(photoVideoSummary(1, 1))
       Text(photoVideoSummary(0, 2))
-      Text(countText(R.plurals.library_selected, 1))
       Text(countText(R.plurals.selection_count, 1))
       Text(countText(R.plurals.collection_count, 1))
       Text(countText(R.plurals.library_first_read_progress_unknown, 1))
@@ -324,7 +323,6 @@ class LibraryActionNoticeTest {
 
     composeRule.onNodeWithText("1 foto, 1 video").assertExists()
     composeRule.onNodeWithText("0 foto, 2 video").assertExists()
-    composeRule.onNodeWithText("1 elemento selezionato").assertExists()
     composeRule.onNodeWithText("1 selezionato").assertExists()
     composeRule.onNodeWithText("1 elemento").assertExists()
     composeRule.onNodeWithText("1 letto").assertExists()
@@ -336,7 +334,7 @@ class LibraryActionNoticeTest {
     val state = state()
     state.photoCount = 92_019
     state.videoCount = 7_981
-    composeRule.showThemed { LibraryFooter(state, LibraryPhoneStatus(), statusFooter = {}) }
+    composeRule.showThemed { LibraryFooter(state, LibraryPhoneStatus(), status = {}) }
 
     composeRule.onNodeWithText("92.019 foto, 7.981 video").assertExists()
   }

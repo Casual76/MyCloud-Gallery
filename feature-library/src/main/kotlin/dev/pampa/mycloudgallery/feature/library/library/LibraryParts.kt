@@ -13,7 +13,6 @@ import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.FilterAltOff
 import androidx.compose.material.icons.rounded.IosShare
-import androidx.compose.material.icons.rounded.KeyboardDoubleArrowDown
 import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.VisibilityOff
@@ -42,10 +41,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidProgressBar
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
-import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryActionBar
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryBarAction
-import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridJumpButton
-import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridLevelBar
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridNotice
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryDeleteLocation
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryDeleteLocationKind
@@ -58,7 +54,6 @@ import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustration
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryStateKind
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryStateView
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
-import dev.pampa.mycloudgallery.core.library.contract.GridLevel
 import dev.pampa.mycloudgallery.core.library.contract.GridStyle
 import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess
@@ -80,8 +75,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-// I pezzi della Libreria: stati, avvisi, piede, chrome in basso, foglio di eliminazione, effetti e salvataggio della
-// posizione. LibraryTab.kt li dispone.
+// I pezzi della Libreria: stati, avvisi, piede, azioni della selezione, fogli, effetti e salvataggio della posizione.
+// LibraryScreen.kt li dispone.
 
 // ---------------------------------------------------------------------------------------------
 // Scelte ricordate (D4, D16): filtro, stile, livello
@@ -146,10 +141,7 @@ internal fun LibraryEffects(state: LibraryTabState) {
     state.videoCount = videos
     state.photoCount = view.size - videos
   }
-  state.debug?.let {
-    DebugSyntheticSize(it)
-    DebugDesignChoice(it)
-  }
+  state.debug?.let { DebugSyntheticSize(it) }
 }
 
 /**
@@ -336,9 +328,12 @@ private fun FirstReadProgress(scanning: SyncStatus.Scanning) {
   }
 }
 
-/** In fondo alla lista, sotto i piu' recenti: il riepilogo, l'avanzamento della prima lettura, lo stato globale. */
+/**
+ * In fondo alla lista, sotto i piu' recenti: il riepilogo, l'avanzamento della prima lettura, e lo stato della rete e del
+ * NAS ([status], `LibraryStatusBlock`).
+ */
 @Composable
-internal fun LibraryFooter(state: LibraryTabState, phone: LibraryPhoneStatus, statusFooter: @Composable () -> Unit) {
+internal fun LibraryFooter(state: LibraryTabState, phone: LibraryPhoneStatus, status: @Composable () -> Unit) {
   Column(
     modifier = Modifier.fillMaxWidth().padding(horizontal = GalleryDimens.Gutter, vertical = FooterPadding),
     horizontalAlignment = Alignment.CenterHorizontally,
@@ -350,7 +345,7 @@ internal fun LibraryFooter(state: LibraryTabState, phone: LibraryPhoneStatus, st
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     phone.firstRead?.let { Column(modifier = Modifier.widthIn(max = StateTextMaxWidth)) { FirstReadProgress(it) } }
-    statusFooter()
+    status()
   }
 }
 
@@ -399,44 +394,10 @@ internal fun LibraryNotices(
   }
 }
 
-@Composable
-internal fun LibraryTodayButton(backdrop: GlassBackdropState, onClick: () -> Unit) {
-  GalleryGridJumpButton(
-    label = stringResource(R.string.library_jump_today),
-    icon = Icons.Rounded.KeyboardDoubleArrowDown,
-    onClick = onClick,
-    backdrop = backdrop,
-    contentDescription = stringResource(R.string.library_jump_today_description),
-  )
-}
-
-/** I segmenti dei livelli in basso: Anni · Mesi · Giorni · Tutte. */
-@Composable
-internal fun LibraryLevelBar(level: GridLevel, backdrop: GlassBackdropState, onSelect: (GridLevel) -> Unit) {
-  val labels = listOf(
-    stringResource(dev.pampa.mycloudgallery.core.designsystem.R.string.level_years),
-    stringResource(dev.pampa.mycloudgallery.core.designsystem.R.string.level_months),
-    stringResource(dev.pampa.mycloudgallery.core.designsystem.R.string.level_days),
-    stringResource(dev.pampa.mycloudgallery.core.designsystem.R.string.level_all),
-  )
-  GalleryGridLevelBar(labels = labels, selected = level.ordinal, onSelect = { onSelect(GridLevel.entries[it]) }, backdrop = backdrop)
-}
-
 /**
- * La barra delle azioni della selezione, in vetro (§2.4, D13): Condividi, Preferito, Nascondi, Elimina dal telefono
- * (D14, solo dove il cestino di sistema c'e'). Con niente di selezionato le azioni sono spente.
+ * Le azioni della selezione, nella barra al posto della pillola (§2.4, D13): Condividi, Preferito, Nascondi, Elimina dal
+ * telefono (D14, solo dove il cestino di sistema c'e'). Con niente di selezionato le azioni sono spente.
  */
-@Composable
-internal fun LibrarySelectionBar(
-  state: LibraryTabState,
-  backdrop: GlassBackdropState,
-  onDelete: () -> Unit,
-  onHideGroups: () -> Unit = {},
-) {
-  GalleryActionBar(actions = selectionActions(state, onDelete, onHideGroups), backdrop = backdrop)
-}
-
-/** Le azioni della selezione (Condividi, Preferito, Nascondi, Elimina): le stesse per la barra di sempre e per i prototipi G1. */
 @Composable
 internal fun selectionActions(
   state: LibraryTabState,

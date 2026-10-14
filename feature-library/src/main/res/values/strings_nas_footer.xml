@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Il piede della Libreria (G2, docs/grafica-progetto.md §12; Fase 4 §1.5, LibraryNasStatus): la capsula del NAS e il
+       dettaglio sotto. Le frasi della capsula sono brevi (una riga accanto a quella della rete). -->
+  <string name="nas_footer_scanning">Sto leggendo il NAS…</string>
+  <string name="nas_footer_aligning">Allineo l’indice del NAS…</string>
+  <string name="nas_footer_scan_of">%1$s di %2$s</string>
+  <plurals name="nas_footer_scan_seen">
+    <item quantity="one">%1$s file letto finora</item>
+    <item quantity="other">%1$s file letti finora</item>
+  </plurals>
+  <string name="nas_footer_with_eta">%1$s · %2$s</string>
+  <string name="nas_footer_eta_under_minute">meno di un minuto</string>
+  <string name="nas_footer_eta_minutes">circa %1$s min</string>
+  <string name="nas_footer_eta_hours">circa %1$s h %2$s min</string>
+  <string name="nas_footer_megabytes">%1$s MB</string>
+  <string name="nas_footer_gigabytes">%1$s GB</string>
+
+  <string name="nas_footer_up_to_date">NAS aggiornato</string>
+  <string name="nas_footer_up_to_date_today">Oggi alle %1$s</string>
+  <string name="nas_footer_up_to_date_day">%1$s alle %2$s</string>
+
+  <string name="nas_footer_frozen">Lavori fermi: cambiamenti anomali</string>
+  <string name="nas_footer_frozen_detail">%1$s Finché non controlli, sul NAS non si scrive e non si cancella niente. Tocca per i dettagli.</string>
+  <string name="nas_footer_frozen_vanished">Sul NAS sono spariti molti file insieme.</string>
+  <string name="nas_footer_frozen_changed">Sul NAS sono cambiati molti file insieme.</string>
+  <string name="nas_footer_frozen_not_media">Sul NAS sono comparsi molti file che non sono foto né video.</string>
+
+  <string name="nas_footer_unavailable">Anteprime salvate</string>
+  <string name="nas_footer_common_unavailable">Area comune non raggiungibile</string>
+  <string name="nas_footer_private_unavailable">Area privata non raggiungibile</string>
+  <string name="nas_footer_unavailable_detail">Il NAS non risponde: vedi le anteprime salvate, e le foto che sono solo lì si aprono quando torna.</string>
+
+  <string name="nas_footer_local_only">Indice condiviso in prova</string>
+  <string name="nas_footer_local_only_detail">Finché la Fase 4A non è chiusa, l’indice si pubblica solo sulle share di prova.</string>
+</resources>

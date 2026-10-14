@@ -20,24 +20,25 @@ import dev.pampa.mycloudgallery.core.library.contract.RowKind
 import java.time.YearMonth
 import kotlin.math.max
 
-// La griglia vista dalla chrome che le sta sopra (G1, docs/grafica-progetto.md): quale sezione e' sotto la linea della
-// barra, lo scrubber disegnato fuori dal fondale della pagina, e che cosa passa sotto un rettangolo di chrome (per il vetro
-// adattivo). Niente di questo ricompone la griglia: si legge lo stato dello scorrimento e basta.
+// La griglia vista dalla chrome che le sta sopra (G1, G2, docs/grafica-progetto.md): quale sezione e' sotto la linea della
+// chrome, lo scrubber disegnato fuori dalla griglia, e che cosa passa sotto un rettangolo di chrome (per il vetro adattivo).
+// Niente di questo ricompone la griglia: si legge lo stato dello scorrimento e basta.
 
 /** La sezione sotto la linea della chrome: il titolo ("Venerdì 9 ottobre", "Giugno 2023", "2024") e il luogo. */
 @Immutable
 data class MediaGridSection(val title: String, val place: String?)
 
 /**
- * La sezione che sta sotto [line] (distanza dal bordo alto della griglia): e' l'intestazione agganciata delle direzioni
- * G1, che la chrome in alto mostra al posto di una seconda fascia di vetro. Al livello "Tutte" (senza intestazioni) e'
+ * La sezione che sta sotto [line] (distanza dal bordo alto della griglia): e' l'intestazione agganciata, che l'etichetta
+ * della chrome in alto mostra al posto di una seconda fascia di vetro. Al livello "Tutte" (senza intestazioni) e'
  * il mese della riga. Null se sotto la linea non c'e' ancora contenuto (la Libreria piu' corta dello schermo).
  *
  * Si ricompone solo quando la sezione cambia: lo scorrimento si legge in un `derivedStateOf`.
  */
 @Composable
 fun rememberMediaGridSection(state: MediaGridState, line: Dp): MediaGridSection? {
-  val linePx = with(LocalDensity.current) { line.roundToPx() }
+  // Si legge dove l'intestazione della lista e' gia' sparita (`handOverLine`): l'etichetta la sostituisce, non la ripete.
+  val linePx = with(LocalDensity.current) { handOverLine(line).roundToPx() }
   val strings = rememberGridStrings()
   val today = remember(state) { state.today() }
   val key by remember(state, linePx) { derivedStateOf { sectionKeyAt(state, linePx) } }
@@ -73,10 +74,10 @@ private fun sectionKeyAt(state: MediaGridState, linePx: Int): SectionKey? {
 }
 
 /**
- * Lo **scrubber** della griglia disegnato da chi la ospita, **fuori** dal fondale della pagina (G1): cosi' maniglia e bolla
- * rifrangono il fondale della pagina senza esserci dentro, e la griglia non deve registrare un secondo fondale a tutto
- * schermo solo per loro (`MediaGrid(backdrop = null)`). Il [modifier] dice dove corre: chi lo posa gli lascia sopra la
- * chrome e sotto la pillola, cosi' la maniglia non arriva mai sotto un altro controllo.
+ * Lo **scrubber** della griglia disegnato da chi la ospita, **fuori** dal fondale della pagina (G1, G2): cosi' maniglia e
+ * bolla rifrangono il fondale della pagina senza esserci dentro, e la griglia non deve registrare un secondo fondale a
+ * tutto schermo solo per loro. Il [modifier] dice dove corre: chi lo posa gli lascia sopra la chrome e sotto la pillola,
+ * cosi' la maniglia non arriva mai sotto un altro controllo.
  */
 @Composable
 fun MediaGridScrubber(
@@ -85,7 +86,6 @@ fun MediaGridScrubber(
   modifier: Modifier = Modifier,
   tint: GlassTint? = null,
   ink: Color? = null,
-  solid: Color? = null,
 ) {
   val shown = state.layout ?: return
   if (shown.rowCount == 0 || shown.totalHeight <= state.viewport.contentHeight * ScrubberScreens) return
@@ -103,7 +103,6 @@ fun MediaGridScrubber(
     onScrubStarted = { state.userScrolled = true },
     tint = tint,
     ink = ink,
-    solid = solid,
   )
 }
 
@@ -201,5 +200,5 @@ private fun lpq(l: Float, p: Float, q: Float): Color {
 private val UnknownDark = Color(red = 0f, green = 0f, blue = 0f)
 private val UnknownLight = Color(red = 1f, green = 1f, blue = 1f)
 
-/** Lo scrubber serve solo a una Libreria lunga: almeno tre schermate (come in [MediaGrid]). */
+/** Lo scrubber serve solo a una Libreria lunga: almeno tre schermate. */
 private const val ScrubberScreens = 3

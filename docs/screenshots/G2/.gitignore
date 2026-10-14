@@ -1,0 +1,7 @@
+# G2: gli screenshot delle campagne restano in locale (come docs/screenshots/G1/): sono centinaia di PNG con i dump.
+# Nel repository vanno la selezione (docs/screenshots/selezione/G2/), gli strumenti e il riassunto delle misure.
+*
+!.gitignore
+!strumenti/
+!strumenti/*.py
+!contrasti-finali.json

@@ -36,7 +36,8 @@ data object CatalogRoute
  *   vero ma in un **database separato** (`gallery-synthetic.db`), con miniature a gradiente;
  * - la **famiglia pronta per lo smoke sull'emulatore** ([familyOverride]): solo se `adb` ha scritto il marcatore;
  * - il **NAS sintetico** (Fase 4A, P11, M1): Impostazioni → Sviluppo → "NAS sintetico", 20 mila file su un NAS finto in
- *   memoria passati dalla scansione vera, in un database separato ([SyntheticNasKit]);
+ *   memoria passati dalla scansione vera, in un database separato ([SyntheticNasKit]); con "libreria mista" (G2) la
+ *   griglia mostra tutti i segni di presenza e il piede lo stato del NAS scelto da `adb` ([MixedPresenceRepository]);
  * - la **recinzione delle share di prova** (D33, [shareGuard]).
  *
  * La versione release di questo file (src/release) non ha niente: nessuna di queste classi entra nell'APK di release
@@ -83,6 +84,15 @@ internal object DeveloperTools {
         subtitle = stringResource(R.string.debug_nas_detail),
         onClick = {
           SyntheticNasKit.request()
+          nav.popBackStack()
+        },
+      )
+      FluidListDivider()
+      FluidListRow(
+        title = stringResource(R.string.debug_nas_mixed_title),
+        subtitle = stringResource(R.string.debug_nas_mixed_detail),
+        onClick = {
+          SyntheticNasKit.request(mixed = true)
           nav.popBackStack()
         },
       )

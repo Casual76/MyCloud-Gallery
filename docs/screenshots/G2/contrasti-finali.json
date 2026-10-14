@@ -1,0 +1,322 @@
+{
+ "campagna": "campagna-2 (14/10, Medium_Phone 1080x2400, 4 GB; Libreria vera con il contenuto peggiore di G1 e i media del benchmark, NAS sintetico in libreria mista)",
+ "metodo": "docs/screenshots/G2/strumenti/misura-contrasto.py (quello di G1 piu' il piede e i dischi di presenza)",
+ "g1_c": {
+  "chiaro|titolo": 5.57,
+  "scuro|titolo": 5.94,
+  "chiaro|comandi": 5.57,
+  "scuro|comandi": 5.06,
+  "chiaro|azioni": 10.53,
+  "scuro|azioni": 14.28,
+  "chiaro|pillola": 8.89,
+  "scuro|pillola": 6.76,
+  "chiaro|menu": 5.5,
+  "scuro|menu": 5.42
+ },
+ "peggiori": {
+  "chiaro|azioni": {
+   "scenario": "libreria",
+   "tema": "chiaro",
+   "scatto": "selezione-preferiti",
+   "categoria": "azioni",
+   "etichetta": "Elimina dal telefono",
+   "tipo": "icona",
+   "riquadro": [
+    698,
+    2153,
+    824,
+    2279
+   ],
+   "ink": 0.023491397199333342,
+   "worst": 8.21,
+   "median": 8.76,
+   "dark_ink": true,
+   "misure": 13
+  },
+  "chiaro|comandi": {
+   "scenario": "libreria",
+   "tema": "chiaro",
+   "scatto": "p13",
+   "categoria": "comandi",
+   "etichetta": "Seleziona",
+   "tipo": "icona",
+   "riquadro": [
+    791,
+    80,
+    917,
+    206
+   ],
+   "ink": 0.000607053967097675,
+   "worst": 7.05,
+   "median": 8.13,
+   "dark_ink": true,
+   "misure": 106
+  },
+  "chiaro|menu": {
+   "scenario": "libreria",
+   "tema": "chiaro",
+   "scatto": "menu",
+   "categoria": "menu",
+   "etichetta": "Senza screenshot e WhatsApp",
+   "tipo": "testo",
+   "riquadro": [
+    366,
+    768,
+    996,
+    829
+   ],
+   "ink": 0.006117175894127335,
+   "worst": 5.38,
+   "median": 11.96,
+   "dark_ink": true,
+   "misure": 13
+  },
+  "chiaro|piede": {
+   "scenario": "mista",
+   "tema": "chiaro",
+   "scatto": "piede-fermo",
+   "categoria": "piede",
+   "etichetta": "Lavori fermi: cambiamenti anomali",
+   "tipo": "testo",
+   "riquadro": [
+    296,
+    1840,
+    853,
+    1885
+   ],
+   "ink": 0.006117175894127335,
+   "worst": 14.15,
+   "median": 14.15,
+   "dark_ink": true,
+   "misure": 17
+  },
+  "chiaro|piede-dettaglio": {
+   "scenario": "libreria",
+   "tema": "chiaro",
+   "scatto": "p00",
+   "categoria": "piede-dettaglio",
+   "etichetta": "Nessuna connessione al NAS",
+   "tipo": "testo",
+   "riquadro": [
+    303,
+    2026,
+    778,
+    2074
+   ],
+   "ink": 0.1512817436799783,
+   "worst": 4.56,
+   "median": 4.6,
+   "dark_ink": true,
+   "misure": 17
+  },
+  "chiaro|pillola": {
+   "scenario": "libreria",
+   "tema": "chiaro",
+   "scatto": "mesi",
+   "categoria": "pillola",
+   "etichetta": "Libreria",
+   "tipo": "testo",
+   "riquadro": [
+    248,
+    2223,
+    371,
+    2268
+   ],
+   "ink": 0.006117175894127335,
+   "worst": 9.19,
+   "median": 9.48,
+   "dark_ink": true,
+   "misure": 39
+  },
+  "chiaro|presenza": {
+   "scenario": "mista",
+   "tema": "chiaro",
+   "scatto": "mesi",
+   "categoria": "presenza",
+   "etichetta": "solo sul telefono",
+   "tipo": "disco",
+   "riquadro": [
+    139.5,
+    1615.75,
+    197.25,
+    1673.5
+   ],
+   "ink": 1.0,
+   "worst": 8.5,
+   "median": 8.8,
+   "dark_ink": false,
+   "misure": 194
+  },
+  "chiaro|titolo": {
+   "scenario": "libreria",
+   "tema": "chiaro",
+   "scatto": "p22",
+   "categoria": "titolo",
+   "etichetta": "Sabato 19 settembre",
+   "tipo": "testo",
+   "riquadro": [
+    79,
+    116,
+    463,
+    169
+   ],
+   "ink": 0.000607053967097675,
+   "worst": 7.3,
+   "median": 8.66,
+   "dark_ink": true,
+   "misure": 62
+  },
+  "scuro|azioni": {
+   "scenario": "mista",
+   "tema": "scuro",
+   "scatto": "selezione",
+   "categoria": "azioni",
+   "etichetta": "Condividi",
+   "tipo": "icona",
+   "riquadro": [
+    330,
+    2153,
+    456,
+    2279
+   ],
+   "ink": 1.0,
+   "worst": 13.75,
+   "median": 14.6,
+   "dark_ink": false,
+   "misure": 9
+  },
+  "scuro|comandi": {
+   "scenario": "libreria",
+   "tema": "scuro",
+   "scatto": "p11",
+   "categoria": "comandi",
+   "etichetta": "Seleziona",
+   "tipo": "icona",
+   "riquadro": [
+    791,
+    80,
+    917,
+    206
+   ],
+   "ink": 1.0,
+   "worst": 5.57,
+   "median": 6.58,
+   "dark_ink": false,
+   "misure": 105
+  },
+  "scuro|menu": {
+   "scenario": "libreria",
+   "tema": "scuro",
+   "scatto": "menu",
+   "categoria": "menu",
+   "etichetta": "Senza screenshot e WhatsApp",
+   "tipo": "testo",
+   "riquadro": [
+    366,
+    768,
+    996,
+    829
+   ],
+   "ink": 0.8897407914303731,
+   "worst": 5.28,
+   "median": 7.4,
+   "dark_ink": false,
+   "misure": 13
+  },
+  "scuro|piede": {
+   "scenario": "mista",
+   "tema": "scuro",
+   "scatto": "piede-aggiornato",
+   "categoria": "piede",
+   "etichetta": "NAS aggiornato",
+   "tipo": "testo",
+   "riquadro": [
+    446,
+    1936,
+    703,
+    1981
+   ],
+   "ink": 0.9835320605990662,
+   "worst": 10.25,
+   "median": 10.25,
+   "dark_ink": false,
+   "misure": 17
+  },
+  "scuro|piede-dettaglio": {
+   "scenario": "mista",
+   "tema": "scuro",
+   "scatto": "piede-aggiornato",
+   "categoria": "piede-dettaglio",
+   "etichetta": "Oggi alle 20:58",
+   "tipo": "testo",
+   "riquadro": [
+    416,
+    2026,
+    665,
+    2074
+   ],
+   "ink": 0.3785206612110459,
+   "worst": 7.81,
+   "median": 7.85,
+   "dark_ink": false,
+   "misure": 17
+  },
+  "scuro|pillola": {
+   "scenario": "libreria",
+   "tema": "scuro",
+   "scatto": "pillola-aperta",
+   "categoria": "pillola",
+   "etichetta": "Libreria",
+   "tipo": "testo",
+   "riquadro": [
+    248,
+    2223,
+    371,
+    2268
+   ],
+   "ink": 0.8897407914303731,
+   "worst": 4.86,
+   "median": 5.32,
+   "dark_ink": false,
+   "misure": 39
+  },
+  "scuro|presenza": {
+   "scenario": "mista",
+   "tema": "scuro",
+   "scatto": "mesi",
+   "categoria": "presenza",
+   "etichetta": "solo sul telefono",
+   "tipo": "disco",
+   "riquadro": [
+    139.5,
+    1615.75,
+    197.25,
+    1673.5
+   ],
+   "ink": 1.0,
+   "worst": 8.5,
+   "median": 8.8,
+   "dark_ink": false,
+   "misure": 194
+  },
+  "scuro|titolo": {
+   "scenario": "libreria",
+   "tema": "scuro",
+   "scatto": "p10",
+   "categoria": "titolo",
+   "etichetta": "Milano",
+   "tipo": "testo",
+   "riquadro": [
+    79,
+    145,
+    188,
+    193
+   ],
+   "ink": 1.0,
+   "worst": 5.48,
+   "median": 6.68,
+   "dark_ink": false,
+   "misure": 61
+  }
+ }
+}

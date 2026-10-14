@@ -21,7 +21,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -30,7 +29,6 @@ import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.antigravity.fluidengine.ui.fluid.glassBackdropSource
 import dev.antigravity.fluidengine.ui.fluid.rememberGlassBackdrop
 import dev.antigravity.fluidengine.ui.theme.FluidLoading
-import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTopBar
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
 import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
 import dev.pampa.mycloudgallery.core.model.MediaId
@@ -40,6 +38,9 @@ import dev.pampa.mycloudgallery.feature.library.ActionNotice
 import dev.pampa.mycloudgallery.feature.library.R
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionEmptyState
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionGridPage
+import dev.pampa.mycloudgallery.feature.library.grid.gridTopChromeHeight
+import dev.pampa.mycloudgallery.feature.library.grid.ChromeLabelText
+import dev.pampa.mycloudgallery.feature.library.grid.GridTopChrome
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionsDimens
 import dev.pampa.mycloudgallery.feature.library.collections.GridEnvironment
 import dev.pampa.mycloudgallery.feature.library.collections.SelectionAction
@@ -199,16 +200,14 @@ internal fun HiddenClosedPage(
 ) {
   val backdrop = rememberGlassBackdrop()
   if (backdropOut != null) SideEffect { backdropOut(backdrop) }
-  val density = LocalDensity.current
-  var barHeightPx by remember { mutableIntStateOf(0) }
-  val barHeight = with(density) { barHeightPx.toDp() }
+  val topChrome = gridTopChromeHeight()
 
   Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
     Box(modifier = Modifier.fillMaxSize().glassBackdropSource(backdrop)) {
       Column(
         modifier = Modifier
           .fillMaxSize()
-          .padding(top = barHeight, bottom = contentPadding.calculateBottomPadding()),
+          .padding(top = topChrome, bottom = contentPadding.calculateBottomPadding()),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
       ) {
@@ -235,12 +234,16 @@ internal fun HiddenClosedPage(
         }
       }
     }
-    GalleryTopBar(
-      title = title,
+    // La stessa chrome delle griglie (G2): l'etichetta con il nome e, se c'e', l'indietro. Niente comandi: e' chiusa.
+    GridTopChrome(
+      grid = null,
       backdrop = backdrop,
-      modifier = Modifier.align(Alignment.TopCenter).onSizeChanged { barHeightPx = it.height },
-      onNavigate = onBack,
-    )
+      label = ChromeLabelText(title, null),
+      topChrome = topChrome,
+      modifier = Modifier.align(Alignment.TopStart),
+      onBack = onBack,
+      showCommands = false,
+    ) {}
   }
 }
 

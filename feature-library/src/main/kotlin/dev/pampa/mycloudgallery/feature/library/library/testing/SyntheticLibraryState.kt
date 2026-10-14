@@ -12,11 +12,13 @@ import dev.pampa.mycloudgallery.core.library.contract.GridLayoutEngine
 import dev.pampa.mycloudgallery.core.library.contract.GridLevel
 import dev.pampa.mycloudgallery.core.library.contract.GridStyle
 import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
+import dev.pampa.mycloudgallery.core.library.contract.LibraryNasStatus
 import dev.pampa.mycloudgallery.core.library.contract.LocalMediaActions
 import dev.pampa.mycloudgallery.core.library.layout.TimelineLayoutEngine
 import dev.pampa.mycloudgallery.core.library.testing.FakeTimelineRepository
 import dev.pampa.mycloudgallery.core.library.testing.InMemoryLibraryPreferences
 import dev.pampa.mycloudgallery.core.library.testing.InMemoryTimelineSnapshot
+import dev.pampa.mycloudgallery.core.library.testing.NasMix
 import dev.pampa.mycloudgallery.core.library.testing.SyntheticLibrary
 import dev.pampa.mycloudgallery.core.model.CellFlags
 import dev.pampa.mycloudgallery.core.model.MediaId
@@ -57,6 +59,8 @@ const val WindowedLoaderAbove: Int = 5_000
  * che e' il comportamento da misurare in M1.
  *
  * @param debugSizes se non e' null, il menu della vista offre queste dimensioni (solo debug, M1).
+ * @param nas lo stato del NAS del piede (G2).
+ * @param mix se non e' null, la libreria e' mista telefono + NAS (`NasMix`): le celle hanno i segni di presenza (G2).
  * @param engine il motore di layout: quello vero di P5 (`TimelineLayoutEngine`).
  */
 fun syntheticLibraryState(
@@ -67,11 +71,13 @@ fun syntheticLibraryState(
   filter: LibraryFilter = LibraryFilter.ALL,
   phone: LibraryPhoneStatus = LibraryPhoneStatus(),
   debugSizes: List<Int>? = null,
+  nas: LibraryNasStatus = LibraryNasStatus.Idle,
+  mix: NasMix? = null,
   engine: GridLayoutEngine = TimelineLayoutEngine(),
   layoutDispatcher: CoroutineDispatcher = Dispatchers.Default,
   today: LocalDate = SyntheticToday,
 ): LibraryTabState {
-  val holder = SyntheticHolder(SyntheticLibrary(seed = seed, count = count, placeIds = FakePlaceData.IDS))
+  val holder = SyntheticHolder(SyntheticLibrary(seed = seed, count = count, placeIds = FakePlaceData.IDS, mix = mix))
   val repository = FakeTimelineRepository(holder.library.snapshot)
   val preferences = InMemoryLibraryPreferences(filter = filter, level = level, style = style)
   val loader = SwitchingThumbnailLoader(useWindowed = count > WindowedLoaderAbove)
@@ -92,7 +98,7 @@ fun syntheticLibraryState(
     LibraryDebugHooks(sizes = sizes, current = count) { size ->
       MainScope().launch {
         val next = withContext(Dispatchers.Default) {
-          SyntheticLibrary(seed = seed, count = size, placeIds = FakePlaceData.IDS).also { it.snapshot }
+          SyntheticLibrary(seed = seed, count = size, placeIds = FakePlaceData.IDS, mix = mix).also { it.snapshot }
         }
         holder.library = next
         loader.useWindowed = size > WindowedLoaderAbove
@@ -119,6 +125,7 @@ fun syntheticLibraryState(
     phone = MutableStateFlow(phone),
     commands = SyntheticCommands,
     debug = debug,
+    nas = MutableStateFlow(nas),
   )
 }
 

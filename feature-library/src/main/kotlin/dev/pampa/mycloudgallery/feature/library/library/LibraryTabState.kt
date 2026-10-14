@@ -90,9 +90,8 @@ interface LibraryCommands {
 object NoLibraryCommands : LibraryCommands
 
 /**
- * Solo debug: le manopole della Libreria sintetica (M1, `docs/bench/M1.md`) e del prototipo grafico (G1,
- * `docs/grafica-progetto.md`). In release e' sempre null e non compare niente. [select] ricostruisce la Libreria con un
- * altro numero di elementi; [chooseDesign] cambia la chrome della Libreria (vera e sintetica: le manopole sono le stesse).
+ * Solo debug: le manopole della Libreria sintetica (M1, `docs/bench/M1.md`). In release e' sempre null e non compare
+ * niente. [select] ricostruisce la Libreria con un altro numero di elementi.
  */
 @Stable
 class LibraryDebugHooks(
@@ -108,14 +107,6 @@ class LibraryDebugHooks(
     current = size
     onSelect(size)
   }
-
-  /** Il prototipo grafico della Libreria (G1): [LibraryDesign.Current] finche' non se ne sceglie un altro. */
-  var design: LibraryDesign by mutableStateOf(LibraryDesign.Current)
-    private set
-
-  fun chooseDesign(design: LibraryDesign) {
-    this.design = design
-  }
 }
 
 /**
@@ -129,8 +120,8 @@ class LibraryDebugHooks(
  *   griglia resta quella che e' (niente filtro).
  * @property preferences filtro, livello e stile **ricordati** (DataStore in `noBackupFilesDir`).
  * @property phone lo stato del telefono (permessi, lettura, in attesa).
- * @property nas lo stato del NAS per il piede della Libreria (Fase 4, §1.5, `LibraryNasStatus`): solo dati, l'aspetto e'
- *   del filone grafico. Di default [LibraryNasStatus.Idle] (nessun NAS: il piede non dice niente).
+ * @property nas lo stato del NAS per il piede della Libreria (Fase 4, §1.5, `LibraryNasStatus`): la capsula del NAS e il
+ *   suo dettaglio (G2, `LibraryStatusBlock`). Di default [LibraryNasStatus.Idle] (nessun NAS: il piede non dice niente).
  */
 @Stable
 class LibraryTabState(
@@ -162,8 +153,8 @@ class LibraryTabState(
   internal var notice: ActionNotice? by mutableStateOf(null)
 
   /**
-   * Vero in modalita' selezione: la barra delle azioni in vetro prende il posto dei segmenti dei livelli. `:app` puo'
-   * leggerlo per nascondere la pillola (§2.4: "al posto della pillola").
+   * Vero in modalita' selezione: la barra delle azioni prende il posto della pillola. `:app` lo legge per nascondere la
+   * pillola (§2.4: "al posto della pillola").
    */
   val selectionActive: Boolean get() = grid.selecting
 }

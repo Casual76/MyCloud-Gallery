@@ -5,6 +5,8 @@ import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
@@ -64,8 +66,12 @@ class MediaGridBehaviourTest {
       scope = rememberCoroutineScope()
       if (withBackdrop) {
         val backdrop = rememberGlassBackdrop()
-        Box(Modifier.fillMaxSize().glassBackdropSource(backdrop)) {
-          MediaGrid(state = state, contentPadding = padding, onOpen = onOpen, backdrop = backdrop)
+        // Lo scrubber lo posa chi ospita la griglia (G2): fuori dal fondale della pagina, che rifrange.
+        Box(Modifier.fillMaxSize()) {
+          Box(Modifier.fillMaxSize().glassBackdropSource(backdrop)) {
+            MediaGrid(state = state, contentPadding = padding, onOpen = onOpen)
+          }
+          MediaGridScrubber(state = state, backdrop = backdrop, modifier = Modifier.padding(padding))
         }
       } else {
         MediaGrid(state = state, contentPadding = padding, onOpen = onOpen)
@@ -342,8 +348,12 @@ class MediaGridBehaviourTest {
     composeRule.showThemed {
       scope = rememberCoroutineScope()
       val backdrop = rememberGlassBackdrop()
-      Box(Modifier.fillMaxSize().glassBackdropSource(backdrop)) {
-        MediaGrid(state = current, contentPadding = padding, backdrop = backdrop)
+      Box(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().glassBackdropSource(backdrop)) {
+          MediaGrid(state = current, contentPadding = padding)
+        }
+        // L'etichetta della chrome legge la sezione sotto la linea: anche lei solo dal layout sullo schermo.
+        Text(rememberMediaGridSection(current, 140.dp)?.title ?: "")
       }
     }
     composeRule.runOnIdle {

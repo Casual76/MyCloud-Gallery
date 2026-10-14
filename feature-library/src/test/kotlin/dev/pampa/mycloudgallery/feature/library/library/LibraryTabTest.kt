@@ -10,12 +10,10 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
-import androidx.compose.ui.test.hasAnyAncestor
-import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.unit.Density
 import com.google.common.truth.Truth.assertWithMessage
-import dev.pampa.mycloudgallery.feature.library.grid.MediaGridStickyHeaderTag
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeTagPrefix
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -194,8 +192,9 @@ class LibraryTabTest {
     composeRule.waitForIdle()
     assertThat(state.preferences.filter.value).isEqualTo(LibraryFilter.VIDEOS)
     assertThat(state.grid.view.filter).isEqualTo(LibraryFilter.VIDEOS)
-    // Il filtro attivo si dice anche a menu chiuso, nella barra.
-    composeRule.onNodeWithText("Video").assertExists()
+    // Il filtro attivo si dice anche a menu chiuso, nell'etichetta in alto ("Video · Oslo").
+    composeRule.waitForIdle()
+    assertThat(composeRule.onAllNodesWithText("Video", substring = true).fetchSemanticsNodes()).isNotEmpty()
 
     composeRule.onNodeWithContentDescription("Vista").performClick()
     composeRule.onNodeWithText("Proporzioni originali").performClick()
@@ -225,7 +224,7 @@ class LibraryTabTest {
     composeRule.onNodeWithContentDescription("Seleziona").performClick()
     composeRule.onNodeWithText("Seleziona elementi").assertExists()
     composeRule.onAllNodesWithContentDescription("Foto, ", substring = true)[0].performClick()
-    composeRule.onNodeWithText("1 elemento selezionato").assertExists()
+    composeRule.onNodeWithText("1 selezionato").assertExists()
     composeRule.onNodeWithContentDescription("Condividi").assertExists()
     composeRule.onNodeWithContentDescription("Nascondi").assertExists()
     composeRule.onNodeWithContentDescription("Elimina dal telefono").assertExists()
@@ -238,7 +237,7 @@ class LibraryTabTest {
     assertThat(CellFlags.has(snapshot.flagsAt(snapshot.indexOf(id)), CellFlags.FAVORITE)).isEqualTo(!wasFavorite)
     composeRule.onNodeWithContentDescription(if (wasFavorite) "Aggiungi ai preferiti" else "Togli dai preferiti").assertExists()
 
-    composeRule.onNodeWithContentDescription("Chiudi").performClick()
+    composeRule.onNodeWithText("Fine").performClick()
     assertThat(state.grid.selecting).isFalse()
     assertThat(state.grid.selection.selected.value.isEmpty).isTrue()
   }
@@ -310,10 +309,13 @@ class LibraryTabTest {
     assertThat(state.grid.selecting).isFalse()
   }
 
+  /** I livelli stanno nel menu della vista (scelta 4 dell'utente, G2): niente segmenti sopra la pillola. */
   @Test
-  fun iSegmentiCambianoLivelloELoRicordano() {
+  fun iLivelliSiScelgonoDalMenuESiRicordano() {
     val state = syntheticLibraryState(count = 600)
     show(state)
+    composeRule.onAllNodesWithText("Anni").assertCountEquals(0)
+    composeRule.onNodeWithContentDescription("Vista").performClick()
     composeRule.onNodeWithText("Anni").performClick()
     composeRule.waitForIdle()
     assertThat(state.grid.level).isEqualTo(GridLevel.YEARS)
@@ -341,6 +343,7 @@ class LibraryTabTest {
     val state = syntheticLibraryState(count = 600)
     show(state)
     assertThat(state.grid.layout!!.spec.columns).isEqualTo(10)
+    composeRule.onNodeWithContentDescription("Vista").performClick()
     composeRule.onNodeWithText("Anni").performClick()
     composeRule.waitForIdle()
     assertThat(state.grid.layout!!.spec.columns).isEqualTo(16)
@@ -398,13 +401,12 @@ class LibraryTabTest {
   }
 
   /**
-   * L'intestazione agganciata sta sempre sotto la barra superiore **misurata**, qualunque sia la sua altezza: barra
-   * normale, di selezione, e con il testo grande (piu' alta: titolo e sottotitolo a 1,3x). Si scorre a piccoli passi
-   * attraverso piu' cambi di sezione (dove l'intestazione successiva spinge quella agganciata): a ogni passo
-   * l'intestazione e il suo testo cominciano sotto l'ultimo controllo della barra e non sono tagliati.
+   * L'etichetta in alto e' l'intestazione agganciata (G2): scorrendo a piccoli passi attraverso piu' cambi di sezione dice
+   * sempre una sezione della Libreria, sta tutta dentro la riga di chrome **misurata** (anche con il testo a 1,3x, dove la
+   * riga cresce) e la griglia comincia sotto. In selezione dice quanti sono gli scelti.
    */
   @Test
-  fun lIntestazioneAgganciataStaSempreSottoLaBarraMisurata() {
+  fun lEtichettaInAltoDiceLaSezioneEStaNellaRigaMisurata() {
     val state = syntheticLibraryState(count = 2_000)
     var fontScale by mutableStateOf(1f)
     composeRule.showThemed {
@@ -421,54 +423,36 @@ class LibraryTabTest {
       }
     }
 
-    val normal = scanStuckHeaderUnderBar(state, "barra normale")
+    val normal = scanLabel(state, "testo normale")
 
     composeRule.onNodeWithContentDescription("Seleziona").performClick()
-    // Cinque elementi qualsiasi (dal modello, non toccando celle che possono stare sotto la barra o sotto i segmenti).
     composeRule.runOnIdle { (0 until 5).forEach { position -> state.grid.selection.toggle(state.grid.idAt(position)!!) } }
-    composeRule.onNodeWithText("5 elementi selezionati").assertExists()
-    scanStuckHeaderUnderBar(state, "barra di selezione")
+    composeRule.onNodeWithText("5 selezionati").assertExists()
+    composeRule.onNodeWithText("Fine").performClick()
 
-    composeRule.onNodeWithContentDescription("Chiudi").performClick()
-    composeRule.onNodeWithContentDescription("Vista").performClick()
-    composeRule.onNodeWithText("Video").performClick()
     fontScale = LargeText
     composeRule.waitForIdle()
-    val large = scanStuckHeaderUnderBar(state, "testo grande")
-    // La barra col testo grande e' davvero piu' alta: la linea di aggancio la segue perche' e' misurata.
+    val large = scanLabel(state, "testo grande")
+    // Con il testo grande l'etichetta e' piu' alta, e la riga misurata la segue.
     assertThat(large).isGreaterThan(normal)
   }
 
-  /** Scorre verso i meno recenti a passi piccoli e verifica a ogni passo; restituisce il fondo dei controlli della barra. */
-  private fun scanStuckHeaderUnderBar(state: LibraryTabState, case: String): Float {
-    var shown = 0
-    var barBottom = 0f
+  /** Scorre verso i meno recenti a passi piccoli; a ogni passo l'etichetta e' dentro la riga; restituisce il suo fondo. */
+  private fun scanLabel(state: LibraryTabState, case: String): Float {
     val titles = mutableSetOf<String>()
+    var bottom = 0f
     repeat(ScanSteps) { step ->
       composeRule.runOnIdle { state.grid.listState.dispatchRawDelta(-ScanStepPx) }
       composeRule.waitForIdle()
-      // La barra misurata: il fondo del suo ultimo controllo (titolo, sottotitolo, pulsanti), non un'altezza attesa.
-      barBottom = composeRule.onAllNodes(hasAnyAncestor(hasTestTag(LibraryTopBarTag)), useUnmergedTree = true)
-        .fetchSemanticsNodes()
-        .maxOf { it.boundsInRoot.bottom }
-      val header = composeRule.onAllNodesWithTag(MediaGridStickyHeaderTag).fetchSemanticsNodes()
-      if (header.isEmpty()) return@repeat
-      shown++
-      val parts = composeRule.onAllNodes(hasAnyAncestor(hasTestTag(MediaGridStickyHeaderTag)), useUnmergedTree = true)
-        .fetchSemanticsNodes()
-      for (node in header + parts) {
-        val bounds = node.boundsInRoot
-        assertWithMessage("$case, passo $step: l'intestazione agganciata comincia sotto la barra")
-          .that(bounds.top).isAtLeast(barBottom - Tolerance)
-        assertWithMessage("$case, passo $step: l'intestazione agganciata non e' tagliata")
-          .that(bounds.height).isWithin(Tolerance).of(node.size.height.toFloat())
-      }
-      parts.forEach { node -> node.config.getOrNull(SemanticsProperties.Text)?.forEach { titles += it.text } }
+      val label = composeRule.onAllNodesWithTag("${GalleryChromeTagPrefix}titolo").fetchSemanticsNodes().single()
+      bottom = label.boundsInRoot.bottom
+      val line = state.grid.viewport.padTop.toFloat()
+      assertWithMessage("$case, passo $step: l'etichetta sta sopra la linea della griglia").that(bottom).isAtMost(line + Tolerance)
+      (listOf(label) + label.children).flatMap { it.config.getOrNull(SemanticsProperties.Text).orEmpty() }.firstOrNull()?.let { titles += it.text }
     }
-    assertWithMessage("$case: l'intestazione agganciata si e' vista").that(shown).isAtLeast(ScanSteps / 2)
-    // Piu' titoli = almeno un cambio di sezione attraversato: la spinta dell'intestazione successiva e' nel giro.
-    assertWithMessage("$case: cambi di sezione attraversati").that(titles.size).isAtLeast(2)
-    return barBottom
+    // Piu' titoli = almeno un cambio di sezione attraversato.
+    assertWithMessage("$case: sezioni dette dall'etichetta $titles").that(titles.size).isAtLeast(2)
+    return bottom
   }
 
   private var current: LibraryTabState? by mutableStateOf(null)

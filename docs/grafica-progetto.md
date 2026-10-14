@@ -16,6 +16,11 @@
 >   cartella): `genera-media.py` (il contenuto peggiore, solo per l'emulatore), `campagna.py` (gli scatti),
 >   `misura-contrasto.py` (il contrasto vero sui pixel), `gfxinfo.py`.
 > - Fluid Engine 2.13.0. Nessuna modifica all'engine: quello che servirebbe è nel §7, come proposta.
+>
+> **G2 (14/10): la direzione C è la Libreria.** I prototipi, la Libreria della Fase 3 e la voce "Prototipo grafico" non
+> ci sono più; le indicazioni qui sopra su come provarli valgono per la storia di G1. Cosa è stato fatto, le misure finali,
+> i badge di presenza, il piede del NAS e le nuove proposte per l'engine: §12. Pagina di confronto G1-C → G2:
+> `docs/screenshots/selezione/G2/confronto.html`.
 
 ## 0. In breve
 
@@ -411,3 +416,199 @@ cambi di colore, stesso calcolo); se vuole zero vetro sopra la griglia, B.
 
 Prossimo passo: tappa G2, cioè la direzione C diventa la Libreria vera (non più prototipo), con i badge di presenza della Fase 4
 (solo NAS, solo telefono, da verificare) e il piede del NAS disegnati nello stesso linguaggio, senza peggiorare le misure sull'S25.
+
+Fatto nella tappa G2: §12.
+
+## 12. G2: cosa è stato fatto (14/10)
+
+La direzione C è **la Libreria**, e la stessa chrome vale per le griglie delle Raccolte. Non è più un prototipo: le
+direzioni A e B, la Libreria della Fase 3 (barra di vetro, segmenti, "Oggi" in basso, intestazione agganciata in vetro) e
+la voce di debug "Prototipo grafico" non ci sono più. I badge di presenza della Fase 4 e il piede del NAS sono disegnati.
+
+### 12.1 Le sei scelte, applicate
+
+| # | Scelta (§11) | Dove |
+|---|---|---|
+| 1 | C, vetro adattivo | `feature-library/.../grid/GridPageChrome.kt` (la riga in alto, lo stile adattivo, la barra delle azioni, lo scrubber), `library/LibraryScreen.kt` (era `LibraryPrototype.kt`) |
+| 2 | La cima del colore della pagina | `GridTopEdgeScrim`: 85% sotto la barra di stato, 55% al suo bordo, 15% sotto i pezzi, poi a zero in 44 dp, dentro il fondale |
+| 3 | Parete squadrata, fessura 1 dp | `GalleryWall` (`core-designsystem/.../grid/GalleryGridCell.kt`): il default di `MediaGrid`, quindi Libreria, Preferiti, Video, Screenshot, WhatsApp, Nascosti; gli Eliminati di recente (che hanno una griglia loro) con la stessa fessura e celle squadrate |
+| 4 | Il livello nel menu della vista | le prime quattro voci di "Vista"; il pinch resta il gesto |
+| 5 | La pillola si riduce scorrendo | `MainScaffold` attacca la connessione della pillola alla griglia (verso i più vecchi si ripiega, verso i recenti torna) |
+| 6 | Celle sotto i 64 dp come oggi | nessun segno sotto i 64 dp di lato corto (il livello Anni); gli angoli sono a zero per la scelta 3 |
+
+### 12.2 La struttura, e cosa è cambiato rispetto al prototipo
+
+- **In alto una riga sola**: (indietro) · etichetta · capsula dei comandi. L'etichetta dice la sezione in vista (data e
+  luogo), in cima "Libreria" e il riepilogo, in selezione "N selezionati"; un filtro attivo si dice davanti al luogo
+  ("Video · Oslo"). Nelle Raccolte sotto la data c'è il nome della raccolta ("Preferiti · Firenze"), così si sa sempre
+  dove si è; in cima, il nome e quanti sono.
+- **Etichetta e capsula sono gemelle**: due capsule della stessa altezza (52 dp, o le due righe del testo grande), il
+  titolo in 15 sp grassetto e il luogo in 13 sp medio (nel prototipo 15 e 15: la seconda riga pesava come la prima).
+- **L'altezza della riga non si misura più**: `chromeRowHeight()` la calcola dalla tipografia. Nel prototipo la riga era
+  misurata e cresceva quando la sezione aveva un luogo: con il testo a 1,3x la linea di lettura si spostava, un'altra
+  sezione senza luogo la riportava indietro, e la composizione non si fermava più (trovato dal test dell'etichetta).
+- **Le intestazioni della lista** sfumano salendo sopra la linea della chrome (20 dp), e l'etichetta legge la sezione
+  dove sono già sparite: il testo passa dall'una all'altra senza doppioni. In cima alla Libreria la prima intestazione si
+  vede.
+- **Il menu della vista scorre** se non ci sta (in debug "Impostazioni" restava tagliata sotto il bordo del pop-up).
+- **Le Raccolte** (`collections/CollectionGridPage.kt`): stessa riga in alto con l'indietro in una capsula, stessa barra
+  delle azioni adattiva nel posto della pillola (a schermo intero la pillola non c'è: la barra sta dove starebbe; nel
+  pannello di dettaglio del tablet sta sopra la pillola), la griglia ferma entrando in selezione. I Nascosti chiusi e gli
+  Eliminati di recente hanno la stessa riga ("Seleziona tutto" e "Fine" nella capsula, "Ripristina" nel posto della
+  pillola).
+- **Il viewer non è cambiato** (G3).
+
+### 12.3 La pellicola minima sale a 0,45
+
+In G1 il vetro adattivo poteva scendere a 0,30 di pellicola. Sulle campagne della G2 (contenuto peggiore di G1 più i media
+del benchmark) un'icona scura della capsula, nel tema scuro, sopra una fila di righe sottili bianche e nere, è scesa a
+**2,85:1**, e un titolo a 4,48:1. Il motivo è quello già scritto nel §4: il calcolo stima il contenuto dai ThumbHash, che
+non vedono le righe sottili né il testo degli screenshot, e la sfocatura del vetro (4,5 dp) non li media del tutto. La
+pellicola minima è ora **0,45** (`GalleryChromeStyles`): passa più di metà della foto, e lo stesso caso misura 5,57:1. La
+polarità e l'isteresi non sono cambiate.
+
+### 12.4 I badge di presenza
+
+Un disco in alto a destra, l'unico angolo libero (`GalleryPresence`, `badgeSlots` in `GalleryGridCell.kt`), con lo scrim
+"sopra una foto" dei badge di sempre (nero al 60%, glifo bianco). La **gerarchia** dei segni di una cella:
+
+| Posto | Segno | Perché lì |
+|---|---|---|
+| In alto a sinistra | il cerchio della selezione | è un controllo: vince su tutto |
+| In basso a destra | la durata di un video | in basso ha la precedenza (come prima) |
+| In basso a sinistra | preferito, modificata | solo se ci stanno per intero accanto alla durata (come prima) |
+| In alto a destra | la presenza | solo se resta staccato dal cerchio e dalla fila in basso: dai 64 dp c'è sempre |
+
+| Stato (`PresenceBadge`) | Glifo | Taglia | TalkBack (in fondo alla descrizione della cella) |
+|---|---|---|---|
+| Solo sul telefono | telefono | disco 22 dp, glifo 14 | "solo sul telefono" |
+| Solo sul NAS | nuvola | 22 / 14 | "solo sul NAS" |
+| Da verificare (D21) | clessidra | 22 / 14 | "copia sul NAS da verificare" |
+| Sul telefono e sul NAS | nuvola con la spunta | **18 / 12** | "sul telefono e sul NAS" |
+| Al sicuro | scudo con la spunta | **18 / 12** | "al sicuro sul NAS" |
+
+La gerarchia la fa la taglia, non l'alfa: gli stati che chiedono attenzione hanno il disco intero, lo stato di tutti i
+giorni il piccolo, così una Libreria tutta sul NAS non è una pioggia di segni. Finché nessuna cella è sul NAS l'indice
+non dà "solo sul telefono" (D15, `ColumnarTimelineSnapshot.presenceAt`): senza NAS nessun segno. I segni restano in
+selezione (servono a decidere cosa eliminare) e spariscono sotto i 64 dp. Glifi uguali a quelli di `GalleryBadge` del
+catalogo per telefono, NAS e al sicuro.
+
+### 12.5 Il piede
+
+In fondo alla lista, sotto i più recenti e sopra la pillola (`library/LibraryStatusFooter.kt`,
+`core-designsystem/.../design/GalleryFooterStatus.kt`): il riepilogo, poi **due voci una sotto l'altra**, la rete (da `:app`)
+e il NAS (`LibraryTabState.nas`). Ogni voce è una capsula tonale con glifo e frase breve e, sotto, il dettaglio. **Non è
+vetro**: sta nel contenuto, non galleggia (§1.4); della chrome prende la grammatica (capsule, inchiostro pieno, taglia e
+peso), dell'indicatore di stato globale le coppie di colori dello schema, verificate su ogni accento
+(`GalleryFooterStatusTest`). Toccare la voce del NAS apre la Diagnostica, dove sta "Ho controllato, continua".
+
+| `LibraryNasStatus` | Capsula | Tono | Dettaglio |
+|---|---|---|---|
+| `Idle` | (niente) | | |
+| `FirstScan` | "Sto leggendo il NAS…" con l'anello | lavoro | barra; "7.412 di 20.000 · circa 4 min" (senza totale: "1.200 file letti finora") |
+| `Aligning` | "Allineo l'indice del NAS…" | lavoro | barra; "640 MB di 1,2 GB · circa 1 min" |
+| `UpToDate` | "NAS aggiornato" | calmo | "Oggi alle 14:32" |
+| `Frozen` | "Lavori fermi: cambiamenti anomali" | allarme | il perché (spariti, cambiati, non media) e "finché non controlli non si scrive e non si cancella niente" |
+| `AreasUnavailable` | "Anteprime salvate" (o "Area comune/privata non raggiungibile") | attenzione | "Il NAS non risponde: vedi le anteprime salvate…" |
+| `LocalOnly` | "Indice condiviso in prova" | attesa | le share di prova (D31) |
+
+La rete usa la stessa voce: "Rete non riconosciuta" in capsula e "Nessuna connessione al NAS" sotto (la frase
+dell'indicatore globale divisa al punto, TalkBack la dice intera), "NAS non raggiungibile", "A casa · NAS collegato" e gli
+altri stati di `GlobalStatus`, con un glifo ciascuno. La stessa voce, allineata a sinistra, è in cima alle Raccolte e a
+Cerca: prima era il `FluidStatusBadge` dell'engine, che nel tono di avviso del tema chiaro tiene il testo a **3,5:1** (§12.9).
+Se il piede cresce mentre lo si guarda (arriva la voce del NAS), la lista lo segue: resta sopra la pillola.
+
+### 12.6 Contrasti finali, caso peggiore
+
+Sull'emulatore `Medium_Phone` (1080 × 2400, 4 GB), Libreria vera con il contenuto peggiore di G1 (186 immagini) e i 60
+media di `tools/bench/seed-media.ps1`, più il NAS sintetico in "libreria mista" (20.000 file, Impostazioni → Sviluppo →
+"NAS sintetico, libreria mista"): due campagne per tema (la Libreria: riposo con il piede, 24 passi di scorrimento
+lento, scorsa a metà, pillola riaperta, scrubber, selezione, menu, Mesi, Raccolte, Preferiti in selezione; la libreria
+mista: riposo, il piede in sette stati, tre passi, selezione, Mesi), 916 misure; più il tablet `Pampa_Tablet` (2560 ×
+1600), 233 misure. Metodo di G1 (§1.5), strumenti in `docs/screenshots/G2/strumenti/`. Chiaro / scuro, soglia 4,5 per il
+testo e 3 per le icone:
+
+| Pezzo | G1-C (prototipo) | **G2** | Soglia |
+|---|---|---|---|
+| Etichetta in alto (data e luogo) | 5,57 / 5,94 | **7,30 / 5,48** | 4,5 |
+| Comandi in alto (icone e "Fine") | 5,57 / 5,06 | **7,05 / 5,57** | 3 |
+| Barra delle azioni (icone) | 10,53 / 14,28 | **8,21 / 13,75** | 3 |
+| Pillola (etichette, aperta sopra le foto) | 8,89 / 6,76 | **9,19 / 4,86** | 4,5 |
+| Menu della vista | 5,50 / 5,42 | **5,38 / 5,28** | 4,5 |
+| Segni di presenza (glifo sul disco) | — | **8,50 / 8,50** | 3 |
+| Piede: capsule della rete e del NAS | — | **14,15 / 10,25** | 4,5 |
+| Piede: dettaglio sotto le capsule | — | **4,56 / 7,81** | 4,5 |
+
+Sul tablet: etichetta 7,03 / 5,48, comandi 11,74 / 10,49, azioni 13,49 / 10,02, menu 5,72 / 5,28, pillola 8,48 / **4,51**,
+piede 14,24 / 10,82. Tutto sopra soglia. Due numeri sono vicini alla soglia e vanno detti: la **pillola in scuro** (4,86 sul
+telefono, 4,51 sul tablet) è la pillola dell'engine sopra la sfumatura calcolata di G1 (§7.2, §7.3: l'etichetta della
+scheda scelta sul pomello tinto); il **dettaglio del piede in chiaro** (4,56) è `onSurfaceVariant` sulla pagina, la coppia
+del tema (il test la verifica a 4,5 su ogni accento). Senza la pellicola minima a 0,45 (§12.3) i comandi in scuro
+sarebbero a 2,85.
+
+Il riassunto è in `docs/screenshots/G2/contrasti-finali.json`. Il dettaglio sotto le capsule del piede è
+`onSurfaceVariant` sulla pagina: la coppia del tema, al limite in chiaro (misurato sui pixel; il test la verifica a 4,5
+su ogni accento).
+
+### 12.7 Costo di disegno
+
+| | Fondali a schermo intero | Vetro che si ricattura | Fasce a tutta larghezza |
+|---|---|---|---|
+| Libreria G1-C | 1 | etichetta, capsula, pillola (2–3), scrubber quando c'è: 4–6 | 0 |
+| **Libreria G2** | **1** | **uguale** (in selezione la barra delle azioni al posto della pillola) | **0** |
+| Raccolte prima (Fase 3) | 2 (pagina e lista) | barra a tutta larghezza, 2 tasti, intestazione agganciata, scrubber | 2 |
+| **Raccolte G2** | **1** | indietro, etichetta, capsula, scrubber quando c'è | **0** |
+
+- I segni di presenza non aggiungono layer né vetro: sono disegnati nel nodo della cella (un contorno e un vettore in più,
+  registrati una volta), come la durata.
+- La tinta adattiva non legge pixel: ThumbHash delle celle sotto ogni pezzo, ricalcolati solo quando sotto entra o esce
+  una riga (§4). Il piede è un `Column` di testo: niente vetro.
+- La sfumatura delle intestazioni è l'alfa del layer che le righe avevano già.
+- Il test `nessunFondaleASchermoInteroInPiu` (§12.8) conta le registrazioni nel codice. La misura vera del RenderThread
+  resta quella dell'S25 (§9).
+
+### 12.8 I principi verificati
+
+| # | Principio | Test |
+|---|---|---|
+| P1 | 4,5:1 il testo, 3:1 le icone, sul caso peggiore | `GalleryLegibilityTest` (vetro adattivo con il nuovo minimo), `GalleryCellBadgesTest.ilGlifoSiLeggeSopraQualunqueFoto`, `GalleryFooterStatusTest` (ogni tono su ogni accento, il dettaglio sulla pagina); sui pixel §12.6 |
+| P2 | Nessuna sovrapposizione | `LibraryChromeLayoutTest` (Libreria a 1x, a 1,3x e sul tablet, Preferiti; a riposo e in selezione); `GalleryCellBadgesTest.nessunSegnoNeToccaUnAltro` (i segni di una cella su 230 mila combinazioni di misure, testo, durata e presenza, a due densità) |
+| P3 | Bersagli di 48 dp | `LibraryChromeLayoutTest` |
+| P4 | Nessun fondale in più | `LibraryChromeLayoutTest.nessunFondaleASchermoInteroInPiu`: la griglia e la sua chrome nessuno, ogni pagina uno |
+| P5, P6 | La barra al posto della pillola, la griglia ferma | `LibraryChromeLayoutTest` (Libreria e Preferiti) |
+| — | L'etichetta dice la sezione e sta nella riga | `LibraryTabTest.lEtichettaInAltoDiceLaSezioneEStaNellaRigaMisurata` |
+| — | Piede e TalkBack | `LibraryStatusFooterTest` (stati del NAS, tocco, descrizioni con la presenza) |
+| — | Sotto i 64 dp nessun segno; la gerarchia è la taglia | `GalleryCellBadgesTest` |
+
+### 12.9 Proposte per l'engine (in aggiunta al §7, che resta valido)
+
+1. **`FluidStatusBadge` nel tono di avviso**: in chiaro `#E65100` su `#FFF3E0` fa 3,5:1, sotto il 4,5 del testo a 12 sp.
+   Le coppie di `FluidTone` vanno portate a 4,5 (o calcolate), con il caso nel `FluidContrastTest`. La galleria ora usa le
+   sue capsule tonali dallo schema.
+2. **Una sonda del dettaglio fine nel vetro adattivo** (estende la §7.7): il ThumbHash non vede righe e testo; una
+   misura economica della varianza ad alta frequenza (per esempio un byte calcolato quando si fa la miniatura) permetterebbe
+   di tenere la pellicola a 0,30 dove il contenuto è liscio e alzarla solo dove serve.
+3. **I pop-up che non ci stanno scorrono**: il pannello dentro `FluidGlassModalPortal(Popover)` non scorre da solo; la
+   galleria lo fa da fuori (`verticalScroll` in `GalleryChromeMenuAnchor`).
+4. **Un'altezza di riga dalla tipografia** (`FluidTextStyles.lineBlock(stili)` o simile): la chrome con testo a due righe ha
+   bisogno di un'altezza che non dipenda dal contenuto, per non fare l'altalena con ciò che legge.
+5. Restano: `legibleInk` pubblico (§7.1), la pellicola dei modali e della pillola sul caso peggiore (§7.2–7.3, il menu è a
+   5,3–5,4:1 con il velo della galleria), `FluidScrollEdge` (§7.4: qui è `GridTopEdgeScrim`), la tinta come lambda (§7.6:
+   le capsule adattive ricompongono due nodi per la durata della molla).
+
+### 12.10 Benchmark, screenshot, cosa resta
+
+- **Selettori del benchmark** (`benchmark/.../BenchUi.kt`, `BenchLabels`): i livelli si scelgono solo dal menu "Vista"
+  (tag `chrome-vista`, poi la descrizione "Vista"), niente più segmenti né l'etichetta della direzione B; i pinch restano
+  l'ultima strada. Smoke sull'emulatore (`benchSmoke=true`, Medium_Phone, dataset di 5.000 righe, 57% solo-NAS): le otto prove di scorrimento e il pinch girano tutte (9 su 9, nessun avviso "menu dei livelli non trovato": ogni livello è stato scelto dal menu, il pulsante trovato per tag `chrome-vista`); i numeri dell'emulatore non valgono.
+- **Screenshot**: `docs/screenshots/G2/` (locali, `.gitignore` come in G1: campagne con i dump e `contrasti.json`), selezione
+  in `docs/screenshots/selezione/G2/` con la pagina `confronto.html` (G1-C → G2). Strumenti: `campagna.py` (scenari
+  `libreria` e `mista`), `apri-mista.py`, `misura-contrasto.py` (la G1 più il piede e i dischi di presenza).
+- **Debug**: "NAS sintetico, libreria mista" in Impostazioni → Sviluppo (`MixedPresenceRepository`: presenza, preferiti e
+  video assegnati sopra l'indice vero, solo per gli occhi) e lo stato del piede scelto da `adb` in `files/g2-nas-footer`
+  (`lettura`, `allineo`, `aggiornato`, `fermo`, `irraggiungibile`, `comune`, `prova`).
+- **Da fare**: misurare sull'S25 scorrimento e pinch della G2 contro il riferimento del 13/10 (§9, guardia della 4A);
+  tarare a occhio sul telefono il minimo della pellicola (0,45) e il disco piccolo; `docs/bench/README.md` §6-ter descrive
+  ancora i selettori di G1 (non è nel perimetro della G2); `GlobalStatusIndicator` di `:app` non ha più chiamanti
+  (Libreria, Raccolte e Cerca usano la voce di stato della G2); `GalleryGridLevelBar` e `GalleryGridJumpButton` restano
+  solo nel catalogo dei componenti.

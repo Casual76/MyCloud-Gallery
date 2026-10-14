@@ -1,6 +1,5 @@
 package dev.pampa.mycloudgallery.benchmark
 
-import android.graphics.Point
 import android.os.Build
 import android.util.Log
 import androidx.test.platform.app.InstrumentationRegistry
@@ -13,9 +12,8 @@ import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import java.util.regex.Pattern
-import kotlin.math.roundToInt
 
-/** I quattro livelli della griglia (§2.4) con il nome che il segmento dei livelli porta in basso. */
+/** I quattro livelli della griglia (§2.4) con il nome della loro voce nel menu "Vista" (G2: i segmenti non ci sono piu'). */
 enum class BenchLevel(val label: String) {
   YEARS("Anni"),
   MONTHS("Mesi"),
@@ -31,14 +29,16 @@ enum class BenchStyle(val label: String) {
 
 /**
  * Le etichette dell'interfaccia di cui gli scenari si fidano, **in un posto solo**: le descrizioni delle celle
- * (`strings_grid.xml`), i nomi dei livelli (`level_*` del design system) e il menu della vista (`library_view_menu`,
- * `library_style_*`), verificati sulla Libreria vera dell'S25 e dell'emulatore il 13/10. Se cambiano, si cambiano qui.
+ * (`strings_library.xml`, `grid_kind_*`), i nomi dei livelli (`level_*` del design system) e il menu della vista
+ * (`library_view_menu`, `library_style_*`). Verificati sulla Libreria vera dell'S25 e dell'emulatore il 13/10, e sulla
+ * Libreria della G2 (`docs/grafica-progetto.md` §12) sull'emulatore il 14/10. Se cambiano, si cambiano qui.
  */
 object BenchLabels {
 
   /**
    * La descrizione di una cella: "Foto, 12 marzo 2024", "Video, ...", "Foto in movimento, ...", "Foto RAW, ...",
-   * "Immagine animata, ..." (`grid_cell_*`). Una cella solo-NAS (Fase 4A) comincia allo stesso modo: la presenza viene dopo.
+   * "Immagine animata, ..." (`grid_kind_*`). Una cella della Libreria mista comincia allo stesso modo: la presenza ("solo
+   * sul NAS", G2) sta in fondo.
    */
   val CELL: Pattern = Pattern.compile("^(Foto RAW|Foto in movimento|Foto|Video|Immagine animata),.*", Pattern.DOTALL)
 
@@ -48,19 +48,14 @@ object BenchLabels {
    */
   val STYLE_MENU_BUTTONS: List<String> = listOf("Vista")
 
-  // --- Robusti al filone grafico (Fase 4A, P10) -------------------------------------------------------------------------
-  // Il filone grafico (docs/grafica-progetto.md) toglie i segmenti dei livelli dalla Libreria: nelle direzioni A e C i
-  // livelli sono le prime quattro voci del menu "Vista", nella B un'etichetta "Giorni" con la freccia (`library_g1_level`:
-  // descrizione "Livello: Giorni"). Ogni selettore ha quindi una catena di alternative, dalla piu' stabile alla piu'
-  // fragile: tag di test (servono `testTagsAsResourceId` alla radice) -> descrizione o testo. Cosa serve all'app:
+  // --- La chrome della G2 (docs/grafica-progetto.md §12) ------------------------------------------------------------------
+  // I segmenti dei livelli non ci sono piu': i livelli sono le prime quattro voci del menu "Vista", nella capsula dei
+  // comandi in alto. Ogni selettore ha una catena di alternative, dalla piu' stabile alla piu' fragile: il tag di test della
+  // chrome (la Libreria mette `testTagsAsResourceId` alla radice) -> la descrizione o il testo. Cosa serve all'app:
   // docs/bench/README.md §6-ter.
 
-  /** I tag di test della chrome G1 (`galleryChromeTag`, prefisso `g1-chrome-`). */
-  const val TAG_VIEW_MENU: String = "g1-chrome-vista"
-  const val TAG_LEVEL_MENU: String = "g1-chrome-livello"
-
-  /** L'etichetta del livello della direzione B: "Livello: Giorni" (`library_g1_level`). */
-  val LEVEL_TRIGGER: Pattern = Pattern.compile("^Livello: (.*)$")
+  /** Il tag di test del menu della vista (`galleryChromeTag("vista")`, prefisso `chrome-`; in G1 era `g1-chrome-`). */
+  const val TAG_VIEW_MENU: String = "chrome-vista"
 }
 
 /** Selettori e gesti sulla Libreria, per tutti gli scenari. Niente di questo conosce il codice dell'app: solo l'albero di accessibilita'. */
@@ -181,7 +176,7 @@ object BenchUi {
   }
 
   /**
-   * I margini dei gesti sulla griglia, che riempie lo schermo: fuori la barra di stato e la barra della Libreria in alto
+   * I margini dei gesti sulla griglia, che riempie lo schermo: fuori la barra di stato e la chrome della Libreria in alto
    * (un fling verso i piu' vecchi parte in alto e scende: da 1/8 dell'altezza tirava giu' la tendina delle notifiche
    * sull'emulatore), la pillola e il gesto di sistema in basso, lo scrubber a destra.
    */
@@ -202,33 +197,21 @@ object BenchUi {
 
   /**
    * Porta la griglia sul livello [level]. Catena di alternative (vedi [BenchLabels]):
-   * 1. il segmento dei livelli, cercato per nome; se proprio quello non si vede (il segmento scelto sta sotto la lente di
-   *    vetro del controllo), la sua posizione si ricava dagli altri, che sono larghi uguali;
-   * 2. senza segmenti (filone grafico, direzioni A, B e C): il menu dei livelli, cioe' l'etichetta "Livello: ..." (B) o le
-   *    prime voci del menu "Vista" (A, C);
-   * 3. solo senza nessuno dei due, i pinch (a fondo verso Anni, poi un passo per livello), che da qui non si possono
-   *    verificare: lo dice il log. `false` se la griglia non c'e'.
+   * 1. le prime voci del menu "Vista" (G2: i livelli stanno li', scelta 4 dell'utente);
+   * 2. solo se il menu non si apre o non ha la voce, i pinch (a fondo verso Anni, poi un passo per livello), che da qui
+   *    non si possono verificare: lo dice il log. `false` se la griglia non c'e'.
    */
   fun selectLevel(device: UiDevice, level: BenchLevel): Boolean {
     if (awaitGrid(device) == null) return false
-    val target = levelSegmentCenter(device, level)
-    if (target != null) {
-      ensureForeground(device)
-      device.click(target.x, target.y)
-      device.waitForIdle()
-      // Il cambio di livello si anima (la scala del pinch sul layer): si misura da fermi, a livello assestato.
-      Thread.sleep(LEVEL_SETTLE_MS)
-      return awaitGrid(device) != null
-    }
     if (selectLevelFromMenu(device, level)) return true
     repeat(LEVELS_TO_SPAN) { pinch(device, close = true) }
     repeat(level.ordinal) { pinch(device, close = false) }
     device.waitForIdle()
-    Log.w(TAG, "segmenti e menu dei livelli non trovati: livello '${level.label}' portato con i pinch, non verificato")
+    Log.w(TAG, "menu dei livelli non trovato: livello '${level.label}' portato con i pinch, non verificato")
     return true
   }
 
-  /** Il pulsante che apre il menu della vista: il tag della chrome G1, poi la descrizione "Vista", poi il testo. */
+  /** Il pulsante che apre il menu della vista: il tag della chrome, poi la descrizione "Vista", poi il testo. */
   private fun viewMenuTrigger(device: UiDevice): UiObject2? {
     val pkg = BenchSession.targetPackage
     device.findObject(By.res(BenchLabels.TAG_VIEW_MENU))?.let { return it }
@@ -239,62 +222,31 @@ object BenchUi {
     return null
   }
 
-  /** L'etichetta del livello ("Giorni v", direzione B): il tag della chrome G1, poi la descrizione "Livello: ...". */
-  private fun levelTrigger(device: UiDevice): UiObject2? =
-    device.findObject(By.res(BenchLabels.TAG_LEVEL_MENU))
-      ?: device.findObject(By.pkg(BenchSession.targetPackage).desc(BenchLabels.LEVEL_TRIGGER))
-
   /**
-   * I livelli dal menu (nessun segmento sulla pagina): prima l'etichetta del livello (B), poi il menu "Vista" (A, C). Se
-   * l'etichetta dice gia' il livello cercato non si tocca niente. `false` se nessuno dei due apre un menu con la voce.
+   * Il livello dal menu "Vista": se la voce non c'e' (il tocco non ha aperto il menu, o si e' aperto un altro pop-up) il
+   * menu si chiude e si riprova. `false` se dopo [MENU_ATTEMPTS] il livello non e' stato scelto.
    */
   private fun selectLevelFromMenu(device: UiDevice, level: BenchLevel): Boolean {
-    val current = levelTrigger(device)?.let { node ->
-      val text = try {
-        node.contentDescription ?: node.text
-      } catch (stale: StaleObjectException) {
-        null
-      }.orEmpty()
-      BenchLabels.LEVEL_TRIGGER.matcher(text).takeIf { it.matches() }?.group(1)?.trim() ?: text.trim()
-    }
-    if (current == level.label) return true
-    val triggers: List<(UiDevice) -> UiObject2?> = listOf(::levelTrigger, ::viewMenuTrigger)
-    for (trigger in triggers) {
-      repeat(MENU_ATTEMPTS) {
-        ensureForeground(device)
-        val button = trigger(device) ?: return@repeat
-        button.click()
-        val item = awaitMenuItem(device, level.label) { device.hasObject(By.text(level.label)) }
-        if (item != null) {
-          item.click()
-          device.wait(Until.hasObject(GRID_IN_APP), MENU_TIMEOUT_MS)
-          device.waitForIdle()
-          Thread.sleep(LEVEL_SETTLE_MS)
-          return awaitGrid(device) != null
-        }
-        if (!device.hasObject(GRID_IN_APP)) {
-          // Il menu e' aperto ma la voce non c'e': lo si chiude.
-          back(device)
-          device.wait(Until.hasObject(GRID_IN_APP), MENU_TIMEOUT_MS)
-        }
+    repeat(MENU_ATTEMPTS) {
+      ensureForeground(device)
+      val button = viewMenuTrigger(device) ?: return@repeat
+      button.click()
+      val item = awaitMenuItem(device, level.label) { device.hasObject(STYLE_ITEMS) }
+      if (item != null) {
+        item.click()
+        device.wait(Until.hasObject(GRID_IN_APP), MENU_TIMEOUT_MS)
+        device.waitForIdle()
+        // Il cambio di livello si anima (la scala del pinch sul layer): si misura da fermi, a livello assestato.
+        Thread.sleep(LEVEL_SETTLE_MS)
+        return awaitGrid(device) != null
+      }
+      if (!device.hasObject(GRID_IN_APP)) {
+        // Il menu e' aperto ma la voce non c'e': lo si chiude.
+        back(device)
+        device.wait(Until.hasObject(GRID_IN_APP), MENU_TIMEOUT_MS)
       }
     }
     return false
-  }
-
-  /** Il centro del segmento di [level]: trovato per nome, o ricavato da due segmenti visti (stessa riga, passo costante). */
-  private fun levelSegmentCenter(device: UiDevice, level: BenchLevel): Point? {
-    val seen = BenchLevel.entries.mapNotNull { l ->
-      val node = device.findObject(By.pkg(BenchSession.targetPackage).text(l.label)) ?: device.findObject(By.pkg(BenchSession.targetPackage).desc(l.label))
-      node?.visibleBounds?.let { l to it }
-    }.toMap()
-    seen[level]?.let { return Point(it.centerX(), it.centerY()) }
-    if (seen.size < 2) return null
-    val (first, second) = seen.entries.sortedBy { it.key.ordinal }.let { it[0] to it[1] }
-    val step = (second.value.centerX() - first.value.centerX()).toDouble() / (second.key.ordinal - first.key.ordinal)
-    val x = first.value.centerX() + step * (level.ordinal - first.key.ordinal)
-    Log.i(TAG, "segmento '${level.label}' ricavato dalla posizione degli altri")
-    return Point(x.roundToInt(), first.value.centerY())
   }
 
   /**
@@ -346,7 +298,7 @@ object BenchUi {
   }
 
   /**
-   * La cella piu' vicina al centro dello schermo, lontana dalla barra in alto e dalla pillola in basso. Le celle si
+   * La cella piu' vicina al centro dello schermo, lontana dalla chrome in alto e dalla pillola in basso. Le celle si
    * rileggono se la lista si e' mossa sotto (dopo un pinch o un fling le righe si ricompongono: StaleObjectException).
    */
   fun centerCell(device: UiDevice): UiObject2? {

@@ -36,6 +36,17 @@ data class Freeze(
   val diff: ScanDiff,
 )
 
+/**
+ * Il numero che l'utente vede e che deve riscrivere per scongelare (la "doppia conferma" di D10): il conteggio della
+ * ragione del congelamento.
+ */
+val Freeze.headlineCount: Int
+  get() = when (reason) {
+    FreezeReason.VANISHED -> diff.vanished
+    FreezeReason.CHANGED -> diff.changed
+    FreezeReason.NOT_MEDIA -> diff.notMedia
+  }
+
 /** Il giudizio su un giro. */
 sealed interface FreezeVerdict {
   data object Proceed : FreezeVerdict

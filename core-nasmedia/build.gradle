@@ -4,7 +4,8 @@
 // cambiamenti di massa. Contratti, null-object e fake di P0; logica di P5.
 //
 // Pacchetti: `contract`, `noop`, `testing` (vedi core-index). `SyntheticNas` (testing) e' il NAS sintetico del §5.3 sopra
-// il NAS finto di core-nas.
+// il NAS finto di core-nas. La logica di P5: `scan` (DefaultNasScanner, ArrivalWatch), `detect` (NasDetector, NasMediaBytes,
+// miniatura EXIF), `exclude` (esclusioni e copertine, D11) e `freeze` (MassChangeGuard e StoreFreezeState, D10).
 //
 // Vede il NAS solo dai contratti di core-nas (NasMediaReader), il catalogo (core-database: l'adattatore NasScanStore lo
 // lega :app), i metadati (core-metadata: MediaBytes, MetadataExtractor) e l'indice (core-index: ReplicaRecords,

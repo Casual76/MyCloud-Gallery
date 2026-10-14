@@ -108,6 +108,23 @@ data class ScanReport(
   val resumed: Boolean,
   val stoppedBy: ScanStop? = null,
   val freeze: Freeze? = null,
+  /**
+   * Aggiunte di P5 (con valore di default, i costruttori di P0 restano validi). File riconosciuti come **spostati o
+   * rinominati** dal PC senza leggere un byte: stesso `fileId`, dimensione e data (E-N1). Identita', preferiti e
+   * preparazione restano quelli di prima.
+   */
+  val moved: Int = 0,
+  /** File noti con un timbro diverso (modificati sul posto, E-N2): una delle tre grandezze del congelamento (D10). */
+  val changed: Int = 0,
+  /** Cartelle escluse dall'utente o dalla configurazione firmata, mai elencate (E-N15). */
+  val excludedFolders: Int = 0,
+  /**
+   * Cartelle che non si sono potute leggere (permesso negato) o oltre il tetto di voci (E-N5): con almeno una il giro
+   * non segna **nessuna** assenza (non si puo' dire che un file sia sparito da dove non si e' visto).
+   */
+  val blockedFolders: Int = 0,
+  /** Adozioni d'identita' rifiutate dal catalogo (D7: l'id remoto e' gia' legato qui a un contenuto diverso). */
+  val identityRefused: Int = 0,
 )
 
 /**

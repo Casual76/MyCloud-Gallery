@@ -172,7 +172,25 @@ sealed interface Location {
 
     override val key: LocationKey get() = LocationKey("nas:${account.value}:$shareKey:" + foldForKey(path.value))
 
-    override val folderKey: String get() = "nas:${account.value}:$shareKey:" + foldForKey(path.parent)
+    override val folderKey: String get() = folderKey(account, share, path.parent)
+
+    /** Lo stesso timbro che darebbe un elenco del NAS: dimensione, data e [fileId] se noto. */
+    fun stampOf(stamp: FileStamp): NasStamp = NasStamp(stamp.size, stamp.modifiedAtMillis, fileId)
+
+    companion object {
+      /** La forma di confronto di un nome di share (SMB non distingue maiuscole e minuscole), come [shareKey]. */
+      fun shareKeyOf(share: String): String = foldForKey(share)
+
+      /**
+       * La [folderKey] dei file che stanno **direttamente** nella cartella [folder] della share (`null` o vuota = la
+       * radice): serve a chi elenca una cartella e la confronta con il catalogo (scansione del NAS, E-N5) senza
+       * costruire una posizione finta.
+       */
+      fun folderKey(account: AccountId, share: String, folder: NasPath?): String = folderKey(account, share, folder?.value.orEmpty())
+
+      private fun folderKey(account: AccountId, share: String, folder: String): String =
+        "nas:${account.value}:${foldForKey(share)}:" + foldForKey(folder)
+    }
   }
 }
 

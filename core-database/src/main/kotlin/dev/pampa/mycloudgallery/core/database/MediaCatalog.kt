@@ -9,8 +9,10 @@ import dev.pampa.mycloudgallery.core.database.entity.MediaEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaGroupEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaLocationEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaPersonalEntity
+import dev.pampa.mycloudgallery.core.database.entity.NasRefRow
 import dev.pampa.mycloudgallery.core.model.AccountId
 import dev.pampa.mycloudgallery.core.model.CellFlags
+import dev.pampa.mycloudgallery.core.model.ContentKey
 import dev.pampa.mycloudgallery.core.model.CorrectionField
 import dev.pampa.mycloudgallery.core.model.EmbeddingVector
 import dev.pampa.mycloudgallery.core.model.FileStamp
@@ -30,9 +32,12 @@ import dev.pampa.mycloudgallery.core.model.MediaMetadata
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.model.MediaVersion
 import dev.pampa.mycloudgallery.core.model.NasAreaLookup
+import dev.pampa.mycloudgallery.core.model.NasPath
 import dev.pampa.mycloudgallery.core.model.NasShare
+import dev.pampa.mycloudgallery.core.model.NasStamp
 import dev.pampa.mycloudgallery.core.model.PersonalFlags
 import dev.pampa.mycloudgallery.core.model.Presence
+import dev.pampa.mycloudgallery.core.model.QuickHash
 import dev.pampa.mycloudgallery.core.model.SafetyStatus
 import dev.pampa.mycloudgallery.core.model.Sha256
 import dev.pampa.mycloudgallery.core.model.VersionId
@@ -40,7 +45,10 @@ import dev.pampa.mycloudgallery.core.model.VersionKind
 import dev.pampa.mycloudgallery.core.model.WorkStage
 import dev.pampa.mycloudgallery.core.model.WorkState
 import dev.pampa.mycloudgallery.core.model.WorkStatus
+import dev.pampa.mycloudgallery.core.model.domain.AdoptRefusal
+import dev.pampa.mycloudgallery.core.model.domain.AdoptionDecision
 import dev.pampa.mycloudgallery.core.model.domain.ContentCandidate
+import dev.pampa.mycloudgallery.core.model.domain.IdentityRules
 import dev.pampa.mycloudgallery.core.model.domain.GroupMember
 import dev.pampa.mycloudgallery.core.model.domain.KnownLocation
 import dev.pampa.mycloudgallery.core.model.domain.LinkContext
@@ -51,12 +59,14 @@ import dev.pampa.mycloudgallery.core.model.domain.MergePlan
 import dev.pampa.mycloudgallery.core.model.domain.MergeRefusal
 import dev.pampa.mycloudgallery.core.model.domain.MergeRules
 import dev.pampa.mycloudgallery.core.model.domain.Observation
+import dev.pampa.mycloudgallery.core.model.domain.RemoteIdentity
 import dev.pampa.mycloudgallery.core.model.domain.SafetyReport
 import dev.pampa.mycloudgallery.core.model.domain.SafetyRules
 import dev.pampa.mycloudgallery.core.model.domain.TimelineRules
 import dev.pampa.mycloudgallery.core.model.domain.VersionPlan
 import dev.pampa.mycloudgallery.core.model.domain.VersionRules
 import dev.pampa.mycloudgallery.core.model.domain.WorkRules
+import dev.pampa.mycloudgallery.core.model.enumByCode
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -104,6 +114,8 @@ class MediaCatalog(
   private val indexDao = database.timelineIndexDao()
   private val metaDao = database.catalogMetaDao()
   private val cursorDao = database.mediaStoreCursorDao()
+  private val nasScanDao = database.nasScanDao()
+  private val identityDao = database.identityDao()
 
   private val writeLock = Mutex()
   private val changeFlow = MutableSharedFlow<CatalogChange>(
@@ -157,15 +169,30 @@ class MediaCatalog(
    * nulla, E-P4). [seenAt] e' l'istante "visto" da scrivere nelle posizioni (di norma l'inizio della
    * scansione, `scanEpoch`), cosi' [markVanishedNotSeenSince] non dipende da salti dell'orologio a meta'
    * giro; senza, l'ora di [clock].
+   *
+   * **NAS (v3).** [nasCursor] e' il cursore della scansione del NAS (`nas_scan_state`), salvato nella stessa transazione
+   * come [cursor] per il MediaStore; [seenAt] e' l'`epoch` del giro (ora del NAS). Con [WhenUndecided.KEEP_SEPARATE] un
+   * file con la stessa impronta rapida di un media che sta **dall'altra parte** (telefono e NAS) e senza hash completo
+   * nasce separato ma in un gruppo provvisorio `PROBABLE_DUPLICATE` (D21, E-L9): una cella sola "da verificare", con la
+   * copia del telefono come copertina, e `FULL_HASH` in coda per le copie del NAS. Quando gli hash completi arrivano il
+   * gruppo si risolve da solo: stessi byte, unione (`MergeRules`); byte diversi, di nuovo separati. Mai un'unione senza
+   * hash completo.
+   *
+   * [inSameTransaction], se c'e', gira nella stessa transazione dopo le osservazioni (es. P4: le righe di `index_record`
+   * e il `HeadMark` del segmento applicato, con i DAO di [GalleryDatabase]): o tutto o niente.
    */
   suspend fun recordAll(
     observations: List<Observation>,
     whenUndecided: WhenUndecided = WhenUndecided.WAIT,
     cursor: MediaStoreCursor? = null,
     seenAt: Long? = null,
+    nasCursor: NasScanState? = null,
+    inSameTransaction: (suspend () -> Unit)? = null,
   ): List<RecordOutcome> = write { tx ->
     val outcomes = observations.map { recordOne(tx, it, whenUndecided, seenAt) }
     cursor?.let { saveCursor(tx, it) }
+    nasCursor?.let { nasScanDao.upsert(it.toEntity()) }
+    inSameTransaction?.invoke()
     outcomes
   }
 
@@ -251,6 +278,153 @@ class MediaCatalog(
     expired.forEach { tx.touch(mediaOf(it.id)) }
     expired.forEach { locationDao.delete(it.id.value) }
     expired.size
+  }
+
+  // --- Fase 4: il NAS (schema v3; porta `NasScanStore` di core-nasmedia, `docs/fase4-progetto.md` §2.3) -------------
+
+  /** Il cursore della scansione di [share] per [account], se c'e' (`NasScanStore.cursor`). */
+  suspend fun nasScanState(account: AccountId, share: String): NasScanState? =
+    nasScanDao.get(account.value, Location.Nas.shareKeyOf(share))?.toDomain()
+
+  /** I cursori di tutte le share (Diagnostica, stato del congelamento all'avvio). */
+  suspend fun nasScanStates(): List<NasScanState> = nasScanDao.all().map { it.toDomain() }
+
+  /**
+   * Salva il cursore da solo (inizio o fine di un giro, congelamento deciso o tolto: `NasScanStore.saveCursor`). Non tocca
+   * l'indice della timeline: nessun cambiamento annunciato.
+   */
+  suspend fun saveNasScanState(state: NasScanState): Unit = write { nasScanDao.upsert(state.toEntity()) }
+
+  /**
+   * I file noti (presenti o non raggiungibili, non gli assenti) che stanno direttamente nella cartella [folder] della share
+   * (`null` = la radice), per chiave di posto (`NasScanStore.knownIn`): la scansione li confronta con l'elenco senza
+   * leggere byte (D9).
+   */
+  suspend fun knownNasFiles(account: AccountId, share: String, folder: NasPath?): Map<LocationKey, KnownNasLocation> =
+    locationDao.knownInFolder(Location.Nas.folderKey(account, share, folder)).associate { entity ->
+      LocationKey(entity.locationKey) to KnownNasLocation(
+        locationId = LocationId(entity.locationId),
+        stamp = NasStamp(entity.size, entity.modifiedAt, entity.fileId),
+        state = enumByCode(entity.state),
+      )
+    }
+
+  /** Quanti file presenti ha la share nel catalogo (le soglie del congelamento, D10; `NasScanStore.countPresent`). */
+  suspend fun countPresentNas(account: AccountId, share: String): Int =
+    locationDao.countPresentInShare(account.value, Location.Nas.shareKeyOf(share))
+
+  /**
+   * La **scorciatoia del timbro** per il NAS (D9; `NasScanStore.confirmAllPresent`), in una transazione con [cursor]: dove
+   * il posto e' noto, non assente e con lo stesso timbro (`NasStamp.sameAs`: dimensione e data uguali, `FileId` uguale se
+   * noto da entrambe le parti) si aggiornano solo "visto a" ([seenAt], l'`epoch` del giro), lo stato (una share tornata
+   * raggiungibile) e il nome com'e' scritto (solo maiuscole cambiate, E-N7) o il `FileId` appena letto. Falso dove non
+   * vale: chi chiama rileva il file e usa [recordAll].
+   */
+  suspend fun confirmAllPresentNas(seen: List<SeenNasFile>, seenAt: Long, cursor: NasScanState? = null): List<Boolean> = write { tx ->
+    val confirmed = seen.map { confirmNas(tx, it, seenAt) }
+    cursor?.let { nasScanDao.upsert(it.toEntity()) }
+    confirmed
+  }
+
+  /**
+   * Fine di un giro **completo** di una share iniziato a [epoch] (`NasScanStore.markVanishedInShare`): le posizioni della
+   * share non viste dal giro diventano assenti, con la tolleranza di 30 giorni di `LocationRules` (E-N3; uno spostamento
+   * visto al giro dopo si ricollega, E-N1). Al massimo [cap] per chiamata (le viste meno di recente prima): chi chiama
+   * ripete finche' il numero e' uguale a [cap].
+   *
+   * **Con la share congelata (D10) non segna nulla e restituisce 0**, anche se chi chiama se ne dimentica: le posizioni
+   * restano "da verificare" (E-S11, C11). [cursor], se c'e', si salva insieme.
+   */
+  suspend fun markVanishedInShare(account: AccountId, share: String, epoch: Long, cap: Int, cursor: NasScanState? = null): Int {
+    require(cap > 0) { "Il tetto e' positivo." }
+    return write { tx ->
+      val shareKey = Location.Nas.shareKeyOf(share)
+      if (nasScanDao.get(account.value, shareKey)?.freezeReason != null) return@write 0
+      val now = clock()
+      val unseen = locationDao.notSeenInShareSince(account.value, shareKey, epoch, cap)
+      unseen.forEach { entity ->
+        locationDao.update(LocationRules.vanished(entity.toDomain(), now).toEntity())
+        tx.touch(mediaOf(LocationId(entity.locationId)))
+      }
+      cursor?.let { nasScanDao.upsert(it.toEntity()) }
+      unseen.size
+    }
+  }
+
+  /**
+   * La share non e' piu' accessibile (E-R10, E-I8: accesso negato in due giorni diversi; `NasScanStore.markShareUnavailable`):
+   * le sue posizioni presenti diventano "non raggiungibili", **non** assenti (niente e' stato cancellato). Al massimo [cap]
+   * per chiamata (una transazione non tiene il database per 60 mila righe): chi chiama ripete finche' torna [cap].
+   */
+  suspend fun markShareUnavailable(account: AccountId, share: String, cap: Int = DEFAULT_NAS_CAP): Int {
+    require(cap > 0) { "Il tetto e' positivo." }
+    return write { tx ->
+      val rows = locationDao.presentInShare(account.value, Location.Nas.shareKeyOf(share), cap)
+      rows.forEach { entity ->
+        locationDao.update(LocationRules.unavailable(entity.toDomain()).toEntity())
+        tx.touch(mediaOf(LocationId(entity.locationId)))
+      }
+      rows.size
+    }
+  }
+
+  /**
+   * L'adozione delle identita' pubblicate da altri dispositivi (D7, E-I18; `IdentityRules`), in **una** transazione: per
+   * ogni [claims] il media del posto adotta gli id remoti minori, tiene i suoi, si unisce al media che l'id remoto indica
+   * qui (solo con hash completi uguali) o rifiuta (`AdoptRefusal`: l'id remoto e' gia' legato qui a un contenuto diverso).
+   * Un id adottato lascia il vecchio come alias. [inSameTransaction] come in [recordAll].
+   */
+  suspend fun adoptIdentities(claims: List<IdentityClaim>, inSameTransaction: (suspend () -> Unit)? = null): List<AdoptOutcome> =
+    write { tx ->
+      val outcomes = claims.map { adoptOne(tx, it) }
+      inSameTransaction?.invoke()
+      outcomes
+    }
+
+  /** [adoptIdentities] per un posto solo. */
+  suspend fun adoptIdentity(location: LocationKey, remote: RemoteIdentity): AdoptOutcome =
+    adoptIdentities(listOf(IdentityClaim(location, remote))).single()
+
+  /**
+   * Come leggere adesso i byte di [ids] dal NAS (D18; miniature dalla replica, viewer): la posizione presente sul NAS
+   * (prima le copie della versione corrente, poi la posizione piu' vecchia) e la chiave di contenuto ridotta dei suoi
+   * byte. Il percorso non esce di qui: si risolve dalla posizione solo quando serve aprire l'originale ([nasLocation]).
+   */
+  suspend fun nasRefs(ids: Collection<MediaId>): Map<MediaId, MediaRef.Nas> =
+    ids.map { it.value }.distinct().chunked(TimelineIndexDao.MAX_IDS)
+      .flatMap { indexDao.nasRefs(it) }
+      .groupBy { it.mediaId }
+      .mapKeys { MediaId(it.key) }
+      .mapValues { (_, rows) ->
+        val row = rows.minWith(compareBy<NasRefRow>({ if (it.isCurrent) 0 else 1 }, { it.locationId }))
+        MediaRef.Nas(row.locationId, ContentKey.of(QuickHash(row.quickHash), row.size).short, row.mimeType)
+      }
+
+  /** La posizione del NAS di un [MediaRef.Nas] (per aprire l'originale), se c'e' ancora. */
+  suspend fun nasLocation(locationId: LocationId): Location.Nas? = locationDao.get(locationId.value)?.toDomain()?.location as? Location.Nas
+
+  /**
+   * La coda di una fase per un posto (§1.3: "code di lavoro esposte"): i media con [stage] da fare e una copia presente
+   * sul telefono o sul NAS, dal piu' recente. La coda del telefono non vede i media solo-NAS (20 mila media del NAS in
+   * coda META non fermano piu' la META del telefono).
+   */
+  suspend fun pendingWork(stage: WorkStage, place: WorkPlace, limit: Int): List<MediaId> = when (place) {
+    WorkPlace.PHONE -> workDao.nextPending(stage.code, limit)
+    WorkPlace.NAS -> workDao.nextPendingOnNas(stage.code, limit)
+  }.map { MediaId(it.mediaId) }
+
+  /** I fallimenti di [stage] da riprovare per un posto, falliti prima di [failedBefore], i piu' vecchi prima. */
+  suspend fun retryableWork(stage: WorkStage, place: WorkPlace, failedBefore: Long, limit: Int): List<MediaId> = when (place) {
+    WorkPlace.PHONE -> workDao.retryable(stage.code, failedBefore, limit)
+    WorkPlace.NAS -> workDao.retryableOnNas(stage.code, failedBefore, limit)
+  }.map { MediaId(it.mediaId) }
+
+  /**
+   * Mette in coda [stage] (es. `HQ`, `FULL_HASH` per la verifica "al sicuro") per la versione corrente di [ids], dove non
+   * e' gia' fatta o in coda per quella versione. Una transazione; restituisce quanti ne ha messi.
+   */
+  suspend fun requestWork(ids: Collection<MediaId>, stage: WorkStage): Int = write { tx ->
+    ids.mapNotNull { resolve(it) }.distinct().count { id -> requestStage(tx, requireMedia(id), stage) }
   }
 
   // --- Operazioni fatte dall'app ---------------------------------------------------------------------
@@ -400,22 +574,7 @@ class MediaCatalog(
    * Le identita' assorbite da un'unione valgono per il sopravvissuto.
    */
   suspend fun group(kind: MediaGroupKind, members: Collection<MediaId>, cover: MediaId): MediaGroupId = write { tx ->
-    val resolved = members.map { checkNotNull(resolve(it)) { "Media sconosciuto." } }.distinct()
-    val coverId = checkNotNull(resolve(cover)) { "Media sconosciuto." }
-    require(resolved.size >= 2) { "Un gruppo ha almeno due media." }
-    require(coverId in resolved) { "La copertina e' uno dei membri." }
-    val group = MediaGroupId.random()
-    mediaDao.insertGroup(MediaGroupEntity(group.value, kind.code, coverId.value, clock()))
-    val left = mutableSetOf<String>()
-    resolved.forEach { id ->
-      mediaDao.get(id.value)?.groupId?.let { left += it }
-      mediaDao.setGroup(id.value, group.value, clock())
-      tx.touch(id)
-      tx.markChanged(id, structural = true)
-    }
-    left.forEach { old -> dissolveIfAlone(tx, old) }
-    tx.dirtyGroups += group.value
-    group
+    groupInTransaction(tx, kind, members, cover)
   }
 
   /** Scioglie un gruppo: i membri tornano elementi singoli della timeline. */
@@ -490,6 +649,9 @@ class MediaCatalog(
     var areas: NasAreaLookup? = null
     var seq: Long? = null
 
+    /** I tipi dei gruppi letti in questa transazione (codice, o null se il gruppo non c'e' piu'). */
+    val groupKinds = HashMap<String, String?>()
+
     /** Il media va ricalcolato alla fine della transazione (i suoi derivati possono cambiare). */
     fun touch(id: MediaId) {
       dirty += id
@@ -539,7 +701,94 @@ class MediaCatalog(
     val decided = LinkingRules.decide(observation, loadContext(observation))
     val decision = if (whenUndecided == WhenUndecided.KEEP_SEPARATE) keepSeparate(decided) else decided
     val target = apply(tx, decision, observation, seenAt ?: clock())
-    return RecordOutcome(decision, target?.first, target?.second)
+    if (whenUndecided == WhenUndecided.KEEP_SEPARATE && target != null) {
+      undecidedCandidates(decided)?.let { groupProbableDuplicates(tx, target.first, observation, it) }
+    }
+    // Un gruppo provvisorio risolto qui (hash completo appena imparato) puo' aver unito il media: vale il sopravvissuto.
+    val mediaId = target?.first?.let { resolve(it) ?: it }
+    return RecordOutcome(decision, mediaId, target?.second)
+  }
+
+  /** I candidati di una decisione rimandata all'hash completo, se e' quella. */
+  private fun undecidedCandidates(decision: LinkDecision): List<ContentCandidate>? = when (decision) {
+    is LinkDecision.NeedsFullHash -> decision.candidates
+    is LinkDecision.Replaced -> (decision.next as? LinkDecision.NeedsFullHash)?.candidates
+    else -> null
+  }
+
+  /**
+   * D21, E-L9: il media appena nato [mediaId] ha la stessa impronta rapida dei [candidates] ma non si puo' unire senza
+   * hash completo. Se fra i candidati c'e' un media che sta **dall'altra parte** (telefono e NAS), si mostra una cella
+   * sola: un gruppo `PROBABLE_DUPLICATE` con la copia del telefono come copertina (con loro i membri dei gruppi
+   * provvisori gia' esistenti). Un candidato in un gruppo d'altro tipo (raffica, RAW+JPEG) resta dov'e': meglio un
+   * doppione temporaneo che rompere quel gruppo. Le copie del NAS senza hash completo vanno in coda `FULL_HASH`.
+   */
+  private suspend fun groupProbableDuplicates(tx: Tx, mediaId: MediaId, observation: Observation, candidates: List<ContentCandidate>) {
+    val type = observation.location.type
+    val self = mediaDao.graph(mediaId.value)?.toDomain() ?: return
+    if (self.groupId != null) return
+    val others = candidates.map { it.mediaId }.distinct().filter { it != mediaId }
+      .mapNotNull { id -> resolve(id)?.let { mediaDao.graph(it.value)?.toDomain() } }
+      .distinctBy { it.id }
+      .filter { media -> media.locations.any { it.location.type != type } }
+    val eligible = others.filter { media ->
+      val group = media.groupId ?: return@filter true
+      groupKind(tx, group.value) == MediaGroupKind.PROBABLE_DUPLICATE.code
+    }
+    if (eligible.isEmpty()) return
+    val eligibleIds = eligible.map { it.id }.toSet()
+    val mates = eligible.mapNotNull { it.groupId?.value }.distinct()
+      .flatMap { group -> mediaDao.groupMembers(group).map { MediaId(it.mediaId) } }
+      .filter { it != mediaId && it !in eligibleIds }
+      .mapNotNull { mediaDao.graph(it.value)?.toDomain() }
+    val members = (listOf(self) + eligible + mates).distinctBy { it.id }
+    val cover = members.filter { media -> media.locations.any { it.isPhone && it.isPresent } }.minByOrNull { it.id }?.id
+      ?: members.filter { media -> media.locations.any { it.isPhone } }.minByOrNull { it.id }?.id
+      ?: members.minOf { it.id }
+    groupInTransaction(tx, MediaGroupKind.PROBABLE_DUPLICATE, members.map { it.id }, cover)
+    members
+      .filter { media -> media.locations.any { it.isNas } && media.currentVersion.fingerprint.fullHash == null }
+      .forEach { requestStage(tx, it, WorkStage.FULL_HASH) }
+  }
+
+  /** Il tipo di un gruppo (codice), letto una volta per transazione; null se il gruppo non c'e'. */
+  private suspend fun groupKind(tx: Tx, groupId: String): String? =
+    if (tx.groupKinds.containsKey(groupId)) tx.groupKinds[groupId] else mediaDao.group(groupId)?.kind.also { tx.groupKinds[groupId] = it }
+
+  /**
+   * Un gruppo `PROBABLE_DUPLICATE` si risolve quando **tutti** i membri hanno l'hash completo dell'originale: chi ha gli
+   * stessi byte si unisce (`MergeRules`, sopravvive il minore), poi il gruppo si scioglie e chi ha byte diversi torna una
+   * cella a se'. Finche' ne manca uno si aspetta (la cella resta "da verificare").
+   */
+  private suspend fun settleProbableDuplicate(tx: Tx, groupId: String) {
+    if (groupKind(tx, groupId) != MediaGroupKind.PROBABLE_DUPLICATE.code) return
+    val members = mediaDao.groupMembers(groupId).mapNotNull { mediaDao.graph(it.mediaId)?.toDomain() }
+    if (members.size < 2) {
+      dissolve(tx, groupId)
+      return
+    }
+    if (members.any { it.originalVersion.fingerprint.fullHash == null }) return
+    members.groupBy { it.originalVersion.fingerprint.fullHash }.values.forEach { same ->
+      var survivor = same.first().id
+      same.drop(1).forEach { other ->
+        (mergeInTransaction(tx, survivor, other.id) as? MergeOutcome.Merged)?.let { survivor = it.survivor }
+      }
+    }
+    if (mediaDao.group(groupId) != null) dissolve(tx, groupId)
+  }
+
+  /**
+   * Mette in coda [stage] per la versione corrente di [media], se non e' gia' fatta o in coda per quella versione. Vero
+   * se ha scritto qualcosa.
+   */
+  private suspend fun requestStage(tx: Tx, media: Media, stage: WorkStage): Boolean {
+    val current = workDao.forMedia(media.id.value).firstOrNull { it.stage == stage.code }?.toDomain()
+    val alreadyThere = current != null && current.versionId == media.currentVersionId &&
+      current.status in setOf(WorkStatus.PENDING, WorkStatus.IN_PROGRESS, WorkStatus.DONE)
+    if (alreadyThere) return false
+    workDao.upsert(listOf(WorkRules.pending(stage, media.currentVersionId, clock()).toEntity(media.id)))
+    if (stage == WorkStage.META) tx.touch(media.id)
+    return true
   }
 
   private suspend fun confirmOne(tx: Tx, phone: Location.Phone, stamp: FileStamp, seenAt: Long, ignoreGeneration: Boolean): Boolean {
@@ -561,6 +810,62 @@ class MediaCatalog(
       tx.refChanged(mediaId)
     }
     return true
+  }
+
+  private suspend fun confirmNas(tx: Tx, seen: SeenNasFile, seenAt: Long): Boolean {
+    val entity = locationDao.byKey(seen.location.key.value) ?: return false
+    val before = entity.toDomain()
+    if (before.state == LocationState.ABSENT) return false
+    val beforeNas = before.location as? Location.Nas ?: return false
+    if (!seen.stamp.sameAs(beforeNas.stampOf(before.stamp))) return false
+    val after = before.copy(
+      location = seen.location.copy(fileId = seen.stamp.fileId ?: seen.location.fileId ?: beforeNas.fileId),
+      stamp = seen.stamp.toFileStamp(),
+      state = LocationState.PRESENT,
+      absentSinceMillis = null,
+      lastSeenAtMillis = seenAt,
+    )
+    locationDao.update(after.toEntity())
+    if (before.location != after.location || before.state != after.state) {
+      val mediaId = mediaOf(before.id)
+      tx.touch(mediaId)
+      tx.refChanged(mediaId)
+    }
+    return true
+  }
+
+  private suspend fun adoptOne(tx: Tx, claim: IdentityClaim): AdoptOutcome {
+    val entity = locationDao.byKey(claim.location.value) ?: return AdoptOutcome.NotFound
+    val localId = mediaOf(LocationId(entity.locationId))
+    val local = requireMedia(localId)
+    val remote = claim.remote
+    val here = resolve(remote.mediaId)?.let { if (it == localId) local else mediaDao.graph(it.value)?.toDomain() }
+    val owner = versionDao.get(remote.versionId.value)?.let { row ->
+      if (row.mediaId == localId.value) local else mediaDao.graph(row.mediaId)?.toDomain()
+    }
+    return when (val decision = IdentityRules.decide(local, LocationId(entity.locationId), remote, here, owner)) {
+      AdoptionDecision.AlreadyShared -> AdoptOutcome.AlreadyShared(localId)
+      AdoptionDecision.KeepLocal -> AdoptOutcome.KeptLocal(localId)
+      is AdoptionDecision.Refuse -> AdoptOutcome.Refused(decision.reason)
+      is AdoptionDecision.MergeWith -> when (val merged = mergeInTransaction(tx, localId, decision.other)) {
+        is MergeOutcome.Merged -> AdoptOutcome.Merged(merged.survivor)
+        is MergeOutcome.Refused -> AdoptOutcome.Refused(AdoptRefusal.NOT_PROVEN_IDENTICAL)
+        MergeOutcome.NotFound -> AdoptOutcome.NotFound
+      }
+      is AdoptionDecision.Rename -> {
+        val version = VersionId(entity.versionId)
+        decision.versionTo?.let { to -> identityDao.renameVersion(version.value, to.value) }
+        val result = decision.mediaTo?.let { to ->
+          identityDao.renameMedia(localId.value, to.value)
+          mediaDao.insertAlias(MediaAliasEntity(aliasId = localId.value, mediaId = to.value, mergedAt = clock()))
+          tx.markChanged(localId, structural = true)
+          tx.markChanged(to, structural = true)
+          to
+        } ?: localId
+        tx.touch(result)
+        AdoptOutcome.Adopted(result, mediaRenamed = decision.mediaTo != null, versionRenamed = decision.versionTo != null)
+      }
+    }
   }
 
   private suspend fun loadContext(observation: Observation): LinkContext {
@@ -608,7 +913,7 @@ class MediaCatalog(
           lastSeenAtMillis = seenAt,
         )
         locationDao.update(after.toEntity())
-        learnFullHash(before.versionId, observation.fingerprint)
+        learnFullHash(tx, before.versionId, observation.fingerprint)
         tx.touch(decision.mediaId)
         if (before.location != after.location || before.state != after.state) tx.refChanged(decision.mediaId)
         decision.mediaId to decision.locationId
@@ -625,7 +930,7 @@ class MediaCatalog(
         val media = requireMedia(decision.mediaId)
         val plan = VersionRules.revertedAt(media, decision.locationId, decision.versionId, observation.stamp, now)
         persist(tx, media, plan, observed = mapOf(decision.locationId to observation.location), seenAt = seenAt)
-        learnFullHash(decision.versionId, observation.fingerprint)
+        learnFullHash(tx, decision.versionId, observation.fingerprint)
         decision.mediaId to decision.locationId
       }
 
@@ -640,7 +945,7 @@ class MediaCatalog(
           lastSeenAtMillis = seenAt,
         )
         locationDao.update(after.toEntity())
-        learnFullHash(before.versionId, observation.fingerprint)
+        learnFullHash(tx, before.versionId, observation.fingerprint)
         tx.touch(decision.mediaId)
         tx.refChanged(decision.mediaId)
         decision.mediaId to decision.locationId
@@ -650,7 +955,7 @@ class MediaCatalog(
         val id = locationDao.insert(
           locationEntity(0, decision.versionId, observation.location, observation.stamp, LocationState.PRESENT, null, null, seenAt),
         )
-        learnFullHash(decision.versionId, observation.fingerprint)
+        learnFullHash(tx, decision.versionId, observation.fingerprint)
         tx.touch(decision.mediaId)
         tx.refChanged(decision.mediaId)
         // Altri media con gli stessi byte (prova: hash completo) si uniscono subito.
@@ -821,13 +1126,22 @@ class MediaCatalog(
 
   private fun slotOf(row: EmbeddingEntity): String = "${row.spaceId}/${row.dimension}/${row.precision}/${row.vectorIndex}"
 
-  /** Impara l'hash completo di una versione da un'osservazione con gli stessi byte. */
-  private suspend fun learnFullHash(versionId: VersionId, observed: Fingerprint) {
+  /**
+   * Impara l'hash completo di una versione da un'osservazione con gli stessi byte. Dalla v3: la fase `FULL_HASH` di quel
+   * media, se era in coda per quella versione, e' fatta; e se il media e' in un gruppo `PROBABLE_DUPLICATE` il gruppo prova
+   * a risolversi (D21).
+   */
+  private suspend fun learnFullHash(tx: Tx, versionId: VersionId, observed: Fingerprint) {
     val hash = observed.fullHash ?: return
     val entity = versionDao.get(versionId.value) ?: return
     if (entity.fullHash != null) return
     if (entity.toDomain().fingerprint.match(observed) == FingerprintMatch.DIFFERENT) return
     versionDao.update(entity.copy(fullHash = hash.hex))
+    val mediaId = MediaId(entity.mediaId)
+    workDao.forMedia(entity.mediaId).firstOrNull { it.stage == WorkStage.FULL_HASH.code && it.versionId == entity.versionId }
+      ?.takeIf { it.status != WorkStatus.DONE.code }
+      ?.let { workDao.upsert(listOf(WorkRules.succeeded(it.toDomain(), versionId, clock()).toEntity(mediaId))) }
+    mediaDao.get(entity.mediaId)?.groupId?.let { settleProbableDuplicate(tx, it) }
   }
 
   /** Scrive i flag personali di [id] se cambiano, con l'istante del cambio di ciascuno. */
@@ -873,6 +1187,26 @@ class MediaCatalog(
     )
   }
 
+  private suspend fun groupInTransaction(tx: Tx, kind: MediaGroupKind, members: Collection<MediaId>, cover: MediaId): MediaGroupId {
+    val resolved = members.map { checkNotNull(resolve(it)) { "Media sconosciuto." } }.distinct()
+    val coverId = checkNotNull(resolve(cover)) { "Media sconosciuto." }
+    require(resolved.size >= 2) { "Un gruppo ha almeno due media." }
+    require(coverId in resolved) { "La copertina e' uno dei membri." }
+    val group = MediaGroupId.random()
+    mediaDao.insertGroup(MediaGroupEntity(group.value, kind.code, coverId.value, clock()))
+    tx.groupKinds[group.value] = kind.code
+    val left = mutableSetOf<String>()
+    resolved.forEach { id ->
+      mediaDao.get(id.value)?.groupId?.let { left += it }
+      mediaDao.setGroup(id.value, group.value, clock())
+      tx.touch(id)
+      tx.markChanged(id, structural = true)
+    }
+    left.forEach { old -> dissolveIfAlone(tx, old) }
+    tx.dirtyGroups += group.value
+    return group
+  }
+
   private suspend fun dissolve(tx: Tx, groupId: String) {
     mediaDao.groupMembers(groupId).forEach { member ->
       mediaDao.setGroup(member.mediaId, null, clock())
@@ -881,6 +1215,7 @@ class MediaCatalog(
       tx.markChanged(id, structural = true)
     }
     mediaDao.deleteGroup(groupId)
+    tx.groupKinds[groupId] = null
   }
 
   private suspend fun dissolveIfAlone(tx: Tx, groupId: String) {
@@ -954,11 +1289,13 @@ class MediaCatalog(
     val unreadable = workDao.status(row.mediaId, WorkStage.META.code) == WorkStatus.GAVE_UP.code
     val capture = metadata?.captureTime
     val sortTime = capture?.utcMillis ?: row.sortTime
+    val safety = SafetyRules.evaluate(media, localAccount, areas).status
+    val probableDuplicate = row.groupId?.let { groupKind(tx, it) } == MediaGroupKind.PROBABLE_DUPLICATE.code
     return Derived(
       row = row,
       owner = owner,
       presence = SafetyRules.presence(media),
-      safety = SafetyRules.evaluate(media, localAccount, areas).status,
+      safety = safety,
       sortTime = sortTime,
       // Con la data letta, il giorno nell'ora del posto; senza, quello provvisorio salvato alla prima lettura.
       localDay = capture?.let(TimelineRules::localDay)
@@ -973,7 +1310,7 @@ class MediaCatalog(
         metadata = metadata,
         favorite = personal?.favorite == true,
         unreadable = unreadable,
-      ),
+      ) or TimelineRules.presenceFlags(media, safety, probableDuplicate),
       thumbHash = metadataRow?.thumbHash,
       hidden = personal?.hidden == true,
     )
@@ -1047,14 +1384,56 @@ class MediaCatalog(
     )
 
     /**
+     * Ogni colonna che punta a una versione (`media_version.version_id`) (tabella.colonna). La rinomina di una versione
+     * adottata (D7, `IdentityDao.renameVersion`) le aggiorna tutte; l'unione le traduce con `MergeDao`.
+     * `MergeReferencesTest` confronta questo elenco con lo schema vero.
+     */
+    val VERSION_REFERENCES: Set<String> = setOf(
+      "media.current_version_id",
+      "media_version.parent_version_id",
+      "media_location.version_id",
+      "version_metadata.version_id",
+      "work_state.version_id",
+      "embedding.version_id",
+    )
+
+    /**
      * Le tabelle che **non** contengono identita' di media (ne' con chiave esterna ne' senza): l'unione
      * non le tocca. `MergeReferencesTest` obbliga a classificare ogni tabella nuova qui o in
-     * [MEDIA_REFERENCES] (o a puntare a `media_version`, che l'unione gestisce per versione).
+     * [MEDIA_REFERENCES] (o a puntare a `media_version`, che l'unione gestisce per versione), o in
+     * [TABLES_WITH_INDEX_IDS].
      */
     val TABLES_WITHOUT_MEDIA_IDS: Set<String> = setOf(
       "nas_share",
       "media_store_cursor",
       "catalog_meta",
+      // v3
+      "nas_scan_state",
+      "index_publish_state",
+      "index_own_segment",
+      "index_outbox_blob",
+      "index_head",
+      "index_segment",
+      "replica_pack",
+      "replica_blob",
+      "index_sync_state",
+      "nas_op",
+      "nas_op_item",
+      "nas_trash_entry",
     )
+
+    /**
+     * Le tabelle (v3) che contengono identita' di media **come dati dell'indice condiviso** (com'erano nei record firmati o
+     * in coda per esserlo), non come riferimenti locali: l'unione e la rinomina non le toccano (lo stato di un dispositivo
+     * e' funzione della sua testa, D5) e l'adozione D7 passa dal catalogo. Le colonne con quelle identita' si chiamano
+     * `remote_*` (`MergeReferencesTest`).
+     */
+    val TABLES_WITH_INDEX_IDS: Set<String> = setOf(
+      "index_record",
+      "index_outbox_record",
+    )
+
+    /** Tetto di posizioni per transazione delle operazioni su una share intera ([markShareUnavailable]). */
+    const val DEFAULT_NAS_CAP: Int = 500
   }
 }

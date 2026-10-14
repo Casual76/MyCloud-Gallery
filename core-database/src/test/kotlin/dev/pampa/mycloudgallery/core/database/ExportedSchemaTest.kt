@@ -10,10 +10,14 @@ import dev.pampa.mycloudgallery.core.model.AccountId
 import dev.pampa.mycloudgallery.core.model.AlbumId
 import dev.pampa.mycloudgallery.core.model.CaptureTimeSource
 import dev.pampa.mycloudgallery.core.model.CellFlags
+import dev.pampa.mycloudgallery.core.model.FreezeReason
+import dev.pampa.mycloudgallery.core.model.Location
 import dev.pampa.mycloudgallery.core.model.LocationState
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.NasArea
+import dev.pampa.mycloudgallery.core.model.NasPath
 import dev.pampa.mycloudgallery.core.model.NasShare
+import dev.pampa.mycloudgallery.core.model.NasStamp
 import dev.pampa.mycloudgallery.core.model.PlaceRef
 import dev.pampa.mycloudgallery.core.model.SafetyStatus
 import dev.pampa.mycloudgallery.core.model.VersionKind
@@ -36,7 +40,8 @@ import java.io.File
  *
  * Con la v2 (Fase 3) il test copre 1 -> 2 da solo: il database v1 con i dati di [SchemaSeeds] migra, i
  * dati restano e i campi nuovi (derivati dell'indice, istanti dei flag personali) sono quelli che il
- * catalogo stesso calcolerebbe.
+ * catalogo stesso calcolerebbe. Con la v3 (Fase 4) copre 1 -> 3 e 2 -> 3: i bit di presenza calcolati dalla
+ * migrazione sono quelli del catalogo, le tabelle nuove nascono vuote e una v3 con una riga per tabella si riapre.
  */
 @RunWith(AndroidJUnit4::class)
 class ExportedSchemaTest {
@@ -188,7 +193,124 @@ object SchemaSeeds {
   fun seed(version: Int, db: SQLiteDatabase) = when (version) {
     1 -> seedV1(db)
     2 -> seedV2(db)
+    3 -> seedV3(db)
     else -> error("Manca il seed della versione $version dello schema (vedi SchemaSeeds).")
+  }
+
+  // --- v3 (Fase 4) ---
+  private const val FILE_ID = 987_654L
+  private const val SEGMENT = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  private const val RECORD_KEY = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  private const val REMOTE_MEDIA = "00000000-0000-4000-8000-000000000001"
+  private const val OP_ID = "44444444-4444-4444-8444-444444444444"
+
+  /** I flag della cella della v2 con i bit di presenza della v3: sul telefono, sul NAS, al sicuro. */
+  private const val PRESENCE_V3 = CellFlags.ON_PHONE or CellFlags.ON_NAS or CellFlags.SAFE
+
+  /**
+   * La v3: le righe della v2 con il `FileId` della copia sul NAS e i bit di presenza, piu' una riga in ogni tabella nuova
+   * (scansione congelata, outbox, replica, diario e cestino della 4B), con i codici scritti a mano.
+   */
+  private fun seedV3(db: SQLiteDatabase) {
+    db.execSQL(
+      "INSERT INTO media (media_id, kind, source, owner_account, group_id, current_version_id, created_at, updated_at, " +
+        "sort_time, presence, safety, local_day, aspect_milli, duration_ms, place_id, cell_flags, thumb_hash) VALUES " +
+        "('$MEDIA_ID', 'photo', 'camera', 'alessio', NULL, '$VERSION_ID', $T0, $T0, $T0, 'phone_and_nas', 'safe', " +
+        "20251009, 750, NULL, $OSLO, ${136 or PRESENCE_V3}, X'$THUMB_HEX')",
+    )
+    db.execSQL(
+      "INSERT INTO media_version (version_id, media_id, kind, parent_version_id, size, quick_hash, full_hash, corrections, " +
+        "created_at) VALUES ('$VERSION_ID', '$MEDIA_ID', 'original', NULL, 300000, '$QUICK', '$FULL', '', $T0)",
+    )
+    db.execSQL(
+      "INSERT INTO version_metadata (version_id, mime_type, width, height, orientation, duration_ms, taken_at_utc, " +
+        "taken_offset_min, taken_confidence, taken_source, latitude, longitude, altitude, updated_at, mirrored, traits, " +
+        "place_id, place_dataset, thumb_hash) VALUES ('$VERSION_ID', 'image/jpeg', 4000, 3000, 90, NULL, $T0, 120, 'exact', " +
+        "'exif_offset', 59.91, 10.75, NULL, $T0, 0, 0, $OSLO, 1, X'$THUMB_HEX')",
+    )
+    db.execSQL(
+      "INSERT INTO media_location (location_id, version_id, location_type, location_key, folder_key, state, volume, " +
+        "relative_path, display_name, media_store_id, media_store_version, generation, account_id, share_name, share_key, " +
+        "nas_path, size, modified_at, absent_since, verified_at, last_seen_at, file_id) VALUES " +
+        "(1, '$VERSION_ID', 'phone', 'phone:external_primary:dcim/camera/img_0001.jpg', 'phone:external_primary:dcim/camera/', " +
+        "'present', 'external_primary', 'DCIM/Camera/', 'IMG_0001.jpg', 42, 'store-v1', 7, NULL, NULL, NULL, NULL, 300000, $T0, " +
+        "NULL, NULL, $T0, NULL), " +
+        "(2, '$VERSION_ID', 'nas', 'nas:alessio:alessio:backup/s25/img_0001.jpg', 'nas:alessio:alessio:backup/s25', 'present', " +
+        "NULL, NULL, NULL, NULL, NULL, NULL, 'alessio', 'alessio', 'alessio', 'Backup/S25/IMG_0001.jpg', 300000, $T0, NULL, $T0, " +
+        "$T0, $FILE_ID)",
+    )
+    db.execSQL("INSERT INTO nas_share (account_id, share_key, share_name, area) VALUES ('alessio', 'alessio', 'alessio', 'private')")
+    db.execSQL(
+      "INSERT INTO media_personal (media_id, favorite, hidden, updated_at, favorite_changed_at, hidden_changed_at) VALUES " +
+        "('$MEDIA_ID', 1, 0, $T0, ${T0 - 5}, ${T0 - 6})",
+    )
+    db.execSQL("INSERT INTO album (album_id, title, cover_media_id, created_at, updated_at) VALUES ('$ALBUM_ID', 'Oslo 2026', '$MEDIA_ID', $T0, $T0)")
+    db.execSQL("INSERT INTO album_item (album_id, media_id, position, added_at) VALUES ('$ALBUM_ID', '$MEDIA_ID', 1, $T0)")
+    db.execSQL(
+      "INSERT INTO work_state (media_id, stage, status, version_id, attempts, last_error, updated_at) VALUES " +
+        "('$MEDIA_ID', 'embed', 'done', '$VERSION_ID', 0, NULL, $T0), ('$MEDIA_ID', 'ocr', 'failed', '$VERSION_ID', 2, 'DECODE_FAILED', $T0), " +
+        "('$MEDIA_ID', 'full_hash', 'done', '$VERSION_ID', 0, NULL, $T0)",
+    )
+    db.execSQL(
+      "INSERT INTO embedding (media_id, space_id, dimension, precision, vector_index, vector, version_id, created_at) VALUES " +
+        "('$MEDIA_ID', 'embeddinggemma2-float-v1', 2, 'f32', 0, X'0000803F00000040', '$VERSION_ID', $T0)",
+    )
+    db.execSQL(
+      "INSERT INTO media_store_cursor (volume, ms_version, generation, deleted_generation, scan_epoch, scan_resume_after_id, " +
+        "last_full_scan_at, last_reconcile_at) VALUES ('external_primary', 'store-v1', 7, 6, $T0, 41, NULL, ${T0 - 1})",
+    )
+    db.execSQL("INSERT INTO catalog_meta (`key`, value) VALUES ('change_seq', $CHANGE_SEQ_V2), ('places_dataset', 1)")
+    // Tabelle nuove della v3.
+    db.execSQL(
+      "INSERT INTO nas_scan_state (account_id, share_key, share_name, epoch, resume_after, last_full_scan_at, freeze_reason, " +
+        "freeze_since, freeze_known_present, freeze_vanished, freeze_changed, freeze_not_media) VALUES " +
+        "('alessio', 'alessio', 'alessio', $T0, 'Backup/S25', ${T0 - 10}, 'vanished', ${T0 - 5}, 1000, 60, 0, 0)",
+    )
+    db.execSQL("INSERT INTO index_publish_state (share_key, next_seq, head_version, head_hash, head_published_at) VALUES ('alessio', 12, 3, '$SEGMENT', $T0)")
+    db.execSQL("INSERT INTO index_own_segment (share_key, segment_hash, cls, size, entries, created_at) VALUES ('alessio', '$SEGMENT', 1, 512, 1, $T0)")
+    db.execSQL(
+      "INSERT INTO index_outbox_record (share_key, record_key, seq, path, gone, body, staged_at) VALUES " +
+        "('alessio', '$RECORD_KEY', 11, 'Backup/S25/IMG_0001.jpg', 0, X'7B7D', $T0)",
+    )
+    db.execSQL(
+      "INSERT INTO index_outbox_blob (share_key, cls, content_key, pack, byte_offset, byte_length, staged_at) VALUES " +
+        "('alessio', 2, '$QUICK', 'outbox-2-1.pack', 0, 6000, $T0)",
+    )
+    db.execSQL("INSERT INTO index_head (share_key, device_id, version, content_hash, registry_version, applied_at) VALUES ('alessio', 'tablet', 4, '$SEGMENT', 9, $T0)")
+    db.execSQL(
+      "INSERT INTO index_segment (share_key, device_id, segment_hash, cls, size, state, pack_id, updated_at) VALUES " +
+        "('alessio', 'tablet', '$SEGMENT', 2, 6000, 'applied', 1, $T0)",
+    )
+    db.execSQL(
+      "INSERT INTO index_record (share_key, device_id, record_key, seq, segment_hash, path, gone, size, modified_at, file_id, " +
+        "quick_hash, full_hash, content_key, remote_media_id, remote_version_id, prep, fail_code, fail_decoder, body) VALUES " +
+        "('alessio', 'tablet', '$RECORD_KEY', 5, '$SEGMENT', 'Backup/S25/IMG_0001.jpg', 0, 300000, $T0, $FILE_ID, '$QUICK', NULL, " +
+        "-42, '$REMOTE_MEDIA', '$VERSION_ID', 6, NULL, NULL, X'7B7D')",
+    )
+    db.execSQL(
+      "INSERT INTO replica_pack (pack_id, share_key, device_id, segment_hash, cls, file_name, size, created_at) VALUES " +
+        "(1, 'alessio', 'tablet', '$SEGMENT', 2, 'p-cccccccc.pack', 6000, $T0)",
+    )
+    db.execSQL(
+      "INSERT INTO replica_blob (pack_id, content_key, content_key_short, cls, byte_offset, byte_length) VALUES " +
+        "(1, '$QUICK', -42, 2, 44, 5956)",
+    )
+    db.execSQL("INSERT INTO index_sync_state (share_key, last_sync_at, last_complete_at, denied_first_day, denied_last_day) VALUES ('alessio', $T0, $T0, NULL, NULL)")
+    db.execSQL(
+      "INSERT INTO nas_op (op_id, kind, state, plan_hash, item_count, total_bytes, error_code, created_at, updated_at) VALUES " +
+        "('$OP_ID', 'move', 'running', '$SEGMENT', 1, 300000, NULL, $T0, $T0)",
+    )
+    db.execSQL(
+      "INSERT INTO nas_op_item (op_id, item_index, state, is_folder, account_id, src_share, src_path, dst_share, dst_path, " +
+        "temp_name, size, modified_at, file_id, sha256, trash_id, attempts, next_attempt_at, error_code, updated_at) VALUES " +
+        "('$OP_ID', 0, 'copied', 0, 'alessio', 'alessio', 'Backup/S25/IMG_0001.jpg', 'NAS', 'Famiglia/IMG_0001.jpg', " +
+        "'tablet-op-1', 300000, $T0, $FILE_ID, NULL, NULL, 1, NULL, NULL, $T0)",
+    )
+    db.execSQL(
+      "INSERT INTO nas_trash_entry (trash_id, account_id, share_key, share_name, original_path, trashed_path, reason, is_folder, " +
+        "size, file_count, trashed_at, state, op_id, updated_at) VALUES ('t-1', 'alessio', 'alessio', 'alessio', 'Vecchie/a.jpg', " +
+        "'.mycloudgallery/trash/tablet/files/t-1', 'delete', 0, 1000, NULL, $T0, 'trashed', NULL, $T0)",
+    )
   }
 
   private fun seedV1(db: SQLiteDatabase) {
@@ -316,8 +438,9 @@ object SchemaSeeds {
     assertThat(row.durationMs).isNull()
     val personal = database.personalDao().get(MEDIA_ID)!!
     if (fromVersion == 1) {
-      // La v1 non aveva luogo ne' segnaposto; gli istanti dei flag partono da updated_at.
-      assertThat(row.cellFlags).isEqualTo(CellFlags.FAVORITE)
+      // La v1 non aveva luogo ne' segnaposto; gli istanti dei flag partono da updated_at. I bit di presenza li calcola la
+      // migrazione 2 -> 3 (sul telefono, sul NAS, al sicuro).
+      assertThat(row.cellFlags).isEqualTo(CellFlags.FAVORITE or PRESENCE_V3)
       assertThat(row.placeId).isNull()
       assertThat(personal.favoriteChangedAt).isEqualTo(T0)
       assertThat(personal.hiddenChangedAt).isEqualTo(T0)
@@ -325,7 +448,7 @@ object SchemaSeeds {
       assertThat(catalog.mediaStoreCursors()).isEmpty()
       assertThat(catalog.placesDataset()).isNull()
     } else {
-      assertThat(row.cellFlags).isEqualTo(CellFlags.FAVORITE or CellFlags.HAS_PLACE)
+      assertThat(row.cellFlags).isEqualTo(CellFlags.FAVORITE or CellFlags.HAS_PLACE or PRESENCE_V3)
       assertThat(row.placeId).isEqualTo(OSLO)
       assertThat(metadata.place).isEqualTo(PlaceRef(OSLO, 1))
       assertThat(metadata.thumbHash!!.bytes().size).isEqualTo(25)
@@ -338,6 +461,43 @@ object SchemaSeeds {
       assertThat(catalog.placesDataset()).isEqualTo(1)
     }
     assertThat(catalog.indexRows(listOf(id)).map { it.mediaId }).containsExactly(MEDIA_ID)
+
+    // --- v3 ---
+    val nasCopy = media.locations.single { it.isNas }.location as Location.Nas
+    val account = AccountId.of("alessio")
+    assertThat(catalog.nasRefs(listOf(id)).getValue(id).locationId).isEqualTo(2L)
+    if (fromVersion < 3) {
+      // Le tabelle nuove nascono vuote; il FileId non era noto.
+      assertThat(nasCopy.fileId).isNull()
+      assertThat(catalog.nasScanStates()).isEmpty()
+      assertThat(database.indexPublishDao().publishState("alessio")).isNull()
+      assertThat(database.replicaDao().heads("alessio")).isEmpty()
+      assertThat(database.nasOpsDao().opsInState(listOf("running"))).isEmpty()
+      assertThat(catalog.workStates(id).map { it.stage }).doesNotContain(WorkStage.FULL_HASH)
+    } else {
+      assertThat(nasCopy.fileId).isEqualTo(FILE_ID)
+      assertThat(catalog.knownNasFiles(account, "alessio", NasPath.of("Backup/S25")).values.single().stamp)
+        .isEqualTo(NasStamp(300_000, T0, FILE_ID))
+      val scan = checkNotNull(catalog.nasScanState(account, "ALESSIO"))
+      assertThat(scan.resumeAfter).isEqualTo(NasPath.of("Backup/S25"))
+      assertThat(scan.freeze).isEqualTo(NasFreeze(FreezeReason.VANISHED, T0 - 5, 1000, 60, 0, 0))
+      val publish = database.indexPublishDao()
+      assertThat(publish.publishState("alessio")!!.headVersion).isEqualTo(3)
+      assertThat(publish.takeSeq("alessio")).isEqualTo(12)
+      assertThat(publish.pendingRecords("alessio", 0, 10).single().seq).isEqualTo(11)
+      assertThat(publish.pendingBlobs("alessio", 2, "", 10).single().length).isEqualTo(6000)
+      assertThat(publish.ownSegments("alessio").single().entries).isEqualTo(1)
+      val replica = database.replicaDao()
+      assertThat(replica.head("alessio", "tablet")!!.version).isEqualTo(4)
+      assertThat(replica.recordsAt("alessio", listOf(RECORD_KEY)).single().remoteMediaId).isEqualTo(REMOTE_MEDIA)
+      assertThat(replica.blobsFor(-42, 2).single().offset).isEqualTo(44)
+      assertThat(replica.segments("alessio", "tablet").single().packId).isEqualTo(1)
+      assertThat(replica.syncState("alessio")!!.lastCompleteAt).isEqualTo(T0)
+      val ops = database.nasOpsDao()
+      assertThat(ops.items(OP_ID).single().state).isEqualTo("copied")
+      assertThat(ops.expiredTrash(T0 + 1, 10).single().trashId).isEqualTo("t-1")
+      assertThat(catalog.workStates(id).first { it.stage == WorkStage.FULL_HASH }.status).isEqualTo(WorkStatus.DONE)
+    }
 
     // I derivati scritti dalla migrazione (o dal seed) sono quelli che il catalogo calcola: ricalcolarli
     // (registrare di nuovo la share tocca il media) non cambia nulla e non annuncia nulla.

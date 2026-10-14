@@ -5,31 +5,71 @@ import dev.pampa.mycloudgallery.core.model.MediaMetadata
 import java.time.ZoneId
 
 /**
- * Cio' che il MediaStore sa gia' di un file e aiuta a leggerlo (docs/fase3-progetto.md §1.2, `core-metadata`).
- * Sono **indizi**, mai verita': un `DATE_TAKEN` puo' essere di un altro fuso, una larghezza puo' essere prima della
- * rotazione. L'estrattore li usa per le date che l'EXIF non da' e per le dimensioni se il file e' troppo rovinato.
+ * Cio' che chi elenca un file sa gia' di lui e aiuta a leggerlo (docs/fase3-progetto.md §1.2, `core-metadata`): sul
+ * telefono la riga del MediaStore, sul NAS (Fase 4) l'elenco della cartella. Sono **indizi**, mai verita': un
+ * `DATE_TAKEN` puo' essere di un altro fuso, una larghezza puo' essere prima della rotazione. L'estrattore li usa per le
+ * date che l'EXIF non da' e per le dimensioni se il file e' troppo rovinato.
  *
- * @property relativePath `RELATIVE_PATH` di MediaStore (`DCIM/Camera/`): serve alla classificazione e al
- *   raggruppamento; non finisce mai in un log.
+ * Fase 4 (P2): i nomi sono **neutri** ([dateTakenMs], [width], ...; prima `msDateTakenMs`, `msWidth`, ...), perche' gli
+ * indizi non vengono piu' solo dal MediaStore. I nomi vecchi restano come alias deprecati (costruttore e proprieta'),
+ * cosi' nessun chiamante si rompe; il significato non cambia.
+ *
+ * @property relativePath la cartella del file, relativa e con `/` finale (`DCIM/Camera/` sul telefono, `Foto/2024/` sul
+ *   NAS): serve alla classificazione e al raggruppamento; non finisce mai in un log.
  * @property scanZone il fuso del telefono **al momento della lettura**: per le date senza fuso si salva questo e
  *   cambiare fuso dopo non sposta nulla (E-P5).
- * @property msDateModifiedMs `DATE_MODIFIED` di MediaStore, in millisecondi: l'ultimo ripiego per la data (`FILE_MODIFIED`,
- *   E-M8). **Aggiunto da P3**, opzionale per non rompere i chiamanti: chi costruisce gli indizi dalla riga del MediaStore
- *   (`MediaStoreRow.toExtractHints`) deve passarlo (`dateModifiedMs`), altrimenti senza EXIF, nome e `DATE_TAKEN` la data
+ * @property dateTakenMs una data di scatto gia' nota a chi elenca (`DATE_TAKEN` del MediaStore; sul NAS di norma nessuna).
+ * @property dateModifiedMs la data di modifica del file, in millisecondi (`DATE_MODIFIED` del MediaStore, `LastWriteTime`
+ *   del NAS): l'ultimo ripiego per la data (`FILE_MODIFIED`, E-M8). Senza, e senza EXIF, nome e [dateTakenMs], la data
  *   cade sul ripiego finale "adesso" (sempre stimata).
+ * @property width, height, orientation, durationMs dimensioni, rotazione in gradi e durata gia' note a chi elenca.
  */
 data class ExtractHints(
   val mime: String?,
   val displayName: String,
   val relativePath: String,
-  val msDateTakenMs: Long?,
-  val msWidth: Int?,
-  val msHeight: Int?,
-  val msOrientation: Int?,
-  val msDurationMs: Long?,
   val scanZone: ZoneId,
-  val msDateModifiedMs: Long? = null,
+  val dateTakenMs: Long? = null,
+  val dateModifiedMs: Long? = null,
+  val width: Int? = null,
+  val height: Int? = null,
+  val orientation: Int? = null,
+  val durationMs: Long? = null,
 ) {
+
+  /** Il costruttore con i nomi della Fase 3 (`ms*`), nello stesso ordine: resta per i chiamanti esistenti. */
+  @Deprecated("Nomi neutri dalla Fase 4: dateTakenMs, width, height, orientation, durationMs, dateModifiedMs.")
+  constructor(
+    mime: String?,
+    displayName: String,
+    relativePath: String,
+    msDateTakenMs: Long?,
+    msWidth: Int?,
+    msHeight: Int?,
+    msOrientation: Int?,
+    msDurationMs: Long?,
+    scanZone: ZoneId,
+    msDateModifiedMs: Long? = null,
+  ) : this(mime, displayName, relativePath, scanZone, msDateTakenMs, msDateModifiedMs, msWidth, msHeight, msOrientation, msDurationMs)
+
+  @Deprecated("Usa dateTakenMs.", ReplaceWith("dateTakenMs"))
+  val msDateTakenMs: Long? get() = dateTakenMs
+
+  @Deprecated("Usa width.", ReplaceWith("width"))
+  val msWidth: Int? get() = width
+
+  @Deprecated("Usa height.", ReplaceWith("height"))
+  val msHeight: Int? get() = height
+
+  @Deprecated("Usa orientation.", ReplaceWith("orientation"))
+  val msOrientation: Int? get() = orientation
+
+  @Deprecated("Usa durationMs.", ReplaceWith("durationMs"))
+  val msDurationMs: Long? get() = durationMs
+
+  @Deprecated("Usa dateModifiedMs.", ReplaceWith("dateModifiedMs"))
+  val msDateModifiedMs: Long? get() = dateModifiedMs
+
   // Il nome del file e il percorso sono dati personali: nessuno dei due nel toString.
   override fun toString(): String = "ExtractHints(mime=$mime)"
 }

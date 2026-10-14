@@ -70,6 +70,19 @@ data class GroupSizeRow(
   @ColumnInfo(name = "size") val size: Int,
 )
 
+/**
+ * Una copia presente sul NAS (v3, `TimelineIndexDao.nasRefs`): la posizione e cio' che serve per la chiave di contenuto
+ * (`ContentKey.of(qh1, dimensione)`). [isCurrent]: la copia ha i byte della versione corrente.
+ */
+data class NasRefRow(
+  @ColumnInfo(name = "media_id") val mediaId: String,
+  @ColumnInfo(name = "location_id") val locationId: Long,
+  @ColumnInfo(name = "size") val size: Long,
+  @ColumnInfo(name = "quick_hash") val quickHash: String,
+  @ColumnInfo(name = "mime_type") val mimeType: String?,
+  @ColumnInfo(name = "is_current") val isCurrent: Boolean,
+)
+
 /** Una copia sul telefono leggibile adesso: l'`_ID` in cache vale per la versione attuale del MediaStore. */
 data class PhoneRefRow(
   @ColumnInfo(name = "media_id") val mediaId: String,

@@ -82,10 +82,10 @@ class CatalogV2Test : CatalogTestBase() {
   @Test
   fun iCampiDerivatiSeguonoMetadatiTipoStatiEDatiPersonali() = runBlocking<Unit> {
     val id = catalog.record(obs(phone("IMG_1.jpg", 10), full(1), capture = utc("2026-03-12T23:30Z"))).mediaId!!
-    // Prima di META: giorno provvisorio nel fuso del telefono (Roma: gia' il 13), quadrato, nessun flag.
+    // Prima di META: giorno provvisorio nel fuso del telefono (Roma: gia' il 13), quadrato, solo la presenza (v3).
     assertThat(row(id).localDay).isEqualTo(20260313)
     assertThat(row(id).aspectMilli).isEqualTo(1000)
-    assertThat(row(id).cellFlags).isEqualTo(0)
+    assertThat(row(id).cellFlags).isEqualTo(CellFlags.ON_PHONE)
 
     // META: scattata a New York la sera del 12, EXIF 8 (ruotata di 270), panorama Ultra HDR con luogo e segnaposto.
     val capture = CaptureTime(utc("2026-03-12T23:30-05:00"), -300, CaptureTimeConfidence.EXACT, CaptureTimeSource.EXIF_WITH_OFFSET)
@@ -111,7 +111,7 @@ class CatalogV2Test : CatalogTestBase() {
       assertThat(r.placeId).isEqualTo(5_128_581)
       assertThat(r.thumbHash!!.toList()).isEqualTo(thumb.bytes().toList())
       assertThat(r.kind).isEqualTo(MediaKind.MOTION_PHOTO.code)
-      assertThat(r.cellFlags).isEqualTo(CellFlags.HAS_PLACE or CellFlags.PANORAMA or CellFlags.ULTRA_HDR or CellFlags.MOTION)
+      assertThat(r.cellFlags).isEqualTo(CellFlags.HAS_PLACE or CellFlags.PANORAMA or CellFlags.ULTRA_HDR or CellFlags.MOTION or CellFlags.ON_PHONE)
     }
     // I metadati si rileggono uguali (luogo e segnaposto compresi).
     assertThat(catalog.media(id)!!.let { db.versionDao().metadata(it.currentVersionId.value)!!.toDomain() }.place).isEqualTo(PlaceRef(5_128_581, 1))
@@ -131,7 +131,8 @@ class CatalogV2Test : CatalogTestBase() {
     repeat(5) { failing = WorkRules.failed(failing, WorkErrorCode("DECODE_FAILED"), now) }
     catalog.updateWork(id, failing)
     catalog.updateMetadata(current(id), MediaMetadata(captureTime = capture.copy(confidence = CaptureTimeConfidence.ESTIMATED, source = CaptureTimeSource.FILE_NAME)))
-    assertThat(row(id).cellFlags).isEqualTo(CellFlags.FAVORITE or CellFlags.UNREADABLE or CellFlags.DATE_ESTIMATED or CellFlags.MOTION)
+    assertThat(row(id).cellFlags)
+      .isEqualTo(CellFlags.FAVORITE or CellFlags.UNREADABLE or CellFlags.DATE_ESTIMATED or CellFlags.MOTION or CellFlags.ON_PHONE)
 
     catalog.record(obs(phone("IMG_1.jpg", 10), full(2), modifiedAt = T0 + DAY))
     assertThat(CellFlags.has(row(id).cellFlags, CellFlags.EDITED)).isTrue()
@@ -343,7 +344,7 @@ class CatalogV2Test : CatalogTestBase() {
 
     catalog.setPersonalFlags(id, PersonalFlags(favorite = true))
     next().let { assertThat(it.ids).containsExactly(id); assertThat(it.structural).isFalse() }
-    assertThat(db.timelineIndexDao().indexRows(listOf(id.value)).single().cellFlags).isEqualTo(CellFlags.FAVORITE)
+    assertThat(db.timelineIndexDao().indexRows(listOf(id.value)).single().cellFlags).isEqualTo(CellFlags.FAVORITE or CellFlags.ON_PHONE)
 
     catalog.setPersonalFlags(id, PersonalFlags(favorite = true, hidden = true))
     next().let { assertThat(it.structural).isTrue() }

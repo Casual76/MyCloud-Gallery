@@ -230,6 +230,47 @@ interface LocationDao {
       "WHERE l.location_type = 'nas' AND l.account_id = :account AND l.share_key = :shareKey",
   )
   suspend fun mediaIdsInShare(account: String, shareKey: String): List<String>
+
+  // --- v3: il NAS (docs/fase4-progetto.md §2.3) ------------------------------------------------------------------
+
+  /**
+   * I file noti (presenti o non raggiungibili, **non** gli assenti) che stanno direttamente in una cartella del NAS
+   * ([folderKey] = `Location.Nas.folderKey`): la scansione li confronta con l'elenco della cartella (scorciatoia del
+   * timbro, D9, E-N5). Nessun ordine: chi chiama li mette in una mappa per chiave di posto.
+   */
+  @Query(KNOWN_IN_FOLDER_SQL)
+  suspend fun knownInFolder(folderKey: String): List<MediaLocationEntity>
+
+  /** Quanti file presenti ha una share nel catalogo (le soglie del congelamento, D10). */
+  @Query(COUNT_PRESENT_IN_SHARE_SQL)
+  suspend fun countPresentInShare(account: String, shareKey: String): Int
+
+  /**
+   * Le posizioni di una share che un giro completo iniziato a [epoch] non ha visto: presenti o non raggiungibili con
+   * `last_seen_at` precedente. Le viste meno di recente prima, al massimo [limit] (indice `account_id, share_key,
+   * last_seen_at`: nessun ordinamento in memoria).
+   */
+  @Query(NOT_SEEN_IN_SHARE_SQL)
+  suspend fun notSeenInShareSince(account: String, shareKey: String, epoch: Long, limit: Int): List<MediaLocationEntity>
+
+  /** Le posizioni presenti di una share, al massimo [limit] (share non piu' accessibile, E-R10). */
+  @Query(PRESENT_IN_SHARE_SQL)
+  suspend fun presentInShare(account: String, shareKey: String, limit: Int): List<MediaLocationEntity>
+
+  companion object {
+    const val KNOWN_IN_FOLDER_SQL: String = "SELECT * FROM media_location WHERE folder_key = :folderKey AND state != 'absent'"
+
+    const val COUNT_PRESENT_IN_SHARE_SQL: String =
+      "SELECT COUNT(*) FROM media_location WHERE account_id = :account AND share_key = :shareKey AND state = 'present'"
+
+    const val NOT_SEEN_IN_SHARE_SQL: String =
+      "SELECT * FROM media_location WHERE account_id = :account AND share_key = :shareKey " +
+        "AND state IN ('present', 'unavailable') AND last_seen_at < :epoch ORDER BY last_seen_at, location_id LIMIT :limit"
+
+    const val PRESENT_IN_SHARE_SQL: String =
+      "SELECT * FROM media_location WHERE account_id = :account AND share_key = :shareKey AND state = 'present' " +
+        "ORDER BY last_seen_at, location_id LIMIT :limit"
+  }
 }
 
 @Dao

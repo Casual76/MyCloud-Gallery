@@ -32,7 +32,9 @@ import androidx.room.PrimaryKey
       deferred = true,
     ),
   ],
-  indices = [Index(value = ["stage", "status"]), Index(value = ["version_id"])],
+  // v3: (stage, status, updated_at) al posto di (stage, status): stessa coda, e i fallimenti da riprovare escono gia'
+  // in ordine di `updated_at` (nessun ordinamento in memoria).
+  indices = [Index(value = ["stage", "status", "updated_at"]), Index(value = ["version_id"])],
 )
 data class WorkStateEntity(
   @ColumnInfo(name = "media_id") val mediaId: String,

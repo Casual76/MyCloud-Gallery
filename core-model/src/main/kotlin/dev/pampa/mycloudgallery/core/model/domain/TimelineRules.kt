@@ -2,10 +2,13 @@ package dev.pampa.mycloudgallery.core.model.domain
 
 import dev.pampa.mycloudgallery.core.model.CaptureTime
 import dev.pampa.mycloudgallery.core.model.CellFlags
+import dev.pampa.mycloudgallery.core.model.Media
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.MediaMetadata
 import dev.pampa.mycloudgallery.core.model.MediaTrait
+import dev.pampa.mycloudgallery.core.model.Presence
+import dev.pampa.mycloudgallery.core.model.SafetyStatus
 import dev.pampa.mycloudgallery.core.model.VersionKind
 import java.time.Instant
 import java.time.LocalDate
@@ -102,6 +105,40 @@ object TimelineRules {
     if (MediaTrait.PANORAMA in traits) flags = flags or CellFlags.PANORAMA
     if (MediaTrait.ULTRA_HDR in traits) flags = flags or CellFlags.ULTRA_HDR
     if (favorite) flags = flags or CellFlags.FAVORITE
+    return flags
+  }
+
+  /** I bit di presenza della Fase 4 ([CellFlags.ON_PHONE], [CellFlags.ON_NAS], [CellFlags.SAFE], [CellFlags.TO_VERIFY]). */
+  const val PRESENCE_MASK: Int = CellFlags.ON_PHONE or CellFlags.ON_NAS or CellFlags.SAFE or CellFlags.TO_VERIFY
+
+  /**
+   * I flag di presenza della cella (D18, §1.5 di `docs/fase4-progetto.md`), che diventano il badge
+   * ([dev.pampa.mycloudgallery.core.model.PresenceBadge]):
+   * - `ON_PHONE`, `ON_NAS`: almeno una posizione **presente** sul telefono, sul NAS (come [SafetyRules.presence]: un file
+   *   assente o in un contenitore non raggiungibile non si puo' aprire);
+   * - `SAFE`: lo stato "al sicuro" e' [SafetyStatus.SAFE] (copia privata riletta qui, D8: mai da dati remoti);
+   * - `TO_VERIFY`: il media e' in un gruppo `PROBABLE_DUPLICATE` (D21, E-L9) in attesa dell'hash completo.
+   */
+  fun presenceFlags(media: Media, safety: SafetyStatus, probableDuplicate: Boolean): Int {
+    val present = media.locations.filter { it.isPresent }
+    var flags = 0
+    if (present.any { it.isPhone }) flags = flags or CellFlags.ON_PHONE
+    if (present.any { it.isNas }) flags = flags or CellFlags.ON_NAS
+    if (safety == SafetyStatus.SAFE) flags = flags or CellFlags.SAFE
+    if (probableDuplicate) flags = flags or CellFlags.TO_VERIFY
+    return flags
+  }
+
+  /**
+   * Gli stessi bit di [presenceFlags] dai campi derivati gia' salvati (`presence`, `safety`): li usa la migrazione 2 -> 3,
+   * che non ricostruisce i grafi. Coincide con [presenceFlags] perche' quei campi sono calcolati dalle stesse regole.
+   */
+  fun presenceFlags(presence: Presence, safety: SafetyStatus, probableDuplicate: Boolean): Int {
+    var flags = 0
+    if (presence == Presence.PHONE_ONLY || presence == Presence.PHONE_AND_NAS) flags = flags or CellFlags.ON_PHONE
+    if (presence == Presence.NAS_ONLY || presence == Presence.PHONE_AND_NAS) flags = flags or CellFlags.ON_NAS
+    if (safety == SafetyStatus.SAFE) flags = flags or CellFlags.SAFE
+    if (probableDuplicate) flags = flags or CellFlags.TO_VERIFY
     return flags
   }
 

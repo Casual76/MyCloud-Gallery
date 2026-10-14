@@ -172,6 +172,9 @@ data class MediaVersionEntity(
     Index(value = ["volume", "media_store_id"]),
     // Posizioni assenti da dimenticare dopo la tolleranza.
     Index(value = ["state", "absent_since"]),
+    // v3: le posizioni di una share del NAS (fine del giro, conteggi del congelamento, share non raggiungibile), nell'ordine
+    // "viste meno di recente prima" senza ordinare in memoria.
+    Index(value = ["account_id", "share_key", "last_seen_at"]),
   ],
 )
 data class MediaLocationEntity(
@@ -199,6 +202,12 @@ data class MediaLocationEntity(
   @ColumnInfo(name = "absent_since") val absentSince: Long?,
   @ColumnInfo(name = "verified_at") val verifiedAt: Long?,
   @ColumnInfo(name = "last_seen_at") val lastSeenAt: Long,
+  // --- v3 (NAS) ---
+  /**
+   * Il `FileId` SMB (`Location.Nas.fileId`): un indizio per gli spostamenti fatti dal PC (E-N1) e per il timbro
+   * (`NasStamp`). NULL sul telefono e quando l'elenco non l'ha dato.
+   */
+  @ColumnInfo(name = "file_id") val fileId: Long? = null,
 )
 
 /**

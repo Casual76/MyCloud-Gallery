@@ -21,7 +21,8 @@ import dev.pampa.mycloudgallery.core.model.LocationState
  *    il file e' stato rinominato o spostato sul telefono. Un `_ID` letto con un'altra versione del
  *    MediaStore non prova nulla: gli ID ripartono e possono essere di un altro file (`docs/android.md`).
  * 3. **Spostamento**: una posizione sparita dello stesso tipo, con stessi byte probabili **e** un
- *    indizio indipendente (hash completo uguale, stessa data di modifica, stessa data di scatto).
+ *    indizio indipendente (hash completo uguale, stessa data di modifica, stessa data di scatto e, sul NAS,
+ *    lo stesso `FileId` nella stessa share).
  *    Se piu' media diversi sono candidati, decide solo l'hash completo.
  * 4. **Stessi byte altrove**: si collega **solo con hash completi uguali**. Con il solo hash rapido
  *    uguale la risposta e' [LinkDecision.NeedsFullHash], mai un'unione.
@@ -151,7 +152,19 @@ object LinkingRules {
   private fun isCorroboratedMove(candidate: KnownLocation, observation: Observation): Boolean =
     candidate.version.fingerprint.match(observation.fingerprint) == FingerprintMatch.SAME ||
       candidate.location.stamp.modifiedAtMillis == observation.stamp.modifiedAtMillis ||
-      sameCaptureTime(candidate.captureTimeHintMillis, observation.captureTimeHintMillis)
+      sameCaptureTime(candidate.captureTimeHintMillis, observation.captureTimeHintMillis) ||
+      sameNasFileId(candidate.location.location, observation.location)
 
   private fun sameCaptureTime(a: Long?, b: Long?): Boolean = a != null && b != null && a == b
+
+  /**
+   * Fase 4 (E-N1, §2.3): lo stesso `FileId` SMB, noto da entrambe le parti, nella stessa share dello stesso account. Il
+   * `FileId` resta uguale a una rinomina o a uno spostamento sullo stesso volume (anche quando il PC "tocca" la data di
+   * modifica); in un'altra share e' un altro volume e non prova nulla.
+   */
+  private fun sameNasFileId(before: Location, now: Location): Boolean {
+    if (before !is Location.Nas || now !is Location.Nas) return false
+    val id = before.fileId ?: return false
+    return id == now.fileId && before.account == now.account && before.shareKey == now.shareKey
+  }
 }

@@ -20,7 +20,7 @@ import dev.pampa.mycloudgallery.core.model.NasPath
 import dev.pampa.mycloudgallery.core.model.NasShare
 import dev.pampa.mycloudgallery.core.model.PersonalFlags
 import dev.pampa.mycloudgallery.core.model.VectorPrecision
-import dev.pampa.mycloudgallery.core.model.WorkStage
+
 import dev.pampa.mycloudgallery.core.model.domain.Observation
 import dev.pampa.mycloudgallery.core.model.domain.WorkRules
 import kotlinx.coroutines.runBlocking
@@ -92,7 +92,8 @@ abstract class CatalogTestBase {
     catalog.setPersonalFlags(mediaId, PersonalFlags(favorite = true))
     val current = catalog.media(mediaId)!!.currentVersionId
     catalog.putEmbedding(mediaId, EmbeddingVector.ofFloats(Db.SPACE, 0, floatArrayOf(0.1f, 0.2f, 0.3f, 0.4f), current))
-    WorkStage.entries.filter { it != WorkStage.FACES }.forEach { stage ->
+    // Le fasi iniziali di un media (non tutte: FACES, HQ e FULL_HASH le mette in coda solo chi le chiede).
+    WorkRules.initialStages(MediaKind.PHOTO).forEach { stage ->
       val state = catalog.workStates(mediaId).first { it.stage == stage }
       catalog.updateWork(mediaId, WorkRules.succeeded(state, current, now))
     }

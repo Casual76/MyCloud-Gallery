@@ -1,12 +1,12 @@
-# Modello dei dati (Fase 1.3, schema v2 della Fase 3)
+# Modello dei dati (Fase 1.3, schema v2 della Fase 3, schema v3 della Fase 4)
 
 > Obiettivo (piano 1.3): un media ha **identita' stabile**, **piu' posizioni** e **piu' versioni**. Backup,
 > spostamenti, condivisioni, modifiche, correzioni e cambi di ID MediaStore non spezzano mai album,
 > preferiti, nascosti, vettori o stati di lavoro.
 >
 > Codice: tipi e regole in `core-model` (Kotlin puro, `dev.pampa.mycloudgallery.core.model` e `.domain`),
-> database Room in `core-database` (v1 della Fase 1.3, **v2** della Fase 3: §10). Il KDoc spiega il perche' di
-> ogni tipo; qui c'e' il quadro d'insieme.
+> database Room in `core-database` (v1 della Fase 1.3, v2 della Fase 3: §10, **v3** della Fase 4: §11). Il KDoc spiega
+> il perche' di ogni tipo; qui c'e' il quadro d'insieme.
 
 ## 1. Principi
 
@@ -219,11 +219,11 @@ entita' (il build esporta `N.json`), scrivere `Migration(N-1, N)` in `GalleryMig
 
 ## 9. Rimandato e punti aperti
 
-- **Identita' tra dispositivi (Fase 4)**: chi pubblica per primo un media nell'indice condiviso ne fissa il
-  `MediaId`; gli altri lo adottano. I conflitti (due UUID per lo stesso file) si risolvono con la stessa unione
-  deterministica e gli alias. Da progettare con il formato firmato della 1.4.
+- ~~**Identita' tra dispositivi (Fase 4)**: chi pubblica per primo un media nell'indice condiviso ne fissa il
+  `MediaId`; gli altri lo adottano.~~ Fatto nella v3 (`IdentityRules`, `MediaCatalog.adoptIdentities`, §11.5).
 - **Rilevatore di doppioni**: chi chiama `merge` quando un hash completo arriva dopo (oggi lo fa da solo solo una
-  terza copia identica). Fase 4.4.
+  terza copia identica). Dalla v3 lo fa il catalogo per i gruppi `PROBABLE_DUPLICATE` telefono-NAS (§11.4); fra due copie
+  dello stesso lato resta aperto (Doppioni, Fase 7).
 - ~~**Cursori di sincronizzazione MediaStore** (generazione per volume, `getVersion()`): Fase 3.1.~~ Fatto nella v2
   (`media_store_cursor`, §10).
 - **OCR, FTS, volti**: tabelle nelle Fasi 6 e 8 (i volti nell'area privata, proposta 13). Il test delle
@@ -331,3 +331,127 @@ catalogo non cambi nulla; apre la v2 con `seedV2`. Su API 29 SQLite e' la 3.22: 
 | `change_seq` nel database, flusso con perdita dichiarata | Flusso senza perdita: uno scrittore bloccato da un collector lento. `seq` solo in memoria: l'istantanea su file non saprebbe se e' vecchia. |
 | `mirrored` in `version_metadata` (colonna in piu' rispetto al progetto) | Codici EXIF al posto dei gradi in `orientation`: avrebbe cambiato il significato di una colonna della v1. |
 | `traits` e `*_changed_at` NOT NULL DEFAULT 0 | Colonne nullable: un valore "sconosciuto" in piu' da gestire, senza guadagno. |
+
+## 11. Schema v3 (Fase 4: il NAS nella Libreria)
+
+Progetto: `docs/fase4-progetto.md` §1.3 (righe `core-model`, `core-database`, `core-metadata` di P2), §2.1-§2.3, §2.5, §2.7,
+D5-D8, D13, D18, D21. Pacchetto P2.
+
+### 11.1 Tipi nuovi o estesi in `core-model`
+
+| Tipo | Cosa | Perche' |
+|---|---|---|
+| `WorkStage.HQ`, `WorkStage.FULL_HASH` | codici `hq`, `full_hash`; **non** fra le fasi iniziali (`WorkRules.initialStages`) | `FULL_HASH` lo mette in coda il catalogo (gruppi provvisori, D21) o chi verifica "al sicuro"; `HQ` chi prepara |
+| `Location.Nas.fileId` (P0) + `stampOf`, `folderKey(account, share, folder)`, `shareKeyOf` | il `FileId` SMB come indizio, la chiave di una cartella senza posizioni finte | scansione per cartelle (E-N5), confronto con il catalogo |
+| `LinkingRules` | spostamento sul NAS corroborato anche dallo **stesso `FileId` nella stessa share** | E-N1: il PC puo' cambiare la data di modifica di un file che sposta |
+| `TimelineRules.presenceFlags` | `ON_PHONE`, `ON_NAS` (posizioni **presenti**), `SAFE` (stato `SAFE`), `TO_VERIFY` (gruppo `PROBABLE_DUPLICATE`); anche dai derivati salvati (`presence`, `safety`) per la migrazione | badge della cella dai soli flag (D18, §1.5) |
+| `domain/IdentityRules` con `RemoteIdentity`, `AdoptionDecision`, `AdoptRefusal` | l'adozione delle identita' dell'indice (D7), §11.5 | regola pura, provata sulla JVM |
+
+`ContentKey`, `NasStamp`, `MediaRef.Nas`, `FreezeReason`, `MediaGroupKind.PROBABLE_DUPLICATE`, i bit 10-13 di `CellFlags` e
+`PresenceBadge` sono di P0 (firme); P2 li riempie.
+
+### 11.2 Tabelle e colonne
+
+| Dove | Aggiunta | Note |
+|---|---|---|
+| `media_location` | `file_id` (NULL); indice (`account_id`, `share_key`, `last_seen_at`) | timbro del NAS (`NasStamp`); fine giro, conteggi del congelamento e share non raggiungibile senza ordinare in memoria |
+| `work_state` | l'indice (`stage`, `status`) diventa (`stage`, `status`, `updated_at`) | i fallimenti da riprovare escono gia' in ordine |
+| `media.cell_flags` | bit di presenza (D18) | derivati come gli altri, ricalcolati nella stessa transazione |
+| `nas_scan_state` (nuova) | PK (`account_id`, `share_key`): `epoch`, `resume_after`, `last_full_scan_at`, `freeze_*` | il cursore della porta `NasScanStore`; si salva con le osservazioni |
+| `index_publish_state`, `index_own_segment`, `index_outbox_record`, `index_outbox_blob` (nuove) | la pubblicazione di **questo** dispositivo per share: `next_seq` (D5), ultima testa, segmenti propri, outbox dei record (JSON canonico) e indice dei blob in coda (i byte stanno nei pacchi temporanei) | P3 (`IndexPublisher`): niente si perde se il processo muore |
+| `index_head`, `index_segment`, `index_record`, `replica_pack`, `replica_blob`, `index_sync_state` (nuove) | la replica: `HeadMark` per (share, dispositivo), segmenti elencati e loro stato, record `meta` (colonne per le query e JSON intero), pacchi immutabili (D15) e i loro blob, giorni di accesso negato (E-I8) | P4 (`IndexSync`, `ReplicaBlobs`, `ReplicaRecords`) |
+| `nas_op`, `nas_op_item`, `nas_trash_entry` (nuove) | il diario delle operazioni sul NAS e quello locale del cestino (4B, §2.7) | P12: ogni passo si scrive prima di farlo |
+
+Regole delle tabelle nuove: `share_key` e' la forma di confronto (`Location.Nas.shareKeyOf`); le classi dei segmenti sono
+il `SegmentClass.code` del formato (1 `meta`, ..., 6 `frames`, 16 `personal`); impronte e chiavi in esadecimale; la chiave
+di contenuto ridotta (`ContentKey.short`) e' un `INTEGER`; gli istanti dell'indice e del diario sono in **ora del NAS**.
+Nessuna punta a `media` o a `media_version`: le identita' nei record dell'indice sono **dati firmati** (colonne `remote_*`,
+tabelle `TABLES_WITH_INDEX_IDS`), non riferimenti locali, e l'unione non le tocca; `MergeReferencesTest` lo controlla.
+
+I DAO (`NasScanDao`, `IndexPublishDao`, `ReplicaDao`, `NasOpsDao`, `IdentityDao`) sono semplici: righe dentro e fuori. Le
+regole sono di chi li usa (P3, P4, P12) e gli adattatori sopra i DAO li scrive P11; il grafo dei media lo scrive sempre e
+solo `MediaCatalog`.
+
+### 11.3 Operazioni nuove di `MediaCatalog`
+
+| Operazione | Cosa garantisce | Porta |
+|---|---|---|
+| `recordAll(obs, whenUndecided, nasCursor, seenAt = epoch)` | come per il telefono: un lotto e il cursore in **una** transazione; con `KEEP_SEPARATE` i gruppi provvisori (§11.4); `inSameTransaction` per chi deve scrivere altro nella stessa transazione (P4) | `NasScanStore.recordAll` |
+| `nasScanState`, `nasScanStates`, `saveNasScanState` | il cursore e il congelamento | `cursor`, `saveCursor` |
+| `knownNasFiles(account, share, folder)` | i file noti (non assenti) di una cartella, per chiave di posto, con il `NasStamp` | `knownIn` |
+| `countPresentNas(account, share)` | i presenti di una share | `countPresent` |
+| `confirmAllPresentNas(seen, seenAt, cursor)` | scorciatoia del timbro (`NasStamp.sameAs`): "visto a", stato, nome com'e' scritto e `FileId` appena letto; mai su un assente | `confirmAllPresent` |
+| `markVanishedInShare(account, share, epoch, cap, cursor)` | assenze con tetto, le viste meno di recente prima; **0 se la share e' congelata** (D10, difesa anche se chi chiama sbaglia) | `markVanishedInShare` |
+| `markShareUnavailable(account, share, cap)` | presenti diventano non raggiungibili, a tappe (si ripete finche' torna `cap`) | `markShareUnavailable` (ciclo nell'adattatore) |
+| `adoptIdentities(claims)`, `adoptIdentity` | D7 in una transazione (§11.5) | P4 |
+| `nasRefs(ids)`, `nasLocation(locationId)` | `MediaRef.Nas` (posizione presente, prima la versione corrente; chiave di contenuto ridotta); il percorso solo su richiesta | P7, P8 |
+| `pendingWork(stage, place, limit)`, `retryableWork`, `requestWork(ids, stage)` | code di lavoro per posto (`WorkPlace.PHONE`, `WorkPlace.NAS`), dal piu' recente; messa in coda di `HQ` e `FULL_HASH` | P6, P9, P11 |
+
+**Code del telefono filtrate.** `WorkStateDao.nextPending` e `retryable` (le code che legge la fase META del telefono)
+restituiscono solo media con una copia presente sul telefono (`presence`). Prima, 20 mila media solo-NAS con META in coda,
+piu' recenti, arrivavano per primi e la fase META li saltava fino a `metaMaxSkips` (2.000), poi si fermava. Le code del NAS
+sono `nextPendingOnNas` e `retryableOnNas`. Il piano: `media` scorsa con l'indice (`sort_time`, `media_id`) e la fase
+cercata per chiave primaria (`CROSS JOIN` fissa l'ordine), nessun ordinamento in memoria; a coda vuota la lettura scorre
+l'indice intero (100 mila righe, decine di ms), prezzo accettato per non ordinare 100 mila righe a ogni lotto della prima
+lettura. Provato in `V3QueriesTest` (20 mila media solo-NAS: 0 salti).
+
+### 11.4 Gruppi `PROBABLE_DUPLICATE` (D21, E-L9)
+
+- **Quando**: con `KEEP_SEPARATE`, un file che le regole rimandano all'hash completo (`NeedsFullHash`) nasce separato; se fra
+  i candidati c'e' un media **dall'altra parte** (telefono e NAS), il nuovo e quel media (con gli eventuali membri del loro
+  gruppo provvisorio) diventano un gruppo `PROBABLE_DUPLICATE`. Copertina: il membro con una copia presente sul telefono.
+  Un candidato in una raffica o in una coppia RAW+JPEG non si sposta (meglio un doppione temporaneo).
+- **Cella**: una sola, la copertina, con `TO_VERIFY` (badge "da verificare"); gli altri membri sono `GROUP_MEMBER`.
+- **Lavoro**: `FULL_HASH` in coda (sul NAS) per i membri con una copia sul NAS senza hash completo; quello del telefono lo
+  calcola la manutenzione degli hash rimandati della Fase 3 (`deferredFullHashes` lo trova: stessa impronta rapida di un
+  altro media).
+- **Risoluzione**: quando un hash completo si impara (`learnFullHash`), la `FULL_HASH` di quella versione e' fatta e il
+  gruppo prova a risolversi: con **tutti** gli originali noti, chi ha gli stessi byte si unisce (`MergeRules`, sopravvive il
+  minore), poi il gruppo si scioglie e chi ha byte diversi torna una cella a se'. Mai un'unione senza hash completo.
+
+### 11.5 Adozione delle identita' (D7, E-I18)
+
+`IdentityRules.decide(locale, posto, remoto, mediaRemotoQui, proprietarioDellaVersioneRemota)`:
+
+| Caso | Esito |
+|---|---|
+| Il record non descrive i byte del posto (dimensione o `qh1` diversi) | `Refuse(CONTENT_MISMATCH)`, non e' un conflitto |
+| La versione remota e' qui con un contenuto diverso, o il media remoto e' qui e nessuna sua versione e' compatibile | `Refuse(ID_BOUND_TO_OTHER_CONTENT)`: **conflitto D7**, contato |
+| La versione remota e' qui in un altro media rispetto a quello dichiarato | `Refuse(ID_BOUND_ELSEWHERE)`: conflitto |
+| Il media remoto e' qui un altro media con byte compatibili | `MergeWith`: unione con `MergeRules` (hash completi degli originali); senza prova `NOT_PROVEN_IDENTICAL`, non un conflitto |
+| Gia' le stesse identita' | `AlreadyShared` |
+| Il media ha copie sul telefono | `KeepLocal` (D8: l'indice vale per l'identita' dei soli media solo-NAS) |
+| Altrimenti | per media e versione, indipendenti: si adotta l'id remoto se e' **minore** del nostro (`Rename`), altrimenti si tiene il nostro (`KeepLocal`): tutti convergono al minore senza parlarsi |
+
+La rinomina (`IdentityDao.renameMedia`, `renameVersion`) aggiorna nella stessa transazione ogni colonna di
+`MEDIA_REFERENCES` e `VERSION_REFERENCES` (chiavi esterne differite: il controllo e' al commit) e lascia il vecchio id come
+alias; l'indice della timeline riceve un cambiamento strutturale (esce il vecchio id, entra il nuovo).
+`MergeReferencesTest` fallisce se una tabella nuova punta a `media` o a `media_version` senza essere elencata.
+
+### 11.6 Migrazione 2 -> 3
+
+`GalleryMigrations.MIGRATION_2_3`: colonna `file_id`, gli indici nuovi (quello di `work_state` sostituito), le tabelle
+nuove vuote, e i bit di presenza dei media esistenti calcolati con `TimelineRules.presenceFlags` dai derivati gia' salvati
+(`presence`, `safety`: un `UPDATE` per combinazione, nessuna seconda copia della regola in SQL). `ExportedSchemaTest`:
+1 -> 3 (`seedV1`, passando dalla 2), 2 -> 3 (`seedV2`), 3 (`seedV3`, una riga in ogni tabella nuova); in tutti i casi un
+ricalcolo del catalogo non cambia nulla.
+
+### 11.7 `core-metadata` (spostamenti)
+
+- `ExtractHints` ha i nomi **neutri** (`dateTakenMs`, `dateModifiedMs`, `width`, `height`, `orientation`, `durationMs`,
+  dopo `scanZone`): gli indizi vengono anche dall'elenco del NAS. Il costruttore e le proprieta' `ms*` restano come alias
+  deprecati, quindi nessun chiamante cambia.
+- `hash/Fingerprints.quick/full` su `MediaBytes`: la stessa logica di `PhoneFingerprints` (core-mediastore), generica per
+  il NAS (rilevamento, `FULL_HASH`). `PhoneFingerprints` resta dov'e' (fuori dal perimetro di P2) e puo' delegare.
+
+### 11.8 Scelte e scarti della v3
+
+| Scelta | Alternative scartate e perche' |
+|---|---|
+| Presenza nei bit di `cell_flags` | Colonne nuove in `media`: un'altra migrazione dell'indice e dell'istantanea per tre booleani. |
+| Coda del telefono filtrata da `presence` | Filtro su `media_location` (EXISTS): un join per riga scorsa. Una colonna "posto" in `work_state`: andrebbe tenuta allineata a ogni cambio di posizione. |
+| Riferimenti al NAS senza `ORDER BY` (scelta in Kotlin) | `ORDER BY` come `phoneRefs`: un ordinamento in memoria per ogni blocco di 500. |
+| Chiave di contenuto calcolata da `qh1` e dimensione (`nasRefs`) | Colonna in `media_version`: 8 byte per riga e una migrazione che rilegge tutto, per uno SHA-256 di 40 byte. |
+| Identita' remote come dati (`remote_*`), mai chiavi esterne | Chiavi esterne verso `media`: una testa remota potrebbe bloccare o cancellare in cascata righe locali. |
+| Rinomina con alias | Unione con un media vuoto: `MergeRules` vuole la prova degli hash completi, qui l'identita' e' la stessa e cambia solo l'id. |
+| Diario della 4B gia' nella v3 | Una v4 all'inizio della 4B: un'altra migrazione sul campo; le tabelle restano vuote finche' P12 non le usa. |

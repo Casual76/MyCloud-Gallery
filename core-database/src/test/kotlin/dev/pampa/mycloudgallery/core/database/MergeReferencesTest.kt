@@ -54,26 +54,51 @@ class MergeReferencesTest {
       }
       val unclassified = tables.filter { table ->
         table != "media" && "media" !in parents.getValue(table) && "media_version" !in parents.getValue(table) &&
-          table !in MediaCatalog.TABLES_WITHOUT_MEDIA_IDS
+          table !in MediaCatalog.TABLES_WITHOUT_MEDIA_IDS && table !in MediaCatalog.TABLES_WITH_INDEX_IDS
       }
-      assertWithMessage("Tabelle non classificate per l'unione: MediaCatalog.TABLES_WITHOUT_MEDIA_IDS o un riferimento a media.")
-        .that(unclassified)
-        .isEmpty()
-      assertThat(MediaCatalog.TABLES_WITHOUT_MEDIA_IDS).containsAtLeast("media_store_cursor", "catalog_meta")
+      assertWithMessage(
+        "Tabelle non classificate per l'unione: MediaCatalog.TABLES_WITHOUT_MEDIA_IDS, TABLES_WITH_INDEX_IDS o un riferimento a media.",
+      ).that(unclassified).isEmpty()
+      assertThat(MediaCatalog.TABLES_WITHOUT_MEDIA_IDS).containsAtLeast("media_store_cursor", "catalog_meta", "nas_scan_state", "nas_op_item")
       assertThat(tables).containsAtLeastElementsIn(MediaCatalog.TABLES_WITHOUT_MEDIA_IDS)
+      assertThat(tables).containsAtLeastElementsIn(MediaCatalog.TABLES_WITH_INDEX_IDS)
+      assertThat(MediaCatalog.TABLES_WITHOUT_MEDIA_IDS.intersect(MediaCatalog.TABLES_WITH_INDEX_IDS)).isEmpty()
+      // Le tabelle della v3 non puntano ne' a `media` ne' a `media_version`: le identita' dell'indice sono dati dei record.
+      (MediaCatalog.TABLES_WITH_INDEX_IDS + MediaCatalog.TABLES_WITHOUT_MEDIA_IDS).forEach { table ->
+        assertWithMessage(table).that(parents.getValue(table).intersect(setOf("media", "media_version"))).isEmpty()
+      }
 
-      // Una colonna che si chiama come un'identita' di media senza chiave esterna sfuggirebbe all'unione.
-      val unmanagedIds = tables.flatMap { table ->
+      // Una colonna che si chiama come un'identita' di media senza chiave esterna sfuggirebbe all'unione. Le uniche
+      // ammesse sono le identita' **remote** dell'indice (`remote_*`) nelle tabelle di TABLES_WITH_INDEX_IDS.
+      val columns = tables.associateWith { table ->
         sql.query("PRAGMA table_info(`$table`)").use { cursor ->
+          buildList { while (cursor.moveToNext()) add(cursor.getString(cursor.getColumnIndexOrThrow("name"))) }
+        }
+      }
+      val unmanagedIds = columns.flatMap { (table, names) -> names.filter { it.endsWith("media_id") }.map { "$table.$it" } }
+        .filter { it != "media.media_id" && it !in MediaCatalog.MEDIA_REFERENCES }
+        .filterNot { ref -> ref.substringBefore('.') in MediaCatalog.TABLES_WITH_INDEX_IDS && ref.substringAfter('.').startsWith("remote_") }
+      assertWithMessage("Colonne con identita' di media non gestite dall'unione").that(unmanagedIds).isEmpty()
+      val remoteOutside = columns.flatMap { (table, names) -> names.filter { it.startsWith("remote_") }.map { "$table.$it" } }
+        .filter { it.substringBefore('.') !in MediaCatalog.TABLES_WITH_INDEX_IDS }
+      assertWithMessage("Identita' remote fuori dalle tabelle dell'indice").that(remoteOutside).isEmpty()
+
+      // Ogni colonna che punta a una versione e' rinominata dall'adozione D7 (IdentityDao.renameVersion) e tradotta
+      // dall'unione: una tabella nuova che punta a `media_version` senza essere elencata fa fallire il test.
+      val versionReferences = tables.flatMap { table ->
+        sql.query("PRAGMA foreign_key_list(`$table`)").use { cursor ->
           buildList {
             while (cursor.moveToNext()) {
-              val column = cursor.getString(cursor.getColumnIndexOrThrow("name"))
-              if (column.endsWith("media_id")) add("$table.$column")
+              val parent = cursor.getString(cursor.getColumnIndexOrThrow("table"))
+              val to = cursor.getString(cursor.getColumnIndexOrThrow("to"))
+              if (parent == "media_version" && to == "version_id") add("$table." + cursor.getString(cursor.getColumnIndexOrThrow("from")))
             }
           }
         }
-      }.filter { it != "media.media_id" && it !in MediaCatalog.MEDIA_REFERENCES }
-      assertWithMessage("Colonne con identita' di media non gestite dall'unione").that(unmanagedIds).isEmpty()
+      }
+      assertWithMessage("Una tabella punta a `media_version`: aggiungila a MediaCatalog.VERSION_REFERENCES e a IdentityDao.renameVersion.")
+        .that(versionReferences)
+        .containsExactlyElementsIn(MediaCatalog.VERSION_REFERENCES)
     } finally {
       database.close()
     }

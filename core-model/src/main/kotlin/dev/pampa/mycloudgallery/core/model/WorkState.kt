@@ -23,9 +23,24 @@ enum class WorkStage(override val code: String) : StableCode {
 
   /** Volti: dato biometrico e personale, solo se l'utente l'ha attivato (proposta 13). */
   FACES("faces"),
+
+  /**
+   * Fase 4 (D12, D16): l'anteprima HQ (lato lungo 2048 px) di un media del NAS, prodotta dalla preparazione insieme alle
+   * altre classi. Non e' fra le fasi iniziali ([dev.pampa.mycloudgallery.core.model.domain.WorkRules.initialStages]):
+   * la crea chi la mette in coda.
+   */
+  HQ("hq"),
+
+  /**
+   * Fase 4 (D21, Q5, Q10): l'hash completo dei byte di una copia sul NAS, letto per intero **qui**. Serve solo quando
+   * decide qualcosa: un gruppo `PROBABLE_DUPLICATE` (stesso video su telefono e NAS con la stessa impronta rapida) o la
+   * verifica "al sicuro". Lo mette in coda il catalogo quando nasce il gruppo provvisorio; mai per tutti (446 GB di video
+   * sarebbero 8 ore di letture).
+   */
+  FULL_HASH("full_hash"),
   ;
 
-  /** Se il risultato dipende dai pixel (e quindi va rifatto quando i pixel cambiano). */
+  /** Se il risultato dipende dai byte della versione (e quindi va rifatto quando cambiano): tutte tranne META. */
   val dependsOnPixels: Boolean get() = this != META
 }
 

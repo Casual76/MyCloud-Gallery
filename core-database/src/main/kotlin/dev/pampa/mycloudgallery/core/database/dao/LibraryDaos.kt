@@ -80,22 +80,53 @@ interface WorkStateDao {
   @Query("SELECT status FROM work_state WHERE media_id = :mediaId AND stage = :stage")
   suspend fun status(mediaId: String, stage: String): String?
 
-  /** La coda di una fase: dal piu' recente al piu' vecchio (proposta 11). */
-  @Query(
-    "SELECT w.* FROM work_state w JOIN media m ON m.media_id = w.media_id " +
-      "WHERE w.stage = :stage AND w.status = 'pending' ORDER BY m.sort_time DESC, m.media_id DESC LIMIT :limit",
-  )
+  /**
+   * La coda di una fase **per il lavoro sul telefono**: dal piu' recente al piu' vecchio (proposta 11), solo media con una
+   * copia presente sul telefono (`presence`). Dalla v3 (Fase 4) nella coda META ci sono anche i media solo-NAS, che il
+   * telefono non sa leggere: senza il filtro 20 mila media del NAS piu' recenti fermavano la META del telefono dopo
+   * `metaMaxSkips` salti (§1.3 di `docs/fase4-progetto.md`). La coda del NAS e' [nextPendingOnNas].
+   *
+   * Piano: si scorre `media` con l'indice (`sort_time`, `media_id`) dal piu' recente e si cerca la fase per chiave
+   * primaria (`CROSS JOIN` fissa l'ordine): nessun ordinamento in memoria, e il `LIMIT` ferma la lettura appena basta.
+   */
+  @Query(NEXT_PENDING_ON_PHONE_SQL)
   suspend fun nextPending(stage: String, limit: Int): List<WorkStateEntity>
 
-  /** I fallimenti da riprovare, i piu' vecchi prima. */
-  @Query(
-    "SELECT * FROM work_state WHERE stage = :stage AND status = 'failed' AND updated_at <= :retryBefore " +
-      "ORDER BY updated_at LIMIT :limit",
-  )
+  /** La coda di una fase per il lavoro **sul NAS** (copie presenti sul NAS), come [nextPending]. */
+  @Query(NEXT_PENDING_ON_NAS_SQL)
+  suspend fun nextPendingOnNas(stage: String, limit: Int): List<WorkStateEntity>
+
+  /** I fallimenti da riprovare **sul telefono**, i piu' vecchi prima (indice `stage, status, updated_at`). */
+  @Query(RETRYABLE_ON_PHONE_SQL)
   suspend fun retryable(stage: String, retryBefore: Long, limit: Int): List<WorkStateEntity>
+
+  /** I fallimenti da riprovare **sul NAS**, come [retryable]. */
+  @Query(RETRYABLE_ON_NAS_SQL)
+  suspend fun retryableOnNas(stage: String, retryBefore: Long, limit: Int): List<WorkStateEntity>
 
   @Query("SELECT status, COUNT(*) AS count FROM work_state WHERE stage = :stage GROUP BY status")
   fun observeCounts(stage: String): Flow<List<StatusCount>>
+
+  companion object {
+    private const val ON_PHONE: String = "m.presence IN ('phone_only', 'phone_and_nas')"
+    private const val ON_NAS: String = "m.presence IN ('nas_only', 'phone_and_nas')"
+
+    private const val NEXT_PENDING: String =
+      "SELECT w.* FROM media m CROSS JOIN work_state w ON w.media_id = m.media_id AND w.stage = :stage " +
+        "WHERE w.status = 'pending' AND "
+    private const val NEXT_PENDING_ORDER: String = " ORDER BY m.sort_time DESC, m.media_id DESC LIMIT :limit"
+
+    const val NEXT_PENDING_ON_PHONE_SQL: String = NEXT_PENDING + ON_PHONE + NEXT_PENDING_ORDER
+    const val NEXT_PENDING_ON_NAS_SQL: String = NEXT_PENDING + ON_NAS + NEXT_PENDING_ORDER
+
+    private const val RETRYABLE: String =
+      "SELECT w.* FROM work_state w CROSS JOIN media m ON m.media_id = w.media_id " +
+        "WHERE w.stage = :stage AND w.status = 'failed' AND w.updated_at <= :retryBefore AND "
+    private const val RETRYABLE_ORDER: String = " ORDER BY w.updated_at LIMIT :limit"
+
+    const val RETRYABLE_ON_PHONE_SQL: String = RETRYABLE + ON_PHONE + RETRYABLE_ORDER
+    const val RETRYABLE_ON_NAS_SQL: String = RETRYABLE + ON_NAS + RETRYABLE_ORDER
+  }
 }
 
 @Dao

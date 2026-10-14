@@ -7,6 +7,7 @@ import androidx.room.Upsert
 import dev.pampa.mycloudgallery.core.database.entity.GroupSizeRow
 import dev.pampa.mycloudgallery.core.database.entity.IndexRow
 import dev.pampa.mycloudgallery.core.database.entity.MediaStoreCursorEntity
+import dev.pampa.mycloudgallery.core.database.entity.NasRefRow
 import dev.pampa.mycloudgallery.core.database.entity.PhoneRefRow
 import dev.pampa.mycloudgallery.core.model.CellFlags
 
@@ -71,6 +72,15 @@ interface TimelineIndexDao {
   @Query(PHONE_REFS_SQL)
   suspend fun phoneRefs(ids: List<String>): List<PhoneRefRow>
 
+  /**
+   * Fase 4 (D18): le copie **presenti** sul NAS dei media [ids] (al massimo [MAX_IDS]), con la posizione, l'impronta
+   * rapida e la dimensione della versione (per la chiave di contenuto) e il tipo. Nessun ordine in SQL (nessun
+   * ordinamento in memoria): la preferenza (prima la versione corrente, poi la posizione piu' vecchia) la sceglie
+   * `MediaCatalog.nasRefs` con [NasRefRow.isCurrent]. Stesso piano di [phoneRefs]: dai media chiesti, giu' per `version_id`.
+   */
+  @Query(NAS_REFS_SQL)
+  suspend fun nasRefs(ids: List<String>): List<NasRefRow>
+
   /** Il numero di sequenza dei cambiamenti dell'ultima transazione del catalogo (0 se non ce ne sono state). */
   @Query("SELECT COALESCE((SELECT value FROM catalog_meta WHERE `key` = '$CHANGE_SEQ'), 0)")
   suspend fun changeSeq(): Long
@@ -90,6 +100,15 @@ interface TimelineIndexDao {
       "LEFT JOIN version_metadata md ON md.version_id = v.version_id " +
       "WHERE m.media_id IN (:ids) AND l.location_type = 'phone' AND +l.state = 'present' AND l.media_store_id IS NOT NULL " +
       "ORDER BY m.media_id, CASE WHEN v.version_id = m.current_version_id THEN 0 ELSE 1 END, l.location_id"
+
+    /** Testo della query di [nasRefs]: pubblico per il test che ne controlla il piano (v3). */
+    const val NAS_REFS_SQL: String =
+      "SELECT m.media_id AS media_id, l.location_id AS location_id, v.size AS size, v.quick_hash AS quick_hash, " +
+        "md.mime_type AS mime_type, (v.version_id = m.current_version_id) AS is_current " +
+        "FROM media m JOIN media_version v ON v.media_id = m.media_id " +
+        "JOIN media_location l ON l.version_id = v.version_id " +
+        "LEFT JOIN version_metadata md ON md.version_id = v.version_id " +
+        "WHERE m.media_id IN (:ids) AND l.location_type = 'nas' AND +l.state = 'present'"
 
     /** Le colonne di [indexCursor], in quest'ordine. */
     const val COLUMNS: String =

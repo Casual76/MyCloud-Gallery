@@ -7,12 +7,17 @@ import androidx.room.RoomDatabase
 import dev.pampa.mycloudgallery.core.database.dao.AlbumDao
 import dev.pampa.mycloudgallery.core.database.dao.CatalogMetaDao
 import dev.pampa.mycloudgallery.core.database.dao.EmbeddingDao
+import dev.pampa.mycloudgallery.core.database.dao.IdentityDao
+import dev.pampa.mycloudgallery.core.database.dao.IndexPublishDao
 import dev.pampa.mycloudgallery.core.database.dao.LocationDao
 import dev.pampa.mycloudgallery.core.database.dao.MediaDao
 import dev.pampa.mycloudgallery.core.database.dao.MediaStoreCursorDao
 import dev.pampa.mycloudgallery.core.database.dao.MergeDao
+import dev.pampa.mycloudgallery.core.database.dao.NasOpsDao
+import dev.pampa.mycloudgallery.core.database.dao.NasScanDao
 import dev.pampa.mycloudgallery.core.database.dao.NasShareDao
 import dev.pampa.mycloudgallery.core.database.dao.PersonalDao
+import dev.pampa.mycloudgallery.core.database.dao.ReplicaDao
 import dev.pampa.mycloudgallery.core.database.dao.TimelineDao
 import dev.pampa.mycloudgallery.core.database.dao.TimelineIndexDao
 import dev.pampa.mycloudgallery.core.database.dao.VersionDao
@@ -21,6 +26,14 @@ import dev.pampa.mycloudgallery.core.database.entity.AlbumEntity
 import dev.pampa.mycloudgallery.core.database.entity.AlbumItemEntity
 import dev.pampa.mycloudgallery.core.database.entity.CatalogMetaEntity
 import dev.pampa.mycloudgallery.core.database.entity.EmbeddingEntity
+import dev.pampa.mycloudgallery.core.database.entity.IndexHeadEntity
+import dev.pampa.mycloudgallery.core.database.entity.IndexOutboxBlobEntity
+import dev.pampa.mycloudgallery.core.database.entity.IndexOutboxRecordEntity
+import dev.pampa.mycloudgallery.core.database.entity.IndexOwnSegmentEntity
+import dev.pampa.mycloudgallery.core.database.entity.IndexPublishStateEntity
+import dev.pampa.mycloudgallery.core.database.entity.IndexRecordEntity
+import dev.pampa.mycloudgallery.core.database.entity.IndexSegmentEntity
+import dev.pampa.mycloudgallery.core.database.entity.IndexSyncStateEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaAliasEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaGroupEntity
@@ -28,7 +41,13 @@ import dev.pampa.mycloudgallery.core.database.entity.MediaLocationEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaPersonalEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaStoreCursorEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaVersionEntity
+import dev.pampa.mycloudgallery.core.database.entity.NasOpEntity
+import dev.pampa.mycloudgallery.core.database.entity.NasOpItemEntity
+import dev.pampa.mycloudgallery.core.database.entity.NasScanStateEntity
 import dev.pampa.mycloudgallery.core.database.entity.NasShareEntity
+import dev.pampa.mycloudgallery.core.database.entity.NasTrashEntryEntity
+import dev.pampa.mycloudgallery.core.database.entity.ReplicaBlobEntity
+import dev.pampa.mycloudgallery.core.database.entity.ReplicaPackEntity
 import dev.pampa.mycloudgallery.core.database.entity.VersionMetadataEntity
 import dev.pampa.mycloudgallery.core.database.entity.WorkStateEntity
 
@@ -56,6 +75,21 @@ import dev.pampa.mycloudgallery.core.database.entity.WorkStateEntity
     // v2
     MediaStoreCursorEntity::class,
     CatalogMetaEntity::class,
+    // v3 (Fase 4): scansione del NAS, indice condiviso (outbox e replica), diario delle operazioni sul NAS
+    NasScanStateEntity::class,
+    IndexPublishStateEntity::class,
+    IndexOwnSegmentEntity::class,
+    IndexOutboxRecordEntity::class,
+    IndexOutboxBlobEntity::class,
+    IndexHeadEntity::class,
+    IndexSegmentEntity::class,
+    IndexRecordEntity::class,
+    ReplicaPackEntity::class,
+    ReplicaBlobEntity::class,
+    IndexSyncStateEntity::class,
+    NasOpEntity::class,
+    NasOpItemEntity::class,
+    NasTrashEntryEntity::class,
   ],
   version = GalleryDatabase.VERSION,
   exportSchema = true,
@@ -88,12 +122,24 @@ abstract class GalleryDatabase : RoomDatabase() {
 
   abstract fun mediaStoreCursorDao(): MediaStoreCursorDao
 
+  // --- v3 (Fase 4) ---
+
+  abstract fun nasScanDao(): NasScanDao
+
+  abstract fun indexPublishDao(): IndexPublishDao
+
+  abstract fun replicaDao(): ReplicaDao
+
+  abstract fun nasOpsDao(): NasOpsDao
+
+  abstract fun identityDao(): IdentityDao
+
   companion object {
     /** Nome del file del database nella cartella privata dell'app. */
     const val NAME: String = "gallery.db"
 
     /** Versione dello schema. Alzarla richiede una migrazione in [GalleryMigrations] (mai distruttiva). */
-    const val VERSION: Int = 2
+    const val VERSION: Int = 3
 
     /**
      * Il database con tutte le migrazioni. **Mai** `fallbackToDestructiveMigration`: una migrazione

@@ -9,6 +9,8 @@ import dev.pampa.mycloudgallery.core.model.CaptureTimeSource
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.MediaMetadata
+import dev.pampa.mycloudgallery.core.model.Presence
+import dev.pampa.mycloudgallery.core.model.SafetyStatus
 import dev.pampa.mycloudgallery.core.model.VersionKind
 import dev.pampa.mycloudgallery.core.model.domain.GroupMember
 import dev.pampa.mycloudgallery.core.model.domain.TimelineRules
@@ -28,10 +30,125 @@ import java.time.ZoneId
  */
 object GalleryMigrations {
 
-  val ALL: Array<Migration> get() = arrayOf(migration1To2())
+  val ALL: Array<Migration> get() = arrayOf(migration1To2(), MIGRATION_2_3)
 
   /** [zone]: il fuso del telefono adesso, per il giorno provvisorio dei media senza data letta. */
   fun migration1To2(zone: () -> ZoneId = ZoneId::systemDefault): Migration = Migration1To2(zone)
+
+  /** v2 -> v3 (Fase 4): vedi [Migration2To3]. */
+  val MIGRATION_2_3: Migration = Migration2To3
+}
+
+/**
+ * v2 -> v3 (Fase 4, `docs/fase4-progetto.md` §1.3, §2.1-§2.3, §2.7; `docs/modello-dati.md` §11):
+ * - `media_location.file_id` (il `FileId` SMB, E-N1) e l'indice (`account_id`, `share_key`, `last_seen_at`) per le
+ *   operazioni su una share intera;
+ * - `work_state`: l'indice (`stage`, `status`) diventa (`stage`, `status`, `updated_at`) (i fallimenti da riprovare escono
+ *   in ordine senza ordinare in memoria);
+ * - `media.cell_flags`: i bit di presenza `ON_PHONE`, `ON_NAS`, `SAFE` (D18) **calcolati qui** dai derivati gia' salvati
+ *   (`presence`, `safety`) con le stesse regole del catalogo (`TimelineRules.presenceFlags`); nessun gruppo provvisorio
+ *   esiste ancora, quindi nessun `TO_VERIFY`;
+ * - le tabelle nuove: `nas_scan_state`, l'indice condiviso (`index_publish_state`, `index_own_segment`,
+ *   `index_outbox_record`, `index_outbox_blob`, `index_head`, `index_segment`, `index_record`, `replica_pack`,
+ *   `replica_blob`, `index_sync_state`) e il diario della 4B (`nas_op`, `nas_op_item`, `nas_trash_entry`), vuote.
+ *
+ * Mai distruttiva: solo colonne, indici e tabelle in piu'. I codici scritti in SQL ('phone_only', 'safe', ...) sono quelli
+ * della v2, fissati qui di proposito. Su API 29 (SQLite 3.22) niente `UPSERT`, `RETURNING`, `DROP COLUMN`.
+ */
+private object Migration2To3 : Migration(2, 3) {
+
+  override fun migrate(db: SupportSQLiteDatabase) {
+    db.execSQL("ALTER TABLE `media_location` ADD COLUMN `file_id` INTEGER")
+    db.execSQL(
+      "CREATE INDEX IF NOT EXISTS `index_media_location_account_id_share_key_last_seen_at` " +
+        "ON `media_location` (`account_id`, `share_key`, `last_seen_at`)",
+    )
+    db.execSQL("DROP INDEX IF EXISTS `index_work_state_stage_status`")
+    db.execSQL(
+      "CREATE INDEX IF NOT EXISTS `index_work_state_stage_status_updated_at` ON `work_state` (`stage`, `status`, `updated_at`)",
+    )
+    CREATE_TABLES.forEach(db::execSQL)
+    fillPresenceFlags(db)
+  }
+
+  /**
+   * I bit di presenza per i media esistenti: un `UPDATE` per ogni combinazione di (`presence`, `safety`) che li accende,
+   * con i valori calcolati da [TimelineRules.presenceFlags] (la stessa funzione del catalogo), cosi' non c'e' una seconda
+   * copia della regola in SQL.
+   */
+  private fun fillPresenceFlags(db: SupportSQLiteDatabase) {
+    db.execSQL("UPDATE `media` SET `cell_flags` = `cell_flags` & ?", arrayOf<Any?>(TimelineRules.PRESENCE_MASK.inv()))
+    for (presence in Presence.entries) {
+      for (safety in SafetyStatus.entries) {
+        val bits = TimelineRules.presenceFlags(presence, safety, probableDuplicate = false)
+        if (bits == 0) continue
+        db.execSQL(
+          "UPDATE `media` SET `cell_flags` = `cell_flags` | ? WHERE `presence` = ? AND `safety` = ?",
+          arrayOf<Any?>(bits, presence.code, safety.code),
+        )
+      }
+    }
+  }
+
+  // Copiate da schemas/.../3.json (createSql di Room): la validazione dello schema dopo la migrazione le confronta.
+  private val CREATE_TABLES = listOf(
+    "CREATE TABLE IF NOT EXISTS `nas_scan_state` (`account_id` TEXT NOT NULL, `share_key` TEXT NOT NULL, `share_name` TEXT NOT NULL, " +
+      "`epoch` INTEGER, `resume_after` TEXT, `last_full_scan_at` INTEGER, `freeze_reason` TEXT, `freeze_since` INTEGER, " +
+      "`freeze_known_present` INTEGER, `freeze_vanished` INTEGER, `freeze_changed` INTEGER, `freeze_not_media` INTEGER, " +
+      "PRIMARY KEY(`account_id`, `share_key`))",
+    "CREATE TABLE IF NOT EXISTS `index_publish_state` (`share_key` TEXT NOT NULL, `next_seq` INTEGER NOT NULL, " +
+      "`head_version` INTEGER NOT NULL DEFAULT 0, `head_hash` TEXT, `head_published_at` INTEGER, PRIMARY KEY(`share_key`))",
+    "CREATE TABLE IF NOT EXISTS `index_own_segment` (`share_key` TEXT NOT NULL, `segment_hash` TEXT NOT NULL, `cls` INTEGER NOT NULL, " +
+      "`size` INTEGER NOT NULL, `entries` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, PRIMARY KEY(`share_key`, `segment_hash`))",
+    "CREATE TABLE IF NOT EXISTS `index_outbox_record` (`share_key` TEXT NOT NULL, `record_key` TEXT NOT NULL, `seq` INTEGER NOT NULL, " +
+      "`path` TEXT NOT NULL, `gone` INTEGER NOT NULL, `body` BLOB NOT NULL, `staged_at` INTEGER NOT NULL, " +
+      "PRIMARY KEY(`share_key`, `record_key`))",
+    "CREATE INDEX IF NOT EXISTS `index_index_outbox_record_share_key_seq` ON `index_outbox_record` (`share_key`, `seq`)",
+    "CREATE TABLE IF NOT EXISTS `index_outbox_blob` (`share_key` TEXT NOT NULL, `cls` INTEGER NOT NULL, `content_key` TEXT NOT NULL, " +
+      "`pack` TEXT NOT NULL, `byte_offset` INTEGER NOT NULL, `byte_length` INTEGER NOT NULL, `staged_at` INTEGER NOT NULL, " +
+      "PRIMARY KEY(`share_key`, `cls`, `content_key`))",
+    "CREATE INDEX IF NOT EXISTS `index_index_outbox_blob_pack` ON `index_outbox_blob` (`pack`)",
+    "CREATE TABLE IF NOT EXISTS `index_head` (`share_key` TEXT NOT NULL, `device_id` TEXT NOT NULL, `version` INTEGER NOT NULL, " +
+      "`content_hash` TEXT NOT NULL, `registry_version` INTEGER, `applied_at` INTEGER NOT NULL, PRIMARY KEY(`share_key`, `device_id`))",
+    "CREATE TABLE IF NOT EXISTS `index_segment` (`share_key` TEXT NOT NULL, `device_id` TEXT NOT NULL, `segment_hash` TEXT NOT NULL, " +
+      "`cls` INTEGER NOT NULL, `size` INTEGER NOT NULL, `state` TEXT NOT NULL, `pack_id` INTEGER, `updated_at` INTEGER NOT NULL, " +
+      "PRIMARY KEY(`share_key`, `device_id`, `segment_hash`))",
+    "CREATE INDEX IF NOT EXISTS `index_index_segment_share_key_state` ON `index_segment` (`share_key`, `state`)",
+    "CREATE TABLE IF NOT EXISTS `index_record` (`share_key` TEXT NOT NULL, `device_id` TEXT NOT NULL, `record_key` TEXT NOT NULL, " +
+      "`seq` INTEGER NOT NULL, `segment_hash` TEXT NOT NULL, `path` TEXT NOT NULL, `gone` INTEGER NOT NULL, `size` INTEGER, " +
+      "`modified_at` INTEGER, `file_id` INTEGER, `quick_hash` TEXT, `full_hash` TEXT, `content_key` INTEGER, `remote_media_id` TEXT, " +
+      "`remote_version_id` TEXT, `prep` INTEGER NOT NULL DEFAULT 0, `fail_code` TEXT, `fail_decoder` TEXT, `body` BLOB NOT NULL, " +
+      "PRIMARY KEY(`share_key`, `device_id`, `record_key`))",
+    "CREATE INDEX IF NOT EXISTS `index_index_record_share_key_record_key` ON `index_record` (`share_key`, `record_key`)",
+    "CREATE INDEX IF NOT EXISTS `index_index_record_share_key_device_id_segment_hash` ON `index_record` (`share_key`, `device_id`, `segment_hash`)",
+    "CREATE INDEX IF NOT EXISTS `index_index_record_content_key` ON `index_record` (`content_key`)",
+    "CREATE TABLE IF NOT EXISTS `replica_pack` (`pack_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `share_key` TEXT NOT NULL, " +
+      "`device_id` TEXT NOT NULL, `segment_hash` TEXT NOT NULL, `cls` INTEGER NOT NULL, `file_name` TEXT NOT NULL, `size` INTEGER NOT NULL, " +
+      "`created_at` INTEGER NOT NULL)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS `index_replica_pack_file_name` ON `replica_pack` (`file_name`)",
+    "CREATE INDEX IF NOT EXISTS `index_replica_pack_share_key_device_id_segment_hash` ON `replica_pack` (`share_key`, `device_id`, `segment_hash`)",
+    "CREATE TABLE IF NOT EXISTS `replica_blob` (`pack_id` INTEGER NOT NULL, `content_key` TEXT NOT NULL, `content_key_short` INTEGER NOT NULL, " +
+      "`cls` INTEGER NOT NULL, `byte_offset` INTEGER NOT NULL, `byte_length` INTEGER NOT NULL, PRIMARY KEY(`pack_id`, `content_key`), " +
+      "FOREIGN KEY(`pack_id`) REFERENCES `replica_pack`(`pack_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+    "CREATE INDEX IF NOT EXISTS `index_replica_blob_content_key_short_cls` ON `replica_blob` (`content_key_short`, `cls`)",
+    "CREATE TABLE IF NOT EXISTS `index_sync_state` (`share_key` TEXT NOT NULL, `last_sync_at` INTEGER, `last_complete_at` INTEGER, " +
+      "`denied_first_day` INTEGER, `denied_last_day` INTEGER, PRIMARY KEY(`share_key`))",
+    "CREATE TABLE IF NOT EXISTS `nas_op` (`op_id` TEXT NOT NULL, `kind` TEXT NOT NULL, `state` TEXT NOT NULL, `plan_hash` TEXT NOT NULL, " +
+      "`item_count` INTEGER NOT NULL, `total_bytes` INTEGER NOT NULL, `error_code` TEXT, `created_at` INTEGER NOT NULL, " +
+      "`updated_at` INTEGER NOT NULL, PRIMARY KEY(`op_id`))",
+    "CREATE INDEX IF NOT EXISTS `index_nas_op_state` ON `nas_op` (`state`)",
+    "CREATE TABLE IF NOT EXISTS `nas_op_item` (`op_id` TEXT NOT NULL, `item_index` INTEGER NOT NULL, `state` TEXT NOT NULL, " +
+      "`is_folder` INTEGER NOT NULL, `account_id` TEXT NOT NULL, `src_share` TEXT NOT NULL, `src_path` TEXT NOT NULL, `dst_share` TEXT, " +
+      "`dst_path` TEXT, `temp_name` TEXT, `size` INTEGER, `modified_at` INTEGER, `file_id` INTEGER, `sha256` TEXT, `trash_id` TEXT, " +
+      "`attempts` INTEGER NOT NULL DEFAULT 0, `next_attempt_at` INTEGER, `error_code` TEXT, `updated_at` INTEGER NOT NULL, " +
+      "PRIMARY KEY(`op_id`, `item_index`), FOREIGN KEY(`op_id`) REFERENCES `nas_op`(`op_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+    "CREATE INDEX IF NOT EXISTS `index_nas_op_item_state_next_attempt_at` ON `nas_op_item` (`state`, `next_attempt_at`)",
+    "CREATE TABLE IF NOT EXISTS `nas_trash_entry` (`trash_id` TEXT NOT NULL, `account_id` TEXT NOT NULL, `share_key` TEXT NOT NULL, " +
+      "`share_name` TEXT NOT NULL, `original_path` TEXT NOT NULL, `trashed_path` TEXT NOT NULL, `reason` TEXT NOT NULL, " +
+      "`is_folder` INTEGER NOT NULL, `size` INTEGER NOT NULL, `file_count` INTEGER, `trashed_at` INTEGER NOT NULL, `state` TEXT NOT NULL, " +
+      "`op_id` TEXT, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`trash_id`))",
+    "CREATE INDEX IF NOT EXISTS `index_nas_trash_entry_state_trashed_at` ON `nas_trash_entry` (`state`, `trashed_at`)",
+  )
 }
 
 /**

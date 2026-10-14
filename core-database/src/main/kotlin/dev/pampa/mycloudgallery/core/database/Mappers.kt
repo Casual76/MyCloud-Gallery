@@ -99,6 +99,7 @@ internal fun MediaLocationEntity.toDomain(): MediaLocation {
       account = AccountId(checkNotNull(accountId) { "Posizione NAS senza account." }),
       share = checkNotNull(shareName) { "Posizione NAS senza share." },
       path = NasPath.of(checkNotNull(nasPath) { "Posizione NAS senza percorso." }),
+      fileId = fileId,
     )
   }
   check(location.key.value == locationKey) { "La chiave salvata non corrisponde alla posizione." }
@@ -149,6 +150,7 @@ internal fun locationEntity(
     absentSince = absentSince,
     verifiedAt = verifiedAt,
     lastSeenAt = lastSeenAt,
+    fileId = nas?.fileId,
   )
 }
 

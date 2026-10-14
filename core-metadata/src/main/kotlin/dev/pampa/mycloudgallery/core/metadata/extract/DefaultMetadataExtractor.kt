@@ -179,8 +179,8 @@ class DefaultMetadataExtractor(
     if (tiffFile == null && scan.exifTiff != null) tiffFile = TiffParser.parse(ArrayAccess(scan.exifTiff))
     val exif = tiffFile?.let { ExifFacts.read(it, withThumbnail = previewDecoder != null) } ?: ExifFacts.EMPTY
 
-    val width = scan.width ?: exif.declaredSize?.first ?: hints.msWidth?.takeIf { it > 0 }
-    val height = scan.height ?: exif.declaredSize?.second ?: hints.msHeight?.takeIf { it > 0 }
+    val width = scan.width ?: exif.declaredSize?.first ?: hints.width?.takeIf { it > 0 }
+    val height = scan.height ?: exif.declaredSize?.second ?: hints.height?.takeIf { it > 0 }
     // HEIF/AVIF: le proprieta' `irot` e `imir` sono l'unica fonte (i decodificatori le applicano e ignorano l'Orientation dell'EXIF,
     // che le fotocamere scrivono in piu' e a volte contraddice: contarlo due volte ruoterebbe due volte). Per gli altri formati
     // vale l'EXIF e, in mancanza, la rotazione del MediaStore.
@@ -188,7 +188,7 @@ class DefaultMetadataExtractor(
       scan.heifOrientation ?: ExifOrientation.NORMAL
     } else {
       exif.orientation?.let { ExifOrientation.fromExif(it) }
-        ?: hints.msOrientation?.let { rotationOnly(it) }
+        ?: hints.orientation?.let { rotationOnly(it) }
         ?: ExifOrientation.NORMAL
     }
 
@@ -264,8 +264,8 @@ class DefaultMetadataExtractor(
       gpsUtc = exif.gpsUtc,
       gps = exif.gps,
       fileName = FileNameDates.parse(hints.displayName),
-      mediaStoreDateTakenMs = hints.msDateTakenMs,
-      fileModifiedMs = hints.msDateModifiedMs,
+      mediaStoreDateTakenMs = hints.dateTakenMs,
+      fileModifiedMs = hints.dateModifiedMs,
       scanZone = hints.scanZone,
       nowMs = clock(),
     )
@@ -347,7 +347,7 @@ class DefaultMetadataExtractor(
       null
     }
 
-    val rotation = facts?.rotation ?: hints.msOrientation?.let { rotationOnly(it).degrees } ?: 0
+    val rotation = facts?.rotation ?: hints.orientation?.let { rotationOnly(it).degrees } ?: 0
     val orientation = ExifOrientation.of(((rotation % 360) + 360) % 360 / 90 * 90, false)
     val traits = LinkedHashSet<MediaTrait>()
     traits += SourceClassifier.classify("", hints.relativePath, hints.displayName, null, hints.mime).traits
@@ -357,17 +357,17 @@ class DefaultMetadataExtractor(
       videoUtcMs = facts?.utcMs,
       videoGps = facts?.iso6709,
       fileName = FileNameDates.parse(hints.displayName),
-      mediaStoreDateTakenMs = hints.msDateTakenMs,
-      fileModifiedMs = hints.msDateModifiedMs,
+      mediaStoreDateTakenMs = hints.dateTakenMs,
+      fileModifiedMs = hints.dateModifiedMs,
       scanZone = hints.scanZone,
       nowMs = clock(),
     )
     val captureTime = CaptureTimeResolver.resolve(dateInputs, zones, neighborsFor(dateInputs, hints, null))
-    val duration = facts?.durationMs?.takeIf { it > 0 } ?: hints.msDurationMs?.takeIf { it >= 0 }
+    val duration = facts?.durationMs?.takeIf { it > 0 } ?: hints.durationMs?.takeIf { it >= 0 }
     val metadata = MediaMetadata(
       mimeType = sniffed.mime ?: hints.mime,
-      width = hints.msWidth?.takeIf { it > 0 },
-      height = hints.msHeight?.takeIf { it > 0 },
+      width = hints.width?.takeIf { it > 0 },
+      height = hints.height?.takeIf { it > 0 },
       orientationDegrees = orientation.degrees,
       durationMillis = duration,
       captureTime = captureTime,
@@ -410,7 +410,7 @@ class DefaultMetadataExtractor(
       val local = fn.date.atTime(fn.time ?: LocalTime.NOON)
       return if (fn.isUtc) local.toInstant(ZoneOffset.UTC).toEpochMilli() else ZonedDateTime.of(local, hints.scanZone).toInstant().toEpochMilli()
     }
-    return hints.msDateTakenMs ?: hints.msDateModifiedMs
+    return hints.dateTakenMs ?: hints.dateModifiedMs
   }
 
   /** Il luogo, solo se e' abbastanza vicino da dirne il nome (`CITY` o `NEAR`): oltre, "Firenze" per una foto a 120 km sarebbe una bugia. */

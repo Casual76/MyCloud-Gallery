@@ -1,0 +1,2408 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 3,
+    "identityHash": "58e59bf5ca255902ac07ca3064bf5d04",
+    "entities": [
+      {
+        "tableName": "media",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`media_id` TEXT NOT NULL, `kind` TEXT NOT NULL, `source` TEXT NOT NULL, `owner_account` TEXT, `group_id` TEXT, `current_version_id` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, `sort_time` INTEGER NOT NULL, `presence` TEXT NOT NULL, `safety` TEXT NOT NULL, `local_day` INTEGER NOT NULL DEFAULT 0, `aspect_milli` INTEGER NOT NULL DEFAULT 1000, `duration_ms` INTEGER, `place_id` INTEGER, `cell_flags` INTEGER NOT NULL DEFAULT 0, `thumb_hash` BLOB, PRIMARY KEY(`media_id`), FOREIGN KEY(`media_id`, `current_version_id`) REFERENCES `media_version`(`media_id`, `version_id`) ON UPDATE NO ACTION ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED, FOREIGN KEY(`group_id`) REFERENCES `media_group`(`group_id`) ON UPDATE NO ACTION ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED)",
+        "fields": [
+          {
+            "fieldPath": "mediaId",
+            "columnName": "media_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerAccount",
+            "columnName": "owner_account",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "groupId",
+            "columnName": "group_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "currentVersionId",
+            "columnName": "current_version_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sortTime",
+            "columnName": "sort_time",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "presence",
+            "columnName": "presence",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "safety",
+            "columnName": "safety",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "localDay",
+            "columnName": "local_day",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "aspectMilli",
+            "columnName": "aspect_milli",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "1000"
+          },
+          {
+            "fieldPath": "durationMs",
+            "columnName": "duration_ms",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "placeId",
+            "columnName": "place_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "cellFlags",
+            "columnName": "cell_flags",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "thumbHash",
+            "columnName": "thumb_hash",
+            "affinity": "BLOB"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "media_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_media_sort_time_media_id",
+            "unique": false,
+            "columnNames": [
+              "sort_time",
+              "media_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_sort_time_media_id` ON `${TABLE_NAME}` (`sort_time`, `media_id`)"
+          },
+          {
+            "name": "index_media_source_sort_time",
+            "unique": false,
+            "columnNames": [
+              "source",
+              "sort_time"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_source_sort_time` ON `${TABLE_NAME}` (`source`, `sort_time`)"
+          },
+          {
+            "name": "index_media_safety",
+            "unique": false,
+            "columnNames": [
+              "safety"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_safety` ON `${TABLE_NAME}` (`safety`)"
+          },
+          {
+            "name": "index_media_group_id",
+            "unique": false,
+            "columnNames": [
+              "group_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_group_id` ON `${TABLE_NAME}` (`group_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "media_version",
+            "onDelete": "NO ACTION",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "media_id",
+              "current_version_id"
+            ],
+            "referencedColumns": [
+              "media_id",
+              "version_id"
+            ]
+          },
+          {
+            "table": "media_group",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "group_id"
+            ],
+            "referencedColumns": [
+              "group_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "media_version",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`version_id` TEXT NOT NULL, `media_id` TEXT NOT NULL, `kind` TEXT NOT NULL, `parent_version_id` TEXT, `size` INTEGER NOT NULL, `quick_hash` TEXT NOT NULL, `full_hash` TEXT, `corrections` TEXT NOT NULL, `created_at` INTEGER NOT NULL, PRIMARY KEY(`version_id`), FOREIGN KEY(`media_id`) REFERENCES `media`(`media_id`) ON UPDATE NO ACTION ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED, FOREIGN KEY(`parent_version_id`) REFERENCES `media_version`(`version_id`) ON UPDATE NO ACTION ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED)",
+        "fields": [
+          {
+            "fieldPath": "versionId",
+            "columnName": "version_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mediaId",
+            "columnName": "media_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "parentVersionId",
+            "columnName": "parent_version_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "size",
+            "columnName": "size",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "quickHash",
+            "columnName": "quick_hash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fullHash",
+            "columnName": "full_hash",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "corrections",
+            "columnName": "corrections",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "version_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_media_version_media_id_version_id",
+            "unique": true,
+            "columnNames": [
+              "media_id",
+              "version_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_media_version_media_id_version_id` ON `${TABLE_NAME}` (`media_id`, `version_id`)"
+          },
+          {
+            "name": "index_media_version_size_quick_hash",
+            "unique": false,
+            "columnNames": [
+              "size",
+              "quick_hash"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_version_size_quick_hash` ON `${TABLE_NAME}` (`size`, `quick_hash`)"
+          },
+          {
+            "name": "index_media_version_full_hash",
+            "unique": false,
+            "columnNames": [
+              "full_hash"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_version_full_hash` ON `${TABLE_NAME}` (`full_hash`)"
+          },
+          {
+            "name": "index_media_version_parent_version_id",
+            "unique": false,
+            "columnNames": [
+              "parent_version_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_version_parent_version_id` ON `${TABLE_NAME}` (`parent_version_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "media",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "media_id"
+            ],
+            "referencedColumns": [
+              "media_id"
+            ]
+          },
+          {
+            "table": "media_version",
+            "onDelete": "NO ACTION",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "parent_version_id"
+            ],
+            "referencedColumns": [
+              "version_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "media_location",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`location_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `version_id` TEXT NOT NULL, `location_type` TEXT NOT NULL, `location_key` TEXT NOT NULL, `folder_key` TEXT NOT NULL, `state` TEXT NOT NULL, `volume` TEXT, `relative_path` TEXT, `display_name` TEXT, `media_store_id` INTEGER, `media_store_version` TEXT, `generation` INTEGER, `account_id` TEXT, `share_name` TEXT, `share_key` TEXT, `nas_path` TEXT, `size` INTEGER NOT NULL, `modified_at` INTEGER NOT NULL, `absent_since` INTEGER, `verified_at` INTEGER, `last_seen_at` INTEGER NOT NULL, `file_id` INTEGER, FOREIGN KEY(`version_id`) REFERENCES `media_version`(`version_id`) ON UPDATE NO ACTION ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED)",
+        "fields": [
+          {
+            "fieldPath": "locationId",
+            "columnName": "location_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "versionId",
+            "columnName": "version_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "locationType",
+            "columnName": "location_type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "locationKey",
+            "columnName": "location_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "folderKey",
+            "columnName": "folder_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "volume",
+            "columnName": "volume",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "relativePath",
+            "columnName": "relative_path",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "displayName",
+            "columnName": "display_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "mediaStoreId",
+            "columnName": "media_store_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "mediaStoreVersion",
+            "columnName": "media_store_version",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "generation",
+            "columnName": "generation",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "accountId",
+            "columnName": "account_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "shareName",
+            "columnName": "share_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "shareKey",
+            "columnName": "share_key",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "nasPath",
+            "columnName": "nas_path",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "size",
+            "columnName": "size",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "modifiedAt",
+            "columnName": "modified_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "absentSince",
+            "columnName": "absent_since",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "verifiedAt",
+            "columnName": "verified_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastSeenAt",
+            "columnName": "last_seen_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fileId",
+            "columnName": "file_id",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "location_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_media_location_location_key",
+            "unique": true,
+            "columnNames": [
+              "location_key"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_media_location_location_key` ON `${TABLE_NAME}` (`location_key`)"
+          },
+          {
+            "name": "index_media_location_version_id",
+            "unique": false,
+            "columnNames": [
+              "version_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_location_version_id` ON `${TABLE_NAME}` (`version_id`)"
+          },
+          {
+            "name": "index_media_location_folder_key",
+            "unique": false,
+            "columnNames": [
+              "folder_key"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_location_folder_key` ON `${TABLE_NAME}` (`folder_key`)"
+          },
+          {
+            "name": "index_media_location_volume_media_store_id",
+            "unique": false,
+            "columnNames": [
+              "volume",
+              "media_store_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_location_volume_media_store_id` ON `${TABLE_NAME}` (`volume`, `media_store_id`)"
+          },
+          {
+            "name": "index_media_location_state_absent_since",
+            "unique": false,
+            "columnNames": [
+              "state",
+              "absent_since"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_location_state_absent_since` ON `${TABLE_NAME}` (`state`, `absent_since`)"
+          },
+          {
+            "name": "index_media_location_account_id_share_key_last_seen_at",
+            "unique": false,
+            "columnNames": [
+              "account_id",
+              "share_key",
+              "last_seen_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_location_account_id_share_key_last_seen_at` ON `${TABLE_NAME}` (`account_id`, `share_key`, `last_seen_at`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "media_version",
+            "onDelete": "NO ACTION",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "version_id"
+            ],
+            "referencedColumns": [
+              "version_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "version_metadata",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`version_id` TEXT NOT NULL, `mime_type` TEXT, `width` INTEGER, `height` INTEGER, `orientation` INTEGER NOT NULL, `duration_ms` INTEGER, `taken_at_utc` INTEGER, `taken_offset_min` INTEGER, `taken_confidence` TEXT, `taken_source` TEXT, `latitude` REAL, `longitude` REAL, `altitude` REAL, `updated_at` INTEGER NOT NULL, `mirrored` INTEGER NOT NULL DEFAULT 0, `traits` INTEGER NOT NULL DEFAULT 0, `place_id` INTEGER, `place_dataset` INTEGER, `thumb_hash` BLOB, PRIMARY KEY(`version_id`), FOREIGN KEY(`version_id`) REFERENCES `media_version`(`version_id`) ON UPDATE NO ACTION ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED)",
+        "fields": [
+          {
+            "fieldPath": "versionId",
+            "columnName": "version_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mimeType",
+            "columnName": "mime_type",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "width",
+            "columnName": "width",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "height",
+            "columnName": "height",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "orientation",
+            "columnName": "orientation",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "durationMs",
+            "columnName": "duration_ms",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "takenAtUtc",
+            "columnName": "taken_at_utc",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "takenOffsetMinutes",
+            "columnName": "taken_offset_min",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "takenConfidence",
+            "columnName": "taken_confidence",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "takenSource",
+            "columnName": "taken_source",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "latitude",
+            "columnName": "latitude",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "longitude",
+            "columnName": "longitude",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "altitude",
+            "columnName": "altitude",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mirrored",
+            "columnName": "mirrored",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "traits",
+            "columnName": "traits",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "placeId",
+            "columnName": "place_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "placeDataset",
+            "columnName": "place_dataset",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "thumbHash",
+            "columnName": "thumb_hash",
+            "affinity": "BLOB"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "version_id"
+          ]
+        },
+        "foreignKeys": [
+          {
+            "table": "media_version",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "version_id"
+            ],
+            "referencedColumns": [
+              "version_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "nas_share",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`account_id` TEXT NOT NULL, `share_key` TEXT NOT NULL, `share_name` TEXT NOT NULL, `area` TEXT NOT NULL, PRIMARY KEY(`account_id`, `share_key`))",
+        "fields": [
+          {
+            "fieldPath": "accountId",
+            "columnName": "account_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "shareKey",
+            "columnName": "share_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "shareName",
+            "columnName": "share_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "area",
+            "columnName": "area",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "account_id",
+            "share_key"
+          ]
+        }
+      },
+      {
+        "tableName": "media_group",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`group_id` TEXT NOT NULL, `kind` TEXT NOT NULL, `cover_media_id` TEXT, `created_at` INTEGER NOT NULL, PRIMARY KEY(`group_id`), FOREIGN KEY(`cover_media_id`) REFERENCES `media`(`media_id`) ON UPDATE NO ACTION ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED)",
+        "fields": [
+          {
+            "fieldPath": "groupId",
+            "columnName": "group_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "coverMediaId",
+            "columnName": "cover_media_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "group_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_media_group_cover_media_id",
+            "unique": false,
+            "columnNames": [
+              "cover_media_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_group_cover_media_id` ON `${TABLE_NAME}` (`cover_media_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "media",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "cover_media_id"
+            ],
+            "referencedColumns": [
+              "media_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "media_alias",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`alias_id` TEXT NOT NULL, `media_id` TEXT NOT NULL, `merged_at` INTEGER NOT NULL, PRIMARY KEY(`alias_id`), FOREIGN KEY(`media_id`) REFERENCES `media`(`media_id`) ON UPDATE NO ACTION ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED)",
+        "fields": [
+          {
+            "fieldPath": "aliasId",
+            "columnName": "alias_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mediaId",
+            "columnName": "media_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mergedAt",
+            "columnName": "merged_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "alias_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_media_alias_media_id",
+            "unique": false,
+            "columnNames": [
+              "media_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_alias_media_id` ON `${TABLE_NAME}` (`media_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "media",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "media_id"
+            ],
+            "referencedColumns": [
+              "media_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "work_state",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`media_id` TEXT NOT NULL, `stage` TEXT NOT NULL, `status` TEXT NOT NULL, `version_id` TEXT, `attempts` INTEGER NOT NULL, `last_error` TEXT, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`media_id`, `stage`), FOREIGN KEY(`media_id`) REFERENCES `media`(`media_id`) ON UPDATE NO ACTION ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED, FOREIGN KEY(`version_id`) REFERENCES `media_version`(`version_id`) ON UPDATE NO ACTION ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED)",
+        "fields": [
+          {
+            "fieldPath": "mediaId",
+            "columnName": "media_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stage",
+            "columnName": "stage",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "versionId",
+            "columnName": "version_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "attempts",
+            "columnName": "attempts",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastError",
+            "columnName": "last_error",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "media_id",
+            "stage"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_work_state_stage_status_updated_at",
+            "unique": false,
+            "columnNames": [
+              "stage",
+              "status",
+              "updated_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_work_state_stage_status_updated_at` ON `${TABLE_NAME}` (`stage`, `status`, `updated_at`)"
+          },
+          {
+            "name": "index_work_state_version_id",
+            "unique": false,
+            "columnNames": [
+              "version_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_work_state_version_id` ON `${TABLE_NAME}` (`version_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "media",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "media_id"
+            ],
+            "referencedColumns": [
+              "media_id"
+            ]
+          },
+          {
+            "table": "media_version",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "version_id"
+            ],
+            "referencedColumns": [
+              "version_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "embedding",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`media_id` TEXT NOT NULL, `space_id` TEXT NOT NULL, `dimension` INTEGER NOT NULL, `precision` TEXT NOT NULL, `vector_index` INTEGER NOT NULL, `vector` BLOB NOT NULL, `version_id` TEXT, `created_at` INTEGER NOT NULL, PRIMARY KEY(`media_id`, `space_id`, `dimension`, `precision`, `vector_index`), FOREIGN KEY(`media_id`) REFERENCES `media`(`media_id`) ON UPDATE NO ACTION ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED, FOREIGN KEY(`version_id`) REFERENCES `media_version`(`version_id`) ON UPDATE NO ACTION ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED)",
+        "fields": [
+          {
+            "fieldPath": "mediaId",
+            "columnName": "media_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "spaceId",
+            "columnName": "space_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dimension",
+            "columnName": "dimension",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "precision",
+            "columnName": "precision",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "vectorIndex",
+            "columnName": "vector_index",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "vector",
+            "columnName": "vector",
+            "affinity": "BLOB",
+            "notNull": true
+          },
+          {
+            "fieldPath": "versionId",
+            "columnName": "version_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "media_id",
+            "space_id",
+            "dimension",
+            "precision",
+            "vector_index"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_embedding_space_id_dimension_precision_media_id_vector_index",
+            "unique": false,
+            "columnNames": [
+              "space_id",
+              "dimension",
+              "precision",
+              "media_id",
+              "vector_index"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_embedding_space_id_dimension_precision_media_id_vector_index` ON `${TABLE_NAME}` (`space_id`, `dimension`, `precision`, `media_id`, `vector_index`)"
+          },
+          {
+            "name": "index_embedding_version_id",
+            "unique": false,
+            "columnNames": [
+              "version_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_embedding_version_id` ON `${TABLE_NAME}` (`version_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "media",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "media_id"
+            ],
+            "referencedColumns": [
+              "media_id"
+            ]
+          },
+          {
+            "table": "media_version",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "version_id"
+            ],
+            "referencedColumns": [
+              "version_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "media_personal",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`media_id` TEXT NOT NULL, `favorite` INTEGER NOT NULL, `hidden` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, `favorite_changed_at` INTEGER NOT NULL DEFAULT 0, `hidden_changed_at` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`media_id`), FOREIGN KEY(`media_id`) REFERENCES `media`(`media_id`) ON UPDATE NO ACTION ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED)",
+        "fields": [
+          {
+            "fieldPath": "mediaId",
+            "columnName": "media_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "favorite",
+            "columnName": "favorite",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hidden",
+            "columnName": "hidden",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "favoriteChangedAt",
+            "columnName": "favorite_changed_at",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "hiddenChangedAt",
+            "columnName": "hidden_changed_at",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "media_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_media_personal_favorite",
+            "unique": false,
+            "columnNames": [
+              "favorite"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_personal_favorite` ON `${TABLE_NAME}` (`favorite`)"
+          },
+          {
+            "name": "index_media_personal_hidden",
+            "unique": false,
+            "columnNames": [
+              "hidden"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_media_personal_hidden` ON `${TABLE_NAME}` (`hidden`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "media",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "media_id"
+            ],
+            "referencedColumns": [
+              "media_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "album",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`album_id` TEXT NOT NULL, `title` TEXT NOT NULL, `cover_media_id` TEXT, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`album_id`), FOREIGN KEY(`cover_media_id`) REFERENCES `media`(`media_id`) ON UPDATE NO ACTION ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED)",
+        "fields": [
+          {
+            "fieldPath": "albumId",
+            "columnName": "album_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "coverMediaId",
+            "columnName": "cover_media_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "album_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_album_cover_media_id",
+            "unique": false,
+            "columnNames": [
+              "cover_media_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_album_cover_media_id` ON `${TABLE_NAME}` (`cover_media_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "media",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "cover_media_id"
+            ],
+            "referencedColumns": [
+              "media_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "album_item",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`album_id` TEXT NOT NULL, `media_id` TEXT NOT NULL, `position` INTEGER NOT NULL, `added_at` INTEGER NOT NULL, PRIMARY KEY(`album_id`, `media_id`), FOREIGN KEY(`album_id`) REFERENCES `album`(`album_id`) ON UPDATE NO ACTION ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED, FOREIGN KEY(`media_id`) REFERENCES `media`(`media_id`) ON UPDATE NO ACTION ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED)",
+        "fields": [
+          {
+            "fieldPath": "albumId",
+            "columnName": "album_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mediaId",
+            "columnName": "media_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "position",
+            "columnName": "position",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "addedAt",
+            "columnName": "added_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "album_id",
+            "media_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_album_item_media_id",
+            "unique": false,
+            "columnNames": [
+              "media_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_album_item_media_id` ON `${TABLE_NAME}` (`media_id`)"
+          },
+          {
+            "name": "index_album_item_album_id_position",
+            "unique": false,
+            "columnNames": [
+              "album_id",
+              "position"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_album_item_album_id_position` ON `${TABLE_NAME}` (`album_id`, `position`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "album",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "album_id"
+            ],
+            "referencedColumns": [
+              "album_id"
+            ]
+          },
+          {
+            "table": "media",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "media_id"
+            ],
+            "referencedColumns": [
+              "media_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "media_store_cursor",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`volume` TEXT NOT NULL, `ms_version` TEXT, `generation` INTEGER, `deleted_generation` INTEGER, `scan_epoch` INTEGER, `scan_resume_after_id` INTEGER, `last_full_scan_at` INTEGER, `last_reconcile_at` INTEGER, PRIMARY KEY(`volume`))",
+        "fields": [
+          {
+            "fieldPath": "volume",
+            "columnName": "volume",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "msVersion",
+            "columnName": "ms_version",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "generation",
+            "columnName": "generation",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "deletedGeneration",
+            "columnName": "deleted_generation",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "scanEpoch",
+            "columnName": "scan_epoch",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "scanResumeAfterId",
+            "columnName": "scan_resume_after_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastFullScanAt",
+            "columnName": "last_full_scan_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastReconcileAt",
+            "columnName": "last_reconcile_at",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "volume"
+          ]
+        }
+      },
+      {
+        "tableName": "catalog_meta",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`key` TEXT NOT NULL, `value` INTEGER NOT NULL, PRIMARY KEY(`key`))",
+        "fields": [
+          {
+            "fieldPath": "key",
+            "columnName": "key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "value",
+            "columnName": "value",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "key"
+          ]
+        }
+      },
+      {
+        "tableName": "nas_scan_state",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`account_id` TEXT NOT NULL, `share_key` TEXT NOT NULL, `share_name` TEXT NOT NULL, `epoch` INTEGER, `resume_after` TEXT, `last_full_scan_at` INTEGER, `freeze_reason` TEXT, `freeze_since` INTEGER, `freeze_known_present` INTEGER, `freeze_vanished` INTEGER, `freeze_changed` INTEGER, `freeze_not_media` INTEGER, PRIMARY KEY(`account_id`, `share_key`))",
+        "fields": [
+          {
+            "fieldPath": "accountId",
+            "columnName": "account_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "shareKey",
+            "columnName": "share_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "shareName",
+            "columnName": "share_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "epoch",
+            "columnName": "epoch",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "resumeAfter",
+            "columnName": "resume_after",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastFullScanAt",
+            "columnName": "last_full_scan_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "freezeReason",
+            "columnName": "freeze_reason",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "freezeSince",
+            "columnName": "freeze_since",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "freezeKnownPresent",
+            "columnName": "freeze_known_present",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "freezeVanished",
+            "columnName": "freeze_vanished",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "freezeChanged",
+            "columnName": "freeze_changed",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "freezeNotMedia",
+            "columnName": "freeze_not_media",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "account_id",
+            "share_key"
+          ]
+        }
+      },
+      {
+        "tableName": "index_publish_state",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`share_key` TEXT NOT NULL, `next_seq` INTEGER NOT NULL, `head_version` INTEGER NOT NULL DEFAULT 0, `head_hash` TEXT, `head_published_at` INTEGER, PRIMARY KEY(`share_key`))",
+        "fields": [
+          {
+            "fieldPath": "shareKey",
+            "columnName": "share_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nextSeq",
+            "columnName": "next_seq",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "headVersion",
+            "columnName": "head_version",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "headHash",
+            "columnName": "head_hash",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "headPublishedAt",
+            "columnName": "head_published_at",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "share_key"
+          ]
+        }
+      },
+      {
+        "tableName": "index_own_segment",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`share_key` TEXT NOT NULL, `segment_hash` TEXT NOT NULL, `cls` INTEGER NOT NULL, `size` INTEGER NOT NULL, `entries` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, PRIMARY KEY(`share_key`, `segment_hash`))",
+        "fields": [
+          {
+            "fieldPath": "shareKey",
+            "columnName": "share_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "segmentHash",
+            "columnName": "segment_hash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cls",
+            "columnName": "cls",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "size",
+            "columnName": "size",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "entries",
+            "columnName": "entries",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "share_key",
+            "segment_hash"
+          ]
+        }
+      },
+      {
+        "tableName": "index_outbox_record",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`share_key` TEXT NOT NULL, `record_key` TEXT NOT NULL, `seq` INTEGER NOT NULL, `path` TEXT NOT NULL, `gone` INTEGER NOT NULL, `body` BLOB NOT NULL, `staged_at` INTEGER NOT NULL, PRIMARY KEY(`share_key`, `record_key`))",
+        "fields": [
+          {
+            "fieldPath": "shareKey",
+            "columnName": "share_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recordKey",
+            "columnName": "record_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "seq",
+            "columnName": "seq",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "path",
+            "columnName": "path",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gone",
+            "columnName": "gone",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "body",
+            "columnName": "body",
+            "affinity": "BLOB",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stagedAt",
+            "columnName": "staged_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "share_key",
+            "record_key"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_index_outbox_record_share_key_seq",
+            "unique": false,
+            "columnNames": [
+              "share_key",
+              "seq"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_index_outbox_record_share_key_seq` ON `${TABLE_NAME}` (`share_key`, `seq`)"
+          }
+        ]
+      },
+      {
+        "tableName": "index_outbox_blob",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`share_key` TEXT NOT NULL, `cls` INTEGER NOT NULL, `content_key` TEXT NOT NULL, `pack` TEXT NOT NULL, `byte_offset` INTEGER NOT NULL, `byte_length` INTEGER NOT NULL, `staged_at` INTEGER NOT NULL, PRIMARY KEY(`share_key`, `cls`, `content_key`))",
+        "fields": [
+          {
+            "fieldPath": "shareKey",
+            "columnName": "share_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cls",
+            "columnName": "cls",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contentKey",
+            "columnName": "content_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pack",
+            "columnName": "pack",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "offset",
+            "columnName": "byte_offset",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "length",
+            "columnName": "byte_length",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stagedAt",
+            "columnName": "staged_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "share_key",
+            "cls",
+            "content_key"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_index_outbox_blob_pack",
+            "unique": false,
+            "columnNames": [
+              "pack"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_index_outbox_blob_pack` ON `${TABLE_NAME}` (`pack`)"
+          }
+        ]
+      },
+      {
+        "tableName": "index_head",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`share_key` TEXT NOT NULL, `device_id` TEXT NOT NULL, `version` INTEGER NOT NULL, `content_hash` TEXT NOT NULL, `registry_version` INTEGER, `applied_at` INTEGER NOT NULL, PRIMARY KEY(`share_key`, `device_id`))",
+        "fields": [
+          {
+            "fieldPath": "shareKey",
+            "columnName": "share_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deviceId",
+            "columnName": "device_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "version",
+            "columnName": "version",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contentHash",
+            "columnName": "content_hash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "registryVersion",
+            "columnName": "registry_version",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "appliedAt",
+            "columnName": "applied_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "share_key",
+            "device_id"
+          ]
+        }
+      },
+      {
+        "tableName": "index_segment",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`share_key` TEXT NOT NULL, `device_id` TEXT NOT NULL, `segment_hash` TEXT NOT NULL, `cls` INTEGER NOT NULL, `size` INTEGER NOT NULL, `state` TEXT NOT NULL, `pack_id` INTEGER, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`share_key`, `device_id`, `segment_hash`))",
+        "fields": [
+          {
+            "fieldPath": "shareKey",
+            "columnName": "share_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deviceId",
+            "columnName": "device_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "segmentHash",
+            "columnName": "segment_hash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cls",
+            "columnName": "cls",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "size",
+            "columnName": "size",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "packId",
+            "columnName": "pack_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "share_key",
+            "device_id",
+            "segment_hash"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_index_segment_share_key_state",
+            "unique": false,
+            "columnNames": [
+              "share_key",
+              "state"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_index_segment_share_key_state` ON `${TABLE_NAME}` (`share_key`, `state`)"
+          }
+        ]
+      },
+      {
+        "tableName": "index_record",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`share_key` TEXT NOT NULL, `device_id` TEXT NOT NULL, `record_key` TEXT NOT NULL, `seq` INTEGER NOT NULL, `segment_hash` TEXT NOT NULL, `path` TEXT NOT NULL, `gone` INTEGER NOT NULL, `size` INTEGER, `modified_at` INTEGER, `file_id` INTEGER, `quick_hash` TEXT, `full_hash` TEXT, `content_key` INTEGER, `remote_media_id` TEXT, `remote_version_id` TEXT, `prep` INTEGER NOT NULL DEFAULT 0, `fail_code` TEXT, `fail_decoder` TEXT, `body` BLOB NOT NULL, PRIMARY KEY(`share_key`, `device_id`, `record_key`))",
+        "fields": [
+          {
+            "fieldPath": "shareKey",
+            "columnName": "share_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deviceId",
+            "columnName": "device_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recordKey",
+            "columnName": "record_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "seq",
+            "columnName": "seq",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "segmentHash",
+            "columnName": "segment_hash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "path",
+            "columnName": "path",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gone",
+            "columnName": "gone",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "size",
+            "columnName": "size",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "modifiedAt",
+            "columnName": "modified_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "fileId",
+            "columnName": "file_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "quickHash",
+            "columnName": "quick_hash",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "fullHash",
+            "columnName": "full_hash",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "contentKey",
+            "columnName": "content_key",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "remoteMediaId",
+            "columnName": "remote_media_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "remoteVersionId",
+            "columnName": "remote_version_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "prep",
+            "columnName": "prep",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "failCode",
+            "columnName": "fail_code",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "failDecoder",
+            "columnName": "fail_decoder",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "body",
+            "columnName": "body",
+            "affinity": "BLOB",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "share_key",
+            "device_id",
+            "record_key"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_index_record_share_key_record_key",
+            "unique": false,
+            "columnNames": [
+              "share_key",
+              "record_key"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_index_record_share_key_record_key` ON `${TABLE_NAME}` (`share_key`, `record_key`)"
+          },
+          {
+            "name": "index_index_record_share_key_device_id_segment_hash",
+            "unique": false,
+            "columnNames": [
+              "share_key",
+              "device_id",
+              "segment_hash"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_index_record_share_key_device_id_segment_hash` ON `${TABLE_NAME}` (`share_key`, `device_id`, `segment_hash`)"
+          },
+          {
+            "name": "index_index_record_content_key",
+            "unique": false,
+            "columnNames": [
+              "content_key"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_index_record_content_key` ON `${TABLE_NAME}` (`content_key`)"
+          }
+        ]
+      },
+      {
+        "tableName": "replica_pack",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`pack_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `share_key` TEXT NOT NULL, `device_id` TEXT NOT NULL, `segment_hash` TEXT NOT NULL, `cls` INTEGER NOT NULL, `file_name` TEXT NOT NULL, `size` INTEGER NOT NULL, `created_at` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "packId",
+            "columnName": "pack_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "shareKey",
+            "columnName": "share_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deviceId",
+            "columnName": "device_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "segmentHash",
+            "columnName": "segment_hash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cls",
+            "columnName": "cls",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fileName",
+            "columnName": "file_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "size",
+            "columnName": "size",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "pack_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_replica_pack_file_name",
+            "unique": true,
+            "columnNames": [
+              "file_name"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_replica_pack_file_name` ON `${TABLE_NAME}` (`file_name`)"
+          },
+          {
+            "name": "index_replica_pack_share_key_device_id_segment_hash",
+            "unique": false,
+            "columnNames": [
+              "share_key",
+              "device_id",
+              "segment_hash"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_replica_pack_share_key_device_id_segment_hash` ON `${TABLE_NAME}` (`share_key`, `device_id`, `segment_hash`)"
+          }
+        ]
+      },
+      {
+        "tableName": "replica_blob",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`pack_id` INTEGER NOT NULL, `content_key` TEXT NOT NULL, `content_key_short` INTEGER NOT NULL, `cls` INTEGER NOT NULL, `byte_offset` INTEGER NOT NULL, `byte_length` INTEGER NOT NULL, PRIMARY KEY(`pack_id`, `content_key`), FOREIGN KEY(`pack_id`) REFERENCES `replica_pack`(`pack_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "packId",
+            "columnName": "pack_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contentKey",
+            "columnName": "content_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contentKeyShort",
+            "columnName": "content_key_short",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cls",
+            "columnName": "cls",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "offset",
+            "columnName": "byte_offset",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "length",
+            "columnName": "byte_length",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "pack_id",
+            "content_key"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_replica_blob_content_key_short_cls",
+            "unique": false,
+            "columnNames": [
+              "content_key_short",
+              "cls"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_replica_blob_content_key_short_cls` ON `${TABLE_NAME}` (`content_key_short`, `cls`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "replica_pack",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "pack_id"
+            ],
+            "referencedColumns": [
+              "pack_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "index_sync_state",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`share_key` TEXT NOT NULL, `last_sync_at` INTEGER, `last_complete_at` INTEGER, `denied_first_day` INTEGER, `denied_last_day` INTEGER, PRIMARY KEY(`share_key`))",
+        "fields": [
+          {
+            "fieldPath": "shareKey",
+            "columnName": "share_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncAt",
+            "columnName": "last_sync_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastCompleteAt",
+            "columnName": "last_complete_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "deniedFirstDay",
+            "columnName": "denied_first_day",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "deniedLastDay",
+            "columnName": "denied_last_day",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "share_key"
+          ]
+        }
+      },
+      {
+        "tableName": "nas_op",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`op_id` TEXT NOT NULL, `kind` TEXT NOT NULL, `state` TEXT NOT NULL, `plan_hash` TEXT NOT NULL, `item_count` INTEGER NOT NULL, `total_bytes` INTEGER NOT NULL, `error_code` TEXT, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`op_id`))",
+        "fields": [
+          {
+            "fieldPath": "opId",
+            "columnName": "op_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "kind",
+            "columnName": "kind",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "planHash",
+            "columnName": "plan_hash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "itemCount",
+            "columnName": "item_count",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalBytes",
+            "columnName": "total_bytes",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "errorCode",
+            "columnName": "error_code",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "op_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_nas_op_state",
+            "unique": false,
+            "columnNames": [
+              "state"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_nas_op_state` ON `${TABLE_NAME}` (`state`)"
+          }
+        ]
+      },
+      {
+        "tableName": "nas_op_item",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`op_id` TEXT NOT NULL, `item_index` INTEGER NOT NULL, `state` TEXT NOT NULL, `is_folder` INTEGER NOT NULL, `account_id` TEXT NOT NULL, `src_share` TEXT NOT NULL, `src_path` TEXT NOT NULL, `dst_share` TEXT, `dst_path` TEXT, `temp_name` TEXT, `size` INTEGER, `modified_at` INTEGER, `file_id` INTEGER, `sha256` TEXT, `trash_id` TEXT, `attempts` INTEGER NOT NULL DEFAULT 0, `next_attempt_at` INTEGER, `error_code` TEXT, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`op_id`, `item_index`), FOREIGN KEY(`op_id`) REFERENCES `nas_op`(`op_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "opId",
+            "columnName": "op_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "itemIndex",
+            "columnName": "item_index",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isFolder",
+            "columnName": "is_folder",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "accountId",
+            "columnName": "account_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "srcShare",
+            "columnName": "src_share",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "srcPath",
+            "columnName": "src_path",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dstShare",
+            "columnName": "dst_share",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "dstPath",
+            "columnName": "dst_path",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "tempName",
+            "columnName": "temp_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "size",
+            "columnName": "size",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "modifiedAt",
+            "columnName": "modified_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "fileId",
+            "columnName": "file_id",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "sha256",
+            "columnName": "sha256",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "trashId",
+            "columnName": "trash_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "attempts",
+            "columnName": "attempts",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "nextAttemptAt",
+            "columnName": "next_attempt_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "errorCode",
+            "columnName": "error_code",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "op_id",
+            "item_index"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_nas_op_item_state_next_attempt_at",
+            "unique": false,
+            "columnNames": [
+              "state",
+              "next_attempt_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_nas_op_item_state_next_attempt_at` ON `${TABLE_NAME}` (`state`, `next_attempt_at`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "nas_op",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "op_id"
+            ],
+            "referencedColumns": [
+              "op_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "nas_trash_entry",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`trash_id` TEXT NOT NULL, `account_id` TEXT NOT NULL, `share_key` TEXT NOT NULL, `share_name` TEXT NOT NULL, `original_path` TEXT NOT NULL, `trashed_path` TEXT NOT NULL, `reason` TEXT NOT NULL, `is_folder` INTEGER NOT NULL, `size` INTEGER NOT NULL, `file_count` INTEGER, `trashed_at` INTEGER NOT NULL, `state` TEXT NOT NULL, `op_id` TEXT, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`trash_id`))",
+        "fields": [
+          {
+            "fieldPath": "trashId",
+            "columnName": "trash_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "accountId",
+            "columnName": "account_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "shareKey",
+            "columnName": "share_key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "shareName",
+            "columnName": "share_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "originalPath",
+            "columnName": "original_path",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "trashedPath",
+            "columnName": "trashed_path",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reason",
+            "columnName": "reason",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isFolder",
+            "columnName": "is_folder",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "size",
+            "columnName": "size",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fileCount",
+            "columnName": "file_count",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "trashedAt",
+            "columnName": "trashed_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "opId",
+            "columnName": "op_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "trash_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_nas_trash_entry_state_trashed_at",
+            "unique": false,
+            "columnNames": [
+              "state",
+              "trashed_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_nas_trash_entry_state_trashed_at` ON `${TABLE_NAME}` (`state`, `trashed_at`)"
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '58e59bf5ca255902ac07ca3064bf5d04')"
+    ]
+  }
+}

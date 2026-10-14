@@ -5,27 +5,55 @@ import java.io.File
 import org.json.JSONObject
 
 /**
+ * I due dataset della variante di misura (Fase 4A, P10; docs/fase4-progetto.md §5.6). Stessa libreria di 100 mila righe,
+ * stessa distribuzione di date, luoghi e proporzioni della Fase 3 (cosi' la guardia confronta mele con mele); cambia
+ * **da dove vengono i pixel**:
+ *
+ * - [MIXED], il default: le [HEAD_PHONE_ROWS] righe piu' recenti sul telefono (come in una libreria vera: le foto appena
+ *   scattate), poi il 60% solo-NAS (miniature dalla replica sintetica), il 6% su telefono **e** NAS e il resto solo telefono;
+ * - [NAS_FIRST]: come [MIXED] ma le [HEAD_NAS_ROWS] piu' recenti sono solo-NAS, tutte con l'HQ in replica. Serve alle due
+ *   misure nuove: la prima pagina di miniature del NAS dopo un avvio a freddo e l'apertura di un media solo-NAS (p90 < 100 ms).
+ *
+ * I due profili hanno database, stato e indice della replica propri: si passa dall'uno all'altro con un file accanto al
+ * marcatore (nessuna ricostruzione dopo la prima volta).
+ */
+internal enum class BenchProfile(val code: String, val databaseName: String, val statusFile: String) {
+  MIXED("mixed", "gallery-bench.db", "bench-dataset.json"),
+  NAS_FIRST("nasfirst", "gallery-bench-nasfirst.db", "bench-dataset-nasfirst.json"),
+}
+
+/**
  * Il dataset della variante di misura: quando crearlo, dove scrivere lo stato, come riconoscere un dataset gia' pronto.
  *
  * **Come si attiva.** Il collaudo (`:benchmark`, `BenchSession`) scrive il marcatore [MARKER] in
  * `getExternalFilesDir(null)` dell'app, concede i permessi di lettura dei media con `pm grant` e avvia l'app. Al primo
  * avvio con il marcatore [BenchDatasetProvider] chiama [onProcessStart]: sul thread `bench-dataset` si leggono i media
- * veri ([BenchDeviceMedia]) e si crea il database [DATABASE_NAME] con [ROWS] righe ([BenchSeeder]). Lo stato sta in
- * [STATUS] accanto al marcatore (il collaudo lo legge con `adb shell`): `in_corso`, poi `pronto` (o `errore`).
+ * veri ([BenchDeviceMedia]), si creano i modelli delle miniature ([BenchReplicaBuilder]) e il database del profilo con
+ * [ROWS] righe ([BenchSeeder]). Lo stato sta in [BenchProfile.statusFile] accanto al marcatore (il collaudo lo legge con
+ * `adb shell`): `in_corso`, poi `pronto` (o `errore`).
+ *
+ * **Quale profilo.** [MIXED] se c'e' solo il marcatore, [NAS_FIRST] se accanto c'e' anche [NAS_FIRST_MARKER] ([profileOf]).
  *
  * **Idempotente.** Con uno stato `pronto` della stessa [SHAPE_VERSION], con lo stesso numero di righe richiesto e con il
- * file del database presente, un avvio successivo non rifa niente: gli avvii a freddo misurati non pagano il dataset.
+ * database e l'indice della replica presenti, un avvio successivo non rifa niente: gli avvii a freddo misurati non pagano il dataset.
  *
- * **Mai il database vero.** Si scrive [DATABASE_NAME] (`gallery-bench.db`), non `gallery.db`.
+ * **Mai il database vero.** Si scrive [BenchProfile.databaseName] (`gallery-bench*.db`), non `gallery.db`.
  *
- * Il collegamento con la UI (famiglia "pronta", database della Libreria, sincronizzazione spenta) e' descritto in
+ * Il collegamento con la UI (famiglia "pronta", database della Libreria, sincronizzazione spenta, replica) e' descritto in
  * `docs/bench/README.md` ("Collegamento con l'app"): da qui si vedono solo [BenchFamilySetupRepository] e
  * [BenchPhoneLibrarySync], che [BenchMeasurementHooks] consegna all'app con un binding Hilt.
  */
 internal object BenchDataset {
 
   const val MARKER: String = "bench-library.marker"
+
+  /** Con questo file accanto al marcatore il profilo e' [BenchProfile.NAS_FIRST]. */
+  const val NAS_FIRST_MARKER: String = "bench-library.nasfirst"
+
+  /** Lo stato del profilo [BenchProfile.MIXED] (gli altri: [BenchProfile.statusFile]). */
   const val STATUS: String = "bench-dataset.json"
+
+  /** Il database del profilo [BenchProfile.MIXED]. */
   const val DATABASE_NAME: String = "gallery-bench.db"
   const val ROWS: Int = 100_000
 
@@ -33,11 +61,25 @@ internal object BenchDataset {
   const val SMOKE_MARKER: String = "bench-library.smoke"
   const val SMOKE_ROWS: Int = 5_000
 
+  /** Quota di righe solo-NAS e su entrambi, in percentuale (§5.6: 60% solo-NAS). Il resto e' solo telefono. */
+  const val NAS_ONLY_PERCENT: Int = 60
+  const val BOTH_PERCENT: Int = 6
+
+  /** [BenchProfile.MIXED]: quante righe fra le piu' recenti stanno sul telefono (la prima e' il soggetto dello zoom a 200 MP). */
+  const val HEAD_PHONE_ROWS: Int = 120
+
+  /** [BenchProfile.NAS_FIRST]: quante righe fra le piu' recenti sono solo-NAS con HQ in replica (piu' di due schermate di un tablet). */
+  const val HEAD_NAS_ROWS: Int = 300
+
+  /** Quante delle altre righe solo-NAS hanno anche l'HQ (qualita' "Alta" su una parte dell'archivio), in percentuale. */
+  const val HQ_PERCENT: Int = 2
+
   /**
    * Da alzare quando cambia la forma delle righe: i dataset scritti prima si rifanno. 2: `quick_hash` valido (64 cifre
-   * esadecimali); con la 1 il catalogo rifiutava le righe alla lettura dei dettagli del viewer.
+   * esadecimali); con la 1 il catalogo rifiutava le righe alla lettura dei dettagli del viewer. 3 (P10): libreria mista,
+   * posizioni NAS, flag di presenza, ThumbHash delle righe solo-NAS e replica sintetica.
    */
-  const val SHAPE_VERSION: Int = 2
+  const val SHAPE_VERSION: Int = 3
 
   private const val TAG = "BenchDataset"
 
@@ -48,6 +90,19 @@ internal object BenchDataset {
     thread.start()
   }
 
+  /** Il profilo scelto dal collaudo: `bench-library.nasfirst` accanto al marcatore. Solo l'esistenza dei file conta. */
+  fun profileOf(dir: File): BenchProfile = if (File(dir, NAS_FIRST_MARKER).exists()) BenchProfile.NAS_FIRST else BenchProfile.MIXED
+
+  /** Come [profileOf], dal contesto: `MIXED` se la cartella non c'e' (variante senza marcatore). */
+  fun profileOf(context: Context): BenchProfile {
+    val dir = try {
+      context.getExternalFilesDir(null)
+    } catch (e: Exception) {
+      null
+    } ?: return BenchProfile.MIXED
+    return profileOf(dir)
+  }
+
   private fun runIfRequested(context: Context) {
     val dir = try {
       context.getExternalFilesDir(null)
@@ -55,19 +110,31 @@ internal object BenchDataset {
       null
     } ?: return
     if (!File(dir, MARKER).exists()) return
+    val profile = profileOf(dir)
     val rows = requestedRows(dir)
-    val statusFile = File(dir, STATUS)
-    if (isReusable(context, statusFile, rows)) return
+    val statusFile = File(dir, profile.statusFile)
+    if (isReusable(context, statusFile, rows, profile)) return
 
-    writeStatus(statusFile, JSONObject().put("formato", SHAPE_VERSION).put("stato", "in_corso").put("righe", rows))
+    writeStatus(statusFile, JSONObject().put("formato", SHAPE_VERSION).put("stato", "in_corso").put("righe", rows).put("profilo", profile.code))
     try {
       val now = System.currentTimeMillis()
       val real = BenchDeviceMedia.load(context)
-      val report = BenchSeeder.seed(context, real, rows, BenchDeviceMedia.version(context), now)
-      val consistent = report.indexRows == rows && report.phoneRefsResolved == report.phoneRefsAsked
+      val report = BenchSeeder.seed(context, real, rows, BenchDeviceMedia.version(context), now, profile, smoke = rows == SMOKE_ROWS)
+      val replica = report.replica
+      val nasShare = report.nasOnlyRows * 100.0 / report.rows.coerceAtLeast(1)
+      // La quota attesa tiene conto della testa forzata dal profilo (con 5 mila righe pesa quasi il 2%).
+      val head = report.headPhoneRows + report.headNasRows
+      val expectedShare = (NAS_ONLY_PERCENT * (report.rows - head) + 100.0 * report.headNasRows) / report.rows.coerceAtLeast(1)
+      val problems = ArrayList<String>()
+      if (report.indexRows != rows) problems += "righe dell'indice ${report.indexRows} su $rows"
+      if (report.phoneRefsResolved != report.phoneRefsAsked) problems += "riferimenti del telefono ${report.phoneRefsResolved} su ${report.phoneRefsAsked}"
+      if (nasShare < expectedShare - 3 || nasShare > expectedShare + 3) problems += "quota solo-NAS ${"%.1f".format(nasShare)}% (attesa ${"%.1f".format(expectedShare)}%)"
+      if (replica.check.ok != replica.check.asked) problems += "blob della replica che non si leggono ${replica.check.ok} su ${replica.check.asked}"
+      val consistent = problems.isEmpty()
       val status = JSONObject()
         .put("formato", SHAPE_VERSION)
         .put("stato", if (consistent) "pronto" else "errore")
+        .put("profilo", profile.code)
         .put("righe", report.rows)
         .put("mediaReali", report.realMedia)
         .put("immagini", report.realImages)
@@ -79,8 +146,32 @@ internal object BenchDataset {
         .put("letturaIndiceMs", report.indexReadMs)
         .put("riferimentiTelefono", report.phoneRefsResolved)
         .put("riferimentiChiesti", report.phoneRefsAsked)
-        .put("database", DATABASE_NAME)
-      if (!consistent) status.put("errore", "il dataset non e' coerente con le query dell'indice (righe o riferimenti)")
+        .put("database", profile.databaseName)
+        // La libreria mista (P10).
+        .put("righeSoloTelefono", report.phoneOnlyRows)
+        .put("righeSoloNas", report.nasOnlyRows)
+        .put("righeEntrambi", report.bothRows)
+        .put("quotaSoloNas", nasShare / 100.0)
+        .put("testaTelefono", report.headPhoneRows)
+        .put("testaNas", report.headNasRows)
+        .put("righeConHq", report.hqRows)
+        // La replica sintetica.
+        .put("replicaBlob", replica.blobs)
+        .put("replicaBlobS", replica.blobsS)
+        .put("replicaBlobM", replica.blobsM)
+        .put("replicaBlobHq", replica.blobsHq)
+        .put("replicaModelli", replica.templates)
+        .put("replicaPaccoKb", replica.packBytes / 1024)
+        .put("replicaIndiceKb", replica.indexBytes / 1024)
+        .put("replicaMedioKbS", replica.averageBytesS / 1024.0)
+        .put("replicaMedioKbM", replica.averageBytesM / 1024.0)
+        .put("replicaMedioKbHq", replica.averageBytesHq / 1024.0)
+        .put("replicaSecondiModelli", replica.templateMs / 1000.0)
+        .put("replicaControllati", replica.check.asked)
+        .put("replicaControlliOk", replica.check.ok)
+        .put("decodificaSMs", replica.check.decodeSMs)
+        .put("decodificaMMs", replica.check.decodeMMs)
+      if (!consistent) status.put("errore", "il dataset non e' coerente: " + problems.joinToString("; "))
       writeStatus(statusFile, status)
     } catch (e: SecurityException) {
       // Permesso di lettura dei media non ancora concesso: il collaudo lo concede e riavvia l'app, che riprova.
@@ -101,7 +192,7 @@ internal object BenchDataset {
    */
   private fun requestedRows(dir: File): Int = if (File(dir, SMOKE_MARKER).exists()) SMOKE_ROWS else ROWS
 
-  private fun isReusable(context: Context, statusFile: File, rows: Int): Boolean {
+  private fun isReusable(context: Context, statusFile: File, rows: Int, profile: BenchProfile): Boolean {
     val previous = try {
       JSONObject(statusFile.readText())
     } catch (e: Exception) {
@@ -110,7 +201,8 @@ internal object BenchDataset {
     return previous.optString("stato") == "pronto" &&
       previous.optInt("formato") == SHAPE_VERSION &&
       previous.optInt("righe") == rows &&
-      context.getDatabasePath(DATABASE_NAME).exists()
+      context.getDatabasePath(profile.databaseName).exists() &&
+      BenchReplicaStore.indexFile(context, profile).exists()
   }
 
   /** Scrive lo stato in modo atomico: il collaudo non deve mai leggerne meta'. */

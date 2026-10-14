@@ -1,0 +1,125 @@
+package dev.pampa.mycloudgallery.bench
+
+// Prova JVM del dataset della variante di misura (P10): libreria mista, profili, replica sintetica. NON e' un test del
+// repository: `benchmarkRelease` e `nonMinifiedRelease` non hanno una variante di unit test, e `app/build.gradle` non e'
+// di P10. Per eseguirlo (e ripeterlo quando il seeder si allinea allo schema v3 di P2 o alla replica vera di P4):
+//
+//   1. copiare questo file in app/src/test/kotlin/dev/pampa/mycloudgallery/bench/BenchSeederRobolectricTest.kt (togliere ".txt");
+//   2. in app/build.gradle, dentro `android { ... }`, aggiungere TEMPORANEAMENTE
+//        sourceSets { test { java.srcDir 'src/benchmarkRelease/kotlin' } }
+//      (compila i sorgenti della variante di misura nei test di debug);
+//   3. gradlew :app:testDebugUnitTest --tests "dev.pampa.mycloudgallery.bench.BenchSeederRobolectricTest"
+//      (il test `fullMixed` scrive 100.000 righe e genera i 192 modelli: circa un minuto e mezzo);
+//   4. rimettere app/build.gradle com'era e togliere il file di test.
+//
+// Il grafico nativo di Robolectric (`GraphicsMode.NATIVE`) codifica WebP vero: il test controlla che i blob siano WebP e si
+// decodifichino. I tempi di decodifica che stampa sono quelli del PC, non del telefono (quelli veri: `decodificaSMs` e
+// `decodificaMMs` in `bench-dataset.json`).
+
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.google.common.truth.Truth.assertThat
+import dev.pampa.mycloudgallery.core.database.GalleryDatabase
+import dev.pampa.mycloudgallery.core.model.CellFlags
+import dev.pampa.mycloudgallery.core.model.ContentKey
+import dev.pampa.mycloudgallery.core.model.QuickHash
+import java.io.File
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+
+@RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(sdk = [34])
+class BenchSeederRobolectricTest {
+
+  private val context: Context get() = ApplicationProvider.getApplicationContext()
+
+  private fun media(): List<BenchRealMedia> = listOf(
+    BenchRealMedia(11L, false, "image/jpeg", 4000, 3000, 0, 0L, 3_000_000L, 0L, "IMG_1.jpg"),
+    BenchRealMedia(12L, false, "image/jpeg", 3000, 4000, 90, 0L, 2_500_000L, 0L, "IMG_2.jpg"),
+    BenchRealMedia(13L, false, "image/png", 1080, 2400, 0, 0L, 400_000L, 0L, "Screenshot_3.png"),
+    BenchRealMedia(14L, false, "image/jpeg", 8000, 3000, 0, 0L, 5_000_000L, 0L, "PANO_4.jpg"),
+    BenchRealMedia(15L, true, "video/mp4", 1920, 1080, 0, 15_000L, 8_000_000L, 0L, "VID_5.mp4"),
+    BenchRealMedia(16L, false, "image/jpeg", 16000, 12000, 0, 0L, 20_000_000L, 0L, "BIG_6.jpg"),
+    BenchRealMedia(17L, false, "image/heic", 4032, 3024, 0, 0L, 2_000_000L, 0L, "IMG_7.heic"),
+  )
+
+  // Room non lavora sul thread principale: nell'app il seeder gira sul thread `bench-dataset`.
+  private fun <T> offMain(block: () -> T): T {
+    var result: Result<T>? = null
+    val thread = Thread { result = runCatching(block) }
+    thread.start()
+    thread.join()
+    return result!!.getOrThrow()
+  }
+
+  private fun seed(profile: BenchProfile, rows: Int, smoke: Boolean): BenchSeedReport = offMain {
+    val t0 = System.nanoTime()
+    val report = BenchSeeder.seed(context, media(), rows, "1", 1_791_936_000_000L, profile, smoke)
+    val r = report.replica
+    println("SEED ${profile.code} righe=$rows ${(System.nanoTime() - t0) / 1_000_000} ms")
+    println("  soloTelefono=${report.phoneOnlyRows} soloNas=${report.nasOnlyRows} entrambi=${report.bothRows} conHq=${report.hqRows}")
+    println(
+      "  replica blob=${r.blobs} S=${r.blobsS} M=${r.blobsM} HQ=${r.blobsHq} modelli=${r.templates} pacco=${r.packBytes / 1024}KB " +
+        "indice=${r.indexBytes / 1024}KB S=${r.averageBytesS}B M=${r.averageBytesM}B HQ=${r.averageBytesHq}B controllo=${r.check.ok}/${r.check.asked}",
+    )
+    report
+  }
+
+  private fun headFlags(profile: BenchProfile, limit: Int): List<Int> = offMain {
+    val db = GalleryDatabase.build(context, profile.databaseName)
+    try {
+      val out = ArrayList<Int>()
+      db.openHelper.readableDatabase.query("SELECT cell_flags FROM media ORDER BY sort_time DESC, media_id DESC LIMIT $limit").use { c ->
+        while (c.moveToNext()) out += c.getInt(0)
+      }
+      out
+    } finally {
+      db.close()
+    }
+  }
+
+  @Test
+  fun smokeMixed() {
+    val report = seed(BenchProfile.MIXED, BenchDataset.SMOKE_ROWS, smoke = true)
+    assertThat(report.indexRows).isEqualTo(BenchDataset.SMOKE_ROWS)
+    assertThat(report.phoneRefsResolved).isEqualTo(report.phoneRefsAsked)
+    assertThat(report.replica.check.ok).isEqualTo(report.replica.check.asked)
+    assertThat(report.replica.check.asked).isGreaterThan(30)
+    val head = headFlags(BenchProfile.MIXED, BenchDataset.HEAD_PHONE_ROWS)
+    assertThat(head.all { CellFlags.has(it, CellFlags.ON_PHONE) && !CellFlags.has(it, CellFlags.ON_NAS) }).isTrue()
+  }
+
+  @Test
+  fun smokeNasFirst() {
+    val report = seed(BenchProfile.NAS_FIRST, BenchDataset.SMOKE_ROWS, smoke = true)
+    assertThat(report.indexRows).isEqualTo(BenchDataset.SMOKE_ROWS)
+    assertThat(report.replica.check.ok).isEqualTo(report.replica.check.asked)
+    val head = headFlags(BenchProfile.NAS_FIRST, BenchDataset.HEAD_NAS_ROWS)
+    assertThat(head.all { CellFlags.has(it, CellFlags.ON_NAS) && !CellFlags.has(it, CellFlags.ON_PHONE) }).isTrue()
+    assertThat(report.hqRows).isAtLeast(BenchDataset.HEAD_NAS_ROWS)
+    // I due profili convivono: stesso pacco dei modelli, un indice ciascuno.
+    assertThat(File(BenchReplicaBuilder.directory(context), "nasfirst.idx").exists()).isTrue()
+  }
+
+  @Test
+  fun fullMixed() {
+    val report = seed(BenchProfile.MIXED, BenchDataset.ROWS, smoke = false)
+    assertThat(report.indexRows).isEqualTo(BenchDataset.ROWS)
+    assertThat(report.phoneRefsResolved).isEqualTo(report.phoneRefsAsked)
+    assertThat(report.replica.check.ok).isEqualTo(report.replica.check.asked)
+    assertThat(report.nasOnlyRows * 100.0 / report.rows).isWithin(2.0).of(60.0)
+    // La chiave di contenuto che il catalogo ricava (qh1 + dimensione) trova il blob; una dimensione sbagliata no.
+    // La riga 5 usa media[5 % 7] = BIG_6 (20 MB).
+    val store = BenchReplicaStore.open(context, BenchProfile.MIXED)!!
+    assertThat(store.blobCount).isEqualTo(report.replica.blobs)
+    val right = ContentKey.of(QuickHash("%064x".format(5)), 20_000_000L).short
+    val wrong = ContentKey.of(QuickHash("%064x".format(5)), 3_000_000L).short
+    assertThat(store.locate(wrong, BenchBlobClass.THUMB_S)).isNull()
+    val rowIsNasBearing = store.locate(right, BenchBlobClass.THUMB_S) != null
+    println("  riga 5 con il NAS: $rowIsNasBearing")
+  }
+}

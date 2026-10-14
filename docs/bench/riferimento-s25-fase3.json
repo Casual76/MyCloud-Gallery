@@ -1,0 +1,23 @@
+{
+  "formato": 1,
+  "dispositivo": "s25",
+  "modello": "SM-S931B",
+  "sdk": 37,
+  "frequenzaHz": 120,
+  "data": "2026-10-13",
+  "origine": "Galaxy S25, misure del 13/10/2026 (docs/bench/misure-s25-2026-10-13.md): corse final (scorrimento, pinch, viewer) e final-startup (avvio), variante benchmarkRelease con la libreria della Fase 3 (100.000 righe tutte sul telefono). Riferimento della guardia della Fase 4A (docs/fase4-progetto.md par. 5.6) finche' l'utente non ne accetta uno nuovo.",
+  "variante": "benchmarkRelease",
+  "prove": {
+    "scroll_all_justified": { "jankPercent.mean": 0.2196, "frameDurationCpuMs.P95": 11.1027 },
+    "scroll_days_square": { "jankPercent.mean": 0.181, "frameDurationCpuMs.P95": 11.6809 },
+    "scroll_years_justified": { "jankPercent.mean": 2.0844, "frameDurationCpuMs.P95": 17.7018 },
+    "scroll_days_justified": { "jankPercent.mean": 3.5642, "frameDurationCpuMs.P95": 22.9492 },
+    "scroll_months_square": { "jankPercent.mean": 0.4174, "frameDurationCpuMs.P95": 13.9995 },
+    "scroll_years_square": { "jankPercent.mean": 0.6638, "frameDurationCpuMs.P95": 16.4483 },
+    "scroll_all_square": { "jankPercent.mean": 0.0755, "frameDurationCpuMs.P95": 9.4664 },
+    "scroll_months_justified": { "jankPercent.mean": 1.2756, "frameDurationCpuMs.P95": 16.0866 },
+    "pinch": { "jankPercent.mean": 0.5354, "frameDurationCpuMs.P95": 14.0809 },
+    "coldStart": { "timeToFullDisplayMs.p90": 680.7361 },
+    "viewerOpen": { "viewerOpenMs.p90": 21.1011, "viewerOpenMaxFrameMs.max": 97.3176 }
+  }
+}

@@ -33,6 +33,20 @@
 .PARAMETER Calibrate     Scrive in soglie.json il tetto di PSS dello zoom a 200 MP (misura + margine), se e' ancora `null`.
 .PARAMETER SummaryJson   Scrive un riassunto leggibile da macchina (una riga per verifica).
 .PARAMETER SelfTest      Prova la logica del confronto su file di esempio (tools\bench\samples): non serve un dispositivo.
+.PARAMETER NoGuard       Spegne la guardia della Fase 4A (par. 5.6): niente riferimento del 13/10, niente "NOTO", niente regole `guardia`.
+.PARAMETER ExtractReference  Cartelle di risultati (la prima che ha una prova vince) da cui scrivere docs\bench\riferimento-<dispositivo>-fase3.json:
+                         le misure del 13/10 con cui la guardia della Fase 4A confronta (vedi -ReferenceDate e -Origin). Non serve altro.
+.PARAMETER ReferenceDate Data da scrivere nel riferimento estratto (default: oggi).
+.PARAMETER Origin        Da dove vengono i numeri del riferimento estratto (una riga di testo, finisce nel file).
+
+.NOTES
+  Guardia della Fase 4A. Con un riferimento (docs\bench\riferimento-<dispositivo>.json accettato dall'utente, altrimenti
+  docs\bench\riferimento-<dispositivo>-fase3.json, le misure del 13/10) e senza -Smoke:
+
+    - le regole `guardia` di soglie.json si valutano (jank e fotogramma piu' lungo: "non peggiorare");
+    - una soglia assoluta che il riferimento violava gia' risulta NOTO e non FAIL (vale la guardia);
+    - le prove `mista` devono girare sulla libreria mista (libraryNasShare >= mistaMinimo), altrimenti NON VALIDE;
+    - nelle regressioni `arrotondaSu` porta il limite a un intero (681 ms + 10% = 749,1 -> 750, come nel par. 5.6).
 
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File tools\bench\compare.ps1 -RequireAll
@@ -53,7 +67,11 @@ param(
   [switch]$Force,
   [switch]$Calibrate,
   [string]$SummaryJson,
-  [switch]$SelfTest
+  [switch]$SelfTest,
+  [switch]$NoGuard,
+  [string[]]$ExtractReference,
+  [string]$ReferenceDate,
+  [string]$Origin
 )
 
 $ErrorActionPreference = "Stop"
@@ -189,10 +207,33 @@ function Read-SkippedTests([string]$dir) {
 
 # --- Valutazione ------------------------------------------------------------------------------------------
 
+# Il valore di riferimento di una prova per metrica.statistica, o $null.
+function Get-ReferenceValue($reference, [string]$test, [string]$metric, [string]$stat) {
+  $key = "$metric.$stat"
+  if ($reference -and (Has-Property $reference "prove") -and (Has-Property $reference.prove $test) -and (Has-Property $reference.prove.$test $key)) {
+    return [double]$reference.prove.$test.$key
+  }
+  return $null
+}
+
+# Il limite di una regressione: riferimento * (1 + aumento). Con `arrotondaSu` (passo in unita' della metrica) il riferimento si
+# porta prima al passo piu' vicino e il limite si arrotonda per eccesso, come scrive il par. 5.6: TTFD 680,7 -> 681, * 1,10 =
+# 749,1 -> 750; viewerOpenMs 21,1 -> 21, * 1,15 = 24,15 -> 25.
+function Get-RegressionCap([double]$baseline, $rule) {
+  $cap = $baseline * (1.0 + [double]$rule.aumentoMassimo)
+  if (-not (Has-Property $rule "arrotondaSu")) { return $cap }
+  $step = [double]$rule.arrotondaSu
+  if ($step -le 0) { return $cap }
+  $rounded = [math]::Round($baseline / $step) * $step
+  return [math]::Ceiling($rounded * (1.0 + [double]$rule.aumentoMassimo) / $step - 1e-9) * $step
+}
+
 # Restituisce le righe del confronto per un dispositivo. $benches = elenco delle prove lette (oggetti `benchmarks[*]`),
-# $reference = il riferimento accettato (o $null), $skipped = nome -> motivo.
-function Invoke-Evaluation($thr, $benches, [string]$deviceKey, $reference, $skipped, [bool]$smoke) {
+# $reference = il riferimento accettato (o $null), $skipped = nome -> motivo. $guard = la guardia della Fase 4A (par. 5.6):
+# regole `guardia`, soglie gia' fuori nel riferimento = NOTO, prove `mista` valide solo sulla libreria mista.
+function Invoke-Evaluation($thr, $benches, [string]$deviceKey, $reference, $skipped, [bool]$smoke, [bool]$guard = $false) {
   $deviceClass = [string]$thr.dispositivi.$deviceKey.classe
+  $mistaMinimo = if (Has-Property $thr "mistaMinimo") { [double]$thr.mistaMinimo } else { 0.55 }
   $rows = New-Object System.Collections.Generic.List[object]
   foreach ($scenario in $thr.scenari) {
     $applies = @($scenario.classiDispositivo) -contains $deviceClass
@@ -229,6 +270,15 @@ function Invoke-Evaluation($thr, $benches, [string]$deviceKey, $reference, $skip
           $rows.Add((New-Row $scenario.id $test "validita" $v.metrica $value ">= $(Format-Number $v.minimo)" "FAIL" "NON VALIDA: $($v.spiega)"))
         }
       }
+      # La libreria mista (P10): una prova che non gira sul 60% di media solo-NAS non e' quella che la guardia confronta.
+      # La metrica manca nei risultati vecchi (Fase 3): allora non si puo' dire e la prova si valuta come prima.
+      if ($valid -and (Has-Property $scenario "mista") -and $scenario.mista) {
+        $share = Get-StatValue $bench "libraryNasShare" "min"
+        if ($null -ne $share -and $share -lt $mistaMinimo) {
+          $valid = $false
+          $rows.Add((New-Row $scenario.id $test "validita" "libraryNasShare" $share (">= " + (Format-Number $mistaMinimo)) "FAIL" "NON VALIDA: la prova non gira sulla libreria mista (quota solo-NAS sotto il minimo): e' un dataset della Fase 3"))
+        }
+      }
       if (-not $valid) { continue }
       foreach ($rule in @($scenario.assolute)) {
         $value = Get-StatValue $bench $rule.metrica $rule.statistica
@@ -245,24 +295,56 @@ function Invoke-Evaluation($thr, $benches, [string]$deviceKey, $reference, $skip
         $status = Test-Absolute $rule $value
         $note = ""
         if ($status -eq "CAL") { $note = "nessun tetto: -Calibrate lo scrive con questa misura" }
+        # La guardia: una soglia che il riferimento violava gia' non fa fallire, vale "non peggiorare" (regole `guardia`).
+        if ($status -eq "FAIL" -and $guard) {
+          $refValue = Get-ReferenceValue $reference $test $rule.metrica $rule.statistica
+          if ($null -ne $refValue -and (Test-Absolute $rule $refValue) -eq "FAIL") {
+            $status = "NOTO"
+            $note = "gia' fuori soglia nel riferimento ($(Format-Number $refValue)): vale la guardia, non deve peggiorare"
+          }
+        }
         $rows.Add((New-Row $scenario.id $test "assoluta" $label $value (Get-LimitText $rule) $status $note))
       }
       foreach ($rule in @($scenario.regressione)) {
         $value = Get-StatValue $bench $rule.metrica $rule.statistica
         $label = "$($rule.metrica) $($rule.statistica)"
         if ($null -eq $value) { continue }
-        $key = "$($rule.metrica).$($rule.statistica)"
-        $baseline = $null
-        if ($reference -and (Has-Property $reference "prove") -and (Has-Property $reference.prove $test) -and (Has-Property $reference.prove.$test $key)) { $baseline = [double]$reference.prove.$test.$key }
+        $baseline = Get-ReferenceValue $reference $test $rule.metrica $rule.statistica
         $pct = (Format-Number ([double]$rule.aumentoMassimo * 100) "0") + "%"
         if ($null -eq $baseline) {
           $rows.Add((New-Row $scenario.id $test "regressione" $label $value "ref + $pct" "NUOVO" "nessun riferimento: -Accept lo crea dopo una misura buona"))
         } elseif ($baseline -le 0) {
           $rows.Add((New-Row $scenario.id $test "regressione" $label $value "ref + $pct" "N/A" "riferimento non positivo ($(Format-Number $baseline))"))
         } else {
-          $cap = $baseline * (1.0 + [double]$rule.aumentoMassimo)
+          $cap = Get-RegressionCap $baseline $rule
           $status = if ($value -le $cap) { "OK" } else { "FAIL" }
           $rows.Add((New-Row $scenario.id $test "regressione" $label $value ("<= " + (Format-Number $cap) + " (ref " + (Format-Number $baseline) + " + $pct)") $status ""))
+        }
+      }
+      # La guardia della Fase 4A: "non peggiorare" per cio' che le soglie assolute non coprono o che falliva gia' il 13/10.
+      if ($guard) {
+        foreach ($rule in @($scenario.guardia)) {
+          $value = Get-StatValue $bench $rule.metrica $rule.statistica
+          $label = "$($rule.metrica) $($rule.statistica)"
+          if ($null -eq $value) { continue }
+          $baseline = Get-ReferenceValue $reference $test $rule.metrica $rule.statistica
+          $pct = (Format-Number ([double]$rule.aumentoMassimo * 100) "0") + "%"
+          if ($null -eq $baseline) {
+            $rows.Add((New-Row $scenario.id $test "guardia" $label $value "ref + $pct" "NUOVO" "nessun riferimento per questa prova"))
+            continue
+          }
+          $cap = $baseline * (1.0 + [double]$rule.aumentoMassimo)
+          $limitNote = "ref " + (Format-Number $baseline) + " + $pct"
+          if ((Has-Property $rule "pavimento") -and ($baseline + [double]$rule.pavimento) -gt $cap) {
+            $cap = $baseline + [double]$rule.pavimento
+            $limitNote = "ref " + (Format-Number $baseline) + " + " + (Format-Number $rule.pavimento) + " (rumore)"
+          }
+          if ((Has-Property $rule "mantieniSotto") -and $baseline -le [double]$rule.mantieniSotto -and $cap -gt [double]$rule.mantieniSotto) {
+            $cap = [double]$rule.mantieniSotto
+            $limitNote = "ref " + (Format-Number $baseline) + ", resta <= " + (Format-Number $rule.mantieniSotto)
+          }
+          $status = if ($value -le $cap) { "OK" } else { "FAIL" }
+          $rows.Add((New-Row $scenario.id $test "guardia" $label $value ("<= " + (Format-Number $cap) + " (" + $limitNote + ")") $status ""))
         }
       }
     }
@@ -271,14 +353,14 @@ function Invoke-Evaluation($thr, $benches, [string]$deviceKey, $reference, $skip
 }
 
 # Il riferimento da accettare: tutte le coppie metrica.statistica che le regole di soglie.json usano, per ogni prova.
-function Build-Reference($thr, $benches, [string]$deviceKey, $context, [double]$hz) {
+function Build-Reference($thr, $benches, [string]$deviceKey, $context, [double]$hz, [string]$date = "", [string]$origin = "") {
   $lines = New-Object System.Collections.Generic.List[string]
   $tests = New-Object System.Collections.Generic.List[string]
   foreach ($scenario in $thr.scenari) {
     foreach ($bench in @($benches | Where-Object { ([string]$_.name -replace '\[.*$', '') -match $scenario.prove })) {
       $test = [string]$bench.name -replace '\[.*$', ''
       $entries = New-Object System.Collections.Generic.List[string]
-      foreach ($rule in (@($scenario.assolute) + @($scenario.regressione))) {
+      foreach ($rule in (@($scenario.assolute) + @($scenario.regressione) + @($scenario.guardia))) {
         $value = Get-StatValue $bench $rule.metrica $rule.statistica
         if ($null -ne $value) { $entries.Add('"' + $rule.metrica + "." + $rule.statistica + '": ' + (Format-Number $value "0.####")) }
       }
@@ -298,7 +380,8 @@ function Build-Reference($thr, $benches, [string]$deviceKey, $context, [double]$
   $lines.Add('  "modello": "' + $model + '",')
   $lines.Add('  "sdk": ' + $(if ($sdk) { $sdk } else { "null" }) + ',')
   $lines.Add('  "frequenzaHz": ' + $(if ($hz -gt 0) { Format-Number $hz "0.#" } else { "null" }) + ',')
-  $lines.Add('  "data": "' + (Get-Date -Format "yyyy-MM-dd") + '",')
+  $lines.Add('  "data": "' + $(if ($date) { $date } else { Get-Date -Format "yyyy-MM-dd" }) + '",')
+  if ($origin) { $lines.Add('  "origine": "' + $origin.Replace('\', '\\').Replace('"', '\"') + '",') }
   $lines.Add('  "variante": "benchmarkRelease",')
   $lines.Add('  "prove": {')
   $lines.Add(($tests -join ",`n"))
@@ -311,7 +394,7 @@ function Write-Table($rows) {
   $format = "  {0,-5} {1,-24} {2,-11} {3,-26} {4,10}  {5,-34} {6}"
   Write-Host ($format -f "ESITO", "PROVA", "TIPO", "METRICA", "VALORE", "SOGLIA", "NOTA") -ForegroundColor Cyan
   foreach ($row in $rows) {
-    $color = switch ($row.Status) { "OK" { "Green" } "FAIL" { "Red" } "MANCA" { "Yellow" } "CAL" { "Yellow" } "NUOVO" { "DarkYellow" } default { "DarkGray" } }
+    $color = switch ($row.Status) { "OK" { "Green" } "FAIL" { "Red" } "MANCA" { "Yellow" } "CAL" { "Yellow" } "NUOVO" { "DarkYellow" } "NOTO" { "DarkCyan" } default { "DarkGray" } }
     $line = $format -f $row.Status, $row.Test, $row.Kind, $row.Metric, (Format-Number $row.Value), $row.Limit, $row.Note
     Write-Host $line -ForegroundColor $color
   }
@@ -364,6 +447,63 @@ if ($SelfTest) {
   $rowsSmoke = Invoke-Evaluation $thr @($bad.benchmarks) "emulatore-telefono" $null @{} $true
   Assert-That (@($rowsSmoke | Where-Object { $_.Status -eq "FAIL" }).Count -eq 0) "in smoke non ci sono FAIL"
 
+  # --- La guardia della Fase 4A (par. 5.6) su prove costruite a mano -----------------------------------------------------------
+  function New-Bench([string]$name, $metrics) {
+    $m = [ordered]@{}
+    foreach ($key in $metrics.Keys) { $m[$key] = [pscustomobject]@{ minimum = $metrics[$key]; maximum = $metrics[$key]; median = $metrics[$key]; runs = @($metrics[$key]) } }
+    return [pscustomobject]@{ name = $name; repeatIterations = 1; metrics = [pscustomobject]$m }
+  }
+  $fase3 = ('{ "formato": 1, "dispositivo": "s25", "prove": {' +
+    ' "scroll_days_square": { "jankPercent.mean": 0.18, "frameDurationCpuMs.P95": 9.5 },' +
+    ' "scroll_days_justified": { "jankPercent.mean": 3.56 },' +
+    ' "pinch": { "jankPercent.mean": 0.54 },' +
+    ' "coldStart": { "timeToFullDisplayMs.p90": 681 },' +
+    ' "viewerOpen": { "viewerOpenMs.p90": 21, "viewerOpenMaxFrameMs.max": 97 } } }') | ConvertFrom-Json
+  $mix = 0.6
+  # Quadrata a giorni: 0,18% il 13/10. 0,30 sta nel pavimento (0,33), 0,50 no.
+  $g1 = Invoke-Evaluation $thr @(New-Bench "scroll_days_square" @{ jankPercent = 0.30; libraryNasShare = $mix }) "s25" $fase3 @{} $false $true
+  Assert-That (@($g1 | Where-Object { $_.Kind -eq "guardia" -and $_.Status -eq "OK" }).Count -eq 1) "guardia: 0,30% su ref 0,18% e' dentro il pavimento di rumore"
+  $g2 = Invoke-Evaluation $thr @(New-Bench "scroll_days_square" @{ jankPercent = 0.50; libraryNasShare = $mix }) "s25" $fase3 @{} $false $true
+  Assert-That (@($g2 | Where-Object { $_.Kind -eq "guardia" -and $_.Status -eq "FAIL" }).Count -eq 1) "guardia: 0,50% su ref 0,18% e' un peggioramento"
+  # Giustificata a giorni: 3,56% il 13/10, gia' fuori soglia. 3,70 e' NOTO (non FAIL) e passa la guardia; 4,30 la fallisce.
+  $g3 = Invoke-Evaluation $thr @(New-Bench "scroll_days_justified" @{ jankPercent = 3.70; libraryNasShare = $mix }) "s25" $fase3 @{} $false $true
+  Assert-That (@($g3 | Where-Object { $_.Kind -eq "assoluta" -and $_.Status -eq "NOTO" }).Count -eq 1) "guardia: la soglia assoluta che il 13/10 violava gia' e' NOTO, non FAIL"
+  Assert-That (@($g3 | Where-Object { $_.Kind -eq "guardia" -and $_.Status -eq "OK" }).Count -eq 1) "guardia: 3,70% su ref 3,56% passa (+10% = 3,92)"
+  $g4 = Invoke-Evaluation $thr @(New-Bench "scroll_days_justified" @{ jankPercent = 4.30; libraryNasShare = $mix }) "s25" $fase3 @{} $false $true
+  Assert-That (@($g4 | Where-Object { $_.Kind -eq "guardia" -and $_.Status -eq "FAIL" }).Count -eq 1) "guardia: 4,30% su ref 3,56% e' un peggioramento"
+  $g4b = Invoke-Evaluation $thr @(New-Bench "scroll_days_justified" @{ jankPercent = 4.30; libraryNasShare = $mix }) "s25" $fase3 @{} $false $false
+  Assert-That (@($g4b | Where-Object { $_.Kind -eq "assoluta" -and $_.Status -eq "FAIL" }).Count -eq 1) "senza guardia la stessa prova fallisce la soglia assoluta"
+  # Una prova che era sotto l'1% deve restarci anche se il pavimento lo permetterebbe: pinch 0,54 + 0,15 = 0,69, 0,95 no.
+  $g5 = Invoke-Evaluation $thr @(New-Bench "pinch" @{ jankPercent = 0.95; libraryNasShare = $mix }) "s25" $fase3 @{} $false $true
+  Assert-That (@($g5 | Where-Object { $_.Kind -eq "guardia" -and $_.Status -eq "FAIL" }).Count -eq 1) "guardia: pinch 0,95% su ref 0,54% peggiora"
+  $fase3b = ('{ "formato": 1, "dispositivo": "s25", "prove": { "pinch": { "jankPercent.mean": 0.95 } } }') | ConvertFrom-Json
+  $g5b = Invoke-Evaluation $thr @(New-Bench "pinch" @{ jankPercent = 1.05; libraryNasShare = $mix }) "s25" $fase3b @{} $false $true
+  Assert-That (@($g5b | Where-Object { $_.Kind -eq "guardia" -and $_.Status -eq "FAIL" }).Count -eq 1) "guardia: dove era sotto l'1% deve restarci (cap 1,0)"
+  # Avvio: 681 ms + 10% = 749,1 -> 750.
+  $g6 = Invoke-Evaluation $thr @(New-Bench "coldStart" @{ timeToFullDisplayMs = 750; libraryShown = 1; libraryNasShare = $mix }) "s25" $fase3 @{} $false $true
+  Assert-That (@($g6 | Where-Object { $_.Kind -eq "regressione" -and $_.Status -eq "OK" }).Count -eq 1) "regressione: TTFD 750 su ref 681 e' dentro (749,1 arrotondato a 750)"
+  $g7 = Invoke-Evaluation $thr @(New-Bench "coldStart" @{ timeToFullDisplayMs = 751; libraryShown = 1; libraryNasShare = $mix }) "s25" $fase3 @{} $false $true
+  Assert-That (@($g7 | Where-Object { $_.Kind -eq "regressione" -and $_.Status -eq "FAIL" }).Count -eq 1) "regressione: TTFD 751 su ref 681 e' fuori"
+  # Viewer: 21 ms + 15% = 24,15 -> 25; fotogramma piu' lungo 97 ms (13/10, gia' fuori soglia): 100 passa, 110 no.
+  $g8 = Invoke-Evaluation $thr @(New-Bench "viewerOpen" @{ viewerOpenMs = 25; viewerOpenMaxFrameMs = 100; libraryNasShare = $mix }) "s25" $fase3 @{} $false $true
+  Assert-That (@($g8 | Where-Object { $_.Status -eq "FAIL" }).Count -eq 0) "guardia: viewerOpen 25 ms e fotogramma 100 ms stanno nella guardia del 13/10"
+  Assert-That (@($g8 | Where-Object { $_.Kind -eq "assoluta" -and $_.Status -eq "NOTO" }).Count -eq 1) "guardia: il fotogramma piu' lungo gia' fuori soglia il 13/10 e' NOTO"
+  $g9 = Invoke-Evaluation $thr @(New-Bench "viewerOpen" @{ viewerOpenMs = 25; viewerOpenMaxFrameMs = 110; libraryNasShare = $mix }) "s25" $fase3 @{} $false $true
+  Assert-That (@($g9 | Where-Object { $_.Kind -eq "guardia" -and $_.Status -eq "FAIL" }).Count -eq 1) "guardia: fotogramma piu' lungo 110 ms su ref 97 peggiora"
+  # La libreria mista: un dataset della Fase 3 (nessuna riga solo-NAS) non vale come misura della guardia.
+  $g10 = Invoke-Evaluation $thr @(New-Bench "scroll_days_square" @{ jankPercent = 0.1; libraryNasShare = 0.0 }) "s25" $fase3 @{} $false $true
+  Assert-That (@($g10 | Where-Object { $_.Kind -eq "validita" -and $_.Status -eq "FAIL" }).Count -eq 1) "libreria non mista: la prova e' NON VALIDA"
+  Assert-That (@($g10 | Where-Object { $_.Kind -eq "assoluta" -or $_.Kind -eq "guardia" }).Count -eq 0) "libreria non mista: nessun confronto con le soglie"
+  # Le prove nuove senza riferimento risultano NUOVO, non FAIL; le soglie assolute valgono.
+  $g11 = Invoke-Evaluation $thr @(New-Bench "viewerOpenNas" @{ viewerOpenMs = 80; libraryNasShare = $mix }) "s25" $fase3 @{} $false $true
+  Assert-That (@($g11 | Where-Object { $_.Status -eq "FAIL" }).Count -eq 0) "viewerOpenNas 80 ms sta sotto i 100 ms"
+  Assert-That (@($g11 | Where-Object { $_.Kind -eq "regressione" -and $_.Status -eq "NUOVO" }).Count -eq 1) "viewerOpenNas senza riferimento: NUOVO"
+  $g12 = Invoke-Evaluation $thr @(New-Bench "viewerOpenNas" @{ viewerOpenMs = 120; libraryNasShare = $mix }) "s25" $fase3 @{} $false $true
+  Assert-That (@($g12 | Where-Object { $_.Kind -eq "assoluta" -and $_.Status -eq "FAIL" }).Count -eq 1) "viewerOpenNas 120 ms fallisce i 100 ms"
+  # Smoke: la guardia non si applica nemmeno se la si chiede.
+  $g13 = Invoke-Evaluation $thr @(New-Bench "scroll_days_justified" @{ jankPercent = 9.0; libraryNasShare = $mix }) "emulatore-telefono" $null @{} $true $true
+  Assert-That (@($g13 | Where-Object { $_.Status -eq "FAIL" }).Count -eq 0) "smoke: nessuna soglia, nemmeno la guardia"
+
   # Il riferimento accettato si rilegge: stesso dispositivo, stesse prove.
   $text = Build-Reference $thr @($good.benchmarks) "s25" $good.context 120
   $parsed = $text | ConvertFrom-Json
@@ -376,6 +516,38 @@ if ($SelfTest) {
     exit 1
   }
   Write-Host "compare.ps1: auto-test OK" -ForegroundColor Green
+  exit 0
+}
+
+# --- Estrazione del riferimento della Fase 3 --------------------------------------------------------------
+# `-ExtractReference <cartella>[,<cartella>]`: scrive docs\bench\riferimento-<dispositivo>-fase3.json dalle corse indicate
+# (la prima cartella che ha una prova vince). Sono le misure del 13/10 con cui la guardia della Fase 4A confronta (par. 5.6).
+if ($ExtractReference) {
+  if (-not (Test-Path -LiteralPath $Thresholds)) { Write-Host "soglie non trovate: $Thresholds" -ForegroundColor Red; exit 2 }
+  $thrX = Read-Json $Thresholds
+  $seen = @{}
+  $all = New-Object System.Collections.Generic.List[object]
+  $ctx = $null
+  foreach ($dir in $ExtractReference) {
+    if (-not (Test-Path -LiteralPath $dir)) { Write-Host "cartella non trovata: $dir" -ForegroundColor Red; exit 2 }
+    foreach ($f in @(Get-ChildItem -LiteralPath $dir -Recurse -Filter "*benchmarkData.json" | Sort-Object LastWriteTime -Descending)) {
+      try { $j = Read-Json $f.FullName } catch { Write-Host ("file illeggibile: " + $f.FullName) -ForegroundColor Red; exit 2 }
+      if (-not $ctx -and (Has-Property $j "context")) { $ctx = $j.context }
+      foreach ($b in @($j.benchmarks)) {
+        $name = [string]$b.name -replace '\[.*$', ''
+        if (-not $seen.ContainsKey($name)) { $seen[$name] = $dir; $all.Add($b) }
+      }
+    }
+  }
+  if ($all.Count -eq 0) { Write-Host "nessuna prova nelle cartelle indicate" -ForegroundColor Red; exit 2 }
+  try { $keyX = Resolve-DeviceKey $ctx $thrX $Device } catch { Write-Host $_.Exception.Message -ForegroundColor Red; exit 2 }
+  if (-not $keyX) { Write-Host "dispositivo non riconosciuto: passa -Device" -ForegroundColor Red; exit 2 }
+  $textX = Build-Reference $thrX $all.ToArray() $keyX $ctx $RefreshHz $ReferenceDate $Origin
+  if (-not (Test-Path -LiteralPath $ReferenceDir)) { New-Item -ItemType Directory -Path $ReferenceDir | Out-Null }
+  $pathX = Join-Path $ReferenceDir ("riferimento-" + $keyX + "-fase3.json")
+  [System.IO.File]::WriteAllText($pathX, $textX, (New-Object System.Text.UTF8Encoding($false)))
+  Write-Host ("riferimento scritto in {0}: {1} prove" -f $pathX, $all.Count) -ForegroundColor Green
+  foreach ($name in ($seen.Keys | Sort-Object)) { Write-Host ("  {0,-24} da {1}" -f $name, (Split-Path -Leaf $seen[$name])) -ForegroundColor DarkGray }
   exit 0
 }
 
@@ -416,9 +588,18 @@ $isEmulator = (Has-Property $deviceInfo "emulatore") -and $deviceInfo.emulatore
 # Su un emulatore e' sempre smoke: nessuna soglia, nessun riferimento.
 $smokeMode = [bool]$Smoke -or [bool]$isEmulator
 
+# Il riferimento: quello che l'utente ha accettato (riferimento-<dispositivo>.json); se non c'e', le misure del 13/10 della
+# Fase 3 (riferimento-<dispositivo>-fase3.json), con cui la guardia della Fase 4A confronta (par. 5.6: "la guardia confronta
+# sempre con l'ultimo riferimento accettato dall'utente").
 $referencePath = Join-Path $ReferenceDir ("riferimento-" + $deviceKey + ".json")
+$referenceNote = ""
+if (-not (Test-Path -LiteralPath $referencePath) -and -not $NoGuard) {
+  $phase3Path = Join-Path $ReferenceDir ("riferimento-" + $deviceKey + "-fase3.json")
+  if (Test-Path -LiteralPath $phase3Path) { $referencePath = $phase3Path; $referenceNote = " (le misure del 13/10, Fase 3)" }
+}
 $reference = $null
 if (Test-Path -LiteralPath $referencePath) { $reference = Read-Json $referencePath }
+$guardOn = (-not $NoGuard) -and (-not $smokeMode) -and ($null -ne $reference)
 $skipped = Read-SkippedTests $Report
 
 $model = if ((Has-Property $context "build") -and (Has-Property $context.build "model")) { [string]$context.build.model } else { "?" }
@@ -435,18 +616,22 @@ if ($RefreshHz -gt 0) {
 if ($smokeMode) {
   Write-Host "  SMOKE: i numeri dell'emulatore non valgono, nessuna soglia si applica. Si verifica solo che gli scenari girino." -ForegroundColor Yellow
 }
-Write-Host ("  riferimento: " + $(if ($reference) { $referencePath } else { "nessuno (docs\bench\riferimento-$deviceKey.json): le regressioni risultano NUOVO" })) -ForegroundColor DarkGray
+Write-Host ("  riferimento: " + $(if ($reference) { $referencePath + $referenceNote } else { "nessuno (docs\bench\riferimento-$deviceKey.json): le regressioni risultano NUOVO" })) -ForegroundColor DarkGray
+if (-not $smokeMode) {
+  Write-Host ("  guardia della Fase 4A (par. 5.6): " + $(if ($guardOn) { "attiva (non peggiorare rispetto al riferimento; le prove devono girare sulla libreria mista)" } elseif ($NoGuard) { "spenta (-NoGuard)" } else { "spenta: nessun riferimento per questo dispositivo" })) -ForegroundColor DarkGray
+}
 Write-Host ""
 
-$rows = Invoke-Evaluation $thr @($benches) $deviceKey $reference $skipped $smokeMode
+$rows = Invoke-Evaluation $thr @($benches) $deviceKey $reference $skipped $smokeMode $guardOn
 Write-Table $rows
 
 $fail = @($rows | Where-Object { $_.Status -eq "FAIL" })
 $manca = @($rows | Where-Object { $_.Status -eq "MANCA" })
 $cal = @($rows | Where-Object { $_.Status -eq "CAL" })
 $ok = @($rows | Where-Object { $_.Status -eq "OK" })
+$noto = @($rows | Where-Object { $_.Status -eq "NOTO" })
 Write-Host ""
-Write-Host ("  OK {0}   FAIL {1}   MANCA {2}   da calibrare {3}" -f $ok.Count, $fail.Count, $manca.Count, $cal.Count)
+Write-Host ("  OK {0}   FAIL {1}   MANCA {2}   da calibrare {3}   gia' fuori nel riferimento (NOTO) {4}" -f $ok.Count, $fail.Count, $manca.Count, $cal.Count, $noto.Count)
 
 if ($SummaryJson) {
   $dir = Split-Path -Parent $SummaryJson
@@ -490,8 +675,8 @@ if ($Accept) {
     Write-Host "  -Accept: un riferimento non si accetta da un emulatore." -ForegroundColor Red
     exit 2
   }
-  if ($fail.Count -gt 0 -and -not $Force) {
-    Write-Host "  -Accept: ci sono soglie fallite; un riferimento si accetta da una misura buona (o con -Force, e va scritto perche')." -ForegroundColor Red
+  if (($fail.Count -gt 0 -or $noto.Count -gt 0) -and -not $Force) {
+    Write-Host "  -Accept: ci sono soglie fallite (o gia' fuori nel riferimento); un riferimento si accetta da una misura buona (o con -Force, e va scritto perche')." -ForegroundColor Red
     exit 1
   }
   if ($manca.Count -gt 0) {

@@ -1,6 +1,6 @@
 {
-  "formato": 1,
-  "descrizione": "Soglie della Fase 3 (docs/fase3-progetto.md §2.6, D21). Le legge tools/bench/compare.ps1. Una soglia assoluta vale sempre; la regressione si confronta con il riferimento accettato docs/bench/riferimento-<dispositivo>.json. I numeri valgono solo su S25 e Tab S9: sugli emulatori gli scenari girano per verificare che funzionino (compare.ps1 -Smoke) e nessuna soglia si applica.",
+  "formato": 2,
+  "descrizione": "Soglie della Fase 3 (docs/fase3-progetto.md par. 2.6, D21) e guardia della Fase 4A (docs/fase4-progetto.md par. 5.6, P10). Le legge tools/bench/compare.ps1. Una soglia assoluta vale sempre; la regressione e la guardia si confrontano con il riferimento: docs/bench/riferimento-<dispositivo>.json se l'utente ne ha accettato uno, altrimenti le misure del 13/10 (riferimento-<dispositivo>-fase3.json). Una soglia assoluta che il riferimento violava gia' (lo scorrimento giustificato, il fotogramma piu' lungo dell'apertura) non fa fallire: vale la guardia, cioe' 'non peggiorare'. I numeri valgono solo su S25 e Tab S9: sugli emulatori gli scenari girano per verificare che funzionino (compare.ps1 -Smoke) e nessuna soglia si applica. 'mista': la prova deve girare sulla libreria mista di 100 mila righe con il 60% di media solo-NAS (metrica libraryNasShare).",
   "dispositivi": {
     "s25": {
       "nome": "Galaxy S25",
@@ -25,63 +25,77 @@
       "emulatore": true
     }
   },
+  "mistaMinimo": 0.55,
   "scenari": [
     {
       "id": "scroll",
-      "descrizione": "Fling e scorrimento su 100 mila elementi, ai 4 livelli e nei 2 stili (FrameJankMetric e FrameTimingMetric)",
+      "descrizione": "Fling e scorrimento su 100 mila elementi (60% solo-NAS), ai 4 livelli e nei 2 stili (FrameJankMetric e FrameTimingMetric)",
       "prove": "^scroll_(years|months|days|all)_(square|justified)$",
       "proveAttese": ["scroll_years_square", "scroll_months_square", "scroll_days_square", "scroll_all_square", "scroll_years_justified", "scroll_months_justified", "scroll_days_justified", "scroll_all_justified"],
       "classi": ["LibraryScrollBenchmark"],
       "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
       "assolute": [
         { "metrica": "jankPercent", "statistica": "mean", "massimo": 1.0, "spiega": "meno dell'1% di fotogrammi davvero in ritardo a 120 Hz: App Deadline Missed o Dropped Frame di FrameTimeline sul totale, media delle iterazioni (Buffer Stuffing escluso, vedi docs/bench/README.md)" }
       ],
       "regressione": [
         { "metrica": "frameDurationCpuMs", "statistica": "P95", "aumentoMassimo": 0.10 }
+      ],
+      "guardia": [
+        { "metrica": "jankPercent", "statistica": "mean", "aumentoMassimo": 0.10, "pavimento": 0.15, "mantieniSotto": 1.0, "spiega": "guardia 4A (par. 5.6): jank <= misura del 13/10 + 10% relativo (con un pavimento di 0,15 punti, circa un fotogramma su 700: sotto non si distingue dal rumore) e <= 1% dove gia' lo era" }
       ]
     },
     {
       "id": "pinch",
-      "descrizione": "10 pinch continui fra i livelli con UiAutomator (FrameJankMetric e FrameTimingMetric)",
+      "descrizione": "10 pinch continui fra i livelli con UiAutomator, sulla libreria mista (FrameJankMetric e FrameTimingMetric)",
       "prove": "^pinch$",
       "proveAttese": ["pinch"],
       "classi": ["LibraryPinchBenchmark"],
       "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
       "assolute": [
         { "metrica": "jankPercent", "statistica": "mean", "massimo": 1.0, "spiega": "meno dell'1% di fotogrammi davvero in ritardo a 120 Hz: App Deadline Missed o Dropped Frame di FrameTimeline sul totale, media delle iterazioni (Buffer Stuffing escluso, vedi docs/bench/README.md)" }
       ],
       "regressione": [
         { "metrica": "frameDurationCpuMs", "statistica": "P95", "aumentoMassimo": 0.10 }
+      ],
+      "guardia": [
+        { "metrica": "jankPercent", "statistica": "mean", "aumentoMassimo": 0.10, "pavimento": 0.15, "mantieniSotto": 1.0, "spiega": "guardia 4A (par. 5.6): come per lo scorrimento" }
       ]
     },
     {
       "id": "avvio",
-      "descrizione": "Avvio a freddo, 15 ripetizioni, TTFD alla prima pagina di miniature (StartupTimingMetric)",
+      "descrizione": "Avvio a freddo sulla libreria mista (le 120 righe piu' recenti sul telefono, come il 13/10), 15 ripetizioni, TTFD alla prima pagina di miniature (StartupTimingMetric)",
       "prove": "^coldStart$",
       "proveAttese": ["coldStart"],
       "classi": ["StartupBenchmark"],
       "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
       "validita": { "metrica": "libraryShown", "statistica": "min", "minimo": 1, "spiega": "la Libreria era visibile: altrimenti l'avvio misurato e' quello dell'onboarding" },
       "assolute": [
         { "metrica": "timeToFullDisplayMs", "statistica": "p90", "massimoEsclusivo": 1000.0, "spiega": "TTFD p90 sotto il secondo; l'app deve chiamare reportFullyDrawn (prima pagina di miniature o dopo 300 ms)" }
       ],
       "regressione": [
-        { "metrica": "timeToFullDisplayMs", "statistica": "p90", "aumentoMassimo": 0.10 }
+        { "metrica": "timeToFullDisplayMs", "statistica": "p90", "aumentoMassimo": 0.10, "arrotondaSu": 1 }
       ]
     },
     {
       "id": "viewer",
-      "descrizione": "Apertura del viewer: dal tocco al primo fotogramma con l'immagine (sezione di traccia MCG:viewerOpen) e il fotogramma piu' lungo dell'espansione",
+      "descrizione": "Apertura del viewer di una foto del telefono sulla libreria mista: dal tocco al primo fotogramma con l'immagine (sezione di traccia MCG:viewerOpen) e il fotogramma piu' lungo dell'espansione",
       "prove": "^viewerOpen$",
       "proveAttese": ["viewerOpen"],
       "classi": ["ViewerBenchmark"],
       "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
       "assolute": [
         { "metrica": "viewerOpenMs", "statistica": "p90", "massimoEsclusivo": 100.0, "spiega": "p90 sotto i 100 ms; la sezione la emette il viewer (P8)" },
         { "metrica": "viewerOpenMaxFrameMs", "statistica": "max", "massimo": 16.7, "spiega": "nessun fotogramma oltre i 16,7 ms (due vsync a 120 Hz) nei primi 500 ms dell'apertura, in nessuna delle iterazioni: lo scatto dell'espansione" }
       ],
       "regressione": [
-        { "metrica": "viewerOpenMs", "statistica": "p90", "aumentoMassimo": 0.15 }
+        { "metrica": "viewerOpenMs", "statistica": "p90", "aumentoMassimo": 0.15, "arrotondaSu": 1 }
+      ],
+      "guardia": [
+        { "metrica": "viewerOpenMaxFrameMs", "statistica": "max", "aumentoMassimo": 0.10, "spiega": "guardia 4A (par. 5.6): il fotogramma piu' lungo dell'apertura, fuori soglia gia' il 13/10 (telefono caldo), non deve peggiorare" }
       ]
     },
     {
@@ -97,6 +111,51 @@
       ],
       "regressione": [
         { "metrica": "pssPeakKb", "statistica": "max", "aumentoMassimo": 0.15 }
+      ]
+    },
+    {
+      "id": "avvio-nas",
+      "descrizione": "NUOVA (4A, par. 5.6): avvio a freddo con la prima pagina fatta solo di miniature del NAS (profilo 'NAS prima': le 300 righe piu' recenti solo-NAS, con l'HQ in replica), 15 ripetizioni",
+      "prove": "^coldStartNasFirst$",
+      "proveAttese": ["coldStartNasFirst"],
+      "classi": ["NasLibraryBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "validita": { "metrica": "libraryShown", "statistica": "min", "minimo": 1, "spiega": "la Libreria era visibile: altrimenti l'avvio misurato e' quello dell'onboarding" },
+      "assolute": [
+        { "metrica": "timeToFullDisplayMs", "statistica": "p90", "massimoEsclusivo": 1000.0, "spiega": "TTFD p90 sotto il secondo con la prima pagina tutta dalla replica (proposta di P10: stessa soglia dell'avvio normale, il par. 5.6 non ne fissa una); reportFullyDrawn alla prima pagina di miniature del NAS (P7)" }
+      ],
+      "regressione": [
+        { "metrica": "timeToFullDisplayMs", "statistica": "p90", "aumentoMassimo": 0.10, "arrotondaSu": 1 }
+      ]
+    },
+    {
+      "id": "viewer-nas",
+      "descrizione": "NUOVA (4A, par. 5.6): apertura di un media solo-NAS con l'HQ in replica (profilo 'NAS prima'), 12 aperture",
+      "prove": "^viewerOpenNas$",
+      "proveAttese": ["viewerOpenNas"],
+      "classi": ["NasLibraryBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "assolute": [
+        { "metrica": "viewerOpenMs", "statistica": "p90", "massimoEsclusivo": 100.0, "spiega": "par. 5.6: apertura di un media solo-NAS con HQ in replica, p90 sotto i 100 ms; la sezione la emette il viewer (P8)" }
+      ],
+      "regressione": [
+        { "metrica": "viewerOpenMs", "statistica": "p90", "aumentoMassimo": 0.15, "arrotondaSu": 1 }
+      ]
+    },
+    {
+      "id": "memoria",
+      "descrizione": "NUOVA (4A, par. 5.6): memoria dell'app (PSS, heap Java, nativo, grafica) a Libreria ferma dopo un avvio a freddo con 100 mila righe, 5 avvii. Il conto preciso dell'indice (estimatedBytes) e' il budget JVM di core-library",
+      "prove": "^libraryMemory$",
+      "proveAttese": ["libraryMemory"],
+      "classi": ["LibraryMemoryBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "validita": { "metrica": "libraryShown", "statistica": "min", "minimo": 1, "spiega": "la Libreria era visibile: altrimenti la memoria misurata e' quella dell'onboarding" },
+      "assolute": [],
+      "regressione": [
+        { "metrica": "libraryPssKb", "statistica": "max", "aumentoMassimo": 0.15 }
       ]
     }
   ]

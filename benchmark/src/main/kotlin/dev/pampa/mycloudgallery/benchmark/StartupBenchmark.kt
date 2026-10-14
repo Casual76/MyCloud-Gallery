@@ -42,7 +42,7 @@ class StartupBenchmark {
   fun coldStart() {
     rule.measureRepeated(
       packageName = BenchSession.targetPackage,
-      metrics = listOf(StartupTimingMetric(), LibraryShownMetric()),
+      metrics = listOf(StartupTimingMetric(), LibraryShownMetric(), LibraryMixMetric()),
       compilationMode = BenchConfig.compilationMode,
       startupMode = StartupMode.COLD,
       iterations = BenchConfig.iterations(ITERATIONS),

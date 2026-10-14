@@ -20,10 +20,19 @@ object BenchmarkTarget {
    */
   const val DATASET_MARKER: String = "bench-library.marker"
 
-  /** Lo stato che l'inizializzatore scrive accanto al marcatore (`BenchDataset.STATUS` nell'app). */
+  /** Lo stato che l'inizializzatore scrive accanto al marcatore (`BenchDataset.STATUS` nell'app): il profilo della libreria mista. */
   const val DATASET_STATUS: String = "bench-dataset.json"
 
-  /** Le righe del dataset (`BenchDataset.ROWS`): il §5.2 vuole 100 mila elementi. */
+  /**
+   * Fase 4A (P10): con questo file accanto al marcatore l'app apre il profilo "NAS prima" (le 300 righe piu' recenti
+   * solo-NAS con l'HQ in replica) invece della libreria mista (`BenchDataset.NAS_FIRST_MARKER`). Senza, il profilo e' quello misto.
+   */
+  const val DATASET_NAS_FIRST_MARKER: String = "bench-library.nasfirst"
+
+  /** Lo stato del profilo "NAS prima" (`BenchProfile.NAS_FIRST.statusFile` nell'app). */
+  const val DATASET_STATUS_NAS_FIRST: String = "bench-dataset-nasfirst.json"
+
+  /** Le righe del dataset (`BenchDataset.ROWS`): il §5.2 vuole 100 mila elementi, dalla Fase 4A il 60% solo-NAS (fase4-progetto §5.6). */
   const val DATASET_ROWS: Int = 100_000
 
   /** Il file che, accanto al marcatore, riduce il dataset a poche migliaia di righe: lo smoke sull'emulatore (`BenchDataset.SMOKE_MARKER`). */

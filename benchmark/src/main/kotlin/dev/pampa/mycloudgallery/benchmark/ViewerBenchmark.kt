@@ -18,6 +18,10 @@ import org.junit.runner.RunWith
  *
  * Per ogni iterazione: app appena avviata, tocco sulla cella piu' vicina al centro (una foto della rotazione dei media
  * veri), aspetta la quiete, chiude con Indietro. Il nome della prova e' `viewerOpen`: e' la chiave di `soglie.json`.
+ *
+ * **Sulla libreria mista (Fase 4A, P10)** la prima schermata e' del telefono: le 120 righe piu' recenti non hanno il NAS
+ * (`BenchDataset.HEAD_PHONE_ROWS`), quindi la cella al centro e' sempre una foto del telefono e la prova resta confrontabile
+ * con il 13/10 (p90 <= 25 ms). L'apertura di un media solo-NAS e' un'altra prova: `NasLibraryBenchmark.viewerOpenNas`.
  */
 @RunWith(AndroidJUnit4::class)
 class ViewerBenchmark {
@@ -34,7 +38,7 @@ class ViewerBenchmark {
   fun viewerOpen() {
     rule.measureRepeated(
       packageName = BenchSession.targetPackage,
-      metrics = listOf(ViewerOpenMetric(), FrameTimingMetric()),
+      metrics = listOf(ViewerOpenMetric(), FrameTimingMetric(), LibraryMixMetric()),
       compilationMode = BenchConfig.compilationMode,
       iterations = BenchConfig.iterations(ITERATIONS),
       setupBlock = {

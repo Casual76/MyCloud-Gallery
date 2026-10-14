@@ -156,9 +156,89 @@ class LibraryShownMetric : TraceMetric() {
     listOf(Metric.Measurement("libraryShown", if (BenchState.libraryShown) 1.0 else 0.0))
 }
 
-/** Lo stato che le prove consegnano alle metriche proprie (`LibraryShownMetric`). */
+/**
+ * "Che libreria si e' misurata" (Fase 4A, P10): la quota di righe solo-NAS (0..1), le righe, i blob della replica e se era
+ * il profilo "NAS prima". `compare.ps1` rifiuta di confrontare con la guardia una prova che non gira sulla libreria mista
+ * (`libraryNasShare` sotto il 55%): senza, un dataset della Fase 3 passerebbe per buono. Legge lo stato del dataset che
+ * [BenchSession] ha consegnato a [BenchState].
+ */
+@OptIn(ExperimentalMetricApi::class)
+class LibraryMixMetric : TraceMetric() {
+
+  override fun getMeasurements(captureInfo: Metric.CaptureInfo, traceSession: TraceProcessor.Session): List<Metric.Measurement> {
+    val dataset = BenchState.dataset ?: return listOf(Metric.Measurement("libraryNasShare", 0.0))
+    return listOf(
+      Metric.Measurement("libraryNasShare", dataset.nasShare),
+      Metric.Measurement("libraryRows", dataset.rows.toDouble()),
+      Metric.Measurement("libraryReplicaBlobs", dataset.replicaBlobs.toDouble()),
+      Metric.Measurement("libraryNasFirst", if (BenchState.profile == BenchLibraryProfile.NAS_FIRST) 1.0 else 0.0),
+    )
+  }
+}
+
+/**
+ * La memoria dell'app a Libreria ferma dopo l'avvio a freddo (Fase 4A, P10: "memoria dell'indice con 100 mila elementi"):
+ * PSS totale, heap Java, heap nativo e grafica, campionati con `dumpsys meminfo` da [BenchMemory.sample]. L'indice della
+ * timeline, l'istantanea mappata e le righe della replica stanno nello heap Java e nella PSS; il conto preciso dell'indice
+ * (`estimatedBytes`) lo fa il budget JVM di `core-library`, questo dice cosa vede il telefono.
+ */
+@OptIn(ExperimentalMetricApi::class)
+class LibraryMemoryMetric : TraceMetric() {
+
+  override fun getMeasurements(captureInfo: Metric.CaptureInfo, traceSession: TraceProcessor.Session): List<Metric.Measurement> =
+    listOfNotNull(
+      BenchMemory.pssKb?.let { Metric.Measurement("libraryPssKb", it) },
+      BenchMemory.javaHeapKb?.let { Metric.Measurement("libraryJavaHeapKb", it) },
+      BenchMemory.nativeHeapKb?.let { Metric.Measurement("libraryNativeHeapKb", it) },
+      BenchMemory.graphicsKb?.let { Metric.Measurement("libraryGraphicsKb", it) },
+    )
+}
+
+/** Lo stato che le prove consegnano alle metriche proprie (`LibraryShownMetric`, `LibraryMixMetric`). */
 object BenchState {
   @Volatile var libraryShown: Boolean = false
+
+  /** Lo stato del dataset e il profilo della prova in corso, messi da [BenchSession.readiness]. */
+  @Volatile var dataset: BenchDatasetStatus? = null
+  @Volatile var profile: BenchLibraryProfile = BenchLibraryProfile.MIXED
+}
+
+/** Un campione di `dumpsys meminfo` a Libreria ferma (KB). Uno stato per processo di test: lo scenario lo azzera a ogni iterazione. */
+object BenchMemory {
+
+  @Volatile var pssKb: Double? = null
+    private set
+
+  @Volatile var javaHeapKb: Double? = null
+    private set
+
+  @Volatile var nativeHeapKb: Double? = null
+    private set
+
+  @Volatile var graphicsKb: Double? = null
+    private set
+
+  fun reset() {
+    pssKb = null
+    javaHeapKb = null
+    nativeHeapKb = null
+    graphicsKb = null
+  }
+
+  fun sample() {
+    val text = BenchSession.shell("dumpsys meminfo ${BenchSession.targetPackage}")
+    pssKb = (PSS_TOTAL.find(text) ?: PSS_TABLE_TOTAL.find(text))?.groupValues?.get(1)?.toDoubleOrNull()
+    javaHeapKb = JAVA_HEAP.find(text)?.groupValues?.get(1)?.toDoubleOrNull()
+    nativeHeapKb = NATIVE_HEAP.find(text)?.groupValues?.get(1)?.toDoubleOrNull()
+    graphicsKb = GRAPHICS.find(text)?.groupValues?.get(1)?.toDoubleOrNull()
+  }
+
+  // "App Summary": "Java Heap:    24956   63584", "Native Heap:    12660", "Graphics:    8452" (prima colonna = PSS).
+  private val PSS_TOTAL = Regex("TOTAL PSS:\\s*(\\d+)")
+  private val PSS_TABLE_TOTAL = Regex("(?m)^\\s*TOTAL\\s+(\\d+)")
+  private val JAVA_HEAP = Regex("Java Heap:\\s*(\\d+)")
+  private val NATIVE_HEAP = Regex("Native Heap:\\s*(\\d+)")
+  private val GRAPHICS = Regex("Graphics:\\s*(\\d+)")
 }
 
 /** Il campionatore della PSS. Uno stato per processo di test: lo scenario lo azzera a ogni iterazione. */

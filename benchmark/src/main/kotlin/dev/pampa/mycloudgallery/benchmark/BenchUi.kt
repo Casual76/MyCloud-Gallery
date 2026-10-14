@@ -36,14 +36,31 @@ enum class BenchStyle(val label: String) {
  */
 object BenchLabels {
 
-  /** La descrizione di una cella: "Foto, 12 marzo 2024", "Video, ...", "Foto in movimento, ..." (`grid_cell_*`). */
-  val CELL: Pattern = Pattern.compile("^(Foto|Video|Foto in movimento),.*", Pattern.DOTALL)
+  /**
+   * La descrizione di una cella: "Foto, 12 marzo 2024", "Video, ...", "Foto in movimento, ...", "Foto RAW, ...",
+   * "Immagine animata, ..." (`grid_cell_*`). Una cella solo-NAS (Fase 4A) comincia allo stesso modo: la presenza viene dopo.
+   */
+  val CELL: Pattern = Pattern.compile("^(Foto RAW|Foto in movimento|Foto|Video|Immagine animata),.*", Pattern.DOTALL)
 
   /**
    * Il pulsante della barra che apre il menu della vista, con lo stile (D4) e il filtro (D16): "Vista"
    * (`library_view_menu`, confermato sulla Libreria vera il 13/10). Una lista per poterne provare piu' d'uno.
    */
   val STYLE_MENU_BUTTONS: List<String> = listOf("Vista")
+
+  // --- Robusti al filone grafico (Fase 4A, P10) -------------------------------------------------------------------------
+  // Il filone grafico (docs/grafica-progetto.md) toglie i segmenti dei livelli dalla Libreria: nelle direzioni A e C i
+  // livelli sono le prime quattro voci del menu "Vista", nella B un'etichetta "Giorni" con la freccia (`library_g1_level`:
+  // descrizione "Livello: Giorni"). Ogni selettore ha quindi una catena di alternative, dalla piu' stabile alla piu'
+  // fragile: tag di test (servono `testTagsAsResourceId` alla radice) -> descrizione o testo. Cosa serve all'app:
+  // docs/bench/README.md §6-ter.
+
+  /** I tag di test della chrome G1 (`galleryChromeTag`, prefisso `g1-chrome-`). */
+  const val TAG_VIEW_MENU: String = "g1-chrome-vista"
+  const val TAG_LEVEL_MENU: String = "g1-chrome-livello"
+
+  /** L'etichetta del livello della direzione B: "Livello: Giorni" (`library_g1_level`). */
+  val LEVEL_TRIGGER: Pattern = Pattern.compile("^Livello: (.*)$")
 }
 
 /** Selettori e gesti sulla Libreria, per tutti gli scenari. Niente di questo conosce il codice dell'app: solo l'albero di accessibilita'. */
@@ -184,10 +201,13 @@ object BenchUi {
   }
 
   /**
-   * Porta la griglia sul livello [level] con il segmento dei livelli. Il segmento si cerca per nome; se proprio quello
-   * non si vede (il segmento scelto sta sotto la lente di vetro del controllo), la sua posizione si ricava dagli altri,
-   * che sono larghi uguali. Solo senza segmenti si passa ai pinch (a fondo verso Anni, poi un passo per livello), che
-   * da qui non si possono verificare: lo dice il log. `false` se la griglia non c'e'.
+   * Porta la griglia sul livello [level]. Catena di alternative (vedi [BenchLabels]):
+   * 1. il segmento dei livelli, cercato per nome; se proprio quello non si vede (il segmento scelto sta sotto la lente di
+   *    vetro del controllo), la sua posizione si ricava dagli altri, che sono larghi uguali;
+   * 2. senza segmenti (filone grafico, direzioni A, B e C): il menu dei livelli, cioe' l'etichetta "Livello: ..." (B) o le
+   *    prime voci del menu "Vista" (A, C);
+   * 3. solo senza nessuno dei due, i pinch (a fondo verso Anni, poi un passo per livello), che da qui non si possono
+   *    verificare: lo dice il log. `false` se la griglia non c'e'.
    */
   fun selectLevel(device: UiDevice, level: BenchLevel): Boolean {
     if (awaitGrid(device) == null) return false
@@ -200,11 +220,66 @@ object BenchUi {
       Thread.sleep(LEVEL_SETTLE_MS)
       return awaitGrid(device) != null
     }
+    if (selectLevelFromMenu(device, level)) return true
     repeat(LEVELS_TO_SPAN) { pinch(device, close = true) }
     repeat(level.ordinal) { pinch(device, close = false) }
     device.waitForIdle()
-    Log.w(TAG, "segmenti dei livelli non trovati: livello '${level.label}' portato con i pinch, non verificato")
+    Log.w(TAG, "segmenti e menu dei livelli non trovati: livello '${level.label}' portato con i pinch, non verificato")
     return true
+  }
+
+  /** Il pulsante che apre il menu della vista: il tag della chrome G1, poi la descrizione "Vista", poi il testo. */
+  private fun viewMenuTrigger(device: UiDevice): UiObject2? {
+    val pkg = BenchSession.targetPackage
+    device.findObject(By.res(BenchLabels.TAG_VIEW_MENU))?.let { return it }
+    for (candidate in BenchLabels.STYLE_MENU_BUTTONS) {
+      device.findObject(By.pkg(pkg).desc(candidate))?.let { return it }
+      device.findObject(By.pkg(pkg).text(candidate))?.let { return it }
+    }
+    return null
+  }
+
+  /** L'etichetta del livello ("Giorni v", direzione B): il tag della chrome G1, poi la descrizione "Livello: ...". */
+  private fun levelTrigger(device: UiDevice): UiObject2? =
+    device.findObject(By.res(BenchLabels.TAG_LEVEL_MENU))
+      ?: device.findObject(By.pkg(BenchSession.targetPackage).desc(BenchLabels.LEVEL_TRIGGER))
+
+  /**
+   * I livelli dal menu (nessun segmento sulla pagina): prima l'etichetta del livello (B), poi il menu "Vista" (A, C). Se
+   * l'etichetta dice gia' il livello cercato non si tocca niente. `false` se nessuno dei due apre un menu con la voce.
+   */
+  private fun selectLevelFromMenu(device: UiDevice, level: BenchLevel): Boolean {
+    val current = levelTrigger(device)?.let { node ->
+      val text = try {
+        node.contentDescription ?: node.text
+      } catch (stale: StaleObjectException) {
+        null
+      }.orEmpty()
+      BenchLabels.LEVEL_TRIGGER.matcher(text).takeIf { it.matches() }?.group(1)?.trim() ?: text.trim()
+    }
+    if (current == level.label) return true
+    val triggers: List<(UiDevice) -> UiObject2?> = listOf(::levelTrigger, ::viewMenuTrigger)
+    for (trigger in triggers) {
+      repeat(MENU_ATTEMPTS) {
+        ensureForeground(device)
+        val button = trigger(device) ?: return@repeat
+        button.click()
+        val item = awaitMenuItem(device, level.label) { device.hasObject(By.text(level.label)) }
+        if (item != null) {
+          item.click()
+          device.wait(Until.hasObject(GRID_IN_APP), MENU_TIMEOUT_MS)
+          device.waitForIdle()
+          Thread.sleep(LEVEL_SETTLE_MS)
+          return awaitGrid(device) != null
+        }
+        if (!device.hasObject(GRID_IN_APP)) {
+          // Il menu e' aperto ma la voce non c'e': lo si chiude.
+          back(device)
+          device.wait(Until.hasObject(GRID_IN_APP), MENU_TIMEOUT_MS)
+        }
+      }
+    }
+    return false
   }
 
   /** Il centro del segmento di [level]: trovato per nome, o ricavato da due segmenti visti (stessa riga, passo costante). */
@@ -233,39 +308,38 @@ object BenchUi {
   fun selectStyle(device: UiDevice, style: BenchStyle): Boolean {
     if (awaitGrid(device) == null) return false
     device.waitForIdle()
-    for (candidate in BenchLabels.STYLE_MENU_BUTTONS) {
-      repeat(MENU_ATTEMPTS) {
-        ensureForeground(device)
-        val button = device.findObject(By.pkg(BenchSession.targetPackage).desc(candidate))
-          ?: device.findObject(By.pkg(BenchSession.targetPackage).text(candidate))
-          ?: return@repeat
-        button.click()
-        val item = awaitMenuItem(device, style)
-        if (item != null) {
-          item.click()
-          // La voce sparisce con il menu; poi la pagina torna visibile all'accessibilita' (vedi [awaitGrid]).
-          device.wait(Until.gone(STYLE_ITEMS), MENU_TIMEOUT_MS)
-          device.waitForIdle()
-          return awaitGrid(device) != null
-        }
-        if (!device.hasObject(GRID_IN_APP)) {
-          // Il menu e' aperto (la pagina sotto e' nascosta) ma la voce non c'e': lo si chiude.
-          back(device)
-          device.wait(Until.hasObject(GRID_IN_APP), MENU_TIMEOUT_MS)
-        }
+    repeat(MENU_ATTEMPTS) {
+      ensureForeground(device)
+      val button = viewMenuTrigger(device) ?: return@repeat
+      button.click()
+      val item = awaitMenuItem(device, style.label) { device.hasObject(STYLE_ITEMS) }
+      if (item != null) {
+        item.click()
+        // La voce sparisce con il menu; poi la pagina torna visibile all'accessibilita' (vedi [awaitGrid]).
+        device.wait(Until.gone(STYLE_ITEMS), MENU_TIMEOUT_MS)
+        device.waitForIdle()
+        return awaitGrid(device) != null
+      }
+      if (!device.hasObject(GRID_IN_APP)) {
+        // Il menu e' aperto (la pagina sotto e' nascosta) ma la voce non c'e': lo si chiude.
+        back(device)
+        device.wait(Until.hasObject(GRID_IN_APP), MENU_TIMEOUT_MS)
       }
     }
     return false
   }
 
-  /** La voce [style] del menu appena toccato: si aspetta finche' compare o finche' la griglia torna visibile (menu non aperto). */
-  private fun awaitMenuItem(device: UiDevice, style: BenchStyle): UiObject2? {
+  /**
+   * La voce [label] del menu appena toccato: si aspetta finche' compare o finche' la griglia torna visibile senza che
+   * [menuIsOpen] dica che il menu si sta aprendo (il tocco non l'ha aperto).
+   */
+  private fun awaitMenuItem(device: UiDevice, label: String, menuIsOpen: () -> Boolean): UiObject2? {
     val start = System.currentTimeMillis()
     while (System.currentTimeMillis() - start < MENU_OPEN_TIMEOUT_MS) {
       refreshAccessibilityTree()
-      device.wait(Until.findObject(By.text(style.label)), MENU_POLL_MS)?.let { return it }
+      device.wait(Until.findObject(By.text(label)), MENU_POLL_MS)?.let { return it }
       // Griglia ancora visibile e nessuna voce dopo un po': il tocco non ha aperto il menu.
-      val notOpening = device.hasObject(GRID_IN_APP) && !device.hasObject(STYLE_ITEMS)
+      val notOpening = device.hasObject(GRID_IN_APP) && !menuIsOpen()
       if (notOpening && System.currentTimeMillis() - start > MENU_GRACE_MS) return null
     }
     return null

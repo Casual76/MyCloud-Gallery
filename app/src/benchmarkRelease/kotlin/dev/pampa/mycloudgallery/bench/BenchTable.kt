@@ -11,7 +11,17 @@ import androidx.sqlite.db.SupportSQLiteStatement
  * neutro del loro tipo, letto da `PRAGMA table_info`: cosi' un campo nuovo del catalogo non rompe la variante di misura.
  * Una colonna che il dataset scrive e che non esiste piu' invece **fa fallire** subito, con il nome della tabella.
  */
-internal class BenchTable(db: SupportSQLiteDatabase, private val table: String, provided: List<String>) {
+internal class BenchTable(
+  db: SupportSQLiteDatabase,
+  private val table: String,
+  provided: List<String>,
+  /**
+   * Colonne che il dataset scrive **se la tabella le ha** (P10: la chiave di contenuto, che lo schema v3 di P2 potra'
+   * tenere in una colonna): se non ci sono, [optionalLong] non fa niente invece di fallire. Una colonna di [provided]
+   * che manca, invece, fa fallire subito.
+   */
+  optional: List<String> = emptyList(),
+) {
 
   private val position = HashMap<String, Int>()
   private val statement: SupportSQLiteStatement
@@ -41,7 +51,8 @@ internal class BenchTable(db: SupportSQLiteDatabase, private val table: String, 
     require(missing.isEmpty()) { "Colonne di $table cambiate: mancano ${missing.joinToString()}. Aggiorna BenchSeeder." }
 
     val all = ArrayList(provided)
-    val extraColumns = known.filter { (name, col) -> name !in provided && col.notNull && !col.hasDefault && !col.primaryKey }
+    all += optional.filter { it in known && it !in provided }
+    val extraColumns = known.filter { (name, col) -> name !in all && col.notNull && !col.hasDefault && !col.primaryKey }
     all += extraColumns.keys
     all.forEachIndexed { i, name -> position[name] = i + 1 }
     extras = extraColumns.map { (name, col) -> Extra(position.getValue(name), col.type) }
@@ -56,6 +67,11 @@ internal class BenchTable(db: SupportSQLiteDatabase, private val table: String, 
   fun text(column: String, value: String?) {
     val i = index(column)
     if (value == null) statement.bindNull(i) else statement.bindString(i, value)
+  }
+
+  /** Scrive [value] in [column] se la tabella ha la colonna (vedi `optional`), altrimenti niente. */
+  fun optionalLong(column: String, value: Long?) {
+    if (column in position) long(column, value)
   }
 
   fun long(column: String, value: Long?) {

@@ -31,6 +31,15 @@ object DiagnosticsActions {
   /** Le impostazioni di sicurezza di Android (blocco schermo). */
   val OPEN_SECURITY_SETTINGS = DiagAction("open_security_settings")
 
+  /** Fase 4A (§1.4): "Ferma le scritture sul NAS" (l'emergenza: niente indice ne' prenotazioni). La esegue :app. */
+  val NAS_STOP_WRITES = DiagAction("nas_stop_writes")
+
+  /** Fase 4A: riattiva le scritture fermate dall'emergenza (D31 resta: solo le aree di prova). La esegue :app. */
+  val NAS_RESUME_WRITES = DiagAction("nas_resume_writes")
+
+  /** Fase 4A (D10): "Ho controllato, continua" su un'area congelata, con la conferma del numero. La esegue :app. */
+  val NAS_RELEASE_FREEZE = DiagAction("nas_release_freeze")
+
   /** Le azioni che questo modulo esegue da solo con un intent verso Android. */
   val INTENT_ACTIONS: Set<DiagAction> = setOf(
     DiagAction.OPEN_BATTERY_SETTINGS,
@@ -59,6 +68,9 @@ object DiagnosticsActions {
     OPEN_UNUSED_APP_SETTINGS -> R.string.diagnostics_action_open_unused_apps
     OPEN_NEVER_SLEEPING_APPS -> R.string.diagnostics_action_open_never_sleeping
     OPEN_SECURITY_SETTINGS -> R.string.diagnostics_action_open_security
+    NAS_STOP_WRITES -> R.string.diagnostics_action_nas_stop_writes
+    NAS_RESUME_WRITES -> R.string.diagnostics_action_nas_resume_writes
+    NAS_RELEASE_FREEZE -> R.string.diagnostics_action_nas_release_freeze
     else -> 0
   }
 

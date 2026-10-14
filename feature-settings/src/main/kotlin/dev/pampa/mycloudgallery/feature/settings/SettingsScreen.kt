@@ -9,6 +9,7 @@ import androidx.compose.material.icons.rounded.FolderOff
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.MonitorHeart
+import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.VpnKey
@@ -48,6 +49,7 @@ class SettingsLinks(
   val openSecurity: () -> Unit = {},
   val openBackupNotice: () -> Unit = {},
   val openAbout: () -> Unit = {},
+  val openQuality: () -> Unit = {},
 ) {
   companion object {
     val None = SettingsLinks()
@@ -154,6 +156,14 @@ fun SettingsScreen(
           tone = FluidTone.Info,
           leading = { RowGlyph(Icons.Rounded.Wifi) },
           onClick = links.openNetwork,
+        )
+        FluidListDivider()
+        FluidListRow(
+          title = stringResource(R.string.settings_quality),
+          subtitle = stringResource(R.string.settings_quality_detail),
+          tone = FluidTone.Info,
+          leading = { RowGlyph(Icons.Rounded.PhotoLibrary) },
+          onClick = links.openQuality,
         )
       }
     }

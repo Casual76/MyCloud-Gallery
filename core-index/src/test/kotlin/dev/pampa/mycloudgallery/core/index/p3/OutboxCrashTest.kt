@@ -23,7 +23,7 @@ import org.junit.Test
  *   un'altra;
  * - outbox vuota, nessun byte orfano nel pacco, replica locale completa.
  */
-class OutboxCrashTest {
+open class OutboxCrashTest {
 
   private val share = "test-comune"
 

@@ -163,6 +163,8 @@ class Fase3CatalogTest {
    * Sono comportamenti che si vedono nel visualizzatore o nelle celle, regole di calcolo, vincoli di progetto, prove
    * sul campo o cose che appartengono a un'altra fase.
    */
+  // E-M10 (file corrotto) ed E-M13 (codec non decodificabile) non sono piu' qui: dalla Fase 4A hanno un codice
+  // (PREP_UNREADABLE, PREP_DECODER_MISSING) nella sezione «NAS nella Libreria" (Fase4ACatalogTest).
   private val notADiagnosticWarning = mapOf(
     // Formati e decodifica (E-M*): si vedono nel visualizzatore o nella cella, non in Diagnostica.
     "E-M1" to "grandi formati (200 MP): si zooma a tasselli nel visualizzatore, nessuno stato da segnalare",
@@ -170,9 +172,7 @@ class Fase3CatalogTest {
     "E-M7" to "codec video non supportato: messaggio nel visualizzatore",
     "E-M8" to "data del file come ultima fonte: la data e' marcata «stimata» nelle informazioni",
     "E-M9" to "date assurde: la fonte si scarta e si passa alla successiva, in silenzio",
-    "E-M10" to "file corrotto: la cella e' «non leggibile», mai bloccante",
     "E-M11" to "GIF e WebP animati: li gestisce il visualizzatore; nella griglia restano fermi",
-    "E-M13" to "video 8K o APV: stesso messaggio del codec non supportato, nel visualizzatore",
     "E-M14" to "fuso dei video: lo risolve il fuso del luogo (regola di calcolo)",
     "E-M15" to "orientamento EXIF: la decodifica raddrizza sempre (provato con screenshot)",
     "E-M16" to "motion photo di formato sconosciuto: foto ferma, come E-M5",

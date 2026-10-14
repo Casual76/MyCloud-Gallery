@@ -9,7 +9,7 @@ import dev.pampa.mycloudgallery.core.index.replica.LocalReplica
 import dev.pampa.mycloudgallery.core.index.replica.PathKeys
 import dev.pampa.mycloudgallery.core.index.replica.pack.PackDirectory
 import dev.pampa.mycloudgallery.core.index.replica.store.MemoryReplicaCatalog
-import dev.pampa.mycloudgallery.core.index.replica.store.MemoryReplicaStore
+import dev.pampa.mycloudgallery.core.index.TestStores
 import dev.pampa.mycloudgallery.core.index.replica.store.ReplicaStore
 import dev.pampa.mycloudgallery.core.index.testing.InMemoryRemoteIndex
 import dev.pampa.mycloudgallery.core.model.ContentKey
@@ -94,7 +94,7 @@ class Harness(
   var nasNow: Long = Fx.NOW,
   maxReleasePerRound: Long = ReplicaQualityController.MAX_RELEASE_BYTES_PER_ROUND,
 ) {
-  val store = MemoryReplicaStore()
+  val store: ReplicaStore = TestStores.replica()
   val catalog = MemoryReplicaCatalog()
   val packs = PackDirectory(File(dir, "packs-$own"))
   val replica = LocalReplica(store, packs, catalog, own)

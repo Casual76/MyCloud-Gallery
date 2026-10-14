@@ -22,6 +22,7 @@ import dev.pampa.mycloudgallery.feature.settings.family.FamilyStateRoute
 import dev.pampa.mycloudgallery.feature.settings.family.InviteRoute
 import dev.pampa.mycloudgallery.feature.settings.family.KitRoute
 import dev.pampa.mycloudgallery.feature.settings.network.NetworkRoute
+import dev.pampa.mycloudgallery.feature.settings.quality.PreviewQualityRoute
 import dev.pampa.mycloudgallery.feature.settings.security.BackupNoticeScreen
 import dev.pampa.mycloudgallery.feature.settings.security.SecurityRoute
 import dev.pampa.mycloudgallery.feature.settings.ui.SettingsHost
@@ -84,6 +85,10 @@ data object SettingsBackupRoute
 @Serializable
 data object SettingsAboutRoute
 
+/** La qualita' delle anteprime del NAS e le copertine degli album (Fase 4A, P11). */
+@Serializable
+data object SettingsQualityRoute
+
 /**
  * Le Impostazioni (P7): Dispositivi (elenco, dettaglio, approvazione, segnala perso), Famiglia (invito, kit di
  * recupero, secondo admin, reset, QR "stato"), Account del NAS (password, indirizzo), Rete e VPN, Sicurezza
@@ -118,6 +123,7 @@ fun NavGraphBuilder.settingsGraph(
             openSecurity = { nav.navigate(SettingsSecurityRoute) },
             openBackupNotice = { nav.navigate(SettingsBackupRoute) },
             openAbout = { nav.navigate(SettingsAboutRoute) },
+            openQuality = { nav.navigate(SettingsQualityRoute) },
           ),
           openDiagnostics = openDiagnostics,
           resumeStep = resumeStep,
@@ -198,6 +204,9 @@ fun NavGraphBuilder.settingsGraph(
         BackupNoticeScreen(onBack = back, onReviewChecklist = { resumeStep(OnboardingStep.SECURITY_NOTICE) })
       }
     }
+
+    // --- Anteprime del NAS (Fase 4A) ---
+    composable<SettingsQualityRoute> { SettingsHost { PreviewQualityRoute(onBack = back) } }
 
     // --- Informazioni e licenze ---
     composable<SettingsAboutRoute> { SettingsHost { AboutRoute(onBack = back) } }

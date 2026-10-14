@@ -48,9 +48,12 @@ object GalleryMigrations {
  * - `media.cell_flags`: i bit di presenza `ON_PHONE`, `ON_NAS`, `SAFE` (D18) **calcolati qui** dai derivati gia' salvati
  *   (`presence`, `safety`) con le stesse regole del catalogo (`TimelineRules.presenceFlags`); nessun gruppo provvisorio
  *   esiste ancora, quindi nessun `TO_VERIFY`;
- * - le tabelle nuove: `nas_scan_state`, l'indice condiviso (`index_publish_state`, `index_own_segment`,
- *   `index_outbox_record`, `index_outbox_blob`, `index_head`, `index_segment`, `index_record`, `replica_pack`,
- *   `replica_blob`, `index_sync_state`) e il diario della 4B (`nas_op`, `nas_op_item`, `nas_trash_entry`), vuote.
+ * - le tabelle nuove: `nas_scan_state`, l'indice condiviso (pubblicazione: `index_publish_state`, `index_own_segment`,
+ *   `index_outbox_record`, `index_outbox_blob`, `index_own_record`, `index_own_blob`; replica: `index_head`,
+ *   `index_segment`, `index_record`, `replica_dirty`, `replica_pack`, `replica_blob`, `replica_share_access`,
+ *   `replica_setting`, `replica_provisional`) e il diario della 4B (`nas_op`, `nas_op_item`, `nas_trash_entry`), vuote.
+ *   P11 ha riconciliato le tabelle dell'indice con le porte di P3 e P4 prima che la v3 uscisse (nessun database v3 esiste
+ *   sui dispositivi).
  *
  * Mai distruttiva: solo colonne, indici e tabelle in piu'. I codici scritti in SQL ('phone_only', 'safe', ...) sono quelli
  * della v2, fissati qui di proposito. Su API 29 (SQLite 3.22) niente `UPSERT`, `RETURNING`, `DROP COLUMN`.
@@ -92,62 +95,95 @@ private object Migration2To3 : Migration(2, 3) {
 
   // Copiate da schemas/.../3.json (createSql di Room): la validazione dello schema dopo la migrazione le confronta.
   private val CREATE_TABLES = listOf(
-    "CREATE TABLE IF NOT EXISTS `nas_scan_state` (`account_id` TEXT NOT NULL, `share_key` TEXT NOT NULL, `share_name` TEXT NOT NULL, " +
-      "`epoch` INTEGER, `resume_after` TEXT, `last_full_scan_at` INTEGER, `freeze_reason` TEXT, `freeze_since` INTEGER, " +
-      "`freeze_known_present` INTEGER, `freeze_vanished` INTEGER, `freeze_changed` INTEGER, `freeze_not_media` INTEGER, " +
-      "PRIMARY KEY(`account_id`, `share_key`))",
-    "CREATE TABLE IF NOT EXISTS `index_publish_state` (`share_key` TEXT NOT NULL, `next_seq` INTEGER NOT NULL, " +
-      "`head_version` INTEGER NOT NULL DEFAULT 0, `head_hash` TEXT, `head_published_at` INTEGER, PRIMARY KEY(`share_key`))",
-    "CREATE TABLE IF NOT EXISTS `index_own_segment` (`share_key` TEXT NOT NULL, `segment_hash` TEXT NOT NULL, `cls` INTEGER NOT NULL, " +
-      "`size` INTEGER NOT NULL, `entries` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, PRIMARY KEY(`share_key`, `segment_hash`))",
-    "CREATE TABLE IF NOT EXISTS `index_outbox_record` (`share_key` TEXT NOT NULL, `record_key` TEXT NOT NULL, `seq` INTEGER NOT NULL, " +
-      "`path` TEXT NOT NULL, `gone` INTEGER NOT NULL, `body` BLOB NOT NULL, `staged_at` INTEGER NOT NULL, " +
+    "CREATE TABLE IF NOT EXISTS `nas_scan_state` (`account_id` TEXT NOT NULL, `share_key` TEXT NOT NULL, " +
+      "`share_name` TEXT NOT NULL, `epoch` INTEGER, `resume_after` TEXT, `last_full_scan_at` INTEGER, " +
+      "`freeze_reason` TEXT, `freeze_since` INTEGER, `freeze_known_present` INTEGER, `freeze_vanished` INTEGER, " +
+      "`freeze_changed` INTEGER, `freeze_not_media` INTEGER, PRIMARY KEY(`account_id`, `share_key`))",
+    "CREATE TABLE IF NOT EXISTS `index_publish_state` (`share_key` TEXT NOT NULL, `share_name` TEXT NOT NULL, " +
+      "`next_seq` INTEGER NOT NULL, `head_version` INTEGER NOT NULL DEFAULT 0, `head_hash` TEXT, " +
+      "`head_published_at` INTEGER, PRIMARY KEY(`share_key`))",
+    "CREATE TABLE IF NOT EXISTS `index_own_segment` (`share_key` TEXT NOT NULL, `segment_hash` TEXT NOT NULL, " +
+      "`cls` INTEGER NOT NULL, `size` INTEGER NOT NULL, `entries` INTEGER NOT NULL, `listed` INTEGER NOT NULL, " +
+      "PRIMARY KEY(`share_key`, `segment_hash`))",
+    "CREATE INDEX IF NOT EXISTS `index_index_own_segment_share_key_listed` ON `index_own_segment` (`share_key`, " +
+      "`listed`)",
+    "CREATE TABLE IF NOT EXISTS `index_outbox_record` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+      "`share_key` TEXT NOT NULL, `seq` INTEGER NOT NULL, `path_key` TEXT NOT NULL, `content_key` TEXT, " +
+      "`body` BLOB NOT NULL, `sunk` INTEGER NOT NULL)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS `index_index_outbox_record_share_key_seq` ON `index_outbox_record` (`share_key`, " +
+      "`seq`)",
+    "CREATE INDEX IF NOT EXISTS `index_index_outbox_record_sunk` ON `index_outbox_record` (`sunk`)",
+    "CREATE TABLE IF NOT EXISTS `index_outbox_blob` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+      "`share_key` TEXT NOT NULL, `cls` INTEGER NOT NULL, `content_key` TEXT NOT NULL, " +
+      "`byte_length` INTEGER NOT NULL, `handle` TEXT NOT NULL, `sunk` INTEGER NOT NULL)",
+    "CREATE INDEX IF NOT EXISTS `index_index_outbox_blob_share_key` ON `index_outbox_blob` (`share_key`)",
+    "CREATE INDEX IF NOT EXISTS `index_index_outbox_blob_sunk` ON `index_outbox_blob` (`sunk`)",
+    "CREATE TABLE IF NOT EXISTS `index_own_record` (`share_key` TEXT NOT NULL, `path_key` TEXT NOT NULL, " +
+      "`path` TEXT NOT NULL, `seq` INTEGER NOT NULL, `gone` INTEGER NOT NULL, `content_key` TEXT, " +
+      "`segment_hash` TEXT NOT NULL, PRIMARY KEY(`share_key`, `path_key`))",
+    "CREATE INDEX IF NOT EXISTS `index_index_own_record_share_key_segment_hash` ON `index_own_record` (`share_key`, " +
+      "`segment_hash`)",
+    "CREATE INDEX IF NOT EXISTS `index_index_own_record_share_key_content_key` ON `index_own_record` (`share_key`, " +
+      "`content_key`)",
+    "CREATE TABLE IF NOT EXISTS `index_own_blob` (`share_key` TEXT NOT NULL, `cls` INTEGER NOT NULL, " +
+      "`content_key` TEXT NOT NULL, `segment_hash` TEXT NOT NULL, PRIMARY KEY(`share_key`, `cls`, `content_key`))",
+    "CREATE INDEX IF NOT EXISTS `index_index_own_blob_share_key_segment_hash` ON `index_own_blob` (`share_key`, " +
+      "`segment_hash`)",
+    "CREATE TABLE IF NOT EXISTS `index_head` (`share_key` TEXT NOT NULL, `device_id` TEXT NOT NULL, " +
+      "`version` INTEGER NOT NULL, `content_hash` TEXT NOT NULL, `registry_version` INTEGER NOT NULL, " +
+      "`created_at` INTEGER NOT NULL, PRIMARY KEY(`share_key`, `device_id`))",
+    "CREATE TABLE IF NOT EXISTS `index_segment` (`share_key` TEXT NOT NULL, `device_id` TEXT NOT NULL, " +
+      "`segment_hash` TEXT NOT NULL, `cls` INTEGER NOT NULL, `size` INTEGER NOT NULL, `state` TEXT NOT NULL, " +
+      "`listed` INTEGER NOT NULL, `pack_id` INTEGER, `position` INTEGER NOT NULL, PRIMARY KEY(`share_key`, " +
+      "`device_id`, `segment_hash`))",
+    "CREATE INDEX IF NOT EXISTS `index_index_segment_state_cls` ON `index_segment` (`state`, `cls`)",
+    "CREATE TABLE IF NOT EXISTS `index_record` (`share_key` TEXT NOT NULL, `device_id` TEXT NOT NULL, " +
+      "`segment_hash` TEXT NOT NULL, `record_key` TEXT NOT NULL, `seq` INTEGER NOT NULL, `gone` INTEGER NOT NULL, " +
+      "`content_key` TEXT, `prep` INTEGER NOT NULL DEFAULT 0, `body` BLOB NOT NULL, PRIMARY KEY(`share_key`, " +
+      "`device_id`, `segment_hash`, `record_key`))",
+    "CREATE INDEX IF NOT EXISTS `index_index_record_share_key_record_key` ON `index_record` (`share_key`, " +
+      "`record_key`)",
+    "CREATE TABLE IF NOT EXISTS `replica_dirty` (`share_key` TEXT NOT NULL, `record_key` TEXT NOT NULL, " +
       "PRIMARY KEY(`share_key`, `record_key`))",
-    "CREATE INDEX IF NOT EXISTS `index_index_outbox_record_share_key_seq` ON `index_outbox_record` (`share_key`, `seq`)",
-    "CREATE TABLE IF NOT EXISTS `index_outbox_blob` (`share_key` TEXT NOT NULL, `cls` INTEGER NOT NULL, `content_key` TEXT NOT NULL, " +
-      "`pack` TEXT NOT NULL, `byte_offset` INTEGER NOT NULL, `byte_length` INTEGER NOT NULL, `staged_at` INTEGER NOT NULL, " +
-      "PRIMARY KEY(`share_key`, `cls`, `content_key`))",
-    "CREATE INDEX IF NOT EXISTS `index_index_outbox_blob_pack` ON `index_outbox_blob` (`pack`)",
-    "CREATE TABLE IF NOT EXISTS `index_head` (`share_key` TEXT NOT NULL, `device_id` TEXT NOT NULL, `version` INTEGER NOT NULL, " +
-      "`content_hash` TEXT NOT NULL, `registry_version` INTEGER, `applied_at` INTEGER NOT NULL, PRIMARY KEY(`share_key`, `device_id`))",
-    "CREATE TABLE IF NOT EXISTS `index_segment` (`share_key` TEXT NOT NULL, `device_id` TEXT NOT NULL, `segment_hash` TEXT NOT NULL, " +
-      "`cls` INTEGER NOT NULL, `size` INTEGER NOT NULL, `state` TEXT NOT NULL, `pack_id` INTEGER, `updated_at` INTEGER NOT NULL, " +
-      "PRIMARY KEY(`share_key`, `device_id`, `segment_hash`))",
-    "CREATE INDEX IF NOT EXISTS `index_index_segment_share_key_state` ON `index_segment` (`share_key`, `state`)",
-    "CREATE TABLE IF NOT EXISTS `index_record` (`share_key` TEXT NOT NULL, `device_id` TEXT NOT NULL, `record_key` TEXT NOT NULL, " +
-      "`seq` INTEGER NOT NULL, `segment_hash` TEXT NOT NULL, `path` TEXT NOT NULL, `gone` INTEGER NOT NULL, `size` INTEGER, " +
-      "`modified_at` INTEGER, `file_id` INTEGER, `quick_hash` TEXT, `full_hash` TEXT, `content_key` INTEGER, `remote_media_id` TEXT, " +
-      "`remote_version_id` TEXT, `prep` INTEGER NOT NULL DEFAULT 0, `fail_code` TEXT, `fail_decoder` TEXT, `body` BLOB NOT NULL, " +
-      "PRIMARY KEY(`share_key`, `device_id`, `record_key`))",
-    "CREATE INDEX IF NOT EXISTS `index_index_record_share_key_record_key` ON `index_record` (`share_key`, `record_key`)",
-    "CREATE INDEX IF NOT EXISTS `index_index_record_share_key_device_id_segment_hash` ON `index_record` (`share_key`, `device_id`, `segment_hash`)",
-    "CREATE INDEX IF NOT EXISTS `index_index_record_content_key` ON `index_record` (`content_key`)",
-    "CREATE TABLE IF NOT EXISTS `replica_pack` (`pack_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `share_key` TEXT NOT NULL, " +
-      "`device_id` TEXT NOT NULL, `segment_hash` TEXT NOT NULL, `cls` INTEGER NOT NULL, `file_name` TEXT NOT NULL, `size` INTEGER NOT NULL, " +
-      "`created_at` INTEGER NOT NULL)",
+    "CREATE TABLE IF NOT EXISTS `replica_pack` (`pack_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+      "`file_name` TEXT NOT NULL, `kind` TEXT NOT NULL, `cls` INTEGER NOT NULL, `bytes` INTEGER NOT NULL, " +
+      "`share_key` TEXT, `device_id` TEXT, `segment_hash` TEXT)",
     "CREATE UNIQUE INDEX IF NOT EXISTS `index_replica_pack_file_name` ON `replica_pack` (`file_name`)",
-    "CREATE INDEX IF NOT EXISTS `index_replica_pack_share_key_device_id_segment_hash` ON `replica_pack` (`share_key`, `device_id`, `segment_hash`)",
-    "CREATE TABLE IF NOT EXISTS `replica_blob` (`pack_id` INTEGER NOT NULL, `content_key` TEXT NOT NULL, `content_key_short` INTEGER NOT NULL, " +
-      "`cls` INTEGER NOT NULL, `byte_offset` INTEGER NOT NULL, `byte_length` INTEGER NOT NULL, PRIMARY KEY(`pack_id`, `content_key`), " +
+    "CREATE INDEX IF NOT EXISTS `index_replica_pack_share_key_device_id_segment_hash` ON `replica_pack` (`share_key`, " +
+      "`device_id`, `segment_hash`)",
+    "CREATE TABLE IF NOT EXISTS `replica_blob` (`content_key` TEXT NOT NULL, `cls` INTEGER NOT NULL, " +
+      "`pack_id` INTEGER NOT NULL, `content_key_short` INTEGER NOT NULL, `byte_offset` INTEGER NOT NULL, " +
+      "`byte_length` INTEGER NOT NULL, `device_id` TEXT NOT NULL, `segment_hash` TEXT NOT NULL, " +
+      "PRIMARY KEY(`content_key`, `cls`, `pack_id`), " +
       "FOREIGN KEY(`pack_id`) REFERENCES `replica_pack`(`pack_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
-    "CREATE INDEX IF NOT EXISTS `index_replica_blob_content_key_short_cls` ON `replica_blob` (`content_key_short`, `cls`)",
-    "CREATE TABLE IF NOT EXISTS `index_sync_state` (`share_key` TEXT NOT NULL, `last_sync_at` INTEGER, `last_complete_at` INTEGER, " +
-      "`denied_first_day` INTEGER, `denied_last_day` INTEGER, PRIMARY KEY(`share_key`))",
-    "CREATE TABLE IF NOT EXISTS `nas_op` (`op_id` TEXT NOT NULL, `kind` TEXT NOT NULL, `state` TEXT NOT NULL, `plan_hash` TEXT NOT NULL, " +
-      "`item_count` INTEGER NOT NULL, `total_bytes` INTEGER NOT NULL, `error_code` TEXT, `created_at` INTEGER NOT NULL, " +
-      "`updated_at` INTEGER NOT NULL, PRIMARY KEY(`op_id`))",
+    "CREATE INDEX IF NOT EXISTS `index_replica_blob_content_key_short_cls` ON `replica_blob` (`content_key_short`, " +
+      "`cls`)",
+    "CREATE INDEX IF NOT EXISTS `index_replica_blob_pack_id` ON `replica_blob` (`pack_id`)",
+    "CREATE TABLE IF NOT EXISTS `replica_share_access` (`share_key` TEXT NOT NULL, `failure` TEXT NOT NULL, " +
+      "`first_failure_day` INTEGER NOT NULL, `dropped` INTEGER NOT NULL, PRIMARY KEY(`share_key`))",
+    "CREATE TABLE IF NOT EXISTS `replica_setting` (`key` TEXT NOT NULL, `value` TEXT NOT NULL, PRIMARY KEY(`key`))",
+    "CREATE TABLE IF NOT EXISTS `replica_provisional` (`content_key_short` INTEGER NOT NULL, " +
+      "`content_key` TEXT NOT NULL, `jpeg` BLOB NOT NULL, PRIMARY KEY(`content_key_short`))",
+    "CREATE TABLE IF NOT EXISTS `nas_op` (`op_id` TEXT NOT NULL, `kind` TEXT NOT NULL, `state` TEXT NOT NULL, " +
+      "`plan_hash` TEXT NOT NULL, `item_count` INTEGER NOT NULL, `total_bytes` INTEGER NOT NULL, `error_code` TEXT, " +
+      "`created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`op_id`))",
     "CREATE INDEX IF NOT EXISTS `index_nas_op_state` ON `nas_op` (`state`)",
-    "CREATE TABLE IF NOT EXISTS `nas_op_item` (`op_id` TEXT NOT NULL, `item_index` INTEGER NOT NULL, `state` TEXT NOT NULL, " +
-      "`is_folder` INTEGER NOT NULL, `account_id` TEXT NOT NULL, `src_share` TEXT NOT NULL, `src_path` TEXT NOT NULL, `dst_share` TEXT, " +
-      "`dst_path` TEXT, `temp_name` TEXT, `size` INTEGER, `modified_at` INTEGER, `file_id` INTEGER, `sha256` TEXT, `trash_id` TEXT, " +
-      "`attempts` INTEGER NOT NULL DEFAULT 0, `next_attempt_at` INTEGER, `error_code` TEXT, `updated_at` INTEGER NOT NULL, " +
-      "PRIMARY KEY(`op_id`, `item_index`), FOREIGN KEY(`op_id`) REFERENCES `nas_op`(`op_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
-    "CREATE INDEX IF NOT EXISTS `index_nas_op_item_state_next_attempt_at` ON `nas_op_item` (`state`, `next_attempt_at`)",
-    "CREATE TABLE IF NOT EXISTS `nas_trash_entry` (`trash_id` TEXT NOT NULL, `account_id` TEXT NOT NULL, `share_key` TEXT NOT NULL, " +
-      "`share_name` TEXT NOT NULL, `original_path` TEXT NOT NULL, `trashed_path` TEXT NOT NULL, `reason` TEXT NOT NULL, " +
-      "`is_folder` INTEGER NOT NULL, `size` INTEGER NOT NULL, `file_count` INTEGER, `trashed_at` INTEGER NOT NULL, `state` TEXT NOT NULL, " +
-      "`op_id` TEXT, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`trash_id`))",
-    "CREATE INDEX IF NOT EXISTS `index_nas_trash_entry_state_trashed_at` ON `nas_trash_entry` (`state`, `trashed_at`)",
+    "CREATE TABLE IF NOT EXISTS `nas_op_item` (`op_id` TEXT NOT NULL, `item_index` INTEGER NOT NULL, " +
+      "`state` TEXT NOT NULL, `is_folder` INTEGER NOT NULL, `account_id` TEXT NOT NULL, `src_share` TEXT NOT NULL, " +
+      "`src_path` TEXT NOT NULL, `dst_share` TEXT, `dst_path` TEXT, `temp_name` TEXT, `size` INTEGER, " +
+      "`modified_at` INTEGER, `file_id` INTEGER, `sha256` TEXT, `trash_id` TEXT, " +
+      "`attempts` INTEGER NOT NULL DEFAULT 0, `next_attempt_at` INTEGER, `error_code` TEXT, " +
+      "`updated_at` INTEGER NOT NULL, PRIMARY KEY(`op_id`, `item_index`), " +
+      "FOREIGN KEY(`op_id`) REFERENCES `nas_op`(`op_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+    "CREATE INDEX IF NOT EXISTS `index_nas_op_item_state_next_attempt_at` ON `nas_op_item` (`state`, " +
+      "`next_attempt_at`)",
+    "CREATE TABLE IF NOT EXISTS `nas_trash_entry` (`trash_id` TEXT NOT NULL, `account_id` TEXT NOT NULL, " +
+      "`share_key` TEXT NOT NULL, `share_name` TEXT NOT NULL, `original_path` TEXT NOT NULL, " +
+      "`trashed_path` TEXT NOT NULL, `reason` TEXT NOT NULL, `is_folder` INTEGER NOT NULL, `size` INTEGER NOT NULL, " +
+      "`file_count` INTEGER, `trashed_at` INTEGER NOT NULL, `state` TEXT NOT NULL, `op_id` TEXT, " +
+      "`updated_at` INTEGER NOT NULL, PRIMARY KEY(`trash_id`))",
+    "CREATE INDEX IF NOT EXISTS `index_nas_trash_entry_state_trashed_at` ON `nas_trash_entry` (`state`, " +
+      "`trashed_at`)",
   )
 }
 

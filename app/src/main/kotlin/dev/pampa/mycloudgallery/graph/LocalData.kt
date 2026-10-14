@@ -6,6 +6,8 @@ import dev.pampa.mycloudgallery.core.family.contract.LocalDataEraser
 import dev.pampa.mycloudgallery.core.family.lifecycle.FileWipeJournal
 import dev.pampa.mycloudgallery.core.network.contract.VpnControlConfig
 import dev.pampa.mycloudgallery.feature.diagnostics.contributors.HeartbeatSource
+import dev.pampa.mycloudgallery.nas.NasGraph
+import dev.pampa.mycloudgallery.work.NasStages
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
@@ -107,6 +109,12 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
             val target = File(context.noBackupFilesDir, dir)
             if (target.exists() && !target.deleteRecursively()) ok = false
           }
+          // Fase 4A (P11): il NAS nella Libreria. I pacchi stanno gia' in `replica/`, l'outbox dell'indice no (miniature
+          // preparate qui, in attesa di pubblicazione): si toglie con i piccoli file di stato (tentativi, emergenza, battiti).
+          for (name in NAS_FILES) {
+            val target = File(context.noBackupFilesDir, name)
+            if (target.exists() && !target.deleteRecursively()) ok = false
+          }
         }
       }
     }
@@ -123,5 +131,16 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
 
     /** Le cartelle dei dati della galleria in `noBackupFilesDir` (le riempiono le fasi 3-6). Mai la radice. */
     val MEDIA_DIRS = listOf("thumbnails", "previews", "replica")
+
+    /** I file e le cartelle del NAS nella Libreria in `noBackupFilesDir` (Fase 4A): outbox, tentativi, emergenza, battiti. */
+    val NAS_FILES = listOf(
+      NasGraph.OUTBOX_DIR,
+      NasGraph.ATTEMPTS_FILE,
+      NasGraph.EMERGENCY_FILE,
+      NasGraph.COVERS_FILE,
+      NasStages.HEARTBEAT_SCAN,
+      NasStages.HEARTBEAT_SYNC,
+      NasStages.HEARTBEAT_PREP,
+    )
   }
 }

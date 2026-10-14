@@ -44,6 +44,13 @@ object ExportKeys {
     // mai una stringa con un dato dell'utente (un luogo, un percorso, un nome di file).
     "places", "placesFailure", "dataset", "items", "rebuilds", "patches", "snapshotWrites", "reconciled",
     "cachedBytes", "budgetBytes", "started", "cancelled", "failed", "memoryHits", "misses", "inFlight",
+    // NAS nella Libreria (Fase 4A: IndexDiagnostics di core-index, NasLibraryDiagnostics di :app). Solo conteggi, byte,
+    // flag ed enumerati: mai share, cartelle, file, account, id di media o di dispositivo.
+    "count", "level", "bytes", "converging", "complete", "localOnly", "emergency", "areas", "frozen", "unreachable",
+    "status", "mode", "folders", "unchanged", "adopted", "detected", "arriving", "skippedNames", "skippedSystem",
+    "albumCovers", "busy", "bytesRead", "resumed", "stoppedBy", "moved", "changed", "excludedFolders", "blockedFolders",
+    "identityRefused", "units", "prepared", "handedOver", "records", "blobs", "contended", "busyLeases", "unleased",
+    "lost", "clockJump", "headsRead", "headsApplied", "segmentsDownloaded", "segmentsMissing", "recordsApplied",
   )
 
   /**
@@ -55,6 +62,9 @@ object ExportKeys {
     Regex("ula[0-3]"),
     Regex("rejected\\.[a-z][a-z_]{2,31}"),
     Regex("bytes\\.[a-z][a-z_]{2,31}"),
+    // Il motivo di scarto dei segmenti e delle teste dell'indice (`reason.` + una costante di `RejectReason`, IndexDiagnostics)
+    // e il motivo di un congelamento (`reason.` + `FreezeReason`): costanti del codice, in maiuscolo.
+    Regex("reason\\.[A-Z][A-Z0-9_]{2,31}"),
   )
 
   fun isAllowed(key: String): Boolean = key in ALLOWED || FAMILIES.any { it.matches(key) }

@@ -37,6 +37,16 @@ import dev.pampa.mycloudgallery.gallery.LibraryDiagnostics
 import dev.pampa.mycloudgallery.gallery.PhoneLibrary
 import dev.pampa.mycloudgallery.graph.AppGraph
 import dev.pampa.mycloudgallery.graph.GalleryStopper
+import dev.pampa.mycloudgallery.nas.NasLibraryDiagnostics
+import dev.pampa.mycloudgallery.feature.settings.quality.PreviewLevel
+import dev.pampa.mycloudgallery.feature.settings.quality.PreviewQualitySettings
+import dev.pampa.mycloudgallery.feature.settings.quality.PreviewQualityState
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import dev.pampa.mycloudgallery.core.common.diagnostics.DiagItem
+import dev.pampa.mycloudgallery.core.common.diagnostics.DiagSection
+import dev.pampa.mycloudgallery.core.index.sync.IndexDiagnostics
+import dev.pampa.mycloudgallery.feature.diagnostics.catalog.DiagCatalog
 import java.util.Optional
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.first
@@ -74,6 +84,10 @@ object GalleryModule {
       syntheticThumbnails = DeveloperTools.syntheticThumbnails(),
       openPlaces = { PlacesDataset.openResult(context) },
       benchSync = measurement?.phoneSync,
+      // Fase 4A (P11): il NAS nella Libreria; mai nelle varianti di misura (il loro dataset e' sintetico, P10).
+      nas = graph.nasInputs.takeIf { measurement == null },
+      // P10, docs/bench/README.md §6-bis: le miniature dei media solo-NAS del dataset vengono dalla replica sintetica.
+      benchReplica = measurement?.replicaBlobs,
     )
     return GalleryGraph(
       context = context,
@@ -127,4 +141,35 @@ object GalleryModule {
   @Provides
   @IntoSet
   fun libraryDiagnostics(gallery: GalleryGraph): DiagnosticsContributor = LibraryDiagnostics(gallery)
+
+  // --- Diagnostica: il NAS nella Libreria (Fase 4A, P11): stato, scansione, preparazione (:app) e indice (core-index) --
+  @Provides
+  @IntoSet
+  fun nasLibraryDiagnostics(gallery: GalleryGraph): DiagnosticsContributor =
+    gallery.nas?.let { NasLibraryDiagnostics(it) } ?: NoNasDiagnostics
+
+  // --- Impostazioni: "Anteprime del NAS" (Fase 4A, P11). Senza NAS la pagina dice che non sono attive. ---
+  @Provides
+  fun previewQualitySettings(gallery: GalleryGraph): PreviewQualitySettings = gallery.nas?.previewQuality ?: NoPreviewQuality
+
+  @Provides
+  @IntoSet
+  fun indexDiagnostics(gallery: GalleryGraph): DiagnosticsContributor =
+    gallery.nas?.let { IndexDiagnostics(it.counters, it.qualityControl, DiagCatalog::titleOf) } ?: NoNasDiagnostics
+}
+
+/** Senza il NAS nella Libreria (varianti di misura): la qualita' non c'e'. */
+private object NoPreviewQuality : PreviewQualitySettings {
+  override val state: StateFlow<PreviewQualityState?> = MutableStateFlow(null)
+
+  override suspend fun choose(level: PreviewLevel) = Unit
+
+  override suspend fun showAlbumCovers(show: Boolean) = Unit
+}
+
+/** Senza il NAS nella Libreria (varianti di misura): nessuna voce. */
+private object NoNasDiagnostics : DiagnosticsContributor {
+  override val section: DiagSection = DiagSection.NAS_LIBRARY
+
+  override suspend fun collect(): List<DiagItem> = emptyList()
 }

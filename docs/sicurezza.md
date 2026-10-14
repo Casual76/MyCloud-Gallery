@@ -327,22 +327,22 @@ Cose che questo progetto non risolve, o risolve solo in parte. Nessuna è nascos
 
 ### Fase 4: il NAS nella Libreria
 Esteso con il §6.3 di `docs/fase4-progetto.md`: (4A) = da spuntare alla chiusura della 4A, (4B) = della 4B.
-- [ ] (4A) Codec dei segmenti: test ostili (tabella incoerente, chiavi non crescenti, corpi oltre i tetti, JSON non canonico, percorsi `..` o dentro `.mycloudgallery`, immagini con dimensioni dichiarate enormi, classe sbagliata); revisione mirata di `core-trust`.
-- [ ] (4A) Segmenti ostili, non firmati o di dispositivi revocati: rifiutati senza crash e segnalati in Diagnostica (F8).
+- [ ] (4A) Codec dei segmenti: test ostili (tabella incoerente, chiavi non crescenti, corpi oltre i tetti, JSON non canonico, percorsi `..` o dentro `.mycloudgallery`, immagini con dimensioni dichiarate enormi, classe sbagliata); revisione mirata di `core-trust`. *P11: i test ostili ci sono (`HostileSegmentTest` di `core-trust`, `NasRemoteIndexTest` di `core-index`) e girano in `check.ps1`; manca la revisione mirata.*
+- [ ] (4A) Segmenti ostili, non firmati o di dispositivi revocati: rifiutati senza crash e segnalati in Diagnostica (F8). *P11: rifiuti contati da `IndexCounters` e mostrati dalla sezione dell'indice della Diagnostica (`IndexDiagnostics`, legata in `:app`); resta F8 dal PC.*
 - [ ] (4A) Con un account di prova (`test2`), l'indice non permette di leggere nulla dell'area privata di `test` (prova 10.4).
-- [ ] (4A) Nessun byte ricavato da un file privato nell'indice dell'area comune (test di proprietà della regola M3).
-- [ ] (4A) Prenotazioni oltre il tetto ignorate; scadenze calcolate sull'ora del NAS; salto dell'ora oltre 5 minuti = funzioni a scadenza sospese (D32).
-- [ ] (4A) Nessun modulo nuovo apre socket; nessun `DefaultDataSource`; `NoNetworkSourcesTest` esteso (smbj vietato fuori da `core-nas`). Fatto in P0 per i moduli nuovi: resta da riverificare alla chiusura.
-- [ ] (4A) Modifica di massa simulata: scritture congelate e avviso, sul NAS sintetico e sull'area di prova (F9).
+- [x] (4A) Nessun byte ricavato da un file privato nell'indice dell'area comune (test di proprietà della regola M3: `ProvenancePropertyTest` di `core-index`, P3).
+- [ ] (4A) Prenotazioni oltre il tetto ignorate; scadenze calcolate sull'ora del NAS; salto dell'ora oltre 5 minuti = funzioni a scadenza sospese (D32). *P11: tetti e ora del NAS provati in `WorkUnitsTest`; in `:app` il salto ferma le scritture (`NasGraph.writeGate`, `CLOCK_JUMP`). Residuo: nessun gesto per accettare un salto, le scritture restano ferme finché l'ultimo salto osservato supera i 5 minuti (`docs/decisioni.md`, Fase 4A).*
+- [x] (4A) Nessun modulo nuovo apre socket; nessun `DefaultDataSource`; `NoNetworkSourcesTest` esteso (smbj vietato fuori da `core-nas`). Fatto in P0 per i moduli nuovi, riverificato al P11 (`check.ps1` verde con i moduli collegati).
+- [ ] (4A) Modifica di massa simulata: scritture congelate e avviso, sul NAS sintetico e sull'area di prova (F9). *Sul NAS sintetico fatto (P5: `MassChangeGuardTest`, `ScanFreezeTest`); al P11 il congelamento arriva alle regole (`MutableNasFreezeSignal`), al riepilogo giornaliero (`NasDailySummary`) e alla Diagnostica ("Ho controllato, continua"). Resta F9.*
 - [ ] (4A) L'indice non compare in DLNA, Plex, Twonky né in Foto di Windows (E-I13, F14).
-- [ ] (4A) D31 attivo alla consegna (`FeatureFlags.indexPublishTestSharesOnly`, non spegnibile in release); nessuna scrittura sulle share vere prima dell'approvazione dell'utente.
-- [ ] (4A) Guardia delle prove e `ShareFence` (D33): nessuna richiesta verso `NAS`, `Public`, `alessio` o `pampa` con gli account di prova (autotest, F14-bis); la recinzione non è nella release.
+- [x] (4A) D31 attivo alla consegna (`FeatureFlags.indexPublishTestSharesOnly`, non spegnibile in release); nessuna scrittura sulle share vere prima dell'approvazione dell'utente. *P11: `FeatureFlagsTest`; il NAS nella Libreria è acceso in release (`nasLibrary`), D31 no: fuori dalle share di prova l'indice resta "solo locale".*
+- [ ] (4A) Guardia delle prove e `ShareFence` (D33): nessuna richiesta verso `NAS`, `Public`, `alessio` o `pampa` con gli account di prova (autotest, F14-bis); la recinzione non è nella release. *P11: `ShareFenceTest` (P1); legata solo in debug (`DeveloperTools.shareGuard()`, `ShareFenceBindingTest`) e assente dal dex di release (passo di `check.ps1`). Resta F14-bis.*
 - [ ] (4A/4B) Nessuna azione distruttiva parte da dati letti dal NAS (finti cestini, finti album, record falsi); `NasFileOps` solo in `core-nasops` (test di architettura).
 - [ ] (4B) `UserConfirmation` costruita solo dalla UI; nessun dato remoto crea voci del diario.
 - [ ] (4B) Pulizia del cestino solo dal diario locale, con handle, tetti, ora del NAS (F20).
 - [ ] (4B) Prova delle 500 interruzioni superata (§5.5 del progetto della Fase 4).
 - [ ] (4B) Permessi e componenti nuovi (UIDT) in §4-bis e in policy, approvati.
-- [ ] Log di release e Diagnostica: nessun percorso, nome, share o account (ricerca automatica e una sessione vera).
+- [ ] Log di release e Diagnostica: nessun percorso, nome, share o account (ricerca automatica e una sessione vera). *P11: le voci della 4A in Diagnostica hanno solo numeri e codici (`Fase4ACatalogTest`, `DiagnosticsWiringTest`); resta la sessione vera.*
 
 ### Fase 5: backup, versioni, integrazioni
 - [ ] Prova delle 500 interruzioni sul backup di foto e video grandi: zero file a metà, duplicati o perdite; hash verificato al 100%.
@@ -424,6 +424,7 @@ Esteso con il §6.3 di `docs/fase4-progetto.md`: (4A) = da spuntare alla chiusur
 | 14/10/2026 | **Cestino del NAS dell'app** (D25) in `.mycloudgallery/trash/<dispositivo>/` della stessa share, record firmato con `reason`, `folder`, `count`; ripristino da qualunque dispositivo con il permesso, pulizia solo dall'autore dal suo diario; "Elimina subito" con doppia conferma e avviso sul backup esterno (risposta **Q8 (a)**). | Il cestino del WD non c'è su tutte le share e non ha record firmati. | Deciso (Q8); codice nella 4B |
 | 14/10/2026 | **Dati personali sincronizzati** (D26): ogni dispositivo pubblica nella propria area privata lo stato unito; vince l'ultima modifica per ora del NAS; valgono solo se firmati da un dispositivo approvato dello stesso account e trovati nell'area privata dichiarata. | Robusto alla perdita di un telefono; limite L29 dichiarato. | **Proposta** (4B; Q9 non chiesta, vale la raccomandazione) |
 | 14/10/2026 | **Permesso UIDT** (D29): `RUN_USER_INITIATED_JOBS` e un `JobService` non esportato al pubblico (protetto da `BIND_JOB_SERVICE`) per le operazioni lunghe avviate dall'utente. | Una mossa di 2.000 file non deve fermarsi se l'utente esce dall'app; nessun servizio in primo piano notturno. | **Proposta**, solo nella 4B (riga in §4-bis), da approvare in P0-B |
+| 14/10/2026 | **Integrazione della 4A (P11).** Nessuna dipendenza, nessun permesso, nessun componente esportato nuovi. `FeatureFlags.RELEASE.nasLibrary = true` (il NAS nella Libreria è acceso in release) con D31 sempre acceso; `ShareFence` (D33) legata solo in debug e cercata da `check.ps1` nel dex di release insieme al NAS sintetico di debug (`SyntheticNasKit`, `nas-synthetic`). L'emergenza "Ferma le scritture sul NAS" sopravvive al riavvio (file in `noBackupFilesDir`) e può solo restringere; l'azzeramento ferma il NAS per primo e cancella outbox, pacchi, tentativi e interruttori. Voci della 4A in Diagnostica solo con numeri e codici. | Collegare i pacchetti senza allargare la superficie: le scritture restano nell'area dell'app e sulle share di prova. | Fatto (P11); residui in `docs/decisioni.md` (Fase 4A) |
 
 ---
 

@@ -5,6 +5,7 @@ import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import dev.pampa.mycloudgallery.core.family.contract.FamilySetupRepository
+import dev.pampa.mycloudgallery.core.index.contract.ReplicaBlobs
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneLibrarySync
 
 /**
@@ -29,6 +30,12 @@ interface MeasurementHooks {
 
   /** Il file del catalogo della variante: il dataset sintetico non sta mai in `gallery.db`. */
   val databaseName: String
+
+  /**
+   * La replica locale sintetica della variante di misura (P10, docs/bench/README.md §6-bis): le miniature dei media
+   * solo-NAS del dataset, servite da `NasThumbnailSource` senza NAS. Null altrove (e finche' il dataset non c'e').
+   */
+  val replicaBlobs: ReplicaBlobs? get() = null
 }
 
 /** Dichiara che le [MeasurementHooks] possono mancare: cosi' le varianti normali compilano senza nessuna implementazione. */

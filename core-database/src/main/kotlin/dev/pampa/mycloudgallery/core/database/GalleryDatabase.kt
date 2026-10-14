@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.withTransaction
 import dev.pampa.mycloudgallery.core.database.dao.AlbumDao
 import dev.pampa.mycloudgallery.core.database.dao.CatalogMetaDao
 import dev.pampa.mycloudgallery.core.database.dao.EmbeddingDao
@@ -29,11 +30,12 @@ import dev.pampa.mycloudgallery.core.database.entity.EmbeddingEntity
 import dev.pampa.mycloudgallery.core.database.entity.IndexHeadEntity
 import dev.pampa.mycloudgallery.core.database.entity.IndexOutboxBlobEntity
 import dev.pampa.mycloudgallery.core.database.entity.IndexOutboxRecordEntity
+import dev.pampa.mycloudgallery.core.database.entity.IndexOwnBlobEntity
+import dev.pampa.mycloudgallery.core.database.entity.IndexOwnRecordEntity
 import dev.pampa.mycloudgallery.core.database.entity.IndexOwnSegmentEntity
 import dev.pampa.mycloudgallery.core.database.entity.IndexPublishStateEntity
 import dev.pampa.mycloudgallery.core.database.entity.IndexRecordEntity
 import dev.pampa.mycloudgallery.core.database.entity.IndexSegmentEntity
-import dev.pampa.mycloudgallery.core.database.entity.IndexSyncStateEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaAliasEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaGroupEntity
@@ -47,7 +49,11 @@ import dev.pampa.mycloudgallery.core.database.entity.NasScanStateEntity
 import dev.pampa.mycloudgallery.core.database.entity.NasShareEntity
 import dev.pampa.mycloudgallery.core.database.entity.NasTrashEntryEntity
 import dev.pampa.mycloudgallery.core.database.entity.ReplicaBlobEntity
+import dev.pampa.mycloudgallery.core.database.entity.ReplicaDirtyEntity
 import dev.pampa.mycloudgallery.core.database.entity.ReplicaPackEntity
+import dev.pampa.mycloudgallery.core.database.entity.ReplicaProvisionalEntity
+import dev.pampa.mycloudgallery.core.database.entity.ReplicaSettingEntity
+import dev.pampa.mycloudgallery.core.database.entity.ReplicaShareAccessEntity
 import dev.pampa.mycloudgallery.core.database.entity.VersionMetadataEntity
 import dev.pampa.mycloudgallery.core.database.entity.WorkStateEntity
 
@@ -81,12 +87,17 @@ import dev.pampa.mycloudgallery.core.database.entity.WorkStateEntity
     IndexOwnSegmentEntity::class,
     IndexOutboxRecordEntity::class,
     IndexOutboxBlobEntity::class,
+    IndexOwnRecordEntity::class,
+    IndexOwnBlobEntity::class,
     IndexHeadEntity::class,
     IndexSegmentEntity::class,
     IndexRecordEntity::class,
+    ReplicaDirtyEntity::class,
     ReplicaPackEntity::class,
     ReplicaBlobEntity::class,
-    IndexSyncStateEntity::class,
+    ReplicaShareAccessEntity::class,
+    ReplicaSettingEntity::class,
+    ReplicaProvisionalEntity::class,
     NasOpEntity::class,
     NasOpItemEntity::class,
     NasTrashEntryEntity::class,
@@ -157,3 +168,10 @@ abstract class GalleryDatabase : RoomDatabase() {
     }
   }
 }
+
+/**
+ * Una transazione sul database della galleria per chi non vede `room-ktx` (gli adattatori Room delle porte di core-index,
+ * P11): [block] gira tutto o niente. **Non** per le scritture del grafo dei media, che passano sempre da `MediaCatalog`
+ * (le sue transazioni annunciano i cambiamenti dopo il commit).
+ */
+suspend fun <T> GalleryDatabase.transaction(block: suspend () -> T): T = withTransaction(block)

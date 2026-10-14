@@ -396,12 +396,189 @@ class MediaCatalog(
       .groupBy { it.mediaId }
       .mapKeys { MediaId(it.key) }
       .mapValues { (_, rows) ->
-        val row = rows.minWith(compareBy<NasRefRow>({ if (it.isCurrent) 0 else 1 }, { it.locationId }))
+        // Prima le copie della versione corrente, poi quelle presenti (una "non raggiungibile" vale solo se e' l'unica: le
+        // miniature vengono comunque dalla replica, E-L4), poi la piu' vecchia.
+        val row = rows.minWith(
+          compareBy<NasRefRow>({ if (it.isCurrent) 0 else 1 }, { if (it.state == LocationState.PRESENT.code) 0 else 1 }, { it.locationId }),
+        )
         MediaRef.Nas(row.locationId, ContentKey.of(QuickHash(row.quickHash), row.size).short, row.mimeType)
       }
 
   /** La posizione del NAS di un [MediaRef.Nas] (per aprire l'originale), se c'e' ancora. */
   suspend fun nasLocation(locationId: LocationId): Location.Nas? = locationDao.get(locationId.value)?.toDomain()?.location as? Location.Nas
+
+  // --- P11: le operazioni aggiunte da P5 alla porta `NasScanStore` e quelle della porta `ReplicaCatalog` di P4 ----------
+
+  /** Le posizioni della share per l'account, in qualunque stato (la replica le confronta per percorso, D6). */
+  suspend fun nasLocationsInShare(account: AccountId, share: String): List<NasLocationInfo> =
+    locationDao.inShare(account.value, Location.Nas.shareKeyOf(share)).mapNotNull { it.toNasInfo() }
+
+  /** La posizione del NAS in quel posto, se c'e' (qualunque stato). */
+  suspend fun nasLocationAt(location: Location.Nas): NasLocationInfo? = locationDao.byKey(location.key.value)?.toNasInfo()
+
+  /**
+   * Le posizioni della share con uno di questi `FileId` (E-N1), a qualunque percorso e anche assenti: per ogni `FileId` al
+   * piu' una, la piu' vecchia (`NasScanStore.findByFileId`).
+   */
+  suspend fun nasByFileIds(account: AccountId, share: String, fileIds: Collection<Long>): Map<Long, NasLocationInfo> {
+    val out = LinkedHashMap<Long, NasLocationInfo>()
+    fileIds.distinct().chunked(TimelineIndexDao.MAX_IDS).forEach { chunk ->
+      locationDao.byFileIds(account.value, Location.Nas.shareKeyOf(share), chunk).forEach { entity ->
+        val info = entity.toNasInfo() ?: return@forEach
+        val id = entity.fileId ?: return@forEach
+        if (id !in out) out[id] = info
+      }
+    }
+    return out
+  }
+
+  /**
+   * Gli spostamenti riconosciuti dalla scansione (E-N1, `NasScanStore.relocateAll`) in **una** transazione con [cursor]: la
+   * posizione cambia posto e timbro, resta della stessa versione e dello stesso media (identita', preferiti, preparazione e
+   * verifica conservati), torna presente con "visto a" [seenAt]. Falso dove il posto d'arrivo e' gia' di un'altra posizione.
+   */
+  suspend fun relocateNas(moves: List<NasRelocation>, seenAt: Long, cursor: NasScanState? = null): List<Boolean> = write { tx ->
+    val result = moves.map { move ->
+      val entity = locationDao.get(move.locationId.value) ?: return@map false
+      val taken = locationDao.byKey(move.to.key.value)
+      if (taken != null && taken.locationId != entity.locationId) return@map false
+      val before = entity.toDomain()
+      if (before.location !is Location.Nas) return@map false
+      val after = before.copy(
+        location = move.to.copy(fileId = move.stamp.fileId ?: move.to.fileId),
+        stamp = move.stamp.toFileStamp(),
+        state = LocationState.PRESENT,
+        absentSinceMillis = null,
+        lastSeenAtMillis = seenAt,
+      )
+      locationDao.update(after.toEntity())
+      val mediaId = mediaOf(before.id)
+      tx.touch(mediaId)
+      tx.refChanged(mediaId)
+      true
+    }
+    cursor?.let { nasScanDao.upsert(it.toEntity()) }
+    result
+  }
+
+  /** Quante posizioni (presenti o non raggiungibili) della share il giro iniziato a [epoch] non ha visto (D10). */
+  suspend fun countUnseenNas(account: AccountId, share: String, epoch: Long): Int =
+    locationDao.countNotSeenInShare(account.value, Location.Nas.shareKeyOf(share), epoch)
+
+  /**
+   * Esclusioni (D11, E-N14, E-N15; `NasScanStore.retireExcluded`): le posizioni non assenti sotto [folders] o con una di
+   * queste [keys] escono dalla Libreria **per scelta**, quindi diventano assenti subito. Una transazione; quante ne ha tolte.
+   */
+  suspend fun retireNas(account: AccountId, share: String, folders: List<NasPath>, keys: List<LocationKey>): Int = write { tx ->
+    val now = clock()
+    val chosen = LinkedHashMap<Long, MediaLocationEntity>()
+    for (folder in folders) {
+      val exact = Location.Nas.folderKey(account, share, folder)
+      locationDao.underFolder(exact, exact + "/", exact + "0").forEach { chosen[it.locationId] = it }
+    }
+    for (key in keys) locationDao.byKey(key.value)?.takeIf { it.state != LocationState.ABSENT.code }?.let { chosen[it.locationId] = it }
+    val shareKey = Location.Nas.shareKeyOf(share)
+    var count = 0
+    for (entity in chosen.values) {
+      if (entity.accountId != account.value || entity.shareKey != shareKey) continue
+      locationDao.update(LocationRules.vanished(entity.toDomain(), now).toEntity())
+      tx.touch(mediaOf(LocationId(entity.locationId)))
+      count++
+    }
+    count
+  }
+
+  /** Le posizioni con queste chiavi diventano assenti (es. quelle nate solo dall'indice che l'indice non elenca piu', D6). */
+  suspend fun markNasVanished(keys: Collection<LocationKey>): Int = write { tx ->
+    val now = clock()
+    var count = 0
+    for (key in keys) {
+      val entity = locationDao.byKey(key.value) ?: continue
+      if (entity.state == LocationState.ABSENT.code) continue
+      locationDao.update(LocationRules.vanished(entity.toDomain(), now).toEntity())
+      tx.touch(mediaOf(LocationId(entity.locationId)))
+      count++
+    }
+    count
+  }
+
+  /**
+   * I metadati letti al rilevamento dei file del NAS (o adottati da un record dell'indice), con la fase META di ogni media
+   * (`NasScanStore.applyMetadata`): **una** transazione. Come [updateMetadata] + [updateWork] per ogni posizione.
+   */
+  suspend fun applyNasMetadata(updates: List<NasMetadataUpdate>): Unit = write { tx ->
+    val now = clock()
+    for (update in updates) {
+      val entity = locationDao.get(update.locationId.value) ?: continue
+      val versionId = VersionId(entity.versionId)
+      val mediaId = mediaOf(update.locationId)
+      val meta = workDao.forMedia(mediaId.value).firstOrNull { it.stage == WorkStage.META.code }?.toDomain()
+      when (val result = update.result) {
+        is NasMetadataResult.Read -> {
+          versionDao.upsertMetadata(result.metadata.toEntity(versionId, now))
+          val row = mediaDao.get(mediaId.value)
+          if (row != null && row.currentVersionId == versionId.value && row.kind != result.kind.code) {
+            mediaDao.setKind(mediaId.value, result.kind.code, now)
+            tx.markChanged(mediaId, structural = false)
+          }
+          if (meta != null) workDao.upsert(listOf(WorkRules.succeeded(meta, versionId, now).toEntity(mediaId)))
+        }
+        is NasMetadataResult.Failed ->
+          if (meta != null) workDao.upsert(listOf(WorkRules.failed(meta.copy(versionId = versionId), result.code, now).toEntity(mediaId)))
+        NasMetadataResult.Unsupported ->
+          if (meta != null) workDao.upsert(listOf(WorkRules.unsupported(meta.copy(versionId = versionId), now).toEntity(mediaId)))
+      }
+      tx.touch(mediaId)
+    }
+  }
+
+
+  /** Il media che ha la posizione [locationId] (alias risolti), se c'e' ancora (P11: "Scarica sul telefono", D20). */
+  suspend fun mediaIdOfLocation(locationId: LocationId): MediaId? = locationDao.mediaIdOf(locationId.value)?.let { resolve(MediaId(it)) }
+
+  /** I metadati della versione [versionId] (P11: il record dell'indice che la preparazione completa, P6). */
+  suspend fun versionMetadata(versionId: VersionId): MediaMetadata? = versionDao.metadata(versionId.value)?.toDomain()
+
+  /**
+   * I file **presenti** della share, versione corrente, con quanto serve alle unita' di lavoro della preparazione (D13,
+   * porta `WorkSource` di core-index): posto, timbro, impronta rapida, tipo, giorno dello scatto, MIME.
+   */
+  suspend fun nasWorkRows(account: AccountId, share: String): List<NasWorkItem> =
+    locationDao.nasWorkRows(account.value, Location.Nas.shareKeyOf(share)).mapNotNull { row ->
+      val quick = row.quickHash ?: return@mapNotNull null
+      val path = runCatching { NasPath.of(row.path) }.getOrNull() ?: return@mapNotNull null
+      NasWorkItem(
+        locationId = LocationId(row.locationId),
+        path = path,
+        stamp = NasStamp(row.size, row.modifiedAt, row.fileId),
+        quickHash = QuickHash(quick),
+        mediaId = MediaId(row.mediaId),
+        versionId = VersionId(row.versionId),
+        kind = enumByCode(row.kind),
+        localDay = row.localDay,
+        mime = row.mime,
+      )
+    }
+
+  /**
+   * Per i percorsi [paths] della share, il timbro e l'impronta rapida che il catalogo conosce (posizioni non assenti): la
+   * regola M3 dell'indice ("si pubblica solo cio' che viene da un file di questa share", porta `ShareCatalog` di P3).
+   */
+  suspend fun nasFiles(account: AccountId, share: String, paths: Collection<NasPath>): Map<NasPath, Pair<NasStamp, QuickHash?>> {
+    val out = LinkedHashMap<NasPath, Pair<NasStamp, QuickHash?>>()
+    for (path in paths) {
+      val entity = locationDao.byKey(Location.Nas(account, share, path).key.value) ?: continue
+      if (entity.state == LocationState.ABSENT.code) continue
+      val quick = versionDao.get(entity.versionId)?.quickHash?.let(::QuickHash)
+      out[path] = NasStamp(entity.size, entity.modifiedAt, entity.fileId) to quick
+    }
+    return out
+  }
+  private fun MediaLocationEntity.toNasInfo(): NasLocationInfo? {
+    val domain = toDomain()
+    val nas = domain.location as? Location.Nas ?: return null
+    return NasLocationInfo(LocationId(locationId), nas, NasStamp(size, modifiedAt, fileId), domain.state, lastSeenAt)
+  }
 
   /**
    * La coda di una fase per un posto (§1.3: "code di lavoro esposte"): i media con [stage] da fare e una copia presente
@@ -1412,11 +1589,16 @@ class MediaCatalog(
       "index_publish_state",
       "index_own_segment",
       "index_outbox_blob",
+      "index_own_record",
+      "index_own_blob",
       "index_head",
       "index_segment",
+      "replica_dirty",
       "replica_pack",
       "replica_blob",
-      "index_sync_state",
+      "replica_share_access",
+      "replica_setting",
+      "replica_provisional",
       "nas_op",
       "nas_op_item",
       "nas_trash_entry",

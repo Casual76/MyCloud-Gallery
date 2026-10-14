@@ -115,7 +115,7 @@ class DiagCatalogTest {
     "C13" to "avviso permanente sul backup esterno: sta in Impostazioni (P7), non in Diagnostica",
     "E-A4" to "consiglio al passo 7 dell'onboarding (nessuna NPU), non un avviso a regime",
     "E-B3" to "«esiste gia'» con gli stessi byte vale come successo: non e' un errore",
-    "E-N14" to "proposta di esclusione al passo 5 dell'onboarding",
+    // E-N14 (copertine degli album) dalla Fase 4A ha il suo codice: NAS_SCAN_ALBUM_COVERS (Fase4ACatalogTest).
     "E-N15" to "proposta di esclusione al passo 5 dell'onboarding",
     "E-O9" to "ripresa dell'onboarding dopo un cambio di app: e' il comportamento normale, non un avviso",
     "E-S15" to "guida del passo VPN (il QR di WireGuard e' una password), non uno stato",

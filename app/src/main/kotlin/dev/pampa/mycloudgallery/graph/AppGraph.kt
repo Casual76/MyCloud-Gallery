@@ -14,6 +14,7 @@ import dev.pampa.mycloudgallery.core.family.contract.FamilySetupRepository
 import dev.pampa.mycloudgallery.core.family.contract.LocalDataEraser
 import dev.pampa.mycloudgallery.core.family.contract.SetupState
 import dev.pampa.mycloudgallery.core.family.contract.TrustSyncScheduler
+import dev.pampa.mycloudgallery.core.model.NasArea
 import dev.pampa.mycloudgallery.core.family.invite.ApprovalWatcher
 import dev.pampa.mycloudgallery.core.family.invite.DefaultJoinFlow
 import dev.pampa.mycloudgallery.core.family.invite.DeviceKeyCodec
@@ -48,6 +49,7 @@ import dev.pampa.mycloudgallery.core.nas.contract.NasCredentialSource
 import dev.pampa.mycloudgallery.core.nas.fs.SmbNasHousekeeping
 import dev.pampa.mycloudgallery.core.nas.fs.SmbShareProbe
 import dev.pampa.mycloudgallery.core.nas.session.SessionNasClock
+import dev.pampa.mycloudgallery.core.nas.session.ShareGuard
 import dev.pampa.mycloudgallery.core.nas.session.SmbNasSessionManager
 import dev.pampa.mycloudgallery.core.nas.status.NasStatusMonitor
 import dev.pampa.mycloudgallery.core.nas.tools.SmbConnectionTester
@@ -70,6 +72,9 @@ import dev.pampa.mycloudgallery.core.rules.settings.DataStoreRuleSettingsStore
 import dev.pampa.mycloudgallery.core.rules.traffic.DataStoreTrafficLedger
 import dev.pampa.mycloudgallery.core.security.credentials.NasCredentials
 import dev.pampa.mycloudgallery.core.security.credentials.SaveResult
+import dev.pampa.mycloudgallery.nas.MutableNasFreezeSignal
+import dev.pampa.mycloudgallery.nas.NasInputs
+import dev.pampa.mycloudgallery.nas.NasShareArea
 import dev.pampa.mycloudgallery.nas.VaultNasCredentialSource
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
@@ -105,6 +110,11 @@ class AppGraph(
   appVersion: String,
   schedulerFactory: (nasNow: () -> Long?) -> TrustSyncScheduler,
   work: WorkCanceller,
+  /**
+   * La recinzione delle prove sul campo (D33, Fase 4): `ShareFence` **solo nella build debug** (`DeveloperTools` di debug);
+   * in release e nelle varianti di misura e' null e la classe non entra nell'APK (tools/check.ps1 lo verifica sul dex).
+   */
+  shareGuard: ShareGuard? = null,
 ) {
 
   private val noBackup: File = context.noBackupFilesDir
@@ -158,6 +168,7 @@ class AppGraph(
     deviceId = { engine.myDeviceId() },
     // Solo prima che "casa" sia registrata (passi 2-3 dell'onboarding): il Wi-Fi confermato dall'utente.
     onboardingCandidate = { onboardingStore.snapshotOrNull()?.homeConfirmed?.takeIf { homeStore.fingerprint.value == null } },
+    shareGuard = shareGuard,
   )
   val nasClock: SessionNasClock = session.nasClock
   val connectionTester = SmbConnectionTester(routeGate, breakers, platform.smbTransport, platform.monotonicClock)
@@ -249,6 +260,9 @@ class AppGraph(
 
   // --- Regole delle attivita' (core-rules) e diagnostica ------------------------------------------------------------
   val roles = OnboardingRolesSignal(onboardingStore, scope)
+
+  /** "Una share del NAS e' congelata" (D10, P9): lo aggiorna il grafo del NAS, lo legge il motore delle regole. */
+  val nasFreeze: MutableNasFreezeSignal = MutableNasFreezeSignal()
   val stateProvider = ComposedSystemStateProvider(
     device = EnvironmentDeviceStateSource(platform.deviceState, environment),
     home = environment,
@@ -257,8 +271,41 @@ class AppGraph(
     limits = NoAndroidLimits,
     app = appContext,
     quality = CombinedNetworkQuality(listOf(environment.quality, statusMonitor), scope),
+    freeze = nasFreeze,
   )
   val rulesEngine = ActivityRulesEngine(ruleSettings, trafficLedger, stateProvider)
+
+  /**
+   * Cio' che il grafo del NAS nella Libreria (Fase 4A, `nas/NasGraph`) riceve da qui: sessione, ora del NAS, fiducia,
+   * percorso, regole e la configurazione dell'onboarding (aree, esclusioni firmate dell'area comune).
+   */
+  val nasInputs: NasInputs by lazy {
+    NasInputs(
+      flags = flags,
+      session = session,
+      nasClock = nasClock,
+      account = { account.value?.user },
+      shares = {
+        val snapshot = onboardingStore.snapshotOrNull()
+        listOfNotNull(
+          snapshot?.privateShare?.let { NasShareArea(it, NasArea.PRIVATE) },
+          snapshot?.commonShare?.let { NasShareArea(it, NasArea.COMMON) },
+        )
+      },
+      commonExclusions = { engine.state?.registry?.config?.commonExclusions ?: onboardingStore.snapshotOrNull()?.excluded?.sorted().orEmpty() },
+      deviceId = { runCatching { engine.myDeviceId() }.getOrNull() },
+      signer = { runCatching { platform.deviceKeys.takeIf { it.hasDeviceKey() }?.deviceSigner() }.getOrNull() },
+      registry = { engine.state },
+      trust = trustGuard,
+      route = routeGate,
+      rules = rulesEngine,
+      stateProvider = stateProvider,
+      ledger = trafficLedger,
+      metered = { environment.snapshot.value.underlying?.metered == true },
+      freezeSignal = nasFreeze,
+      lastDiskTouchAt = session.lastDiskTouchAt,
+    )
+  }
   val vpnAutomation = DefaultVpnAutomation(environment, wireGuard, vpnConfigStore, appContext, sessionActivity)
   val networkDiagnostics = NetworkDiagnosticsContributor(
     paths = environment,
@@ -297,8 +344,10 @@ class AppGraph(
    */
   suspend fun forgetCompletedWipe() {
     if (selfWipe.forgetCompletedWipe()) {
-      onboardingStore.clear()
+      // Subito, senza sospensioni in mezzo: tolto il diario il motore della fiducia non deve dire "perso" piu' a lungo del
+      // necessario (lo stato del dispositivo non lo scambia comunque per un azzeramento in corso, DefaultFamilySetupRepository).
       engine.refreshStatus()
+      onboardingStore.clear()
     }
   }
 

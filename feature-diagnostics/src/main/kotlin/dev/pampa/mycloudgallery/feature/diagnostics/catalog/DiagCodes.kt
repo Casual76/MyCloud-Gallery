@@ -191,6 +191,45 @@ object DiagCodes {
   // sezione). I codici veri della 4A (IndexDiag, NasMediaDiag, PrepDiag nei contratti dei moduli nuovi) li cataloga P11.
   @JvmField val NAS_LIBRARY_STATE = DiagCode("NAS_LIBRARY_STATE")
 
+  // P11: i codici della 4A. Quelli dei moduli (`IndexDiag` di core-index, `NasMediaDiag` di core-nasmedia, `PrepDiag` di
+  // core-prepare) sono scritti come letterali con gli STESSI id ed edge case: questo modulo non vede quei moduli. Un test
+  // di :app (`DiagnosticsWiringTest`) verifica l'uguaglianza, `Fase4ACatalogTest` qui la tabella e gli edge case.
+  // Quelli del contributore di :app (`NasLibraryDiagnostics`): l'emergenza e le aree non raggiungibili.
+  @JvmField val NAS_WRITES_STOPPED = DiagCode("NAS_WRITES_STOPPED")
+  @JvmField val NAS_AREA_UNREACHABLE = DiagCode("NAS_AREA_UNREACHABLE", setOf("E-L4"))
+
+  // Scansione (NasMediaDiag).
+  @JvmField val NAS_SCAN_STATE = DiagCode("NAS_SCAN_STATE", setOf("E-N5"))
+  @JvmField val NAS_SCAN_FROZEN = DiagCode("NAS_SCAN_FROZEN", setOf("C11", "E-S11"))
+  @JvmField val NAS_SCAN_SKIPPED_NAMES = DiagCode("NAS_SCAN_SKIPPED_NAMES", setOf("E-N6"))
+  @JvmField val NAS_SCAN_ALBUM_COVERS = DiagCode("NAS_SCAN_ALBUM_COVERS", setOf("E-N14"))
+  @JvmField val NAS_SCAN_NOT_MEDIA = DiagCode("NAS_SCAN_NOT_MEDIA", setOf("E-M12"))
+  @JvmField val NAS_SCAN_ARRIVING = DiagCode("NAS_SCAN_ARRIVING", setOf("E-N4"))
+  @JvmField val NAS_SCAN_BUSY = DiagCode("NAS_SCAN_BUSY", setOf("E-N13"))
+  @JvmField val NAS_SCAN_LOOPS = DiagCode("NAS_SCAN_LOOPS", setOf("E-N10"))
+  @JvmField val NAS_SCAN_TRUNCATED = DiagCode("NAS_SCAN_TRUNCATED", setOf("E-N5"))
+  @JvmField val NAS_SCAN_AWAY_CAP = DiagCode("NAS_SCAN_AWAY_CAP", setOf("D22"))
+
+  // Indice condiviso (IndexDiag).
+  @JvmField val INDEX_REJECTED = DiagCode("INDEX_REJECTED", setOf("E-I5", "E-I14", "C9"))
+  @JvmField val INDEX_ROLLBACK = DiagCode("INDEX_ROLLBACK", setOf("E-I5"))
+  @JvmField val INDEX_NEWER_FORMAT = DiagCode("INDEX_NEWER_FORMAT", setOf("E-I3"))
+  @JvmField val INDEX_IDENTITY_CONFLICT = DiagCode("INDEX_IDENTITY_CONFLICT", setOf("E-I18"))
+  @JvmField val INDEX_OUTBOX_PENDING = DiagCode("INDEX_OUTBOX_PENDING", setOf("E-I6"))
+  @JvmField val INDEX_LOCAL_ONLY = DiagCode("INDEX_LOCAL_ONLY", setOf("D31"))
+  @JvmField val INDEX_CLOCK_JUMP = DiagCode("INDEX_CLOCK_JUMP", setOf("E-N17", "D32"))
+  @JvmField val INDEX_AREA_READ_ONLY = DiagCode("INDEX_AREA_READ_ONLY", setOf("E-I19"))
+  @JvmField val INDEX_SHARE_DROPPED = DiagCode("INDEX_SHARE_DROPPED", setOf("E-I8", "E-R10"))
+  @JvmField val INDEX_NO_PREPARERS = DiagCode("INDEX_NO_PREPARERS", setOf("E-I10", "E-I12"))
+  @JvmField val INDEX_REPLICA_STATE = DiagCode("INDEX_REPLICA_STATE", setOf("E-L6"))
+  @JvmField val INDEX_LEASES_CONTENDED = DiagCode("INDEX_LEASES_CONTENDED", setOf("E-I1"))
+
+  // Preparazione (PrepDiag).
+  @JvmField val PREP_STATE = DiagCode("PREP_STATE")
+  @JvmField val PREP_DECODER_MISSING = DiagCode("PREP_DECODER_MISSING", setOf("E-M13"))
+  @JvmField val PREP_UNREADABLE = DiagCode("PREP_UNREADABLE", setOf("E-M10"))
+  @JvmField val PREP_TOO_LARGE = DiagCode("PREP_TOO_LARGE", setOf("E-M3"))
+
   // I codici di `PhoneLibraryDiagnostics` (core-mediastore, P2): stessi id e stessi edge case di
   // `PhoneLibraryDiagCodes`, scritti come letterali perche' questo modulo non dipende da core-mediastore.
   // `Fase3CatalogTest` verifica la tabella qui sotto e un test di :app (P11) verifica l'uguaglianza con

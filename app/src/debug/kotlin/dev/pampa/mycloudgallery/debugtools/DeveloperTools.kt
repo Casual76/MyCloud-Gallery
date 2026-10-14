@@ -6,6 +6,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
+import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.pampa.mycloudgallery.R
@@ -14,6 +15,9 @@ import dev.pampa.mycloudgallery.core.family.contract.FamilySetupRepository
 import dev.pampa.mycloudgallery.core.family.contract.SetupState
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbnailSource
 import dev.pampa.mycloudgallery.core.imaging.testing.SyntheticThumbnailSource
+import dev.pampa.mycloudgallery.core.nas.fence.ShareFence
+import dev.pampa.mycloudgallery.core.nas.session.ShareGuard
+import dev.pampa.mycloudgallery.gallery.DebugLibraryKit
 import dev.pampa.mycloudgallery.gallery.SyntheticLibraryKit
 import java.io.File
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,7 +34,10 @@ data object CatalogRoute
  * - l'ingresso al **Catalogo componenti** (Impostazioni → Sviluppo), come nella Fase 1;
  * - la **Libreria sintetica** (docs/fase3-progetto.md §1.4, §5.2): menu "Vista" → "Sintetica: 100.000", sopra il catalogo
  *   vero ma in un **database separato** (`gallery-synthetic.db`), con miniature a gradiente;
- * - la **famiglia pronta per lo smoke sull'emulatore** ([familyOverride]): solo se `adb` ha scritto il marcatore.
+ * - la **famiglia pronta per lo smoke sull'emulatore** ([familyOverride]): solo se `adb` ha scritto il marcatore;
+ * - il **NAS sintetico** (Fase 4A, P11, M1): Impostazioni → Sviluppo → "NAS sintetico", 20 mila file su un NAS finto in
+ *   memoria passati dalla scansione vera, in un database separato ([SyntheticNasKit]);
+ * - la **recinzione delle share di prova** (D33, [shareGuard]).
  *
  * La versione release di questo file (src/release) non ha niente: nessuna di queste classi entra nell'APK di release
  * (tools/check.ps1 cerca il catalogo e i package `testing` nel dex di release).
@@ -42,6 +49,9 @@ internal object DeveloperTools {
 
   /** I gradienti della Libreria sintetica, per la pipeline delle miniature vera (riferimenti `MediaRef.Synthetic`). */
   fun syntheticThumbnails(): ThumbnailSource = SyntheticThumbnailSource()
+
+  /** Il NAS sintetico (Fase 4A, P11, M1): media solo sul NAS dalla scansione vera su un NAS finto in memoria. */
+  fun nasLibrary(): DebugLibraryKit? = SyntheticNasKit
 
   /**
    * SOLO debug, SOLO con il marcatore: la famiglia "pronta" senza NAS, per provare la Libreria su un **emulatore** (che
@@ -67,8 +77,24 @@ internal object DeveloperTools {
         subtitle = stringResource(R.string.debug_catalog_detail),
         onClick = { nav.navigate(CatalogRoute) },
       )
+      FluidListDivider()
+      FluidListRow(
+        title = stringResource(R.string.debug_nas_title),
+        subtitle = stringResource(R.string.debug_nas_detail),
+        onClick = {
+          SyntheticNasKit.request()
+          nav.popBackStack()
+        },
+      )
     }
   }
+
+  /**
+   * D33 (Fase 4): la recinzione delle prove sul campo. Con un account di prova (`test`, `test2`) la sessione rifiuta ogni
+   * share fuori da `test`, `test2`, `test-comune` prima di qualunque richiesta (anche `NAS` e `Public`, pubbliche). Solo
+   * qui, nella build debug: la release non la referenzia e R8 la toglie (tools/check.ps1 la cerca nel dex di release).
+   */
+  fun shareGuard(): ShareGuard? = ShareFence
 
   /** Il nome del marcatore della famiglia pronta (lo scrive solo `adb`). */
   const val FAMILY_READY_MARKER: String = "debug-family-ready.marker"

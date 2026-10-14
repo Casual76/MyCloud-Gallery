@@ -81,6 +81,8 @@ data class NasRefRow(
   @ColumnInfo(name = "quick_hash") val quickHash: String,
   @ColumnInfo(name = "mime_type") val mimeType: String?,
   @ColumnInfo(name = "is_current") val isCurrent: Boolean,
+  /** P11: anche le posizioni "non raggiungibili" (NAS spento, fuori casa): le miniature vengono dalla replica (E-L4). */
+  @ColumnInfo(name = "state") val state: String,
 )
 
 /** Una copia sul telefono leggibile adesso: l'`_ID` in cache vale per la versione attuale del MediaStore. */

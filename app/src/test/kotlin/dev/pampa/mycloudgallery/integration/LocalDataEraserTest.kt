@@ -4,6 +4,8 @@ import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.graph.GalleryStopper
+import dev.pampa.mycloudgallery.nas.NasGraph
+import dev.pampa.mycloudgallery.work.NasStages
 import java.io.File
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -70,6 +72,22 @@ class LocalDataEraserTest {
 
     assertThat(done).isFalse()
     assertThat(replica.exists()).isTrue()
+  }
+
+  /** Fase 4A (P11): l'outbox dell'indice (miniature preparate qui), i pacchi della replica e i file di stato del NAS. */
+  @Test
+  fun siCancellanoAncheOutboxPacchiEStatoDelNas() = runBlocking<Unit> {
+    val device = device()
+    val noBackup = device.context.noBackupFilesDir
+    val outbox = File(File(noBackup, NasGraph.OUTBOX_DIR), "m0000").apply { parentFile!!.mkdirs(); writeText("blob") }
+    val pack = File(File(File(noBackup, NasGraph.REPLICA_DIR), NasGraph.PACKS_DIR), "p0000").apply { parentFile!!.mkdirs(); writeText("pacco") }
+    val state = listOf(NasGraph.ATTEMPTS_FILE, NasGraph.EMERGENCY_FILE, NasStages.HEARTBEAT_SCAN).map { File(noBackup, it).apply { writeText("x") } }
+
+    assertThat(device.graph.eraser.eraseAll()).isTrue()
+
+    assertThat(outbox.parentFile!!.exists()).isFalse()
+    assertThat(pack.exists()).isFalse()
+    state.forEach { assertThat(it.exists()).isFalse() }
   }
 
   @Test

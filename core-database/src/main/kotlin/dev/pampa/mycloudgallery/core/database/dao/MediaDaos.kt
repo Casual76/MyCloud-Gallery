@@ -257,6 +257,36 @@ interface LocationDao {
   @Query(PRESENT_IN_SHARE_SQL)
   suspend fun presentInShare(account: String, shareKey: String, limit: Int): List<MediaLocationEntity>
 
+  // --- P11: le operazioni della scansione aggiunte da P5 e quelle della replica (porte NasScanStore e ReplicaCatalog) ---
+
+  /** Le posizioni della share con uno di questi `FileId` (E-N1), a qualunque percorso e in qualunque stato. */
+  @Query("SELECT * FROM media_location WHERE account_id = :account AND share_key = :shareKey AND file_id IN (:fileIds) ORDER BY location_id")
+  suspend fun byFileIds(account: String, shareKey: String, fileIds: List<Long>): List<MediaLocationEntity>
+
+  /** Quante posizioni (presenti o non raggiungibili) della share non sono state viste dal giro iniziato a [epoch] (D10). */
+  @Query(
+    "SELECT COUNT(*) FROM media_location WHERE account_id = :account AND share_key = :shareKey " +
+      "AND state IN ('present', 'unavailable') AND last_seen_at < :epoch",
+  )
+  suspend fun countNotSeenInShare(account: String, shareKey: String, epoch: Long): Int
+
+  /**
+   * Le posizioni non assenti sotto una cartella: quelle direttamente dentro ([exact]) e quelle nelle sottocartelle
+   * (`folder_key` fra [lo] = `exact + "/"` e [hi] = `exact + "0"`, il carattere dopo `/`): un intervallo sull'indice.
+   */
+  @Query(
+    "SELECT * FROM media_location WHERE (folder_key = :exact OR (folder_key > :lo AND folder_key < :hi)) AND state != 'absent'",
+  )
+  suspend fun underFolder(exact: String, lo: String, hi: String): List<MediaLocationEntity>
+
+  /** I file presenti della share, versione corrente, per le unita' di lavoro della preparazione (D13). */
+  @Query(NAS_WORK_ROWS_SQL)
+  suspend fun nasWorkRows(account: String, shareKey: String): List<NasWorkRow>
+
+  /** Tutte le posizioni della share per l'account (qualunque stato): la replica le confronta per percorso. */
+  @Query("SELECT * FROM media_location WHERE account_id = :account AND share_key = :shareKey")
+  suspend fun inShare(account: String, shareKey: String): List<MediaLocationEntity>
+
   companion object {
     const val KNOWN_IN_FOLDER_SQL: String = "SELECT * FROM media_location WHERE folder_key = :folderKey AND state != 'absent'"
 
@@ -266,6 +296,14 @@ interface LocationDao {
     const val NOT_SEEN_IN_SHARE_SQL: String =
       "SELECT * FROM media_location WHERE account_id = :account AND share_key = :shareKey " +
         "AND state IN ('present', 'unavailable') AND last_seen_at < :epoch ORDER BY last_seen_at, location_id LIMIT :limit"
+
+    const val NAS_WORK_ROWS_SQL: String =
+      "SELECT l.location_id AS locationId, l.nas_path AS path, l.size AS size, l.modified_at AS modifiedAt, " +
+        "l.file_id AS fileId, v.version_id AS versionId, v.media_id AS mediaId, v.quick_hash AS quickHash, m.kind AS kind, " +
+        "m.local_day AS localDay, vm.mime_type AS mime FROM media_location l " +
+        "JOIN media_version v ON v.version_id = l.version_id JOIN media m ON m.media_id = v.media_id " +
+        "LEFT JOIN version_metadata vm ON vm.version_id = v.version_id " +
+        "WHERE l.account_id = :account AND l.share_key = :shareKey AND l.state = 'present' AND m.current_version_id = v.version_id"
 
     const val PRESENT_IN_SHARE_SQL: String =
       "SELECT * FROM media_location WHERE account_id = :account AND share_key = :shareKey AND state = 'present' " +
@@ -282,3 +320,18 @@ interface NasShareDao {
   @Query("SELECT * FROM nas_share")
   suspend fun all(): List<NasShareEntity>
 }
+
+/** Una riga di [LocationDao.nasWorkRows]. */
+data class NasWorkRow(
+  val locationId: Long,
+  val path: String,
+  val size: Long,
+  val modifiedAt: Long,
+  val fileId: Long?,
+  val versionId: String,
+  val mediaId: String,
+  val quickHash: String?,
+  val kind: String,
+  val localDay: Int?,
+  val mime: String?,
+)

@@ -23,7 +23,8 @@
                                 receiver del Macrobenchmark torna solo nella variante benchmarkRelease)
     7b. nessun resto di debug  nel dex dell'APK di release non compaiono la Libreria sintetica, il marcatore della famiglia
                                 "pronta", `DebugSyntheticSize`, il sink di logcat e il catalogo dei componenti (I4 della
-                                revisione di sicurezza): lettura diretta del dex, FALLISCE se non lo legge
+                                revisione di sicurezza), ne' (Fase 4A, D33) la recinzione delle prove `ShareFence` e il NAS
+                                sintetico del menu di debug: lettura diretta del dex, FALLISCE se non lo legge
     7c. niente servizi         l'APK di release non ha nessun `META-INF/services/dev.pampa.*` (ne' un file di servizio che
                                 nomini una classe `dev.pampa.*`): le varianti di misura legano le loro classi con Hilt, mai
                                 con `ServiceLoader` (R6)
@@ -476,9 +477,12 @@ $debugRemnants = @(
   "debug-family-ready", "DeveloperTools`$ReadyFamily",
   # La Libreria sintetica (M1): il kit, i nomi del suo database e della sua istantanea, la manopola che sceglie la dimensione.
   "SyntheticCatalogKit", "gallery-synthetic", "replica-synthetic", "libreria-sintetica", "m1-synthetic-count", "DebugSyntheticSize",
-  "LibraryDebugHooks"
+  "LibraryDebugHooks",
+  # Fase 4A (P11, D33): la recinzione delle prove sul campo (`ShareFence`) e' legata solo nella build debug
+  # (DeveloperTools di debug); in release non e' referenziata e R8 la toglie. Anche il NAS sintetico del menu di debug.
+  "core/nas/fence/ShareFence", "SyntheticNasKit", "nas-synthetic"
 )
-Step "nessun resto degli strumenti di debug nel dex di release (Libreria sintetica, famiglia pronta, sink di logcat)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
+Step "nessun resto degli strumenti di debug nel dex di release (Libreria e NAS sintetici, famiglia pronta, sink di logcat, ShareFence D33)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
   $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
   if (-not $apk) { return "nessun APK di release in app\build\outputs\apk\release" }

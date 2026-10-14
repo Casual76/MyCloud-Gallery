@@ -1,7 +1,78 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <!-- Sezione «NAS nella Libreria» (Fase 4). P0: il minimo perché la sezione esista; P11 aggiunge le voci dei casi limite. -->
+  <!-- Sezione «NAS nella Libreria» (Fase 4A). Le voci dei casi limite (P11): solo numeri ed enumerati nelle esportazioni,
+       mai nomi di share, cartelle, file, account o dispositivi. -->
   <string name="diagnostics_section_nas_library">NAS nella Libreria</string>
   <string name="diagnostics_hint_nas_library">Scansione delle cartelle, congelamento, indice condiviso, anteprime sul telefono e preparazione.</string>
   <string name="diag_nas_library_state_title">Stato del NAS nella Libreria</string>
+  <string name="diag_nas_library_state_guide">Le aree del NAS che il telefono legge, se si lavora in solo locale e se le scritture sul NAS sono ferme. Qui si possono fermare le scritture automatiche sul NAS (indice e prenotazioni): i file non vengono mai toccati.</string>
+
+  <!-- Emergenza (§1.4) e aree non raggiungibili (E-L4). -->
+  <string name="diag_nas_writes_stopped_title">Scritture sul NAS ferme</string>
+  <string name="diag_nas_writes_stopped_guide">Hai fermato le scritture automatiche sul NAS: niente indice e niente prenotazioni. La Libreria e la preparazione continuano sul telefono. Riattivale quando vuoi.</string>
+  <string name="diag_nas_area_unreachable_title">Area del NAS non raggiungibile</string>
+  <string name="diag_nas_area_unreachable_guide">Il NAS non risponde o nega l\'accesso a un\'area: la Libreria mostra quello che conosceva, con le miniature già sul telefono. Controlla che il NAS sia acceso e di essere a casa o con la VPN.</string>
+
+  <!-- Scansione (NasMediaDiag, P5). -->
+  <string name="diag_nas_scan_state_title">Ultima verifica del NAS</string>
+  <string name="diag_nas_scan_state_guide">Quanti file sono stati visti, quanti letti, quanti riconosciuti senza leggerli (stesso timbro, spostati dal PC, adottati dall\'indice) e se il giro è arrivato in fondo.</string>
+  <string name="diag_nas_scan_frozen_title">Cambiamenti anomali sul NAS</string>
+  <string name="diag_nas_scan_frozen_guide">In un\'area del NAS sono spariti, cambiati o diventati illeggibili molti file in una volta (potrebbe essere un errore o un ransomware). Le scritture automatiche sono ferme e nessun file è stato segnato come sparito. Controlla dal PC; se è tutto a posto, conferma il numero per riprendere.</string>
+  <string name="diag_nas_scan_skipped_names_title">Nomi di file non gestibili</string>
+  <string name="diag_nas_scan_skipped_names_guide">Alcuni file hanno nomi con caratteri che non si possono usare in modo sicuro: sono stati saltati. Rinominali dal PC se vuoi vederli nella Libreria.</string>
+  <string name="diag_nas_scan_album_covers_title">Copertine degli album escluse</string>
+  <string name="diag_nas_scan_album_covers_guide">Le immagini nelle cartelle di musica (copertine) non entrano nella Libreria. Puoi mostrarle dalle Impostazioni.</string>
+  <string name="diag_nas_scan_not_media_title">File vuoti o non media</string>
+  <string name="diag_nas_scan_not_media_guide">Alcuni file hanno un\'estensione da foto o video ma dentro sono altro (o sono vuoti): non entrano nella Libreria.</string>
+  <string name="diag_nas_scan_arriving_title">File in arrivo</string>
+  <string name="diag_nas_scan_arriving_guide">Alcuni file si stanno ancora copiando sul NAS: entreranno nella Libreria quando saranno stabili.</string>
+  <string name="diag_nas_scan_busy_title">File in uso sul PC</string>
+  <string name="diag_nas_scan_busy_guide">Alcuni file erano aperti da un altro programma: si riprova al prossimo giro.</string>
+  <string name="diag_nas_scan_loops_title">Collegamenti e cartelle troppo profonde</string>
+  <string name="diag_nas_scan_loops_guide">Collegamenti che rimandano a cartelle già viste o cartelle oltre 64 livelli: non si seguono.</string>
+  <string name="diag_nas_scan_truncated_title">Cartelle troppo grandi o non leggibili</string>
+  <string name="diag_nas_scan_truncated_guide">Alcune cartelle non si sono potute leggere per intero: in quelle cartelle nessun file viene segnato come sparito finché non si leggono di nuovo.</string>
+  <string name="diag_nas_scan_away_cap_title">Rilevamento fuori casa al limite</string>
+  <string name="diag_nas_scan_away_cap_guide">Fuori dal Wi-Fi di casa il telefono legge al massimo 50 MB di file nuovi per giro: il resto si fa a casa.</string>
+
+  <!-- Indice condiviso (IndexDiag, P3 e P4). -->
+  <string name="diag_index_rejected_title">Dati dell\'indice rifiutati</string>
+  <string name="diag_index_rejected_guide">Alcuni segmenti o teste dell\'indice condiviso non hanno superato i controlli e sono stati ignorati: la Libreria resta com\'era. Se continua, un dispositivo potrebbe avere un problema.</string>
+  <string name="diag_index_rollback_title">Indice tornato indietro</string>
+  <string name="diag_index_rollback_guide">L\'indice di un dispositivo sul NAS è più vecchio di quello già letto, o è sparito: si tiene quello che si conosceva.</string>
+  <string name="diag_index_newer_format_title">Indice di una versione più nuova</string>
+  <string name="diag_index_newer_format_guide">Un altro dispositivo usa una versione più recente dell\'app: aggiorna MyCloud Gallery per leggere i suoi dati.</string>
+  <string name="diag_index_identity_conflict_title">Identità dei media in conflitto</string>
+  <string name="diag_index_identity_conflict_guide">Un dispositivo ha pubblicato per un file un\'identità già usata qui per un altro contenuto: non è stata adottata e i media restano separati.</string>
+  <string name="diag_index_outbox_pending_title">Indice in attesa di pubblicazione</string>
+  <string name="diag_index_outbox_pending_guide">Miniature e dati preparati qui aspettano di essere scritti sul NAS (NAS pieno, quota, scritture ferme o non raggiungibile). Niente si perde: si riprova.</string>
+  <string name="diag_index_local_only_title">Indice solo su questo telefono</string>
+  <string name="diag_index_local_only_guide">Finché la fase di prova non è chiusa, l\'indice si pubblica solo sulle aree di prova: sulle aree vere il telefono lavora in solo locale.</string>
+  <string name="diag_index_clock_jump_title">L\'ora del NAS ha fatto un salto</string>
+  <string name="diag_index_clock_jump_guide">L\'ora del NAS è cambiata di oltre 5 minuti: le prenotazioni e le pulizie aspettano finché l\'ora non torna stabile.</string>
+  <string name="diag_index_area_read_only_title">Area in sola lettura</string>
+  <string name="diag_index_area_read_only_guide">Questo account legge l\'area ma non ci scrive: si prepara solo sul telefono e si usa l\'indice degli altri.</string>
+  <string name="diag_index_share_dropped_title">Area tolta dalla replica</string>
+  <string name="diag_index_share_dropped_guide">Un\'area ha negato l\'accesso in due giorni diversi: i suoi dati sul telefono sono stati tolti. Se torna raggiungibile si ricostruiscono.</string>
+  <string name="diag_index_no_preparers_title">Nessun dispositivo prepara le anteprime</string>
+  <string name="diag_index_no_preparers_guide">In un\'area nessun dispositivo attivo ha il ruolo di Preparatore: le miniature restano quelle provvisorie. Attiva il ruolo su un dispositivo che sta spesso in carica a casa.</string>
+  <string name="diag_index_replica_state_title">Anteprime sul telefono</string>
+  <string name="diag_index_replica_state_guide">Il livello di qualità scelto, lo spazio occupato dalle anteprime e se il telefono sta ancora scaricando o liberando spazio.</string>
+  <string name="diag_index_leases_contended_title">Prenotazioni contese</string>
+  <string name="diag_index_leases_contended_guide">Le prenotazioni del lavoro sul NAS non si sono potute prendere: si lavora lo stesso, con il rischio di rifare qualcosa due volte.</string>
+
+  <!-- Preparazione (PrepDiag, P6). -->
+  <string name="diag_prep_state_title">Ultima preparazione</string>
+  <string name="diag_prep_state_guide">Quanti media sono stati preparati (miniature, anteprime, fotogrammi), quanti non riusciti e perché il giro si è fermato.</string>
+  <string name="diag_prep_decoder_missing_title">Formati non leggibili qui</string>
+  <string name="diag_prep_decoder_missing_guide">Questo telefono non sa decodificare alcuni formati: li proverà un altro Preparatore. Se nessuno ci riesce, resta il segnaposto.</string>
+  <string name="diag_prep_unreadable_title">File non leggibili</string>
+  <string name="diag_prep_unreadable_guide">Alcuni file non si sono potuti decodificare dopo cinque tentativi: nella Libreria hanno il segnaposto. Controlla se sono rovinati.</string>
+  <string name="diag_prep_too_large_title">File troppo grandi</string>
+  <string name="diag_prep_too_large_guide">Alcune foto superano i limiti di memoria della preparazione: restano con il segnaposto.</string>
+
+  <!-- Azioni (§1.4): emergenza e scongelamento. -->
+  <string name="diagnostics_action_nas_stop_writes">Ferma le scritture sul NAS</string>
+  <string name="diagnostics_action_nas_resume_writes">Riattiva le scritture</string>
+  <string name="diagnostics_action_nas_release_freeze">Ho controllato, continua</string>
 </resources>

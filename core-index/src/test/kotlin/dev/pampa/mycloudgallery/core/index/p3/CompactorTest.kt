@@ -23,7 +23,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Test
 
 /** La compattazione (D5): stesso stato per chi legge, meno segmenti, lapidi tolte solo con tutti i `meta`, regole. */
-class CompactorTest {
+open class CompactorTest {
 
   private val share = "test-comune"
   private val world = TestWorld()

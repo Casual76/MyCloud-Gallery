@@ -13,8 +13,9 @@ package dev.pampa.mycloudgallery.core.common.featureflags
  *
  * @property wol Wake-on-LAN (piano 2.6). Spento: con il NAS sempre acceso il WoL non e' verificabile.
  * @property nasLibrary Fase 4 (`docs/fase4-progetto.md`): i media del NAS nella Libreria (scansione, indice, replica,
- *   preparazione, viewer). Spento in release finche' l'integrazione (P11, o la tappa M1 dell'orchestratore) non lo
- *   accende cambiando [RELEASE] con una modifica del codice che si vede in revisione.
+ *   preparazione, viewer). **Acceso dall'integrazione della 4A (P11)** anche in release: la 4A non tocca mai i media sul
+ *   NAS (D1) e con [indexPublishTestSharesOnly] sulle share vere lavora in solo locale (D31). Serve alla tappa M1 e alla
+ *   prova F2 (scansione in sola lettura dell'archivio vero con l'APK di release, risposta Q4).
  * @property indexPublishTestSharesOnly Fase 4, D31: l'indice condiviso e le prenotazioni si scrivono **solo** sulle
  *   share di prova ([TestShares]); sulle share vere la 4A lavora in solo locale. E' una **protezione**: vale `true`
  *   in release e la spegne solo l'utente a fine 4A (approvazione di D31), cambiando [RELEASE]. L'"emergenza" di
@@ -37,7 +38,7 @@ class FeatureFlags private constructor(
 
   companion object {
     /** I valori di ogni build di release: funzioni sperimentali spente, protezioni accese. */
-    val RELEASE: FeatureFlags = FeatureFlags(wol = false, nasLibrary = false, indexPublishTestSharesOnly = true)
+    val RELEASE: FeatureFlags = FeatureFlags(wol = false, nasLibrary = true, indexPublishTestSharesOnly = true)
 
     /**
      * Le funzioni di questa build. Con [debugBuild] falso il risultato e' sempre [RELEASE], qualunque cosa si chieda

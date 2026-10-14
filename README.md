@@ -4,14 +4,16 @@ Galleria Android privata per una famiglia di soli adulti, complementare a Samsun
 telefono e del NAS WD My Cloud EX2 Ultra in una sola libreria, backup automatico, ricerca sul
 dispositivo, nessun cloud di terzi e nessuna telemetria. Telefono e tablet.
 
-Stato: **Fase 3 integrata (P11)**. Oltre alla Fase 2 (rete e casa, sessione SMB verso il NAS, famiglia, QR, Impostazioni e
+Stato: **Fase 4A integrata (P11, M1)**. Oltre alla Fase 2 (rete e casa, sessione SMB verso il NAS, famiglia, QR, Impostazioni e
 Diagnostica) l'app mostra la **galleria del telefono**: Libreria (griglia della timeline su anni, mesi, giorni e tutte, con
 selezione, preferiti, nascosti ed eliminazione dal telefono), viewer (zoom, video, foto in movimento, informazioni) e Raccolte
 (Preferiti, Video, Screenshot, WhatsApp, Nascosti ed Eliminati di recente dietro lo sblocco). Tutto sul telefono, senza rete:
-il NAS nella Libreria arriva con la Fase 4 (`docs/fase4-progetto.md`): il **P0 della 4A** ha creato i moduli `core-index`,
-`core-nasmedia` e `core-prepare` con contratti, null-object e fake, i contratti nuovi di `core-nas` (`NasMediaReader`),
-`core-model` (`MediaRef.Nas`, presenza), `core-trust` (contenuto dei segmenti) e i test di architettura; la logica arriva con
-P1–P10 e l'integrazione con P11.
+il NAS nella Libreria e' la Fase 4 (`docs/fase4-progetto.md`). Con il **P11 della 4A** (milestone M1) i pacchetti P0–P10
+sono collegati nel grafo vero dell'app (`nas/NasGraph`): la scansione del NAS porta i media nella Libreria (data, presenza
+"solo NAS", miniature EXIF provvisorie), la preparazione produce le anteprime e le pubblica nell'indice della share, gli altri
+dispositivi sincronizzano l'indice e vedono le miniature senza preparare niente, il viewer apre gli originali dal NAS e
+"Scarica" li copia sul telefono. Nessuna operazione sui media del NAS (D1): le scritture sono solo nell'area dell'app
+(`.mycloudgallery/`), e nella 4A solo nelle share di prova (D31). Le operazioni sui file del NAS arrivano con la 4B.
 
 ## Verifica in un comando
 
@@ -44,7 +46,7 @@ segnaposto e almeno un test.
 
 | Modulo | Cosa contiene | Vede |
 |---|---|---|
-| `:app` | `MainActivity`, blocco app, navigazione, il grafo della Fase 2 (`graph/AppGraph`) e quello della galleria (`gallery/GalleryGraph`) esposti a Hilt, `TrustSyncWorker`, `PhoneSyncWorker` e `LibraryMaintenanceWorker` (`work/GalleryWork.kt`), notifiche, ciclo di vita del processo; applicationId `dev.pampa.mycloudgallery` (debug: `.debug`; variante di misura: `.bench`) | tutti + `engine-ui` |
+| `:app` | `MainActivity`, blocco app, navigazione, il grafo della Fase 2 (`graph/AppGraph`), quello della galleria (`gallery/GalleryGraph`) e, dalla 4A, quello del NAS nella Libreria (`nas/NasGraph`) esposti a Hilt, `TrustSyncWorker`, `PhoneSyncWorker` e `LibraryMaintenanceWorker` (`work/GalleryWork.kt`), i lavori del NAS (`work/NasWork.kt`), notifiche e riepilogo giornaliero, ciclo di vita del processo; applicationId `dev.pampa.mycloudgallery` (debug: `.debug`; variante di misura: `.bench`) | tutti + `engine-ui` |
 | `:core-common` | logger interno (in release non scrive nulla), `Redacted`, `DispatcherProvider` | nessuno |
 | `:core-model` | tipi di dominio (media, posizioni, versioni, dispositivi) | nessuno |
 | `:core-database` | Room + KSP: replica locale dell'indice | model, common |
@@ -106,7 +108,32 @@ chiavi in software. Intorno al grafo, in `:app`:
 - `root/RootViewModel` e `status/GlobalStatus`: la prima schermata dallo stato vero del dispositivo e l'indicatore globale
   (§3.5) da rete, sessione, sonda TCP e interruttore.
 
-Il Fluid Engine e' in `engine/` (submodule, agganciato al tag **engine-2.11.0**); entrano nel build solo
+**Il NAS nella Libreria (Fase 4A, P11).** `GalleryGraph` costruisce un `nas/NasGraph` quando la funzione e' accesa
+(`FeatureFlags.nasLibrary`, accesa anche in release; D31 `indexPublishTestSharesOnly` resta acceso) e il dispositivo e'
+configurato (`AppGraph.nasInputs`: account, share privata e comune, esclusioni firmate, chiave del dispositivo, registro,
+fiducia, regole, ora del NAS). Il grafo, per ogni area:
+
+```
+sessione SMB (P1, mediaReader)
+  -> scansione DefaultNasScanner (P5) -> catalogo MediaCatalog v3 (P2, MediaCatalogScanStore)
+  -> unita' di lavoro con prenotazioni (P3, CatalogWorkSource) -> preparazione DefaultPreparer (P6, NasPrepInputs)
+  -> outbox e pubblicazione dell'indice OutboxIndexPublisher (P3, RoomIndexPublishStore, solo share di prova: D31)
+  -> sincronizzazione IndexSyncEngine e replica LocalReplica (P4, RoomReplicaStore, pacchi in noBackupFilesDir/replica)
+  -> Libreria (P7: CatalogTimelineSource con nasRefs, NasThumbnailSource, LibraryTabState.nas)
+  -> viewer e "Scarica" (P8: NasImageOrigin, video a intervalli, NasDownloader con CatalogCopyLinker)
+```
+
+I lavori (`work/NasWork.kt`: scansione, sincronizzazione dell'indice, preparazione, anteprime HQ) girano a tappe
+(`StagedRun`, D22) dentro le regole delle attivita' (P9); il congelamento (D10) ferma le scritture automatiche
+(`MutableNasFreezeSignal` -> regole) e finisce nel **riepilogo giornaliero** (`notify/NasDailySummary`, risposta Q6).
+L'emergenza "Ferma le scritture sul NAS" e "Ho controllato, continua" sono azioni della Diagnostica; la qualita' delle
+anteprime e "Mostra le copertine degli album" stanno in Impostazioni (`feature-settings/.../quality`). L'azzeramento ferma il
+NAS per primo e cancella outbox, pacchi, tentativi e interruttori. La recinzione delle share di prova (D33, `ShareFence`) e'
+legata **solo in debug** (`DeveloperTools.shareGuard()`); `tools\check.ps1` verifica che non sia nel dex di release. In debug,
+Impostazioni → Sviluppo → "NAS sintetico" apre una Libreria di prova con 20 mila file su un NAS finto in memoria, passati
+dalla scansione vera, in un database separato (M1 sull'emulatore).
+
+Il Fluid Engine e' in `engine/` (submodule, agganciato al tag **engine-2.13.0**); entrano nel build solo
 `engine-foundation` e `engine-ui`. Per aggiungerne altri: `engine\tools\engine-install.ps1 -AppRoot . -Modules
 engine-ui,engine-storage` (e rigenerare i checksum).
 

@@ -40,6 +40,12 @@ class DefaultFamilySetupRepository(
 
   private var wipeObservedAt: Long? = null
 
+  /** L'ultima fase dell'azzeramento vista (per riconoscere "finito, poi dimenticato"). */
+  private var lastPhase: WipePhase? = null
+
+  /** Vero dal momento in cui un azzeramento finito e' stato dimenticato finche' il registro dice ancora "perso". */
+  private var forgotten = false
+
   override val state: StateFlow<SetupState> =
     combine(store.state, registry.status, wipe.progress) { stored, trust, phase ->
       // L'ora dell'azzeramento: la prima volta che lo si vede finito (P3 non la espone, e l'eraser puo' aver
@@ -49,7 +55,18 @@ class DefaultFamilySetupRepository(
       } else {
         wipeObservedAt = null
       }
-      SetupResolver.resolve(stored, trust, phase, wipeObservedAt ?: 0L)
+      // "Configura di nuovo" (P11): `forgetCompletedWipe` toglie il diario (la fase passa da "finito" a nessuna) un istante
+      // PRIMA che il motore della fiducia ricalcoli il suo stato, che fino ad allora dice ancora "perso". Le tre fonti si
+      // osservano separatamente, quindi la combinazione vedeva (perso, nessun azzeramento) = "azzeramento in corso": un
+      // lampo della schermata bloccata in produzione e un test d'integrazione instabile. Dopo un azzeramento finito non
+      // c'e' piu' la chiave del dispositivo, quindi "perso" non puo' essere vero: finche' il motore non si aggiorna vale
+      // "non configurato". Un dispositivo segnato perso di nuovo passa da una configurazione nuova (stato diverso da
+      // "perso" nel frattempo) o dall'azzeramento (fase non nulla): in entrambi i casi la correzione si spegne.
+      if (lastPhase == WipePhase.DONE && phase == null) forgotten = true
+      if (phase != null || trust != TrustStatus.Lost) forgotten = false
+      lastPhase = phase
+      val effectiveTrust = if (forgotten) TrustStatus.NotConfigured else trust
+      SetupResolver.resolve(stored, effectiveTrust, phase, wipeObservedAt ?: 0L)
     }.stateIn(scope, SharingStarted.Eagerly, SetupState.Loading)
 }
 

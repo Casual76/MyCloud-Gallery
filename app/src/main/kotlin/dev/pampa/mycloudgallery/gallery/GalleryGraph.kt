@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.gallery
 
 import android.content.ComponentCallbacks2
 import android.content.Context
+import android.os.SystemClock
 import dev.pampa.mycloudgallery.core.common.coroutines.DefaultDispatcherProvider
 import dev.pampa.mycloudgallery.core.common.coroutines.DispatcherProvider
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagItem
@@ -13,13 +14,18 @@ import dev.pampa.mycloudgallery.core.database.MediaCatalog
 import dev.pampa.mycloudgallery.core.family.contract.FamilySetupRepository
 import dev.pampa.mycloudgallery.core.family.contract.SetupState
 import dev.pampa.mycloudgallery.core.imaging.ImagingPipeline
+import dev.pampa.mycloudgallery.core.imaging.nas.NasThumbnailSource
+import dev.pampa.mycloudgallery.core.index.contract.ReplicaBlobs
+import dev.pampa.mycloudgallery.core.index.noop.NoProvisionalThumbnails
 import dev.pampa.mycloudgallery.core.imaging.budget.ImagingBudget
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbnailSource
 import dev.pampa.mycloudgallery.core.imaging.loader.PipelineThumbnailLoader
 import dev.pampa.mycloudgallery.core.imaging.noop.NoThumbnailSource
 import dev.pampa.mycloudgallery.core.imaging.placeholder.ThumbHashDecoder
 import dev.pampa.mycloudgallery.core.imaging.placeholder.ThumbHashPlaceholderCache
+import dev.pampa.mycloudgallery.core.imaging.viewer.ContentImageOrigin
 import dev.pampa.mycloudgallery.core.imaging.viewer.PipelineViewerImageSource
+import dev.pampa.mycloudgallery.core.imaging.viewer.RoutingImageOrigin
 import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
 import dev.pampa.mycloudgallery.core.library.contract.LocalMediaActions
 import dev.pampa.mycloudgallery.core.library.contract.TimelineRepository
@@ -39,6 +45,7 @@ import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneLibrarySync
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneMediaIntents
 import dev.pampa.mycloudgallery.core.mediastore.contract.RecentlyDeletedSource
 import dev.pampa.mycloudgallery.core.mediastore.contract.SyncStatus
+import dev.pampa.mycloudgallery.core.mediastore.write.MediaStorePhoneMediaWriter
 import dev.pampa.mycloudgallery.core.metadata.contract.ThumbHashCodec
 import dev.pampa.mycloudgallery.core.metadata.extract.AndroidPreviewDecoder
 import dev.pampa.mycloudgallery.core.metadata.extract.DefaultExifDetailsReader
@@ -58,6 +65,8 @@ import dev.pampa.mycloudgallery.feature.viewer.details.CatalogMediaDetailsSource
 import dev.pampa.mycloudgallery.feature.viewer.details.ContentResolverViewerBytes
 import dev.pampa.mycloudgallery.feature.viewer.details.MediaDetails
 import dev.pampa.mycloudgallery.feature.viewer.details.MediaDetailsSource
+import dev.pampa.mycloudgallery.nas.NasGraph
+import dev.pampa.mycloudgallery.nas.NasInputs
 import java.io.File
 import java.time.ZoneId
 import kotlinx.coroutines.CancellationException
@@ -101,6 +110,11 @@ import kotlinx.coroutines.withContext
  * @property benchSync la sincronizzazione ferma della variante di misura (`MeasurementHooks`, docs/bench/README.md §6): con
  *   questa la lettura del telefono e i lavori in background non partono, perche' riconcilierebbero il dataset sintetico.
  * @property snapshotDelayMs l'attesa dell'accorpamento dell'istantanea su file (di norma 5 s; i test la accorciano).
+ * @property nas il NAS nella Libreria (Fase 4A, P11): i pezzi del grafo dell'app che servono a `NasGraph`; null nelle
+ *   varianti senza NAS (misura, prove della sola galleria del telefono).
+ * @property monotonicMs l'orologio monotono (tempi delle tappe e delle stime, mai l'ora del telefono).
+ * @property benchReplica la replica sintetica della variante di misura (`MeasurementHooks.replicaBlobs`, docs/bench/README.md
+ *   §6-bis): le miniature dei media solo-NAS del dataset, senza NAS; null altrove.
  */
 class GalleryParts(
   val databaseName: String?,
@@ -114,6 +128,9 @@ class GalleryParts(
   val openPlaces: () -> PlacesOpenResult = { PlacesOpenResult.NotBundled },
   val benchSync: PhoneLibrarySync? = null,
   val snapshotDelayMs: Long = SnapshotWriter.DEFAULT_DELAY_MS,
+  val nas: NasInputs? = null,
+  val monotonicMs: () -> Long = { SystemClock.elapsedRealtime() },
+  val benchReplica: ReplicaBlobs? = null,
 )
 
 /** Il catalogo e la lettura del telefono: esistono solo quando l'account del dispositivo e' noto (vedi [GalleryGraph]). */
@@ -180,15 +197,50 @@ class GalleryGraph(
   // --- Luoghi (P4): null-object finche' il dataset non c'e' -------------------------------------------------------
   val places: LazyPlaces = LazyPlaces(scope, dispatchers.io, parts.openPlaces)
 
+  // --- Il NAS nella Libreria (Fase 4A, P11) ------------------------------------------------------------------------
+
+  /**
+   * Il grafo del NAS (scansione, indice condiviso, preparazione, miniature e viewer del NAS): nasce qui senza I/O e parte
+   * con la galleria ([startWhenReady]); l'azzeramento lo ferma con lei ([shutdown]). Null senza NAS o con
+   * `FeatureFlags.nasLibrary` spento.
+   */
+  val nas: NasGraph? = parts.nas?.takeIf { it.flags.nasLibrary }?.let { inputs ->
+    NasGraph(
+      context = context.applicationContext,
+      scope = galleryScope,
+      database = database,
+      inputs = inputs,
+      catalogProvider = { coreIfReady()?.catalog },
+      extractor = { newExtractor() },
+      writer = { MediaStorePhoneMediaWriter(context.applicationContext, dispatchers) },
+      monotonicMs = parts.monotonicMs,
+      onReplicaChanged = { thumbnails.refreshNas() },
+      foreground = { foreground },
+    )
+  }
+
   // --- Miniature e viewer (P6) ------------------------------------------------------------------------------------
   val imagingBudget: ImagingBudget = ImagingBudget.of(context)
-  val thumbnailSource: ThumbnailSource = ImagingPipeline.thumbnailSource(context, parts.syntheticThumbnails)
+  val thumbnailSource: ThumbnailSource =
+    ImagingPipeline.thumbnailSource(
+      context,
+      parts.syntheticThumbnails,
+      nas = nas?.thumbnails ?: parts.benchReplica?.let { NasThumbnailSource(it, NoProvisionalThumbnails) } ?: NoThumbnailSource,
+    )
   val thumbnails: PipelineThumbnailLoader = ImagingPipeline.thumbnailLoader(thumbnailSource, imagingBudget, dispatchers)
 
   /** I segnaposto sfocati: il decodificatore ThumbHash e' di core-metadata, che core-imaging non vede (nota di P6). */
   val placeholders: ThumbHashPlaceholderCache =
     ImagingPipeline.placeholderCache(imagingBudget, ThumbHashDecoder { hash, maxSide -> ThumbHashCodec.decode(hash, maxSide) })
-  val viewerImages: PipelineViewerImageSource = ImagingPipeline.viewerImageSource(context, thumbnailSource, imagingBudget, dispatchers)
+  val viewerImages: PipelineViewerImageSource = nas?.let { n ->
+    // Fase 4 (P8, D19): i media del NAS dal loro origine (HQ della replica, poi l'originale a intervalli), il resto come prima.
+    PipelineViewerImageSource(
+      origin = RoutingImageOrigin(ContentImageOrigin(context.applicationContext.contentResolver), n.imageOrigin),
+      previews = thumbnailSource,
+      budget = imagingBudget,
+      dispatchers = dispatchers,
+    )
+  } ?: ImagingPipeline.viewerImageSource(context, thumbnailSource, imagingBudget, dispatchers)
 
   // --- Libreria (P5) -----------------------------------------------------------------------------------------------
   val preferences: DataStoreLibraryPreferences = DataStoreLibraryPreferences.create(parts.preferencesFile, scope)
@@ -384,6 +436,11 @@ class GalleryGraph(
         viewerImages.drawable(ref, screenSide)
           ?: ImageDecoderAnimatedLoader(resolver, intents::uriOf, dispatchers, screenSide, imagingBudget.viewerMaxPixels).load(ref)
       },
+      // Fase 4 (P8): dati mobili (E-V2), originali con lo zoom, video in streaming, "Scarica sul telefono" (D19, D20).
+      onConfirmMobileData = nas?.consent?.let { consent -> { ref: MediaRef -> consent.confirm(ref) } },
+      originals = nas?.imageOrigin,
+      nasVideo = nas?.video,
+      download = nas?.downloader,
       dispatchers = dispatchers,
     )
   }
@@ -416,6 +473,8 @@ class GalleryGraph(
         core()
         repository.start()
         startedFlow.value = true
+        // Il NAS nella Libreria parte con la galleria (famiglia pronta, catalogo costruito); senza NAS non fa niente.
+        nas?.let { n -> galleryScope.launch { runCatching { n.start() } } }
         if (foreground) attachSync()
         onStarted()
       } catch (e: CancellationException) {
@@ -510,6 +569,8 @@ class GalleryGraph(
         runningWork.toList()
       }
       retiredFlow.value = true
+      // Il NAS si ferma per primo: niente parte piu', le sue facciate rispondono "niente" (R7, §1.4).
+      nas?.stop()
       running.forEach { it.cancel() }
       currentSync()?.detach()
       galleryJob.cancelAndJoin()
@@ -534,17 +595,9 @@ class GalleryGraph(
   private suspend fun buildCore(): GalleryCore = withContext(dispatchers.io) {
     val owner = ownerAccount() ?: LOCAL_OWNER
     val catalog = MediaCatalog(database, owner, ZoneId::systemDefault, clock)
-    val extractor = DefaultMetadataExtractor(
-      geocoder = places,
-      zones = places,
-      videoProbe = MediaMetadataVideoProbe(),
-      previewDecoder = AndroidPreviewDecoder(),
-      // I fusi dei "vicini" (stessa cartella e stesso modello) non sono ricavabili dal catalogo senza cambiare lo
-      // schema: senza, un'immagine senza fuso e senza GPS prende il fuso del telefono alla lettura (§2.2, ultima riga).
-      neighbors = null,
-      clock = clock,
-    )
-    val source = CatalogTimelineSource(database, catalog)
+    val extractor = newExtractor()
+    // Fase 4 (D18): i riferimenti al NAS delle celle solo-NAS, anche con la share non raggiungibile (E-L4).
+    val source = CatalogTimelineSource(database, catalog, nasRefsLookup = if (nas != null || parts.benchReplica != null) catalog::nasRefs else null)
     val core = GalleryCore(
       catalog = catalog,
       timelineSource = source,
@@ -556,6 +609,19 @@ class GalleryGraph(
     coreFlow.value = core
     core
   }
+
+  /** L'estrattore dei metadati (telefono e NAS): luoghi offline, fusi, sonda dei video, anteprime incorporate. */
+  /** L'estrattore dei metadati dell'app (anche per il NAS sintetico di debug, che scansiona con lo stesso). */
+  internal fun newExtractor() = DefaultMetadataExtractor(
+    geocoder = places,
+    zones = places,
+    videoProbe = MediaMetadataVideoProbe(),
+    previewDecoder = AndroidPreviewDecoder(),
+    // I fusi dei "vicini" (stessa cartella e stesso modello) non sono ricavabili dal catalogo senza cambiare lo
+    // schema: senza, un'immagine senza fuso e senza GPS prende il fuso del telefono alla lettura (§2.2, ultima riga).
+    neighbors = null,
+    clock = clock,
+  )
 
   companion object {
     private const val TAG = "Gallery"

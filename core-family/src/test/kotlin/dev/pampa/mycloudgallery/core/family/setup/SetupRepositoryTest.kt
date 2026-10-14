@@ -21,6 +21,7 @@ import dev.pampa.mycloudgallery.core.family.support.expectAdvanced
 import dev.pampa.mycloudgallery.core.family.testing.FakeRegistryService
 import dev.pampa.mycloudgallery.core.family.testing.RecordingSelfWipe
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
@@ -144,6 +145,38 @@ class SetupRepositoryTest {
     // Riconfigurazione dopo l'azzeramento (E-S2): un percorso nuovo.
     store.setState(StoreState.Ready(snapshot(OnboardingPath.JOIN_QR)))
     assertThat(repo.state.value).isInstanceOf(SetupState.Onboarding::class.java)
+  }
+
+  /**
+   * P11: "Configura di nuovo" toglie il diario dell'azzeramento finito un istante prima che il motore della fiducia
+   * ricalcoli il suo stato (che dice ancora "perso"). Nessun lampo di "azzeramento in corso" in mezzo: da "azzerato" si
+   * passa a "non configurato". Un dispositivo segnato perso che non ha ancora cominciato l'azzeramento resta bloccato.
+   */
+  @Test
+  fun dimenticatoLAzzeramentoNessunLampoDiAzzeramentoInCorso() = runTest(UnconfinedTestDispatcher()) {
+    val store = InMemoryOnboardingStateStore()
+    val registry = FakeRegistryService()
+    val wipe = RecordingSelfWipe()
+    val repo = DefaultFamilySetupRepository(store, registry, wipe, backgroundScope) { 1_000L }
+    val seen = mutableListOf<SetupState>()
+    backgroundScope.launch { repo.state.collect { seen += it } }
+
+    // Perso: azzeramento finito, il motore dice ancora "perso" (finche' il diario c'e').
+    registry.status.value = TrustStatus.Lost
+    wipe.progress.value = WipePhase.DONE
+    assertThat(repo.state.value).isEqualTo(SetupState.Wiped(1_000L))
+    seen.clear()
+
+    // forgetCompletedWipe: prima sparisce la fase, poi il motore ricalcola.
+    wipe.progress.value = null
+    registry.status.value = TrustStatus.NotConfigured
+    assertThat(repo.state.value).isEqualTo(SetupState.NotConfigured)
+    assertThat(seen).doesNotContain(SetupState.Blocked(BlockReason.WIPE_IN_PROGRESS))
+
+    // Una configurazione nuova, poi di nuovo perso prima che l'azzeramento parta: bloccato, come sempre.
+    registry.status.value = TrustStatus.Approved(admin = false)
+    registry.status.value = TrustStatus.Lost
+    assertThat(repo.state.value).isEqualTo(SetupState.Blocked(BlockReason.WIPE_IN_PROGRESS))
   }
 
   @Test

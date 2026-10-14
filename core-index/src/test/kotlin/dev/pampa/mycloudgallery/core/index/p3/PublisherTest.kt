@@ -21,7 +21,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 
 /** Il pubblicatore (§2.1): segmenti e testa, regole prima di firmare, D5, E-I6, ripresa. */
-class PublisherTest {
+open class PublisherTest {
 
   private val world = TestWorld()
   private val share = "test-comune"

@@ -42,6 +42,8 @@ internal class DeferredTimelineSource(private val source: suspend () -> CatalogT
 
   override suspend fun phoneRefs(ids: Collection<MediaId>): Map<String, MediaRef.Phone> = source().phoneRefs(ids)
 
+  override suspend fun nasRefs(ids: Collection<MediaId>): Map<String, MediaRef.Nas> = source().nasRefs(ids)
+
   override suspend fun withGroupMates(ids: Collection<MediaId>): Set<MediaId> = source().withGroupMates(ids)
 }
 

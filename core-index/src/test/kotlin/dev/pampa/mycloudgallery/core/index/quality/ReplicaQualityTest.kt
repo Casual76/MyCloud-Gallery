@@ -16,7 +16,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
 /** D16, E-L6: stima prima di scaricare, convergenza piano verso l'alto e verso il basso. */
-class ReplicaQualityTest {
+open class ReplicaQualityTest {
 
   @get:Rule val tmp = TemporaryFolder()
 

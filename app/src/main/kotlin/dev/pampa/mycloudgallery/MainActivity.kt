@@ -5,6 +5,11 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.fragment.app.FragmentActivity
 import dagger.hilt.android.AndroidEntryPoint
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
@@ -40,7 +45,11 @@ class MainActivity : FragmentActivity() {
     val authenticator = BiometricPromptAuthenticator(this)
     setContent {
       MyCloudGalleryTheme {
-        AppRoot(lockController = lockController, authenticator = authenticator)
+        // I tag di test come id delle risorse (docs/bench/README.md §6-ter): i selettori del collaudo li trovano per tag
+        // (`g1-chrome-*`) invece che per testo. Solo semantica: niente cambia nell'aspetto.
+        Box(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
+          AppRoot(lockController = lockController, authenticator = authenticator)
+        }
       }
     }
   }

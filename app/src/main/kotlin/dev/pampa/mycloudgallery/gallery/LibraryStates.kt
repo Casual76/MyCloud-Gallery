@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentSender
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.pampa.mycloudgallery.core.library.contract.LibraryNasStatus
+import dev.pampa.mycloudgallery.core.library.index.ColumnarTimelineSnapshot
 import dev.pampa.mycloudgallery.core.mediastore.android.AndroidPhoneMediaIntents
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaRef
@@ -120,6 +122,7 @@ class AppLibraryStates @Inject constructor(
 
   private val services = WeakHashMap<LibraryTabState, ViewerServices>()
   private val kit: SyntheticLibraryKit? = DeveloperTools.syntheticKit()
+  private val nasKit: DebugLibraryKit? = DeveloperTools.nasLibrary()
 
   /** I servizi del viewer per lo stato [state] (di norma quelli del grafo vero). */
   fun viewerServicesFor(state: LibraryTabState): ViewerServices = synchronized(services) { services[state] } ?: gallery.viewerServices
@@ -127,16 +130,21 @@ class AppLibraryStates @Inject constructor(
   override fun open(scope: CoroutineScope): StateFlow<LibraryTabState> {
     lateinit var real: LibraryTabState
     lateinit var flow: MutableStateFlow<LibraryTabState>
-    var synthetic: SyntheticLibraryStack? = null
+    var synthetic: DebugLibraryStack? = null
     var hooks: LibraryDebugHooks? = null
     hooks = kit?.let { k ->
       LibraryDebugHooks(sizes = listOf(PHONE) + k.sizes, current = PHONE) { size ->
         synthetic?.close()
         synthetic = null
+        if (size != NAS_SYNTHETIC) nasKit?.dismiss()
         if (size == PHONE) {
           flow.value = real
         } else {
-          val stack = SyntheticLibraryStack(context, gallery, k, size, checkNotNull(hooks))
+          val stack: DebugLibraryStack = if (size == NAS_SYNTHETIC && nasKit != null) {
+            nasKit.open(context, gallery, checkNotNull(hooks))
+          } else {
+            SyntheticLibraryStack(context, gallery, k, size, checkNotNull(hooks))
+          }
           synchronized(services) { services[stack.state] = stack.viewerServices }
           synthetic = stack
           flow.value = stack.state
@@ -145,6 +153,9 @@ class AppLibraryStates @Inject constructor(
     }
     real = realState(scope, hooks)
     flow = MutableStateFlow(real)
+    // Solo debug (P11, M1): il NAS sintetico chiesto da Impostazioni → Sviluppo prende il posto della Libreria.
+    val debugHooks = hooks
+    if (nasKit != null && debugHooks != null) scope.launch { nasKit.requested.collect { if (it) debugHooks.select(NAS_SYNTHETIC) } }
     scope.coroutineContext[Job]?.invokeOnCompletion { synthetic?.close() }
     return flow.asStateFlow()
   }
@@ -157,9 +168,13 @@ class AppLibraryStates @Inject constructor(
       placeholders = gallery.placeholders,
       placeNames = gallery.places,
       engine = gallery.layoutEngine,
-      refOf = { id -> gallery.repository.refOf(id) ?: throw NoSuchElementException("Nessuna copia leggibile adesso.") },
+      // Fase 4 (D18, P7): la copia del telefono se c'e', altrimenti quella del NAS (media solo-NAS, E-L4).
+      refOf = { id -> gallery.repository.mediaRefOf(id) ?: throw NoSuchElementException("Nessuna copia leggibile adesso.") },
       level = prefs.level.value,
       style = prefs.style.value,
+      refAt = { snapshot, index ->
+        if (snapshot is ColumnarTimelineSnapshot) snapshot.thumbRefAt(index) else gallery.repository.mediaRefOf(snapshot.idAt(index))
+      },
     )
     // D11: la finestra visibile della griglia guida la fase META (prima i media sullo schermo).
     scope.launch { grid.visibleIds.collect { gallery.metaPriority.show(it) } }
@@ -175,6 +190,8 @@ class AppLibraryStates @Inject constructor(
       phone = gallery.libraryPhoneStatus,
       commands = AppLibraryCommands(gallery) { id -> gallery.repository.refOf(id) },
       debug = hooks,
+      // Fase 4 (§1.5): lo stato del NAS per il piede; senza NAS resta Idle (il piede non dice niente).
+      nas = gallery.nas?.libraryStatus ?: MutableStateFlow(LibraryNasStatus.Idle),
     )
     synchronized(services) { services[state] = gallery.viewerServices }
     return state
@@ -183,5 +200,8 @@ class AppLibraryStates @Inject constructor(
   private companion object {
     /** Nel menu di debug: la Libreria del telefono (le altre voci sono le dimensioni della sintetica). */
     const val PHONE = 0
+
+    /** Il NAS sintetico (solo debug): non e' una voce del menu "Vista", lo si chiede da Impostazioni → Sviluppo. */
+    const val NAS_SYNTHETIC = -1
   }
 }

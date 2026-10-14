@@ -31,7 +31,6 @@ import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeout
@@ -109,9 +108,7 @@ internal class GalleryRig(
   suspend fun awaitView(filter: LibraryFilter = LibraryFilter.ALL, predicate: (TimelineView) -> Boolean): TimelineView =
     withTimeout(TIMEOUT_MS) { gallery.repository.view(filter).first(predicate) }
 
-  fun close() {
-    scope.cancel()
-  }
+  fun close() = closeScope(scope)
 
   private fun FakeMediaStore.rowCount(): Int = (1L..MAX_ID).count { row(PRIMARY, it) != null }
 

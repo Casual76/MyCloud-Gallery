@@ -10,8 +10,13 @@ import dev.pampa.mycloudgallery.core.model.LocationId
 import dev.pampa.mycloudgallery.core.model.LocationKey
 import dev.pampa.mycloudgallery.core.model.LocationState
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.model.MediaKind
+import dev.pampa.mycloudgallery.core.model.MediaMetadata
 import dev.pampa.mycloudgallery.core.model.NasPath
 import dev.pampa.mycloudgallery.core.model.NasStamp
+import dev.pampa.mycloudgallery.core.model.VersionId
+import dev.pampa.mycloudgallery.core.model.QuickHash
+import dev.pampa.mycloudgallery.core.model.WorkErrorCode
 import dev.pampa.mycloudgallery.core.model.domain.AdoptRefusal
 import dev.pampa.mycloudgallery.core.model.domain.RemoteIdentity
 import dev.pampa.mycloudgallery.core.model.enumByCode
@@ -165,6 +170,58 @@ sealed interface AdoptOutcome {
 
   /** Rifiutata; `reason.isConflict` = conflitto di D7 da contare (`SyncReport.identityConflicts`). */
   data class Refused(val reason: AdoptRefusal) : AdoptOutcome
+}
+
+/**
+ * Una posizione del NAS com'e' nel catalogo (P11: porte `NasScanStore` e `ReplicaCatalog`): posto, timbro, stato e
+ * "visto a" dell'ultima scansione (`0` = mai vista da una scansione: e' nata dall'indice condiviso, D6).
+ */
+data class NasLocationInfo(
+  val locationId: LocationId,
+  val location: Location.Nas,
+  val stamp: NasStamp,
+  val state: LocationState,
+  val lastSeenAt: Long,
+) {
+  /** Nata solo dall'indice condiviso: nessuna scansione l'ha ancora vista (D6, "provvisoria"). */
+  val indexOnly: Boolean get() = lastSeenAt <= 0L
+
+  override fun toString(): String = "NasLocationInfo($locationId, $state)"
+}
+
+/** Uno spostamento riconosciuto dalla scansione senza leggere il file (E-N1): la posizione passa a [to] con [stamp]. */
+data class NasRelocation(val locationId: LocationId, val to: Location.Nas, val stamp: NasStamp)
+
+/** Cio' che il rilevamento (o un record dell'indice adottato) dice dei metadati di un file del NAS (P5). */
+sealed interface NasMetadataResult {
+  data class Read(val metadata: MediaMetadata, val kind: MediaKind) : NasMetadataResult
+
+  /** Rovinato (E-M10): META fallita con [code]. */
+  data class Failed(val code: WorkErrorCode) : NasMetadataResult
+
+  /** Formato che non si sa leggere (E-M13): META "non supportata". */
+  data object Unsupported : NasMetadataResult
+}
+
+/** I metadati da scrivere nella versione della posizione [locationId]. */
+data class NasMetadataUpdate(val locationId: LocationId, val result: NasMetadataResult)
+
+/**
+ * Un file presente del NAS per le unita' di lavoro della preparazione (P11, porta `WorkSource`): [localDay] e' il giorno
+ * dello scatto `aaaammgg` (null = senza data, mese `0000-00`).
+ */
+data class NasWorkItem(
+  val locationId: LocationId,
+  val path: NasPath,
+  val stamp: NasStamp,
+  val quickHash: QuickHash,
+  val mediaId: MediaId,
+  val versionId: VersionId,
+  val kind: MediaKind,
+  val localDay: Int?,
+  val mime: String?,
+) {
+  override fun toString(): String = "NasWorkItem($locationId, $kind)"
 }
 
 /** Dove si fa il lavoro di una coda ([MediaCatalog.pendingWork]): sul telefono o sul NAS (copie presenti li'). */

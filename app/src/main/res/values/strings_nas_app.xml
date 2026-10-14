@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fase 4A (P11): il NAS nella Libreria, testi di :app. Solo conteggi: mai nomi di share, cartelle o file. -->
+<resources>
+  <!-- Il riepilogo giornaliero dei problemi (proposta 12; congelamento compreso, risposta Q6). -->
+  <string name="notify_summary_title">Riepilogo di MyCloud Gallery</string>
+  <plurals name="notify_summary_frozen">
+    <item quantity="one">Un\'area del NAS ha cambiamenti anomali: le scritture automatiche sono ferme. Controlla in Diagnostica.</item>
+    <item quantity="other">%1$d aree del NAS hanno cambiamenti anomali: le scritture automatiche sono ferme. Controlla in Diagnostica.</item>
+  </plurals>
+  <string name="notify_summary_silent">Il NAS non ha risposto nelle ultime 24 ore: la Libreria mostra quello che conosceva.</string>
+  <plurals name="notify_summary_stalled">
+    <item quantity="one">Le verifiche del NAS sono ferme da un giorno.</item>
+    <item quantity="other">Le verifiche del NAS sono ferme da %1$d giorni.</item>
+  </plurals>
+
+  <!-- "Ho controllato, continua" (D10): la doppia conferma con il numero. -->
+  <string name="nas_unfreeze_title">Riprendere il lavoro sul NAS?</string>
+  <plurals name="nas_unfreeze_text">
+    <item quantity="one">Sul NAS è cambiato in modo anomalo un file. Se hai controllato dal PC e va tutto bene, riscrivi il numero per riprendere.</item>
+    <item quantity="other">Sul NAS sono cambiati in modo anomalo %1$d file. Se hai controllato dal PC e va tutto bene, riscrivi il numero per riprendere.</item>
+  </plurals>
+  <string name="nas_unfreeze_field">Numero dei file</string>
+  <string name="nas_unfreeze_wrong">Il numero non corrisponde.</string>
+  <string name="nas_unfreeze_confirm">Ho controllato, continua</string>
+  <string name="nas_unfreeze_cancel">Annulla</string>
+</resources>

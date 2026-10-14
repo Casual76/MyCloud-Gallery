@@ -13,6 +13,7 @@ import dev.pampa.mycloudgallery.core.imaging.noop.NoPlaceholderCache
 import dev.pampa.mycloudgallery.core.imaging.noop.NoThumbnailLoader
 import dev.pampa.mycloudgallery.core.imaging.noop.NoViewerImageSource
 import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
+import dev.pampa.mycloudgallery.core.library.contract.LibraryNasStatus
 import dev.pampa.mycloudgallery.core.library.contract.LibraryPreferences
 import dev.pampa.mycloudgallery.core.library.contract.LocalMediaActions
 import dev.pampa.mycloudgallery.core.library.contract.TimelineRepository
@@ -128,6 +129,8 @@ class LibraryDebugHooks(
  *   griglia resta quella che e' (niente filtro).
  * @property preferences filtro, livello e stile **ricordati** (DataStore in `noBackupFilesDir`).
  * @property phone lo stato del telefono (permessi, lettura, in attesa).
+ * @property nas lo stato del NAS per il piede della Libreria (Fase 4, §1.5, `LibraryNasStatus`): solo dati, l'aspetto e'
+ *   del filone grafico. Di default [LibraryNasStatus.Idle] (nessun NAS: il piede non dice niente).
  */
 @Stable
 class LibraryTabState(
@@ -142,6 +145,7 @@ class LibraryTabState(
   val phone: StateFlow<LibraryPhoneStatus> = MutableStateFlow(LibraryPhoneStatus()),
   val commands: LibraryCommands = NoLibraryCommands,
   val debug: LibraryDebugHooks? = null,
+  val nas: StateFlow<LibraryNasStatus> = MutableStateFlow(LibraryNasStatus.Idle),
 ) {
   /** Quante foto e quanti video ci sono nella vista (il riepilogo in fondo). Si ricontano a ogni vista nuova. */
   var photoCount: Int by mutableIntStateOf(photoCount)

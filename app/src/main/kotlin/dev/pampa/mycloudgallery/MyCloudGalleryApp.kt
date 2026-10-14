@@ -10,6 +10,7 @@ import dev.pampa.mycloudgallery.notify.AppNotifications
 import dev.pampa.mycloudgallery.process.GalleryLifecycle
 import dev.pampa.mycloudgallery.process.ProcessWatcher
 import dev.pampa.mycloudgallery.work.GalleryWorkScheduling
+import dev.pampa.mycloudgallery.work.NasWorkScheduling
 import dev.pampa.mycloudgallery.work.WorkManagerTrustSyncScheduler
 import javax.inject.Inject
 
@@ -68,11 +69,22 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
     override fun start() {
       gallery.startWhenReady {
         // Lavori in background solo con la famiglia pronta, e mai nella variante di misura (dataset sintetico).
-        if (gallery.backgroundWorkAllowed) GalleryWorkScheduling.ensure(this@MyCloudGalleryApp)
+        if (gallery.backgroundWorkAllowed) {
+          GalleryWorkScheduling.ensure(this@MyCloudGalleryApp)
+          // Fase 4A (P11): i lavori del NAS nella Libreria, solo se il NAS c'e' (FeatureFlags.nasLibrary).
+          if (gallery.nas != null) {
+            NasWorkScheduling.ensure(this@MyCloudGalleryApp)
+            NasWorkScheduling.scanNow(this@MyCloudGalleryApp)
+          }
+        }
       }
     }
 
-    override fun onForeground() = gallery.onForeground()
+    override fun onForeground() {
+      gallery.onForeground()
+      // All'apertura: una verifica del NAS se l'ultima ha piu' di 15 minuti (§1.4), poi la sincronizzazione dell'indice.
+      if (gallery.backgroundWorkAllowed && gallery.nas?.verifyDue() == true) NasWorkScheduling.scanNow(this@MyCloudGalleryApp)
+    }
 
     override fun onBackground() = gallery.onBackground()
 

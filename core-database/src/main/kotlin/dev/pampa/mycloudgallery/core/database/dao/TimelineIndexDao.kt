@@ -104,11 +104,11 @@ interface TimelineIndexDao {
     /** Testo della query di [nasRefs]: pubblico per il test che ne controlla il piano (v3). */
     const val NAS_REFS_SQL: String =
       "SELECT m.media_id AS media_id, l.location_id AS location_id, v.size AS size, v.quick_hash AS quick_hash, " +
-        "md.mime_type AS mime_type, (v.version_id = m.current_version_id) AS is_current " +
+        "md.mime_type AS mime_type, (v.version_id = m.current_version_id) AS is_current, l.state AS state " +
         "FROM media m JOIN media_version v ON v.media_id = m.media_id " +
         "JOIN media_location l ON l.version_id = v.version_id " +
         "LEFT JOIN version_metadata md ON md.version_id = v.version_id " +
-        "WHERE m.media_id IN (:ids) AND l.location_type = 'nas' AND +l.state = 'present'"
+        "WHERE m.media_id IN (:ids) AND l.location_type = 'nas' AND +l.state IN ('present', 'unavailable')"
 
     /** Le colonne di [indexCursor], in quest'ordine. */
     const val COLUMNS: String =

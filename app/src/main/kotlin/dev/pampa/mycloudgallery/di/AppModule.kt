@@ -48,10 +48,13 @@ object AppModule {
   fun provideLockSettings(@ApplicationContext context: Context): Flow<@JvmSuppressWildcards AppLockSettings> =
     AppLockSettingsStore.getInstance(context).settings
 
-  /** In release `wol` e' spento comunque (FeatureFlags.forBuild ignora la richiesta). */
+  /**
+   * In release valgono i valori di `FeatureFlags.RELEASE` (`wol` spento, il NAS nella Libreria acceso dalla 4A, D31 attivo):
+   * `forBuild` ignora le richieste. In debug il NAS nella Libreria e' acceso e D31 resta attivo.
+   */
   @Provides
   @Singleton
-  fun provideFeatureFlags(): FeatureFlags = FeatureFlags.forBuild(debugBuild = BuildConfig.DEBUG)
+  fun provideFeatureFlags(): FeatureFlags = FeatureFlags.forBuild(debugBuild = BuildConfig.DEBUG, nasLibrary = true)
 
   /** L'anello degli ultimi 500 eventi, in noBackupFilesDir. */
   @Provides

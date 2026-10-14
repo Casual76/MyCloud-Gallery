@@ -17,11 +17,14 @@ class FeatureFlagsTest {
     assertThat(FeatureFlags.forBuild(debugBuild = true, wol = true).wol).isTrue()
   }
 
-  /** Fase 4: il NAS nella Libreria resta spento in release finche' l'integrazione non cambia RELEASE. */
+  /**
+   * Fase 4A (P11): il NAS nella Libreria e' acceso in release (D31 resta attivo: sulle share vere solo locale) e una richiesta
+   * di spegnerlo non cambia la release, come per ogni valore di RELEASE.
+   */
   @Test
-  fun ilNasNellaLibreriaInReleaseNonSiAccendeChiedendolo() {
-    assertThat(FeatureFlags.RELEASE.nasLibrary).isFalse()
-    assertThat(FeatureFlags.forBuild(debugBuild = false, nasLibrary = true).nasLibrary).isFalse()
+  fun ilNasNellaLibreriaInReleaseEAccesoEUnaRichiestaNonLoCambia() {
+    assertThat(FeatureFlags.RELEASE.nasLibrary).isTrue()
+    assertThat(FeatureFlags.forBuild(debugBuild = false, nasLibrary = false).nasLibrary).isTrue()
     assertThat(FeatureFlags.forBuild(debugBuild = true, nasLibrary = true).nasLibrary).isTrue()
     assertThat(FeatureFlags.forBuild(debugBuild = true).nasLibrary).isFalse()
   }

@@ -76,7 +76,7 @@ internal class SyntheticLibraryStack(
   private val kit: SyntheticLibraryKit,
   private val count: Int,
   hooks: LibraryDebugHooks,
-) {
+) : DebugLibraryStack {
 
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
   private val ready = CompletableDeferred<CatalogTimelineSource>()
@@ -100,8 +100,8 @@ internal class SyntheticLibraryStack(
     },
   )
 
-  val state: LibraryTabState
-  val viewerServices: ViewerServices
+  override val state: LibraryTabState
+  override val viewerServices: ViewerServices
 
   init {
     val prefs = gallery.preferences
@@ -190,7 +190,7 @@ internal class SyntheticLibraryStack(
   }
 
   /** Chiude il database e ferma il lavoro (si torna alla Libreria del telefono o si sceglie un'altra dimensione). */
-  fun close() {
+  override fun close() {
     scope.launch {
       runCatching { repository.flush() }
       database?.close()

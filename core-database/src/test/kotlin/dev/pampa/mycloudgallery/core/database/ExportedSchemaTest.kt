@@ -201,7 +201,6 @@ object SchemaSeeds {
   private const val FILE_ID = 987_654L
   private const val SEGMENT = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
   private const val RECORD_KEY = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
-  private const val REMOTE_MEDIA = "00000000-0000-4000-8000-000000000001"
   private const val OP_ID = "44444444-4444-4444-8444-444444444444"
 
   /** I flag della cella della v2 con i bit di presenza della v3: sul telefono, sul NAS, al sicuro. */
@@ -266,36 +265,42 @@ object SchemaSeeds {
         "freeze_since, freeze_known_present, freeze_vanished, freeze_changed, freeze_not_media) VALUES " +
         "('alessio', 'alessio', 'alessio', $T0, 'Backup/S25', ${T0 - 10}, 'vanished', ${T0 - 5}, 1000, 60, 0, 0)",
     )
-    db.execSQL("INSERT INTO index_publish_state (share_key, next_seq, head_version, head_hash, head_published_at) VALUES ('alessio', 12, 3, '$SEGMENT', $T0)")
-    db.execSQL("INSERT INTO index_own_segment (share_key, segment_hash, cls, size, entries, created_at) VALUES ('alessio', '$SEGMENT', 1, 512, 1, $T0)")
+    db.execSQL("INSERT INTO index_publish_state (share_key, share_name, next_seq, head_version, head_hash, head_published_at) VALUES ('alessio', 'alessio', 12, 3, '$SEGMENT', $T0)")
+    db.execSQL("INSERT INTO index_own_segment (share_key, segment_hash, cls, size, entries, listed) VALUES ('alessio', '$SEGMENT', 1, 512, 1, 1)")
     db.execSQL(
-      "INSERT INTO index_outbox_record (share_key, record_key, seq, path, gone, body, staged_at) VALUES " +
-        "('alessio', '$RECORD_KEY', 11, 'Backup/S25/IMG_0001.jpg', 0, X'7B7D', $T0)",
+      "INSERT INTO index_outbox_record (id, share_key, seq, path_key, content_key, body, sunk) VALUES " +
+        "(1, 'alessio', 11, '$RECORD_KEY', '$QUICK', X'7B7D', 0)",
     )
     db.execSQL(
-      "INSERT INTO index_outbox_blob (share_key, cls, content_key, pack, byte_offset, byte_length, staged_at) VALUES " +
-        "('alessio', 2, '$QUICK', 'outbox-2-1.pack', 0, 6000, $T0)",
-    )
-    db.execSQL("INSERT INTO index_head (share_key, device_id, version, content_hash, registry_version, applied_at) VALUES ('alessio', 'tablet', 4, '$SEGMENT', 9, $T0)")
-    db.execSQL(
-      "INSERT INTO index_segment (share_key, device_id, segment_hash, cls, size, state, pack_id, updated_at) VALUES " +
-        "('alessio', 'tablet', '$SEGMENT', 2, 6000, 'applied', 1, $T0)",
+      "INSERT INTO index_outbox_blob (id, share_key, cls, content_key, byte_length, handle, sunk) VALUES " +
+        "(1, 'alessio', 2, '$QUICK', 6000, 'h-1', 1)",
     )
     db.execSQL(
-      "INSERT INTO index_record (share_key, device_id, record_key, seq, segment_hash, path, gone, size, modified_at, file_id, " +
-        "quick_hash, full_hash, content_key, remote_media_id, remote_version_id, prep, fail_code, fail_decoder, body) VALUES " +
-        "('alessio', 'tablet', '$RECORD_KEY', 5, '$SEGMENT', 'Backup/S25/IMG_0001.jpg', 0, 300000, $T0, $FILE_ID, '$QUICK', NULL, " +
-        "-42, '$REMOTE_MEDIA', '$VERSION_ID', 6, NULL, NULL, X'7B7D')",
+      "INSERT INTO index_own_record (share_key, path_key, path, seq, gone, content_key, segment_hash) VALUES " +
+        "('alessio', '$RECORD_KEY', 'Backup/S25/IMG_0001.jpg', 10, 0, '$QUICK', '$SEGMENT')",
+    )
+    db.execSQL("INSERT INTO index_own_blob (share_key, cls, content_key, segment_hash) VALUES ('alessio', 2, '$QUICK', '$SEGMENT')")
+    db.execSQL("INSERT INTO index_head (share_key, device_id, version, content_hash, registry_version, created_at) VALUES ('alessio', 'tablet', 4, '$SEGMENT', 9, $T0)")
+    db.execSQL(
+      "INSERT INTO index_segment (share_key, device_id, segment_hash, cls, size, state, listed, pack_id, position) VALUES " +
+        "('alessio', 'tablet', '$SEGMENT', 2, 6000, 'applied', 1, 1, 0)",
     )
     db.execSQL(
-      "INSERT INTO replica_pack (pack_id, share_key, device_id, segment_hash, cls, file_name, size, created_at) VALUES " +
-        "(1, 'alessio', 'tablet', '$SEGMENT', 2, 'p-cccccccc.pack', 6000, $T0)",
+      "INSERT INTO index_record (share_key, device_id, segment_hash, record_key, seq, gone, content_key, prep, body) VALUES " +
+        "('alessio', 'tablet', '$SEGMENT', '$RECORD_KEY', 5, 0, '$QUICK', 6, X'7B7D')",
+    )
+    db.execSQL("INSERT INTO replica_dirty (share_key, record_key) VALUES ('alessio', '$RECORD_KEY')")
+    db.execSQL(
+      "INSERT INTO replica_pack (pack_id, file_name, kind, cls, bytes, share_key, device_id, segment_hash) VALUES " +
+        "(1, 'p-cccccccc', 'segment', 2, 6000, 'alessio', 'tablet', '$SEGMENT')",
     )
     db.execSQL(
-      "INSERT INTO replica_blob (pack_id, content_key, content_key_short, cls, byte_offset, byte_length) VALUES " +
-        "(1, '$QUICK', -42, 2, 44, 5956)",
+      "INSERT INTO replica_blob (content_key, cls, pack_id, content_key_short, byte_offset, byte_length, device_id, segment_hash) VALUES " +
+        "('$QUICK', 2, 1, -42, 44, 5956, 'tablet', '$SEGMENT')",
     )
-    db.execSQL("INSERT INTO index_sync_state (share_key, last_sync_at, last_complete_at, denied_first_day, denied_last_day) VALUES ('alessio', $T0, $T0, NULL, NULL)")
+    db.execSQL("INSERT INTO replica_share_access (share_key, failure, first_failure_day, dropped) VALUES ('alessio', 'ACCESS_DENIED', 20000, 0)")
+    db.execSQL("INSERT INTO replica_setting (`key`, value) VALUES ('quality', 'high')")
+    db.execSQL("INSERT INTO replica_provisional (content_key_short, content_key, jpeg) VALUES (-42, '$QUICK', X'FFD8FF')")
     db.execSQL(
       "INSERT INTO nas_op (op_id, kind, state, plan_hash, item_count, total_bytes, error_code, created_at, updated_at) VALUES " +
         "('$OP_ID', 'move', 'running', '$SEGMENT', 1, 300000, NULL, $T0, $T0)",
@@ -483,16 +488,21 @@ object SchemaSeeds {
       assertThat(scan.freeze).isEqualTo(NasFreeze(FreezeReason.VANISHED, T0 - 5, 1000, 60, 0, 0))
       val publish = database.indexPublishDao()
       assertThat(publish.publishState("alessio")!!.headVersion).isEqualTo(3)
-      assertThat(publish.takeSeq("alessio")).isEqualTo(12)
-      assertThat(publish.pendingRecords("alessio", 0, 10).single().seq).isEqualTo(11)
-      assertThat(publish.pendingBlobs("alessio", 2, "", 10).single().length).isEqualTo(6000)
-      assertThat(publish.ownSegments("alessio").single().entries).isEqualTo(1)
+      assertThat(publish.publishState("alessio")!!.nextSeq).isEqualTo(12)
+      assertThat(publish.outboxRecords("alessio").single().seq).isEqualTo(11)
+      assertThat(publish.outboxBlobs("alessio").single().length).isEqualTo(6000)
+      assertThat(publish.listedSegments("alessio").single().entries).isEqualTo(1)
+      assertThat(publish.ownRecords("alessio", listOf(RECORD_KEY)).single().seq).isEqualTo(10)
       val replica = database.replicaDao()
-      assertThat(replica.head("alessio", "tablet")!!.version).isEqualTo(4)
-      assertThat(replica.recordsAt("alessio", listOf(RECORD_KEY)).single().remoteMediaId).isEqualTo(REMOTE_MEDIA)
-      assertThat(replica.blobsFor(-42, 2).single().offset).isEqualTo(44)
+      assertThat(replica.heads("alessio").single().version).isEqualTo(4)
+      assertThat(replica.records("alessio", listOf(RECORD_KEY)).single().prep).isEqualTo(6)
+      assertThat(replica.blobsOfPack(1).single().offset).isEqualTo(44)
       assertThat(replica.segments("alessio", "tablet").single().packId).isEqualTo(1)
-      assertThat(replica.syncState("alessio")!!.lastCompleteAt).isEqualTo(T0)
+      assertThat(replica.dirty("alessio", 10)).containsExactly(RECORD_KEY)
+      assertThat(replica.shareAccess("alessio")!!.firstFailureDay).isEqualTo(20000)
+      assertThat(replica.setting("quality")).isEqualTo("high")
+      // Lettura bloccante (il dispatcher delle miniature): mai sul thread principale.
+      assertThat(kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { replica.provisional(-42) }!!.size).isEqualTo(3)
       val ops = database.nasOpsDao()
       assertThat(ops.items(OP_ID).single().state).isEqualTo("copied")
       assertThat(ops.expiredTrash(T0 + 1, 10).single().trashId).isEqualTo("t-1")

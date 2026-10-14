@@ -27,7 +27,7 @@ import org.junit.rules.TemporaryFolder
  * La sincronizzazione sul NAS finto (`InMemoryRemoteIndex`): verifica senza novita', E-I5, E-I7, E-I8, E-I15, E-I17,
  * budget e ripresa, dati mobili, cancello.
  */
-class IndexSyncEngineTest {
+open class IndexSyncEngineTest {
 
   @get:Rule val tmp = TemporaryFolder()
 

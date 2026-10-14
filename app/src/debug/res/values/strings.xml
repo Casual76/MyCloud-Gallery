@@ -4,5 +4,7 @@
   <string name="app_name">MyCloud Dev</string>
   <string name="debug_catalog_title">Catalogo componenti</string>
   <string name="debug_catalog_detail">I componenti della galleria, in chiaro e scuro</string>
+  <string name="debug_nas_title">NAS sintetico</string>
+  <string name="debug_nas_detail">20.000 file su un NAS finto: scansione vera, media solo sul NAS e miniature EXIF provvisorie in un database a parte. Dalla Libreria, «Vista» riporta al telefono.</string>
 
 </resources>

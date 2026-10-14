@@ -7,6 +7,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dev.pampa.mycloudgallery.core.family.contract.FamilySetupRepository
+import dev.pampa.mycloudgallery.core.index.contract.ReplicaBlobs
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneLibrarySync
 import dev.pampa.mycloudgallery.di.MeasurementHooks
 import javax.inject.Inject
@@ -21,8 +22,8 @@ import javax.inject.Singleton
  * **Il profilo** (P10): il database che l'app apre dipende dal profilo scelto dal collaudo ([BenchDataset.profileOf]):
  * `gallery-bench.db` per la libreria mista, `gallery-bench-nasfirst.db` per le due misure della prima pagina del NAS.
  *
- * **La replica sintetica** ([replica]) e' pronta per chi serve le miniature dei media solo-NAS: `MeasurementHooks` non ha
- * ancora un posto dove consegnarla all'app (l'app non vede `ReplicaBlobs`), lo aggiungono P7/P11 (docs/bench/README.md §6-bis).
+ * **La replica sintetica** ([replica]) serve le miniature dei media solo-NAS: dal P11 arriva all'app come `ReplicaBlobs`
+ * ([replicaBlobs], docs/bench/README.md §6-bis) e la griglia la legge con `NasThumbnailSource`.
  */
 @Singleton
 class BenchMeasurementHooks @Inject constructor(
@@ -37,6 +38,10 @@ class BenchMeasurementHooks @Inject constructor(
 
   /** I blob WebP del NAS sintetico, con la stessa forma di `ReplicaBlobs`; `null` se il dataset non e' ancora stato creato. */
   internal val replica: BenchReplicaStore? by lazy { BenchReplicaStore.open(context, profile) }
+
+  private val blobs: ReplicaBlobs? by lazy { replica?.let { BenchReplicaBlobs(it) } }
+
+  override val replicaBlobs: ReplicaBlobs? get() = blobs
 }
 
 @Module

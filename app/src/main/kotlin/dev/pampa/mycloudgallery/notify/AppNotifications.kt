@@ -107,6 +107,42 @@ class AppNotifications(context: Context) {
     return post(ID_PASSWORD, notification)
   }
 
+  /**
+   * Il riepilogo giornaliero dei problemi del NAS nella Libreria (proposta 12; congelamento compreso, risposta Q6): una sola
+   * notifica, solo conteggi, mai nomi di share, cartelle o file. Niente da dire = nessuna notifica (e quella di ieri si toglie).
+   */
+  fun notifyDailySummary(problems: List<NasDailySummary.Problem>): Boolean {
+    if (problems.isEmpty()) {
+      NotificationManagerCompat.from(app).cancel(ID_DAILY_SUMMARY)
+      return false
+    }
+    if (!canNotify()) return false
+    val lines = problems.map { problem ->
+      when (problem) {
+        is NasDailySummary.Problem.Frozen -> app.resources.getQuantityString(R.plurals.notify_summary_frozen, problem.areas, problem.areas)
+        NasDailySummary.Problem.NasSilent -> app.getString(R.string.notify_summary_silent)
+        is NasDailySummary.Problem.Stalled -> app.resources.getQuantityString(R.plurals.notify_summary_stalled, problem.days, problem.days)
+      }
+    }
+    val text = lines.joinToString(separator = "\n")
+    val publicVersion = NotificationCompat.Builder(app, CHANNEL_NAS)
+      .setSmallIcon(R.drawable.ic_stat_gallery)
+      .setContentTitle(app.getString(R.string.notify_summary_title))
+      .build()
+    val notification = NotificationCompat.Builder(app, CHANNEL_NAS)
+      .setSmallIcon(R.drawable.ic_stat_gallery)
+      .setContentTitle(app.getString(R.string.notify_summary_title))
+      .setContentText(lines.first())
+      .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+      .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+      .setPublicVersion(publicVersion)
+      .setContentIntent(openAppIntent())
+      .setOnlyAlertOnce(true)
+      .setAutoCancel(true)
+      .build()
+    return post(ID_DAILY_SUMMARY, notification)
+  }
+
   /** Toglie la notifica della password (salvata di nuovo, o interruttore richiuso). */
   fun cancelPasswordNeeded() = NotificationManagerCompat.from(app).cancel(ID_PASSWORD)
 
@@ -136,6 +172,7 @@ class AppNotifications(context: Context) {
     const val CHANNEL_NAS = "nas"
     const val ID_NEW_DEVICE = 1001
     const val ID_PASSWORD = 1002
+    const val ID_DAILY_SUMMARY = 1003
     private const val REQUEST_OPEN_APP = 0
     private const val TAG = "Notifications"
   }

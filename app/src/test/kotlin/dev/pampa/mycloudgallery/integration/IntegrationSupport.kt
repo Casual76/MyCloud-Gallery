@@ -57,10 +57,13 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 
 // Il banco dei test d'integrazione dell'app (P9): il grafo VERO (`AppGraph`, lo stesso di produzione) con le sole parti
@@ -250,8 +253,22 @@ class TestDevice(base: Context, root: File, val platform: TestPlatform) {
     work = WorkCanceller { workCancelled.incrementAndGet() },
   )
 
-  fun close() = scope.cancel()
+  /**
+   * Ferma il dispositivo **e aspetta** che tutti i suoi lavori (DataStore, raccolte dei flussi) siano finiti: subito dopo
+   * la `TemporaryFolder` cancella i suoi file. Solo `cancel()` lasciava letture di DataStore ancora in corso su un
+   * dispositivo gia' chiuso, che trovavano il file sparito (`FileNotFoundException` su `nas_auth_breaker.preferences_pb`)
+   * e lo segnalavano come eccezione non gestita **nel test successivo** (P11).
+   */
+  fun close() = closeScope(scope)
 }
+
+/** Annulla [scope] e ne aspetta la fine (con un tetto: un lavoro che non si ferma fa fallire il test, non lo blocca). */
+fun closeScope(scope: CoroutineScope) {
+  val job = scope.coroutineContext[Job] ?: return scope.cancel()
+  runBlocking { withTimeout(CLOSE_TIMEOUT) { job.cancelAndJoin() } }
+}
+
+private val CLOSE_TIMEOUT: Duration = 10.seconds
 
 /** Aspetta (con un tetto) che un flusso arrivi a un valore che soddisfa [predicate]. */
 suspend fun <T> Flow<T>.await(timeout: Duration = 10.seconds, predicate: (T) -> Boolean): T =

@@ -192,6 +192,10 @@ dependencies {
   implementation project(':core-library')
   implementation project(':feature-library')
   implementation project(':feature-viewer')
+  // Fase 4A (docs/fase4-progetto.md §1.1, §1.4): il NAS nella Libreria. `:app` vede tutti e li cabla (NasGraph, P11).
+  implementation project(':core-index')
+  implementation project(':core-nasmedia')
+  implementation project(':core-prepare')
 
   // --- Il design system (engine-ui porta Compose, Material 3, activity-compose e lifecycle) ----------
   implementation project(':engine-ui')

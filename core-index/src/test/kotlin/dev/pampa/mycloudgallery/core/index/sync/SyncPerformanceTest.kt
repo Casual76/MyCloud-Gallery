@@ -41,7 +41,7 @@ class SyncPerformanceTest {
     println("P4: $total record applicati in $elapsedMs ms (${total * 1000L / elapsedMs.coerceAtLeast(1)} record/s)")
 
     assertThat(report.recordsApplied).isEqualTo(total)
-    assertThat(me.store.recordCount()).isEqualTo(total)
+    assertThat((me.store as dev.pampa.mycloudgallery.core.index.replica.store.MemoryReplicaStore).recordCount()).isEqualTo(total)
     assertThat(me.catalog.outcomes[IdentityOutcome.ADOPTED]).isEqualTo(total)
     assertThat(elapsedMs).isLessThan(10_000)
 

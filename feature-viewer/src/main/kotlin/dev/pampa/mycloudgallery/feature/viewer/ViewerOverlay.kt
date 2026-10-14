@@ -184,8 +184,9 @@ private fun ViewerHost(
   val viewModel: ViewerViewModel = viewModel()
   val state = rememberSaveable(saver = ViewerState.Saver) { ViewerState(request.start) }
   // Gli esiti di scaricamenti conclusi prima che il viewer si aprisse non sono una notizia: si scartano in silenzio (Fase 4).
+  // (`also`: una volta per servizio, prima della prima lettura degli esiti; `remember` non deve restituire Unit.)
   remember(services.download) {
-    services.download?.let { downloads ->
+    services.download?.also { downloads ->
       downloads.states.value.filterValues { it.isTerminal }.keys.forEach(downloads::acknowledge)
     }
   }

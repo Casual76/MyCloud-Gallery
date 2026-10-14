@@ -215,7 +215,39 @@ internal object DiagCatalogEntries {
     DiagEntry(DiagCodes.PHONE_THUMBNAILS, DiagSection.PHONE_LIBRARY, DiagSeverity.INFO, R.string.diag_phone_thumbnails_title, R.string.diag_phone_thumbnails_guide, null),
 
     // --- Il NAS nella Libreria (Fase 4): lo stato; i codici dei casi limite li aggiunge P11 ----------------------------
-    DiagEntry(DiagCodes.NAS_LIBRARY_STATE, DiagSection.NAS_LIBRARY, DiagSeverity.INFO, R.string.diag_nas_library_state_title, 0, null),
+    DiagEntry(DiagCodes.NAS_LIBRARY_STATE, DiagSection.NAS_LIBRARY, DiagSeverity.INFO, R.string.diag_nas_library_state_title, R.string.diag_nas_library_state_guide, null),
+    // P11: emergenza e aree non raggiungibili (NasLibraryDiagnostics di :app).
+    DiagEntry(DiagCodes.NAS_WRITES_STOPPED, DiagSection.NAS_LIBRARY, DiagSeverity.WARNING, R.string.diag_nas_writes_stopped_title, R.string.diag_nas_writes_stopped_guide, DiagnosticsActions.NAS_RESUME_WRITES),
+    DiagEntry(DiagCodes.NAS_AREA_UNREACHABLE, DiagSection.NAS_LIBRARY, DiagSeverity.WARNING, R.string.diag_nas_area_unreachable_title, R.string.diag_nas_area_unreachable_guide, DiagAction.RUN_CONNECTION_TEST),
+    // Scansione (NasMediaDiag di core-nasmedia).
+    DiagEntry(DiagCodes.NAS_SCAN_STATE, DiagSection.NAS_LIBRARY, DiagSeverity.INFO, R.string.diag_nas_scan_state_title, R.string.diag_nas_scan_state_guide, null),
+    DiagEntry(DiagCodes.NAS_SCAN_FROZEN, DiagSection.NAS_LIBRARY, DiagSeverity.ERROR, R.string.diag_nas_scan_frozen_title, R.string.diag_nas_scan_frozen_guide, DiagnosticsActions.NAS_RELEASE_FREEZE),
+    DiagEntry(DiagCodes.NAS_SCAN_SKIPPED_NAMES, DiagSection.NAS_LIBRARY, DiagSeverity.WARNING, R.string.diag_nas_scan_skipped_names_title, R.string.diag_nas_scan_skipped_names_guide, null),
+    DiagEntry(DiagCodes.NAS_SCAN_ALBUM_COVERS, DiagSection.NAS_LIBRARY, DiagSeverity.INFO, R.string.diag_nas_scan_album_covers_title, R.string.diag_nas_scan_album_covers_guide, null),
+    DiagEntry(DiagCodes.NAS_SCAN_NOT_MEDIA, DiagSection.NAS_LIBRARY, DiagSeverity.INFO, R.string.diag_nas_scan_not_media_title, R.string.diag_nas_scan_not_media_guide, null),
+    DiagEntry(DiagCodes.NAS_SCAN_ARRIVING, DiagSection.NAS_LIBRARY, DiagSeverity.INFO, R.string.diag_nas_scan_arriving_title, R.string.diag_nas_scan_arriving_guide, null),
+    DiagEntry(DiagCodes.NAS_SCAN_BUSY, DiagSection.NAS_LIBRARY, DiagSeverity.INFO, R.string.diag_nas_scan_busy_title, R.string.diag_nas_scan_busy_guide, null),
+    DiagEntry(DiagCodes.NAS_SCAN_LOOPS, DiagSection.NAS_LIBRARY, DiagSeverity.WARNING, R.string.diag_nas_scan_loops_title, R.string.diag_nas_scan_loops_guide, null),
+    DiagEntry(DiagCodes.NAS_SCAN_TRUNCATED, DiagSection.NAS_LIBRARY, DiagSeverity.WARNING, R.string.diag_nas_scan_truncated_title, R.string.diag_nas_scan_truncated_guide, null),
+    DiagEntry(DiagCodes.NAS_SCAN_AWAY_CAP, DiagSection.NAS_LIBRARY, DiagSeverity.INFO, R.string.diag_nas_scan_away_cap_title, R.string.diag_nas_scan_away_cap_guide, null),
+    // Indice condiviso (IndexDiag di core-index).
+    DiagEntry(DiagCodes.INDEX_REJECTED, DiagSection.NAS_LIBRARY, DiagSeverity.WARNING, R.string.diag_index_rejected_title, R.string.diag_index_rejected_guide, null),
+    DiagEntry(DiagCodes.INDEX_ROLLBACK, DiagSection.NAS_LIBRARY, DiagSeverity.WARNING, R.string.diag_index_rollback_title, R.string.diag_index_rollback_guide, null),
+    DiagEntry(DiagCodes.INDEX_NEWER_FORMAT, DiagSection.NAS_LIBRARY, DiagSeverity.WARNING, R.string.diag_index_newer_format_title, R.string.diag_index_newer_format_guide, null),
+    DiagEntry(DiagCodes.INDEX_IDENTITY_CONFLICT, DiagSection.NAS_LIBRARY, DiagSeverity.WARNING, R.string.diag_index_identity_conflict_title, R.string.diag_index_identity_conflict_guide, null),
+    DiagEntry(DiagCodes.INDEX_OUTBOX_PENDING, DiagSection.NAS_LIBRARY, DiagSeverity.INFO, R.string.diag_index_outbox_pending_title, R.string.diag_index_outbox_pending_guide, null),
+    DiagEntry(DiagCodes.INDEX_LOCAL_ONLY, DiagSection.NAS_LIBRARY, DiagSeverity.INFO, R.string.diag_index_local_only_title, R.string.diag_index_local_only_guide, null),
+    DiagEntry(DiagCodes.INDEX_CLOCK_JUMP, DiagSection.NAS_LIBRARY, DiagSeverity.WARNING, R.string.diag_index_clock_jump_title, R.string.diag_index_clock_jump_guide, null),
+    DiagEntry(DiagCodes.INDEX_AREA_READ_ONLY, DiagSection.NAS_LIBRARY, DiagSeverity.INFO, R.string.diag_index_area_read_only_title, R.string.diag_index_area_read_only_guide, null),
+    DiagEntry(DiagCodes.INDEX_SHARE_DROPPED, DiagSection.NAS_LIBRARY, DiagSeverity.WARNING, R.string.diag_index_share_dropped_title, R.string.diag_index_share_dropped_guide, null),
+    DiagEntry(DiagCodes.INDEX_NO_PREPARERS, DiagSection.NAS_LIBRARY, DiagSeverity.INFO, R.string.diag_index_no_preparers_title, R.string.diag_index_no_preparers_guide, null),
+    DiagEntry(DiagCodes.INDEX_REPLICA_STATE, DiagSection.NAS_LIBRARY, DiagSeverity.INFO, R.string.diag_index_replica_state_title, R.string.diag_index_replica_state_guide, null),
+    DiagEntry(DiagCodes.INDEX_LEASES_CONTENDED, DiagSection.NAS_LIBRARY, DiagSeverity.INFO, R.string.diag_index_leases_contended_title, R.string.diag_index_leases_contended_guide, null),
+    // Preparazione (PrepDiag di core-prepare).
+    DiagEntry(DiagCodes.PREP_STATE, DiagSection.NAS_LIBRARY, DiagSeverity.INFO, R.string.diag_prep_state_title, R.string.diag_prep_state_guide, null),
+    DiagEntry(DiagCodes.PREP_DECODER_MISSING, DiagSection.NAS_LIBRARY, DiagSeverity.INFO, R.string.diag_prep_decoder_missing_title, R.string.diag_prep_decoder_missing_guide, null),
+    DiagEntry(DiagCodes.PREP_UNREADABLE, DiagSection.NAS_LIBRARY, DiagSeverity.WARNING, R.string.diag_prep_unreadable_title, R.string.diag_prep_unreadable_guide, null),
+    DiagEntry(DiagCodes.PREP_TOO_LARGE, DiagSection.NAS_LIBRARY, DiagSeverity.INFO, R.string.diag_prep_too_large_title, R.string.diag_prep_too_large_guide, null),
 
     // --- Rete e NAS --------------------------------------------------------
     DiagEntry(DiagCodes.DIAG_SECTION_UNAVAILABLE, DiagSection.NETWORK_AND_NAS, DiagSeverity.WARNING, R.string.diag_diag_section_unavailable_title, R.string.diag_diag_section_unavailable_guide, null),

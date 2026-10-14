@@ -107,6 +107,8 @@ object GraphModule {
         WorkManagerTrustSyncScheduler(context, nasNow, monotonicNow = SystemClock::elapsedRealtime, window = window)
       },
       work = WorkManagerCanceller(context, window),
+      // D33: la recinzione delle prove sul campo, solo nella build debug (DeveloperTools di debug); null in release.
+      shareGuard = DeveloperTools.shareGuard(),
     )
   }
 

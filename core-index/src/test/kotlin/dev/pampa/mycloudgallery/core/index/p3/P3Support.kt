@@ -16,6 +16,7 @@ import dev.pampa.mycloudgallery.core.index.publish.MapShareCatalog
 import dev.pampa.mycloudgallery.core.index.publish.NasRemoteIndex
 import dev.pampa.mycloudgallery.core.index.publish.OutboxIndexPublisher
 import dev.pampa.mycloudgallery.core.index.publish.ShareLocks
+import dev.pampa.mycloudgallery.core.index.TestStores
 import dev.pampa.mycloudgallery.core.index.store.IndexPublishStore
 import dev.pampa.mycloudgallery.core.index.store.InMemoryIndexPublishStore
 import dev.pampa.mycloudgallery.core.index.store.InMemoryOutboxBlobStore
@@ -319,7 +320,7 @@ class TestDevice(
   val world: TestWorld,
   val signer: Signer,
   val account: String = "test",
-  val store: InMemoryIndexPublishStore = InMemoryIndexPublishStore(),
+  val store: IndexPublishStore = TestStores.publish(),
   val blobs: InMemoryOutboxBlobStore = InMemoryOutboxBlobStore(),
   val replica: InMemoryReplica = InMemoryReplica(TrustIds.deviceIdOf(signer.publicKey)),
   var gate: MapWriteGate = MapWriteGate(),

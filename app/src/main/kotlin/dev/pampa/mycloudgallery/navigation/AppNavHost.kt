@@ -36,6 +36,8 @@ import dev.pampa.mycloudgallery.core.family.contract.BlockReason
 import dev.pampa.mycloudgallery.core.family.contract.TrustStatus
 import dev.pampa.mycloudgallery.debugtools.DeveloperTools
 import dev.pampa.mycloudgallery.feature.diagnostics.DiagnosticsGraphRoute
+import dev.pampa.mycloudgallery.feature.diagnostics.actions.DiagnosticsActions
+import dev.pampa.mycloudgallery.nas.NasUnfreezeDialog
 import dev.pampa.mycloudgallery.feature.diagnostics.diagnosticsGraph
 import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess
@@ -130,6 +132,9 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
   // Le Raccolte aprono il viewer del grafo vero sull'host della galleria (D12: il viewer non e' una rotta).
   val viewer = LocalViewerHost.current
   val gallery: GalleryHostViewModel? = if (destination == RootDestination.Main) hiltViewModel() else null
+  // Fase 4A (D10): il foglio "Ho controllato, continua", aperto dalla voce del congelamento in Diagnostica.
+  var unfreeze by remember { mutableStateOf(false) }
+  if (unfreeze && gallery != null) NasUnfreezeDialog(gallery, onDismiss = { unfreeze = false })
   NavHost(
     navController = nav,
     startDestination = startRoute(destination),
@@ -158,7 +163,14 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
           diagnosticsGraph(
             nav = nav,
             appActions = DIAGNOSTICS_APP_ACTIONS,
-            onAppAction = { action -> onDiagnosticsAction(nav, action) },
+            onAppAction = { action ->
+              when (action) {
+                DiagnosticsActions.NAS_STOP_WRITES -> gallery?.setNasWritesStopped(true)
+                DiagnosticsActions.NAS_RESUME_WRITES -> gallery?.setNasWritesStopped(false)
+                DiagnosticsActions.NAS_RELEASE_FREEZE -> unfreeze = true
+                else -> onDiagnosticsAction(nav, action)
+              }
+            },
           )
           with(DeveloperTools) { destinations(nav) }
         }
@@ -206,7 +218,15 @@ private fun AwaitingDestination(code: String, actions: RootNavActions) {
 }
 
 /** Le azioni della Diagnostica che portano fuori dalla Diagnostica: le sa fare solo :app (i feature non si conoscono). */
-private val DIAGNOSTICS_APP_ACTIONS = setOf(DiagAction.REENTER_NAS_PASSWORD, DiagAction.OPEN_DEVICES, DiagAction.RESUME_ONBOARDING)
+private val DIAGNOSTICS_APP_ACTIONS = setOf(
+  DiagAction.REENTER_NAS_PASSWORD,
+  DiagAction.OPEN_DEVICES,
+  DiagAction.RESUME_ONBOARDING,
+  // Fase 4A (§1.4): l'emergenza e lo scongelamento del NAS nella Libreria.
+  DiagnosticsActions.NAS_STOP_WRITES,
+  DiagnosticsActions.NAS_RESUME_WRITES,
+  DiagnosticsActions.NAS_RELEASE_FREEZE,
+)
 
 private fun onDiagnosticsAction(nav: NavHostController, action: DiagAction) {
   when (action) {

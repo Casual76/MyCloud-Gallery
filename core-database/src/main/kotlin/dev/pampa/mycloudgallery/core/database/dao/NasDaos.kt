@@ -8,17 +8,22 @@ import androidx.room.Upsert
 import dev.pampa.mycloudgallery.core.database.entity.IndexHeadEntity
 import dev.pampa.mycloudgallery.core.database.entity.IndexOutboxBlobEntity
 import dev.pampa.mycloudgallery.core.database.entity.IndexOutboxRecordEntity
+import dev.pampa.mycloudgallery.core.database.entity.IndexOwnBlobEntity
+import dev.pampa.mycloudgallery.core.database.entity.IndexOwnRecordEntity
 import dev.pampa.mycloudgallery.core.database.entity.IndexOwnSegmentEntity
 import dev.pampa.mycloudgallery.core.database.entity.IndexPublishStateEntity
 import dev.pampa.mycloudgallery.core.database.entity.IndexRecordEntity
 import dev.pampa.mycloudgallery.core.database.entity.IndexSegmentEntity
-import dev.pampa.mycloudgallery.core.database.entity.IndexSyncStateEntity
 import dev.pampa.mycloudgallery.core.database.entity.NasOpEntity
 import dev.pampa.mycloudgallery.core.database.entity.NasOpItemEntity
 import dev.pampa.mycloudgallery.core.database.entity.NasScanStateEntity
 import dev.pampa.mycloudgallery.core.database.entity.NasTrashEntryEntity
 import dev.pampa.mycloudgallery.core.database.entity.ReplicaBlobEntity
+import dev.pampa.mycloudgallery.core.database.entity.ReplicaDirtyEntity
 import dev.pampa.mycloudgallery.core.database.entity.ReplicaPackEntity
+import dev.pampa.mycloudgallery.core.database.entity.ReplicaProvisionalEntity
+import dev.pampa.mycloudgallery.core.database.entity.ReplicaSettingEntity
+import dev.pampa.mycloudgallery.core.database.entity.ReplicaShareAccessEntity
 import kotlinx.coroutines.flow.Flow
 
 // I DAO dello schema v3 (Fase 4). Semplici di proposito: righe dentro e fuori, nessuna regola. Le regole stanno nei
@@ -51,14 +56,12 @@ interface NasScanDao {
 }
 
 /**
- * La pubblicazione dell'indice di **questo** dispositivo (P3, §2.1): stato per share, outbox dei record e dei blob,
- * segmenti propri elencati dall'ultima testa.
+ * La pubblicazione dell'indice di **questo** dispositivo (P3, §2.1): stato per share, outbox dei record e dei blob, stato
+ * proprio pubblicato (segmenti, record e blob vivi). Righe dentro e fuori, nessuna regola: le regole (seq, M3, vivi per
+ * `seq`) stanno nell'adattatore `RoomIndexPublishStore` di core-index, che fa una transazione per metodo della porta.
  *
- * Firme per l'adattatore di `IndexPublisher` (P11):
- * - `stage`: in una transazione, per ogni record `takeSeq` + [upsertRecord]; per ogni blob [upsertBlob];
- * - `flush`: [pendingRecords] in ordine di `seq` e [pendingBlobs] per classe → segmenti → testa; poi, in una transazione,
- *   [insertOwnSegments], [savePublishState] con la versione nuova e [deleteRecordsUpTo] / [deleteBlobs] di cio' che e'
- *   uscito.
+ * Le liste di chiavi passate a `IN (...)` vanno spezzate da chi chiama in blocchi da [MAX_KEYS] (limite dei parametri di
+ * SQLite su API 29).
  */
 @Dao
 interface IndexPublishDao {
@@ -66,101 +69,137 @@ interface IndexPublishDao {
   @Query("SELECT * FROM index_publish_state WHERE share_key = :shareKey")
   suspend fun publishState(shareKey: String): IndexPublishStateEntity?
 
+  @Query("SELECT * FROM index_publish_state ORDER BY share_key")
+  suspend fun publishStates(): List<IndexPublishStateEntity>
+
   @Upsert
   suspend fun savePublishState(state: IndexPublishStateEntity)
 
-  /** Crea lo stato della share con `next_seq = 1` se manca (due istruzioni: niente `UPSERT` su API 29). */
-  @Query("INSERT OR IGNORE INTO index_publish_state (share_key, next_seq, head_version) VALUES (:shareKey, 1, 0)")
-  suspend fun createIfMissing(shareKey: String)
+  // --- Outbox -------------------------------------------------------------------------------------------------------
 
-  @Query("UPDATE index_publish_state SET next_seq = next_seq + :count WHERE share_key = :shareKey")
-  suspend fun advanceSeq(shareKey: String, count: Long)
+  @Insert
+  suspend fun insertRecords(records: List<IndexOutboxRecordEntity>): List<Long>
 
-  /**
-   * Prende [count] numeri di sequenza consecutivi per la share e restituisce il primo (D5). Va chiamata **dentro** la
-   * transazione che scrive i record: un crash non lascia numeri a meta' e due lavori non si contendono lo stesso.
-   */
-  suspend fun takeSeq(shareKey: String, count: Long = 1): Long {
-    require(count > 0) { "Almeno un numero." }
-    createIfMissing(shareKey)
-    val first = checkNotNull(publishState(shareKey)).nextSeq
-    advanceSeq(shareKey, count)
-    return first
-  }
+  @Insert
+  suspend fun insertBlobs(blobs: List<IndexOutboxBlobEntity>): List<Long>
 
-  /** Un record nell'outbox: sostituisce quello in coda per la stessa chiave (vince il piu' nuovo, D5). */
-  @Insert(onConflict = OnConflictStrategy.REPLACE)
-  suspend fun upsertRecord(record: IndexOutboxRecordEntity)
+  @Query("UPDATE index_outbox_record SET sunk = 1 WHERE share_key = :shareKey AND id IN (:ids)")
+  suspend fun markRecordsSunk(shareKey: String, ids: List<Long>)
 
-  /** I record in coda per la share, in ordine di `seq`, a pagine (`afterSeq` = ultimo gia' letto, 0 all'inizio). */
-  @Query(PENDING_RECORDS_SQL)
-  suspend fun pendingRecords(shareKey: String, afterSeq: Long, limit: Int): List<IndexOutboxRecordEntity>
+  @Query("UPDATE index_outbox_blob SET sunk = 1 WHERE share_key = :shareKey AND id IN (:ids)")
+  suspend fun markBlobsSunk(shareKey: String, ids: List<Long>)
 
-  /** Toglie i record pubblicati: quelli con `seq` fino a [maxSeq] compreso (un record ri-messo in coda ha un `seq` nuovo). */
-  @Query("DELETE FROM index_outbox_record WHERE share_key = :shareKey AND seq <= :maxSeq")
-  suspend fun deleteRecordsUpTo(shareKey: String, maxSeq: Long): Int
+  @Query("SELECT * FROM index_outbox_record WHERE sunk = 0 ORDER BY id")
+  suspend fun unsunkRecords(): List<IndexOutboxRecordEntity>
 
-  @Insert(onConflict = OnConflictStrategy.REPLACE)
-  suspend fun upsertBlob(blob: IndexOutboxBlobEntity)
+  @Query("SELECT * FROM index_outbox_blob WHERE sunk = 0 ORDER BY id")
+  suspend fun unsunkBlobs(): List<IndexOutboxBlobEntity>
 
-  /** I blob in coda di una classe, in ordine di chiave di contenuto (l'ordine della tabella del segmento). */
-  @Query(PENDING_BLOBS_SQL)
-  suspend fun pendingBlobs(shareKey: String, cls: Int, afterKey: String, limit: Int): List<IndexOutboxBlobEntity>
+  /** L'outbox di una share in ordine di `seq` (lo stesso dell'id: il `seq` si assegna in ordine d'inserimento). */
+  @Query(OUTBOX_RECORDS_SQL)
+  suspend fun outboxRecords(shareKey: String): List<IndexOutboxRecordEntity>
 
-  @Query("DELETE FROM index_outbox_blob WHERE share_key = :shareKey AND cls = :cls AND content_key IN (:keys)")
-  suspend fun deleteBlobs(shareKey: String, cls: Int, keys: List<String>): Int
+  @Query(OUTBOX_BLOBS_SQL)
+  suspend fun outboxBlobs(shareKey: String): List<IndexOutboxBlobEntity>
 
-  /** I blob che stanno in un pacco temporaneo (per sapere se il file si puo' togliere). */
-  @Query("SELECT COUNT(*) FROM index_outbox_blob WHERE pack = :pack")
-  suspend fun blobsInPack(pack: String): Int
+  @Query("DELETE FROM index_outbox_record WHERE share_key = :shareKey AND id IN (:ids)")
+  suspend fun deleteRecords(shareKey: String, ids: List<Long>)
 
-  /** Quanto c'e' in coda (`PendingCounts`): record e blob di tutte le share. */
-  @Query("SELECT (SELECT COUNT(*) FROM index_outbox_record) AS records, (SELECT COUNT(*) FROM index_outbox_blob) AS blobs, " +
-    "(SELECT COALESCE(SUM(byte_length), 0) FROM index_outbox_blob) AS bytes")
-  fun observePending(): Flow<PendingRow>
+  @Query("DELETE FROM index_outbox_blob WHERE share_key = :shareKey AND id IN (:ids)")
+  suspend fun deleteBlobs(shareKey: String, ids: List<Long>)
 
-  @Query("SELECT * FROM index_own_segment WHERE share_key = :shareKey ORDER BY segment_hash")
-  suspend fun ownSegments(shareKey: String): List<IndexOwnSegmentEntity>
+  @Query("SELECT COUNT(*) FROM index_outbox_record")
+  suspend fun pendingRecordCount(): Int
 
-  @Insert(onConflict = OnConflictStrategy.REPLACE)
-  suspend fun insertOwnSegments(segments: List<IndexOwnSegmentEntity>)
+  @Query("SELECT COUNT(*) AS items, COALESCE(SUM(byte_length), 0) AS bytes FROM index_outbox_blob")
+  suspend fun pendingBlobs(): CountBytesRow
 
-  @Query("DELETE FROM index_own_segment WHERE share_key = :shareKey AND segment_hash IN (:hashes)")
-  suspend fun deleteOwnSegments(shareKey: String, hashes: List<String>): Int
+  @Query("SELECT path_key FROM index_outbox_record WHERE share_key = :shareKey AND path_key IN (:pathKeys)")
+  suspend fun pendingPathKeys(shareKey: String, pathKeys: List<String>): List<String>
+
+  @Query("SELECT content_key FROM index_outbox_record WHERE share_key = :shareKey AND content_key IN (:keys)")
+  suspend fun pendingContentKeys(shareKey: String, keys: List<String>): List<String>
+
+  @Query("SELECT handle FROM index_outbox_blob")
+  suspend fun referencedHandles(): List<String>
+
+  // --- Stato proprio pubblicato -------------------------------------------------------------------------------------
+
+  /** I segmenti elencati dalla testa corrente, in ordine d'impronta (come nella testa). */
+  @Query("SELECT * FROM index_own_segment WHERE share_key = :shareKey AND listed = 1 ORDER BY segment_hash")
+  suspend fun listedSegments(shareKey: String): List<IndexOwnSegmentEntity>
+
+  /** Il diario: tutti i segmenti propri pubblicati nella share. */
+  @Query("SELECT segment_hash FROM index_own_segment WHERE share_key = :shareKey")
+  suspend fun publishedSegmentHashes(shareKey: String): List<String>
+
+  @Query("UPDATE index_own_segment SET listed = 0 WHERE share_key = :shareKey")
+  suspend fun unlistSegments(shareKey: String)
+
+  @Upsert
+  suspend fun saveOwnSegments(segments: List<IndexOwnSegmentEntity>)
+
+  @Query("SELECT * FROM index_own_record WHERE share_key = :shareKey AND path_key IN (:pathKeys)")
+  suspend fun ownRecords(shareKey: String, pathKeys: List<String>): List<IndexOwnRecordEntity>
+
+  @Query("SELECT path_key FROM index_own_record WHERE share_key = :shareKey AND path_key IN (:pathKeys)")
+  suspend fun livePathKeys(shareKey: String, pathKeys: List<String>): List<String>
+
+  @Query("SELECT content_key FROM index_own_record WHERE share_key = :shareKey AND content_key IN (:keys)")
+  suspend fun liveContentKeys(shareKey: String, keys: List<String>): List<String>
+
+  @Query("SELECT * FROM index_own_record WHERE share_key = :shareKey AND segment_hash IN (:segments)")
+  suspend fun ownRecordsIn(shareKey: String, segments: List<String>): List<IndexOwnRecordEntity>
+
+  @Query("SELECT * FROM index_own_blob WHERE share_key = :shareKey AND segment_hash IN (:segments)")
+  suspend fun ownBlobsIn(shareKey: String, segments: List<String>): List<IndexOwnBlobEntity>
+
+  @Query("SELECT segment_hash AS segment, COUNT(*) AS items FROM index_own_record WHERE share_key = :shareKey GROUP BY segment_hash")
+  suspend fun ownRecordCounts(shareKey: String): List<SegmentCountRow>
+
+  @Query("SELECT segment_hash AS segment, COUNT(*) AS items FROM index_own_blob WHERE share_key = :shareKey GROUP BY segment_hash")
+  suspend fun ownBlobCounts(shareKey: String): List<SegmentCountRow>
+
+  @Query("SELECT COUNT(*) FROM index_own_record WHERE share_key = :shareKey")
+  suspend fun ownRecordCount(shareKey: String): Int
+
+  @Upsert
+  suspend fun saveOwnRecords(records: List<IndexOwnRecordEntity>)
+
+  @Query("DELETE FROM index_own_record WHERE share_key = :shareKey AND path_key IN (:pathKeys)")
+  suspend fun deleteOwnRecords(shareKey: String, pathKeys: List<String>)
+
+  @Upsert
+  suspend fun saveOwnBlobs(blobs: List<IndexOwnBlobEntity>)
 
   companion object {
-    const val PENDING_RECORDS_SQL: String =
-      "SELECT * FROM index_outbox_record WHERE share_key = :shareKey AND seq > :afterSeq ORDER BY seq LIMIT :limit"
+    /** Il massimo di chiavi per `IN (...)` (SQLite su API 29 ammette 999 parametri; si lascia margine agli altri). */
+    const val MAX_KEYS: Int = 900
 
-    const val PENDING_BLOBS_SQL: String =
-      "SELECT * FROM index_outbox_blob WHERE share_key = :shareKey AND cls = :cls AND content_key > :afterKey " +
-        "ORDER BY content_key LIMIT :limit"
+    const val OUTBOX_RECORDS_SQL: String = "SELECT * FROM index_outbox_record WHERE share_key = :shareKey ORDER BY seq"
+
+    const val OUTBOX_BLOBS_SQL: String = "SELECT * FROM index_outbox_blob WHERE share_key = :shareKey ORDER BY id"
   }
 }
 
-/** Quanto c'e' nell'outbox. */
-data class PendingRow(val records: Int, val blobs: Int, val bytes: Long)
+/** Un conteggio e dei byte. */
+data class CountBytesRow(val items: Int, val bytes: Long)
+
+/** Quante voci vive per segmento. */
+data class SegmentCountRow(val segment: String, val items: Int)
 
 /**
- * La replica locale dell'indice (P4, §2.2): teste accettate, segmenti, record `meta`, pacchi e blob, stato per share.
- *
- * Firme per gli adattatori di `IndexSync`, `ReplicaBlobs`, `ReplicaRecords` (P11):
- * - testa nuova accettata: in **una** transazione [upsertSegments] dei segmenti elencati, [markSegment] di quelli tolti
- *   (o [deleteSegment] + [deleteRecordsOfSegment] + [deletePacksOfSegment]), per ogni segmento `meta` scaricato
- *   [upsertRecords] (tenendo il `seq` piu' alto, vedi [recordFor]) e [saveHead]; le osservazioni al catalogo passano da
- *   `MediaCatalog.recordAll` / `adoptIdentities` (anche nella stessa transazione, con `inSameTransaction`);
- * - pacco scaricato: [insertPack] + [insertBlobs], poi [markSegment] `applied` con il `pack_id`;
- * - `ReplicaRecords.matching`: [recordsAt] per chiave del percorso, scelta D6 fatta da chi chiama;
- * - `ReplicaBlobs.locate`: [blobsFor] (o pacco per pacco con [blobsOfPack] per l'indice in memoria).
+ * La replica locale dell'indice (P4, §2.2): teste accettate, segmenti, record, percorsi da rifondere, pacchi e blob,
+ * accesso alle share, impostazioni e miniature provvisorie. Righe dentro e fuori: le regole (D5, trattenuti, convergenza
+ * della qualita') stanno nell'adattatore `RoomReplicaStore` di core-index, una transazione per metodo della porta.
  */
 @Dao
 interface ReplicaDao {
 
+  // --- Teste e segmenti ---------------------------------------------------------------------------------------------
+
   @Query("SELECT * FROM index_head WHERE share_key = :shareKey ORDER BY device_id")
   suspend fun heads(shareKey: String): List<IndexHeadEntity>
-
-  @Query("SELECT * FROM index_head WHERE share_key = :shareKey AND device_id = :deviceId")
-  suspend fun head(shareKey: String, deviceId: String): IndexHeadEntity?
 
   @Upsert
   suspend fun saveHead(head: IndexHeadEntity)
@@ -168,98 +207,183 @@ interface ReplicaDao {
   @Query("DELETE FROM index_head WHERE share_key = :shareKey AND device_id = :deviceId")
   suspend fun deleteHead(shareKey: String, deviceId: String)
 
-  @Query("SELECT * FROM index_segment WHERE share_key = :shareKey AND device_id = :deviceId ORDER BY segment_hash")
+  @Query("DELETE FROM index_head WHERE share_key = :shareKey")
+  suspend fun deleteHeads(shareKey: String)
+
+  @Query("SELECT * FROM index_segment WHERE share_key = :shareKey AND device_id = :deviceId ORDER BY position, segment_hash")
   suspend fun segments(shareKey: String, deviceId: String): List<IndexSegmentEntity>
 
-  /** I segmenti di una share in uno stato (es. `listed` = da scaricare). */
-  @Query("SELECT * FROM index_segment WHERE share_key = :shareKey AND state = :state")
-  suspend fun segmentsInState(shareKey: String, state: String): List<IndexSegmentEntity>
+  @Query("SELECT * FROM index_segment WHERE share_key = :shareKey AND device_id = :deviceId AND segment_hash = :hash")
+  suspend fun segment(shareKey: String, deviceId: String, hash: String): IndexSegmentEntity?
+
+  @Query("SELECT * FROM index_segment WHERE state IN (:states) AND cls IN (:classes) ORDER BY share_key, device_id, position")
+  suspend fun segmentsWhere(states: List<String>, classes: List<Int>): List<IndexSegmentEntity>
 
   @Upsert
-  suspend fun upsertSegments(segments: List<IndexSegmentEntity>)
+  suspend fun saveSegments(segments: List<IndexSegmentEntity>)
+
+  @Query("UPDATE index_segment SET state = :state WHERE share_key = :shareKey AND device_id = :deviceId AND segment_hash = :hash")
+  suspend fun setSegmentState(shareKey: String, deviceId: String, hash: String, state: String)
 
   @Query(
-    "UPDATE index_segment SET state = :state, pack_id = :packId, updated_at = :now " +
-      "WHERE share_key = :shareKey AND device_id = :deviceId AND segment_hash = :segmentHash",
+    "UPDATE index_segment SET state = :state, pack_id = :packId " +
+      "WHERE share_key = :shareKey AND device_id = :deviceId AND segment_hash = :hash",
   )
-  suspend fun markSegment(shareKey: String, deviceId: String, segmentHash: String, state: String, packId: Long?, now: Long)
+  suspend fun setSegmentPack(shareKey: String, deviceId: String, hash: String, state: String, packId: Long?)
 
-  @Query("DELETE FROM index_segment WHERE share_key = :shareKey AND device_id = :deviceId AND segment_hash = :segmentHash")
-  suspend fun deleteSegment(shareKey: String, deviceId: String, segmentHash: String)
+  @Query("DELETE FROM index_segment WHERE share_key = :shareKey AND device_id = :deviceId AND segment_hash = :hash")
+  suspend fun deleteSegment(shareKey: String, deviceId: String, hash: String)
 
-  /** Il record di un dispositivo per una chiave (per tenere il `seq` piu' alto, D5). */
-  @Query("SELECT * FROM index_record WHERE share_key = :shareKey AND device_id = :deviceId AND record_key = :recordKey")
-  suspend fun recordFor(shareKey: String, deviceId: String, recordKey: String): IndexRecordEntity?
+  @Query("DELETE FROM index_segment WHERE share_key = :shareKey AND device_id = :deviceId")
+  suspend fun deleteSegments(shareKey: String, deviceId: String)
+
+  @Query("DELETE FROM index_segment WHERE share_key = :shareKey")
+  suspend fun deleteSegmentsOfShare(shareKey: String)
+
+  // --- Record -------------------------------------------------------------------------------------------------------
 
   @Insert(onConflict = OnConflictStrategy.REPLACE)
-  suspend fun upsertRecords(records: List<IndexRecordEntity>)
+  suspend fun saveRecords(records: List<IndexRecordEntity>)
 
-  /** Tutti i record di un percorso, di tutti i dispositivi (D6). Al massimo 500 chiavi per chiamata. */
   @Query(RECORDS_AT_SQL)
-  suspend fun recordsAt(shareKey: String, recordKeys: List<String>): List<IndexRecordEntity>
+  suspend fun records(shareKey: String, pathKeys: List<String>): List<IndexRecordEntity>
 
-  /** I record con una chiave di contenuto (forma ridotta): chi ha preparato cosa, fallimenti D14. */
-  @Query(RECORDS_WITH_CONTENT_SQL)
-  suspend fun recordsWithContent(contentKey: Long): List<IndexRecordEntity>
-
-  /** I record di una share a pagine, in ordine di chiave (ricostruzioni, unita' di lavoro). */
   @Query(
-    "SELECT * FROM index_record WHERE share_key = :shareKey AND record_key > :afterKey ORDER BY record_key LIMIT :limit",
+    "SELECT * FROM index_record WHERE share_key = :shareKey AND device_id = :deviceId AND segment_hash = :segment " +
+      "AND record_key IN (:pathKeys)",
   )
-  suspend fun recordsInShare(shareKey: String, afterKey: String, limit: Int): List<IndexRecordEntity>
+  suspend fun recordsOf(shareKey: String, deviceId: String, segment: String, pathKeys: List<String>): List<IndexRecordEntity>
 
-  @Query("DELETE FROM index_record WHERE share_key = :shareKey AND device_id = :deviceId AND segment_hash = :segmentHash")
-  suspend fun deleteRecordsOfSegment(shareKey: String, deviceId: String, segmentHash: String): Int
+  @Query("SELECT DISTINCT record_key FROM index_record WHERE share_key = :shareKey ORDER BY record_key")
+  suspend fun pathKeys(shareKey: String): List<String>
 
-  /** Dimentica una share intera (E-I8: accesso negato in due giorni diversi). I pacchi li toglie chi chiama dal disco. */
+  @Query("SELECT record_key FROM index_record WHERE share_key = :shareKey AND device_id = :deviceId AND segment_hash = :segment")
+  suspend fun keysOfSegment(shareKey: String, deviceId: String, segment: String): List<String>
+
+  @Query("SELECT DISTINCT record_key FROM index_record WHERE share_key = :shareKey AND device_id = :deviceId")
+  suspend fun keysOfDevice(shareKey: String, deviceId: String): List<String>
+
+  @Query("DELETE FROM index_record WHERE share_key = :shareKey AND device_id = :deviceId AND segment_hash = :segment")
+  suspend fun deleteRecordsOfSegment(shareKey: String, deviceId: String, segment: String)
+
+  @Query("DELETE FROM index_record WHERE share_key = :shareKey AND device_id = :deviceId")
+  suspend fun deleteRecordsOfDevice(shareKey: String, deviceId: String)
+
   @Query("DELETE FROM index_record WHERE share_key = :shareKey")
-  suspend fun deleteRecordsOfShare(shareKey: String): Int
+  suspend fun deleteRecordsOfShare(shareKey: String)
 
-  @Insert
-  suspend fun insertPack(pack: ReplicaPackEntity): Long
+  @Query(
+    "SELECT record_key FROM index_record WHERE share_key = :shareKey AND device_id = :deviceId AND segment_hash = :segment " +
+      "AND seq <= :upToSeq",
+  )
+  suspend fun keysUpToSeq(shareKey: String, deviceId: String, segment: String, upToSeq: Long): List<String>
+
+  @Query(
+    "DELETE FROM index_record WHERE share_key = :shareKey AND device_id = :deviceId AND segment_hash = :segment " +
+      "AND seq <= :upToSeq",
+  )
+  suspend fun deleteUpToSeq(shareKey: String, deviceId: String, segment: String, upToSeq: Long)
+
+  /** Le chiavi di contenuto distinte con almeno una delle classi di [mask] preparate (la stima di un livello, E-L6). */
+  @Query("SELECT COUNT(DISTINCT content_key) FROM index_record WHERE gone = 0 AND (prep & :mask) != 0")
+  suspend fun preparedContentCount(mask: Int): Int
+
+  // --- Percorsi da rifondere ----------------------------------------------------------------------------------------
+
+  @Insert(onConflict = OnConflictStrategy.IGNORE)
+  suspend fun markDirty(rows: List<ReplicaDirtyEntity>)
+
+  @Query("SELECT record_key FROM replica_dirty WHERE share_key = :shareKey ORDER BY record_key LIMIT :limit")
+  suspend fun dirty(shareKey: String, limit: Int): List<String>
+
+  @Query("SELECT DISTINCT share_key FROM replica_dirty")
+  suspend fun dirtyShares(): List<String>
+
+  @Query("DELETE FROM replica_dirty WHERE share_key = :shareKey AND record_key IN (:pathKeys)")
+  suspend fun clearDirty(shareKey: String, pathKeys: List<String>)
+
+  @Query("DELETE FROM replica_dirty WHERE share_key = :shareKey")
+  suspend fun clearDirtyOfShare(shareKey: String)
+
+  // --- Pacchi e blob ------------------------------------------------------------------------------------------------
+
+  @Query("SELECT * FROM replica_pack ORDER BY pack_id")
+  suspend fun packs(): List<ReplicaPackEntity>
 
   @Query("SELECT * FROM replica_pack WHERE pack_id = :packId")
   suspend fun pack(packId: Long): ReplicaPackEntity?
 
-  @Query("SELECT * FROM replica_pack ORDER BY pack_id")
-  suspend fun allPacks(): List<ReplicaPackEntity>
+  @Query("SELECT * FROM replica_pack WHERE file_name = :fileName")
+  suspend fun packByName(fileName: String): ReplicaPackEntity?
 
-  @Query("SELECT * FROM replica_pack WHERE share_key = :shareKey AND device_id = :deviceId AND segment_hash = :segmentHash")
-  suspend fun packsOfSegment(shareKey: String, deviceId: String, segmentHash: String): List<ReplicaPackEntity>
+  @Query("SELECT * FROM replica_pack WHERE share_key = :shareKey ORDER BY pack_id")
+  suspend fun packsOfShare(shareKey: String): List<ReplicaPackEntity>
 
-  /** Toglie un pacco (e in cascata i suoi blob). Il file lo cancella chi chiama, dopo il commit. */
+  /** I pacchi delle classi fuori da [keep], i piu' grandi prima (convergenza della qualita', E-L6). */
+  @Query("SELECT * FROM replica_pack WHERE cls NOT IN (:keep) ORDER BY bytes DESC, pack_id")
+  suspend fun packsOutside(keep: List<Int>): List<ReplicaPackEntity>
+
+  @Insert
+  suspend fun insertPack(pack: ReplicaPackEntity): Long
+
+  @Query("UPDATE replica_pack SET bytes = :bytes WHERE pack_id = :packId")
+  suspend fun setPackBytes(packId: Long, bytes: Long)
+
   @Query("DELETE FROM replica_pack WHERE pack_id = :packId")
   suspend fun deletePack(packId: Long)
 
-  @Query("DELETE FROM replica_pack WHERE share_key = :shareKey AND device_id = :deviceId AND segment_hash = :segmentHash")
-  suspend fun deletePacksOfSegment(shareKey: String, deviceId: String, segmentHash: String): Int
+  @Query("SELECT * FROM replica_blob ORDER BY pack_id, content_key, cls")
+  suspend fun blobs(): List<ReplicaBlobEntity>
 
-  @Insert(onConflict = OnConflictStrategy.REPLACE)
-  suspend fun insertBlobs(blobs: List<ReplicaBlobEntity>)
-
-  /** I blob di una chiave ridotta e di una classe (piu' righe se piu' dispositivi l'hanno pubblicata). */
-  @Query(BLOBS_FOR_SQL)
-  suspend fun blobsFor(contentKeyShort: Long, cls: Int): List<ReplicaBlobEntity>
-
-  /** I blob di un pacco, in ordine di chiave: per costruire l'indice in memoria di `ReplicaBlobs` pacco per pacco. */
-  @Query("SELECT * FROM replica_blob WHERE pack_id = :packId ORDER BY content_key")
+  @Query("SELECT * FROM replica_blob WHERE pack_id = :packId ORDER BY content_key, cls")
   suspend fun blobsOfPack(packId: Long): List<ReplicaBlobEntity>
 
-  /** Byte dei blob per classe (stima dello spazio, `ReplicaQualityState.currentBytes`). */
-  @Query("SELECT cls, COALESCE(SUM(byte_length), 0) AS bytes, COUNT(*) AS items FROM replica_blob GROUP BY cls")
-  suspend fun bytesByClass(): List<ClassBytesRow>
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun saveBlobs(blobs: List<ReplicaBlobEntity>)
 
-  @Query("SELECT * FROM index_sync_state WHERE share_key = :shareKey")
-  suspend fun syncState(shareKey: String): IndexSyncStateEntity?
+  @Query("DELETE FROM replica_blob WHERE pack_id = :packId")
+  suspend fun deleteBlobsOfPack(packId: Long)
+
+  // --- Accesso alle share e impostazioni ----------------------------------------------------------------------------
+
+  @Query("SELECT * FROM replica_share_access WHERE share_key = :shareKey")
+  suspend fun shareAccess(shareKey: String): ReplicaShareAccessEntity?
 
   @Upsert
-  suspend fun saveSyncState(state: IndexSyncStateEntity)
+  suspend fun saveShareAccess(row: ReplicaShareAccessEntity)
+
+  @Query("DELETE FROM replica_share_access WHERE share_key = :shareKey")
+  suspend fun deleteShareAccess(shareKey: String)
+
+  @Query("SELECT value FROM replica_setting WHERE `key` = :key")
+  suspend fun setting(key: String): String?
+
+  @Upsert
+  suspend fun saveSetting(row: ReplicaSettingEntity)
+
+  // --- Miniature provvisorie (D17) ----------------------------------------------------------------------------------
+
+  /** Bloccante, per chiave primaria: la chiama il dispatcher delle miniature. */
+  @Query("SELECT jpeg FROM replica_provisional WHERE content_key_short = :contentKeyShort")
+  fun provisional(contentKeyShort: Long): ByteArray?
+
+  @Upsert
+  suspend fun saveProvisional(row: ReplicaProvisionalEntity)
+
+  @Query("DELETE FROM replica_provisional WHERE content_key_short = :contentKeyShort")
+  suspend fun deleteProvisional(contentKeyShort: Long)
+
+  @Query("SELECT COUNT(*) FROM replica_provisional")
+  suspend fun provisionalCount(): Int
 
   companion object {
-    const val RECORDS_AT_SQL: String = "SELECT * FROM index_record WHERE share_key = :shareKey AND record_key IN (:recordKeys)"
+    /** Come [IndexPublishDao.MAX_KEYS]. */
+    const val MAX_KEYS: Int = IndexPublishDao.MAX_KEYS
 
-    const val RECORDS_WITH_CONTENT_SQL: String = "SELECT * FROM index_record WHERE content_key = :contentKey"
+    /** Tutti i dispositivi per un percorso (D6). */
+    const val RECORDS_AT_SQL: String = "SELECT * FROM index_record WHERE share_key = :shareKey AND record_key IN (:pathKeys)"
 
+    /** La query del lato caldo delle miniature (indice su `content_key_short`, `cls`): `V3QueryPlanTest` ne guarda il piano. */
     const val BLOBS_FOR_SQL: String = "SELECT * FROM replica_blob WHERE content_key_short = :contentKeyShort AND cls = :cls"
   }
 }

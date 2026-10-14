@@ -126,24 +126,29 @@ internal class OperationMonitor(
     }
   }
 
-  /** Un giro di controllo (anche chiamato dai test). */
+  /**
+   * Un giro di controllo (anche chiamato dai test).
+   *
+   * Prima si decide il verdetto di TUTTE le operazioni da interrompere e lo si scrive sui loro biglietti, poi si chiude la
+   * connessione (una volta per biglietto, la prima basta). Chiudere la connessione sveglia subito le letture sorelle ferme
+   * sullo stesso socket: se il loro biglietto non fosse ancora segnato, scambierebbero il blocco per una caduta da
+   * riprovare (`RECONNECT`) invece di riportare `Timeout`/`Stalled`, e ripartirebbero su una connessione nuova.
+   */
   fun inspect(snapshot: List<OpTicket> = synchronized(lock) { tickets.toList() }) {
     val now = clock.nowMillis()
+    val verdicts = ArrayList<Pair<OpTicket, NasError>>()
     for (ticket in snapshot) {
       if (ticket.abortedBy != null) continue
       when {
-        now >= ticket.deadlineAt -> abort(ticket, NasError.Timeout)
-        ticket.transfer?.isStalled(now) == true -> abort(ticket, NasError.Stalled)
+        now >= ticket.deadlineAt -> verdicts += ticket to NasError.Timeout
+        ticket.transfer?.isStalled(now) == true -> verdicts += ticket to NasError.Stalled
         ticket.firstDiskTouch && !ticket.wakingReported && now - ticket.startedAt >= wakingThresholdMs -> {
           ticket.wakingReported = true
           onWaking(ticket)
         }
       }
     }
-  }
-
-  private fun abort(ticket: OpTicket, error: NasError) {
-    ticket.abortedBy = error
-    onAbort(ticket, error)
+    for ((ticket, error) in verdicts) ticket.abortedBy = error
+    for ((ticket, error) in verdicts) onAbort(ticket, error)
   }
 }

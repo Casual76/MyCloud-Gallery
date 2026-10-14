@@ -140,7 +140,7 @@ class FileSystemTest {
       "pending-0123456789abcdef0123456789abcdef",
     )
     assertThrows(IllegalArgumentException::class.java) {
-      kotlinx.coroutines.runBlocking { housekeeping.purgeOwnStaleTemps("../altro", 1.hours) }
+      runBlockingBounded("la pulizia") { housekeeping.purgeOwnStaleTemps("../altro", 1.hours) }
     }
   }
 

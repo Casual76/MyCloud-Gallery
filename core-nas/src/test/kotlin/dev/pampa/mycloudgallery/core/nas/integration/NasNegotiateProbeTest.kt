@@ -1,9 +1,11 @@
 package dev.pampa.mycloudgallery.core.nas.integration
 
 import com.google.common.truth.Truth.assertThat
+import dev.pampa.mycloudgallery.core.nas.INTEGRATION_WAIT_SECONDS
 import dev.pampa.mycloudgallery.core.nas.breaker.AuthBreakerRegistry
 import dev.pampa.mycloudgallery.core.nas.contract.Stage
 import dev.pampa.mycloudgallery.core.nas.contract.TestTarget
+import dev.pampa.mycloudgallery.core.nas.runBlockingBounded
 import dev.pampa.mycloudgallery.core.nas.session.MonotonicClock
 import dev.pampa.mycloudgallery.core.nas.smb.Negotiation
 import dev.pampa.mycloudgallery.core.nas.smb.SmbjTransport
@@ -17,7 +19,6 @@ import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Test
 
@@ -67,7 +68,7 @@ class NasNegotiateProbeTest {
     // Lo stesso, attraverso il test di connessione fermo prima dell'autenticazione (credenziali nulle).
     val gate = FakeNasRouteGate().apply { allow(Via.HOME_LAN, TimedDirectBinding()) }
     val scope = CoroutineScope(SupervisorJob())
-    runBlocking {
+    runBlockingBounded("la sonda NEGOTIATE", INTEGRATION_WAIT_SECONDS) {
       val tester = SmbConnectionTester(
         gate,
         AuthBreakerRegistry(InMemoryBreakerStore(), scope),

@@ -26,7 +26,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertThrows
@@ -161,10 +160,10 @@ class MediaReaderTest {
     // Il PC lo modifica e la connessione ricade: mai mescolare due versioni.
     h.backend.modify(SHARE, "v.mp4", NasContent.of(ByteArray(200_000)), lastWriteMs = 1_800_000_060_000L)
     h.backend.dropAllConnections()
-    val error = assertThrows(NasIoException::class.java) { runBlocking { file.readRange(200L until 300) } }.error
+    val error = assertThrows(NasIoException::class.java) { runBlockingBounded("la lettura") { file.readRange(200L until 300) } }.error
     assertThat(error).isEqualTo(NasError.Unexpected(null))
     file.close()
-    assertThrows(IllegalStateException::class.java) { runBlocking { file.read(0, ByteArray(1), 0, 1) } }
+    assertThrows(IllegalStateException::class.java) { runBlockingBounded("la lettura") { file.read(0, ByteArray(1), 0, 1) } }
   }
 
   @Test
@@ -187,7 +186,7 @@ class MediaReaderTest {
       }
       val out = ByteArrayOutputStream()
       val progress = ArrayList<Long>()
-      val hash = runBlocking {
+      val hash = runBlockingBounded("readAll a quattro flussi") {
         val reader = h.manager.mediaReader()
         val file = reader.open(SHARE, SharePath.of("grande.mov"), Purpose.BACKGROUND).value()
         reader.readAll(file, { buf, n -> out.write(buf, 0, n) }) { synchronized(progress) { progress += it } }.value()

@@ -8,6 +8,7 @@ import dev.pampa.mycloudgallery.core.nas.contract.NasRandomFile
 import dev.pampa.mycloudgallery.core.nas.contract.NasResult
 import dev.pampa.mycloudgallery.core.nas.contract.Purpose
 import dev.pampa.mycloudgallery.core.nas.contract.ServerCopy
+import dev.pampa.mycloudgallery.core.nas.runBlockingBounded
 import dev.pampa.mycloudgallery.core.nas.smb.DirAccess
 import dev.pampa.mycloudgallery.core.nas.smb.SmbConnection
 import dev.pampa.mycloudgallery.core.nas.smb.SmbCopyChunk
@@ -23,7 +24,6 @@ import dev.pampa.mycloudgallery.core.network.contract.SocketBinding
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration
-import kotlinx.coroutines.runBlocking
 
 /**
  * L'autotest della guardia (§5.4, punto 4): prova `../`, un'altra share, la radice, la `.mycloudgallery` vera, i nomi
@@ -78,19 +78,19 @@ internal object TestAreaSelfTest {
       SharePath.of(TestAreaGuard.ROOT, "20200101-000000-00000000", "a.jpg"),
       SharePath.of("Foto", TestAreaGuard.ROOT, guard.runId, "a.jpg"),
     )
-    runBlocking {
+    runBlockingBounded("l'autotest della guardia") {
       for (path in outside) {
         val n = path.components.size
-        expectRefused("stat ($n)") { runBlocking { media.mediaReader.stat(share, path, Purpose.BACKGROUND) } }
-        expectRefused("open ($n)") { runBlocking { media.mediaReader.open(share, path, Purpose.BACKGROUND) } }
-        expectRefused("copia verso fuori ($n)") { runBlocking { media.serverCopy.copy(share, inside, share, path) } }
-        expectRefused("copia da fuori ($n)") { runBlocking { media.serverCopy.copy(share, path, share, inside) } }
+        expectRefused("stat ($n)") { runBlockingBounded("l'autotest della guardia") { media.mediaReader.stat(share, path, Purpose.BACKGROUND) } }
+        expectRefused("open ($n)") { runBlockingBounded("l'autotest della guardia") { media.mediaReader.open(share, path, Purpose.BACKGROUND) } }
+        expectRefused("copia verso fuori ($n)") { runBlockingBounded("l'autotest della guardia") { media.serverCopy.copy(share, inside, share, path) } }
+        expectRefused("copia da fuori ($n)") { runBlockingBounded("l'autotest della guardia") { media.serverCopy.copy(share, path, share, inside) } }
       }
-      expectRefused("elenco della radice") { runBlocking { media.mediaReader.list(share, null, Purpose.BACKGROUND) {} } }
-      expectRefused("elenco di mcg-it") { runBlocking { media.mediaReader.list(share, SharePath.of(TestAreaGuard.ROOT), Purpose.BACKGROUND) {} } }
+      expectRefused("elenco della radice") { runBlockingBounded("l'autotest della guardia") { media.mediaReader.list(share, null, Purpose.BACKGROUND) {} } }
+      expectRefused("elenco di mcg-it") { runBlockingBounded("l'autotest della guardia") { media.mediaReader.list(share, SharePath.of(TestAreaGuard.ROOT), Purpose.BACKGROUND) {} } }
       for (other in listOf("NAS", "Public", "PUBLIC")) {
-        expectRefused("stat su $other") { runBlocking { media.mediaReader.stat(other, inside, Purpose.BACKGROUND) } }
-        expectRefused("copia verso $other") { runBlocking { media.serverCopy.copy(share, inside, other, inside) } }
+        expectRefused("stat su $other") { runBlockingBounded("l'autotest della guardia") { media.mediaReader.stat(other, inside, Purpose.BACKGROUND) } }
+        expectRefused("copia verso $other") { runBlockingBounded("l'autotest della guardia") { media.serverCopy.copy(share, inside, other, inside) } }
       }
     }
     if (counting.calls.get() != 0 || media.delegateCalls.get() != 0) failures += "chiamate passate dalle interfacce"

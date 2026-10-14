@@ -15,6 +15,7 @@ import dev.pampa.mycloudgallery.core.nas.contract.NasAccount
 import dev.pampa.mycloudgallery.core.nas.contract.NasError
 import dev.pampa.mycloudgallery.core.nas.contract.Purpose
 import dev.pampa.mycloudgallery.core.nas.contract.errorOrNull
+import dev.pampa.mycloudgallery.core.nas.runBlockingBounded
 import dev.pampa.mycloudgallery.core.nas.session.MonotonicClock
 import dev.pampa.mycloudgallery.core.nas.session.SmbNasSessionManager
 import dev.pampa.mycloudgallery.core.nas.testing.InMemoryBreakerStore
@@ -29,7 +30,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -137,7 +137,7 @@ class SessionSetupSignatureTest {
   }
 
   @Test
-  fun ilGestoreDellaSessioneDiceSessioneInsicuraENonRiprova() = runBlocking {
+  fun ilGestoreDellaSessioneDiceSessioneInsicuraENonRiprova() = runBlockingBounded("il gestore con l'impostore") {
     val server = server(FakeSmbServer.FinalSignature.NONE)
     val gate = FakeNasRouteGate().apply { allow(Via.HOME_LAN, DirectSocketBinding("loopback")) }
     val account = NasAccount(address(server), "test", "slot", server.guid.toString())

@@ -160,7 +160,7 @@ class TestAreaGuardTest {
     assertThat(backend.exists("test-comune", "mcg-it/$run/copia")).isTrue()
     // Verso una share pubblica: ne' le interfacce ne' il trasporto.
     assertThrows(TestAreaViolation::class.java) {
-      kotlinx.coroutines.runBlocking { media.serverCopy.copy("test", from, "Public", SharePath.of("mcg-it", run, "copia")) }
+      dev.pampa.mycloudgallery.core.nas.runBlockingBounded("la copia vietata") { media.serverCopy.copy("test", from, "Public", SharePath.of("mcg-it", run, "copia")) }
     }
     assertThat(backend.exists("Public", "mcg-it")).isFalse()
     assertThat(backend.treeConnects.get()).isEqualTo(2)

@@ -551,9 +551,17 @@ class InMemorySmbBackend(
       if (!isConnected) throw SmbConnectionLostException()
     }
 
-    /** Aspetta che la connessione venga chiusa (letture bloccate). */
+    /**
+     * Aspetta che la connessione venga chiusa (letture bloccate). Ha un tetto in tempo REALE ([BLOCK_MAX_SECONDS]): un
+     * test che dimentica di chiuderla (o che blocca il solo thread che dovrebbe farlo) fallisce con un messaggio invece
+     * di restare appeso per sempre.
+     */
     fun awaitClosed() {
-      while (isConnected) closedLatch.await(BLOCK_POLL_MS, TimeUnit.MILLISECONDS)
+      val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(BLOCK_MAX_SECONDS)
+      while (isConnected) {
+        check(System.nanoTime() < deadline) { "simulatore: richiesta ferma e connessione mai chiusa entro $BLOCK_MAX_SECONDS s" }
+        closedLatch.await(BLOCK_POLL_MS, TimeUnit.MILLISECONDS)
+      }
     }
 
     override fun authenticate(user: String, password: CharArray): SmbSession {
@@ -982,6 +990,7 @@ class InMemorySmbBackend(
     /** 2026-10-12T00:00:00Z. */
     const val DEFAULT_NAS_TIME = 1_791_763_200_000L
     const val BLOCK_POLL_MS = 50L
+    const val BLOCK_MAX_SECONDS = 120L
     const val RESUME_KEY_BYTES = 24
     const val FIRST_FILE_ID = 1000L
     const val DEFAULT_WAKE_UP_MS = 8_000L

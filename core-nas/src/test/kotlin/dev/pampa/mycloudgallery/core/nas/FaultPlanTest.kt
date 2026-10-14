@@ -108,7 +108,7 @@ class FaultPlanTest {
       assertWithMessage(where).that(again).isEqualTo(if (first.getOrNull() == PublishResult.CREATED || visible != null) PublishResult.ALREADY_EXISTS else PublishResult.CREATED)
       assertWithMessage(where).that(h.backend.bytes(SHARE, path.value)).isEqualTo(bytes)
       // I propri temporanei rimasti (risposta della CREATE persa) li toglie la pulizia; quello altrui resta.
-      kotlinx.coroutines.runBlocking { SmbNasHousekeeping(h.manager) { listOf(SHARE) }.purgeOwnStaleTemps(DEVICE, Duration.ZERO) }
+      runBlockingBounded("la pulizia dei temporanei") { SmbNasHousekeeping(h.manager) { listOf(SHARE) }.purgeOwnStaleTemps(DEVICE, Duration.ZERO) }
       assertWithMessage(where).that(h.backend.children(SHARE, tmp)).containsExactly("zzzzzzzzzzzzzzzzzzzzzzzzzz-" + "ab".repeat(16))
     }
   }
@@ -125,7 +125,7 @@ class FaultPlanTest {
 
     forEachFault(total, prepare) { h, where ->
       val copy = SmbServerSideCopy(h.manager)
-      val first = kotlinx.coroutines.runBlocking { copy.copy(SHARE, SharePath.of("video.mp4"), SHARE, SharePath.of("copia", "video.mp4")) }
+      val first = runBlockingBounded("la copia") { copy.copy(SHARE, SharePath.of("video.mp4"), SHARE, SharePath.of("copia", "video.mp4")) }
       val visible = h.backend.bytes(SHARE, "copia/video.mp4")
       // Mai una copia a meta' visibile; la sorgente non si tocca.
       assertWithMessage(where).that(visible == null || visible.contentEquals(source)).isTrue()
@@ -133,14 +133,14 @@ class FaultPlanTest {
       if (first is NasResult.Ok) assertWithMessage(where).that(visible).isEqualTo(source)
 
       h.backend.faults = null
-      val again = kotlinx.coroutines.runBlocking { copy.copy(SHARE, SharePath.of("video.mp4"), SHARE, SharePath.of("copia", "video.mp4")) }
+      val again = runBlockingBounded("la copia ripetuta") { copy.copy(SHARE, SharePath.of("video.mp4"), SHARE, SharePath.of("copia", "video.mp4")) }
       if (visible == null) {
         assertWithMessage(where).that(again).isEqualTo(NasResult.Ok(source.size.toLong()))
       } else {
         assertWithMessage(where).that(again).isEqualTo(NasResult.Err(NasError.Exists))
       }
       assertWithMessage(where).that(h.backend.bytes(SHARE, "copia/video.mp4")).isEqualTo(source)
-      kotlinx.coroutines.runBlocking { SmbNasHousekeeping(h.manager) { listOf(SHARE) }.purgeOwnStaleTemps(DEVICE, Duration.ZERO) }
+      runBlockingBounded("la pulizia dei temporanei") { SmbNasHousekeeping(h.manager) { listOf(SHARE) }.purgeOwnStaleTemps(DEVICE, Duration.ZERO) }
       assertWithMessage(where).that(h.backend.children(SHARE, tmp)).isEmpty()
     }
   }
@@ -154,7 +154,7 @@ class FaultPlanTest {
 
     forEachFault(total, prepare) { h, where ->
       val names = ArrayList<String>()
-      val result = kotlinx.coroutines.runBlocking {
+      val result = runBlockingBounded("l'elenco") {
         h.manager.mediaReader().list(SHARE, SharePath.of("foto"), Purpose.BACKGROUND, pageSize = 10) { page -> page.mapTo(names) { it.name } }
       }
       assertWithMessage(where).that(names).containsNoDuplicates()
@@ -175,7 +175,7 @@ class FaultPlanTest {
     val total = countOps(prepare) { assertThat(read(it)).isEqualTo(NasResult.Ok(Sha256.of(content))) }
 
     forEachFault(total, prepare) { h, where ->
-      val result = kotlinx.coroutines.runBlocking { read(h) }
+      val result = runBlockingBounded("la lettura") { read(h) }
       if (result is NasResult.Ok) assertWithMessage(where).that(result.value).isEqualTo(Sha256.of(content))
     }
   }
@@ -185,19 +185,22 @@ class FaultPlanTest {
     val io = kotlinx.coroutines.CoroutineScope(SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
     val h = Harness(backgroundScope, virtualClock(), io = kotlinx.coroutines.Dispatchers.IO)
     h.backend.put(SHARE, "foto/a.jpg", byteArrayOf(1))
-    kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) { h.manager.browser(SHARE).list(SharePath.of("foto"), 10) }.value()
+    blockingIo("il primo elenco") { h.manager.browser(SHARE).list(SharePath.of("foto"), 10) }.value()
     h.backend.faults = FaultPlan().at(1, FaultPhase.BEFORE, SimFault.Stall, SimOp.OPEN_DIRECTORY)
     val entered = java.util.concurrent.CountDownLatch(1)
     h.backend.beforeOp = { op, _ -> if (op == SimOp.OPEN_DIRECTORY) entered.countDown() }
     val result = io.async { h.manager.browser(SHARE).list(SharePath.of("foto"), 10) }
-    assertThat(entered.await(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue()
+    entered.mustOpen("l'elenco fermo")
 
     // Il server non risponde: dopo la scadenza interattiva il sorvegliante chiude la connessione.
     advanceTimeBy(15_500)
     runCurrent()
-    assertThat(kotlinx.coroutines.runBlocking { result.await() }.errorOrNull()).isEqualTo(NasError.Timeout)
-    assertThat(h.backend.openConnections).isEqualTo(0)
-    io.cancel()
+    try {
+      assertThat(result.awaitBlocking("l'elenco fermo").errorOrNull()).isEqualTo(NasError.Timeout)
+      assertThat(h.backend.openConnections).isEqualTo(0)
+    } finally {
+      io.cancel()
+    }
   }
 
   @Test
@@ -207,7 +210,7 @@ class FaultPlanTest {
       repeat(10) { h.backend.put(SHARE, "f/$it", byteArrayOf(1)) }
       val plan = FaultPlan().random(seed = 42, probability = 0.2, phase = FaultPhase.AFTER, fault = SimFault.DropConnection)
       h.backend.faults = plan
-      repeat(5) { kotlinx.coroutines.runBlocking { h.manager.mediaReader().list(SHARE, SharePath.of("f"), Purpose.BACKGROUND) {} } }
+      repeat(5) { runBlockingBounded("l'elenco") { h.manager.mediaReader().list(SHARE, SharePath.of("f"), Purpose.BACKGROUND) {} } }
       return plan.fired.map { it.index }
     }
     val first = run()

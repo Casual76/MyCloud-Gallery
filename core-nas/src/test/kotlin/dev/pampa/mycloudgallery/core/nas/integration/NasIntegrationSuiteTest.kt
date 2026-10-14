@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.core.nas.integration
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.model.Sha256
+import dev.pampa.mycloudgallery.core.nas.INTEGRATION_WAIT_SECONDS
 import dev.pampa.mycloudgallery.core.nas.breaker.AuthBreakerRegistry
 import dev.pampa.mycloudgallery.core.nas.contract.AuthBlockReason
 import dev.pampa.mycloudgallery.core.nas.contract.CredentialLoad
@@ -27,6 +28,7 @@ import dev.pampa.mycloudgallery.core.nas.fs.SmbNasHousekeeping
 import dev.pampa.mycloudgallery.core.nas.fs.SmbServerSideCopy
 import dev.pampa.mycloudgallery.core.nas.fs.SmbShareProbe
 import dev.pampa.mycloudgallery.core.nas.fs.smb
+import dev.pampa.mycloudgallery.core.nas.runBlockingBounded
 import dev.pampa.mycloudgallery.core.nas.session.MonotonicClock
 import dev.pampa.mycloudgallery.core.nas.session.NasSessionConfig
 import dev.pampa.mycloudgallery.core.nas.session.OpContext
@@ -55,7 +57,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.runBlocking
 import org.junit.AfterClass
 import org.junit.Assume.assumeTrue
 import org.junit.BeforeClass
@@ -96,7 +97,7 @@ class NasIntegrationSuiteTest {
   }
 
   @Test
-  fun t01_sessioneCifrataConLaFirmaFinaleVerificataEGuidStabile() = runBlocking {
+  fun t01_sessioneCifrataConLaFirmaFinaleVerificataEGuidStabile() = runBlockingBounded("t01_sessioneCifrataConLaFirmaFinaleVerificataEGuidStabile", INTEGRATION_WAIT_SECONDS) {
     manager.withShare(share, Purpose.INTERACTIVE) { }.also { assertThat(it).isInstanceOf(NasResult.Ok::class.java) }
     val ready = manager.state.value as NasConnState.Ready
     // Arrivare qui vuol dire che la risposta finale di SESSION_SETUP era firmata e la firma tornava (SmbjTransport).
@@ -133,7 +134,7 @@ class NasIntegrationSuiteTest {
   }
 
   @Test
-  fun t03_provaDellaShareEPuliziaDeiSoliPropriTemporanei() = runBlocking {
+  fun t03_provaDellaShareEPuliziaDeiSoliPropriTemporanei() = runBlockingBounded("t03_provaDellaShareEPuliziaDeiSoliPropriTemporanei", INTEGRATION_WAIT_SECONDS) {
     val access = SmbShareProbe(manager, Purpose.INTERACTIVE, area).probe(share)
     assertThat(access).isEqualTo(NasResult.Ok(ShareAccess.READ_WRITE))
     val tmp = SharePath.of(*(area.components + listOf(TrustFormat.ROOT_DIR, "tmp")).toTypedArray())
@@ -154,7 +155,7 @@ class NasIntegrationSuiteTest {
   }
 
   @Test
-  fun t04_elencoAPagineConFileIdVeriEStabiliAllaRinomina() = runBlocking {
+  fun t04_elencoAPagineConFileIdVeriEStabiliAllaRinomina() = runBlockingBounded("t04_elencoAPagineConFileIdVeriEStabiliAllaRinomina", INTEGRATION_WAIT_SECONDS) {
     val dir = path("elenco")
     val files = 1_500
     val createStarted = System.nanoTime()
@@ -204,7 +205,7 @@ class NasIntegrationSuiteTest {
   }
 
   @Test
-  fun t05_lettureAIntervalliEReadAllAQuattroFlussi() = runBlocking {
+  fun t05_lettureAIntervalliEReadAllAQuattroFlussi() = runBlockingBounded("t05_lettureAIntervalliEReadAllAQuattroFlussi", INTEGRATION_WAIT_SECONDS) {
     val (written, writeMs) = bigFile()
     val reader = media.mediaReader
     val file = reader.open(share, BIG, Purpose.BACKGROUND).okOrNull()!!
@@ -237,7 +238,7 @@ class NasIntegrationSuiteTest {
   }
 
   @Test
-  fun t06_ilSorveglianteAProgressoNonUccideUnaLetturaLungaSulNasVero() = runBlocking {
+  fun t06_ilSorveglianteAProgressoNonUccideUnaLetturaLungaSulNasVero() = runBlockingBounded("t06_ilSorveglianteAProgressoNonUccideUnaLetturaLungaSulNasVero", INTEGRATION_WAIT_SECONDS) {
     val (written, _) = bigFile()
     // Una sessione a parte con la scadenza interattiva di 1 s: il totale e' molto di piu', ogni blocco ci sta (D3).
     val short = newManager(NasSessionConfig(interactiveOpTimeout = 1.seconds))
@@ -256,7 +257,7 @@ class NasIntegrationSuiteTest {
   }
 
   @Test
-  fun t07_copiaLatoServerNellaShareETraShare() = runBlocking {
+  fun t07_copiaLatoServerNellaShareETraShare() = runBlockingBounded("t07_copiaLatoServerNellaShareETraShare", INTEGRATION_WAIT_SECONDS) {
     val (written, _) = bigFile()
     val copy = media.serverCopy
     val started = System.nanoTime()
@@ -283,7 +284,7 @@ class NasIntegrationSuiteTest {
   }
 
   @Test
-  fun t08_laRecinzioneDelTelefonoRifiutaLeSharePubblicheSenzaRichieste() = runBlocking {
+  fun t08_laRecinzioneDelTelefonoRifiutaLeSharePubblicheSenzaRichieste() = runBlockingBounded("t08_laRecinzioneDelTelefonoRifiutaLeSharePubblicheSenzaRichieste", INTEGRATION_WAIT_SECONDS) {
     val before = transport.delegateCalls.get()
     for (public in listOf("Public", "NAS", "PUBLIC")) {
       assertThat(manager.withShare(public, Purpose.INTERACTIVE) { }.errorOrNull()).isEqualTo(NasError.PermissionDenied)
@@ -294,7 +295,7 @@ class NasIntegrationSuiteTest {
   }
 
   @Test
-  fun t09_ilSecondoAccountNonVedeLAreaPrivataDelPrimo() = runBlocking {
+  fun t09_ilSecondoAccountNonVedeLAreaPrivataDelPrimo() = runBlockingBounded("t09_ilSecondoAccountNonVedeLAreaPrivataDelPrimo", INTEGRATION_WAIT_SECONDS) {
     val user2 = credentials.user2
     val password2 = credentials.password2
     assumeTrue("user2/password2 assenti: prova fra account saltata", user2 != null && password2 != null)
@@ -313,7 +314,7 @@ class NasIntegrationSuiteTest {
 
   /** M9: UN solo tentativo con la password sbagliata, solo con il consenso scritto nel file (`m9.consent=yes`). */
   @Test
-  fun t10_passwordSbagliataUnSoloTentativo() = runBlocking {
+  fun t10_passwordSbagliataUnSoloTentativo() = runBlockingBounded("t10_passwordSbagliataUnSoloTentativo", INTEGRATION_WAIT_SECONDS) {
     assumeTrue("M9 senza consenso esplicito: saltato", credentials.wrongPasswordConsent)
     val isolated = AuthBreakerRegistry(InMemoryBreakerStore(), scope)
     val tester = SmbConnectionTester(gate, isolated, transport, clock)
@@ -386,7 +387,7 @@ class NasIntegrationSuiteTest {
       scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
       gate = FakeNasRouteGate().apply { allow(Via.HOME_LAN, TimedDirectBinding()) }
       val breakers = AuthBreakerRegistry(SHARED_STORE, scope)
-      val guid = credentials.guid ?: runBlocking {
+      val guid = credentials.guid ?: runBlockingBounded("il primo contatto col NAS", INTEGRATION_WAIT_SECONDS) {
         // Primo contatto come l'onboarding: GUID dalla NEGOTIATE, senza autenticare (passa comunque dal recinto).
         SmbConnectionTester(gate, breakers, transport, clock)
           .run(TestTarget(NasAddress(credentials.host), null, null, null), null, setOf(Stage.ROUTE, Stage.TCP, Stage.NEGOTIATE))
@@ -397,7 +398,7 @@ class NasIntegrationSuiteTest {
       // La copia lato server con i temporanei sotto mcg-it/<giro>/ (anche nella share di destinazione).
       media = TestAreaMedia(manager.mediaReader(), SmbServerSideCopy(manager, Purpose.BACKGROUND, SecureRandom(), guard.root), guard)
       // (7) La password si verifica UNA volta, con la sessione e il suo interruttore condiviso.
-      val check = runBlocking { manager.withShare(credentials.share, Purpose.INTERACTIVE) { } }
+      val check = runBlockingBounded("la verifica della sessione", INTEGRATION_WAIT_SECONDS) { manager.withShare(credentials.share, Purpose.INTERACTIVE) { } }
       if (check is NasResult.Err) throw AssertionError("la sessione di prova non parte: ${check.error} (nessun altro tentativo in questa suite)")
       verified = true
       // (5) I giri rimasti a meta' (di qualunque eta') li toglie la pulizia finale, con l'account giusto per ogni share.
@@ -410,7 +411,7 @@ class NasIntegrationSuiteTest {
       var second: SmbNasSessionManager? = null
       try {
         if (verified) {
-          runBlocking {
+          runBlockingBounded("la pulizia finale", INTEGRATION_WAIT_SECONDS) {
             // Ogni cartella mcg-it/<giro>/ si cancella con l'account che ha accesso alla share: `test` per la sua,
             // `test2` per la sua privata, e a turno entrambi in `test-comune` (le voci negate all'uno le toglie l'altro).
             val accounts = arrayListOf(TestAreaCleanup.Account(credentials.user, manager))
@@ -433,7 +434,7 @@ class NasIntegrationSuiteTest {
           }
         }
       } finally {
-        runBlocking {
+        runBlockingBounded("la chiusura delle sessioni", INTEGRATION_WAIT_SECONDS) {
           second?.invalidate(InvalidateReason.USER_REQUEST)
           manager.invalidate(InvalidateReason.USER_REQUEST)
         }

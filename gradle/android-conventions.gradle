@@ -46,6 +46,11 @@ android {
     unitTests {
       // Robolectric e Roborazzi leggono risorse e manifest del modulo.
       includeAndroidResources = true
+      // Un test che resta appeso (un'attesa senza tetto sotto carico) non deve bloccare check.ps1 per ore:
+      // dopo 20 minuti il task fallisce e dice quale modulo era. Il 14/10 un test di core-nas e' rimasto fermo 67 minuti.
+      all {
+        timeout = java.time.Duration.ofMinutes(20)
+      }
     }
   }
 

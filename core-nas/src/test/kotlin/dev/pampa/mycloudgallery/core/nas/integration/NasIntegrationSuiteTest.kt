@@ -31,10 +31,6 @@ import dev.pampa.mycloudgallery.core.nas.session.MonotonicClock
 import dev.pampa.mycloudgallery.core.nas.session.NasSessionConfig
 import dev.pampa.mycloudgallery.core.nas.session.OpContext
 import dev.pampa.mycloudgallery.core.nas.session.SmbNasSessionManager
-import dev.pampa.mycloudgallery.core.nas.smb.DirAccess
-import dev.pampa.mycloudgallery.core.nas.smb.NtStatus
-import dev.pampa.mycloudgallery.core.nas.smb.SmbShare
-import dev.pampa.mycloudgallery.core.nas.smb.SmbStatusException
 import dev.pampa.mycloudgallery.core.nas.smb.SmbjTransport
 import dev.pampa.mycloudgallery.core.nas.testing.InMemoryBreakerStore
 import dev.pampa.mycloudgallery.core.nas.tools.SmbConnectionTester
@@ -74,8 +70,12 @@ import org.junit.runners.MethodSorters
  *
  * **Dietro la guardia** ([TestAreaGuard], D30): configurazione validata e autotest **prima** di qualunque socket; ogni
  * richiesta SMB passa dal trasporto recintato ([TestAreaTransport]); tutto avviene sotto `mcg-it/<giro>/` delle share
- * di prova, compresi i temporanei e l'indice di prova; alla fine il giro si cancella (e i giri rimasti a meta' piu'
- * vecchi di 24 ore di ora del NAS). La sessione ha anche la recinzione del telefono (`ShareFence`, D33).
+ * di prova, compresi i temporanei e l'indice di prova. Alla fine ([TestAreaCleanup]) ogni cartella `mcg-it/<giro>/`
+ * delle share di prova, del giro e di quelli rimasti a meta' (qualunque eta'), si cancella **con l'account che ci ha
+ * accesso** (`test`, e `test2` per la sua share privata e per cio' che ha creato in `test-comune`); poi, con entrambi
+ * gli account, sotto `mcg-it/` non deve restare niente (altrimenti la suite fallisce) e `mcg-it` vuota si toglie. La
+ * suite presuppone di essere l'unica a girare sulle share di prova. La sessione ha anche la recinzione del telefono
+ * (`ShareFence`, D33).
  *
  * Nessun tentativo con una password sbagliata senza `m9.consent=yes`.
  */
@@ -400,36 +400,43 @@ class NasIntegrationSuiteTest {
       val check = runBlocking { manager.withShare(credentials.share, Purpose.INTERACTIVE) { } }
       if (check is NasResult.Err) throw AssertionError("la sessione di prova non parte: ${check.error} (nessun altro tentativo in questa suite)")
       verified = true
-      // (5) I giri rimasti a meta' piu' vecchi di 24 ore (ora del NAS).
-      runBlocking { for (shareName in guard.shares) purgeStaleRuns(shareName) }
+      // (5) I giri rimasti a meta' (di qualunque eta') li toglie la pulizia finale, con l'account giusto per ogni share.
     }
 
     @AfterClass
     @JvmStatic
     fun tearDownSuite() {
       if (!::manager.isInitialized) return
+      var second: SmbNasSessionManager? = null
       try {
         if (verified) {
           runBlocking {
-            for (shareName in guard.shares) {
-              val removed = deleteRun(shareName, RUN_ID)
-              if (removed) report += "pulizia: giro cancellato da una share di prova"
+            // Ogni cartella mcg-it/<giro>/ si cancella con l'account che ha accesso alla share: `test` per la sua,
+            // `test2` per la sua privata, e a turno entrambi in `test-comune` (le voci negate all'uno le toglie l'altro).
+            val accounts = arrayListOf(TestAreaCleanup.Account(credentials.user, manager))
+            val user2 = credentials.user2
+            val password2 = credentials.password2
+            if (user2 != null && password2 != null) {
+              val other = newManager(NasSessionConfig(), user = user2, password = password2)
+              second = other
+              accounts += TestAreaCleanup.Account(user2, other)
             }
-            // Dopo la pulizia nella cartella del giro non resta niente; mcg-it resta solo se c'era gia' prima.
-            for (shareName in guard.shares) {
-              val exists = manager.mediaReader().stat(shareName, guard.root, Purpose.BACKGROUND).okOrNull()
-              check(exists == null) { "il giro non e' stato cancellato del tutto" }
-              val parent = manager.mediaReader().stat(shareName, SharePath.of(TestAreaGuard.ROOT), Purpose.BACKGROUND).okOrNull()
-              report += "pulizia: mcg-it " + when {
-                parent == null -> "tolta (creata da questo giro)"
-                guard.createdRoot -> "rimasta (non vuota: un altro giro in corso?)"
-                else -> "rimasta (c'era gia' prima del giro)"
-              }
+            val cleanup = TestAreaCleanup(guard, accounts, strict = accounts.size > 1) { report += it }
+            // Dopo la pulizia, con ogni account, sotto mcg-it non resta niente (e mcg-it vuota si toglie): un residuo fa fallire.
+            val problems = cleanup.sweep(includeCurrent = true) + cleanup.verifyAndRemoveRoot()
+            report += if (problems.isEmpty()) {
+              "pulizia: sotto mcg-it delle ${guard.shares.size} share di prova non resta niente (verificato con ${accounts.size} account)"
+            } else {
+              "pulizia: RESIDUI ${problems.size}"
             }
+            if (problems.isNotEmpty()) throw AssertionError("pulizia incompleta sotto mcg-it: " + problems.joinToString("; "))
           }
         }
       } finally {
-        runBlocking { manager.invalidate(InvalidateReason.USER_REQUEST) }
+        runBlocking {
+          second?.invalidate(InvalidateReason.USER_REQUEST)
+          manager.invalidate(InvalidateReason.USER_REQUEST)
+        }
         scope.cancel()
         val text = (listOf("--- giro ${RUN_ID.take(15)}") + report).joinToString("\n")
         println("=== Integrazione NAS ===\n$text")
@@ -484,75 +491,5 @@ class NasIntegrationSuiteTest {
       val ms = (System.nanoTime() - started) / 1_000_000.0
       return (Sha256(digest.digest().joinToString("") { "%02x".format(Locale.ROOT, it) }) to ms).also { bigWritten = it }
     }
-
-    /** Cancella `mcg-it/<run>` (tutto cio' che contiene) dalla share: solo attraverso la guardia. */
-    private suspend fun deleteRun(shareName: String, run: String): Boolean {
-      val result = manager.runOp(shareName, Purpose.BACKGROUND, idempotent = true, touchesDisk = true) { ctx ->
-        val runDir = "${TestAreaGuard.ROOT}\\$run"
-        val present = try {
-          ctx.share.stat(runDir)
-          true
-        } catch (e: SmbStatusException) {
-          if (e.status != NtStatus.OBJECT_NAME_NOT_FOUND && e.status != NtStatus.OBJECT_PATH_NOT_FOUND) throw e
-          false
-        }
-        if (present) deleteTree(ctx.share, runDir)
-        // La cartella mcg-it si toglie solo se l'ha creata questo giro e se e' vuota.
-        if (guard.createdRoot) {
-          try {
-            ctx.share.removeEmptyDirectory(TestAreaGuard.ROOT)
-          } catch (_: SmbStatusException) {
-            // non vuota (un altro giro) o gia' tolta: resta
-          }
-        }
-        present
-      }
-      return result.okOrNull() ?: throw AssertionError("pulizia fallita: ${result.errorOrNull()}")
-    }
-
-    private fun deleteTree(share: SmbShare, dir: String) {
-      val children = share.openDirectory(dir, DirAccess.LIST).use { directory ->
-        val list = ArrayList<Pair<String, Boolean>>()
-        val iterator = directory.entries()
-        while (iterator.hasNext()) iterator.next().let { list += it.name to it.isDirectory }
-        list
-      }
-      for ((name, isDirectory) in children) {
-        val child = "$dir\\$name"
-        if (isDirectory) deleteTree(share, child) else share.deleteFile(child)
-      }
-      share.removeEmptyDirectory(dir)
-    }
-
-    /** I giri di altre esecuzioni rimasti a meta' e piu' vecchi di 24 ore di ora del NAS (§5.4, punto 5). */
-    private suspend fun purgeStaleRuns(shareName: String) {
-      val nasNow = manager.nasClock.nowMillisOrNull() ?: return
-      val stale = ArrayList<String>()
-      val listed = manager.runOp(shareName, Purpose.BACKGROUND, idempotent = true, touchesDisk = true) { ctx ->
-        try {
-          ctx.share.openDirectory(TestAreaGuard.ROOT, DirAccess.LIST).use { directory ->
-            val iterator = directory.entries()
-            while (iterator.hasNext()) {
-              val entry = iterator.next()
-              if (entry.isDirectory && TestAreaGuard.RUN_ID.matches(entry.name) && entry.name != RUN_ID &&
-                nasNow - entry.lastWriteMs >= STALE_MS
-              ) {
-                stale += entry.name
-              }
-            }
-          }
-        } catch (e: SmbStatusException) {
-          if (e.status != NtStatus.OBJECT_NAME_NOT_FOUND && e.status != NtStatus.OBJECT_PATH_NOT_FOUND) throw e
-        }
-      }
-      if (listed is NasResult.Err) return
-      for (name in stale) {
-        guard.approveStale(name)
-        deleteRun(shareName, name)
-        report += "pulizia: tolto un giro vecchio rimasto a meta'"
-      }
-    }
-
-    private const val STALE_MS = 24L * 60 * 60 * 1000
   }
 }

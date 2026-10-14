@@ -96,6 +96,28 @@ class TestAreaGuardTest {
   }
 
   @Test
+  fun mcgItVuotaSiTogliePerEsplicitoPermessoESoloQuella() {
+    val guard = TestAreaGuard.of(credentials(), run)
+    // Di base solo se l'ha creata questo giro: una mcg-it rimasta da un giro interrotto non si tocca.
+    assertThrows(TestAreaViolation::class.java) { guard.checkSmb("test", "mcg-it", SmbAccess.RMDIR) }
+    guard.allowRootRemoval()
+    guard.checkSmb("test", "mcg-it", SmbAccess.RMDIR)
+    // Il permesso e' solo la rimozione (che il NAS rifiuta se non e' vuota): su mcg-it nient'altro, e nient'altro altrove.
+    for (op in listOf(SmbAccess.DELETE, SmbAccess.CREATE, SmbAccess.OPEN_READ, SmbAccess.ADD_FILE, SmbAccess.RENAME)) {
+      assertThrows(op.name, TestAreaViolation::class.java) { guard.checkSmb("test", "mcg-it", op) }
+    }
+    assertThrows(TestAreaViolation::class.java) { guard.checkSmb("test", "mcg-it\\20261001-080000-ffffffff", SmbAccess.RMDIR) }
+    assertThrows(TestAreaViolation::class.java) { guard.checkSmb("test", "mcg-it\\altro", SmbAccess.RMDIR) }
+    assertThrows(TestAreaViolation::class.java) { guard.checkSmb("test", "Foto", SmbAccess.RMDIR) }
+    assertThrows(TestAreaViolation::class.java) { guard.checkSmb("Public", "mcg-it", SmbAccess.RMDIR) }
+    assertThrows(TestAreaViolation::class.java) { guard.checkSmb("NAS", "mcg-it", SmbAccess.RMDIR) }
+    // Una guardia nuova ricomincia senza il permesso, e l'autotest passa lo stesso.
+    val fresh = TestAreaGuard.of(credentials(), run)
+    assertThrows(TestAreaViolation::class.java) { fresh.checkSmb("test", "mcg-it", SmbAccess.RMDIR) }
+    assertThat(TestAreaSelfTest.run(fresh).failures).isEmpty()
+  }
+
+  @Test
   fun ilTrasportoRecintatoLasciaPassareSoloLAreaEVedeAncheITemporanei() = runTest {
     val backend = InMemorySmbBackend().apply {
       addUser("test", GOOD_PASSWORD)

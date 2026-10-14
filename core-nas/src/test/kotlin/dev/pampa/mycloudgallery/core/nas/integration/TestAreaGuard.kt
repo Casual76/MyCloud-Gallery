@@ -60,6 +60,9 @@ internal class TestAreaGuard private constructor(
   /** La cartella `mcg-it` l'ha creata questo giro (allora, se vuota, la toglie anche). */
   @Volatile var createdRoot: Boolean = false
 
+  /** La pulizia finale ha il permesso di togliere `mcg-it` se e' vuota anche se c'era gia' ([allowRootRemoval]). */
+  @Volatile private var rootRemovable: Boolean = false
+
   fun checkAccount(user: String) {
     if (fold(user) in FORBIDDEN_ACCOUNTS || user.lowercase(Locale.ROOT) !in accounts) throw TestAreaViolation("account non di prova")
   }
@@ -91,8 +94,8 @@ internal class TestAreaGuard private constructor(
 
   /**
    * Un percorso del trasporto (`\`). Ammessi: tutto sotto `mcg-it/<giro>` e la cartella stessa; `mcg-it` solo per
-   * crearla, elencarla (pulizia dei giri vecchi), guardarla o toglierla se vuota e creata da noi; sotto un giro vecchio
-   * approvato ([approveStale]) solo elenco, stato e cancellazione.
+   * crearla, elencarla (pulizia dei giri vecchi), guardarla o toglierla se vuota e creata da noi (o dopo
+   * [allowRootRemoval]); sotto un giro vecchio approvato ([approveStale]) solo elenco, stato e cancellazione.
    */
   fun checkSmb(share: String, raw: String, op: SmbAccess) {
     checkShare(share)
@@ -100,12 +103,22 @@ internal class TestAreaGuard private constructor(
     val ok = when {
       inRun(parts, runId) -> true
       parts.size == 1 && same(parts[0], ROOT) ->
-        op == SmbAccess.MKDIR || op == SmbAccess.LIST || op == SmbAccess.STAT || (op == SmbAccess.RMDIR && createdRoot)
+        op == SmbAccess.MKDIR || op == SmbAccess.LIST || op == SmbAccess.STAT ||
+          (op == SmbAccess.RMDIR && (createdRoot || rootRemovable))
       parts.size >= 2 && same(parts[0], ROOT) && parts[1].lowercase(Locale.ROOT) in staleRuns ->
         op == SmbAccess.LIST || op == SmbAccess.STAT || op == SmbAccess.DELETE || op == SmbAccess.RMDIR
       else -> false
     }
     if (!ok) throw TestAreaViolation("percorso fuori dall'area di prova ($op)")
+  }
+
+  /**
+   * Da qui in poi la pulizia finale puo' togliere `mcg-it` (solo `RMDIR`, e solo se vuota: il NAS rifiuta altrimenti)
+   * anche se l'ha creata un giro precedente rimasto a meta'. Non allarga nient'altro: su `mcg-it` restano vietati
+   * cancellazione di file, creazione, lettura e rinomina.
+   */
+  fun allowRootRemoval() {
+    rootRemovable = true
   }
 
   /** Un giro vecchio da pulire: solo un nome nel formato dei giri, mai il giro corrente. */

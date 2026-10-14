@@ -8,10 +8,12 @@ import dev.pampa.mycloudgallery.core.trust.crypto.EcdsaDer
 import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKey
 import dev.pampa.mycloudgallery.core.trust.crypto.KeyProtection
 import dev.pampa.mycloudgallery.core.trust.crypto.TrustIds
+import dev.pampa.mycloudgallery.core.trust.data.ClassedSegment
 import dev.pampa.mycloudgallery.core.trust.data.DeviceHead
 import dev.pampa.mycloudgallery.core.trust.data.HeadKind
 import dev.pampa.mycloudgallery.core.trust.data.HeadLocation
 import dev.pampa.mycloudgallery.core.trust.data.HeadVerifier
+import dev.pampa.mycloudgallery.core.trust.data.SegmentClass
 import dev.pampa.mycloudgallery.core.trust.data.Segments
 import dev.pampa.mycloudgallery.core.trust.nas.NasClock
 import dev.pampa.mycloudgallery.core.trust.registry.FamilyAuthority
@@ -85,7 +87,7 @@ class KeystoreDeviceTest {
     // Una testa dell'indice firmata dal Keystore e verificata con JCA puro.
     val (_, ref) = Segments.wrap(ByteArray(64) { it.toByte() })
     val deviceId = TrustIds.deviceIdOf(device.publicKey)
-    val head = DeviceHead(familyId, deviceId, "Public", HeadKind.INDEX, 1, 1, clock.nowMillis(), listOf(ref)).sign(device)
+    val head = DeviceHead(familyId, deviceId, "Public", HeadKind.INDEX, 1, 1, clock.nowMillis(), listOf(ClassedSegment(SegmentClass.META, ref))).sign(device)
     val accepted = HeadVerifier.accept(head, registry, HeadLocation("Public", deviceId, HeadKind.INDEX, 1), null, "admin")
     assertNotNull(accepted.acceptedOrNull())
 

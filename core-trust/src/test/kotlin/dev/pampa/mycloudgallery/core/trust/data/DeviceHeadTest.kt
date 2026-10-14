@@ -28,7 +28,7 @@ class DeviceHeadTest {
     share: String = "Public",
     kind: HeadKind = HeadKind.INDEX,
     registryVersion: Long = family.state.registry.version,
-    segments: List<SegmentRef> = listOf(segment.second),
+    segments: List<ClassedSegment> = listOf(ClassedSegment(if (kind == HeadKind.PERSONAL) SegmentClass.PERSONAL else SegmentClass.META, segment.second)),
   ) = DeviceHead(family.familyId, signer.deviceId, share, kind, version, registryVersion, family.clock.nowMillis(), segments).sign(signer)
 
   private fun location(signer: Signer = tablet, version: Long = 1, share: String = "Public", kind: HeadKind = HeadKind.INDEX) =
@@ -41,8 +41,9 @@ class DeviceHeadTest {
   fun testaDiUnDispositivoApprovatoAccettata_eSegmentoVerificato() {
     val accepted = accept(head()).acceptedOrNull()!!
 
-    assertThat(accepted.head.segments).containsExactly(segment.second)
-    assertThat(Segments.unwrap(segment.first, accepted.head.segments[0]).acceptedOrNull()).isEqualTo("contenuto del segmento".toByteArray())
+    assertThat(accepted.head.refs).containsExactly(segment.second)
+    assertThat(accepted.head.segments.single().cls).isEqualTo(SegmentClass.META)
+    assertThat(Segments.unwrap(segment.first, accepted.head.refs[0]).acceptedOrNull()).isEqualTo("contenuto del segmento".toByteArray())
     assertThat(accepted.registryBehind).isFalse()
   }
 
@@ -172,12 +173,12 @@ class DeviceHeadTest {
       "version" to 1.json(),
       "registryVersion" to 1.json(),
       "createdAt" to family.clock.nowMillis().json(),
-      "segments" to listOf(high, low).map { jsonObject("hash" to it.hash.json(), "size" to it.size.json()) }.json(),
+      "segments" to listOf(high, low).map { jsonObject("class" to "meta".json(), "hash" to it.hash.json(), "size" to it.size.json()) }.json(),
     )
     val unordered = Envelope.seal(DocType.DEVICE_HEAD, payload, tablet)
     val hugeSegment = Envelope.seal(
       DocType.DEVICE_HEAD,
-      jsonObject(*payload.members.map { it.key to it.value }.toTypedArray(), "segments" to listOf(jsonObject("hash" to a.hash.json(), "size" to (1L shl 40).json())).json()),
+      jsonObject(*payload.members.map { it.key to it.value }.toTypedArray(), "segments" to listOf(jsonObject("class" to "meta".json(), "hash" to a.hash.json(), "size" to (1L shl 40).json())).json()),
       tablet,
     )
 

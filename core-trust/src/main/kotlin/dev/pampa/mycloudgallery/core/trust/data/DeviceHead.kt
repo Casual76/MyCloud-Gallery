@@ -36,8 +36,8 @@ data class SegmentRef(val hash: String, val size: Long) {
 }
 
 /**
- * La testa dei dati di un dispositivo in una share (`docs/formato-nas.md` §5.4): un file firmato con un
- * numero di versione che cresce, che elenca i segmenti validi con impronta e dimensione. I segmenti non
+ * La testa dei dati di un dispositivo in una share (`docs/formato-nas.md` §5.5): un file firmato con un
+ * numero di versione che cresce, che elenca i segmenti validi con classe, impronta e dimensione. I segmenti non
  * sono firmati uno per uno: li autentica l'impronta nella testa firmata.
  */
 data class DeviceHead(
@@ -49,16 +49,25 @@ data class DeviceHead(
   /** La versione del registro che il dispositivo conosceva: chi legge scopre se il suo e' indietro. */
   val registryVersion: Long,
   val createdAt: Long,
-  /** In ordine crescente di impronta, senza doppioni. */
-  val segments: List<SegmentRef>,
+  /**
+   * In ordine crescente di impronta, senza doppioni, ognuno con la sua classe (Fase 4, M1: `{class, hash, size}`). Una
+   * testa `index` elenca solo le classi dell'indice ([SegmentClass.INDEX_CLASSES]), una testa `personal` solo
+   * [SegmentClass.PERSONAL].
+   */
+  val segments: List<ClassedSegment>,
 ) {
   init {
     ensure(TrustIds.isValid(familyId) && TrustIds.isValid(deviceId), RejectReason.INVALID_FIELD, "testa: id")
     ShareNames.check(share)
     ensure(version in 1..TrustLimits.MAX_VERSION && registryVersion in 1..TrustLimits.MAX_VERSION, RejectReason.INVALID_FIELD, "testa: versione")
     ensure(segments.size <= TrustLimits.MAX_HEAD_SEGMENTS, RejectReason.TOO_LARGE, "testa: troppi segmenti")
-    ensure(segments.zipWithNext().all { (a, b) -> a.hash < b.hash }, RejectReason.INVALID_FIELD, "testa: segmenti non ordinati o ripetuti")
+    ensure(segments.zipWithNext().all { (a, b) -> a.ref.hash < b.ref.hash }, RejectReason.INVALID_FIELD, "testa: segmenti non ordinati o ripetuti")
+    val allowed = if (kind == HeadKind.INDEX) SegmentClass.INDEX_CLASSES else setOf(SegmentClass.PERSONAL)
+    ensure(segments.all { it.cls in allowed }, RejectReason.INVALID_FIELD, "testa: classe di segmento fuori posto")
   }
+
+  /** I soli riferimenti (impronta e dimensione), nell'ordine della testa. */
+  val refs: List<SegmentRef> get() = segments.map { it.ref }
 
   fun sign(signer: Signer): ByteArray {
     require(TrustIds.deviceIdOf(signer.publicKey) == deviceId) { "La testa va firmata dal suo dispositivo." }
@@ -70,7 +79,9 @@ data class DeviceHead(
       "version" to version.json(),
       "registryVersion" to registryVersion.json(),
       "createdAt" to createdAt.json(),
-      "segments" to segments.map { jsonObject("hash" to it.hash.json(), "size" to it.size.json()) }.json(),
+      "segments" to segments.map {
+        jsonObject("class" to it.cls.wire.json(), "hash" to it.ref.hash.json(), "size" to it.ref.size.json())
+      }.json(),
     )
     return Envelope.seal(DocType.DEVICE_HEAD, payload, signer)
   }
@@ -121,7 +132,12 @@ object HeadVerifier {
         registryVersion = f.long("registryVersion", 1..TrustLimits.MAX_VERSION),
         createdAt = f.time("createdAt"),
         segments = f.array("segments", TrustLimits.MAX_HEAD_SEGMENTS).map { item ->
-          Fields.read(item) { s -> SegmentRef(s.string("hash", Hashes.NAME_LENGTH), s.long("size", 1..TrustLimits.MAX_SEGMENT_BYTES.toLong())) }
+          Fields.read(item) { s ->
+            // M1: una classe sconosciuta o riservata (`vec`, `ocr`, `faces`, E-I4) rifiuta la testa intera.
+            val cls = SegmentClass.fromWire(s.string("class", TrustLimits.MAX_ENUM_CHARS))
+              ?: violation(RejectReason.INVALID_FIELD, "testa: classe di segmento sconosciuta o riservata")
+            ClassedSegment(cls, SegmentRef(s.string("hash", Hashes.NAME_LENGTH), s.long("size", 1..TrustLimits.MAX_SEGMENT_BYTES.toLong())))
+          }
         },
       )
     }

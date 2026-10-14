@@ -38,8 +38,11 @@ internal sealed interface PageNoticeKind {
 
   data object NotAllowedHere : PageNoticeKind
 
-  /** Servono i dati mobili: [sizeBytes] e' il peso dell'originale, se noto (E-V2). */
-  data class MobileData(val sizeBytes: Long?) : PageNoticeKind
+  /**
+   * Servono i dati mobili: [sizeBytes] e' il peso dell'originale, se noto (E-V2). [what] dice cosa si sta per leggere: la
+   * frase cambia ("Questo video pesa...", "Questo file pesa...").
+   */
+  data class MobileData(val sizeBytes: Long?, val what: MobileDataFor = MobileDataFor.ORIGINAL) : PageNoticeKind
 
   data object VolumeUnmounted : PageNoticeKind
 
@@ -47,26 +50,61 @@ internal sealed interface PageNoticeKind {
 
   data class VideoProblem(val problem: PlaybackProblem) : PageNoticeKind
 
+  /** Il video del NAS sta partendo: finche' non c'e' il primo fotogramma (Fase 4, "Loading fino al primo fotogramma"). */
+  data object VideoLoading : PageNoticeKind
+
+  /** "Scarica sul telefono" in corso o in coda ([queued]); [progress] da 0 a 1 se noto. */
+  data class Downloading(val progress: Float?, val queued: Boolean = false) : PageNoticeKind
+
   companion object {
     /**
      * Cosa dire per questa pagina, o null se non c'e' niente da dire. Un errore del video vince su tutto: la pagina e'
      * un video che non parte, non un'immagine che manca.
+     *
+     * @param isVideo la pagina e' un video: un'immagine che non si apre non e' un problema suo (il lettore decide).
+     * @param original l'originale del NAS chiesto con lo zoom (Fase 4), o per un video il permesso di partire (dati
+     *   mobili da confermare): se c'e' qualcosa da dire.
      */
-    fun of(image: PageImage?, videoProblem: PlaybackProblem?): PageNoticeKind? = when {
+    fun of(
+      image: PageImage?,
+      videoProblem: PlaybackProblem?,
+      isVideo: Boolean = false,
+      original: OriginalProgress? = null,
+    ): PageNoticeKind? = when {
       videoProblem != null -> VideoProblem(videoProblem)
-      image == null -> null
+      // Un video che non puo' partire (dati mobili da confermare, NAS non raggiungibile) lo dice prima di ogni immagine.
+      isVideo && original != null -> ofOriginal(original, isVideo = true)
+      image == null -> ofOriginal(original, isVideo)
       image.unavailable != null -> when (image.unavailable.reason) {
         UnavailableReason.NAS_UNREACHABLE -> NasUnreachable
         UnavailableReason.NOT_ALLOWED_HERE -> NotAllowedHere
-        UnavailableReason.NEEDS_MOBILE_DATA_CONFIRMATION -> MobileData(image.unavailable.sizeBytes)
+        UnavailableReason.NEEDS_MOBILE_DATA_CONFIRMATION ->
+          MobileData(image.unavailable.sizeBytes, if (isVideo) MobileDataFor.VIDEO else MobileDataFor.ORIGINAL)
         UnavailableReason.VOLUME_UNMOUNTED -> VolumeUnmounted
       }
-      image.failed != null -> ImageFailed(image.failed)
+      image.failed != null -> if (isVideo) null else ImageFailed(image.failed)
       image.sharp == null && image.loading != null -> Loading(image.loading.progress)
-      else -> null
+      else -> ofOriginal(original, isVideo)
+    }
+
+    /** L'originale chiesto con lo zoom, mentre la nitida (l'HQ) e' gia' sullo schermo. */
+    private fun ofOriginal(original: OriginalProgress?, isVideo: Boolean): PageNoticeKind? = when (original) {
+      null -> null
+      is OriginalProgress.Reading -> Loading(original.progress)
+      is OriginalProgress.Blocked -> when (original.reason) {
+        UnavailableReason.NAS_UNREACHABLE -> NasUnreachable
+        UnavailableReason.NOT_ALLOWED_HERE -> NotAllowedHere
+        UnavailableReason.NEEDS_MOBILE_DATA_CONFIRMATION ->
+          MobileData(original.sizeBytes, if (isVideo) MobileDataFor.VIDEO else MobileDataFor.ORIGINAL)
+        UnavailableReason.VOLUME_UNMOUNTED -> VolumeUnmounted
+      }
+      is OriginalProgress.Failed -> ImageFailed(original.code)
     }
   }
 }
+
+/** Cosa si sta per leggere con i dati mobili: cambia la frase della nota. */
+internal enum class MobileDataFor { ORIGINAL, VIDEO, DOWNLOAD }
 
 /** La nota di vetro in basso sulla foto per [kind]. */
 @Composable
@@ -75,6 +113,8 @@ internal fun BoxScope.PageNotice(
   backdrop: GlassBackdropState,
   onConfirmMobileData: (() -> Unit)?,
   modifier: Modifier = Modifier,
+  onRetry: (() -> Unit)? = null,
+  onCancelDownload: (() -> Unit)? = null,
 ) {
   val context = LocalContext.current
   val icon: ImageVector
@@ -94,6 +134,10 @@ internal fun BoxScope.PageNotice(
       icon = Icons.Rounded.CloudOff
       title = stringResource(R.string.viewer_notice_nas_title)
       detail = stringResource(R.string.viewer_notice_nas_detail)
+      if (onRetry != null) {
+        actionLabel = stringResource(R.string.viewer_notice_retry)
+        onAction = onRetry
+      }
     }
     PageNoticeKind.NotAllowedHere -> {
       icon = Icons.Rounded.WifiOff
@@ -104,12 +148,25 @@ internal fun BoxScope.PageNotice(
       icon = Icons.Rounded.NetworkCell
       title = stringResource(R.string.viewer_notice_mobile_title)
       detail = if (kind.sizeBytes != null) {
-        stringResource(R.string.viewer_notice_mobile_detail_size, Formatter.formatFileSize(context, kind.sizeBytes))
+        stringResource(
+          when (kind.what) {
+            MobileDataFor.ORIGINAL -> R.string.viewer_notice_mobile_detail_size
+            MobileDataFor.VIDEO -> R.string.viewer_notice_mobile_video_detail_size
+            MobileDataFor.DOWNLOAD -> R.string.viewer_notice_mobile_download_detail_size
+          },
+          Formatter.formatFileSize(context, kind.sizeBytes),
+        )
       } else {
         stringResource(R.string.viewer_notice_mobile_detail)
       }
       if (onConfirmMobileData != null) {
-        actionLabel = stringResource(R.string.viewer_notice_mobile_action)
+        actionLabel = stringResource(
+          when (kind.what) {
+            MobileDataFor.ORIGINAL -> R.string.viewer_notice_mobile_action
+            MobileDataFor.VIDEO -> R.string.viewer_notice_mobile_video_action
+            MobileDataFor.DOWNLOAD -> R.string.viewer_notice_mobile_download_action
+          },
+        )
         onAction = onConfirmMobileData
       }
     }
@@ -127,17 +184,46 @@ internal fun BoxScope.PageNotice(
           ImageFailure.OUT_OF_MEMORY -> R.string.viewer_notice_failed_memory
           ImageFailure.UNSUPPORTED_FORMAT -> R.string.viewer_notice_failed_format
           ImageFailure.NOT_FOUND -> R.string.viewer_notice_failed_missing
+          ImageFailure.STORAGE_FULL -> R.string.viewer_notice_failed_storage
         },
       )
     }
     is PageNoticeKind.VideoProblem -> {
       icon = Icons.Rounded.VideocamOff
       title = stringResource(
-        if (kind.problem == PlaybackProblem.UNSUPPORTED) R.string.viewer_notice_video_unsupported_title else R.string.viewer_notice_video_failed_title,
+        when (kind.problem) {
+          PlaybackProblem.UNSUPPORTED -> R.string.viewer_notice_video_unsupported_title
+          PlaybackProblem.NAS_UNREACHABLE -> R.string.viewer_notice_video_nas_title
+          PlaybackProblem.FAILED -> R.string.viewer_notice_video_failed_title
+        },
       )
       detail = stringResource(
-        if (kind.problem == PlaybackProblem.UNSUPPORTED) R.string.viewer_notice_video_unsupported_detail else R.string.viewer_notice_video_failed_detail,
+        when (kind.problem) {
+          PlaybackProblem.UNSUPPORTED -> R.string.viewer_notice_video_unsupported_detail
+          PlaybackProblem.NAS_UNREACHABLE -> R.string.viewer_notice_video_nas_detail
+          PlaybackProblem.FAILED -> R.string.viewer_notice_video_failed_detail
+        },
       )
+      if (kind.problem == PlaybackProblem.NAS_UNREACHABLE && onRetry != null) {
+        actionLabel = stringResource(R.string.viewer_notice_retry)
+        onAction = onRetry
+      }
+    }
+    PageNoticeKind.VideoLoading -> {
+      icon = Icons.Rounded.CloudDownload
+      title = stringResource(R.string.viewer_notice_video_loading_title)
+      detail = stringResource(R.string.viewer_notice_video_loading_detail)
+      progress = GalleryNoticeProgress.Indeterminate
+    }
+    is PageNoticeKind.Downloading -> {
+      icon = Icons.Rounded.CloudDownload
+      title = stringResource(R.string.viewer_notice_download_title)
+      detail = stringResource(if (kind.queued) R.string.viewer_notice_download_queued else R.string.viewer_notice_download_detail)
+      progress = kind.progress?.let { GalleryNoticeProgress.Determinate(it) } ?: GalleryNoticeProgress.Indeterminate
+      if (onCancelDownload != null) {
+        actionLabel = stringResource(R.string.viewer_notice_download_cancel)
+        onAction = onCancelDownload
+      }
     }
   }
   GalleryViewerNotice(
@@ -157,8 +243,11 @@ internal fun BoxScope.PageNotice(
 internal fun MessageNotice(message: ViewerMessage, backdrop: GlassBackdropState, modifier: Modifier = Modifier) {
   GalleryViewerNotice(
     icon = when (message) {
-      ViewerMessage.Copied, ViewerMessage.Hidden, ViewerMessage.Unhidden -> Icons.Rounded.CheckCircle
-      ViewerMessage.ActionFailed, ViewerMessage.HideFailed, ViewerMessage.UnhideFailed, ViewerMessage.FavoriteFailed -> Icons.Rounded.ReportProblem
+      ViewerMessage.Copied, ViewerMessage.Hidden, ViewerMessage.Unhidden, ViewerMessage.Downloaded -> Icons.Rounded.CheckCircle
+      ViewerMessage.ActionFailed, ViewerMessage.HideFailed, ViewerMessage.UnhideFailed, ViewerMessage.FavoriteFailed,
+      ViewerMessage.DownloadFailed, ViewerMessage.DownloadNasUnreachable, ViewerMessage.DownloadPhoneFull,
+      ViewerMessage.DownloadIntegrity,
+      -> Icons.Rounded.ReportProblem
       else -> Icons.Rounded.Info
     },
     title = stringResource(message.title),

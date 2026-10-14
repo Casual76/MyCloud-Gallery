@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import dev.pampa.mycloudgallery.core.common.coroutines.DispatcherProvider
 import dev.pampa.mycloudgallery.core.imaging.testing.FakePlaceholderCache
+import dev.pampa.mycloudgallery.core.imaging.viewer.OriginalFetcher
 import dev.pampa.mycloudgallery.core.imaging.testing.FakeThumbnailLoader
 import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
 import dev.pampa.mycloudgallery.core.library.contract.LocalMediaActions
@@ -15,10 +16,12 @@ import dev.pampa.mycloudgallery.core.metadata.testing.ByteArrayMediaBytes
 import dev.pampa.mycloudgallery.core.metadata.testing.FakeExifDetailsReader
 import dev.pampa.mycloudgallery.core.places.testing.FakePlaces
 import dev.pampa.mycloudgallery.feature.viewer.details.ViewerBytes
+import dev.pampa.mycloudgallery.feature.viewer.download.PhoneDownload
 import dev.pampa.mycloudgallery.feature.viewer.testing.FakeMediaDetailsSource
 import dev.pampa.mycloudgallery.feature.viewer.testing.FakeMotionVideoLocator
 import dev.pampa.mycloudgallery.feature.viewer.testing.FakeViewerPlayer
 import dev.pampa.mycloudgallery.feature.viewer.video.MotionVideoLocator
+import dev.pampa.mycloudgallery.feature.viewer.video.NasVideoSource
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import org.junit.Rule
@@ -79,6 +82,9 @@ abstract class ViewerTestBase {
     confirmMobileData: ((dev.pampa.mycloudgallery.core.model.MediaRef) -> Unit)? = null,
     imageSource: dev.pampa.mycloudgallery.core.imaging.contract.ViewerImageSource = images,
     animatedLoader: AnimatedDrawableLoader? = null,
+    originals: OriginalFetcher? = null,
+    nasVideo: NasVideoSource? = null,
+    download: PhoneDownload? = null,
   ): ViewerServices = ViewerServices(
     animated = animatedLoader,
     images = imageSource,
@@ -103,6 +109,9 @@ abstract class ViewerTestBase {
       player
     },
     onConfirmMobileData = confirmMobileData,
+    originals = originals,
+    nasVideo = nasVideo,
+    download = download,
     dispatchers = ImmediateDispatchers,
   )
 

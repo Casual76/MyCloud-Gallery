@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.feature.viewer.video
 import android.net.Uri
 import android.view.SurfaceView
 import androidx.compose.runtime.Immutable
+import dev.pampa.mycloudgallery.core.model.MediaRef
 import kotlinx.coroutines.flow.StateFlow
 
 // Il lettore video del viewer, dietro un'interfaccia (docs/fase3-progetto.md D7): la UI parla con [ViewerPlayer]; la
@@ -11,8 +12,9 @@ import kotlinx.coroutines.flow.StateFlow
 // la memoria su un telefono, e per sentire due colonne sonore.
 
 /**
- * Cosa riprodurre. Sempre **locale** (D24: niente rete, niente `DefaultDataSource`): un URI `content://` del
- * MediaStore, tutto o un intervallo di byte (la parte video di una motion photo).
+ * Cosa riprodurre. Mai una rete qualunque (D24: niente `DefaultDataSource`, che aprirebbe anche `https://`): un URI
+ * `content://` del MediaStore, tutto o un intervallo di byte (la parte video di una motion photo), oppure, dalla Fase 4, un
+ * video del NAS letto da `NasVideoDataSource` (D19) sopra i contratti di `core-nas`.
  */
 sealed interface PlaybackSource {
 
@@ -27,6 +29,15 @@ sealed interface PlaybackSource {
       require(start >= 0 && length > 0) { "Intervallo di byte non valido." }
     }
   }
+
+  /**
+   * Un video del NAS (Fase 4, D19), in streaming a intervalli. [uri] e' un'etichetta senza percorsi (`nasmedia://v/<id>.mp4`,
+   * l'estensione aiuta l'estrattore): i byte non si cercano a quell'indirizzo ma si leggono dal media [ref], risolto dal
+   * catalogo solo all'apertura. Nessun altro indirizzo si apre mai con questa sorgente.
+   */
+  data class Nas(val ref: MediaRef.Nas, override val uri: Uri) : PlaybackSource {
+    override fun toString(): String = "PlaybackSource.Nas"
+  }
 }
 
 /** Perche' il video non parte. */
@@ -36,6 +47,9 @@ enum class PlaybackProblem {
 
   /** Il file non si legge o e' rovinato. */
   FAILED,
+
+  /** Il NAS non risponde o la rete non e' ammessa (Fase 4, E-L4): il video riparte con "Riprova". */
+  NAS_UNREACHABLE,
 }
 
 /** Lo stato del lettore, tutto quello che la UI ha bisogno di disegnare. */

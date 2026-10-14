@@ -30,6 +30,9 @@ enum class ImageFailure {
   OUT_OF_MEMORY,
   UNSUPPORTED_FORMAT,
   NOT_FOUND,
+
+  /** Fase 4 (P8): il telefono non ha posto per il temporaneo dell'originale letto dal NAS. Aggiunta compatibile. */
+  STORAGE_FULL,
 }
 
 /**

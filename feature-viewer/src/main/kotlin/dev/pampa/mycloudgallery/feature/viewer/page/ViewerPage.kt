@@ -48,12 +48,15 @@ import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryOnPhoto
 import dev.pampa.mycloudgallery.core.imaging.contract.AnimatedSpec
+import dev.pampa.mycloudgallery.core.imaging.contract.ImageFailure
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbKey
 import dev.pampa.mycloudgallery.core.imaging.contract.ZoomSpec
+import dev.pampa.mycloudgallery.core.imaging.viewer.OriginalFetch
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.model.ThumbHash
+import dev.pampa.mycloudgallery.feature.viewer.OriginalProgress
 import dev.pampa.mycloudgallery.feature.viewer.PageImage
 import dev.pampa.mycloudgallery.feature.viewer.ViewerServices
 import dev.pampa.mycloudgallery.feature.viewer.ViewerState
@@ -62,6 +65,7 @@ import dev.pampa.mycloudgallery.feature.viewer.video.ViewerPlayback
 import dev.pampa.mycloudgallery.feature.viewer.video.ViewerPlayer
 import dev.pampa.mycloudgallery.feature.viewer.video.collectPlayerState
 import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import me.saket.telephoto.subsamplingimage.SubSamplingImage
@@ -113,8 +117,11 @@ internal fun ViewerPage(
 ) {
   val id = spec.id
   val image = state.images[id] ?: PageImage()
+  // Fase 4: "Riprova" e l'arrivo dell'originale del NAS rifanno il caricamento (la nitida dall'originale, HDR compreso).
+  val retry = state.retries[id] ?: 0
+  val originalReady = state.originalReady[id] ?: 0
 
-  LaunchedEffect(id, spec.ref, screen, loadActive) {
+  LaunchedEffect(id, spec.ref, screen, loadActive, retry, originalReady) {
     val ref = spec.ref
     if (ref == null || !loadActive || screen.width <= 0 || screen.height <= 0) return@LaunchedEffect
     state.loadGate.withPermit {
@@ -124,10 +131,15 @@ internal fun ViewerPage(
     }
   }
 
+  // Un media del NAS la cui nitida viene dall'HQ della replica: se l'utente ingrandisce si legge l'originale, con
+  // l'avanzamento nella nota (D19). Se e' gia' sul telefono (o la nitida viene gia' da lui) non si legge niente.
+  val originals = services.originals
+  val nasRef = spec.ref as? MediaRef.Nas
+  val wantsOriginal = originals != null && nasRef != null && isCurrent && image.sharp != null && spec.kind != MediaKind.VIDEO
   val peeked = remember(spec.thumbKey, services.thumbnails) { services.thumbnails.peek(spec.thumbKey) }
   val placeholder = remember(spec.thumbHash, services.placeholders) { spec.thumbHash?.let { services.placeholders.image(it) } }
   val best = image.best ?: peeked
-  val facts = rememberPageFacts(spec, services)
+  val facts = rememberPageFacts(spec, services, nasKey = if (nasRef != null) (if (image.sharp != null) 1 else 0) + 2 * originalReady else 0)
   val zoomSpec = facts?.zoom
   val animated = facts?.animated
 
@@ -143,6 +155,26 @@ internal fun ViewerPage(
     else -> spec.aspect
   }
   val zoom = rememberZoomableMediaState(contentSize, screen)
+
+  // Solo per un media del NAS con la nitida gia' arrivata: le pagine del telefono non pagano nemmeno questo effetto.
+  // La chiave non comprende `originalReady`: a originale arrivato l'effetto finisce, non si rilancia (se il file sparisse dal
+  // disco, un nuovo "Riprova" o un nuovo ingresso nella pagina lo chiedono di nuovo; mai un giro continuo di letture).
+  if (wantsOriginal && originals != null && nasRef != null) LaunchedEffect(nasRef, retry) {
+    if (withContext(services.dispatchers.io) { originals.localFile(nasRef) } != null) return@LaunchedEffect
+    snapshotFlow { zoom.isZoomed }.first { it }
+    originals.fetch(nasRef).collect { change ->
+      when (change) {
+        is OriginalFetch.Reading -> state.originals[id] = OriginalProgress.Reading(change.progress)
+        is OriginalFetch.Ready -> {
+          state.originals.remove(id)
+          state.originalReady[id] = (state.originalReady[id] ?: 0) + 1
+        }
+        is OriginalFetch.Blocked -> state.originals[id] = OriginalProgress.Blocked(change.reason, change.sizeBytes)
+        OriginalFetch.Missing -> state.originals[id] = OriginalProgress.Failed(ImageFailure.NOT_FOUND)
+        is OriginalFetch.Failed -> state.originals[id] = OriginalProgress.Failed(change.code)
+      }
+    }
+  }
 
   // Una pagina che smette di essere la corrente torna interamente nello schermo, senza che si veda.
   LaunchedEffect(isCurrent) {
@@ -212,8 +244,9 @@ internal fun ViewerPage(
         )
       }
       best != null || placeholder != null -> {
-        val phoneUri = remember(spec.ref, services.intents) {
-          (spec.ref as? MediaRef.Phone)?.let { services.intents?.uriOf(it) }
+        // I tasselli leggono dal MediaStore (telefono) o, per un media del NAS, dal temporaneo dell'originale (D19).
+        val phoneUri = remember(spec.ref, services.intents, facts?.originalUri) {
+          (spec.ref as? MediaRef.Phone)?.let { services.intents?.uriOf(it) } ?: facts?.originalUri
         }
         val sharp = image.sharp
         // Se i tasselli non si leggono (file rovinato, formato che BitmapRegionDecoder non regge) resta la nitida.
@@ -245,7 +278,7 @@ internal fun ViewerPage(
 
 /** Cio' che si sa dell'originale di una pagina: le misure per lo zoom (e i tasselli) e, per GIF e WebP, l'animazione. */
 @Immutable
-private class PageFacts(val zoom: ZoomSpec?, val animated: AnimatedSpec?)
+private class PageFacts(val zoom: ZoomSpec?, val animated: AnimatedSpec?, val originalUri: android.net.Uri? = null)
 
 /**
  * Le misure dell'originale, lette **fuori dal thread principale**: `zoomSpec` e `animated` della sorgente aprono il file
@@ -258,14 +291,17 @@ private class PageFacts(val zoom: ZoomSpec?, val animated: AnimatedSpec?)
  * forma: niente si sposta quando arrivano (cambiano solo il limite dello zoom e la scelta dei tasselli).
  */
 @Composable
-private fun rememberPageFacts(spec: PageSpec, services: ViewerServices): PageFacts? {
+private fun rememberPageFacts(spec: PageSpec, services: ViewerServices, nasKey: Int = 0): PageFacts? {
   val ref = spec.ref ?: return null
   var facts by remember(ref, spec.kind, services.images) { mutableStateOf<PageFacts?>(null) }
-  LaunchedEffect(ref, spec.kind, services.images) {
+  // [nasKey] cambia per un media del NAS quando arriva la nitida (la posizione e' risolta: ora si sanno le misure del
+  // catalogo) e quando arriva l'originale (misure vere, tasselli): le misure si rifanno. Per il telefono e' sempre 0.
+  LaunchedEffect(ref, spec.kind, services.images, nasKey) {
     facts = withContext(services.dispatchers.io) {
       PageFacts(
         zoom = readOrNull { services.images.zoomSpec(ref) },
         animated = if (spec.kind != MediaKind.VIDEO) readOrNull { services.images.animated(ref) } else null,
+        originalUri = if (ref is MediaRef.Nas) readOrNull { services.originals?.localFile(ref)?.let(android.net.Uri::fromFile) } else null,
       )
     }
   }

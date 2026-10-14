@@ -70,7 +70,7 @@
   <string name="viewer_notice_failed_decode">Il file potrebbe essere rovinato.</string>
   <string name="viewer_notice_failed_memory">L’immagine è troppo grande per la memoria di questo dispositivo.</string>
   <string name="viewer_notice_failed_format">Questo formato non si può mostrare su questo dispositivo.</string>
-  <string name="viewer_notice_failed_missing">Il file non c’è più sul telefono.</string>
+  <string name="viewer_notice_failed_missing">Il file non c’è più.</string>
   <string name="viewer_notice_video_unsupported_title">Questo dispositivo non riesce a riprodurre il video</string>
   <string name="viewer_notice_video_unsupported_detail">Il formato, per esempio l’8K o un codec nuovo, è oltre ciò che il suo decoder sa fare.</string>
   <string name="viewer_notice_video_failed_title">Non riesco a riprodurre il video</string>

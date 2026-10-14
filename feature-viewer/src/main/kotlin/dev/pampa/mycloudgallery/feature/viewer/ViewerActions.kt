@@ -10,6 +10,7 @@ import android.os.PersistableBundle
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.DeleteForever
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Info
@@ -30,9 +31,10 @@ import java.util.Locale
  *  - Preferito e Nascondi servono le azioni locali (`LocalMediaActions`).
  *  - Condividi e Copia servono un media del telefono e le azioni di sistema (l'URI `content://media/...`).
  *  - Elimina dal telefono serve il cestino di sistema (Android 11+, D14); su Android 10 non c'e'.
+ *  - Scarica sul telefono (Fase 4, D20) serve un media del NAS e un `PhoneDownload`.
  *  - Informazioni c'e' sempre.
  *
- * Versioni, correzioni, scarica, modifica con, sposta e rinomina arrivano con le loro fasi, senza cambiare la struttura.
+ * Versioni, correzioni, modifica con, sposta e rinomina arrivano con le loro fasi, senza cambiare la struttura.
  */
 internal data class ViewerCapabilities(
   val favorite: Boolean,
@@ -40,6 +42,7 @@ internal data class ViewerCapabilities(
   val share: Boolean,
   val copy: Boolean,
   val trash: Boolean,
+  val download: Boolean = false,
 ) {
   companion object {
     fun of(services: ViewerServices, ref: MediaRef): ViewerCapabilities {
@@ -51,6 +54,7 @@ internal data class ViewerCapabilities(
         share = phone && intents != null,
         copy = phone && intents != null,
         trash = phone && intents?.canTrash == true,
+        download = ref is MediaRef.Nas && services.download?.canDownload(ref) == true,
       )
     }
   }
@@ -64,6 +68,7 @@ internal class ViewerActionHandlers(
   val onCopy: () -> Unit,
   val onDelete: () -> Unit,
   val onInfo: () -> Unit,
+  val onDownload: () -> Unit = {},
 )
 
 /**
@@ -106,6 +111,9 @@ internal fun viewerMenuEntries(
     }
     if (capabilities.copy) {
       add(GalleryMenuEntry.Item(resources.getString(R.string.viewer_action_copy), handlers.onCopy, Icons.Rounded.ContentCopy))
+    }
+    if (capabilities.download) {
+      add(GalleryMenuEntry.Item(resources.getString(R.string.viewer_action_download), handlers.onDownload, Icons.Rounded.Download))
     }
     add(GalleryMenuEntry.Item(resources.getString(R.string.viewer_action_info), handlers.onInfo, Icons.Rounded.Info))
   })

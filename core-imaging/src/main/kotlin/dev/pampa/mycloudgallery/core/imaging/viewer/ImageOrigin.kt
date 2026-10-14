@@ -4,6 +4,7 @@ import android.content.ContentResolver
 import android.content.ContentUris
 import android.net.Uri
 import android.provider.MediaStore
+import dev.pampa.mycloudgallery.core.imaging.contract.ImageFailure
 import dev.pampa.mycloudgallery.core.imaging.contract.UnavailableReason
 import dev.pampa.mycloudgallery.core.imaging.decode.ContentImageBytes
 import dev.pampa.mycloudgallery.core.imaging.decode.ImageBytes
@@ -14,8 +15,14 @@ import java.io.IOException
 /** L'esito dell'apertura di un media per il viewer. */
 sealed interface OriginResult {
 
-  /** Aperto: i byte si possono leggere. Chi lo riceve lo chiude. */
-  class Opened(val bytes: ImageBytes) : OriginResult
+  /**
+   * Aperto: i byte si possono leggere. Chi lo riceve lo chiude.
+   *
+   * @property isOriginal falso se i byte sono un **ripiego** dell'originale (l'HQ della replica per un media del NAS,
+   *   Fase 4): si decodificano per la nitida, ma le sue dimensioni e il suo formato non sono quelli dell'originale e non
+   *   decidono lo zoom a tasselli.
+   */
+  class Opened(val bytes: ImageBytes, val isOriginal: Boolean = true) : OriginResult
 
   /**
    * Non raggiungibile adesso (il NAS non risponde, rete non ammessa, dati mobili da confermare, volume tolto):
@@ -25,6 +32,19 @@ sealed interface OriginResult {
 
   /** Il media non esiste piu' (cancellato da Galleria o da un altro dispositivo, E-V6). */
   data object Missing : OriginResult
+
+  /**
+   * Non si e' potuto aprire per una ragione nostra, non della rete: il telefono non ha piu' posto per il temporaneo
+   * (`STORAGE_FULL`), l'originale supera quello che la memoria regge (`OUT_OF_MEMORY`), la posizione non si risolve.
+   */
+  class Failed(val code: ImageFailure) : OriginResult
+}
+
+/** Le dimensioni dritte di un originale note senza aprirlo (dal catalogo): per i limiti dello zoom di un media remoto. */
+class DeclaredSize(val width: Int, val height: Int) {
+  init {
+    require(width > 0 && height > 0) { "Dimensioni non valide." }
+  }
 }
 
 /**
@@ -36,6 +56,19 @@ interface ImageOrigin {
 
   /** Apre [ref]. Puo' sospendere a lungo (rete); l'annullamento della coroutine la interrompe. */
   suspend fun open(ref: MediaRef): OriginResult
+
+  /**
+   * Come [open], ma racconta l'avanzamento (da 0 a 1) di una lettura lunga: il viewer lo mostra come `Loading(progress)`
+   * (Fase 4, un originale letto dal NAS). Le sorgenti che aprono subito non hanno niente da dire e lasciano il default.
+   * [onProgress] puo' essere chiamata da un thread di lavoro, e deve essere economica.
+   */
+  suspend fun open(ref: MediaRef, onProgress: (Float?) -> Unit): OriginResult = open(ref)
+
+  /**
+   * Le dimensioni dritte dell'originale, se si sanno **senza aprirlo** e senza sospendere (Fase 4: dal catalogo, una volta
+   * risolta la posizione). Serve a `zoomSpec` finche' l'originale di un media remoto non e' sul telefono. Null = non note.
+   */
+  fun declaredSize(ref: MediaRef): DeclaredSize? = null
 
   /**
    * Solo se i byte sono locali e subito disponibili: serve a `zoomSpec` e `animated`, che non sospendono. Una

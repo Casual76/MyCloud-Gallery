@@ -11,6 +11,7 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import dev.pampa.mycloudgallery.core.imaging.contract.ImageFailure
+import dev.pampa.mycloudgallery.core.imaging.contract.UnavailableReason
 import dev.pampa.mycloudgallery.core.imaging.contract.ViewerImageState
 import dev.pampa.mycloudgallery.core.model.MediaId
 
@@ -44,6 +45,20 @@ internal data class PageImage(
   }
 }
 
+/**
+ * L'originale di un media del NAS chiesto con lo zoom (Fase 4, D19): a che punto e', o perche' non arriva. Quando arriva la
+ * voce esce dalla mappa e [ViewerState.originalReady] sale (le misure per lo zoom e i tasselli si rifanno).
+ */
+@Immutable
+internal sealed interface OriginalProgress {
+
+  data class Reading(val progress: Float?) : OriginalProgress
+
+  data class Blocked(val reason: UnavailableReason, val sizeBytes: Long?) : OriginalProgress
+
+  data class Failed(val code: ImageFailure) : OriginalProgress
+}
+
 /** Un avviso breve sopra la foto (si spegne da solo): cosa e' successo a cio' che stavi guardando. */
 internal enum class ViewerMessage(@StringRes val title: Int, @StringRes val detail: Int?) {
   /** E-V6: l'elemento e' sparito dalla vista (cancellato da Galleria o da un altro dispositivo). */
@@ -72,6 +87,16 @@ internal enum class ViewerMessage(@StringRes val title: Int, @StringRes val deta
 
   /** La foto in movimento non ha una parte video che sappiamo riprodurre (E-M16). */
   MotionUnplayable(R.string.viewer_msg_motion_title, R.string.viewer_msg_motion_detail),
+
+  /** "Scarica sul telefono" e' riuscito (Fase 4, D20). */
+  Downloaded(R.string.viewer_msg_downloaded_title, R.string.viewer_msg_downloaded_detail),
+
+  /** Lo scaricamento non e' riuscito: nessun file a meta' sul telefono. */
+  DownloadFailed(R.string.viewer_msg_download_failed_title, R.string.viewer_msg_download_failed_detail),
+  DownloadNasUnreachable(R.string.viewer_msg_download_nas_title, R.string.viewer_msg_download_nas_detail),
+  DownloadPhoneFull(R.string.viewer_msg_download_full_title, R.string.viewer_msg_download_full_detail),
+  DownloadIntegrity(R.string.viewer_msg_download_integrity_title, R.string.viewer_msg_download_integrity_detail),
+  DownloadCancelled(R.string.viewer_msg_download_cancelled_title, R.string.viewer_msg_download_cancelled_detail),
 }
 
 /**
@@ -119,6 +144,18 @@ internal class ViewerState(
 
   /** I preferiti toccati dall'utente e non ancora confermati dall'indice: la stella risponde subito. */
   val favoriteOverride = mutableStateMapOf<MediaId, Boolean>()
+
+  /**
+   * Quante volte l'utente ha detto "Riprova" (o ha accettato i dati mobili) per ogni pagina: e' la chiave che rifa il
+   * caricamento della pagina e l'avvio del suo video. Non si salva: dopo una ricreazione si riparte da zero (Fase 4).
+   */
+  val retries = mutableStateMapOf<MediaId, Int>()
+
+  /** L'originale del NAS chiesto con lo zoom, per pagina. */
+  val originals = mutableStateMapOf<MediaId, OriginalProgress>()
+
+  /** Quante volte l'originale di una pagina e' arrivato sul telefono: rifa le misure dello zoom e i tasselli. */
+  val originalReady = mutableStateMapOf<MediaId, Int>()
 
   companion object {
     const val MAX_DECODES = 3

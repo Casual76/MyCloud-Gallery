@@ -35,12 +35,16 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
+import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.withContext
 
@@ -107,7 +111,24 @@ class PipelineViewerImageSource(
       val preview = loadPreview(ref)
       if (preview != null) emit(ViewerImageState.Preview(preview.asImageBitmap()))
       emit(ViewerImageState.Loading(progress = null))
-      val result = withSlot { produce(ref, screen, preview) }
+      val result = if (ref is MediaRef.Nas) {
+        // Un originale che arriva dalla rete: la lettura racconta l'avanzamento (Loading(progress)). Il telefono resta sul
+        // percorso di sempre, senza un coroutine in piu' nell'apertura del viewer (docs/bench/misure-s25-2026-10-13.md §3.3).
+        val progress = Channel<Float?>(Channel.CONFLATED)
+        coroutineScope {
+          val work = async { withSlot { produce(ref, screen, preview) { value -> progress.trySend(value) } } }
+          var final: ViewerImageState? = null
+          while (final == null) {
+            select<Unit> {
+              progress.onReceive { value -> emit(ViewerImageState.Loading(value)) }
+              work.onAwait { done -> final = done }
+            }
+          }
+          final
+        }
+      } else {
+        withSlot { produce(ref, screen, preview) { } }
+      }
       emit(result)
       terminal = true
     } finally {
@@ -117,7 +138,13 @@ class PipelineViewerImageSource(
 
   override fun zoomSpec(ref: MediaRef): ZoomSpec? {
     zoomSpecs[ref]?.let { return it }
-    val known = factsOf(ref) ?: return null
+    val known = factsOf(ref)
+    if (known == null) {
+      // Un media remoto la cui nitida viene da un ripiego (l'HQ della replica): le misure dell'originale sono quelle del
+      // catalogo, senza tasselli finche' l'originale non e' sul telefono. Non si tiene in cache: cambia quando arriva.
+      val declared = origin.declaredSize(ref) ?: return null
+      return ZoomSpec(width = declared.width, height = declared.height, tiled = false)
+    }
     val spec = ZoomSpec(
       width = known.uprightWidth,
       height = known.uprightHeight,
@@ -184,7 +211,12 @@ class PipelineViewerImageSource(
     }
   }
 
-  private suspend fun produce(ref: MediaRef, screen: IntSize, preview: Bitmap?): ViewerImageState {
+  private suspend fun produce(
+    ref: MediaRef,
+    screen: IntSize,
+    preview: Bitmap?,
+    onProgress: (Float?) -> Unit,
+  ): ViewerImageState {
     if (isVideo(ref)) {
       // I video li riproduce il player: qui resta il fotogramma-miniatura come immagine finale.
       return if (preview != null) {
@@ -193,22 +225,32 @@ class PipelineViewerImageSource(
         fail(ImageFailure.UNSUPPORTED_FORMAT)
       }
     }
-    return when (val opened = withContext(dispatchers.io) { origin.open(ref) }) {
+    val result = try {
+      withContext(dispatchers.io) { origin.open(ref, onProgress) }
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      // Una sorgente che lancia (un database che non risponde, un provider rotto) e' un'immagine che non si apre, non un viewer che muore.
+      GalleryLog.d(TAG) { "apertura non riuscita: ${e.javaClass.simpleName}" }
+      return fail(ImageFailure.DECODE_FAILED)
+    }
+    return when (result) {
       is OriginResult.Unreachable -> {
         statsFlow.update { it.copy(unavailable = it.unavailable + 1) }
-        ViewerImageState.Unavailable(opened.reason, opened.sizeBytes)
+        ViewerImageState.Unavailable(result.reason, result.sizeBytes)
       }
       OriginResult.Missing -> fail(ImageFailure.NOT_FOUND)
-      is OriginResult.Opened -> opened.bytes.use { decode(ref, it, screen) }
+      is OriginResult.Failed -> fail(result.code)
+      is OriginResult.Opened -> result.bytes.use { decode(ref, it, screen, cacheFacts = result.isOriginal) }
     }
   }
 
-  private suspend fun decode(ref: MediaRef, bytes: ImageBytes, screen: IntSize): ViewerImageState =
+  private suspend fun decode(ref: MediaRef, bytes: ImageBytes, screen: IntSize, cacheFacts: Boolean): ViewerImageState =
     try {
       withCancellationSignal { signal ->
         withContext(dispatchers.default) {
           val known = ImageProbe.probe(bytes)
-          facts[ref] = known
+          if (cacheFacts) facts[ref] = known
           val decoded = ScreenImageDecoder.decode(bytes, known, screen, budget, signal)
           // Se la pagina e' uscita mentre si decodificava, la bitmap non si prepara ne' si consegna.
           ensureActive()
@@ -235,7 +277,11 @@ class PipelineViewerImageSource(
     return ViewerImageState.Failed(code)
   }
 
-  private fun isVideo(ref: MediaRef): Boolean = (ref as? MediaRef.Phone)?.mime?.startsWith("video/") == true
+  private fun isVideo(ref: MediaRef): Boolean = when (ref) {
+    is MediaRef.Phone -> ref.mime?.startsWith("video/") == true
+    is MediaRef.Nas -> ref.mime?.startsWith("video/") == true
+    is MediaRef.Synthetic -> false
+  }
 
   /** La testa del file di [ref]: dalla cache, oppure (solo da una sorgente locale) leggendola adesso. */
   private fun factsOf(ref: MediaRef): ImageFacts? {

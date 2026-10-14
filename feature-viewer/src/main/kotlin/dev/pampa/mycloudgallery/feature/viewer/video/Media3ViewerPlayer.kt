@@ -29,9 +29,10 @@ import kotlinx.coroutines.flow.asStateFlow
 /**
  * Il lettore vero, su Media3 ExoPlayer (D7).
  *
- * **Solo locale.** Le sorgenti sono `ContentDataSource` (l'URI `content://` del MediaStore, tutto o un intervallo di
- * byte): mai la sorgente "di default" di Media3, che apre anche `https://` (D24, vietata da un test sui sorgenti). Per
- * questo il costruttore dell'ExoPlayer riceve una [MediaSource.Factory] nostra invece di costruirne una da solo.
+ * **Nessuna sorgente di default.** Le sorgenti sono `ContentDataSource` (l'URI `content://` del MediaStore, tutto o un
+ * intervallo di byte) e, dalla Fase 4, [NasVideoDataSource] per i video del NAS (D19): mai la sorgente "di default" di
+ * Media3, che apre anche `https://` (D24, vietata da un test sui sorgenti e dal test dei `DataSource` creati). Per questo il
+ * costruttore dell'ExoPlayer riceve una [MediaSource.Factory] nostra invece di costruirne una da solo.
  *
  * **Un solo lettore, una superficie `SurfaceView`.** La superficie e' quella dell'HDR: HDR10 e HLG arrivano allo
  * schermo senza passare da una texture (che li appiattirebbe). Il focus audio lo prende solo un video con audio
@@ -41,7 +42,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * chiave piu' vicino (nessuna decodifica dei fotogrammi in mezzo), al rilascio a quello esatto.
  */
 @OptIn(UnstableApi::class)
-class Media3ViewerPlayer(context: Context) : ViewerPlayer {
+class Media3ViewerPlayer(context: Context, private val nasVideo: NasVideoSource? = null) : ViewerPlayer {
 
   private val appContext = context.applicationContext
   private val handler = Handler(Looper.getMainLooper())
@@ -98,9 +99,11 @@ class Media3ViewerPlayer(context: Context) : ViewerPlayer {
 
   override fun load(source: PlaybackSource, autoplay: Boolean, muted: Boolean, startPositionMs: Long) {
     if (released) return
-    val factory = when (source) {
-      is PlaybackSource.Whole -> contentOnly(appContext)
-      is PlaybackSource.Range -> DataSource.Factory { RangeDataSource(ContentDataSource(appContext), source.start, source.length) }
+    val factory = dataSourceFactoryFor(source)
+    if (factory == null) {
+      // Un video del NAS senza il collegamento al NAS: niente da riprodurre, e lo si dice invece di restare muti.
+      mutableState.value = PlayerUiState(source = source, muted = muted, problem = PlaybackProblem.NAS_UNREACHABLE)
+      return
     }
     val mediaSource = ProgressiveMediaSource.Factory(factory, DefaultExtractorsFactory())
       .createMediaSource(MediaItem.fromUri(source.uri))
@@ -155,6 +158,13 @@ class Media3ViewerPlayer(context: Context) : ViewerPlayer {
     mutableState.value = PlayerUiState()
   }
 
+  /** La sola fabbrica di `DataSource` per [source]: contenuto locale, intervallo locale o video del NAS. Mai altro. */
+  internal fun dataSourceFactoryFor(source: PlaybackSource): DataSource.Factory? = when (source) {
+    is PlaybackSource.Whole -> contentOnly(appContext)
+    is PlaybackSource.Range -> DataSource.Factory { RangeDataSource(ContentDataSource(appContext), source.start, source.length) }
+    is PlaybackSource.Nas -> nasVideo?.let { nas -> DataSource.Factory { nas.newDataSource(source) } }
+  }
+
   private fun publish() {
     if (released) return
     val duration = player.duration.takeIf { it != C.TIME_UNSET && it >= 0 } ?: 0L
@@ -207,8 +217,8 @@ internal class RangeDataSource(
 
 /**
  * I codici per cui il dispositivo "non riesce a riprodurre": decoder assente o che non si avvia, formato fuori dalle sue
- * capacita' (8K, un profilo HDR, APV), contenitore non supportato. Tutto il resto e' un file che non si legge o e'
- * rovinato. E' la differenza fra "Questo dispositivo non riesce a riprodurre il video" (E-M7, E-M13) e "Non riesco a
+ * capacita' (8K, un profilo HDR, APV), contenitore non supportato. Poi, dalla Fase 4, la rete verso il NAS che non c'e'.
+ * Tutto il resto e' un file che non si legge o e' rovinato. E' la differenza fra "Questo dispositivo non riesce a riprodurre il video" (E-M7, E-M13) e "Non riesco a
  * riprodurre il video".
  */
 internal fun playbackProblemOf(errorCode: Int): PlaybackProblem = when (errorCode) {
@@ -218,5 +228,9 @@ internal fun playbackProblemOf(errorCode: Int): PlaybackProblem = when (errorCod
   PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
   PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
   -> PlaybackProblem.UNSUPPORTED
+  // Fase 4: il NAS non risponde o la rete non c'e' (E-L4). Dal telefono questi codici non arrivano mai.
+  PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+  PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
+  -> PlaybackProblem.NAS_UNREACHABLE
   else -> PlaybackProblem.FAILED
 }

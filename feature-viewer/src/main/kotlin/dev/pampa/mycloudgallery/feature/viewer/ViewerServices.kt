@@ -15,6 +15,7 @@ import dev.pampa.mycloudgallery.core.imaging.contract.ViewerImageSource
 import dev.pampa.mycloudgallery.core.imaging.noop.NoPlaceholderCache
 import dev.pampa.mycloudgallery.core.imaging.noop.NoThumbnailLoader
 import dev.pampa.mycloudgallery.core.imaging.noop.NoViewerImageSource
+import dev.pampa.mycloudgallery.core.imaging.viewer.OriginalFetcher
 import dev.pampa.mycloudgallery.core.library.contract.LocalMediaActions
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneMediaIntents
 import dev.pampa.mycloudgallery.core.metadata.contract.ExifDetailsReader
@@ -28,8 +29,10 @@ import dev.pampa.mycloudgallery.feature.viewer.details.MediaDetailsSource
 import dev.pampa.mycloudgallery.feature.viewer.details.NoMediaDetails
 import dev.pampa.mycloudgallery.feature.viewer.details.NoViewerBytes
 import dev.pampa.mycloudgallery.feature.viewer.details.ViewerBytes
+import dev.pampa.mycloudgallery.feature.viewer.download.PhoneDownload
 import dev.pampa.mycloudgallery.feature.viewer.video.BytesMotionVideoLocator
 import dev.pampa.mycloudgallery.feature.viewer.video.MotionVideoLocator
+import dev.pampa.mycloudgallery.feature.viewer.video.NasVideoSource
 import dev.pampa.mycloudgallery.feature.viewer.video.ViewerPlayerFactory
 import kotlin.math.max
 import kotlin.math.min
@@ -54,8 +57,14 @@ import kotlinx.coroutines.withContext
  * @property motion dove sta il video di una motion photo (di default lo cerca nei [bytes]).
  * @property player come si crea il lettore video; null = Media3 (il default).
  * @property animated come si decodificano GIF e WebP animati; null = `ImageDecoder` sull'URI di [intents].
- * @property onConfirmMobileData cosa fare quando l'utente accetta i dati mobili per un originale (Fase 4); null = la
- *   nota non propone il tasto.
+ * @property onConfirmMobileData cosa fare quando l'utente accetta i dati mobili per un originale (Fase 4): :app registra la
+ *   conferma per quel media (`MobileDataConsent.confirm`); il viewer poi ricarica la pagina da solo. null = la nota non
+ *   propone il tasto.
+ * @property originals l'originale dei media del NAS portato sul telefono con lo zoom (Fase 4, D19): senza, lo zoom resta
+ *   sulla nitida che c'e'. Di norma e' la stessa `NasImageOrigin` che e' dietro [images].
+ * @property nasVideo i video del NAS in streaming (Fase 4, D19): senza, un video del NAS non parte e il viewer dice che il
+ *   NAS non risponde.
+ * @property download "Scarica sul telefono" (Fase 4, D20): senza, la voce non compare nel menu (D13).
  * @property dispatchers i thread di lavoro (letture di dettagli ed EXIF): nei test sono uno solo, senza attese.
  */
 @Immutable
@@ -74,6 +83,9 @@ class ViewerServices(
   val player: ViewerPlayerFactory? = null,
   val animated: AnimatedDrawableLoader? = null,
   val onConfirmMobileData: ((MediaRef) -> Unit)? = null,
+  val originals: OriginalFetcher? = null,
+  val nasVideo: NasVideoSource? = null,
+  val download: PhoneDownload? = null,
   val dispatchers: DispatcherProvider = DefaultDispatcherProvider,
 )
 

@@ -259,6 +259,44 @@ internal class ViewerController(
     playback.stopMotion()
   }
 
+  // --- Media del NAS (Fase 4) ----------------------------------------------------------------------------------------
+
+  /** "Riprova" dalla nota: la pagina si ricarica e, per un video, riparte. L'originale chiesto con lo zoom si richiede. */
+  fun retry() {
+    val id = state.currentId
+    state.originals.remove(id)
+    // Il video che era in errore va rifatto da capo: il lettore libera la sorgente e la pagina lo riavvia.
+    if (playback.videoFor == id) playback.clear()
+    state.retries[id] = (state.retries[id] ?: 0) + 1
+  }
+
+  /**
+   * L'utente accetta i dati mobili per [ref] (E-V2): :app registra la conferma (`onConfirmMobileData`) e la pagina riparte da
+   * sola, come dopo un "Riprova". Senza il collegamento di :app la nota non propone il tasto.
+   */
+  fun confirmMobileData(ref: MediaRef) {
+    services.onConfirmMobileData?.invoke(ref)
+    retry()
+  }
+
+  /** Come [confirmMobileData], per "Scarica sul telefono": dopo la conferma il download parte. */
+  fun confirmMobileDataForDownload(ref: MediaRef.Nas) {
+    services.onConfirmMobileData?.invoke(ref)
+    services.download?.start(ref)
+  }
+
+  /** "Scarica sul telefono" dal menu: il download va in coda e continua anche se il viewer si chiude (D20). */
+  fun download() {
+    if (closing) return
+    val ref = refOf(state.currentId) as? MediaRef.Nas ?: return
+    services.download?.start(ref)
+  }
+
+  fun cancelDownload() {
+    val ref = refOf(state.currentId) as? MediaRef.Nas ?: return
+    services.download?.cancel(ref)
+  }
+
   // --- Azioni --------------------------------------------------------------------------------------------------------
 
   /** Dove stanno i byte di [id], o null se adesso non c'e' una copia leggibile o l'elemento e' sparito del tutto. */

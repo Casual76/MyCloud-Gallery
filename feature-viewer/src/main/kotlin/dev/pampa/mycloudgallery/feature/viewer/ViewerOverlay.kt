@@ -80,6 +80,8 @@ import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryViewerTransition
 import dev.pampa.mycloudgallery.core.designsystem.viewer.GalleryVideoBar
 import dev.pampa.mycloudgallery.core.designsystem.viewer.GalleryViewerChrome
 import dev.pampa.mycloudgallery.core.designsystem.viewer.GalleryViewerChromeDefaults
+import dev.pampa.mycloudgallery.core.imaging.contract.ImageFailure
+import dev.pampa.mycloudgallery.core.imaging.contract.UnavailableReason
 import dev.pampa.mycloudgallery.core.imaging.contract.ViewerImageSource
 import dev.pampa.mycloudgallery.core.imaging.noop.NoViewerImageSource
 import dev.pampa.mycloudgallery.core.library.contract.TimelineView
@@ -91,6 +93,8 @@ import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.security.screen.SecureScreen
 import dev.pampa.mycloudgallery.feature.viewer.details.ViewerFormat
+import dev.pampa.mycloudgallery.feature.viewer.download.DownloadFailure
+import dev.pampa.mycloudgallery.feature.viewer.download.DownloadState
 import dev.pampa.mycloudgallery.feature.viewer.gesture.viewerVerticalDrag
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoInputs
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoPanelState
@@ -102,6 +106,7 @@ import dev.pampa.mycloudgallery.feature.viewer.info.sheetHeight
 import dev.pampa.mycloudgallery.feature.viewer.page.PageSpec
 import dev.pampa.mycloudgallery.feature.viewer.page.ViewerPage
 import dev.pampa.mycloudgallery.feature.viewer.video.Media3ViewerPlayer
+import dev.pampa.mycloudgallery.feature.viewer.video.NasVideoGate
 import dev.pampa.mycloudgallery.feature.viewer.video.PlaybackSource
 import dev.pampa.mycloudgallery.feature.viewer.video.ViewerPlayback
 import dev.pampa.mycloudgallery.feature.viewer.video.ViewerPlayerFactory
@@ -112,6 +117,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** I nomi con cui i test trovano i pezzi del viewer. */
 internal object ViewerTags {
@@ -177,14 +183,20 @@ private fun ViewerHost(
   val scope = rememberCoroutineScope()
   val viewModel: ViewerViewModel = viewModel()
   val state = rememberSaveable(saver = ViewerState.Saver) { ViewerState(request.start) }
+  // Gli esiti di scaricamenti conclusi prima che il viewer si aprisse non sono una notizia: si scartano in silenzio (Fase 4).
+  remember(services.download) {
+    services.download?.let { downloads ->
+      downloads.states.value.filterValues { it.isTerminal }.keys.forEach(downloads::acknowledge)
+    }
+  }
   val transition = remember { GalleryViewerTransitionState() }
   val info = remember { InfoPanelState(initialOpen = state.infoOpen) }
   val startPage = remember {
     view.viewIndexOf(state.currentId).takeIf { it >= 0 } ?: view.viewIndexOf(request.start).coerceAtLeast(0)
   }
   val pager = rememberPagerState(initialPage = startPage) { view.size }
-  val playback = remember(services.player) {
-    ViewerPlayback(services.player ?: ViewerPlayerFactory { Media3ViewerPlayer(context) })
+  val playback = remember(services.player, services.nasVideo) {
+    ViewerPlayback(services.player ?: ViewerPlayerFactory { Media3ViewerPlayer(context, services.nasVideo) })
   }
   DisposableEffect(playback) { onDispose { playback.release() } }
   val latestOnClosed by rememberUpdatedState(onClosed)
@@ -286,7 +298,7 @@ private fun ViewerHost(
     if (playback.videoFor != null && playback.videoFor != currentId) playback.clear()
     if (playback.motionFor != null && playback.motionFor != currentId) playback.stopMotion()
   }
-  LaunchedEffect(currentId, atRest, currentKind) {
+  LaunchedEffect(currentId, atRest, currentKind, state.retries[currentId]) {
     if (currentKind != MediaKind.VIDEO) return@LaunchedEffect
     if (atRest) {
       if (playback.videoFor == currentId) {
@@ -296,9 +308,15 @@ private fun ViewerHost(
         }
       } else {
         // D19: il video parte da solo quando la pagina si ferma, con l'audio.
-        val phone = controller.refOf(currentId) as? MediaRef.Phone
-        val uri = phone?.let { services.intents?.uriOf(it) }
-        if (uri != null) playback.playVideo(currentId, PlaybackSource.Whole(uri))
+        when (val ref = controller.refOf(currentId)) {
+          is MediaRef.Phone -> {
+            val uri = services.intents?.uriOf(ref)
+            if (uri != null) playback.playVideo(currentId, PlaybackSource.Whole(uri))
+          }
+          // Un video del NAS: prima si guarda se puo' partire (dati mobili), poi parte in streaming a intervalli (D19).
+          is MediaRef.Nas -> startNasVideo(currentId, ref, services, state, playback)
+          else -> Unit
+        }
       }
     } else if (playback.videoFor == currentId) {
       // Un trascinamento verso il basso ferma il video; se il dito torna indietro, riparte da dove era.
@@ -612,6 +630,17 @@ private fun ViewerOverlays(
   val currentKind = controller.kindOf(currentId)
   val currentRef = controller.refOf(currentId)
 
+  // "Scarica sul telefono" (Fase 4, D20): lo stato di ogni download e, a download concluso, l'avviso con l'esito.
+  // Senza `PhoneDownload` (il viewer di sola lettura) non si osserva niente: nessun costo nell'apertura.
+  val downloads: Map<Long, DownloadState> = services.download?.states?.collectAsState()?.value ?: NoDownloads
+  if (services.download != null) {
+    LaunchedEffect(downloads) {
+      val finished = downloads.entries.firstOrNull { it.value.isTerminal } ?: return@LaunchedEffect
+      messageOf(finished.value)?.let { state.message = it }
+      services.download?.acknowledge(finished.key)
+    }
+  }
+
   // Il launcher del dialogo di sistema del cestino (D14).
   val trashLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { }
   controller.launchSender = { sender -> trashLauncher.launch(IntentSenderRequest.Builder(sender).build()) }
@@ -644,6 +673,7 @@ private fun ViewerOverlays(
     onCopy = { controller.copy(copyLabel) },
     onDelete = controller::askDelete,
     onInfo = controller::toggleInfo,
+    onDownload = controller::download,
   )
   val menu = viewerMenuEntries(resources, capabilities, isFavorite, request.secure, handlers)
   val barActions = viewerBarActions(resources, capabilities, isFavorite, handlers)
@@ -704,8 +734,29 @@ private fun ViewerOverlays(
   Box(Modifier.fillMaxSize().then(chromeModifier)) {
     // Perche' la pagina non mostra l'originale (o il video non parte): la nota sta sopra la barra azioni.
     val image = state.images[currentId]
-    val noticeKind = if (atRest) PageNoticeKind.of(image, if (isVideo && playback.videoFor == currentId) playerUi.problem else null) else null
+    val videoProblem = if (isVideo && playback.videoFor == currentId) playerUi.problem else null
+    val nasRef = currentRef as? MediaRef.Nas
+    val downloadState = nasRef?.let { downloads[it.locationId] }
+    val pageNotice = PageNoticeKind.of(image, videoProblem, isVideo, state.originals[currentId])
+    val noticeKind: PageNoticeKind? = if (!atRest) {
+      null
+    } else {
+      when {
+        pageNotice is PageNoticeKind.VideoProblem -> pageNotice
+        downloadState is DownloadState.Queued -> PageNoticeKind.Downloading(progress = null, queued = true)
+        downloadState is DownloadState.Running -> PageNoticeKind.Downloading(downloadState.progress)
+        downloadState is DownloadState.NeedsMobileData -> PageNoticeKind.MobileData(downloadState.sizeBytes, MobileDataFor.DOWNLOAD)
+        // Fino al primo fotogramma di un video del NAS si dice che si sta leggendo (Fase 4, "Loading fino al primo fotogramma").
+        isVideo && nasRef != null && playback.videoFor == currentId && !playerUi.firstFrame && pageNotice == null -> PageNoticeKind.VideoLoading
+        else -> pageNotice
+      }
+    }
     if (noticeKind != null) {
+      val confirmMobileData: (() -> Unit)? = when {
+        services.onConfirmMobileData == null || currentRef == null -> null
+        downloadState is DownloadState.NeedsMobileData && nasRef != null -> ({ controller.confirmMobileDataForDownload(nasRef) })
+        else -> ({ controller.confirmMobileData(currentRef) })
+      }
       Box(
         Modifier
           .align(Alignment.BottomCenter)
@@ -715,7 +766,9 @@ private fun ViewerOverlays(
         PageNotice(
           kind = noticeKind,
           backdrop = backdrop,
-          onConfirmMobileData = currentRef?.let { ref -> services.onConfirmMobileData?.let { confirm -> { confirm(ref) } } },
+          onConfirmMobileData = confirmMobileData,
+          onRetry = if (nasRef != null) controller::retry else null,
+          onCancelDownload = if (downloadState is DownloadState.Queued || downloadState is DownloadState.Running) controller::cancelDownload else null,
         )
       }
     }
@@ -822,3 +875,57 @@ private const val MIN_SHIFT_SCALE = 0.4f
 
 /** A che punto dell'espansione entrano le pagine vicine (vedi `PagerLayer`): lontano dal primo fotogramma, prima della fine. */
 private const val NeighborsAtProgress = 0.5f
+
+/** Nessun download: la mappa vuota di un viewer senza `PhoneDownload`. */
+private val NoDownloads: Map<Long, DownloadState> = emptyMap()
+
+/** L'avviso breve per l'esito di un download concluso, o null se non c'e' niente da dire (stati non terminali). */
+private fun messageOf(state: DownloadState): ViewerMessage? = when (state) {
+  is DownloadState.Done -> ViewerMessage.Downloaded
+  DownloadState.Cancelled -> ViewerMessage.DownloadCancelled
+  is DownloadState.Failed -> when (state.reason) {
+    DownloadFailure.NAS_UNREACHABLE, DownloadFailure.NOT_ALLOWED_HERE -> ViewerMessage.DownloadNasUnreachable
+    DownloadFailure.NOT_FOUND -> ViewerMessage.ItemGone
+    DownloadFailure.PHONE_FULL -> ViewerMessage.DownloadPhoneFull
+    DownloadFailure.INTEGRITY -> ViewerMessage.DownloadIntegrity
+    DownloadFailure.OTHER -> ViewerMessage.DownloadFailed
+  }
+  else -> null
+}
+
+/**
+ * Fa partire il video del NAS [ref] nella pagina [id] (D19): guarda se si puo' (dati mobili da confermare, media sparito),
+ * poi lo consegna al lettore come sorgente del NAS. Il perche' di un no sta in [ViewerState.originals], che la nota legge.
+ * Un catalogo che lancia vale "il NAS non risponde": non fa cadere il viewer.
+ */
+private suspend fun startNasVideo(
+  id: MediaId,
+  ref: MediaRef.Nas,
+  services: ViewerServices,
+  state: ViewerState,
+  playback: ViewerPlayback,
+) {
+  val nas = services.nasVideo
+  if (nas == null) {
+    state.originals[id] = OriginalProgress.Blocked(UnavailableReason.NAS_UNREACHABLE, null)
+    return
+  }
+  val gate = try {
+    // La posizione si risolve dal catalogo: fuori dal thread principale.
+    withContext(services.dispatchers.io) { nas.check(ref) }
+  } catch (cancelled: CancellationException) {
+    throw cancelled
+  } catch (_: Exception) {
+    state.originals[id] = OriginalProgress.Blocked(UnavailableReason.NAS_UNREACHABLE, null)
+    return
+  }
+  when (gate) {
+    is NasVideoGate.Ready -> {
+      state.originals.remove(id)
+      playback.playVideo(id, nas.playbackSource(ref))
+    }
+    is NasVideoGate.NeedsMobileData ->
+      state.originals[id] = OriginalProgress.Blocked(UnavailableReason.NEEDS_MOBILE_DATA_CONFIRMATION, gate.sizeBytes)
+    NasVideoGate.Missing -> state.message = ViewerMessage.ItemGone
+  }
+}

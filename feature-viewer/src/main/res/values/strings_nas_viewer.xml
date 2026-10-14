@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Viewer dei media del NAS e "Scarica sul telefono" (Fase 4, P8). Un file proprio: i pacchetti paralleli non si contendono strings.xml. -->
+
+  <!-- Menu a capacità -->
+  <string name="viewer_action_download">Scarica sul telefono</string>
+
+  <!-- Note sulla pagina: video del NAS -->
+  <string name="viewer_notice_video_loading_title">Preparo il video</string>
+  <string name="viewer_notice_video_loading_detail">Lo leggo dal NAS.</string>
+  <string name="viewer_notice_video_nas_title">Il NAS non risponde</string>
+  <string name="viewer_notice_video_nas_detail">Il video riparte quando il NAS è di nuovo raggiungibile.</string>
+  <string name="viewer_notice_mobile_video_detail_size">Questo video pesa %1$s. Guardarlo con i dati mobili?</string>
+  <string name="viewer_notice_mobile_video_action">Guarda con i dati mobili</string>
+  <string name="viewer_notice_mobile_download_detail_size">Questo file pesa %1$s. Scaricarlo con i dati mobili?</string>
+  <string name="viewer_notice_mobile_download_action">Scarica con i dati mobili</string>
+  <string name="viewer_notice_retry">Riprova</string>
+  <string name="viewer_notice_failed_storage">Il telefono non ha più posto per leggere l’originale.</string>
+
+  <!-- Nota: scarico sul telefono -->
+  <string name="viewer_notice_download_title">Scarico sul telefono</string>
+  <string name="viewer_notice_download_detail">Lo trovi in Pictures/MyCloud Gallery.</string>
+  <string name="viewer_notice_download_queued">In coda: parte appena finisce l’altro scaricamento.</string>
+  <string name="viewer_notice_download_cancel">Annulla</string>
+
+  <!-- Avvisi brevi: esito dello scaricamento -->
+  <string name="viewer_msg_downloaded_title">Salvato sul telefono</string>
+  <string name="viewer_msg_downloaded_detail">Lo trovi in Pictures/MyCloud Gallery.</string>
+  <string name="viewer_msg_download_failed_title">Non è stato possibile scaricarlo</string>
+  <string name="viewer_msg_download_failed_detail">Riprova fra poco. Sul telefono non è rimasto nessun file a metà.</string>
+  <string name="viewer_msg_download_nas_title">Il NAS non risponde</string>
+  <string name="viewer_msg_download_nas_detail">Lo scaricamento si è fermato. Riprova quando il NAS è raggiungibile.</string>
+  <string name="viewer_msg_download_full_title">Il telefono è pieno</string>
+  <string name="viewer_msg_download_full_detail">Libera spazio e riprova. Non è rimasto nessun file a metà.</string>
+  <string name="viewer_msg_download_integrity_title">Il file è cambiato sul NAS</string>
+  <string name="viewer_msg_download_integrity_detail">È stato modificato mentre lo scaricavo. Riprova fra poco.</string>
+  <string name="viewer_msg_download_cancelled_title">Scaricamento annullato</string>
+  <string name="viewer_msg_download_cancelled_detail">Sul telefono non è rimasto niente.</string>
+</resources>

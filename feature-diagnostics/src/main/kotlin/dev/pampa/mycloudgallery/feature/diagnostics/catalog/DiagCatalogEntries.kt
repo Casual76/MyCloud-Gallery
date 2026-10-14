@@ -99,6 +99,7 @@ internal object DiagCatalogEntries {
     DiagEntry(DiagCodes.ACT_ANDROID_LIMIT, DiagSection.ACTIVITIES, DiagSeverity.WARNING, R.string.diag_act_android_limit_title, R.string.diag_act_android_limit_guide, DiagAction.OPEN_BATTERY_SETTINGS),
     DiagEntry(DiagCodes.ACT_NAS_UNREACHABLE, DiagSection.ACTIVITIES, DiagSeverity.WARNING, R.string.diag_act_nas_unreachable_title, R.string.diag_act_nas_unreachable_guide, DiagAction.RUN_CONNECTION_TEST),
     DiagEntry(DiagCodes.ACT_CONFIRMATION_REQUIRED, DiagSection.ACTIVITIES, DiagSeverity.INFO, R.string.diag_act_confirmation_required_title, 0, null),
+    DiagEntry(DiagCodes.ACT_FROZEN, DiagSection.ACTIVITIES, DiagSeverity.WARNING, R.string.diag_act_frozen_title, R.string.diag_act_frozen_guide, null),
     DiagEntry(DiagCodes.ACT_JOB_STOPPED, DiagSection.ACTIVITIES, DiagSeverity.INFO, R.string.diag_act_job_stopped_title, R.string.diag_act_job_stopped_guide, null),
 
     // --- Ultimi esiti ed errori --------------------------------------------

@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.core.rules
 
+import dev.pampa.mycloudgallery.core.model.FreezeReason
 import dev.pampa.mycloudgallery.core.rules.traffic.CycleUsage
 import java.time.Duration
 
@@ -7,10 +8,18 @@ import java.time.Duration
 sealed interface WorkRequest {
 
   /**
+   * Il lavoro **scrive sul NAS** (pubblicazione dell'indice, prenotazioni, compattazione, pulizie, operazioni in coda,
+   * backup): con una share congelata per cambiamenti di massa (D10, [SystemState.nasFrozen]) non parte e dice
+   * [WaitReason.Frozen]. Falso per tutto cio' che legge soltanto (la scansione, lo scaricamento di segmenti e miniature):
+   * la scansione deve poter girare per accorgersi che la situazione e' tornata normale.
+   */
+  val writesToNas: Boolean get() = false
+
+  /**
    * Un lavoro in background (pianificato). Se e' [BackgroundActivity.INDEX_SYNC] e l'app e' in primo
    * piano, vale la regola della proposta 3: sempre consentito, tranne tetti e roaming.
    */
-  data class Background(val activity: BackgroundActivity) : WorkRequest
+  data class Background(val activity: BackgroundActivity, override val writesToNas: Boolean = false) : WorkRequest
 
   /**
    * "Fai ora" (piano §3, proposta 10): lavoro avviato dall'utente. Scavalca fascia, alimentazione,
@@ -24,6 +33,7 @@ sealed interface WorkRequest {
     val activity: BackgroundActivity,
     val estimatedBytes: Long? = null,
     val confirmed: Boolean = false,
+    override val writesToNas: Boolean = false,
   ) : WorkRequest
 
   /** Miniature e anteprime di cio' che e' sullo schermo (solo con l'app in primo piano). */
@@ -63,9 +73,9 @@ data class EvaluatorConfig(
  * L'ordine dei motivi e' quello della priorita' con cui si mostrano all'utente; [RuleDecision.Wait.reason]
  * e' il primo, gli altri stanno in `alsoBlockedBy` (per la Diagnostica):
  *
- *   profilo, ruolo, attivita' spenta, roaming, offline, rete non riconosciuta, rete scadente, fascia oraria, alimentazione,
- *   batteria, risparmio energetico, temperatura, rete non ammessa, attivita' pesante, tetto, limiti di
- *   Android, NAS.
+ *   profilo, ruolo, attivita' spenta, NAS congelato (solo per chi scrive sul NAS), roaming, offline, rete non
+ *   riconosciuta, rete scadente, fascia oraria, alimentazione, batteria, risparmio energetico, temperatura, rete non
+ *   ammessa, attivita' pesante, tetto, limiti di Android, NAS.
  */
 class RuleEvaluator(private val config: EvaluatorConfig = EvaluatorConfig()) {
 
@@ -82,17 +92,19 @@ class RuleEvaluator(private val config: EvaluatorConfig = EvaluatorConfig()) {
     running: Boolean = false,
   ): RuleDecision {
     val network = NetworkClassifier.classify(state.network)
+    // D10: solo i lavori che scrivono sul NAS vedono il congelamento.
+    val frozen = if (request.writesToNas) state.nasFrozen else null
     val decision =
       when (request) {
         is WorkRequest.Background ->
           if (request.activity == BackgroundActivity.INDEX_SYNC && state.appInForeground) {
-            foreground(request.activity, rules, state, usage, network)
+            foreground(request.activity, rules, state, usage, network, frozen)
           } else {
-            background(request.activity, rules, state, usage, network, running)
+            background(request.activity, rules, state, usage, network, running, frozen)
           }
-        is WorkRequest.UserInitiated -> userInitiated(request, rules, state, usage, network)
+        is WorkRequest.UserInitiated -> userInitiated(request, rules, state, usage, network, frozen)
         WorkRequest.VisibleContent ->
-          if (state.appInForeground) foreground(null, rules, state, usage, network)
+          if (state.appInForeground) foreground(null, rules, state, usage, network, frozen = null)
           else RuleDecision.Wait(WaitReason.AppNotVisible)
       }
     return if (running) decision.asStop() else decision
@@ -107,6 +119,7 @@ class RuleEvaluator(private val config: EvaluatorConfig = EvaluatorConfig()) {
     usage: CycleUsage,
     network: NetworkClass,
     running: Boolean,
+    frozen: FreezeReason?,
   ): RuleDecision {
     val rule = rules.ruleFor(activity)
     val power = state.power
@@ -115,6 +128,7 @@ class RuleEvaluator(private val config: EvaluatorConfig = EvaluatorConfig()) {
     if (!state.profileActive) blockers += WaitReason.ProfileInactive
     activity.requiredRole?.let { if (!state.roles.has(it)) blockers += WaitReason.RoleDisabled(it) }
     if (!rule.enabled) blockers += WaitReason.ActivityDisabled
+    if (frozen != null) blockers += WaitReason.Frozen(frozen)
 
     val roamingBlocked = network == NetworkClass.ROAMING && AllowedNetwork.ROAMING !in rule.networks
     if (roamingBlocked) blockers += WaitReason.Roaming
@@ -185,11 +199,13 @@ class RuleEvaluator(private val config: EvaluatorConfig = EvaluatorConfig()) {
     state: SystemState,
     usage: CycleUsage,
     network: NetworkClass,
+    frozen: FreezeReason?,
   ): RuleDecision {
     val rule = activity?.let { rules.ruleFor(it) }
     val blockers = ArrayList<WaitReason>()
 
     if (!state.profileActive) blockers += WaitReason.ProfileInactive
+    if (frozen != null) blockers += WaitReason.Frozen(frozen)
     val roamingBlocked =
       network == NetworkClass.ROAMING && (rule == null || AllowedNetwork.ROAMING !in rule.networks)
     if (roamingBlocked) blockers += WaitReason.Roaming
@@ -222,11 +238,14 @@ class RuleEvaluator(private val config: EvaluatorConfig = EvaluatorConfig()) {
     state: SystemState,
     usage: CycleUsage,
     network: NetworkClass,
+    frozen: FreezeReason?,
   ): RuleDecision {
     val activity = request.activity
     val blockers = ArrayList<WaitReason>()
 
     activity.requiredRole?.let { if (!state.roles.has(it)) blockers += WaitReason.RoleDisabled(it) }
+    // D10: neanche un "Fai ora" scrive sul NAS finche' la share e' congelata (come la sicurezza termica, non e' una preferenza).
+    if (frozen != null) blockers += WaitReason.Frozen(frozen)
     if (network == NetworkClass.OFFLINE) blockers += WaitReason.Offline
     if (network == NetworkClass.UNTRUSTED) blockers += WaitReason.NetworkNotTrusted
     if (state.power.thermalStatus >= config.hardStopAt) {

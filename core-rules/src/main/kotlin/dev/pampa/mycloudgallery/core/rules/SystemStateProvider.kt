@@ -1,5 +1,7 @@
 package dev.pampa.mycloudgallery.core.rules
 
+import dev.pampa.mycloudgallery.core.rules.run.NasFreezeSignal
+import dev.pampa.mycloudgallery.core.rules.run.NeverFrozenSignal
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDateTime
@@ -85,6 +87,7 @@ class ComposedSystemStateProvider(
   private val clock: Clock = SystemClockFollowingZone,
   config: EvaluatorConfig = EvaluatorConfig(),
   private val quality: NetworkQualitySignal = NoNetworkQualityInfo,
+  private val freeze: NasFreezeSignal = NeverFrozenSignal,
 ) : SystemStateProvider {
 
   private val tracker = PowerHistoryTracker(config)
@@ -102,6 +105,7 @@ class ComposedSystemStateProvider(
       androidLimits = limits.limits.value,
       appInForeground = appContext.inForeground,
       profileActive = appContext.profileActive,
+      nasFrozen = freeze.frozen.value,
     )
   }
 
@@ -114,6 +118,7 @@ class ComposedSystemStateProvider(
         limits.limits.map { },
         app.context.map { },
         quality.isPoor.map { },
+        freeze.frozen.map { },
       )
       .onStart { emit(Unit) }
       .conflate()

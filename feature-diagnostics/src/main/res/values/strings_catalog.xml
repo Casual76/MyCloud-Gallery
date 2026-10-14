@@ -145,6 +145,8 @@
   <string name="diag_act_nas_unreachable_title">NAS spento o non raggiungibile</string>
   <string name="diag_act_nas_unreachable_guide">Il calcolo AI lavora sul buffer locale, il resto aspetta. Esegui il test di connessione per capire dove si ferma.</string>
   <string name="diag_act_confirmation_required_title">Serve la tua conferma</string>
+  <string name="diag_act_frozen_title">Lavori sul NAS fermi: cambiamenti anomali</string>
+  <string name="diag_act_frozen_guide">Molti file sono spariti o cambiati tutti insieme. Per sicurezza l\'app non scrive niente sul NAS finché non controlli: guarda le cartelle dal PC e, se è tutto a posto, riprendi dalla Libreria.</string>
   <string name="diag_act_job_stopped_title">Un lavoro si è fermato e ripartirà</string>
   <string name="diag_act_job_stopped_guide">Android ferma i lavori per riavvii, aggiornamenti o limiti. Il punto di ripresa è salvato.</string>
 

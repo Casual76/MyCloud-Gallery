@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.core.rules
 
+import dev.pampa.mycloudgallery.core.model.FreezeReason
 import dev.pampa.mycloudgallery.core.rules.traffic.BillingCycle
 import dev.pampa.mycloudgallery.core.rules.traffic.CycleUsage
 import dev.pampa.mycloudgallery.core.rules.traffic.TrafficKey
@@ -45,6 +46,7 @@ fun state(
   limits: AndroidLimits = AndroidLimits(),
   foreground: Boolean = false,
   profileActive: Boolean = true,
+  frozen: FreezeReason? = null,
 ): SystemState =
   SystemState(
     now = now,
@@ -66,6 +68,7 @@ fun state(
     androidLimits = limits,
     appInForeground = foreground,
     profileActive = profileActive,
+    nasFrozen = frozen,
   )
 
 /** I consumi del mese di ottobre 2026: [mobile] e [wifi] byte, tutti attribuiti al backup foto. */
@@ -79,14 +82,15 @@ fun usage(mobile: Long = 0, wifi: Long = 0): CycleUsage {
 fun ruleSetOf(preset: Preset, night: TimeWindow = NightWindows.DEFAULT): RuleSet =
   PresetCatalog.ruleSet(preset, night)
 
-/** Valuta un lavoro in background. */
+/** Valuta un lavoro in background ([writesToNas]: scrive sul NAS, quindi lo ferma il congelamento, D10). */
 fun RuleEvaluator.background(
   activity: BackgroundActivity,
   rules: RuleSet,
   state: SystemState,
   usage: CycleUsage = usage(),
   running: Boolean = false,
-): RuleDecision = evaluate(WorkRequest.Background(activity), rules, state, usage, running)
+  writesToNas: Boolean = false,
+): RuleDecision = evaluate(WorkRequest.Background(activity, writesToNas), rules, state, usage, running)
 
 /** Un orologio che si sposta a mano, per i test dei contatori e del cambio mese. */
 class MutableClock(

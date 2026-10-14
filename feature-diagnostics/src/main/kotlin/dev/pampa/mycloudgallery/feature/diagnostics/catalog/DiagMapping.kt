@@ -178,6 +178,7 @@ internal enum class ActivityReason(val code: DiagCode) {
   ANDROID_LIMIT(DiagCodes.ACT_ANDROID_LIMIT),
   NAS_UNREACHABLE(DiagCodes.ACT_NAS_UNREACHABLE),
   CONFIRMATION_REQUIRED(DiagCodes.ACT_CONFIRMATION_REQUIRED),
+  FROZEN(DiagCodes.ACT_FROZEN),
   ;
 
   companion object {
@@ -201,6 +202,7 @@ internal enum class ActivityReason(val code: DiagCode) {
       is WaitReason.AndroidLimit -> ANDROID_LIMIT
       WaitReason.NasUnreachable -> NAS_UNREACHABLE
       is WaitReason.ConfirmationRequired -> CONFIRMATION_REQUIRED
+      is WaitReason.Frozen -> FROZEN
     }
   }
 }

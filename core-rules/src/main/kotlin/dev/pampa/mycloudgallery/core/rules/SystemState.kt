@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.core.rules
 
+import dev.pampa.mycloudgallery.core.model.FreezeReason
 import java.time.Duration
 import java.time.LocalDateTime
 
@@ -173,6 +174,9 @@ data class AppContext(val inForeground: Boolean = false, val profileActive: Bool
  * @property now l'ora locale del dispositivo (data e ora): fa da riferimento per la fascia notte e per
  *   il cambio mese dei contatori.
  * @property nasReachable il NAS risponde (segnale della Fase 2, `NasReachabilitySignal`).
+ * @property nasFrozen almeno una share del NAS e' congelata per cambiamenti di massa (D10, Fase 4; segnale
+ *   `NasFreezeSignal`): perche', o null se non lo e'. Vale solo per i lavori che scrivono sul NAS
+ *   ([WorkRequest.writesToNas]); la granularita' per share sta in `IndexWriteGate`, qui basta "qualcuna".
  */
 data class SystemState(
   val now: LocalDateTime,
@@ -183,4 +187,5 @@ data class SystemState(
   val androidLimits: AndroidLimits = AndroidLimits(),
   val appInForeground: Boolean = false,
   val profileActive: Boolean = true,
+  val nasFrozen: FreezeReason? = null,
 )

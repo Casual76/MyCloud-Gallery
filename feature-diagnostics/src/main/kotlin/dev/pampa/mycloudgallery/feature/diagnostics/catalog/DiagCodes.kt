@@ -105,6 +105,7 @@ object DiagCodes {
   @JvmField val ACT_ANDROID_LIMIT = DiagCode("ACT_ANDROID_LIMIT", setOf("E-P14"))
   @JvmField val ACT_NAS_UNREACHABLE = DiagCode("ACT_NAS_UNREACHABLE", setOf("E-R5", "E-A6"))
   @JvmField val ACT_CONFIRMATION_REQUIRED = DiagCode("ACT_CONFIRMATION_REQUIRED")
+  @JvmField val ACT_FROZEN = DiagCode("ACT_FROZEN", setOf("E-S11"))
   @JvmField val ACT_JOB_STOPPED = DiagCode("ACT_JOB_STOPPED", setOf("E-P4", "E-P8", "E-P14"))
 
   // --- Ultimi esiti ed errori ----------------------------------------------

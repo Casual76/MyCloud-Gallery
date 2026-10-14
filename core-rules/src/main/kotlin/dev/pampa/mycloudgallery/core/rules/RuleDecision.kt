@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.core.rules
 
+import dev.pampa.mycloudgallery.core.model.FreezeReason
 import java.time.LocalDateTime
 
 /** Quale tetto mensile. */
@@ -40,6 +41,29 @@ sealed interface WaitReason {
 
   data object ActivityDisabled : WaitReason {
     override val message = "Attività disattivata nelle impostazioni"
+  }
+
+  /**
+   * Una share del NAS e' **congelata** per cambiamenti di massa (D10, C11 di docs/fase4-progetto.md): troppi file spariti,
+   * cambiati o diventati "non piu' media" in una scansione (possibile ransomware o errore). Finche' l'utente non ha
+   * controllato ("Ho controllato, continua") o la situazione non torna normale, **nessun lavoro scrive sul NAS**
+   * (indice, prenotazioni, compattazione, pulizie, operazioni in coda, backup): lo vedono i lavori valutati con
+   * [WorkRequest.writesToNas]. La lettura (anche la scansione che serve a scongelare) non e' toccata.
+   *
+   * E' "relativo al NAS" ([isNetworkRelated]): se e' l'unico ostacolo, il Calcolo AI lavora comunque sul suo buffer
+   * locale (E-A6). Da risposta Q6 dell'utente, l'avviso va nel riepilogo giornaliero, non in una notifica a se'.
+   */
+  data class Frozen(val reason: FreezeReason) : WaitReason {
+    override val message =
+      when (reason) {
+        FreezeReason.VANISHED ->
+          "Scritture sul NAS ferme: sono spariti molti file. Controlla, poi tocca «Ho controllato, continua»"
+        FreezeReason.CHANGED ->
+          "Scritture sul NAS ferme: sono cambiati molti file. Controlla, poi tocca «Ho controllato, continua»"
+        FreezeReason.NOT_MEDIA ->
+          "Scritture sul NAS ferme: molti file non sono più foto o video. Controlla, poi tocca «Ho controllato, continua»"
+      }
+    override val isNetworkRelated = true
   }
 
   /** Una richiesta "solo con l'app aperta" (miniature visibili) arrivata con l'app in background. */

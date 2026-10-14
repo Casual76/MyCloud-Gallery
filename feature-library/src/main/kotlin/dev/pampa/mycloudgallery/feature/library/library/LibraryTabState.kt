@@ -89,8 +89,9 @@ interface LibraryCommands {
 object NoLibraryCommands : LibraryCommands
 
 /**
- * Solo debug: le manopole della Libreria sintetica (M1, `docs/bench/M1.md`). In release e' sempre null e non compare
- * niente. [select] ricostruisce la Libreria con un altro numero di elementi.
+ * Solo debug: le manopole della Libreria sintetica (M1, `docs/bench/M1.md`) e del prototipo grafico (G1,
+ * `docs/grafica-progetto.md`). In release e' sempre null e non compare niente. [select] ricostruisce la Libreria con un
+ * altro numero di elementi; [chooseDesign] cambia la chrome della Libreria (vera e sintetica: le manopole sono le stesse).
  */
 @Stable
 class LibraryDebugHooks(
@@ -105,6 +106,14 @@ class LibraryDebugHooks(
     if (size == current) return
     current = size
     onSelect(size)
+  }
+
+  /** Il prototipo grafico della Libreria (G1): [LibraryDesign.Current] finche' non se ne sceglie un altro. */
+  var design: LibraryDesign by mutableStateOf(LibraryDesign.Current)
+    private set
+
+  fun chooseDesign(design: LibraryDesign) {
+    this.design = design
   }
 }
 

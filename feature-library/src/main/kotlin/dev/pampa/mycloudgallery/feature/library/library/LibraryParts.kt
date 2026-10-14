@@ -146,7 +146,10 @@ internal fun LibraryEffects(state: LibraryTabState) {
     state.videoCount = videos
     state.photoCount = view.size - videos
   }
-  state.debug?.let { DebugSyntheticSize(it) }
+  state.debug?.let {
+    DebugSyntheticSize(it)
+    DebugDesignChoice(it)
+  }
 }
 
 /**
@@ -430,6 +433,16 @@ internal fun LibrarySelectionBar(
   onDelete: () -> Unit,
   onHideGroups: () -> Unit = {},
 ) {
+  GalleryActionBar(actions = selectionActions(state, onDelete, onHideGroups), backdrop = backdrop)
+}
+
+/** Le azioni della selezione (Condividi, Preferito, Nascondi, Elimina): le stesse per la barra di sempre e per i prototipi G1. */
+@Composable
+internal fun selectionActions(
+  state: LibraryTabState,
+  onDelete: () -> Unit,
+  onHideGroups: () -> Unit,
+): List<GalleryBarAction> {
   val grid = state.grid
   val scope = rememberCoroutineScope()
   val selected by grid.selection.selected.collectAsState()
@@ -479,7 +492,7 @@ internal fun LibrarySelectionBar(
       )
     }
   }
-  GalleryActionBar(actions = actions, backdrop = backdrop)
+  return actions
 }
 
 /** Il foglio "Elimina dal telefono" (D14): un posto solo, il telefono, e l'avviso che sul NAS non c'e' ancora una copia. */

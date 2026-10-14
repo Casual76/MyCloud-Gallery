@@ -32,6 +32,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -80,7 +81,9 @@ import kotlinx.coroutines.launch
  * - [onOpenViewer]: il viewer e' una sovrapposizione ospitata da `:app` sopra la pillola (D12): la griglia non lo
  *   conosce, manda la richiesta con la geometria della miniatura (`ViewerAnchor`);
  * - [onOpenSettings]: dal menu della vista;
- * - [statusFooter]: l'indicatore globale della Fase 2, in fondo.
+ * - [statusFooter]: l'indicatore globale della Fase 2, in fondo;
+ * - [tabBarScroll]: la connessione con cui la pillola si ripiega scorrendo. La Libreria attuale non la usa (la pillola resta
+ *   aperta, come sempre); i prototipi G1 A e C la attaccano alla griglia (solo debug, `LibraryDesign`).
  *
  * Gli stati (§2.4): nessun permesso, accesso parziale (E-P1), foto in attesa (E-P21), prima lettura, Libreria vuota,
  * filtro senza risultati. I pop-up (menu, conferma dell'eliminazione) usano il `FluidGlassModalHost` dello scope; se
@@ -95,9 +98,15 @@ fun LibraryTab(
   statusFooter: @Composable () -> Unit,
   modifier: Modifier = Modifier,
   state: LibraryTabState = rememberEmptyLibraryTabState(),
+  tabBarScroll: NestedScrollConnection? = null,
 ) {
   LibraryModalHost(modifier) {
-    LibraryScreen(contentPadding, backdropOut, onOpenViewer, onOpenSettings, statusFooter, state)
+    LibraryEffects(state)
+    // G1: in debug il prototipo grafico scelto; in release (manopole nulle) sempre la Libreria di sempre.
+    when (val design = state.debug?.design ?: LibraryDesign.Current) {
+      LibraryDesign.Current -> LibraryScreen(contentPadding, backdropOut, onOpenViewer, onOpenSettings, statusFooter, state)
+      else -> LibraryPrototypeScreen(design, contentPadding, backdropOut, onOpenViewer, onOpenSettings, statusFooter, state, tabBarScroll)
+    }
   }
 }
 
@@ -140,8 +149,6 @@ private fun LibraryScreen(
   var bottomBarHeightPx by remember { mutableIntStateOf(0) }
   var deleting by remember { mutableStateOf(false) }
   var hidingGroups by remember { mutableStateOf(false) }
-
-  LibraryEffects(state)
 
   // Gli avvisi scompaiono (anche da soli, dopo qualche secondo): la loro altezza torna a zero, e con lei lo spazio sopra la griglia.
   val noticesShown = !showPermissionNow(phone) && hasNotices(phone, state.notice)
@@ -345,7 +352,7 @@ private fun LibraryViewMenu(state: LibraryTabState, onOpenSettings: () -> Unit, 
     }
   }.orEmpty()
   GalleryFilterMenu(
-    groups = listOf(filters, styles, debug),
+    groups = listOf(filters, styles, debug, designOptions(state)),
     contentDescription = stringResource(R.string.library_view_menu),
     active = state.filter != LibraryFilter.ALL,
     trailing = listOf(

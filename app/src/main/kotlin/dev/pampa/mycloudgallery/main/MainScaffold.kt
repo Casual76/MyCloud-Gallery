@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,6 +26,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import dev.antigravity.fluidengine.ui.fluid.FluidFloatingTabBarDefaults
+import dev.antigravity.fluidengine.ui.fluid.FluidFloatingTabBarInlineBehavior
+import dev.antigravity.fluidengine.ui.fluid.rememberFluidFloatingTabBarScrollConnection
 import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
@@ -88,6 +91,11 @@ fun MainScaffold(
   val ownViewer = if (rootViewer == null) remember { ViewerHostState(null) } else null
   val viewer = rootViewer ?: checkNotNull(ownViewer)
   val scope = rememberCoroutineScope()
+  // La piega della pillola allo scorrimento. La Libreria attuale non attacca la connessione alla griglia (la pillola resta
+  // aperta come sempre); i prototipi grafici G1 A e C (solo debug) si'. In una griglia che si apre in fondo, "verso i piu'
+  // vecchi" e' il dito che scende: la pillola si ripiega li' (`OnScrollUp`) e torna tornando verso i recenti.
+  val tabBarScroll = rememberFluidFloatingTabBarScrollConnection(inlineBehavior = FluidFloatingTabBarInlineBehavior.OnScrollUp)
+  LaunchedEffect(selectedTab) { tabBarScroll.expand() }
 
   val navigationBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
   val selecting = selectedTab == GalleryTab.Library && libraryState.selectionActive
@@ -114,6 +122,7 @@ fun MainScaffold(
         onOpenSettings = onOpenSettings,
         statusFooter = { GlobalStatusIndicator(status = status, onClick = onStatusClick) },
         state = libraryState,
+        tabBarScroll = tabBarScroll,
       )
       selectedTab == GalleryTab.Collections && collections != null -> collections(
         CollectionsSlot(
@@ -140,6 +149,7 @@ fun MainScaffold(
         onSelect = onSelectTab,
         backdrop = backdrop,
         onReselect = { tab -> if (tab == GalleryTab.Library) scope.launch { libraryState.grid.scrollToNewest() } },
+        scrollConnection = tabBarScroll,
       )
     }
 

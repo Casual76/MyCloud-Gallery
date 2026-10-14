@@ -97,4 +97,17 @@
   <string name="library_debug_synthetic">Sintetica: %1$s elementi</string>
   <!-- Solo debug (P11): torna alla Libreria vera del telefono. -->
   <string name="library_debug_phone">Libreria del telefono</string>
+
+  <!-- G1, solo debug finché l'utente non sceglie: i prototipi grafici della Libreria (docs/grafica-progetto.md). -->
+  <string name="library_debug_design">Prototipo grafico: %1$s</string>
+  <string name="library_design_current">attuale</string>
+  <string name="library_design_a">A, sopra le foto</string>
+  <string name="library_design_b">B, barra solida</string>
+  <string name="library_design_c">C, vetro adattivo</string>
+  <string name="library_g1_done">Fine</string>
+  <string name="library_g1_level">Livello: %1$s</string>
+  <plurals name="library_g1_selected">
+    <item quantity="one">%1$s selezionato</item>
+    <item quantity="other">%1$s selezionati</item>
+  </plurals>
 </resources>

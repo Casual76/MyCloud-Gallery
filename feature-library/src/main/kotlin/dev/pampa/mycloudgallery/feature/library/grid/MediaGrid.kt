@@ -111,6 +111,8 @@ import kotlinx.coroutines.launch
  * @param onLevelChanged il livello si e' assestato dopo un pinch (per ricordarlo).
  * @param stickyHeader se la griglia disegna da se' l'intestazione agganciata. Chi ha una barra di vetro sopra la griglia
  *   passa `false` e mette [MediaGridStickyHeader] **dopo** la barra: agganciata alla barra, deve starle sopra.
+ * @param cellCornerScale quanto dell'angolo delle celle resta (G1: 0 = parete di foto squadrata).
+ * @param gap la fessura fra le celle.
  */
 @Composable
 fun MediaGrid(
@@ -123,6 +125,8 @@ fun MediaGrid(
   stickyTop: Dp = contentPadding.calculateTopPadding(),
   onLevelChanged: (GridLevel) -> Unit = {},
   stickyHeader: Boolean = true,
+  cellCornerScale: Float = 1f,
+  gap: Dp = GalleryDimens.GridGap,
 ) {
   BoxWithConstraints(
     modifier = modifier
@@ -141,7 +145,7 @@ fun MediaGrid(
 
     // --- I layout -----------------------------------------------------------------------------
     val levels = remember(maxWidth) { GalleryGridLevels.forWidth(maxWidth.value) }
-    val gapPx = with(density) { GalleryDimens.GridGap.roundToPx() }
+    val gapPx = with(density) { gap.roundToPx() }
     // Le intestazioni crescono col testo di sistema: il motore le misura in dp per questa densita'.
     val headerDensity = density.density * max(1f, density.fontScale)
     val inputs = remember(state.view, state.style, widthPx, gapPx, headerDensity, levels) {
@@ -170,7 +174,7 @@ fun MediaGrid(
 
     GridEffects(state, reducedMotion)
 
-    val style = rememberGalleryGridCellStyle()
+    val style = rememberGalleryGridCellStyle(cellCornerScale)
     val strings = rememberGridStrings()
     val actions = remember(state, strings) { GridCellActions(state, strings) { currentOnOpen(it) } }
     val today = remember(state) { state.today() }

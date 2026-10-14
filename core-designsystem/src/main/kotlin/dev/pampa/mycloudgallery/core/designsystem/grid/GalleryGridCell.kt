@@ -224,6 +224,8 @@ class GalleryGridCellStyle internal constructor(
   internal val selectedText: String,
   internal val notSelectedText: String,
   internal val loadingText: String,
+  /** Quanto dell'angolo continuo resta (1 = quello di sempre, 0 = celle squadrate, G1 direzione A). */
+  internal val cornerScale: Float = 1f,
 ) {
   internal val onPhotoFilter: ColorFilter = ColorFilter.tint(badgeContent)
   internal val checkFilter: ColorFilter = ColorFilter.tint(checkTint)
@@ -260,16 +262,20 @@ class GalleryGridCellStyle internal constructor(
     outlines[packed]?.let { return it }
     if (outlines.size >= MaxCachedOutlines) outlines.clear()
     val share = (min(size.width, size.height) / referenceCell).coerceIn(MinCornerShare, 1f)
-    val radius = with(density) { (maxCorner * share).toDp() }
+    val radius = with(density) { (maxCorner * share * cornerScale).toDp() }
     return ContinuousCornerShape(radius).createOutline(size, layoutDirection, density).also { outlines[packed] = it }
   }
 
   internal fun capsule(size: Size): Outline = FluidCapsuleShape.createOutline(size, layoutDirection, density)
 }
 
-/** Lo stile delle celle della griglia, dal tema corrente. Uno per griglia. */
+/**
+ * Lo stile delle celle della griglia, dal tema corrente. Uno per griglia.
+ *
+ * @param cornerScale quanto dell'angolo continuo resta: 1 di serie, 0 per le celle squadrate di una parete di foto (G1).
+ */
 @Composable
-fun rememberGalleryGridCellStyle(): GalleryGridCellStyle {
+fun rememberGalleryGridCellStyle(cornerScale: Float = 1f): GalleryGridCellStyle {
   val scheme = MaterialTheme.colorScheme
   val density = LocalDensity.current
   val direction = LocalLayoutDirection.current
@@ -283,7 +289,7 @@ fun rememberGalleryGridCellStyle(): GalleryGridCellStyle {
   val selectedText = stringResource(R.string.cell_selected)
   val notSelectedText = stringResource(R.string.cell_not_selected)
   val loadingText = stringResource(R.string.cell_loading)
-  return remember(scheme, density, direction, textMeasurer, badgeText, play, favorite, edited, check, broken, selectedText) {
+  return remember(scheme, density, direction, textMeasurer, badgeText, play, favorite, edited, check, broken, selectedText, cornerScale) {
     GalleryGridCellStyle(
       density = density,
       layoutDirection = direction,
@@ -307,6 +313,7 @@ fun rememberGalleryGridCellStyle(): GalleryGridCellStyle {
       selectedText = selectedText,
       notSelectedText = notSelectedText,
       loadingText = loadingText,
+      cornerScale = cornerScale.coerceIn(0f, 1f),
     )
   }
 }

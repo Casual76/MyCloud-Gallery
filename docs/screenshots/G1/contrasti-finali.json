@@ -1,0 +1,914 @@
+{
+ "A|chiaro|titolo": {
+  "direzione": "A",
+  "tema": "chiaro",
+  "scatto": "p12",
+  "categoria": "titolo",
+  "etichetta": "Firenze",
+  "tipo": "testo",
+  "riquadro": [
+   53,
+   143,
+   190,
+   199
+  ],
+  "ink": 1.0,
+  "worst": 5.51,
+  "median": 6.42,
+  "dark_ink": false,
+  "camp": 1
+ },
+ "A|chiaro|comandi": {
+  "direzione": "A",
+  "tema": "chiaro",
+  "scatto": "p02",
+  "categoria": "comandi",
+  "etichetta": "Vista",
+  "tipo": "icona",
+  "riquadro": [
+   922,
+   79,
+   1048,
+   205
+  ],
+  "ink": 1.0,
+  "worst": 12.08,
+  "median": 12.45,
+  "dark_ink": false,
+  "camp": 1
+ },
+ "A|scuro|titolo": {
+  "direzione": "A",
+  "tema": "scuro",
+  "scatto": "p12",
+  "categoria": "titolo",
+  "etichetta": "Firenze",
+  "tipo": "testo",
+  "riquadro": [
+   53,
+   143,
+   190,
+   199
+  ],
+  "ink": 1.0,
+  "worst": 5.6,
+  "median": 5.91,
+  "dark_ink": false,
+  "camp": 1
+ },
+ "A|scuro|comandi": {
+  "direzione": "A",
+  "tema": "scuro",
+  "scatto": "p11",
+  "categoria": "comandi",
+  "etichetta": "Seleziona",
+  "tipo": "icona",
+  "riquadro": [
+   796,
+   79,
+   922,
+   205
+  ],
+  "ink": 1.0,
+  "worst": 12.08,
+  "median": 12.27,
+  "dark_ink": false,
+  "camp": 1
+ },
+ "B|chiaro|titolo": {
+  "direzione": "B",
+  "tema": "chiaro",
+  "scatto": "p00",
+  "categoria": "titolo",
+  "etichetta": "Libreria",
+  "tipo": "testo",
+  "riquadro": [
+   53,
+   100,
+   546,
+   174
+  ],
+  "ink": 0.006117175894127335,
+  "worst": 16.51,
+  "median": 16.51,
+  "dark_ink": true,
+  "camp": 1
+ },
+ "B|chiaro|comandi": {
+  "direzione": "B",
+  "tema": "chiaro",
+  "scatto": "p00",
+  "categoria": "comandi",
+  "etichetta": "Livello: Giorni",
+  "tipo": "icona",
+  "riquadro": [
+   557,
+   74,
+   806,
+   200
+  ],
+  "ink": 0.006117175894127335,
+  "worst": 15.89,
+  "median": 15.89,
+  "dark_ink": true,
+  "camp": 1
+ },
+ "B|chiaro|agganciata": {
+  "direzione": "B",
+  "tema": "chiaro",
+  "scatto": "p00",
+  "categoria": "agganciata",
+  "etichetta": "Oslo",
+  "tipo": "testo",
+  "riquadro": [
+   377,
+   230,
+   460,
+   286
+  ],
+  "ink": 0.13969474310681393,
+  "worst": 4.89,
+  "median": 4.89,
+  "dark_ink": true,
+  "camp": 1
+ },
+ "B|chiaro|pillola": {
+  "direzione": "B",
+  "tema": "chiaro",
+  "scatto": "p00",
+  "categoria": "pillola",
+  "etichetta": "Libreria",
+  "tipo": "testo",
+  "riquadro": [
+   248,
+   2223,
+   371,
+   2268
+  ],
+  "ink": 0.006117175894127335,
+  "worst": 12.34,
+  "median": 12.34,
+  "dark_ink": true,
+  "camp": 1
+ },
+ "B|chiaro|azioni": {
+  "direzione": "B",
+  "tema": "chiaro",
+  "scatto": "selezione",
+  "categoria": "azioni",
+  "etichetta": "Elimina dal telefono",
+  "tipo": "icona",
+  "riquadro": [
+   698,
+   2153,
+   824,
+   2279
+  ],
+  "ink": 0.14501215915751667,
+  "worst": 4.57,
+  "median": 4.57,
+  "dark_ink": true,
+  "camp": 1
+ },
+ "B|scuro|titolo": {
+  "direzione": "B",
+  "tema": "scuro",
+  "scatto": "p00",
+  "categoria": "titolo",
+  "etichetta": "Libreria",
+  "tipo": "testo",
+  "riquadro": [
+   53,
+   100,
+   546,
+   174
+  ],
+  "ink": 0.8897407914303731,
+  "worst": 17.22,
+  "median": 17.22,
+  "dark_ink": false,
+  "camp": 1
+ },
+ "B|scuro|comandi": {
+  "direzione": "B",
+  "tema": "scuro",
+  "scatto": "p00",
+  "categoria": "comandi",
+  "etichetta": "Livello: Giorni",
+  "tipo": "icona",
+  "riquadro": [
+   557,
+   74,
+   806,
+   200
+  ],
+  "ink": 0.8897407914303731,
+  "worst": 12.68,
+  "median": 12.68,
+  "dark_ink": false,
+  "camp": 1
+ },
+ "B|scuro|agganciata": {
+  "direzione": "B",
+  "tema": "scuro",
+  "scatto": "p00",
+  "categoria": "agganciata",
+  "etichetta": "Oslo",
+  "tipo": "testo",
+  "riquadro": [
+   377,
+   230,
+   460,
+   286
+  ],
+  "ink": 0.40509851037238287,
+  "worst": 8.34,
+  "median": 8.34,
+  "dark_ink": false,
+  "camp": 1
+ },
+ "B|scuro|pillola": {
+  "direzione": "B",
+  "tema": "scuro",
+  "scatto": "p00",
+  "categoria": "pillola",
+  "etichetta": "Libreria",
+  "tipo": "testo",
+  "riquadro": [
+   248,
+   2223,
+   371,
+   2268
+  ],
+  "ink": 0.8897407914303731,
+  "worst": 11.23,
+  "median": 11.23,
+  "dark_ink": false,
+  "camp": 1
+ },
+ "B|scuro|azioni": {
+  "direzione": "B",
+  "tema": "scuro",
+  "scatto": "selezione",
+  "categoria": "azioni",
+  "etichetta": "Elimina dal telefono",
+  "tipo": "icona",
+  "riquadro": [
+   698,
+   2153,
+   824,
+   2279
+  ],
+  "ink": 0.32226218032428083,
+  "worst": 5.02,
+  "median": 5.02,
+  "dark_ink": false,
+  "camp": 1
+ },
+ "attuale|chiaro|menu": {
+  "direzione": "attuale",
+  "tema": "chiaro",
+  "scatto": "menu",
+  "categoria": "menu",
+  "etichetta": "Screenshot",
+  "tipo": "testo",
+  "riquadro": [
+   292,
+   350,
+   996,
+   411
+  ],
+  "ink": 0.006117175894127335,
+  "worst": 5.22,
+  "median": 5.36,
+  "dark_ink": true,
+  "camp": 1
+ },
+ "attuale|chiaro|segmenti": {
+  "direzione": "attuale",
+  "tema": "chiaro",
+  "scatto": "p02",
+  "categoria": "segmenti",
+  "etichetta": "Mesi",
+  "tipo": "testo",
+  "riquadro": [
+   388,
+   2034,
+   466,
+   2082
+  ],
+  "ink": 0.19806931955994886,
+  "worst": 1.0,
+  "median": 1.0,
+  "dark_ink": true,
+  "camp": 1
+ },
+ "attuale|chiaro|barra": {
+  "direzione": "attuale",
+  "tema": "chiaro",
+  "scatto": "p10",
+  "categoria": "barra",
+  "etichetta": "Libreria",
+  "tipo": "testo",
+  "riquadro": [
+   462,
+   97,
+   619,
+   155
+  ],
+  "ink": 0.006117175894127335,
+  "worst": 3.67,
+  "median": 4.0,
+  "dark_ink": true,
+  "camp": 1
+ },
+ "attuale|chiaro|comandi": {
+  "direzione": "attuale",
+  "tema": "chiaro",
+  "scatto": "p00",
+  "categoria": "comandi",
+  "etichetta": "Seleziona",
+  "tipo": "icona",
+  "riquadro": [
+   807,
+   63,
+   933,
+   189
+  ],
+  "ink": 0.20633484335140323,
+  "worst": 1.39,
+  "median": 1.45,
+  "dark_ink": true,
+  "camp": 1
+ },
+ "attuale|chiaro|agganciata": {
+  "direzione": "attuale",
+  "tema": "chiaro",
+  "scatto": "p00",
+  "categoria": "agganciata",
+  "etichetta": "Oslo",
+  "tipo": "testo",
+  "riquadro": [
+   53,
+   268,
+   136,
+   315
+  ],
+  "ink": 0.04214943011186794,
+  "worst": 1.0,
+  "median": 1.0,
+  "dark_ink": true,
+  "camp": 1
+ },
+ "attuale|chiaro|pillola": {
+  "direzione": "attuale",
+  "tema": "chiaro",
+  "scatto": "p02",
+  "categoria": "pillola",
+  "etichetta": "Libreria",
+  "tipo": "testo",
+  "riquadro": [
+   248,
+   2223,
+   371,
+   2268
+  ],
+  "ink": 0.006117175894127335,
+  "worst": 1.0,
+  "median": 2.58,
+  "dark_ink": true,
+  "camp": 1
+ },
+ "attuale|chiaro|oggi": {
+  "direzione": "attuale",
+  "tema": "chiaro",
+  "scatto": "p12",
+  "categoria": "oggi",
+  "etichetta": "Oggi",
+  "tipo": "testo",
+  "riquadro": [
+   902,
+   1890,
+   990,
+   1943
+  ],
+  "ink": 0.2063468024700405,
+  "worst": 3.8,
+  "median": 3.8,
+  "dark_ink": true,
+  "camp": 1
+ },
+ "attuale|chiaro|azioni": {
+  "direzione": "attuale",
+  "tema": "chiaro",
+  "scatto": "selezione",
+  "categoria": "azioni",
+  "etichetta": "Nascondi",
+  "tipo": "icona",
+  "riquadro": [
+   546,
+   2169,
+   672,
+   2295
+  ],
+  "ink": 0.2063468024700405,
+  "worst": 1.12,
+  "median": 2.39,
+  "dark_ink": true,
+  "camp": 2
+ },
+ "attuale|scuro|menu": {
+  "direzione": "attuale",
+  "tema": "scuro",
+  "scatto": "menu",
+  "categoria": "menu",
+  "etichetta": "Prototipo grafico: A, sopra le foto",
+  "tipo": "testo",
+  "riquadro": [
+   292,
+   1680,
+   996,
+   1741
+  ],
+  "ink": 0.8897407914303731,
+  "worst": 3.15,
+  "median": 3.33,
+  "dark_ink": false,
+  "camp": 1
+ },
+ "attuale|scuro|segmenti": {
+  "direzione": "attuale",
+  "tema": "scuro",
+  "scatto": "p04",
+  "categoria": "segmenti",
+  "etichetta": "Anni",
+  "tipo": "testo",
+  "riquadro": [
+   165,
+   2034,
+   238,
+   2082
+  ],
+  "ink": 0.3824400010654917,
+  "worst": 1.0,
+  "median": 1.0,
+  "dark_ink": false,
+  "camp": 1
+ },
+ "attuale|scuro|barra": {
+  "direzione": "attuale",
+  "tema": "scuro",
+  "scatto": "p03",
+  "categoria": "barra",
+  "etichetta": "Libreria",
+  "tipo": "testo",
+  "riquadro": [
+   462,
+   97,
+   619,
+   155
+  ],
+  "ink": 0.8897407914303731,
+  "worst": 1.89,
+  "median": 2.05,
+  "dark_ink": false,
+  "camp": 1
+ },
+ "attuale|scuro|comandi": {
+  "direzione": "attuale",
+  "tema": "scuro",
+  "scatto": "p03",
+  "categoria": "comandi",
+  "etichetta": "Vista",
+  "tipo": "icona",
+  "riquadro": [
+   938,
+   63,
+   1064,
+   189
+  ],
+  "ink": 0.2832450844450843,
+  "worst": 1.0,
+  "median": 1.0,
+  "dark_ink": false,
+  "camp": 1
+ },
+ "attuale|scuro|agganciata": {
+  "direzione": "attuale",
+  "tema": "scuro",
+  "scatto": "p12",
+  "categoria": "agganciata",
+  "etichetta": "Firenze",
+  "tipo": "testo",
+  "riquadro": [
+   53,
+   268,
+   189,
+   315
+  ],
+  "ink": 0.4298825690024542,
+  "worst": 1.0,
+  "median": 1.0,
+  "dark_ink": false,
+  "camp": 1
+ },
+ "attuale|scuro|pillola": {
+  "direzione": "attuale",
+  "tema": "scuro",
+  "scatto": "p05",
+  "categoria": "pillola",
+  "etichetta": "Libreria",
+  "tipo": "testo",
+  "riquadro": [
+   248,
+   2223,
+   371,
+   2268
+  ],
+  "ink": 0.8897407914303731,
+  "worst": 1.0,
+  "median": 1.42,
+  "dark_ink": false,
+  "camp": 1
+ },
+ "attuale|scuro|oggi": {
+  "direzione": "attuale",
+  "tema": "scuro",
+  "scatto": "p12",
+  "categoria": "oggi",
+  "etichetta": "Oggi",
+  "tipo": "testo",
+  "riquadro": [
+   902,
+   1890,
+   990,
+   1943
+  ],
+  "ink": 0.34772709419619446,
+  "worst": 2.3,
+  "median": 2.37,
+  "dark_ink": false,
+  "camp": 1
+ },
+ "attuale|scuro|azioni": {
+  "direzione": "attuale",
+  "tema": "scuro",
+  "scatto": "selezione",
+  "categoria": "azioni",
+  "etichetta": "Condividi",
+  "tipo": "icona",
+  "riquadro": [
+   272,
+   2169,
+   398,
+   2295
+  ],
+  "ink": 0.34772709419619446,
+  "worst": 1.0,
+  "median": 1.53,
+  "dark_ink": false,
+  "camp": 1
+ },
+ "B|chiaro|menu": {
+  "direzione": "B",
+  "tema": "chiaro",
+  "scatto": "menu",
+  "categoria": "menu",
+  "etichetta": "Prototipo grafico: C, vetro adattivo",
+  "tipo": "testo",
+  "riquadro": [
+   249,
+   1544,
+   996,
+   1605
+  ],
+  "ink": 0.006117175894127335,
+  "worst": 5.21,
+  "median": 11.45,
+  "dark_ink": true,
+  "camp": 3
+ },
+ "B|scuro|menu": {
+  "direzione": "B",
+  "tema": "scuro",
+  "scatto": "menu",
+  "categoria": "menu",
+  "etichetta": "Prototipo grafico: B, barra solida",
+  "tipo": "testo",
+  "riquadro": [
+   249,
+   1417,
+   911,
+   1478
+  ],
+  "ink": 0.8897407914303731,
+  "worst": 5.28,
+  "median": 14.2,
+  "dark_ink": false,
+  "camp": 3
+ },
+ "A|chiaro|menu": {
+  "direzione": "A",
+  "tema": "chiaro",
+  "scatto": "menu",
+  "categoria": "menu",
+  "etichetta": "Senza screenshot e WhatsApp",
+  "tipo": "testo",
+  "riquadro": [
+   240,
+   767,
+   996,
+   828
+  ],
+  "ink": 0.006117175894127335,
+  "worst": 5.21,
+  "median": 7.57,
+  "dark_ink": true,
+  "camp": 4
+ },
+ "A|chiaro|pillola": {
+  "direzione": "A",
+  "tema": "chiaro",
+  "scatto": "p00",
+  "categoria": "pillola",
+  "etichetta": "Libreria",
+  "tipo": "testo",
+  "riquadro": [
+   248,
+   2223,
+   371,
+   2268
+  ],
+  "ink": 0.006117175894127335,
+  "worst": 12.22,
+  "median": 12.34,
+  "dark_ink": true,
+  "camp": 4
+ },
+ "A|chiaro|azioni": {
+  "direzione": "A",
+  "tema": "chiaro",
+  "scatto": "selezione",
+  "categoria": "azioni",
+  "etichetta": "Elimina dal telefono",
+  "tipo": "icona",
+  "riquadro": [
+   698,
+   2153,
+   824,
+   2279
+  ],
+  "ink": 0.8087317060519353,
+  "worst": 3.34,
+  "median": 3.37,
+  "dark_ink": false,
+  "camp": 4
+ },
+ "A|scuro|menu": {
+  "direzione": "A",
+  "tema": "scuro",
+  "scatto": "menu",
+  "categoria": "menu",
+  "etichetta": "Anni",
+  "tipo": "testo",
+  "riquadro": [
+   240,
+   112,
+   996,
+   173
+  ],
+  "ink": 0.8897407914303731,
+  "worst": 8.52,
+  "median": 9.22,
+  "dark_ink": false,
+  "camp": 4
+ },
+ "A|scuro|pillola": {
+  "direzione": "A",
+  "tema": "scuro",
+  "scatto": "pillola-aperta",
+  "categoria": "pillola",
+  "etichetta": "Libreria",
+  "tipo": "testo",
+  "riquadro": [
+   248,
+   2223,
+   371,
+   2268
+  ],
+  "ink": 0.8897407914303731,
+  "worst": 4.65,
+  "median": 5.0,
+  "dark_ink": false,
+  "camp": 4
+ },
+ "A|scuro|azioni": {
+  "direzione": "A",
+  "tema": "scuro",
+  "scatto": "selezione",
+  "categoria": "azioni",
+  "etichetta": "Condividi",
+  "tipo": "icona",
+  "riquadro": [
+   257,
+   2153,
+   383,
+   2279
+  ],
+  "ink": 1.0,
+  "worst": 14.08,
+  "median": 15.1,
+  "dark_ink": false,
+  "camp": 4
+ },
+ "C|chiaro|menu": {
+  "direzione": "C",
+  "tema": "chiaro",
+  "scatto": "menu",
+  "categoria": "menu",
+  "etichetta": "Giorni",
+  "tipo": "testo",
+  "riquadro": [
+   240,
+   366,
+   911,
+   427
+  ],
+  "ink": 0.006117175894127335,
+  "worst": 5.5,
+  "median": 5.57,
+  "dark_ink": true,
+  "camp": 6
+ },
+ "C|chiaro|titolo": {
+  "direzione": "C",
+  "tema": "chiaro",
+  "scatto": "p09",
+  "categoria": "titolo",
+  "etichetta": "Sabato 19 settembre",
+  "tipo": "testo",
+  "riquadro": [
+   90,
+   116,
+   474,
+   169
+  ],
+  "ink": 0.000607053967097675,
+  "worst": 5.57,
+  "median": 6.78,
+  "dark_ink": true,
+  "camp": 6
+ },
+ "C|chiaro|comandi": {
+  "direzione": "C",
+  "tema": "chiaro",
+  "scatto": "selezione",
+  "categoria": "comandi",
+  "etichetta": "Fine",
+  "tipo": "testo",
+  "riquadro": [
+   931,
+   116,
+   1011,
+   169
+  ],
+  "ink": 0.000607053967097675,
+  "worst": 5.57,
+  "median": 6.18,
+  "dark_ink": true,
+  "camp": 6
+ },
+ "C|chiaro|pillola": {
+  "direzione": "C",
+  "tema": "chiaro",
+  "scatto": "pillola-aperta",
+  "categoria": "pillola",
+  "etichetta": "Libreria",
+  "tipo": "testo",
+  "riquadro": [
+   248,
+   2223,
+   371,
+   2268
+  ],
+  "ink": 0.006117175894127335,
+  "worst": 8.89,
+  "median": 9.71,
+  "dark_ink": true,
+  "camp": 6
+ },
+ "C|chiaro|azioni": {
+  "direzione": "C",
+  "tema": "chiaro",
+  "scatto": "selezione",
+  "categoria": "azioni",
+  "etichetta": "Aggiungi ai preferiti",
+  "tipo": "icona",
+  "riquadro": [
+   404,
+   2153,
+   530,
+   2279
+  ],
+  "ink": 0.000607053967097675,
+  "worst": 10.53,
+  "median": 11.11,
+  "dark_ink": true,
+  "camp": 6
+ },
+ "C|scuro|menu": {
+  "direzione": "C",
+  "tema": "scuro",
+  "scatto": "menu",
+  "categoria": "menu",
+  "etichetta": "Video",
+  "tipo": "testo",
+  "riquadro": [
+   240,
+   1148,
+   996,
+   1209
+  ],
+  "ink": 0.8897407914303731,
+  "worst": 5.42,
+  "median": 5.59,
+  "dark_ink": false,
+  "camp": 6
+ },
+ "C|scuro|titolo": {
+  "direzione": "C",
+  "tema": "scuro",
+  "scatto": "p04",
+  "categoria": "titolo",
+  "etichetta": "Napoli",
+  "tipo": "testo",
+  "riquadro": [
+   90,
+   141,
+   210,
+   197
+  ],
+  "ink": 1.0,
+  "worst": 5.94,
+  "median": 5.99,
+  "dark_ink": false,
+  "camp": 6
+ },
+ "C|scuro|comandi": {
+  "direzione": "C",
+  "tema": "scuro",
+  "scatto": "p05",
+  "categoria": "comandi",
+  "etichetta": "Seleziona",
+  "tipo": "icona",
+  "riquadro": [
+   796,
+   79,
+   922,
+   205
+  ],
+  "ink": 1.0,
+  "worst": 5.06,
+  "median": 5.89,
+  "dark_ink": false,
+  "camp": 6
+ },
+ "C|scuro|pillola": {
+  "direzione": "C",
+  "tema": "scuro",
+  "scatto": "pillola-aperta",
+  "categoria": "pillola",
+  "etichetta": "Libreria",
+  "tipo": "testo",
+  "riquadro": [
+   248,
+   2223,
+   371,
+   2268
+  ],
+  "ink": 0.8897407914303731,
+  "worst": 6.76,
+  "median": 7.27,
+  "dark_ink": false,
+  "camp": 6
+ },
+ "C|scuro|azioni": {
+  "direzione": "C",
+  "tema": "scuro",
+  "scatto": "selezione",
+  "categoria": "azioni",
+  "etichetta": "Condividi",
+  "tipo": "icona",
+  "riquadro": [
+   257,
+   2153,
+   383,
+   2279
+  ],
+  "ink": 1.0,
+  "worst": 14.28,
+  "median": 15.65,
+  "dark_ink": false,
+  "camp": 6
+ }
+}

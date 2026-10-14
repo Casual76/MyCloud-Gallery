@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.core.designsystem.grid
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -29,6 +30,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
@@ -49,6 +52,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.antigravity.fluidengine.ui.fluid.GlassDefaults
 import dev.antigravity.fluidengine.ui.fluid.GlassRole
+import dev.antigravity.fluidengine.ui.fluid.GlassTint
 import dev.antigravity.fluidengine.ui.fluid.glassSurface
 import dev.antigravity.fluidengine.ui.haptics.FluidHapticEvent
 import dev.antigravity.fluidengine.ui.haptics.rememberFluidHaptics
@@ -127,6 +131,9 @@ object GalleryScrubberDefaults {
  * Il vetro c'e' solo quando la maniglia si vede: a scrubber nascosto non costa niente.
  *
  * @param backdrop il fondale della griglia, che maniglia e bolla rifrangono.
+ * @param tint la pellicola di maniglia e bolla (G1: quella della direzione); null = la famiglia `floatingTint`.
+ * @param ink l'inchiostro di glifo e mese; null = `onSurface`.
+ * @param solid se c'e', maniglia e bolla sono una superficie opaca di questo colore (G1, direzione B), senza vetro.
  */
 @Composable
 fun GalleryScrubber(
@@ -140,8 +147,13 @@ fun GalleryScrubber(
   reducedMotion: Boolean = false,
   onScrubStarted: () -> Unit = {},
   onScrubStopped: () -> Unit = {},
+  tint: GlassTint? = null,
+  ink: Color? = null,
+  solid: Color? = null,
 ) {
   val scope = rememberCoroutineScope()
+  val glassTint = tint ?: GlassDefaults.floatingTint()
+  val inkColor = ink ?: MaterialTheme.colorScheme.onSurface
   val haptics = rememberFluidHaptics()
   val currentFraction by rememberUpdatedState(fraction)
   val currentOnScrub by rememberUpdatedState(onScrub)
@@ -189,13 +201,13 @@ fun GalleryScrubber(
           Box(
             modifier = Modifier
               .wrapContentSize()
-              .glassSurface(state = backdrop, tint = GlassDefaults.floatingTint(), shape = FluidCapsuleShape, role = GlassRole.Floating)
+              .scrubberMaterial(backdrop, glassTint, solid)
               .padding(horizontal = BubblePaddingH, vertical = BubblePaddingV),
           ) {
             Text(
               text = label,
               style = MaterialTheme.typography.titleSmall,
-              color = MaterialTheme.colorScheme.onSurface,
+              color = inkColor,
               maxLines = 1,
               overflow = TextOverflow.Ellipsis,
             )
@@ -246,14 +258,14 @@ fun GalleryScrubber(
               },
             )
           }
-          .glassSurface(state = backdrop, tint = GlassDefaults.floatingTint(), shape = FluidCapsuleShape, role = GlassRole.Floating),
+          .scrubberMaterial(backdrop, glassTint, solid),
         contentAlignment = Alignment.Center,
       ) {
         Icon(
           imageVector = Icons.Rounded.UnfoldMore,
           contentDescription = null,
           modifier = Modifier.size(ThumbGlyph),
-          tint = MaterialTheme.colorScheme.onSurface,
+          tint = inkColor,
         )
       }
     }
@@ -265,6 +277,15 @@ fun GalleryScrubber(
   }
 }
 
+/** La maniglia e la bolla: vetro (con la pellicola data, o quella della famiglia), oppure una superficie opaca con l'ombra. */
+@Composable
+private fun Modifier.scrubberMaterial(backdrop: GlassBackdropState, tint: GlassTint, solid: Color?): Modifier =
+  if (solid != null) {
+    shadow(SolidElevation, FluidCapsuleShape).background(solid, FluidCapsuleShape)
+  } else {
+    glassSurface(state = backdrop, tint = tint, shape = FluidCapsuleShape, role = GlassRole.Floating)
+  }
+
 /** La griglia ha superato una schermata intera di scorrimento in un gesto: e' uno scorrimento "veloce". */
 fun galleryScrubberShouldShow(scrolledPx: Float, viewportPx: Float): Boolean =
   viewportPx > 0f && kotlin.math.abs(scrolledPx) >= viewportPx * GalleryScrubberShowAfterScreens
@@ -273,6 +294,7 @@ fun galleryScrubberShouldShow(scrolledPx: Float, viewportPx: Float): Boolean =
 const val GalleryScrubberShowAfterScreens: Float = 0.75f
 
 private val BubbleGap = 8.dp
+private val SolidElevation = 6.dp
 private val BubblePaddingH = 14.dp
 private val BubblePaddingV = 8.dp
 private val ThumbGlyph = 22.dp

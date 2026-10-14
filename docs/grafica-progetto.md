@@ -398,3 +398,16 @@ cambi di colore, stesso calcolo); se vuole zero vetro sopra la griglia, B.
 5. **La pillola che si riduce scorrendo** (A, C): sì, oppure sempre aperta (B, e oggi)?
 6. **Angoli e badge sotto i 64 dp**: angoli a zero e solo il glifo del video, oppure come oggi (angolo ridotto, nessun
    badge)?
+
+## 11. Scelte dell'utente (14/10)
+| # | Domanda | Risposta |
+|---|---|---|
+| 1 | Direzione | **C, vetro adattivo** (non la A consigliata) |
+| 2 | Colore della cima (domanda nata per A) | **Del colore della pagina**: vale anche per C, la sfumatura in alto segue il tema, non è scura fissa |
+| 3 | Griglia | **Parete squadrata** con fessura di 1 dp |
+| 4 | Livello (Anni/Mesi/Giorni/Tutte) | **Nel menu della vista**, non sempre visibile |
+| 5 | Pillola che si riduce scorrendo | **Sì** |
+| 6 | Celle sotto i 64 dp (livello Anni) | **Come oggi** |
+
+Prossimo passo: tappa G2, cioè la direzione C diventa la Libreria vera (non più prototipo), con i badge di presenza della Fase 4
+(solo NAS, solo telefono, da verificare) e il piede del NAS disegnati nello stesso linguaggio, senza peggiorare le misure sull'S25.

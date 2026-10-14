@@ -47,6 +47,12 @@ include ':feature-library'   // Libreria e Raccolte
 include ':feature-viewer'    // il viewer (sovrapposizione)
 include ':benchmark'         // Macrobenchmark e Baseline Profile (com.android.test, mai nell'APK)
 
+// Fase 4A (docs/fase4-progetto.md §1.1): il NAS in sola lettura nella Libreria. Nessun modulo nuovo apre socket: SMB
+// solo dai contratti di core-nas (D28). core-nasops, core-personal e feature-nas arrivano con la 4B (P0-B).
+include ':core-index'        // indice condiviso: pubblicazione, unita' di lavoro, replica locale, qualita'
+include ':core-nasmedia'     // scansione del NAS, rilevamento, esclusioni, congelamento
+include ':core-prepare'      // preparazione: miniature, anteprime, fotogrammi, hash completi (anche per la Fase 5)
+
 // --- fluid-engine (inizio) ---
 def engineDir = file('engine')
 if (engineDir.exists()) {

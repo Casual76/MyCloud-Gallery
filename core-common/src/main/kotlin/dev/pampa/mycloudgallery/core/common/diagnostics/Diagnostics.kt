@@ -56,6 +56,13 @@ enum class DiagSection {
    */
   PHONE_LIBRARY,
 
+  /**
+   * Il NAS nella Libreria (Fase 4, `docs/fase4-progetto.md` §2.2, §2.3): scansione, congelamento (D10), indice
+   * condiviso (teste, segmenti rifiutati, outbox, pubblicazione solo locale D31), replica e qualita', preparazione,
+   * salti dell'ora del NAS (D32). Solo codici e numeri: mai percorsi, nomi di file, share, account o id di media.
+   */
+  NAS_LIBRARY,
+
   /** I consumi del mese (TrafficLedger). */
   MONTHLY_TRAFFIC,
 

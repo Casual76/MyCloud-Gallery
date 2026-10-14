@@ -8,7 +8,10 @@ Stato: **Fase 3 integrata (P11)**. Oltre alla Fase 2 (rete e casa, sessione SMB 
 Diagnostica) l'app mostra la **galleria del telefono**: Libreria (griglia della timeline su anni, mesi, giorni e tutte, con
 selezione, preferiti, nascosti ed eliminazione dal telefono), viewer (zoom, video, foto in movimento, informazioni) e Raccolte
 (Preferiti, Video, Screenshot, WhatsApp, Nascosti ed Eliminati di recente dietro lo sblocco). Tutto sul telefono, senza rete:
-il NAS nella Libreria arriva con la Fase 4.
+il NAS nella Libreria arriva con la Fase 4 (`docs/fase4-progetto.md`): il **P0 della 4A** ha creato i moduli `core-index`,
+`core-nasmedia` e `core-prepare` con contratti, null-object e fake, i contratti nuovi di `core-nas` (`NasMediaReader`),
+`core-model` (`MediaRef.Nas`, presenza), `core-trust` (contenuto dei segmenti) e i test di architettura; la logica arriva con
+P1–P10 e l'integrazione con P11.
 
 ## Verifica in un comando
 
@@ -59,14 +62,27 @@ segnaposto e almeno un test.
 | `:core-places` | luoghi offline da GeoNames (asset `places.mcgp1`), fusi orari, nomi in italiano | common, model |
 | `:core-metadata` | lettura dei metadati (EXIF, contenitori video, foto in movimento), ThumbHash | common, model, places |
 | `:core-mediastore` | lettura del MediaStore e sincronizzazione della Libreria del telefono (scansione, META, impronte) | common, model, database, metadata, places |
-| `:core-imaging` | miniature, segnaposto, decodifica per il viewer con i tetti di memoria | common, model |
-| `:core-library` | indice della timeline, istantanea su disco, layout della griglia, raccolte, date (`text/GalleryDates`) | common, model, database, imaging |
+| `:core-imaging` | miniature, segnaposto, decodifica per il viewer con i tetti di memoria | common, model; dalla Fase 4 index e nas (`implementation`) |
+| `:core-library` | indice della timeline, istantanea su disco, layout della griglia, raccolte, date (`text/GalleryDates`), stato del NAS nel piede (`LibraryNasStatus`, Fase 4) | common, model, database, imaging; dalla Fase 4 index (`implementation`) |
 | `:feature-library` | Libreria, Raccolte, Nascosti ed Eliminati di recente | common, model, designsystem, imaging, library, mediastore, places, security |
 | `:feature-viewer` | viewer a schermo intero | common, model, database, designsystem, imaging, library, mediastore, metadata, places, security |
 | `:benchmark` | scenari Macrobenchmark e Baseline Profile (`docs/bench/README.md`); mai nell'APK | `:app` (variante `benchmarkRelease`) |
+| `:core-index` | Fase 4: indice condiviso nelle share (pubblicazione con outbox, unità di lavoro con prenotazioni, replica locale a pacchi, sincronizzazione delle teste, qualità delle anteprime) | common, model, trust; database, nas, rules in `implementation` |
+| `:core-nasmedia` | Fase 4: scansione del NAS (elenco a pagine, rilevamento con impronta rapida, esclusioni, stabilità con l'ora del NAS, congelamento per cambiamenti di massa); NAS sintetico per i test | common, model, trust, database, nas, metadata, index |
+| `:core-prepare` | Fase 4: preparazione dei media (miniature S e M, anteprime di analisi e HQ, fotogrammi dei video senza scaricarli, hash completo); dalla Fase 5 anche per il backup. **Non conosce il NAS** | common, model, metadata, index; imaging in `implementation` |
 
 Nessun ciclo: `core-common` e `core-model` sono le foglie. I `feature-*` non si conoscono fra loro: ogni
 passaggio da una funzione all'altra e' una callback scritta da `:app` (`navigation/AppNavHost.kt`).
+
+**Fase 4: chi vede chi** (`docs/fase4-progetto.md` §1.1). Nella 4A (P0): `core-index`, `core-nasmedia` e `core-prepare` come
+nella tabella; `core-prepare` non vede `core-nas` nemmeno di passaggio (riceve byte); `core-imaging` e `core-library` vedono
+l'indice solo in `implementation`. Nella 4B (P0-B) arriveranno `core-nasops` (l'**unico** modulo con operazioni distruttive sui
+file del NAS, l'unico che vede `NasFileOps`), `core-personal` (dati personali) e `feature-nas` (Cartelle NAS, Spazio NAS,
+Eliminati di recente del NAS, Operazioni in corso); di `core-nasops` dipendono solo `feature-nas`, il menu del viewer e `:app`.
+Lo verifica `Phase4ArchitectureTest` (`core-common`): grafo senza cicli, dipendenze dei moduli nuovi, `core-nasops` invisibile a
+chi legge il NAS o mostra la Libreria, smbj solo in `core-nas`, `NasFileOps` solo in `core-nas` e `core-nasops`, regole dei
+moduli nuovi. Ogni modulo nuovo della Fase 4 ha anche `NoNetworkSourcesTest` (niente rete, niente smbj) e
+`NoWallClockSourcesTest` (niente orologio del telefono nelle decisioni: ora del NAS o orologio monotono).
 
 Dalla Fase 2 ogni modulo nuovo ha tre package fissi (docs/fase2-progetto.md, D6):
 - `contract`: le interfacce e i tipi che gli altri moduli usano (con KDoc che spiega il perche');

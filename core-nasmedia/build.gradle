@@ -1,0 +1,44 @@
+// La scansione dei media del NAS (docs/fase4-progetto.md §1.2 "core-nasmedia", §2.3; D9, D10, D11, D17, D22): elenco a
+// pagine delle cartelle incluse, rilevamento dei file nuovi o cambiati (impronta rapida qh1, metadati, miniatura EXIF
+// incorporata), adozione dei record dell'indice con lo stesso timbro, esclusioni, stabilita' dei file e congelamento per
+// cambiamenti di massa. Contratti, null-object e fake di P0; logica di P5.
+//
+// Pacchetti: `contract`, `noop`, `testing` (vedi core-index). `SyntheticNas` (testing) e' il NAS sintetico del §5.3 sopra
+// il NAS finto di core-nas.
+//
+// Vede il NAS solo dai contratti di core-nas (NasMediaReader), il catalogo (core-database: l'adattatore NasScanStore lo
+// lega :app), i metadati (core-metadata: MediaBytes, MetadataExtractor) e l'indice (core-index: ReplicaRecords,
+// ProvisionalThumbnails). Non vede core-nasops (test di architettura): la scansione non cancella ne' sposta nulla (E-S11).
+//
+// D28: nessuna rete in questo modulo (NoNetworkSourcesTest). §4.3: nessun orologio del telefono nelle decisioni
+// (NoWallClockSourcesTest): la stabilita' dei file (E-N4) usa l'ora del NAS.
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.core.nasmedia'
+}
+
+dependencies {
+  api project(':core-common')
+  api project(':core-model')
+  // api: SharePath (core-trust), MediaCatalog.RecordOutcome (core-database), NasMediaReader e NasRandomFile (core-nas),
+  // MediaBytes (core-metadata) e ReplicaRecords (core-index) compaiono nelle firme pubbliche e nei fake.
+  api project(':core-trust')
+  api project(':core-database')
+  api project(':core-nas')
+  api project(':core-metadata')
+  api project(':core-index')
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+  testImplementation appDeps.androidxTestExtJunit
+}

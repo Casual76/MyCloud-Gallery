@@ -7,22 +7,28 @@ import dev.pampa.mycloudgallery.core.nas.contract.ConnectionTester
 import dev.pampa.mycloudgallery.core.nas.contract.CredentialLoad
 import dev.pampa.mycloudgallery.core.nas.contract.DirPage
 import dev.pampa.mycloudgallery.core.nas.contract.InvalidateReason
+import dev.pampa.mycloudgallery.core.nas.contract.ListOutcome
 import dev.pampa.mycloudgallery.core.nas.contract.NasBrowser
 import dev.pampa.mycloudgallery.core.nas.contract.NasConnState
 import dev.pampa.mycloudgallery.core.nas.contract.NasCredentialSource
 import dev.pampa.mycloudgallery.core.nas.contract.NasError
 import dev.pampa.mycloudgallery.core.nas.contract.NasHousekeeping
+import dev.pampa.mycloudgallery.core.nas.contract.NasEntry
 import dev.pampa.mycloudgallery.core.nas.contract.NasIoException
+import dev.pampa.mycloudgallery.core.nas.contract.NasMediaReader
+import dev.pampa.mycloudgallery.core.nas.contract.NasRandomFile
 import dev.pampa.mycloudgallery.core.nas.contract.NasResult
 import dev.pampa.mycloudgallery.core.nas.contract.NasSessionManager
 import dev.pampa.mycloudgallery.core.nas.contract.NasShareScope
 import dev.pampa.mycloudgallery.core.nas.contract.Purpose
+import dev.pampa.mycloudgallery.core.nas.contract.ServerCopy
 import dev.pampa.mycloudgallery.core.nas.contract.ShareAccess
 import dev.pampa.mycloudgallery.core.nas.contract.ShareProbe
 import dev.pampa.mycloudgallery.core.nas.contract.Stage
 import dev.pampa.mycloudgallery.core.nas.contract.StageOutcome
 import dev.pampa.mycloudgallery.core.nas.contract.StageResult
 import dev.pampa.mycloudgallery.core.nas.contract.TestTarget
+import dev.pampa.mycloudgallery.core.model.Sha256
 import dev.pampa.mycloudgallery.core.network.contract.DenyReason
 import dev.pampa.mycloudgallery.core.security.credentials.NasCredentials
 import dev.pampa.mycloudgallery.core.trust.nas.NasFileSystem
@@ -99,4 +105,28 @@ object NoCredentialSource : NasCredentialSource {
 
 object NoNasHousekeeping : NasHousekeeping {
   override suspend fun purgeOwnStaleTemps(deviceId: String, olderThan: Duration): NasResult<Int> = NasResult.Err(notConfigured)
+}
+
+/** Fase 4: nessun NAS, nessuna lettura di media. Ogni chiamata e' negata prima di aprire un socket. */
+object NoNasMediaReader : NasMediaReader {
+  override suspend fun list(
+    share: String,
+    dir: SharePath?,
+    purpose: Purpose,
+    pageSize: Int,
+    onPage: suspend (List<NasEntry>) -> Unit,
+  ): NasResult<ListOutcome> = NasResult.Err(notConfigured)
+
+  override suspend fun stat(share: String, path: SharePath, purpose: Purpose): NasResult<NasEntry?> = NasResult.Err(notConfigured)
+
+  override suspend fun open(share: String, path: SharePath, purpose: Purpose): NasResult<NasRandomFile> = NasResult.Err(notConfigured)
+
+  override suspend fun readAll(file: NasRandomFile, sink: (ByteArray, Int) -> Unit, progress: ((Long) -> Unit)?): NasResult<Sha256> =
+    NasResult.Err(notConfigured)
+}
+
+/** Fase 4: nessuna copia lato server. */
+object NoServerCopy : ServerCopy {
+  override suspend fun copy(fromShare: String, from: SharePath, toShare: String, to: SharePath): NasResult<Long> =
+    NasResult.Err(notConfigured)
 }

@@ -25,6 +25,7 @@ class StableCodesTest {
     "Presence" to Presence.entries,
     "SafetyStatus" to SafetyStatus.entries,
     "MediaTrait" to MediaTrait.entries,
+    "FreezeReason" to FreezeReason.entries,
   )
 
   @Test

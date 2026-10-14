@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Sezione «NAS nella Libreria» (Fase 4). P0: il minimo perché la sezione esista; P11 aggiunge le voci dei casi limite. -->
+  <string name="diagnostics_section_nas_library">NAS nella Libreria</string>
+  <string name="diagnostics_hint_nas_library">Scansione delle cartelle, congelamento, indice condiviso, anteprime sul telefono e preparazione.</string>
+  <string name="diag_nas_library_state_title">Stato del NAS nella Libreria</string>
+</resources>

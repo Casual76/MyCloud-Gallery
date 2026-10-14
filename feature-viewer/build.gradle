@@ -49,6 +49,9 @@ dependencies {
   implementation project(':core-metadata')
   implementation project(':core-places')
   implementation project(':core-security')
+  // Fase 4 (P0, docs/fase4-progetto.md D19): `NasVideoDataSource` (P8) e' un `BaseDataSource` di Media3 sopra
+  // `NasMediaReader`: sta qui, dove c'e' Media3, e vede il NAS solo dal contratto (mai `DefaultDataSource`).
+  implementation project(':core-nas')
 
   implementation appDeps.media3Exoplayer
   implementation appDeps.telephotoZoomableImage

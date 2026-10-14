@@ -10,6 +10,22 @@ apply from: "${rootDir}/gradle/android-conventions.gradle"
 
 android {
   namespace = 'dev.pampa.mycloudgallery.core.common'
+
+  testOptions {
+    unitTests.all {
+      // Fase 4 (P0): Phase4ArchitectureTest legge settings.gradle, i build.gradle, i manifest e i sorgenti di TUTTI i
+      // moduli della galleria. Sono ingressi del test: se cambia un altro modulo il test si riesegue, invece di
+      // risultare "aggiornato" e lasciar passare una dipendenza vietata.
+      inputs.files(rootProject.file('settings.gradle'))
+      inputs.files(fileTree(rootDir) {
+        include '*/build.gradle'
+        include '*/src/main/AndroidManifest.xml'
+        include '*/src/*/kotlin/**/*.kt'
+        include '*/src/*/java/**/*.java'
+        exclude 'engine/**', 'spike/**', '**/build/**'
+      }).withPropertyName('galleryModuleSources')
+    }
+  }
 }
 
 dependencies {

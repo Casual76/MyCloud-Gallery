@@ -30,6 +30,9 @@ dependencies {
   // api: `ViewerAnchor.thumbKey(id): ThumbKey` (§1.2) mette ThumbKey, di core-imaging, nelle firme del contratto con
   // il viewer. Deviazione dal grafo del §1.1 (library non vedeva imaging): nessun ciclo, imaging vede solo model e common.
   api project(':core-imaging')
+  // Fase 4 (P0, docs/fase4-progetto.md §1.1): i blob delle miniature del NAS solo tramite ReplicaBlobs (P7). In
+  // `implementation`: nessun tipo dell'indice nelle firme che vedono i moduli a valle.
+  implementation project(':core-index')
 
   api platform("androidx.compose:compose-bom:${engine.composeBom}")
   api appDeps.composeRuntimeAnnotation

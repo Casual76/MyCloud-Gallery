@@ -17,10 +17,17 @@ import dev.pampa.mycloudgallery.core.model.MediaRef
 class RoutingThumbnailSource(
   private val phone: ThumbnailSource,
   private val synthetic: ThumbnailSource = NoThumbnailSource,
+  /**
+   * Fase 4 (P0 ha aggiunto `MediaRef.Nas` e questo ingresso; la sorgente vera, `NasThumbnailSource`, e' di P7):
+   * replica → miniatura provvisoria → originale solo per il contenuto visibile (D17). Finche' :app non la passa, i
+   * riferimenti del NAS non producono niente (la cella mostra il segnaposto).
+   */
+  private val nas: ThumbnailSource = NoThumbnailSource,
 ) : ThumbnailSource {
 
   override suspend fun load(ref: MediaRef, px: Int, cancel: CancellationSignal): Bitmap? = when (ref) {
     is MediaRef.Phone -> phone.load(ref, px, cancel)
     is MediaRef.Synthetic -> synthetic.load(ref, px, cancel)
+    is MediaRef.Nas -> nas.load(ref, px, cancel)
   }
 }

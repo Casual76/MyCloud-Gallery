@@ -33,4 +33,24 @@ sealed interface MediaRef {
       require(width > 0 && height > 0) { "Dimensioni non valide." }
     }
   }
+
+  /**
+   * Un file del NAS (Fase 4, `docs/fase4-progetto.md` §1.2, D18): firma fissata da P0, schema e riempimento di P2/P7.
+   *
+   * - [locationId] e' la riga della posizione nella replica locale (`LocationId.value`): il percorso (share, cartella,
+   *   nome) **non** sta qui, si risolve dal database solo quando serve aprire l'originale (viewer, miniatura
+   *   interattiva). Cosi' una cella dell'istantanea `MCGT2` resta di pochi byte e un percorso del NAS, che e' un dato
+   *   sensibile come il GPS, non gira per la UI.
+   * - [contentKey] e' la chiave di contenuto ridotta a 64 bit ([ContentKey.short]): con questa le miniature si trovano
+   *   nella replica (`ReplicaBlobs.locate`) anche dopo una rinomina fatta dal PC (D4).
+   */
+  data class Nas(
+    val locationId: Long,
+    val contentKey: Long,
+    val mime: String?,
+  ) : MediaRef {
+    init {
+      require(locationId > 0) { "L'identificativo di una posizione e' positivo." }
+    }
+  }
 }

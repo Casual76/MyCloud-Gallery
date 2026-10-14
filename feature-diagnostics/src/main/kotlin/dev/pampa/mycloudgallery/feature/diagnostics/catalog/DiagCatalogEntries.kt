@@ -213,6 +213,9 @@ internal object DiagCatalogEntries {
     DiagEntry(DiagCodes.PHONE_INDEX, DiagSection.PHONE_LIBRARY, DiagSeverity.INFO, R.string.diag_phone_index_title, R.string.diag_phone_index_guide, null),
     DiagEntry(DiagCodes.PHONE_THUMBNAILS, DiagSection.PHONE_LIBRARY, DiagSeverity.INFO, R.string.diag_phone_thumbnails_title, R.string.diag_phone_thumbnails_guide, null),
 
+    // --- Il NAS nella Libreria (Fase 4): lo stato; i codici dei casi limite li aggiunge P11 ----------------------------
+    DiagEntry(DiagCodes.NAS_LIBRARY_STATE, DiagSection.NAS_LIBRARY, DiagSeverity.INFO, R.string.diag_nas_library_state_title, 0, null),
+
     // --- Rete e NAS --------------------------------------------------------
     DiagEntry(DiagCodes.DIAG_SECTION_UNAVAILABLE, DiagSection.NETWORK_AND_NAS, DiagSeverity.WARNING, R.string.diag_diag_section_unavailable_title, R.string.diag_diag_section_unavailable_guide, null),
   )

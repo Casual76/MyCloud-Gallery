@@ -1,0 +1,39 @@
+// La preparazione dei media (docs/fase4-progetto.md §1.2 "core-prepare", §2.4, §2.11; D12, D14, D17, D28): si legge
+// l'originale UNA volta e si producono tutte le classi (miniature S e M in WebP, anteprima di analisi in JPEG, anteprima
+// HQ in WebP, fotogrammi chiave dei video senza scaricarli, hash completo delle foto). Contratti, null-object e fake di P0;
+// logica di P6. Dalla Fase 5 la usa anche il backup ("chi carica prepara") con i byte del telefono.
+//
+// Pacchetti: `contract`, `noop`, `testing` (vedi core-index).
+//
+// **Non conosce il NAS** (§1.1, test di architettura): lavora su `MediaBytes` (core-metadata) e su un file temporaneo;
+// chi apre l'originale sul NAS e' :app (`PrepInputs`). Vede l'indice (core-index: WorkUnits, IndexPublisher, BlobPut) e
+// la decodifica (core-imaging: DecodePlanner) in `implementation`.
+//
+// D28: nessuna dipendenza nuova (WebP e JPEG con Bitmap.compress, fotogrammi con MediaMetadataRetriever) e nessuna rete
+// (NoNetworkSourcesTest). §4.3: nessun orologio del telefono (NoWallClockSourcesTest).
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.core.prepare'
+}
+
+dependencies {
+  api project(':core-common')
+  api project(':core-model')
+  // api: MediaBytes (core-metadata) e BlobPut, VideoFrame, WorkItem, UnitPriority (core-index) compaiono nelle firme.
+  api project(':core-metadata')
+  api project(':core-index')
+
+  implementation project(':core-imaging')
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+}

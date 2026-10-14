@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!--
+      :core-nasmedia: nessun permesso e nessun componente (Fase 4, P0). Il NAS si legge solo dai contratti di core-nas
+      (D28); la scansione cambia solo lo stato nel catalogo locale, mai i file (E-S11). I lavori che la eseguono
+      (NasScanWorker) stanno in :app.
+      Un permesso o un componente nuovo si chiede all'orchestratore: prima la riga in docs/sicurezza.md 4-bis, poi
+      quella in releaseManifestPolicy.
+  -->
+
+</manifest>

@@ -1,0 +1,43 @@
+// L'indice condiviso della Fase 4 (docs/fase4-progetto.md §1.2 "core-index", §2.1, §2.2; D4–D8, D13, D15, D16, D31):
+// pubblicazione con outbox persistente e unita' di lavoro con prenotazioni (P3), replica locale a pacchi, sincronizzazione
+// delle teste e qualita' delle anteprime (P4). Contratti, null-object e fake di P0.
+//
+// Pacchetti: `contract` (le interfacce che gli altri moduli usano), `noop` (i null-object che falliscono chiusi), `testing`
+// (i fake, in src/main per i test dei moduli a valle; tools/check.ps1 li vieta nel dex di release). P3 aggiunge
+// `publish/`, `work/`, `compact/`; P4 `replica/`, `sync/`, `quality/`.
+//
+// Vede il formato (core-trust: MetaRecord, SegmentClass, SharePath, HeadMark nelle firme), il catalogo (core-database:
+// outbox e replica stanno nel database; deviazione dal §1.1, che non lo elencava), le regole (INDEX_SYNC) e il NAS solo
+// in `implementation`: nessun tipo di core-nas nelle firme, cosi' core-prepare (che vede questo modulo) non conosce il NAS.
+//
+// D28: nessuna rete in questo modulo (NoNetworkSourcesTest); SMB solo dai contratti di core-nas. §4.3: nessun orologio
+// del telefono nelle decisioni (NoWallClockSourcesTest): ora del NAS (NasClock) o orologio monotono.
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.core.index'
+}
+
+dependencies {
+  api project(':core-common')
+  api project(':core-model')
+  // api: MetaRecord, MetaFile, SegmentClass, SegmentContent, ClassedSegment, HeadMark, RejectReason e SharePath
+  // compaiono nelle firme dei contratti.
+  api project(':core-trust')
+
+  implementation project(':core-database')
+  implementation project(':core-nas')
+  implementation project(':core-rules')
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+}

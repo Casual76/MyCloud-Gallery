@@ -185,6 +185,11 @@ object DiagCodes {
   // contributore lo produce, ma e' innocuo e il suo titolo serve alle voci senza un codice piu' preciso).
   @JvmField val PHONE_LIBRARY_STATE = DiagCode("PHONE_LIBRARY_STATE")
 
+  // --- Il NAS nella Libreria (Fase 4) ----------------------------------------------------------------------------
+  // P0 aggiunge solo il codice di stato che tiene viva la sezione NAS_LIBRARY (un test vuole almeno una voce per
+  // sezione). I codici veri della 4A (IndexDiag, NasMediaDiag, PrepDiag nei contratti dei moduli nuovi) li cataloga P11.
+  @JvmField val NAS_LIBRARY_STATE = DiagCode("NAS_LIBRARY_STATE")
+
   // I codici di `PhoneLibraryDiagnostics` (core-mediastore, P2): stessi id e stessi edge case di
   // `PhoneLibraryDiagCodes`, scritti come letterali perche' questo modulo non dipende da core-mediastore.
   // `Fase3CatalogTest` verifica la tabella qui sotto e un test di :app (P11) verifica l'uguaglianza con

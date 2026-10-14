@@ -57,6 +57,8 @@ class TimelineTypesTest {
     assertThat(CellFlags.ALL).containsExactly(
       "EDITED", 1, "DATE_ESTIMATED", 2, "UNREADABLE", 4, "HAS_PLACE", 8, "MOTION", 16,
       "PANORAMA", 32, "ULTRA_HDR", 64, "FAVORITE", 128, "GROUP_MEMBER", 256, "GROUP_COVER", 512,
+      // Fase 4 (P0): presenza e "da verificare".
+      "ON_PHONE", 1024, "ON_NAS", 2048, "SAFE", 4096, "TO_VERIFY", 8192,
     ).inOrder()
     assertThat(CellFlags.has(CellFlags.FAVORITE or CellFlags.MOTION, CellFlags.MOTION)).isTrue()
     assertThat(CellFlags.has(CellFlags.FAVORITE, CellFlags.MOTION)).isFalse()

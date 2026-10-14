@@ -23,6 +23,11 @@ android {
 dependencies {
   api project(':core-common')
   api project(':core-model')
+  // Fase 4 (P0, docs/fase4-progetto.md §1.1): le miniature del NAS dalla replica (ReplicaBlobs, ProvisionalThumbnails di
+  // core-index) e l'originale letto a intervalli (NasMediaReader di core-nas) per NasThumbnailSource e il viewer (P7, P8).
+  // In `implementation`: nessun tipo del NAS nelle firme che vedono i moduli a valle (core-prepare non deve conoscerlo).
+  implementation project(':core-index')
+  implementation project(':core-nas')
 
   // api: ImageBitmap, State e IntSize compaiono nelle firme pubbliche. Versioni dal BOM dell'engine.
   api platform("androidx.compose:compose-bom:${engine.composeBom}")

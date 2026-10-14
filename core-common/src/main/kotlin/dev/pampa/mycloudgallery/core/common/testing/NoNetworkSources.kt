@@ -34,6 +34,10 @@ object NoNetworkSources {
     Forbidden(Regex("""\bDefaultHttpDataSource\b"""), "DefaultHttpDataSource di Media3"),
     Forbidden(Regex("""\b(OkHttpDataSource|CronetDataSource)\b"""), "sorgenti di rete di Media3"),
     Forbidden(Regex("""\b(coil3?|com\.bumptech\.glide)\b"""), "caricatori di immagini con rete (D5: pipeline propria)"),
+    // Fase 4 (D28): SMB solo dietro i contratti di core-nas (NasMediaReader, NasFileSystem). smbj (e un'altra libreria
+    // SMB) in un modulo con questo test vorrebbe dire un secondo canale verso il NAS, senza cancello di rete ne' guardie.
+    Forbidden(Regex("""\bcom\.hierynomus\b"""), "smbj (SMB solo tramite i contratti di core-nas, D28)"),
+    Forbidden(Regex("""\bjcifs\b"""), "jcifs (SMB solo tramite i contratti di core-nas, D28)"),
   )
 
   /**

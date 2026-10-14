@@ -129,6 +129,77 @@ object TrustLimits {
 
   /** Tetto di pixel per decodificare un'immagine che arriva dall'indice (miniature e anteprime). */
   const val MAX_INDEX_IMAGE_PIXELS: Long = 4096L * 4096L
+
+  // --- Fase 4: contenuto dei segmenti dell'indice (§5.5-bis, M2; §7, M9). Costanti fissate da P0, usate da P3/P4 ------
+
+  /** Voci per segmento (`N` nella tabella del contenuto, da 1 a questo). */
+  const val MAX_SEGMENT_ENTRIES: Int = 4096
+
+  /** Lapidi (`gone`) per segmento `meta`: tutte le voci possono esserlo (una cartella cancellata dal PC). */
+  const val MAX_SEGMENT_TOMBSTONES: Int = MAX_SEGMENT_ENTRIES
+
+  /** Un record `meta` (JSON canonico, al massimo [MAX_JSON_OBJECT_MEMBERS] campi). */
+  const val MAX_META_RECORD_BYTES: Int = 4 * 1024
+
+  /** Un blob d'immagine (`thumbS`, `thumbM`, `analysis`, `hq`): JPEG o WebP. */
+  const val MAX_BLOB_BYTES: Int = 1024 * 1024
+
+  /** Il corpo `frames` di un media (conteggio + fotogrammi) e quante immagini al massimo (copertina + 8). */
+  const val MAX_FRAMES_BODY_BYTES: Int = 2 * 1024 * 1024
+  const val MAX_FRAMES_PER_MEDIA: Int = 9
+
+  /** `seq` di un record: cresce per (dispositivo, share), stesso tetto delle versioni. */
+  const val MAX_RECORD_SEQ: Long = MAX_VERSION
+
+  /** Record vivi per dispositivo e share (oltre: la pubblicazione si ferma con un avviso, non si tronca). */
+  const val MAX_RECORDS_PER_DEVICE_SHARE: Int = 262_144
+
+  /** Il segnaposto nel record (`th`): un ThumbHash di al massimo 36 byte in base32. */
+  const val MAX_THUMBHASH_BASE32_CHARS: Int = 58
+
+  /** Un segmento si chiude quando arriva a questa dimensione (o a fine unita'): resta sotto [MAX_SEGMENT_BYTES]. */
+  const val SEGMENT_TARGET_BYTES: Int = 12 * 1024 * 1024
+
+  // --- Fase 4: lettura e pubblicazione delle teste dell'indice (§5.5, M3; §7, M9) -------------------------------------
+
+  /** Dispositivi letti per share e per giro (cartelle in `devices/`, tenute solo se approvati o dismessi). */
+  const val MAX_INDEX_DEVICES_PER_SHARE: Int = MAX_DEVICES
+
+  /** Letture per nome delle teste per share e per giro (salti doppi e bisezione, come `DeviceStatusSeries`). */
+  const val MAX_HEAD_READS_PER_SHARE: Int = 1024
+
+  /** Al massimo una testa nuova per share e tipo in questo intervallo (ora del NAS), salvo la chiusura di un'unita'. */
+  const val HEAD_MIN_INTERVAL_MILLIS: Long = 5L * 60 * 1000
+
+  // --- Fase 4: unita' di lavoro e prenotazioni (§5.6, M4; D13) ------------------------------------------------------------
+
+  /** Media per unita' di lavoro (parte di un mese di scatto, in ordine di chiave di contenuto). */
+  const val WORK_UNIT_MAX_ITEMS: Int = 200
+
+  /** Rinnovo di una prenotazione di lavoro: una generazione nuova ogni 20 minuti (durata 1 ora). */
+  const val LEASE_RENEW_MILLIS: Long = 20L * 60 * 1000
+
+  // --- Fase 4: pulizia dei propri file (§2.3, M6; accesa nella 4B) ---------------------------------------------------------
+
+  /** Le ultime teste proprie che si tengono sempre. */
+  const val OWN_FILES_KEEP_HEADS: Int = 3
+
+  /** Un segmento non elencato dalle ultime teste si toglie solo se piu' vecchio di cosi' (ora del NAS). */
+  const val OWN_FILES_GRACE_MILLIS: Long = 7L * 24 * 60 * 60 * 1000
+
+  /** File propri tolti al massimo per giro. */
+  const val MAX_OWN_FILES_PER_ROUND: Int = 500
+
+  // --- Fase 4: ora del NAS (§6.1, M8; D32) -------------------------------------------------------------------------------------
+
+  /**
+   * Un salto dell'ora del NAS fra due sessioni oltre questa soglia sospende prenotazioni, pulizia del cestino,
+   * compattazione e pulizia dei propri file (uguale a `SessionNasClock.DEFAULT_JUMP_THRESHOLD_MS` di core-nas).
+   */
+  const val NAS_CLOCK_JUMP_MILLIS: Long = 5L * 60 * 1000
+
+  /** Dopo un salto, le funzioni sospese ripartono da sole dopo 24 ore di ora stabile (o con il gesto dell'utente). */
+  const val NAS_CLOCK_STABLE_RESUME_MILLIS: Long = 24L * 60 * 60 * 1000
 }
 
 /**

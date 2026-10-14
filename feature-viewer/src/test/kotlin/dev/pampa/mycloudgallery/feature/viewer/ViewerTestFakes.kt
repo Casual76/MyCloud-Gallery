@@ -158,6 +158,8 @@ internal class ScriptedImages(
       val seed = when (ref) {
         is MediaRef.Phone -> ref.mediaStoreId
         is MediaRef.Synthetic -> ref.seed
+        // Fase 4 (P0): il riferimento del NAS esiste; il gradiente si fa dalla chiave di contenuto.
+        is MediaRef.Nas -> ref.contentKey
       }
       val width = side
       val height = side * 9 / 16

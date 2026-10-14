@@ -150,6 +150,13 @@ sealed interface Location {
     /** Il nome della share come lo riporta il NAS (es. `alessio`, `NAS`). */
     val share: String,
     val path: NasPath,
+    /**
+     * Fase 4 (firma di P0, colonna di P2): il `FileId` SMB (`FileIdBothDirectoryInformation`), stabile alla rinomina
+     * sullo stesso volume. E' solo un **indizio** in piu' per riconoscere uno spostamento fatto dal PC (E-N1): non fa
+     * parte della [key] (il posto resta il percorso) e un NAS riavviato puo' cambiarlo (§7 del progetto). `null` =
+     * non letto.
+     */
+    val fileId: Long? = null,
   ) : Location {
 
     init {

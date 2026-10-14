@@ -21,6 +21,14 @@ android {
     // androidx.test:runner, che non e' nell'elenco di versions-app.gradle (vedi il sorgente del runner).
     testInstrumentationRunner = 'dev.pampa.mycloudgallery.core.trust.KeystoreTestRunner'
   }
+
+  testOptions {
+    unitTests.all {
+      // Fase 4 (P0): IndexSegmentTypesTest confronta i tetti del §7 di docs/formato-nas.md con TrustLimits. Se cambia
+      // il documento, il test si riesegue.
+      inputs.files("${rootDir}/docs/formato-nas.md").withPropertyName('formatoNas')
+    }
+  }
 }
 
 dependencies {

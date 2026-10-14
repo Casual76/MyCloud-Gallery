@@ -36,6 +36,13 @@ enum class MediaGroupKind(override val code: String) : StableCode {
 
   /** Lo stesso scatto salvato come RAW e come JPEG (E-M13). */
   RAW_JPEG_PAIR("raw_jpeg_pair"),
+
+  /**
+   * Fase 4 (D21, E-L9): lo stesso video su telefono e NAS con dimensione e `qh1` uguali ma senza hash completo. Si
+   * mostra **una** cella "da verificare" (copertina: la copia del telefono) finche' il passaggio `FULL_HASH` non
+   * decide: stessi byte → unione d'identita', byte diversi → il gruppo si scioglie. Mai un'unione senza hash completo.
+   */
+  PROBABLE_DUPLICATE("probable_duplicate"),
 }
 
 /**

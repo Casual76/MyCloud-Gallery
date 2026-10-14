@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!--
+      :core-prepare: nessun permesso e nessun componente (Fase 4, P0). I temporanei stanno in cacheDir/prep/ con nomi
+      derivati da un hash (LocalNames), al massimo 512 MiB. Non conosce il NAS ne' la rete (D28): riceve i byte.
+      Un permesso o un componente nuovo si chiede all'orchestratore: prima la riga in docs/sicurezza.md 4-bis, poi
+      quella in releaseManifestPolicy.
+  -->
+
+</manifest>

@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| **Stato** | Fase 1.4, 12/10/2026, **aggiornato dopo la revisione di sicurezza e la sua verifica** (`docs/review/1.4-core-trust.md`, due giri) e **esteso nella Fase 2 (pacchetto P3)**: configurazione di famiglia completa (§5.3), segnalazione "perso" (tipo 7, §5.9), stato del dispositivo (tipo 8, §5.10), rifondazione dopo un reset (§4.10), residui N2, R2, R3, R4 della revisione chiusi (§2.3, §4.4). Formato **versione 1**. Nessun dato e' ancora stato scritto sul NAS. L'uso da parte dell'app: `docs/famiglia-dispositivi.md`. |
+| **Stato** | Fase 1.4, 12/10/2026, **aggiornato dopo la revisione di sicurezza e la sua verifica** (`docs/review/1.4-core-trust.md`, due giri) e **esteso nella Fase 2 (pacchetto P3)**: configurazione di famiglia completa (§5.3), segnalazione "perso" (tipo 7, §5.9), stato del dispositivo (tipo 8, §5.10), rifondazione dopo un reset (§4.10), residui N2, R2, R3, R4 della revisione chiusi (§2.3, §4.4). **Completato nella Fase 4 (P0, 14/10/2026)** con le modifiche M1–M12 di `docs/fase4-progetto.md` §0.3: classi dei segmenti nelle teste (§5.5), contenuto dei segmenti (§5.5-bis), regole di pubblicazione (§5.5), unita' di lavoro (§5.6), campi nuovi del cestino (§5.7), pulizia dei propri file (§2.3), dati personali (§5.5), salto dell'ora (§6.1), tetti nuovi (§7), modulo unico delle operazioni distruttive (§9), involucro dei file cestinati (§2.1), mappa (§14). Formato **versione 1**. Nessun dato e' ancora stato scritto sul NAS. L'uso da parte dell'app: `docs/famiglia-dispositivi.md`. |
 | **Codice** | modulo `:core-trust` (`dev.pampa.mycloudgallery.core.trust`); la mappa sezione → file → test e' al §14. |
 | **Sigle** | `E-xx` = casi limite del piano; `C1`…`C23`, `L1`…`L17`, `S1`…`S12` = `docs/sicurezza.md`; `A1`…`I10` = voci della revisione. |
-| **Regola** | Ogni costante citata qui esiste identica nel codice (`TrustFormat`, `TrustLimits`). Cambiarne una vuol dire cambiare questo documento. |
+| **Regola** | Ogni costante citata qui esiste identica nel codice (`TrustFormat`, `TrustLimits`). Cambiarne una vuol dire cambiare questo documento. Le righe del §7 che nominano una costante tra apici inversi sono confrontate con il codice da un test (`IndexSegmentTypesTest`). |
 
 ---
 
@@ -58,6 +58,18 @@ Ogni share usata dall'app contiene **una** cartella `.mycloudgallery/`:
   (`trash/<id>/files/`) sono le foto e i video cestinati, rinominati senza estensione, e conservano i loro
   byte; li nascondono solo il punto iniziale della cartella e l'assenza di estensione. Se in Fase 4.5 si
   scopre che un servizio del NAS riconosce i media dal contenuto, quei file si avvolgono in un contenitore.
+
+**Prova E-I13 (Fase 4, M11).** La prova sul campo F14 (`docs/fase4-progetto.md` §5.7: Twonky e Plex con
+`test-comune` aggiunta per la prova, Foto di Windows sulla share) dice se l'indice o il cestino compaiono. **Esito: da
+fare** (F14 e' della chiusura della 4A; il cestino arriva con la 4B). Se un servizio riconosce i file cestinati dal
+contenuto, si avvolgono nell'involucro **`MCGW`**, definito qui come proposta e non ancora scritto da nessuno:
+
+```
+"MCGW" | versione (1) | 0x00 0x00 0x00 | byte originali del file, invariati
+```
+
+Il ripristino toglie gli 8 byte iniziali; la dimensione registrata nel record del cestino (§5.7) resta quella
+dell'originale. Si decide alla 4B, con l'esito di F14 (L30 di `docs/sicurezza.md`).
 
 L'indice di una share sta **dentro quella share** (stessi permessi dei file, C19). Il registro di famiglia
 sta solo nell'**area comune**, perche' tutti devono leggerlo.
@@ -123,10 +135,29 @@ Non ci sono cancellazione, spostamento o sovrascrittura (un test lo verifica, §
   silenzio** (`CommitResult.Published.unverifiedBeyond`, avviso all'admin e in Diagnostica).
 - **Contenuti per impronta.** I segmenti si chiamano con lo SHA-256 del loro contenuto: immutabili, senza
   conflitti.
-- **Pulizia dei propri file vecchi** (teste superate, segmenti non piu' elencati, generazioni di
-  prenotazione superate, kit della chiave ruotata) arriva in Fase 4.1/2.4 con un'interfaccia separata, che
-  permette a ciascuno di cancellare **solo cio' che ha scritto lui** (si riconosce dal firmatario e dal
-  posto), dopo un periodo di grazia, come azione locale.
+- **Pulizia dei propri file vecchi**: sotto.
+
+**Pulizia dei propri file (Fase 4, M6; `OwnFilesPolicy` in `core-trust`, accesa nella 4B).** L'interfaccia promessa
+qui: una **politica** pura che decide, file per file, se un file e' **proprio** e se si puo' togliere; la cancellazione
+la esegue solo `core-nasops` (§9, punto 7), mai `core-trust`.
+
+| Che cosa | Si toglie quando | Mai |
+|---|---|---|
+| Teste proprie (`devices/<io>/<tipo>/head/<n>`) | superate: si tengono sempre le ultime `OWN_FILES_KEEP_HEADS` (3) | la piu' alta |
+| Segmenti propri (`devices/<io>/<tipo>/seg/<impronta>`) | non elencati da nessuna delle ultime 3 teste **e** piu' vecchi di `OWN_FILES_GRACE_MILLIS` (7 giorni, ora del NAS) | un segmento elencato da una delle ultime 3 teste |
+| Generazioni proprie di prenotazione (`leases/.../<n>`) | superate da una generazione piu' alta della stessa risorsa | la generazione piu' alta della risorsa, anche se propria |
+| Temporanei propri (`tmp/<io>-*`) | piu' vecchi di un giorno (come `NasHousekeeping`) | quelli citati dal diario locale delle operazioni (4B) |
+| Kit della chiave ruotata (§4.8) | dopo la rotazione confermata dall'admin | il kit della chiave corrente |
+
+- **Un file e' proprio solo se lo dicono insieme la firma e il posto**: firmato da questo dispositivo (per i file
+  firmati) **e** sotto i suoi id (`devices/<io>/`, `trash/<io>/`, `tmp/<io>-`). Per i segmenti, che non sono firmati,
+  vale il posto piu' la presenza dell'impronta in una delle proprie teste passate (diario locale). Un file messo da
+  altri nella mia cartella non e' mio: non lo tocco (E-S11).
+- **Tetti per giro**: al massimo `MAX_OWN_FILES_PER_ROUND` (500) file; le stesse condizioni della pulizia del cestino
+  (nessun congelamento, nessun salto dell'ora, §6.1).
+- **Generazioni condivise** (nota della revisione 1.4, riga 109): la generazione piu' alta di una risorsa non si toglie
+  mai, nemmeno se e' mia, cosi' chi legge trova sempre l'ultimo stato e il numero successivo non si ripete.
+- Una testa di dati personali (`personal`) e i suoi segmenti seguono le stesse regole nella propria area privata.
 
 ### 2.4 Nomi
 
@@ -606,26 +637,111 @@ busta, `device` il suo id, e il file deve chiamarsi `requests/<device>`.
 ### 5.5 Testa di un dispositivo (tipo 3) e segmenti
 
 `family`, `device`, `share`, `kind` (`index` o `personal`), `version`, `registryVersion`, `createdAt`,
-`segments` (al massimo 8192 elementi `{hash, size}`, in ordine crescente di impronta, ognuno al massimo
+`segments` (al massimo 8192 elementi `{class, hash, size}`, in ordine crescente di impronta, ognuno al massimo
 16 MiB). Il file deve stare in `devices/<device>/<kind>/head/<version>` della share `share`. Le teste sono una
 serie numerata con le stesse regole del registro (§2.3: primo nome libero, lettura per nome, spazzatura
-scavalcata); la lettura per nome delle teste e' codice della Fase 4.1.
+scavalcata).
+
+- **Classi dei segmenti (Fase 4, M1).** `class` e' una fra `meta`, `thumbS`, `thumbM`, `analysis`, `hq`, `frames`,
+  `personal` (`SegmentClass`); `vec`, `ocr` e `faces` sono **riservate** e una testa che le elenca e' rifiutata
+  (`INVALID_FIELD`) finche' una versione del formato non le definisce (E-I4). Una testa `personal` elenca solo segmenti
+  `personal`; una testa `index` mai. Ogni dispositivo scarica solo le classi che gli servono (D16); la classe sta anche
+  nel primo byte del contenuto del segmento (§5.5-bis) e i due valori devono coincidere.
+- **Regole di pubblicazione (Fase 4, M3).** Un dispositivo pubblica nell'indice di una share **solo dati ricavati da
+  file di quella share** (percorsi, impronte, metadati, miniature): niente di un file dell'area privata finisce
+  nell'indice dell'area comune (C19; un test di proprieta' lo verifica). Al massimo **una testa ogni
+  `HEAD_MIN_INTERVAL_MILLIS` (5 minuti) per share e tipo**, ora del NAS, salvo la chiusura di un'unita' di lavoro
+  (§5.6). Prima di firmare: registro fresco, permesso di scrittura, nessun congelamento (`docs/fase4-progetto.md` D10),
+  nessuna pubblicazione sulle share vere finche' vale D31, nessun salto dell'ora (§6.1). I segmenti si pubblicano prima
+  della testa, con il nome uguale all'impronta: una ripetizione dopo un crash trova "esiste gia'" con gli stessi byte.
+- **Lettura delle teste per nome (Fase 4, M3).** Come `DeviceStatusSeries` (§5.10): dall'ultima testa accettata
+  (`HeadMark`) si legge la successiva **per nome**; di solito una sola lettura che risponde "non trovato" (nessuna
+  novita'). Per un ritardo lungo, salti doppi e poi bisezione, tornando indietro di al massimo `MAX_JUNK_RUN` (32) nomi
+  se in cima c'e' spazzatura; al massimo `MAX_HEAD_READS_PER_SHARE` (1024) letture per share e per giro e
+  `MAX_INDEX_DEVICES_PER_SHARE` (256) dispositivi per share. Si tengono solo i dispositivi approvati o dismessi del
+  registro accettato.
 
 - **Anti-rollback per dispositivo**: chi legge ricorda per (share, dispositivo, tipo) l'ultima versione e
   l'impronta del contenuto firmato accettati (`HeadMark`); versione piu' bassa → `ROLLBACK`, stessa versione
   con contenuto diverso → `EQUIVOCATION`. La stessa testa con un'altra firma valida non e' un'equivocazione
   (domanda aperta 1 della revisione).
 - **Dati personali** (`personal`): validi solo se firmati da un dispositivo dello **stesso account del NAS**
-  di chi legge, e mai se stanno nell'area comune. Quando la configurazione elenchera' le aree private (Fase
-  2.2), varranno solo nella share privata dichiarata per quell'account (revisione B6).
+  di chi legge, e mai se stanno nell'area comune. **Fase 4 (M7)**: il registro non elenca le aree private, quindi
+  valgono solo se trovati nella share privata **dichiarata localmente** per l'account di chi legge (onboarding,
+  `LocalDeviceProfile.privateShare`), mai in un'altra share anche se firmati bene (revisione B6). Il contenuto della
+  classe `personal` e' al §5.5-bis (voci per media e campo, 4B).
 - `registryVersion` dice quale registro conosceva chi ha scritto: se e' piu' alto del nostro, il nostro e'
   indietro (forse qualcuno ce ne nasconde uno nuovo) e lo si rilegge; se non si trova, e' un'anomalia da
   Diagnostica.
 - **Segmenti**: non firmati uno per uno; li autentica l'impronta nella testa firmata. Formato: `"MCGB"`, un
-  byte di versione, poi il contenuto (definito in Fase 4.1). Si accettano solo se dimensione e impronta
+  byte di versione, poi il contenuto (§5.5-bis). Si accettano solo se dimensione e impronta
   coincidono con la testa (`Segments.unwrap`). Le immagini che contengono (miniature, anteprime) si
   decodificano solo entro 4096 × 4096 pixel e 16384 per lato (`ImageBounds`), leggendo prima le sole
   dimensioni.
+
+### 5.5-bis Contenuto dei segmenti (Fase 4, M2)
+
+Il contenuto dopo `"MCGB" | versione` (`Segments.wrap`). Codec stretto in `core-trust` (`IndexSegments`, Fase 4 P3);
+tipi in `data/IndexSegment.kt` (`SegmentClass`, `MetaRecord`, `MetaFile`, `SegmentContent`).
+
+```
+offset  byte    contenuto
+0       1       classe (1 meta, 2 thumbS, 3 thumbM, 4 analysis, 5 hq, 6 frames, 16 personal; 7–15 e 17–31 riservate)
+1       3       riservati = 0
+4       4       N voci, 1 ≤ N ≤ MAX_SEGMENT_ENTRIES (4096), big endian
+8       N×36    tabella: chiave (32 byte) + lunghezza del corpo (4 byte, big endian); chiavi strettamente crescenti
+...             i corpi, nell'ordine della tabella, uno dopo l'altro, senza spazi ne' byte in piu'
+```
+
+- **Chiavi** (32 byte):
+  - `meta`: `SHA-256("mcg-path" ‖ 0x00 ‖ percorso)`, con il percorso relativo alla share in UTF-8, forma **NFC** e
+    **minuscolo** (`Locale.ROOT`): due nomi diversi solo per maiuscole sono lo stesso posto per Samba (E-N7);
+  - `thumbS`, `thumbM`, `analysis`, `hq`, `frames`: la **chiave di contenuto** `SHA-256("mcg-ck" ‖ 0x00 ‖ qh1 ‖
+    dimensione)`, con `qh1` come 32 byte grezzi (`QuickHashAlgorithm`) e la dimensione come 8 byte big endian
+    (`ContentKey` in `core-model`). Una rinomina dal PC cambia il record ma non la chiave: la preparazione non si
+    rifa' (D4). Due file diversi solo nel mezzo hanno la stessa chiave (L32): la chiave decide cosa **mostrare**, mai
+    un'unione d'identita';
+  - `personal`: `SHA-256("mcg-pers" ‖ 0x00 ‖ tipo ‖ id del media o dell'album ‖ campo)` (4B, `docs/fase4-progetto.md`
+    §2.9).
+- **Corpi**:
+  - `meta` e `personal`: JSON canonico (§3.2), al massimo `MAX_META_RECORD_BYTES` (4 KiB) e 32 campi;
+  - immagini (`thumbS`, `thumbM`, `analysis`, `hq`): **solo** JPEG (`FF D8 FF`) o WebP (`RIFF…WEBP`), al massimo
+    `MAX_BLOB_BYTES` (1 MiB). Le dimensioni si leggono dall'intestazione e si controllano con `ImageBounds` **prima** di
+    qualunque decodifica; un altro formato o dimensioni oltre il tetto = segmento rifiutato;
+  - `frames`: conteggio (1 byte, da 1 a `MAX_FRAMES_PER_MEDIA` = 9) e, per ogni fotogramma, istante nel video in ms
+    (4 byte) + lunghezza (4 byte) + JPEG; al massimo `MAX_FRAMES_BODY_BYTES` (2 MiB) per media.
+- **Ordine della lettura**: dimensione e impronta uguali alla testa (`Segments.unwrap`) → classe uguale a quella della
+  testa → `N` entro il tetto → tabella coerente (chiavi crescenti, somma delle lunghezze = resto del file esatto) → ogni
+  corpo con i suoi tetti. **Nessuna allocazione da lunghezze dichiarate**: i corpi si leggono come finestre del
+  segmento gia' verificato. Un errore scarta **il segmento intero** (`INDEX_REJECTED` in Diagnostica, E-I5, E-I14) e
+  non ferma gli altri; i dati gia' nella replica restano (E-I17).
+- **Un segmento si chiude** a `SEGMENT_TARGET_BYTES` (12 MiB) o a fine unita' di lavoro, sempre sotto
+  `MAX_SEGMENT_BYTES` (16 MiB). Record vivi per dispositivo e share: al massimo `MAX_RECORDS_PER_DEVICE_SHARE` (262.144).
+
+**Il record `meta`** (JSON canonico; i campi facoltativi si omettono, mai `null`):
+
+| Campo | Forma | Note |
+|---|---|---|
+| `path` | percorso di **media** (§8.1, `SharePath.parseMediaPath`: mai dentro `.mycloudgallery`) | relativo alla share della testa; deve corrispondere alla chiave |
+| `seq` | intero da 1 a `MAX_RECORD_SEQ` (10^9), crescente per (dispositivo, share) | fra record dello stesso dispositivo per lo stesso percorso vince il piu' alto (D5) |
+| `gone` | `true` | **lapide**: il record ha solo `path`, `seq` e `gone`; al massimo `MAX_SEGMENT_TOMBSTONES` per segmento |
+| `size`, `mtime`, `fid` | interi; `fid` facoltativo | il **timbro** (D6): il record vale solo se coincide con l'ultimo elenco del file |
+| `qh`, `fh` | 52 caratteri base32 (32 byte); `fh` facoltativo | `qh1` e SHA-256 dell'intero file |
+| `media`, `version`, `parent` | id da 128 bit in base32 (26 caratteri); `parent` facoltativo | identita' condivise (D7) |
+| `vkind` | `original`, `edited`, `corrected` | codici di `VersionKind` |
+| `kind`, `src`, `mime` | codici stabili di `MediaKind` e `MediaSource`; `mime` facoltativo | |
+| `taken`, `offset`, `conf`, `origin` | ms UTC, minuti (±18 h), codici di `CaptureTimeConfidence` e `CaptureTimeSource` | tutti o nessuno |
+| `w`, `h`, `dur`, `traits` | interi; dimensioni gia' orientate | |
+| `geo` | `[lat×10^7, lon×10^7]` (interi) | facoltativo; sta solo nella share del file che lo contiene gia' |
+| `th` | ThumbHash in base32, al massimo `MAX_THUMBHASH_BASE32_CHARS` (58) caratteri | segnaposto sfocato |
+| `prep` | maschera delle classi pubblicate per la chiave di contenuto (bit = codice della classe) | mai `meta` o `personal` |
+| `fail` | `{"code":…,"dec":…}` | D14: codice (`DECODER_MISSING`, …) e famiglia del decoder del dispositivo |
+
+Un campo sconosciuto, un valore fuori forma, una lapide con campi in piu' o un record senza i campi obbligatori
+(`path`, `seq` e, se non e' una lapide, `size`, `mtime`, `qh`, `media`, `version`, `kind`, `src`) rifiutano il
+segmento. **Fiducia** (D8): un record serve a mostrare (miniature, metadati), a dare l'identita' ai media solo-NAS e a
+coordinare il lavoro; **non basta** per unire un media del telefono a un file del NAS (serve l'impronta letta da chi
+unisce), per dire "al sicuro" (rilettura locale con SHA-256) ne' per nessuna azione sui file (§9).
 
 ### 5.6 Prenotazione (tipo 4)
 
@@ -634,6 +750,13 @@ scavalcata); la lettura per nome delle teste e' codice della Fase 4.1.
 `leases/<SHA-256 di resource>/<gruppo>/<generation>`, con `gruppo = (generation − 1) / 256 + 1`: una
 prenotazione copiata in un altro posto non vale. Regole al §6.2.
 
+**Unita' di lavoro (Fase 4, M4).** La chiave di una prenotazione di lavoro e'
+`work/1/<passaggio>/<aaaa-mm>/<parte>` (es. `work/1/prep/2024-03/2`; `0000-00` per i media senza data): passaggio,
+mese di scatto e numero della parte, **mai nomi di cartelle o di file** (la chiave sta in chiaro nel record firmato).
+Una parte e' al massimo `WORK_UNIT_MAX_ITEMS` (200) media del mese, ordinati per chiave di contenuto. Durata 1 ora;
+**rinnovo ogni `LEASE_RENEW_MILLIS` (20 minuti)** con una generazione nuova; fine = generazione con durata 0. Si prenota
+l'unita', mai il singolo media (`docs/fase4-progetto.md` D13).
+
 ### 5.7 Record del cestino (tipo 5)
 
 `family`, `device`, `share`, `trashId`, `originalPath` (percorso di media validato, §8.1), `size`,
@@ -641,6 +764,17 @@ prenotazione copiata in un altro posto non vale. Regole al §6.2.
 senza estensione (§2.1). Serve a mostrare "Eliminati di recente" e a sapere dove ripristinare; **non decide
 mai una cancellazione** (§9). Il ripristino e' un'azione locale confermata: rinomina nella stessa share verso
 `originalPath` senza sovrascrivere (collisione = nome alternativo, E-D3, E-SH4).
+
+**Campi nuovi (Fase 4, M5; codice nella 4B, P12):**
+- `reason`: `delete` (eliminato dall'utente) o `move` (sorgente di uno spostamento tra share, tenuta 30 giorni: D24, Q3);
+- `folder`: `true` se l'elemento cestinato e' una cartella intera (una sola rinomina, E-D10), `false` altrimenti;
+- `count`: solo per le cartelle, quanti file conteneva al momento del cestino (per "Eliminati di recente"); assente per i
+  file. `size` per una cartella e' la somma dei file.
+
+**Chi puo' fare cosa:** il **ripristino** lo puo' chiedere qualunque dispositivo approvato che abbia il permesso di
+scrittura sulla share (l'utente lo conferma sul suo dispositivo); la **pulizia** dopo 30 giorni la fa solo l'autore, dal
+proprio diario locale (§9, punto 3). Un dispositivo dismesso o azzerato lascia i suoi elementi nel cestino per sempre
+(L31 di `docs/sicurezza.md`): si eliminano solo a mano.
 
 ### 5.8 Testa di un album condiviso (tipo 6, Fase 7)
 
@@ -705,8 +839,20 @@ L'implementazione (Fase 2.1) somma all'orologio monotono del dispositivo lo scar
 - solo **SMB 3.1.1 con firma obbligatoria**: l'hash di pre-autenticazione copre anche l'ora della
   NEGOTIATE (con 3.0/3.0.2 chi fa MITM in LAN potrebbe spostarla);
 - controllo incrociato con l'ora assegnata dal server a un file appena pubblicato;
-- un salto dell'ora del NAS tra due sessioni oltre una soglia (da misurare) sospende cestino e prenotazioni e
-  va in Diagnostica.
+- un salto dell'ora del NAS tra due sessioni oltre una soglia sospende cestino e prenotazioni e va in Diagnostica.
+
+**Soglia ed effetti (Fase 4, M8; `docs/fase4-progetto.md` D32, E-N17).** La soglia e' `NAS_CLOCK_JUMP_MILLIS`
+(**5 minuti**, uguale a `SessionNasClock.DEFAULT_JUMP_THRESHOLD_MS` di `core-nas`): l'ora del NAS letta a una NEGOTIATE
+che si scosta di piu' da quella prevista dall'ancora precedente (`SessionNasClock.lastJumpMs`) **sospende** le
+prenotazioni, la pulizia del cestino, la compattazione e la pulizia dei propri file finche' l'utente non lo conferma in
+Diagnostica o finche' l'ora non resta stabile per `NAS_CLOCK_STABLE_RESUME_MILLIS` (24 ore). Sotto la soglia bastano le
+tolleranze esistenti (2 minuti nel futuro). Motivo: il NAS di casa oggi e' avanti di 53–58 s e deriva di ~5 s al giorno;
+quando l'NTP verra' sistemato l'ora tornera' indietro di colpo, e un orologio che va all'indietro non deve far scadere
+ne' eliminare nulla.
+
+**Stabilita' dei file (E-N4).** Un file nuovo o cambiato e' "stabile" solo se visto due volte uguale a distanza di
+almeno 2 minuti di **ora del NAS** (la data di modifica e' scritta dal NAS): mai con l'ora del telefono, che oggi e'
+~55 s indietro e farebbe sembrare "appena scritto" un file finito.
 
 Istanti plausibili: dal 2020 al 2100; fuori, il campo e' malformato.
 
@@ -770,6 +916,26 @@ insieme, il risultato resta coerente.
 | Permanenza nel cestino | 30 giorni (ora del NAS) |
 | Pulizia del cestino per giro | 200 file e 20 GiB (il primo file del giro passa comunque) |
 | Immagini dall'indice | 4096 × 4096 pixel, 16384 per lato |
+| Voci per segmento (`MAX_SEGMENT_ENTRIES`) | 4096 |
+| Lapidi per segmento `meta` (`MAX_SEGMENT_TOMBSTONES`) | 4096 (tutte le voci) |
+| Record `meta`, JSON canonico (`MAX_META_RECORD_BYTES`) | 4096 byte (4 KiB), 32 campi |
+| Blob d'immagine (`MAX_BLOB_BYTES`) | 1048576 byte (1 MiB), solo JPEG o WebP |
+| Corpo `frames` di un media (`MAX_FRAMES_BODY_BYTES`) | 2097152 byte (2 MiB) |
+| Fotogrammi per media (`MAX_FRAMES_PER_MEDIA`) | 9 (copertina + 8) |
+| `seq` di un record (`MAX_RECORD_SEQ`) | 1000000000 (10^9) |
+| Record vivi per dispositivo e share (`MAX_RECORDS_PER_DEVICE_SHARE`) | 262144 |
+| ThumbHash nel record, base32 (`MAX_THUMBHASH_BASE32_CHARS`) | 58 caratteri |
+| Chiusura di un segmento (`SEGMENT_TARGET_BYTES`) | 12582912 byte (12 MiB) |
+| Dispositivi letti per share e per giro (`MAX_INDEX_DEVICES_PER_SHARE`) | 256 |
+| Letture per nome delle teste, per share e per giro (`MAX_HEAD_READS_PER_SHARE`) | 1024 |
+| Teste nuove per share e tipo (`HEAD_MIN_INTERVAL_MILLIS`) | 300000 ms (una ogni 5 minuti), salvo la chiusura di un'unita' |
+| Media per unita' di lavoro (`WORK_UNIT_MAX_ITEMS`) | 200 |
+| Rinnovo di una prenotazione di lavoro (`LEASE_RENEW_MILLIS`) | 1200000 ms (20 minuti) |
+| Teste proprie tenute dalla pulizia (`OWN_FILES_KEEP_HEADS`) | 3 |
+| Grazia dei propri segmenti non elencati (`OWN_FILES_GRACE_MILLIS`) | 604800000 ms (7 giorni, ora del NAS) |
+| Propri file tolti per giro (`MAX_OWN_FILES_PER_ROUND`) | 500 |
+| Salto dell'ora del NAS che sospende (`NAS_CLOCK_JUMP_MILLIS`) | 300000 ms (5 minuti) |
+| Ora stabile per riprendere dopo un salto (`NAS_CLOCK_STABLE_RESUME_MILLIS`) | 86400000 ms (24 ore) |
 
 Superare un tetto vuol dire rifiutare il dato (o l'elenco), contarlo in Diagnostica e proseguire con cio'
 che si ha. **Mai un crash** (E-I14): ogni eccezione di un parser diventa un rifiuto.
@@ -868,6 +1034,16 @@ partono solo da azioni locali confermate**, con tetti per giro. Come la garantis
    un'equivocazione o una regressione non diventano mai lo stato accettato, quindi non fanno azzerare (test
    `NoFalseWipeTest` di `core-family`).
 
+7. **Un solo modulo con operazioni distruttive (Fase 4, M10).** `core-nasops` (4B) e' l'**unico** modulo con
+   operazioni distruttive sui media e sui file dell'app sul NAS (rinomina, spostamento, cestino, eliminazione con
+   handle, pulizia del cestino e dei propri file), oltre ai propri temporanei di `core-nas` (`NasHousekeeping`). Le
+   primitive di scrittura stanno in `core-nas/ops` dietro il contratto `NasFileOps`, che solo `core-nasops` vede.
+   `core-nasops` entra **solo** da un `UserConfirmation` costruito dal foglio di conferma della UI o dal **diario
+   locale** (riprese dopo un'interruzione); nessun dato letto dal NAS (record del cestino, teste, segmenti, prenotazioni,
+   dati personali) crea voci del diario. Lo garantiscono: il test di architettura (`Phase4ArchitectureTest` di
+   `core-common`: `NasFileOps` solo in `core-nas` e `core-nasops`; chi legge il NAS o mostra la Libreria non vede
+   `core-nasops`) e, per ogni operazione, un test "dato remoto ostile → nessuna azione" (P12).
+
 Le operazioni distruttive vere vivranno in moduli e interfacce separate (Fasi 2.4, 4.5, 5, 7), ciascuna con
 il suo diario locale e i suoi test "dato remoto ostile → nessuna azione".
 
@@ -888,8 +1064,9 @@ il suo diario locale e i suoi test "dato remoto ostile → nessuna azione".
   viene tolta, se ne alza `OLDEST_READABLE_VERSION` e i dati vecchi vanno riscritti dai loro autori.
 - **Finche' l'app non e' rilasciata e nessun dato e' stato scritto sul NAS, la versione 1 puo' ancora
   cambiare** (le Fasi 2.2, 4.1, 4.7 e 7 aggiungono campi alla v1; la revisione 1.4 l'ha gia' cambiata:
-  firme canoniche, codice di approvazione a 80 bit, prenotazioni a gruppi, kit per chiave). Dal primo dato
-  scritto sull'area di prova in poi, ogni modifica segue le regole sopra.
+  firme canoniche, codice di approvazione a 80 bit, prenotazioni a gruppi, kit per chiave; la Fase 4 l'ha
+  completata con M1 (classi nelle teste), M2 (contenuto dei segmenti), M5 (campi del cestino) e M7 (dati
+  personali)). Dal primo dato scritto sull'area di prova in poi, ogni modifica segue le regole sopra.
 
 ---
 
@@ -1029,6 +1206,12 @@ e C23 hanno ora codice e test; L11 e i limiti del §12 vanno riportati li' alla 
 | §5.7, §9 | `data/Trash.kt` | `TrashTest`, `ReviewFixesTest` (B7) |
 | §7 | `TrustFormat.kt` (`TrustLimits`) | in tutti i test sopra |
 | §8 | `nas/SharePath.kt`, `codec/TextRules.kt`, `nas/NasLayout.kt` (`LocalNames`, `ImageBounds`), `registry/Registration.kt` (`LookAlike`) | `SharePathTest`, `Base32AndTextTest`, `ReviewFixesTest` (B1, B2, I7) |
+| §5.5 (M1, M3, M7), §5.5-bis (M2) | `data/IndexSegment.kt` (tipi, P0: `SegmentClass`, `ClassedSegment`, `MetaFile`, `MetaRecord`, `SegmentContent`; codec `IndexSegments` e `MetaRecords`, P3), `data/DeviceHead.kt` (teste con le classi, P3), `data/HeadSeries.kt` (lettura per nome, P3); `ContentKey` in `core-model` | `IndexSegmentTypesTest` (P0: classi, invarianti, §7 contro `TrustLimits`); P3: `IndexSegmentCodecTest`, `HostileSegmentTest`, `HeadSeriesTest` |
+| §2.3 (M6) | `data/OwnFiles.kt` (`OwnFilesPolicy`, P3; esecuzione in `core-nasops`, 4B) | P3: `OwnFilesPolicyTest` |
+| §5.6 (M4) | `data/Leases.kt`; chiave delle unita' in `core-index` (`WorkUnitKey`) | `LeaseTest`; `IndexContractTest` (P0) |
+| §5.7 (M5) | `data/Trash.kt` (campi nuovi nella 4B, P12) | `TrashTest` |
+| §6.1 (M8) | `TrustLimits.NAS_CLOCK_JUMP_MILLIS`; `SessionNasClock` in `core-nas` | `IndexSegmentTypesTest` (§7); in `core-nas` i test dell'orologio |
+| §9 (M10) | `core-nasops` (4B), `core-nas/ops` (`NasFileOps`, 4B) | `Phase4ArchitectureTest` (`core-common`, P0); P12: test "dato remoto ostile" |
 
 I test JVM usano un NAS finto volutamente scomodo: elenchi in ordine casuale e nomi senza distinzione di
 maiuscole (I3).

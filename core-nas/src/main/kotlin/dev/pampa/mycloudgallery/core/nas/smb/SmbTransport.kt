@@ -114,8 +114,45 @@ enum class DirAccess {
   ADD_FILE,
 }
 
-/** Una voce di cartella. [lastWriteMs] e' l'ora del NAS (ms dall'epoca). */
-class SmbDirEntry(val name: String, val isDirectory: Boolean, val size: Long, val lastWriteMs: Long)
+/**
+ * Una voce di cartella (`FileIdBothDirectoryInformation`). [lastWriteMs] e [changeMs] sono ore del NAS (ms
+ * dall'epoca); [fileId] e' il `FileId` del server (stabile alla rinomina sullo stesso volume), [attributes] la maschera
+ * `FILE_ATTRIBUTE_*` (MS-FSCC 2.6).
+ */
+class SmbDirEntry(
+  val name: String,
+  val isDirectory: Boolean,
+  val size: Long,
+  val lastWriteMs: Long,
+  val changeMs: Long? = null,
+  val fileId: Long? = null,
+  val attributes: Int = if (isDirectory) ATTRIBUTE_DIRECTORY else ATTRIBUTE_ARCHIVE,
+) {
+  override fun toString(): String = "SmbDirEntry(dir=$isDirectory, size=$size)"
+
+  companion object {
+    const val ATTRIBUTE_DIRECTORY: Int = 0x10
+    const val ATTRIBUTE_ARCHIVE: Int = 0x20
+  }
+}
+
+/**
+ * Lo stato di un file o di una cartella letto **su un handle** (`FileAllInformation`: una `QUERY_INFO`). Serve alla
+ * lettura dei media (Fase 4, D2): dimensione, data, `fileId` e attributi visti dallo stesso handle da cui si legge.
+ *
+ * @property name il nome com'e' sul server (l'ultima parte di `FileNameInformation`), se il server l'ha detto.
+ */
+class SmbFileInfo(
+  val name: String?,
+  val isDirectory: Boolean,
+  val size: Long,
+  val lastWriteMs: Long,
+  val changeMs: Long?,
+  val fileId: Long?,
+  val attributes: Int,
+) {
+  override fun toString(): String = "SmbFileInfo(dir=$isDirectory, size=$size)"
+}
 
 /** Spazio libero visto dal NAS (`FileFsFullSizeInformation`): per l'utente (quota) e per tutto il volume. */
 class SmbSpace(val callerFreeBytes: Long, val totalFreeBytes: Long)
@@ -146,6 +183,20 @@ interface SmbShare : Closeable {
   @Throws(IOException::class)
   fun openDirectory(path: String, access: DirAccess): SmbDirectory
 
+  /**
+   * Lo stato di un file o di una cartella: `CREATE` con il solo `FILE_READ_ATTRIBUTES` + `QUERY_INFO` + `CLOSE`.
+   * `0xC0000034`/`0xC000003A` se non c'e'. Nessun diritto di lettura dei dati: non blocca chi scrive (E-N13).
+   */
+  @Throws(IOException::class)
+  fun stat(path: String): SmbFileInfo
+
+  /**
+   * Toglie una cartella **vuota** (`0xC0000101` se non lo e'). Solo per `ops/` (4B, `rmdirIfEmpty`) e per la pulizia
+   * dell'area di prova dei test d'integrazione: nessun altro chiamante (E-S11).
+   */
+  @Throws(IOException::class)
+  fun removeEmptyDirectory(path: String)
+
   /** Cancella un file. Usata SOLO per i temporanei scritti da questo dispositivo (E-S11). */
   @Throws(IOException::class)
   fun deleteFile(path: String)
@@ -160,6 +211,9 @@ interface SmbShare : Closeable {
 interface SmbReadFile : Closeable {
   /** La dimensione dichiarata dal server (`EndOfFile`). Non ci si fida: si legge comunque con un tetto. */
   val declaredSize: Long
+
+  /** Lo stato visto all'apertura **sullo stesso handle** (data, `fileId`, attributi); null se il server non l'ha dato. */
+  val info: SmbFileInfo? get() = null
 
   /** Legge al piu' [length] byte da [fileOffset]; -1 a fine file. */
   @Throws(IOException::class)
@@ -240,6 +294,29 @@ class SmbCreditsExhaustedException(cause: Throwable? = null) : SmbException("cre
 /** La NEGOTIATE non e' andata a buon fine (nessun dialetto comune: il server non offre SMB 3.1.1). */
 class SmbNegotiationException(cause: Throwable? = null) : SmbException("negoziazione SMB fallita", cause)
 
+/** Perche' una sessione autenticata non e' credibile (domanda aperta 1 della revisione 2, P1 della Fase 4). */
+enum class SessionDefect {
+  /**
+   * La risposta finale di `SESSION_SETUP` non e' firmata, o la firma non torna con la chiave della sessione. In SMB
+   * 3.1.1 la firma e' obbligatoria e prova che il server conosce la password: un impostore che ha solo raccolto la
+   * risposta NTLMv2 non la sa calcolare. smbj 0.15 non la controlla.
+   */
+  UNSIGNED_FINAL_RESPONSE,
+
+  /**
+   * Una risposta in chiaro (ne' cifrata ne' firmata) su una sessione cifrata. smbj 0.15 la accetta quando il server ha
+   * chiesto la cifratura (non pretende piu' la firma) o quando la risposta dichiara la sessione 0.
+   */
+  PLAINTEXT_RESPONSE,
+}
+
+/**
+ * La sessione si e' rivelata insicura **dopo** il login (vedi [SessionDefect]): la connessione e' gia' chiusa, nessun
+ * dato ricevuto e' stato consegnato. Non si riprova sulla stessa rete (come gli altri rifiuti di sicurezza).
+ */
+class SmbInsecureSessionException(val defect: SessionDefect, cause: Throwable? = null) :
+  SmbException("sessione SMB insicura: $defect", cause)
+
 /** I codici NTSTATUS che la sessione distingue (MS-ERREF; tabella del §3.4). */
 object NtStatus {
   const val LOGON_FAILURE: Long = 0xC000006DL
@@ -266,4 +343,7 @@ object NtStatus {
   const val MEDIA_WRITE_PROTECTED: Long = 0xC00000A2L
   const val DELETE_PENDING: Long = 0xC0000056L
   const val NO_SUCH_FILE: Long = 0xC000000FL
+  const val DIRECTORY_NOT_EMPTY: Long = 0xC0000101L
+  const val NOT_SUPPORTED: Long = 0xC00000BBL
+  const val INVALID_PARAMETER: Long = 0xC000000DL
 }

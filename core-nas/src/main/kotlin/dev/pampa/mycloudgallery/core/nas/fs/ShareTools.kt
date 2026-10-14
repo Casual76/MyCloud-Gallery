@@ -10,6 +10,7 @@ import dev.pampa.mycloudgallery.core.nas.session.SmbNasSessionManager
 import dev.pampa.mycloudgallery.core.nas.smb.DirAccess
 import dev.pampa.mycloudgallery.core.nas.smb.NtStatus
 import dev.pampa.mycloudgallery.core.nas.smb.SmbStatusException
+import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import kotlin.time.Duration
 
 /**
@@ -17,16 +18,21 @@ import kotlin.time.Duration
  * verifica aprendo la radice della share con `FILE_ADD_FILE` (il diritto di creare file), **senza creare nessun
  * file**. Gli errori di rete restano errori (una share irraggiungibile non e' una share assente).
  */
-class SmbShareProbe(
+class SmbShareProbe internal constructor(
   private val manager: SmbNasSessionManager,
-  private val purpose: Purpose = Purpose.INTERACTIVE,
+  private val purpose: Purpose,
+  /** La cartella provata al posto della radice: solo l'area di prova dei test d'integrazione (§5.4). */
+  private val root: SharePath?,
 ) : ShareProbe {
 
+  constructor(manager: SmbNasSessionManager, purpose: Purpose = Purpose.INTERACTIVE) : this(manager, purpose, null)
+
   override suspend fun probe(share: String): NasResult<ShareAccess> {
+    val dir = root?.smb().orEmpty()
     val result = manager.runOp(share, purpose, idempotent = true, touchesDisk = true) { ctx ->
-      if (!opens(ctx.share::openDirectory, DirAccess.LIST)) {
+      if (!opens(dir, ctx.share::openDirectory, DirAccess.LIST)) {
         ShareAccess.DENIED
-      } else if (opens(ctx.share::openDirectory, DirAccess.ADD_FILE)) {
+      } else if (opens(dir, ctx.share::openDirectory, DirAccess.ADD_FILE)) {
         ShareAccess.READ_WRITE
       } else {
         ShareAccess.READ_ONLY
@@ -42,9 +48,9 @@ class SmbShareProbe(
     }
   }
 
-  private fun opens(open: (String, DirAccess) -> AutoCloseable, access: DirAccess): Boolean =
+  private fun opens(dir: String, open: (String, DirAccess) -> AutoCloseable, access: DirAccess): Boolean =
     try {
-      open("", access).close()
+      open(dir, access).close()
       true
     } catch (e: SmbStatusException) {
       if (e.status != NtStatus.ACCESS_DENIED && e.status != NtStatus.MEDIA_WRITE_PROTECTED) throw e
@@ -59,10 +65,17 @@ class SmbShareProbe(
  *
  * @param shares le share in cui questo dispositivo pubblica (area comune e area privata).
  */
-class SmbNasHousekeeping(
+class SmbNasHousekeeping internal constructor(
   private val manager: SmbNasSessionManager,
   private val shares: () -> Collection<String>,
+  /** La radice al posto di quella della share: solo l'area di prova dei test d'integrazione (§5.4). */
+  root: SharePath?,
 ) : NasHousekeeping {
+
+  constructor(manager: SmbNasSessionManager, shares: () -> Collection<String>) : this(manager, shares, null)
+
+  private val tmpDir: SharePath = tmpDirOf(root)
+
 
   override suspend fun purgeOwnStaleTemps(deviceId: String, olderThan: Duration): NasResult<Int> {
     require(DEVICE_ID.matches(deviceId)) { "id di dispositivo non valido" }
@@ -73,7 +86,7 @@ class SmbNasHousekeeping(
       val result = manager.runOp(share, Purpose.BACKGROUND, idempotent = true, touchesDisk = true) { ctx ->
         val nasNow = manager.nasClock.nowMillisOrNull() ?: return@runOp 0
         val directory = try {
-          ctx.share.openDirectory(TMP_DIR.smb(), DirAccess.LIST)
+          ctx.share.openDirectory(tmpDir.smb(), DirAccess.LIST)
         } catch (e: SmbStatusException) {
           if (e.status == NtStatus.OBJECT_NAME_NOT_FOUND || e.status == NtStatus.OBJECT_PATH_NOT_FOUND) return@runOp 0
           throw e
@@ -91,7 +104,7 @@ class SmbNasHousekeeping(
         var deleted = 0
         for (name in stale) {
           try {
-            ctx.share.deleteFile(TMP_DIR.child(name).smb())
+            ctx.share.deleteFile(tmpDir.child(name).smb())
             deleted++
           } catch (e: SmbStatusException) {
             if (e.status != NtStatus.OBJECT_NAME_NOT_FOUND) throw e

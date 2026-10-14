@@ -30,6 +30,13 @@ import kotlinx.coroutines.runBlocking
 /** I temporanei della pubblicazione atomica (formato-nas.md §2.2): `<share>/.mycloudgallery/tmp/`. */
 internal val TMP_DIR: SharePath = SharePath.of(TrustFormat.ROOT_DIR, "tmp")
 
+/** [path] sotto [root] (null = la radice della share). */
+internal fun rooted(root: SharePath?, path: SharePath): SharePath =
+  if (root == null) path else SharePath.of(*(root.components + path.components).toTypedArray())
+
+/** La cartella dei temporanei per una radice (`<root>/.mycloudgallery/tmp`). */
+internal fun tmpDirOf(root: SharePath?): SharePath = rooted(root, TMP_DIR)
+
 /** Un id di dispositivo: 128 bit in base32, 26 caratteri `[0-9a-z]` (formato-nas.md §2.4). */
 internal val DEVICE_ID: Regex = Regex("^[0-9a-z]{26}$")
 
@@ -62,20 +69,27 @@ internal class SmbNasFileSystem(
   private val manager: SmbNasSessionManager,
   override val shareName: String,
   private val purpose: Purpose,
+  /**
+   * La radice vista dal formato (null = la radice della share). Solo l'area di prova dei test d'integrazione la sposta
+   * (§5.4, punto 3): percorsi e temporanei finiscono tutti sotto di lei.
+   */
+  private val root: SharePath? = null,
 ) : NasFileSystem {
 
   override fun list(dir: SharePath, limit: Int): NasListing {
     require(limit >= 0) { "limite negativo" }
-    return blocking { manager.runOp(shareName, purpose, idempotent = true, touchesDisk = true) { FsOps.list(it, dir, limit) } }
+    return blocking { manager.runOp(shareName, purpose, idempotent = true, touchesDisk = true) { FsOps.list(it, rooted(root, dir), limit) } }
   }
 
   override fun read(path: SharePath, maxBytes: Int): NasRead {
     require(maxBytes >= 0) { "tetto negativo" }
-    return blocking { manager.runOp(shareName, purpose, idempotent = true, touchesDisk = true) { FsOps.read(it, path, maxBytes) } }
+    return blocking {
+      manager.runOp(shareName, purpose, idempotent = true, touchesDisk = true) { FsOps.read(it, rooted(root, path), maxBytes) }
+    }
   }
 
   override fun publishExclusive(path: SharePath, bytes: ByteArray): PublishResult =
-    blocking { Publisher(manager, shareName, purpose).publish(path, bytes) }
+    blocking { Publisher(manager, shareName, purpose, tmpDir = tmpDirOf(root)).publish(rooted(root, path), bytes) }
 
   override fun toString(): String = "SmbNasFileSystem"
 
@@ -200,8 +214,8 @@ internal object FsOps {
   }
 
   /** Cancella un proprio temporaneo; "non c'e' piu'" va bene. */
-  fun deleteOwnTemp(ctx: OpContext, temp: SharePath) {
-    require(temp.parent() == TMP_DIR) { "si cancellano solo i temporanei" }
+  fun deleteOwnTemp(ctx: OpContext, temp: SharePath, tmpDir: SharePath = TMP_DIR) {
+    require(temp.parent() == tmpDir && tmpDir.components.takeLast(2) == TMP_DIR.components) { "si cancellano solo i temporanei" }
     try {
       ctx.share.deleteFile(temp.smb())
     } catch (e: SmbStatusException) {
@@ -223,9 +237,16 @@ internal object FsOps {
    * lunghezza → `rename(path, false)`. Le cartelle mancanti si creano solo se servono (meno giri sulla VPN).
    * Collisione → si cancella il PROPRIO temporaneo e il risultato e' `ALREADY_EXISTS`.
    */
-  fun publishOnce(ctx: OpContext, path: SharePath, bytes: ByteArray, tempName: () -> String, progress: PublishProgress): PublishResult {
+  fun publishOnce(
+    ctx: OpContext,
+    path: SharePath,
+    bytes: ByteArray,
+    tempName: () -> String,
+    progress: PublishProgress,
+    tmpDir: SharePath = TMP_DIR,
+  ): PublishResult {
     try {
-      val (temp, file) = createTemp(ctx, tempName)
+      val (temp, file) = createTemp(ctx, tempName, tmpDir)
       progress.temp = temp
       var renamed = false
       try {
@@ -273,15 +294,15 @@ internal object FsOps {
     }
   }
 
-  fun createTemp(ctx: OpContext, tempName: () -> String): Pair<SharePath, SmbWriteFile> {
+  fun createTemp(ctx: OpContext, tempName: () -> String, tmpDir: SharePath = TMP_DIR): Pair<SharePath, SmbWriteFile> {
     var collisions = 0
     while (true) {
-      val temp = TMP_DIR.child(tempName())
+      val temp = tmpDir.child(tempName())
       try {
         return temp to ctx.share.createExclusive(temp.smb())
       } catch (e: SmbStatusException) {
         when {
-          e.status == NtStatus.OBJECT_PATH_NOT_FOUND -> mkdirs(ctx, TMP_DIR)
+          e.status == NtStatus.OBJECT_PATH_NOT_FOUND -> mkdirs(ctx, tmpDir)
           e.status == NtStatus.OBJECT_NAME_COLLISION && collisions++ == 0 -> Unit
           else -> throw e
         }
@@ -312,6 +333,7 @@ internal class Publisher(
   private val shareName: String,
   private val purpose: Purpose,
   private val random: SecureRandom = SecureRandom(),
+  private val tmpDir: SharePath = TMP_DIR,
 ) {
   suspend fun publish(path: SharePath, bytes: ByteArray): NasResult<PublishResult> {
     var attempt = 0
@@ -321,7 +343,7 @@ internal class Publisher(
       val progress = FsOps.PublishProgress()
       val result = manager.attemptOnce(shareName, purpose, touchesDisk = true) { ctx ->
         leftover?.let {
-          FsOps.deleteOwnTemp(ctx, it)
+          FsOps.deleteOwnTemp(ctx, it, tmpDir)
           leftover = null
         }
         if (renameUncertain) {
@@ -331,7 +353,7 @@ internal class Publisher(
             FsOps.Comparison.MISSING -> renameUncertain = false
           }
         }
-        FsOps.publishOnce(ctx, path, bytes, ::tempName, progress)
+        FsOps.publishOnce(ctx, path, bytes, ::tempName, progress, tmpDir)
       }
       when (result) {
         is Attempt.Done -> return NasResult.Ok(result.value)

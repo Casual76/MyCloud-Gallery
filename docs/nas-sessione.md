@@ -1,7 +1,10 @@
-# Sessione NAS (`core-nas`, Fase 2 P1)
+# Sessione NAS (`core-nas`, Fase 2 P1; lettura dei media, Fase 4 P1)
 
-> Implementa il §3 di `docs/fase2-progetto.md`. Contratti in `core-nas/.../contract/` (P0), contratto di fiducia in
-> `core-trust/.../nas/NasFileSystem.kt`. Riferimenti: `docs/research/smb-vpn.md`, spike `nas-probe`.
+> Implementa il §3 di `docs/fase2-progetto.md` e, dalla Fase 4, la riga P1 del §4.4 di `docs/fase4-progetto.md`
+> (lettura dei media, sorvegliante a progresso, simulatore del §5.2, guardia dell'area di prova del §5.4, recinzione
+> D33). Contratti in `core-nas/.../contract/` (P0), contratto di fiducia in `core-trust/.../nas/NasFileSystem.kt`.
+> Riferimenti: `docs/research/smb-vpn.md`, spike `nas-probe`. La parte della Fase 4 e' descritta in fondo
+> ("Fase 4, P1").
 
 ## Come funziona
 
@@ -28,7 +31,8 @@ NasRouteGate (P2) ──▶ SmbNasSessionManager ──▶ SmbTransport ──�
 **Ordine dei controlli a ogni connessione** (§3.1): (1) percorso `Allowed`, altrimenti nessun socket → (2) TCP sul
 binding, 6 s (20 s dopo un timeout o in risveglio) → (3) NEGOTIATE: 3.1.1, cifratura offerta, GUID = memorizzato;
 solo allora si ancora l'ora del NAS → (4) interruttore chiuso → (5) di nuovo il percorso, stessa rete del socket →
-(6) credenziali e **una** `authenticate` → (7) cifratura davvero attiva, né guest né anonima. Un fallimento tra 3 e 7
+(6) credenziali e **una** `authenticate`, con la **firma della risposta finale di SESSION_SETUP verificata** (Fase 4
+P1) → (7) cifratura davvero attiva, né guest né anonima; da qui ogni risposta in chiaro chiude la connessione. Un fallimento tra 3 e 7
 chiude la connessione; l'esito resta "agganciato" sulla stessa rete e lo stesso account (nessun nuovo tentativo
 automatico) finché non cambiano rete o account, o `invalidate(USER_REQUEST/CREDENTIALS_CHANGED/...)`.
 
@@ -67,7 +71,7 @@ temporaneo e si ripete; caduta **durante** la rinomina: si rilegge il file final
 - Log solo con `GalleryLog`, senza utente, password, IP, nomi o percorsi (`NasAddress`, `ShareMissing` e
   `Negotiation` hanno `toString` neutri).
 
-Test JVM: `gradlew.bat :core-nas:testDebugUnitTest` (78 test; tabella §3.4 in `ErrorTableTest` con Robolectric per le
+Test JVM: `gradlew.bat :core-nas:testDebugUnitTest` (78 test nella Fase 2, 141 con la Fase 4 P1; tabella §3.4 in `ErrorTableTest` con Robolectric per le
 stringhe; tempo virtuale in `WatchdogTest`; simulatore `testing/InMemorySmbBackend`, riusabile dai moduli a valle).
 
 ## Suite d'integrazione (`@NasIntegration`, dal PC cablato)
@@ -78,22 +82,29 @@ gradlew.bat :core-nas:testDebugUnitTest -PnasIntegration --tests "*.integration.
 
 - `NasNegotiateProbeTest`: **solo NEGOTIATE**, nessuna credenziale. Scrive `core-nas/build/nas-it/negotiate.txt`.
 - `NasIntegrationSuiteTest`: parte solo se esiste `%USERPROFILE%\.mycloudgallery\nas-it.properties`, scritto
-  dall'utente (mai nel repository):
+  dall'utente (mai nel repository, mai letto ne' stampato dai log). Chiavi in `integration/NasIntegration.kt`
+  (`ItCredentials`):
   ```properties
   user=test
   password=...
   share=test
-  # facoltativi
+  # facoltative (senza, i test che le usano risultano saltati)
   host=192.168.178.58
-  guid=            # se manca si legge dalla NEGOTIATE
+  guid=               # se manca si legge dalla NEGOTIATE
   share2=test-comune  # copia lato server tra share
-  m9.consent=yes   # SOLO con consenso esplicito: un tentativo con password sbagliata (M9)
+  m9.consent=yes      # SOLO con consenso esplicito: un tentativo con password sbagliata (M9)
+  # Fase 4 (docs/fase4-progetto.md §5.4)
+  user2=test2         # secondo account: l'area privata del primo non si vede
+  password2=...
+  privateShare2=test2
+  chaos.rounds=400    # P15
+  chaos.bigFileMb=200 # P15
   ```
-  Senza file i 5 test risultano *skipped* ("file delle credenziali assente"). Con il file: sessione cifrata e GUID
-  dopo la riconnessione, `publishExclusive` reale (collisione, maiuscole, tetto, elenco troncato), `ShareProbe`,
-  pulizia dei temporanei, copia tra share. La password si verifica **prima** con la sessione (interruttore condiviso
-  da tutta la suite): un errore nel file costa un solo tentativo. Scrive solo sotto `.mycloudgallery/it/<giro>/` e
-  `.mycloudgallery/tmp/` della share di prova e alla fine cancella tutto ciò che ha creato.
+  **Dietro la guardia dell'area di prova** (Fase 4, D30, sotto): la configurazione si valida e la guardia fa il suo
+  autotest **prima di qualunque socket**; ogni richiesta passa dal trasporto recintato; tutto avviene sotto
+  `mcg-it/<giro>/` delle share di prova (anche i temporanei e l'indice di prova); alla fine il giro si cancella, e
+  con lui `mcg-it/` se l'ha creata il giro. La password si verifica **prima** con la sessione (interruttore condiviso
+  da tutta la suite): un errore nel file costa un solo tentativo.
 
 ## NEGOTIATE reale (12/10/2026, PC cablato → 192.168.178.58:445, nessuna autenticazione)
 
@@ -139,3 +150,73 @@ gradlew.bat :core-nas:testDebugUnitTest -PnasIntegration --tests "*.integration.
 - **P2**: il cancello deve negare `LOCAL_NETWORK_DENIED` (a permesso negato la TCP va solo in timeout).
 - **Sul campo** (F11): APK di release con R8 (regole consumer verificate da `ToolsTest`); confermare che
   `Connection.close(true)` sblocca subito una richiesta appesa (watchdog) anche sul telefono.
+
+---
+
+## Fase 4, P1: lettura dei media, sorvegliante a progresso, recinzioni (14/10/2026)
+
+| Pezzo | File | Cosa fa |
+|---|---|---|
+| `SmbNasMediaReader` | `media/SmbNasMediaReader.kt` | `NasMediaReader` sopra la sessione (`NasSessionManager.mediaReader()`): stessi controlli, limitatore, nuovi tentativi, recinzione |
+| Elenco a pagine | idem (`DirCursor`) | Una pagina = un'operazione corta; **lo stesso handle e lo stesso iteratore** per tutte le pagine; mai l'elenco intero in memoria. Guasto prima della prima pagina: si riparte da capo; dopo: errore (rifarlo darebbe doppioni). Tetto 200.000 (`cappedAt`) |
+| File aperti | idem (`SmbRandomFile`) | Timbro (dimensione, data, `fileId`) letto **sullo stesso handle** (`FileAllInformation`, una `QUERY_INFO`); ogni lettura e' un'operazione corta; dopo una riconnessione il file si riapre e, se il timbro e' cambiato, la lettura fallisce (`Unexpected`): mai due versioni mescolate |
+| `readAll` | idem | 4 flussi a blocchi da 1 MiB, riordinati prima del `sink`, SHA-256 in ordine, al massimo 8 blocchi in memoria; il ritmo lo sorveglia un biglietto del trasferimento |
+| Sorvegliante a progresso (D3) | `session/OperationMonitor.kt`, `OpContext` | Operazioni a flusso (`startTransfer`): la scadenza si sposta di 15/60 s a ogni blocco; resta la soglia di 32 KiB/s per 20 s; i 60 s della prima operazione sui dischi valgono solo fino al primo blocco. Vale per letture, pubblicazioni e copia lato server |
+| Firma della risposta finale | `smb/SmbjTransport.kt` (`FinalResponseCheck`) | AES-CMAC con la chiave di firma della sessione sui byte della risposta finale di `SESSION_SETUP` (catturati da `ResponseGuard`), prima di qualunque richiesta |
+| Niente risposte in chiaro | idem (`ResponseGuard`, `GuardedTransportFactory`) | Il ricevitore di smbj avvolto: dopo il login su una sessione cifrata ogni pacchetto non cifrato chiude la connessione (`SmbInsecureSessionException` → `InsecureSession`, agganciato sulla rete) |
+| Recinzione D33 | `session/ShareGuard.kt`, `fence/ShareFence.kt` | Con un account di prova, share fuori da `test`, `test2`, `test-comune` → `PermissionDenied` prima del socket e prima del `TREE_CONNECT`, per ogni via (anche la sorgente della copia). La lega :app solo in debug (P11) |
+| Copia lato server | `fs/SmbServerSideCopy.kt` | Implementa `ServerCopy`; operazione a flusso; recinzione su entrambe le share |
+| Simulatore §5.2 | `testing/InMemorySmbBackend.kt`, `testing/FaultPlan.kt` | `fileId`, date delle cartelle, `lock`, contenuti virtuali, latenze e standby a tempo virtuale, `FaultPlan` (prima/dopo, sessione scaduta, blocco, codici), ordine casuale, elenchi troncati, copia rifiutata, collegamenti e cicli, `SimNasTime` (scarto, deriva, salti) |
+| Guardia dell'area di prova | `src/test/.../integration/TestAreaGuard.kt`, `TestAreaSelfTest.kt` | Configurazione validata (share = file ∩ `TestShares`, famiglia rifiutata in ogni forma), percorsi solo sotto `mcg-it/<giro>/` a livello delle interfacce e del trasporto, autotest con contatori a zero; nessun test d'integrazione usa smbj direttamente |
+
+**Domanda aperta 1 della revisione 2** (smbj e la sessione finale), provata con un impostore SMB su `127.0.0.1`
+(`SessionSetupSignatureTest`): smbj 0.15.0 **non** verifica la firma della risposta finale di `SESSION_SETUP` e
+**accetta** una risposta in chiaro e non firmata su una sessione cifrata (con il flag `ENCRYPT_DATA` smbj smette di
+pretendere la firma; con la sessione 0 nell'intestazione non verifica nulla). Ora le due cose le fa `SmbjTransport`;
+il test di caratterizzazione segnalera' un eventuale cambio di comportamento di smbj. La verifica in positivo (firma
+giusta, calcolata a parte con NTLMv2, KDF SP800-108 e AES-CMAC scritti nel test) passa, e sul NAS vero la sessione si
+apre.
+
+**Invarianti nuovi** (ognuno ha un test): elenco di 50.000 voci con al piu' una pagina in memoria; `fileId` uguale
+dopo una rinomina (nostra o dal PC), nuovo dopo una copia; letture a intervalli giuste ai bordi e mai oltre il
+richiesto; `readAll` a 4 flussi con lo SHA-256 giusto e i blocchi in ordine; un trasferimento lungo che procede non
+scade, uno fermo si' (15 s interattivo, 20 s di soglia in background); con un guasto a ogni chiamata (prima e dopo
+l'applicazione, sessione scaduta) nessun file a meta' visibile, nessun contenuto sbagliato, nessun doppione negli
+elenchi, nessun temporaneo altrui toccato; nessuna richiesta verso una share fuori recinzione.
+
+**Sul NAS vero** (14/10/2026, PC cablato, account `test`, share `test`, area `mcg-it/<giro>/`; due giri):
+
+| Misura | Valore |
+|---|---|
+| Sessione | SMB 3.1.1, AES-128-GCM, firma finale di `SESSION_SETUP` verificata; GUID stabile alla riconnessione |
+| Ora del NAS | **+45,8 … +46,0 s** sul PC (il 12/10 erano +53 s) |
+| Creazione di 1.500 file vuoti | 11–31 s (CREATE + CLOSE, a lotti di 100) |
+| Elenco di 1.500 voci a pagine da 1.000 | **170–178 ms** (8.400–8.800 voci/s), un solo handle; `fileId` presenti, unici, uguali a quelli di `stat`, **stabili alla rinomina** |
+| Scrittura di 64 MiB (un flusso) | 8,0–10,3 MB/s |
+| Lettura a un flusso (blocchi da 1 MiB) | 11,4–11,8 MB/s |
+| `readAll` a 4 flussi, 64 MiB | **16,9–18,1 MB/s** (3,7–4,0 s), SHA-256 giusto |
+| `readAll` interattivo con scadenza per blocco di 1 s | 3,8 s in tutto: nessuna interruzione (D3) |
+| Copia lato server nella share, 64 MiB | 1,2–1,8 s (**36–57 MB/s**), SHA-256 giusto, `fileId` nuovo |
+| Copia tra share | non provata (`share2` assente nel file) |
+| Recinzione | `Public` e `NAS` rifiutate senza richieste; autotest della guardia: 93 casi, zero chiamate |
+| Pulizia | giro cancellato e verificato; `mcg-it/` tolta (creata dal giro) |
+
+**Deviazioni**
+- `NasSessionManager.mediaReader()` ha un default (`NoNasMediaReader`): le sessioni finte gia' scritte dagli altri
+  moduli restano valide; `SmbNasSessionManager` e `FakeNasSessionManager` (campo `media`) lo ridefiniscono.
+- Nessun `NasError` o `InsecureKind` nuovo: risposta finale non firmata = `InsecureSession(SIGNING_NOT_REQUIRED)`,
+  risposta in chiaro = `InsecureSession(NO_ENCRYPTION)`; file cambiato durante la lettura = `Unexpected(null)`;
+  share fuori recinzione = `PermissionDenied`.
+- Con 4 flussi ogni blocco aspetta i suoi tre compagni: in interattivo `readAll` vuole almeno ~270 KiB/s in tutto
+  (4 MiB in 15 s); sotto, conviene un flusso solo (punto aperto per P8).
+- La soglia di 32 KiB/s si vede a blocchi interi: con blocchi da 1 MiB il minimo osservabile e' ~51 KiB/s per 20 s.
+- `SmbShare` ha due primitive nuove: `stat` e `removeEmptyDirectory` (quest'ultima solo per `ops/` della 4B e per la
+  pulizia dell'area di prova).
+
+**Cosa resta**
+- **P11**: legare `shareGuard = ShareFence` in `SmbNasSessionManager` solo da `DeveloperTools` di debug e
+  verificare con `check.ps1` che `fence/ShareFence` non sia nel dex di release.
+- **P12** (4B): `NasFileOps` passa da `runOp` (recinzione e sorvegliante gia' attivi); aggiungere i suoi percorsi
+  all'autotest della guardia (`TestAreaSelfTest`).
+- **Con le chiavi nuove**: copia tra share (`share2`), privacy fra account (`user2`, `password2`, `privateShare2`).
+- **Sul campo**: ripetere le misure dall'S25 sul Wi-Fi e sulla VPN (con 4 flussi in interattivo).

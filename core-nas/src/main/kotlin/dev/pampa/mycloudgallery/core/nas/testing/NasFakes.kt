@@ -15,6 +15,7 @@ import dev.pampa.mycloudgallery.core.nas.contract.NasCredentialSource
 import dev.pampa.mycloudgallery.core.nas.contract.NasError
 import dev.pampa.mycloudgallery.core.nas.contract.NasHousekeeping
 import dev.pampa.mycloudgallery.core.nas.contract.NasIoException
+import dev.pampa.mycloudgallery.core.nas.contract.NasMediaReader
 import dev.pampa.mycloudgallery.core.nas.contract.NasResult
 import dev.pampa.mycloudgallery.core.nas.contract.NasSessionManager
 import dev.pampa.mycloudgallery.core.nas.contract.NasShareScope
@@ -23,6 +24,7 @@ import dev.pampa.mycloudgallery.core.nas.contract.ShareAccess
 import dev.pampa.mycloudgallery.core.nas.contract.ShareProbe
 import dev.pampa.mycloudgallery.core.nas.contract.Stage
 import dev.pampa.mycloudgallery.core.nas.contract.TestTarget
+import dev.pampa.mycloudgallery.core.nas.noop.NoNasMediaReader
 import dev.pampa.mycloudgallery.core.security.credentials.NasCredentials
 import dev.pampa.mycloudgallery.core.trust.nas.NasFileSystem
 import dev.pampa.mycloudgallery.core.trust.nas.NasListing
@@ -141,6 +143,12 @@ class FakeNasSessionManager(initial: NasConnState = NasConnState.Idle) : NasSess
   override fun fileSystem(share: String): NasFileSystem = share(share)
 
   override fun browser(share: String): NasBrowser = FakeNasBrowser(share(share))
+
+  /** La lettura dei media che [mediaReader] restituisce (Fase 4): di solito `InMemoryNasMedia.reader`. */
+  @Volatile
+  var media: NasMediaReader = NoNasMediaReader
+
+  override fun mediaReader(): NasMediaReader = media
 
   override suspend fun invalidate(reason: InvalidateReason) {
     invalidations += reason

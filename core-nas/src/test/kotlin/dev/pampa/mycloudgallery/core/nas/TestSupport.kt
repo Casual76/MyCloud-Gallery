@@ -7,6 +7,7 @@ import dev.pampa.mycloudgallery.core.nas.contract.NasAccount
 import dev.pampa.mycloudgallery.core.nas.contract.NasResult
 import dev.pampa.mycloudgallery.core.nas.session.MonotonicClock
 import dev.pampa.mycloudgallery.core.nas.session.NasSessionConfig
+import dev.pampa.mycloudgallery.core.nas.session.ShareGuard
 import dev.pampa.mycloudgallery.core.nas.session.SmbNasSessionManager
 import dev.pampa.mycloudgallery.core.nas.testing.FakeNasCredentialSource
 import dev.pampa.mycloudgallery.core.nas.testing.InMemoryBreakerStore
@@ -51,6 +52,7 @@ class Harness(
   io: CoroutineDispatcher = Dispatchers.Unconfined,
   val store: BreakerStore = InMemoryBreakerStore(),
   val backend: InMemorySmbBackend = defaultBackend(),
+  shareGuard: ShareGuard? = null,
 ) {
   val gate = FakeNasRouteGate().apply { allow(Via.HOME_LAN, backend.binding(HOME_WIFI)) }
 
@@ -60,7 +62,7 @@ class Harness(
   @Volatile
   var password: String = GOOD_PASSWORD
 
-  val credentials = FakeNasCredentialSource { CredentialLoad.Found(NasCredentials(USER, password.toCharArray())) }
+  val credentials = FakeNasCredentialSource { CredentialLoad.Found(NasCredentials(account?.user ?: USER, password.toCharArray())) }
   val breakers = AuthBreakerRegistry(store, scope, wallClock = { WALL_CLOCK })
   val backoffs: MutableList<Duration> = CopyOnWriteArrayList()
 
@@ -76,6 +78,7 @@ class Harness(
     io = io,
     deviceId = { DEVICE },
     backoff = { backoffs += it },
+    shareGuard = shareGuard,
   )
 
   val breaker get() = breakers.forAccount(checkNotNull(account))

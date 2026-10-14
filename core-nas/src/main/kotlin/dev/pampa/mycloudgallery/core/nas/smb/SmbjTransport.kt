@@ -1,18 +1,28 @@
 package dev.pampa.mycloudgallery.core.nas.smb
 
 import com.hierynomus.msdtyp.AccessMask
+import com.hierynomus.msdtyp.FileTime
 import com.hierynomus.msfscc.FileAttributes
+import com.hierynomus.msfscc.fileinformation.FileAllInformation
 import com.hierynomus.msfscc.fileinformation.FileIdBothDirectoryInformation
 import com.hierynomus.msfscc.fileinformation.FileStandardInformation
 import com.hierynomus.mssmb2.SMB2CreateDisposition
 import com.hierynomus.mssmb2.SMB2CreateOptions
 import com.hierynomus.mssmb2.SMB2Dialect
+import com.hierynomus.mssmb2.SMB2MessageCommandCode
+import com.hierynomus.mssmb2.SMB2PacketData
 import com.hierynomus.mssmb2.SMB2ShareAccess
+import com.hierynomus.mssmb2.SMB3EncryptedPacketData
 import com.hierynomus.mssmb2.SMBApiException
 import com.hierynomus.mssmb2.copy.CopyChunkRequest
 import com.hierynomus.mssmb2.copy.CopyChunkResponse
-import com.hierynomus.smb.SMBBuffer
+import com.hierynomus.protocol.transport.PacketHandlers
+import com.hierynomus.protocol.transport.PacketReceiver
 import com.hierynomus.protocol.transport.TransportException
+import com.hierynomus.protocol.transport.TransportLayer
+import com.hierynomus.smb.SMBBuffer
+import com.hierynomus.smb.SMBPacket
+import com.hierynomus.smb.SMBPacketData
 import com.hierynomus.smbj.SMBClient
 import com.hierynomus.smbj.SmbConfig
 import com.hierynomus.smbj.auth.AuthenticationContext
@@ -23,6 +33,8 @@ import com.hierynomus.smbj.session.Session
 import com.hierynomus.smbj.share.Directory
 import com.hierynomus.smbj.share.DiskShare
 import com.hierynomus.smbj.share.File
+import com.hierynomus.smbj.transport.TransportLayerFactory
+import com.hierynomus.smbj.transport.tcp.direct.DirectTcpTransportFactory
 import dev.pampa.mycloudgallery.core.nas.contract.SmbDialect
 import dev.pampa.mycloudgallery.core.network.contract.NasAddress
 import dev.pampa.mycloudgallery.core.network.contract.SocketBinding
@@ -34,6 +46,7 @@ import java.net.NoRouteToHostException
 import java.net.Socket
 import java.net.SocketException
 import java.net.SocketTimeoutException
+import java.security.MessageDigest
 import java.util.EnumSet
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
@@ -53,6 +66,9 @@ import kotlin.time.Duration.Companion.seconds
  * connessioni per `host:porta` e potrebbe restituire una connessione legata alla rete di prima (D1). La fabbrica
  * di socket e' quella del percorso consentito ([SocketBinding]): socket legato, connect a tempo, IP letterale.
  *
+ * **Due controlli che smbj non fa** (domanda aperta 1 della revisione 2, P1 della Fase 4), con [ResponseGuard]:
+ * la firma della risposta finale di `SESSION_SETUP` e il rifiuto di ogni risposta in chiaro su una sessione cifrata.
+ *
  * Nient'altro: niente logica, niente nuovi tentativi. Ogni eccezione di smbj diventa una delle eccezioni di
  * `SmbTransport.kt`.
  */
@@ -64,6 +80,7 @@ class SmbjTransport(
 
   override fun connect(binding: SocketBinding, address: NasAddress, connectTimeout: Duration): SmbConnection {
     val factory = BoundSocketFactory(binding, address.toInetAddress(), connectTimeout)
+    val guard = ResponseGuard()
     val config = SmbConfig.builder()
       .withDialects(SMB2Dialect.SMB_3_1_1)
       .withSigningRequired(true)
@@ -75,11 +92,12 @@ class SmbjTransport(
       .withBufferSize(bufferSize)
       .withTimeout(libraryTimeout.inWholeMilliseconds, TimeUnit.MILLISECONDS)
       .withSocketFactory(factory)
+      .withTransportLayerFactory(GuardedTransportFactory(guard))
       .build()
     val client = SMBClient(config)
     try {
       val connection = client.connect(address.ip, address.port)
-      return SmbjConnection(client, connection, readNegotiation(connection))
+      return SmbjConnection(client, connection, readNegotiation(connection), config, guard)
     } catch (t: Throwable) {
       closeQuietly { client.close() }
       throw translateConnect(t)
@@ -142,28 +160,42 @@ private class SmbjConnection(
   private val client: SMBClient,
   private val connection: Connection,
   override val negotiation: Negotiation,
+  private val config: SmbConfig,
+  private val guard: ResponseGuard,
 ) : SmbConnection {
 
-  override val isConnected: Boolean get() = connection.isConnected
+  override val isConnected: Boolean get() = connection.isConnected && guard.violation == null
 
   override fun authenticate(user: String, password: CharArray): SmbSession {
     val context = AuthenticationContext(user, password, "")
     try {
       val session = connection.authenticate(context)
       try {
+        // Domanda aperta 1 della revisione 2: smbj non verifica la firma della risposta finale. La si verifica qui,
+        // prima di mandare qualunque richiesta sulla sessione (un impostore senza la password non sa firmarla).
+        if (!FinalResponseCheck.signed(guard.finalSessionSetup(), session, config)) {
+          throw SmbInsecureSessionException(SessionDefect.UNSIGNED_FINAL_RESPONSE)
+        }
         val facts = SessionFacts(
           encrypted = session.shouldEncryptData(),
           guest = session.isGuest,
           anonymous = session.isAnonymous,
           signingRequired = session.isSigningRequired,
         )
-        return SmbjSession(session, facts)
+        // Da qui ogni risposta deve arrivare cifrata: smbj accetterebbe anche il chiaro (vedi ResponseGuard).
+        if (facts.encrypted) guard.arm()
+        return SmbjSession(session, facts, guard)
       } catch (t: Throwable) {
-        closeQuietly { session.close() }
+        if (t is SmbInsecureSessionException) {
+          // Nessun LOGOFF verso un server che non ha provato chi e': si chiude il socket e basta.
+          closeQuietly { connection.close(true) }
+        } else {
+          closeQuietly { session.close() }
+        }
         throw t
       }
     } catch (t: Throwable) {
-      throw translate(t)
+      throw guard.translate(t)
     } finally {
       // smbj copia la password in AuthenticationContext e la terrebbe per tutta la sessione (sicurezza.md L4):
       // getPassword() restituisce l'array interno, lo si azzera appena l'autenticazione e' finita (DFS e
@@ -178,14 +210,18 @@ private class SmbjConnection(
   }
 }
 
-private class SmbjSession(private val session: Session, override val facts: SessionFacts) : SmbSession {
-  override fun connectShare(name: String): SmbShare = io {
+private class SmbjSession(
+  private val session: Session,
+  override val facts: SessionFacts,
+  private val guard: ResponseGuard,
+) : SmbSession {
+  override fun connectShare(name: String): SmbShare = guard.io {
     val share = session.connectShare(name)
     share as? DiskShare ?: run {
       closeQuietly { share.close() }
       throw SmbStatusException(NtStatus.BAD_NETWORK_NAME)
     }
-    SmbjShare(name, share)
+    SmbjShare(name, share, guard)
   }
 
   override fun close() {
@@ -193,9 +229,9 @@ private class SmbjSession(private val session: Session, override val facts: Sess
   }
 }
 
-private class SmbjShare(override val name: String, private val share: DiskShare) : SmbShare {
+private class SmbjShare(override val name: String, private val share: DiskShare, private val guard: ResponseGuard) : SmbShare {
 
-  override fun openRead(path: String): SmbReadFile = io {
+  override fun openRead(path: String): SmbReadFile = guard.io {
     val file = share.openFile(
       path,
       EnumSet.of(AccessMask.FILE_READ_DATA, AccessMask.FILE_READ_ATTRIBUTES),
@@ -205,16 +241,21 @@ private class SmbjShare(override val name: String, private val share: DiskShare)
       EnumSet.of(SMB2CreateOptions.FILE_NON_DIRECTORY_FILE),
     )
     try {
-      // Un round trip in piu' rispetto all'EndOfFile della CREATE, che smbj non espone sull'oggetto File.
-      val size = file.getFileInformation(FileStandardInformation::class.java).endOfFile
-      SmbjReadFile(file, size)
+      // Un round trip in piu' rispetto all'EndOfFile della CREATE, che smbj non espone sull'oggetto File: tutto lo
+      // stato (dimensione, data, fileId, attributi) dallo stesso handle con una sola QUERY_INFO.
+      val all = file.getFileInformation(FileAllInformation::class.java)
+      SmbjReadFile(file, all.standardInformation.endOfFile, all.toInfo(), guard)
     } catch (t: Throwable) {
       closeQuietly { file.closeSilently() }
       throw t
     }
   }
 
-  override fun createExclusive(path: String): SmbWriteFile = io {
+  override fun stat(path: String): SmbFileInfo = guard.io { share.getFileInformation(path).toInfo() }
+
+  override fun removeEmptyDirectory(path: String) = guard.io { share.rmdir(path, false) }
+
+  override fun createExclusive(path: String): SmbWriteFile = guard.io {
     val file = share.openFile(
       path,
       EnumSet.of(
@@ -229,12 +270,12 @@ private class SmbjShare(override val name: String, private val share: DiskShare)
       SMB2CreateDisposition.FILE_CREATE,
       EnumSet.of(SMB2CreateOptions.FILE_NON_DIRECTORY_FILE),
     )
-    SmbjWriteFile(file)
+    SmbjWriteFile(file, guard)
   }
 
-  override fun mkdir(path: String) = io { share.mkdir(path) }
+  override fun mkdir(path: String) = guard.io { share.mkdir(path) }
 
-  override fun openDirectory(path: String, access: DirAccess): SmbDirectory = io {
+  override fun openDirectory(path: String, access: DirAccess): SmbDirectory = guard.io {
     val mask = when (access) {
       DirAccess.LIST -> EnumSet.of(AccessMask.FILE_LIST_DIRECTORY, AccessMask.FILE_READ_ATTRIBUTES)
       DirAccess.ADD_FILE -> EnumSet.of(AccessMask.FILE_ADD_FILE)
@@ -247,12 +288,12 @@ private class SmbjShare(override val name: String, private val share: DiskShare)
       SMB2CreateDisposition.FILE_OPEN,
       EnumSet.of(SMB2CreateOptions.FILE_DIRECTORY_FILE),
     )
-    SmbjDirectory(directory)
+    SmbjDirectory(directory, guard)
   }
 
-  override fun deleteFile(path: String) = io { share.rm(path) }
+  override fun deleteFile(path: String) = guard.io { share.rm(path) }
 
-  override fun space(): SmbSpace = io {
+  override fun space(): SmbSpace = guard.io {
     val info = share.shareInformation
     SmbSpace(callerFreeBytes = info.callerFreeSpace, totalFreeBytes = info.freeSpace)
   }
@@ -262,33 +303,38 @@ private class SmbjShare(override val name: String, private val share: DiskShare)
   }
 }
 
-private class SmbjReadFile(private val file: File, override val declaredSize: Long) : SmbReadFile {
+private class SmbjReadFile(
+  private val file: File,
+  override val declaredSize: Long,
+  override val info: SmbFileInfo?,
+  private val guard: ResponseGuard,
+) : SmbReadFile {
   override fun read(buffer: ByteArray, fileOffset: Long, bufferOffset: Int, length: Int): Int =
-    io { file.read(buffer, fileOffset, bufferOffset, length) }
+    guard.io { file.read(buffer, fileOffset, bufferOffset, length) }
 
   // Come nello spike (SmbTests.copyAcrossShares), verificato sul NAS: le prime 24 byte della risposta.
   override fun resumeKey(): ByteArray =
-    io { file.ioctl(FSCTL_SRV_REQUEST_RESUME_KEY, true, ByteArray(0), 0, 0, RESUME_KEY_RESPONSE).copyOf(RESUME_KEY_BYTES) }
+    guard.io { file.ioctl(FSCTL_SRV_REQUEST_RESUME_KEY, true, ByteArray(0), 0, 0, RESUME_KEY_RESPONSE).copyOf(RESUME_KEY_BYTES) }
 
   override fun close() {
     closeQuietly { file.closeSilently() }
   }
 }
 
-private class SmbjWriteFile(private val file: File) : SmbWriteFile {
+private class SmbjWriteFile(private val file: File, private val guard: ResponseGuard) : SmbWriteFile {
   override fun write(buffer: ByteArray, fileOffset: Long, bufferOffset: Int, length: Int): Int =
-    io { file.write(buffer, fileOffset, bufferOffset, length).toInt() }
+    guard.io { file.write(buffer, fileOffset, bufferOffset, length).toInt() }
 
-  override fun flush() = io { file.flush() }
+  override fun flush() = guard.io { file.flush() }
 
-  override fun length(): Long = io { file.getFileInformation(FileStandardInformation::class.java).endOfFile }
+  override fun length(): Long = guard.io { file.getFileInformation(FileStandardInformation::class.java).endOfFile }
 
-  override fun renameNoReplace(newPath: String) = io { file.rename(newPath, false) }
+  override fun renameNoReplace(newPath: String) = guard.io { file.rename(newPath, false) }
 
-  override fun deleteOnClose() = io { file.deleteOnClose() }
+  override fun deleteOnClose() = guard.io { file.deleteOnClose() }
 
   // smbj espone File.remoteCopyTo solo nella stessa share: tra share la richiesta si costruisce a mano (research §1.7).
-  override fun copyChunks(resumeKey: ByteArray, chunks: List<SmbCopyChunk>): Long = io {
+  override fun copyChunks(resumeKey: ByteArray, chunks: List<SmbCopyChunk>): Long = guard.io {
     val request = SMBBuffer()
     CopyChunkRequest(resumeKey, chunks.map { CopyChunkRequest.Chunk(it.sourceOffset, it.targetOffset, it.length) }).write(request)
     val bytes = request.compactData
@@ -301,15 +347,15 @@ private class SmbjWriteFile(private val file: File) : SmbWriteFile {
   }
 }
 
-private class SmbjDirectory(private val directory: Directory) : SmbDirectory {
+private class SmbjDirectory(private val directory: Directory, private val guard: ResponseGuard) : SmbDirectory {
   override fun entries(): Iterator<SmbDirEntry> {
-    val raw = io { directory.iterator(FileIdBothDirectoryInformation::class.java) }
+    val raw = guard.io { directory.iterator(FileIdBothDirectoryInformation::class.java) }
     return object : Iterator<SmbDirEntry> {
       private var next: SmbDirEntry? = null
 
       private fun advance(): SmbDirEntry? {
-        while (io { raw.hasNext() }) {
-          val info = io { raw.next() }
+        while (guard.io { raw.hasNext() }) {
+          val info = guard.io { raw.next() }
           val name = info.fileName
           if (name == "." || name == "..") continue
           return SmbDirEntry(
@@ -317,6 +363,10 @@ private class SmbjDirectory(private val directory: Directory) : SmbDirectory {
             isDirectory = (info.fileAttributes and FILE_ATTRIBUTE_DIRECTORY) != 0L,
             size = info.endOfFile,
             lastWriteMs = info.lastWriteTime.toEpochMillis(),
+            changeMs = info.changeTime.millisOrNull(),
+            // Samba ricava il FileId dall'inode: 0 = non dato.
+            fileId = info.fileId.takeIf { it != 0L },
+            attributes = info.fileAttributes.toInt(),
           )
         }
         return null
@@ -344,15 +394,162 @@ private class SmbjDirectory(private val directory: Directory) : SmbDirectory {
   }
 }
 
-// --- Traduzione degli errori di smbj ------------------------------------------------------------------------
+/** Lo stato di `FileAllInformation` nella forma del trasporto. */
+private fun FileAllInformation.toInfo(): SmbFileInfo {
+  val basic = basicInformation
+  val attributes = basic.fileAttributes.toInt()
+  return SmbFileInfo(
+    // FileNameInformation: il percorso dalla radice della share, con la barra rovesciata iniziale.
+    name = nameInformation?.substringAfterLast('\\')?.takeIf { it.isNotEmpty() },
+    isDirectory = standardInformation.isDirectory || (attributes and SmbDirEntry.ATTRIBUTE_DIRECTORY) != 0,
+    size = standardInformation.endOfFile,
+    lastWriteMs = basic.lastWriteTime.toEpochMillis(),
+    changeMs = basic.changeTime.millisOrNull(),
+    fileId = internalInformation.indexNumber.takeIf { it != 0L },
+    attributes = attributes,
+  )
+}
 
-/** Esegue una chiamata smbj traducendo ogni eccezione in una di `SmbTransport.kt`. */
-private inline fun <T> io(block: () -> T): T =
-  try {
-    block()
-  } catch (t: Throwable) {
-    throw translate(t)
+private fun FileTime?.millisOrNull(): Long? = this?.takeIf { it.windowsTimeStamp != 0L }?.toEpochMillis()
+
+// --- La guardia sulle risposte (domanda aperta 1 della revisione 2) ------------------------------------------
+
+/**
+ * Sorveglia **ogni pacchetto in arrivo** su una connessione, prima che smbj lo smisti (P1 della Fase 4; domanda aperta
+ * 1 di `docs/review/2-fase2.md`). Letto nel bytecode di smbj 0.15.0 (`SMBSessionBuilder`,
+ * `SMB2SignatureVerificationPacketHandler`, `SMB3DecryptingPacketHandler`):
+ * - la risposta finale di `SESSION_SETUP` non viene mai verificata: un impostore che risponde `STATUS_SUCCESS` senza
+ *   firma "completa" la sessione. Qui se ne tiene una copia, verificata dopo il login da [FinalResponseCheck];
+ * - un pacchetto in chiaro e non firmato su una sessione cifrata passa se il server ha messo il flag `ENCRYPT_DATA`
+ *   (smbj smette di pretendere la firma) o se dichiara la sessione 0 (nessuna verifica). Qui, dopo [arm], ogni
+ *   pacchetto che non sia cifrato chiude la connessione: le richieste in corso falliscono e nessun byte arriva su.
+ */
+internal class ResponseGuard {
+  @Volatile
+  private var armed = false
+
+  @Volatile
+  private var lastSessionSetup: ByteArray? = null
+
+  /** Perche' la connessione e' stata chiusa dalla guardia, se e' successo. */
+  @Volatile
+  var violation: SessionDefect? = null
+    private set
+
+  /** La copia dell'ultima risposta di `SESSION_SETUP` riuscita (null = mai vista). */
+  fun finalSessionSetup(): ByteArray? = lastSessionSetup
+
+  /** Da qui ogni pacchetto deve essere cifrato. */
+  fun arm() {
+    armed = true
   }
+
+  /** Vero = si consegna a smbj; falso = violazione (la connessione si chiude). */
+  fun accept(packet: SMBPacketData<*>): Boolean {
+    if (armed) {
+      if (packet is SMB3EncryptedPacketData) return true
+      violation = SessionDefect.PLAINTEXT_RESPONSE
+      return false
+    }
+    if (packet is SMB2PacketData) {
+      val header = packet.header
+      if (header.message == SMB2MessageCommandCode.SMB2_SESSION_SETUP && header.statusCode == STATUS_SUCCESS) {
+        lastSessionSetup = packet.dataBuffer.array().copyOf()
+      }
+    }
+    return true
+  }
+
+  /** Come la traduzione normale, ma un errore dopo una violazione e' la violazione (non una caduta da riprovare). */
+  inline fun <T> io(block: () -> T): T =
+    try {
+      block()
+    } catch (t: Throwable) {
+      throw translate(t)
+    }
+
+  fun translate(t: Throwable): IOException {
+    if (t is SmbInsecureSessionException) return t
+    violation?.let { return SmbInsecureSessionException(it, t) }
+    return translateSmbj(t)
+  }
+
+  private companion object {
+    const val STATUS_SUCCESS = 0L
+  }
+}
+
+/** Il ricevitore di smbj avvolto dalla guardia: una violazione chiude la connessione invece di consegnare. */
+private class GuardedReceiver(
+  private val delegate: PacketReceiver<SMBPacketData<*>>,
+  private val guard: ResponseGuard,
+) : PacketReceiver<SMBPacketData<*>> {
+  override fun handle(packet: SMBPacketData<*>) {
+    if (guard.accept(packet)) {
+      delegate.handle(packet)
+    } else {
+      // Fallisce ogni richiesta in corso e chiude il socket (Connection.handleError).
+      delegate.handleError(TransportException("risposta in chiaro su una sessione cifrata"))
+    }
+  }
+
+  override fun handleError(t: Throwable) = delegate.handleError(t)
+}
+
+/** Il trasporto TCP diretto di smbj, con il ricevitore avvolto da [ResponseGuard]. */
+private class GuardedTransportFactory(private val guard: ResponseGuard) : TransportLayerFactory<SMBPacketData<*>, SMBPacket<*, *>> {
+  private val direct = DirectTcpTransportFactory<SMBPacketData<*>, SMBPacket<*, *>>()
+
+  override fun createTransportLayer(
+    handlers: PacketHandlers<SMBPacketData<*>, SMBPacket<*, *>>,
+    config: SmbConfig,
+  ): TransportLayer<SMBPacket<*, *>> =
+    direct.createTransportLayer(PacketHandlers(handlers.serializer, GuardedReceiver(handlers.receiver, guard), handlers.packetFactory), config)
+}
+
+/**
+ * La firma della risposta finale di `SESSION_SETUP` (MS-SMB2 3.2.5.3.1: con 3.1.1 e' obbligatoria e il client la deve
+ * verificare): AES-CMAC con la chiave di firma della sessione sui byte del messaggio, con il campo della firma a zero.
+ * Stesso calcolo di `PacketSignatory.verify` di smbj, che pero' per questa risposta non viene mai chiamato.
+ */
+internal object FinalResponseCheck {
+  private const val FLAGS_OFFSET = 16
+  private const val NEXT_COMMAND_OFFSET = 20
+  private const val SESSION_ID_OFFSET = 40
+  private const val SIGNATURE_OFFSET = 48
+  private const val SIGNATURE_BYTES = 16
+  private const val HEADER_BYTES = 64
+  private const val FLAG_SIGNED = 0x8
+
+  fun signed(raw: ByteArray?, session: Session, config: SmbConfig): Boolean {
+    if (raw == null || raw.size < HEADER_BYTES) return false
+    if (le32(raw, FLAGS_OFFSET) and FLAG_SIGNED == 0) return false
+    if (le64(raw, SESSION_ID_OFFSET) != session.sessionId) return false
+    val next = le32(raw, NEXT_COMMAND_OFFSET)
+    val end = if (next in HEADER_BYTES..raw.size) next else raw.size
+    val key = session.sessionContext.signingKey ?: return false
+    return try {
+      val mac = config.securityProvider.getMac(key.algorithm)
+      mac.init(key.encoded)
+      mac.update(raw, 0, SIGNATURE_OFFSET)
+      mac.update(ByteArray(SIGNATURE_BYTES))
+      mac.update(raw, HEADER_BYTES, end - HEADER_BYTES)
+      val computed = mac.doFinal().copyOf(SIGNATURE_BYTES)
+      MessageDigest.isEqual(computed, raw.copyOfRange(SIGNATURE_OFFSET, SIGNATURE_OFFSET + SIGNATURE_BYTES))
+    } catch (_: Exception) {
+      false
+    }
+  }
+
+  private fun le32(b: ByteArray, at: Int): Int =
+    (b[at].toInt() and 0xff) or ((b[at + 1].toInt() and 0xff) shl 8) or ((b[at + 2].toInt() and 0xff) shl 16) or
+      ((b[at + 3].toInt() and 0xff) shl 24)
+
+  private fun le64(b: ByteArray, at: Int): Long =
+    (le32(b, at).toLong() and 0xffffffffL) or (le32(b, at + 4).toLong() shl 32)
+}
+
+// --- Traduzione degli errori di smbj ------------------------------------------------------------------------
 
 private inline fun closeQuietly(block: () -> Unit) {
   try {
@@ -404,3 +601,6 @@ internal fun translate(t: Throwable): IOException = when {
   t is TransportException || t is IOException || t is SMBRuntimeException -> SmbConnectionLostException(t)
   else -> SmbException("errore SMB imprevisto", t)
 }
+
+/** Usata da [ResponseGuard]. */
+private fun translateSmbj(t: Throwable): IOException = translate(t)

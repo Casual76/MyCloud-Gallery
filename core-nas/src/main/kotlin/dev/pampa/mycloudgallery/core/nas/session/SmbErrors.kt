@@ -7,7 +7,9 @@ import dev.pampa.mycloudgallery.core.nas.contract.NasIoException
 import dev.pampa.mycloudgallery.core.nas.smb.NtStatus
 import dev.pampa.mycloudgallery.core.nas.smb.SmbConnectionLostException
 import dev.pampa.mycloudgallery.core.nas.smb.SmbCreditsExhaustedException
+import dev.pampa.mycloudgallery.core.nas.smb.SessionDefect
 import dev.pampa.mycloudgallery.core.nas.smb.SmbGuestRejectedException
+import dev.pampa.mycloudgallery.core.nas.smb.SmbInsecureSessionException
 import dev.pampa.mycloudgallery.core.nas.smb.SmbNegotiationException
 import dev.pampa.mycloudgallery.core.nas.smb.SmbSpace
 import dev.pampa.mycloudgallery.core.nas.smb.SmbStatusException
@@ -107,6 +109,12 @@ internal object SmbErrors {
 
   private const val MAX_CAUSES = 8
 
+  /** Il difetto della sessione nella voce gia' esistente di [InsecureKind] (nessun valore nuovo nel contratto). */
+  fun insecureKind(defect: SessionDefect): InsecureKind = when (defect) {
+    SessionDefect.UNSIGNED_FINAL_RESPONSE -> InsecureKind.SIGNING_NOT_REQUIRED
+    SessionDefect.PLAINTEXT_RESPONSE -> InsecureKind.NO_ENCRYPTION
+  }
+
   private fun classifyType(t: Throwable, share: String?): Failure = when (t) {
     is NasOpException -> Failure(t.error, t.kind)
     is NasIoException -> Failure(t.error, FailureKind.FINAL)
@@ -115,6 +123,8 @@ internal object SmbErrors {
       else -> Failure(fromStatus(t.status, share), FailureKind.FINAL)
     }
     is SmbGuestRejectedException -> Failure(NasError.InsecureSession(InsecureKind.GUEST), FailureKind.FINAL)
+    // Revisione 2, domanda 1: sessione non firmata o risposta in chiaro. La connessione e' gia' chiusa; sospetta.
+    is SmbInsecureSessionException -> Failure(NasError.InsecureSession(insecureKind(t.defect)), FailureKind.SUSPECT)
     is SmbNegotiationException -> Failure(NasError.InsecureSession(InsecureKind.DIALECT), FailureKind.FINAL)
     is SmbCreditsExhaustedException -> Failure(NasError.Timeout, FailureKind.CREDITS)
     is SmbTimeoutException, is SocketTimeoutException -> Failure(NasError.Timeout, FailureKind.SUSPECT)

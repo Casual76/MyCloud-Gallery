@@ -21,9 +21,10 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlin.random.Random
 
 // Il NAS finto dei MEDIA della Fase 4 (P0): uno scheletro funzionante del §5.2 di docs/fase4-progetto.md, abbastanza per
-// far lavorare P4, P5, P7 e P8 senza P1. Il simulatore fedele (dietro SmbTransport, con FaultPlan "prima/dopo che il
-// server l'abbia applicata", latenze a tempo virtuale, dischi in standby, quote) e' di P1: estendera'
-// InMemorySmbBackend. Questo vive SOPRA il contratto NasMediaReader, quindi non prova nulla di SMB.
+// far lavorare P4, P5, P7 e P8 senza SMB. Il simulatore fedele (dietro SmbTransport, con FaultPlan "prima/dopo che il
+// server l'abbia applicata", latenze a tempo virtuale, dischi in standby, quote) e' InMemorySmbBackend (P1), letto da
+// `SmbNasSessionManager.mediaReader()`; gli stessi casi del contratto passano su entrambi (NasMediaReaderContract).
+// Questo vive SOPRA il contratto NasMediaReader, quindi non prova nulla di SMB.
 
 /**
  * Il contenuto di un file finto: byte veri (piccoli) oppure **virtuali** (dimensione + seme, generati a richiesta),

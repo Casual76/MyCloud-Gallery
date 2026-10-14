@@ -16,6 +16,7 @@ import dev.pampa.mycloudgallery.core.nas.contract.NasConnState
 import dev.pampa.mycloudgallery.core.nas.contract.NasCredentialSource
 import dev.pampa.mycloudgallery.core.nas.contract.NasError
 import dev.pampa.mycloudgallery.core.nas.contract.NasIoException
+import dev.pampa.mycloudgallery.core.nas.contract.NasMediaReader
 import dev.pampa.mycloudgallery.core.nas.contract.NasResult
 import dev.pampa.mycloudgallery.core.nas.contract.NasSessionManager
 import dev.pampa.mycloudgallery.core.nas.contract.NasShareScope
@@ -25,6 +26,7 @@ import dev.pampa.mycloudgallery.core.nas.contract.SessionInfo
 import dev.pampa.mycloudgallery.core.nas.contract.SmbDialect
 import dev.pampa.mycloudgallery.core.nas.fs.SmbNasBrowser
 import dev.pampa.mycloudgallery.core.nas.fs.SmbNasFileSystem
+import dev.pampa.mycloudgallery.core.nas.media.SmbNasMediaReader
 import dev.pampa.mycloudgallery.core.nas.smb.SmbConnection
 import dev.pampa.mycloudgallery.core.nas.smb.SmbConnectionLostException
 import dev.pampa.mycloudgallery.core.nas.smb.SmbSession
@@ -39,6 +41,7 @@ import dev.pampa.mycloudgallery.core.network.contract.NasRouteGate
 import dev.pampa.mycloudgallery.core.security.credentials.NasCredentials
 import dev.pampa.mycloudgallery.core.trust.nas.NasClock
 import dev.pampa.mycloudgallery.core.trust.nas.NasFileSystem
+import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import java.io.IOException
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
@@ -100,6 +103,8 @@ import kotlinx.coroutines.withTimeoutOrNull
  *   (`NasRouteGate.onboardingRoute`) usato dalle operazioni con [Purpose.ONBOARDING].
  * @param io il dispatcher delle chiamate bloccanti (nei test: `Dispatchers.Unconfined`).
  * @param backoff l'attesa prima di un nuovo tentativo (nei test: istantanea).
+ * @param shareGuard la recinzione D33 (solo debug, `fence.ShareFence`): consultata prima di qualunque richiesta per
+ *   ogni via d'accesso a una share; null in release.
  */
 class SmbNasSessionManager(
   private val account: () -> NasAccount?,
@@ -116,6 +121,7 @@ class SmbNasSessionManager(
   internal val deviceId: () -> String? = { null },
   private val onboardingCandidate: () -> HomeCandidate? = { null },
   internal val backoff: suspend (Duration) -> Unit = { delay(it) },
+  private val shareGuard: ShareGuard? = null,
 ) : NasSessionManager {
 
   private val mutableState = MutableStateFlow<NasConnState>(NasConnState.Idle)
@@ -170,6 +176,7 @@ class SmbNasSessionManager(
   // --- API del contratto ------------------------------------------------------------------------------------
 
   override suspend fun <T> withShare(share: String, purpose: Purpose, block: suspend (NasShareScope) -> T): NasResult<T> {
+    fenced(share)?.let { return NasResult.Err(it) }
     opStarted()
     try {
       val ready = runOp(share, purpose, idempotent = true, touchesDisk = false) { }
@@ -188,6 +195,72 @@ class SmbNasSessionManager(
   override fun fileSystem(share: String): NasFileSystem = SmbNasFileSystem(this, share, Purpose.BACKGROUND)
 
   override fun browser(share: String): NasBrowser = SmbNasBrowser(this, share, Purpose.INTERACTIVE)
+
+  private val reader: NasMediaReader by lazy { SmbNasMediaReader(this) }
+
+  /** La lettura dei media (Fase 4, D2) sopra questa sessione: stessi controlli, stesso limitatore, stessa recinzione. */
+  override fun mediaReader(): NasMediaReader = reader
+
+  /**
+   * Un `NasFileSystem` con la radice spostata in [root] della share: il formato vede `.mycloudgallery/...` come sempre
+   * (anche i temporanei), sul NAS finisce sotto `root/`. Per l'area di prova dei test d'integrazione (§5.4, punto 3).
+   */
+  internal fun rootedFileSystem(share: String, root: SharePath, purpose: Purpose = Purpose.BACKGROUND): NasFileSystem =
+    SmbNasFileSystem(this, share, purpose, root)
+
+  /**
+   * D33: la share e' fuori dalla recinzione per l'account in uso? L'errore da dare **prima** di qualunque richiesta
+   * (nessun socket, nessun `TREE_CONNECT`), o null.
+   */
+  internal fun fenced(share: String): NasError? {
+    val guard = shareGuard ?: return null
+    val user = account()?.user ?: return null
+    if (guard.allows(user, share)) return null
+    GalleryLog.w(TAG) { "share rifiutata dalla recinzione delle prove" }
+    return NasError.PermissionDenied
+  }
+
+  /** Chiude [resource] fuori dal chiamante (una `CLOSE` SMB e' bloccante): per i file aperti dalla lettura dei media. */
+  internal fun closeLater(resource: AutoCloseable) {
+    scope.launch(io) {
+      try {
+        resource.close()
+      } catch (_: Exception) {
+        // chiusura: niente da riportare (l'handle muore comunque con la connessione)
+      }
+    }
+  }
+
+  /** Un trasferimento fatto di piu' operazioni (`readAll`): solo il ritmo, sorvegliato dal monitor (D3, E-R14). */
+  internal fun beginTransfer(): OpTicket {
+    val now = clock.nowMillis()
+    val window = config.stallWindow.inWholeMilliseconds
+    val ticket = OpTicket(TransferOwner, now, Long.MAX_VALUE, firstDiskTouch = false, chunkBudgetMs = 0, transferOnly = true)
+    ticket.transfer = TransferWatchdog(window, config.stallMinBytesPerSecond * window / MILLIS_PER_SECOND, now)
+    monitor.begin(ticket)
+    return ticket
+  }
+
+  /** [bytes] arrivati per il trasferimento [ticket]; lancia `Stalled` se il sorvegliante l'ha gia' interrotto. */
+  internal fun transferProgress(ticket: OpTicket, bytes: Int) {
+    ticket.abortedBy?.let { throw NasOpException(it, FailureKind.SUSPECT) }
+    ticket.transfer?.onBytes(bytes, clock.nowMillis())
+  }
+
+  internal fun endTransfer(ticket: OpTicket) = monitor.end(ticket)
+
+  /**
+   * Tiene la sessione "occupata" per tutta una sequenza di operazioni (un elenco a pagine, un `readAll`): niente chiusura
+   * per inattivita' fra un'operazione e l'altra.
+   */
+  internal suspend fun <T> holding(block: suspend () -> T): T {
+    opStarted()
+    try {
+      return block()
+    } finally {
+      opFinished()
+    }
+  }
 
   override suspend fun invalidate(reason: InvalidateReason) {
     epoch.incrementAndGet()
@@ -222,6 +295,8 @@ class SmbNasSessionManager(
     purpose: Purpose,
     idempotent: Boolean,
     touchesDisk: Boolean,
+    /** Consultato prima di ogni nuovo tentativo (un elenco gia' consegnato a meta', un trasferimento interrotto). */
+    mayRetry: () -> Boolean = { true },
     op: (OpContext) -> T,
   ): NasResult<T> {
     opStarted()
@@ -231,14 +306,14 @@ class SmbNasSessionManager(
         when (val result = attemptOnce(share, purpose, touchesDisk, op)) {
           is Attempt.Done -> return NasResult.Ok(result.value)
           is Attempt.NoSession -> {
-            if (result.error == NasError.SessionExpired && attempt < config.maxRetries) {
+            if (result.error == NasError.SessionExpired && attempt < config.maxRetries && mayRetry()) {
               attempt++
               continue
             }
             return NasResult.Err(result.error)
           }
           is Attempt.Failed -> {
-            val retry = attempt < config.maxRetries && when (result.failure.kind) {
+            val retry = attempt < config.maxRetries && mayRetry() && when (result.failure.kind) {
               FailureKind.RECONNECT -> idempotent
               FailureKind.CREDITS -> true
               FailureKind.SUSPECT, FailureKind.FINAL -> false
@@ -259,6 +334,8 @@ class SmbNasSessionManager(
    * In caso di caduta o di sospetto la connessione e' gia' scartata al ritorno.
    */
   internal suspend fun <T> attemptOnce(share: String, purpose: Purpose, touchesDisk: Boolean, op: (OpContext) -> T): Attempt<T> {
+    // D33: prima di qualunque richiesta, anche prima di aprire la sessione.
+    fenced(share)?.let { return Attempt.NoSession(it) }
     val session = when (val acquired = acquire(purpose)) {
       is NasResult.Ok -> acquired.value
       is NasResult.Err -> return Attempt.NoSession(acquired.error)
@@ -266,14 +343,15 @@ class SmbNasSessionManager(
     return permits.withPermit {
       val startedAt = clock.nowMillis()
       val firstDiskTouch = !session.diskTouched
+      val chunkBudget = config.opTimeout(purpose).inWholeMilliseconds
       val budget = if (firstDiskTouch) maxOf(config.opTimeout(purpose), config.firstDiskTouchTimeout) else config.opTimeout(purpose)
-      val ticket = OpTicket(session, startedAt, startedAt + budget.inWholeMilliseconds, firstDiskTouch)
+      val ticket = OpTicket(session, startedAt, startedAt + budget.inWholeMilliseconds, firstDiskTouch, chunkBudget)
       monitor.begin(ticket)
       try {
         val value = runInterruptible(io) {
           ticket.abortedBy?.let { throw NasOpException(it, FailureKind.SUSPECT) }
           val smbShare = session.share(share)
-          op(OpContext(smbShare, session, ticket, clock, config))
+          op(OpContext(smbShare, session, ticket, clock, config, ::fenced))
         }
         if (touchesDisk) {
           session.diskTouched = true
@@ -297,6 +375,8 @@ class SmbNasSessionManager(
           FailureKind.SUSPECT -> {
             discard(session)
             if (aborted == null && failure.error == NasError.Stalled) stalls.value = clock.nowMillis()
+            // Una sessione rivelatasi insicura dopo il login (risposta in chiaro): nessun nuovo tentativo su questa rete.
+            if (failure.error is NasError.InsecureSession) latch = SecurityLatch(failure.error, session.networkId, session.account)
             mutableState.value = NasConnState.Unavailable(failure.error)
           }
           FailureKind.CREDITS, FailureKind.FINAL -> backToReady(session)
@@ -490,7 +570,7 @@ class SmbNasSessionManager(
       nasTimeOffsetMs = negotiation.nasTimeOffsetMs ?: 0L,
       via = route.via,
     )
-    val created = LiveSession(acc, route, onboarding, connection, session, info)
+    val created = LiveSession(acc, route, onboarding, connection, session, info, ::fenced)
     live.set(created)
     mutableState.value = NasConnState.Ready(info)
     if (active.value == 0) scheduleIdle()
@@ -562,8 +642,10 @@ class SmbNasSessionManager(
   }
 
   private fun onAbort(ticket: OpTicket, error: NasError) {
-    // Chiudere la connessione e' l'unico modo di sbloccare una chiamata ferma su un socket muto.
-    (ticket.owner as? LiveSession)?.let { discard(it) }
+    // Chiudere la connessione e' l'unico modo di sbloccare una chiamata ferma su un socket muto. Un trasferimento in
+    // piu' operazioni (readAll) fermo: le sue letture in volo stanno sulla sessione corrente.
+    val owner = if (ticket.owner === TransferOwner) live.get() else ticket.owner as? LiveSession
+    owner?.let { discard(it) }
     if (error == NasError.Stalled) stalls.value = clock.nowMillis()
     mutableState.value = NasConnState.Unavailable(error)
     GalleryLog.w(TAG) { "operazione interrotta dal sorvegliante: $error" }
@@ -630,33 +712,49 @@ internal class OpContext(
   private val ticket: OpTicket,
   private val clock: MonotonicClock,
   private val config: NasSessionConfig,
+  private val fence: (String) -> NasError? = { null },
 ) {
-  /** Un'altra share della stessa sessione (copia lato server tra share). */
-  fun otherShare(name: String): SmbShare = session.share(name)
+  /** La sessione su cui gira l'operazione: un handle aperto vale solo dentro la stessa (lettura dei media). */
+  val sessionKey: Any get() = session
 
-  /** Da qui in poi l'operazione trasferisce byte: parte il watchdog (E-R14). */
+  /** Un'altra share della stessa sessione (copia lato server tra share). Passa anche lei dalla recinzione D33. */
+  fun otherShare(name: String): SmbShare {
+    fence(name)?.let { throw NasOpException(it) }
+    return session.share(name)
+  }
+
+  /**
+   * Da qui in poi l'operazione trasferisce byte: parte il watchdog (E-R14) e la scadenza diventa **per blocco** (D3):
+   * ogni [progress] la sposta in avanti di una scadenza intera, finche' i byte arrivano.
+   */
   fun startTransfer() {
     val window = config.stallWindow.inWholeMilliseconds
     ticket.transfer = TransferWatchdog(window, config.stallMinBytesPerSecond * window / MILLIS_PER_SECOND, clock.nowMillis())
   }
 
-  /** [bytes] trasferiti adesso. Lancia se il trasferimento e' sotto la soglia o se il sorvegliante l'ha interrotto. */
+  /**
+   * [bytes] trasferiti adesso. Lancia se il blocco e' arrivato oltre la scadenza, se il trasferimento e' sotto la
+   * soglia o se il sorvegliante l'ha interrotto; altrimenti sposta la scadenza al blocco successivo.
+   */
   fun progress(bytes: Int) {
     checkAborted()
     val watchdog = ticket.transfer ?: return
     val now = clock.nowMillis()
+    if (now >= ticket.deadlineAt) throw NasOpException(NasError.Timeout, FailureKind.SUSPECT)
     watchdog.onBytes(bytes, now)
     if (watchdog.isStalled(now)) throw NasOpException(NasError.Stalled, FailureKind.SUSPECT)
+    ticket.onChunk(now)
   }
 
   fun checkAborted() {
     ticket.abortedBy?.let { throw NasOpException(it, FailureKind.SUSPECT) }
   }
-
-  private companion object {
-    const val MILLIS_PER_SECOND = 1000L
-  }
 }
+
+/** Il "proprietario" dei biglietti dei trasferimenti in piu' operazioni (`readAll`): non e' una sessione. */
+internal object TransferOwner
+
+private const val MILLIS_PER_SECOND = 1000L
 
 /** Una connessione autenticata e le sue share. La chiude solo il gestore. */
 internal class LiveSession(
@@ -667,6 +765,8 @@ internal class LiveSession(
   private val connection: SmbConnection,
   private val session: SmbSession,
   val info: SessionInfo,
+  /** D33: l'ultima difesa prima del `TREE_CONNECT` (i controlli veri stanno prima della sessione). */
+  private val fence: (String) -> NasError? = { null },
 ) {
   val networkId: String get() = route.binding.networkId
 
@@ -685,6 +785,7 @@ internal class LiveSession(
   /** La share connessa (TREE_CONNECT alla prima richiesta, poi dalla cache; i nomi non distinguono le maiuscole). */
   fun share(name: String): SmbShare = synchronized(shares) {
     if (closed) throw SmbConnectionLostException()
+    fence(name)?.let { throw NasOpException(it) }
     shares.getOrPut(name.lowercase(Locale.ROOT)) { session.connectShare(name) }
   }
 

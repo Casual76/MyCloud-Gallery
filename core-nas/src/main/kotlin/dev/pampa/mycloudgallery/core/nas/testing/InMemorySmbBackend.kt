@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.core.nas.testing
 
 import dev.pampa.mycloudgallery.core.nas.breaker.BreakerRecord
 import dev.pampa.mycloudgallery.core.nas.breaker.BreakerStore
+import dev.pampa.mycloudgallery.core.nas.contract.NasAttributes
 import dev.pampa.mycloudgallery.core.nas.contract.SmbDialect
 import dev.pampa.mycloudgallery.core.nas.session.MonotonicClock
 import dev.pampa.mycloudgallery.core.nas.smb.DirAccess
@@ -14,6 +15,7 @@ import dev.pampa.mycloudgallery.core.nas.smb.SmbCopyChunk
 import dev.pampa.mycloudgallery.core.nas.smb.SmbCreditsExhaustedException
 import dev.pampa.mycloudgallery.core.nas.smb.SmbDirEntry
 import dev.pampa.mycloudgallery.core.nas.smb.SmbDirectory
+import dev.pampa.mycloudgallery.core.nas.smb.SmbFileInfo
 import dev.pampa.mycloudgallery.core.nas.smb.SmbGuestRejectedException
 import dev.pampa.mycloudgallery.core.nas.smb.SmbNegotiationException
 import dev.pampa.mycloudgallery.core.nas.smb.SmbReadFile
@@ -36,19 +38,21 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.random.Random
 import kotlin.time.Duration
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
-// Il simulatore SMB di P1 (docs/fase2-progetto.md §5.1): un NAS in memoria con la semantica di Samba che conta per
-// la sessione. Sta in src/main/.../testing (D6) per i test dei moduli a valle; mai nella release.
+// Il simulatore SMB (docs/fase2-progetto.md §5.1, esteso dalla Fase 4 P1 secondo docs/fase4-progetto.md §5.2): un NAS
+// in memoria con la semantica di Samba che conta per la sessione e per la lettura dei media. Sta in src/main/.../testing
+// (D6) per i test dei moduli a valle; mai nella release (tools/check.ps1).
 
-/** Le operazioni del simulatore, per i ganci dei test ([InMemorySmbBackend.beforeOp]). */
+/** Le operazioni del simulatore, per i ganci dei test ([InMemorySmbBackend.beforeOp]) e per il [FaultPlan]. */
 enum class SimOp {
   CONNECT, AUTHENTICATE, TREE_CONNECT, OPEN_READ, READ, CREATE, WRITE, FLUSH, LENGTH, RENAME, DELETE_ON_CLOSE, MKDIR,
-  OPEN_DIRECTORY, LIST_ENTRY, DELETE, SPACE, RESUME_KEY, COPY_CHUNK,
+  OPEN_DIRECTORY, LIST_ENTRY, DELETE, SPACE, RESUME_KEY, COPY_CHUNK, STAT, RMDIR,
 }
 
 /** Che cosa fa la TCP verso il simulatore. */
@@ -78,6 +82,20 @@ enum class SimAccess { NONE, READ, READ_WRITE }
  * - GUID, dialetto, cifratura offerta e concessa, guest e anonimo, scarto dell'orologio;
  * - stati dell'account (bloccato, disattivato, scaduto...) come codici del login;
  * - cadute della connessione, sessioni scadute, crediti esauriti, TCP rifiutata o muta, letture bloccate.
+ *
+ * Dalla Fase 4 (§5.2):
+ * - **`fileId`** stabile per file, conservato da ogni rinomina (anche di una cartella intera), nuovo per una copia;
+ * - **date**: del file all'ultima scrittura; della cartella a ogni creazione, rinomina o cancellazione dentro;
+ * - **file bloccati** ([lock]): scrittura, rinomina e cancellazione → `SHARING_VIOLATION` (con `denyRead` anche la
+ *   lettura, come un file aperto in esclusiva dal PC);
+ * - **contenuti virtuali** ([putContent] con `NasContent.virtual`): un video "da 9,4 GB" senza occupare memoria;
+ * - **latenze** per tipo di operazione e **dischi in standby** a **tempo virtuale** ([time], [latencies],
+ *   [standbyAfterMs]);
+ * - **piano dei guasti** ([faults]): caduta prima o dopo che il server abbia applicato l'operazione, sessione scaduta,
+ *   blocco, codici;
+ * - ordine degli elenchi casuale ([listOrder]), elenchi troncati ([truncateListsAfter]);
+ * - copia lato server con `NOT_SUPPORTED` o `ACCESS_DENIED` programmabili ([copyChunkStatus]);
+ * - contenuti ostili: nomi non validi, punti di rianalisi e cicli ([putLink]), cartelle enormi.
  *
  * Non apre socket: del `SocketBinding` registra solo la rete ([connectedNetworks]). Thread-safe.
  */
@@ -119,6 +137,28 @@ class InMemorySmbBackend(
   /** Gancio prima di ogni operazione (fuori dal lucchetto del simulatore: puo' lanciare o aspettare). */
   @Volatile var beforeOp: ((SimOp, String) -> Unit)? = null
 
+  /** Il piano dei guasti (§5.2): null = nessuno. */
+  @Volatile var faults: FaultPlan? = null
+
+  /** Il tempo virtuale che latenze e risvegli fanno avanzare; null = latenze e standby spenti. */
+  @Volatile var time: ManualMonotonicClock? = null
+
+  /** Le latenze per tipo di operazione, in tempo virtuale ([time]). */
+  @Volatile var latencies: SimLatencies = SimLatencies.NONE
+
+  /** Dopo questa inattivita' ([time]) i dischi dormono e la prossima operazione su di loro tarda [wakeUpMs] (E-R1). */
+  @Volatile var standbyAfterMs: Long? = null
+  @Volatile var wakeUpMs: Long = DEFAULT_WAKE_UP_MS
+
+  /** Se non null, ogni elenco esce in un ordine casuale (l'ordine di Samba non e' garantito). */
+  @Volatile var listOrder: Random? = null
+
+  /** Se non null, ogni elenco si ferma in silenzio dopo queste voci (un elenco troncato dal server). */
+  @Volatile var truncateListsAfter: Int? = null
+
+  /** Se non null, la copia lato server risponde con questo codice (`NOT_SUPPORTED`, `ACCESS_DENIED`: E-D12). */
+  @Volatile var copyChunkStatus: Long? = null
+
   // --- Contatori ---------------------------------------------------------------------------------------------
   val tcpAttempts = AtomicInteger(0)
   val negotiations = AtomicInteger(0)
@@ -128,23 +168,89 @@ class InMemorySmbBackend(
   val bytesServed = AtomicLong(0)
   val connectedNetworks: MutableList<String> = CopyOnWriteArrayList()
 
+  /** Tutte le richieste arrivate alle share (per i test "zero richieste"). */
+  val shareOps = AtomicInteger(0)
+
+  /** Le voci d'elenco consegnate (per provare che chi elenca non tiene tutto in memoria). */
+  val listEntriesServed = AtomicLong(0)
+
+  /** Le letture in corso adesso e il massimo visto (per i flussi paralleli di `readAll`). */
+  val readsInFlight = AtomicInteger(0)
+  val maxReadsInFlight = AtomicInteger(0)
+
+  /** I risvegli dei dischi simulati. */
+  val diskWakeUps = AtomicInteger(0)
+
   // --- Stato ---------------------------------------------------------------------------------------------------
   private val lock = Any()
   private val users = HashMap<String, SimUser>()
   private val shares = HashMap<String, SimShareState>()
   private val connections = CopyOnWriteArrayList<SimConnection>()
   private val resumeKeys = java.util.concurrent.ConcurrentHashMap<List<Byte>, Pair<Any, Node>>()
+  private val locks = HashMap<String, Boolean>()
+  private val nextFileId = AtomicLong(FIRST_FILE_ID)
+
+  @Volatile private var lastDiskOpAt: Long? = null
+  private val listMicros = AtomicLong(0)
 
   private class SimUser(val password: String, val loginStatus: Long?)
 
-  private class Node(var displayPath: String, val isDirectory: Boolean, var bytes: ByteArray, var lastWriteMs: Long) {
+  private class Node(var displayPath: String, val isDirectory: Boolean, val fileId: Long, var lastWriteMs: Long) {
+    var bytes: ByteArray = EMPTY
+    var virtual: NasContent? = null
     var declaredSize: Long? = null
+    var changeMs: Long = lastWriteMs
+    var attributes: Int = if (isDirectory) NasAttributes.DIRECTORY else NasAttributes.ARCHIVE
+
+    /** Un punto di rianalisi (collegamento) verso un'altra cartella: la chiave della destinazione. */
+    var linkTarget: String? = null
+
+    val size: Long get() = virtual?.size ?: bytes.size.toLong()
+
+    fun copyTo(offset: Long, dst: ByteArray, dstOffset: Int, len: Int) {
+      val v = virtual
+      if (v != null) v.copy(offset, dst, dstOffset, len) else System.arraycopy(bytes, offset.toInt(), dst, dstOffset, len)
+    }
+
+    /** I byte veri (un contenuto virtuale si materializza: solo per file piccoli). */
+    fun materialize(): ByteArray {
+      val v = virtual ?: return bytes
+      require(v.size <= MAX_MATERIALIZE) { "Contenuto virtuale troppo grande per una scrittura." }
+      return ByteArray(v.size.toInt()).also { v.copy(0, it, 0, it.size) }.also {
+        bytes = it
+        virtual = null
+      }
+    }
   }
 
-  private class SimShareState(val name: String, val access: Map<String, SimAccess>, val quotaBytes: Long?) {
-    val nodes = LinkedHashMap<String, Node>()
+  private inner class SimShareState(val name: String, val access: Map<String, SimAccess>, val quotaBytes: Long?) {
+    val nodes = HashMap<String, Node>()
+    val kids = HashMap<String, LinkedHashMap<String, Node>>()
+    val root = Node("", true, nextFileId.incrementAndGet(), nasTime())
 
-    fun usedBytes(): Long = nodes.values.sumOf { it.bytes.size.toLong() }
+    fun usedBytes(): Long = nodes.values.sumOf { if (it.virtual == null) it.bytes.size.toLong() else 0L }
+
+    fun add(key: String, node: Node) {
+      nodes[key] = node
+      kids.getOrPut(parentKey(key)) { LinkedHashMap() }[key] = node
+    }
+
+    fun remove(key: String): Node? {
+      val node = nodes.remove(key) ?: return null
+      kids[parentKey(key)]?.remove(key)
+      return node
+    }
+
+    fun node(key: String): Node? = if (key.isEmpty()) root else nodes[key]
+
+    fun children(key: String): Collection<Node> = kids[key]?.values.orEmpty()
+
+    /** La data della cartella che contiene [key] cambia (creazione, rinomina, cancellazione dentro, §5.2). */
+    fun touchParent(key: String, at: Long) {
+      val parent = node(parentKey(key)) ?: return
+      parent.lastWriteMs = at
+      parent.changeMs = at
+    }
   }
 
   /** Un utente del NAS. [loginStatus] non null = il login risponde sempre con quel codice (bloccato, scaduto...). */
@@ -175,17 +281,102 @@ class InMemorySmbBackend(
 
   // --- Accesso diretto ai file (come un PC sul NAS) -----------------------------------------------------------
 
-  /** Scrive un file (crea le cartelle), con l'ora di modifica [lastWriteMs]. */
+  /** Scrive un file (crea le cartelle), con l'ora di modifica [lastWriteMs]. Un file gia' presente tiene il `fileId`. */
   fun put(share: String, path: String, bytes: ByteArray, lastWriteMs: Long = nasTime()) {
+    putNode(share, path, lastWriteMs, NasAttributes.ARCHIVE) { it.bytes = bytes.copyOf() }
+  }
+
+  /** Come [put], con un contenuto anche virtuale e gli attributi. Restituisce il `fileId`. */
+  fun putContent(
+    share: String,
+    path: String,
+    content: NasContent,
+    lastWriteMs: Long = nasTime(),
+    attributes: Int = NasAttributes.ARCHIVE,
+  ): Long = putNode(share, path, lastWriteMs, attributes) { it.virtual = content }
+
+  private fun putNode(share: String, path: String, lastWriteMs: Long, attributes: Int, fill: (Node) -> Unit): Long =
     synchronized(lock) {
       val state = shareState(share)
       val parts = split(path)
-      for (depth in 1 until parts.size) {
-        val dir = parts.subList(0, depth)
-        state.nodes.getOrPut(key(dir)) { Node(dir.joinToString("/"), true, ByteArray(0), lastWriteMs) }
-      }
-      state.nodes[key(parts)] = Node(parts.joinToString("/"), false, bytes.copyOf(), lastWriteMs)
+      ensureDirs(state, parts.dropLast(1), lastWriteMs)
+      val k = key(parts)
+      val previous = state.nodes[k]
+      require(previous == null || !previous.isDirectory) { "Al posto del file c'e' una cartella." }
+      val node = Node(parts.joinToString("/"), false, previous?.fileId ?: nextFileId.incrementAndGet(), lastWriteMs)
+      node.attributes = attributes
+      fill(node)
+      state.remove(k)
+      state.add(k, node)
+      if (previous == null) state.touchParent(k, lastWriteMs)
+      node.fileId
     }
+
+  /** Una cartella (e quelle sopra) con i suoi attributi (nascosta, di sistema...). */
+  fun putDir(share: String, path: String, attributes: Int = NasAttributes.DIRECTORY, lastWriteMs: Long = nasTime()) {
+    synchronized(lock) {
+      val state = shareState(share)
+      val parts = split(path)
+      ensureDirs(state, parts, lastWriteMs)
+      state.nodes.getValue(key(parts)).attributes = attributes or NasAttributes.DIRECTORY
+    }
+  }
+
+  /**
+   * Un punto di rianalisi (E-N10): una "cartella" in [path] che porta a [target] (anche un suo antenato: un ciclo).
+   * Ha l'attributo `REPARSE_POINT`; aprirla elenca la destinazione, come farebbe un server che segue i collegamenti.
+   */
+  fun putLink(share: String, path: String, target: String) {
+    synchronized(lock) {
+      val state = shareState(share)
+      val parts = split(path)
+      ensureDirs(state, parts.dropLast(1), nasTime())
+      val node = Node(parts.joinToString("/"), true, nextFileId.incrementAndGet(), nasTime())
+      node.attributes = NasAttributes.DIRECTORY or NasAttributes.REPARSE_POINT
+      node.linkTarget = key(split(target))
+      state.add(key(parts), node)
+    }
+  }
+
+  /** Modifica sul posto dal PC (E-N2): contenuto nuovo, stesso `fileId`, data nuova; la cartella non cambia data. */
+  fun modify(share: String, path: String, content: NasContent, lastWriteMs: Long = nasTime()) {
+    synchronized(lock) {
+      val node = checkNotNull(shareState(share).nodes[key(split(path))]) { "File assente." }
+      node.virtual = content
+      node.bytes = EMPTY
+      node.lastWriteMs = lastWriteMs
+      node.changeMs = lastWriteMs
+    }
+  }
+
+  /**
+   * Rinomina o sposta dal PC (anche una cartella intera, E-N1): i `fileId` restano, le date dei file no, quelle delle
+   * due cartelle genitore si'. Non sostituisce mai: una destinazione occupata e' un errore del test.
+   */
+  fun rename(share: String, from: String, to: String) {
+    synchronized(lock) { moveLocked(shareState(share), key(split(from)), split(to), nasTime(), outside = true) }
+  }
+
+  /** Cancellazione dal PC (E-N3): una cartella sparisce con tutto il contenuto. */
+  fun delete(share: String, path: String) {
+    synchronized(lock) {
+      val state = shareState(share)
+      val k = key(split(path))
+      state.nodes.keys.filter { it == k || it.startsWith("$k/") }.forEach { state.remove(it) }
+      state.touchParent(k, nasTime())
+    }
+  }
+
+  /**
+   * Il file e' aperto dal PC (E-N13): scrittura, rinomina e cancellazione rispondono `SHARING_VIOLATION`; con
+   * [denyRead] anche la lettura (un'apertura esclusiva, come Office).
+   */
+  fun lock(share: String, path: String, denyRead: Boolean = true) {
+    synchronized(lock) { locks[lockKey(share, path)] = denyRead }
+  }
+
+  fun unlock(share: String, path: String) {
+    synchronized(lock) { locks.remove(lockKey(share, path)) }
   }
 
   /** La dimensione che la CREATE dichiarera' per il file (un server che mente). */
@@ -193,18 +384,22 @@ class InMemorySmbBackend(
     synchronized(lock) { checkNotNull(shareState(share).nodes[key(split(path))]).declaredSize = size }
   }
 
-  fun bytes(share: String, path: String): ByteArray? =
-    synchronized(lock) { shareState(share).nodes[key(split(path))]?.takeIf { !it.isDirectory }?.bytes?.copyOf() }
+  fun bytes(share: String, path: String): ByteArray? = synchronized(lock) {
+    val node = shareState(share).nodes[key(split(path))]?.takeIf { !it.isDirectory } ?: return null
+    ByteArray(node.size.toInt()).also { node.copyTo(0, it, 0, it.size) }
+  }
 
   fun exists(share: String, path: String): Boolean = synchronized(lock) { shareState(share).nodes.containsKey(key(split(path))) }
 
+  /** Il `fileId` di un file o di una cartella, o null. */
+  fun fileId(share: String, path: String): Long? = synchronized(lock) { shareState(share).node(key(split(path)))?.fileId }
+
+  /** La data di modifica (ora del NAS) di un file o di una cartella, o null. */
+  fun lastWriteMs(share: String, path: String): Long? = synchronized(lock) { shareState(share).node(key(split(path)))?.lastWriteMs }
+
   /** I nomi (come scritti) dei figli di [dir]. */
   fun children(share: String, dir: String): List<String> = synchronized(lock) {
-    val parent = split(dir)
-    shareState(share).nodes.values
-      .map { split(it.displayPath) }
-      .filter { it.size == parent.size + 1 && key(it.subList(0, parent.size)) == key(parent) }
-      .map { it.last() }
+    shareState(share).children(key(split(dir))).map { split(it.displayPath).last() }
   }
 
   fun fileCount(share: String): Int = synchronized(lock) { shareState(share).nodes.values.count { !it.isDirectory } }
@@ -269,6 +464,72 @@ class InMemorySmbBackend(
     return SimConnection(negotiation).also { connections += it }
   }
 
+  /** Il piano dei guasti per un'operazione: conta, applica la fase [FaultPhase.BEFORE], restituisce l'indice. */
+  private fun faultBefore(op: SimOp, connection: SimConnection, session: SimSession?): Pair<Int, Int>? {
+    val plan = faults ?: return null
+    val indices = plan.begin(op)
+    plan.check(op, indices, FaultPhase.BEFORE)?.let { apply(it, connection, session) }
+    return indices
+  }
+
+  private fun faultAfter(op: SimOp, indices: Pair<Int, Int>?, connection: SimConnection, session: SimSession?) {
+    val plan = faults ?: return
+    indices ?: return
+    plan.check(op, indices, FaultPhase.AFTER)?.let { apply(it, connection, session) }
+  }
+
+  private fun apply(fault: SimFault, connection: SimConnection, session: SimSession?): Nothing {
+    when (fault) {
+      SimFault.DropConnection -> {
+        connection.serverDrop()
+        throw SmbConnectionLostException()
+      }
+      SimFault.ExpireSession -> {
+        session?.expired = true
+        throw SmbStatusException(NtStatus.USER_SESSION_DELETED)
+      }
+      SimFault.Stall -> {
+        connection.awaitClosed()
+        throw SmbConnectionLostException()
+      }
+      is SimFault.Status -> throw SmbStatusException(fault.ntStatus)
+    }
+  }
+
+  /** Le latenze in tempo virtuale e il risveglio dei dischi (§5.2). */
+  private fun simulateTime(op: SimOp, bytes: Long) {
+    val clock = time ?: return
+    val l = latencies
+    var ms = l.roundTripMs
+    when (op) {
+      SimOp.READ -> ms += bytes * l.readPerMiBMs / MIB
+      SimOp.WRITE -> ms += bytes * l.writePerMiBMs / MIB
+      SimOp.COPY_CHUNK -> ms += bytes * l.readPerMiBMs / MIB / COPY_SPEEDUP
+      SimOp.LIST_ENTRY -> {
+        // Le voci arrivano a pacchi: niente giro di rete per voce, solo il costo per voce (in microsecondi).
+        ms = 0
+        val total = listMicros.addAndGet(l.perListEntryUs)
+        if (total >= MICROS_PER_MILLI) {
+          val whole = total / MICROS_PER_MILLI
+          listMicros.addAndGet(-whole * MICROS_PER_MILLI)
+          ms = whole
+        }
+      }
+      else -> Unit
+    }
+    if (op in DISK_OPS) {
+      val now = clock.nowMillis()
+      val idle = standbyAfterMs
+      val last = lastDiskOpAt
+      if (idle != null && (last == null || now - last >= idle)) {
+        diskWakeUps.incrementAndGet()
+        ms += wakeUpMs
+      }
+    }
+    if (ms > 0) clock.advance(ms)
+    if (op in DISK_OPS) lastDiskOpAt = clock.nowMillis()
+  }
+
   private inner class SimConnection(override val negotiation: Negotiation) : SmbConnection {
     private val closedLatch = CountDownLatch(1)
 
@@ -300,6 +561,7 @@ class InMemorySmbBackend(
       authenticateCalls.incrementAndGet()
       beforeOp?.invoke(SimOp.AUTHENTICATE, "")
       ensureAlive()
+      val indices = faultBefore(SimOp.AUTHENTICATE, this, null)
       val account = synchronized(lock) { users[user.lowercase(Locale.ROOT)] }
       when {
         account == null -> throw SmbStatusException(NtStatus.LOGON_FAILURE)
@@ -313,7 +575,9 @@ class InMemorySmbBackend(
         anonymous = anonymous,
         signingRequired = signingRequired,
       )
-      return SimSession(this, user.lowercase(Locale.ROOT), facts).also { sessions += it }
+      val session = SimSession(this, user.lowercase(Locale.ROOT), facts).also { sessions += it }
+      faultAfter(SimOp.AUTHENTICATE, indices, this, session)
+      return session
     }
 
     override fun close() {
@@ -335,12 +599,13 @@ class InMemorySmbBackend(
       treeConnects.incrementAndGet()
       beforeOp?.invoke(SimOp.TREE_CONNECT, name)
       ensureUsable()
+      val indices = faultBefore(SimOp.TREE_CONNECT, connection, this)
       val access = synchronized(lock) {
         val state = shares[name.lowercase(Locale.ROOT)] ?: throw SmbStatusException(NtStatus.BAD_NETWORK_NAME)
         state.access[user] ?: SimAccess.NONE
       }
       if (access == SimAccess.NONE) throw SmbStatusException(NtStatus.ACCESS_DENIED)
-      return SimShare(this, name, access)
+      return SimShare(this, name, access).also { faultAfter(SimOp.TREE_CONNECT, indices, connection, this) }
     }
 
     override fun close() = Unit
@@ -348,11 +613,18 @@ class InMemorySmbBackend(
 
   private inner class SimShare(val session: SimSession, override val name: String, val access: SimAccess) : SmbShare {
 
-    private fun enter(op: SimOp, path: String) {
+    /** Una richiesta: guasti "prima", gancio, crediti, latenze; poi [body]; poi guasti "dopo" (risposta persa). */
+    private inline fun <T> perform(op: SimOp, path: String, bytes: Long = 0, body: () -> T): T {
       session.ensureUsable()
+      shareOps.incrementAndGet()
       beforeOp?.invoke(op, path)
       session.ensureUsable()
+      val indices = faultBefore(op, session.connection, session)
       if (creditFailures.getAndUpdate { if (it > 0) it - 1 else 0 } > 0) throw SmbCreditsExhaustedException()
+      simulateTime(op, bytes)
+      val result = body()
+      faultAfter(op, indices, session.connection, session)
+      return result
     }
 
     private fun requireWrite() {
@@ -363,10 +635,8 @@ class InMemorySmbBackend(
 
     /** Il nodo di [parts], con gli errori di Samba per cartella o nome mancanti. */
     private fun lookup(state: SimShareState, parts: List<String>): Node {
-      if (parts.isEmpty()) return ROOT
-      if (parts.size > 1 && state.nodes[key(parts.dropLast(1))]?.isDirectory != true) {
-        throw SmbStatusException(NtStatus.OBJECT_PATH_NOT_FOUND)
-      }
+      if (parts.isEmpty()) return state.root
+      requireParent(state, parts)
       return state.nodes[key(parts)] ?: throw SmbStatusException(NtStatus.OBJECT_NAME_NOT_FOUND)
     }
 
@@ -376,74 +646,98 @@ class InMemorySmbBackend(
       }
     }
 
-    override fun openRead(path: String): SmbReadFile {
-      enter(SimOp.OPEN_READ, path)
+    private fun checkUnlocked(path: String, forRead: Boolean) {
+      val denyRead = locks[lockKey(name, path)] ?: return
+      if (!forRead || denyRead) throw SmbStatusException(NtStatus.SHARING_VIOLATION)
+    }
+
+    override fun openRead(path: String): SmbReadFile = perform(SimOp.OPEN_READ, path) {
       val node = synchronized(lock) {
         val found = lookup(state(), split(path))
         if (found.isDirectory) throw SmbStatusException(NtStatus.FILE_IS_A_DIRECTORY)
+        checkUnlocked(path, forRead = true)
         found
       }
-      return SimReadFile(this, node)
+      SimReadFile(this, node)
     }
 
-    override fun createExclusive(path: String): SmbWriteFile {
-      enter(SimOp.CREATE, path)
+    override fun stat(path: String): SmbFileInfo = perform(SimOp.STAT, path) {
+      synchronized(lock) { lookup(state(), split(path)).info() }
+    }
+
+    override fun createExclusive(path: String): SmbWriteFile = perform(SimOp.CREATE, path) {
       requireWrite()
       val node = synchronized(lock) {
         val state = state()
         val parts = split(path)
         requireParent(state, parts)
         if (state.nodes.containsKey(key(parts))) throw SmbStatusException(NtStatus.OBJECT_NAME_COLLISION)
-        Node(parts.joinToString("/"), false, ByteArray(0), nasTime()).also { state.nodes[key(parts)] = it }
+        val now = nasTime()
+        Node(parts.joinToString("/"), false, nextFileId.incrementAndGet(), now).also {
+          state.add(key(parts), it)
+          state.touchParent(key(parts), now)
+        }
       }
-      return SimWriteFile(this, node)
+      SimWriteFile(this, node)
     }
 
-    override fun mkdir(path: String) {
-      enter(SimOp.MKDIR, path)
+    override fun mkdir(path: String) = perform(SimOp.MKDIR, path) {
       requireWrite()
       synchronized(lock) {
         val state = state()
         val parts = split(path)
         requireParent(state, parts)
         if (state.nodes.containsKey(key(parts))) throw SmbStatusException(NtStatus.OBJECT_NAME_COLLISION)
-        state.nodes[key(parts)] = Node(parts.joinToString("/"), true, ByteArray(0), nasTime())
+        val now = nasTime()
+        state.add(key(parts), Node(parts.joinToString("/"), true, nextFileId.incrementAndGet(), now))
+        state.touchParent(key(parts), now)
       }
     }
 
-    override fun openDirectory(path: String, access: DirAccess): SmbDirectory {
-      enter(SimOp.OPEN_DIRECTORY, path)
+    override fun removeEmptyDirectory(path: String) = perform(SimOp.RMDIR, path) {
+      requireWrite()
+      synchronized(lock) {
+        val state = state()
+        val parts = split(path)
+        if (parts.isEmpty()) throw SmbStatusException(NtStatus.ACCESS_DENIED)
+        val node = lookup(state, parts)
+        if (!node.isDirectory) throw SmbStatusException(NtStatus.NOT_A_DIRECTORY)
+        if (state.children(key(parts)).isNotEmpty()) throw SmbStatusException(NtStatus.DIRECTORY_NOT_EMPTY)
+        state.remove(key(parts))
+        state.touchParent(key(parts), nasTime())
+      }
+    }
+
+    override fun openDirectory(path: String, access: DirAccess): SmbDirectory = perform(SimOp.OPEN_DIRECTORY, path) {
       if (access == DirAccess.ADD_FILE) requireWrite()
       val entries = synchronized(lock) {
         val state = state()
         val parts = split(path)
         val node = lookup(state, parts)
         if (!node.isDirectory) throw SmbStatusException(NtStatus.NOT_A_DIRECTORY)
-        state.nodes.values
-          .filter { child ->
-            val childParts = split(child.displayPath)
-            childParts.size == parts.size + 1 && key(childParts.subList(0, parts.size)) == key(parts)
-          }
-          .map { SmbDirEntry(split(it.displayPath).last(), it.isDirectory, it.bytes.size.toLong(), it.lastWriteMs) }
+        val listed = node.linkTarget ?: key(parts)
+        // Un'istantanea dei nodi (riferimenti): le voci si costruiscono una alla volta, mentre si scorre.
+        val snapshot = state.children(listed).toList()
+        listOrder?.let { random -> snapshot.shuffled(random) } ?: snapshot
       }
-      return SimDirectory(this, entries)
+      SimDirectory(this, entries, truncateListsAfter)
     }
 
-    override fun deleteFile(path: String) {
-      enter(SimOp.DELETE, path)
+    override fun deleteFile(path: String) = perform(SimOp.DELETE, path) {
       requireWrite()
       synchronized(lock) {
         val state = state()
         val parts = split(path)
         val node = lookup(state, parts)
         if (node.isDirectory) throw SmbStatusException(NtStatus.FILE_IS_A_DIRECTORY)
-        state.nodes.remove(key(parts))
+        checkUnlocked(path, forRead = false)
+        state.remove(key(parts))
+        state.touchParent(key(parts), nasTime())
       }
     }
 
-    override fun space(): SmbSpace {
-      enter(SimOp.SPACE, "")
-      return synchronized(lock) {
+    override fun space(): SmbSpace = perform(SimOp.SPACE, "") {
+      synchronized(lock) {
         val state = state()
         val quotaLeft = state.quotaBytes?.let { (it - state.usedBytes()).coerceAtLeast(0) } ?: volumeFreeBytes
         SmbSpace(callerFreeBytes = minOf(quotaLeft, volumeFreeBytes), totalFreeBytes = volumeFreeBytes)
@@ -453,92 +747,113 @@ class InMemorySmbBackend(
     override fun close() = Unit
 
     fun readInto(node: Node, buffer: ByteArray, fileOffset: Long, bufferOffset: Int, length: Int): Int {
-      enter(SimOp.READ, node.displayPath)
-      readCalls.incrementAndGet()
-      if (stallReads) {
-        session.connection.awaitClosed()
-        throw SmbConnectionLostException()
+      val inFlight = readsInFlight.incrementAndGet()
+      maxReadsInFlight.accumulateAndGet(inFlight, ::maxOf)
+      try {
+        return perform(SimOp.READ, node.displayPath, bytes = length.toLong()) {
+          readCalls.incrementAndGet()
+          if (stallReads) {
+            session.connection.awaitClosed()
+            throw SmbConnectionLostException()
+          }
+          val count = synchronized(lock) {
+            val size = node.size
+            if (fileOffset >= size) return@perform -1
+            val count = minOf(length.toLong(), size - fileOffset, maxBytesPerRead.toLong()).toInt()
+            node.copyTo(fileOffset, buffer, bufferOffset, count)
+            count
+          }
+          bytesServed.addAndGet(count.toLong())
+          count
+        }
+      } finally {
+        readsInFlight.decrementAndGet()
       }
-      val count = synchronized(lock) {
-        val bytes = node.bytes
-        if (fileOffset >= bytes.size) return -1
-        val count = minOf(length.toLong(), bytes.size - fileOffset, maxBytesPerRead.toLong()).toInt()
-        System.arraycopy(bytes, fileOffset.toInt(), buffer, bufferOffset, count)
-        count
-      }
-      bytesServed.addAndGet(count.toLong())
-      return count
     }
 
-    fun writeInto(node: Node, buffer: ByteArray, fileOffset: Long, bufferOffset: Int, length: Int): Int {
-      enter(SimOp.WRITE, node.displayPath)
-      synchronized(lock) { writeLocked(node, buffer, fileOffset, bufferOffset, length) }
-      return length
-    }
+    fun writeInto(node: Node, buffer: ByteArray, fileOffset: Long, bufferOffset: Int, length: Int): Int =
+      perform(SimOp.WRITE, node.displayPath, bytes = length.toLong()) {
+        synchronized(lock) {
+          checkUnlocked(node.displayPath, forRead = false)
+          writeLocked(node, buffer, fileOffset, bufferOffset, length)
+        }
+        length
+      }
 
     private fun writeLocked(node: Node, buffer: ByteArray, fileOffset: Long, bufferOffset: Int, length: Int) {
       val state = state()
+      val current = node.materialize()
       val end = fileOffset + length
-      val growth = (end - node.bytes.size).coerceAtLeast(0)
+      val growth = (end - current.size).coerceAtLeast(0)
       val quotaFull = state.quotaBytes != null && state.usedBytes() + growth > state.quotaBytes
       if (quotaFull || growth > volumeFreeBytes) throw SmbStatusException(NtStatus.DISK_FULL)
-      if (end > node.bytes.size) node.bytes = node.bytes.copyOf(end.toInt())
+      if (end > current.size) node.bytes = current.copyOf(end.toInt())
       System.arraycopy(buffer, bufferOffset, node.bytes, fileOffset.toInt(), length)
       node.lastWriteMs = nasTime()
+      node.changeMs = node.lastWriteMs
     }
 
-    fun resumeKeyOf(node: Node): ByteArray {
-      enter(SimOp.RESUME_KEY, node.displayPath)
+    fun resumeKeyOf(node: Node): ByteArray = perform(SimOp.RESUME_KEY, node.displayPath) {
       val key = ByteArray(RESUME_KEY_BYTES).also { java.security.SecureRandom().nextBytes(it) }
       resumeKeys[key.toList()] = session to node
-      return key
+      key
     }
 
     /** Copia lato server: la chiave vale nella stessa sessione, anche da un'altra share (come Samba). */
-    fun copyChunksInto(node: Node, resumeKey: ByteArray, chunks: List<SmbCopyChunk>): Long {
-      enter(SimOp.COPY_CHUNK, node.displayPath)
-      val (owner, source) = resumeKeys[resumeKey.toList()] ?: throw SmbStatusException(NtStatus.OBJECT_NAME_NOT_FOUND)
-      if (owner !== session) throw SmbStatusException(NtStatus.ACCESS_DENIED)
-      var total = 0L
-      synchronized(lock) {
-        for (chunk in chunks) {
-          val available = (source.bytes.size - chunk.sourceOffset).coerceAtLeast(0)
-          val length = minOf(chunk.length, available).toInt()
-          if (length <= 0) break
-          writeLocked(node, source.bytes, chunk.targetOffset, chunk.sourceOffset.toInt(), length)
-          total += length
+    fun copyChunksInto(node: Node, resumeKey: ByteArray, chunks: List<SmbCopyChunk>): Long =
+      perform(SimOp.COPY_CHUNK, node.displayPath, bytes = chunks.sumOf { it.length }) {
+        copyChunkStatus?.let { throw SmbStatusException(it) }
+        val (owner, source) = resumeKeys[resumeKey.toList()] ?: throw SmbStatusException(NtStatus.OBJECT_NAME_NOT_FOUND)
+        if (owner !== session) throw SmbStatusException(NtStatus.ACCESS_DENIED)
+        var total = 0L
+        synchronized(lock) {
+          for (chunk in chunks) {
+            val available = (source.size - chunk.sourceOffset).coerceAtLeast(0)
+            val length = minOf(chunk.length, available).toInt()
+            if (length <= 0) break
+            val piece = ByteArray(length).also { source.copyTo(chunk.sourceOffset, it, 0, length) }
+            writeLocked(node, piece, chunk.targetOffset, 0, length)
+            total += length
+          }
         }
+        total
       }
-      return total
-    }
 
-    fun rename(node: Node, newPath: String) {
-      enter(SimOp.RENAME, newPath)
+    fun rename(node: Node, newPath: String) = perform(SimOp.RENAME, newPath) {
       synchronized(lock) {
         val state = state()
-        val parts = split(newPath)
-        requireParent(state, parts)
-        val target = state.nodes[key(parts)]
-        if (target != null && target !== node) throw SmbStatusException(NtStatus.OBJECT_NAME_COLLISION)
         val oldKey = state.nodes.entries.firstOrNull { it.value === node }?.key ?: throw SmbStatusException(NtStatus.OBJECT_NAME_NOT_FOUND)
-        state.nodes.remove(oldKey)
-        node.displayPath = parts.joinToString("/")
-        state.nodes[key(parts)] = node
+        if (locks.containsKey(lockKeyOf(name, oldKey))) throw SmbStatusException(NtStatus.SHARING_VIOLATION)
+        moveLocked(state, oldKey, split(newPath), nasTime(), outside = false)
       }
     }
 
     fun deleteNode(node: Node) {
       synchronized(lock) {
         val state = state()
-        state.nodes.entries.firstOrNull { it.value === node }?.let { state.nodes.remove(it.key) }
+        state.nodes.entries.firstOrNull { it.value === node }?.key?.let { k ->
+          state.remove(k)
+          state.touchParent(k, nasTime())
+        }
       }
     }
 
     fun checkAlive() = session.ensureUsable()
+
+    fun flushOrLength(op: SimOp, node: Node) = perform(op, node.displayPath) { Unit }
+
+    fun markDeleteOnClose(node: Node) = perform(SimOp.DELETE_ON_CLOSE, node.displayPath) { Unit }
+
+    fun nextEntry(node: Node): SmbDirEntry = perform(SimOp.LIST_ENTRY, "") {
+      listEntriesServed.incrementAndGet()
+      synchronized(lock) { node.entry() }
+    }
   }
 
   private inner class SimReadFile(private val share: SimShare, private val node: Node) : SmbReadFile {
-    override val declaredSize: Long = synchronized(lock) { node.declaredSize ?: node.bytes.size.toLong() }
+    override val declaredSize: Long = synchronized(lock) { node.declaredSize ?: node.size }
+
+    override val info: SmbFileInfo = synchronized(lock) { node.info() }
 
     override fun read(buffer: ByteArray, fileOffset: Long, bufferOffset: Int, length: Int): Int =
       share.readInto(node, buffer, fileOffset, bufferOffset, length)
@@ -554,17 +869,11 @@ class InMemorySmbBackend(
     override fun write(buffer: ByteArray, fileOffset: Long, bufferOffset: Int, length: Int): Int =
       share.writeInto(node, buffer, fileOffset, bufferOffset, length)
 
-    override fun flush() {
-      share.checkAlive()
-      beforeOp?.invoke(SimOp.FLUSH, node.displayPath)
-      share.checkAlive()
-    }
+    override fun flush() = share.flushOrLength(SimOp.FLUSH, node)
 
     override fun length(): Long {
-      share.checkAlive()
-      beforeOp?.invoke(SimOp.LENGTH, node.displayPath)
-      share.checkAlive()
-      return synchronized(lock) { node.bytes.size.toLong() }
+      share.flushOrLength(SimOp.LENGTH, node)
+      return synchronized(lock) { node.size }
     }
 
     override fun renameNoReplace(newPath: String) = share.rename(node, newPath)
@@ -572,9 +881,7 @@ class InMemorySmbBackend(
     override fun copyChunks(resumeKey: ByteArray, chunks: List<SmbCopyChunk>): Long = share.copyChunksInto(node, resumeKey, chunks)
 
     override fun deleteOnClose() {
-      share.checkAlive()
-      beforeOp?.invoke(SimOp.DELETE_ON_CLOSE, node.displayPath)
-      share.checkAlive()
+      share.markDeleteOnClose(node)
       deleteOnClose = true
     }
 
@@ -584,16 +891,18 @@ class InMemorySmbBackend(
     }
   }
 
-  private inner class SimDirectory(private val share: SimShare, private val entries: List<SmbDirEntry>) : SmbDirectory {
+  private inner class SimDirectory(private val share: SimShare, private val entries: List<Node>, private val truncate: Int?) : SmbDirectory {
     override fun entries(): Iterator<SmbDirEntry> {
       val inner = entries.iterator()
+      var served = 0
       return object : Iterator<SmbDirEntry> {
-        override fun hasNext(): Boolean = inner.hasNext()
+        override fun hasNext(): Boolean = inner.hasNext() && (truncate == null || served < truncate)
 
         override fun next(): SmbDirEntry {
           share.checkAlive()
-          beforeOp?.invoke(SimOp.LIST_ENTRY, "")
-          return inner.next()
+          if (!hasNext()) throw NoSuchElementException()
+          served++
+          return share.nextEntry(inner.next())
         }
       }
     }
@@ -601,8 +910,71 @@ class InMemorySmbBackend(
     override fun close() = Unit
   }
 
+  private fun Node.info(): SmbFileInfo = SmbFileInfo(
+    name = displayPath.substringAfterLast('/').takeIf { it.isNotEmpty() },
+    isDirectory = isDirectory,
+    size = if (isDirectory) 0 else size,
+    lastWriteMs = lastWriteMs,
+    changeMs = changeMs,
+    fileId = fileId,
+    attributes = attributes,
+  )
+
+  private fun Node.entry(): SmbDirEntry = SmbDirEntry(
+    name = displayPath.substringAfterLast('/'),
+    isDirectory = isDirectory,
+    size = if (isDirectory) 0 else size,
+    lastWriteMs = lastWriteMs,
+    changeMs = changeMs,
+    fileId = fileId,
+    attributes = attributes,
+  )
+
+  /** Sposta [fromKey] (e tutto cio' che contiene) in [toParts]; mai sopra un nome esistente. Sotto il lucchetto. */
+  private fun moveLocked(state: SimShareState, fromKey: String, toParts: List<String>, now: Long, outside: Boolean) {
+    val toKey = key(toParts)
+    val moving = state.nodes[fromKey] ?: if (outside) error("Origine assente.") else throw SmbStatusException(NtStatus.OBJECT_NAME_NOT_FOUND)
+    if (outside) {
+      ensureDirs(state, toParts.dropLast(1), now)
+    } else if (toParts.size > 1 && state.nodes[key(toParts.dropLast(1))]?.isDirectory != true) {
+      throw SmbStatusException(NtStatus.OBJECT_PATH_NOT_FOUND)
+    }
+    val target = state.nodes[toKey]
+    if (target != null && target !== moving) {
+      if (outside) error("Destinazione occupata.") else throw SmbStatusException(NtStatus.OBJECT_NAME_COLLISION)
+    }
+    val movedKeys = state.nodes.keys.filter { it == fromKey || it.startsWith("$fromKey/") }
+    val moved = movedKeys.map { it to state.remove(it)!! }
+    val depth = split(moving.displayPath).size
+    for ((oldKey, node) in moved) {
+      node.displayPath = (toParts + split(node.displayPath).drop(depth)).joinToString("/")
+      state.add(toKey + oldKey.removePrefix(fromKey), node)
+    }
+    moving.changeMs = now
+    state.touchParent(fromKey, now)
+    state.touchParent(toKey, now)
+  }
+
+  private fun ensureDirs(state: SimShareState, parts: List<String>, at: Long) {
+    for (depth in 1..parts.size) {
+      val dir = parts.subList(0, depth)
+      val k = key(dir)
+      val existing = state.nodes[k]
+      if (existing == null) {
+        state.add(k, Node(dir.joinToString("/"), true, nextFileId.incrementAndGet(), at))
+        state.touchParent(k, at)
+      } else {
+        require(existing.isDirectory) { "Un file sta al posto di una cartella." }
+      }
+    }
+  }
+
   private fun shareState(name: String): SimShareState =
     shares[name.lowercase(Locale.ROOT)] ?: throw SmbStatusException(NtStatus.BAD_NETWORK_NAME)
+
+  private fun lockKey(share: String, path: String): String = lockKeyOf(share, key(split(path)))
+
+  private fun lockKeyOf(share: String, nodeKey: String): String = share.lowercase(Locale.ROOT) + ":" + nodeKey
 
   private companion object {
     const val DEFAULT_GUID = "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"
@@ -611,11 +983,25 @@ class InMemorySmbBackend(
     const val DEFAULT_NAS_TIME = 1_791_763_200_000L
     const val BLOCK_POLL_MS = 50L
     const val RESUME_KEY_BYTES = 24
-    val ROOT = Node("", true, ByteArray(0), 0L)
+    const val FIRST_FILE_ID = 1000L
+    const val DEFAULT_WAKE_UP_MS = 8_000L
+    const val MIB = 1024L * 1024
+    const val COPY_SPEEDUP = 30
+    const val MICROS_PER_MILLI = 1000L
+    const val MAX_MATERIALIZE = 256L * 1024 * 1024
+    val EMPTY = ByteArray(0)
+
+    /** Le operazioni che toccano i dischi (il risveglio dallo standby, E-R1). */
+    val DISK_OPS: Set<SimOp> = setOf(
+      SimOp.OPEN_READ, SimOp.READ, SimOp.CREATE, SimOp.WRITE, SimOp.RENAME, SimOp.MKDIR, SimOp.OPEN_DIRECTORY,
+      SimOp.DELETE, SimOp.COPY_CHUNK, SimOp.STAT, SimOp.RMDIR,
+    )
 
     fun split(path: String): List<String> = path.split('\\', '/').filter { it.isNotEmpty() }
 
     fun key(parts: List<String>): String = parts.joinToString("/") { it.lowercase(Locale.ROOT) }
+
+    fun parentKey(key: String): String = key.substringBeforeLast('/', "")
   }
 }
 

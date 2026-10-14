@@ -36,15 +36,38 @@ internal class TransferWatchdog(
 /**
  * Un'operazione SMB in corso, sorvegliata da [OperationMonitor].
  *
+ * **Sorvegliante a progresso (D3 della Fase 4).** Un'operazione corta ha una scadenza totale (15 s interattiva, 60 s in
+ * background). Un'operazione **a flusso** (che ha chiamato `startTransfer`) la sposta in avanti di [chunkBudgetMs] a
+ * ogni blocco arrivato ([onChunk]): la scadenza vale per blocco, non per il totale, finche' i byte arrivano; resta la
+ * soglia anti-blocco del watchdog (32 KiB/s per 20 s, E-R14). Un trasferimento in piu' operazioni (`readAll`) ha un
+ * biglietto suo senza scadenza ([transferOnly]) che sorveglia solo il ritmo.
+ *
  * @property firstDiskTouch la prima operazione sui dischi di questa sessione: tempo piu' lungo e, oltre la soglia,
  *   stato "Risveglio del NAS…".
  */
 internal class OpTicket(
   val owner: Any,
   val startedAt: Long,
-  val deadlineAt: Long,
+  deadlineAt: Long,
   val firstDiskTouch: Boolean,
+  /** La scadenza di ogni blocco di un'operazione a flusso (D3): quella dell'operazione corta per lo stesso scopo. */
+  val chunkBudgetMs: Long = deadlineAt - startedAt,
+  /** Un biglietto che sorveglia solo il ritmo di un trasferimento fatto di piu' operazioni (niente scadenza). */
+  val transferOnly: Boolean = false,
 ) {
+  /** La scadenza attuale: fissa per le operazioni corte, spostata a ogni blocco per quelle a flusso. */
+  @Volatile
+  var deadlineAt: Long = deadlineAt
+    private set
+
+  /**
+   * Un blocco e' arrivato adesso: la prossima scadenza e' fra [chunkBudgetMs] (solo per le operazioni a flusso). Il
+   * tempo lungo della prima operazione sui dischi (E-R1) vale fino al primo blocco: poi i dischi sono svegli.
+   */
+  fun onChunk(nowMs: Long) {
+    if (transfer != null && !transferOnly) deadlineAt = nowMs + chunkBudgetMs
+  }
+
   /** Se il sorvegliante l'ha interrotta: l'errore da restituire (Timeout o Stalled). */
   @Volatile
   var abortedBy: NasError? = null

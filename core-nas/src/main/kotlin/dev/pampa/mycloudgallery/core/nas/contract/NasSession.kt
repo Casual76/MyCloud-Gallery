@@ -138,6 +138,13 @@ interface NasSessionManager {
 
   fun browser(share: String): NasBrowser
 
+  /**
+   * La lettura dei media del NAS (Fase 4, D2) sopra questa sessione: stessi controlli del §3.1, stesso limitatore, stessa
+   * recinzione D33. Aggiunta di P1 con un default (nessun NAS, nessuna lettura) perche' le sessioni finte gia' scritte
+   * dagli altri moduli restino valide; l'implementazione SMB la ridefinisce.
+   */
+  fun mediaReader(): NasMediaReader = dev.pampa.mycloudgallery.core.nas.noop.NoNasMediaReader
+
   suspend fun invalidate(reason: InvalidateReason)
 }
 

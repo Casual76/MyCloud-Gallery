@@ -71,7 +71,9 @@
     <!--
         Fase 4B (D29): il JobService delle operazioni lunghe sui file del NAS avviate dall'utente (UIDT). NON esportato e protetto da
         BIND_JOB_SERVICE: lo lega solo il sistema (JobScheduler). verifyReleaseManifest e tools/check.ps1 pretendono il permesso per
-        ogni *JobService. Scheletro di P0-B: non fa niente finche' P16 non lo lega alle operazioni (docs/sicurezza.md 4-bis).
+        ogni *JobService. Dal P16 riprende dal diario locale le operazioni gia' confermate (mai una nuova), con la notifica di
+        avanzamento e "Ferma"; "Ferma" arriva a un ricevitore registrato solo mentre il lavoro gira e NON esportato
+        (RECEIVER_NOT_EXPORTED): nessun componente in piu' qui (docs/sicurezza.md 4-bis).
     -->
     <service
         android:name=".work.NasOpsJobService"

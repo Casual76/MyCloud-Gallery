@@ -10,6 +10,7 @@ import dev.pampa.mycloudgallery.notify.AppNotifications
 import dev.pampa.mycloudgallery.process.GalleryLifecycle
 import dev.pampa.mycloudgallery.process.ProcessWatcher
 import dev.pampa.mycloudgallery.work.GalleryWorkScheduling
+import dev.pampa.mycloudgallery.work.JobSchedulerNasOpsJobs
 import dev.pampa.mycloudgallery.work.NasWorkScheduling
 import dev.pampa.mycloudgallery.work.WorkManagerTrustSyncScheduler
 import javax.inject.Inject
@@ -44,7 +45,11 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
   lateinit var notifications: AppNotifications
 
   override val workManagerConfiguration: Configuration
-    get() = Configuration.Builder().setWorkerFactory(workerFactory).build()
+    get() = Configuration.Builder()
+      .setWorkerFactory(workerFactory)
+      // Fase 4B (P16): il JobService delle operazioni sul NAS usa due id fissi di JobScheduler; WorkManager resta sotto.
+      .setJobSchedulerJobIdRange(JobSchedulerNasOpsJobs.WORK_MANAGER_JOB_IDS.first, JobSchedulerNasOpsJobs.WORK_MANAGER_JOB_IDS.last)
+      .build()
 
   override fun onCreate() {
     super.onCreate()

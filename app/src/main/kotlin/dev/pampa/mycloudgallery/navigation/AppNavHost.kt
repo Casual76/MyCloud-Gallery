@@ -9,7 +9,11 @@ import androidx.activity.compose.ReportDrawnAfter
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
+import dev.pampa.mycloudgallery.feature.nas.hub.nasGraph
+import dev.pampa.mycloudgallery.feature.nas.hub.openNas
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -135,6 +139,9 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
   // Fase 4A (D10): il foglio "Ho controllato, continua", aperto dalla voce del congelamento in Diagnostica.
   var unfreeze by remember { mutableStateOf(false) }
   if (unfreeze && gallery != null) NasUnfreezeDialog(gallery, onDismiss = { unfreeze = false })
+  // Fase 4B (P16): un file toccato in Cartelle NAS si apre nel viewer della Libreria (se la Libreria lo mostra).
+  val openerScope = rememberCoroutineScope()
+  val nasOpener = remember(gallery, viewer) { NasFileOpener(openerScope, gallery, viewer) }
   NavHost(
     navController = nav,
     startDestination = startRoute(destination),
@@ -148,10 +155,12 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
       when (destination) {
         RootDestination.Main -> {
           composable<MainRoute> {
-            MainDestination(nav = nav, status = status, openWireGuard = actions.openWireGuard)
+            MainDestination(nav = nav, status = status, openWireGuard = actions.openWireGuard, nasOpener = nasOpener)
           }
           // Fase 3 (P10): le pagine delle Raccolte sul telefono (griglie filtrate, Nascosti, Eliminati di recente).
           collectionsGraph(nav = nav, onOpenViewer = { request -> gallery?.let { viewer?.open(request, it.viewerServices) } })
+          // Fase 4B (P16): Cartelle NAS, Spazio NAS, Eliminati di recente del NAS, Operazioni in corso (rotte a schermo intero).
+          nasGraph(nav = nav, onOpenFile = nasOpener::open)
           // "Da completare" nelle Impostazioni riapre i passi saltati dell'onboarding.
           onboardingGraph(nav = nav, onDone = {}, onPause = actions.pause)
           settingsGraph(
@@ -243,13 +252,20 @@ private fun onDiagnosticsAction(nav: NavHostController, action: DiagAction) {
  * con le loro rotte, il viewer sull'host della galleria.
  */
 @Composable
-private fun MainDestination(nav: NavHostController, status: GlobalStatus, openWireGuard: () -> Boolean) {
+private fun MainDestination(nav: NavHostController, status: GlobalStatus, openWireGuard: () -> Boolean, nasOpener: NasFileOpener) {
   var tab by rememberSaveable { mutableStateOf(GalleryTab.Library) }
   val library: LibraryViewModel = hiltViewModel()
   val gallery: GalleryHostViewModel = hiltViewModel()
   val viewer = LocalViewerHost.current
   val state by library.state.collectAsStateWithLifecycle()
   val libraryViewer = remember(state) { gallery.viewerServicesFor(state) }
+  // Fase 4B: la Libreria di adesso per aprire nel viewer un file toccato in Cartelle NAS.
+  SideEffect {
+    nasOpener.library = state
+    nasOpener.services = libraryViewer
+  }
+  val nasConfigured by gallery.nasConfigured.collectAsStateWithLifecycle()
+  val nasGroups = nasCollectionGroups(nasConfigured)
 
   LibraryCommandHostEffect(state.commands, onAccessChanged = gallery::refreshAccess)
   ReportLibraryDrawn(state)
@@ -277,6 +293,10 @@ private fun MainDestination(nav: NavHostController, status: GlobalStatus, openWi
         onOpenCollection = { kind -> nav.openCollection(kind) },
         onOpenSettings = { nav.navigate(SettingsGraphRoute) },
         statusHeader = slot.statusHeader,
+        // Fase 4B (P16): "Sul NAS". Sul telefono la voce apre la sua rotta, sul tablet la pagina sta nel pannello di dettaglio.
+        extraGroups = nasGroups,
+        onOpenEntry = { entry -> nasScreenOf(entry.code)?.let(nav::openNas) },
+        entryDetail = { entry -> NasEntryDetail(entry, nav, slot.contentPadding, nasOpener) },
       )
     },
   )

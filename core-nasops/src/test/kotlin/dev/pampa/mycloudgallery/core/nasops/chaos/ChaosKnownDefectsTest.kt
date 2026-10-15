@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.nasops.chaos
 
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.nas.contract.NasError
 import dev.pampa.mycloudgallery.core.nas.contract.NasIoException
 import dev.pampa.mycloudgallery.core.nas.testing.FakeNasFault
@@ -21,11 +22,9 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Test
 
 /**
- * I difetti noti dello stack fake di P0-B (`FakeChaosStackFactory.knownDefects`), ciascuno con la sua riproduzione minima e deterministica.
- *
- * Questo test NON fallisce se un difetto c'e' (non deve bloccare P12, che rifa' l'esecutore): racconta se la riproduzione riesce ancora.
- * Quando un difetto non si riproduce piu' (corretto) va tolto da `FakeChaosStackFactory.knownDefects` e dalle sue esclusioni
- * (`unfaultable`, `cancelIsSafe`, `knownDefectHit`), cosi' il banco torna a colpire anche li'. Lo stack vero di P12 non ha esclusioni.
+ * I difetti che il banco aveva trovato nello stack fake di P0-B (docs/prova-500.md §6), ciascuno con la sua riproduzione minima e
+ * deterministica. P12 li ha corretti in `InMemoryNasOperations` e P16 ha tolto le esclusioni da `FakeChaosStackFactory` (`knownDefects`,
+ * `unfaultable`, `cancelIsSafe`, `knownDefectHit`): da qui in poi questo test e' una **regressione**, fallisce se uno torna.
  */
 class ChaosKnownDefectsTest {
 
@@ -107,16 +106,12 @@ class ChaosKnownDefectsTest {
   }
 
   @Test
-  fun iDifettiNotiDelFakeSiRiproducono_oSonoStatiCorretti() {
+  fun iDifettiTrovatiDalBancoNelFakeNonSiRiproduconoPiu() {
     val results = linkedMapOf("D1" to d1(), "D2" to d2(), "D3" to d3(), "D4" to d4())
-    for ((id, reproduced) in results) {
-      println(if (reproduced) "difetto noto $id: riprodotto (resta fra FakeChaosStackFactory.knownDefects)" else "difetto noto $id: NON si riproduce piu': toglierlo dalle esclusioni di FakeChaosStackFactory")
-    }
-    println(if (o1()) "osservazione O1: la stessa rinomina ripetuta dopo un'altra non parte (start idempotente sull'impronta del piano)" else "osservazione O1: non si riproduce piu'")
-    // I quattro scenari partono (nessun check() e' scattato): il resto e' un racconto.
-    assertThat(results.keys).containsExactly("D1", "D2", "D3", "D4")
-    // Il fake dichiara tutti e quattro: se una riproduzione riesce, deve essere un difetto dichiarato.
-    val declared = FakeChaosStackFactory.knownDefects.map { it.substringBefore('.') }
-    assertThat(declared).containsAtLeast("D1", "D2", "D3", "D4")
+    for ((id, reproduced) in results) assertWithMessage("difetto $id del fake tornato").that(reproduced).isFalse()
+    println(if (o1()) "osservazione O1: la stessa rinomina ripetuta dopo un'altra non parte nel fake (start idempotente sull'impronta del piano)" else "osservazione O1: non si riproduce piu'")
+    // Senza difetti noti, nessuna esclusione: il banco colpisce tutto anche con lo stack fake.
+    assertThat(FakeChaosStackFactory.knownDefects).isEmpty()
+    assertThat(FakeChaosStackFactory.unfaultable).isEmpty()
   }
 }

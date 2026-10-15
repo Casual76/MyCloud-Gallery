@@ -33,17 +33,22 @@ import dev.pampa.mycloudgallery.feature.library.trash.RecentlyDeletedRoute
 /**
  * La scheda **Raccolte** (D17): un elenco raggruppato di Fluid con Preferiti, Video, Screenshot, WhatsApp e, nel gruppo
  * dei posti protetti, Nascosti ed Eliminati di recente. Ogni voce apre una griglia filtrata con lo stesso `MediaGrid` e lo
- * stesso viewer della Libreria.
+ * stesso viewer della Libreria. Dalla Fase 4B, dopo i gruppi di sempre, le voci che arrivano da `:app` ([extraGroups]: "Sul
+ * NAS" con Cartelle NAS, Spazio NAS, Eliminati di recente del NAS, Operazioni in corso), come **dati**.
  *
  * - **Telefono**: l'elenco e basta; una voce toccata chiama [onOpenCollection] (`:app` la porta alla rotta giusta con
- *   `NavController.openCollection`).
+ *   `NavController.openCollection`) o, per le voci di `:app`, [onOpenEntry].
  * - **Tablet** (da 840 dp: `FluidListDetailScaffold`): l'elenco a sinistra, la raccolta scelta a destra. E' la "barra
- *   laterale delle raccolte" del piano. Le voci selezionano e basta, nessuna navigazione.
+ *   laterale delle raccolte" del piano. Le voci selezionano e basta, nessuna navigazione; per una voce di `:app` il dettaglio
+ *   e' [entryDetail].
  *
  * @param contentPadding lo spazio che la pillola delle schede occupa in basso (il contenuto scorre sotto, rifratto).
  * @param backdropOut consegna a `:app` il fondale dell'elenco, che la pillola rifrange.
  * @param onOpenViewer il viewer e' una sovrapposizione ospitata da `:app` (D12): qui si manda solo la richiesta.
  * @param statusHeader l'indicatore globale della Fase 2, in cima come nelle altre pagine.
+ * @param extraGroups le voci in piu' di `:app` (Fase 4B); nessuna di default.
+ * @param onOpenEntry sul telefono, la voce di `:app` toccata (`:app` apre la sua rotta).
+ * @param entryDetail sul tablet, la pagina di una voce di `:app` nel pannello di dettaglio; null = la voce apre la rotta anche li'.
  */
 @Composable
 fun CollectionsTab(
@@ -54,6 +59,9 @@ fun CollectionsTab(
   onOpenSettings: () -> Unit,
   statusHeader: @Composable () -> Unit,
   modifier: Modifier = Modifier,
+  extraGroups: List<CollectionEntryGroup> = emptyList(),
+  onOpenEntry: (CollectionEntry) -> Unit = {},
+  entryDetail: (@Composable (CollectionEntry) -> Unit)? = null,
   viewModel: CollectionsViewModel = hiltViewModel(),
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
@@ -65,6 +73,9 @@ fun CollectionsTab(
     onOpenSettings = onOpenSettings,
     statusHeader = statusHeader,
     modifier = modifier,
+    extraGroups = extraGroups,
+    onOpenEntry = onOpenEntry,
+    entryDetail = entryDetail,
     detail = { kind ->
       // Il pannello di dettaglio: la stessa pagina della rotta a schermo intero, senza il tasto indietro e senza la
       // pillola (e' sopra l'elenco): il fondale per la pillola lo da' l'elenco.
@@ -92,11 +103,18 @@ internal fun CollectionsScreen(
   detail: @Composable (CollectionKind) -> Unit,
   modifier: Modifier = Modifier,
   initialSelection: CollectionKind? = null,
+  extraGroups: List<CollectionEntryGroup> = emptyList(),
+  onOpenEntry: (CollectionEntry) -> Unit = {},
+  entryDetail: (@Composable (CollectionEntry) -> Unit)? = null,
 ) {
   // Su due pannelli una raccolta e' sempre scelta: quella di prima, o la prima dell'elenco (mai i Nascosti da soli:
-  // chiederebbero la credenziale senza che nessuno l'abbia toccato). Il codice sopravvive alla rotazione.
+  // chiederebbero la credenziale senza che nessuno l'abbia toccato). Il codice sopravvive alla rotazione. Una voce di `:app`
+  // scelta (Fase 4B) ha il suo codice a parte: se sparisce (NAS scollegato) la scelta torna alla raccolta.
   var savedCode by rememberSaveable { mutableStateOf(initialSelection?.code) }
-  val selected = CollectionKind.fromCode(savedCode)?.takeIf { it in state } ?: state.media.first().kind
+  var savedEntry by rememberSaveable { mutableStateOf<String?>(null) }
+  val selectedKind = CollectionKind.fromCode(savedCode)?.takeIf { it in state } ?: state.media.first().kind
+  val selectedEntry = if (entryDetail != null) CollectionEntries.selected(extraGroups, savedEntry) else null
+  val selection: CollectionsSelection = selectedEntry?.let { CollectionsSelection.Entry(it) } ?: CollectionsSelection.Kind(selectedKind)
 
   FluidListDetailScaffold(
     ambient = null,
@@ -104,31 +122,71 @@ internal fun CollectionsScreen(
     list = { twoPane ->
       CollectionsList(
         state = state,
-        selected = if (twoPane) selected else null,
+        selected = if (twoPane && selectedEntry == null) selectedKind else null,
+        twoPane = twoPane,
         contentPadding = contentPadding,
         backdropOut = backdropOut,
-        onSelect = { kind -> if (twoPane) savedCode = kind.code else onOpenCollection(kind) },
+        onSelect = { kind ->
+          if (twoPane) {
+            savedCode = kind.code
+            savedEntry = null
+          } else {
+            onOpenCollection(kind)
+          }
+        },
         onOpenSettings = onOpenSettings,
         statusHeader = statusHeader,
+        extraGroups = extraGroups,
+        selectedEntry = if (twoPane) selectedEntry?.code else null,
+        onSelectEntry = { entry -> if (twoPane && entryDetail != null) savedEntry = entry.code else onOpenEntry(entry) },
       )
     },
     detail = {
-      FluidDetailContent(item = selected, key = { it.code }, order = { it.ordinal }) { kind -> detail(kind) }
+      FluidDetailContent(item = selection, key = { it.key }, order = { it.order(extraGroups) }) { chosen ->
+        when (chosen) {
+          is CollectionsSelection.Kind -> detail(chosen.kind)
+          is CollectionsSelection.Entry -> entryDetail?.invoke(chosen.entry)
+        }
+      }
     },
   )
+}
+
+/** Che cosa ha il pannello di dettaglio del tablet: una raccolta o una voce di `:app` (Fase 4B). */
+internal sealed interface CollectionsSelection {
+  val key: String
+
+  /** L'ordine delle pagine per la transizione laterale: le raccolte prima, le voci di `:app` dopo, nell'ordine dell'elenco. */
+  fun order(groups: List<CollectionEntryGroup>): Int
+
+  data class Kind(val kind: CollectionKind) : CollectionsSelection {
+    override val key: String get() = kind.code
+
+    override fun order(groups: List<CollectionEntryGroup>): Int = kind.ordinal
+  }
+
+  data class Entry(val entry: CollectionEntry) : CollectionsSelection {
+    override val key: String get() = "entry:" + entry.code
+
+    override fun order(groups: List<CollectionEntryGroup>): Int =
+      CollectionKind.entries.size + CollectionEntries.codes(groups).indexOf(entry.code).coerceAtLeast(0)
+  }
 }
 
 @Composable
 private fun CollectionsList(
   state: CollectionsUiState,
   selected: CollectionKind?,
+  twoPane: Boolean,
   contentPadding: PaddingValues,
   backdropOut: (GlassBackdropState) -> Unit,
   onSelect: (CollectionKind) -> Unit,
   onOpenSettings: () -> Unit,
   statusHeader: @Composable () -> Unit,
+  extraGroups: List<CollectionEntryGroup>,
+  selectedEntry: String?,
+  onSelectEntry: (CollectionEntry) -> Unit,
 ) {
-  val twoPane = selected != null
   FluidScreen(
     title = stringResource(R.string.collections_title),
     actions = {
@@ -151,6 +209,8 @@ private fun CollectionsList(
     item(key = "protected") {
       CollectionGroup(state.protectedRows, selected, twoPane, onSelect)
     }
+    // Fase 4B: le voci di `:app` ("Sul NAS"), dopo i gruppi di sempre.
+    collectionEntryItems(extraGroups, selectedEntry, twoPane, onSelectEntry)
   }
 }
 

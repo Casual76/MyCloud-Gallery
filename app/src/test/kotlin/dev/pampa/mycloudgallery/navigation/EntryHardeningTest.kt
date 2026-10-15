@@ -14,6 +14,7 @@ import dev.pampa.mycloudgallery.MainActivity
 import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
 import dev.pampa.mycloudgallery.core.family.contract.BlockReason
 import dev.pampa.mycloudgallery.feature.diagnostics.DiagnosticsGraphRoute
+import dev.pampa.mycloudgallery.feature.nas.contract.NasScreen
 import dev.pampa.mycloudgallery.feature.onboarding.OnboardingGraphRoute
 import dev.pampa.mycloudgallery.feature.settings.SettingsDevicesRoute
 import dev.pampa.mycloudgallery.feature.settings.SettingsGraphRoute
@@ -84,6 +85,15 @@ class EntryHardeningTest {
     }
   }
 
+  /** Fase 4B (P16): le pagine del NAS (rotte stringa di `NasScreen`) esistono solo nella galleria. */
+  private fun assertNasUnreachable(nav: NavHostController) {
+    for (screen in NasScreen.entries) {
+      compose.runOnUiThread {
+        assertThrows(IllegalArgumentException::class.java) { nav.navigate(screen.route) }
+      }
+    }
+  }
+
   @Test
   fun lIntentDiIngressoNonPortaExtraNeDeepLink() {
     val app = ApplicationProvider.getApplicationContext<Application>()
@@ -114,17 +124,20 @@ class EntryHardeningTest {
     assertThat(flags and WindowManager.LayoutParams.FLAG_SECURE).isNotEqualTo(0)
     // Da qui non si arriva altrove: niente galleria, Impostazioni, Diagnostica o onboarding con un intent costruito.
     assertUnreachable(nav, MainRoute, SettingsGraphRoute, SettingsDevicesRoute, DiagnosticsGraphRoute, OnboardingGraphRoute)
+    assertNasUnreachable(nav)
   }
 
   @Test
   fun ogniStatoRegistraSoloLeSueDestinazioni() {
     val wiped = show(RootDestination.Wiped)
     assertUnreachable(wiped, MainRoute, AwaitingApprovalRoute, SettingsGraphRoute, OnboardingGraphRoute)
+    assertNasUnreachable(wiped)
   }
 
   @Test
   fun bloccatoNonApreAltro() {
     val blocked = show(RootDestination.Blocked(BlockReason.STORAGE_LOCKED))
     assertUnreachable(blocked, MainRoute, AwaitingApprovalRoute, SettingsGraphRoute, DiagnosticsGraphRoute)
+    assertNasUnreachable(blocked)
   }
 }

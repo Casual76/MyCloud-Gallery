@@ -65,8 +65,10 @@ import dev.pampa.mycloudgallery.feature.viewer.details.CatalogMediaDetailsSource
 import dev.pampa.mycloudgallery.feature.viewer.details.ContentResolverViewerBytes
 import dev.pampa.mycloudgallery.feature.viewer.details.MediaDetails
 import dev.pampa.mycloudgallery.feature.viewer.details.MediaDetailsSource
+import dev.pampa.mycloudgallery.nas.ActiveWork
 import dev.pampa.mycloudgallery.nas.NasGraph
 import dev.pampa.mycloudgallery.nas.NasInputs
+import dev.pampa.mycloudgallery.work.NasOpsJobs
 import java.io.File
 import java.time.ZoneId
 import kotlinx.coroutines.CancellationException
@@ -115,6 +117,9 @@ import kotlinx.coroutines.withContext
  * @property monotonicMs l'orologio monotono (tempi delle tappe e delle stime, mai l'ora del telefono).
  * @property benchReplica la replica sintetica della variante di misura (`MeasurementHooks.replicaBlobs`, docs/bench/README.md
  *   §6-bis): le miniature dei media solo-NAS del dataset, senza NAS; null altrove.
+ * @property nasJobs Fase 4B (P16): il lavoro delle operazioni lunghe sul NAS (UIDT) e della ripresa dal diario; nessuno nei test.
+ * @property onNasOperationsClosed Fase 4B: un'operazione sui file si e' chiusa, la Libreria va riverificata (in produzione la
+ *   verifica del NAS con WorkManager; nei test niente).
  */
 class GalleryParts(
   val databaseName: String?,
@@ -131,6 +136,8 @@ class GalleryParts(
   val nas: NasInputs? = null,
   val monotonicMs: () -> Long = { SystemClock.elapsedRealtime() },
   val benchReplica: ReplicaBlobs? = null,
+  val nasJobs: NasOpsJobs = NasOpsJobs.NONE,
+  val onNasOperationsClosed: () -> Unit = {},
 )
 
 /** Il catalogo e la lettura del telefono: esistono solo quando l'account del dispositivo e' noto (vedi [GalleryGraph]). */
@@ -216,6 +223,12 @@ class GalleryGraph(
       monotonicMs = parts.monotonicMs,
       onReplicaChanged = { thumbnails.refreshNas() },
       foreground = { foreground },
+      // Fase 4B (P16): operazioni, pulizie e dati personali passano da runIfActive (l'azzeramento li ferma e li aspetta).
+      work = object : ActiveWork {
+        override suspend fun <T> run(block: suspend () -> T): T? = runIfActive { block() }
+      },
+      opsJobs = parts.nasJobs,
+      onOperationsClosed = parts.onNasOperationsClosed,
     )
   }
 
@@ -315,11 +328,14 @@ class GalleryGraph(
       override suspend fun setFavorite(ids: Set<MediaId>, on: Boolean) {
         val core = core()
         writing { core.actions.setFavorite(ids, on) }
+        // Fase 4B (§2.9): la modifica viaggia ai miei dispositivi (accorpata 30 s; la adotta `adoptLocal` della sincronizzazione).
+        nas?.organizer?.personalChanged()
       }
 
       override suspend fun setHidden(ids: Set<MediaId>, on: Boolean) {
         val core = core()
         writing { core.actions.setHidden(ids, on) }
+        nas?.organizer?.personalChanged()
       }
     },
   )
@@ -441,6 +457,8 @@ class GalleryGraph(
       originals = nas?.imageOrigin,
       nasVideo = nas?.video,
       download = nas?.downloader,
+      // Fase 4B (P16): "Sposta", "Rinomina", "Elimina…" per i media del NAS (il viewer non scrive mai da solo, D24).
+      nasActions = nas?.organizer?.mediaActions,
       dispatchers = dispatchers,
     )
   }

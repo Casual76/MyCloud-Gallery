@@ -4,7 +4,7 @@ Galleria Android privata per una famiglia di soli adulti, complementare a Samsun
 telefono e del NAS WD My Cloud EX2 Ultra in una sola libreria, backup automatico, ricerca sul
 dispositivo, nessun cloud di terzi e nessuna telemetria. Telefono e tablet.
 
-Stato: **Fase 4A integrata (P11, M1); fondamenta della 4B pronte (P0-B)**. Oltre alla Fase 2 (rete e casa, sessione SMB verso il NAS, famiglia, QR, Impostazioni e
+Stato: **Fase 4A integrata (P11, M1); Fase 4B integrata (P16)**, in attesa delle prove sul campo e della revisione di sicurezza. Oltre alla Fase 2 (rete e casa, sessione SMB verso il NAS, famiglia, QR, Impostazioni e
 Diagnostica) l'app mostra la **galleria del telefono**: Libreria (griglia della timeline su anni, mesi, giorni e tutte, con
 selezione, preferiti, nascosti ed eliminazione dal telefono), viewer (zoom, video, foto in movimento, informazioni) e Raccolte
 (Preferiti, Video, Screenshot, WhatsApp, Nascosti ed Eliminati di recente dietro lo sblocco). Tutto sul telefono, senza rete:
@@ -13,9 +13,12 @@ sono collegati nel grafo vero dell'app (`nas/NasGraph`): la scansione del NAS po
 "solo NAS", miniature EXIF provvisorie), la preparazione produce le anteprime e le pubblica nell'indice della share, gli altri
 dispositivi sincronizzano l'indice e vedono le miniature senza preparare niente, il viewer apre gli originali dal NAS e
 "Scarica" li copia sul telefono. Nessuna operazione sui media del NAS (D1): le scritture sono solo nell'area dell'app
-(`.mycloudgallery/`), e nella 4A solo nelle share di prova (D31). Le operazioni sui file del NAS arrivano con la 4B: il **P0-B** ha
-gia' consegnato i moduli `core-nasops`, `core-personal` e `feature-nas` con contratti, macchine a stati, conferme e fake (nessuna
-logica ancora), il permesso `RUN_USER_INITIATED_JOBS` e lo scheletro del `JobService` delle operazioni lunghe.
+(`.mycloudgallery/`), e nella 4A solo nelle share di prova (D31). Con la **4B** (P0-B, P12–P16) il NAS si **organizza**: da
+Raccolte → "Sul NAS" si sfogliano le Cartelle NAS, si crea, rinomina, sposta (anche fra area privata e comune) ed elimina nel
+cestino del NAS per 30 giorni, si ripristina da "Eliminati di recente del NAS", si guardano Spazio NAS e Operazioni in corso con
+"Ferma"; dal viewer "Sposta", "Rinomina" ed "Elimina…" per un media del NAS. Le operazioni lunghe continuano anche uscendo
+dall'app (lavoro avviato dall'utente, UIDT, con notifica di avanzamento e "Ferma"); preferiti, nascosti e impostazioni personali
+viaggiano fra i dispositivi dello stesso account, nella sua area privata.
 
 ## Verifica in un comando
 
@@ -75,9 +78,9 @@ segnaposto e almeno un test.
 | `:core-index` | Fase 4: indice condiviso nelle share (pubblicazione con outbox, unità di lavoro con prenotazioni, replica locale a pacchi, sincronizzazione delle teste, qualità delle anteprime) | common, model, trust; database, nas, rules in `implementation` |
 | `:core-nasmedia` | Fase 4: scansione del NAS (elenco a pagine, rilevamento con impronta rapida, esclusioni, stabilità con l'ora del NAS, congelamento per cambiamenti di massa); NAS sintetico per i test | common, model, trust, database, nas, metadata, index |
 | `:core-prepare` | Fase 4: preparazione dei media (miniature S e M, anteprime di analisi e HQ, fotogrammi dei video senza scaricarli, hash completo); dalla Fase 5 anche per il backup. **Non conosce il NAS** | common, model, metadata, index; imaging in `implementation` |
-| `:core-nasops` | Fase 4B: operazioni sui file del NAS (crea cartella, rinomina, sposta, elimina nel cestino del NAS, ripristina, "elimina subito"), cestino, Spazio NAS, Cartelle NAS, pulizia dei propri file; diario con macchina a stati; `UserConfirmation`. **L'unico che vede le primitive di scrittura** (`core-nas/ops`). P0-B: contratti e fake | common, model, trust; nas in `implementation` |
-| `:core-personal` | Fase 4B: dati personali sincronizzati fra i miei dispositivi (preferiti, nascosti, album, ricordi visti, impostazioni personali); fusione per ora del NAS. P0-B: contratti e fake | common, model, trust |
-| `:feature-nas` | Fase 4B: Cartelle NAS, Spazio NAS, Eliminati di recente del NAS, Operazioni in corso, fogli di conferma (linguaggio grafico G2). P0-B: scheletro e rotte | nasops, designsystem, library, imaging, common, model |
+| `:core-nasops` | Fase 4B: operazioni sui file del NAS (crea cartella, rinomina, sposta, elimina nel cestino del NAS, ripristina, "elimina subito"), cestino, Spazio NAS, Cartelle NAS, pulizia dei propri file; diario con macchina a stati (Room); `UserConfirmation`. **L'unico che vede le primitive di scrittura** (`core-nas/ops`). P0-B contratti e fake, P12 esecutore, P16 collegato in `:app` | common, model, trust; nas in `implementation` |
+| `:core-personal` | Fase 4B: dati personali sincronizzati fra i miei dispositivi (preferiti, nascosti, album, ricordi visti, impostazioni personali); fusione per ora del NAS. P0-B contratti e fake, P13 sincronizzazione, P16 collegato in `:app` | common, model, trust |
+| `:feature-nas` | Fase 4B: Cartelle NAS, Spazio NAS, Eliminati di recente del NAS, Operazioni in corso, fogli di conferma (linguaggio grafico G2, chrome in alto condivisa con le griglie: `GalleryTopChrome` di core-designsystem). P14 schermate, P16 rotte e Raccolte | nasops, designsystem, library, imaging, common, model |
 
 Nessun ciclo: `core-common` e `core-model` sono le foglie. I `feature-*` non si conoscono fra loro: ogni
 passaggio da una funzione all'altra e' una callback scritta da `:app` (`navigation/AppNavHost.kt`).
@@ -141,6 +144,30 @@ NAS per primo e cancella outbox, pacchi, tentativi e interruttori. La recinzione
 legata **solo in debug** (`DeveloperTools.shareGuard()`); `tools\check.ps1` verifica che non sia nel dex di release. In debug,
 Impostazioni → Sviluppo → "NAS sintetico" apre una Libreria di prova con 20 mila file su un NAS finto in memoria, passati
 dalla scansione vera, in un database separato (M1 sull'emulatore).
+
+**Organizzare il NAS (Fase 4B, P16).** `NasGraph` porta con se' un `nas/NasOrganizer`, che parte con il motore del NAS e lega:
+
+```
+NasOpsWiring (core-nasops)  -> operazioni (NasOpsEngine, diario RoomOpsStore), cestino, Spazio NAS, Cartelle NAS,
+                               manutenzione dell'indice (Compactor acceso + pulizia dei propri file)
+cancello OpsGate            -> emergenza, congelamento (D10), salto dell'ora (D32)
+NasPersonalSync (P13)       -> registro locale in noBackupFilesDir/personal, proiezione sul catalogo, solo area privata (M7)
+```
+
+- **Schermate**: le quattro pagine di `feature-nas` sono rotte (`nasGraph`) e, in Raccolte, il gruppo "Sul NAS" (voci come dati,
+  `CollectionEntry`): sul telefono una voce apre la rotta, sul tablet la pagina sta nel pannello di dettaglio. Un file toccato in
+  Cartelle NAS si apre nel viewer della Libreria (solo se la Libreria lo mostra).
+- **Viewer**: `ViewerServices.nasActions` (`NasOrganizer.mediaActions`) accende "Sposta", "Rinomina", "Elimina…" (P14).
+- **Avvio e ripresa**: `start` esegue nello scope della galleria (la schermata puo' chiudersi) e risponde appena l'operazione e' nel
+  diario; un'operazione lunga (fra share, o da 10 elementi in su) chiede il lavoro avviato dall'utente (`work/NasOpsJobService`,
+  UIDT su Android 14+, notifica con "Ferma"); all'avvio, dopo una morte del processo o per un file aperto dal PC il lavoro riprende
+  **dal diario** (mai una conferma nuova).
+- **Lavori** (`work/NasWork.kt`, `INDEX_SYNC`): pulizia del cestino scaduto (solo dal diario locale), manutenzione dell'indice,
+  sincronizzazione dei dati personali (anche 30 s dopo un preferito o un nascosto, con l'app aperta).
+- **Diagnostica**: `nas/NasOpsDiagnostics` (operazioni, file aperti dal PC, elementi fermi, cestino, pulizia, manutenzione, dati
+  personali; solo numeri).
+- **Azzeramento**: la galleria ferma il NAS e le operazioni (e toglie i lavori in coda); il diario sta nel database, il registro dei
+  dati personali in `noBackupFilesDir/personal/`: si cancellano con il resto.
 
 Il Fluid Engine e' in `engine/` (submodule, agganciato al tag **engine-2.13.0**); entrano nel build solo
 `engine-foundation` e `engine-ui`. Per aggiungerne altri: `engine\tools\engine-install.ps1 -AppRoot . -Modules

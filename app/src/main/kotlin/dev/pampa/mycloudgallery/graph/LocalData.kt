@@ -7,6 +7,7 @@ import dev.pampa.mycloudgallery.core.family.lifecycle.FileWipeJournal
 import dev.pampa.mycloudgallery.core.network.contract.VpnControlConfig
 import dev.pampa.mycloudgallery.feature.diagnostics.contributors.HeartbeatSource
 import dev.pampa.mycloudgallery.nas.NasGraph
+import dev.pampa.mycloudgallery.nas.NasOrganizer
 import dev.pampa.mycloudgallery.work.NasStages
 import java.io.File
 import java.io.IOException
@@ -111,6 +112,8 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
           }
           // Fase 4A (P11): il NAS nella Libreria. I pacchi stanno gia' in `replica/`, l'outbox dell'indice no (miniature
           // preparate qui, in attesa di pubblicazione): si toglie con i piccoli file di stato (tentativi, emergenza, battiti).
+          // Fase 4B (P16): il registro locale dei dati personali (`personal/`). Il diario delle operazioni e del cestino sta nel
+          // database (tolto qui sopra); le operazioni in corso e i loro lavori li ha gia' fermati la galleria (NasOrganizer.stop).
           for (name in NAS_FILES) {
             val target = File(context.noBackupFilesDir, name)
             if (target.exists() && !target.deleteRecursively()) ok = false
@@ -132,12 +135,16 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
     /** Le cartelle dei dati della galleria in `noBackupFilesDir` (le riempiono le fasi 3-6). Mai la radice. */
     val MEDIA_DIRS = listOf("thumbnails", "previews", "replica")
 
-    /** I file e le cartelle del NAS nella Libreria in `noBackupFilesDir` (Fase 4A): outbox, tentativi, emergenza, battiti. */
+    /**
+     * I file e le cartelle del NAS nella Libreria in `noBackupFilesDir` (Fase 4A): outbox, tentativi, emergenza, battiti; dalla 4B il
+     * registro dei dati personali.
+     */
     val NAS_FILES = listOf(
       NasGraph.OUTBOX_DIR,
       NasGraph.ATTEMPTS_FILE,
       NasGraph.EMERGENCY_FILE,
       NasGraph.COVERS_FILE,
+      NasOrganizer.PERSONAL_DIR,
       NasStages.HEARTBEAT_SCAN,
       NasStages.HEARTBEAT_SYNC,
       NasStages.HEARTBEAT_PREP,

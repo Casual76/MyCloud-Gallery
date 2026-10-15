@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.graph.GalleryStopper
 import dev.pampa.mycloudgallery.nas.NasGraph
+import dev.pampa.mycloudgallery.nas.NasOrganizer
 import dev.pampa.mycloudgallery.work.NasStages
 import java.io.File
 import kotlinx.coroutines.runBlocking
@@ -82,12 +83,19 @@ class LocalDataEraserTest {
     val outbox = File(File(noBackup, NasGraph.OUTBOX_DIR), "m0000").apply { parentFile!!.mkdirs(); writeText("blob") }
     val pack = File(File(File(noBackup, NasGraph.REPLICA_DIR), NasGraph.PACKS_DIR), "p0000").apply { parentFile!!.mkdirs(); writeText("pacco") }
     val state = listOf(NasGraph.ATTEMPTS_FILE, NasGraph.EMERGENCY_FILE, NasStages.HEARTBEAT_SCAN).map { File(noBackup, it).apply { writeText("x") } }
+    // Fase 4B (P16): il registro locale dei dati personali e il suo temporaneo.
+    val ledgerDir = File(noBackup, NasOrganizer.PERSONAL_DIR)
+    val ledger = listOf(NasOrganizer.PERSONAL_LEDGER_FILE, NasOrganizer.PERSONAL_LEDGER_FILE + ".tmp").map {
+      File(ledgerDir, it).apply { parentFile!!.mkdirs(); writeText("voci") }
+    }
 
     assertThat(device.graph.eraser.eraseAll()).isTrue()
 
     assertThat(outbox.parentFile!!.exists()).isFalse()
     assertThat(pack.exists()).isFalse()
     state.forEach { assertThat(it.exists()).isFalse() }
+    ledger.forEach { assertThat(it.exists()).isFalse() }
+    assertThat(ledgerDir.exists()).isFalse()
   }
 
   @Test

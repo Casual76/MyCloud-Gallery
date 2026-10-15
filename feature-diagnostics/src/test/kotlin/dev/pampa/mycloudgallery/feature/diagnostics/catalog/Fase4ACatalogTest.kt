@@ -65,8 +65,8 @@ class Fase4ACatalogTest {
       assertWithMessage(id).that(entry.titleRes).isNotEqualTo(0)
       assertWithMessage(id).that(entry.guideRes).isNotEqualTo(0)
     }
-    // E viceversa: nella sezione ci sono solo questi.
-    assertThat(DiagCatalog.entriesOf(DiagSection.NAS_LIBRARY).map { it.code.id }).containsExactlyElementsIn(expected.keys)
+    // E viceversa: nella sezione ci sono solo questi e quelli della 4B (Fase4BCatalogTest, P16).
+    assertThat(DiagCatalog.entriesOf(DiagSection.NAS_LIBRARY).map { it.code.id }).containsExactlyElementsIn(expected.keys + Fase4BCatalogTest.CODES_4B.keys)
   }
 
   @Test
@@ -127,7 +127,7 @@ class Fase4ACatalogTest {
     "E-N3" to "cancellato dal PC: esce dalla Libreria, contato in NAS_SCAN_STATE (vanished)",
     "E-N7" to "nomi diversi solo per maiuscole: un posto solo, regola della chiave",
     "E-N8" to "cartelle di sistema escluse sempre: contate in NAS_SCAN_STATE (skippedSystem)",
-    "E-N11" to "due familiari sullo stesso file: vale l'ultimo stato, regola",
+    // E-N11 (due familiari sullo stesso file) lo copre dalla 4B NAS_OPS_FAILED ("spostato da un altro dispositivo").
     "E-N12" to "indice vecchio rispetto al file: timbro diverso, si rileva di nuovo (regola D6)",
     "E-N15" to "cartelle escluse all'onboarding: contate in NAS_SCAN_STATE (excludedFolders)",
     "E-N16" to "cartelle col punto e cestini del NAS: mai scansionati, contati in NAS_SCAN_STATE (skippedSystem)",

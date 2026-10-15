@@ -196,6 +196,11 @@ dependencies {
   implementation project(':core-index')
   implementation project(':core-nasmedia')
   implementation project(':core-prepare')
+  // Fase 4B (docs/fase4-progetto.md §1.1, §1.4): organizzare il NAS. `:app` cabla operazioni, cestino, spazio, dati personali e le
+  // schermate (P16); le primitive di scrittura restano dentro core-nasops (`NasOpsWiring`), `:app` non le vede.
+  implementation project(':core-nasops')
+  implementation project(':core-personal')
+  implementation project(':feature-nas')
 
   // --- Il design system (engine-ui porta Compose, Material 3, activity-compose e lifecycle) ----------
   implementation project(':engine-ui')

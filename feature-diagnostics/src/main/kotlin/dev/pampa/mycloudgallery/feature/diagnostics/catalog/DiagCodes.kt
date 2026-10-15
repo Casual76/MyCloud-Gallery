@@ -230,6 +230,18 @@ object DiagCodes {
   @JvmField val PREP_UNREADABLE = DiagCode("PREP_UNREADABLE", setOf("E-M10"))
   @JvmField val PREP_TOO_LARGE = DiagCode("PREP_TOO_LARGE", setOf("E-M3"))
 
+  // P16: i codici della 4B (organizzare il NAS) del contributore di :app (`NasOpsDiagnostics`, `NasOpsDiagCodes`): operazioni sui
+  // file, cestino del NAS, manutenzione dell'indice, dati personali. Stessi id ed edge case, scritti come letterali (questo modulo non
+  // vede :app); `DiagnosticsWiringTest` di :app verifica l'uguaglianza, `Fase4BCatalogTest` qui la tabella e gli edge case.
+  @JvmField val NAS_OPS_STATE = DiagCode("NAS_OPS_STATE", setOf("E-D6"))
+  @JvmField val NAS_OPS_LOCKED = DiagCode("NAS_OPS_LOCKED", setOf("E-N13"))
+  @JvmField val NAS_OPS_FAILED = DiagCode("NAS_OPS_FAILED", setOf("E-D5", "E-D9", "E-D13", "E-N9", "E-N11"))
+  @JvmField val NAS_TRASH_STATE = DiagCode("NAS_TRASH_STATE", setOf("E-D2"))
+  @JvmField val NAS_TRASH_PURGE = DiagCode("NAS_TRASH_PURGE", setOf("E-D4", "E-S11"))
+  @JvmField val NAS_INDEX_MAINTENANCE = DiagCode("NAS_INDEX_MAINTENANCE", setOf("M6"))
+  @JvmField val NAS_PERSONAL_STATE = DiagCode("NAS_PERSONAL_STATE", setOf("E-H4"))
+  @JvmField val NAS_PERSONAL_REJECTED = DiagCode("NAS_PERSONAL_REJECTED", setOf("E-F5", "D26"))
+
   // I codici di `PhoneLibraryDiagnostics` (core-mediastore, P2): stessi id e stessi edge case di
   // `PhoneLibraryDiagCodes`, scritti come letterali perche' questo modulo non dipende da core-mediastore.
   // `Fase3CatalogTest` verifica la tabella qui sotto e un test di :app (P11) verifica l'uguaglianza con

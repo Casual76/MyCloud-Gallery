@@ -248,6 +248,15 @@ internal object DiagCatalogEntries {
     DiagEntry(DiagCodes.PREP_DECODER_MISSING, DiagSection.NAS_LIBRARY, DiagSeverity.INFO, R.string.diag_prep_decoder_missing_title, R.string.diag_prep_decoder_missing_guide, null),
     DiagEntry(DiagCodes.PREP_UNREADABLE, DiagSection.NAS_LIBRARY, DiagSeverity.WARNING, R.string.diag_prep_unreadable_title, R.string.diag_prep_unreadable_guide, null),
     DiagEntry(DiagCodes.PREP_TOO_LARGE, DiagSection.NAS_LIBRARY, DiagSeverity.INFO, R.string.diag_prep_too_large_title, R.string.diag_prep_too_large_guide, null),
+    // P16: organizzare il NAS (NasOpsDiagnostics di :app). "Ferma" e la ripresa stanno in Raccolte → Operazioni in corso.
+    DiagEntry(DiagCodes.NAS_OPS_STATE, DiagSection.NAS_LIBRARY, DiagSeverity.INFO, R.string.diag_nas_ops_state_title, R.string.diag_nas_ops_state_guide, null),
+    DiagEntry(DiagCodes.NAS_OPS_LOCKED, DiagSection.NAS_LIBRARY, DiagSeverity.INFO, R.string.diag_nas_ops_locked_title, R.string.diag_nas_ops_locked_guide, null),
+    DiagEntry(DiagCodes.NAS_OPS_FAILED, DiagSection.NAS_LIBRARY, DiagSeverity.WARNING, R.string.diag_nas_ops_failed_title, R.string.diag_nas_ops_failed_guide, null),
+    DiagEntry(DiagCodes.NAS_TRASH_STATE, DiagSection.NAS_LIBRARY, DiagSeverity.INFO, R.string.diag_nas_trash_state_title, R.string.diag_nas_trash_state_guide, null),
+    DiagEntry(DiagCodes.NAS_TRASH_PURGE, DiagSection.NAS_LIBRARY, DiagSeverity.INFO, R.string.diag_nas_trash_purge_title, R.string.diag_nas_trash_purge_guide, null),
+    DiagEntry(DiagCodes.NAS_INDEX_MAINTENANCE, DiagSection.NAS_LIBRARY, DiagSeverity.INFO, R.string.diag_nas_index_maintenance_title, R.string.diag_nas_index_maintenance_guide, null),
+    DiagEntry(DiagCodes.NAS_PERSONAL_STATE, DiagSection.NAS_LIBRARY, DiagSeverity.INFO, R.string.diag_nas_personal_state_title, R.string.diag_nas_personal_state_guide, null),
+    DiagEntry(DiagCodes.NAS_PERSONAL_REJECTED, DiagSection.NAS_LIBRARY, DiagSeverity.WARNING, R.string.diag_nas_personal_rejected_title, R.string.diag_nas_personal_rejected_guide, null),
 
     // --- Rete e NAS --------------------------------------------------------
     DiagEntry(DiagCodes.DIAG_SECTION_UNAVAILABLE, DiagSection.NETWORK_AND_NAS, DiagSeverity.WARNING, R.string.diag_diag_section_unavailable_title, R.string.diag_diag_section_unavailable_guide, null),

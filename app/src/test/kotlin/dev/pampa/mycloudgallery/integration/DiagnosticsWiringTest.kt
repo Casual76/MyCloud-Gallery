@@ -10,6 +10,7 @@ import dev.pampa.mycloudgallery.core.index.contract.IndexDiag
 import dev.pampa.mycloudgallery.core.nasmedia.contract.NasMediaDiag
 import dev.pampa.mycloudgallery.core.prepare.contract.PrepDiag
 import dev.pampa.mycloudgallery.nas.NasLibraryDiagCodes
+import dev.pampa.mycloudgallery.nas.NasOpsDiagCodes
 import org.junit.Test
 
 /**
@@ -25,16 +26,19 @@ class DiagnosticsWiringTest {
   /** P11: i codici della 4A dei moduli (indice, scansione, preparazione) e di :app (stato, emergenza, aree). */
   private val NAS_4A = IndexDiag.ALL + NasMediaDiag.ALL + PrepDiag.ALL + NasLibraryDiagCodes.ALL
 
+  /** P16: i codici della 4B di :app (operazioni, cestino, manutenzione, dati personali). */
+  private val NAS_4B = NasOpsDiagCodes.ALL
+
   @Test
   fun iCodiciDeiContributoriCollegatiSonoTuttiNelCatalogo() {
-    val all = NetworkDiagCodes.ALL + TrustDiagCodes.ALL + PhoneLibraryDiagCodes.ALL + LibraryDiagCodes.ALL + NAS_4A
+    val all = NetworkDiagCodes.ALL + TrustDiagCodes.ALL + PhoneLibraryDiagCodes.ALL + LibraryDiagCodes.ALL + NAS_4A + NAS_4B
     val fuori = all.filterNot { it in DiagCatalog }.map { it.id }
     assertWithMessage("codici dei contributori fuori dal catalogo: $fuori").that(fuori).isEmpty()
   }
 
   @Test
   fun iCodiciDellaGalleriaHannoGliStessiEdgeCaseDelCatalogo() {
-    for (code in PhoneLibraryDiagCodes.ALL + LibraryDiagCodes.ALL + NAS_4A) {
+    for (code in PhoneLibraryDiagCodes.ALL + LibraryDiagCodes.ALL + NAS_4A + NAS_4B) {
       val entry = DiagCatalog.entry(code)
       assertWithMessage(code.id).that(entry).isNotNull()
       assertWithMessage(code.id).that(entry!!.code.edgeCases).isEqualTo(code.edgeCases)

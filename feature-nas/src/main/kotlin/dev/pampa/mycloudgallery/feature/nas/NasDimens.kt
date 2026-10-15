@@ -14,9 +14,6 @@ internal object NasDimens {
   /** Nessuno spazio. */
   val None: Dp = 0.dp
 
-  /** Quanto la sfumatura della pagina in alto si prolunga sotto la riga di chrome prima di sparire (come nelle griglie). */
-  val TopEdgeFade: Dp = 44.dp
-
   /** Il margine interno di uno stato vuoto o di un avviso a tutta pagina. */
   val StatePadding: Dp = 32.dp
 

@@ -537,6 +537,87 @@ una cartella) e per **ciascuna** primitiva di scrittura che fanno, un guasto pri
 doppio, nessuna perdita, nessun temporaneo (il numero di primitive si conta con un giro pulito; ogni guasto deve scattare davvero). P15 lo estende a
 migliaia di giri casuali.
 
+## Fase 4B: integrazione nell'app (P16, 15/10)
+P12 (operazioni, cestino, spazio, cartelle, pulizie), P13 (dati personali), P14 (schermate) e P15 (banco delle interruzioni) sono
+collegati nel grafo vero. `NasGraph` porta un `nas/NasOrganizer` che parte con il motore del NAS (`attach` in `NasGraph.start`) e
+lega `NasOpsWiring` (diario `RoomOpsStore`, cancello `OpsGate` = emergenza, congelamento, salto dell'ora; compattazione accesa con
+lo stesso lucchetto per share della pubblicazione) e `NasPersonalSync` (registro `FilePersonalLedger` in `noBackupFilesDir/personal/`,
+proiezione sul catalogo, solo area privata). Hilt espone `NasOperations`, `NasTrash`, `NasSpace`, `NasFolders`, `OpClocks`, `NasAreas`
+(null-object senza NAS). Raccolte ha il gruppo "Sul NAS" (`CollectionsTab.extraGroups`, voci come dati); le quattro pagine sono rotte
+(`nasGraph`) sul telefono e pannello di dettaglio sul tablet; il viewer ha "Sposta", "Rinomina", "Elimina…" (`ViewerServices.nasActions`).
+Le prove d'integrazione sul NAS finto (`app/src/test/.../integration/NasOrganizeIntegrationTest.kt`): Cartelle NAS → sposta tra
+share (UIDT chiesto) → elimina → "Eliminati di recente" → ripristina → Libreria coerente dopo la verifica → Diagnostica → pulizia con
+l'ora finta (+31 giorni: solo la voce propria scaduta; il ripristinato e un finto cestino di un altro dispositivo restano) →
+azzeramento; e preferito e nascosto che viaggiano fra due dispositivi dello stesso account (niente dati personali nell'area comune).
+`tools\check.ps1` verde il 15/10: 6 min 43 s (passo Gradle 374 s, con la cache di Gradle), 1 min 51 s rifatto dopo l'ultima modifica;
+APK debug e release prodotti. Nessun emulatore usato.
+
+**Scostamenti dal progetto (da confermare)**
+1. **L'avvio sopravvive alla schermata.** `NasOpsEngine.start` esegue l'operazione fino in fondo prima di rispondere: la facciata di
+   `:app` (`NasOrganizer.AppNasOperations`) lo fa girare nello scope della galleria (dentro `runIfActive`: l'azzeramento lo ferma e lo
+   aspetta) e risponde `Started` appena l'operazione e' nel diario (stessa impronta del piano, id nuovo). Nessuna modifica all'esecutore.
+2. **UIDT solo per le operazioni lunghe**: spostamenti tra share o da 10 elementi in su (`NasOpsJobs.isLong`); una rinomina o tre file
+   nel cestino finiscono prima che l'utente esca. La **ripresa** dal diario (all'avvio con operazioni aperte, dopo un "NAS sparito", per
+   un file aperto dal PC alla scadenza dell'attesa) e' un lavoro normale dello stesso `NasOpsJobService` (si puo' chiedere dal secondo
+   piano, UIDT no). Sotto Android 14 anche l'operazione lunga e' un lavoro normale, con la notifica postata dal servizio. Due id fissi di
+   `JobScheduler` (1.000.101 e 1.000.102); WorkManager resta nell'intervallo 0–999.999 (`setJobSchedulerJobIdRange`).
+3. **"Ferma" della notifica**: un broadcast immutabile ed esplicito sul pacchetto verso un ricevitore **registrato a runtime mentre il
+   lavoro gira e non esportato** (`RECEIVER_NOT_EXPORTED`): nessun componente nuovo nel manifest. E' l'unica azione su una notifica
+   dell'app (eccezione dichiarata a C17: ferma, non distrugge). Lo "Stop" del Task Manager di Android vale come "Ferma".
+4. **E-N9 (sola lettura)**: nessuna prova preventiva per share (`ShareAccessView.ALL_WRITABLE`): la dice il NAS quando si scrive
+   (l'elemento si ferma con `PERMISSION_DENIED`/`READ_ONLY`, contato in Diagnostica). Una prova per area resta per il campo (F15).
+5. **Viewer**: un media del NAS ha il riferimento del NAS solo se una copia leggibile sul telefono non c'e' (`thumbRefAt`): il bersaglio
+   ha `onPhone = false` e "Solo dal telefono / Ovunque" (E-D1) dal viewer non e' raggiungibile per un media su telefono e NAS (che si
+   apre con il riferimento del telefono). Il piano e l'esecutore lo coprono (P12); la voce nel viewer e' un residuo per il filone grafico.
+6. **Dati personali dalla Libreria**: preferiti e nascosti continuano a passare dalle azioni della Libreria (E-H1: prima l'indice, poi il
+   catalogo); la sincronizzazione li adotta (`adoptLocal`) al giro dopo, accorpato a 30 s con l'app aperta, e `reproject()` gira dopo
+   ogni scansione e ogni sincronizzazione dell'indice con novita'. "Mostra le copertine degli album" diventa un'impostazione personale
+   (il file locale resta come specchio, la scelta fatta prima della 4B diventa la prima voce); le esclusioni dell'area privata vengono
+   dall'impostazione personale.
+7. **Un'operazione chiusa fa riverificare il NAS** (`NasWorkScheduling.scanNow`): la Libreria segue spostamenti e cestino senza
+   aspettare il giro delle 6 ore.
+8. **Cartelle NAS → viewer**: un file toccato si apre nel viewer della Libreria sul suo media, solo se la Libreria lo mostra (un nascosto,
+   escluso o non ancora scansionato non si apre).
+9. **Diagnostica**: otto codici nella sezione "NAS nella Libreria" (nessuna sezione nuova: `DiagSection` e' in core-common, fuori
+   perimetro): `NAS_OPS_STATE` (E-D6), `NAS_OPS_LOCKED` (E-N13), `NAS_OPS_FAILED` (E-D5, E-D9, E-D13, E-N9, E-N11), `NAS_TRASH_STATE`
+   (E-D2), `NAS_TRASH_PURGE` (E-D4, E-S11), `NAS_INDEX_MAINTENANCE` (M6), `NAS_PERSONAL_STATE` (E-H4), `NAS_PERSONAL_REJECTED`
+   (E-F5, D26). `Fase4BCatalogTest` legge §2.7 e §2.9 dal documento: E-D1, E-D3, E-D7, E-D8, E-D10, E-D11, E-D12, E-N7, C19 ed E-O7
+   non sono avvisi (motivo scritto). E-N11 esce dalle eccezioni della 4A.
+10. **Chrome G2 nel design system**: `GalleryTopChrome`, `GalleryTopEdgeScrim`, lo stile adattivo e l'interfaccia `GalleryChromeContent`
+    (cio' che passa sotto: la griglia la implementa con un adattatore) stanno in `core-designsystem/design/GalleryTopChrome.kt`;
+    `feature-library` li usa con gli stessi nomi interni, `feature-nas` al posto della sua copia. Verificato registrando gli screenshot
+    prima e dopo: le 188 immagini delle griglie (3-P7, 3-P10) sono **identiche byte per byte**; le 240 della 4B differiscono al
+    massimo di 2/255 su un canale, solo nei pezzi della riga in alto (il velo ora e' calcolato pezzo per pezzo come nelle griglie).
+11. **Banco delle interruzioni**: tolte le esclusioni del fake (D1–D4 corretti da P12): 2.000 giri sulle operazioni vere e 2.000 sul fake,
+    zero violazioni; `ChaosKnownDefectsTest` diventa una regressione.
+
+**Correzioni in moduli di altri pacchetti** (firme pubbliche invariate: solo parametri nuovi con un default)
+- `core-nasops` (solo test): `FakeChaosStackFactory` senza esclusioni, `ChaosKnownDefectsTest` come regressione.
+- `feature-viewer`: `ViewerServices.nasActions`, `viewerMenuEntries(nasActions, nasDelete)`, aggancio in `ViewerOverlay`, `NasNoticeView`.
+- `feature-library`: `CollectionsTab(extraGroups, onOpenEntry, entryDetail)`; `GridPageChrome` delega al design system.
+- `feature-nas`: `NasPage` usa la chrome condivisa (tolti `NasTopChrome`, `NasTopEdge`, `NasDimens.TopEdgeFade`, interni).
+- `feature-diagnostics`: codici, voci, testi ed elenco delle chiavi della 4B; `Fase4ACatalogTest` aggiornato (sezione condivisa, E-N11).
+
+**Cosa resta per le prove sul campo** (oltre a F1–F14 della 4A, che si provano insieme): **F15** (crea, rinomina anche solo di
+maiuscole, sposta nella share e tra share, elimina, ripristina, file aperto in un editor sul PC, nome in conflitto, cartella intera;
+anche la sola lettura di un'area, scostamento 4), **F16** (runner dell'area di prova ≥ 400 interruzioni, quando il file delle
+credenziali sara' aggiornato: al P16 il login di prova e' fallito con `AUTH_FAILED` e non si e' riprovato; script del telefono ≥ 100),
+**F17** (preferito e nascosto sull'S25 → profilo del tablet con lo stesso account, non `test2`), **F18** (una settimana con Notte e una
+con Bilanciato), **F19** (APK di release: operazioni, UIDT e "Ferma" con R8), **F20** (pulizia con la ritenzione accorciata **solo in
+debug**: oggi la ritenzione e' una costante di `TrustLimits`, serve un aggancio di debug in `core-nasops`/`DeveloperTools` prima della
+prova). Da guardare sull'S25: la notifica UIDT (Android 14+), "Ferma" dalla notifica e dal Task Manager, la ripresa dopo `am kill`.
+
+**Per la revisione di sicurezza della 4B**: il ricevitore di "Ferma" (runtime, non esportato) e l'eccezione a C17; gli id fissi di
+`JobScheduler`; `:app` che non costruisce conferme e i lavori che chiamano solo `resumeAll` e la pulizia; i punti di P12 (rinomina che
+attende se il viewer ha il file aperto; sorgente bloccata dopo la pubblicazione → doppione visibile fino a 24 ore; "Ferma" perso con la
+morte del processo, O3; record del cestino saltato senza identita' di firma) e di P13 (L29: autore non autenticato per voce; una revoca
+non ripristina il valore sovrascritto; id dei media in chiaro nel registro locale dei dati personali).
+
+**Dubbi grafici** (per il filone grafico): nomi lunghi che vanno a capo a meta' parola con il testo a 1,3× (P14); sul tablet la capsula
+dei comandi all'estremo destro (P14); il gruppo "Sul NAS" in Raccolte con le righe di Impostazioni (funzionale); sul tablet "Vedi" dopo
+un'operazione apre "Operazioni in corso" a schermo intero invece di cambiare il pannello accanto; l'esito di "Sposta"/"Elimina…" nel
+viewer usa l'avviso breve in alto; la notifica delle operazioni (solo numeri, una barra).
+
 ## Revisione grafica della Libreria da parte dell'utente (13/10)
 Giudizio: le prestazioni della navigazione non sono male, la **grafica no**. Serve molto lavoro, da fare in un **filone grafico
 parallelo** alle fasi successive (insieme ai lavori che non toccano l'app sul momento, per esempio il back-end NAS della Fase 4).

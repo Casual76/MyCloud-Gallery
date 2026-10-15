@@ -16,6 +16,8 @@ import dagger.assisted.AssistedInject
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.index.contract.QualityLevel
 import dev.pampa.mycloudgallery.core.nasmedia.contract.ScanMode
+import dev.pampa.mycloudgallery.core.nasops.contract.PurgeStop
+import dev.pampa.mycloudgallery.core.personal.contract.PersonalStop
 import dev.pampa.mycloudgallery.core.prepare.contract.PrepControl
 import dev.pampa.mycloudgallery.core.prepare.contract.PrepVerdict
 import dev.pampa.mycloudgallery.core.rules.BackgroundActivity
@@ -52,6 +54,13 @@ import kotlin.time.Duration.Companion.seconds
  * - [HqPreviewsWorker] (`HQ_PREVIEWS`): l'HQ della replica, solo con la qualita' "Alta";
  * - [NasDailySummaryWorker]: il **riepilogo giornaliero** dei problemi (proposta 12; congelamento compreso, risposta Q6).
  *
+ * Fase 4B (P16, §1.4, §2.7–§2.9):
+ * - [NasTrashPurgeWorker] (`INDEX_SYNC`, scrive sul NAS): la pulizia del cestino scaduto, solo dal diario locale, una volta al giorno;
+ * - [IndexMaintenanceWorker] (`INDEX_SYNC`, scrive sul NAS): compattazione dell'indice e pulizia dei propri file, una volta al giorno;
+ * - [PersonalSyncWorker] (`INDEX_SYNC`): i dati personali fra i dispositivi dello stesso account, ogni 6 ore e dopo ogni verifica
+ *   (oltre all'accorpamento di 30 s dopo una modifica con l'app aperta, `NasOrganizer.personalChanged`);
+ * - le operazioni sui file non sono lavori di WorkManager: le riprende `NasOpsJobService` (UIDT per quelle lunghe avviate dall'utente).
+ *
  * I punti di ripresa stanno nel database (cursore della scansione, `HeadMark` e stati dei segmenti, unita' prenotate):
  * le tappe non hanno un punto proprio ([NoCheckpoints]).
  */
@@ -65,10 +74,21 @@ object NasWorkScheduling {
   const val PREP_NOW_WORK = "nas-preparation-now"
   const val HQ_WORK = "nas-hq-previews"
   const val SUMMARY_WORK = "nas-daily-summary"
+
+  // Fase 4B (P16): cestino, manutenzione dell'indice, dati personali.
+  const val TRASH_PURGE_WORK = "nas-trash-purge"
+  const val TRASH_PURGE_NOW_WORK = "nas-trash-purge-now"
+  const val MAINTENANCE_WORK = "nas-index-maintenance"
+  const val MAINTENANCE_NOW_WORK = "nas-index-maintenance-now"
+  const val PERSONAL_WORK = "nas-personal-sync"
+  const val PERSONAL_NOW_WORK = "nas-personal-sync-now"
   const val TAG = "nas"
 
   val PERIOD: Duration = 6.hours
   val SUMMARY_PERIOD: Duration = 24.hours
+
+  /** Pulizia del cestino e manutenzione dell'indice: al massimo una volta al giorno (§2.8). */
+  val DAILY_PERIOD: Duration = 24.hours
 
   /** A ogni apertura dell'app si verifica di nuovo solo se l'ultima verifica ha piu' di tanto (§1.4). */
   val VERIFY_ON_OPEN_AFTER: Duration = 15.minutes
@@ -84,13 +104,21 @@ object NasWorkScheduling {
     periodic(PREP_WORK, PeriodicWorkRequestBuilder<PreparationWorker>(PERIOD.inWholeHours, TimeUnit.HOURS).setConstraints(connected()).addTag(TAG).build())
     periodic(HQ_WORK, PeriodicWorkRequestBuilder<HqPreviewsWorker>(PERIOD.inWholeHours, TimeUnit.HOURS).setConstraints(connected()).addTag(TAG).build())
     periodic(SUMMARY_WORK, PeriodicWorkRequestBuilder<NasDailySummaryWorker>(SUMMARY_PERIOD.inWholeHours, TimeUnit.HOURS).addTag(TAG).build())
+    // Fase 4B: le regole decidono quando (INDEX_SYNC, §2.8); i lavori non partono senza le condizioni del §2.7 (cancello, ora del NAS).
+    periodic(TRASH_PURGE_WORK, PeriodicWorkRequestBuilder<NasTrashPurgeWorker>(DAILY_PERIOD.inWholeHours, TimeUnit.HOURS).setConstraints(connected()).addTag(TAG).build())
+    periodic(MAINTENANCE_WORK, PeriodicWorkRequestBuilder<IndexMaintenanceWorker>(DAILY_PERIOD.inWholeHours, TimeUnit.HOURS).setConstraints(connected()).addTag(TAG).build())
+    periodic(PERSONAL_WORK, PeriodicWorkRequestBuilder<PersonalSyncWorker>(PERIOD.inWholeHours, TimeUnit.HOURS).setConstraints(connected()).addTag(TAG).build())
   }
 
-  /** Una verifica adesso (apertura dell'app, "aggiorna"), poi la sincronizzazione: senza spostare un giro gia' in coda. */
+  /**
+   * Una verifica adesso (apertura dell'app, "aggiorna", un'operazione sui file finita), poi la sincronizzazione dell'indice e quella dei
+   * dati personali (4B): senza spostare un giro gia' in coda.
+   */
   fun scanNow(context: Context) {
     val wm = WorkManager.getInstance(context.applicationContext)
     wm.beginUniqueWork(SCAN_NOW_WORK, ExistingWorkPolicy.KEEP, OneTimeWorkRequestBuilder<NasScanWorker>().setConstraints(connected()).addTag(TAG).build())
       .then(OneTimeWorkRequestBuilder<IndexSyncWorker>().setConstraints(connected()).addTag(TAG).build())
+      .then(OneTimeWorkRequestBuilder<PersonalSyncWorker>().setConstraints(connected()).addTag(TAG).build())
       .enqueue()
   }
 
@@ -173,6 +201,47 @@ class NasStages(private val graph: AppGraph, private val nas: NasGraph, private 
     })
     if (outcome is StageOutcome.Finished) prepBeat.beat(graph.platform.deviceNow())
     return outcome
+  }
+
+  // --- Fase 4B (P16, §2.7, §2.8, §2.9) ---------------------------------------------------------------------------------------
+
+  /**
+   * Una tappa di pulizia del cestino scaduto (`INDEX_SYNC` + condizioni del §2.7, scrive sul NAS: con una share congelata non parte):
+   * **solo dal diario locale** di questo dispositivo, 30 giorni di ora del NAS, tetti per giro, mai con un salto dell'ora (E-D4).
+   */
+  suspend fun purgeTrash(): StageOutcome? {
+    nas.start()
+    if (nas.organizer.parts == null) return null
+    return stage(WorkRequest.Background(BackgroundActivity.INDEX_SYNC, writesToNas = true)).run({ scope, _ ->
+      val report = nas.organizer.purgeTrash(SLICE) ?: return@run BatchResult(hasMore = false)
+      scope.record(0)
+      BatchResult(hasMore = report.stoppedBy == PurgeStop.BUDGET)
+    })
+  }
+
+  /** Una tappa di manutenzione dell'indice: compattazione e pulizia dei propri file (M6), una volta al giorno per share. */
+  suspend fun maintainIndex(): StageOutcome? {
+    nas.start()
+    if (nas.organizer.parts == null) return null
+    return stage(WorkRequest.Background(BackgroundActivity.INDEX_SYNC, writesToNas = true)).run({ scope, _ ->
+      val report = nas.organizer.maintainIndex(SLICE) ?: return@run BatchResult(hasMore = false)
+      scope.record(0)
+      BatchResult(hasMore = report.clean.stoppedBy == PurgeStop.BUDGET)
+    })
+  }
+
+  /**
+   * Una tappa di sincronizzazione dei dati personali (`INDEX_SYNC`, §2.9). Non e' `writesToNas`: anche con una share congelata si
+   * leggono i dati degli altri dispositivi; se pubblicare lo decide la sincronizzazione (D31, D10, D32).
+   */
+  suspend fun syncPersonal(): StageOutcome? {
+    nas.start()
+    if (nas.organizer.parts?.personalSync == null) return null
+    return stage(WorkRequest.Background(BackgroundActivity.INDEX_SYNC)).run({ scope, _ ->
+      val report = nas.organizer.syncPersonal(SLICE) ?: return@run BatchResult(hasMore = false)
+      scope.record(0)
+      BatchResult(hasMore = report.stoppedBy == PersonalStop.BUDGET)
+    })
   }
 
   /** Una tappa di scaricamento dell'HQ (`HQ_PREVIEWS`), solo con la qualita' "Alta" (D16). */
@@ -275,6 +344,54 @@ class PreparationWorker @AssistedInject constructor(
   override suspend fun stage(stages: NasStages): StageOutcome = stages.prepare()
 
   override fun continuation() = NasWorkScheduling.PREP_NOW_WORK to OneTimeWorkRequestBuilder<PreparationWorker>().addTag(NasWorkScheduling.TAG).build()
+}
+
+/** Fase 4B: la pulizia del cestino scaduto del NAS (§2.7, D25, E-D4), una volta al giorno. */
+@HiltWorker
+class NasTrashPurgeWorker @AssistedInject constructor(
+  @Assisted appContext: Context,
+  @Assisted params: WorkerParameters,
+  gallery: GalleryGraph,
+  graph: AppGraph,
+) : NasWorker(appContext, params, gallery, graph) {
+  override val tag: String = "NasTrashPurgeWorker"
+
+  override suspend fun stage(stages: NasStages): StageOutcome? = stages.purgeTrash()
+
+  override fun continuation() =
+    NasWorkScheduling.TRASH_PURGE_NOW_WORK to OneTimeWorkRequestBuilder<NasTrashPurgeWorker>().addTag(NasWorkScheduling.TAG).build()
+}
+
+/** Fase 4B: la compattazione dell'indice e la pulizia dei propri file (M6), una volta al giorno. */
+@HiltWorker
+class IndexMaintenanceWorker @AssistedInject constructor(
+  @Assisted appContext: Context,
+  @Assisted params: WorkerParameters,
+  gallery: GalleryGraph,
+  graph: AppGraph,
+) : NasWorker(appContext, params, gallery, graph) {
+  override val tag: String = "IndexMaintenanceWorker"
+
+  override suspend fun stage(stages: NasStages): StageOutcome? = stages.maintainIndex()
+
+  override fun continuation() =
+    NasWorkScheduling.MAINTENANCE_NOW_WORK to OneTimeWorkRequestBuilder<IndexMaintenanceWorker>().addTag(NasWorkScheduling.TAG).build()
+}
+
+/** Fase 4B: i dati personali fra i dispositivi dello stesso account (§2.9, `INDEX_SYNC`). */
+@HiltWorker
+class PersonalSyncWorker @AssistedInject constructor(
+  @Assisted appContext: Context,
+  @Assisted params: WorkerParameters,
+  gallery: GalleryGraph,
+  graph: AppGraph,
+) : NasWorker(appContext, params, gallery, graph) {
+  override val tag: String = "PersonalSyncWorker"
+
+  override suspend fun stage(stages: NasStages): StageOutcome? = stages.syncPersonal()
+
+  override fun continuation() =
+    NasWorkScheduling.PERSONAL_NOW_WORK to OneTimeWorkRequestBuilder<PersonalSyncWorker>().addTag(NasWorkScheduling.TAG).build()
 }
 
 @HiltWorker

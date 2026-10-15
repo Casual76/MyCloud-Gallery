@@ -30,6 +30,7 @@ import dev.pampa.mycloudgallery.feature.viewer.details.NoMediaDetails
 import dev.pampa.mycloudgallery.feature.viewer.details.NoViewerBytes
 import dev.pampa.mycloudgallery.feature.viewer.details.ViewerBytes
 import dev.pampa.mycloudgallery.feature.viewer.download.PhoneDownload
+import dev.pampa.mycloudgallery.feature.viewer.menu.NasMediaActions
 import dev.pampa.mycloudgallery.feature.viewer.video.BytesMotionVideoLocator
 import dev.pampa.mycloudgallery.feature.viewer.video.MotionVideoLocator
 import dev.pampa.mycloudgallery.feature.viewer.video.NasVideoSource
@@ -65,6 +66,7 @@ import kotlinx.coroutines.withContext
  * @property nasVideo i video del NAS in streaming (Fase 4, D19): senza, un video del NAS non parte e il viewer dice che il
  *   NAS non risponde.
  * @property download "Scarica sul telefono" (Fase 4, D20): senza, la voce non compare nel menu (D13).
+ * @property nasActions "Sposta", "Rinomina" ed "Elimina…" per un media del NAS (Fase 4B, P14/P16): senza, le voci non compaiono (D13).
  * @property dispatchers i thread di lavoro (letture di dettagli ed EXIF): nei test sono uno solo, senza attese.
  */
 @Immutable
@@ -86,6 +88,7 @@ class ViewerServices(
   val originals: OriginalFetcher? = null,
   val nasVideo: NasVideoSource? = null,
   val download: PhoneDownload? = null,
+  val nasActions: NasMediaActions? = null,
   val dispatchers: DispatcherProvider = DefaultDispatcherProvider,
 )
 

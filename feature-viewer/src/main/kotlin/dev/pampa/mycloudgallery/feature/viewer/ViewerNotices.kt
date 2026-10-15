@@ -256,3 +256,17 @@ internal fun MessageNotice(message: ViewerMessage, backdrop: GlassBackdropState,
     modifier = modifier,
   )
 }
+
+/**
+ * L'esito di "Sposta", "Rinomina" o "Elimina…" su un media del NAS (Fase 4B): "Operazione avviata" o il motivo per cui non e' partita.
+ * Solo una frase delle risorse, mai un testo del NAS. Sta dove sta l'avviso breve e si spegne da solo come lui.
+ */
+@Composable
+internal fun NasNoticeView(notice: dev.pampa.mycloudgallery.feature.viewer.menu.NasActionNotice, backdrop: GlassBackdropState, modifier: Modifier = Modifier) {
+  GalleryViewerNotice(
+    icon = if (notice.started) Icons.Rounded.CheckCircle else Icons.Rounded.ReportProblem,
+    title = stringResource(notice.text),
+    backdrop = backdrop,
+    modifier = modifier,
+  )
+}

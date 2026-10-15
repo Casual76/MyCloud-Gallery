@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fase 4B (P16): organizzare il NAS, le voci della Diagnostica. Solo numeri e motivi: mai nomi di share, cartelle o file. -->
+<resources>
+  <string name="diag_nas_ops_state_title">Operazioni sui file del NAS</string>
+  <string name="diag_nas_ops_state_guide">Gli spostamenti, le rinomine e le eliminazioni che hai avviato. Se un\'operazione si interrompe (app chiusa, NAS spento, Wi-Fi perso) riprende da dove era arrivata. Si fermano da Raccolte → Operazioni in corso, o con «Ferma» nella notifica.</string>
+  <string name="diag_nas_ops_locked_title">File aperti sul PC</string>
+  <string name="diag_nas_ops_locked_guide">Alcuni file sono aperti da un programma sul PC: l\'operazione li riprova da sola, con attese sempre più lunghe, fino a 24 ore. Chiudi il programma sul PC per farla continuare subito.</string>
+  <string name="diag_nas_ops_failed_title">Elementi non spostati o non eliminati</string>
+  <string name="diag_nas_ops_failed_guide">Alcuni elementi si sono fermati: il file era cambiato o già spostato da un altro dispositivo, il nome non era valido, mancava spazio o il permesso. Nessun file è andato perso: i dettagli sono in Raccolte → Operazioni in corso.</string>
+  <string name="diag_nas_trash_state_title">Cestino del NAS di questo telefono</string>
+  <string name="diag_nas_trash_state_guide">I file che hai eliminato da qui restano nel cestino del NAS per 30 giorni (ora del NAS), poi questo telefono li elimina. Si ripristinano da Raccolte → Eliminati di recente del NAS.</string>
+  <string name="diag_nas_trash_purge_title">Pulizia del cestino del NAS</string>
+  <string name="diag_nas_trash_purge_guide">L\'ultima pulizia dei file scaduti. Elimina solo ciò che questo telefono ha messo nel cestino e che è rimasto uguale; si ferma se l\'ora del NAS salta, se un\'area è ferma per cambiamenti anomali o se le scritture sono ferme.</string>
+  <string name="diag_nas_index_maintenance_title">Manutenzione dell\'indice sul NAS</string>
+  <string name="diag_nas_index_maintenance_guide">Una volta al giorno l\'app riordina l\'indice che ha pubblicato e toglie i suoi file superati. Non tocca mai le foto e i video.</string>
+  <string name="diag_nas_personal_state_title">Preferiti e nascosti fra i tuoi dispositivi</string>
+  <string name="diag_nas_personal_state_guide">Preferiti, nascosti e impostazioni personali viaggiano fra i dispositivi del tuo account, nella tua area privata del NAS. Sulle aree vere restano sul telefono finché la pubblicazione è limitata alle aree di prova.</string>
+  <string name="diag_nas_personal_rejected_title">Dati personali scartati</string>
+  <string name="diag_nas_personal_rejected_guide">Alcune voci non vengono da un dispositivo approvato del tuo account, hanno un\'ora nel futuro o un tipo non ancora previsto: l\'app le ignora. Se il numero cresce, controlla i dispositivi in Impostazioni.</string>
+</resources>

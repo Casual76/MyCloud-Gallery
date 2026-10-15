@@ -52,6 +52,14 @@ class AppNotifications(context: Context) {
         lockscreenVisibility = Notification.VISIBILITY_PRIVATE
       },
     )
+    // Fase 4B (D29): l'avanzamento delle operazioni lunghe sul NAS (UIDT), silenzioso.
+    manager.createNotificationChannel(
+      NotificationChannel(CHANNEL_NAS_OPS, app.getString(R.string.channel_nas_ops_name), NotificationManager.IMPORTANCE_LOW).apply {
+        description = app.getString(R.string.channel_nas_ops_description)
+        lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+        setShowBadge(false)
+      },
+    )
   }
 
   /** Si possono mostrare notifiche? (permesso concesso e notifiche dell'app non spente) */
@@ -170,9 +178,13 @@ class AppNotifications(context: Context) {
   companion object {
     const val CHANNEL_APPROVALS = "approvals"
     const val CHANNEL_NAS = "nas"
+    const val CHANNEL_NAS_OPS = "nas-ops"
     const val ID_NEW_DEVICE = 1001
     const val ID_PASSWORD = 1002
     const val ID_DAILY_SUMMARY = 1003
+
+    /** L'avanzamento delle operazioni sul NAS (UIDT, Fase 4B): una notifica sola, tolta alla fine del lavoro. */
+    const val ID_NAS_OPS = 1004
     private const val REQUEST_OPEN_APP = 0
     private const val TAG = "Notifications"
   }

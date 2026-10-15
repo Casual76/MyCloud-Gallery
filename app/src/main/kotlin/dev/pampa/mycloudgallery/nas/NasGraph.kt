@@ -37,6 +37,10 @@ import dev.pampa.mycloudgallery.core.index.publish.IndexIdentity
 import dev.pampa.mycloudgallery.core.index.publish.IndexWriteRules
 import dev.pampa.mycloudgallery.core.index.publish.NasRemoteIndex
 import dev.pampa.mycloudgallery.core.index.publish.OutboxIndexPublisher
+import dev.pampa.mycloudgallery.core.index.publish.ShareLocks
+import dev.pampa.mycloudgallery.core.nasops.contract.OpsGate
+import dev.pampa.mycloudgallery.work.NasOpsJobs
+import dev.pampa.mycloudgallery.feature.nas.R as NasScreensR
 import dev.pampa.mycloudgallery.core.index.quality.ReplicaQualityController
 import dev.pampa.mycloudgallery.core.index.replica.LocalReplica
 import dev.pampa.mycloudgallery.core.index.replica.ReplicaProvisionalThumbnails
@@ -150,6 +154,12 @@ class NasGraph(
   private val onReplicaChanged: () -> Unit = {},
   /** L'app e' in primo piano: solo allora si decodificano gli originali come contenuto visibile (D17). */
   private val foreground: () -> Boolean = { true },
+  /** Fase 4B (P16): i lavori che l'azzeramento ferma e aspetta (`GalleryGraph.runIfActive`). */
+  private val work: ActiveWork = ActiveWork.DIRECT,
+  /** Fase 4B (P16): il lavoro delle operazioni lunghe (UIDT) e della ripresa dal diario. */
+  private val opsJobs: NasOpsJobs = NasOpsJobs.NONE,
+  /** Fase 4B (P16): un'operazione sui file si e' chiusa (la Libreria va riverificata). */
+  private val onOperationsClosed: () -> Unit = {},
 ) {
 
   val enabled: Boolean get() = inputs.flags.nasLibrary
@@ -222,10 +232,16 @@ class NasGraph(
   /** L'interruttore delle copertine, per le Impostazioni. */
   val albumCovers: StateFlow<Boolean> get() = covers.flow
 
-  /** Vale dalla prossima verifica: le cartelle di musica si rileggono con la scansione seguente (E-N14). */
+  /**
+   * Vale dalla prossima verifica: le cartelle di musica si rileggono con la scansione seguente (E-N14). Dalla 4B e' un'impostazione
+   * personale sincronizzata fra i dispositivi dell'account (Q9): l'interruttore locale resta come specchio (e per prima del NAS).
+   */
   var showAlbumCovers: Boolean
     get() = covers.on
-    set(value) = covers.set(value)
+    set(value) {
+      covers.set(value)
+      organizer.setShowAlbumCovers(value)
+    }
 
   /** "Anteprime del NAS" nelle Impostazioni (feature-settings, `PreviewQualitySettings`). */
   val previewQuality: NasPreviewQuality by lazy { NasPreviewQuality(this, scope) }
@@ -339,6 +355,39 @@ class NasGraph(
   /** Le share congelate adesso (D10), per chiave: Libreria, Diagnostica, riepilogo giornaliero. */
   val frozen: StateFlow<Map<String, Freeze>> = frozenShares.asStateFlow()
 
+  /**
+   * Il cancello delle operazioni sui file (4B, §2.7): emergenza, congelamento della share, salto dell'ora. Le operazioni dell'utente si
+   * fermano con i primi due; le funzioni a scadenza (pulizie, compattazione) anche con il terzo (`GateStatus.blocksScheduled`).
+   */
+  val opsGate: OpsGate = OpsGate { share ->
+    NasOpsGates.statusOf(
+      emergency = emergency.stopped,
+      frozen = frozenShares.value.containsKey(share.lowercase(Locale.ROOT)),
+      clockJump = clockGuard.blocked,
+    )
+  }
+
+  /** Organizzare il NAS (Fase 4B, P16): operazioni, cestino, spazio, cartelle, manutenzione dell'indice, dati personali. */
+  val organizer: NasOrganizer = NasOrganizer(
+    scope = scope,
+    database = database,
+    inputs = inputs,
+    noBackup = noBackup,
+    catalogProvider = catalogProvider,
+    monotonicMs = monotonicMs,
+    gate = opsGate,
+    clockBlocked = { clockGuard.blocked },
+    work = work,
+    jobs = opsJobs,
+    foreground = foreground,
+    onOperationsClosed = onOperationsClosed,
+    areaLabel = { area ->
+      context.getString(if (area == NasArea.PRIVATE) NasScreensR.string.nas_area_private else NasScreensR.string.nas_area_common)
+    },
+    localCovers = { covers.on },
+    mirrorCovers = { on -> if (covers.on != on) covers.set(on) },
+  )
+
   private val composer = LibraryNasStatusComposer { monotonicMs() }
 
   /** Il piede della Libreria (§1.5, `LibraryTabState.nas`): cosa dire e quando, mai l'aspetto. */
@@ -449,6 +498,8 @@ class NasGraph(
     )
     val identity = IndexIdentity(signer, user) { inputs.registry() }
     val rules = IndexWriteRules(inputs.flags, writeGate)
+    // Un lucchetto per share condiviso dalla pubblicazione e dalla compattazione (4B): mai due teste proprie scritte insieme.
+    val locks = ShareLocks()
     val publisher = OutboxIndexPublisher(
       identity = identity,
       clock = inputs.nasClock,
@@ -458,6 +509,7 @@ class NasGraph(
       catalog = CatalogShareFiles({ catalog }, { account }),
       rules = rules,
       sink = replica,
+      locks = locks,
     )
     val workSource = CatalogWorkSource({ catalog }, { account }, records, { attempts.gaveUp(it) }, monotonicMs)
     val workUnits = LeasedWorkUnits(
@@ -510,13 +562,26 @@ class NasGraph(
     if (stopped.get()) return@withLock false
     runtimeFlow.value = rt
     watchers = scope.launch { watchFreezes(rt) }
+    // Fase 4B (P16): operazioni, cestino, spazio, cartelle, manutenzione e dati personali. Se non parte, la Libreria del NAS resta.
+    try {
+      organizer.attach(rt, user, identity, rules, remote, publishStore, replicaStore, locks, catalog, CatalogKnownHashes(locations))
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      GalleryLog.w(TAG) { "organizzazione del NAS non avviata: ${e.javaClass.simpleName}" }
+    }
     scope.launch { runCatching { (phoneWriter as? dev.pampa.mycloudgallery.core.mediastore.write.MediaStorePhoneMediaWriter)?.purgeOrphans() } }
     true
   }
 
   /** Le esclusioni di un'area (D11): quelle firmate dell'area comune; le cartelle di sistema le esclude sempre lo scanner. */
   private fun settingsFor(area: NasShareArea): ScanSettings = ScanSettings(
-    excluded = if (area.area == NasArea.COMMON) inputs.commonExclusions().mapNotNull { runCatching { SharePath.parseMediaPath(it) }.getOrNull() } else emptyList(),
+    // Area comune: la configurazione firmata (D11). Area privata: l'impostazione personale sincronizzata (4B, E-N15, Q9).
+    excluded = if (area.area == NasArea.COMMON) {
+      inputs.commonExclusions().mapNotNull { runCatching { SharePath.parseMediaPath(it) }.getOrNull() }
+    } else {
+      organizer.privateExclusions()
+    },
     showAlbumCovers = showAlbumCovers,
     detectionByteCap = detectionCap,
   )
@@ -536,6 +601,8 @@ class NasGraph(
    */
   fun stop() {
     stopped.set(true)
+    // 4B: niente piu' operazioni ne' lavori in coda; quelle in corso le ferma la galleria (sono figlie del suo scope).
+    organizer.stop()
     watchers?.cancel()
     runtimeFlow.value = null
     frozenShares.value = emptyMap()
@@ -562,6 +629,8 @@ class NasGraph(
     lastScan.value = reports
     lastScanAtMs = monotonicMs()
     rt.workSource.invalidate()
+    // 4B (§2.9): le voci personali per media appena entrati nel catalogo si proiettano adesso.
+    organizer.reproject()
     reports
   }
 
@@ -590,7 +659,11 @@ class NasGraph(
     val report = rt.sync.sync(SyncScope(rt.areas.map { it.share }.toSet(), rt.quality.syncClasses(), visibleOnly), budget)
     runCatching { rt.quality.converge() }
     rt.workSource.invalidate()
-    if (report.segmentsDownloaded > 0 || report.recordsApplied > 0) onReplicaChanged()
+    if (report.segmentsDownloaded > 0 || report.recordsApplied > 0) {
+      onReplicaChanged()
+      // 4B (§2.9): identita' adottate dalla replica (D7) possono sbloccare voci personali in attesa.
+      organizer.reproject()
+    }
     report
   }
 

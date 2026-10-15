@@ -10,19 +10,13 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBackIos
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -54,17 +48,14 @@ import dev.antigravity.fluidengine.ui.fluid.glassSurface
 import dev.antigravity.fluidengine.ui.fluid.rememberGlassBackdrop
 import dev.pampa.mycloudgallery.core.designsystem.design.ActionBarHeight
 import dev.pampa.mycloudgallery.core.designsystem.design.ContentRange
-import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeCapsule
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeDefaults
-import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeIconButton
-import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeLabel
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeStyle
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeStyles
-import dev.pampa.mycloudgallery.core.designsystem.design.GalleryEdgeScrim
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryTopChrome
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryTopEdgeScrim
+import dev.pampa.mycloudgallery.core.designsystem.design.galleryTopChromeHeight
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryLegibility
 import dev.pampa.mycloudgallery.core.designsystem.design.LocalGalleryChromeInk
-import dev.pampa.mycloudgallery.core.designsystem.design.chromeRowHeight
-import dev.pampa.mycloudgallery.core.designsystem.design.galleryChromeTag
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.feature.nas.NasDimens
 import dev.pampa.mycloudgallery.feature.nas.R
@@ -74,11 +65,11 @@ import dev.pampa.mycloudgallery.feature.nas.R
 // dei comandi, tutti pezzi di vetro adattivo su una sfumatura del colore della pagina; in basso, nel posto della pillola, la barra
 // delle azioni; sotto, la pagina che scorre. Un solo fondale di vetro per pagina: lo registra [NasPage].
 //
-// Perche' non si riusa `GridTopChrome` di feature-library: e' `internal` (e i feature non si conoscono). Le funzioni pubbliche di
-// `core-designsystem/design` bastano a rifarlo in poche righe; la proposta per il filone grafico e' portarlo nel design system.
+// La riga in alto e la sfumatura sono quelle delle griglie (`GalleryTopChrome` e `GalleryTopEdgeScrim` di core-designsystem, dalla
+// Fase 4B P16: prima erano una copia, perche' `GridTopChrome` di feature-library era `internal`).
 //
 // Il contenuto che passa sotto la chrome qui e' pagina e testo (non foto con ThumbHash): si garantisce il caso peggiore assoluto
-// (nero e bianco pieni) sotto la sfumatura, come fanno gli Eliminati di recente e i Nascosti (`grid = null`).
+// (nero e bianco pieni) sotto la sfumatura, come fanno gli Eliminati di recente e i Nascosti (contenuto nullo).
 
 /** Che cosa dice l'etichetta in alto: il titolo e, sotto, il luogo o il riepilogo. */
 @Immutable
@@ -120,21 +111,24 @@ internal fun NasPage(
   } else {
     maxOf(hostPadding.calculateBottomPadding(), WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding())
   }
-  val style = rememberNasChromeStyle(veil = nasTopVeil())
   val barStyle = rememberNasChromeStyle(veil = null)
 
   Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
     Box(modifier = Modifier.fillMaxSize().glassBackdropSource(backdrop)) {
       content(NasInsets(top = topChrome, bottom = bottomInset))
-      NasTopEdge(topChrome, Modifier.align(Alignment.TopCenter))
+      GalleryTopEdgeScrim(topChrome, Modifier.align(Alignment.TopCenter))
     }
-    NasTopChrome(
-      label = label,
-      style = style,
+    GalleryTopChrome(
+      content = null,
       backdrop = backdrop,
+      title = label.title,
+      subtitle = label.subtitle,
+      topChrome = topChrome,
       modifier = Modifier.align(Alignment.TopStart),
       onBack = onBack,
-      commands = commands,
+      backDescription = stringResource(R.string.nas_back),
+      showCommands = commands != null,
+      commands = commands ?: {},
     )
     if (bottomBar != null) {
       Box(
@@ -145,51 +139,6 @@ internal fun NasPage(
       ) {
         bottomBar(backdrop, barStyle)
       }
-    }
-  }
-}
-
-/** La riga di chrome in alto: indietro, etichetta, comandi. Ogni pezzo e' vetro adattivo con la stessa pellicola. */
-@Composable
-internal fun NasTopChrome(
-  label: NasLabel,
-  style: GalleryChromeStyle,
-  backdrop: GlassBackdropState,
-  modifier: Modifier = Modifier,
-  onBack: (() -> Unit)? = null,
-  commands: (@Composable RowScope.() -> Unit)? = null,
-) {
-  val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-  Row(
-    modifier = modifier
-      .fillMaxWidth()
-      .padding(top = statusBar)
-      .height(chromeRowHeight())
-      .padding(horizontal = GalleryChromeDefaults.EdgeMargin),
-    verticalAlignment = Alignment.CenterVertically,
-  ) {
-    if (onBack != null) {
-      GalleryChromeCapsule(style = style, backdrop = backdrop, modifier = Modifier.galleryChromeTag("indietro")) {
-        GalleryChromeIconButton(
-          icon = Icons.AutoMirrored.Rounded.ArrowBackIos,
-          contentDescription = stringResource(R.string.nas_back),
-          onClick = onBack,
-        )
-      }
-      Spacer(Modifier.width(GalleryChromeDefaults.Gap))
-    }
-    Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-      GalleryChromeLabel(
-        title = label.title,
-        subtitle = label.subtitle,
-        style = style,
-        backdrop = backdrop,
-        modifier = Modifier.galleryChromeTag("titolo"),
-      )
-    }
-    if (commands != null) {
-      Spacer(Modifier.width(GalleryChromeDefaults.Gap))
-      GalleryChromeCapsule(style = style, backdrop = backdrop, modifier = Modifier.galleryChromeTag("comandi"), content = commands)
     }
   }
 }
@@ -218,13 +167,9 @@ internal fun nasChromeChoice(
   return GalleryLegibility.adapt(seen, palette, previousDark = !darkTheme)
 }
 
-/** Il velo della sfumatura in alto alla quota del bordo basso dei pezzi di chrome: il piu' leggero, quindi il piu' prudente. */
-@Composable
-private fun nasTopVeil(): Color = MaterialTheme.colorScheme.background.copy(alpha = EdgeRowAlpha)
-
 /** L'altezza della chrome in alto, barra di stato compresa: la linea sotto cui comincia il contenuto. */
 @Composable
-internal fun nasTopChromeHeight(): Dp = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + chromeRowHeight()
+internal fun nasTopChromeHeight(): Dp = galleryTopChromeHeight()
 
 /**
  * Dove sta la barra delle azioni in fondo: nel posto della pillola se la pagina non ne ha una sotto (la rotta a schermo intero
@@ -237,22 +182,6 @@ internal fun nasActionSlot(hostPadding: PaddingValues): Dp {
   return if (pill > NasDimens.None) navigation + pill + GalleryChromeDefaults.Gap else navigation + FluidFloatingTabBarDefaults.BottomMargin
 }
 
-/** La sfumatura del colore della pagina in alto, da posare **dentro** il fondale perche' il vetro sopra la veda. */
-@Composable
-private fun NasTopEdge(topChrome: Dp, modifier: Modifier = Modifier) {
-  val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-  val stops = nasTopEdgeStops(statusBar, topChrome)
-  GalleryEdgeScrim(color = MaterialTheme.colorScheme.background, stops = stops, modifier = modifier.fillMaxWidth().height(stops.last().first))
-}
-
-/** Le tappe della sfumatura: piena sotto la barra di stato, leggera sotto i pezzi di chrome, poi a zero (le stesse delle griglie). */
-internal fun nasTopEdgeStops(statusBar: Dp, topChrome: Dp): List<Pair<Dp, Float>> =
-  listOf(NasDimens.None to EdgeTopAlpha, statusBar to EdgeStatusAlpha, topChrome to EdgeRowAlpha, topChrome + NasDimens.TopEdgeFade to 0f)
-
-// Le opacita' sono quelle di GridPageChrome (G2): densa solo dove ci sono le icone di sistema, leggera sotto i pezzi.
-private const val EdgeTopAlpha = 0.85f
-private const val EdgeStatusAlpha = 0.55f
-private const val EdgeRowAlpha = 0.15f
 private const val DisabledAlpha = 0.38f
 
 /**

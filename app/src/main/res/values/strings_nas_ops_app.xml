@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fase 4B (P16): le operazioni sui file del NAS fuori dalla schermata (UIDT). Solo numeri: mai nomi di share, cartelle o file. -->
+<resources>
+  <string name="channel_nas_ops_name">Operazioni sul NAS</string>
+  <string name="channel_nas_ops_description">L\'avanzamento di spostamenti ed eliminazioni sul NAS avviati da te, con «Ferma».</string>
+
+  <string name="notify_nas_ops_title">Operazioni sul NAS</string>
+  <string name="notify_nas_ops_starting">Sto riprendendo le operazioni sul NAS…</string>
+  <plurals name="notify_nas_ops_progress">
+    <item quantity="one">%1$s di %2$s elemento</item>
+    <item quantity="other">%1$s di %2$s elementi</item>
+  </plurals>
+  <plurals name="notify_nas_ops_locked">
+    <item quantity="one">In attesa: un file è aperto sul PC</item>
+    <item quantity="other">In attesa: %1$s file sono aperti sul PC</item>
+  </plurals>
+  <string name="notify_nas_ops_paused">In pausa: il NAS non risponde o le scritture sono ferme</string>
+  <string name="notify_nas_ops_stopping">Mi fermo prima del prossimo elemento…</string>
+  <string name="notify_nas_ops_stop">Ferma</string>
+</resources>

@@ -51,6 +51,10 @@ object ExportKeys {
     "albumCovers", "busy", "bytesRead", "resumed", "stoppedBy", "moved", "changed", "excludedFolders", "blockedFolders",
     "identityRefused", "units", "prepared", "handedOver", "records", "blobs", "contended", "busyLeases", "unleased",
     "lost", "clockJump", "headsRead", "headsApplied", "segmentsDownloaded", "segmentsMissing", "recordsApplied",
+    // Organizzare il NAS (Fase 4B: NasOpsDiagnostics di :app). Solo conteggi, byte ed enumerati: mai share, cartelle, file, account,
+    // id di operazioni, di media o di dispositivi. I motivi per codice usano la famiglia `reason.` qui sotto.
+    "opsActive", "opsRunning", "opsPaused", "opsLocked", "opsClosed", "expired", "purged", "alreadyGone", "deferred", "compacted",
+    "skipped", "removed", "published", "applied", "stillUndated", "unresolved", "rejectedSegments", "rejectedHeads",
   )
 
   /**

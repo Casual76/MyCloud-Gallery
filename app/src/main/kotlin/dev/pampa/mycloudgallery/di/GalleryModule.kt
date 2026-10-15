@@ -38,6 +38,20 @@ import dev.pampa.mycloudgallery.gallery.PhoneLibrary
 import dev.pampa.mycloudgallery.graph.AppGraph
 import dev.pampa.mycloudgallery.graph.GalleryStopper
 import dev.pampa.mycloudgallery.nas.NasLibraryDiagnostics
+import dev.pampa.mycloudgallery.nas.NasOpsDiagnostics
+import dev.pampa.mycloudgallery.core.nasops.contract.NasFolders
+import dev.pampa.mycloudgallery.core.nasops.contract.NasOperations
+import dev.pampa.mycloudgallery.core.nasops.contract.NasSpace
+import dev.pampa.mycloudgallery.core.nasops.contract.NasTrash
+import dev.pampa.mycloudgallery.core.nasops.contract.OpClocks
+import dev.pampa.mycloudgallery.core.nasops.noop.NoNasFolders
+import dev.pampa.mycloudgallery.core.nasops.noop.NoNasOperations
+import dev.pampa.mycloudgallery.core.nasops.noop.NoNasSpace
+import dev.pampa.mycloudgallery.core.nasops.noop.NoNasTrash
+import dev.pampa.mycloudgallery.feature.nas.contract.NasAreas
+import dev.pampa.mycloudgallery.work.JobSchedulerNasOpsJobs
+import dev.pampa.mycloudgallery.work.NasOpsJobs
+import dev.pampa.mycloudgallery.work.NasWorkScheduling
 import dev.pampa.mycloudgallery.feature.settings.quality.PreviewLevel
 import dev.pampa.mycloudgallery.feature.settings.quality.PreviewQualitySettings
 import dev.pampa.mycloudgallery.feature.settings.quality.PreviewQualityState
@@ -88,6 +102,9 @@ object GalleryModule {
       nas = graph.nasInputs.takeIf { measurement == null },
       // P10, docs/bench/README.md §6-bis: le miniature dei media solo-NAS del dataset vengono dalla replica sintetica.
       benchReplica = measurement?.replicaBlobs,
+      // Fase 4B (P16): il lavoro delle operazioni lunghe (UIDT) e la verifica del NAS dopo un'operazione finita.
+      nasJobs = if (measurement == null) JobSchedulerNasOpsJobs(context) else NasOpsJobs.NONE,
+      onNasOperationsClosed = { if (measurement == null) NasWorkScheduling.scanNow(context) },
     )
     return GalleryGraph(
       context = context,
@@ -156,6 +173,37 @@ object GalleryModule {
   @IntoSet
   fun indexDiagnostics(gallery: GalleryGraph): DiagnosticsContributor =
     gallery.nas?.let { IndexDiagnostics(it.counters, it.qualityControl, DiagCatalog::titleOf) } ?: NoNasDiagnostics
+
+  // --- Fase 4B (P16): organizzare il NAS. I ViewModel di feature-nas vedono solo i contratti; senza NAS i null-object (falliscono
+  // chiusi: niente si pianifica, niente parte). -----------------------------------------------------------------------------
+  @Provides fun nasOperations(gallery: GalleryGraph): NasOperations = gallery.nas?.organizer?.operations ?: NoNasOperations
+
+  @Provides fun nasTrash(gallery: GalleryGraph): NasTrash = gallery.nas?.organizer?.trash ?: NoNasTrash
+
+  @Provides fun nasSpace(gallery: GalleryGraph): NasSpace = gallery.nas?.organizer?.space ?: NoNasSpace
+
+  @Provides fun nasFolders(gallery: GalleryGraph): NasFolders = gallery.nas?.organizer?.folders ?: NoNasFolders
+
+  @Provides fun opClocks(gallery: GalleryGraph): OpClocks = gallery.nas?.organizer?.clocks ?: MonotonicOnlyClocks(gallery.parts.monotonicMs)
+
+  @Provides fun nasAreas(gallery: GalleryGraph): NasAreas = gallery.nas?.organizer?.areas ?: NoNasAreas
+
+  @Provides
+  @IntoSet
+  fun nasOpsDiagnostics(gallery: GalleryGraph): DiagnosticsContributor =
+    gallery.nas?.let { NasOpsDiagnostics(it) } ?: NoNasDiagnostics
+}
+
+/** Senza NAS: l'orologio monotono (le conferme), nessuna ora del NAS (niente si scrive). */
+private class MonotonicOnlyClocks(private val monotonic: () -> Long) : OpClocks {
+  override fun monotonicMs(): Long = monotonic()
+
+  override fun nasNowMs(): Long? = null
+}
+
+/** Senza NAS: nessuna area. */
+private object NoNasAreas : NasAreas {
+  override val areas: StateFlow<List<dev.pampa.mycloudgallery.feature.nas.contract.NasArea>> = MutableStateFlow(emptyList())
 }
 
 /** Senza il NAS nella Libreria (varianti di misura): la qualita' non c'e'. */

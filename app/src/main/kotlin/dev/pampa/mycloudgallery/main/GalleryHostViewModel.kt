@@ -11,8 +11,15 @@ import dev.pampa.mycloudgallery.feature.viewer.ViewerServices
 import dev.pampa.mycloudgallery.gallery.AppLibraryStates
 import dev.pampa.mycloudgallery.gallery.GalleryGraph
 import javax.inject.Inject
+import dev.pampa.mycloudgallery.core.model.Location
+import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.model.NasPath
+import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
@@ -39,6 +46,25 @@ class GalleryHostViewModel @Inject constructor(
   /** "Ferma le scritture sul NAS" / "Riattiva le scritture": l'emergenza dell'utente (D31 resta comunque). */
   fun setNasWritesStopped(stopped: Boolean) {
     gallery.nas?.emergency?.set(stopped)
+  }
+
+  // --- Fase 4B (P16): organizzare il NAS ----------------------------------------------------------------------------------
+
+  /** Il NAS e' collegato (account, aree): solo allora le Raccolte mostrano il gruppo "Sul NAS". */
+  val nasConfigured: StateFlow<Boolean> = gallery.nas?.organizer?.let { organizer ->
+    organizer.partsState.map { it != null }.stateIn(viewModelScope, SharingStarted.Eagerly, organizer.parts != null)
+  } ?: MutableStateFlow(false)
+
+  /**
+   * Il media del catalogo dietro un file toccato in Cartelle NAS ([share], [path] vengono dall'elenco che l'utente sta guardando):
+   * null se il catalogo non lo conosce (non ancora scansionato, escluso, copertina). Solo per aprirlo nel viewer della Libreria.
+   */
+  suspend fun mediaIdOfNasFile(share: String, path: SharePath): MediaId? {
+    val account = gallery.nas?.organizer?.parts?.account ?: return null
+    val catalog = gallery.coreIfReady()?.catalog ?: return null
+    val nasPath = runCatching { NasPath.of(path.value) }.getOrNull() ?: return null
+    val info = catalog.nasLocationAt(Location.Nas(account, share, nasPath)) ?: return null
+    return catalog.mediaIdOfLocation(info.locationId)
   }
 
   /** Le aree congelate adesso (D10): per il foglio "Ho controllato, continua". */

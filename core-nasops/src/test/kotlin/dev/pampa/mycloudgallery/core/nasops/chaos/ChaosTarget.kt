@@ -5,11 +5,8 @@ import dev.pampa.mycloudgallery.core.nas.ops.NasFileOps
 import dev.pampa.mycloudgallery.core.nas.testing.InMemoryNasMedia
 import dev.pampa.mycloudgallery.core.nas.testing.NasContent
 import dev.pampa.mycloudgallery.core.nas.testing.ServerCopyMode
-import dev.pampa.mycloudgallery.core.nasops.contract.ItemFlow
 import dev.pampa.mycloudgallery.core.nasops.contract.NasOperations
-import dev.pampa.mycloudgallery.core.nasops.contract.OpErrorCode
 import dev.pampa.mycloudgallery.core.nasops.contract.OpItemRecord
-import dev.pampa.mycloudgallery.core.nasops.contract.OpItemState
 import dev.pampa.mycloudgallery.core.nasops.contract.NasTrash
 import dev.pampa.mycloudgallery.core.nasops.contract.OpClocks
 import dev.pampa.mycloudgallery.core.nasops.contract.OpsGate
@@ -138,31 +135,8 @@ interface ChaosStackFactory {
 object FakeChaosStackFactory : ChaosStackFactory {
   override val name: String = "operazioni fake di P0-B (InMemoryNasOperations)"
 
-  override val unfaultable: Set<Primitive> = setOf(Primitive.READ)
-
-  override val knownDefects: List<String> = listOf(
-    "D1. InMemoryNasOperations.fallbackCopy non cattura NasIoException: una caduta della connessione a meta' di una lettura a flusso (ripiego dal " +
-      "telefono, E-D12) esce da start/resumeAll come eccezione invece di mettere l'operazione in pausa. Il banco non colpisce le letture a flusso " +
-      "con questo stack.",
-    "D2. InMemoryNasOperations.cancel ignora l'esito di deleteOwnTemp: se la cancellazione del temporaneo fallisce (connessione, socket) l'elemento " +
-      "risulta ANNULLATO e il temporaneo resta sul NAS senza che nessun elemento del diario lo citi (invariante 5). Il banco non tocca \"Ferma\" " +
-      "con elementi di spostamento tra share in COPYING, COPIED o VERIFIED.",
-    "D4. InMemoryNasOperations.publishedByThisOp tratta un errore di lettura passeggero (connessione, socket) come \"non pubblicato\": dopo una " +
-      "risposta persa di publishTemp, se la verifica della destinazione trova il NAS irraggiungibile l'elemento FALLISCE (unexpected) con la copia " +
-      "gia' pubblicata e la sorgente mai finita nel cestino: due copie visibili e operazione fallita. Il banco ferma il giro quando lo vede e lo conta " +
-      "(difetto 'riprodotto N volte').",
-    "D3. OpStateMachine.cancellable ammette VERIFIED, ma lo stato VERIFIED non prova che la pubblicazione non sia avvenuta (PUBLISHED si scrive " +
-      "DOPO publishTemp): con la risposta di publishTemp persa, \"Ferma\" annulla un elemento la cui copia e' gia' visibile mentre la sorgente non e' " +
-      "mai andata nel cestino: due copie visibili (invariante 2) e operazione ANNULLATA. Stesso perimetro di D2 per il banco.",
-  )
-
-  override fun cancelIsSafe(openItems: List<OpItemRecord>): Boolean =
-    openItems.none { it.flow == ItemFlow.MOVE_ACROSS_SHARES && it.state in UNSAFE_TO_CANCEL }
-
-  override fun knownDefectHit(items: List<OpItemRecord>): String? =
-    if (items.any { it.flow == ItemFlow.MOVE_ACROSS_SHARES && it.state == OpItemState.FAILED && it.errorCode == OpErrorCode.UNEXPECTED && it.sha256 != null }) "D4" else null
-
-  private val UNSAFE_TO_CANCEL = setOf(OpItemState.COPYING, OpItemState.COPIED, OpItemState.VERIFIED)
+  // P16: i difetti D1-D4 del fake (docs/prova-500.md §6) sono stati corretti da P12 (InMemoryNasOperations) e non si riproducono piu'
+  // (ChaosKnownDefectsTest): niente piu' esclusioni. Il banco colpisce anche le letture a flusso e tocca "Ferma" in ogni passo.
 
   override fun newStore(world: ChaosWorld): OpsStore = InMemoryOpsStore()
 

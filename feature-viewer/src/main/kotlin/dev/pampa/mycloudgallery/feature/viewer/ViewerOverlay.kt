@@ -94,6 +94,11 @@ import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.security.screen.SecureScreen
 import dev.pampa.mycloudgallery.feature.viewer.details.ViewerFormat
 import dev.pampa.mycloudgallery.feature.viewer.download.DownloadFailure
+import dev.pampa.mycloudgallery.feature.viewer.menu.NasActionCapabilities
+import dev.pampa.mycloudgallery.feature.viewer.menu.NasActionHandlers
+import dev.pampa.mycloudgallery.feature.viewer.menu.NasActionSheets
+import dev.pampa.mycloudgallery.feature.viewer.menu.NasActionsController
+import dev.pampa.mycloudgallery.feature.viewer.menu.nasMenuEntries
 import dev.pampa.mycloudgallery.feature.viewer.download.DownloadState
 import dev.pampa.mycloudgallery.feature.viewer.gesture.viewerVerticalDrag
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoInputs
@@ -676,8 +681,37 @@ private fun ViewerOverlays(
     onInfo = controller::toggleInfo,
     onDownload = controller::download,
   )
-  val menu = viewerMenuEntries(resources, capabilities, isFavorite, request.secure, handlers)
+  // Fase 4B (P14, P16): "Sposta", "Rinomina", "Elimina…" per il media del NAS di adesso. Il controller vive quanto il viewer: se si
+  // chiude a meta' di un foglio non resta niente di avviato (un'operazione parte solo dal tocco di conferma del foglio).
+  val nasController = services.nasActions?.let { actions -> remember(actions) { NasActionsController(actions, scope) } }
+  if (nasController != null) LaunchedEffect(nasController, currentRef) { nasController.bind(currentRef) }
+  val nasTarget = nasController?.target?.collectAsState()?.value
+  val nasEntries = if (nasController != null) {
+    nasMenuEntries(
+      resources,
+      NasActionCapabilities.of(nasTarget),
+      NasActionHandlers(onMove = nasController::requestMove, onRename = nasController::requestRename, onDelete = nasController::requestDelete),
+    )
+  } else {
+    null
+  }
+  val menu = viewerMenuEntries(
+    resources,
+    capabilities,
+    isFavorite,
+    request.secure,
+    handlers,
+    nasActions = nasEntries?.actions.orEmpty(),
+    nasDelete = nasEntries?.delete.orEmpty(),
+  )
   val barActions = viewerBarActions(resources, capabilities, isFavorite, handlers)
+  val nasNotice = nasController?.notice?.collectAsState()?.value
+  if (nasController != null && nasNotice != null) {
+    LaunchedEffect(nasNotice) {
+      delay(MessageMillis)
+      nasController.dismissNotice()
+    }
+  }
 
   // Il video: la barra con play, tempo e scorrimento.
   val playerUi = playback.collectPlayerState()
@@ -784,6 +818,15 @@ private fun ViewerOverlays(
       ) {
         MessageNotice(message = message, backdrop = backdrop)
       }
+    } else if (nasNotice != null) {
+      Box(
+        Modifier
+          .align(Alignment.TopCenter)
+          .statusBarsPadding()
+          .padding(top = MessageTopInset),
+      ) {
+        NasNoticeView(notice = nasNotice, backdrop = backdrop)
+      }
     }
   }
 
@@ -849,6 +892,8 @@ private fun ViewerOverlays(
     onConfirm = { controller.confirmMaps(details?.location) },
     onCancel = { controller.sheet = null },
   )
+  // I fogli delle voci del NAS (P14): "Solo dal telefono" usa il cestino di sistema del viewer.
+  if (nasController != null) NasActionSheets(controller = nasController, onDeleteFromPhone = controller::confirmDelete)
 }
 
 /** Restringe di [end] pixel il lato destro: il chrome sta nella parte della foto, accanto alla colonna informazioni. */

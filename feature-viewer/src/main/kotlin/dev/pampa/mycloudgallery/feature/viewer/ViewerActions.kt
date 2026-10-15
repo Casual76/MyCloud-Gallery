@@ -76,6 +76,8 @@ internal class ViewerActionHandlers(
  * un'interruzione, l'unica distruttiva ("Elimina dal telefono"). I gruppi vuoti non lasciano interruzioni doppie.
  *
  * @param secure il viewer e' aperto dai Nascosti: la voce e' "Mostra nella Libreria", non "Nascondi".
+ * @param nasActions le voci "Sposta" e "Rinomina" di un media del NAS (Fase 4B): nel gruppo di Condividi, Copia e Informazioni.
+ * @param nasDelete la voce "Elimina…" di un media del NAS: in fondo, con l'altra voce che cancella.
  */
 internal fun viewerMenuEntries(
   resources: Resources,
@@ -83,6 +85,8 @@ internal fun viewerMenuEntries(
   isFavorite: Boolean,
   secure: Boolean,
   handlers: ViewerActionHandlers,
+  nasActions: List<GalleryMenuEntry> = emptyList(),
+  nasDelete: List<GalleryMenuEntry> = emptyList(),
 ): List<GalleryMenuEntry> {
   val groups = mutableListOf<List<GalleryMenuEntry>>()
   groups.add(buildList<GalleryMenuEntry> {
@@ -115,6 +119,7 @@ internal fun viewerMenuEntries(
     if (capabilities.download) {
       add(GalleryMenuEntry.Item(resources.getString(R.string.viewer_action_download), handlers.onDownload, Icons.Rounded.Download))
     }
+    addAll(nasActions)
     add(GalleryMenuEntry.Item(resources.getString(R.string.viewer_action_info), handlers.onInfo, Icons.Rounded.Info))
   })
   groups.add(buildList<GalleryMenuEntry> {
@@ -128,6 +133,7 @@ internal fun viewerMenuEntries(
         ),
       )
     }
+    addAll(nasDelete)
   })
   return groups.filter { it.isNotEmpty() }.flatMapIndexed { index, group ->
     if (index == 0) group else listOf(GalleryMenuEntry.GroupBreak) + group

@@ -332,6 +332,23 @@ fun GalleryChromeMenuAnchor(
   modifier: Modifier = Modifier,
   trigger: @Composable (open: () -> Unit) -> Unit,
 ) {
+  GalleryChromeMenuAnchor(paneTitle = paneTitle, modifier = modifier, entries = { entries }, trigger = trigger)
+}
+
+/**
+ * Come l'altro [GalleryChromeMenuAnchor], ma le voci si costruiscono **solo a menu aperto**: [entries] si chiama dentro il
+ * pop-up. Chi posa il menu non legge nella propria composizione lo stato che le voci mostrano (il livello scelto, il
+ * filtro, lo stile): un cambio di livello durante un pinch non ricompone il tasto e la capsula che lo contiene (misure
+ * sull'S25 del 15/10). Le azioni delle voci devono girare in uno scope di chi posa il menu, non del pop-up, che lascia la
+ * composizione alla chiusura.
+ */
+@Composable
+fun GalleryChromeMenuAnchor(
+  paneTitle: String,
+  modifier: Modifier = Modifier,
+  entries: @Composable () -> List<GalleryMenuEntry>,
+  trigger: @Composable (open: () -> Unit) -> Unit,
+) {
   var open by remember { mutableStateOf(false) }
   var bounds by remember { mutableStateOf<Rect?>(null) }
   val veil = menuVeil()
@@ -346,7 +363,7 @@ fun GalleryChromeMenuAnchor(
     // Il menu della vista e' lungo (i livelli, i filtri, lo stile, le Impostazioni; in debug le librerie di prova): se il
     // pop-up non ci sta, le voci scorrono invece di restare tagliate sotto il bordo (G2, visto sull'emulatore).
     Box(modifier = Modifier.background(veil).verticalScroll(rememberScrollState())) {
-      GalleryMenuPanel(entries = entries, onItemSelected = { open = false })
+      GalleryMenuPanel(entries = entries(), onItemSelected = { open = false })
     }
   }
 }

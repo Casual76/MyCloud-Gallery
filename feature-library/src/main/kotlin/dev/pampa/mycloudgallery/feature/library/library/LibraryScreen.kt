@@ -78,6 +78,7 @@ import dev.pampa.mycloudgallery.feature.library.grid.MediaGrid
 import dev.pampa.mycloudgallery.feature.library.grid.MediaGridSection
 import dev.pampa.mycloudgallery.feature.library.grid.rememberMediaGridSection
 import dev.pampa.mycloudgallery.feature.library.photoVideoSummary
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 // La Libreria, "vetro adattivo" (direzione C, G2: docs/grafica-progetto.md §4, §11, §12). La struttura:
@@ -130,7 +131,6 @@ internal fun LibraryScreen(
   val slotBottom = navBottom + FluidFloatingTabBarDefaults.BottomMargin
   val bottomPadding = maxOf(slotBottom + ActionBarHeight + GalleryChromeDefaults.Gap, contentPadding.calculateBottomPadding())
   val empty = grid.view.size == 0
-  val section = rememberMediaGridSection(grid, topChrome)
   val pillVeil = rememberPillVeil()
   val status: @Composable () -> Unit = { LibraryStatusBlock(nas = nas, statusFooter = statusFooter, onNasClick = onNasStatusClick) }
 
@@ -184,22 +184,15 @@ internal fun LibraryScreen(
       )
     }
 
-    val farFromToday by remember(grid) { derivedStateOf { grid.screensFromNewest() > TodayAfterScreens } }
-    GridTopChrome(
-      grid = grid,
+    LibraryTopChrome(
+      state = state,
       backdrop = backdrop,
-      label = libraryLabel(state, section),
       topChrome = topChrome,
-      modifier = Modifier.align(Alignment.TopStart),
       showCommands = !showPermission,
-    ) {
-      LibraryCommandsContent(
-        state = state,
-        showSelect = !empty,
-        showToday = farFromToday && !grid.selecting && !empty,
-        onOpenSettings = onOpenSettings,
-      )
-    }
+      empty = empty,
+      onOpenSettings = onOpenSettings,
+      modifier = Modifier.align(Alignment.TopStart),
+    )
 
     // Lo scrubber fra la chrome in alto e il posto della pillola: la maniglia non arriva mai sotto un altro controllo.
     if (!showPermission && !empty) {
@@ -223,6 +216,44 @@ internal fun LibraryScreen(
 
     LibraryDeleteSheet(visible = deleting, state = state, onDismiss = { deleting = false })
     LibraryHideGroupSheet(visible = hidingGroups, state = state, onDismiss = { hidingGroups = false })
+  }
+}
+
+/**
+ * La riga di chrome in alto della Libreria: l'etichetta con la sezione in vista e la capsula dei comandi.
+ *
+ * Sta in una funzione sua perche' **legge la sezione** sotto la riga, che cambia scorrendo e a ogni livello attraversato
+ * da un pinch: cosi' quei cambi ricompongono questa riga e basta, non tutta la Libreria (griglia, avvisi, scrubber, barra
+ * delle azioni, fogli). Sull'S25 (15/10, `docs/bench/misure-s25-2026-10-15.md`) i fotogrammi dei cambi di livello del
+ * pinch erano i piu' lunghi del thread principale anche per questo.
+ */
+@Composable
+private fun LibraryTopChrome(
+  state: LibraryTabState,
+  backdrop: GlassBackdropState,
+  topChrome: Dp,
+  showCommands: Boolean,
+  empty: Boolean,
+  onOpenSettings: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val grid = state.grid
+  val section = rememberMediaGridSection(grid, topChrome)
+  val farFromToday by remember(grid) { derivedStateOf { grid.screensFromNewest() > TodayAfterScreens } }
+  GridTopChrome(
+    grid = grid,
+    backdrop = backdrop,
+    label = libraryLabel(state, section),
+    topChrome = topChrome,
+    modifier = modifier,
+    showCommands = showCommands,
+  ) {
+    LibraryCommandsContent(
+      state = state,
+      showSelect = !empty,
+      showToday = farFromToday && !grid.selecting && !empty,
+      onOpenSettings = onOpenSettings,
+    )
   }
 }
 
@@ -274,20 +305,27 @@ private fun LibraryCommandsContent(state: LibraryTabState, showSelect: Boolean, 
   }
   val description = stringResource(R.string.library_view_menu)
   val filterActive = state.filter != LibraryFilter.ALL
-  GalleryChromeMenuAnchor(entries = libraryMenu(state, onOpenSettings), paneTitle = description, modifier = Modifier.galleryChromeTag("vista")) { open ->
+  val reducedMotion = LocalFluidMotionPolicy.current.reducedMotion
+  // Le voci si fanno solo a menu aperto (dentro il pop-up): qui non si legge il livello, quindi un pinch che attraversa i
+  // livelli non ricompone la capsula dei comandi. Le azioni girano nello scope della capsula, non in quello del pop-up,
+  // che lascia la composizione quando il menu si chiude (il salto di livello deve arrivare in fondo).
+  GalleryChromeMenuAnchor(
+    paneTitle = description,
+    modifier = Modifier.galleryChromeTag("vista"),
+    entries = { libraryMenu(state, onOpenSettings, scope, reducedMotion) },
+  ) { open ->
     GalleryChromeIconButton(icon = if (filterActive) Icons.Rounded.FilterAlt else Icons.Rounded.MoreHoriz, contentDescription = description, onClick = open)
   }
 }
 
 /**
  * Il menu della vista ("Vista", il nome che cercano anche gli scenari di misura): i livelli (scelta 4 dell'utente: nel
- * menu, non sempre in vista), il filtro (D16), lo stile (D4), in debug la Libreria sintetica, le Impostazioni.
+ * menu, non sempre in vista), il filtro (D16), lo stile (D4), in debug la Libreria sintetica, le Impostazioni. Si compone
+ * dentro il pop-up, a menu aperto; [scope] e' quello di chi posa il menu.
  */
 @Composable
-private fun libraryMenu(state: LibraryTabState, onOpenSettings: () -> Unit): List<GalleryMenuEntry> {
-  val scope = rememberCoroutineScope()
+private fun libraryMenu(state: LibraryTabState, onOpenSettings: () -> Unit, scope: CoroutineScope, reducedMotion: Boolean): List<GalleryMenuEntry> {
   val grid = state.grid
-  val reducedMotion = LocalFluidMotionPolicy.current.reducedMotion
   val labels = levelLabels()
   val levels = GridLevel.entries.map { level ->
     GalleryFilterOption(labels[level.ordinal], selected = level == grid.level) {

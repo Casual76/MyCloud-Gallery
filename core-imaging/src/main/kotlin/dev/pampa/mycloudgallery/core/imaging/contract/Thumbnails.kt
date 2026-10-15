@@ -176,4 +176,11 @@ sealed interface ThumbResult {
  */
 interface PlaceholderCache {
   fun image(h: ThumbHash): ImageBitmap
+
+  /**
+   * Vero se [image] si puo' chiamare anche da un thread di lavoro: la griglia allora decodifica in anticipo, fuori dal
+   * thread principale, i segnaposto delle celle attorno a dove si e' (misure sull'S25 del 15/10). Falso di serie: una
+   * cache che non lo dichiara si usa solo dalla composizione.
+   */
+  val threadSafe: Boolean get() = false
 }

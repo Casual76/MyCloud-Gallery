@@ -1,0 +1,32 @@
+# Baseline Profile di core-imaging: il caricatore delle miniature, la cache, il pianificatore e le sorgenti (telefono e,
+# dalla Fase 4, NAS con la replica).
+#
+# Il profilo dell'app (app/src/release/generated/baselineProfiles) e' del 13/10, prima della Fase 4: la sorgente del NAS
+# (NasThumbnailSource, BlobDecoder) e le parti nuove del caricatore giravano interpretate fino al JIT. Girano sui thread
+# di lavoro, ma decidono quanto presto una miniatura arriva alla cella durante uno scorrimento
+# (docs/bench/misure-s25-2026-10-15.md).
+HSPLdev/pampa/mycloudgallery/core/imaging/loader/**->**(**)**
+Ldev/pampa/mycloudgallery/core/imaging/loader/**;
+HSPLdev/pampa/mycloudgallery/core/imaging/cache/**->**(**)**
+Ldev/pampa/mycloudgallery/core/imaging/cache/**;
+HSPLdev/pampa/mycloudgallery/core/imaging/scheduler/**->**(**)**
+Ldev/pampa/mycloudgallery/core/imaging/scheduler/**;
+HSPLdev/pampa/mycloudgallery/core/imaging/nas/**->**(**)**
+Ldev/pampa/mycloudgallery/core/imaging/nas/**;
+HSPLdev/pampa/mycloudgallery/core/imaging/source/**->**(**)**
+Ldev/pampa/mycloudgallery/core/imaging/source/**;
+HSPLdev/pampa/mycloudgallery/core/imaging/placeholder/**->**(**)**
+Ldev/pampa/mycloudgallery/core/imaging/placeholder/**;
+HSPLdev/pampa/mycloudgallery/core/imaging/contract/**->**(**)**
+Ldev/pampa/mycloudgallery/core/imaging/contract/**;
+#
+# Il decodificatore che la cache dei segnaposto chiama (ThumbHashPlaceholderCache -> ThumbHashCodec di core-metadata, e il
+# ThumbHash di core-model): stanno in moduli fuori da questo lavoro, ma il codice e' quello che gira per ogni cella nuova.
+# Nel profilo del 13/10 non c'era (allora le righe del dataset non avevano ThumbHash): sull'S25 (15/10) il JIT compilava
+# `ThumbHashCodec.decode` a meta' pinch.
+HSPLdev/pampa/mycloudgallery/core/metadata/contract/ThumbHashCodec;->**(**)**
+Ldev/pampa/mycloudgallery/core/metadata/contract/ThumbHashCodec;
+HSPLdev/pampa/mycloudgallery/core/metadata/format/ThumbHash**->**(**)**
+Ldev/pampa/mycloudgallery/core/metadata/format/ThumbHash**;
+HSPLdev/pampa/mycloudgallery/core/model/ThumbHash**->**(**)**
+Ldev/pampa/mycloudgallery/core/model/ThumbHash**;

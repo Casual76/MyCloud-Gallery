@@ -1,0 +1,22 @@
+# Baseline Profile di core-designsystem: la chrome di vetro adattivo (G2), le celle con i segni di presenza (Fase 4), le
+# intestazioni e i menu.
+#
+# Il profilo dell'app (app/src/release/generated/baselineProfiles) e' del 13/10, prima della G2: GalleryTopChrome,
+# GalleryChrome, GalleryLegibility (la scelta della pellicola, due ricerche binarie a ogni riga che passa sotto un pezzo
+# di chrome) e i segni di presenza giravano interpretati fino al JIT. Sull'S25 (15/10) il primo cambio di livello di ogni
+# prova costava fino a 11 ms di ricomposizione. Le regole a carattere jolly coprono anche le classi che verranno; il
+# catalogo dei componenti (solo debug) resta fuori (docs/bench/misure-s25-2026-10-15.md).
+HSPLdev/pampa/mycloudgallery/core/designsystem/design/**->**(**)**
+Ldev/pampa/mycloudgallery/core/designsystem/design/**;
+HSPLdev/pampa/mycloudgallery/core/designsystem/grid/**->**(**)**
+Ldev/pampa/mycloudgallery/core/designsystem/grid/**;
+HSPLdev/pampa/mycloudgallery/core/designsystem/media/**->**(**)**
+Ldev/pampa/mycloudgallery/core/designsystem/media/**;
+HSPLdev/pampa/mycloudgallery/core/designsystem/chrome/**->**(**)**
+Ldev/pampa/mycloudgallery/core/designsystem/chrome/**;
+HSPLdev/pampa/mycloudgallery/core/designsystem/motion/**->**(**)**
+Ldev/pampa/mycloudgallery/core/designsystem/motion/**;
+HSPLdev/pampa/mycloudgallery/core/designsystem/theme/**->**(**)**
+Ldev/pampa/mycloudgallery/core/designsystem/theme/**;
+HSPLdev/pampa/mycloudgallery/core/designsystem/state/**->**(**)**
+Ldev/pampa/mycloudgallery/core/designsystem/state/**;

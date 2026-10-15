@@ -48,15 +48,41 @@ object GalleryLegibility {
    * quando la pellicola va verso il polo opposto all'inchiostro: una ricerca binaria trova il minimo.
    */
   fun minimalFilmAlpha(ink: Color, film: Color, range: ContentRange, target: Float, floor: Float, ceiling: Float): Float {
-    if (worstContrast(ink, film.copy(alpha = floor), range) >= target) return floor
-    if (worstContrast(ink, film.copy(alpha = ceiling), range) < target) return ceiling
+    val probe = FilmProbe(ink, film, range.samples, target)
+    if (probe.holds(floor)) return floor
+    if (!probe.holds(ceiling)) return ceiling
     var low = floor
     var high = ceiling
     repeat(SearchSteps) {
       val mid = (low + high) / 2f
-      if (worstContrast(ink, film.copy(alpha = mid), range) >= target) high = mid else low = mid
+      if (probe.holds(mid)) high = mid else low = mid
     }
     return high
+  }
+
+  /**
+   * La domanda di ogni passo della ricerca di [minimalFilmAlpha]: `worstContrast(ink, film a quell'opacita', range) >=
+   * target`. Il minimo regge se e solo se reggono tutti i campioni, quindi la risposta e' la stessa, ma ci si ferma al
+   * primo campione che non regge e si prova per primo quello che non reggeva al passo prima (nella ricerca binaria di
+   * solito e' lui). Lo stesso risultato con meno conti: si rifa' sul thread principale quando sotto la chrome entra una riga
+   * e a ogni cambio di livello di un pinch (S25, 15/10).
+   */
+  private class FilmProbe(private val ink: Color, private val film: Color, private val samples: List<Color>, private val target: Float) {
+    private var lastFailing = 0
+
+    fun holds(alpha: Float): Boolean {
+      val f = film.copy(alpha = alpha)
+      val first = lastFailing
+      if (GalleryLegibility.contrastOver(ink, f, samples[first]) < target) return false
+      for (i in samples.indices) {
+        if (i == first) continue
+        if (GalleryLegibility.contrastOver(ink, f, samples[i]) < target) {
+          lastFailing = i
+          return false
+        }
+      }
+      return true
+    }
   }
 
   /**

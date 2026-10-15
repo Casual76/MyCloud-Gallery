@@ -84,6 +84,7 @@ La Fase 4 non deve peggiorare la fluidità. Le misure del 13/10 (`misure-s25-202
 - **Nuove misure** senza riferimento (`coldStartNasFirst`, `viewerOpenNas`, `libraryMemory`): `NUOVO` fino alla prima corsa buona; poi `compare.ps1 -Accept` le fissa.
 - La guardia si applica da sola sui dispositivi veri quando esiste un riferimento (`check.ps1 -Bench` non cambia); `-NoGuard` la spegne. Sugli emulatori (smoke) non c'è nessuna soglia.
 - Il Tab S9 non ha un riferimento del 13/10: la prima corsa buona con la libreria mista (`-Accept`) lo diventa.
+- Le misure del 15/10 sulla G2 con la libreria mista (pinch e scorrimento, cause e correzioni): `misure-s25-2026-10-15.md`.
 
 ## 3. Come si usa
 
@@ -125,6 +126,11 @@ powershell -ExecutionPolicy Bypass -File tools\bench\compare.ps1 -Calibrate     
 ```
 
 Il riferimento si **committa** con il motivo nel messaggio; una regressione si corregge, non si "accetta".
+
+`-Accept` scrive sempre `riferimento-<dispositivo>.json` (fino al 15/10, senza un riferimento accettato, riscriveva per
+errore `riferimento-<dispositivo>-fase3.json`). Da una misura **parziale** (solo alcune prove, per esempio pinch e
+scorrimento rimisurati dopo una correzione) le prove non misurate tengono i valori del riferimento in uso, cosi' la guardia
+continua a valere per tutte; `-Origin "<testo>"` scrive da dove vengono i numeri (`misure-s25-2026-10-15.md`).
 
 **Guardia della Fase 4A.** Con la libreria mista e i riferimenti del 13/10 (§2-ter) il comando è lo stesso: `check.ps1 -Bench` stampa anche le righe `guardia` e `NOTO`. Per rifare il riferimento del 13/10 dai JSON grezzi (fuori dal repository):
 

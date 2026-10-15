@@ -47,6 +47,9 @@ class ThumbHashPlaceholderCache(
   /** Quante voci ci sono adesso (per i test e la Diagnostica). */
   val size: Int get() = synchronized(cache) { cache.size }
 
+  /** Sincronizzata: la griglia la scalda da un thread di lavoro ([PlaceholderCache.threadSafe]). */
+  override val threadSafe: Boolean get() = true
+
   override fun image(h: ThumbHash): ImageBitmap {
     synchronized(cache) { cache[h] }?.let { return it }
     val decoded = decode(h)

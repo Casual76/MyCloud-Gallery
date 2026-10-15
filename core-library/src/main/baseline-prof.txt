@@ -1,0 +1,15 @@
+# Baseline Profile di core-library: l'indice a colonne (con la presenza della Fase 4, letta da ogni cella), il layout
+# della griglia e i contratti che la griglia chiama a ogni riga.
+#
+# Il profilo dell'app (app/src/release/generated/baselineProfiles) e' del 13/10, prima della Fase 4: i metodi nuovi
+# (ColumnarTimelineSnapshot.presenceAt, i riferimenti del NAS, ...) giravano interpretati fino al JIT, che sull'S25
+# (15/10) li compilava a meta' pinch. Le regole a carattere jolly coprono anche quelli che verranno
+# (docs/bench/misure-s25-2026-10-15.md).
+HSPLdev/pampa/mycloudgallery/core/library/index/**->**(**)**
+Ldev/pampa/mycloudgallery/core/library/index/**;
+HSPLdev/pampa/mycloudgallery/core/library/layout/**->**(**)**
+Ldev/pampa/mycloudgallery/core/library/layout/**;
+HSPLdev/pampa/mycloudgallery/core/library/contract/**->**(**)**
+Ldev/pampa/mycloudgallery/core/library/contract/**;
+HSPLdev/pampa/mycloudgallery/core/library/text/**->**(**)**
+Ldev/pampa/mycloudgallery/core/library/text/**;

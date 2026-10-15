@@ -5,6 +5,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.structuralEqualityPolicy
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
@@ -17,6 +18,7 @@ import dev.pampa.mycloudgallery.core.designsystem.design.ContentRange
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryScrubber
 import dev.pampa.mycloudgallery.core.library.contract.GridLayout
 import dev.pampa.mycloudgallery.core.library.contract.RowKind
+import java.time.LocalDate
 import java.time.YearMonth
 import kotlin.math.max
 
@@ -33,7 +35,10 @@ data class MediaGridSection(val title: String, val place: String?)
  * della chrome in alto mostra al posto di una seconda fascia di vetro. Al livello "Tutte" (senza intestazioni) e'
  * il mese della riga. Null se sotto la linea non c'e' ancora contenuto (la Libreria piu' corta dello schermo).
  *
- * Si ricompone solo quando la sezione cambia: lo scorrimento si legge in un `derivedStateOf`.
+ * Si ricompone solo quando **il testo** della sezione cambia: lo scorrimento si legge in un `derivedStateOf` (la riga
+ * sotto la linea), e un secondo `derivedStateOf` ne fa il testo con l'uguaglianza strutturale. Un layout nuovo con la
+ * stessa sezione (il pinch rifa' il layout a ogni livello che attraversa) non ricompone chi legge: sull'S25 (15/10) ogni
+ * cambio di livello ricomponeva tutta la Libreria da qui.
  */
 @Composable
 fun rememberMediaGridSection(state: MediaGridState, line: Dp): MediaGridSection? {
@@ -41,16 +46,21 @@ fun rememberMediaGridSection(state: MediaGridState, line: Dp): MediaGridSection?
   val linePx = with(LocalDensity.current) { handOverLine(line).roundToPx() }
   val strings = rememberGridStrings()
   val today = remember(state) { state.today() }
-  val key by remember(state, linePx) { derivedStateOf { sectionKeyAt(state, linePx) } }
-  val k = key ?: return null
-  return remember(k, strings, today) {
-    val l = k.layout
-    if (k.section >= 0) {
-      val section = l.sections[k.section]
-      MediaGridSection(GridText.sectionTitle(section, today, strings), GridText.sectionPlace(section, state.placeNames))
-    } else {
-      MediaGridSection(GridText.month(checkNotNull(k.month)), null)
-    }
+  val section by remember(state, linePx, strings, today) {
+    val key = derivedStateOf { sectionKeyAt(state, linePx) }
+    derivedStateOf(structuralEqualityPolicy()) { key.value?.let { sectionOf(state, it, strings, today) } }
+  }
+  return section
+}
+
+/** Il testo della sezione [k] (calcolato solo quando la chiave cambia, non a ogni fotogramma di scorrimento). */
+private fun sectionOf(state: MediaGridState, k: SectionKey, strings: GridStrings, today: LocalDate): MediaGridSection {
+  val l = k.layout
+  return if (k.section >= 0) {
+    val section = l.sections[k.section]
+    MediaGridSection(GridText.sectionTitle(section, today, strings), GridText.sectionPlace(section, state.placeNames))
+  } else {
+    MediaGridSection(GridText.month(checkNotNull(k.month)), null)
   }
 }
 

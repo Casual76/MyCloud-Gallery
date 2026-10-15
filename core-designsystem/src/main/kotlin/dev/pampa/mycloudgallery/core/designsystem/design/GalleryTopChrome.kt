@@ -86,10 +86,11 @@ fun rememberAdaptiveChromeStyle(content: GalleryChromeContent?, bounds: Rect?, v
   val previous = remember { mutableStateOf<Boolean?>(null) }
   val version = content?.chromeContentVersion
   val k = key
+  val memo = remember(palette) { AdaptiveMemo(palette) }
   val choice = remember(k, version, page, text, veil, palette) {
     val raw = if (content == null || bounds == null) palette.unknown else content.chromeContentUnder(bounds, page, text)
     val range = if (veil == null) raw else ContentRange(raw.samples.map { veil.compositeOver(it) })
-    GalleryLegibility.adapt(range, palette, previousDark = previous.value ?: !darkTheme)
+    memo.adapt(range, previousDark = previous.value ?: !darkTheme)
   }
   SideEffect { previous.value = choice.darkInk }
   val reduced = LocalFluidMotionPolicy.current.reducedMotion
@@ -97,6 +98,23 @@ fun rememberAdaptiveChromeStyle(content: GalleryChromeContent?, bounds: Rect?, v
   val film by animateColorAsState(choice.film, if (reduced) snap() else FluidMotion.standard(), label = "pellicola adattiva")
   return GalleryChromeStyles.adaptive(choice.copy(ink = ink, film = film))
 }
+
+/**
+ * Le ultime scelte di [GalleryLegibility.adapt] di un pezzo di chrome, per contenuto: lo stesso contenuto sotto (lo stesso
+ * livello allo stesso punto, tornando indietro con un pinch o uno scorrimento) da' la stessa scelta senza rifare le due
+ * ricerche. E' la stessa funzione pura, ricordata: il risultato non cambia.
+ */
+private class AdaptiveMemo(private val palette: AdaptivePalette) {
+  private val choices = object : LinkedHashMap<Pair<ContentRange, Boolean>, AdaptiveInk>(MemoEntries, MemoLoadFactor, true) {
+    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Pair<ContentRange, Boolean>, AdaptiveInk>?): Boolean = size > MemoEntries
+  }
+
+  fun adapt(range: ContentRange, previousDark: Boolean): AdaptiveInk =
+    choices.getOrPut(range to previousDark) { GalleryLegibility.adapt(range, palette, previousDark = previousDark) }
+}
+
+private const val MemoEntries = 16
+private const val MemoLoadFactor = 0.75f
 
 /**
  * Lo stile del vetro adattivo per un contenuto **qualunque** (nero e bianco pieni), nella polarita' del tema: per i pezzi che corrono

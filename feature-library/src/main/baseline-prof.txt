@@ -1,0 +1,14 @@
+# Baseline Profile di feature-library: la griglia, la chrome della G2 e il piede del NAS.
+#
+# Il profilo dell'app (app/src/release/generated/baselineProfiles) e' stato generato sull'S25 il 13/10, prima della G2 e
+# della Fase 4: le classi nate dopo (LibraryScreen, GridPageChrome, MediaGridChrome, LibraryStatusFooter, ...) non ci sono
+# e giravano interpretate finche' il JIT non le compilava. Sull'S25 (15/10) i fotogrammi dei cambi di livello del pinch
+# ricomponevano proprio quel codice (LibraryScreen e LibraryCommandsContent compilati dal JIT a meta' prova).
+# Le regole a carattere jolly coprono anche le classi che verranno, finche' il profilo dell'app non si rigenera.
+# AGP le unisce al profilo dell'app e le espande sulle classi vere (docs/bench/misure-s25-2026-10-15.md).
+HSPLdev/pampa/mycloudgallery/feature/library/grid/**->**(**)**
+Ldev/pampa/mycloudgallery/feature/library/grid/**;
+HSPLdev/pampa/mycloudgallery/feature/library/library/**->**(**)**
+Ldev/pampa/mycloudgallery/feature/library/library/**;
+HSPLdev/pampa/mycloudgallery/feature/library/*->**(**)**
+Ldev/pampa/mycloudgallery/feature/library/*;

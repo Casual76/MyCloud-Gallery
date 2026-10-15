@@ -30,6 +30,7 @@
 .PARAMETER Smoke         Nessuna soglia: verifica solo che gli scenari girino.
 .PARAMETER RequireAll    Una prova attesa senza risultati e' un FAIL (chiusura della Fase 3).
 .PARAMETER Accept        Scrive docs\bench\riferimento-<dispositivo>.json con questi risultati (solo se nessuna soglia assoluta fallisce, salvo -Force).
+                         Da una misura parziale le prove non misurate tengono i valori del riferimento in uso; -Origin ne dice la provenienza.
 .PARAMETER Calibrate     Scrive in soglie.json il tetto di PSS dello zoom a 200 MP (misura + margine), se e' ancora `null`.
 .PARAMETER SummaryJson   Scrive un riassunto leggibile da macchina (una riga per verifica).
 .PARAMETER SelfTest      Prova la logica del confronto su file di esempio (tools\bench\samples): non serve un dispositivo.
@@ -37,7 +38,7 @@
 .PARAMETER ExtractReference  Cartelle di risultati (la prima che ha una prova vince) da cui scrivere docs\bench\riferimento-<dispositivo>-fase3.json:
                          le misure del 13/10 con cui la guardia della Fase 4A confronta (vedi -ReferenceDate e -Origin). Non serve altro.
 .PARAMETER ReferenceDate Data da scrivere nel riferimento estratto (default: oggi).
-.PARAMETER Origin        Da dove vengono i numeri del riferimento estratto (una riga di testo, finisce nel file).
+.PARAMETER Origin        Da dove vengono i numeri del riferimento estratto o accettato (una riga di testo, finisce nel file).
 
 .NOTES
   Guardia della Fase 4A. Con un riferimento (docs\bench\riferimento-<dispositivo>.json accettato dall'utente, altrimenti
@@ -353,9 +354,10 @@ function Invoke-Evaluation($thr, $benches, [string]$deviceKey, $reference, $skip
 }
 
 # Il riferimento da accettare: tutte le coppie metrica.statistica che le regole di soglie.json usano, per ogni prova.
-function Build-Reference($thr, $benches, [string]$deviceKey, $context, [double]$hz, [string]$date = "", [string]$origin = "") {
+function Build-Reference($thr, $benches, [string]$deviceKey, $context, [double]$hz, [string]$date = "", [string]$origin = "", $keepFrom = $null) {
   $lines = New-Object System.Collections.Generic.List[string]
   $tests = New-Object System.Collections.Generic.List[string]
+  $measured = @{}
   foreach ($scenario in $thr.scenari) {
     foreach ($bench in @($benches | Where-Object { ([string]$_.name -replace '\[.*$', '') -match $scenario.prove })) {
       $test = [string]$bench.name -replace '\[.*$', ''
@@ -365,7 +367,16 @@ function Build-Reference($thr, $benches, [string]$deviceKey, $context, [double]$
         if ($null -ne $value) { $entries.Add('"' + $rule.metrica + "." + $rule.statistica + '": ' + (Format-Number $value "0.####")) }
       }
       $unique = @($entries | Select-Object -Unique)
-      if ($unique.Count -gt 0) { $tests.Add('    "' + $test + '": { ' + ($unique -join ", ") + ' }') }
+      if ($unique.Count -gt 0) { $tests.Add('    "' + $test + '": { ' + ($unique -join ", ") + ' }'); $measured[$test] = $true }
+    }
+  }
+  # Una misura parziale (solo alcune prove) non cancella le altre: restano quelle del riferimento in uso, cosi' la guardia
+  # continua a valere per tutte (15/10: pinch e scorrimento rimisurati da soli dopo la correzione della G2).
+  if ($null -ne $keepFrom -and (Has-Property $keepFrom "prove")) {
+    foreach ($property in $keepFrom.prove.PSObject.Properties) {
+      if ($measured.ContainsKey($property.Name)) { continue }
+      $kept = @(foreach ($entry in $property.Value.PSObject.Properties) { '"' + $entry.Name + '": ' + (Format-Number $entry.Value "0.####") })
+      if ($kept.Count -gt 0) { $tests.Add('    "' + $property.Name + '": { ' + ($kept -join ", ") + ' }') }
     }
   }
   $model = ""
@@ -510,6 +521,15 @@ if ($SelfTest) {
   Assert-That ($parsed.dispositivo -eq "s25") "il riferimento scritto si rilegge (dispositivo)"
   Assert-That ((Has-Property $parsed.prove "scroll_days_square") -and (Has-Property $parsed.prove.scroll_days_square "frameDurationCpuMs.P95")) "il riferimento contiene scroll_days_square / frameDurationCpuMs.P95"
   Assert-That (Has-Property $parsed.prove.scroll_days_square "jankPercent.mean") "il riferimento contiene scroll_days_square / jankPercent.mean"
+
+  # Una misura parziale tiene le prove non misurate dal riferimento in uso; quelle misurate prendono i valori nuovi.
+  $partial = Build-Reference $thr @(New-Bench "pinch" @{ jankPercent = 0.61; libraryNasShare = $mix }) "s25" $good.context 120 "2026-10-15" "prova" $fase3
+  $parsedPartial = $partial | ConvertFrom-Json
+  Assert-That ([double]$parsedPartial.prove.pinch."jankPercent.mean" -eq 0.61) "riferimento parziale: la prova misurata prende il valore nuovo"
+  Assert-That ([double]$parsedPartial.prove.coldStart."timeToFullDisplayMs.p90" -eq 681) "riferimento parziale: le prove non misurate restano quelle del riferimento in uso"
+  Assert-That ([double]$parsedPartial.prove.viewerOpen."viewerOpenMaxFrameMs.max" -eq 97) "riferimento parziale: tutte le metriche della prova tenuta"
+  Assert-That (@($parsedPartial.prove.PSObject.Properties).Count -eq 5) "riferimento parziale: nessuna prova persa o doppia"
+  Assert-That ($parsedPartial.origine -eq "prova") "riferimento parziale: l'origine si scrive"
 
   if ($failures.Count -gt 0) {
     foreach ($f in $failures) { Write-Host ("[FAIL] " + $f) -ForegroundColor Red }
@@ -680,12 +700,19 @@ if ($Accept) {
     exit 1
   }
   if ($manca.Count -gt 0) {
-    Write-Host ("  -Accept: ATTENZIONE, il riferimento e' PARZIALE: {0} prove attese non hanno risultati e non ci saranno nel riferimento." -f $manca.Count) -ForegroundColor Yellow
+    if ($reference) {
+      Write-Host ("  -Accept: misura PARZIALE: le {0} verifiche senza risultati tengono i valori del riferimento in uso ({1})." -f $manca.Count, (Split-Path -Leaf $referencePath)) -ForegroundColor Yellow
+    } else {
+      Write-Host ("  -Accept: ATTENZIONE, il riferimento e' PARZIALE: {0} prove attese non hanno risultati e non ci saranno nel riferimento." -f $manca.Count) -ForegroundColor Yellow
+    }
   }
-  $text = Build-Reference $thr @($benches) $deviceKey $context $RefreshHz
+  $text = Build-Reference $thr @($benches) $deviceKey $context $RefreshHz $ReferenceDate $Origin $reference
   if (-not (Test-Path -LiteralPath $ReferenceDir)) { New-Item -ItemType Directory -Path $ReferenceDir | Out-Null }
-  [System.IO.File]::WriteAllText($referencePath, $text, (New-Object System.Text.UTF8Encoding($false)))
-  Write-Host ("  -Accept: riferimento scritto in " + $referencePath) -ForegroundColor Green
+  # Si scrive sempre il riferimento ACCETTATO (riferimento-<dispositivo>.json), mai quello della Fase 3: prima, senza un
+  # riferimento accettato, -Accept riscriveva riferimento-<dispositivo>-fase3.json (le misure del 13/10).
+  $acceptedPath = Join-Path $ReferenceDir ("riferimento-" + $deviceKey + ".json")
+  [System.IO.File]::WriteAllText($acceptedPath, $text, (New-Object System.Text.UTF8Encoding($false)))
+  Write-Host ("  -Accept: riferimento scritto in " + $acceptedPath) -ForegroundColor Green
 }
 
 Write-Host ""

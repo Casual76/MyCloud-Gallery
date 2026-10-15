@@ -22,6 +22,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -63,10 +64,13 @@ import dev.pampa.mycloudgallery.core.model.PresenceBadge
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.math.max
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * La griglia della galleria, riusata da tutte le liste (la Libreria, le Raccolte filtrate, i Nascosti, gli Eliminati di
@@ -187,7 +191,7 @@ fun MediaGrid(
       ) {
         val l = renderLayout
         if (l != null) {
-          items(count = l.rowCount, contentType = { l.rowKind(it) }) { row -> GridRow(context, l, row) }
+          items(count = l.rowCount, key = { rowKey(l, it) }, contentType = { l.rowKind(it) }) { row -> GridRow(context, l, row) }
           item(key = FooterKey, contentType = FooterKey) {
             Box(modifier = Modifier.fillMaxWidth().onSizeChanged { state.footerHeight = it.height }) { footer() }
           }
@@ -221,6 +225,17 @@ private fun GridEffects(state: MediaGridState, reducedMotion: Boolean) {
         state.loader.window(plan.visible, plan.ahead)
         state.updateVisibleIds(plan.visibleIds)
       }
+  }
+
+  // I segnaposto delle celle attorno a dove si e', per tutti i livelli, decodificati su un thread di lavoro: la
+  // composizione delle celle (un cambio di livello, una riga che entra) li trova gia' pronti (`PlaceholderWarmup`).
+  LaunchedEffect(state) {
+    val cache = state.placeholders
+    if (!cache.threadSafe) return@LaunchedEffect
+    snapshotFlow { state.layout?.let { l -> PlaceholderWarmup.around(state, l) } }
+      .filterNotNull()
+      .distinctUntilChanged()
+      .collectLatest { target -> withContext(Dispatchers.Default) { target.warm(cache) } }
   }
 
   // La selezione arriva alle celle (che la leggono nel loro nodo, senza ricomporsi).
@@ -300,6 +315,20 @@ private fun Modifier.pinchLayer(state: MediaGridState): Modifier = graphicsLayer
   }
 }
 
+/**
+ * La chiave di una riga della lista: la riga **nel suo layout** (livello e stile). Senza chiave le righe pigre sono
+ * indicizzate per posizione: a un cambio di livello (un pinch, il menu) la lista ricomponeva le righe che erano sullo
+ * schermo con lo **stesso indice nel layout nuovo**, cioe' righe lontanissime (sull'S25, 15/10: celle a 30.000 posizioni
+ * da quelle in vista, con i loro segnaposto da decodificare), e subito dopo, nella misura, componeva quelle giuste
+ * dell'ancora. Con la chiave le righe del layout vecchio escono e basta. Una vista nuova allo stesso livello (dati
+ * aggiornati) tiene le stesse chiavi: le righe si ricompongono sul posto come prima.
+ */
+private fun rowKey(l: GridLayout, row: Int): Long =
+  (l.spec.level.ordinal.toLong() shl LevelKeyShift) or (l.spec.style.ordinal.toLong() shl StyleKeyShift) or row.toLong()
+
+private const val LevelKeyShift = 40
+private const val StyleKeyShift = 32
+
 /** Una riga alta esattamente [heightPx] (la riga piu' lo spazio sotto): le posizioni della lista sono quelle del layout. */
 private fun Modifier.exactHeight(heightPx: Int): Modifier = layout { measurable, constraints ->
   val placeable = measurable.measure(Constraints.fixed(constraints.maxWidth, heightPx))
@@ -345,7 +374,13 @@ private fun HeaderRow(context: GridRenderContext, layout: GridLayout, row: Int) 
       .exactHeight(layout.rowHeight(row) + context.gapPx)
       // Avvicinandosi alla linea della chrome l'intestazione sfuma, e quando la tocca l'etichetta in alto dice la sua
       // sezione: si passa il testo, nessun doppione. Letto nel layer: scorrere non ricompone.
-      .graphicsLayer { alpha = headerAlpha(state, layout, row, context.stickyTopPx, context.handOverPx) },
+      // L'alfa si applica a ogni disegno (`ModulateAlpha`), non a un buffer fuori schermo: l'intestazione e' testo che non
+      // si sovrappone, quindi si vede uguale, e il RenderThread non alloca un layer a tutta larghezza per ogni
+      // intestazione che sfuma (S25, 15/10: memoria GPU riallocata a ogni passaggio, docs/bench/misure-s25-2026-10-15.md).
+      .graphicsLayer {
+        alpha = headerAlpha(state, layout, row, context.stickyTopPx, context.handOverPx)
+        compositingStrategy = CompositingStrategy.ModulateAlpha
+      },
   ) {
     GalleryTimelineHeader(
       title = GridText.sectionTitle(section, context.today, context.strings),

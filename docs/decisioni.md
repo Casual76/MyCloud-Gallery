@@ -618,6 +618,43 @@ dei comandi all'estremo destro (P14); il gruppo "Sul NAS" in Raccolte con le rig
 un'operazione apre "Operazioni in corso" a schermo intero invece di cambiare il pannello accanto; l'esito di "Sposta"/"Elimina…" nel
 viewer usa l'avviso breve in alto; la notifica delle operazioni (solo numeri, una barra).
 
+### Revisione di sicurezza della 4B: correzioni (15/10)
+Fonte: `docs/review/4b-fase4b.md` (R1-R11 corretti, ognuno con il suo test; i cinque `SecurityReview4bTest` verdi senza modifiche;
+I1, I4, I6, I10 corretti). Regola di tutte le scelte: **ogni correzione riduce cio' che si puo' cancellare, mai il contrario**. Quelle
+che l'utente vede (da confermare):
+
+- **R1, R5: i 30 giorni del cestino.** Contano da quando il file e' entrato **davvero** nel cestino (non dalla voce scritta prima: dopo
+  una pausa di un mese il file ha comunque 30 giorni) e mai da prima della fine dell'ultimo salto dell'ora del NAS accettato (24 ore
+  stabili o il gesto): dopo un salto il cestino riparte con 30 giorni pieni. Con il salto in corso "Elimina" sposta i file nel
+  cestino ma l'operazione resta **in pausa "ora del NAS"** finche' l'ora torna fidata; poi si chiude da sola alla prima ripresa.
+- **R2: eliminare una cartella.** Il foglio dice quanti file e quanti byte contiene davvero (contati prima del foglio, scendendo in
+  tutte le sottocartelle) e, oltre 500 file, una riga in evidenza "Sono molti file". Una cartella che non si riesce a contare (oltre
+  100.000 file, elenco troncato) **non si elimina in un colpo**: il foglio dice "troppi elementi". Se fra il foglio e il tocco la
+  cartella e' cresciuta, non si sposta niente (l'elemento si ferma con "il file e' cambiato").
+- **R3: la pulizia delle cartelle cestinate** cancella solo cio' che l'app ha visto dentro la cartella prima di cestinarla (inventario,
+  per identita' e timbro), non scende in cartelle che non tornano e non attraversa un collegamento riconoscibile (L35). Qualunque dubbio:
+  la cartella resta nel cestino, anche dopo 30 giorni, ed "Elimina subito" la rifiuta; si toglie dal PC o si ripristina (L36).
+- **R4: al massimo 200 file e 20 GiB eliminati per giorno** dalla pulizia automatica (contano anche "Elimina subito" e le voci gia'
+  sparite: contare di piu' e' la direzione sicura); un cestino grande si svuota in piu' giorni. La prima voce del giorno passa sempre.
+- **R6: "Elimina subito" vuole due gesti distinti** (almeno 600 ms fra i due tocchi): un doppio tocco sul primo pannello non elimina.
+- **R7: ogni foglio di conferma** (anche quelli della Libreria) nasconde le sovrapposizioni delle altre app mentre e' aperto (un filtro
+  della luce blu sparisce per quel momento).
+- **R8: le operazioni dell'app non fanno scattare il congelamento** (eliminare o spostare fuori dalla share 60 foto in una settimana):
+  vale solo per i file che il diario di questo telefono ricorda con la loro identita'; tutto il resto conta come prima.
+- **R9: "Ferma" vale anche se l'app muore subito dopo**: alla riapertura l'operazione si annulla (si porta a termine solo cio' che e'
+  oltre il punto di non ritorno), non riparte.
+- **R10:** rinominare, spostare o eliminare dal viewer il video che si sta guardando ferma la riproduzione un attimo prima.
+- **R11:** spostando nell'area comune elementi che l'utente ha nascosto, il foglio lo dice (quanti); nel viewer "L'hai nascosto". **Non
+  c'e' la scelta "lasciali dove sono"**: da decidere con l'utente se serve.
+- **P16, "Elimina…" nel viewer per un media sul telefono e sul NAS**: c'e' un solo "Elimina…" con "Solo dal telefono" (di default) e
+  "Ovunque" (cestino di sistema del telefono e cestino del NAS per ogni copia del NAS dove si hanno i diritti; le aree in sola lettura
+  restano come sono, il foglio le elenca). Da li' niente "Sposta" ne' "Rinomina" (sono della copia del NAS, nel viewer del NAS).
+- **Solo debug, prova F20:** `adb shell` scrive un numero di minuti in
+  `/sdcard/Android/data/<id>/files/debug-trash-retention-minutes.txt` e il cestino del NAS tiene le voci quei minuti (1 minuto - 30
+  giorni). Nella release non esiste (`check.ps1` lo cerca nel dex).
+- **Residui:** L35 (collegamento gia' presente, non riconoscibile senza la voce `..` e senza media nel catalogo: da provare sul WD),
+  L36; I2, I3, I5, I7, I8, I9 come scritti nella revisione; il doppione oltre 24 ore (I10, prima parte).
+
 ## Revisione grafica della Libreria da parte dell'utente (13/10)
 Giudizio: le prestazioni della navigazione non sono male, la **grafica no**. Serve molto lavoro, da fare in un **filone grafico
 parallelo** alle fasi successive (insieme ai lavori che non toccano l'app sul momento, per esempio il back-end NAS della Fase 4).

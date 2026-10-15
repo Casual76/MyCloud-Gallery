@@ -21,8 +21,10 @@ import dev.antigravity.fluidengine.ui.fluid.fluidGlassModalObscured
 import dev.antigravity.fluidengine.ui.fluid.glassBackdropSource
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidGlassModalHostState
 import dev.antigravity.fluidengine.ui.fluid.rememberGlassBackdrop
+import dev.pampa.mycloudgallery.core.designsystem.sheet.LocalConfirmSheetShield
 import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.security.screen.OverlayShield
 import dev.pampa.mycloudgallery.feature.viewer.ViewerOverlay
 import dev.pampa.mycloudgallery.feature.viewer.ViewerServices
 
@@ -103,6 +105,9 @@ class ViewerHostState internal constructor(restoreLibraryId: String?) {
   }
 }
 
+/** R7: la difesa dalle sovrapposizioni di core-security, per ogni foglio di conferma del design system. */
+internal val ConfirmSheetShield: @Composable () -> Unit = { OverlayShield() }
+
 /** L'host del viewer della galleria, se c'e' (null nei test che compongono la sola scheda). */
 val LocalViewerHost = staticCompositionLocalOf<ViewerHostState?> { null }
 
@@ -117,7 +122,12 @@ fun GalleryRoot(content: @Composable () -> Unit) {
   val viewer = rememberSaveable(saver = ViewerHostState.Saver) { ViewerHostState(null) }
   val modal = rememberFluidGlassModalHostState()
   val backdrop = rememberGlassBackdrop()
-  CompositionLocalProvider(LocalFluidGlassModalHostState provides modal, LocalViewerHost provides viewer) {
+  // R7 (revisione 4B): i fogli di conferma nascondono le sovrapposizioni delle altre app mentre sono aperti (L34).
+  CompositionLocalProvider(
+    LocalFluidGlassModalHostState provides modal,
+    LocalViewerHost provides viewer,
+    LocalConfirmSheetShield provides ConfirmSheetShield,
+  ) {
     Box(modifier = Modifier.fillMaxSize()) {
       // Il fondale della radice lo campiona solo il vetro dei pop-up (`FluidGlassModalHost`): c'e' solo mentre un pop-up
       // e' sullo schermo, dall'apertura alla fine dell'uscita (`isOnScreen`). Senza pop-up era un layer fuori schermo a

@@ -8,6 +8,7 @@ import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.DriveFileRenameOutline
 import androidx.compose.material.icons.rounded.Group
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -380,6 +381,17 @@ internal fun NasMoveSheetContent(state: NasActionsState.ConfirmMove, onConfirm: 
             tone = FluidTone.Info,
             disclosure = false,
             leading = { Icon(imageVector = Icons.Rounded.Group, contentDescription = null) },
+          )
+        }
+        // R11: l'utente l'ha nascosto; nell'area comune lo vedranno i familiari (i loro dispositivi non sanno cosa ha nascosto).
+        if (toCommon && target.hidden) {
+          FluidListDivider()
+          FluidListRow(
+            title = stringResource(R.string.viewer_nas_move_hidden_title),
+            subtitle = stringResource(R.string.viewer_nas_move_hidden_detail),
+            tone = FluidTone.Warning,
+            disclosure = false,
+            leading = { Icon(imageVector = Icons.Rounded.VisibilityOff, contentDescription = null) },
           )
         }
         if (cross) {

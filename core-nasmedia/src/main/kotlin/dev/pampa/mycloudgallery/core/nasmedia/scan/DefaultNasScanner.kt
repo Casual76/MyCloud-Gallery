@@ -11,6 +11,7 @@ import dev.pampa.mycloudgallery.core.model.Fingerprint
 import dev.pampa.mycloudgallery.core.model.Location
 import dev.pampa.mycloudgallery.core.model.LocationId
 import dev.pampa.mycloudgallery.core.model.LocationKey
+import dev.pampa.mycloudgallery.core.model.LocationState
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.NasPath
 import dev.pampa.mycloudgallery.core.model.NasStamp
@@ -32,6 +33,7 @@ import dev.pampa.mycloudgallery.core.nasmedia.contract.NasScanCursor
 import dev.pampa.mycloudgallery.core.nasmedia.contract.NasScanStatus
 import dev.pampa.mycloudgallery.core.nasmedia.contract.NasScanStore
 import dev.pampa.mycloudgallery.core.nasmedia.contract.NasScanner
+import dev.pampa.mycloudgallery.core.nasmedia.contract.OwnRemovals
 import dev.pampa.mycloudgallery.core.nasmedia.contract.NasSeen
 import dev.pampa.mycloudgallery.core.nasmedia.contract.ScanDiff
 import dev.pampa.mycloudgallery.core.nasmedia.contract.ScanMode
@@ -106,6 +108,8 @@ class DefaultNasScanner(
   private val config: ScanConfig = ScanConfig(),
   private val arrivals: ArrivalWatch = ArrivalWatch(),
   private val monotonicMs: () -> Long = { System.nanoTime() / 1_000_000 },
+  /** R8 (revisione 4B): cio' che l'app stessa ha tolto dalla share (diario locale): non conta come cambiamento anomalo. */
+  private val ownRemovals: OwnRemovals = OwnRemovals.NONE,
 ) : NasScanner {
 
   private val keeper = CursorKeeper(store, account, share)
@@ -356,7 +360,9 @@ class DefaultNasScanner(
         complete = false
         return
       }
-      val diff = ScanDiff(r.knownPresent, unseen, r.changed, r.notMedia)
+      // R8: i file che l'app stessa ha tolto (cestino del NAS, spostamenti fuori dalla share), riconosciuti per `fileId` dal diario locale,
+      // spariscono come tutti (le assenze si segnano) ma non sono "spariti" per il congelamento.
+      val diff = ScanDiff(r.knownPresent, (unseen - ownRemovedUnseen(r.epoch)).coerceAtLeast(0), r.changed, r.notMedia)
       // R9 (revisione 4A): dopo il gesto valgono solo i conteggi che l'utente ha confermato (franchigia), non "tutto"; senza
       // gesto i conteggi dei giri accettati negli ultimi 7 giorni si sommano a questo (finestra), cosi' le gocce sotto la
       // soglia a ogni giro arrivano comunque alla soglia.
@@ -400,6 +406,25 @@ class DefaultNasScanner(
           complete = true
         }
       }
+    }
+
+    /** R8: quante posizioni non viste in questo giro sono file che l'app stessa ha tolto dalla share (stesso `fileId` del diario). */
+    private suspend fun ownRemovedUnseen(epoch: Long): Int {
+      val ids = try {
+        ownRemovals.fileIds(share)
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        return 0
+      }
+      if (ids.isEmpty()) return 0
+      var count = 0
+      for (chunk in ids.chunked(OWN_REMOVALS_CHUNK)) {
+        count += store.findByFileId(account, share, chunk).values.count { known ->
+          known.state != LocationState.ABSENT && (known.seenAt == null || known.seenAt < epoch)
+        }
+      }
+      return count
     }
 
     /** R9: la finestra salvata, se e' ancora aperta (meno di 7 giorni di ora del NAS). */
@@ -1030,6 +1055,9 @@ class DefaultNasScanner(
   private companion object {
     const val TAG = "NasScan"
     const val MAX_NOT_MEDIA_MEMORY = 50_000
+
+    /** R8: i `fileId` tolti dall'app si cercano nel catalogo a blocchi (una query per blocco). */
+    const val OWN_REMOVALS_CHUNK = 500
 
     /** Testa (64 KiB) piu' coda (fino a 128 KiB): sotto questo, il tetto del giro non basta per rilevare un altro file. */
     const val MIN_DETECTION_BYTES = 192L * 1024

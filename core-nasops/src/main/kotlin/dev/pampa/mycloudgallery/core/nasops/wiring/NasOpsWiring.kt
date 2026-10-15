@@ -14,6 +14,7 @@ import dev.pampa.mycloudgallery.core.nasops.contract.OpClocks
 import dev.pampa.mycloudgallery.core.nasops.contract.OpsGate
 import dev.pampa.mycloudgallery.core.nasops.contract.OpsStore
 import dev.pampa.mycloudgallery.core.nasops.contract.OwnFilesCleaning
+import dev.pampa.mycloudgallery.core.nasops.engine.CatalogPresence
 import dev.pampa.mycloudgallery.core.nasops.engine.HeavyWorkPolicy
 import dev.pampa.mycloudgallery.core.nasops.engine.KnownHashes
 import dev.pampa.mycloudgallery.core.nasops.engine.NasOpsEngine
@@ -25,6 +26,7 @@ import dev.pampa.mycloudgallery.core.nasops.trash.NasTrashService
 import dev.pampa.mycloudgallery.core.nasops.trash.SignedTrashRecordSource
 import dev.pampa.mycloudgallery.core.nasops.trash.SignedTrashRecords
 import dev.pampa.mycloudgallery.core.nasops.trash.TrashSigningIdentity
+import dev.pampa.mycloudgallery.core.trust.TrustLimits
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import dev.pampa.mycloudgallery.core.trust.registry.RegistryState
 
@@ -38,6 +40,8 @@ import dev.pampa.mycloudgallery.core.trust.registry.RegistryState
  * @property registry il registro accettato (verifica dei record del cestino e dei propri file firmati).
  * @property signing famiglia e chiave del dispositivo per firmare i record del cestino (null = non ancora).
  * @property compact `Compactor.compactIfNeeded` costruito con `enabled = true` (la 4B accende la compattazione).
+ * @property catalogPresence R3: cio' che il catalogo vede ancora presente (la pulizia non attraversa un collegamento).
+ * @property trashRetentionMillis quanto resta una voce nel cestino: 30 giorni; solo la build debug lo accorcia (F20).
  */
 class NasOpsConfig(
   val deviceId: String,
@@ -57,6 +61,8 @@ class NasOpsConfig(
   val authorName: (String) -> String? = { null },
   val folderFileCount: suspend (String, SharePath) -> Int? = { _, _ -> null },
   val compact: (suspend (String) -> CompactOutcome)? = null,
+  val catalogPresence: CatalogPresence = CatalogPresence.NONE,
+  val trashRetentionMillis: Long = TrustLimits.TRASH_RETENTION_MILLIS,
 ) {
   override fun toString(): String = "NasOpsConfig"
 }
@@ -97,6 +103,7 @@ object NasOpsWiring {
       hashes = config.knownHashes,
       heavy = config.heavyWork,
       lock = lock,
+      presence = config.catalogPresence,
     )
     val trash = NasTrashService(
       deviceId = config.deviceId,
@@ -111,6 +118,8 @@ object NasOpsWiring {
       remote = SignedTrashRecordSource(session::fileSystem, config.registry),
       lock = lock,
       authorName = config.authorName,
+      presence = config.catalogPresence,
+      retentionMillis = config.trashRetentionMillis,
     )
     val space = NasSpaceService(fileOps, config.clocks, store, config.largest, config.indexBytes, trash)
     val folders = NasFolderService(reader, config.clocks, config.access, config.folderFileCount)

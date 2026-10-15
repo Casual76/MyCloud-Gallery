@@ -303,6 +303,9 @@ private class SmbjShare(override val name: String, private val share: DiskShare,
   // Fase 4B (ops/): file o cartella esistenti, aperti con DELETE per rinominarli o cancellarli sullo stesso handle. Nessuna
   // opzione FILE_(NON_)DIRECTORY_FILE: smbj restituisce File o Directory secondo cio' che c'e'. Lo stato si legge subito sullo
   // stesso handle (una QUERY_INFO), cosi' il controllo del timbro e la modifica non sono su due aperture diverse.
+  // R3 (revisione 4B): con FILE_OPEN_REPARSE_POINT un punto di rianalisi (collegamento, giunzione) che il server riconosce si apre
+  // per quello che e' e non si segue: una rinomina o una cancellazione toccano il collegamento, mai la sua destinazione, e
+  // l'attributo REPARSE_POINT arriva sullo stesso handle (le primitive rifiutano di cancellarlo).
   override fun openForChange(path: String, exclusive: Boolean): SmbChangeHandle = guard.io {
     val entry = share.open(
       path,
@@ -310,7 +313,7 @@ private class SmbjShare(override val name: String, private val share: DiskShare,
       EnumSet.noneOf(FileAttributes::class.java),
       if (exclusive) EnumSet.noneOf(SMB2ShareAccess::class.java) else EnumSet.of(SMB2ShareAccess.FILE_SHARE_READ),
       SMB2CreateDisposition.FILE_OPEN,
-      EnumSet.noneOf(SMB2CreateOptions::class.java),
+      EnumSet.of(SMB2CreateOptions.FILE_OPEN_REPARSE_POINT),
     )
     try {
       SmbjChangeHandle(entry, entry.getFileInformation(FileAllInformation::class.java).toInfo(), guard)
@@ -384,6 +387,16 @@ private class SmbjChangeHandle(
 }
 
 private class SmbjDirectory(private val directory: Directory, private val guard: ResponseGuard) : SmbDirectory {
+  // R3: il genitore SUL DISCO (la voce `..`): un elenco a parte, che si ferma appena la trova (di solito la seconda voce).
+  override fun parentFileId(): Long? {
+    val raw = guard.io { directory.iterator(FileIdBothDirectoryInformation::class.java) }
+    while (guard.io { raw.hasNext() }) {
+      val info = guard.io { raw.next() }
+      if (info.fileName == "..") return info.fileId.takeIf { it != 0L }
+    }
+    return null
+  }
+
   override fun entries(): Iterator<SmbDirEntry> {
     val raw = guard.io { directory.iterator(FileIdBothDirectoryInformation::class.java) }
     return object : Iterator<SmbDirEntry> {

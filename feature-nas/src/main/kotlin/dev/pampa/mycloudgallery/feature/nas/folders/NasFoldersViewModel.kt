@@ -11,6 +11,7 @@ import dev.pampa.mycloudgallery.core.nasops.contract.NasFolders
 import dev.pampa.mycloudgallery.core.nasops.contract.NasItem
 import dev.pampa.mycloudgallery.core.nasops.contract.NasOperations
 import dev.pampa.mycloudgallery.core.nasops.contract.OpClocks
+import dev.pampa.mycloudgallery.core.nasops.contract.OpKind
 import dev.pampa.mycloudgallery.core.nasops.contract.OpPlan
 import dev.pampa.mycloudgallery.core.nasops.contract.OpRequest
 import dev.pampa.mycloudgallery.core.nasops.contract.PlanOutcome
@@ -62,6 +63,8 @@ internal data class FoldersUiState(
   val mode: FoldersMode = FoldersMode.Browse,
   val activeOperations: Int = 0,
   val confirm: OpPlan? = null,
+  /** R11: quanti elementi del piano di [confirm] l'utente ha nascosto (spostamento nell'area comune). */
+  val confirmHidden: Int = 0,
   val name: NameDraft? = null,
   val notice: UiNotice? = null,
 ) {
@@ -99,7 +102,7 @@ internal data class FoldersUiState(
 class NasFoldersViewModel @Inject constructor(
   private val folders: NasFolders,
   private val operations: NasOperations,
-  areas: NasAreas,
+  private val areas: NasAreas,
   private val clocks: OpClocks,
 ) : ViewModel() {
 
@@ -223,7 +226,11 @@ class NasFoldersViewModel @Inject constructor(
   private fun plan(request: OpRequest) {
     viewModelScope.launch {
       when (val outcome = operations.plan(request)) {
-        is PlanOutcome.Ready -> mutable.update { it.copy(confirm = outcome.plan, notice = null) }
+        is PlanOutcome.Ready -> {
+          // R11: per uno spostamento, quanti elementi nascosti ci sono (il foglio lo dice se vanno nell'area comune).
+          val hidden = if (outcome.plan.kind == OpKind.MOVE) runCatching { areas.hiddenAmong(outcome.plan) }.getOrDefault(0) else 0
+          mutable.update { it.copy(confirm = outcome.plan, confirmHidden = hidden, notice = null) }
+        }
         is PlanOutcome.Rejected -> mutable.update { it.copy(notice = noticeFor(outcome)) }
       }
     }

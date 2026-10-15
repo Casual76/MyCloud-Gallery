@@ -19,6 +19,7 @@ import dev.pampa.mycloudgallery.core.nas.contract.NasRandomFile
 import dev.pampa.mycloudgallery.core.nas.contract.NasResult
 import dev.pampa.mycloudgallery.core.nas.contract.Purpose
 import dev.pampa.mycloudgallery.core.nas.testing.InMemoryNasMedia
+import dev.pampa.mycloudgallery.core.nasmedia.contract.OwnRemovals
 import dev.pampa.mycloudgallery.core.nasmedia.contract.ScanMode
 import dev.pampa.mycloudgallery.core.nasmedia.contract.ScanReport
 import dev.pampa.mycloudgallery.core.nasmedia.contract.ScanSettings
@@ -138,6 +139,9 @@ internal class ScanHarness(
   var arrivals = ArrivalWatch()
     private set
 
+  /** R8: cio' che "l'app" ha tolto dalla share (dal suo diario locale). */
+  var ownRemovals: OwnRemovals = OwnRemovals.NONE
+
   private fun newScanner() = DefaultNasScanner(
     account = me,
     share = share,
@@ -151,6 +155,7 @@ internal class ScanHarness(
     config = config,
     arrivals = arrivals,
     monotonicMs = { mono },
+    ownRemovals = OwnRemovals { share -> ownRemovals.fileIds(share) },
   )
 
   var scanner: DefaultNasScanner = newScanner()

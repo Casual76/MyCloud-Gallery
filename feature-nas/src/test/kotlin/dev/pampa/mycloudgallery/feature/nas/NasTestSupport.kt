@@ -48,6 +48,11 @@ class FakeNasAreas(areas: List<NasArea> = defaultAreas()) : NasAreas {
   private val state = MutableStateFlow(areas)
   override val areas: StateFlow<List<NasArea>> = state
 
+  /** R11: quanti elementi di un piano risultano nascosti (lo sa `:app`). */
+  var hidden: Int = 0
+
+  override suspend fun hiddenAmong(plan: dev.pampa.mycloudgallery.core.nasops.contract.OpPlan): Int = hidden
+
   fun set(areas: List<NasArea>) {
     state.value = areas
   }

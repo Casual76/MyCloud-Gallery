@@ -61,6 +61,8 @@ value class PlanHash(val hex: String) {
             out.writeLong(it.fileId ?: -1L)
           }
           out.writeUTF(item.trashId.orEmpty())
+          // R2: per una cartella eliminata, quanti file contiene (contati alla pianificazione): la conferma vale per QUEI numeri.
+          out.writeInt(item.contentFiles ?: -1)
         }
       }
       val digest = MessageDigest.getInstance("SHA-256").digest(bytes.toByteArray())
@@ -77,6 +79,8 @@ value class PlanHash(val hex: String) {
  *   (`trash/<proprietario>/files/<id>`), derivato dal proprietario e dall'id, mai da un percorso letto dal NAS.
  * @property stamp il timbro atteso di un file (E-D13); null per cartelle, ripristini e creazioni.
  * @property trashId l'id della voce del cestino (ripristino, elimina subito).
+ * @property contentFiles per una cartella da eliminare (R2 della revisione 4B): i file che contiene, contati scendendo in tutte le
+ *   sottocartelle; [size] e' allora la somma dei loro byte. Entrambi entrano nell'impronta del piano.
  */
 data class PlannedItem(
   val index: Int,
@@ -89,10 +93,12 @@ data class PlannedItem(
   val size: Long,
   val stamp: NasStamp?,
   val trashId: String? = null,
+  val contentFiles: Int? = null,
 ) {
   init {
     require(index >= 0 && size >= 0) { "Indice o dimensione negativi." }
     require(trashId == null || TrustIds.isValid(trashId)) { "Id di cestino non valido." }
+    require(contentFiles == null || (isFolder && contentFiles >= 0)) { "Il conteggio del contenuto e' solo delle cartelle." }
   }
 
   override fun toString(): String = "PlannedItem(#$index, ${flow.code})"
@@ -123,10 +129,16 @@ enum class PlanWarning(override val code: String) : StableCode {
   FOLDER_INCLUDED("folder_included"),
   SOME_SKIPPED("some_skipped"),
   NAME_ADJUSTED("name_adjusted"),
+
+  /** R2: l'eliminazione porta nel cestino molti file (oltre [PlanSummary.MANY_FILES]): il foglio lo dice in evidenza. */
+  MANY_FILES("many_files"),
 }
 
 /**
  * Il riepilogo del foglio di conferma. [destShare] e [destFolder] sono i nomi scelti dall'utente (mai nei log).
+ *
+ * @property fileCount i file che l'operazione tocca davvero: quelli scelti e (R2) quelli dentro le cartelle da eliminare, contati.
+ * @property totalBytes i loro byte (per una cartella da eliminare, la somma del contenuto).
  */
 data class PlanSummary(
   val kind: OpKind,
@@ -135,8 +147,14 @@ data class PlanSummary(
   val totalBytes: Long,
   val destShare: String?,
   val destFolder: SharePath?,
+  val fileCount: Int = itemCount - folderCount,
 ) {
-  override fun toString(): String = "PlanSummary(${kind.code}, $itemCount elementi, $totalBytes byte)"
+  override fun toString(): String = "PlanSummary(${kind.code}, $itemCount elementi, $fileCount file, $totalBytes byte)"
+
+  companion object {
+    /** R2: oltre questi file il foglio di un'eliminazione lo dice in evidenza ([PlanWarning.MANY_FILES]). */
+    const val MANY_FILES: Int = 500
+  }
 }
 
 /**

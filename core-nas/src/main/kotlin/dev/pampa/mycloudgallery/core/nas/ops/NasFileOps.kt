@@ -114,8 +114,20 @@ interface NasFileOps {
    * sullo stesso handle, poi `delete-on-close` (formato §9.3, revisione B7). Vale solo dentro `.mycloudgallery/` (cestino
    * proprio, indice proprio); mai un media. Un file con un'altra dimensione e' [DeleteOutcome.SizeChanged], una cartella
    * [DeleteOutcome.NotAFile].
+   *
+   * R3 (revisione 4B): con [expect] anche la data di modifica e il `fileId` (se noti da entrambe le parti) si controllano sullo stesso
+   * handle: un file diverso da quello che il diario ricorda, anche della stessa dimensione, e' [DeleteOutcome.SizeChanged] e resta.
+   * Un punto di rianalisi (collegamento) non si cancella mai: [DeleteOutcome.NotAFile].
    */
-  suspend fun deleteIfUnchanged(share: String, path: SharePath, size: Long, purpose: Purpose): NasResult<DeleteOutcome>
+  suspend fun deleteIfUnchanged(share: String, path: SharePath, size: Long, purpose: Purpose, expect: NasStamp? = null): NasResult<DeleteOutcome>
+
+  /**
+   * R3 (revisione 4B): l'identita' (`fileId`) della cartella che contiene **sul disco** la cartella [dir] del **proprio** cestino, come
+   * la dice il server nella voce `..` di [dir]. Per una cartella vera e' quella da cui ci si e' arrivati; per un collegamento simbolico
+   * che il server presenta come cartella (Samba) e' il genitore della destinazione: la pulizia la confronta e non scende dove non torna.
+   * `Ok(null)` se il server non lo dice. Solo lettura.
+   */
+  suspend fun parentIdentity(share: String, dir: SharePath, purpose: Purpose): NasResult<Long?>
 
   /** Elimina il temporaneo proprio [temp] (qualunque dimensione). Assente = [DeleteOutcome.Missing]. */
   suspend fun deleteOwnTemp(share: String, temp: SharePath, purpose: Purpose): NasResult<DeleteOutcome>
@@ -205,7 +217,7 @@ sealed interface DeleteOutcome {
 
   data object Missing : DeleteOutcome
 
-  /** La dimensione non e' piu' quella attesa: non si cancella (E-D4). */
+  /** La dimensione non e' piu' quella attesa (o, con il timbro atteso, la data o il `fileId`): non si cancella (E-D4, R3). */
   data class SizeChanged(val actual: Long) : DeleteOutcome
 
   data object NotAFile : DeleteOutcome

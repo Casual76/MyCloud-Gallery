@@ -29,6 +29,7 @@ internal fun opErrorRes(code: OpErrorCode): Int = when (code) {
   OpErrorCode.LOCKED_TOO_LONG -> R.string.nas_error_locked_too_long
   OpErrorCode.PERMISSION_DENIED -> R.string.nas_error_permission_denied
   OpErrorCode.UNEXPECTED -> R.string.nas_error_unexpected
+  OpErrorCode.STOPPED_BY_USER -> R.string.nas_ops_pause_user
 }
 
 @StringRes

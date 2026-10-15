@@ -70,9 +70,28 @@ class ConfirmationTest {
     permanent.reset()
     assertThat(permanent.tapsLeft).isEqualTo(2)
     assertThat(permanent.tap(now)).isNull()
-    val confirmation = permanent.tap(now)
+    // R6: il secondo tocco e' un secondo gesto, non il secondo colpo di un doppio tocco.
+    val later = now + ConfirmationRules.MIN_TAP_GAP_MS
+    val confirmation = permanent.tap(later)
     assertThat(confirmation).isNotNull()
-    assertThat(ConfirmationRules.check(permanent.plan, confirmation!!, now)).isEqualTo(ConfirmationCheck.Valid)
+    assertThat(ConfirmationRules.check(permanent.plan, confirmation!!, later)).isEqualTo(ConfirmationCheck.Valid)
+  }
+
+  @Test
+  fun r6_unDoppioToccoNonFaLaDoppiaConfermaENemmenoUnToccoAppenaComparsoIlFoglio() {
+    // Il secondo colpo di un doppio tocco (40 ms) non conta: resta da fare il secondo gesto.
+    val sheet = ConfirmationSheet(PlanFixtures.purge())
+    assertThat(sheet.tap(now)).isNull()
+    assertThat(sheet.tap(now + 40)).isNull()
+    assertThat(sheet.tapsLeft).isEqualTo(1)
+    assertThat(sheet.tap(now + ConfirmationRules.MIN_TAP_GAP_MS - 1)).isNull()
+    assertThat(sheet.tap(now + ConfirmationRules.MIN_TAP_GAP_MS)!!.confirmedSteps).isEqualTo(2)
+    // Un tocco arrivato con il foglio appena comparso (il secondo colpo sulla voce del menu) non conta nemmeno come primo.
+    val shown = ConfirmationSheet(PlanFixtures.purge(), shownAtMonotonicMs = now)
+    assertThat(shown.tap(now + 100)).isNull()
+    assertThat(shown.tapsLeft).isEqualTo(2)
+    // Un foglio a un tocco solo (cestino del NAS, 30 giorni) non cambia.
+    assertThat(ConfirmationSheet(PlanFixtures.trash(), shownAtMonotonicMs = now).tap(now)).isNotNull()
   }
 
   @Test

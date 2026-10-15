@@ -58,6 +58,10 @@
   <string name="nas_confirm_skipped_line">%1$s (%2$s)</string>
   <string name="nas_confirm_purge_note_title">Non si possono ripristinare</string>
   <string name="nas_confirm_purge_note_detail">Eliminati subito, non passano dal cestino: non c\'è più il ripristino dei 30 giorni.</string>
+  <string name="nas_confirm_many_title">Sono molti file</string>
+  <string name="nas_confirm_many_detail">Nel cestino del NAS vanno %1$s. Controlla che sia la cartella giusta.</string>
+  <string name="nas_confirm_hidden_title">Ci sono elementi che hai nascosto</string>
+  <string name="nas_confirm_hidden_detail">%1$s nascosti da te: nell\'area comune li vedranno anche i familiari. Per tenerli per te, spostali prima altrove.</string>
   <string name="nas_confirm_backup_title">Hai un backup esterno?</string>
   <string name="nas_confirm_backup_detail">Il NAS non tiene altre copie di questi file. Se non ne hai una copia altrove (un disco esterno, un cloud), dopo non si recuperano più.</string>
 

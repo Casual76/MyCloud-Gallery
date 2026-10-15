@@ -41,6 +41,8 @@
   <string name="viewer_nas_move_common_message_video">Il video verrà spostato nell\'area comune e lo vedranno tutti i familiari.</string>
   <string name="viewer_nas_move_common_note_title">Le vedranno tutti i familiari</string>
   <string name="viewer_nas_move_common_note_detail">Per tornare indietro la devi spostare di nuovo nella tua area.</string>
+  <string name="viewer_nas_move_hidden_title">L\'hai nascosto</string>
+  <string name="viewer_nas_move_hidden_detail">Nell\'area comune lo vedranno anche i familiari: i loro telefoni non sanno che l\'hai nascosto.</string>
   <string name="viewer_nas_move_title">Spostare in %1$s?</string>
   <string name="viewer_nas_move_message">Il file cambia posto; niente viene sostituito.</string>
   <string name="viewer_nas_move_cross_title">Prima copio, poi controllo</string>

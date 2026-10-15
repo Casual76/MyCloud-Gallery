@@ -16,8 +16,10 @@ import dev.pampa.mycloudgallery.core.nasops.contract.OpsGate
 import dev.pampa.mycloudgallery.core.nasops.contract.OpsStore
 import dev.pampa.mycloudgallery.core.nasops.contract.PurgeReport
 import dev.pampa.mycloudgallery.core.nasops.contract.PurgeStop
+import dev.pampa.mycloudgallery.core.nasops.contract.PurgedTally
 import dev.pampa.mycloudgallery.core.nasops.contract.TrashEntryState
 import dev.pampa.mycloudgallery.core.nasops.contract.TrashReason
+import dev.pampa.mycloudgallery.core.nasops.engine.CatalogPresence
 import dev.pampa.mycloudgallery.core.nasops.engine.NasOpsLock
 import dev.pampa.mycloudgallery.core.nasops.engine.ShareAccessView
 import dev.pampa.mycloudgallery.core.trust.TrustLimits
@@ -63,18 +65,33 @@ class NasTrashService internal constructor(
   private val lock: NasOpsLock = NasOpsLock(),
   /** Il nome del dispositivo che ha cestinato, se il registro lo conosce (solo da mostrare). */
   private val authorName: (String) -> String? = { null },
+  /** R3: cio' che il catalogo vede ancora presente fuori dal cestino (un collegamento non si attraversa). */
+  private val presence: CatalogPresence = CatalogPresence.NONE,
+  /**
+   * Quanto resta una voce nel cestino: 30 giorni. **Solo la build debug** lo accorcia (prova sul campo F20, `DeveloperTools` di `app/src/debug`,
+   * assente dal dex di release: tools/check.ps1); mai piu' lungo di 30 giorni ne' piu' corto di un minuto.
+   */
+  private val retentionMillis: Long = TrustLimits.TRASH_RETENTION_MILLIS,
 ) : NasTrash {
 
   init {
     require(TrustIds.isValid(deviceId)) { "Id di dispositivo non valido." }
     require(fileOps.ownerDeviceId == deviceId) { "Le primitive devono essere di questo dispositivo." }
+    require(retentionMillis in MIN_RETENTION_MS..TrustLimits.TRASH_RETENTION_MILLIS) { "Durata del cestino fuori dai limiti." }
   }
 
   private val state = MutableStateFlow<NasTrashState>(NasTrashState.Loading)
   override val items: StateFlow<NasTrashState> = state
 
   private val policy = TrashPurgePolicy(deviceId)
-  private val purger = OwnTrashPurger(deviceId, fileOps, reader)
+  private val purger = OwnTrashPurger(deviceId, fileOps, reader, store, presence)
+
+  /**
+   * R1, R5 (revisione 4B): da quando contano i 30 giorni di una voce. Mai da prima che il file sia entrato nel cestino (`trashedAtNas`, che
+   * l'esecutore sposta solo in avanti) e mai da prima della fine dell'ultimo salto dell'ora del NAS accettato (D32): dopo un salto il
+   * cestino riparte con i suoi 30 giorni pieni.
+   */
+  private fun countFrom(entry: LocalTrashRecord): Long = maxOf(entry.trashedAtNas, clocks.clockTrustedSinceNasMs() ?: Long.MIN_VALUE)
 
   private suspend fun ownEntries(): List<LocalTrashRecord> =
     store.expiredTrash(Long.MAX_VALUE, Int.MAX_VALUE).filter { it.state == TrashEntryState.TRASHED && it.accountId == accountId }
@@ -121,7 +138,7 @@ class NasTrashService internal constructor(
     originalFolder = entry.originalPath.parent(),
     originalPath = entry.originalPath,
     size = entry.size,
-    daysLeft = daysLeft(entry.trashedAtNas, nasNow),
+    daysLeft = daysLeft(countFrom(entry), nasNow),
     author = authorName(deviceId),
     reason = entry.reason,
     isFolder = entry.isFolder,
@@ -156,7 +173,7 @@ class NasTrashService internal constructor(
 
   private fun daysLeft(trashedAtNas: Long, nasNow: Long?): Int? {
     nasNow ?: return null
-    val leftMs = trashedAtNas + TrustLimits.TRASH_RETENTION_MILLIS - nasNow
+    val leftMs = trashedAtNas + retentionMillis - nasNow
     return if (leftMs <= 0) 0 else ((leftMs + DAY_MS - 1) / DAY_MS).toInt()
   }
 
@@ -167,17 +184,29 @@ class NasTrashService internal constructor(
   private suspend fun purgeLocked(budget: Duration): PurgeReport {
     val nasNow = clocks.nasNowMs() ?: return PurgeReport(0, 0, emptyMap(), 0, 0, PurgeStop.NO_NAS_TIME)
     val deadline = clocks.monotonicMs() + budget.inWholeMilliseconds
+    // R4: il tetto vale per GIORNO (24 ore di ora del NAS), non per chiamata: cio' che si e' gia' eliminato oggi conta. Raggiunto, la
+    // pulizia si ferma fino al giorno dopo (ROUND_CAP: il lavoro giornaliero non ne chiede un'altra).
+    val today = store.purgedSince(nasNow - DAY_MS + 1)
+    if (today.files >= TrustLimits.MAX_PURGE_ITEMS_PER_ROUND || today.bytes >= TrustLimits.MAX_PURGE_BYTES_PER_ROUND) {
+      return PurgeReport(0, 0, emptyMap(), 0, 0, PurgeStop.ROUND_CAP)
+    }
     val round = PurgeRound()
     var purged = 0
     var bytes = 0L
+    var files = 0
     var alreadyGone = 0
     var deferred = 0
     val kept = HashMap<KeepReason, Int>()
     var stop = PurgeStop.COMPLETE
-    // Una voce citata da un'operazione non chiusa (un ripristino, "elimina subito") resta a quell'operazione.
+    // Una voce citata da un'operazione non chiusa (un ripristino, "elimina subito", un "elimina" non ancora datato) resta a quell'operazione.
     val busy = activeTrashIds()
-    // Solo il diario locale: le voci proprie con l'ora del cestino di 30 giorni fa (ora del NAS) o prima. Nessun record remoto.
-    val candidates = store.expiredTrash(nasNow - TrustLimits.TRASH_RETENTION_MILLIS + 1, TrustLimits.MAX_PURGE_ITEMS_PER_ROUND + 1)
+    val shortening = TrustLimits.TRASH_RETENTION_MILLIS - retentionMillis
+    val limit = nasNow - retentionMillis + 1
+    // Solo il diario locale: le voci proprie i cui 30 giorni (contati da countFrom) sono passati, in ora del NAS. Nessun record remoto.
+    val candidates = store.expiredTrash(limit, Int.MAX_VALUE)
+      .filter { countFrom(it) < limit }
+      .sortedBy { countFrom(it) }
+      .take(TrustLimits.MAX_PURGE_ITEMS_PER_ROUND + 1)
     for (entry in candidates) {
       if (clocks.monotonicMs() >= deadline) {
         stop = PurgeStop.BUDGET
@@ -187,7 +216,8 @@ class NasTrashService internal constructor(
         stop = PurgeStop.BLOCKED
         break
       }
-      val local = LocalTrashEntry(entry.shareName, entry.trashId, entry.size, entry.trashedAtNas)
+      // La regola di core-trust vede la voce con l'ora da cui contano i suoi 30 giorni (R1, R5); in debug, spostata della durata accorciata.
+      val local = LocalTrashEntry(entry.shareName, entry.trashId, entry.size, countFrom(entry) - shortening)
       // Il posto lo deriva la regola dall'id, e deve coincidere con il diario; l'account deve essere quello di adesso.
       val path = policy.itemPath(local)
       if (entry.accountId != accountId || entry.trashedPath != path || entry.trashId in busy) {
@@ -212,17 +242,31 @@ class NasTrashService internal constructor(
         else -> TrashItemInfo(found.size)
       }
       when (val decision = policy.decide(local, info, nasNow, round)) {
-        is PurgeDecision.Purge -> when (val r = purger.purge(entry.shareName, decision.path, entry.isFolder, entry.size, Purpose.BACKGROUND)) {
-          OwnTrashPurger.Result.Done -> {
-            store.markTrash(entry.trashId, TrashEntryState.PURGED, nasNow)
-            purged++
-            bytes += entry.size
-          }
-          OwnTrashPurger.Result.Locked -> deferred++
-          OwnTrashPurger.Result.Changed -> kept.merge(KeepReason.CHANGED, 1, Int::plus)
-          is OwnTrashPurger.Result.Error -> {
-            stop = PurgeStop.NAS_UNREACHABLE
+        is PurgeDecision.Purge -> {
+          // R4: nel tetto del giorno contano i FILE (una cartella conta i suoi) e i byte; il primo del giorno passa sempre (B7).
+          val entryFiles = if (entry.isFolder) entry.fileCount ?: PurgedTally.UNCOUNTED_FOLDER_FILES else 1
+          val usedFiles = today.files + files
+          val usedBytes = today.bytes + bytes
+          val overDay = usedFiles + entryFiles > TrustLimits.MAX_PURGE_ITEMS_PER_ROUND ||
+            usedBytes + entry.size > TrustLimits.MAX_PURGE_BYTES_PER_ROUND
+          if (usedFiles > 0 && overDay) {
+            deferred++
+            stop = PurgeStop.ROUND_CAP
             break
+          }
+          when (val r = purger.purge(entry, Purpose.BACKGROUND)) {
+            OwnTrashPurger.Result.Done -> {
+              store.markTrash(entry.trashId, TrashEntryState.PURGED, nasNow)
+              purged++
+              files += entryFiles
+              bytes += entry.size
+            }
+            OwnTrashPurger.Result.Locked -> deferred++
+            OwnTrashPurger.Result.Changed -> kept.merge(KeepReason.CHANGED, 1, Int::plus)
+            is OwnTrashPurger.Result.Error -> {
+              stop = PurgeStop.NAS_UNREACHABLE
+              break
+            }
           }
         }
         is PurgeDecision.Keep -> kept.merge(decision.why, 1, Int::plus)
@@ -231,6 +275,7 @@ class NasTrashService internal constructor(
           alreadyGone++
         }
         PurgeDecision.Defer -> {
+          // Il tetto del giro di core-trust: il resto al giro dopo, che trova il tetto del giorno (ROUND_CAP) se e' stato raggiunto.
           deferred++
           stop = PurgeStop.BUDGET
           break
@@ -252,5 +297,8 @@ class NasTrashService internal constructor(
   private companion object {
     const val TAG = "NasTrash"
     const val DAY_MS = 24L * 60 * 60 * 1000
+
+    /** La durata piu' corta che la build debug puo' chiedere (F20: la pulizia si prova in minuti). */
+    const val MIN_RETENTION_MS = 60_000L
   }
 }

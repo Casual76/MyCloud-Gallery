@@ -29,6 +29,8 @@ import dev.pampa.mycloudgallery.core.nasops.contract.OpStateMachine
 import dev.pampa.mycloudgallery.core.nasops.contract.OpsStore
 import dev.pampa.mycloudgallery.core.nasops.contract.PlanHash
 import dev.pampa.mycloudgallery.core.nasops.contract.TrashEntryState
+import dev.pampa.mycloudgallery.core.nasops.contract.PurgedTally
+import dev.pampa.mycloudgallery.core.nasops.contract.TrashManifest
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import kotlinx.coroutines.flow.Flow
 
@@ -71,8 +73,12 @@ class ChaosFileOps(
   override suspend fun trashMove(share: String, path: SharePath, trashId: String, expect: NasStamp?, purpose: Purpose): NasResult<RenameOutcome> =
     injector.nas(Primitive.TRASH_MOVE, incarnation) { inner.trashMove(share, path, trashId, expect, purpose) }
 
-  override suspend fun deleteIfUnchanged(share: String, path: SharePath, size: Long, purpose: Purpose): NasResult<DeleteOutcome> =
-    injector.nas(Primitive.DELETE_IF_UNCHANGED, incarnation) { inner.deleteIfUnchanged(share, path, size, purpose) }
+  override suspend fun deleteIfUnchanged(share: String, path: SharePath, size: Long, purpose: Purpose, expect: NasStamp?): NasResult<DeleteOutcome> =
+    injector.nas(Primitive.DELETE_IF_UNCHANGED, incarnation) { inner.deleteIfUnchanged(share, path, size, purpose, expect) }
+
+  // Una lettura del proprio cestino (R3): cade come un elenco.
+  override suspend fun parentIdentity(share: String, dir: SharePath, purpose: Purpose): NasResult<Long?> =
+    injector.nas(Primitive.LIST, incarnation) { inner.parentIdentity(share, dir, purpose) }
 
   override suspend fun deleteOwnTemp(share: String, temp: SharePath, purpose: Purpose): NasResult<DeleteOutcome> =
     injector.nas(Primitive.DELETE_OWN_TEMP, incarnation) { inner.deleteOwnTemp(share, temp, purpose) }
@@ -227,9 +233,29 @@ class ChaosStore(
     injector.store(Primitive.STORE_MARK_TRASH, incarnation) { inner.markTrash(trashId, state, nowNas) }
   }
 
+  // Una scrittura della voce del cestino come `markTrash`: la morte puo' cadere prima o dopo, stessa primitiva del banco.
+  override suspend fun trashEntered(trashId: String, atNas: Long) {
+    injector.store(Primitive.STORE_MARK_TRASH, incarnation) { inner.trashEntered(trashId, atNas) }
+  }
+
   override suspend fun expiredTrash(beforeNas: Long, limit: Int): List<LocalTrashRecord> {
     incarnation.checkAlive()
     return inner.expiredTrash(beforeNas, limit)
+  }
+
+  // L'inventario di una cartella cestinata (R3) si scrive con la voce: la morte puo' cadere prima o dopo, come per `recordTrash`.
+  override suspend fun saveTrashManifest(trashId: String, manifest: TrashManifest) {
+    injector.store(Primitive.STORE_RECORD_TRASH, incarnation) { inner.saveTrashManifest(trashId, manifest) }
+  }
+
+  override suspend fun trashManifest(trashId: String): TrashManifest? {
+    incarnation.checkAlive()
+    return inner.trashManifest(trashId)
+  }
+
+  override suspend fun purgedSince(sinceNas: Long): PurgedTally {
+    incarnation.checkAlive()
+    return inner.purgedSince(sinceNas)
   }
 }
 

@@ -26,7 +26,8 @@
     7b. nessun resto di debug  nel dex dell'APK di release non compaiono la Libreria sintetica, il marcatore della famiglia
                                 "pronta", `DebugSyntheticSize`, il sink di logcat e il catalogo dei componenti (I4 della
                                 revisione di sicurezza), ne' (Fase 4A, D33) la recinzione delle prove `ShareFence` e il NAS
-                                sintetico del menu di debug: lettura diretta del dex, FALLISCE se non lo legge; e (R11 della
+                                sintetico del menu di debug, ne' (revisione 4B, F20) il gancio che accorcia i 30 giorni del
+                                cestino del NAS: lettura diretta del dex, FALLISCE se non lo legge; e (R11 della
                                 revisione 4A) gli esiti di R8 della release: `ShareFence` tolta per intero in usage.txt e
                                 assente da mapping.txt (una classe fusa in un'altra non lascia il suo nome nel dex)
     7c. niente servizi         l'APK di release non ha nessun `META-INF/services/dev.pampa.*` (ne' un file di servizio che
@@ -491,9 +492,12 @@ $debugRemnants = @(
   "LibraryDebugHooks",
   # Fase 4A (P11, D33): la recinzione delle prove sul campo (`ShareFence`) e' legata solo nella build debug
   # (DeveloperTools di debug); in release non e' referenziata e R8 la toglie. Anche il NAS sintetico del menu di debug.
-  "core/nas/fence/ShareFence", "SyntheticNasKit", "nas-synthetic"
+  "core/nas/fence/ShareFence", "SyntheticNasKit", "nas-synthetic",
+  # Fase 4B (revisione 4B, prova F20): il gancio che accorcia i 30 giorni del cestino del NAS (DeveloperTools di debug) e il nome del
+  # suo marcatore scritto da adb. In release DeveloperTools torna null e il gancio non deve esistere.
+  "DebugTrashRetention", "debug-trash-retention"
 )
-Step "nessun resto degli strumenti di debug nel dex di release (Libreria e NAS sintetici, famiglia pronta, sink di logcat, ShareFence D33)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
+Step "nessun resto degli strumenti di debug nel dex di release (Libreria e NAS sintetici, famiglia pronta, sink di logcat, ShareFence D33, cestino corto F20)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
   $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
   if (-not $apk) { return "nessun APK di release in app\build\outputs\apk\release" }

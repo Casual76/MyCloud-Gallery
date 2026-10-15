@@ -122,7 +122,15 @@ open class TrashAndHostileDataTest {
     assertThat(first.purged).isEqualTo(TrustLimits.MAX_PURGE_ITEMS_PER_ROUND)
     assertThat(first.deferred).isAtLeast(1)
     val second = kit.trash.purgeExpired(1.minutes)
-    assertThat(second.purged).isEqualTo(5)
+    if (kit.engine == KitEngine.PRODUCTION) {
+      // R4: il tetto e' per giorno. Lo stesso giorno non si elimina altro (ROUND_CAP: il lavoro non ne chiede un'altra); il giorno dopo si'.
+      assertThat(second.purged).isEqualTo(0)
+      assertThat(second.stoppedBy).isEqualTo(PurgeStop.ROUND_CAP)
+      kit.advance(24L * 60 * 60 * 1000)
+      assertThat(kit.trash.purgeExpired(1.minutes).purged).isEqualTo(5)
+    } else {
+      assertThat(second.purged).isEqualTo(5)
+    }
   }
 
   @Test

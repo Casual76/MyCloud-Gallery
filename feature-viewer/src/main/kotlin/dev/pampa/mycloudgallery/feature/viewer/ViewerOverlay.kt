@@ -669,7 +669,24 @@ private fun ViewerOverlays(
   val subtitle = format.subtitle(capture, placeName)
 
   // Le azioni: solo quelle che funzionano (D13).
-  val capabilities = currentRef?.let { ViewerCapabilities.of(services, it) } ?: ViewerCapabilities(false, false, false, false, false)
+  // Fase 4B (P14, P16): "Sposta", "Rinomina", "Elimina…" per il media del NAS di adesso. Il controller vive quanto il viewer: se si
+  // chiude a meta' di un foglio non resta niente di avviato (un'operazione parte solo dal tocco di conferma del foglio).
+  val nasController = services.nasActions?.let { actions ->
+    remember(actions) {
+      // R10: prima di rinominare, spostare o cestinare il file che sta guardando, il viewer chiude il suo lettore.
+      NasActionsController(actions, scope) {
+        val playing = playback.videoFor != null || playback.motionFor != null
+        playback.clear()
+        playing
+      }
+    }
+  }
+  if (nasController != null) LaunchedEffect(nasController, currentRef, currentId) { nasController.bind(currentRef, currentId) }
+  val nasTarget = nasController?.target?.collectAsState()?.value
+  val baseCapabilities = currentRef?.let { ViewerCapabilities.of(services, it) } ?: ViewerCapabilities(false, false, false, false, false)
+  // E-D1 (piano §2): un media sul telefono e sul NAS ha un solo "Elimina…", con "Solo dal telefono" / "Ovunque" (il foglio del NAS).
+  val phoneAndNas = nasTarget?.viaPhoneCopy == true
+  val capabilities = if (phoneAndNas) baseCapabilities.copy(trash = false) else baseCapabilities
   val isFavorite = controller.isFavorite(currentId)
   val copyLabel = stringResource(R.string.viewer_copy_label)
   val handlers = ViewerActionHandlers(
@@ -677,15 +694,10 @@ private fun ViewerOverlays(
     onToggleHidden = controller::toggleHidden,
     onShare = controller::share,
     onCopy = { controller.copy(copyLabel) },
-    onDelete = controller::askDelete,
+    onDelete = { if (phoneAndNas) nasController?.requestDelete() else controller.askDelete() },
     onInfo = controller::toggleInfo,
     onDownload = controller::download,
   )
-  // Fase 4B (P14, P16): "Sposta", "Rinomina", "Elimina…" per il media del NAS di adesso. Il controller vive quanto il viewer: se si
-  // chiude a meta' di un foglio non resta niente di avviato (un'operazione parte solo dal tocco di conferma del foglio).
-  val nasController = services.nasActions?.let { actions -> remember(actions) { NasActionsController(actions, scope) } }
-  if (nasController != null) LaunchedEffect(nasController, currentRef) { nasController.bind(currentRef) }
-  val nasTarget = nasController?.target?.collectAsState()?.value
   val nasEntries = if (nasController != null) {
     nasMenuEntries(
       resources,
@@ -704,7 +716,7 @@ private fun ViewerOverlays(
     nasActions = nasEntries?.actions.orEmpty(),
     nasDelete = nasEntries?.delete.orEmpty(),
   )
-  val barActions = viewerBarActions(resources, capabilities, isFavorite, handlers)
+  val barActions = viewerBarActions(resources, baseCapabilities, isFavorite, handlers)
   val nasNotice = nasController?.notice?.collectAsState()?.value
   if (nasController != null && nasNotice != null) {
     LaunchedEffect(nasNotice) {

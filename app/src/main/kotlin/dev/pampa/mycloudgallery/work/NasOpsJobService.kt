@@ -159,8 +159,8 @@ class NasOpsJobService : JobService() {
     // "Stop" dal Task Manager di Android: l'utente ha detto di fermarsi, come "Ferma" (nessuna ripresa automatica).
     val byUser = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && params.stopReason == JobParameters.STOP_REASON_USER
     if (byUser) {
-      val organizer = runCatching { entry().gallery().nas?.organizer }.getOrNull()
-      if (organizer != null) scope.launch { runCatching { organizer.cancelActive() } }
+      // R9: l'annullamento nello scope della galleria: il servizio sta per essere distrutto e con lui il suo scope.
+      runCatching { entry().gallery().nas?.organizer }.getOrNull()?.stopActiveFromService()
       return false
     }
     return true
@@ -198,7 +198,8 @@ class NasOpsJobService : JobService() {
         } catch (e: SecurityException) {
           // Senza permesso delle notifiche non c'era nemmeno il tasto.
         }
-        scope.launch { runCatching { organizer.cancelActive() } }
+        // R9: nello scope della galleria (vive piu' del servizio); la richiesta si scrive subito nel diario.
+        organizer.stopActiveFromService()
       }
     }
     ContextCompat.registerReceiver(this, receiver, IntentFilter(NasOpsNotification.stopAction(this)), ContextCompat.RECEIVER_NOT_EXPORTED)

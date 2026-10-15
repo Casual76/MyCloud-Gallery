@@ -155,6 +155,8 @@ class NasOtherViewModelsTest {
     assertThat(sheet.tapsLeft).isEqualTo(1)
     assertThat(kit.filesIn("test")).isNotEmpty()
 
+    // R6: il secondo tocco e' un secondo gesto, non il secondo colpo di un doppio tocco.
+    kit.clocks.monotonic += dev.pampa.mycloudgallery.core.nasops.contract.ConfirmationRules.MIN_TAP_GAP_MS
     val confirmation = checkNotNull(sheet.tap(vm.monotonicMs()))
     assertThat(confirmation.confirmedSteps).isEqualTo(2)
     vm.confirmed(plan, confirmation)

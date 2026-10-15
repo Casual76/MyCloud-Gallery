@@ -106,6 +106,12 @@ internal object DeveloperTools {
    */
   fun shareGuard(): ShareGuard? = ShareFence
 
+  /**
+   * SOLO debug, SOLO con il marcatore: la prova sul campo F20 della pulizia del cestino del NAS in minuti invece che in 30 giorni
+   * ([DebugTrashRetention]). Senza marcatore la debug e' l'app vera. In release non esiste (tools/check.ps1 lo cerca nel dex).
+   */
+  fun trashRetentionMillis(context: Context): Long? = DebugTrashRetention.read(context)
+
   /** Il nome del marcatore della famiglia pronta (lo scrive solo `adb`). */
   const val FAMILY_READY_MARKER: String = "debug-family-ready.marker"
 

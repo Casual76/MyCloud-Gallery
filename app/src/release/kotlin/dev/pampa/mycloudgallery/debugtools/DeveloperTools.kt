@@ -33,6 +33,10 @@ internal object DeveloperTools {
   /** Nessuna recinzione delle prove (D33 vale solo in debug): `ShareFence` non entra nell'APK di release. */
   fun shareGuard(): ShareGuard? = null
 
+  /** Il cestino del NAS tiene le voci 30 giorni, sempre: il gancio della prova F20 esiste solo in debug. */
+  @Suppress("UNUSED_PARAMETER")
+  fun trashRetentionMillis(context: Context): Long? = null
+
   fun NavGraphBuilder.destinations(nav: NavController) = Unit
 
   fun settingsSection(nav: NavController): (@Composable () -> Unit)? = null

@@ -29,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -81,6 +82,11 @@ import androidx.compose.ui.unit.dp
  * Il vetro e il trascinamento per chiudere sono dell'engine. Il foglio sta alla radice dell'app, in un
  * `FluidGlassModalHost`: senza host nello scope non si apre, e non va in crash.
  *
+ * R7 (revisione 4B, sicurezza.md L34): mentre il foglio e' aperto le **sovrapposizioni** delle altre app si nascondono, come nelle
+ * schermate della famiglia: [LocalConfirmSheetShield], che `:app` lega alla difesa di core-security (`OverlayShield`: finestre di
+ * sovrapposizione nascoste da Android 12, tocchi oscurati scartati). Una finestra che coprisse il riepilogo ("1 elemento, 3 MB" sopra
+ * "2.000 elementi") lasciando libero il pulsante non resta sopra il foglio.
+ *
  * @param paneTitle il titolo per il lettore di schermo: il foglio e' un pannello, e TalkBack lo annuncia.
  */
 @Composable
@@ -96,6 +102,8 @@ fun GalleryConfirmSheet(
     if (visible) view.filterTouchesWhenObscured = true
     onDispose { view.filterTouchesWhenObscured = previous }
   }
+  // R7: la difesa della finestra (sovrapposizioni nascoste), solo mentre il foglio e' aperto.
+  if (visible) LocalConfirmSheetShield.current()
   FluidGlassModalPortal(
     visible = visible,
     onDismissRequest = onDismissRequest,
@@ -104,6 +112,12 @@ fun GalleryConfirmSheet(
     content = content,
   )
 }
+
+/**
+ * R7 (revisione 4B): la difesa della finestra mentre un foglio di conferma e' aperto. Il design system non conosce core-security: la lega
+ * `:app` alla radice (`OverlayShield`). Di default niente (anteprime, test dei moduli senza l'app): resta il filtro dei tocchi oscurati.
+ */
+val LocalConfirmSheetShield = staticCompositionLocalOf<@Composable () -> Unit> { {} }
 
 /** Le misure di un foglio di conferma. */
 object GallerySheetDefaults {

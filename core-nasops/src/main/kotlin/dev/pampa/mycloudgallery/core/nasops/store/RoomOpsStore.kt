@@ -25,8 +25,13 @@ import dev.pampa.mycloudgallery.core.nasops.contract.PlanHash
 import dev.pampa.mycloudgallery.core.nasops.contract.TrashEntryState
 import dev.pampa.mycloudgallery.core.nasops.contract.TrashReason
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
+import dev.pampa.mycloudgallery.core.nasops.contract.PurgedTally
+import dev.pampa.mycloudgallery.core.nasops.contract.TrashManifest
+import java.io.File
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -45,9 +50,18 @@ import kotlinx.coroutines.sync.withLock
  * corrente degli elementi per il controllo delle transizioni si tiene in memoria dopo la prima lettura di ogni operazione: questo
  * adattatore e' l'unico che scrive il diario, e dopo la morte del processo un adattatore nuovo rilegge dal database.
  */
-class RoomOpsStore(private val database: GalleryDatabase) : OpsStore {
+class RoomOpsStore(
+  private val database: GalleryDatabase,
+  /**
+   * R3: la cartella degli inventari delle cartelle cestinate (in `noBackupFilesDir`, scelta da `:app`). Senza, gli inventari stanno in
+   * memoria e si perdono con il processo: una cartella cestinata prima di un riavvio allora non si svuota da sola (mai il contrario).
+   */
+  manifestDir: File? = null,
+) : OpsStore {
 
   private val dao: NasOpsDao = database.nasOpsDao()
+  private val manifestFiles = manifestDir?.let(::TrashManifestFiles)
+  private val manifestsInMemory = HashMap<String, TrashManifest>()
   private val mutex = Mutex()
   private val kinds = HashMap<String, OpKind>()
   private val current = HashMap<String, HashMap<Int, OpItemRecord>>()
@@ -173,6 +187,56 @@ class RoomOpsStore(private val database: GalleryDatabase) : OpsStore {
       database.transaction {
         val old = dao.trashEntry(trashId) ?: return@transaction
         dao.updateTrashEntry(old.copy(state = state.code, updatedAt = nowNas))
+      }
+    }
+    // Una voce eliminata o ripristinata non ha piu' bisogno del suo inventario.
+    if (state != TrashEntryState.TRASHED) dropManifest(trashId)
+  }
+
+  override suspend fun saveTrashManifest(trashId: String, manifest: TrashManifest) {
+    val entry = dao.trashEntry(trashId)
+    require(entry == null || entry.state == TrashEntryState.TRASHED.code) { "Inventario di una voce gia' chiusa." }
+    val files = manifestFiles
+    if (files == null) {
+      synchronized(manifestsInMemory) { manifestsInMemory[trashId] = manifest }
+    } else {
+      withContext(Dispatchers.IO) { files.write(trashId, manifest) }
+    }
+  }
+
+  override suspend fun trashManifest(trashId: String): TrashManifest? {
+    val files = manifestFiles ?: return synchronized(manifestsInMemory) { manifestsInMemory[trashId] }
+    return withContext(Dispatchers.IO) { files.read(trashId) }
+  }
+
+  override suspend fun purgedSince(sinceNas: Long): PurgedTally = withContext(Dispatchers.IO) {
+    var files = 0
+    var bytes = 0L
+    // Sola lettura sulla tabella del diario locale del cestino (nessuna colonna nuova): le voci chiuse come eliminate da [sinceNas].
+    database.openHelper.readableDatabase.query(
+      "SELECT is_folder, file_count, size FROM nas_trash_entry WHERE state = ? AND updated_at >= ?",
+      arrayOf<Any?>(TrashEntryState.PURGED.code, sinceNas),
+    ).use { cursor ->
+      while (cursor.moveToNext()) {
+        val folder = cursor.getInt(0) != 0
+        files += if (!folder) 1 else if (cursor.isNull(1)) PurgedTally.UNCOUNTED_FOLDER_FILES else cursor.getInt(1)
+        bytes += cursor.getLong(2)
+      }
+    }
+    PurgedTally(files, bytes)
+  }
+
+  private suspend fun dropManifest(trashId: String) {
+    synchronized(manifestsInMemory) { manifestsInMemory.remove(trashId) }
+    manifestFiles?.let { files -> withContext(Dispatchers.IO) { runCatching { files.remove(trashId) } } }
+  }
+
+  override suspend fun trashEntered(trashId: String, atNas: Long) {
+    mutex.withLock {
+      database.transaction {
+        val old = dao.trashEntry(trashId) ?: return@transaction
+        // Solo in avanti: i 30 giorni non si accorciano mai (R5).
+        if (atNas > old.trashedAt) dao.updateTrashEntry(old.copy(trashedAt = atNas, updatedAt = maxOf(old.updatedAt, atNas)))
       }
     }
   }

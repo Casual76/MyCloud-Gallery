@@ -417,6 +417,8 @@ class EdgeCasesTest {
     assertThat(sheet.tap(kit.clocks.monotonicMs())).isNull()
     assertThat(sheet.tapsLeft).isEqualTo(1)
     org.junit.Assert.assertThrows(IllegalArgumentException::class.java) { ConfirmationIssuer.issue(plan, 1, kit.clocks.monotonicMs()) }
+    // R6: il secondo tocco e' un secondo gesto (non il secondo colpo di un doppio tocco).
+    kit.clocks.monotonic += dev.pampa.mycloudgallery.core.nasops.contract.ConfirmationRules.MIN_TAP_GAP_MS
     val confirmation = sheet.tap(kit.clocks.monotonicMs())!!
     // Un piano di "elimina subito" fuori dal proprio cestino non parte nemmeno con due tocchi.
     val media = OpPlan(

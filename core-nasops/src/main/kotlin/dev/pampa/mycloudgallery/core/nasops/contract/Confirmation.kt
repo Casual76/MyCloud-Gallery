@@ -46,23 +46,39 @@ object ConfirmationIssuer {
  * Il foglio di conferma come macchina a tocchi, uguale per ogni UI che lo mostra (Cartelle NAS, Eliminati di recente, menu del
  * viewer): un tocco per i piani normali, due per i definitivi ("Elimina subito", Q8). Non e' stato di Compose: la UI lo avvolge.
  */
-class ConfirmationSheet(val plan: OpPlan) {
+class ConfirmationSheet(val plan: OpPlan, private val shownAtMonotonicMs: Long? = null) {
 
   var tapsDone: Int = 0
     private set
 
+  /** L'istante (monotono) dell'ultimo tocco contato, o della comparsa del pannello. */
+  private var lastCountedMs: Long? = shownAtMonotonicMs
+
   /** I tocchi che mancano ancora per avere la conferma. */
   val tapsLeft: Int get() = (plan.requiredConfirmations - tapsDone).coerceAtLeast(0)
 
-  /** Un tocco di conferma dell'utente. Restituisce la conferma solo quando e' l'ultimo tocco richiesto. */
+  /**
+   * Un tocco di conferma dell'utente. Restituisce la conferma solo quando e' l'ultimo tocco richiesto.
+   *
+   * R6 (revisione 4B): in un foglio a piu' conferme ("Elimina subito", definitivo) un tocco arrivato meno di
+   * [ConfirmationRules.MIN_TAP_GAP_MS] dopo il tocco precedente contato (un doppio tocco, un tocco registrato due volte) **non conta**: la
+   * seconda conferma vuole un secondo gesto, dopo che il pannello nuovo (con l'avviso sul backup esterno) e' comparso. Lo stesso per il
+   * primo tocco troppo vicino alla comparsa del foglio ([shownAtMonotonicMs]): il secondo colpo di un doppio tocco sulla voce del menu.
+   * I fogli a un tocco solo (tutto cio' che passa dal cestino del NAS, 30 giorni) non cambiano.
+   */
   fun tap(nowMonotonicMs: Long): UserConfirmation? {
+    val last = lastCountedMs
+    val tooSoon = last != null && nowMonotonicMs - last in 0 until ConfirmationRules.MIN_TAP_GAP_MS
+    if (tooSoon && plan.requiredConfirmations > 1) return null
     tapsDone++
+    lastCountedMs = nowMonotonicMs
     return if (tapsDone >= plan.requiredConfirmations) ConfirmationIssuer.issue(plan, tapsDone, nowMonotonicMs) else null
   }
 
   /** L'utente ha rinunciato: il foglio ricomincia da capo, nessuna conferma resta in giro. */
   fun reset() {
     tapsDone = 0
+    lastCountedMs = shownAtMonotonicMs
   }
 }
 
@@ -86,6 +102,12 @@ object ConfirmationRules {
 
   /** Quanto vale una conferma: 10 minuti di orologio monotono. */
   const val MAX_AGE_MS: Long = 10L * 60 * 1000
+
+  /**
+   * R6: il tempo minimo fra due tocchi contati di un foglio a piu' conferme (e fra la comparsa di un foglio e il suo primo tocco). Un
+   * doppio tocco sta sotto i 300 ms; un secondo gesto voluto, dopo aver letto il pannello nuovo, sta sopra.
+   */
+  const val MIN_TAP_GAP_MS: Long = 600
 
   fun check(plan: OpPlan, confirmation: UserConfirmation, nowMonotonicMs: Long): ConfirmationCheck = when {
     confirmation.planHash != plan.hash -> ConfirmationCheck.WrongPlan

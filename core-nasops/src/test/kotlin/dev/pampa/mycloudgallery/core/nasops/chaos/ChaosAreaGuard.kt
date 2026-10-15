@@ -238,9 +238,14 @@ class GuardedFileOps(
     return inner.trashMove(share, path, trashId, expect, purpose)
   }
 
-  override suspend fun deleteIfUnchanged(share: String, path: SharePath, size: Long, purpose: Purpose): NasResult<DeleteOutcome> {
+  override suspend fun deleteIfUnchanged(share: String, path: SharePath, size: Long, purpose: Purpose, expect: NasStamp?): NasResult<DeleteOutcome> {
     pass(share)
-    return inner.deleteIfUnchanged(share, path, size, purpose)
+    return inner.deleteIfUnchanged(share, path, size, purpose, expect)
+  }
+
+  override suspend fun parentIdentity(share: String, dir: SharePath, purpose: Purpose): NasResult<Long?> {
+    pass(share)
+    return inner.parentIdentity(share, dir, purpose)
   }
 
   override suspend fun deleteOwnTemp(share: String, temp: SharePath, purpose: Purpose): NasResult<DeleteOutcome> {

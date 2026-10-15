@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.feature.viewer.menu
 
 import androidx.annotation.StringRes
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryDeleteScope
+import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.nasops.contract.ConfirmationCheck
 import dev.pampa.mycloudgallery.core.nasops.contract.NameRules
@@ -73,10 +74,14 @@ class NasActionNotice(@StringRes val text: Int, val started: Boolean) {
  *
  * @param scope lo scope che vive quanto il viewer: se si chiude a meta' di un piano, non resta niente di avviato (un'operazione parte
  *   solo da [confirmed], cioe' da un tocco).
+ * @param releaseOwnHandles R10 (revisione 4B): il viewer chiude i propri handle sul file (il lettore del video) prima che l'operazione lo
+ *   rinomini, lo sposti o lo metta nel cestino: altrimenti l'operazione aspetterebbe il viewer stesso come un "file aperto dal PC".
+ *   Vero se ha chiuso qualcosa.
  */
 class NasActionsController(
   private val actions: NasMediaActions,
   private val scope: CoroutineScope,
+  private val releaseOwnHandles: () -> Boolean = { false },
 ) {
 
   private val targetFlow = MutableStateFlow<NasActionTarget?>(null)
@@ -99,15 +104,21 @@ class NasActionsController(
   /** L'orologio con cui il foglio data una conferma. */
   fun monotonicMs(): Long = actions.monotonicMs()
 
-  /** Il viewer e' passato a [ref] (null = un media che non e' del NAS): si risolve il file e cosa ci si puo' fare. */
-  fun bind(ref: MediaRef?) {
+  /**
+   * Il viewer e' passato a [ref] (null = un media senza copia leggibile): si risolve il file e cosa ci si puo' fare. Un media mostrato
+   * dalla copia del telefono ([MediaRef.Phone]) con copie anche sul NAS ([id]) ha "Elimina…" con la scelta del luogo (E-D1).
+   */
+  fun bind(ref: MediaRef?, id: MediaId? = null) {
     bindJob?.cancel()
     dismiss()
-    if (ref !is MediaRef.Nas) {
-      targetFlow.value = null
-      return
+    when {
+      ref is MediaRef.Nas -> bindJob = scope.launch { targetFlow.value = actions.target(ref) }
+      ref is MediaRef.Phone && id != null -> {
+        targetFlow.value = null
+        bindJob = scope.launch { targetFlow.value = actions.targetForPhoneCopy(id) }
+      }
+      else -> targetFlow.value = null
     }
-    bindJob = scope.launch { targetFlow.value = actions.target(ref) }
   }
 
   // --- Elimina… ---------------------------------------------------------------------------------------------------------------
@@ -121,7 +132,8 @@ class NasActionsController(
     stateFlow.value = NasActionsState.Delete(target, scopeChoice, plan = null, planning = true)
     planJob?.cancel()
     planJob = scope.launch {
-      val outcome = actions.operations.plan(OpRequest.Trash(listOf(target.item)))
+      // "Ovunque": tutte le copie del NAS dove si hanno i diritti (E-D11); il piano salta il resto e il foglio lo elenca.
+      val outcome = actions.operations.plan(OpRequest.Trash(target.everywhereItems))
       stateFlow.update { current ->
         if (current is NasActionsState.Delete && current.target === target) {
           when (outcome) {
@@ -210,7 +222,10 @@ class NasActionsController(
    */
   internal fun confirmed(plan: OpPlan, confirmation: UserConfirmation) {
     stateFlow.value = NasActionsState.Idle
+    // R10: prima di toccare il file, il viewer chiude il suo (il lettore del video): l'operazione non aspetta il viewer stesso.
+    val released = releaseOwnHandles()
     scope.launch {
+      if (released) delay(RELEASE_SETTLE_MS)
       val outcome = actions.operations.start(plan, confirmation)
       noticeFlow.value = noticeFor(outcome)
     }
@@ -254,5 +269,8 @@ class NasActionsController(
   private companion object {
     /** Quanto si aspetta dopo l'ultimo carattere prima di chiedere il piano: non si interroga il NAS a ogni lettera. */
     const val NAME_CHECK_DELAY_MS = 250L
+
+    /** R10: il lettore chiude il suo handle sul NAS in modo asincrono; un attimo prima di rinominare o cestinare. */
+    const val RELEASE_SETTLE_MS = 500L
   }
 }

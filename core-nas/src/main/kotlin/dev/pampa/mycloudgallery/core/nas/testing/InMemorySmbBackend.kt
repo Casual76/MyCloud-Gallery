@@ -725,17 +725,20 @@ class InMemorySmbBackend(
 
     override fun openDirectory(path: String, access: DirAccess): SmbDirectory = perform(SimOp.OPEN_DIRECTORY, path) {
       if (access == DirAccess.ADD_FILE) requireWrite()
+      var parentId: Long? = null
       val entries = synchronized(lock) {
         val state = state()
         val parts = split(path)
         val node = lookup(state, parts)
         if (!node.isDirectory) throw SmbStatusException(NtStatus.NOT_A_DIRECTORY)
         val listed = node.linkTarget ?: key(parts)
+        // La voce `..` come la da' Samba: il genitore sul disco (per un collegamento, quello della destinazione). Radice: niente.
+        parentId = if (listed.isEmpty()) null else state.node(parentKey(listed))?.fileId
         // Un'istantanea dei nodi (riferimenti): le voci si costruiscono una alla volta, mentre si scorre.
         val snapshot = state.children(listed).toList()
         listOrder?.let { random -> snapshot.shuffled(random) } ?: snapshot
       }
-      SimDirectory(this, entries, truncateListsAfter)
+      SimDirectory(this, entries, truncateListsAfter, parentId)
     }
 
     override fun deleteFile(path: String) = perform(SimOp.DELETE, path) {
@@ -984,7 +987,17 @@ class InMemorySmbBackend(
     }
   }
 
-  private inner class SimDirectory(private val share: SimShare, private val entries: List<Node>, private val truncate: Int?) : SmbDirectory {
+  private inner class SimDirectory(
+    private val share: SimShare,
+    private val entries: List<Node>,
+    private val truncate: Int?,
+    private val parent: Long? = null,
+  ) : SmbDirectory {
+    override fun parentFileId(): Long? {
+      share.checkAlive()
+      return parent
+    }
+
     override fun entries(): Iterator<SmbDirEntry> {
       val inner = entries.iterator()
       var served = 0

@@ -187,7 +187,11 @@ class NasOrganizeIntegrationTest {
     val plan = (ops.plan(request) as? PlanOutcome.Ready)?.plan ?: error("piano rifiutato: ${ops.plan(request)}")
     val sheet = ConfirmationSheet(plan)
     var confirmation = sheet.tap(organizer.clocks.monotonicMs())
-    repeat(taps - 1) { confirmation = sheet.tap(organizer.clocks.monotonicMs()) }
+    repeat(taps - 1) {
+      // R6 (revisione 4B): la conferma successiva e' un secondo gesto, non il secondo colpo di un doppio tocco.
+      Thread.sleep(dev.pampa.mycloudgallery.core.nasops.contract.ConfirmationRules.MIN_TAP_GAP_MS)
+      confirmation = sheet.tap(organizer.clocks.monotonicMs())
+    }
     val outcome = ops.start(plan, checkNotNull(confirmation))
     val id = when (outcome) {
       is StartOutcome.Started -> outcome.id

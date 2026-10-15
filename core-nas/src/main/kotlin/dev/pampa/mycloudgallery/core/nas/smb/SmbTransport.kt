@@ -308,6 +308,15 @@ interface SmbDirectory : Closeable {
   @Throws(IOException::class)
   fun entries(): Iterator<SmbDirEntry>
 
+  /**
+   * R3 della revisione 4B: il `FileId` della voce `..` di questa cartella come la riporta il server, cioe' della cartella che la contiene
+   * **sul disco**. Samba (`follow symlinks = yes`) presenta un collegamento simbolico a una cartella come una cartella normale, ma risolve
+   * `..` dopo il collegamento: il genitore riportato e' quello della destinazione, non quello da cui si e' arrivati. Null se il server non
+   * lo dice (o il trasporto non lo sa leggere): allora non prova niente.
+   */
+  @Throws(IOException::class)
+  fun parentFileId(): Long? = null
+
   override fun close()
 }
 

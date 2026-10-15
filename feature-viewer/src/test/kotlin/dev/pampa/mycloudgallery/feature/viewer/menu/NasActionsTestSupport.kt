@@ -21,6 +21,7 @@ import dev.antigravity.fluidengine.ui.fluid.glassBackdropSource
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidGlassModalHostState
 import dev.antigravity.fluidengine.ui.fluid.rememberGlassBackdrop
 import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
+import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.nasops.contract.NasOperations
 import dev.pampa.mycloudgallery.core.nasops.testing.NasOpsTestKit
@@ -49,7 +50,12 @@ class KitNasMediaActions(
   var writable: Boolean = true,
   var destinations: List<NasMoveDestination> = defaultDestinations(),
   var others: List<NasLocationInfo> = emptyList(),
+  /** P16 (E-D1): il bersaglio per un media mostrato dalla copia del telefono, se ne ha anche sul NAS. */
+  var phoneCopy: (suspend (MediaId) -> NasActionTarget?)? = null,
 ) : NasMediaActions {
+
+  override suspend fun targetForPhoneCopy(id: MediaId): NasActionTarget? = phoneCopy?.invoke(id)
+
 
   override val operations: NasOperations get() = kit.operations
 

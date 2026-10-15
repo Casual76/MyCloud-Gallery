@@ -84,6 +84,12 @@ enum class PurgeStop(override val code: String) : StableCode {
 
   /** L'ora del NAS non e' ancorata: senza non si decide niente (D32). */
   NO_NAS_TIME("no_nas_time"),
+
+  /**
+   * R4 (revisione 4B): il tetto del giro (200 file e 20 GiB, formato §9.3) e' raggiunto. Non e' "tempo finito": il lavoro giornaliero non
+   * ne chiede un altro subito, il resto aspetta il giro del giorno dopo.
+   */
+  ROUND_CAP("round_cap"),
 }
 
 /**

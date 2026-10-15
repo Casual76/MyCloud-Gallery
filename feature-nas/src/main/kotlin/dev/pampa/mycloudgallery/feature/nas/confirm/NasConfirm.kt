@@ -13,6 +13,8 @@ import androidx.compose.material.icons.rounded.RestoreFromTrash
 import androidx.compose.material.icons.rounded.Save
 import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.Update
+import androidx.compose.material.icons.rounded.VisibilityOff
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -66,6 +68,8 @@ internal data class ConfirmFacts(
   val kind: OpKind,
   val itemCount: Int,
   val folderCount: Int,
+  /** R2: i file che l'operazione tocca davvero, contando quelli dentro le cartelle da eliminare (contati alla pianificazione). */
+  val fileCount: Int,
   val totalBytes: Long,
   /** L'area di arrivo (spostamenti), se e' fra quelle dell'utente. */
   val destArea: NasArea?,
@@ -78,12 +82,16 @@ internal data class ConfirmFacts(
   val intoCommon: Boolean,
   val skipped: List<Pair<SkipReason, Int>>,
   val warnings: Set<PlanWarning>,
+  /** R11: quanti degli elementi che vanno nell'area comune l'utente ha nascosto (li vedranno tutti i familiari). */
+  val hiddenCount: Int = 0,
 ) {
-  val fileCount: Int get() = itemCount - folderCount
   val hasFolders: Boolean get() = folderCount > 0
+
+  /** R2: l'eliminazione porta nel cestino molti file: il foglio lo dice in evidenza. */
+  val manyFiles: Boolean get() = PlanWarning.MANY_FILES in warnings
 }
 
-internal fun confirmFacts(plan: OpPlan, areas: List<NasArea>): ConfirmFacts {
+internal fun confirmFacts(plan: OpPlan, areas: List<NasArea>, hidden: Int = 0): ConfirmFacts {
   val summary = plan.summary
   val destArea = summary.destShare?.let { areas.areaOf(it) }
   val fromElsewhere = summary.destShare != null && plan.items.any { !it.srcShare.equals(summary.destShare, ignoreCase = true) }
@@ -91,6 +99,7 @@ internal fun confirmFacts(plan: OpPlan, areas: List<NasArea>): ConfirmFacts {
     kind = plan.kind,
     itemCount = summary.itemCount,
     folderCount = summary.folderCount,
+    fileCount = summary.fileCount,
     totalBytes = summary.totalBytes,
     destArea = destArea,
     destShare = summary.destShare,
@@ -99,6 +108,7 @@ internal fun confirmFacts(plan: OpPlan, areas: List<NasArea>): ConfirmFacts {
     intoCommon = plan.kind == OpKind.MOVE && destArea?.kind == NasAreaKind.COMMON && fromElsewhere,
     skipped = plan.skipped.groupingBy { it.reason }.eachCount().toList().sortedBy { it.first.ordinal },
     warnings = plan.warnings,
+    hiddenCount = if (plan.kind == OpKind.MOVE && destArea?.kind == NasAreaKind.COMMON && fromElsewhere) hidden.coerceAtLeast(0) else 0,
   )
 }
 
@@ -125,6 +135,7 @@ internal fun destinationText(facts: ConfirmFacts, areas: List<NasArea>): String 
  *
  * @param plan il piano da confermare; null = il foglio e' chiuso.
  * @param monotonicMs l'orologio monotono con cui si data la conferma (lo stesso con cui `NasOperations.start` la controlla).
+ * @param hidden R11: quanti elementi del piano l'utente ha nascosto (per uno spostamento nell'area comune).
  */
 @Composable
 internal fun NasConfirmSheet(
@@ -133,6 +144,7 @@ internal fun NasConfirmSheet(
   monotonicMs: () -> Long,
   onConfirmed: (OpPlan, UserConfirmation) -> Unit,
   onDismiss: () -> Unit,
+  hidden: Int = 0,
 ) {
   // Il foglio che si chiude fa la sua uscita con il contenuto che aveva, non a vuoto.
   var shown by remember { mutableStateOf(plan) }
@@ -143,7 +155,7 @@ internal fun NasConfirmSheet(
     onDismissRequest = onDismiss,
     paneTitle = if (showing != null) confirmTitle(showing, last = false) else "",
   ) {
-    if (showing != null) NasConfirmBody(plan = showing, areas = areas, monotonicMs = monotonicMs, onConfirmed = onConfirmed, onDismiss = onDismiss)
+    if (showing != null) NasConfirmBody(plan = showing, areas = areas, hidden = hidden, monotonicMs = monotonicMs, onConfirmed = onConfirmed, onDismiss = onDismiss)
   }
 }
 
@@ -151,15 +163,18 @@ internal fun NasConfirmSheet(
 private fun ColumnScope.NasConfirmBody(
   plan: OpPlan,
   areas: List<NasArea>,
+  hidden: Int,
   monotonicMs: () -> Long,
   onConfirmed: (OpPlan, UserConfirmation) -> Unit,
   onDismiss: () -> Unit,
 ) {
-  val sheet = remember(plan) { ConfirmationSheet(plan) }
+  // R6: il foglio sa quando e' comparso; per "Elimina subito" un tocco troppo vicino (doppio tocco) non conta.
+  val sheet = remember(plan) { ConfirmationSheet(plan, shownAtMonotonicMs = monotonicMs()) }
   var taps by remember(plan) { mutableIntStateOf(0) }
   NasConfirmSheetContent(
     plan = plan,
     areas = areas,
+    hidden = hidden,
     tapsDone = taps,
     onConfirm = {
       // L'unico punto del modulo in cui nasce una conferma: un tocco dell'utente sul pulsante di conferma.
@@ -187,8 +202,9 @@ internal fun NasConfirmSheetContent(
   onConfirm: () -> Unit,
   onCancel: () -> Unit,
   modifier: Modifier = Modifier,
+  hidden: Int = 0,
 ) {
-  val facts = remember(plan, areas) { confirmFacts(plan, areas) }
+  val facts = remember(plan, areas, hidden) { confirmFacts(plan, areas, hidden) }
   val last = tapsDone >= plan.requiredConfirmations - 1
   GallerySheetScaffold(
     icon = confirmIcon(facts.kind),
@@ -326,6 +342,10 @@ private fun skippedText(skipped: List<Pair<SkipReason, Int>>): String = skipped.
 @Composable
 private fun NotesGroup(facts: ConfirmFacts, last: Boolean) {
   val notes = buildList<Note> {
+    // R2: molti file in un'eliminazione: per primo, in evidenza (il riepilogo e' la difesa contro la cartella sbagliata).
+    if (facts.manyFiles && facts.kind == OpKind.TRASH) {
+      add(Note(Icons.Rounded.Warning, FluidTone.Danger, R.string.nas_confirm_many_title, R.string.nas_confirm_many_detail, countText(R.plurals.nas_files_count, facts.fileCount)))
+    }
     if (facts.kind == OpKind.PURGE_NOW) {
       val noRestore = Note(Icons.Rounded.Lock, FluidTone.Danger, R.string.nas_confirm_purge_note_title, R.string.nas_confirm_purge_note_detail)
       val backup = Note(Icons.Rounded.Save, FluidTone.Danger, R.string.nas_confirm_backup_title, R.string.nas_confirm_backup_detail)
@@ -340,6 +360,10 @@ private fun NotesGroup(facts: ConfirmFacts, last: Boolean) {
     }
     if (facts.intoCommon) {
       add(Note(Icons.Rounded.Group, FluidTone.Info, R.string.nas_confirm_common_title, R.string.nas_confirm_common_detail))
+    }
+    // R11: fra gli elementi che vanno nell'area comune ce ne sono di nascosti dall'utente: i familiari li vedranno.
+    if (facts.hiddenCount > 0) {
+      add(Note(Icons.Rounded.VisibilityOff, FluidTone.Warning, R.string.nas_confirm_hidden_title, R.string.nas_confirm_hidden_detail, countText(R.plurals.nas_items_count, facts.hiddenCount)))
     }
     if (facts.crossShare) {
       add(Note(Icons.Rounded.CloudSync, FluidTone.Neutral, R.string.nas_confirm_cross_title, R.string.nas_confirm_cross_detail))
@@ -369,7 +393,7 @@ private fun NotesGroup(facts: ConfirmFacts, last: Boolean) {
       if (index > 0) FluidListDivider()
       FluidListRow(
         title = stringResource(note.title),
-        subtitle = stringResource(note.detail),
+        subtitle = if (note.arg != null) stringResource(note.detail, note.arg) else stringResource(note.detail),
         tone = note.tone,
         disclosure = false,
         leading = { Icon(imageVector = note.icon, contentDescription = null) },
@@ -378,4 +402,4 @@ private fun NotesGroup(facts: ConfirmFacts, last: Boolean) {
   }
 }
 
-private class Note(val icon: ImageVector, val tone: FluidTone, val title: Int, val detail: Int)
+private class Note(val icon: ImageVector, val tone: FluidTone, val title: Int, val detail: Int, val arg: String? = null)

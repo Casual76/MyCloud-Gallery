@@ -113,3 +113,18 @@ interface FreezeState {
   /** Vero se ha scongelato (gesto valido e share congelata). */
   suspend fun release(gesture: UserGesture): Boolean
 }
+
+/**
+ * R8 della revisione 4B: i file che **questo dispositivo** ha tolto dalla parte visibile di una share con le sue operazioni (eliminati nel
+ * cestino del NAS, spostati in un'altra share), per `fileId`, dal **diario locale** delle operazioni: azioni confermate dall'utente su
+ * questo telefono, mai dati letti dal NAS. La scansione non li conta fra gli "spariti" del congelamento (D10): un riordino grande fatto
+ * dall'app non e' un ransomware, e un allarme che scatta a ogni riordino insegna a confermare senza guardare. Un file che sparisce per
+ * altra via (il PC, un altro dispositivo, un ransomware) conta come prima: serve lo stesso `fileId` che il diario ricorda.
+ */
+fun interface OwnRemovals {
+  suspend fun fileIds(share: String): Set<Long>
+
+  companion object {
+    val NONE: OwnRemovals = OwnRemovals { emptySet() }
+  }
+}

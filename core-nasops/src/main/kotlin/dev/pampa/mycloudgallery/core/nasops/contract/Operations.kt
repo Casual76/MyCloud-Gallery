@@ -152,6 +152,13 @@ interface OpClocks {
 
   /** L'ora del NAS adesso, o null se nessuna sessione l'ha ancora ancorata (le operazioni che ne hanno bisogno aspettano). */
   fun nasNowMs(): Long?
+
+  /**
+   * R1 (revisione 4B, D32): l'ora del NAS in cui l'ultimo salto dell'ora e' finito (24 ore di ora stabile o il gesto dell'utente), o null
+   * se non se ne ricorda nessuno. Le scadenze che contano su date scritte prima (i 30 giorni del cestino) non partono mai da prima di
+   * questo istante: dopo un salto accettato il cestino riparte con 30 giorni pieni (al peggio tiene di piu', mai di meno).
+   */
+  fun clockTrustedSinceNasMs(): Long? = null
 }
 
 /** Perche' adesso non si scrive sul NAS. */

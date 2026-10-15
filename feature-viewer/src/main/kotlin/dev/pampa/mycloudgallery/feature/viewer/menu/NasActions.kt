@@ -7,6 +7,7 @@ import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.DriveFileRenameOutline
 import androidx.compose.material.icons.rounded.Lock
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuEntry
+import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.nasops.contract.NasItem
 import dev.pampa.mycloudgallery.core.nasops.contract.NasOperations
@@ -27,8 +28,11 @@ enum class NasAreaScope {
   COMMON,
 }
 
-/** Un posto in cui il media si trova, per l'elenco del foglio "Elimina…". [writable] falso = sola lettura per l'utente (E-D11). */
-data class NasLocationInfo(val kind: Kind, val writable: Boolean = true) {
+/**
+ * Un posto in cui il media si trova, per l'elenco del foglio "Elimina…". [writable] falso = sola lettura per l'utente (E-D11). [item] e' la
+ * copia del NAS in quel posto (con il timbro visto): con "Ovunque" va nel cestino anche lei, se si puo' scrivere.
+ */
+data class NasLocationInfo(val kind: Kind, val writable: Boolean = true, val item: NasItem? = null) {
   enum class Kind { PHONE, NAS_PRIVATE, NAS_COMMON }
 
   override fun toString(): String = "NasLocationInfo(${kind.name})"
@@ -56,6 +60,8 @@ data class NasMoveDestination(
  * @property onPhone il media ha anche una copia sul telefono (E-D1): "Elimina…" offre "Solo dal telefono" / "Ovunque".
  * @property others le altre posizioni del NAS in cui il media si trova (un'altra area), con il permesso (E-D11).
  * @property destinations dove si puo' spostare; vuoto = "Sposta" non compare.
+ * @property hidden l'utente ha nascosto questo media nella Libreria (R11): spostarlo nell'area comune lo mostra ai familiari, e il foglio
+ *   lo dice.
  */
 class NasActionTarget(
   val item: NasItem,
@@ -65,7 +71,16 @@ class NasActionTarget(
   val isVideo: Boolean,
   val others: List<NasLocationInfo> = emptyList(),
   val destinations: List<NasMoveDestination> = emptyList(),
+  val hidden: Boolean = false,
+  /** Il viewer mostra la copia del **telefono** (E-D1): del NAS si offre solo "Elimina…" con la scelta del luogo. */
+  val viaPhoneCopy: Boolean = false,
 ) {
+  /**
+   * Le copie del NAS che "Ovunque" mette nel cestino: questa e le altre, solo dove si hanno i diritti (E-D11). Le altre si pianificano
+   * comunque: il piano salta le aree in sola lettura e il foglio le elenca.
+   */
+  val everywhereItems: List<NasItem> get() = listOf(item) + others.filter { it.writable }.mapNotNull { it.item }
+
   override fun toString(): String = "NasActionTarget(${scope.name}, writable=$writable, onPhone=$onPhone)"
 }
 
@@ -83,6 +98,13 @@ interface NasMediaActions {
 
   /** Il file dietro [ref], o null se non si risolve (la riga del catalogo non c'e' piu', l'area non e' raggiungibile). */
   suspend fun target(ref: MediaRef.Nas): NasActionTarget?
+
+  /**
+   * Un media che il viewer mostra dalla copia del **telefono** ([id]) ma che sta anche sul NAS (E-D1, piano §2): le sue copie del NAS, con
+   * [NasActionTarget.onPhone] vero, cosi' "Elimina…" offre "Solo dal telefono" / "Ovunque". Null se non ha copie del NAS nelle aree
+   * dell'utente.
+   */
+  suspend fun targetForPhoneCopy(id: MediaId): NasActionTarget? = null
 }
 
 /** Cosa la voce di menu puo' fare per questo media. Pura: la provano i test su JVM. */
@@ -101,6 +123,8 @@ internal data class NasActionCapabilities(
 
     fun of(target: NasActionTarget?): NasActionCapabilities = when {
       target == null -> None
+      // Il viewer mostra la copia del telefono: del NAS si offre solo "Elimina…" con la scelta del luogo (E-D1).
+      target.viaPhoneCopy -> NasActionCapabilities(move = false, rename = false, delete = true, readOnly = false)
       !target.writable -> NasActionCapabilities(move = false, rename = false, delete = false, readOnly = true)
       else -> NasActionCapabilities(
         move = target.destinations.isNotEmpty(),

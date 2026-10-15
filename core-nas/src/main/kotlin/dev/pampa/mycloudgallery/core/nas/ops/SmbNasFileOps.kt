@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.nas.ops
 
 import dev.pampa.mycloudgallery.core.model.NasStamp
+import dev.pampa.mycloudgallery.core.nas.contract.NasAttributes
 import dev.pampa.mycloudgallery.core.nas.contract.NasError
 import dev.pampa.mycloudgallery.core.nas.contract.NasResult
 import dev.pampa.mycloudgallery.core.nas.contract.NasSessionManager
@@ -14,6 +15,7 @@ import dev.pampa.mycloudgallery.core.nas.session.NasOpException
 import dev.pampa.mycloudgallery.core.nas.session.OpContext
 import dev.pampa.mycloudgallery.core.nas.session.SmbErrors
 import dev.pampa.mycloudgallery.core.nas.session.SmbNasSessionManager
+import dev.pampa.mycloudgallery.core.nas.smb.DirAccess
 import dev.pampa.mycloudgallery.core.nas.smb.NtStatus
 import dev.pampa.mycloudgallery.core.nas.smb.SmbChangeHandle
 import dev.pampa.mycloudgallery.core.nas.smb.SmbCopyChunk
@@ -319,27 +321,42 @@ internal class SmbNasFileOps(
 
   // --- cancellazioni (solo dentro .mycloudgallery/) --------------------------------------------------------------------
 
-  override suspend fun deleteIfUnchanged(share: String, path: SharePath, size: Long, purpose: Purpose): NasResult<DeleteOutcome> {
+  override suspend fun deleteIfUnchanged(share: String, path: SharePath, size: Long, purpose: Purpose, expect: NasStamp?): NasResult<DeleteOutcome> {
     require(NasOpsPaths.isAppArea(path)) { "L'eliminazione definitiva vale solo dentro .mycloudgallery/: un media va nel cestino." }
-    return manager.runOp(share, purpose, idempotent = false, touchesDisk = true) { ctx -> deleteOnce(ctx.share, path, size) }
+    require(expect == null || expect.size == size) { "Il timbro atteso ha la sua dimensione." }
+    return manager.runOp(share, purpose, idempotent = false, touchesDisk = true) { ctx -> deleteOnce(ctx.share, path, size, expect) }
   }
 
   override suspend fun deleteOwnTemp(share: String, temp: SharePath, purpose: Purpose): NasResult<DeleteOutcome> {
     require(NasOpsPaths.isTempOf(temp, ownerDeviceId)) { "Un temporaneo di questo dispositivo." }
-    return manager.runOp(share, purpose, idempotent = false, touchesDisk = true) { ctx -> deleteOnce(ctx.share, temp, expectedSize = null) }
+    return manager.runOp(share, purpose, idempotent = false, touchesDisk = true) { ctx -> deleteOnce(ctx.share, temp, expectedSize = null, expect = null) }
+  }
+
+  override suspend fun parentIdentity(share: String, dir: SharePath, purpose: Purpose): NasResult<Long?> {
+    require(NasOpsPaths.isOwnTrashTree(dir, ownerDeviceId)) { "Solo nel proprio cestino." }
+    return manager.runOp(share, purpose, idempotent = true, touchesDisk = true) { ctx ->
+      try {
+        ctx.share.openDirectory(at(dir), DirAccess.LIST).use { it.parentFileId() }
+      } catch (e: SmbStatusException) {
+        if (e.status in ABSENT || e.status == NtStatus.NOT_A_DIRECTORY) throw NasOpException(NasError.NotFound)
+        throw e
+      }
+    }
   }
 
   /**
    * UNA cancellazione con UN handle (formato §9.3, revisione B7): apertura **esclusiva** (nessun altro puo' aprire il file finche'
-   * l'handle e' aperto), dimensione letta su quell'handle, poi cancellazione alla chiusura dello stesso handle.
+   * l'handle e' aperto), dimensione (e, con [expect], data e `fileId`) letta su quell'handle, poi cancellazione alla chiusura dello
+   * stesso handle. Un punto di rianalisi non si cancella (R3): l'handle e' aperto sul collegamento, non sulla destinazione.
    */
-  private fun deleteOnce(share: SmbShare, path: SharePath, expectedSize: Long?): DeleteOutcome {
+  private fun deleteOnce(share: SmbShare, path: SharePath, expectedSize: Long?, expect: NasStamp?): DeleteOutcome {
     val handle = openChange(share, path, exclusive = true) ?: return DeleteOutcome.Missing
     if (handle === LOCKED) return DeleteOutcome.Locked
     handle.use { h ->
       val info = h.info
-      if (info.isDirectory) return DeleteOutcome.NotAFile
+      if (info.isDirectory || (info.attributes and NasAttributes.REPARSE_POINT) != 0) return DeleteOutcome.NotAFile
       if (expectedSize != null && info.size != expectedSize) return DeleteOutcome.SizeChanged(info.size)
+      if (expect != null && !expect.sameAs(stampOf(info))) return DeleteOutcome.SizeChanged(info.size)
       try {
         h.deleteOnClose()
       } catch (e: SmbStatusException) {
@@ -362,6 +379,8 @@ internal class SmbNasFileOps(
         handle === LOCKED -> RmdirOutcome.Locked
         else -> handle.use { h ->
           if (!h.info.isDirectory) throw NasOpException(NasError.NotFound)
+          // R3: un collegamento (punto di rianalisi) non si toglie, neanche "vuoto": resta dov'e'.
+          if ((h.info.attributes and NasAttributes.REPARSE_POINT) != 0) return@use RmdirOutcome.NotEmpty
           try {
             h.deleteOnClose()
             RmdirOutcome.Removed

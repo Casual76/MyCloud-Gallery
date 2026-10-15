@@ -91,6 +91,8 @@ class ConfirmationTapTest : ComposeNasTest() {
     // Primo pannello: l'avviso sul backup esterno c'e' gia', e il pulsante non conferma ancora.
     composeRule.onNodeWithText("Eliminare subito 2 elementi?").assertIsDisplayed()
     composeRule.onNodeWithText("Hai un backup esterno?").assertExists()
+    // R6: il primo tocco e' un gesto vero, non il secondo colpo di un doppio tocco sulla voce che ha aperto il foglio.
+    clock += ConfirmationRules.MIN_TAP_GAP_MS
     composeRule.onNodeWithText("Continua").performClick()
     composeRule.waitForIdle()
     assertThat(confirmed).isEmpty()
@@ -98,11 +100,30 @@ class ConfirmationTapTest : ComposeNasTest() {
     // Secondo pannello: "Ultima conferma", l'avviso sul backup e il pulsante che elimina davvero.
     composeRule.onNodeWithText("Ultima conferma").assertIsDisplayed()
     composeRule.onNodeWithText("Hai un backup esterno?").assertExists()
+    clock += ConfirmationRules.MIN_TAP_GAP_MS
     composeRule.onNodeWithText("Elimina subito").performClick()
     composeRule.waitForIdle()
     assertThat(confirmed).hasSize(1)
     assertThat(confirmed.single().second.confirmedSteps).isEqualTo(2)
     assertThat(ConfirmationRules.check(plan, confirmed.single().second, clock)).isEqualTo(ConfirmationCheck.Valid)
+  }
+
+  @Test
+  fun r6_unDoppioToccoSulPrimoPannelloDiEliminaSubitoNonEliminaNiente() {
+    showSheet(NasFixtures.purgePlan())
+    clock += ConfirmationRules.MIN_TAP_GAP_MS
+    composeRule.onNodeWithText("Continua").performClick()
+    composeRule.waitForIdle()
+    // Il secondo colpo del doppio tocco (stesso istante): il pannello e' cambiato, ma il tocco non conta.
+    composeRule.onNodeWithText("Elimina subito").performClick()
+    composeRule.waitForIdle()
+    assertThat(confirmed).isEmpty()
+    composeRule.onNodeWithText("Ultima conferma").assertIsDisplayed()
+    // Un secondo gesto, dopo aver letto l'avviso sul backup, si'.
+    clock += ConfirmationRules.MIN_TAP_GAP_MS
+    composeRule.onNodeWithText("Elimina subito").performClick()
+    composeRule.waitForIdle()
+    assertThat(confirmed.single().second.confirmedSteps).isEqualTo(2)
   }
 
   @Test
@@ -112,6 +133,7 @@ class ConfirmationTapTest : ComposeNasTest() {
     show {
       NasConfirmSheet(plan = shown, areas = areas, monotonicMs = { clock }, onConfirmed = { p, c -> confirmed += p to c }, onDismiss = { shown = null })
     }
+    clock += ConfirmationRules.MIN_TAP_GAP_MS
     composeRule.onNodeWithText("Continua").performClick()
     composeRule.waitForIdle()
     composeRule.onNodeWithText("Annulla").performClick()

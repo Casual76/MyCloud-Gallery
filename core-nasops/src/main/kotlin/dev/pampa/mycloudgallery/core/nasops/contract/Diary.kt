@@ -105,6 +105,13 @@ enum class OpErrorCode(override val code: String) : StableCode {
   LOCKED_TOO_LONG("locked_too_long"),
   PERMISSION_DENIED("permission_denied"),
   UNEXPECTED("unexpected"),
+
+  /**
+   * R9 (revisione 4B): su un'operazione (`nas_op.error_code`, stato `PAUSED`) l'utente ha detto "Ferma". Si scrive subito, senza aspettare
+   * il lucchetto delle scritture: se il processo muore prima che l'annullamento arrivi in fondo, la ripresa dal diario annulla (cio' che si
+   * puo' annullare) invece di continuare.
+   */
+  STOPPED_BY_USER("stopped_by_user"),
 }
 
 /**
@@ -265,6 +272,29 @@ data class LocalTrashRecord(
 }
 
 /**
+ * L'**inventario** di una cartella messa nel cestino (R3 della revisione 4B): cio' che l'app ha visto dentro la cartella un attimo prima
+ * di spostarla, scritto nel diario **prima** della rinomina. La pulizia (scadenza o "Elimina subito") scende solo nelle cartelle che sono
+ * qui e cancella solo i file che sono qui, con la stessa identita' e lo stesso timbro: un collegamento comparso dopo, un file arrivato dal
+ * PC o da un dispositivo compromesso, una cartella che Samba presenta come tale ma porta altrove (con un'identita' ripetuta) restano dove
+ * sono, e la voce resta nel cestino.
+ *
+ * @property rootFileId il `fileId` della cartella cestinata (null se il NAS non lo da').
+ * @property folders i `fileId` delle sottocartelle spostate con lei; mai una senza identita', un punto di rianalisi o un'identita' vista
+ *   due volte (un collegamento a una cartella dello stesso albero).
+ * @property files i file spostati con lei, per `fileId`: dimensione e data di modifica viste.
+ */
+class TrashManifest(
+  val rootFileId: Long?,
+  val folders: Set<Long>,
+  val files: Map<Long, ManifestFile>,
+) {
+  /** Un file dell'inventario. */
+  data class ManifestFile(val size: Long, val modifiedAt: Long)
+
+  override fun toString(): String = "TrashManifest(${folders.size} cartelle, ${files.size} file)"
+}
+
+/**
  * La porta del diario (`nas_op`, `nas_op_item`, `nas_trash_entry`). P12 la implementa sopra `NasOpsDao` (Room); il fake in memoria
  * sta in `testing`. Le scritture di un'operazione sono transazioni: [create] scrive l'operazione e **tutti** i suoi elementi o niente.
  *
@@ -305,6 +335,36 @@ interface OpsStore {
 
   suspend fun markTrash(trashId: String, state: TrashEntryState, nowNas: Long)
 
+  /**
+   * R5, R1 (revisione 4B): il file della voce [trashId] e' entrato davvero nel cestino all'ora del NAS [atNas] (passo `TRASHED` o
+   * `SOURCE_TRASHED`, anche molto dopo la voce). I 30 giorni contano da qui: `trashedAtNas` si sposta **solo in avanti**, mai indietro.
+   */
+  suspend fun trashEntered(trashId: String, atNas: Long)
+
   /** Le voci proprie nel cestino da prima di [beforeNas] (ora del NAS), le piu' vecchie prima, al massimo [limit] (E-D4). */
   suspend fun expiredTrash(beforeNas: Long, limit: Int): List<LocalTrashRecord>
+
+  /**
+   * R3: l'inventario della cartella della voce [trashId], scritto **prima** della rinomina nel cestino (riscritto a ogni ripresa finche' la
+   * rinomina non c'e' stata). Solo per un elemento di un'operazione gia' nel diario.
+   */
+  suspend fun saveTrashManifest(trashId: String, manifest: TrashManifest)
+
+  /** L'inventario della voce [trashId], o null se non c'e' (voce di prima, file perso): la cartella allora non si svuota mai da sola. */
+  suspend fun trashManifest(trashId: String): TrashManifest?
+
+  /**
+   * R4: quanto si e' tolto dal cestino da [sinceNas] (ora del NAS) in poi: le voci chiuse come eliminate (`PURGED`, anche quelle gia'
+   * sparite o fermate: contarne di piu' e' la direzione sicura), in file (una cartella conta i suoi) e byte. Il tetto del giorno della
+   * pulizia si misura da qui, anche fra un processo e l'altro.
+   */
+  suspend fun purgedSince(sinceNas: Long): PurgedTally
+}
+
+/** Quanto si e' eliminato in un intervallo (R4). */
+data class PurgedTally(val files: Int, val bytes: Long) {
+  companion object {
+    /** Il peso di una cartella eliminata senza conteggio: come un giro intero (200 file). */
+    const val UNCOUNTED_FOLDER_FILES: Int = 200
+  }
 }

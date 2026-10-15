@@ -169,8 +169,11 @@ class DyingFileOps(private val inner: NasFileOps, private val death: Death) : Na
   override suspend fun trashMove(share: String, path: SharePath, trashId: String, expect: NasStamp?, purpose: Purpose): NasResult<RenameOutcome> =
     death.around { inner.trashMove(share, path, trashId, expect, purpose) }
 
-  override suspend fun deleteIfUnchanged(share: String, path: SharePath, size: Long, purpose: Purpose): NasResult<DeleteOutcome> =
-    death.around { inner.deleteIfUnchanged(share, path, size, purpose) }
+  override suspend fun deleteIfUnchanged(share: String, path: SharePath, size: Long, purpose: Purpose, expect: NasStamp?): NasResult<DeleteOutcome> =
+    death.around { inner.deleteIfUnchanged(share, path, size, purpose, expect) }
+
+  override suspend fun parentIdentity(share: String, dir: SharePath, purpose: Purpose): NasResult<Long?> =
+    death.around { inner.parentIdentity(share, dir, purpose) }
 
   override suspend fun deleteOwnTemp(share: String, temp: SharePath, purpose: Purpose): NasResult<DeleteOutcome> =
     death.around { inner.deleteOwnTemp(share, temp, purpose) }

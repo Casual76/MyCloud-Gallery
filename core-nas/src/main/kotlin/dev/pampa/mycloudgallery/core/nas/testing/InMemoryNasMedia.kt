@@ -629,16 +629,18 @@ class InMemoryNasMedia(
       }
     }
 
-    override suspend fun deleteIfUnchanged(share: String, path: SharePath, size: Long, purpose: Purpose): NasResult<DeleteOutcome> {
+    override suspend fun deleteIfUnchanged(share: String, path: SharePath, size: Long, purpose: Purpose, expect: NasStamp?): NasResult<DeleteOutcome> {
       require(NasOpsPaths.isAppArea(path)) { "L'eliminazione definitiva vale solo dentro .mycloudgallery/: un media va nel cestino." }
+      require(expect == null || expect.size == size) { "Il timbro atteso ha la sua dimensione." }
       return guarded(SimOp.DELETE_ON_CLOSE, FakeNasOp.DELETE, share, path, write = true) {
         val state = shares[key(share)] ?: return@guarded NasResult.Err(NasError.ShareMissing(share))
         val node = node(state, path.components) ?: return@guarded NasResult.Ok(DeleteOutcome.Missing)
         when {
-          node.isDirectory -> NasResult.Ok(DeleteOutcome.NotAFile)
+          node.isDirectory || NasAttributes.has(node.attributes, NasAttributes.REPARSE_POINT) -> NasResult.Ok(DeleteOutcome.NotAFile)
           lockKey(share, path.value) in locked -> NasResult.Ok(DeleteOutcome.Locked)
-          // La dimensione si controlla qui, sotto lo stesso blocco: controllo e cancellazione sono lo stesso passo.
+          // La dimensione (e il timbro atteso) si controllano qui, sotto lo stesso blocco: controllo e cancellazione sono lo stesso passo.
           node.content.size != size -> NasResult.Ok(DeleteOutcome.SizeChanged(node.content.size))
+          changedStamp(node, expect) != null -> NasResult.Ok(DeleteOutcome.SizeChanged(node.content.size))
           else -> {
             this@InMemoryNasMedia.delete(share, path.value)
             NasResult.Ok(DeleteOutcome.Deleted)
@@ -669,12 +671,26 @@ class InMemoryNasMedia(
         when {
           !node.isDirectory -> NasResult.Err(NasError.NotFound)
           lockKey(share, dir.value) in locked -> NasResult.Ok(RmdirOutcome.Locked)
+          // Un collegamento (punto di rianalisi) non si toglie mai (R3 della revisione 4B).
+          NasAttributes.has(node.attributes, NasAttributes.REPARSE_POINT) -> NasResult.Ok(RmdirOutcome.NotEmpty)
           hasChildren(state, key(dir.components)) -> NasResult.Ok(RmdirOutcome.NotEmpty)
           else -> {
             this@InMemoryNasMedia.delete(share, dir.value)
             NasResult.Ok(RmdirOutcome.Removed)
           }
         }
+      }
+    }
+
+    /** Il genitore sul disco di una cartella del proprio cestino: qui non ci sono collegamenti trasparenti, e' quello del percorso. */
+    override suspend fun parentIdentity(share: String, dir: SharePath, purpose: Purpose): NasResult<Long?> {
+      require(NasOpsPaths.isOwnTrashTree(dir, ownerDeviceId)) { "Solo nel proprio cestino." }
+      return guarded(SimOp.OPEN_DIRECTORY, FakeNasOp.LIST, share, dir, write = false) {
+        val state = shares[key(share)] ?: return@guarded NasResult.Err(NasError.ShareMissing(share))
+        val node = node(state, dir.components) ?: return@guarded NasResult.Err(NasError.NotFound)
+        if (!node.isDirectory) return@guarded NasResult.Err(NasError.NotFound)
+        val parent = dir.components.dropLast(1)
+        NasResult.Ok(if (parent.isEmpty()) null else node(state, parent)?.fileId)
       }
     }
 

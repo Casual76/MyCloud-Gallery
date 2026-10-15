@@ -170,6 +170,28 @@ class NasFoldersViewModelTest {
   }
 
   @Test
+  fun r11_spostareNellAreaComuneDiceQuantiElementiNascostiCiSono() = runTest(dispatcher) {
+    populate()
+    areas.hidden = 2
+    val vm = viewModel()
+    vm.goTo(FolderWhere("test", null))
+    settle()
+    vm.toggle(SharePath.of("nota.txt"))
+    vm.startMove()
+    vm.goTo(FolderWhere("test-comune", SharePath.of("Famiglia")))
+    settle()
+    vm.moveHere()
+    settle()
+    val plan = checkNotNull(vm.state.value.confirm)
+    assertThat(vm.state.value.confirmHidden).isEqualTo(2)
+    val facts = confirmFacts(plan, vm.state.value.areas, vm.state.value.confirmHidden)
+    assertThat(facts.intoCommon).isTrue()
+    assertThat(facts.hiddenCount).isEqualTo(2)
+    // Nella stessa area (niente "area comune") i nascosti non contano: nessuna riga.
+    assertThat(confirmFacts(plan, emptyList(), 2).hiddenCount).isEqualTo(0)
+  }
+
+  @Test
   fun spostareNellAreaComuneDiceChePassaDallaCopia() = runTest(dispatcher) {
     populate()
     val vm = viewModel()

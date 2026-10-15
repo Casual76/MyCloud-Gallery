@@ -42,6 +42,8 @@ class NasFeatureFakesTest {
     val purgeSheet = ConfirmationSheet(purge)
     assertThat(purgeSheet.tap(kit.clocks.monotonicMs())).isNull()
     assertThat(purgeSheet.tapsLeft).isEqualTo(1)
+    // R6: il secondo tocco e' un secondo gesto, non il secondo colpo di un doppio tocco.
+    kit.clocks.monotonic += dev.pampa.mycloudgallery.core.nasops.contract.ConfirmationRules.MIN_TAP_GAP_MS
     val second = purgeSheet.tap(kit.clocks.monotonicMs())!!
     assertThat(kit.operations.start(purge, second)).isInstanceOf(StartOutcome.Started::class.java)
     assertThat(kit.filesIn("test")).isEmpty()

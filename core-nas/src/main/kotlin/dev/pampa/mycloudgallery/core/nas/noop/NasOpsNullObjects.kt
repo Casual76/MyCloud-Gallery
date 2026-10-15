@@ -53,8 +53,10 @@ object NoNasFileOps : NasFileOps {
     purpose: Purpose,
   ): NasResult<RenameOutcome> = NasResult.Err(notConfigured)
 
-  override suspend fun deleteIfUnchanged(share: String, path: SharePath, size: Long, purpose: Purpose): NasResult<DeleteOutcome> =
+  override suspend fun deleteIfUnchanged(share: String, path: SharePath, size: Long, purpose: Purpose, expect: NasStamp?): NasResult<DeleteOutcome> =
     NasResult.Err(notConfigured)
+
+  override suspend fun parentIdentity(share: String, dir: SharePath, purpose: Purpose): NasResult<Long?> = NasResult.Err(notConfigured)
 
   override suspend fun deleteOwnTemp(share: String, temp: SharePath, purpose: Purpose): NasResult<DeleteOutcome> = NasResult.Err(notConfigured)
 

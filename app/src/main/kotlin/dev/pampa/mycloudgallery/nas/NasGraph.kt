@@ -40,6 +40,7 @@ import dev.pampa.mycloudgallery.core.index.publish.OutboxIndexPublisher
 import dev.pampa.mycloudgallery.core.index.publish.ShareLocks
 import dev.pampa.mycloudgallery.core.nasops.contract.OpsGate
 import dev.pampa.mycloudgallery.work.NasOpsJobs
+import dev.pampa.mycloudgallery.debugtools.DeveloperTools
 import dev.pampa.mycloudgallery.feature.nas.R as NasScreensR
 import dev.pampa.mycloudgallery.core.index.quality.ReplicaQualityController
 import dev.pampa.mycloudgallery.core.index.replica.LocalReplica
@@ -182,7 +183,8 @@ class NasGraph(
    * anche di un processo di prima; un salto oltre 5 minuti sospende prenotazioni e indice finche' l'utente non accetta l'ora
    * ([acceptClockJump]) o per 24 ore di ora stabile. Il file sta sotto `replica/`, quindi l'azzeramento lo toglie con i pacchi.
    */
-  val clockGuard: ClockJumpGuard = ClockJumpGuard(FileClockJumpStore(File(File(noBackup, REPLICA_DIR), CLOCK_FILE)))
+  private val clockStore = FileClockJumpStore(File(File(noBackup, REPLICA_DIR), CLOCK_FILE))
+  val clockGuard: ClockJumpGuard = ClockJumpGuard(clockStore)
 
   /** Le conferme "dati mobili" per media e per sessione (E-V2): una per l'app, condivisa da foto, video e "Scarica". */
   val consent: MobileDataConsent = MobileDataConsent()
@@ -377,6 +379,10 @@ class NasGraph(
     monotonicMs = monotonicMs,
     gate = opsGate,
     clockBlocked = { clockGuard.blocked },
+    // R1 (revisione 4B): dopo un salto dell'ora accettato, il cestino del NAS non conta da prima.
+    clockTrustedSince = { clockStore.trustedSinceNasMs() },
+    // F20: solo la build debug, solo con il marcatore scritto da adb, accorcia i 30 giorni del cestino (assente dal dex di release).
+    trashRetentionMillis = { DeveloperTools.trashRetentionMillis(context) },
     work = work,
     jobs = opsJobs,
     foreground = foreground,
@@ -541,6 +547,8 @@ class NasGraph(
         clock = inputs.nasClock,
         settings = { settingsFor(area) },
         monotonicMs = monotonicMs,
+        // R8 (revisione 4B): cio' che l'app stessa ha tolto dalla share (diario locale) non fa scattare il congelamento.
+        ownRemovals = organizer.ownRemovals,
       )
     }
     val rt = Runtime(account, deviceId, areas, replica, quality, sync, publisher, remote, workSource, workUnits, preparer, scanners)

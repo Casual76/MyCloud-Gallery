@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.nas.contract
 
+import dev.pampa.mycloudgallery.core.nasops.contract.OpPlan
 import kotlinx.coroutines.flow.StateFlow
 
 // Le aree del NAS che le schermate della 4B mostrano (docs/fase4-progetto.md §1.4, §2.7). Le compone `:app` (P16) da
@@ -27,6 +28,13 @@ data class NasArea(val share: String, val kind: NasAreaKind, val label: String? 
 /** Le aree dell'account su questo dispositivo, nell'ordine in cui si mostrano (prima la privata). */
 interface NasAreas {
   val areas: StateFlow<List<NasArea>>
+
+  /**
+   * R11 (revisione 4B): quanti elementi di [plan] (uno spostamento) l'utente ha **nascosto** nella Libreria. Lo sa `:app` (catalogo e dati
+   * personali), non le schermate: il foglio di uno spostamento nell'area comune lo dice, perche' i familiari non sanno cosa ha nascosto.
+   * Solo da mostrare: non cambia il piano.
+   */
+  suspend fun hiddenAmong(plan: OpPlan): Int = 0
 }
 
 /** Quale area e' [share], se e' fra [areas] (il confronto non distingue le maiuscole, come il NAS). */

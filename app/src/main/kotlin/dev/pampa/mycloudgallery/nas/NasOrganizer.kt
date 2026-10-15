@@ -15,10 +15,13 @@ import dev.pampa.mycloudgallery.core.model.AccountId
 import dev.pampa.mycloudgallery.core.model.Location
 import dev.pampa.mycloudgallery.core.model.LocationId
 import dev.pampa.mycloudgallery.core.model.LocationState
+import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.model.NasArea
+import dev.pampa.mycloudgallery.core.model.NasPath
 import dev.pampa.mycloudgallery.core.model.NasStamp
+import dev.pampa.mycloudgallery.core.nasmedia.contract.OwnRemovals
 import dev.pampa.mycloudgallery.core.nasops.clean.MaintenanceReport
 import dev.pampa.mycloudgallery.core.nasops.contract.GateStatus
 import dev.pampa.mycloudgallery.core.nasops.contract.LargestFile
@@ -44,6 +47,7 @@ import dev.pampa.mycloudgallery.core.nasops.contract.RunResult
 import dev.pampa.mycloudgallery.core.nasops.contract.RunStop
 import dev.pampa.mycloudgallery.core.nasops.contract.StartOutcome
 import dev.pampa.mycloudgallery.core.nasops.contract.UserConfirmation
+import dev.pampa.mycloudgallery.core.nasops.engine.CatalogPresence
 import dev.pampa.mycloudgallery.core.nasops.engine.HeavyWorkPolicy
 import dev.pampa.mycloudgallery.core.nasops.engine.KnownHashes
 import dev.pampa.mycloudgallery.core.nasops.engine.ShareAccessView
@@ -144,6 +148,10 @@ class NasOrganizer(
   private val gate: OpsGate,
   /** Il salto dell'ora del NAS sospende la datazione delle modifiche personali (D32). */
   private val clockBlocked: () -> Boolean,
+  /** R1 (revisione 4B): l'ora del NAS in cui l'ultimo salto dell'ora e' finito (il cestino non conta i suoi 30 giorni da prima). */
+  private val clockTrustedSince: () -> Long? = { null },
+  /** F20: la durata del cestino del NAS; null = 30 giorni. Solo la build debug, con il marcatore di adb, la accorcia. */
+  private val trashRetentionMillis: () -> Long? = { null },
   private val work: ActiveWork,
   private val jobs: NasOpsJobs,
   /** L'app e' in primo piano: solo allora la sincronizzazione accorpata dei dati personali parte da sola (§2.9). */
@@ -157,8 +165,11 @@ class NasOrganizer(
   private val mirrorCovers: (Boolean) -> Unit = {},
 ) {
 
-  /** Il diario delle operazioni e del cestino (schema v3): nel database della galleria, quindi l'azzeramento lo toglie con lei. */
-  val opsStore: RoomOpsStore = RoomOpsStore(database)
+  /**
+   * Il diario delle operazioni e del cestino (schema v3): nel database della galleria, quindi l'azzeramento lo toglie con lei. Gli
+   * inventari delle cartelle cestinate (R3) stanno accanto, in `noBackupFilesDir/nasops/` (l'azzeramento toglie anche quella).
+   */
+  val opsStore: RoomOpsStore = RoomOpsStore(database, File(File(noBackup, NASOPS_DIR), TRASH_MANIFESTS_DIR))
 
   /** Cio' che nasce in [attach]. */
   class Parts internal constructor(
@@ -184,6 +195,8 @@ class NasOrganizer(
     override fun monotonicMs(): Long = this@NasOrganizer.monotonicMs()
 
     override fun nasNowMs(): Long? = inputs.nasClock.nowMillisOrNull()
+
+    override fun clockTrustedSinceNasMs(): Long? = this@NasOrganizer.clockTrustedSince()
   }
 
   /** Le operazioni come le vede la UI: quelle vere quando il NAS c'e', con l'avvio che sopravvive alla schermata ([AppNasOperations]). */
@@ -220,6 +233,8 @@ class NasOrganizer(
     override val areas: StateFlow<List<dev.pampa.mycloudgallery.feature.nas.contract.NasArea>> = partsFlow
       .map { p -> p?.areas.orEmpty().map { it.toScreenArea() } }
       .stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+    override suspend fun hiddenAmong(plan: OpPlan): Int = hiddenIn(plan)
   }
 
   /** Le voci "Sposta", "Rinomina", "Elimina…" del viewer per un media del NAS (P14): risolte dal catalogo, mai dalla UI. */
@@ -229,6 +244,31 @@ class NasOrganizer(
     override fun monotonicMs(): Long = clocks.monotonicMs()
 
     override suspend fun target(ref: MediaRef.Nas): NasActionTarget? = targetOf(ref)
+
+    override suspend fun targetForPhoneCopy(id: MediaId): NasActionTarget? = targetOfPhoneCopy(id)
+  }
+
+  /**
+   * R8 (revisione 4B): i file che questo dispositivo ha tolto da una share con le sue operazioni (voci del diario locale del cestino ancora
+   * nel cestino: file eliminati, sorgenti di spostamenti tra share, contenuto delle cartelle cestinate dal loro inventario), per `fileId`.
+   * La scansione non li conta come "spariti" per il congelamento. Solo il diario locale: mai dati letti dal NAS.
+   */
+  val ownRemovals: OwnRemovals = OwnRemovals { share ->
+    val user = partsFlow.value?.user ?: return@OwnRemovals emptySet()
+    val entries = opsStore.expiredTrash(Long.MAX_VALUE, Int.MAX_VALUE)
+      .filter { it.accountId == user && it.shareName.equals(share, ignoreCase = true) }
+    val out = HashSet<Long>()
+    val itemsByOp = HashMap<OpId, List<dev.pampa.mycloudgallery.core.nasops.contract.OpItemRecord>>()
+    for (entry in entries) {
+      if (entry.isFolder) {
+        opsStore.trashManifest(entry.trashId)?.files?.keys?.let(out::addAll)
+      } else {
+        val op = entry.opId ?: continue
+        val items = itemsByOp.getOrPut(op) { opsStore.items(op) }
+        items.firstOrNull { it.trashId == entry.trashId }?.stamp?.fileId?.let(out::add)
+      }
+    }
+    out
   }
 
   /** Lo stato della sincronizzazione dei dati personali, per la Diagnostica. */
@@ -299,6 +339,9 @@ class NasOrganizer(
       currentSegments = { share -> publishStore.ownHead(share)?.segments?.mapTo(HashSet()) { it.hash }.orEmpty() },
       authorName = { id -> inputs.registry()?.registry?.device(id)?.name },
       compact = { share -> compactor.compactIfNeeded(share) },
+      // R3 (revisione 4B): un file del cestino che il catalogo vede ancora fuori dal cestino (un collegamento) non si elimina.
+      catalogPresence = CatalogPresenceSql(database, runtime.account),
+      trashRetentionMillis = trashRetentionMillis() ?: dev.pampa.mycloudgallery.core.trust.TrustLimits.TRASH_RETENTION_MILLIS,
     )
     val services = NasOpsWiring.build(inputs.session, opsStore, config)
 
@@ -390,6 +433,14 @@ class NasOrganizer(
   suspend fun cancelActive() {
     val ops = partsFlow.value?.services?.operations ?: return
     for (state in ops.operations.value.filter { it.active }) operations.cancel(state.id)
+  }
+
+  /**
+   * R9 (revisione 4B): "Ferma" dalla notifica o dal Task Manager, chiesto dal servizio del lavoro. L'annullamento gira nello scope della
+   * galleria (non in quello del servizio, che Android distrugge subito dopo): la richiesta arriva nel diario anche se il servizio muore.
+   */
+  fun stopActiveFromService() {
+    scope.launch { runCatching { work.run { cancelActive() } } }
   }
 
   // --- Cestino, manutenzione, dati personali ------------------------------------------------------------------------------------
@@ -485,6 +536,7 @@ class NasOrganizer(
       .map { NasMoveDestination(it.share, null, it.area.toScope(), areaLabel(it.area)) }
     return NasActionTarget(
       item = NasItem(share = nas.share, path = path, isFolder = false, size = info.stamp.size, stamp = info.stamp),
+      hidden = media?.let { isHidden(it.id) } == true,
       scope = area.area.toScope(),
       // E-N9: la sola lettura la dice il NAS (vedi ShareAccessView sopra). Un congelamento o l'emergenza non sono "sola lettura": il
       // foglio si apre e `start` risponde "scritture ferme" con la sua frase.
@@ -496,6 +548,60 @@ class NasOrganizer(
       others = others,
       destinations = destinations,
     )
+  }
+
+  /**
+   * E-D1 (piano §2), P16: un media che il viewer mostra dalla copia del telefono e che sta anche sul NAS. Le sue copie del NAS presenti
+   * nelle aree dell'utente: la prima (l'area privata prima) e' il bersaglio, le altre stanno in `others` con il loro elemento, cosi'
+   * "Ovunque" le mette tutte nel cestino del NAS dove si hanno i diritti (E-D11: la sola lettura la dice il NAS, l'elemento si ferma).
+   */
+  private suspend fun targetOfPhoneCopy(id: MediaId): NasActionTarget? {
+    val p = partsFlow.value ?: return null
+    val catalog = catalogProvider() ?: return null
+    val media = catalog.media(id) ?: return null
+    class Copy(val area: NasShareArea, val item: NasItem)
+    val copies = media.locations.mapNotNull { place ->
+      val nas = place.location as? Location.Nas ?: return@mapNotNull null
+      val info = catalog.nasLocationAt(nas) ?: return@mapNotNull null
+      if (info.state != LocationState.PRESENT) return@mapNotNull null
+      val area = p.areas.firstOrNull { it.share.equals(nas.share, ignoreCase = true) } ?: return@mapNotNull null
+      val path = runCatching { SharePath.parseMediaPath(nas.path.value) }.getOrNull() ?: return@mapNotNull null
+      Copy(area, NasItem(share = nas.share, path = path, isFolder = false, size = info.stamp.size, stamp = info.stamp))
+    }.sortedBy { if (it.area.area == NasArea.PRIVATE) 0 else 1 }
+    val first = copies.firstOrNull() ?: return null
+    return NasActionTarget(
+      item = first.item,
+      scope = first.area.area.toScope(),
+      writable = true,
+      onPhone = true,
+      isVideo = media.kind == MediaKind.VIDEO,
+      others = copies.drop(1).map { copy ->
+        NasLocationInfo(
+          kind = if (copy.area.area == NasArea.PRIVATE) NasLocationInfo.Kind.NAS_PRIVATE else NasLocationInfo.Kind.NAS_COMMON,
+          writable = true,
+          item = copy.item,
+        )
+      },
+      destinations = emptyList(),
+      hidden = isHidden(id),
+      viaPhoneCopy = true,
+    )
+  }
+
+  /** L'utente ha nascosto [id] nella Libreria (dati personali proiettati sul catalogo). */
+  private suspend fun isHidden(id: MediaId): Boolean = CatalogHidden.isHidden(database, id)
+
+  /**
+   * R11 (revisione 4B): quanti file di uno spostamento (gli elementi del piano, con le cartelle gia' espanse fra le share) l'utente ha
+   * nascosto nella Libreria. Solo da mostrare nel foglio: i familiari, nell'area comune, li vedrebbero.
+   */
+  private suspend fun hiddenIn(plan: OpPlan): Int {
+    val p = partsFlow.value ?: return 0
+    val keys = plan.items.filter { !it.isFolder }.mapNotNull { item ->
+      val path = runCatching { NasPath.of(item.srcPath.value) }.getOrNull() ?: return@mapNotNull null
+      runCatching { Location.Nas(p.account, item.srcShare, path).key.value }.getOrNull()
+    }
+    return CatalogHidden.hiddenAmong(database, keys)
   }
 
   private fun NasArea.toScope(): NasAreaScope = if (this == NasArea.PRIVATE) NasAreaScope.PRIVATE else NasAreaScope.COMMON
@@ -574,6 +680,11 @@ class NasOrganizer(
 
     /** La cartella del registro locale dei dati personali in `noBackupFilesDir` (l'azzeramento la toglie). */
     const val PERSONAL_DIR = "personal"
+
+    /** R3: la cartella delle operazioni in `noBackupFilesDir` (gli inventari delle cartelle cestinate; l'azzeramento la toglie). */
+    const val NASOPS_DIR = "nasops"
+    private const val TRASH_MANIFESTS_DIR = "trash-manifests"
+
     const val PERSONAL_LEDGER_FILE = "ledger"
 
     /** §2.9: le modifiche personali si accorpano per 30 secondi. */
@@ -605,6 +716,62 @@ class CatalogKnownHashes(private val locations: CatalogNasLocations) : KnownHash
     val same = known.size == stamp.size && known.modifiedAtMillis == stamp.modifiedAtMillis &&
       (known.fileId == null || stamp.fileId == null || known.fileId == stamp.fileId)
     return if (same) expected.fullHash else null
+  }
+}
+
+/**
+ * R3 (revisione 4B): i file che il catalogo vede ancora presenti in una share, per `fileId`, con i percorsi. La scansione non entra mai nel
+ * cestino del NAS: un file del cestino che il catalogo vede altrove e' raggiungibile da li' (un collegamento che Samba presenta come
+ * cartella), e la pulizia non lo tocca. Sola lettura del catalogo.
+ */
+class CatalogPresenceSql(private val database: GalleryDatabase, private val account: AccountId) : CatalogPresence {
+  override suspend fun presentPaths(share: String, fileIds: Collection<Long>): Map<Long, List<SharePath>> =
+    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+      val out = HashMap<Long, MutableList<SharePath>>()
+      for (chunk in fileIds.distinct().chunked(500)) {
+        val marks = chunk.joinToString(",") { "?" }
+        database.openHelper.readableDatabase.query(
+          "SELECT file_id, nas_path FROM media_location WHERE location_type = 'nas' AND account_id = ? AND share_key = ? " +
+            "AND state = 'present' AND file_id IN ($marks)",
+          (listOf<Any?>(account.value, Location.Nas.shareKeyOf(share)) + chunk).toTypedArray(),
+        ).use { c ->
+          while (c.moveToNext()) {
+            val path = c.getString(1)?.let { runCatching { SharePath.parseMediaPath(it) }.getOrNull() } ?: continue
+            out.getOrPut(c.getLong(0)) { ArrayList() } += path
+          }
+        }
+      }
+      out
+    }
+}
+
+/** R11, P16: i nascosti dell'utente letti dal catalogo (dati personali proiettati, `media_personal`). Sola lettura, solo da mostrare. */
+internal object CatalogHidden {
+
+  /** Le query si fanno a blocchi (il limite delle variabili di SQLite). */
+  private const val CHUNK = 500
+
+  suspend fun isHidden(database: GalleryDatabase, id: MediaId): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+    database.openHelper.readableDatabase.query("SELECT hidden FROM media_personal WHERE media_id = ?", arrayOf<Any?>(id.value)).use { c ->
+      c.moveToFirst() && c.getInt(0) != 0
+    }
+  }
+
+  /** Quante delle posizioni [locationKeys] (`media_location.location_key`) sono di media nascosti. */
+  suspend fun hiddenAmong(database: GalleryDatabase, locationKeys: List<String>): Int {
+    if (locationKeys.isEmpty()) return 0
+    return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+      var hidden = 0
+      for (chunk in locationKeys.distinct().chunked(CHUNK)) {
+        val marks = chunk.joinToString(",") { "?" }
+        database.openHelper.readableDatabase.query(
+          "SELECT COUNT(*) FROM media_location l JOIN media_version v ON v.version_id = l.version_id " +
+            "JOIN media_personal m ON m.media_id = v.media_id WHERE m.hidden = 1 AND l.location_key IN ($marks)",
+          chunk.toTypedArray<Any?>(),
+        ).use { c -> if (c.moveToFirst()) hidden += c.getInt(0) }
+      }
+      hidden
+    }
   }
 }
 

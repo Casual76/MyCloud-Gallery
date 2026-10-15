@@ -68,9 +68,14 @@ import kotlinx.coroutines.flow.flow
 
 /** Gli orologi controllati dal test: tutti e due avanzano insieme con [advance]; [nasNow] a null = ora del NAS non ancorata. */
 class FakeOpClocks(var monotonic: Long = 1_000L, var nasNow: Long? = DEFAULT_NAS_NOW) : OpClocks {
+  /** R1: l'ora del NAS in cui l'ultimo salto dell'ora e' finito (null = nessuno). */
+  var trustedSince: Long? = null
+
   override fun monotonicMs(): Long = monotonic
 
   override fun nasNowMs(): Long? = nasNow
+
+  override fun clockTrustedSinceNasMs(): Long? = trustedSince
 
   fun advance(ms: Long) {
     monotonic += ms

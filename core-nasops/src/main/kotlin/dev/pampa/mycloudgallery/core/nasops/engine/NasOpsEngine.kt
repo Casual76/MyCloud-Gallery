@@ -98,6 +98,8 @@ class NasOpsEngine internal constructor(
   private val heavy: HeavyWorkPolicy = HeavyWorkPolicy.ALWAYS,
   private val lock: NasOpsLock = NasOpsLock(),
   private val newId: () -> String = { TrustIds.random() },
+  /** R3: cio' che il catalogo vede ancora presente (inventario delle cartelle cestinate, "Elimina subito"). Serve solo a non eliminare. */
+  private val presence: CatalogPresence = CatalogPresence.NONE,
 ) : NasOperations {
 
   init {
@@ -106,7 +108,8 @@ class NasOpsEngine internal constructor(
   }
 
   private val planner = OpPlanner(deviceId, accountId, fileOps, reader, store, gate, access, newId)
-  private val purger = OwnTrashPurger(deviceId, fileOps, reader)
+  private val purger = OwnTrashPurger(deviceId, fileOps, reader, store, presence)
+  private val inventory = FolderInventory(reader, presence)
 
   // =========================================================================================================================
   // Stato mostrato ("Operazioni in corso", notifica UIDT): contatori per operazione, aggiornati a ogni scrittura del diario
@@ -169,7 +172,14 @@ class NasOpsEngine internal constructor(
   private suspend fun setOpState(id: OpId, state: OpState, code: OpErrorCode?) {
     val now = clocks.nasNowMs()
     val record = store.op(id) ?: return
-    store.setOpState(id, state, code, now ?: record.updatedAtNas)
+    // R9: un'operazione che l'utente ha fermato resta fermata (in pausa con il suo segno) finche' non si chiude: nessuna scrittura
+    // dell'esecuzione lo toglie, cosi' una ripresa dopo la morte del processo annulla invece di continuare.
+    val stopped = !state.terminal && (id in cancelRequests || record.errorCode == OpErrorCode.STOPPED_BY_USER)
+    if (stopped) {
+      store.setOpState(id, OpState.PAUSED, OpErrorCode.STOPPED_BY_USER, now ?: record.updatedAtNas)
+    } else {
+      store.setOpState(id, state, code, now ?: record.updatedAtNas)
+    }
     val updated = store.op(id) ?: return
     synchronized(viewsLock) {
       val view = views[id]
@@ -195,7 +205,11 @@ class NasOpsEngine internal constructor(
     return when (op.state) {
       OpState.PLANNED -> NasOperationState.Planned(op.id, op.kind, PlanSummary(op.kind, t.total, t.folders, op.totalBytes, null, null))
       OpState.RUNNING -> NasOperationState.Running(op.id, op.kind, t.done, t.total, t.bytesDone, op.totalBytes)
-      OpState.PAUSED -> if (t.locked > 0 && view.pause == null) {
+      // R9: un'operazione fermata dall'utente lo resta anche dopo un riavvio (il segno e' nel diario); se questo processo sa perche'
+      // l'annullamento aspetta (il NAS non risponde), lo dice.
+      OpState.PAUSED -> if (op.errorCode == OpErrorCode.STOPPED_BY_USER && view.pause == null) {
+        NasOperationState.Paused(op.id, op.kind, PauseReason.USER, t.done, t.total)
+      } else if (t.locked > 0 && view.pause == null) {
         NasOperationState.WaitingLocked(op.id, op.kind, t.locked, t.done, t.total)
       } else {
         NasOperationState.Paused(op.id, op.kind, view.pause ?: PauseReason.CONDITIONS, t.done, t.total)
@@ -249,30 +263,37 @@ class NasOpsEngine internal constructor(
     // Ferma l'esecuzione prima dell'elemento successivo (il ciclo lo guarda), poi annulla cio' che si puo' annullare.
     cancelRequests += id
     try {
-      lock.mutex.withLock {
-        if (!loaded) loadViews()
-        val op = store.op(id) ?: return@withLock
-        if (op.state.terminal) return@withLock
-        val purpose = Purpose.INTERACTIVE
-        for (item in store.items(id)) {
-          if (!OpStateMachine.cancellable(item.flow, item.state)) continue
-          when (tempGone(item, purpose)) {
-            TempCheck.GONE -> persist(item, item.copy(state = OpItemState.CANCELLED, errorCode = null, nextAttemptAtNas = null), allowNoClock = true)
-            // Forse gia' pubblicata (risposta persa di publishTemp): si porta a termine, mai due copie visibili.
-            TempCheck.MAYBE_PUBLISHED -> Unit
-            // Il temporaneo non si e' potuto togliere: "Annulla" non lascia temporanei che il diario non cita. Si riprova piu' tardi.
-            TempCheck.UNREACHABLE -> {
-              pause(id, PauseReason.NAS_UNREACHABLE)
-              return@withLock
-            }
-          }
-        }
-        // Gli elementi oltre il punto di non ritorno (copia gia' pubblicata) si portano a termine: niente doppioni visibili.
-        runOp(id, Long.MAX_VALUE, purpose, honourCancel = false)
+      // R9: la richiesta dell'utente si scrive SUBITO nel diario, senza aspettare il lucchetto (l'operazione in corso lo tiene fino al
+      // prossimo elemento): se il processo muore adesso, la ripresa annulla invece di continuare.
+      store.op(id)?.takeIf { !it.state.terminal }?.let { op ->
+        store.setOpState(id, OpState.PAUSED, OpErrorCode.STOPPED_BY_USER, clocks.nasNowMs() ?: op.updatedAtNas)
       }
+      lock.mutex.withLock { cancelLocked(id, Purpose.INTERACTIVE) }
     } finally {
       cancelRequests -= id
     }
+  }
+
+  /** L'annullamento sotto il lucchetto: dal "Ferma" dell'utente, o dalla ripresa di un'operazione che l'utente aveva fermato (R9). */
+  private suspend fun cancelLocked(id: OpId, purpose: Purpose) {
+    if (!loaded) loadViews()
+    val op = store.op(id) ?: return
+    if (op.state.terminal) return
+    for (item in store.items(id)) {
+      if (!OpStateMachine.cancellable(item.flow, item.state)) continue
+      when (tempGone(item, purpose)) {
+        TempCheck.GONE -> persist(item, item.copy(state = OpItemState.CANCELLED, errorCode = null, nextAttemptAtNas = null), allowNoClock = true)
+        // Forse gia' pubblicata (risposta persa di publishTemp): si porta a termine, mai due copie visibili.
+        TempCheck.MAYBE_PUBLISHED -> Unit
+        // Il temporaneo non si e' potuto togliere: "Annulla" non lascia temporanei che il diario non cita. Si riprova piu' tardi.
+        TempCheck.UNREACHABLE -> {
+          pause(id, PauseReason.NAS_UNREACHABLE)
+          return
+        }
+      }
+    }
+    // Gli elementi oltre il punto di non ritorno (copia gia' pubblicata) si portano a termine: niente doppioni visibili.
+    runOp(id, Long.MAX_VALUE, purpose, honourCancel = false)
   }
 
   private enum class TempCheck { GONE, MAYBE_PUBLISHED, UNREACHABLE }
@@ -308,10 +329,25 @@ class NasOpsEngine internal constructor(
         break
       }
       resumed++
+      // R9: l'utente l'aveva fermata (anche in un processo di prima): si annulla cio' che si puo' annullare, non si continua.
+      if (op.errorCode == OpErrorCode.STOPPED_BY_USER) {
+        cancelRequests += op.id
+        try {
+          cancelLocked(op.id, Purpose.BACKGROUND)
+        } finally {
+          cancelRequests -= op.id
+        }
+        continue
+      }
       val run = runOp(op.id, deadline, Purpose.BACKGROUND)
       done += run.done
       failed += run.failed
       waiting += run.waiting
+      // R1: un'operazione che aspetta l'ora del NAS fidata non ferma le altre.
+      if (run.held) {
+        stop = RunStop.BLOCKED
+        continue
+      }
       if (run.stop == RunStop.NAS_UNREACHABLE || run.stop == RunStop.BLOCKED || run.stop == RunStop.BUDGET) {
         stop = run.stop
         break
@@ -330,10 +366,13 @@ class NasOpsEngine internal constructor(
   /** Fermata dell'operazione intera (rete, condizioni): l'elemento resta al passo scritto, la ripresa riparte da li'. */
   private class PauseSignal(val reason: PauseReason) : RuntimeException(null, null, false, false)
 
-  private class OpRun(val done: Int, val failed: Int, val waiting: Int, val stop: RunStop)
+  private class OpRun(val done: Int, val failed: Int, val waiting: Int, val stop: RunStop, val held: Boolean = false)
 
-  /** Il contesto di un giro: lo scopo (tempi del NAS) e lo stato corrente degli elementi (le cartelle aspettano il loro contenuto). */
-  private class RunCtx(val purpose: Purpose, val current: MutableMap<Int, OpItemRecord>)
+  /**
+   * Il contesto di un giro: lo scopo (tempi del NAS) e lo stato corrente degli elementi (le cartelle aspettano il loro contenuto).
+   * [heldForClock]: un elemento e' entrato nel cestino mentre l'ora del NAS era sospetta (R1) e aspetta di essere datato.
+   */
+  private class RunCtx(val purpose: Purpose, val current: MutableMap<Int, OpItemRecord>, var heldForClock: Boolean = false)
 
   private suspend fun runOp(id: OpId, deadlineMonotonic: Long, purpose: Purpose, honourCancel: Boolean = true): OpRun {
     val op = store.op(id) ?: return OpRun(0, 0, 0, RunStop.COMPLETE)
@@ -384,6 +423,12 @@ class NasOpsEngine internal constructor(
       val code = if (finalState == OpState.FAILED) finalItems.firstOrNull { it.errorCode != null }?.errorCode else null
       setOpState(id, finalState, code)
       GalleryLog.i(TAG) { "operazione chiusa: ${finalState.code}, fatti $doneCount, fermi $failedCount" }
+    } else if (stop == RunStop.COMPLETE && ctx.heldForClock) {
+      // R1: file gia' nel cestino, voce non ancora datata: l'operazione resta aperta (la voce e' sua, la pulizia la salta) finche' l'ora
+      // del NAS torna fidata; la ripresa la data e la chiude.
+      stop = RunStop.BLOCKED
+      pause(id, PauseReason.CLOCK_JUMP)
+      return OpRun(doneCount, failedCount, waitingCount, stop, held = true)
     } else if (stop == RunStop.COMPLETE && waitingCount > 0) {
       stop = RunStop.WAITING_LOCKED
       setOpState(id, OpState.PAUSED, null)
@@ -629,8 +674,27 @@ class NasOpsEngine internal constructor(
     if (cur.state == OpItemState.VERIFIED) cur = publishPhase(cur, temp, ctx)
     if (cur.state == OpItemState.PUBLISHED) cur = recordSourcePhase(cur)
     if (cur.state == OpItemState.SOURCE_RECORDED) cur = trashSourcePhase(cur, ctx)
-    if (cur.state == OpItemState.SOURCE_TRASHED) cur = advance(cur, OpItemState.DONE)
+    if (cur.state == OpItemState.SOURCE_TRASHED) cur = dateAndFinish(cur, ctx)
     return cur
+  }
+
+  /**
+   * R5, R1 (revisione 4B): il file e' nel cestino adesso (passo `TRASHED` o `SOURCE_TRASHED`). I 30 giorni della sua voce contano da qui
+   * (`trashEntered`, solo in avanti), non dalla voce scritta prima della rinomina (che puo' essere di un mese fa, dopo una pausa). Con l'ora
+   * del NAS sospetta (salto, D32) non si data: l'elemento resta a questo passo e l'operazione aperta (la pulizia salta le voci citate da
+   * un'operazione aperta) finche' l'ora torna fidata.
+   */
+  private suspend fun dateAndFinish(cur: OpItemRecord, ctx: RunCtx): OpItemRecord {
+    val trashId = cur.trashId
+    val entry = trashId?.let { store.trashEntry(it) }
+    if (entry != null && entry.state == TrashEntryState.TRASHED) {
+      if (gate.statusOf(cur.srcShare) == GateStatus.CLOCK_JUMP) {
+        ctx.heldForClock = true
+        return cur
+      }
+      store.trashEntered(entry.trashId, nasNow())
+    }
+    return advance(cur, OpItemState.DONE)
   }
 
   private suspend fun deleteTemp(share: String, temp: SharePath, purpose: Purpose) {
@@ -887,6 +951,12 @@ class NasOpsEngine internal constructor(
 
   private suspend fun trashSourcePhase(cur: OpItemRecord, ctx: RunCtx): OpItemRecord {
     val trashId = cur.trashId ?: return fail(cur, OpErrorCode.UNEXPECTED)
+    // I10: fra la pubblicazione e il cestino della sorgente la copia puo' essere stata tolta dal PC (sembrava un doppione): la sorgente
+    // va nel cestino solo se la copia c'e' ancora, con la dimensione verificata. Altrimenti restano dove sono (nessuna perdita).
+    if (!copyStillThere(cur, ctx)) {
+      store.markTrash(trashId, TrashEntryState.PURGED, nasNow())
+      return fail(cur, OpErrorCode.UNEXPECTED)
+    }
     // Solo se il file e' ancora quello verificato (timbro): altrimenti nessun cestino, restano entrambe le copie (E-D13).
     return when (val r = fileOps.trashMove(cur.srcShare, cur.srcPath, trashId, cur.stamp, ctx.purpose)) {
       is NasResult.Err -> closeEntryIfFailed(failOrPause(cur, r.error), trashId, ctx)
@@ -911,6 +981,18 @@ class NasOpsEngine internal constructor(
         }
       }
     }
+  }
+
+  /** La copia pubblicata c'e' ancora con la dimensione verificata; se la sorgente e' gia' nel cestino (ripresa), non serve guardare. */
+  private suspend fun copyStillThere(cur: OpItemRecord, ctx: RunCtx): Boolean {
+    val dst = cur.dstPath ?: return false
+    val entry = when (val r = probe(cur.dstShare!!, dst, ctx.purpose)) {
+      is NasResult.Err -> if (isNetwork(r.error)) throw PauseSignal(PauseReason.NAS_UNREACHABLE) else return false
+      is NasResult.Ok -> (r.value as? Probe.Found)?.entry
+    }
+    if (entry != null) return !entry.isDirectory && entry.size == cur.size
+    // La copia non c'e': forse la sorgente e' gia' nel cestino (risposta persa) e la copia l'ha tolta qualcuno dopo. Il cestino e' coerente.
+    return inOwnTrash(cur, cur.trashId ?: return false, ctx)
   }
 
   /** L'elemento e' nel proprio cestino con la sua identita' (la rinomina c'e' stata, la risposta no). */
@@ -968,7 +1050,16 @@ class NasOpsEngine internal constructor(
     val trashId = cur.trashId ?: return fail(cur, OpErrorCode.UNEXPECTED)
     if (cur.state == OpItemState.PLANNED) {
       // Prima la voce del diario locale e il record firmato, poi la rinomina nel cestino (un record senza file e' innocuo).
-      val counted = if (cur.isFolder) countFolder(cur.srcShare, cur.srcPath, ctx) else null
+      val counted = if (cur.isFolder) {
+        when (val r = folderBeforeTrash(cur, ctx)) {
+          is FolderCheck.Ready -> r.counted
+          is FolderCheck.Stop -> return r.item
+        }
+      } else {
+        null
+      }
+      // R3: l'inventario della cartella, nel diario, prima della rinomina: la pulizia cancellera' solo cio' che c'e' qui.
+      if (counted != null) store.saveTrashManifest(trashId, counted.manifest)
       val now = nasNow()
       store.recordTrash(
         LocalTrashRecord(
@@ -980,7 +1071,7 @@ class NasOpsEngine internal constructor(
           trashedPath = NasLayout.trashItemFile(deviceId, trashId),
           reason = TrashReason.DELETE,
           isFolder = cur.isFolder,
-          size = counted?.bytes?.takeIf { cur.size == null || cur.size == 0L } ?: (cur.size ?: 0),
+          size = counted?.bytes ?: (cur.size ?: 0),
           fileCount = counted?.files,
           trashedAtNas = now,
           state = TrashEntryState.TRASHED,
@@ -1016,7 +1107,7 @@ class NasOpsEngine internal constructor(
         }
       }
     }
-    return if (cur.state == OpItemState.TRASHED) advance(cur, OpItemState.DONE) else cur
+    return if (cur.state == OpItemState.TRASHED) dateAndFinish(cur, ctx) else cur
   }
 
   /**
@@ -1029,33 +1120,31 @@ class NasOpsEngine internal constructor(
     return result
   }
 
-  private class Counted(val files: Int, val bytes: Long)
+  private sealed interface FolderCheck {
+    class Ready(val counted: FolderInventory.Result.Counted) : FolderCheck
 
-  /** Quanti file contiene una cartella da cestinare (per "Eliminati di recente" e il record); null se non si sa (troppi, assente). */
-  private suspend fun countFolder(share: String, root: SharePath, ctx: RunCtx): Counted? {
-    var files = 0
-    var bytes = 0L
-    val queue = ArrayDeque<SharePath>()
-    queue.add(root)
-    while (queue.isNotEmpty()) {
-      val dir = queue.removeFirst()
-      val entries = ArrayList<NasEntry>()
-      when (val r = reader.list(share, dir, ctx.purpose) { entries += it }) {
-        is NasResult.Err -> if (isNetwork(r.error)) throw PauseSignal(PauseReason.NAS_UNREACHABLE) else return null
-        is NasResult.Ok -> if (r.value.cappedAt != null) return null
-      }
-      for (entry in entries) {
-        if (entry.isReparsePoint) continue
-        if (entry.isDirectory) {
-          runCatching { dir.child(entry.name) }.getOrNull()?.let(queue::add)
-        } else {
-          files++
-          bytes += entry.size
-        }
-        if (files > MAX_COUNTED) return null
-      }
+    class Stop(val item: OpItemRecord) : FolderCheck
+  }
+
+  /**
+   * Una cartella da cestinare, un attimo prima della rinomina: e' ancora quella confermata (identita', I4) e non contiene **piu'** byte di
+   * quelli che il foglio ha detto (R2: la conferma vale per quei numeri); il suo inventario (R3) e il conteggio per il record.
+   */
+  private suspend fun folderBeforeTrash(cur: OpItemRecord, ctx: RunCtx): FolderCheck {
+    val self = when (val r = probe(cur.srcShare, cur.srcPath, ctx.purpose)) {
+      is NasResult.Err -> return FolderCheck.Stop(failOrPause(cur, r.error))
+      is NasResult.Ok -> (r.value as? Probe.Found)?.entry ?: return FolderCheck.Stop(fail(cur, OpErrorCode.SOURCE_MISSING))
     }
-    return Counted(files, bytes)
+    val knownId = cur.stamp?.fileId
+    if (!self.isDirectory || self.isReparsePoint || (knownId != null && self.fileId != null && knownId != self.fileId)) {
+      return FolderCheck.Stop(fail(cur, OpErrorCode.SOURCE_CHANGED))
+    }
+    return when (val r = inventory.take(cur.srcShare, cur.srcPath, self.fileId, ctx.purpose, checkCatalog = true)) {
+      is FolderInventory.Result.Counted ->
+        if (r.bytes > (cur.size ?: 0)) FolderCheck.Stop(fail(cur, OpErrorCode.SOURCE_CHANGED)) else FolderCheck.Ready(r)
+      FolderInventory.Result.TooBig -> FolderCheck.Stop(fail(cur, OpErrorCode.SOURCE_CHANGED))
+      is FolderInventory.Result.Failed -> FolderCheck.Stop(failOrPause(cur, r.error))
+    }
   }
 
   // --- Ripristina: PLANNED -> RESTORING -> DONE ---------------------------------------------------------------------------------
@@ -1127,8 +1216,10 @@ class NasOpsEngine internal constructor(
       TrashEntryState.RESTORED -> return fail(cur, OpErrorCode.SOURCE_MISSING)
       TrashEntryState.TRASHED -> Unit
     }
+    // I6: una voce citata da un'altra operazione aperta (il file non e' ancora nel cestino, o si sta ripristinando) non si elimina.
+    if (cur.state == OpItemState.PLANNED && citedElsewhere(trashId, cur.opId)) return fail(cur, OpErrorCode.SOURCE_CHANGED)
     if (cur.state == OpItemState.PLANNED) cur = advance(cur, OpItemState.PURGING)
-    return when (val r = purger.purge(entry.shareName, path, entry.isFolder, entry.size, ctx.purpose)) {
+    return when (val r = purger.purge(entry, ctx.purpose)) {
       OwnTrashPurger.Result.Done -> {
         store.markTrash(trashId, TrashEntryState.PURGED, nasNow())
         advance(cur, OpItemState.DONE)
@@ -1139,6 +1230,12 @@ class NasOpsEngine internal constructor(
     }
   }
 
+  /** La voce [trashId] e' citata da un elemento non chiuso di un'altra operazione aperta. */
+  private suspend fun citedElsewhere(trashId: String, self: OpId): Boolean =
+    store.ops(setOf(OpState.PLANNED, OpState.RUNNING, OpState.PAUSED)).filter { it.id != self }.any { op ->
+      store.items(op.id).any { !it.state.terminal && it.trashId == trashId }
+    }
+
   private companion object {
     const val TAG = "NasOps"
 
@@ -1147,9 +1244,6 @@ class NasOpsEngine internal constructor(
 
     /** Nomi alternativi provati prima di fermarsi: `nome (2)` ... `nome (99)`. */
     const val MAX_ALTERNATIVE = 99
-
-    /** Oltre questi file una cartella cestinata non si conta (il record dice "non so"). */
-    const val MAX_COUNTED = 100_000
 
     /** Quante volte si ricrea la cartella di destinazione sparita fra la creazione e la rinomina. */
     const val MAX_PARENT_TRIES = 3

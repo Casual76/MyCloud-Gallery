@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuEntry
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryDeleteScope
+import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.nasops.contract.ConfirmationCheck
 import dev.pampa.mycloudgallery.core.nasops.contract.ConfirmationRules
@@ -241,6 +242,105 @@ class NasActionsControllerTest {
     runCurrent()
     assertThat(kit.exists("test-comune", "Famiglia/IMG_1.jpg")).isTrue()
     assertThat(kit.exists("test", "Viaggi/IMG_1.jpg")).isFalse()
+  }
+
+  // --- P16 (E-D1, E-D11): un media sul telefono e sul NAS ----------------------------------------------------------------------
+
+  @Test
+  fun p16_unMediaMostratoDalTelefonoConCopieSulNasHaEliminaConLaSceltaDelLuogo() = runTest(StandardTestDispatcher()) {
+    prepare()
+    kit.putFile("test-comune", "Famiglia/IMG_1.jpg", byteArrayOf(1, 2, 3, 4))
+    val id = MediaId("0b5f8c1e-3d2a-4c6b-9e7f-1a2b3c4d5e6f")
+    val actions = KitNasMediaActions(kit)
+    actions.phoneCopy = { asked ->
+      if (asked != id) {
+        null
+      } else {
+        NasActionTarget(
+          item = kit.itemOf("test", "Viaggi/IMG_1.jpg"),
+          scope = NasAreaScope.PRIVATE,
+          writable = true,
+          onPhone = true,
+          isVideo = false,
+          // La copia nell'area comune: con "Ovunque" va nel cestino anche lei (dove si hanno i diritti).
+          others = listOf(NasLocationInfo(NasLocationInfo.Kind.NAS_COMMON, writable = true, item = kit.itemOf("test-comune", "Famiglia/IMG_1.jpg"))),
+          viaPhoneCopy = true,
+        )
+      }
+    }
+    val c = controller(this, actions)
+    c.bind(MediaRef.Phone(volume = "external_primary", mediaStoreId = 1L, mime = "image/jpeg"), id)
+    runCurrent()
+    // Dal telefono: del NAS solo "Elimina…" (con la scelta del luogo), niente "Sposta" ne' "Rinomina".
+    val menu = entries(NasActionCapabilities.of(c.target.value))
+    assertThat(menu.actions).isEmpty()
+    assertThat(menu.delete.single().item().label).isEqualTo("Elimina…")
+    c.requestDelete()
+    runCurrent()
+    val state = c.state.value as NasActionsState.Delete
+    assertThat(state.scope).isEqualTo(GalleryDeleteScope.PhoneOnly)
+    val plan = checkNotNull(state.plan)
+    assertThat(plan.items.map { it.srcShare }).containsExactly("test", "test-comune")
+    // "Ovunque": tutte e due le copie del NAS nel cestino (il telefono lo fa il viewer con il cestino di sistema).
+    c.setScope(GalleryDeleteScope.Everywhere)
+    c.confirmed(plan, checkNotNull(ConfirmationSheet(plan).tap(c.monotonicMs())))
+    runCurrent()
+    assertThat(kit.exists("test", "Viaggi/IMG_1.jpg")).isFalse()
+    assertThat(kit.exists("test-comune", "Famiglia/IMG_1.jpg")).isFalse()
+  }
+
+  @Test
+  fun p16_ovunqueSaltaLeCopieDoveNonSiHannoIDiritti() = runTest(StandardTestDispatcher()) {
+    prepare()
+    kit.putFile("test-comune", "Famiglia/IMG_1.jpg", byteArrayOf(1, 2, 3, 4))
+    val actions = KitNasMediaActions(kit)
+    actions.phoneCopy = {
+      NasActionTarget(
+        item = kit.itemOf("test", "Viaggi/IMG_1.jpg"),
+        scope = NasAreaScope.PRIVATE,
+        writable = true,
+        onPhone = true,
+        isVideo = false,
+        others = listOf(NasLocationInfo(NasLocationInfo.Kind.NAS_COMMON, writable = false, item = kit.itemOf("test-comune", "Famiglia/IMG_1.jpg"))),
+        viaPhoneCopy = true,
+      )
+    }
+    val c = controller(this, actions)
+    c.bind(MediaRef.Phone(volume = "external_primary", mediaStoreId = 1L, mime = "image/jpeg"), MediaId("0b5f8c1e-3d2a-4c6b-9e7f-1a2b3c4d5e6f"))
+    runCurrent()
+    c.requestDelete()
+    runCurrent()
+    val plan = checkNotNull((c.state.value as NasActionsState.Delete).plan)
+    assertThat(plan.items.map { it.srcShare }).containsExactly("test")
+  }
+
+  // --- R10: il viewer non aspetta se stesso ---------------------------------------------------------------------------------------
+
+  @Test
+  fun r10_primaDiRinominareIlViewerChiudeIlSuoLettore() = runTest(StandardTestDispatcher()) {
+    prepare()
+    val events = mutableListOf<String>()
+    val c = NasActionsController(KitNasMediaActions(kit), backgroundScope) {
+      events += "rilascio"
+      // Il lettore tiene il file aperto fino al rilascio: l'operazione non deve partire prima.
+      assertThat(kit.operations.operations.value).isEmpty()
+      true
+    }
+    c.bind(ref)
+    runCurrent()
+    c.requestRename()
+    c.onRenameText("Tramonto.jpg")
+    advanceTimeBy(300)
+    runCurrent()
+    val ready = ((c.state.value as NasActionsState.Rename).check as RenameCheck.Ready).plan
+    c.confirmed(ready, checkNotNull(ConfirmationSheet(ready).tap(c.monotonicMs())))
+    assertThat(events).containsExactly("rilascio")
+    runCurrent()
+    // Un attimo perche' il lettore chiuda davvero il suo handle sul NAS, poi la rinomina.
+    assertThat(kit.exists("test", "Viaggi/IMG_1.jpg")).isTrue()
+    advanceTimeBy(1_000)
+    runCurrent()
+    assertThat(kit.exists("test", "Viaggi/Tramonto.jpg")).isTrue()
   }
 
   @Test

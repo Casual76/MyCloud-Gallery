@@ -15,6 +15,7 @@ import dev.pampa.mycloudgallery.core.nasops.contract.OpKind
 import dev.pampa.mycloudgallery.core.nasops.contract.OpPlan
 import dev.pampa.mycloudgallery.core.nasops.contract.OpRequest
 import dev.pampa.mycloudgallery.core.nasops.contract.OpRules
+import dev.pampa.mycloudgallery.core.nasops.contract.OpState
 import dev.pampa.mycloudgallery.core.nasops.contract.OpStateMachine
 import dev.pampa.mycloudgallery.core.nasops.contract.OpsGate
 import dev.pampa.mycloudgallery.core.nasops.contract.OpsStore
@@ -49,6 +50,9 @@ internal class OpPlanner(
   private val newId: () -> String,
 ) {
   private val purpose = Purpose.INTERACTIVE
+
+  /** R2: il contenuto di una cartella da eliminare si conta qui (alla pianificazione basta contare: l'inventario lo scrive l'esecuzione). */
+  private val inventory = FolderInventory(reader, CatalogPresence.NONE)
 
   suspend fun plan(request: OpRequest): PlanOutcome = try {
     when (request) {
@@ -98,13 +102,16 @@ internal class OpPlanner(
 
   private fun build(kind: OpKind, items: List<PlannedItem>, skipped: List<SkippedItem>, destShare: String?, destFolder: SharePath?): OpPlan {
     if (items.size > OpRules.MAX_ITEMS_PER_OP) reject(PlanRejection.TOO_MANY_ITEMS)
+    // R2: i file che l'operazione tocca davvero, contando quelli dentro le cartelle da eliminare.
+    val fileCount = items.count { !it.isFolder } + items.sumOf { it.contentFiles ?: 0 }
     val warnings = buildSet {
       if (items.any { it.flow == ItemFlow.MOVE_ACROSS_SHARES }) add(PlanWarning.CROSS_SHARE_COPY)
       if (kind.permanent) add(PlanWarning.PERMANENT_DELETE)
       if (items.any { it.isFolder }) add(PlanWarning.FOLDER_INCLUDED)
       if (skipped.isNotEmpty()) add(PlanWarning.SOME_SKIPPED)
+      if (kind == OpKind.TRASH && fileCount > PlanSummary.MANY_FILES) add(PlanWarning.MANY_FILES)
     }
-    val summary = PlanSummary(kind, items.size, items.count { it.isFolder }, items.sumOf { it.size }, destShare, destFolder)
+    val summary = PlanSummary(kind, items.size, items.count { it.isFolder }, items.sumOf { it.size }, destShare, destFolder, fileCount)
     return OpPlan(kind, items, skipped, summary, warnings)
   }
 
@@ -269,14 +276,37 @@ internal class OpPlanner(
         continue
       }
       val real = if (entry != null && entry.isDirectory != item.isFolder) item.copy(isFolder = entry.isDirectory, stamp = null) else item
-      val stamp = stampFor(real, entry)
+      if (real.isFolder && entry?.isReparsePoint == true) {
+        // Un collegamento non si conta e non si elimina da qui (E-N10).
+        skipped += SkippedItem(item.share, item.path, SkipReason.SOURCE_MISSING)
+        continue
+      }
+      // R2: una cartella si conta adesso, scendendo in tutte le sottocartelle: il foglio dice quanti file e quanti byte, e la conferma si
+      // lega a quei numeri (entrano nell'impronta). Una cartella che non si riesce a contare non si elimina in un colpo solo.
+      val counted = if (real.isFolder) countForPlan(item.share, item.path, entry?.fileId) else null
+      val stamp = if (counted != null) NasStamp(counted.bytes, checkNotNull(entry).modifiedAt, entry.fileId) else stampFor(real, entry)
       planned += PlannedItem(
-        planned.size, ItemFlow.TRASH, item.share, item.path, null, null, real.isFolder, sizeFor(real, stamp), stamp, trashId = newId(),
+        planned.size, ItemFlow.TRASH, item.share, item.path, null, null, real.isFolder,
+        counted?.bytes ?: sizeFor(real, stamp), stamp, trashId = newId(), contentFiles = counted?.files,
       )
     }
     if (planned.isEmpty()) reject(emptyRejection(skipped))
     return PlanOutcome.Ready(build(OpKind.TRASH, planned, skipped, null, null))
   }
+
+  /** R2: il contenuto vero di una cartella da eliminare, o il rifiuto del piano. */
+  private suspend fun countForPlan(share: String, path: SharePath, fileId: Long?): FolderInventory.Result.Counted =
+    when (val r = inventory.take(share, path, fileId, purpose, checkCatalog = false)) {
+      is FolderInventory.Result.Counted -> r
+      FolderInventory.Result.TooBig -> reject(PlanRejection.TOO_MANY_ITEMS)
+      is FolderInventory.Result.Failed -> reject(
+        when (r.error) {
+          NasError.PermissionDenied -> PlanRejection.READ_ONLY
+          NasError.NotFound -> PlanRejection.SOURCE_MISSING
+          else -> PlanRejection.NAS_UNREACHABLE
+        },
+      )
+    }
 
   // --- ripristina ------------------------------------------------------------------------------------------------------------
 
@@ -316,6 +346,7 @@ internal class OpPlanner(
     if (request.entries.isEmpty()) reject(PlanRejection.EMPTY)
     val planned = ArrayList<PlannedItem>()
     val seen = HashSet<String>()
+    val busy = busyTrashIds()
     for (ref in request.entries) {
       if (!seen.add(ref.trashId)) continue
       // Solo il diario locale dice cosa e' mio: percorso, dimensione e share vengono da li', mai da un record remoto.
@@ -323,11 +354,23 @@ internal class OpPlanner(
       if (entry == null || entry.state != TrashEntryState.TRASHED || entry.accountId != accountId) reject(PlanRejection.NOT_MINE)
       if (entry.trashedPath != NasLayout.trashItemFile(deviceId, ref.trashId)) reject(PlanRejection.NOT_MINE)
       if (blocked(entry.shareName)) reject(PlanRejection.WRITES_BLOCKED)
+      // I6: una voce ancora in mano a un'operazione aperta (il file non e' ancora nel cestino, o un ripristino la sta spostando) non si
+      // elimina adesso: si riprova a operazione chiusa.
+      if (ref.trashId in busy) reject(PlanRejection.WRITES_BLOCKED)
       planned += PlannedItem(
         planned.size, ItemFlow.PURGE, entry.shareName, entry.trashedPath, null, null, entry.isFolder, entry.size, null, trashId = ref.trashId,
       )
     }
     return PlanOutcome.Ready(build(OpKind.PURGE_NOW, planned, emptyList(), null, null))
+  }
+
+  /** Le voci del cestino citate da un elemento non chiuso di un'operazione aperta. */
+  private suspend fun busyTrashIds(): Set<String> {
+    val out = HashSet<String>()
+    for (op in store.ops(setOf(OpState.PLANNED, OpState.RUNNING, OpState.PAUSED))) {
+      store.items(op.id).filter { !it.state.terminal }.mapNotNullTo(out) { it.trashId }
+    }
+    return out
   }
 
   private companion object {

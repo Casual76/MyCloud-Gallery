@@ -82,6 +82,21 @@ fun interface HeavyWorkPolicy {
   }
 }
 
+/**
+ * R3 (revisione 4B): i file che il **catalogo** vede ancora presenti in una share, per `fileId`, con i loro percorsi. La scansione non entra
+ * mai in `.mycloudgallery/`: un file del proprio cestino che il catalogo vede presente **fuori** dalla cartella cestinata e' raggiungibile
+ * anche da li' (un collegamento simbolico che Samba presenta come cartella), e la pulizia non lo tocca. Serve solo a **non** eliminare: un
+ * catalogo vuoto o vecchio non fa eliminare niente in piu' di quanto il diario gia' permetta.
+ */
+fun interface CatalogPresence {
+  suspend fun presentPaths(share: String, fileIds: Collection<Long>): Map<Long, List<SharePath>>
+
+  companion object {
+    /** Nessun catalogo (test, banco): solo il diario e il NAS decidono. */
+    val NONE: CatalogPresence = CatalogPresence { _, _ -> emptyMap() }
+  }
+}
+
 /** Le share in sola lettura per l'account (E-N9): dall'ultima prova della share (onboarding, Cartelle NAS). */
 fun interface ShareAccessView {
   fun readOnly(share: String): Boolean

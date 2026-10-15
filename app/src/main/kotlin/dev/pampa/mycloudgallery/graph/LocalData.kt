@@ -145,6 +145,7 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
       NasGraph.EMERGENCY_FILE,
       NasGraph.COVERS_FILE,
       NasOrganizer.PERSONAL_DIR,
+      NasOrganizer.NASOPS_DIR,
       NasStages.HEARTBEAT_SCAN,
       NasStages.HEARTBEAT_SYNC,
       NasStages.HEARTBEAT_PREP,

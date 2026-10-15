@@ -13,6 +13,8 @@ import dev.pampa.mycloudgallery.core.nasops.contract.OpStateMachine
 import dev.pampa.mycloudgallery.core.nasops.contract.OpsStore
 import dev.pampa.mycloudgallery.core.nasops.contract.PlanHash
 import dev.pampa.mycloudgallery.core.nasops.contract.TrashEntryState
+import dev.pampa.mycloudgallery.core.nasops.contract.PurgedTally
+import dev.pampa.mycloudgallery.core.nasops.contract.TrashManifest
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
@@ -157,6 +159,36 @@ class InMemoryOpsStore : OpsStore {
     synchronized(lock) {
       val old = trash[trashId] ?: return
       trash[trashId] = old.copy(state = state, updatedAtNas = nowNas)
+      if (state != TrashEntryState.TRASHED) manifests.remove(trashId)
+      trashFlow.value = trash.values.toList()
+    }
+  }
+
+  private val manifests = HashMap<String, TrashManifest>()
+
+  override suspend fun saveTrashManifest(trashId: String, manifest: TrashManifest) {
+    synchronized(lock) {
+      val entry = trash[trashId]
+      require(entry == null || entry.state == TrashEntryState.TRASHED) { "Inventario di una voce gia' chiusa." }
+      manifests[trashId] = manifest
+    }
+  }
+
+  override suspend fun trashManifest(trashId: String): TrashManifest? = synchronized(lock) { manifests[trashId] }
+
+  override suspend fun purgedSince(sinceNas: Long): PurgedTally = synchronized(lock) {
+    val purged = trash.values.filter { it.state == TrashEntryState.PURGED && it.updatedAtNas >= sinceNas }
+    PurgedTally(
+      files = purged.sumOf { if (!it.isFolder) 1 else it.fileCount ?: PurgedTally.UNCOUNTED_FOLDER_FILES },
+      bytes = purged.sumOf { it.size },
+    )
+  }
+
+  override suspend fun trashEntered(trashId: String, atNas: Long) {
+    synchronized(lock) {
+      val old = trash[trashId] ?: return
+      // Solo in avanti: i 30 giorni non si accorciano mai (R5).
+      if (atNas > old.trashedAtNas) trash[trashId] = old.copy(trashedAtNas = atNas, updatedAtNas = maxOf(old.updatedAtNas, atNas))
       trashFlow.value = trash.values.toList()
     }
   }

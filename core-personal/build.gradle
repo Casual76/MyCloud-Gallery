@@ -1,0 +1,40 @@
+// I dati personali sincronizzati fra i *miei* dispositivi della Fase 4B (docs/fase4-progetto.md §1.2 "core-personal", §2.9, D26, L29):
+// preferiti, nascosti, album manuali, date di ultima visione dei ricordi, impostazioni personali (esclusioni dell'area privata,
+// "Mostra le copertine degli album"). Contratti, null-object e fake di P0-B; la logica (codec della classe `personal`, pubblicazione,
+// lettura, integrazione col catalogo) e' di P13.
+//
+// Ogni dispositivo pubblica nella **propria area privata** lo stato unito che conosce (`devices/<io>/personal/`); per ogni voce vince
+// l'ultima modifica per ora del NAS, a pari ora l'autore minore (D26). Valgono solo voci firmate da un dispositivo approvato **dello
+// stesso account**, trovate nell'area privata dichiarata: mai l'area comune (C19: i nascosti non li vede nessun altro account).
+//
+// Pacchetti: `contract`, `noop`, `testing` (vedi core-index). P13 aggiunge `codec` (voce <-> record della classe `personal`),
+// `sync`, `store` (adattatore sul catalogo, che ha gia' i `*_changed_at` dello schema v2) e `settings`.
+//
+// Non vede `core-nasops` (test di architettura): nessun dato personale letto dal NAS puo' arrivare a un'operazione distruttiva.
+// Le dipendenze che P13 aggiungera' (core-nas per la lettura, core-database per il catalogo, core-index per il pubblicatore) sono nel
+// grafo del §1.1.
+//
+// D28: nessuna rete in questo modulo (NoNetworkSourcesTest). §4.3: nessun orologio del telefono nelle decisioni
+// (NoWallClockSourcesTest): l'ordine delle modifiche e' l'ora del NAS; senza, la modifica resta "da datare".
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.core.personal'
+}
+
+dependencies {
+  api project(':core-common')
+  api project(':core-model')
+  // api: SharePath e TrustLimits (core-trust) compaiono nelle firme dei contratti.
+  api project(':core-trust')
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+}

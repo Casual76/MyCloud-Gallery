@@ -12,7 +12,9 @@
 //   - c'e' un componente vietato in release (`forbiddenComponents`): dalla Fase 3, il ProfileInstallReceiver del
 //     profilo di benchmark (torna solo nella variante benchmarkRelease, che non passa da questo controllo);
 //   - c'e' un permesso Android che non e' nell'elenco qui sotto;
-//   - un permesso con un tetto di SDK (`permissionMaxSdk`) non dichiara quel `android:maxSdkVersion`.
+//   - un permesso con un tetto di SDK (`permissionMaxSdk`) non dichiara quel `android:maxSdkVersion`;
+//   - un servizio il cui nome finisce per `JobService` non e' protetto da `android.permission.BIND_JOB_SERVICE` (Fase 4B, D29: il
+//     JobService delle operazioni lunghe sui file del NAS non e' esportato e solo il sistema puo' legarlo).
 //
 // `assembleRelease` dipende dal controllo: un APK che non lo passa non si produce nemmeno.
 //
@@ -78,6 +80,11 @@ ext.releaseManifestPolicy = [
     // :app: lettura dei media su Android 10-12 (SDK 29-32), dove READ_MEDIA_* non esiste. Solo con
     // android:maxSdkVersion="32" (vedi `permissionMaxSdk`): da Android 13 non e' nemmeno dichiarato.
     'android.permission.READ_EXTERNAL_STORAGE',
+
+    // --- Fase 4B (P0-B, docs/fase4-progetto.md D29, approvato dall'utente il 15/10): riga in docs/sicurezza.md 4-bis. -------------
+    // :app: le operazioni lunghe sui file del NAS avviate da un tocco girano come lavoro avviato dall'utente (UIDT, Android 14+)
+    // nel JobService dell'app (NasOpsJobService: non esportato, protetto da BIND_JOB_SERVICE, vedi `verify`). Normale.
+    'android.permission.RUN_USER_INITIATED_JOBS',
   ],
   // Permessi che sono ammessi SOLO con un tetto di SDK: nome -> android:maxSdkVersion atteso. Senza l'attributo (o con un
   // altro valore) il manifest non passa: un READ_EXTERNAL_STORAGE senza tetto chiederebbe l'accesso ai file anche su
@@ -158,6 +165,11 @@ abstract class VerifyReleaseManifest extends DefaultTask {
           }
           if (name in forbiddenComponents.get()) {
             problems << "componente VIETATO in release: <${kind}> ${name}".toString()
+          }
+          // Fase 4B (D29): ogni JobService e' legato solo dal sistema (JobScheduler), quindi deve richiedere BIND_JOB_SERVICE.
+          if (kind == 'service' && name != null && name.endsWith('JobService') &&
+              attr(component, 'permission') != 'android.permission.BIND_JOB_SERVICE') {
+            problems << "<service> ${name} e' un JobService senza android:permission=\"android.permission.BIND_JOB_SERVICE\"".toString()
           }
           // Un componente ammesso perche' protetto deve dichiarare ESATTAMENTE il permesso atteso.
           String required = exportedRequiresPermission.get()[name]

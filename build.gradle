@@ -81,6 +81,10 @@ ext.galleryModules = [
   ':core-index',
   ':core-nasmedia',
   ':core-prepare',
+  // Fase 4B (docs/fase4-progetto.md §1.1, P0-B)
+  ':core-nasops',
+  ':core-personal',
+  ':feature-nas',
 ]
 
 tasks.register('galleryTest') {

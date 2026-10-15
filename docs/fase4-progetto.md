@@ -970,5 +970,7 @@ Operazioni coperte: rinomina, sposta nella stessa share, sposta tra share (copia
 | Q7 | (a) Con i dati mobili solo ciò che è sullo schermo | D23 confermata |
 | Q8 | (a) "Elimina subito" con doppia conferma e avviso sul backup esterno | D25, 4B |
 | Q9, Q10 | Non chieste: valgono le raccomandazioni (a) | — |
+| D29 | **Sì** al permesso `RUN_USER_INITIATED_JOBS` e al `JobService` per le operazioni lunghe avviate dall'utente (15/10) | P0-B li aggiunge a policy e §4-bis |
+| Prove sul campo | La 4A si prova sul telefono **insieme** alla 4B (15/10): la 4B parte senza aspettare F1–F14 | Chiusura unica di 4A e 4B sul campo |
 
 <!-- fine del documento -->

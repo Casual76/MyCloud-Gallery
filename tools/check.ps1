@@ -19,8 +19,10 @@
     7. APK di release           ispezione dell'APK vero con aapt2: non debuggable, backup escluso, nessun
                                 componente esportato oltre quelli ammessi da gradle\verify-release-manifest.gradle
                                 (launcher e JobService di WorkManager, quest'ultimo solo con BIND_JOB_SERVICE),
-                                nessun codice solo-debug dentro, e (Fase 3) nessun `ProfileInstallReceiver` (il
-                                receiver del Macrobenchmark torna solo nella variante benchmarkRelease)
+                                nessun codice solo-debug dentro, (Fase 3) nessun `ProfileInstallReceiver` (il
+                                receiver del Macrobenchmark torna solo nella variante benchmarkRelease) e (Fase 4B, D29)
+                                ogni `*JobService` protetto da BIND_JOB_SERVICE: quello delle operazioni lunghe sui
+                                file del NAS (UIDT) non e' nemmeno esportato
     7b. nessun resto di debug  nel dex dell'APK di release non compaiono la Libreria sintetica, il marcatore della famiglia
                                 "pronta", `DebugSyntheticSize`, il sink di logcat e il catalogo dei componenti (I4 della
                                 revisione di sicurezza), ne' (Fase 4A, D33) la recinzione delle prove `ShareFence` e il NAS
@@ -444,6 +446,13 @@ Step "APK di release: non debuggable, backup escluso, nessun componente esposto"
       $problems += ("componente esportato non ammesso: <{0}> {1}" -f $component.Kind, $component.Name)
     } elseif ($allowedExported[$component.Name] -and $component.Permission -ne $allowedExported[$component.Name]) {
       $problems += ("<{0}> {1} e' esportato senza il permesso {2}" -f $component.Kind, $component.Name, $allowedExported[$component.Name])
+    }
+  }
+  # Fase 4B (D29): ogni JobService (quello di WorkManager e quello delle operazioni avviate dall'utente) lo lega solo il sistema, quindi
+  # deve richiedere BIND_JOB_SERVICE; quello dell'app non e' esportato (lo prende gia' il controllo qui sopra: non e' fra gli ammessi).
+  foreach ($component in @($facts.Components | Where-Object { $_.Kind -eq "service" -and $_.Name -match 'JobService$' })) {
+    if ($component.Permission -ne "android.permission.BIND_JOB_SERVICE") {
+      $problems += ("<service> {0} e' un JobService senza il permesso BIND_JOB_SERVICE" -f $component.Name)
     }
   }
   # Fase 3: il ProfileInstallReceiver (Macrobenchmark) non deve esserci neanche non esportato.

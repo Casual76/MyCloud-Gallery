@@ -20,6 +20,9 @@
       - READ_EXTERNAL_STORAGE, SOLO fino all'SDK 32 (Fase 3, D22, proposta): su Android 10-12 e' l'unico permesso di
         lettura dei media (READ_MEDIA_* esiste da Android 13). Con maxSdkVersion=32 su Android 13+ non e' nemmeno
         dichiarato; verifyReleaseManifest pretende l'attributo.
+      - RUN_USER_INITIATED_JOBS (Fase 4B, D29, approvato dall'utente il 15/10): le operazioni lunghe sui file del NAS avviate da un
+        tocco (spostare 2.000 file) girano come lavoro avviato dall'utente (UIDT, Android 14+) nel NasOpsJobService, con notifica
+        di avanzamento e "Ferma". Permesso normale, nessuna richiesta all'utente; sotto Android 14 e' ignorato.
   -->
   <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -31,6 +34,7 @@
   <uses-permission
       android:name="android.permission.READ_EXTERNAL_STORAGE"
       android:maxSdkVersion="32" />
+  <uses-permission android:name="android.permission.RUN_USER_INITIATED_JOBS" />
 
   <application
       android:name=".MyCloudGalleryApp"
@@ -63,6 +67,16 @@
         <category android:name="android.intent.category.LAUNCHER" />
       </intent-filter>
     </activity>
+
+    <!--
+        Fase 4B (D29): il JobService delle operazioni lunghe sui file del NAS avviate dall'utente (UIDT). NON esportato e protetto da
+        BIND_JOB_SERVICE: lo lega solo il sistema (JobScheduler). verifyReleaseManifest e tools/check.ps1 pretendono il permesso per
+        ogni *JobService. Scheletro di P0-B: non fa niente finche' P16 non lo lega alle operazioni (docs/sicurezza.md 4-bis).
+    -->
+    <service
+        android:name=".work.NasOpsJobService"
+        android:exported="false"
+        android:permission="android.permission.BIND_JOB_SERVICE" />
 
     <!--
         androidx.profileinstaller (portato da Compose) dichiara questo receiver ESPORTATO, protetto dal

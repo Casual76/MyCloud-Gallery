@@ -1,0 +1,79 @@
+// Le schermate della 4B per organizzare il NAS (docs/fase4-progetto.md §1.1, §1.5, D27; riga P14 del §4.4): Cartelle NAS, Spazio NAS,
+// Eliminati di recente del NAS, Operazioni in corso e i fogli di conferma. Scheletro di P0-B (modulo, rotte, test di guardia); le
+// schermate sono di P14.
+//
+// **Aspetto: linguaggio grafico G2, direzione C "vetro adattivo"** (docs/grafica-progetto.md §11-§12; core-designsystem/.../design/**).
+// La Fase 4 consegna stati e contratti (D27, §1.5): le composable usano solo i componenti esistenti di `core-designsystem`, nessuno
+// stile nuovo. Gli stati (`NasFolderState`, `NasTrashState`, `NasSpaceState`, `NasOperationState`) stanno in `core-nasops/contract`.
+//
+// **Conferme.** Una `UserConfirmation` si costruisce qui (o nel menu del viewer) e solo dopo un tocco dell'utente sul foglio di
+// riepilogo, con `ConfirmationSheet`/`ConfirmationIssuer`: mai da dati letti dal NAS. Lo verifica `Phase4ArchitectureTest`.
+//
+// Vede `core-nasops` e non `core-nas`: `NasFileOps` non e' raggiungibile da qui nemmeno per inferenza. I `feature-*` non si
+// conoscono fra loro: il viewer lo apre una callback scritta da :app; il menu del viewer per i media del NAS e' di feature-viewer
+// (`NasActions`), che usa gli stessi contratti di core-nasops.
+//
+// D7 della Fase 2: @HiltViewModel (KSP). D28: nessuna rete in questo modulo (NoNetworkSourcesTest). §4.3: nessun orologio del telefono
+// nelle decisioni (NoWallClockSourcesTest). Stringhe in `values/strings_nas_<area>.xml`, uno per area.
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+  id 'org.jetbrains.kotlin.plugin.compose'
+  id 'org.jetbrains.kotlin.plugin.serialization'
+  id 'com.google.devtools.ksp'
+  id 'com.google.dagger.hilt.android'
+  id 'io.github.takahirom.roborazzi'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.feature.nas'
+
+  buildFeatures {
+    compose = true
+  }
+
+  testOptions {
+    unitTests.all {
+      maxHeapSize = '2g'
+    }
+  }
+}
+
+dependencies {
+  // api: UserConfirmation, OpPlan e gli stati sigillati (core-nasops), i componenti (core-designsystem) compaiono nelle firme.
+  api project(':core-nasops')
+  api project(':core-designsystem')
+
+  // Le miniature e la Libreria per le voci con un'anteprima (§1.1: feature-nas vede library e imaging); P14 li usa. Servono gia'
+  // ora anche al calcolo delle versioni delle librerie di AndroidX per la verifica dei checksum (come feature-library).
+  implementation project(':core-library')
+  implementation project(':core-imaging')
+
+  implementation project(':core-common')
+  implementation project(':core-model')
+
+  implementation appDeps.hiltAndroid
+  ksp appDeps.hiltCompiler
+  implementation appDeps.hiltNavigationCompose
+  implementation appDeps.navigationCompose
+  implementation appDeps.lifecycleViewModelCompose
+  implementation appDeps.lifecycleRuntimeCompose
+  implementation appDeps.coroutinesAndroid
+  implementation appDeps.serializationCore
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+  testImplementation appDeps.androidxTestExtJunit
+  testImplementation platform("androidx.compose:compose-bom:${engine.composeBom}")
+  testImplementation appDeps.composeUiTestJunit4
+  testImplementation appDeps.composeUiTestManifest
+  testImplementation appDeps.roborazzi
+  testImplementation appDeps.roborazziCompose
+  testImplementation appDeps.roborazziJunitRule
+}

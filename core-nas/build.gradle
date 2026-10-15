@@ -21,6 +21,13 @@ apply from: "${rootDir}/gradle/android-conventions.gradle"
 android {
   namespace = 'dev.pampa.mycloudgallery.core.nas'
 
+  // Fase 4B (P0-B, D2): le primitive di scrittura (`ops/NasFileOps`) richiedono un'adesione esplicita (`@RequiresOptIn`, ERRORE).
+  // L'argomento lo passano solo questo modulo, che le definisce e ne scrive il fake, e `core-nasops`: ogni altro modulo che le
+  // toccasse non compila (oltre al test di architettura, che vieta il nome del marcatore fuori da questi due).
+  kotlinOptions {
+    freeCompilerArgs += ['-opt-in=dev.pampa.mycloudgallery.core.nas.ops.DestructiveNasAccess']
+  }
+
   testOptions {
     unitTests.all { test ->
       test.systemProperty('nasIntegration', project.hasProperty('nasIntegration') ? 'true' : 'false')

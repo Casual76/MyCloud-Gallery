@@ -4,7 +4,7 @@ Galleria Android privata per una famiglia di soli adulti, complementare a Samsun
 telefono e del NAS WD My Cloud EX2 Ultra in una sola libreria, backup automatico, ricerca sul
 dispositivo, nessun cloud di terzi e nessuna telemetria. Telefono e tablet.
 
-Stato: **Fase 4A integrata (P11, M1)**. Oltre alla Fase 2 (rete e casa, sessione SMB verso il NAS, famiglia, QR, Impostazioni e
+Stato: **Fase 4A integrata (P11, M1); fondamenta della 4B pronte (P0-B)**. Oltre alla Fase 2 (rete e casa, sessione SMB verso il NAS, famiglia, QR, Impostazioni e
 Diagnostica) l'app mostra la **galleria del telefono**: Libreria (griglia della timeline su anni, mesi, giorni e tutte, con
 selezione, preferiti, nascosti ed eliminazione dal telefono), viewer (zoom, video, foto in movimento, informazioni) e Raccolte
 (Preferiti, Video, Screenshot, WhatsApp, Nascosti ed Eliminati di recente dietro lo sblocco). Tutto sul telefono, senza rete:
@@ -13,7 +13,9 @@ sono collegati nel grafo vero dell'app (`nas/NasGraph`): la scansione del NAS po
 "solo NAS", miniature EXIF provvisorie), la preparazione produce le anteprime e le pubblica nell'indice della share, gli altri
 dispositivi sincronizzano l'indice e vedono le miniature senza preparare niente, il viewer apre gli originali dal NAS e
 "Scarica" li copia sul telefono. Nessuna operazione sui media del NAS (D1): le scritture sono solo nell'area dell'app
-(`.mycloudgallery/`), e nella 4A solo nelle share di prova (D31). Le operazioni sui file del NAS arrivano con la 4B.
+(`.mycloudgallery/`), e nella 4A solo nelle share di prova (D31). Le operazioni sui file del NAS arrivano con la 4B: il **P0-B** ha
+gia' consegnato i moduli `core-nasops`, `core-personal` e `feature-nas` con contratti, macchine a stati, conferme e fake (nessuna
+logica ancora), il permesso `RUN_USER_INITIATED_JOBS` e lo scheletro del `JobService` delle operazioni lunghe.
 
 ## Verifica in un comando
 
@@ -33,6 +35,7 @@ Esegue, in ordine, e finisce con un riepilogo OK/FAIL (codice di uscita 0 solo s
 6. ogni modulo ha eseguito almeno un test e nessuno e' fallito;
 7. ispezione dell'**APK di release** con aapt2: non debuggable, backup escluso, nessun componente
    esportato oltre quelli ammessi (la launcher e il JobService di WorkManager, solo con
+   `BIND_JOB_SERVICE`; ogni `*JobService`, anche quello delle operazioni lunghe sui file del NAS della 4B, deve avere
    `BIND_JOB_SERVICE`), nessun codice solo-debug dentro;
 8. nessuna classe di un package `testing` (i fake dei contratti) nel dex dell'APK di release.
 
@@ -72,18 +75,24 @@ segnaposto e almeno un test.
 | `:core-index` | Fase 4: indice condiviso nelle share (pubblicazione con outbox, unità di lavoro con prenotazioni, replica locale a pacchi, sincronizzazione delle teste, qualità delle anteprime) | common, model, trust; database, nas, rules in `implementation` |
 | `:core-nasmedia` | Fase 4: scansione del NAS (elenco a pagine, rilevamento con impronta rapida, esclusioni, stabilità con l'ora del NAS, congelamento per cambiamenti di massa); NAS sintetico per i test | common, model, trust, database, nas, metadata, index |
 | `:core-prepare` | Fase 4: preparazione dei media (miniature S e M, anteprime di analisi e HQ, fotogrammi dei video senza scaricarli, hash completo); dalla Fase 5 anche per il backup. **Non conosce il NAS** | common, model, metadata, index; imaging in `implementation` |
+| `:core-nasops` | Fase 4B: operazioni sui file del NAS (crea cartella, rinomina, sposta, elimina nel cestino del NAS, ripristina, "elimina subito"), cestino, Spazio NAS, Cartelle NAS, pulizia dei propri file; diario con macchina a stati; `UserConfirmation`. **L'unico che vede le primitive di scrittura** (`core-nas/ops`). P0-B: contratti e fake | common, model, trust; nas in `implementation` |
+| `:core-personal` | Fase 4B: dati personali sincronizzati fra i miei dispositivi (preferiti, nascosti, album, ricordi visti, impostazioni personali); fusione per ora del NAS. P0-B: contratti e fake | common, model, trust |
+| `:feature-nas` | Fase 4B: Cartelle NAS, Spazio NAS, Eliminati di recente del NAS, Operazioni in corso, fogli di conferma (linguaggio grafico G2). P0-B: scheletro e rotte | nasops, designsystem, library, imaging, common, model |
 
 Nessun ciclo: `core-common` e `core-model` sono le foglie. I `feature-*` non si conoscono fra loro: ogni
 passaggio da una funzione all'altra e' una callback scritta da `:app` (`navigation/AppNavHost.kt`).
 
 **Fase 4: chi vede chi** (`docs/fase4-progetto.md` §1.1). Nella 4A (P0): `core-index`, `core-nasmedia` e `core-prepare` come
 nella tabella; `core-prepare` non vede `core-nas` nemmeno di passaggio (riceve byte); `core-imaging` e `core-library` vedono
-l'indice solo in `implementation`. Nella 4B (P0-B) arriveranno `core-nasops` (l'**unico** modulo con operazioni distruttive sui
+l'indice solo in `implementation`. Nella 4B (P0-B) ci sono `core-nasops` (l'**unico** modulo con operazioni distruttive sui
 file del NAS, l'unico che vede `NasFileOps`), `core-personal` (dati personali) e `feature-nas` (Cartelle NAS, Spazio NAS,
 Eliminati di recente del NAS, Operazioni in corso); di `core-nasops` dipendono solo `feature-nas`, il menu del viewer e `:app`.
-Lo verifica `Phase4ArchitectureTest` (`core-common`): grafo senza cicli, dipendenze dei moduli nuovi, `core-nasops` invisibile a
-chi legge il NAS o mostra la Libreria, smbj solo in `core-nas`, `NasFileOps` solo in `core-nas` e `core-nasops`, regole dei
-moduli nuovi. Ogni modulo nuovo della Fase 4 ha anche `NoNetworkSourcesTest` (niente rete, niente smbj) e
+`feature-nas` non vede `core-nas`. Le primitive di scrittura richiedono un'adesione del compilatore (`@RequiresOptIn`, ERRORE) che
+passano solo `core-nas` e `core-nasops`; un'operazione distruttiva parte **solo** da una `UserConfirmation`, il cui costruttore e'
+`internal` e che costruisce solo `ConfirmationIssuer`, usato solo dalla UI dopo un tocco (`feature-nas`, menu del viewer, `:app`), o dal
+diario locale (riprese dopo un'interruzione). Lo verifica `Phase4ArchitectureTest` (`core-common`): grafo senza cicli, dipendenze dei
+moduli nuovi, `core-nasops` invisibile a chi legge il NAS o mostra la Libreria, smbj solo in `core-nas`, primitive di scrittura e
+marcatore solo in `core-nas` e `core-nasops`, chi puo' costruire una conferma, regole dei moduli nuovi, tutti i moduli in `galleryModules`. Ogni modulo nuovo della Fase 4 ha anche `NoNetworkSourcesTest` (niente rete, niente smbj) e
 `NoWallClockSourcesTest` (niente orologio del telefono nelle decisioni: ora del NAS o orologio monotono).
 
 Dalla Fase 2 ogni modulo nuovo ha tre package fissi (docs/fase2-progetto.md, D6):

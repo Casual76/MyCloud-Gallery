@@ -13,9 +13,24 @@ import dev.pampa.mycloudgallery.core.nas.contract.NasRandomFile
 import dev.pampa.mycloudgallery.core.nas.contract.NasResult
 import dev.pampa.mycloudgallery.core.nas.contract.Purpose
 import dev.pampa.mycloudgallery.core.nas.contract.ServerCopy
+import dev.pampa.mycloudgallery.core.nas.ops.CopyOutcome
+import dev.pampa.mycloudgallery.core.nas.ops.DeleteOutcome
+import dev.pampa.mycloudgallery.core.nas.ops.DestructiveNasAccess
+import dev.pampa.mycloudgallery.core.nas.ops.NasFileOps
+import dev.pampa.mycloudgallery.core.nas.ops.NasOpsPaths
+import dev.pampa.mycloudgallery.core.nas.ops.NasSpaceInfo
+import dev.pampa.mycloudgallery.core.nas.ops.NasTempWriter
+import dev.pampa.mycloudgallery.core.nas.ops.PublishOutcome
+import dev.pampa.mycloudgallery.core.nas.ops.RenameOutcome
+import dev.pampa.mycloudgallery.core.nas.ops.RmdirOutcome
+import dev.pampa.mycloudgallery.core.nas.ops.TempFinish
+import dev.pampa.mycloudgallery.core.nas.session.SmbErrors
+import dev.pampa.mycloudgallery.core.trust.crypto.TrustIds
+import dev.pampa.mycloudgallery.core.trust.nas.NasLayout
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import java.security.MessageDigest
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.random.Random
@@ -79,7 +94,15 @@ private class VirtualContent(override val size: Long, private val seed: Long, pr
 }
 
 /** Le operazioni del NAS finto, per contare le chiamate e per i guasti programmati. */
-enum class FakeNasOp { LIST, STAT, OPEN, READ, READ_ALL, SERVER_COPY }
+enum class FakeNasOp {
+  LIST, STAT, OPEN, READ, READ_ALL, SERVER_COPY,
+
+  // Le primitive di scrittura (4B, NasFileOps): il fake delle operazioni le conta e le guasta come le letture.
+  MKDIRS, RENAME, COPY_TO_TEMP, OPEN_TEMP, WRITE_TEMP, PUBLISH_TEMP, TRASH_MOVE, DELETE, RMDIR, SPACE,
+}
+
+/** Come risponde la copia lato server di `NasFileOps.copyToTemp` (E-D12). */
+enum class ServerCopyMode { OK, NOT_SUPPORTED, ACCESS_DENIED }
 
 /**
  * Un guasto programmato: dato l'operazione, la share e il percorso (null per la radice), l'errore da restituire o
@@ -251,6 +274,15 @@ class InMemoryNasMedia(
 
   fun fileCount(share: String): Int = synchronized(lock) { shareState(share).nodes.values.count { !it.isDirectory } }
 
+  /** I percorsi (scritti come sul server) di tutti i file di una share, in ordine alfabetico: per i controlli dei test (4B). */
+  fun filePaths(share: String): List<String> = synchronized(lock) {
+    val state = shareState(share)
+    state.nodes.entries.filter { (k, n) -> k.isNotEmpty() && !n.isDirectory }.map { (k, _) ->
+      val parts = k.split('/')
+      (1..parts.size).joinToString("/") { depth -> state.nodes.getValue(parts.subList(0, depth).joinToString("/")).displayName }
+    }.sorted()
+  }
+
   // --- Cio' che vede l'app -------------------------------------------------------------------------------------------
 
   /** Il lettore dei media sopra questo NAS. */
@@ -274,6 +306,351 @@ class InMemoryNasMedia(
           Node(to.components.last(), false, NasContent.of(bytes), now, now, nextFileId.incrementAndGet(), node.attributes)
         touchParent(target, to.components, now)
         NasResult.Ok(bytes.size.toLong())
+      }
+    }
+  }
+
+  // --- Le primitive di scrittura (4B, P0-B): il fake di NasFileOps ----------------------------------------------------------
+  // Un fake funzionante delle primitive, con la semantica del contratto: mai sostituire, mai eliminare un media, rinomina con
+  // controllo del timbro, copia lato server su un temporaneo, scrittore a offset, pubblicazione senza sostituire, cestino per
+  // rinomina, eliminazione solo dentro `.mycloudgallery/` con la dimensione controllata nello stesso passo. I guasti sono il
+  // `FaultPlan` del simulatore SMB ([opsFaults]): caduta PRIMA o DOPO che il NAS abbia applicato l'operazione (risposta persa),
+  // sessione scaduta, stallo. P12 scrive l'implementazione vera dietro SmbTransport e estende il simulatore; il contratto non cambia.
+
+  /** Il piano dei guasti delle operazioni di scrittura (stessa semantica di `InMemorySmbBackend.faults`). */
+  @Volatile var opsFaults: FaultPlan? = null
+
+  /** Come risponde la copia lato server (E-D12). */
+  @Volatile var serverCopyMode: ServerCopyMode = ServerCopyMode.OK
+
+  /** Lo spazio di ogni share (E-D5, E-N13): di default ampio. */
+  @Volatile var spaceOf: (String) -> NasSpaceInfo = { NasSpaceInfo(totalBytes = 2L shl 40, freeBytes = 1L shl 40, callerFreeBytes = 1L shl 40) }
+
+  private val readOnlyShares = HashSet<String>()
+  private val opCounts = ConcurrentHashMap<FakeNasOp, AtomicInteger>()
+
+  /** Share in sola lettura per questo account (E-N9): ogni scrittura risponde `PermissionDenied`. */
+  fun setReadOnly(share: String, readOnly: Boolean) {
+    synchronized(lock) { if (readOnly) readOnlyShares += key(share) else readOnlyShares -= key(share) }
+  }
+
+  /** Quante volte e' stata chiamata la primitiva [op] (anche se un guasto l'ha fatta fallire). */
+  fun opCount(op: FakeNasOp): Int = opCounts[op]?.get() ?: 0
+
+  /** Il fake delle primitive di scrittura per il dispositivo [ownerDeviceId] (un id valido, `TrustIds`). */
+  @DestructiveNasAccess
+  fun fileOps(ownerDeviceId: String): NasFileOps = Ops(ownerDeviceId)
+
+  /** Esegue [apply] sotto il blocco del NAS (un'operazione e' atomica), con i guasti prima e dopo. */
+  private fun <T> guarded(
+    sim: SimOp,
+    op: FakeNasOp,
+    share: String,
+    path: SharePath?,
+    write: Boolean,
+    apply: () -> NasResult<T>,
+  ): NasResult<T> {
+    opCounts.getOrPut(op) { AtomicInteger(0) }.incrementAndGet()
+    fail(op, share, path)?.let { return NasResult.Err(it) }
+    val plan = opsFaults
+    val indices = plan?.begin(sim)
+    if (plan != null && indices != null) plan.check(sim, indices, FaultPhase.BEFORE)?.let { return NasResult.Err(faultError(it, share)) }
+    val result = synchronized(lock) {
+      if (write && key(share) in readOnlyShares) NasResult.Err(NasError.PermissionDenied) else apply()
+    }
+    if (plan != null && indices != null) plan.check(sim, indices, FaultPhase.AFTER)?.let { return NasResult.Err(faultError(it, share)) }
+    return result
+  }
+
+  private fun faultError(fault: SimFault, share: String): NasError = when (fault) {
+    SimFault.DropConnection -> NasError.Timeout
+    SimFault.ExpireSession -> NasError.SessionExpired
+    SimFault.Stall -> NasError.Stalled
+    is SimFault.Status -> SmbErrors.fromStatus(fault.ntStatus, share)
+  }
+
+  private fun stampOf(node: Node?): NasStamp? = node?.let { NasStamp(if (it.isDirectory) 0 else it.content.size, it.modifiedAt, it.fileId) }
+
+  /** Il timbro attuale se il file non e' piu' quello atteso (le cartelle non si confrontano), altrimenti null. */
+  private fun changedStamp(node: Node, expect: NasStamp?): NasStamp? {
+    if (expect == null || node.isDirectory) return null
+    val actual = NasStamp(node.content.size, node.modifiedAt, node.fileId)
+    return if (expect.sameAs(actual)) null else actual
+  }
+
+  /** Un livello del percorso e' un file: creare cartelle sotto di esso e' impossibile. */
+  private fun blockedByFile(state: ShareState, parts: List<String>): Boolean =
+    (1..parts.size).any { depth -> state.nodes[key(parts.subList(0, depth))]?.isDirectory == false }
+
+  private fun hasChildren(state: ShareState, k: String): Boolean = state.nodes.keys.any { it.startsWith("$k/") }
+
+  /** Spazio per [bytes] sulla share: quota dell'account o disco pieno (E-D5, E-N13, E-R9). */
+  private fun roomError(share: String, bytes: Long): NasError? {
+    val space = spaceOf(share)
+    if (bytes <= space.callerFreeBytes) return null
+    return if (space.quotaLimited) NasError.QuotaExceeded else NasError.NasFull
+  }
+
+  /** Un buffer che cresce a ogni scrittura: il contenuto di un temporaneo mentre lo si scrive. */
+  private class GrowableContent : NasContent {
+    private var data = ByteArray(0)
+
+    @Volatile private var length = 0
+
+    override val size: Long get() = length.toLong()
+
+    override fun copy(offset: Long, dst: ByteArray, dstOffset: Int, len: Int) {
+      System.arraycopy(data, offset.toInt(), dst, dstOffset, len)
+    }
+
+    fun write(offset: Long, src: ByteArray, off: Int, len: Int) {
+      val end = offset.toInt() + len
+      if (end > data.size) data = data.copyOf(maxOf(end, data.size * 2))
+      System.arraycopy(src, off, data, offset.toInt(), len)
+      if (end > length) length = end
+    }
+
+    fun snapshot(): ByteArray = data.copyOf(length)
+  }
+
+  @DestructiveNasAccess
+  private inner class Ops(override val ownerDeviceId: String) : NasFileOps {
+
+    init {
+      require(TrustIds.isValid(ownerDeviceId)) { "Il dispositivo proprietario e' un id valido." }
+    }
+
+    override suspend fun mkdirs(share: String, dir: SharePath, purpose: Purpose): NasResult<Unit> {
+      require(NasOpsPaths.isMediaPath(dir)) { "mkdirs vale solo fuori da .mycloudgallery/." }
+      return guarded(SimOp.MKDIR, FakeNasOp.MKDIRS, share, dir, write = true) {
+        val state = shares[key(share)] ?: return@guarded NasResult.Err(NasError.ShareMissing(share))
+        val existing = node(state, dir.components)
+        when {
+          existing != null && existing.isDirectory -> NasResult.Ok(Unit)
+          existing != null || blockedByFile(state, dir.components) -> NasResult.Err(NasError.Exists)
+          else -> {
+            ensureDirs(state, dir.components, nasNow())
+            NasResult.Ok(Unit)
+          }
+        }
+      }
+    }
+
+    override suspend fun rename(
+      share: String,
+      from: SharePath,
+      to: SharePath,
+      expect: NasStamp?,
+      purpose: Purpose,
+    ): NasResult<RenameOutcome> {
+      require(
+        (NasOpsPaths.isMediaPath(from) && NasOpsPaths.isMediaPath(to)) || (NasOpsPaths.isTrashItem(from) && NasOpsPaths.isMediaPath(to)),
+      ) { "Rinomina non ammessa: solo fra percorsi di media, o dal cestino al posto d'origine." }
+      return guarded(SimOp.RENAME, FakeNasOp.RENAME, share, from, write = true) {
+        val state = shares[key(share)] ?: return@guarded NasResult.Err(NasError.ShareMissing(share))
+        move(state, share, from, to, expect, createParents = false)
+      }
+    }
+
+    /** Rinomina [from] in [to] (senza sostituire); le cartelle che mancano a [to] si creano solo con [createParents]. */
+    private fun move(
+      state: ShareState,
+      share: String,
+      from: SharePath,
+      to: SharePath,
+      expect: NasStamp?,
+      createParents: Boolean,
+    ): NasResult<RenameOutcome> {
+      val src = node(state, from.components) ?: return NasResult.Ok(RenameOutcome.SourceMissing)
+      if (lockKey(share, from.value) in locked) return NasResult.Ok(RenameOutcome.Locked)
+      changedStamp(src, expect)?.let { return NasResult.Ok(RenameOutcome.SourceChanged(it)) }
+      val fromKey = key(from.components)
+      val toKey = key(to.components)
+      // Stessa destinazione, anche solo per le maiuscole (E-N7): il chiamante passa da un nome temporaneo.
+      if (toKey == fromKey || state.nodes.containsKey(toKey)) return NasResult.Ok(RenameOutcome.Collision)
+      if (toKey.startsWith("$fromKey/")) return NasResult.Err(NasError.Unexpected(STATUS_INVALID_PARAMETER))
+      val parents = to.components.dropLast(1)
+      if (createParents) {
+        if (blockedByFile(state, parents)) return NasResult.Err(NasError.Exists)
+      } else if (node(state, parents)?.isDirectory != true) {
+        return NasResult.Err(NasError.NotFound)
+      }
+      this@InMemoryNasMedia.rename(share, from.value, to.value)
+      return NasResult.Ok(RenameOutcome.Renamed(stampOf(node(state, to.components))))
+    }
+
+    override suspend fun copyToTemp(
+      fromShare: String,
+      from: SharePath,
+      toShare: String,
+      temp: SharePath,
+      expect: NasStamp?,
+      purpose: Purpose,
+    ): NasResult<CopyOutcome> {
+      require(NasOpsPaths.isMediaPath(from)) { "La sorgente di una copia e' un media." }
+      require(NasOpsPaths.isTempOf(temp, ownerDeviceId)) { "La destinazione e' un temporaneo di questo dispositivo." }
+      return guarded(SimOp.COPY_CHUNK, FakeNasOp.COPY_TO_TEMP, fromShare, from, write = false) {
+        val source = shares[key(fromShare)] ?: return@guarded NasResult.Err(NasError.ShareMissing(fromShare))
+        val target = shares[key(toShare)] ?: return@guarded NasResult.Err(NasError.ShareMissing(toShare))
+        if (key(toShare) in readOnlyShares) return@guarded NasResult.Err(NasError.PermissionDenied)
+        if (serverCopyMode != ServerCopyMode.OK) return@guarded NasResult.Ok(CopyOutcome.NotSupported)
+        val node = node(source, from.components) ?: return@guarded NasResult.Ok(CopyOutcome.SourceMissing)
+        if (node.isDirectory) return@guarded NasResult.Err(NasError.Unexpected(null))
+        if (lockKey(fromShare, from.value) in locked) return@guarded NasResult.Ok(CopyOutcome.Locked)
+        changedStamp(node, expect)?.let { return@guarded NasResult.Ok(CopyOutcome.SourceChanged(it)) }
+        if (target.nodes.containsKey(key(temp.components))) return@guarded NasResult.Ok(CopyOutcome.TempExists)
+        roomError(toShare, node.content.size)?.let { return@guarded NasResult.Err(it) }
+        val now = nasNow()
+        ensureDirs(target, temp.components.dropLast(1), now)
+        // Il contenuto e' immutabile (modify lo sostituisce): si condivide, cosi' anche un video "da 9 GB" si copia.
+        val copy = Node(temp.name, false, node.content, now, now, nextFileId.incrementAndGet(), node.attributes)
+        target.nodes[key(temp.components)] = copy
+        touchParent(target, temp.components, now)
+        serverCopies.incrementAndGet()
+        NasResult.Ok(CopyOutcome.Copied(node.content.size, stampOf(copy)!!))
+      }
+    }
+
+    override suspend fun openTemp(share: String, temp: SharePath, purpose: Purpose): NasResult<NasTempWriter> {
+      require(NasOpsPaths.isTempOf(temp, ownerDeviceId)) { "Un temporaneo di questo dispositivo." }
+      return guarded(SimOp.CREATE, FakeNasOp.OPEN_TEMP, share, temp, write = true) {
+        val state = shares[key(share)] ?: return@guarded NasResult.Err(NasError.ShareMissing(share))
+        if (state.nodes.containsKey(key(temp.components))) return@guarded NasResult.Err(NasError.Exists)
+        val now = nasNow()
+        ensureDirs(state, temp.components.dropLast(1), now)
+        val content = GrowableContent()
+        val node = Node(temp.name, false, content, now, now, nextFileId.incrementAndGet(), NasAttributes.ARCHIVE)
+        state.nodes[key(temp.components)] = node
+        touchParent(state, temp.components, now)
+        NasResult.Ok(TempWriter(share, temp, node, content))
+      }
+    }
+
+    override suspend fun publishTemp(share: String, temp: SharePath, final: SharePath, purpose: Purpose): NasResult<PublishOutcome> {
+      require(NasOpsPaths.isTempOf(temp, ownerDeviceId)) { "Un temporaneo di questo dispositivo." }
+      require(NasOpsPaths.isMediaPath(final)) { "La destinazione e' un percorso di media." }
+      return guarded(SimOp.RENAME, FakeNasOp.PUBLISH_TEMP, share, temp, write = true) {
+        val state = shares[key(share)] ?: return@guarded NasResult.Err(NasError.ShareMissing(share))
+        if (node(state, temp.components) == null) return@guarded NasResult.Ok(PublishOutcome.TempMissing)
+        when (val moved = move(state, share, temp, final, expect = null, createParents = true)) {
+          is NasResult.Err -> moved
+          is NasResult.Ok -> NasResult.Ok(
+            when (val outcome = moved.value) {
+              is RenameOutcome.Renamed -> PublishOutcome.Published(outcome.stamp)
+              RenameOutcome.Collision -> PublishOutcome.Collision
+              RenameOutcome.Locked -> PublishOutcome.Locked
+              RenameOutcome.SourceMissing, is RenameOutcome.SourceChanged -> PublishOutcome.TempMissing
+            },
+          )
+        }
+      }
+    }
+
+    override suspend fun trashMove(
+      share: String,
+      path: SharePath,
+      trashId: String,
+      expect: NasStamp?,
+      purpose: Purpose,
+    ): NasResult<RenameOutcome> {
+      require(NasOpsPaths.isMediaPath(path)) { "Nel cestino si mette un media, mai un file dell'app." }
+      require(TrustIds.isValid(trashId)) { "Un id di cestino valido." }
+      return guarded(SimOp.RENAME, FakeNasOp.TRASH_MOVE, share, path, write = true) {
+        val state = shares[key(share)] ?: return@guarded NasResult.Err(NasError.ShareMissing(share))
+        move(state, share, path, NasLayout.trashItemFile(ownerDeviceId, trashId), expect, createParents = true)
+      }
+    }
+
+    override suspend fun deleteIfUnchanged(share: String, path: SharePath, size: Long, purpose: Purpose): NasResult<DeleteOutcome> {
+      require(NasOpsPaths.isAppArea(path)) { "L'eliminazione definitiva vale solo dentro .mycloudgallery/: un media va nel cestino." }
+      return guarded(SimOp.DELETE_ON_CLOSE, FakeNasOp.DELETE, share, path, write = true) {
+        val state = shares[key(share)] ?: return@guarded NasResult.Err(NasError.ShareMissing(share))
+        val node = node(state, path.components) ?: return@guarded NasResult.Ok(DeleteOutcome.Missing)
+        when {
+          node.isDirectory -> NasResult.Ok(DeleteOutcome.NotAFile)
+          lockKey(share, path.value) in locked -> NasResult.Ok(DeleteOutcome.Locked)
+          // La dimensione si controlla qui, sotto lo stesso blocco: controllo e cancellazione sono lo stesso passo.
+          node.content.size != size -> NasResult.Ok(DeleteOutcome.SizeChanged(node.content.size))
+          else -> {
+            this@InMemoryNasMedia.delete(share, path.value)
+            NasResult.Ok(DeleteOutcome.Deleted)
+          }
+        }
+      }
+    }
+
+    override suspend fun deleteOwnTemp(share: String, temp: SharePath, purpose: Purpose): NasResult<DeleteOutcome> {
+      require(NasOpsPaths.isTempOf(temp, ownerDeviceId)) { "Un temporaneo di questo dispositivo." }
+      return guarded(SimOp.DELETE_ON_CLOSE, FakeNasOp.DELETE, share, temp, write = true) {
+        val state = shares[key(share)] ?: return@guarded NasResult.Err(NasError.ShareMissing(share))
+        val node = node(state, temp.components) ?: return@guarded NasResult.Ok(DeleteOutcome.Missing)
+        if (lockKey(share, temp.value) in locked) return@guarded NasResult.Ok(DeleteOutcome.Locked)
+        if (node.isDirectory) return@guarded NasResult.Ok(DeleteOutcome.NotAFile)
+        this@InMemoryNasMedia.delete(share, temp.value)
+        NasResult.Ok(DeleteOutcome.Deleted)
+      }
+    }
+
+    override suspend fun rmdirIfEmpty(share: String, dir: SharePath, purpose: Purpose): NasResult<RmdirOutcome> {
+      require(NasOpsPaths.isMediaPath(dir) || NasOpsPaths.isOwnTrashTree(dir, ownerDeviceId)) {
+        "rmdirIfEmpty vale fuori da .mycloudgallery/ o nel proprio cestino."
+      }
+      return guarded(SimOp.RMDIR, FakeNasOp.RMDIR, share, dir, write = true) {
+        val state = shares[key(share)] ?: return@guarded NasResult.Err(NasError.ShareMissing(share))
+        val node = node(state, dir.components) ?: return@guarded NasResult.Ok(RmdirOutcome.Missing)
+        when {
+          !node.isDirectory -> NasResult.Err(NasError.NotFound)
+          lockKey(share, dir.value) in locked -> NasResult.Ok(RmdirOutcome.Locked)
+          hasChildren(state, key(dir.components)) -> NasResult.Ok(RmdirOutcome.NotEmpty)
+          else -> {
+            this@InMemoryNasMedia.delete(share, dir.value)
+            NasResult.Ok(RmdirOutcome.Removed)
+          }
+        }
+      }
+    }
+
+    override suspend fun space(share: String, purpose: Purpose): NasResult<NasSpaceInfo> =
+      guarded(SimOp.SPACE, FakeNasOp.SPACE, share, null, write = false) {
+        if (shares[key(share)] == null) NasResult.Err(NasError.ShareMissing(share)) else NasResult.Ok(spaceOf(share))
+      }
+
+    private inner class TempWriter(
+      private val share: String,
+      override val temp: SharePath,
+      private val node: Node,
+      private val content: GrowableContent,
+    ) : NasTempWriter {
+      @Volatile private var closed = false
+
+      override suspend fun write(offset: Long, buf: ByteArray, off: Int, len: Int): NasResult<Unit> {
+        check(!closed) { "Scrittore chiuso." }
+        require(offset >= 0 && off >= 0 && len >= 0 && off + len <= buf.size) { "Intervallo non valido." }
+        return guarded(SimOp.WRITE, FakeNasOp.WRITE_TEMP, share, temp, write = true) {
+          val state = shares[key(share)] ?: return@guarded NasResult.Err(NasError.ShareMissing(share))
+          if (state.nodes[key(temp.components)] !== node) return@guarded NasResult.Err(NasError.NotFound)
+          require(offset <= content.size) { "Scrittura oltre la fine del temporaneo." }
+          roomError(share, offset + len)?.let { return@guarded NasResult.Err(it) }
+          content.write(offset, buf, off, len)
+          node.modifiedAt = nasNow()
+          NasResult.Ok(Unit)
+        }
+      }
+
+      override suspend fun finish(expectedSize: Long): NasResult<TempFinish> {
+        check(!closed) { "Scrittore chiuso." }
+        return guarded(SimOp.FLUSH, FakeNasOp.WRITE_TEMP, share, temp, write = true) {
+          val state = shares[key(share)] ?: return@guarded NasResult.Err(NasError.ShareMissing(share))
+          if (state.nodes[key(temp.components)] !== node) return@guarded NasResult.Err(NasError.NotFound)
+          val actual = content.size
+          if (actual != expectedSize) return@guarded NasResult.Ok(TempFinish.SizeMismatch(actual))
+          node.content = NasContent.of(content.snapshot())
+          NasResult.Ok(TempFinish.Complete(stampOf(node)!!))
+        }
+      }
+
+      override fun close() {
+        closed = true
       }
     }
   }
@@ -430,6 +807,9 @@ class InMemoryNasMedia(
   private companion object {
     /** 2026-10-14T00:00:00Z: un'ora del NAS plausibile per i test che non la impostano. */
     const val DEFAULT_NOW: Long = 1_791_936_000_000L
+
+    /** `STATUS_INVALID_PARAMETER`: per esempio spostare una cartella dentro se stessa. */
+    const val STATUS_INVALID_PARAMETER: Long = 0xC000000DL
 
     fun key(name: String): String = name.lowercase(Locale.ROOT)
 

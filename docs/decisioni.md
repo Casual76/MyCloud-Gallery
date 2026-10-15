@@ -351,7 +351,7 @@ riassunto e lo stato. Le modifiche al formato (M1–M12) sono in `docs/formato-n
 | D26 | Dati personali come stato unito nell'area privata | Proposta (Q9 non chiesta), 4B |
 | D27 | UI della Fase 4 come stati e contratti; l'aspetto è del filone grafico | Deciso |
 | D28 | Nessuna dipendenza nuova; nessun modulo nuovo apre socket | Deciso; verificato in P0 |
-| D29 | Nessun permesso nella 4A; UIDT nella 4B | Proposta (4B) |
+| D29 | Nessun permesso nella 4A; UIDT nella 4B (`RUN_USER_INITIATED_JOBS` e `NasOpsJobService`) | **Deciso: sì dell'utente il 15/10**; in manifest e in policy dal P0-B |
 | D30 | Area di prova vera dietro una guardia (`mcg-it/<giro>/`, share di prova scritte nel codice) | Deciso (P1) |
 | D31 | Pubblicazione solo sulle share di prova finché l'utente non chiude la 4A (`FeatureFlags.indexPublishTestSharesOnly`) | Deciso; flag in P0, `true` anche in release |
 | D32 | Ora del NAS per tutto; salto oltre 5 minuti sospende prenotazioni, cestino, compattazione e pulizie | Deciso; costanti in P0 |
@@ -462,6 +462,80 @@ modifiche). Le scelte che l'utente vede, tutte le **piu' prudenti** fra quelle p
 - **Residui:** fra dispositivi della **stessa** share con la stessa chiave intera vale ancora l'id minore e un record con la
   maschera `prep` gonfiata vince D6 (L27); `NasDownloader` (`feature-viewer`) non confronta da se' il timbro; gli informativi
   I1-I4 aperti, I5-I6 in parte (vedi la revisione).
+
+## Fase 4B: fondamenta e contratti (P0-B, 15/10)
+Fonte: `docs/fase4-progetto.md` (§1.1, §1.2 per la 4B, §1.5, §2.7, §2.9, D24, D25, D26, D29, D32, D33; riga P0-B del §4.4). Consegna i moduli,
+i contratti e i fake su cui partono in parallelo P12 (operazioni, cestino, spazio), P13 (dati personali), P14 (UI) e P15 (prova delle 500
+interruzioni). Nessuna logica di produzione: i moduli hanno `contract/`, `noop/` e `testing/`, `NoNetworkSourcesTest`,
+`NoWallClockSourcesTest` e test sui fake.
+
+**Risposte dell'utente (15/10).** D29: sì al permesso `RUN_USER_INITIATED_JOBS` e al `JobService` per le operazioni lunghe avviate
+dall'utente. Q3, Q8, Q9 come al 14/10 (sorgente nel cestino per 30 giorni; "Elimina subito" con doppia conferma; dati personali (a)). La 4A si
+prova sul telefono insieme alla 4B (chiusura unica sul campo).
+
+**Moduli e contratti**
+| Dove | Cosa | Per chi |
+|---|---|---|
+| `core-nas/ops` | `NasFileOps` (mkdirs, rename, copyToTemp, openTemp + `NasTempWriter`, publishTemp, trashMove, deleteIfUnchanged, deleteOwnTemp, rmdirIfEmpty, space) con gli esiti sigillati, `NasOpsPaths`, `NoNasFileOps` (noop) e il fake funzionante `InMemoryNasMedia.fileOps(dispositivo)` con `FaultPlan` (`opsFaults`: caduta prima o dopo l'applicazione), copia lato server rifiutabile, spazio e quota, share in sola lettura | P12 (implementazione su smbj dietro `SmbTransport`), P15 |
+| `core-nasops/contract` | `OpRequest`, `OpPlan`/`PlanHash`/`PlannedItem`, `PlanRules`, `UserConfirmation`/`ConfirmationIssuer`/`ConfirmationSheet`/`ConfirmationGate`/`AcceptedPlan`, diario (`OpsStore`, `OpRecord`, `OpItemRecord`, `LocalTrashRecord`), macchina a stati (`OpItemState`, `ItemFlow`, `OpStateMachine`), `NasOperations`, `NasOperationState`, `NasTrash`/`NasTrashState`, `NasSpace`/`NasSpaceState`, `NasFolders`/`NasFolderState`, `OwnFilesCleaning`, `OpClocks`, `OpsGate`/`GateStatus`, `NameRules`, `LockedBackoff`, `OpTemps` | P12, P14, P15, P16 |
+| `core-nasops/testing` | `NasOpsTestKit` (NAS finto + diario + orologi + operazioni, cestino, spazio e cartelle collegati; `restart()` simula la morte del processo), `InMemoryNasOperations` (esecutore di riferimento di tutte le macchine a stati), `ScriptedNasOperations` (per la UI), `InMemoryOpsStore` (rifiuta le transizioni fuori dalla macchina), `InMemoryNasTrash`, `InMemoryNasSpace`, `InMemoryNasFolders`, `FakeOpClocks`, `FakeOpsGate` | tutti |
+| `core-personal/contract` | `PersonalKey`/`PersonalEntry`/`PersonalValue`, `PersonalMerge` (D26: vince `(ora del NAS, autore minore)`, commutativa e idempotente), `PersonalValidity` (stesso account, area privata dichiarata, non revocato, non nel futuro), `PersonalSync`, `PersonalStore`, `PersonalSettings`; fake: `InMemoryPersonalStore`, `FakePersonalCloud` + `FakePersonalSync` (convergenza fra dispositivi dello stesso account, un altro account non vede niente) | P13, P14, P16 |
+| `feature-nas` | modulo Compose + Hilt pronto, `NasScreen` (rotte e quali schermate scrivono) | P14, P16 |
+| `:app` | `RUN_USER_INITIATED_JOBS`, `NasOpsJobService` (non esportato, `BIND_JOB_SERVICE`, scheletro che non fa niente) | P16 |
+
+**Come e' garantito che niente di distruttivo parta da dati letti dal NAS**
+- `NasFileOps` richiede un'adesione `@RequiresOptIn` (ERRORE) al marcatore `DestructiveNasAccess`: l'argomento del compilatore lo passano solo
+  `core-nas` e `core-nasops`. `NasSessionManager` **non** espone le primitive (come espone `mediaReader()`): P12 le consegna a `core-nasops` con
+  una factory dentro `core-nas`.
+- `UserConfirmation` ha il costruttore `internal`, lo costruisce solo `ConfirmationIssuer` (stesso file); vale per un piano (impronta), 10 minuti di
+  orologio monotono, e i tocchi richiesti (2 per "Elimina subito"). `OpsStore.create` vuole un `AcceptedPlan`, che esce solo da
+  `ConfirmationGate.accept`. `start` rifiuta anche con una conferma valida un piano che `PlanRules` non passa (area dell'app, cestino di un
+  altro dispositivo, cammino sbagliato).
+- `Phase4ArchitectureTest` (`core-common`) verifica: primitive e marcatore solo in `core-nas`/`core-nasops`, chi nomina emittente e foglio di
+  conferma, i costruttori, `feature-nas` cieca a `core-nas`, `core-nasops` invisibile a chi legge il NAS, tutti i moduli in `galleryModules`.
+  **Provato il 15/10 reintroducendo ogni violazione** (il test corrispondente fallisce, poi si toglie e torna verde): le primitive di scrittura
+  citate in `core-index`; il marcatore in `core-index`; `core-personal` che dipende da `core-nasops`; `feature-nas` che dipende da `core-nas`;
+  l'emittente delle conferme in `feature-library` e in un file di esecuzione di `core-nasops`; il costruttore di `UserConfirmation` chiamato da
+  `feature-nas` o reso pubblico; `OpsStore.create` che accetta un piano qualunque; `feature-nas` fuori da `galleryModules` o senza
+  `NoWallClockSourcesTest`. A livello di compilatore: `core-index` che nomina le primitive, o ne riceve un'istanza per inferenza
+  (`InMemoryNasMedia.fileOps(...).mkdirs(...)`), non compila. E una mutazione dell'esecutore di riferimento (il controllo della "risposta
+  persa") fa fallire `FaultMatrixTest`.
+- L'eliminazione definitiva (`deleteIfUnchanged`, `deleteOwnTemp`) vale solo dentro `.mycloudgallery/`: un media va solo nel cestino. Il fake lo
+  impone con un errore di programmazione; `rmdirIfEmpty` toglie cartelle vuote fuori dall'area dell'app e nel **proprio** cestino (cartelle cestinate).
+
+**Scostamenti dal progetto (da confermare; tutti piccoli, nessuna dipendenza nuova)**
+1. **`NasFileOps`**: `copyToTemp`/`publishTemp`/`deleteOwnTemp` prendono il **percorso** del temporaneo (`OpTemps.tempFor`, scritto nel diario
+   prima della chiamata) invece di un `tag`; `ownerDeviceId` fa parte del contratto (temporanei e cestino sono del dispositivo); ogni metodo ha il
+   `Purpose`; `expect` confronta dimensione, data di modifica e `fileId`; il ripiego E-D12 e' `openTemp` + `NasTempWriter` (scritture a offset,
+   `finish` controlla la lunghezza sullo stesso handle) invece di `writeToTemp`. Il fake **rifiuta come `Collision` la rinomina solo di maiuscole in un
+   colpo**, per obbligare al passaggio dal nome temporaneo (E-N7): F15 dira' se Samba la accetta e si potra' allentare.
+2. **`NasOperations`**: `plan` risponde `PlanOutcome` (piano o `PlanRejection`), `start` `StartOutcome` (`Started`, `AlreadyStarted` sull'impronta del
+   piano, `ConfirmationRejected`, `PlanInvalid`, `WritesBlocked`); `NasTrash` ha anche `refresh()`. L'attesa di un file bloccato (E-N13) e' una
+   **condizione** dell'elemento (passo non terminale + `nextAttemptAtNas` futuro + `LOCKED`), non uno stato `WAITING_LOCKED`: cosi' la ripresa sa a
+   che passo tornare senza colonne nuove nello schema v3. Annullare e' ammesso solo prima di `PUBLISHED` (poi si porta a termine: niente doppioni visibili).
+3. **`core-nasops`** dipende da `core-nas` in `implementation` (nessun tipo di `core-nas` nelle firme pubbliche); `core-database` e `core-index` non ci sono
+   ancora: li aggiunge P12 (sono nel grafo del §1.1). Stessa cosa per `core-personal`.
+4. **`NasFolders` (Cartelle NAS, lettura)**: contratto e fake in `core-nasops`, ma il §4.4 non ne assegna la realizzazione. Proposta: P12, in
+   `core-nasops/.../folders`, sopra `NasMediaReader` e il catalogo.
+5. **`TrashRecord` di core-trust** non ha ancora `reason`, `folder` e `count` (M5 e' solo documentato): nessun pacchetto lo ha in perimetro. Va esteso
+   (`core-trust/.../data/Trash.kt`, con il suo test) da P12; il contratto di `core-nasops` ha gia' `TrashReason` e `NasTrashItem.fileCount`.
+6. **`feature-nas`** vede anche `core-library` e `core-imaging` (§1.1), che servono pure a far risolvere alla sua configurazione KSP le stesse
+   versioni di AndroidX di `feature-library` (altrimenti la verifica dei checksum rifiuta due `.module`). Non ha `noop/` ne' `testing/`: i fake per i suoi
+   ViewModel sono in `core-nasops/testing` (`NasOpsTestKit`, `ScriptedNasOperations`).
+7. **`InMemoryNasMedia`** (file di P1) esteso con `fileOps()`, `opsFaults`, `serverCopyMode`, `spaceOf`, `setReadOnly`, `opCount`, `filePaths`; `FakeNasOp`
+   ha i valori delle nuove primitive.
+8. **`PersonalMerge` e `PersonalValidity`** sono gia' scritti in `core-personal/contract` (sono la regola D26 in poche righe, servono al fake); P13 puo'
+   estenderli. La chiave `PersonalKey.digest()` e' `SHA-256("mcg-pers\0" ‖ tipo ‖ \0 ‖ soggetto ‖ \0 ‖ campo)`; il corpo della classe `personal` (JSON da 4 KiB) e'
+   di P13.
+9. **L'esecutore di riferimento** (`InMemoryNasOperations`) e' piu' semplice di quello vero: `start` esegue fino in fondo (o alla prima pausa), una
+   cartella spostata tra share si espande in file e le cartelle sorgente restano vuote, `fileCount` delle cartelle cestinate non e' compilato, l'identita'
+   di una cartella cestinata non si confronta (non ha timbro). P12 e' libero di riscriverlo; i test (`OperationsTest`, `FaultMatrixTest`) valgono per
+   entrambi.
+
+**Prove di P0-B.** `FaultMatrixTest`: per sei operazioni (sposta tra share, elimina, ripristina, rinomina, rinomina solo di maiuscole, elimina subito di
+una cartella) e per **ciascuna** primitiva di scrittura che fanno, un guasto prima e dopo, morte del processo, ripresa dal diario: nessun file a meta' o
+doppio, nessuna perdita, nessun temporaneo (il numero di primitive si conta con un giro pulito; ogni guasto deve scattare davvero). P15 lo estende a
+migliaia di giri casuali.
 
 ## Revisione grafica della Libreria da parte dell'utente (13/10)
 Giudizio: le prestazioni della navigazione non sono male, la **grafica no**. Serve molto lavoro, da fare in un **filone grafico

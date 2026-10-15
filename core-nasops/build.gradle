@@ -1,0 +1,48 @@
+// Le operazioni sui file del NAS della Fase 4B (docs/fase4-progetto.md §1.2 "core-nasops", §2.7, D24, D25, D29; formato-nas.md §9
+// punto 7): crea cartella, rinomina, sposta, cestino, ripristina, elimina subito, cestino del NAS e Spazio NAS, pulizia dei propri
+// file. Contratti, null-object e fake di P0-B; la logica e' di P12.
+//
+// **L'unico modulo con operazioni distruttive sui file del NAS**, l'unico che vede `NasFileOps` (core-nas/ops). Ci si entra solo
+// da un `UserConfirmation` (costruito dal foglio di conferma della UI, dopo un tocco) o dal diario locale (riprese dopo
+// un'interruzione, pulizia del cestino); nessun dato letto dal NAS crea voci del diario. Lo verifica `Phase4ArchitectureTest`
+// (core-common): `NasFileOps` solo qui e in core-nas, `UserConfirmation` costruita solo da `ConfirmationIssuer` e questo solo dalla
+// UI, nessun modulo che legge il NAS o mostra la Libreria raggiunge questo modulo.
+//
+// Pacchetti: `contract`, `noop`, `testing` (vedi core-index). P12 aggiunge `plan` (pianificazione), `engine` (le macchine a stati),
+// `store` (adattatore Room del diario), `trash`, `space`, `folders` e `clean` (pulizia dei propri file).
+//
+// core-nas e' `implementation`: nessun tipo di core-nas (e quindi nessuna primitiva di scrittura) compare nelle firme pubbliche, cosi'
+// feature-nas e il menu del viewer, che dipendono da questo modulo, non vedono `NasFileOps` nemmeno per inferenza. Le due
+// dipendenze che P12 aggiungera' (core-database per il diario, core-index per la compattazione) sono nel grafo del §1.1.
+//
+// D28: nessuna rete in questo modulo (NoNetworkSourcesTest). §4.3: nessun orologio del telefono nelle decisioni
+// (NoWallClockSourcesTest): ora del NAS per cio' che si scrive o scade, orologio monotono per le durate.
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.core.nasops'
+
+  // L'adesione al marcatore delle primitive di scrittura (vedi core-nas/build.gradle): solo core-nas e questo modulo.
+  kotlinOptions {
+    freeCompilerArgs += ['-opt-in=dev.pampa.mycloudgallery.core.nas.ops.DestructiveNasAccess']
+  }
+}
+
+dependencies {
+  api project(':core-common')
+  api project(':core-model')
+  // api: SharePath, LocalTrashEntry, KeepReason, OwnKeepReason (core-trust) compaiono nelle firme dei contratti.
+  api project(':core-trust')
+
+  implementation project(':core-nas')
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+}

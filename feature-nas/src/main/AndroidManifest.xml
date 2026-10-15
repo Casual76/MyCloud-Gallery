@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!--
+      :feature-nas: nessun permesso e nessun componente (Fase 4B, P0-B). Le operazioni lunghe girano nel JobService di :app (UIDT,
+      docs/sicurezza.md 4-bis, D29), non qui. Nessuna rete (D28): il NAS si raggiunge solo dai contratti di core-nasops.
+      Un permesso o un componente nuovo si chiede all'orchestratore: prima la riga in docs/sicurezza.md 4-bis, poi
+      quella in releaseManifestPolicy.
+  -->
+
+</manifest>

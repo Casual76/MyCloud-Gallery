@@ -568,6 +568,33 @@ Con due caricamenti paralleli, se il NAS li regge, il totale può scendere verso
 | `MediaDocumentsProvider` | Fase 10.2: trascinamento fra app sul tablet |
 | `PhoneConfirmation` | ogni azione futura che tolga copie dal telefono |
 
+### 2.11 Backup già fatti prima dell'app (richiesta dell'utente del 15/10)
+L'utente ha già copiato sul NAS, a mano o con altri strumenti, molte foto e video che sono anche sul telefono: **non vanno
+ricaricati**. Requisiti per P0 e P4 (piano del backup), P2 (caricamento) e P3 (deduplica):
+1. **Prima del primo backup la scansione della Fase 4 dell'area privata deve essere completa**, così che i candidati della
+   deduplica (D8) siano noti **in qualunque cartella** dell'area privata (es. vecchie cartelle "Backup telefono 2023/"), non
+   solo in `Backup/<dispositivo>/`. Il piano del primo backup aspetta la fine della scansione e lo dice ("Sto cercando
+   cosa c'è già sul NAS…").
+2. **Copie identiche byte per byte nell'area privata**: collegate dopo la rilettura (D8, `LINKED_EXISTING`), nessun
+   caricamento e niente spostamenti dei file esistenti (restano dove l'utente li ha messi).
+3. **Copie identiche nell'area comune o in una share pubblica** (es. `NAS`, `Public`): **non si ricaricano** nell'area
+   privata. Il media risulta "sul NAS (area comune)", non "al sicuro" (piano §2). La copia privata si crea solo quando sparisce
+   quella del telefono o prima di "Libera spazio", come da risposta Q4 (§9.1).
+4. **Riepilogo del primo backup** con tre numeri e la stima: "N già sul NAS (collegati), M sul NAS ma non identici,
+   K da caricare (X GB, circa Y ore)".
+5. **Costo**: la rilettura delle copie già presenti (es. 40 GB a 16 MB/s, circa 45 minuti) si fa secondo le regole
+   (`PHOTO_BACKUP`/`VIDEO_BACKUP`, di notte con il preset Notte), dai più recenti, e si riprende.
+6. **Copie "quasi uguali"** (stessa data di scatto, stesse dimensioni, impronta visiva simile, ma byte diversi: ricompressione
+   o EXIF cambiati da un'altra app di backup): oggi la regola "nel dubbio si carica" le ricaricherebbe. Comportamento da
+   decidere con l'utente (domanda Q11).
+
+Domande aperte per l'utente (da fare prima di P0):
+| # | Domanda | Opzioni | Raccomandazione |
+|---|---|---|---|
+| Q11 | Copie sul NAS "quasi uguali" ma non identiche byte per byte | (a) Si caricano comunque (doppione sul NAS, sicuro). (b) Si mostra l'elenco una volta ("312 foto sembrano già sul NAS ma non sono identiche") e decidi tu: carica / salta / guarda. (c) Si saltano sempre | **(b)**: niente doppioni senza che tu lo sappia, niente media non protetti senza che tu lo sappia |
+| Q12 | Dove stanno i backup già fatti (share e cartelle) e con quale strumento sono stati fatti | Elenco libero | Serve a includerli nella scansione e a stimare quante copie sono identiche |
+| Q13 | Le copie già presenti restano dove sono o si riordinano in `Backup/<dispositivo>/AAAA/MM/`? | (a) Restano dove sono. (b) Riordino proposto più avanti, con conferma (Fase 4B: sposta) | **(a)** per il backup; il riordino eventuale è un'operazione separata e confermata |
+
 ## 3. Alternative scartate
 | Tema | Opzioni | Scelta e motivo |
 |---|---|---|

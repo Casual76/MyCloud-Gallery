@@ -300,6 +300,27 @@ class NasLayoutTest : NasComposeBase() {
     assertEveryTargetIsBigEnough("Foglio di conferma")
   }
 
+  private fun checkHiddenChoiceSheet(fontScale: Float?) {
+    // R11: le due righe della scelta ("Lascia i nascosti dove sono" / "Sposta tutto") si toccano come le altre: 48 dp, anche a 1,3x.
+    show(fontScale = fontScale) {
+      dev.pampa.mycloudgallery.feature.nas.confirm.NasConfirmSheetContent(
+        plan = NasFixtures.moveToCommonLeavingHiddenPlan(),
+        areas = areas,
+        tapsDone = 0,
+        onConfirm = {},
+        onCancel = {},
+        choice = dev.pampa.mycloudgallery.feature.nas.confirm.HiddenChoice(count = 12, leave = true, somethingLeft = true, onChange = {}),
+      )
+    }
+    assertEveryTargetIsBigEnough("Foglio di conferma con i nascosti, testo ${fontScale ?: 1f}")
+  }
+
+  @Test
+  fun ilFoglioConLeScelteSuiNascostiHaBersagliDa48() = checkHiddenChoiceSheet(fontScale = null)
+
+  @Test
+  fun ilFoglioConLeScelteSuiNascostiHaBersagliDa48ConIlTestoGrande() = checkHiddenChoiceSheet(fontScale = LARGE_TEXT)
+
   // --- Un fondale per pagina ------------------------------------------------------------------------------------------------------
 
   /**

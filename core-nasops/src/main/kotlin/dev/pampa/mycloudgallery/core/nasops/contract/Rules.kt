@@ -4,6 +4,7 @@ import dev.pampa.mycloudgallery.core.model.StableCode
 import dev.pampa.mycloudgallery.core.nas.ops.NasOpsPaths
 import dev.pampa.mycloudgallery.core.trust.nas.NasLayout
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
+import java.util.Locale
 
 // Fase 4B (docs/fase4-progetto.md §2.7): le regole PURE delle operazioni, senza NAS e senza orologio: tetti, nomi, temporanei, attese per
 // i file bloccati e i controlli che ogni piano deve passare prima di toccare il NAS. Le usano P12 (pianificazione ed esecuzione), il fake e
@@ -129,6 +130,9 @@ enum class PlanViolation(override val code: String) : StableCode {
 
   /** Un ripristino da un posto che non e' un file nel cestino. */
   NOT_A_TRASH_ITEM("not_a_trash_item"),
+
+  /** R11: un file che il piano dice di lasciare dov'e' (un nascosto) compare anche fra gli elementi da spostare. */
+  LEFT_BEHIND_MOVED("left_behind_moved"),
 }
 
 /**
@@ -144,6 +148,14 @@ object PlanRules {
     plan.items.forEachIndexed { at, item ->
       if (item.index != at) return PlanViolation.BAD_INDEX
       itemViolation(plan.kind, item, ownerDeviceId)?.let { return it }
+    }
+    // R11: cio' che il piano elenca come "lasciato dov'e'" non puo' essere anche un elemento da spostare (un nascosto nell'area comune).
+    val left = plan.leftBehind
+    if (left.isNotEmpty()) {
+      val keys = left.mapTo(HashSet()) { it.share.lowercase(Locale.ROOT) + "/" + it.path.value.lowercase(Locale.ROOT) }
+      if (plan.items.any { (it.srcShare.lowercase(Locale.ROOT) + "/" + it.srcPath.value.lowercase(Locale.ROOT)) in keys }) {
+        return PlanViolation.LEFT_BEHIND_MOVED
+      }
     }
     return null
   }

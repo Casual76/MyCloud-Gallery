@@ -55,13 +55,26 @@
   <string name="nas_confirm_skipped_same_location">già lì</string>
   <string name="nas_confirm_skipped_into_itself">cartelle dentro se stesse</string>
   <string name="nas_confirm_skipped_source_missing">non ci sono più</string>
+  <string name="nas_confirm_skipped_left_behind">nascosti da te</string>
   <string name="nas_confirm_skipped_line">%1$s (%2$s)</string>
   <string name="nas_confirm_purge_note_title">Non si possono ripristinare</string>
   <string name="nas_confirm_purge_note_detail">Eliminati subito, non passano dal cestino: non c\'è più il ripristino dei 30 giorni.</string>
   <string name="nas_confirm_many_title">Sono molti file</string>
   <string name="nas_confirm_many_detail">Nel cestino del NAS vanno %1$s. Controlla che sia la cartella giusta.</string>
   <string name="nas_confirm_hidden_title">Ci sono elementi che hai nascosto</string>
-  <string name="nas_confirm_hidden_detail">%1$s nascosti da te: nell\'area comune li vedranno anche i familiari. Per tenerli per te, spostali prima altrove.</string>
+  <string name="nas_confirm_hidden_detail">%1$s nascosti da te: nell\'area comune li vedranno anche i familiari.</string>
+  <!-- R11, scelta dell'utente del 15/10: i nascosti si lasciano dove sono (la scelta di partenza) o si spostano con il resto -->
+  <plurals name="nas_confirm_hidden_leave">
+    <item quantity="one">Lascia %1$s nascosto dove sta</item>
+    <item quantity="other">Lascia i %1$s nascosti dove sono</item>
+  </plurals>
+  <plurals name="nas_confirm_hidden_all">
+    <item quantity="one">Sposta tutto (%1$s nascosto diventa visibile ai familiari)</item>
+    <item quantity="other">Sposta tutto (%1$s nascosti diventano visibili ai familiari)</item>
+  </plurals>
+  <string name="nas_confirm_hidden_leave_detail">Restano nella cartella d\'origine, nella tua area privata. Si sposta il resto.</string>
+  <string name="nas_confirm_hidden_leave_nothing">Non resterebbe niente da spostare: sono tutti nascosti.</string>
+  <string name="nas_confirm_hidden_all_detail">Finiscono nell\'area comune insieme al resto.</string>
   <string name="nas_confirm_backup_title">Hai un backup esterno?</string>
   <string name="nas_confirm_backup_detail">Il NAS non tiene altre copie di questi file. Se non ne hai una copia altrove (un disco esterno, un cloud), dopo non si recuperano più.</string>
 
@@ -73,6 +86,7 @@
   <string name="nas_confirm_action_purge_continue">Continua</string>
   <string name="nas_confirm_action_purge_now">Elimina subito</string>
   <string name="nas_confirm_action_back">Indietro</string>
+  <string name="nas_confirm_action_nothing_to_move">Niente da spostare</string>
 
   <!-- Nome di una cartella o di un file (crea, rinomina) -->
   <string name="nas_name_new_folder_title">Nuova cartella</string>

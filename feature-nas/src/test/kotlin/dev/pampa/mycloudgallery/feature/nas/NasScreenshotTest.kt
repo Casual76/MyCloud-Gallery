@@ -13,6 +13,7 @@ import dev.pampa.mycloudgallery.core.nasops.contract.NasTrashState
 import dev.pampa.mycloudgallery.core.nasops.contract.OpErrorCode
 import dev.pampa.mycloudgallery.core.nasops.contract.OpPlan
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
+import dev.pampa.mycloudgallery.feature.nas.confirm.HiddenChoice
 import dev.pampa.mycloudgallery.feature.nas.confirm.NameCheck
 import dev.pampa.mycloudgallery.feature.nas.confirm.NameDraft
 import dev.pampa.mycloudgallery.feature.nas.confirm.NamePurpose
@@ -293,10 +294,10 @@ abstract class NasScreenshotBase(private val dark: Boolean, private val device: 
   // --- I fogli di conferma ----------------------------------------------------------------------------------------------------
 
   @Composable
-  private fun SheetOverFolders(plan: OpPlan, tapsDone: Int = 0) {
+  private fun SheetOverFolders(plan: OpPlan, tapsDone: Int = 0, choice: HiddenChoice? = null) {
     FoldersPage(folders())
     GalleryConfirmSheet(visible = true, onDismissRequest = {}, paneTitle = "Conferma") {
-      NasConfirmSheetContent(plan = plan, areas = areas, tapsDone = tapsDone, onConfirm = {}, onCancel = {})
+      NasConfirmSheetContent(plan = plan, areas = areas, tapsDone = tapsDone, onConfirm = {}, onCancel = {}, choice = choice)
     }
   }
 
@@ -305,6 +306,27 @@ abstract class NasScreenshotBase(private val dark: Boolean, private val device: 
 
   @Test
   fun foglioSpostaNellAreaComuneTestoGrande() = shoot("foglio-sposta-comune", fontScale = LARGE_TEXT) { SheetOverFolders(NasFixtures.moveToCommonPlan(skipped = true)) }
+
+  // R11 (scelta del 15/10): lo spostamento nell'area comune con dei nascosti: "Lascia i nascosti dove sono" (di partenza) o "Sposta tutto".
+  @Test
+  fun foglioSpostaNellAreaComuneLasciandoINascosti() = shoot("foglio-sposta-comune-nascosti-lascia") {
+    SheetOverFolders(NasFixtures.moveToCommonLeavingHiddenPlan(), choice = HiddenChoice(count = 2, leave = true, somethingLeft = true, onChange = {}))
+  }
+
+  @Test
+  fun foglioSpostaNellAreaComuneLasciandoINascostiTestoGrande() = shoot("foglio-sposta-comune-nascosti-lascia", fontScale = LARGE_TEXT) {
+    SheetOverFolders(NasFixtures.moveToCommonLeavingHiddenPlan(), choice = HiddenChoice(count = 2, leave = true, somethingLeft = true, onChange = {}))
+  }
+
+  @Test
+  fun foglioSpostaNellAreaComuneConINascosti() = shoot("foglio-sposta-comune-nascosti-tutto") {
+    SheetOverFolders(NasFixtures.moveToCommonPlan(), choice = HiddenChoice(count = 2, leave = false, somethingLeft = true, onChange = {}))
+  }
+
+  @Test
+  fun foglioSpostaNellAreaComuneSeSonoTuttiNascosti() = shoot("foglio-sposta-comune-nascosti-niente") {
+    SheetOverFolders(NasFixtures.moveToCommonPlan(), choice = HiddenChoice(count = 2, leave = true, somethingLeft = false, onChange = {}))
+  }
 
   @Test
   fun foglioSpostaNellaStessaArea() = shoot("foglio-sposta") { SheetOverFolders(NasFixtures.moveSameAreaPlan()) }

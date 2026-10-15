@@ -245,6 +245,7 @@ internal fun NasFoldersScreen(
     onConfirmed = actions.onConfirmed,
     onDismiss = actions.onDismissConfirm,
     hidden = state.confirmHidden,
+    leavePlan = state.confirmLeave,
   )
   NasNameSheet(
     draft = state.name,

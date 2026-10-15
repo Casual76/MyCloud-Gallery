@@ -48,10 +48,16 @@ class FakeNasAreas(areas: List<NasArea> = defaultAreas()) : NasAreas {
   private val state = MutableStateFlow(areas)
   override val areas: StateFlow<List<NasArea>> = state
 
-  /** R11: quanti elementi di un piano risultano nascosti (lo sa `:app`). */
-  var hidden: Int = 0
+  /** R11: i percorsi (d'origine) dei media che l'utente ha nascosto; lo sa `:app`. */
+  val hiddenPaths: MutableSet<String> = HashSet()
 
-  override suspend fun hiddenAmong(plan: dev.pampa.mycloudgallery.core.nasops.contract.OpPlan): Int = hidden
+  /** Il catalogo non risponde: ogni domanda sui nascosti e' un errore. */
+  var failing: Boolean = false
+
+  override suspend fun hiddenAmong(plan: dev.pampa.mycloudgallery.core.nasops.contract.OpPlan): Int {
+    check(!failing) { "catalogo non raggiungibile" }
+    return plan.items.count { !it.isFolder && it.srcPath.value in hiddenPaths }
+  }
 
   fun set(areas: List<NasArea>) {
     state.value = areas

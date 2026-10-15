@@ -172,11 +172,17 @@ internal class OpPlanner(
     val planned = ArrayList<PlannedItem>()
     val skipped = ArrayList<SkippedItem>()
     val seen = HashSet<String>()
+    // R11: i file che l'utente ha chiesto di lasciare dov'erano (i nascosti, spostando nell'area comune): niente elementi per loro.
+    val leave = request.leaveBehind.mapTo(HashSet()) { key(it.share, it.path) }
     for (item in request.items) {
       requireMedia(item.path)
       if (!seen.add(key(item.share, item.path))) continue
       if (access.readOnly(item.share)) {
         skipped += SkippedItem(item.share, item.path, SkipReason.READ_ONLY)
+        continue
+      }
+      if (!item.isFolder && key(item.share, item.path) in leave) {
+        skipped += SkippedItem(item.share, item.path, SkipReason.LEFT_BEHIND)
         continue
       }
       val dst = request.destFolder?.child(item.path.name) ?: SharePath.of(item.path.name)
@@ -204,7 +210,7 @@ internal class OpPlanner(
           planned.size, ItemFlow.MOVE_ACROSS_SHARES, item.share, item.path, request.destShare, dst, false, sizeFor(item, stamp), stamp,
           trashId = newId(),
         )
-        else -> expand(item.share, item.path, checkNotNull(entry), request.destShare, dst, planned, depth = 0)
+        else -> expand(item.share, item.path, checkNotNull(entry), request.destShare, dst, planned, skipped, leave, depth = 0)
       }
       if (planned.size > OpRules.MAX_ITEMS_PER_OP) reject(PlanRejection.TOO_MANY_ITEMS)
     }
@@ -224,21 +230,40 @@ internal class OpPlanner(
    * Una cartella spostata tra share: un elemento per ogni file (ognuno con il suo cammino completo) e, **dopo** il suo contenuto, un
    * elemento per la cartella stessa (ricrea la cartella, anche vuota, nella destinazione e toglie quella d'origine se e' rimasta vuota).
    * Ordine stabile (per nome). Un collegamento non si segue e resta dov'e' (con la sua cartella).
+   *
+   * R11: un file in [leave] (un nascosto che l'utente lascia dov'e') non diventa un elemento: va fra gli esclusi, e la cartella d'origine
+   * resta con lui (l'elemento della cartella toglie solo una cartella rimasta vuota). Una sottocartella che resterebbe vuota **solo** perche'
+   * tutto cio' che aveva era da lasciare non si ricrea nell'area di arrivo: il suo nome non deve arrivarci da solo.
    */
-  private suspend fun expand(share: String, dir: SharePath, self: NasEntry, destShare: String, dstDir: SharePath, out: MutableList<PlannedItem>, depth: Int) {
+  private suspend fun expand(
+    share: String,
+    dir: SharePath,
+    self: NasEntry,
+    destShare: String,
+    dstDir: SharePath,
+    out: MutableList<PlannedItem>,
+    skipped: MutableList<SkippedItem>,
+    leave: Set<String>,
+    depth: Int,
+  ) {
     if (depth > MAX_DEPTH) reject(PlanRejection.TOO_MANY_ITEMS)
     val entries = ArrayList<NasEntry>()
     when (val r = reader.list(share, dir, purpose) { entries += it }) {
       is NasResult.Err -> reject(if (r.error == NasError.PermissionDenied) PlanRejection.READ_ONLY else PlanRejection.NAS_UNREACHABLE)
       is NasResult.Ok -> if (r.value.cappedAt != null) reject(PlanRejection.TOO_MANY_ITEMS)
     }
+    // In `expand` si aggiungono agli esclusi solo i file da lasciare: la differenza di dimensione dice se ne sono stati lasciati qui sotto.
+    val plannedBefore = out.size
+    val leftBefore = skipped.size
     for (entry in entries.sortedBy { it.name }) {
       if (entry.isReparsePoint) continue
       // E-N6: un nome non valido letto dal NAS non diventa mai un elemento (resta dov'e', con la sua cartella).
       val src = runCatching { dir.child(entry.name) }.getOrNull() ?: continue
       val dst = runCatching { dstDir.child(entry.name) }.getOrNull() ?: continue
       if (entry.isDirectory) {
-        expand(share, src, entry, destShare, dst, out, depth + 1)
+        expand(share, src, entry, destShare, dst, out, skipped, leave, depth + 1)
+      } else if (key(share, src) in leave) {
+        skipped += SkippedItem(share, src, SkipReason.LEFT_BEHIND)
       } else {
         out += PlannedItem(
           out.size, ItemFlow.MOVE_ACROSS_SHARES, share, src, destShare, dst, false, entry.size, entry.stamp, trashId = newId(),
@@ -246,6 +271,8 @@ internal class OpPlanner(
       }
       if (out.size > OpRules.MAX_ITEMS_PER_OP) reject(PlanRejection.TOO_MANY_ITEMS)
     }
+    val onlyLeftBehind = depth > 0 && out.size == plannedBefore && skipped.size > leftBefore
+    if (onlyLeftBehind) return
     out += PlannedItem(
       out.size, ItemFlow.MOVE_ACROSS_SHARES, share, dir, destShare, dstDir, true, 0, NasStamp(0, self.modifiedAt, self.fileId),
     )

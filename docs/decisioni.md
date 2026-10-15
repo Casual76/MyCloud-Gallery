@@ -644,8 +644,8 @@ che l'utente vede (da confermare):
 - **R9: "Ferma" vale anche se l'app muore subito dopo**: alla riapertura l'operazione si annulla (si porta a termine solo cio' che e'
   oltre il punto di non ritorno), non riparte.
 - **R10:** rinominare, spostare o eliminare dal viewer il video che si sta guardando ferma la riproduzione un attimo prima.
-- **R11:** spostando nell'area comune elementi che l'utente ha nascosto, il foglio lo dice (quanti); nel viewer "L'hai nascosto". **Non
-  c'e' la scelta "lasciali dove sono"**: da decidere con l'utente se serve.
+- **R11, con la scelta dell'utente del 15/10 («Lascia i nascosti dove sono», qui sotto):** spostando nell'area comune elementi che
+  l'utente ha nascosto, il foglio dice quanti sono e chiede cosa farne; nel viewer, per un media solo, resta "L'hai nascosto".
 - **P16, "Elimina…" nel viewer per un media sul telefono e sul NAS**: c'e' un solo "Elimina…" con "Solo dal telefono" (di default) e
   "Ovunque" (cestino di sistema del telefono e cestino del NAS per ogni copia del NAS dove si hanno i diritti; le aree in sola lettura
   restano come sono, il foglio le elenca). Da li' niente "Sposta" ne' "Rinomina" (sono della copia del NAS, nel viewer del NAS).
@@ -654,6 +654,34 @@ che l'utente vede (da confermare):
   giorni). Nella release non esiste (`check.ps1` lo cerca nel dex).
 - **Residui:** L35 (collegamento gia' presente, non riconoscibile senza la voce `..` e senza media nel catalogo: da provare sul WD),
   L36; I2, I3, I5, I7, I8, I9 come scritti nella revisione; il doppione oltre 24 ore (I10, prima parte).
+
+### ✅ DECISO (utente, 15/10): R11, «Lascia i nascosti dove sono»
+Fonte: `docs/review/4b-fase4b.md`, R11 ("corretto, con scelta"). Spostando nell'**area comune**, da Cartelle NAS, una cartella (o dei file)
+che contiene media che l'utente ha **nascosto**, i familiari li vedrebbero: l'utente ha voluto poter scegliere di lasciarli dove sono.
+
+- **Il foglio.** Quando ci sono nascosti il foglio dello spostamento nell'area comune ha **due scelte**, due righe da 48 dp con la
+  conseguenza scritta sotto (la forma del foglio "Elimina" della Libreria, linguaggio G2): **«Lascia i N nascosti dove sono»**,
+  **preselezionata** perche' e' la piu' prudente, e **«Sposta tutto (N nascosti diventano visibili ai familiari)»**. Il foglio segue la
+  scelta: titolo, numeri e pulsante sono quelli del piano scelto, e il riepilogo elenca cio' che resta ("Restano dove sono: nascosti da te
+  (N)"). Spostando dentro la stessa area non c'e' nessuna scelta: i nascosti non diventano visibili a nessuno in piu'.
+- **Con «lascia»** i nascosti restano dove sono, nell'area privata, anche quelli dentro una cartella spostata. **La cartella d'origine non
+  si toglie e non si svuota**: resta con i soli nascosti. Una sottocartella che resterebbe vuota solo perche' aveva soli nascosti non si
+  ricrea nell'area comune (non ci arriva nemmeno il suo nome); una cartella davvero vuota si sposta come sempre.
+- **Sono due piani, con due impronte.** L'impronta del piano include l'elenco degli esclusi: la conferma data per «lascia» **non puo'
+  avviare «sposta tutto»**, ne' il contrario (R2 della 4B), e un piano che elenca un file fra i lasciati e lo sposta comunque non parte
+  (`PlanViolation.LEFT_BEHIND_MOVED`). I lasciati non sono nel diario: una ripresa dopo un'interruzione non li tocca mai.
+- **Il piano che lascia si ricontrolla.** La schermata chiede di nuovo al catalogo se nel piano senza i nascosti ne e' rimasto qualcuno
+  (un file diventato nascosto fra i due piani) e, se si', ripianifica (al massimo 3 volte); se non riesce a controllare o a toglierli
+  tutti non mostra nessun foglio, ma una frase ("Nel frattempo e' cambiato qualcosa").
+- **Se tutto cio' che si sposta e' nascosto**, lasciandolo non resta niente da spostare: la scelta c'e', il pulsante dice «Niente da
+  spostare» ed e' spento; «Sposta tutto» resta possibile, sapendolo.
+- **Chi dice quali sono i nascosti** e' `:app` (catalogo e dati personali), mai il NAS; `core-nasops` riceve solo percorsi da escludere
+  (`OpRequest.Move.leaveBehind`) e non vede dati personali. `NasAreas.hiddenItems(piano)` ha un'implementazione di serie che ricava
+  gli elementi da `hiddenAmong` su pezzi del piano (ricerca a meta': pochi nascosti, poche domande), quindi `:app` non e' cambiata;
+  potra' rispondere con una sola ricerca nel catalogo.
+- **Fuori da questo lavoro:** il foglio "Sposta" del viewer (un media solo: dice "L'hai nascosto", nessuna scelta); le immagini dei
+  fogli nuovi in `docs/screenshots/4-P14/` (si registrano con `recordRoborazziDebug`; i test `foglioSpostaNellAreaComune*Nascosti*`
+  verificano per ora solo che compongano); la prova sul campo (sotto, in `4b-fase4b.md`).
 
 ## Revisione grafica della Libreria da parte dell'utente (13/10)
 Giudizio: le prestazioni della navigazione non sono male, la **grafica no**. Serve molto lavoro, da fare in un **filone grafico

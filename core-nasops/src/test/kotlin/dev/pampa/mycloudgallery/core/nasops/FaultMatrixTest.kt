@@ -5,6 +5,7 @@ import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.nas.testing.FaultPhase
 import dev.pampa.mycloudgallery.core.nas.testing.FaultPlan
 import dev.pampa.mycloudgallery.core.nas.testing.SimFault
+import dev.pampa.mycloudgallery.core.nasops.contract.LeaveBehind
 import dev.pampa.mycloudgallery.core.nasops.contract.NasOperationState
 import dev.pampa.mycloudgallery.core.nasops.contract.OpKind
 import dev.pampa.mycloudgallery.core.nasops.contract.OpRequest
@@ -114,6 +115,42 @@ open class FaultMatrixTest {
           // Nessun temporaneo: tutto cio' che sta in tmp/ e' citato dal diario (qui: niente).
           assertWithMessage(label).that(kit.appFiles("test-comune")).isEmpty()
           assertWithMessage(label).that(kit.operations.operations.value.single()).isInstanceOf(NasOperationState.Done::class.java)
+        },
+      ),
+    )
+  }
+
+  @Test
+  fun spostaTraShareLasciandoINascostiRegge_unGuastoAOgniPrimitivaPrimaEDopo() = runTest {
+    // R11 (scelta del 15/10): due file normali si spostano, due nascosti restano dov'erano; con un guasto a ogni primitiva, prima e dopo,
+    // e la ripresa dal diario, i nascosti non arrivano mai nell'area comune e la cartella d'origine resta con loro.
+    val hidden = listOf(byteArrayOf(9, 9, 9, 9, 9), byteArrayOf(8, 8, 8, 8, 8, 8))
+    verify(
+      Case(
+        "sposta lasciando i nascosti",
+        setup = { kit ->
+          kit.putFile("test", "V/0.jpg", contents[0])
+          kit.putFile("test", "V/Gita/1.jpg", contents[1])
+          kit.putFile("test", "V/riservata.jpg", hidden[0])
+          kit.putFile("test", "V/Gita/Segreta/s.jpg", hidden[1])
+          OpRequest.Move(
+            listOf(kit.itemOf("test", "V")),
+            "test-comune",
+            SharePath.parse("F"),
+            setOf(LeaveBehind("test", SharePath.parse("V/riservata.jpg")), LeaveBehind("test", SharePath.parse("V/Gita/Segreta/s.jpg"))),
+          )
+        },
+        check = { kit, label ->
+          assertWithMessage(label).that(kit.visible("test-comune")).containsExactly("F/V/0.jpg", "F/V/Gita/1.jpg")
+          for (path in kit.filesIn("test-comune")) {
+            assertWithMessage("$label: $path").that(hidden.map { it.toList() }).doesNotContain(kit.bytes("test-comune", path)!!.toList())
+          }
+          assertWithMessage(label).that(kit.visible("test")).containsExactly("V/riservata.jpg", "V/Gita/Segreta/s.jpg")
+          assertWithMessage(label).that(kit.bytes("test", "V/riservata.jpg")!!.toList()).isEqualTo(hidden[0].toList())
+          assertWithMessage(label).that(kit.bytes("test", "V/Gita/Segreta/s.jpg")!!.toList()).isEqualTo(hidden[1].toList())
+          assertWithMessage(label).that(kit.exists("test", "V/Gita/Segreta")).isTrue()
+          assertWithMessage(label).that(kit.trashedBytes()).containsExactly(contents[0].toList(), contents[1].toList())
+          assertWithMessage(label).that(kit.appFiles("test-comune")).isEmpty()
         },
       ),
     )

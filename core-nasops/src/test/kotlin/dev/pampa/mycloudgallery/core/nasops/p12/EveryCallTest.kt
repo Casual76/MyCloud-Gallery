@@ -6,6 +6,7 @@ import dev.pampa.mycloudgallery.core.nas.testing.FaultPhase
 import dev.pampa.mycloudgallery.core.nas.testing.FaultPlan
 import dev.pampa.mycloudgallery.core.nas.testing.ServerCopyMode
 import dev.pampa.mycloudgallery.core.nas.testing.SimFault
+import dev.pampa.mycloudgallery.core.nasops.contract.LeaveBehind
 import dev.pampa.mycloudgallery.core.nasops.contract.OpItemState
 import dev.pampa.mycloudgallery.core.nasops.contract.OpPlan
 import dev.pampa.mycloudgallery.core.nasops.contract.OpRequest
@@ -268,6 +269,50 @@ class EveryCallTest {
           val moved = kit.store.allTrash()
           assertWithMessage(label).that(moved.map { it.reason }.toSet()).containsExactly(TrashReason.MOVE)
           assertWithMessage(label).that(moved.filter { it.state == TrashEntryState.TRASHED }).hasSize(3)
+        },
+      ),
+    )
+  }
+
+  @Test
+  fun spostaTraShareLasciandoINascosti() = runTest {
+    // R11 (scelta dell'utente del 15/10): i nascosti restano nell'area privata, il resto si sposta. Con un guasto a ogni chiamata e la morte
+    // del processo a ogni passo, nessun nascosto arriva nell'area comune, la cartella d'origine resta con loro e ogni operazione si chiude.
+    val hidden = listOf(content(40), content(41))
+    both(
+      Scenario(
+        "sposta lasciando i nascosti",
+        setup = { kit ->
+          kit.putFile("test", "V/0.jpg", content(20))
+          kit.putFile("test", "V/Gita/1.jpg", content(21))
+          kit.putFile("test", "V/riservata.jpg", hidden[0])
+          kit.putFile("test", "V/Gita/Segreta/s.jpg", hidden[1])
+          kit.putDir("test", "V/Gita/Vuota")
+          OpRequest.Move(
+            listOf(kit.itemOf("test", "V")),
+            "test-comune",
+            SharePath.parse("F"),
+            setOf(LeaveBehind("test", SharePath.parse("V/riservata.jpg")), LeaveBehind("test", SharePath.parse("V/Gita/Segreta/s.jpg"))),
+          )
+        },
+        check = { kit, label ->
+          assertWithMessage(label).that(kit.visible("test-comune")).containsExactly("F/V/0.jpg", "F/V/Gita/1.jpg")
+          for (path in kit.filesIn("test-comune")) {
+            assertWithMessage("$label: $path").that(hidden.map { it.toList() }).doesNotContain(kit.bytes("test-comune", path)!!.toList())
+          }
+          // Una cartella davvero vuota si sposta come sempre; quella con un nascosto non arriva nell'area comune da sola.
+          assertWithMessage(label).that(kit.exists("test-comune", "F/V/Gita/Vuota")).isTrue()
+          assertWithMessage(label).that(kit.exists("test-comune", "F/V/Gita/Segreta")).isFalse()
+          // I nascosti sono dove erano, intatti, e le cartelle che li contengono non si sono tolte.
+          assertWithMessage(label).that(kit.visible("test")).containsExactly("V/riservata.jpg", "V/Gita/Segreta/s.jpg")
+          assertWithMessage(label).that(kit.bytes("test", "V/riservata.jpg")!!.toList()).isEqualTo(hidden[0].toList())
+          assertWithMessage(label).that(kit.bytes("test", "V/Gita/Segreta/s.jpg")!!.toList()).isEqualTo(hidden[1].toList())
+          assertWithMessage(label).that(kit.exists("test", "V")).isTrue()
+          assertWithMessage(label).that(kit.exists("test", "V/Gita")).isTrue()
+          assertWithMessage(label).that(kit.exists("test", "V/Gita/Vuota")).isFalse()
+          val moved = kit.store.allTrash()
+          assertWithMessage(label).that(moved.map { it.reason }.toSet()).containsExactly(TrashReason.MOVE)
+          assertWithMessage(label).that(moved.filter { it.state == TrashEntryState.TRASHED }).hasSize(2)
         },
       ),
     )

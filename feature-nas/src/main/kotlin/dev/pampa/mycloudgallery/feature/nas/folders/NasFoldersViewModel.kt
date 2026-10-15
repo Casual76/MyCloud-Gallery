@@ -4,6 +4,8 @@ import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.pampa.mycloudgallery.core.nasops.contract.ItemFlow
+import dev.pampa.mycloudgallery.core.nasops.contract.LeaveBehind
 import dev.pampa.mycloudgallery.core.nasops.contract.NameRules
 import dev.pampa.mycloudgallery.core.nasops.contract.NasFolderEntry
 import dev.pampa.mycloudgallery.core.nasops.contract.NasFolderState
@@ -21,11 +23,15 @@ import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import dev.pampa.mycloudgallery.feature.nas.confirm.NameCheck
 import dev.pampa.mycloudgallery.feature.nas.confirm.NameDraft
 import dev.pampa.mycloudgallery.feature.nas.confirm.NamePurpose
+import dev.pampa.mycloudgallery.feature.nas.confirm.movesIntoCommon
 import dev.pampa.mycloudgallery.feature.nas.contract.NasArea
 import dev.pampa.mycloudgallery.feature.nas.contract.NasAreas
+import dev.pampa.mycloudgallery.feature.nas.R
+import dev.pampa.mycloudgallery.feature.nas.ui.NasTone
 import dev.pampa.mycloudgallery.feature.nas.ui.UiNotice
 import dev.pampa.mycloudgallery.feature.nas.ui.noticeFor
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -65,6 +71,12 @@ internal data class FoldersUiState(
   val confirm: OpPlan? = null,
   /** R11: quanti elementi del piano di [confirm] l'utente ha nascosto (spostamento nell'area comune). */
   val confirmHidden: Int = 0,
+  /**
+   * R11: lo stesso spostamento di [confirm] **senza** i nascosti, che restano dove sono (scelta dell'utente del 15/10). E' un piano a se',
+   * con la sua impronta: il foglio conferma quello che l'utente sceglie, e la conferma vale solo per quello. Null con dei nascosti =
+   * lasciandoli non resterebbe niente da spostare.
+   */
+  val confirmLeave: OpPlan? = null,
   val name: NameDraft? = null,
   val notice: UiNotice? = null,
 ) {
@@ -226,21 +238,78 @@ class NasFoldersViewModel @Inject constructor(
   private fun plan(request: OpRequest) {
     viewModelScope.launch {
       when (val outcome = operations.plan(request)) {
-        is PlanOutcome.Ready -> {
-          // R11: per uno spostamento, quanti elementi nascosti ci sono (il foglio lo dice se vanno nell'area comune).
-          val hidden = if (outcome.plan.kind == OpKind.MOVE) runCatching { areas.hiddenAmong(outcome.plan) }.getOrDefault(0) else 0
-          mutable.update { it.copy(confirm = outcome.plan, confirmHidden = hidden, notice = null) }
-        }
+        is PlanOutcome.Ready -> offer(request, outcome.plan)
         is PlanOutcome.Rejected -> mutable.update { it.copy(notice = noticeFor(outcome)) }
       }
     }
   }
 
-  internal fun dismissConfirm() = mutable.update { it.copy(confirm = null) }
+  /**
+   * Mette il piano davanti all'utente. R11: se e' uno spostamento nell'area comune con dei file che l'utente ha **nascosto**, i familiari li
+   * vedrebbero: oltre al piano che sposta tutto si chiede quello che li lascia dov'erano (`OpRequest.Move.leaveBehind`) e il foglio offre
+   * le due scelte. Quali sono i nascosti lo dice `:app` (dati personali), mai il NAS; qui si passano al pianificatore come percorsi da
+   * escludere. Il piano senza di loro si **ricontrolla**: se ne avesse ancora (un file comparso fra i due piani) si riprova, e se non
+   * riesce a toglierli tutti non si propone niente: meglio nessun foglio che un foglio che promette e non mantiene.
+   */
+  private suspend fun offer(request: OpRequest, plan: OpPlan) {
+    val move = request as? OpRequest.Move
+    val exposed = if (move != null && plan.kind == OpKind.MOVE && movesIntoCommon(plan, mutable.value.areas)) hiddenFiles(plan) else null
+    if (move == null || exposed.isNullOrEmpty()) {
+      mutable.update { it.copy(confirm = plan, confirmHidden = 0, confirmLeave = null, notice = null) }
+      return
+    }
+    var leave: Set<LeaveBehind> = move.leaveBehind + exposed
+    repeat(LEAVE_ROUNDS) {
+      when (val outcome = operations.plan(move.copy(leaveBehind = leave))) {
+        is PlanOutcome.Ready -> {
+          // Il piano che li lascia non deve averne piu' (non riuscire a controllare e' come averne).
+          val left = hiddenFiles(outcome.plan)
+          if (left != null && left.isEmpty()) {
+            mutable.update { it.copy(confirm = plan, confirmHidden = maxOf(exposed.size, outcome.plan.leftBehind.size), confirmLeave = outcome.plan, notice = null) }
+            return
+          }
+          if (left == null) {
+            mutable.update { it.copy(notice = UiNotice(R.string.nas_confirmation_wrong, NasTone.Alarm)) }
+            return
+          }
+          leave = leave + left
+        }
+        is PlanOutcome.Rejected -> {
+          // Tutto cio' che si sposta e' nascosto: la scelta c'e', ma lasciandoli non resta niente da fare.
+          if (outcome.reason == PlanRejection.EMPTY) {
+            mutable.update { it.copy(confirm = plan, confirmHidden = exposed.size, confirmLeave = null, notice = null) }
+          } else {
+            mutable.update { it.copy(notice = noticeFor(outcome)) }
+          }
+          return
+        }
+      }
+    }
+    mutable.update { it.copy(notice = UiNotice(R.string.nas_confirmation_wrong, NasTone.Alarm)) }
+  }
+
+  /**
+   * I file di [plan] che cambiano area e che l'utente ha nascosto, o null se non si riesce a saperlo. Il filtro e' anche qui: chi risponde
+   * (`:app`) puo' dire di piu', ma solo un file che passa da un'area all'altra e' esposto ai familiari.
+   */
+  private suspend fun hiddenFiles(plan: OpPlan): Set<LeaveBehind>? {
+    val indexes = try {
+      areas.hiddenItems(plan)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      return null
+    }
+    return plan.items
+      .filter { it.index in indexes && !it.isFolder && it.flow == ItemFlow.MOVE_ACROSS_SHARES }
+      .mapTo(LinkedHashSet()) { LeaveBehind(it.srcShare, it.srcPath) }
+  }
+
+  internal fun dismissConfirm() = mutable.update { it.copy(confirm = null, confirmHidden = 0, confirmLeave = null) }
 
   /** L'utente ha confermato [plan] con un tocco: l'operazione parte (o l'esito dice perche' no). */
   internal fun confirmed(plan: OpPlan, confirmation: UserConfirmation) {
-    mutable.update { it.copy(confirm = null, name = null) }
+    mutable.update { it.copy(confirm = null, confirmHidden = 0, confirmLeave = null, name = null) }
     viewModelScope.launch {
       val outcome = operations.start(plan, confirmation)
       mutable.update {
@@ -324,5 +393,8 @@ class NasFoldersViewModel @Inject constructor(
   private companion object {
     /** Quanto si aspetta dopo l'ultimo carattere prima di chiedere il piano: non si interroga il NAS a ogni lettera. */
     const val NAME_CHECK_DELAY_MS = 250L
+
+    /** Quante volte si ripianifica per lasciare i nascosti, se fra un piano e l'altro ne compare qualcuno. */
+    const val LEAVE_ROUNDS = 3
   }
 }

@@ -83,6 +83,17 @@ data class OwnTrashRef(val trashId: String) {
   override fun toString(): String = "OwnTrashRef"
 }
 
+/**
+ * Un file che uno spostamento **lascia dove sta** (R11, scelta dell'utente del 15/10: "Lascia i nascosti dove sono"): la share e il
+ * percorso d'origine. Lo decide la schermata, mai un dato letto dal NAS: l'elenco dei nascosti lo da' `:app` (catalogo e dati
+ * personali), che `core-nasops` non vede. Il piano che ne nasce non contiene questi file e li elenca fra gli esclusi
+ * ([SkipReason.LEFT_BEHIND]), che entrano nell'impronta: la conferma vale per quel piano.
+ */
+data class LeaveBehind(val share: String, val path: SharePath) {
+  /** Mai il percorso nei log: e' un dato dell'utente (§4.3). */
+  override fun toString(): String = "LeaveBehind"
+}
+
 /** Le richieste. Nessuna fa niente da sola. */
 sealed interface OpRequest {
   val kind: OpKind
@@ -101,11 +112,21 @@ sealed interface OpRequest {
     override fun toString(): String = "Rename"
   }
 
-  /** Sposta [items] in [destFolder] di [destShare] (null = radice). Fra share diverse: copia lato server, verifica, cestino (D24). */
-  data class Move(val items: List<NasItem>, val destShare: String, val destFolder: SharePath?) : OpRequest {
+  /**
+   * Sposta [items] in [destFolder] di [destShare] (null = radice). Fra share diverse: copia lato server, verifica, cestino (D24).
+   *
+   * @property leaveBehind R11: i file che restano dov'erano (i nascosti dell'utente, spostando nell'area comune). Si escludono dal
+   *   piano, anche quando stanno dentro una cartella da spostare; la cartella d'origine resta con loro, non si toglie e non si svuota.
+   */
+  data class Move(
+    val items: List<NasItem>,
+    val destShare: String,
+    val destFolder: SharePath?,
+    val leaveBehind: Set<LeaveBehind> = emptySet(),
+  ) : OpRequest {
     override val kind: OpKind get() = OpKind.MOVE
 
-    override fun toString(): String = "Move(${items.size} elementi)"
+    override fun toString(): String = "Move(${items.size} elementi, ${leaveBehind.size} lasciati)"
   }
 
   /** Elimina [items]: nel cestino del NAS (D25). "Ovunque" (con il cestino di Android) lo orchestra la UI, non questa richiesta. */

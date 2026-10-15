@@ -83,7 +83,7 @@ if ($Mode -eq "verify" -and $NotSettled) { $environment["MCG_CHAOS_SETTLED"] = "
 $environment["ANDROID_SERIAL"] = "none"
 
 $test = if ($Mode -eq "jvm") { "*ChaosBenchTest*" } else { "*ChaosNasIntegrationTest*" }
-$arguments = @(":core-nasops:testDebugUnitTest", "--tests", $test, "--console=plain", "--rerun")
+$arguments = @(":core-nasops:testDebugUnitTest", "--tests", $test, "--console=plain", "--rerun", "-PmcgTestTimeoutMinutes=180")
 
 if ($DryRun) {
   Write-Host "=== A SECCO: non lancio niente ===" -ForegroundColor Yellow

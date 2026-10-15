@@ -7,8 +7,11 @@ import dev.pampa.mycloudgallery.core.nasops.contract.NasFolderState
 import dev.pampa.mycloudgallery.core.nasops.contract.NasFolders
 import dev.pampa.mycloudgallery.core.nasops.contract.NasOperationState
 import dev.pampa.mycloudgallery.core.nasops.contract.OpKind
+import dev.pampa.mycloudgallery.core.nasops.contract.PlanOutcome
 import dev.pampa.mycloudgallery.core.nasops.contract.PlanRejection
 import dev.pampa.mycloudgallery.core.nasops.contract.PlanWarning
+import dev.pampa.mycloudgallery.core.nasops.contract.SkipReason
+import dev.pampa.mycloudgallery.core.nasops.testing.KitEngine
 import dev.pampa.mycloudgallery.core.nasops.testing.NasOpsTestKit
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import dev.pampa.mycloudgallery.feature.nas.confirm.NameCheck
@@ -169,10 +172,150 @@ class NasFoldersViewModelTest {
     assertThat(vm.state.value.notice?.opensOperations).isFalse()
   }
 
+  // --- R11: i nascosti spostando nell'area comune (scelta dell'utente del 15/10: "Lascia i nascosti dove sono") -------------------------
+
+  /** Seleziona `Viaggi` (Oslo/a.jpg, Oslo/b.jpg, mappa.png) nell'area privata e chiede di spostarla in `Famiglia` dell'area comune. */
+  private fun TestScope.askToMoveViaggiToCommon(vm: NasFoldersViewModel) {
+    vm.goTo(FolderWhere("test", null))
+    settle()
+    vm.toggle(SharePath.of("Viaggi"))
+    vm.startMove()
+    vm.goTo(FolderWhere("test-comune", SharePath.of("Famiglia")))
+    settle()
+    vm.moveHere()
+    settle()
+  }
+
+  private fun sourceFiles(plan: dev.pampa.mycloudgallery.core.nasops.contract.OpPlan) = plan.items.filter { !it.isFolder }.map { it.srcPath.value }
+
   @Test
   fun r11_spostareNellAreaComuneDiceQuantiElementiNascostiCiSono() = runTest(dispatcher) {
     populate()
-    areas.hidden = 2
+    areas.hiddenPaths += "Viaggi/Oslo/b.jpg"
+    val vm = viewModel()
+    askToMoveViaggiToCommon(vm)
+    val plan = checkNotNull(vm.state.value.confirm)
+    assertThat(vm.state.value.confirmHidden).isEqualTo(1)
+    val facts = confirmFacts(plan, vm.state.value.areas, vm.state.value.confirmHidden)
+    assertThat(facts.intoCommon).isTrue()
+    assertThat(facts.hiddenCount).isEqualTo(1)
+    // Nella stessa area (niente "area comune") i nascosti non contano: nessuna riga.
+    assertThat(confirmFacts(plan, emptyList(), 1).hiddenCount).isEqualTo(0)
+  }
+
+  @Test
+  fun r11_ConINascostiIlFoglioHaDuePianiConDueImpronte_ELaScelteDiPartenzaELaPrudente() = runTest(dispatcher) {
+    populate()
+    areas.hiddenPaths += "Viaggi/Oslo/b.jpg"
+    val vm = viewModel()
+    askToMoveViaggiToCommon(vm)
+    val everything = checkNotNull(vm.state.value.confirm)
+    val leaving = checkNotNull(vm.state.value.confirmLeave)
+
+    // "Sposta tutto" porta anche il nascosto; "Lascia" no, e lo elenca fra gli esclusi.
+    assertThat(sourceFiles(everything)).containsExactly("Viaggi/Oslo/a.jpg", "Viaggi/Oslo/b.jpg", "Viaggi/mappa.png")
+    assertThat(sourceFiles(leaving)).containsExactly("Viaggi/Oslo/a.jpg", "Viaggi/mappa.png")
+    assertThat(leaving.skipped.map { it.reason }).containsExactly(SkipReason.LEFT_BEHIND)
+    assertThat(leaving.hash).isNotEqualTo(everything.hash)
+    assertThat(everything.skipped).isEmpty()
+    // I piani non toccano il NAS.
+    assertThat(kit.exists("test", "Viaggi/Oslo/b.jpg")).isTrue()
+    assertThat(kit.exists("test-comune", "Famiglia/Viaggi")).isFalse()
+  }
+
+  @Test
+  fun r11_SenzaNascostiNonCeNessunaScelta() = runTest(dispatcher) {
+    populate()
+    val vm = viewModel()
+    askToMoveViaggiToCommon(vm)
+    assertThat(vm.state.value.confirm).isNotNull()
+    assertThat(vm.state.value.confirmHidden).isEqualTo(0)
+    assertThat(vm.state.value.confirmLeave).isNull()
+  }
+
+  @Test
+  fun r11_SpostandoNellaStessaAreaNonSiChiedeDeiNascosti() = runTest(dispatcher) {
+    populate()
+    areas.hiddenPaths += "Viaggi/Oslo/b.jpg"
+    areas.failing = true // se si chiedesse al catalogo, sarebbe un errore: nella stessa area non serve
+    val vm = viewModel()
+    vm.goTo(FolderWhere("test", null))
+    settle()
+    vm.toggle(SharePath.of("nota.txt"))
+    vm.startMove()
+    vm.goTo(FolderWhere("test", SharePath.of("Viaggi")))
+    settle()
+    vm.moveHere()
+    settle()
+    assertThat(vm.state.value.confirm).isNotNull()
+    assertThat(vm.state.value.confirmHidden).isEqualTo(0)
+    assertThat(vm.state.value.confirmLeave).isNull()
+  }
+
+  @Test
+  fun r11_ConfermandoIlPianoCheLasciaINascostiRestanoDovErano() = runTest(dispatcher) {
+    populate()
+    areas.hiddenPaths += "Viaggi/Oslo/b.jpg"
+    val vm = viewModel()
+    askToMoveViaggiToCommon(vm)
+    val leaving = checkNotNull(vm.state.value.confirmLeave)
+    vm.confirmed(leaving, checkNotNull(ConfirmationSheet(leaving).tap(vm.monotonicMs())))
+    settle()
+
+    assertThat(vm.state.value.notice?.opensOperations).isTrue()
+    // Nell'area comune arrivano gli altri; il nascosto resta nell'area privata, intatto, e nessun suo byte e' nell'area comune.
+    assertThat(kit.filesIn("test-comune").filterNot { it.startsWith(".mycloudgallery") })
+      .containsExactly("Famiglia/Viaggi/Oslo/a.jpg", "Famiglia/Viaggi/mappa.png")
+    assertThat(kit.bytes("test", "Viaggi/Oslo/b.jpg")!!.toList()).isEqualTo(listOf<Byte>(4, 5, 6, 7))
+    for (path in kit.filesIn("test-comune")) assertThat(kit.bytes("test-comune", path)!!.toList()).isNotEqualTo(listOf<Byte>(4, 5, 6, 7))
+    assertThat(kit.exists("test", "Viaggi")).isTrue()
+    assertThat(vm.state.value.confirm).isNull()
+    assertThat(vm.state.value.confirmLeave).isNull()
+    assertThat(vm.state.value.confirmHidden).isEqualTo(0)
+  }
+
+  @Test
+  fun r11_ConfermandoSpostaTuttoIlNascostoVaNellAreaComune() = runTest(dispatcher) {
+    populate()
+    areas.hiddenPaths += "Viaggi/Oslo/b.jpg"
+    val vm = viewModel()
+    askToMoveViaggiToCommon(vm)
+    val everything = checkNotNull(vm.state.value.confirm)
+    vm.confirmed(everything, checkNotNull(ConfirmationSheet(everything).tap(vm.monotonicMs())))
+    settle()
+    assertThat(kit.exists("test-comune", "Famiglia/Viaggi/Oslo/b.jpg")).isTrue()
+    assertThat(kit.exists("test", "Viaggi/Oslo/b.jpg")).isFalse()
+  }
+
+  @Test
+  fun r11_UnaConfermaPerUnPianoNonAvviaLAltro() = runTest(dispatcher) {
+    populate()
+    areas.hiddenPaths += "Viaggi/Oslo/b.jpg"
+    val vm = viewModel()
+    askToMoveViaggiToCommon(vm)
+    val everything = checkNotNull(vm.state.value.confirm)
+    val leaving = checkNotNull(vm.state.value.confirmLeave)
+
+    // Il tocco su "Lascia i nascosti" non puo' far partire "Sposta tutto"...
+    vm.confirmed(everything, checkNotNull(ConfirmationSheet(leaving).tap(vm.monotonicMs())))
+    settle()
+    assertThat(vm.state.value.notice?.opensOperations).isFalse()
+    assertThat(kit.exists("test", "Viaggi/Oslo/b.jpg")).isTrue()
+    assertThat(kit.exists("test-comune", "Famiglia/Viaggi")).isFalse()
+    assertThat(kit.operations.operations.value).isEmpty()
+
+    // ...e viceversa.
+    vm.confirmed(leaving, checkNotNull(ConfirmationSheet(everything).tap(vm.monotonicMs())))
+    settle()
+    assertThat(vm.state.value.notice?.opensOperations).isFalse()
+    assertThat(kit.exists("test", "Viaggi/Oslo/b.jpg")).isTrue()
+    assertThat(kit.operations.operations.value).isEmpty()
+  }
+
+  @Test
+  fun r11_SeTuttoCioCheSiSpostaENascostoLaScelteCeMaLasciandoliNonRestaNiente() = runTest(dispatcher) {
+    populate()
+    areas.hiddenPaths += "nota.txt"
     val vm = viewModel()
     vm.goTo(FolderWhere("test", null))
     settle()
@@ -182,13 +325,77 @@ class NasFoldersViewModelTest {
     settle()
     vm.moveHere()
     settle()
-    val plan = checkNotNull(vm.state.value.confirm)
+    assertThat(vm.state.value.confirm).isNotNull()
+    assertThat(vm.state.value.confirmHidden).isEqualTo(1)
+    assertThat(vm.state.value.confirmLeave).isNull()
+  }
+
+  @Test
+  fun r11_IlPianoCheLasciaSiRicontrolla_UnFileDiventatoNascostoFraDuePianiVieneLasciato() = runTest(dispatcher) {
+    populate()
+    areas.hiddenPaths += "Viaggi/Oslo/b.jpg"
+    var plans = 0
+    val operations = object : dev.pampa.mycloudgallery.core.nasops.contract.NasOperations by kit.operations {
+      override suspend fun plan(request: dev.pampa.mycloudgallery.core.nasops.contract.OpRequest): PlanOutcome {
+        // Dopo il primo piano (quello che sposta tutto) un altro file risulta nascosto.
+        if (++plans == 2) areas.hiddenPaths += "Viaggi/mappa.png"
+        return kit.operations.plan(request)
+      }
+    }
+    val vm = NasFoldersViewModel(kit.folders, operations, areas, kit.clocks)
+    askToMoveViaggiToCommon(vm)
+    val leaving = checkNotNull(vm.state.value.confirmLeave)
+    assertThat(sourceFiles(leaving)).containsExactly("Viaggi/Oslo/a.jpg")
+    assertThat(leaving.skipped).hasSize(2)
     assertThat(vm.state.value.confirmHidden).isEqualTo(2)
-    val facts = confirmFacts(plan, vm.state.value.areas, vm.state.value.confirmHidden)
-    assertThat(facts.intoCommon).isTrue()
-    assertThat(facts.hiddenCount).isEqualTo(2)
-    // Nella stessa area (niente "area comune") i nascosti non contano: nessuna riga.
-    assertThat(confirmFacts(plan, emptyList(), 2).hiddenCount).isEqualTo(0)
+  }
+
+  @Test
+  fun r11_SeIlCatalogoNonRispondeAlControlloDelPianoCheLasciaNonSiProponeNiente() = runTest(dispatcher) {
+    populate()
+    areas.hiddenPaths += "Viaggi/Oslo/b.jpg"
+    var plans = 0
+    val operations = object : dev.pampa.mycloudgallery.core.nasops.contract.NasOperations by kit.operations {
+      override suspend fun plan(request: dev.pampa.mycloudgallery.core.nasops.contract.OpRequest): PlanOutcome {
+        if (++plans == 2) areas.failing = true
+        return kit.operations.plan(request)
+      }
+    }
+    val vm = NasFoldersViewModel(kit.folders, operations, areas, kit.clocks)
+    askToMoveViaggiToCommon(vm)
+    // Non poter controllare e' come avere ancora dei nascosti: nessun foglio, una frase, niente promesso e non mantenuto.
+    assertThat(vm.state.value.confirm).isNull()
+    assertThat(vm.state.value.confirmLeave).isNull()
+    assertThat(vm.state.value.notice).isNotNull()
+    assertThat(kit.exists("test", "Viaggi/Oslo/b.jpg")).isTrue()
+  }
+
+  @Test
+  fun r11_ConLEsecutoreVeroLasciaINascostiELaCartellaDOrigineResta() = runTest(dispatcher) {
+    val production = NasOpsTestKit(engine = KitEngine.PRODUCTION)
+    production.putFile("test", "Viaggi/Oslo/a.jpg", byteArrayOf(1, 2, 3))
+    production.putFile("test", "Viaggi/Oslo/b.jpg", byteArrayOf(4, 5, 6, 7))
+    production.putFile("test", "Viaggi/Segreti/s.jpg", byteArrayOf(8, 8))
+    production.putFile("test", "Viaggi/mappa.png", byteArrayOf(9))
+    production.putDir("test-comune", "Famiglia")
+    areas.hiddenPaths += setOf("Viaggi/Oslo/b.jpg", "Viaggi/Segreti/s.jpg")
+    val vm = NasFoldersViewModel(production.folders, production.operations, areas, production.clocks)
+    askToMoveViaggiToCommon(vm)
+
+    val leaving = checkNotNull(vm.state.value.confirmLeave)
+    assertThat(vm.state.value.confirmHidden).isEqualTo(2)
+    assertThat(sourceFiles(leaving)).containsExactly("Viaggi/Oslo/a.jpg", "Viaggi/mappa.png")
+    vm.confirmed(leaving, checkNotNull(ConfirmationSheet(leaving).tap(vm.monotonicMs())))
+    settle()
+
+    assertThat(production.filesIn("test-comune").filterNot { it.startsWith(".mycloudgallery") })
+      .containsExactly("Famiglia/Viaggi/Oslo/a.jpg", "Famiglia/Viaggi/mappa.png")
+    assertThat(production.filesIn("test").filterNot { it.startsWith(".mycloudgallery") })
+      .containsExactly("Viaggi/Oslo/b.jpg", "Viaggi/Segreti/s.jpg")
+    // Le cartelle d'origine non si sono tolte, e nell'area comune non e' arrivato nemmeno il nome della cartella di soli nascosti.
+    assertThat(production.exists("test", "Viaggi")).isTrue()
+    assertThat(production.exists("test", "Viaggi/Segreti")).isTrue()
+    assertThat(production.exists("test-comune", "Famiglia/Viaggi/Segreti")).isFalse()
   }
 
   @Test

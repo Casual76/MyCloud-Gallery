@@ -58,6 +58,7 @@ import dev.pampa.mycloudgallery.core.nasops.contract.UserConfirmation
 import dev.pampa.mycloudgallery.core.trust.crypto.TrustIds
 import dev.pampa.mycloudgallery.core.trust.nas.NasLayout
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
+import java.util.Locale
 import kotlin.time.Duration
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -198,10 +199,16 @@ class InMemoryNasOperations(
     request.destFolder?.let { if (!NasOpsPaths.isMediaPath(it)) return PlanOutcome.Rejected(PlanRejection.PATH_NOT_ALLOWED) }
     val planned = ArrayList<PlannedItem>()
     val skipped = ArrayList<SkippedItem>()
+    // R11: i file da lasciare dov'erano (i nascosti, spostando nell'area comune) non diventano elementi: vanno fra gli esclusi.
+    val leave = request.leaveBehind.mapTo(HashSet()) { leaveKey(it.share, it.path) }
     for (item in request.items) {
       if (!NasOpsPaths.isMediaPath(item.path)) return PlanOutcome.Rejected(PlanRejection.PATH_NOT_ALLOWED)
       if (readOnly(item.share)) {
         skipped += SkippedItem(item.share, item.path, SkipReason.READ_ONLY)
+        continue
+      }
+      if (!item.isFolder && leaveKey(item.share, item.path) in leave) {
+        skipped += SkippedItem(item.share, item.path, SkipReason.LEFT_BEHIND)
         continue
       }
       val dst = request.destFolder?.child(item.path.name) ?: SharePath.of(item.path.name)
@@ -219,7 +226,7 @@ class InMemoryNasOperations(
         !item.isFolder -> planned += PlannedItem(
           planned.size, ItemFlow.MOVE_ACROSS_SHARES, item.share, item.path, request.destShare, dst, false, item.size, item.stamp, trashId = newId(),
         )
-        else -> if (!expandFolder(item.share, item.path, request.destShare, dst, planned)) return PlanOutcome.Rejected(PlanRejection.NAS_UNREACHABLE)
+        else -> if (!expandFolder(item.share, item.path, request.destShare, dst, planned, skipped, leave)) return PlanOutcome.Rejected(PlanRejection.NAS_UNREACHABLE)
       }
       if (planned.size > OpRules.MAX_ITEMS_PER_OP) return PlanOutcome.Rejected(PlanRejection.TOO_MANY_ITEMS)
     }
@@ -228,7 +235,8 @@ class InMemoryNasOperations(
         when {
           skipped.any { it.reason == SkipReason.READ_ONLY } -> PlanRejection.READ_ONLY
           skipped.any { it.reason == SkipReason.INTO_ITSELF } -> PlanRejection.INTO_ITSELF
-          else -> PlanRejection.SAME_LOCATION
+          skipped.any { it.reason == SkipReason.SAME_LOCATION } || skipped.isEmpty() -> PlanRejection.SAME_LOCATION
+          else -> PlanRejection.EMPTY
         },
       )
     }
@@ -244,8 +252,18 @@ class InMemoryNasOperations(
     return PlanOutcome.Ready(buildPlan(OpKind.MOVE, planned, skipped, request.destShare, request.destFolder))
   }
 
+  private fun leaveKey(share: String, path: SharePath): String = share.lowercase(Locale.ROOT) + "/" + path.value.lowercase(Locale.ROOT)
+
   /** Espande una cartella da spostare tra share in un elemento per file (ordine stabile). Falso se il NAS non risponde. */
-  private suspend fun expandFolder(share: String, root: SharePath, destShare: String, destRoot: SharePath, out: MutableList<PlannedItem>): Boolean {
+  private suspend fun expandFolder(
+    share: String,
+    root: SharePath,
+    destShare: String,
+    destRoot: SharePath,
+    out: MutableList<PlannedItem>,
+    skipped: MutableList<SkippedItem>,
+    leave: Set<String>,
+  ): Boolean {
     val queue = ArrayDeque<Pair<SharePath, SharePath>>()
     queue.add(root to destRoot)
     while (queue.isNotEmpty()) {
@@ -258,6 +276,8 @@ class InMemoryNasOperations(
         val dst = runCatching { dstDir.child(entry.name) }.getOrNull() ?: continue
         if (entry.isDirectory) {
           queue.add(src to dst)
+        } else if (leaveKey(share, src) in leave) {
+          skipped += SkippedItem(share, src, SkipReason.LEFT_BEHIND)
         } else {
           out += PlannedItem(
             out.size, ItemFlow.MOVE_ACROSS_SHARES, share, src, destShare, dst, false, entry.size,

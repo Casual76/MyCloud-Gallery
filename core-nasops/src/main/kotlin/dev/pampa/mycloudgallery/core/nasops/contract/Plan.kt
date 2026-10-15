@@ -38,8 +38,15 @@ value class PlanHash(val hex: String) {
   companion object {
     private val HEX_64 = Regex("^[0-9a-f]{64}$")
 
-    /** L'impronta del piano di [kind] con questi [items], nell'ordine dato. Deterministica: stessa lista, stessa impronta. */
-    fun of(kind: OpKind, items: List<PlannedItem>): PlanHash {
+    /**
+     * L'impronta del piano di [kind] con questi [items], nell'ordine dato, e con gli esclusi ([skipped]: cio' che il piano lascia dov'e').
+     * Deterministica: stessa lista, stessa impronta.
+     *
+     * R11: gli esclusi entrano nell'impronta. Una conferma data per "lascia i nascosti dove sono" porta l'impronta di QUEL piano, con la sua
+     * lista di esclusi: non puo' avviare "sposta tutto" (altri elementi, nessun escluso), ne' un piano con altri esclusi. Senza esclusi la
+     * codifica e' quella di sempre.
+     */
+    fun of(kind: OpKind, items: List<PlannedItem>, skipped: List<SkippedItem> = emptyList()): PlanHash {
       val bytes = ByteArrayOutputStream()
       DataOutputStream(bytes).use { out ->
         out.writeUTF("mcg-op-plan")
@@ -63,6 +70,15 @@ value class PlanHash(val hex: String) {
           out.writeUTF(item.trashId.orEmpty())
           // R2: per una cartella eliminata, quanti file contiene (contati alla pianificazione): la conferma vale per QUEI numeri.
           out.writeInt(item.contentFiles ?: -1)
+        }
+        if (skipped.isNotEmpty()) {
+          out.writeUTF("skipped")
+          out.writeInt(skipped.size)
+          for (entry in skipped) {
+            out.writeUTF(entry.share)
+            out.writeUTF(entry.path.value)
+            out.writeUTF(entry.reason.code)
+          }
         }
       }
       val digest = MessageDigest.getInstance("SHA-256").digest(bytes.toByteArray())
@@ -117,6 +133,9 @@ enum class SkipReason(override val code: String) : StableCode {
   /** Sarebbe una cartella spostata dentro se stessa. */
   INTO_ITSELF("into_itself"),
   SOURCE_MISSING("source_missing"),
+
+  /** R11: un file che l'utente ha chiesto di lasciare dov'e' (un media nascosto, spostando nell'area comune). */
+  LEFT_BEHIND("left_behind"),
 }
 
 /** Gli avvisi del foglio di conferma. */
@@ -170,7 +189,10 @@ class OpPlan(
   val summary: PlanSummary,
   val warnings: Set<PlanWarning>,
 ) {
-  val hash: PlanHash = PlanHash.of(kind, items)
+  val hash: PlanHash = PlanHash.of(kind, items, skipped)
+
+  /** R11: i file che il piano lascia dov'erano per scelta dell'utente (i nascosti, spostando nell'area comune). */
+  val leftBehind: List<SkippedItem> get() = skipped.filter { it.reason == SkipReason.LEFT_BEHIND }
 
   val requiredConfirmations: Int get() = if (kind.permanent) 2 else 1
 

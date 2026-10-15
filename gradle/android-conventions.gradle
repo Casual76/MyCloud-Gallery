@@ -49,7 +49,9 @@ android {
       // Un test che resta appeso (un'attesa senza tetto sotto carico) non deve bloccare check.ps1 per ore:
       // dopo 20 minuti il task fallisce e dice quale modulo era. Il 14/10 un test di core-nas e' rimasto fermo 67 minuti.
       all {
-        timeout = java.time.Duration.ofMinutes(20)
+        // -PmcgTestTimeoutMinutes=N lo alza per una prova lunga voluta (tools/chaos/area.ps1, la prova delle 500
+        // interruzioni sul NAS vero dura piu' di 20 minuti); il default resta 20.
+        timeout = java.time.Duration.ofMinutes((project.findProperty('mcgTestTimeoutMinutes') ?: '20').toString().toLong())
       }
     }
   }

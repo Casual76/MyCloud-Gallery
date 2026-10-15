@@ -17,6 +17,7 @@ import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -26,7 +27,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
@@ -51,12 +55,18 @@ import dev.pampa.mycloudgallery.feature.nas.R
 import dev.pampa.mycloudgallery.feature.nas.contract.NasArea
 import dev.pampa.mycloudgallery.feature.nas.contract.NasAreaKind
 import dev.pampa.mycloudgallery.feature.nas.contract.areaOf
+import dev.pampa.mycloudgallery.feature.nas.ui.NasSelectDot
 import dev.pampa.mycloudgallery.feature.nas.ui.NasText
 import dev.pampa.mycloudgallery.feature.nas.ui.countText
 
 // I fogli di conferma delle operazioni sul NAS (docs/fase4-progetto.md §2.7 "Regole comuni", D24, Q8): il riepilogo con numero e
 // dimensione ("Spostare 312 elementi, 4,1 GB, in Famiglia / Viaggi?"), le cartelle intere, lo spostamento nell'area comune ("le
 // vedranno tutti i familiari") e "Elimina subito" con doppia conferma e l'avviso sul backup esterno.
+//
+// **I nascosti (R11).** Spostando nell'area comune dei file che l'utente ha nascosto, i familiari li vedrebbero: il foglio lo dice e
+// chiede, con due scelte, "lascia i nascosti dove sono" (quella di partenza, la prudente) o "sposta tutto". Sono **due piani**, non
+// due modi di leggere lo stesso: ognuno ha la sua impronta (il secondo non contiene i nascosti e li elenca fra gli esclusi), e la
+// conferma nasce dal piano scelto in quel momento, quindi non puo' avviare l'altro.
 //
 // **Una conferma nasce da un tocco.** Il foglio e' [ConfirmationSheet] (la macchina a tocchi di core-nasops) avvolta in una
 // composizione; la [UserConfirmation] esce solo dal gestore del pulsante di conferma, dopo il numero di tocchi che il piano chiede (2
@@ -91,10 +101,18 @@ internal data class ConfirmFacts(
   val manyFiles: Boolean get() = PlanWarning.MANY_FILES in warnings
 }
 
+/** Lo spostamento mette nell'area comune cose che stanno altrove ("le vedranno tutti i familiari"): vale anche per la schermata. */
+internal fun movesIntoCommon(plan: OpPlan, areas: List<NasArea>): Boolean {
+  val destShare = plan.summary.destShare ?: return false
+  val destArea = areas.areaOf(destShare)
+  val fromElsewhere = plan.items.any { !it.srcShare.equals(destShare, ignoreCase = true) }
+  return plan.kind == OpKind.MOVE && destArea?.kind == NasAreaKind.COMMON && fromElsewhere
+}
+
 internal fun confirmFacts(plan: OpPlan, areas: List<NasArea>, hidden: Int = 0): ConfirmFacts {
   val summary = plan.summary
   val destArea = summary.destShare?.let { areas.areaOf(it) }
-  val fromElsewhere = summary.destShare != null && plan.items.any { !it.srcShare.equals(summary.destShare, ignoreCase = true) }
+  val intoCommon = movesIntoCommon(plan, areas)
   return ConfirmFacts(
     kind = plan.kind,
     itemCount = summary.itemCount,
@@ -105,12 +123,30 @@ internal fun confirmFacts(plan: OpPlan, areas: List<NasArea>, hidden: Int = 0): 
     destShare = summary.destShare,
     destFolder = summary.destFolder?.components.orEmpty(),
     crossShare = PlanWarning.CROSS_SHARE_COPY in plan.warnings,
-    intoCommon = plan.kind == OpKind.MOVE && destArea?.kind == NasAreaKind.COMMON && fromElsewhere,
+    intoCommon = intoCommon,
     skipped = plan.skipped.groupingBy { it.reason }.eachCount().toList().sortedBy { it.first.ordinal },
     warnings = plan.warnings,
-    hiddenCount = if (plan.kind == OpKind.MOVE && destArea?.kind == NasAreaKind.COMMON && fromElsewhere) hidden.coerceAtLeast(0) else 0,
+    hiddenCount = if (intoCommon) hidden.coerceAtLeast(0) else 0,
   )
 }
+
+/**
+ * R11: la scelta sui nascosti nel foglio di uno spostamento nell'area comune.
+ *
+ * @property count quanti nascosti ci sono fra gli elementi spostati.
+ * @property leave "Lascia i nascosti dove sono" e' la scelta di adesso (quella di partenza: e' la piu' prudente).
+ * @property somethingLeft lasciando i nascosti resta qualcosa da spostare; se no, la scelta c'e' ma non c'e' niente da confermare.
+ */
+internal class HiddenChoice(
+  val count: Int,
+  val leave: Boolean,
+  val somethingLeft: Boolean,
+  val onChange: (Boolean) -> Unit,
+)
+
+/** Cio' che il foglio sta mostrando: il piano, e per i nascosti il piano alternativo che li lascia dove sono. */
+@Immutable
+private class Offer(val plan: OpPlan, val hidden: Int, val leavePlan: OpPlan?)
 
 /** Il nome di un'area per le persone: quello scelto da `:app`, o "La mia area" / "Area comune". */
 @Composable
@@ -136,6 +172,8 @@ internal fun destinationText(facts: ConfirmFacts, areas: List<NasArea>): String 
  * @param plan il piano da confermare; null = il foglio e' chiuso.
  * @param monotonicMs l'orologio monotono con cui si data la conferma (lo stesso con cui `NasOperations.start` la controlla).
  * @param hidden R11: quanti elementi del piano l'utente ha nascosto (per uno spostamento nell'area comune).
+ * @param leavePlan R11: lo stesso spostamento **senza** i nascosti, che restano dove sono; null = lasciandoli non resterebbe niente da
+ *   spostare. Con dei nascosti il foglio offre le due scelte e [onConfirmed] riceve il piano scelto, con la conferma di quel piano.
  */
 @Composable
 internal fun NasConfirmSheet(
@@ -145,45 +183,59 @@ internal fun NasConfirmSheet(
   onConfirmed: (OpPlan, UserConfirmation) -> Unit,
   onDismiss: () -> Unit,
   hidden: Int = 0,
+  leavePlan: OpPlan? = null,
 ) {
   // Il foglio che si chiude fa la sua uscita con il contenuto che aveva, non a vuoto.
-  var shown by remember { mutableStateOf(plan) }
-  if (plan != null && plan !== shown) shown = plan
+  var shown by remember { mutableStateOf(plan?.let { Offer(it, hidden, leavePlan) }) }
+  val current = shown
+  if (plan != null && (current == null || plan !== current.plan || hidden != current.hidden || leavePlan !== current.leavePlan)) {
+    shown = Offer(plan, hidden, leavePlan)
+  }
   val showing = shown
   GalleryConfirmSheet(
     visible = plan != null,
     onDismissRequest = onDismiss,
-    paneTitle = if (showing != null) confirmTitle(showing, last = false) else "",
+    paneTitle = if (showing != null) confirmTitle(showing.plan, last = false) else "",
   ) {
-    if (showing != null) NasConfirmBody(plan = showing, areas = areas, hidden = hidden, monotonicMs = monotonicMs, onConfirmed = onConfirmed, onDismiss = onDismiss)
+    if (showing != null) NasConfirmBody(offer = showing, areas = areas, monotonicMs = monotonicMs, onConfirmed = onConfirmed, onDismiss = onDismiss)
   }
 }
 
 @Composable
 private fun ColumnScope.NasConfirmBody(
-  plan: OpPlan,
+  offer: Offer,
   areas: List<NasArea>,
-  hidden: Int,
   monotonicMs: () -> Long,
   onConfirmed: (OpPlan, UserConfirmation) -> Unit,
   onDismiss: () -> Unit,
 ) {
+  val plan = offer.plan
+  // R11: con dei nascosti da portare nell'area comune si sceglie fra due piani; di partenza quello che li lascia dov'erano.
+  val choosing = remember(plan, areas, offer.hidden) { confirmFacts(plan, areas, offer.hidden).hiddenCount > 0 }
+  var leave by remember(plan, offer.leavePlan) { mutableStateOf(true) }
+  // Il piano che questo foglio confermerebbe adesso: null = lasciando i nascosti non resterebbe niente da spostare.
+  val chosen: OpPlan? = if (choosing && leave) offer.leavePlan else plan
   // R6: il foglio sa quando e' comparso; per "Elimina subito" un tocco troppo vicino (doppio tocco) non conta.
-  val sheet = remember(plan) { ConfirmationSheet(plan, shownAtMonotonicMs = monotonicMs()) }
-  var taps by remember(plan) { mutableIntStateOf(0) }
+  val sheet = remember(chosen) { chosen?.let { ConfirmationSheet(it, shownAtMonotonicMs = monotonicMs()) } }
+  var taps by remember(chosen) { mutableIntStateOf(0) }
   NasConfirmSheetContent(
-    plan = plan,
+    plan = chosen ?: plan,
     areas = areas,
-    hidden = hidden,
+    hidden = if (chosen == null || chosen === plan) offer.hidden else 0,
+    choice = if (choosing) {
+      HiddenChoice(count = offer.hidden, leave = leave, somethingLeft = offer.leavePlan != null, onChange = { leave = it })
+    } else {
+      null
+    },
     tapsDone = taps,
     onConfirm = {
       // L'unico punto del modulo in cui nasce una conferma: un tocco dell'utente sul pulsante di conferma.
-      val confirmation = sheet.tap(monotonicMs())
-      taps = sheet.tapsDone
-      if (confirmation != null) onConfirmed(plan, confirmation)
+      val confirmation = sheet?.tap(monotonicMs())
+      taps = sheet?.tapsDone ?: 0
+      if (confirmation != null && chosen != null) onConfirmed(chosen, confirmation)
     },
     onCancel = {
-      sheet.reset()
+      sheet?.reset()
       taps = 0
       onDismiss()
     },
@@ -203,9 +255,12 @@ internal fun NasConfirmSheetContent(
   onCancel: () -> Unit,
   modifier: Modifier = Modifier,
   hidden: Int = 0,
+  choice: HiddenChoice? = null,
 ) {
   val facts = remember(plan, areas, hidden) { confirmFacts(plan, areas, hidden) }
   val last = tapsDone >= plan.requiredConfirmations - 1
+  // R11: lasciando i nascosti non resta niente da spostare: la scelta si legge, ma il pulsante non ha niente da confermare.
+  val nothingToMove = choice != null && choice.leave && !choice.somethingLeft
   GallerySheetScaffold(
     icon = confirmIcon(facts.kind),
     tone = confirmTone(facts.kind),
@@ -214,12 +269,14 @@ internal fun NasConfirmSheetContent(
     modifier = modifier.widthIn(max = NasDimens.SheetMaxWidth),
     body = {
       SummaryGroup(facts)
-      NotesGroup(facts, last)
+      if (choice != null) HiddenChoiceGroup(choice)
+      NotesGroup(facts, last, hiddenNote = choice == null)
     },
     actions = {
       FluidButton(
-        text = confirmActionLabel(facts, last),
+        text = if (nothingToMove) stringResource(R.string.nas_confirm_action_nothing_to_move) else confirmActionLabel(facts, last),
         onClick = onConfirm,
+        enabled = !nothingToMove,
         style = if (facts.kind == OpKind.TRASH || facts.kind.permanent) FluidButtonStyle.Destructive else FluidButtonStyle.Filled,
         size = FluidButtonSize.Large,
         fillWidth = true,
@@ -332,15 +389,64 @@ private fun skippedText(skipped: List<Pair<SkipReason, Int>>): String = skipped.
         SkipReason.SAME_LOCATION -> R.string.nas_confirm_skipped_same_location
         SkipReason.INTO_ITSELF -> R.string.nas_confirm_skipped_into_itself
         SkipReason.SOURCE_MISSING -> R.string.nas_confirm_skipped_source_missing
+        SkipReason.LEFT_BEHIND -> R.string.nas_confirm_skipped_left_behind
       },
     ),
     NasText.count(count),
   )
 }.joinToString(", ")
 
+/**
+ * R11: le due scelte per i nascosti, due righe da 48 dp con la loro conseguenza scritta sotto, quella scelta con il cerchio pieno. Come la
+ * scelta del luogo nel foglio "Elimina" della Libreria: per una decisione che ha conseguenze e' la forma piu' chiara e piu' facile da toccare.
+ * Prima la scelta prudente, che e' anche quella di partenza.
+ */
+@Composable
+private fun HiddenChoiceGroup(choice: HiddenChoice) {
+  val number = GalleryNumbers.format(choice.count)
+  FluidListGroup {
+    ChoiceRow(
+      title = pluralStringResource(R.plurals.nas_confirm_hidden_leave, choice.count, number),
+      detail = stringResource(if (choice.somethingLeft) R.string.nas_confirm_hidden_leave_detail else R.string.nas_confirm_hidden_leave_nothing),
+      icon = Icons.Rounded.VisibilityOff,
+      tone = FluidTone.Primary,
+      selected = choice.leave,
+      onSelect = { choice.onChange(true) },
+    )
+    FluidListDivider()
+    ChoiceRow(
+      title = pluralStringResource(R.plurals.nas_confirm_hidden_all, choice.count, number),
+      detail = stringResource(R.string.nas_confirm_hidden_all_detail),
+      icon = Icons.Rounded.Group,
+      tone = FluidTone.Warning,
+      selected = !choice.leave,
+      onSelect = { choice.onChange(false) },
+    )
+  }
+}
+
+@Composable
+private fun ChoiceRow(title: String, detail: String, icon: ImageVector, tone: FluidTone, selected: Boolean, onSelect: () -> Unit) {
+  FluidListRow(
+    title = title,
+    subtitle = detail,
+    titleMaxLines = 4,
+    tone = tone,
+    disclosure = false,
+    selected = selected,
+    onClick = onSelect,
+    leading = { Icon(imageVector = icon, contentDescription = null) },
+    badge = { NasSelectDot(selected = selected) },
+    modifier = Modifier.semantics(mergeDescendants = true) {
+      role = Role.RadioButton
+      this.selected = selected
+    },
+  )
+}
+
 /** Cosa succede, una riga per cosa: l'area comune, la copia tra aree, le cartelle intere, il cestino, il backup. */
 @Composable
-private fun NotesGroup(facts: ConfirmFacts, last: Boolean) {
+private fun NotesGroup(facts: ConfirmFacts, last: Boolean, hiddenNote: Boolean = true) {
   val notes = buildList<Note> {
     // R2: molti file in un'eliminazione: per primo, in evidenza (il riepilogo e' la difesa contro la cartella sbagliata).
     if (facts.manyFiles && facts.kind == OpKind.TRASH) {
@@ -362,7 +468,7 @@ private fun NotesGroup(facts: ConfirmFacts, last: Boolean) {
       add(Note(Icons.Rounded.Group, FluidTone.Info, R.string.nas_confirm_common_title, R.string.nas_confirm_common_detail))
     }
     // R11: fra gli elementi che vanno nell'area comune ce ne sono di nascosti dall'utente: i familiari li vedranno.
-    if (facts.hiddenCount > 0) {
+    if (hiddenNote && facts.hiddenCount > 0) {
       add(Note(Icons.Rounded.VisibilityOff, FluidTone.Warning, R.string.nas_confirm_hidden_title, R.string.nas_confirm_hidden_detail, countText(R.plurals.nas_items_count, facts.hiddenCount)))
     }
     if (facts.crossShare) {

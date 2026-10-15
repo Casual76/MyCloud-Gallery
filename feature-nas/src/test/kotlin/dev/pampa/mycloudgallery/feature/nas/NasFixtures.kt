@@ -185,6 +185,23 @@ object NasFixtures {
     warnings = setOf(PlanWarning.CROSS_SHARE_COPY, PlanWarning.FOLDER_INCLUDED) + if (skipped) setOf(PlanWarning.SOME_SKIPPED) else emptySet(),
   )
 
+  /**
+   * R11 (scelta del 15/10): lo stesso spostamento di [moveToCommonPlan] **senza** i due nascosti, che restano dove sono. E' un altro piano:
+   * altri elementi, altri numeri, e gli esclusi nell'impronta.
+   */
+  fun moveToCommonLeavingHiddenPlan(): OpPlan = OpPlan(
+    kind = OpKind.MOVE,
+    items = listOf(
+      item(0, ItemFlow.MOVE_ACROSS_SHARES, "test", "Viaggi/DJI_0142.mp4", "test-comune", "Famiglia/Viaggi/DJI_0142.mp4", false, 200_000_000, trashId(12)),
+    ),
+    skipped = listOf(
+      SkippedItem("test", SharePath.parse("Viaggi/Oslo 2026/IMG_0001.jpg"), SkipReason.LEFT_BEHIND),
+      SkippedItem("test", SharePath.parse("Viaggi/Oslo 2026/IMG_0002.jpg"), SkipReason.LEFT_BEHIND),
+    ),
+    summary = summary(OpKind.MOVE, 310, 4_000_000_000, "test-comune", "Famiglia/Viaggi", folders = 2),
+    warnings = setOf(PlanWarning.CROSS_SHARE_COPY, PlanWarning.FOLDER_INCLUDED, PlanWarning.SOME_SKIPPED),
+  )
+
   /** Spostare dentro la stessa area (una rinomina atomica). */
   fun moveSameAreaPlan(): OpPlan = OpPlan(
     kind = OpKind.MOVE,

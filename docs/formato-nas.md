@@ -1018,10 +1018,31 @@ partono solo da azioni locali confermate**, con tetti per giro. Come la garantis
    Si elimina solo se il file c'e' ancora con la stessa dimensione, sono passati 30 giorni (ora del NAS)
    dall'ora annotata **localmente**, e il giro non ha superato 200 file o 20 GiB (il primo file di un giro
    passa comunque, altrimenti un file da solo oltre il tetto non si eliminerebbe mai); un'ora locale nel
-   futuro blocca tutto. In Fase 4.5 la cancellazione avverra' tramite un handle aperto dopo il controllo
-   della dimensione (niente controllo-poi-uso su due aperture diverse). Un record remoto, vero o finto, non
-   compare tra gli ingressi: un "finto cestino" non fa eliminare nulla. Gli elementi cestinati da un
-   dispositivo che non c'e' piu' non si eliminano mai in automatico.
+   futuro blocca tutto. Un record remoto, vero o finto, non compare tra gli ingressi: un "finto cestino" non
+   fa eliminare nulla. Gli elementi cestinati da un dispositivo che non c'e' piu' non si eliminano mai in
+   automatico.
+
+   **Come e' fatto (4B, P12).** La pulizia e' `NasTrashService.purgeExpired` di `core-nasops`:
+   - gli ingressi sono `nas_trash_entry` (voci `TRASHED` dell'account in uso), il percorso derivato da
+     `TrashPurgePolicy.itemPath` (deve coincidere con quello del diario, altrimenti la voce resta) e l'ora del
+     NAS; i record letti dal NAS non sono nemmeno visibili al codice della pulizia (test sul sorgente);
+   - una voce citata da un'operazione non chiusa (un ripristino o un "elimina subito" in corso) non si tocca;
+   - ferma con congelamento, salto dell'ora (D32, `GateStatus.CLOCK_JUMP`), emergenza o ora non ancorata;
+   - **un solo handle** (`NasFileOps.deleteIfUnchanged`): apertura **esclusiva** con `DELETE` (nessun altro
+     client SMB puo' aprire il file finche' l'handle e' aperto), dimensione letta con una `QUERY_INFO` su
+     quell'handle, poi `FileDispositionInformation` (cancellazione alla chiusura) sullo stesso. Una cartella
+     cestinata (E-D10) si svuota dal fondo: ogni file con la dimensione appena vista, poi le cartelle vuote;
+     un collegamento dentro non si segue e ferma l'eliminazione (la voce resta);
+   - "Elimina subito" (Q8) usa lo stesso percorso, solo per le voci del diario locale, con due conferme.
+
+   **Campi nuovi del record (M5, §5.7)**, scritti dalla 4B: `reason` (`delete` o `move`), `folder` e, solo per
+   le cartelle, `count`. Sono **obbligatori** (nessun record era mai stato scritto): un record senza `reason` o
+   `folder`, con un `reason` sconosciuto, con `count` per un file o senza `count` per una cartella e' rifiutato
+   (`TrashRecord.verify`, `TrashTest`). Per una cartella che non si e' potuta contare (oltre 100.000 file, un
+   errore non di rete) `count` vale 0. Il record si pubblica **prima** della rinomina nel cestino, insieme alla
+   voce del diario locale; senza identita' per firmare (famiglia non pronta) non si scrive e l'elemento compare
+   agli altri "senza record valido". I record propri restano anche dopo la pulizia del file (innocui: un record
+   senza file non si mostra).
 4. **Spostamenti verso l'area comune** (album condivisi, Fase 7): partono solo dalla conferma locale
    "N foto verranno spostate…"; una definizione d'album letta dal NAS non sposta nulla.
 5. **Ripristino dal cestino**: azione locale confermata, percorso validato (§8.1), mai sovrascrivendo.
@@ -1043,6 +1064,26 @@ partono solo da azioni locali confermate**, con tetti per giro. Come la garantis
    dati personali) crea voci del diario. Lo garantiscono: il test di architettura (`Phase4ArchitectureTest` di
    `core-common`: `NasFileOps` solo in `core-nas` e `core-nasops`; chi legge il NAS o mostra la Libreria non vede
    `core-nasops`) e, per ogni operazione, un test "dato remoto ostile → nessuna azione" (P12).
+
+   **Come e' fatto (4B, P12).**
+   - Le primitive (`SmbNasFileOps`, `core-nas/ops`) le consegna **solo** `NasFileOpsFactory` a `core-nasops`
+     (`NasOpsWiring`); `NasSessionManager` non le espone (test per riflessione). Ogni modifica avviene sullo
+     **stesso handle** su cui si e' letto lo stato (`SmbShare.openForChange`): timbro (dimensione, data,
+     `fileId`) controllato prima della rinomina, dimensione prima della cancellazione. Nessuna primitiva di
+     scrittura si ripete da sola dopo una caduta: la risposta persa la riconosce il diario.
+   - Il diario nasce solo da `NasOpsEngine.start` dopo `ConfirmationGate.accept` e `PlanRules`; le voci del
+     cestino solo dall'esecuzione di un elemento del diario. I soli percorsi usati dalle azioni sono quelli del
+     piano confermato e quelli derivati dall'app (temporanei `tmp/<io>-op-<op>-<n>`, cestino `trash/<io>/files/<id>`,
+     nome temporaneo delle maiuscole, nomi alternativi scritti nel diario). Unica lettura che diventa elementi: il
+     contenuto di una cartella che l'utente sposta tra share (figli validi della cartella scelta, collegamenti
+     esclusi), mostrato nel riepilogo e confermato con il piano.
+   - La pulizia dei propri file (`OwnFilesCleaner`, M6) toglie solo cio' che e' proprio per **firma e posto**
+     (teste e prenotazioni verificate con il registro; segmenti giudicati con le ultime 3 teste valide e il diario
+     dei segmenti; temporanei propri non citati dal diario), sempre con `deleteIfUnchanged`.
+   - Prove: un guasto a ogni chiamata al NAS (letture comprese) prima e dopo l'applicazione e la morte del processo
+     a ogni passo per ogni macchina a stati (`EveryCallTest`, `RoomOpsStoreTest`), un NAS ostile attraversato da
+     tutti gli ingressi automatici senza cambiare un byte (`NoRemoteDataToActionTest`), il finto cestino e i record
+     falsi o altrui (`TrashPurgeTest`).
 
 Le operazioni distruttive vere vivranno in moduli e interfacce separate (Fasi 2.4, 4.5, 5, 7), ciascuna con
 il suo diario locale e i suoi test "dato remoto ostile → nessuna azione".

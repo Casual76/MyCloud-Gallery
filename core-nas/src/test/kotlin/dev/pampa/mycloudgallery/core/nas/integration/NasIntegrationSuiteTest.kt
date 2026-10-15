@@ -28,11 +28,20 @@ import dev.pampa.mycloudgallery.core.nas.fs.SmbNasHousekeeping
 import dev.pampa.mycloudgallery.core.nas.fs.SmbServerSideCopy
 import dev.pampa.mycloudgallery.core.nas.fs.SmbShareProbe
 import dev.pampa.mycloudgallery.core.nas.fs.smb
+import dev.pampa.mycloudgallery.core.nas.ops.CopyOutcome
+import dev.pampa.mycloudgallery.core.nas.ops.DeleteOutcome
+import dev.pampa.mycloudgallery.core.nas.ops.NasFileOps
+import dev.pampa.mycloudgallery.core.nas.ops.PublishOutcome
+import dev.pampa.mycloudgallery.core.nas.ops.RenameOutcome
+import dev.pampa.mycloudgallery.core.nas.ops.RmdirOutcome
+import dev.pampa.mycloudgallery.core.nas.ops.SmbNasFileOps
+import dev.pampa.mycloudgallery.core.nas.ops.TempFinish
 import dev.pampa.mycloudgallery.core.nas.runBlockingBounded
 import dev.pampa.mycloudgallery.core.nas.session.MonotonicClock
 import dev.pampa.mycloudgallery.core.nas.session.NasSessionConfig
 import dev.pampa.mycloudgallery.core.nas.session.OpContext
 import dev.pampa.mycloudgallery.core.nas.session.SmbNasSessionManager
+import dev.pampa.mycloudgallery.core.nas.smb.SmbStatusException
 import dev.pampa.mycloudgallery.core.nas.smb.SmbjTransport
 import dev.pampa.mycloudgallery.core.nas.testing.InMemoryBreakerStore
 import dev.pampa.mycloudgallery.core.nas.tools.SmbConnectionTester
@@ -40,7 +49,10 @@ import dev.pampa.mycloudgallery.core.network.contract.NasAddress
 import dev.pampa.mycloudgallery.core.network.contract.Via
 import dev.pampa.mycloudgallery.core.network.testing.FakeNasRouteGate
 import dev.pampa.mycloudgallery.core.security.credentials.NasCredentials
+import dev.pampa.mycloudgallery.core.model.NasStamp
 import dev.pampa.mycloudgallery.core.trust.TrustFormat
+import dev.pampa.mycloudgallery.core.trust.crypto.TrustIds
+import dev.pampa.mycloudgallery.core.trust.nas.NasLayout
 import dev.pampa.mycloudgallery.core.trust.nas.NasRead
 import dev.pampa.mycloudgallery.core.trust.nas.PublishResult
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
@@ -328,6 +340,212 @@ class NasIntegrationSuiteTest {
     assertThat(second.stages.first { it.stage == Stage.AUTHENTICATE }.outcome).isEqualTo(StageOutcome.SKIPPED)
   }
 
+  // --- Fase 4B (P12): le primitive di scrittura di ops/ sul NAS vero, solo sotto mcg-it/<giro>/ (radice delle primitive) -------------
+
+  /** Le primitive con la radice dell'area di prova: `x/y` diventa `mcg-it/<giro>/x/y`, cestino e temporanei compresi. */
+  private val ops: NasFileOps get() = SmbNasFileOps(manager, OPS_DEVICE, area)
+
+  private fun rel(path: String) = SharePath.parse(path)
+
+  private fun full(path: SharePath) = SharePath.of(*(area.components + path.components).toTypedArray())
+
+  /** Scrive un file nell'area di prova (percorso relativo alla radice del giro) e ne restituisce il timbro letto dal NAS. */
+  private suspend fun writeFile(shareName: String, path: SharePath, bytes: ByteArray): NasStamp {
+    op(shareName) { ctx ->
+      FsOps.mkdirs(ctx, full(path).parent())
+      ctx.share.createExclusive(full(path).smb()).use { file ->
+        var offset = 0
+        while (offset < bytes.size) offset += file.write(bytes, offset.toLong(), offset, minOf(MIB, bytes.size - offset))
+        file.flush()
+      }
+    }
+    return media.mediaReader.stat(shareName, full(path), Purpose.BACKGROUND).okOrNull()!!.stamp
+  }
+
+  private fun ms(started: Long) = (System.nanoTime() - started) / 1_000_000.0
+
+  @Test
+  fun t11_primitiveDiRinominaSulNasVero() = runBlockingBounded("t11_primitiveDiRinominaSulNasVero", INTEGRATION_WAIT_SECONDS) {
+    val ops = ops
+    assertThat(ops.mkdirs(share, rel("ops/A/B"), Purpose.BACKGROUND)).isEqualTo(NasResult.Ok(Unit))
+    assertThat(ops.mkdirs(share, rel("ops/a/b"), Purpose.BACKGROUND)).isEqualTo(NasResult.Ok(Unit))
+    val stamp = writeFile(share, rel("ops/A/x.jpg"), ByteArray(4096) { it.toByte() })
+    assertThat(ops.mkdirs(share, rel("ops/A/x.jpg"), Purpose.BACKGROUND).errorOrNull()).isEqualTo(NasError.Exists)
+
+    // Rinomina con il timbro controllato sullo stesso handle: stesso fileId (E-N1), mai sostituire.
+    var started = System.nanoTime()
+    val renamed = ops.rename(share, rel("ops/A/x.jpg"), rel("ops/A/B/y.jpg"), stamp, Purpose.BACKGROUND).okOrNull()
+    val renameMs = ms(started)
+    assertThat(renamed).isInstanceOf(RenameOutcome.Renamed::class.java)
+    assertThat(media.mediaReader.stat(share, full(rel("ops/A/B/y.jpg")), Purpose.BACKGROUND).okOrNull()!!.fileId).isEqualTo(stamp.fileId)
+    writeFile(share, rel("ops/A/B/z.jpg"), byteArrayOf(7))
+    assertThat(ops.rename(share, rel("ops/A/B/y.jpg"), rel("ops/A/B/Z.JPG"), null, Purpose.BACKGROUND).okOrNull()).isEqualTo(RenameOutcome.Collision)
+    assertThat(media.mediaReader.stat(share, full(rel("ops/A/B/z.jpg")), Purpose.BACKGROUND).okOrNull()!!.size).isEqualTo(1)
+    // Il file non e' piu' quello confermato (E-D13, E-N11): niente.
+    val wrong = NasStamp(stamp.size + 1, stamp.modifiedAtMillis, stamp.fileId)
+    assertThat(ops.rename(share, rel("ops/A/B/y.jpg"), rel("ops/A/B/w.jpg"), wrong, Purpose.BACKGROUND).okOrNull()).isInstanceOf(RenameOutcome.SourceChanged::class.java)
+    assertThat(ops.rename(share, rel("ops/A/B/manca.jpg"), rel("ops/A/B/w.jpg"), null, Purpose.BACKGROUND).okOrNull()).isEqualTo(RenameOutcome.SourceMissing)
+    assertThat(ops.rename(share, rel("ops/A/B/y.jpg"), rel("ops/Manca/y.jpg"), null, Purpose.BACKGROUND).errorOrNull()).isEqualTo(NasError.NotFound)
+
+    // E-N13: un file aperto da un altro (qui un nostro handle senza condivisione) = Locked, niente cambia.
+    val holder = op(share) { ctx -> ctx.share.createExclusive(full(rel("ops/A/aperto.jpg")).smb()) }
+    val locked = try {
+      ops.rename(share, rel("ops/A/aperto.jpg"), rel("ops/A/chiuso.jpg"), null, Purpose.BACKGROUND).okOrNull()
+    } finally {
+      holder.close()
+    }
+    assertThat(locked).isEqualTo(RenameOutcome.Locked)
+
+    // E-N7: la rinomina solo di maiuscole il contratto la rifiuta senza richieste; com'e' Samba con un colpo solo?
+    val before = transport.delegateCalls.get()
+    assertThat(ops.rename(share, rel("ops/A/B/y.jpg"), rel("ops/A/B/Y.JPG"), null, Purpose.BACKGROUND).okOrNull()).isEqualTo(RenameOutcome.Collision)
+    assertThat(transport.delegateCalls.get()).isEqualTo(before)
+    val sambaCaseOnly = op(share) { ctx ->
+      ctx.share.openForChange(full(rel("ops/A/B/y.jpg")).smb(), exclusive = false).use { handle ->
+        try {
+          handle.renameNoReplace(full(rel("ops/A/B/Y.jpg")).smb())
+          "accettata (" + (ctx.share.stat(full(rel("ops/A/B/y.jpg")).smb()).name ?: "?") + ")"
+        } catch (e: SmbStatusException) {
+          "rifiutata (0x%08X)".format(Locale.ROOT, e.status)
+        }
+      }
+    }
+    started = System.nanoTime()
+    val dir = ops.rename(share, rel("ops/A/B"), rel("ops/C"), null, Purpose.BACKGROUND).okOrNull()
+    val dirMs = ms(started)
+    assertThat(dir).isInstanceOf(RenameOutcome.Renamed::class.java)
+    report += String.format(
+      Locale.ROOT,
+      "4B rinomina: file %.0f ms (fileId uguale), cartella %.0f ms; collisione, timbro cambiato, sorgente assente, cartella mancante, " +
+        "file aperto=Locked: ok; solo maiuscole in un colpo su Samba: %s",
+      renameMs, dirMs, sambaCaseOnly,
+    )
+  }
+
+  @Test
+  fun t12_spostamentoTraShareConCopiaLatoServerVerificaECestino() = runBlockingBounded("t12_spostamentoTraShareConCopiaLatoServerVerificaECestino", INTEGRATION_WAIT_SECONDS) {
+    val second = credentials.share2
+    assumeTrue("share2 assente: spostamento tra share saltato", second != null)
+    val (written, _) = bigFile()
+    val source = rel("letture/grande.bin")
+    val stamp = media.mediaReader.stat(share, full(source), Purpose.BACKGROUND).okOrNull()!!.stamp
+    val temp = NasLayout.ROOT.child("tmp").child("$OPS_DEVICE-op-it-0")
+    val ops = ops
+    val total = System.nanoTime()
+    // 1. Copia lato server sul temporaneo proprio della destinazione.
+    var started = System.nanoTime()
+    val copied = ops.copyToTemp(share, source, checkNotNull(second), temp, stamp, Purpose.BACKGROUND).okOrNull()
+    val copyMs = ms(started)
+    assertThat(copied).isInstanceOf(CopyOutcome.Copied::class.java)
+    assertThat(ops.copyToTemp(share, source, second, temp, stamp, Purpose.BACKGROUND).okOrNull()).isEqualTo(CopyOutcome.TempExists)
+    // 2. Verifica completa: SHA-256 della copia uguale a quello della sorgente.
+    started = System.nanoTime()
+    val tempFile = media.mediaReader.open(second, full(temp), Purpose.BACKGROUND).okOrNull()!!
+    val tempHash = media.mediaReader.readAll(tempFile, { _, _ -> }).okOrNull()
+    tempFile.close()
+    val verifyMs = ms(started)
+    assertThat(tempHash).isEqualTo(written)
+    // 3. Pubblicazione senza sostituire, creando le cartelle.
+    started = System.nanoTime()
+    assertThat(ops.publishTemp(second, temp, rel("spostati/2026/grande.bin"), Purpose.BACKGROUND).okOrNull()).isInstanceOf(PublishOutcome.Published::class.java)
+    val publishMs = ms(started)
+    assertThat(ops.publishTemp(second, temp, rel("spostati/2026/grande.bin"), Purpose.BACKGROUND).okOrNull()).isEqualTo(PublishOutcome.TempMissing)
+    // 4. La sorgente nel cestino della sua share (Q3), solo se e' ancora quella verificata.
+    val trashId = TrustIds.random()
+    started = System.nanoTime()
+    assertThat(ops.trashMove(share, source, trashId, stamp, Purpose.BACKGROUND).okOrNull()).isInstanceOf(RenameOutcome.Renamed::class.java)
+    val trashMs = ms(started)
+    val totalMs = ms(total)
+    assertThat(media.mediaReader.stat(share, full(source), Purpose.BACKGROUND).okOrNull()).isNull()
+    val trashed = media.mediaReader.stat(share, full(NasLayout.trashItemFile(OPS_DEVICE, trashId)), Purpose.BACKGROUND).okOrNull()!!
+    assertThat(trashed.size).isEqualTo(BIG_BYTES)
+    assertThat(trashed.fileId).isEqualTo(stamp.fileId)
+    assertThat(media.mediaReader.stat(second, full(rel("spostati/2026/grande.bin")), Purpose.BACKGROUND).okOrNull()!!.size).isEqualTo(BIG_BYTES)
+    assertThat(names(second, full(NasLayout.ROOT.child("tmp")))).doesNotContain(temp.name)
+    report += String.format(
+      Locale.ROOT,
+      "4B spostamento tra share (%d MiB): copia lato server %.0f ms (%.0f MB/s), verifica SHA-256 %.0f ms (%.0f MB/s), pubblicazione %.0f ms, " +
+        "sorgente nel cestino %.0f ms; totale %.0f ms; fileId della sorgente conservato nel cestino",
+      BIG_CHUNKS, copyMs, mbps(BIG_BYTES, copyMs), verifyMs, mbps(BIG_BYTES, verifyMs), publishMs, trashMs, totalMs,
+    )
+  }
+
+  @Test
+  fun t13_cestinoEdEliminazioneConUnSoloHandle() = runBlockingBounded("t13_cestinoEdEliminazioneConUnSoloHandle", INTEGRATION_WAIT_SECONDS) {
+    val ops = ops
+    val bytes = ByteArray(MIB) { (it * 13).toByte() }
+    val stamp = writeFile(share, rel("ops/del/a.bin"), bytes)
+    writeFile(share, rel("ops/del/Gita/1.jpg"), byteArrayOf(1))
+    writeFile(share, rel("ops/del/Gita/Mare/2.jpg"), byteArrayOf(2, 2))
+    val fileId = TrustIds.random()
+    val folderId = TrustIds.random()
+    var started = System.nanoTime()
+    assertThat(ops.trashMove(share, rel("ops/del/a.bin"), fileId, stamp, Purpose.BACKGROUND).okOrNull()).isInstanceOf(RenameOutcome.Renamed::class.java)
+    val trashFileMs = ms(started)
+    started = System.nanoTime()
+    assertThat(ops.trashMove(share, rel("ops/del/Gita"), folderId, null, Purpose.BACKGROUND).okOrNull()).isInstanceOf(RenameOutcome.Renamed::class.java)
+    val trashFolderMs = ms(started)
+    val inTrash = NasLayout.trashItemFile(OPS_DEVICE, fileId)
+    // La dimensione si controlla sullo stesso handle della cancellazione: una dimensione diversa non elimina niente.
+    assertThat(ops.deleteIfUnchanged(share, inTrash, MIB + 1L, Purpose.BACKGROUND).okOrNull()).isEqualTo(DeleteOutcome.SizeChanged(MIB.toLong()))
+    assertThat(media.mediaReader.stat(share, full(inTrash), Purpose.BACKGROUND).okOrNull()).isNotNull()
+    started = System.nanoTime()
+    assertThat(ops.deleteIfUnchanged(share, inTrash, MIB.toLong(), Purpose.BACKGROUND).okOrNull()).isEqualTo(DeleteOutcome.Deleted)
+    val deleteMs = ms(started)
+    assertThat(ops.deleteIfUnchanged(share, inTrash, MIB.toLong(), Purpose.BACKGROUND).okOrNull()).isEqualTo(DeleteOutcome.Missing)
+    // La cartella cestinata (E-D10): i file con la dimensione vista, poi le cartelle vuote; mai una cartella piena.
+    val folder = NasLayout.trashItemFile(OPS_DEVICE, folderId)
+    assertThat(ops.rmdirIfEmpty(share, folder, Purpose.BACKGROUND).okOrNull()).isEqualTo(RmdirOutcome.NotEmpty)
+    assertThat(ops.deleteIfUnchanged(share, folder.child("1.jpg"), 1, Purpose.BACKGROUND).okOrNull()).isEqualTo(DeleteOutcome.Deleted)
+    assertThat(ops.deleteIfUnchanged(share, folder.child("Mare").child("2.jpg"), 2, Purpose.BACKGROUND).okOrNull()).isEqualTo(DeleteOutcome.Deleted)
+    assertThat(ops.rmdirIfEmpty(share, folder.child("Mare"), Purpose.BACKGROUND).okOrNull()).isEqualTo(RmdirOutcome.Removed)
+    assertThat(ops.rmdirIfEmpty(share, folder, Purpose.BACKGROUND).okOrNull()).isEqualTo(RmdirOutcome.Removed)
+    // Un media non si elimina mai: errore di programmazione prima di qualunque richiesta.
+    val calls = transport.delegateCalls.get()
+    org.junit.Assert.assertThrows(IllegalArgumentException::class.java) {
+      runBlockingBounded("eliminazione vietata") { ops.deleteIfUnchanged(share, rel("ops/del/x.jpg"), 1, Purpose.BACKGROUND) }
+    }
+    assertThat(transport.delegateCalls.get()).isEqualTo(calls)
+    report += String.format(
+      Locale.ROOT,
+      "4B cestino: file da 1 MiB %.0f ms, cartella intera (una rinomina) %.0f ms; eliminazione con un handle %.0f ms; dimensione diversa = " +
+        "niente eliminato; cartella cestinata svuotata dal fondo",
+      trashFileMs, trashFolderMs, deleteMs,
+    )
+  }
+
+  @Test
+  fun t14_temporaneoScrittoDalTelefonoESpazio() = runBlockingBounded("t14_temporaneoScrittoDalTelefonoESpazio", INTEGRATION_WAIT_SECONDS) {
+    val ops = ops
+    val temp = NasLayout.ROOT.child("tmp").child("$OPS_DEVICE-op-it-1")
+    val writer = ops.openTemp(share, temp, Purpose.BACKGROUND).okOrNull()!!
+    val data = ByteArray(3 * MIB + 17) { (it * 7).toByte() }
+    var offset = 0
+    val started = System.nanoTime()
+    while (offset < data.size) {
+      val n = minOf(256 * 1024, data.size - offset)
+      assertThat(writer.write(offset.toLong(), data, offset, n)).isEqualTo(NasResult.Ok(Unit))
+      offset += n
+    }
+    assertThat(writer.finish(data.size + 1L).okOrNull()).isInstanceOf(TempFinish.SizeMismatch::class.java)
+    assertThat(writer.finish(data.size.toLong()).okOrNull()).isInstanceOf(TempFinish.Complete::class.java)
+    val writeMs = ms(started)
+    writer.close()
+    assertThat(ops.openTemp(share, temp, Purpose.BACKGROUND).errorOrNull()).isEqualTo(NasError.Exists)
+    writeFile(share, rel("ops/tmp/occupato.bin"), byteArrayOf(1))
+    assertThat(ops.publishTemp(share, temp, rel("ops/tmp/occupato.bin"), Purpose.BACKGROUND).okOrNull()).isEqualTo(PublishOutcome.Collision)
+    assertThat(ops.deleteOwnTemp(share, temp, Purpose.BACKGROUND).okOrNull()).isEqualTo(DeleteOutcome.Deleted)
+    assertThat(ops.deleteOwnTemp(share, temp, Purpose.BACKGROUND).okOrNull()).isEqualTo(DeleteOutcome.Missing)
+    val space = ops.space(share, Purpose.INTERACTIVE).okOrNull()!!
+    assertThat(space.totalBytes).isAtLeast(space.freeBytes)
+    report += String.format(
+      Locale.ROOT,
+      "4B temporaneo dal telefono (ripiego E-D12): %d MiB scritti in %.0f ms (%.1f MB/s), lunghezza controllata sullo stesso handle; " +
+        "spazio: totale %.0f GB, libero %.0f GB, quota=%s",
+      data.size / MIB, writeMs, mbps(data.size.toLong(), writeMs), space.totalBytes / 1e9, space.freeBytes / 1e9, space.quotaLimited,
+    )
+  }
+
   private suspend fun <T> op(shareName: String, block: (OpContext) -> T): T =
     when (val result = manager.runOp(shareName, Purpose.BACKGROUND, idempotent = false, touchesDisk = true, op = block)) {
       is NasResult.Ok -> result.value
@@ -367,6 +585,9 @@ class NasIntegrationSuiteTest {
 
     /** L'id di "dispositivo" della suite: 26 caratteri `[0-9a-z]` (da' il nome ai temporanei). */
     private val DEVICE_ID: String = "itest" + RUN_ID.filter { it.isLetterOrDigit() }.lowercase(Locale.ROOT).take(21).padEnd(21, '0')
+
+    /** Il dispositivo delle primitive di scrittura (4B): un id valido (`TrustIds`), proprietario di temporanei e cestino del giro. */
+    private val OPS_DEVICE: String = TrustIds.random()
 
     private val BIG: SharePath get() = SharePath.of(TestAreaGuard.ROOT, RUN_ID, "letture", "grande.bin")
 

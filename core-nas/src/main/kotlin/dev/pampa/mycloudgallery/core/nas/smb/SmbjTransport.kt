@@ -32,6 +32,7 @@ import com.hierynomus.smbj.connection.Connection
 import com.hierynomus.smbj.session.SMB2GuestSigningRequiredException
 import com.hierynomus.smbj.session.Session
 import com.hierynomus.smbj.share.Directory
+import com.hierynomus.smbj.share.DiskEntry
 import com.hierynomus.smbj.share.DiskShare
 import com.hierynomus.smbj.share.File
 import com.hierynomus.smbj.transport.TransportLayerFactory
@@ -296,7 +297,27 @@ private class SmbjShare(override val name: String, private val share: DiskShare,
 
   override fun space(): SmbSpace = guard.io {
     val info = share.shareInformation
-    SmbSpace(callerFreeBytes = info.callerFreeSpace, totalFreeBytes = info.freeSpace)
+    SmbSpace(callerFreeBytes = info.callerFreeSpace, totalFreeBytes = info.freeSpace, totalBytes = info.totalSpace)
+  }
+
+  // Fase 4B (ops/): file o cartella esistenti, aperti con DELETE per rinominarli o cancellarli sullo stesso handle. Nessuna
+  // opzione FILE_(NON_)DIRECTORY_FILE: smbj restituisce File o Directory secondo cio' che c'e'. Lo stato si legge subito sullo
+  // stesso handle (una QUERY_INFO), cosi' il controllo del timbro e la modifica non sono su due aperture diverse.
+  override fun openForChange(path: String, exclusive: Boolean): SmbChangeHandle = guard.io {
+    val entry = share.open(
+      path,
+      EnumSet.of(AccessMask.DELETE, AccessMask.FILE_READ_ATTRIBUTES, AccessMask.SYNCHRONIZE),
+      EnumSet.noneOf(FileAttributes::class.java),
+      if (exclusive) EnumSet.noneOf(SMB2ShareAccess::class.java) else EnumSet.of(SMB2ShareAccess.FILE_SHARE_READ),
+      SMB2CreateDisposition.FILE_OPEN,
+      EnumSet.noneOf(SMB2CreateOptions::class.java),
+    )
+    try {
+      SmbjChangeHandle(entry, entry.getFileInformation(FileAllInformation::class.java).toInfo(), guard)
+    } catch (t: Throwable) {
+      closeQuietly { entry.closeSilently() }
+      throw t
+    }
   }
 
   override fun close() {
@@ -345,6 +366,20 @@ private class SmbjWriteFile(private val file: File, private val guard: ResponseG
 
   override fun close() {
     closeQuietly { file.closeSilently() }
+  }
+}
+
+private class SmbjChangeHandle(
+  private val entry: DiskEntry,
+  override val info: SmbFileInfo,
+  private val guard: ResponseGuard,
+) : SmbChangeHandle {
+  override fun renameNoReplace(newPath: String) = guard.io { entry.rename(newPath, false) }
+
+  override fun deleteOnClose() = guard.io { entry.deleteOnClose() }
+
+  override fun close() {
+    closeQuietly { entry.close() }
   }
 }
 

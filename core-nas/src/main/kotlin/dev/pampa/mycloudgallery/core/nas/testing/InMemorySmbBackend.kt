@@ -9,6 +9,7 @@ import dev.pampa.mycloudgallery.core.nas.smb.DirAccess
 import dev.pampa.mycloudgallery.core.nas.smb.Negotiation
 import dev.pampa.mycloudgallery.core.nas.smb.NtStatus
 import dev.pampa.mycloudgallery.core.nas.smb.SessionFacts
+import dev.pampa.mycloudgallery.core.nas.smb.SmbChangeHandle
 import dev.pampa.mycloudgallery.core.nas.smb.SmbConnection
 import dev.pampa.mycloudgallery.core.nas.smb.SmbConnectionLostException
 import dev.pampa.mycloudgallery.core.nas.smb.SmbCopyChunk
@@ -53,6 +54,9 @@ import kotlinx.coroutines.flow.map
 enum class SimOp {
   CONNECT, AUTHENTICATE, TREE_CONNECT, OPEN_READ, READ, CREATE, WRITE, FLUSH, LENGTH, RENAME, DELETE_ON_CLOSE, MKDIR,
   OPEN_DIRECTORY, LIST_ENTRY, DELETE, SPACE, RESUME_KEY, COPY_CHUNK, STAT, RMDIR,
+
+  /** Fase 4B: apertura di un file o di una cartella esistenti per rinominarli o cancellarli sullo stesso handle. */
+  OPEN_CHANGE,
 }
 
 /** Che cosa fa la TCP verso il simulatore. */
@@ -124,6 +128,9 @@ class InMemorySmbBackend(
 
   /** Spazio libero del volume (tutto il NAS). */
   @Volatile var volumeFreeBytes: Long = 2_420_000_000_000L
+
+  /** Dimensione del volume (Spazio NAS, 4B). */
+  @Volatile var volumeTotalBytes: Long = 3_840_000_000_000L
 
   /** Le prossime N operazioni sulle share falliscono con "Not enough credits". */
   val creditFailures = AtomicInteger(0)
@@ -748,11 +755,71 @@ class InMemorySmbBackend(
       synchronized(lock) {
         val state = state()
         val quotaLeft = state.quotaBytes?.let { (it - state.usedBytes()).coerceAtLeast(0) } ?: volumeFreeBytes
-        SmbSpace(callerFreeBytes = minOf(quotaLeft, volumeFreeBytes), totalFreeBytes = volumeFreeBytes)
+        SmbSpace(callerFreeBytes = minOf(quotaLeft, volumeFreeBytes), totalFreeBytes = volumeFreeBytes, totalBytes = volumeTotalBytes)
       }
     }
 
+    // Fase 4B: un file o una cartella esistenti aperti con DELETE. Un file aperto dal PC (lock) risponde SHARING_VIOLATION
+    // all'apertura, come Samba quando chi l'ha aperto non condivide la cancellazione; per una cartella lo dice la rinomina o la
+    // cancellazione se dentro c'e' un file aperto.
+    override fun openForChange(path: String, exclusive: Boolean): SmbChangeHandle = perform(SimOp.OPEN_CHANGE, path) {
+      requireWrite()
+      val node = synchronized(lock) {
+        val parts = split(path)
+        if (parts.isEmpty()) throw SmbStatusException(NtStatus.ACCESS_DENIED)
+        val found = lookup(state(), parts)
+        if (locks.containsKey(lockKey(name, path))) throw SmbStatusException(NtStatus.SHARING_VIOLATION)
+        found
+      }
+      SimChangeHandle(this, node)
+    }
+
     override fun close() = Unit
+
+    /** La chiave attuale di [node] (dopo eventuali rinomine), o null se non c'e' piu'. Sotto il lucchetto. */
+    private fun keyOf(state: SimShareState, node: Node): String? = state.nodes.entries.firstOrNull { it.value === node }?.key
+
+    /** Un file aperto dal PC dentro la cartella [key] (o la cartella stessa). Sotto il lucchetto. */
+    private fun lockedUnder(key: String): Boolean {
+      val prefix = name.lowercase(Locale.ROOT) + ":"
+      return locks.keys.any { it.startsWith(prefix) && (it.removePrefix(prefix) == key || it.removePrefix(prefix).startsWith("$key/")) }
+    }
+
+    fun renameByHandle(node: Node, newPath: String) = perform(SimOp.RENAME, newPath) {
+      synchronized(lock) {
+        val state = state()
+        val oldKey = keyOf(state, node) ?: throw SmbStatusException(NtStatus.OBJECT_NAME_NOT_FOUND)
+        if (lockedUnder(oldKey)) throw SmbStatusException(NtStatus.SHARING_VIOLATION)
+        val toParts = split(newPath)
+        val toKey = key(toParts)
+        if (toKey == oldKey || toKey.startsWith("$oldKey/")) {
+          // Stesso nome (anche solo per le maiuscole: il chiamante non lo chiede mai) o dentro se stessa.
+          if (toKey == oldKey) throw SmbStatusException(NtStatus.OBJECT_NAME_COLLISION)
+          throw SmbStatusException(NtStatus.INVALID_PARAMETER)
+        }
+        moveLocked(state, oldKey, toParts, nasTime(), outside = false)
+      }
+    }
+
+    fun markDeleteByHandle(node: Node) = perform(SimOp.DELETE_ON_CLOSE, node.displayPath) {
+      synchronized(lock) {
+        val state = state()
+        val k = keyOf(state, node) ?: throw SmbStatusException(NtStatus.OBJECT_NAME_NOT_FOUND)
+        if (lockedUnder(k)) throw SmbStatusException(NtStatus.SHARING_VIOLATION)
+        if (node.isDirectory && state.children(k).isNotEmpty()) throw SmbStatusException(NtStatus.DIRECTORY_NOT_EMPTY)
+      }
+    }
+
+    /** La cancellazione alla chiusura: solo se l'elemento c'e' ancora ed e' ancora vuoto (una cartella). */
+    fun deleteByHandle(node: Node) {
+      synchronized(lock) {
+        val state = state()
+        val k = keyOf(state, node) ?: return
+        if (node.isDirectory && state.children(k).isNotEmpty()) return
+        state.remove(k)
+        state.touchParent(k, nasTime())
+      }
+    }
 
     fun readInto(node: Node, buffer: ByteArray, fileOffset: Long, bufferOffset: Int, length: Int): Int {
       val inFlight = readsInFlight.incrementAndGet()
@@ -899,6 +966,24 @@ class InMemorySmbBackend(
     }
   }
 
+  private inner class SimChangeHandle(private val share: SimShare, private val node: Node) : SmbChangeHandle {
+    @Volatile private var deleteOnClose = false
+
+    override val info: SmbFileInfo = synchronized(lock) { node.info() }
+
+    override fun renameNoReplace(newPath: String) = share.renameByHandle(node, newPath)
+
+    override fun deleteOnClose() {
+      share.markDeleteByHandle(node)
+      deleteOnClose = true
+    }
+
+    override fun close() {
+      // Come Samba: la cancellazione avviene alla chiusura, anche quando l'handle si chiude per la caduta della sessione.
+      if (deleteOnClose) share.deleteByHandle(node)
+    }
+  }
+
   private inner class SimDirectory(private val share: SimShare, private val entries: List<Node>, private val truncate: Int?) : SmbDirectory {
     override fun entries(): Iterator<SmbDirEntry> {
       val inner = entries.iterator()
@@ -1003,7 +1088,7 @@ class InMemorySmbBackend(
     /** Le operazioni che toccano i dischi (il risveglio dallo standby, E-R1). */
     val DISK_OPS: Set<SimOp> = setOf(
       SimOp.OPEN_READ, SimOp.READ, SimOp.CREATE, SimOp.WRITE, SimOp.RENAME, SimOp.MKDIR, SimOp.OPEN_DIRECTORY,
-      SimOp.DELETE, SimOp.COPY_CHUNK, SimOp.STAT, SimOp.RMDIR,
+      SimOp.DELETE, SimOp.COPY_CHUNK, SimOp.STAT, SimOp.RMDIR, SimOp.OPEN_CHANGE,
     )
 
     fun split(path: String): List<String> = path.split('\\', '/').filter { it.isNotEmpty() }

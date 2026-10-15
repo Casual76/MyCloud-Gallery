@@ -17,11 +17,27 @@ import dev.pampa.mycloudgallery.core.trust.registry.DeviceTrust
 import dev.pampa.mycloudgallery.core.trust.registry.RegistryState
 import dev.pampa.mycloudgallery.core.trust.registry.ShareNames
 import dev.pampa.mycloudgallery.core.trust.verdictOf
+import dev.pampa.mycloudgallery.core.trust.violation
+
+/** Perche' un elemento e' nel cestino (formato §5.7, M5): eliminato dall'utente o sorgente di uno spostamento tra share (Q3). */
+enum class TrashRecordReason(val wire: String) {
+  DELETE("delete"),
+  MOVE("move"),
+  ;
+
+  companion object {
+    fun fromWire(wire: String): TrashRecordReason? = entries.firstOrNull { it.wire == wire }
+  }
+}
 
 /**
- * Il record firmato di un file messo nel cestino del NAS (`docs/formato-nas.md` §5.6). Serve a mostrare
+ * Il record firmato di un file messo nel cestino del NAS (`docs/formato-nas.md` §5.7). Serve a mostrare
  * "Eliminati di recente" sugli altri dispositivi e a sapere dove ripristinare. NON serve a decidere la
  * cancellazione definitiva: quella la decide [TrashPurgePolicy] dal diario LOCALE di chi ha cestinato.
+ *
+ * Campi della Fase 4 (M5, P12): [reason], [folder] e, solo per le cartelle, [count] (quanti file conteneva); [size] di una
+ * cartella e' la somma dei suoi file. Sono obbligatori nel formato (nessun record del cestino era mai stato scritto prima):
+ * un record senza `reason` o `folder`, con `count` per un file o senza `count` per una cartella, e' malformato.
  */
 data class TrashRecord(
   val familyId: String,
@@ -32,28 +48,33 @@ data class TrashRecord(
   val originalPath: SharePath,
   val size: Long,
   val trashedAt: Long,
+  val reason: TrashRecordReason = TrashRecordReason.DELETE,
+  val folder: Boolean = false,
+  val count: Int? = null,
 ) {
   init {
     ensure(TrustIds.isValid(familyId) && TrustIds.isValid(deviceId) && TrustIds.isValid(trashId), RejectReason.INVALID_FIELD, "cestino: id")
     ShareNames.check(share)
     ensure(size >= 0, RejectReason.INVALID_FIELD, "cestino: dimensione")
+    ensure(folder == (count != null), RejectReason.INVALID_FIELD, "cestino: count solo per le cartelle")
+    ensure(count == null || count >= 0, RejectReason.INVALID_FIELD, "cestino: count negativo")
   }
 
   fun sign(signer: Signer): ByteArray {
     require(TrustIds.deviceIdOf(signer.publicKey) == deviceId) { "Il record va firmato da chi ha cestinato." }
-    return Envelope.seal(
-      DocType.TRASH_RECORD,
-      jsonObject(
-        "family" to familyId.json(),
-        "device" to deviceId.json(),
-        "share" to share.json(),
-        "trashId" to trashId.json(),
-        "originalPath" to originalPath.value.json(),
-        "size" to size.json(),
-        "trashedAt" to trashedAt.json(),
-      ),
-      signer,
+    val members = arrayListOf(
+      "family" to familyId.json(),
+      "device" to deviceId.json(),
+      "share" to share.json(),
+      "trashId" to trashId.json(),
+      "originalPath" to originalPath.value.json(),
+      "size" to size.json(),
+      "trashedAt" to trashedAt.json(),
+      "reason" to reason.wire.json(),
+      "folder" to folder.json(),
     )
+    count?.let { members += "count" to it.toLong().json() }
+    return Envelope.seal(DocType.TRASH_RECORD, jsonObject(*members.toTypedArray()), signer)
   }
 
   companion object {
@@ -63,14 +84,27 @@ data class TrashRecord(
       val signed = trust.open(bytes, DocType.TRASH_RECORD)
       val record = Fields.read(signed.envelope.payloadJson()) { f ->
         trust.checkCommon(f, signed)
+        // Nell'ordine del formato: il percorso ostile si riconosce prima dei campi nuovi.
+        val share = f.string("share", TrustLimits.MAX_SHARE_NAME_CHARS)
+        val id = f.string("trashId", TrustIds.LENGTH)
+        val originalPath = SharePath.parseMediaPath(f.string("originalPath", TrustLimits.MAX_PATH_UTF8_BYTES))
+        val size = f.long("size", 0..Long.MAX_VALUE)
+        val trashedAt = f.time("trashedAt")
+        val reason = TrashRecordReason.fromWire(f.string("reason", TrustLimits.MAX_ENUM_CHARS))
+          ?: violation(RejectReason.INVALID_FIELD, "cestino: reason sconosciuto")
+        val folder = f.bool("folder")
         TrashRecord(
           familyId = registry.registry.familyId,
           deviceId = signed.signer.id,
-          share = f.string("share", TrustLimits.MAX_SHARE_NAME_CHARS),
-          trashId = f.string("trashId", TrustIds.LENGTH),
-          originalPath = SharePath.parseMediaPath(f.string("originalPath", TrustLimits.MAX_PATH_UTF8_BYTES)),
-          size = f.long("size", 0..Long.MAX_VALUE),
-          trashedAt = f.time("trashedAt"),
+          share = share,
+          trashId = id,
+          originalPath = originalPath,
+          size = size,
+          trashedAt = trashedAt,
+          reason = reason,
+          folder = folder,
+          // Solo per le cartelle: per un file il campo non c'e' (e se c'e', `Fields.end` lo rifiuta come sconosciuto).
+          count = if (folder) f.long("count", 0..Int.MAX_VALUE.toLong()).toInt() else null,
         )
       }
       ensure(

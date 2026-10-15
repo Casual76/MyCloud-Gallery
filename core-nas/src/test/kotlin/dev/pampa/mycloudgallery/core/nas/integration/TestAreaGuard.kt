@@ -10,6 +10,7 @@ import dev.pampa.mycloudgallery.core.nas.contract.NasResult
 import dev.pampa.mycloudgallery.core.nas.contract.Purpose
 import dev.pampa.mycloudgallery.core.nas.contract.ServerCopy
 import dev.pampa.mycloudgallery.core.nas.smb.DirAccess
+import dev.pampa.mycloudgallery.core.nas.smb.SmbChangeHandle
 import dev.pampa.mycloudgallery.core.nas.smb.SmbConnection
 import dev.pampa.mycloudgallery.core.nas.smb.SmbCopyChunk
 import dev.pampa.mycloudgallery.core.nas.smb.SmbDirectory
@@ -179,7 +180,7 @@ internal class TestAreaGuard private constructor(
 }
 
 /** Che cosa fa una chiamata del trasporto su un percorso (per [TestAreaGuard.checkSmb]). */
-internal enum class SmbAccess { OPEN_READ, CREATE, MKDIR, LIST, ADD_FILE, STAT, DELETE, RMDIR, RENAME, SPACE }
+internal enum class SmbAccess { OPEN_READ, CREATE, MKDIR, LIST, ADD_FILE, STAT, DELETE, RMDIR, RENAME, SPACE, CHANGE }
 
 /**
  * Il trasporto SMB dietro la guardia: ogni account, share e percorso passa da [guard] **prima** della chiamata al
@@ -268,7 +269,23 @@ internal class TestAreaTransport(private val delegate: SmbTransport, private val
 
     override fun space(): SmbSpace = call { inner.space() }
 
+    // Fase 4B: un file o una cartella esistenti aperti per cambiarli (rinomina o cancellazione sullo stesso handle). Il percorso
+    // di partenza e quello d'arrivo passano entrambi dalla guardia prima della chiamata.
+    override fun openForChange(path: String, exclusive: Boolean): SmbChangeHandle {
+      check(path, SmbAccess.CHANGE)
+      return ChangeHandle(call { inner.openForChange(path, exclusive) })
+    }
+
     override fun close() = inner.close()
+
+    private inner class ChangeHandle(private val handle: SmbChangeHandle) : SmbChangeHandle by handle {
+      override fun renameNoReplace(newPath: String) {
+        check(newPath, SmbAccess.RENAME)
+        call { handle.renameNoReplace(newPath) }
+      }
+
+      override fun deleteOnClose() = call { handle.deleteOnClose() }
+    }
 
     private inner class WriteFile(private val file: SmbWriteFile) : SmbWriteFile by file {
       override fun renameNoReplace(newPath: String) {

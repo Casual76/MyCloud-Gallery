@@ -10,6 +10,7 @@ import dev.pampa.mycloudgallery.core.nas.contract.Purpose
 import dev.pampa.mycloudgallery.core.nas.contract.ServerCopy
 import dev.pampa.mycloudgallery.core.nas.runBlockingBounded
 import dev.pampa.mycloudgallery.core.nas.smb.DirAccess
+import dev.pampa.mycloudgallery.core.nas.smb.SmbChangeHandle
 import dev.pampa.mycloudgallery.core.nas.smb.SmbConnection
 import dev.pampa.mycloudgallery.core.nas.smb.SmbCopyChunk
 import dev.pampa.mycloudgallery.core.nas.smb.SmbDirectory
@@ -107,6 +108,7 @@ internal object TestAreaSelfTest {
       expectRefused("trasporto cancella '$path'") { wrapped.deleteFile(path) }
       expectRefused("trasporto elenca '$path'") { wrapped.openDirectory(path, DirAccess.LIST) }
       expectRefused("trasporto stato '$path'") { wrapped.stat(path) }
+      expectRefused("trasporto apre per cambiare '$path'") { wrapped.openForChange(path, exclusive = true) }
     }
     expectRefused("trasporto toglie mcg-it non creata da noi") { wrapped.removeEmptyDirectory(TestAreaGuard.ROOT) }
     expectRefused("trasporto cancella mcg-it") { wrapped.deleteFile(TestAreaGuard.ROOT) }
@@ -115,8 +117,13 @@ internal object TestAreaSelfTest {
     val created = wrapped.createExclusive("$smbArea\\dentro.tmp")
     expectRefused("rinomina verso fuori") { created.renameNoReplace("fuori.jpg") }
     expectRefused("rinomina verso NAS") { created.renameNoReplace("..\\..\\fuori.jpg") }
-    if (dummy.calls.get() != 1) failures += "chiamate passate dal trasporto: ${dummy.calls.get() - 1} oltre alla creazione ammessa"
-    if (transport.delegateCalls.get() != 1) failures += "contatore del trasporto: ${transport.delegateCalls.get()}"
+    // 4B: un file dell'area aperto per cambiarlo (seconda chiamata ammessa) non si rinomina fuori dall'area.
+    val opened = wrapped.openForChange("$smbArea\\dentro.tmp", exclusive = false)
+    expectRefused("rinomina con l'handle verso fuori") { opened.renameNoReplace("fuori.jpg") }
+    expectRefused("rinomina con l'handle verso mcg-it") { opened.renameNoReplace("${TestAreaGuard.ROOT}\\fuori.jpg") }
+    expectRefused("rinomina con l'handle verso un giro vecchio") { opened.renameNoReplace("${TestAreaGuard.ROOT}\\20200101-000000-00000000\\x") }
+    if (dummy.calls.get() != 2) failures += "chiamate passate dal trasporto: ${dummy.calls.get() - 2} oltre alle due ammesse"
+    if (transport.delegateCalls.get() != 2) failures += "contatore del trasporto: ${transport.delegateCalls.get()}"
     return Result(failures, cases)
   }
 
@@ -167,6 +174,20 @@ internal object TestAreaSelfTest {
     override fun deleteFile(path: String) = count()
 
     override fun space(): SmbSpace = count()
+
+    /** Ammessa una sola volta (l'apertura dentro l'area per provare la rinomina verso fuori); tutto il resto conta e fallisce. */
+    override fun openForChange(path: String, exclusive: Boolean): SmbChangeHandle {
+      calls.incrementAndGet()
+      return object : SmbChangeHandle {
+        override val info: SmbFileInfo get() = count()
+
+        override fun renameNoReplace(newPath: String) = count()
+
+        override fun deleteOnClose() = count()
+
+        override fun close() = Unit
+      }
+    }
 
     override fun close() = Unit
   }

@@ -33,6 +33,15 @@ android {
   kotlinOptions {
     freeCompilerArgs += ['-opt-in=dev.pampa.mycloudgallery.core.nas.ops.DestructiveNasAccess']
   }
+
+  // Le prove contro l'area di prova del NAS vero (banco delle interruzioni di P15) solo con -PnasIntegration, come in core-nas; e un heap
+  // piu' largo per i file grandi del banco (chaos.bigFileMb).
+  testOptions {
+    unitTests.all { test ->
+      test.systemProperty('nasIntegration', project.hasProperty('nasIntegration') ? 'true' : 'false')
+      test.maxHeapSize = '1536m'
+    }
+  }
 }
 
 dependencies {
@@ -42,7 +51,14 @@ dependencies {
   api project(':core-trust')
 
   implementation project(':core-nas')
+  // P12: il diario su Room (`nas_op`, `nas_op_item`, `nas_trash_entry`, NasOpsDao) e la compattazione dell'indice con la pulizia
+  // dei propri file (Compactor, IndexPublishStore). Entrambi nel grafo del §1.1.
+  implementation project(':core-database')
+  implementation project(':core-index')
 
   testImplementation appDeps.coroutinesTest
   testImplementation appDeps.turbine
+  // Il diario Room vero in memoria (RoomOpsStore) e la morte del processo sul database.
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
 }

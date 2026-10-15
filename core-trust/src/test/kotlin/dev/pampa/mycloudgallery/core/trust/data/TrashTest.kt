@@ -45,6 +45,44 @@ class TrashTest {
     }
   }
 
+  /** M5 (Fase 4B, P12): `reason`, `folder` e, solo per le cartelle, `count`; obbligatori e stretti. */
+  @Test
+  fun iCampiNuoviFannoIlGiroESonoStretti() {
+    val folder = TrashRecord(
+      family.familyId, phone.deviceId, "Public", trashId, SharePath.parse("Gita"), 4096, family.clock.now,
+      reason = TrashRecordReason.DELETE, folder = true, count = 12,
+    )
+    assertThat(TrashRecord.verify(folder.sign(phone), family.state, "Public", phone.deviceId, trashId).acceptedOrNull()).isEqualTo(folder)
+    val moved = TrashRecord(
+      family.familyId, phone.deviceId, "Public", trashId, SharePath.parse("Foto/a.jpg"), 10, family.clock.now, reason = TrashRecordReason.MOVE,
+    )
+    assertThat(TrashRecord.verify(moved.sign(phone), family.state, "Public", phone.deviceId, trashId).acceptedOrNull()).isEqualTo(moved)
+
+    fun payload(vararg extra: Pair<String, dev.pampa.mycloudgallery.core.trust.codec.JsonValue>) = Envelope.seal(
+      DocType.TRASH_RECORD,
+      jsonObject(
+        "family" to family.familyId.json(),
+        "device" to phone.deviceId.json(),
+        "share" to "Public".json(),
+        "trashId" to trashId.json(),
+        "originalPath" to "Foto/a.jpg".json(),
+        "size" to 1.json(),
+        "trashedAt" to family.clock.now.json(),
+        *extra,
+      ),
+      phone,
+    )
+    fun verdict(bytes: ByteArray) = TrashRecord.verify(bytes, family.state, "Public", phone.deviceId, trashId).rejectionOrNull()
+    // Senza i campi nuovi, con un motivo sconosciuto, con count per un file o senza count per una cartella: rifiutato.
+    assertThat(verdict(payload())).isEqualTo(RejectReason.MALFORMED)
+    assertThat(verdict(payload("reason" to "delete".json()))).isEqualTo(RejectReason.MALFORMED)
+    assertThat(verdict(payload("reason" to "purge".json(), "folder" to false.json()))).isEqualTo(RejectReason.INVALID_FIELD)
+    assertThat(verdict(payload("reason" to "delete".json(), "folder" to false.json(), "count" to 3.json()))).isEqualTo(RejectReason.MALFORMED)
+    assertThat(verdict(payload("reason" to "delete".json(), "folder" to true.json()))).isEqualTo(RejectReason.MALFORMED)
+    assertThat(verdict(payload("reason" to "move".json(), "folder" to true.json(), "count" to (-1).json()))).isEqualTo(RejectReason.INVALID_FIELD)
+    assertThat(verdict(payload("reason" to "move".json(), "folder" to false.json()))).isNull()
+  }
+
   @Test
   fun unRecordRemotoDaSoloNonFaEliminareNulla() {
     // Finto cestino: un record valido (anche firmato da un dispositivo approvato) non e' un'azione locale.

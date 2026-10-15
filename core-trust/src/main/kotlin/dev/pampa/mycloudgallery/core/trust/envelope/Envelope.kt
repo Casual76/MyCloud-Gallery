@@ -41,6 +41,12 @@ enum class DocType(val code: Int, val maxPayload: Int) {
   DEVICE_STATUS(8, TrustLimits.MAX_DEVICE_STATUS_PAYLOAD),
   ;
 
+  /**
+   * Il tetto di un file firmato di questo tipo (busta + contenuto + firma): quanto leggere al massimo dal NAS prima di
+   * verificarlo. Aggiunta della Fase 4B (P12, pulizia dei propri file): la busta resta interna.
+   */
+  val maxFileBytes: Int get() = Envelope.maxFileBytes(this)
+
   companion object {
     fun fromCode(code: Int): DocType? = entries.firstOrNull { it.code == code }
   }

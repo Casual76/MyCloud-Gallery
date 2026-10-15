@@ -154,8 +154,38 @@ class SmbFileInfo(
   override fun toString(): String = "SmbFileInfo(dir=$isDirectory, size=$size)"
 }
 
-/** Spazio libero visto dal NAS (`FileFsFullSizeInformation`): per l'utente (quota) e per tutto il volume. */
-class SmbSpace(val callerFreeBytes: Long, val totalFreeBytes: Long)
+/**
+ * Spazio libero visto dal NAS (`FileFsFullSizeInformation`): per l'utente (quota) e per tutto il volume.
+ *
+ * @property totalBytes la dimensione del volume (Fase 4B, Spazio NAS), se il trasporto la riporta.
+ */
+class SmbSpace(val callerFreeBytes: Long, val totalFreeBytes: Long, val totalBytes: Long? = null)
+
+/**
+ * Un file o una cartella **esistenti** aperti per cambiarli (Fase 4B, solo `ops/`): `CREATE` con `FILE_OPEN` e il diritto
+ * `DELETE`, lo stato letto **sullo stesso handle** ([info]), poi una rinomina senza sostituire o la cancellazione alla
+ * chiusura, sempre su questo handle (nessun controllo-poi-uso su due aperture diverse, formato §9.3, revisione B7).
+ *
+ * Se il file e' aperto da un altro programma senza condividere la cancellazione (il PC), l'apertura risponde
+ * `SHARING_VIOLATION` (E-N13).
+ */
+interface SmbChangeHandle : Closeable {
+  /** Lo stato all'apertura, letto su questo handle (`FileAllInformation`). */
+  val info: SmbFileInfo
+
+  /** Rinomina senza mai sostituire: `0xC0000035` se la destinazione esiste (anche con maiuscole diverse). */
+  @Throws(IOException::class)
+  fun renameNoReplace(newPath: String)
+
+  /**
+   * L'elemento sparira' alla chiusura dell'handle (`FileDispositionInformation`). Per una cartella non vuota il server
+   * risponde `0xC0000101` subito.
+   */
+  @Throws(IOException::class)
+  fun deleteOnClose()
+
+  override fun close()
+}
 
 /**
  * Una share connessa. I percorsi sono relativi alla radice della share, con `\` come separatore e `""` per la
@@ -201,9 +231,20 @@ interface SmbShare : Closeable {
   @Throws(IOException::class)
   fun deleteFile(path: String)
 
-  /** Spazio libero. Tocca i dischi: si chiama solo dopo un `DISK_FULL` (§3.4). */
+  /** Spazio libero. Tocca i dischi: si chiama solo dopo un `DISK_FULL` (§3.4) o su richiesta dell'utente (Spazio NAS, 4B). */
   @Throws(IOException::class)
   fun space(): SmbSpace
+
+  /**
+   * Fase 4B, solo per le primitive di scrittura (`ops/SmbNasFileOps`): apre il file o la cartella **esistente** [path] per
+   * rinominarlo o cancellarlo sullo stesso handle ([SmbChangeHandle]). Con [exclusive] nessun altro lo puo' aprire finche'
+   * l'handle e' aperto (cancellazione con il controllo della dimensione). `0xC0000034`/`0xC000003A` se non c'e',
+   * `0xC0000043` se e' aperto da un altro programma.
+   *
+   * Di default non c'e' (`NOT_SUPPORTED`): un trasporto che non la implementa non cambia niente.
+   */
+  @Throws(IOException::class)
+  fun openForChange(path: String, exclusive: Boolean): SmbChangeHandle = throw SmbStatusException(NtStatus.NOT_SUPPORTED)
 
   override fun close()
 }

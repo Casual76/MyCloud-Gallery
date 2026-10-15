@@ -11,6 +11,7 @@ import dev.pampa.mycloudgallery.core.nasops.contract.PurgeStop
 import dev.pampa.mycloudgallery.core.nasops.contract.TrashEntryState
 import dev.pampa.mycloudgallery.core.nasops.contract.TrashReason
 import dev.pampa.mycloudgallery.core.nasops.contract.TrashRestoreRef
+import dev.pampa.mycloudgallery.core.nasops.testing.KitEngine
 import dev.pampa.mycloudgallery.core.nasops.testing.NasOpsTestKit
 import dev.pampa.mycloudgallery.core.nasops.testing.RemoteTrashRecord
 import dev.pampa.mycloudgallery.core.trust.TrustLimits
@@ -25,9 +26,12 @@ import org.junit.Test
  * La pulizia del cestino (E-D4, F20) e i dati remoti ostili (E-S11, C10): nessun record, vero o finto, letto dal NAS fa eliminare o
  * spostare niente. Le uniche cose che partono sono la richiesta confermata dall'utente e la scadenza dal diario **locale**.
  */
-class TrashAndHostileDataTest {
+open class TrashAndHostileDataTest {
 
-  private val kit = NasOpsTestKit()
+  /** L'esecutore provato: quello di riferimento (P0-B) qui, quello vero (P12) in [ProductionTrashAndHostileDataTest]. */
+  protected open fun engine(): KitEngine = KitEngine.REFERENCE
+
+  private val kit = NasOpsTestKit(engine = engine())
   private val a = byteArrayOf(1, 2, 3, 4)
   private val day = 24L * 60 * 60 * 1000
 

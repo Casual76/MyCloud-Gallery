@@ -21,6 +21,7 @@ import dev.pampa.mycloudgallery.core.trust.registry.DeviceTrust
 import dev.pampa.mycloudgallery.core.trust.registry.RegistryState
 import dev.pampa.mycloudgallery.core.trust.registry.ShareNames
 import dev.pampa.mycloudgallery.core.trust.verdictOf
+import dev.pampa.mycloudgallery.core.trust.violation
 
 /**
  * Una prenotazione (`docs/formato-nas.md` §6.2): "sto lavorando su [resource] fino a acquiredAt +
@@ -197,5 +198,29 @@ object Leases {
       "prenotazione: non corrisponde al posto in cui si trova",
     )
     lease
+  }
+
+  /**
+   * Come [verify], per chi trova la prenotazione **dal posto** (`leases/<impronta della risorsa>/<gruppo>/<generazione>`) e non
+   * conosce la risorsa in chiaro: la risorsa si legge dal contenuto firmato e deve avere esattamente l'impronta [resourceName]
+   * della cartella. Aggiunta della Fase 4B (P12, pulizia dei propri file, M6): nessuna decisione qui, solo la verifica.
+   */
+  fun verifyAt(bytes: ByteArray, registry: RegistryState, share: String, resourceName: String, generation: Long): Verdict<Lease> = verdictOf {
+    val trust = DeviceTrust(registry)
+    val signed = trust.open(bytes, DocType.LEASE)
+    val resource = Fields.read(signed.envelope.payloadJson()) { f ->
+      f.string("family", TrustIds.LENGTH)
+      f.string("device", TrustIds.LENGTH)
+      f.string("share", TrustLimits.MAX_SHARE_NAME_CHARS)
+      f.long("generation", 1..TrustLimits.MAX_VERSION)
+      f.time("acquiredAt")
+      f.long("durationMillis", 0..Long.MAX_VALUE)
+      f.string("resource", TrustLimits.MAX_RESOURCE_KEY_CHARS)
+    }
+    ensure(NasLayout.resourceName(resource) == resourceName, RejectReason.WRONG_LOCATION, "prenotazione: risorsa di un'altra cartella")
+    when (val verdict = verify(bytes, registry, share, resource, generation)) {
+      is Verdict.Accepted -> verdict.value
+      is Verdict.Rejected -> violation(verdict.reason, "prenotazione rifiutata")
+    }
   }
 }

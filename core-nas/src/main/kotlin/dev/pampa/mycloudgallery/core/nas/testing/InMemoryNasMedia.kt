@@ -26,7 +26,11 @@ import dev.pampa.mycloudgallery.core.nas.ops.RmdirOutcome
 import dev.pampa.mycloudgallery.core.nas.ops.TempFinish
 import dev.pampa.mycloudgallery.core.nas.session.SmbErrors
 import dev.pampa.mycloudgallery.core.trust.crypto.TrustIds
+import dev.pampa.mycloudgallery.core.trust.nas.NasFileSystem
 import dev.pampa.mycloudgallery.core.trust.nas.NasLayout
+import dev.pampa.mycloudgallery.core.trust.nas.NasListing
+import dev.pampa.mycloudgallery.core.trust.nas.NasRead
+import dev.pampa.mycloudgallery.core.trust.nas.PublishResult
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import java.security.MessageDigest
 import java.util.Locale
@@ -288,6 +292,53 @@ class InMemoryNasMedia(
   /** Il lettore dei media sopra questo NAS. */
   val reader: NasMediaReader = Reader()
 
+  /**
+   * Fase 4B (P12): la share [share] vista da `core-trust` (`NasFileSystem`: elenco, lettura, pubblicazione esclusiva) sopra gli
+   * **stessi** file: i record firmati del cestino scritti dall'app finiscono accanto ai file cestinati. [failWith] vale anche qui.
+   */
+  fun fileSystem(share: String): NasFileSystem = object : NasFileSystem {
+    override val shareName: String = share
+
+    private fun failIfRequested() {
+      failWith?.let { throw NasIoException(it) }
+    }
+
+    override fun list(dir: SharePath, limit: Int): NasListing {
+      failIfRequested()
+      val names = synchronized(lock) {
+        val state = shares[key(share)] ?: throw NasIoException(NasError.ShareMissing(share))
+        val prefix = key(dir.components) + "/"
+        state.nodes.entries.filter { (k, _) -> k.startsWith(prefix) && '/' !in k.removePrefix(prefix) }.map { it.value.displayName }
+      }
+      return NasListing(names.take(limit), truncated = names.size > limit)
+    }
+
+    override fun read(path: SharePath, maxBytes: Int): NasRead {
+      failIfRequested()
+      val node = synchronized(lock) {
+        val state = shares[key(share)] ?: throw NasIoException(NasError.ShareMissing(share))
+        node(state, path.components)
+      } ?: return NasRead.NotFound
+      if (node.isDirectory) return NasRead.NotFound
+      if (node.content.size > maxBytes) return NasRead.TooLarge
+      return NasRead.Data(ByteArray(node.content.size.toInt()).also { node.content.copy(0, it, 0, it.size) })
+    }
+
+    override fun publishExclusive(path: SharePath, bytes: ByteArray): PublishResult {
+      failIfRequested()
+      return synchronized(lock) {
+        val state = shares[key(share)] ?: throw NasIoException(NasError.ShareMissing(share))
+        if (state.nodes.containsKey(key(path.components))) return@synchronized PublishResult.ALREADY_EXISTS
+        val now = nasNow()
+        ensureDirs(state, path.components.dropLast(1), now)
+        state.nodes[key(path.components)] =
+          Node(path.name, false, NasContent.of(bytes), now, now, nextFileId.incrementAndGet(), NasAttributes.ARCHIVE)
+        touchParent(state, path.components, now)
+        PublishResult.CREATED
+      }
+    }
+  }
+
   /** La copia lato server (fra share di questo NAS, nuovo `fileId`, mai sovrascrivendo). */
   val serverCopy: ServerCopy = object : ServerCopy {
     override suspend fun copy(fromShare: String, from: SharePath, toShare: String, to: SharePath): NasResult<Long> {
@@ -319,6 +370,23 @@ class InMemoryNasMedia(
 
   /** Il piano dei guasti delle operazioni di scrittura (stessa semantica di `InMemorySmbBackend.faults`). */
   @Volatile var opsFaults: FaultPlan? = null
+
+  /**
+   * Fase 4B (P12): il piano dei guasti delle **letture** (elenco, stato, apertura, ogni blocco letto), con la stessa semantica (prima o
+   * dopo: per una lettura e' la risposta persa). Con lo stesso [FaultPlan] di [opsFaults] le chiamate si contano tutte insieme: un
+   * guasto "alla chiamata n" colpisce qualunque chiamata, lettura o scrittura.
+   */
+  @Volatile var readFaults: FaultPlan? = null
+
+  /** Una lettura con i guasti programmati di [readFaults] (prima e dopo). */
+  private inline fun <T> readGuarded(sim: SimOp, share: String, block: () -> NasResult<T>): NasResult<T> {
+    val plan = readFaults ?: return block()
+    val indices = plan.begin(sim)
+    plan.check(sim, indices, FaultPhase.BEFORE)?.let { return NasResult.Err(faultError(it, share)) }
+    val result = block()
+    plan.check(sim, indices, FaultPhase.AFTER)?.let { return NasResult.Err(faultError(it, share)) }
+    return result
+  }
 
   /** Come risponde la copia lato server (E-D12). */
   @Volatile var serverCopyMode: ServerCopyMode = ServerCopyMode.OK
@@ -667,16 +735,21 @@ class InMemoryNasMedia(
       require(pageSize > 0) { "Pagina vuota." }
       listCalls.incrementAndGet()
       fail(FakeNasOp.LIST, share, dir)?.let { return NasResult.Err(it) }
-      val entries = synchronized(lock) {
-        val state = shares[key(share)] ?: return NasResult.Err(NasError.ShareMissing(share))
-        val parts = dir?.components.orEmpty()
-        val self = node(state, parts) ?: return NasResult.Err(NasError.NotFound)
-        if (!self.isDirectory) return NasResult.Err(NasError.NotFound)
-        val prefix = if (parts.isEmpty()) "" else key(parts) + "/"
-        state.nodes.entries
-          .filter { (k, _) -> k.isNotEmpty() && k.startsWith(prefix) && '/' !in k.removePrefix(prefix) }
-          .map { (_, n) -> n.toEntry() }
+      var entries: List<NasEntry> = emptyList()
+      val listed = readGuarded(SimOp.OPEN_DIRECTORY, share) {
+        synchronized(lock) {
+          val state = shares[key(share)] ?: return@synchronized NasResult.Err(NasError.ShareMissing(share))
+          val parts = dir?.components.orEmpty()
+          val self = node(state, parts) ?: return@synchronized NasResult.Err(NasError.NotFound)
+          if (!self.isDirectory) return@synchronized NasResult.Err(NasError.NotFound)
+          val prefix = if (parts.isEmpty()) "" else key(parts) + "/"
+          entries = state.nodes.entries
+            .filter { (k, _) -> k.isNotEmpty() && k.startsWith(prefix) && '/' !in k.removePrefix(prefix) }
+            .map { (_, n) -> n.toEntry() }
+          NasResult.Ok(Unit)
+        }
       }
+      if (listed is NasResult.Err) return listed
       val ordered = shuffle?.let { entries.shuffled(it) } ?: entries
       val capped = ordered.size > NasMediaLimits.MAX_DIR_ENTRIES
       val delivered = if (capped) ordered.subList(0, NasMediaLimits.MAX_DIR_ENTRIES) else ordered
@@ -687,21 +760,25 @@ class InMemoryNasMedia(
     override suspend fun stat(share: String, path: SharePath, purpose: Purpose): NasResult<NasEntry?> {
       statCalls.incrementAndGet()
       fail(FakeNasOp.STAT, share, path)?.let { return NasResult.Err(it) }
-      return synchronized(lock) {
-        val state = shares[key(share)] ?: return NasResult.Err(NasError.ShareMissing(share))
-        NasResult.Ok(node(state, path.components)?.toEntry())
+      return readGuarded(SimOp.STAT, share) {
+        synchronized(lock) {
+          val state = shares[key(share)] ?: return@synchronized NasResult.Err(NasError.ShareMissing(share))
+          NasResult.Ok(node(state, path.components)?.toEntry())
+        }
       }
     }
 
     override suspend fun open(share: String, path: SharePath, purpose: Purpose): NasResult<NasRandomFile> {
       opens.incrementAndGet()
       fail(FakeNasOp.OPEN, share, path)?.let { return NasResult.Err(it) }
-      return synchronized(lock) {
-        val state = shares[key(share)] ?: return NasResult.Err(NasError.ShareMissing(share))
-        val node = node(state, path.components) ?: return NasResult.Err(NasError.NotFound)
-        if (node.isDirectory) return NasResult.Err(NasError.NotFound)
-        if (lockKey(share, path.value) in locked) return NasResult.Err(NasError.FileBusy)
-        NasResult.Ok(OpenFile(share, path, node.content, NasStamp(node.content.size, node.modifiedAt, node.fileId)))
+      return readGuarded(SimOp.OPEN_READ, share) {
+        synchronized(lock) {
+          val state = shares[key(share)] ?: return@synchronized NasResult.Err(NasError.ShareMissing(share))
+          val node = node(state, path.components) ?: return@synchronized NasResult.Err(NasError.NotFound)
+          if (node.isDirectory) return@synchronized NasResult.Err(NasError.NotFound)
+          if (lockKey(share, path.value) in locked) return@synchronized NasResult.Err(NasError.FileBusy)
+          NasResult.Ok(OpenFile(share, path, node.content, NasStamp(node.content.size, node.modifiedAt, node.fileId)))
+        }
       }
     }
 
@@ -741,11 +818,20 @@ class InMemoryNasMedia(
       check(!closed) { "File chiuso." }
       require(offset >= 0 && off >= 0 && len >= 0 && off + len <= buf.size) { "Intervallo non valido." }
       fail(FakeNasOp.READ, share, path)?.let { throw NasIoException(it) }
-      if (offset >= content.size) return -1
-      val n = minOf(len.toLong(), content.size - offset).toInt()
-      content.copy(offset, buf, off, n)
-      bytesRead.addAndGet(n.toLong())
-      return n
+      val result = readGuarded(SimOp.READ, share) {
+        if (offset >= content.size) {
+          NasResult.Ok(-1)
+        } else {
+          val n = minOf(len.toLong(), content.size - offset).toInt()
+          content.copy(offset, buf, off, n)
+          bytesRead.addAndGet(n.toLong())
+          NasResult.Ok(n)
+        }
+      }
+      return when (result) {
+        is NasResult.Ok -> result.value
+        is NasResult.Err -> throw NasIoException(result.error)
+      }
     }
 
     override suspend fun readRange(range: LongRange): ByteArray {

@@ -28,6 +28,7 @@ import dev.pampa.mycloudgallery.core.nasops.contract.TrashEntryState
 import dev.pampa.mycloudgallery.core.nasops.contract.TrashReason
 import dev.pampa.mycloudgallery.core.nasops.contract.TrashRestoreRef
 import dev.pampa.mycloudgallery.core.nasops.contract.NasTrashState
+import dev.pampa.mycloudgallery.core.nasops.testing.KitEngine
 import dev.pampa.mycloudgallery.core.nasops.testing.NasOpsTestKit
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import kotlin.time.Duration.Companion.minutes
@@ -38,9 +39,12 @@ import org.junit.Test
  * Le operazioni sul NAS finto con l'esecutore di riferimento: ogni macchina a stati arriva in fondo, il diario scrive i passi nell'ordine,
  * le regole del progetto (E-D*, E-N*) tengono. Da P12 gli stessi scenari girano sull'esecutore vero.
  */
-class OperationsTest {
+open class OperationsTest {
 
-  private val kit = NasOpsTestKit()
+  /** L'esecutore provato: quello di riferimento (P0-B) qui, quello vero (P12) in [ProductionOperationsTest]. */
+  protected open fun engine(): KitEngine = KitEngine.REFERENCE
+
+  private val kit = NasOpsTestKit(engine = engine())
   private val a = byteArrayOf(1, 2, 3, 4)
   private val b = byteArrayOf(9, 8, 7)
 

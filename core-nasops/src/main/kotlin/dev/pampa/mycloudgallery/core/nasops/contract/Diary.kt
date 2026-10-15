@@ -143,6 +143,10 @@ object OpStateMachine {
   /**
    * Da questi stati annullare e' sicuro (D24, "nessun doppione visibile"): prima che la copia venga pubblicata, o prima che
    * l'elemento sia partito. Dopo [OpItemState.PUBLISHED] l'elemento va portato a termine: annullare lascerebbe due copie visibili.
+   *
+   * Attenzione (P15, D2/D3): `PUBLISHED` si scrive DOPO `publishTemp`, quindi `VERIFIED` non prova che la copia non sia gia' visibile.
+   * Chi annulla scrive `CANCELLED` solo dopo aver tolto il temporaneo proprio con successo; un elemento `VERIFIED` il cui temporaneo e'
+   * gia' assente (pubblicazione con la risposta persa) non si annulla: si porta a termine.
    */
   fun cancellable(flow: ItemFlow, state: OpItemState): Boolean {
     if (state.terminal) return false

@@ -49,7 +49,8 @@ class InMemoryOpsStore : OpsStore {
     private set
 
   override suspend fun create(accepted: AcceptedPlan, id: OpId, accountId: String, nowNas: Long): OpRecord = synchronized(lock) {
-    ops.values.firstOrNull { it.planHash == accepted.plan.hash }?.let { return it }
+    // Idempotente sull'impronta finche' l'operazione non e' chiusa (P12, O1 di P15: un piano uguale a uno chiuso e' una richiesta nuova).
+    ops.values.firstOrNull { it.planHash == accepted.plan.hash && !it.state.terminal }?.let { return it }
     require(id !in ops) { "Operazione gia' presente." }
     val plan = accepted.plan
     plan.items.forEach { item ->
@@ -98,7 +99,10 @@ class InMemoryOpsStore : OpsStore {
 
   override suspend fun op(id: OpId): OpRecord? = synchronized(lock) { ops[id] }
 
-  override suspend fun opByPlanHash(hash: PlanHash): OpRecord? = synchronized(lock) { ops.values.firstOrNull { it.planHash == hash } }
+  override suspend fun opByPlanHash(hash: PlanHash): OpRecord? = synchronized(lock) {
+    val same = ops.values.filter { it.planHash == hash }
+    same.firstOrNull { !it.state.terminal } ?: same.lastOrNull()
+  }
 
   override suspend fun ops(states: Set<OpState>): List<OpRecord> = synchronized(lock) { ops.values.filter { it.state in states } }
 

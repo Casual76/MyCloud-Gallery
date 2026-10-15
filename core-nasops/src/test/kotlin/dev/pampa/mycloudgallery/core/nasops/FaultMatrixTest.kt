@@ -13,6 +13,7 @@ import dev.pampa.mycloudgallery.core.nasops.contract.OwnTrashRef
 import dev.pampa.mycloudgallery.core.nasops.contract.PlanOutcome
 import dev.pampa.mycloudgallery.core.nasops.contract.TrashEntryState
 import dev.pampa.mycloudgallery.core.nasops.contract.TrashRestoreRef
+import dev.pampa.mycloudgallery.core.nasops.testing.KitEngine
 import dev.pampa.mycloudgallery.core.nasops.testing.NasOpsTestKit
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import kotlin.time.Duration.Companion.minutes
@@ -26,7 +27,10 @@ import org.junit.Test
  * temporaneo rimasto. P15 lo estende a migliaia di giri casuali con l'esecutore vero; qui prova che il fake e i contratti reggono
  * lo stesso schema.
  */
-class FaultMatrixTest {
+open class FaultMatrixTest {
+
+  /** L'esecutore provato: quello di riferimento (P0-B) qui, quello vero (P12) in [ProductionFaultMatrixTest]. */
+  protected open fun engine(): KitEngine = KitEngine.REFERENCE
 
   private val contents = listOf(byteArrayOf(1, 1, 1, 1), byteArrayOf(2, 2, 2), byteArrayOf(3, 3, 3, 3, 3))
 
@@ -68,7 +72,7 @@ class FaultMatrixTest {
 
   private suspend fun verify(case: Case) {
     // Giro pulito: quante primitive di scrittura fa l'operazione, e il risultato atteso senza guasti.
-    val clean = NasOpsTestKit()
+    val clean = NasOpsTestKit(engine = engine())
     val counter = FaultPlan()
     clean.scenario(case.setup(clean), counter)
     val total = counter.operations
@@ -78,7 +82,7 @@ class FaultMatrixTest {
 
     for (n in 1..total) {
       for (phase in FaultPhase.entries) {
-        val kit = NasOpsTestKit()
+        val kit = NasOpsTestKit(engine = engine())
         val request = case.setup(kit)
         val fault = FaultPlan().at(n, phase, SimFault.DropConnection)
         kit.scenario(request, fault)
@@ -213,7 +217,7 @@ class FaultMatrixTest {
 
   @Test
   fun dopoLaMorteDelProcessoLoStatoSiRicostruisceDalDiario() = runTest {
-    val kit = NasOpsTestKit()
+    val kit = NasOpsTestKit(engine = engine())
     kit.putFile("test", "x.jpg", contents[0])
     kit.run(OpRequest.Rename(kit.itemOf("test", "x.jpg"), "y.jpg"))
     kit.restart()

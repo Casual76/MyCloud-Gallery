@@ -7,7 +7,9 @@ import dev.pampa.mycloudgallery.core.nas.contract.NasError
 import dev.pampa.mycloudgallery.core.nas.contract.NasMediaReader
 import dev.pampa.mycloudgallery.core.nas.contract.NasResult
 import dev.pampa.mycloudgallery.core.nas.contract.Purpose
+import dev.pampa.mycloudgallery.core.nas.contract.NasIoException
 import dev.pampa.mycloudgallery.core.nas.ops.CopyOutcome
+import dev.pampa.mycloudgallery.core.nas.ops.DeleteOutcome
 import dev.pampa.mycloudgallery.core.nas.ops.NasFileOps
 import dev.pampa.mycloudgallery.core.nas.ops.NasOpsPaths
 import dev.pampa.mycloudgallery.core.nas.ops.PublishOutcome
@@ -76,6 +78,12 @@ import kotlinx.coroutines.flow.StateFlow
  * parallelismo, nessun tetto di rete; una cartella spostata tra share si espande in file (le cartelle vuote non si ricreano e le
  * cartelle sorgente restano, vuote: P12 deve decidere come tracciarle nel diario); `fileCount` delle cartelle cestinate non e'
  * compilato; per una cartella cestinata l'identita' della sorgente non e' confrontata (le cartelle non hanno timbro).
+ *
+ * I difetti D1-D4 trovati dal banco delle interruzioni (P15, docs/prova-500.md §6) sono corretti come nell'esecutore vero di P12: la
+ * lettura a flusso del ripiego che cade mette in pausa (D1); "Ferma" annulla un elemento solo dopo aver tolto il suo temporaneo (D2) e
+ * non annulla un elemento VERIFIED il cui temporaneo e' gia' sparito (forse pubblicato, si porta a termine: D3); un errore passeggero
+ * mentre si guarda se la pubblicazione e' avvenuta mette in pausa, non fa fallire (D4). Un temporaneo sparito prima della pubblicazione
+ * (un "Ferma" perso con la morte del processo) annulla l'elemento invece di farlo fallire.
  */
 class InMemoryNasOperations(
   private val deviceId: String,
@@ -353,13 +361,37 @@ class InMemoryNasOperations(
     try {
       for (item in store.items(id)) {
         if (!OpStateMachine.cancellable(item.flow, item.state)) continue
-        item.tempName?.let { temp -> if (NasOpsPaths.isTempOf(temp, deviceId)) fileOps.deleteOwnTemp(item.dstShare ?: item.srcShare, temp, purpose) }
-        persist(item.copy(state = OpItemState.CANCELLED, errorCode = null, nextAttemptAtNas = null))
+        when (tempGone(item)) {
+          TempCheck.GONE -> persist(item.copy(state = OpItemState.CANCELLED, errorCode = null, nextAttemptAtNas = null))
+          // D3 (P15): un elemento VERIFIED senza temporaneo puo' essere gia' pubblicato (risposta persa): si porta a termine.
+          TempCheck.MAYBE_PUBLISHED -> Unit
+          // D2 (P15): il temporaneo non si e' potuto togliere: niente si annulla (nessun temporaneo che il diario non cita), si riprova.
+          TempCheck.UNREACHABLE -> {
+            pause(id, PauseReason.NAS_UNREACHABLE)
+            return
+          }
+        }
       }
       // Gli elementi oltre il punto di non ritorno (copia gia' pubblicata) si portano a termine: niente doppioni visibili.
       runOp(id, Long.MAX_VALUE)
     } finally {
       cancelRequests -= id
+    }
+  }
+
+  private enum class TempCheck { GONE, MAYBE_PUBLISHED, UNREACHABLE }
+
+  /** Il temporaneo proprio di un elemento da annullare non c'e' piu' (tolto adesso o mai creato)? Vedi D2 e D3 in docs/prova-500.md. */
+  private suspend fun tempGone(item: OpItemRecord): TempCheck {
+    if (item.state == OpItemState.PLANNED) return TempCheck.GONE
+    val temp = item.tempName?.takeIf { NasOpsPaths.isTempOf(it, deviceId) } ?: return TempCheck.GONE
+    return when (val r = fileOps.deleteOwnTemp(item.dstShare ?: item.srcShare, temp, purpose)) {
+      is NasResult.Err -> TempCheck.UNREACHABLE
+      is NasResult.Ok -> when (r.value) {
+        DeleteOutcome.Deleted -> TempCheck.GONE
+        DeleteOutcome.Missing -> if (item.state == OpItemState.VERIFIED) TempCheck.MAYBE_PUBLISHED else TempCheck.GONE
+        else -> TempCheck.UNREACHABLE
+      }
     }
   }
 
@@ -680,7 +712,12 @@ class InMemoryNasOperations(
         val buffer = ByteArray(FALLBACK_CHUNK)
         var offset = 0L
         while (offset < file.size) {
-          val n = file.read(offset, buffer, 0, buffer.size)
+          // D1 (P15): una lettura a flusso che cade si traduce nel suo errore (pausa), non esce come eccezione.
+          val n = try {
+            file.read(offset, buffer, 0, buffer.size)
+          } catch (e: NasIoException) {
+            return Step.Stop(failOrPause(cur, e.error))
+          }
           if (n <= 0) break
           (writer.write(offset, buffer, 0, n) as? NasResult.Err)?.let { return Step.Stop(failOrPause(cur, it.error)) }
           offset += n
@@ -744,7 +781,8 @@ class InMemoryNasOperations(
       return Step.Stop(fail(cur, OpErrorCode.SOURCE_CHANGED))
     }
     val copy = when (val h = hashOf(dstShare, temp)) {
-      Hashed.Missing -> return Step.Stop(fail(cur, OpErrorCode.UNEXPECTED))
+      // Prima della pubblicazione il temporaneo proprio lo toglie solo un "Ferma" perso con la morte del processo: annullato.
+      Hashed.Missing -> return Step.Stop(advanceTo(cur, OpItemState.CANCELLED))
       is Hashed.Error -> return Step.Stop(failOrPause(cur, h.error))
       is Hashed.Ok -> h
     }
@@ -773,7 +811,14 @@ class InMemoryNasOperations(
           }
           PublishOutcome.Locked -> return Step.Stop(waitLocked(cur))
           // Il temporaneo non c'e' piu': o e' stato pubblicato e la risposta si e' persa, o e' sparito. Si guarda la destinazione.
-          PublishOutcome.TempMissing -> return Step.Stop(if (publishedByThisOp(cur, dst)) advanceTo(cur, OpItemState.PUBLISHED) else fail(cur, OpErrorCode.UNEXPECTED))
+          PublishOutcome.TempMissing -> return Step.Stop(
+            when {
+              publishedByThisOp(cur, dst) -> advanceTo(cur, OpItemState.PUBLISHED)
+              // Nessun file a quel nome: il temporaneo l'ha tolto un "Ferma" perso con la morte del processo.
+              probeOrPause(dstShare, dst) == Probe.Absent -> advanceTo(cur, OpItemState.CANCELLED)
+              else -> fail(cur, OpErrorCode.UNEXPECTED)
+            },
+          )
         }
       }
     }
@@ -781,10 +826,27 @@ class InMemoryNasOperations(
 
   /** Destinazione con la dimensione e l'impronta del file verificato: la pubblicazione e' avvenuta (§2.7). */
   private suspend fun publishedByThisOp(cur: OpItemRecord, dst: SharePath): Boolean {
-    val entry = (probe(cur.dstShare!!, dst) as? Probe.Found)?.entry ?: return false
+    val entry = (probeOrPause(cur.dstShare!!, dst) as? Probe.Found)?.entry ?: return false
     if (entry.isDirectory || entry.size != cur.size) return false
-    val hashed = hashOf(cur.dstShare, dst)
-    return hashed is Hashed.Ok && hashed.sha == cur.sha256
+    return when (val hashed = hashOf(cur.dstShare, dst)) {
+      is Hashed.Ok -> hashed.sha == cur.sha256
+      Hashed.Missing -> false
+      // D4 (P15): un errore passeggero mentre si guarda la destinazione non dice "non pubblicato": si riprova.
+      is Hashed.Error -> if (transient(hashed.error)) throw PauseSignal(PauseReason.NAS_UNREACHABLE) else false
+    }
+  }
+
+  /** Come [probe], ma un errore passeggero mette in pausa invece di valere "non si sa" (D4). */
+  private suspend fun probeOrPause(share: String, path: SharePath): Probe = when (val r = reader.stat(share, path, purpose)) {
+    is NasResult.Ok -> r.value?.let { Probe.Found(it) } ?: Probe.Absent
+    is NasResult.Err -> if (r.error == NasError.NotFound) Probe.Absent else if (transient(r.error)) throw PauseSignal(PauseReason.NAS_UNREACHABLE) else Probe.Unreachable
+  }
+
+  /** Gli errori che [failOrPause] tratta come rete (pausa), non come esito. */
+  private fun transient(error: NasError): Boolean = when (error) {
+    NasError.PermissionDenied, NasError.NasFull, NasError.QuotaExceeded, NasError.FileBusy, NasError.Exists, NasError.NotFound -> false
+    is NasError.ShareMissing, is NasError.Unexpected -> false
+    else -> true
   }
 
   private suspend fun recordSourcePhase(cur: OpItemRecord): Step {

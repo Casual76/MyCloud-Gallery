@@ -21,6 +21,7 @@ import dev.pampa.mycloudgallery.core.nasops.contract.OpRecord
 import dev.pampa.mycloudgallery.core.nasops.contract.OpState
 import dev.pampa.mycloudgallery.core.nasops.contract.OpStateMachine
 import dev.pampa.mycloudgallery.core.nasops.contract.OpsStore
+import dev.pampa.mycloudgallery.core.nasops.contract.PauseReason
 import dev.pampa.mycloudgallery.core.nasops.contract.PlanHash
 import dev.pampa.mycloudgallery.core.nasops.contract.TrashEntryState
 import dev.pampa.mycloudgallery.core.nasops.contract.TrashReason
@@ -161,8 +162,10 @@ class RoomOpsStore(
     }
   }
 
-  override suspend fun setOpState(id: OpId, state: OpState, errorCode: OpErrorCode?, nowNas: Long) {
-    dao.setOpState(id.value, state.code, errorCode?.code, nowNas)
+  override suspend fun setOpState(id: OpId, state: OpState, errorCode: OpErrorCode?, nowNas: Long, pause: PauseReason?) {
+    // Il motivo della pausa nella stessa colonna dei codici (nessuna colonna nuova nello schema v3): solo con PAUSED e senza codice.
+    val code = errorCode?.code ?: pause?.takeIf { state == OpState.PAUSED }?.code
+    dao.setOpState(id.value, state.code, code, nowNas)
   }
 
   // --- Diario locale del cestino ---------------------------------------------------------------------------------------------
@@ -270,6 +273,7 @@ class RoomOpsStore(
     errorCode = enumByCodeOrNull<OpErrorCode>(errorCode),
     createdAtNas = createdAt,
     updatedAtNas = updatedAt,
+    pauseReason = if (state == OpState.PAUSED.code) enumByCodeOrNull<PauseReason>(errorCode) else null,
   )
 
   private fun NasOpItemEntity.toRecord(kind: OpKind) = OpItemRecord(

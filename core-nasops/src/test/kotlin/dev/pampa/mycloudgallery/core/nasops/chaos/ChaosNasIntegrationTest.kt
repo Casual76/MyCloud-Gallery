@@ -2,6 +2,8 @@ package dev.pampa.mycloudgallery.core.nasops.chaos
 
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
+import dev.pampa.mycloudgallery.core.common.log.GalleryLog
+import dev.pampa.mycloudgallery.core.common.log.LogLevel
 import java.io.File
 import java.security.SecureRandom
 import java.time.ZoneOffset
@@ -58,13 +60,25 @@ class ChaosNasIntegrationTest {
         interruptions = interruptions,
         baseSeed = seedOf(),
         bigBytes = ChaosNasGate.bigFileBytes(credentials),
+        firstRound = System.getenv("MCG_CHAOS_FIRST_ROUND")?.toIntOrNull()?.coerceAtLeast(0) ?: 0,
       )
-      val result = ChaosAreaRunner.run(target, factory, settings)
+      // L'avanzamento, giro per giro, in un file a parte: la prova lunga (100 minuti) si segue senza aspettare il rapporto.
+      val progress = File("build/chaos/area-progress-${runId.take(15)}.txt").also { it.parentFile?.mkdirs(); it.writeText("") }
+      val started = System.nanoTime()
+      // Gli avvisi del codice sotto prova (solo codici e numeri, mai percorsi: regola di GalleryLog), con l'ora dall'inizio.
+      val log = File("build/chaos/area-log-${runId.take(15)}.txt").also { it.writeText("") }
+      GalleryLog.install { level, tag, message, _ ->
+        if (level >= LogLevel.WARN) synchronized(log) { log.appendText("${(System.nanoTime() - started) / 1_000_000} ms $level $tag $message\n") }
+      }
+      val result = ChaosAreaRunner.run(target, factory, settings) { rounds, red, fired ->
+        progress.appendText("giri $rounds, rossi $red, interruzioni $fired di $interruptions, ${(System.nanoTime() - started) / 1_000_000_000} s\n")
+      }
       println(result.summary())
       result.writeReport(File("build/chaos/area-report-${runId.take(15)}.txt"))
       assertWithMessage("giri con violazioni:\n" + result.failureText()).that(result.failures).isEmpty()
       assertThat(result.stats.totalFired).isAtLeast(interruptions)
     } finally {
+      GalleryLog.uninstall()
       ready.binding.close()
     }
   }

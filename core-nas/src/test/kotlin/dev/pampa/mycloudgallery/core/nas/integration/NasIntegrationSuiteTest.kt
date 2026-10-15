@@ -546,6 +546,67 @@ class NasIntegrationSuiteTest {
     )
   }
 
+  /**
+   * Prova F16 (15/10): gli handle del telefono ancora aperti sul WD. Una nostra lettura aperta non deve bloccare la rinomina del file (la
+   * lettura condivide la cancellazione, `SmbOpenMode.READ`); la cancellazione esclusiva invece si'. E una cartella con un nostro file
+   * aperto sotto, dalla stessa connessione o da un'altra: come la tratta Samba sul WD? Il simulatore deve fare lo stesso
+   * (`InMemorySmbBackend.openBelowDeniesDirRename`).
+   */
+  @Test
+  fun t15_handleDelTelefonoApertiSulNas() = runBlockingBounded("t15_handleDelTelefonoApertiSulNas", INTEGRATION_WAIT_SECONDS) {
+    val ops = ops
+    writeFile(share, rel("handle/f.jpg"), ByteArray(4096) { 5 })
+    writeFile(share, rel("handle/Cartella/dentro.jpg"), ByteArray(4096) { 6 })
+    fun code(block: () -> String): String = try {
+      block()
+    } catch (e: SmbStatusException) {
+      "0x%08X".format(Locale.ROOT, e.status)
+    }
+    fun renameDir(ctx: OpContext, from: String, to: String): String = code {
+      ctx.share.openForChange(full(rel(from)).smb(), exclusive = false).use { it.renameNoReplace(full(rel(to)).smb()) }
+      "rinominata"
+    }
+    // 1. Una nostra lettura aperta: la rinomina del file passa, la cancellazione esclusiva no.
+    val open = media.mediaReader.open(share, full(rel("handle/f.jpg")), Purpose.BACKGROUND).okOrNull()!!
+    val renamed: RenameOutcome?
+    val exclusive: String
+    try {
+      renamed = ops.rename(share, rel("handle/f.jpg"), rel("handle/g.jpg"), null, Purpose.BACKGROUND).okOrNull()
+      exclusive = op(share) { ctx -> code { ctx.share.openForChange(full(rel("handle/g.jpg")).smb(), exclusive = true).close(); "aperta" } }
+    } finally {
+      open.close()
+    }
+    // 2. Una cartella con un nostro file aperto sotto, dalla stessa connessione.
+    val inner = media.mediaReader.open(share, full(rel("handle/Cartella/dentro.jpg")), Purpose.BACKGROUND).okOrNull()!!
+    val sameConnection = try {
+      op(share) { ctx -> renameDir(ctx, "handle/Cartella", "handle/Cartella2") }
+    } finally {
+      inner.close()
+    }
+    val current = if (sameConnection == "rinominata") "handle/Cartella2" else "handle/Cartella"
+    // 3. Lo stesso con il file aperto da un'altra connessione (come il PC).
+    val other = newManager(NasSessionConfig())
+    val otherConnection = try {
+      val held = other.mediaReader().open(share, full(rel("$current/dentro.jpg")), Purpose.BACKGROUND).okOrNull()!!
+      try {
+        op(share) { ctx -> renameDir(ctx, current, "handle/Cartella3") }
+      } finally {
+        held.close()
+      }
+    } finally {
+      other.invalidate(InvalidateReason.USER_REQUEST)
+    }
+    report += "F16 handle del telefono sul WD: rinomina di un file con una nostra lettura aperta=${renamed?.let { it::class.simpleName }}; " +
+      "cancellazione esclusiva con la lettura aperta=$exclusive; cartella con un nostro file aperto sotto (stessa connessione)=$sameConnection; " +
+      "(altra connessione)=$otherConnection"
+    assertThat(renamed).isInstanceOf(RenameOutcome.Renamed::class.java)
+    assertThat(exclusive).isEqualTo("0x%08X".format(Locale.ROOT, dev.pampa.mycloudgallery.core.nas.smb.NtStatus.SHARING_VIOLATION))
+    // Visto sul WD il 15/10 (Samba, `strict rename = no`): lo stesso client non rinomina una cartella con un suo file aperto sotto, un
+    // altro client si'. Il simulatore fa lo stesso: se il NAS cambia, questa prova lo dice.
+    assertThat(sameConnection).isEqualTo("0x%08X".format(Locale.ROOT, dev.pampa.mycloudgallery.core.nas.smb.NtStatus.ACCESS_DENIED))
+    assertThat(otherConnection).isEqualTo("rinominata")
+  }
+
   private suspend fun <T> op(shareName: String, block: (OpContext) -> T): T =
     when (val result = manager.runOp(shareName, Purpose.BACKGROUND, idempotent = false, touchesDisk = true, op = block)) {
       is NasResult.Ok -> result.value

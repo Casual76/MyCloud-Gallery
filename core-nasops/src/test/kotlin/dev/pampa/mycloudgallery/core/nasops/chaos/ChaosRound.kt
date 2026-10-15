@@ -221,6 +221,8 @@ class ChaosRound(
     deaths++
     stats.restart()
     log += "morte del processo #$deaths${cause?.let { " (${it.primitive} ${if (it.moment == Moment.BEFORE) "prima" else "dopo"})" } ?: ""}"
+    // Il sistema chiude i socket del processo morto: il NAS chiude i suoi handle (come sul telefono, ChaosWorld.processDied).
+    world.processDied()
     // Se un difetto noto aveva gia' fatto il suo danno prima di questa morte, il mondo non rispetta piu' gli invarianti per colpa sua.
     stopOnKnownDefect()
     val snapshot = scan()
@@ -353,6 +355,23 @@ class ChaosRound(
     }
   }
 
+  /**
+   * Il motivo della pausa come lo dice il diario: il codice dell'operazione e, per ogni elemento non finito, passo, codice, tentativi e fra
+   * quanti secondi (ora del NAS) e' la prossima prova. Una pausa senza motivo leggibile e' gia' un difetto.
+   */
+  private suspend fun pauseReasons(active: List<dev.pampa.mycloudgallery.core.nasops.contract.OpRecord>): String {
+    val now = world.clocks.nasNowMs()
+    val parts = ArrayList<String>()
+    for (op in active) {
+      val open = store.items(op.id).filter { !it.state.terminal }.joinToString(", ") { item ->
+        val wait = item.nextAttemptAtNas?.let { at -> if (now != null) " fra ${(at - now) / 1000} s" else " a $at" }.orEmpty()
+        "#${item.index} ${item.state.code} ${item.errorCode?.code ?: "-"} x${item.attempts}$wait"
+      }
+      parts += "${op.kind.code} motivo=${op.errorCode?.code ?: "nessuno"} elementi: $open"
+    }
+    return parts.joinToString(" | ")
+  }
+
   /** Il diario mostra l'effetto di un difetto noto dello stack: si ferma il giro, e si conta. */
   private suspend fun stopOnKnownDefect() {
     val items = store.ops(OpState.entries.toSet()).flatMap { store.items(it.id) }
@@ -371,7 +390,10 @@ class ChaosRound(
       val active = store.ops(setOf(OpState.PLANNED, OpState.RUNNING, OpState.PAUSED))
       if (active.isEmpty()) return cancelled
       if (++passes > config.resumeBound) {
-        violations += Violation(Invariant.CONVERGENCE, "dopo $passes riprese ci sono ancora ${active.size} operazioni aperte (${active.first().state.code}): ${spec.describe()}")
+        violations += Violation(
+          Invariant.CONVERGENCE,
+          "dopo $passes riprese ci sono ancora ${active.size} operazioni aperte (${active.first().state.code}; ${pauseReasons(active)}): ${spec.describe()}",
+        )
         return cancelled
       }
       val wantsCancel = spec.cancellable && !cancelled && random.nextInt(100) < config.cancelPercent
@@ -630,6 +652,7 @@ class ChaosRound(
   private suspend fun idleRestart() {
     val before = fingerprint(scan())
     val opsBefore = store.ops(OpState.entries.toSet()).map { it.id.value to it.state }
+    world.processDied()
     incarnation = Incarnation(incarnation.number + 1)
     stack = newStack()
     stats.restart()

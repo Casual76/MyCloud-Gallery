@@ -101,17 +101,27 @@ internal class SmbNasMediaReader(private val manager: SmbNasSessionManager) : Na
       }
     }
 
-  override suspend fun open(share: String, path: SharePath, purpose: Purpose): NasResult<NasRandomFile> =
-    manager.runOp(share, purpose, idempotent = true, touchesDisk = true) { ctx ->
-      val file = openChecked(ctx, path)
-      try {
-        val stamp = stampOf(ctx, path, file)
-        SmbRandomFile(manager, share, path, purpose, file, ctx.sessionKey, stamp)
-      } catch (t: Throwable) {
-        file.close()
-        throw t
+  override suspend fun open(share: String, path: SharePath, purpose: Purpose): NasResult<NasRandomFile> {
+    // Prova F16: se chi ha chiesto l'apertura viene annullato mentre il NAS risponde, il file aperto non arriva a nessuno e il suo handle
+    // resterebbe aperto sul NAS per tutta la sessione (e un nostro handle blocca le nostre rinomine): lo si chiude qui.
+    var undelivered: SmbRandomFile? = null
+    try {
+      val result = manager.runOp(share, purpose, idempotent = true, touchesDisk = true) { ctx ->
+        val file = openChecked(ctx, path)
+        try {
+          val stamp = stampOf(ctx, path, file)
+          SmbRandomFile(manager, share, path, purpose, file, ctx.sessionKey, stamp).also { undelivered = it }
+        } catch (t: Throwable) {
+          file.close()
+          throw t
+        }
       }
+      undelivered = null
+      return result
+    } finally {
+      undelivered?.close()
     }
+  }
 
   override suspend fun readAll(file: NasRandomFile, sink: (ByteArray, Int) -> Unit, progress: ((Long) -> Unit)?): NasResult<Sha256> {
     val smb = file as? SmbRandomFile ?: return sequential(file, sink, progress)
@@ -212,7 +222,7 @@ private class DirCursor(private val path: String) {
   private var directory: SmbDirectory? = null
   private var iterator: Iterator<SmbDirEntry>? = null
   private var session: Any? = null
-  private val stale = ArrayList<SmbDirectory>()
+  private val stale = ArrayList<Pair<SmbDirectory, Any?>>()
 
   /** Un tentativo e' fallito a meta' pagina: l'iteratore non e' piu' affidabile (voci gia' tolte e perse). */
   private var dirty = false
@@ -253,7 +263,7 @@ private class DirCursor(private val path: String) {
   }
 
   private fun reset() {
-    directory?.let { stale += it }
+    directory?.let { stale += it to session }
     directory = null
     iterator = null
     session = null
@@ -261,7 +271,7 @@ private class DirCursor(private val path: String) {
 
   fun close(manager: SmbNasSessionManager) {
     reset()
-    stale.forEach { manager.closeLater(it) }
+    stale.forEach { (dir, owner) -> manager.closeLater(dir, owner) }
     stale.clear()
   }
 
@@ -356,7 +366,7 @@ internal class SmbRandomFile(
     check(!closed) { "File chiuso." }
     handle?.takeIf { handleSession === ctx.sessionKey }?.let { return it }
     // La sessione e' cambiata (caduta, riconnessione): l'handle vecchio e' morto con lei.
-    handle?.let { manager.closeLater(it) }
+    handle?.let { manager.closeLater(it, handleSession) }
     handle = null
     val reopened = openChecked(ctx, path)
     val now = try {
@@ -376,11 +386,11 @@ internal class SmbRandomFile(
   }
 
   override fun close() {
-    val toClose = synchronized(lock) {
+    val (toClose, owner) = synchronized(lock) {
       closed = true
-      handle.also { handle = null }
+      (handle to handleSession).also { handle = null }
     }
-    toClose?.let { manager.closeLater(it) }
+    toClose?.let { manager.closeLater(it, owner) }
   }
 
   override fun toString(): String = "SmbRandomFile(size=$size)"

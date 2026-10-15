@@ -67,6 +67,8 @@ object ChaosBench {
     stopAfterInterruptions: Int? = null,
     firstRound: Int = 0,
     onFailure: (RoundReport) -> Unit = {},
+    /** Dopo ogni giro (giri fatti, giri rossi): l'avanzamento di una prova lunga sul NAS vero. */
+    onRound: (Int, Int) -> Unit = { _, _ -> },
   ): BenchResult {
     val started = System.nanoTime()
     val failures = ArrayList<RoundReport>()
@@ -79,6 +81,7 @@ object ChaosBench {
         failures += report
         onFailure(report)
       }
+      onRound(done, failures.size)
     }
     return BenchResult(done, failures, stats, (System.nanoTime() - started) / 1_000_000, baseSeed, target.name, factory.name, factory.knownDefects)
   }

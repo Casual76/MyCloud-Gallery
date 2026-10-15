@@ -59,6 +59,14 @@ interface ChaosWorld : AutoCloseable {
   /** La connessione e' caduta davvero (colpo `DROP`/`STALL`): sul NAS vero chiude la sessione, cosi' la chiamata dopo si riconnette. */
   suspend fun connectionLost()
 
+  /**
+   * Il processo e' morto (o e' stato ucciso a vuoto). Sul telefono il sistema chiude i socket del processo morto e Samba chiude **i suoi
+   * handle** (le letture a meta', l'apertura di cui la risposta e' andata persa): il processo nuovo parte con una connessione nuova. Fino
+   * alla prova F16 il banco teneva viva la connessione del processo morto e la passava al processo nuovo, con quegli handle aperti per
+   * sempre: una cosa che sul telefono non succede (gli handle che il NAS tiene dopo una rete persa li prova `SmbStaleHandlesTest`).
+   */
+  suspend fun processDied() = connectionLost()
+
   /** Una riga per il rapporto (mai nomi di file ne' credenziali). */
   fun describe(): String
 

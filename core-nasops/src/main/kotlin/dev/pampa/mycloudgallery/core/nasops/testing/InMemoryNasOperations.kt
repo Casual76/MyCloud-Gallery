@@ -490,7 +490,7 @@ class InMemoryNasOperations(
       store.setOpState(id, finalState, code, clocks.nasNowMs() ?: op.updatedAtNas)
     } else if (stop == RunStop.COMPLETE && waitingCount > 0) {
       stop = RunStop.WAITING_LOCKED
-      store.setOpState(id, OpState.PAUSED, null, clocks.nasNowMs() ?: op.updatedAtNas)
+      store.setOpState(id, OpState.PAUSED, OpErrorCode.LOCKED, clocks.nasNowMs() ?: op.updatedAtNas)
     }
     refreshStates()
     return OpRun(doneCount, failedCount, waitingCount, stop)
@@ -498,7 +498,8 @@ class InMemoryNasOperations(
 
   private suspend fun pause(id: OpId, reason: PauseReason) {
     pauseReasons[id] = reason
-    store.setOpState(id, OpState.PAUSED, null, clocks.nasNowMs() ?: 0L)
+    // Come l'esecutore vero (prova F16): il motivo della pausa nel diario.
+    store.setOpState(id, OpState.PAUSED, null, clocks.nasNowMs() ?: 0L, reason)
     refreshStates()
   }
 
@@ -1049,10 +1050,11 @@ class InMemoryNasOperations(
       OpState.RUNNING -> NasOperationState.Running(op.id, op.kind, done, total, bytesDone, op.totalBytes)
       OpState.PAUSED -> {
         val locked = items.count { it.waitingLocked }
-        if (locked > 0 && pauseReasons[op.id] == null) {
+        val reason = pauseReasons[op.id] ?: op.pauseReason
+        if (locked > 0 && reason == null) {
           NasOperationState.WaitingLocked(op.id, op.kind, locked, done, total)
         } else {
-          NasOperationState.Paused(op.id, op.kind, pauseReasons[op.id] ?: PauseReason.CONDITIONS, done, total)
+          NasOperationState.Paused(op.id, op.kind, reason ?: PauseReason.CONDITIONS, done, total)
         }
       }
       OpState.DONE -> NasOperationState.Done(op.id, op.kind, DoneSummary(done, failed, skipped = 0, bytes = bytesDone))

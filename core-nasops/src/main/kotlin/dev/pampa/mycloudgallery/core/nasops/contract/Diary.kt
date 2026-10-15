@@ -173,7 +173,13 @@ object OpStateMachine {
   val resumable: Set<OpItemState> = OpItemState.entries.filterNot { it.terminal }.toSet()
 }
 
-/** L'operazione nel diario (`nas_op`). Tempi in ora del NAS (D32). */
+/**
+ * L'operazione nel diario (`nas_op`). Tempi in ora del NAS (D32).
+ *
+ * @property pauseReason perche' e' in pausa (prova F16 sul NAS vero: una pausa senza motivo leggibile e' gia' un difetto). Sta nella
+ *   stessa colonna `error_code` dei codici di [OpErrorCode] (i codici di [PauseReason] non si sovrappongono a quelli: `RulesTest`), solo
+ *   con lo stato `PAUSED`. "Ferma" dell'utente e l'attesa di un file aperto restano [OpErrorCode.STOPPED_BY_USER] e [OpErrorCode.LOCKED].
+ */
 data class OpRecord(
   val id: OpId,
   val kind: OpKind,
@@ -184,6 +190,7 @@ data class OpRecord(
   val errorCode: OpErrorCode?,
   val createdAtNas: Long,
   val updatedAtNas: Long,
+  val pauseReason: PauseReason? = null,
 )
 
 /**
@@ -322,7 +329,11 @@ interface OpsStore {
   /** Riscrive un elemento (il passo si scrive **prima** di farlo). Una transizione fuori da [OpStateMachine] e' un errore di programmazione. */
   suspend fun updateItem(item: OpItemRecord)
 
-  suspend fun setOpState(id: OpId, state: OpState, errorCode: OpErrorCode?, nowNas: Long)
+  /**
+   * Lo stato dell'operazione. Con `PAUSED` e nessun [errorCode], [pause] e' il motivo della pausa, scritto nella stessa colonna
+   * (`OpRecord.pauseReason`): dopo la morte del processo la ripresa e la Diagnostica lo rileggono da qui.
+   */
+  suspend fun setOpState(id: OpId, state: OpState, errorCode: OpErrorCode?, nowNas: Long, pause: PauseReason? = null)
 
   // --- Diario locale del cestino ---------------------------------------------------------------------------------------
 

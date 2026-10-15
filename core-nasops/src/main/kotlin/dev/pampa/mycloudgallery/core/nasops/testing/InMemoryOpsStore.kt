@@ -11,6 +11,7 @@ import dev.pampa.mycloudgallery.core.nasops.contract.OpRecord
 import dev.pampa.mycloudgallery.core.nasops.contract.OpState
 import dev.pampa.mycloudgallery.core.nasops.contract.OpStateMachine
 import dev.pampa.mycloudgallery.core.nasops.contract.OpsStore
+import dev.pampa.mycloudgallery.core.nasops.contract.PauseReason
 import dev.pampa.mycloudgallery.core.nasops.contract.PlanHash
 import dev.pampa.mycloudgallery.core.nasops.contract.TrashEntryState
 import dev.pampa.mycloudgallery.core.nasops.contract.PurgedTally
@@ -134,10 +135,12 @@ class InMemoryOpsStore : OpsStore {
     }
   }
 
-  override suspend fun setOpState(id: OpId, state: OpState, errorCode: OpErrorCode?, nowNas: Long) {
+  override suspend fun setOpState(id: OpId, state: OpState, errorCode: OpErrorCode?, nowNas: Long, pause: PauseReason?) {
     synchronized(lock) {
       val old = ops[id] ?: error("Operazione sconosciuta.")
-      ops[id] = old.copy(state = state, errorCode = errorCode, updatedAtNas = nowNas)
+      // Come la colonna unica di Room: il motivo della pausa solo con PAUSED e senza un codice d'errore.
+      val reason = pause.takeIf { state == OpState.PAUSED && errorCode == null }
+      ops[id] = old.copy(state = state, errorCode = errorCode, updatedAtNas = nowNas, pauseReason = reason)
       publishOps()
     }
   }

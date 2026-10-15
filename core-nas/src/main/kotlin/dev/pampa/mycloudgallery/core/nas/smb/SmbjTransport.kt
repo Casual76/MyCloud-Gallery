@@ -233,12 +233,14 @@ private class SmbjSession(
 
 private class SmbjShare(override val name: String, private val share: DiskShare, private val guard: ResponseGuard) : SmbShare {
 
+  // Le condivisioni di ogni apertura vengono da SmbOpenMode (le stesse che applica il simulatore). La lettura condivide anche la
+  // cancellazione (prova F16 sul NAS vero): un nostro handle di lettura ancora aperto non impedisce la rinomina o il cestino del file.
   override fun openRead(path: String): SmbReadFile = guard.io {
     val file = share.openFile(
       path,
       EnumSet.of(AccessMask.FILE_READ_DATA, AccessMask.FILE_READ_ATTRIBUTES),
       EnumSet.of(FileAttributes.FILE_ATTRIBUTE_NORMAL),
-      EnumSet.of(SMB2ShareAccess.FILE_SHARE_READ, SMB2ShareAccess.FILE_SHARE_WRITE),
+      SmbOpenMode.READ.shareAccess(),
       SMB2CreateDisposition.FILE_OPEN,
       EnumSet.of(SMB2CreateOptions.FILE_NON_DIRECTORY_FILE),
     )
@@ -268,7 +270,7 @@ private class SmbjShare(override val name: String, private val share: DiskShare,
         AccessMask.DELETE,
       ),
       EnumSet.of(FileAttributes.FILE_ATTRIBUTE_NORMAL),
-      EnumSet.noneOf(SMB2ShareAccess::class.java),
+      SmbOpenMode.CREATE_EXCLUSIVE.shareAccess(),
       SMB2CreateDisposition.FILE_CREATE,
       EnumSet.of(SMB2CreateOptions.FILE_NON_DIRECTORY_FILE),
     )
@@ -286,7 +288,7 @@ private class SmbjShare(override val name: String, private val share: DiskShare,
       path,
       mask,
       EnumSet.of(FileAttributes.FILE_ATTRIBUTE_DIRECTORY),
-      EnumSet.of(SMB2ShareAccess.FILE_SHARE_READ, SMB2ShareAccess.FILE_SHARE_WRITE, SMB2ShareAccess.FILE_SHARE_DELETE),
+      SmbOpenMode.directory(access).shareAccess(),
       SMB2CreateDisposition.FILE_OPEN,
       EnumSet.of(SMB2CreateOptions.FILE_DIRECTORY_FILE),
     )
@@ -311,7 +313,7 @@ private class SmbjShare(override val name: String, private val share: DiskShare,
       path,
       EnumSet.of(AccessMask.DELETE, AccessMask.FILE_READ_ATTRIBUTES, AccessMask.SYNCHRONIZE),
       EnumSet.noneOf(FileAttributes::class.java),
-      if (exclusive) EnumSet.noneOf(SMB2ShareAccess::class.java) else EnumSet.of(SMB2ShareAccess.FILE_SHARE_READ),
+      SmbOpenMode.change(exclusive).shareAccess(),
       SMB2CreateDisposition.FILE_OPEN,
       EnumSet.of(SMB2CreateOptions.FILE_OPEN_REPARSE_POINT),
     )
@@ -460,6 +462,13 @@ private fun FileAllInformation.toInfo(): SmbFileInfo {
 }
 
 private fun FileTime?.millisOrNull(): Long? = this?.takeIf { it.windowsTimeStamp != 0L }?.toEpochMillis()
+
+/** Le condivisioni di [SmbOpenMode] per smbj. */
+private fun SmbOpenMode.shareAccess(): EnumSet<SMB2ShareAccess> = EnumSet.noneOf(SMB2ShareAccess::class.java).apply {
+  if (shareRead) add(SMB2ShareAccess.FILE_SHARE_READ)
+  if (shareWrite) add(SMB2ShareAccess.FILE_SHARE_WRITE)
+  if (shareDelete) add(SMB2ShareAccess.FILE_SHARE_DELETE)
+}
 
 // --- La guardia sulle risposte (domanda aperta 1 della revisione 2) ------------------------------------------
 

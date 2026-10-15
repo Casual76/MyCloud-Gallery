@@ -264,6 +264,14 @@ class RulesTest {
     assertThat(OpErrorCode.entries.map { it.code }).containsAtLeast("source_changed", "locked", "locked_too_long", "verify_failed")
   }
 
+  /** Prova F16: il motivo della pausa sta nella stessa colonna `error_code` dei codici d'errore, quindi i due elenchi non si toccano. */
+  @Test
+  fun iMotiviDellaPausaNonSiConfondonoConICodiciDErrore() {
+    val errors = OpErrorCode.entries.map { it.code }.toSet()
+    assertThat(PauseReason.entries.map { it.code }.filter { it in errors }).isEmpty()
+    assertThat(PauseReason.entries.map { it.code }).containsAtLeast("nas_unreachable", "conditions", "frozen", "clock_jump", "writes_stopped")
+  }
+
   @Test
   fun ilNomeDelCamminoNonDipendeDalleMaiuscoleDelleShare() {
     val a = PlannedItem(0, ItemFlow.RENAME, "Test", SharePath.parse("a"), "TEST", SharePath.parse("b"), false, 1, NasStamp(1, 2, 3))

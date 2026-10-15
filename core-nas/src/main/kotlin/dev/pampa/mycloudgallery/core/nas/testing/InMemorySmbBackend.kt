@@ -17,6 +17,7 @@ import dev.pampa.mycloudgallery.core.nas.smb.SmbCreditsExhaustedException
 import dev.pampa.mycloudgallery.core.nas.smb.SmbDirEntry
 import dev.pampa.mycloudgallery.core.nas.smb.SmbDirectory
 import dev.pampa.mycloudgallery.core.nas.smb.SmbFileInfo
+import dev.pampa.mycloudgallery.core.nas.smb.SmbOpenMode
 import dev.pampa.mycloudgallery.core.nas.smb.SmbGuestRejectedException
 import dev.pampa.mycloudgallery.core.nas.smb.SmbNegotiationException
 import dev.pampa.mycloudgallery.core.nas.smb.SmbReadFile
@@ -166,6 +167,28 @@ class InMemorySmbBackend(
   /** Se non null, la copia lato server risponde con questo codice (`NOT_SUPPORTED`, `ACCESS_DENIED`: E-D12). */
   @Volatile var copyChunkStatus: Long? = null
 
+  /**
+   * P16, prova F16 sul NAS vero: gli **handle dei client** contano come su Samba. Ogni apertura (lettura, temporaneo, cartella, handle
+   * per cambiare) resta viva sul server con i suoi diritti e le sue condivisioni ([SmbOpenMode], le stesse di `SmbjTransport`) finche'
+   * il client non la chiude o finche' la connessione non cade **per il server**; chi apre lo stesso file con un diritto che un handle
+   * vivo non condivide riceve `SHARING_VIOLATION`, anche se l'handle e' dello stesso telefono. Una cancellazione con altri handle aperti
+   * avviene alla chiusura dell'ultimo (`DELETE_PENDING` nel frattempo). Di default acceso, come il NAS vero.
+   */
+  @Volatile var shareModes: Boolean = true
+
+  /**
+   * Rinominare (o mettere nel cestino) una cartella con un file aperto **sotto**, dalla stessa connessione: Samba risponde
+   * `ACCESS_DENIED` (controlla gli handle dello stesso processo `smbd`, cioe' dello stesso client; `strict rename = no`). Gli handle di
+   * un'altra connessione (il PC) non contano.
+   */
+  @Volatile var openBelowDeniesDirRename: Boolean = true
+
+  /**
+   * Gancio chiamato quando la chiusura di un handle sta per arrivare al server (fuori dal lucchetto: puo' aspettare). Serve a provare
+   * l'ordine fra una chiusura "in volo" e la richiesta che segue.
+   */
+  @Volatile var beforeClose: (() -> Unit)? = null
+
   // --- Contatori ---------------------------------------------------------------------------------------------
   val tcpAttempts = AtomicInteger(0)
   val negotiations = AtomicInteger(0)
@@ -197,6 +220,17 @@ class InMemorySmbBackend(
   private val locks = HashMap<String, Boolean>()
   private val nextFileId = AtomicLong(FIRST_FILE_ID)
 
+  /** Gli handle vivi sul server, per nodo ([shareModes]). Sotto [lock]. */
+  private val handles = HashMap<Node, MutableList<SimHandle>>()
+
+  /** Un handle vivo sul server: di quale sessione (e connessione), con quali diritti e condivisioni. */
+  private inner class SimHandle(val node: Node, val state: SimShareState, val session: SimSession, val mode: SmbOpenMode) {
+    val connection: SimConnection get() = session.connection
+
+    /** Il "cancella alla chiusura": Samba lo esegue quando l'handle si chiude, anche per la caduta della connessione. */
+    @Volatile var deleteOnClose = false
+  }
+
   @Volatile private var lastDiskOpAt: Long? = null
   private val listMicros = AtomicLong(0)
 
@@ -211,6 +245,9 @@ class InMemorySmbBackend(
 
     /** Un punto di rianalisi (collegamento) verso un'altra cartella: la chiave della destinazione. */
     var linkTarget: String? = null
+
+    /** Cancellato con altri handle ancora aperti: sparisce alla chiusura dell'ultimo; intanto aprirlo da' `DELETE_PENDING`. */
+    var deletePending: Boolean = false
 
     val size: Long get() = virtual?.size ?: bytes.size.toLong()
 
@@ -426,6 +463,90 @@ class InMemorySmbBackend(
   val openConnections: Int get() = connections.count { it.isConnected }
 
   /**
+   * Il telefono perde la rete senza che il NAS se ne accorga (Wi-Fi caduto, cambio di rete): per il client le connessioni sono morte,
+   * ma il server tiene le sessioni e **i loro handle** finche' non si accorge che dall'altra parte non c'e' piu' nessuno ([reapAbandoned]).
+   */
+  fun abandonAllConnections() {
+    connections.forEach { it.abandon() }
+  }
+
+  /** Il NAS si accorge delle connessioni abbandonate (keepalive) e chiude i loro handle. */
+  fun reapAbandoned() {
+    synchronized(lock) {
+      handles.values.flatten().filter { it.connection.abandoned }.forEach { releaseLocked(it) }
+    }
+  }
+
+  /** Gli handle dei client ancora aperti sul server (tutte le connessioni). */
+  val openHandles: Int get() = synchronized(lock) { handles.values.sumOf { it.size } }
+
+  /** Gli handle ancora aperti sul server su [path] (per i test). */
+  fun openHandlesOn(share: String, path: String): Int = synchronized(lock) {
+    val node = shareState(share).nodes[key(split(path))] ?: return 0
+    handles[node]?.size ?: 0
+  }
+
+  // --- Handle dei client (condivisioni di Samba) -------------------------------------------------------------
+
+  /** Un'apertura di [node]: `DELETE_PENDING` se sta per sparire, `SHARING_VIOLATION` se un handle vivo non la lascia passare. Sotto il lucchetto. */
+  private fun openLocked(node: Node, state: SimShareState, session: SimSession, mode: SmbOpenMode): SimHandle {
+    checkOpenLocked(node, mode)
+    return SimHandle(node, state, session, mode).also { handles.getOrPut(node) { ArrayList() } += it }
+  }
+
+  /** Il controllo di un'apertura che non resta (cancellazione per nome). Sotto il lucchetto. */
+  private fun checkOpenLocked(node: Node, mode: SmbOpenMode) {
+    if (node.deletePending) throw SmbStatusException(NtStatus.DELETE_PENDING)
+    if (shareModes && handles[node].orEmpty().any { it.mode.conflictsWith(mode) }) throw SmbStatusException(NtStatus.SHARING_VIOLATION)
+  }
+
+  /** L'handle si chiude sul server: se il nodo aspettava di sparire e questo era l'ultimo handle, sparisce adesso. Sotto il lucchetto. */
+  private fun releaseLocked(handle: SimHandle) {
+    val list = handles[handle.node] ?: return
+    if (!list.remove(handle)) return
+    if (list.isEmpty()) handles.remove(handle.node)
+    val node = handle.node
+    if (handle.deleteOnClose) {
+      // Una cartella riempita nel frattempo resta (Samba ricontrolla alla chiusura).
+      val k = handle.state.nodes.entries.firstOrNull { it.value === node }?.key
+      if (k != null && !(node.isDirectory && handle.state.children(k).isNotEmpty())) deleteLocked(handle.state, node)
+    } else if (list.isEmpty() && node.deletePending) {
+      removeNodeLocked(handle.state, node)
+    }
+  }
+
+  /** Cancella [node] adesso, o alla chiusura dell'ultimo handle se ce ne sono ancora (Samba: cancella alla chiusura). Sotto il lucchetto. */
+  private fun deleteLocked(state: SimShareState, node: Node) {
+    if (handles[node].isNullOrEmpty()) removeNodeLocked(state, node) else node.deletePending = true
+  }
+
+  private fun removeNodeLocked(state: SimShareState, node: Node) {
+    val k = state.nodes.entries.firstOrNull { it.value === node }?.key ?: return
+    state.remove(k)
+    state.touchParent(k, nasTime())
+  }
+
+  /** La chiusura di un handle da parte del client: il gancio [beforeClose], poi il server lo dimentica (se la connessione c'e' ancora). */
+  private fun closeHandle(handle: SimHandle?) {
+    handle ?: return
+    beforeClose?.invoke()
+    synchronized(lock) {
+      // Una connessione abbandonata non porta la chiusura al server: l'handle resta finche' il NAS non se ne accorge.
+      if (!handle.connection.abandoned) releaseLocked(handle)
+    }
+  }
+
+  /** La connessione si e' chiusa o e' caduta per il server: i suoi handle si chiudono. */
+  private fun releaseConnection(connection: SimConnection) {
+    synchronized(lock) { handles.values.flatten().filter { it.connection === connection }.forEach { releaseLocked(it) } }
+  }
+
+  /** La sessione e' scaduta o chiusa: i suoi handle si chiudono. */
+  private fun releaseSession(session: SimSession) {
+    synchronized(lock) { handles.values.flatten().filter { it.session === session }.forEach { releaseLocked(it) } }
+  }
+
+  /**
    * Un binding "verso questo NAS" per chi fa la TCP da se' (la fase TCP del test di connessione): rispetta [tcp],
    * conta i tentativi in [tcpAttempts] e restituisce un socket mai connesso (nessuna rete vera).
    */
@@ -492,7 +613,7 @@ class InMemorySmbBackend(
         throw SmbConnectionLostException()
       }
       SimFault.ExpireSession -> {
-        session?.expired = true
+        session?.expire()
         throw SmbStatusException(NtStatus.USER_SESSION_DELETED)
       }
       SimFault.Stall -> {
@@ -543,16 +664,27 @@ class InMemorySmbBackend(
     @Volatile private var dropped = false
 
     @Volatile private var closed = false
+
+    /** Morta per il client, viva per il server (con i suoi handle) finche' non la si raccoglie: [abandonAllConnections]. */
+    @Volatile var abandoned = false
+      private set
     private val sessions = CopyOnWriteArrayList<SimSession>()
 
-    override val isConnected: Boolean get() = !dropped && !closed
+    override val isConnected: Boolean get() = !dropped && !closed && !abandoned
 
     fun serverDrop() {
       dropped = true
       closedLatch.countDown()
+      // Il server chiude la connessione (anche una che il telefono aveva gia' perso): i suoi handle si chiudono con lei.
+      releaseConnection(this)
     }
 
-    fun expireSessions() = sessions.forEach { it.expired = true }
+    fun abandon() {
+      abandoned = true
+      closedLatch.countDown()
+    }
+
+    fun expireSessions() = sessions.forEach { it.expire() }
 
     fun ensureAlive() {
       if (!isConnected) throw SmbConnectionLostException()
@@ -598,11 +730,19 @@ class InMemorySmbBackend(
     override fun close() {
       closed = true
       closedLatch.countDown()
+      // Il client chiude il socket: il server chiude i suoi handle (non se la rete era gia' persa: allora non lo sa).
+      if (!abandoned) releaseConnection(this)
     }
   }
 
   private inner class SimSession(val connection: SimConnection, val user: String, override val facts: SessionFacts) : SmbSession {
     @Volatile var expired = false
+
+    /** La sessione scade sul server (`USER_SESSION_DELETED`): i suoi handle si chiudono. */
+    fun expire() {
+      expired = true
+      releaseSession(this)
+    }
 
     fun ensureUsable() {
       connection.ensureAlive()
@@ -628,8 +768,12 @@ class InMemorySmbBackend(
 
   private inner class SimShare(val session: SimSession, override val name: String, val access: SimAccess) : SmbShare {
 
-    /** Una richiesta: guasti "prima", gancio, crediti, latenze; poi [body]; poi guasti "dopo" (risposta persa). */
-    private inline fun <T> perform(op: SimOp, path: String, bytes: Long = 0, body: () -> T): T {
+    /**
+     * Una richiesta: guasti "prima", gancio, crediti, latenze; poi [body]; poi guasti "dopo" (risposta persa). Per un'apertura, [lost]
+     * chiude sul server l'handle che il client non ricevera' mai (un codice d'errore al posto della risposta; con la connessione caduta o
+     * la sessione scaduta gli handle si chiudono comunque).
+     */
+    private inline fun <T> perform(op: SimOp, path: String, bytes: Long = 0, noinline lost: ((T) -> Unit)? = null, body: () -> T): T {
       session.ensureUsable()
       shareOps.incrementAndGet()
       beforeOp?.invoke(op, path)
@@ -638,9 +782,17 @@ class InMemorySmbBackend(
       if (creditFailures.getAndUpdate { if (it > 0) it - 1 else 0 } > 0) throw SmbCreditsExhaustedException()
       simulateTime(op, bytes)
       val result = body()
-      faultAfter(op, indices, session.connection, session)
+      try {
+        faultAfter(op, indices, session.connection, session)
+      } catch (t: Throwable) {
+        lost?.invoke(result)
+        throw t
+      }
       return result
     }
+
+    /** Il nodo aperto con un handle che resta vivo sul server ([shareModes]). Sotto il lucchetto. */
+    private fun open(state: SimShareState, node: Node, mode: SmbOpenMode): SimHandle = openLocked(node, state, session, mode)
 
     private fun requireWrite() {
       if (access != SimAccess.READ_WRITE) throw SmbStatusException(NtStatus.ACCESS_DENIED)
@@ -666,34 +818,40 @@ class InMemorySmbBackend(
       if (!forRead || denyRead) throw SmbStatusException(NtStatus.SHARING_VIOLATION)
     }
 
-    override fun openRead(path: String): SmbReadFile = perform(SimOp.OPEN_READ, path) {
-      val node = synchronized(lock) {
-        val found = lookup(state(), split(path))
+    override fun openRead(path: String): SmbReadFile = perform(SimOp.OPEN_READ, path, lost = { (it as SimOpen).lost() }) {
+      synchronized(lock) {
+        val state = state()
+        val found = lookup(state, split(path))
         if (found.isDirectory) throw SmbStatusException(NtStatus.FILE_IS_A_DIRECTORY)
         checkUnlocked(path, forRead = true)
-        found
+        SimReadFile(this, found, open(state, found, SmbOpenMode.READ))
       }
-      SimReadFile(this, node)
     }
 
     override fun stat(path: String): SmbFileInfo = perform(SimOp.STAT, path) {
-      synchronized(lock) { lookup(state(), split(path)).info() }
+      synchronized(lock) {
+        val node = lookup(state(), split(path))
+        if (node.deletePending) throw SmbStatusException(NtStatus.DELETE_PENDING)
+        node.info()
+      }
     }
 
-    override fun createExclusive(path: String): SmbWriteFile = perform(SimOp.CREATE, path) {
+    override fun createExclusive(path: String): SmbWriteFile = perform(SimOp.CREATE, path, lost = { (it as SimOpen).lost() }) {
       requireWrite()
-      val node = synchronized(lock) {
+      synchronized(lock) {
         val state = state()
         val parts = split(path)
         requireParent(state, parts)
-        if (state.nodes.containsKey(key(parts))) throw SmbStatusException(NtStatus.OBJECT_NAME_COLLISION)
+        state.nodes[key(parts)]?.let { existing ->
+          throw SmbStatusException(if (existing.deletePending) NtStatus.DELETE_PENDING else NtStatus.OBJECT_NAME_COLLISION)
+        }
         val now = nasTime()
-        Node(parts.joinToString("/"), false, nextFileId.incrementAndGet(), now).also {
+        val node = Node(parts.joinToString("/"), false, nextFileId.incrementAndGet(), now).also {
           state.add(key(parts), it)
           state.touchParent(key(parts), now)
         }
+        SimWriteFile(this, node, open(state, node, SmbOpenMode.CREATE_EXCLUSIVE))
       }
-      SimWriteFile(this, node)
     }
 
     override fun mkdir(path: String) = perform(SimOp.MKDIR, path) {
@@ -718,27 +876,27 @@ class InMemorySmbBackend(
         val node = lookup(state, parts)
         if (!node.isDirectory) throw SmbStatusException(NtStatus.NOT_A_DIRECTORY)
         if (state.children(key(parts)).isNotEmpty()) throw SmbStatusException(NtStatus.DIRECTORY_NOT_EMPTY)
-        state.remove(key(parts))
-        state.touchParent(key(parts), nasTime())
+        checkOpenLocked(node, SmbOpenMode.DELETE_BY_NAME)
+        deleteLocked(state, node)
       }
     }
 
-    override fun openDirectory(path: String, access: DirAccess): SmbDirectory = perform(SimOp.OPEN_DIRECTORY, path) {
+    override fun openDirectory(path: String, access: DirAccess): SmbDirectory = perform(SimOp.OPEN_DIRECTORY, path, lost = { (it as SimOpen).lost() }) {
       if (access == DirAccess.ADD_FILE) requireWrite()
-      var parentId: Long? = null
-      val entries = synchronized(lock) {
+      synchronized(lock) {
         val state = state()
         val parts = split(path)
         val node = lookup(state, parts)
         if (!node.isDirectory) throw SmbStatusException(NtStatus.NOT_A_DIRECTORY)
+        val handle = open(state, node, SmbOpenMode.directory(access))
         val listed = node.linkTarget ?: key(parts)
         // La voce `..` come la da' Samba: il genitore sul disco (per un collegamento, quello della destinazione). Radice: niente.
-        parentId = if (listed.isEmpty()) null else state.node(parentKey(listed))?.fileId
+        val parentId = if (listed.isEmpty()) null else state.node(parentKey(listed))?.fileId
         // Un'istantanea dei nodi (riferimenti): le voci si costruiscono una alla volta, mentre si scorre.
         val snapshot = state.children(listed).toList()
-        listOrder?.let { random -> snapshot.shuffled(random) } ?: snapshot
+        val entries = listOrder?.let { random -> snapshot.shuffled(random) } ?: snapshot
+        SimDirectory(this, entries, truncateListsAfter, parentId, handle)
       }
-      SimDirectory(this, entries, truncateListsAfter, parentId)
     }
 
     override fun deleteFile(path: String) = perform(SimOp.DELETE, path) {
@@ -749,8 +907,8 @@ class InMemorySmbBackend(
         val node = lookup(state, parts)
         if (node.isDirectory) throw SmbStatusException(NtStatus.FILE_IS_A_DIRECTORY)
         checkUnlocked(path, forRead = false)
-        state.remove(key(parts))
-        state.touchParent(key(parts), nasTime())
+        checkOpenLocked(node, SmbOpenMode.DELETE_BY_NAME)
+        deleteLocked(state, node)
       }
     }
 
@@ -765,16 +923,16 @@ class InMemorySmbBackend(
     // Fase 4B: un file o una cartella esistenti aperti con DELETE. Un file aperto dal PC (lock) risponde SHARING_VIOLATION
     // all'apertura, come Samba quando chi l'ha aperto non condivide la cancellazione; per una cartella lo dice la rinomina o la
     // cancellazione se dentro c'e' un file aperto.
-    override fun openForChange(path: String, exclusive: Boolean): SmbChangeHandle = perform(SimOp.OPEN_CHANGE, path) {
+    override fun openForChange(path: String, exclusive: Boolean): SmbChangeHandle = perform(SimOp.OPEN_CHANGE, path, lost = { (it as SimOpen).lost() }) {
       requireWrite()
-      val node = synchronized(lock) {
+      synchronized(lock) {
         val parts = split(path)
         if (parts.isEmpty()) throw SmbStatusException(NtStatus.ACCESS_DENIED)
-        val found = lookup(state(), parts)
+        val state = state()
+        val found = lookup(state, parts)
         if (locks.containsKey(lockKey(name, path))) throw SmbStatusException(NtStatus.SHARING_VIOLATION)
-        found
+        SimChangeHandle(this, found, open(state, found, SmbOpenMode.change(exclusive)))
       }
-      SimChangeHandle(this, node)
     }
 
     override fun close() = Unit
@@ -788,11 +946,20 @@ class InMemorySmbBackend(
       return locks.keys.any { it.startsWith(prefix) && (it.removePrefix(prefix) == key || it.removePrefix(prefix).startsWith("$key/")) }
     }
 
+    /** Un handle di questa connessione e' aperto su qualcosa SOTTO la cartella [dirKey] (Samba lo controlla nello stesso processo). Sotto il lucchetto. */
+    private fun ownHandleBelow(state: SimShareState, dirKey: String): Boolean = handles.values.any { list ->
+      list.any { it.state === state && it.connection === session.connection && key(split(it.node.displayPath)).startsWith("$dirKey/") }
+    }
+
     fun renameByHandle(node: Node, newPath: String) = perform(SimOp.RENAME, newPath) {
       synchronized(lock) {
         val state = state()
         val oldKey = keyOf(state, node) ?: throw SmbStatusException(NtStatus.OBJECT_NAME_NOT_FOUND)
         if (lockedUnder(oldKey)) throw SmbStatusException(NtStatus.SHARING_VIOLATION)
+        // Samba (`have_file_open_below`): una cartella con un file aperto sotto dallo stesso client non si rinomina.
+        if (node.isDirectory && shareModes && openBelowDeniesDirRename && ownHandleBelow(state, oldKey)) {
+          throw SmbStatusException(NtStatus.ACCESS_DENIED)
+        }
         val toParts = split(newPath)
         val toKey = key(toParts)
         if (toKey == oldKey || toKey.startsWith("$oldKey/")) {
@@ -813,16 +980,8 @@ class InMemorySmbBackend(
       }
     }
 
-    /** La cancellazione alla chiusura: solo se l'elemento c'e' ancora ed e' ancora vuoto (una cartella). */
-    fun deleteByHandle(node: Node) {
-      synchronized(lock) {
-        val state = state()
-        val k = keyOf(state, node) ?: return
-        if (node.isDirectory && state.children(k).isNotEmpty()) return
-        state.remove(k)
-        state.touchParent(k, nasTime())
-      }
-    }
+    /** La chiusura di [handle] da parte di questo client (la cancellazione alla chiusura, se chiesta, la fa il server: [releaseLocked]). */
+    fun closeOf(handle: SimHandle) = closeHandle(handle)
 
     fun readInto(node: Node, buffer: ByteArray, fileOffset: Long, bufferOffset: Int, length: Int): Int {
       val inFlight = readsInFlight.incrementAndGet()
@@ -906,16 +1065,6 @@ class InMemorySmbBackend(
       }
     }
 
-    fun deleteNode(node: Node) {
-      synchronized(lock) {
-        val state = state()
-        state.nodes.entries.firstOrNull { it.value === node }?.key?.let { k ->
-          state.remove(k)
-          state.touchParent(k, nasTime())
-        }
-      }
-    }
-
     fun checkAlive() = session.ensureUsable()
 
     fun flushOrLength(op: SimOp, node: Node) = perform(op, node.displayPath) { Unit }
@@ -928,7 +1077,25 @@ class InMemorySmbBackend(
     }
   }
 
-  private inner class SimReadFile(private val share: SimShare, private val node: Node) : SmbReadFile {
+  /** Un handle aperto dal client: chiuderlo lo chiude sul server (una volta sola). */
+  private abstract inner class SimOpen(private val share: SimShare, private val handle: SimHandle) {
+    @Volatile private var closed = false
+
+    /** Il client non ha mai ricevuto la risposta dell'apertura: per il server l'handle non c'e'. */
+    fun lost() = synchronized(lock) { releaseLocked(handle) }
+
+    protected fun markDeleteOnClose() {
+      handle.deleteOnClose = true
+    }
+
+    fun closeOnServer() {
+      if (closed) return
+      closed = true
+      share.closeOf(handle)
+    }
+  }
+
+  private inner class SimReadFile(private val share: SimShare, private val node: Node, handle: SimHandle) : SimOpen(share, handle), SmbReadFile {
     override val declaredSize: Long = synchronized(lock) { node.declaredSize ?: node.size }
 
     override val info: SmbFileInfo = synchronized(lock) { node.info() }
@@ -938,12 +1105,10 @@ class InMemorySmbBackend(
 
     override fun resumeKey(): ByteArray = share.resumeKeyOf(node)
 
-    override fun close() = Unit
+    override fun close() = closeOnServer()
   }
 
-  private inner class SimWriteFile(private val share: SimShare, private val node: Node) : SmbWriteFile {
-    @Volatile private var deleteOnClose = false
-
+  private inner class SimWriteFile(private val share: SimShare, private val node: Node, handle: SimHandle) : SimOpen(share, handle), SmbWriteFile {
     override fun write(buffer: ByteArray, fileOffset: Long, bufferOffset: Int, length: Int): Int =
       share.writeInto(node, buffer, fileOffset, bufferOffset, length)
 
@@ -960,39 +1125,35 @@ class InMemorySmbBackend(
 
     override fun deleteOnClose() {
       share.markDeleteOnClose(node)
-      deleteOnClose = true
+      markDeleteOnClose()
     }
 
-    override fun close() {
-      // Samba esegue il "cancella alla chiusura" anche quando l'handle si chiude per la caduta della sessione.
-      if (deleteOnClose) share.deleteNode(node)
-    }
+    // Samba esegue il "cancella alla chiusura" anche quando l'handle si chiude per la caduta della sessione ([releaseLocked]).
+    override fun close() = closeOnServer()
   }
 
-  private inner class SimChangeHandle(private val share: SimShare, private val node: Node) : SmbChangeHandle {
-    @Volatile private var deleteOnClose = false
-
+  private inner class SimChangeHandle(private val share: SimShare, private val node: Node, handle: SimHandle) :
+    SimOpen(share, handle), SmbChangeHandle {
     override val info: SmbFileInfo = synchronized(lock) { node.info() }
 
     override fun renameNoReplace(newPath: String) = share.renameByHandle(node, newPath)
 
     override fun deleteOnClose() {
       share.markDeleteByHandle(node)
-      deleteOnClose = true
+      markDeleteOnClose()
     }
 
-    override fun close() {
-      // Come Samba: la cancellazione avviene alla chiusura, anche quando l'handle si chiude per la caduta della sessione.
-      if (deleteOnClose) share.deleteByHandle(node)
-    }
+    // Come Samba: la cancellazione avviene alla chiusura, anche quando l'handle si chiude per la caduta della sessione.
+    override fun close() = closeOnServer()
   }
 
   private inner class SimDirectory(
     private val share: SimShare,
     private val entries: List<Node>,
     private val truncate: Int?,
-    private val parent: Long? = null,
-  ) : SmbDirectory {
+    private val parent: Long?,
+    handle: SimHandle,
+  ) : SimOpen(share, handle), SmbDirectory {
     override fun parentFileId(): Long? {
       share.checkAlive()
       return parent
@@ -1013,7 +1174,7 @@ class InMemorySmbBackend(
       }
     }
 
-    override fun close() = Unit
+    override fun close() = closeOnServer()
   }
 
   private fun Node.info(): SmbFileInfo = SmbFileInfo(

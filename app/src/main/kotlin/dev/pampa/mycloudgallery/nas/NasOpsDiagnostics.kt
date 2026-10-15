@@ -9,6 +9,7 @@ import dev.pampa.mycloudgallery.core.common.diagnostics.ExportValue
 import dev.pampa.mycloudgallery.core.nasops.contract.NasOperationState
 import dev.pampa.mycloudgallery.core.nasops.contract.OpErrorCode
 import dev.pampa.mycloudgallery.core.nasops.contract.OpItemState
+import dev.pampa.mycloudgallery.core.nasops.contract.OpRecord
 import dev.pampa.mycloudgallery.core.nasops.contract.OpState
 import dev.pampa.mycloudgallery.core.nasops.contract.PauseReason
 import dev.pampa.mycloudgallery.core.nasops.contract.TrashEntryState
@@ -66,7 +67,12 @@ class NasOpsDiagnostics(private val nas: NasGraph) : DiagnosticsContributor {
     // Operazioni attive e chiuse (dal diario mostrato).
     val states = organizer.operations.operations.value
     val active = states.filter { it.active }
-    if (states.isNotEmpty()) {
+    // Prova F16 sul NAS vero: perche' ogni operazione e' in pausa, letto dal DIARIO (sopravvive alla morte del processo). Una pausa senza
+    // motivo leggibile e' un difetto: conta come UNKNOWN e alza la gravita'.
+    val pauseReasons = runCatching {
+      organizer.opsStore.ops(setOf(OpState.PAUSED)).groupingBy(::pauseReasonOf).eachCount()
+    }.getOrDefault(emptyMap())
+    if (states.isNotEmpty() || pauseReasons.isNotEmpty()) {
       val paused = active.filterIsInstance<NasOperationState.Paused>()
       val export = linkedMapOf<String, ExportValue>(
         "opsActive" to ExportValue.Num(active.size.toLong()),
@@ -76,7 +82,9 @@ class NasOpsDiagnostics(private val nas: NasGraph) : DiagnosticsContributor {
         "opsClosed" to ExportValue.Num((states.size - active.size).toLong()),
       )
       paused.firstOrNull()?.reason?.let { export["pauseReason"] = ExportValue.Enum.of(it) }
-      val severity = if (paused.any { it.reason == PauseReason.FROZEN || it.reason == PauseReason.WRITES_STOPPED }) DiagSeverity.WARNING else DiagSeverity.INFO
+      pauseReasons.forEach { (reason, n) -> export["reason.$reason"] = ExportValue.Num(n.toLong()) }
+      val blocked = paused.any { it.reason == PauseReason.FROZEN || it.reason == PauseReason.WRITES_STOPPED }
+      val severity = if (blocked || UNKNOWN_PAUSE in pauseReasons) DiagSeverity.WARNING else DiagSeverity.INFO
       items += item(NasOpsDiagCodes.OPS_STATE, severity, export)
     }
     val locked = active.filterIsInstance<NasOperationState.WaitingLocked>().sumOf { it.lockedCount }
@@ -164,6 +172,16 @@ class NasOpsDiagnostics(private val nas: NasGraph) : DiagnosticsContributor {
     return items
   }
 
+  /**
+   * Il motivo di un'operazione in pausa come lo dice il diario: [PauseReason] scritto con la pausa, oppure "Ferma" dell'utente (USER) e
+   * l'attesa di un file aperto (LOCKED); [UNKNOWN_PAUSE] se il diario non lo dice (una riga scritta prima della prova F16).
+   */
+  private fun pauseReasonOf(op: OpRecord): String = op.pauseReason?.name ?: when (op.errorCode) {
+    OpErrorCode.STOPPED_BY_USER -> PauseReason.USER.name
+    OpErrorCode.LOCKED -> OpErrorCode.LOCKED.name
+    else -> UNKNOWN_PAUSE
+  }
+
   /** Lo stato della sincronizzazione come enumerato (senza i dati dentro). */
   enum class PersonalState { IDLE, SYNCING, UP_TO_DATE, UNAVAILABLE, LOCAL_ONLY }
 
@@ -182,5 +200,8 @@ class NasOpsDiagnostics(private val nas: NasGraph) : DiagnosticsContributor {
     /** Le operazioni del diario guardate per gli elementi fermi: quelle che "Operazioni in corso" mostra ancora. */
     const val RECENT_OPS = 20
     const val TRASH_DAYS_MS = 30L * 24 * 60 * 60 * 1000
+
+    /** Una pausa il cui motivo il diario non dice. */
+    const val UNKNOWN_PAUSE = "UNKNOWN"
   }
 }

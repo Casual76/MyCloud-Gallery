@@ -44,6 +44,9 @@ import dev.pampa.mycloudgallery.core.trust.nas.NasFileSystem
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import java.io.IOException
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.cancellation.CancellationException
@@ -61,6 +64,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.sync.Mutex
@@ -221,15 +225,65 @@ class SmbNasSessionManager(
     return NasError.PermissionDenied
   }
 
-  /** Chiude [resource] fuori dal chiamante (una `CLOSE` SMB e' bloccante): per i file aperti dalla lettura dei media. */
-  internal fun closeLater(resource: AutoCloseable) {
+  /**
+   * Le chiusure rimandate ([closeLater]) non ancora arrivate al NAS. Prova F16 sul NAS vero: un handle nostro ancora aperto sul server
+   * (la `CLOSE` partita su un altro thread non e' ancora arrivata) fa rispondere `SHARING_VIOLATION` alla nostra richiesta successiva
+   * sullo stesso file, e l'operazione aspettava "il file aperto dal PC". Per questo ogni operazione, prima di partire, aspetta le chiusure
+   * chieste prima di lei sulla stessa sessione ([awaitCloses]), ognuna al massimo [CLOSE_WAIT_MS] dalla sua partenza: una `CLOSE` che il
+   * NAS non conferma (in volo mentre la connessione si chiude: smbj la aspetta 60 s) non deve fermare nessuno.
+   */
+  private val pendingCloses: MutableSet<PendingClose> = ConcurrentHashMap.newKeySet()
+
+  /** Una chiusura in volo: su quale sessione (null = non si sa: conta come quella corrente), da quando, e quando e' finita. */
+  private class PendingClose(val session: Any?, val startedAt: Long) {
+    val done = CountDownLatch(1)
+  }
+
+  /**
+   * Chiude [resource] fuori dal chiamante (una `CLOSE` SMB e' bloccante): per i file aperti dalla lettura dei media. [session] e' la
+   * sessione su cui la risorsa e' stata aperta (`OpContext.sessionKey`).
+   */
+  internal fun closeLater(resource: AutoCloseable, session: Any?) {
+    val pending = PendingClose(session, clock.nowMillis())
+    if (!scope.isActive) {
+      closeQuietly(resource, pending)
+      return
+    }
+    pendingCloses += pending
     scope.launch(io) {
       try {
-        resource.close()
-      } catch (_: Exception) {
-        // chiusura: niente da riportare (l'handle muore comunque con la connessione)
+        closeQuietly(resource, pending)
+      } finally {
+        pending.done.countDown()
+        pendingCloses -= pending
       }
     }
+  }
+
+  /**
+   * Aspetta le chiusure in volo chieste prima **sulla sessione in uso**, ognuna al massimo [CLOSE_WAIT_MS] dalla sua partenza: al ritorno
+   * sono arrivate al NAS (di norma in pochi millisecondi). Quelle di una sessione gia' chiusa non si aspettano (i loro handle sono morti
+   * con la connessione). Bloccante, sul dispatcher [io].
+   */
+  internal fun awaitCloses() {
+    if (pendingCloses.isEmpty()) return
+    val current = live.get()
+    // L'iteratore dell'insieme concorrente regge le chiusure che finiscono mentre lo si scorre (toList no: conta prima di copiare).
+    for (pending in pendingCloses) {
+      if (pending.session != null && pending.session !== current) continue
+      val left = pending.startedAt + CLOSE_WAIT_MS - clock.nowMillis()
+      if (left > 0) pending.done.await(left, TimeUnit.MILLISECONDS)
+    }
+  }
+
+  private fun closeQuietly(resource: AutoCloseable, pending: PendingClose) {
+    try {
+      resource.close()
+    } catch (_: Exception) {
+      // chiusura: niente da riportare (l'handle muore comunque con la connessione)
+    }
+    val took = clock.nowMillis() - pending.startedAt
+    if (took >= CLOSE_WAIT_MS) GalleryLog.w(TAG) { "chiusura lenta: $took ms (sessione ancora in uso=${pending.session === live.get()})" }
   }
 
   /** Un trasferimento fatto di piu' operazioni (`readAll`): solo il ritmo, sorvegliato dal monitor (D3, E-R14). */
@@ -351,6 +405,8 @@ class SmbNasSessionManager(
       try {
         val value = runInterruptible(io) {
           ticket.abortedBy?.let { throw NasOpException(it, FailureKind.SUSPECT) }
+          // Prima le chiusure chieste prima di questa operazione: un nostro handle non deve bloccare la nostra richiesta (prova F16).
+          awaitCloses()
           val smbShare = session.share(share)
           op(OpContext(smbShare, session, ticket, clock, config, ::fenced))
         }
@@ -698,6 +754,12 @@ class SmbNasSessionManager(
 
   private companion object {
     const val TAG = "NasSession"
+
+    /**
+     * Quanto una richiesta aspetta, al massimo, una chiusura in volo chiesta prima di lei (contato dalla partenza della chiusura). Una
+     * `CLOSE` arriva in pochi millisecondi; una che il NAS non conferma (smbj la aspetta 60 s) si annota e non ferma piu' nessuno.
+     */
+    const val CLOSE_WAIT_MS = 2_000L
   }
 }
 

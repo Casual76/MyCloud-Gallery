@@ -683,6 +683,40 @@ che contiene media che l'utente ha **nascosto**, i familiari li vedrebbero: l'ut
   fogli nuovi in `docs/screenshots/4-P14/` (si registrano con `recordRoborazziDebug`; i test `foglioSpostaNellAreaComune*Nascosti*`
   verificano per ora solo che compongano); la prova sul campo (sotto, in `4b-fase4b.md`).
 
+### Prova F16 sul NAS vero: operazioni ferme "in attesa del PC" senza un PC (15/10)
+Fonte: `docs/prova-500.md` §6bis. Il primo giro lungo della prova delle interruzioni sul WD (493 giri) ha avuto 13 giri con operazioni
+rimaste in pausa per sempre (e, di conseguenza, copie arrivate con la sorgente ancora al suo posto e temporanei non pubblicati). Nessun file
+perso o rovinato.
+
+- **Causa.** Il file "aperto da un altro programma" lo teneva aperto **il telefono stesso**. Un nostro handle di lettura ancora aperto sul
+  NAS (nel banco: quello di un processo morto a meta' di una lettura, perche' il banco passava la connessione del processo morto a quello
+  nuovo; nella vita vera: una chiusura partita su un altro thread e non ancora arrivata, la Libreria che legge, una connessione persa che il
+  NAS tiene ancora per minuti) non condivideva la cancellazione: Samba rifiutava la nostra rinomina di quel file (`SHARING_VIOLATION`) e
+  l'operazione aspettava "il PC" con attese da 1 minuto in su. In piu', il motivo della pausa non era nel diario (`motivo=nessuno`): dopo un
+  riavvio la schermata diceva "condizioni". Due giri senza nessuna interruzione erano la corsa fra la chiusura del temporaneo (su un altro
+  thread) e la sua pubblicazione. Provato rigiocando un giro rosso sul NAS vero e con il simulatore che ora tiene gli handle come Samba.
+- **Correzione.** (1) La lettura **condivide la cancellazione**: un nostro handle di lettura non blocca mai la rinomina o il cestino di quel
+  file (provato sul WD). Le protezioni non cambiano: la rinomina condivide solo la lettura (nessuno scrive fra il controllo del timbro e la
+  rinomina), la cancellazione con il controllo della dimensione resta esclusiva, la sorgente va nel cestino solo dopo la verifica completa.
+  (2) **Chiusure ordinate**: ogni richiesta al NAS parte dopo le chiusure chieste prima di lei sulla stessa connessione, aspettandole al
+  massimo 2 s ciascuna (sul WD una chiusura in volo mentre la connessione si chiude non torna mai: smbj la aspetta 60 s, e senza tetto ogni
+  richiesta dopo restava ferma con lei). (3) Un'apertura annullata mentre il NAS
+  risponde chiude il suo handle. (4) **Il motivo della pausa sta nel diario** (stessa colonna `error_code`, codici distinti) e nella
+  Diagnostica (`NAS_OPS_STATE`: pause per motivo; una pausa senza motivo conta come `UNKNOWN` e alza la gravita'). Le pause restano quelle di
+  prima e riprendono da sole quando la condizione passa (lavoro di ripresa programmato; un file davvero aperto dal PC si aspetta fino a 24
+  ore, poi l'elemento si ferma e lo dice).
+- **Banco e simulatore.** La morte del processo chiude la sua connessione, come fa il sistema sul telefono. Il simulatore SMB tiene gli
+  handle dei client con le stesse condivisioni del trasporto vero, le connessioni perse dal telefono ma non ancora dal NAS e le cartelle che
+  Samba non rinomina; con il codice di prima il banco sul simulatore ha 49 giri rossi su 600 con la stessa firma del WD.
+- **Esito sul NAS vero (15/10, sera):** area pulita, giro corto 27 giri / 20 interruzioni / 0 violazioni, poi **537 giri, 400
+  interruzioni (264 morti del processo, 22 durante una lettura), 0 violazioni**, 142 minuti, 58 GB riletti con SHA-256; area di nuovo
+  pulita e verificata con entrambi gli account.
+- **Osservazione da decidere (non cambiata).** Sul WD una cartella con un file aperto **dalla stessa connessione** non si rinomina
+  (`ACCESS_DENIED`, Samba `strict rename = no`; un file aperto dal PC invece non conta). Le chiusure ordinate tolgono il caso dell'inventario
+  prima del cestino (che con le chiusure in volo faceva fallire l'elemento "permesso negato"); resta la Libreria che sta leggendo un file
+  dentro una cartella mentre la si sposta o la si elimina: l'elemento si ferma con "permesso negato" (motivo visibile, niente perso). Si
+  potrebbe trattare come un'attesa breve invece che come un rifiuto.
+
 ## Revisione grafica della Libreria da parte dell'utente (13/10)
 Giudizio: le prestazioni della navigazione non sono male, la **grafica no**. Serve molto lavoro, da fare in un **filone grafico
 parallelo** alle fasi successive (insieme ai lavori che non toccano l'app sul momento, per esempio il back-end NAS della Fase 4).

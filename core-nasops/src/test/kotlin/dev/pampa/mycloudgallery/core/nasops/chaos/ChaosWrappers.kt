@@ -27,6 +27,7 @@ import dev.pampa.mycloudgallery.core.nasops.contract.OpRecord
 import dev.pampa.mycloudgallery.core.nasops.contract.OpState
 import dev.pampa.mycloudgallery.core.nasops.contract.OpStateMachine
 import dev.pampa.mycloudgallery.core.nasops.contract.OpsStore
+import dev.pampa.mycloudgallery.core.nasops.contract.PauseReason
 import dev.pampa.mycloudgallery.core.nasops.contract.PlanHash
 import dev.pampa.mycloudgallery.core.nasops.contract.TrashEntryState
 import dev.pampa.mycloudgallery.core.nasops.contract.PurgedTally
@@ -214,8 +215,8 @@ class ChaosStore(
     }
   }
 
-  override suspend fun setOpState(id: OpId, state: OpState, errorCode: OpErrorCode?, nowNas: Long) {
-    injector.store(Primitive.STORE_SET_OP_STATE, incarnation) { inner.setOpState(id, state, errorCode, nowNas) }
+  override suspend fun setOpState(id: OpId, state: OpState, errorCode: OpErrorCode?, nowNas: Long, pause: PauseReason?) {
+    injector.store(Primitive.STORE_SET_OP_STATE, incarnation) { inner.setOpState(id, state, errorCode, nowNas, pause) }
   }
 
   override suspend fun recordTrash(entry: LocalTrashRecord) {

@@ -4,6 +4,7 @@
 |---|---|
 | **Stato** | 15/10/2026 (P16). Il banco JVM gira a ogni `check.ps1` su **due stack**: le operazioni vere di P12 (`ProductionChaosStackFactory`) e quelle fake di P0-B, entrambe **senza esclusioni** (i difetti D1-D4 del fake li ha corretti P12; il P16 ha tolto le esclusioni, §6): 2.000 giri ciascuno, circa 7.000 interruzioni, zero violazioni, circa 10 secondi per stack. Il runner contro l'area di prova del NAS vero ha l'aggancio a smbj (`SmbChaosBinding`, P12) ma **non e' mai stato lanciato sul NAS vero**: al P16 la suite d'integrazione di `core-nas` si e' fermata al login (`AUTH_FAILED`, un solo tentativo: il file delle credenziali va aggiornato con le password di prova nuove). Lo script del telefono e' controllato a secco, **mai lanciato su un telefono**. |
 | **Revisione 4B (15/10)** | I1 chiuso: il banco gira anche sulle **vere `SmbNasFileOps`** e sulla sessione SMB di produzione, sopra il simulatore SMB di core-nas (`SimSmbTarget`, `SmbPrimitivesChaosBenchTest`): **600 giri, 2.172 interruzioni, 0 violazioni**, ~12 s, a ogni `check.ps1` (§2). Gli invarianti valgono con le correzioni della revisione (date del cestino, inventario delle cartelle, tetto per giorno, "Ferma" nel diario). |
+| **F16 sul NAS vero (15/10)** | Primo giro lungo sul WD: 493 giri, 401 interruzioni, **13 giri rossi** (operazioni "in pausa" per sempre, doppioni da spostamenti fermi, temporanei rimasti). Causa: **handle del telefono rimasti aperti sul NAS** (§6bis). Corretto nel codice di produzione (la lettura condivide la cancellazione, chiusure ordinate, motivo della pausa nel diario) e nel banco (la morte del processo chiude la sua connessione, come sul telefono); il simulatore SMB ora tiene gli handle come Samba. Dopo: **537 giri, 400 interruzioni, 0 violazioni** sul NAS vero (142 min), area pulita |
 | **Dove** | `core-nasops/src/test/kotlin/dev/pampa/mycloudgallery/core/nasops/chaos/` (il banco), `tools/chaos/` (gli script), questo file |
 | **Riferimenti** | `docs/fase4-progetto.md` §2.7 (macchine a stati), §4.4 riga P15, §5.4 (area di prova e guardia), §5.5 (le interruzioni) |
 
@@ -43,8 +44,8 @@ La ripresa a vuoto è parte della prova: dopo un passo, una morte senza colpo se
 | Dove | Che cosa | Quante | Stato |
 |---|---|---|---|
 | **JVM, NAS finto** | `ChaosBenchTest`: giri casuali sul NAS finto in memoria, con le operazioni vere di P12 (`ProductionChaosStackFactory`) e con quelle fake di P0-B, senza esclusioni | 2.000 giri per stack, ~7.000 interruzioni ciascuno, ~10 s per stack | **verde** su entrambi |
-| **JVM, simulatore SMB** (revisione 4B, I1) | `SmbPrimitivesChaosBenchTest`: gli stessi giri con le operazioni vere di P12 sopra la **sessione SMB di produzione e le vere `SmbNasFileOps`** (handle, `FILE_CREATE`, rinomina senza sostituire, condivisioni, copia lato server a blocchi, codici NTSTATUS), sul simulatore di core-nas (`InMemorySmbBackend`, uno nuovo per giro: `SimSmbTarget`); il tempo passa (30 giorni del cestino) e la copia lato server si puo' rifiutare (ripiego dal telefono); "connessione caduta" chiude davvero le connessioni | 600 giri (`MCG_CHAOS_SMB_ROUNDS`, al massimo 3.000), 2.172 interruzioni, ~12 s | **verde** (0 violazioni) |
-| **PC, area di prova del NAS vero** | `ChaosNasIntegrationTest` modo `run`: giri brevi, **un colpo per passo**, file da 1 MB e da `chaos.bigFileMb` MB, dietro la guardia, solo sotto `mcg-it/<giro>/` | ≥ 400 interruzioni (`chaos.rounds`) | scritto e agganciato a smbj (`SmbChaosBinding`); provato sul NAS finto con 20 interruzioni; **non lanciato sul NAS vero** (P16: login di prova fallito, credenziali da aggiornare) |
+| **JVM, simulatore SMB** (revisione 4B, I1) | `SmbPrimitivesChaosBenchTest`: gli stessi giri con le operazioni vere di P12 sopra la **sessione SMB di produzione e le vere `SmbNasFileOps`** (`FILE_CREATE`, rinomina senza sostituire, copia lato server a blocchi, codici NTSTATUS e, dalla prova F16, **gli handle dei client con le loro condivisioni** come Samba: §6bis), sul simulatore di core-nas (`InMemorySmbBackend`, uno nuovo per giro: `SimSmbTarget`); il tempo passa (30 giorni del cestino) e la copia lato server si puo' rifiutare (ripiego dal telefono); "connessione caduta" chiude davvero le connessioni; la morte del processo chiude la sua | 600 giri (`MCG_CHAOS_SMB_ROUNDS`, al massimo 3.000), 2.172 interruzioni, ~14 s | **verde** (0 violazioni). Con gli handle e il codice di prima: 49 giri rossi su 600, la stessa firma del NAS vero |
+| **PC, area di prova del NAS vero** | `ChaosNasIntegrationTest` modo `run`: giri brevi, **un colpo per passo**, file da 1 MB e da `chaos.bigFileMb` MB, dietro la guardia, solo sotto `mcg-it/<giro>/` | ≥ 400 interruzioni (`chaos.rounds`) | 15/10: primo giro lungo 13 rossi su 493 (§6bis); dopo le correzioni **537 giri, 400 interruzioni, 0 violazioni** (142 min) |
 | **Telefono, area di prova** | `tools/chaos/s25.ps1`: durante una mossa di massa, a tempi casuali `kill -9` del processo o Wi-Fi spento e riacceso; poi il verificatore | ≥ 100 | scritto; **solo a secco** |
 
 ## 3. Come si lancia
@@ -62,6 +63,10 @@ powershell -ExecutionPolicy Bypass -File tools\chaos\area.ps1 -Mode jvm -Seed 20
 # Il runner contro l'area di prova (serve il file delle credenziali e l'aggancio, §9):
 powershell -ExecutionPolicy Bypass -File tools\chaos\area.ps1 -Mode run -Interruptions 20    # giro corto di prova (al massimo 20)
 powershell -ExecutionPolicy Bypass -File tools\chaos\area.ps1 -Mode run                      # le 400 (o chaos.rounds)
+powershell -ExecutionPolicy Bypass -File tools\chaos\area.ps1 -Mode run -TimeoutMinutes 300  # con il PC carico (tetto del task, di norma 180)
+# Rifare sul NAS vero UN giro rosso del rapporto ("giro 149, seme di base 113917122009500", 1 interruzione):
+powershell -ExecutionPolicy Bypass -File tools\chaos\area.ps1 -Mode run -Seed 113917122009500 -FirstRound 149 -Interruptions 1
+# L'avanzamento di una prova lunga, giro per giro: core-nasops\build\chaos\area-progress-<giro>.txt
 
 # La prova sul telefono: seminare l'area, avviare la mossa di massa nell'app, interrompere, verificare
 powershell -ExecutionPolicy Bypass -File tools\chaos\area.ps1 -Mode seed -Files 300 -Manifest build\chaos\manifest.txt
@@ -81,6 +86,7 @@ Gradle non vede le variabili d'ambiente come ingressi dei test: gli script aggiu
 | `MCG_NAS_INTEGRATION=true` (o `-DnasIntegration=true`) | NAS vero | senza, nessuna prova tocca il NAS e nessun file di credenziali si legge |
 | `MCG_CHAOS_MODE` | NAS vero | `run` (default), `seed`, `verify` |
 | `MCG_CHAOS_ROUNDS` | NAS vero, `run` | le interruzioni da far cadere, se `chaos.rounds` non è nel file |
+| `MCG_CHAOS_SEED`, `MCG_CHAOS_FIRST_ROUND` | NAS vero, `run` | seme di base e primo giro: con le interruzioni del giro rifanno un giro rosso (`area.ps1 -Seed -FirstRound`) |
 | `MCG_CHAOS_FILES`, `MCG_CHAOS_RUN`, `MCG_CHAOS_MANIFEST`, `MCG_CHAOS_SETTLED=false` | NAS vero | originali da seminare, nome del giro, manifesto, "prova non ancora ferma" |
 
 `-PnasIntegration` di core-nasops non arriva ai test (il suo `build.gradle` non inoltra la proprietà come fa quello di core-nas): per questo c'è la variabile. Chi vuole la stessa forma aggiunge a `core-nasops/build.gradle` `testOptions { unitTests.all { test -> test.systemProperty('nasIntegration', project.hasProperty('nasIntegration') ? 'true' : 'false') } }` (è fuori dal perimetro di P15).
@@ -155,6 +161,55 @@ Osservazioni (non difetti del fake, ma del contratto o di scelte da fare in P12)
 
 Senza "Ferma" l'esecutore vero non ha mai violato un invariante (~100.000 interruzioni in totale). È una fotografia di un lavoro in corso, non un giudizio su P12.
 
+## 6bis. F16 sul NAS vero: gli handle del telefono rimasti aperti (15/10)
+
+**Il primo giro lungo sul WD** (`area-report-20261015-125120.txt`: 493 giri, 401 interruzioni, 5.810 s) ha avuto **13 giri rossi**:
+81 violazioni [8] (operazioni `paused` dopo 81 riprese, elementi fermi in `source_recorded`, `copied`, `verified`), 17 [2] (copia
+arrivata e sorgente ancora li': conseguenza delle operazioni ferme), 10 [5] (temporanei non pubblicati), 1 [6], 2 [7]. Nessun file perso,
+sovrascritto o rovinato. Le operazioni "rinomina", "crea cartella" ed "elimina" del rapporto non erano ferme loro: le violazioni di ogni
+passo elencano l'operazione rimasta aperta, ed era sempre lo spostamento tra share di prima.
+
+**Che cosa era.** 11 giri su 13 avevano una **morte del processo durante una lettura** (`OPEN` dopo, `READ_ALL` prima o dopo: 11 delle 14
+morti cadute su una lettura; nessuna delle altre 230 morti). L'handle di lettura del processo morto restava **aperto sul WD**: il banco
+teneva la stessa connessione SMB e la passava al processo nuovo (sul telefono il sistema chiude il socket del processo ucciso e Samba chiude
+i suoi handle). Samba applica le condivisioni, e la lettura **non condivideva la cancellazione**: la rinomina dello stesso file (la sorgente
+nel cestino dopo la verifica, il temporaneo da pubblicare) rispondeva `SHARING_VIOLATION`, cioe' "file aperto dal PC" (E-N13), e l'elemento
+aspettava 1, 2, 5... minuti. Nel banco l'ora del NAS non avanza: l'attesa non finiva mai. Rigiocato il giro 149 sul NAS vero (seme di base
+113917122009500, una interruzione): stesso esito in 0,9 s, e il diario diceva solo `source_recorded locked`, **l'operazione nessun motivo**.
+Gli altri 2 giri (394, 480, **zero interruzioni**) erano una corsa del codice di produzione: lo scrittore del temporaneo chiude l'handle su
+un altro thread e la pubblicazione che segue arriva al NAS prima della chiusura (`Locked`). Il simulatore SMB non teneva gli handle dei
+client: per questo 600 giri su 600 erano verdi. Gli indiziati (salto dell'ora, ancora dopo il login, tetto del giorno, spazio, "Ferma") non
+c'entravano: nel banco il cancello e' sempre aperto e ogni pausa era un'attesa di file "aperti".
+
+**Correzioni nel codice di produzione** (`core-nas`, `core-nasops`, `:app`):
+
+| | |
+|---|---|
+| Lettura che condivide la cancellazione | `SmbOpenMode.READ` (`SmbTransport.kt`, usato da `SmbjTransport`): un nostro handle di lettura (una chiusura in volo, la Libreria che legge, una connessione persa che il NAS tiene ancora per minuti) non blocca la rinomina o il cestino di quel file, a noi ne' al PC. Provato sul WD (`t15` della suite). Chi rinomina condivide solo la lettura (nessuno scrive fra il controllo del timbro e la rinomina), la cancellazione con il controllo della dimensione resta esclusiva |
+| Chiusure ordinate | `SmbNasSessionManager.awaitCloses`: ogni operazione, prima di partire, aspetta le chiusure chieste prima di lei sulla stessa sessione (`closeLater`), ognuna al massimo 2 s dalla sua partenza; quelle di una connessione gia' chiusa non si aspettano. Il tetto serve: sul WD una `CLOSE` in volo mentre la connessione si chiude non torna mai e smbj la aspetta 60 s (una prima versione senza tetto rallentava il giro lungo di 60 s a ogni morte del processo; lo dice `area-log-<giro>.txt`, "chiusura lenta") |
+| Aperture non consegnate | `open` e `openTemp`: annullati mentre il NAS risponde, chiudono l'handle che nessuno ricevera' |
+| Il motivo della pausa nel diario | `nas_op.error_code` (stessa colonna, codici di `PauseReason` distinti da quelli di `OpErrorCode`: `RulesTest`); l'attesa di file aperti scrive `locked`; dopo un riavvio la schermata dice il motivo vero, non "condizioni". Diagnostica: `NAS_OPS_STATE` conta le pause per motivo dal diario (`reason.<MOTIVO>`; `UNKNOWN` = pausa senza motivo, gravita' alzata) |
+
+**Il banco**: la morte del processo chiude la connessione del processo morto (`ChaosWorld.processDied`, anche nella ripresa a vuoto), come
+il sistema sul telefono; la violazione [8] dice il motivo letto dal diario (operazione ed elementi: passo, codice, tentativi, prossima prova);
+`-FirstRound` vale anche per `run`; l'avanzamento sta in `area-progress-<giro>.txt` (una riga per giro) e gli avvisi del codice sotto
+prova (solo codici e tempi) in `area-log-<giro>.txt`; `-TimeoutMinutes` alza il tetto del task (default 180).
+
+**Il simulatore** (`InMemorySmbBackend`): ogni apertura resta viva sul server con diritti e condivisioni (le stesse di `SmbjTransport`,
+`SmbOpenMode`) finche' il client non la chiude o la connessione non cade per il server; **connessioni abbandonate** (rete persa: il NAS tiene
+sessione e handle finche' non se ne accorge, `abandonAllConnections`/`reapAbandoned`); cancellazione alla chiusura dell'ultimo handle
+(`DELETE_PENDING`); una cartella con un handle **dello stesso client** aperto sotto non si rinomina (`ACCESS_DENIED`, visto sul WD; un altro
+client non conta). Con il simulatore nuovo e il codice di prima il banco SMB ha **49 giri rossi su 600** con la stessa firma del WD; casi fissi
+in `OwnHandlesTest`, `SimulatorHandlesTest` (core-nas) e `SmbStaleHandlesTest`, `PauseReasonDiaryTest` (core-nasops), che con il codice di
+prima falliscono (`source_recorded/locked`; `failed/permission_denied` per il cestino di una cartella con sottocartelle e le chiusure in volo).
+
+**Dopo** (15/10, sera, `area-report-20261015-160842.txt`): area pulita con la suite, giro corto 27 giri / 20 interruzioni / 0 violazioni,
+poi **537 giri, 400 interruzioni, 0 violazioni** in 8.545 s (142 min): connessione caduta 101, sessione scaduta 13, socket fermo 22, morte
+del processo 264 (16 su `OPEN`, 6 su `READ_ALL`: il caso che prima restava fermo); prima 227, dopo 173; 1.352 passi (242 spostamenti tra
+share, 315 eliminazioni, 48 "elimina subito"), 8.584 file riletti con SHA-256 (58 GB). `area-log` riporta 179 chiusure "lente" (60 s, smbj)
+tutte su connessioni gia' chiuse: nessuna richiesta le ha aspettate. Alla fine la suite ha ripulito `mcg-it/` (verificato con entrambi gli
+account). La durata dipende dai file grandi (200 MB): i giri normali durano 2-5 s, quelli con il file grande fino a 5 minuti.
+
 ## 7. L'area di prova sul NAS vero e la guardia (§5.4)
 
 - **Quando gira**: solo con `MCG_NAS_INTEGRATION=true` **e** il file delle credenziali; altrimenti i test risultano *saltati* con il motivo, **senza aprire un socket**.
@@ -222,7 +277,8 @@ Garanzie dello script: tocca **un solo** dispositivo (`-Serial` o `ANDROID_SERIA
 
 ## 11. Tempi
 
-2.000 giri sul NAS finto: ~13 secondi (limite del brief: 5 minuti). 600 giri sul simulatore SMB con le primitive vere: ~12 secondi. L'intero pacchetto di test di P15 (banco, difetti iniettati, verificatore, determinismo, runner): ~45 secondi. Nessun test usa più di un thread.
+2.000 giri sul NAS finto: ~13 secondi (limite del brief: 5 minuti). 600 giri sul simulatore SMB con le primitive vere: ~15-25 secondi
+(dalla prova F16 il simulatore tiene gli handle e le richieste aspettano le chiusure in volo). L'intero pacchetto di test di P15 (banco, difetti iniettati, verificatore, determinismo, runner): ~45 secondi. Nessun test usa più di un thread.
 
 ## 12. La pulizia del cestino in minuti (prova sul campo F20, solo debug)
 

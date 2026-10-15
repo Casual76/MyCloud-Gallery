@@ -237,9 +237,17 @@ internal class SmbNasFileOps(
 
   override suspend fun openTemp(share: String, temp: SharePath, purpose: Purpose): NasResult<NasTempWriter> {
     require(NasOpsPaths.isTempOf(temp, ownerDeviceId)) { "Un temporaneo di questo dispositivo." }
-    return manager.runOp(share, purpose, idempotent = false, touchesDisk = true) { ctx ->
-      val file = createTemp(ctx.share, temp) ?: throw NasOpException(NasError.Exists)
-      SmbTempWriter(share, temp, purpose, file, ctx.sessionKey)
+    // Prova F16: annullati mentre il NAS risponde, lo scrittore non arriva a nessuno; il suo handle esclusivo si chiude qui.
+    var undelivered: SmbTempWriter? = null
+    try {
+      val result = manager.runOp(share, purpose, idempotent = false, touchesDisk = true) { ctx ->
+        val file = createTemp(ctx.share, temp) ?: throw NasOpException(NasError.Exists)
+        SmbTempWriter(share, temp, purpose, file, ctx.sessionKey).also { undelivered = it }
+      }
+      undelivered = null
+      return result
+    } finally {
+      undelivered?.close()
     }
   }
 
@@ -315,7 +323,7 @@ internal class SmbNasFileOps(
     override fun close() {
       if (closed) return
       closed = true
-      manager.closeLater(file)
+      manager.closeLater(file, session)
     }
   }
 

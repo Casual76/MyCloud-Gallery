@@ -21,11 +21,15 @@
 .PARAMETER Interruptions  Per run: le interruzioni da far cadere (chaos.rounds del file ha la precedenza). Default 400.
 .PARAMETER Rounds         Per jvm: i giri (default 2000).
 .PARAMETER FirstRound     Per jvm: il primo giro (default 0): con -Rounds 1 e lo stesso -Seed rifa' esattamente un giro che e' fallito.
+                          Per run: con lo stesso -Seed (seme di base del rapporto) e -Interruptions pari a quelle del giro, rifa' quel
+                          giro sul NAS vero.
 .PARAMETER Seed           Il seme (default: quello del banco; per run/seed, casuale).
 .PARAMETER Files          Per seed: quanti originali (default 300).
 .PARAMETER Manifest       Per seed: dove scrivere il manifesto; per verify: quale leggere.
 .PARAMETER Run            Per seed: il nome del giro (default: nuovo).
 .PARAMETER NotSettled     Per verify: la prova e' ancora in corso, si controllano solo gli invarianti che valgono sempre.
+.PARAMETER TimeoutMinutes Il tetto del task dei test (default 180, da 20 a 600): il giro da 400 sul NAS vero dura circa 100 minuti, di
+                          piu' con il PC carico (ogni morte del processo riapre la connessione, come sul telefono).
 .PARAMETER DryRun         Stampa e basta.
 
 .EXAMPLE
@@ -44,6 +48,7 @@ param(
   [string]$Manifest,
   [string]$Run,
   [switch]$NotSettled,
+  [int]$TimeoutMinutes = 180,
   [switch]$DryRun
 )
 
@@ -58,6 +63,7 @@ function Fail([string]$message, [int]$code = 1) {
 if ($Interruptions -lt 0 -or $Interruptions -gt 100000) { Fail "-Interruptions fuori misura." }
 if ($Rounds -lt 1 -or $Rounds -gt 1000000) { Fail "-Rounds fuori misura." }
 if ($Files -lt 1 -or $Files -gt 100000) { Fail "-Files fuori misura." }
+if ($TimeoutMinutes -lt 20 -or $TimeoutMinutes -gt 600) { Fail "-TimeoutMinutes fuori misura (20-600)." }
 if ($Run -and $Run -notmatch '^[0-9]{8}-[0-9]{6}-[0-9a-f]{8}$') { Fail "-Run deve avere la forma aaaammgg-hhmmss-<8 esadecimali>." }
 if ($Mode -eq "verify" -and -not $Manifest) { Fail "verify vuole -Manifest." }
 if ($Manifest -and $Mode -eq "verify" -and -not $DryRun -and -not (Test-Path -LiteralPath $Manifest)) { Fail "Manifesto non trovato: $Manifest" }
@@ -73,7 +79,11 @@ if ($Mode -eq "jvm") {
   if ($Seed -ne 0) { $environment["MCG_CHAOS_SEED"] = "$Seed" }
   if ($FirstRound -ne 0) { $environment["MCG_CHAOS_FIRST_ROUND"] = "$FirstRound" }
 }
-if ($Mode -eq "run") { $environment["MCG_CHAOS_ROUNDS"] = "$Interruptions" }
+if ($Mode -eq "run") {
+  $environment["MCG_CHAOS_ROUNDS"] = "$Interruptions"
+  # Rifare un giro rosso sul NAS vero: stesso -Seed (il seme di base del rapporto), -FirstRound N e tante -Interruptions quante ne aveva.
+  if ($FirstRound -ne 0) { $environment["MCG_CHAOS_FIRST_ROUND"] = "$FirstRound" }
+}
 if ($Mode -eq "seed") { $environment["MCG_CHAOS_FILES"] = "$Files" }
 if (($Mode -eq "run" -or $Mode -eq "seed") -and $Seed -ne 0) { $environment["MCG_CHAOS_SEED"] = "$Seed" }
 if ($Manifest) { $environment["MCG_CHAOS_MANIFEST"] = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Manifest) }
@@ -83,7 +93,7 @@ if ($Mode -eq "verify" -and $NotSettled) { $environment["MCG_CHAOS_SETTLED"] = "
 $environment["ANDROID_SERIAL"] = "none"
 
 $test = if ($Mode -eq "jvm") { "*ChaosBenchTest*" } else { "*ChaosNasIntegrationTest*" }
-$arguments = @(":core-nasops:testDebugUnitTest", "--tests", $test, "--console=plain", "--rerun", "-PmcgTestTimeoutMinutes=180")
+$arguments = @(":core-nasops:testDebugUnitTest", "--tests", $test, "--console=plain", "--rerun", "-PmcgTestTimeoutMinutes=$TimeoutMinutes")
 
 if ($DryRun) {
   Write-Host "=== A SECCO: non lancio niente ===" -ForegroundColor Yellow

@@ -320,6 +320,59 @@ interface SmbDirectory : Closeable {
   override fun close()
 }
 
+/**
+ * Con quali diritti e quali **condivisioni** il trasporto apre un file o una cartella (`DesiredAccess` e `ShareAccess` della `CREATE`).
+ * Le scrive qui, una volta, sia `SmbjTransport` (che le traduce per smbj) sia il simulatore (che le applica come Samba): un handle
+ * ancora aperto sul NAS (una chiusura in volo, una connessione che il NAS non ha ancora visto cadere) fa rispondere
+ * `SHARING_VIOLATION` a chi apre lo stesso file con un diritto che quell'handle non condivide, **anche se e' dello stesso telefono**.
+ *
+ * Contano solo i diritti sui dati e la cancellazione: leggere gli attributi (`stat`) non entra in conflitto con nessuno.
+ */
+data class SmbOpenMode(
+  val read: Boolean,
+  val write: Boolean,
+  val delete: Boolean,
+  val shareRead: Boolean,
+  val shareWrite: Boolean,
+  val shareDelete: Boolean,
+) {
+  /** Due aperture dello stesso file non stanno insieme (regola di Windows e di Samba, in tutte e due le direzioni). */
+  fun conflictsWith(other: SmbOpenMode): Boolean =
+    (read && !other.shareRead) || (write && !other.shareWrite) || (delete && !other.shareDelete) ||
+      (other.read && !shareRead) || (other.write && !shareWrite) || (other.delete && !shareDelete)
+
+  companion object {
+    /**
+     * La lettura (media, verifiche, copia lato server): condivide **anche la cancellazione**. Un nostro handle di lettura (una chiusura
+     * ancora in volo, la Libreria che sta leggendo, una connessione caduta che il NAS tiene ancora) non deve mai impedire la rinomina o
+     * il cestino di quel file, a noi (P16, prova F16 sul NAS vero) o al PC. Chi cambia il contenuto (scrittura) resta escluso dalle regole
+     * di chi cambia ([change]): leggere non da' a nessuno il permesso di scrivere.
+     */
+    val READ: SmbOpenMode = SmbOpenMode(read = true, write = false, delete = false, shareRead = true, shareWrite = true, shareDelete = true)
+
+    /** Il temporaneo creato in esclusiva: nessuno lo apre finche' lo si scrive. */
+    val CREATE_EXCLUSIVE: SmbOpenMode =
+      SmbOpenMode(read = true, write = true, delete = true, shareRead = false, shareWrite = false, shareDelete = false)
+
+    /** Una cartella aperta per elencarla (o per provare il diritto di aggiungere file, [DirAccess.ADD_FILE]): condivide tutto. */
+    fun directory(access: DirAccess): SmbOpenMode = SmbOpenMode(
+      read = access == DirAccess.LIST, write = access == DirAccess.ADD_FILE, delete = false,
+      shareRead = true, shareWrite = true, shareDelete = true,
+    )
+
+    /**
+     * L'handle per cambiare un file esistente ([SmbShare.openForChange]): il diritto `DELETE`; condivide solo la lettura (nessuno ci
+     * scrive mentre si controlla il timbro e si rinomina), niente con [exclusive] (la cancellazione con il controllo della dimensione).
+     */
+    fun change(exclusive: Boolean): SmbOpenMode =
+      SmbOpenMode(read = false, write = false, delete = true, shareRead = !exclusive, shareWrite = false, shareDelete = false)
+
+    /** La cancellazione per nome ([SmbShare.deleteFile], [SmbShare.removeEmptyDirectory]): `DELETE`, condivide tutto. */
+    val DELETE_BY_NAME: SmbOpenMode =
+      SmbOpenMode(read = false, write = false, delete = true, shareRead = true, shareWrite = true, shareDelete = true)
+  }
+}
+
 // --- Errori del trasporto ----------------------------------------------------------------------------------
 
 /** Radice degli errori SMB. Il messaggio non contiene mai nomi, percorsi, utenti o indirizzi. */

@@ -49,6 +49,8 @@ object ChaosAreaRunner {
     val mediumBytes: Int = 1 shl 20,
     val bigBytes: Int = 200 shl 20,
     val bigPercent: Int = 3,
+    /** Il primo giro (`MCG_CHAOS_FIRST_ROUND`): con lo stesso seme di base rifa' un giro rosso sul NAS vero. */
+    val firstRound: Int = 0,
   )
 
   fun config(settings: Settings): ChaosConfig = ChaosConfig(
@@ -67,15 +69,25 @@ object ChaosAreaRunner {
   )
 
   /** Fa i giri necessari. Si ferma appena le interruzioni cadute sono [Settings.interruptions] (ma al massimo `4 x + 5` giri). */
-  suspend fun run(target: ChaosTarget, factory: ChaosStackFactory, settings: Settings): BenchResult =
-    ChaosBench.run(
+  suspend fun run(
+    target: ChaosTarget,
+    factory: ChaosStackFactory,
+    settings: Settings,
+    progress: ((rounds: Int, red: Int, fired: Int) -> Unit)? = null,
+  ): BenchResult {
+    val stats = ChaosStats()
+    return ChaosBench.run(
       rounds = settings.interruptions * 4 + 5,
       baseSeed = settings.baseSeed,
       target = target,
       factory = factory,
       config = config(settings),
+      stats = stats,
       stopAfterInterruptions = settings.interruptions,
+      firstRound = settings.firstRound,
+      onRound = { done, red -> progress?.invoke(done, red, stats.totalFired) },
     )
+  }
 }
 
 // =============================================================================================================================

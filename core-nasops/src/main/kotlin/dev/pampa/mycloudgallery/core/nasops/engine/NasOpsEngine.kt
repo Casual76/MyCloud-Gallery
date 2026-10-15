@@ -139,7 +139,8 @@ class NasOpsEngine internal constructor(
     for (op in shown) {
       val tally = Tally()
       store.items(op.id).forEach { add(tally, it, +1) }
-      fresh[op.id] = View(op, tally, synchronized(viewsLock) { views[op.id]?.pause })
+      // Il motivo della pausa: quello che sa questo processo, altrimenti quello scritto nel diario (dopo la morte del processo).
+      fresh[op.id] = View(op, tally, synchronized(viewsLock) { views[op.id]?.pause } ?: op.pauseReason)
     }
     synchronized(viewsLock) {
       views.clear()
@@ -169,7 +170,7 @@ class NasOpsEngine internal constructor(
     publish()
   }
 
-  private suspend fun setOpState(id: OpId, state: OpState, code: OpErrorCode?) {
+  private suspend fun setOpState(id: OpId, state: OpState, code: OpErrorCode?, pause: PauseReason? = null) {
     val now = clocks.nasNowMs()
     val record = store.op(id) ?: return
     // R9: un'operazione che l'utente ha fermato resta fermata (in pausa con il suo segno) finche' non si chiude: nessuna scrittura
@@ -178,7 +179,8 @@ class NasOpsEngine internal constructor(
     if (stopped) {
       store.setOpState(id, OpState.PAUSED, OpErrorCode.STOPPED_BY_USER, now ?: record.updatedAtNas)
     } else {
-      store.setOpState(id, state, code, now ?: record.updatedAtNas)
+      // Prova F16: il motivo della pausa va nel diario, non solo nella memoria di questo processo.
+      store.setOpState(id, state, code, now ?: record.updatedAtNas, pause)
     }
     val updated = store.op(id) ?: return
     synchronized(viewsLock) {
@@ -431,14 +433,15 @@ class NasOpsEngine internal constructor(
       return OpRun(doneCount, failedCount, waitingCount, stop, held = true)
     } else if (stop == RunStop.COMPLETE && waitingCount > 0) {
       stop = RunStop.WAITING_LOCKED
-      setOpState(id, OpState.PAUSED, null)
+      // Il motivo nel diario: file aperti (E-N13); gli elementi dicono quali e quando si riprova.
+      setOpState(id, OpState.PAUSED, OpErrorCode.LOCKED)
     }
     return OpRun(doneCount, failedCount, waitingCount, stop)
   }
 
   private suspend fun pause(id: OpId, reason: PauseReason) {
     synchronized(viewsLock) { views[id]?.pause = reason }
-    setOpState(id, OpState.PAUSED, null)
+    setOpState(id, OpState.PAUSED, null, reason)
     GalleryLog.d(TAG) { "operazione in pausa: ${reason.code}" }
   }
 

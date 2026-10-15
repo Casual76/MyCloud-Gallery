@@ -25,6 +25,7 @@ import dev.pampa.mycloudgallery.core.nasops.contract.OpItemRecord
 import dev.pampa.mycloudgallery.core.nasops.contract.OpRecord
 import dev.pampa.mycloudgallery.core.nasops.contract.OpState
 import dev.pampa.mycloudgallery.core.nasops.contract.OpsStore
+import dev.pampa.mycloudgallery.core.nasops.contract.PauseReason
 import dev.pampa.mycloudgallery.core.nasops.contract.TrashEntryState
 import dev.pampa.mycloudgallery.core.nasops.engine.NasOpsEngine
 import dev.pampa.mycloudgallery.core.nasops.engine.NasOpsLock
@@ -138,8 +139,8 @@ class DyingStore(private val inner: OpsStore, private val death: Death) : OpsSto
 
   override suspend fun updateItem(item: OpItemRecord) = death.around { inner.updateItem(item) }
 
-  override suspend fun setOpState(id: OpId, state: OpState, errorCode: OpErrorCode?, nowNas: Long) =
-    death.around { inner.setOpState(id, state, errorCode, nowNas) }
+  override suspend fun setOpState(id: OpId, state: OpState, errorCode: OpErrorCode?, nowNas: Long, pause: PauseReason?) =
+    death.around { inner.setOpState(id, state, errorCode, nowNas, pause) }
 
   override suspend fun recordTrash(entry: LocalTrashRecord) = death.around { inner.recordTrash(entry) }
 

@@ -536,12 +536,14 @@ object Verifier {
     val diary = c.diary ?: return emptyList()
     val v = ArrayList<Violation>()
     for (op in diary.ops()) {
-      if (!op.state.terminal) v += Violation(Invariant.CONVERGENCE, "un'operazione ${op.kind.code} e' rimasta ${op.state.code}")
+      if (!op.state.terminal) v += Violation(Invariant.CONVERGENCE, "un'operazione ${op.kind.code} e' rimasta ${op.state.code} (motivo nel diario: ${op.errorCode?.code ?: "nessuno"})")
       if (op.state == OpState.FAILED && !allowFailed) v += Violation(Invariant.CONVERGENCE, "un'operazione ${op.kind.code} e' fallita (${op.errorCode?.code}) per un guasto passeggero")
       if (op.state == OpState.CANCELLED && !allowCancelled) v += Violation(Invariant.CONVERGENCE, "un'operazione ${op.kind.code} risulta annullata senza che nessuno l'abbia annullata")
     }
     for (item in diary.items()) {
-      if (!item.state.terminal) v += Violation(Invariant.CONVERGENCE, "un elemento ${item.flow.code} e' rimasto ${item.state.code}")
+      if (!item.state.terminal) {
+        v += Violation(Invariant.CONVERGENCE, "un elemento ${item.flow.code} e' rimasto ${item.state.code} (${item.errorCode?.code ?: "nessun codice"}, ${item.attempts} tentativi)")
+      }
       if (item.state == OpItemState.FAILED && !allowFailed) v += Violation(Invariant.CONVERGENCE, "un elemento ${item.flow.code} e' fallito (${item.errorCode?.code}) per un guasto passeggero")
       if (item.state == OpItemState.CANCELLED && !allowCancelled) v += Violation(Invariant.CONVERGENCE, "un elemento ${item.flow.code} risulta annullato senza che nessuno l'abbia annullato")
     }

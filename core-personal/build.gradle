@@ -1,18 +1,18 @@
 // I dati personali sincronizzati fra i *miei* dispositivi della Fase 4B (docs/fase4-progetto.md §1.2 "core-personal", §2.9, D26, L29):
 // preferiti, nascosti, album manuali, date di ultima visione dei ricordi, impostazioni personali (esclusioni dell'area privata,
-// "Mostra le copertine degli album"). Contratti, null-object e fake di P0-B; la logica (codec della classe `personal`, pubblicazione,
-// lettura, integrazione col catalogo) e' di P13.
+// "Mostra le copertine degli album"). Contratti, null-object e fake di P0-B; la logica e' di P13.
 //
 // Ogni dispositivo pubblica nella **propria area privata** lo stato unito che conosce (`devices/<io>/personal/`); per ogni voce vince
 // l'ultima modifica per ora del NAS, a pari ora l'autore minore (D26). Valgono solo voci firmate da un dispositivo approvato **dello
 // stesso account**, trovate nell'area privata dichiarata: mai l'area comune (C19: i nascosti non li vede nessun altro account).
 //
-// Pacchetti: `contract`, `noop`, `testing` (vedi core-index). P13 aggiunge `codec` (voce <-> record della classe `personal`),
-// `sync`, `store` (adattatore sul catalogo, che ha gia' i `*_changed_at` dello schema v2) e `settings`.
+// Pacchetti: `contract`, `noop`, `testing` (P0-B) e, di P13, `codec` (voce <-> corpo JSON da 4 KiB e segmento di classe `personal`),
+// `rules` (le regole di validita' dal registro accettato), `remote` (lettura e pubblicazione sul NAS: teste `personal` di
+// `HeadSeries`), `sync` (il giro di sincronizzazione), `store` (registro locale, proiezione sul catalogo) e `settings`.
 //
 // Non vede `core-nasops` (test di architettura): nessun dato personale letto dal NAS puo' arrivare a un'operazione distruttiva.
-// Le dipendenze che P13 aggiungera' (core-nas per la lettura, core-database per il catalogo, core-index per il pubblicatore) sono nel
-// grafo del §1.1.
+// Dal NAS legge e scrive **solo** con `NasFileSystem` di core-trust (`list`, `read`, `publishExclusive`): nessuna cancellazione,
+// nessuno spostamento, nessuna sovrascrittura.
 //
 // D28: nessuna rete in questo modulo (NoNetworkSourcesTest). §4.3: nessun orologio del telefono nelle decisioni
 // (NoWallClockSourcesTest): l'ordine delle modifiche e' l'ora del NAS; senza, la modifica resta "da datare".
@@ -35,6 +35,17 @@ dependencies {
   // api: SharePath e TrustLimits (core-trust) compaiono nelle firme dei contratti.
   api project(':core-trust')
 
+  // Il NAS solo dai contratti (NasIoException per tradurre gli errori), l'identita' e il cancello delle scritture dell'indice
+  // (IndexIdentity, IndexWriteGate: le stesse regole D10, D31, D32), il catalogo per i preferiti e i nascosti (proiezione).
+  // implementation: nessun loro tipo di Room/SMB compare nelle firme dei contratti di questo modulo.
+  implementation project(':core-nas')
+  implementation project(':core-index')
+  implementation project(':core-database')
+
   testImplementation appDeps.coroutinesTest
   testImplementation appDeps.turbine
+  // Il catalogo vero in memoria (proiezione dei nascosti, E-H1) e la share finta di core-nas.
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+  testImplementation appDeps.androidxTestExtJunit
 }

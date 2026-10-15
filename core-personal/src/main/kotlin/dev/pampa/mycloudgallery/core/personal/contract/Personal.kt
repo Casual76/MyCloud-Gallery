@@ -3,7 +3,11 @@ package dev.pampa.mycloudgallery.core.personal.contract
 import dev.pampa.mycloudgallery.core.model.QuickHash
 import dev.pampa.mycloudgallery.core.model.StableCode
 import dev.pampa.mycloudgallery.core.trust.TrustLimits
+import dev.pampa.mycloudgallery.core.trust.codec.Base32
+import dev.pampa.mycloudgallery.core.trust.crypto.Hashes
 import dev.pampa.mycloudgallery.core.trust.crypto.TrustIds
+import dev.pampa.mycloudgallery.core.trust.data.IndexKeys
+import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import java.security.MessageDigest
 
 // Fase 4B (docs/fase4-progetto.md §2.9, D26, L29; formato-nas.md §5.5 classe `personal`, M7): i tipi dei dati personali sincronizzati.
@@ -27,7 +31,10 @@ enum class PersonalKind(override val code: String, val reserved: Boolean = false
   /** L'ultima visione di un ricordo (campo pronto per la Fase 9). */
   MEMORY("memory"),
 
-  /** Un'impostazione personale (esclusioni dell'area privata, "Mostra le copertine"). Soggetto = la chiave dell'impostazione. */
+  /**
+   * Un'impostazione personale (esclusioni dell'area privata, "Mostra le copertine"). Soggetto = [PersonalFields.SETTINGS_SUBJECT],
+   * campo = la chiave dell'impostazione (per un insieme, una voce per elemento: [PersonalFields.privateExclusion]).
+   */
   SETTING("setting"),
 
   /** Riservato (Fase 8). */
@@ -48,8 +55,34 @@ object PersonalFields {
 
   const val MEMORY_SEEN: String = "seen"
 
+  /** Il soggetto di ogni impostazione: la chiave dell'impostazione sta nel campo. */
+  const val SETTINGS_SUBJECT: String = "settings"
+
+  /** "Mostra le copertine degli album" (E-N14): un [PersonalValue.Flag]. */
   const val SETTING_SHOW_ALBUM_COVERS: String = "show_album_covers"
+
+  /** Prefisso del campo di una cartella esclusa dalla scansione dell'area privata (E-N15): vedi [privateExclusion]. */
   const val SETTING_PRIVATE_EXCLUSIONS: String = "private_exclusions"
+
+  /**
+   * Il campo di una cartella esclusa: `private_exclusions:` + l'impronta del percorso (NFC e minuscolo, come la chiave dell'indice:
+   * per Samba due nomi diversi solo per maiuscole sono la stessa cartella). Una voce per cartella, valore = il percorso
+   * ([PersonalValue.Text]) o la lapide: due dispositivi che aggiungono cartelle diverse le tengono entrambe, e la cartella tolta su
+   * uno si toglie ovunque. Un insieme intero in un solo valore perderebbe una delle due aggiunte.
+   */
+  fun privateExclusion(folder: SharePath): String {
+    val digest = Hashes.sha256("mcg-excl\u0000".toByteArray(Charsets.UTF_8), IndexKeys.foldPath(folder.value).toByteArray(Charsets.UTF_8))
+    return "$SETTING_PRIVATE_EXCLUSIONS:${Base32.encode(digest)}"
+  }
+
+  /** Vero se [field] e' il campo di una cartella esclusa. */
+  fun isPrivateExclusion(field: String): Boolean = field.startsWith("$SETTING_PRIVATE_EXCLUSIONS:")
+
+  /** Vero se [field] e' un elemento di un album ([albumItem]). */
+  fun isAlbumItem(field: String): Boolean = field.startsWith("item:")
+
+  /** L'id del media di un elemento di album, o null se [field] non e' un elemento. */
+  fun albumItemMedia(field: String): String? = field.takeIf { isAlbumItem(it) }?.substring("item:".length)?.takeIf { it.isNotEmpty() }
 }
 
 /**
@@ -107,6 +140,9 @@ data class PersonalFingerprint(val size: Long, val quickHash: QuickHash) {
   init {
     require(size >= 0) { "Dimensione negativa." }
   }
+
+  /** Mai l'impronta di un media dell'utente nei log. */
+  override fun toString(): String = "PersonalFingerprint"
 }
 
 /**
@@ -171,9 +207,11 @@ object PersonalValidity {
 }
 
 /**
- * La fusione (D26): per ogni chiave vince la voce con `(atNas, autore)` piu' grande; a parita' di tutto e due vince quella con il
- * valore "maggiore" ([valueOrder]), cosi' la fusione e' commutativa, associativa e idempotente: qualunque ordine di arrivo, stesso
- * stato. Le voci qui dentro sono gia' state giudicate valide ([PersonalValidity]).
+ * La fusione (D26): per ogni chiave vince la voce con `(atNas, autore)` piu' grande, a pari ora l'autore **minore**; a parita' di
+ * tutto vince il valore "maggiore" ([compareValues]: falso < vero) e infine l'impronta del media. E' un ordine **totale** sulle voci
+ * della stessa chiave, quindi la fusione e' commutativa, associativa e idempotente: qualunque ordine di arrivo e qualunque
+ * raggruppamento, stesso stato (provato con permutazioni casuali in `PersonalMergeTest`). Le voci qui dentro sono gia' state
+ * giudicate valide ([PersonalValidity]).
  */
 object PersonalMerge {
 
@@ -181,7 +219,8 @@ object PersonalMerge {
     a.atNas.compareTo(b.atNas).let { if (it != 0) return it }
     // A pari ora vince l'autore minore (D26): per questo il confronto sull'autore e' invertito.
     b.author.compareTo(a.author).let { if (it != 0) return it }
-    return valueOrder(a.value).compareTo(valueOrder(b.value))
+    compareValues(a.value, b.value).let { if (it != 0) return it }
+    return compareFingerprints(a.fingerprint, b.fingerprint)
   }
 
   fun winner(a: PersonalEntry, b: PersonalEntry): PersonalEntry = if (compare(a, b) >= 0) a else b
@@ -196,12 +235,34 @@ object PersonalMerge {
     return result
   }
 
-  private fun valueOrder(value: PersonalValue): String = when (value) {
-    is PersonalValue.Flag -> "f${if (value.on) 1 else 0}"
-    is PersonalValue.Text -> "t${value.text}"
-    is PersonalValue.Number -> "n${value.value.toString().padStart(NUMBER_WIDTH, '0')}"
-    PersonalValue.Removed -> "r"
+  /**
+   * L'ordine dei valori a parita' di ora e di autore: flag (falso prima), numeri, lapide, testi. Nessuna conversione in testo
+   * (un numero negativo non deve ordinarsi male): e' un ordine totale perche' ogni valore ha un solo rango e dentro il rango un
+   * solo confronto.
+   */
+  fun compareValues(a: PersonalValue, b: PersonalValue): Int {
+    val byRank = rank(a).compareTo(rank(b))
+    if (byRank != 0) return byRank
+    return when (a) {
+      is PersonalValue.Flag -> a.on.compareTo((b as PersonalValue.Flag).on)
+      is PersonalValue.Number -> a.value.compareTo((b as PersonalValue.Number).value)
+      is PersonalValue.Text -> a.text.compareTo((b as PersonalValue.Text).text)
+      PersonalValue.Removed -> 0
+    }
   }
 
-  private const val NUMBER_WIDTH = 20
+  private fun rank(value: PersonalValue): Int = when (value) {
+    is PersonalValue.Flag -> 0
+    is PersonalValue.Number -> 1
+    PersonalValue.Removed -> 2
+    is PersonalValue.Text -> 3
+  }
+
+  /** Senza impronta prima di con impronta; poi dimensione e `qh1`. */
+  private fun compareFingerprints(a: PersonalFingerprint?, b: PersonalFingerprint?): Int = when {
+    a == null && b == null -> 0
+    a == null -> -1
+    b == null -> 1
+    else -> a.size.compareTo(b.size).let { if (it != 0) it else a.quickHash.hex.compareTo(b.quickHash.hex) }
+  }
 }

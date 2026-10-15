@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.personal.contract
 
 import dev.pampa.mycloudgallery.core.model.StableCode
+import dev.pampa.mycloudgallery.core.trust.data.HeadMark
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import kotlin.time.Duration
 import kotlinx.coroutines.flow.StateFlow
@@ -23,6 +24,12 @@ enum class PersonalUnavailable(override val code: String) : StableCode {
 
   /** Congelamento (D10) o "Ferma le scritture sul NAS": si legge, non si pubblica. */
   WRITES_BLOCKED("writes_blocked"),
+
+  /** Il dispositivo non e' (piu') approvato o il registro non e' fresco (E-S14): si legge, non si pubblica. */
+  NOT_TRUSTED("not_trusted"),
+
+  /** NAS o quota pieni (E-I6): lo stato non si e' potuto pubblicare, resta sul telefono e si riprova. */
+  NAS_FULL("nas_full"),
 }
 
 /** Lo stato della sincronizzazione, per Impostazioni e Diagnostica. */
@@ -57,6 +64,15 @@ data class PersonalSyncReport(
   val rejected: Map<PersonalVerdict, Int>,
   val stillUndated: Int,
   val stoppedBy: PersonalStop,
+  /** Segmenti e teste scartati interi (firma, impronta, forma, tetti: E-I14) o assenti; mai il contenuto, solo il conto. */
+  val rejectedSegments: Int = 0,
+  val rejectedHeads: Int = 0,
+  /** Voci dello stato unito che non si possono scrivere (ora fuori dal periodo, testo con caratteri vietati): restano sul telefono. */
+  val notPublishable: Int = 0,
+  /** M3: una testa ogni 5 minuti; se lo stato locale e' piu' nuovo di quello pubblicato, quando si potra' (ora del NAS). */
+  val publishRetryAtNas: Long? = null,
+  /** Voci applicate allo stato ma non ancora al catalogo (media non ancora noto a questo dispositivo): si riprovano. */
+  val unresolved: Int = 0,
 )
 
 /**
@@ -94,6 +110,52 @@ interface PersonalStore {
 
   /** Data le modifiche "da datare" con [nasNowMs]. */
   suspend fun stamp(nasNowMs: Long)
+}
+
+/** L'ultima testa `personal` pubblicata da questo dispositivo: serve a non ripubblicare cio' che e' gia' sul NAS e a rispettare M3. */
+data class PersonalPublication(
+  val version: Long,
+  val mark: HeadMark,
+  /** Ora del NAS in cui e' stata scritta (M3: al massimo una testa ogni 5 minuti). */
+  val publishedAtNas: Long,
+  /** I nomi (impronte) dei segmenti elencati dalla testa: lo stato pubblicato. */
+  val segments: Set<String>,
+  val entries: Int,
+)
+
+/**
+ * Cio' che il motore di sincronizzazione chiede allo store oltre a [PersonalStore]: le teste gia' accettate (anti-rollback, E-I5), la
+ * pubblicazione propria e la revisione dello stato quando il registro cambia. Le scritture che vanno insieme (le voci applicate e la
+ * testa da cui vengono) sono **una** operazione: un crash non lascia mai una testa "gia' letta" senza le sue voci.
+ */
+interface PersonalSyncStore : PersonalStore {
+  /** L'ultima testa accettata per dispositivo (tutti i dispositivi dell'account, anche questo). */
+  suspend fun marks(): Map<String, HeadMark>
+
+  /**
+   * Applica voci giudicate valide, lette dalla testa di [deviceId], e (se [mark] non e' null) ricorda quella testa. [mark] resta null
+   * quando la lettura non e' finita o ha scartato voci che potrebbero valere piu' tardi (nel futuro): la testa si rilegge al giro dopo.
+   */
+  suspend fun applyFrom(deviceId: String, entries: List<PersonalEntry>, mark: HeadMark?): PersonalApplyResult
+
+  /** Toglie dallo stato le voci che [rules] non ammettono piu' (autore revocato dopo che le avevamo accettate). Quante. */
+  suspend fun purgeInvalid(rules: PersonalRules): Int
+
+  /** Lo stato unito adesso: cio' che si pubblica. */
+  suspend fun state(): Map<PersonalKey, PersonalEntry>
+
+  suspend fun published(): PersonalPublication?
+
+  suspend fun setPublished(publication: PersonalPublication)
+
+  /** Riprova ad applicare al catalogo cio' che non si e' potuto (il media non c'era ancora). Quante voci restano senza media. */
+  suspend fun reproject(): Int
+
+  /**
+   * Adotta come proprie le modifiche locali che non hanno una voce: preferiti e nascosti accesi nel catalogo prima che la
+   * sincronizzazione esistesse, o cambiati dalla Libreria senza passare dallo store. Quante. Idempotente.
+   */
+  suspend fun adoptLocal(): Int
 }
 
 /**

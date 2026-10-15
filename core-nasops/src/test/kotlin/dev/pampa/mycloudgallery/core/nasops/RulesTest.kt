@@ -20,6 +20,7 @@ import dev.pampa.mycloudgallery.core.nasops.contract.OpPlan
 import dev.pampa.mycloudgallery.core.nasops.contract.OpState
 import dev.pampa.mycloudgallery.core.nasops.contract.OpStateMachine
 import dev.pampa.mycloudgallery.core.nasops.contract.OpTemps
+import dev.pampa.mycloudgallery.core.nasops.contract.OwnFolderBackoff
 import dev.pampa.mycloudgallery.core.nasops.contract.PauseReason
 import dev.pampa.mycloudgallery.core.nasops.contract.PlanHash
 import dev.pampa.mycloudgallery.core.nasops.contract.PlanRejection
@@ -195,6 +196,15 @@ class RulesTest {
     assertThat(delays.sum()).isEqualTo(LockedBackoff.MAX_TOTAL_WAIT_MS)
     assertThat(LockedBackoff.decide(attempts)).isEqualTo(LockedBackoff.Decision.GiveUp)
     assertThat(LockedBackoff.decide(1_000)).isEqualTo(LockedBackoff.Decision.GiveUp)
+  }
+
+  @Test
+  fun leAtteseBreviPerUnaCartellaInUsoDallAppSonoSecondiECrescono() {
+    // Decisione dell'utente (15/10): 1, 2, 4, 8, 16, 32 secondi, circa un minuto; molto meno della prima attesa per un file aperto dal PC.
+    assertThat(OwnFolderBackoff.DELAYS_MS).containsExactly(1_000L, 2_000L, 4_000L, 8_000L, 16_000L, 32_000L).inOrder()
+    assertThat(OwnFolderBackoff.MAX_TOTAL_WAIT_MS).isEqualTo(63_000L)
+    assertThat(OwnFolderBackoff.MAX_TOTAL_WAIT_MS).isAtMost(65_000L)
+    assertThat(OwnFolderBackoff.DELAYS_MS.max()).isLessThan(LockedBackoff.DELAYS_MS.first())
   }
 
   @Test

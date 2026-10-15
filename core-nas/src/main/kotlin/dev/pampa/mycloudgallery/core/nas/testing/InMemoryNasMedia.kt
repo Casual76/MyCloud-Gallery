@@ -606,7 +606,7 @@ class InMemoryNasMedia(
             when (val outcome = moved.value) {
               is RenameOutcome.Renamed -> PublishOutcome.Published(outcome.stamp)
               RenameOutcome.Collision -> PublishOutcome.Collision
-              RenameOutcome.Locked -> PublishOutcome.Locked
+              RenameOutcome.Locked, RenameOutcome.FolderInUse -> PublishOutcome.Locked
               RenameOutcome.SourceMissing, is RenameOutcome.SourceChanged -> PublishOutcome.TempMissing
             },
           )

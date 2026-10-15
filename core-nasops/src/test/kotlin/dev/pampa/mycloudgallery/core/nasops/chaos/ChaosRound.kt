@@ -57,6 +57,12 @@ class ChaosConfig(
   val hashCache: Boolean = false,
   /** Se non null, il massimo di colpi per passo (il runner sul NAS vero: uno solo, cosi' ogni giro vale una interruzione). */
   val stepFaults: Int? = null,
+  /**
+   * Su un mondo che lo sa fare ([ChaosWorld.Capabilities.libraryReads]), la percentuale di cartelle toccate da una rinomina, uno spostamento o
+   * un'eliminazione con la Libreria che tiene aperto un file qui sotto: su Samba la rinomina e' rifiutata finche' l'handle e' aperto, e
+   * l'operazione deve arrivare in fondo lo stesso (con gli stessi invarianti, colpi e morti del processo di sempre).
+   */
+  val libraryReadPercent: Int = 40,
 )
 
 /** Il racconto di un giro. */
@@ -96,6 +102,9 @@ class ChaosRound(
   private val stats: ChaosStats,
 ) {
   private val random = Random(seed)
+
+  /** Un generatore a parte per le letture della Libreria: non cambia le scelte dei giri che non le hanno. */
+  private val libraryRandom = Random(seed xor LIBRARY_SALT)
   private val ids = SeededIds(seed xor ID_SALT)
   private val ledger = Ledger()
   private val model = FsModel()
@@ -288,6 +297,39 @@ class ChaosRound(
   // --- Le azioni dell'utente: piano, conferma, avvio, ripresa -----------------------------------------------------------------
 
   private suspend fun userAction(spec: StepSpec) {
+    val library = openLibraryReads(spec)
+    try {
+      runUserAction(spec)
+    } finally {
+      library.forEach { runCatching { it.close() } }
+    }
+  }
+
+  /**
+   * La Libreria sta leggendo un file dentro una cartella che l'utente sta per rinominare, spostare nella stessa share o eliminare: l'handle resta
+   * aperto per tutto il passo (anche attraverso colpi e morti del processo). Si apre senza colpi, dal mondo.
+   */
+  private suspend fun openLibraryReads(spec: StepSpec): List<AutoCloseable> {
+    if (!world.capabilities.libraryReads || config.libraryReadPercent <= 0) return emptyList()
+    val folders = when (spec) {
+      is StepSpec.Rename -> listOf(spec.src)
+      is StepSpec.Move -> if (spec.crossShare) emptyList() else spec.sources
+      is StepSpec.Trash -> spec.sources
+      else -> emptyList()
+    }.filter { it.isFolder }
+    val opened = ArrayList<AutoCloseable>()
+    for (folder in folders) {
+      if (libraryRandom.nextInt(100) >= config.libraryReadPercent) continue
+      val (_, place) = model.filesUnder(folder.place).randomOrNull(libraryRandom) ?: continue
+      val handle = world.openLibraryRead(place.share, SharePath.parse(place.path)) ?: continue
+      stats.libraryRead()
+      log += "la Libreria legge $place, sotto ${folder.place}"
+      opened += handle
+    }
+    return opened
+  }
+
+  private suspend fun runUserAction(spec: StepSpec) {
     if (spec is StepSpec.Move) world.setCopyMode(if (spec.fallback) CopyMode.FALLBACK else CopyMode.SERVER)
     val estimate = 14 + 9 * spec.itemCount
     val opsBefore = store.ops(OpState.entries.toSet()).map { it.id }.toSet()
@@ -681,6 +723,7 @@ class ChaosRound(
 
   private companion object {
     const val ID_SALT = 0x5DEECE66DL
+    const val LIBRARY_SALT = 0x2545F4914F6CDD1DL
     const val START_ATTEMPTS = 40
   }
 }

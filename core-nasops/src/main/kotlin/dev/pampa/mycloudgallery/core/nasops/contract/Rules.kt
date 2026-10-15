@@ -110,6 +110,22 @@ object LockedBackoff {
   }
 }
 
+/**
+ * Le attese **brevi** per una cartella che il telefono stesso tiene aperta (decisione dell'utente, 15/10): la Libreria sta leggendo un file
+ * dentro la cartella che si sposta o si elimina, e Samba non rinomina una cartella con un file aperto sotto dallo stesso client (`ACCESS_DENIED`).
+ * Non e' un file aperto dal PC ([LockedBackoff]) e non e' un permesso negato: i nostri handle si rilasciano e si riprova dopo 1, 2, 4, 8, 16 e
+ * 32 secondi, circa un minuto in tutto, senza uscire dal giro dell'operazione. Se dopo l'ultima prova la cartella e' ancora bloccata
+ * l'elemento diventa un'attesa normale ([LockedBackoff], "aperto"), mai un errore definitivo.
+ */
+object OwnFolderBackoff {
+
+  /** Le attese fra una prova e la successiva. */
+  val DELAYS_MS: List<Long> = listOf(1L, 2, 4, 8, 16, 32).map { it * 1_000L }
+
+  /** Quanto si aspetta, al massimo, prima di passare all'attesa normale. */
+  val MAX_TOTAL_WAIT_MS: Long = DELAYS_MS.sum()
+}
+
 /** Cosa non va in un piano. Un piano che ne ha una non parte, anche se la conferma e' valida. */
 enum class PlanViolation(override val code: String) : StableCode {
   EMPTY("empty"),

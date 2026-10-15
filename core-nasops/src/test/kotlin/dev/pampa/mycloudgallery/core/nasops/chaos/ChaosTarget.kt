@@ -67,11 +67,18 @@ interface ChaosWorld : AutoCloseable {
    */
   suspend fun processDied() = connectionLost()
 
+  /**
+   * La Libreria legge un file (una miniatura, un'anteprima) e tiene l'handle aperto sul NAS finche' chi chiama non lo chiude: una cartella con un
+   * file aperto sotto dallo stesso client non si rinomina su Samba (`ACCESS_DENIED`), e lo spostamento o l'eliminazione devono comunque riuscire
+   * (decisione dell'utente del 15/10). Null se il mondo non sa farlo ([Capabilities.libraryReads]) o la lettura non e' riuscita. Nessun colpo.
+   */
+  suspend fun openLibraryRead(share: String, path: SharePath): AutoCloseable? = null
+
   /** Una riga per il rapporto (mai nomi di file ne' credenziali). */
   fun describe(): String
 
   /** Cosa il mondo sa fare oltre a cio' che fa ogni NAS. */
-  class Capabilities(val advanceTime: Boolean, val copyFallback: Boolean)
+  class Capabilities(val advanceTime: Boolean, val copyFallback: Boolean, val libraryReads: Boolean = false)
 }
 
 /** Dove si apre un mondo. */

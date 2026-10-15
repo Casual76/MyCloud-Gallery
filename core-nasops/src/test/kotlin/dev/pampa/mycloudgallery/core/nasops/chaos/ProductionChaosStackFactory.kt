@@ -8,6 +8,7 @@ import dev.pampa.mycloudgallery.core.nasops.engine.TrashRecordWriter
 import dev.pampa.mycloudgallery.core.nasops.testing.InMemoryOpsStore
 import dev.pampa.mycloudgallery.core.nasops.trash.NasTrashService
 import dev.pampa.mycloudgallery.core.nasops.trash.RemoteTrashSource
+import kotlinx.coroutines.delay
 
 /**
  * Lo stack VERO di P12 nel banco delle interruzioni (docs/prova-500.md §9, punto 1): l'esecutore delle operazioni ([NasOpsEngine]) e il
@@ -41,6 +42,8 @@ object ProductionChaosStackFactory : ChaosStackFactory {
       records = TrashRecordWriter.NONE,
       lock = lock,
       newId = env.newId,
+      // Le attese brevi per una cartella in uso dall'app fanno passare il tempo del mondo finto, non quello vero (il NAS vero lo aspetta davvero).
+      waitShortly = { ms -> if (env.world.capabilities.advanceTime) env.world.advanceTime(ms) else delay(ms) },
     )
     val trash = NasTrashService(
       deviceId = env.world.deviceId,

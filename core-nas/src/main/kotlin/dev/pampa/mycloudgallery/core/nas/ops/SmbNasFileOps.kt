@@ -78,7 +78,7 @@ internal class SmbNasFileOps(
     // Stesso posto, anche solo per le maiuscole (E-N7): il chiamante passa da un nome temporaneo. Nessuna richiesta.
     if (from.value.lowercase(Locale.ROOT) == to.value.lowercase(Locale.ROOT)) return NasResult.Ok(RenameOutcome.Collision)
     return manager.runOp(share, purpose, idempotent = false, touchesDisk = true) { ctx ->
-      renameOnce(ctx.share, from, to, expect, createParents = false)
+      renameOnce(ctx, from, to, expect, createParents = false)
     }
   }
 
@@ -87,7 +87,7 @@ internal class SmbNasFileOps(
     require(TrustIds.isValid(trashId)) { "Un id di cestino valido." }
     val target = NasLayout.trashItemFile(ownerDeviceId, trashId)
     return manager.runOp(share, purpose, idempotent = false, touchesDisk = true) { ctx ->
-      renameOnce(ctx.share, path, target, expect, createParents = true)
+      renameOnce(ctx, path, target, expect, createParents = true)
     }
   }
 
@@ -95,10 +95,11 @@ internal class SmbNasFileOps(
     require(NasOpsPaths.isTempOf(temp, ownerDeviceId)) { "Un temporaneo di questo dispositivo." }
     require(NasOpsPaths.isMediaPath(final)) { "La destinazione e' un percorso di media." }
     return manager.runOp(share, purpose, idempotent = false, touchesDisk = true) { ctx ->
-      when (val outcome = renameOnce(ctx.share, temp, final, expect = null, createParents = true)) {
+      when (val outcome = renameOnce(ctx, temp, final, expect = null, createParents = true)) {
         is RenameOutcome.Renamed -> PublishOutcome.Published(outcome.stamp)
         RenameOutcome.Collision -> PublishOutcome.Collision
-        RenameOutcome.Locked -> PublishOutcome.Locked
+        // Un temporaneo e' un file: "cartella in uso" non puo' arrivare di qui, ma se arrivasse e' un'attesa come le altre.
+        RenameOutcome.Locked, RenameOutcome.FolderInUse -> PublishOutcome.Locked
         RenameOutcome.SourceMissing, is RenameOutcome.SourceChanged -> PublishOutcome.TempMissing
       }
     }
@@ -107,8 +108,12 @@ internal class SmbNasFileOps(
   /**
    * UNA rinomina su un handle: apertura con `DELETE`, timbro letto sullo stesso handle e confrontato con [expect] (solo per i
    * file), poi `SET_INFO` senza sostituire. Con [createParents] le cartelle mancanti di [to] si creano e si riprova una volta.
+   *
+   * Una **cartella** rifiutata con `ACCESS_DENIED` non e' per forza un permesso negato: se sotto c'e' un handle nostro aperto (la Libreria che
+   * legge una miniatura) Samba risponde cosi' ([retryWithoutOwnHandles]). Senza un handle nostro sotto, resta l'errore di sempre.
    */
-  private fun renameOnce(share: SmbShare, from: SharePath, to: SharePath, expect: NasStamp?, createParents: Boolean): RenameOutcome {
+  private fun renameOnce(ctx: OpContext, from: SharePath, to: SharePath, expect: NasStamp?, createParents: Boolean): RenameOutcome {
+    val share = ctx.share
     val handle = openChange(share, from, exclusive = false) ?: return RenameOutcome.SourceMissing
     if (handle === LOCKED) return RenameOutcome.Locked
     handle.use { h ->
@@ -125,19 +130,52 @@ internal class SmbNasFileOps(
           NtStatus.OBJECT_NAME_COLLISION -> RenameOutcome.Collision
           NtStatus.SHARING_VIOLATION, NtStatus.FILE_LOCK_CONFLICT -> RenameOutcome.Locked
           NtStatus.OBJECT_PATH_NOT_FOUND -> MISSING_PARENT
+          NtStatus.ACCESS_DENIED -> if (info.isDirectory) FOLDER_DENIED else throw e
           else -> throw e
         }
       }
       var outcome = attempt()
+      if (outcome === FOLDER_DENIED) outcome = retryWithoutOwnHandles(ctx, from, ::attempt)
       if (outcome === MISSING_PARENT) {
         if (!createParents) throw NasOpException(NasError.NotFound)
         to.parent()?.let { ensureDir(share, componentsOf(it)) }
           ?: root?.let { ensureDir(share, it.components) }
         outcome = attempt()
+        if (outcome === FOLDER_DENIED) outcome = retryWithoutOwnHandles(ctx, from, ::attempt)
         if (outcome === MISSING_PARENT) throw NasOpException(NasError.NotFound)
       }
       return outcome ?: RenameOutcome.Renamed(stampOf(info))
     }
+  }
+
+  /**
+   * La rinomina della cartella [dir] e' stata rifiutata con `ACCESS_DENIED`. Se sotto la cartella il registro degli handle propri ne ha di
+   * aperti, il rifiuto e' di Samba che non rinomina una cartella con un file aperto sotto dallo stesso client: si rilasciano i nostri handle di
+   * lettura (il proprietario li riapre da solo alla lettura dopo), si aspetta che la `CLOSE` arrivi al NAS e si riprova, al massimo
+   * [RELEASE_ROUNDS] volte. Se alla fine qualcuno e' ancora aperto (un elenco a meta', una lettura che si e' riaperta) la risposta e'
+   * [RenameOutcome.FolderInUse]: l'esecutore riprova fra poco.
+   *
+   * **Un vero permesso negato resta un errore**: senza alcun handle nostro sotto la cartella (la prima volta), o con handle visti ma nessuno
+   * piu' sotto dopo i tentativi (il rifiuto non dipendeva da loro), si rilancia lo stesso `ACCESS_DENIED` di prima.
+   */
+  private fun retryWithoutOwnHandles(ctx: OpContext, dir: SharePath, attempt: () -> RenameOutcome?): RenameOutcome? {
+    val share = ctx.share.name
+    val path = at(dir)
+    var seenOwn = false
+    repeat(RELEASE_ROUNDS) {
+      if (ctx.ownHandles.countBelow(share, path) > 0) {
+        seenOwn = true
+        ctx.ownHandles.releaseBelow(share, path)
+        // Le chiusure chieste (anche adesso) arrivano al NAS prima della richiesta che segue: e' il caso che si vuole sistemare.
+        manager.awaitCloses()
+      } else if (!seenOwn) {
+        throw SmbStatusException(NtStatus.ACCESS_DENIED)
+      }
+      val outcome = attempt()
+      if (outcome !== FOLDER_DENIED) return outcome
+    }
+    if (ctx.ownHandles.countBelow(share, path) > 0) return RenameOutcome.FolderInUse
+    throw SmbStatusException(NtStatus.ACCESS_DENIED)
   }
 
   // --- copia lato server e temporanei ----------------------------------------------------------------------------------
@@ -485,8 +523,14 @@ internal class SmbNasFileOps(
     /** La copia lato server non c'e' o e' negata (E-D12): si ripiega dal telefono. */
     val COPY_REFUSED: Set<Long> = setOf(NtStatus.NOT_SUPPORTED, NtStatus.ACCESS_DENIED, INVALID_DEVICE_REQUEST)
 
+    /** Quante volte, al massimo, una cartella rifiutata si riprova dopo aver rilasciato i nostri handle (poi `FolderInUse`). */
+    const val RELEASE_ROUNDS = 3
+
     /** Segnaposto interni (mai restituiti a chi chiama). */
     val MISSING_PARENT: RenameOutcome = RenameOutcome.SourceChanged(null)
+
+    /** `ACCESS_DENIED` su una cartella: ancora da capire se e' un permesso negato vero o un nostro handle sotto. */
+    val FOLDER_DENIED: RenameOutcome = RenameOutcome.SourceChanged(null)
     val LOCKED: SmbChangeHandle = object : SmbChangeHandle {
       override val info: SmbFileInfo get() = error("segnaposto")
 

@@ -785,6 +785,9 @@ internal class OpContext(
   /** La sessione su cui gira l'operazione: un handle aperto vale solo dentro la stessa (lettura dei media). */
   val sessionKey: Any get() = session
 
+  /** Gli handle che questa sessione tiene aperti sul NAS: la prova che un `ACCESS_DENIED` su una cartella dipende da noi. */
+  val ownHandles: OwnHandles get() = session.ownHandles
+
   /** Un'altra share della stessa sessione (copia lato server tra share). Passa anche lei dalla recinzione D33. */
   fun otherShare(name: String): SmbShare {
     fence(name)?.let { throw NasOpException(it) }
@@ -848,13 +851,16 @@ internal class LiveSession(
 
   private val shares = HashMap<String, SmbShare>()
 
+  /** Gli handle di lettura ed elenco che questa sessione tiene aperti: ogni share qui sotto li registra aprendoli. */
+  val ownHandles = OwnHandles()
+
   val usable: Boolean get() = !closed && connection.isConnected
 
   /** La share connessa (TREE_CONNECT alla prima richiesta, poi dalla cache; i nomi non distinguono le maiuscole). */
   fun share(name: String): SmbShare = synchronized(shares) {
     if (closed) throw SmbConnectionLostException()
     fence(name)?.let { throw NasOpException(it) }
-    shares.getOrPut(name.lowercase(Locale.ROOT)) { session.connectShare(name) }
+    shares.getOrPut(name.lowercase(Locale.ROOT)) { TrackingShare(session.connectShare(name), ownHandles) }
   }
 
   /** Prima il socket (sblocca subito le chiamate in corso), poi share e sessione. */
@@ -864,5 +870,7 @@ internal class LiveSession(
     val toClose = synchronized(shares) { shares.values.toList().also { shares.clear() } }
     toClose.forEach { it.close() }
     session.close()
+    // Il server ha chiuso gli handle della connessione: nessuno di questi esiste piu'.
+    ownHandles.clear()
   }
 }

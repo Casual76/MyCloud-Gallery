@@ -711,11 +711,47 @@ perso o rovinato.
 - **Esito sul NAS vero (15/10, sera):** area pulita, giro corto 27 giri / 20 interruzioni / 0 violazioni, poi **537 giri, 400
   interruzioni (264 morti del processo, 22 durante una lettura), 0 violazioni**, 142 minuti, 58 GB riletti con SHA-256; area di nuovo
   pulita e verificata con entrambi gli account.
-- **Osservazione da decidere (non cambiata).** Sul WD una cartella con un file aperto **dalla stessa connessione** non si rinomina
-  (`ACCESS_DENIED`, Samba `strict rename = no`; un file aperto dal PC invece non conta). Le chiusure ordinate tolgono il caso dell'inventario
-  prima del cestino (che con le chiusure in volo faceva fallire l'elemento "permesso negato"); resta la Libreria che sta leggendo un file
-  dentro una cartella mentre la si sposta o la si elimina: l'elemento si ferma con "permesso negato" (motivo visibile, niente perso). Si
-  potrebbe trattare come un'attesa breve invece che come un rifiuto.
+- **Osservazione (decisa il 15/10, vedi «Cartella in uso dall'app» qui sotto).** Sul WD una cartella con un file aperto **dalla stessa
+  connessione** non si rinomina (`ACCESS_DENIED`, Samba `strict rename = no`; un file aperto dal PC invece non conta). Le chiusure ordinate
+  tolgono il caso dell'inventario prima del cestino (che con le chiusure in volo faceva fallire l'elemento "permesso negato"); restava la
+  Libreria che sta leggendo un file dentro una cartella mentre la si sposta o la si elimina: l'elemento si fermava con "permesso negato"
+  (motivo visibile, niente perso).
+
+### ✅ DECISO (utente, 15/10): «Cartella in uso dall'app» e' un'attesa breve, non un rifiuto
+Fonte: l'osservazione qui sopra (prova F16 sul NAS vero). Se la Libreria sta leggendo un file (una miniatura, un'anteprima) dentro una cartella
+che si sposta, si rinomina o si elimina, Samba risponde `ACCESS_DENIED` come per un permesso negato vero. L'utente ha deciso di trattarlo come
+**un'attesa breve**: l'app riprova da sola dopo qualche secondo invece di fermare l'elemento.
+
+- **La regola e la prova.** Vale **solo** quando la cartella ha sotto un handle aperto **dal nostro stesso processo**. La prova e' il registro
+  degli handle propri (`OwnHandles`, `core-nas/session`): ogni lettura di media e ogni elenco aperti dalla sessione ci stanno dall'apertura alla
+  `CLOSE` arrivata al NAS (una chiusura in volo conta ancora), per share e percorso, uno per sessione (Samba controlla gli handle della stessa
+  connessione). Un `ACCESS_DENIED` su una **cartella** con almeno un handle nostro sotto non e' un permesso negato; **senza** (share in sola
+  lettura, permessi dell'account, handle fuori dalla cartella, un file invece di una cartella, un rifiuto che resta anche dopo il rilascio)
+  resta `PermissionDenied` e l'elemento si ferma come prima (E-N9). Un handle che il registro non conosce fa solo tornare al comportamento di
+  prima: mai il contrario.
+- **Che cosa fa.** (1) Le primitive (`SmbNasFileOps.rename` e `trashMove`, quindi anche la rinomina di sole maiuscole e il ripristino)
+  **rilasciano** i nostri handle di lettura sotto la cartella, come il viewer per i file (R10): `SmbRandomFile.release` chiude l'handle sul NAS,
+  la lettura dopo lo riapre da sola e confronta il timbro; se una lettura lo sta usando lo chiude l'ultima che lo lascia, mai una sotto i piedi
+  dell'altra. Poi aspettano che le `CLOSE` arrivino al NAS e riprovano, fino a 3 volte. (2) Se qualcosa e' ancora aperto (un elenco a meta', una
+  lettura che si e' riaperta) rispondono `RenameOutcome.FolderInUse`: niente e' cambiato. (3) L'esecutore (`NasOpsEngine`) riprova **dopo 1, 2,
+  4, 8, 16 e 32 secondi** (`OwnFolderBackoff`, 63 s in tutto), senza uscire dal giro e tenendo il lucchetto delle scritture; il tetto vale **per
+  giro** (con molte cartelle bloccate non si aspetta un minuto per ognuna) e l'attesa si interrompe con «Ferma», con le scritture ferme o a fine
+  del tempo della ripresa. (4) Se dopo l'ultima prova la cartella e' ancora bloccata diventa un'**attesa normale** (`WAITING_LOCKED`, come un
+  file aperto dal PC: prima prova dopo 1 minuto, poi le attese crescenti fino a 24 ore): mai un errore definitivo.
+- **Il motivo.** Nel diario e in Diagnostica l'elemento in attesa risulta `locked`, come per un file aperto: nessun valore nuovo in
+  `OpErrorCode` o `PauseReason`, perche' `feature-nas` li legge con un `when` esaustivo (fuori dal perimetro di questo lavoro). Le attese brevi
+  sono nei log (`NasOps`: solo codici e millisecondi). Una frase dedicata («Cartella in uso dall'app, riprovo») e una voce di Diagnostica
+  separata chiedono un valore nuovo in quei due contratti e le righe in `feature-nas` (`NasMessages.kt`, stringhe) e in `app`
+  (`NasOpsDiagnostics`): da fare insieme, quando si tocca la UI.
+- **Guasti e morte del processo durante l'attesa.** L'attesa breve non scrive niente nel diario: il passo e' quello gia' scritto (`RENAMING`,
+  `RECORDED`) e la ripresa riparte da li' su una connessione nuova (il NAS chiude gli handle del processo morto); se la rinomina era gia'
+  avvenuta con la risposta persa la riconosce (sorgente assente, destinazione con la stessa identita').
+- **Prove sul simulatore** (`InMemorySmbBackend`, che rifiuta gia' la rinomina di una cartella con un handle dello stesso client sotto):
+  `OwnFolderHandlesTest` e `OwnHandlesRegistryTest` (core-nas: miniatura aperta, piu' letture, elenco a meta', lettura in corso, rilascio e
+  rilettura, cestino, i `ACCESS_DENIED` veri), `OwnFolderWaitTest` (core-nasops, esecutore vero: rinomina, maiuscole, cestino, attese 1-32 s,
+  attesa normale, tetto per giro, scritture ferme, permesso negato vero, share in sola lettura, guasti `FaultPlan` e morte del processo
+  durante l'attesa). Il banco delle interruzioni sul simulatore SMB (600 giri, 2.172 interruzioni, 0 violazioni) tiene ora, nel 40% dei passi
+  su una cartella, una lettura della Libreria aperta sotto di lei (233 letture in 600 giri); senza il rilascio i giri rossi sono 26 [8].
 
 ## Revisione grafica della Libreria da parte dell'utente (13/10)
 Giudizio: le prestazioni della navigazione non sono male, la **grafica no**. Serve molto lavoro, da fare in un **filone grafico

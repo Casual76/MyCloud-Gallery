@@ -27,6 +27,7 @@ class BenchResult(
     stats.knownDefectHits.entries.sortedBy { it.key }.forEach { appendLine("difetto noto ${it.key} riprodotto ${it.value} volte (giri fermati li', non contati come fallimenti)") }
     appendLine("passi eseguiti: ${stats.steps}; verifiche a meta': ${stats.midChecks}; verifiche a operazioni finite: ${stats.quiescentChecks}; riavvii: ${stats.restarts}; annullamenti: ${stats.cancels}")
     appendLine("file riletti con SHA-256: ${stats.filesHashed} (${stats.bytesHashed / 1024} KiB)")
+    if (stats.libraryReads > 0) appendLine("letture della Libreria rimaste aperte sotto una cartella spostata o eliminata: ${stats.libraryReads}")
     val total = stats.totalFired
     appendLine("interruzioni cadute: $total")
     for (kind in FaultKind.entries) appendLine("  ${kind.label}: ${stats.firedBy(kind)} (${percent(stats.firedBy(kind), total)})")

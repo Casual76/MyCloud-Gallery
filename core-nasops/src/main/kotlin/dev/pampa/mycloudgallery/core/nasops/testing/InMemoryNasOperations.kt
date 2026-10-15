@@ -584,7 +584,7 @@ class InMemoryNasOperations(
           RenameOutcome.SourceMissing ->
             return if (alreadyAt(cur, dst)) advanceTo(cur, OpItemState.DONE) else fail(cur, OpErrorCode.SOURCE_MISSING)
           is RenameOutcome.SourceChanged -> return fail(cur, OpErrorCode.SOURCE_CHANGED)
-          RenameOutcome.Locked -> return waitLocked(cur)
+          RenameOutcome.Locked, RenameOutcome.FolderInUse -> return waitLocked(cur)
         }
       }
     }
@@ -621,7 +621,7 @@ class InMemoryNasOperations(
         is NasResult.Err -> return failOrPause(cur, r.error)
         is NasResult.Ok -> when (r.value) {
           is RenameOutcome.Renamed -> Unit
-          RenameOutcome.Locked -> return waitLocked(cur)
+          RenameOutcome.Locked, RenameOutcome.FolderInUse -> return waitLocked(cur)
           is RenameOutcome.SourceChanged -> return fail(cur, OpErrorCode.SOURCE_CHANGED)
           RenameOutcome.SourceMissing -> return fail(cur, OpErrorCode.SOURCE_MISSING)
           RenameOutcome.Collision -> return fail(cur, OpErrorCode.UNEXPECTED)
@@ -632,7 +632,7 @@ class InMemoryNasOperations(
       is NasResult.Err -> return failOrPause(cur, r.error)
       is NasResult.Ok -> when (r.value) {
         is RenameOutcome.Renamed -> return advanceTo(cur, OpItemState.DONE)
-        RenameOutcome.Locked -> return waitLocked(cur)
+        RenameOutcome.Locked, RenameOutcome.FolderInUse -> return waitLocked(cur)
         RenameOutcome.Collision -> {
           // Qualcuno ha preso il nome finale: si rimette il nome di prima (se riesce) e ci si ferma.
           fileOps.rename(share, tmp, src, null, purpose)
@@ -916,7 +916,7 @@ class InMemoryNasOperations(
           store.markTrash(trashId, TrashEntryState.PURGED, nasNow())
           Step.Stop(fail(cur, OpErrorCode.SOURCE_CHANGED))
         }
-        RenameOutcome.Locked -> Step.Stop(waitLocked(cur))
+        RenameOutcome.Locked, RenameOutcome.FolderInUse -> Step.Stop(waitLocked(cur))
         RenameOutcome.Collision -> Step.Stop(fail(cur, OpErrorCode.UNEXPECTED))
       }
     }
@@ -966,7 +966,7 @@ class InMemoryNasOperations(
             store.markTrash(trashId, TrashEntryState.PURGED, nasNow())
             return fail(cur, OpErrorCode.SOURCE_CHANGED)
           }
-          RenameOutcome.Locked -> return waitLocked(cur)
+          RenameOutcome.Locked, RenameOutcome.FolderInUse -> return waitLocked(cur)
           RenameOutcome.Collision -> return fail(cur, OpErrorCode.UNEXPECTED)
         }
       }
@@ -999,7 +999,7 @@ class InMemoryNasOperations(
           }
           RenameOutcome.SourceMissing -> return if (alreadyAt(cur, dst)) restored(cur) else fail(cur, OpErrorCode.SOURCE_MISSING)
           is RenameOutcome.SourceChanged -> return fail(cur, OpErrorCode.SOURCE_CHANGED)
-          RenameOutcome.Locked -> return waitLocked(cur)
+          RenameOutcome.Locked, RenameOutcome.FolderInUse -> return waitLocked(cur)
         }
       }
     }

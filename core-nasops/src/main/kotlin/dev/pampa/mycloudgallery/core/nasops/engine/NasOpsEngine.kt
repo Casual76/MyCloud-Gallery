@@ -41,6 +41,7 @@ import dev.pampa.mycloudgallery.core.nasops.contract.OpStateMachine
 import dev.pampa.mycloudgallery.core.nasops.contract.OpTemps
 import dev.pampa.mycloudgallery.core.nasops.contract.OpsGate
 import dev.pampa.mycloudgallery.core.nasops.contract.OpsStore
+import dev.pampa.mycloudgallery.core.nasops.contract.OwnFolderBackoff
 import dev.pampa.mycloudgallery.core.nasops.contract.PauseReason
 import dev.pampa.mycloudgallery.core.nasops.contract.PlanOutcome
 import dev.pampa.mycloudgallery.core.nasops.contract.PlanRules
@@ -57,6 +58,7 @@ import dev.pampa.mycloudgallery.core.trust.nas.NasLayout
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import java.util.Locale
 import kotlin.time.Duration
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.withLock
@@ -83,6 +85,11 @@ import kotlinx.coroutines.sync.withLock
  * Esecuzione: [start] e [resumeAll] eseguono gli elementi in ordine, uno alla volta, sotto il lucchetto [NasOpsLock] condiviso con le
  * pulizie; un'operazione si ferma (in pausa) se il NAS non risponde, se le scritture sono bloccate ([OpsGate]) o alla fine del budget,
  * e aspetta i file aperti dal PC con attese crescenti fino a 24 ore (E-N13).
+ *
+ * Una cartella che il telefono stesso tiene aperta (la Libreria che legge una miniatura sotto di lei) non e' un permesso negato e non e' il PC:
+ * Samba non la rinomina finche' un nostro handle e' aperto sotto. Le primitive rilasciano i nostri handle e, se serve, rispondono
+ * [RenameOutcome.FolderInUse]: qui si riprova con attese brevi ([OwnFolderBackoff], circa un minuto), poi diventa un'attesa normale come un
+ * file aperto. Un `ACCESS_DENIED` senza un nostro handle sotto resta l'errore di sempre.
  */
 class NasOpsEngine internal constructor(
   private val deviceId: String,
@@ -100,6 +107,8 @@ class NasOpsEngine internal constructor(
   private val newId: () -> String = { TrustIds.random() },
   /** R3: cio' che il catalogo vede ancora presente (inventario delle cartelle cestinate, "Elimina subito"). Serve solo a non eliminare. */
   private val presence: CatalogPresence = CatalogPresence.NONE,
+  /** L'attesa breve di [OwnFolderBackoff] (millisecondi): di norma un `delay`; i test la fanno passare sull'orologio finto. */
+  private val waitShortly: suspend (Long) -> Unit = { delay(it) },
 ) : NasOperations {
 
   init {
@@ -374,7 +383,10 @@ class NasOpsEngine internal constructor(
    * Il contesto di un giro: lo scopo (tempi del NAS) e lo stato corrente degli elementi (le cartelle aspettano il loro contenuto).
    * [heldForClock]: un elemento e' entrato nel cestino mentre l'ora del NAS era sospetta (R1) e aspetta di essere datato.
    */
-  private class RunCtx(val purpose: Purpose, val current: MutableMap<Int, OpItemRecord>, var heldForClock: Boolean = false)
+  private class RunCtx(val purpose: Purpose, val current: MutableMap<Int, OpItemRecord>, val deadline: Long, var heldForClock: Boolean = false) {
+    /** Quanto, in questo giro, si e' gia' aspettato per cartelle in uso dall'app ([OwnFolderBackoff]): il tetto vale per tutto il giro, non per elemento. */
+    var shortWaitedMs: Long = 0
+  }
 
   private suspend fun runOp(id: OpId, deadlineMonotonic: Long, purpose: Purpose, honourCancel: Boolean = true): OpRun {
     val op = store.op(id) ?: return OpRun(0, 0, 0, RunStop.COMPLETE)
@@ -383,7 +395,7 @@ class NasOpsEngine internal constructor(
     synchronized(viewsLock) { views[id]?.pause = null }
     publish()
     val items = store.items(id)
-    val ctx = RunCtx(purpose, items.associateByTo(LinkedHashMap()) { it.index })
+    val ctx = RunCtx(purpose, items.associateByTo(LinkedHashMap()) { it.index }, deadlineMonotonic)
     var stop = RunStop.COMPLETE
     try {
       for (snapshot in items) {
@@ -488,6 +500,35 @@ class NasOpsEngine internal constructor(
     else -> throw PauseSignal(PauseReason.NAS_UNREACHABLE)
   }
 
+  /**
+   * La rinomina (o il cestino) di una cartella risponde `FolderInUse`: un handle nostro e' aperto sotto di lei (le primitive hanno gia'
+   * rilasciato quelli di lettura). Non e' un file aperto dal PC e non e' un permesso negato: si riprova con attese brevi ([OwnFolderBackoff],
+   * circa un minuto **in tutto per giro**: con molte cartelle bloccate non si aspetta un minuto per ognuna) senza uscire dal giro, finche'
+   * l'utente non tocca "Ferma", le scritture non si fermano o il tempo della ripresa non finisce. Se alla fine e' ancora `FolderInUse`, chi
+   * chiama la tratta come un file aperto ([waitLocked]): attesa normale, mai un errore.
+   * Un processo che muore nell'attesa non lascia niente da disfare: il passo e' quello gia' scritto, la ripresa riparte da li' su una
+   * connessione nuova (e senza handle).
+   */
+  private suspend fun retryWhileFolderInUse(item: OpItemRecord, ctx: RunCtx, call: suspend () -> NasResult<RenameOutcome>): NasResult<RenameOutcome> {
+    var result = call()
+    var waits = 0
+    for (delayMs in OwnFolderBackoff.DELAYS_MS) {
+      if (!result.isFolderInUse()) break
+      if (item.opId in cancelRequests || clocks.monotonicMs() + delayMs > ctx.deadline) break
+      if (ctx.shortWaitedMs + delayMs > OwnFolderBackoff.MAX_TOTAL_WAIT_MS) break
+      if (listOfNotNull(item.srcShare, item.dstShare).any { gate.statusOf(it).blocksUserOps }) break
+      GalleryLog.d(TAG) { "cartella in uso dall'app: riprovo fra $delayMs ms" }
+      waits++
+      ctx.shortWaitedMs += delayMs
+      waitShortly(delayMs)
+      result = call()
+    }
+    if (result.isFolderInUse()) GalleryLog.d(TAG) { "cartella ancora in uso dall'app dopo $waits attese brevi: attesa normale" }
+    return result
+  }
+
+  private fun NasResult<RenameOutcome>.isFolderInUse(): Boolean = this is NasResult.Ok && value == RenameOutcome.FolderInUse
+
   private sealed interface Probe {
     data class Found(val entry: NasEntry) : Probe
 
@@ -589,7 +630,7 @@ class NasOpsEngine internal constructor(
         parentReady = true
       }
       val expect = cur.stamp.takeIf { !cur.isFolder }
-      when (val r = fileOps.rename(share, cur.srcPath, dst, expect, ctx.purpose)) {
+      when (val r = retryWhileFolderInUse(cur, ctx) { fileOps.rename(share, cur.srcPath, dst, expect, ctx.purpose) }) {
         // La cartella di destinazione e' sparita fra la creazione e la rinomina: si ricrea (poche volte).
         is NasResult.Err -> if (r.error == NasError.NotFound) parentReady = false else return failOrPause(cur, r.error)
         is NasResult.Ok -> when (r.value) {
@@ -599,7 +640,7 @@ class NasOpsEngine internal constructor(
           RenameOutcome.SourceMissing ->
             return if (alreadyAt(cur, share, dst, ctx.purpose)) advance(cur, OpItemState.DONE) else fail(cur, OpErrorCode.SOURCE_MISSING)
           is RenameOutcome.SourceChanged -> return fail(cur, OpErrorCode.SOURCE_CHANGED)
-          RenameOutcome.Locked -> return waitLocked(cur)
+          RenameOutcome.Locked, RenameOutcome.FolderInUse -> return waitLocked(cur)
         }
       }
     }
@@ -632,11 +673,11 @@ class NasOpsEngine internal constructor(
       }
       // Il nome sul server e' gia' quello finale (risposta persa della seconda rinomina).
       if (atSrc.entry.name == cur.dstPath!!.name && isSame(cur, atSrc.entry)) return advance(cur, OpItemState.DONE)
-      when (val r = fileOps.rename(share, src, tmp, expect, ctx.purpose)) {
+      when (val r = retryWhileFolderInUse(cur, ctx) { fileOps.rename(share, src, tmp, expect, ctx.purpose) }) {
         is NasResult.Err -> return failOrPause(cur, r.error)
         is NasResult.Ok -> when (r.value) {
           is RenameOutcome.Renamed -> Unit
-          RenameOutcome.Locked -> return waitLocked(cur)
+          RenameOutcome.Locked, RenameOutcome.FolderInUse -> return waitLocked(cur)
           is RenameOutcome.SourceChanged -> return fail(cur, OpErrorCode.SOURCE_CHANGED)
           RenameOutcome.SourceMissing -> return fail(cur, OpErrorCode.SOURCE_MISSING)
           RenameOutcome.Collision -> return fail(cur, OpErrorCode.UNEXPECTED)
@@ -646,12 +687,12 @@ class NasOpsEngine internal constructor(
     // Seconda rinomina: dal temporaneo (nostro) al nome finale; se qualcuno l'ha preso nel frattempo, nome alternativo.
     while (true) {
       val dst = cur.dstPath!!
-      when (val r = fileOps.rename(share, tmp, dst, null, ctx.purpose)) {
+      when (val r = retryWhileFolderInUse(cur, ctx) { fileOps.rename(share, tmp, dst, null, ctx.purpose) }) {
         is NasResult.Err -> return if (isNetwork(r.error)) failOrPause(cur, r.error) else stuckAtTemp(cur, share, tmp, src, ctx, failOrPause(cur, r.error))
         is NasResult.Ok -> when (r.value) {
           is RenameOutcome.Renamed -> return advance(cur, OpItemState.DONE)
           RenameOutcome.Collision -> cur = withAlternative(cur) ?: return stuckAtTemp(cur, share, tmp, src, ctx, fail(cur, OpErrorCode.NAME_TAKEN))
-          RenameOutcome.Locked -> return waitLocked(cur)
+          RenameOutcome.Locked, RenameOutcome.FolderInUse -> return waitLocked(cur)
           RenameOutcome.SourceMissing ->
             return if (alreadyAt(cur, share, dst, ctx.purpose)) advance(cur, OpItemState.DONE) else fail(cur, OpErrorCode.SOURCE_MISSING)
           is RenameOutcome.SourceChanged -> return stuckAtTemp(cur, share, tmp, src, ctx, fail(cur, OpErrorCode.SOURCE_CHANGED))
@@ -976,7 +1017,8 @@ class NasOpsEngine internal constructor(
           store.markTrash(trashId, TrashEntryState.PURGED, nasNow())
           fail(cur, OpErrorCode.SOURCE_CHANGED)
         }
-        RenameOutcome.Locked -> closeEntryIfFailed(waitLocked(cur), trashId, ctx)
+        // Un file non e' una cartella: `FolderInUse` non puo' arrivare di qui, ma se arrivasse e' un'attesa come le altre.
+        RenameOutcome.Locked, RenameOutcome.FolderInUse -> closeEntryIfFailed(waitLocked(cur), trashId, ctx)
         RenameOutcome.Collision -> {
           // Il posto nel cestino e' occupato da altro: la voce non deve mai far eliminare quel file.
           store.markTrash(trashId, TrashEntryState.PURGED, nasNow())
@@ -1087,7 +1129,7 @@ class NasOpsEngine internal constructor(
     }
     if (cur.state == OpItemState.RECORDED) {
       val expect = cur.stamp.takeIf { !cur.isFolder }
-      when (val r = fileOps.trashMove(cur.srcShare, cur.srcPath, trashId, expect, ctx.purpose)) {
+      when (val r = retryWhileFolderInUse(cur, ctx) { fileOps.trashMove(cur.srcShare, cur.srcPath, trashId, expect, ctx.purpose) }) {
         is NasResult.Err -> return closeEntryIfFailed(failOrPause(cur, r.error), trashId, ctx)
         is NasResult.Ok -> when (r.value) {
           is RenameOutcome.Renamed -> cur = advance(cur, OpItemState.TRASHED)
@@ -1102,7 +1144,7 @@ class NasOpsEngine internal constructor(
             store.markTrash(trashId, TrashEntryState.PURGED, nasNow())
             return fail(cur, OpErrorCode.SOURCE_CHANGED)
           }
-          RenameOutcome.Locked -> return closeEntryIfFailed(waitLocked(cur), trashId, ctx)
+          RenameOutcome.Locked, RenameOutcome.FolderInUse -> return closeEntryIfFailed(waitLocked(cur), trashId, ctx)
           RenameOutcome.Collision -> {
             store.markTrash(trashId, TrashEntryState.PURGED, nasNow())
             return fail(cur, OpErrorCode.UNEXPECTED)
@@ -1171,7 +1213,7 @@ class NasOpsEngine internal constructor(
         }
         parentReady = true
       }
-      when (val r = fileOps.rename(share, cur.srcPath, dst, null, ctx.purpose)) {
+      when (val r = retryWhileFolderInUse(cur, ctx) { fileOps.rename(share, cur.srcPath, dst, null, ctx.purpose) }) {
         // La cartella d'origine e' sparita di nuovo fra la creazione e la rinomina: si ricrea (poche volte).
         is NasResult.Err -> if (r.error == NasError.NotFound) parentReady = false else return failOrPause(cur, r.error)
         is NasResult.Ok -> when (r.value) {
@@ -1181,7 +1223,7 @@ class NasOpsEngine internal constructor(
           RenameOutcome.SourceMissing ->
             return if (alreadyAt(cur, share, dst, ctx.purpose)) restored(cur) else fail(cur, OpErrorCode.SOURCE_MISSING)
           is RenameOutcome.SourceChanged -> return fail(cur, OpErrorCode.SOURCE_CHANGED)
-          RenameOutcome.Locked -> return waitLocked(cur)
+          RenameOutcome.Locked, RenameOutcome.FolderInUse -> return waitLocked(cur)
         }
       }
     }

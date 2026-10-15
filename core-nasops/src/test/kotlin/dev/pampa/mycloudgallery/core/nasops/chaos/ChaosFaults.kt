@@ -393,6 +393,8 @@ class ChaosStats {
     private set
   var cancels: Int = 0
     private set
+  var libraryReads: Int = 0
+    private set
   val stepKinds: MutableMap<String, Int> = HashMap()
 
   /** Quante volte e' comparso ciascun difetto noto dello stack sotto prova (il giro si ferma li'). */
@@ -418,6 +420,8 @@ class ChaosStats {
   fun quiescentCheck() = synchronized(lock) { quiescentChecks++ }
 
   fun cancel() = synchronized(lock) { cancels++ }
+
+  fun libraryRead() = synchronized(lock) { libraryReads++ }
 
   fun hashed(files: Int, bytes: Long) = synchronized(lock) {
     filesHashed += files

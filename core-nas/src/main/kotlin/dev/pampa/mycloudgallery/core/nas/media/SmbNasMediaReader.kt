@@ -18,6 +18,7 @@ import dev.pampa.mycloudgallery.core.nas.session.FailureKind
 import dev.pampa.mycloudgallery.core.nas.session.NasOpException
 import dev.pampa.mycloudgallery.core.nas.session.OpContext
 import dev.pampa.mycloudgallery.core.nas.session.OpTicket
+import dev.pampa.mycloudgallery.core.nas.session.OwnHandles
 import dev.pampa.mycloudgallery.core.nas.session.SmbNasSessionManager
 import dev.pampa.mycloudgallery.core.nas.smb.DirAccess
 import dev.pampa.mycloudgallery.core.nas.smb.SmbDirEntry
@@ -298,12 +299,47 @@ internal class SmbRandomFile(
 
   override val size: Long get() = stamp.size
 
+  /**
+   * L'handle aperto sul NAS in questo momento, con la sessione che l'ha aperto e le letture che lo stanno usando. Un handle [retired]
+   * (rilasciato o sostituito mentre una lettura lo usava) lo chiude l'ultima lettura che lo lascia, mai una sotto i piedi dell'altra.
+   */
+  private class Lease(val file: SmbReadFile, val session: Any?) {
+    var users = 0
+    var retired = false
+  }
+
   private val lock = Any()
-  private var handle: SmbReadFile? = first
-  private var handleSession: Any? = firstSession
+  private var lease: Lease? = Lease(first, firstSession)
 
   @Volatile
   private var closed = false
+
+  init {
+    track(first)
+  }
+
+  /**
+   * Fa sapere al registro degli handle propri che questo handle sa rilasciarsi: se una cartella sopra il file non si lascia rinominare per
+   * colpa nostra (Samba non rinomina una cartella con un file aperto sotto dallo stesso client), l'esecutore delle operazioni ci chiede di
+   * lasciarlo e la lettura dopo lo riapre da sola ([acquire]).
+   */
+  private fun track(file: SmbReadFile) {
+    (file as? OwnHandles.Tracked)?.entry?.release = ::release
+  }
+
+  /**
+   * Chiude l'handle sul NAS senza chiudere il file: la prossima lettura lo riapre (e controlla che sia ancora lo stesso, come dopo una
+   * riconnessione). Se una lettura lo sta usando, la chiusura aspetta che finisca.
+   */
+  fun release() {
+    synchronized(lock) { lease?.let { lease = null; retire(it) } }
+  }
+
+  /** L'handle non serve piu' a questo file: si chiude subito, o quando l'ultima lettura che lo usa ha finito. Sotto [lock]. */
+  private fun retire(old: Lease) {
+    old.retired = true
+    if (old.users == 0) manager.closeLater(old.file, old.session)
+  }
 
   override suspend fun read(offset: Long, buf: ByteArray, off: Int, len: Int): Int {
     require(offset >= 0 && off >= 0 && len >= 0 && off + len <= buf.size) { "Intervallo non valido." }
@@ -352,7 +388,12 @@ internal class SmbRandomFile(
       mayRetry = { transfer?.abortedBy == null && !closed },
     ) { ctx ->
       transfer?.abortedBy?.let { throw NasOpException(it, FailureKind.SUSPECT) }
-      val n = handleFor(ctx).read(buf, offset, off, len)
+      val used = acquire(ctx)
+      val n = try {
+        used.file.read(buf, offset, off, len)
+      } finally {
+        leave(used)
+      }
       if (n > 0 && transfer != null) manager.transferProgress(transfer, n)
       n
     }
@@ -362,12 +403,16 @@ internal class SmbRandomFile(
     }
   }
 
-  private fun handleFor(ctx: OpContext): SmbReadFile = synchronized(lock) {
+  /** L'handle per una lettura sulla sessione di [ctx]: riaperto, con il confronto del timbro, se e' stato rilasciato o la sessione e' cambiata. */
+  private fun acquire(ctx: OpContext): Lease = synchronized(lock) {
     check(!closed) { "File chiuso." }
-    handle?.takeIf { handleSession === ctx.sessionKey }?.let { return it }
+    lease?.takeIf { it.session === ctx.sessionKey }?.let {
+      it.users++
+      return it
+    }
     // La sessione e' cambiata (caduta, riconnessione): l'handle vecchio e' morto con lei.
-    handle?.let { manager.closeLater(it, handleSession) }
-    handle = null
+    lease?.let { retire(it) }
+    lease = null
     val reopened = openChecked(ctx, path)
     val now = try {
       stampOf(ctx, path, reopened)
@@ -380,17 +425,26 @@ internal class SmbRandomFile(
       reopened.close()
       throw NasOpException(NasError.Unexpected(null))
     }
-    handle = reopened
-    handleSession = ctx.sessionKey
-    reopened
+    track(reopened)
+    Lease(reopened, ctx.sessionKey).also {
+      it.users = 1
+      lease = it
+    }
+  }
+
+  /** La lettura ha finito con [used]: se nel frattempo e' stato rilasciato o sostituito, lo chiude l'ultima. */
+  private fun leave(used: Lease) {
+    synchronized(lock) {
+      used.users--
+      if (used.retired && used.users == 0) manager.closeLater(used.file, used.session)
+    }
   }
 
   override fun close() {
-    val (toClose, owner) = synchronized(lock) {
+    synchronized(lock) {
       closed = true
-      (handle to handleSession).also { handle = null }
+      lease?.let { lease = null; retire(it) }
     }
-    toClose?.let { manager.closeLater(it, owner) }
   }
 
   override fun toString(): String = "SmbRandomFile(size=$size)"

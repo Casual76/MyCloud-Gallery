@@ -77,7 +77,7 @@ class SimSmbTarget : ChaosTarget {
 
       override fun nasNowMs(): Long? = manager.nasClock.nowMillisOrNull()
     }
-    override val capabilities: ChaosWorld.Capabilities = ChaosWorld.Capabilities(advanceTime = true, copyFallback = true)
+    override val capabilities: ChaosWorld.Capabilities = ChaosWorld.Capabilities(advanceTime = true, copyFallback = true, libraryReads = true)
 
     override fun advanceTime(ms: Long) {
       offset += ms
@@ -92,6 +92,9 @@ class SimSmbTarget : ChaosTarget {
     override suspend fun putFile(share: String, path: SharePath, bytes: ByteArray) {
       backend.put(share, path.value, bytes)
     }
+
+    override suspend fun openLibraryRead(share: String, path: SharePath): AutoCloseable? =
+      (reader.open(share, path, Purpose.BACKGROUND) as? NasResult.Ok)?.value
 
     override suspend fun connectionLost() {
       backend.dropAllConnections()

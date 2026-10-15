@@ -182,6 +182,16 @@ sealed interface RenameOutcome {
 
   /** Aperto da un altro programma (`SHARING_VIOLATION`, E-N13): si riprova piu' tardi. */
   data object Locked : RenameOutcome
+
+  /**
+   * Una cartella con sotto un handle **nostro** ancora aperto (la Libreria che legge una miniatura, un elenco a meta'): Samba non rinomina una
+   * cartella con un file aperto sotto dallo stesso client e risponde `ACCESS_DENIED`, come per un permesso negato vero. Qui e' la **prova**
+   * che non lo e' (il registro degli handle propri, `OwnHandles`, ne ha almeno uno sotto la cartella): i nostri handle di lettura sono gia'
+   * stati rilasciati e la rinomina riprovata, ma qualcuno resta aperto o si e' riaperto. Niente e' cambiato: chi chiama riprova fra poco, con
+   * attese brevi (decisione dell'utente del 15/10). Un `ACCESS_DENIED` senza handle nostri sotto resta un errore (`NasError.PermissionDenied`).
+   * Solo per le cartelle.
+   */
+  data object FolderInUse : RenameOutcome
 }
 
 /** Esiti di [NasFileOps.copyToTemp]. */

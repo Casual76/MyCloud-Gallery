@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 4B, P14: Eliminati di recente del NAS (ripristina, "Elimina subito" con doppia conferma). -->
+
+  <string name="nas_trash_title">Eliminati di recente</string>
+  <string name="nas_trash_subtitle_empty">Cestino del NAS</string>
+  <string name="nas_trash_subtitle_count">Cestino del NAS · %1$s</string>
+  <string name="nas_trash_select">Seleziona</string>
+
+  <!-- Le voci -->
+  <string name="nas_trash_no_name">Senza nome</string>
+  <string name="nas_trash_from">Da %1$s · %2$s</string>
+  <string name="nas_trash_from_root">Dalla radice dell\'area · %1$s</string>
+  <string name="nas_trash_by">Eliminato da %1$s</string>
+  <string name="nas_trash_by_me">Eliminato da questo dispositivo</string>
+  <string name="nas_trash_moved">Copia di partenza di uno spostamento</string>
+  <string name="nas_trash_folder_files">%1$s · %2$s</string>
+  <string name="nas_trash_invalid_title">Senza record valido</string>
+  <string name="nas_trash_invalid_detail">Non posso verificare nome e posto d\'origine di questa voce, quindi non la ripristino da sola. Decidi tu cosa farne dal PC.</string>
+  <string name="nas_trash_invalid_pill">Senza record</string>
+  <string name="nas_trash_days_today">Oggi</string>
+  <string name="nas_trash_soon_pill">Scade presto</string>
+  <string name="nas_trash_expires_today">Scade oggi</string>
+  <plurals name="nas_trash_days_left">
+    <item quantity="one">Resta %1$s giorno</item>
+    <item quantity="other">Restano %1$s giorni</item>
+  </plurals>
+  <string name="nas_trash_desc_folder_word">cartella</string>
+
+  <!-- Azioni -->
+  <string name="nas_trash_restore">Ripristina</string>
+  <string name="nas_trash_purge">Elimina subito</string>
+  <string name="nas_trash_purge_only_own_title">Elimina subito non è disponibile</string>
+  <string name="nas_trash_purge_only_own">Puoi eliminare subito solo quello che hai eliminato da questo dispositivo. Il resto lo puoi solo ripristinare.</string>
+  <string name="nas_trash_restore_partial">Si ripristina solo quello che ha un record valido.</string>
+
+  <!-- Stati -->
+  <string name="nas_trash_empty_title">Niente di eliminato di recente</string>
+  <string name="nas_trash_empty_detail">Quello che elimini dal NAS resta qui per 30 giorni: lo puoi ripristinare.</string>
+  <string name="nas_trash_offline_title">Il NAS non risponde</string>
+  <string name="nas_trash_offline_detail">Vedi solo quello che hai eliminato da questo dispositivo, senza le voci degli altri. Ripristinare ed eliminare subito serve il NAS.</string>
+  <string name="nas_trash_readonly_title">Sola lettura</string>
+  <string name="nas_trash_readonly_detail">Con questo account non puoi ripristinare né eliminare: puoi solo vedere cosa c\'è.</string>
+  <string name="nas_trash_footnote">Il NAS elimina davvero ogni voce dopo 30 giorni. Sulla share con il cestino del NAS acceso, lo spazio si libera solo quando lo svuota lui.</string>
+</resources>

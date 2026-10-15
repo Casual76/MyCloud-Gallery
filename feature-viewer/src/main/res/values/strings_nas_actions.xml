@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 4B, P14: Sposta, Rinomina ed Elimina… per un media del NAS, dal menu del viewer. -->
+
+  <!-- Le voci del menu -->
+  <string name="viewer_nas_action_move">Sposta</string>
+  <string name="viewer_nas_action_rename">Rinomina</string>
+  <string name="viewer_nas_action_delete">Elimina…</string>
+  <string name="viewer_nas_action_read_only">Area in sola lettura per te</string>
+
+  <!-- Elimina… con la scelta del luogo -->
+  <string name="viewer_nas_delete_phone">Telefono</string>
+  <string name="viewer_nas_delete_nas_private">NAS · La mia area</string>
+  <string name="viewer_nas_delete_nas_common">NAS · Area comune</string>
+  <string name="viewer_nas_delete_phone_detail">Nel cestino di Android per 30 giorni.</string>
+  <string name="viewer_nas_delete_nas_detail">Nel cestino del NAS per 30 giorni.</string>
+  <string name="viewer_nas_delete_nas_read_only">Non hai il permesso di eliminare qui.</string>
+  <string name="viewer_nas_delete_nas_only_photo_title">Eliminare questa foto dal NAS?</string>
+  <string name="viewer_nas_delete_nas_only_video_title">Eliminare questo video dal NAS?</string>
+  <string name="viewer_nas_delete_nas_only_message">Sta solo sul NAS. Va nel cestino del NAS per 30 giorni: la trovi in Eliminati di recente del NAS.</string>
+  <string name="viewer_nas_delete_nas_only_confirm">Elimina dal NAS</string>
+  <string name="viewer_nas_delete_planning">Preparo l\'eliminazione…</string>
+
+  <!-- Rinomina -->
+  <string name="viewer_nas_rename_title">Rinomina</string>
+  <string name="viewer_nas_rename_message">Scegli il nuovo nome. Niente viene sostituito.</string>
+  <string name="viewer_nas_rename_field">Nome</string>
+  <string name="viewer_nas_rename_confirm">Rinomina</string>
+  <string name="viewer_nas_rename_checking">Controllo…</string>
+  <string name="viewer_nas_rename_ok">Il nome va bene.</string>
+  <string name="viewer_nas_rename_invalid">Nel nome ci sono caratteri che il NAS non ammette o spazi e punti alla fine.</string>
+  <string name="viewer_nas_rename_suggestion">Prova con «%1$s»</string>
+  <string name="viewer_nas_rename_exists">Esiste già qualcosa con questo nome.</string>
+  <string name="viewer_nas_rename_same">È il nome di adesso.</string>
+
+  <!-- Sposta -->
+  <string name="viewer_nas_move_pick_title">Sposta in…</string>
+  <string name="viewer_nas_move_pick_message">Scegli dove metterlo. Dopo la scelta ti chiedo di confermare.</string>
+  <string name="viewer_nas_move_common_title">Spostare nell\'area comune?</string>
+  <string name="viewer_nas_move_common_message_photo">La foto verrà spostata nell\'area comune e la vedranno tutti i familiari.</string>
+  <string name="viewer_nas_move_common_message_video">Il video verrà spostato nell\'area comune e lo vedranno tutti i familiari.</string>
+  <string name="viewer_nas_move_common_note_title">Le vedranno tutti i familiari</string>
+  <string name="viewer_nas_move_common_note_detail">Per tornare indietro la devi spostare di nuovo nella tua area.</string>
+  <string name="viewer_nas_move_title">Spostare in %1$s?</string>
+  <string name="viewer_nas_move_message">Il file cambia posto; niente viene sostituito.</string>
+  <string name="viewer_nas_move_cross_title">Prima copio, poi controllo</string>
+  <string name="viewer_nas_move_cross_detail">Tra aree diverse il file si copia e si controlla. Solo dopo l\'originale va nel cestino del NAS per 30 giorni.</string>
+  <string name="viewer_nas_move_row_size">Dimensione</string>
+  <string name="viewer_nas_move_confirm">Sposta</string>
+  <string name="viewer_nas_move_confirm_common">Sposta nell\'area comune</string>
+
+  <!-- Dopo la conferma -->
+  <string name="viewer_nas_done_started">Operazione avviata. La trovi in Operazioni in corso.</string>
+  <string name="viewer_nas_done_blocked">Le scritture sul NAS sono ferme adesso. Riprova più tardi.</string>
+  <string name="viewer_nas_done_expired">La conferma è scaduta: ricomincia.</string>
+  <string name="viewer_nas_done_refused">Questa operazione non si può fare adesso.</string>
+  <string name="viewer_nas_reject_read_only">Quest\'area è in sola lettura per te.</string>
+  <string name="viewer_nas_reject_source_missing">Il file non c\'è più dov\'era.</string>
+  <string name="viewer_nas_reject_not_enough_space">Sulla destinazione non c\'è abbastanza spazio.</string>
+  <string name="viewer_nas_reject_unreachable">Il NAS non risponde.</string>
+  <string name="viewer_nas_reject_other">Non posso preparare questa operazione.</string>
+
+  <string name="viewer_nas_cancel">Annulla</string>
+</resources>

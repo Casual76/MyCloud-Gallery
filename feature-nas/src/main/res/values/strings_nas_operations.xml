@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 4B, P14: Operazioni in corso (avanzamento e "Ferma"). -->
+
+  <string name="nas_ops_title">Operazioni in corso</string>
+  <string name="nas_ops_subtitle_none">Nessuna operazione</string>
+  <plurals name="nas_ops_subtitle_active">
+    <item quantity="one">%1$s in corso</item>
+    <item quantity="other">%1$s in corso</item>
+  </plurals>
+  <string name="nas_ops_section_active">In corso</string>
+  <string name="nas_ops_section_closed">Finite di recente</string>
+
+  <string name="nas_ops_empty_title">Nessuna operazione</string>
+  <string name="nas_ops_empty_detail">Quando sposti, rinomini o elimini qualcosa sul NAS la trovi qui, con l\'avanzamento. Puoi chiudere l\'app: va avanti da sola.</string>
+
+  <!-- Titoli di un\'operazione che non è finita -->
+  <string name="nas_ops_title_create_folder">Creo una cartella</string>
+  <plurals name="nas_ops_title_rename">
+    <item quantity="one">Rinomino %1$s elemento</item>
+    <item quantity="other">Rinomino %1$s elementi</item>
+  </plurals>
+  <plurals name="nas_ops_title_move">
+    <item quantity="one">Sposto %1$s elemento</item>
+    <item quantity="other">Sposto %1$s elementi</item>
+  </plurals>
+  <plurals name="nas_ops_title_trash">
+    <item quantity="one">Elimino %1$s elemento</item>
+    <item quantity="other">Elimino %1$s elementi</item>
+  </plurals>
+  <plurals name="nas_ops_title_restore">
+    <item quantity="one">Ripristino %1$s elemento</item>
+    <item quantity="other">Ripristino %1$s elementi</item>
+  </plurals>
+  <plurals name="nas_ops_title_purge">
+    <item quantity="one">Elimino subito %1$s elemento</item>
+    <item quantity="other">Elimino subito %1$s elementi</item>
+  </plurals>
+
+  <!-- Titoli di un\'operazione finita -->
+  <string name="nas_ops_done_create_folder">Cartella creata</string>
+  <plurals name="nas_ops_done_rename">
+    <item quantity="one">Rinominato %1$s elemento</item>
+    <item quantity="other">Rinominati %1$s elementi</item>
+  </plurals>
+  <plurals name="nas_ops_done_move">
+    <item quantity="one">Spostato %1$s elemento</item>
+    <item quantity="other">Spostati %1$s elementi</item>
+  </plurals>
+  <plurals name="nas_ops_done_trash">
+    <item quantity="one">Eliminato %1$s elemento</item>
+    <item quantity="other">Eliminati %1$s elementi</item>
+  </plurals>
+  <plurals name="nas_ops_done_restore">
+    <item quantity="one">Ripristinato %1$s elemento</item>
+    <item quantity="other">Ripristinati %1$s elementi</item>
+  </plurals>
+  <plurals name="nas_ops_done_purge">
+    <item quantity="one">Eliminato subito %1$s elemento</item>
+    <item quantity="other">Eliminati subito %1$s elementi</item>
+  </plurals>
+
+  <!-- La pillola di stato -->
+  <string name="nas_ops_status_planned">In coda</string>
+  <string name="nas_ops_status_running">In corso · %1$s%%</string>
+  <string name="nas_ops_status_running_unknown">In corso</string>
+  <string name="nas_ops_status_paused">In pausa</string>
+  <string name="nas_ops_status_locked">In attesa</string>
+  <string name="nas_ops_status_done">Fatto</string>
+  <string name="nas_ops_status_done_partial">Fatto in parte</string>
+  <string name="nas_ops_status_failed">Fermata</string>
+  <string name="nas_ops_status_cancelled">Annullata</string>
+
+  <!-- Le righe di dettaglio -->
+  <string name="nas_ops_detail_elements">%1$s di %2$s elementi</string>
+  <string name="nas_ops_detail_elements_bytes">%1$s di %2$s elementi · %3$s di %4$s</string>
+  <string name="nas_ops_detail_planned">%1$s · %2$s, in coda</string>
+  <string name="nas_ops_detail_done">%1$s · %2$s</string>
+  <plurals name="nas_ops_detail_failed">
+    <item quantity="one">%1$s elemento si è fermato: l\'ho lasciato com\'era.</item>
+    <item quantity="other">%1$s elementi si sono fermati: li ho lasciati come erano.</item>
+  </plurals>
+  <plurals name="nas_ops_detail_skipped">
+    <item quantity="one">%1$s elemento è rimasto dov\'era.</item>
+    <item quantity="other">%1$s elementi sono rimasti dov\'erano.</item>
+  </plurals>
+  <plurals name="nas_ops_detail_locked">
+    <item quantity="one">%1$s file è aperto su un altro dispositivo: riprovo da solo, con attese sempre più lunghe, fino a 24 ore.</item>
+    <item quantity="other">%1$s file sono aperti su un altro dispositivo: riprovo da soli, con attese sempre più lunghe, fino a 24 ore.</item>
+  </plurals>
+  <string name="nas_ops_detail_cancelled">Fermata dopo %1$s di %2$s. Quello che era già fatto resta fatto.</string>
+  <string name="nas_ops_detail_failed">%1$s</string>
+  <string name="nas_ops_detail_failed_progress">%1$s Fatti %2$s di %3$s: quelli fatti restano fatti.</string>
+
+  <!-- Perché è in pausa -->
+  <string name="nas_ops_pause_nas_unreachable">Il NAS non risponde: riprende da sola appena torna raggiungibile.</string>
+  <string name="nas_ops_pause_conditions">In attesa delle condizioni giuste (rete o batteria): riprende da sola.</string>
+  <string name="nas_ops_pause_frozen">Questa area è ferma per cambiamenti anomali: serve un tuo controllo in Diagnostica.</string>
+  <string name="nas_ops_pause_clock_jump">L\'ora del NAS è cambiata di colpo: aspetto che si stabilizzi.</string>
+  <string name="nas_ops_pause_writes_stopped">Le scritture sul NAS sono ferme (interruttore di emergenza in Diagnostica).</string>
+  <string name="nas_ops_pause_user">L\'hai messa in pausa tu.</string>
+
+  <!-- Ferma -->
+  <string name="nas_ops_stop">Ferma</string>
+  <string name="nas_ops_stop_for">Ferma: %1$s</string>
+  <string name="nas_ops_stop_note">Quello che è già stato fatto resta fatto.</string>
+</resources>

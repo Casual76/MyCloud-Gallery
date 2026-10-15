@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 4B, P14: le voci delle quattro schermate in Raccolte (il gruppo "Sul NAS"). -->
+
+  <string name="nas_hub_group">Sul NAS</string>
+  <string name="nas_hub_folders_title">Cartelle NAS</string>
+  <string name="nas_hub_folders_subtitle">Sfoglia, crea, rinomina, sposta ed elimina</string>
+  <string name="nas_hub_space_title">Spazio NAS</string>
+  <string name="nas_hub_space_subtitle">Spazio libero, quota e file più grandi</string>
+  <string name="nas_hub_trash_title">Eliminati di recente del NAS</string>
+  <string name="nas_hub_trash_subtitle">Il cestino del NAS: 30 giorni per ripensarci</string>
+  <string name="nas_hub_ops_title">Operazioni in corso</string>
+  <string name="nas_hub_ops_subtitle_none">Quello che sta facendo il NAS per te</string>
+  <plurals name="nas_hub_ops_subtitle_active">
+    <item quantity="one">%1$s in corso adesso</item>
+    <item quantity="other">%1$s in corso adesso</item>
+  </plurals>
+</resources>

@@ -1,0 +1,71 @@
+package dev.pampa.mycloudgallery.feature.library.collections
+
+import androidx.compose.runtime.Immutable
+import androidx.compose.ui.graphics.vector.ImageVector
+import dev.antigravity.fluidengine.ui.theme.FluidTone
+
+// Le voci in piu' dell'elenco delle Raccolte che arrivano da `:app` (Fase 4, docs/fase4-progetto.md §1.3, §1.5, riga P14 del §4.4):
+// oggi le quattro pagine del NAS della 4B (Cartelle NAS, Spazio NAS, Eliminati di recente del NAS, Operazioni in corso). Sono **solo
+// dati**: `feature-library` non sa che cosa c'e' dietro una voce (i `feature-*` non si conoscono), disegna una riga e dice a `:app`
+// quale e' stata toccata; `:app` apre la pagina giusta (`NasScreenContent` di feature-nas). Cosi' il codice delle Raccolte non cambia
+// quando una fase aggiunge un'altra pagina.
+//
+// Come si collega (le tre righe che restano a chi integra, P16): `CollectionsTab` riceve i gruppi (`extraGroups`) e li passa a
+// `CollectionEntryRows` dopo i gruppi di sempre; su due pannelli la voce scelta e' il `code` salvato accanto a quello delle raccolte
+// e il dettaglio e' `entryDetail(entry)`; sul telefono `onOpenEntry(entry)` porta alla rotta della voce.
+
+/**
+ * Una riga in piu' delle Raccolte.
+ *
+ * @property code il nome stabile della destinazione (la rotta di `NasScreen`, per esempio `nas/folders`): mai un percorso del NAS,
+ *   mai un nome dell'utente. Non cambia: finisce nello stato salvato del pannello scelto su un tablet.
+ * @property title il nome della riga (gia' scritto, nella lingua dell'app).
+ * @property subtitle la frase sotto il nome.
+ * @property badge quante cose chiedono un'occhiata adesso (le operazioni in corso); 0 = niente da segnalare, nessun numero sulla riga.
+ */
+@Immutable
+data class CollectionEntry(
+  val code: String,
+  val title: String,
+  val subtitle: String,
+  val icon: ImageVector,
+  val tone: FluidTone,
+  val badge: Int = 0,
+) {
+  init {
+    require(code.isNotBlank()) { "Una voce ha un codice." }
+    require(badge >= 0) { "Il numero sulla riga non e' negativo." }
+  }
+
+  override fun toString(): String = "CollectionEntry($code, badge=$badge)"
+}
+
+/** Un gruppo di righe con la sua intestazione ("Sul NAS"): come "Dal telefono" e "Da tenere al sicuro". */
+@Immutable
+data class CollectionEntryGroup(val title: String, val entries: List<CollectionEntry>) {
+  init {
+    require(entries.map { it.code }.toSet().size == entries.size) { "I codici delle voci di un gruppo sono unici." }
+  }
+
+  val isEmpty: Boolean get() = entries.isEmpty()
+}
+
+/** Le funzioni pure sui gruppi: provate su JVM (`CollectionEntriesTest`). */
+object CollectionEntries {
+
+  /** La voce con [code] fra tutti i [groups], o null (una versione piu' nuova dell'app ne ha altre, o il NAS non e' piu' collegato). */
+  fun find(groups: List<CollectionEntryGroup>, code: String?): CollectionEntry? =
+    if (code == null) null else groups.asSequence().flatMap { it.entries }.firstOrNull { it.code == code }
+
+  /** I gruppi con almeno una voce, nell'ordine dato: un gruppo vuoto non ha neanche l'intestazione. */
+  fun visible(groups: List<CollectionEntryGroup>): List<CollectionEntryGroup> = groups.filterNot { it.isEmpty }
+
+  /**
+   * La voce scelta su due pannelli: [saved] se c'e' ancora, altrimenti null (la scelta torna a una raccolta). Un codice salvato di una
+   * voce sparita non lascia un pannello vuoto.
+   */
+  fun selected(groups: List<CollectionEntryGroup>, saved: String?): CollectionEntry? = find(groups, saved)
+
+  /** Tutti i codici, per verificare che due gruppi non ne condividano uno (le rotte sono uniche). */
+  fun codes(groups: List<CollectionEntryGroup>): List<String> = groups.flatMap { g -> g.entries.map { it.code } }
+}

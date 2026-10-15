@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 4B, P14: i fogli di conferma (riepilogo con numero e dimensione, cartelle intere, area comune, "Elimina subito"). -->
+
+  <!-- Titoli: il numero arriva già scritto con il punto delle migliaia -->
+  <plurals name="nas_confirm_move_title">
+    <item quantity="one">Spostare %1$s elemento?</item>
+    <item quantity="other">Spostare %1$s elementi?</item>
+  </plurals>
+  <plurals name="nas_confirm_trash_title">
+    <item quantity="one">Eliminare %1$s elemento?</item>
+    <item quantity="other">Eliminare %1$s elementi?</item>
+  </plurals>
+  <plurals name="nas_confirm_restore_title">
+    <item quantity="one">Ripristinare %1$s elemento?</item>
+    <item quantity="other">Ripristinare %1$s elementi?</item>
+  </plurals>
+  <plurals name="nas_confirm_purge_title">
+    <item quantity="one">Eliminare subito %1$s elemento?</item>
+    <item quantity="other">Eliminare subito %1$s elementi?</item>
+  </plurals>
+  <string name="nas_confirm_purge_last_title">Ultima conferma</string>
+
+  <!-- La frase sotto il titolo -->
+  <string name="nas_confirm_move_message">Verso %1$s.</string>
+  <string name="nas_confirm_move_message_unknown">Verso la cartella scelta.</string>
+  <string name="nas_confirm_trash_message">Vanno nel cestino del NAS per 30 giorni.</string>
+  <string name="nas_confirm_restore_message">Tornano dove erano.</string>
+  <string name="nas_confirm_purge_message">Non passano dal cestino del NAS.</string>
+  <string name="nas_confirm_purge_last_message">Dopo questo tocco non si torna indietro.</string>
+
+  <!-- Il riepilogo -->
+  <string name="nas_confirm_row_skipped">Restano dove sono</string>
+  <string name="nas_confirm_folders_and_files">%1$s e %2$s</string>
+  <string name="nas_confirm_path_separator">%1$s / %2$s</string>
+
+  <!-- Le note: cosa succede, in una riga ciascuna -->
+  <string name="nas_confirm_common_title">Le vedranno tutti i familiari</string>
+  <string name="nas_confirm_common_detail">Spostare nell\'area comune rende questi elementi visibili a tutta la famiglia.</string>
+  <string name="nas_confirm_cross_title">Prima copio, poi controllo</string>
+  <string name="nas_confirm_cross_detail">Tra aree diverse i file si copiano e si controllano uno per uno. Solo dopo l\'originale va nel cestino del NAS per 30 giorni. Ci vuole più tempo e serve spazio.</string>
+  <string name="nas_confirm_folders_move_title">Cartelle intere</string>
+  <string name="nas_confirm_folders_move_detail">Le cartelle si spostano con tutto quello che contengono.</string>
+  <string name="nas_confirm_folders_trash_title">Cartelle intere</string>
+  <string name="nas_confirm_folders_trash_detail">Le cartelle vanno nel cestino intere e si ripristinano intere.</string>
+  <string name="nas_confirm_folders_restore_title">Cartelle intere</string>
+  <string name="nas_confirm_folders_restore_detail">Le cartelle tornano intere, con quello che avevano dentro.</string>
+  <string name="nas_confirm_trash_note_title">Si possono ripristinare</string>
+  <string name="nas_confirm_trash_note_detail">Per 30 giorni li trovi in Eliminati di recente del NAS. Dopo, il NAS li elimina davvero.</string>
+  <string name="nas_confirm_restore_note_title">Niente viene sostituito</string>
+  <string name="nas_confirm_restore_note_detail">Se la cartella d\'origine non c\'è più la ricreo; se il nome è occupato aggiungo (2).</string>
+  <string name="nas_confirm_names_title">Alcuni nomi sono già occupati</string>
+  <string name="nas_confirm_names_detail">Aggiungo (2) al nome dei file che esistono già: niente viene sostituito.</string>
+  <string name="nas_confirm_skipped_read_only">in sola lettura</string>
+  <string name="nas_confirm_skipped_same_location">già lì</string>
+  <string name="nas_confirm_skipped_into_itself">cartelle dentro se stesse</string>
+  <string name="nas_confirm_skipped_source_missing">non ci sono più</string>
+  <string name="nas_confirm_skipped_line">%1$s (%2$s)</string>
+  <string name="nas_confirm_purge_note_title">Non si possono ripristinare</string>
+  <string name="nas_confirm_purge_note_detail">Eliminati subito, non passano dal cestino: non c\'è più il ripristino dei 30 giorni.</string>
+  <string name="nas_confirm_backup_title">Hai un backup esterno?</string>
+  <string name="nas_confirm_backup_detail">Il NAS non tiene altre copie di questi file. Se non ne hai una copia altrove (un disco esterno, un cloud), dopo non si recuperano più.</string>
+
+  <!-- I pulsanti -->
+  <string name="nas_confirm_action_move">Sposta</string>
+  <string name="nas_confirm_action_move_common">Sposta nell\'area comune</string>
+  <string name="nas_confirm_action_trash">Elimina</string>
+  <string name="nas_confirm_action_restore">Ripristina</string>
+  <string name="nas_confirm_action_purge_continue">Continua</string>
+  <string name="nas_confirm_action_purge_now">Elimina subito</string>
+  <string name="nas_confirm_action_back">Indietro</string>
+
+  <!-- Nome di una cartella o di un file (crea, rinomina) -->
+  <string name="nas_name_new_folder_title">Nuova cartella</string>
+  <string name="nas_name_new_folder_message">Dove? In %1$s.</string>
+  <string name="nas_name_new_folder_action">Crea cartella</string>
+  <string name="nas_name_rename_title">Rinomina</string>
+  <string name="nas_name_rename_message">Scegli il nuovo nome. Niente viene sostituito.</string>
+  <string name="nas_name_rename_action">Rinomina</string>
+  <string name="nas_name_field_label">Nome</string>
+  <string name="nas_name_checking">Controllo…</string>
+  <string name="nas_name_ok">Il nome va bene.</string>
+  <string name="nas_name_invalid">Nel nome ci sono caratteri che il NAS non ammette (come \\ / : * ? \" &lt; &gt; |) o spazi e punti alla fine.</string>
+  <string name="nas_name_suggestion">Prova con «%1$s»</string>
+  <string name="nas_name_use_suggestion">Usa questo nome</string>
+  <string name="nas_name_exists">Esiste già qualcosa con questo nome.</string>
+  <string name="nas_name_same">È il nome di adesso.</string>
+</resources>

@@ -52,6 +52,10 @@ dependencies {
   // Fase 4 (P0, docs/fase4-progetto.md D19): `NasVideoDataSource` (P8) e' un `BaseDataSource` di Media3 sopra
   // `NasMediaReader`: sta qui, dove c'e' Media3, e vede il NAS solo dal contratto (mai `DefaultDataSource`).
   implementation project(':core-nas')
+  // Fase 4B (P14, docs/fase4-progetto.md §1.3, D24): le voci "Sposta", "Rinomina" ed "Elimina…" per un media del NAS (`menu/NasActions*`)
+  // parlano con i contratti delle operazioni. `Phase4ArchitectureTest` ammette questa dipendenza (come `feature-nas` e `:app`) e vieta
+  // le primitive di scrittura: da qui non si arriva a `NasFileOps`, solo a piano, conferma e avvio.
+  implementation project(':core-nasops')
 
   implementation appDeps.media3Exoplayer
   implementation appDeps.telephotoZoomableImage

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 4B, P14: Cartelle NAS (sfoglia, crea, rinomina, sposta, elimina). -->
+
+  <string name="nas_folders_title">Cartelle NAS</string>
+  <string name="nas_folders_pick_area">Scegli un\'area</string>
+  <string name="nas_folders_areas_header">Aree</string>
+  <string name="nas_folders_path_header">Dove sei</string>
+  <string name="nas_folders_areas_footnote">Qui sfogli i file del NAS come in un gestore di file. Quello che elimini va nel cestino del NAS per 30 giorni.</string>
+
+  <string name="nas_folders_no_areas_title">Nessuna area collegata</string>
+  <string name="nas_folders_no_areas_detail">Collega il NAS dalle Impostazioni: qui compariranno la tua area e l\'area comune.</string>
+
+  <!-- Comandi in alto -->
+  <string name="nas_folders_new_folder">Nuova cartella</string>
+  <string name="nas_folders_start_select">Seleziona</string>
+
+  <!-- Una cartella e i suoi elementi -->
+  <string name="nas_folders_subtitle_in_area">%1$s · %2$s</string>
+  <string name="nas_folders_row_folder">Cartella</string>
+  <string name="nas_folders_row_file">%1$s · %2$s</string>
+  <string name="nas_folders_desc_folder">%1$s, cartella</string>
+  <string name="nas_folders_desc_folder_count">%1$s, cartella, %2$s</string>
+  <string name="nas_folders_desc_photo">%1$s, foto, %2$s, %3$s</string>
+  <string name="nas_folders_desc_video">%1$s, video, %2$s, %3$s</string>
+  <string name="nas_folders_desc_file">%1$s, file, %2$s, %3$s</string>
+  <string name="nas_folders_state_selected">Selezionato</string>
+  <string name="nas_folders_state_not_selected">Non selezionato</string>
+  <string name="nas_folders_moving">Si sta spostando</string>
+
+  <!-- Vuoto -->
+  <string name="nas_folders_empty_title">Cartella vuota</string>
+  <string name="nas_folders_empty_detail">Qui non c\'è ancora niente. Puoi creare una cartella o spostarci dei file.</string>
+  <string name="nas_folders_empty_detail_read_only">Qui non c\'è niente, e con questo account non puoi aggiungere altro.</string>
+  <string name="nas_folders_empty_offline_title">Niente di salvato</string>
+
+  <!-- Azioni sulla selezione -->
+  <string name="nas_folders_action_rename">Rinomina</string>
+  <string name="nas_folders_action_move">Sposta</string>
+  <string name="nas_folders_action_trash">Elimina</string>
+
+  <!-- Scelta della cartella di arrivo -->
+  <plurals name="nas_folders_pick_title">
+    <item quantity="one">Sposta %1$s elemento</item>
+    <item quantity="other">Sposta %1$s elementi</item>
+  </plurals>
+  <string name="nas_folders_pick_into">Verso %1$s</string>
+  <string name="nas_folders_pick_subtitle">Scegli la cartella di arrivo</string>
+  <string name="nas_folders_pick_here">Sposta qui</string>
+  <string name="nas_folders_pick_cancel">Annulla</string>
+  <string name="nas_folders_pick_blocked">Qui non si può spostare: la cartella è in sola lettura o il NAS non risponde.</string>
+
+  <!-- Operazioni in corso: la striscia in cima -->
+  <plurals name="nas_folders_ops_strip">
+    <item quantity="one">%1$s operazione in corso</item>
+    <item quantity="other">%1$s operazioni in corso</item>
+  </plurals>
+  <string name="nas_folders_ops_strip_detail">Tocca per vedere a che punto è.</string>
+</resources>

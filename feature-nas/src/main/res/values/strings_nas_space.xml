@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 4B, P14: Spazio NAS (libero, quota, file più grandi, cestino, indice, versioni). -->
+
+  <string name="nas_space_title">Spazio NAS</string>
+  <string name="nas_space_refresh">Ricalcola</string>
+  <string name="nas_space_section_area">Quale area</string>
+  <string name="nas_space_section_largest">File più grandi</string>
+  <string name="nas_space_section_uses">Cosa occupa spazio</string>
+
+  <!-- Il numero grande -->
+  <string name="nas_space_free_caption">liberi su %1$s</string>
+  <string name="nas_space_used_line">Usati %1$s · %2$s%%</string>
+  <string name="nas_space_free_description">%1$s liberi su %2$s</string>
+  <string name="nas_space_quota_title">Il tuo spazio è limitato</string>
+  <string name="nas_space_quota_detail">Per il tuo account restano %1$s. È la quota che ti ha dato chi gestisce il NAS: è meno dello spazio libero del disco.</string>
+
+  <!-- I file più grandi -->
+  <string name="nas_space_largest_footnote">Dall\'archivio che l\'app conosce: non interroga il NAS.</string>
+  <string name="nas_space_largest_empty">L\'app non conosce ancora file di questa area.</string>
+  <string name="nas_space_largest_more">Mostra tutti e %1$s</string>
+  <string name="nas_space_largest_less">Mostra meno</string>
+  <string name="nas_space_in_folder">In %1$s</string>
+  <string name="nas_space_in_root">Nella radice dell\'area</string>
+
+  <!-- Cosa occupa spazio -->
+  <string name="nas_space_trash_title">Cestino del NAS</string>
+  <string name="nas_space_trash_detail">Si svuota da solo dopo 30 giorni.</string>
+  <string name="nas_space_index_title">Indice condiviso</string>
+  <string name="nas_space_index_detail">Le miniature e i dati che servono a tutti i dispositivi.</string>
+  <string name="nas_space_versions_title">Versioni conservate</string>
+  <string name="nas_space_versions_detail">Arrivano con una prossima versione dell\'app.</string>
+  <string name="nas_space_versions_value">—</string>
+
+  <!-- Avvisi -->
+  <string name="nas_space_wd_title">Il cestino del NAS è acceso</string>
+  <string name="nas_space_wd_detail">Su questa area, lo spazio dei file eliminati per sempre torna libero solo quando il NAS svuota il suo cestino.</string>
+  <string name="nas_space_unavailable_title">Non riesco a leggere lo spazio</string>
+  <string name="nas_space_measured_at">Calcolato il %1$s alle %2$s</string>
+  <string name="nas_space_loading">Calcolo lo spazio…</string>
+</resources>

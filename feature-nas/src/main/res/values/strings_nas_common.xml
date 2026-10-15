@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 4B, P14: parole comuni a Cartelle NAS, Spazio NAS, Eliminati di recente del NAS e Operazioni in corso. -->
+
+  <!-- Chrome -->
+  <string name="nas_back">Indietro</string>
+  <string name="nas_done">Fine</string>
+  <string name="nas_cancel">Annulla</string>
+  <string name="nas_retry">Riprova</string>
+  <string name="nas_close">Chiudi</string>
+  <string name="nas_select">Seleziona</string>
+  <string name="nas_select_all">Seleziona tutto</string>
+  <string name="nas_select_items">Seleziona elementi</string>
+
+  <!-- Conteggi (il numero arriva già scritto con il punto delle migliaia) -->
+  <plurals name="nas_selected_count">
+    <item quantity="one">%1$s selezionato</item>
+    <item quantity="other">%1$s selezionati</item>
+  </plurals>
+  <plurals name="nas_items_count">
+    <item quantity="one">%1$s elemento</item>
+    <item quantity="other">%1$s elementi</item>
+  </plurals>
+  <plurals name="nas_folders_count">
+    <item quantity="one">%1$s cartella</item>
+    <item quantity="other">%1$s cartelle</item>
+  </plurals>
+  <plurals name="nas_files_count">
+    <item quantity="one">%1$s file</item>
+    <item quantity="other">%1$s file</item>
+  </plurals>
+  <string name="nas_count_and_size">%1$s · %2$s</string>
+
+  <!-- Aree -->
+  <string name="nas_area_private">La mia area</string>
+  <string name="nas_area_common">Area comune</string>
+  <string name="nas_area_private_hint">Solo tu la vedi</string>
+  <string name="nas_area_common_hint">La vedono tutti i familiari</string>
+  <string name="nas_area_unknown">Altra area</string>
+
+  <!-- Sola lettura (E-N9) e NAS che non risponde -->
+  <string name="nas_readonly_title">Sola lettura</string>
+  <string name="nas_readonly_detail">Con questo account puoi guardare ma non modificare: crea, rinomina, sposta ed elimina sono spenti qui.</string>
+  <string name="nas_readonly_pill">Sola lettura</string>
+  <string name="nas_offline_title">Il NAS non risponde</string>
+  <string name="nas_offline_detail">Non posso fare modifiche finché non torna raggiungibile. Quello che vedi è l\'ultimo elenco salvato.</string>
+  <string name="nas_offline_detail_saved">Non posso fare modifiche finché non torna raggiungibile. Quello che vedi è l\'elenco salvato il %1$s alle %2$s.</string>
+  <string name="nas_offline_detail_none">Non ho un elenco salvato di questo posto. Riprova quando il NAS è raggiungibile.</string>
+  <string name="nas_offline_pill">NAS non raggiungibile</string>
+  <string name="nas_denied_title">Qui non puoi entrare</string>
+  <string name="nas_denied_detail">Il NAS dice che questo account non ha accesso a questo posto. Se pensi sia un errore, chiedilo a chi gestisce la famiglia.</string>
+  <string name="nas_error_title">Qualcosa non va</string>
+  <string name="nas_error_detail">Non sono riuscito a leggere questo posto. Riprova fra poco.</string>
+  <string name="nas_loading">Leggo dal NAS…</string>
+
+  <!-- Perché un\'operazione si ferma o non parte (OpErrorCode) -->
+  <string name="nas_error_source_missing">Il file non c\'è più dov\'era.</string>
+  <string name="nas_error_source_changed">Il file è cambiato nel frattempo (modificato o spostato da un altro dispositivo): l\'ho lasciato com\'era.</string>
+  <string name="nas_error_name_taken">Il nome è già occupato.</string>
+  <string name="nas_error_read_only">Il posto è in sola lettura per questo account.</string>
+  <string name="nas_error_no_space">Non c\'è abbastanza spazio sul NAS.</string>
+  <string name="nas_error_quota">Hai raggiunto la quota di spazio del tuo account.</string>
+  <string name="nas_error_verify_failed">La copia non è identica all\'originale. L\'originale non è stato toccato.</string>
+  <string name="nas_error_invalid_name">Il nome non è valido.</string>
+  <string name="nas_error_unreachable">Il NAS non risponde.</string>
+  <string name="nas_error_locked">Il file è aperto su un altro dispositivo: riprovo da solo.</string>
+  <string name="nas_error_locked_too_long">Il file è rimasto aperto per 24 ore: mi sono fermato.</string>
+  <string name="nas_error_permission_denied">Non hai il permesso di farlo.</string>
+  <string name="nas_error_unexpected">Qualcosa è andato storto.</string>
+
+  <!-- Perché un\'operazione non diventa un piano (PlanRejection) -->
+  <string name="nas_reject_empty">Non c\'è niente da fare con questa scelta.</string>
+  <string name="nas_reject_read_only">Questo posto è in sola lettura per il tuo account.</string>
+  <string name="nas_reject_invalid_name">Il nome non è valido.</string>
+  <string name="nas_reject_name_exists">Esiste già qualcosa con questo nome.</string>
+  <string name="nas_reject_same_location">È già lì.</string>
+  <string name="nas_reject_into_itself">Una cartella non si può spostare dentro se stessa.</string>
+  <string name="nas_reject_source_missing">Quello che avevi scelto non c\'è più: è stato spostato o eliminato.</string>
+  <string name="nas_reject_path_not_allowed">Questo posto è dell\'app e non si tocca.</string>
+  <string name="nas_reject_too_many_items">Sono troppi elementi in una volta: dividili in gruppi più piccoli.</string>
+  <string name="nas_reject_not_enough_space">Sulla destinazione non c\'è abbastanza spazio (serve anche 1 GB di margine).</string>
+  <string name="nas_reject_writes_blocked">Le scritture sul NAS sono ferme adesso. Riprova più tardi.</string>
+  <string name="nas_reject_nas_unreachable">Il NAS non risponde: riprova quando è raggiungibile.</string>
+  <string name="nas_reject_not_mine">Puoi eliminare subito solo ciò che hai eliminato da questo dispositivo.</string>
+
+  <!-- Dopo aver confermato (StartOutcome) -->
+  <string name="nas_started">Operazione avviata. La trovi in Operazioni in corso.</string>
+  <string name="nas_already_started">Questa operazione è già partita.</string>
+  <string name="nas_confirmation_expired">La conferma è scaduta: ricomincia.</string>
+  <string name="nas_confirmation_wrong">Nel frattempo è cambiato qualcosa: ricomincia dall\'inizio.</string>
+  <string name="nas_plan_invalid">Questa operazione non è consentita.</string>
+  <string name="nas_writes_blocked">Le scritture sul NAS sono ferme adesso (cambiamenti anomali o interruttore di emergenza). Riprova più tardi.</string>
+  <string name="nas_open_operations">Vedi</string>
+  <string name="nas_notice_dismiss">Nascondi</string>
+</resources>

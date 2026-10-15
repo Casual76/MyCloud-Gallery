@@ -887,5 +887,19 @@ Operazioni coperte: caricamento di foto e video grandi, deduplica, guardiano, ve
 | Q9 | "Libera spazio": cosa propone di default? | (a) Tutto ciò che è al sicuro **tranne gli ultimi 30 giorni**, con i filtri "solo video" e "più vecchi di un anno". (b) Solo i video. (c) Solo i più vecchi di un anno | **(a)**: le foto recenti si guardano di più e restano sul telefono; i filtri coprono gli altri casi |
 | Q10 | Riverifica a rotazione delle copie private | (a) Sì, ogni copia riletta almeno una volta all'anno (~140 MB a notte, una decina di secondi). (b) No, solo la verifica al caricamento e quella sul momento | **(a)**: senza backup esterno è l'unico modo di accorgersi di una copia rovinata finché c'è ancora quella del telefono |
 
+### 9.1 Risposte dell'utente (15/10)
+| # | Risposta | Effetto |
+|---|---|---|
+| Q1 | (a) **5A** e poi **5B** | Divisione confermata |
+| Q2 | (a) Cartella **`Versioni/` alla radice di ogni share** | Punto aperto 5.4 chiuso |
+| Q3 | **(b) Primo backup vero su `alessio` solo a fine 5B** | D12 resta acceso fino alla fine della 5B; la stima ±30% (5.1) si misura allora |
+| Q4 | **(b) Copia privata solo quando sparisce quella del telefono** (lettera del piano 5.3) | Niente copia privata subito dopo lo spostamento nell'area comune; resta la protezione dei 30 giorni del cestino, da dichiarare come limite |
+| Q5 | (a) **Sì a tutti i componenti** (`BackupJobService`; `PickerActivity`, `ShareReceiverActivity`, `MediaDocumentsProvider`, `FileProvider`) | Policy e §4-bis in P0 |
+| Q6 | Non chiesta: vale (a) (correzioni nel file solo per JPEG, PNG e WebP) | — |
+| Q7 | (a) **Sì**, "Proteggi subito le foto nuove" anche con Notte | D34 confermata |
+| Q8 | Non chiesta: vale (a) (sottocartelle per screenshot e cartelle aggiuntive) | — |
+| Q9 | (a) "Libera spazio" propone tutto il sicuro **tranne gli ultimi 30 giorni**, con i filtri | — |
+| Q10 | (a) **Riverifica** a rotazione, ogni copia almeno una volta l'anno | — |
+
 <!-- fine del documento -->
 

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- La sezione "copie" del pannello informazioni (Fase 5A, docs/fase5-progetto.md §2.12, D36, E-L10…E-L13). Mai nomi di file né percorsi. -->
+  <plurals name="viewer_similar_header">
+    <item quantity="one">%d copia</item>
+    <item quantity="other">%d copie</item>
+  </plurals>
+
+  <string name="viewer_similar_place_phone">Telefono</string>
+  <string name="viewer_similar_place_nas_private">NAS, area privata</string>
+  <string name="viewer_similar_place_nas_common">NAS, area comune</string>
+  <string name="viewer_similar_place_unknown">Non raggiungibile adesso</string>
+  <string name="viewer_similar_places_join">%1$s e %2$s</string>
+  <string name="viewer_similar_pair">%1$s · %2$s</string>
+
+  <string name="viewer_similar_main_pill">Principale</string>
+  <string name="viewer_similar_current">La stai guardando</string>
+  <string name="viewer_similar_original">Originale della fotocamera</string>
+
+  <string name="viewer_similar_make_main">Mostra questa come principale</string>
+  <string name="viewer_similar_make_main_caption">In Libreria si vede questa copia.</string>
+  <string name="viewer_similar_separate">Separa</string>
+  <string name="viewer_similar_separate_caption">Non è una copia delle altre: resta una foto a sé.</string>
+
+  <string name="viewer_similar_hidden">Nascoste insieme</string>
+  <string name="viewer_similar_hidden_caption">Nascondere o mostrare una copia vale per tutte.</string>
+
+  <!-- Il foglio di conferma di "Separa". -->
+  <string name="viewer_similar_separate_title">Separare questa copia?</string>
+  <string name="viewer_similar_separate_message">Diventa una foto a sé, anche sugli altri tuoi dispositivi, e non si unisce più alle altre. Non cambia niente sul telefono né sul NAS.</string>
+  <string name="viewer_similar_separate_confirm">Separa</string>
+</resources>

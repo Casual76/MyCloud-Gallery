@@ -27,8 +27,8 @@ import org.junit.runner.RunWith
 /**
  * Fase 5, D36 (P0): le voci personali delle copie simili ("Mostra questa come principale", "Separa") sono voci `MEDIA_FLAG` con campi
  * nuovi. Qui si prova che **il formato non cambia**: il codec di oggi le scrive e le rilegge identiche (una versione precedente
- * dell'app riconosce il tipo dalla chiave e non scarta il segmento), e la proiezione sul catalogo di oggi le lascia stare (non sono
- * preferito ne' nascosto). La loro proiezione sulle tabelle locali e' di P15.
+ * dell'app riconosce il tipo dalla chiave e non scarta il segmento), e la proiezione sul catalogo non le confonde con un preferito o un
+ * nascosto. La loro proiezione sulle copie simili (P15) e' in `SimilarCopiesProjectionTest`.
  */
 @RunWith(AndroidJUnit4::class)
 class SimilarCopiesRecordsTest {
@@ -66,14 +66,17 @@ class SimilarCopiesRecordsTest {
   }
 
   @Test
-  fun laProiezioneDiOggiNonLeConfondeConPreferitoONascosto() = runBlocking {
+  fun laProiezioneNonLeConfondeConPreferitoONascosto() = runBlocking {
     val db = GalleryDatabase.build(ApplicationProvider.getApplicationContext<Context>(), name = null)
     try {
       val catalog = MediaCatalog(db, AccountId.of("alessio"), zone = { ZoneId.of("Europe/Rome") }) { 1_760_000_000_000L }
       val projection = CatalogPersonalProjection(catalog, db)
       for (key in listOf(SimilarCopiesRecords.cover(a), SimilarCopiesRecords.separation(a, b))) {
+        // Sono scelte sulle copie simili (P15): con media che questo catalogo non conosce restano in attesa, e mai un preferito o un nascosto.
         val result = projection.apply(PersonalEntry(key, 1_792_000_000_000L, author, PersonalValue.Flag(true)))
-        assertThat(result).isEqualTo(ProjectionResult.NOT_PROJECTED)
+        assertThat(result).isEqualTo(ProjectionResult.UNRESOLVED)
+        assertThat(db.personalDao().get(a)).isNull()
+        assertThat(db.personalDao().get(b)).isNull()
       }
     } finally {
       db.close()

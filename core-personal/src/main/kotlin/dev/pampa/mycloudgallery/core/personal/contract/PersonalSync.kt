@@ -110,6 +110,14 @@ interface PersonalStore {
 
   /** Data le modifiche "da datare" con [nasNowMs]. */
   suspend fun stamp(nasNowMs: Long)
+
+  /**
+   * Lo stato come lo vede l'utente su questo dispositivo **adesso**: lo stato unito con sopra le sue modifiche ancora "da datare" (che
+   * in [entries] non ci sono: senza ora del NAS non si pubblicano, ma valgono subito). Le voci da datare hanno l'ora piu' alta
+   * possibile: una scelta appena fatta vince su cio' che si sa. Lo leggono le scelte che non devono perdersi (una separazione di copie
+   * simili fatta senza rete: il gruppo non si deve riformare, E-L13). Di serie lo stato unito.
+   */
+  suspend fun effective(): Map<PersonalKey, PersonalEntry> = entries.value
 }
 
 /** L'ultima testa `personal` pubblicata da questo dispositivo: serve a non ripubblicare cio' che e' gia' sul NAS e a rispettare M3. */

@@ -62,6 +62,12 @@ class InMemoryPersonalStore(
 
   override suspend fun undated(): List<PersonalKey> = pending.keys.toList()
 
+  override suspend fun effective(): Map<PersonalKey, PersonalEntry> {
+    val out = HashMap(state.value)
+    for ((key, v) in pending) out[key] = PersonalEntry(key, Long.MAX_VALUE, author, v.first, v.second)
+    return out
+  }
+
   override suspend fun stamp(nasNowMs: Long) {
     val dated = pending.map { (key, v) -> PersonalEntry(key, nasNowMs, author, v.first, v.second) }
     pending.clear()

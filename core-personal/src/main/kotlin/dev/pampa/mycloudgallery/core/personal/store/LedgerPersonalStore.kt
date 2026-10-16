@@ -92,7 +92,7 @@ class LedgerPersonalStore(
       persist()
       if (project) {
         val effect = PersonalEntry(key, current[key]?.atNas ?: 0L, author, value, fp)
-        if (projection.apply(effect) != ProjectionResult.UNRESOLVED) {
+        if (projection.apply(effect, effectiveNow()) != ProjectionResult.UNRESOLVED) {
           unprojected -= key
           persist()
         }
@@ -123,10 +123,15 @@ class LedgerPersonalStore(
     toProject.forEach { unprojected += it.key }
     if (changed.isNotEmpty() || mark != null) persist()
     for (entry in toProject) {
-      if (projection.apply(entry) != ProjectionResult.UNRESOLVED) unprojected -= entry.key
+      if (projection.apply(entry, effectiveNow()) != ProjectionResult.UNRESOLVED) unprojected -= entry.key
     }
     if (toProject.isNotEmpty()) persist()
     PersonalApplyResult(applied = changed.size, ignored = entries.size - changed.size)
+  }
+
+  override suspend fun effective(): Map<PersonalKey, PersonalEntry> = lock.withLock {
+    ensureLoaded()
+    effectiveNow()
   }
 
   override suspend fun undated(): List<PersonalKey> = lock.withLock {
@@ -200,7 +205,7 @@ class LedgerPersonalStore(
       if (entry == null) {
         unprojected -= key
         changed = true
-      } else if (projection.apply(entry) != ProjectionResult.UNRESOLVED) {
+      } else if (projection.apply(entry, effectiveNow()) != ProjectionResult.UNRESOLVED) {
         unprojected -= key
         changed = true
       }
@@ -247,6 +252,14 @@ class LedgerPersonalStore(
     published = snapshot.published
     state.value = current
     loaded = true
+  }
+
+  /** Lo stato unito con sopra le modifiche ancora da datare, che valgono subito e hanno l'ora piu' alta (vedi [effective]). */
+  private fun effectiveNow(): Map<PersonalKey, PersonalEntry> {
+    if (pending.isEmpty()) return current
+    val out = HashMap(current)
+    for ((key, change) in pending) out[key] = PersonalEntry(key, Long.MAX_VALUE, author, change.value, change.fingerprint)
+    return out
   }
 
   private fun publishState(next: Map<PersonalKey, PersonalEntry>) {

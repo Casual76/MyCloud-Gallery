@@ -35,7 +35,9 @@
     7d. D12 nella release       (Fase 5A) la protezione "backup solo sulle share di prova" C'E' nell'APK di release: il campo
                                 `FeatureFlags.backupTestSharesOnly` e la decisione `backupMayWriteTo` nel dex e tenuti da R8 in
                                 mapping.txt (consumer-rules.pro di core-common); il valore acceso e non spegnibile lo prova
-                                FeatureFlagsTest
+                                FeatureFlagsTest. E (P7) il CANCELLO: nel bytecode della release (dexdump) `AppBackupGate.stateOf`
+                                chiama `FeatureFlags.backupMayWriteTo`, risponde `BackupGateState.TEST_ONLY` e la classe del cancello
+                                e' istanziata da `BackupGraph` (un cancello tolto, fuso o scollegato fa FALLIRE il passo)
     7c. niente servizi         l'APK di release non ha nessun `META-INF/services/dev.pampa.*` (ne' un file di servizio che
                                 nomini una classe `dev.pampa.*`): le varianti di misura legano le loro classi con Hilt, mai
                                 con `ServiceLoader` (R6)
@@ -274,6 +276,121 @@ function Get-DexClassesMatching([string]$apk, [string]$pattern) {
   } finally {
     $zip.Dispose()
   }
+}
+
+# Il bytecode del cancello D12 (Fase 5A, P7): `dexdump -d` dei classes*.dex dell'APK (build-tools, accanto ad aapt2), letto in streaming da un
+# piccolo lettore C# (l'uscita e' di decine di MB). Cerca: la classe del cancello e il suo metodo `stateOf`, se lo `stateOf` chiama la
+# decisione `FeatureFlags.backupMayWriteTo` e risponde `BackupGateState.TEST_ONLY`, chi istanzia la classe del cancello e chi altro chiama
+# la decisione. Senza dexdump o senza vedere la MainActivity la lettura non e' affidabile e il passo FALLISCE (non salta).
+$script:dexGateReaderLoaded = $false
+function Initialize-DexGateReader {
+  if ($script:dexGateReaderLoaded) { return }
+  Add-Type -Language CSharp -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Text;
+using System.Text.RegularExpressions;
+
+public class DexGateFacts {
+  public bool SawMainActivity;
+  public bool GateClassFound;
+  public bool StateOfFound;
+  public bool StateOfCallsDecision;
+  public bool StateOfReturnsTestOnly;
+  public List<string> Instantiators = new List<string>();
+  public List<string> DecisionCallers = new List<string>();
+  public int Lines;
+}
+
+public static class DexGateReader {
+  const string GateClass = "Ldev/pampa/mycloudgallery/backup/AppBackupGate;";
+  const string MainClass = "Ldev/pampa/mycloudgallery/MainActivity;";
+  const string Decision = "Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;.backupMayWriteTo:(Ljava/lang/String;)Z";
+  const string TestOnly = "Ldev/pampa/mycloudgallery/core/backup/contract/BackupGateState;.TEST_ONLY:";
+
+  static readonly Regex ClassLine = new Regex(@"^\s*Class descriptor\s*:\s*'([^']+)'", RegexOptions.Compiled);
+  static readonly Regex NameLine = new Regex(@"^\s*name\s*:\s*'([^']*)'", RegexOptions.Compiled);
+  static readonly Regex InsnLine = new Regex(@"\|[0-9a-fA-F]{4}:\s+(\S+)\s*(.*)$", RegexOptions.Compiled);
+
+  public static void Scan(string dexdump, string dexPath, DexGateFacts facts) {
+    var info = new ProcessStartInfo(dexdump, "-d \"" + dexPath + "\"") {
+      UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
+      StandardOutputEncoding = Encoding.GetEncoding(28591),
+    };
+    using (var process = Process.Start(info)) {
+      string cls = "", method = "";
+      bool sawDecisionInStateOf = false;
+      var errors = process.StandardError.ReadToEndAsync();
+      string line;
+      while ((line = process.StandardOutput.ReadLine()) != null) {
+        facts.Lines++;
+        var m = ClassLine.Match(line);
+        if (m.Success) {
+          cls = m.Groups[1].Value; method = ""; sawDecisionInStateOf = false;
+          if (cls == MainClass) facts.SawMainActivity = true;
+          if (cls == GateClass) facts.GateClassFound = true;
+          continue;
+        }
+        m = NameLine.Match(line);
+        if (m.Success) {
+          method = m.Groups[1].Value; sawDecisionInStateOf = false;
+          if (cls == GateClass && method == "stateOf") facts.StateOfFound = true;
+          continue;
+        }
+        var insn = InsnLine.Match(line);
+        if (!insn.Success) continue;
+        string op = insn.Groups[1].Value, rest = insn.Groups[2].Value;
+        string here = cls + "." + method;
+        if (op.StartsWith("invoke") && rest.Contains(Decision)) {
+          facts.DecisionCallers.Add(here);
+          if (cls == GateClass && method == "stateOf") { facts.StateOfCallsDecision = true; sawDecisionInStateOf = true; }
+        } else if (op == "new-instance" && rest.Contains(GateClass)) {
+          facts.Instantiators.Add(here);
+        } else if (op.StartsWith("sget") && rest.Contains(TestOnly) && cls == GateClass && method == "stateOf" && sawDecisionInStateOf) {
+          facts.StateOfReturnsTestOnly = true;
+        }
+      }
+      process.WaitForExit();
+      if (process.ExitCode != 0) throw new InvalidOperationException("dexdump ha fallito: " + errors.Result);
+    }
+  }
+}
+'@
+  $script:dexGateReaderLoaded = $true
+}
+
+# Il dexdump accanto ad aapt2 (stessa cartella build-tools).
+function Get-DexDump {
+  $aapt2 = Get-Aapt2
+  if (-not $aapt2) { return $null }
+  $dexdump = Join-Path (Split-Path -Parent $aapt2) "dexdump.exe"
+  if (Test-Path -LiteralPath $dexdump) { return $dexdump }
+  return $null
+}
+
+# Estrae i classes*.dex dell'APK in una cartella temporanea e li legge uno a uno.
+function Get-D12GateFacts([string]$dexdump, [string]$apk) {
+  Initialize-DexGateReader
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $temp = Join-Path ([System.IO.Path]::GetTempPath()) ("mcg-dex-" + [guid]::NewGuid().ToString("N"))
+  New-Item -ItemType Directory -Path $temp | Out-Null
+  $facts = New-Object DexGateFacts
+  $zip = [System.IO.Compression.ZipFile]::OpenRead($apk)
+  try {
+    $dexes = @($zip.Entries | Where-Object { $_.FullName -match '^classes\d*\.dex$' })
+    if ($dexes.Count -eq 0) { throw "nessun classes*.dex nell'APK" }
+    foreach ($entry in $dexes) {
+      $target = Join-Path $temp $entry.FullName
+      [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $target, $true)
+      [DexGateReader]::Scan($dexdump, $target, $facts)
+    }
+  } finally {
+    $zip.Dispose()
+    Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
+  }
+  return $facts
 }
 
 # Le classi di un package `testing` (i fake dei contratti, D6 di Fase 2 e D23 di Fase 3).
@@ -578,6 +695,27 @@ Step "D12 nella release: FeatureFlags.backupTestSharesOnly e backupMayWriteTo ne
   }
   if ($problems.Count -gt 0) { return ($problems -join "; ") }
   Write-Host "        D12 presente nella release (dex e mapping.txt)" -ForegroundColor DarkGray
+
+  # Fase 5A (P7): il campo e la decisione non bastano, serve il CANCELLO che la usa. Il bytecode della release (dexdump): lo `stateOf` del
+  # cancello chiama `FeatureFlags.backupMayWriteTo` e risponde `BackupGateState.TEST_ONLY`, e il cancello e' istanziato (collegato al grafo
+  # del backup). R8 puo' fondere o inlineare: le regole di app\proguard-rules.pro tengono il cancello e vietano di inlineare la decisione.
+  $dexdump = Get-DexDump
+  if (-not $dexdump) { return "dexdump.exe non trovato accanto ad aapt2 (build-tools): non posso provare il cancello D12 nel dex di release" }
+  $gate = Get-D12GateFacts $dexdump $apk.FullName
+  if ($gate.Lines -lt 1000 -or -not $gate.SawMainActivity) { return "lettura del bytecode non affidabile ($($gate.Lines) righe, MainActivity vista: $($gate.SawMainActivity))" }
+  if (-not $gate.GateClassFound) { $problems += "AppBackupGate non e' nel dex di release: il cancello del backup e' stato tolto o fuso" }
+  elseif (-not $gate.StateOfFound) { $problems += "AppBackupGate.stateOf non e' nel dex di release" }
+  else {
+    if (-not $gate.StateOfCallsDecision) { $problems += "AppBackupGate.stateOf non chiama FeatureFlags.backupMayWriteTo: la decisione D12 non governa il cancello" }
+    elseif (-not $gate.StateOfReturnsTestOnly) { $problems += "AppBackupGate.stateOf non risponde BackupGateState.TEST_ONLY dopo la decisione D12" }
+  }
+  if ($gate.Instantiators.Count -eq 0) { $problems += "nessun codice istanzia AppBackupGate: il cancello non e' collegato al backup" }
+  elseif (-not ($gate.Instantiators | Where-Object { $_ -like "Ldev/pampa/mycloudgallery/backup/BackupGraph;.*" })) {
+    $problems += ("AppBackupGate e' istanziato solo da " + (($gate.Instantiators | Select-Object -Unique) -join ", ") + ", non da BackupGraph")
+  }
+  if ($problems.Count -gt 0) { return ($problems -join "; ") }
+  Write-Host ("        cancello D12 provato nel bytecode: stateOf -> backupMayWriteTo -> TEST_ONLY, istanziato da {0}, decisione chiamata da {1} metodi ({2} righe di dexdump)" -f
+    (($gate.Instantiators | Select-Object -Unique) -join ", "), @($gate.DecisionCallers | Select-Object -Unique).Count, $gate.Lines) -ForegroundColor DarkGray
 }
 
 # R6: nessun file di servizio nostro nell'APK di release. `ServiceLoader` e' un canale dichiarativo e invisibile: un file in

@@ -193,7 +193,6 @@ class Fase3CatalogTest {
     "E-P11" to "cestino di Samsung: la posizione diventa assente con tolleranza; il messaggio arriva con lo stato del backup (E-B4)",
     "E-P18" to "ridimensionamento e finestre: layout della Libreria ancorato, provato con test di layout",
     // Altre fasi e prove sul campo.
-    "E-B4" to "messaggio «Recuperala dal cestino di Galleria» con lo stato del backup: Fase 5",
     "T-13" to "prova sul campo (trigger di contenuto di WorkManager)",
   )
 

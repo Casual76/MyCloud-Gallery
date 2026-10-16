@@ -6,6 +6,9 @@ import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
+import dev.pampa.mycloudgallery.backup.DataStoreBackupSettingsStorage
+import dev.pampa.mycloudgallery.core.backup.contract.BackupSource
+import dev.pampa.mycloudgallery.core.backup.contract.BackupSources
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagHasher
 import dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
@@ -29,6 +32,7 @@ import dev.pampa.mycloudgallery.core.family.lifecycle.WorkCanceller
 import dev.pampa.mycloudgallery.core.family.onboarding.DataStoreOnboardingStateStore
 import dev.pampa.mycloudgallery.core.family.onboarding.CredentialSaver
 import dev.pampa.mycloudgallery.core.family.onboarding.DefaultOnboardingCoordinator
+import dev.pampa.mycloudgallery.core.family.onboarding.StoreState
 import dev.pampa.mycloudgallery.core.family.onboarding.OnboardingPorts
 import dev.pampa.mycloudgallery.core.family.registry.DeviceStatusBook
 import dev.pampa.mycloudgallery.core.family.registry.FileApprovalSightings
@@ -83,6 +87,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
 /**
@@ -140,6 +146,18 @@ class AppGraph(
   val ruleSettings = DataStoreRuleSettingsStore(preferences(context, scope, RULES_FILE))
   val trafficLedger = DataStoreTrafficLedger(preferences(context, scope, TRAFFIC_FILE))
   val heartbeat = HeartbeatStore(File(noBackup, HEARTBEAT_FILE))
+
+  /**
+   * Le impostazioni del backup (Fase 5A, P7; D7): del dispositivo, in `noBackupFilesDir/datastore`. Finche' l'utente non sceglie, le sorgenti
+   * sono quelle del passo 6 dell'onboarding (fotocamera e screenshot, come le ha scelte); l'azzeramento le cancella.
+   */
+  val backupSettingsStorage = DataStoreBackupSettingsStorage(
+    dataStore = preferences(context, scope, BACKUP_FILE),
+    initialSources = onboardingStore.state.filterIsInstance<StoreState.Ready>().map { state ->
+      val choices = state.snapshot.choices
+      BackupSources(setOfNotNull(BackupSource.Camera.takeIf { choices.camera }, BackupSource.Screenshots.takeIf { choices.screenshots }))
+    },
+  )
 
   // --- Rete, casa, VPN (P2) -----------------------------------------------------------------------------------
   val environment = LiveNetworkEnvironment(platform.networkObservation, homeStore, platform.localNetworkPermission, scope)
@@ -368,6 +386,7 @@ class AppGraph(
   private companion object {
     const val TAG = "AppGraph"
     const val RULES_FILE = "rule_settings"
+    const val BACKUP_FILE = "backup_settings"
     const val TRAFFIC_FILE = "traffic_ledger"
     const val TRUST_FILE = "trust-state"
     const val SIGHTINGS_FILE = "approval-sightings"

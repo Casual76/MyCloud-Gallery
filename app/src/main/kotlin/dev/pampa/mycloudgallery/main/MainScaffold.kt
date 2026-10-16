@@ -95,6 +95,7 @@ fun MainScaffold(
   onSelectTab: (GalleryTab) -> Unit,
   onStatusClick: () -> Unit,
   onOpenSettings: () -> Unit,
+  onBackupStatusClick: () -> Unit = {},
   libraryState: LibraryTabState = rememberEmptyLibraryTabState(),
   libraryViewer: ViewerServices? = null,
   collections: (@Composable (CollectionsSlot) -> Unit)? = null,
@@ -139,6 +140,8 @@ fun MainScaffold(
         tabBarScroll = tabBarScroll,
         // I dettagli del NAS (e "Ho controllato, continua" dei lavori fermi) stanno in Diagnostica, come quelli della rete.
         onNasStatusClick = onStatusClick,
+        // Fase 5A (D16): la terza voce del piede apre la pagina Backup.
+        onBackupStatusClick = onBackupStatusClick,
       )
       selectedTab == GalleryTab.Collections && collections != null -> collections(
         CollectionsSlot(

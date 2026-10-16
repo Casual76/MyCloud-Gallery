@@ -3,11 +3,13 @@ package dev.pampa.mycloudgallery.integration
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
+import dev.pampa.mycloudgallery.backup.BackupRunMemory
 import dev.pampa.mycloudgallery.graph.GalleryStopper
 import dev.pampa.mycloudgallery.nas.NasGraph
 import dev.pampa.mycloudgallery.nas.NasOrganizer
 import dev.pampa.mycloudgallery.work.NasStages
 import java.io.File
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Rule
@@ -96,6 +98,24 @@ class LocalDataEraserTest {
     state.forEach { assertThat(it.exists()).isFalse() }
     ledger.forEach { assertThat(it.exists()).isFalse() }
     assertThat(ledgerDir.exists()).isFalse()
+  }
+
+  /**
+   * Fase 5A (P7): il backup si ferma per primo (con la galleria), poi l'azzeramento toglie la cartella del dispositivo e le sorgenti scelte
+   * (impostazioni del backup) e la memoria locale del backup (battiti, ultimo giro, ultimo problema, da quando e' attivo).
+   */
+  @Test
+  fun siCancellanoLeImpostazioniEIlRicordoDelBackup() = runBlocking<Unit> {
+    val device = device()
+    val noBackup = device.context.noBackupFilesDir
+    device.graph.backupSettingsStorage.update { it.copy(sourceIds = setOf("camera", "screenshots"), deviceFolder = "Pixel di prova") }
+    assertThat(device.graph.backupSettingsStorage.data.first().deviceFolder).isEqualTo("Pixel di prova")
+    val memory = BackupRunMemory.FILES.map { File(noBackup, it).apply { writeText("1") } }
+
+    assertThat(device.graph.eraser.eraseAll()).isTrue()
+
+    assertThat(device.graph.backupSettingsStorage.data.first().deviceFolder).isNull()
+    memory.forEach { assertThat(it.exists()).isFalse() }
   }
 
   @Test

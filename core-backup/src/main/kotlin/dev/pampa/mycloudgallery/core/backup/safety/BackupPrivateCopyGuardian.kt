@@ -114,7 +114,7 @@ class BackupPrivateCopyGuardian(
 
     fun fits(size: Long): Boolean = committed == 0L || committed + size <= capBytes
 
-    fun report(stop: RunStop) = GuardReport(created, linked, skipped, failed, bytesCopied, stop)
+    fun report(stop: RunStop, problem: BackupProblemCode? = null) = GuardReport(created, linked, skipped, failed, bytesCopied, stop, problem)
 
     fun overtime(): Boolean = clock.monotonicMs() >= deadline
   }
@@ -126,7 +126,7 @@ class BackupPrivateCopyGuardian(
     /** L'elemento aspetta il prossimo giro (file aperto dal PC, ora del NAS assente...). */
     data object Wait : Step
 
-    class Stop(val stop: RunStop) : Step
+    class Stop(val stop: RunStop, val problem: BackupProblemCode? = null) : Step
   }
 
   /** Byte riletti dall'ultimo giro (verifiche, riferimento, deduplica): soli numeri, per il traffico e la Diagnostica. */
@@ -154,7 +154,7 @@ class BackupPrivateCopyGuardian(
       if (!tally.fits(item.size)) return tally.report(RunStop.BUDGET)
       tally.committed += item.size
       val step = drive(item, tally)
-      if (step is Step.Stop) return tally.report(step.stop)
+      if (step is Step.Stop) return tally.report(step.stop, step.problem)
     }
 
     // 2. I media propri con la sola copia comune, dal catalogo locale.
@@ -182,7 +182,7 @@ class BackupPrivateCopyGuardian(
         }
         tally.committed += item.size
         val step = drive(item, tally)
-        if (step is Step.Stop) return tally.report(step.stop)
+        if (step is Step.Stop) return tally.report(step.stop, step.problem)
       }
       if (page.size < limit) return tally.report(RunStop.COMPLETE)
     }
@@ -305,8 +305,7 @@ class BackupPrivateCopyGuardian(
   private suspend fun save(item: BackupItem): Step = Step.Next(saveItem(item))
 
   /** Un errore del NAS ferma il giro, non l'elemento (§2.2 "Rete"): si riprende al prossimo, dal diario. */
-  @Suppress("UNUSED_PARAMETER")
-  private fun stopFor(error: NasError): Step = Step.Stop(RunStop.NAS)
+  private fun stopFor(error: NasError): Step = Step.Stop(RunStop.NAS, SafetyCommon.problemFor(error))
 
   /** Toglie il proprio temporaneo: null se non c'e' piu', altrimenti il passo con cui fermarsi. */
   private suspend fun removeTemp(share: String, temp: SharePath): Step? = when (val d = ops.deleteOwnTemp(share, temp, purpose)) {
@@ -369,7 +368,9 @@ class BackupPrivateCopyGuardian(
     if (item.size > SPACE_CHECK_BYTES) {
       when (val space = ops.space(item.share, purpose)) {
         is NasResult.Err -> return stopFor(space.error)
-        is NasResult.Ok -> if (space.value.callerFreeBytes < item.size + SPACE_MARGIN_BYTES) return Step.Stop(RunStop.NAS)
+        is NasResult.Ok -> if (space.value.callerFreeBytes < item.size + SPACE_MARGIN_BYTES) {
+          return Step.Stop(RunStop.NAS, if (space.value.quotaLimited) BackupProblemCode.QUOTA else BackupProblemCode.NAS_FULL)
+        }
       }
     }
     return save(item.copy(state = UploadState.COPYING, temp = NasBackupPaths.tempFor(deviceId, item.id.value), resumeAt = 0, sha256 = sha))

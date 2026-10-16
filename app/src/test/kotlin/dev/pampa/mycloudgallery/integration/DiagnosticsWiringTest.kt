@@ -1,6 +1,10 @@
 package dev.pampa.mycloudgallery.integration
 
+import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
+import dev.pampa.mycloudgallery.backup.BackupDiagCodes
+import dev.pampa.mycloudgallery.core.backup.contract.BackupProblemCode
+import dev.pampa.mycloudgallery.core.common.diagnostics.DiagSection
 import dev.pampa.mycloudgallery.core.family.trust.TrustDiagCodes
 import dev.pampa.mycloudgallery.core.mediastore.diagnostics.PhoneLibraryDiagCodes
 import dev.pampa.mycloudgallery.core.network.diagnostics.NetworkDiagCodes
@@ -29,19 +33,36 @@ class DiagnosticsWiringTest {
   /** P16: i codici della 4B di :app (operazioni, cestino, manutenzione, dati personali). */
   private val NAS_4B = NasOpsDiagCodes.ALL
 
+  /** P7: i codici del backup di :app, uno per riga del §2.6 (`BackupProblemCode`) e due voci di stato. */
+  private val BACKUP_5A = BackupDiagCodes.ALL
+
   @Test
   fun iCodiciDeiContributoriCollegatiSonoTuttiNelCatalogo() {
-    val all = NetworkDiagCodes.ALL + TrustDiagCodes.ALL + PhoneLibraryDiagCodes.ALL + LibraryDiagCodes.ALL + NAS_4A + NAS_4B
+    val all = NetworkDiagCodes.ALL + TrustDiagCodes.ALL + PhoneLibraryDiagCodes.ALL + LibraryDiagCodes.ALL + NAS_4A + NAS_4B + BACKUP_5A
     val fuori = all.filterNot { it in DiagCatalog }.map { it.id }
     assertWithMessage("codici dei contributori fuori dal catalogo: $fuori").that(fuori).isEmpty()
   }
 
   @Test
   fun iCodiciDellaGalleriaHannoGliStessiEdgeCaseDelCatalogo() {
-    for (code in PhoneLibraryDiagCodes.ALL + LibraryDiagCodes.ALL + NAS_4A + NAS_4B) {
+    for (code in PhoneLibraryDiagCodes.ALL + LibraryDiagCodes.ALL + NAS_4A + NAS_4B + BACKUP_5A) {
       val entry = DiagCatalog.entry(code)
       assertWithMessage(code.id).that(entry).isNotNull()
       assertWithMessage(code.id).that(entry!!.code.edgeCases).isEqualTo(code.edgeCases)
     }
+  }
+
+  /** P7: ogni `BackupProblemCode` ha il suo codice di Diagnostica con lo stesso nome ("BACKUP_" + nome) e gli stessi edge case. */
+  @Test
+  fun ogniProblemaDelBackupHaIlSuoCodiceNelCatalogo() {
+    for (problem in BackupProblemCode.entries) {
+      val code = BackupDiagCodes.of(problem)
+      assertThat(code.id).isEqualTo("BACKUP_" + problem.name)
+      val entry = DiagCatalog.entry(code)
+      assertWithMessage(code.id).that(entry).isNotNull()
+      assertWithMessage(code.id).that(entry!!.code.edgeCases).isEqualTo(problem.edgeCases)
+      assertWithMessage(code.id).that(entry.section).isEqualTo(DiagSection.BACKUP)
+    }
+    assertThat(BackupDiagCodes.ALL.map { it.id }.toSet()).hasSize(BackupDiagCodes.ALL.size)
   }
 }

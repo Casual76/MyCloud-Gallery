@@ -47,4 +47,9 @@
 
   <string name="viewer_backup_lost">Cancellato prima del backup</string>
   <string name="viewer_backup_lost_caption">Era sul telefono, ma è sparito prima di essere salvato. Se lo hai tolto da poco, lo trovi nel cestino di Galleria.</string>
+
+  <!-- Fase 5A (P7, D36): un'altra copia dello stesso gruppo, mostrata a parte (non sta nell'indice). -->
+  <string name="viewer_outside_copy_description">Un\'altra copia della stessa foto</string>
+  <string name="viewer_outside_copy_close">Torna alla foto</string>
+  <string name="viewer_outside_copy_missing">Questa copia non è disponibile adesso.</string>
 </resources>

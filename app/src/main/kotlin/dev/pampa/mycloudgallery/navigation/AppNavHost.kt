@@ -62,6 +62,7 @@ import dev.pampa.mycloudgallery.feature.settings.settingsGraph
 import dev.pampa.mycloudgallery.feature.viewer.ViewerServices
 import dev.pampa.mycloudgallery.main.GalleryHostViewModel
 import dev.pampa.mycloudgallery.main.GalleryRoot
+import dev.pampa.mycloudgallery.main.BackupHostEffect
 import dev.pampa.mycloudgallery.main.LibraryCommandHostEffect
 import dev.pampa.mycloudgallery.main.LocalViewerHost
 import dev.pampa.mycloudgallery.main.MainScaffold
@@ -142,6 +143,8 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
   // Fase 4B (P16): un file toccato in Cartelle NAS si apre nel viewer della Libreria (se la Libreria lo mostra).
   val openerScope = rememberCoroutineScope()
   val nasOpener = remember(gallery, viewer) { NasFileOpener(openerScope, gallery, viewer) }
+  // Fase 5A (P7): le azioni del backup (navigazione, permessi, conferma dei dati mobili) vivono finche' la galleria e' visibile.
+  if (gallery != null) BackupHostEffect(gallery.backupActions, nav, onAccessChanged = gallery::refreshAccess)
   NavHost(
     navController = nav,
     startDestination = startRoute(destination),
@@ -161,6 +164,8 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
           collectionsGraph(nav = nav, onOpenViewer = { request -> gallery?.let { viewer?.open(request, it.viewerServices) } })
           // Fase 4B (P16): Cartelle NAS, Spazio NAS, Eliminati di recente del NAS, Operazioni in corso (rotte a schermo intero).
           nasGraph(nav = nav, onOpenFile = nasOpener::open)
+          // Fase 5A (P7): la pagina Backup, le impostazioni, la cartella del dispositivo e il riepilogo del primo backup.
+          if (gallery?.backupAvailable == true) backupGraph(nav)
           // "Da completare" nelle Impostazioni riapre i passi saltati dell'onboarding.
           onboardingGraph(nav = nav, onDone = {}, onPause = actions.pause)
           settingsGraph(
@@ -168,6 +173,8 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
             openDiagnostics = { nav.navigate(DiagnosticsGraphRoute) },
             resumeStep = { step -> nav.navigate(OnboardingResumeRoute(step)) },
             developerSection = DeveloperTools.settingsSection(nav),
+            // Fase 5A (D16): la voce "Backup" delle Impostazioni, solo se il backup c'e'.
+            openBackup = if (gallery?.backupAvailable == true) ({ nav.openBackupPage() }) else null,
           )
           diagnosticsGraph(
             nav = nav,
@@ -283,6 +290,8 @@ private fun MainDestination(nav: NavHostController, status: GlobalStatus, openWi
       }
     },
     onOpenSettings = { nav.navigate(SettingsGraphRoute) },
+    // Fase 5A (D16): la capsula del backup nel piede della Libreria porta alla pagina Backup.
+    onBackupStatusClick = { nav.openBackupPage() },
     libraryState = state,
     libraryViewer = libraryViewer,
     collections = { slot ->

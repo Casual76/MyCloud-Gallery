@@ -38,6 +38,7 @@ import dev.pampa.mycloudgallery.core.index.publish.IndexWriteRules
 import dev.pampa.mycloudgallery.core.index.publish.NasRemoteIndex
 import dev.pampa.mycloudgallery.core.index.publish.OutboxIndexPublisher
 import dev.pampa.mycloudgallery.core.index.publish.ShareLocks
+import dev.pampa.mycloudgallery.core.nasops.contract.CitedTemps
 import dev.pampa.mycloudgallery.core.nasops.contract.OpsGate
 import dev.pampa.mycloudgallery.work.NasOpsJobs
 import dev.pampa.mycloudgallery.debugtools.DeveloperTools
@@ -74,6 +75,7 @@ import dev.pampa.mycloudgallery.core.model.LocationId
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.model.NasArea
 import dev.pampa.mycloudgallery.core.model.NasPath
+import dev.pampa.mycloudgallery.core.model.NasShare
 import dev.pampa.mycloudgallery.core.nas.contract.NasMediaReader
 import dev.pampa.mycloudgallery.core.nas.session.ClockJumpGuard
 import dev.pampa.mycloudgallery.core.nas.contract.Purpose
@@ -161,6 +163,8 @@ class NasGraph(
   private val opsJobs: NasOpsJobs = NasOpsJobs.NONE,
   /** Fase 4B (P16): un'operazione sui file si e' chiusa (la Libreria va riverificata). */
   private val onOperationsClosed: () -> Unit = {},
+  /** Fase 5A (P7, D33): i temporanei citati dal diario del backup (lo compone `GalleryGraph`: il backup nasce dopo il NAS). */
+  private val citedTemps: CitedTemps = CitedTemps.NONE,
 ) {
 
   val enabled: Boolean get() = inputs.flags.nasLibrary
@@ -392,6 +396,7 @@ class NasGraph(
     },
     localCovers = { covers.on },
     mirrorCovers = { on -> if (covers.on != on) covers.set(on) },
+    citedTemps = citedTemps,
   )
 
   private val composer = LibraryNasStatusComposer { monotonicMs() }
@@ -481,6 +486,17 @@ class NasGraph(
     if (areas.isEmpty()) return@withLock false
     val catalog = catalogProvider() ?: return@withLock false
     val account = AccountId.of(user)
+    // Fase 5A (P7): la configurazione di famiglia diventa la mappa delle aree del catalogo (`nas_share`). Senza, ogni copia sul NAS sta in una
+    // share di "area sconosciuta": mai "al sicuro" (serve un'area privata) e sempre "solo nell'area comune". E' idempotente (una riga per
+    // share) e ricalcola proprietario e sicurezza dei media che hanno una copia li'. Se non riesce non si parte con aree sbagliate in
+    // silenzio: le copie restano "area sconosciuta", cioe' mai al sicuro per errore.
+    try {
+      areas.forEach { catalog.registerShare(NasShare(account, it.share, it.area)) }
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      GalleryLog.w(TAG) { "aree delle share non registrate: ${e.javaClass.simpleName}" }
+    }
     val names = areas.associate { it.share.lowercase(Locale.ROOT) to it.share }
     val shareName: (String) -> String = { key -> names[key.lowercase(Locale.ROOT)] ?: key }
 

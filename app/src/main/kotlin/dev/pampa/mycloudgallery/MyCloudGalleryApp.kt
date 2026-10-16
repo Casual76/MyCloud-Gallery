@@ -9,6 +9,7 @@ import dev.pampa.mycloudgallery.graph.AppGraph
 import dev.pampa.mycloudgallery.notify.AppNotifications
 import dev.pampa.mycloudgallery.process.GalleryLifecycle
 import dev.pampa.mycloudgallery.process.ProcessWatcher
+import dev.pampa.mycloudgallery.work.BackupWorkScheduling
 import dev.pampa.mycloudgallery.work.GalleryWorkScheduling
 import dev.pampa.mycloudgallery.work.JobSchedulerNasOpsJobs
 import dev.pampa.mycloudgallery.work.NasWorkScheduling
@@ -81,6 +82,8 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
             NasWorkScheduling.ensure(this@MyCloudGalleryApp)
             NasWorkScheduling.scanNow(this@MyCloudGalleryApp)
           }
+          // Fase 5A (P7): i lavori del backup (foto, video, verifiche). Le regole decidono quando; i trigger sono la lettura del telefono.
+          if (gallery.backup != null) BackupWorkScheduling.ensure(this@MyCloudGalleryApp)
         }
       }
     }

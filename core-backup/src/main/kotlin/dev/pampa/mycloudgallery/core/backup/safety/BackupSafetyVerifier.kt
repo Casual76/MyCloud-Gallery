@@ -107,13 +107,13 @@ class BackupSafetyVerifier(
     var unreadable = 0
     var bytes = 0L
 
-    fun report(stop: RunStop) = VerifyReport(checked, verified, mismatched, unreadable, bytes, stop)
+    fun report(stop: RunStop, problem: BackupProblemCode? = null) = VerifyReport(checked, verified, mismatched, unreadable, bytes, stop, problem)
   }
 
   private sealed interface Step {
     data object Next : Step
 
-    class Stop(val stop: RunStop) : Step
+    class Stop(val stop: RunStop, val problem: BackupProblemCode? = null) : Step
   }
 
   override suspend fun verify(scope: VerifyScope, budget: Duration): VerifyReport {
@@ -137,7 +137,7 @@ class BackupSafetyVerifier(
         if (scope == VerifyScope.Rotation && tally.bytes >= rotationBytes && !overdue(c)) return tally.report(RunStop.COMPLETE)
         when (val step = verifyOne(scope, share, c, tally)) {
           Step.Next -> Unit
-          is Step.Stop -> return tally.report(step.stop)
+          is Step.Stop -> return tally.report(step.stop, step.problem)
         }
       }
       // Pagina non piena: non c'e' altro (le copie gia' viste restano viste; quelle verificate escono dall'ambito).
@@ -169,7 +169,7 @@ class BackupSafetyVerifier(
     tally.checked++
     val read = rereader.reread(copy.share, copy.path, onBytes = { tally.bytes += it })
     val sha = when (read) {
-      is Reread.Fail -> return Step.Stop(RunStop.NAS)
+      is Reread.Fail -> return Step.Stop(RunStop.NAS, SafetyCommon.problemFor(read.error))
       Reread.Missing, Reread.Busy, Reread.Changed, Reread.Different -> {
         // Assente, aperta dal PC o cambiata durante la lettura: questa volta non si sa. L'assenza la registra la scansione.
         tally.unreadable++

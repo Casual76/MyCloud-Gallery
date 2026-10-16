@@ -23,6 +23,7 @@ import dev.pampa.mycloudgallery.core.model.NasPath
 import dev.pampa.mycloudgallery.core.model.NasStamp
 import dev.pampa.mycloudgallery.core.nasmedia.contract.OwnRemovals
 import dev.pampa.mycloudgallery.core.nasops.clean.MaintenanceReport
+import dev.pampa.mycloudgallery.core.nasops.contract.CitedTemps
 import dev.pampa.mycloudgallery.core.nasops.contract.GateStatus
 import dev.pampa.mycloudgallery.core.nasops.contract.LargestFile
 import dev.pampa.mycloudgallery.core.nasops.contract.NasFolderState
@@ -163,6 +164,11 @@ class NasOrganizer(
   /** Il valore locale di "Mostra le copertine degli album" (prima della 4B era solo del dispositivo) e il suo specchio. */
   private val localCovers: () -> Boolean = { false },
   private val mirrorCovers: (Boolean) -> Unit = {},
+  /**
+   * Fase 5A, D33: i temporanei del diario del **backup** (`BackupGraph.citedTemps`): la pulizia dei propri file li lascia finche'
+   * qualche elemento li cita (un video a meta' con il telefono fuori casa da giorni, E-B21). Si somma a quelli del diario delle operazioni.
+   */
+  private val citedTemps: CitedTemps = CitedTemps.NONE,
 ) {
 
   /**
@@ -342,6 +348,7 @@ class NasOrganizer(
       // R3 (revisione 4B): un file del cestino che il catalogo vede ancora fuori dal cestino (un collegamento) non si elimina.
       catalogPresence = CatalogPresenceSql(database, runtime.account),
       trashRetentionMillis = trashRetentionMillis() ?: dev.pampa.mycloudgallery.core.trust.TrustLimits.TRASH_RETENTION_MILLIS,
+      citedTemps = citedTemps,
     )
     val services = NasOpsWiring.build(inputs.session, opsStore, config)
 

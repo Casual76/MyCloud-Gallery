@@ -81,6 +81,18 @@
         android:permission="android.permission.BIND_JOB_SERVICE" />
 
     <!--
+        Fase 5A (D11, P7): il JobService del backup avviato dall'utente ("Inizia ora" del primo backup, "Fai ora"), come lavoro avviato
+        dall'utente (UIDT, Android 14+; stesso permesso RUN_USER_INITIATED_JOBS gia' dichiarato, nessun permesso nuovo). NON esportato e
+        protetto da BIND_JOB_SERVICE: lo lega solo il sistema (JobScheduler). Gira le tappe del backup con la notifica di avanzamento (solo
+        numeri) e "Ferma"; "Ferma" arriva a un ricevitore registrato solo mentre il lavoro gira e NON esportato (RECEIVER_NOT_EXPORTED):
+        nessun componente in piu' qui (docs/sicurezza.md 4-bis). I lavori notturni e quelli di D34 sono di WorkManager.
+    -->
+    <service
+        android:name=".work.BackupJobService"
+        android:exported="false"
+        android:permission="android.permission.BIND_JOB_SERVICE" />
+
+    <!--
         androidx.profileinstaller (portato da Compose) dichiara questo receiver ESPORTATO, protetto dal
         solo permesso DUMP: serve a strumenti esterni (macrobenchmark, adb) per installare un profilo
         con un broadcast. Non ci serve e non deve restare un punto d'ingresso dell'app. L'installazione

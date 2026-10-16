@@ -95,6 +95,19 @@ class PhoneSyncWorker @AssistedInject constructor(
     // `runIfActive` permette all'azzeramento di fermare un giro in corso e di aspettarlo (R7).
     val outcome = gallery.runIfActive { core -> core.phone.runner.run(BUDGET) } ?: return Result.success()
     GalleryLog.d(TAG) { "lettura del telefono in background: ${outcome.javaClass.simpleName}" }
+    // Fase 5A (D11, E-B13): media nuovi in una sorgente del backup => il lavoro del tipo giusto (lavoro unico, KEEP); la copia del telefono
+    // puo' essere sparita mentre la sola copia sul NAS e' nell'area comune => il guardiano. Dal catalogo e dal diario, nessun polling.
+    gallery.backup?.let { backup ->
+      try {
+        BackupWorkScheduling.afterPhoneRead(applicationContext, backup)
+      } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        GalleryLog.w(TAG) { "backup dopo la lettura del telefono non chiesto: ${e.javaClass.simpleName}" }
+      }
+    }
+    // Fase 5A (D36): dopo META, un giro del confronto delle copie simili (a tappe, su Default; chi lo chiede non aspetta).
+    gallery.similarCopies?.requestRun()
     // Il trigger di contenuto vale una volta: il prossimo cambiamento del MediaStore deve trovarne uno nuovo, accodato
     // dopo questo (APPEND: mai annullare il lavoro in corso).
     WorkManager.getInstance(applicationContext)
@@ -130,7 +143,11 @@ class LibraryMaintenanceWorker @AssistedInject constructor(
       GalleryLog.d(TAG) { "manutenzione: giro ${report.completed}, META ${meta.javaClass.simpleName}, hash ${hashes.hashed}" }
     }
     // Come tutte le scritture dell'istantanea, passa da `flush` della galleria (mai a galleria ferma).
-    if (done != null) runCatching { gallery.flush() }
+    if (done != null) {
+      runCatching { gallery.flush() }
+      // Fase 5A (D36): META residua finita, quindi un giro del confronto delle copie simili.
+      gallery.similarCopies?.requestRun()
+    }
     return Result.success()
   }
 

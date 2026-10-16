@@ -138,6 +138,11 @@ data class VerifyReport(
   val unreadable: Int,
   val bytesRead: Long,
   val stoppedBy: RunStop,
+  /**
+   * Aggiunta compatibile di P7: perche' la rete si e' fermata ([RunStop.NAS]) quando lo si sa (pieno, quota, password, sola lettura,
+   * irraggiungibile), cosi' la pagina Backup e il riepilogo distinguono i casi. Null = nessuna fermata da segnalare.
+   */
+  val problem: BackupProblemCode? = null,
 )
 
 /** Le verifiche e gli hash completi (D14, P3): "al sicuro" nasce solo da una rilettura fatta qui (L28). */
@@ -162,6 +167,8 @@ data class GuardReport(
   val failed: Int,
   val bytesCopied: Long,
   val stoppedBy: RunStop,
+  /** Aggiunta compatibile di P7: come [VerifyReport.problem]. */
+  val problem: BackupProblemCode? = null,
 )
 
 /**

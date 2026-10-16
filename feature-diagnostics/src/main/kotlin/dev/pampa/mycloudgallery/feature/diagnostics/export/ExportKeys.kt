@@ -55,6 +55,11 @@ object ExportKeys {
     // id di operazioni, di media o di dispositivi. I motivi per codice usano la famiglia `reason.` qui sotto.
     "opsActive", "opsRunning", "opsPaused", "opsLocked", "opsClosed", "expired", "purged", "alreadyGone", "deferred", "compacted",
     "skipped", "removed", "published", "applied", "stillUndated", "unresolved", "rejectedSegments", "rejectedHeads",
+    // Il backup (Fase 5A: BackupDiagnostics di :app). Solo conteggi, byte, flag ed enumerati: mai share, cartelle, file, account, id di
+    // media o di elementi del diario, impronte. I problemi per codice usano la famiglia `problem.` qui sotto.
+    "safe", "queued", "unverified", "onlyCommonCopy", "noNasCopy", "sources", "folderChosen", "gate", "backupStatus", "done", "linked",
+    "gone", "waiting", "bytesUploaded", "bytesReread", "diaryOpen", "diaryBytesOpen", "pending", "similarRunning", "available",
+    "lastProblem", "startedAgeMs", "lastCompleteAgeMs", "beatAgeMs",
   )
 
   /**
@@ -69,6 +74,8 @@ object ExportKeys {
     // Il motivo di scarto dei segmenti e delle teste dell'indice (`reason.` + una costante di `RejectReason`, IndexDiagnostics)
     // e il motivo di un congelamento (`reason.` + `FreezeReason`): costanti del codice, in maiuscolo.
     Regex("reason\\.[A-Z][A-Z0-9_]{2,31}"),
+    // I problemi del backup per codice (`problem.` + il codice di `BackupProblemCode`, in minuscolo): costanti del codice.
+    Regex("problem\\.[a-z][a-z_]{2,31}"),
   )
 
   fun isAllowed(key: String): Boolean = key in ALLOWED || FAMILIES.any { it.matches(key) }

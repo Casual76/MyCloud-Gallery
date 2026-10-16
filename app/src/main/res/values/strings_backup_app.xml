@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fase 5A (P7): il backup nell'app, testi di :app. Solo numeri: mai nomi di file, cartelle, share o account. -->
+<resources>
+  <!-- Il canale e la notifica dell'avanzamento del backup avviato dall'utente (UIDT, D11). -->
+  <string name="channel_backup_name">Backup</string>
+  <string name="channel_backup_description">L\'avanzamento del backup che hai avviato tu, con «Ferma».</string>
+
+  <string name="notify_backup_title">Backup di foto e video</string>
+  <string name="notify_backup_starting">Sto riprendendo il backup…</string>
+  <plurals name="notify_backup_progress">
+    <item quantity="one">%1$s di %2$s elemento</item>
+    <item quantity="other">%1$s di %2$s elementi</item>
+  </plurals>
+  <string name="notify_backup_paused">In pausa: il NAS non risponde o il backup è fermo</string>
+  <string name="notify_backup_stopping">Mi fermo prima del prossimo elemento…</string>
+  <string name="notify_backup_stop">Ferma</string>
+
+  <!-- La conferma prima di un backup sui dati mobili, in roaming o oltre il tetto (proposta 10): il testo con la stima lo scrivono le regole. -->
+  <string name="backup_confirm_title">Avviare il backup adesso?</string>
+  <string name="backup_confirm_go">Continua</string>
+  <string name="backup_confirm_cancel">Annulla</string>
+
+  <!-- Il riepilogo giornaliero (proposta 12, E-P15): il backup. -->
+  <plurals name="notify_summary_backup_stalled">
+    <item quantity="one">Il backup è fermo da un giorno.</item>
+    <item quantity="other">Il backup è fermo da %1$d giorni: controlla la batteria e il risparmio energetico.</item>
+  </plurals>
+  <string name="notify_summary_backup_quota">Il backup si è fermato: hai raggiunto la quota sul NAS.</string>
+  <string name="notify_summary_backup_nas_full">Il backup si è fermato: il NAS è pieno.</string>
+  <plurals name="notify_summary_backup_lost">
+    <item quantity="one">Una foto o un video è stato cancellato dal telefono prima del backup.</item>
+    <item quantity="other">%1$d foto o video sono stati cancellati dal telefono prima del backup.</item>
+  </plurals>
+  <plurals name="notify_summary_backup_not_intact">
+    <item quantity="one">Una copia sul NAS non è integra: controlla in Diagnostica.</item>
+    <item quantity="other">%1$d copie sul NAS non sono integre: controlla in Diagnostica.</item>
+  </plurals>
+  <plurals name="notify_summary_backup_common_lost">
+    <item quantity="one">Una foto o un video aveva l\'unica copia nell\'area comune ed è sparita: cerca nel cestino del NAS.</item>
+    <item quantity="other">%1$d foto o video avevano l\'unica copia nell\'area comune ed è sparita: cerca nel cestino del NAS.</item>
+  </plurals>
+</resources>

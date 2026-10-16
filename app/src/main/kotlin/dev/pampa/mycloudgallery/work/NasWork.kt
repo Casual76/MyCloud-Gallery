@@ -15,6 +15,7 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.index.contract.QualityLevel
+import dev.pampa.mycloudgallery.core.index.contract.UnitPriority
 import dev.pampa.mycloudgallery.core.nasmedia.contract.ScanMode
 import dev.pampa.mycloudgallery.core.nasops.contract.PurgeStop
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalStop
@@ -34,6 +35,7 @@ import dev.pampa.mycloudgallery.gallery.GalleryGraph
 import dev.pampa.mycloudgallery.graph.AppGraph
 import dev.pampa.mycloudgallery.graph.HeartbeatStore
 import dev.pampa.mycloudgallery.nas.NasGraph
+import dev.pampa.mycloudgallery.nas.NoUnitPriority
 import dev.pampa.mycloudgallery.notify.NasDailySummaryWorker
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -183,8 +185,11 @@ class NasStages(private val graph: AppGraph, private val nas: NasGraph, private 
     return outcome
   }
 
-  /** Una tappa di preparazione (`PREPARATION`, scrive sul NAS: con una share congelata non parte, D10). */
-  suspend fun prepare(): StageOutcome {
+  /**
+   * Una tappa di preparazione (`PREPARATION`, scrive sul NAS: con una share congelata non parte, D10). [priority] = le unita' da preparare
+   * per prime (Fase 5A, D36: le copie del NAS che aspettano la miniatura per il confronto delle copie simili).
+   */
+  suspend fun prepare(priority: UnitPriority = NoUnitPriority): StageOutcome {
     nas.start()
     val outcome = stage(WorkRequest.Background(BackgroundActivity.PREPARATION, writesToNas = true)).run({ scope, _ ->
       val control = PrepControl {
@@ -194,7 +199,7 @@ class NasStages(private val graph: AppGraph, private val nas: NasGraph, private 
           else -> PrepVerdict.Continue
         }
       }
-      val result = nas.prepare(SLICE, control) ?: return@run BatchResult(hasMore = false)
+      val result = nas.prepare(SLICE, control, priority) ?: return@run BatchResult(hasMore = false)
       scope.record(result.bytesRead)
       nas.flushOutbox()
       BatchResult(hasMore = result.stoppedBy == dev.pampa.mycloudgallery.core.prepare.contract.PrepStop.BUDGET)
@@ -284,6 +289,12 @@ abstract class NasWorker(
 
   protected abstract suspend fun stage(stages: NasStages): StageOutcome?
 
+  /**
+   * Dopo la tappa si chiede un giro del confronto delle copie simili (Fase 5A, D36, §2.12): per la sincronizzazione dell'indice e quella dei
+   * dati personali, che portano miniature e scelte nuove. A tappe, su `Dispatchers.Default`, dentro `runIfActive`; chi lo chiede non aspetta.
+   */
+  protected open val triggersSimilarCopies: Boolean = false
+
   /** Il lavoro della tappa dopo, se questa ha lasciato altro da fare. */
   protected abstract fun continuation(): Pair<String, androidx.work.OneTimeWorkRequest>?
 
@@ -299,6 +310,7 @@ abstract class NasWorker(
       return Result.success()
     }
     GalleryLog.d(tag) { "tappa: ${outcome?.javaClass?.simpleName}" }
+    if (triggersSimilarCopies && outcome != null) gallery.similarCopies?.requestRun()
     if (outcome is StageOutcome.Yielded) continuation()?.let { (name, request) -> NasWorkScheduling.continueLater(applicationContext, name, request) }
     return Result.success()
   }
@@ -327,6 +339,8 @@ class IndexSyncWorker @AssistedInject constructor(
 ) : NasWorker(appContext, params, gallery, graph) {
   override val tag: String = "IndexSyncWorker"
 
+  override val triggersSimilarCopies: Boolean = true
+
   override suspend fun stage(stages: NasStages): StageOutcome = stages.sync()
 
   override fun continuation() = NasWorkScheduling.SYNC_NOW_WORK to OneTimeWorkRequestBuilder<IndexSyncWorker>().addTag(NasWorkScheduling.TAG).build()
@@ -341,7 +355,7 @@ class PreparationWorker @AssistedInject constructor(
 ) : NasWorker(appContext, params, gallery, graph) {
   override val tag: String = "PreparationWorker"
 
-  override suspend fun stage(stages: NasStages): StageOutcome = stages.prepare()
+  override suspend fun stage(stages: NasStages): StageOutcome = stages.prepare(gallery.similarCopies?.priority ?: NoUnitPriority)
 
   override fun continuation() = NasWorkScheduling.PREP_NOW_WORK to OneTimeWorkRequestBuilder<PreparationWorker>().addTag(NasWorkScheduling.TAG).build()
 }
@@ -387,6 +401,8 @@ class PersonalSyncWorker @AssistedInject constructor(
   graph: AppGraph,
 ) : NasWorker(appContext, params, gallery, graph) {
   override val tag: String = "PersonalSyncWorker"
+
+  override val triggersSimilarCopies: Boolean = true
 
   override suspend fun stage(stages: NasStages): StageOutcome? = stages.syncPersonal()
 

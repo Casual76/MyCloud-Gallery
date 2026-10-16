@@ -182,6 +182,28 @@ NasPersonalSync (P13)       -> registro locale in noBackupFilesDir/personal, pro
 - **Azzeramento**: la galleria ferma il NAS e le operazioni (e toglie i lavori in coda); il diario sta nel database, il registro dei
   dati personali in `noBackupFilesDir/personal/`: si cancellano con il resto.
 
+**Il backup (Fase 5A, P7).** `GalleryGraph` costruisce un `backup/BackupGraph` dopo il NAS, con la stessa vita (l'azzeramento lo ferma
+**per primo**, poi `AppLocalDataEraser`). `:app` non nomina mai le primitive del backup (`BackupEngineFactory`, `BackupSafetyFactory`;
+`Phase5ArchitectureTest`) e non vede il NAS se non attraverso `NasBackupOps`:
+
+```
+catalogo (CatalogBackupCatalog) + telefono (MediaStorePhoneBytes) + NAS (NasBackupOps)
+  -> motore del caricamento (P2, diario RoomBackupStore) -> copia verificata in Backup/<dispositivo>/AAAA/MM/ dell'area privata
+  -> verificatore e guardiano (P3): "al sicuro" solo da una rilettura fatta qui
+cancello AppBackupGate      -> famiglia pronta, area privata, share di prova (D12), emergenza, congelamento, area in sola lettura
+```
+
+- **D12**: sulle share che non sono di prova il cancello dice `TestOnly` e **non si scrive niente**, anche con la release (la pagina e il
+  piede dicono "Backup in prova"); `tools\check.ps1` lo verifica nel bytecode della release (`dexdump`): `AppBackupGate.stateOf` chiama
+  `FeatureFlags.backupMayWriteTo` e risponde `TEST_ONLY`. **D13**: solo in debug, con gli account di prova, il backup legge `DCIM/mcg-prova/`
+  e `Pictures/mcg-prova/` e scrive sotto `mcg-campo/Backup/` (`DeveloperTools.backupFence()`, assente dal dex di release).
+- **Lavori** (`work/BackupWork.kt`): foto, video (solo Wi-Fi di casa), "Proteggi subito le foto nuove" (D34) e verifiche, a tappe dentro le
+  regole delle attivita'; si chiedono a fine lettura del telefono, mai a intervalli brevi. Il primo backup e "Fai ora" sono lavori avviati
+  dall'utente (`BackupJobService`, UIDT, notifica con soli numeri e "Ferma").
+- **Schermate**: la pagina Backup in Impostazioni, la terza voce del piede della Libreria, la riga del viewer; le copie simili (D36) si
+  vedono in una cella sola, con "Mostra come principale" e "Separa" nel pannello del viewer.
+- **Diagnostica e riepilogo giornaliero**: codici del backup (`BACKUP_*`), soli numeri; il NAS continua ad avere una sola notifica al giorno.
+
 Il Fluid Engine e' in `engine/` (submodule, agganciato al tag **engine-2.13.0**); entrano nel build solo
 `engine-foundation` e `engine-ui`. Per aggiungerne altri: `engine\tools\engine-install.ps1 -AppRoot . -Modules
 engine-ui,engine-storage` (e rigenerare i checksum).

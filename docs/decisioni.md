@@ -831,6 +831,149 @@ byte per byte restano "una volta sola" con tutte le posizioni, come prima.
 **Dubbi grafici** (per il filone grafico): la terza voce del piede (Backup), la pagina Backup, il foglio "Libera spazio" con
 l'avviso forte, il segno `PROBLEM`, il segno "copie" e la striscia delle copie simili del viewer: in `docs/grafica-progetto.md` §12.11.
 
+## Fase 5A: integrazione nell'app (P7, 16/10)
+Il backup (P2 motore, P3 verifiche e guardiano, P4 piano e impostazioni, P5 schermate) e le copie simili (P15) sono collegati nel grafo
+vero. Tutte le prove sono sul NAS finto di `core-nas` e su un MediaStore finto con i byte delle foto: nessun NAS vero, nessun telefono,
+nessun emulatore. **Il backup in release non scrive niente su una share vera** (D12): e' la prima cosa che si controlla.
+
+**Che cosa c'e'** (`app/.../backup/`, `work/`, `notify/`, `di/BackupModule.kt`, `main/BackupHostEffect.kt`, `navigation/BackupNavigation.kt`)
+- **`backup/BackupGraph`**, dentro `GalleryGraph` dopo `NasGraph` e con la stessa vita. Due tempi, come il NAS: il costruttore non
+  fa I/O (diario `RoomBackupStore`, impostazioni su DataStore in `noBackupFilesDir`, cancello, orologi, stati per le schermate); `start`, con
+  il motore del NAS partito, apre l'area privata, costruisce motore, verificatore e guardiano. `:app` non nomina mai le primitive del backup
+  (`BackupEngineFactory`, `BackupSafetyFactory`: lo verifica `Phase5ArchitectureTest`). Motore, verifiche e guardiano girano **uno alla
+  volta** (`exclusive`).
+- **Il cancello** `AppBackupGate` (§1.4, D12, D32), nell'ordine: famiglia non pronta o senza permesso di scrittura → area privata assente →
+  **share non di prova (`FeatureFlags.backupMayWriteTo`) → `TestOnly`** → emergenza → congelamento → area in sola lettura → aperto. Il
+  motore lo guarda a ogni elemento; verifiche e guardiano si fermano con le prime tre ragioni, non con emergenza, congelamento o sola
+  lettura (leggere non fa male). **Come funziona D12**: `backupTestSharesOnly` e' vero in release e `FeatureFlags.forBuild` non lo spegne; una
+  share che non e' di prova da' `TestOnly`, e allora il giro, il primo backup (UIDT), le verifiche, il guardiano e le tappe di D34 si
+  fermano al cancello prima di toccare il NAS (nessun file, nessuna cartella `Backup/`, nessun temporaneo); lo stato diventa "Backup in
+  prova" nella pagina, nel piede e in Diagnostica. La classe del cancello e' tenuta da R8 (`app/proguard-rules.pro`, `-keep` su `stateOf`):
+  senza, R8 potrebbe fondere o inlineare la regola.
+- **D13**: `DeveloperTools.backupFence()` (solo `app/src/debug`) restringe, con un account di prova, le sorgenti (`DCIM/mcg-prova/`,
+  `Pictures/mcg-prova/`), le righe che il telefono apre (`MediaStorePhoneBytes`: una riga fuori recinzione risponde `NOT_SELECTED`, si
+  fallisce chiusi), la radice di scrittura (`mcg-campo/Backup/`, `UploadConfig.allowedRoots`) e l'elenco delle cartelle da scegliere. In
+  release `backupFence()` risponde null e la classe non esiste (passo "strumenti di debug nel dex" di `tools/check.ps1`).
+- **Lavori** (`work/BackupWork.kt`, `BackupStages.kt`, `BackupJobService.kt`, `BackupJobs.kt`): `PhotoBackupWorker`, `VideoBackupWorker`
+  (pesante: solo Wi-Fi di casa), `QuickPhotoWorker` (D34: regole sue, nessuna fascia, anche a batteria sopra la soglia, solo Wi-Fi di casa;
+  spenta la regola non parte), `SafetyVerifyWorker` (guardiano, copie non verificate, `FULL_HASH`, rotazione annuale). Tutti a tappe
+  (`StagedRun`, otto minuti) dentro `GalleryGraph.runIfActive`. Periodici: foto e video ogni 6 ore, verifiche una volta al giorno. **Nessun
+  polling**: a fine lettura del telefono, `BackupWorkScheduling.afterPhoneRead` chiede (lavoro unico, `KEEP`) il tipo di lavoro che il
+  piano dice che serve (`BackupPlanner.next`: D34, foto, video) e le verifiche se il guardiano ha da fare (E-B13); scansione del NAS e
+  lettura dell'indice fanno partire il confronto delle copie simili. `BackupJobService` (UIDT su Android 14+, lavoro normale a una tappa
+  sotto; id di JobScheduler 1.000.103, dopo 101 e 102 della 4B): il primo backup e "Fai ora", fino a 15 tappe per tipo (foto poi video), con
+  "Ferma", al cancello chiuso e ai permessi del telefono si chiude, con un errore del NAS si fa riprogrammare, e con un'attesa delle
+  regole o una conferma da chiedere finisce (lo dice la pagina, non un lavoro che ritenta). Notifica di avanzamento con soli numeri e
+  "Ferma" (broadcast immutabile ed esplicito verso un ricevitore registrato solo mentre il lavoro gira, `RECEIVER_NOT_EXPORTED`).
+- **D33**: `BackupGraph.citedTemps()` (i temporanei dei diari del backup non finiti) → `GalleryGraph.citedTemps` → `NasOpsConfig.citedTemps`
+  di `OwnFilesCleaner`.
+- **Notifiche**: canale "Backup" (importanza bassa, privato; notifica 1005) per l'avanzamento; il **riepilogo giornaliero** del NAS cresce di sei
+  voci (backup fermo da N giorni con qualcosa in coda, quota, NAS pieno, N perse prima del backup, N copie non integre, N con la sola copia
+  comune persa), sempre una notifica al giorno e soli numeri.
+- **Diagnostica**: i 21 codici del §2.6 (`BACKUP_` + il codice di `BackupProblemCode`) e due di stato (`BACKUP_LAST_ROUND`,
+  `BACKUP_SIMILAR_COPIES`), con voce di catalogo, testi e chiavi nell'elenco chiuso di `ExportKeys` (la famiglia `problem.<codice>` per i
+  problemi); `BackupDiagnostics` raccoglie soli conteggi, byte, flag e codici.
+- **Schermate**: le porte di feature-backup, feature-settings e feature-viewer (`BackupOverview`, `PhoneFolders`, `BackupRules`,
+  `DeviceFolderProposals`, `BackupActions`, `BackupSettings`, `MediaBackupStates`, `BackupEntryStatus`) legate in `di/BackupModule` con
+  null-object quando il backup non c'e'; la rotta Backup; il piede della Libreria (`BackupStatus` ridotto a `LibraryBackupStatus`); il tocco
+  sul piede apre la pagina.
+- **Copie simili (D36)**: `backup/SimilarCopiesGraph` lega `CatalogSimilarCopies` alla sorgente delle firme (pixel dal telefono, miniature
+  del NAS, fotogrammi dei video) e alle scelte dell'utente su `SimilarCopiesChoices` di core-personal. Una sola istanza per il viewer
+  (sezione "N copie", "Mostra come principale", "Separa", e `ViewerOutsideCopy` per aprire una copia che non sta nell'indice), la Diagnostica e il
+  riepilogo del primo backup. Il confronto gira dopo la lettura dei metadati, dopo la sincronizzazione dei dati personali e dopo
+  quella dell'indice.
+- **F1**: `BackupCatalog.phoneRowOf` e' implementato nell'adattatore di `:app` (`CatalogBackupCatalog`, con la ricetta della porta), quindi
+  il difetto F1 e' chiuso anche in produzione.
+- **Azzeramento**: `GalleryGraph.shutdown` ferma il backup **per primo** (toglie i lavori in coda, aspetta il giro in corso), poi
+  `AppLocalDataEraser`, che toglie anche le impostazioni del backup e la memoria dei giri (`BackupRunMemory`).
+- **`tools/check.ps1`, passo D12**: oltre al campo e alla decisione nel dex e in `mapping.txt`, legge il bytecode della release con
+  `dexdump` (build-tools, accanto ad aapt2) e pretende che `AppBackupGate.stateOf` chiami `FeatureFlags.backupMayWriteTo` e risponda
+  `BackupGateState.TEST_ONLY` e che `BackupGraph` istanzi il cancello. Se `dexdump` non c'e' o non si legge la MainActivity il passo fallisce
+  (non salta). **Prova che il passo morde**: tolta la chiamata a `backupMayWriteTo` dal cancello, ricostruita la release, il controllo
+  dice "stateOf non chiama FeatureFlags.backupMayWriteTo"; rimessa, passa.
+
+**Prove** (tutte nel modulo `:app`, NAS e telefono finti)
+- `BackupIntegrationTest`: flusso completo (due foto nuove → un giro → copie verificate in `Backup/<dispositivo>/AAAA/MM/` byte per byte,
+  nessun temporaneo rimasto, `SAFE` e piede "tutto al sicuro" → secondo dispositivo dello stesso account senza doppioni sul NAS → Diagnostica
+  senza nomi → spegnimento: niente parte piu', lavori tolti); **D12** (account e share con nomi non di prova: `TestOnly`, nessun file, nessuna
+  cartella, diario vuoto, anche per primo backup, verifiche e guardiano); **E-B15** (la foto appena scattata si carica subito con D34 e la
+  modifica di Samsung "Salva" non tocca l'originale verificato); **D33** (il temporaneo citato dal diario sopravvive alla pulizia dei propri
+  file, anche vecchio di tre giorni, e si toglie quando l'elemento si chiude).
+- `BackupFenceIntegrationTest` (in `src/testDebug`): **D13**, con una foto vera della famiglia in `DCIM/Camera/` che non viene letta, caricata
+  ne' messa nel diario e nulla in `Backup/` della radice.
+- `SimilarCopiesIntegrationTest`: l'originale salvato dal backup e la stessa foto ricompressa nell'area comune sono **una cella sola** (la
+  copertina e' l'originale; l'altra copia si ritrova dal catalogo per il viewer); "Separa" le rimette in due celle per sempre; la scelta
+  viaggia come dato personale e il secondo dispositivo la riceve valida (vedi il limite sotto).
+- `AppBackupGateTest` (ordine delle ragioni, D12 con la configurazione di release, chiusura al volo), `BackupPiecesTest` (piede, riepilogo del
+  primo backup, motivi dell'attesa, verifiche leggere e pesanti, pagine filtrate, riepilogo giornaliero), `BackupWorkTest` (seguito di una
+  tappa, vincoli e ritardo di WorkManager, il lavoro dell'utente a tappe e il suo tetto, errori del NAS), `BackupNotificationTest`,
+  `LocalDataEraserTest` e `DiagnosticsWiringTest` estesi, e in `feature-diagnostics` `Fase5ACatalogTest` e `Fase5ACodeCatalogTest` (un test per
+  codice: voce nel catalogo, testo, edge case, chiavi di esportazione).
+- `tools\check.ps1` verde il 16/10: 3 min 9 s (con la cache di Gradle), dopo una prima esecuzione che aveva trovato un colore nominato a mano
+  in `ViewerOutsideCopy` (`NoHandWrittenStyleTest` di feature-viewer), corretto con `MaterialTheme.colorScheme.scrim` e rifatto. APK debug e
+  release prodotti; nel passo D12 il cancello e' provato nel bytecode ("stateOf -> backupMayWriteTo -> TEST_ONLY, istanziato da
+  `BackupGraph`"). `:app:testDebugUnitTest`: 255 test, nessuno fallito. Nessun emulatore, `adb`, NAS o telefono usato.
+
+**Scostamenti dal progetto (da confermare)**
+1. **Verifiche per peso, non per tipo.** Le query del catalogo non portano il tipo del media (e toccarle rovinerebbe i piani delle query
+   di P1): `SizeFilteredCatalog` divide le copie da rileggere a 64 MiB. Sotto, la regola `PHOTO_BACKUP` (leggera); da 64 MiB in su,
+   `VIDEO_BACKUP` (pesante, solo Wi-Fi di casa). Una foto enorme o un video piccolo vanno nella regola "sbagliata" ma sempre in una delle due.
+2. **Tappa delle verifiche di 60 secondi** (non otto minuti): il budget si controlla tra un file e l'altro (un file iniziato si rilegge
+   fino in fondo, lo SHA-256 non si riprende) e il lavoro segue con altre tappe (`BackupFollowUp.Continue`); il motore invece fa tappe da
+   otto minuti (D11).
+3. **`UnitPriority`**: l'unione fra le chiavi visibili e le miniature attese dal confronto (`awaitingThumbnails`) e' oggi solo la priorita'
+   del confronto (`similarCopies.priority`), perche' la Preparazione del NAS non riceve ancora una priorita' dalla Libreria.
+4. **"Oltre domani" (E-B17) resta nel guardiano com'e'**: la nota chiedeva di usare `BackupPaths.isCredibleDayAt`; il guardiano ha gia' la
+   stessa regola (ora del NAS piu' un giorno di margine, riga 253) e cambiarla avrebbe toccato un comportamento gia' provato.
+5. **Un buco di produzione chiuso: `nas_share`.** La tabella che da' l'area (privata o comune) ai file del NAS non era popolata da nessun
+   codice di produzione (nei test di 4A/4B bastava il costruttore); senza, un file copiato dal backup risultava `ONLY_COMMON_COPY` e mai
+   `SAFE`. `NasGraph.start` ora registra le share (`registerShare`) prima della prima scansione.
+6. **Id fissi di JobScheduler**: 1.000.103 per il backup, accanto a 101 e 102 della 4B; WorkManager resta in 0–999.999.
+7. **Il backup non parte da un dato letto dal NAS** (E-S11): il piano, le regole e l'elenco delle cartelle vengono solo dal catalogo locale,
+   dalle impostazioni e dai tocchi dell'utente.
+
+**Aggiunte compatibili ai moduli esterni** (nessuna firma esistente cambia, nessun comportamento provato cambia)
+- `core-backup`: `VerifyReport.problem` e `GuardReport.problem` (con valore di serie null: il motivo di un arresto per NAS pieno o quota,
+  che prima era "NAS" e basta); `BackupSafetyFactory` (nuovo: costruisce verificatore e guardiano senza che `:app` nomini le primitive);
+  lo stesso `problem` portato da `BackupSafetyVerifier` e `BackupPrivateCopyGuardian`; `BackupServices.kt` (due righe di contratto).
+- `feature-viewer`: `ViewerServices.similarCopies` e `ViewerServices.outsideCopy` (nulli di serie), `ViewerOutsideCopy.kt` (la copia fuori
+  indice, a parte), il collegamento in `ViewerOverlay` e le stringhe `viewer_outside_copy_*`.
+- `feature-diagnostics`: i 23 codici, le voci del catalogo, i testi, le chiavi di `ExportKeys` e la famiglia `problem\.[a-z][a-z_]{2,31}`;
+  in `Fase3CatalogTest` tolta l'eccezione di E-B4 (ora coperto da `BACKUP_LOST_BEFORE_BACKUP`).
+- `gradle/verify-release-manifest.gradle`: solo un commento (il permesso UIDT serve anche al backup).
+
+**Da provare sul campo (F21–F31, F31-bis, con l'S25 in debug e l'account `test`)**
+Il backup in debug scrive solo sotto `test/mcg-campo/Backup/` e legge solo `DCIM/mcg-prova/` e `Pictures/mcg-prova/` (D13); sulle share vere
+non scrive nulla (D12). Semina del telefono con `tools\chaos\s25.ps1 -Mode backup -Step seed`. F21 (una foto, "Fai ora", SHA-256 uguale a quello
+del telefono, scudo in Libreria, "Al sicuro sul NAS" nel viewer), F22 (primo backup di `mcg-prova`, riepilogo, notifica, "Ferma" e
+"Riprendi", stima ±30%, Libreria fluida), F23 (Wi-Fi spento a meta' di un video), F24 (`am kill` durante caricamento e verifica), F25 (nome
+uguale con file diverso e poi identico), F26 (cancellata in Samsung Gallery e ripristinata), F27 (rinomina del dispositivo, secondo
+dispositivo), F28 (hotspot con Bilanciato), F29 (spostamento in `test-comune` e cancellazione dal PC), F30 (500 interruzioni), F31 (quota),
+F31-bis (copie identiche, ricompresse, EXIF riscritto, HEIC e raffica; "Separa" sul telefono e sul tablet). In piu' per il P7: che la
+notifica di avanzamento di un primo backup lungo resti viva con l'app chiusa (UIDT) e che "Ferma" fermi prima del file dopo; che il piede
+dica "Backup in prova" con un account non di prova.
+
+**Rischi e punti aperti**
+- **"Separa" fra due dispositivi dipende da identita' uguali.** La scelta nomina i due media con gli id del dispositivo che l'ha fatta (voce
+  `similar_apart:<id>`); l'altro dispositivo risolve il primo anche per impronta, il secondo solo per id. Le identita' dei file del NAS
+  convergono al minore (D7) e un media con la copia sul telefono tiene la sua (D8): fra due dispositivi gli id di una stessa foto possono
+  restare diversi, e allora la voce resta "in attesa" (`unresolved`) e le copie restano unite sull'altro dispositivo finche' non le separa
+  anche li. Nel test di integrazione i due id sono casuali: il ramo "stessi id" e il ramo "id diversi" si alternano, entrambi con le loro
+  verifiche; il caso "stessi id" e' provato a parte da `SimilarCopiesProjectionTest` di core-personal (`unSeparaSulTelefonoArrivaSulTabletEScioglieIlGruppo`). Da guardare in F31-bis; una correzione (portare nella voce anche
+  l'impronta del secondo media) tocca il formato dei dati personali e non e' del P7.
+- **Verifica di un video molto grande** (copia gia' sul NAS da un vecchio backup, rotazione annuale, rilettura finale di un caricamento
+  notturno): lo SHA-256 non si riprende e un file iniziato si rilegge fino in fondo; oltre circa dieci minuti di lettura (da ~7 GB in su sulla
+  rete di casa) il sistema puo' fermare il lavoro e la rilettura riparte da zero a ogni giro (nota di P3, non cambiata dal P7). Il
+  `BackupJobService` non esegue le verifiche. Da misurare in F22/F32.
+- **Raffiche e fuso**: raffiche senza sottosecondi e senza `BURST` possono unirsi (< 0,5% stimato); foto con EXIF senza fuso scattate in
+  un altro fuso non sono candidate (nota di P15). Le soglie della firma visiva si tarano con F31-bis (HEIC vero, profili colore).
+- **Costo per file**: ~0,19 s contro 0,12 del §2.9, da ricalibrare dopo F22; il motore carica un file alla volta.
+- **Batteria del confronto** delle copie simili non misurata.
+- Dubbi grafici gia' elencati in `docs/grafica-progetto.md` §12.11 (disco `PROBLEM`, segno "copie", foglio del primo backup, tasto pieno).
+- Non spuntate nella checklist di `docs/sicurezza.md` perche' non provate dal P7: `core-backup` non toglie ne' sostituisce (prova "reintroducendo
+  la violazione"), nessun file visibile non verificato (prova delle 500 interruzioni e F21–F24 sul campo), deduplica e guardiano non leggono aree
+  private altrui.
+
 ## Revisione grafica della Libreria da parte dell'utente (13/10)
 Giudizio: le prestazioni della navigazione non sono male, la **grafica no**. Serve molto lavoro, da fare in un **filone grafico
 parallelo** alle fasi successive (insieme ai lavori che non toccano l'app sul momento, per esempio il back-end NAS della Fase 4).

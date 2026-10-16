@@ -22,3 +22,13 @@
     public static int w(...);
     public static boolean isLoggable(...) return false;
 }
+
+# --- Fase 5A (P7, D12): il cancello del backup ----------------------------------------------------------------------
+# "Backup solo sulle share di prova" e' la regola piu' importante del backup: il cancello (`AppBackupGate.stateOf`) chiama sempre la
+# decisione per share (`FeatureFlags.backupMayWriteTo`) e risponde `TEST_ONLY` se la share non e' di prova. R8 non deve ne' togliere il
+# cancello ne' fonderlo in un'altra classe (la decisione la tiene core-common/consumer-rules.pro: un membro tenuto non si inlinea): tools/check.ps1 (passo "D12 nella release") legge il
+# bytecode della release (dexdump) e prova che `stateOf` chiama `backupMayWriteTo` e risponde TEST_ONLY. Il campo e la decisione li tiene
+# core-common/consumer-rules.pro.
+-keep class dev.pampa.mycloudgallery.backup.AppBackupGate {
+    public *** stateOf(java.lang.String);
+}

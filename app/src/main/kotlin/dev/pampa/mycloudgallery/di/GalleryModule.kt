@@ -49,6 +49,10 @@ import dev.pampa.mycloudgallery.core.nasops.noop.NoNasOperations
 import dev.pampa.mycloudgallery.core.nasops.noop.NoNasSpace
 import dev.pampa.mycloudgallery.core.nasops.noop.NoNasTrash
 import dev.pampa.mycloudgallery.feature.nas.contract.NasAreas
+import dev.pampa.mycloudgallery.backup.BackupDiagnostics
+import dev.pampa.mycloudgallery.backup.BackupInputs
+import dev.pampa.mycloudgallery.backup.NoBackupDiagnostics
+import dev.pampa.mycloudgallery.work.JobSchedulerBackupJobs
 import dev.pampa.mycloudgallery.work.JobSchedulerNasOpsJobs
 import dev.pampa.mycloudgallery.work.NasOpsJobs
 import dev.pampa.mycloudgallery.work.NasWorkScheduling
@@ -105,6 +109,8 @@ object GalleryModule {
       // Fase 4B (P16): il lavoro delle operazioni lunghe (UIDT) e la verifica del NAS dopo un'operazione finita.
       nasJobs = if (measurement == null) JobSchedulerNasOpsJobs(context) else NasOpsJobs.NONE,
       onNasOperationsClosed = { if (measurement == null) NasWorkScheduling.scanNow(context) },
+      // Fase 5A (P7): il backup; mai nelle varianti di misura. La recinzione di D13 e' di `DeveloperTools`: in release vale null.
+      backup = if (measurement == null) backupInputs(context, graph) else null,
     )
     return GalleryGraph(
       context = context,
@@ -119,6 +125,23 @@ object GalleryModule {
       graph.galleryStopper = GalleryStopper { gallery.shutdown() }
     }
   }
+
+  /**
+   * Cio' che il backup riceve dall'app (Fase 5A, P7): impostazioni del dispositivo, regole (D34), sonda delle share (E-I19), nome del
+   * dispositivo (D7), **recinzione del telefono di D13** (`DeveloperTools.backupFence()`: null in release, dove la classe non esiste) e
+   * lavori avviati dall'utente (UIDT).
+   */
+  internal fun backupInputs(context: Context, graph: AppGraph): BackupInputs = BackupInputs(
+    settingsStorage = graph.backupSettingsStorage,
+    ruleSettings = graph.ruleSettings,
+    shareProbe = graph.shareProbe,
+    deviceName = {
+      val id = runCatching { graph.engine.myDeviceId() }.getOrNull()
+      id?.let { runCatching { graph.engine.state?.registry?.device(it)?.name }.getOrNull() } ?: graph.profiles.load()?.deviceName
+    },
+    fence = DeveloperTools.backupFence(),
+    jobs = JobSchedulerBackupJobs(context),
+  )
 
   /**
    * Il catalogo: `gallery.db`; con le [MeasurementHooks] (benchmarkRelease **e** nonMinifiedRelease, I3) il dataset sintetico di
@@ -192,6 +215,12 @@ object GalleryModule {
   @IntoSet
   fun nasOpsDiagnostics(gallery: GalleryGraph): DiagnosticsContributor =
     gallery.nas?.let { NasOpsDiagnostics(it) } ?: NoNasDiagnostics
+
+  // --- Fase 5A (P7): il backup in Diagnostica (stato, un elemento per problema, ultimo giro, copie simili) ---
+  @Provides
+  @IntoSet
+  fun backupDiagnostics(gallery: GalleryGraph): DiagnosticsContributor =
+    gallery.backup?.let { BackupDiagnostics(it, gallery.similarCopies) } ?: NoBackupDiagnostics
 }
 
 /** Senza NAS: l'orologio monotono (le conferme), nessuna ora del NAS (niente si scrive). */

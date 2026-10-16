@@ -244,8 +244,35 @@ object DiagCodes {
 
   // --- Il backup (Fase 5A) -----------------------------------------------------------------------------------------
   // P0 aggiunge solo il codice di stato che tiene viva la sezione BACKUP (un test vuole almeno una voce per sezione), come per
-  // NAS_LIBRARY nella Fase 4. I codici del §2.6 (`BackupProblemCode` di core-backup) li cataloga P7.
+  // NAS_LIBRARY nella Fase 4. I codici del §2.6 (`BackupProblemCode` di core-backup) sono qui sotto (P7).
   @JvmField val BACKUP_STATE = DiagCode("BACKUP_STATE")
+
+  // P7: i codici del §2.6 (`BackupProblemCode` di core-backup, un DiagCode per riga della tabella: "BACKUP_" + il nome del codice) e due voci
+  // di stato del contributore di :app (`BackupDiagnostics`). Stessi id ed edge case, scritti come letterali (questo modulo non vede
+  // core-backup); `DiagnosticsWiringTest` di :app verifica l'uguaglianza con `BackupProblemCode`, `Fase5ACatalogTest` qui la tabella.
+  @JvmField val BACKUP_NAS_UNREACHABLE = DiagCode("BACKUP_NAS_UNREACHABLE", setOf("E-R5"))
+  @JvmField val BACKUP_NAS_FULL = DiagCode("BACKUP_NAS_FULL", setOf("E-R9"))
+  @JvmField val BACKUP_QUOTA = DiagCode("BACKUP_QUOTA", setOf("E-N13"))
+  @JvmField val BACKUP_AUTH = DiagCode("BACKUP_AUTH", setOf("E-R8"))
+  @JvmField val BACKUP_READ_ONLY_AREA = DiagCode("BACKUP_READ_ONLY_AREA", setOf("E-N9", "E-I19"))
+  @JvmField val BACKUP_NO_PRIVATE_AREA = DiagCode("BACKUP_NO_PRIVATE_AREA", setOf("E-O2"))
+  @JvmField val BACKUP_MEDIA_PERMISSION = DiagCode("BACKUP_MEDIA_PERMISSION", setOf("E-P15", "E-O4"))
+  @JvmField val BACKUP_MEDIA_LOCATION = DiagCode("BACKUP_MEDIA_LOCATION", setOf("E-P21"))
+  @JvmField val BACKUP_PARTIAL_ACCESS = DiagCode("BACKUP_PARTIAL_ACCESS", setOf("E-P1"))
+  @JvmField val BACKUP_CAP_REACHED = DiagCode("BACKUP_CAP_REACHED", setOf("E-B10"))
+  @JvmField val BACKUP_FROZEN = DiagCode("BACKUP_FROZEN", setOf("E-B19", "C11"))
+  @JvmField val BACKUP_WRITES_STOPPED = DiagCode("BACKUP_WRITES_STOPPED", setOf("E-B19"))
+  @JvmField val BACKUP_TEST_ONLY = DiagCode("BACKUP_TEST_ONLY", setOf("D12"))
+  @JvmField val BACKUP_LOST_BEFORE_BACKUP = DiagCode("BACKUP_LOST_BEFORE_BACKUP", setOf("E-B4"))
+  @JvmField val BACKUP_VERIFY_FAILED = DiagCode("BACKUP_VERIFY_FAILED", setOf("E-B18", "E-B8"))
+  @JvmField val BACKUP_UNREADABLE = DiagCode("BACKUP_UNREADABLE", setOf("D15", "E-M12"))
+  @JvmField val BACKUP_COMMON_COPY_LOST = DiagCode("BACKUP_COMMON_COPY_LOST", setOf("E-B13", "L44"))
+  @JvmField val BACKUP_PHONE_STORAGE_LOW = DiagCode("BACKUP_PHONE_STORAGE_LOW", setOf("E-P3"))
+  @JvmField val BACKUP_STALE = DiagCode("BACKUP_STALE", setOf("E-P15", "E-P2"))
+  @JvmField val BACKUP_WAITING_UNLOCK = DiagCode("BACKUP_WAITING_UNLOCK", setOf("E-P13"))
+  @JvmField val BACKUP_PROFILE_INACTIVE = DiagCode("BACKUP_PROFILE_INACTIVE", setOf("E-P19"))
+  @JvmField val BACKUP_LAST_ROUND = DiagCode("BACKUP_LAST_ROUND")
+  @JvmField val BACKUP_SIMILAR_COPIES = DiagCode("BACKUP_SIMILAR_COPIES")
 
   // I codici di `PhoneLibraryDiagnostics` (core-mediastore, P2): stessi id e stessi edge case di
   // `PhoneLibraryDiagCodes`, scritti come letterali perche' questo modulo non dipende da core-mediastore.

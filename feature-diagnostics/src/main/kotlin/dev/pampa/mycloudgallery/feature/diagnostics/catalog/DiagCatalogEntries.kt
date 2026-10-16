@@ -258,8 +258,31 @@ internal object DiagCatalogEntries {
     DiagEntry(DiagCodes.NAS_PERSONAL_STATE, DiagSection.NAS_LIBRARY, DiagSeverity.INFO, R.string.diag_nas_personal_state_title, R.string.diag_nas_personal_state_guide, null),
     DiagEntry(DiagCodes.NAS_PERSONAL_REJECTED, DiagSection.NAS_LIBRARY, DiagSeverity.WARNING, R.string.diag_nas_personal_rejected_title, R.string.diag_nas_personal_rejected_guide, null),
 
-    // --- Il backup (Fase 5A): lo stato; i codici del §2.6 li aggiunge P7 ------------------------------------------------
+    // --- Il backup (Fase 5A): lo stato e i codici del §2.6 (P7) ------------------------------------------------
     DiagEntry(DiagCodes.BACKUP_STATE, DiagSection.BACKUP, DiagSeverity.INFO, R.string.diag_backup_state_title, R.string.diag_backup_state_guide, null),
+    DiagEntry(DiagCodes.BACKUP_NAS_UNREACHABLE, DiagSection.BACKUP, DiagSeverity.WARNING, R.string.diag_backup_nas_unreachable_title, R.string.diag_backup_nas_unreachable_guide, null),
+    DiagEntry(DiagCodes.BACKUP_NAS_FULL, DiagSection.BACKUP, DiagSeverity.WARNING, R.string.diag_backup_nas_full_title, R.string.diag_backup_nas_full_guide, null),
+    DiagEntry(DiagCodes.BACKUP_QUOTA, DiagSection.BACKUP, DiagSeverity.WARNING, R.string.diag_backup_quota_title, R.string.diag_backup_quota_guide, null),
+    DiagEntry(DiagCodes.BACKUP_AUTH, DiagSection.BACKUP, DiagSeverity.ERROR, R.string.diag_backup_auth_title, R.string.diag_backup_auth_guide, DiagAction.REENTER_NAS_PASSWORD),
+    DiagEntry(DiagCodes.BACKUP_READ_ONLY_AREA, DiagSection.BACKUP, DiagSeverity.ERROR, R.string.diag_backup_read_only_area_title, R.string.diag_backup_read_only_area_guide, null),
+    DiagEntry(DiagCodes.BACKUP_NO_PRIVATE_AREA, DiagSection.BACKUP, DiagSeverity.ERROR, R.string.diag_backup_no_private_area_title, R.string.diag_backup_no_private_area_guide, null),
+    DiagEntry(DiagCodes.BACKUP_MEDIA_PERMISSION, DiagSection.BACKUP, DiagSeverity.ERROR, R.string.diag_backup_media_permission_title, R.string.diag_backup_media_permission_guide, DiagAction.OPEN_APP_DETAILS),
+    DiagEntry(DiagCodes.BACKUP_MEDIA_LOCATION, DiagSection.BACKUP, DiagSeverity.WARNING, R.string.diag_backup_media_location_title, R.string.diag_backup_media_location_guide, DiagAction.OPEN_APP_DETAILS),
+    DiagEntry(DiagCodes.BACKUP_PARTIAL_ACCESS, DiagSection.BACKUP, DiagSeverity.WARNING, R.string.diag_backup_partial_access_title, R.string.diag_backup_partial_access_guide, DiagAction.OPEN_APP_DETAILS),
+    DiagEntry(DiagCodes.BACKUP_CAP_REACHED, DiagSection.BACKUP, DiagSeverity.INFO, R.string.diag_backup_cap_reached_title, R.string.diag_backup_cap_reached_guide, null),
+    DiagEntry(DiagCodes.BACKUP_FROZEN, DiagSection.BACKUP, DiagSeverity.ERROR, R.string.diag_backup_frozen_title, R.string.diag_backup_frozen_guide, DiagnosticsActions.NAS_RELEASE_FREEZE),
+    DiagEntry(DiagCodes.BACKUP_WRITES_STOPPED, DiagSection.BACKUP, DiagSeverity.INFO, R.string.diag_backup_writes_stopped_title, R.string.diag_backup_writes_stopped_guide, DiagnosticsActions.NAS_RESUME_WRITES),
+    DiagEntry(DiagCodes.BACKUP_TEST_ONLY, DiagSection.BACKUP, DiagSeverity.INFO, R.string.diag_backup_test_only_title, R.string.diag_backup_test_only_guide, null),
+    DiagEntry(DiagCodes.BACKUP_LOST_BEFORE_BACKUP, DiagSection.BACKUP, DiagSeverity.WARNING, R.string.diag_backup_lost_before_backup_title, R.string.diag_backup_lost_before_backup_guide, null),
+    DiagEntry(DiagCodes.BACKUP_VERIFY_FAILED, DiagSection.BACKUP, DiagSeverity.ERROR, R.string.diag_backup_verify_failed_title, R.string.diag_backup_verify_failed_guide, null),
+    DiagEntry(DiagCodes.BACKUP_UNREADABLE, DiagSection.BACKUP, DiagSeverity.WARNING, R.string.diag_backup_unreadable_title, R.string.diag_backup_unreadable_guide, null),
+    DiagEntry(DiagCodes.BACKUP_COMMON_COPY_LOST, DiagSection.BACKUP, DiagSeverity.ERROR, R.string.diag_backup_common_copy_lost_title, R.string.diag_backup_common_copy_lost_guide, null),
+    DiagEntry(DiagCodes.BACKUP_PHONE_STORAGE_LOW, DiagSection.BACKUP, DiagSeverity.WARNING, R.string.diag_backup_phone_storage_low_title, R.string.diag_backup_phone_storage_low_guide, null),
+    DiagEntry(DiagCodes.BACKUP_STALE, DiagSection.BACKUP, DiagSeverity.WARNING, R.string.diag_backup_stale_title, R.string.diag_backup_stale_guide, DiagAction.OPEN_BATTERY_SETTINGS),
+    DiagEntry(DiagCodes.BACKUP_WAITING_UNLOCK, DiagSection.BACKUP, DiagSeverity.INFO, R.string.diag_backup_waiting_unlock_title, R.string.diag_backup_waiting_unlock_guide, null),
+    DiagEntry(DiagCodes.BACKUP_PROFILE_INACTIVE, DiagSection.BACKUP, DiagSeverity.INFO, R.string.diag_backup_profile_inactive_title, R.string.diag_backup_profile_inactive_guide, null),
+    DiagEntry(DiagCodes.BACKUP_LAST_ROUND, DiagSection.BACKUP, DiagSeverity.INFO, R.string.diag_backup_last_round_title, R.string.diag_backup_last_round_guide, null),
+    DiagEntry(DiagCodes.BACKUP_SIMILAR_COPIES, DiagSection.BACKUP, DiagSeverity.INFO, R.string.diag_backup_similar_copies_title, R.string.diag_backup_similar_copies_guide, null),
 
     // --- Rete e NAS --------------------------------------------------------
     DiagEntry(DiagCodes.DIAG_SECTION_UNAVAILABLE, DiagSection.NETWORK_AND_NAS, DiagSeverity.WARNING, R.string.diag_diag_section_unavailable_title, R.string.diag_diag_section_unavailable_guide, null),

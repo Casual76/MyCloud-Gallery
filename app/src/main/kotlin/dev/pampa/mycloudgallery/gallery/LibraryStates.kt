@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentSender
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupStatus
 import dev.pampa.mycloudgallery.core.library.contract.LibraryNasStatus
 import dev.pampa.mycloudgallery.core.library.index.ColumnarTimelineSnapshot
 import dev.pampa.mycloudgallery.core.mediastore.android.AndroidPhoneMediaIntents
@@ -192,6 +193,8 @@ class AppLibraryStates @Inject constructor(
       debug = hooks,
       // Fase 4 (§1.5): lo stato del NAS per il piede; senza NAS resta Idle (il piede non dice niente).
       nas = gallery.nas?.libraryStatus ?: MutableStateFlow(LibraryNasStatus.Idle),
+      // Fase 5A (§1.5, D16): lo stato del backup per il piede (terza voce); senza backup resta Idle (il piede non dice niente).
+      backup = gallery.backup?.libraryStatus ?: MutableStateFlow(LibraryBackupStatus.Idle),
     )
     synchronized(services) { services[state] = gallery.viewerServices }
     return state

@@ -3,6 +3,10 @@ package dev.pampa.mycloudgallery.gallery
 import android.content.ComponentCallbacks2
 import android.content.Context
 import android.os.SystemClock
+import dev.pampa.mycloudgallery.backup.BackupGraph
+import dev.pampa.mycloudgallery.backup.BackupInputs
+import dev.pampa.mycloudgallery.backup.BackupUi
+import dev.pampa.mycloudgallery.backup.SimilarCopiesGraph
 import dev.pampa.mycloudgallery.core.common.coroutines.DefaultDispatcherProvider
 import dev.pampa.mycloudgallery.core.common.coroutines.DispatcherProvider
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagItem
@@ -36,6 +40,7 @@ import dev.pampa.mycloudgallery.core.library.data.CatalogTimelineSource
 import dev.pampa.mycloudgallery.core.library.data.DataStoreLibraryPreferences
 import dev.pampa.mycloudgallery.core.library.data.TimelineViewerItems
 import dev.pampa.mycloudgallery.core.library.layout.TimelineLayoutEngine
+import dev.pampa.mycloudgallery.core.library.similar.SignatureSource
 import dev.pampa.mycloudgallery.core.library.store.SnapshotStore
 import dev.pampa.mycloudgallery.core.library.store.SnapshotWriter
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess
@@ -53,13 +58,17 @@ import dev.pampa.mycloudgallery.core.metadata.extract.DefaultMetadataExtractor
 import dev.pampa.mycloudgallery.core.metadata.extract.MediaMetadataVideoProbe
 import dev.pampa.mycloudgallery.core.model.AccountId
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.MediaRef
+import dev.pampa.mycloudgallery.core.nasops.contract.CitedTemps
 import dev.pampa.mycloudgallery.core.places.dataset.PlacesOpenResult
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionItemsSource
 import dev.pampa.mycloudgallery.feature.library.hidden.HiddenLibrary
 import dev.pampa.mycloudgallery.feature.library.library.LibraryPhoneStatus
 import dev.pampa.mycloudgallery.feature.library.trash.TrashHiddenMask
 import dev.pampa.mycloudgallery.feature.viewer.ImageDecoderAnimatedLoader
+import dev.pampa.mycloudgallery.feature.viewer.OutsideCopy
+import dev.pampa.mycloudgallery.feature.viewer.OutsideCopyLookup
 import dev.pampa.mycloudgallery.feature.viewer.ViewerServices
 import dev.pampa.mycloudgallery.feature.viewer.details.CatalogMediaDetailsSource
 import dev.pampa.mycloudgallery.feature.viewer.details.ContentResolverViewerBytes
@@ -88,6 +97,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
@@ -120,6 +131,9 @@ import kotlinx.coroutines.withContext
  * @property nasJobs Fase 4B (P16): il lavoro delle operazioni lunghe sul NAS (UIDT) e della ripresa dal diario; nessuno nei test.
  * @property onNasOperationsClosed Fase 4B: un'operazione sui file si e' chiusa, la Libreria va riverificata (in produzione la
  *   verifica del NAS con WorkManager; nei test niente).
+ * @property similarSignatures solo per i test d'integrazione (Fase 5A): da dove vengono i pixel delle copie simili; null in produzione.
+ * @property backup Fase 5A (P7): cio' che il backup riceve oltre al NAS (impostazioni, regole, sonda delle share, recinzione di D13, lavori
+ *   dell'utente); null = senza backup (varianti di misura, prove della sola galleria).
  */
 class GalleryParts(
   val databaseName: String?,
@@ -138,6 +152,8 @@ class GalleryParts(
   val benchReplica: ReplicaBlobs? = null,
   val nasJobs: NasOpsJobs = NasOpsJobs.NONE,
   val onNasOperationsClosed: () -> Unit = {},
+  val backup: BackupInputs? = null,
+  val similarSignatures: ((MediaCatalog) -> SignatureSource)? = null,
 )
 
 /** Il catalogo e la lettura del telefono: esistono solo quando l'account del dispositivo e' noto (vedi [GalleryGraph]). */
@@ -229,6 +245,9 @@ class GalleryGraph(
       },
       opsJobs = parts.nasJobs,
       onOperationsClosed = parts.onNasOperationsClosed,
+      // Fase 5A (D33): i temporanei del diario del backup non si puliscono finche' qualcuno li cita. Se la porta fallisce, nessun
+      // temporaneo si toglie in quel giro (lo garantisce la pulizia dei propri file).
+      citedTemps = CitedTemps { backup?.citedTemps().orEmpty() },
     )
   }
 
@@ -254,6 +273,55 @@ class GalleryGraph(
       dispatchers = dispatchers,
     )
   } ?: ImagingPipeline.viewerImageSource(context, thumbnailSource, imagingBudget, dispatchers)
+
+  // --- Il backup (Fase 5A, P7) ------------------------------------------------------------------------------------------
+
+  /**
+   * Il rilevatore delle copie simili (D36, §2.12): uno per processo, per il viewer, la Diagnostica e il riepilogo del primo backup. Senza
+   * NAS non c'e' (nessuna copia sul NAS con cui confrontare).
+   */
+  val similarCopies: SimilarCopiesGraph? = nas?.let { n ->
+    SimilarCopiesGraph(
+      scope = galleryScope,
+      context = context.applicationContext,
+      catalogProvider = { coreIfReady()?.catalog },
+      personal = { n.organizer.parts?.personalStore },
+      blobs = n.blobs,
+      blobScopes = n.locations,
+      budget = imagingBudget,
+      uriOf = intents::uriOf,
+      work = { block -> runIfActive { block() } },
+      signatures = parts.similarSignatures,
+    )
+  }
+
+  /**
+   * Il backup (D1-D16, D32-D36): motore, verifiche, guardiano, impostazioni, cancello D12, stato per le schermate. Nasce nel costruttore
+   * senza I/O e parte con la galleria ([startWhenReady]); l'azzeramento lo ferma **per primo** ([shutdown]). Null senza NAS o senza
+   * ingressi del backup.
+   */
+  val backup: BackupGraph? = if (nas != null && similarCopies != null && parts.nas != null && parts.backup != null) {
+    BackupGraph(
+      context = context.applicationContext,
+      scope = galleryScope,
+      database = database,
+      nas = nas,
+      nasInputs = parts.nas,
+      inputs = parts.backup,
+      catalogProvider = { coreIfReady()?.catalog },
+      phoneProvider = { coreFlow.value?.phone },
+      similar = similarCopies,
+      familyReady = { setup.state.value is SetupState.Ready },
+      monotonicMs = parts.monotonicMs,
+      foreground = { foreground },
+      deviceNow = { System.currentTimeMillis() },
+    )
+  } else {
+    null
+  }
+
+  /** Le porte delle schermate del backup (pagina, impostazioni, viewer, Impostazioni): adattatori sul grafo del backup. */
+  val backupUi: BackupUi? = backup?.let { b -> BackupUi(b, database, galleryScope, context, parts.nas?.account ?: { null }) }
 
   // --- Libreria (P5) -----------------------------------------------------------------------------------------------
   val preferences: DataStoreLibraryPreferences = DataStoreLibraryPreferences.create(parts.preferencesFile, scope)
@@ -460,7 +528,21 @@ class GalleryGraph(
       // Fase 4B (P16): "Sposta", "Rinomina", "Elimina…" per i media del NAS (il viewer non scrive mai da solo, D24).
       nasActions = nas?.organizer?.mediaActions,
       dispatchers = dispatchers,
+      // Fase 5A (P7): la riga "Backup" del pannello informazioni (D16) e la sezione "N copie" (D36), con le copie fuori indice.
+      backup = backupUi?.mediaStates,
+      similarCopies = similarCopies,
+      outsideCopy = similarCopies?.let { OutsideCopyLookup { id -> outsideCopyOf(id) } },
     )
+  }
+
+  /**
+   * Dove sta una copia che non e' nell'indice (D36: le copie simili sono unite in una cella, l'indice ha solo la copertina): dal catalogo,
+   * la copia del telefono se c'e' e altrimenti quella del NAS. Null se non ne ha una leggibile adesso.
+   */
+  private suspend fun outsideCopyOf(id: MediaId): OutsideCopy? {
+    val catalog = coreIfReady()?.catalog ?: return null
+    val ref: MediaRef = catalog.phoneRefs(listOf(id))[id] ?: catalog.nasRefs(listOf(id))[id] ?: return null
+    return OutsideCopy(ref, catalog.media(id)?.kind ?: MediaKind.PHOTO)
   }
 
   /** Il contributo alla sezione "Libreria del telefono" della Diagnostica (P2): vuoto finche' il catalogo non c'e'. */
@@ -492,7 +574,21 @@ class GalleryGraph(
         repository.start()
         startedFlow.value = true
         // Il NAS nella Libreria parte con la galleria (famiglia pronta, catalogo costruito); senza NAS non fa niente.
-        nas?.let { n -> galleryScope.launch { runCatching { n.start() } } }
+        nas?.let { n ->
+          galleryScope.launch {
+            runCatching { n.start() }
+            // Il backup parte dopo il NAS: area privata, chiave del dispositivo e catalogo servono tutti (senza, non parte niente).
+            backup?.let { b -> runCatching { b.start() } }
+            // Fase 5A (D36): con il registro dei dati personali pronto il confronto delle copie simili puo' partire.
+            similarCopies?.requestRun()
+          }
+        }
+        // Dopo ogni lettura del telefono finita con l'app aperta (META compresa) il confronto riparte: a tappe, su Default, chi lo chiede non aspetta.
+        similarCopies?.let { detector ->
+          galleryScope.launch {
+            phoneStatus.map { it is SyncStatus.Idle }.distinctUntilChanged().filter { it }.collect { detector.requestRun() }
+          }
+        }
         if (foreground) attachSync()
         onStarted()
       } catch (e: CancellationException) {
@@ -587,7 +683,9 @@ class GalleryGraph(
         runningWork.toList()
       }
       retiredFlow.value = true
-      // Il NAS si ferma per primo: niente parte piu', le sue facciate rispondono "niente" (R7, §1.4).
+      // Il backup si ferma per primo (§1.4): il giro in corso si ferma prima del file successivo e niente di nuovo parte; poi il NAS.
+      backup?.stop()
+      // Il NAS si ferma poi: niente parte piu', le sue facciate rispondono "niente" (R7, §1.4).
       nas?.stop()
       running.forEach { it.cancel() }
       currentSync()?.detach()

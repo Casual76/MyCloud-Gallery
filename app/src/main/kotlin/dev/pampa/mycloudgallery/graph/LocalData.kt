@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.graph
 
 import android.content.Context
+import dev.pampa.mycloudgallery.backup.BackupRunMemory
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.family.contract.LocalDataEraser
 import dev.pampa.mycloudgallery.core.family.lifecycle.FileWipeJournal
@@ -100,6 +101,9 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
     step("battito") { graph.heartbeat.clear() }
     // R7: la galleria viva si ferma (e si aspetta) PRIMA di toccare i suoi file; se non si ferma, i file restano.
     if (step("galleria") { graph.galleryStopper?.stop() }) {
+      // Fase 5A (P7): il backup si e' gia' fermato per primo (`GalleryGraph.shutdown`); le sue impostazioni (cartella del dispositivo,
+      // sorgenti scelte) appartengono alla famiglia che si lascia.
+      step("backup") { graph.backupSettingsStorage.clear() }
       step("file") {
         withContext(Dispatchers.IO) {
           if (!deleteChildren(context.cacheDir)) ok = false
@@ -137,7 +141,7 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
 
     /**
      * I file e le cartelle del NAS nella Libreria in `noBackupFilesDir` (Fase 4A): outbox, tentativi, emergenza, battiti; dalla 4B il
-     * registro dei dati personali.
+     * registro dei dati personali; dalla 5A la memoria del backup (battiti, ultimo giro, ultimo problema).
      */
     val NAS_FILES = listOf(
       NasGraph.OUTBOX_DIR,
@@ -149,6 +153,6 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
       NasStages.HEARTBEAT_SCAN,
       NasStages.HEARTBEAT_SYNC,
       NasStages.HEARTBEAT_PREP,
-    )
+    ) + BackupRunMemory.FILES
   }
 }

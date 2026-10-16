@@ -90,7 +90,7 @@ internal fun LibraryCommandHostEffect(commands: LibraryCommands, onAccessChanged
 }
 
 /** I permessi di lettura dei media per questa versione di Android (gli stessi del passo 9 dell'onboarding). */
-private fun mediaPermissions(): Array<String> = when {
+internal fun mediaPermissions(): Array<String> = when {
   Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE -> arrayOf(
     Manifest.permission.READ_MEDIA_IMAGES,
     Manifest.permission.READ_MEDIA_VIDEO,
@@ -104,12 +104,12 @@ private fun mediaPermissions(): Array<String> = when {
  * Con "foto selezionate" (Android 14+, E-P1) il permesso parziale e' concesso ma immagini e video no: "Consenti tutto"
  * deve riaprire il dialogo anche se [full] contiene solo permessi parziali gia' dati.
  */
-private fun needsPartialUpgrade(context: Context, full: Array<String>): Boolean =
+internal fun needsPartialUpgrade(context: Context, full: Array<String>): Boolean =
   Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
     Manifest.permission.READ_MEDIA_IMAGES in full &&
     !(granted(context, Manifest.permission.READ_MEDIA_IMAGES) && granted(context, Manifest.permission.READ_MEDIA_VIDEO))
 
-private fun granted(context: Context, permission: String): Boolean =
+internal fun granted(context: Context, permission: String): Boolean =
   ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
 
 /**
@@ -117,7 +117,7 @@ private fun granted(context: Context, permission: String): Boolean =
  * soprattutto la `RuntimeException` con cui `startActivity` rilancia una `TransactionTooLargeException` (una condivisione di
  * molte migliaia di foto chiudeva l'app, I8). Chi chiama dice all'utente che non e' partito.
  */
-private fun tryStart(context: Context, intent: Intent): Boolean {
+internal fun tryStart(context: Context, intent: Intent): Boolean {
   if (context !is Activity) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
   return try {
     context.startActivity(intent)
@@ -131,7 +131,7 @@ private fun tryStart(context: Context, intent: Intent): Boolean {
   }
 }
 
-private tailrec fun Context.findActivity(): Activity? = when (this) {
+internal tailrec fun Context.findActivity(): Activity? = when (this) {
   is Activity -> this
   is ContextWrapper -> baseContext.findActivity()
   else -> null

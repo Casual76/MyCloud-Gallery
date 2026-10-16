@@ -17,6 +17,7 @@ import dev.pampa.mycloudgallery.core.imaging.noop.NoThumbnailLoader
 import dev.pampa.mycloudgallery.core.imaging.noop.NoViewerImageSource
 import dev.pampa.mycloudgallery.core.imaging.viewer.OriginalFetcher
 import dev.pampa.mycloudgallery.core.library.contract.LocalMediaActions
+import dev.pampa.mycloudgallery.core.library.similar.SimilarCopies
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneMediaIntents
 import dev.pampa.mycloudgallery.core.metadata.contract.ExifDetailsReader
 import dev.pampa.mycloudgallery.core.metadata.noop.NoExifDetailsReader
@@ -69,6 +70,10 @@ import kotlinx.coroutines.withContext
  * @property download "Scarica sul telefono" (Fase 4, D20): senza, la voce non compare nel menu (D13).
  * @property nasActions "Sposta", "Rinomina" ed "Elimina…" per un media del NAS (Fase 4B, P14/P16): senza, le voci non compaiono (D13).
  * @property backup lo stato del backup di un media per la riga "Backup" del pannello informazioni (Fase 5A, D16): senza, la riga non c'e' (D13).
+ * @property similarCopies Fase 5A (D36, §2.12): il rilevatore delle copie simili per la sezione "N copie" del pannello (con "Mostra come
+ *   principale" e "Separa"): senza, la sezione non c'e' (D13). Di norma e' la stessa istanza della Diagnostica e del riepilogo del primo backup.
+ * @property outsideCopy dove sta una copia di quel gruppo che non e' nell'indice (le copie unite in una cella hanno nell'indice solo la
+ *   copertina): senza, il tocco su una riga di una copia fuori indice non apre niente.
  * @property dispatchers i thread di lavoro (letture di dettagli ed EXIF): nei test sono uno solo, senza attese.
  */
 @Immutable
@@ -93,6 +98,8 @@ class ViewerServices(
   val nasActions: NasMediaActions? = null,
   val dispatchers: DispatcherProvider = DefaultDispatcherProvider,
   val backup: MediaBackupStates? = null,
+  val similarCopies: SimilarCopies? = null,
+  val outsideCopy: OutsideCopyLookup? = null,
 )
 
 /** Decodifica un'immagine animata (GIF, WebP animato) in un `Drawable` che si anima da solo (E-M11). */

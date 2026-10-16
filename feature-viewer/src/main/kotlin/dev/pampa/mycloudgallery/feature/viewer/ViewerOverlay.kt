@@ -103,11 +103,13 @@ import dev.pampa.mycloudgallery.feature.viewer.download.DownloadState
 import dev.pampa.mycloudgallery.feature.viewer.gesture.viewerVerticalDrag
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoInputs
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoPanelState
+import dev.pampa.mycloudgallery.feature.viewer.info.InfoSectionModel
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoSections
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoSheet
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoSidePanel
 import dev.pampa.mycloudgallery.feature.viewer.info.buildInfoSections
 import dev.pampa.mycloudgallery.feature.viewer.info.rememberBackupState
+import dev.pampa.mycloudgallery.feature.viewer.info.rememberSimilarCopiesPanel
 import dev.pampa.mycloudgallery.feature.viewer.info.sheetHeight
 import dev.pampa.mycloudgallery.feature.viewer.page.PageSpec
 import dev.pampa.mycloudgallery.feature.viewer.page.ViewerPage
@@ -847,9 +849,22 @@ private fun ViewerOverlays(
   val infoVisible by remember { derivedStateOf { info.progress.value > 0f || state.infoOpen } }
   // Fase 5A (D16): lo stato del backup del media, seguito solo mentre il pannello e' aperto.
   val backupState by rememberBackupState(services.backup, currentId, active = infoVisible)
+  // Fase 5A (P7, D36): "N copie" nel pannello. Una copia che sta nell'indice si raggiunge scorrendo il pager; una fuori indice (le copie unite
+  // in una cella hanno nell'indice solo la copertina) si guarda a parte, sopra il viewer, e "Indietro" torna alla foto di prima.
+  var outsideCopy by remember { mutableStateOf<MediaId?>(null) }
+  val similar = rememberSimilarCopiesPanel(
+    source = services.similarCopies,
+    id = currentId,
+    active = infoVisible,
+    refreshKey = view.snapshot.seq,
+    onView = { copyId ->
+      val page = view.viewIndexOf(copyId)
+      if (page >= 0) scope.launch { controller.pager.animateScrollToPage(page) } else if (services.outsideCopy != null) outsideCopy = copyId
+    },
+  )
   if (infoVisible && currentKind != null) {
     val kind = currentKind
-    val sections = remember(current, kind, controller.motionUnplayableVersion, placeName, currentId, backupState) {
+    val baseSections = remember(current, kind, controller.motionUnplayableVersion, placeName, currentId, backupState) {
       buildInfoSections(
         format = format,
         inputs = InfoInputs(
@@ -864,6 +879,7 @@ private fun ViewerOverlays(
         onOpenMaps = if (details?.location != null) controller::askMaps else null,
       )
     }
+    val sections = remember(baseSections, similar.sections) { sectionsWithSimilar(baseSections, similar.sections, format) }
     val infoTitle = stringResource(R.string.viewer_info_title)
     Box(Modifier.fillMaxSize().testTag(ViewerTags.InfoPanel)) {
       if (sidePanel) {
@@ -908,8 +924,20 @@ private fun ViewerOverlays(
     onConfirm = { controller.confirmMaps(details?.location) },
     onCancel = { controller.sheet = null },
   )
+  // Fase 5A (D36): il foglio "Separare questa copia?", accanto agli altri fogli.
+  similar.confirmSheet()
   // I fogli delle voci del NAS (P14): "Solo dal telefono" usa il cestino di sistema del viewer.
   if (nasController != null) NasActionSheets(controller = nasController, onDeleteFromPhone = controller::confirmDelete)
+  // L'altra copia di un gruppo che non sta nell'indice: per ultima, sopra tutto il resto.
+  outsideCopy?.let { copyId -> OutsideCopyLayer(id = copyId, services = services, playback = playback, onClose = { outsideCopy = null }) }
+}
+
+/** La sezione "N copie" va subito dopo quella del file (prima di "Telefono"); se il file non c'e', in fondo. */
+private fun sectionsWithSimilar(base: List<InfoSectionModel>, similar: List<InfoSectionModel>, format: ViewerFormat): List<InfoSectionModel> {
+  if (similar.isEmpty()) return base
+  val fileHeader = format.resources.getString(R.string.viewer_info_h_file)
+  val at = base.indexOfFirst { it.header == fileHeader }
+  return if (at < 0) base + similar else base.take(at + 1) + similar + base.drop(at + 1)
 }
 
 /** Restringe di [end] pixel il lato destro: il chrome sta nella parte della foto, accanto alla colonna informazioni. */

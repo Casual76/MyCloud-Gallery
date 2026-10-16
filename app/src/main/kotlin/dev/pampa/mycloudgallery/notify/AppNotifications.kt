@@ -60,6 +60,14 @@ class AppNotifications(context: Context) {
         setShowBadge(false)
       },
     )
+    // Fase 5A (D11): l'avanzamento del backup avviato dall'utente (UIDT), silenzioso.
+    manager.createNotificationChannel(
+      NotificationChannel(CHANNEL_BACKUP, app.getString(R.string.channel_backup_name), NotificationManager.IMPORTANCE_LOW).apply {
+        description = app.getString(R.string.channel_backup_description)
+        lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+        setShowBadge(false)
+      },
+    )
   }
 
   /** Si possono mostrare notifiche? (permesso concesso e notifiche dell'app non spente) */
@@ -130,6 +138,15 @@ class AppNotifications(context: Context) {
         is NasDailySummary.Problem.Frozen -> app.resources.getQuantityString(R.plurals.notify_summary_frozen, problem.areas, problem.areas)
         NasDailySummary.Problem.NasSilent -> app.getString(R.string.notify_summary_silent)
         is NasDailySummary.Problem.Stalled -> app.resources.getQuantityString(R.plurals.notify_summary_stalled, problem.days, problem.days)
+        // Fase 5A: il backup, solo numeri.
+        is NasDailySummary.Problem.BackupStalled -> app.resources.getQuantityString(R.plurals.notify_summary_backup_stalled, problem.days, problem.days)
+        NasDailySummary.Problem.BackupQuota -> app.getString(R.string.notify_summary_backup_quota)
+        NasDailySummary.Problem.BackupNasFull -> app.getString(R.string.notify_summary_backup_nas_full)
+        is NasDailySummary.Problem.BackupLost -> app.resources.getQuantityString(R.plurals.notify_summary_backup_lost, problem.count, problem.count)
+        is NasDailySummary.Problem.BackupNotIntact ->
+          app.resources.getQuantityString(R.plurals.notify_summary_backup_not_intact, problem.count, problem.count)
+        is NasDailySummary.Problem.BackupCommonCopyLost ->
+          app.resources.getQuantityString(R.plurals.notify_summary_backup_common_lost, problem.count, problem.count)
       }
     }
     val text = lines.joinToString(separator = "\n")
@@ -179,12 +196,18 @@ class AppNotifications(context: Context) {
     const val CHANNEL_APPROVALS = "approvals"
     const val CHANNEL_NAS = "nas"
     const val CHANNEL_NAS_OPS = "nas-ops"
+
+    /** Fase 5A: l'avanzamento del backup avviato dall'utente (UIDT), silenzioso. */
+    const val CHANNEL_BACKUP = "backup"
     const val ID_NEW_DEVICE = 1001
     const val ID_PASSWORD = 1002
     const val ID_DAILY_SUMMARY = 1003
 
     /** L'avanzamento delle operazioni sul NAS (UIDT, Fase 4B): una notifica sola, tolta alla fine del lavoro. */
     const val ID_NAS_OPS = 1004
+
+    /** L'avanzamento del backup (UIDT, Fase 5A): una notifica sola, tolta alla fine del lavoro. */
+    const val ID_BACKUP = 1005
     private const val REQUEST_OPEN_APP = 0
     private const val TAG = "Notifications"
   }

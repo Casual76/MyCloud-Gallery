@@ -84,6 +84,8 @@ ext.releaseManifestPolicy = [
     // --- Fase 4B (P0-B, docs/fase4-progetto.md D29, approvato dall'utente il 15/10): riga in docs/sicurezza.md 4-bis. -------------
     // :app: le operazioni lunghe sui file del NAS avviate da un tocco girano come lavoro avviato dall'utente (UIDT, Android 14+)
     // nel JobService dell'app (NasOpsJobService: non esportato, protetto da BIND_JOB_SERVICE, vedi `verify`). Normale.
+    // Fase 5A (P7, D11): lo stesso permesso serve al backup avviato dall'utente ("Inizia ora", "Fai ora") nel BackupJobService, con le
+    // stesse due garanzie (non esportato, BIND_JOB_SERVICE: `verify` le pretende per ogni `*JobService`). Nessun permesso nuovo.
     'android.permission.RUN_USER_INITIATED_JOBS',
   ],
   // Permessi che sono ammessi SOLO con un tetto di SDK: nome -> android:maxSdkVersion atteso. Senza l'attributo (o con un

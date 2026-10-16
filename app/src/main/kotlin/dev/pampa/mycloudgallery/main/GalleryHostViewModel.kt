@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.main
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.pampa.mycloudgallery.backup.AppBackupActions
 import dev.pampa.mycloudgallery.core.nasmedia.contract.Freeze
 import dev.pampa.mycloudgallery.core.nasmedia.contract.UserGesture
 import dev.pampa.mycloudgallery.core.nasmedia.contract.headlineCount
@@ -66,6 +67,14 @@ class GalleryHostViewModel @Inject constructor(
     val info = catalog.nasLocationAt(Location.Nas(account, share, nasPath)) ?: return null
     return catalog.mediaIdOfLocation(info.locationId)
   }
+
+  // --- Fase 5A (P7): il backup --------------------------------------------------------------------------------------------
+
+  /** Le azioni del backup (navigazione, permessi, conferme), se il backup c'e': la galleria vi registra la sua schermata. */
+  val backupActions: AppBackupActions? get() = gallery.backupUi?.actions
+
+  /** Il backup c'e': solo allora Impostazioni mostra la voce "Backup" e il piede della Libreria porta alla sua pagina. */
+  val backupAvailable: Boolean get() = gallery.backup != null
 
   /** Le aree congelate adesso (D10): per il foglio "Ho controllato, continua". */
   val frozenAreas: StateFlow<Map<String, Freeze>> = gallery.nas?.frozen ?: MutableStateFlow(emptyMap())

@@ -612,3 +612,22 @@ su ogni accento).
   ancora i selettori di G1 (non è nel perimetro della G2); `GlobalStatusIndicator` di `:app` non ha più chiamanti
   (Libreria, Raccolte e Cerca usano la voce di stato della G2); `GalleryGridLevelBar` e `GalleryGridJumpButton` restano
   solo nel catalogo dei componenti.
+
+### 12.11 Dubbi grafici della Fase 5 (16/10): da rifinire più avanti
+
+La Fase 5 (`docs/fase5-progetto.md`, §1.5 e D30) consegna **stati e contratti** e schermate funzionali fatte **solo** con i
+componenti G2 esistenti (chrome condivisa, capsule tonali del piede, `GalleryConfirmSheet` con lo scudo contro le
+sovrapposizioni, bersagli da 48 dp, testo a 1,3x). Il filone grafico rifinisce **senza toccare la logica** né i contratti. Le
+voci da rifinire, in ordine di arrivo:
+
+| Voce | Cosa fa la Fase 5 | Da rifinire | Quando |
+|---|---|---|---|
+| **Terza voce del piede (Backup)** | `LibraryBackupStatus` (in `core-library`) come terza capsula sotto rete e NAS (§12.5), con i componenti esistenti: "Tutto al sicuro" · "Oggi alle 03:12"; "312 in coda" · "Attesa carica"; "Primo backup: 1.240 di 6.658" · "circa 1 h 20 min"; "Quota esaurita" · "Chiedi all'admin del NAS"; "Backup in prova". Il tocco apre la pagina Backup | tono e glifo di ogni caso (calmo, lavoro, attenzione, attesa); tre capsule una sotto l'altra, soprattutto con il testo a 1,3x e sul tablet; contrasti per ogni accento come in `GalleryFooterStatusTest` | 5A, P5 |
+| **Pagina Backup** | una riga per sorgente (`SourceStatus`), il problema più grave in cima con la sua azione, "Fai ora", "Ferma", la cartella del dispositivo e le impostazioni; il foglio del primo backup (riepilogo, stima, "Stanotte" o "Inizia ora"); nella 5B la sezione "Da decidere" | gerarchia fra problema, azioni e righe; avanzamento del primo backup; come sta nel pannello di dettaglio del tablet | 5A, P5 (5B: P12) |
+| **Foglio "Libera spazio" con l'avviso forte** | `GalleryConfirmSheet` con l'avviso "Il NAS non ha un backup esterno: dopo, l'unica copia sarà sul NAS" in evidenza, il riepilogo (numero e GB, filtri, esclusi per motivo) e, per "Libera subito", la seconda conferma con due gesti distinti a 600 ms | quanto deve pesare l'avviso (forte senza diventare rumore), la differenza visibile fra cestino di Android e "Libera subito", lo scudo contro le sovrapposizioni in ogni passo | 5B, P12 |
+| **Segno `PROBLEM`** | nuovo valore di `PresenceBadge` (da `BACKUP_PROBLEM`, bit 14 di `CellFlags`) per un errore che chiede l'utente (illeggibile, verifica fallita tre volte, sparito prima del backup); solo il glifo nel catalogo di `core-designsystem` | glifo e colore; gerarchia con gli altri segni (§12.4: gli stati che chiedono attenzione hanno il disco intero); testo di TalkBack; si somma agli altri segni della cella e alla selezione | 5A, P5 |
+| **Segno "copie" sulla cella** (D36) | la cella di un gruppo `SIMILAR_COPIES` mostra il numero delle copie, con un glifo nel catalogo G2 | in quale dei quattro posti della cella sta (§12.4), come convive con il disco di presenza e con la durata del video, sotto i 64 dp | 5A, P15 e P5 |
+| **Striscia delle copie simili nel viewer** (G3) | il pannello info dice "2 copie"; una striscia per guardarle tutte (dove sta ognuna, risoluzione, dimensione, formato) con "Mostra questa come principale" e "Separa" | l'aspetto della striscia e dei due comandi; il viewer non è cambiato in G2 (§12.2), quindi va disegnato in G3 insieme alla riga "Backup" del pannello info | 5A, P15 (viewer: G3) |
+
+Per le stesse voci la Fase 5 aggiunge solo i **glifi** `PROBLEM` e "copie" al catalogo dei componenti (P5); non cambia la
+chrome, il vetro, la pillola né la cella. Screenshot di riferimento in `docs/screenshots/5-P5/` e, per la 5B, `5-P12/`.

@@ -81,6 +81,9 @@ segnaposto e almeno un test.
 | `:core-nasops` | Fase 4B: operazioni sui file del NAS (crea cartella, rinomina, sposta, elimina nel cestino del NAS, ripristina, "elimina subito"), cestino, Spazio NAS, Cartelle NAS, pulizia dei propri file; diario con macchina a stati (Room); `UserConfirmation`. **L'unico che vede le primitive di scrittura** (`core-nas/ops`). P0-B contratti e fake, P12 esecutore, P16 collegato in `:app` | common, model, trust; nas in `implementation` |
 | `:core-personal` | Fase 4B: dati personali sincronizzati fra i miei dispositivi (preferiti, nascosti, album, ricordi visti, impostazioni personali); fusione per ora del NAS. P0-B contratti e fake, P13 sincronizzazione, P16 collegato in `:app` | common, model, trust |
 | `:feature-nas` | Fase 4B: Cartelle NAS, Spazio NAS, Eliminati di recente del NAS, Operazioni in corso, fogli di conferma (linguaggio grafico G2, chrome in alto condivisa con le griglie: `GalleryTopChrome` di core-designsystem). P14 schermate, P16 rotte e Raccolte | nasops, designsystem, library, imaging, common, model |
+| `:core-backup` | Fase 5A (5B: versioni, correzioni, "Libera spazio", attivita' in sospeso, caricamenti in arrivo): backup dei media del telefono nell'area privata (piano e destinazioni, caricamento con diario e macchina a stati, rilettura completa prima del nome definitivo, deduplica byte per byte, guardiano delle copie private, "al sicuro", stato). Vede il NAS **solo** con `NasBackupOps`, una vista in sola aggiunta di `core-nas` (`@AppendOnlyNasAccess`): non puo' togliere ne' sostituire un file | model, common, trust, nas (lettura e `NasBackupOps`), database (porte), index (publisher), prepare, metadata, rules. **Non vede** `core-nasops`, `NasFileOps`, `DestructiveNasAccess` ne' `core-mediastore` |
+| `:feature-backup` | Fase 5A e 5B: impostazioni e pagina Backup, primo backup, stato nel piede e nel viewer; nella 5B Versioni, "Libera spazio", "Da decidere". Stati e contratti, composable con i soli componenti G2. **Cieca a `core-nas` e `core-nasops`** | backup (contratti), library, imaging, designsystem |
+| `:feature-integrations` | Fase 5B: selettore per le altre app (`PickerActivity`), provider di documenti (`MediaDocumentsProvider`), ricezione delle condivisioni ("Salva sul NAS"), sessioni di "Modifica con…", condivisione senza posizione. **Cieca a `core-nas` e `core-nasops`** | backup, library, imaging, mediastore (contratti), designsystem |
 
 Nessun ciclo: `core-common` e `core-model` sono le foglie. I `feature-*` non si conoscono fra loro: ogni
 passaggio da una funzione all'altra e' una callback scritta da `:app` (`navigation/AppNavHost.kt`).
@@ -97,6 +100,16 @@ diario locale (riprese dopo un'interruzione). Lo verifica `Phase4ArchitectureTes
 moduli nuovi, `core-nasops` invisibile a chi legge il NAS o mostra la Libreria, smbj solo in `core-nas`, primitive di scrittura e
 marcatore solo in `core-nas` e `core-nasops`, chi puo' costruire una conferma, regole dei moduli nuovi, tutti i moduli in `galleryModules`. Ogni modulo nuovo della Fase 4 ha anche `NoNetworkSourcesTest` (niente rete, niente smbj) e
 `NoWallClockSourcesTest` (niente orologio del telefono nelle decisioni: ora del NAS o orologio monotono).
+
+**Fase 5: chi vede chi** (`docs/fase5-progetto.md` §1.1). Nella 5A nascono `core-backup` e `feature-backup`, nella 5B
+`feature-integrations`. `core-backup` e' il secondo modulo che scrive i media sul NAS, ma **in sola aggiunta**: vede il NAS solo
+con `NasBackupOps` (in `core-nas/ops/backup/`, con un marcatore suo, `@AppendOnlyNasAccess`, `@RequiresOptIn` di livello errore,
+che passano solo `core-nas` e `core-backup`): crea e pubblica senza sostituire, non toglie ne' sostituisce niente. Non nomina
+`NasFileOps`, `DestructiveNasAccess`, `ConfirmationIssuer` ne' tipi di `core-nasops`: cio' che toglie un file dal NAS resta di
+`core-nasops`, dietro una `UserConfirmation`. `feature-backup` e `feature-integrations` non vedono `core-nas` ne' `core-nasops`.
+Chi legge il NAS o mostra la Libreria (`core-index`, `core-nasmedia`, `core-prepare`, `core-personal`, `core-library`,
+`core-imaging`) **non vede** `core-backup`. `core-nasops` riceve solo la porta `CitedTemps` (la pulizia dei propri file rispetta i
+temporanei del backup). `Phase4ArchitectureTest` e' esteso a queste regole.
 
 Dalla Fase 2 ogni modulo nuovo ha tre package fissi (docs/fase2-progetto.md, D6):
 - `contract`: le interfacce e i tipi che gli altri moduli usano (con KDoc che spiega il perche');

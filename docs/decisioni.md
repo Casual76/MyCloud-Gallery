@@ -753,6 +753,84 @@ che si sposta, si rinomina o si elimina, Samba risponde `ACCESS_DENIED` come per
   durante l'attesa). Il banco delle interruzioni sul simulatore SMB (600 giri, 2.172 interruzioni, 0 violazioni) tiene ora, nel 40% dei passi
   su una cartella, una lettura della Libreria aperta sotto di lei (233 letture in 600 giri); senza il rilascio i giri rossi sono 26 [8].
 
+## Fase 5: progetto (15–16/10)
+Fonte: `docs/fase5-progetto.md` (§0.1 decisioni, §9 domande, §9.1 risposte). Le decisioni valgono come scritte lì; qui il
+riassunto in una riga ciascuna, con il rimando alla sezione. Le modifiche agli altri documenti (§0.3 del progetto) sono in
+`docs/formato-nas.md` (N1–N5), `docs/sicurezza.md` (C10, C12, C13, C17, C18, §4-bis, L37–L44, checklist, §8),
+`docs/regole-attivita.md` (§3, §5, §6, §8), `docs/fase4-progetto.md` (§1.4, §2.11), `docs/grafica-progetto.md` (§12.11) e
+`README.md` (moduli). Lo schema v4 (`docs/modello-dati.md` §12) lo scrive P1.
+
+Diciotto pacchetti in due metà: **5A** "Il backup al sicuro" (P0–P7 e P15 copie simili), **5B** "Versioni, Libera spazio,
+integrazioni" (P0-B, P8–P14 e P16 riordino); tappe M1, M2 (5A) e M3 (5B) (§4.2, §4.4).
+
+**Risposte dell'utente alle domande del §9 (15/10) e del §2.11 (16/10)**
+| # | Domanda | Risposta | Effetto |
+|---|---|---|---|
+| Q1 | Dividere la fase in due metà | (a) **5A** e poi **5B** | D1 confermata |
+| Q2 | Dove conservare sul NAS le versioni precedenti | (a) cartella **`Versioni/` alla radice di ogni share** | D17; punto aperto 5.4 del piano chiuso |
+| Q3 | Quando il primo backup vero dell'S25 sull'area privata dell'utente | **(b) solo a fine 5B** | D12 resta acceso fino alla fine della 5B; la stima ±30% (5.1) si misura allora |
+| Q4 | Copia privata dei media spostati nell'area comune | **(b) solo quando sparisce la copia del telefono** (lettera del piano 5.3) | Niente copia privata subito dopo lo spostamento; resta la protezione dei 30 giorni del cestino, dichiarata come limite (L44) |
+| Q5 | Componenti nuovi (§6.4) | (a) **sì a tutti**: `BackupJobService`; `PickerActivity`, `ShareReceiverActivity`, `MediaDocumentsProvider`, `FileProvider` | D29 approvata; §4-bis scritto con P0; componenti e policy del manifest in P7 (5A) e P14 (5B) |
+| Q6 | Correzioni su HEIC, RAW e video | non chiesta: vale (a), nel file solo per JPEG, PNG e WebP | L40 |
+| Q7 | "Proteggi subito le foto nuove" anche con Notte | (a) **sì** | D34 approvata |
+| Q8 | Screenshot e cartelle aggiuntive sul NAS | non chiesta: vale (a), in sottocartelle col loro nome | D6 |
+| Q9 | Cosa propone di default "Libera spazio" | (a) tutto il sicuro **tranne gli ultimi 30 giorni**, con i filtri | D21 |
+| Q10 | Riverifica a rotazione delle copie private | (a) **sì**, ogni copia almeno una volta l'anno | D14 |
+| Q11 (16/10) | Copie sul NAS "quasi uguali" ma non identiche | **nuova opzione**: si caricano sempre, ma si uniscono in una cella come in Google Foto e Samsung Gallery; tutte le copie si possono vedere, c'è una funzione per separarle, di default si mostra quella a risoluzione maggiore o compressione minore | D36, §2.12, P15 |
+| Q12 (16/10) | Dove stanno i backup già fatti e con quale strumento | Nell'area privata dell'utente; fatti con l'app di WD e con un'altra app o un cloud | Ci si aspettano copie identiche e simili; i numeri veri dalla scansione F2 |
+| Q13 (16/10) | Le copie già presenti restano o si riordinano | **(b) riordino proposto dopo**, con conferma | D37, §2.13, P16 |
+
+**Aperto**: Q14 (da fare all'avvio di P16, con i numeri della scansione vera): dove vanno i file dei vecchi backup che non sono
+più su nessun dispositivo (telefoni precedenti).
+
+**Decisioni D1–D37** (rimando: `docs/fase5-progetto.md`, sezione indicata; stato: *deciso* = confermato o senza alternative aperte)
+| # | In breve | Rimando | Stato |
+|---|---|---|---|
+| D1 | Fase in due metà: 5A (backup, "al sicuro", stato; sul NAS solo file nuovi, dal telefono non si toglie niente) e 5B (versioni, correzioni, "Libera spazio", integrazioni) | §0.1, §4.2 | Deciso (Q1) |
+| D2 | `core-backup` vede il NAS solo con `NasBackupOps`, una vista in sola aggiunta (`@AppendOnlyNasAccess`): niente cestino, rinomina libera o cancellazione | §0.1, §1.1–§1.2 | Deciso; contratto e test di architettura in P0 |
+| D3 | Caricamento con diario (`backup_item`) e macchina a stati; valori scritti prima dell'uso, passi idempotenti | §0.1, §2.2 | Deciso |
+| D4 | Verifica = rilettura completa del temporaneo dal NAS prima del nome definitivo; dopo, solo il timbro; tre verifiche fallite = `VERIFY_FAILED` | §0.1, §2.2 | Deciso |
+| D5 | Ripresa dei file grandi: punto di ripresa ogni 64 MiB, `reopenTemp`, verifica completa alla fine | §0.1, §2.2 | Deciso |
+| D6 | `Backup/<dispositivo>/AAAA/MM/` per data di scatto, `Senza data/`; screenshot e cartelle extra in `<Nome>/AAAA/MM/`; mai una sostituzione | §0.1, §2.1 | Deciso (Q8) |
+| D7 | Cartella del dispositivo scelta una volta al primo backup; un nome già presente chiede; reinstallazione: "continua lì" | §0.1, §2.1 | Deciso |
+| D8 | Deduplica byte per byte: solo area privata del proprietario, candidato riletto per intero; l'indice non basta | §0.1, §2.3 | Deciso |
+| D9 | Guardiano delle copie private: copia lato server dall'area comune, verifica completa, `Backup/Area comune/AAAA/MM/`; non subito dopo lo spostamento | §0.1, §2.3 | Deciso (Q4 (b)) |
+| D10 | Chi carica prepara: miniature e anteprime dai byte del telefono, nella stessa lettura dell'hash | §0.1, §2.2 | Deciso |
+| D11 | Foto prima dei video, dal più recente; due file in volo; tappe da 8 minuti; primo backup e "Fai ora" come lavori avviati dall'utente | §0.1, §2.8 | Deciso |
+| D12 | Backup solo sulle share di prova (`backupTestSharesOnly`, anche in release e non spegnibile) | §0.1, §5.3 | Deciso; acceso fino alla fine della 5B (Q3 (b)) |
+| D13 | Recinzione del telefono in debug con gli account di prova: sorgenti `mcg-prova`, destinazione `mcg-campo/Backup/`; assente dalla release | §0.1, §5.3 | Deciso |
+| D14 | Verifiche e hash completi in `core-backup` (`SafetyVerifier`): non verificate, `FULL_HASH`, sul momento, riverifica a rotazione | §0.1, §2.3 | Deciso (Q10); chiude ciò che la Fase 4 non ha realizzato |
+| D15 | Segni per media: `PHONE_ONLY` e `SAFE` come prima, nuovo `BACKUP_PROBLEM` (bit 14); "in coda", "in caricamento", "in verifica" solo nel viewer e nella pagina | §0.1, §1.5 | Deciso |
+| D16 | `BackupStatus` come contratto: terza voce del piede, pagina Backup, riga nel viewer; notifiche solo per primo backup e "Fai ora" | §0.1, §2.6 | Deciso |
+| D17 | Versioni: l'attuale al solito percorso, le precedenti in `<share>/Versioni/…`; verifica, archiviazione, pubblicazione; nessuna cancellazione automatica | §0.1, §2.4 | Deciso (Q2 (a)), 5B |
+| D18 | Modifiche fatte sul telefono → versione; "Ripristina originale" = scambio sul NAS senza caricare; "Salva copia" = media nuovo | §0.1, §2.4 | Deciso, 5B |
+| D19 | Correzioni scritte nel file (JPEG, PNG, WebP con `ExifInterface`); sul telefono solo se già al sicuro e con `createWriteRequest` | §0.1, §2.4 | Deciso (Q6), 5B |
+| D20 | Video modificato e salvato sopra: versione sul NAS e attività in sospeso "elimina l'originale?" dal foglio di `feature-nas` | §0.1, §2.4 | Deciso, 5B |
+| D21 | "Libera spazio": avviso forte, guardiano, verifica sul momento (6 ore), controllo del timbro, cestino di Android a lotti, "Libera subito" con due gesti | §0.1, §2.5 | Deciso (Q9), 5B |
+| D22 | "Elimina solo dal telefono" di un media non al sicuro propone "Prima mettilo al sicuro"; "Ovunque" comprende le copie di tutte le versioni | §0.1, §2.5 | Deciso, 5B |
+| D23 | Scegliere foto per le altre app: `PickerActivity` e `MediaDocumentsProvider`; solo-NAS con descrittore a richiesta; mai i nascosti | §0.1, §2.7 | Deciso, 5B; chiude il punto aperto sul selettore del piano |
+| D24 | Ricevere condivisioni: `ShareReceiverActivity`, copia subito con tetti e tipo dai byte, poi "Salva sul NAS" | §0.1, §2.7 | Deciso, 5B |
+| D25 | "Modifica con…": sessione di modifica (Samsung Gallery) o copia in cache servita da `FileProvider` (solo-NAS) | §0.1, §2.7 | Deciso, 5B |
+| D26 | Condividere senza posizione: copia in cache senza GPS, ricontrollata con due lettori | §0.1, §2.7 | Deciso, 5B |
+| D27 | Schema v4 in una sola migrazione (3→4 mai distruttiva), anche con le tabelle della 5B | §0.1, §1.3 | Deciso |
+| D28 | Nessuna dipendenza nuova | §0.1 | Deciso |
+| D29 | `BackupJobService` (5A); `PickerActivity`, `ShareReceiverActivity`, `MediaDocumentsProvider`, `FileProvider` (5B); nessun permesso nuovo | §0.1, §6.4 | **Approvata dall'utente (Q5 (a))** |
+| D30 | UI come stati e contratti; composable solo con i componenti G2 esistenti | §0.1, §1.5 | Deciso |
+| D31 | Ora: nessuna scadenza nel backup; validità di verifica e conferme con l'orologio monotono; attività in sospeso con l'ora del NAS | §0.1 | Deciso |
+| D32 | Congelamento ed emergenza fermano backup, guardiano, versioni e "Libera spazio"; i movimenti delle versioni non fanno scattare il congelamento | §0.1 | Deciso |
+| D33 | Temporanei del backup `.mycloudgallery/tmp/<io>-bk-<id>`; la pulizia dei propri file rispetta quelli citati da entrambi i diari (`CitedTemps`) | §0.1, §1.4 | Deciso |
+| D34 | "Proteggi subito le foto nuove": con qualunque preset la foto appena scattata si carica appena c'è il Wi-Fi di casa | §0.1, §2.8 | **Approvata dall'utente (Q7 (a))** |
+| D35 | Versioni di media non propri: area comune accanto all'originale dopo un foglio; area in sola lettura = media nuovo in `Backup/<dispositivo>/Modificate/` | §0.1, §2.4 | Deciso, 5B |
+| D36 | Copie simili (stesso scatto, byte diversi): si caricano sempre e si uniscono in una cella (`SIMILAR_COPIES`); copertina = più pixel, poi meno compressione, poi l'originale della fotocamera; "Mostra questa come principale" e "Separa" | §0.1, §2.12 | Deciso (Q11), P15 |
+| D37 | Riordino dei vecchi backup: proposto dopo il primo backup vero, come piano di spostamenti della 4B con conferma | §0.1, §2.13 | Deciso (Q13), P16 |
+
+**D36 cambia la proposta 5 del piano** (§3): le copie dello stesso scatto con byte diversi (ricompresse, EXIF riscritto, HEIC
+convertito) si **uniscono in una cella** in Libreria; Utility → Doppioni resta per gli scatti simili ma diversi. I file identici
+byte per byte restano "una volta sola" con tutte le posizioni, come prima.
+
+**Dubbi grafici** (per il filone grafico): la terza voce del piede (Backup), la pagina Backup, il foglio "Libera spazio" con
+l'avviso forte, il segno `PROBLEM`, il segno "copie" e la striscia delle copie simili del viewer: in `docs/grafica-progetto.md` §12.11.
+
 ## Revisione grafica della Libreria da parte dell'utente (13/10)
 Giudizio: le prestazioni della navigazione non sono male, la **grafica no**. Serve molto lavoro, da fare in un **filone grafico
 parallelo** alle fasi successive (insieme ai lavori che non toccano l'app sul momento, per esempio il back-end NAS della Fase 4).

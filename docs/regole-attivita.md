@@ -93,6 +93,10 @@ roaming si abilita solo con l'interruttore `allowRoaming` (che aggiunge `ROAMING
 attività). Il tetto dati mobili di 1 GB dei preset senza dati mobili serve al contenuto che si carica
 con l'app aperta (proposta 3), che nessun preset blocca.
 
+**Eccezione per il backup delle foto nuove** (Fase 5, D34, approvata con Q7): "Proteggi subito le foto nuove" porta una foto
+appena scattata sul NAS anche fuori dalla fascia di Notte e a batteria sopra la soglia, ma solo sul Wi-Fi di casa e solo per le
+foto della fotocamera (§8, punto 14).
+
 Descrizioni per l'utente (`PresetCatalog.info`, qui in sintesi):
 
 | Preset | Che cosa fa | Per chi |
@@ -211,6 +215,7 @@ Android passa ai dati mobili, le regole vedono `MOBILE` e il traffico pesante no
   nuovo non ha ancora chiavi, quindi parte da zero a mezzanotte del primo giorno. Nessun lavoro di pulizia da
   schedulare. Giorno di inizio configurabile (1-28) per i piani dati con rinnovo a metà mese.
 * **Storico**: i cicli passati restano in DataStore per 12 cicli (`keepCycles`); `history()` li elenca.
+* **Backup (Fase 5)**: il backup registra caricamento **e** rilettura di verifica (§6, "Backup").
 * Persistenza: `DataStore<Preferences>`, chiavi `traffic.<AAAA-MM>.<SORGENTE>.<RETE>` (somma atomica con
   `edit`, saturante). Le impostazioni usano chiavi `rule.*` (si può condividere lo stesso DataStore).
   `:app` crea il `DataStore` (serve la dipendenza `datastore-preferences` anche lì).
@@ -236,6 +241,9 @@ batteria al giorno a regime, dati mobili e Wi-Fi al mese, dati mobili nel primo 
 | Anteprima di analisi | 150 KB | `decisioni.md` (E-I11) |
 | Batteria trasferimento | **0,5% per GB** | **ipotesi, non misurata** (Wi-Fi + cifratura SMB + hash): da misurare |
 | Fattore radio cellulare | **x2** | **ipotesi**: la radio mobile costa ~2x il Wi-Fi a parità di byte |
+| Rilettura di verifica del backup (`verifyReadBytesPerSecond`) | **16e6** B/s (16 MB/s) | Fase 5, D4: stessa misura della lettura SMB cifrata a 4 flussi (`inventario-nas.md` §4); **ipotesi** per la rilettura del temporaneo appena scritto, da misurare a M2 |
+| Costo per file del backup (`perFileOverheadSeconds`) | **0,12** s | Fase 5, `docs/fase5-progetto.md` §2.9: circa 12 viaggi SMB (creazione del temporaneo, scritture, `flush`, chiusura, apertura e lettura di verifica, rinomina, `stat`) a circa 10 ms l'uno in casa; **ipotesi**, da misurare in F22 |
+| Caricamenti paralleli (`uploadStreams`) | **1** | Fase 5: i 9 MB/s della scrittura sono la misura con un flusso; due caricamenti paralleli **non sono misurati** (la CPU del NAS fa da tetto: in lettura 4 flussi rendono 2,2 volte uno); si misurano con 1 e 2 flussi in F22 |
 
 `UsageProfile` (ipotesi, nessuna misura in Fase 0): 8 h/giorno collegato, 14 h sul Wi-Fi di casa, 1 h su altro
 Wi-Fi, 8 h sui dati mobili, efficienza 0,8 (risvegli del NAS, ripartenze, riavvii notturni E-P13).
@@ -262,6 +270,26 @@ Wi-Fi, 8 h sui dati mobili, efficienza 0,8 (risvegli del NAS, ripartenze, riavvi
 
 Esempio (test): 20.000 foto da indicizzare = 1,98 ore di lavoro (la Fase 0 stimava "~2 ore") e 80% di energia,
 tutta dalla presa con Notte, smaltita in una notte.
+
+### Backup (Fase 5, `docs/fase5-progetto.md` §2.9)
+
+Il backup non è un semplice trasferimento: ogni file si **scrive** sul NAS e poi si **rilegge per intero** prima del nome
+definitivo (D4). Per questo:
+
+* **Tempo** del backup di `B` byte in `N` file: `T = B / W + B / R + N · o`, con `W` = scrittura SMB (9,0 MB/s con un
+  flusso, `uploadStreams = 1`), `R` = `verifyReadBytesPerSecond` (16 MB/s) e `o` = `perFileOverheadSeconds` (0,12 s).
+  Con due caricamenti paralleli il totale può scendere se il NAS li regge: lo dice la misura di F22.
+* **Il traffico del backup conta anche la rilettura**: caricamento **e** rilettura si registrano nel `TrafficLedger` con la
+  rete usata, subito, prima del punto di ripresa (`StagedRun`). Il traffico di un backup è quindi circa il **doppio** dei
+  byte caricati: per il primo backup dell'S25 (~48 GB di media, dimensioni ipotizzate) circa 97 GB sul Wi-Fi di casa. Con il
+  preset Massimo il tetto di 10 GB di dati mobili vale circa 5 GB di media.
+* **Arretrato**: `BacklogFacts.toProtect` (media da caricare, c'è già) più `toVerify` (copie da rileggere, nuovo).
+* **Esempio** (ipotesi, dimensioni vere solo dopo M2): primo backup dell'S25 con 6.658 media = circa 2,6 ore (caso basso
+  1,5, alto 5,3), una notte con il preset Notte; a regime (200 foto e 10 video al mese) circa 6 minuti di lavoro e 3,4 GB
+  di traffico al mese.
+
+Le tre costanti nuove sono **ipotesi** come le altre: si ricalibrano con le misure di M2 e del primo backup vero (F22, F32).
+
 
 ---
 
@@ -309,6 +337,12 @@ I segnali "rete di casa", "NAS raggiungibile" e "rete scadente" sono interfacce 
 11. **Stime**: 0,5%/GB di batteria, fattore radio x2 e il profilo d'uso sono ipotesi, non misure.
 12. **Ciclo dati** con giorno di inizio configurabile (1-28).
 13. `:app` dichiara `ACCESS_NETWORK_STATE` (vedi §7).
+14. **"Proteggi subito le foto nuove"** (Fase 5, D34): **approvata dall'utente il 15/10 (Q7 (a))**, anche con il preset Notte.
+    Con qualunque preset, una foto appena scattata si carica appena c'è il Wi-Fi di casa e la batteria è sopra la soglia,
+    anche fuori dalla fascia notte. Solo foto della fotocamera (pochi MB), **mai** video, **mai** dati mobili. Si realizza
+    come `RuleSettings.protectNewPhotos` e richiesta `QUICK_NEW_PHOTOS` di `PHOTO_BACKUP`; il motivo è che Samsung "Salva"
+    sovrascrive il file, e una foto modificata prima del backup notturno non arriverebbe mai originale sul NAS (E-B15, L38
+    di `docs/sicurezza.md`). Costo: pochi secondi per foto. Il test `PresetMatrixTest` si estende con questa regola.
 
 ---
 

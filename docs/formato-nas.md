@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Stato** | Fase 1.4, 12/10/2026, **aggiornato dopo la revisione di sicurezza e la sua verifica** (`docs/review/1.4-core-trust.md`, due giri) e **esteso nella Fase 2 (pacchetto P3)**: configurazione di famiglia completa (§5.3), segnalazione "perso" (tipo 7, §5.9), stato del dispositivo (tipo 8, §5.10), rifondazione dopo un reset (§4.10), residui N2, R2, R3, R4 della revisione chiusi (§2.3, §4.4). **Completato nella Fase 4 (P0, 14/10/2026)** con le modifiche M1–M12 di `docs/fase4-progetto.md` §0.3: classi dei segmenti nelle teste (§5.5), contenuto dei segmenti (§5.5-bis), regole di pubblicazione (§5.5), unita' di lavoro (§5.6), campi nuovi del cestino (§5.7), pulizia dei propri file (§2.3), dati personali (§5.5), salto dell'ora (§6.1), tetti nuovi (§7), modulo unico delle operazioni distruttive (§9), involucro dei file cestinati (§2.1), mappa (§14). Formato **versione 1**. Nessun dato e' ancora stato scritto sul NAS. L'uso da parte dell'app: `docs/famiglia-dispositivi.md`. |
+| **Stato** | Fase 1.4, 12/10/2026, **aggiornato dopo la revisione di sicurezza e la sua verifica** (`docs/review/1.4-core-trust.md`, due giri) e **esteso nella Fase 2 (pacchetto P3)**: configurazione di famiglia completa (§5.3), segnalazione "perso" (tipo 7, §5.9), stato del dispositivo (tipo 8, §5.10), rifondazione dopo un reset (§4.10), residui N2, R2, R3, R4 della revisione chiusi (§2.3, §4.4). **Completato nella Fase 4 (P0, 14/10/2026)** con le modifiche M1–M12 di `docs/fase4-progetto.md` §0.3: classi dei segmenti nelle teste (§5.5), contenuto dei segmenti (§5.5-bis), regole di pubblicazione (§5.5), unita' di lavoro (§5.6), campi nuovi del cestino (§5.7), pulizia dei propri file (§2.3), dati personali (§5.5), salto dell'ora (§6.1), tetti nuovi (§7), modulo unico delle operazioni distruttive (§9), involucro dei file cestinati (§2.1), mappa (§14). Formato **versione 1**. **Fase 5 (avvio, 16/10/2026)**: N1–N5 di `docs/fase5-progetto.md` §0.3, **nessun file firmato cambia** (il backup scrive media, non dati del formato): temporanei del backup e cartelle `Backup/` e `Versioni/` (§2.1, §2.2), pulizia dei propri file (§2.3), record `meta` delle versioni (§5.5-bis), il backup che scrive ma non toglie (§9, punto 8). Nessun dato e' ancora stato scritto sul NAS. L'uso da parte dell'app: `docs/famiglia-dispositivi.md`. |
 | **Codice** | modulo `:core-trust` (`dev.pampa.mycloudgallery.core.trust`); la mappa sezione → file → test e' al §14. |
 | **Sigle** | `E-xx` = casi limite del piano; `C1`…`C23`, `L1`…`L17`, `S1`…`S12` = `docs/sicurezza.md`; `A1`…`I10` = voci della revisione. |
 | **Regola** | Ogni costante citata qui esiste identica nel codice (`TrustFormat`, `TrustLimits`). Cambiarne una vuol dire cambiare questo documento. Le righe del §7 che nominano una costante tra apici inversi sono confrontate con il codice da un test (`IndexSegmentTypesTest`). |
@@ -71,6 +71,12 @@ contenuto, si avvolgono nell'involucro **`MCGW`**, definito qui come proposta e 
 Il ripristino toglie gli 8 byte iniziali; la dimensione registrata nel record del cestino (§5.7) resta quella
 dell'originale. Si decide alla 4B, con l'esito di F14 (L30 di `docs/sicurezza.md`).
 
+**`Backup/` e `Versioni/` sono cartelle normali (Fase 5, N5).** Le crea l'app fuori da `.mycloudgallery/` (§2.2) e
+contengono media veri con la loro estensione, non file del formato: se la share e' nelle librerie di Twonky o di Plex, i
+due servizi le vedono come ogni altra cartella di foto e di video, e le versioni precedenti possono comparire in TV
+(L43 di `docs/sicurezza.md`). Non c'e' niente da nascondere: sono i file dell'utente. La prova F45 di
+`docs/fase5-progetto.md` §5.6 dice se compaiono; l'utente decide poi se escludere `Versioni/` da Twonky e Plex.
+
 L'indice di una share sta **dentro quella share** (stessi permessi dei file, C19). Il registro di famiglia
 sta solo nell'**area comune**, perche' tutti devono leggerlo.
 
@@ -93,7 +99,8 @@ sta solo nell'**area comune**, perche' tutti devono leggerlo.
 │   ├── rec/<id elemento>                 [5] record firmato del cestino
 │   └── files/<id elemento>               il file cestinato, rinominato senza estensione
 ├── albums/<id album>/<id dispositivo>/head/<versione>   [6] album condivisi (Fase 7), area comune
-└── tmp/                                  temporanei della pubblicazione atomica
+└── tmp/                                  temporanei della pubblicazione atomica; dalla Fase 5 anche i
+                                          temporanei del backup <id dispositivo>-bk-<id> (senza estensione)
 
 <area privata dell'admin>/.mycloudgallery/recovery/<id famiglia>/<impronta della chiave>   kit di recupero (§4.8)
 <area privata di un account>/.mycloudgallery/family/reports/<id dispositivo>/<vers.>   [7] copia della segnalazione (prova di possesso, §5.9)
@@ -101,6 +108,27 @@ sta solo nell'**area comune**, perche' tutti devono leggerlo.
 
 `[n]` e' il tipo del file firmato (§5.1). Ogni dispositivo scrive **solo sotto i propri id** (piu' le
 richieste e le prenotazioni); l'admin scrive il registro.
+
+**Fuori da `.mycloudgallery/` (Fase 5, N1).** Le cartelle che l'app crea nelle aree degli utenti. Sono file normali con la
+loro estensione, **non firmati** e visibili dal PC (non fanno parte del formato: nessuna firma, nessuna versione):
+
+```
+<area privata di un account>/Backup/<dispositivo>/AAAA/MM/                foto e video della fotocamera, per data di scatto
+<area privata di un account>/Backup/<dispositivo>/<Nome>/AAAA/MM/         screenshot e cartelle aggiuntive
+<area privata di un account>/Backup/<dispositivo>/Senza data/             data di scatto assente o assurda (E-B17)
+<area privata di un account>/Backup/<dispositivo>/Modificate/AAAA/MM/     modifiche di media di aree in sola lettura (5B, D35)
+<area privata di un account>/Backup/Area comune/AAAA/MM/                  copie private di media dell'area comune (guardiano, D9)
+<share>/Versioni/<percorso della cartella del file>/<nome> (originale).<ext>              versioni precedenti (5B, D17)
+<share>/Versioni/<percorso della cartella del file>/<nome> (versione del AAAA-MM-GG HH.MM).<ext>
+```
+
+- Il **temporaneo del backup** sta in `.mycloudgallery/tmp/` della share di destinazione, con il nome
+  `<id dispositivo>-bk-<id elemento>` e **nessuna estensione** (D33): cartella col punto e nome senza estensione lo
+  tengono lontano dalla scansione, da DLNA e dalle viste normali del PC. Si pubblica con il nome definitivo solo dopo la
+  rilettura completa (D4) e **senza sostituire** (`publishTemp`).
+- `Backup/` sta nell'area privata dell'utente; `Versioni/` sta alla **radice di ogni share** e ne rispecchia i
+  percorsi (D17, Q2): un solo posto da documentare e da escludere in Twonky e Plex.
+- Il nome del dispositivo in `Backup/<dispositivo>/` e' scelto una volta (D7) e validato con `SharePath` (§8.1).
 
 ### 2.3 Come si scrive e come si legge (l'interfaccia `NasFileSystem`)
 
@@ -146,7 +174,7 @@ la esegue solo `core-nasops` (§9, punto 7), mai `core-trust`.
 | Teste proprie (`devices/<io>/<tipo>/head/<n>`) | superate: si tengono sempre le ultime `OWN_FILES_KEEP_HEADS` (3) | la piu' alta |
 | Segmenti propri (`devices/<io>/<tipo>/seg/<impronta>`) | non elencati da nessuna delle ultime 3 teste **e** piu' vecchi di `OWN_FILES_GRACE_MILLIS` (7 giorni, ora del NAS) | un segmento elencato da una delle ultime 3 teste |
 | Generazioni proprie di prenotazione (`leases/.../<n>`) | superate da una generazione piu' alta della stessa risorsa | la generazione piu' alta della risorsa, anche se propria |
-| Temporanei propri (`tmp/<io>-*`) | piu' vecchi di un giorno (come `NasHousekeeping`) | quelli citati dal diario locale delle operazioni (4B) |
+| Temporanei propri (`tmp/<io>-*`) | piu' vecchi di un giorno (come `NasHousekeeping`) | quelli citati da **uno dei due** diari locali: operazioni (4B, `tmp/<io>-op-…`) e backup (Fase 5, `tmp/<io>-bk-…`; N2, D33) |
 | Kit della chiave ruotata (§4.8) | dopo la rotazione confermata dall'admin | il kit della chiave corrente |
 
 - **Un file e' proprio solo se lo dicono insieme la firma e il posto**: firmato da questo dispositivo (per i file
@@ -158,6 +186,11 @@ la esegue solo `core-nasops` (§9, punto 7), mai `core-trust`.
 - **Generazioni condivise** (nota della revisione 1.4, riga 109): la generazione piu' alta di una risorsa non si toglie
   mai, nemmeno se e' mia, cosi' chi legge trova sempre l'ultimo stato e il numero successivo non si ripete.
 - Una testa di dati personali (`personal`) e i suoi segmenti seguono le stesse regole nella propria area privata.
+- **Temporanei del backup (Fase 5, N2, D33).** Un temporaneo proprio si toglie **solo se nessuno dei due diari** (operazioni
+  e backup) lo cita. Un video a meta' fermo da piu' di un giorno (telefono fuori casa) e' citato dal diario del backup con il
+  suo punto di ripresa: resta, anche oltre il giorno (E-B21). `OwnFilesCleaner` riceve i temporanei citati da entrambi i diari
+  da una porta (`CitedTemps`) che compone `:app`. La pulizia di `core-nas` (`SmbNasHousekeeping`) riconosce solo i suoi nomi
+  da 32 cifre esadecimali e non tocca i `-bk-`.
 
 ### 2.4 Nomi
 
@@ -743,6 +776,18 @@ segmento. **Fiducia** (D8): un record serve a mostrare (miniature, metadati), a 
 coordinare il lavoro; **non basta** per unire un media del telefono a un file del NAS (serve l'impronta letta da chi
 unisce), per dire "al sicuro" (rilettura locale con SHA-256) ne' per nessuna azione sui file (§9).
 
+**Versioni caricate dal backup (Fase 5, N4).** Nessun campo nuovo e nessuna versione del formato: bastano `vkind` e `parent`
+della tabella qui sopra.
+- Il record `meta` di una **versione caricata** dal backup (D17, D18: una modifica fatta sul telefono o con un editor
+  esterno, una correzione fatta dall'app) lo pubblica chi carica (D10), con il timbro letto **dopo** la pubblicazione;
+  `vkind` e' `edited` (modifica) o `corrected` (correzione di data o luogo, E-L8) e `parent` e' la versione da cui nasce.
+  `media` resta quello del media (stessa identita'), `version` e' quello della versione nuova.
+- I file in `Versioni/` (§2.2) sono **file normali della share**, con il loro record `meta` pubblicato come quello degli
+  altri file: la regola di pubblicazione del §5.5 (solo dati ricavati da file di quella share) vale cosi' com'e'. Il loro
+  `path` e' un percorso di media come gli altri (§8.1).
+- Archiviare una versione (5B) e' una **rinomina** nella stessa share: i byte e il `fileId` non cambiano, e la scansione la
+  riconosce per `fileId` (E-N1) senza rifare il lavoro.
+
 ### 5.6 Prenotazione (tipo 4)
 
 `family`, `device`, `share`, `resource` (chiave del lavoro, al massimo 256 caratteri), `generation`,
@@ -1084,6 +1129,32 @@ partono solo da azioni locali confermate**, con tetti per giro. Come la garantis
      a ogni passo per ogni macchina a stati (`EveryCallTest`, `RoomOpsStoreTest`), un NAS ostile attraversato da
      tutti gli ingressi automatici senza cambiare un byte (`NoRemoteDataToActionTest`), il finto cestino e i record
      falsi o altrui (`TrashPurgeTest`).
+
+8. **Il backup scrive, ma non toglie (Fase 5, N3, D2).** `core-backup` e' un **secondo** modulo che scrive i media sul NAS,
+   ma con poteri minori di `core-nasops`: gira da solo ogni notte, partendo da dati locali e senza una conferma per file,
+   quindi deve essere **incapace** di togliere o sostituire un file per costruzione. Vede il NAS **solo** attraverso
+   `NasBackupOps`, una vista in sola aggiunta di `SmbNasFileOps` (`core-nas/ops/backup/`) con un marcatore suo
+   (`@AppendOnlyNasAccess`, `@RequiresOptIn` di livello errore).
+   - **Cosa puo' fare**: creare le cartelle che mancano (`mkdirs`); creare e scrivere un **proprio** temporaneo
+     (`openTemp`) e riaprirlo per riprendere un video grande (`reopenTemp`: solo un `-bk-` proprio, aperto senza crearlo e
+     accorciato al punto di ripresa salvato nel diario); copiare lato server in un proprio temporaneo (`copyToTemp`, per il guardiano delle copie
+     private); **pubblicare senza sostituire** (`publishTemp`: rinomina che fallisce se il nome esiste); togliere i
+     **propri** temporanei (`deleteOwnTemp`); chiedere lo spazio (`space`). Nella 5B anche **rinominare verso e da
+     `Versioni/`** (`archiveVersion`, `restoreVersion`), nella stessa share, senza sostituire e con il timbro (dimensione,
+     data, `fileId`) obbligatorio e controllato sullo stesso handle prima della rinomina.
+   - **Cosa non puo' fare**: nessuna di queste azioni toglie byte di un media (il solo file che si toglie e' un proprio
+     temporaneo, mai un media). Niente cestino, niente rinomina libera, niente `deleteIfUnchanged`. `core-backup` non vede
+     `NasFileOps`, `DestructiveNasAccess`, `ConfirmationIssuer` ne' `core-nasops`. Cio' che toglie un file dal NAS
+     (l'originale di un video modificato, le versioni intermedie) passa dal foglio di conferma di `feature-nas` e da
+     `core-nasops`, con la sua `UserConfirmation`.
+   - **Ingressi**: il catalogo locale, le impostazioni del backup e le conferme della UI (nella 5B, `PhoneConfirmation`,
+     costruita solo dalla UI dopo un tocco). **Mai** un dato letto dal NAS: chi legge il NAS o mostra la Libreria non vede
+     `core-backup` (un dato remoto diventa un'azione del backup solo passando dal catalogo locale o dalla UI).
+   - **Prove**: il compilatore (nessuno, fuori da `core-nas` e `core-backup`, passa l'argomento che permette di usare
+     `NasBackupOps`); `Phase4ArchitectureTest` esteso (`core-backup` che nomina `NasFileOps` o `core-nasops`, `NasBackupOps`
+     fuori da `core-nas` e `core-backup`, un modulo che legge il NAS e vede `core-backup`, `feature-backup` che vede
+     `core-nas`: ognuno fallisce reintroducendo la violazione); la prova delle 500 interruzioni del backup (`docs/prova-500.md`,
+     invarianti 1–11 del §5.4 di `docs/fase5-progetto.md`, piu' 12–14 nella 5B).
 
 Le operazioni distruttive vere vivranno in moduli e interfacce separate (Fasi 2.4, 4.5, 5, 7), ciascuna con
 il suo diario locale e i suoi test "dato remoto ostile → nessuna azione".

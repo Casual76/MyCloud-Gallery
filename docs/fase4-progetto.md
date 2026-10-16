@@ -258,6 +258,7 @@ app → tutti
   - `PreparationWorker` (`PREPARATION`, solo Preparatori);
   - `HqPreviewsWorker` (`HQ_PREVIEWS`, solo con "Alta");
   - `VerifyWorker` (`PHOTO_BACKUP`/`VIDEO_BACKUP`): verifica delle copie private e hash completi `FULL_HASH`;
+    > **Nota (Fase 5, 16/10/2026): non realizzato nella Fase 4.** Il `VerifyWorker` non è stato scritto, e non c'è l'esecutore della fase `FULL_HASH` che il catalogo mette in coda (F4-D21): nessun codice chiama `markVerified`, quindi oggi il segno "al sicuro" non può comparire. Passano alla Fase 5: `SafetyVerifier` in `core-backup` e `SafetyVerifyWorker` in `:app` (D14, P3 di `docs/fase5-progetto.md`).
   - 4B: `NasOpsJobService` (UIDT), `NasTrashPurgeWorker`, `PersonalSyncWorker`, `IndexMaintenanceWorker` (compattazione e pulizia dei propri file).
 - **Notifiche**: congelamento **subito** (eccezione alla proposta 12, domanda Q6); "il NAS non ha risposto stanotte" e "attività ferma da N giorni" nel riepilogo giornaliero.
 - **Azzeramento**: `GalleryGraph.shutdown()` ferma anche `NasGraph`; i pacchi stanno già in `replica/`, il diario delle operazioni e quello del cestino nel database, quindi `AppLocalDataEraser` li toglie senza modifiche. Dopo un azzeramento i file nel cestino del NAS restano **per sempre** (nessun diario, nessuna pulizia): è il comportamento sicuro, e la guida lo dice.
@@ -623,6 +624,8 @@ Due Preparatori insieme **non** dimezzano il tempo: il limite è la CPU del NAS.
 | Esclusione di `.mycloudgallery/` dalla scansione | i temporanei dell'uploader non compaiono mai |
 | `PHOTO_BACKUP` / `VIDEO_BACKUP` già usati per la verifica | stesse regole, stime già calibrate in parte |
 | Struttura `Backup/<dispositivo>/AAAA/MM` | **non** si crea nella Fase 4 |
+
+> **Nota (Fase 5, 16/10/2026):** la riga "`VerifyWorker` e `SafetyRules` collegati" non si è avverata nella Fase 4. `SafetyRules` c'è (`evaluate`, `canFreePhoneCopy`), ma il `VerifyWorker` e l'esecutore della fase `FULL_HASH` (F4-D21) **non sono stati realizzati** e nessun codice chiama `markVerified`: passano alla Fase 5, nel pacchetto P3 (D14 di `docs/fase5-progetto.md`: `SafetyVerifier` in `core-backup`, `SafetyVerifyWorker` in `:app`).
 
 ## 3. Alternative scartate
 | Tema | Opzioni | Scelta e motivo |

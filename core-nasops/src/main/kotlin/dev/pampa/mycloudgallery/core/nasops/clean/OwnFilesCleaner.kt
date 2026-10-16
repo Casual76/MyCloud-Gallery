@@ -9,6 +9,7 @@ import dev.pampa.mycloudgallery.core.nas.contract.NasResult
 import dev.pampa.mycloudgallery.core.nas.contract.Purpose
 import dev.pampa.mycloudgallery.core.nas.ops.DeleteOutcome
 import dev.pampa.mycloudgallery.core.nas.ops.NasFileOps
+import dev.pampa.mycloudgallery.core.nasops.contract.CitedTemps
 import dev.pampa.mycloudgallery.core.nasops.contract.CleanReport
 import dev.pampa.mycloudgallery.core.nasops.contract.OpClocks
 import dev.pampa.mycloudgallery.core.nasops.contract.OpState
@@ -32,6 +33,7 @@ import dev.pampa.mycloudgallery.core.trust.envelope.DocType
 import dev.pampa.mycloudgallery.core.trust.nas.NasLayout
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import dev.pampa.mycloudgallery.core.trust.registry.RegistryState
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration
 import kotlinx.coroutines.sync.withLock
 
@@ -43,7 +45,8 @@ import kotlinx.coroutines.sync.withLock
  *
  * Le prove non vengono mai da un dato remoto "di fiducia": la firma si verifica (una testa o una prenotazione e' mia solo se la firma e'
  * mia **e** il posto e' mio), i segmenti si giudicano con le teste proprie verificate e il diario locale dei segmenti pubblicati, i
- * temporanei con il diario delle operazioni (un temporaneo citato da un'operazione non chiusa non si tocca). Nel dubbio (registro non
+ * temporanei con il diario delle operazioni e, dalla Fase 5 (D33), con quello del backup ([CitedTemps]): un temporaneo citato da un
+ * elemento non chiuso dell'uno o dell'altro non si tocca. Nel dubbio (registro non
  * pronto, una testa illeggibile, nessuna testa valida) si tiene tutto. Le stesse condizioni della pulizia del cestino: niente con
  * congelamento, salto dell'ora (D32) o emergenza ([OpsGate]), ne' senza ora del NAS.
  */
@@ -63,6 +66,8 @@ class OwnFilesCleaner internal constructor(
   private val publishedSegments: suspend (String) -> Set<String> = { emptySet() },
   /** I segmenti elencati dalla testa propria corrente secondo il database (in piu' delle teste lette dal NAS). */
   private val currentSegments: suspend (String) -> Set<String> = { emptySet() },
+  /** D33: i temporanei citati dal diario del backup (porta composta da `:app`); in mancanza, solo quelli delle operazioni. */
+  private val otherCited: CitedTemps = CitedTemps.NONE,
 ) : OwnFilesCleaning {
 
   init {
@@ -234,12 +239,20 @@ class OwnFilesCleaner internal constructor(
   private suspend fun temps(share: String, facts: MutableList<OwnFileFacts>, sizes: MutableMap<SharePath, Long>) {
     val dir = NasLayout.ROOT.child("tmp")
     val cited = citedTemps()
+    // D33: senza la risposta dell'altro diario non si sa se un temporaneo serve ancora: in questo giro i temporanei restano tutti.
+    val others = try {
+      otherCited.cited()
+    } catch (e: CancellationException) {
+      throw e
+    } catch (_: Exception) {
+      return
+    }
     for (entry in list(share, dir)) {
       if (entry.isDirectory) continue
       val path = runCatching { dir.child(entry.name) }.getOrNull() ?: continue
       val file = OwnFile.classify(path) as? OwnFile.Temp ?: continue
       if (file.deviceId != deviceId) continue
-      facts += OwnFileFacts.TempFacts(file, modifiedAtNas = entry.modifiedAt, citedByDiary = path in cited)
+      facts += OwnFileFacts.TempFacts(file, modifiedAtNas = entry.modifiedAt, citedByDiary = path in cited || path in others)
       sizes[path] = entry.size
     }
   }

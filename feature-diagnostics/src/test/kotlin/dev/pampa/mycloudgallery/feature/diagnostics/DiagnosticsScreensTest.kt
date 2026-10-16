@@ -365,6 +365,7 @@ class DiagnosticsScreensTest {
     DiagSection.RECENT_EVENTS -> R.string.diagnostics_section_recent
     DiagSection.PHONE_LIBRARY -> R.string.diagnostics_section_phone_library
     DiagSection.NAS_LIBRARY -> R.string.diagnostics_section_nas_library
+    DiagSection.BACKUP -> R.string.diagnostics_section_backup
     DiagSection.STORAGE -> R.string.diagnostics_section_storage
     DiagSection.MONTHLY_TRAFFIC -> R.string.diagnostics_section_traffic
     DiagSection.ANDROID_WARNINGS -> R.string.diagnostics_section_android

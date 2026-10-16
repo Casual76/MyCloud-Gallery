@@ -1,0 +1,65 @@
+// Il backup della Fase 5A (docs/fase5-progetto.md §1.1, §1.2, §2.1-§2.3, §2.6, D2-D16, D33): piano, caricamento (diario e macchina a
+// stati), verifiche, deduplica, guardiano delle copie private, stato. Contratti, null-object, fake ed esecutore di riferimento di P0;
+// la logica e' di P2 (caricamento, `upload/`, `store/`), P3 (`safety/`) e P4 (`plan/`, `settings/`). Nella 5B versioni, correzioni,
+// "Libera spazio", attivita' in sospeso, caricamenti in arrivo (P0-B, P8, P9).
+//
+// **Vede il NAS solo in sola aggiunta (D2).** L'unico accesso in scrittura e' `NasBackupOps` (core-nas/ops/backup), con il suo
+// marcatore `AppendOnlyNasAccess` (`@RequiresOptIn`, ERRORE): l'argomento del compilatore lo passano solo core-nas e questo modulo.
+// Non vede `NasFileOps`, `DestructiveNasAccess`, `ConfirmationIssuer` ne' core-nasops: cio' che toglie un file dal NAS passa dal
+// foglio di feature-nas e da core-nasops con la conferma dell'utente. Non vede core-mediastore: i byte del telefono arrivano dalla
+// porta `PhoneBytes` (legata da :app). Lo verifica `Phase5ArchitectureTest` (core-common).
+//
+// Pacchetti: `contract`, `noop`, `testing` (fake, esecutore di riferimento `InMemoryBackupEngine`, verificatore degli invarianti del
+// §5.4 per il banco di P6). core-nas, core-database, core-index, core-prepare, core-metadata e core-rules sono `implementation`:
+// nessun loro tipo nelle firme dei contratti, cosi' feature-backup (che dipende da qui) resta cieca a core-nas (§1.1).
+//
+// D28: nessuna rete in questo modulo (NoNetworkSourcesTest): SMB solo dai contratti di core-nas. §4.3 e D31: nessun orologio del
+// telefono nelle decisioni (NoWallClockSourcesTest): orologio monotono per le durate, ora del NAS per cio' che si scrive.
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.core.backup'
+
+  // D2: l'adesione alle primitive in sola aggiunta (vedi core-nas/build.gradle). MAI quella di `DestructiveNasAccess`.
+  kotlinOptions {
+    freeCompilerArgs += ['-opt-in=dev.pampa.mycloudgallery.core.nas.ops.backup.AppendOnlyNasAccess']
+  }
+
+  // Le prove contro l'area di prova del NAS vero (banco di P6) solo con -PnasIntegration, come in core-nas e core-nasops; un heap piu'
+  // largo per i file grandi del banco.
+  testOptions {
+    unitTests.all { test ->
+      test.systemProperty('nasIntegration', project.hasProperty('nasIntegration') ? 'true' : 'false')
+      test.maxHeapSize = '1536m'
+    }
+  }
+}
+
+dependencies {
+  api project(':core-common')
+  api project(':core-model')
+  // api: SharePath (core-trust) compare nelle firme dei contratti (destinazioni, temporanei del diario).
+  api project(':core-trust')
+
+  // §1.1: il NAS (lettore + NasBackupOps), le porte del catalogo (Room v4, P1), la pubblicazione dell'indice (D10), la preparazione
+  // dai byte del telefono (`PrepareSource.Bytes`, D10), i metadati (`MediaBytes`, impronte), le regole e le misure (P4).
+  implementation project(':core-nas')
+  implementation project(':core-database')
+  implementation project(':core-index')
+  implementation project(':core-prepare')
+  implementation project(':core-metadata')
+  implementation project(':core-rules')
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+  // Il diario Room vero in memoria (RoomBackupStore, P2) e la morte del processo sul database.
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+}

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!--
+      :core-backup: nessun permesso e nessun componente (Fase 5A, P0). Il primo backup e "Fai ora" girano nel BackupJobService di
+      :app (UIDT, D11, D29), i lavori di notte in WorkManager (:app): il componente sta nel manifest di :app, non qui. Nessuna rete
+      (D28): il NAS si raggiunge solo dai contratti di core-nas, in sola aggiunta (D2).
+      Un permesso o un componente nuovo si chiede all'orchestratore: prima la riga in docs/sicurezza.md 4-bis, poi
+      quella in releaseManifestPolicy.
+  -->
+
+</manifest>

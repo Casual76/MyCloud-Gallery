@@ -488,6 +488,9 @@ internal fun PresenceBadge.toGallery(): GalleryPresence = when (this) {
   PresenceBadge.BOTH -> GalleryPresence.Both
   PresenceBadge.SAFE -> GalleryPresence.Safe
   PresenceBadge.TO_VERIFY -> GalleryPresence.ToVerify
+  // Fase 5 (P0, D15): finche' il glifo PROBLEM non e' nel catalogo G2 (P5, §12.4 della grafica) un problema del backup si
+  // disegna con il segno che chiede attenzione, mai come "al sicuro".
+  PresenceBadge.PROBLEM -> GalleryPresence.ToVerify
 }
 
 /**

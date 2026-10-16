@@ -43,6 +43,14 @@ enum class MediaGroupKind(override val code: String) : StableCode {
    * decide: stessi byte → unione d'identita', byte diversi → il gruppo si scioglie. Mai un'unione senza hash completo.
    */
   PROBABLE_DUPLICATE("probable_duplicate"),
+
+  /**
+   * Fase 5 (D36, `docs/fase5-progetto.md` §2.12, E-L10…E-L13): lo **stesso scatto con byte diversi** (ricompresso da un cloud,
+   * EXIF riscritto, HEIC convertito) in una cella sola, con la copia migliore come copertina ([CellFlags.SIMILAR_COPIES]). Ogni
+   * copia resta un media a se' (il backup carica sempre l'originale del telefono, "al sicuro" e' per media). Gruppo **derivato
+   * locale**: ogni dispositivo lo ricalcola; "Separa" e "Mostra questa come principale" sono dati personali (core-personal).
+   */
+  SIMILAR_COPIES("similar_copies"),
 }
 
 /**

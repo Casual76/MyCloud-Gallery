@@ -56,6 +56,10 @@ dependencies {
   // parlano con i contratti delle operazioni. `Phase4ArchitectureTest` ammette questa dipendenza (come `feature-nas` e `:app`) e vieta
   // le primitive di scrittura: da qui non si arriva a `NasFileOps`, solo a piano, conferma e avvio.
   implementation project(':core-nasops')
+  // Fase 5A (P0, docs/fase5-progetto.md §1.5, D15, D16): la riga "Backup" del pannello info (`info/BackupInfo*`, P5) mostra
+  // `MediaBackupState` (core-backup/contract). Solo i contratti: core-backup tiene core-nas in `implementation`, quindi da qui non si
+  // arriva a `NasBackupOps` (Phase5ArchitectureTest).
+  implementation project(':core-backup')
 
   implementation appDeps.media3Exoplayer
   implementation appDeps.telephotoZoomableImage

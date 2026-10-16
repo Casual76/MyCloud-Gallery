@@ -63,6 +63,24 @@ object CellFlags {
    */
   const val TO_VERIFY: Int = 1 shl 13
 
+  // --- Fase 5: backup e copie simili (`docs/fase5-progetto.md` D15, D36). Bit fissati da P0, calcolati da P1 e P15 ------------
+
+  /**
+   * Un errore del backup che chiede l'utente (D15): illeggibile, verifica fallita tre volte (E-B18), sparito prima del backup
+   * (E-B4), copia privata non piu' integra (E-B8). Derivato dal catalogo nella stessa transazione che registra il problema (P1).
+   * "In coda", "in caricamento" e "in verifica" **non** sono bit: cambierebbero a ogni file e farebbero ricostruire l'indice della
+   * timeline migliaia di volte durante il primo backup (D15).
+   */
+  const val BACKUP_PROBLEM: Int = 1 shl 14
+
+  /**
+   * La cella e' la **copertina di un gruppo di copie simili** (D36, `MediaGroupKind.SIMILAR_COPIES`): lo stesso scatto con byte
+   * diversi mostrato una volta sola, con il segno "copie" e il numero (`groupSizeAt`). Con [GROUP_COVER] lo dice anche una raffica:
+   * questo bit e' cio' che distingue le due pile senza una colonna in piu' nell'istantanea (la cella oggi sa di essere una raffica
+   * solo da [GROUP_COVER] + dimensione del gruppo, e il "da verificare" di `PROBABLE_DUPLICATE` ha gia' un bit suo, [TO_VERIFY]).
+   */
+  const val SIMILAR_COPIES: Int = 1 shl 15
+
   /** Tutti i flag con il loro nome, per i test di stabilita' e la Diagnostica (solo numeri). */
   val ALL: Map<String, Int> = linkedMapOf(
     "EDITED" to EDITED,
@@ -79,6 +97,8 @@ object CellFlags {
     "ON_NAS" to ON_NAS,
     "SAFE" to SAFE,
     "TO_VERIFY" to TO_VERIFY,
+    "BACKUP_PROBLEM" to BACKUP_PROBLEM,
+    "SIMILAR_COPIES" to SIMILAR_COPIES,
   )
 
   fun has(flags: Int, flag: Int): Boolean = flags and flag == flag
@@ -88,8 +108,9 @@ object CellFlags {
  * Il badge di presenza di una cella (`docs/fase4-progetto.md` §1.5): **cosa** dire, ricavato dai soli [CellFlags].
  * **Come** dirlo (icona, colore, posizione) e' del filone grafico (`GalleryBadge`).
  *
- * Uno solo per cella, in quest'ordine: [SAFE] (la cosa che conta di piu'), [TO_VERIFY], [BOTH], [PHONE_ONLY],
- * [NAS_ONLY]. `null` quando la cella non ha bit di presenza (libreria sintetica, o prima che P2 li calcoli).
+ * Uno solo per cella, in quest'ordine: [PROBLEM] (Fase 5, D15: un problema del backup chiede l'utente e non si nasconde mai
+ * dietro "al sicuro"), [SAFE] (la cosa che conta di piu'), [TO_VERIFY], [BOTH], [PHONE_ONLY], [NAS_ONLY]. `null` quando la
+ * cella non ha bit di presenza (libreria sintetica, o prima che P2 li calcoli).
  */
 enum class PresenceBadge {
   PHONE_ONLY,
@@ -97,6 +118,9 @@ enum class PresenceBadge {
   BOTH,
   SAFE,
   TO_VERIFY,
+
+  /** Fase 5 (D15, §1.5 di `docs/fase5-progetto.md`): [CellFlags.BACKUP_PROBLEM]. Il glifo e' del catalogo G2 (P5). */
+  PROBLEM,
   ;
 
   companion object {
@@ -104,6 +128,7 @@ enum class PresenceBadge {
       val phone = CellFlags.has(flags, CellFlags.ON_PHONE)
       val nas = CellFlags.has(flags, CellFlags.ON_NAS)
       return when {
+        CellFlags.has(flags, CellFlags.BACKUP_PROBLEM) -> PROBLEM
         CellFlags.has(flags, CellFlags.SAFE) -> SAFE
         CellFlags.has(flags, CellFlags.TO_VERIFY) -> TO_VERIFY
         phone && nas -> BOTH

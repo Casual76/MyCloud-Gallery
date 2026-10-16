@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.feature.diagnostics.ui
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.DataUsage
 import androidx.compose.material.icons.rounded.Dns
@@ -75,6 +76,7 @@ internal fun DiagSection.icon(): ImageVector = when (this) {
   DiagSection.RECENT_EVENTS -> Icons.Rounded.History
   DiagSection.PHONE_LIBRARY -> Icons.Rounded.PhotoLibrary
   DiagSection.NAS_LIBRARY -> Icons.Rounded.Dns
+  DiagSection.BACKUP -> Icons.Rounded.Backup
   DiagSection.STORAGE -> Icons.Rounded.Storage
   DiagSection.MONTHLY_TRAFFIC -> Icons.Rounded.DataUsage
   DiagSection.ANDROID_WARNINGS -> Icons.Rounded.PhoneAndroid
@@ -89,6 +91,7 @@ internal fun DiagSection.titleRes(): Int = when (this) {
   DiagSection.RECENT_EVENTS -> R.string.diagnostics_section_recent
   DiagSection.PHONE_LIBRARY -> R.string.diagnostics_section_phone_library
   DiagSection.NAS_LIBRARY -> R.string.diagnostics_section_nas_library
+  DiagSection.BACKUP -> R.string.diagnostics_section_backup
   DiagSection.STORAGE -> R.string.diagnostics_section_storage
   DiagSection.MONTHLY_TRAFFIC -> R.string.diagnostics_section_traffic
   DiagSection.ANDROID_WARNINGS -> R.string.diagnostics_section_android
@@ -103,6 +106,7 @@ internal fun DiagSection.hintRes(): Int = when (this) {
   DiagSection.RECENT_EVENTS -> R.string.diagnostics_hint_recent
   DiagSection.PHONE_LIBRARY -> R.string.diagnostics_hint_phone_library
   DiagSection.NAS_LIBRARY -> R.string.diagnostics_hint_nas_library
+  DiagSection.BACKUP -> R.string.diagnostics_hint_backup
   DiagSection.STORAGE -> R.string.diagnostics_hint_storage
   DiagSection.MONTHLY_TRAFFIC -> R.string.diagnostics_hint_traffic
   DiagSection.ANDROID_WARNINGS -> R.string.diagnostics_hint_android

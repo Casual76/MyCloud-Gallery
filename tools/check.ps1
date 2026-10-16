@@ -27,9 +27,15 @@
                                 "pronta", `DebugSyntheticSize`, il sink di logcat e il catalogo dei componenti (I4 della
                                 revisione di sicurezza), ne' (Fase 4A, D33) la recinzione delle prove `ShareFence` e il NAS
                                 sintetico del menu di debug, ne' (revisione 4B, F20) il gancio che accorcia i 30 giorni del
-                                cestino del NAS: lettura diretta del dex, FALLISCE se non lo legge; e (R11 della
-                                revisione 4A) gli esiti di R8 della release: `ShareFence` tolta per intero in usage.txt e
-                                assente da mapping.txt (una classe fusa in un'altra non lascia il suo nome nel dex)
+                                cestino del NAS, ne' (Fase 5A, D13) la recinzione del telefono del backup in debug
+                                (`DebugBackupFence`, le cartelle `mcg-prova` e la radice `mcg-campo`): lettura diretta del dex,
+                                FALLISCE se non lo legge; e (R11 della revisione 4A) gli esiti di R8 della release: `ShareFence`
+                                tolta per intero in usage.txt e assente da mapping.txt (una classe fusa in un'altra non lascia il
+                                suo nome nel dex)
+    7d. D12 nella release       (Fase 5A) la protezione "backup solo sulle share di prova" C'E' nell'APK di release: il campo
+                                `FeatureFlags.backupTestSharesOnly` e la decisione `backupMayWriteTo` nel dex e tenuti da R8 in
+                                mapping.txt (consumer-rules.pro di core-common); il valore acceso e non spegnibile lo prova
+                                FeatureFlagsTest
     7c. niente servizi         l'APK di release non ha nessun `META-INF/services/dev.pampa.*` (ne' un file di servizio che
                                 nomini una classe `dev.pampa.*`): le varianti di misura legano le loro classi con Hilt, mai
                                 con `ServiceLoader` (R6)
@@ -495,9 +501,12 @@ $debugRemnants = @(
   "core/nas/fence/ShareFence", "SyntheticNasKit", "nas-synthetic",
   # Fase 4B (revisione 4B, prova F20): il gancio che accorcia i 30 giorni del cestino del NAS (DeveloperTools di debug) e il nome del
   # suo marcatore scritto da adb. In release DeveloperTools torna null e il gancio non deve esistere.
-  "DebugTrashRetention", "debug-trash-retention"
+  "DebugTrashRetention", "debug-trash-retention",
+  # Fase 5A (P0, D13): la recinzione del telefono del backup con gli account di prova (DeveloperTools di debug, app/src/debug) e le
+  # cartelle che recinta: in release DeveloperTools.backupFence() risponde null e niente di questo deve esistere.
+  "DebugBackupFence", "mcg-prova", "mcg-campo"
 )
-Step "nessun resto degli strumenti di debug nel dex di release (Libreria e NAS sintetici, famiglia pronta, sink di logcat, ShareFence D33, cestino corto F20)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
+Step "nessun resto degli strumenti di debug nel dex di release (Libreria e NAS sintetici, famiglia pronta, sink di logcat, ShareFence D33, cestino corto F20, recinzione del telefono D13)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
   $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
   if (-not $apk) { return "nessun APK di release in app\build\outputs\apk\release" }
@@ -544,6 +553,31 @@ Step "R8 ha tolto la recinzione D33 dalla release (usage.txt e mapping.txt)" -Sk
   }
   if ($problems.Count -gt 0) { return ($problems -join "; ") }
   Write-Host ("        {0} classi della recinzione tolte da R8, nessuna in mapping.txt" -f $fenceClasses.Count) -ForegroundColor DarkGray
+}
+
+# Fase 5A (P0, D12): "backup solo sulle share di prova" e' una protezione che deve esserci NELLA RELEASE (come F4-D31), accesa e non
+# spegnibile (FeatureFlagsTest). Qui si controlla che R8 non l'abbia tolta: i due membri di `FeatureFlags` (il campo e la decisione per
+# share, tenuti da core-common/consumer-rules.pro anche prima che P7 leghi il cancello del backup) devono stare nel dex dell'APK di
+# release e in mapping.txt. Senza i file il passo FALLISCE (non salta).
+$d12Members = @("getBackupTestSharesOnly", "backupMayWriteTo")
+Step "D12 nella release: FeatureFlags.backupTestSharesOnly e backupMayWriteTo nel dex e in mapping.txt" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
+  $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if (-not $apk) { return "nessun APK di release in app\build\outputs\apk\release" }
+  $mapping = Join-Path $root "app\build\outputs\mapping\release\mapping.txt"
+  if (-not (Test-Path $mapping)) { return "manca mapping.txt in app\build\outputs\mapping\release" }
+  $problems = @()
+  $found = @(Get-DexClassesMatching $apk.FullName (($d12Members | ForEach-Object { [regex]::Escape($_) }) -join "|"))
+  foreach ($member in $d12Members) {
+    if ($found -notcontains $member) { $problems += "$member non e' nel dex di release: la protezione D12 e' stata tolta" }
+  }
+  $flags = "dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags"
+  if (-not (Select-String -Path $mapping -SimpleMatch -Pattern "$flags -> " -Quiet)) { $problems += "FeatureFlags non e' in mapping.txt" }
+  foreach ($member in @("boolean backupMayWriteTo(java.lang.String)", "boolean getBackupTestSharesOnly()")) {
+    if (-not (Select-String -Path $mapping -SimpleMatch -Pattern $member -Quiet)) { $problems += "$member non e' in mapping.txt" }
+  }
+  if ($problems.Count -gt 0) { return ($problems -join "; ") }
+  Write-Host "        D12 presente nella release (dex e mapping.txt)" -ForegroundColor DarkGray
 }
 
 # R6: nessun file di servizio nostro nell'APK di release. `ServiceLoader` e' un canale dichiarativo e invisibile: un file in

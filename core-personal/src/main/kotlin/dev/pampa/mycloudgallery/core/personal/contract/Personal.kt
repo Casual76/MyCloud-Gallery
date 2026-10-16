@@ -83,6 +83,58 @@ object PersonalFields {
 
   /** L'id del media di un elemento di album, o null se [field] non e' un elemento. */
   fun albumItemMedia(field: String): String? = field.takeIf { isAlbumItem(it) }?.substring("item:".length)?.takeIf { it.isNotEmpty() }
+
+  // --- Fase 5, D36 (docs/fase5-progetto.md §2.12): le scelte dell'utente sulle copie simili. Voci `MEDIA_FLAG` (un flag di un
+  // media, come preferito e nascosto) con campi nuovi: il formato della classe `personal` NON cambia (il tipo si riconosce dalla
+  // chiave, e `MEDIA_FLAG` c'e' gia'; una versione precedente dell'app le legge e le lascia stare, la proiezione sul catalogo
+  // risponde NOT_PROJECTED ai campi che non conosce). Le costruisce [SimilarCopiesRecords]; le proietta sul catalogo P15.
+
+  /** "Mostra questa come principale": [PersonalValue.Flag] vero sulla copia scelta; fra due scelte vince la piu' recente. */
+  const val SIMILAR_COVER: String = "similar_cover"
+
+  /** Prefisso del campo di una separazione: vedi [similarApart]. */
+  const val SIMILAR_APART: String = "similar_apart"
+
+  /**
+   * Il campo della separazione da [otherMediaId] ("Separa", E-L13): `similar_apart:<id dell'altro media>`. Una voce per coppia,
+   * sul media minore: la separazione e' simmetrica e vale per sempre ([PersonalValue.Removed] la toglie).
+   */
+  fun similarApart(otherMediaId: String): String = "$SIMILAR_APART:$otherMediaId"
+
+  /** Vero se [field] e' una separazione fra copie simili. */
+  fun isSimilarApart(field: String): Boolean = field.startsWith("$SIMILAR_APART:")
+
+  /** L'altro media di una separazione, o null se [field] non e' una separazione. */
+  fun similarApartOther(field: String): String? =
+    field.takeIf { isSimilarApart(it) }?.substring(SIMILAR_APART.length + 1)?.takeIf { it.isNotEmpty() }
+}
+
+/**
+ * Le chiavi delle due scelte dell'utente sulle copie simili (D36, §2.12), come **firme**: la logica (quale copertina vince, quando un
+ * gruppo si scioglie, la proiezione sulle tabelle locali di P1) e' di P15. Nessuna versione nuova del formato: sono voci `MEDIA_FLAG`
+ * con i campi di [PersonalFields] (vedi la nota li').
+ */
+object SimilarCopiesRecords {
+
+  /** La voce "questa copia e' la principale" di [mediaId] (valore: [PersonalValue.Flag]). */
+  fun cover(mediaId: String): PersonalKey = PersonalKey(PersonalKind.MEDIA_FLAG, mediaId, PersonalFields.SIMILAR_COVER)
+
+  /**
+   * La voce "[a] e [b] non sono copie simili" (valore: [PersonalValue.Flag] vero; lapide = di nuovo unibili). Simmetrica: la stessa
+   * chiave per (a, b) e (b, a), sul media minore, cosi' due dispositivi che separano la stessa coppia scrivono la stessa voce.
+   */
+  fun separation(a: String, b: String): PersonalKey {
+    require(a != b) { "Una separazione e' fra due media diversi." }
+    val (low, high) = if (a < b) a to b else b to a
+    return PersonalKey(PersonalKind.MEDIA_FLAG, low, PersonalFields.similarApart(high))
+  }
+
+  /** La coppia separata da [key], o null se [key] non e' una separazione. */
+  fun separatedPair(key: PersonalKey): Pair<String, String>? {
+    if (key.kind != PersonalKind.MEDIA_FLAG) return null
+    val other = PersonalFields.similarApartOther(key.field) ?: return null
+    return key.subject to other
+  }
 }
 
 /**

@@ -1,6 +1,8 @@
 package dev.pampa.mycloudgallery.core.common.featureflags
 
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
+import java.io.File
 import org.junit.Test
 
 class FeatureFlagsTest {
@@ -36,6 +38,30 @@ class FeatureFlagsTest {
     assertThat(FeatureFlags.forBuild(debugBuild = false, indexPublishTestSharesOnly = false).indexPublishTestSharesOnly).isTrue()
     assertThat(FeatureFlags.forBuild(debugBuild = true).indexPublishTestSharesOnly).isTrue()
     assertThat(FeatureFlags.forBuild(debugBuild = true, indexPublishTestSharesOnly = false).indexPublishTestSharesOnly).isFalse()
+  }
+
+  /**
+   * Fase 5, D12: il backup solo sulle share di prova e' acceso in release **e in debug**, e nessuna richiesta lo spegne: `forBuild`
+   * non ha nemmeno il parametro (lo controlla la lettura del sorgente qui sotto, perche' un parametro aggiunto con il default
+   * acceso passerebbe il resto del test).
+   */
+  @Test
+  fun ilBackupSoloSulleShareDiProvaEAccesoSempreENonSiSpegne() {
+    assertThat(FeatureFlags.RELEASE.backupTestSharesOnly).isTrue()
+    for (debug in listOf(false, true)) {
+      val flags = FeatureFlags.forBuild(debugBuild = debug, wol = true, nasLibrary = true, indexPublishTestSharesOnly = false)
+      assertThat(flags.backupTestSharesOnly).isTrue()
+      // La decisione per share: solo le share di prova scritte nel codice, mai una share di famiglia o pubblica.
+      for (share in listOf("test", "test2", "TEST-comune")) assertThat(flags.backupMayWriteTo(share)).isTrue()
+      for (share in listOf("alessio", "pampa", "NAS", "Public", "ｔｅｓｔ", "test ", "test3", "")) {
+        assertThat(flags.backupMayWriteTo(share)).isFalse()
+      }
+    }
+    val root = generateSequence(File(".").absoluteFile) { it.parentFile }.first { File(it, "settings.gradle").isFile }
+    val source = File(root, "core-common/src/main/kotlin/dev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags.kt").readText()
+    val forBuild = Regex("""fun\s+forBuild\s*\(([^)]*)\)""").find(source)?.groupValues?.get(1) ?: error("forBuild non trovata")
+    assertWithMessage("forBuild non deve poter spegnere D12").that(forBuild).doesNotContain("backup")
+    assertWithMessage("D12 e' una costante accesa").that(source).contains("private const val BACKUP_TEST_SHARES_ONLY: Boolean = true")
   }
 
   @Test

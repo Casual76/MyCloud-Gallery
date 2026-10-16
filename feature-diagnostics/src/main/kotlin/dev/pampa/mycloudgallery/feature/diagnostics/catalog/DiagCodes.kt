@@ -242,6 +242,11 @@ object DiagCodes {
   @JvmField val NAS_PERSONAL_STATE = DiagCode("NAS_PERSONAL_STATE", setOf("E-H4"))
   @JvmField val NAS_PERSONAL_REJECTED = DiagCode("NAS_PERSONAL_REJECTED", setOf("E-F5", "D26"))
 
+  // --- Il backup (Fase 5A) -----------------------------------------------------------------------------------------
+  // P0 aggiunge solo il codice di stato che tiene viva la sezione BACKUP (un test vuole almeno una voce per sezione), come per
+  // NAS_LIBRARY nella Fase 4. I codici del §2.6 (`BackupProblemCode` di core-backup) li cataloga P7.
+  @JvmField val BACKUP_STATE = DiagCode("BACKUP_STATE")
+
   // I codici di `PhoneLibraryDiagnostics` (core-mediastore, P2): stessi id e stessi edge case di
   // `PhoneLibraryDiagCodes`, scritti come letterali perche' questo modulo non dipende da core-mediastore.
   // `Fase3CatalogTest` verifica la tabella qui sotto e un test di :app (P11) verifica l'uguaglianza con

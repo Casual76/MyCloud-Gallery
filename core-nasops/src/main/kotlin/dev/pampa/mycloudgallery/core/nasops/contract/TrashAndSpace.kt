@@ -181,6 +181,25 @@ interface OwnFilesCleaning {
   suspend fun clean(shares: List<String>, budget: Duration): CleanReport
 }
 
+/**
+ * Fase 5A, D33 (`docs/fase5-progetto.md` §0.1, formato §2.3 N2): i temporanei propri citati da un diario **diverso** da quello delle
+ * operazioni, cioe' dal diario del backup (`BackupStore.citedTemps` di core-backup: `.mycloudgallery/tmp/<io>-bk-<id>` degli elementi
+ * non finiti). La pulizia dei propri file toglie un temporaneo solo se **nessuno** dei due diari lo cita: un video a meta' con il
+ * telefono fuori casa da giorni (E-B21) resta finche' la ripresa non lo finisce o lo toglie.
+ *
+ * La compone `:app` (P7): core-nasops non vede core-backup ne' il contrario. I percorsi valgono in qualunque share (nel dubbio si
+ * tiene di piu'). Se la porta fallisce (eccezione), in quel giro **non si toglie nessun temporaneo**: senza la prova che un
+ * temporaneo non serve, resta.
+ */
+fun interface CitedTemps {
+  suspend fun cited(): Set<SharePath>
+
+  companion object {
+    /** Nessun altro diario (prima che il backup sia legato): valgono solo le citazioni del diario delle operazioni. */
+    val NONE: CitedTemps = CitedTemps { emptySet() }
+  }
+}
+
 // --- Cartelle NAS ------------------------------------------------------------------------------------------------------------
 
 /** Una voce di una cartella del NAS, per "Cartelle NAS". */

@@ -1,0 +1,76 @@
+// Le schermate del backup (docs/fase5-progetto.md §1.1, §1.5, §2.6, D16, D30; righe P5 e P12 del §4.4): impostazioni del backup,
+// riepilogo del primo backup, pagina Backup (5A); versioni, "Libera spazio", attivita' in sospeso (5B). Scheletro di P0 (modulo, rotte,
+// azioni come porta, stati di esempio per i test); le schermate sono di P5 (5A) e P12 (5B).
+//
+// **Aspetto: linguaggio grafico G2** (docs/grafica-progetto.md §11-§12; core-designsystem/.../design/**). La Fase 5 consegna stati e
+// contratti (D30, §1.5): le composable usano solo i componenti esistenti di `core-designsystem`, nessuno stile nuovo. Gli stati
+// (`BackupStatus`, `BackupSummary`, `SourceStatus`, `MediaBackupState`) stanno in `core-backup/contract`.
+//
+// Vede i contratti di core-backup e **non** core-nas ne' core-nasops (§1.1): `NasBackupOps` non e' raggiungibile da qui nemmeno per
+// inferenza (core-backup tiene core-nas in `implementation`). I `feature-*` non si conoscono fra loro: le azioni dei problemi (§2.6:
+// Diagnostica, Spazio NAS, permessi, password) le esegue :app tramite `BackupActions`.
+//
+// D7 della Fase 2: @HiltViewModel (KSP). D28: nessuna rete in questo modulo (NoNetworkSourcesTest). §4.3: nessun orologio del telefono
+// nelle decisioni (NoWallClockSourcesTest). Stringhe in `values/strings_backup_<area>.xml`, uno per area.
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+  id 'org.jetbrains.kotlin.plugin.compose'
+  id 'org.jetbrains.kotlin.plugin.serialization'
+  id 'com.google.devtools.ksp'
+  id 'com.google.dagger.hilt.android'
+  id 'io.github.takahirom.roborazzi'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.feature.backup'
+
+  buildFeatures {
+    compose = true
+  }
+
+  testOptions {
+    unitTests.all {
+      maxHeapSize = '2g'
+    }
+  }
+}
+
+dependencies {
+  // api: gli stati sigillati e le porte del backup (core-backup/contract) e i componenti (core-designsystem) compaiono nelle firme.
+  api project(':core-backup')
+  api project(':core-designsystem')
+
+  // La Libreria e le miniature (§1.1: feature-backup vede library e imaging), per le voci con un'anteprima; servono gia' ora anche al
+  // calcolo delle versioni delle librerie di AndroidX per la verifica dei checksum (come feature-library e feature-nas).
+  implementation project(':core-library')
+  implementation project(':core-imaging')
+
+  implementation project(':core-common')
+  implementation project(':core-model')
+
+  implementation appDeps.hiltAndroid
+  ksp appDeps.hiltCompiler
+  implementation appDeps.hiltNavigationCompose
+  implementation appDeps.navigationCompose
+  implementation appDeps.lifecycleViewModelCompose
+  implementation appDeps.lifecycleRuntimeCompose
+  implementation appDeps.coroutinesAndroid
+  implementation appDeps.serializationCore
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+  testImplementation appDeps.androidxTestExtJunit
+  testImplementation platform("androidx.compose:compose-bom:${engine.composeBom}")
+  testImplementation appDeps.composeUiTestJunit4
+  testImplementation appDeps.composeUiTestManifest
+  testImplementation appDeps.roborazzi
+  testImplementation appDeps.roborazziCompose
+  testImplementation appDeps.roborazziJunitRule
+}

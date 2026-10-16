@@ -183,6 +183,8 @@ internal object GridText {
       PresenceBadge.BOTH -> parts += strings.both
       PresenceBadge.SAFE -> parts += strings.safe
       PresenceBadge.TO_VERIFY -> parts += strings.toVerify
+      // Fase 5 (P0, D15): segnaposto finche' P5 non porta il testo del problema del backup; mai "al sicuro".
+      PresenceBadge.PROBLEM -> parts += strings.toVerify
       null -> Unit
     }
     return parts.joinToString(", ")

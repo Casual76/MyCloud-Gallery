@@ -59,6 +59,12 @@ include ':core-nasops'       // operazioni sui file del NAS, cestino, spazio, pu
 include ':core-personal'     // dati personali sincronizzati fra i miei dispositivi
 include ':feature-nas'       // Cartelle NAS, Spazio NAS, Eliminati di recente del NAS, Operazioni in corso
 
+// Fase 5A (docs/fase5-progetto.md §1.1, P0): il backup. core-backup vede il NAS SOLO con le primitive in sola aggiunta
+// (`NasBackupOps`, marcatore `AppendOnlyNasAccess`): non vede core-nasops, `NasFileOps` ne' core-mediastore (i byte del telefono
+// arrivano da una porta). Nessun modulo che legge il NAS o mostra la Libreria vede core-backup.
+include ':core-backup'       // piano, caricamento (diario e macchina a stati), verifiche, deduplica, guardiano, stato
+include ':feature-backup'    // impostazioni e pagina del backup, primo backup (5B: versioni, Libera spazio, attivita' in sospeso)
+
 // --- fluid-engine (inizio) ---
 def engineDir = file('engine')
 if (engineDir.exists()) {

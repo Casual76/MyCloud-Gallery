@@ -10,6 +10,7 @@ import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.pampa.mycloudgallery.R
+import dev.pampa.mycloudgallery.core.backup.contract.BackupFence
 import dev.pampa.mycloudgallery.core.designsystem.catalog.ComponentCatalogPlaceholder
 import dev.pampa.mycloudgallery.core.family.contract.FamilySetupRepository
 import dev.pampa.mycloudgallery.core.family.contract.SetupState
@@ -38,7 +39,8 @@ data object CatalogRoute
  * - il **NAS sintetico** (Fase 4A, P11, M1): Impostazioni → Sviluppo → "NAS sintetico", 20 mila file su un NAS finto in
  *   memoria passati dalla scansione vera, in un database separato ([SyntheticNasKit]); con "libreria mista" (G2) la
  *   griglia mostra tutti i segni di presenza e il piede lo stato del NAS scelto da `adb` ([MixedPresenceRepository]);
- * - la **recinzione delle share di prova** (D33, [shareGuard]).
+ * - la **recinzione delle share di prova** (D33, [shareGuard]);
+ * - (Fase 5A) la **recinzione del telefono** del backup con gli account di prova (D13, [backupFence]).
  *
  * La versione release di questo file (src/release) non ha niente: nessuna di queste classi entra nell'APK di release
  * (tools/check.ps1 cerca il catalogo e i package `testing` nel dex di release).
@@ -111,6 +113,13 @@ internal object DeveloperTools {
    * ([DebugTrashRetention]). Senza marcatore la debug e' l'app vera. In release non esiste (tools/check.ps1 lo cerca nel dex).
    */
   fun trashRetentionMillis(context: Context): Long? = DebugTrashRetention.read(context)
+
+  /**
+   * D13 (Fase 5A): la recinzione del telefono del backup con gli account di prova: solo `DCIM/mcg-prova/` e `Pictures/mcg-prova/`, scritture
+   * sotto `mcg-campo/` delle share di prova ([DebugBackupFence]). Punto di aggancio di P0, la lega P7 (piano, porta del telefono,
+   * destinazioni). In release non esiste (tools/check.ps1 la cerca nel dex di release).
+   */
+  fun backupFence(): BackupFence? = DebugBackupFence
 
   /** Il nome del marcatore della famiglia pronta (lo scrive solo `adb`). */
   const val FAMILY_READY_MARKER: String = "debug-family-ready.marker"

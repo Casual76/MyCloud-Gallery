@@ -22,7 +22,10 @@ import kotlinx.coroutines.flow.MutableSharedFlow
  *   fra le tolte) e **cestino di Samsung** (la riga sparisce davvero e torna come riga nuova al ripristino, E-P11);
  * - accesso parziale (solo le righe selezionate), permessi ritirati (nessuna riga, aprire e' vietato: E-P1, E-P15) e
  *   permesso della posizione negato (le foto non si aprono: E-P21; [redactedOpenAttempts] conta chi ci prova);
- * - guasti: file che non si aprono, query che falliscono (riavvio a meta' scansione, E-P4).
+ * - guasti: file che non si aprono, query che falliscono (riavvio a meta' scansione, E-P4);
+ * - (Fase 5A, P0, `docs/fase5-progetto.md` §5.2) righe che **cambiano durante una lettura** ([duringRead]): dopo n byte letti il
+ *   file viene riscritto sul posto (Samsung "Salva", E-B15), la riga sparisce (E-B4) o il MediaStore si ricostruisce e la riga
+ *   cambia `_ID` e versione (E-P12). Lo stato del telefono finto sopravvive alla "morte del processo" dell'app: e' il telefono.
  *
  * **Contenuto.** Senza byte espliciti una riga ha un contenuto "virtuale" della dimensione dichiarata, generato a
  * richiesta (nessun megabyte in memoria): una testa da media (JPEG o MP4) e poi byte pseudo-casuali da un seme che
@@ -120,6 +123,70 @@ class FakeMediaStore : MediaStoreSource, MediaStoreRowLookup {
 
   /** Le query ricevute, in ordine. */
   val queries: MutableList<QueryCall> = ArrayList()
+
+  /**
+   * Fase 5A (§5.2): che cosa succede a una riga **mentre qualcuno la sta leggendo**. Scatta una volta sola, quando la lettura di
+   * quella riga (su un `MediaBytes` aperto con [open]) supera [DuringRead.afterBytes] byte.
+   */
+  sealed interface MidRead {
+    /**
+     * Il file viene riscritto sul posto (Samsung "Salva", E-B15): la riga ha dimensione, data di modifica e generazione nuove, e chi
+     * sta leggendo vede i byte nuovi da quel punto in poi (stesso file sul disco). Senza [content] i byte nuovi sono virtuali.
+     */
+    class Rewritten(val size: Long, val dateModifiedMs: Long, val content: ByteArray? = null) : MidRead
+
+    /** La riga sparisce (cancellata, E-B4): la lettura successiva fallisce con un errore di I/O. */
+    data object Vanished : MidRead
+
+    /**
+     * Il MediaStore si ricostruisce (E-P12, E-P22): versione [newVersion] e la riga diventa [newId]. La lettura in corso continua
+     * (il descrittore aperto resta valido), ma il vecchio `_ID` non vale piu'.
+     */
+    class Renumbered(val newVersion: String, val newId: Long) : MidRead
+  }
+
+  /** Un evento programmato su una riga. */
+  class DuringRead(val volume: String, val id: Long, val afterBytes: Long, val event: MidRead) {
+    @Volatile var fired: Boolean = false
+      internal set
+  }
+
+  private val duringReads = java.util.concurrent.CopyOnWriteArrayList<DuringRead>()
+
+  /** Programma [event] sulla riga [id] di [volume] dopo [afterBytes] byte letti (anche da letture diverse della stessa apertura). */
+  fun duringRead(volume: String, id: Long, afterBytes: Long, event: MidRead): DuringRead {
+    require(afterBytes >= 0) { "Byte negativi." }
+    return DuringRead(volume, id, afterBytes, event).also { duringReads += it }
+  }
+
+  /** Gli eventi gia' scattati, in ordine di programmazione. */
+  fun firedDuringReads(): List<DuringRead> = duringReads.filter { it.fired }
+
+  /** Applica l'evento: restituisce il contenuto che la lettura in corso vede da qui in poi (null = la riga non c'e' piu'). */
+  private fun fire(trigger: DuringRead, current: Content): Content? {
+    trigger.fired = true
+    val v = volumeMap.getValue(trigger.volume)
+    return when (val event = trigger.event) {
+      is MidRead.Rewritten -> {
+        val old = v.rows[trigger.id] ?: return null
+        val row = MediaStoreRow(
+          volume = old.volume, id = old.id, type = old.type, displayName = old.displayName, relativePath = old.relativePath,
+          mime = old.mime, size = event.size, dateModifiedMs = event.dateModifiedMs, dateTakenMs = old.dateTakenMs, width = old.width,
+          height = old.height, orientation = old.orientation, durationMs = old.durationMs, ownerPackage = old.ownerPackage,
+        )
+        put(row, event.content)
+        v.content.getValue(trigger.id)
+      }
+      MidRead.Vanished -> {
+        remove(trigger.volume, trigger.id)
+        null
+      }
+      is MidRead.Renumbered -> {
+        bumpVersion(trigger.volume, event.newVersion, mapOf(trigger.id to event.newId))
+        current
+      }
+    }
+  }
 
   fun addVolume(name: String, version: String = "v1", mounted: Boolean = true) {
     volumeMap[name] = FakeVolume(version, mounted)
@@ -315,7 +382,7 @@ class FakeMediaStore : MediaStoreSource, MediaStoreRowLookup {
       throw OriginalBytesUnavailableException()
     }
     val content = v.content[row.id] ?: throw FileNotFoundException("Riga sparita.")
-    return FakeBytes(content)
+    return FakeBytes(content, row.volume, row.id)
   }
 
   override fun changes(): Flow<Unit> = changed
@@ -355,15 +422,32 @@ class FakeMediaStore : MediaStoreSource, MediaStoreRowLookup {
     return Virtual(seed, row.size.coerceAtLeast(0), FakeMediaContent.headerFor(row.type))
   }
 
-  private inner class FakeBytes(private val content: Content) : MediaBytes, AutoCloseable {
+  private inner class FakeBytes(
+    private var content: Content,
+    private val volume: String = "",
+    private val id: Long = 0,
+  ) : MediaBytes, AutoCloseable {
+    /** Byte letti da questa apertura (per gli eventi di [duringRead]). */
+    private var readHere = 0L
+
+    /** La riga e' sparita durante la lettura: ogni lettura successiva fallisce. */
+    private var vanished = false
+
     override val size: Long get() = content.size
 
     override suspend fun read(range: LongRange): ByteArray {
+      if (vanished) throw IOException("Riga sparita durante la lettura.")
       if (range.isEmpty() || range.first >= content.size) return ByteArray(0)
       val from = maxOf(range.first, 0L)
       val to = minOf(range.last, content.size - 1)
       val chunk = content.read(from, (to - from + 1).toInt())
       bytesRead += chunk.size
+      readHere += chunk.size
+      for (trigger in duringReads) {
+        if (trigger.fired || trigger.volume != volume || trigger.id != id || readHere < trigger.afterBytes) continue
+        val next = fire(trigger, content)
+        if (next == null) vanished = true else content = next
+      }
       return chunk
     }
 

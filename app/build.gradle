@@ -201,6 +201,11 @@ dependencies {
   implementation project(':core-nasops')
   implementation project(':core-personal')
   implementation project(':feature-nas')
+  // Fase 5A (docs/fase5-progetto.md §1.1, §1.4): il backup. `:app` cabla il backup (BackupGraph, lavori, BackupJobService: P7); le
+  // primitive in sola aggiunta restano dentro core-backup (`NasBackupOps`), `:app` non le vede. La recinzione del telefono in debug
+  // (D13) sta in src/debug (`DeveloperTools`), mai nella release.
+  implementation project(':core-backup')
+  implementation project(':feature-backup')
 
   // --- Il design system (engine-ui porta Compose, Material 3, activity-compose e lifecycle) ----------
   implementation project(':engine-ui')

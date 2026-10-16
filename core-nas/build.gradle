@@ -24,8 +24,14 @@ android {
   // Fase 4B (P0-B, D2): le primitive di scrittura (`ops/NasFileOps`) richiedono un'adesione esplicita (`@RequiresOptIn`, ERRORE).
   // L'argomento lo passano solo questo modulo, che le definisce e ne scrive il fake, e `core-nasops`: ogni altro modulo che le
   // toccasse non compila (oltre al test di architettura, che vieta il nome del marcatore fuori da questi due).
+  //
+  // Fase 5A (P0, D2): le primitive del backup in sola aggiunta (`ops/backup/NasBackupOps`) hanno un marcatore loro,
+  // `AppendOnlyNasAccess`: l'argomento lo passano solo questo modulo (che le definisce, ne scrive la vista e il fake) e core-backup.
   kotlinOptions {
-    freeCompilerArgs += ['-opt-in=dev.pampa.mycloudgallery.core.nas.ops.DestructiveNasAccess']
+    freeCompilerArgs += [
+      '-opt-in=dev.pampa.mycloudgallery.core.nas.ops.DestructiveNasAccess',
+      '-opt-in=dev.pampa.mycloudgallery.core.nas.ops.backup.AppendOnlyNasAccess',
+    ]
   }
 
   testOptions {

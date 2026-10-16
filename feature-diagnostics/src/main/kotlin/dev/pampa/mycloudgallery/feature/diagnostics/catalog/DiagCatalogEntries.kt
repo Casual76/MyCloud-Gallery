@@ -258,6 +258,9 @@ internal object DiagCatalogEntries {
     DiagEntry(DiagCodes.NAS_PERSONAL_STATE, DiagSection.NAS_LIBRARY, DiagSeverity.INFO, R.string.diag_nas_personal_state_title, R.string.diag_nas_personal_state_guide, null),
     DiagEntry(DiagCodes.NAS_PERSONAL_REJECTED, DiagSection.NAS_LIBRARY, DiagSeverity.WARNING, R.string.diag_nas_personal_rejected_title, R.string.diag_nas_personal_rejected_guide, null),
 
+    // --- Il backup (Fase 5A): lo stato; i codici del §2.6 li aggiunge P7 ------------------------------------------------
+    DiagEntry(DiagCodes.BACKUP_STATE, DiagSection.BACKUP, DiagSeverity.INFO, R.string.diag_backup_state_title, R.string.diag_backup_state_guide, null),
+
     // --- Rete e NAS --------------------------------------------------------
     DiagEntry(DiagCodes.DIAG_SECTION_UNAVAILABLE, DiagSection.NETWORK_AND_NAS, DiagSeverity.WARNING, R.string.diag_diag_section_unavailable_title, R.string.diag_diag_section_unavailable_guide, null),
   )

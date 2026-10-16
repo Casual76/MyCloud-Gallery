@@ -63,6 +63,13 @@ enum class DiagSection {
    */
   NAS_LIBRARY,
 
+  /**
+   * Il backup (Fase 5, `docs/fase5-progetto.md` §2.6, D16): stato per sorgente, i codici di `BackupProblem` (coda, quota, verifiche
+   * non tornate, perse prima del backup, "Backup in prova" D12), byte ricaricati dopo una ripresa. Solo codici e numeri: mai nomi
+   * di file, percorsi, share, account, id di media ne' impronte.
+   */
+  BACKUP,
+
   /** I consumi del mese (TrafficLedger). */
   MONTHLY_TRAFFIC,
 

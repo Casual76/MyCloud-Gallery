@@ -5,6 +5,7 @@ import dev.pampa.mycloudgallery.core.nas.contract.NasSessionManager
 import dev.pampa.mycloudgallery.core.nas.ops.NasFileOpsFactory
 import dev.pampa.mycloudgallery.core.nasops.clean.IndexMaintenance
 import dev.pampa.mycloudgallery.core.nasops.clean.OwnFilesCleaner
+import dev.pampa.mycloudgallery.core.nasops.contract.CitedTemps
 import dev.pampa.mycloudgallery.core.nasops.contract.LargestFile
 import dev.pampa.mycloudgallery.core.nasops.contract.NasFolders
 import dev.pampa.mycloudgallery.core.nasops.contract.NasOperations
@@ -42,6 +43,8 @@ import dev.pampa.mycloudgallery.core.trust.registry.RegistryState
  * @property compact `Compactor.compactIfNeeded` costruito con `enabled = true` (la 4B accende la compattazione).
  * @property catalogPresence R3: cio' che il catalogo vede ancora presente (la pulizia non attraversa un collegamento).
  * @property trashRetentionMillis quanto resta una voce nel cestino: 30 giorni; solo la build debug lo accorcia (F20).
+ * @property citedTemps Fase 5A, D33: i temporanei citati dal diario del backup (`BackupStore.citedTemps`, composto da `:app`, P7): la
+ *   pulizia dei propri file li lascia come quelli delle operazioni.
  */
 class NasOpsConfig(
   val deviceId: String,
@@ -63,6 +66,7 @@ class NasOpsConfig(
   val compact: (suspend (String) -> CompactOutcome)? = null,
   val catalogPresence: CatalogPresence = CatalogPresence.NONE,
   val trashRetentionMillis: Long = TrustLimits.TRASH_RETENTION_MILLIS,
+  val citedTemps: CitedTemps = CitedTemps.NONE,
 ) {
   override fun toString(): String = "NasOpsConfig"
 }
@@ -135,6 +139,7 @@ object NasOpsWiring {
       registry = config.registry,
       publishedSegments = config.publishedSegments,
       currentSegments = config.currentSegments,
+      otherCited = config.citedTemps,
     )
     val maintenance = config.compact?.let { IndexMaintenance(it, cleaning, config.gate, config.clocks) }
     return NasOpsServices(operations, trash, space, folders, cleaning, maintenance)

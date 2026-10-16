@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
+import dev.pampa.mycloudgallery.core.backup.contract.BackupFence
 import dev.pampa.mycloudgallery.core.family.contract.FamilySetupRepository
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbnailSource
 import dev.pampa.mycloudgallery.core.imaging.noop.NoThumbnailSource
@@ -36,6 +37,9 @@ internal object DeveloperTools {
   /** Il cestino del NAS tiene le voci 30 giorni, sempre: il gancio della prova F20 esiste solo in debug. */
   @Suppress("UNUSED_PARAMETER")
   fun trashRetentionMillis(context: Context): Long? = null
+
+  /** Nessuna recinzione del telefono (D13 vale solo in debug con gli account di prova): in release valgono D12 e le sorgenti scelte. */
+  fun backupFence(): BackupFence? = null
 
   fun NavGraphBuilder.destinations(nav: NavController) = Unit
 

@@ -20,29 +20,55 @@ package dev.pampa.mycloudgallery.core.common.featureflags
  *   share di prova ([TestShares]); sulle share vere la 4A lavora in solo locale. E' una **protezione**: vale `true`
  *   in release e la spegne solo l'utente a fine 4A (approvazione di D31), cambiando [RELEASE]. L'"emergenza" di
  *   Diagnostica ("Ferma le scritture sul NAS") e' un interruttore a parte, di :app, che puo' solo restringere.
+ * @property backupTestSharesOnly Fase 5, D12 (`docs/fase5-progetto.md` §0.1): il backup scrive i media **solo** sulle share
+ *   di prova ([TestShares]); sulle share vere lo stato dice "Backup in prova" e niente si scrive. Come F4-D31 vale in release,
+ *   ma in piu' **non si spegne nemmeno in debug**: [forBuild] non ha un parametro per lui. Lo spegne solo l'utente, con la
+ *   risposta a Q3 (primo backup vero a fine 5B), cambiando questo file. La decisione per share e' [backupMayWriteTo].
  */
 class FeatureFlags private constructor(
   val wol: Boolean,
   val nasLibrary: Boolean,
   val indexPublishTestSharesOnly: Boolean,
+  val backupTestSharesOnly: Boolean,
 ) {
+
+  /**
+   * D12: il backup (caricamento, guardiano, deduplica che collega) puo' scrivere nella share [share]? Con [backupTestSharesOnly]
+   * solo le share di prova scritte nel codice ([TestShares.isTestShare]: nome esatto, mai una share di famiglia). Lo legge il
+   * cancello del backup (`BackupGate`, P7) e la release lo tiene anche prima che il backup sia legato (consumer-rules.pro di
+   * questo modulo; `tools/check.ps1` lo cerca nel dex di release).
+   */
+  fun backupMayWriteTo(share: String): Boolean = !backupTestSharesOnly || TestShares.isTestShare(share)
 
   override fun equals(other: Any?): Boolean =
     other is FeatureFlags && other.wol == wol && other.nasLibrary == nasLibrary &&
-      other.indexPublishTestSharesOnly == indexPublishTestSharesOnly
+      other.indexPublishTestSharesOnly == indexPublishTestSharesOnly && other.backupTestSharesOnly == backupTestSharesOnly
 
-  override fun hashCode(): Int = (wol.hashCode() * 31 + nasLibrary.hashCode()) * 31 + indexPublishTestSharesOnly.hashCode()
+  override fun hashCode(): Int =
+    ((wol.hashCode() * 31 + nasLibrary.hashCode()) * 31 + indexPublishTestSharesOnly.hashCode()) * 31 + backupTestSharesOnly.hashCode()
 
   override fun toString(): String =
-    "FeatureFlags(wol=$wol, nasLibrary=$nasLibrary, indexPublishTestSharesOnly=$indexPublishTestSharesOnly)"
+    "FeatureFlags(wol=$wol, nasLibrary=$nasLibrary, indexPublishTestSharesOnly=$indexPublishTestSharesOnly, " +
+      "backupTestSharesOnly=$backupTestSharesOnly)"
 
   companion object {
+    /**
+     * D12: il backup solo sulle share di prova. Una costante, non un parametro: nessuna build (nemmeno debug) lo spegne da fuori.
+     * Si cambia qui, a mano, solo con il consenso dell'utente (Q3).
+     */
+    private const val BACKUP_TEST_SHARES_ONLY: Boolean = true
+
     /** I valori di ogni build di release: funzioni sperimentali spente, protezioni accese. */
-    val RELEASE: FeatureFlags = FeatureFlags(wol = false, nasLibrary = true, indexPublishTestSharesOnly = true)
+    val RELEASE: FeatureFlags = FeatureFlags(
+      wol = false,
+      nasLibrary = true,
+      indexPublishTestSharesOnly = true,
+      backupTestSharesOnly = BACKUP_TEST_SHARES_ONLY,
+    )
 
     /**
      * Le funzioni di questa build. Con [debugBuild] falso il risultato e' sempre [RELEASE], qualunque cosa si chieda
-     * (anche `indexPublishTestSharesOnly = false`).
+     * (anche `indexPublishTestSharesOnly = false`). [backupTestSharesOnly] (D12) non si chiede: e' sempre acceso.
      */
     fun forBuild(
       debugBuild: Boolean,
@@ -53,7 +79,14 @@ class FeatureFlags private constructor(
       if (!debugBuild) {
         RELEASE
       } else {
-        FeatureFlags(wol = wol, nasLibrary = nasLibrary, indexPublishTestSharesOnly = indexPublishTestSharesOnly)
+        FeatureFlags(
+          wol = wol,
+          nasLibrary = nasLibrary,
+          indexPublishTestSharesOnly = indexPublishTestSharesOnly,
+          // D12: nessun parametro, di proposito. Anche la debug scrive solo nelle share di prova (D13 ci aggiunge la recinzione
+          // delle sorgenti del telefono).
+          backupTestSharesOnly = BACKUP_TEST_SHARES_ONLY,
+        )
       }
   }
 }

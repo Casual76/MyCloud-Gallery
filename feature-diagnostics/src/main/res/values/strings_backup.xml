@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Sezione «Backup» (Fase 5A, docs/fase5-progetto.md §2.6). Titolo e spiegazione della sezione (P0); le voci e i codici del
+       backup li aggiunge P7. Solo numeri e codici nelle esportazioni: mai nomi di file, percorsi, share, account, id ne' impronte. -->
+  <string name="diagnostics_section_backup">Backup</string>
+  <string name="diag_backup_state_title">Stato del backup</string>
+  <string name="diag_backup_state_guide">Le sorgenti salvate, quanti media sono al sicuro, in coda o con un problema, e se il backup scrive solo nelle share di prova. I file non vengono mai toccati da qui.</string>
+  <string name="diagnostics_hint_backup">Backup dei media del telefono sul NAS: coda, caricamenti, verifiche, copie non integre e problemi da risolvere.</string>
+</resources>

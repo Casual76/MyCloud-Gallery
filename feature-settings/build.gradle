@@ -39,6 +39,9 @@ dependencies {
   implementation project(':core-security')
   implementation project(':core-rules')
   implementation project(':core-designsystem')
+  // Fase 5A (P0, docs/fase5-progetto.md §1.3): la voce "Backup" delle Impostazioni (`backup/**`, P5) con lo stato del backup
+  // (`BackupStatus`, core-backup/contract); la pagina e' di feature-backup, che si apre con una callback di :app.
+  implementation project(':core-backup')
 
   implementation appDeps.hiltAndroid
   ksp appDeps.hiltCompiler

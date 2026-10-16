@@ -24,6 +24,11 @@ import dev.pampa.mycloudgallery.core.nas.ops.PublishOutcome
 import dev.pampa.mycloudgallery.core.nas.ops.RenameOutcome
 import dev.pampa.mycloudgallery.core.nas.ops.RmdirOutcome
 import dev.pampa.mycloudgallery.core.nas.ops.TempFinish
+import dev.pampa.mycloudgallery.core.nas.ops.backup.AppendOnlyNasAccess
+import dev.pampa.mycloudgallery.core.nas.ops.backup.BackupTempWriter
+import dev.pampa.mycloudgallery.core.nas.ops.backup.NasBackupOps
+import dev.pampa.mycloudgallery.core.nas.ops.backup.NasBackupPaths
+import dev.pampa.mycloudgallery.core.nas.ops.backup.ReopenOutcome
 import dev.pampa.mycloudgallery.core.nas.session.SmbErrors
 import dev.pampa.mycloudgallery.core.trust.crypto.TrustIds
 import dev.pampa.mycloudgallery.core.trust.nas.NasFileSystem
@@ -103,6 +108,9 @@ enum class FakeNasOp {
 
   // Le primitive di scrittura (4B, NasFileOps): il fake delle operazioni le conta e le guasta come le letture.
   MKDIRS, RENAME, COPY_TO_TEMP, OPEN_TEMP, WRITE_TEMP, PUBLISH_TEMP, TRASH_MOVE, DELETE, RMDIR, SPACE,
+
+  // Fase 5A (NasBackupOps): la riapertura di un temporaneo del backup con l'accorciamento al punto di ripresa (D5).
+  REOPEN_TEMP,
 }
 
 /** Come risponde la copia lato server di `NasFileOps.copyToTemp` (E-D12). */
@@ -479,6 +487,239 @@ class InMemoryNasMedia(
     }
 
     fun snapshot(): ByteArray = data.copyOf(length)
+  }
+
+  // --- Le primitive del backup (Fase 5A, P0): il fake di NasBackupOps -------------------------------------------------------------
+  // La vista in sola aggiunta sopra le stesse primitive del fake della 4B: stessi guasti ([opsFaults], prima e dopo che il NAS abbia
+  // applicato l'operazione), spazio e quota ([spaceOf]), sola lettura ([setReadOnly]), contatori ([opCount]). In piu': i temporanei
+  // devono essere del backup del dispositivo (`<io>-bk-`), lo scrittore ha il punto di ripresa (`checkpoint`) e la riapertura
+  // accorcia il temporaneo al punto salvato (`reopenTemp`, D5). Nessuna primitiva che tolga o sposti un file visibile.
+
+  /** Quante riaperture hanno accorciato un temporaneo del backup (D5): per provare "al massimo 64 MiB ricaricati". */
+  val backupTruncations = AtomicInteger(0)
+
+  /** Byte scritti dagli scrittori del backup, riscritture comprese: il traffico del caricamento. */
+  val backupBytesWritten = AtomicLong(0)
+
+  private val knownContents = java.util.concurrent.CopyOnWriteArrayList<NasContent>()
+
+  /**
+   * Un contenuto che i test scriveranno (es. un video "da 3 GB" virtuale del telefono finto): una pagina di un temporaneo del backup
+   * scritta con gli **stessi byte, allo stesso punto** di un contenuto noto si conserva come riferimento invece che come copia, cosi'
+   * anche un file virtuale da GB si carica, si verifica e si pubblica senza occupare memoria. Non cambia la semantica: i byte letti
+   * sono quelli scritti.
+   */
+  fun registerKnownContent(content: NasContent) {
+    knownContents += content
+  }
+
+  /** Il fake delle primitive del backup per il dispositivo [ownerDeviceId] (un id valido, `TrustIds`). */
+  @AppendOnlyNasAccess
+  fun backupOps(ownerDeviceId: String): NasBackupOps = BackupView(Ops(ownerDeviceId))
+
+  /**
+   * Il contenuto di un temporaneo del backup mentre lo si scrive: pagine da 64 KiB, ognuna con i suoi byte o (se uguale) un
+   * riferimento allo stesso tratto di un contenuto noto ([registerKnownContent]). Si accorcia alla riapertura (D5).
+   */
+  private inner class PagedContent : NasContent {
+    private inner class Page(val bytes: ByteArray?, val source: NasContent?, val length: Int)
+
+    private val pages = ArrayList<Page>()
+
+    @Volatile private var length = 0L
+
+    override val size: Long get() = length
+
+    override fun copy(offset: Long, dst: ByteArray, dstOffset: Int, len: Int) {
+      var done = 0
+      while (done < len) {
+        val pos = offset + done
+        val index = (pos / PAGE).toInt()
+        val inPage = (pos % PAGE).toInt()
+        val page = pages[index]
+        val n = minOf(len - done, page.length - inPage)
+        if (page.bytes != null) {
+          System.arraycopy(page.bytes, inPage, dst, dstOffset + done, n)
+        } else {
+          page.source!!.copy(index.toLong() * PAGE + inPage, dst, dstOffset + done, n)
+        }
+        done += n
+      }
+    }
+
+    private fun materialize(index: Int): ByteArray {
+      val page = pages[index]
+      return page.bytes?.copyOf() ?: ByteArray(page.length).also { page.source!!.copy(index.toLong() * PAGE, it, 0, page.length) }
+    }
+
+    private fun store(index: Int, data: ByteArray, len: Int) {
+      val start = index.toLong() * PAGE
+      val head = data.copyOf(len)
+      val match = knownContents.firstOrNull { known ->
+        known.size >= start + len && ByteArray(len).also { known.copy(start, it, 0, len) }.contentEquals(head)
+      }
+      val page = if (match != null) Page(null, match, len) else Page(head, null, len)
+      if (index == pages.size) pages += page else pages[index] = page
+    }
+
+    fun write(offset: Long, src: ByteArray, off: Int, len: Int) {
+      require(offset in 0..length) { "Scrittura oltre la fine del temporaneo." }
+      var done = 0
+      while (done < len) {
+        val pos = offset + done
+        val index = (pos / PAGE).toInt()
+        val inPage = (pos % PAGE).toInt()
+        val n = minOf(len - done, PAGE - inPage)
+        val current = if (index < pages.size) materialize(index) else ByteArray(0)
+        val pageLen = maxOf(current.size, inPage + n)
+        val data = current.copyOf(PAGE)
+        System.arraycopy(src, off + done, data, inPage, n)
+        store(index, data, pageLen)
+        done += n
+      }
+      length = maxOf(length, offset + len)
+    }
+
+    /** Tiene i primi [keep] byte (fine file sullo stesso handle, D5). */
+    fun truncate(keep: Long) {
+      require(keep in 0..length) { "Accorciamento oltre la fine." }
+      val full = (keep / PAGE).toInt()
+      val rest = (keep % PAGE).toInt()
+      val lastIndex = if (rest == 0) full else full + 1
+      while (pages.size > lastIndex) pages.removeAt(pages.size - 1)
+      if (rest != 0) store(full, materialize(full).copyOf(PAGE), rest)
+      length = keep
+    }
+
+    /** I primi [keep] byte di [content] (un temporaneo che non nasce da questo fake: la ripresa lo riprende da qui). */
+    fun loadFrom(content: NasContent, keep: Long) {
+      var pos = 0L
+      val buffer = ByteArray(PAGE)
+      while (pos < keep) {
+        val n = minOf(PAGE.toLong(), keep - pos).toInt()
+        content.copy(pos, buffer, 0, n)
+        write(pos, buffer, 0, n)
+        pos += n
+      }
+    }
+  }
+
+  @AppendOnlyNasAccess
+  private inner class BackupView(private val ops: Ops) : NasBackupOps {
+    override val ownerDeviceId: String get() = ops.ownerDeviceId
+
+    private fun requireBackupTemp(temp: SharePath) {
+      require(NasBackupPaths.isBackupTempOf(temp, ownerDeviceId)) { "Un temporaneo del backup di questo dispositivo." }
+    }
+
+    override suspend fun mkdirs(share: String, dir: SharePath, purpose: Purpose): NasResult<Unit> = ops.mkdirs(share, dir, purpose)
+
+    override suspend fun openTemp(share: String, temp: SharePath, purpose: Purpose): NasResult<BackupTempWriter> {
+      requireBackupTemp(temp)
+      return guarded(SimOp.CREATE, FakeNasOp.OPEN_TEMP, share, temp, write = true) {
+        val state = shares[key(share)] ?: return@guarded NasResult.Err(NasError.ShareMissing(share))
+        if (state.nodes.containsKey(key(temp.components))) return@guarded NasResult.Err(NasError.Exists)
+        val now = nasNow()
+        ensureDirs(state, temp.components.dropLast(1), now)
+        val content = PagedContent()
+        val node = Node(temp.name, false, content, now, now, nextFileId.incrementAndGet(), NasAttributes.ARCHIVE)
+        state.nodes[key(temp.components)] = node
+        touchParent(state, temp.components, now)
+        NasResult.Ok(BackupWriter(share, temp, node, content))
+      }
+    }
+
+    override suspend fun reopenTemp(share: String, temp: SharePath, keepBytes: Long, purpose: Purpose): NasResult<ReopenOutcome> {
+      requireBackupTemp(temp)
+      require(keepBytes >= 0) { "Punto di ripresa negativo." }
+      return guarded(SimOp.OPEN_CHANGE, FakeNasOp.REOPEN_TEMP, share, temp, write = true) {
+        val state = shares[key(share)] ?: return@guarded NasResult.Err(NasError.ShareMissing(share))
+        val node = node(state, temp.components) ?: return@guarded NasResult.Ok(ReopenOutcome.Missing)
+        if (node.isDirectory) return@guarded NasResult.Err(NasError.NotFound)
+        if (lockKey(share, temp.value) in locked) return@guarded NasResult.Ok(ReopenOutcome.Locked)
+        if (node.content.size < keepBytes) return@guarded NasResult.Ok(ReopenOutcome.TooShort(node.content.size))
+        val content = (node.content as? PagedContent) ?: PagedContent().also { it.loadFrom(node.content, keepBytes) }
+        content.truncate(keepBytes)
+        node.content = content
+        node.modifiedAt = nasNow()
+        backupTruncations.incrementAndGet()
+        NasResult.Ok(ReopenOutcome.Reopened(BackupWriter(share, temp, node, content)))
+      }
+    }
+
+    override suspend fun copyToTemp(
+      fromShare: String,
+      from: SharePath,
+      toShare: String,
+      temp: SharePath,
+      expect: NasStamp?,
+      purpose: Purpose,
+    ): NasResult<CopyOutcome> {
+      requireBackupTemp(temp)
+      return ops.copyToTemp(fromShare, from, toShare, temp, expect, purpose)
+    }
+
+    override suspend fun publishTemp(share: String, temp: SharePath, final: SharePath, purpose: Purpose): NasResult<PublishOutcome> {
+      requireBackupTemp(temp)
+      return ops.publishTemp(share, temp, final, purpose)
+    }
+
+    override suspend fun deleteOwnTemp(share: String, temp: SharePath, purpose: Purpose): NasResult<DeleteOutcome> {
+      requireBackupTemp(temp)
+      return ops.deleteOwnTemp(share, temp, purpose)
+    }
+
+    override suspend fun space(share: String, purpose: Purpose): NasResult<NasSpaceInfo> = ops.space(share, purpose)
+
+    private inner class BackupWriter(
+      private val share: String,
+      override val temp: SharePath,
+      private val node: Node,
+      private val content: PagedContent,
+    ) : BackupTempWriter {
+      @Volatile private var closed = false
+
+      override val length: Long get() = content.size
+
+      private fun alive(state: ShareState?): Boolean = state != null && state.nodes[key(temp.components)] === node
+
+      override suspend fun write(offset: Long, buf: ByteArray, off: Int, len: Int): NasResult<Unit> {
+        check(!closed) { "Scrittore chiuso." }
+        require(offset >= 0 && off >= 0 && len >= 0 && off + len <= buf.size) { "Intervallo non valido." }
+        require(offset <= content.size) { "Scrittura oltre la fine del temporaneo." }
+        return guarded(SimOp.WRITE, FakeNasOp.WRITE_TEMP, share, temp, write = true) {
+          val state = shares[key(share)] ?: return@guarded NasResult.Err(NasError.ShareMissing(share))
+          if (!alive(state)) return@guarded NasResult.Err(NasError.NotFound)
+          roomError(share, offset + len)?.let { return@guarded NasResult.Err(it) }
+          content.write(offset, buf, off, len)
+          backupBytesWritten.addAndGet(len.toLong())
+          node.modifiedAt = nasNow()
+          NasResult.Ok(Unit)
+        }
+      }
+
+      override suspend fun checkpoint(): NasResult<Long> {
+        check(!closed) { "Scrittore chiuso." }
+        return guarded(SimOp.LENGTH, FakeNasOp.WRITE_TEMP, share, temp, write = true) {
+          if (!alive(shares[key(share)])) return@guarded NasResult.Err(NasError.NotFound)
+          NasResult.Ok(content.size)
+        }
+      }
+
+      override suspend fun finish(expectedSize: Long): NasResult<TempFinish> {
+        check(!closed) { "Scrittore chiuso." }
+        return guarded(SimOp.FLUSH, FakeNasOp.WRITE_TEMP, share, temp, write = true) {
+          if (!alive(shares[key(share)])) return@guarded NasResult.Err(NasError.NotFound)
+          val actual = content.size
+          if (actual != expectedSize) return@guarded NasResult.Ok(TempFinish.SizeMismatch(actual))
+          NasResult.Ok(TempFinish.Complete(stampOf(node)!!))
+        }
+      }
+
+      override fun close() {
+        closed = true
+      }
+    }
   }
 
   @DestructiveNasAccess
@@ -912,6 +1153,9 @@ class InMemoryNasMedia(
 
     /** `STATUS_INVALID_PARAMETER`: per esempio spostare una cartella dentro se stessa. */
     const val STATUS_INVALID_PARAMETER: Long = 0xC000000DL
+
+    /** Le pagine dei temporanei del backup (Fase 5A). */
+    const val PAGE: Int = 64 * 1024
 
     fun key(name: String): String = name.lowercase(Locale.ROOT)
 

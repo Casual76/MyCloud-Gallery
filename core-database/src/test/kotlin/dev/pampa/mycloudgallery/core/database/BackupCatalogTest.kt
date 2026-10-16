@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.core.database
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.database.Db.DAY
 import dev.pampa.mycloudgallery.core.database.Db.T0
 import dev.pampa.mycloudgallery.core.model.AccountId
@@ -265,6 +266,144 @@ class BackupCatalogTest : CatalogTestBase() {
     assertThat(CellFlags.has(flags(id), CellFlags.BACKUP_PROBLEM)).isTrue()
     assertThat(candidates()).isEmpty()
     assertThat(catalog.safetyCounts(camera)).isEqualTo(CatalogSafetyCounts(0, 0, 0, 0, 1, mapOf("lost_before_backup" to 1)))
+  }
+
+  // --- "Persa prima del backup" e la foto che torna (E-B4, E-P11) -------------------------------------------------------------
+
+  /** La lettura del telefono rivede il file del media [n] (come `addPhone`), con l'`_ID` [mediaStoreId] se e' stato rinumerato. */
+  private fun seenAgain(n: Int, mediaStoreId: Long = 100L + n) =
+    phoneObservation("IMG_$n.jpg", mediaStoreId, smallFull(n), T0 - n * 1_000L)
+
+  @Test
+  fun unaFotoRecuperataDalCestinoTornaCandidataESenzaIlSegnoDiPersa() = runBlocking<Unit> {
+    val id = addPhone(1)
+    val other = addPhone(2)
+    assertThat(candidates().map { it.mediaId }).containsExactly(id, other).inOrder()
+    val changes = Changes(this, catalog)
+
+    // Persa prima del backup (E-B4): fuori dai candidati, con il segno sulla cella.
+    catalog.markBackupProblem(id, "lost_before_backup")
+    changes.next()
+    assertThat(candidates().map { it.mediaId }).containsExactly(other)
+    assertThat(CellFlags.has(flags(id), CellFlags.BACKUP_PROBLEM)).isTrue()
+    assertThat(db.mediaDao().get(id.value)!!.backupTodo).isFalse()
+    val seq = catalog.changeSeq()
+
+    // L'utente la recupera dal cestino di Galleria: la lettura del telefono la registra di nuovo presente.
+    catalog.recordAll(listOf(seenAgain(1)), seenAt = T0 + 10)
+
+    // Nella stessa transazione: la riga, il bit della cella e `backup_todo` ricalcolati, e un solo cambiamento dell'indice.
+    assertThat(db.backupProblemDao().get(id.value)).isNull()
+    assertThat(CellFlags.has(flags(id), CellFlags.BACKUP_PROBLEM)).isFalse()
+    assertThat(PresenceBadge.of(flags(id))).isNotEqualTo(PresenceBadge.PROBLEM)
+    assertThat(db.mediaDao().get(id.value)!!.backupTodo).isTrue()
+    assertThat(candidates().map { it.mediaId }).containsExactly(id, other).inOrder()
+    assertThat(catalog.mediaSafety(id)!!.problem).isNull()
+    assertThat(catalog.safetyCounts(camera).problems).isEmpty()
+    assertThat(catalog.changeSeq()).isEqualTo(seq + 1)
+    assertThat(changes.next().ids).containsExactly(id)
+    assertThat(changes.none()).isTrue()
+    changes.job.cancel()
+  }
+
+  @Test
+  fun laFotoRipristinataDopoEssereSparitaTornaCandidataConLaRigaNuova() = runBlocking<Unit> {
+    val id = addPhone(1)
+    // Sparita dal telefono prima di essere caricata: assente, persa, segnata.
+    catalog.markVanished(seenAgain(1).location.key)
+    catalog.markBackupProblem(id, "lost_before_backup")
+    assertThat(catalog.safety(id)!!.status).isEqualTo(SafetyStatus.LOST)
+    assertThat(candidates()).isEmpty()
+    val changes = Changes(this, catalog)
+    val seq = catalog.changeSeq()
+
+    // Ripristinata dal cestino: la riga del MediaStore ha un `_ID` nuovo, il posto e' lo stesso.
+    catalog.recordAll(listOf(seenAgain(1, mediaStoreId = 555)), seenAt = T0 + 10)
+
+    assertThat(catalog.safety(id)!!.status).isEqualTo(SafetyStatus.NO_NAS_COPY)
+    assertThat(db.backupProblemDao().get(id.value)).isNull()
+    assertThat(CellFlags.has(flags(id), CellFlags.BACKUP_PROBLEM)).isFalse()
+    assertThat(db.mediaDao().get(id.value)!!.backupTodo).isTrue()
+    val candidate = candidates().single()
+    assertThat(candidate.mediaId).isEqualTo(id)
+    assertThat(candidate.phone.mediaStoreId).isEqualTo(555)
+    assertThat(catalog.changeSeq()).isEqualTo(seq + 1)
+    assertThat(changes.next().ids).containsExactly(id)
+    assertThat(changes.none()).isTrue()
+    changes.job.cancel()
+  }
+
+  @Test
+  fun laConfermaDelTimbroTogliaIlSegnoDiPersaComeLaRegistrazione() = runBlocking<Unit> {
+    val a = addPhone(1)
+    val b = addPhone(2)
+    val c = addPhone(3)
+    fun stamped(n: Int) = PhoneStamp(Db.phone("IMG_$n.jpg", 100L + n), FileStamp(2_000, T0, 7))
+
+    // In lotto: due media persi e uno no, una transazione e un cambiamento solo; il terzo non e' toccato.
+    catalog.markBackupProblem(a, "lost_before_backup")
+    catalog.markBackupProblem(b, "lost_before_backup")
+    catalog.markBackupProblem(c, "unreadable")
+    assertThat(candidates()).isEmpty()
+    var seq = catalog.changeSeq()
+    assertThat(catalog.confirmAllPresent(listOf(stamped(1), stamped(2), stamped(3)), seenAt = T0 + 5)).containsExactly(true, true, true)
+    assertThat(candidates().map { it.mediaId }).containsExactly(a, b).inOrder()
+    assertThat(db.backupProblemDao().get(a.value)).isNull()
+    assertThat(db.backupProblemDao().get(b.value)).isNull()
+    assertThat(db.backupProblemDao().get(c.value)!!.code).isEqualTo("unreadable")
+    assertThat(CellFlags.has(flags(c), CellFlags.BACKUP_PROBLEM)).isTrue()
+    assertThat(catalog.changeSeq()).isEqualTo(seq + 1)
+
+    // Da solo, con `confirmPresent`.
+    catalog.markBackupProblem(a, "lost_before_backup")
+    assertThat(candidates().map { it.mediaId }).containsExactly(b)
+    seq = catalog.changeSeq()
+    assertThat(catalog.confirmPresent(Db.phone("IMG_1.jpg", 101), FileStamp(2_000, T0, 7), seenAt = T0 + 6)).isTrue()
+    assertThat(candidates().map { it.mediaId }).containsExactly(a, b).inOrder()
+    assertThat(CellFlags.has(flags(a), CellFlags.BACKUP_PROBLEM)).isFalse()
+    assertThat(catalog.changeSeq()).isEqualTo(seq + 1)
+  }
+
+  @Test
+  fun glAltriProblemiNonSiTolgonoConUnaNuovaOsservazioneDelTelefono() = runBlocking<Unit> {
+    val unreadable = addPhone(1)
+    val verifyFailed = addPhone(2)
+    val commonLost = addPhone(3)
+    val problems = mapOf(unreadable to "unreadable", verifyFailed to "verify_failed", commonLost to "common_copy_lost")
+    problems.forEach { (id, code) -> catalog.markBackupProblem(id, code) }
+    val seq = catalog.changeSeq()
+
+    // Registrati di nuovo (stessa riga) e confermati col timbro: il problema resta, la cella resta segnata, nessun candidato.
+    catalog.recordAll(listOf(seenAgain(1), seenAgain(2), seenAgain(3)), seenAt = T0 + 10)
+    catalog.confirmAllPresent(
+      (1..3).map { PhoneStamp(Db.phone("IMG_$it.jpg", 100L + it), FileStamp(2_000, T0, 7)) },
+      seenAt = T0 + 11,
+    )
+    catalog.confirmPresent(Db.phone("IMG_1.jpg", 101), FileStamp(2_000, T0, 7), seenAt = T0 + 12)
+
+    problems.forEach { (id, code) ->
+      assertWithMessage(code).that(db.backupProblemDao().get(id.value)?.code).isEqualTo(code)
+      assertWithMessage(code).that(CellFlags.has(flags(id), CellFlags.BACKUP_PROBLEM)).isTrue()
+      assertWithMessage(code).that(db.mediaDao().get(id.value)!!.backupTodo).isFalse()
+    }
+    assertThat(candidates()).isEmpty()
+    assertThat(catalog.changeSeq()).isEqualTo(seq)
+  }
+
+  @Test
+  fun ilSegnoDiPersaRestaSeNonRicompareUnaPosizioneDelTelefonoDiQuelMedia() = runBlocking<Unit> {
+    val lost = addPhone(1)
+    catalog.markVanished(seenAgain(1).location.key)
+    catalog.markBackupProblem(lost, "lost_before_backup")
+
+    // Un altro file del telefono, e una copia sul NAS dello stesso media: nessuna e' la posizione del telefono che mancava.
+    addPhone(2)
+    addPrivateCopy(1)
+    catalog.confirmPresent(Db.phone("IMG_1.jpg", 101), FileStamp(2_000, T0, 7), seenAt = T0 + 5) // assente: non si conferma a occhio
+
+    assertThat(db.backupProblemDao().get(lost.value)!!.code).isEqualTo("lost_before_backup")
+    assertThat(CellFlags.has(flags(lost), CellFlags.BACKUP_PROBLEM)).isTrue()
+    assertThat(candidates().map { it.mediaId }).doesNotContain(lost)
   }
 
   // --- Conteggi -----------------------------------------------------------------------------------------------------------------

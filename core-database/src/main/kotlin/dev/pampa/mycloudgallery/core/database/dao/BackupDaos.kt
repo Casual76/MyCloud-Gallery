@@ -102,6 +102,24 @@ interface BackupProblemDao {
 
   @Query("SELECT COUNT(*) FROM backup_problem")
   suspend fun count(): Int
+
+  /**
+   * I media con il problema [code] che hanno una delle posizioni [locationIds] nello stato [state] (al massimo
+   * [TimelineIndexDao.MAX_IDS] posizioni per chiamata). Serve a una regola sola, `MediaCatalog`: la foto "persa prima del backup"
+   * che la lettura del telefono rivede presente non e' piu' persa. Si parte dalle posizioni (chiave primaria) e si arriva al
+   * problema per chiave primaria: un lotto della lettura costa una manciata di ricerche, anche con la tabella vuota. Un media con
+   * due posizioni nell'elenco torna due volte (niente `DISTINCT`: eviterebbe un `USE TEMP B-TREE`, chi chiama deduplica).
+   */
+  @Query(WITH_CODE_AT_LOCATIONS_SQL)
+  suspend fun mediaIdsWithCodeAt(code: String, state: String, locationIds: List<Long>): List<String>
+
+  companion object {
+    const val WITH_CODE_AT_LOCATIONS_SQL: String =
+      "SELECT p.media_id FROM media_location l " +
+        "CROSS JOIN media_version v ON v.version_id = l.version_id " +
+        "CROSS JOIN backup_problem p ON p.media_id = v.media_id " +
+        "WHERE l.location_id IN (:locationIds) AND l.state = :state AND p.code = :code"
+  }
 }
 
 /** Le copie del NAS la cui rilettura non e' tornata (`nas_copy_mismatch`); le scritture passano da `MediaCatalog.markVerified`. */

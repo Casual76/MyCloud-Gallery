@@ -7,6 +7,7 @@ import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.database.Db.DAY
 import dev.pampa.mycloudgallery.core.database.Db.T0
+import dev.pampa.mycloudgallery.core.database.dao.BackupProblemDao
 import dev.pampa.mycloudgallery.core.database.dao.BackupQueries
 import dev.pampa.mycloudgallery.core.model.CellFlags
 import dev.pampa.mycloudgallery.core.model.MediaId
@@ -342,5 +343,20 @@ class BackupQueriesTest : CatalogTestBase() {
     val plan = planOf(BackupQueries.onlyCommonCopies("alessio", null, 500))
     println("Piano di onlyCommonCopies: $plan")
     assertThat(plan).contains("index_media_safety")
+  }
+
+  /**
+   * La regola "la foto persa prima del backup e' tornata" gira a ogni lotto della lettura del telefono (500 posizioni): deve
+   * partire dalle posizioni per chiave primaria, mai scorrere `media_location` ne' ordinare.
+   */
+  @Test
+  fun laRegolaDellaFotoTornataCercaPerChiaveSenzaScorrereNulla() = runBlocking<Unit> {
+    bulk(1_000) { Spec(presence = "phone_only", safety = "no_nas_copy", todo = true, phone = true, privateCopy = false, verifiedAt = null) }
+    // Il testo che Room esegue, con tre posizioni al posto dell'elenco (stesso ordine dei parametri: posizioni, stato, codice).
+    val sql = BackupProblemDao.WITH_CODE_AT_LOCATIONS_SQL.replace(":locationIds", "?, ?, ?").replace(":state", "?").replace(":code", "?")
+    val plan = planOf(sql, 1L, 2L, 3L, "present", "lost_before_backup")
+    println("Piano di mediaIdsWithCodeAt: $plan")
+    assertThat(plan).doesNotContain("SCAN")
+    assertThat(plan).doesNotContain("TEMP B-TREE")
   }
 }

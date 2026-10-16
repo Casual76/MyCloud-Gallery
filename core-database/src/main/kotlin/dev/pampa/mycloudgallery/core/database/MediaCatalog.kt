@@ -1042,6 +1042,9 @@ class MediaCatalog(
    * transazione** e toglie il media dai candidati (un media con la verifica fallita tre volte non si ricarica all'infinito).
    * Un problema vale per un media **non al sicuro**: su un media al sicuro non resta (e se il media torna al sicuro il problema
    * di prima si toglie da solo). Dopo `markVerified(.., falso)` si segna il problema, non prima.
+   *
+   * **`lost_before_backup`** (E-B4) si toglie anche quando la lettura del telefono registra di nuovo una posizione presente del
+   * media (la foto recuperata dal cestino di Galleria, E-P11): vedi [releaseRecoveredLostMedia]. Gli altri codici no.
    */
   suspend fun markBackupProblem(mediaId: MediaId, code: String?, marksCell: Boolean = true): Unit = write { tx ->
     val id = resolve(mediaId) ?: return@write
@@ -1381,6 +1384,13 @@ class MediaCatalog(
     val dirty = LinkedHashSet<MediaId>()
     val dirtyGroups = LinkedHashSet<String>()
     val changed = LinkedHashSet<MediaId>()
+
+    /**
+     * Le posizioni del telefono che un'osservazione di questa transazione ha registrato o confermato **presenti** (id di
+     * posizione, non di media: nella conferma a tappeto del timbro non costa una ricerca per riga). La regola "la foto e'
+     * tornata" ([releaseRecoveredLostMedia]) le risolve in un colpo solo alla fine, in [refreshDerived].
+     */
+    val phoneSeen = LinkedHashSet<Long>()
     var structural = false
     var areas: NasAreaLookup? = null
     var seq: Long? = null
@@ -1443,6 +1453,8 @@ class MediaCatalog(
     val decided = LinkingRules.decide(observation, loadContext(observation, byContent = !fingerprintAdopted))
     val decision = if (whenUndecided == WhenUndecided.KEEP_SEPARATE) keepSeparate(decided) else decided
     val target = apply(tx, decision, observation, seenAt ?: clock())
+    // Una posizione del telefono registrata presente: se il media era "perso prima del backup" non lo e' piu' (refreshDerived).
+    if (target != null && observation.location is Location.Phone) tx.phoneSeen += target.second.value
     if (whenUndecided == WhenUndecided.KEEP_SEPARATE && target != null && !fingerprintAdopted) {
       undecidedCandidates(decided)?.let { groupProbableDuplicates(tx, target.first, observation, it) }
     }
@@ -1554,6 +1566,7 @@ class MediaCatalog(
       lastSeenAtMillis = seenAt,
     )
     locationDao.update(after.toEntity())
+    tx.phoneSeen += entity.locationId
     if (before.location != after.location || before.state != after.state) {
       val mediaId = mediaOf(before.id)
       tx.touch(mediaId)
@@ -2035,6 +2048,8 @@ class MediaCatalog(
    * dominio, li scrive se sono cambiati e annota che cosa cambia per l'indice.
    */
   private suspend fun refreshDerived(tx: Tx) {
+    // Prima del ricalcolo, cosi' il bit della cella e `backup_todo` nascono gia' senza il segno (stessa transazione, un cambiamento).
+    releaseRecoveredLostMedia(tx)
     if (tx.dirty.isEmpty() && tx.dirtyGroups.isEmpty()) return
     val rows = LinkedHashMap<String, MediaEntity?>()
     tx.dirty.forEach { rows[it.value] = mediaDao.get(it.value) }
@@ -2071,6 +2086,27 @@ class MediaCatalog(
     }
 
     derived.values.forEach { store(tx, it) }
+  }
+
+  /**
+   * "Persa prima del backup" (E-B4) vale finche' la foto non c'e': il messaggio all'utente dice "Recuperala dal cestino di
+   * Galleria" (E-P11, F26), e se la riga ricompare nel MediaStore il segno non deve tenerla fuori dai candidati per sempre. Un
+   * media segnato `LOST_BEFORE_BACKUP` con una posizione del telefono che un'osservazione di questa transazione ha registrato o
+   * confermato **presente** perde il segno qui: la riga di `backup_problem` si toglie e il media si tocca, cosi' il ricalcolo che
+   * segue (bit `BACKUP_PROBLEM` della cella e `backup_todo`) lo rimette fra i candidati nella stessa transazione.
+   *
+   * E' l'unico posto della regola: le vie d'ingresso ([recordOne], [confirmOne]) annotano soltanto la posizione in [Tx.phoneSeen].
+   * Si guarda lo stato **letto adesso** dal database (una posizione tolta o rimasta assente in questa transazione non conta). Gli
+   * altri codici di problema non cambiano comportamento: si tolgono solo da [markBackupProblem] o quando il media torna al sicuro.
+   */
+  private suspend fun releaseRecoveredLostMedia(tx: Tx) {
+    if (tx.phoneSeen.isEmpty()) return
+    for (chunk in tx.phoneSeen.chunked(TimelineIndexDao.MAX_IDS)) {
+      problemDao.mediaIdsWithCodeAt(LOST_BEFORE_BACKUP, LocationState.PRESENT.code, chunk).distinct().forEach { id ->
+        problemDao.delete(id)
+        tx.touch(MediaId(id))
+      }
+    }
   }
 
   private suspend fun derive(tx: Tx, row: MediaEntity): Derived {
@@ -2275,6 +2311,9 @@ class MediaCatalog(
 
     /** Il tetto di una pagina di candidati del backup (`CandidateQuery.MAX_LIMIT`). */
     const val MAX_CANDIDATE_PAGE: Int = 1_000
+
+    /** Il codice di `BackupProblemCode.LOST_BEFORE_BACKUP` (core-backup, che core-database non vede): la foto e' sparita prima del backup (E-B4). */
+    private const val LOST_BEFORE_BACKUP: String = "lost_before_backup"
 
     private const val MILLIS_PER_SECOND: Long = 1_000L
   }

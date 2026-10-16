@@ -107,7 +107,8 @@ data class BackupItemEntity(
 /**
  * Il problema che il backup ha registrato per un media (`backup_problem`, D15): [code] e' un `BackupProblemCode`. Se [marksCell]
  * accende `CellFlags.BACKUP_PROBLEM` (derivato dal catalogo nella stessa transazione) e toglie il media dai candidati del backup
- * (un media con la verifica fallita tre volte non si ricarica all'infinito). **Si toglie da solo quando il media torna al sicuro.**
+ * (un media con la verifica fallita tre volte non si ricarica all'infinito). **Si toglie da solo quando il media torna al sicuro**
+ * (e `lost_before_backup` anche quando la foto ricompare sul telefono: `MediaCatalog.releaseRecoveredLostMedia`).
  * Una riga per media; con cascata perche' e' un'annotazione ricalcolabile (l'unione la sposta comunque sul sopravvissuto).
  */
 @Entity(

@@ -27,6 +27,6 @@ class BackupStateVerifyTest {
     }
     println(text)
     File("build/chaos/backup-state-verify.txt").also { it.parentFile?.mkdirs() }.writeText(text)
-    assertWithMessage(text).that(violations.filter { it.invariant != Invariant.KNOWN_GAP }).isEmpty()
+    assertWithMessage(text).that(violations).isEmpty()
   }
 }

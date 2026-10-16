@@ -14,21 +14,14 @@ class BenchResult(
   val baseSeed: Long,
   val targetName: String,
   val stackName: String,
-  private val gapRounds: List<RoundReport> = emptyList(),
 ) {
   val ok: Boolean get() = failures.isEmpty()
-
-  /** I giri in cui il banco ha visto un difetto noto del motore (dichiarato, non fa fallire il giro). */
-  val knownGapRounds: List<RoundReport> get() = gapRounds
 
   /** Il riassunto per il rapporto: giri, interruzioni per tipo e momento, copertura delle primitive. Mai nomi di file ne' impronte. */
   fun summary(): String = buildString {
     appendLine("=== Prova delle interruzioni del backup: $rounds giri, seme di base $baseSeed ===")
     appendLine("NAS: $targetName; motore: $stackName")
     appendLine("durata: ${millis / 1000.0} s; giri con violazioni: ${failures.size}")
-    if (gapRounds.isNotEmpty()) {
-      appendLine("DIFETTO NOTO F1 (docs/prova-500.md): visto in ${gapRounds.size} giri, ${gapRounds.sumOf { it.knownGaps.size }} elementi (dichiarato: non fa fallire il giro)")
-    }
     appendLine("passi eseguiti: ${stats.steps}; media sul telefono: ${stats.mediaTotal}; verifiche a meta': ${stats.midChecks}; verifiche a lavoro finito: ${stats.finalChecks}; riavvii: ${stats.restarts}")
     appendLine("file riletti con SHA-256: ${stats.filesHashed} (${stats.bytesHashed / 1024} KiB); eventi del telefono scattati a meta' lettura: ${stats.phoneEventsFired}")
     val total = stats.totalFired
@@ -86,13 +79,11 @@ object BackupChaosBench {
   ): BenchResult {
     val started = System.nanoTime()
     val failures = ArrayList<RoundReport>()
-    val gapRounds = ArrayList<RoundReport>()
     var done = 0
     for (index in firstRound until firstRound + rounds) {
       if (stopAfterInterruptions != null && stats.totalFired >= stopAfterInterruptions) break
       val report = BackupChaosRound(index, seedOf(baseSeed, index), target, factory, config, stats, redact).run()
       done++
-      if (report.knownGaps.isNotEmpty()) gapRounds += report
       if (!report.ok) {
         failures += report
         if (statesDir != null) report.badState?.let { runCatching { BackupStateFile.write(it, File(statesDir, "backup-state-$index.txt")) } }
@@ -100,6 +91,6 @@ object BackupChaosBench {
       }
       onRound(done, failures.size)
     }
-    return BenchResult(done, failures, stats, (System.nanoTime() - started) / 1_000_000, baseSeed, target.name, factory.name, gapRounds)
+    return BenchResult(done, failures, stats, (System.nanoTime() - started) / 1_000_000, baseSeed, target.name, factory.name)
   }
 }

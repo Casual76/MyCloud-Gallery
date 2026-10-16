@@ -79,8 +79,7 @@ object BackupVerifier {
       add(Invariant.DUPLICATE, "gli stessi byte pubblicati ${same.size} volte (${same.joinToString { nm(it.path) }})")
     }
 
-    // 6. Temporanei (e il resto della cartella dell'app). Un temporaneo trattenuto da un elemento fermo per il difetto noto F1 e' parte di F1.
-    val gapTemps = state.items.filter { it.waitsForRow }.mapNotNull { it.temp?.lowercase(Locale.ROOT) }.toSet()
+    // 6. Temporanei (e il resto della cartella dell'app).
     for (f in state.files.filter { it.key !in beforeByKey && it.appArea }) {
       val lower = f.path.lowercase(Locale.ROOT)
       if (!lower.startsWith("${NasFileFact.APP_DIR}tmp/")) {
@@ -89,7 +88,6 @@ object BackupVerifier {
       }
       when {
         !isBackupTemp(f.path, state.deviceId) -> add(Invariant.TEMP, "temporaneo che non e' del backup (${nm(f.path)})")
-        phase == Phase.FINAL && lower in gapTemps -> add(Invariant.KNOWN_GAP, "F1: temporaneo trattenuto da un elemento fermo")
         phase == Phase.FINAL -> add(Invariant.TEMP, "temporaneo rimasto a lavoro finito (${nm(f.path)})")
         lower !in citedLower -> add(Invariant.TEMP, "temporaneo non citato dal diario (${nm(f.path)})")
       }
@@ -141,11 +139,7 @@ object BackupVerifier {
       for (item in state.items) {
         val superseded = item.state == UploadState.FAILED.code && lastItemOfMedia[item.media] != item.id
         if (item.state in finished || superseded) continue
-        if (item.waitsForRow) {
-          add(Invariant.KNOWN_GAP, "F1: elemento #${item.id} fermo in ${item.state} per una riga del telefono che il catalogo non conosce piu' (versione del MediaStore vecchia)")
-        } else {
-          add(Invariant.CONVERGENCE, "elemento #${item.id} fermo in ${item.state}")
-        }
+        add(Invariant.CONVERGENCE, "elemento #${item.id} fermo in ${item.state}")
       }
       for (m in state.media) {
         if (m.onPhone && !m.safe) add(Invariant.CONVERGENCE, "un media ancora sul telefono non e' al sicuro${m.problem?.let { " (problema: $it)" }.orEmpty()}")

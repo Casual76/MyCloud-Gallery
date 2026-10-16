@@ -23,6 +23,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.PhoneBytes
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneFile
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneLookup
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneOpen
+import dev.pampa.mycloudgallery.core.backup.contract.PhoneRowNow
 import dev.pampa.mycloudgallery.core.backup.contract.RunStop
 import dev.pampa.mycloudgallery.core.backup.contract.StopBy
 import dev.pampa.mycloudgallery.core.backup.contract.UploadKind
@@ -36,6 +37,7 @@ import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.NasStamp
 import dev.pampa.mycloudgallery.core.model.QuickHash
+import dev.pampa.mycloudgallery.core.model.SafetyStatus
 import dev.pampa.mycloudgallery.core.model.Sha256
 import dev.pampa.mycloudgallery.core.model.VersionId
 import dev.pampa.mycloudgallery.core.nas.contract.NasError
@@ -367,7 +369,7 @@ class SafeUploadEngine(
     if (item.size == 0L) return unreadable(round, item)
     val description = round.describe(item)
     val file = when (val opened = phone.open(ref)) {
-      PhoneOpen.Stale -> return refreshPhone(item)
+      PhoneOpen.Stale -> return refreshPhone(round, item)
       PhoneOpen.Gone -> return gone(round, item, lost = true)
       is PhoneOpen.Denied -> return Step.Stop(RunStop.PHONE, opened.reason.problem)
       is PhoneOpen.Opened -> opened.file
@@ -381,7 +383,7 @@ class SafeUploadEngine(
       when (val after = phone.lookup(ref)) {
         is PhoneLookup.Present -> if (after.stamp != expected) return gone(round, item, lost = false)
         PhoneLookup.Gone -> return gone(round, item, lost = true)
-        PhoneLookup.Stale -> return refreshPhone(item)
+        PhoneLookup.Stale -> return refreshPhone(round, item)
         is PhoneLookup.Denied -> return Step.Stop(RunStop.PHONE, after.reason.problem)
       }
       when (catalog.recordFullHash(item.mediaId, item.versionId, read.sha256)) {
@@ -414,10 +416,19 @@ class SafeUploadEngine(
 
   private fun readContext(): CoroutineContext = if (foreground()) lowPriority() else EmptyCoroutineContext
 
-  /** La versione del MediaStore e' cambiata (E-P12): la riga nuova dal catalogo, o si aspetta che la lettura del telefono la ritrovi. */
-  private suspend fun refreshPhone(item: BackupItem): Step {
-    val fresh = catalog.phoneRefOf(item.mediaId, item.versionId)
-    return if (fresh != null && fresh != item.phone) save(item.copy(phone = fresh)) else Step.Wait()
+  /**
+   * La versione del MediaStore e' cambiata (E-P12): l'`_ID` dell'elemento non vale piu' e la riga si chiede al catalogo. Riga nuova = si
+   * riprende da li'; la stessa riga (catalogo in ritardo) o la lettura del telefono non ancora finita = si aspetta, mai un `GONE` in
+   * anticipo; assente dopo una rilettura completa = `GONE` (F1, docs/prova-500.md §B6), "persa prima del backup" solo se il media non e'
+   * piu' da nessuna parte (un file riscritto ha la sua versione nuova, E-B15, e il segno toglierebbe il media dal piano).
+   */
+  private suspend fun refreshPhone(round: Round, item: BackupItem): Step {
+    val stale = item.phone ?: return Step.Wait()
+    return when (val now = catalog.phoneRowOf(item.mediaId, item.versionId, stale)) {
+      is PhoneRowNow.At -> if (now.ref != stale) save(item.copy(phone = now.ref)) else Step.Wait()
+      PhoneRowNow.Rereading -> Step.Wait()
+      PhoneRowNow.Absent -> gone(round, item, lost = catalog.mediaSafety(item.mediaId)?.status == SafetyStatus.LOST)
+    }
   }
 
   /** Una lettura del telefono e' fallita a meta': si guarda la riga e si decide (E-B4, E-B15, D15). */
@@ -430,7 +441,7 @@ class SafeUploadEngine(
         round.readFailed(item) >= config.phoneReadRetries -> unreadable(round, item)
         else -> Step.Next(item)
       }
-      PhoneLookup.Stale -> refreshPhone(item)
+      PhoneLookup.Stale -> refreshPhone(round, item)
       is PhoneLookup.Denied -> Step.Stop(RunStop.PHONE, now.reason.problem)
     }
   }
@@ -516,7 +527,7 @@ class SafeUploadEngine(
     }
     val ref = item.phone ?: return Step.Wait()
     val file = when (val opened = phone.open(ref)) {
-      PhoneOpen.Stale -> return refreshPhone(item)
+      PhoneOpen.Stale -> return refreshPhone(round, item)
       PhoneOpen.Gone -> return gone(round, item, lost = true)
       is PhoneOpen.Denied -> return Step.Stop(RunStop.PHONE, opened.reason.problem)
       is PhoneOpen.Opened -> opened.file

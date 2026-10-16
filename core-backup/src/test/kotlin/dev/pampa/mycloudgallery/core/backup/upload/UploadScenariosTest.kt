@@ -351,6 +351,45 @@ class UploadScenariosTest {
     assertClean(before)
   }
 
+  /**
+   * F1 (docs/prova-500.md §B6): un video a meta' caricamento, cancellato mentre il MediaStore cambia versione (E-P12). Finche' la lettura del
+   * telefono rilegge (il catalogo non conosce la riga ma non ha finito), si aspetta: nessun `GONE` in anticipo, nessuna "persa" finta, il
+   * temporaneo resta citato. Quando ha finito e la riga non c'e', `GONE` con "persa prima del backup" e il temporaneo tolto.
+   */
+  @Test
+  fun f1_unVideoAMetaCancellatoMentreIlMediaStoreCambiaVersioneDiventaGone() = runTest {
+    val media = kit.addPhoneMedia("VID_1.mp4", NasContent.of(bytes(100_000, 2)), kind = MediaKind.VIDEO)
+    val before = kit.snapshot()
+    val death = dev.pampa.mycloudgallery.core.backup.testing.BackupDeath(dieAt = 5, afterEffect = true)
+    try {
+      h.runAll(h.dyingEngine(death))
+    } catch (_: dev.pampa.mycloudgallery.core.backup.testing.ProcessDeath) {
+    }
+    val open = kit.store.all().single()
+    assertThat(open.state).isEqualTo(UploadState.UPLOADING)
+    assertThat(open.resumeAt).isGreaterThan(0L)
+    val temp = NasBackupPaths.tempFor(kit.deviceId, open.id.value).value
+    assertThat(kit.nas.filePaths(kit.share)).contains(temp)
+    kit.phone.delete(kit.phoneIdOf(media))
+    kit.phone.rebuild("v2")
+    kit.catalog.phoneRereading = true
+    kit.catalog.relinkPhone(media, null)
+    h.restart()
+    h.resumeUntilQuiet()
+    assertThat(kit.store.all().single().state).isEqualTo(UploadState.UPLOADING)
+    assertThat(kit.catalog.problemOf(media)).isNull()
+    assertThat(kit.nas.filePaths(kit.share)).contains(temp)
+    assertThat(kit.violations(before, final = false)).isEmpty()
+    kit.catalog.phoneRereading = false
+    h.resumeUntilQuiet()
+    val gone = kit.store.all().single()
+    assertThat(gone.state).isEqualTo(UploadState.GONE)
+    assertThat(gone.problem).isEqualTo(BackupProblemCode.LOST_BEFORE_BACKUP)
+    assertThat(kit.catalog.problemOf(media)).isEqualTo(BackupProblemCode.LOST_BEFORE_BACKUP)
+    assertThat(kit.nas.filePaths(kit.share)).doesNotContain(temp)
+    assertClean(before)
+  }
+
   /** E-B4: cancellata prima del backup: `GONE` con "persa prima del backup"; il giro continua con le altre. */
   @Test
   fun eB4_unaFotoCancellataDiceIlPerche() = runTest {

@@ -11,11 +11,6 @@ import java.util.Locale
 
 /** Gli invarianti del §5.4 (1-11) piu' uno: il motore non lancia per un guasto del NAS o del telefono (il suo contratto, §1.2). */
 enum class Invariant(val number: Int, val label: String) {
-  /**
-   * Non un invariante: un difetto NOTO del codice sotto prova che il banco ha visto e dichiara (come i `knownDefects` della 4B): non fa
-   * fallire il giro, ma finisce sempre nel rapporto con il suo conteggio e in docs/prova-500.md. Quando il difetto e' corretto non compare piu'.
-   */
-  KNOWN_GAP(0, "difetto noto del motore"),
   HALF_FILE(1, "nessun file a meta' visibile"),
   DUPLICATE(2, "nessun doppione creato"),
   REPLACED(3, "nessuna sostituzione"),
@@ -72,12 +67,6 @@ class ItemFact(
   val resumeAt: Long,
   val sha256: Sha256?,
   val verifyAttempts: Int,
-  /**
-   * L'elemento aspetta una riga del telefono che il catalogo non conosce piu': l'`_ID` e' di una versione vecchia del MediaStore
-   * (`Stale`) e `phoneRefOf` risponde null. Il motore la tratta come "la lettura del telefono la ritrovera'" e aspetta (per sempre, se la
-   * foto e' stata cancellata): il difetto noto F1 di docs/prova-500.md.
-   */
-  val waitsForRow: Boolean = false,
 ) {
   override fun toString(): String = "ItemFact(#$id, $kind, $state)"
 }
@@ -148,7 +137,7 @@ object BackupStateFile {
     state.items.forEach {
       appendLine(
         "item=${it.id}|${it.kind}|${it.state}|${it.media}|${it.version}|${it.size}|${it.share}|${it.planned}|${it.finalPath ?: NONE}|" +
-          "${it.temp ?: NONE}|${it.resumeAt}|${it.sha256 ?: NONE}|${it.verifyAttempts}|${flag(it.waitsForRow)}",
+          "${it.temp ?: NONE}|${it.resumeAt}|${it.sha256 ?: NONE}|${it.verifyAttempts}",
       )
     }
     state.transitions.forEach { appendLine("transition=${it.item}|${it.from}|${it.to}") }
@@ -201,11 +190,12 @@ object BackupStateFile {
         "before" -> before += fileOf(p) ?: bad()
         "file" -> files += fileOf(p) ?: bad()
         "item" -> {
-          need(14)
+          // 13 campi; un quattordicesimo (il segno del difetto F1, corretto) in uno stato scritto prima si ignora.
+          need(13)
           items += ItemFact(
             id = p[0].toLongOrNull() ?: bad(), kind = p[1], state = p[2], media = p[3], version = p[4], size = p[5].toLongOrNull() ?: bad(),
             share = p[6], planned = p[7], finalPath = opt(p[8]), temp = opt(p[9]), resumeAt = p[10].toLongOrNull() ?: bad(),
-            sha256 = opt(p[11])?.let(Sha256::parse), verifyAttempts = p[12].toIntOrNull() ?: bad(), waitsForRow = p[13] == "1",
+            sha256 = opt(p[11])?.let(Sha256::parse), verifyAttempts = p[12].toIntOrNull() ?: bad(),
           )
         }
         "transition" -> {

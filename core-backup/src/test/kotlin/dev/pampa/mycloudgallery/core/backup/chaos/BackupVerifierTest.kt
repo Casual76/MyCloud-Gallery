@@ -64,8 +64,8 @@ class BackupVerifierTest {
     return d
   }
 
-  private fun item(id: Long, state: String, finalPath: String?, media: String = "m1", temp: String? = null, resumeAt: Long = 0, waits: Boolean = false) =
-    ItemFact(id, "new_copy", state, media, "v1", 1002, "test", "$folder/IMG_1.jpg", finalPath, temp, resumeAt, null, 0, waits)
+  private fun item(id: Long, state: String, finalPath: String?, media: String = "m1", temp: String? = null, resumeAt: Long = 0) =
+    ItemFact(id, "new_copy", state, media, "v1", 1002, "test", "$folder/IMG_1.jpg", finalPath, temp, resumeAt, null, 0)
 
   private fun violations(d: Draft, phase: Phase) = BackupVerifier.check(d.build(), phase)
 
@@ -214,10 +214,13 @@ class BackupVerifierTest {
     val deleted = healthy()
     deleted.media += MediaFact("m3", "v1", 5, null, safe = false, problem = null, onPhone = false)
     assertThat(violations(deleted, Phase.FINAL)).isEmpty()
-    // F1: un elemento che aspetta una riga che il catalogo non conosce piu' e' un difetto NOTO, non una violazione.
-    val gap = healthy()
-    gap.items += item(2, "planned", null, media = "m2", waits = true)
-    assertOnly(violations(gap, Phase.FINAL), Invariant.KNOWN_GAP)
+    // Un elemento fermo per una riga del telefono vecchia (F1, corretto nei motori) e' un elemento fermo come gli altri.
+    val stale = healthy()
+    stale.files += file(tmp(2), 5)
+    stale.cited += tmp(2)
+    stale.items += item(2, "uploading", null, media = "m2", temp = tmp(2), resumeAt = 32768)
+    assertThat(violations(stale, Phase.MID)).isEmpty()
+    assertOnly(violations(stale, Phase.FINAL), Invariant.CONVERGENCE, Invariant.TEMP)
   }
 
   @Test
@@ -259,12 +262,12 @@ class BackupVerifierTest {
       val d = healthy()
       d.files += file(tmp(2), 5)
       d.cited += tmp(2)
-      d.items += item(2, "uploading", null, media = "m2", temp = tmp(2), resumeAt = 32768, waits = true)
+      d.items += item(2, "uploading", null, media = "m2", temp = tmp(2), resumeAt = 32768)
       d.notes += Note(Invariant.NAS_READS, "una nota")
       BackupStateFile.write(d.build(), file)
       val back = BackupStateFile.read(file)
       assertThat(back.files.map { it.path }).isEqualTo(d.files.map { it.path })
-      assertThat(back.items.map { it.waitsForRow }).containsExactly(false, true).inOrder()
+      assertThat(back.items.map { it.resumeAt }).isEqualTo(d.items.map { it.resumeAt })
       assertThat(back.cited).containsExactly(tmp(2))
       assertThat(BackupVerifier.check(back, Phase.MID).map { it.toString() }).isEqualTo(violations(d, Phase.MID).map { it.toString() })
     } finally {

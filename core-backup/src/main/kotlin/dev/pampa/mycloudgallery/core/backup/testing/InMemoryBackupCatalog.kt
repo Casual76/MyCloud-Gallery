@@ -13,6 +13,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.HashRecord
 import dev.pampa.mycloudgallery.core.backup.contract.MediaSafety
 import dev.pampa.mycloudgallery.core.backup.contract.NasCopyRef
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneRef
+import dev.pampa.mycloudgallery.core.backup.contract.PhoneRowNow
 import dev.pampa.mycloudgallery.core.backup.contract.SafetyCounts
 import dev.pampa.mycloudgallery.core.backup.contract.VerifiedCopy
 import dev.pampa.mycloudgallery.core.backup.contract.VerifyScope
@@ -104,6 +105,14 @@ class InMemoryBackupCatalog(val privateShare: String, val commonShare: String? =
     synchronized(lock) { media.getValue(mediaId).phone = ref }
   }
 
+  /**
+   * La lettura del telefono sta rileggendo il volume dopo un cambio di versione del MediaStore (E-P12) e non ha finito: come il catalogo
+   * vero con la scansione completa in corso, [phoneRowOf] risponde [PhoneRowNow.Rereading] per le righe che non conosce (ancora). Falso
+   * (di norma): una riga che il catalogo non conosce e' una riga che la lettura ha cercato e non ha trovato ([relinkPhone] con null).
+   */
+  @Volatile
+  var phoneRereading: Boolean = false
+
   /** "Al sicuro": una copia privata verificata della versione da proteggere. */
   fun isSafe(mediaId: MediaId): Boolean = synchronized(lock) { isSafeLocked(mediaId) }
 
@@ -158,6 +167,15 @@ class InMemoryBackupCatalog(val privateShare: String, val commonShare: String? =
 
   override suspend fun phoneRefOf(mediaId: MediaId, versionId: VersionId): PhoneRef? = synchronized(lock) {
     media[mediaId]?.takeIf { it.versionId == versionId }?.phone
+  }
+
+  override suspend fun phoneRowOf(mediaId: MediaId, versionId: VersionId, stale: PhoneRef): PhoneRowNow = synchronized(lock) {
+    val ref = media[mediaId]?.takeIf { it.versionId == versionId }?.phone
+    when {
+      ref != null -> PhoneRowNow.At(ref)
+      phoneRereading -> PhoneRowNow.Rereading
+      else -> PhoneRowNow.Absent
+    }
   }
 
   override suspend fun recordFullHash(mediaId: MediaId, versionId: VersionId, sha256: Sha256): HashRecord = synchronized(lock) {

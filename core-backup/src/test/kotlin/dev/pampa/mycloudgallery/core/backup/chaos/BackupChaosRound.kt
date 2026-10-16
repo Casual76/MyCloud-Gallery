@@ -61,8 +61,6 @@ class RoundReport(
   val steps: List<String>,
   val faults: List<FiredFault>,
   val violations: List<Violation>,
-  /** I difetti noti del codice sotto prova visti in questo giro (non fanno fallire il giro: vedi [Invariant.KNOWN_GAP]). */
-  val knownGaps: List<Violation>,
   val deaths: Int,
   val log: List<String>,
   /** Lo stato in cui e' comparsa la prima violazione: si salva in un file e si verifica da solo. */
@@ -76,7 +74,6 @@ class RoundReport(
     appendLine("  interruzioni: ${faults.joinToString("; ")}")
     violations.take(12).forEach { appendLine("  VIOLAZIONE $it") }
     if (violations.size > 12) appendLine("  ... e altre ${violations.size - 12}")
-    knownGaps.forEach { appendLine("  DIFETTO NOTO $it") }
     appendLine("  cronaca:")
     log.takeLast(60).forEach { appendLine("    $it") }
   }
@@ -149,8 +146,7 @@ class BackupChaosRound(
       )
     }
     val fired = if (::injector.isInitialized) injector.fired.toList() else emptyList()
-    val (gaps, real) = violations.values.partition { it.invariant == Invariant.KNOWN_GAP }
-    return RoundReport(index, seed, stepLog, fired, real.take(40), gaps, deaths, log, badState)
+    return RoundReport(index, seed, stepLog, fired, violations.values.take(40), deaths, log, badState)
   }
 
   // =========================================================================================================================

@@ -12,7 +12,15 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneDenied
 import dev.pampa.mycloudgallery.core.backup.contract.RunStop
 import dev.pampa.mycloudgallery.core.backup.contract.UploadState
+import dev.pampa.mycloudgallery.core.backup.contract.BackupKind
+import dev.pampa.mycloudgallery.core.backup.contract.BackupTrigger
+import dev.pampa.mycloudgallery.core.backup.testing.BackupDeath
 import dev.pampa.mycloudgallery.core.backup.testing.BackupInvariants
+import dev.pampa.mycloudgallery.core.backup.testing.DyingBackupCatalog
+import dev.pampa.mycloudgallery.core.backup.testing.DyingBackupStore
+import dev.pampa.mycloudgallery.core.backup.testing.ProcessDeath
+import dev.pampa.mycloudgallery.core.nas.ops.backup.NasBackupPaths
+import kotlin.time.Duration.Companion.hours
 import dev.pampa.mycloudgallery.core.backup.testing.BackupTestKit
 import dev.pampa.mycloudgallery.core.backup.testing.FakePhoneBytes
 import dev.pampa.mycloudgallery.core.backup.testing.InMemoryBackupCatalog
@@ -177,6 +185,48 @@ class ReferenceEngineTest {
     kit.catalog.relinkPhone(media, kit.phone.ref(777))
     kit.resumeUntilQuiet()
     assertThat(kit.store.all().single().state).isEqualTo(UploadState.DONE)
+    assertClean(before)
+  }
+
+  /**
+   * F1 (docs/prova-500.md §B6): un video a meta' caricamento, cancellato mentre il MediaStore cambia versione (E-P12). Finche' la lettura del
+   * telefono rilegge, si aspetta (nessun `GONE` in anticipo, il temporaneo resta citato); quando ha finito e la riga non c'e', `GONE` con
+   * "persa prima del backup" e il temporaneo tolto (prima l'elemento restava aperto per sempre).
+   */
+  @Test
+  fun f1_unVideoAMetaCancellatoMentreIlMediaStoreCambiaVersioneDiventaGone() = runTest {
+    val media = kit.addPhoneMedia("VID_1.mp4", NasContent.of(bytes(100_000, 2)), kind = MediaKind.VIDEO)
+    val before = kit.snapshot()
+    // Le scritture: creazione, hash nel catalogo, HASHED, UPLOADING, primo punto di ripresa: il processo muore subito dopo.
+    val death = BackupDeath(dieAt = 5, afterEffect = true)
+    val dying = kit.newEngine(DyingBackupStore(kit.store, death), DyingBackupCatalog(kit.catalog, death))
+    try {
+      dying.run(BackupKind.PHOTOS, 1.hours, BackupTrigger.SCHEDULED)
+      dying.run(BackupKind.VIDEOS, 1.hours, BackupTrigger.SCHEDULED)
+    } catch (_: ProcessDeath) {
+    }
+    val open = kit.store.all().single()
+    assertThat(open.state).isEqualTo(UploadState.UPLOADING)
+    assertThat(open.resumeAt).isGreaterThan(0L)
+    val temp = NasBackupPaths.tempFor(kit.deviceId, open.id.value).value
+    assertThat(kit.nas.filePaths(kit.share)).contains(temp)
+    kit.phone.delete(kit.phoneIdOf(media))
+    kit.phone.rebuild("v2")
+    kit.catalog.phoneRereading = true
+    kit.catalog.relinkPhone(media, null)
+    kit.restart()
+    kit.resumeUntilQuiet()
+    assertThat(kit.store.all().single().state).isEqualTo(UploadState.UPLOADING)
+    assertThat(kit.catalog.problemOf(media)).isNull()
+    assertThat(kit.nas.filePaths(kit.share)).contains(temp)
+    assertThat(kit.violations(before, final = false)).isEmpty()
+    kit.catalog.phoneRereading = false
+    kit.resumeUntilQuiet()
+    val gone = kit.store.all().single()
+    assertThat(gone.state).isEqualTo(UploadState.GONE)
+    assertThat(gone.problem).isEqualTo(BackupProblemCode.LOST_BEFORE_BACKUP)
+    assertThat(kit.catalog.problemOf(media)).isEqualTo(BackupProblemCode.LOST_BEFORE_BACKUP)
+    assertThat(kit.nas.filePaths(kit.share)).doesNotContain(temp)
     assertClean(before)
   }
 

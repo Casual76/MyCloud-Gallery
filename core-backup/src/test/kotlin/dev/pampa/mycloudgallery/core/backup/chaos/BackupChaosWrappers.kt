@@ -22,6 +22,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.PhoneFile
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneLookup
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneOpen
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneRef
+import dev.pampa.mycloudgallery.core.backup.contract.PhoneRowNow
 import dev.pampa.mycloudgallery.core.backup.contract.SafetyCounts
 import dev.pampa.mycloudgallery.core.backup.contract.UploadState
 import dev.pampa.mycloudgallery.core.backup.contract.UploadStateMachine
@@ -273,6 +274,11 @@ class ChaosCatalog(
   override suspend fun phoneRefOf(mediaId: MediaId, versionId: VersionId): PhoneRef? {
     incarnation.checkAlive()
     return inner.phoneRefOf(mediaId, versionId)
+  }
+
+  override suspend fun phoneRowOf(mediaId: MediaId, versionId: VersionId, stale: PhoneRef): PhoneRowNow {
+    incarnation.checkAlive()
+    return inner.phoneRowOf(mediaId, versionId, stale)
   }
 
   override suspend fun recordFullHash(mediaId: MediaId, versionId: VersionId, sha256: Sha256): HashRecord =

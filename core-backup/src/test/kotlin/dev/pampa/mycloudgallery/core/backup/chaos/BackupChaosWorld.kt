@@ -6,7 +6,6 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupPlanner
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSource
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSources
 import dev.pampa.mycloudgallery.core.backup.contract.DeviceFolder
-import dev.pampa.mycloudgallery.core.backup.contract.PhoneLookup
 import dev.pampa.mycloudgallery.core.backup.testing.FakeBackupClock
 import dev.pampa.mycloudgallery.core.backup.testing.FakeBackupGate
 import dev.pampa.mycloudgallery.core.backup.testing.FakePhoneBytes
@@ -217,13 +216,6 @@ class BackupChaosWorld(
     }
   }
 
-  /** L'elemento [item] aspetta una riga che il catalogo non conosce piu' (vedi [ItemFact.waitsForRow]). */
-  private suspend fun waitsForRow(item: BackupItem): Boolean {
-    if (item.state.terminal) return false
-    val ref = item.phone ?: return false
-    return phone.port.lookup(ref) == PhoneLookup.Stale && catalog.phoneRefOf(item.mediaId, item.versionId) == null
-  }
-
   /** La riga di [media] c'e' ancora sul telefono con il timbro che il catalogo conosce. */
   private fun onPhone(media: InMemoryBackupCatalog.Media): Boolean {
     val ref = media.phone ?: return false
@@ -276,7 +268,7 @@ class BackupChaosWorld(
       ItemFact(
         id = it.id.value, kind = it.kind.code, state = it.state.code, media = it.mediaId.toString(), version = it.versionId.toString(), size = it.size,
         share = it.share, planned = it.planned.value, finalPath = it.finalPath?.value, temp = it.temp?.value, resumeAt = it.resumeAt,
-        sha256 = it.sha256, verifyAttempts = it.verifyAttempts, waitsForRow = waitsForRow(it),
+        sha256 = it.sha256, verifyAttempts = it.verifyAttempts,
       )
     },
     transitions = transitions.map { TransitionFact(it.item.value, it.from.code, it.to.code) },

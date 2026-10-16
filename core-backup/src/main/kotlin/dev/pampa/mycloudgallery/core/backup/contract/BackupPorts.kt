@@ -40,11 +40,27 @@ sealed interface PhoneLookup {
 
   /**
    * La versione del MediaStore e' cambiata (E-P12, E-P22): l'`_ID` non vale piu'. Il motore chiede la riga nuova al catalogo
-   * (`BackupCatalog.phoneRefOf`), che la ritrova per impronta dopo la lettura del telefono; finche' non c'e', l'elemento aspetta.
+   * (`BackupCatalog.phoneRowOf`), che la ritrova per impronta dopo la lettura del telefono; finche' la lettura non ha finito, l'elemento
+   * aspetta; se ha finito e la riga non c'e', l'elemento e' `GONE`.
    */
   data object Stale : PhoneLookup
 
   data class Denied(val reason: PhoneDenied) : PhoneLookup
+}
+
+/**
+ * La riga del telefono di una versione secondo il catalogo, per un elemento che ha visto la sua riga diventare [PhoneLookup.Stale]
+ * ([BackupCatalog.phoneRowOf], E-P12, F1 di docs/prova-500.md §B6).
+ */
+sealed interface PhoneRowNow {
+  /** La riga attuale. Se e' quella che l'elemento ha gia', il catalogo non ha ancora visto il cambio di versione (in ritardo): si aspetta. */
+  data class At(val ref: PhoneRef) : PhoneRowNow
+
+  /** La lettura del telefono non ha ancora riletto tutto il volume dopo il cambio di versione (o non puo', accesso parziale): si aspetta. */
+  data object Rereading : PhoneRowNow
+
+  /** Il catalogo ha riletto tutto il volume dopo il cambio di versione e la versione non ha una riga presente: l'elemento e' `GONE`. */
+  data object Absent : PhoneRowNow
 }
 
 /**
@@ -187,6 +203,21 @@ interface BackupCatalog {
 
   /** La riga del telefono attuale della versione (dopo una rinumerazione degli `_ID`, E-P12), o null se il catalogo non la sa. */
   suspend fun phoneRefOf(mediaId: MediaId, versionId: VersionId): PhoneRef?
+
+  /**
+   * Dove sta adesso la riga di una versione il cui `_ID` [stale] non vale piu' (E-P12; F1 di docs/prova-500.md §B6). [PhoneRowNow.Absent]
+   * **solo se il catalogo dimostra di aver riletto il telefono dopo il cambio di versione**: la lettura completa del volume di [stale] e'
+   * finita (nessuna scansione completa in corso ne' da fare, come dopo un accesso parziale) a una versione del MediaStore diversa da quella
+   * di [stale], e la versione non ha una riga presente. Mentre la lettura rilegge, [phoneRefOf] risponde null anche per le righe che ci
+   * sono ancora (la scansione completa salva subito la versione nuova del cursore e rilegge le righe a lotti, anche in piu' giri): qui e'
+   * [PhoneRowNow.Rereading], mai un `GONE` con "persa prima del backup" per una lettura non ancora fatta.
+   *
+   * Con `MediaCatalog` (`:app`): prima il cursore (`mediaStoreCursor(stale.volume)`: `msVersion` diversa da quella di [stale],
+   * `scanEpoch == null`, `generation != null`), poi [phoneRefOf]; o le due letture in una transazione. Il default, per chi lega solo
+   * [phoneRefOf], non risponde mai `Absent`: l'elemento aspetta (F1 resta, ma nessuna perdita finta).
+   */
+  suspend fun phoneRowOf(mediaId: MediaId, versionId: VersionId, stale: PhoneRef): PhoneRowNow =
+    phoneRefOf(mediaId, versionId)?.let { PhoneRowNow.At(it) } ?: PhoneRowNow.Rereading
 
   /** L'hash completo calcolato qui dai byte originali del telefono (D10): serve prima di attaccare una copia verificata. */
   suspend fun recordFullHash(mediaId: MediaId, versionId: VersionId, sha256: Sha256): HashRecord

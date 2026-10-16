@@ -20,6 +20,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.NewBackupItem
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneBytes
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneLookup
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneOpen
+import dev.pampa.mycloudgallery.core.backup.contract.PhoneRowNow
 import dev.pampa.mycloudgallery.core.backup.contract.RunStop
 import dev.pampa.mycloudgallery.core.backup.contract.StopBy
 import dev.pampa.mycloudgallery.core.backup.contract.UploadKind
@@ -29,6 +30,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.VerifiedCopy
 import dev.pampa.mycloudgallery.core.backup.contract.WaitReason
 import dev.pampa.mycloudgallery.core.metadata.contract.MediaBytes
 import dev.pampa.mycloudgallery.core.model.NasStamp
+import dev.pampa.mycloudgallery.core.model.SafetyStatus
 import dev.pampa.mycloudgallery.core.model.Sha256
 import dev.pampa.mycloudgallery.core.nas.contract.NasError
 import dev.pampa.mycloudgallery.core.nas.contract.NasMediaReader
@@ -65,7 +67,8 @@ import kotlinx.coroutines.flow.StateFlow
  * - **nessun doppione**: una copia privata identica gia' nota al catalogo si collega dopo la rilettura (D8), la risposta persa della
  *   pubblicazione si riconosce (temporaneo assente + finale con i byte giusti = pubblicato, D3);
  * - **ripresa** dall'ultimo punto (D5): `reopenTemp(keep = punto)`; temporaneo assente o corto = da zero;
- * - riga del telefono sparita prima che il temporaneo sia completo = `GONE` (E-B4, con `LOST_BEFORE_BACKUP`), timbro cambiato = `GONE`
+ * - riga del telefono sparita prima che il temporaneo sia completo = `GONE` (E-B4, con `LOST_BEFORE_BACKUP`; con l'`_ID` vecchio, E-P12, solo
+ *   quando il catalogo ha riletto il telefono e la riga non c'e' piu', F1), timbro cambiato = `GONE`
  *   senza problema (E-B15: la versione nuova ha il suo elemento); verifica fallita tre volte = `FAILED` con `VERIFY_FAILED` (E-B18);
  * - un errore del NAS ferma il giro, non l'elemento; il cancello si controlla prima di ogni elemento (D32).
  *
@@ -272,10 +275,18 @@ class InMemoryBackupEngine(
     }
   }
 
-  /** La versione del MediaStore e' cambiata (E-P12): la riga nuova dal catalogo, o si aspetta che la lettura del telefono la ritrovi. */
+  /**
+   * La versione del MediaStore e' cambiata (E-P12): la riga nuova dal catalogo; la stessa (catalogo in ritardo) o la lettura del telefono
+   * non ancora finita = si aspetta; assente dopo una rilettura completa = `GONE` (F1, docs/prova-500.md §B6), "persa prima del backup"
+   * solo se il media non e' piu' da nessuna parte.
+   */
   private suspend fun refreshPhone(item: BackupItem): Step {
-    val fresh = catalog.phoneRefOf(item.mediaId, item.versionId)
-    return if (fresh != null && fresh != item.phone) save(item.copy(phone = fresh)) else Step.Wait
+    val stale = item.phone ?: return Step.Wait
+    return when (val now = catalog.phoneRowOf(item.mediaId, item.versionId, stale)) {
+      is PhoneRowNow.At -> if (now.ref != stale) save(item.copy(phone = now.ref)) else Step.Wait
+      PhoneRowNow.Rereading -> Step.Wait
+      PhoneRowNow.Absent -> gone(item, lost = catalog.mediaSafety(item.mediaId)?.status == SafetyStatus.LOST)
+    }
   }
 
   /** Una lettura del telefono e' fallita a meta': si guarda la riga e si decide. */

@@ -8,14 +8,14 @@
 > Sigle: `Dn` = decisione di questo documento (§0.1); `F4-Dn` = decisione n della Fase 4 (`docs/fase4-progetto.md` §0.1); "R8 della 4B" = voce della revisione di sicurezza; `Fn` = prova sul campo (la Fase 4 ha usato F1–F20, qui F21–F45); `Qn` = domanda del §9.
 >
 > Contesto:
-> - **La Fase 4 è integrata** (4A e 4B, revisioni di sicurezza corrette il 14 e il 15/10). Il NAS è nella Libreria, le operazioni sui file passano dal diario di `core-nasops` con la conferma dell'utente, il banco delle 500 interruzioni è verde sulla JVM (2.000 giri per stack) e sul simulatore SMB con le vere `SmbNasFileOps` (600 giri). **Le prove sul campo F1–F20 non sono ancora state fatte** e il runner contro il NAS vero non è mai partito (al P16 il login di prova è fallito: file delle credenziali da aggiornare). La Fase 5 scrive i media dell'utente: il §8 mette quelle prove prima di M2.
+> - **La Fase 4 è integrata** (4A e 4B, revisioni di sicurezza corrette il 14 e il 15/10). Il NAS è nella Libreria, le operazioni sui file passano dal diario di `core-nasops` con la conferma dell'utente, il banco delle 500 interruzioni è verde sulla JVM (2.000 giri per stack) e sul simulatore SMB con le vere `SmbNasFileOps` (600 giri). **Le prove sul campo F1–F20 non sono ancora state fatte**, tranne F16: il 15/10 il runner contro il NAS vero ha superato la prova delle 500 interruzioni (537 giri, 400 interruzioni, 0 violazioni; `docs/prova-500.md` §6bis) e la suite d'integrazione sul NAS vero è verde. La Fase 5 scrive i media dell'utente: il §8 mette le altre prove prima di M2.
 > - **Cosa la Fase 4 ha lasciato pronto** (verificato nel codice): `NasFileOps.openTemp` + `NasTempWriter` (scritture a offset, `finish` che controlla la lunghezza sullo stesso handle, "dalla Fase 5, per il caricamento"), `publishTemp` (rinomina senza sostituire, crea le cartelle che mancano), `copyToTemp` (copia lato server anche tra share); `Preparer` con `PrepareSource.Bytes` e `Local` ("dalla Fase 5 i byte del telefono"); `IndexPublisher` ("dalla Fase 5, l'uploader"); `MediaCatalog.attachCopy` (copia scritta dall'app, con `verifiedAtMillis`), `markVerified`, `correct`, `restoreOriginal`; `SafetyRules.evaluate` e `canFreePhoneCopy` (con `CREATE_PRIVATE_COPY_FIRST` e `VERIFICATION_TOO_OLD`); `BacklogFacts.toProtect` nello stimatore; il passo 6 dell'onboarding salva già "fotocamera" e "screenshot".
 > - **Cosa la Fase 4 prometteva e nel codice non c'è**: il `VerifyWorker` del §2.11 e un esecutore della fase `FULL_HASH` che il catalogo mette in coda (F4-D21). **Nessun codice chiama `markVerified`**: oggi il segno "al sicuro" non può comparire. Inoltre `OwnFilesCleaner` protegge solo i temporanei citati dal diario delle operazioni: un temporaneo del backup fermo da più di un giorno verrebbe tolto dalla pulizia giornaliera. La Fase 5 chiude entrambi (D14, D33).
 > - **Android**: le prove T-09 (cestino), T-11 (byte originali e hash), T-14 (selettori), T-15 (condivisioni in arrivo) e T-16 ("Modifica con…") di `docs/android.md` non sono mai state fatte. Le strategie di 5.5 e 5.7 poggiano su letture di sistema e documentazione: la 5A ha bisogno solo di T-11 (la prova M1), la 5B fa le altre all'inizio (P0-B).
 > - **Il telefono**: l'S25 (Android 17) aveva il 12/10 **6.274 immagini e 384 video** nel MediaStore (`docs/android.md` 4.2 bis): 2.105 di app di messaggistica, 1.088 in una sottocartella di `DCIM`, 915 screenshot, 866 in `DCIM/Camera`, 654 di Quick Share, 224 in `Pictures`. **Le dimensioni non sono mai state misurate**: il §2.9 le ipotizza, il riepilogo del primo backup userà quelle vere del MediaStore. Il Tab S9 (Android 16, profili) ha 834 immagini e 56 video.
 > - **Il NAS**: sempre acceso, 2,42 TB liberi, scrittura SMB cifrata **9 MB/s** con un flusso (S25), lettura **16 MB/s** con quattro, copia lato server 124 MB/s nella stessa share e 148 MB/s tra share. **Nessun backup esterno** (scelta dell'utente, S10): il RAID 1 copia anche i danni.
 > - **Prove**: contro il NAS vero solo nell'area di prova (`mcg-it/<giro>/` di `test`, `test2`, `test-comune`) dietro la guardia (F4-D30) e, sul telefono, con la recinzione delle share (F4-D33). `NAS` e `Public` restano pubbliche: ogni recinto è da codice.
-> - **In parallelo**: il filone grafico (G2 fatto, G3 viewer da fare). Nel repository ci sono modifiche della 4B non ancora committate (R11, "Lascia i nascosti dove sono", in `core-nasops` e `feature-nas`): vanno chiuse prima di P0, che tocca `core-nasops` (D33).
+> - **In parallelo**: il filone grafico (G2 fatto, G3 viewer da fare). Le modifiche della 4B sono tutte committate (R11, "Lascia i nascosti dove sono"; l'ultima il 15/10: la cartella in uso dall'app è un'attesa breve, non un errore).
 
 ## 0. Sintesi
 
@@ -42,8 +42,8 @@
 - `core-mediastore` (5B): `createDeleteRequest`, `createWriteRequest`, riscrittura di un media con il permesso di sistema;
 - `core-library`, `feature-viewer`, `feature-settings`, `feature-diagnostics`, `:app`.
 
-**Sedici pacchetti, in due metà**
-- **5A "Il backup al sicuro"** (P0–P7): 5.1, 5.2, 5.3, 5.6. Sul NAS si **aggiungono** soltanto file nuovi, pubblicati senza sostituire; dal telefono non si toglie niente.
+**Diciotto pacchetti, in due metà** (P15 e P16 aggiunti il 16/10 con le risposte Q11–Q13)
+- **5A "Il backup al sicuro"** (P0–P7 e P15 copie simili): 5.1, 5.2, 5.3, 5.6. Sul NAS si **aggiungono** soltanto file nuovi, pubblicati senza sostituire; dal telefono non si toglie niente.
 - **5B "Versioni, Libera spazio, integrazioni"** (P0-B, P8–P14): 5.4, 5.5, 5.7. Le azioni che spostano file sul NAS (versioni), riscrivono un file del telefono (correzioni) o tolgono copie dal telefono arrivano dopo la revisione della 5A e il primo backup vero.
 - Opus solo per i cinque pacchetti fondanti o pericolosi: P0 (fondamenta), P2 (caricamento sicuro), P3 ("al sicuro"), P8 (versioni), P9 ("Libera spazio"); sonnet per gli altri undici (§4.4).
 
@@ -93,6 +93,8 @@
 | D33 | **Temporanei del backup**: `.mycloudgallery/tmp/<io>-bk-<id>` nella share di destinazione (cartella col punto, nessuna estensione: invisibili alla scansione, a DLNA e alle viste normali del PC). `OwnFilesCleaner` riceve i temporanei citati da **entrambi** i diari (porta `CitedTemps` composta da `:app`); la pulizia di `core-nas` (`SmbNasHousekeeping`) riconosce solo i suoi nomi da 32 cifre esadecimali e non tocca i `-bk-` | Oggi un temporaneo del backup fermo da più di un giorno (un video a metà, telefono fuori casa) verrebbe tolto dalla pulizia giornaliera |
 | D34 | **"Proteggi subito le foto nuove"** (**proposta**, Q7): con qualunque preset, una foto appena scattata si carica appena c'è il Wi-Fi di casa e la batteria è sopra la soglia, anche fuori dalla fascia notte (solo foto della fotocamera, pochi MB, mai video, mai dati mobili) | Samsung "Salva" sovrascrive il file: una foto modificata prima del backup notturno non arriva mai originale sul NAS (E-B15, L38) |
 | D35 | **Versioni di media non propri o in aree in sola lettura** (E-E9): nell'area comune la versione nuova si scrive accanto all'originale (stessa share, `Versioni/`) solo dopo un foglio "La modifica sarà visibile a tutti i familiari"; in un'area senza permesso di scrittura (E-N9) la modifica diventa un **media nuovo** nell'area privata (`Backup/<dispositivo>/Modificate/AAAA/MM/`) e le info lo dicono | "Rispettando i permessi" (piano 5.4); i permessi degli album arrivano con la Fase 7 |
+| D36 | **Copie simili** (risposta Q11, §2.12): lo stesso scatto con byte diversi si carica sempre e si mostra in **una cella** (gruppo `SIMILAR_COPIES`); copertina = più pixel, poi meno compressione, poi l'originale della fotocamera; "Mostra questa come principale" e "Separa" come dati personali sincronizzati. Firma visiva solo locale e solo per i candidati con la stessa ora di scatto; nascosto contagioso nel gruppo | Niente doppioni in Libreria e niente media non protetti: l'originale del telefono va sempre sul NAS (cambia la proposta 5 del piano: le copie dello stesso scatto si uniscono in Libreria, Utility → Doppioni resta per gli scatti simili ma diversi) |
+| D37 | **Riordino dei vecchi backup** (risposta Q13, §2.13): proposto dopo il primo backup vero, come piano di spostamenti della 4B con conferma; solo file propri dell'area privata che sono copie di media di un proprio dispositivo | Il backup non sposta mai niente da solo (D2); il riordino è un'azione separata, confermata e già provata dal banco della 4B |
 
 ### 0.2 Nuovi edge case proposti (da aggiungere al §6 del piano)
 - **E-B15**: il file del telefono cambia durante il caricamento (Samsung "Salva", un'app che lo riscrive): timbro o hash diversi, il caricamento si scarta e riparte con i byte nuovi; se quelli di prima erano i byte originali, l'originale non arriva al NAS (L38, D34).
@@ -111,6 +113,11 @@
 - **E-X6**: un'altra app chiede molti media solo-NAS insieme: coda con tetto (100 elementi, 2 GiB), oltre rifiuto motivato.
 - **E-X7**: selettore aperto con il blocco dell'app attivo: prima lo sblocco; i nascosti non compaiono mai.
 - **E-X8**: condivisione in arrivo verso il NAS mentre il NAS non è raggiungibile: copia locale in coda (con i tetti di D24), caricata appena possibile, con lo stato.
+- **E-L10**: copia simile (ricompressa, EXIF riscritto, HEIC convertito) di una foto del telefono già sul NAS: l'originale si carica, le due copie stanno in una cella con la migliore come copertina (D36).
+- **E-L11**: copia simile di una foto nascosta: il gruppo è nascosto per intero; la foto non ricompare dalla copia (D36, E-H1).
+- **E-L12**: fotogrammi di una raffica o scatti diversi nello stesso secondo: mai uniti come copie simili; un media che somiglia a due altri non entra in nessun gruppo.
+- **E-L13**: "Separa" su un dispositivo: le copie restano separate su tutti i dispositivi dell'utente e il gruppo non si riforma.
+- **E-B23**: vecchi backup fatti con altri strumenti nell'area privata: le copie identiche si collegano senza caricare, quelle simili si caricano e si uniscono, il riordino arriva solo su proposta e con conferma (D37).
 
 ### 0.3 Modifiche da fare in P0 e P0-B (agli altri documenti)
 **`docs/formato-nas.md`** (nessun file firmato cambia: il backup scrive media, non dati del formato)
@@ -122,7 +129,7 @@
 
 **`docs/sicurezza.md`**: C10 (un secondo modulo che scrive i media, in sola aggiunta: D2), C12 (D2–D5, D12, D14), C13 (avviso forte di D21), C17 (componenti esportati della 5B, D29), C18 (D24, D26); §4-bis (`BackupJobService` nella 5A; i componenti della 5B come **proposta**); §6 L37–L44 (§6.2 di questo documento); §7 checklist della Fase 5 estesa (§6.3); §8 righe di D2, D4, D9, D12, D13, D17, D21, D29.
 
-**`docs/modello-dati.md`**: nuovo §12 "Schema v4" (lo scrive P1).
+**`docs/modello-dati.md`**: nuovo §12 "Schema v4" (lo scrive P1), con il gruppo `SIMILAR_COPIES` e la firma visiva locale (D36).
 
 **`docs/decisioni.md`**: sezione "Fase 5" con D1–D35 e le risposte del §9.
 
@@ -134,7 +141,7 @@
 
 **`docs/android.md`**: esiti di T-11 (con M1) e di T-09, T-14, T-15, T-16 (P0-B).
 
-**Piano**: edge case del §0.2; punto aperto "Dove conservare sul NAS le versioni precedenti" chiuso con D17 e Q2; "Selettore foto delle altre app" chiuso con D23.
+**Piano**: edge case del §0.2 (compresi E-L10…E-L13 ed E-B23); proposta 5 aggiornata da D36 (le copie dello stesso scatto si uniscono in Libreria, Doppioni resta per gli scatti simili ma diversi); punto aperto "Dove conservare sul NAS le versioni precedenti" chiuso con D17 e Q2; "Selettore foto delle altre app" chiuso con D23.
 
 **`README.md`**: moduli nuovi e grafo. **`docs/grafica-progetto.md`**, "Dubbi grafici": terza voce del piede (Backup), pagina Backup, foglio "Libera spazio" con l'avviso forte, segno `BACKUP_PROBLEM` (per G3).
 
@@ -585,15 +592,87 @@ ricaricati**. Requisiti per P0 e P4 (piano del backup), P2 (caricamento) e P3 (d
 5. **Costo**: la rilettura delle copie già presenti (es. 40 GB a 16 MB/s, circa 45 minuti) si fa secondo le regole
    (`PHOTO_BACKUP`/`VIDEO_BACKUP`, di notte con il preset Notte), dai più recenti, e si riprende.
 6. **Copie "quasi uguali"** (stessa data di scatto, stesse dimensioni, impronta visiva simile, ma byte diversi: ricompressione
-   o EXIF cambiati da un'altra app di backup): oggi la regola "nel dubbio si carica" le ricaricherebbe. Comportamento da
-   decidere con l'utente (domanda Q11).
+   o EXIF cambiati da un'altra app di backup): **si caricano sempre** e poi si **uniscono in una cella** (risposta Q11, D36,
+   §2.12). Il riepilogo diventa: "N già sul NAS (collegati), M con una copia simile sul NAS (si caricano e si vedranno
+   insieme), K nuovi: da caricare M+K, X GB, circa Y ore".
+7. **Dove e con cosa** (risposta Q12): i vecchi backup stanno nell'area privata dell'utente, fatti con l'app di WD e con
+   un'altra app o un cloud. Ci si aspetta quindi sia copie identiche (l'app di WD carica gli originali) sia copie simili
+   (i cloud spesso ricomprimono o riscrivono l'EXIF). I numeri veri li dà la scansione in sola lettura dell'archivio (F2).
+8. **Riordino** (risposta Q13): le copie restano dove sono per il backup. **Dopo il primo backup vero** (fine 5B, Q3) l'app
+   propone di spostarle in `Backup/<dispositivo>/AAAA/MM/` con la conferma e il diario della Fase 4B (D37, P16).
 
-Domande aperte per l'utente (da fare prima di P0):
+Domande per l'utente (fatte il 16/10, risposte nel §9.1):
 | # | Domanda | Opzioni | Raccomandazione |
 |---|---|---|---|
 | Q11 | Copie sul NAS "quasi uguali" ma non identiche byte per byte | (a) Si caricano comunque (doppione sul NAS, sicuro). (b) Si mostra l'elenco una volta ("312 foto sembrano già sul NAS ma non sono identiche") e decidi tu: carica / salta / guarda. (c) Si saltano sempre | **(b)**: niente doppioni senza che tu lo sappia, niente media non protetti senza che tu lo sappia |
 | Q12 | Dove stanno i backup già fatti (share e cartelle) e con quale strumento sono stati fatti | Elenco libero | Serve a includerli nella scansione e a stimare quante copie sono identiche |
 | Q13 | Le copie già presenti restano dove sono o si riordinano in `Backup/<dispositivo>/AAAA/MM/`? | (a) Restano dove sono. (b) Riordino proposto più avanti, con conferma (Fase 4B: sposta) | **(a)** per il backup; il riordino eventuale è un'operazione separata e confermata |
+
+### 2.12 Copie simili (D36, risposta Q11)
+**Cosa vede l'utente.** Lo stesso scatto salvato con byte diversi (ricompresso da un cloud, EXIF riscritto da un'altra app,
+HEIC convertito in JPEG) occupa **una sola cella** in Libreria, come le raffiche di Samsung Gallery e le pile di Google Foto.
+Il viewer mostra "2 copie" nelle info e una striscia per guardarle tutte (dove sta ognuna, risoluzione, dimensione, formato).
+Due azioni: **"Mostra questa come principale"** e **"Separa"**. Il backup carica sempre l'originale del telefono: solo i byte
+identici si collegano senza caricare (D8 resta com'è).
+
+**Quando due media sono copie simili** (tutte le condizioni; "nel dubbio non si unisce"):
+1. stesso tipo (foto con foto, video con video);
+2. stessa **ora di scatto letta dai metadati**, al secondo (mai una data "stimata", mai la data del file); se entrambi hanno
+   i sottosecondi (`SubSecTimeOriginal`) devono coincidere (le raffiche li hanno diversi);
+3. stessa proporzione dopo l'orientamento (scarto massimo 1%); per i video anche la durata (scarto massimo 0,5 s);
+4. **firma visiva** uguale entro le soglie (sotto);
+5. nessuno dei due è in una raffica o in una coppia RAW+JPEG (non si spostano, come i gruppi `PROBABLE_DUPLICATE`);
+6. nessuna ambiguità: un media che somiglia a due media distinti non ancora raggruppati fra loro non entra in nessun gruppo;
+7. nessuna separazione salvata dall'utente fra i due ("Separa" vale per sempre e si sincronizza fra i suoi dispositivi).
+
+**Firma visiva.** Calcolata **solo in locale e solo per i candidati** (stessa ora di scatto e stessa proporzione: pochi casi),
+mai pubblicata sul NAS (il formato dell'indice non cambia). Foto: decodifica a misura fissa (es. 32×32 dopo l'orientamento,
+in uno spazio di colore percettivo) dall'originale sul telefono e dalla **miniatura dell'indice** sul NAS (la stessa su ogni
+dispositivo; se manca, il candidato passa avanti nella coda della Preparazione). Video: la stessa firma su due fotogrammi
+agli stessi istanti. Le soglie si tarano con le fixture:
+- **devono unirsi**: JPEG ricompresso da qualità 50 a 95; ridotto al 50% e a 16 MP; EXIF tolto o riscritto; HEIC convertito
+  in JPEG; video ricodificato a 1080p o con meno bitrate;
+- **non devono unirsi**: fotogrammi consecutivi di una raffica; esposizione ±0,3 EV; filtro bianco e nero o di colore;
+  ritaglio del 3%; raddrizzamento di 1°; specchiatura; due scatti diversi nello stesso secondo.
+
+**Quale si vede** (copertina del gruppo), in ordine:
+1. più pixel (video: risoluzione);
+2. a parità di formato, **meno compressione**: più byte per pixel (video: bitrate più alto);
+3. a formati diversi, **l'originale della fotocamera** (la copia che viene dal telefono o con i dati del produttore intatti):
+   una conversione non può avere più dettaglio della sua sorgente;
+4. file più grande; poi id minore (stabile).
+
+La scelta manuale ("Mostra questa come principale") è un dato personale e vince sulla regola.
+
+**Regole del gruppo** (nuovo `MediaGroupKind.SIMILAR_COPIES`, stessa meccanica di copertina e `GROUP_MEMBER` del §11 di
+`modello-dati.md`):
+- **Segni della cella**: sul telefono se almeno una copia è sul telefono; **al sicuro solo se ogni copia che sta sul telefono
+  è al sicuro**; `BACKUP_PROBLEM` se una copia lo ha; più il segno "copie" con il numero (glifo del catalogo G2).
+- **Nascosti** (E-H1): nascondere dalla cella nasconde **tutte** le copie. Se un gruppo nasce con una copia nascosta, il gruppo
+  intero è nascosto e le info lo dicono: la stessa foto non deve ricomparire dalla porta della sua copia. "Separa" non toglie
+  il nascosto.
+- **Azioni dalla cella** (preferito, elimina, condividi, sposta): valgono per tutte le copie, e il foglio dice "2 copie"; dalla
+  striscia del viewer valgono per la copia scelta.
+- **Album e ricerca**: un album che contiene una copia mostra la cella del gruppo; la ricerca (Fase 6) restituisce una cella
+  per gruppo.
+- **"Separa"**: toglie quella copia dal gruppo e salva la separazione (dato personale sincronizzato, 4.7); un gruppo rimasto
+  con una copia si scioglie.
+- Il gruppo è un **dato derivato locale**: ogni dispositivo lo ricalcola dagli stessi dati; nessuna azione sul NAS parte da lì.
+
+**Quando gira.** Come manutenzione del catalogo, dopo che META ha letto l'ora di scatto di un media nuovo (telefono o NAS),
+con i candidati presi dall'indice `sort_time`; per il riepilogo del primo backup il piano (P4) aspetta che il confronto dei
+candidati sia finito e lo dice ("Sto confrontando 120 foto con le copie sul NAS…").
+
+### 2.13 Riordino dei vecchi backup (D37, risposta Q13; 5B, dopo il primo backup vero)
+- Dopo il primo backup vero (fine 5B, Q3) la pagina Backup propone una volta, poi resta disponibile: "312 file dei vecchi backup
+  stanno fuori da `Backup/`: vuoi spostarli in `Backup/<dispositivo>/AAAA/MM/`?". Elenco per cartella con conteggi e GB.
+- Si spostano solo file dell'area privata del proprietario, fuori da `Backup/` e `Versioni/`, che sono copie (identiche o simili)
+  di media di un suo dispositivo. Mai l'area comune, mai file di altri.
+- Lo spostamento è un piano della 4B (`core-nasops`, `UserConfirmation` dal foglio, diario, ripresa, conflitti di nome senza
+  sostituire: "IMG_1234 (2).jpg"); nella stessa share è una rinomina, senza copie. Il congelamento non scatta: i movimenti propri
+  si riconoscono dal diario (franchigia della 4B). Le cartelle rimaste vuote si tolgono solo se davvero vuote.
+- **Domanda Q14** (da fare all'avvio di P16, con i numeri della scansione vera F2): dove vanno i file dei vecchi backup che non
+  sono più su nessun dispositivo (telefoni precedenti)?
 
 ## 3. Alternative scartate
 | Tema | Opzioni | Scelta e motivo |
@@ -628,6 +707,7 @@ P0 fondamenta, contratti, recinti, documenti ──┬── P1 modello e databa
                                                 ├── P3 "al sicuro", deduplica, guardiano ────────────┤
                                                 ├── P4 piano, sorgenti, destinazioni, stime ─────────┤
                                                 ├── P5 stato del backup e UI della 5A ───────────────┤
+                                                ├── P15 copie simili (rilevamento, copertina, cella) ┤
                                                 └── P6 prova delle 500 interruzioni (banco, area, telefono) ┴── P7 integrazione 5A ── M2
                                                                          ── check.ps1 (-Bench) + security-review + Q3 → primo backup vero (F32)
 5B (dopo l'approvazione della 5A)
@@ -638,6 +718,7 @@ P0-B fondamenta 5B e prove T ──┬── P8 versioni e correzioni ───�
                                 ├── P12 UI della 5B ──────────────────────────┤
                                 └── P13 prova delle 500 interruzioni della 5B ┴── P14 integrazione 5B ── M3
                                                                          ── security-review
+                                                                         ── primo backup vero (Q3) ── P16 riordino dei vecchi backup (Q14)
 ```
 - Dopo P0 tutti i pacchetti della 5A partono **insieme** sui contratti, sull'esecutore di riferimento e sui fake di P0; si incontrano in P7.
 - **M1** è un'integrazione parziale dell'orchestratore dopo P1 e P2 (la verifica del caricamento è dentro P2): una foto, dal telefono finto e poi dall'S25, fino allo scudo in Libreria.
@@ -673,12 +754,12 @@ P0-B fondamenta 5B e prove T ──┬── P8 versioni e correzioni ───�
 ### 4.4 I pacchetti
 | ID | Obiettivo | Perimetro esclusivo | Dipende da | Fatto quando | Modello | Campo |
 |---|---|---|---|---|---|---|
-| **P0 Fondamenta e contratti (5A)** | Moduli, contratti, esecutore di riferimento, recinti, documenti | `settings.gradle`, `build.gradle` (`galleryModules`), `tools/check.ps1` (D12 nel dex di release, D13 assente); creazione di `core-backup` e `feature-backup` (build, manifest, `contract/`, `noop/`, `testing/`, `NoNetworkSourcesTest`, `NoWallClockSourcesTest`); **contratti** del §1.2 della 5A (`NasBackupOps`, marcatore e fake in `core-nas/.../ops/backup/` e `testing/`; porte, `UploadStateMachine`, `BackupStatus` di `core-backup`; `LibraryBackupStatus`; `CellFlags.BACKUP_PROBLEM` come firma); **esecutore di riferimento** `InMemoryBackupEngine`; `FakeMediaStore` esteso (§5.2); `core-nasops` (porta `CitedTemps` di `OwnFilesCleaner`, D33); `core-common` (`FeatureFlags.backupTestSharesOnly`, `DiagSection.BACKUP`, test di architettura); firma della recinzione di D13 in `DeveloperTools`; documenti del §0.3 | 4B chiusa (R11 committata) | `check.ps1` verde; nessuna dipendenza nuova; ogni test di architettura fallisce reintroducendo la violazione (`core-backup` che nomina `NasFileOps` o `core-nasops`; `NasBackupOps` fuori da `core-nas`/`core-backup`; un modulo che legge il NAS che vede `core-backup`; `feature-backup` che vede `core-nas`); `EveryCallTest` del backup sull'esecutore di riferimento (guasto prima e dopo a ogni primitiva, morte del processo a ogni scrittura del diario: invarianti del §5.4); `backupTestSharesOnly` vero in release e non spegnibile; un temporaneo `-bk-` citato dal diario sopravvive a `OwnFilesCleaner` | opus | no |
-| **P1 Modello e database v4** | §1.3 `core-model`, `core-database` | `core-model/**`, `core-database/**` (schemi, DAO, `MediaCatalog`), `docs/modello-dati.md` §12 | P0 | `4.json` esportato; `ExportedSchemaTest` 1→4, 2→4, 3→4 con `seedV3`; `MergeReferencesTest` con le tabelle nuove; `backupCandidates` su 100 mila media sotto 100 ms per pagina senza `USE TEMP B-TREE`; `verifyCandidates` per `verified_at` con l'indice nuovo; `attachCopies` a lotti in una transazione (un solo cambiamento dell'indice per lotto); `BACKUP_PROBLEM` derivato nella stessa transazione | sonnet | no |
+| **P0 Fondamenta e contratti (5A)** | Moduli, contratti, esecutore di riferimento, recinti, documenti | `settings.gradle`, `build.gradle` (`galleryModules`), `tools/check.ps1` (D12 nel dex di release, D13 assente); creazione di `core-backup` e `feature-backup` (build, manifest, `contract/`, `noop/`, `testing/`, `NoNetworkSourcesTest`, `NoWallClockSourcesTest`); **contratti** del §1.2 della 5A (`NasBackupOps`, marcatore e fake in `core-nas/.../ops/backup/` e `testing/`; porte, `UploadStateMachine`, `BackupStatus` di `core-backup`; `LibraryBackupStatus`; `CellFlags.BACKUP_PROBLEM` come firma; per D36 `MediaGroupKind.SIMILAR_COPIES`, la porta del rilevatore delle copie simili con il fake e i record personali di separazione e di copertina scelta, come firme); **esecutore di riferimento** `InMemoryBackupEngine`; `FakeMediaStore` esteso (§5.2); `core-nasops` (porta `CitedTemps` di `OwnFilesCleaner`, D33); `core-common` (`FeatureFlags.backupTestSharesOnly`, `DiagSection.BACKUP`, test di architettura); firma della recinzione di D13 in `DeveloperTools`; documenti del §0.3 | 4B chiusa (R11 committata) | `check.ps1` verde; nessuna dipendenza nuova; ogni test di architettura fallisce reintroducendo la violazione (`core-backup` che nomina `NasFileOps` o `core-nasops`; `NasBackupOps` fuori da `core-nas`/`core-backup`; un modulo che legge il NAS che vede `core-backup`; `feature-backup` che vede `core-nas`); `EveryCallTest` del backup sull'esecutore di riferimento (guasto prima e dopo a ogni primitiva, morte del processo a ogni scrittura del diario: invarianti del §5.4); `backupTestSharesOnly` vero in release e non spegnibile; un temporaneo `-bk-` citato dal diario sopravvive a `OwnFilesCleaner` | opus | no |
+| **P1 Modello e database v4** | §1.3 `core-model`, `core-database`; per D36 le tabelle locali della firma visiva e delle copie simili (§2.12) | `core-model/**`, `core-database/**` (schemi, DAO, `MediaCatalog`), `docs/modello-dati.md` §12 | P0 | `4.json` esportato; `ExportedSchemaTest` 1→4, 2→4, 3→4 con `seedV3`; `MergeReferencesTest` con le tabelle nuove; `backupCandidates` su 100 mila media sotto 100 ms per pagina senza `USE TEMP B-TREE`; `verifyCandidates` per `verified_at` con l'indice nuovo; `attachCopies` a lotti in una transazione (un solo cambiamento dell'indice per lotto); `BACKUP_PROBLEM` derivato nella stessa transazione | sonnet | no |
 | **P2 Caricamento sicuro** | §2.2, primitive del §1.2 | `core-backup/.../upload/**`, `.../store/**` (`RoomBackupStore`), `core-nas/.../ops/backup/**` e la vista in `SmbNasFileOps` (`reopenTemp`), `InMemorySmbBackend` (fine file) | P0 (P1 per l'adattatore Room) | ogni passo con `FaultPlan` a **ogni** chiamata e morte del processo a ogni scrittura del diario: invarianti del §5.4 veri; E-B1 (3 GB virtuali, al massimo 64 MiB ricaricati), E-B2, E-B3 (file diverso e file identico allo stesso nome), E-B5 tramite la porta, E-B15, E-B18, E-R9 (`DISK_FULL` a metà), E-N13, E-P12; nessun file fuori dalle radici ammesse (proprietà); nessuna sostituzione con 1.000 collisioni casuali; temporanei solo `<io>-bk-`; `reopenTemp` sul simulatore SMB; 200 giri del banco; costo per file misurato sul simulatore con le latenze dell'inventario; lettura e preparazione a priorità bassa con l'app in primo piano | opus | sì (F21–F25) |
 | **P3 "Al sicuro", deduplica, guardiano** | §2.3, D8, D9, D14 | `core-backup/.../safety/**` (`SafetyVerifier`, `PrivateCopyGuardian`, deduplica, rotazione) | P0 (fake di P1, P2) | la tabella "Fatto quando di 5.3" del §2.3 in test, scenario per scenario (con il diario finto della 4B per lo spostamento nell'area comune); un hash dell'indice non fa mai "al sicuro" né collegamento (F4-D8); candidati solo dell'area privata propria (un'altra area privata e l'area comune piene di file identici non vengono lette); `FULL_HASH` risolve i gruppi `PROBABLE_DUPLICATE`; la rotazione trova un byte cambiato e toglie "al sicuro"; guardiano con copia lato server rifiutata (ripiego) e sorgente cambiata a metà (E-D13: niente pubblicato); `FaultPlan` a ogni chiamata; tetto di 20 GB per giro | opus | sì (F29) |
-| **P4 Piano, sorgenti, destinazioni, stime** | §2.1, §2.8, §2.9, D6, D7, D11, D34 | `core-backup/.../plan/**`, `.../settings/**`, `core-rules/.../estimate/**`, `core-rules/.../settings/**` (regola di D34) | P0 | regole dei percorsi (E-B6, E-B7, E-B12, E-B16, E-B17, E-N6, nomi rifiutati da `SharePath`, microSD) in test; ordine (foto, recenti, originale prima della versione); riepilogo dalle dimensioni vere; la tabella dei preset del §2.9 riprodotta dallo stimatore con la composizione del §2.9; `PresetMatrixTest` esteso con D34 e "Fai ora" sui dati mobili | sonnet | no |
-| **P5 Stato del backup e UI della 5A** | §1.5 (stati della 5A), §2.6, D15, D16, D30 | `feature-backup/**` (impostazioni, primo backup, pagina Backup), `core-library/.../library/LibraryBackupStatus*` (dati), `feature-library/.../library/LibraryStatusFooter.kt` (terza voce, componenti esistenti), `feature-viewer/.../info/BackupInfo*`, `feature-settings/.../backup/**` (voce), glifo `PROBLEM` nel catalogo di `core-designsystem` | P0 (fake di `core-backup`) | ogni stato del §1.5 della 5A composto; ogni codice del §2.6 con messaggio e azione (test che legge l'elenco dal contratto); TalkBack e testo a 1,3x; bersagli da 48 dp (test dei bordi del piede); contrasti in `GalleryFooterStatusTest`; screenshot `5-P5` | sonnet | sì |
+| **P4 Piano, sorgenti, destinazioni, stime** | §2.1, §2.8, §2.9, §2.11 (riepilogo con i tre numeri, attesa della scansione e del confronto delle copie simili), D6, D7, D11, D34 | `core-backup/.../plan/**`, `.../settings/**`, `core-rules/.../estimate/**`, `core-rules/.../settings/**` (regola di D34) | P0 | regole dei percorsi (E-B6, E-B7, E-B12, E-B16, E-B17, E-N6, nomi rifiutati da `SharePath`, microSD) in test; ordine (foto, recenti, originale prima della versione); riepilogo dalle dimensioni vere; la tabella dei preset del §2.9 riprodotta dallo stimatore con la composizione del §2.9; `PresetMatrixTest` esteso con D34 e "Fai ora" sui dati mobili | sonnet | no |
+| **P5 Stato del backup e UI della 5A** | §1.5 (stati della 5A), §2.6, D15, D16, D30 | `feature-backup/**` (impostazioni, primo backup, pagina Backup), `core-library/.../library/LibraryBackupStatus*` (dati), `feature-library/.../library/LibraryStatusFooter.kt` (terza voce, componenti esistenti), `feature-viewer/.../info/BackupInfo*`, `feature-settings/.../backup/**` (voce), glifi `PROBLEM` e "copie" (D36) nel catalogo di `core-designsystem` | P0 (fake di `core-backup`) | ogni stato del §1.5 della 5A composto; ogni codice del §2.6 con messaggio e azione (test che legge l'elenco dal contratto); TalkBack e testo a 1,3x; bersagli da 48 dp (test dei bordi del piede); contrasti in `GalleryFooterStatusTest`; screenshot `5-P5` | sonnet | sì |
 | **P6 Prova delle 500 interruzioni del backup** | §5.4 | `core-backup/src/test/.../chaos/**`, `tools/chaos/**` (modi `backup` di `area.ps1` e `s25.ps1`, semina di `mcg-prova` con `adb`), `docs/prova-500.md` (sezione del backup) | P0 (esecutore di riferimento), poi P2, P3 | 2.000 giri JVM verdi sullo stack di riferimento e su quello vero; 600 sul simulatore SMB con le vere `SmbNasFileOps`; runner contro l'area di prova (≥ 400) dietro la guardia; script del telefono con il manifesto da `adb shell sha256sum`; verificatore che gira anche da solo; `ChaosMutationTest` (pubblicare prima della verifica, saltare la rilettura, scrivere il diario dopo la chiamata, temporaneo tolto dalla pulizia: rossi con l'invariante giusto) | sonnet | sì (F30) |
 | **P7 Integrazione 5A** | §1.4 per la 5A | `app/**`, `feature-diagnostics/.../catalog/**` ed `export/ExportKeys.kt`, `README.md`, `docs/sicurezza.md` (checklist), `docs/decisioni.md` | P0–P6 | `BackupGraph`, lavori, `BackupJobService` (UIDT, "Ferma"), trigger dopo la lettura del telefono, cancelli (D12, congelamento, emergenza), `CitedTemps` composta, notifiche e riepilogo, Diagnostica (test di catalogo per ogni codice del §2.6), azzeramento; test d'integrazione sul NAS finto e sul telefono finto: foto nuova → backup → `SAFE` in Libreria → un secondo "dispositivo" la vede dalla scansione senza doppioni → spegnimento; D13 solo in debug e assente dal dex di release; `check.ps1` verde; APK debug e release | sonnet | sì |
 | **P0-B Fondamenta 5B** | Moduli, contratti e prove guidate della 5B | `settings.gradle`, `build.gradle`, creazione di `feature-integrations`; contratti del §1.2 della 5B (`archiveVersion`/`restoreVersion` con il fake, `VersionKeeper`, `Corrections`, `FreeSpace`, `PhoneConfirmation`, `PendingTasks`, `IncomingUploads`, `EditSessions`, `MetadataWriter`, `LocationStripper`); `core-mediastore` (`deleteRequest`, `writeRequest`, `PhoneMediaRewriter` e fake); manifest e `releaseManifestPolicy` dei componenti di D29 approvati (Q5), `sicurezza.md` §4-bis; test di architettura (`PhoneConfirmation` solo dalla UI, `feature-integrations` cieca a `core-nas` e `core-nasops`); **prove guidate** di T-09, T-14, T-15, T-16 (schermata di debug in Diagnostica → Sviluppo che le esegue su `mcg-prova` e scrive un resoconto di soli numeri) | 5A chiusa | `check.ps1` verde; test di architettura provati reintroducendo le violazioni; nel manifest fuso solo i componenti approvati; resoconto di T-09…T-16 dall'S25 in `docs/android.md` | sonnet | sì (prove T) |
@@ -689,8 +770,10 @@ P0-B fondamenta 5B e prove T ──┬── P8 versioni e correzioni ───�
 | **P12 UI della 5B** | §1.5 (stati della 5B) | `feature-backup/.../versions/**`, `.../free/**`, `.../tasks/**`, `feature-viewer/.../menu/BackupActions*`, `feature-settings/.../sharing/**` | P0-B (fake di P8, P9, P11) | Versioni, Libera spazio con l'avviso forte, Da decidere, Correggi, Condividi; `PhoneConfirmationSheet` solo da un tocco, due gesti per "Libera subito"; scudo contro le sovrapposizioni in ogni foglio (R7 della 4B); TalkBack, 1,3x, 48 dp; screenshot `5-P12` | sonnet | sì |
 | **P13 Prova delle 500 interruzioni della 5B** | §5.4 per versioni, scambi, guardiano, verifica sul momento | `core-backup/src/test/.../chaos/**` (estensione), `tools/chaos/**`, `docs/prova-500.md` | P0-B, poi P8, P9 | 2.000 giri JVM, 600 sul simulatore, ≥ 400 sull'area di prova con versioni e scambi; invarianti 12–14 del §5.4 | sonnet | sì (F43) |
 | **P14 Integrazione 5B** | §1.4 per la 5B | `app/**` (manifest, `AppLockGate` con più activity, navigazione), `feature-diagnostics/**`, `docs/sicurezza.md`, `docs/decisioni.md`, `README.md` | P0-B, P8–P13 | componenti di D29 nel manifest e nella policy, provati con `adb` (`am start` e `content query` da fuori non ottengono niente senza un tocco e senza grant); test d'integrazione: modifica sul telefono → versione → Versioni → Ripristina originale; "Libera spazio" con una copia rovinata; ricezione → "Salva sul NAS"; selettore con un solo-NAS; `check.ps1` verde; APK | sonnet | sì |
+| **P15 Copie simili (5A)** | §2.12, D36, E-L10…E-L13 | `core-library/.../similar/**` (rilevatore, firma visiva, scelta della copertina, regole del gruppo), le righe del gruppo `SIMILAR_COPIES` in `MediaCatalog` (dopo P1, con il suo accordo sul perimetro), `feature-viewer/.../info/SimilarCopies*` (striscia, "Mostra questa come principale", "Separa"), i record personali di separazione e di copertina in `core-personal` | P0 (contratti), P1 (tabelle) | tabella "devono unirsi / non devono unirsi" del §2.12 in test con fixture generate (ricompressione, riduzione, EXIF, HEIC→JPEG, raffica, ±0,3 EV, filtri, ritaglio, raddrizzamento, specchiatura, video ricodificati); copertina secondo le quattro regole; nascosto contagioso (test su tutte le superfici che leggono l'indice); "Separa" sincronizzato e mai riformato; un media ambiguo non entra; nessuna lettura del NAS oltre le miniature dei candidati; 100 mila media con 1.000 gruppi: indice della timeline senza `USE TEMP B-TREE` e guardia delle prestazioni invariata | sonnet | sì (F31-bis) |
+| **P16 Riordino dei vecchi backup (5B)** | §2.13, D37, E-B23 | `core-nasops/.../plan/reorganize/**` (piano di spostamenti dalla lista proposta), `feature-backup/.../reorganize/**` (proposta, elenco per cartella, foglio di conferma) | P14 chiusa, primo backup vero fatto, risposta a Q14 | solo file propri dell'area privata, fuori da `Backup/` e `Versioni/`, copie di media propri; piano della 4B con `UserConfirmation` dal foglio; prova delle interruzioni della 4B estesa al riordino (2.000 giri JVM, 600 sul simulatore); nessun congelamento per i propri spostamenti; cartelle tolte solo se vuote | sonnet | sì |
 
-> Nota sui crediti: opus per 5 pacchetti su 16, quelli che l'utente ha indicato come fondanti o pericolosi: P0 (i contratti che rendono il backup incapace di distruggere), P2 (caricamento sicuro), P3 ("al sicuro"), P8 (versioni, le uniche rinomine automatiche di media), P9 ("Libera spazio", l'unico flusso che toglie copie dal telefono). Le integrazioni P7 e P14 sono sonnet con brief completi; la revisione di sicurezza di fine metà fa da controllo indipendente.
+> Nota sui crediti: opus per 5 pacchetti su 18, quelli che l'utente ha indicato come fondanti o pericolosi: P0 (i contratti che rendono il backup incapace di distruggere), P2 (caricamento sicuro), P3 ("al sicuro"), P8 (versioni, le uniche rinomine automatiche di media), P9 ("Libera spazio", l'unico flusso che toglie copie dal telefono). Le integrazioni P7 e P14 sono sonnet con brief completi; la revisione di sicurezza di fine metà fa da controllo indipendente.
 
 ### 4.5 Chiusura delle due metà
 - **5A**: `check.ps1` verde; `check.ps1 -Bench` su S25 e Tab S9 dentro la guardia della Fase 4, anche con un backup in corso (F22); F21–F31 superati; F16 della 4B fatta; screenshot del piede, della pagina e del primo backup approvati; `security-review` con revisione mirata di `core-backup` e `NasBackupOps`; checklist della 5A spuntata (§6.3); risposta a Q3 → D12 spento → F32.
@@ -781,6 +864,7 @@ Operazioni coperte: caricamento di foto e video grandi, deduplica, guardiano, ve
 | F29 | E-B13, E-B14, Q4: da Cartelle NAS spostare 20 foto proprie in `test-comune`; poi `test2` cancella dal PC le copie comuni | copie private in `Backup/Area comune/` (Q4 a); dopo la cancellazione restano; Libreria "al sicuro" |
 | F30 | Prova delle 500 interruzioni del backup | runner dal PC ≥ 400, telefono ≥ 100: invarianti del §5.4 veri |
 | F31 | E-R9, E-N13 (facoltativa): quota piccola sull'account `test` dalla dashboard | "Spazio del tuo account esaurito", nessun file a metà; tolta la quota riprende |
+| F31-bis | E-B23, E-L10…E-L12: in `mcg-campo/` della share di prova, prima del backup, copie di alcune foto di `mcg-prova` identiche, ricompresse, con EXIF riscritto e convertite da HEIC (preparate dal PC), più una raffica | riepilogo con i tre numeri giusti; le identiche collegate senza caricare; le simili caricate e unite in una cella con la copertina giusta; la raffica intatta; "Separa" sul telefono e il tablet di prova vede la separazione |
 | F32 | (chiusura 5A, Q3) APK di release, account vero, D12 spento: primo backup vero dell'S25 su `alessio` | tempo, traffico e batteria entro ±30% del riepilogo; dal PC struttura `Backup/<dispositivo>/AAAA/MM/`, niente toccato fuori da lì |
 | F33 | Una settimana con Notte e una con Bilanciato, backup acceso (insieme a F18 della Fase 4) | meno del 2% di batteria al giorno con Notte; stime entro ±30% |
 | F34 | (5B) Samsung Gallery: "Salva" su una foto al sicuro, poi "Ripristina originale", poi "Salva copia" | versione al solito percorso e originale in `Versioni/`; scambio; media nuovo (T-16, parte a) |
@@ -927,6 +1011,13 @@ Operazioni coperte: caricamento di foto e video grandi, deduplica, guardiano, ve
 | Q8 | Non chiesta: vale (a) (sottocartelle per screenshot e cartelle aggiuntive) | — |
 | Q9 | (a) "Libera spazio" propone tutto il sicuro **tranne gli ultimi 30 giorni**, con i filtri | — |
 | Q10 | (a) **Riverifica** a rotazione, ogni copia almeno una volta l'anno | — |
+
+**16/10** (domande del §2.11)
+| # | Risposta | Effetto |
+|---|---|---|
+| Q11 | **Nuova opzione**: le copie quasi uguali si caricano sempre, ma si uniscono in una cella come in Google Foto e Samsung Gallery; tutte le copie si possono vedere, c'è una funzione per separarle, e di default si mostra quella a risoluzione maggiore o compressione minore | D36, §2.12, P15 |
+| Q12 | Nell'area privata dell'utente; fatti con l'app di WD e con un'altra app o un cloud | Ci si aspettano copie identiche e simili; numeri dalla scansione F2 |
+| Q13 | (b) **Riordino proposto dopo**, con conferma | D37, §2.13, P16 (dopo il primo backup vero, Q14 allora) |
 
 <!-- fine del documento -->
 

@@ -447,14 +447,53 @@ class PrivateCopyGuardianTest {
     assertThat(bench.guardItems()).isEmpty()
   }
 
-  /** La sorgente sparita (un familiare l'ha cancellata) prima della copia: `GONE`, niente copiato. */
+  /**
+   * La sorgente sparita (un familiare l'ha cancellata) prima della copia, senza la copia del telefono ne' una privata (L44): `GONE`,
+   * niente copiato, e il media porta `COMMON_COPY_LOST` ("Recuperalo dal cestino del NAS").
+   */
   @Test
   fun sorgenteSparitaPrimaDellaCopia() = runTest {
     val start = bench.commonOnly("IMG_19.jpg", SafetyBench.bytes(10_000, 25))
     kit.nas.delete(kit.commonShare, start.commonPath!!.value)
     bench.guardian().ensure(GuardScope.All, 1.hours)
-    assertThat(bench.guardItems().single().state).isEqualTo(UploadState.GONE)
+    val item = bench.guardItems().single()
+    assertThat(item.state).isEqualTo(UploadState.GONE)
+    assertThat(item.problem).isEqualTo(BackupProblemCode.COMMON_COPY_LOST)
+    assertThat(kit.catalog.problemOf(start.mediaId)).isEqualTo(BackupProblemCode.COMMON_COPY_LOST)
     assertThat(kit.nas.filePaths(kit.share)).isEmpty()
+  }
+
+  /** L44 anche quando l'hash della versione non e' noto e la sorgente sparisce prima della lettura di riferimento. */
+  @Test
+  fun sorgenteSparitaPrimaDellaLetturaDiRiferimento() = runTest {
+    val start = bench.commonOnly("IMG_20.jpg", SafetyBench.bytes(10_000, 26), hashKnown = false)
+    kit.nas.delete(kit.commonShare, start.commonPath!!.value)
+    bench.guardian().ensure(GuardScope.All, 1.hours)
+    assertThat(bench.guardItems().single().problem).isEqualTo(BackupProblemCode.COMMON_COPY_LOST)
+    assertThat(kit.catalog.problemOf(start.mediaId)).isEqualTo(BackupProblemCode.COMMON_COPY_LOST)
+  }
+
+  /** La sorgente sparita ma la versione e' ancora sul telefono (ambito dei media chiesti): non e' persa, niente si segna. */
+  @Test
+  fun sorgenteSparitaMaIlTelefonoCeLHa() = runTest {
+    val start = bench.commonOnly("IMG_21.jpg", SafetyBench.bytes(10_000, 27), onPhone = true)
+    kit.nas.delete(kit.commonShare, start.commonPath!!.value)
+    bench.guardian().ensure(GuardScope.Media(setOf(start.mediaId)), 1.hours)
+    val item = bench.guardItems().single()
+    assertThat(item.state).isEqualTo(UploadState.GONE)
+    assertThat(item.problem).isNull()
+    assertThat(kit.catalog.problemOf(start.mediaId)).isNull()
+  }
+
+  /** La sorgente sparita con i permessi del telefono ritirati: non si sa se il telefono ha ancora la versione, niente si segna. */
+  @Test
+  fun sorgenteSparitaConIPermessiRitiratiNonSegnaNiente() = runTest {
+    val start = bench.commonOnly("IMG_22.jpg", SafetyBench.bytes(10_000, 28), onPhone = true)
+    kit.nas.delete(kit.commonShare, start.commonPath!!.value)
+    kit.phone.denied = dev.pampa.mycloudgallery.core.backup.contract.PhoneDenied.MEDIA_PERMISSION
+    bench.guardian().ensure(GuardScope.Media(setOf(start.mediaId)), 1.hours)
+    assertThat(bench.guardItems().single().problem).isNull()
+    assertThat(kit.catalog.problemOf(start.mediaId)).isNull()
   }
 
   // --- Doppi ---------------------------------------------------------------------------------------------------------------------

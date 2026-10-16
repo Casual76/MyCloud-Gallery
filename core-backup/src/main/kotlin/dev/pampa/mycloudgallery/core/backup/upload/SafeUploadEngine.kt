@@ -31,6 +31,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.UploadStateMachine
 import dev.pampa.mycloudgallery.core.backup.contract.VerifiedCopy
 import dev.pampa.mycloudgallery.core.backup.contract.WaitReason
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
+import dev.pampa.mycloudgallery.core.metadata.contract.MediaBytes
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.NasStamp
@@ -91,7 +92,12 @@ import kotlinx.coroutines.yield
  * - **mai una sostituzione** (D2, D6, E-B3): `publishTemp` non sostituisce; nome occupato da un file identico = collegato, da uno diverso
  *   = "nome (2)" scritto nel diario prima di riprovare; la risposta persa si riconosce come in F4-D24;
  * - **ripresa** (D5, E-B1): un punto ogni 64 MiB; dopo un'interruzione `reopenTemp(keep = punto)` riapre il proprio temporaneo senza
- *   crearlo e lo accorcia; un timbro del telefono cambiato = la versione non c'e' piu' (E-B15) e il temporaneo si toglie;
+ *   crearlo e lo accorcia;
+ * - **file del telefono cambiato** (E-B15, L38, decisione dell'orchestratore del 16/10): prima che il temporaneo sia completo, la
+ *   versione non c'e' piu' e il temporaneo si toglie; a temporaneo **completo** non si scarta niente: la verifica decide, e se la
+ *   rilettura da' lo SHA-256 dei byte letti **prima** del cambiamento quei byte (l'originale, che sul telefono non c'e' piu') si
+ *   pubblicano come copia di **quella** versione. Una foto ancora in memoria dalla lettura (fino a 64 MiB, con la preparazione) si
+ *   carica dalla memoria: il telefono non serve piu' (anche se nel frattempo la foto e' stata riscritta o cancellata);
  * - **due file in volo** (D11): uno in caricamento ([Round.uploadLane]), l'altro in lettura, preparazione o verifica ([Round.readLane]);
  *   lettura e preparazione a priorita' bassa con l'app in primo piano ([foreground]);
  * - un errore del NAS ferma il giro, non l'elemento; un file aperto dal PC e' un'attesa crescente (E-N13); `DISK_FULL` a meta' toglie il
@@ -139,6 +145,16 @@ class SafeUploadEngine(
   private val preparedCache = object : LinkedHashMap<Long, PreparedUpload>(8, 0.75f, true) {
     override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, PreparedUpload>?): Boolean =
       size > MAX_PREPARED || values.sumOf { it.bytesInMemory } > MAX_PREPARED_BYTES
+  }
+
+  /**
+   * I byte del telefono letti per l'hash e ancora in memoria (D10: foto fino a 64 MiB con la preparazione), per elemento, fino alla
+   * verifica: il caricamento li usa al posto di una seconda lettura del telefono (E-B15). Al piu' due, come i file in volo.
+   */
+  private class Raw(val sha256: Sha256, val bytes: ByteArray)
+
+  private val rawCache = object : LinkedHashMap<Long, Raw>(4, 0.75f, true) {
+    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Long, Raw>?): Boolean = size > MAX_RAW
   }
 
   /** L'esito di un passo. */
@@ -268,6 +284,7 @@ class SafeUploadEngine(
         is Step.Next -> {
           item = step.item
           if (item.state.terminal) {
+            dropRaw(item)
             round.count(item.state)
             return
           }
@@ -341,7 +358,7 @@ class SafeUploadEngine(
 
   // --- PLANNED: lettura completa dal telefono, hash e preparazione dagli stessi byte (D10) ------------------------------------------
 
-  private class PhoneRead(val sha256: Sha256, val quickHash: QuickHash, val prepared: PreparedUpload?)
+  private class PhoneRead(val sha256: Sha256, val quickHash: QuickHash, val prepared: PreparedUpload?, val memory: ByteArray?)
 
   private suspend fun readPhone(round: Round, item: BackupItem): Step {
     val ref = item.phone ?: return Step.Wait()
@@ -373,7 +390,9 @@ class SafeUploadEngine(
         HashRecord.CONFLICT, HashRecord.UNKNOWN_VERSION -> return gone(round, item, lost = false)
       }
       read.prepared?.let { keepPrepared(item, it) }
-      return save(item.copy(state = UploadState.HASHED, sha256 = read.sha256, quickHash = read.quickHash))
+      val hashed = save(item.copy(state = UploadState.HASHED, sha256 = read.sha256, quickHash = read.quickHash))
+      read.memory?.let { keepRaw(item, Raw(read.sha256, it)) }
+      return hashed
     }
   }
 
@@ -390,7 +409,7 @@ class SafeUploadEngine(
       val subject = UploadSubject(item.mediaId, item.versionId, item.size, read.sha256, read.quickHash, description)
       prepared = indexing.prepare(subject, read.memory?.let { InMemoryMediaBytes(it) } ?: file.bytes)
     }
-    return PhoneRead(read.sha256, read.quickHash, prepared)
+    return PhoneRead(read.sha256, read.quickHash, prepared, read.memory)
   }
 
   private fun readContext(): CoroutineContext = if (foreground()) lowPriority() else EmptyCoroutineContext
@@ -490,6 +509,11 @@ class SafeUploadEngine(
   private suspend fun upload(round: Round, item: BackupItem): Step {
     if (item.verifyAttempts >= UploadStateMachine.MAX_VERIFY_ATTEMPTS) return verifyFailed(round, item)
     val temp = item.temp ?: return save(item.copy(temp = tempOf(item), resumeAt = 0))
+    // E-B15, D10: i byte letti per l'hash sono ancora in memoria: si caricano quelli (sono la versione, qualunque cosa sia successa al
+    // file del telefono nel frattempo).
+    rawOf(item)?.let { raw ->
+      return afterPump(round, round.uploadLane.withPermit { writeTemp(round, item, temp, InMemoryMediaBytes(raw.bytes)) })
+    }
     val ref = item.phone ?: return Step.Wait()
     val file = when (val opened = phone.open(ref)) {
       PhoneOpen.Stale -> return refreshPhone(item)
@@ -498,24 +522,24 @@ class SafeUploadEngine(
       is PhoneOpen.Opened -> opened.file
     }
     val pumped = file.use {
-      // D5, E-B15: il file del telefono e' cambiato dopo la lettura: si ricomincia da zero (con l'elemento della versione nuova).
+      // D5, E-B15: il file del telefono e' cambiato prima che il temporaneo fosse completo: si ricomincia da zero, con l'elemento della
+      // versione nuova (questi byte non sono piu' la versione).
       if (file.stamp != item.expected) return gone(round, item, lost = false)
-      round.uploadLane.withPermit { writeTemp(round, item, temp, file) }
+      round.uploadLane.withPermit { writeTemp(round, item, temp, file.bytes) }
     }
-    return when (pumped) {
-      is Pumped.Then -> pumped.step
-      is Pumped.PhoneFailed -> afterPhoneFailure(round, pumped.item)
-      is Pumped.DiskFull -> diskFull(round, pumped.item, pumped.error)
-      is Pumped.Done -> {
-        // Il file del telefono non e' cambiato durante il caricamento (E-B15). Sparito: il temporaneo completo si verifica comunque.
-        val now = phone.lookup(ref)
-        if (now is PhoneLookup.Present && now.stamp != pumped.item.expected) return gone(round, pumped.item, lost = false)
-        save(pumped.item.copy(state = UploadState.UPLOADED, resumeAt = pumped.item.size))
-      }
-    }
+    return afterPump(round, pumped)
   }
 
-  private suspend fun writeTemp(round: Round, start: BackupItem, temp: SharePath, file: PhoneFile): Pumped {
+  private suspend fun afterPump(round: Round, pumped: Pumped): Step = when (pumped) {
+    is Pumped.Then -> pumped.step
+    is Pumped.PhoneFailed -> afterPhoneFailure(round, pumped.item)
+    is Pumped.DiskFull -> diskFull(round, pumped.item, pumped.error)
+    // Temporaneo completo: non si scarta piu' niente, nemmeno se il file del telefono e' cambiato dopo la lettura (E-B15, L38). Decide
+    // la verifica: byte misti = rilettura diversa = si rifa' (e il telefono cambiato chiude con GONE); byte giusti = l'originale e' salvo.
+    is Pumped.Done -> save(pumped.item.copy(state = UploadState.UPLOADED, resumeAt = pumped.item.size))
+  }
+
+  private suspend fun writeTemp(round: Round, start: BackupItem, temp: SharePath, source: MediaBytes): Pumped {
     val writer: BackupTempWriter
     val from: Long
     if (start.resumeAt > 0) {
@@ -548,11 +572,11 @@ class SafeUploadEngine(
         }
       }
     }
-    return writer.use { pump(round, start, writer, from, file) }
+    return writer.use { pump(round, start, writer, from, source) }
   }
 
   /** Le scritture da 1 MiB e i punti di ripresa ogni 64 MiB (D5); traffico registrato prima di ogni punto (§2.2 "Traffico"). */
-  private suspend fun pump(round: Round, start: BackupItem, writer: BackupTempWriter, from: Long, file: PhoneFile): Pumped {
+  private suspend fun pump(round: Round, start: BackupItem, writer: BackupTempWriter, from: Long, source: MediaBytes): Pumped {
     var item = start
     var offset = from
     var lastPoint = from
@@ -574,7 +598,7 @@ class SafeUploadEngine(
         }
         val n = minOf(buffer, item.size - offset).toInt()
         val bytes = try {
-          file.bytes.read(offset until offset + n)
+          source.read(offset until offset + n)
         } catch (_: IOException) {
           return Pumped.PhoneFailed(item)
         }
@@ -663,7 +687,7 @@ class SafeUploadEngine(
       Read.Missing -> save(item.copy(state = back, resumeAt = 0))
       is Read.Fail -> stopFor(round, item, read.error)
       is Read.Ok -> if (read.sha == expected && read.stamp.size == item.size) {
-        save(item.copy(state = UploadState.VERIFIED, tempStamp = read.stamp))
+        save(item.copy(state = UploadState.VERIFIED, tempStamp = read.stamp)).also { dropRaw(item) }
       } else {
         mismatch(round, item, back, temp)
       }
@@ -845,6 +869,19 @@ class SafeUploadEngine(
         }
       }
     }
+  }
+
+  private fun keepRaw(item: BackupItem, raw: Raw) {
+    if (raw.bytes.size.toLong() != item.size) return
+    synchronized(rawCache) { rawCache[item.id.value] = raw }
+  }
+
+  /** I byte in memoria di [item], solo se sono esattamente quelli del suo hash. */
+  private fun rawOf(item: BackupItem): Raw? = synchronized(rawCache) { rawCache[item.id.value] }
+    ?.takeIf { it.sha256 == item.sha256 && it.bytes.size.toLong() == item.size }
+
+  private fun dropRaw(item: BackupItem) {
+    synchronized(rawCache) { rawCache.remove(item.id.value) }
   }
 
   private fun keepPrepared(item: BackupItem, prepared: PreparedUpload) {
@@ -1074,6 +1111,9 @@ class SafeUploadEngine(
     /** Uscite della preparazione tenute in memoria al massimo (D10). */
     private const val MAX_PREPARED = 8
     private const val MAX_PREPARED_BYTES = 64L shl 20
+
+    /** File letti tenuti in memoria al piu' (uno in caricamento, uno appena letto: D11). */
+    private const val MAX_RAW = 2
 
     /** Gli stati in cui il proprio temporaneo puo' esistere (si toglie prima di un'uscita). */
     private val TEMP_STATES = setOf(

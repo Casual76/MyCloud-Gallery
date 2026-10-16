@@ -22,6 +22,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.UploadState
 import dev.pampa.mycloudgallery.core.backup.contract.UploadStateMachine
 import dev.pampa.mycloudgallery.core.backup.contract.VerifiedCopy
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.model.SafetyStatus
 import dev.pampa.mycloudgallery.core.model.Sha256
 import dev.pampa.mycloudgallery.core.model.VersionId
 import dev.pampa.mycloudgallery.core.nas.contract.NasError
@@ -314,11 +315,35 @@ class BackupPrivateCopyGuardian(
   }
 
   /** `GONE`: la copia comune non c'e' piu' o non e' piu' la versione. Prima si toglie il proprio temporaneo (citato finche' aperto). */
-  private suspend fun gone(item: BackupItem): Step {
+  private suspend fun gone(item: BackupItem, problem: BackupProblemCode? = null): Step {
     val temp = item.temp
     if (temp != null && item.state == UploadState.COPYING) removeTemp(item.share, temp)?.let { return it }
-    return save(item.copy(state = UploadState.GONE))
+    if (problem != null) catalog.markProblem(item.mediaId, problem)
+    return save(item.copy(state = UploadState.GONE, problem = problem))
   }
+
+  /**
+   * La copia comune e' **sparita** (un familiare l'ha cancellata, E-B13) prima della copia privata. Se la versione non e' nemmeno piu' sul
+   * telefono e il media non ha una copia privata, per il backup e' persa (L44): `COMMON_COPY_LOST` sul media, con "Recuperalo dal
+   * cestino del NAS" (30 giorni). Se il telefono ce l'ha (o non si sa: permessi ritirati), niente si segna: la caricera' il backup.
+   */
+  private suspend fun sourceMissing(item: BackupItem): Step {
+    val lost = phoneSurelyLacks(item.mediaId, item.versionId) && !hasPrivateCopy(item.mediaId)
+    return gone(item, if (lost) BackupProblemCode.COMMON_COPY_LOST else null)
+  }
+
+  /** La versione non e' sul telefono, di sicuro: nessuna riga nel catalogo, o la riga non c'e' piu'. Permessi ritirati = non si sa. */
+  private suspend fun phoneSurelyLacks(mediaId: MediaId, versionId: VersionId): Boolean {
+    val ref = catalog.phoneRefOf(mediaId, versionId) ?: return true
+    return phone.lookup(ref) == PhoneLookup.Gone
+  }
+
+  /** Il catalogo sa di una copia privata del media (verificata o no): allora non e' perso. */
+  private suspend fun hasPrivateCopy(mediaId: MediaId): Boolean =
+    when (catalog.mediaSafety(mediaId)?.status) {
+      SafetyStatus.SAFE, SafetyStatus.PRIVATE_COPY_UNVERIFIED -> true
+      else -> false
+    }
 
   // --- PLANNED: riferimento, deduplica, spazio ---------------------------------------------------------------------------------
 
@@ -370,7 +395,8 @@ class BackupPrivateCopyGuardian(
     val sha = when (read) {
       is Reread.Fail -> return Reference.Exit(stopFor(read.error))
       Reread.Busy -> return Reference.Exit(Step.Wait)
-      Reread.Missing, Reread.Changed, Reread.Different -> return Reference.Exit(gone(item))
+      Reread.Missing -> return Reference.Exit(sourceMissing(item))
+      Reread.Changed, Reread.Different -> return Reference.Exit(gone(item))
       is Reread.Ok -> read.sha
     }
     return when (catalog.recordFullHash(item.mediaId, item.versionId, sha)) {
@@ -394,7 +420,8 @@ class BackupPrivateCopyGuardian(
         // Una lunghezza diversa: la sorgente non e' (piu') la versione.
         if (o.bytes == item.size) save(item.copy(state = UploadState.COPIED, resumeAt = item.size)) else gone(item)
       }
-      CopyOutcome.SourceMissing -> gone(item)
+      // E-B13, L44: la copia comune non c'e' piu'.
+      CopyOutcome.SourceMissing -> sourceMissing(item)
       // E-D13: la sorgente e' cambiata (modificata dal PC): niente si pubblica.
       is CopyOutcome.SourceChanged -> gone(item)
       // Un temporaneo rimasto da un tentativo interrotto: e' nostro (citato dal diario), si toglie e si rifa'.
@@ -443,7 +470,7 @@ class BackupPrivateCopyGuardian(
     }
     val file = when (val o = reader.open(source.share, source.path, purpose)) {
       is NasResult.Err -> return when (o.error) {
-        NasError.NotFound -> gone(item)
+        NasError.NotFound -> sourceMissing(item)
         NasError.FileBusy -> Step.Wait
         else -> stopFor(o.error)
       }

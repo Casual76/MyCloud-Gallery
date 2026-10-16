@@ -47,7 +47,9 @@ class BackupProblemCatalogTest {
   @Test
   fun soloIProblemiDiUnMediaAccendonoIlSegnoDellaCella() {
     assertThat(BackupProblemCode.entries.filter { it.marksMedia })
-      .containsExactly(BackupProblemCode.LOST_BEFORE_BACKUP, BackupProblemCode.VERIFY_FAILED, BackupProblemCode.UNREADABLE)
+      .containsExactly(
+        BackupProblemCode.LOST_BEFORE_BACKUP, BackupProblemCode.VERIFY_FAILED, BackupProblemCode.UNREADABLE, BackupProblemCode.COMMON_COPY_LOST,
+      )
   }
 
   @Test

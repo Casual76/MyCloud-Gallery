@@ -22,6 +22,9 @@ enum class BackupAction(override val code: String) : StableCode {
   /** "Fai ora" con la conferma e la stima (tetto dati raggiunto, E-B10). */
   DO_NOW_CONFIRM("do_now_confirm"),
   OPEN_GALLERY_TRASH("open_gallery_trash"),
+
+  /** "Recuperalo dal cestino del NAS" (30 giorni, Eliminati di recente del NAS della 4B): un media perso dall'area comune (L44). */
+  OPEN_NAS_TRASH("open_nas_trash"),
   FREE_SPACE("free_space"),
 
   /** La guida: batteria "Illimitata", "Mai in sospensione" (E-P15, E-P2). */
@@ -65,6 +68,12 @@ enum class BackupProblemCode(
    * ma leggibile invece si salva comunque (E-M10: i byte sono dell'utente, la preparazione mette il segnaposto).
    */
   UNREADABLE("unreadable", listOf(BackupAction.RETRY, BackupAction.DIAGNOSTICS), setOf("D15", "E-M12"), marksMedia = true),
+
+  /**
+   * L44 (proposto da P3): un media **proprio** la cui unica copia era nell'area comune, sparita prima che il guardiano ne facesse la copia
+   * privata, senza piu' la copia del telefono (E-B13 con Q4 b). Resta solo il cestino del NAS, per 30 giorni.
+   */
+  COMMON_COPY_LOST("common_copy_lost", listOf(BackupAction.OPEN_NAS_TRASH), setOf("E-B13", "L44"), marksMedia = true),
   PHONE_STORAGE_LOW("phone_storage_low", listOf(BackupAction.FREE_SPACE), setOf("E-P3")),
   STALE("stale", listOf(BackupAction.BATTERY_GUIDE), setOf("E-P15", "E-P2")),
   WAITING_UNLOCK("waiting_unlock", emptyList(), setOf("E-P13")),

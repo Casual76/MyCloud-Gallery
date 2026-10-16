@@ -76,8 +76,8 @@ class UploadWiringTest {
     // La preparazione ha lavorato sui byte letti per l'hash (in memoria, sotto i 64 MiB): nessuna lettura in piu' del telefono.
     assertThat(preparer.prepared.map { it.kind }).containsExactly(MediaKind.PHOTO, MediaKind.VIDEO)
     assertThat(preparer.prepared.all { it is PrepareSource.Bytes }).isTrue()
-    // Due passaggi del telefono per file: la lettura (hash e preparazione) e il caricamento.
-    assertThat(h.kit.phone.bytesRead).isEqualTo(2L * (photo.size + video.size))
+    // Un solo passaggio del telefono per file: la lettura (hash e preparazione); il caricamento usa gli stessi byte in memoria (E-B15).
+    assertThat(h.kit.phone.bytesRead).isEqualTo(photo.size.toLong() + video.size)
     // Un record per file, al percorso finale, con il timbro letto dopo la pubblicazione e l'hash completo calcolato qui.
     val staged = publisher.flush(h.kit.share, dev.pampa.mycloudgallery.core.index.contract.FlushReason.PERIODIC)
     assertThat(staged).isInstanceOf(dev.pampa.mycloudgallery.core.index.contract.PublishOutcome.Published::class.java)

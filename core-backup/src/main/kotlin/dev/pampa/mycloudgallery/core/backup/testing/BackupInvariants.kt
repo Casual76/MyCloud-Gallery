@@ -106,14 +106,21 @@ object BackupInvariants {
         .any { c -> now.files[key(c.share, c.path.value)]?.sha.let { it != null && it == m.fullHash } }
       if (!ok) v += "4: un media al sicuro senza una copia privata con i byte della versione"
     }
+    // Un media puo' avere piu' elementi nel diario (un elemento fallito e, dopo "Riprova", uno nuovo che riesce): "al sicuro per un
+    // elemento fallito" vale solo per l'ULTIMO elemento del media, non per uno qualsiasi (il fallito di prima resta nel diario).
+    val lastItemOfMedia = items.groupBy { it.mediaId }.mapValues { (_, own) -> own.maxBy { it.id.value }.id }
     for (item in items) {
       if (item.state == UploadState.DONE || item.state == UploadState.LINKED_EXISTING) {
         if (!kit.catalog.isSafe(item.mediaId)) v += "7: elemento #${item.id} ${item.state.code} senza la sua copia al sicuro"
         val fp = item.finalPath
         if (fp == null || now.files[key(item.share, fp.value)] == null) v += "8: nome finale di #${item.id} assente dal NAS"
       }
-      if (item.state == UploadState.FAILED && kit.catalog.isSafe(item.mediaId)) v += "7: al sicuro per l'elemento fallito #${item.id}"
-      if (final && item.state !in FINISHED) v += "9: elemento #${item.id} fermo in ${item.state.code}"
+      if (item.state == UploadState.FAILED && lastItemOfMedia[item.mediaId] == item.id && kit.catalog.isSafe(item.mediaId)) {
+        v += "7: al sicuro per l'elemento fallito #${item.id}"
+      }
+      // Un elemento fallito e poi superato da uno successivo dello stesso media non e' "fermo": lo e' solo l'ultimo.
+      val superseded = item.state == UploadState.FAILED && lastItemOfMedia[item.mediaId] != item.id
+      if (final && item.state !in FINISHED && !superseded) v += "9: elemento #${item.id} fermo in ${item.state.code}"
     }
 
     // 8. Diario: ogni transizione registrata e' ammessa.

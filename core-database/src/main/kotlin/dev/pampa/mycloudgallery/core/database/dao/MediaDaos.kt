@@ -56,11 +56,11 @@ interface MediaDao {
   @Query("UPDATE media SET current_version_id = :versionId, updated_at = :now WHERE media_id = :mediaId")
   suspend fun setCurrentVersion(mediaId: String, versionId: String, now: Long)
 
-  /** Riscrive i campi derivati (v2 compresi): li calcola solo `MediaCatalog`, con le regole di dominio. */
+  /** Riscrive i campi derivati (v2 e v4 compresi): li calcola solo `MediaCatalog`, con le regole di dominio. */
   @Query(
     "UPDATE media SET presence = :presence, safety = :safety, sort_time = :sortTime, local_day = :localDay, " +
       "aspect_milli = :aspectMilli, duration_ms = :durationMs, place_id = :placeId, cell_flags = :cellFlags, " +
-      "thumb_hash = :thumbHash, updated_at = :now WHERE media_id = :mediaId",
+      "thumb_hash = :thumbHash, backup_todo = :backupTodo, updated_at = :now WHERE media_id = :mediaId",
   )
   suspend fun updateDerived(
     mediaId: String,
@@ -73,6 +73,7 @@ interface MediaDao {
     placeId: Int?,
     cellFlags: Int,
     thumbHash: ByteArray?,
+    backupTodo: Boolean,
     now: Long,
   )
 
@@ -93,6 +94,10 @@ interface MediaDao {
 
   @Query("DELETE FROM media_group WHERE group_id = :groupId")
   suspend fun deleteGroup(groupId: String)
+
+  /** La copertina salvata di un gruppo (v4: "Mostra questa come principale" delle copie simili). */
+  @Query("UPDATE media_group SET cover_media_id = :coverMediaId WHERE group_id = :groupId")
+  suspend fun setGroupCover(groupId: String, coverMediaId: String?)
 
   /** I membri di un gruppo, in ordine di identita'. */
   @Query("SELECT * FROM media WHERE group_id = :groupId ORDER BY media_id")

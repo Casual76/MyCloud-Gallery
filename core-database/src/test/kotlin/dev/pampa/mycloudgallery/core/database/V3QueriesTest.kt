@@ -165,7 +165,9 @@ class V3QueriesTest : CatalogTestBase() {
       "retryable (telefono)" to (WorkStateDao.RETRYABLE_ON_PHONE_SQL to "index_work_state_stage_status_updated_at"),
       "retryableOnNas" to (WorkStateDao.RETRYABLE_ON_NAS_SQL to "index_work_state_stage_status_updated_at"),
       "knownInFolder" to (LocationDao.KNOWN_IN_FOLDER_SQL to "index_media_location_folder_key"),
-      "countPresentInShare" to (LocationDao.COUNT_PRESENT_IN_SHARE_SQL to "index_media_location_account_id_share_key_last_seen_at"),
+      // Dalla v4 gli indici (account, share, last_seen_at) e (account, share, verified_at) hanno lo stesso prefisso: il conteggio
+      // scorre l'uno o l'altro (stessa spesa), l'importante e' che parta dalla share e non da tutte le posizioni.
+      "countPresentInShare" to (LocationDao.COUNT_PRESENT_IN_SHARE_SQL to "index_media_location_account_id_share_key_"),
       "notSeenInShareSince" to (LocationDao.NOT_SEEN_IN_SHARE_SQL to "index_media_location_account_id_share_key_last_seen_at"),
       "presentInShare" to (LocationDao.PRESENT_IN_SHARE_SQL to "index_media_location_account_id_share_key_last_seen_at"),
       "nasRefs" to (TimelineIndexDao.NAS_REFS_SQL to "index_media_location_version_id"),

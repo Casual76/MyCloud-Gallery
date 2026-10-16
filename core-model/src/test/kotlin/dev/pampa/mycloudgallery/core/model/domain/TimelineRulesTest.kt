@@ -10,6 +10,8 @@ import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.MediaMetadata
 import dev.pampa.mycloudgallery.core.model.MediaTrait
 import dev.pampa.mycloudgallery.core.model.PlaceRef
+import dev.pampa.mycloudgallery.core.model.Presence
+import dev.pampa.mycloudgallery.core.model.SafetyStatus
 import dev.pampa.mycloudgallery.core.model.VersionKind
 import org.junit.Test
 import java.time.ZoneId
@@ -121,5 +123,75 @@ class TimelineRulesTest {
     assertThat(TimelineRules.withGroupRole(flags, inGroup = true, isCover = true)).isEqualTo(CellFlags.FAVORITE or CellFlags.GROUP_COVER)
     assertThat(TimelineRules.withGroupRole(flags, inGroup = true, isCover = false)).isEqualTo(CellFlags.FAVORITE or CellFlags.GROUP_MEMBER)
     assertThat(TimelineRules.withGroupRole(flags, inGroup = false, isCover = false)).isEqualTo(CellFlags.FAVORITE)
+  }
+
+  // --- Fase 5A (P1): backup e copie simili ----------------------------------------------------------
+
+  /**
+   * Un candidato del backup: proprio, con una copia sul telefono, non al sicuro, senza un problema che chiede l'utente. Mai chi ha
+   * la sola copia nell'area comune: la copia privata la crea il guardiano (§2.11 punto 3, Q4 (b)).
+   */
+  @Test
+  fun unCandidatoDelBackupEProprioSulTelefonoENonAlSicuro() {
+    val todo = listOf(SafetyStatus.NO_NAS_COPY, SafetyStatus.PRIVATE_COPY_UNVERIFIED)
+    for (presence in Presence.entries) {
+      for (safety in SafetyStatus.entries) {
+        val onPhone = presence == Presence.PHONE_ONLY || presence == Presence.PHONE_AND_NAS
+        assertThat(TimelineRules.backupTodo(presence, safety, markedProblem = false)).isEqualTo(onPhone && safety in todo)
+        // Un problema che chiede l'utente toglie il media dai candidati: niente giri infiniti (E-B18).
+        assertThat(TimelineRules.backupTodo(presence, safety, markedProblem = true)).isFalse()
+      }
+    }
+    assertThat(TimelineRules.backupTodo(Presence.PHONE_AND_NAS, SafetyStatus.ONLY_COMMON_COPY, markedProblem = false)).isFalse()
+  }
+
+  @Test
+  fun ilSegnoDelProblemaNonCopreMaiUnMediaAlSicuro() {
+    assertThat(TimelineRules.backupProblemFlags(true, SafetyStatus.PRIVATE_COPY_UNVERIFIED)).isEqualTo(CellFlags.BACKUP_PROBLEM)
+    assertThat(TimelineRules.backupProblemFlags(true, SafetyStatus.LOST)).isEqualTo(CellFlags.BACKUP_PROBLEM)
+    assertThat(TimelineRules.backupProblemFlags(true, SafetyStatus.SAFE)).isEqualTo(0)
+    assertThat(TimelineRules.backupProblemFlags(false, SafetyStatus.NO_NAS_COPY)).isEqualTo(0)
+  }
+
+  /** E-H1: se anche una sola copia e' nascosta il gruppo non e' rappresentato da nessuna, mai da "un'altra copia". */
+  @Test
+  fun unGruppoDiCopieSimiliConUnaCopiaNascostaNonHaCopertina() {
+    val a = MediaId("00000000-0000-4000-8000-00000000000a")
+    val b = MediaId("00000000-0000-4000-8000-00000000000b")
+    val visible = listOf(GroupMember(a, 100, true), GroupMember(b, 90, true))
+    assertThat(TimelineRules.similarCopiesCover(visible, b, anyHidden = false)).isEqualTo(b)
+    // Come una raffica: la copertina non si vede, un altro membro la sostituisce...
+    assertThat(TimelineRules.groupCover(listOf(GroupMember(a, 100, false), GroupMember(b, 90, true)), a)).isEqualTo(b)
+    // ...ma non nelle copie simili: il nascosto e' contagioso.
+    assertThat(TimelineRules.similarCopiesCover(listOf(GroupMember(a, 100, false), GroupMember(b, 90, true)), a, anyHidden = true)).isNull()
+    assertThat(TimelineRules.similarCopiesCover(visible, null, anyHidden = true)).isNull()
+  }
+
+  /** §2.12 "Segni della cella": al sicuro solo se ogni copia sul telefono lo e'; problema se una copia lo ha. */
+  @Test
+  fun laCellaDelleCopieSimiliRiassumeLePresenzeDelGruppo() {
+    val phoneOnly = CellFlags.ON_PHONE
+    val phoneSafe = CellFlags.ON_PHONE or CellFlags.ON_NAS or CellFlags.SAFE
+    val nasSafe = CellFlags.ON_NAS or CellFlags.SAFE
+    val nasUnsafe = CellFlags.ON_NAS
+
+    // La copertina e' la copia convertita sul NAS (al sicuro) ma l'originale del telefono non e' protetto: niente scudo.
+    val cell = TimelineRules.similarCopiesFlags(nasSafe or CellFlags.FAVORITE, listOf(nasSafe or CellFlags.FAVORITE, phoneOnly))
+    assertThat(cell).isEqualTo(CellFlags.SIMILAR_COPIES or CellFlags.FAVORITE or CellFlags.ON_PHONE or CellFlags.ON_NAS)
+
+    // Tutte le copie del telefono al sicuro: scudo, anche se un'altra copia (solo NAS) non lo e'.
+    val safe = TimelineRules.similarCopiesFlags(nasUnsafe, listOf(nasUnsafe, phoneSafe))
+    assertThat(safe).isEqualTo(CellFlags.SIMILAR_COPIES or CellFlags.ON_PHONE or CellFlags.ON_NAS or CellFlags.SAFE)
+
+    // Nessuna copia sul telefono: vale la copertina.
+    assertThat(TimelineRules.similarCopiesFlags(nasSafe, listOf(nasSafe, nasUnsafe)))
+      .isEqualTo(CellFlags.SIMILAR_COPIES or CellFlags.ON_NAS or CellFlags.SAFE)
+    assertThat(TimelineRules.similarCopiesFlags(nasUnsafe, listOf(nasUnsafe, nasSafe))).isEqualTo(CellFlags.SIMILAR_COPIES or CellFlags.ON_NAS)
+
+    // Il problema di una copia sale sulla cella e prevale sullo scudo (PresenceBadge).
+    val problem = TimelineRules.similarCopiesFlags(phoneSafe, listOf(phoneSafe, phoneOnly or CellFlags.BACKUP_PROBLEM))
+    assertThat(CellFlags.has(problem, CellFlags.BACKUP_PROBLEM)).isTrue()
+    assertThat(CellFlags.has(problem, CellFlags.SAFE)).isFalse()
+    assertThat(dev.pampa.mycloudgallery.core.model.PresenceBadge.of(problem)).isEqualTo(dev.pampa.mycloudgallery.core.model.PresenceBadge.PROBLEM)
   }
 }

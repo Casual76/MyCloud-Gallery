@@ -60,6 +60,16 @@ class MergeReferencesTest {
         "Tabelle non classificate per l'unione: MediaCatalog.TABLES_WITHOUT_MEDIA_IDS, TABLES_WITH_INDEX_IDS o un riferimento a media.",
       ).that(unclassified).isEmpty()
       assertThat(MediaCatalog.TABLES_WITHOUT_MEDIA_IDS).containsAtLeast("media_store_cursor", "catalog_meta", "nas_scan_state", "nas_op_item")
+      // Schema v4 (Fase 5A): il diario, il problema, le firme e le tabelle della 5B che riguardano un media o una versione sono
+      // riferimenti che l'unione e la rinomina spostano (`MergeV4Test` prova che non perdono righe); le altre non hanno identita'.
+      assertThat(MediaCatalog.MEDIA_REFERENCES).containsAtLeast(
+        "backup_item.media_id", "backup_problem.media_id", "pending_task.media_id", "edit_session.media_id", "free_space_item.media_id",
+      )
+      assertThat(MediaCatalog.VERSION_REFERENCES).containsAtLeast(
+        "backup_item.version_id", "visual_signature.version_id", "pending_task.version_id", "edit_session.version_id",
+        "free_space_item.version_id",
+      )
+      assertThat(MediaCatalog.TABLES_WITHOUT_MEDIA_IDS).containsAtLeast("free_space_run", "incoming_item", "nas_copy_mismatch")
       assertThat(tables).containsAtLeastElementsIn(MediaCatalog.TABLES_WITHOUT_MEDIA_IDS)
       assertThat(tables).containsAtLeastElementsIn(MediaCatalog.TABLES_WITH_INDEX_IDS)
       assertThat(MediaCatalog.TABLES_WITHOUT_MEDIA_IDS.intersect(MediaCatalog.TABLES_WITH_INDEX_IDS)).isEmpty()

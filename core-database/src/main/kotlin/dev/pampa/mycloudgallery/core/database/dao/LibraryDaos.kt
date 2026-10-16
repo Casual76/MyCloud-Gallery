@@ -229,4 +229,38 @@ interface MergeDao {
 
   @Query("UPDATE media_alias SET media_id = :survivor WHERE media_id = :loser")
   suspend fun repointAliases(loser: String, survivor: String)
+
+  // --- v4 (Fase 5): diario del backup, problema, firme e tabelle della 5B ---------------------------------------------------
+
+  @Query("UPDATE backup_item SET media_id = :survivor WHERE media_id = :loser")
+  suspend fun repointBackupItemMedia(loser: String, survivor: String)
+
+  @Query("UPDATE backup_item SET version_id = :to WHERE version_id = :from")
+  suspend fun repointBackupItemVersion(from: String, to: String)
+
+  /** Un solo problema per media: se il sopravvissuto ne ha gia' uno resta il suo (la riga del perdente se ne va con lui). */
+  @Query("UPDATE OR IGNORE backup_problem SET media_id = :survivor WHERE media_id = :loser")
+  suspend fun repointBackupProblem(loser: String, survivor: String)
+
+  /** Una sola firma per versione: se la versione di destinazione ha gia' la sua, resta quella (l'altra se ne va con la versione). */
+  @Query("UPDATE OR IGNORE visual_signature SET version_id = :to WHERE version_id = :from")
+  suspend fun repointSignature(from: String, to: String)
+
+  @Query("UPDATE pending_task SET media_id = :survivor WHERE media_id = :loser")
+  suspend fun repointPendingTaskMedia(loser: String, survivor: String)
+
+  @Query("UPDATE pending_task SET version_id = :to WHERE version_id = :from")
+  suspend fun repointPendingTaskVersion(from: String, to: String)
+
+  @Query("UPDATE edit_session SET media_id = :survivor WHERE media_id = :loser")
+  suspend fun repointEditSessionMedia(loser: String, survivor: String)
+
+  @Query("UPDATE edit_session SET version_id = :to WHERE version_id = :from")
+  suspend fun repointEditSessionVersion(from: String, to: String)
+
+  @Query("UPDATE free_space_item SET media_id = :survivor WHERE media_id = :loser")
+  suspend fun repointFreeSpaceItemMedia(loser: String, survivor: String)
+
+  @Query("UPDATE free_space_item SET version_id = :to WHERE version_id = :from")
+  suspend fun repointFreeSpaceItemVersion(from: String, to: String)
 }

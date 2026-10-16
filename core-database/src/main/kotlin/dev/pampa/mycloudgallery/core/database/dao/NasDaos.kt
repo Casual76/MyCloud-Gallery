@@ -539,6 +539,38 @@ interface IdentityDao {
   @Query("UPDATE embedding SET version_id = :to WHERE version_id = :from")
   suspend fun renameVersionInEmbeddings(from: String, to: String)
 
+  // --- v4 (Fase 5) ---
+
+  @Query("UPDATE backup_item SET media_id = :to WHERE media_id = :from")
+  suspend fun renameMediaInBackupItems(from: String, to: String)
+
+  @Query("UPDATE backup_problem SET media_id = :to WHERE media_id = :from")
+  suspend fun renameMediaInBackupProblems(from: String, to: String)
+
+  @Query("UPDATE pending_task SET media_id = :to WHERE media_id = :from")
+  suspend fun renameMediaInPendingTasks(from: String, to: String)
+
+  @Query("UPDATE edit_session SET media_id = :to WHERE media_id = :from")
+  suspend fun renameMediaInEditSessions(from: String, to: String)
+
+  @Query("UPDATE free_space_item SET media_id = :to WHERE media_id = :from")
+  suspend fun renameMediaInFreeSpaceItems(from: String, to: String)
+
+  @Query("UPDATE backup_item SET version_id = :to WHERE version_id = :from")
+  suspend fun renameVersionInBackupItems(from: String, to: String)
+
+  @Query("UPDATE visual_signature SET version_id = :to WHERE version_id = :from")
+  suspend fun renameVersionInSignatures(from: String, to: String)
+
+  @Query("UPDATE pending_task SET version_id = :to WHERE version_id = :from")
+  suspend fun renameVersionInPendingTasks(from: String, to: String)
+
+  @Query("UPDATE edit_session SET version_id = :to WHERE version_id = :from")
+  suspend fun renameVersionInEditSessions(from: String, to: String)
+
+  @Query("UPDATE free_space_item SET version_id = :to WHERE version_id = :from")
+  suspend fun renameVersionInFreeSpaceItems(from: String, to: String)
+
   /** Tutte le colonne che puntano al media [from] passano a [to] (stesso ordine di `MEDIA_REFERENCES`). */
   suspend fun renameMedia(from: String, to: String) {
     renameMediaRow(from, to)
@@ -550,6 +582,11 @@ interface IdentityDao {
     renameMediaInGroupCovers(from, to)
     renameMediaInAlbumCovers(from, to)
     renameMediaInAlbumItems(from, to)
+    renameMediaInBackupItems(from, to)
+    renameMediaInBackupProblems(from, to)
+    renameMediaInPendingTasks(from, to)
+    renameMediaInEditSessions(from, to)
+    renameMediaInFreeSpaceItems(from, to)
   }
 
   /** Tutte le colonne che puntano alla versione [from] passano a [to] (`VERSION_REFERENCES`). */
@@ -561,5 +598,10 @@ interface IdentityDao {
     renameVersionInMetadata(from, to)
     renameVersionInWork(from, to)
     renameVersionInEmbeddings(from, to)
+    renameVersionInBackupItems(from, to)
+    renameVersionInSignatures(from, to)
+    renameVersionInPendingTasks(from, to)
+    renameVersionInEditSessions(from, to)
+    renameVersionInFreeSpaceItems(from, to)
   }
 }

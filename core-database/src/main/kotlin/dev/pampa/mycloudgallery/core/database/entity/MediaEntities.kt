@@ -62,6 +62,9 @@ import androidx.room.RoomWarnings
     // "312 in coda", "Tutto al sicuro": conteggi per stato.
     Index(value = ["safety"]),
     Index(value = ["group_id"]),
+    // v4 (Fase 5A): i candidati del backup per `sort_time` decrescente, senza scorrere i media che non lo sono e senza ordinare
+    // in memoria (`MediaCatalog.backupCandidates`).
+    Index(value = ["backup_todo", "sort_time", "media_id"]),
   ],
 )
 data class MediaEntity(
@@ -87,6 +90,13 @@ data class MediaEntity(
   /** `CellFlags`. */
   @ColumnInfo(name = "cell_flags", defaultValue = "0") val cellFlags: Int = 0,
   @ColumnInfo(name = "thumb_hash", typeAffinity = ColumnInfo.BLOB) val thumbHash: ByteArray? = null,
+  // --- v4 (Fase 5A): derivato per il backup ---
+  /**
+   * Il media e' un candidato del backup (`TimelineRules.backupTodo`: proprio, con una copia sul telefono, non al sicuro, senza un
+   * problema che chiede l'utente). Derivato come gli altri, riscritto nella stessa transazione; **non** fa parte dell'indice della
+   * timeline (non e' in `IndexRow`): cambiarlo non annuncia nulla da solo.
+   */
+  @ColumnInfo(name = "backup_todo", defaultValue = "0") val backupTodo: Boolean = false,
 ) {
   // Un ByteArray non ha l'uguaglianza per contenuto: la si scrive a mano.
   override fun equals(other: Any?): Boolean = other is MediaEntity && sameScalars(other) && thumbHash.contentEquals(other.thumbHash)
@@ -97,7 +107,7 @@ data class MediaEntity(
     mediaId == o.mediaId && kind == o.kind && source == o.source && ownerAccount == o.ownerAccount && groupId == o.groupId &&
       currentVersionId == o.currentVersionId && createdAt == o.createdAt && updatedAt == o.updatedAt && sortTime == o.sortTime &&
       presence == o.presence && safety == o.safety && localDay == o.localDay && aspectMilli == o.aspectMilli &&
-      durationMs == o.durationMs && placeId == o.placeId && cellFlags == o.cellFlags
+      durationMs == o.durationMs && placeId == o.placeId && cellFlags == o.cellFlags && backupTodo == o.backupTodo
 }
 
 /**
@@ -175,6 +185,9 @@ data class MediaVersionEntity(
     // v3: le posizioni di una share del NAS (fine del giro, conteggi del congelamento, share non raggiungibile), nell'ordine
     // "viste meno di recente prima" senza ordinare in memoria.
     Index(value = ["account_id", "share_key", "last_seen_at"]),
+    // v4 (Fase 5A): le copie di una share per `verified_at`: la riverifica a rotazione (dalla verifica piu' vecchia, Q10) e le
+    // copie non ancora verificate (`verified_at` NULL) senza scorrere le posizioni del telefono ne' quelle di altre share.
+    Index(value = ["account_id", "share_key", "verified_at"]),
   ],
 )
 data class MediaLocationEntity(

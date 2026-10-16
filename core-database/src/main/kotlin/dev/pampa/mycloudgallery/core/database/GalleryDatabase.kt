@@ -6,27 +6,43 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.withTransaction
 import dev.pampa.mycloudgallery.core.database.dao.AlbumDao
+import dev.pampa.mycloudgallery.core.database.dao.BackupDiaryDao
+import dev.pampa.mycloudgallery.core.database.dao.BackupProblemDao
+import dev.pampa.mycloudgallery.core.database.dao.BackupQueryDao
 import dev.pampa.mycloudgallery.core.database.dao.CatalogMetaDao
+import dev.pampa.mycloudgallery.core.database.dao.EditSessionDao
 import dev.pampa.mycloudgallery.core.database.dao.EmbeddingDao
+import dev.pampa.mycloudgallery.core.database.dao.FreeSpaceDao
+import dev.pampa.mycloudgallery.core.database.dao.IncomingDao
 import dev.pampa.mycloudgallery.core.database.dao.IdentityDao
 import dev.pampa.mycloudgallery.core.database.dao.IndexPublishDao
 import dev.pampa.mycloudgallery.core.database.dao.LocationDao
 import dev.pampa.mycloudgallery.core.database.dao.MediaDao
 import dev.pampa.mycloudgallery.core.database.dao.MediaStoreCursorDao
 import dev.pampa.mycloudgallery.core.database.dao.MergeDao
+import dev.pampa.mycloudgallery.core.database.dao.NasCopyMismatchDao
 import dev.pampa.mycloudgallery.core.database.dao.NasOpsDao
 import dev.pampa.mycloudgallery.core.database.dao.NasScanDao
 import dev.pampa.mycloudgallery.core.database.dao.NasShareDao
+import dev.pampa.mycloudgallery.core.database.dao.PendingTaskDao
 import dev.pampa.mycloudgallery.core.database.dao.PersonalDao
 import dev.pampa.mycloudgallery.core.database.dao.ReplicaDao
+import dev.pampa.mycloudgallery.core.database.dao.SimilarDao
 import dev.pampa.mycloudgallery.core.database.dao.TimelineDao
 import dev.pampa.mycloudgallery.core.database.dao.TimelineIndexDao
 import dev.pampa.mycloudgallery.core.database.dao.VersionDao
+import dev.pampa.mycloudgallery.core.database.dao.VisualSignatureDao
 import dev.pampa.mycloudgallery.core.database.dao.WorkStateDao
 import dev.pampa.mycloudgallery.core.database.entity.AlbumEntity
 import dev.pampa.mycloudgallery.core.database.entity.AlbumItemEntity
+import dev.pampa.mycloudgallery.core.database.entity.BackupItemEntity
+import dev.pampa.mycloudgallery.core.database.entity.BackupProblemEntity
 import dev.pampa.mycloudgallery.core.database.entity.CatalogMetaEntity
+import dev.pampa.mycloudgallery.core.database.entity.EditSessionEntity
 import dev.pampa.mycloudgallery.core.database.entity.EmbeddingEntity
+import dev.pampa.mycloudgallery.core.database.entity.FreeSpaceItemEntity
+import dev.pampa.mycloudgallery.core.database.entity.FreeSpaceRunEntity
+import dev.pampa.mycloudgallery.core.database.entity.IncomingItemEntity
 import dev.pampa.mycloudgallery.core.database.entity.IndexHeadEntity
 import dev.pampa.mycloudgallery.core.database.entity.IndexOutboxBlobEntity
 import dev.pampa.mycloudgallery.core.database.entity.IndexOutboxRecordEntity
@@ -44,11 +60,13 @@ import dev.pampa.mycloudgallery.core.database.entity.MediaPersonalEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaStoreCursorEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaVersionEntity
 import dev.pampa.mycloudgallery.core.database.entity.NasAdoptedFingerprintEntity
+import dev.pampa.mycloudgallery.core.database.entity.NasCopyMismatchEntity
 import dev.pampa.mycloudgallery.core.database.entity.NasOpEntity
 import dev.pampa.mycloudgallery.core.database.entity.NasOpItemEntity
 import dev.pampa.mycloudgallery.core.database.entity.NasScanStateEntity
 import dev.pampa.mycloudgallery.core.database.entity.NasShareEntity
 import dev.pampa.mycloudgallery.core.database.entity.NasTrashEntryEntity
+import dev.pampa.mycloudgallery.core.database.entity.PendingTaskEntity
 import dev.pampa.mycloudgallery.core.database.entity.ReplicaBlobEntity
 import dev.pampa.mycloudgallery.core.database.entity.ReplicaDirtyEntity
 import dev.pampa.mycloudgallery.core.database.entity.ReplicaPackEntity
@@ -56,6 +74,7 @@ import dev.pampa.mycloudgallery.core.database.entity.ReplicaProvisionalEntity
 import dev.pampa.mycloudgallery.core.database.entity.ReplicaSettingEntity
 import dev.pampa.mycloudgallery.core.database.entity.ReplicaShareAccessEntity
 import dev.pampa.mycloudgallery.core.database.entity.VersionMetadataEntity
+import dev.pampa.mycloudgallery.core.database.entity.VisualSignatureEntity
 import dev.pampa.mycloudgallery.core.database.entity.WorkStateEntity
 
 /**
@@ -104,6 +123,17 @@ import dev.pampa.mycloudgallery.core.database.entity.WorkStateEntity
     NasTrashEntryEntity::class,
     // v3, revisione 4A (R6): impronte adottate dall'indice, non lette qui
     NasAdoptedFingerprintEntity::class,
+    // v4 (Fase 5): il diario del backup, il problema di un media e la firma visiva delle copie simili (5A); le tabelle della 5B
+    // nascono gia' qui, vuote (D27)
+    BackupItemEntity::class,
+    BackupProblemEntity::class,
+    NasCopyMismatchEntity::class,
+    VisualSignatureEntity::class,
+    PendingTaskEntity::class,
+    EditSessionEntity::class,
+    FreeSpaceRunEntity::class,
+    FreeSpaceItemEntity::class,
+    IncomingItemEntity::class,
   ],
   version = GalleryDatabase.VERSION,
   exportSchema = true,
@@ -148,12 +178,34 @@ abstract class GalleryDatabase : RoomDatabase() {
 
   abstract fun identityDao(): IdentityDao
 
+  // --- v4 (Fase 5) ---
+
+  abstract fun backupDiaryDao(): BackupDiaryDao
+
+  abstract fun backupProblemDao(): BackupProblemDao
+
+  abstract fun nasCopyMismatchDao(): NasCopyMismatchDao
+
+  abstract fun visualSignatureDao(): VisualSignatureDao
+
+  abstract fun backupQueryDao(): BackupQueryDao
+
+  abstract fun similarDao(): SimilarDao
+
+  abstract fun pendingTaskDao(): PendingTaskDao
+
+  abstract fun editSessionDao(): EditSessionDao
+
+  abstract fun freeSpaceDao(): FreeSpaceDao
+
+  abstract fun incomingDao(): IncomingDao
+
   companion object {
     /** Nome del file del database nella cartella privata dell'app. */
     const val NAME: String = "gallery.db"
 
     /** Versione dello schema. Alzarla richiede una migrazione in [GalleryMigrations] (mai distruttiva). */
-    const val VERSION: Int = 3
+    const val VERSION: Int = 4
 
     /**
      * Il database con tutte le migrazioni. **Mai** `fallbackToDestructiveMigration`: una migrazione

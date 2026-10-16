@@ -455,3 +455,148 @@ ricalcolo del catalogo non cambia nulla.
 | Identita' remote come dati (`remote_*`), mai chiavi esterne | Chiavi esterne verso `media`: una testa remota potrebbe bloccare o cancellare in cascata righe locali. |
 | Rinomina con alias | Unione con un media vuoto: `MergeRules` vuole la prova degli hash completi, qui l'identita' e' la stessa e cambia solo l'id. |
 | Diario della 4B gia' nella v3 | Una v4 all'inizio della 4B: un'altra migrazione sul campo; le tabelle restano vuote finche' P12 non le usa. |
+
+## 12. Schema v4 (Fase 5A: il backup al sicuro e le copie simili)
+
+Progetto: `docs/fase5-progetto.md` §1.2 (porta `BackupCatalog`), §1.3 (righe `core-model` e `core-database`), §2.1-§2.3, §2.11,
+§2.12, §4.3, riga P1 del §4.4; D3, D8, D9, D14, D15, D27, D36. Pacchetto P1. La v4 e' **una sola migrazione sul campo per tutta la
+Fase 5**: le tabelle della 5B nascono gia' qui, vuote (D27).
+
+### 12.1 Tipi nuovi o estesi in `core-model`
+
+Solo aggiunte (gli altri pacchetti programmano gia' sui tipi). I bit 14 e 15 di `CellFlags`, `PresenceBadge.PROBLEM`,
+`MediaGroupKind.SIMILAR_COPIES` e `VisualSignature` sono di P0; P1 li riempie.
+
+| Tipo | Cosa | Perche' |
+|---|---|---|
+| `TimelineRules.backupTodo(presence, safety, markedProblem)` | il media e' un candidato del backup: copia presente sul telefono, `NO_NAS_COPY` o `PRIVATE_COPY_UNVERIFIED`, nessun problema che chiede l'utente. **Mai `ONLY_COMMON_COPY`** | §2.11 punto 3 e Q4 (b): la sola copia comune non si ricarica dal telefono, la copia privata la crea il guardiano. Funzione dei soli derivati salvati: la migrazione la calcola in SQL senza l'account del dispositivo |
+| `TimelineRules.backupProblemFlags(markedProblem, safety)` | `CellFlags.BACKUP_PROBLEM` finche' il media non e' di nuovo al sicuro | un errore vecchio non nasconde "al sicuro" |
+| `TimelineRules.similarCopiesCover(members, designated, anyHidden)` | come `groupCover`, ma con una copia nascosta nessuna rappresenta il gruppo | nascosto contagioso (E-H1): mai "un'altra copia al suo posto" |
+| `TimelineRules.similarCopiesFlags(coverFlags, memberFlags)` | `SIMILAR_COPIES` sulla copertina e i segni di presenza **del gruppo** | §2.12 "Segni della cella": al sicuro solo se ogni copia sul telefono lo e'; problema se una copia lo ha; sul telefono / sul NAS se almeno una copia lo e' |
+
+### 12.2 Tabelle e colonne
+
+| Dove | Aggiunta | Note |
+|---|---|---|
+| `media` | `backup_todo` (NOT NULL DEFAULT 0) e indice (`backup_todo`, `sort_time`, `media_id`) | derivato come gli altri, ricalcolato nella stessa transazione; **non** e' in `IndexRow`: da solo non annuncia nulla. L'indice scorre solo i candidati: dopo il primo backup una pagina non legge 100.000 righe |
+| `media_location` | indice (`account_id`, `share_key`, `verified_at`) | la riverifica a rotazione (dalla verifica piu' vecchia, senza ordinare) e le copie non ancora verificate (`verified_at` NULL) senza scorrere il telefono ne' altre share. Con questo indice `countPresentInShare` puo' scegliere l'uno o l'altro dei due con lo stesso prefisso (stessa spesa) |
+| `backup_item` (nuova) | il diario: i campi di `BackupItem` di `core-backup` uno per uno (telefono, timbro atteso, destinazione, "nome (n)", temporaneo, punto di ripresa, impronte, timbri del temporaneo e del finale, sorgente del guardiano, problema) piu' `is_open`, `created_at`, `updated_at` | FK differite verso `media` e `media_version`, **senza cascata**. `is_open` (vero se lo stato non e' terminale) lo tiene il DAO: gli aperti sono pochi e la tabella cresce di una riga per file. Indici: (`is_open`, `item_id`), (`version_id`, `is_open`), `media_id`, `state`. Nessun indice unico sugli aperti: un'unione potrebbe farne collidere due |
+| `backup_problem` (nuova) | PK `media_id`: `code`, `marks_cell`, `updated_at` | un problema per media; cascata (si ricalcola). Si toglie da solo quando il media torna al sicuro |
+| `nas_copy_mismatch` (nuova) | PK `location_id` (FK con cascata): `size`, `modified_at`, `found_at` | una copia la cui rilettura non e' tornata; vale solo per quel timbro |
+| `visual_signature` (nuova) | PK `version_id` (FK con cascata): `algorithm`, `frames`, `data` (BLOB), `signed_at` | D36: solo locale, una per versione; una firma di un altro algoritmo la sostituisce |
+| `pending_task` (nuova, 5B) | `task_id`, `kind`, `state`, `media_id`, `version_id`, `bytes`, `created_at`, `updated_at` | D20, "Da decidere" (tipo, media, byte, da quando); indice (`state`, `created_at`) |
+| `edit_session` (nuova, 5B) | media, versione di partenza, `target`, `state`, la riga del telefono e il timbro all'inizio, `relative_path`, `taken_at_utc`, `cache_name`, `cache_sha256`, `started_at`, `expires_at` | D25, E-X3: istanti e non durate, la sessione sopravvive alla morte del processo; indice (`state`, `expires_at`) |
+| `free_space_run`, `free_space_item` (nuove, 5B) | il giro (filtro, impronta del piano, modo, lotti) e i suoi elementi (media, versione, `phone_location_id` **senza FK**, copia privata verificata e suo timbro, lotto, motivo) | D21: l'elemento "sa" della posizione del telefono prima che sparisca. La verifica sul momento **non** si salva (vale 6 ore di orologio monotono). Indici su `phone_location_id`, (`run_id`, `batch_index`) |
+| `incoming_item` (nuova, 5B) | file in arrivo: `stage_id`, `state`, `file_name` (derivato dall'hash), `sha256`, `size`, `mime`, destinazione, `backup_item_id` (FK, SET NULL) | D24: non e' ancora un media, nessun riferimento a `media` |
+
+Regole come per le altre tabelle: codici stabili per le enumerazioni, hash in esadecimale, istanti in millisecondi. **I `toString`
+delle righe con dati dell'utente sono muti** (nomi, percorsi, share, id, impronte: mai nei log, §4.3).
+
+### 12.3 Il diario (`BackupDiaryDao`)
+
+`insert` e `update` tengono coerente `is_open` con lo stato (qualunque cosa porti l'entita'); `itemsToResume(limit)` (aperti, dal piu'
+vecchio), `openForVersion`, `forMedia`, `citedTemps` (D33: i temporanei degli elementi non finiti), `countsByState`, `openBytes`.
+La macchina a stati e l'adattatore Room (`RoomBackupStore`) sono di P2; qui ci sono le righe e le query con gli indici.
+
+### 12.4 Operazioni di `MediaCatalog` e porta `BackupCatalog`
+
+`core-database` non dipende da `core-backup`: i tipi sono lo specchio di quelli della porta (`BackupCatalogTypes.kt`) e `:app` (P7)
+li lega 1:1 con una traduzione campo per campo. Percorsi, nomi, share e id non vanno mai nei log.
+
+| `MediaCatalog` | Metodo della porta | Cosa garantisce |
+|---|---|---|
+| `backupCandidates(sources: Set<CatalogSource>, kind: CatalogBackupKind, after: CatalogCandidateCursor?, limit: Int): List<CatalogBackupCandidate>` | `candidates(CandidateQuery)` | per `sort_time` decrescente dall'indice dei candidati, senza ordinare in memoria; **un candidato per media**: la riga del telefono piu' vecchia di una versione da proteggere (originale o corrente) **presente**, con un `_ID` valido per la versione attuale del MediaStore (E-P22), in una sorgente scelta e senza copia privata verificata. Mai `ONLY_COMMON_COPY` (D9), mai un media con un problema che chiede l'utente. `dateEstimated`: META non l'ha ancora letta o e' una stima |
+| `safetyCounts(sources): CatalogSafetyCounts` | `safetyCounts(BackupSources)` | per stato e problemi per codice, dei media propri delle sorgenti; legge i derivati |
+| `phoneRefOf(mediaId, versionId): CatalogPhonePlace?` | `phoneRefOf` | la copia presente piu' vecchia con `_ID` valido; null finche' la lettura del telefono non la rilegge (E-P12); un alias vale per il sopravvissuto |
+| `recordFullHash(mediaId, versionId, sha256): FullHashRecord` | `recordFullHash` → `HashRecord` | impara l'hash (e con lui `FULL_HASH` e un gruppo `PROBABLE_DUPLICATE`); `SAME`, `CONFLICT` (E-B15), `UNKNOWN_VERSION`. **In ogni esito la fase `FULL_HASH` di quella versione si chiude** (`DONE` con l'hash noto, `GAVE_UP` con una versione che non c'e': fuori dalla coda ma ri-richiedibile) |
+| `attachCopies(copies: List<AttachedCopy>): Int` | `attachVerifiedCopies(List<VerifiedCopy>)` | **un lotto, una transazione, un solo cambiamento dell'indice**; idempotente sulla stessa posizione; una versione sparita nel frattempo si salta, una dimensione sbagliata o una verifica senza hash completo annullano il lotto (`IllegalArgumentException`). `VerifiedCopy.path: SharePath` → `Location.Nas(account, share, NasPath)` |
+| `markBackupProblem(mediaId, code: String?, marksCell: Boolean = true)` | `markProblem(mediaId, BackupProblemCode?)` → `(code?.code, code?.marksMedia)` | `BACKUP_PROBLEM` e `backup_todo` **nella stessa transazione**; su un media al sicuro non resta; dopo `markVerified(.., falso)` si segna il problema, non prima |
+| `privateCopies(share, size, quickHash, limit): List<CatalogNasCopy>` | `privateCopies` → `NasCopyRef` | D8: solo l'area privata **dell'account del dispositivo**, in qualunque cartella; mai l'area comune ne' un'altra area privata; dall'indice (`size`, `quick_hash`) |
+| `verifyCandidates(scope: CatalogVerifyScope, limit): List<CatalogCopyToVerify>` | `verifyCandidates(VerifyScope, limit)` → `CopyToVerify` | `Unverified` (hash della versione noto; **non** le copie segnate non integre sullo stesso timbro ne' di un media con un problema che chiede l'utente), `FullHash` (la coda `FULL_HASH`, **anche l'area comune**: li' si impara solo l'hash), `Rotation` (dalla verifica piu' vecchia), `OnTheSpot(ids)` (rilegge comunque) |
+| `markVerified(locationId, readBack, atMillis): Boolean` | `markVerified` | falso per una posizione che non c'e' piu'; una rilettura che non torna **si ricorda** (`nas_copy_mismatch`); una che torna toglie il segno |
+| `onlyCommonCopies(ids: Collection<MediaId>?, limit): List<CatalogGuardCandidate>` | `onlyCommonCopies(GuardScope, limit)` | `ONLY_COMMON_COPY` propri, una riga per versione da proteggere senza copia privata e con una copia **comune dichiarata** (mai una share di area sconosciuta) |
+| `mediaSafety(mediaId): CatalogMediaSafety?` | `mediaSafety` | stato, ultima verifica di una copia privata, problema |
+| `versionLocations(mediaId): List<VersionLocations>` | (5B, non ancora in porta) | per versione, le posizioni con l'area della share |
+
+### 12.5 Copie simili: le operazioni per P15 (D36, §2.12)
+
+| Operazione | Cosa garantisce |
+|---|---|
+| `similarRuns(fromSecond, limit): SimilarRunsPage` | i candidati per `sort_time` dall'indice: stesso tipo (foto/video), **stesso secondo di scatto letto dai metadati** (EXIF o contenitore; mai nome, data del file, `MEDIASTORE` o stima), visibili, fuori da raffiche, coppie RAW+JPEG e `PROBABLE_DUPLICATE`; a gruppi per secondo e tipo, **una pagina non spezza mai un secondo**; ogni candidato porta `aspectMilli`, `durationMs`, il gruppo e l'algoritmo della firma salvata |
+| `similarRunsFor(ids): List<SimilarRun>` | gli stessi gruppi per i secondi di alcuni media (dopo che META ha letto l'ora di uno nuovo) |
+| `similarUnsigned(algorithm): Int` | quanti candidati con un compagno aspettano ancora la firma (`SimilarCopiesProgress.pending`) |
+| `saveSignature(versionId, VisualSignature): Boolean`, `signatureOf`, `signaturesOf` | firma locale per versione; una riga rovinata si legge come "manca" |
+| `groupSimilar(members, cover): SimilarGroupOutcome` | **rifiuta senza scrivere nulla** (`Refused` con i membri colpevoli) se un membro e' in una raffica, in una coppia RAW+JPEG o in un `PROBABLE_DUPLICATE`, con meno di due media (dopo gli alias) o con una copertina che non e' un membro; i membri di un altro gruppo di copie simili lo lasciano (un gruppo rimasto con meno di due si scioglie): si passano **tutti** i membri voluti. **Nascosto contagioso**: se un membro e' nascosto lo diventano tutti nella stessa transazione, con `hidden_changed_at` |
+| `separate(member): SeparateOutcome` | il membro torna una cella a se'; il gruppo rimasto con un solo media si scioglie; se era la copertina ne resta una provvisoria (la piu' recente) e `coverChanged` lo dice; **non toglie il nascosto** |
+| `setSimilarCover(group, media): Boolean` | "Mostra questa come principale"; falso se non e' un membro o il gruppo non e' di copie simili |
+| `similarGroupOf(mediaId)`, `similarGroup(group)`, `similarGroupIds(after, limit)` | le copie con misure, dove stanno e se sono nascoste, per la striscia del viewer e per rivalutare i gruppi a giri |
+
+**Nascosto contagioso (E-H1, regola di sicurezza).** `setPersonalFlags` (singolo e per selezione) propaga il nascosto a tutte le
+copie di un gruppo di copie simili passando dalla **stessa funzione** che scrive `hidden_changed_at` (la sincronizzazione dei dati
+personali vede ogni copia); nascondere e mostrare, tutte e due le direzioni. L'unione che porta un media nascosto in un gruppo lo
+fa lo stesso. Difesa in piu': se un dato arrivasse a meta' (una sola copia nascosta, scritta senza passare di qui), il gruppo non
+ha copertina (`similarCopiesCover`) e **nessun altro membro compare nell'indice della timeline**. Il preferito non e' contagioso.
+`MediaCatalog.group(SIMILAR_COPIES, ..)` e' un errore di programmazione: l'unico ingresso e' `groupSimilar`.
+
+### 12.6 Unione e rinomina d'identita'
+
+Ogni colonna nuova che punta a un media o a una versione e' in `MEDIA_REFERENCES` / `VERSION_REFERENCES` (`MergeReferencesTest` li
+confronta con lo schema) ed e' spostata dall'unione (`MergeDao`) e dalla rinomina D7 (`IdentityDao`): `backup_item`, `pending_task`,
+`edit_session`, `free_space_item` per media e versione; `backup_problem` per media (se il sopravvissuto ne ha gia' uno resta il suo);
+`visual_signature` per versione (resta la firma gia' presente). `free_space_run`, `incoming_item` e `nas_copy_mismatch` non
+contengono identita' di media (`TABLES_WITHOUT_MEDIA_IDS`). Un gruppo di copie simili non si perde: il sopravvissuto prende il posto
+del perdente, copertina compresa; rimasto con un media solo, si scioglie. `MergeV4Test`.
+
+### 12.7 Migrazione 3 -> 4
+
+`GalleryMigrations.MIGRATION_3_4`: `media.backup_todo` (calcolato da `TimelineRules.backupTodo` per ogni combinazione di
+`presence` e `safety`, un `UPDATE` per combinazione, nessuna seconda copia della regola in SQL), i due indici, le nove tabelle vuote
+(le istruzioni sono copiate da `4.json`: la validazione dello schema dopo la migrazione le confronta). Mai distruttiva.
+`ExportedSchemaTest`: 1 -> 4, 2 -> 4, 3 -> 4 con `seedV3` e 4 con `seedV4` (una riga in ogni tabella nuova, codici scritti a mano);
+`laMigrazioneDalla3CalcolaIlBackupTodoDiOgniCombinazione` apre una v3 con un media per ogni combinazione.
+
+### 12.8 Invarianti e prove
+
+| Invariante | Prova |
+|---|---|
+| `backup_todo` = `TimelineRules.backupTodo` per ogni media, scritto nella stessa transazione, mai nell'indice della timeline | `BackupCatalogTest`, `ExportedSchemaTest` |
+| Un lotto di copie verificate e' una transazione e **un solo** cambiamento (`change_seq` + 1) | `BackupCatalogTest.unLottoDiCopieVerificate…` |
+| `BACKUP_PROBLEM` derivato nella stessa transazione, mai su un media al sicuro | `BackupCatalogTest.ilProblemaAccende…` |
+| `ONLY_COMMON_COPY` non e' un candidato; la copia comune letta non fa mai "al sicuro" | `BackupCatalogTest` |
+| Una copia non integra o di un media con un problema non si rilegge a ogni giro; `FULL_HASH` si chiude in ogni esito | `BackupCatalogTest` |
+| Nessuna riga di diario, problema, firma o gruppo si perde in un'unione o in una rinomina | `MergeV4Test`, `MergeReferencesTest` |
+| Nascosto contagioso nelle due direzioni e per tutte le vie; "Separa" non toglie il nascosto; un membro di una raffica e' rifiutato | `SimilarCopiesCatalogTest` |
+| Un gruppo di copie simili con la copertina nascosta non fa comparire un altro membro | `SimilarCopiesCatalogTest.unGruppoConLaCopertinaNascosta…` |
+| Piani: indici giusti, **nessun `USE TEMP B-TREE`** (candidati, verifiche, deduplica, diario, indice della timeline, copie simili) | `BackupQueriesTest`, `BackupDiaryTest`, `SimilarQueriesTest`, `TimelineIndexTest` |
+
+### 12.9 Misure (JVM, Robolectric; il dispositivo si misura a M2)
+
+| Misura | Esito |
+|---|---|
+| `backupCandidates`, 100.000 media tutti candidati, pagine da 500 (180 pagine di foto) | 4-14 ms a pagina (prima 14); a meta' libreria 7 ms |
+| `backupCandidates`, 100.000 media con 350 candidati (la fine del primo backup) | 4 ms; la pagina vuota dopo l'ultimo 0 ms |
+| `safetyCounts` su 100.000 media | 21 ms |
+| `verifyCandidates` su 100.000 copie private | `Rotation` 32-37 ms, `Unverified` 9-11 ms (500 righe) |
+| `privateCopies` su 100.000 media | 2 ms |
+| diario con 100.000 elementi terminali e 12 aperti: `itemsToResume` + `citedTemps` + conteggi | 9 ms |
+| indice della timeline, 100.000 media con 1.000 gruppi di copie simili | 681 ms (751 ms senza i gruppi); budget 8 s |
+| `similarRuns` su tutta la libreria (100.000 media, 1.666 gruppi) | 118 ms in 7 pagine, la piu' lenta 32 ms; `similarUnsigned` 46 ms |
+
+**Una trappola del pianificatore** (provata, 35 secondi a pagina): senza statistiche SQLite sceglie per `media_location` l'indice
+(`state`, `absent_since`) o quello di una share e rilegge ~100.000 posizioni per candidato (come per `phoneRefs`, §10). Le query del
+backup usano `CROSS JOIN` per fissare l'ordine e `+` davanti alle colonne di `media_location` che non devono scegliere l'indice;
+il piano di ogni query e' nei test.
+
+### 12.10 Scelte e scarti della v4
+
+| Scelta | Alternative scartate e perche' |
+|---|---|
+| `media.backup_todo` con il suo indice | Filtrare sull'indice della timeline: dopo il primo backup ogni pagina scorrerebbe 100.000 righe per non trovare niente. Un indice su (`safety`, `sort_time`): tre stati diversi non si ordinano insieme senza `TEMP B-TREE` |
+| `is_open` in `backup_item` | Indice su `state` con `IN (...)`: l'elenco degli aperti si ordinerebbe in memoria e scorrerebbe i terminali; indice unico parziale sugli aperti: Room non li esporta, e un'unione potrebbe farne collidere due |
+| Diario senza cascata, problema e firma con cascata | Cascata sul diario: una riga si perderebbe in silenzio se un'unione sbagliasse. Il problema e la firma si ricalcolano |
+| `nas_copy_mismatch` come tabella a parte | Una colonna su `media_location`: ogni aggiornamento della posizione dal dominio la riscriverebbe a NULL e la copia rovinata si rileggerebbe a ogni scansione |
+| `markBackupProblem` non resta su un media al sicuro | Lasciarlo: il badge `PROBLEM` prevale su "al sicuro" e un errore vecchio nasconderebbe una copia buona |
+| `groupSimilar` rifiuta tutto senza scrivere | Escludere i membri colpevoli e raggruppare gli altri: nascerebbe un gruppo che chi chiama non ha chiesto |
+| Un gruppo di copie simili senza una colonna "copertina scelta" | La scelta dell'utente e' un dato personale sincronizzato (P15): il catalogo tiene solo la copertina attuale in `media_group.cover_media_id` |
+| Candidati e firme per versione corrente | Una firma per media: una correzione di data o una modifica cambiano i pixel, e la firma di una versione e' immutabile |
+| Il pianificatore: `CROSS JOIN` e `+` nelle query del backup | `ANALYZE` sul telefono: nessuno lo esegue, e le statistiche invecchiano |

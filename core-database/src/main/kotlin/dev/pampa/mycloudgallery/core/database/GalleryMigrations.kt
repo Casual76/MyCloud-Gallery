@@ -30,13 +30,16 @@ import java.time.ZoneId
  */
 object GalleryMigrations {
 
-  val ALL: Array<Migration> get() = arrayOf(migration1To2(), MIGRATION_2_3)
+  val ALL: Array<Migration> get() = arrayOf(migration1To2(), MIGRATION_2_3, MIGRATION_3_4)
 
   /** [zone]: il fuso del telefono adesso, per il giorno provvisorio dei media senza data letta. */
   fun migration1To2(zone: () -> ZoneId = ZoneId::systemDefault): Migration = Migration1To2(zone)
 
   /** v2 -> v3 (Fase 4): vedi [Migration2To3]. */
   val MIGRATION_2_3: Migration = Migration2To3
+
+  /** v3 -> v4 (Fase 5): vedi [Migration3To4]. */
+  val MIGRATION_3_4: Migration = Migration3To4
 }
 
 /**
@@ -187,6 +190,126 @@ private object Migration2To3 : Migration(2, 3) {
       "`updated_at` INTEGER NOT NULL, PRIMARY KEY(`trash_id`))",
     "CREATE INDEX IF NOT EXISTS `index_nas_trash_entry_state_trashed_at` ON `nas_trash_entry` (`state`, " +
       "`trashed_at`)",
+  )
+}
+
+/**
+ * v3 -> v4 (Fase 5, `docs/fase5-progetto.md` D27, `docs/modello-dati.md` §12):
+ * - `media.backup_todo` (i candidati del backup) e il suo indice (`backup_todo`, `sort_time`, `media_id`): **calcolato qui** dai
+ *   derivati gia' salvati (`presence`, `safety`) con la stessa regola del catalogo (`TimelineRules.backupTodo`), senza conoscere
+ *   l'account del dispositivo (`safety` dice gia' se il media e' proprio) e senza problemi registrati (la tabella nasce vuota);
+ * - l'indice (`account_id`, `share_key`, `verified_at`) di `media_location`: la riverifica a rotazione e le copie da verificare;
+ * - le tabelle nuove, vuote: il diario del backup (`backup_item`), il problema di un media (`backup_problem`), le copie che non sono tornate (`nas_copy_mismatch`), la firma visiva
+ *   delle copie simili (`visual_signature`) e quelle che la 5B usera' (`pending_task`, `edit_session`, `free_space_run`,
+ *   `free_space_item`, `incoming_item`): una sola migrazione sul campo per tutta la fase.
+ *
+ * Nessun bit di `cell_flags` cambia: `BACKUP_PROBLEM` e `SIMILAR_COPIES` nascono accesi solo dal catalogo (nessun problema e nessun
+ * gruppo di copie simili esistono ancora). Mai distruttiva: solo colonne, indici e tabelle in piu'. I codici scritti in SQL
+ * ('phone_only', 'unverified', ...) sono quelli della v3, fissati qui di proposito. Su API 29 (SQLite 3.22) niente `UPSERT`,
+ * `RETURNING`, `DROP COLUMN`.
+ */
+private object Migration3To4 : Migration(3, 4) {
+
+  override fun migrate(db: SupportSQLiteDatabase) {
+    db.execSQL("ALTER TABLE `media` ADD COLUMN `backup_todo` INTEGER NOT NULL DEFAULT 0")
+    db.execSQL(
+      "CREATE INDEX IF NOT EXISTS `index_media_backup_todo_sort_time_media_id` ON `media` (`backup_todo`, `sort_time`, `media_id`)",
+    )
+    db.execSQL(
+      "CREATE INDEX IF NOT EXISTS `index_media_location_account_id_share_key_verified_at` ON `media_location` " +
+        "(`account_id`, `share_key`, `verified_at`)",
+    )
+    CREATE_TABLES.forEach(db::execSQL)
+    fillBackupTodo(db)
+  }
+
+  /**
+   * I candidati del backup dei media esistenti: un `UPDATE` per ogni combinazione di (`presence`, `safety`) che li accende, con
+   * il valore calcolato da [TimelineRules.backupTodo] (la stessa funzione del catalogo), cosi' non c'e' una seconda copia della
+   * regola in SQL. Nessun problema del backup esiste ancora.
+   */
+  private fun fillBackupTodo(db: SupportSQLiteDatabase) {
+    for (presence in Presence.entries) {
+      for (safety in SafetyStatus.entries) {
+        if (!TimelineRules.backupTodo(presence, safety, markedProblem = false)) continue
+        db.execSQL(
+          "UPDATE `media` SET `backup_todo` = 1 WHERE `presence` = ? AND `safety` = ?",
+          arrayOf<Any?>(presence.code, safety.code),
+        )
+      }
+    }
+  }
+
+  // Copiate da schemas/.../4.json (createSql di Room): la validazione dello schema dopo la migrazione le confronta.
+  private val CREATE_TABLES = listOf(
+    "CREATE TABLE IF NOT EXISTS `backup_item` (`item_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `kind` TEXT NOT NULL, " +
+      "`state` TEXT NOT NULL, `is_open` INTEGER NOT NULL, `media_id` TEXT NOT NULL, `version_id` TEXT NOT NULL, `size` " +
+      "INTEGER NOT NULL, `phone_volume` TEXT, `phone_ms_id` INTEGER, `phone_ms_version` TEXT, `expected_size` INTEGER, " +
+      "`expected_modified_at` INTEGER, `expected_generation` INTEGER, `share` TEXT NOT NULL, `planned_path` TEXT NOT NULL, " +
+      "`final_path` TEXT, `name_attempt` INTEGER NOT NULL, `temp_path` TEXT, `resume_at` INTEGER NOT NULL, `sha256` TEXT, " +
+      "`quick_hash` TEXT, `temp_size` INTEGER, `temp_modified_at` INTEGER, `temp_file_id` INTEGER, `final_size` INTEGER, " +
+      "`final_modified_at` INTEGER, `final_file_id` INTEGER, `verify_attempts` INTEGER NOT NULL, `guard_share` TEXT, " +
+      "`guard_path` TEXT, `guard_size` INTEGER, `guard_modified_at` INTEGER, `guard_file_id` INTEGER, `problem` TEXT, " +
+      "`created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, FOREIGN KEY(`media_id`) REFERENCES `media`(`media_id`) " +
+      "ON UPDATE NO ACTION ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED, FOREIGN KEY(`version_id`) REFERENCES " +
+      "`media_version`(`version_id`) ON UPDATE NO ACTION ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED)",
+    "CREATE INDEX IF NOT EXISTS `index_backup_item_is_open_item_id` ON `backup_item` (`is_open`, `item_id`)",
+    "CREATE INDEX IF NOT EXISTS `index_backup_item_version_id_is_open` ON `backup_item` (`version_id`, `is_open`)",
+    "CREATE INDEX IF NOT EXISTS `index_backup_item_media_id` ON `backup_item` (`media_id`)",
+    "CREATE INDEX IF NOT EXISTS `index_backup_item_state` ON `backup_item` (`state`)",
+    "CREATE TABLE IF NOT EXISTS `backup_problem` (`media_id` TEXT NOT NULL, `code` TEXT NOT NULL, `marks_cell` INTEGER NOT " +
+      "NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`media_id`), FOREIGN KEY(`media_id`) REFERENCES `media`(`media_id`) " +
+      "ON UPDATE NO ACTION ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED)",
+    "CREATE TABLE IF NOT EXISTS `nas_copy_mismatch` (`location_id` INTEGER NOT NULL, `size` INTEGER NOT NULL, `modified_at` " +
+      "INTEGER NOT NULL, `found_at` INTEGER NOT NULL, PRIMARY KEY(`location_id`), FOREIGN KEY(`location_id`) REFERENCES " +
+      "`media_location`(`location_id`) ON UPDATE NO ACTION ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED)",
+    "CREATE TABLE IF NOT EXISTS `visual_signature` (`version_id` TEXT NOT NULL, `algorithm` INTEGER NOT NULL, `frames` " +
+      "INTEGER NOT NULL, `data` BLOB NOT NULL, `signed_at` INTEGER NOT NULL, PRIMARY KEY(`version_id`), FOREIGN " +
+      "KEY(`version_id`) REFERENCES `media_version`(`version_id`) ON UPDATE NO ACTION ON DELETE CASCADE DEFERRABLE INITIALLY " +
+      "DEFERRED)",
+    "CREATE TABLE IF NOT EXISTS `pending_task` (`task_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `kind` TEXT NOT NULL, " +
+      "`state` TEXT NOT NULL, `media_id` TEXT NOT NULL, `version_id` TEXT NOT NULL, `bytes` INTEGER NOT NULL, `created_at` " +
+      "INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, FOREIGN KEY(`media_id`) REFERENCES `media`(`media_id`) ON UPDATE NO " +
+      "ACTION ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED, FOREIGN KEY(`version_id`) REFERENCES " +
+      "`media_version`(`version_id`) ON UPDATE NO ACTION ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED)",
+    "CREATE INDEX IF NOT EXISTS `index_pending_task_state_created_at` ON `pending_task` (`state`, `created_at`)",
+    "CREATE INDEX IF NOT EXISTS `index_pending_task_media_id` ON `pending_task` (`media_id`)",
+    "CREATE INDEX IF NOT EXISTS `index_pending_task_version_id` ON `pending_task` (`version_id`)",
+    "CREATE TABLE IF NOT EXISTS `edit_session` (`session_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `media_id` TEXT " +
+      "NOT NULL, `version_id` TEXT NOT NULL, `target` TEXT NOT NULL, `state` TEXT NOT NULL, `phone_volume` TEXT, " +
+      "`phone_ms_id` INTEGER, `phone_ms_version` TEXT, `start_size` INTEGER NOT NULL, `start_modified_at` INTEGER NOT NULL, " +
+      "`start_generation` INTEGER, `relative_path` TEXT, `taken_at_utc` INTEGER, `cache_name` TEXT, `cache_sha256` TEXT, " +
+      "`started_at` INTEGER NOT NULL, `expires_at` INTEGER NOT NULL, FOREIGN KEY(`media_id`) REFERENCES `media`(`media_id`) " +
+      "ON UPDATE NO ACTION ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED, FOREIGN KEY(`version_id`) REFERENCES " +
+      "`media_version`(`version_id`) ON UPDATE NO ACTION ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED)",
+    "CREATE INDEX IF NOT EXISTS `index_edit_session_state_expires_at` ON `edit_session` (`state`, `expires_at`)",
+    "CREATE INDEX IF NOT EXISTS `index_edit_session_media_id` ON `edit_session` (`media_id`)",
+    "CREATE INDEX IF NOT EXISTS `index_edit_session_version_id` ON `edit_session` (`version_id`)",
+    "CREATE TABLE IF NOT EXISTS `free_space_run` (`run_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `state` TEXT NOT " +
+      "NULL, `filter` TEXT NOT NULL, `exclude_recent_days` INTEGER NOT NULL, `plan_hash` TEXT NOT NULL, `delete_mode` TEXT " +
+      "NOT NULL, `item_count` INTEGER NOT NULL, `total_bytes` INTEGER NOT NULL, `batches_total` INTEGER NOT NULL, " +
+      "`batches_done` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL)",
+    "CREATE INDEX IF NOT EXISTS `index_free_space_run_state` ON `free_space_run` (`state`)",
+    "CREATE TABLE IF NOT EXISTS `free_space_item` (`run_id` INTEGER NOT NULL, `item_index` INTEGER NOT NULL, `state` TEXT " +
+      "NOT NULL, `media_id` TEXT NOT NULL, `version_id` TEXT NOT NULL, `phone_location_id` INTEGER NOT NULL, " +
+      "`nas_location_id` INTEGER, `size` INTEGER NOT NULL, `verified_size` INTEGER, `verified_modified_at` INTEGER, " +
+      "`verified_file_id` INTEGER, `batch_index` INTEGER, `reason` TEXT, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`run_id`, " +
+      "`item_index`), FOREIGN KEY(`run_id`) REFERENCES `free_space_run`(`run_id`) ON UPDATE NO ACTION ON DELETE CASCADE " +
+      "DEFERRABLE INITIALLY DEFERRED, FOREIGN KEY(`media_id`) REFERENCES `media`(`media_id`) ON UPDATE NO ACTION ON DELETE NO " +
+      "ACTION DEFERRABLE INITIALLY DEFERRED, FOREIGN KEY(`version_id`) REFERENCES `media_version`(`version_id`) ON UPDATE NO " +
+      "ACTION ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED)",
+    "CREATE INDEX IF NOT EXISTS `index_free_space_item_phone_location_id` ON `free_space_item` (`phone_location_id`)",
+    "CREATE INDEX IF NOT EXISTS `index_free_space_item_media_id` ON `free_space_item` (`media_id`)",
+    "CREATE INDEX IF NOT EXISTS `index_free_space_item_version_id` ON `free_space_item` (`version_id`)",
+    "CREATE INDEX IF NOT EXISTS `index_free_space_item_run_id_batch_index` ON `free_space_item` (`run_id`, `batch_index`)",
+    "CREATE TABLE IF NOT EXISTS `incoming_item` (`incoming_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `stage_id` TEXT " +
+      "NOT NULL, `state` TEXT NOT NULL, `file_name` TEXT NOT NULL, `display_name` TEXT, `sha256` TEXT NOT NULL, `size` " +
+      "INTEGER NOT NULL, `mime` TEXT NOT NULL, `dest_share` TEXT, `dest_folder` TEXT, `backup_item_id` INTEGER, `created_at` " +
+      "INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, FOREIGN KEY(`backup_item_id`) REFERENCES `backup_item`(`item_id`) ON " +
+      "UPDATE NO ACTION ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED)",
+    "CREATE INDEX IF NOT EXISTS `index_incoming_item_state_created_at` ON `incoming_item` (`state`, `created_at`)",
+    "CREATE INDEX IF NOT EXISTS `index_incoming_item_stage_id` ON `incoming_item` (`stage_id`)",
+    "CREATE INDEX IF NOT EXISTS `index_incoming_item_backup_item_id` ON `incoming_item` (`backup_item_id`)",
   )
 }
 

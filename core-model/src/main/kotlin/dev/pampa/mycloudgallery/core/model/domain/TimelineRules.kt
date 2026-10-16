@@ -164,6 +164,60 @@ object TimelineRules {
     }
   }
 
+  // --- Fase 5A (P1): backup e copie simili (docs/fase5-progetto.md D15, D36; docs/modello-dati.md §12) -------------------
+
+  /**
+   * Il media e' un **candidato del backup** (`media.backup_todo`, §2.1): ha una copia presente sul telefono ed e' un media
+   * **proprio** non ancora al sicuro ([SafetyStatus.NO_NAS_COPY] o [SafetyStatus.PRIVATE_COPY_UNVERIFIED]: quest'ultimo si
+   * rilegge e si collega, D8) e nessun problema che chiede l'utente
+   * ([markedProblem]: un media con la verifica fallita tre volte non si ricarica all'infinito, E-B18).
+   *
+   * **Mai [SafetyStatus.ONLY_COMMON_COPY]** (§2.11 punto 3, risposta Q4 (b)): un media la cui sola copia sul NAS e' nell'area comune
+   * non si ricarica dal telefono; la copia privata la crea il guardiano (D9) quando serve ([SafetyStatus.NOT_MINE] e
+   * [SafetyStatus.LOST] mai). Funzione dei soli derivati gia' salvati (`presence`, `safety`) e del problema: per questo la
+   * migrazione 3 -> 4 la calcola in SQL senza conoscere l'account del dispositivo, e senza una seconda copia della regola.
+   */
+  fun backupTodo(presence: Presence, safety: SafetyStatus, markedProblem: Boolean): Boolean =
+    !markedProblem &&
+      (presence == Presence.PHONE_ONLY || presence == Presence.PHONE_AND_NAS) &&
+      (safety == SafetyStatus.NO_NAS_COPY || safety == SafetyStatus.PRIVATE_COPY_UNVERIFIED)
+
+  /**
+   * [CellFlags.BACKUP_PROBLEM] (D15): un problema che chiede l'utente ([markedProblem]) vale finche' il media non e' di nuovo
+   * al sicuro; un media al sicuro non porta mai il segno (non si nasconde "al sicuro" dietro un errore vecchio).
+   */
+  fun backupProblemFlags(markedProblem: Boolean, safety: SafetyStatus): Int =
+    if (markedProblem && safety != SafetyStatus.SAFE) CellFlags.BACKUP_PROBLEM else 0
+
+  /**
+   * Chi rappresenta un gruppo `SIMILAR_COPIES` nell'indice (D36, E-H1). Come [groupCover], ma il **nascosto e' contagioso**: se
+   * anche un solo membro e' nascosto ([anyHidden]) nessuno rappresenta il gruppo, mai "un'altra copia al suo posto": la stessa
+   * foto non deve ricomparire dalla porta della sua copia. (Il catalogo nasconde tutte le copie insieme; questa e' la difesa
+   * se un dato arriva comunque a meta'.)
+   */
+  fun similarCopiesCover(members: List<GroupMember>, designatedCover: MediaId?, anyHidden: Boolean): MediaId? =
+    if (anyHidden) null else groupCover(members, designatedCover)
+
+  /**
+   * I flag della cella che rappresenta un gruppo di copie simili (§2.12 "Segni della cella"): [CellFlags.SIMILAR_COPIES], piu' i
+   * segni di presenza **del gruppo**, non solo della copertina: sul telefono se almeno una copia lo e', sul NAS se almeno una
+   * copia lo e'; **al sicuro solo se ogni copia che sta sul telefono e' al sicuro** (la copertina puo' essere la copia
+   * convertita sul NAS mentre l'originale del telefono non e' ancora protetto); [CellFlags.BACKUP_PROBLEM] se una copia lo ha.
+   * Senza copie sul telefono "al sicuro" e' quello della copertina. Gli altri bit restano quelli della copertina.
+   *
+   * @param coverFlags i flag della copertina; @param memberFlags quelli di tutti i membri (copertina compresa).
+   */
+  fun similarCopiesFlags(coverFlags: Int, memberFlags: List<Int>): Int {
+    val onPhone = memberFlags.filter { CellFlags.has(it, CellFlags.ON_PHONE) }
+    var flags = coverFlags and (CellFlags.ON_PHONE or CellFlags.ON_NAS or CellFlags.SAFE or CellFlags.BACKUP_PROBLEM).inv()
+    if (onPhone.isNotEmpty()) flags = flags or CellFlags.ON_PHONE
+    if (memberFlags.any { CellFlags.has(it, CellFlags.ON_NAS) }) flags = flags or CellFlags.ON_NAS
+    val safe = if (onPhone.isNotEmpty()) onPhone.all { CellFlags.has(it, CellFlags.SAFE) } else CellFlags.has(coverFlags, CellFlags.SAFE)
+    if (safe) flags = flags or CellFlags.SAFE
+    if (memberFlags.any { CellFlags.has(it, CellFlags.BACKUP_PROBLEM) }) flags = flags or CellFlags.BACKUP_PROBLEM
+    return flags or CellFlags.SIMILAR_COPIES
+  }
+
   private const val MILLIS_PER_DAY: Long = 24L * 60 * 60 * 1000
 
   private val MIN_INSTANT: Long = FIRST_DAY.toEpochDay() * MILLIS_PER_DAY

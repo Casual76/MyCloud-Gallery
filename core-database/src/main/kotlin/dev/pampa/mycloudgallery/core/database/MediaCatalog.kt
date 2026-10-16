@@ -1,7 +1,10 @@
 package dev.pampa.mycloudgallery.core.database
 
 import androidx.room.withTransaction
+import dev.pampa.mycloudgallery.core.database.dao.BackupQueries
 import dev.pampa.mycloudgallery.core.database.dao.TimelineIndexDao
+import dev.pampa.mycloudgallery.core.database.entity.BackupCandidateRow
+import dev.pampa.mycloudgallery.core.database.entity.BackupProblemEntity
 import dev.pampa.mycloudgallery.core.database.entity.NasAdoptedFingerprintEntity
 import dev.pampa.mycloudgallery.core.database.entity.EmbeddingEntity
 import dev.pampa.mycloudgallery.core.database.entity.IndexRow
@@ -10,7 +13,11 @@ import dev.pampa.mycloudgallery.core.database.entity.MediaEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaGroupEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaLocationEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaPersonalEntity
+import dev.pampa.mycloudgallery.core.database.entity.NasCopyMismatchEntity
+import dev.pampa.mycloudgallery.core.database.entity.NasCopyRow
 import dev.pampa.mycloudgallery.core.database.entity.NasRefRow
+import dev.pampa.mycloudgallery.core.database.entity.SimilarCandidateRow
+import dev.pampa.mycloudgallery.core.database.entity.VisualSignatureEntity
 import dev.pampa.mycloudgallery.core.model.AccountId
 import dev.pampa.mycloudgallery.core.model.CellFlags
 import dev.pampa.mycloudgallery.core.model.ContentKey
@@ -31,7 +38,9 @@ import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.MediaLocation
 import dev.pampa.mycloudgallery.core.model.MediaMetadata
 import dev.pampa.mycloudgallery.core.model.MediaRef
+import dev.pampa.mycloudgallery.core.model.MediaSource
 import dev.pampa.mycloudgallery.core.model.MediaVersion
+import dev.pampa.mycloudgallery.core.model.NasArea
 import dev.pampa.mycloudgallery.core.model.NasAreaLookup
 import dev.pampa.mycloudgallery.core.model.NasPath
 import dev.pampa.mycloudgallery.core.model.NasShare
@@ -43,6 +52,7 @@ import dev.pampa.mycloudgallery.core.model.SafetyStatus
 import dev.pampa.mycloudgallery.core.model.Sha256
 import dev.pampa.mycloudgallery.core.model.VersionId
 import dev.pampa.mycloudgallery.core.model.VersionKind
+import dev.pampa.mycloudgallery.core.model.VisualSignature
 import dev.pampa.mycloudgallery.core.model.WorkStage
 import dev.pampa.mycloudgallery.core.model.WorkState
 import dev.pampa.mycloudgallery.core.model.WorkStatus
@@ -117,6 +127,11 @@ class MediaCatalog(
   private val cursorDao = database.mediaStoreCursorDao()
   private val nasScanDao = database.nasScanDao()
   private val identityDao = database.identityDao()
+  private val problemDao = database.backupProblemDao()
+  private val mismatchDao = database.nasCopyMismatchDao()
+  private val signatureDao = database.visualSignatureDao()
+  private val backupQueryDao = database.backupQueryDao()
+  private val similarDao = database.similarDao()
 
   private val writeLock = Mutex()
   private val changeFlow = MutableSharedFlow<CatalogChange>(
@@ -662,7 +677,34 @@ class MediaCatalog(
     location: Location,
     stamp: FileStamp,
     verifiedAtMillis: Long?,
-  ): LocationId = write { tx ->
+  ): LocationId = write { tx -> attachInTransaction(tx, mediaId, versionId, location, stamp, verifiedAtMillis) }
+
+  /**
+   * [attachCopy] per un lotto, **in una sola transazione e con un solo cambiamento dell'indice** (Fase 5A, §5.5: durante il primo
+   * backup il catalogo si aggiorna a lotti, non a file). Restituisce quante copie ha attaccato; le altre non si attaccano:
+   * una versione che non esiste piu' (unita nel frattempo) si salta e si conta in meno, mentre una copia con una dimensione
+   * diversa dalla versione, o "verificata" contro un hash completo non noto, e' un errore di programmazione che annulla il lotto
+   * (`IllegalArgumentException`: o tutte o nessuna). Idempotente sulla stessa posizione.
+   */
+  suspend fun attachCopies(copies: List<AttachedCopy>): Int = write { tx ->
+    var attached = 0
+    for (copy in copies) {
+      // Dopo un'unione la versione passa al sopravvissuto: vale il media a cui appartiene adesso.
+      val owner = versionDao.get(copy.versionId.value)?.mediaId ?: continue
+      attachInTransaction(tx, MediaId(owner), copy.versionId, copy.location, copy.stamp, copy.verifiedAtMillis)
+      attached++
+    }
+    attached
+  }
+
+  private suspend fun attachInTransaction(
+    tx: Tx,
+    mediaId: MediaId,
+    versionId: VersionId,
+    location: Location,
+    stamp: FileStamp,
+    verifiedAtMillis: Long?,
+  ): LocationId {
     val now = clock()
     val version = requireMedia(mediaId).version(versionId)
     require(stamp.size == version.fingerprint.size) { "La copia ha una dimensione diversa dalla versione." }
@@ -677,7 +719,7 @@ class MediaCatalog(
     }
     tx.touch(mediaId)
     tx.refChanged(mediaId)
-    LocationId(id)
+    return LocationId(id)
   }
 
   /** Uno spostamento fatto dall'app (condivisione nell'area comune, 7.4): stessa posizione, altro posto. */
@@ -701,12 +743,23 @@ class MediaCatalog(
    * I byte in [locationId] sono stati riletti e hanno dato [readBack]. Vero se coincidono con l'hash
    * completo della versione (copia verificata); falso se diversi (copia non integra, E-B8) o se
    * l'hash della versione non e' noto. In caso di falso la verifica precedente decade.
+   *
+   * **Una copia che non torna si ricorda** (`nas_copy_mismatch`, stesso timbro): [verifyCandidates] con
+   * [CatalogVerifyScope.Unverified] non la restituisce piu' finche' il file non cambia, cosi' la stessa copia rovinata non si
+   * rilegge a ogni giro. Una rilettura che torna toglie il segno. Una posizione che non c'e' piu' e' falso, non un errore.
    */
   suspend fun markVerified(locationId: LocationId, readBack: Sha256, atMillis: Long): Boolean = write { tx ->
-    val before = requireLocation(locationId)
+    // Una posizione che non c'e' piu' (unita, tolta) non e' verificata: falso, non un errore (porta `BackupCatalog`).
+    val before = locationDao.get(locationId.value)?.toDomain() ?: return@write false
     val expected = versionDao.get(before.versionId.value)?.fullHash
     val ok = expected != null && expected == readBack.hex
     locationDao.update(before.copy(verifiedAtMillis = if (ok) atMillis else null).toEntity())
+    // Byte diversi da quelli della versione (hash noto): la copia non e' integra e non si rilegge finche' il timbro e' lo stesso.
+    if (ok) {
+      mismatchDao.delete(locationId.value)
+    } else if (expected != null) {
+      mismatchDao.upsert(NasCopyMismatchEntity(locationId.value, before.stamp.size, before.stamp.modifiedAtMillis, atMillis))
+    }
     tx.touch(mediaOf(locationId))
     ok
   }
@@ -785,8 +838,10 @@ class MediaCatalog(
    * Un membro che era in un altro gruppo lo lascia; un gruppo rimasto con un membro solo si scioglie.
    * Le identita' assorbite da un'unione valgono per il sopravvissuto.
    */
-  suspend fun group(kind: MediaGroupKind, members: Collection<MediaId>, cover: MediaId): MediaGroupId = write { tx ->
-    groupInTransaction(tx, kind, members, cover)
+  suspend fun group(kind: MediaGroupKind, members: Collection<MediaId>, cover: MediaId): MediaGroupId {
+    // Le copie simili hanno regole loro (rifiuti, nascosto contagioso): un solo ingresso, `groupSimilar`.
+    require(kind != MediaGroupKind.SIMILAR_COPIES) { "Le copie simili si raggruppano con groupSimilar." }
+    return write { tx -> groupInTransaction(tx, kind, members, cover) }
   }
 
   /** Scioglie un gruppo: i membri tornano elementi singoli della timeline. */
@@ -808,6 +863,475 @@ class MediaCatalog(
 
   /** La versione del dataset dei luoghi con cui sono stati calcolati i `place_id` (`catalog_meta`). */
   suspend fun setPlacesDataset(dataset: Int): Unit = write { metaDao.put(PLACES_DATASET, dataset.toLong()) }
+
+  // --- Fase 5A (P1): il backup e le copie simili (schema v4; docs/modello-dati.md §12) ----------------------------------------
+  //
+  // Le operazioni della porta `BackupCatalog` di core-backup (che core-database non vede: i tipi sono lo specchio di
+  // `BackupCatalogTypes.kt`, `:app` li lega 1:1 in P7) e quelle che il rilevatore delle copie simili (P15, core-library) chiede al
+  // catalogo. **Ogni decisione parte da qui**, mai da dati letti dal NAS (E-S11); "al sicuro" nasce solo da [attachCopy],
+  // [attachCopies] e [markVerified], cioe' da una rilettura fatta qui (F4-D8, L28). Percorsi, nomi e id non vanno mai nei log.
+
+  /**
+   * I candidati del backup (`BackupCatalog.candidates`, §2.1): media **propri**, con una copia presente sul telefono in una delle
+   * [sources] (con un `_ID` valido per la versione attuale del MediaStore, E-P22), per una versione da proteggere senza copia
+   * privata verificata e senza un problema che chiede l'utente. Una pagina di al massimo [limit] media per `sort_time`
+   * decrescente (poi identita'), dopo il cursore [after]: dall'indice (`backup_todo`, `sort_time`, `media_id`), quindi si scorrono
+   * solo i candidati e non si ordina in memoria. Un candidato per media: la versione da proteggere con la riga del telefono piu'
+   * vecchia. Le righe `IS_PENDING` non entrano mai nel catalogo (la lettura del telefono le salta).
+   */
+  suspend fun backupCandidates(
+    sources: Set<CatalogSource>,
+    kind: CatalogBackupKind,
+    after: CatalogCandidateCursor?,
+    limit: Int,
+  ): List<CatalogBackupCandidate> {
+    require(limit in 1..MAX_CANDIDATE_PAGE) { "Pagina di candidati fuori misura." }
+    val query = BackupQueries.candidates(localAccount.value, sources, kind, after, limit) ?: return emptyList()
+    return backupQueryDao.candidates(query).map { it.toCandidate(sources) }
+  }
+
+  private fun BackupCandidateRow.toCandidate(sources: Set<CatalogSource>): CatalogBackupCandidate {
+    val place = CatalogPhonePlace(
+      volume = checkNotNull(volume) { "Candidato senza volume." },
+      mediaStoreId = checkNotNull(mediaStoreId) { "Candidato senza _ID." },
+      mediaStoreVersion = checkNotNull(mediaStoreVersion) { "Candidato senza versione del MediaStore." },
+    )
+    // La sorgente: per `MediaSource` se e' una di quelle scelte, altrimenti la cartella in cui sta la riga scelta.
+    val chosen: CatalogSource = when {
+      source == MediaSource.CAMERA.code && CatalogSource.Camera in sources -> CatalogSource.Camera
+      source == MediaSource.SCREENSHOT.code && CatalogSource.Screenshots in sources -> CatalogSource.Screenshots
+      else -> sources.filterIsInstance<CatalogSource.Folder>().firstOrNull { it.volume == volume && it.relativePath == relativePath }
+        ?: sources.first()
+    }
+    return CatalogBackupCandidate(
+      mediaId = MediaId(mediaId),
+      versionId = VersionId(versionId),
+      phone = place,
+      stamp = FileStamp(stampSize, stampModifiedAt, stampGeneration),
+      size = versionSize,
+      kind = enumByCode<MediaKind>(kind),
+      source = chosen,
+      localDay = localDay.takeIf { it != 0 },
+      dateEstimated = dateEstimated,
+      fileName = checkNotNull(displayName) { "Candidato senza nome." },
+      sortTime = sortTime,
+      quickHash = QuickHash(quickHash),
+      original = isOriginal,
+    )
+  }
+
+  /**
+   * I conteggi della sicurezza dei media propri delle [sources] (`BackupCatalog.safetyCounts`): per stato e i problemi del
+   * backup per codice. Legge i derivati (`safety`) e la tabella dei problemi: nessun grafo.
+   */
+  suspend fun safetyCounts(sources: Set<CatalogSource>): CatalogSafetyCounts {
+    val me = localAccount.value
+    val byStatus = BackupQueries.safetyByStatus(me, sources)?.let { backupQueryDao.statusCounts(it) }?.associate { it.status to it.count }
+      ?: return CatalogSafetyCounts.ZERO
+    val problems = BackupQueries.problemsByCode(me, sources)?.let { backupQueryDao.codeCounts(it) }.orEmpty().associate { it.code to it.count }
+    return CatalogSafetyCounts(
+      safe = byStatus[SafetyStatus.SAFE.code] ?: 0,
+      unverified = byStatus[SafetyStatus.PRIVATE_COPY_UNVERIFIED.code] ?: 0,
+      onlyCommonCopy = byStatus[SafetyStatus.ONLY_COMMON_COPY.code] ?: 0,
+      noNasCopy = byStatus[SafetyStatus.NO_NAS_COPY.code] ?: 0,
+      lost = byStatus[SafetyStatus.LOST.code] ?: 0,
+      problems = problems,
+    )
+  }
+
+  /**
+   * D8 (`BackupCatalog.privateCopies`): le copie dell'area privata [share] **del proprietario** (l'account del dispositivo) con la
+   * stessa [size] (e lo stesso `qh1`, se noto) in **qualunque cartella**, anche i vecchi backup fatti con altri strumenti (§2.11).
+   * Mai un'altra area privata, mai l'area comune. Sono solo candidati: decide la rilettura completa (F4-D8). Dall'indice
+   * (`size`, `quick_hash`) di `media_version`.
+   */
+  suspend fun privateCopies(share: String, size: Long, quickHash: QuickHash?, limit: Int): List<CatalogNasCopy> {
+    require(limit > 0) { "Il tetto e' positivo." }
+    val query = BackupQueries.privateCopies(localAccount.value, Location.Nas.shareKeyOf(share), size, quickHash?.hex, limit)
+    return backupQueryDao.nasCopies(query).map { it.toNasCopy() }
+  }
+
+  /**
+   * Le copie private da rileggere per [scope] (`BackupCatalog.verifyCandidates`, D14), al massimo [limit]: le non verificate (in
+   * ordine di identita'), `FULL_HASH` (le fasi in coda, le piu' vecchie prima; [CatalogCopyToVerify.expected] null) e la
+   * **rotazione** (dalla verifica piu' vecchia, Q10: dall'indice `account_id`, `share_key`, `verified_at`, senza ordinare in
+   * memoria). Solo l'area privata dell'account del dispositivo; con piu' aree private si fondono liste gia' ordinate, al
+   * massimo [limit] per area.
+   */
+  suspend fun verifyCandidates(scope: CatalogVerifyScope, limit: Int): List<CatalogCopyToVerify> {
+    require(limit > 0) { "Il tetto e' positivo." }
+    val me = localAccount.value
+    val shares = backupQueryDao.privateShareKeys(me)
+    val rows: List<NasCopyRow> = when (scope) {
+      CatalogVerifyScope.Unverified ->
+        shares.flatMap { backupQueryDao.nasCopies(BackupQueries.unverified(me, it, limit)) }.sortedBy { it.locationId }
+      CatalogVerifyScope.Rotation ->
+        shares.flatMap { backupQueryDao.nasCopies(BackupQueries.rotation(me, it, limit)) }
+          .sortedWith(compareBy<NasCopyRow>({ it.verifiedAt }, { it.locationId }))
+      CatalogVerifyScope.FullHash -> backupQueryDao.nasCopies(BackupQueries.fullHash(me, limit))
+      is CatalogVerifyScope.OnTheSpot -> {
+        val ids = scope.media.mapNotNull { resolve(it)?.value }.distinct()
+        buildList {
+          for (chunk in ids.chunked(BackupQueries.MAX_IDS)) {
+            for (share in shares) {
+              if (size >= limit) break
+              addAll(backupQueryDao.nasCopies(BackupQueries.onTheSpot(me, share, chunk, limit - size)))
+            }
+          }
+        }
+      }
+    }
+    return rows.take(limit).map { row ->
+      CatalogCopyToVerify(row.toNasCopy(), row.size, row.fullHash?.let(::Sha256), row.verifiedAt)
+    }
+  }
+
+  /**
+   * L'hash completo calcolato **qui** dai byte originali (`BackupCatalog.recordFullHash`, D10): serve prima di attaccare una
+   * copia verificata. Se la versione non lo aveva lo impara (e con lui la fase `FULL_HASH` e un eventuale gruppo
+   * `PROBABLE_DUPLICATE`, come per [record]); lo stesso hash e' [FullHashRecord.SAME]; uno diverso e' [FullHashRecord.CONFLICT]
+   * (i byte letti non sono quelli della versione, E-B15) e l'hash noto non cambia.
+   *
+   * **In ogni esito la fase `FULL_HASH` di quella versione si chiude**, cosi' non si ripete a ogni giro: con l'hash noto
+   * ([FullHashRecord.RECORDED], [FullHashRecord.SAME], [FullHashRecord.CONFLICT]) e' fatta; con una versione che non c'e' o non
+   * e' di quel media ([FullHashRecord.UNKNOWN_VERSION]) e' "arresa" (`GAVE_UP`: fuori dalla coda, ma una nuova richiesta di
+   * `requestWork` la rimette in coda). Nessuna di queste chiusure tocca l'indice della timeline.
+   */
+  suspend fun recordFullHash(mediaId: MediaId, versionId: VersionId, sha256: Sha256): FullHashRecord = write { tx ->
+    val entity = versionDao.get(versionId.value)
+    val owner = resolve(mediaId)
+    if (entity == null || owner == null || entity.mediaId != owner.value) {
+      closeFullHashWork(listOfNotNull(owner, entity?.let { MediaId(it.mediaId) }), versionId, entity?.fullHash != null)
+      return@write FullHashRecord.UNKNOWN_VERSION
+    }
+    when {
+      entity.fullHash == null -> {
+        learnFullHash(tx, versionId, Fingerprint(entity.size, QuickHash(entity.quickHash), sha256))
+        closeFullHashWork(listOf(owner), versionId, hashKnown = true)
+        FullHashRecord.RECORDED
+      }
+      entity.fullHash == sha256.hex -> {
+        closeFullHashWork(listOf(owner), versionId, hashKnown = true)
+        FullHashRecord.SAME
+      }
+      else -> {
+        closeFullHashWork(listOf(owner), versionId, hashKnown = true)
+        FullHashRecord.CONFLICT
+      }
+    }
+  }
+
+  /**
+   * Chiude la fase `FULL_HASH` ancora da fare dei [medias] che riguarda [versionId] (o nessuna versione, o una che non c'e'
+   * piu'): `DONE` se la versione ha un hash completo noto, altrimenti `GAVE_UP`. Fuori dalla coda in tutti e due i casi.
+   */
+  private suspend fun closeFullHashWork(medias: List<MediaId>, versionId: VersionId, hashKnown: Boolean) {
+    val now = clock()
+    val status = if (hashKnown) WorkStatus.DONE else WorkStatus.GAVE_UP
+    for (media in medias.distinct()) {
+      workDao.forMedia(media.value)
+        .filter { it.stage == WorkStage.FULL_HASH.code && it.status != WorkStatus.DONE.code && it.status != status.code }
+        .filter { row -> row.versionId == null || row.versionId == versionId.value || versionDao.get(row.versionId) == null }
+        .forEach { row -> workDao.upsert(listOf(row.copy(status = status.code, lastError = null, updatedAt = now))) }
+    }
+  }
+
+  /**
+   * Il problema del backup di un media (`BackupCatalog.markProblem`, D15): [code] e' un `BackupProblemCode`, null lo toglie.
+   * Con [marksCell] (come `BackupProblemCode.marksMedia`) il catalogo accende [CellFlags.BACKUP_PROBLEM] **nella stessa
+   * transazione** e toglie il media dai candidati (un media con la verifica fallita tre volte non si ricarica all'infinito).
+   * Un problema vale per un media **non al sicuro**: su un media al sicuro non resta (e se il media torna al sicuro il problema
+   * di prima si toglie da solo). Dopo `markVerified(.., falso)` si segna il problema, non prima.
+   */
+  suspend fun markBackupProblem(mediaId: MediaId, code: String?, marksCell: Boolean = true): Unit = write { tx ->
+    val id = resolve(mediaId) ?: return@write
+    if (code == null) problemDao.delete(id.value) else problemDao.upsert(BackupProblemEntity(id.value, code, marksCell, clock()))
+    tx.touch(id)
+  }
+
+  /**
+   * D9 (`BackupCatalog.onlyCommonCopies`): i media propri la cui sola copia sul NAS e' nell'area **comune**, una riga per versione
+   * da proteggere senza copia privata e con una copia comune presente. [ids] null = tutti, altrimenti solo questi media.
+   * Mai una share di area sconosciuta: potrebbe essere un'area privata altrui.
+   */
+  suspend fun onlyCommonCopies(ids: Collection<MediaId>?, limit: Int): List<CatalogGuardCandidate> {
+    require(limit > 0) { "Il tetto e' positivo." }
+    val me = localAccount.value
+    val rows: List<NasCopyRow> = if (ids == null) {
+      backupQueryDao.nasCopies(BackupQueries.onlyCommonCopies(me, null, limit))
+    } else {
+      buildList {
+        for (chunk in ids.mapNotNull { resolve(it)?.value }.distinct().chunked(BackupQueries.MAX_IDS)) {
+          if (size >= limit) break
+          addAll(backupQueryDao.nasCopies(BackupQueries.onlyCommonCopies(me, chunk, limit - size)))
+        }
+      }
+    }
+    return rows.map { row ->
+      val copy = row.toNasCopy()
+      CatalogGuardCandidate(
+        common = copy,
+        size = row.size,
+        fullHash = row.fullHash?.let(::Sha256),
+        quickHash = row.quickHash?.let(::QuickHash),
+        localDay = row.localDay.takeIf { it != 0 },
+        fileName = copy.path.fileName,
+      )
+    }
+  }
+
+  /**
+   * Lo stato di sicurezza di un media per il viewer (`BackupCatalog.mediaSafety`): lo stato derivato, l'ultima verifica di una sua
+   * copia privata presente e il problema del backup, se c'e'. Null se il media non esiste (un alias vale per il sopravvissuto).
+   */
+  suspend fun mediaSafety(mediaId: MediaId): CatalogMediaSafety? {
+    val id = resolve(mediaId) ?: return null
+    val row = mediaDao.get(id.value) ?: return null
+    return CatalogMediaSafety(
+      status = enumByCode<SafetyStatus>(row.safety),
+      verifiedAtMillis = backupQueryDao.lastPrivateVerification(id.value, localAccount.value),
+      problem = problemDao.get(id.value)?.code,
+    )
+  }
+
+  /**
+   * La riga del telefono attuale di una versione (`BackupCatalog.phoneRefOf`, E-P12): la copia presente piu' vecchia con un `_ID`
+   * valido per la versione attuale del MediaStore del suo volume. Null se il catalogo non la sa (finche' la lettura del telefono
+   * non l'ha riletta dopo una rinumerazione): l'elemento aspetta. Il media puo' essere un alias.
+   */
+  suspend fun phoneRefOf(mediaId: MediaId, versionId: VersionId): CatalogPhonePlace? {
+    val owner = resolve(mediaId) ?: return null
+    if (versionDao.get(versionId.value)?.mediaId != owner.value) return null
+    val row = backupQueryDao.phonePlace(versionId.value).firstOrNull() ?: return null
+    return CatalogPhonePlace(row.volume, row.mediaStoreId, row.mediaStoreVersion)
+  }
+
+  /**
+   * Dove sta ogni versione di un media (5B, §1.3; riga "Backup" e "Versioni" del viewer): per ogni versione, dalla piu' vecchia, le sue
+   * posizioni con l'area della share se sono sul NAS. Vuoto se il media non esiste.
+   */
+  suspend fun versionLocations(mediaId: MediaId): List<VersionLocations> {
+    val media = media(mediaId) ?: return emptyList()
+    val areas = areas()
+    return media.versions.sortedWith(compareBy({ it.createdAtMillis }, { it.id.value })).map { version ->
+      VersionLocations(
+        versionId = version.id,
+        kind = version.kind,
+        isCurrent = version.id == media.currentVersionId,
+        size = version.fingerprint.size,
+        fullHash = version.fingerprint.fullHash,
+        locations = media.locationsOf(version.id).sortedBy { it.id.value }.map { located ->
+          VersionLocation(located, (located.location as? Location.Nas)?.let { areas.areaOf(it.account, it.shareKey) })
+        },
+      )
+    }
+  }
+
+  private fun NasCopyRow.toNasCopy(): CatalogNasCopy = CatalogNasCopy(
+    locationId = LocationId(locationId),
+    mediaId = MediaId(mediaId),
+    versionId = VersionId(versionId),
+    share = checkNotNull(shareName) { "Copia sul NAS senza share." },
+    path = NasPath.of(checkNotNull(nasPath) { "Copia sul NAS senza percorso." }),
+    stamp = NasStamp(size, modifiedAt, fileId),
+  )
+
+  // --- Copie simili (D36, §2.12): le operazioni per il rilevatore (P15) --------------------------------------------------------
+
+  /**
+   * Una pagina dei candidati alle copie simili a partire dal secondo [fromSecond] (epoca, secondi): i media che hanno almeno un
+   * altro candidato dello stesso tipo nello **stesso secondo di scatto letto dai metadati** (mai nome o data del file, mai una
+   * stima), visibili da qualche parte e fuori da raffiche, coppie RAW+JPEG e `PROBABLE_DUPLICATE` (§2.12 condizioni 1, 2, 5),
+   * raggruppati per secondo e tipo. Per `sort_time` dall'indice (`sort_time`, `media_id`): nessun ordinamento in memoria.
+   * Una pagina non spezza mai un secondo; [SimilarRunsPage.nextSecond] e' da dove riprendere, null a fine corsa. Proporzione,
+   * durata e firma (condizioni 3 e 4) sono del rilevatore: ogni candidato porta [SimilarCandidate.aspectMilli] e
+   * [SimilarCandidate.durationMs].
+   */
+  suspend fun similarRuns(fromSecond: Long, limit: Int): SimilarRunsPage {
+    require(limit > 0) { "Il tetto e' positivo." }
+    val rows = similarDao.runRows(fromSecond * MILLIS_PER_SECOND, limit)
+    if (rows.size < limit) return SimilarRunsPage(similarRunsOf(rows.map { it.toSimilar() }), null)
+    // Pagina piena: l'ultimo secondo puo' continuare, quindi si rilegge intero e la pagina arriva fino a li'.
+    val lastSecond = Math.floorDiv(rows.last().sortTime, MILLIS_PER_SECOND)
+    val complete = rows.filter { Math.floorDiv(it.sortTime, MILLIS_PER_SECOND) < lastSecond }.map { it.toSimilar() } +
+      similarDao.secondRows(lastSecond * MILLIS_PER_SECOND, (lastSecond + 1) * MILLIS_PER_SECOND).map { it.toSimilar() }
+    return SimilarRunsPage(similarRunsOf(complete), lastSecond + 1)
+  }
+
+  /** I gruppi di candidati dei secondi di scatto di [ids] (dopo che META ha letto l'ora di un media nuovo): lo stesso criterio di [similarRuns]. */
+  suspend fun similarRunsFor(ids: Collection<MediaId>): List<SimilarRun> {
+    val seconds = ids.mapNotNull { resolve(it) }.distinct().mapNotNull { mediaDao.get(it.value)?.sortTime }
+      .map { Math.floorDiv(it, MILLIS_PER_SECOND) }.distinct().sorted()
+    return seconds.flatMap { second ->
+      similarRunsOf(similarDao.secondRows(second * MILLIS_PER_SECOND, (second + 1) * MILLIS_PER_SECOND).map { it.toSimilar() })
+    }
+  }
+
+  /** Quanti candidati con almeno un compagno non hanno ancora la firma dell'algoritmo [algorithm] (`SimilarCopiesProgress.pending`). */
+  suspend fun similarUnsigned(algorithm: Int): Int = similarDao.unsignedCount(algorithm)
+
+  private fun similarRunsOf(candidates: List<SimilarCandidate>): List<SimilarRun> =
+    candidates.groupBy { it.second to it.isVideo }.filterValues { it.size >= 2 }.map { (key, list) -> SimilarRun(key.first, list) }
+      .sortedBy { it.second }
+
+  private fun SimilarCandidateRow.toSimilar(): SimilarCandidate = SimilarCandidate(
+    mediaId = MediaId(mediaId),
+    versionId = VersionId(versionId),
+    kind = enumByCode<MediaKind>(kind),
+    takenAtUtcMillis = sortTime,
+    aspectMilli = aspectMilli,
+    durationMs = durationMs,
+    group = groupId?.let(::MediaGroupId),
+    signatureAlgorithm = signatureAlgorithm,
+  )
+
+  /**
+   * Salva la firma visiva di una versione (D36): **solo locale**, una per versione; una firma di un altro algoritmo sostituisce la
+   * vecchia (si ricalcola). Falso se la versione non esiste (piu'). Non tocca l'indice della timeline.
+   */
+  suspend fun saveSignature(versionId: VersionId, signature: VisualSignature): Boolean = write {
+    if (versionDao.get(versionId.value) == null) return@write false
+    signatureDao.upsert(VisualSignatureEntity(versionId.value, signature.algorithm, signature.frames, signature.bytes(), clock()))
+    true
+  }
+
+  /** La firma salvata per la versione; null se manca o se la riga e' rovinata (una firma illeggibile non si confronta: si ricalcola). */
+  suspend fun signatureOf(versionId: VersionId): VisualSignature? = signatureDao.get(versionId.value)?.toSignature()
+
+  /** Le firme salvate delle versioni (quelle che mancano o sono rovinate non compaiono). */
+  suspend fun signaturesOf(versionIds: Collection<VersionId>): Map<VersionId, VisualSignature> =
+    versionIds.map { it.value }.distinct().chunked(TimelineIndexDao.MAX_IDS).flatMap { signatureDao.forVersions(it) }
+      .mapNotNull { row -> row.toSignature()?.let { VersionId(row.versionId) to it } }.toMap()
+
+  private fun VisualSignatureEntity.toSignature(): VisualSignature? =
+    runCatching { VisualSignature.of(algorithm, frames, data) }.getOrNull()
+
+  /**
+   * Raggruppa [members] come copie dello stesso scatto (`SIMILAR_COPIES`, §2.12), con [cover] come copertina: in Libreria resta
+   * una cella sola. **Rifiuta, senza scrivere nulla**, se un membro sta gia' in una raffica, in una coppia RAW+JPEG o in un
+   * `PROBABLE_DUPLICATE` (non si spostano: E-L12, "nel dubbio non si unisce"), se ci sono meno di due media diversi (dopo gli
+   * alias) o se la copertina non e' un membro. I membri che erano in un altro gruppo di copie simili lo lasciano (un gruppo
+   * rimasto con meno di due media si scioglie): chi chiama passa **tutti** i membri che vuole nel gruppo.
+   *
+   * **Nascosto contagioso (E-H1, regola di sicurezza)**: se anche un solo membro e' nascosto, nella stessa transazione lo
+   * diventano tutti, con `hidden_changed_at` come per ogni nascondere, cosi' la sincronizzazione dei dati personali lo vede:
+   * la stessa foto non deve ricomparire dalla porta della sua copia. La scelta della copertina e' di P15.
+   */
+  suspend fun groupSimilar(members: Collection<MediaId>, cover: MediaId): SimilarGroupOutcome = write { tx ->
+    val resolved = LinkedHashSet<MediaId>()
+    for (member in members) {
+      resolved += resolve(member)
+        ?: return@write SimilarGroupOutcome.Refused(SimilarRefusal.UNKNOWN_MEDIA, mapOf(member to SimilarRefusal.UNKNOWN_MEDIA))
+    }
+    if (resolved.size < 2) return@write SimilarGroupOutcome.Refused(SimilarRefusal.TOO_FEW_MEMBERS, emptyMap())
+    val coverId = resolve(cover)
+    if (coverId == null || coverId !in resolved) return@write SimilarGroupOutcome.Refused(SimilarRefusal.COVER_NOT_A_MEMBER, emptyMap())
+
+    val offenders = LinkedHashMap<MediaId, SimilarRefusal>()
+    for (id in resolved) {
+      val group = mediaDao.get(id.value)?.groupId ?: continue
+      when (groupKind(tx, group)) {
+        MediaGroupKind.BURST.code -> offenders[id] = SimilarRefusal.IN_BURST
+        MediaGroupKind.RAW_JPEG_PAIR.code -> offenders[id] = SimilarRefusal.IN_RAW_JPEG_PAIR
+        MediaGroupKind.PROBABLE_DUPLICATE.code -> offenders[id] = SimilarRefusal.IN_PROBABLE_DUPLICATE
+      }
+    }
+    if (offenders.isNotEmpty()) return@write SimilarGroupOutcome.Refused(offenders.values.first(), offenders)
+
+    val oldGroups = resolved.mapNotNull { mediaDao.get(it.value)?.groupId }.toSet()
+    val anyHidden = resolved.any { personalDao.get(it.value)?.hidden == true }
+    val group = groupInTransaction(tx, MediaGroupKind.SIMILAR_COPIES, resolved, coverId)
+    if (anyHidden) {
+      for (id in resolved) {
+        val current = personalDao.get(id.value)?.toDomain() ?: PersonalFlags()
+        writePersonal(tx, id, current.copy(hidden = true), spread = false)
+      }
+    }
+    SimilarGroupOutcome.Grouped(group, resolved.toList(), hidden = anyHidden, dissolved = oldGroups.count { mediaDao.group(it) == null })
+  }
+
+  /**
+   * "Separa" (E-L13): [member] esce dal suo gruppo di copie simili. Un gruppo rimasto con meno di due media **si scioglie**. Se
+   * [member] era la copertina ne resta una provvisoria (la piu' recente) e [SeparateOutcome.Separated.coverChanged] lo dice: il
+   * rilevatore rivaluta la sua regola. **Il nascosto non cambia mai**: separare non mostra niente. Che la separazione valga per
+   * sempre e su tutti i dispositivi (dato personale) e' di P15.
+   */
+  suspend fun separate(member: MediaId): SeparateOutcome = write { tx ->
+    val id = resolve(member) ?: return@write SeparateOutcome.NotInGroup
+    val group = mediaDao.get(id.value)?.groupId ?: return@write SeparateOutcome.NotInGroup
+    val groupRow = mediaDao.group(group)?.takeIf { it.kind == MediaGroupKind.SIMILAR_COPIES.code } ?: return@write SeparateOutcome.NotInGroup
+    mediaDao.setGroup(id.value, null, clock())
+    tx.touch(id)
+    tx.markChanged(id, structural = true)
+    val coverChanged = groupRow.coverMediaId == id.value
+    val rest = mediaDao.groupMembers(group)
+    if (rest.size < 2) {
+      dissolve(tx, group)
+      SeparateOutcome.Separated(null, rest.map { MediaId(it.mediaId) }, dissolved = true, coverChanged = coverChanged)
+    } else {
+      if (coverChanged) mediaDao.setGroupCover(group, rest.maxWith(compareBy<MediaEntity>({ it.sortTime }, { it.mediaId })).mediaId)
+      tx.dirtyGroups += group
+      SeparateOutcome.Separated(MediaGroupId(group), rest.map { MediaId(it.mediaId) }, dissolved = false, coverChanged = coverChanged)
+    }
+  }
+
+  /**
+   * "Mostra questa come principale": [media] diventa la copertina del gruppo di copie simili [group]. Falso se il gruppo non
+   * esiste, non e' di copie simili o [media] non ne e' un membro. La scelta dell'utente (dato personale) e' di P15.
+   */
+  suspend fun setSimilarCover(group: MediaGroupId, media: MediaId): Boolean = write { tx ->
+    val id = resolve(media) ?: return@write false
+    val row = mediaDao.group(group.value)?.takeIf { it.kind == MediaGroupKind.SIMILAR_COPIES.code } ?: return@write false
+    if (mediaDao.get(id.value)?.groupId != group.value) return@write false
+    if (row.coverMediaId != id.value) {
+      mediaDao.setGroupCover(group.value, id.value)
+      tx.dirtyGroups += group.value
+    }
+    true
+  }
+
+  /** Il gruppo di copie simili di [mediaId] con le sue copie (striscia del viewer, scelta della copertina), o null se non ne ha uno. */
+  suspend fun similarGroupOf(mediaId: MediaId): SimilarGroupInfo? {
+    val id = resolve(mediaId) ?: return null
+    return mediaDao.get(id.value)?.groupId?.let { similarGroup(MediaGroupId(it)) }
+  }
+
+  /** Il gruppo di copie simili [group], o null se non c'e' o e' d'un altro tipo. */
+  suspend fun similarGroup(group: MediaGroupId): SimilarGroupInfo? {
+    val row = mediaDao.group(group.value)?.takeIf { it.kind == MediaGroupKind.SIMILAR_COPIES.code } ?: return null
+    val areas = areas()
+    val members = mediaDao.groupMembers(group.value).mapNotNull { mediaDao.graph(it.mediaId) }.map { graph ->
+      val media = graph.toDomain()
+      val metadata = graph.versions.firstOrNull { it.version.versionId == graph.media.currentVersionId }?.metadata
+      val present = media.locations.filter { it.isPresent }
+      val nas = present.mapNotNull { it.location as? Location.Nas }
+      SimilarMember(
+        mediaId = media.id,
+        versionId = media.currentVersionId,
+        kind = media.kind,
+        bytes = media.currentVersion.fingerprint.size,
+        width = metadata?.width,
+        height = metadata?.height,
+        orientationDegrees = metadata?.orientation ?: 0,
+        durationMs = metadata?.durationMs,
+        mime = metadata?.mimeType,
+        sortTime = graph.media.sortTime,
+        onPhone = present.any { it.isPhone },
+        onNasPrivate = nas.any { areas.areaOf(it.account, it.shareKey) == NasArea.PRIVATE },
+        onNasCommon = nas.any { areas.areaOf(it.account, it.shareKey) == NasArea.COMMON },
+        hidden = personalDao.get(media.id.value)?.hidden == true,
+        safety = enumByCode<SafetyStatus>(graph.media.safety),
+        backupProblem = CellFlags.has(graph.media.cellFlags, CellFlags.BACKUP_PROBLEM),
+      )
+    }
+    return SimilarGroupInfo(group, row.coverMediaId?.let(::MediaId), members, hidden = members.any { it.hidden })
+  }
+
+  /** Gli identificativi dei gruppi di copie simili in ordine, dopo [after] (null = dall'inizio): per rivalutarli a giri. */
+  suspend fun similarGroupIds(after: MediaGroupId?, limit: Int): List<MediaGroupId> {
+    require(limit > 0) { "Il tetto e' positivo." }
+    return similarDao.groupIds(after?.value.orEmpty(), limit).map { MediaGroupId(it.groupId) }
+  }
 
   // --- Letture ---------------------------------------------------------------------------------------
 
@@ -1293,6 +1817,12 @@ class MediaCatalog(
       mergeDao.repointWorkVersion(from.value, to.value)
       mergeDao.repointEmbeddingVersion(from.value, to.value)
       mergeDao.repointParents(from.value, to.value)
+      // v4: il diario del backup, le firme visive e le tabelle della 5B seguono la versione.
+      mergeDao.repointBackupItemVersion(from.value, to.value)
+      mergeDao.repointSignature(from.value, to.value)
+      mergeDao.repointPendingTaskVersion(from.value, to.value)
+      mergeDao.repointEditSessionVersion(from.value, to.value)
+      mergeDao.repointFreeSpaceItemVersion(from.value, to.value)
     }
     // 2. Le altre versioni passano al sopravvissuto, con posizioni e metadati.
     plan.movedVersions.forEach { mergeDao.moveVersion(it.id.value, survivor, it.parentId?.value) }
@@ -1309,6 +1839,12 @@ class MediaCatalog(
     mergeDao.copyAlbumItems(loser, survivor)
     mergeDao.repointAlbumCovers(loser, survivor)
     mergeDao.repointGroupCovers(loser, survivor)
+    // v4: nessuna riga del diario, del problema o delle attivita' si perde con il perdente.
+    mergeDao.repointBackupItemMedia(loser, survivor)
+    mergeDao.repointBackupProblem(loser, survivor)
+    mergeDao.repointPendingTaskMedia(loser, survivor)
+    mergeDao.repointEditSessionMedia(loser, survivor)
+    mergeDao.repointFreeSpaceItemMedia(loser, survivor)
 
     // 5. Vettori: per ogni spazio e indice, quello calcolato dalla versione corrente.
     val survivorVectors = embeddingDao.forMedia(survivor).associateBy { slotOf(it) }
@@ -1343,12 +1879,16 @@ class MediaCatalog(
       ),
     )
     mediaDao.delete(loser)
-    // Il gruppo del perdente perde un membro: la sua copertina si ricalcola.
-    loserRow.groupId?.let { tx.dirtyGroups += it }
+    // Il gruppo del perdente perde un membro: la sua copertina si ricalcola; un gruppo di copie simili rimasto con un media solo si scioglie.
+    loserRow.groupId?.let { old ->
+      if (mediaDao.group(old)?.kind == MediaGroupKind.SIMILAR_COPIES.code) dissolveIfAlone(tx, old) else tx.dirtyGroups += old
+    }
     tx.touch(plan.survivor)
     tx.touch(plan.loser)
     tx.markChanged(plan.survivor, structural = true)
     tx.markChanged(plan.loser, structural = true)
+    // Il media unito e' nascosto (nel dubbio si nasconde): se sta in un gruppo di copie simili lo sono tutte (E-H1).
+    if (personalDao.get(survivor)?.hidden == true) spreadHidden(tx, plan.survivor, true)
     return MergeOutcome.Merged(plan.survivor, plan.loser)
   }
 
@@ -1372,8 +1912,12 @@ class MediaCatalog(
     mediaDao.get(entity.mediaId)?.groupId?.let { settleProbableDuplicate(tx, it) }
   }
 
-  /** Scrive i flag personali di [id] se cambiano, con l'istante del cambio di ciascuno. */
-  private suspend fun writePersonal(tx: Tx, id: MediaId, flags: PersonalFlags) {
+  /**
+   * Scrive i flag personali di [id] se cambiano, con l'istante del cambio di ciascuno. **Nascondere o mostrare un media di un
+   * gruppo di copie simili vale per tutte le copie** (D36, E-H1): [spread] lo propaga ai compagni passando da qui, quindi anche
+   * per loro si registra `hidden_changed_at` e la sincronizzazione dei dati personali vede il cambiamento.
+   */
+  private suspend fun writePersonal(tx: Tx, id: MediaId, flags: PersonalFlags, spread: Boolean = true) {
     val row = personalDao.get(id.value)
     val before = row?.toDomain() ?: PersonalFlags()
     if (before == flags) return
@@ -1389,7 +1933,21 @@ class MediaCatalog(
       ),
     )
     tx.touch(id)
-    if (flags.hidden != before.hidden) tx.markChanged(id, structural = true)
+    if (flags.hidden != before.hidden) {
+      tx.markChanged(id, structural = true)
+      if (spread) spreadHidden(tx, id, flags.hidden)
+    }
+  }
+
+  /** Il nascosto di [id] passa a tutte le altre copie del suo gruppo di copie simili, se ne ha uno (E-H1). */
+  private suspend fun spreadHidden(tx: Tx, id: MediaId, hidden: Boolean) {
+    val group = mediaDao.get(id.value)?.groupId ?: return
+    if (groupKind(tx, group) != MediaGroupKind.SIMILAR_COPIES.code) return
+    mediaDao.groupMembers(group).forEach { member ->
+      if (member.mediaId == id.value) return@forEach
+      val current = personalDao.get(member.mediaId)?.toDomain() ?: PersonalFlags()
+      if (current.hidden != hidden) writePersonal(tx, MediaId(member.mediaId), current.copy(hidden = hidden), spread = false)
+    }
   }
 
   /**
@@ -1464,6 +2022,10 @@ class MediaCatalog(
     var cellFlags: Int,
     val thumbHash: ByteArray?,
     val hidden: Boolean,
+    /** v4: il media e' un candidato del backup (`TimelineRules.backupTodo`). */
+    val backupTodo: Boolean,
+    /** v4: il media e' tornato al sicuro e un problema del backup di prima non vale piu': la riga si toglie. */
+    val staleProblem: Boolean,
   ) {
     val visible: Boolean get() = presence != Presence.NONE && !hidden
   }
@@ -1492,11 +2054,17 @@ class MediaCatalog(
 
     groups.forEach { group ->
       val members = derived.values.filter { it.row.groupId == group }
-      val cover = TimelineRules.groupCover(
-        members.map { GroupMember(MediaId(it.row.mediaId), it.sortTime, it.visible) },
-        mediaDao.group(group)?.coverMediaId?.let(::MediaId),
-      )
+      val list = members.map { GroupMember(MediaId(it.row.mediaId), it.sortTime, it.visible) }
+      val designated = mediaDao.group(group)?.coverMediaId?.let(::MediaId)
+      val similar = groupKind(tx, group) == MediaGroupKind.SIMILAR_COPIES.code
+      // Copie simili (D36, E-H1): il nascosto e' contagioso, quindi con una copia nascosta nessuna rappresenta il gruppo.
+      val cover = if (similar) TimelineRules.similarCopiesCover(list, designated, members.any { it.hidden }) else TimelineRules.groupCover(list, designated)
+      val memberFlags = members.map { it.cellFlags }
       members.forEach { it.cellFlags = TimelineRules.withGroupRole(it.cellFlags, inGroup = true, isCover = it.row.mediaId == cover?.value) }
+      // La cella del gruppo di copie simili riassume i segni di presenza di tutte le copie (§2.12).
+      if (similar && cover != null) {
+        derived[cover.value]?.let { it.cellFlags = TimelineRules.similarCopiesFlags(it.cellFlags, memberFlags) }
+      }
     }
     derived.values.filter { it.row.groupId == null }.forEach {
       it.cellFlags = TimelineRules.withGroupRole(it.cellFlags, inGroup = false, isCover = false)
@@ -1519,10 +2087,14 @@ class MediaCatalog(
     val sortTime = capture?.utcMillis ?: row.sortTime
     val safety = SafetyRules.evaluate(media, localAccount, areas).status
     val probableDuplicate = row.groupId?.let { groupKind(tx, it) } == MediaGroupKind.PROBABLE_DUPLICATE.code
+    // v4: il problema che il backup ha registrato; vale finche' il media non e' di nuovo al sicuro.
+    val problem = problemDao.get(row.mediaId)
+    val markedProblem = problem?.marksCell == true && safety != SafetyStatus.SAFE
+    val presence = SafetyRules.presence(media)
     return Derived(
       row = row,
       owner = owner,
-      presence = SafetyRules.presence(media),
+      presence = presence,
       safety = safety,
       sortTime = sortTime,
       // Con la data letta, il giorno nell'ora del posto; senza, quello provvisorio salvato alla prima lettura.
@@ -1538,9 +2110,11 @@ class MediaCatalog(
         metadata = metadata,
         favorite = personal?.favorite == true,
         unreadable = unreadable,
-      ) or TimelineRules.presenceFlags(media, safety, probableDuplicate),
+      ) or TimelineRules.presenceFlags(media, safety, probableDuplicate) or TimelineRules.backupProblemFlags(markedProblem, safety),
       thumbHash = metadataRow?.thumbHash,
       hidden = personal?.hidden == true,
+      backupTodo = TimelineRules.backupTodo(presence, safety, markedProblem),
+      staleProblem = problem != null && safety == SafetyStatus.SAFE,
     )
   }
 
@@ -1550,9 +2124,12 @@ class MediaCatalog(
     val id = MediaId(row.mediaId)
     val now = clock()
     if (d.owner?.value != row.ownerAccount) mediaDao.setOwner(row.mediaId, d.owner?.value, now)
+    // Un problema del backup di prima, e il media e' di nuovo al sicuro: non vale piu' (stessa transazione).
+    if (d.staleProblem) problemDao.delete(row.mediaId)
     val same = row.presence == d.presence.code && row.safety == d.safety.code && row.sortTime == d.sortTime &&
       row.localDay == d.localDay && row.aspectMilli == d.aspectMilli && row.durationMs == d.durationMs &&
-      row.placeId == d.placeId && row.cellFlags == d.cellFlags && row.thumbHash.contentEquals(d.thumbHash)
+      row.placeId == d.placeId && row.cellFlags == d.cellFlags && row.thumbHash.contentEquals(d.thumbHash) &&
+      row.backupTodo == d.backupTodo
     if (same) return
     mediaDao.updateDerived(
       mediaId = row.mediaId,
@@ -1565,8 +2142,16 @@ class MediaCatalog(
       placeId = d.placeId,
       cellFlags = d.cellFlags,
       thumbHash = d.thumbHash,
+      backupTodo = d.backupTodo,
       now = now,
     )
+    // `backup_todo` non e' nell'indice della timeline: da solo non annuncia nulla.
+    if (row.presence == d.presence.code && row.safety == d.safety.code && row.sortTime == d.sortTime && row.localDay == d.localDay &&
+      row.aspectMilli == d.aspectMilli && row.durationMs == d.durationMs && row.placeId == d.placeId && row.cellFlags == d.cellFlags &&
+      row.thumbHash.contentEquals(d.thumbHash)
+    ) {
+      return
+    }
     val wasVisible = row.presence != Presence.NONE.code
     val memberBefore = CellFlags.has(row.cellFlags, CellFlags.GROUP_MEMBER)
     val memberAfter = CellFlags.has(d.cellFlags, CellFlags.GROUP_MEMBER)
@@ -1609,6 +2194,12 @@ class MediaCatalog(
       "media_group.cover_media_id",
       "album.cover_media_id",
       "album_item.media_id",
+      // v4 (Fase 5): il diario del backup, il problema di un media e le tabelle della 5B che riguardano un media
+      "backup_item.media_id",
+      "backup_problem.media_id",
+      "pending_task.media_id",
+      "edit_session.media_id",
+      "free_space_item.media_id",
     )
 
     /**
@@ -1623,6 +2214,12 @@ class MediaCatalog(
       "version_metadata.version_id",
       "work_state.version_id",
       "embedding.version_id",
+      // v4 (Fase 5): il diario, la firma visiva e le tabelle della 5B seguono la versione
+      "backup_item.version_id",
+      "visual_signature.version_id",
+      "pending_task.version_id",
+      "edit_session.version_id",
+      "free_space_item.version_id",
     )
 
     /**
@@ -1655,6 +2252,11 @@ class MediaCatalog(
       "nas_trash_entry",
       // revisione 4A (R6): per posizione, e una posizione resta la stessa anche quando il suo media si unisce a un altro.
       "nas_adopted_fingerprint",
+      // v4 (Fase 5): per posizione, come sopra (e con cascata sulla posizione)
+      "nas_copy_mismatch",
+      // v4 (Fase 5): il giro di "Libera spazio" (i suoi elementi puntano ai media, lui no) e un file in arrivo (non e' ancora un media)
+      "free_space_run",
+      "incoming_item",
     )
 
     /**
@@ -1670,5 +2272,10 @@ class MediaCatalog(
 
     /** Tetto di posizioni per transazione delle operazioni su una share intera ([markShareUnavailable]). */
     const val DEFAULT_NAS_CAP: Int = 500
+
+    /** Il tetto di una pagina di candidati del backup (`CandidateQuery.MAX_LIMIT`). */
+    const val MAX_CANDIDATE_PAGE: Int = 1_000
+
+    private const val MILLIS_PER_SECOND: Long = 1_000L
   }
 }

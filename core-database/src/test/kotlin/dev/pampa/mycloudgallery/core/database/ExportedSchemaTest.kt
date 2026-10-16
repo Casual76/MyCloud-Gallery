@@ -19,10 +19,12 @@ import dev.pampa.mycloudgallery.core.model.NasPath
 import dev.pampa.mycloudgallery.core.model.NasShare
 import dev.pampa.mycloudgallery.core.model.NasStamp
 import dev.pampa.mycloudgallery.core.model.PlaceRef
+import dev.pampa.mycloudgallery.core.model.Presence
 import dev.pampa.mycloudgallery.core.model.SafetyStatus
 import dev.pampa.mycloudgallery.core.model.VersionKind
 import dev.pampa.mycloudgallery.core.model.WorkStage
 import dev.pampa.mycloudgallery.core.model.WorkStatus
+import dev.pampa.mycloudgallery.core.model.domain.TimelineRules
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import org.junit.Test
@@ -111,6 +113,50 @@ class ExportedSchemaTest {
     }
   }
 
+  /**
+   * 3 -> 4: `backup_todo` lo calcola la migrazione dai derivati gia' salvati, con la stessa regola del catalogo
+   * (`TimelineRules.backupTodo`), per **ogni** combinazione di presenza e sicurezza; e le tabelle nuove nascono vuote.
+   */
+  @Test
+  fun laMigrazioneDalla3CalcolaIlBackupTodoDiOgniCombinazione() = runBlocking<Unit> {
+    val combos = Presence.entries.flatMap { presence -> SafetyStatus.entries.map { presence to it } }
+    val name = "migrazione-backup-todo.db"
+    createFromSchema(3, name) { db ->
+      combos.forEachIndexed { i, (presence, safety) ->
+        val media = "00000000-0000-4000-8000-%012d".format(i)
+        val version = "10000000-0000-4000-8000-%012d".format(i)
+        db.execSQL(
+          "INSERT INTO media (media_id, kind, source, owner_account, group_id, current_version_id, created_at, updated_at, " +
+            "sort_time, presence, safety, local_day, aspect_milli, duration_ms, place_id, cell_flags, thumb_hash) VALUES " +
+            "('$media', 'photo', 'camera', 'alessio', NULL, '$version', 0, 0, ${1_760_000_000_000L - i}, '${presence.code}', " +
+            "'${safety.code}', 20251009, 1000, NULL, NULL, 0, NULL)",
+        )
+        db.execSQL(
+          "INSERT INTO media_version (version_id, media_id, kind, parent_version_id, size, quick_hash, full_hash, corrections, " +
+            "created_at) VALUES ('$version', '$media', 'original', NULL, 1000, '%064x', NULL, '', 0)".format(i),
+        )
+      }
+    }
+
+    val database = GalleryDatabase.build(context, name)
+    try {
+      val sql = database.openHelper.writableDatabase
+      sql.query("PRAGMA foreign_key_check").use { assertThat(it.count).isEqualTo(0) }
+      val todo = sql.query("SELECT media_id, backup_todo FROM media").use { cursor ->
+        buildMap { while (cursor.moveToNext()) put(cursor.getString(0), cursor.getInt(1) == 1) }
+      }
+      assertThat(todo).hasSize(combos.size)
+      combos.forEachIndexed { i, (presence, safety) ->
+        assertThat(todo.getValue("00000000-0000-4000-8000-%012d".format(i))).isEqualTo(TimelineRules.backupTodo(presence, safety, false))
+      }
+      // Solo telefono e telefono+NAS, con due stati non al sicuro (mai la sola copia comune: la crea il guardiano).
+      assertThat(todo.values.count { it }).isEqualTo(2 * 2)
+      assertThat(database.backupDiaryDao().countsByState()).isEmpty()
+    } finally {
+      database.close()
+    }
+  }
+
   // --- Creazione di un database dallo schema esportato ----------------------------------------------
 
   private fun createFromSchema(version: Int, name: String, seed: (SQLiteDatabase) -> Unit = {}): File {
@@ -194,7 +240,59 @@ object SchemaSeeds {
     1 -> seedV1(db)
     2 -> seedV2(db)
     3 -> seedV3(db)
+    4 -> seedV4(db)
     else -> error("Manca il seed della versione $version dello schema (vedi SchemaSeeds).")
+  }
+
+  // --- v4 (Fase 5) ---
+  private const val BACKUP_ITEM_ID = 1L
+  private const val SIGNATURE_HEX = "0102030405060708"
+
+  /**
+   * La v4: le righe della v3 piu' una riga in ogni tabella nuova (diario del backup con tutti i campi, problema, firma visiva,
+   * e le cinque della 5B), con i codici scritti a mano. `backup_todo` della v4 (il media del seed e' al sicuro: spento) arriva dal
+   * suo DEFAULT.
+   */
+  private fun seedV4(db: SQLiteDatabase) {
+    seedV3(db)
+    db.execSQL(
+      "INSERT INTO backup_item (item_id, kind, state, is_open, media_id, version_id, size, phone_volume, phone_ms_id, " +
+        "phone_ms_version, expected_size, expected_modified_at, expected_generation, share, planned_path, final_path, name_attempt, " +
+        "temp_path, resume_at, sha256, quick_hash, temp_size, temp_modified_at, temp_file_id, final_size, final_modified_at, " +
+        "final_file_id, verify_attempts, guard_share, guard_path, guard_size, guard_modified_at, guard_file_id, problem, created_at, " +
+        "updated_at) VALUES ($BACKUP_ITEM_ID, 'new_copy', 'uploading', 1, '$MEDIA_ID', '$VERSION_ID', 300000, 'external_primary', 42, " +
+        "'store-v1', 300000, $T0, 7, 'alessio', 'Backup/S25/2025/10/IMG_0001.jpg', 'Backup/S25/2025/10/IMG_0001 (2).jpg', 1, " +
+        "'.mycloudgallery/tmp/tablet-bk-1', 134217728, '$FULL', '$QUICK', 300000, $T0, $FILE_ID, NULL, NULL, NULL, 2, 'NAS', " +
+        "'Famiglia/IMG_0001.jpg', 300000, $T0, $FILE_ID, NULL, $T0, $T0)",
+    )
+    db.execSQL("INSERT INTO backup_problem (media_id, code, marks_cell, updated_at) VALUES ('$MEDIA_ID', 'verify_failed', 1, $T0)")
+    db.execSQL("INSERT INTO nas_copy_mismatch (location_id, size, modified_at, found_at) VALUES (2, 300000, $T0, ${T0 + 5})")
+    db.execSQL("INSERT INTO visual_signature (version_id, algorithm, frames, data, signed_at) VALUES ('$VERSION_ID', 1, 1, X'$SIGNATURE_HEX', $T0)")
+    db.execSQL(
+      "INSERT INTO pending_task (task_id, kind, state, media_id, version_id, bytes, created_at, updated_at) VALUES " +
+        "(1, 'delete_original_video', 'open', '$MEDIA_ID', '$VERSION_ID', 2500000000, $T0, $T0)",
+    )
+    db.execSQL(
+      "INSERT INTO edit_session (session_id, media_id, version_id, target, state, phone_volume, phone_ms_id, phone_ms_version, " +
+        "start_size, start_modified_at, start_generation, relative_path, taken_at_utc, cache_name, cache_sha256, started_at, " +
+        "expires_at) VALUES (1, '$MEDIA_ID', '$VERSION_ID', 'phone_view', 'open', 'external_primary', 42, 'store-v1', 300000, $T0, 7, " +
+        "'DCIM/Camera/', $T0, NULL, NULL, $T0, ${T0 + 30 * 60_000})",
+    )
+    db.execSQL(
+      "INSERT INTO free_space_run (run_id, state, filter, exclude_recent_days, plan_hash, delete_mode, item_count, total_bytes, " +
+        "batches_total, batches_done, created_at, updated_at) VALUES (1, 'ready', 'all', 30, '$SEGMENT', 'android_trash', 1, 300000, 1, 0, " +
+        "$T0, $T0)",
+    )
+    db.execSQL(
+      "INSERT INTO free_space_item (run_id, item_index, state, media_id, version_id, phone_location_id, nas_location_id, size, " +
+        "verified_size, verified_modified_at, verified_file_id, batch_index, reason, updated_at) VALUES (1, 0, 'verified', '$MEDIA_ID', " +
+        "'$VERSION_ID', 1, 2, 300000, 300000, $T0, $FILE_ID, 0, NULL, $T0)",
+    )
+    db.execSQL(
+      "INSERT INTO incoming_item (incoming_id, stage_id, state, file_name, display_name, sha256, size, mime, dest_share, dest_folder, " +
+        "backup_item_id, created_at, updated_at) VALUES (1, 'stage-1', 'queued', '$FULL', 'IMG-20251009-WA0001.jpg', '$FULL', 120000, " +
+        "'image/jpeg', 'alessio', 'Backup/S25/Ricevute', $BACKUP_ITEM_ID, $T0, $T0)",
+    )
   }
 
   // --- v3 (Fase 4) ---
@@ -507,6 +605,44 @@ object SchemaSeeds {
       assertThat(ops.items(OP_ID).single().state).isEqualTo("copied")
       assertThat(ops.expiredTrash(T0 + 1, 10).single().trashId).isEqualTo("t-1")
       assertThat(catalog.workStates(id).first { it.stage == WorkStage.FULL_HASH }.status).isEqualTo(WorkStatus.DONE)
+    }
+
+    // --- v4 (Fase 5) ---
+    // Il media del seed e' al sicuro e proprio: non e' un candidato del backup, in nessuna versione di partenza.
+    assertThat(row.backupTodo).isFalse()
+    if (fromVersion < 4) {
+      // Le tabelle nuove nascono vuote.
+      assertThat(database.backupDiaryDao().countsByState()).isEmpty()
+      assertThat(database.backupProblemDao().count()).isEqualTo(0)
+      assertThat(database.nasCopyMismatchDao().count()).isEqualTo(0)
+      assertThat(database.visualSignatureDao().count()).isEqualTo(0)
+      assertThat(database.pendingTaskDao().inState("open")).isEmpty()
+      assertThat(database.editSessionDao().inState("open")).isEmpty()
+      assertThat(database.freeSpaceDao().runsInState(listOf("ready"))).isEmpty()
+      assertThat(database.incomingDao().inState("queued")).isEmpty()
+      assertThat(catalog.mediaSafety(id)).isEqualTo(CatalogMediaSafety(SafetyStatus.SAFE, T0, null))
+    } else {
+      val item = checkNotNull(database.backupDiaryDao().get(BACKUP_ITEM_ID))
+      assertThat(item.state).isEqualTo("uploading")
+      assertThat(item.isOpen).isTrue()
+      assertThat(item.finalPath).isEqualTo("Backup/S25/2025/10/IMG_0001 (2).jpg")
+      assertThat(item.nameAttempt).isEqualTo(1)
+      assertThat(item.resumeAt).isEqualTo(134_217_728L)
+      assertThat(item.tempFileId).isEqualTo(FILE_ID)
+      assertThat(item.guardPath).isEqualTo("Famiglia/IMG_0001.jpg")
+      assertThat(database.backupDiaryDao().itemsToResume(10).map { it.itemId }).containsExactly(BACKUP_ITEM_ID)
+      assertThat(database.backupDiaryDao().citedTemps()).containsExactly(".mycloudgallery/tmp/tablet-bk-1")
+      assertThat(database.backupProblemDao().get(MEDIA_ID)!!.code).isEqualTo("verify_failed")
+      assertThat(database.nasCopyMismatchDao().get(2)!!.foundAt).isEqualTo(T0 + 5)
+      assertThat(database.visualSignatureDao().get(VERSION_ID)!!.data.toList()).isEqualTo(byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8).toList())
+      assertThat(catalog.signatureOf(dev.pampa.mycloudgallery.core.model.VersionId(VERSION_ID))!!.algorithm).isEqualTo(1)
+      assertThat(database.pendingTaskDao().inState("open").single().bytes).isEqualTo(2_500_000_000L)
+      assertThat(database.editSessionDao().inState("open").single().startGeneration).isEqualTo(7)
+      assertThat(database.freeSpaceDao().items(1).single().verifiedFileId).isEqualTo(FILE_ID)
+      assertThat(database.freeSpaceDao().forPhoneLocation(1).map { it.runId }).containsExactly(1L)
+      assertThat(database.incomingDao().get(1)!!.backupItemId).isEqualTo(BACKUP_ITEM_ID)
+      // Un problema che marca la cella su un media al sicuro non vale: lo toglie il primo ricalcolo (sotto).
+      assertThat(CellFlags.has(row.cellFlags, CellFlags.BACKUP_PROBLEM)).isFalse()
     }
 
     // I derivati scritti dalla migrazione (o dal seed) sono quelli che il catalogo calcola: ricalcolarli

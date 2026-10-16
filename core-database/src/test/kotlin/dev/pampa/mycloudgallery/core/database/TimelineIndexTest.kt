@@ -175,6 +175,96 @@ class TimelineIndexTest : CatalogTestBase() {
     assertThat(millis).isLessThan(8_000)
   }
 
+  /**
+   * Fase 5A (P1, D36): 100 mila media di cui **1.000 gruppi di copie simili** (coppie, una ogni cento celle, e un gruppo su
+   * cinquanta nascosto per intero). L'indice della timeline resta senza `USE TEMP B-TREE`, legge solo le copertine dei gruppi
+   * visibili (mai un altro membro) ed entra nello stesso budget di `centoMilaRigheSiLegganoConUnCursorEntroIlBudget`.
+   */
+  @Test
+  fun centoMilaMediaConMilleGruppiDiCopieSimiliRestanoNelBudgetSenzaOrdinareInMemoria() = runBlocking<Unit> {
+    val expected = HashSet(bulkInsert(100_000))
+    val sql = db.openHelper.writableDatabase
+    val candidates = expected.toList().sorted().take(2_000)
+    val random = Random(99)
+    var hiddenGroups = 0
+    sql.beginTransaction()
+    try {
+      val group = sql.compileStatement("INSERT INTO media_group (group_id, kind, cover_media_id, created_at) VALUES (?, 'similar_copies', ?, 0)")
+      val cover = sql.compileStatement("UPDATE media SET group_id = ?, cell_flags = cell_flags | ? WHERE media_id = ?")
+      val hide = sql.compileStatement("INSERT OR REPLACE INTO media_personal (media_id, favorite, hidden, updated_at) VALUES (?, 0, 1, 0)")
+      for (g in 0 until 1_000) {
+        val a = candidates[2 * g]
+        val b = candidates[2 * g + 1]
+        val groupId = UUID(random.nextLong(), random.nextLong()).toString()
+        group.clearBindings()
+        group.bindString(1, groupId)
+        group.bindString(2, a)
+        group.executeInsert()
+        cover.clearBindings()
+        cover.bindString(1, groupId)
+        cover.bindLong(2, (CellFlags.GROUP_COVER or CellFlags.SIMILAR_COPIES).toLong())
+        cover.bindString(3, a)
+        cover.executeUpdateDelete()
+        cover.clearBindings()
+        cover.bindString(1, groupId)
+        cover.bindLong(2, CellFlags.GROUP_MEMBER.toLong())
+        cover.bindString(3, b)
+        cover.executeUpdateDelete()
+        expected.remove(b)
+        if (g % 50 == 7) {
+          // Un gruppo nascosto per intero (E-H1): nessuna delle due copie compare, nemmeno quella dietro la copertina.
+          hiddenGroups++
+          hide.clearBindings()
+          hide.bindString(1, a)
+          hide.executeInsert()
+          hide.clearBindings()
+          hide.bindString(1, b)
+          hide.executeInsert()
+          expected.remove(a)
+        }
+      }
+      sql.setTransactionSuccessful()
+    } finally {
+      sql.endTransaction()
+    }
+    assertThat(hiddenGroups).isEqualTo(20)
+
+    val plain = planOf(TimelineIndexDao.INDEX_SQL)
+    sql.execSQL("ANALYZE")
+    val analyzed = planOf(TimelineIndexDao.INDEX_SQL)
+    println("Piano dell'indice con 1.000 gruppi di copie simili: $plain / dopo ANALYZE: $analyzed")
+    listOf(plain, analyzed).forEach { plan ->
+      assertThat(plan).contains("index_media_sort_time_media_id")
+      assertThat(plan).doesNotContain("TEMP B-TREE")
+    }
+
+    val started = System.nanoTime()
+    val ids = HashSet<String>(expected.size)
+    var covers = 0
+    withContext(Dispatchers.IO) {
+      db.timelineIndexDao().indexCursor().use { cursor ->
+        val id = cursor.getColumnIndexOrThrow("media_id")
+        val flags = cursor.getColumnIndexOrThrow("cell_flags")
+        while (cursor.moveToNext()) {
+          ids += cursor.getString(id)
+          if (cursor.getInt(flags) and CellFlags.SIMILAR_COPIES != 0) covers++
+        }
+      }
+    }
+    val millis = (System.nanoTime() - started) / 1_000_000
+    println("Indice di ${ids.size} righe con 1.000 gruppi di copie simili letto con un Cursor in $millis ms ($covers copertine di gruppo)")
+    assertThat(ids).isEqualTo(expected)
+    assertThat(covers).isEqualTo(1_000 - hiddenGroups)
+    assertThat(millis).isLessThan(8_000)
+    // Il numero sulla copertina ("2 copie") legge solo i membri visibili; costa quanto il resto della manutenzione dell'indice.
+    val sizesStarted = System.nanoTime()
+    val sizes = db.timelineIndexDao().groupSizes()
+    val sizesMillis = (System.nanoTime() - sizesStarted) / 1_000_000
+    println("groupSizes con 1.000 gruppi su 100.000 media: ${sizes.size} gruppi in $sizesMillis ms")
+    assertThat(sizes).hasSize(1_000 - hiddenGroups)
+    assertThat(sizes.all { it.size == 2 }).isTrue()
+  }
+
   /** Le righe dell'indice per identita' (patch dal flusso dei cambiamenti) oltre il limite delle variabili di SQLite. */
   @Test
   fun leRigheSiRileggonoPerIdentitaABlocchi() = runBlocking<Unit> {

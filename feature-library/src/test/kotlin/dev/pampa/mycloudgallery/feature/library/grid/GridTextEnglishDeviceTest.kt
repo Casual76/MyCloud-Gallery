@@ -35,6 +35,7 @@ class GridTextEnglishDeviceTest {
     editedFeminine = "modificata", editedMasculine = "modificato", unreadable = "non leggibile", estimated = "data stimata",
     duration = "durata %1\$s", group = "%1\$s scatti", phoneOnly = "solo sul telefono", nasOnly = "solo sul NAS",
     both = "sul telefono e sul NAS", safe = "al sicuro sul NAS", toVerify = "copia sul NAS da verificare",
+    backupProblem = "problema con il backup", similarCopies = "%1\$s copie simili",
     open = "Apri", select = "Seleziona", deselect = "Deseleziona",
     scrubber = "Scorri la timeline",
   )

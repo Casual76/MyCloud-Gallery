@@ -43,6 +43,17 @@ class GalleryFooterStatusTest {
     }
   }
 
+  /**
+   * Le tre voci del piede (rete, NAS e, dalla Fase 5A, backup) hanno **solo questi cinque toni**: `ogniTonoDelPiedeSiLegge` li verifica
+   * su ogni accento, chiaro e scuro, e quindi vale anche per la terza voce. Un sesto tono non passerebbe di qui senza essere
+   * verificato (`BackupFooterProblemsTest` di feature-library controlla che i problemi del backup ne usino solo di questi).
+   */
+  @Test
+  fun leTreVociDelPiedeUsanoSoloITreToniVerificati() {
+    assertWithMessage("toni del piede").that(GalleryFooterTone.entries.map { it.name })
+      .containsExactly("Calm", "Working", "Waiting", "Attention", "Alarm").inOrder()
+  }
+
   /** I toni sono distinti: il colore non e' l'unico segnale (c'e' sempre la frase), ma i cinque non si confondono. */
   @Test
   fun iToniSonoDiversi() {

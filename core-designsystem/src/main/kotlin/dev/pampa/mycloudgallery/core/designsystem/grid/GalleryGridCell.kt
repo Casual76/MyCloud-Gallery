@@ -11,11 +11,13 @@ import androidx.compose.material.icons.rounded.BrokenImage
 import androidx.compose.material.icons.rounded.Cloud
 import androidx.compose.material.icons.rounded.CloudDone
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.GppGood
 import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.PriorityHigh
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -125,6 +127,12 @@ data class GalleryGridCellBadges(
   val unreadable: Boolean = false,
   /** Dove sta il media (`PresenceBadge` dell'indice), o null se l'indice non lo dice (nessun NAS, libreria sintetica). */
   val presence: GalleryPresence? = null,
+  /**
+   * Fase 5 (D36): quante copie simili raccoglie la cella (la copertina di un gruppo `SIMILAR_COPIES`, `groupSizeAt`); da 2 in su si
+   * disegna il segno "copie" con il numero, in basso a sinistra accanto ai segni del contenuto. 0 = niente. Un intero: nessuna
+   * allocazione per cella.
+   */
+  val copies: Int = 0,
 ) {
   companion object {
     val None: GalleryGridCellBadges = GalleryGridCellBadges()
@@ -156,6 +164,13 @@ enum class GalleryPresence(val prominent: Boolean) {
 
   /** Copia privata verificata sul NAS (D8): al sicuro. */
   Safe(prominent = false),
+
+  /**
+   * Fase 5 (D15, `PresenceBadge.PROBLEM`): un errore del backup che chiede l'utente (illeggibile, verifica fallita tre volte, sparito
+   * prima del backup). Disco intero come gli stati che chiedono attenzione. In fondo all'enumerazione: i glifi sono indicizzati
+   * per posizione.
+   */
+  Problem(prominent = true),
 }
 
 /**
@@ -260,6 +275,8 @@ class GalleryGridCellStyle internal constructor(
   internal val broken: VectorPainter,
   /** I glifi della presenza, nell'ordine di [GalleryPresence]. */
   internal val presenceGlyphs: List<VectorPainter>,
+  /** Il glifo del segno "copie" (D36). */
+  internal val copies: VectorPainter,
   internal val textMeasurer: TextMeasurer,
   internal val badgeText: TextStyle,
   internal val selectedText: String,
@@ -342,10 +359,11 @@ fun rememberGalleryGridCellStyle(cornerScale: Float = 1f): GalleryGridCellStyle 
   val check = rememberVectorPainter(Icons.Rounded.Check)
   val broken = rememberVectorPainter(Icons.Rounded.BrokenImage)
   val presenceGlyphs = GalleryPresence.entries.map { rememberVectorPainter(it.glyph) }
+  val copies = rememberVectorPainter(Icons.Rounded.ContentCopy)
   val selectedText = stringResource(R.string.cell_selected)
   val notSelectedText = stringResource(R.string.cell_not_selected)
   val loadingText = stringResource(R.string.cell_loading)
-  return remember(scheme, density, direction, textMeasurer, badgeText, play, favorite, edited, check, broken, presenceGlyphs, selectedText, cornerScale) {
+  return remember(scheme, density, direction, textMeasurer, badgeText, play, favorite, edited, check, broken, presenceGlyphs, copies, selectedText, cornerScale) {
     GalleryGridCellStyle(
       density = density,
       layoutDirection = direction,
@@ -365,6 +383,7 @@ fun rememberGalleryGridCellStyle(cornerScale: Float = 1f): GalleryGridCellStyle 
       check = check,
       broken = broken,
       presenceGlyphs = presenceGlyphs,
+      copies = copies,
       textMeasurer = textMeasurer,
       badgeText = badgeText,
       selectedText = selectedText,
@@ -664,6 +683,10 @@ private class GalleryGridCellNode(
           translate(x, y) { with(painter) { draw(Size(s.badgeGlyph, s.badgeGlyph), colorFilter = s.onPhotoFilter) } }
           x += s.badgeGlyph + s.clusterGap
         }
+        pill.copies?.let { number ->
+          translate(x, y) { with(s.copies) { draw(Size(s.badgeGlyph, s.badgeGlyph), colorFilter = s.onPhotoFilter) } }
+          drawText(number, topLeft = Offset(x + s.badgeGlyph + s.glyphGap, (pill.size.height - number.size.height) / 2f))
+        }
       }
     }
     layout.presence?.let { disc ->
@@ -696,6 +719,8 @@ private class Pill(
   val text: TextLayoutResult? = null,
   val glyphs: List<VectorPainter> = emptyList(),
   val glyphsWidth: Float = 0f,
+  /** Il segno "copie" (D36), dopo i glifi del contenuto: il glifo e, accanto, il numero. */
+  val copies: TextLayoutResult? = null,
 )
 
 private class BadgeLayout(val start: Pill?, val end: Pill?, val presence: Pill?)
@@ -769,6 +794,7 @@ internal fun badgeSlots(
   contentGlyphs: Int,
   durationTextWidth: Float?,
   presence: GalleryPresence?,
+  copiesTextWidth: Float? = null,
 ): BadgeSlots {
   val indicator = Rect(m.inset, m.inset, m.inset + m.indicator, m.inset + m.indicator)
   if (min(width, height) < m.minSide) return BadgeSlots(null, null, null, indicator)
@@ -780,9 +806,8 @@ internal fun badgeSlots(
     end = Rect(width - m.inset - pillWidth, top, width - m.inset, top + m.badgeHeight)
   }
   var start: Rect? = null
-  if (contentGlyphs > 0) {
-    val glyphsWidth = contentGlyphs * m.glyph + (contentGlyphs - 1) * m.clusterGap
-    val pillWidth = max(m.badgeHeight, glyphsWidth + 2 * m.iconPadding)
+  if (contentGlyphs > 0 || copiesTextWidth != null) {
+    val pillWidth = max(m.badgeHeight, startContentWidth(m, contentGlyphs, copiesTextWidth) + 2 * startPadding(m, copiesTextWidth))
     val room = rowWidth - (end?.let { it.width + m.rowGap } ?: 0f)
     if (pillWidth <= room) start = Rect(m.inset, top, m.inset + pillWidth, top + m.badgeHeight)
   }
@@ -797,6 +822,22 @@ internal fun badgeSlots(
   return BadgeSlots(start, end, disc, indicator)
 }
 
+/**
+ * La larghezza di cio' che sta nella pillola in basso a sinistra: i glifi del contenuto (preferito, modificata) e, se la cella e' una
+ * pila di copie simili (D36), il glifo "copie" con il numero accanto.
+ */
+private fun startContentWidth(m: BadgeMetrics, contentGlyphs: Int, copiesTextWidth: Float?): Float {
+  val glyphs = if (contentGlyphs > 0) contentGlyphs * m.glyph + (contentGlyphs - 1) * m.clusterGap else 0f
+  if (copiesTextWidth == null) return glyphs
+  return glyphs + (if (contentGlyphs > 0) m.clusterGap else 0f) + m.glyph + m.glyphGap + copiesTextWidth
+}
+
+/** Col numero delle copie la pillola ha l'imbottitura di quelle con il testo (come la durata), senza solo i glifi quella stretta. */
+private fun startPadding(m: BadgeMetrics, copiesTextWidth: Float?): Float = if (copiesTextWidth != null) m.labeledPadding else m.iconPadding
+
+/** Il numero delle copie come si scrive nella cella: da 2 a 99, poi "99+". */
+private fun copiesLabel(copies: Int): String = if (copies > MaxCopiesShown) "$MaxCopiesShown+" else copies.toString()
+
 /** I segni della cella, misurati e messi al loro posto da [badgeSlots]. */
 private fun CacheDrawScope.layoutBadges(s: GalleryGridCellStyle, badges: GalleryGridCellBadges, size: Size): BadgeLayout? {
   val glyphs = buildList {
@@ -804,15 +845,25 @@ private fun CacheDrawScope.layoutBadges(s: GalleryGridCellStyle, badges: Gallery
     if (badges.edited) add(s.edited)
   }
   val presence = badges.presence
-  if (glyphs.isEmpty() && badges.duration == null && presence == null) return null
+  val showCopies = badges.copies > 1
+  if (glyphs.isEmpty() && badges.duration == null && presence == null && !showCopies) return null
   val text = badges.duration?.let { s.textMeasurer.measure(it, s.badgeText, maxLines = 1) }
-  val slots = badgeSlots(size.width, size.height, s.metrics, glyphs.size, text?.size?.width?.toFloat(), presence)
-  fun pill(rect: Rect, text: TextLayoutResult? = null, glyphs: List<VectorPainter> = emptyList(), glyphsWidth: Float = 0f): Pill {
+  val copiesText = if (showCopies) s.textMeasurer.measure(copiesLabel(badges.copies), s.badgeText, maxLines = 1) else null
+  val slots = badgeSlots(size.width, size.height, s.metrics, glyphs.size, text?.size?.width?.toFloat(), presence, copiesText?.size?.width?.toFloat())
+  fun pill(
+    rect: Rect,
+    text: TextLayoutResult? = null,
+    glyphs: List<VectorPainter> = emptyList(),
+    glyphsWidth: Float = 0f,
+    copies: TextLayoutResult? = null,
+  ): Pill {
     val pillSize = Size(rect.width, rect.height)
-    return Pill(rect.left, rect.top, pillSize, s.capsule(pillSize), text, glyphs, glyphsWidth)
+    return Pill(rect.left, rect.top, pillSize, s.capsule(pillSize), text, glyphs, glyphsWidth, copies)
   }
   val end = slots.end?.let { pill(it, text = text) }
-  val start = slots.start?.let { pill(it, glyphs = glyphs, glyphsWidth = glyphs.size * s.badgeGlyph + (glyphs.size - 1) * s.clusterGap) }
+  val start = slots.start?.let {
+    pill(it, glyphs = glyphs, glyphsWidth = startContentWidth(s.metrics, glyphs.size, copiesText?.size?.width?.toFloat()), copies = copiesText)
+  }
   val disc = presence?.let { p ->
     slots.presence?.let { rect ->
       pill(rect, glyphs = listOf(s.presenceGlyphs[p.ordinal]), glyphsWidth = if (p.prominent) s.metrics.presenceGlyph else s.metrics.quietGlyph)
@@ -829,6 +880,7 @@ internal val GalleryPresence.glyph: ImageVector
     GalleryPresence.ToVerify -> Icons.Rounded.HourglassTop
     GalleryPresence.Both -> Icons.Rounded.CloudDone
     GalleryPresence.Safe -> Icons.Rounded.GppGood
+    GalleryPresence.Problem -> Icons.Rounded.PriorityHigh
   }
 
 /** Un pennello che disegna [image] ritagliata al centro dentro [size] (come `ContentScale.Crop`), filtrata. */
@@ -864,6 +916,7 @@ private val QuietPresenceGlyph = 12.dp
 private val CornerReferenceCell = 100.dp
 private const val MinCornerShare = 0.45f
 private const val MaxCachedOutlines = 64
+private const val MaxCopiesShown = 99
 private const val PressedDimAlpha = 0.16f
 private const val HairlineAlpha = 0.28f
 private const val RingFillAlpha = 0.28f

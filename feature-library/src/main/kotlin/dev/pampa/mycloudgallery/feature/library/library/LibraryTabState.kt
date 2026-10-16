@@ -12,6 +12,7 @@ import dev.pampa.mycloudgallery.core.imaging.contract.ViewerImageSource
 import dev.pampa.mycloudgallery.core.imaging.noop.NoPlaceholderCache
 import dev.pampa.mycloudgallery.core.imaging.noop.NoThumbnailLoader
 import dev.pampa.mycloudgallery.core.imaging.noop.NoViewerImageSource
+import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupStatus
 import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
 import dev.pampa.mycloudgallery.core.library.contract.LibraryNasStatus
 import dev.pampa.mycloudgallery.core.library.contract.LibraryPreferences
@@ -122,6 +123,9 @@ class LibraryDebugHooks(
  * @property phone lo stato del telefono (permessi, lettura, in attesa).
  * @property nas lo stato del NAS per il piede della Libreria (Fase 4, §1.5, `LibraryNasStatus`): la capsula del NAS e il
  *   suo dettaglio (G2, `LibraryStatusBlock`). Di default [LibraryNasStatus.Idle] (nessun NAS: il piede non dice niente).
+ * @property backup lo stato del backup per il piede (Fase 5A, §1.5, D16, `LibraryBackupStatus`): la terza voce, sotto la rete e il
+ *   NAS, con gli stessi componenti. Di default [LibraryBackupStatus.Idle] (backup non configurato: il piede non dice niente). Lo
+ *   riduce `:app` da `BackupStatus` di core-backup, che la Libreria non vede.
  */
 @Stable
 class LibraryTabState(
@@ -137,6 +141,7 @@ class LibraryTabState(
   val commands: LibraryCommands = NoLibraryCommands,
   val debug: LibraryDebugHooks? = null,
   val nas: StateFlow<LibraryNasStatus> = MutableStateFlow(LibraryNasStatus.Idle),
+  val backup: StateFlow<LibraryBackupStatus> = MutableStateFlow(LibraryBackupStatus.Idle),
 ) {
   /** Quante foto e quanti video ci sono nella vista (il riepilogo in fondo). Si ricontano a ogni vista nuova. */
   var photoCount: Int by mutableIntStateOf(photoCount)

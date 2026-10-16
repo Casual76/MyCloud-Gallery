@@ -46,6 +46,10 @@ internal class GridStrings(
   val both: String,
   val safe: String,
   val toVerify: String,
+  /** Fase 5 (D15): "problema con il backup", per un media con `CellFlags.BACKUP_PROBLEM`. */
+  val backupProblem: String,
+  /** Fase 5 (D36): "%1$s copie simili", per la copertina di un gruppo `CellFlags.SIMILAR_COPIES`. */
+  val similarCopies: String,
   val open: String,
   val select: String,
   val deselect: String,
@@ -81,6 +85,8 @@ internal fun rememberGridStrings(): GridStrings {
     stringResource(R.string.grid_action_select),
     stringResource(R.string.grid_action_deselect),
     stringResource(R.string.library_scrubber),
+    stringResource(R.string.grid_desc_backup_problem),
+    stringResource(R.string.grid_desc_similar_copies),
   )
   return remember(configuration, values) {
     GridStrings(
@@ -89,7 +95,7 @@ internal fun rememberGridStrings(): GridStrings {
       editedFeminine = values[9], editedMasculine = values[10], unreadable = values[11], estimated = values[12],
       duration = values[13], group = values[14], phoneOnly = values[15], nasOnly = values[16], both = values[17],
       safe = values[18], toVerify = values[19], open = values[20], select = values[21], deselect = values[22],
-      scrubber = values[23],
+      scrubber = values[23], backupProblem = values[24], similarCopies = values[25],
     )
   }
 }
@@ -176,15 +182,18 @@ internal object GridText {
     if (CellFlags.has(flags, CellFlags.DATE_ESTIMATED)) parts += strings.estimated
     if (CellFlags.has(flags, CellFlags.UNREADABLE)) parts += strings.unreadable
     val group = snapshot.groupSizeAt(index)
-    if (group > 1) parts += strings.group.format(GalleryNumbers.format(group))
+    // Una pila di copie simili (D36) si dice "N copie simili", una raffica "N scatti": il bit distingue le due pile.
+    if (group > 1) {
+      parts += (if (CellFlags.has(flags, CellFlags.SIMILAR_COPIES)) strings.similarCopies else strings.group).format(GalleryNumbers.format(group))
+    }
     when (snapshot.presenceAt(index)) {
       PresenceBadge.PHONE_ONLY -> parts += strings.phoneOnly
       PresenceBadge.NAS_ONLY -> parts += strings.nasOnly
       PresenceBadge.BOTH -> parts += strings.both
       PresenceBadge.SAFE -> parts += strings.safe
       PresenceBadge.TO_VERIFY -> parts += strings.toVerify
-      // Fase 5 (P0, D15): segnaposto finche' P5 non porta il testo del problema del backup; mai "al sicuro".
-      PresenceBadge.PROBLEM -> parts += strings.toVerify
+      // Fase 5 (D15): un problema del backup chiede l'utente e vince su "al sicuro"; il motivo preciso sta nel viewer e nella pagina Backup.
+      PresenceBadge.PROBLEM -> parts += strings.backupProblem
       null -> Unit
     }
     return parts.joinToString(", ")

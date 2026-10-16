@@ -24,6 +24,9 @@ class GalleryCellBadgesTest {
   /** Le larghezze di testo di una durata: niente, "0:42", "12:05", "1:03:20" (in pixel, a 2,6x circa). */
   private val durations = listOf(null, 52f, 66f, 92f)
 
+  /** Il numero del segno "copie" (D36, Fase 5): niente, una cifra, due cifre, "99+" (in pixel, a 2,6x circa). */
+  private val copyNumbers = listOf(null, 14f, 28f, 42f)
+
   private fun Rect.overlapsWithGap(other: Rect, gap: Float): Boolean =
     left < other.right + gap && other.left < right + gap && top < other.bottom + gap && other.top < bottom + gap
 
@@ -36,8 +39,8 @@ class GalleryCellBadgesTest {
       val m = badgeMetrics(density)
       val sides = (64..420 step 9).map { it * density.density }
       for (w in sides) for (h in sides) {
-        for (glyphs in 0..2) for (duration in durations) for (presence in listOf(null) + GalleryPresence.entries) {
-          val slots = badgeSlots(w, h, m, glyphs, duration, presence)
+        for (glyphs in 0..2) for (duration in durations) for (presence in listOf(null) + GalleryPresence.entries) for (copies in copyNumbers) {
+          val slots = badgeSlots(w, h, m, glyphs, duration, presence, copies)
           val placed = listOfNotNull(slots.start, slots.end, slots.presence)
           for (rect in placed + slots.indicator) {
             assertWithMessage("cella ${w}x$h: $rect sta dentro").that(rect.inside(w, h)).isTrue()
@@ -54,7 +57,7 @@ class GalleryCellBadgesTest {
         }
       }
     }
-    assertThat(checked).isGreaterThan(10_000)
+    assertThat(checked).isGreaterThan(40_000)
   }
 
   /** La presenza c'e' su ogni cella dai 64 dp in su (e' l'informazione della Fase 4): non la scaccia nessun altro segno. */
@@ -93,8 +96,43 @@ class GalleryCellBadgesTest {
     assertThat(loud).containsExactly(m.presenceDisc)
     assertThat(quiet).containsExactly(m.quietDisc)
     assertThat(m.quietDisc).isLessThan(m.presenceDisc)
+    // Fase 5 (D15): un problema del backup chiede l'utente quanto "da verificare": disco intero.
     assertThat(GalleryPresence.entries.filter { it.prominent })
-      .containsExactly(GalleryPresence.PhoneOnly, GalleryPresence.NasOnly, GalleryPresence.ToVerify)
+      .containsExactly(GalleryPresence.PhoneOnly, GalleryPresence.NasOnly, GalleryPresence.ToVerify, GalleryPresence.Problem)
+  }
+
+  /**
+   * Il segno "copie" (D36): sta in basso a sinistra con i segni del contenuto, mai su un'altra cella piu' piccola di cio' che serve; se
+   * accanto alla durata di un video non ci sta, cade (la cella resta leggibile, TalkBack dice sempre "N copie"). Il disco della
+   * presenza non lo scaccia: si vede dai 64 dp con o senza copie.
+   */
+  @Test
+  fun ilSegnoDelleCopieStaInBassoASinistraEnonScacciaLaPresenza() {
+    for (density in densities) {
+      val m = badgeMetrics(density)
+      for (side in 64..420 step 4) {
+        val px = side * density.density
+        val alone = badgeSlots(px, px, m, contentGlyphs = 0, durationTextWidth = null, presence = GalleryPresence.Problem, copiesTextWidth = 28f)
+        assertWithMessage("copie su $side dp").that(alone.start).isNotNull()
+        assertWithMessage("presenza su $side dp").that(alone.presence).isNotNull()
+        assertThat(alone.start!!.left).isEqualTo(m.inset)
+        // Con la durata di un video e due segni la pillola larga puo' non starci: la durata e la presenza restano.
+        val crowded = badgeSlots(px, px, m, contentGlyphs = 2, durationTextWidth = 92f, presence = GalleryPresence.Problem, copiesTextWidth = 42f)
+        assertWithMessage("durata su $side dp").that(crowded.end).isNotNull()
+        assertWithMessage("presenza con le copie su $side dp").that(crowded.presence).isNotNull()
+      }
+    }
+  }
+
+  /** Senza il numero delle copie la pillola dei segni e' quella di sempre (nessuna regressione delle misure della G2). */
+  @Test
+  fun senzaCopieLaPillolaDeiSegniNonCambia() {
+    val m = badgeMetrics(densities.first())
+    val side = 120 * densities.first().density
+    val before = badgeSlots(side, side, m, 2, null, GalleryPresence.Safe).start!!
+    val same = badgeSlots(side, side, m, 2, null, GalleryPresence.Safe, copiesTextWidth = null).start!!
+    assertThat(same).isEqualTo(before)
+    assertThat(badgeSlots(side, side, m, 2, null, GalleryPresence.Safe, copiesTextWidth = 14f).start!!.width).isGreaterThan(before.width)
   }
 
   /** Il glifo bianco sullo scrim dei segni regge 4,5:1 (le icone ne chiedono 3) sopra le foto peggiori. */

@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Il piede della Libreria, terza voce (Fase 5A, docs/fase5-progetto.md §1.5, §2.6, D16; G2, docs/grafica-progetto.md §12.5):
+       lo stato del backup (LibraryBackupStatus). La capsula dice la frase breve, sotto il dettaglio. Solo numeri e codici: mai nomi
+       di file, cartelle o share. I problemi hanno una riga per codice di BackupProblemCode: nome backup_footer_<codice>_label e
+       backup_footer_<codice>_detail (un test confronta questo file con l'elenco dei codici). -->
+  <string name="backup_footer_comparing">Sto confrontando con il NAS…</string>
+  <string name="backup_footer_comparing_search">Sto cercando cosa c’è già sul NAS…</string>
+  <plurals name="backup_footer_comparing_count">
+    <item quantity="one">Sto confrontando %1$s foto con le copie sul NAS…</item>
+    <item quantity="other">Sto confrontando %1$s foto con le copie sul NAS…</item>
+  </plurals>
+
+  <string name="backup_footer_all_safe">Tutto al sicuro</string>
+  <string name="backup_footer_all_safe_today">Oggi alle %1$s</string>
+  <string name="backup_footer_all_safe_day">%1$s alle %2$s</string>
+
+  <string name="backup_footer_queued">%1$s in coda</string>
+  <string name="backup_footer_wait_charging">Attesa carica</string>
+  <string name="backup_footer_wait_wifi">Attesa Wi-Fi</string>
+  <string name="backup_footer_wait_home_wifi">Attesa Wi-Fi di casa</string>
+  <string name="backup_footer_wait_night_window">Attesa della notte</string>
+  <string name="backup_footer_wait_battery">Attesa batteria</string>
+  <string name="backup_footer_wait_nas">Attesa NAS</string>
+  <string name="backup_footer_wait_next_run">Al prossimo giro</string>
+  <string name="backup_footer_wait_other">Attesa delle regole</string>
+
+  <string name="backup_footer_first">Primo backup: %1$s di %2$s</string>
+  <string name="backup_footer_running">Backup in corso: %1$s di %2$s</string>
+
+  <!-- Un problema che il piede non conosce ancora (un codice nuovo): mai un testo vuoto. -->
+  <string name="backup_footer_problem_generic">Problema con il backup</string>
+  <string name="backup_footer_problem_generic_detail">Tocca per i dettagli.</string>
+
+  <!-- Un problema per codice (§2.6): la frase breve e, sotto, cosa fare. -->
+  <string name="backup_footer_nas_unreachable_label">Il NAS non risponde</string>
+  <string name="backup_footer_nas_unreachable_detail">Riprova o apri la Diagnostica.</string>
+  <string name="backup_footer_nas_full_label">Il NAS è pieno</string>
+  <string name="backup_footer_nas_full_detail">Controlla lo spazio del NAS.</string>
+  <string name="backup_footer_quota_label">Quota esaurita</string>
+  <string name="backup_footer_quota_detail">Chiedi all’admin del NAS.</string>
+  <string name="backup_footer_auth_label">Serve la password del NAS</string>
+  <string name="backup_footer_auth_detail">Inserisci la password.</string>
+  <string name="backup_footer_read_only_area_label">Area privata in sola lettura</string>
+  <string name="backup_footer_read_only_area_detail">Chiedi all’admin del NAS.</string>
+  <string name="backup_footer_no_private_area_label">Manca l’area privata</string>
+  <string name="backup_footer_no_private_area_detail">Vai in Impostazioni, Aree.</string>
+  <string name="backup_footer_media_permission_label">Accesso alle foto ritirato</string>
+  <string name="backup_footer_media_permission_detail">Consenti l’accesso alle foto.</string>
+  <string name="backup_footer_media_location_label">Foto in attesa</string>
+  <string name="backup_footer_media_location_detail">Consenti l’accesso alla posizione delle foto.</string>
+  <string name="backup_footer_partial_access_label">Solo le foto selezionate</string>
+  <string name="backup_footer_partial_access_detail">Consenti l’accesso a tutte.</string>
+  <string name="backup_footer_cap_reached_label">Tetto dati raggiunto</string>
+  <string name="backup_footer_cap_reached_detail">Puoi fare ora, con conferma.</string>
+  <string name="backup_footer_frozen_label">Backup fermo: cambiamenti anomali</string>
+  <string name="backup_footer_frozen_detail">Controlla nella Diagnostica.</string>
+  <string name="backup_footer_writes_stopped_label">Scritture sul NAS ferme</string>
+  <string name="backup_footer_writes_stopped_detail">Apri la Diagnostica.</string>
+  <string name="backup_footer_test_only_label">Backup in prova</string>
+  <string name="backup_footer_test_only_detail">Si scrive solo nelle share di prova.</string>
+  <string name="backup_footer_lost_before_backup_label">Cancellati prima del backup</string>
+  <plurals name="backup_footer_lost_before_backup_label_count">
+    <item quantity="one">%1$s cancellato prima del backup</item>
+    <item quantity="other">%1$s cancellati prima del backup</item>
+  </plurals>
+  <string name="backup_footer_lost_before_backup_detail">Foto o video: apri il cestino di Galleria.</string>
+  <string name="backup_footer_verify_failed_label">Copie non integre</string>
+  <plurals name="backup_footer_verify_failed_label_count">
+    <item quantity="one">%1$s copia non integra</item>
+    <item quantity="other">%1$s copie non integre</item>
+  </plurals>
+  <string name="backup_footer_verify_failed_detail">Riprova o apri la Diagnostica.</string>
+  <string name="backup_footer_common_copy_lost_label">Spariti dall’area comune</string>
+  <plurals name="backup_footer_common_copy_lost_label_count">
+    <item quantity="one">%1$s sparito dall’area comune</item>
+    <item quantity="other">%1$s spariti dall’area comune</item>
+  </plurals>
+  <string name="backup_footer_common_copy_lost_detail">Recuperalo dal cestino del NAS.</string>
+  <string name="backup_footer_unreadable_label">File illeggibili</string>
+  <plurals name="backup_footer_unreadable_label_count">
+    <item quantity="one">%1$s file illeggibile</item>
+    <item quantity="other">%1$s file illeggibili</item>
+  </plurals>
+  <string name="backup_footer_unreadable_detail">Riprova o apri la Diagnostica.</string>
+  <string name="backup_footer_phone_storage_low_label">Memoria del telefono quasi piena</string>
+  <string name="backup_footer_phone_storage_low_detail">Libera spazio sul telefono.</string>
+  <string name="backup_footer_stale_label">Backup fermo da 3 giorni</string>
+  <string name="backup_footer_stale_detail">Segui la guida sulla batteria.</string>
+  <string name="backup_footer_waiting_unlock_label">Il telefono si è riavviato</string>
+  <string name="backup_footer_waiting_unlock_detail">Il backup riprende allo sblocco.</string>
+  <string name="backup_footer_profile_inactive_label">Profilo non attivo</string>
+  <string name="backup_footer_profile_inactive_detail">Il backup riprende quando il profilo torna attivo.</string>
+</resources>

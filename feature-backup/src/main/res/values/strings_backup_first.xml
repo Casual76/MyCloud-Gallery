@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Il foglio del primo backup (Fase 5A, docs/fase5-progetto.md §2.11, D11): i tre numeri, il peso, la stima e le due scelte. -->
+  <string name="backup_first_title">Primo backup</string>
+  <string name="backup_first_headline">Da caricare: %1$s foto e video, %2$s.</string>
+  <string name="backup_first_headline_eta">Stanotte: %1$s.</string>
+  <string name="backup_first_headline_never">Con le regole di adesso il backup non parte.</string>
+  <string name="backup_first_headline_comparing">Sto ancora contando: quello che c’è già sul NAS non si ricarica.</string>
+  <string name="backup_first_tonight">Stanotte</string>
+  <string name="backup_first_now">Inizia ora</string>
+  <string name="backup_first_later">Non ora</string>
+
+  <string name="backup_first_searching">Sto cercando cosa c’è già sul NAS…</string>
+  <plurals name="backup_first_comparing">
+    <item quantity="one">Sto confrontando %1$s foto con le copie sul NAS…</item>
+    <item quantity="other">Sto confrontando %1$s foto con le copie sul NAS…</item>
+  </plurals>
+  <string name="backup_first_provisional">I numeri sono provvisori finché non ho finito.</string>
+
+  <string name="backup_first_linked">%1$s già sul NAS</string>
+  <string name="backup_first_linked_detail">Identici byte per byte: si collegano, non si ricaricano.</string>
+  <string name="backup_first_similar">%1$s con una copia simile sul NAS</string>
+  <string name="backup_first_similar_detail">Si caricano e si vedranno insieme in una cella sola.</string>
+  <string name="backup_first_fresh">%1$s nuovi</string>
+  <string name="backup_first_fresh_detail">Da caricare.</string>
+  <plurals name="backup_first_common">
+    <item quantity="one">%1$s è già nell’area comune: non si ricarica e non è ancora «al sicuro».</item>
+    <item quantity="other">%1$s sono già nell’area comune: non si ricaricano e non sono ancora «al sicuro».</item>
+  </plurals>
+
+  <string name="backup_first_total">Da caricare</string>
+  <string name="backup_first_total_detail">I nuovi e quelli con una copia simile.</string>
+  <string name="backup_first_total_value">%1$s · %2$s</string>
+  <string name="backup_first_time">Tempo</string>
+  <string name="backup_first_never">Con le regole di adesso il backup non parte: controlla le attività.</string>
+  <string name="backup_first_now_detail">Parte subito, anche fuori dalla notte e senza carica.</string>
+  <string name="backup_first_now_mobile">Parte subito; %1$s passano dai dati mobili e chiedo conferma.</string>
+  <string name="backup_first_time_unknown">La stima arriva quando ho finito di confrontare.</string>
+  <string name="backup_first_none">—</string>
+  <plurals name="backup_first_nights">
+    <item quantity="one">In %1$s notte, con le regole di adesso.</item>
+    <item quantity="other">In circa %1$s notti, con le regole di adesso.</item>
+  </plurals>
+  <string name="backup_first_traffic">Traffico</string>
+  <string name="backup_first_traffic_wifi_only">Tutto sul Wi-Fi, compresa la rilettura per controllare le copie.</string>
+  <string name="backup_first_traffic_mobile">Sul Wi-Fi, e %1$s sui dati mobili.</string>
+  <string name="backup_first_battery">Batteria</string>
+  <string name="backup_first_battery_detail">Se il telefono non è in carica.</string>
+  <string name="backup_first_battery_value">circa %1$d%%</string>
+
+  <string name="backup_first_warning_on_battery">Meglio in carica e sul Wi-Fi di casa.</string>
+  <string name="backup_first_warning_mobile_data">Sui dati mobili chiedo conferma con la stima.</string>
+  <string name="backup_first_warning_storage">La memoria del telefono è quasi piena.</string>
+  <string name="backup_first_warning_partial_access">Hai dato accesso solo ad alcune foto: si salvano solo quelle.</string>
+  <string name="backup_first_warning_media_location">Alcune foto aspettano l’accesso alla posizione.</string>
+  <string name="backup_first_warning_long">Con le regole di adesso servono più notti.</string>
+
+  <string name="backup_first_by_source">Da caricare, per sorgente</string>
+  <plurals name="backup_first_source_items">
+    <item quantity="one">%1$s media</item>
+    <item quantity="other">%1$s media</item>
+  </plurals>
+</resources>

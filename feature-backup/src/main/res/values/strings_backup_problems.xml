@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- I problemi del backup e le loro azioni (Fase 5A, docs/fase5-progetto.md §2.6, "Ogni problema ha un messaggio e un'azione"). Un messaggio
+       backup_problem_<codice>_title (con il suo _detail) per ogni BackupProblemCode e un testo backup_action_<azione> per ogni BackupAction:
+       BackupMessagesTest li confronta con l'elenco del contratto. Solo numeri e codici: mai nomi di file o percorsi. -->
+  <string name="backup_problem_nas_unreachable_title">Il NAS non risponde</string>
+  <string name="backup_problem_nas_unreachable_detail">Il backup riprova da solo. Controlla di essere a casa o collegato alla VPN.</string>
+  <string name="backup_problem_nas_full_title">Il NAS è pieno</string>
+  <string name="backup_problem_nas_full_detail">Non c’è più spazio per le copie: libera spazio sul NAS.</string>
+  <string name="backup_problem_quota_title">Spazio del tuo account esaurito</string>
+  <string name="backup_problem_quota_detail">Il NAS non lascia scrivere altro nella tua area privata.</string>
+  <string name="backup_problem_auth_title">Serve la password del NAS</string>
+  <string name="backup_problem_auth_detail">Il NAS non accetta più la password salvata su questo telefono.</string>
+  <string name="backup_problem_read_only_area_title">La tua area privata è in sola lettura</string>
+  <string name="backup_problem_read_only_area_detail">Senza il permesso di scrittura il backup non può salvare niente.</string>
+  <string name="backup_problem_no_private_area_title">Manca l’area privata</string>
+  <string name="backup_problem_no_private_area_detail">Il backup ha bisogno di un’area privata sul NAS dove mettere le copie.</string>
+  <string name="backup_problem_media_permission_title">Accesso alle foto ritirato</string>
+  <string name="backup_problem_media_permission_detail">Senza il permesso di Android l’app non può leggere foto e video.</string>
+  <string name="backup_problem_media_location_title">Foto in attesa: serve l’accesso alla posizione delle foto</string>
+  <string name="backup_problem_media_location_detail">Senza, le foto con la posizione restano in attesa: l’app non salva mai una copia senza posizione.</string>
+  <string name="backup_problem_partial_access_title">Si salvano solo le foto selezionate</string>
+  <string name="backup_problem_partial_access_detail">Hai dato accesso solo ad alcune foto: le altre non si salvano.</string>
+  <string name="backup_problem_cap_reached_title">Tetto dati raggiunto</string>
+  <string name="backup_problem_cap_reached_detail">Per questo periodo i dati mobili sono finiti: «Fai ora» chiede conferma con la stima.</string>
+  <string name="backup_problem_frozen_title">Lavori fermi: cambiamenti anomali sul NAS</string>
+  <string name="backup_problem_frozen_detail">Finché non controlli, sul NAS non si scrive e non si cancella niente.</string>
+  <string name="backup_problem_writes_stopped_title">Scritture sul NAS ferme</string>
+  <string name="backup_problem_writes_stopped_detail">Hai fermato le scritture sul NAS: il backup riprende quando le riattivi.</string>
+  <string name="backup_problem_test_only_title">Backup in prova</string>
+  <string name="backup_problem_test_only_detail">Si scrive solo nelle share di prova: le foto vere non si toccano.</string>
+  <string name="backup_problem_lost_before_backup_title">Foto cancellate prima del backup</string>
+  <plurals name="backup_problem_lost_before_backup_title_count">
+    <item quantity="one">%1$s foto cancellata prima del backup</item>
+    <item quantity="other">%1$s foto cancellate prima del backup</item>
+  </plurals>
+  <string name="backup_problem_lost_before_backup_detail">Erano sul telefono ma sono sparite prima di essere salvate. Se le hai tolte da poco, le trovi nel cestino di Galleria.</string>
+  <string name="backup_problem_verify_failed_title">Copie non integre</string>
+  <plurals name="backup_problem_verify_failed_title_count">
+    <item quantity="one">%1$s copia non integra</item>
+    <item quantity="other">%1$s copie non integre</item>
+  </plurals>
+  <string name="backup_problem_verify_failed_detail">La copia sul NAS non coincide con l’originale: non conta come «al sicuro» e il backup la rifà.</string>
+  <string name="backup_problem_unreadable_title">File del telefono illeggibili</string>
+  <plurals name="backup_problem_unreadable_title_count">
+    <item quantity="one">%1$s file del telefono illeggibile</item>
+    <item quantity="other">%1$s file del telefono illeggibili</item>
+  </plurals>
+  <string name="backup_problem_unreadable_detail">Il file è vuoto o rovinato, o dopo tre tentativi il telefono non lo lascia leggere: non si carica e non conta come «al sicuro». «Riprova» lo rilegge.</string>
+  <string name="backup_problem_common_copy_lost_title">Media spariti dall’area comune</string>
+  <plurals name="backup_problem_common_copy_lost_title_count">
+    <item quantity="one">%1$s media sparito dall’area comune</item>
+    <item quantity="other">%1$s media spariti dall’area comune</item>
+  </plurals>
+  <string name="backup_problem_common_copy_lost_detail">Erano solo nell’area comune e non c’è né una copia privata né una sul telefono. Per 30 giorni li trovi nel cestino del NAS.</string>
+  <string name="backup_problem_generic_title">Problema con il backup</string>
+  <string name="backup_problem_generic_detail">Apri la Diagnostica per i dettagli.</string>
+  <string name="backup_problem_phone_storage_low_title">Memoria del telefono quasi piena</string>
+  <string name="backup_problem_phone_storage_low_detail">Con poca memoria libera il backup può rallentare o fermarsi.</string>
+  <string name="backup_problem_stale_title">Backup fermo da 3 giorni</string>
+  <string name="backup_problem_stale_detail">Probabilmente Android ferma l’app in secondo piano: imposta la batteria su «Illimitata» e togli l’app da «Mai in sospensione».</string>
+  <string name="backup_problem_waiting_unlock_title">Il telefono si è riavviato</string>
+  <string name="backup_problem_waiting_unlock_detail">Il backup riprende allo sblocco.</string>
+  <string name="backup_problem_profile_inactive_title">Profilo non attivo</string>
+  <string name="backup_problem_profile_inactive_detail">Il backup riprende quando il profilo torna attivo.</string>
+
+  <string name="backup_action_retry">Riprova</string>
+  <string name="backup_action_diagnostics">Apri la Diagnostica</string>
+  <string name="backup_action_nas_space">Apri Spazio NAS</string>
+  <string name="backup_action_ask_admin">Chiedi all’admin del NAS</string>
+  <string name="backup_action_enter_password">Inserisci la password</string>
+  <string name="backup_action_areas_settings">Apri Impostazioni, Aree</string>
+  <string name="backup_action_grant_media">Consenti l’accesso</string>
+  <string name="backup_action_grant_media_location">Consenti la posizione delle foto</string>
+  <string name="backup_action_grant_all_media">Consenti tutto</string>
+  <string name="backup_action_do_now_confirm">Fai ora</string>
+  <string name="backup_action_open_gallery_trash">Apri il cestino di Galleria</string>
+  <string name="backup_action_free_space">Libera spazio</string>
+  <string name="backup_action_battery_guide">Apri la guida alla batteria</string>
+  <string name="backup_action_open_nas_trash">Recuperalo dal cestino del NAS</string>
+  <string name="backup_action_generic">Apri</string>
+</resources>

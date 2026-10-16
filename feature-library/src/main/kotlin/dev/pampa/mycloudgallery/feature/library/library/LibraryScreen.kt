@@ -101,10 +101,12 @@ internal fun LibraryScreen(
   state: LibraryTabState,
   tabBarScroll: NestedScrollConnection?,
   onNasStatusClick: () -> Unit,
+  onBackupStatusClick: () -> Unit = {},
 ) {
   val grid = state.grid
   val phone by state.phone.collectAsState()
   val nas by state.nas.collectAsState()
+  val backup by state.backup.collectAsState()
   val backdrop = rememberGlassBackdrop()
   SideEffect { backdropOut(backdrop) }
   val scope = rememberCoroutineScope()
@@ -132,7 +134,9 @@ internal fun LibraryScreen(
   val bottomPadding = maxOf(slotBottom + ActionBarHeight + GalleryChromeDefaults.Gap, contentPadding.calculateBottomPadding())
   val empty = grid.view.size == 0
   val pillVeil = rememberPillVeil()
-  val status: @Composable () -> Unit = { LibraryStatusBlock(nas = nas, statusFooter = statusFooter, onNasClick = onNasStatusClick) }
+  val status: @Composable () -> Unit = {
+    LibraryStatusBlock(nas = nas, statusFooter = statusFooter, onNasClick = onNasStatusClick, backup = backup, onBackupClick = onBackupStatusClick)
+  }
 
   // I tag della chrome come id di risorsa: gli strumenti di misura sull'emulatore (uiautomator) la trovano per nome.
   Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).semantics { testTagsAsResourceId = true }) {

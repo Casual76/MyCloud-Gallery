@@ -5,16 +5,21 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CloudDone
 import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.GppGood
 import androidx.compose.material.icons.rounded.PauseCircle
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Science
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterEntry
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterNote
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterTone
+import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupStatus
+import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupWait
 import dev.pampa.mycloudgallery.core.library.contract.LibraryNasStatus
 import dev.pampa.mycloudgallery.core.library.text.GalleryDates
 import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
@@ -26,22 +31,126 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 
-// Il piede della Libreria (G2, docs/grafica-progetto.md §12; Fase 4 §1.5): sotto i piu' recenti, sulla pagina, la rete
-// (l'indicatore globale di :app, `statusFooter`) e il NAS (`LibraryTabState.nas`) come due voci sorelle, una sotto
-// l'altra: una capsula tonale con la frase breve e, sotto, il dettaglio (avanzamento, quando, perche'). Cosa dire lo
-// decide il contratto (`LibraryNasStatus`, la regola e' `LibraryNasStatusComposer`); qui solo come.
+// Il piede della Libreria (G2, docs/grafica-progetto.md §12; Fase 4 §1.5; Fase 5A §1.5, D16): sotto i piu' recenti, sulla pagina, la
+// rete (l'indicatore globale di :app, `statusFooter`), il NAS (`LibraryTabState.nas`) e il backup (`LibraryTabState.backup`) come
+// tre voci sorelle, una sotto l'altra: una capsula tonale con la frase breve e, sotto, il dettaglio (avanzamento, quando, perche').
+// Cosa dire lo decide il contratto (`LibraryNasStatus`, la regola e' `LibraryNasStatusComposer`; `LibraryBackupStatus`, che `:app`
+// riduce da `BackupStatus`); qui solo come, con i componenti del design system: nessuno stile nuovo (D30).
 
 /**
- * La voce della rete ([statusFooter], da `:app`) e sotto quella del NAS, centrate, ognuna con il suo dettaglio. Toccare la
- * capsula del NAS apre i dettagli ([onNasClick]: la Diagnostica, dove sta anche "Ho controllato, continua" dei lavori
- * fermi). Una sotto l'altra e non affiancate: una frase lunga ("Rete non riconosciuta") non tronca l'altra.
+ * La voce della rete ([statusFooter], da `:app`), sotto quella del NAS e sotto ancora quella del backup, centrate, ognuna con il suo
+ * dettaglio. Toccare la capsula del NAS apre i dettagli ([onNasClick]: la Diagnostica, dove sta anche "Ho controllato, continua" dei
+ * lavori fermi); toccare quella del backup apre la pagina Backup ([onBackupClick]). Una sotto l'altra e non affiancate: una frase
+ * lunga ("Rete non riconosciuta") non tronca l'altra.
  */
 @Composable
-internal fun LibraryStatusBlock(nas: LibraryNasStatus, statusFooter: @Composable () -> Unit, onNasClick: () -> Unit, modifier: Modifier = Modifier) {
+internal fun LibraryStatusBlock(
+  nas: LibraryNasStatus,
+  statusFooter: @Composable () -> Unit,
+  onNasClick: () -> Unit,
+  modifier: Modifier = Modifier,
+  backup: LibraryBackupStatus = LibraryBackupStatus.Idle,
+  onBackupClick: () -> Unit = {},
+) {
   val note = nasFooterNote(nas)
+  val backupNote = backupFooterNote(backup)
   Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(GroupGap)) {
     statusFooter()
     if (note != null) GalleryFooterEntry(note = note, onClick = onNasClick)
+    if (backupNote != null) GalleryFooterEntry(note = backupNote, onClick = onBackupClick)
+  }
+}
+
+/**
+ * Che cosa il piede dice del backup (Fase 5A, §2.6), o null se non c'e' niente da dire (backup non configurato). Le frasi brevi e i
+ * dettagli sono quelli del progetto: "Tutto al sicuro" · "Oggi alle 03:12"; "312 in coda" · "Attesa carica"; "Primo backup: 1.240
+ * di 6.658" · "circa 1 h 20 min"; "Quota esaurita" · "Chiedi all'admin del NAS"; "Backup in prova" · "Si scrive solo nelle share di
+ * prova". I toni sono quelli del piede, gia' verificati su ogni accento.
+ */
+@Composable
+internal fun backupFooterNote(status: LibraryBackupStatus): GalleryFooterNote? = when (status) {
+  LibraryBackupStatus.Idle -> null
+  LibraryBackupStatus.TestOnly -> footerNote(BackupFooterProblems.of("test_only"), count = 0)
+  is LibraryBackupStatus.Comparing -> GalleryFooterNote(
+    tone = GalleryFooterTone.Working,
+    label = stringResource(R.string.backup_footer_comparing),
+    busy = true,
+    detail = status.pending.takeIf { it != null && it > 0 }?.let { pending ->
+      pluralStringResource(R.plurals.backup_footer_comparing_count, pending, GalleryNumbers.format(pending))
+    } ?: stringResource(R.string.backup_footer_comparing_search),
+  )
+  is LibraryBackupStatus.AllSafe -> GalleryFooterNote(
+    tone = GalleryFooterTone.Calm,
+    label = stringResource(R.string.backup_footer_all_safe),
+    glyph = Icons.Rounded.GppGood,
+    detail = status.atNasMillis?.let { backupUpdatedAt(it) },
+  )
+  is LibraryBackupStatus.Queued -> GalleryFooterNote(
+    tone = GalleryFooterTone.Waiting,
+    label = stringResource(R.string.backup_footer_queued, GalleryNumbers.format(status.items)),
+    glyph = Icons.Rounded.Schedule,
+    detail = stringResource(waitRes(status.wait)),
+  )
+  is LibraryBackupStatus.FirstBackup -> workingNote(
+    label = stringResource(R.string.backup_footer_first, GalleryNumbers.format(status.done), GalleryNumbers.format(status.total)),
+    done = status.done,
+    total = status.total,
+    etaMillis = status.etaMillis,
+  )
+  is LibraryBackupStatus.Running -> workingNote(
+    label = stringResource(R.string.backup_footer_running, GalleryNumbers.format(status.done), GalleryNumbers.format(status.total)),
+    done = status.done,
+    total = status.total,
+    etaMillis = status.etaMillis,
+  )
+  is LibraryBackupStatus.Problem -> footerNote(BackupFooterProblems.of(status.code), status.count)
+}
+
+/** Un lavoro del backup in corso: l'anello nella capsula e la barra sotto se il totale e' noto, il tempo che manca se si sa stimare. */
+@Composable
+private fun workingNote(label: String, done: Int, total: Int, etaMillis: Long?): GalleryFooterNote {
+  val progress = if (total > 0) (done.toFloat() / total).coerceIn(0f, 1f) else null
+  return GalleryFooterNote(
+    tone = GalleryFooterTone.Working,
+    label = label,
+    detail = etaMillis?.let { withEta(null, it) },
+    progress = progress,
+    busy = progress == null,
+  )
+}
+
+/** Un problema del §2.6 come lo dice il piede: la frase breve (con il numero, per un problema di un media) e cosa fare. */
+@Composable
+private fun footerNote(problem: FooterProblem, count: Int): GalleryFooterNote {
+  val withCount = problem.labelCount
+  return GalleryFooterNote(
+    tone = problem.tone,
+    label = if (withCount != null && count > 0) pluralStringResource(withCount, count, GalleryNumbers.format(count)) else stringResource(problem.label),
+    glyph = problem.glyph,
+    detail = stringResource(problem.detail),
+  )
+}
+
+private fun waitRes(wait: LibraryBackupWait): Int = when (wait) {
+  LibraryBackupWait.CHARGING -> R.string.backup_footer_wait_charging
+  LibraryBackupWait.WIFI -> R.string.backup_footer_wait_wifi
+  LibraryBackupWait.HOME_WIFI -> R.string.backup_footer_wait_home_wifi
+  LibraryBackupWait.NIGHT_WINDOW -> R.string.backup_footer_wait_night_window
+  LibraryBackupWait.BATTERY -> R.string.backup_footer_wait_battery
+  LibraryBackupWait.NAS -> R.string.backup_footer_wait_nas
+  LibraryBackupWait.NEXT_RUN -> R.string.backup_footer_wait_next_run
+  LibraryBackupWait.OTHER -> R.string.backup_footer_wait_other
+}
+
+/** "Oggi alle 03:12", "12 ottobre 2026 alle 03:12": l'ultimo giro del backup, in ora del NAS mostrata come ora di casa. */
+@Composable
+private fun backupUpdatedAt(atNasMillis: Long): String {
+  val at = Instant.ofEpochMilli(atNasMillis).atZone(ZoneId.systemDefault()).toLocalDateTime()
+  val time = GalleryDates.time(at)
+  return if (at.toLocalDate() == LocalDate.now()) {
+    stringResource(R.string.backup_footer_all_safe_today, time)
+  } else {
+    stringResource(R.string.backup_footer_all_safe_day, GalleryDates.date(at), time)
   }
 }
 
@@ -119,15 +228,15 @@ internal fun nasFooterNote(status: LibraryNasStatus): GalleryFooterNote? = when 
 
 /** "1.200 di 12.000 file · circa 4 min": il tempo che manca si aggiunge solo quando il compositore lo sa stimare. */
 @Composable
-private fun withEta(text: String, etaMillis: Long?): String {
-  if (etaMillis == null) return text
+private fun withEta(text: String?, etaMillis: Long?): String {
+  if (etaMillis == null) return text.orEmpty()
   val minutes = ((etaMillis + MinuteMs - 1) / MinuteMs).toInt()
   val eta = when {
     etaMillis < MinuteMs -> stringResource(R.string.nas_footer_eta_under_minute)
     minutes < MinutesPerHour -> stringResource(R.string.nas_footer_eta_minutes, GalleryNumbers.format(minutes))
     else -> stringResource(R.string.nas_footer_eta_hours, GalleryNumbers.format(minutes / MinutesPerHour), GalleryNumbers.format(minutes % MinutesPerHour))
   }
-  return stringResource(R.string.nas_footer_with_eta, text, eta)
+  return if (text == null) eta else stringResource(R.string.nas_footer_with_eta, text, eta)
 }
 
 /** "Oggi alle 14:32", "12 ottobre 2026 alle 14:32": l'istante e' in ora del NAS, mostrato come ora di casa. */

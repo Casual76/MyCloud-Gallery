@@ -107,6 +107,7 @@ import dev.pampa.mycloudgallery.feature.viewer.info.InfoSections
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoSheet
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoSidePanel
 import dev.pampa.mycloudgallery.feature.viewer.info.buildInfoSections
+import dev.pampa.mycloudgallery.feature.viewer.info.rememberBackupState
 import dev.pampa.mycloudgallery.feature.viewer.info.sheetHeight
 import dev.pampa.mycloudgallery.feature.viewer.page.PageSpec
 import dev.pampa.mycloudgallery.feature.viewer.page.ViewerPage
@@ -844,9 +845,11 @@ private fun ViewerOverlays(
 
   // Le informazioni: foglio a meta' sul telefono, colonna laterale da 840 dp.
   val infoVisible by remember { derivedStateOf { info.progress.value > 0f || state.infoOpen } }
+  // Fase 5A (D16): lo stato del backup del media, seguito solo mentre il pannello e' aperto.
+  val backupState by rememberBackupState(services.backup, currentId, active = infoVisible)
   if (infoVisible && currentKind != null) {
     val kind = currentKind
-    val sections = remember(current, kind, controller.motionUnplayableVersion, placeName, currentId) {
+    val sections = remember(current, kind, controller.motionUnplayableVersion, placeName, currentId, backupState) {
       buildInfoSections(
         format = format,
         inputs = InfoInputs(
@@ -856,6 +859,7 @@ private fun ViewerOverlays(
           place = current?.place,
           placeName = placeName,
           motionUnplayable = currentId in controller.motionUnplayable,
+          backup = backupState,
         ),
         onOpenMaps = if (details?.location != null) controller::askMaps else null,
       )

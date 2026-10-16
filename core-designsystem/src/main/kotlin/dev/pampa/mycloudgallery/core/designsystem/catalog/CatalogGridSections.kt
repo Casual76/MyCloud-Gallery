@@ -45,6 +45,7 @@ import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridInteractionSta
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridJumpButton
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridLevelBar
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridNotice
+import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryPresence
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryScrubber
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryScrubberState
 import dev.pampa.mycloudgallery.core.designsystem.grid.forWidth
@@ -90,6 +91,7 @@ private fun GridCellStates() {
   val captions = listOf(
     R.string.grid_cell_thumbnail, R.string.grid_cell_placeholder, R.string.grid_cell_video,
     R.string.grid_cell_marks, R.string.grid_cell_unreadable, R.string.grid_cell_pressed,
+    R.string.grid_cell_problem, R.string.grid_cell_copies,
   ).map { stringResource(it) }
   val actions = remember(captions) { CatalogCellActions { key -> captions.getOrElse((key as? String)?.removePrefix("c")?.toIntOrNull() ?: 0) { "" } } }
   val placeholder = remember { sampleBitmap(seed = 9, side = PlaceholderSide) }
@@ -106,6 +108,13 @@ private fun GridCellStates() {
       GalleryGridCell("c4", empty, GalleryGridCellBadges(unreadable = true), style, interaction, actions, Modifier.size(CellSide))
     }
     CaptionedCell(captions[5]) { GalleryGridCell(PressedKey, sampleState(seed = 23), GalleryGridCellBadges.None, style, interaction, actions, Modifier.size(CellSide)) }
+    // Fase 5 (D15, D36): il segno del problema del backup (disco intero) e quello delle copie simili con il numero.
+    CaptionedCell(captions[6]) {
+      GalleryGridCell("c6", sampleState(seed = 5), GalleryGridCellBadges(presence = GalleryPresence.Problem), style, interaction, actions, Modifier.size(CellSide))
+    }
+    CaptionedCell(captions[7]) {
+      GalleryGridCell("c7", sampleState(seed = 29), GalleryGridCellBadges(favorite = true, presence = GalleryPresence.Safe, copies = 3), style, interaction, actions, Modifier.size(CellSide))
+    }
   }
 }
 

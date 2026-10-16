@@ -12,5 +12,7 @@ object NoBackupActions : BackupActions {
 
   override fun stop() = Unit
 
+  override fun startFirstBackup(tonight: Boolean) = Unit
+
   override fun open(screen: BackupScreen) = Unit
 }

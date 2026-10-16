@@ -11,6 +11,7 @@ import dev.pampa.mycloudgallery.core.imaging.testing.FakeViewerImageSource
 import dev.pampa.mycloudgallery.core.library.contract.GridLayoutEngine
 import dev.pampa.mycloudgallery.core.library.contract.GridLevel
 import dev.pampa.mycloudgallery.core.library.contract.GridStyle
+import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupStatus
 import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
 import dev.pampa.mycloudgallery.core.library.contract.LibraryNasStatus
 import dev.pampa.mycloudgallery.core.library.contract.LocalMediaActions
@@ -60,6 +61,9 @@ const val WindowedLoaderAbove: Int = 5_000
  *
  * @param debugSizes se non e' null, il menu della vista offre queste dimensioni (solo debug, M1).
  * @param nas lo stato del NAS del piede (G2).
+ * @param backup lo stato del backup del piede, la terza voce (Fase 5A, D16).
+ * @param edit riscrive l'indice iniziale prima che la griglia lo veda (per gli screenshot dei segni della Fase 5: `withFlags` di una
+ *   cella con `BACKUP_PROBLEM` o `SIMILAR_COPIES`); le posizioni restano quelle della Libreria sintetica.
  * @param mix se non e' null, la libreria e' mista telefono + NAS (`NasMix`): le celle hanno i segni di presenza (G2).
  * @param engine il motore di layout: quello vero di P5 (`TimelineLayoutEngine`).
  */
@@ -72,13 +76,15 @@ fun syntheticLibraryState(
   phone: LibraryPhoneStatus = LibraryPhoneStatus(),
   debugSizes: List<Int>? = null,
   nas: LibraryNasStatus = LibraryNasStatus.Idle,
+  backup: LibraryBackupStatus = LibraryBackupStatus.Idle,
+  edit: (InMemoryTimelineSnapshot) -> InMemoryTimelineSnapshot = { it },
   mix: NasMix? = null,
   engine: GridLayoutEngine = TimelineLayoutEngine(),
   layoutDispatcher: CoroutineDispatcher = Dispatchers.Default,
   today: LocalDate = SyntheticToday,
 ): LibraryTabState {
   val holder = SyntheticHolder(SyntheticLibrary(seed = seed, count = count, placeIds = FakePlaceData.IDS, mix = mix))
-  val repository = FakeTimelineRepository(holder.library.snapshot)
+  val repository = FakeTimelineRepository(edit(holder.library.snapshot))
   val preferences = InMemoryLibraryPreferences(filter = filter, level = level, style = style)
   val loader = SwitchingThumbnailLoader(useWindowed = count > WindowedLoaderAbove)
   val grid = MediaGridState(
@@ -126,6 +132,7 @@ fun syntheticLibraryState(
     commands = SyntheticCommands,
     debug = debug,
     nas = MutableStateFlow(nas),
+    backup = MutableStateFlow(backup),
   )
 }
 

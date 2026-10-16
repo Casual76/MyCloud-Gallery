@@ -12,6 +12,7 @@ import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Videocam
 import dev.antigravity.fluidengine.ui.theme.FluidTone
+import dev.pampa.mycloudgallery.core.backup.contract.MediaBackupState
 import dev.pampa.mycloudgallery.core.designsystem.viewer.GalleryInfoRow
 import dev.pampa.mycloudgallery.core.designsystem.viewer.GalleryVideoTime
 import dev.pampa.mycloudgallery.core.metadata.contract.ExifDetails
@@ -29,6 +30,8 @@ import dev.pampa.mycloudgallery.feature.viewer.details.ViewerFormat
  * @property place il luogo dal dataset offline (regione e paese), se si conosce.
  * @property placeName il nome per la UI ("Oslo").
  * @property motionUnplayable E-M16: una motion photo il cui video non si riconosce.
+ * @property backup Fase 5A (D15, D16): lo stato del backup del media (`MediaBackupState`); null = nessuna fonte o pannello non ancora
+ *   risposto: la sezione "Backup" non c'e'.
  */
 internal class InfoInputs(
   val kind: MediaKind,
@@ -37,6 +40,7 @@ internal class InfoInputs(
   val place: Place? = null,
   val placeName: String? = null,
   val motionUnplayable: Boolean = false,
+  val backup: MediaBackupState? = null,
 )
 
 /**
@@ -71,6 +75,9 @@ internal fun buildInfoSections(
       ),
     )
   }
+
+  // Fase 5A (D16): lo stato del backup del media, la riga "Backup": subito dopo la data, cosi' si vede a pannello mezzo aperto.
+  inputs.backup?.let { sections += backupInfoSection(format, it) }
 
   // Luogo.
   val point = details?.location

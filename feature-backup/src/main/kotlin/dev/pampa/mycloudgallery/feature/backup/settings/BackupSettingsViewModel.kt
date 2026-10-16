@@ -1,0 +1,158 @@
+package dev.pampa.mycloudgallery.feature.backup.settings
+
+import androidx.compose.runtime.Immutable
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.pampa.mycloudgallery.core.backup.contract.BackupSettings
+import dev.pampa.mycloudgallery.core.backup.contract.BackupSource
+import dev.pampa.mycloudgallery.core.backup.contract.BackupSources
+import dev.pampa.mycloudgallery.core.backup.contract.DeviceFolder
+import dev.pampa.mycloudgallery.feature.backup.contract.BackupActions
+import dev.pampa.mycloudgallery.feature.backup.contract.BackupRules
+import dev.pampa.mycloudgallery.feature.backup.contract.BackupScreen
+import dev.pampa.mycloudgallery.feature.backup.contract.PhoneFolder
+import dev.pampa.mycloudgallery.feature.backup.contract.PhoneFolders
+import dev.pampa.mycloudgallery.feature.backup.noop.NoBackupActions
+import dev.pampa.mycloudgallery.feature.backup.noop.NoBackupRules
+import dev.pampa.mycloudgallery.feature.backup.noop.NoPhoneFolders
+import java.util.Optional
+import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+
+// Impostazioni -> Backup (docs/fase5-progetto.md §2.1, D7, D34, E-B12, E-B20; D30): le sorgenti (fotocamera, screenshot e le altre cartelle
+// del telefono con numero e GB), la cartella del dispositivo e la regola "Proteggi subito le foto nuove". Il ViewModel salva le scelte nelle
+// impostazioni del backup (`BackupSettings`, del dispositivo: non personali) e non decide altro.
+
+/** Le cartelle del telefono che si possono scegliere: in lettura, pronte o non disponibili. */
+internal sealed interface FoldersState {
+  /** La lettura delle cartelle (puo' durare, il MediaStore ha migliaia di righe). */
+  data object Loading : FoldersState
+
+  data class Ready(val folders: List<PhoneFolder>) : FoldersState
+
+  /** Non si e' potuto leggere (nessun accesso ai media, nessun elenco legato): si vedono solo le sorgenti gia' scelte. */
+  data object Unavailable : FoldersState
+}
+
+/** Una riga di sorgente delle impostazioni: la sorgente, se e' scelta e, se la si conosce, quanti media e quanti byte. */
+@Immutable
+internal class SourceChoice(val source: BackupSource, val chosen: Boolean, val media: Int?, val bytes: Long?)
+
+@Immutable
+internal data class SettingsUi(
+  val folders: FoldersState,
+  val chosen: BackupSources,
+  val deviceFolder: DeviceFolder?,
+  val protectNewPhotos: Boolean,
+  /** `:app` ha legato le regole: senza, l'interruttore non c'e'. */
+  val rulesAvailable: Boolean,
+  /** `:app` ha legato le impostazioni: senza, niente si puo' scegliere. */
+  val editable: Boolean,
+) {
+  /**
+   * Le righe delle sorgenti nell'ordine in cui si mostrano: fotocamera, screenshot, poi le cartelle aggiuntive dalla piu' grande. Una
+   * cartella gia' scelta che il telefono non elenca piu' (E-B12) resta in lista, cosi' si puo' togliere.
+   */
+  val choices: List<SourceChoice> by lazy(LazyThreadSafetyMode.NONE) {
+    val known = (folders as? FoldersState.Ready)?.folders.orEmpty().associateBy { it.source.id }
+    val base = listOf(BackupSource.Camera, BackupSource.Screenshots)
+    val extra = known.values.map { it.source }.filter { it !in base } + chosen.sources.filter { it !in base && it.id !in known }
+    (base + extra.distinctBy { it.id }.sortedByDescending { known[it.id]?.media ?: 0 }).map { source ->
+      val folder = known[source.id]
+      SourceChoice(source, chosen = source in chosen, media = folder?.media, bytes = folder?.bytes)
+    }
+  }
+}
+
+@HiltViewModel
+class BackupSettingsViewModel @Inject constructor(
+  settings: Optional<BackupSettings>,
+  phoneFolders: Optional<PhoneFolders>,
+  rules: Optional<BackupRules>,
+  actions: Optional<BackupActions>,
+) : ViewModel() {
+
+  private val port: BackupSettings? = settings.orElse(null)
+  private val folders: PhoneFolders = phoneFolders.orElse(NoPhoneFolders)
+  private val rulesPort: BackupRules? = rules.orElse(null)
+  private val rulesOrNone: BackupRules = rulesPort ?: NoBackupRules
+  private val acts: BackupActions = actions.orElse(NoBackupActions)
+
+  private val foldersState = MutableStateFlow<FoldersState>(FoldersState.Loading)
+  private val noSources: StateFlow<BackupSources> = MutableStateFlow(BackupSources.NONE)
+  private val noFolder: StateFlow<DeviceFolder?> = MutableStateFlow<DeviceFolder?>(null)
+
+  internal val state: StateFlow<SettingsUi> = combine(
+    foldersState,
+    port?.sources ?: noSources,
+    port?.deviceFolder ?: noFolder,
+    rulesOrNone.protectNewPhotos,
+  ) { found, chosen, deviceFolder, protect ->
+    SettingsUi(
+      folders = found,
+      chosen = chosen,
+      deviceFolder = deviceFolder,
+      protectNewPhotos = protect,
+      rulesAvailable = rulesPort != null,
+      editable = port != null,
+    )
+  }.stateIn(
+    scope = viewModelScope,
+    started = SharingStarted.WhileSubscribed(StopTimeoutMillis),
+    initialValue = SettingsUi(
+      folders = FoldersState.Loading,
+      chosen = (port?.sources ?: noSources).value,
+      deviceFolder = (port?.deviceFolder ?: noFolder).value,
+      protectNewPhotos = rulesOrNone.protectNewPhotos.value,
+      rulesAvailable = rulesPort != null,
+      editable = port != null,
+    ),
+  )
+
+  init {
+    reloadFolders()
+  }
+
+  /** Rilegge le cartelle del telefono (all'apertura e quando l'utente torna dal permesso). */
+  fun reloadFolders() {
+    foldersState.value = FoldersState.Loading
+    viewModelScope.launch {
+      foldersState.value = try {
+        FoldersState.Ready(folders.folders())
+      } catch (e: CancellationException) {
+        throw e
+      } catch (_: Exception) {
+        FoldersState.Unavailable
+      }
+    }
+  }
+
+  /** Accende o spegne una sorgente (E-B12: togliere una cartella non cancella niente, i media nuovi non si caricano piu'). */
+  fun setSource(source: BackupSource, on: Boolean) {
+    val settings = port ?: return
+    val current = settings.sources.value.sources
+    val next = if (on) current + source else current - source
+    if (next == current) return
+    viewModelScope.launch { settings.setSources(BackupSources(next)) }
+  }
+
+  /** D34: "Proteggi subito le foto nuove". */
+  fun setProtectNewPhotos(on: Boolean) {
+    if (rulesPort == null) return
+    viewModelScope.launch { rulesPort.setProtectNewPhotos(on) }
+  }
+
+  /** Apre la scelta della cartella del dispositivo (D7). */
+  fun openDeviceFolder() = acts.open(BackupScreen.DEVICE_FOLDER)
+
+  private companion object {
+    const val StopTimeoutMillis = 5_000L
+  }
+}

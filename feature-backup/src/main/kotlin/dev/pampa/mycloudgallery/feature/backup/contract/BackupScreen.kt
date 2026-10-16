@@ -45,6 +45,14 @@ interface BackupActions {
   /** "Ferma": prima del file successivo, ogni temporaneo resta con il suo punto di ripresa. */
   fun stop()
 
+  /**
+   * La scelta del foglio del primo backup (§2.11, P5): [tonight] = "Stanotte" (la predefinita: il lavoro segue il preset, di notte),
+   * altrimenti "Inizia ora" (un lavoro avviato dall'utente, UIDT, con l'avviso "meglio in carica e sul Wi-Fi di casa"; sui dati
+   * mobili `:app` chiede prima la conferma con la stima). Aggiunta di P5 al contratto di P0: `backupNow` e' "Fai ora" (`USER_NOW`), questo
+   * e' il primo backup (`FIRST_BACKUP`).
+   */
+  fun startFirstBackup(tonight: Boolean)
+
   /** Apre una schermata del backup. */
   fun open(screen: BackupScreen)
 }

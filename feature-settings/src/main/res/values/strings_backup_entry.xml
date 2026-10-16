@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- La voce "Backup" delle Impostazioni (Fase 5A, docs/fase5-progetto.md §1.3, D16): il titolo e lo stato in una frase. Solo numeri e codici. -->
+  <string name="settings_backup">Backup</string>
+  <string name="settings_backup_detail">Metti al sicuro foto e video sul NAS</string>
+  <string name="settings_backup_not_configured">Non ancora pronto: manca qualcosa</string>
+  <string name="settings_backup_test_only">In prova: si scrive solo nelle share di prova</string>
+  <string name="settings_backup_first_comparing">Sto preparando il primo backup</string>
+  <string name="settings_backup_first_ready">Pronto per il primo backup</string>
+  <plurals name="settings_backup_up_to_date">
+    <item quantity="one">Tutto al sicuro: %1$s media</item>
+    <item quantity="other">Tutto al sicuro: %1$s media</item>
+  </plurals>
+  <string name="settings_backup_waiting">%1$s in coda</string>
+  <string name="settings_backup_running">In corso: %1$s di %2$s</string>
+  <string name="settings_backup_stopped">Fermo</string>
+  <string name="settings_backup_problem">C’è qualcosa da controllare</string>
+  <string name="settings_backup_pill_check">Da controllare</string>
+  <string name="settings_backup_pill_first">Primo backup</string>
+</resources>

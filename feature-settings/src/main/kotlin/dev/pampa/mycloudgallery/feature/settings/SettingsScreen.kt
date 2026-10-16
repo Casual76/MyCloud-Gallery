@@ -30,9 +30,12 @@ import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
+import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
 import dev.pampa.mycloudgallery.core.family.contract.StaleReason
 import dev.pampa.mycloudgallery.core.family.contract.TrustStatus
+import dev.pampa.mycloudgallery.feature.settings.backup.BackupEntryRow
+import dev.pampa.mycloudgallery.feature.settings.backup.BackupEntryViewModel
 import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
 import dev.pampa.mycloudgallery.feature.settings.ui.StatusPill
 import androidx.compose.runtime.getValue
@@ -50,6 +53,11 @@ class SettingsLinks(
   val openBackupNotice: () -> Unit = {},
   val openAbout: () -> Unit = {},
   val openQuality: () -> Unit = {},
+  /**
+   * Fase 5A (D16): la voce "Backup" porta alla pagina del backup di feature-backup, che le Impostazioni non conoscono (i feature non si
+   * conoscono: la callback la scrive `:app`). Null = la voce non c'e'.
+   */
+  val openBackup: (() -> Unit)? = null,
 ) {
   companion object {
     val None = SettingsLinks()
@@ -66,6 +74,8 @@ internal fun SettingsRoute(
 ) {
   val viewModel: SettingsViewModel = hiltViewModel()
   val state by viewModel.state.collectAsStateWithLifecycle()
+  val backupViewModel: BackupEntryViewModel = hiltViewModel()
+  val backup by backupViewModel.status.collectAsStateWithLifecycle()
   SettingsScreen(
     state = state,
     onBack = onBack,
@@ -73,6 +83,7 @@ internal fun SettingsRoute(
     resumeStep = resumeStep,
     developerSection = developerSection,
     links = links,
+    backupStatus = backup,
   )
 }
 
@@ -92,6 +103,7 @@ fun SettingsScreen(
   resumeStep: (OnboardingStep) -> Unit,
   developerSection: (@Composable () -> Unit)? = null,
   links: SettingsLinks = SettingsLinks.None,
+  backupStatus: BackupStatus? = null,
 ) {
   val family = familyHero(state)
   FluidScreen(
@@ -179,6 +191,11 @@ fun SettingsScreen(
           onClick = links.openSecurity,
         )
         FluidListDivider()
+        // Fase 5A (D16): la voce "Backup" (stato in una frase), solo se `:app` ha scritto dove porta.
+        links.openBackup?.let { openBackup ->
+          BackupEntryRow(status = backupStatus, onClick = openBackup)
+          FluidListDivider()
+        }
         FluidListRow(
           title = stringResource(R.string.settings_backup_notice),
           subtitle = stringResource(R.string.settings_backup_notice_detail),

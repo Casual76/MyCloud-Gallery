@@ -30,6 +30,9 @@
   <string name="grid_desc_both">sul telefono e sul NAS</string>
   <string name="grid_desc_safe">al sicuro sul NAS</string>
   <string name="grid_desc_to_verify">copia sul NAS da verificare</string>
+  <!-- Fase 5 (D15, D36): il problema del backup e le copie simili, detti a TalkBack. -->
+  <string name="grid_desc_backup_problem">problema con il backup</string>
+  <string name="grid_desc_similar_copies">%1$s copie simili</string>
   <string name="grid_back">Indietro</string>
   <string name="grid_action_open">Apri</string>
   <string name="grid_action_select">Seleziona</string>

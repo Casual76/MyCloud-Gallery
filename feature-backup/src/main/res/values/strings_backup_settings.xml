@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Impostazioni -> Backup e la cartella del dispositivo (Fase 5A, docs/fase5-progetto.md §2.1, D7, D34, E-B6, E-B12, E-B16). -->
+  <string name="backup_settings_section_sources">Cosa salvare</string>
+  <string name="backup_settings_folders_loading">Cerco le cartelle del telefono…</string>
+  <string name="backup_settings_folders_unavailable">Non riesco a leggere le cartelle del telefono: qui compaiono solo quelle già scelte.</string>
+  <string name="backup_settings_not_ready">Il backup non è ancora pronto: le scelte si fanno quando lo è.</string>
+  <string name="backup_settings_sources_note">Togliere una cartella non cancella niente: quello che è già al sicuro resta, i media nuovi non si caricano più.</string>
+  <string name="backup_settings_source_numbers">%1$s media · %2$s</string>
+  <string name="backup_settings_source_numbers_unknown">Cartella del telefono</string>
+
+  <string name="backup_settings_section_folder">Dove va sul NAS</string>
+  <string name="backup_settings_folder_note">Le copie stanno nella tua area privata, in una cartella per dispositivo, divise per anno e mese di scatto. Rinominare il dispositivo non cambia la cartella.</string>
+
+  <string name="backup_settings_section_rules">Regole</string>
+  <string name="backup_settings_protect_title">Proteggi subito le foto nuove</string>
+  <string name="backup_settings_protect_detail">Una foto appena scattata si carica appena c’è il Wi-Fi di casa, anche fuori dalla notte.</string>
+  <string name="backup_settings_when_title">Quando fa il backup</string>
+  <string name="backup_settings_when_detail">Lo decidono le regole delle attività: notte, Wi-Fi di casa, batteria.</string>
+  <string name="backup_settings_rules_note">La protezione delle foto nuove vale solo per le foto della fotocamera, pesa pochi MB, non riguarda i video e non usa mai i dati mobili.</string>
+
+  <string name="backup_folder_title">Cartella del dispositivo</string>
+  <string name="backup_folder_loading">Controllo cosa c’è già sul NAS…</string>
+  <string name="backup_folder_unavailable_title">Non posso ancora proporre una cartella</string>
+  <string name="backup_folder_unavailable_detail">Serve il NAS acceso e l’area privata. Riprova fra poco.</string>
+  <string name="backup_folder_chosen_title">Le copie vanno in «%1$s»</string>
+  <string name="backup_folder_chosen_detail">La cartella si sceglie una volta e non cambia più.</string>
+  <string name="backup_folder_new_title">Le copie andranno in «%1$s»</string>
+  <string name="backup_folder_new_detail">È il nome di questo dispositivo, nella tua area privata. Si sceglie una volta.</string>
+  <string name="backup_folder_use">Usa questo nome</string>
+  <string name="backup_folder_exists_title">«%1$s» c’è già sul NAS</string>
+  <plurals name="backup_folder_exists_detail">
+    <item quantity="one">Ci sta già %1$s file. Se continui lì, quelli identici si collegano senza ricaricarli e niente si sovrascrive.</item>
+    <item quantity="other">Ci stanno già %1$s file. Se continui lì, quelli identici si collegano senza ricaricarli e niente si sovrascrive.</item>
+  </plurals>
+  <string name="backup_folder_continue">Continua lì</string>
+  <string name="backup_folder_new">Nuova cartella «%1$s»</string>
+  <string name="backup_folder_note">Dopo la scelta la cartella non si cambia: rinominare il dispositivo non la sposta.</string>
+</resources>

@@ -30,7 +30,8 @@ import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
  * - [onOpenSettings]: dal menu della vista;
  * - [statusFooter]: l'indicatore della rete e del NAS di `:app`, in fondo accanto alla capsula del NAS;
  * - [tabBarScroll]: la connessione con cui la pillola si ripiega scorrendo verso i piu' vecchi (scelta 5 dell'utente);
- * - [onNasStatusClick]: la capsula del NAS in fondo apre i dettagli (la Diagnostica: "Ho controllato, continua").
+ * - [onNasStatusClick]: la capsula del NAS in fondo apre i dettagli (la Diagnostica: "Ho controllato, continua");
+ * - [onBackupStatusClick]: la capsula del backup, la terza voce del piede, apre la pagina Backup (Fase 5A, D16).
  *
  * Gli stati (§2.4): nessun permesso, accesso parziale (E-P1), foto in attesa (E-P21), prima lettura, Libreria vuota,
  * filtro senza risultati. I pop-up (menu, conferma dell'eliminazione) usano il `FluidGlassModalHost` dello scope; se
@@ -47,10 +48,11 @@ fun LibraryTab(
   state: LibraryTabState = rememberEmptyLibraryTabState(),
   tabBarScroll: NestedScrollConnection? = null,
   onNasStatusClick: () -> Unit = {},
+  onBackupStatusClick: () -> Unit = {},
 ) {
   LibraryModalHost(modifier) {
     LibraryEffects(state)
-    LibraryScreen(contentPadding, backdropOut, onOpenViewer, onOpenSettings, statusFooter, state, tabBarScroll, onNasStatusClick)
+    LibraryScreen(contentPadding, backdropOut, onOpenViewer, onOpenSettings, statusFooter, state, tabBarScroll, onNasStatusClick, onBackupStatusClick)
   }
 }
 

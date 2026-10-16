@@ -26,6 +26,8 @@
   <string name="grid_cell_marks">Segni</string>
   <string name="grid_cell_unreadable">Non leggibile</string>
   <string name="grid_cell_pressed">Premuta</string>
+  <string name="grid_cell_problem">Problema del backup</string>
+  <string name="grid_cell_copies">Copie simili</string>
   <string name="grid_sample_duration">0:42</string>
 
   <string name="grid_width_narrow">Finestra stretta, %1$d dp</string>

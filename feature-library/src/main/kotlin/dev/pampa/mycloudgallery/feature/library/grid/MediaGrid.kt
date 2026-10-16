@@ -444,7 +444,7 @@ private fun GridCell(context: GridRenderContext, layout: GridLayout, position: I
   GalleryGridCell(
     key = id,
     image = image,
-    badges = badgesOf(snapshot.kindAt(index), snapshot.flagsAt(index), snapshot.presenceAt(index)) { snapshot.durationMsAt(index) },
+    badges = badgesOf(snapshot.kindAt(index), snapshot.flagsAt(index), snapshot.presenceAt(index), { snapshot.durationMsAt(index) }, { snapshot.groupSizeAt(index) }),
     style = context.style,
     interaction = state.interaction,
     actions = context.actions,
@@ -469,8 +469,14 @@ private val FallbackOrder: Map<ThumbBucket, List<ThumbBucket>> = mapOf(
  * I segni di una cella: quelli della Fase 3 (D15: durata, preferito, modificata, non leggibile) e la presenza della
  * Fase 4 (D18, `TimelineSnapshot.presenceAt`: l'indice non da' "solo telefono" finche' nessuna cella e' sul NAS).
  */
-private inline fun badgesOf(kind: MediaKind, flags: Int, presence: PresenceBadge?, duration: () -> Long): GalleryGridCellBadges {
-  val marks = flags and (CellFlags.FAVORITE or CellFlags.EDITED or CellFlags.UNREADABLE)
+private inline fun badgesOf(
+  kind: MediaKind,
+  flags: Int,
+  presence: PresenceBadge?,
+  duration: () -> Long,
+  groupSize: () -> Int,
+): GalleryGridCellBadges {
+  val marks = flags and (CellFlags.FAVORITE or CellFlags.EDITED or CellFlags.UNREADABLE or CellFlags.SIMILAR_COPIES)
   if (marks == 0 && kind != MediaKind.VIDEO && presence == null) return GalleryGridCellBadges.None
   return GalleryGridCellBadges(
     favorite = CellFlags.has(flags, CellFlags.FAVORITE),
@@ -478,6 +484,8 @@ private inline fun badgesOf(kind: MediaKind, flags: Int, presence: PresenceBadge
     duration = if (kind == MediaKind.VIDEO) GridText.duration(duration()) else null,
     unreadable = CellFlags.has(flags, CellFlags.UNREADABLE),
     presence = presence?.toGallery(),
+    // D36: il segno "copie" dipende dal solo flag della cella (D15); il numero e' la dimensione del gruppo che l'indice ha gia'.
+    copies = if (CellFlags.has(flags, CellFlags.SIMILAR_COPIES)) groupSize() else 0,
   )
 }
 
@@ -488,9 +496,8 @@ internal fun PresenceBadge.toGallery(): GalleryPresence = when (this) {
   PresenceBadge.BOTH -> GalleryPresence.Both
   PresenceBadge.SAFE -> GalleryPresence.Safe
   PresenceBadge.TO_VERIFY -> GalleryPresence.ToVerify
-  // Fase 5 (P0, D15): finche' il glifo PROBLEM non e' nel catalogo G2 (P5, §12.4 della grafica) un problema del backup si
-  // disegna con il segno che chiede attenzione, mai come "al sicuro".
-  PresenceBadge.PROBLEM -> GalleryPresence.ToVerify
+  // Fase 5 (D15): il disco intero del catalogo G2 (§12.4 della grafica); PresenceBadge.of lo da' prima di "al sicuro".
+  PresenceBadge.PROBLEM -> GalleryPresence.Problem
 }
 
 /**

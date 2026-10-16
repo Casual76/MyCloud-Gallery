@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- La pagina Backup (Fase 5A, docs/fase5-progetto.md §1.5, §2.6, D16): la scheda di stato, le sorgenti, la cartella del dispositivo. -->
+  <string name="backup_do_now">Fai ora</string>
+  <string name="backup_resume">Riprendi</string>
+  <string name="backup_stop">Ferma</string>
+  <string name="backup_settings_open">Impostazioni del backup</string>
+
+  <string name="backup_status_not_configured_title">Il backup non è ancora pronto</string>
+  <string name="backup_status_not_configured_detail">Manca qualcosa per cominciare.</string>
+  <string name="backup_status_open_settings">Apri le impostazioni</string>
+  <string name="backup_setup_nas">Collega il NAS.</string>
+  <string name="backup_setup_private_area">Manca l’area privata sul NAS.</string>
+  <string name="backup_setup_sources">Scegli cosa salvare.</string>
+  <string name="backup_setup_device_folder">Scegli la cartella del dispositivo sul NAS.</string>
+  <string name="backup_setup_media_permission">Consenti l’accesso a foto e video.</string>
+
+  <string name="backup_status_first_comparing_title">Preparo il primo backup</string>
+  <string name="backup_status_first_ready_title">Pronto per il primo backup</string>
+  <string name="backup_status_first_ready_detail">%1$s foto e video da mettere al sicuro, %2$s in tutto.</string>
+  <string name="backup_status_first_see">Vedi il riepilogo</string>
+
+  <string name="backup_status_up_to_date_title">Tutto al sicuro</string>
+  <plurals name="backup_status_up_to_date_detail">
+    <item quantity="one">%1$s media al sicuro sul NAS.</item>
+    <item quantity="other">%1$s media al sicuro sul NAS.</item>
+  </plurals>
+  <string name="backup_status_last_run">Ultimo giro: %1$s</string>
+
+  <string name="backup_status_waiting_title">%1$s in coda</string>
+  <string name="backup_status_waiting_detail">%1$s Da caricare: %2$s.</string>
+
+  <string name="backup_status_running_title">Backup in corso</string>
+  <string name="backup_status_running_first_title">Primo backup in corso</string>
+  <string name="backup_status_running_now_title">Backup in corso, avviato da te</string>
+  <string name="backup_status_running_files">%1$s: %2$s di %3$s</string>
+  <string name="backup_status_running_bytes">%1$s di %2$s</string>
+
+  <string name="backup_status_stopped_title">Backup fermo</string>
+  <string name="backup_status_stopped_user">Lo hai fermato tu. Quello che era a metà riparte da dove si era fermato.</string>
+  <string name="backup_status_stopped_system">Android ha fermato il lavoro. Riprende da solo.</string>
+  <string name="backup_status_stopped_reset">L’app è stata azzerata: il backup ricomincia dalla configurazione.</string>
+
+  <string name="backup_section_problems">Da controllare</string>
+  <string name="backup_section_sources">Cosa si salva</string>
+  <string name="backup_section_device">Sul NAS</string>
+
+  <string name="backup_sources_empty_title">Nessuna sorgente scelta</string>
+  <string name="backup_sources_empty_detail">Scegli le cartelle del telefono da salvare nelle impostazioni del backup.</string>
+  <plurals name="backup_source_media">
+    <item quantity="one">%1$s media</item>
+    <item quantity="other">%1$s media</item>
+  </plurals>
+  <string name="backup_source_safe">%1$s al sicuro</string>
+  <string name="backup_source_queued">%1$s in coda</string>
+  <plurals name="backup_source_problems">
+    <item quantity="one">%1$s con un problema</item>
+    <item quantity="other">%1$s con problemi</item>
+  </plurals>
+  <string name="backup_source_not_saved">non si salva</string>
+  <string name="backup_source_state_safe">Al sicuro</string>
+  <string name="backup_source_state_working">In corso</string>
+  <string name="backup_source_state_problem">Da controllare</string>
+  <string name="backup_source_state_off">Non salvata</string>
+
+  <string name="backup_device_folder_title">Cartella del dispositivo</string>
+  <string name="backup_device_folder_chosen">Le copie vanno in «%1$s».</string>
+  <string name="backup_device_folder_not_chosen">Si sceglie prima del primo backup.</string>
+  <string name="backup_settings_title">Impostazioni del backup</string>
+  <string name="backup_settings_detail">Cosa salvare, dove e quando.</string>
+</resources>

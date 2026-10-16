@@ -100,6 +100,8 @@ data object SettingsQualityRoute
  * passa **solo in debug** (catalogo dei componenti, stati finti dello scaffold); in release e' null e non
  * esiste.
  *
+ * [openBackup] (Fase 5A, D16) porta dalla voce "Backup" alla pagina del backup di feature-backup; null = la voce non c'e'.
+ *
  * Ogni pagina vive dentro un [SettingsHost]: i fogli di conferma (perso, reimposta, indirizzo) si aprono
  * anche se :app non ha un host dei pop-up alla radice.
  */
@@ -108,6 +110,7 @@ fun NavGraphBuilder.settingsGraph(
   openDiagnostics: () -> Unit,
   resumeStep: (OnboardingStep) -> Unit,
   developerSection: (@Composable () -> Unit)? = null,
+  openBackup: (() -> Unit)? = null,
 ) {
   val back: () -> Unit = { nav.popBackStack() }
   navigation<SettingsGraphRoute>(startDestination = SettingsHomeRoute) {
@@ -124,6 +127,7 @@ fun NavGraphBuilder.settingsGraph(
             openBackupNotice = { nav.navigate(SettingsBackupRoute) },
             openAbout = { nav.navigate(SettingsAboutRoute) },
             openQuality = { nav.navigate(SettingsQualityRoute) },
+            openBackup = openBackup,
           ),
           openDiagnostics = openDiagnostics,
           resumeStep = resumeStep,

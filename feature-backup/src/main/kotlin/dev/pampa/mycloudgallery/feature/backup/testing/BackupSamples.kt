@@ -9,6 +9,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupSource
 import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSummary
 import dev.pampa.mycloudgallery.core.backup.contract.BackupTrigger
+import dev.pampa.mycloudgallery.core.backup.contract.DeviceFolder
 import dev.pampa.mycloudgallery.core.backup.contract.ExistingCopiesState
 import dev.pampa.mycloudgallery.core.backup.contract.MediaBackupState
 import dev.pampa.mycloudgallery.core.backup.contract.NotOnNasReason
@@ -19,6 +20,9 @@ import dev.pampa.mycloudgallery.core.backup.contract.SummaryWarning
 import dev.pampa.mycloudgallery.core.backup.contract.WaitReason
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupActions
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupScreen
+import dev.pampa.mycloudgallery.feature.backup.contract.DeviceFolderProposal
+import dev.pampa.mycloudgallery.feature.backup.contract.ExistingFolder
+import dev.pampa.mycloudgallery.feature.backup.contract.PhoneFolder
 
 /**
  * Fase 5A (P0): gli stati di esempio del backup per i test e gli screenshot di P5 (`docs/screenshots/5-P5/`): **uno per ogni caso** del
@@ -40,6 +44,21 @@ object BackupSamples {
     ),
     estimate = BackupEstimate(durationMillis = 9_360_000, nights = 1, wifiBytes = 97_000_000_000, mobileBytes = 0, batteryPercent = null),
     warnings = setOf(SummaryWarning.ON_BATTERY),
+  )
+
+  /**
+   * Il riepilogo con le due stime di P4: "Stanotte" (`estimate`, segue il preset) e "Inizia ora" (`estimateNow`, parte subito e scavalca
+   * fascia e carica), con una parte del traffico sui dati mobili (la conferma con la stima).
+   */
+  val twoEstimatesSummary: BackupSummary = firstBackupSummary.copy(
+    estimateNow = BackupEstimate(durationMillis = 8_100_000, nights = 1, wifiBytes = 82_000_000_000, mobileBytes = 15_000_000_000, batteryPercent = 18),
+    warnings = setOf(SummaryWarning.ON_BATTERY, SummaryWarning.MOBILE_DATA, SummaryWarning.PARTIAL_ACCESS),
+  )
+
+  /** Le regole di adesso non lasciano partire il backup (`BackupEstimate.neverFinishes`, P4): il foglio lo dice invece di "0 notti". */
+  val neverFinishesSummary: BackupSummary = firstBackupSummary.copy(
+    estimate = BackupEstimate(durationMillis = 0, nights = 0, wifiBytes = 97_000_000_000, mobileBytes = 0, batteryPercent = null, neverFinishes = true),
+    warnings = setOf(SummaryWarning.LONG_FIRST_BACKUP),
   )
 
   /** Lo stesso riepilogo mentre si confronta ancora con le copie sul NAS (§2.11 punti 1 e 6). */
@@ -75,6 +94,29 @@ object BackupSamples {
     MediaBackupState.LostBeforeBackup,
   )
 
+  /**
+   * Le cartelle del telefono che Impostazioni -> Backup elenca (§2.1, §0 del progetto: i numeri dell'S25 del 12/10): la fotocamera e gli
+   * screenshot, poi le app di messaggistica, Quick Share, una sottocartella di `DCIM` e `Pictures`.
+   */
+  val phoneFolders: List<PhoneFolder> = listOf(
+    PhoneFolder(BackupSource.Camera, media = 866, bytes = 3_500_000_000),
+    PhoneFolder(BackupSource.Screenshots, media = 915, bytes = 600_000_000),
+    PhoneFolder(BackupSource.Folder("external_primary", "Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Images/"), media = 2_105, bytes = 4_200_000_000),
+    PhoneFolder(BackupSource.Folder("external_primary", "DCIM/Vecchie/"), media = 1_088, bytes = 5_100_000_000),
+    PhoneFolder(BackupSource.Folder("external_primary", "Download/Quick Share/"), media = 654, bytes = 2_300_000_000),
+    PhoneFolder(BackupSource.Folder("external_primary", "Pictures/Telegram/"), media = 224, bytes = 310_000_000),
+  )
+
+  /** Il nome del dispositivo ripulito per `SharePath` (D7). */
+  val deviceFolder: DeviceFolder = DeviceFolder("S25 di Mario")
+
+  /** La proposta senza nessuna cartella sul NAS con quel nome. */
+  val freshFolderProposal: DeviceFolderProposal = DeviceFolderProposal(suggested = deviceFolder, existing = null, alternative = null)
+
+  /** E-B6, E-B16: `Backup/S25 di Mario` c'e' gia' con 1.234 file: "Continua lì" o "Nuova cartella". */
+  val existingFolderProposal: DeviceFolderProposal =
+    DeviceFolderProposal(suggested = deviceFolder, existing = ExistingFolder(files = 1_234), alternative = DeviceFolder("S25 di Mario (2)"))
+
   /** Le sorgenti della pagina Backup: una a posto, una con un problema, una spenta. */
   val sources: List<SourceStatus> = listOf(
     SourceStatus(BackupSource.Camera, active = true, media = 1_250, safe = 1_250, queued = 0, problems = emptyMap()),
@@ -100,6 +142,9 @@ class RecordingBackupActions : BackupActions {
   var stopCalls: Int = 0
     private set
 
+  /** Le scelte del foglio del primo backup: `true` = "Stanotte", `false` = "Inizia ora". */
+  val firstBackupChoices: MutableList<Boolean> = ArrayList()
+
   override fun perform(action: BackupAction) {
     performed += action
   }
@@ -110,6 +155,10 @@ class RecordingBackupActions : BackupActions {
 
   override fun stop() {
     stopCalls++
+  }
+
+  override fun startFirstBackup(tonight: Boolean) {
+    firstBackupChoices += tonight
   }
 
   override fun open(screen: BackupScreen) {

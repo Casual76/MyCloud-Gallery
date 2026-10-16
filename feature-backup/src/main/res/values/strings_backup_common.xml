@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Le parole comuni alle schermate del backup (Fase 5A, docs/fase5-progetto.md §1.5, §2.6; D30). Solo numeri e codici: mai nomi di
+       file, percorsi o share. Le apostrofi sono quelle tipografiche (’). -->
+  <string name="backup_title">Backup</string>
+  <string name="backup_back">Indietro</string>
+  <string name="backup_state_on">Attivo</string>
+  <string name="backup_state_off">Spento</string>
+
+  <string name="backup_source_camera">Fotocamera</string>
+  <string name="backup_source_screenshots">Screenshot</string>
+  <string name="backup_source_folder_other">Altra cartella</string>
+
+  <string name="backup_kind_photos">Foto</string>
+  <string name="backup_kind_videos">Video</string>
+
+  <string name="backup_eta_under_minute">meno di un minuto</string>
+  <string name="backup_eta_minutes">circa %1$s min</string>
+  <string name="backup_eta_hours">circa %1$s h %2$s min</string>
+  <string name="backup_eta_hours_only">circa %1$s h</string>
+
+  <string name="backup_at_day">%1$s alle %2$s</string>
+
+  <string name="backup_wait_charging">Aspetta che il telefono sia in carica.</string>
+  <string name="backup_wait_wifi">Aspetta una rete Wi-Fi.</string>
+  <string name="backup_wait_home_wifi">Aspetta il Wi-Fi di casa.</string>
+  <string name="backup_wait_night_window">Aspetta la notte, la fascia scelta nelle attività.</string>
+  <string name="backup_wait_battery">Aspetta che la batteria sia più carica.</string>
+  <string name="backup_wait_thermal">Aspetta che il telefono si raffreddi.</string>
+  <string name="backup_wait_data_cap">Aspetta il prossimo periodo dei dati.</string>
+  <string name="backup_wait_nas">Aspetta che il NAS risponda.</string>
+  <string name="backup_wait_comparing">Sta ancora confrontando con il NAS.</string>
+  <string name="backup_wait_next_run">Riprende al prossimo giro.</string>
+</resources>

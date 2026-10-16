@@ -30,6 +30,7 @@ import dev.pampa.mycloudgallery.feature.viewer.details.NoMediaDetails
 import dev.pampa.mycloudgallery.feature.viewer.details.NoViewerBytes
 import dev.pampa.mycloudgallery.feature.viewer.details.ViewerBytes
 import dev.pampa.mycloudgallery.feature.viewer.download.PhoneDownload
+import dev.pampa.mycloudgallery.feature.viewer.info.MediaBackupStates
 import dev.pampa.mycloudgallery.feature.viewer.menu.NasMediaActions
 import dev.pampa.mycloudgallery.feature.viewer.video.BytesMotionVideoLocator
 import dev.pampa.mycloudgallery.feature.viewer.video.MotionVideoLocator
@@ -67,6 +68,7 @@ import kotlinx.coroutines.withContext
  *   NAS non risponde.
  * @property download "Scarica sul telefono" (Fase 4, D20): senza, la voce non compare nel menu (D13).
  * @property nasActions "Sposta", "Rinomina" ed "Elimina…" per un media del NAS (Fase 4B, P14/P16): senza, le voci non compaiono (D13).
+ * @property backup lo stato del backup di un media per la riga "Backup" del pannello informazioni (Fase 5A, D16): senza, la riga non c'e' (D13).
  * @property dispatchers i thread di lavoro (letture di dettagli ed EXIF): nei test sono uno solo, senza attese.
  */
 @Immutable
@@ -90,6 +92,7 @@ class ViewerServices(
   val download: PhoneDownload? = null,
   val nasActions: NasMediaActions? = null,
   val dispatchers: DispatcherProvider = DefaultDispatcherProvider,
+  val backup: MediaBackupStates? = null,
 )
 
 /** Decodifica un'immagine animata (GIF, WebP animato) in un `Drawable` che si anima da solo (E-M11). */

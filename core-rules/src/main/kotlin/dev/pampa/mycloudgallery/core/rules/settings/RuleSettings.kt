@@ -37,6 +37,9 @@ import kotlinx.coroutines.flow.map
  * @property customRules regole di "Personalizzato"; le attivita' mancanti hanno quelle del preset Notte.
  * @property customHeavyOnlyAtHome "pesanti solo sul Wi-Fi di casa" per "Personalizzato".
  * @property billingCycleStartDay giorno di inizio del mese dei contatori (1..28).
+ * @property protectNewPhotos "Proteggi subito le foto nuove" (Fase 5, D34, approvata con Q7 (a)): con **qualunque** preset una foto
+ *   appena scattata si carica appena c'e' il Wi-Fi di casa e la batteria e' sopra la soglia, anche fuori dalla fascia notte. Solo foto
+ *   della fotocamera, mai video, mai dati mobili ([quickPhotosRuleSet]). Acceso di default.
  */
 data class RuleSettings(
   val preset: Preset = Preset.NIGHT,
@@ -49,6 +52,7 @@ data class RuleSettings(
   val customRules: Map<BackgroundActivity, ActivityRule> = emptyMap(),
   val customHeavyOnlyAtHome: Boolean = true,
   val billingCycleStartDay: Int = 1,
+  val protectNewPhotos: Boolean = true,
 ) {
   init {
     require(batteryThresholdPercent in 0..100) { "La soglia della batteria e' una percentuale." }
@@ -148,6 +152,7 @@ class DataStoreRuleSettingsStore(private val dataStore: DataStore<Preferences>) 
       billingCycleStartDay =
         prefs[CYCLE_START_DAY]?.takeIf { it in 1..BillingCycle.MAX_START_DAY }
           ?: defaults.billingCycleStartDay,
+      protectNewPhotos = prefs[PROTECT_NEW_PHOTOS] ?: defaults.protectNewPhotos,
     )
   }
 
@@ -171,6 +176,7 @@ class DataStoreRuleSettingsStore(private val dataStore: DataStore<Preferences>) 
     prefs[PAUSE_ON_POWER_SAVER] = s.pauseOnPowerSaver
     prefs[CUSTOM_HEAVY_AT_HOME] = s.customHeavyOnlyAtHome
     prefs[CYCLE_START_DAY] = s.billingCycleStartDay
+    prefs[PROTECT_NEW_PHOTOS] = s.protectNewPhotos
     BackgroundActivity.entries.forEach { activity ->
       val rule = s.customRules[activity]
       if (rule == null) prefs.remove(ruleKey(activity)) else prefs[ruleKey(activity)] = encodeRule(rule)
@@ -237,5 +243,6 @@ class DataStoreRuleSettingsStore(private val dataStore: DataStore<Preferences>) 
     val PAUSE_ON_POWER_SAVER = booleanPreferencesKey("rule.powersaver.pause")
     val CUSTOM_HEAVY_AT_HOME = booleanPreferencesKey("rule.custom.heavy_home_only")
     val CYCLE_START_DAY = intPreferencesKey("rule.cycle.startday")
+    val PROTECT_NEW_PHOTOS = booleanPreferencesKey("rule.backup.protect_new_photos")
   }
 }

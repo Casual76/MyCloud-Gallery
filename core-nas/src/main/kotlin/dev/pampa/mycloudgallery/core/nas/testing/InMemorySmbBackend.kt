@@ -58,6 +58,12 @@ enum class SimOp {
 
   /** Fase 4B: apertura di un file o di una cartella esistenti per rinominarli o cancellarli sullo stesso handle. */
   OPEN_CHANGE,
+
+  /** Fase 5A (D5): riapertura in scrittura, senza crearlo, del proprio temporaneo del backup. */
+  OPEN_WRITE,
+
+  /** Fase 5A (D5): `SET_INFO` di fine file sullo stesso handle (accorciamento al punto di ripresa). */
+  SET_END_OF_FILE,
 }
 
 /** Che cosa fa la TCP verso il simulatore. */
@@ -935,6 +941,22 @@ class InMemorySmbBackend(
       }
     }
 
+    // Fase 5A (D5): il proprio temporaneo del backup riaperto per riprenderlo. Mai creato (FILE_OPEN: nome assente = 0xC0000034), in
+    // esclusiva come il temporaneo appena creato, senza seguire un collegamento (FILE_OPEN_REPARSE_POINT): lo stato del nodo stesso
+    // arriva sullo stesso handle, attributi compresi. Un file aperto dal PC risponde SHARING_VIOLATION.
+    override fun openExistingForWrite(path: String): SmbWriteFile = perform(SimOp.OPEN_WRITE, path, lost = { (it as SimOpen).lost() }) {
+      requireWrite()
+      synchronized(lock) {
+        val parts = split(path)
+        if (parts.isEmpty()) throw SmbStatusException(NtStatus.ACCESS_DENIED)
+        val state = state()
+        val found = lookup(state, parts)
+        if (found.isDirectory) throw SmbStatusException(NtStatus.FILE_IS_A_DIRECTORY)
+        checkUnlocked(path, forRead = false)
+        SimWriteFile(this, found, open(state, found, SmbOpenMode.CREATE_EXCLUSIVE), found.info())
+      }
+    }
+
     override fun close() = Unit
 
     /** La chiave attuale di [node] (dopo eventuali rinomine), o null se non c'e' piu'. Sotto il lucchetto. */
@@ -1065,6 +1087,20 @@ class InMemorySmbBackend(
       }
     }
 
+    /** `SET_INFO` di fine file sullo stesso handle (D5): il file tiene i primi [length] byte (o si allunga con zeri, come Samba). */
+    fun setLengthOf(node: Node, length: Long) = perform(SimOp.SET_END_OF_FILE, node.displayPath) {
+      require(length >= 0) { "Lunghezza negativa." }
+      synchronized(lock) {
+        checkUnlocked(node.displayPath, forRead = false)
+        val current = node.materialize()
+        val growth = (length - current.size).coerceAtLeast(0)
+        if (growth > volumeFreeBytes) throw SmbStatusException(NtStatus.DISK_FULL)
+        node.bytes = current.copyOf(length.toInt())
+        node.lastWriteMs = nasTime()
+        node.changeMs = node.lastWriteMs
+      }
+    }
+
     fun checkAlive() = session.ensureUsable()
 
     fun flushOrLength(op: SimOp, node: Node) = perform(op, node.displayPath) { Unit }
@@ -1108,7 +1144,12 @@ class InMemorySmbBackend(
     override fun close() = closeOnServer()
   }
 
-  private inner class SimWriteFile(private val share: SimShare, private val node: Node, handle: SimHandle) : SimOpen(share, handle), SmbWriteFile {
+  private inner class SimWriteFile(
+    private val share: SimShare,
+    private val node: Node,
+    handle: SimHandle,
+    override val info: SmbFileInfo? = null,
+  ) : SimOpen(share, handle), SmbWriteFile {
     override fun write(buffer: ByteArray, fileOffset: Long, bufferOffset: Int, length: Int): Int =
       share.writeInto(node, buffer, fileOffset, bufferOffset, length)
 
@@ -1122,6 +1163,8 @@ class InMemorySmbBackend(
     override fun renameNoReplace(newPath: String) = share.rename(node, newPath)
 
     override fun copyChunks(resumeKey: ByteArray, chunks: List<SmbCopyChunk>): Long = share.copyChunksInto(node, resumeKey, chunks)
+
+    override fun setLength(length: Long) = share.setLengthOf(node, length)
 
     override fun deleteOnClose() {
       share.markDeleteOnClose(node)
@@ -1262,7 +1305,7 @@ class InMemorySmbBackend(
     /** Le operazioni che toccano i dischi (il risveglio dallo standby, E-R1). */
     val DISK_OPS: Set<SimOp> = setOf(
       SimOp.OPEN_READ, SimOp.READ, SimOp.CREATE, SimOp.WRITE, SimOp.RENAME, SimOp.MKDIR, SimOp.OPEN_DIRECTORY,
-      SimOp.DELETE, SimOp.COPY_CHUNK, SimOp.STAT, SimOp.RMDIR, SimOp.OPEN_CHANGE,
+      SimOp.DELETE, SimOp.COPY_CHUNK, SimOp.STAT, SimOp.RMDIR, SimOp.OPEN_CHANGE, SimOp.OPEN_WRITE, SimOp.SET_END_OF_FILE,
     )
 
     fun split(path: String): List<String> = path.split('\\', '/').filter { it.isNotEmpty() }

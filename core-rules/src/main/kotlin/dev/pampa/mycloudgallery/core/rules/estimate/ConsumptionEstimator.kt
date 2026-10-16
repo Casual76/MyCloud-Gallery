@@ -12,10 +12,13 @@ import kotlin.math.ceil
 import kotlin.math.min
 
 /**
- * Lavoro di una attivita': quanti elementi e quanti byte di TRAFFICO verso il NAS comporta.
+ * Lavoro di una attivita': quanti elementi e quanti byte comporta.
  *
  * Per il Calcolo AI i byte sono quelli delle anteprime di analisi da scaricare (~150 KB l'una,
  * [DeviceMeasures.analysisPreviewBytes]); il tempo si calcola sugli elementi.
+ *
+ * **Per il backup** (`PHOTO_BACKUP`, `VIDEO_BACKUP`, Fase 5) i byte sono quelli dei **media da caricare**, non il traffico: ogni file si
+ * scrive e poi si rilegge per intero prima del nome definitivo (D4), quindi il traffico e' il doppio (vedi [BackupCosts]).
  */
 data class Workload(val items: Long, val bytes: Long) {
   init {
@@ -30,14 +33,21 @@ data class Workload(val items: Long, val bytes: Long) {
 /**
  * La dimensione della libreria che aspetta di essere lavorata ([pending], l'arretrato di adesso) e il
  * flusso ordinario di media nuovi ([monthlyNew], per i dati e la batteria "a regime").
+ *
+ * @property verify Fase 5: copie **gia' sul NAS** da rileggere senza caricare niente (le copie identiche da collegare, gli hash
+ *   completi di `FULL_HASH`): costano la sola rilettura (`byte / verifyReadBytesPerSecond`) e il loro traffico. Vale per le attivita' di
+ *   backup; per le altre e' ignorato.
  */
 data class LibraryBacklog(
   val pending: Map<BackgroundActivity, Workload> = emptyMap(),
   val monthlyNew: Map<BackgroundActivity, Workload> = emptyMap(),
+  val verify: Map<BackgroundActivity, Workload> = emptyMap(),
 ) {
   fun pending(activity: BackgroundActivity): Workload = pending[activity] ?: Workload.NONE
 
   fun monthlyNew(activity: BackgroundActivity): Workload = monthlyNew[activity] ?: Workload.NONE
+
+  fun verify(activity: BackgroundActivity): Workload = verify[activity] ?: Workload.NONE
 }
 
 /**
@@ -54,6 +64,9 @@ data class LibraryBacklog(
  * | [transferBatteryPercentPerGigabyte] | 0,5 % | IPOTESI (non misurata in Fase 0): Wi-Fi attivo + cifratura SMB + hash |
  * | [mobileEnergyFactor] | 2,0 | IPOTESI: la radio cellulare costa ~2x il Wi-Fi a parita' di byte |
  * | [analysisPreviewBytes] | 150 KB | docs/decisioni.md, anteprima di analisi ~768 px (E-I11) |
+ * | [verifyReadBytesPerSecond] | 16,0 MB/s | Fase 5, D4: la rilettura di verifica del backup; stessa misura della lettura cifrata a 4 flussi. IPOTESI per il temporaneo appena scritto (da misurare a M2) |
+ * | [perFileOverheadSeconds] | 0,12 s | Fase 5, `fase5-progetto.md` §2.9: ~12 viaggi SMB per file a ~10 ms l'uno. IPOTESI (da misurare in F22) |
+ * | [uploadStreams] | 1 | Fase 5: i 9 MB/s di [smbWriteBytesPerSecond] sono la misura con **un** flusso; due caricamenti paralleli non sono misurati (F22) |
  */
 data class DeviceMeasures(
   val smbWriteBytesPerSecond: Double = 9.0e6,
@@ -63,11 +76,19 @@ data class DeviceMeasures(
   val transferBatteryPercentPerGigabyte: Double = 0.5,
   val mobileEnergyFactor: Double = 2.0,
   val analysisPreviewBytes: Long = 150_000L,
+  val verifyReadBytesPerSecond: Double = 16.0e6,
+  val perFileOverheadSeconds: Double = 0.12,
+  val uploadStreams: Int = 1,
 ) {
   init {
     require(smbWriteBytesPerSecond > 0 && smbReadBytesPerSecond > 0 && aiItemsPerSecond > 0) {
       "Le velocita' misurate devono essere positive."
     }
+    require(verifyReadBytesPerSecond > 0) { "La velocita' di rilettura deve essere positiva." }
+    require(perFileOverheadSeconds >= 0) { "Il costo per file non puo' essere negativo." }
+    // `uploadStreams` dice con quanti caricamenti in parallelo e' stata misurata `smbWriteBytesPerSecond` (e quanti ne tiene il motore
+    // del backup): il tempo NON si moltiplica per il numero di flussi, perche' con piu' flussi la velocita' va misurata (CPU del NAS).
+    require(uploadStreams >= 1) { "Almeno un caricamento alla volta." }
   }
 
   companion object {
@@ -113,6 +134,10 @@ data class ActivityEstimate(
   /** Giorni per finire da sola (null = mai con queste regole). */
   val daysToFinish: Double?,
   val enabled: Boolean,
+  /** Traffico dell'arretrato verso il NAS, in byte (per il backup: caricamento **e** rilettura, Fase 5). */
+  val pendingTrafficBytes: Long = 0L,
+  /** Quota di quel traffico che passa sui dati mobili con queste regole (0..1). */
+  val mobileShare: Double = 0.0,
 )
 
 /**
@@ -128,6 +153,7 @@ data class ActivityEstimate(
  * @property wifiBytesPerMonth dati Wi-Fi al mese a regime.
  * @property mobileBytesFirstMonth dati mobili nel primo mese, arretrato compreso, entro il tetto.
  * @property daysToFinish giorni per smaltire tutto l'arretrato; null = non finisce mai con queste regole.
+ * @property wifiBytesFirstMonth dati Wi-Fi nel primo mese, arretrato compreso, entro il tetto Wi-Fi (Fase 5).
  */
 data class ConsumptionEstimate(
   val perActivity: Map<BackgroundActivity, ActivityEstimate>,
@@ -138,6 +164,7 @@ data class ConsumptionEstimate(
   val wifiBytesPerMonth: Long,
   val mobileBytesFirstMonth: Long,
   val daysToFinish: Double?,
+  val wifiBytesFirstMonth: Long = 0L,
 )
 
 /** L'interfaccia dello stimatore: dimensioni della libreria + misure del dispositivo -> consumi. */
@@ -153,17 +180,18 @@ interface ConsumptionEstimator {
 /**
  * Lo stimatore. Formule (documentate anche in docs/regole-attivita.md):
  *
- *  - **Tempo di lavoro** dell'arretrato: backup = byte / velocita' di scrittura SMB; sync indice,
- *    preparazione e anteprime HQ = byte / velocita' di lettura SMB; Calcolo AI = elementi / foto al secondo.
+ *  - **Tempo di lavoro** dell'arretrato: backup = byte / scrittura SMB + byte / rilettura + file x costo per file
+ *    (Fase 5, D4: ogni file si scrive e si rilegge per intero), piu' la sola rilettura delle copie gia' sul NAS; sync
+ *    indice, preparazione e anteprime HQ = byte / velocita' di lettura SMB; Calcolo AI = elementi / foto al secondo.
  *  - **Ore utili al giorno** di una attivita' = min(ore della fascia, ore di carica se serve la carica,
  *    ore delle reti ammesse) x efficienza. Il Calcolo AI non e' limitato dalla rete (lavora in locale).
  *    Le attivita' pesanti, con "pesanti solo a casa", hanno solo il Wi-Fi di casa.
  *  - **Tempo per finire**: le attivita' di rete si dividono la stessa banda (il collo di bottiglia e' il
  *    NAS), quindi i loro tempi si sommano: giorni = somma dei tempi / ore utili; il Calcolo AI e' in
  *    parallelo. Totale = il maggiore dei due. E' una stima prudente.
- *  - **Energia**: trasferimento = GB x %/GB (x [DeviceMeasures.mobileEnergyFactor] per la quota che passa
- *    sui dati mobili); Calcolo AI = migliaia di foto x %/1000.
- *  - **Dati al mese**: i media nuovi del mese, ripartiti fra le reti ammesse in proporzione alle ore
+ *  - **Energia**: trasferimento = GB di **traffico** x %/GB (x [DeviceMeasures.mobileEnergyFactor] per la quota che
+ *    passa sui dati mobili; per il backup il traffico e' caricamento + rilettura); Calcolo AI = migliaia di foto x %/1000.
+ *  - **Dati al mese**: il traffico dei media nuovi del mese, ripartito fra le reti ammesse in proporzione alle ore
  *    giornaliere su ciascuna; la quota mobile e' limitata dal tetto.
  */
 class DefaultConsumptionEstimator : ConsumptionEstimator {
@@ -212,6 +240,8 @@ class DefaultConsumptionEstimator : ConsumptionEstimator {
           fractionPerNight = fraction,
           daysToFinish = days,
           enabled = row.enabled,
+          pendingTrafficBytes = row.pendingBytes.toLong(),
+          mobileShare = row.mobileShare,
         )
     }
 
@@ -222,8 +252,10 @@ class DefaultConsumptionEstimator : ConsumptionEstimator {
     var mobileSteady = 0.0
     var mobileFirst = 0.0
     var allSteady = 0.0
+    var allFirst = 0.0
     for (row in enabledRows) {
       allSteady += row.monthlyBytes
+      allFirst += row.monthlyBytes + row.pendingBytes
       mobileSteady += row.monthlyBytes * row.mobileShare
       mobileFirst += (row.monthlyBytes + row.pendingBytes) * row.mobileShare
     }
@@ -232,6 +264,8 @@ class DefaultConsumptionEstimator : ConsumptionEstimator {
     val mobileFirstMonth = if (mobileCap != null) min(mobileFirst, mobileCap) else mobileFirst
     var wifiMonthly = (allSteady - mobileMonthly).coerceAtLeast(0.0)
     rules.caps.wifiBytes?.let { wifiMonthly = min(wifiMonthly, it.toDouble()) }
+    var wifiFirstMonth = (allFirst - mobileFirstMonth).coerceAtLeast(0.0)
+    rules.caps.wifiBytes?.let { wifiFirstMonth = min(wifiFirstMonth, it.toDouble()) }
 
     return ConsumptionEstimate(
       perActivity = estimates,
@@ -242,6 +276,7 @@ class DefaultConsumptionEstimator : ConsumptionEstimator {
       wifiBytesPerMonth = wifiMonthly.toLong(),
       mobileBytesFirstMonth = mobileFirstMonth.toLong(),
       daysToFinish = daysToFinish,
+      wifiBytesFirstMonth = wifiFirstMonth.toLong(),
     )
   }
 
@@ -269,6 +304,10 @@ class DefaultConsumptionEstimator : ConsumptionEstimator {
     val rule = rules.ruleFor(activity)
     val pending = backlog.pending(activity)
     val monthly = backlog.monthlyNew(activity)
+    val verify = backlog.verify(activity)
+    // Il traffico: per il backup caricamento + rilettura (Fase 5, D4); per le altre attivita' sono i byte del lavoro.
+    val pendingTraffic = trafficBytes(activity, pending, verify)
+    val monthlyTraffic = trafficBytes(activity, monthly, Workload.NONE)
 
     // Reti davvero disponibili: le pesanti, con la regola "solo a casa", hanno solo il Wi-Fi di casa.
     val networks =
@@ -298,12 +337,12 @@ class DefaultConsumptionEstimator : ConsumptionEstimator {
       activity = activity,
       rule = rule,
       enabled = rule.enabled,
-      workSeconds = workSeconds(activity, pending, measures),
+      workSeconds = workSeconds(activity, pending, verify, measures),
       usableHours = usable,
-      pendingEnergy = energy(activity, pending, measures, mobileShare),
-      monthlyEnergy = energy(activity, monthly, measures, mobileShare),
-      pendingBytes = pending.bytes.toDouble(),
-      monthlyBytes = monthly.bytes.toDouble(),
+      pendingEnergy = energy(activity, pending, pendingTraffic, measures, mobileShare),
+      monthlyEnergy = energy(activity, monthly, monthlyTraffic, measures, mobileShare),
+      pendingBytes = pendingTraffic.toDouble(),
+      monthlyBytes = monthlyTraffic.toDouble(),
       mobileShare = mobileShare,
     )
   }
@@ -316,19 +355,29 @@ class DefaultConsumptionEstimator : ConsumptionEstimator {
       AllowedNetwork.ROAMING -> 0.0 // mai pianificato: il roaming e' un'eccezione, non una risorsa
     }
 
-  private fun workSeconds(activity: BackgroundActivity, work: Workload, measures: DeviceMeasures): Double =
+  private fun workSeconds(activity: BackgroundActivity, work: Workload, verify: Workload, measures: DeviceMeasures): Double =
     when (activity) {
       BackgroundActivity.AI_COMPUTE -> work.items / measures.aiItemsPerSecond
+      // Fase 5: T = B/W + B/R + N·o, piu' la sola rilettura delle copie gia' sul NAS (§2.9).
       BackgroundActivity.PHOTO_BACKUP,
-      BackgroundActivity.VIDEO_BACKUP -> work.bytes / measures.smbWriteBytesPerSecond
+      BackgroundActivity.VIDEO_BACKUP -> BackupCosts.seconds(work, verify, measures)
       BackgroundActivity.INDEX_SYNC,
       BackgroundActivity.PREPARATION,
       BackgroundActivity.HQ_PREVIEWS -> work.bytes / measures.smbReadBytesPerSecond
     }
 
+  /** Il traffico verso il NAS di un lavoro: per il backup il caricamento **e** la rilettura (Fase 5, D4), per le altre i byte. */
+  private fun trafficBytes(activity: BackgroundActivity, work: Workload, verify: Workload): Long =
+    when (activity) {
+      BackgroundActivity.PHOTO_BACKUP,
+      BackgroundActivity.VIDEO_BACKUP -> BackupCosts.trafficBytes(work, verify)
+      else -> work.bytes
+    }
+
   private fun energy(
     activity: BackgroundActivity,
     work: Workload,
+    trafficBytes: Long,
     measures: DeviceMeasures,
     mobileShare: Double,
   ): Double =
@@ -337,7 +386,7 @@ class DefaultConsumptionEstimator : ConsumptionEstimator {
       work.items / 1000.0 * measures.aiBatteryPercentPerThousandItems
     } else {
       val factor = 1.0 + mobileShare * (measures.mobileEnergyFactor - 1.0)
-      work.bytes / BYTES_PER_GB * measures.transferBatteryPercentPerGigabyte * factor
+      trafficBytes / BYTES_PER_GB * measures.transferBatteryPercentPerGigabyte * factor
     }
 
   private companion object {

@@ -246,6 +246,18 @@ interface SmbShare : Closeable {
   @Throws(IOException::class)
   fun openForChange(path: String, exclusive: Boolean): SmbChangeHandle = throw SmbStatusException(NtStatus.NOT_SUPPORTED)
 
+  /**
+   * Fase 5A (D5), solo per la ripresa del **proprio** temporaneo del backup (`ops/SmbNasFileOps.reopenBackupTemp`): apre il file
+   * **esistente** [path] per scriverci **senza crearlo** (`FILE_OPEN`, mai `FILE_OPEN_IF`), in esclusiva come il temporaneo appena
+   * creato ([SmbOpenMode.CREATE_EXCLUSIVE]), senza seguire un punto di rianalisi (`FILE_OPEN_REPARSE_POINT`). Lo stato si legge sullo
+   * stesso handle ([SmbWriteFile.info]): chi chiama rifiuta una cartella o un collegamento. `0xC0000034`/`0xC000003A` se non c'e',
+   * `0xC0000043` se e' aperto da un altro programma.
+   *
+   * Di default non c'e' (`NOT_SUPPORTED`): un trasporto che non la implementa non riprende niente (il backup ricomincia da zero).
+   */
+  @Throws(IOException::class)
+  fun openExistingForWrite(path: String): SmbWriteFile = throw SmbStatusException(NtStatus.NOT_SUPPORTED)
+
   override fun close()
 }
 
@@ -299,6 +311,19 @@ interface SmbWriteFile : Closeable {
    */
   @Throws(IOException::class)
   fun copyChunks(resumeKey: ByteArray, chunks: List<SmbCopyChunk>): Long
+
+  /**
+   * Fase 5A (D5): lo stato visto all'apertura **sullo stesso handle** (attributi, `fileId`), per [SmbShare.openExistingForWrite]: chi
+   * riprende un temporaneo rifiuta una cartella o un punto di rianalisi. Null se il trasporto non lo dice (un file appena creato).
+   */
+  val info: SmbFileInfo? get() = null
+
+  /**
+   * Fase 5A (D5): la fine del file a [length] byte **sullo stesso handle** (`SET_INFO` con `FileEndOfFileInformation`): accorcia il
+   * proprio temporaneo al punto di ripresa salvato. Di default non c'e' (`NOT_SUPPORTED`).
+   */
+  @Throws(IOException::class)
+  fun setLength(length: Long): Unit = throw SmbStatusException(NtStatus.NOT_SUPPORTED)
 
   override fun close()
 }

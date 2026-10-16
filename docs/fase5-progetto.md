@@ -451,6 +451,7 @@ La Fase 5 decide **cosa** si mostra e **quando**; il filone grafico decide **com
 | `TEST_ONLY` | Backup in prova | — (lo spegne la chiusura della 5A) | D12 |
 | `LOST_BEFORE_BACKUP` | N foto cancellate prima del backup | Apri il cestino di Galleria | E-B4 |
 | `VERIFY_FAILED` | N copie non integre | Riprova · Diagnostica | E-B18, E-B8 |
+| `UNREADABLE` | N file del telefono illeggibili | Riprova · Diagnostica | D15, E-M12 |
 | `PHONE_STORAGE_LOW` | Memoria del telefono quasi piena | Libera spazio | E-P3 |
 | `STALE` | Backup fermo da 3 giorni | Guida: batteria "Illimitata", "Mai in sospensione" | E-P15, E-P2 |
 | `WAITING_UNLOCK` | Il telefono si è riavviato: riprende allo sblocco | — | E-P13 |

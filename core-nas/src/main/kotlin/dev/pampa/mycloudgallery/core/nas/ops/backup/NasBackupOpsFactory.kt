@@ -6,6 +6,7 @@ import dev.pampa.mycloudgallery.core.nas.contract.NasResult
 import dev.pampa.mycloudgallery.core.nas.contract.NasSessionManager
 import dev.pampa.mycloudgallery.core.nas.contract.Purpose
 import dev.pampa.mycloudgallery.core.nas.noop.NoNasBackupOps
+import dev.pampa.mycloudgallery.core.nas.ops.BackupTempReopen
 import dev.pampa.mycloudgallery.core.nas.ops.CopyOutcome
 import dev.pampa.mycloudgallery.core.nas.ops.DeleteOutcome
 import dev.pampa.mycloudgallery.core.nas.ops.NasFileOps
@@ -44,13 +45,19 @@ object NasBackupOpsFactory {
 }
 
 /**
- * La vista in sola aggiunta sopra le primitive SMB della 4B (scheletro di P0, la completa P2): ogni chiamata controlla che il
+ * La vista in sola aggiunta sopra le primitive SMB della 4B (scheletro di P0, completata da P2): ogni chiamata controlla che il
  * temporaneo sia **del backup** di questo dispositivo e poi passa a `SmbNasFileOps`, che resta l'unica a parlare con il server.
  * Della 4B si usano solo le primitive che aggiungono; quelle che tolgono o spostano (`rename`, `trashMove`, `deleteIfUnchanged`,
  * `rmdirIfEmpty`) qui non sono raggiungibili.
  *
- * [reopenTemp] (D5: apertura senza creare + fine file sullo stesso handle) e' di P2: fino ad allora risponde un **errore esplicito**
- * (`STATUS_NOT_IMPLEMENTED`), mai un successo finto, e il backup ricomincia il file da zero (nessun danno, solo traffico).
+ * [reopenTemp] (D5, P2): `SmbNasFileOps.reopenBackupTemp` apre il proprio temporaneo **senza crearlo** (`FILE_OPEN`, in esclusiva, senza
+ * seguire un collegamento), legge la lunghezza e lo accorcia a `keepBytes` con il `SET_INFO` di fine file **sullo stesso handle**; lo
+ * scrittore riparte da li'. Sopra primitive che non sono quelle SMB (il fake della 4B nei test) la ripresa non c'e': risponde un **errore
+ * esplicito** (`STATUS_NOT_IMPLEMENTED`), mai un successo finto, e il backup ricomincia il file da zero (nessun danno, solo traffico).
+ *
+ * Il punto di ripresa ([BackupTempWriter.checkpoint]) usa `finish` dello scrittore della 4B: `FLUSH`, lunghezza sullo stesso handle e
+ * timbro letto per nome (solo `FILE_READ_ATTRIBUTES`, che non entra in conflitto con l'handle esclusivo). `finish` **non chiude**
+ * l'handle: lo scrittore resta usabile dopo ogni punto di ripresa (provato sul simulatore SMB, `SmbNasBackupOpsTest`).
  */
 @AppendOnlyNasAccess
 internal class SmbNasBackupOps(private val ops: NasFileOps) : NasBackupOps {
@@ -81,8 +88,18 @@ internal class SmbNasBackupOps(private val ops: NasFileOps) : NasBackupOps {
   override suspend fun reopenTemp(share: String, temp: SharePath, keepBytes: Long, purpose: Purpose): NasResult<ReopenOutcome> {
     requireBackupTemp(temp)
     require(keepBytes >= 0) { "Punto di ripresa negativo." }
-    // TODO(P2, D5): apertura del proprio temporaneo senza crearlo, `SET_INFO` di fine file a keepBytes sullo stesso handle.
-    return NasResult.Err(NasError.Unexpected(STATUS_NOT_IMPLEMENTED))
+    val smb = ops as? SmbNasFileOps ?: return NasResult.Err(NasError.Unexpected(STATUS_NOT_IMPLEMENTED))
+    return when (val reopened = smb.reopenBackupTemp(share, temp, keepBytes, purpose)) {
+      is NasResult.Err -> reopened
+      is NasResult.Ok -> NasResult.Ok(
+        when (val r = reopened.value) {
+          is BackupTempReopen.Reopened -> ReopenOutcome.Reopened(Writer(r.writer, start = keepBytes))
+          BackupTempReopen.Missing -> ReopenOutcome.Missing
+          is BackupTempReopen.TooShort -> ReopenOutcome.TooShort(r.actual)
+          BackupTempReopen.Locked -> ReopenOutcome.Locked
+        },
+      )
+    }
   }
 
   override suspend fun copyToTemp(
@@ -143,7 +160,7 @@ internal class SmbNasBackupOps(private val ops: NasFileOps) : NasBackupOps {
   }
 
   private companion object {
-    /** `STATUS_NOT_IMPLEMENTED`: la primitiva non c'e' ancora (P2). */
+    /** `STATUS_NOT_IMPLEMENTED`: sopra primitive che non sono quelle SMB la ripresa non c'e'. */
     const val STATUS_NOT_IMPLEMENTED: Long = 0xC0000002L
   }
 }

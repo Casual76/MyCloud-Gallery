@@ -84,6 +84,13 @@ interface BackupPlanner {
   suspend fun next(kind: BackupKind, limit: Int): List<BackupCandidate>
 
   /**
+   * Come [next], ma per un giro avviato da [trigger]. Aggiunta compatibile di P4: di default [trigger] non cambia i candidati. Il piano
+   * vero la specializza per D34: con [BackupTrigger.QUICK_NEW_PHOTOS] solo foto della fotocamera, pochi e recenti, mai video.
+   * Il motore la chiama con il trigger del giro (`BackupEngine.run`).
+   */
+  suspend fun next(kind: BackupKind, limit: Int, trigger: BackupTrigger): List<BackupCandidate> = next(kind, limit)
+
+  /**
    * La destinazione di [candidate] nella cartella del dispositivo [folder] (D6): `Backup/<cartella>/AAAA/MM/<nome>` per la fotocamera,
    * `Backup/<cartella>/<Nome della sorgente>/AAAA/MM/<nome>` per screenshot e cartelle aggiuntive (Q8), `Senza data/` per una data
    * assente o assurda (E-B17). Il nome e' quello del telefono validato con `SharePath` (E-N6). Pura: nessuna lettura del NAS (il

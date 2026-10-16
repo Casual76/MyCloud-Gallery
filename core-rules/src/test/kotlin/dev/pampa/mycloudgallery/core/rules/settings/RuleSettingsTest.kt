@@ -167,6 +167,7 @@ class RuleSettingsTest {
         customRules = custom,
         customHeavyOnlyAtHome = false,
         billingCycleStartDay = 15,
+        protectNewPhotos = false,
       )
 
     store.save(settings)
@@ -228,6 +229,21 @@ class RuleSettingsTest {
     assertThat(read.billingCycleStartDay).isEqualTo(1)
     assertThat(read.disabledActivities).containsExactly(BackgroundActivity.HQ_PREVIEWS)
     assertThat(read.customRules).isEmpty()
+  }
+
+  @Test
+  fun proteggiSubitoLeFotoNuove_D34_eAccesoDiDefault_esiRicordaSpento() = runTest {
+    val store = DataStoreRuleSettingsStore(dataStore())
+
+    assertThat(RuleSettings().protectNewPhotos).isTrue()
+    assertThat(store.current().protectNewPhotos).isTrue()
+
+    store.update { it.copy(protectNewPhotos = false) }
+    assertThat(store.current().protectNewPhotos).isFalse()
+
+    store.update { it.copy(protectNewPhotos = true, preset = Preset.BALANCED) }
+    assertThat(store.current().protectNewPhotos).isTrue()
+    assertThat(store.current().preset).isEqualTo(Preset.BALANCED)
   }
 
   @Test

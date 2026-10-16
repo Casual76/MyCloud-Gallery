@@ -305,6 +305,53 @@ internal class SmbNasFileOps(
     }
   }
 
+  /**
+   * Fase 5A (D5), solo per la vista del backup (`ops/backup/SmbNasBackupOps`): riapre il **proprio** temporaneo [temp] **senza
+   * crearlo** e lo accorcia a [keepBytes] con il `SET_INFO` di fine file **sullo stesso handle**; lo scrittore riparte da li'. Mai un
+   * file che non e' un temporaneo di questo dispositivo (errore di programmazione), mai una cartella o un punto di rianalisi
+   * (`NasError.Unexpected`: niente si tocca). Piu' corto di [keepBytes]: [BackupTempReopen.TooShort] e niente cambia. Non si ripete da
+   * sola dopo una caduta (`idempotent = false`): chi chiama ha il diario.
+   */
+  internal suspend fun reopenBackupTemp(share: String, temp: SharePath, keepBytes: Long, purpose: Purpose): NasResult<BackupTempReopen> {
+    require(NasOpsPaths.isTempOf(temp, ownerDeviceId)) { "Un temporaneo di questo dispositivo." }
+    require(keepBytes >= 0) { "Punto di ripresa negativo." }
+    // Come openTemp: annullati mentre il NAS risponde, lo scrittore non arriva a nessuno e il suo handle esclusivo si chiude qui.
+    var undelivered: SmbTempWriter? = null
+    try {
+      val result = manager.runOp(share, purpose, idempotent = false, touchesDisk = true) { ctx ->
+        val file = try {
+          ctx.share.openExistingForWrite(at(temp))
+        } catch (e: SmbStatusException) {
+          when (e.status) {
+            in ABSENT -> return@runOp BackupTempReopen.Missing
+            NtStatus.SHARING_VIOLATION, NtStatus.FILE_LOCK_CONFLICT -> return@runOp BackupTempReopen.Locked
+            else -> throw e
+          }
+        }
+        var keep = false
+        try {
+          val info = file.info
+          // Un nome che non e' un file vero (cartella, collegamento) non si accorcia: lo si dice, senza toccarlo.
+          if (info != null && (info.isDirectory || (info.attributes and NasAttributes.REPARSE_POINT) != 0)) {
+            throw NasOpException(NasError.Unexpected(null))
+          }
+          val length = file.length()
+          if (length < keepBytes) return@runOp BackupTempReopen.TooShort(length)
+          if (length != keepBytes) file.setLength(keepBytes)
+          if (file.length() != keepBytes) throw NasOpException(NasError.Unexpected(null))
+          keep = true
+          BackupTempReopen.Reopened(SmbTempWriter(share, temp, purpose, file, ctx.sessionKey, start = keepBytes).also { undelivered = it })
+        } finally {
+          if (!keep) file.close()
+        }
+      }
+      undelivered = null
+      return result
+    } finally {
+      undelivered?.close()
+    }
+  }
+
   /** Lo scrittore di un temporaneo: un handle legato alla sessione che l'ha aperto (dopo una riconnessione e' morto). */
   private inner class SmbTempWriter(
     private val share: String,
@@ -312,11 +359,13 @@ internal class SmbNasFileOps(
     private val purpose: Purpose,
     private val file: SmbWriteFile,
     private val session: Any,
+    /** Dove riparte lo scrittore: 0 per un temporaneo nuovo, il punto di ripresa per uno riaperto (D5). */
+    start: Long = 0L,
   ) : NasTempWriter {
     @Volatile private var closed = false
 
     /** La fine dei dati scritti finora: una scrittura oltre lascerebbe un buco. */
-    @Volatile private var end = 0L
+    @Volatile private var end = start
 
     private fun sameSession(ctx: OpContext) {
       if (ctx.sessionKey !== session) throw NasOpException(NasError.SessionExpired, FailureKind.FINAL)
@@ -541,6 +590,17 @@ internal class SmbNasFileOps(
       override fun close() = Unit
     }
   }
+}
+
+/** Esiti di [SmbNasFileOps.reopenBackupTemp] (Fase 5A, D5): li traduce in `ReopenOutcome` la vista del backup. */
+internal sealed interface BackupTempReopen {
+  class Reopened(val writer: NasTempWriter) : BackupTempReopen
+
+  data object Missing : BackupTempReopen
+
+  data class TooShort(val actual: Long) : BackupTempReopen
+
+  data object Locked : BackupTempReopen
 }
 
 /**

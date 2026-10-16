@@ -126,19 +126,36 @@ class BacklogSourceTest {
   }
 
   @Test
-  fun ilBackupDelTelefono_eGliHashCompletiDeiVideoStannoNelleAttivitaDelBackup() {
+  fun ilBackupDelTelefono_eLeCopieDaRileggereStannoNelleAttivitaDelBackup() {
     val facts =
       BacklogFacts(
         toProtect = MediaVolume(Workload(150, 600 * MB), Workload(12, 1_800 * MB)),
         toFullHash = Workload(300, 40 * GB),
+        toVerify = MediaVolume(Workload(80, 300 * MB), Workload(5, 900 * MB)),
         toAnalyze = 1_000,
       )
 
     val backlog = facts.toLibraryBacklog(ReplicaDepth.STANDARD)
 
+    // Fase 5: da caricare (si scrive e si rilegge) e da rileggere soltanto (copie gia' sul NAS, hash completi) sono due cose.
     assertThat(backlog.pending(PHOTO_BACKUP)).isEqualTo(Workload(150, 600 * MB))
-    assertThat(backlog.pending(VIDEO_BACKUP)).isEqualTo(Workload(312, 1_800 * MB + 40 * GB))
+    assertThat(backlog.pending(VIDEO_BACKUP)).isEqualTo(Workload(12, 1_800 * MB))
+    assertThat(backlog.verify(PHOTO_BACKUP)).isEqualTo(Workload(80, 300 * MB))
+    assertThat(backlog.verify(VIDEO_BACKUP)).isEqualTo(Workload(305, 900 * MB + 40 * GB))
     assertThat(backlog.pending(AI_COMPUTE)).isEqualTo(Workload(1_000, 150 * MB))
+  }
+
+  @Test
+  fun ilBackupDaRileggere_costaLaSolaRilettura_nellaTabellaDeiPreset() = runTest {
+    // 40 GB di copie gia' sul NAS da collegare e niente da caricare: ~42 minuti a 16 MB/s, 40 GB di traffico (§2.11 punto 5).
+    val source = BacklogSource { BacklogFacts(toVerify = MediaVolume(Workload(0, 0), Workload(300, 40 * GB))).toLibraryBacklog(ReplicaDepth.STANDARD) }
+
+    val night = PresetEstimateTable().build(source).first { it.preset == Preset.NIGHT }
+
+    val video = night.estimate.perActivity.getValue(VIDEO_BACKUP)
+    assertThat(video.workHours * 3600).isWithin(0.5).of(40e9 / 16e6)
+    assertThat(video.pendingTrafficBytes).isEqualTo(40 * GB)
+    assertThat(night.estimate.daysToFinish!!).isLessThan(1.0) // una notte
   }
 
   @Test

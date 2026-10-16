@@ -58,6 +58,13 @@ enum class BackupProblemCode(
   TEST_ONLY("test_only", emptyList(), setOf("D12")),
   LOST_BEFORE_BACKUP("lost_before_backup", listOf(BackupAction.OPEN_GALLERY_TRASH), setOf("E-B4"), marksMedia = true),
   VERIFY_FAILED("verify_failed", listOf(BackupAction.RETRY, BackupAction.DIAGNOSTICS), setOf("E-B18", "E-B8"), marksMedia = true),
+
+  /**
+   * D15 (P2): un file del telefono che non si legge (errori di lettura ripetuti con la riga e il timbro invariati) o che non e' un media
+   * salvabile (zero byte, E-M12): mai caricato, mai "al sicuro"; "Riprova" toglie il segno e il backup lo rilegge. Un media **rovinato**
+   * ma leggibile invece si salva comunque (E-M10: i byte sono dell'utente, la preparazione mette il segnaposto).
+   */
+  UNREADABLE("unreadable", listOf(BackupAction.RETRY, BackupAction.DIAGNOSTICS), setOf("D15", "E-M12"), marksMedia = true),
   PHONE_STORAGE_LOW("phone_storage_low", listOf(BackupAction.FREE_SPACE), setOf("E-P3")),
   STALE("stale", listOf(BackupAction.BATTERY_GUIDE), setOf("E-P15", "E-P2")),
   WAITING_UNLOCK("waiting_unlock", emptyList(), setOf("E-P13")),
@@ -224,6 +231,11 @@ data class BackupEstimate(
   val mobileBytes: Long,
   /** Batteria consumata se fosse tutta a batteria, in percento (null = dalla presa o non stimabile). */
   val batteryPercent: Int?,
+  /**
+   * Aggiunta compatibile di P4: le regole attuali non lasciano partire il backup (nessuna ora utile, o il backup spento nelle
+   * impostazioni). [nights] vale 0 e il riepilogo lo dice invece di "0 notti".
+   */
+  val neverFinishes: Boolean = false,
 )
 
 /** Gli avvisi del riepilogo del primo backup. */
@@ -266,6 +278,11 @@ data class BackupSummary(
   val bySource: Map<String, SummaryCount>,
   val estimate: BackupEstimate?,
   val warnings: Set<SummaryWarning>,
+  /**
+   * Aggiunta compatibile di P4: la stima di "Inizia ora" (lavoro avviato dall'utente, parte subito e scavalca fascia e carica,
+   * sui dati mobili con conferma). [estimate] e' la scelta "Stanotte" (predefinita): segue il preset.
+   */
+  val estimateNow: BackupEstimate? = null,
 ) {
   /** "Sto ancora confrontando": i tre numeri non sono ancora definitivi. */
   val comparing: Boolean get() = !existing.settled

@@ -32,8 +32,8 @@ import org.junit.Test
 /**
  * Fase 5A (P0, D2, D5, D33): il contratto delle primitive del backup (`NasBackupOps`) sul NAS finto. Solo **aggiungere**: temporanei
  * del backup del dispositivo (`<io>-bk-`), pubblicazione senza sostituire, riapertura con l'accorciamento al punto di ripresa,
- * guasti prima e dopo l'applicazione come per la 4B. La vista vera sopra SMB (con `reopenTemp`) e' di P2: qui si prova anche che,
- * finche' manca, non finge un successo.
+ * guasti prima e dopo l'applicazione come per la 4B. La vista vera sopra SMB (con `reopenTemp`, P2) e' in `ops/backup/SmbNasBackupOpsTest`:
+ * qui si prova anche che, sopra primitive che non sono SMB, non finge un successo.
  */
 class NasBackupOpsContractTest {
 
@@ -166,14 +166,15 @@ class NasBackupOpsContractTest {
     assertThat(ops.space("test", purpose).okOrNull()!!.freeBytes).isEqualTo(10L)
   }
 
-  /** Senza NAS (o con una sessione finta) nessuna scrittura; la vista SMB non finge una ripresa che non sa ancora fare (P2). */
+  /** Senza NAS (o con una sessione finta) nessuna scrittura; la vista SMB non finge una ripresa che le primitive sotto non sanno fare. */
   @Test
   fun nullObjectEVistaSmbFallisconoChiuso() = runTest {
     assertThat(NoNasBackupOps.openTemp("test", NasBackupPaths.tempFor(me, 1), purpose)).isInstanceOf(NasResult.Err::class.java)
     assertThat(NoNasBackupOps.reopenTemp("test", NasBackupPaths.tempFor(me, 1), 0, purpose)).isInstanceOf(NasResult.Err::class.java)
     assertThat(NasBackupOpsFactory.create(FakeNasSessionManager(), me)).isSameInstanceAs(NoNasBackupOps)
-    // La vista SMB (qui sopra il fake della 4B al posto di SmbNasFileOps): solo temporanei del backup, e la ripresa e' un errore
-    // esplicito finche' P2 non la scrive (il backup ricomincia il file da zero, mai un successo finto).
+    // La vista SMB sopra primitive che non sono quelle SMB (qui il fake della 4B al posto di SmbNasFileOps): solo temporanei del
+    // backup, e la ripresa e' un errore esplicito (il backup ricomincia il file da zero, mai un successo finto). La ripresa vera,
+    // sopra SmbNasFileOps e il simulatore SMB, la prova `ops/backup/SmbNasBackupOpsTest` (P2).
     val view = dev.pampa.mycloudgallery.core.nas.ops.backup.SmbNasBackupOps(nas.fileOps(me))
     val temp = NasBackupPaths.tempFor(me, 9)
     val writer = view.openTemp("test", temp, purpose).okOrNull()!!

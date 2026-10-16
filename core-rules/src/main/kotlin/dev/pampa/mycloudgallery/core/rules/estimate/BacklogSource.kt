@@ -123,6 +123,8 @@ data class MonthlyArrivals(
  * @property toPrepare dal catalogo: media del NAS senza le classi di anteprima **che tocca preparare a questo
  *   dispositivo** (vuoto se non e' un Preparatore).
  * @property toProtect dal catalogo: media del telefono non ancora al sicuro sul NAS (backup, Fase 5).
+ * @property toVerify dal catalogo (Fase 5): copie gia' sul NAS da **rileggere** senza caricare niente (le copie identiche da
+ *   collegare, §2.11 punto 5; le copie private non ancora verificate): costano la sola rilettura e il suo traffico.
  * @property toFullHash dal catalogo (`WorkStage.FULL_HASH`): video del NAS in attesa dell'hash completo, byte da rileggere.
  * @property toAnalyze dal catalogo: media in attesa dell'anteprima di analisi (Fase 6).
  */
@@ -135,6 +137,7 @@ data class BacklogFacts(
   val toFullHash: Workload = Workload.NONE,
   val toAnalyze: Long = 0L,
   val monthly: MonthlyArrivals = MonthlyArrivals(),
+  val toVerify: MediaVolume = MediaVolume.NONE,
 ) {
   init {
     require(toAnalyze >= 0 && monthly.toAnalyze >= 0) { "Un conteggio non puo' essere negativo." }
@@ -146,7 +149,9 @@ data class BacklogFacts(
    *  - `INDEX_SYNC` = replica da scaricare + rilevamento dei file nuovi (byte sommati);
    *  - `PREPARATION` = letture degli originali + scritture delle classi (traffico);
    *  - `HQ_PREVIEWS` = le anteprime HQ da scaricare;
-   *  - `PHOTO_BACKUP` / `VIDEO_BACKUP` = media del telefono da mettere al sicuro; i video aggiungono gli hash completi;
+   *  - `PHOTO_BACKUP` / `VIDEO_BACKUP` = media del telefono da mettere al sicuro (`pending`: byte dei media, il traffico e' il doppio
+   *    perche' si rileggono, Fase 5); le copie gia' sul NAS da rileggere ([toVerify], e per i video gli hash completi [toFullHash])
+   *    stanno in `verify` e costano la sola rilettura;
    *  - `AI_COMPUTE` = le anteprime di analisi da scaricare (Fase 6).
    *
    * Il flusso mensile usa gli stessi costi sui media nuovi di un mese ([MonthlyArrivals]).
@@ -159,7 +164,7 @@ data class BacklogFacts(
         BackgroundActivity.PREPARATION to costs.preparation(toPrepare),
         BackgroundActivity.HQ_PREVIEWS to hq,
         BackgroundActivity.PHOTO_BACKUP to toProtect.photos,
-        BackgroundActivity.VIDEO_BACKUP to toProtect.videos + toFullHash,
+        BackgroundActivity.VIDEO_BACKUP to toProtect.videos,
         BackgroundActivity.AI_COMPUTE to costs.analysis(toAnalyze),
       )
     val monthlyNew =
@@ -171,7 +176,12 @@ data class BacklogFacts(
         BackgroundActivity.VIDEO_BACKUP to monthly.onPhoneToProtect.videos,
         BackgroundActivity.AI_COMPUTE to costs.analysis(monthly.toAnalyze),
       )
-    return LibraryBacklog(pending = pending, monthlyNew = monthlyNew)
+    val verify =
+      mapOf(
+        BackgroundActivity.PHOTO_BACKUP to toVerify.photos,
+        BackgroundActivity.VIDEO_BACKUP to toVerify.videos + toFullHash,
+      )
+    return LibraryBacklog(pending = pending, monthlyNew = monthlyNew, verify = verify)
   }
 }
 

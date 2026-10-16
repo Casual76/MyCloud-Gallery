@@ -277,6 +277,32 @@ private class SmbjShare(override val name: String, private val share: DiskShare,
     SmbjWriteFile(file, guard)
   }
 
+  // Fase 5A (D5): il PROPRIO temporaneo del backup riaperto per riprenderlo. FILE_OPEN (mai crearlo), gli stessi diritti e la stessa
+  // esclusiva del temporaneo appena creato, FILE_OPEN_REPARSE_POINT (un collegamento al suo nome si apre per quello che e', mai la sua
+  // destinazione) e lo stato letto subito sullo stesso handle: chi chiama rifiuta una cartella o un punto di rianalisi prima di toccarlo.
+  override fun openExistingForWrite(path: String): SmbWriteFile = guard.io {
+    val file = share.openFile(
+      path,
+      EnumSet.of(
+        AccessMask.FILE_WRITE_DATA,
+        AccessMask.FILE_READ_DATA,
+        AccessMask.FILE_READ_ATTRIBUTES,
+        AccessMask.FILE_WRITE_ATTRIBUTES,
+        AccessMask.DELETE,
+      ),
+      EnumSet.noneOf(FileAttributes::class.java),
+      SmbOpenMode.CREATE_EXCLUSIVE.shareAccess(),
+      SMB2CreateDisposition.FILE_OPEN,
+      EnumSet.of(SMB2CreateOptions.FILE_NON_DIRECTORY_FILE, SMB2CreateOptions.FILE_OPEN_REPARSE_POINT),
+    )
+    try {
+      SmbjWriteFile(file, guard, file.getFileInformation(FileAllInformation::class.java).toInfo())
+    } catch (t: Throwable) {
+      closeQuietly { file.closeSilently() }
+      throw t
+    }
+  }
+
   override fun mkdir(path: String) = guard.io { share.mkdir(path) }
 
   override fun openDirectory(path: String, access: DirAccess): SmbDirectory = guard.io {
@@ -348,13 +374,20 @@ private class SmbjReadFile(
   }
 }
 
-private class SmbjWriteFile(private val file: File, private val guard: ResponseGuard) : SmbWriteFile {
+private class SmbjWriteFile(
+  private val file: File,
+  private val guard: ResponseGuard,
+  override val info: SmbFileInfo? = null,
+) : SmbWriteFile {
   override fun write(buffer: ByteArray, fileOffset: Long, bufferOffset: Int, length: Int): Int =
     guard.io { file.write(buffer, fileOffset, bufferOffset, length).toInt() }
 
   override fun flush() = guard.io { file.flush() }
 
   override fun length(): Long = guard.io { file.getFileInformation(FileStandardInformation::class.java).endOfFile }
+
+  // Fase 5A (D5): SET_INFO con FileEndOfFileInformation sullo stesso handle (File.setLength di smbj).
+  override fun setLength(length: Long) = guard.io { file.setLength(length) }
 
   override fun renameNoReplace(newPath: String) = guard.io { file.rename(newPath, false) }
 

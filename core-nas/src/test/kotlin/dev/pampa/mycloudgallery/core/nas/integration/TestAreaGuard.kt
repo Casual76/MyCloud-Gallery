@@ -276,6 +276,12 @@ internal class TestAreaTransport(private val delegate: SmbTransport, private val
       return ChangeHandle(call { inner.openForChange(path, exclusive) })
     }
 
+    // Fase 5A (D5): la riapertura del proprio temporaneo del backup scrive come una creazione: stessa guardia di CREATE.
+    override fun openExistingForWrite(path: String): SmbWriteFile {
+      check(path, SmbAccess.CREATE)
+      return WriteFile(call { inner.openExistingForWrite(path) })
+    }
+
     override fun close() = inner.close()
 
     private inner class ChangeHandle(private val handle: SmbChangeHandle) : SmbChangeHandle by handle {
@@ -294,6 +300,11 @@ internal class TestAreaTransport(private val delegate: SmbTransport, private val
       }
 
       override fun copyChunks(resumeKey: ByteArray, chunks: List<SmbCopyChunk>): Long = call { file.copyChunks(resumeKey, chunks) }
+
+      // Le implementazioni predefinite dell'interfaccia si inoltrano esplicitamente (la delega non le copre).
+      override val info: SmbFileInfo? get() = file.info
+
+      override fun setLength(length: Long) = call { file.setLength(length) }
     }
   }
 }

@@ -35,6 +35,19 @@ class ConsumptionEstimatorTest {
     assertThat(measures.aiItemsPerSecond).isEqualTo(2.8) // GPU, con decodifica
     assertThat(measures.aiBatteryPercentPerThousandItems).isEqualTo(4.0) // ~4% ogni 1000 foto
     assertThat(measures.analysisPreviewBytes).isEqualTo(150_000L)
+    // Fase 5 (docs/regole-attivita.md §6): le tre misure del backup, tutte ipotesi da ricalibrare a M2 e al primo backup vero.
+    assertThat(measures.verifyReadBytesPerSecond).isEqualTo(16.0e6)
+    assertThat(measures.perFileOverheadSeconds).isEqualTo(0.12)
+    assertThat(measures.uploadStreams).isEqualTo(1)
+  }
+
+  @Test
+  fun leMisureDelBackupHannoValoriAmmessi() {
+    assertThrows(IllegalArgumentException::class.java) { measures.copy(verifyReadBytesPerSecond = 0.0) }
+    assertThrows(IllegalArgumentException::class.java) { measures.copy(perFileOverheadSeconds = -0.1) }
+    assertThrows(IllegalArgumentException::class.java) { measures.copy(uploadStreams = 0) }
+    // Un costo per file nullo e' ammesso (la misura puo' venire fuori trascurabile).
+    assertThat(measures.copy(perFileOverheadSeconds = 0.0).perFileOverheadSeconds).isEqualTo(0.0)
   }
 
   @Test
@@ -55,14 +68,45 @@ class ConsumptionEstimatorTest {
   }
 
   @Test
-  fun backup_tempoDalleVelocitaSmb() {
-    // 10 GB di foto alla velocita' di scrittura: 10e9 / 9e6 = 1111 s.
+  fun backup_tempoESpesaDalleVelocitaSmb_conLaRilettura_eIlCostoPerFile() {
+    // Fase 5, D4: ogni file si scrive e si rilegge per intero. 10 GB in 5.000 file: T = B/W + B/R + N·o.
     val estimate =
       estimator.estimate(ruleSetOf(Preset.NIGHT), backlog(pending = mapOf(PHOTO_BACKUP to Workload(5000, 10 * GB))), measures, profile)
 
-    assertThat(estimate.perActivity.getValue(PHOTO_BACKUP).workHours).isWithin(0.001).of(10e9 / 9e6 / 3600)
-    // Energia di trasferimento: 10 GB x 0,5 %/GB.
-    assertThat(estimate.batteryPercentPerNight).isWithin(1e-9).of(5.0)
+    val seconds = 10e9 / 9e6 + 10e9 / 16e6 + 5000 * 0.12
+    assertThat(estimate.perActivity.getValue(PHOTO_BACKUP).workHours).isWithin(0.001).of(seconds / 3600)
+    // Il traffico e' il doppio dei media (caricamento + rilettura): 20 GB x 0,5 %/GB.
+    assertThat(estimate.perActivity.getValue(PHOTO_BACKUP).pendingTrafficBytes).isEqualTo(20 * GB)
+    assertThat(estimate.batteryPercentPerNight).isWithin(1e-9).of(10.0)
+  }
+
+  @Test
+  fun backup_leCopieGiaSulNasCostanoLaSolaRilettura() {
+    // 40 GB gia' sul NAS da collegare: solo la rilettura, a 16 MB/s (§2.11 punto 5: "circa 45 minuti"), e 40 GB di traffico.
+    val estimate =
+      estimator.estimate(
+        ruleSetOf(Preset.NIGHT),
+        LibraryBacklog(verify = mapOf(VIDEO_BACKUP to Workload(300, 40 * GB))),
+        measures,
+        profile,
+      )
+
+    val video = estimate.perActivity.getValue(VIDEO_BACKUP)
+    assertThat(video.workHours * 60).isWithin(0.1).of(40e9 / 16e6 / 60) // ~41,7 minuti
+    assertThat(video.pendingTrafficBytes).isEqualTo(40 * GB)
+    assertThat(estimate.batteryPercentPerNight).isWithin(1e-9).of(40 * 0.5) // 40 GB di traffico x 0,5 %/GB
+  }
+
+  @Test
+  fun backup_laRilettura_eIlCostoPerFile_sonoSostituibili() {
+    val slowVerify = measures.copy(verifyReadBytesPerSecond = 8.0e6, perFileOverheadSeconds = 0.5)
+    val work = mapOf(PHOTO_BACKUP to Workload(1000, 4 * GB))
+
+    val base = estimator.estimate(ruleSetOf(Preset.NIGHT), backlog(pending = work), measures, profile)
+    val slow = estimator.estimate(ruleSetOf(Preset.NIGHT), backlog(pending = work), slowVerify, profile)
+
+    assertThat(base.perActivity.getValue(PHOTO_BACKUP).workHours * 3600).isWithin(0.01).of(4e9 / 9e6 + 4e9 / 16e6 + 1000 * 0.12)
+    assertThat(slow.perActivity.getValue(PHOTO_BACKUP).workHours * 3600).isWithin(0.01).of(4e9 / 9e6 + 4e9 / 8e6 + 1000 * 0.5)
   }
 
   @Test
@@ -85,8 +129,9 @@ class ConsumptionEstimatorTest {
         profile,
       )
 
-    val videoSeconds = 250e9 / 9e6
-    val photoSeconds = 10e9 / 9e6
+    // Ogni file si scrive e si rilegge (Fase 5): T = B/W + B/R + N·o.
+    val videoSeconds = 250e9 / 9e6 + 250e9 / 16e6 + 300 * 0.12
+    val photoSeconds = 10e9 / 9e6 + 10e9 / 16e6 + 5000 * 0.12
     // Pesante = solo Wi-Fi di casa; 6,4 ore utili; la banda e' una sola.
     assertThat(estimate.daysToFinish!!).isWithin(0.001).of((videoSeconds + photoSeconds) / (6.4 * 3600))
     // In una notte si smaltisce solo una parte: il resto continua la notte dopo.
@@ -119,7 +164,8 @@ class ConsumptionEstimatorTest {
     assertThat(night.batteryDrainPercentPerNight).isEqualTo(0.0)
     // Wi-Fi sempre: tutto puo' girare a batteria, quindi tutta l'energia pesa sulla batteria.
     assertThat(wifiAlways.batteryDrainPercentPerNight).isWithin(1e-9).of(wifiAlways.batteryPercentPerNight)
-    assertThat(wifiAlways.batteryPercentPerNight).isWithin(1e-9).of(4 * 0.5 + 3 * 4.0)
+    // 4 GB di foto = 8 GB di traffico (caricamento + rilettura) x 0,5 %/GB, piu' il Calcolo AI.
+    assertThat(wifiAlways.batteryPercentPerNight).isWithin(1e-9).of(8 * 0.5 + 3 * 4.0)
   }
 
   @Test
@@ -128,8 +174,8 @@ class ConsumptionEstimatorTest {
 
     val estimate = estimator.estimate(ruleSetOf(Preset.BALANCED), backlog, measures, profile)
 
-    assertThat(estimate.batteryDrainPercentPerNight).isWithin(1e-9).of(4 * 0.5) // solo il backup foto
-    assertThat(estimate.batteryPercentPerNight).isWithin(1e-9).of(4 * 0.5 + 12.0)
+    assertThat(estimate.batteryDrainPercentPerNight).isWithin(1e-9).of(8 * 0.5) // solo il backup foto (8 GB di traffico)
+    assertThat(estimate.batteryPercentPerNight).isWithin(1e-9).of(8 * 0.5 + 12.0)
   }
 
   @Test
@@ -144,8 +190,8 @@ class ConsumptionEstimatorTest {
 
     val estimate = estimator.estimate(ruleSetOf(Preset.NIGHT), backlog(monthly = monthly), measures, profile)
 
-    // (13 GB x 0,5 + 0,62 x 4) / 30 giorni.
-    assertThat(estimate.steadyBatteryPercentPerDay).isWithin(1e-9).of((13 * 0.5 + 0.62 * 4.0) / 30.0)
+    // (26 GB di traffico (13 GB di media, caricati e riletti) x 0,5 + 0,62 x 4) / 30 giorni.
+    assertThat(estimate.steadyBatteryPercentPerDay).isWithin(1e-9).of((26 * 0.5 + 0.62 * 4.0) / 30.0)
     assertThat(estimate.steadyBatteryPercentPerDay).isLessThan(2.0) // obiettivo del piano §4
   }
 
@@ -157,13 +203,16 @@ class ConsumptionEstimatorTest {
     val night = estimator.estimate(ruleSetOf(Preset.NIGHT), backlog(pending, monthly), measures, profile)
     assertThat(night.mobileBytesPerMonth).isEqualTo(0)
     assertThat(night.mobileBytesFirstMonth).isEqualTo(0)
-    assertThat(night.wifiBytesPerMonth).isEqualTo(3 * GB)
+    // 3 GB di media = 6 GB di traffico (la rilettura conta, Fase 5).
+    assertThat(night.wifiBytesPerMonth).isEqualTo(6 * GB)
+    assertThat(night.wifiBytesFirstMonth).isEqualTo(26 * GB)
 
     // Massimo: le ore sul mobile sono 8 su 8 + 14 + 1 = 23.
     val share = 8.0 / 23.0
     val max = estimator.estimate(ruleSetOf(Preset.MAXIMUM), backlog(pending, monthly), measures, profile)
-    assertThat(max.mobileBytesPerMonth.toDouble()).isWithin(1e6).of(3e9 * share)
-    assertThat(max.mobileBytesFirstMonth.toDouble()).isWithin(1e6).of(13e9 * share)
+    assertThat(max.mobileBytesPerMonth.toDouble()).isWithin(1e6).of(6e9 * share)
+    assertThat(max.mobileBytesFirstMonth.toDouble()).isWithin(1e6).of(26e9 * share)
+    assertThat(max.perActivity.getValue(PHOTO_BACKUP).mobileShare).isWithin(1e-9).of(share)
 
     // Il tetto limita i dati mobili.
     val capped = ruleSetOf(Preset.MAXIMUM).copy(caps = MonthlyCaps(mobileBytes = 1 * GB, wifiBytes = null))
@@ -212,7 +261,7 @@ class ConsumptionEstimatorTest {
 
     assertThat(estimate.perActivity.getValue(VIDEO_BACKUP).enabled).isFalse()
     assertThat(estimate.perActivity.getValue(VIDEO_BACKUP).daysToFinish).isEqualTo(0.0)
-    assertThat(estimate.batteryPercentPerNight).isWithin(1e-9).of(0.5) // solo 1 GB di foto
+    assertThat(estimate.batteryPercentPerNight).isWithin(1e-9).of(1.0) // solo 1 GB di foto (2 GB di traffico)
   }
 
   @Test

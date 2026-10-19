@@ -1,0 +1,223 @@
+package dev.pampa.mycloudgallery.feature.integrations.provider
+
+import android.content.Context
+import android.provider.DocumentsContract
+import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
+import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.model.MediaRef
+import dev.pampa.mycloudgallery.feature.integrations.R
+import dev.pampa.mycloudgallery.feature.integrations.contract.DocumentEntry
+import dev.pampa.mycloudgallery.feature.integrations.contract.DocumentId
+import dev.pampa.mycloudgallery.feature.integrations.contract.DocumentReader
+import dev.pampa.mycloudgallery.feature.integrations.contract.DocumentRoot
+import dev.pampa.mycloudgallery.feature.integrations.contract.MediaDocuments
+
+// Fase 5B (P10, docs/fase5-progetto.md §2.7, D23, C17; E-H1, E-X1): i documenti del provider, sopra la Libreria per le altre app.
+// Implementa la porta `MediaDocuments` di P0-B (radice, cartelle, documenti, apertura) e ci aggiunge cio' che serve al selettore per
+// **consegnare** un media solo-NAS ([DocumentIssuer]).
+//
+// Le regole, tutte provate da `LibraryMediaDocumentsTest` e `HiddenNeverLeavesTest`:
+//  - **la vista di adesso e' l'unico elenco** (E-H1): un media si elenca, si descrive e si apre solo se e' nella vista della Libreria ora
+//    (che non ha i nascosti, ne' i membri di un gruppo di copie simili con un nascosto, ne' cio' che il telefono non concede). Gli id che
+//    la porta del NAS dovesse restituire per sbaglio ("Cartelle NAS") non escono comunque; un media nascosto dopo che il suo id e' nato non
+//    si apre piu' e il suo id si revoca;
+//  - **id opachi**: solo token casuali ([DocumentIdTable]); i nomi dei file sono dati dell'utente e non entrano mai nell'id;
+//  - **nomi sicuri**: il nome visualizzato non porta mai un separatore di percorso ne' caratteri di controllo (le app che lo usano come
+//    nome di file non possono essere portate fuori dalla loro cartella);
+//  - **scadenza** (E-X1): un id scaduto o mai emesso in questo avvio non apre niente.
+
+/** I nomi delle cartelle virtuali, nella lingua dell'utente (stringhe dell'app, non dati). */
+class DocumentLabels(val root: String, val recent: String, val nasFolders: String) {
+  companion object {
+    /** I tre nomi dalle stringhe di questo modulo: e' cio' che `:app` passa a [LibraryMediaDocuments]. */
+    fun from(context: Context): DocumentLabels = DocumentLabels(
+      root = context.getString(R.string.integrations_documents_root_title),
+      recent = context.getString(R.string.integrations_documents_recent),
+      nasFolders = context.getString(R.string.integrations_documents_nas_folders),
+    )
+  }
+}
+
+/**
+ * Chi puo' consegnare un media a un'altra app come documento (il selettore, per i media solo-NAS) e dire se un id e' stato consegnato.
+ * L'implementa [LibraryMediaDocuments]; `:app` la installa come `IntegrationPorts.documents`.
+ */
+interface DocumentIssuer {
+
+  /**
+   * Un id **consegnato** per [id], o null se il media non e' nella vista della Libreria adesso (nascosto, sparito, non concesso). Un id
+   * consegnato vale anche quando l'app si richiude e vale piu' a lungo di uno da sfoglio: l'utente ha sbloccato e ha toccato.
+   */
+  fun issue(id: MediaId): DocumentId?
+
+  /** Se [id] e' stato consegnato da [issue] e non e' scaduto. */
+  fun isDelivered(id: DocumentId): Boolean
+
+  /** Revoca [ids] (un annullamento a meta': E-X4). Da quel momento non aprono piu' niente. */
+  fun revoke(ids: Collection<DocumentId>)
+
+  /** Revoca ogni id non fisso (azzeramento dell'app, famiglia che cambia). */
+  fun revokeAll()
+}
+
+class LibraryMediaDocuments(
+  private val library: IntegrationLibrary,
+  private val labels: DocumentLabels,
+  private val table: DocumentIdTable = DocumentIdTable(),
+) : MediaDocuments, DocumentIssuer {
+
+  // --- MediaDocuments ---------------------------------------------------------------------------------------------------
+
+  override suspend fun roots(): List<DocumentRoot> = listOf(DocumentRoot(ROOT_ID, table.idFor(DocumentTarget.Root)))
+
+  override suspend fun children(parent: DocumentId, limit: Int): List<DocumentEntry> {
+    val cap = limit.coerceIn(0, DocumentPolicy.MAX_CHILDREN)
+    if (cap == 0) return emptyList()
+    val found = found(parent) ?: return emptyList()
+    return when (val target = found.target) {
+      DocumentTarget.Root -> listOf(directory(table.idFor(DocumentTarget.Recent), labels.recent), directory(table.idFor(DocumentTarget.NasFolders), labels.nasFolders))
+      DocumentTarget.Recent -> recent(cap)
+      DocumentTarget.NasFolders -> folders(null, cap)
+      is DocumentTarget.Folder -> {
+        val sub = folders(target.key, cap)
+        sub + mediaIn(target.key, cap - sub.size)
+      }
+      is DocumentTarget.Media -> emptyList()
+    }
+  }
+
+  override suspend fun entry(id: DocumentId): DocumentEntry? {
+    val found = found(id) ?: return null
+    return when (val target = found.target) {
+      DocumentTarget.Root -> directory(id, labels.root)
+      DocumentTarget.Recent -> directory(id, labels.recent)
+      DocumentTarget.NasFolders -> directory(id, labels.nasFolders)
+      is DocumentTarget.Folder -> directory(id, found.label ?: labels.nasFolders)
+      is DocumentTarget.Media -> {
+        if (!stillVisible(id, target.id)) return null
+        library.fileInfos(listOf(target.id))[target.id]?.let { file(id, it) }
+      }
+    }
+  }
+
+  override suspend fun open(id: DocumentId): DocumentReader? {
+    val target = (found(id)?.target as? DocumentTarget.Media) ?: return null
+    // La vista di ADESSO: un media nascosto dopo la nascita dell'id, o sparito, non si apre piu' (E-H1).
+    if (!stillVisible(id, target.id)) return null
+    return when (val ref = library.items.refOrNull(target.id)) {
+      is MediaRef.Phone -> library.openPhone(ref)
+      is MediaRef.Nas -> library.openNas(ref)
+      is MediaRef.Synthetic, null -> null
+    }
+  }
+
+  // --- DocumentIssuer ---------------------------------------------------------------------------------------------------
+
+  override fun issue(id: MediaId): DocumentId? {
+    if (!isVisible(id)) {
+      IntegrationCounters.add(IntegrationCounter.HIDDEN_STOPPED)
+      return null
+    }
+    return table.idFor(DocumentTarget.Media(id), delivered = true)
+  }
+
+  override fun isDelivered(id: DocumentId): Boolean = table.isDelivered(id)
+
+  override fun revoke(ids: Collection<DocumentId>) = table.revoke(ids)
+
+  override fun revokeAll() = table.revokeAll()
+
+  // --- Elenchi ----------------------------------------------------------------------------------------------------------
+
+  private suspend fun recent(limit: Int): List<DocumentEntry> {
+    val snapshot = snapshot()
+    val ids = ArrayList<MediaId>(minOf(limit, snapshot.size))
+    var i = 0
+    while (i < snapshot.size && ids.size < limit) ids += snapshot.idAt(i++)
+    return files(ids)
+  }
+
+  private suspend fun folders(parent: NasFolderKey?, limit: Int): List<DocumentEntry> =
+    library.nasFolders(parent).take(limit).map { folder ->
+      directory(table.idFor(DocumentTarget.Folder(folder.key), label = safeName(folder.name, FALLBACK_FOLDER)), safeName(folder.name, FALLBACK_FOLDER))
+    }
+
+  private suspend fun mediaIn(folder: NasFolderKey, limit: Int): List<DocumentEntry> {
+    if (limit <= 0) return emptyList()
+    // La porta puo' sbagliare (restituire un nascosto, un gruppo contagiato): si tiene solo cio' che la vista di adesso mostra (E-H1).
+    val offered = library.mediaIn(folder, limit)
+    val visible = offered.filter { isVisible(it) }
+    IntegrationCounters.add(IntegrationCounter.HIDDEN_STOPPED, (offered.size - visible.size).toLong())
+    return files(visible.take(limit))
+  }
+
+  /** Le voci di [ids] che il catalogo conosce, nell'ordine dato. Ogni id e' gia' nella vista: lo garantiscono i chiamanti. */
+  private suspend fun files(ids: List<MediaId>): List<DocumentEntry> {
+    if (ids.isEmpty()) return emptyList()
+    val infos = library.fileInfos(ids)
+    return ids.mapNotNull { id -> infos[id]?.let { file(table.idFor(DocumentTarget.Media(id)), it) } }
+  }
+
+  // --- Voci -------------------------------------------------------------------------------------------------------------
+
+  private fun directory(id: DocumentId, name: String): DocumentEntry =
+    DocumentEntry(id, name, DocumentsContract.Document.MIME_TYPE_DIR, 0L, null, isFolder = true)
+
+  private fun file(id: DocumentId, info: MediaFileInfo): DocumentEntry =
+    DocumentEntry(id, safeName(info.displayName, FALLBACK_FILE), safeMime(info.mime), info.size.coerceAtLeast(0), info.modifiedAtMillis, isFolder = false)
+
+  // --- Visibilita' (E-H1) -----------------------------------------------------------------------------------------------
+
+  private fun snapshot(): TimelineSnapshot = library.items.view.value.snapshot
+
+  private fun isVisible(id: MediaId): Boolean = snapshot().indexOf(id) >= 0
+
+  /** Vero se il media di [token] e' ancora nella vista; altrimenti lo conta, revoca il token e dice di no. */
+  private fun stillVisible(token: DocumentId, id: MediaId): Boolean {
+    if (isVisible(id)) return true
+    IntegrationCounters.add(IntegrationCounter.HIDDEN_STOPPED)
+    table.revoke(listOf(token))
+    return false
+  }
+
+  private fun found(id: DocumentId): DocumentResolution.Found? = when (val r = table.resolve(id)) {
+    is DocumentResolution.Found -> r
+    DocumentResolution.Expired -> {
+      IntegrationCounters.add(IntegrationCounter.PROVIDER_EXPIRED)
+      null
+    }
+    DocumentResolution.Unknown -> null
+  }
+
+  companion object {
+    /** L'id della radice per il sistema: una costante dell'app, non un dato. */
+    const val ROOT_ID: String = "mcg-root"
+
+    private const val FALLBACK_FILE = "media"
+    private const val FALLBACK_FOLDER = "cartella"
+    private const val MAX_NAME_LENGTH = 200
+    private val MIME = Regex("^[a-z0-9][a-z0-9!#$&^_.+-]{0,126}/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}$")
+
+    /**
+     * Un nome da mostrare e da usare come nome di file dall'altra app: senza separatori di percorso, senza caratteri di controllo, mai solo
+     * punti, al massimo [MAX_NAME_LENGTH] caratteri. Il contenuto resta quello dell'utente (non e' un id).
+     */
+    internal fun safeName(raw: String, fallback: String): String {
+      val cleaned = buildString {
+        for (c in raw) {
+          when {
+            c == '/' || c == '\\' -> append('_')
+            c.isISOControl() || c == ' ' || c == ' ' || c == '‮' -> Unit
+            else -> append(c)
+          }
+        }
+      }.trim().take(MAX_NAME_LENGTH).trim()
+      return if (cleaned.isEmpty() || cleaned.all { it == '.' }) fallback else cleaned
+    }
+
+    internal fun safeMime(raw: String): String {
+      val lower = raw.trim().lowercase()
+      return if (MIME.matches(lower)) lower else "application/octet-stream"
+    }
+  }
+}

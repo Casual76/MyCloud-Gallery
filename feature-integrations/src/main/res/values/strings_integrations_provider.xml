@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Il provider dei documenti (Fase 5B, docs/fase5-progetto.md §2.7, D23, P10): cio' che si legge nei selettori di documenti di sistema
+       (Gmail «Allega file», «Documento» di WhatsApp e Telegram). Nessun dato dell'utente: i nomi dei file e delle cartelle vengono dal catalogo. -->
+  <string name="integrations_documents_recent">Recenti</string>
+  <string name="integrations_documents_nas_folders">Cartelle NAS</string>
+  <string name="integrations_documents_locked_summary">Bloccata: sbloccala dall’app</string>
+  <string name="integrations_documents_error_nas">Il NAS non risponde.</string>
+  <string name="integrations_documents_error_generic">Non riesco a leggere questa cartella adesso.</string>
+</resources>

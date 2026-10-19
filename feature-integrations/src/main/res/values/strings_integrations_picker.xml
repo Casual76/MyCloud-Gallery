@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Il selettore per le altre app (Fase 5B, docs/fase5-progetto.md §2.7, D23, P10): foto e video della Libreria, scelti da un'altra app
+       (OneDrive, I miei file, Google Drive...). Nessun dato dell'utente nelle stringhe: i nomi dei file non compaiono mai qui. -->
+  <string name="integrations_picker_title">Scegli da MyCloud Gallery</string>
+  <string name="integrations_picker_subtitle_photos">Foto</string>
+  <string name="integrations_picker_subtitle_videos">Video</string>
+  <string name="integrations_picker_subtitle_both">Foto e video</string>
+  <string name="integrations_picker_cancel">Annulla</string>
+  <string name="integrations_picker_close">Chiudi</string>
+  <string name="integrations_picker_choose">Scegli</string>
+  <plurals name="integrations_picker_choose_count">
+    <item quantity="one">Scegli %1$d elemento</item>
+    <item quantity="other">Scegli %1$d elementi</item>
+  </plurals>
+  <plurals name="integrations_picker_selected_count">
+    <item quantity="one">%1$d scelto</item>
+    <item quantity="other">%1$d scelti</item>
+  </plurals>
+  <string name="integrations_picker_nothing_selected">Tocca per scegliere</string>
+
+  <string name="integrations_picker_cell_photo">Foto</string>
+  <string name="integrations_picker_cell_video">Video</string>
+  <string name="integrations_picker_cell_nas_only">solo sul NAS</string>
+
+  <string name="integrations_picker_loading_title">Preparo la consegna</string>
+  <string name="integrations_picker_loading_detail">Un momento: controllo che tutto sia pronto.</string>
+
+  <string name="integrations_picker_empty_title">Niente da scegliere</string>
+  <string name="integrations_picker_empty_detail">Qui compaiono le foto e i video della tua libreria che l’altra app può usare.</string>
+
+  <string name="integrations_picker_locked_title">MyCloud Gallery è bloccata</string>
+  <string name="integrations_picker_locked_detail">Sblocca con la credenziale del telefono per scegliere foto e video.</string>
+  <string name="integrations_picker_unlock">Sblocca</string>
+  <string name="integrations_picker_unlock_failed">Non sono riuscito a sbloccare. Riprova.</string>
+
+  <string name="integrations_picker_not_ready_title">Prima configura MyCloud Gallery</string>
+  <string name="integrations_picker_not_ready_detail">Apri l’app e completa la configurazione, poi torna a scegliere foto e video.</string>
+
+  <string name="integrations_picker_notice_nas_offline">Il NAS non risponde: i media che stanno solo sul NAS non si possono consegnare adesso. Toglili dalla scelta o riprova più tardi.</string>
+  <string name="integrations_picker_notice_nas_metered">Stai usando i dati mobili: i media che stanno solo sul NAS non si consegnano senza il tuo consenso. Collegati al Wi-Fi di casa o toglili dalla scelta.</string>
+  <string name="integrations_picker_notice_nas_unavailable">Il NAS non è disponibile adesso: i media che stanno solo sul NAS non si possono consegnare. Toglili dalla scelta.</string>
+  <string name="integrations_picker_notice_too_many_nas">Hai scelto %1$d media solo sul NAS: se ne possono consegnare al massimo %2$d e %3$s alla volta. Togline qualcuno.</string>
+  <string name="integrations_picker_notice_too_many_nas_size">Hai scelto %1$d media solo sul NAS per %2$s: se ne possono consegnare al massimo %3$d e %4$s alla volta. Togline qualcuno.</string>
+  <string name="integrations_picker_notice_too_many">Si possono scegliere al massimo %1$d elementi alla volta.</string>
+  <string name="integrations_picker_notice_nothing">Nessuno degli elementi scelti è disponibile adesso.</string>
+  <string name="integrations_picker_notice_dismiss">Chiudi il messaggio</string>
+
+  <plurals name="integrations_picker_skipped_toast">
+    <item quantity="one">%1$d elemento non era più disponibile e non è stato consegnato.</item>
+    <item quantity="other">%1$d elementi non erano più disponibili e non sono stati consegnati.</item>
+  </plurals>
+</resources>

@@ -1338,6 +1338,114 @@ riapertura le righe confermate risultano liberate, mai perse); un riavvio del te
 verifica (fermo, niente liberato); "Elimina solo dal telefono" di un media non al sicuro e di uno con la sola copia comune ("Prima mettilo al sicuro", guardiano
 prima del cestino). Da misurare: tempo della verifica sul momento per GB (16 MB/s attesi) e il dialogo di Samsung con 2.000 righe.
 
+## Fase 5B: P10, scegliere foto per le altre app (19/10)
+Fonte: `docs/fase5-progetto.md` (§2.7 per intero, D23, D29, §4.3, riga P10 del §4.4, §6.1 e §6.4, E-H1, E-X1, E-X4, E-X6, E-X7), `docs/sicurezza.md` §4-bis e C17,
+`docs/android.md` §5.3 (T-14), la sezione P0-B qui sopra. Perimetro: `feature-integrations/.../picker/**` e `.../provider/**`. Riempie due dei quattro
+scheletri di P0-B, `PickerActivity` e `MediaDocumentsProvider`. **Nessun permesso, nessuna dipendenza, nessuna modifica al manifest, alle build o ai contratti
+di `contract/`**: le porte nuove stanno nei pacchetti di P10 e `:app` le installa (P14).
+
+**Cosa c'è** (`feature-integrations/src/main/kotlin/.../integrations/`)
+| File | Cosa |
+|---|---|
+| `provider/IntegrationLibrary.kt` | **la Libreria per le altre app, una porta sola**: la vista (`ViewerItems`, senza nascosti), le miniature, l'URI del MediaStore, nome/tipo/dimensione dal catalogo, la lettura a intervalli di una copia del telefono e di un solo-NAS, la prova del NAS, le Cartelle NAS (chiavi opache). Più il null-object |
+| `provider/LibraryMediaDocuments.kt` | `MediaDocuments` (P0-B) sopra quella porta, più `DocumentIssuer`: ciò che il selettore usa per **consegnare** un solo-NAS (`issue`, `isDelivered`, `revoke`) |
+| `provider/DocumentIdTable.kt` | gli **id opachi**: token casuali di 18 byte (`SecureRandom`), tabella in memoria, due classi (da sfoglio, consegnati), scadenza a scorrimento sull'orologio monotono, capienza, revoca |
+| `provider/ProxyDescriptors.kt` | il **descrittore a richiesta** (`StorageManager.openProxyFileDescriptor`): una lettura per volta dentro il buffer del sistema, scadenza a ogni lettura, annullamento, tetto dei descrittori aperti |
+| `provider/CallerGuard.kt` | la seconda cintura: chi chiama il provider |
+| `provider/MediaDocumentsProvider.kt`, `DocumentRows.kt` | il provider vero e le righe che risponde |
+| `provider/DocumentPolicy.kt` | i tetti e le scadenze (un posto solo), l'orologio, i **contatori della Diagnostica** (soli codici fissi) |
+| `picker/PickerRequest.kt` | cosa chiede l'altra app (azione, tipi, scelta multipla, solo locale), letto in modo difensivo |
+| `picker/PickerPorts.kt` | le porte che `IntegrationPorts` non ha: la Libreria (`IntegrationLibrary`) e lo sblocco (`EntryUnlock`) |
+| `picker/PickerDelivery.kt`, `PickerViewModel.kt` | dalla scelta al risultato (tetti, NAS, annullamento); lo stato (blocco, griglia, consegna) |
+| `picker/PickerScreen.kt`, `PickerActivity.kt` | la schermata (solo componenti del design system, nessun colore a mano, stringhe in `strings_integrations_picker.xml` e `..._provider.xml`) e l'activity, ora una `FragmentActivity` (lo sblocco con la credenziale di sistema la vuole, come la `MainActivity`) |
+| `provider/testing/`, `picker/testing/` | il telefono finto e il NAS finto (`FakeIntegrationLibrary`: indice misto, nascosti fuori dall'indice, byte virtuali, guasti, una porta che "sbaglia" apposta) e lo sblocco finto |
+
+**Le regole** (tutte provate; tra parentesi i test in `src/test/.../integrations/`)
+- **La vista di adesso è l'unico elenco, e la porta non è mai fidata** (E-H1; `HiddenNeverLeavesTest`, `LibraryMediaDocumentsTest`, `PickerDeliveryTest`). Un media si elenca,
+  si descrive, si apre e si consegna solo se è nella vista della Libreria **in quel momento**: la vista non ha i nascosti, né i membri di un gruppo di copie simili con
+  un nascosto (nascosto contagioso, D36), né ciò che l'accesso parziale non concede. Gli id che la porta delle Cartelle NAS restituisce lo stesso, e i nascosti che la
+  porta "sbaglia" a conoscere (nomi, riferimenti, byte), non escono: né dal selettore né dal provider. Un media nascosto **dopo** che il suo id è nato non si apre più,
+  e **prima di aprire qualunque file**; la vista si ricontrolla anche subito prima di creare gli id, perché durante le attese un media può essere stato nascosto da un altro dispositivo.
+- **Blocco dell'app** (E-X7; `PickerViewModelTest`, `PickerActivityTest`, `PickerLayoutTest`, `MediaDocumentsProviderTest`). Il selettore decide da `EntryGate` e **rilegge il cancello a ogni ritorno
+  in primo piano, al tocco su "Scegli" e un'ultima volta prima di consegnare**. Bloccata: nello stato non resta niente della Libreria (né griglia né selezione) e la griglia
+  non è nemmeno in composizione; si vede solo "Sblocca", che chiede la credenziale di sistema da solo una volta per ritorno e poi con il tasto. Uno sblocco "riuscito" che
+  non cambia il cancello non vale. Se il blocco si richiude durante la consegna gli id appena creati si revocano. Provider: l'app non pronta non ha radici né documenti; con il
+  blocco acceso la radice c'è ("Bloccata: sbloccala dall'app") ma lo sfoglio risponde `AuthenticationRequiredException` con un tocco immutabile ed esplicito sul pacchetto che apre
+  l'app; **un documento consegnato dal selettore** (sbloccato e toccato) si serve anche con l'app richiusa finché l'id vale, uno da sfoglio no.
+- **Un'altra app non ottiene niente senza un tocco e senza un grant** (`MediaDocumentsProviderTest`). Il sistema fa già rispettare `MANAGE_DOCUMENTS` e i permessi sugli URI; qui c'è
+  la **seconda cintura** (`CallerGuard`), che serve anche perché `getType` non passa dai permessi del provider: radici ed elenchi solo per il sistema (o per noi); un documento
+  per il sistema o per chi ha un permesso di lettura su **quel** documento (non sulla cartella, non su un altro). Provato con un chiamante estraneo su `query`, `openFile`,
+  `getType`, `queryRoots`, `queryChildDocuments`, `queryDocument`, `openDocument` (tutte `SecurityException`, zero descrittori aperti), con il controllo vero di Android (uid estraneo) e con un chiamante che ha il permesso
+  su un solo documento. Il provider si rifiuta di nascere senza `MANAGE_DOCUMENTS` o non esportato.
+- **Id opachi** (`DocumentIdTableTest`, `LibraryMediaDocumentsTest`, `PickerDeliveryTest`). Mai un percorso, una share, un account, un id del MediaStore o del NAS, un `MediaId`, un nome:
+  token casuali; i nomi delle cartelle e dei file sono dati dell'utente che compaiono **solo** nel nome visualizzato, e lì senza separatori di percorso, senza caratteri di controllo,
+  mai solo punti, al massimo 200 caratteri; il tipo MIME che non è `tipo/sottotipo` diventa `application/octet-stream`. L'URI di un solo-NAS è `content://<pacchetto>.integrations.documents/document/<token>` e basta.
+  Id scaduto, sconosciuto, revocato o non opaco: sempre `FileNotFoundException` (nessun oracolo sui media).
+- **Solo lettura**: ogni modo di apertura diverso da "r" è `SecurityException`; nessun flag di scrittura, cancellazione, rinomina, copia, spostamento, miniatura; nessun "recente" né ricerca di sistema
+  (metterebbero le foto fra i recenti del selettore senza passare dallo sblocco).
+- **Risultato del selettore** (`PickerDeliveryTest`, `PickerActivityTest`): copie del telefono = URI del MediaStore, solo-NAS = URI del provider con un id **consegnato**; sempre e solo
+  `FLAG_GRANT_READ_URI_PERMISSION` (mai scrittura, mai persistente, mai prefisso) e `ClipData`; `data` solo se è uno. Niente esce da solo: un tocco (su un elemento, o su "Scegli" con
+  `EXTRA_ALLOW_MULTIPLE`). `EXTRA_LOCAL_ONLY` esclude i solo-NAS. I tipi precisi (`image/jpeg`) si ricontrollano sul tipo vero di ogni file. L'intento si legge solo per azione, tipi e tre booleani
+  (un extra ostile vale come assente; l'URI in `data` di `PICK` non si apre mai); un'azione che non serve o nessun tipo di media chiudono subito con `RESULT_CANCELED`.
+- **Log, notifiche, Diagnostica**: solo numeri e codici (`IntegrationHygieneTest`): nessun log (né `Log` né `println`), messaggi delle eccezioni a frase fissa senza dati, `toString` di
+  `MediaFileInfo`, `NasFolder`, `DocumentTarget`, `PickerUi`, `Ready` senza nomi né id. I contatori (`IntegrationCounters.snapshot()`, 19 codici fissi) li legge P14.
+
+**Edge case e i test che li provano**
+| ID | Cosa | Test |
+|---|---|---|
+| E-X1 | **Scadenza a ogni lettura** di 15 s (`ETIMEDOUT`, mai un'attesa infinita); apertura del documento con la stessa scadenza (`FileNotFoundException`); NAS irraggiungibile detto **prima** di creare gli id, con il motivo (`OFFLINE`, `METERED`, `UNAVAILABLE`) e la prova del NAS con scadenza di 5 s; **un URI usato dopo che il permesso è scaduto** non apre niente (sfoglio 30 min, consegnato 6 h, a scorrimento, monotono; un riavvio del processo li invalida tutti) | `ProxyDescriptorsTest.unaLetturaCheNonFinisceScadeConEtimedout_E_X1`, `MediaDocumentsProviderTest.unNasCheNonRispondeDaUnErroreSubito…`, `…unUriUsatoDopoLaScadenzaNonApreNiente_E_X1`, `…dopoUnRiavvioDelProcesso…`, `DocumentIdTableTest`, `PickerDeliveryTest.ilNas…_E_X1`, `PickerViewModelTest.ilNas…_E_X1` |
+| E-X4 | **Annullamento a metà**: nel selettore ogni sospensione è prima della creazione degli id e dopo non si sospende più, quindi annullare durante le informazioni o la prova del NAS non lascia id; un guasto dopo la creazione li revoca; indietro e "Annulla" danno `RESULT_CANCELED` senza id né permessi. Nel provider il segnale di annullamento ferma l'apertura e le letture in volo (`ECANCELED`), il lettore si chiude una volta sola, il thread esce, il posto si libera | `PickerDeliveryTest.annullare…_E_X4`, `…seQualcosaFallisceDopo…`, `PickerViewModelTest.annullare…_E_X4`, `PickerActivityTest.indietroAnnulla…_E_X4`, `ProxyDescriptorsTest.annullareFermaLaLetturaInVolo…`, `MediaDocumentsProviderTest.unaAperturaAnnullata…_E_X4` |
+| E-X6 | Molti solo-NAS insieme: **al massimo 100 solo-NAS e 2 GiB** in una scelta, e **500 elementi in tutto** (il limite del binder per i `ClipData`); oltre, rifiuto con la frase e la scelta resta per correggerla (anche al tocco, non solo al "Scegli"). Nel provider: **8 descrittori aperti**; le aperture oltre aspettano un posto fino alla scadenza, **al massimo 6 in attesa** (ognuna blocca un thread del binder), oltre rifiuto immediato | `PickerDeliveryTest.oltreCento…`, `…oltreDueGib…`, `PickerViewModelTest.ilCentounesimo…`, `…troppiSoloNas…`, `ProxyDescriptorsTest.oltreIlTetto…`, `MediaDocumentsProviderTest.moltiSoloNasInsieme…` |
+| E-X7 | Blocco attivo: prima lo sblocco, nessuna cella in composizione, niente senza sblocco e tocco | vedi sopra |
+| E-H1, E-L11 | Mai i nascosti, né il gruppo di copie simili con un nascosto, su **entrambe** le vie | `HiddenNeverLeavesTest` (selettore: 3 prove; provider: 3; confronto fra le due) |
+
+**Prove**: 223 test nuovi in `feature-integrations` (237 nel modulo, tutti verdi): `HiddenNeverLeavesTest` 6, `IntegrationHygieneTest` 6, `PickerActivityTest` 13, `PickerDeliveryTest` 20,
+`PickerViewModelTest` 22, `PickerRequestTest` 11, `PickerPhone/TabletLayoutTest` 12 (bordi a 1x e 1,3x, 48 dp, nessuna sovrapposizione, nomi per TalkBack), `PickerPhone/TabletScreenshotTest` 60,
+`DocumentIdTableTest` 12, `LibraryMediaDocumentsTest` 19, `MediaDocumentsProviderTest` 27, `ProxyDescriptorsTest` 15. Screenshot in `docs/screenshots/5-P10/` (chiaro e scuro, telefono 412 dp e tablet 1280 dp, testo a 1,3x).
+**Provato reintroducendo i difetti** (il test giusto diventa rosso, poi si toglie; 21 mutazioni, 20 rosse): il filtro della vista nelle cartelle (4 test), nell'apertura (1) e nella consegna dell'id (3), la vista in `prepare` (1),
+la prova del NAS (8), i tetti dei solo-NAS (3), la revoca dopo un guasto (1), l'ultimo cancello (1) e quello al tocco (1), l'annullamento che non ferma la consegna (1), la potatura della selezione (1),
+`CallerGuard` su documenti (3) ed elenchi (2), il modo di apertura (1), il documento consegnato sempre servito (2), la scadenza della lettura (1), l'annullamento della lettura in volo (1), la chiusura del lettore (3),
+la scadenza degli id (4). Tre test sono nati da mutanti sopravvissuti: l'apertura di un media nascosto con una porta che sbaglia ("nemmeno il file", `phoneReaders` vuoto), il cancello al tocco (ora la scelta ha anche un solo-NAS e si
+controlla che il catalogo e il NAS non siano stati toccati) e l'annullamento (ora si lascia scorrere il tempo e non cambia più niente). **Sopravvissuta una, equivalente**: il ricontrollo della vista subito prima di creare gli id
+**dei solo-NAS** (`issue` ricontrolla la vista da solo: due strati). I test che provano una scadenza girano con un limite di tempo proprio (`ProviderTestSupport.within`, `withTimeout`): un mutante senza scadenza fa
+**fallire** il test, non lo lascia appeso fino ai 20 minuti di Gradle (era successo con la mutazione della prova del NAS).
+
+**Descrittore a richiesta** (D23, T-14). Niente copia in cache: l'altra app legge a intervalli. Ogni `onRead` riempie il buffer del sistema (mai tutto il file: provato con un file virtuale di 3 GiB, al
+massimo 128 KiB per lettura) e riempie sempre la richiesta salvo la fine del file; offset e dimensioni assurdi sono `EINVAL`; `onWrite` è `EBADF`. Un thread per descrittore (nome generico), chiuso alla chiusura.
+Se T-14 chiedesse il download prima in cache la forma della risposta cambierebbe: oggi il selettore consegna sempre l'URI del provider.
+
+**Come si lega** (P14, da `:app`)
+```kotlin
+val library: IntegrationLibrary = ...           // vedi sotto
+val documents = LibraryMediaDocuments(library, DocumentLabels.from(context))   // le tre etichette dalle stringhe del modulo
+IntegrationPorts.install(entryGate, documents)  // provider E consegna dei solo-NAS
+PickerPorts.install(library, unlock)            // selettore
+```
+`IntegrationLibrary`: `items` = `GalleryGraph.viewerItems(LibraryFilter.ALL)` (l'indice senza i nascosti e con l'accesso parziale), `thumbnails`/`placeholders` = la pipeline delle miniature,
+`phoneUri` = `PhoneMediaIntents.uriOf`, `fileInfos` = il catalogo (nome, tipo, dimensione, data), `openPhone` = `ContentUriMediaBytes.open` dentro un `DocumentReader`,
+`openNas` = il lettore dei byte del NAS **con la scadenza e senza mai accumulare il file** (`null` se non risponde), `nasReach` = rete + `MobileDataConsent` (`METERED` se i dati mobili non sono
+stati accettati per quei media, D23 e E-V2), `nasFolders`/`mediaIn` = il catalogo. `EntryUnlock` = `AppLockController.beginAuthentication` + `BiometricPromptAuthenticator(activity).authenticate` + `endAuthentication`.
+
+**Modifiche richieste agli altri**
+- **P14, `EntryGate.decide()`** deve valutare il blocco **adesso**, tenendo conto del tempo passato dall'uscita dall'app (`AppLockController.onAppForegrounded` lo fa solo al ritorno in primo piano della `MainActivity`: con
+  la `MainActivity` in secondo piano lo stato resterebbe `UNLOCKED` per sempre). Serve un metodo come `isLockedNow()`. E uno sblocco fatto nel selettore deve far rispondere `ALLOWED` a `decide()`; con "Blocca subito"
+  il provider dei documenti non si può sfogliare dalle altre app se `decide()` torna `NEEDS_UNLOCK` appena la `MainActivity` esce: proporre una **finestra di tolleranza dopo uno sblocco d'ingresso** (due minuti, monotona).
+- **P14**: azzeramento dell'app e cambio di famiglia → `LibraryMediaDocuments.revokeAll()`; Diagnostica → `IntegrationCounters.snapshot()` (`codice=numero`); le righe di `docs/sicurezza.md` §4-bis del selettore e del
+  provider dicono ancora "scheletro" (non le ho toccate: sono di P14); una `ThumbnailLoader` **separata** per il selettore (la finestra delle richieste è per caricatore: due schermate sullo stesso la sovrascrivono).
+- **Contratti di `contract/`**: nessuna modifica. `MediaDocuments` non ha un modo di consegnare un id a un media: per questo `DocumentIssuer` è nuovo (lo implementa `LibraryMediaDocuments`). Se si preferisce un'unica
+  `install`, `IntegrationPorts` può prendere anche `PickerPorts` come terzo argomento: non l'ho fatto per restare nel perimetro.
+- **`IntegrationSkeletonsTest` (P0-B)**: tolti i due test dello scheletro del selettore e del provider (descrivevano il comportamento che P10 sostituisce); restano quello della ricezione (P11) e le stesse garanzie, più forti, in
+  `PickerActivityTest` e `MediaDocumentsProviderTest`.
+
+**Limiti dichiarati e punti aperti**
+- Nessuna miniatura per il selettore di documenti (`FLAG_SUPPORTS_THUMBNAIL`): gli elenchi hanno solo nome, tipo, dimensione e data.
+- Con il blocco su "Subito" lo sfoglio dalle altre app chiede lo sblocco a ogni volta (vedi la finestra di tolleranza sopra); il selettore non ha il problema (sblocca e consegna nella stessa activity).
+- Le Cartelle NAS dipendono da `nasFolders`/`mediaIn` di P14: se non li lega, la radice ha "Recenti" e una cartella vuota.
+- I tetti di descrittori (8, attese 6) e la scadenza di 15 s sono quelli del progetto; il tetto del binder per i `ClipData` (500) è una scelta di P10. Da ricalibrare con le misure di F39.
+- Il rendimento dei descrittori a richiesta con Gmail, WhatsApp e Telegram (lunghezza e parallelismo delle letture) non è misurato: è T-14.
+
+**Da provare sul campo** (F39, T-14): la radice "MyCloud Gallery" compare in Gmail ("Allega file"), "Documento" di WhatsApp e Telegram; il selettore compare in OneDrive, I miei file, Google Drive, e **non** nel Photo Picker; con 5 foto del telefono e 5 solo-NAS (Wi-Fi di casa) scelte da Gmail l'allegato è identico all'originale (SHA-256); un video da 1 GB solo-NAS si allega senza riempire la memoria e, annullato a metà, non lascia thread né posti; NAS spento dopo la scelta: l'altra app riceve un errore subito (E-X1), non un'attesa; blocco app acceso con timeout "Subito": il selettore mostra lo sblocco e consegna; **nascondere una foto mentre il selettore è aperto** e toccare "Scegli": non esce; `am start -a android.intent.action.GET_CONTENT -t image/*` da `adb` con l'app bloccata non mostra niente prima dello sblocco; `content query --uri content://<pacchetto>.integrations.documents/root` da `adb shell` (senza `MANAGE_DOCUMENTS`): `SecurityException`; un URI consegnato aperto dopo 6 ore: non si apre; tempi di lettura di Gmail e WhatsApp (F39) per tarare tetti e scadenze.
+
 ## Revisione grafica della Libreria da parte dell'utente (13/10)
 Giudizio: le prestazioni della navigazione non sono male, la **grafica no**. Serve molto lavoro, da fare in un **filone grafico
 parallelo** alle fasi successive (insieme ai lavori che non toccano l'app sul momento, per esempio il back-end NAS della Fase 4).

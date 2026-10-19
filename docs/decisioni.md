@@ -1116,6 +1116,228 @@ manifest.
   Samsung (E-P11), l'eventuale `MANAGE_MEDIA` (atteso di no), la forma della risposta per i media solo-NAS, la strategia di copia delle condivisioni e l'algoritmo delle versioni.
 - Il `FileProvider` di androidx non si può provare con un URI su Windows (la radice ha un separatore in più): `FileProviderPathsTest` legge il file XML e le radici configurate.
 
+## Fase 5B: P8, versioni e correzioni (19/10)
+Fonte: `docs/fase5-progetto.md` (§2.4 per intero, D17-D20, D32, D35, §4.3, riga P8 del §4.4, §5.4 invarianti 12-14, §6, risposte Q2 (a) e Q6 (a)), le note
+per P8 della sezione P0-B qui sopra, `docs/review/5a-fase5a.md` (R1, R3), il codice della 5A (`upload/SafeUploadEngine.kt`, diario, `safety/`).
+Perimetro: `core-backup/.../versions/**`, `.../corrections/**`, `.../tasks/**` (e i loro test), `core-nas/.../ops/backup/` con
+`SmbNasFileOps.renameVersion`, `core-metadata/.../write/**`. Nessuna dipendenza nuova, nessun permesso nuovo.
+
+**Cosa c'è**
+| Dove | File | Cosa |
+|---|---|---|
+| `core-nas` | `ops/SmbNasFileOps.kt` (`renameVersion`), `ops/backup/NasBackupOpsFactory.kt` | `archiveVersion` e `restoreVersion` veri: la rinomina della 4B sullo stesso handle, con il timbro **obbligatorio** confrontato prima del `SET_INFO`, senza sostituire, solo un file (cartella o punto di rianalisi = `SourceChanged`), senza creare cartelle (`NotFound`: prima `mkdirs`). Sopra primitive non SMB resta `NOT_IMPLEMENTED` |
+| `core-metadata/write` | `ExifMetadataWriter.kt` | lo scrittore vero (`ExifInterface`): tipo dai **byte**, solo JPEG, PNG, WebP; destinazione nuova creata in esclusiva, sorgente mai toccato, rilettura con `ExifInterface`, niente resta se qualcosa va storto |
+| | `WrittenFileCheck.kt` | `ExtractingFileCheck`: la copia corretta si rilegge con l'estrattore dell'app (i valori chiesti ci sono) e si **decodifica** un'anteprima (D19) |
+| `core-backup/versions` | `VersionModel.kt` | lavori `VERSION`/`SWAP` (`VersionJob`), porte `VersionJournal`, `VersionCatalog`, `StagedVersionFiles`, `VideoOriginalTasks` |
+| | `NasVersionEngine.kt` | il motore dei due cammini del §2.4 (sotto) |
+| | `VersionPlanning.kt`, `VersionNames.kt` | decisioni pure (solito percorso, versione del telefono, file preparato, scambio) e nomi in `Versioni/` |
+| | `DefaultVersionKeeper.kt` | `VersionKeeper`: piano delle versioni e "Ripristina originale" (E-E10) |
+| | `VersionFranchise.kt` | la franchigia del congelamento (D32) |
+| | `RoomVersionJournal.kt`, `DirectoryStagedFiles.kt` | il diario su Room nella tabella `backup_item` e i file preparati in una cartella dell'app |
+| `core-backup/corrections` | `DefaultCorrections.kt` | `Corrections` (D19, Q6 (a)) |
+| `core-backup/tasks` | `RoomPendingTasks.kt` | `PendingTasks` su `pending_task` (D20) e la porta `VideoOriginalTasks` |
+
+**I due cammini** (stessa macchina `UploadStateMachine`; ogni valore si scrive nel diario prima della chiamata; la risposta persa si riconosce dal NAS)
+- `VERSION`: lettura completa (telefono o file preparato) con l'hash, temporaneo proprio con i punti di ripresa e l'identità di R3, rilettura completa (D4); **solo
+  dopo la verifica** il piano si ricalcola dal catalogo: se la versione è ancora l'attuale, il file che il catalogo conosce al solito percorso (dello **stesso**
+  media) va in `Versioni/` (nome scritto prima, cartella creata prima, timbro obbligatorio), la posizione nel catalogo lo segue **subito** (prima di scrivere
+  `ARCHIVED`, così un giro fermato lì lascia catalogo e NAS d'accordo), poi la versione si pubblica al solito percorso senza sostituire. Se non è più l'attuale
+  (la versione del PC registrata dalla scansione) va direttamente in `Versioni/` e il solito percorso non si tocca. `VERSION_DIRECT` (nessun attuale da spostare:
+  l'originale rimasto sul telefono dopo una modifica del PC, E-E6) pubblica subito in `Versioni/`.
+- `SWAP`: due rinomine, nessun byte caricato; il catalogo segue ogni rinomina subito; `restoreOriginal` del catalogo solo se la versione riportata è l'originale.
+
+**Scelte** (quelle che l'utente vede sono da confermare)
+- **Nomi in `Versioni/`** (Q2 (a)): `Versioni/<percorso del file>/IMG_1234 (originale).jpg`; le altre `IMG_1234 (versione del 2026-10-15 14.32).jpg` con l'**ora del NAS**
+  del file archiviato (quando è arrivato sul NAS, non quando è stato modificato sul telefono: l'orologio del telefono non entra, D31), mostrata nel fuso del
+  telefono; un nome occupato da un altro file diventa "… (2)" (mai sostituito); un nome oltre i 255 byte si accorcia nella radice (come R1).
+- **`SOURCE_CHANGED`** (il PC ha modificato o tolto l'attuale durante il lavoro): niente si sposta, la versione resta nel suo temporaneo (citato dal diario: la
+  pulizia D33 non lo tocca) e il lavoro aspetta in `ARCHIVING`; quando la scansione registra il file del PC il piano si ricalcola (versione del PC attuale → la
+  nostra in `Versioni/`; file tolto → la nostra al solito percorso libero). Per uno `SWAP` lo scambio finisce `FAILED`: il piano che l'utente ha confermato non vale.
+- **Il solito percorso occupato da un file di altri** fra l'archiviazione e la pubblicazione: mai sostituito; la versione va in `Versioni/` (`USUAL_PATH_TAKEN`).
+- **Uno scambio che non può riportare l'originale** (cambiato o sparito dal PC): l'attuale **torna al suo posto** (`ROLLED_BACK`, `FAILED`): a lavoro finito il
+  solito percorso non resta mai vuoto. Se nemmeno l'attuale si può riportare, entrambi restano in `Versioni/` (nessun byte perso).
+- **Errori inattesi** (R1): prima di spostare qualcosa il lavoro si parcheggia `FAILED` con `UNEXPECTED`; **dopo** (`ARCHIVING` in poi, uno scambio iniziato) resta
+  aperto e si riprende: un `FAILED` lascerebbe il solito percorso vuoto.
+- **Congelamento ed emergenza** (D32): il cancello si guarda prima di ogni passo; un congelamento che arriva fra `ARCHIVED` e `PUBLISHED` lascia il solito percorso
+  vuoto finché dura (i byte sono in `Versioni/` e nel temporaneo verificato; il catalogo è già d'accordo). Residuo dichiarato.
+- **Franchigia** (D32): `VersionFranchise.fileIds(share)` = i `fileId` che le versioni hanno spostato o messo (archiviati, pubblicati, riportati), dal diario
+  locale: per la guardia dei cambiamenti di massa non contano né fra i "cambiati" né fra gli "spariti". In più il catalogo segue ogni rinomina subito, quindi la
+  scansione trova i file al posto che il catalogo già sa.
+- **"Ripristina originale" dall'app** (E-E10): permesso `null` → `NeedsPhoneWrite` e niente si tocca; un permesso che **non copre** le righe = l'utente ha detto
+  no al dialogo → si scambia solo sul NAS e il telefono tiene la modifica (il piano lo mostra); con il permesso, a scambio finito, la riga si riscrive con
+  l'originale **riletto dal NAS e verificato** con il suo SHA-256.
+- **"Ripristina originale" in Samsung Gallery** (E-E2): `NasVersionEngine.planRealign(mediaId)` crea lo `SWAP` senza conferma (due rinomine dei file del media
+  stesso, da dati locali: il catalogo dice già che l'attuale è l'originale).
+- **Correzioni** (D19): l'ordine è catalogo (versione `CORRECTED` con l'impronta nuova, **nessun posto**: la lettura del telefono la riconoscerà come ritorno a
+  una versione nota) → lavoro `VERSION` dal file preparato → riscrittura del telefono → il lavoro va avanti subito. Il file preparato ha una **nota** (a quale
+  media appartiene) scritta prima del file: dopo una morte del processo `recoverStaged` (a ogni giro) lo affida al suo lavoro o lo toglie se la correzione non è
+  mai arrivata al catalogo. Una riscrittura del telefono fallita risponde `Failed(PHONE_WRITE_FAILED)` (o `PHONE_NOT_RESTORED`), ma la correzione resta nell'app e
+  va sul NAS: il telefono tiene la versione di prima. Un media del telefono **non al sicuro** (la versione attuale senza copia privata verificata e SHA-256) non
+  si corregge: `NeedsSafeFirst`, niente letto né scritto. Anche un solo-NAS non verificato vuole prima la verifica.
+- **Q6 (a)**: HEIC, RAW e video → `FormatNotWritable` dopo la conferma, con `VersionCatalog.correctInApp` (il file non si tocca). Anche un "JPEG" che dentro non lo
+  è (lo scrittore guarda i byte).
+- **Scrittore** (`ExifMetadataWriter`): data in `DateTimeOriginal`/`DateTimeDigitized` con `OffsetTime*` e `SubSecTime*` (senza fuso nella correzione vale quello
+  del file); l'ora GPS si sposta con la data (l'estrattore la usa per il fuso); un luogo nuovo toglie l'altitudine di prima; "togli il luogo" svuota tutte le
+  etichette di posizione GPS (non l'ora GPS).
+- **D20**: l'attività in sospeso nasce solo quando il file spostato in `Versioni/` è l'**originale** di un **video**; una per originale, per sempre ("Tienilo"
+  non la riapre); "Elimina" resta della 4B (`:app` chiama `complete`).
+- **D13 in debug**: le versioni nascono solo da media letti dal telefono recintato (`mcg-prova`) e si scrivono nella share di prova del media, ma `Versioni/`
+  sta alla **radice** della share (Q2 (a)), quindi fuori da `mcg-campo/` (es. `Versioni/mcg-campo/Backup/...`). Se la recinzione deve restare tutta sotto
+  `mcg-campo/`, `VersionPaths` vuole una radice (punto aperto per P14).
+- **D35**: un media proprio che sta solo nell'area comune non diventa una versione scritta lì (né dal telefono né da una correzione: `COMMON_AREA_NOTICE`): il
+  foglio "la vedranno tutti" non è nel contratto. Un'area in sola lettura ferma il giro al cancello.
+
+**Il diario su Room** (`RoomVersionJournal`, **soluzione provvisoria**): i lavori stanno in `backup_item` con i tipi `version` e `swap` già previsti dallo schema v4,
+così la 5A li vede (`openFor`: nessuna copia nuova in parallelo; `citedTemps`: D33; conteggi). Lo schema non ha le colonne per l'attuale da spostare, il nome
+in `Versioni/`, il timbro archiviato, la destinazione e l'attesa: stanno in una **nota** nella colonna `problem` con il prefisso `mcg-versioni-1;`, che
+`RoomBackupStore` legge come "nessun problema" (per costruzione); la versione da riportare di uno scambio sta in `guard_path`/`guard_*`. Un'unione di identità
+aggiorna `backup_item.version_id` ma non l'id dell'attuale dentro la nota (caso raro: l'attività di D20 di quel lavoro fallirebbe). Le colonne vere sono una
+richiesta per lo schema (sotto).
+
+**Test** (tutti JVM; Robolectric dove c'è Room o `ExifInterface`)
+- `core-nas` `ops/backup/SmbVersionRenamesTest` (simulatore Samba): una sola apertura e una sola rinomina, byte e `fileId` intatti; collisione (anche per maiuscole);
+  sorgente cambiato dal PC (byte o un altro file) senza nessuna `RENAME` inviata; cartella mancante `NotFound` senza `MKDIR`; cartella, file assente, file aperto
+  dal PC; percorsi sbagliati prima di toccare il NAS; caduta della connessione e sessione scaduta prima e dopo **ogni** richiesta SMB (file a un solo nome,
+  intero, stessa identità, ripresa riconosciuta).
+- `core-metadata` `write/ExifMetadataWriterTest`: JPEG, PNG e WebP corretti (data, luogo messo o tolto, rotazione, tutto) **riletti dall'estrattore e decodificati**
+  (grafica nativa), `ExifInterface` d'accordo, sorgente intatto; formati fuori dalla Q6 e "JPEG" falso non scritti; destinazione esistente intatta; copia rovinata
+  (troncata, solo la testa) rifiutata dalla rilettura.
+- `core-backup` `versions/VersionScenariosTest` (§2.4 scenario per scenario), `VersionKeeperTest`, `VersionEveryCallTest` (7 scenari: guasto prima e dopo ogni
+  chiamata al NAS, circa 85 chiamate in tutto, e morte del processo prima e dopo ogni scrittura del diario e del catalogo, circa 100 passi, con gli invarianti 1, 2, 3, 6, 8,
+  10, 12, 13 a lavoro finito), `VersionSimulatorTest` (il motore sul simulatore Samba: E-E1, E-E2, `SOURCE_CHANGED`, guasto a ogni richiesta SMB),
+  `RoomVersionJournalTest` (ogni campo, regole, convivenza con il diario della 5A, ripresa da un database chiuso e riaperto), `VersionEdgeCasesTest`
+  (E-R9, E-B15, R6, E-P12, R1 applicati al lavoro `VERSION`); `corrections/CorrectionsTest`;
+  `tasks/RoomPendingTasksTest`. Il banco (`VersionWorld`, diario e catalogo in memoria che muoiono, `HookedOps`, invarianti) resta per P13.
+
+**Da provare sul campo** (F34-F36, solo `mcg-prova` con D13)
+- F34: Samsung Gallery "Salva" su una foto **al sicuro** di `mcg-prova` → dal PC la versione al solito percorso e `Versioni/…/IMG (originale).jpg` con lo stesso
+  `fileId` (stessa data di creazione) e gli stessi byte di prima; poi "Ripristina originale" in Samsung Gallery → scambio senza traffico (contatore dei byte
+  caricati fermo); poi "Salva copia" → un media nuovo (non una versione). Da misurare: la rinomina in `Versioni/` sul WD (tempo, `fileId` dopo la rinomina, ora
+  di modifica conservata).
+- F35: video modificato e salvato sopra → l'originale in `Versioni/`, l'attività "Da decidere"; Sì → cestino del NAS (4B); No → resta e non si ripropone.
+- F36: correzione di data, luogo e rotazione su un JPEG del telefono (dialogo di sistema; il telefono e il NAS con la versione corretta, l'originale in
+  `Versioni/`; dal PC `exiftool` legge i valori nuovi); la stessa su un solo-NAS; un HEIC → "corretto solo nell'app", file intatto; un PNG e un WebP veri
+  del telefono (le fixture non bastano a dire che `ExifInterface` scriva bene i file di Samsung). Dal PC modificare il file al solito percorso mentre il backup
+  della versione è in corso (`SOURCE_CHANGED`: niente spostato, il temporaneo resta, dopo la scansione la versione va in `Versioni/`).
+
+**Modifiche richieste ai contratti degli altri**
+- **P14 (`:app`)**: legare `VersionCatalog` a `MediaCatalog` (`versionLocations` con tipo, MIME, proprietario e attuale; `recordFullHash`; `attachCopies`;
+  `relocate` **conservando `verified_at`**; `restoreOriginal`; `correct` senza posti; `markBackupProblem`); `RoomVersionJournal`; `DirectoryStagedFiles` in
+  `noBackupFilesDir/versions` con `dropLeftoverWork()` all'avvio; `RoomPendingTasks` (con `refresh()` all'avvio) come `PendingTasks` e `VideoOriginalTasks`;
+  `ExifMetadataWriter`; `ExtractingFileCheck` (estrattore e `AndroidPreviewDecoder`); `DefaultVersionKeeper` e `DefaultCorrections` al posto dei null-object.
+  Nel lavoro a tappe del backup: `planPhoneVersions(planner.next(...))` **prima** del giro della 5A (altrimenti la 5A carica la modifica come "nome (2)"), poi
+  `versionEngine.run(...)` nella stessa tappa; dopo la lettura del telefono, per un `RevertedToVersion`, `planRealign(mediaId)`. Le versioni della copia in
+  `Pictures/MyCloud Gallery` (E-E7) vanno offerte come candidati anche se quella cartella non è una sorgente. La franchigia va composta nella guardia della
+  scansione (una porta come `OwnRemovals` per i "cambiati" e gli "spariti" per `fileId`: core-nasmedia). Il cancello è lo stesso del backup.
+- **P1 / schema**: colonne vere per `VERSION`/`SWAP` in `backup_item` (l'attuale con versione, posizione, timbro e originale; nome e timbro in `Versioni/`;
+  destinazione; attesa) al posto della nota; una query del DAO dei lavori per tipo e share (oggi `RoomVersionJournal.inShare` legge gli id con una query
+  diretta); `MediaCatalog.correctInApp` (Q6 (a): una correzione di metadati che sopravviva alla rilettura META) non c'è.
+- **P0-B / contratti di core-backup**: `BackupProblemCode` non ha `SOURCE_CHANGED` (sta in `VersionHold`): per la pagina del backup serve un codice o lo stato del
+  lavoro; `RestoreOutcome` non dice "scambio fatto ma telefono non riscritto" (oggi `Queued`: la UI ripianifica e lo vede); `RestoreAvailability` non ha "un'altra
+  versione in corso" (oggi `NOT_AVAILABLE`); la semantica di `PhoneWriteGrant` che non copre le righe = "dialogo negato" va scritta nel contratto;
+  `BackupItem.flow` ignora `archivesCurrent` (un `VERSION_DIRECT` letto da `RoomBackupStore` ha il cammino sbagliato: il verificatore di P13 usi `VersionJob.flow`).
+- **P9**: una copia privata verificata **in `Versioni/`** è una copia privata della sua versione come le altre (la posizione la segue con `verified_at`);
+  `VersionKeeper.plan` è solo catalogo e diario locale.
+- **P12**: `VersionsState` da `DefaultVersionKeeper.plan`; `FormatNotWritable` = "corretta solo nell'app"; `COMMON_AREA_NOTICE` non ha ancora un foglio nel
+  contratto (D35 per le scritture nell'area comune non è fatto).
+- **P11**: per "Modifica con…" di un solo-NAS (E-E3) il risultato dell'editor diventa una versione così: `StagedVersionFiles.keep(file, sha, media)`, versione nel
+  catalogo, `NasVersionEngine.planStaged`.
+- **P13**: il banco delle versioni è pronto (`VersionWorld`, `InMemoryVersionJournal`/`Catalog`, `DyingVersion*`, `HookedOps`, `violations`); i wrapper del caos
+  della 5A delegano le due rinomine senza entrate in `Primitive` (nota di P0-B).
+
+## Fase 5B: P9, "Libera spazio" e cancellazioni dal telefono (19/10)
+Fonte: `docs/fase5-progetto.md` (§2.5 per intero, §2.3, D9, D13, D21, D22, D31, §4.3, riga P9 del §4.4, risposte Q4 (b) e Q9 (a)), il contratto `FreeSpace` e
+`PhoneConfirmation` di P0-B, il codice della 5A (`safety/`, diario, catalogo). Perimetro: `core-backup/.../free/**` (e i suoi test). È l'unico flusso
+dell'app che toglie copie dal telefono: **nessun media lascia il telefono se la sua copia sul NAS non è stata riletta per intero, qui e da poco**.
+
+**Cosa c'è** (`core-backup/src/main/kotlin/.../backup/free/`)
+| File | Cosa |
+|---|---|
+| `SafeFreeSpace.kt` | il motore (`FreeSpace`): piano, conferma, guardiano, verifica sul momento, controllo finale, lotti, risposte di Android; più `assessPhoneOnly` ("Elimina solo dal telefono") e `settle` (esiti in dubbio dopo la lettura del telefono) |
+| `FreeSpaceEvaluator.kt` | le regole su una copia del telefono, **solo da dati locali** (catalogo, diario del backup, versioni di P8) |
+| `FreeSpacePorts.kt` | le porte: `FreeSpaceCatalog` (il grafo vero dei media, a pagine), `BootCounter`, il diario `FreeSpaceDiary` con `FreeRunRecord`/`FreeItemRecord`, la tabella `FreeItemTransitions` |
+| `RoomFreeSpaceDiary.kt` | il diario su `free_space_run`/`free_space_item` della v4, **senza colonne nuove** (D27), con le stesse regole del fake |
+| `EverywhereCopies.kt` | l'elenco di "Ovunque" con le copie di **tutte** le versioni (E-D15), dal catalogo, per il piano `Trash` della 4B |
+| `PhoneOnlyDeletion.kt` | `PhoneOnlyAdvice`/`PhoneOnlyAssessment`: il foglio di "Elimina solo dal telefono" (E-D14, E-B14) |
+| `testing/` | `InMemoryFreeSpaceCatalog`, `InMemoryFreeSpaceDiary` (rifiuta ciò che il diario vero non deve contenere), per P12, P13, P14 |
+
+**Le regole** (tutte provate; tra parentesi i test in `core-backup/src/test/.../free/`)
+- **Versioni da proteggere**: quella della copia del telefono più l'originale e l'attuale che esistono ancora (`SafetyRules`). Ognuna vuole nell'area privata
+  **dell'account** (share uguale a `privateShare`, area `PRIVATE`) una copia presente, con l'hash completo noto e `verified_at`. Un hash dell'indice non conta
+  (F4-D8). Solo la copia comune → guardiano (D9, E-B14), e solo con il cancello `OPEN`. Per un media con più versioni anche il custode delle versioni di P8
+  (`VersionKeeper.plan`) deve dire "attuale uguale, ogni versione da proteggere `safe`": **due fonti indipendenti**; con `NoVersionKeeper` un media con più
+  versioni non si libera mai (`FreeSpacePlanTest.versioni_*`).
+- **Mai**: non proprio, non verificato, in caricamento (un elemento aperto nel diario del backup per **una qualunque** versione del media: anche guardiano,
+  versioni e scambi di P8) o in errore (`BACKUP_PROBLEM`), con una versione scoperta, con l'area congelata o le scritture ferme (E-B22), fuori da `mcg-prova`
+  con la recinzione D13, una riga già consegnata ad Android in un altro giro (mai una riga in due dialoghi).
+- **Il cancello**: `FROZEN`/`WRITES_STOPPED` → escluso e giro fermo (`AREA_FROZEN`); `TEST_ONLY`/`NO_PRIVATE_AREA`/`NOT_READY` → "Libera spazio" non c'è
+  (`NOT_AVAILABLE`). **Quindi in release con un account di prova (R2) e, fino a Q3, con l'account vero (D12) non si libera niente**: è il motivo di D13 (senza
+  recinzione "Libera spazio" potrebbe togliere foto vere). `PAUSED` e `READ_ONLY_AREA` no: il flusso legge soltanto, ma il guardiano non scrive e quei media escono.
+- **Il piano** non legge mai il NAS (E-S11: `FreeSpacePlanTest.eS11_*` conta zero aperture, stat ed elenchi) e non allarga mai la scelta dell'utente (un alias o
+  un gruppo di copie simili non aggiungono media, I9 della revisione 5A). Di default tutto il sicuro tranne gli ultimi 30 giorni, filtri "solo video" e "più
+  vecchi di un anno" (Q9); "oggi" viene dall'ora del NAS nel fuso del telefono, mai dall'orologio del telefono; senza l'ora del NAS un media datato è "recente".
+  Il tetto di 20 GB del guardiano si applica già nel piano.
+- **La conferma** si controlla contro il piano **ricalcolato adesso** (un elemento, un timbro, un filtro diversi: `CONFIRMATION_REJECTED`); "Libera subito"
+  vuole due tocchi distinti (`PhoneConfirmationSheet`, 600 ms) e dà `TrashMode.DELETE_NOW`. **Un giro alla volta**: un giro nuovo chiude quello di prima
+  (`EXPIRED`); un suo lotto già nel dialogo resta tracciato.
+- **La validità** (D21, D31) parte dalla creazione del giro (prima di ogni rilettura: è il conto prudente), vale 6 ore di orologio **monotono** e solo nello
+  **stesso avvio**: conteggio dei riavvii uguale (`Settings.Global.BOOT_COUNT`); se non si legge, solo nello stesso processo; un monotono che torna indietro
+  è un riavvio. L'ora del NAS serve solo all'istante scritto nel catalogo.
+- **La verifica sul momento** rilegge per intero ogni copia scelta (`NasRereader` di P3: timbro uguale all'apertura e dopo, dimensione della versione) e passa lo
+  SHA-256 **letto** al catalogo (`markVerified`): diverso → l'elemento esce e la copia perde "al sicuro" (E-B8, il backup la rifà). Una copia letta per due
+  righe del telefono si rilegge una volta. Un errore del NAS ferma il giro (`NAS_UNREACHABLE`, terminale: si rifà dal piano; E-B9).
+- **Il controllo finale, prima di ogni dialogo**: le regole di nuovo dal catalogo (una versione nuova, un caricamento partito, una riga fuori recinto fanno
+  uscire l'elemento), la riga del telefono (stessa riga, stesso timbro: un file modificato da Samsung "Salva" è una versione nuova, non al sicuro) e il **timbro**
+  di ogni copia riletta (`COPY_CHANGED`, L39). Poi il lotto (≤ 2.000) si scrive `IN_DIALOG` **prima** di arrivare alla UI. Un lotto senza risposta si
+  ripropone uguale e ricontrollato: mai due lotti aperti.
+- **Le risposte**: confermate → `FREED` (solo le righe del lotto), le altre `KEPT`; rifiutato → `KEPT` e giro `CANCELLED`; sconosciuto, o un lotto di un
+  processo morto → la **prova del telefono**: riga assente = liberata, presente = rimasta, altrimenti `IN_DOUBT` (mai riproposta, mai data per liberata).
+- **Ripresa dopo la morte del processo**: con un diario completo (il fake; Room con colonne nuove) il giro continua nello stesso avvio; con Room v4 il motore
+  ricorda per intero ciò che ha scritto finché il processo vive, e dopo la morte un giro a metà è `EXPIRED` (come prevede il commento di P1 sull'entità) mentre
+  le righe consegnate ad Android restano tracciate per `phone_location_id` (`IN_DOUBT` finché la lettura del telefono non le risolve).
+- **Nessuna scrittura sul telefono**: il motore vede il telefono solo con `PhoneBytes` (lettura) e il NAS solo con `NasMediaReader`; produce `TrashBatch` che la
+  UI traduce in `createTrashRequest`/`createDeleteRequest` di core-mediastore (`FreeSpaceSourcesTest`).
+- **"Elimina solo dal telefono"** (D22): `assessPhoneOnly` dà per media `FREE`, `GUARD_FIRST` (E-B14), `SAFE_FIRST` (E-D14, preselezionata), `WAIT`, `FROZEN`,
+  `UNAVAILABLE`, `OUTSIDE_TEST_FENCE`, `NOT_ON_PHONE`; i liberabili passano da `plan(freeFilter)`, con **zero giorni esclusi** (li ha scelti l'utente).
+- **"Ovunque"** (D22, E-D15): `EverywhereCopies.list` elenca le copie presenti dell'account di ogni versione (l'attuale prima, poi dalla più vecchia; area;
+  in `Versioni/` o no; timbro del catalogo) e le righe del telefono; con D13 un media fuori recinto non si elenca. Nessuna lettura del NAS.
+- **Motivi senza un codice proprio** nel contratto: un media non proprio o un backup non attivo → `NOT_VERIFIED`; una riga del telefono rinumerata o non
+  leggibile al controllo finale → `GONE_FROM_PHONE`; una riga già nel dialogo di un altro giro → `IN_PROGRESS_OR_ERROR`.
+
+**Prove** (58 test, tutti verdi): il "Fatto quando" di 5.5 con ogni variante (`FattoQuando55Test`: byte cambiato prima della verifica con il timbro nuovo e
+**con lo stesso timbro**, dopo la verifica e prima del controllo finale, copia tolta prima e dopo, originale in `Versioni/` rovinato, copia rovinata dal guardiano, NAS
+che cade a metà verifica e al controllo finale, ora del NAS spostata di ±1 anno con il monotono che decide); ogni lotto controllato quando esce **contro la
+verità** del NAS finto e del telefono finto (invariante 14 del §5.4); `FreeSpaceEveryCallTest`: `FaultPlan` prima e dopo ognuna delle 27 chiamate al NAS e morte
+del processo prima e dopo ognuna delle 19 scritture del diario e del catalogo, con ripresa nello stesso avvio e dopo un riavvio (130 interruzioni): nessun lotto
+con una copia non integra, nessuna riga tolta senza traccia, alla fine tutto il sicuro liberato e la copia rovinata mai; lotti 2.000/2.000/500 su 4.500 media;
+Room vero con il database chiuso e riaperto. **Provato reintroducendo i difetti** (il test giusto diventa rosso, poi si toglie): niente controllo del timbro
+prima del dialogo (3 test), niente confronto dello SHA-256 (1 test: il secondo strato, il catalogo che toglie la verifica, ferma comunque l'elemento), conteggio
+dei riavvii ignorato (3), lotto non scritto prima di consegnarlo (27), esito sconosciuto dato per liberato (1).
+
+**Modifiche richieste ai contratti degli altri**
+- **P14** (`:app`): legare `SafeFreeSpace` con `RoomFreeSpaceDiary`, `BootCounter` su `Settings.Global.BOOT_COUNT` (come `NasGraph`), `systemDialogs` = Android 11+,
+  la recinzione di `DeveloperTools`, e un `FreeSpaceCatalog` su `MediaCatalog`: `media(ids)` = `media(id)` + `local_day` + `mediaSafety().problem` + il tipo;
+  `markVerified` = `MediaCatalog.markVerified`; **`phoneMedia(after, limit)` manca**: serve una query a pagine dei media con una posizione del telefono presente,
+  per `sort_time` decrescente (in `MediaCatalog`, d'accordo con P1, o in `:app`). La lettura del telefono deve consultare `free_space_item.forPhoneLocation`: una
+  posizione sparita con una riga `freed`, `in_dialog` o `in_doubt` è "liberata" (cella "solo NAS"), non "persa"; dopo ogni lettura `SafeFreeSpace.settle()`
+  (e la risoluzione degli `in_doubt` per posizione, che Room non sa per riga del telefono). La verifica come lavoro avviato dall'utente (`verify` poi `resume` a
+  tappe) con la notifica "Pronto: N elementi, X GB" a fine verifica. "Ovunque" da `EverywhereCopies` (al posto dell'elenco di `NasOrganizer.targetOfPhoneCopy`) al
+  piano `Trash` della 4B. `FreeSpaceDiary.handedPhoneLocations` (le righe consegnate ad Android e non risolte) oggi scorre tutti i giri: con molti giri nel diario serve una query su `free_space_item.state` (un metodo nuovo di `FreeSpaceDao`, P1). Facoltativo: colonne per validità e riga del telefono (migrazione 4→5, contro D27) se si vuole riprendere un giro dopo la morte del processo.
+- **P12** (UI): `FreeSpaceRun` non dice quante righe sono "in dubbio" né quante "rimaste": proposta di due campi (`inDoubt`, `kept`) nel contratto di P0-B; due
+  codici in più in `FreeSpaceExclusion` (`NOT_MINE`, `BACKUP_NOT_ACTIVE`) se il foglio vuole distinguerli da `NOT_VERIFIED`. I fogli usano `PhoneOnlyAssessment`
+  (preselezione, `freeFilter`) e `EverywherePlan` (`previousVersions`, area, `Versioni/`). Il lotto si traduce in `PhoneMediaIntents.trashRequest`/`deleteRequest`
+  con `MediaRef.Phone(volume, _ID, mime)` e la risposta torna con `recordOutcome` (sconosciuta se l'app è stata uccisa: `TrashOutcome.Unknown`).
+- **P8**: `VersionKeeper.plan` va chiamato per ogni media con più versioni a ogni piano e a ogni controllo finale: deve essere solo catalogo (nessuna lettura del
+  NAS) e veloce; `VersionEntry.safe` deve voler dire "copia privata riletta e verificata" e `current` la versione attuale del catalogo. Gli elementi `VERSION` e
+  `SWAP` devono restare aperti nel diario del backup (`openFor` di una versione del media) per tutta la loro durata, e un'archiviazione in `Versioni/` deve
+  aggiornare la posizione nel catalogo conservando `verified_at` (altrimenti l'originale archiviato non risulta al sicuro e il media resta sul telefono).
+
+**Da provare sul campo** (F37, F38): "Libera spazio" su 50 media di `mcg-prova` con, dal PC, una copia con un byte cambiato e una cancellata (escluse; il resto nel
+cestino di Android; celle "solo NAS"; una foto liberata si apre dal NAS); "Libera subito" con due gesti; l'app uccisa con il dialogo di sistema aperto (dopo la
+riapertura le righe confermate risultano liberate, mai perse); un riavvio del telefono fra la verifica e il dialogo (giro scaduto); il Wi-Fi spento durante la
+verifica (fermo, niente liberato); "Elimina solo dal telefono" di un media non al sicuro e di uno con la sola copia comune ("Prima mettilo al sicuro", guardiano
+prima del cestino). Da misurare: tempo della verifica sul momento per GB (16 MB/s attesi) e il dialogo di Samsung con 2.000 righe.
+
 ## Revisione grafica della Libreria da parte dell'utente (13/10)
 Giudizio: le prestazioni della navigazione non sono male, la **grafica no**. Serve molto lavoro, da fare in un **filone grafico
 parallelo** alle fasi successive (insieme ai lavori che non toccano l'app sul momento, per esempio il back-end NAS della Fase 4).

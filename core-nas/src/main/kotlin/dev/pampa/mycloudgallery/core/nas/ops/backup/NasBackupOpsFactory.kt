@@ -50,7 +50,8 @@ object NasBackupOpsFactory {
  * La vista in sola aggiunta sopra le primitive SMB della 4B (scheletro di P0, completata da P2): ogni chiamata controlla che il
  * temporaneo sia **del backup** di questo dispositivo e poi passa a `SmbNasFileOps`, che resta l'unica a parlare con il server.
  * Della 4B si usano solo le primitive che aggiungono; quelle che tolgono o spostano (`rename`, `trashMove`, `deleteIfUnchanged`,
- * `rmdirIfEmpty`) qui non sono raggiungibili.
+ * `rmdirIfEmpty`) qui non sono raggiungibili. Le due rinomine delle versioni (5B, P8) passano da `SmbNasFileOps.renameVersion`, la
+ * rinomina della 4B ristretta a un file, con il timbro obbligatorio e senza creare cartelle, mai da `rename`.
  *
  * [reopenTemp] (D5, P2): `SmbNasFileOps.reopenBackupTemp` apre il proprio temporaneo **senza crearlo** (`FILE_OPEN`, in esclusiva, senza
  * seguire un collegamento), controlla sullo stesso handle che sia il temporaneo del punto di ripresa (R3 della revisione 5A: identita', un
@@ -130,19 +131,23 @@ internal class SmbNasBackupOps(private val ops: NasFileOps) : NasBackupOps {
   }
 
   /**
-   * 5B (P0-B): le due rinomine delle versioni (D17, D18) sono di P8. Qui i **percorsi** si controllano gia' (un errore di programmazione,
-   * come le altre primitive) e poi la vista risponde con un **errore esplicito** (`STATUS_NOT_IMPLEMENTED`), mai un successo finto: niente
-   * si sposta, il chiamante (che nella 5A non le chiama) vede un guasto del NAS. P8 le sostituisce con la rinomina sopra
-   * `SmbNasFileOps.rename` (stesso handle, timbro obbligatorio, senza sostituire), provata sul simulatore SMB e sul NAS vero.
+   * 5B (P8, D17): le due rinomine delle versioni. Prima i **percorsi** (un errore di programmazione, come le altre primitive: una sola
+   * estremita' sotto `Versioni/`, mai l'area dell'app), poi la rinomina di `SmbNasFileOps.renameVersion`: la rinomina della 4B sullo stesso
+   * handle, con il timbro **obbligatorio** confrontato prima del `SET_INFO`, senza sostituire, solo per un file e senza creare cartelle.
+   * Sopra primitive che non sono quelle SMB (il fake della 4B nei test) la rinomina non c'e': un **errore esplicito**
+   * (`STATUS_NOT_IMPLEMENTED`), mai un successo finto, e niente si sposta.
    */
   override suspend fun archiveVersion(share: String, from: SharePath, to: SharePath, expect: NasStamp, purpose: Purpose): NasResult<RenameOutcome> {
     VersionPaths.requireArchive(from, to)
-    return NasResult.Err(NasError.Unexpected(STATUS_NOT_IMPLEMENTED))
+    val smb = ops as? SmbNasFileOps ?: return NasResult.Err(NasError.Unexpected(STATUS_NOT_IMPLEMENTED))
+    return smb.renameVersion(share, from, to, expect, purpose)
   }
 
+  /** 5B (P8, D18): l'inversa di [archiveVersion], da `Versioni/` al solito percorso (che deve essere libero). Stesse garanzie. */
   override suspend fun restoreVersion(share: String, from: SharePath, to: SharePath, expect: NasStamp, purpose: Purpose): NasResult<RenameOutcome> {
     VersionPaths.requireRestore(from, to)
-    return NasResult.Err(NasError.Unexpected(STATUS_NOT_IMPLEMENTED))
+    val smb = ops as? SmbNasFileOps ?: return NasResult.Err(NasError.Unexpected(STATUS_NOT_IMPLEMENTED))
+    return smb.renameVersion(share, from, to, expect, purpose)
   }
 
   override suspend fun space(share: String, purpose: Purpose): NasResult<NasSpaceInfo> = ops.space(share, purpose)

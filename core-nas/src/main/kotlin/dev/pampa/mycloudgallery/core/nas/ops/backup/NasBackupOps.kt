@@ -20,7 +20,7 @@ import java.text.Normalizer
 // le primitive del BACKUP. Contratto, null-object e fake di P0; la vista vera sopra `SmbNasFileOps` (con `reopenTemp` e il
 // punto di ripresa) e' di P2. Fase 5B (P0-B, D17, D18): `archiveVersion` e `restoreVersion`, le uniche due primitive che SPOSTANO un
 // file visibile (sempre con il suo timbro, mai verso un nome occupato); contratto, null-object e fake sono di P0-B, la vista SMB vera
-// e' di P8.
+// e' di P8 (`SmbNasFileOps.renameVersion`, provata sul simulatore Samba in `ops/backup/SmbVersionRenamesTest`).
 //
 // **Solo core-backup vede `NasBackupOps`.** Le stesse tre barriere delle primitive della 4B, con un marcatore suo:
 //  1. il test di architettura (`Phase5ArchitectureTest`, core-common): nessun sorgente fuori da `core-nas` e `core-backup` nomina

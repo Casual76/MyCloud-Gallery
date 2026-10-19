@@ -179,6 +179,52 @@ internal class SmbNasFileOps(
     throw SmbStatusException(NtStatus.ACCESS_DENIED)
   }
 
+  /**
+   * Fase 5B (D17, D18), solo per la vista del backup (`ops/backup/SmbNasBackupOps`): la rinomina di **una versione**, verso `Versioni/`
+   * (`archiveVersion`) o da li' al solito percorso (`restoreVersion`). E' la rinomina della 4B ([rename], stessa apertura con `DELETE`,
+   * stesso `SET_INFO` senza sostituire) con tre vincoli in piu', tutti **sullo stesso handle** su cui si rinomina e prima del `SET_INFO`:
+   *  - solo un **file**: una cartella al posto del file e' [RenameOutcome.SourceChanged] (`null`), un punto di rianalisi pure (con il suo
+   *    timbro): non si archivia ne' una cartella ne' un collegamento;
+   *  - il timbro [expect] e' **obbligatorio** e si confronta sempre (dimensione, data e, se noti, `fileId`): un file modificato o sostituito
+   *    dal PC e' [RenameOutcome.SourceChanged] e niente si muove (`SOURCE_CHANGED` del diario delle versioni);
+   *  - la cartella di [to] deve esistere (`NasError.NotFound`: il chiamante fa prima `mkdirs`), nessuna cartella si crea qui.
+   * Non si ripete da sola dopo una caduta (`idempotent = false`): chi chiama ha il diario e riconosce la risposta persa (sorgente assente e
+   * destinazione con lo stesso `fileId`). I percorsi li ha gia' controllati la vista (`VersionPaths`); qui si ricontrolla solo che siano di
+   * media. Restituisce il timbro letto sull'handle: la rinomina non cambia ne' i byte ne' il `fileId`.
+   */
+  internal suspend fun renameVersion(share: String, from: SharePath, to: SharePath, expect: NasStamp, purpose: Purpose): NasResult<RenameOutcome> {
+    require(NasOpsPaths.isMediaPath(from) && NasOpsPaths.isMediaPath(to)) { "Le versioni si spostano solo fra percorsi di media." }
+    // Stesso posto, anche solo per le maiuscole: VersionPaths lo esclude gia' (una sola estremita' sotto Versioni/), ma non si chiede niente.
+    if (from.value.lowercase(Locale.ROOT) == to.value.lowercase(Locale.ROOT)) return NasResult.Ok(RenameOutcome.Collision)
+    return manager.runOp(share, purpose, idempotent = false, touchesDisk = true) { ctx -> renameVersionOnce(ctx.share, from, to, expect) }
+  }
+
+  private fun renameVersionOnce(share: SmbShare, from: SharePath, to: SharePath, expect: NasStamp): RenameOutcome {
+    val handle = openChange(share, from, exclusive = false) ?: return RenameOutcome.SourceMissing
+    if (handle === LOCKED) return RenameOutcome.Locked
+    handle.use { h ->
+      val info = h.info
+      // Una cartella non e' una versione: per il chiamante e' "non e' il file che mi aspettavo" (come il fake di P0-B).
+      if (info.isDirectory) return RenameOutcome.SourceChanged(null)
+      val actual = stampOf(info)
+      // Un punto di rianalisi (un collegamento che il server segnala) non si sposta come se fosse il file.
+      if ((info.attributes and NasAttributes.REPARSE_POINT) != 0) return RenameOutcome.SourceChanged(actual)
+      if (!expect.sameAs(actual)) return RenameOutcome.SourceChanged(actual)
+      try {
+        h.renameNoReplace(at(to))
+      } catch (e: SmbStatusException) {
+        return when (e.status) {
+          NtStatus.OBJECT_NAME_COLLISION -> RenameOutcome.Collision
+          NtStatus.SHARING_VIOLATION, NtStatus.FILE_LOCK_CONFLICT -> RenameOutcome.Locked
+          // La cartella di destinazione non c'e': nessuna cartella si crea da qui, il chiamante fa `mkdirs` e riprova.
+          NtStatus.OBJECT_PATH_NOT_FOUND -> throw NasOpException(NasError.NotFound)
+          else -> throw e
+        }
+      }
+      return RenameOutcome.Renamed(actual)
+    }
+  }
+
   // --- copia lato server e temporanei ----------------------------------------------------------------------------------
 
   override suspend fun copyToTemp(

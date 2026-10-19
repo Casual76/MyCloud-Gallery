@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Ricevere condivisioni (Fase 5B, docs/fase5-progetto.md §2.7, D24, C18, E-X2, E-X8, P11): "Salva sul NAS" dal foglio di condivisione di un'altra app.
+       Nessun dato dell'utente nelle stringhe: i nomi dei file non compaiono mai qui, solo numeri e tipi. -->
+  <string name="integrations_receive_title">Salva sul NAS</string>
+  <string name="integrations_receive_subtitle">Da un’altra app</string>
+  <string name="integrations_receive_close">Chiudi</string>
+  <string name="integrations_receive_cancel">Annulla</string>
+
+  <string name="integrations_receive_locked_title">MyCloud Gallery è bloccata</string>
+  <string name="integrations_receive_locked_detail">Sblocca con la credenziale del telefono per salvare i file sul NAS.</string>
+  <string name="integrations_receive_unlock">Sblocca</string>
+  <string name="integrations_receive_unlock_failed">Non sono riuscito a sbloccare. Riprova.</string>
+
+  <string name="integrations_receive_not_ready_title">Prima configura MyCloud Gallery</string>
+  <string name="integrations_receive_not_ready_detail">Apri l’app e completa la configurazione, poi condividi di nuovo i file.</string>
+
+  <string name="integrations_receive_staging_title">Copio i file</string>
+  <string name="integrations_receive_staging_detail">Li metto al sicuro sul telefono prima di salvarli: l’altra app potrebbe toglierne l’accesso.</string>
+
+  <plurals name="integrations_receive_photos">
+    <item quantity="one">%1$d foto</item>
+    <item quantity="other">%1$d foto</item>
+  </plurals>
+  <plurals name="integrations_receive_videos">
+    <item quantity="one">%1$d video</item>
+    <item quantity="other">%1$d video</item>
+  </plurals>
+  <string name="integrations_receive_summary_both">%1$s e %2$s · %3$s</string>
+  <string name="integrations_receive_summary_one">%1$s · %2$s</string>
+  <string name="integrations_receive_summary_label">Da salvare</string>
+
+  <string name="integrations_receive_rejected_title">Non ho copiato alcuni file</string>
+  <string name="integrations_receive_rejected_file_scheme">%1$d indicati come percorso del telefono, non come file</string>
+  <string name="integrations_receive_rejected_own_provider">%1$d sono file di MyCloud Gallery stessa</string>
+  <string name="integrations_receive_rejected_too_large">%1$d troppo grandi (al massimo %2$s per file)</string>
+  <string name="integrations_receive_rejected_too_many">%1$d oltre i %2$d file per volta</string>
+  <string name="integrations_receive_rejected_stage_too_big">%1$d oltre i %2$s in tutto</string>
+  <string name="integrations_receive_rejected_no_space">%1$d senza spazio: sul telefono deve restare almeno %2$s libero</string>
+  <string name="integrations_receive_rejected_not_media">%1$d non sono foto né video</string>
+  <string name="integrations_receive_rejected_unreadable">%1$d non si leggono</string>
+  <string name="integrations_receive_rejected_not_available">%1$d non disponibili adesso</string>
+
+  <string name="integrations_receive_where">Dove li salvo</string>
+  <string name="integrations_receive_up">Cartella di sopra</string>
+  <string name="integrations_receive_open_folder">Apri la cartella scelta</string>
+  <string name="integrations_receive_area_private">Area privata</string>
+  <string name="integrations_receive_area_common">Area comune</string>
+  <string name="integrations_receive_common_notice">Lo vedranno tutti i familiari.</string>
+  <string name="integrations_receive_save">Salva sul NAS</string>
+  <string name="integrations_receive_save_hint">Non carico niente finché non tocchi “Salva sul NAS”.</string>
+
+  <string name="integrations_receive_saving_title">Metto in coda i file</string>
+  <string name="integrations_receive_saving_detail">Un momento.</string>
+
+  <string name="integrations_receive_nothing_title">Niente da salvare</string>
+  <string name="integrations_receive_nothing_detail">Nessuno dei file ricevuti si può salvare sul NAS.</string>
+  <string name="integrations_receive_nothing_no_folder">Non c’è una cartella del NAS dove salvare: apri MyCloud Gallery e controlla la configurazione.</string>
+
+  <plurals name="integrations_receive_done_title">
+    <item quantity="one">%1$d file in coda</item>
+    <item quantity="other">%1$d file in coda</item>
+  </plurals>
+  <string name="integrations_receive_done_detail">Li carico sul NAS e controllo che arrivino interi. Puoi chiudere: la coda prosegue da sola.</string>
+  <string name="integrations_receive_done_offline">Il NAS non risponde adesso: tengo i file sul telefono e li carico appena risponde.</string>
+
+  <string name="integrations_receive_failed_title">Non sono riuscito a salvare</string>
+  <string name="integrations_receive_failed_confirmation">La conferma non è più valida. Controlla la cartella e tocca di nuovo “Salva sul NAS”.</string>
+  <string name="integrations_receive_failed_destination">In quella cartella non si può scrivere. Scegline un’altra.</string>
+  <string name="integrations_receive_failed_gone">I file copiati non ci sono più. Condividili di nuovo.</string>
+  <string name="integrations_receive_failed_unavailable">Il salvataggio sul NAS non è disponibile adesso. Riprova più tardi.</string>
+  <string name="integrations_receive_retry">Riprova</string>
+</resources>

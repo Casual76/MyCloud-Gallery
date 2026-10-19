@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.feature.integrations
 
 import android.app.Activity
+import android.app.Application
 import android.content.ContentProvider
 import android.content.ContentValues
 import android.content.Context
@@ -11,19 +12,26 @@ import android.os.ParcelFileDescriptor
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
+import dev.pampa.mycloudgallery.feature.integrations.contract.IntegrationPorts
+import dev.pampa.mycloudgallery.feature.integrations.receive.ReceivePorts
 import dev.pampa.mycloudgallery.feature.integrations.receive.ShareReceiverActivity
 import java.io.FileNotFoundException
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /**
- * Fase 5B (P0-B, D29, C17): i componenti approvati sono **scheletri che non agiscono**. La ricezione chiude con `RESULT_CANCELED` senza leggere
- * l'intento ne' aprire un flusso (P11 la riempira'). Il selettore e il provider dei documenti non sono piu' scheletri dal P10: i loro test sono in
- * `picker/` e `provider/` (stesse garanzie: con le porte non installate non mostrano e non aprono niente, nemmeno con un intento ostile).
+ * Fase 5B (P0-B, D29, C17): i componenti approvati **non agiscono** da soli. La ricezione, con le porte non installate (l'app non e' pronta), non
+ * legge l'intento ne' apre un flusso: mostra solo che l'app non e' pronta. Un intento che non e' una condivisione di media chiude subito con
+ * `RESULT_CANCELED`. Dal P11 la ricezione e' piena (copia, tetti, "Salva sul NAS"): le sue prove stanno in `receive/`. Il selettore e il provider dei
+ * documenti non sono scheletri dal P10: i loro test sono in `picker/` e `provider/`.
  */
 @RunWith(AndroidJUnit4::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(application = Application::class)
 class IntegrationSkeletonsTest {
 
   private val context: Context get() = ApplicationProvider.getApplicationContext()
@@ -63,18 +71,26 @@ class IntegrationSkeletonsTest {
   }
 
   @Test
-  fun laRicezioneNonApreNessunFlusso() {
+  fun laRicezioneSenzaLePorteInstallateNonApreNessunFlusso() {
+    IntegrationPorts.reset()
+    ReceivePorts.reset()
     CountingProvider.opens = 0
     CountingProvider.queries = 0
     Robolectric.buildContentProvider(CountingProvider::class.java).create("test.stream")
     val uri = Uri.parse("content://test.stream/1")
     val one = Intent(Intent.ACTION_SEND).setType("image/jpeg").putExtra(Intent.EXTRA_STREAM, uri)
-    assertCanceledAndGone(Robolectric.buildActivity(ShareReceiverActivity::class.java, one).create().get())
+    Robolectric.buildActivity(ShareReceiverActivity::class.java, one).create().start().resume().visible().get()
     // Un file:// e un provider nostro (gli ingressi ostili del D24) non fanno aprire niente nemmeno qui, e non fanno eccezioni.
     val hostile = Intent(Intent.ACTION_SEND_MULTIPLE).setType("image/*")
       .putParcelableArrayListExtra(Intent.EXTRA_STREAM, arrayListOf(Uri.parse("file:///data/data/x/databases/gallery.db"), uri))
-    assertCanceledAndGone(Robolectric.buildActivity(ShareReceiverActivity::class.java, hostile).create().get())
+    Robolectric.buildActivity(ShareReceiverActivity::class.java, hostile).create().start().resume().visible().get()
     assertThat(CountingProvider.opens).isEqualTo(0)
     assertThat(CountingProvider.queries).isEqualTo(0)
+  }
+
+  @Test
+  fun unIntentoCheNonEUnaCondivisioneChiudeSubitoAnnullato() {
+    assertCanceledAndGone(Robolectric.buildActivity(ShareReceiverActivity::class.java, Intent(Intent.ACTION_VIEW)).create().get())
+    assertCanceledAndGone(Robolectric.buildActivity(ShareReceiverActivity::class.java, Intent(Intent.ACTION_SEND).setType("text/plain")).create().get())
   }
 }

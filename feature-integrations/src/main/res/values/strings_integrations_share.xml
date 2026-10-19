@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Condividere senza posizione (Fase 5B, docs/fase5-progetto.md §2.7, D26, E-X5, L41, P11). Nessun dato dell'utente nelle stringhe: i nomi dei file non compaiono mai qui. -->
+  <string name="integrations_share_preparing">Preparo i file da condividere</string>
+  <string name="integrations_share_preparing_progress">%1$d di %2$d</string>
+  <string name="integrations_share_ready_verified">Posizione tolta e controllata</string>
+  <string name="integrations_share_stop_nothing">Non c’è niente da condividere.</string>
+  <string name="integrations_share_stop_too_many">Si possono condividere al massimo %1$d elementi alla volta.</string>
+  <string name="integrations_share_stop_too_big">I file sono troppo grandi per condividerli insieme: al massimo %1$s alla volta.</string>
+  <string name="integrations_share_stop_no_space">Sul telefono non c’è abbastanza spazio libero per preparare i file da condividere.</string>
+  <string name="integrations_share_stop_unavailable">Uno dei file non c’è più o non si legge: non l’ho condiviso.</string>
+  <string name="integrations_share_stop_nas_unreachable">Il NAS non risponde: non posso scaricare il file da condividere. Riprova quando sei a casa.</string>
+  <string name="integrations_share_stop_cannot_remove_location">Questo file non si può condividere senza posizione: condividilo con la posizione o annulla.</string>
+  <string name="integrations_share_stop_location_remains">Non sono riuscito a togliere la posizione da questo file, quindi non lo condivido. Puoi condividerlo con la posizione o annullare.</string>
+  <string name="integrations_share_stop_failed">Non sono riuscito a preparare i file. Riprova.</string>
+  <string name="integrations_share_share_with_location">Condividi con la posizione</string>
+  <string name="integrations_share_cancel">Annulla</string>
+</resources>

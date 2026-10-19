@@ -5,6 +5,7 @@ import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.backup.contract.RunStop
 import dev.pampa.mycloudgallery.core.backup.contract.UploadKind
 import dev.pampa.mycloudgallery.core.backup.contract.UploadState
+import dev.pampa.mycloudgallery.core.backup.upload.UploadControl
 import dev.pampa.mycloudgallery.core.model.NasStamp
 import dev.pampa.mycloudgallery.core.model.Sha256
 import dev.pampa.mycloudgallery.core.nas.breaker.AuthBreakerRegistry
@@ -157,6 +158,47 @@ class VersionSimulatorTest {
     assertThat(s.backend.exists(share, "Versioni")).isTrue() // la cartella si crea prima (mkdirs), ma vuota
     assertThat(s.backend.children(share, "Versioni/Backup/S25 di prova/2026/10")).isEmpty()
     assertThat(s.backend.exists(share, job.temp!!.value)).isTrue()
+  }
+
+  /** Un giro che si ferma dopo [limit] byte caricati (la fine di una tappa): il lavoro resta a meta' con il suo temporaneo. */
+  private class StopAfter(private val limit: Long) : UploadControl {
+    private var seen = 0L
+
+    override suspend fun proceed(): Boolean = seen < limit
+
+    override suspend fun traffic(bytes: Long) {
+      seen += bytes
+    }
+  }
+
+  @Test
+  fun f1_unLavoroDalTelefonoConLaVersioneSuperataFinisceGoneEToglieIlSuoTemporaneo() = runTest {
+    // F1 della prova della 5B (docs/prova-500.md §C6): il lavoro e' a meta' (temporaneo con il punto di ripresa), il MediaStore si ricostruisce e
+    // la foto cambia ancora. La riga del lavoro non tornera': il lavoro toglie il suo temporaneo e finisce GONE, mai appeso.
+    val s = sim()
+    val seed = s.seed()
+    val v1 = s.w.editOnPhone(seed)
+    val engine = s.engine()
+    engine.planPhoneVersions(listOf(s.w.candidate(seed.mediaId, seed.phoneId!!)))
+    engine.run(1.hours, StopAfter(40_000))
+    val half = s.w.journal.all().single()
+    assertThat(half.state).isEqualTo(UploadState.UPLOADING)
+    assertThat(half.resumeAt).isGreaterThan(0L)
+    assertThat(s.backend.exists(share, half.temp!!.value)).isTrue()
+    val fresh = 900L
+    s.w.phone.rebuild("v2", mapOf(seed.phoneId to fresh))
+    s.w.catalog.phoneRenumbered(seed.mediaId, seed.phoneId, s.w.phone.ref(fresh)!!)
+    val bytes = s.w.bytes(seed.content.size + 2_000)
+    s.w.knownContents += Sha256.of(bytes)
+    s.w.phone.rewrite(fresh, NasContent.of(bytes), 999_999L)
+    val v2 = s.w.catalog.phoneChanged(seed.mediaId, s.w.phone.ref(fresh)!!, s.w.phone.stamp(fresh)!!, bytes.size.toLong(), null)
+    val again = s.engine()
+    again.planPhoneVersions(listOf(s.w.candidate(seed.mediaId, fresh, v2)))
+    repeat(4) { again.run(1.hours) }
+    assertThat(s.w.journal.all().first { it.versionId == v1 }.state).isEqualTo(UploadState.GONE)
+    assertThat(s.w.journal.all().first { it.versionId == v2 }.state).isEqualTo(UploadState.DONE)
+    assertThat(s.sha(seed.usualPath.value)).isEqualTo(Sha256.of(bytes))
+    assertThat(s.backend.children(share, ".mycloudgallery/tmp")).isEmpty()
   }
 
   @Test

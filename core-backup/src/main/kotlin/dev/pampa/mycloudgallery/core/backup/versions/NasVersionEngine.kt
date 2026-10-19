@@ -393,11 +393,18 @@ class NasVersionEngine(
     }
   }
 
-  /** E-P12: la riga del telefono si ritrova dal catalogo (stessa versione, stesso timbro); finche' non c'e', si aspetta. */
+  /**
+   * E-P12: la riga del telefono si ritrova dal catalogo (stessa versione, stesso timbro). Finche' il catalogo ha ancora la riga di prima
+   * (presente, con l'`_ID` e la versione del MediaStore del lavoro) la lettura del telefono non ha visto il cambio: si aspetta. Se l'ha visto e
+   * la versione non ha piu' una riga presente con quel timbro, la versione del lavoro non e' piu' sul telefono com'era: `GONE` (F1 della prova
+   * della 5B, `docs/prova-500.md` §C6; la stessa regola del caricamento della 5A, F1 della Parte B). Mai un lavoro appeso a una riga che non
+   * tornera': se la versione e' ancora sul telefono con un'altra riga o un altro timbro, il piano del giro dopo ne fa un lavoro nuovo.
+   */
   private suspend fun refreshPhone(job: VersionJob, src: VersionSource.Phone): Step {
-    val now = catalog.media(job.mediaId)?.version(job.versionId)?.phone
-      ?.firstOrNull { it.present && it.stamp == src.expected && it.ref != src.ref }?.ref ?: return Step.Wait()
-    return save(job.copy(source = src.copy(ref = now)))
+    val rows = catalog.media(job.mediaId)?.version(job.versionId)?.phone.orEmpty().filter { it.present }
+    rows.firstOrNull { it.stamp == src.expected && it.ref != src.ref }?.let { return save(job.copy(source = src.copy(ref = it.ref))) }
+    if (rows.any { it.ref == src.ref }) return Step.Wait()
+    return gone(job)
   }
 
   private suspend fun afterPhoneFailure(round: Round, job: VersionJob, src: VersionSource.Phone): Step =
@@ -692,6 +699,10 @@ class NasVersionEngine(
     if (job.hold == VersionHold.SOURCE_CHANGED) return recalculateHeld(job)
     val archivePath = job.archivePath ?: return save(job.copy(state = UploadState.ARCHIVED, archivedStamp = null))
     val current = job.current ?: return save(job.copy(state = UploadState.ARCHIVED, archivedStamp = null))
+    // F2 della prova della 5B (`docs/prova-500.md` §C6): il file da spostare puo' essere la copia di un altro elemento ancora aperto della sua
+    // versione (il guardiano o il caricamento che l'ha gia' attaccata al catalogo e non ha ancora scritto `LINKED`, un processo morto in mezzo).
+    // Spostarla adesso gli farebbe trovare il nome vuoto o con altri byte e rifare la copia: un doppione. Si aspetta che quell'elemento finisca.
+    if (journal.busy(current.versionId)) return Step.Wait()
     // D17, P0-B: la cartella in Versioni/ si crea prima (la rinomina non crea cartelle). Idempotente.
     archivePath.parent()?.let { dir ->
       when (val made = ops.mkdirs(job.share, dir, purpose)) {
@@ -717,10 +728,14 @@ class NasVersionEngine(
           }
         }
       }
-      // La risposta persa (D3, §2.4): sorgente assente e destinazione con lo stesso fileId e la stessa dimensione = fatto.
+      // La risposta persa (D3, §2.4): sorgente assente e a destinazione il file del lavoro (identita' e timbro atteso, o una rilettura: F3) = fatto.
       RenameOutcome.SourceMissing -> when (val st = stat(job.share, archivePath)) {
         is Stat.Fail -> stopFor(job, st.error)
-        is Stat.Found -> if (sameIdentity(st.stamp, current.stamp)) archived(job, st.stamp) else sourceChanged(job)
+        is Stat.Found -> when (val moved = movedFile(round, job, archivePath, st.stamp, current.stamp, current.versionId)) {
+          is Moved.Mine -> archived(job, moved.stamp)
+          Moved.NotMine -> sourceChanged(job)
+          is Moved.Exit -> moved.step
+        }
         Stat.Missing -> sourceChanged(job)
       }
       // D17: l'attuale e' stato modificato (o sostituito) dal PC: niente si sposta.
@@ -913,23 +928,30 @@ class NasVersionEngine(
       RenameOutcome.Collision -> when (val st = stat(job.share, job.usualPath)) {
         is Stat.Fail -> stopFor(job, st.error)
         Stat.Missing -> Step.Next(job)
-        is Stat.Found -> if (sameIdentity(st.stamp, src.stamp)) {
-          restored(job, src, st.stamp)
-        } else {
-          save(job.copy(state = UploadState.FAILED, hold = VersionHold.USUAL_PATH_TAKEN))
-        }
+        is Stat.Found -> atUsualAfterLostRename(round, job, src, st.stamp)
       }
       RenameOutcome.SourceMissing -> when (val st = stat(job.share, job.usualPath)) {
         is Stat.Fail -> stopFor(job, st.error)
-        is Stat.Found -> if (sameIdentity(st.stamp, src.stamp)) {
-          restored(job, src, st.stamp)
-        } else {
-          save(job.copy(state = UploadState.FAILED, hold = VersionHold.USUAL_PATH_TAKEN))
-        }
+        is Stat.Found -> atUsualAfterLostRename(round, job, src, st.stamp)
         Stat.Missing -> rollbackOrFail(job, VersionHold.SOURCE_CHANGED)
       }
       is RenameOutcome.SourceChanged -> rollbackOrFail(job, VersionHold.SOURCE_CHANGED)
       RenameOutcome.Locked, RenameOutcome.FolderInUse -> lockedWait(round, job)
+    }
+  }
+
+  /**
+   * Al solito percorso c'e' un file dopo una rinomina di ripristino la cui risposta e' andata persa: se e' quello riportato (F3: identita' e timbro
+   * atteso, o una rilettura) lo scambio continua; altrimenti e' di altri (o il PC l'ha cambiato dopo la rinomina) e non si tocca: lo scambio
+   * finisce senza che il catalogo lo segua (la scansione registrera' il file del PC e dichiarera' assente la copia che non c'e' piu', D10).
+   */
+  private suspend fun atUsualAfterLostRename(round: Round, job: VersionJob, src: VersionSource.InVersions, found: NasStamp): Step {
+    // Dopo un ritorno indietro la sorgente dello scambio e' l'attuale archiviato, non la versione del lavoro.
+    val versionId = if (job.hold == VersionHold.ROLLED_BACK) job.current?.versionId else job.versionId
+    return when (val moved = movedFile(round, job, job.usualPath, found, src.stamp, versionId)) {
+      is Moved.Mine -> restored(job, src, moved.stamp)
+      Moved.NotMine -> save(job.copy(state = UploadState.FAILED, hold = VersionHold.USUAL_PATH_TAKEN))
+      is Moved.Exit -> moved.step
     }
   }
 
@@ -1016,6 +1038,38 @@ class NasVersionEngine(
     val a = found.fileId
     val b = expected.fileId
     return if (a != null && b != null) a == b && found.size == expected.size else found.sameAs(expected)
+  }
+
+  /** Il file che una rinomina con la risposta persa ha lasciato a destinazione. */
+  private sealed interface Moved {
+    /** E' il file del lavoro: [stamp] e' il timbro da scrivere nel catalogo (quello atteso, o quello dei byte riletti qui). */
+    class Mine(val stamp: NasStamp) : Moved
+
+    /** Non e' il file del lavoro (un altro file, o il suo cambiato dal PC dopo la rinomina): niente del catalogo lo segue. */
+    data object NotMine : Moved
+
+    class Exit(val step: Step) : Moved
+  }
+
+  /**
+   * F3 della prova della 5B (`docs/prova-500.md` §C6; F4-D8, L28): "al sicuro" nasce solo da una rilettura fatta qui o da un timbro **atteso** che
+   * coincide, mai da un timbro trovato dopo un'interruzione. Il file a destinazione [path] e' quello del lavoro se ha la sua identita' **e** il
+   * timbro atteso [expected] (dimensione, data e `fileId`: la rinomina non li cambia). Se torna solo l'identita' (stesso `fileId` e stessa
+   * dimensione, un'altra data: il PC l'ha toccato fra la rinomina e la ripresa, magari riscrivendo un byte) vale solo una **rilettura completa**
+   * con lo SHA-256 della versione [versionId]: byte uguali = e' il suo, con il timbro letto; diversi, o l'impronta della versione non nota = non
+   * e' il suo, e il chiamante lo tratta come un file cambiato dal PC (lo stesso esito di una modifica di un'altra dimensione, O1).
+   */
+  private suspend fun movedFile(round: Round, job: VersionJob, path: SharePath, found: NasStamp, expected: NasStamp, versionId: VersionId?): Moved {
+    if (!sameIdentity(found, expected)) return Moved.NotMine
+    if (found.sameAs(expected)) return Moved.Mine(found)
+    val sha = versionId?.let { catalog.media(job.mediaId)?.version(it)?.fullHash } ?: return Moved.NotMine
+    GalleryLog.w(TAG) { "il file spostato ha un'altra data: si rilegge prima di seguirlo (${job.kind.code})" }
+    return when (val read = readSha(round, job.share, path)) {
+      // Sparito fra il timbro e la lettura: si rifa' il passo, che lo vedra' assente.
+      Read.Missing -> Moved.Exit(Step.Next(job))
+      is Read.Fail -> Moved.Exit(stopFor(job, read.error))
+      is Read.Ok -> if (read.sha == sha && sameIdentity(read.stamp, expected)) Moved.Mine(read.stamp) else Moved.NotMine
+    }
   }
 
   private sealed interface Read {

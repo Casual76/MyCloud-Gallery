@@ -92,21 +92,14 @@ class MediaRec(
 }
 
 /**
- * I difetti veri dei servizi di P8 e P3 che il banco ha trovato e che nessuno ha ancora corretto (`docs/prova-500.md` Parte C §C6). Il banco li
- * **evita** per default, perche' `check.ps1` deve restare verde: ogni evitamento e' una voce di [Backup5BConfig.avoid], scritta qui e non nascosta
- * in un filtro, e `ChaosKnownDefectsTest` prova che **con l'evitamento spento il banco li trova** (un banco che salta un caso senza dirlo
- * farebbe credere di averlo provato). Quando un difetto e' corretto si toglie la voce da qui, dal default e dal punto del banco che la usa.
+ * I difetti veri dei servizi che il banco ha trovato e che nessuno ha ancora corretto (`docs/prova-500.md` Parte C §C6). Il banco li **evita** per
+ * default, perche' `check.ps1` deve restare verde: ogni evitamento e' una voce di qui e di [Backup5BConfig.avoid], scritta e non nascosta in un
+ * filtro, e un test prova che **con l'evitamento spento il banco li trova** (un banco che salta un caso senza dirlo farebbe credere di averlo
+ * provato). Quando un difetto e' corretto si toglie la voce da qui, dal default e dal punto del banco che la usa.
+ *
+ * **Oggi nessuno.** F1, F2 e F3 (P13) sono stati corretti il 19/10 e i loro evitamenti tolti: il banco li prova davvero (`ChaosKnownDefectsTest`).
  */
-enum class KnownDefect(val code: String) {
-  /** P8, `NasVersionEngine.refreshPhone`: un lavoro `VERSION` dal telefono resta `PLANNED` per sempre dopo un MediaStore ricostruito e un'altra modifica. */
-  F1("f1"),
-
-  /** P3/P8: una correzione sposta in `Versioni/` la copia di un elemento del guardiano non ancora `LINKED`: il guardiano ne rifa' una (doppione). */
-  F2("f2"),
-
-  /** P8, `restore`/`archive` per identita': una modifica del PC **della stessa dimensione** fra la rinomina e la ripresa e' scambiata per il file del lavoro. */
-  F3("f3"),
-}
+enum class KnownDefect(val code: String)
 
 /** Come gira la fase 5B di un giro (P13). */
 class Backup5BConfig(
@@ -504,15 +497,9 @@ class FiveBWorld(
     val stamp = stampOf(share, path) ?: return false
     val oldSha = nasSha(share, path) ?: return false
     var size = exactSize ?: (stamp.size * (80 + random.nextInt(41)) / 100).coerceAtLeast(300).toInt()
-    if (exactSize == null) {
-      // F3: una modifica sul posto della STESSA dimensione e' quella che i servizi scambiano per il loro file (`sameIdentity`: `fileId` e dimensione).
-      // Evitata per default (anche per caso: 1 volta su 41); senza l'evitamento meta' delle modifiche del PC conserva la dimensione.
-      if (KnownDefect.F3 in config.avoid) {
-        if (size.toLong() == stamp.size) size += 1
-      } else if (random.nextBoolean()) {
-        size = stamp.size.toInt()
-      }
-    }
+    // F3 (corretto il 19/10): una modifica sul posto della STESSA dimensione (stesso `fileId`, data nuova) e' quella che i servizi scambiavano per il
+    // loro file dopo una rinomina con la risposta persa. Meta' delle modifiche del PC conserva la dimensione, perche' il banco la provi spesso.
+    if (exactSize == null && random.nextBoolean()) size = stamp.size.toInt()
     val bytes = random.nextBytes(size)
     val sha = Sha256.of(bytes)
     world.nas.pcModify(share, path.value, bytes, stamp.modifiedAtMillis + 1_000L + random.nextInt(5_000))

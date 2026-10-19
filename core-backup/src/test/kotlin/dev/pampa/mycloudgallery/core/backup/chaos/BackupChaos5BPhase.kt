@@ -20,7 +20,6 @@ import dev.pampa.mycloudgallery.core.backup.free.FreeItemState
 import dev.pampa.mycloudgallery.core.backup.free.FreeRunRecord
 import dev.pampa.mycloudgallery.core.backup.free.FreeSpaceEvaluator
 import dev.pampa.mycloudgallery.core.backup.testing.TestConfirmations
-import dev.pampa.mycloudgallery.core.backup.versions.VersionSource
 import dev.pampa.mycloudgallery.core.metadata.testing.ChangeSamples
 import dev.pampa.mycloudgallery.core.model.Sha256
 import dev.pampa.mycloudgallery.core.model.VersionId
@@ -262,12 +261,6 @@ class Backup5BPhase(
 
   private fun busy(rec: MediaRec): Boolean = fb.journal.all().any { it.mediaId == rec.mediaId && !it.state.terminal }
 
-  /** Un elemento aperto del guardiano per una versione del media. */
-  private suspend fun guardBusy(rec: MediaRec): Boolean {
-    val media = fb.catalog.media(rec.mediaId) ?: return false
-    return media.versions.any { fb.guardStore.openFor(it.versionId) != null }
-  }
-
   private suspend fun editable(): List<MediaRec> = fb.registry.values.filter { rec ->
     (rec.category == FiveBCategory.SAFE_PHONE || rec.category == FiveBCategory.EDITED_SAFE) && fb.currentRow(rec) != null && !busy(rec) &&
       fb.catalog.media(rec.mediaId)?.let { m -> m.versions.any { v -> v.nas.any { it.present && it.verifiedAtMillis != null && it.share.equals(world.share, true) } } } == true
@@ -289,12 +282,9 @@ class Backup5BPhase(
       }.randomOrNull(random)
       Step5B.RESTORE -> target = fb.registry.values.filter { services.keeper.plan(it.mediaId).restore == RestoreAvailability.AVAILABLE }.randomOrNull(random)
       Step5B.STAGED -> target = fb.registry.values.filter { it.category == FiveBCategory.SOLO_NAS && !busy(it) && it.usualPath != null }.randomOrNull(random)
+      // Anche con un elemento del guardiano aperto per il media (F2, corretto il 19/10: `ChaosKnownDefectsTest`).
       Step5B.CORRECT -> target = fb.registry.values.filter { rec ->
-        // DIFETTO NOTO F2 (P3/P8, docs/prova-500.md): la correzione non guarda gli elementi aperti del guardiano. Una copia del guardiano gia' pubblicata
-        // e collegata nel catalogo, ma il cui elemento non e' ancora LINKED, viene spostata in `Versioni/` e il guardiano, riprendendo, ne fa una seconda
-        // copia "(2)". Il banco non corregge un media con un elemento del guardiano aperto; `ChaosKnownDefectsTest.f2_...` lo riproduce.
-        !busy(rec) && (KnownDefect.F2 !in config.avoid || !guardBusy(rec)) &&
-          services.corrections.plan(rec.mediaId, CorrectionRequest(ChangeSamples.newDate)).readiness == CorrectionReadiness.READY
+        !busy(rec) && services.corrections.plan(rec.mediaId, CorrectionRequest(ChangeSamples.newDate)).readiness == CorrectionReadiness.READY
       }.randomOrNull(random)
       Step5B.FREE, Step5B.RESUME -> Unit
     }
@@ -635,14 +625,10 @@ class Backup5BPhase(
         }
       }
       roll < 58 -> {
-        // DIFETTO NOTO F1 (P8, docs/prova-500.md): un lavoro `VERSION` che ha una riga del telefono con l'`_ID` vecchio e la cui versione viene poi
-        // superata da un'altra modifica resta in `PLANNED` per sempre (`refreshPhone` aspetta una riga che non tornera'). Il banco non ricostruisce
-        // il MediaStore mentre un lavoro dal telefono e' aperto; `ChaosKnownDefectsTest.f1_...` lo riproduce.
-        if (KnownDefect.F1 !in config.avoid || fb.journal.all().none { !it.state.terminal && it.source is VersionSource.Phone }) {
-          fb.phoneRebuild()
-          scanNow()
-          happened("MediaStore ricostruito, _ID rinumerati")
-        }
+        // Anche con un lavoro dal telefono aperto (F1, corretto il 19/10: `ChaosKnownDefectsTest`).
+        fb.phoneRebuild()
+        scanNow()
+        happened("MediaStore ricostruito, _ID rinumerati")
       }
       roll < 63 -> {
         val rec = media.filter { fb.currentRow(it) != null && !busy(it) }.randomOrNull(random)

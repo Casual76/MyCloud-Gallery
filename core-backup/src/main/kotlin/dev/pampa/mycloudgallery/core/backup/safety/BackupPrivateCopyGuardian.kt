@@ -726,24 +726,19 @@ class BackupPrivateCopyGuardian(
     val final = item.finalPath ?: return Step.Wait
     var stamp = when (val st = rereader.stamp(item.share, final)) {
       is NasResult.Err -> return stopFor(st.error)
-      // Sparito dal PC fra la pubblicazione e il collegamento: si rifa'.
-      is NasResult.Ok -> st.value ?: return save(item.copy(state = UploadState.COPYING, resumeAt = 0))
+      // Sparito fra la pubblicazione e il collegamento (il PC, o spostato da una versione nuova: F2): si cerca, altrimenti si rifa'.
+      is NasResult.Ok -> st.value ?: return relinkOrRedo(item, tally, nextName = false)
     }
     if (item.tempStamp?.let { stamp.sameAs(it) } != true) {
-      // Toccato dopo la rinomina: si rilegge tutto; byte diversi = non sono i nostri, si rifa' con un altro nome.
+      // Toccato dopo la rinomina: si rilegge tutto; byte diversi = non sono i nostri: si cerca la copia, altrimenti si rifa' con un altro nome.
       when (val read = rereader.reread(item.share, final, onBytes = { tally.bytesRead += it })) {
-        Reread.Missing -> return save(item.copy(state = UploadState.COPYING, resumeAt = 0))
+        Reread.Missing -> return relinkOrRedo(item, tally, nextName = false)
         Reread.Busy -> return Step.Wait
         is Reread.Fail -> return stopFor(read.error)
         is Reread.Ok -> if (read.sha == item.sha256 && read.stamp.size == item.size) {
           stamp = read.stamp
         } else {
-          val attempt = item.nameAttempt + 1
-          return save(
-            item.copy(
-              state = UploadState.COPYING, resumeAt = 0, nameAttempt = attempt, finalPath = SafetyCommon.nameFor(item.planned, attempt),
-            ),
-          )
+          return relinkOrRedo(item, tally, nextName = true)
         }
         Reread.Changed, Reread.Different -> return Step.Wait
       }
@@ -751,6 +746,38 @@ class BackupPrivateCopyGuardian(
     val at = clock.nasNowMs() ?: return Step.Wait
     catalog.attachVerifiedCopies(listOf(VerifiedCopy(item.mediaId, item.versionId, item.share, final, stamp, at)))
     return save(item.copy(state = UploadState.LINKED, finalStamp = stamp))
+  }
+
+  /**
+   * F2 della prova della 5B (`docs/prova-500.md` §C6): al nome finale la copia pubblicata non c'e' piu', o ci sono altri byte. Prima di rifarla si
+   * guarda se e' stata **spostata**: l'elemento puo' averla gia' attaccata al catalogo e il processo essere morto prima di `LINKED`, e nel frattempo
+   * qualcuno l'ha spostata seguita dal catalogo (una versione nuova del media la archivia in `Versioni/`). Come nel piano (D8) si cercano nell'area
+   * privata le copie con la stessa dimensione, **rilette qui per intero**: una con i byte della versione e' la copia di questo elemento, si collega
+   * li' (il nome finale diventa il suo) e niente si rifa', nessun doppione. Altrimenti si rifa' la copia come prima: [nextName] se il nome finale e'
+   * occupato da altri byte (mai sostituiti).
+   */
+  private suspend fun relinkOrRedo(item: BackupItem, tally: Tally, nextName: Boolean): Step {
+    val sha = item.sha256
+    if (sha != null) {
+      when (
+        val found = PrivateCopyFinder.findIdentical(
+          catalog, rereader, item.share, item.size, item.quickHash, sha, DEDUP_LIMIT,
+        ) { tally.bytesRead += it }
+      ) {
+        is PrivateCopyFinder.Identical.Stop -> return stopFor(found.error)
+        is PrivateCopyFinder.Identical.Copy -> {
+          val at = clock.nasNowMs() ?: return Step.Wait
+          catalog.attachVerifiedCopies(listOf(VerifiedCopy(item.mediaId, item.versionId, found.copy.share, found.copy.path, found.stamp, at)))
+          return save(item.copy(state = UploadState.LINKED, finalPath = found.copy.path, finalStamp = found.stamp))
+        }
+        PrivateCopyFinder.Identical.None -> Unit
+      }
+    }
+    if (!nextName) return save(item.copy(state = UploadState.COPYING, resumeAt = 0))
+    val attempt = item.nameAttempt + 1
+    return save(
+      item.copy(state = UploadState.COPYING, resumeAt = 0, nameAttempt = attempt, finalPath = SafetyCommon.nameFor(item.planned, attempt)),
+    )
   }
 
   companion object {

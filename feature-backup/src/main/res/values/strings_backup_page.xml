@@ -37,7 +37,9 @@
   <string name="backup_status_running_bytes">%1$s di %2$s</string>
 
   <string name="backup_status_stopped_title">Backup fermo</string>
-  <string name="backup_status_stopped_user">Lo hai fermato tu. Quello che era a metà riparte da dove si era fermato.</string>
+  <!-- R4 della revisione 5A: «Ferma» è una pausa che dura finché non tocchi «Riprendi». -->
+  <string name="backup_status_paused_title">In pausa</string>
+  <string name="backup_status_stopped_user">Hai messo in pausa il backup: non riparte da solo finché non tocchi «Riprendi». Quello che era a metà riparte da dove si era fermato.</string>
   <string name="backup_status_stopped_system">Android ha fermato il lavoro. Riprende da solo.</string>
   <string name="backup_status_stopped_reset">L’app è stata azzerata: il backup ricomincia dalla configurazione.</string>
 

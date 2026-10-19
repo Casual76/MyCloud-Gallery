@@ -81,11 +81,8 @@ object DeviceFolderPolicy {
     }
   }
 
-  private fun shorten(base: String, maxBytes: Int): String {
-    var s = base
-    while (s.isNotEmpty() && s.toByteArray(Charsets.UTF_8).size > maxBytes) s = s.substring(0, s.offsetByCodePoints(s.length, -1))
-    return s.trimEnd()
-  }
+  /** Il nome accorciato a [maxBytes] byte a un confine di carattere: la stessa regola di `BackupPaths.alternateName` (R1, 5A). */
+  private fun shorten(base: String, maxBytes: Int): String = BackupPaths.cutToBytes(base, maxBytes).trimEnd()
 
   private val WHITESPACE = Regex("\\s+")
   private val RESERVED_KEYS: Set<String> = setOf(LookAlike.key(BackupPaths.COMMON_AREA_FOLDER))

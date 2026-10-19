@@ -25,7 +25,6 @@ import dev.pampa.mycloudgallery.notify.AppNotifications
 import dev.pampa.mycloudgallery.notify.BackupNotification
 import dev.pampa.mycloudgallery.notify.BackupProgress
 import java.util.concurrent.ConcurrentHashMap
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -135,18 +134,22 @@ class BackupJobService : JobService() {
     running[params.jobId] = scope.launch {
       val notifier = launch { followProgress(entry.notifications(), backup, userInitiated) }
       val end = try {
-        val stages = BackupStages(entry.graph(), backup)
-        // La stima serve alle regole per la conferma sui dati mobili (proposta 10): il riepilogo e' in cache.
-        val estimate = runCatching { backup.summary().toUpload.bytes }.getOrNull()
-        BackupJobRun(
-          stage = { kind -> gallery.runIfActive { stages.round(kind, trigger, userEstimate = estimate, confirmed = confirmed) } },
-          userInitiated = userInitiated,
-        ).run()
-      } catch (e: CancellationException) {
-        throw e
-      } catch (e: Exception) {
-        GalleryLog.w(TAG) { "backup non ripreso: ${e.javaClass.simpleName}" }
-        BackupJobEnd.RESCHEDULE
+        // R1: un errore inatteso si salva come problema visibile (la pagina non resta "in corso") e il lavoro finisce: mai un RESCHEDULE a
+        // oltranza di un lavoro dell'utente che ogni volta muore allo stesso punto.
+        when (
+          val attempt = attemptStage(TAG, onError = { backup.noteUnexpectedError() }) {
+            val stages = BackupStages(entry.graph(), backup)
+            // La stima serve alle regole per la conferma sui dati mobili (proposta 10): il riepilogo e' in cache.
+            val estimate = runCatching { backup.summary().toUpload.bytes }.getOrNull()
+            BackupJobRun(
+              stage = { kind -> gallery.runIfActive { stages.round(kind, trigger, userEstimate = estimate, confirmed = confirmed) } },
+              userInitiated = userInitiated,
+            ).run()
+          }
+        ) {
+          StageAttempt.Failed -> BackupJobEnd.DONE
+          is StageAttempt.Done -> attempt.value
+        }
       } finally {
         notifier.cancel()
         if (!userInitiated) NotificationManagerCompat.from(this@BackupJobService).cancel(AppNotifications.ID_BACKUP)

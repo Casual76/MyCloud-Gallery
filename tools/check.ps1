@@ -37,7 +37,10 @@
                                 mapping.txt (consumer-rules.pro di core-common); il valore acceso e non spegnibile lo prova
                                 FeatureFlagsTest. E (P7) il CANCELLO: nel bytecode della release (dexdump) `AppBackupGate.stateOf`
                                 chiama `FeatureFlags.backupMayWriteTo`, risponde `BackupGateState.TEST_ONLY` e la classe del cancello
-                                e' istanziata da `BackupGraph` (un cancello tolto, fuso o scollegato fa FALLIRE il passo)
+                                e' istanziata da `BackupGraph` (un cancello tolto, fuso o scollegato fa FALLIRE il passo). E (R2 della
+                                revisione 5A) il cancello chiama anche `FeatureFlags.backupMayWriteAs` e risponde `TEST_ONLY`: in
+                                release un account di prova non scrive in nessuna share (D13, la recinzione del telefono, c'e' solo in
+                                debug); anche `backupBlocksTestAccounts` e `backupMayWriteAs` devono stare nel dex e in mapping.txt
     7c. niente servizi         l'APK di release non ha nessun `META-INF/services/dev.pampa.*` (ne' un file di servizio che
                                 nomini una classe `dev.pampa.*`): le varianti di misura legano le loro classi con Hilt, mai
                                 con `ServiceLoader` (R6)
@@ -299,8 +302,11 @@ public class DexGateFacts {
   public bool StateOfFound;
   public bool StateOfCallsDecision;
   public bool StateOfReturnsTestOnly;
+  public bool StateOfCallsAccountDecision;
+  public bool StateOfReturnsTestOnlyForAccount;
   public List<string> Instantiators = new List<string>();
   public List<string> DecisionCallers = new List<string>();
+  public List<string> AccountDecisionCallers = new List<string>();
   public int Lines;
 }
 
@@ -308,6 +314,7 @@ public static class DexGateReader {
   const string GateClass = "Ldev/pampa/mycloudgallery/backup/AppBackupGate;";
   const string MainClass = "Ldev/pampa/mycloudgallery/MainActivity;";
   const string Decision = "Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;.backupMayWriteTo:(Ljava/lang/String;)Z";
+  const string AccountDecision = "Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;.backupMayWriteAs:(Ljava/lang/String;)Z";
   const string TestOnly = "Ldev/pampa/mycloudgallery/core/backup/contract/BackupGateState;.TEST_ONLY:";
 
   static readonly Regex ClassLine = new Regex(@"^\s*Class descriptor\s*:\s*'([^']+)'", RegexOptions.Compiled);
@@ -321,21 +328,21 @@ public static class DexGateReader {
     };
     using (var process = Process.Start(info)) {
       string cls = "", method = "";
-      bool sawDecisionInStateOf = false;
+      bool sawDecisionInStateOf = false, sawAccountDecisionInStateOf = false;
       var errors = process.StandardError.ReadToEndAsync();
       string line;
       while ((line = process.StandardOutput.ReadLine()) != null) {
         facts.Lines++;
         var m = ClassLine.Match(line);
         if (m.Success) {
-          cls = m.Groups[1].Value; method = ""; sawDecisionInStateOf = false;
+          cls = m.Groups[1].Value; method = ""; sawDecisionInStateOf = false; sawAccountDecisionInStateOf = false;
           if (cls == MainClass) facts.SawMainActivity = true;
           if (cls == GateClass) facts.GateClassFound = true;
           continue;
         }
         m = NameLine.Match(line);
         if (m.Success) {
-          method = m.Groups[1].Value; sawDecisionInStateOf = false;
+          method = m.Groups[1].Value; sawDecisionInStateOf = false; sawAccountDecisionInStateOf = false;
           if (cls == GateClass && method == "stateOf") facts.StateOfFound = true;
           continue;
         }
@@ -346,10 +353,15 @@ public static class DexGateReader {
         if (op.StartsWith("invoke") && rest.Contains(Decision)) {
           facts.DecisionCallers.Add(here);
           if (cls == GateClass && method == "stateOf") { facts.StateOfCallsDecision = true; sawDecisionInStateOf = true; }
+        } else if (op.StartsWith("invoke") && rest.Contains(AccountDecision)) {
+          facts.AccountDecisionCallers.Add(here);
+          if (cls == GateClass && method == "stateOf") { facts.StateOfCallsAccountDecision = true; sawAccountDecisionInStateOf = true; }
         } else if (op == "new-instance" && rest.Contains(GateClass)) {
           facts.Instantiators.Add(here);
-        } else if (op.StartsWith("sget") && rest.Contains(TestOnly) && cls == GateClass && method == "stateOf" && sawDecisionInStateOf) {
-          facts.StateOfReturnsTestOnly = true;
+        } else if (op.StartsWith("sget") && rest.Contains(TestOnly) && cls == GateClass && method == "stateOf") {
+          // D12: la risposta TEST_ONLY dopo la decisione per share; R2: la risposta TEST_ONLY dopo la decisione per account.
+          if (sawDecisionInStateOf) facts.StateOfReturnsTestOnly = true;
+          if (sawAccountDecisionInStateOf) facts.StateOfReturnsTestOnlyForAccount = true;
         }
       }
       process.WaitForExit();
@@ -676,8 +688,8 @@ Step "R8 ha tolto la recinzione D33 dalla release (usage.txt e mapping.txt)" -Sk
 # spegnibile (FeatureFlagsTest). Qui si controlla che R8 non l'abbia tolta: i due membri di `FeatureFlags` (il campo e la decisione per
 # share, tenuti da core-common/consumer-rules.pro anche prima che P7 leghi il cancello del backup) devono stare nel dex dell'APK di
 # release e in mapping.txt. Senza i file il passo FALLISCE (non salta).
-$d12Members = @("getBackupTestSharesOnly", "backupMayWriteTo")
-Step "D12 nella release: FeatureFlags.backupTestSharesOnly e backupMayWriteTo nel dex e in mapping.txt" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
+$d12Members = @("getBackupTestSharesOnly", "backupMayWriteTo", "getBackupBlocksTestAccounts", "backupMayWriteAs")
+Step "D12 e R2 nella release: FeatureFlags.backupTestSharesOnly, backupMayWriteTo, backupBlocksTestAccounts e backupMayWriteAs nel dex e in mapping.txt, e il cancello che li usa" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
   $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
   if (-not $apk) { return "nessun APK di release in app\build\outputs\apk\release" }
@@ -690,11 +702,11 @@ Step "D12 nella release: FeatureFlags.backupTestSharesOnly e backupMayWriteTo ne
   }
   $flags = "dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags"
   if (-not (Select-String -Path $mapping -SimpleMatch -Pattern "$flags -> " -Quiet)) { $problems += "FeatureFlags non e' in mapping.txt" }
-  foreach ($member in @("boolean backupMayWriteTo(java.lang.String)", "boolean getBackupTestSharesOnly()")) {
+  foreach ($member in @("boolean backupMayWriteTo(java.lang.String)", "boolean getBackupTestSharesOnly()", "boolean backupMayWriteAs(java.lang.String)", "boolean getBackupBlocksTestAccounts()")) {
     if (-not (Select-String -Path $mapping -SimpleMatch -Pattern $member -Quiet)) { $problems += "$member non e' in mapping.txt" }
   }
   if ($problems.Count -gt 0) { return ($problems -join "; ") }
-  Write-Host "        D12 presente nella release (dex e mapping.txt)" -ForegroundColor DarkGray
+  Write-Host "        D12 e R2 presenti nella release (dex e mapping.txt)" -ForegroundColor DarkGray
 
   # Fase 5A (P7): il campo e la decisione non bastano, serve il CANCELLO che la usa. Il bytecode della release (dexdump): lo `stateOf` del
   # cancello chiama `FeatureFlags.backupMayWriteTo` e risponde `BackupGateState.TEST_ONLY`, e il cancello e' istanziato (collegato al grafo
@@ -708,14 +720,18 @@ Step "D12 nella release: FeatureFlags.backupTestSharesOnly e backupMayWriteTo ne
   else {
     if (-not $gate.StateOfCallsDecision) { $problems += "AppBackupGate.stateOf non chiama FeatureFlags.backupMayWriteTo: la decisione D12 non governa il cancello" }
     elseif (-not $gate.StateOfReturnsTestOnly) { $problems += "AppBackupGate.stateOf non risponde BackupGateState.TEST_ONLY dopo la decisione D12" }
+    # R2 (revisione 5A): in release un account di prova non scrive in nessuna share. Il controllo sta nel cancello della release, non solo in
+    # debug: stateOf chiama la decisione per account e, se non passa, risponde TEST_ONLY.
+    if (-not $gate.StateOfCallsAccountDecision) { $problems += "AppBackupGate.stateOf non chiama FeatureFlags.backupMayWriteAs: in release un account di prova scriverebbe senza la recinzione D13 (R2)" }
+    elseif (-not $gate.StateOfReturnsTestOnlyForAccount) { $problems += "AppBackupGate.stateOf non risponde BackupGateState.TEST_ONLY dopo la decisione per account (R2)" }
   }
   if ($gate.Instantiators.Count -eq 0) { $problems += "nessun codice istanzia AppBackupGate: il cancello non e' collegato al backup" }
   elseif (-not ($gate.Instantiators | Where-Object { $_ -like "Ldev/pampa/mycloudgallery/backup/BackupGraph;.*" })) {
     $problems += ("AppBackupGate e' istanziato solo da " + (($gate.Instantiators | Select-Object -Unique) -join ", ") + ", non da BackupGraph")
   }
   if ($problems.Count -gt 0) { return ($problems -join "; ") }
-  Write-Host ("        cancello D12 provato nel bytecode: stateOf -> backupMayWriteTo -> TEST_ONLY, istanziato da {0}, decisione chiamata da {1} metodi ({2} righe di dexdump)" -f
-    (($gate.Instantiators | Select-Object -Unique) -join ", "), @($gate.DecisionCallers | Select-Object -Unique).Count, $gate.Lines) -ForegroundColor DarkGray
+  Write-Host ("        cancello D12 e R2 provato nel bytecode: stateOf -> backupMayWriteTo -> TEST_ONLY e stateOf -> backupMayWriteAs -> TEST_ONLY, istanziato da {0}, decisioni chiamate da {1} e {2} metodi ({3} righe di dexdump)" -f
+    (($gate.Instantiators | Select-Object -Unique) -join ", "), @($gate.DecisionCallers | Select-Object -Unique).Count, @($gate.AccountDecisionCallers | Select-Object -Unique).Count, $gate.Lines) -ForegroundColor DarkGray
 }
 
 # R6: nessun file di servizio nostro nell'APK di release. `ServiceLoader` e' un canale dichiarativo e invisibile: un file in

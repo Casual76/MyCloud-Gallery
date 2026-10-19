@@ -277,6 +277,13 @@ enum class BackupGateState(override val code: String, val problem: BackupProblem
 
   /** La famiglia non e' pronta (onboarding, revoca): niente si scrive. */
   NOT_READY("not_ready", null),
+
+  /**
+   * R4 della revisione 5A: l'utente ha toccato "Ferma", che e' una **pausa**. Il segno dura (anche fra un giro e l'altro e dopo la morte
+   * del processo) finche' non tocca "Riprendi" o "Fai ora": il motore e il guardiano non scrivono, la pagina dice "In pausa". Non e' un
+   * problema (nessun codice). Le verifiche, che leggono soltanto, continuano.
+   */
+  PAUSED("paused", null),
   ;
 
   val open: Boolean get() = this == OPEN

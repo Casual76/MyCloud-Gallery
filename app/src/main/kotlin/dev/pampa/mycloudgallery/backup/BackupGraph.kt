@@ -98,8 +98,13 @@ import kotlinx.coroutines.withContext
  * - **D12**: il [gate] non lascia scrivere su una share che non e' di prova (`FeatureFlags.backupMayWriteTo`, vero in release): lo stato
  *   dice "Backup in prova" e niente si scrive; anche le verifiche e il guardiano si fermano. Vale per ogni build;
  * - **D13**: in debug con un account di prova la recinzione del telefono (`DeveloperTools.backupFence()`) limita le sorgenti, le righe
- *   che si aprono e le destinazioni (`mcg-campo/Backup/`); in release `fence` e' null;
+ *   che si aprono e le destinazioni (`mcg-campo/Backup/`); in release `fence` e' null. **R2**: per questo, in release un account di prova
+ *   non scrive in nessuna share (`FeatureFlags.backupMayWriteAs`, "Backup in prova" per ogni share): senza la recinzione tutta la libreria
+ *   vera finirebbe nella share di prova;
  * - **D32**: emergenza, congelamento, sola lettura e famiglia non pronta chiudono il cancello; il motore lo guarda a ogni elemento;
+ * - **R4**: "Ferma" e' una pausa che dura ([BackupRunMemory.isPaused]) finche' l'utente non tocca "Riprendi" o "Fai ora": il cancello e'
+ *   `PAUSED` per il motore e il guardiano, le verifiche (sola lettura) continuano;
+ * - **R7**: il cancello vale solo per l'area privata di adesso; se cambia, le parti del backup si ricostruiscono ([start]);
  * - verificatore, guardiano e motore girano **uno alla volta** ([exclusive]): il guardiano non scrive mentre il motore guida il diario;
  * - il backup parte solo da dati locali (catalogo, impostazioni, tocchi dell'utente): nessun dato letto dal NAS crea un elemento (E-S11);
  * - nei log solo codici e numeri: mai nomi di file, percorsi, share, account, id ne' impronte.
@@ -160,9 +165,11 @@ class BackupGraph(
       flags = nasInputs.flags,
       familyReady = { familyReady() && nasInputs.trust.writePermit() != null },
       privateShare = ::privateShare,
+      account = { nasInputs.account() },
       writesStopped = { nas.emergency.stopped },
       frozen = { share -> nas.frozen.value.containsKey(share.lowercase(Locale.ROOT)) },
       readOnly = { share -> share.lowercase(Locale.ROOT) in readOnlyShares },
+      paused = memory::isPaused,
     ),
   )
 
@@ -210,7 +217,16 @@ class BackupGraph(
    */
   suspend fun start(): Boolean = startLock.withLock {
     if (stopped.get()) return@withLock false
-    partsFlow.value?.let { return@withLock true }
+    partsFlow.value?.let { current ->
+      if (current.share.equals(privateShare(), ignoreCase = true)) return@withLock true
+      // R7: l'area privata e' cambiata (l'admin ha corretto la configurazione) e il motore e' nato con la share di prima: il cancello gli
+      // chiude la porta (`NO_PRIVATE_AREA`) e qui si ricostruiscono le parti con la share di adesso. Il giro in corso si ferma al passo dopo.
+      GalleryLog.w(TAG) { "l'area privata e' cambiata: le parti del backup si ricostruiscono" }
+      changesWatcher?.cancel()
+      changesWatcher = null
+      partsFlow.value = null
+      readOnlyShares.clear()
+    }
     if (!nas.start()) return@withLock false
     val runtime = nas.runtime ?: return@withLock false
     val catalog = catalogProvider() ?: return@withLock false
@@ -323,10 +339,43 @@ class BackupGraph(
     }
   }
 
-  /** "Ferma" (pagina, notifica): il giro in corso si ferma prima del file successivo e ogni temporaneo resta con il suo punto di ripresa. */
+  /**
+   * "Ferma" (pagina, notifica): il giro in corso si ferma prima del file successivo e ogni temporaneo resta con il suo punto di ripresa.
+   *
+   * **R4**: "Ferma" dell'utente ([StopBy.USER]) e' una **pausa**: il segno resta (anche fra un giro e l'altro e dopo la morte del processo)
+   * finche' l'utente non tocca "Riprendi" o "Fai ora" ([resumeFromPause]). Il lavoro a tappe dopo una lettura del telefono o il giro delle
+   * sei ore non la scavalcano: il cancello e' `PAUSED`. Il segno vale subito (in memoria), il file segue.
+   */
   fun requestStop(by: StopBy) {
+    // Dopo l'azzeramento (stop) niente si scrive piu' nella memoria locale: un segno rimasto vivrebbe nel setup dopo.
+    if (by == StopBy.USER && !stopped.get()) {
+      memory.pauseNow()
+      kick()
+      scope.launch { runCatching { memory.setPaused(true) } }
+    }
     val engine = partsFlow.value?.engine ?: return
     scope.launch { runCatching { engine.stop(by) } }
+  }
+
+  /** R4: l'utente ha fermato il backup e non l'ha ripreso? */
+  fun isPaused(): Boolean = memory.isPaused()
+
+  /** R4: "Riprendi" o "Fai ora": la pausa finisce e il backup puo' ripartire (con le regole di sempre). */
+  suspend fun resumeFromPause() {
+    if (stopped.get() || !memory.isPaused()) return
+    memory.setPaused(false)
+    kick()
+  }
+
+  /**
+   * R1: un lavoro del backup e' finito con un errore che nessuno prevedeva. Il problema si salva (la pagina lo dice con
+   * [BackupProblemCode.UNEXPECTED], "Riprova" lo toglie) invece di sparire in un "successo" silenzioso, e lo stato si ricalcola.
+   */
+  suspend fun noteUnexpectedError() {
+    // Dopo l'azzeramento (stop) la memoria locale non si riscrive: l'errore di un lavoro fermato dalla chiusura non e' un problema del backup.
+    if (stopped.get()) return
+    memory.setProblem(BackupProblemCode.UNEXPECTED)
+    kick()
   }
 
   /**
@@ -473,7 +522,8 @@ class BackupGraph(
   val fence get() = inputs.fence
 
   /**
-   * "Riprova" (§2.6): toglie il segno dei media che non si leggono o la cui verifica e' fallita, e l'ultimo problema che ha fermato un giro.
+   * "Riprova" (§2.6): toglie il segno dei media che non si leggono, la cui verifica e' fallita o che hanno avuto un errore inatteso (R1), e
+   * l'ultimo problema che ha fermato un giro.
    * Il backup li rilegge al prossimo giro. Solo dal catalogo locale. Vero se ha tolto qualcosa.
    */
   suspend fun retryProblems(): Boolean {
@@ -482,8 +532,10 @@ class BackupGraph(
     val ids = withContext(Dispatchers.IO) {
       runCatching {
         database.openHelper.readableDatabase.query(
-          "SELECT media_id FROM backup_problem WHERE code IN (?, ?) LIMIT ?",
-          arrayOf<Any?>(BackupProblemCode.UNREADABLE.code, BackupProblemCode.VERIFY_FAILED.code, RETRY_LIMIT),
+          "SELECT media_id FROM backup_problem WHERE code IN (?, ?, ?) LIMIT ?",
+          arrayOf<Any?>(
+            BackupProblemCode.UNREADABLE.code, BackupProblemCode.VERIFY_FAILED.code, BackupProblemCode.UNEXPECTED.code, RETRY_LIMIT,
+          ),
         ).use { c -> buildList { while (c.moveToNext()) add(c.getString(0)) } }
       }.getOrDefault(emptyList())
     }
@@ -566,8 +618,9 @@ class BackupGraph(
   }
 
   private suspend fun composeStatus(sources: BackupSources, share: String?, access: PhoneAccess?, counts: SafetyCounts): BackupStatus {
-    // D12 vale per primo: sulle share vere il backup e' "in prova", qualunque altra cosa manchi.
-    if (share != null && familyReady() && !nasInputs.flags.backupMayWriteTo(share)) return BackupStatus.TestOnly
+    // D12 vale per primo: sulle share vere il backup e' "in prova", qualunque altra cosa manchi. Con R2, in release, anche per un account
+    // di prova (senza la recinzione del telefono di D13 non si scrive da nessuna parte).
+    if (share != null && familyReady() && testOnly(share)) return BackupStatus.TestOnly
     val missing = LinkedHashSet<BackupSetupStep>()
     if (nasInputs.shares().isEmpty() || nasInputs.deviceId() == null) {
       missing += BackupSetupStep.NAS
@@ -578,8 +631,11 @@ class BackupGraph(
     if (sources.isEmpty && settings.loaded.value) missing += BackupSetupStep.SOURCES
     if (missing.isNotEmpty()) return BackupStatus.NotConfigured(missing)
     val area = checkNotNull(share)
-    when (val state = gate.stateOf(area)) {
+    val gateState = gate.stateOf(area)
+    when (val state = gateState) {
       BackupGateState.OPEN -> Unit
+      // R4: la pausa dell'utente si dice dopo la cartella del dispositivo (sotto): finche' non c'e' non c'e' nemmeno un backup da fermare.
+      BackupGateState.PAUSED -> Unit
       BackupGateState.TEST_ONLY -> return BackupStatus.TestOnly
       BackupGateState.NOT_READY -> return BackupStatus.NotConfigured(setOf(BackupSetupStep.NAS))
       BackupGateState.NO_PRIVATE_AREA -> return BackupStatus.NotConfigured(setOf(BackupSetupStep.PRIVATE_AREA))
@@ -588,6 +644,8 @@ class BackupGraph(
     }
     // Il primo backup lo avvia l'utente, con il riepilogo (§2.11): finche' non ha scelto la cartella del dispositivo non si carica niente.
     if (settings.deviceFolder.value == null) return BackupStatus.FirstBackupReady(summary())
+    // R4: "In pausa" prima di tutto il resto (anche mentre il file in volo finisce), cosi' la pagina e la notifica dicono la stessa cosa.
+    if (gateState == BackupGateState.PAUSED) return BackupStatus.Stopped(StopBy.USER)
 
     val engineStatus = parts?.engine?.status?.value
     if (engineStatus is BackupStatus.Running) return engineStatus
@@ -603,6 +661,9 @@ class BackupGraph(
     problems.entries.minByOrNull { it.key.ordinal }?.let { (code, count) -> return BackupStatus.Problem(code, count) }
     return BackupStatus.UpToDate(counts.safe, memory.lastComplete())
   }
+
+  /** D12 e R2: il backup non scrive in [share] perche' non e' di prova, o perche' l'account e' di prova e la recinzione del telefono non c'e'. */
+  private fun testOnly(share: String): Boolean = !nasInputs.flags.backupMayWriteTo(share) || !nasInputs.flags.backupMayWriteAs(nasInputs.account())
 
   /** Perche' il backup aspetta adesso, dalle regole delle attivita' (nessuna rete, nessun orologio del telefono). */
   suspend fun waitReason(): WaitReason {

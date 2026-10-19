@@ -136,7 +136,7 @@ class BackupEntryTest {
       "Tutto al sicuro: 6.658 media",
       "312 in coda",
       "In corso: 1.240 di 6.658",
-      "Fermo",
+      "In pausa",
       "C’è qualcosa da controllare",
     )
   }

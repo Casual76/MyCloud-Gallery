@@ -155,13 +155,14 @@ internal fun queuedReasonRes(reason: WaitReason?): Int = when (reason) {
 }
 
 /**
- * Il perche' di un problema di un media. I tre che accendono il segno della cella ([BackupProblemCode.marksMedia]) hanno la loro frase;
+ * Il perche' di un problema di un media. Quelli che accendono il segno della cella ([BackupProblemCode.marksMedia]) hanno la loro frase;
  * gli altri (problemi di tutto il backup, non di un media) mandano alla pagina Backup, dove ogni codice ha il suo messaggio e la sua azione.
  */
 internal fun problemCaptionRes(code: BackupProblemCode): Int = when (code) {
   BackupProblemCode.VERIFY_FAILED -> R.string.viewer_backup_problem_verify_failed
   BackupProblemCode.UNREADABLE -> R.string.viewer_backup_problem_unreadable
   BackupProblemCode.LOST_BEFORE_BACKUP -> R.string.viewer_backup_lost_caption
+  BackupProblemCode.UNEXPECTED -> R.string.viewer_backup_problem_unexpected
   // P2 aggiunge `COMMON_COPY_LOST` al contratto: si lega per codice stabile, senza aspettare il caso dell'enumerazione.
   else -> if (code.code == COMMON_COPY_LOST) R.string.viewer_backup_problem_common_copy_lost else R.string.viewer_backup_problem_generic
 }

@@ -161,4 +161,79 @@ class BackupWorkTest {
     assertThat(BackupJobRun(endless::stage, userInitiated = true, maxSlices = 3).run()).isEqualTo(BackupJobEnd.RESCHEDULE)
     assertThat(endless.asked).hasSize(3)
   }
+
+  // --- R1 della revisione 5A: un errore inatteso non e' ne' un successo silenzioso ne' un RESCHEDULE a oltranza ----------------------
+
+  @Test
+  fun r1_unErroreInattesoSiSalvaComeProblemaEIlLavoroFinisceSenzaRiprogrammarsi() = runBlocking {
+    var saved = 0
+    val attempt = attemptStage("BackupWorkTest", onError = { saved++ }) { throw IllegalStateException("errore inatteso di prova") }
+    // Il problema e' stato salvato una volta (la pagina dice `UNEXPECTED`), e il chiamante sa che e' fallito: nessun `success` muto.
+    assertThat(saved).isEqualTo(1)
+    assertThat(attempt).isEqualTo(StageAttempt.Failed)
+    // Il lavoro dell'utente: lo stesso errore a ogni giro finirebbe in RESCHEDULE a oltranza; adesso il servizio chiude con DONE.
+    val end = when (val a = attemptStage("BackupWorkTest", onError = { saved++ }) { throw IllegalStateException("ancora") }) {
+      StageAttempt.Failed -> BackupJobEnd.DONE
+      is StageAttempt.Done -> a.value
+    }
+    assertThat(end).isEqualTo(BackupJobEnd.DONE)
+    assertThat(saved).isEqualTo(2)
+  }
+
+  @Test
+  fun r1_unaTappaCheRiesceDaIlSuoValoreENonSalvaNiente() = runBlocking {
+    var saved = 0
+    val attempt = attemptStage("BackupWorkTest", onError = { saved++ }) { BackupFollowUp.Continue }
+    assertThat((attempt as StageAttempt.Done).value).isEqualTo(BackupFollowUp.Continue)
+    assertThat(saved).isEqualTo(0)
+  }
+
+  @Test
+  fun r1_lAnnullamentoPassaEUnErroreDelSalvataggioNonLoNasconde() {
+    // L'annullamento (il lavoro e' stato fermato) risale: non e' un errore del backup e non si salva nessun problema.
+    var saved = 0
+    val cancelled = runCatching {
+      runBlocking { attemptStage("BackupWorkTest", onError = { saved++ }) { throw kotlinx.coroutines.CancellationException("fermato") } }
+    }.exceptionOrNull()
+    assertThat(cancelled).isInstanceOf(kotlinx.coroutines.CancellationException::class.java)
+    assertThat(saved).isEqualTo(0)
+    // Se il salvataggio stesso fallisce, il lavoro e' comunque `Failed` (mai un successo).
+    val attempt = runBlocking { attemptStage("BackupWorkTest", onError = { throw IllegalStateException("memoria piena") }) { throw IllegalStateException("x") } }
+    assertThat(attempt).isEqualTo(StageAttempt.Failed)
+  }
+
+  @Test
+  fun r1_ilGuardianoCheFallisceNonTogleLeVerifiche() = runBlocking {
+    val order = mutableListOf<String>()
+    var error: Exception? = null
+    BackupStages.guardThenVerify(
+      guard = {
+        order += "guardiano"
+        throw IllegalStateException("errore inatteso del guardiano")
+      },
+      onGuardError = {
+        order += "errore"
+        error = it
+      },
+      verify = { order += "verifiche" },
+    )
+    assertThat(order).containsExactly("guardiano", "errore", "verifiche").inOrder()
+    assertThat(error).isInstanceOf(IllegalStateException::class.java)
+    // Col guardiano che va bene, le verifiche seguono lo stesso e nessun errore si dice.
+    order.clear()
+    error = null
+    BackupStages.guardThenVerify(guard = { order += "guardiano" }, onGuardError = { order += "errore" }, verify = { order += "verifiche" })
+    assertThat(order).containsExactly("guardiano", "verifiche").inOrder()
+    // L'annullamento passa: nessuna verifica parte dopo un lavoro fermato.
+    order.clear()
+    val cancelled = runCatching {
+      BackupStages.guardThenVerify(
+        guard = { throw kotlinx.coroutines.CancellationException("fermato") },
+        onGuardError = { order += "errore" },
+        verify = { order += "verifiche" },
+      )
+    }.exceptionOrNull()
+    assertThat(cancelled).isInstanceOf(kotlinx.coroutines.CancellationException::class.java)
+    assertThat(order).isEmpty()
+  }
 }

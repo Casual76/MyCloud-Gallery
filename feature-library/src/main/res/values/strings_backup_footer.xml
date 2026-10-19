@@ -83,6 +83,12 @@
     <item quantity="other">%1$s file illeggibili</item>
   </plurals>
   <string name="backup_footer_unreadable_detail">Riprova o apri la Diagnostica.</string>
+  <string name="backup_footer_unexpected_label">Errore inatteso</string>
+  <plurals name="backup_footer_unexpected_label_count">
+    <item quantity="one">%1$s con un errore inatteso</item>
+    <item quantity="other">%1$s con un errore inatteso</item>
+  </plurals>
+  <string name="backup_footer_unexpected_detail">Riprova o apri la Diagnostica.</string>
   <string name="backup_footer_phone_storage_low_label">Memoria del telefono quasi piena</string>
   <string name="backup_footer_phone_storage_low_detail">Libera spazio sul telefono.</string>
   <string name="backup_footer_stale_label">Backup fermo da 3 giorni</string>

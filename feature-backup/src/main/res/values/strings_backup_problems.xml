@@ -53,6 +53,12 @@
     <item quantity="other">%1$s media spariti dall’area comune</item>
   </plurals>
   <string name="backup_problem_common_copy_lost_detail">Erano solo nell’area comune e non c’è né una copia privata né una sul telefono. Per 30 giorni li trovi nel cestino del NAS.</string>
+  <string name="backup_problem_unexpected_title">Errore inatteso nel backup</string>
+  <plurals name="backup_problem_unexpected_title_count">
+    <item quantity="one">%1$s media con un errore inatteso</item>
+    <item quantity="other">%1$s media con un errore inatteso</item>
+  </plurals>
+  <string name="backup_problem_unexpected_detail">Un errore che l’app non si aspettava ha fermato questo file, non gli altri: non conta come «al sicuro». «Riprova» lo rilegge; se si ripete, apri la Diagnostica.</string>
   <string name="backup_problem_generic_title">Problema con il backup</string>
   <string name="backup_problem_generic_detail">Apri la Diagnostica per i dettagli.</string>
   <string name="backup_problem_phone_storage_low_title">Memoria del telefono quasi piena</string>

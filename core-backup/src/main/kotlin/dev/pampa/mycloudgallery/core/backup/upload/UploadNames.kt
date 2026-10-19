@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.backup.upload
 
 import dev.pampa.mycloudgallery.core.backup.contract.BackupProblemCode
+import dev.pampa.mycloudgallery.core.backup.plan.BackupPaths
 import dev.pampa.mycloudgallery.core.nas.contract.NasError
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 
@@ -9,16 +10,10 @@ object UploadNames {
 
   /**
    * Il nome del tentativo [attempt] dopo collisioni con file **diversi** (E-B3): 0 = il nome previsto, 1 = "nome (2)", 2 = "nome (3)"...
-   * nella stessa cartella, l'estensione resta. Lo stesso schema dell'esecutore di riferimento e dei nomi alternativi della 4B.
+   * nella stessa cartella, l'estensione resta. Lo stesso schema dell'esecutore di riferimento, del guardiano e dei nomi alternativi della
+   * 4B; un nome che con " (n)" supererebbe i 255 byte si accorcia (R1 della revisione 5A): vedi [BackupPaths.alternateName].
    */
-  fun nameFor(planned: SharePath, attempt: Int): SharePath {
-    require(attempt >= 0) { "Tentativo negativo." }
-    if (attempt == 0) return planned
-    val name = planned.name
-    val dot = name.lastIndexOf('.')
-    val alt = if (dot > 0) "${name.substring(0, dot)} (${attempt + 1})${name.substring(dot)}" else "$name (${attempt + 1})"
-    return planned.parent()?.child(alt) ?: SharePath.of(alt)
-  }
+  fun nameFor(planned: SharePath, attempt: Int): SharePath = BackupPaths.alternateName(planned, attempt)
 
   /** Il problema del giro per un errore del NAS (§2.2 "Rete", §2.6): il giro si ferma, l'elemento no. */
   fun problemFor(error: NasError): BackupProblemCode = when (error) {

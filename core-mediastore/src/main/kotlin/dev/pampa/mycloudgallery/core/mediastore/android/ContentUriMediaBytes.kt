@@ -23,6 +23,13 @@ class ContentUriMediaBytes private constructor(private val descriptor: ParcelFil
 
   override val size: Long = descriptor.statSize.takeIf { it >= 0 } ?: channel.size()
 
+  /**
+   * La dimensione del file **adesso**: un `fstat` del descrittore aperto a ogni chiamata (R6 della revisione 5A). [size] e' quella del
+   * momento dell'apertura e non cambia mai; se il file cresce mentre lo si legge (un'app che scrive senza dirlo al MediaStore) qui si vede.
+   * Il backup la confronta con la dimensione del MediaStore dopo aver letto il file: una copia non deve mai essere un prefisso.
+   */
+  fun currentSize(): Long = descriptor.statSize.takeIf { it >= 0 } ?: channel.size()
+
   override suspend fun read(range: LongRange): ByteArray {
     if (range.isEmpty() || range.first >= size || range.last < 0) return ByteArray(0)
     val from = maxOf(range.first, 0L)

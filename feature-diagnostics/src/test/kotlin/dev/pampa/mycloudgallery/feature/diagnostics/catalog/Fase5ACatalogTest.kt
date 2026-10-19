@@ -68,7 +68,7 @@ class Fase5ACatalogTest {
       "safe", "queued", "unverified", "onlyCommonCopy", "noNasCopy", "sources", "folderChosen", "gate", "backupStatus", "done", "linked", "gone",
       "waiting", "bytesUploaded", "bytesReread", "diaryOpen", "diaryBytesOpen", "pending", "similarRunning", "available", "lastProblem",
       "startedAgeMs", "lastCompleteAgeMs", "beatAgeMs", "stoppedBy", "failed", "count",
-      "problem.verify_failed", "problem.common_copy_lost", "problem.unreadable", "problem.lost_before_backup",
+      "problem.verify_failed", "problem.common_copy_lost", "problem.unreadable", "problem.lost_before_backup", "problem.unexpected",
     )
     keys.forEach { assertWithMessage(it).that(ExportKeys.isAllowed(it)).isTrue() }
     // Un nome di file, di cartella o di share sotto la famiglia non passa (maiuscole, punti, spazi, trattini).

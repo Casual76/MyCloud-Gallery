@@ -71,6 +71,10 @@ internal object BackupFooterProblems {
       "unreadable", GalleryFooterTone.Attention, Icons.Rounded.Warning, R.string.backup_footer_unreadable_label,
       R.string.backup_footer_unreadable_detail, R.plurals.backup_footer_unreadable_label_count,
     ),
+    problem(
+      "unexpected", GalleryFooterTone.Attention, Icons.Rounded.Warning, R.string.backup_footer_unexpected_label,
+      R.string.backup_footer_unexpected_detail, R.plurals.backup_footer_unexpected_label_count,
+    ),
     problem("phone_storage_low", GalleryFooterTone.Attention, Icons.Rounded.Warning, R.string.backup_footer_phone_storage_low_label, R.string.backup_footer_phone_storage_low_detail),
     problem("stale", GalleryFooterTone.Attention, Icons.Rounded.Warning, R.string.backup_footer_stale_label, R.string.backup_footer_stale_detail),
     problem("waiting_unlock", GalleryFooterTone.Waiting, Icons.Rounded.Schedule, R.string.backup_footer_waiting_unlock_label, R.string.backup_footer_waiting_unlock_detail),

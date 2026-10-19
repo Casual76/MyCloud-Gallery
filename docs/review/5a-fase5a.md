@@ -8,7 +8,7 @@
 | **Tipo** | Revisione avversariale in sola lettura. Nessuna correzione al codice di produzione. Nessun NAS vero, nessun telefono, nessun `adb`. |
 | **Data** | 16/10/2026 |
 | **Metodo** | Lettura del codice delle superfici richieste, seguendo la macchina a stati del motore vero (`SafeUploadEngine`) e del guardiano passo per passo (pubblicazione, nome occupato, risposta persa, ripresa, telefono che cambia o rifiuta, cancello, eccezioni) fino al catalogo (`attachCopies`, `markVerified`, `recordFullHash`, collegamenti, adozione d'identita') e ai lavori di `:app`. Tre **test temporanei**, sul motore vero (`RealEngineKit`) e sul guardiano vero (`SafetyBench`) di core-backup, per R1 (motore e guardiano) e R5. Sono stati eseguiti in una **copia del repository** nella cartella temporanea della sessione (`git archive` di `87b89e3` piu' il sottomodulo `engine`), perche' un'altra sessione stava eseguendo `:core-backup:testDebugUnitTest --tests *BackupNasIntegrationTest*` (timeout di 180 minuti) e teneva occupata la cartella dei risultati del modulo: niente e' stato toccato nel repository, copia e test sono stati cancellati. Esiti: R1 motore 5 giri su 5 finiti con `TrustViolation`, R1 guardiano 3 su 3, R5 4 giri delle foto su 4 fermi a `phone`. |
-| **Stato** | **Aperta**: tutte le voci sono da correggere o da decidere. |
+| **Stato** | **Parzialmente corretta (19/10/2026)**: R1, R2, R4, R5, R6, R7 **chiuse** (correzioni in un pacchetto successivo, senza commit, ognuna con il suo test; le scelte che l'utente vede in `docs/decisioni.md`, "Fase 5A: correzioni della revisione (19/10)"). **R3 resta aperta** (la fa un'altra sessione), come le informative I1-I9. |
 
 ## Riepilogo
 
@@ -131,7 +131,7 @@ Le due medie riguardano la protezione stessa:
   2. Difesa in profondita': nel motore e nel guardiano un'eccezione di un elemento (non `CancellationException`, non `Error`) parcheggia quell'elemento con un codice di problema, e il giro continua con gli altri.
   3. In `BackupStages.safety` le verifiche girano anche se il guardiano fallisce.
   4. Nel banco e negli scenari, fixture con nomi da 252-255 byte e con caratteri multibyte (oggi i nomi sono corti).
-- **Stato:** aperta.
+- **Stato:** **chiusa (19/10).** Un solo `BackupPaths.alternateName` accorcia la radice a un confine di carattere (motore, guardiano, riferimento); l'eccezione di un elemento lo parcheggia `FAILED` con il nuovo problema `UNEXPECTED` (DiagCodes, voce, testi, `problem.unexpected`) e il giro continua; `BackupStages.safety` fa girare le verifiche comunque; `BackupWork` e `BackupJobService` salvano il problema (`attemptStage`) senza successo muto ne' `RESCHEDULE`. Test: `Review5aEngineTest.r1_*` (5 giri), `Review5aSafetyTest.r1_*` (3 giri), `BackupPathsTest.nomeAlternativo_*`, `BackupWorkTest.r1_*`.
 
 ### R2. Con l'APK di release e un account di prova nessuna recinzione del telefono: tutta la libreria va nella share di prova
 
@@ -153,7 +153,7 @@ Le due medie riguardano la protezione stessa:
   - **la regola in `main`**: "account di prova → si legge solo `DCIM/mcg-prova/` e `Pictures/mcg-prova/`, si scrive solo sotto `mcg-campo/`", pura e ricavata da `TestShares.ACCOUNTS`; in debug restano solo gli strumenti di semina;
   - **piu' semplice**: in release, con un account di prova, il cancello risponde `TEST_ONLY` per ogni share. Fino a Q3 il backup in release non scrive da nessuna parte.
   - **In entrambi i casi**: aggiornare D13, `check.ps1` (oggi vieta "mcg-prova" nel dex di release) e la voce D13 della checklist.
-- **Stato:** aperta.
+- **Stato:** **chiusa (19/10).** Strada "piu' semplice": `FeatureFlags.backupBlocksTestAccounts` (vero in `RELEASE`, falso in debug) e `backupMayWriteAs`; `AppBackupGate` risponde `TEST_ONLY` per ogni share a un account di prova in release; `check.ps1` lo prova nel bytecode di release; D13 e checklist aggiornati. Test: `FeatureFlagsTest.r2_*`, `AppBackupGateTest.r2_*` (tutte le combinazioni), `BackupIntegrationTest.r2_*`.
 
 ---
 
@@ -196,7 +196,7 @@ Le due medie riguardano la protezione stessa:
   - E' R9 della 4B in un'altra forma, senza nemmeno un processo che muore.
 - **Confermato:** lettura del codice.
 - **Correzione proposta:** un segno "fermato dall'utente" persistente (`BackupRunMemory`) che `BackupStages.round`/`safety` e lo stato rispettano finche' l'utente non tocca "Riprendi" o "Fai ora". In alternativa, chiamare il tasto "Ferma questo giro" e dirlo.
-- **Stato:** aperta.
+- **Stato:** **chiusa (19/10).** Il segno `backup-user-paused` (`BackupRunMemory`) e il nuovo stato del cancello `PAUSED` fermano motore e guardiano (le verifiche continuano) finche' non si tocca "Riprendi" o "Fai ora"; pagina, Impostazioni e notifica dicono "In pausa". Test: `Review5aEngineTest.r4_*`, `Review5aSafetyTest.r4_*`, `AppBackupGateTest.r4_*`, `BackupPauseTest`, `BackupNotificationTest.r4_*`.
 
 ### R5. Con "foto selezionate" un media non scelto ferma ogni giro delle foto
 
@@ -213,7 +213,7 @@ Le due medie riguardano la protezione stessa:
   - **Il risultato**: nessuna delle foto scelte arriva sul NAS.
 - **Confermato:** **si'**, con un test temporaneo poi cancellato, sul motore vero: 4 giri delle foto su 4 fermi a `phone`, la foto scelta resta `PLANNED`.
 - **Correzione proposta:** un rifiuto che riguarda una sola riga (`NOT_SELECTED`) fa aspettare quell'elemento (`Step.Wait()`), non il giro. Il giro si ferma solo per i rifiuti globali: `MEDIA_PERMISSION`, e `MEDIA_LOCATION` per le foto.
-- **Stato:** aperta.
+- **Stato:** **chiusa (19/10).** `SafeUploadEngine.denied`: `NOT_SELECTED` fa aspettare solo l'elemento (`Step.Wait()`), `MEDIA_PERMISSION` e `MEDIA_LOCATION` fermano ancora il giro. Test: `Review5aEngineTest.r5_*` (1 non scelto e 3 scelti: i 3 arrivano al sicuro).
 
 ### R6. La lettura del telefono non controlla dove finisce il file
 
@@ -229,7 +229,7 @@ Le due medie riguardano la protezione stessa:
   - **Chi se ne accorge**: nessuno, finche' il MediaStore non si aggiorna.
 - **Confermato:** plausibile; dipende da quanto il MediaStore resta indietro. Sull'S25 con FUSE si aggiorna alla chiusura del file.
 - **Correzione proposta:** dopo `size` byte leggerne uno in piu' (deve arrivare la fine del file), oppure confrontare con la dimensione del descrittore aperto (`ParcelFileDescriptor.statSize`). Se e' diversa, il file e' cambiato (E-B15).
-- **Stato:** aperta.
+- **Stato:** **chiusa (19/10).** Dopo `size` byte `PhoneReading` controlla la dimensione del descrittore e un byte in piu' (`endsAtSize`); il file cresciuto e' E-B15 (`GONE`, niente sul NAS); `MediaStorePhoneBytes` consegna la dimensione di adesso (`ContentUriMediaBytes.currentSize()`). Test: `Review5aEngineTest.r6_*` (telefono finto, `FakePhoneBytes.growSilently`), `AndroidMediaStoreSourceTest.r6_*`.
 
 ### R7. Il cancello non ricontrolla che la share dell'elemento sia ancora l'area privata
 
@@ -245,7 +245,7 @@ Le due medie riguardano la protezione stessa:
   - **Oggi**: D12 limita il caso alle share di prova.
 - **Confermato:** lettura del codice.
 - **Correzione proposta:** nel cancello la share deve essere uguale (senza maiuscole) a `privateShare()`, altrimenti `NO_PRIVATE_AREA`. Le parti del grafo si ricostruiscono quando l'area privata cambia; un elemento di un'altra share aspetta, e lo dice.
-- **Stato:** aperta.
+- **Stato:** **chiusa (19/10).** Il cancello vuole la share uguale a `privateShare()` (senza maiuscole) o risponde `NO_PRIVATE_AREA`; `BackupGraph.start` ricostruisce le parti se l'area cambia; un elemento di un'altra share aspetta (log) e non ferma gli altri. Test: `AppBackupGateTest.r7_*`, `Review5aEngineTest.r7_*`, `Review5aSafetyTest.r7_*`.
 
 ---
 
@@ -337,7 +337,7 @@ Tutte con stato **aperta**.
 - **R1**, dopo la correzione: un file del telefono in `DCIM/mcg-prova/` con un nome da 255 byte e un file diverso con lo stesso nome in `mcg-campo/Backup/...`. Il file deve arrivare come "(2)" e gli altri media devono andare avanti.
 - **R5** sull'S25: primo backup interrotto, poi "foto selezionate". Dopo la correzione le foto scelte arrivano e le altre aspettano.
 - **R6**: un file in `DCIM/mcg-prova/` allungato con `dd` in coda, senza far rileggere il MediaStore; poi controllare nel viewer che non diventi "al sicuro" con la copia corta.
-- **R2**: nessuna prova. Va corretto prima; fino ad allora **mai** l'APK di release con `test` o `test2` sul telefono con le foto vere.
+- **R2**: corretto il 19/10 (con la release un account di prova non scrive in nessuna share): nessuna prova sul campo da fare, ma l'APK di release con `test` o `test2` resta una prova che non carica niente ("Backup in prova"). Per provare il backup sull'S25 serve la build di debug con D13.
 - **Il resto, come previsto**: il runner del backup sull'area di prova (`BackupNasIntegrationTest`, era in corso in un'altra sessione durante questa revisione) e F30 sul telefono (`s25.ps1 -Mode backup`).
 
 ## Checklist della 5A (`docs/sicurezza.md` §7, "Fase 5")
@@ -345,7 +345,7 @@ Tutte con stato **aperta**.
 - [ ] **Prova delle 500 interruzioni sul backup di foto e video grandi: zero file a meta', duplicati o perdite; hash verificato al 100%.**
   - Fatto: banco JVM e simulatore SMB verdi (P6, `docs/prova-500.md` §B).
   - Manca: il runner sul NAS vero (in corso in un'altra sessione, esito non visto) e il telefono (F30).
-  - Il banco non copre R1 (nomi corti nelle fixture), R3 (niente collegamenti trasparenti) ne' R5 (nessun rifiuto per una riga sola).
+  - Il banco non copriva R1 (nomi corti nelle fixture), R3 (niente collegamenti trasparenti) ne' R5 (nessun rifiuto per una riga sola): R1 e R5 hanno ora i loro scenari (`Review5aEngineTest`, `Review5aSafetyTest`); R3 no.
 - [ ] **(5A) `core-backup` non puo' togliere ne' sostituire un file: test del compilatore e di architettura, provati reintroducendo la violazione.**
   - Regge per tipi e per nomi: marcatore, `Phase5ArchitectureTest` letto (non rieseguito reintroducendo le violazioni), `NasFileSystem` senza distruttivi.
   - Resta **R3**: accorciamento attraverso un collegamento al nome del temporaneo. Poi I1.
@@ -355,7 +355,7 @@ Tutte con stato **aperta**.
   - Restano **R6** e **I3**; F21-F24 non sono ancora fatte.
 - [x] **(5A) D12 attivo alla consegna; D13 solo in debug e assente dal dex di release.**
   - La voce, cosi' come e' scritta, e' confermata dalla lettura: il cancello guarda ogni elemento sulla share di destinazione e le verifiche si chiudono con `TEST_ONLY`; D13 e' `null` in release e `check.ps1` lo cerca nel dex.
-  - Pero' non copre **R2**. Va aggiunta una voce: "in release un account di prova non carica i media veri del telefono".
+  - Pero' non copriva **R2**: la voce "in release un account di prova non carica i media veri del telefono" e' stata aggiunta (19/10) alla stessa riga della checklist di `docs/sicurezza.md` e provata dal passo di `check.ps1`.
 - [x] **(5A) I temporanei del backup non li toglie la pulizia dei propri file finche' il diario li cita.**
   - Confermato in lettura (risposta 9).
   - Restano i temporanei di un dispositivo azzerato, gia' dichiarati nel §1.4 del progetto.

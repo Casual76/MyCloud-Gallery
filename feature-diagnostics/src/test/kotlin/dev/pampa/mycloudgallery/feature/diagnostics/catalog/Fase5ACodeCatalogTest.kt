@@ -8,7 +8,7 @@ import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
 
 /**
- * **Un test di catalogo per ogni codice** del backup (Fase 5A, P7; docs/fase5-progetto.md §2.6): ognuno dei 21 codici di
+ * **Un test di catalogo per ogni codice** del backup (Fase 5A, P7; docs/fase5-progetto.md §2.6): ognuno dei 22 codici di
  * `BackupProblemCode` e le due voci di stato di `BackupDiagnostics` ha il suo `DiagCode` con gli edge case del documento, la sezione
  * «Backup», un titolo e un «cosa fare» (le due risorse esistono, non sono vuote) e nessuno stesso id di un altro codice.
  *
@@ -55,6 +55,7 @@ class Fase5ACodeCatalogTest(private val id: String, private val edgeCases: Set<S
       arrayOf("BACKUP_VERIFY_FAILED", setOf("E-B18", "E-B8")),
       arrayOf("BACKUP_UNREADABLE", setOf("D15", "E-M12")),
       arrayOf("BACKUP_COMMON_COPY_LOST", setOf("E-B13", "L44")),
+      arrayOf("BACKUP_UNEXPECTED", setOf("R1")),
       arrayOf("BACKUP_PHONE_STORAGE_LOW", setOf("E-P3")),
       arrayOf("BACKUP_STALE", setOf("E-P15", "E-P2")),
       arrayOf("BACKUP_WAITING_UNLOCK", setOf("E-P13")),

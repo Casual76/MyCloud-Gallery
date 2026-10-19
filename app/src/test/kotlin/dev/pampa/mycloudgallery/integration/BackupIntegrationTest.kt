@@ -11,6 +11,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupKind
 import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
 import dev.pampa.mycloudgallery.core.backup.contract.BackupTrigger
 import dev.pampa.mycloudgallery.core.backup.contract.RunStop
+import dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags
 import dev.pampa.mycloudgallery.core.family.contract.FamilyInvite
 import dev.pampa.mycloudgallery.core.family.contract.InviteParams
 import dev.pampa.mycloudgallery.core.family.contract.JoinStep
@@ -88,8 +89,8 @@ class BackupIntegrationTest {
     devices.forEach { it.close() }
   }
 
-  private fun device(name: String, backend: InMemorySmbBackend): TestDevice =
-    TestDevice(app, File(temp.root, name), TestPlatform(time, backend)).also { devices += it }
+  private fun device(name: String, backend: InMemorySmbBackend, flags: FeatureFlags = DEBUG_LIKE): TestDevice =
+    TestDevice(app, File(temp.root, name), TestPlatform(time, backend), flags).also { devices += it }
 
   private fun rig(device: TestDevice, account: String, jobs: BackupJobs = BackupJobs.NONE, name: String = "Pixel di prova"): BackupRig =
     BackupRig(app, device, account, jobs = jobs, deviceName = name).also { rigs += it }
@@ -166,6 +167,45 @@ class BackupIntegrationTest {
     assertThat(backup.parts).isNull()
     assertThat(jobs.cancelled.get()).isAtLeast(1)
     assertThat(first.round()).isNull()
+  }
+
+  /**
+   * **R2 della revisione 5A**: con la configurazione di **release** un account di prova (`test`) non fa scrivere il backup nemmeno nella sua
+   * share di prova, dove D12 lo lascerebbe: la recinzione del telefono di D13 c'e' solo in debug, e la libreria vera finirebbe nella share di
+   * prova. Lo stato dice "Backup in prova", il cancello risponde `TEST_ONLY`, e ne' un giro, ne' il primo backup, ne' le verifiche scrivono.
+   * Con la configurazione di debug lo stesso account e la stessa share aprono il cancello (provato da `fotoNuovaGiroCopiaVerificata...`).
+   */
+  @Test
+  fun r2_inReleaseUnAccountDiProvaNonScriveNemmenoNellaSuaShareDiProva() = runBlocking {
+    val backend = TestNas.backend(time)
+    val phone = device("telefono", backend, flags = FeatureFlags.RELEASE)
+    phone.graph.start()
+    phone.graph.foundFamily()
+
+    val jobs = RecordingJobs()
+    val rig = rig(phone, TestNas.ADMIN_USER, jobs)
+    BackupRig.photo(rig.store, id = 1, bytes = BackupRig.jpeg(tone = 91), takenAt = time.now() - 2 * HOUR)
+    val backup = rig.open()
+    rig.chooseFolder("Pixel di prova")
+
+    assertThat(TestNas.ADMIN_USER).isEqualTo("test")
+    assertThat(backup.gate.stateOf(TestNas.ADMIN_USER)).isEqualTo(BackupGateState.TEST_ONLY)
+    withTimeout(20.seconds) { backup.status.first { it == BackupStatus.TestOnly } }
+    withTimeout(20.seconds) { backup.libraryStatus.first { it == LibraryBackupStatus.TestOnly } }
+
+    val filesBefore = backend.fileCount(TestNas.ADMIN_USER)
+    for (trigger in listOf(BackupTrigger.USER_NOW, BackupTrigger.FIRST_BACKUP)) {
+      val outcome = rig.round(BackupKind.PHOTOS, trigger)
+      assertThat(outcome?.last?.stoppedBy).isEqualTo(RunStop.GATE)
+      assertThat(outcome?.last?.done).isEqualTo(0)
+    }
+    val safety = rig.safety()
+    assertThat(safety?.verified ?: 0).isEqualTo(0)
+    assertThat(safety?.guardCreated ?: 0).isEqualTo(0)
+    assertThat(backend.exists(TestNas.ADMIN_USER, "Backup")).isFalse()
+    assertThat(backend.fileCount(TestNas.ADMIN_USER)).isEqualTo(filesBefore)
+    assertThat(backup.store.counts().open).isEqualTo(0)
+    Unit
   }
 
   @Test
@@ -340,6 +380,9 @@ class BackupIntegrationTest {
 
   private companion object {
     const val HOUR = 3_600_000L
+
+    /** Una build di debug: le funzioni della release, ma l'account di prova `test` puo' provare il backup (senza R2, dove D13 recinta il telefono). */
+    val DEBUG_LIKE: FeatureFlags = FeatureFlags.forBuild(debugBuild = true, nasLibrary = true)
     const val MINUTE = 60_000L
     const val DAY = 24 * HOUR
     const val REAL_USER = "mario"

@@ -121,6 +121,11 @@ internal object BackupProblemTexts {
       BackupTone.Alarm, Icons.Rounded.ErrorOutline, R.string.backup_problem_common_copy_lost_title, R.string.backup_problem_common_copy_lost_detail,
       titleCount = R.plurals.backup_problem_common_copy_lost_title_count,
     ),
+    // R1 della revisione 5A: un errore che nessuna regola prevedeva. L'elemento e' parcheggiato, gli altri vanno avanti; "Riprova" lo rilegge.
+    "unexpected" to ProblemText(
+      BackupTone.Attention, Icons.Rounded.Warning, R.string.backup_problem_unexpected_title, R.string.backup_problem_unexpected_detail,
+      titleCount = R.plurals.backup_problem_unexpected_title_count,
+    ),
   )
 }
 

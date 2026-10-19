@@ -12,7 +12,9 @@
     <item quantity="other">%1$s di %2$s elementi</item>
   </plurals>
   <string name="notify_backup_paused">In pausa: il NAS non risponde o il backup è fermo</string>
-  <string name="notify_backup_stopping">Mi fermo prima del prossimo elemento…</string>
+  <!-- R4 della revisione 5A: «Ferma» è una pausa che dura finché non tocchi «Riprendi» nell’app. -->
+  <string name="notify_backup_user_paused">In pausa: riprende quando tocchi «Riprendi» nell’app</string>
+  <string name="notify_backup_stopping">Metto in pausa prima del prossimo elemento…</string>
   <string name="notify_backup_stop">Ferma</string>
 
   <!-- La conferma prima di un backup sui dati mobili, in roaming o oltre il tetto (proposta 10): il testo con la stima lo scrivono le regole. -->

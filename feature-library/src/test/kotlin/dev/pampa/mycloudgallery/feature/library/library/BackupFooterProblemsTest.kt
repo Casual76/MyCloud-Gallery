@@ -60,6 +60,6 @@ class BackupFooterProblemsTest {
       assertWithMessage("${problem.code}: plurale").that(xml).contains("""<plurals name="backup_footer_${problem.code}_label_count">""")
     }
     assertThat(BackupFooterProblems.all.filter { it.labelCount != null }.map { it.code })
-      .containsExactly("lost_before_backup", "verify_failed", "common_copy_lost", "unreadable")
+      .containsExactly("lost_before_backup", "verify_failed", "common_copy_lost", "unreadable", "unexpected")
   }
 }

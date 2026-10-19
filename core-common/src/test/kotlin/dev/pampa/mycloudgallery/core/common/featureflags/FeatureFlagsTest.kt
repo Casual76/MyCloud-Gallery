@@ -81,4 +81,41 @@ class FeatureFlagsTest {
     assertThat(TestShares.isTestAccount("alessio")).isFalse()
     assertThat(TestShares.isTestAccount("admin")).isFalse()
   }
+
+  /**
+   * R2 della revisione di sicurezza della 5A: D13 (la recinzione del telefono) esiste solo in debug, quindi **in release** un account di
+   * prova non fa scrivere il backup in nessuna share, nemmeno di prova. In debug la recinzione c'e' e la decisione non blocca.
+   */
+  @Test
+  fun r2_inReleaseUnAccountDiProvaNonScriveInNessunaShare() {
+    val release = FeatureFlags.RELEASE
+    assertThat(release.backupBlocksTestAccounts).isTrue()
+    assertThat(FeatureFlags.forBuild(debugBuild = false, wol = true, nasLibrary = false, indexPublishTestSharesOnly = false)).isEqualTo(release)
+    for (account in listOf("test", "test2", "TEST", "Test2")) assertWithMessage(account).that(release.backupMayWriteAs(account)).isFalse()
+    // Un account vero puo' (poi decide D12 per share); un account che non si conosce non si dice "non di prova": si fallisce chiusi.
+    for (account in listOf("alessio", "pampa", "admin", "mario", "")) assertWithMessage(account).that(release.backupMayWriteAs(account)).isTrue()
+    assertThat(release.backupMayWriteAs(null)).isFalse()
+  }
+
+  @Test
+  fun r2_inDebugLaRecinzioneDelTelefonoCeEIlBackupDiProvaPuoGirare() {
+    val debug = FeatureFlags.forBuild(debugBuild = true)
+    assertThat(debug.backupBlocksTestAccounts).isFalse()
+    for (account in listOf("test", "test2", "alessio", null)) assertThat(debug.backupMayWriteAs(account)).isTrue()
+    // D12 resta in debug come in release: R2 non lo tocca.
+    assertThat(debug.backupTestSharesOnly).isTrue()
+    assertThat(debug.backupMayWriteTo("test")).isTrue()
+    assertThat(debug.backupMayWriteTo("alessio")).isFalse()
+  }
+
+  /** R2 non si chiede da fuori: `forBuild` non ha un parametro per spegnere la protezione, come per D12 (la lettura del sorgente). */
+  @Test
+  fun r2_laProtezioneNonSiSpegneDaFuori() {
+    val root = generateSequence(File(".").absoluteFile) { it.parentFile }.first { File(it, "settings.gradle").isFile }
+    val source = File(root, "core-common/src/main/kotlin/dev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags.kt").readText()
+    val forBuild = Regex("""fun\s+forBuild\s*\(([^)]*)\)""").find(source)?.groupValues?.get(1) ?: error("forBuild non trovata")
+    assertWithMessage("forBuild non deve poter spegnere R2").that(forBuild).doesNotContain("Account")
+    // Anche le build di release di un valore diverso da RELEASE non esistono: il costruttore e' privato.
+    assertWithMessage("RELEASE accende R2").that(source).contains("backupBlocksTestAccounts = true")
+  }
 }

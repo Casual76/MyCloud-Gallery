@@ -267,6 +267,7 @@ object DiagCodes {
   @JvmField val BACKUP_VERIFY_FAILED = DiagCode("BACKUP_VERIFY_FAILED", setOf("E-B18", "E-B8"))
   @JvmField val BACKUP_UNREADABLE = DiagCode("BACKUP_UNREADABLE", setOf("D15", "E-M12"))
   @JvmField val BACKUP_COMMON_COPY_LOST = DiagCode("BACKUP_COMMON_COPY_LOST", setOf("E-B13", "L44"))
+  @JvmField val BACKUP_UNEXPECTED = DiagCode("BACKUP_UNEXPECTED", setOf("R1"))
   @JvmField val BACKUP_PHONE_STORAGE_LOW = DiagCode("BACKUP_PHONE_STORAGE_LOW", setOf("E-P3"))
   @JvmField val BACKUP_STALE = DiagCode("BACKUP_STALE", setOf("E-P15", "E-P2"))
   @JvmField val BACKUP_WAITING_UNLOCK = DiagCode("BACKUP_WAITING_UNLOCK", setOf("E-P13"))

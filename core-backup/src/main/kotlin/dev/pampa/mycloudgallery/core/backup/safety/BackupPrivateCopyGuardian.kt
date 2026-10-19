@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.core.backup.safety
 import dev.pampa.mycloudgallery.core.backup.contract.BackupCatalog
 import dev.pampa.mycloudgallery.core.backup.contract.BackupClock
 import dev.pampa.mycloudgallery.core.backup.contract.BackupGate
+import dev.pampa.mycloudgallery.core.backup.contract.BackupGateState
 import dev.pampa.mycloudgallery.core.backup.contract.BackupItem
 import dev.pampa.mycloudgallery.core.backup.contract.BackupProblemCode
 import dev.pampa.mycloudgallery.core.backup.contract.BackupStore
@@ -21,6 +22,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.UploadKind
 import dev.pampa.mycloudgallery.core.backup.contract.UploadState
 import dev.pampa.mycloudgallery.core.backup.contract.UploadStateMachine
 import dev.pampa.mycloudgallery.core.backup.contract.VerifiedCopy
+import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.SafetyStatus
 import dev.pampa.mycloudgallery.core.model.Sha256
@@ -44,6 +46,7 @@ import java.time.Instant
 import java.time.ZoneOffset
 import java.util.Locale
 import kotlin.time.Duration
+import kotlinx.coroutines.CancellationException
 
 /**
  * Il **guardiano delle copie private** (Fase 5A, P3; `docs/fase5-progetto.md` D9, §2.3, Q4 (b), E-B13, E-B14, E-D12, E-D13, E-S11).
@@ -72,6 +75,11 @@ import kotlin.time.Duration
  * Tetto di [capBytes] (20 GB) per giro: un elemento si comincia solo se ci sta; un solo media piu' grande del tetto parte da solo, come
  * primo del giro (altrimenti non partirebbe mai). Il budget e' di tempo, con l'orologio monotono. Nessuna eccezione per un errore del NAS
  * o del telefono: il giro si ferma con il suo [RunStop]; la morte del processo (un `Error`) non si cattura mai.
+ *
+ * **Un errore inatteso di un solo media non ferma gli altri** (R1 della revisione 5A, difesa in profondita'): l'elemento si parcheggia
+ * (`FAILED` con [BackupProblemCode.UNEXPECTED], il media porta il segno e il guardiano non lo ritenta finche' l'utente non tocca "Riprova")
+ * e il giro continua. Un elemento di un'altra share (l'area privata e' cambiata, R7) aspetta; la pausa dell'utente (R4, [BackupGateState.PAUSED])
+ * ferma il giro con [RunStop.STOPPED]. Il nome "nome (n)" di una copia rispetta i 255 byte ([SafetyCommon.nameFor]).
  */
 class BackupPrivateCopyGuardian(
   private val deviceId: String,
@@ -144,16 +152,22 @@ class BackupPrivateCopyGuardian(
 
   private suspend fun run(scope: GuardScope, tally: Tally): GuardReport {
     val share = privateShare() ?: return tally.report(RunStop.GATE)
-    if (!gate.stateOf(share).open) return tally.report(RunStop.GATE)
+    closedReport(tally, gate.stateOf(share))?.let { return it }
 
     // 1. Ripresa: gli elementi del guardiano rimasti aperti nel diario (dopo un riavvio, una tappa finita, un errore del NAS).
     val open = store.itemsToResume(RESUME_SCAN).filter { it.kind == UploadKind.GUARD_COPY && inScope(it.mediaId, scope) }
     for (item in open) {
       if (tally.overtime()) return tally.report(RunStop.BUDGET)
-      if (!gate.stateOf(item.share).open) return tally.report(RunStop.GATE)
+      // R7: l'area privata e' cambiata dopo che l'elemento e' nato: niente si scrive nella share di prima, ma gli altri vanno avanti.
+      if (!SafetyCommon.sameShare(item.share, share)) {
+        tally.skipped++
+        GalleryLog.w(TAG) { "elemento di un'altra area: aspetta (la share non e' piu' l'area privata)" }
+        continue
+      }
+      closedReport(tally, gate.stateOf(item.share))?.let { return it }
       if (!tally.fits(item.size)) return tally.report(RunStop.BUDGET)
       tally.committed += item.size
-      val step = drive(item, tally)
+      val step = driveGuarded(item, tally)
       if (step is Step.Stop) return tally.report(step.stop, step.problem)
     }
 
@@ -168,25 +182,39 @@ class BackupPrivateCopyGuardian(
       for (candidate in fresh) {
         seen += candidate.common.mediaId
         if (tally.overtime()) return tally.report(RunStop.BUDGET)
-        if (!gate.stateOf(share).open) return tally.report(RunStop.GATE)
-        val planned = plan(candidate, share, scope)
-        if (planned == null) {
-          tally.skipped++
+        closedReport(tally, gate.stateOf(share))?.let { return it }
+        val item = try {
+          val planned = plan(candidate, share, scope)
+          if (planned == null) {
+            tally.skipped++
+            continue
+          }
+          if (!tally.fits(planned.size)) return tally.report(RunStop.BUDGET)
+          store.create(listOf(planned)).single()
+        } catch (e: CancellationException) {
+          throw e
+        } catch (e: Exception) {
+          // R1: un media che non si lascia nemmeno pianificare non ferma gli altri.
+          parkCandidate(candidate, tally, e)
           continue
         }
-        if (!tally.fits(planned.size)) return tally.report(RunStop.BUDGET)
-        val item = store.create(listOf(planned)).single()
         if (item.kind != UploadKind.GUARD_COPY || item.state.terminal) {
           tally.skipped++
           continue
         }
         tally.committed += item.size
-        val step = drive(item, tally)
+        val step = driveGuarded(item, tally)
         if (step is Step.Stop) return tally.report(step.stop, step.problem)
       }
       if (page.size < limit) return tally.report(RunStop.COMPLETE)
     }
   }
+
+  /** Il cancello e' chiuso: la fermata del giro (la pausa dell'utente e' un "Ferma", ogni altra ragione e' del cancello); null se e' aperto. */
+  private fun closedReport(tally: Tally, state: BackupGateState): GuardReport? =
+    if (state.open) null else tally.report(gateStop(state))
+
+  private fun gateStop(state: BackupGateState): RunStop = if (state == BackupGateState.PAUSED) RunStop.STOPPED else RunStop.GATE
 
   private fun inScope(mediaId: MediaId, scope: GuardScope): Boolean = when (scope) {
     GuardScope.All -> true
@@ -208,6 +236,8 @@ class BackupPrivateCopyGuardian(
     if (candidate.fullHash == null && candidate.quickHash == null) return null
     // Un altro elemento aperto (anche del caricamento) protegge gia' questa versione: nessun doppione.
     if (store.openFor(versionId) != null) return null
+    // R1: un media gia' parcheggiato per un errore inatteso non si ritenta a ogni giro: lo rimette in gioco "Riprova".
+    if (catalog.mediaSafety(source.mediaId)?.problem == BackupProblemCode.UNEXPECTED) return null
     // Q4 (b): con l'ambito "tutti" solo i media che non sono piu' sul telefono.
     if (scope == GuardScope.All && phoneStillHas(source.mediaId, versionId)) return null
     return NewBackupItem(
@@ -260,13 +290,68 @@ class BackupPrivateCopyGuardian(
 
   // --- La macchina di un elemento ------------------------------------------------------------------------------------------------
 
+  /**
+   * [drive] con la difesa in profondita' di R1: un'eccezione inattesa (non l'annullamento, non un `Error`) parcheggia **questo** elemento
+   * e il giro continua con gli altri.
+   */
+  private suspend fun driveGuarded(start: BackupItem, tally: Tally): Step = try {
+    drive(start, tally)
+  } catch (e: CancellationException) {
+    throw e
+  } catch (e: Exception) {
+    parkOnError(start, tally, e)
+  }
+
+  /**
+   * L'elemento si parcheggia: `FAILED` con [BackupProblemCode.UNEXPECTED] e il segno sul media; il proprio temporaneo si toglie senza
+   * insistere (la pulizia di D33 lo toglie comunque dopo un giorno). Se nemmeno il diario scrive il parcheggio l'errore risale.
+   */
+  private suspend fun parkOnError(start: BackupItem, tally: Tally, error: Exception): Step {
+    GalleryLog.e(TAG) { "errore inatteso (${error::class.java.simpleName}): elemento fermo con ${BackupProblemCode.UNEXPECTED.code}" }
+    val stored = store.item(start.id)
+    if (stored != null && stored.state.terminal) return Step.Next(stored)
+    val item = stored ?: start
+    val temp = item.temp
+    if (temp != null && item.state == UploadState.COPYING) {
+      try {
+        ops.deleteOwnTemp(item.share, temp, purpose)
+      } catch (e: CancellationException) {
+        throw e
+      } catch (_: Exception) {
+        GalleryLog.w(TAG) { "temporaneo non tolto dopo l'errore: lo togliera' la pulizia" }
+      }
+    }
+    markUnexpected(item.mediaId)
+    store.update(item.copy(state = UploadState.FAILED, problem = BackupProblemCode.UNEXPECTED))
+    tally.failed++
+    return Step.Wait
+  }
+
+  /** Un media che non si e' lasciato pianificare: nessun elemento da parcheggiare, solo il segno (e il conto). */
+  private suspend fun parkCandidate(candidate: GuardCandidate, tally: Tally, error: Exception) {
+    GalleryLog.e(TAG) { "errore inatteso (${error::class.java.simpleName}) nel piano: media fermo con ${BackupProblemCode.UNEXPECTED.code}" }
+    markUnexpected(candidate.common.mediaId)
+    tally.failed++
+  }
+
+  private suspend fun markUnexpected(mediaId: MediaId) {
+    try {
+      catalog.markProblem(mediaId, BackupProblemCode.UNEXPECTED)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (_: Exception) {
+      GalleryLog.w(TAG) { "segno del problema non scritto" }
+    }
+  }
+
   /** Porta avanti un elemento finche' non e' terminale, aspetta o ferma il giro. */
   private suspend fun drive(start: BackupItem, tally: Tally): Step {
     var item = start
     var steps = 0
     while (true) {
       if (tally.overtime()) return Step.Stop(RunStop.BUDGET)
-      if (!gate.stateOf(item.share).open) return Step.Stop(RunStop.GATE)
+      val gateState = gate.stateOf(item.share)
+      if (!gateState.open) return Step.Stop(gateStop(gateState))
       if (++steps > MAX_STEPS_PER_ITEM) return Step.Wait
       val step = advance(item, tally)
       if (step !is Step.Next) return step
@@ -685,6 +770,7 @@ class BackupPrivateCopyGuardian(
     const val COMMON_FOLDER: String = "Area comune"
     const val NO_DATE_FOLDER: String = "Senza data"
 
+    private const val TAG = "BackupGuardian"
     private const val MIN_YEAR = 1990
     private const val PLAN_PAGE = 100
     private const val RESUME_SCAN = 100_000

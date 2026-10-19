@@ -4,6 +4,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupCandidate
 import dev.pampa.mycloudgallery.core.backup.contract.BackupCatalog
 import dev.pampa.mycloudgallery.core.backup.contract.BackupClock
 import dev.pampa.mycloudgallery.core.backup.contract.BackupGate
+import dev.pampa.mycloudgallery.core.backup.contract.BackupGateState
 import dev.pampa.mycloudgallery.core.backup.contract.BackupItem
 import dev.pampa.mycloudgallery.core.backup.contract.BackupKind
 import dev.pampa.mycloudgallery.core.backup.contract.BackupPlanner
@@ -20,6 +21,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.ExistingCopyResult
 import dev.pampa.mycloudgallery.core.backup.contract.HashRecord
 import dev.pampa.mycloudgallery.core.backup.contract.NewBackupItem
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneBytes
+import dev.pampa.mycloudgallery.core.backup.contract.PhoneDenied
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneFile
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneLookup
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneOpen
@@ -106,8 +108,18 @@ import kotlinx.coroutines.yield
  *   temporaneo e ferma il giro con `NAS_FULL` o `QUOTA` (E-R9); il cancello si controlla prima di ogni passo (D32);
  * - si pubblica **solo** dentro le radici ammesse ([UploadConfig.allowedRoots], `Backup/`), mai un temporaneo che non sia `<io>-bk-`.
  *
- * Non cattura mai `Error` (la "morte del processo" dei test passa) ne' l'annullamento: solo gli errori di I/O della lettura del telefono.
- * I log dicono solo numeri e codici (§4.3): mai nomi, percorsi, share, id o impronte.
+ * - **un errore inatteso di un elemento non ferma gli altri** (R1 della revisione 5A, difesa in profondita'): l'elemento si parcheggia
+ *   (`FAILED` con [BackupProblemCode.UNEXPECTED], il media esce dai candidati finche' l'utente non tocca "Riprova") e il giro continua;
+ *   un errore del giro intero (il diario che non risponde) chiude lo stato del motore e risale;
+ * - **un rifiuto del telefono per una sola riga** (`NOT_SELECTED`, "foto selezionate") fa aspettare quell'elemento, non il giro (R5);
+ *   il giro si ferma solo per i rifiuti globali (permessi, posizione delle foto);
+ * - **la fine del file del telefono** si controlla dopo la lettura (R6): un file piu' lungo del MediaStore e' cambiato (E-B15), mai un
+ *   prefisso "al sicuro";
+ * - **l'elemento di un'altra share aspetta** (R7): se l'area privata cambia a motore costruito, niente si scrive nella share di prima.
+ *
+ * Non cattura mai `Error` (la "morte del processo" dei test passa) ne' l'annullamento: solo gli errori di I/O della lettura del telefono
+ * e, per un elemento alla volta, le eccezioni inattese (vedi sopra). I log dicono solo numeri e codici (§4.3): mai nomi, percorsi, share,
+ * id o impronte.
  */
 class SafeUploadEngine(
   private val deviceId: String,
@@ -189,20 +201,41 @@ class SafeUploadEngine(
     stopRequested = null
     val round = Round(kind, trigger, control, clock.monotonicMs() + budget.inWholeMilliseconds)
     val gateState = gate.stateOf(share)
-    if (!gateState.open) return finish(round, null, Halt(RunStop.GATE, gateState.problem))
+    if (!gateState.open) return finish(round, null, haltFor(gateState))
     val device = folder()
     if (device == null) {
       state.value = BackupStatus.NotConfigured(setOf(BackupSetupStep.DEVICE_FOLDER))
       return BackupRunResult.nothing(RunStop.GATE)
     }
-    plan(kind, trigger, device)
-    return drive(round)
+    return closingOnError {
+      plan(kind, trigger, device)
+      drive(round)
+    }
   }
 
   override suspend fun resumeAll(budget: Duration, control: UploadControl): BackupRunResult {
     stopRequested = null
-    return drive(Round(null, BackupTrigger.SCHEDULED, control, clock.monotonicMs() + budget.inWholeMilliseconds))
+    return closingOnError { drive(Round(null, BackupTrigger.SCHEDULED, control, clock.monotonicMs() + budget.inWholeMilliseconds)) }
   }
+
+  /**
+   * Un errore che nemmeno il parcheggio di un elemento ha potuto assorbire (il diario o il piano che non rispondono): lo stato del motore
+   * non resta "in corso" per sempre, diventa [BackupProblemCode.UNEXPECTED] e l'eccezione risale a chi guida il lavoro (`:app` salva il
+   * problema e non riprogramma all'infinito). L'annullamento e `Error` passano come sono.
+   */
+  private suspend fun <T> closingOnError(block: suspend () -> T): T = try {
+    block()
+  } catch (e: CancellationException) {
+    throw e
+  } catch (e: Exception) {
+    GalleryLog.e(TAG) { "giro interrotto da un errore inatteso (${e::class.java.simpleName})" }
+    state.value = BackupStatus.Problem(BackupProblemCode.UNEXPECTED, 0)
+    throw e
+  }
+
+  /** Il cancello chiuso come fermata del giro: la pausa dell'utente (R4) e' un "Ferma", ogni altra ragione e' del cancello. */
+  private fun haltFor(gateState: BackupGateState): Halt =
+    if (gateState == BackupGateState.PAUSED) Halt(RunStop.STOPPED, null) else Halt(RunStop.GATE, gateState.problem)
 
   /**
    * I candidati nuovi del piano diventano elementi `PLANNED` (D3): solo dati locali, solo destinazioni dentro le radici ammesse. Il piano
@@ -213,7 +246,22 @@ class SafeUploadEngine(
     if (fresh.isEmpty()) return
     var refused = 0
     val items = fresh.mapNotNull { c ->
-      val destination = planner.destination(c, device)
+      val destination = try {
+        planner.destination(c, device)
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        // R1: un media la cui destinazione non si costruisce non ferma il piano degli altri: porta il segno e il piano lo salta.
+        GalleryLog.e(TAG) { "destinazione non costruita (${e::class.java.simpleName}): media fermo con ${BackupProblemCode.UNEXPECTED.code}" }
+        try {
+          catalog.markProblem(c.mediaId, BackupProblemCode.UNEXPECTED)
+        } catch (marking: CancellationException) {
+          throw marking
+        } catch (_: Exception) {
+          GalleryLog.w(TAG) { "segno del problema non scritto" }
+        }
+        return@mapNotNull null
+      }
       if (!config.allows(destination)) {
         refused++
         return@mapNotNull null
@@ -230,8 +278,13 @@ class SafeUploadEngine(
   /** Il lavoro di un giro: gli elementi aperti del diario, al piu' [UploadConfig.parallel] in volo. */
   private suspend fun drive(round: Round): BackupRunResult {
     val open = store.itemsToResume(RESUME_LIMIT).filter { it.kind == UploadKind.NEW_COPY || (config.driveGuardCopies && it.kind == UploadKind.GUARD_COPY) }
-    val mine = if (round.kind == null) open else open.filter { item -> round.describe(item)?.let { BackupKind.of(it.kind) == round.kind } ?: true }
+    val ofKind = if (round.kind == null) open else open.filter { item -> round.describe(item)?.let { BackupKind.of(it.kind) == round.kind } ?: true }
+    // R7: l'area privata puo' cambiare a motore costruito (l'admin corregge la configurazione). L'elemento di un'altra share aspetta: niente
+    // si scrive nella share di prima, ma non ferma neppure gli elementi della share di adesso.
+    val (mine, foreign) = ofKind.partition { it.share.equals(share, ignoreCase = true) }
+    if (foreign.isNotEmpty()) GalleryLog.w(TAG) { "elementi di un'altra area: ${foreign.size} aspettano (la share non e' piu' quella del motore)" }
     val queue = WorkQueue(round, mine)
+    repeat(foreign.size) { queue.park() }
     round.publishRunning(queue)
     coroutineScope {
       repeat(config.parallel) { launch { worker(round, queue) } }
@@ -268,7 +321,7 @@ class SafeUploadEngine(
       val item = store.item(taken.id)?.takeIf { !it.state.terminal } ?: continue
       val gateState = gate.stateOf(item.share)
       if (!gateState.open) {
-        round.stopWith(RunStop.GATE, gateState.problem)
+        round.stopForGate(gateState)
         queue.park()
         return
       }
@@ -282,7 +335,16 @@ class SafeUploadEngine(
     var item = start
     var steps = 0
     while (true) {
-      when (val step = advance(round, item)) {
+      val step = try {
+        advance(round, item)
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        // R1: un errore inatteso di questo elemento non ferma il giro degli altri.
+        parkOnError(round, item, e)
+        return
+      }
+      when (step) {
         is Step.Next -> {
           item = step.item
           if (item.state.terminal) {
@@ -314,13 +376,51 @@ class SafeUploadEngine(
       }
       val gateState = gate.stateOf(item.share)
       if (!gateState.open) {
-        round.stopWith(RunStop.GATE, gateState.problem)
+        round.stopForGate(gateState)
         queue.park()
         return
       }
       // L'altro file in volo va avanti (D11).
       yield()
     }
+  }
+
+  /**
+   * R1 (difesa in profondita'): un'eccezione inattesa di un solo elemento. L'elemento si **parcheggia**: `FAILED` con
+   * [BackupProblemCode.UNEXPECTED] e il segno sul media (che esce dai candidati finche' l'utente non tocca "Riprova"); non torna per
+   * primo a ogni giro (il diario riprende solo gli elementi aperti) e il giro continua con gli altri. Il proprio temporaneo, se c'e', si
+   * toglie senza insistere (comunque la pulizia di D33 lo toglie dopo un giorno). Se nemmeno il diario riesce a scrivere il parcheggio
+   * l'errore non e' piu' di un elemento: risale e il giro intero si chiude ([closingOnError]).
+   */
+  private suspend fun parkOnError(round: Round, item: BackupItem, error: Exception) {
+    GalleryLog.e(TAG) { "errore inatteso (${error::class.java.simpleName}): elemento fermo con ${BackupProblemCode.UNEXPECTED.code}" }
+    val stored = store.item(item.id)
+    if (stored != null && stored.state.terminal) {
+      // L'elemento era gia' arrivato a un'uscita: niente da parcheggiare.
+      round.count(stored.state)
+      return
+    }
+    val fresh = stored ?: item
+    val temp = fresh.temp
+    if (temp != null && fresh.state in TEMP_STATES) {
+      try {
+        ops.deleteOwnTemp(fresh.share, temp, config.purpose)
+      } catch (e: CancellationException) {
+        throw e
+      } catch (_: Exception) {
+        GalleryLog.w(TAG) { "temporaneo non tolto dopo l'errore: lo togliera' la pulizia" }
+      }
+    }
+    try {
+      catalog.markProblem(fresh.mediaId, BackupProblemCode.UNEXPECTED)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (_: Exception) {
+      GalleryLog.w(TAG) { "segno del problema non scritto" }
+    }
+    dropRaw(fresh)
+    store.update(fresh.copy(state = UploadState.FAILED, problem = BackupProblemCode.UNEXPECTED))
+    round.count(UploadState.FAILED)
   }
 
   private suspend fun advance(round: Round, item: BackupItem): Step = when (item.kind) {
@@ -360,7 +460,7 @@ class SafeUploadEngine(
 
   // --- PLANNED: lettura completa dal telefono, hash e preparazione dagli stessi byte (D10) ------------------------------------------
 
-  private class PhoneRead(val sha256: Sha256, val quickHash: QuickHash, val prepared: PreparedUpload?, val memory: ByteArray?)
+  private class PhoneRead(val sha256: Sha256, val quickHash: QuickHash, val prepared: PreparedUpload?, val memory: ByteArray?, val endsAtSize: Boolean)
 
   private suspend fun readPhone(round: Round, item: BackupItem): Step {
     val ref = item.phone ?: return Step.Wait()
@@ -371,7 +471,7 @@ class SafeUploadEngine(
     val file = when (val opened = phone.open(ref)) {
       PhoneOpen.Stale -> return refreshPhone(round, item)
       PhoneOpen.Gone -> return gone(round, item, lost = true)
-      is PhoneOpen.Denied -> return Step.Stop(RunStop.PHONE, opened.reason.problem)
+      is PhoneOpen.Denied -> return denied(opened.reason)
       is PhoneOpen.Opened -> opened.file
     }
     file.use {
@@ -379,12 +479,15 @@ class SafeUploadEngine(
       if (file.stamp != expected) return gone(round, item, lost = false)
       val read = round.readLane.withPermit { withContext(readContext()) { readAndPrepare(item, file, description) } }
         ?: return afterPhoneFailure(round, item)
+      // R6: il file continua oltre la dimensione del MediaStore (rimasto indietro): i byte letti sono un prefisso, non la versione. Come un
+      // file riscritto (E-B15): la versione non si salva da qui, quella nuova avra' il suo elemento quando il MediaStore l'avra' vista.
+      if (!read.endsAtSize) return gone(round, item, lost = false)
       // Il timbro uguale prima e dopo la lettura (§2.2): un file riscritto a meta' non e' la versione.
       when (val after = phone.lookup(ref)) {
         is PhoneLookup.Present -> if (after.stamp != expected) return gone(round, item, lost = false)
         PhoneLookup.Gone -> return gone(round, item, lost = true)
         PhoneLookup.Stale -> return refreshPhone(round, item)
-        is PhoneLookup.Denied -> return Step.Stop(RunStop.PHONE, after.reason.problem)
+        is PhoneLookup.Denied -> return denied(after.reason)
       }
       when (catalog.recordFullHash(item.mediaId, item.versionId, read.sha256)) {
         HashRecord.RECORDED, HashRecord.SAME -> Unit
@@ -407,11 +510,12 @@ class SafeUploadEngine(
       null
     } ?: return null
     var prepared: PreparedUpload? = null
-    if (prepare) {
+    // Un file che continua oltre la dimensione del MediaStore (R6) non e' la versione: niente si prepara dai suoi byte.
+    if (prepare && read.endsAtSize) {
       val subject = UploadSubject(item.mediaId, item.versionId, item.size, read.sha256, read.quickHash, description)
       prepared = indexing.prepare(subject, read.memory?.let { InMemoryMediaBytes(it) } ?: file.bytes)
     }
-    return PhoneRead(read.sha256, read.quickHash, prepared, read.memory)
+    return PhoneRead(read.sha256, read.quickHash, prepared, read.memory, read.endsAtSize)
   }
 
   private fun readContext(): CoroutineContext = if (foreground()) lowPriority() else EmptyCoroutineContext
@@ -442,8 +546,21 @@ class SafeUploadEngine(
         else -> Step.Next(item)
       }
       PhoneLookup.Stale -> refreshPhone(round, item)
-      is PhoneLookup.Denied -> Step.Stop(RunStop.PHONE, now.reason.problem)
+      is PhoneLookup.Denied -> denied(now.reason)
     }
+  }
+
+  /**
+   * Il telefono nega i byte (R5). `NOT_SELECTED` ("foto selezionate", E-P1) riguarda **una riga sola**: quell'elemento aspetta (il diario
+   * tiene le righe che non vede piu', il piano le propone ancora) e le foto scelte vanno avanti. I rifiuti globali (i permessi dei media,
+   * la posizione delle foto) fermano il giro: nessun altro elemento andrebbe meglio.
+   */
+  private fun denied(reason: PhoneDenied): Step {
+    if (reason == PhoneDenied.NOT_SELECTED) {
+      GalleryLog.d(TAG) { "riga non fra le foto selezionate: l'elemento aspetta" }
+      return Step.Wait()
+    }
+    return Step.Stop(RunStop.PHONE, reason.problem)
   }
 
   /** `GONE` (E-B4, E-B15): prima il proprio temporaneo incompleto (citato dal diario finche' l'elemento e' aperto), poi l'uscita. */
@@ -529,13 +646,13 @@ class SafeUploadEngine(
     val file = when (val opened = phone.open(ref)) {
       PhoneOpen.Stale -> return refreshPhone(round, item)
       PhoneOpen.Gone -> return gone(round, item, lost = true)
-      is PhoneOpen.Denied -> return Step.Stop(RunStop.PHONE, opened.reason.problem)
+      is PhoneOpen.Denied -> return denied(opened.reason)
       is PhoneOpen.Opened -> opened.file
     }
     val pumped = file.use {
       // D5, E-B15: il file del telefono e' cambiato prima che il temporaneo fosse completo: si ricomincia da zero, con l'elemento della
-      // versione nuova (questi byte non sono piu' la versione).
-      if (file.stamp != item.expected) return gone(round, item, lost = false)
+      // versione nuova (questi byte non sono piu' la versione). Anche se e' piu' lungo di cio' che dice il MediaStore (R6).
+      if (file.stamp != item.expected || file.bytes.size != item.size) return gone(round, item, lost = false)
       round.uploadLane.withPermit { writeTemp(round, item, temp, file.bytes) }
     }
     return afterPump(round, pumped)
@@ -876,7 +993,7 @@ class SafeUploadEngine(
           } catch (_: IOException) {
             null
           }
-          if (read == null || read.sha256 != subject.sha256) null else indexing.prepare(subject, read.memory?.let { InMemoryMediaBytes(it) } ?: file.bytes)
+          if (read == null || !read.endsAtSize || read.sha256 != subject.sha256) null else indexing.prepare(subject, read.memory?.let { InMemoryMediaBytes(it) } ?: file.bytes)
         }
       }
     }
@@ -1001,6 +1118,12 @@ class SafeUploadEngine(
 
     fun stopWith(stop: RunStop, problem: BackupProblemCode?) {
       halt.compareAndSet(null, Halt(stop, problem))
+    }
+
+    /** Il cancello si e' chiuso: la ragione di [gateState] ferma il giro ([haltFor]). */
+    fun stopForGate(gateState: BackupGateState) {
+      val h = haltFor(gateState)
+      stopWith(h.stop, h.problem)
     }
 
     /** Si puo' continuare? "Ferma", tempo del giro e regole della tappa; la prima ragione vince. */

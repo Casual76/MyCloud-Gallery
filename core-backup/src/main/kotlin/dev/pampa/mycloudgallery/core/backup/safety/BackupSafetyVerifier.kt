@@ -236,7 +236,10 @@ class BackupSafetyVerifier(
   companion object {
     const val DEFAULT_PAGE_SIZE: Int = 50
 
-    /** Il backup non c'e': niente da verificare. Congelamento, scritture ferme e sola lettura non fermano una lettura. */
+    /**
+     * Il backup non c'e': niente da verificare. Congelamento, scritture ferme, sola lettura e la pausa dell'utente ([BackupGateState.PAUSED],
+     * R4 della revisione 5A: ferma chi scrive, non chi legge) non fermano una lettura.
+     */
     private val CLOSED_FOR_VERIFY = setOf(BackupGateState.NOT_READY, BackupGateState.NO_PRIVATE_AREA, BackupGateState.TEST_ONLY)
   }
 }

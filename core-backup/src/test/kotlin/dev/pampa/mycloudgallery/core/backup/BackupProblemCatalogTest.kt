@@ -49,12 +49,17 @@ class BackupProblemCatalogTest {
     assertThat(BackupProblemCode.entries.filter { it.marksMedia })
       .containsExactly(
         BackupProblemCode.LOST_BEFORE_BACKUP, BackupProblemCode.VERIFY_FAILED, BackupProblemCode.UNREADABLE, BackupProblemCode.COMMON_COPY_LOST,
+        BackupProblemCode.UNEXPECTED,
       )
   }
 
   @Test
   fun cancelloETelefonoHannoIlLoroCodice() {
-    assertThat(BackupGateState.entries.filter { !it.open && it != BackupGateState.NOT_READY }.map { it.problem }).doesNotContain(null)
+    // NOT_READY (famiglia non pronta) e PAUSED ("Ferma" dell'utente, R4 della revisione 5A) non sono problemi: nessun codice.
+    val withoutProblem = setOf(BackupGateState.NOT_READY, BackupGateState.PAUSED)
+    assertThat(BackupGateState.entries.filter { !it.open && it !in withoutProblem }.map { it.problem }).doesNotContain(null)
+    assertThat(BackupGateState.PAUSED.problem).isNull()
+    assertThat(BackupGateState.PAUSED.open).isFalse()
     assertThat(BackupGateState.TEST_ONLY.problem).isEqualTo(BackupProblemCode.TEST_ONLY)
     assertThat(PhoneDenied.entries.map { it.problem })
       .containsExactly(BackupProblemCode.MEDIA_PERMISSION, BackupProblemCode.MEDIA_LOCATION, BackupProblemCode.PARTIAL_ACCESS)

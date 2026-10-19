@@ -74,6 +74,14 @@ enum class BackupProblemCode(
    * privata, senza piu' la copia del telefono (E-B13 con Q4 b). Resta solo il cestino del NAS, per 30 giorni.
    */
   COMMON_COPY_LOST("common_copy_lost", listOf(BackupAction.OPEN_NAS_TRASH), setOf("E-B13", "L44"), marksMedia = true),
+
+  /**
+   * R1 della revisione 5A (difesa in profondita'): un errore che nessuna regola prevedeva (un nome rifiutato, un diario che dice di no,
+   * un'eccezione del NAS non tradotta). L'elemento che lo ha provocato si **parcheggia** (`FAILED`, mai "al sicuro") e il giro continua con
+   * gli altri: un solo file non ferma piu' il backup di tutti. Il segno toglie il media dai candidati; "Riprova" lo rimette in gioco. Con il
+   * numero 0 e' l'errore di un intero lavoro (`BackupWork`, `BackupJobService`): la pagina non resta "in corso" e non lo ripete all'infinito.
+   */
+  UNEXPECTED("unexpected", listOf(BackupAction.RETRY, BackupAction.DIAGNOSTICS), setOf("R1"), marksMedia = true),
   PHONE_STORAGE_LOW("phone_storage_low", listOf(BackupAction.FREE_SPACE), setOf("E-P3")),
   STALE("stale", listOf(BackupAction.BATTERY_GUIDE), setOf("E-P15", "E-P2")),
   WAITING_UNLOCK("waiting_unlock", emptyList(), setOf("E-P13")),

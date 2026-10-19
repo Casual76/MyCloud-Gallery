@@ -155,6 +155,62 @@ object BackupPaths {
    */
   fun fileName(raw: String): String = component(raw, FALLBACK_FILE)
 
+  /**
+   * Il nome "nome (n)" del tentativo [attempt] (0 = il nome previsto, 1 = "nome (2)", 2 = "nome (3)"...) nella stessa cartella di
+   * [planned]: l'estensione resta (E-B3, come i nomi alternativi della 4B). **Il punto comune** del motore, del guardiano e
+   * dell'esecutore di riferimento (R1 della revisione 5A).
+   *
+   * Un nome che e' gia' di 252-255 byte non puo' ricevere " (2)" senza superare i 255 byte UTF-8 di un componente (`SharePath` lo
+   * rifiuta con una violazione, non con un rifiuto qualunque): allora si accorcia la **radice** del nome a un confine di carattere
+   * (mai una coppia surrogata o un carattere multibyte a meta', come [truncate]), tenendo l'estensione e il suffisso. Un nome che sta
+   * gia' nei limiti non cambia. Lo stesso ingresso da' sempre lo stesso nome: il diario lo scrive prima di pubblicare e lo ritrova.
+   */
+  fun alternateName(planned: SharePath, attempt: Int): SharePath {
+    require(attempt >= 0) { "Tentativo negativo." }
+    if (attempt == 0) return planned
+    val name = planned.name
+    val suffix = " (${attempt + 1})"
+    val dot = name.lastIndexOf('.')
+    var alt = if (dot > 0) "${name.substring(0, dot)}$suffix${name.substring(dot)}" else "$name$suffix"
+    if (utf8Size(alt) > TrustLimits.MAX_COMPONENT_UTF8_BYTES) {
+      // Come `truncate`: l'estensione resta se e' corta, altrimenti e' parte del nome e si accorcia con lui.
+      val extension = if (dot > 0 && name.length - dot <= MAX_EXTENSION_CHARS) name.substring(dot) else ""
+      val stem = name.substring(0, name.length - extension.length)
+      val room = TrustLimits.MAX_COMPONENT_UTF8_BYTES - utf8Size(suffix) - utf8Size(extension)
+      alt = cutToBytes(stem, room) + suffix + extension
+    }
+    // Ultima difesa: un nome che `SharePath` rifiuterebbe comunque si ripulisce in modo deterministico (mai una violazione al passo dopo).
+    val safe = if (SharePath.isValidComponent(alt)) alt else component(alt, FALLBACK_FILE)
+    return planned.parent()?.child(safe) ?: SharePath.of(safe)
+  }
+
+  /**
+   * I primi caratteri di [text] che stanno in [maxBytes] byte UTF-8, a un confine di **carattere** (un punto di codice intero: mai una
+   * coppia surrogata o una sequenza multibyte spezzata). Vuoto se [maxBytes] non basta nemmeno per un carattere. Il punto comune di
+   * [truncate], di [alternateName] e di `DeviceFolderPolicy.freeName`.
+   */
+  internal fun cutToBytes(text: String, maxBytes: Int): String {
+    var bytes = 0
+    var end = 0
+    while (end < text.length) {
+      val cp = text.codePointAt(end)
+      val size = utf8Size(cp)
+      if (bytes + size > maxBytes) break
+      bytes += size
+      end += Character.charCount(cp)
+    }
+    return text.substring(0, end)
+  }
+
+  private fun utf8Size(text: String): Int = text.toByteArray(Charsets.UTF_8).size
+
+  private fun utf8Size(codePoint: Int): Int = when {
+    codePoint < 0x80 -> 1
+    codePoint < 0x800 -> 2
+    codePoint < 0x10000 -> 3
+    else -> 4
+  }
+
   /** Un nome qualunque ripulito per diventare **un** componente valido di `SharePath` (o [fallback]). */
   fun component(raw: String, fallback: String): String {
     if (SharePath.isValidComponent(raw)) return raw
@@ -208,11 +264,7 @@ object BackupPaths {
   private fun truncate(name: String): String {
     val dot = name.lastIndexOf('.')
     val extension = if (dot > 0 && name.length - dot <= MAX_EXTENSION_CHARS) name.substring(dot) else ""
-    var stem = name.substring(0, name.length - extension.length)
-    val limit = TrustLimits.MAX_COMPONENT_UTF8_BYTES
-    while (stem.isNotEmpty() && (stem + extension).toByteArray(Charsets.UTF_8).size > limit) {
-      stem = stem.substring(0, stem.offsetByCodePoints(stem.length, -1))
-    }
+    val stem = cutToBytes(name.substring(0, name.length - extension.length), TrustLimits.MAX_COMPONENT_UTF8_BYTES - utf8Size(extension))
     return trimTail(stem) + extension
   }
 }

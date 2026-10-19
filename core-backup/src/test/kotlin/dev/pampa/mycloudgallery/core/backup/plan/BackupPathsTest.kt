@@ -236,4 +236,80 @@ class BackupPathsTest {
       assertThat(destination.components.take(4)).containsExactly("Backup", "S25 di Mario", "2026", "10").inOrder()
     }
   }
+
+  // --- R1 della revisione 5A: il nome "nome (n)" resta dentro i 255 byte ---------------------------------------------------------
+
+  private fun utf8(text: String) = text.toByteArray(Charsets.UTF_8).size
+
+  private fun nameOf(total: Int, filler: String, extension: String): String {
+    val sb = StringBuilder()
+    while (utf8(sb.toString()) + utf8(filler) <= total - utf8(extension)) sb.append(filler)
+    while (utf8(sb.toString()) < total - utf8(extension)) sb.append('a')
+    return sb.toString() + extension
+  }
+
+  @Test
+  fun nomeAlternativo_unNomeCheCiStaNonCambiaForma() {
+    fun alt(path: String, attempt: Int) = BackupPaths.alternateName(SharePath.parse(path), attempt).value
+    assertThat(alt("Backup/S25/2026/10/IMG_1.jpg", 0)).isEqualTo("Backup/S25/2026/10/IMG_1.jpg")
+    assertThat(alt("Backup/S25/2026/10/IMG_1.jpg", 1)).isEqualTo("Backup/S25/2026/10/IMG_1 (2).jpg")
+    assertThat(alt("Backup/S25/2026/10/IMG_1.jpg", 2)).isEqualTo("Backup/S25/2026/10/IMG_1 (3).jpg")
+    assertThat(alt("A/LEGGIMI", 2)).isEqualTo("A/LEGGIMI (3)")
+    // Un nome che comincia con un punto non ha estensione: il suffisso va in fondo.
+    assertThat(alt("A/.nascosto", 1)).isEqualTo("A/.nascosto (2)")
+    assertThat(alt("IMG.jpg", 1)).isEqualTo("IMG (2).jpg")
+  }
+
+  @Test
+  fun nomeAlternativo_daDuecentocinquantaADuecentocinquantacinqueByte_staNei255_senzaSpezzareUnCarattere() {
+    val fillers = listOf("a", "é", "あ", "😀", "日本語", "👨‍👩‍👧")
+    val extensions = listOf("", ".jpg", ".heic", ".mp4")
+    for (total in 240..255) {
+      for (filler in fillers) {
+        for (extension in extensions) {
+          val name = nameOf(total, filler, extension)
+          if (utf8(name) > TrustLimits.MAX_COMPONENT_UTF8_BYTES || !SharePath.isValidComponent(name)) continue
+          val planned = SharePath.parse("Backup/S25/2026/10/$name")
+          for (attempt in listOf(1, 2, 8, 98, 998)) {
+            val alt = BackupPaths.alternateName(planned, attempt)
+            val label = "${utf8(name)} byte, '${filler.take(2)}', '$extension', tentativo $attempt"
+            assertWithMessage(label).that(utf8(alt.name)).isAtMost(TrustLimits.MAX_COMPONENT_UTF8_BYTES)
+            assertWithMessage(label).that(alt.name).endsWith(" (${attempt + 1})$extension")
+            assertWithMessage(label).that(alt.parent()).isEqualTo(planned.parent())
+            // Mai una coppia surrogata a meta': il nome e' UTF-16 valido (andata e ritorno in UTF-8 senza perdite).
+            assertWithMessage(label).that(String(alt.name.toByteArray(Charsets.UTF_8), Charsets.UTF_8)).isEqualTo(alt.name)
+            // Lo stesso ingresso da' sempre lo stesso nome (il diario lo ritrova) e tentativi diversi danno nomi diversi.
+            assertWithMessage(label).that(BackupPaths.alternateName(planned, attempt)).isEqualTo(alt)
+            assertWithMessage(label).that(BackupPaths.alternateName(planned, attempt + 1)).isNotEqualTo(alt)
+          }
+        }
+      }
+    }
+  }
+
+  @Test
+  fun nomeAlternativo_unaEstensioneLunghissimaFaParteDelNomeEsiAccorcia() {
+    val planned = SharePath.parse("A/x." + "y".repeat(251))
+    assertThat(utf8(planned.name)).isEqualTo(253)
+    val alt = BackupPaths.alternateName(planned, 1)
+    assertThat(utf8(alt.name)).isAtMost(TrustLimits.MAX_COMPONENT_UTF8_BYTES)
+    assertThat(alt.name).endsWith(" (2)")
+    assertThat(BackupPaths.alternateName(planned, 1)).isEqualTo(alt)
+  }
+
+  @Test
+  fun nomeAlternativo_ilConfineDiCaratterePerOgniLunghezza() {
+    val text = "写😀é" + "a".repeat(5)
+    for (limit in 0..utf8(text) + 2) {
+      val cut = BackupPaths.cutToBytes(text, limit)
+      assertThat(utf8(cut)).isAtMost(maxOf(limit, 0))
+      assertThat(text).startsWith(cut)
+      assertThat(String(cut.toByteArray(Charsets.UTF_8), Charsets.UTF_8)).isEqualTo(cut)
+      // E' il piu' lungo possibile: il carattere dopo non ci sta piu'.
+      if (cut.length < text.length) {
+        val next = text.substring(cut.length, cut.length + Character.charCount(text.codePointAt(cut.length)))
+        assertThat(utf8(cut) + utf8(next)).isGreaterThan(limit)
+      }
+    }
+  }
 }

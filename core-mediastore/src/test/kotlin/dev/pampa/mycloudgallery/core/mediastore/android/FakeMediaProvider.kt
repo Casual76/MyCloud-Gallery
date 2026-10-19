@@ -31,6 +31,9 @@ class FakeMediaProvider : ContentProvider() {
   private lateinit var db: SQLiteDatabase
   private val files = HashMap<Long, File>()
 
+  /** Il file di una riga: un test lo allunga senza dirlo al provider (un'app che scrive e non avvisa il MediaStore, R6 della revisione 5A). */
+  fun fileOf(id: Long): File? = files[id]
+
   val versions = HashMap<String, String>()
   val generations = HashMap<String, Long>()
 

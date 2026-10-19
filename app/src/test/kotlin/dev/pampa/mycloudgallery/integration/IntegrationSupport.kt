@@ -237,8 +237,19 @@ class DeviceContext(base: Context, private val root: File) : ContextWrapper(base
   override fun databaseList(): Array<String> = emptyArray()
 }
 
-/** Un dispositivo della famiglia nei test: piattaforma finta, grafo vero. */
-class TestDevice(base: Context, root: File, val platform: TestPlatform) {
+/**
+ * Un dispositivo della famiglia nei test: piattaforma finta, grafo vero.
+ *
+ * [flags]: di serie quelle di una build **di debug** (le funzioni della release, ma senza R2): il NAS di prova ha l'account `test`, e in
+ * release un account di prova non fa scrivere il backup in nessuna share (R2 della revisione 5A, dove D13 non c'e'). Per provare la release
+ * vera si passa `FeatureFlags.RELEASE`.
+ */
+class TestDevice(
+  base: Context,
+  root: File,
+  val platform: TestPlatform,
+  flags: FeatureFlags = FeatureFlags.forBuild(debugBuild = true, nasLibrary = true),
+) {
   val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
   val scheduler = RecordingScheduler()
   val workCancelled = AtomicLong(0)
@@ -247,7 +258,7 @@ class TestDevice(base: Context, root: File, val platform: TestPlatform) {
     context = context,
     scope = scope,
     platform = platform,
-    flags = FeatureFlags.forBuild(debugBuild = false),
+    flags = flags,
     appVersion = "0.1.0",
     schedulerFactory = { scheduler },
     work = WorkCanceller { workCancelled.incrementAndGet() },

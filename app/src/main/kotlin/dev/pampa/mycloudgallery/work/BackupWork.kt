@@ -210,6 +210,35 @@ sealed interface BackupFollowUp {
   }
 }
 
+/** L'esito di una tappa lanciata con la difesa di R1 ([attemptStage]): il valore, oppure l'errore inatteso gia' registrato. */
+internal sealed interface StageAttempt<out T> {
+  class Done<T>(val value: T) : StageAttempt<T>
+
+  data object Failed : StageAttempt<Nothing>
+}
+
+/**
+ * R1 della revisione 5A: una tappa o un lavoro del backup che finisce con un'eccezione che nessuno prevedeva **non** diventa un successo
+ * silenzioso (`Result.success()` senza traccia) ne' una ripianificazione all'infinito del lavoro dell'utente (`RESCHEDULE`): l'errore si
+ * registra come problema visibile ([onError], di norma `BackupGraph.noteUnexpectedError`: la pagina dice `UNEXPECTED`, "Riprova" lo toglie) e
+ * il chiamante chiude il lavoro. L'annullamento passa (il lavoro e' stato fermato) e `Error` non si cattura. Pura, provata su JVM.
+ */
+internal suspend fun <T> attemptStage(tag: String, onError: suspend () -> Unit, block: suspend () -> T): StageAttempt<T> = try {
+  StageAttempt.Done(block())
+} catch (e: kotlinx.coroutines.CancellationException) {
+  throw e
+} catch (e: Exception) {
+  GalleryLog.e(tag, e) { "tappa non riuscita" }
+  try {
+    onError()
+  } catch (c: kotlinx.coroutines.CancellationException) {
+    throw c
+  } catch (_: Exception) {
+    GalleryLog.w(tag) { "problema non salvato" }
+  }
+  StageAttempt.Failed
+}
+
 /** La parte comune dei lavori del backup: niente senza NAS, niente nella variante di misura, tutto dentro `runIfActive`. */
 abstract class BackupWorker(
   appContext: Context,
@@ -228,13 +257,11 @@ abstract class BackupWorker(
   final override suspend fun doWork(): Result {
     val backup = gallery.backup ?: return Result.success()
     if (!gallery.backgroundWorkAllowed) return Result.success()
-    val followUp = try {
-      gallery.runIfActive { stage(BackupStages(graph, backup)) }
-    } catch (e: kotlinx.coroutines.CancellationException) {
-      throw e
-    } catch (e: Exception) {
-      GalleryLog.e(tag, e) { "tappa non riuscita" }
-      return Result.success()
+    // R1: un errore inatteso si salva come problema visibile e il lavoro finisce `failure` (mai un successo silenzioso, mai un `retry` a oltranza:
+    // il lavoro dopo lo chiede la lettura del telefono o il giro periodico, e "Riprova" toglie il segno).
+    val followUp = when (val attempt = attemptStage(tag, onError = { backup.noteUnexpectedError() }) { gallery.runIfActive { stage(BackupStages(graph, backup)) } }) {
+      StageAttempt.Failed -> return Result.failure()
+      is StageAttempt.Done -> attempt.value
     }
     GalleryLog.d(tag) { "tappa: ${followUp?.javaClass?.simpleName}" }
     when (followUp) {

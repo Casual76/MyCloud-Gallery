@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.work
 
 import dev.pampa.mycloudgallery.backup.BackupGraph
+import dev.pampa.mycloudgallery.core.backup.contract.BackupGateState
 import dev.pampa.mycloudgallery.core.backup.contract.BackupKind
 import dev.pampa.mycloudgallery.core.backup.contract.BackupProblemCode
 import dev.pampa.mycloudgallery.core.backup.contract.BackupRunResult
@@ -30,6 +31,7 @@ import dev.pampa.mycloudgallery.core.rules.traffic.TrafficLedger
 import dev.pampa.mycloudgallery.graph.AppGraph
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.CancellationException
 
 /**
  * Le regole di una corsa "Proteggi subito le foto nuove" (D34, Q7 (a)): le impostazioni dell'utente con la sola `PHOTO_BACKUP` sostituita
@@ -73,7 +75,8 @@ class SafetyStageOutcome(
  * - [photos] e [videos]: `PHOTO_BACKUP` (leggera) e `VIDEO_BACKUP` (pesante, solo Wi-Fi di casa); [quick]: D34 con le sue regole;
  * - [user]: il primo backup e "Fai ora", `UserInitiated` (scavalca fascia e carica; sui dati mobili chiede conferma, mai a caso);
  * - [safety]: il guardiano (D9), poi le verifiche, `FULL_HASH` e la rotazione (D14) con la regola dell'attivita' del tipo di media: le
- *   copie leggere sotto `PHOTO_BACKUP`, quelle pesanti sotto `VIDEO_BACKUP`. Le verifiche leggono soltanto: non vedono il congelamento.
+ *   copie leggere sotto `PHOTO_BACKUP`, quelle pesanti sotto `VIDEO_BACKUP`. Le verifiche leggono soltanto: non vedono il congelamento
+ *   ne' la pausa dell'utente (R4); girano anche se il guardiano fallisce (R1, [guardThenVerify]).
  */
 class BackupStages(private val graph: AppGraph, private val backup: BackupGraph) {
 
@@ -104,9 +107,13 @@ class BackupStages(private val graph: AppGraph, private val backup: BackupGraph)
     }
     // Il primo backup lo avvia l'utente (cartella del dispositivo, D7); la scansione dell'area privata deve essere finita (§2.11 punto 1).
     if (backup.settings.deviceFolder.value == null || !backup.privateAreaScanned()) return null
-    // Il cancello chiuso (D12, emergenza, congelamento, sola lettura) non e' "tutto al sicuro": non si tocca la memoria.
+    // Il cancello chiuso (D12, emergenza, congelamento, sola lettura) non e' "tutto al sicuro": non si tocca la memoria. La pausa dell'utente
+    // (R4) e' un "Ferma": il giro dice `STOPPED`, e nemmeno una corsa del lavoro a tappe la scavalca.
     val gate = backup.gate.stateOf(parts.share)
-    if (!gate.open) return BackupStageOutcome(StageOutcome.Finished(StageStats(0, 0L, 0L, Duration.ZERO, resumed = false)), BackupRunResult.nothing(RunStop.GATE, gate.problem))
+    if (!gate.open) {
+      val stop = if (gate == BackupGateState.PAUSED) RunStop.STOPPED else RunStop.GATE
+      return BackupStageOutcome(StageOutcome.Finished(StageStats(0, 0L, 0L, Duration.ZERO, resumed = false)), BackupRunResult.nothing(stop, gate.problem))
+    }
     backup.refreshArea()
     val outcome = backup.exclusive {
       // Niente da fare (nessun media nuovo in una sorgente, niente a meta' nel diario): il backup e' al passo.
@@ -185,26 +192,38 @@ class BackupStages(private val graph: AppGraph, private val backup: BackupGraph)
       var problem: BackupProblemCode? = null
 
       // 1. Il guardiano (D9): copie private dei media la cui sola copia e' nell'area comune. Solo dal catalogo, mai da dati del NAS.
-      if (backup.guardianHasWork()) {
-        val run = staged(WorkRequest.Background(BackgroundActivity.PHOTO_BACKUP, writesToNas = true))
-        stages += run.run({ scope, _ ->
-          val report = parts.guardian.ensure(GuardScope.All, SLICE)
-          created += report.created
-          problem = problem ?: report.problem
-          // La copia lato server non passa dal telefono: nessun traffico da registrare (se ripiega, i byte sono nel conto del giro).
-          scope.record(0)
-          BatchResult(hasMore = report.stoppedBy == RunStop.BUDGET)
-        })
-      }
-
-      // 2. Le verifiche: le copie leggere con la regola delle foto, quelle pesanti con quella dei video.
-      for ((verifier, activity) in listOf(parts.lightVerifier to BackgroundActivity.PHOTO_BACKUP, parts.heavyVerifier to BackgroundActivity.VIDEO_BACKUP)) {
-        val totals = VerifyTotals()
-        stages += verifyStage(verifier, activity, totals)
-        verified += totals.verified
-        mismatched += totals.mismatched
-        problem = problem ?: totals.problem
-      }
+      //    Scrive: con la pausa dell'utente (R4), il congelamento o il cancello chiuso non parte nemmeno. Se fallisce con un errore che
+      //    nessuno prevedeva (R1) lo dice (problema visibile) e le verifiche girano lo stesso.
+      guardThenVerify(
+        guard = {
+          if (backup.gate.stateOf(parts.share).open && backup.guardianHasWork()) {
+            val run = staged(WorkRequest.Background(BackgroundActivity.PHOTO_BACKUP, writesToNas = true))
+            stages += run.run({ scope, _ ->
+              val report = parts.guardian.ensure(GuardScope.All, SLICE)
+              created += report.created
+              problem = problem ?: report.problem
+              // La copia lato server non passa dal telefono: nessun traffico da registrare (se ripiega, i byte sono nel conto del giro).
+              scope.record(0)
+              BatchResult(hasMore = report.stoppedBy == RunStop.BUDGET)
+            })
+          }
+        },
+        onGuardError = { error ->
+          GalleryLog.e(TAG, error) { "guardiano non riuscito" }
+          problem = problem ?: BackupProblemCode.UNEXPECTED
+          backup.noteUnexpectedError()
+        },
+        // 2. Le verifiche: le copie leggere con la regola delle foto, quelle pesanti con quella dei video.
+        verify = {
+          for ((verifier, activity) in listOf(parts.lightVerifier to BackgroundActivity.PHOTO_BACKUP, parts.heavyVerifier to BackgroundActivity.VIDEO_BACKUP)) {
+            val totals = VerifyTotals()
+            stages += verifyStage(verifier, activity, totals)
+            verified += totals.verified
+            mismatched += totals.mismatched
+            problem = problem ?: totals.problem
+          }
+        },
+      )
       backup.kick()
       SafetyStageOutcome(stages, verified, mismatched, created, problem)
     }
@@ -246,6 +265,26 @@ class BackupStages(private val graph: AppGraph, private val backup: BackupGraph)
 
   companion object {
     private const val TAG = "BackupStages"
+
+    /**
+     * R1: il guardiano e poi le verifiche. Un guardiano che fallisce con un'eccezione inattesa (non l'annullamento, non un `Error`) non
+     * toglie le verifiche, che leggono soltanto e servono proprio quando qualcosa non va: [onGuardError] dice l'errore (e lo rende
+     * visibile) e [verify] gira comunque. Pura, provata su JVM.
+     */
+    internal suspend fun guardThenVerify(
+      guard: suspend () -> Unit,
+      onGuardError: suspend (Exception) -> Unit,
+      verify: suspend () -> Unit,
+    ) {
+      try {
+        guard()
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        onGuardError(e)
+      }
+      verify()
+    }
 
     /** Un lotto: abbastanza lungo per lavorare, abbastanza breve per fermarsi presto se le regole cambiano (come i lavori del NAS). */
     val SLICE: Duration = 60.seconds

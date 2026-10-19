@@ -14,6 +14,8 @@
   <string name="settings_backup_waiting">%1$s in coda</string>
   <string name="settings_backup_running">In corso: %1$s di %2$s</string>
   <string name="settings_backup_stopped">Fermo</string>
+  <!-- R4 della revisione 5A: «Ferma» è una pausa; la pagina Backup, la notifica e questa voce dicono la stessa cosa. -->
+  <string name="settings_backup_paused">In pausa</string>
   <string name="settings_backup_problem">C’è qualcosa da controllare</string>
   <string name="settings_backup_pill_check">Da controllare</string>
   <string name="settings_backup_pill_first">Primo backup</string>

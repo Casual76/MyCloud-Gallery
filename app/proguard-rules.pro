@@ -29,6 +29,8 @@
 # cancello ne' fonderlo in un'altra classe (la decisione la tiene core-common/consumer-rules.pro: un membro tenuto non si inlinea): tools/check.ps1 (passo "D12 nella release") legge il
 # bytecode della release (dexdump) e prova che `stateOf` chiama `backupMayWriteTo` e risponde TEST_ONLY. Il campo e la decisione li tiene
 # core-common/consumer-rules.pro.
+# R2 (revisione 5A): lo stesso `stateOf` chiama anche `backupMayWriteAs` (in release un account di prova non scrive in nessuna share, perche'
+# la recinzione del telefono di D13 c'e' solo in debug) e risponde TEST_ONLY: il passo del dexdump lo prova nello stesso modo.
 -keep class dev.pampa.mycloudgallery.backup.AppBackupGate {
     public *** stateOf(java.lang.String);
 }

@@ -37,6 +37,8 @@
   <string name="diag_backup_verify_failed_guide">Alla rilettura i byte sul NAS non coincidono con l\'originale: la copia non conta come al sicuro. «Riprova» rifà la verifica; se persiste, controlla il disco del NAS.</string>
   <string name="diag_backup_unreadable_title">Backup: file del telefono illeggibili</string>
   <string name="diag_backup_unreadable_guide">Il telefono non riesce a leggere questi file (o sono vuoti): non si caricano e non contano come al sicuro. «Riprova» li rilegge.</string>
+  <string name="diag_backup_unexpected_title">Backup: errore inatteso</string>
+  <string name="diag_backup_unexpected_guide">Un errore che l\'app non si aspettava ha fermato un file (o un giro intero): quel file non conta come al sicuro e gli altri vanno avanti. «Riprova» dalla pagina Backup lo rilegge; se si ripete, esporta la Diagnostica per capire dove.</string>
   <string name="diag_backup_common_copy_lost_title">Backup: media spariti dall\'area comune</string>
   <string name="diag_backup_common_copy_lost_guide">La loro unica copia stava nell\'area comune e qualcuno l\'ha tolta prima che l\'app ne facesse una privata. Recuperale dal cestino del NAS (restano 30 giorni).</string>
   <string name="diag_backup_phone_storage_low_title">Backup: memoria del telefono quasi piena</string>

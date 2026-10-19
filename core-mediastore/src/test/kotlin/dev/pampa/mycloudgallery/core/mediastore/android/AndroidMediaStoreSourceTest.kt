@@ -205,6 +205,30 @@ class AndroidMediaStoreSourceTest {
     assertThrows(OriginalBytesUnavailableException::class.java) { runBlocking { source.open(photo) } }
   }
 
+  /**
+   * R6 della revisione 5A: `size` e' la dimensione del momento dell'apertura, `currentSize()` e' un `fstat` di adesso. Un file che cresce
+   * dopo l'apertura (e dopo l'ultima lettura del MediaStore) si vede solo da qui: il backup lo confronta con la dimensione del MediaStore
+   * dopo aver letto, e una copia che sarebbe un prefisso non diventa mai "al sicuro".
+   */
+  @Test
+  fun r6_laDimensioneDiAdessoVedeUnFileCheCresceDopoLApertura() = runBlocking<Unit> {
+    provider.insertRow(1, mediaType = 3, content = FakeMediaContent.mp4(50_000, seed = 7))
+    val video = source.query("external_primary", null, null, 10).first { it.id == 1L }
+    val bytes = source.open(video) as ContentUriMediaBytes
+    try {
+      assertThat(bytes.size).isEqualTo(50_000L)
+      assertThat(bytes.currentSize()).isEqualTo(50_000L)
+      // Il file cresce di 3 KiB mentre e' aperto: la dimensione dell'apertura non cambia, quella di adesso si'.
+      provider.fileOf(1L)!!.appendBytes(ByteArray(3_072) { 9 })
+      assertThat(bytes.size).isEqualTo(50_000L)
+      assertThat(bytes.currentSize()).isEqualTo(53_072L)
+      // La lettura resta dentro la dimensione dell'apertura (contratto di `MediaBytes`): oltre, un intervallo vuoto.
+      assertThat(bytes.read(50_000L until 50_001L)).isEmpty()
+    } finally {
+      bytes.close()
+    }
+  }
+
   @Test
   fun iCambiamentiSiAccorpano() = runTest {
     val emitted = mutableListOf<Unit>()

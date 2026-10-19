@@ -24,12 +24,19 @@ package dev.pampa.mycloudgallery.core.common.featureflags
  *   di prova ([TestShares]); sulle share vere lo stato dice "Backup in prova" e niente si scrive. Come F4-D31 vale in release,
  *   ma in piu' **non si spegne nemmeno in debug**: [forBuild] non ha un parametro per lui. Lo spegne solo l'utente, con la
  *   risposta a Q3 (primo backup vero a fine 5B), cambiando questo file. La decisione per share e' [backupMayWriteTo].
+ * @property backupBlocksTestAccounts R2 della revisione di sicurezza della 5A (`docs/review/5a-fase5a.md`): **in release** un account di
+ *   prova ([TestShares.isTestAccount]) non fa scrivere il backup in **nessuna** share (il cancello risponde `TEST_ONLY`). D13, la recinzione
+ *   del telefono (`DCIM/mcg-prova/` in lettura, `mcg-campo/` in scrittura), esiste solo in debug: senza, la release con `test` o `test2`
+ *   caricherebbe tutta la libreria vera del telefono nella share di prova. Vale `true` in [RELEASE] e `false` nelle build di debug, dove la
+ *   recinzione c'e'. Come D12 e' una protezione: in release non si spegne, `forBuild` non ha un parametro per lui. La decisione e'
+ *   [backupMayWriteAs].
  */
 class FeatureFlags private constructor(
   val wol: Boolean,
   val nasLibrary: Boolean,
   val indexPublishTestSharesOnly: Boolean,
   val backupTestSharesOnly: Boolean,
+  val backupBlocksTestAccounts: Boolean,
 ) {
 
   /**
@@ -40,16 +47,25 @@ class FeatureFlags private constructor(
    */
   fun backupMayWriteTo(share: String): Boolean = !backupTestSharesOnly || TestShares.isTestShare(share)
 
+  /**
+   * R2: il backup puo' scrivere con l'account [account]? Con [backupBlocksTestAccounts] (la release) un account di prova no, in nessuna
+   * share: la recinzione del telefono di D13 non c'e' e tutta la libreria vera finirebbe nella share di prova. Un account non noto (null)
+   * non si puo' dire "non di prova": con la protezione accesa si fallisce chiusi. Spenta (debug, dove D13 recinta) vale sempre.
+   */
+  fun backupMayWriteAs(account: String?): Boolean = !backupBlocksTestAccounts || (account != null && !TestShares.isTestAccount(account))
+
   override fun equals(other: Any?): Boolean =
     other is FeatureFlags && other.wol == wol && other.nasLibrary == nasLibrary &&
-      other.indexPublishTestSharesOnly == indexPublishTestSharesOnly && other.backupTestSharesOnly == backupTestSharesOnly
+      other.indexPublishTestSharesOnly == indexPublishTestSharesOnly && other.backupTestSharesOnly == backupTestSharesOnly &&
+      other.backupBlocksTestAccounts == backupBlocksTestAccounts
 
   override fun hashCode(): Int =
-    ((wol.hashCode() * 31 + nasLibrary.hashCode()) * 31 + indexPublishTestSharesOnly.hashCode()) * 31 + backupTestSharesOnly.hashCode()
+    (((wol.hashCode() * 31 + nasLibrary.hashCode()) * 31 + indexPublishTestSharesOnly.hashCode()) * 31 + backupTestSharesOnly.hashCode()) * 31 +
+      backupBlocksTestAccounts.hashCode()
 
   override fun toString(): String =
     "FeatureFlags(wol=$wol, nasLibrary=$nasLibrary, indexPublishTestSharesOnly=$indexPublishTestSharesOnly, " +
-      "backupTestSharesOnly=$backupTestSharesOnly)"
+      "backupTestSharesOnly=$backupTestSharesOnly, backupBlocksTestAccounts=$backupBlocksTestAccounts)"
 
   companion object {
     /**
@@ -64,6 +80,7 @@ class FeatureFlags private constructor(
       nasLibrary = true,
       indexPublishTestSharesOnly = true,
       backupTestSharesOnly = BACKUP_TEST_SHARES_ONLY,
+      backupBlocksTestAccounts = true,
     )
 
     /**
@@ -86,6 +103,8 @@ class FeatureFlags private constructor(
           // D12: nessun parametro, di proposito. Anche la debug scrive solo nelle share di prova (D13 ci aggiunge la recinzione
           // delle sorgenti del telefono).
           backupTestSharesOnly = BACKUP_TEST_SHARES_ONLY,
+          // R2: in debug la recinzione del telefono di D13 c'e' (DeveloperTools di debug): un account di prova puo' provare il backup.
+          backupBlocksTestAccounts = false,
         )
       }
   }

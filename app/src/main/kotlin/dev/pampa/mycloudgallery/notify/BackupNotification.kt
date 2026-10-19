@@ -7,6 +7,7 @@ import android.content.Intent
 import androidx.core.app.NotificationCompat
 import dev.pampa.mycloudgallery.R
 import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
+import dev.pampa.mycloudgallery.core.backup.contract.StopBy
 import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
 
 /**
@@ -21,13 +22,16 @@ data class BackupProgress(
   val paused: Boolean,
   /** Un giro sta caricando. */
   val running: Boolean,
+  /** R4: l'utente ha messo il backup in pausa ("Ferma") e non e' ancora ripreso: la notifica dice "In pausa" come la pagina. */
+  val userPaused: Boolean = false,
 ) {
   companion object {
     val NONE = BackupProgress(0, 0, paused = false, running = false)
 
     fun of(status: BackupStatus): BackupProgress = when (status) {
       is BackupStatus.Running -> BackupProgress(status.done, status.total, paused = false, running = true)
-      is BackupStatus.Waiting, is BackupStatus.Problem, is BackupStatus.Stopped -> NONE.copy(paused = true)
+      is BackupStatus.Stopped -> NONE.copy(paused = true, userPaused = status.by == StopBy.USER)
+      is BackupStatus.Waiting, is BackupStatus.Problem -> NONE.copy(paused = true)
       else -> NONE
     }
   }
@@ -35,7 +39,7 @@ data class BackupProgress(
 
 /**
  * La notifica dell'avanzamento del backup avviato dall'utente ("Inizia ora", "Fai ora"; UIDT). Il tocco apre l'app (l'intent del
- * launcher, immutabile, senza extra: C17); l'**unica azione** e' "Ferma", che non distrugge niente (il giro si ferma prima dell'elemento
+ * launcher, immutabile, senza extra: C17); l'**unica azione** e' "Ferma" (R4: una **pausa** che dura finche' non tocchi "Riprendi"), che non distrugge niente (il giro si ferma prima dell'elemento
  * successivo, i temporanei restano con il loro punto di ripresa) e arriva solo al ricevitore **non esportato** che il servizio registra
  * mentre lavora (`BackupJobService`): nessun'altra app la puo' mandare.
  */
@@ -48,6 +52,7 @@ object BackupNotification {
     val app = context.applicationContext ?: context
     val text = when {
       stopping -> app.getString(R.string.notify_backup_stopping)
+      progress.userPaused -> app.getString(R.string.notify_backup_user_paused)
       progress.paused -> app.getString(R.string.notify_backup_paused)
       !progress.running -> app.getString(R.string.notify_backup_starting)
       else -> app.resources.getQuantityString(

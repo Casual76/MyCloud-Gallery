@@ -28,6 +28,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.UploadState
 import dev.pampa.mycloudgallery.core.backup.contract.UploadStateMachine
 import dev.pampa.mycloudgallery.core.backup.contract.VerifiedCopy
 import dev.pampa.mycloudgallery.core.backup.contract.WaitReason
+import dev.pampa.mycloudgallery.core.backup.plan.BackupPaths
 import dev.pampa.mycloudgallery.core.metadata.contract.MediaBytes
 import dev.pampa.mycloudgallery.core.model.NasStamp
 import dev.pampa.mycloudgallery.core.model.SafetyStatus
@@ -652,15 +653,8 @@ class InMemoryBackupEngine(
 
     /**
      * Il nome "nome (n)" del tentativo [attempt] (0 = il nome previsto, 1 = "(2)"...), nella stessa cartella: l'estensione resta
-     * (E-B3, come i nomi alternativi della 4B).
+     * (E-B3, come i nomi alternativi della 4B). La regola e' quella del motore vero: [BackupPaths.alternateName] (R1, revisione 5A).
      */
-    fun nameFor(planned: SharePath, attempt: Int): SharePath {
-      require(attempt >= 0) { "Tentativo negativo." }
-      if (attempt == 0) return planned
-      val name = planned.name
-      val dot = name.lastIndexOf('.')
-      val alt = if (dot > 0) "${name.substring(0, dot)} (${attempt + 1})${name.substring(dot)}" else "$name (${attempt + 1})"
-      return planned.parent()?.child(alt) ?: SharePath.of(alt)
-    }
+    fun nameFor(planned: SharePath, attempt: Int): SharePath = BackupPaths.alternateName(planned, attempt)
   }
 }

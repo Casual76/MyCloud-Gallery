@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.backup.safety
 
 import dev.pampa.mycloudgallery.core.backup.contract.BackupProblemCode
+import dev.pampa.mycloudgallery.core.backup.plan.BackupPaths
 import dev.pampa.mycloudgallery.core.model.NasStamp
 import dev.pampa.mycloudgallery.core.model.QuickHash
 import dev.pampa.mycloudgallery.core.model.QuickHashAlgorithm
@@ -146,14 +147,8 @@ internal object SafetyCommon {
 
   /**
    * Il nome "nome (n)" del tentativo [attempt] (0 = il nome previsto, 1 = "(2)"...), nella stessa cartella: l'estensione resta (E-B3,
-   * come il motore e i nomi alternativi della 4B).
+   * come il motore e i nomi alternativi della 4B). Un nome che con " (n)" supererebbe i 255 byte si accorcia (R1 della revisione 5A):
+   * la regola e' una sola, [BackupPaths.alternateName].
    */
-  fun nameFor(planned: SharePath, attempt: Int): SharePath {
-    require(attempt >= 0) { "Tentativo negativo." }
-    if (attempt == 0) return planned
-    val name = planned.name
-    val dot = name.lastIndexOf('.')
-    val alt = if (dot > 0) "${name.substring(0, dot)} (${attempt + 1})${name.substring(dot)}" else "$name (${attempt + 1})"
-    return planned.parent()?.child(alt) ?: SharePath.of(alt)
-  }
+  fun nameFor(planned: SharePath, attempt: Int): SharePath = BackupPaths.alternateName(planned, attempt)
 }

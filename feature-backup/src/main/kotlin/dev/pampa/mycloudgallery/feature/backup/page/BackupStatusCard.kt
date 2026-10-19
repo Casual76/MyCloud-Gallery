@@ -203,7 +203,8 @@ private fun StoppedCard(status: BackupStatus.Stopped, actions: BackupPageActions
   BackupCard(
     tone = BackupTone.Waiting,
     glyph = Icons.Rounded.PauseCircle,
-    title = stringResource(R.string.backup_status_stopped_title),
+    // R4: "Ferma" dell'utente e' una pausa, e la pagina dice "In pausa" (come la notifica e la voce delle Impostazioni).
+    title = stringResource(if (status.by == StopBy.USER) R.string.backup_status_paused_title else R.string.backup_status_stopped_title),
     detail = stringResource(
       when (status.by) {
         StopBy.USER -> R.string.backup_status_stopped_user

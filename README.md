@@ -196,7 +196,9 @@ cancello AppBackupGate      -> famiglia pronta, area privata, share di prova (D1
 - **D12**: sulle share che non sono di prova il cancello dice `TestOnly` e **non si scrive niente**, anche con la release (la pagina e il
   piede dicono "Backup in prova"); `tools\check.ps1` lo verifica nel bytecode della release (`dexdump`): `AppBackupGate.stateOf` chiama
   `FeatureFlags.backupMayWriteTo` e risponde `TEST_ONLY`. **D13**: solo in debug, con gli account di prova, il backup legge `DCIM/mcg-prova/`
-  e `Pictures/mcg-prova/` e scrive sotto `mcg-campo/Backup/` (`DeveloperTools.backupFence()`, assente dal dex di release).
+  e `Pictures/mcg-prova/` e scrive sotto `mcg-campo/Backup/` (`DeveloperTools.backupFence()`, assente dal dex di release); **per questo, in
+  release, un account di prova non scrive in nessuna share** (R2 della revisione 5A: `FeatureFlags.backupMayWriteAs`, `TEST_ONLY` per ogni
+  share, provato anch'esso nel bytecode da `tools\check.ps1`).
 - **Lavori** (`work/BackupWork.kt`): foto, video (solo Wi-Fi di casa), "Proteggi subito le foto nuove" (D34) e verifiche, a tappe dentro le
   regole delle attivita'; si chiedono a fine lettura del telefono, mai a intervalli brevi. Il primo backup e "Fai ora" sono lavori avviati
   dall'utente (`BackupJobService`, UIDT, notifica con soli numeri e "Ferma").

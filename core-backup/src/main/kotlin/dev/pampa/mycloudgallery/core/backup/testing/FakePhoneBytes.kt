@@ -20,7 +20,9 @@ import java.security.MessageDigest
  * non lo copia), e i colpi del banco delle interruzioni:
  * - riga riscritta (Samsung "Salva", E-B15), cancellata (E-B4), MediaStore ricostruito con gli `_ID` rinumerati (E-P12, E-P22);
  * - gli stessi eventi **durante una lettura**, dopo n byte ([duringRead]);
- * - permessi ritirati, permesso della posizione negato, accesso parziale ([denied]).
+ * - permessi ritirati, permesso della posizione negato, accesso parziale ([denied]);
+ * - il file che **cresce senza che il MediaStore lo sappia** ([growSilently], R6 della revisione 5A): la riga dice ancora la dimensione di
+ *   prima, il descrittore aperto ha quella nuova.
  *
  * E' il telefono: sopravvive alla "morte del processo" dell'app. core-backup non vede core-mediastore: `FakeMediaStore` (esteso nello
  * stesso modo) serve all'adattatore vero di `:app` (P7); questo serve al motore e al banco di core-backup (P2, P6).
@@ -38,7 +40,8 @@ class FakePhoneBytes(volume: String = VOLUME, version: String = "v1") {
     class Renumbered(val newVersion: String, val newId: Long) : MidRead
   }
 
-  private class Row(var content: NasContent, var modifiedMs: Long, var generation: Long)
+  /** [stampSize] e' la dimensione che dice il MediaStore (la riga); il contenuto e' quello vero del file, che puo' essere piu' lungo (R6). */
+  private class Row(var content: NasContent, var modifiedMs: Long, var generation: Long, var stampSize: Long = content.size)
 
   private class Trigger(val id: Long, val afterBytes: Long, val event: MidRead) {
     @Volatile var fired = false
@@ -77,16 +80,26 @@ class FakePhoneBytes(volume: String = VOLUME, version: String = "v1") {
   fun ref(id: Long): PhoneRef? = synchronized(lock) { if (id in rows) PhoneRef(volumeName, id, mediaStoreVersion) else null }
 
   /** Il timbro di una riga adesso. */
-  fun stamp(id: Long): FileStamp? = synchronized(lock) { rows[id]?.let { FileStamp(it.content.size, it.modifiedMs, it.generation) } }
+  fun stamp(id: Long): FileStamp? = synchronized(lock) { rows[id]?.let { FileStamp(it.stampSize, it.modifiedMs, it.generation) } }
 
   /** Samsung "Salva" (E-B15): byte nuovi sul posto, timbro nuovo. */
   fun rewrite(id: Long, content: NasContent, modifiedMs: Long) {
     synchronized(lock) {
       val row = rows.getValue(id)
       row.content = content
+      row.stampSize = content.size
       row.modifiedMs = modifiedMs
       row.generation = ++generation
     }
+  }
+
+  /**
+   * R6: il file cresce (un'app che scrive in piu' sessioni, la memoria condivisa di Android 10) **senza che il MediaStore lo sappia**: il
+   * contenuto vero e' [content] (di solito i byte di prima piu' una coda), ma la riga ha ancora la dimensione, la data e la generazione di
+   * prima. Chi guarda solo il timbro non se ne accorge; chi guarda dove finisce il file si'.
+   */
+  fun growSilently(id: Long, content: NasContent) {
+    synchronized(lock) { rows.getValue(id).content = content }
   }
 
   /** Cancellata (E-B4): la riga non c'e' piu'. */
@@ -128,7 +141,7 @@ class FakePhoneBytes(volume: String = VOLUME, version: String = "v1") {
       denied?.let { return PhoneLookup.Denied(it) }
       if (ref.mediaStoreVersion != mediaStoreVersion) return PhoneLookup.Stale
       val row = check(ref) ?: return PhoneLookup.Gone
-      PhoneLookup.Present(FileStamp(row.content.size, row.modifiedMs, row.generation))
+      PhoneLookup.Present(FileStamp(row.stampSize, row.modifiedMs, row.generation))
     }
 
     override suspend fun open(ref: PhoneRef): PhoneOpen = synchronized(lock) {
@@ -136,7 +149,7 @@ class FakePhoneBytes(volume: String = VOLUME, version: String = "v1") {
       if (ref.mediaStoreVersion != mediaStoreVersion) return PhoneOpen.Stale
       val row = check(ref) ?: return PhoneOpen.Gone
       opens++
-      val stamp = FileStamp(row.content.size, row.modifiedMs, row.generation)
+      val stamp = FileStamp(row.stampSize, row.modifiedMs, row.generation)
       PhoneOpen.Opened(PhoneFile(OpenRow(ref.mediaStoreId, row.content), stamp))
     }
   }
@@ -166,6 +179,7 @@ class FakePhoneBytes(volume: String = VOLUME, version: String = "v1") {
               val row = rows[id]
               if (row != null) {
                 row.content = e.content
+                row.stampSize = e.content.size
                 row.modifiedMs = e.modifiedMs
                 row.generation = ++generation
                 content = e.content

@@ -11,6 +11,7 @@ import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaStoreRow
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneAccess
+import dev.pampa.mycloudgallery.core.mediastore.android.ContentUriMediaBytes
 import dev.pampa.mycloudgallery.core.mediastore.contract.RowType
 import dev.pampa.mycloudgallery.core.mediastore.sync.OriginalBytesUnavailableException
 import dev.pampa.mycloudgallery.core.metadata.contract.MediaBytes
@@ -31,6 +32,10 @@ import kotlinx.coroutines.CancellationException
  *   [PhoneDenied.MEDIA_LOCATION] (E-P21).
  * - **D13**: con la recinzione del telefono (debug con gli account di prova) una riga fuori da `DCIM/mcg-prova/` e `Pictures/mcg-prova/`
  *   non si apre mai ([PhoneDenied.NOT_SELECTED], fallire chiusi).
+ * - **R6 della revisione 5A**: la dimensione del MediaStore puo' essere rimasta indietro (un file che cresce in piu' sessioni, la memoria
+ *   condivisa di Android 10). I byte consegnati dicono la dimensione **vera** del descrittore aperto, adesso ([LiveSizeBytes]): il motore, dopo
+ *   aver letto `size` byte, la confronta con quella del MediaStore e cerca la fine del file; se non coincidono la copia sarebbe un prefisso e
+ *   il file e' cambiato (E-B15).
  * - Un file che non si apre per un errore di I/O non e' ne' sparito ne' vietato: si consegna lo stesso e la lettura fallisce a modo suo,
  *   cosi' il motore conta i tentativi e dopo tre dice `UNREADABLE` (D15).
  *
@@ -72,7 +77,7 @@ class MediaStorePhoneBytes(
     // Una foto senza la posizione si leggerebbe oscurata: mai un'impronta di byte che non sono quelli del file (E-P21).
     if (row.type == RowType.IMAGE && !current.mediaLocation) return PhoneOpen.Denied(PhoneDenied.MEDIA_LOCATION)
     val bytes: MediaBytes = try {
-      source.open(row)
+      source.open(row).let { opened -> if (opened is ContentUriMediaBytes) LiveSizeBytes(opened) else opened }
     } catch (e: CancellationException) {
       throw e
     } catch (_: OriginalBytesUnavailableException) {
@@ -118,6 +123,14 @@ class MediaStorePhoneBytes(
     val fence = fence ?: return true
     val account = account() ?: return false
     return fence.allowsPhoneFolder(account, row.relativePath)
+  }
+
+  /**
+   * I byte di una riga del MediaStore con la dimensione **di adesso** (R6): [size] e' un `fstat` del descrittore a ogni lettura, non quella
+   * del momento dell'apertura. Le letture e la sorgente per i lettori di video sono quelle di [inner], che si chiude con lui.
+   */
+  private class LiveSizeBytes(private val inner: ContentUriMediaBytes) : MediaBytes by inner, AutoCloseable by inner {
+    override val size: Long get() = inner.currentSize()
   }
 
   /** Un file che non si lascia aprire: ogni lettura fallisce con un errore di I/O (il motore conta i tentativi, D15). */

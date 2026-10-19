@@ -15,6 +15,7 @@ import dagger.hilt.components.SingletonComponent
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
+import dev.pampa.mycloudgallery.core.backup.contract.StopBy
 import dev.pampa.mycloudgallery.feature.settings.R
 import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
 import dev.pampa.mycloudgallery.feature.settings.ui.StatusPill
@@ -105,7 +106,7 @@ internal object BackupEntryTexts {
       is BackupStatus.UpToDate -> res.getQuantityString(R.plurals.settings_backup_up_to_date, status.safeCount, ItalianCount.format(status.safeCount))
       is BackupStatus.Waiting -> res.getString(R.string.settings_backup_waiting, ItalianCount.format(status.items))
       is BackupStatus.Running -> res.getString(R.string.settings_backup_running, ItalianCount.format(status.done), ItalianCount.format(status.total))
-      is BackupStatus.Stopped -> res.getString(R.string.settings_backup_stopped)
+      is BackupStatus.Stopped -> res.getString(if (status.by == StopBy.USER) R.string.settings_backup_paused else R.string.settings_backup_stopped)
       is BackupStatus.Problem -> res.getString(R.string.settings_backup_problem)
     }
   }

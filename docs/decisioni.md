@@ -974,6 +974,43 @@ dica "Backup in prova" con un account non di prova.
   la violazione"), nessun file visibile non verificato (prova delle 500 interruzioni e F21–F24 sul campo), deduplica e guardiano non leggono aree
   private altrui.
 
+## Fase 5A: correzioni della revisione (19/10)
+Fonte: `docs/review/5a-fase5a.md` (R1, R2, R4, R5, R6, R7 corrette, ognuna con il suo test; **R3 resta aperta**: la fa un'altra sessione,
+`reopenTemp`, `openExistingForWrite`, `setLength` e `SmbNasFileOps` non sono stati toccati). Regola di tutte le scelte: **ogni correzione
+riduce cio' che il backup scrive, mai il contrario**. Quelle che l'utente vede (da confermare):
+
+- **R2: la release con un account di prova non scrive da nessuna parte.** Presa la strada "piu' semplice" della revisione: con
+  `FeatureFlags.backupBlocksTestAccounts` (vero in `RELEASE`, falso nelle build di debug dove la recinzione D13 c'e') il cancello risponde
+  `TEST_ONLY` per **ogni** share se l'account e' di prova (`test`, `test2`); un account non noto si tratta come di prova (si fallisce chiusi).
+  Fino a Q3 l'APK di release su un account di prova mostra "Backup in prova" e non carica niente. In debug non cambia nulla (D12 e D13).
+  `tools\check.ps1` lo prova nel bytecode di release (`AppBackupGate.stateOf` chiama anche `FeatureFlags.backupMayWriteAs`).
+- **R4: "Ferma" e' una pausa.** Il segno (`backup-user-paused` in `noBackupFilesDir`) dura fra un giro e l'altro e dopo la morte del processo,
+  finche' l'utente non tocca **"Riprendi"** o **"Fai ora"** (o "Inizia ora"/"Stanotte" del primo backup) o non azzera l'app. Il motore e il
+  guardiano non scrivono (nuovo stato del cancello `PAUSED`, che non e' un problema: nessun messaggio d'allarme); le **verifiche**, che
+  leggono soltanto, continuano. Il lavoro dopo la lettura del telefono e il giro delle sei ore non la scavalcano. Il tasto resta "Ferma"; lo stato
+  dice **"In pausa"** nella pagina Backup, nella voce delle Impostazioni e nella notifica ("In pausa: riprende quando tocchi «Riprendi»
+  nell'app"; subito dopo il tocco: "Metto in pausa prima del prossimo elemento..."). "Android ha fermato il lavoro" (Task Manager di sistema,
+  limiti) non e' una pausa dell'utente: riprende da solo e dice ancora "Backup fermo".
+- **R5: "foto selezionate".** Una foto non scelta aspetta, le scelte vanno avanti (e il diario si tiene la riga non scelta, che torna
+  quando l'utente dara' l'accesso a tutte). Il giro si ferma solo per i rifiuti globali: accesso ai media ritirato, posizione delle foto.
+- **R1: un nome " (n)" oltre i 255 byte.** "nome (2).jpg" si ottiene accorciando la radice del nome (a un confine di carattere, mai una coppia
+  surrogata a meta') perche' tutto stia in 255 byte UTF-8; lo stesso file ha sempre lo stesso nome. Nuovo **problema `UNEXPECTED`**
+  ("N media con un errore inatteso", azioni Riprova e Diagnostica): un errore che nessuna regola prevedeva ferma **quel file** (mai "al
+  sicuro"), non il backup degli altri; "Riprova" lo toglie. Un lavoro che finisce con un errore inatteso non e' piu' un "successo" muto
+  ne' una ripianificazione infinita: salva lo stesso problema, la pagina non resta "in corso", il lavoro si chiude (WorkManager `failure`,
+  `JobScheduler` senza ripianificare). Le verifiche girano anche se il guardiano fallisce.
+- **R6: un file piu' lungo di cio' che dice il MediaStore** (cresciuto senza che il MediaStore lo sappia) non diventa mai "al sicuro"
+  troncato: dopo aver letto `size` byte il backup guarda la dimensione **vera** del descrittore aperto (`fstat` di adesso) e se un byte in
+  piu' esiste; se non torna, il file e' cambiato (come E-B15: quella versione non si salva da li', la nuova avra' il suo elemento).
+  Costo noto: finche' il MediaStore resta indietro, ogni giro rilegge quel file e lo scarta (si risolve da solo quando il MediaStore lo vede).
+- **R7: la share di un elemento.** Il cancello vale solo per l'area privata **di adesso** (stessa share, senza maiuscole, altrimenti
+  `NO_PRIVATE_AREA`): se l'admin cambia la configurazione a processo vivo il motore non scrive piu' nella share di prima e le parti del
+  backup si ricostruiscono con la share nuova al giro dopo. Un elemento del diario di un'altra share aspetta (e il log lo dice); non
+  ferma gli altri. **Residuo:** finche' aspetta, il suo media non riceve un elemento nuovo per la share di adesso; si risolve tenendo
+  l'area privata com'era o con "Azzera".
+- **Residui:** R3 (aperta), le informative I1-I9 come scritte; F21-F24 e le prove sul campo di R1, R5, R6 della revisione (sotto "Da
+  provare sul campo") non sono state fatte (nessun NAS vero, nessun telefono).
+
 ## Revisione grafica della Libreria da parte dell'utente (13/10)
 Giudizio: le prestazioni della navigazione non sono male, la **grafica no**. Serve molto lavoro, da fare in un **filone grafico
 parallelo** alle fasi successive (insieme ai lavori che non toccano l'app sul momento, per esempio il back-end NAS della Fase 4).

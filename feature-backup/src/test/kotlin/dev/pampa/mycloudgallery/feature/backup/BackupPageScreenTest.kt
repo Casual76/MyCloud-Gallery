@@ -145,10 +145,13 @@ class BackupPageScreenTest : ComposeBackupTest() {
   @Test
   fun fermatoDallUtentePropoineRiprendi() {
     start(BackupStatus.Stopped(StopBy.USER))
-    composeRule.onNodeWithText("Backup fermo").assertExists()
+    // R4: "Ferma" e' una pausa, e la pagina dice "In pausa" (non "Backup fermo", che resta per Android e per l'azzeramento).
+    composeRule.onNodeWithText("In pausa").assertExists()
+    composeRule.onNodeWithText("Backup fermo").assertDoesNotExist()
     composeRule.onNodeWithText("Riprendi").performClick()
     assertThat(actions.backupNowCalls).isEqualTo(1)
     set(BackupStatus.Stopped(StopBy.SYSTEM))
+    composeRule.onNodeWithText("Backup fermo").assertExists()
     composeRule.onNodeWithText("Android ha fermato il lavoro. Riprende da solo.").assertExists()
     set(BackupStatus.Stopped(StopBy.RESET))
     composeRule.onNodeWithText("Riprendi").assertDoesNotExist()

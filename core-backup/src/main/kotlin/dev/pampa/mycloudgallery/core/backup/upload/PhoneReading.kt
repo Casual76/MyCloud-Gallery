@@ -13,10 +13,15 @@ import java.security.MessageDigest
  * [chunkBytes] (mai un video intero in memoria); con [keepInMemory] il file resta anche in un array, cosi' la preparazione lavora sugli
  * stessi byte senza rileggere il telefono. [onBytes] riceve i byte letti (avanzamento). Una lettura corta (il file si e' accorciato)
  * da' null; un errore di I/O risale (il motore guarda la riga e decide, E-B4, E-B15).
+ *
+ * **La fine del file** (R6 della revisione 5A): `size` e' quella del MediaStore, che puo' essere rimasta indietro (un file che cresce in
+ * piu' sessioni, la memoria condivisa di Android 10). Dopo `size` byte si guarda dove finisce il file: la dimensione del descrittore
+ * aperto ([MediaBytes.size]) deve essere `size` e un byte in piu' deve dare la fine del file. Altrimenti [Result.endsAtSize] e' falso: i
+ * byte letti sono un **prefisso**, non la versione, e non devono mai diventare un caricamento "al sicuro".
  */
 internal object PhoneReading {
 
-  class Result(val sha256: Sha256, val quickHash: QuickHash, val memory: ByteArray?)
+  class Result(val sha256: Sha256, val quickHash: QuickHash, val memory: ByteArray?, val endsAtSize: Boolean = true)
 
   @Throws(IOException::class)
   suspend fun read(bytes: MediaBytes, size: Long, chunkBytes: Int, keepInMemory: Boolean, onBytes: (Long) -> Unit = {}): Result? {
@@ -40,8 +45,11 @@ internal object PhoneReading {
       onBytes(chunk.size.toLong())
       position = end
     }
-    return Result(Sha256(hex(digest.digest())), QuickHashAlgorithm.compute(size, head, tail), memory)
+    return Result(Sha256(hex(digest.digest())), QuickHashAlgorithm.compute(size, head, tail), memory, endsAtSize = endsAt(bytes, size))
   }
+
+  /** Il file finisce dove dice il MediaStore: stessa dimensione sul descrittore aperto e nessun byte dopo `size` (R6). */
+  private suspend fun endsAt(bytes: MediaBytes, size: Long): Boolean = bytes.size == size && bytes.read(size until size + 1).isEmpty()
 
   /** Copia in [target] (che inizia all'offset [targetStart] del file) la parte di [chunk] (all'offset [chunkStart]). */
   private fun copyOverlap(chunk: ByteArray, chunkStart: Long, target: ByteArray, targetStart: Long) {

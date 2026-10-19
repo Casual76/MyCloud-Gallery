@@ -297,8 +297,8 @@ interface BackupActionsHost {
 }
 
 /**
- * Le azioni della pagina Backup (§2.6, colonna "Azione"; D11; D7): partono **solo** da un tocco. "Fai ora" e "Inizia ora" sono lavori avviati
- * dall'utente (UIDT, [BackupGraph.jobs]); sui dati mobili le regole chiedono prima una conferma con la stima ([prompt]). "Stanotte" non
+ * Le azioni della pagina Backup (§2.6, colonna "Azione"; D11; D7): partono **solo** da un tocco. "Fai ora" (e "Riprendi", che e' lo stesso
+ * tasto dopo "Ferma") e "Inizia ora" finiscono la pausa dell'utente (R4) e sono lavori avviati dall'utente (UIDT, [BackupGraph.jobs]); sui dati mobili le regole chiedono prima una conferma con la stima ([prompt]). "Stanotte" non
  * avvia niente di nuovo: chiede al lavoro dei tipi di partire e le regole decidono quando (la fascia notturna). Prima di tutto la
  * cartella del dispositivo (D7): se sul NAS c'e' gia' una cartella con quel nome si chiede "Continua li'" o "Nuova cartella".
  */
@@ -395,6 +395,8 @@ class AppBackupActions(
   }
 
   private suspend fun proceedFirst(tonight: Boolean) {
+    // R4: chi sceglie come partire (anche "Stanotte") non e' piu' in pausa.
+    backup.resumeFromPause()
     if (tonight) {
       // "Stanotte" (la predefinita): il lavoro dei tipi segue il preset; qui si chiede solo che parta il giro delle regole.
       BackupWorkScheduling.afterPhoneRead(context, backup)
@@ -418,6 +420,8 @@ class AppBackupActions(
   private fun startUser(trigger: BackupTrigger, confirmed: Boolean) {
     scope.launch {
       try {
+        // R4: "Riprendi" e "Fai ora" sono i due tocchi che finiscono la pausa di "Ferma".
+        backup.resumeFromPause()
         val estimate = runCatching { backup.summary().toUpload.bytes }.getOrNull()
         when (val decision = backup.userDecision(estimate, confirmed)) {
           // Dati mobili, roaming o tetto superato: l'utente ha l'ultima parola, con la stima (proposta 10).

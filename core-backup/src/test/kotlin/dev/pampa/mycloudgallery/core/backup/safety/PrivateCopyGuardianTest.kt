@@ -397,7 +397,8 @@ class PrivateCopyGuardianTest {
   fun ilCancelloChiusoFermaIlGuardiano() = runTest {
     bench.commonOnly("IMG_16.jpg", SafetyBench.bytes(20_000, 18))
     val before = kit.snapshot()
-    for (state in BackupGateState.entries.filter { !it.open }) {
+    // La pausa dell'utente (R4) e' un "Ferma", non un cancello chiuso per una ragione: il giro dice `STOPPED` (Review5aSafetyTest).
+    for (state in BackupGateState.entries.filter { !it.open && it != BackupGateState.PAUSED }) {
       kit.gate.default = state
       val report = bench.guardian().ensure(GuardScope.All, 1.hours)
       assertWithMessage(state.code).that(report.stoppedBy).isEqualTo(RunStop.GATE)

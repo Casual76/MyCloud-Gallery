@@ -43,6 +43,7 @@
   <string name="viewer_backup_problem_verify_failed">La copia sul NAS non coincide con l’originale: non è «al sicuro» e il backup la rifà.</string>
   <string name="viewer_backup_problem_unreadable">Il telefono non lascia leggere questo file, oppure è vuoto: non si carica.</string>
   <string name="viewer_backup_problem_common_copy_lost">Era solo nell’area comune ed è sparito: non c’è una copia privata né una sul telefono. Recuperalo dal cestino del NAS (30 giorni).</string>
+  <string name="viewer_backup_problem_unexpected">Un errore che l’app non si aspettava ha fermato questo file: non è «al sicuro». Dalla pagina Backup, «Riprova» lo rilegge.</string>
   <string name="viewer_backup_problem_generic">Apri la pagina Backup: lì c’è cosa fare.</string>
 
   <string name="viewer_backup_lost">Cancellato prima del backup</string>

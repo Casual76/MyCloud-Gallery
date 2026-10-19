@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 4,
-    "identityHash": "df05b44512ea04f2f7f2454b43afa51e",
+    "identityHash": "a6137036abe8c115756da9b814ff62c6",
     "entities": [
       {
         "tableName": "media",
@@ -2670,7 +2670,7 @@
       },
       {
         "tableName": "backup_item",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`item_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `kind` TEXT NOT NULL, `state` TEXT NOT NULL, `is_open` INTEGER NOT NULL, `media_id` TEXT NOT NULL, `version_id` TEXT NOT NULL, `size` INTEGER NOT NULL, `phone_volume` TEXT, `phone_ms_id` INTEGER, `phone_ms_version` TEXT, `expected_size` INTEGER, `expected_modified_at` INTEGER, `expected_generation` INTEGER, `share` TEXT NOT NULL, `planned_path` TEXT NOT NULL, `final_path` TEXT, `name_attempt` INTEGER NOT NULL, `temp_path` TEXT, `resume_at` INTEGER NOT NULL, `sha256` TEXT, `quick_hash` TEXT, `temp_size` INTEGER, `temp_modified_at` INTEGER, `temp_file_id` INTEGER, `final_size` INTEGER, `final_modified_at` INTEGER, `final_file_id` INTEGER, `verify_attempts` INTEGER NOT NULL, `guard_share` TEXT, `guard_path` TEXT, `guard_size` INTEGER, `guard_modified_at` INTEGER, `guard_file_id` INTEGER, `problem` TEXT, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, FOREIGN KEY(`media_id`) REFERENCES `media`(`media_id`) ON UPDATE NO ACTION ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED, FOREIGN KEY(`version_id`) REFERENCES `media_version`(`version_id`) ON UPDATE NO ACTION ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`item_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `kind` TEXT NOT NULL, `state` TEXT NOT NULL, `is_open` INTEGER NOT NULL, `media_id` TEXT NOT NULL, `version_id` TEXT NOT NULL, `size` INTEGER NOT NULL, `phone_volume` TEXT, `phone_ms_id` INTEGER, `phone_ms_version` TEXT, `expected_size` INTEGER, `expected_modified_at` INTEGER, `expected_generation` INTEGER, `share` TEXT NOT NULL, `planned_path` TEXT NOT NULL, `final_path` TEXT, `name_attempt` INTEGER NOT NULL, `temp_path` TEXT, `resume_at` INTEGER NOT NULL, `resume_file_id` INTEGER, `sha256` TEXT, `quick_hash` TEXT, `temp_size` INTEGER, `temp_modified_at` INTEGER, `temp_file_id` INTEGER, `final_size` INTEGER, `final_modified_at` INTEGER, `final_file_id` INTEGER, `verify_attempts` INTEGER NOT NULL, `guard_share` TEXT, `guard_path` TEXT, `guard_size` INTEGER, `guard_modified_at` INTEGER, `guard_file_id` INTEGER, `problem` TEXT, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, FOREIGN KEY(`media_id`) REFERENCES `media`(`media_id`) ON UPDATE NO ACTION ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED, FOREIGN KEY(`version_id`) REFERENCES `media_version`(`version_id`) ON UPDATE NO ACTION ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED)",
         "fields": [
           {
             "fieldPath": "itemId",
@@ -2777,6 +2777,11 @@
             "columnName": "resume_at",
             "affinity": "INTEGER",
             "notNull": true
+          },
+          {
+            "fieldPath": "resumeFileId",
+            "columnName": "resume_file_id",
+            "affinity": "INTEGER"
           },
           {
             "fieldPath": "sha256",
@@ -3757,7 +3762,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'df05b44512ea04f2f7f2454b43afa51e')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'a6137036abe8c115756da9b814ff62c6')"
     ]
   }
 }

@@ -9,6 +9,7 @@ import dev.pampa.mycloudgallery.core.nas.noop.NoNasBackupOps
 import dev.pampa.mycloudgallery.core.nas.ops.BackupTempReopen
 import dev.pampa.mycloudgallery.core.nas.ops.CopyOutcome
 import dev.pampa.mycloudgallery.core.nas.ops.DeleteOutcome
+import dev.pampa.mycloudgallery.core.nas.ops.HandleStamp
 import dev.pampa.mycloudgallery.core.nas.ops.NasFileOps
 import dev.pampa.mycloudgallery.core.nas.ops.NasOpsPaths
 import dev.pampa.mycloudgallery.core.nas.ops.NasSpaceInfo
@@ -51,12 +52,13 @@ object NasBackupOpsFactory {
  * `rmdirIfEmpty`) qui non sono raggiungibili.
  *
  * [reopenTemp] (D5, P2): `SmbNasFileOps.reopenBackupTemp` apre il proprio temporaneo **senza crearlo** (`FILE_OPEN`, in esclusiva, senza
- * seguire un collegamento), legge la lunghezza e lo accorcia a `keepBytes` con il `SET_INFO` di fine file **sullo stesso handle**; lo
+ * seguire un collegamento), controlla sullo stesso handle che sia il temporaneo del punto di ripresa (R3 della revisione 5A: identita', un
+ * nome solo, `tmp/` vera), legge la lunghezza e lo accorcia a `keepBytes` con il `SET_INFO` di fine file **sullo stesso handle**; lo
  * scrittore riparte da li'. Sopra primitive che non sono quelle SMB (il fake della 4B nei test) la ripresa non c'e': risponde un **errore
  * esplicito** (`STATUS_NOT_IMPLEMENTED`), mai un successo finto, e il backup ricomincia il file da zero (nessun danno, solo traffico).
  *
- * Il punto di ripresa ([BackupTempWriter.checkpoint]) usa `finish` dello scrittore della 4B: `FLUSH`, lunghezza sullo stesso handle e
- * timbro letto per nome (solo `FILE_READ_ATTRIBUTES`, che non entra in conflitto con l'handle esclusivo). `finish` **non chiude**
+ * Il punto di ripresa ([BackupTempWriter.checkpoint]) e' `FLUSH` piu' una `QUERY_INFO` **sullo stesso handle** (lunghezza e identita', R3),
+ * mai un timbro letto per nome; sopra lo scrittore di un'altra implementazione ripiega su `finish` della 4B, senza identita'. Non chiude
  * l'handle: lo scrittore resta usabile dopo ogni punto di ripresa (provato sul simulatore SMB, `SmbNasBackupOpsTest`).
  */
 @AppendOnlyNasAccess
@@ -85,16 +87,17 @@ internal class SmbNasBackupOps(private val ops: NasFileOps) : NasBackupOps {
     }
   }
 
-  override suspend fun reopenTemp(share: String, temp: SharePath, keepBytes: Long, purpose: Purpose): NasResult<ReopenOutcome> {
+  override suspend fun reopenTemp(share: String, temp: SharePath, keepBytes: Long, tempId: Long, purpose: Purpose): NasResult<ReopenOutcome> {
     requireBackupTemp(temp)
     require(keepBytes >= 0) { "Punto di ripresa negativo." }
     val smb = ops as? SmbNasFileOps ?: return NasResult.Err(NasError.Unexpected(STATUS_NOT_IMPLEMENTED))
-    return when (val reopened = smb.reopenBackupTemp(share, temp, keepBytes, purpose)) {
+    return when (val reopened = smb.reopenBackupTemp(share, temp, keepBytes, tempId, purpose)) {
       is NasResult.Err -> reopened
       is NasResult.Ok -> NasResult.Ok(
         when (val r = reopened.value) {
           is BackupTempReopen.Reopened -> ReopenOutcome.Reopened(Writer(r.writer, start = keepBytes))
           BackupTempReopen.Missing -> ReopenOutcome.Missing
+          BackupTempReopen.NotOurs -> ReopenOutcome.Foreign
           is BackupTempReopen.TooShort -> ReopenOutcome.TooShort(r.actual)
           BackupTempReopen.Locked -> ReopenOutcome.Locked
         },
@@ -128,8 +131,9 @@ internal class SmbNasBackupOps(private val ops: NasFileOps) : NasBackupOps {
   override suspend fun space(share: String, purpose: Purpose): NasResult<NasSpaceInfo> = ops.space(share, purpose)
 
   /**
-   * Lo scrittore sopra quello della 4B. Il punto di ripresa usa `finish` della 4B (svuota e legge la lunghezza sullo stesso handle,
-   * senza chiudere): una lunghezza diversa da quella scritta si restituisce com'e', e il chiamante non la salva come punto di ripresa.
+   * Lo scrittore sopra quello della 4B. Il punto di ripresa legge lunghezza e identita' sullo stesso handle ([HandleStamp], R3), senza
+   * chiudere; sopra uno scrittore che non lo sa fare, `finish` della 4B. Una lunghezza diversa da quella scritta si restituisce com'e', e il
+   * chiamante non la salva come punto di ripresa.
    */
   private class Writer(private val inner: NasTempWriter, start: Long) : BackupTempWriter {
     @Volatile override var length: Long = start
@@ -144,14 +148,24 @@ internal class SmbNasBackupOps(private val ops: NasFileOps) : NasBackupOps {
       return result
     }
 
-    override suspend fun checkpoint(): NasResult<Long> = when (val r = inner.finish(length)) {
-      is NasResult.Err -> r
-      is NasResult.Ok -> NasResult.Ok(
-        when (val f = r.value) {
-          is TempFinish.Complete -> f.stamp.size
-          is TempFinish.SizeMismatch -> f.actual
-        },
-      )
+    override suspend fun checkpoint(): NasResult<TempPoint> {
+      if (inner is HandleStamp) {
+        return when (val r = inner.stampOnHandle()) {
+          is NasResult.Err -> r
+          is NasResult.Ok -> NasResult.Ok(TempPoint(r.value.size, r.value.fileId))
+        }
+      }
+      // Un altro scrittore (il fake della 4B): la lunghezza dal suo `finish`, ma nessuna identita', perche' `finish` la legge per nome. Senza
+      // identita' il motore non riprende (e sopra queste primitive la ripresa comunque non c'e').
+      return when (val r = inner.finish(length)) {
+        is NasResult.Err -> r
+        is NasResult.Ok -> NasResult.Ok(
+          when (val f = r.value) {
+            is TempFinish.Complete -> TempPoint(f.stamp.size, null)
+            is TempFinish.SizeMismatch -> TempPoint(f.actual, null)
+          },
+        )
+      }
     }
 
     override suspend fun finish(expectedSize: Long): NasResult<TempFinish> = inner.finish(expectedSize)

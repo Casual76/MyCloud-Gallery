@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.core.nas.integration
 
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
+import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.model.Sha256
 import dev.pampa.mycloudgallery.core.nas.INTEGRATION_WAIT_SECONDS
 import dev.pampa.mycloudgallery.core.nas.breaker.AuthBreakerRegistry
@@ -36,6 +37,11 @@ import dev.pampa.mycloudgallery.core.nas.ops.RenameOutcome
 import dev.pampa.mycloudgallery.core.nas.ops.RmdirOutcome
 import dev.pampa.mycloudgallery.core.nas.ops.SmbNasFileOps
 import dev.pampa.mycloudgallery.core.nas.ops.TempFinish
+import dev.pampa.mycloudgallery.core.nas.ops.backup.BackupTempWriter
+import dev.pampa.mycloudgallery.core.nas.ops.backup.NasBackupOpsFactory
+import dev.pampa.mycloudgallery.core.nas.ops.backup.NasBackupPaths
+import dev.pampa.mycloudgallery.core.nas.ops.backup.ReopenOutcome
+import dev.pampa.mycloudgallery.core.nas.ops.backup.TempPoint
 import dev.pampa.mycloudgallery.core.nas.runBlockingBounded
 import dev.pampa.mycloudgallery.core.nas.session.MonotonicClock
 import dev.pampa.mycloudgallery.core.nas.session.NasSessionConfig
@@ -606,6 +612,94 @@ class NasIntegrationSuiteTest {
     assertThat(sameConnection).isEqualTo("0x%08X".format(Locale.ROOT, dev.pampa.mycloudgallery.core.nas.smb.NtStatus.ACCESS_DENIED))
     assertThat(otherConnection).isEqualTo("rinominata")
   }
+
+  /**
+   * R3 della revisione 5A (`docs/review/5a-fase5a.md`): la **ripresa a meta' file** del backup sul WD, che il runner delle 400 interruzioni
+   * non ha mai fatto capitare (nessun `REOPEN_TEMP` nel rapporto). Le primitive del backup di produzione (`NasBackupOpsFactory`, cioe'
+   * `SmbNasBackupOps` sopra `SmbNasFileOps` radicate nel giro) e la sessione della suite, dietro il recinto del giro:
+   * un temporaneo del backup, una parte scritta, il punto di ripresa (lunghezza e identita' lette sullo stesso handle), la chiusura come in
+   * un'interruzione; poi `reopenTemp` (apertura senza creare, i controlli di R3 sullo stesso handle) e l'accorciamento a un punto **piu'
+   * corto** della parte scritta (`SET_INFO` di fine file), il resto, la fine, la pubblicazione senza sostituire e la rilettura completa:
+   * lo SHA-256 dev'essere quello dei byte.
+   *
+   * Il collegamento fisico al nome del temporaneo (la difesa di R3) qui non si crea: servirebbe smbj direttamente, fuori dal trasporto
+   * recintato, e la suite lo vieta (`TestAreaGuardTest.nessunTestDIntegrazioneUsaSmbjDirettamente`). La difesa la provano il simulatore
+   * (`SmbNasBackupOpsTest.r3_*`, `Review5aR3Test` di core-backup) e una prova a mano annotata in `docs/review/5a-fase5a.md`.
+   *
+   * Da solo: `gradlew :core-nas:testDebugUnitTest -PnasIntegration --tests "*NasIntegrationSuiteTest.t16*"` (la preparazione e la pulizia
+   * della suite girano comunque).
+   */
+  @Test
+  fun t16_ripresaDelBackupAMetaFileSulNasVero() = runBlockingBounded("t16_ripresaDelBackupAMetaFileSulNasVero", INTEGRATION_WAIT_SECONDS) {
+    val backup = NasBackupOpsFactory.createForTestArea(manager, OPS_DEVICE, area)
+    val purpose = Purpose.BACKGROUND
+    val random = SecureRandom()
+    val seen = java.util.concurrent.CopyOnWriteArrayList<String>()
+    GalleryLog.install { level, tag, message, _ -> if (tag == "NasFileOps") seen += "$level $message" }
+    try {
+      val data = ByteArray(6 * MIB + 12_345).also(random::nextBytes)
+      val written = 4L * MIB
+      val keep = 2L * MIB + 777
+      val temp = NasBackupPaths.tempFor(OPS_DEVICE, 1)
+      var started = System.nanoTime()
+      val writer = backup.openTemp(share, temp, purpose).okOrNull()!!
+      writeRange(writer, data, 0, written)
+      val point = writer.checkpoint().okOrNull()!!
+      val firstMs = ms(started)
+      // L'interruzione: l'handle si chiude senza finire, il temporaneo resta con il suo punto di ripresa.
+      writer.close()
+      assertThat(point.length).isEqualTo(written)
+      val tempId = checkNotNull(point.fileId) { "il WD non dice l'identita' del temporaneo" }
+      assertThat(media.mediaReader.stat(share, full(temp), purpose).okOrNull()!!.fileId).isEqualTo(tempId)
+      started = System.nanoTime()
+      val reopened = backup.reopenTemp(share, temp, keep, tempId, purpose)
+      val reopenMs = ms(started)
+      assertWithMessage("riapertura: $reopened").that(reopened.okOrNull()).isInstanceOf(ReopenOutcome.Reopened::class.java)
+      val resumed = (reopened.okOrNull() as ReopenOutcome.Reopened).writer
+      assertThat(resumed.length).isEqualTo(keep)
+      // L'accorciamento c'e' stato davvero sul WD: la lunghezza vista per nome, prima di scrivere il resto.
+      assertThat(media.mediaReader.stat(share, full(temp), purpose).okOrNull()!!.size).isEqualTo(keep)
+      started = System.nanoTime()
+      writeRange(resumed, data, keep, data.size.toLong())
+      // Dopo la ripresa il punto dice lo stesso file, sullo stesso handle.
+      assertThat(resumed.checkpoint().okOrNull()).isEqualTo(TempPoint(data.size.toLong(), tempId))
+      val finish = resumed.finish(data.size.toLong()).okOrNull()
+      val restMs = ms(started)
+      resumed.close()
+      assertThat(finish).isInstanceOf(TempFinish.Complete::class.java)
+      val final = rel("r3/ripresa.bin")
+      started = System.nanoTime()
+      assertThat(backup.publishTemp(share, temp, final, purpose).okOrNull()).isInstanceOf(PublishOutcome.Published::class.java)
+      val publishMs = ms(started)
+      started = System.nanoTime()
+      val readBack = shaOf(full(final))
+      val rereadMs = ms(started)
+      assertThat(readBack).isEqualTo(Sha256.of(data))
+      report += String.format(
+        Locale.ROOT,
+        "R3 ripresa a meta' file sul WD: %d MiB scritti e punto di ripresa in %.0f ms; riapertura con i controlli di R3 e accorciamento da %d a " +
+          "%d byte in %.0f ms; resto scritto e finito in %.0f ms; pubblicazione %.0f ms; rilettura completa %.0f ms, SHA-256 uguale",
+        written / MIB, firstMs, written, keep, reopenMs, restMs, publishMs, rereadMs,
+      )
+    } finally {
+      GalleryLog.uninstall()
+      if (seen.isNotEmpty()) report += "R3 avvisi delle primitive: " + seen.joinToString("; ")
+    }
+  }
+
+  private suspend fun writeRange(writer: BackupTempWriter, data: ByteArray, from: Long, to: Long) {
+    var offset = from
+    while (offset < to) {
+      val n = minOf(MIB.toLong(), to - offset).toInt()
+      assertThat(writer.write(offset, data, offset.toInt(), n)).isEqualTo(NasResult.Ok(Unit))
+      offset += n
+    }
+  }
+
+  private suspend fun shaOf(path: SharePath): Sha256 =
+    media.mediaReader.open(share, path, Purpose.BACKGROUND).okOrNull()!!.use { file ->
+      media.mediaReader.readAll(file, { _, _ -> }, null).okOrNull()!!
+    }
 
   private suspend fun <T> op(shareName: String, block: (OpContext) -> T): T =
     when (val result = manager.runOp(shareName, Purpose.BACKGROUND, idempotent = false, touchesDisk = true, op = block)) {

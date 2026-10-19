@@ -30,7 +30,7 @@ object NoNasBackupOps : NasBackupOps {
   override suspend fun openTemp(share: String, temp: SharePath, purpose: Purpose): NasResult<BackupTempWriter> =
     NasResult.Err(backupNotConfigured)
 
-  override suspend fun reopenTemp(share: String, temp: SharePath, keepBytes: Long, purpose: Purpose): NasResult<ReopenOutcome> =
+  override suspend fun reopenTemp(share: String, temp: SharePath, keepBytes: Long, tempId: Long, purpose: Purpose): NasResult<ReopenOutcome> =
     NasResult.Err(backupNotConfigured)
 
   override suspend fun copyToTemp(

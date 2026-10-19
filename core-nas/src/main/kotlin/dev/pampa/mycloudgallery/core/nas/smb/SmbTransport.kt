@@ -141,6 +141,8 @@ class SmbDirEntry(
  * lettura dei media (Fase 4, D2): dimensione, data, `fileId` e attributi visti dallo stesso handle da cui si legge.
  *
  * @property name il nome com'e' sul server (l'ultima parte di `FileNameInformation`), se il server l'ha detto.
+ * @property links quanti nomi ha il file (`NumberOfLinks` di `FileStandardInformation`): piu' di 1 = un collegamento fisico (R3 della
+ *   revisione 5A). Null se il trasporto non lo dice.
  */
 class SmbFileInfo(
   val name: String?,
@@ -150,6 +152,7 @@ class SmbFileInfo(
   val changeMs: Long?,
   val fileId: Long?,
   val attributes: Int,
+  val links: Long? = null,
 ) {
   override fun toString(): String = "SmbFileInfo(dir=$isDirectory, size=$size)"
 }
@@ -250,8 +253,9 @@ interface SmbShare : Closeable {
    * Fase 5A (D5), solo per la ripresa del **proprio** temporaneo del backup (`ops/SmbNasFileOps.reopenBackupTemp`): apre il file
    * **esistente** [path] per scriverci **senza crearlo** (`FILE_OPEN`, mai `FILE_OPEN_IF`), in esclusiva come il temporaneo appena
    * creato ([SmbOpenMode.CREATE_EXCLUSIVE]), senza seguire un punto di rianalisi (`FILE_OPEN_REPARSE_POINT`). Lo stato si legge sullo
-   * stesso handle ([SmbWriteFile.info]): chi chiama rifiuta una cartella o un collegamento. `0xC0000034`/`0xC000003A` se non c'e',
-   * `0xC0000043` se e' aperto da un altro programma.
+   * stesso handle ([SmbWriteFile.info]): chi chiama rifiuta una cartella, un punto di rianalisi e (R3 della revisione 5A) un file con piu'
+   * di un nome o con un'identita' diversa da quella del proprio temporaneo. `0xC0000034`/`0xC000003A` se non c'e', `0xC0000043` se e'
+   * aperto da un altro programma.
    *
    * Di default non c'e' (`NOT_SUPPORTED`): un trasporto che non la implementa non riprende niente (il backup ricomincia da zero).
    */
@@ -324,6 +328,14 @@ interface SmbWriteFile : Closeable {
    */
   @Throws(IOException::class)
   fun setLength(length: Long): Unit = throw SmbStatusException(NtStatus.NOT_SUPPORTED)
+
+  /**
+   * R3 della revisione 5A: lo stato del file letto **adesso, sullo stesso handle** (una `QUERY_INFO` con `FileAllInformation`): lunghezza,
+   * identita' (`fileId`) e nomi (`NumberOfLinks`). Il punto di ripresa del backup ci legge l'identita' del proprio temporaneo, che la
+   * riapertura confronta prima di accorciare. Di default non c'e' (`NOT_SUPPORTED`).
+   */
+  @Throws(IOException::class)
+  fun query(): SmbFileInfo = throw SmbStatusException(NtStatus.NOT_SUPPORTED)
 
   override fun close()
 }

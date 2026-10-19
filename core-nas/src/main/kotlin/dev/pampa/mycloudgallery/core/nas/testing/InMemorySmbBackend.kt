@@ -108,6 +108,11 @@ enum class SimAccess { NONE, READ, READ_WRITE }
  * - copia lato server con `NOT_SUPPORTED` o `ACCESS_DENIED` programmabili ([copyChunkStatus]);
  * - contenuti ostili: nomi non validi, punti di rianalisi e cicli ([putLink]), cartelle enormi.
  *
+ * Dalla revisione 5A (R3): i **collegamenti a un file** come li vede un client SMB di Samba di serie: un collegamento fisico
+ * ([putHardLink]: lo stesso file sotto due nomi, `NumberOfLinks` 2) e un collegamento simbolico "trasparente" ([putFileLink]: un file
+ * normale con l'identita' e i byte della destinazione). Scrivere da un nome cambia il file anche dall'altro; togliere un nome (cancellazione
+ * alla chiusura, dal nome con cui si e' aperto) lascia il file all'altro.
+ *
  * Non apre socket: del `SocketBinding` registra solo la rete ([connectedNetworks]). Thread-safe.
  */
 class InMemorySmbBackend(
@@ -229,8 +234,11 @@ class InMemorySmbBackend(
   /** Gli handle vivi sul server, per nodo ([shareModes]). Sotto [lock]. */
   private val handles = HashMap<Node, MutableList<SimHandle>>()
 
-  /** Un handle vivo sul server: di quale sessione (e connessione), con quali diritti e condivisioni. */
-  private inner class SimHandle(val node: Node, val state: SimShareState, val session: SimSession, val mode: SmbOpenMode) {
+  /**
+   * Un handle vivo sul server: di quale sessione (e connessione), con quali diritti e condivisioni. [key] e' il nome con cui e' stato aperto
+   * (per un file con piu' nomi la cancellazione alla chiusura toglie quello, non un altro); null = il nodo stesso, qualunque nome abbia.
+   */
+  private inner class SimHandle(val node: Node, val state: SimShareState, val session: SimSession, val mode: SmbOpenMode, val key: String?) {
     val connection: SimConnection get() = session.connection
 
     /** Il "cancella alla chiusura": Samba lo esegue quando l'handle si chiude, anche per la caduta della connessione. */
@@ -255,6 +263,12 @@ class InMemorySmbBackend(
     /** Cancellato con altri handle ancora aperti: sparisce alla chiusura dell'ultimo; intanto aprirlo da' `DELETE_PENDING`. */
     var deletePending: Boolean = false
 
+    /** Il nome da togliere quando [deletePending] scatta (null = quello che il nodo ha). */
+    var pendingKey: String? = null
+
+    /** I nomi del file (`NumberOfLinks`): piu' di 1 con un collegamento fisico ([putHardLink]). */
+    var links: Int = 1
+
     val size: Long get() = virtual?.size ?: bytes.size.toLong()
 
     fun copyTo(offset: Long, dst: ByteArray, dstOffset: Int, len: Int) {
@@ -277,6 +291,9 @@ class InMemorySmbBackend(
     val nodes = HashMap<String, Node>()
     val kids = HashMap<String, LinkedHashMap<String, Node>>()
     val root = Node("", true, nextFileId.incrementAndGet(), nasTime())
+
+    /** I nomi che sono collegamenti simbolici "trasparenti" a un file ([putFileLink]): toglierli non cambia i nomi della destinazione. */
+    val symlinks = HashSet<String>()
 
     fun usedBytes(): Long = nodes.values.sumOf { if (it.virtual == null) it.bytes.size.toLong() else 0L }
 
@@ -374,19 +391,53 @@ class InMemorySmbBackend(
 
   /**
    * Un punto di rianalisi (E-N10): una "cartella" in [path] che porta a [target] (anche un suo antenato: un ciclo).
-   * Ha l'attributo `REPARSE_POINT`; aprirla elenca la destinazione, come farebbe un server che segue i collegamenti.
+   * Ha l'attributo `REPARSE_POINT`; aprirla elenca la destinazione, come farebbe un server che segue i collegamenti. Con [transparent]
+   * (R3 della revisione 5A) e' come Samba di serie la presenta: una cartella normale, senza attributo; la voce `..` resta quella della
+   * destinazione. I percorsi sotto il collegamento non si risolvono attraverso: chi prova un file "dentro" lo mette al suo nome.
    */
-  fun putLink(share: String, path: String, target: String) {
+  fun putLink(share: String, path: String, target: String, transparent: Boolean = false) {
     synchronized(lock) {
       val state = shareState(share)
       val parts = split(path)
       ensureDirs(state, parts.dropLast(1), nasTime())
       val node = Node(parts.joinToString("/"), true, nextFileId.incrementAndGet(), nasTime())
-      node.attributes = NasAttributes.DIRECTORY or NasAttributes.REPARSE_POINT
+      node.attributes = if (transparent) NasAttributes.DIRECTORY else NasAttributes.DIRECTORY or NasAttributes.REPARSE_POINT
       node.linkTarget = key(split(target))
       state.add(key(parts), node)
     }
   }
+
+  /**
+   * R3 della revisione 5A: un **collegamento fisico** [link] al file [existing] (come `ln` via SSH, o `FileLinkInformation` di SMB2, che
+   * Samba accetta). Lo stesso file sotto due nomi: stesso `fileId`, stessi byte, `NumberOfLinks` 2 da entrambi. Il nome [link] deve essere
+   * libero (le cartelle sopra si creano).
+   */
+  fun putHardLink(share: String, existing: String, link: String) = addName(share, existing, link, symbolic = false)
+
+  /**
+   * R3 della revisione 5A: un **collegamento simbolico** [link] al file [target] come lo presenta Samba di serie a un client SMB 3 senza
+   * estensioni POSIX (`follow symlinks = yes`): un file normale, senza attributi, con l'identita', i byte e i nomi (`NumberOfLinks`) della
+   * destinazione. Toglierlo toglie solo il collegamento.
+   */
+  fun putFileLink(share: String, link: String, target: String) = addName(share, target, link, symbolic = true)
+
+  private fun addName(share: String, existing: String, link: String, symbolic: Boolean) {
+    synchronized(lock) {
+      val state = shareState(share)
+      val node = checkNotNull(state.nodes[key(split(existing))]) { "File assente." }
+      require(!node.isDirectory) { "Solo il collegamento a un file." }
+      val parts = split(link)
+      val now = nasTime()
+      ensureDirs(state, parts.dropLast(1), now)
+      require(!state.nodes.containsKey(key(parts))) { "Il nome del collegamento e' occupato." }
+      state.add(key(parts), node)
+      if (symbolic) state.symlinks += key(parts) else node.links++
+      state.touchParent(key(parts), now)
+    }
+  }
+
+  /** I nomi del file [path] (`NumberOfLinks`), o null se non c'e'. */
+  fun links(share: String, path: String): Int? = synchronized(lock) { shareState(share).nodes[key(split(path))]?.links }
 
   /** Modifica sul posto dal PC (E-N2): contenuto nuovo, stesso `fileId`, data nuova; la cartella non cambia data. */
   fun modify(share: String, path: String, content: NasContent, lastWriteMs: Long = nasTime()) {
@@ -412,7 +463,7 @@ class InMemorySmbBackend(
     synchronized(lock) {
       val state = shareState(share)
       val k = key(split(path))
-      state.nodes.keys.filter { it == k || it.startsWith("$k/") }.forEach { state.remove(it) }
+      state.nodes.keys.filter { it == k || it.startsWith("$k/") }.forEach { name -> state.remove(name)?.let { dropName(state, it, name) } }
       state.touchParent(k, nasTime())
     }
   }
@@ -495,9 +546,9 @@ class InMemorySmbBackend(
   // --- Handle dei client (condivisioni di Samba) -------------------------------------------------------------
 
   /** Un'apertura di [node]: `DELETE_PENDING` se sta per sparire, `SHARING_VIOLATION` se un handle vivo non la lascia passare. Sotto il lucchetto. */
-  private fun openLocked(node: Node, state: SimShareState, session: SimSession, mode: SmbOpenMode): SimHandle {
+  private fun openLocked(node: Node, state: SimShareState, session: SimSession, mode: SmbOpenMode, key: String?): SimHandle {
     checkOpenLocked(node, mode)
-    return SimHandle(node, state, session, mode).also { handles.getOrPut(node) { ArrayList() } += it }
+    return SimHandle(node, state, session, mode, key).also { handles.getOrPut(node) { ArrayList() } += it }
   }
 
   /** Il controllo di un'apertura che non resta (cancellazione per nome). Sotto il lucchetto. */
@@ -513,23 +564,40 @@ class InMemorySmbBackend(
     if (list.isEmpty()) handles.remove(handle.node)
     val node = handle.node
     if (handle.deleteOnClose) {
-      // Una cartella riempita nel frattempo resta (Samba ricontrolla alla chiusura).
-      val k = handle.state.nodes.entries.firstOrNull { it.value === node }?.key
-      if (k != null && !(node.isDirectory && handle.state.children(k).isNotEmpty())) deleteLocked(handle.state, node)
+      // Una cartella riempita nel frattempo resta (Samba ricontrolla alla chiusura). Il nome tolto e' quello con cui l'handle e' stato
+      // aperto (un file con piu' nomi tiene gli altri), se c'e' ancora; altrimenti quello che il nodo ha adesso (dopo una rinomina).
+      val k = handle.key?.takeIf { handle.state.nodes[it] === node } ?: handle.state.nodes.entries.firstOrNull { it.value === node }?.key
+      if (k != null && !(node.isDirectory && handle.state.children(k).isNotEmpty())) deleteLocked(handle.state, node, k)
     } else if (list.isEmpty() && node.deletePending) {
       removeNodeLocked(handle.state, node)
     }
   }
 
-  /** Cancella [node] adesso, o alla chiusura dell'ultimo handle se ce ne sono ancora (Samba: cancella alla chiusura). Sotto il lucchetto. */
-  private fun deleteLocked(state: SimShareState, node: Node) {
-    if (handles[node].isNullOrEmpty()) removeNodeLocked(state, node) else node.deletePending = true
+  /**
+   * Cancella il nome [name] di [node] adesso, o alla chiusura dell'ultimo handle se ce ne sono ancora (Samba: cancella alla chiusura). Sotto
+   * il lucchetto.
+   */
+  private fun deleteLocked(state: SimShareState, node: Node, name: String? = null) {
+    if (handles[node].isNullOrEmpty()) {
+      removeNodeLocked(state, node, name)
+    } else {
+      node.deletePending = true
+      node.pendingKey = name
+    }
   }
 
-  private fun removeNodeLocked(state: SimShareState, node: Node) {
-    val k = state.nodes.entries.firstOrNull { it.value === node }?.key ?: return
+  private fun removeNodeLocked(state: SimShareState, node: Node, name: String? = null) {
+    val k = (name ?: node.pendingKey)?.takeIf { state.nodes[it] === node } ?: state.nodes.entries.firstOrNull { it.value === node }?.key ?: return
     state.remove(k)
+    dropName(state, node, k)
     state.touchParent(k, nasTime())
+  }
+
+  /** Il nome [name] di [node] e' stato tolto: un collegamento simbolico sparisce e basta, un nome fisico ne lascia uno in meno. Sotto il lucchetto. */
+  private fun dropName(state: SimShareState, node: Node, name: String) {
+    node.deletePending = false
+    node.pendingKey = null
+    if (!state.symlinks.remove(name) && node.links > 1) node.links--
   }
 
   /** La chiusura di un handle da parte del client: il gancio [beforeClose], poi il server lo dimentica (se la connessione c'e' ancora). */
@@ -798,7 +866,7 @@ class InMemorySmbBackend(
     }
 
     /** Il nodo aperto con un handle che resta vivo sul server ([shareModes]). Sotto il lucchetto. */
-    private fun open(state: SimShareState, node: Node, mode: SmbOpenMode): SimHandle = openLocked(node, state, session, mode)
+    private fun open(state: SimShareState, node: Node, mode: SmbOpenMode, key: String?): SimHandle = openLocked(node, state, session, mode, key)
 
     private fun requireWrite() {
       if (access != SimAccess.READ_WRITE) throw SmbStatusException(NtStatus.ACCESS_DENIED)
@@ -830,7 +898,7 @@ class InMemorySmbBackend(
         val found = lookup(state, split(path))
         if (found.isDirectory) throw SmbStatusException(NtStatus.FILE_IS_A_DIRECTORY)
         checkUnlocked(path, forRead = true)
-        SimReadFile(this, found, open(state, found, SmbOpenMode.READ))
+        SimReadFile(this, found, open(state, found, SmbOpenMode.READ, key(split(path))))
       }
     }
 
@@ -856,7 +924,7 @@ class InMemorySmbBackend(
           state.add(key(parts), it)
           state.touchParent(key(parts), now)
         }
-        SimWriteFile(this, node, open(state, node, SmbOpenMode.CREATE_EXCLUSIVE))
+        SimWriteFile(this, node, open(state, node, SmbOpenMode.CREATE_EXCLUSIVE, key(parts)))
       }
     }
 
@@ -894,7 +962,7 @@ class InMemorySmbBackend(
         val parts = split(path)
         val node = lookup(state, parts)
         if (!node.isDirectory) throw SmbStatusException(NtStatus.NOT_A_DIRECTORY)
-        val handle = open(state, node, SmbOpenMode.directory(access))
+        val handle = open(state, node, SmbOpenMode.directory(access), key(parts))
         val listed = node.linkTarget ?: key(parts)
         // La voce `..` come la da' Samba: il genitore sul disco (per un collegamento, quello della destinazione). Radice: niente.
         val parentId = if (listed.isEmpty()) null else state.node(parentKey(listed))?.fileId
@@ -937,7 +1005,7 @@ class InMemorySmbBackend(
         val state = state()
         val found = lookup(state, parts)
         if (locks.containsKey(lockKey(name, path))) throw SmbStatusException(NtStatus.SHARING_VIOLATION)
-        SimChangeHandle(this, found, open(state, found, SmbOpenMode.change(exclusive)))
+        SimChangeHandle(this, found, open(state, found, SmbOpenMode.change(exclusive), key(parts)))
       }
     }
 
@@ -953,14 +1021,18 @@ class InMemorySmbBackend(
         val found = lookup(state, parts)
         if (found.isDirectory) throw SmbStatusException(NtStatus.FILE_IS_A_DIRECTORY)
         checkUnlocked(path, forRead = false)
-        SimWriteFile(this, found, open(state, found, SmbOpenMode.CREATE_EXCLUSIVE), found.info())
+        SimWriteFile(this, found, open(state, found, SmbOpenMode.CREATE_EXCLUSIVE, key(parts)), found.info())
       }
     }
 
     override fun close() = Unit
 
-    /** La chiave attuale di [node] (dopo eventuali rinomine), o null se non c'e' piu'. Sotto il lucchetto. */
-    private fun keyOf(state: SimShareState, node: Node): String? = state.nodes.entries.firstOrNull { it.value === node }?.key
+    /**
+     * La chiave attuale di [node] (dopo eventuali rinomine), o null se non c'e' piu'. Per un file con piu' nomi, [opened] (il nome con cui
+     * l'handle e' stato aperto) se e' ancora suo. Sotto il lucchetto.
+     */
+    private fun keyOf(state: SimShareState, node: Node, opened: String? = null): String? =
+      opened?.takeIf { state.nodes[it] === node } ?: state.nodes.entries.firstOrNull { it.value === node }?.key
 
     /** Un file aperto dal PC dentro la cartella [key] (o la cartella stessa). Sotto il lucchetto. */
     private fun lockedUnder(key: String): Boolean {
@@ -973,10 +1045,10 @@ class InMemorySmbBackend(
       list.any { it.state === state && it.connection === session.connection && key(split(it.node.displayPath)).startsWith("$dirKey/") }
     }
 
-    fun renameByHandle(node: Node, newPath: String) = perform(SimOp.RENAME, newPath) {
+    fun renameByHandle(node: Node, newPath: String, opened: String?) = perform(SimOp.RENAME, newPath) {
       synchronized(lock) {
         val state = state()
-        val oldKey = keyOf(state, node) ?: throw SmbStatusException(NtStatus.OBJECT_NAME_NOT_FOUND)
+        val oldKey = keyOf(state, node, opened) ?: throw SmbStatusException(NtStatus.OBJECT_NAME_NOT_FOUND)
         if (lockedUnder(oldKey)) throw SmbStatusException(NtStatus.SHARING_VIOLATION)
         // Samba (`have_file_open_below`): una cartella con un file aperto sotto dallo stesso client non si rinomina.
         if (node.isDirectory && shareModes && openBelowDeniesDirRename && ownHandleBelow(state, oldKey)) {
@@ -993,10 +1065,10 @@ class InMemorySmbBackend(
       }
     }
 
-    fun markDeleteByHandle(node: Node) = perform(SimOp.DELETE_ON_CLOSE, node.displayPath) {
+    fun markDeleteByHandle(node: Node, opened: String?) = perform(SimOp.DELETE_ON_CLOSE, node.displayPath) {
       synchronized(lock) {
         val state = state()
-        val k = keyOf(state, node) ?: throw SmbStatusException(NtStatus.OBJECT_NAME_NOT_FOUND)
+        val k = keyOf(state, node, opened) ?: throw SmbStatusException(NtStatus.OBJECT_NAME_NOT_FOUND)
         if (lockedUnder(k)) throw SmbStatusException(NtStatus.SHARING_VIOLATION)
         if (node.isDirectory && state.children(k).isNotEmpty()) throw SmbStatusException(NtStatus.DIRECTORY_NOT_EMPTY)
       }
@@ -1078,10 +1150,10 @@ class InMemorySmbBackend(
         total
       }
 
-    fun rename(node: Node, newPath: String) = perform(SimOp.RENAME, newPath) {
+    fun rename(node: Node, newPath: String, opened: String?) = perform(SimOp.RENAME, newPath) {
       synchronized(lock) {
         val state = state()
-        val oldKey = state.nodes.entries.firstOrNull { it.value === node }?.key ?: throw SmbStatusException(NtStatus.OBJECT_NAME_NOT_FOUND)
+        val oldKey = keyOf(state, node, opened) ?: throw SmbStatusException(NtStatus.OBJECT_NAME_NOT_FOUND)
         if (locks.containsKey(lockKeyOf(name, oldKey))) throw SmbStatusException(NtStatus.SHARING_VIOLATION)
         moveLocked(state, oldKey, split(newPath), nasTime(), outside = false)
       }
@@ -1116,6 +1188,9 @@ class InMemorySmbBackend(
   /** Un handle aperto dal client: chiuderlo lo chiude sul server (una volta sola). */
   private abstract inner class SimOpen(private val share: SimShare, private val handle: SimHandle) {
     @Volatile private var closed = false
+
+    /** Il nome con cui l'handle e' stato aperto (per un file con piu' nomi). */
+    protected val openedAs: String? get() = handle.key
 
     /** Il client non ha mai ricevuto la risposta dell'apertura: per il server l'handle non c'e'. */
     fun lost() = synchronized(lock) { releaseLocked(handle) }
@@ -1160,11 +1235,17 @@ class InMemorySmbBackend(
       return synchronized(lock) { node.size }
     }
 
-    override fun renameNoReplace(newPath: String) = share.rename(node, newPath)
+    override fun renameNoReplace(newPath: String) = share.rename(node, newPath, openedAs)
 
     override fun copyChunks(resumeKey: ByteArray, chunks: List<SmbCopyChunk>): Long = share.copyChunksInto(node, resumeKey, chunks)
 
     override fun setLength(length: Long) = share.setLengthOf(node, length)
+
+    // R3 (revisione 5A): una QUERY_INFO sullo stesso handle, come la lunghezza (stessa richiesta, stessi guasti).
+    override fun query(): SmbFileInfo {
+      share.flushOrLength(SimOp.LENGTH, node)
+      return synchronized(lock) { node.info() }
+    }
 
     override fun deleteOnClose() {
       share.markDeleteOnClose(node)
@@ -1179,10 +1260,10 @@ class InMemorySmbBackend(
     SimOpen(share, handle), SmbChangeHandle {
     override val info: SmbFileInfo = synchronized(lock) { node.info() }
 
-    override fun renameNoReplace(newPath: String) = share.renameByHandle(node, newPath)
+    override fun renameNoReplace(newPath: String) = share.renameByHandle(node, newPath, openedAs)
 
     override fun deleteOnClose() {
-      share.markDeleteByHandle(node)
+      share.markDeleteByHandle(node, openedAs)
       markDeleteOnClose()
     }
 
@@ -1228,6 +1309,7 @@ class InMemorySmbBackend(
     changeMs = changeMs,
     fileId = fileId,
     attributes = attributes,
+    links = if (isDirectory) null else links.toLong(),
   )
 
   private fun Node.entry(): SmbDirEntry = SmbDirEntry(
@@ -1258,7 +1340,10 @@ class InMemorySmbBackend(
     val depth = split(moving.displayPath).size
     for ((oldKey, node) in moved) {
       node.displayPath = (toParts + split(node.displayPath).drop(depth)).joinToString("/")
-      state.add(toKey + oldKey.removePrefix(fromKey), node)
+      val newKey = toKey + oldKey.removePrefix(fromKey)
+      state.add(newKey, node)
+      // Un collegamento simbolico rinominato resta un collegamento simbolico (R3 della revisione 5A).
+      if (state.symlinks.remove(oldKey)) state.symlinks += newKey
     }
     moving.changeMs = now
     state.touchParent(fromKey, now)

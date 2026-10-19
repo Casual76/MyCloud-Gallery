@@ -29,6 +29,7 @@ import dev.pampa.mycloudgallery.core.nas.ops.backup.BackupTempWriter
 import dev.pampa.mycloudgallery.core.nas.ops.backup.NasBackupOps
 import dev.pampa.mycloudgallery.core.nas.ops.backup.NasBackupPaths
 import dev.pampa.mycloudgallery.core.nas.ops.backup.ReopenOutcome
+import dev.pampa.mycloudgallery.core.nas.ops.backup.TempPoint
 import dev.pampa.mycloudgallery.core.nas.session.SmbErrors
 import dev.pampa.mycloudgallery.core.trust.crypto.TrustIds
 import dev.pampa.mycloudgallery.core.trust.nas.NasFileSystem
@@ -492,8 +493,9 @@ class InMemoryNasMedia(
   // --- Le primitive del backup (Fase 5A, P0): il fake di NasBackupOps -------------------------------------------------------------
   // La vista in sola aggiunta sopra le stesse primitive del fake della 4B: stessi guasti ([opsFaults], prima e dopo che il NAS abbia
   // applicato l'operazione), spazio e quota ([spaceOf]), sola lettura ([setReadOnly]), contatori ([opCount]). In piu': i temporanei
-  // devono essere del backup del dispositivo (`<io>-bk-`), lo scrittore ha il punto di ripresa (`checkpoint`) e la riapertura
-  // accorcia il temporaneo al punto salvato (`reopenTemp`, D5). Nessuna primitiva che tolga o sposti un file visibile.
+  // devono essere del backup del dispositivo (`<io>-bk-`), lo scrittore ha il punto di ripresa (`checkpoint`, con l'identita' del file) e
+  // la riapertura accorcia il temporaneo al punto salvato (`reopenTemp`, D5) solo se e' ancora lui (stessa identita', R3 della revisione
+  // 5A; il fake non ha collegamenti). Nessuna primitiva che tolga o sposti un file visibile.
 
   /** Quante riaperture hanno accorciato un temporaneo del backup (D5): per provare "al massimo 64 MiB ricaricati". */
   val backupTruncations = AtomicInteger(0)
@@ -629,7 +631,7 @@ class InMemoryNasMedia(
       }
     }
 
-    override suspend fun reopenTemp(share: String, temp: SharePath, keepBytes: Long, purpose: Purpose): NasResult<ReopenOutcome> {
+    override suspend fun reopenTemp(share: String, temp: SharePath, keepBytes: Long, tempId: Long, purpose: Purpose): NasResult<ReopenOutcome> {
       requireBackupTemp(temp)
       require(keepBytes >= 0) { "Punto di ripresa negativo." }
       return guarded(SimOp.OPEN_CHANGE, FakeNasOp.REOPEN_TEMP, share, temp, write = true) {
@@ -637,6 +639,8 @@ class InMemoryNasMedia(
         val node = node(state, temp.components) ?: return@guarded NasResult.Ok(ReopenOutcome.Missing)
         if (node.isDirectory) return@guarded NasResult.Err(NasError.NotFound)
         if (lockKey(share, temp.value) in locked) return@guarded NasResult.Ok(ReopenOutcome.Locked)
+        // R3 (revisione 5A): un altro file al nome del temporaneo (o un punto di rianalisi) non si accorcia mai.
+        if (node.fileId != tempId || (node.attributes and NasAttributes.REPARSE_POINT) != 0) return@guarded NasResult.Ok(ReopenOutcome.Foreign)
         if (node.content.size < keepBytes) return@guarded NasResult.Ok(ReopenOutcome.TooShort(node.content.size))
         val content = (node.content as? PagedContent) ?: PagedContent().also { it.loadFrom(node.content, keepBytes) }
         content.truncate(keepBytes)
@@ -698,11 +702,11 @@ class InMemoryNasMedia(
         }
       }
 
-      override suspend fun checkpoint(): NasResult<Long> {
+      override suspend fun checkpoint(): NasResult<TempPoint> {
         check(!closed) { "Scrittore chiuso." }
         return guarded(SimOp.LENGTH, FakeNasOp.WRITE_TEMP, share, temp, write = true) {
           if (!alive(shares[key(share)])) return@guarded NasResult.Err(NasError.NotFound)
-          NasResult.Ok(content.size)
+          NasResult.Ok(TempPoint(content.size, node.fileId))
         }
       }
 

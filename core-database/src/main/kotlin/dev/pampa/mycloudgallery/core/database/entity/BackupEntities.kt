@@ -29,8 +29,8 @@ import androidx.room.PrimaryKey
  * - telefono: la riga del MediaStore con cui e' stato pianificato ([phoneVolume], [phoneMediaStoreId], [phoneMediaStoreVersion]) e il
  *   timbro atteso ([expectedSize], [expectedModifiedAt], [expectedGeneration]); `NULL` per il guardiano.
  * - NAS: [share] e [plannedPath] (D6), [finalPath] ("nome (n)" dopo una collisione), [tempPath] (D33), [resumeAt] (D5: byte gia'
- *   sul NAS e controllati), i timbri del temporaneo verificato e del finale (dimensione, data, `FileId`), la sorgente del
- *   guardiano ([guardShare], [guardPath] e il suo timbro).
+ *   sul NAS e controllati) con [resumeFileId] (R3 della revisione 5A: l'identita' del temporaneo a quel punto), i timbri del temporaneo
+ *   verificato e del finale (dimensione, data, `FileId`), la sorgente del guardiano ([guardShare], [guardPath] e il suo timbro).
  * - [problem]: codice di `BackupProblemCode` registrato con un'uscita (`FAILED`, `GONE`).
  */
 @Entity(
@@ -71,6 +71,8 @@ data class BackupItemEntity(
   @ColumnInfo(name = "name_attempt") val nameAttempt: Int,
   @ColumnInfo(name = "temp_path") val tempPath: String?,
   @ColumnInfo(name = "resume_at") val resumeAt: Long,
+  // R3 della revisione 5A: l'identita' (`FileId`) del temporaneo al punto di ripresa, letta sull'handle dello scrittore.
+  @ColumnInfo(name = "resume_file_id") val resumeFileId: Long?,
   // --- impronte dei byte del telefono (o, per il guardiano, quelle attese della versione) ---
   @ColumnInfo(name = "sha256") val sha256: String?,
   @ColumnInfo(name = "quick_hash") val quickHash: String?,

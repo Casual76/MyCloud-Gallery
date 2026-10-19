@@ -389,6 +389,9 @@ private class SmbjWriteFile(
   // Fase 5A (D5): SET_INFO con FileEndOfFileInformation sullo stesso handle (File.setLength di smbj).
   override fun setLength(length: Long) = guard.io { file.setLength(length) }
 
+  // R3 (revisione 5A): lunghezza, fileId e NumberOfLinks in una QUERY_INFO sullo stesso handle (il punto di ripresa del backup).
+  override fun query(): SmbFileInfo = guard.io { file.getFileInformation(FileAllInformation::class.java).toInfo() }
+
   override fun renameNoReplace(newPath: String) = guard.io { file.rename(newPath, false) }
 
   override fun deleteOnClose() = guard.io { file.deleteOnClose() }
@@ -491,6 +494,8 @@ private fun FileAllInformation.toInfo(): SmbFileInfo {
     changeMs = basic.changeTime.millisOrNull(),
     fileId = internalInformation.indexNumber.takeIf { it != 0L },
     attributes = attributes,
+    // R3 (revisione 5A): i nomi del file. Un collegamento fisico (anche creato via SMB2 `FileLinkInformation`) ne ha almeno 2.
+    links = standardInformation.numberOfLinks,
   )
 }
 

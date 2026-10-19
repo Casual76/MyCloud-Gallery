@@ -975,9 +975,9 @@ dica "Backup in prova" con un account non di prova.
   private altrui.
 
 ## Fase 5A: correzioni della revisione (19/10)
-Fonte: `docs/review/5a-fase5a.md` (R1, R2, R4, R5, R6, R7 corrette, ognuna con il suo test; **R3 resta aperta**: la fa un'altra sessione,
-`reopenTemp`, `openExistingForWrite`, `setLength` e `SmbNasFileOps` non sono stati toccati). Regola di tutte le scelte: **ogni correzione
-riduce cio' che il backup scrive, mai il contrario**. Quelle che l'utente vede (da confermare):
+Fonte: `docs/review/5a-fase5a.md` (R1, R2, R4, R5, R6, R7 corrette, ognuna con il suo test; **R3** corretta dopo, in un'altra sessione:
+ultima voce qui sotto). Regola di tutte le scelte: **ogni correzione riduce cio' che il backup scrive, mai il contrario**. Quelle che
+l'utente vede (da confermare):
 
 - **R2: la release con un account di prova non scrive da nessuna parte.** Presa la strada "piu' semplice" della revisione: con
   `FeatureFlags.backupBlocksTestAccounts` (vero in `RELEASE`, falso nelle build di debug dove la recinzione D13 c'e') il cancello risponde
@@ -1008,8 +1008,16 @@ riduce cio' che il backup scrive, mai il contrario**. Quelle che l'utente vede (
   backup si ricostruiscono con la share nuova al giro dopo. Un elemento del diario di un'altra share aspetta (e il log lo dice); non
   ferma gli altri. **Residuo:** finche' aspetta, il suo media non riceve un elemento nuovo per la share di adesso; si risolve tenendo
   l'area privata com'era o con "Azzera".
-- **Residui:** R3 (aperta), le informative I1-I9 come scritte; F21-F24 e le prove sul campo di R1, R5, R6 della revisione (sotto "Da
-  provare sul campo") non sono state fatte (nessun NAS vero, nessun telefono).
+- **R3: la ripresa di un file grande accorcia solo il proprio temporaneo.** Con il punto di ripresa il diario scrive anche l'identita' del
+  temporaneo letta sull'handle dello scrittore; alla riapertura, sullo stesso handle e prima di accorciare, un altro file, un file con due
+  nomi (collegamento fisico), un punto di rianalisi o una `tmp/` che non e' la cartella vera **non si toccano**: l'elemento ricomincia da
+  capo (al piu' 64 MiB di traffico in piu', mai un byte cambiato) e il nome occupato si toglie con `deleteOwnTemp`, che toglie solo il nome.
+  Un server che non dice l'identita' non riprende mai. Provato sul WD (19/10): ripresa con accorciamento riuscita; un collegamento fisico
+  via SMB2 il WD lo crea e lo dice (`NumberOfLinks` 2), e la riapertura lo rifiuta lasciando il file intero (visto una volta: la prova
+  usava smbj diretto, che la suite vieta, e non e' rimasta; **da decidere** se renderla ripetibile).
+- **Residui:** le informative I1-I9 come scritte; F21-F24 e le prove sul campo di R1, R5, R6 della revisione (sotto "Da provare sul
+  campo") non sono state fatte (nessun telefono). Di R3: un file il cui unico nome e' quello del temporaneo lo toglie `deleteOwnTemp` (come
+  gia' le altre vie del motore e la pulizia D33); il collegamento simbolico non si crea via SMB e non e' stato provato sul WD.
 
 ## Revisione grafica della Libreria da parte dell'utente (13/10)
 Giudizio: le prestazioni della navigazione non sono male, la **grafica no**. Serve molto lavoro, da fare in un **filone grafico

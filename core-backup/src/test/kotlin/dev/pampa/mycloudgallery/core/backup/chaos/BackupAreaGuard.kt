@@ -18,6 +18,7 @@ import dev.pampa.mycloudgallery.core.nas.ops.TempFinish
 import dev.pampa.mycloudgallery.core.nas.ops.backup.BackupTempWriter
 import dev.pampa.mycloudgallery.core.nas.ops.backup.NasBackupOps
 import dev.pampa.mycloudgallery.core.nas.ops.backup.ReopenOutcome
+import dev.pampa.mycloudgallery.core.nas.ops.backup.TempPoint
 import dev.pampa.mycloudgallery.core.network.contract.NasAddress
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import java.util.Locale
@@ -238,9 +239,9 @@ class GuardedBackupOps(
     }
   }
 
-  override suspend fun reopenTemp(share: String, temp: SharePath, keepBytes: Long, purpose: Purpose): NasResult<ReopenOutcome> {
+  override suspend fun reopenTemp(share: String, temp: SharePath, keepBytes: Long, tempId: Long, purpose: Purpose): NasResult<ReopenOutcome> {
     pass(share)
-    return when (val reopened = inner.reopenTemp(share, temp, keepBytes, purpose).stopOnAuth()) {
+    return when (val reopened = inner.reopenTemp(share, temp, keepBytes, tempId, purpose).stopOnAuth()) {
       is NasResult.Err -> reopened
       is NasResult.Ok -> when (val outcome = reopened.value) {
         is ReopenOutcome.Reopened -> NasResult.Ok(ReopenOutcome.Reopened(GuardedWriter(outcome.writer)))
@@ -280,7 +281,7 @@ class GuardedBackupOps(
   private class GuardedWriter(private val inner: BackupTempWriter) : BackupTempWriter by inner {
     override suspend fun write(offset: Long, buf: ByteArray, off: Int, len: Int): NasResult<Unit> = inner.write(offset, buf, off, len).stopOnAuth()
 
-    override suspend fun checkpoint(): NasResult<Long> = inner.checkpoint().stopOnAuth()
+    override suspend fun checkpoint(): NasResult<TempPoint> = inner.checkpoint().stopOnAuth()
 
     override suspend fun finish(expectedSize: Long): NasResult<TempFinish> = inner.finish(expectedSize).stopOnAuth()
   }
@@ -378,7 +379,7 @@ object BackupAreaSelfTest {
       mustRefuse("apertura nella share '$share'") { reader.open(share, SharePath.of("x"), Purpose.BACKGROUND) }
       mustRefuse("cartella nella share '$share'") { ops.mkdirs(share, SharePath.of("Backup"), Purpose.BACKGROUND) }
       mustRefuse("temporaneo nella share '$share'") { ops.openTemp(share, someTemp, Purpose.BACKGROUND) }
-      mustRefuse("ripresa nella share '$share'") { ops.reopenTemp(share, someTemp, 1, Purpose.BACKGROUND) }
+      mustRefuse("ripresa nella share '$share'") { ops.reopenTemp(share, someTemp, 1, 1L, Purpose.BACKGROUND) }
       mustRefuse("pubblicazione nella share '$share'") { ops.publishTemp(share, someTemp, SharePath.of("Backup", "x.jpg"), Purpose.BACKGROUND) }
       mustRefuse("cancellazione di un proprio temporaneo nella share '$share'") { ops.deleteOwnTemp(share, someTemp, Purpose.BACKGROUND) }
       mustRefuse("copia verso la share '$share'") { ops.copyToTemp("test", SharePath.of("x"), share, someTemp, null, Purpose.BACKGROUND) }

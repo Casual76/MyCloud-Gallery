@@ -72,8 +72,13 @@ interface NasBackupOps {
    * sullo stesso handle, `SET_INFO`) e restituisce lo scrittore pronto a continuare da li' ([BackupTempWriter.length] = [keepBytes]).
    * Assente: [ReopenOutcome.Missing]. Piu' corto di [keepBytes]: [ReopenOutcome.TooShort] e niente cambia (il chiamante riparte da
    * zero). Fidarsi del prefisso e' sicuro perche' la verifica completa (D4) viene comunque dopo.
+   *
+   * R3 della revisione 5A: e' l'unica primitiva del backup che cambia byte gia' scritti, quindi accorcia solo il temporaneo **del punto di
+   * ripresa**: [tempId] e' la sua identita' ([TempPoint.fileId], letta dallo scrittore sul suo handle e scritta nel diario con il punto).
+   * Sullo stesso handle, prima di accorciare, un'identita' diversa, piu' di un nome (un collegamento fisico), un punto di rianalisi o una
+   * `tmp/` che non e' la cartella vera danno [ReopenOutcome.Foreign] e niente cambia.
    */
-  suspend fun reopenTemp(share: String, temp: SharePath, keepBytes: Long, purpose: Purpose): NasResult<ReopenOutcome>
+  suspend fun reopenTemp(share: String, temp: SharePath, keepBytes: Long, tempId: Long, purpose: Purpose): NasResult<ReopenOutcome>
 
   /**
    * Copia lato server [from] di [fromShare] nel temporaneo [temp] di [toShare] (il guardiano, D9: dall'area comune all'area
@@ -116,10 +121,11 @@ interface BackupTempWriter : Closeable {
   suspend fun write(offset: Long, buf: ByteArray, off: Int, len: Int): NasResult<Unit>
 
   /**
-   * D5: svuota le scritture e legge la lunghezza del file **sullo stesso handle**. Il chiamante scrive nel diario il punto di
-   * ripresa solo se la lunghezza e' quella che si aspetta (ogni 64 MiB).
+   * D5: svuota le scritture e legge lunghezza e identita' del file **sullo stesso handle** ([TempPoint]). Il chiamante scrive nel diario
+   * il punto di ripresa solo se la lunghezza e' quella che si aspetta (ogni 64 MiB), e con il punto l'identita' (R3 della revisione 5A),
+   * che la riapertura confrontera' prima di accorciare.
    */
-  suspend fun checkpoint(): NasResult<Long>
+  suspend fun checkpoint(): NasResult<TempPoint>
 
   /** Svuota le scritture e controlla, sullo stesso handle, che il file sia lungo [expectedSize]. */
   suspend fun finish(expectedSize: Long): NasResult<TempFinish>
@@ -127,6 +133,12 @@ interface BackupTempWriter : Closeable {
   /** Chiude senza finire: il temporaneo resta, citato dal diario del backup (la pulizia dei propri file non lo tocca, D33). */
   override fun close()
 }
+
+/**
+ * Un punto di ripresa letto **sullo stesso handle** dello scrittore (D5, R3 della revisione 5A): fin dove arriva il file ([length]) e quale
+ * file e' ([fileId], l'identita' del server; null se non la dice: senza identita' la ripresa non si fa).
+ */
+data class TempPoint(val length: Long, val fileId: Long?)
 
 /** Esiti di [NasBackupOps.reopenTemp]. */
 sealed interface ReopenOutcome {
@@ -143,6 +155,13 @@ sealed interface ReopenOutcome {
 
   /** Aperto da un altro programma (`SHARING_VIOLATION`): si riprova piu' tardi. */
   data object Locked : ReopenOutcome
+
+  /**
+   * R3 della revisione 5A: al nome del temporaneo non c'e' il temporaneo del punto di ripresa: un'altra identita', piu' di un nome (un
+   * collegamento fisico), un punto di rianalisi, o `tmp/` non e' la cartella vera. **Niente e' cambiato** (nessun accorciamento, nessuna
+   * scrittura): il chiamante ricomincia da capo con un temporaneo nuovo.
+   */
+  data object Foreign : ReopenOutcome
 }
 
 /**

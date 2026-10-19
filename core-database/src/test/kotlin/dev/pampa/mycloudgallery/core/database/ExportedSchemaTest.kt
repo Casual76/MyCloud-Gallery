@@ -258,12 +258,12 @@ object SchemaSeeds {
     db.execSQL(
       "INSERT INTO backup_item (item_id, kind, state, is_open, media_id, version_id, size, phone_volume, phone_ms_id, " +
         "phone_ms_version, expected_size, expected_modified_at, expected_generation, share, planned_path, final_path, name_attempt, " +
-        "temp_path, resume_at, sha256, quick_hash, temp_size, temp_modified_at, temp_file_id, final_size, final_modified_at, " +
-        "final_file_id, verify_attempts, guard_share, guard_path, guard_size, guard_modified_at, guard_file_id, problem, created_at, " +
-        "updated_at) VALUES ($BACKUP_ITEM_ID, 'new_copy', 'uploading', 1, '$MEDIA_ID', '$VERSION_ID', 300000, 'external_primary', 42, " +
-        "'store-v1', 300000, $T0, 7, 'alessio', 'Backup/S25/2025/10/IMG_0001.jpg', 'Backup/S25/2025/10/IMG_0001 (2).jpg', 1, " +
-        "'.mycloudgallery/tmp/tablet-bk-1', 134217728, '$FULL', '$QUICK', 300000, $T0, $FILE_ID, NULL, NULL, NULL, 2, 'NAS', " +
-        "'Famiglia/IMG_0001.jpg', 300000, $T0, $FILE_ID, NULL, $T0, $T0)",
+        "temp_path, resume_at, resume_file_id, sha256, quick_hash, temp_size, temp_modified_at, temp_file_id, final_size, " +
+        "final_modified_at, final_file_id, verify_attempts, guard_share, guard_path, guard_size, guard_modified_at, guard_file_id, " +
+        "problem, created_at, updated_at) VALUES ($BACKUP_ITEM_ID, 'new_copy', 'uploading', 1, '$MEDIA_ID', '$VERSION_ID', 300000, " +
+        "'external_primary', 42, 'store-v1', 300000, $T0, 7, 'alessio', 'Backup/S25/2025/10/IMG_0001.jpg', " +
+        "'Backup/S25/2025/10/IMG_0001 (2).jpg', 1, '.mycloudgallery/tmp/tablet-bk-1', 134217728, $RESUME_FILE_ID, '$FULL', '$QUICK', " +
+        "300000, $T0, $FILE_ID, NULL, NULL, NULL, 2, 'NAS', 'Famiglia/IMG_0001.jpg', 300000, $T0, $FILE_ID, NULL, $T0, $T0)",
     )
     db.execSQL("INSERT INTO backup_problem (media_id, code, marks_cell, updated_at) VALUES ('$MEDIA_ID', 'verify_failed', 1, $T0)")
     db.execSQL("INSERT INTO nas_copy_mismatch (location_id, size, modified_at, found_at) VALUES (2, 300000, $T0, ${T0 + 5})")
@@ -297,6 +297,9 @@ object SchemaSeeds {
 
   // --- v3 (Fase 4) ---
   private const val FILE_ID = 987_654L
+
+  /** v4, R3 della revisione 5A: l'identita' del temporaneo al punto di ripresa. */
+  private const val RESUME_FILE_ID = 876_543L
   private const val SEGMENT = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
   private const val RECORD_KEY = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
   private const val OP_ID = "44444444-4444-4444-8444-444444444444"
@@ -628,6 +631,7 @@ object SchemaSeeds {
       assertThat(item.finalPath).isEqualTo("Backup/S25/2025/10/IMG_0001 (2).jpg")
       assertThat(item.nameAttempt).isEqualTo(1)
       assertThat(item.resumeAt).isEqualTo(134_217_728L)
+      assertThat(item.resumeFileId).isEqualTo(RESUME_FILE_ID)
       assertThat(item.tempFileId).isEqualTo(FILE_ID)
       assertThat(item.guardPath).isEqualTo("Famiglia/IMG_0001.jpg")
       assertThat(database.backupDiaryDao().itemsToResume(10).map { it.itemId }).containsExactly(BACKUP_ITEM_ID)

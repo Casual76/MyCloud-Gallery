@@ -95,8 +95,9 @@ import kotlinx.coroutines.yield
  *   non tornate = `FAILED` con `VERIFY_FAILED` (E-B18);
  * - **mai una sostituzione** (D2, D6, E-B3): `publishTemp` non sostituisce; nome occupato da un file identico = collegato, da uno diverso
  *   = "nome (2)" scritto nel diario prima di riprovare; la risposta persa si riconosce come in F4-D24;
- * - **ripresa** (D5, E-B1): un punto ogni 64 MiB; dopo un'interruzione `reopenTemp(keep = punto)` riapre il proprio temporaneo senza
- *   crearlo e lo accorcia;
+ * - **ripresa** (D5, E-B1): un punto ogni 64 MiB, con l'identita' del temporaneo letta sull'handle dello scrittore; dopo un'interruzione
+ *   `reopenTemp(keep = punto)` riapre il proprio temporaneo senza crearlo e lo accorcia **solo se e' ancora lui** (R3 della revisione 5A:
+ *   stessa identita', un nome solo, `tmp/` vera); altrimenti niente si tocca e l'elemento ricomincia da capo con un temporaneo nuovo;
  * - **file del telefono cambiato** (E-B15, L38, decisione dell'orchestratore del 16/10): prima che il temporaneo sia completo, la
  *   versione non c'e' piu' e il temporaneo si toglie; a temporaneo **completo** non si scarta niente: la verifica decide, e se la
  *   rilettura da' lo SHA-256 dei byte letti **prima** del cambiamento quei byte (l'originale, che sul telefono non c'e' piu') si
@@ -671,7 +672,9 @@ class SafeUploadEngine(
     val writer: BackupTempWriter
     val from: Long
     if (start.resumeAt > 0) {
-      when (val r = ops.reopenTemp(start.share, temp, start.resumeAt, config.purpose)) {
+      // R3 (revisione 5A): senza l'identita' del temporaneo al punto di ripresa non si accorcia niente: da capo.
+      val tempId = start.resumeId ?: return Pumped.Then(save(start.copy(resumeAt = 0)))
+      when (val r = ops.reopenTemp(start.share, temp, start.resumeAt, tempId, config.purpose)) {
         is NasResult.Err -> return Pumped.Then(
           // Un temporaneo che non si puo' riprendere (il server non accorcia, non e' un file): "da capo" nel diario, mai un errore che
           // si ripete a ogni giro. Gli errori di rete fermano il giro come sempre.
@@ -685,6 +688,13 @@ class SafeUploadEngine(
           // Assente o piu' corto del punto salvato: da capo ("da capo" nel diario prima di tutto).
           ReopenOutcome.Missing, is ReopenOutcome.TooShort -> return Pumped.Then(save(start.copy(resumeAt = 0)))
           ReopenOutcome.Locked -> return Pumped.Then(lockedWait(round, start))
+          // R3: al nome del temporaneo c'e' un altro file (un collegamento, un'altra identita') e niente e' stato toccato. Da capo: il passo
+          // dopo trova il nome occupato e lo toglie con deleteOwnTemp, che toglie solo il NOME (un collegamento fisico lascia il file al suo
+          // altro nome, uno simbolico la sua destinazione; un punto di rianalisi non si toglie), poi crea un temporaneo nuovo.
+          ReopenOutcome.Foreign -> {
+            GalleryLog.w(TAG) { "al nome del temporaneo c'e' un altro file: la ripresa ricomincia da capo" }
+            return Pumped.Then(save(start.copy(resumeAt = 0, resumeId = null)))
+          }
         }
       }
     } else {
@@ -716,10 +726,10 @@ class SafeUploadEngine(
           // "Ferma", fine della tappa o regole: un punto di ripresa dove si e' arrivati (se lo scrittore lo conferma), poi si esce.
           if (offset > lastPoint) {
             val cp = writer.checkpoint()
-            if (cp is NasResult.Ok && cp.value == offset) {
+            if (cp is NasResult.Ok && cp.value.length == offset) {
               round.traffic(unrecorded)
               unrecorded = 0
-              item = saveItem(item.copy(resumeAt = offset))
+              item = saveItem(item.copy(resumeAt = offset, resumeId = cp.value.fileId))
             }
           }
           return Pumped.Then(Step.Wait())
@@ -745,8 +755,9 @@ class SafeUploadEngine(
               // Prima il registro del traffico, poi il punto di ripresa (StagedRun): mai il contrario.
               round.traffic(unrecorded)
               unrecorded = 0
-              if (cp.value != offset) return Pumped.Then(save(item.copy(resumeAt = 0)))
-              item = saveItem(item.copy(resumeAt = offset))
+              if (cp.value.length != offset) return Pumped.Then(save(item.copy(resumeAt = 0)))
+              // Con il punto, l'identita' letta sullo stesso handle (R3): la riapertura accorcera' solo questo file.
+              item = saveItem(item.copy(resumeAt = offset, resumeId = cp.value.fileId))
               lastPoint = offset
             }
           }

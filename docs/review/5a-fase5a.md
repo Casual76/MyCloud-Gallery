@@ -8,7 +8,7 @@
 | **Tipo** | Revisione avversariale in sola lettura. Nessuna correzione al codice di produzione. Nessun NAS vero, nessun telefono, nessun `adb`. |
 | **Data** | 16/10/2026 |
 | **Metodo** | Lettura del codice delle superfici richieste, seguendo la macchina a stati del motore vero (`SafeUploadEngine`) e del guardiano passo per passo (pubblicazione, nome occupato, risposta persa, ripresa, telefono che cambia o rifiuta, cancello, eccezioni) fino al catalogo (`attachCopies`, `markVerified`, `recordFullHash`, collegamenti, adozione d'identita') e ai lavori di `:app`. Tre **test temporanei**, sul motore vero (`RealEngineKit`) e sul guardiano vero (`SafetyBench`) di core-backup, per R1 (motore e guardiano) e R5. Sono stati eseguiti in una **copia del repository** nella cartella temporanea della sessione (`git archive` di `87b89e3` piu' il sottomodulo `engine`), perche' un'altra sessione stava eseguendo `:core-backup:testDebugUnitTest --tests *BackupNasIntegrationTest*` (timeout di 180 minuti) e teneva occupata la cartella dei risultati del modulo: niente e' stato toccato nel repository, copia e test sono stati cancellati. Esiti: R1 motore 5 giri su 5 finiti con `TrustViolation`, R1 guardiano 3 su 3, R5 4 giri delle foto su 4 fermi a `phone`. |
-| **Stato** | **Parzialmente corretta (19/10/2026)**: R1, R2, R4, R5, R6, R7 **chiuse** (correzioni in un pacchetto successivo, senza commit, ognuna con il suo test; le scelte che l'utente vede in `docs/decisioni.md`, "Fase 5A: correzioni della revisione (19/10)"). **R3 resta aperta** (la fa un'altra sessione), come le informative I1-I9. |
+| **Stato** | **Corretta (19/10/2026)**: R1, R2, R4, R5, R6, R7 **chiuse** (correzioni in un pacchetto successivo, senza commit, ognuna con il suo test; le scelte che l'utente vede in `docs/decisioni.md`, "Fase 5A: correzioni della revisione (19/10)"); **R3 chiusa** dopo, in un'altra sessione (anche sul WD). Restano le informative I1-I9. |
 
 ## Riepilogo
 
@@ -178,7 +178,7 @@ Le due medie riguardano la protezione stessa:
   - rifiutare (da capo, con `deleteOwnTemp`) se `NumberOfLinks` di `FileStandardInformation` non e' 1 o se il `fileId` non torna;
   - controllare che `tmp/` sia la cartella vera, con la voce `..` come in R3 della 4B;
   - prova sul campo (sotto).
-- **Stato:** aperta.
+- **Stato:** **chiusa (19/10).** Il punto di ripresa legge lunghezza e identita' **sull'handle dello scrittore** (`checkpoint` da' un `TempPoint`: `FLUSH` e una `QUERY_INFO` di `FileAllInformation`, mai un timbro per nome) e il diario le scrive insieme (`BackupItem.resumeId`, colonna `resume_file_id` dello schema v4, senza migrazione); `reopenTemp(…, tempId, …)` sullo stesso handle, prima del `SET_INFO`, rifiuta (`ReopenOutcome.Foreign`, niente toccato) un'identita' diversa, `NumberOfLinks` diverso da 1, un punto di rianalisi o una `tmp/` la cui voce `..` non e' la cartella dell'app; senza identita' nel diario non si riprende. Il motore (e quello di riferimento) ricomincia da capo: il nome occupato lo toglie `deleteOwnTemp`, che toglie solo il nome (un collegamento fisico lascia il file all'altro nome, uno simbolico la destinazione; un punto di rianalisi non si toglie): rifiutare un nome che resterebbe occupato fermerebbe l'elemento per sempre, e un altro nome rimanderebbe soltanto lo stesso scollegamento alla pulizia D33. Test: `Review5aR3Test` (motore vero sul simulatore Samba, che ora ha collegamenti fisici e simbolici "trasparenti": collegamento fisico, identita' diversa, due nomi, ripresa normale; **prima della correzione i primi tre fallivano con il media rovinato**), `SmbNasBackupOpsTest.r3_*` (anche identita' letta sull'handle e non per nome, `tmp/` collegata), `NasBackupOpsContractTest`, `ExportedSchemaTest`; banco 2.000 giri (JVM) e 600 (simulatore SMB) verdi; sul WD `NasIntegrationSuiteTest.t16_ripresaDelBackupAMetaFileSulNasVero` per la ripresa (sotto). Residui: un file il cui **unico** nome e' quello del temporaneo (messo li' da chi ha gia' la password) lo toglie `deleteOwnTemp`, come gia' ogni altra via del motore e la pulizia D33; la voce `..` non vede un collegamento a un'altra cartella che sta anch'essa dentro `.mycloudgallery/` (resta il controllo sull'handle).
 
 ### R4. "Ferma" non e' una pausa
 
@@ -329,11 +329,10 @@ Tutte con stato **aperta**.
 
 ## Da provare sul campo
 
-- **R3** (solo nell'area di prova, su file da buttare):
-  - creare un collegamento fisico (via SSH, o `mklink /H` da Windows su una share Samba) al nome di un temporaneo `-bk-` con un punto di ripresa;
-  - vedere se il WD crea il collegamento fisico via SMB e cosa riporta `FileStandardInformation.NumberOfLinks`;
-  - con un collegamento simbolico, vedere se `FILE_OPEN_REPARSE_POINT` apre il collegamento o la destinazione;
-  - dopo la correzione, l'elemento deve ricominciare da capo e il file collegato restare intero.
+- **R3** (solo nell'area di prova, su file da buttare): **fatta sul WD il 19/10** (`mcg-it/<giro>/` di `test`, primitive del backup di produzione, un solo giro).
+  - La ripresa a meta' file funziona: riapertura senza creare, controlli di R3 e accorciamento da 4 MiB a 2 MiB + 777 byte in 36 ms, resto scritto, pubblicazione, rilettura completa con lo SHA-256 giusto. Resta nella suite: `NasIntegrationSuiteTest.t16_ripresaDelBackupAMetaFileSulNasVero`.
+  - Nello stesso giro, con un aiuto che creava il collegamento con smbj **direttamente**, sulla stessa sessione ma fuori dal trasporto recintato (i percorsi controllati a mano con la guardia, solo dentro il giro): il WD **crea** il collegamento fisico via SMB2 (`FileLinkInformation`) e riporta `NumberOfLinks` = 2 (stessa identita' dai due nomi); la riapertura rifiuta (anche con l'identita' del file collegato), il file di prova resta intero e `deleteOwnTemp` toglie solo il nome (`NumberOfLinks` torna 1). **Quell'aiuto non resta nella suite**: la regola `TestAreaGuardTest.nessunTestDIntegrazioneUsaSmbjDirettamente` vieta smbj diretto nei test d'integrazione (se ne e' accorto `check.ps1` dopo il giro). Rifarla in modo ripetibile chiede una scelta: un'operazione "collegamento fisico" nel trasporto recintato dei test, o la prova a mano via SSH.
+  - Per una `tmp/` vera il WD da' la voce `..` con l'identita' della cartella dell'app (la ripresa e' passata dal controllo). Il collegamento simbolico non si crea via SMB: non provato (resta come in L35 della 4B).
 - **R1**, dopo la correzione: un file del telefono in `DCIM/mcg-prova/` con un nome da 255 byte e un file diverso con lo stesso nome in `mcg-campo/Backup/...`. Il file deve arrivare come "(2)" e gli altri media devono andare avanti.
 - **R5** sull'S25: primo backup interrotto, poi "foto selezionate". Dopo la correzione le foto scelte arrivano e le altre aspettano.
 - **R6**: un file in `DCIM/mcg-prova/` allungato con `dd` in coda, senza far rileggere il MediaStore; poi controllare nel viewer che non diventi "al sicuro" con la copia corta.
@@ -345,11 +344,10 @@ Tutte con stato **aperta**.
 - [ ] **Prova delle 500 interruzioni sul backup di foto e video grandi: zero file a meta', duplicati o perdite; hash verificato al 100%.**
   - Fatto: banco JVM e simulatore SMB verdi (P6, `docs/prova-500.md` §B).
   - Manca: il runner sul NAS vero (in corso in un'altra sessione, esito non visto) e il telefono (F30).
-  - Il banco non copriva R1 (nomi corti nelle fixture), R3 (niente collegamenti trasparenti) ne' R5 (nessun rifiuto per una riga sola): R1 e R5 hanno ora i loro scenari (`Review5aEngineTest`, `Review5aSafetyTest`); R3 no.
-- [ ] **(5A) `core-backup` non puo' togliere ne' sostituire un file: test del compilatore e di architettura, provati reintroducendo la violazione.**
-  - Regge per tipi e per nomi: marcatore, `Phase5ArchitectureTest` letto (non rieseguito reintroducendo le violazioni), `NasFileSystem` senza distruttivi.
-  - Resta **R3**: accorciamento attraverso un collegamento al nome del temporaneo. Poi I1.
-  - Si spunta quando R3 e' corretta o dichiarata come limite.
+  - Il banco non copriva R1 (nomi corti nelle fixture), R3 (niente collegamenti trasparenti) ne' R5 (nessun rifiuto per una riga sola): R1 e R5 hanno ora i loro scenari (`Review5aEngineTest`, `Review5aSafetyTest`), R3 i suoi sul simulatore con i collegamenti (`Review5aR3Test`).
+- [x] **(5A) `core-backup` non puo' togliere ne' sostituire un file: test del compilatore e di architettura, provati reintroducendo la violazione.**
+  - Regge per tipi e per nomi: marcatore, `Phase5ArchitectureTest`, `NasFileSystem` senza distruttivi. Rieseguiti il 19/10 reintroducendo due violazioni (`NasFileOps` nominato in core-backup, `NasBackupOps` in core-library): 3 test rossi, verdi dopo averle tolte.
+  - **R3 chiusa (19/10)**: la ripresa accorcia solo il temporaneo del punto di ripresa (identita' e un nome solo sullo stesso handle), visto anche sul WD con un collegamento fisico vero (una volta, con un aiuto poi tolto dalla suite: vedi "Da provare sul campo"). Resta I1 (informativa).
 - [ ] **(5A) Nessun file visibile non verificato; "al sicuro" solo da una rilettura fatta qui (prova delle 500 interruzioni, F21-F24).**
   - Nel codice e' vero (risposta 5).
   - Restano **R6** e **I3**; F21-F24 non sono ancora fatte.

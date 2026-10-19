@@ -359,15 +359,17 @@ class InMemoryBackupEngine(
       val writer: BackupTempWriter
       var offset: Long
       if (item.resumeAt > 0) {
-        when (val r = ops.reopenTemp(item.share, temp, item.resumeAt, purpose)) {
+        // R3 (revisione 5A): senza l'identita' del temporaneo al punto di ripresa non si accorcia niente.
+        val tempId = item.resumeId ?: return save(item.copy(resumeAt = 0))
+        when (val r = ops.reopenTemp(item.share, temp, item.resumeAt, tempId, purpose)) {
           is NasResult.Err -> return stopFor(r.error)
           is NasResult.Ok -> when (val o = r.value) {
             is ReopenOutcome.Reopened -> {
               writer = o.writer
               offset = item.resumeAt
             }
-            // Assente o piu' corto del punto salvato: da capo ("da capo" nel diario prima di tutto).
-            ReopenOutcome.Missing, is ReopenOutcome.TooShort -> return save(item.copy(resumeAt = 0))
+            // Assente, piu' corto del punto salvato o un altro file al suo nome (R3): da capo ("da capo" nel diario prima di tutto).
+            ReopenOutcome.Missing, is ReopenOutcome.TooShort, ReopenOutcome.Foreign -> return save(item.copy(resumeAt = 0, resumeId = null))
             ReopenOutcome.Locked -> return Step.Wait
           }
         }
@@ -408,9 +410,9 @@ class InMemoryBackupEngine(
           if (offset - lastPoint >= checkpointBytes && offset < item.size) {
             when (val cp = writer.checkpoint()) {
               is NasResult.Err -> return stopFor(cp.error)
-              is NasResult.Ok -> if (cp.value == offset) {
-                // Il punto di ripresa solo dopo la lunghezza confermata sullo stesso handle.
-                item = saveItem(item.copy(resumeAt = offset))
+              is NasResult.Ok -> if (cp.value.length == offset) {
+                // Il punto di ripresa solo dopo la lunghezza confermata sullo stesso handle, con l'identita' letta li' (R3).
+                item = saveItem(item.copy(resumeAt = offset, resumeId = cp.value.fileId))
                 lastPoint = offset
               } else {
                 saveItem(item.copy(resumeAt = 0))

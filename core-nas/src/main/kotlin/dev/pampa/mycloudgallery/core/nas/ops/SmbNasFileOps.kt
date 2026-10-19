@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.core.nas.ops
 
+import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.model.NasStamp
 import dev.pampa.mycloudgallery.core.nas.contract.NasAttributes
 import dev.pampa.mycloudgallery.core.nas.contract.NasError
@@ -308,11 +309,26 @@ internal class SmbNasFileOps(
   /**
    * Fase 5A (D5), solo per la vista del backup (`ops/backup/SmbNasBackupOps`): riapre il **proprio** temporaneo [temp] **senza
    * crearlo** e lo accorcia a [keepBytes] con il `SET_INFO` di fine file **sullo stesso handle**; lo scrittore riparte da li'. Mai un
-   * file che non e' un temporaneo di questo dispositivo (errore di programmazione), mai una cartella o un punto di rianalisi
-   * (`NasError.Unexpected`: niente si tocca). Piu' corto di [keepBytes]: [BackupTempReopen.TooShort] e niente cambia. Non si ripete da
-   * sola dopo una caduta (`idempotent = false`): chi chiama ha il diario.
+   * file che non e' un temporaneo di questo dispositivo (errore di programmazione). Piu' corto di [keepBytes]: [BackupTempReopen.TooShort]
+   * e niente cambia. Non si ripete da sola dopo una caduta (`idempotent = false`): chi chiama ha il diario.
+   *
+   * R3 (revisione 5A): e' l'unica primitiva del backup che cambia byte gia' scritti, quindi accorcia **solo il temporaneo del punto di
+   * ripresa**. Prima del `SET_INFO`, sullo **stesso handle** su cui si accorcera', si guarda cosa si e' aperto e si rifiuta
+   * ([BackupTempReopen.NotOurs], niente si tocca) se:
+   *  - e' un punto di rianalisi (un collegamento che il server segnala);
+   *  - ha piu' di un nome (`NumberOfLinks` di `FileStandardInformation`, o il server non lo dice): un collegamento fisico, che Samba crea
+   *    anche via SMB2 (`FileLinkInformation`), al nome del temporaneo o dal temporaneo verso un altro nome;
+   *  - la sua identita' (`fileId`) non e' [tempId], quella che lo scrittore ha letto sul suo handle al punto di ripresa (o il server non la
+   *    dice): un altro file, o un collegamento simbolico che Samba di serie presenta come un file normale con l'identita' della destinazione;
+   *  - `tmp/` non e' la cartella vera della cartella dell'app ([tmpIsTheRealFolder]), come in R3 della 4B.
    */
-  internal suspend fun reopenBackupTemp(share: String, temp: SharePath, keepBytes: Long, purpose: Purpose): NasResult<BackupTempReopen> {
+  internal suspend fun reopenBackupTemp(
+    share: String,
+    temp: SharePath,
+    keepBytes: Long,
+    tempId: Long,
+    purpose: Purpose,
+  ): NasResult<BackupTempReopen> {
     require(NasOpsPaths.isTempOf(temp, ownerDeviceId)) { "Un temporaneo di questo dispositivo." }
     require(keepBytes >= 0) { "Punto di ripresa negativo." }
     // Come openTemp: annullati mentre il NAS risponde, lo scrittore non arriva a nessuno e il suo handle esclusivo si chiude qui.
@@ -330,10 +346,19 @@ internal class SmbNasFileOps(
         }
         var keep = false
         try {
-          val info = file.info
-          // Un nome che non e' un file vero (cartella, collegamento) non si accorcia: lo si dice, senza toccarlo.
-          if (info != null && (info.isDirectory || (info.attributes and NasAttributes.REPARSE_POINT) != 0)) {
-            throw NasOpException(NasError.Unexpected(null))
+          // Lo stato letto all'apertura, sullo stesso handle (la stessa QUERY_INFO di FileAllInformation): un trasporto che non lo dice non
+          // prova niente, e senza prova non si accorcia.
+          val info = file.info ?: throw NasOpException(NasError.Unexpected(null))
+          // Una cartella non arriva fin qui (`FILE_NON_DIRECTORY_FILE`), ma se arrivasse non si accorcia: lo si dice, senza toccarla.
+          if (info.isDirectory) throw NasOpException(NasError.Unexpected(null))
+          if (!isOwnTemp(info, tempId)) {
+            val sameId = info.fileId == tempId
+            GalleryLog.w(TAG) { "ripresa rifiutata: al nome del temporaneo c'e' un altro file (nomi ${info.links ?: -1}, stessa identita' $sameId)" }
+            return@runOp BackupTempReopen.NotOurs
+          }
+          if (!tmpIsTheRealFolder(ctx.share, temp)) {
+            GalleryLog.w(TAG) { "ripresa rifiutata: la cartella dei temporanei non e' quella vera" }
+            return@runOp BackupTempReopen.NotOurs
           }
           val length = file.length()
           if (length < keepBytes) return@runOp BackupTempReopen.TooShort(length)
@@ -352,6 +377,34 @@ internal class SmbNasFileOps(
     }
   }
 
+  /**
+   * R3 (revisione 5A): [info], letto sull'handle aperto per accorciare, e' il temporaneo del punto di ripresa. Un nome solo
+   * (`NumberOfLinks` = 1: un collegamento fisico ne ha almeno 2, da qualunque nome lo si apra), nessun punto di rianalisi, la stessa
+   * identita' che lo scrittore ha letto sul suo handle al punto di ripresa. Un dato che il server non dice e' un rifiuto, mai un "va bene".
+   */
+  private fun isOwnTemp(info: SmbFileInfo, tempId: Long): Boolean =
+    (info.attributes and NasAttributes.REPARSE_POINT) == 0 && info.links == 1L && info.fileId != null && info.fileId == tempId
+
+  /**
+   * R3 (revisione 5A), come R3 della 4B: `tmp/` e' la cartella vera della cartella dell'app, non un collegamento che Samba di serie presenta
+   * come una cartella normale. La voce `..` di `tmp/` (il genitore **sul disco**, che Samba risolve dopo il collegamento) deve essere la
+   * cartella dell'app vista per nome, e la cartella dell'app non dev'essere un punto di rianalisi. Il server che non dice `..` (o l'identita')
+   * non prova niente: resta il controllo sull'handle ([isOwnTemp]), che basta da solo per R3 (questo e' difesa in profondita'). Non vede un
+   * collegamento a un'altra cartella che sta anch'essa dentro la cartella dell'app (il genitore sul disco e' lo stesso).
+   */
+  private fun tmpIsTheRealFolder(share: SmbShare, temp: SharePath): Boolean {
+    val tmp = temp.parent() ?: return false
+    val app = tmp.parent() ?: return false
+    val appInfo = share.stat(at(app))
+    if (!appInfo.isDirectory || (appInfo.attributes and NasAttributes.REPARSE_POINT) != 0) return false
+    val onDisk = share.openDirectory(at(tmp), DirAccess.LIST).use { it.parentFileId() }
+    if (onDisk == null || appInfo.fileId == null) {
+      GalleryLog.d(TAG) { "voce .. della cartella dei temporanei non data dal server: niente da confrontare" }
+      return true
+    }
+    return onDisk == appInfo.fileId
+  }
+
   /** Lo scrittore di un temporaneo: un handle legato alla sessione che l'ha aperto (dopo una riconnessione e' morto). */
   private inner class SmbTempWriter(
     private val share: String,
@@ -361,7 +414,7 @@ internal class SmbNasFileOps(
     private val session: Any,
     /** Dove riparte lo scrittore: 0 per un temporaneo nuovo, il punto di ripresa per uno riaperto (D5). */
     start: Long = 0L,
-  ) : NasTempWriter {
+  ) : NasTempWriter, HandleStamp {
     @Volatile private var closed = false
 
     /** La fine dei dati scritti finora: una scrittura oltre lascerebbe un buco. */
@@ -404,6 +457,18 @@ internal class SmbNasFileOps(
           val info = ctx.share.stat(at(temp))
           TempFinish.Complete(NasStamp(actual, info.lastWriteMs, info.fileId))
         }
+      }
+    }
+
+    // R3 (revisione 5A): FLUSH, poi lunghezza, data e identita' in una QUERY_INFO sullo stesso handle (mai per nome: al nome potrebbe
+    // esserci gia' un altro file). Non chiude l'handle.
+    override suspend fun stampOnHandle(): NasResult<NasStamp> {
+      check(!closed) { "Scrittore chiuso." }
+      return manager.runOp(share, purpose, idempotent = false, touchesDisk = true) { ctx ->
+        sameSession(ctx)
+        file.flush()
+        val info = file.query()
+        NasStamp(info.size, info.lastWriteMs, info.fileId)
       }
     }
 
@@ -563,6 +628,7 @@ internal class SmbNasFileOps(
   private fun stampOf(info: SmbFileInfo): NasStamp = NasStamp(if (info.isDirectory) 0 else info.size, info.lastWriteMs, info.fileId)
 
   private companion object {
+    const val TAG = "NasFileOps"
     const val CHUNK_BYTES = 1024L * 1024
     const val CHUNKS_PER_REQUEST = 16
 
@@ -598,9 +664,21 @@ internal sealed interface BackupTempReopen {
 
   data object Missing : BackupTempReopen
 
+  /** R3 (revisione 5A): al nome del temporaneo non c'e' il temporaneo del punto di ripresa (o `tmp/` non e' la cartella vera). Niente toccato. */
+  data object NotOurs : BackupTempReopen
+
   data class TooShort(val actual: Long) : BackupTempReopen
 
   data object Locked : BackupTempReopen
+}
+
+/**
+ * R3 (revisione 5A): lo scrittore di un temporaneo che sa leggere il proprio timbro (dimensione, data, `fileId`) **sullo stesso handle**. Lo
+ * usa il punto di ripresa del backup (`SmbNasBackupOps`): l'identita' che la riapertura confrontera' viene dal file che si sta scrivendo,
+ * non da quello che in quel momento sta al suo nome.
+ */
+internal interface HandleStamp {
+  suspend fun stampOnHandle(): NasResult<NasStamp>
 }
 
 /**

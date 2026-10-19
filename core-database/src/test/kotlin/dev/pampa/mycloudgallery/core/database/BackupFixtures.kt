@@ -119,6 +119,7 @@ internal fun backupItemEntity(
   nameAttempt = 0,
   tempPath = temp,
   resumeAt = 0,
+  resumeFileId = null,
   sha256 = null,
   quickHash = null,
   tempSize = null,

@@ -26,6 +26,7 @@ import dev.pampa.mycloudgallery.core.nas.ops.TempFinish
 import dev.pampa.mycloudgallery.core.nas.ops.backup.BackupTempWriter
 import dev.pampa.mycloudgallery.core.nas.ops.backup.NasBackupOps
 import dev.pampa.mycloudgallery.core.nas.ops.backup.ReopenOutcome
+import dev.pampa.mycloudgallery.core.nas.ops.backup.TempPoint
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import java.security.MessageDigest
 import java.util.Locale
@@ -75,8 +76,8 @@ object Mutants {
           is NasResult.Ok -> NasResult.Ok(EarlyPublishWriter(opened.value) { early(env, inner, share, it) })
         }
 
-      override suspend fun reopenTemp(share: String, temp: SharePath, keepBytes: Long, purpose: Purpose): NasResult<ReopenOutcome> =
-        when (val reopened = inner.reopenTemp(share, temp, keepBytes, purpose)) {
+      override suspend fun reopenTemp(share: String, temp: SharePath, keepBytes: Long, tempId: Long, purpose: Purpose): NasResult<ReopenOutcome> =
+        when (val reopened = inner.reopenTemp(share, temp, keepBytes, tempId, purpose)) {
           is NasResult.Err -> reopened
           is NasResult.Ok -> when (val outcome = reopened.value) {
             is ReopenOutcome.Reopened -> NasResult.Ok(ReopenOutcome.Reopened(EarlyPublishWriter(outcome.writer) { early(env, inner, share, it) }))
@@ -128,8 +129,8 @@ object Mutants {
       }
 
     // Dopo una ripresa il prefisso non lo conosce: la sua impronta non vale (si rilegge davvero).
-    override suspend fun reopenTemp(share: String, temp: SharePath, keepBytes: Long, purpose: Purpose): NasResult<ReopenOutcome> =
-      when (val reopened = inner.reopenTemp(share, temp, keepBytes, purpose)) {
+    override suspend fun reopenTemp(share: String, temp: SharePath, keepBytes: Long, tempId: Long, purpose: Purpose): NasResult<ReopenOutcome> =
+      when (val reopened = inner.reopenTemp(share, temp, keepBytes, tempId, purpose)) {
         is NasResult.Err -> reopened
         is NasResult.Ok -> when (val outcome = reopened.value) {
           is ReopenOutcome.Reopened -> NasResult.Ok(ReopenOutcome.Reopened(IntentWriter(outcome.writer, intent.begin(temp, valid = false))))
@@ -252,8 +253,8 @@ object Mutants {
         wrapped
       }
 
-    override suspend fun reopenTemp(share: String, temp: SharePath, keepBytes: Long, purpose: Purpose): NasResult<ReopenOutcome> =
-      inner.reopenTemp(share, temp, keepBytes, purpose).let { r ->
+    override suspend fun reopenTemp(share: String, temp: SharePath, keepBytes: Long, tempId: Long, purpose: Purpose): NasResult<ReopenOutcome> =
+      inner.reopenTemp(share, temp, keepBytes, tempId, purpose).let { r ->
         val wrapped = if (r is NasResult.Ok && r.value is ReopenOutcome.Reopened) {
           NasResult.Ok<ReopenOutcome>(ReopenOutcome.Reopened(FlushingWriter((r.value as ReopenOutcome.Reopened).writer, diary)))
         } else {
@@ -284,7 +285,7 @@ object Mutants {
   private class FlushingWriter(private val inner: BackupTempWriter, private val diary: DeferredDiary) : BackupTempWriter by inner {
     override suspend fun write(offset: Long, buf: ByteArray, off: Int, len: Int): NasResult<Unit> = inner.write(offset, buf, off, len).also { diary.flush() }
 
-    override suspend fun checkpoint(): NasResult<Long> = inner.checkpoint().also { diary.flush() }
+    override suspend fun checkpoint(): NasResult<TempPoint> = inner.checkpoint().also { diary.flush() }
 
     override suspend fun finish(expectedSize: Long): NasResult<TempFinish> = inner.finish(expectedSize).also { diary.flush() }
   }

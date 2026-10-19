@@ -262,6 +262,9 @@ class GuardSource(val share: String, val path: SharePath, val stamp: NasStamp?) 
  * @property nameAttempt quante collisioni con file diversi (il prossimo nome e' "nome (nameAttempt + 1)").
  * @property temp il temporaneo `.mycloudgallery/tmp/<io>-bk-<id>` (D33), scritto prima di `UPLOADING`/`COPYING`.
  * @property resumeAt il punto di ripresa (byte gia' sul NAS e controllati sullo stesso handle, D5): 0 = da capo.
+ * @property resumeId l'identita' (`fileId`) del temporaneo al punto di ripresa, letta dallo scrittore **sul suo handle** e scritta insieme a
+ *   [resumeAt] (R3 della revisione 5A): la riapertura accorcia solo un file con questa identita' e un nome solo. Vale solo con [resumeAt]
+ *   oltre 0; null = il server non l'ha detta, e allora non si riprende (si ricomincia da capo).
  * @property sha256 lo SHA-256 dei byte del telefono (o, per il guardiano, quello atteso della versione).
  * @property quickHash `qh1` dei byte del telefono (la deduplica, D8).
  * @property tempStamp il timbro del temporaneo verificato (`VERIFIED`): dopo la pubblicazione basta confrontare questo (D4).
@@ -284,6 +287,7 @@ data class BackupItem(
   val nameAttempt: Int = 0,
   val temp: SharePath? = null,
   val resumeAt: Long = 0,
+  val resumeId: Long? = null,
   val sha256: Sha256? = null,
   val quickHash: QuickHash? = null,
   val tempStamp: NasStamp? = null,

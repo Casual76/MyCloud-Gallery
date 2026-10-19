@@ -246,8 +246,8 @@ private object Migration3To4 : Migration(3, 4) {
       "`state` TEXT NOT NULL, `is_open` INTEGER NOT NULL, `media_id` TEXT NOT NULL, `version_id` TEXT NOT NULL, `size` " +
       "INTEGER NOT NULL, `phone_volume` TEXT, `phone_ms_id` INTEGER, `phone_ms_version` TEXT, `expected_size` INTEGER, " +
       "`expected_modified_at` INTEGER, `expected_generation` INTEGER, `share` TEXT NOT NULL, `planned_path` TEXT NOT NULL, " +
-      "`final_path` TEXT, `name_attempt` INTEGER NOT NULL, `temp_path` TEXT, `resume_at` INTEGER NOT NULL, `sha256` TEXT, " +
-      "`quick_hash` TEXT, `temp_size` INTEGER, `temp_modified_at` INTEGER, `temp_file_id` INTEGER, `final_size` INTEGER, " +
+      "`final_path` TEXT, `name_attempt` INTEGER NOT NULL, `temp_path` TEXT, `resume_at` INTEGER NOT NULL, `resume_file_id` INTEGER, " +
+      "`sha256` TEXT, `quick_hash` TEXT, `temp_size` INTEGER, `temp_modified_at` INTEGER, `temp_file_id` INTEGER, `final_size` INTEGER, " +
       "`final_modified_at` INTEGER, `final_file_id` INTEGER, `verify_attempts` INTEGER NOT NULL, `guard_share` TEXT, " +
       "`guard_path` TEXT, `guard_size` INTEGER, `guard_modified_at` INTEGER, `guard_file_id` INTEGER, `problem` TEXT, " +
       "`created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, FOREIGN KEY(`media_id`) REFERENCES `media`(`media_id`) " +

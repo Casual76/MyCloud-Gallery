@@ -75,7 +75,10 @@ class NasBackupOpsContractTest {
     val data = bytes(200_000)
     val writer = ops.openTemp("test", temp, purpose).okOrNull()!!
     writer.write(0, data, 0, 100_000)
-    assertThat(writer.checkpoint().okOrNull()).isEqualTo(100_000L)
+    // Il punto di ripresa dice fin dove arriva il file e quale file e' (R3 della revisione 5A).
+    val point = writer.checkpoint().okOrNull()!!
+    assertThat(point.length).isEqualTo(100_000L)
+    assertThat(point.fileId).isEqualTo(nas.reader.stat("test", temp, purpose).okOrNull()!!.fileId)
     writer.write(100_000, data, 100_000, 100_000)
     assertThat((writer.finish(200_000).okOrNull() as TempFinish.Complete).stamp.size).isEqualTo(200_000L)
     writer.close()
@@ -99,11 +102,15 @@ class NasBackupOpsContractTest {
     val data = bytes(300_000, seed = 9)
     val writer = ops.openTemp("test", temp, purpose).okOrNull()!!
     writer.write(0, data, 0, 250_000) // il punto salvato nel diario e' a 128 KiB, poi la connessione cade
+    val id = writer.checkpoint().okOrNull()!!.fileId!!
     writer.close()
-    assertThat(ops.reopenTemp("test", NasBackupPaths.tempFor(me, 3), 0, purpose).okOrNull()).isEqualTo(ReopenOutcome.Missing)
-    assertThat(ops.reopenTemp("test", temp, 400_000, purpose).okOrNull()).isEqualTo(ReopenOutcome.TooShort(250_000))
+    assertThat(ops.reopenTemp("test", NasBackupPaths.tempFor(me, 3), 0, id, purpose).okOrNull()).isEqualTo(ReopenOutcome.Missing)
+    assertThat(ops.reopenTemp("test", temp, 400_000, id, purpose).okOrNull()).isEqualTo(ReopenOutcome.TooShort(250_000))
+    // R3 (revisione 5A): un'altra identita' al nome del temporaneo non si accorcia mai.
+    assertThat(ops.reopenTemp("test", temp, 131_072, id + 1, purpose).okOrNull()).isEqualTo(ReopenOutcome.Foreign)
+    assertThat(nas.bytes("test", temp.value)!!.size).isEqualTo(250_000)
     assertThat(nas.backupTruncations.get()).isEqualTo(0)
-    val reopened = ops.reopenTemp("test", temp, 131_072, purpose).okOrNull() as ReopenOutcome.Reopened
+    val reopened = ops.reopenTemp("test", temp, 131_072, id, purpose).okOrNull() as ReopenOutcome.Reopened
     assertThat(reopened.writer.length).isEqualTo(131_072L)
     assertThat(nas.bytes("test", temp.value)!!.size).isEqualTo(131_072)
     assertThrows(IllegalArgumentException::class.java) { kotlinx.coroutines.runBlocking { reopened.writer.write(131_073, data, 0, 1) } }
@@ -111,7 +118,7 @@ class NasBackupOpsContractTest {
     assertThat(reopened.writer.finish(300_000).okOrNull()).isInstanceOf(TempFinish.Complete::class.java)
     assertThat(sha(nas.bytes("test", temp.value)!!)).isEqualTo(sha(data))
     assertThat(nas.backupTruncations.get()).isEqualTo(1)
-    assertThat(nas.opCount(FakeNasOp.REOPEN_TEMP)).isEqualTo(3)
+    assertThat(nas.opCount(FakeNasOp.REOPEN_TEMP)).isEqualTo(4)
   }
 
   /** Un video "da GB" virtuale si carica senza occupare memoria: le pagine uguali al contenuto noto restano riferimenti. */
@@ -161,7 +168,8 @@ class NasBackupOpsContractTest {
     assertThat(ops.mkdirs("test", p("Backup/S25"), purpose).errorOrNull()).isEqualTo(NasError.PermissionDenied)
     nas.setReadOnly("test", false)
     nas.spaceOf = { dev.pampa.mycloudgallery.core.nas.ops.NasSpaceInfo(totalBytes = 100, freeBytes = 10, callerFreeBytes = 10) }
-    val writer = ops.reopenTemp("test", temp, 0, purpose).okOrNull() as ReopenOutcome.Reopened
+    val id = nas.reader.stat("test", temp, purpose).okOrNull()!!.fileId!!
+    val writer = ops.reopenTemp("test", temp, 0, id, purpose).okOrNull() as ReopenOutcome.Reopened
     assertThat(writer.writer.write(0, bytes(50), 0, 50).errorOrNull()).isEqualTo(NasError.NasFull)
     assertThat(ops.space("test", purpose).okOrNull()!!.freeBytes).isEqualTo(10L)
   }
@@ -170,7 +178,7 @@ class NasBackupOpsContractTest {
   @Test
   fun nullObjectEVistaSmbFallisconoChiuso() = runTest {
     assertThat(NoNasBackupOps.openTemp("test", NasBackupPaths.tempFor(me, 1), purpose)).isInstanceOf(NasResult.Err::class.java)
-    assertThat(NoNasBackupOps.reopenTemp("test", NasBackupPaths.tempFor(me, 1), 0, purpose)).isInstanceOf(NasResult.Err::class.java)
+    assertThat(NoNasBackupOps.reopenTemp("test", NasBackupPaths.tempFor(me, 1), 0, 1L, purpose)).isInstanceOf(NasResult.Err::class.java)
     assertThat(NasBackupOpsFactory.create(FakeNasSessionManager(), me)).isSameInstanceAs(NoNasBackupOps)
     // La vista SMB sopra primitive che non sono quelle SMB (qui il fake della 4B al posto di SmbNasFileOps): solo temporanei del
     // backup, e la ripresa e' un errore esplicito (il backup ricomincia il file da zero, mai un successo finto). La ripresa vera,
@@ -179,9 +187,9 @@ class NasBackupOpsContractTest {
     val temp = NasBackupPaths.tempFor(me, 9)
     val writer = view.openTemp("test", temp, purpose).okOrNull()!!
     writer.write(0, bytes(10), 0, 10)
-    assertThat(writer.checkpoint().okOrNull()).isEqualTo(10L)
+    assertThat(writer.checkpoint().okOrNull()!!.length).isEqualTo(10L)
     assertThat(writer.length).isEqualTo(10L)
-    assertThat(view.reopenTemp("test", temp, 5, purpose).errorOrNull()).isEqualTo(NasError.Unexpected(0xC0000002L))
+    assertThat(view.reopenTemp("test", temp, 5, 1L, purpose).errorOrNull()).isEqualTo(NasError.Unexpected(0xC0000002L))
     assertThat(nas.bytes("test", temp.value)!!.size).isEqualTo(10)
     assertThrows(IllegalArgumentException::class.java) {
       kotlinx.coroutines.runBlocking { view.deleteOwnTemp("test", NasLayout.ROOT.child("tmp").child("$me-op-1-0"), purpose) }

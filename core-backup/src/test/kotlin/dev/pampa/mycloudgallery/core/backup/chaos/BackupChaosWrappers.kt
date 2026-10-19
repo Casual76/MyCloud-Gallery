@@ -49,6 +49,7 @@ import dev.pampa.mycloudgallery.core.nas.ops.TempFinish
 import dev.pampa.mycloudgallery.core.nas.ops.backup.BackupTempWriter
 import dev.pampa.mycloudgallery.core.nas.ops.backup.NasBackupOps
 import dev.pampa.mycloudgallery.core.nas.ops.backup.ReopenOutcome
+import dev.pampa.mycloudgallery.core.nas.ops.backup.TempPoint
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 
 // I decoratori che portano i colpi (BackupChaosFaults.kt) dentro le porte del codice sotto prova: le primitive in sola aggiunta del NAS
@@ -73,8 +74,8 @@ class ChaosBackupOps(
       is NasResult.Ok -> NasResult.Ok(ChaosBackupWriter(opened.value, injector, incarnation))
     }
 
-  override suspend fun reopenTemp(share: String, temp: SharePath, keepBytes: Long, purpose: Purpose): NasResult<ReopenOutcome> =
-    when (val reopened = injector.nas(Primitive.REOPEN_TEMP, incarnation, locked = ReopenOutcome.Locked as ReopenOutcome) { inner.reopenTemp(share, temp, keepBytes, purpose) }) {
+  override suspend fun reopenTemp(share: String, temp: SharePath, keepBytes: Long, tempId: Long, purpose: Purpose): NasResult<ReopenOutcome> =
+    when (val reopened = injector.nas(Primitive.REOPEN_TEMP, incarnation, locked = ReopenOutcome.Locked as ReopenOutcome) { inner.reopenTemp(share, temp, keepBytes, tempId, purpose) }) {
       is NasResult.Err -> reopened
       is NasResult.Ok -> when (val outcome = reopened.value) {
         is ReopenOutcome.Reopened -> NasResult.Ok(ReopenOutcome.Reopened(ChaosBackupWriter(outcome.writer, injector, incarnation)))
@@ -123,7 +124,7 @@ class ChaosBackupWriter(
       }
     }
 
-  override suspend fun checkpoint(): NasResult<Long> = injector.nas(Primitive.CHECKPOINT, incarnation) { inner.checkpoint() }
+  override suspend fun checkpoint(): NasResult<TempPoint> = injector.nas(Primitive.CHECKPOINT, incarnation) { inner.checkpoint() }
 
   override suspend fun finish(expectedSize: Long): NasResult<TempFinish> =
     injector.nas(Primitive.FINISH_TEMP, incarnation) { inner.finish(expectedSize) }

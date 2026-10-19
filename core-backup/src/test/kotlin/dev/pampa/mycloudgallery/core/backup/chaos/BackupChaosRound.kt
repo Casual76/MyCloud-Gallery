@@ -52,6 +52,11 @@ class BackupChaosConfig(
   val hashCache: Boolean = false,
   /** Percentuale di giri che portano nel NAS file che c'erano gia' (vecchi backup identici o no, nome occupato). */
   val oldFilesPercent: Int = 1,
+  /**
+   * 5B (P13): dopo il caricamento il giro semina qualche media con le sue versioni e lavora su versioni, scambi, guardiano e "Libera spazio"
+   * ([Backup5BPhase]). Senza (di norma, e per i difetti iniettati della 5A) il giro e' quello di prima, identico.
+   */
+  val fiveB: Backup5BConfig? = null,
 )
 
 /** Il racconto di un giro. */
@@ -65,6 +70,8 @@ class RoundReport(
   val log: List<String>,
   /** Lo stato in cui e' comparsa la prima violazione: si salva in un file e si verifica da solo. */
   val badState: BackupState?,
+  /** Come [badState], per una violazione della fase 5B (versioni, scambi, guardiano, "Libera spazio"). */
+  val badFiveBState: FiveBState? = null,
 ) {
   val ok: Boolean get() = violations.isEmpty()
 
@@ -118,6 +125,7 @@ class BackupChaosRound(
   private val stepLog = ArrayList<String>()
   private val log = ArrayList<String>()
   private var badState: BackupState? = null
+  private var five: FiveBResult? = null
 
   /** Fa il giro. Non lancia mai per un errore del codice sotto prova: lo mette nelle violazioni (solo un errore di autenticazione risale). */
   suspend fun run(): RoundReport {
@@ -129,6 +137,7 @@ class BackupChaosRound(
         val steps = config.minSteps + random.nextInt(config.maxSteps - config.minSteps + 1)
         repeat(steps) { step() }
         finish()
+        runFiveB()
       } finally {
         stats.phoneEvents(world.phone.firedEvents())
         world.close()
@@ -145,8 +154,18 @@ class BackupChaosRound(
         "giro",
       )
     }
-    val fired = if (::injector.isInitialized) injector.fired.toList() else emptyList()
-    return RoundReport(index, seed, stepLog, fired, violations.values.take(40), deaths, log, badState)
+    val fired = (if (::injector.isInitialized) injector.fired.toList() else emptyList()) + five?.faults.orEmpty()
+    return RoundReport(index, seed, stepLog, fired, violations.values.take(40), deaths + (five?.deaths ?: 0), log, badState, five?.badState)
+  }
+
+  /** La fase 5B del giro (versioni, scambi, guardiano, "Libera spazio"): su un seme suo, cosi' i colpi del caricamento restano quelli di prima. */
+  private suspend fun runFiveB() {
+    val settings = config.fiveB ?: return
+    val result = Backup5BPhase(index, seed xor FIVE_B_SALT xor factory.fiveBSalt, world, settings, stats, redact).run()
+    five = result
+    stepLog += result.steps.map { "5B: $it" }
+    log += result.log
+    for (v in result.violations) violations.putIfAbsent("${v.invariant}|${v.detail}", v)
   }
 
   // =========================================================================================================================
@@ -555,6 +574,9 @@ class BackupChaosRound(
   }
 
   private companion object {
+    /** Il seme della fase 5B e' quello del giro rimescolato: la fase ha le sue scelte e non tocca quelle del caricamento. */
+    const val FIVE_B_SALT = 0x5B5B5B5B5B5BL
+
     /** Oltre questa taglia un contenuto del telefono e' virtuale (generato da un seme): non si tiene in memoria. */
     const val FakeBigLimit = 4L shl 20
 

@@ -94,18 +94,24 @@ class ChaosBackupOps(
   ): NasResult<CopyOutcome> = injector.nas(Primitive.COPY_TO_TEMP, incarnation) { inner.copyToTemp(fromShare, from, toShare, temp, expect, purpose) }
 
   override suspend fun publishTemp(share: String, temp: SharePath, final: SharePath, purpose: Purpose): NasResult<PublishOutcome> =
-    injector.nas(Primitive.PUBLISH_TEMP, incarnation, locked = PublishOutcome.Locked as PublishOutcome) { inner.publishTemp(share, temp, final, purpose) }
+    injector.nas(Primitive.PUBLISH_TEMP, incarnation, locked = PublishOutcome.Locked as PublishOutcome, target = NasTarget(share, temp, final)) {
+      inner.publishTemp(share, temp, final, purpose)
+    }
 
   override suspend fun deleteOwnTemp(share: String, temp: SharePath, purpose: Purpose): NasResult<DeleteOutcome> =
     injector.nas(Primitive.DELETE_OWN_TEMP, incarnation, locked = DeleteOutcome.Locked as DeleteOutcome) { inner.deleteOwnTemp(share, temp, purpose) }
 
-  // 5B (P0-B): le rinomine delle versioni passano senza colpi. P13 aggiunge `ARCHIVE_VERSION` e `RESTORE_VERSION` a `Primitive` (con la
-  // morte prima e dopo, e il file cambiato dal PC): oggi nessun giro della 5A le chiama, e aggiungerle all'enum cambierebbe i giri casuali.
+  // 5B (P13): le due rinomine delle versioni sono punti dove cade un colpo (connessione, morte prima o dopo, file aperto dal PC) e dove il PC puo'
+  // modificare il file proprio prima della rinomina (`PC_EDIT`: il timbro obbligatorio deve accorgersene). Nei giri della 5A non si chiamano mai.
   override suspend fun archiveVersion(share: String, from: SharePath, to: SharePath, expect: NasStamp, purpose: Purpose): NasResult<RenameOutcome> =
-    inner.archiveVersion(share, from, to, expect, purpose)
+    injector.nas(Primitive.ARCHIVE_VERSION, incarnation, locked = RenameOutcome.Locked as RenameOutcome, target = NasTarget(share, from, to)) {
+      inner.archiveVersion(share, from, to, expect, purpose)
+    }
 
   override suspend fun restoreVersion(share: String, from: SharePath, to: SharePath, expect: NasStamp, purpose: Purpose): NasResult<RenameOutcome> =
-    inner.restoreVersion(share, from, to, expect, purpose)
+    injector.nas(Primitive.RESTORE_VERSION, incarnation, locked = RenameOutcome.Locked as RenameOutcome, target = NasTarget(share, from, to)) {
+      inner.restoreVersion(share, from, to, expect, purpose)
+    }
 
   override suspend fun space(share: String, purpose: Purpose): NasResult<NasSpaceInfo> =
     injector.nas(Primitive.SPACE, incarnation) { inner.space(share, purpose) }

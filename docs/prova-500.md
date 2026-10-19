@@ -1,6 +1,6 @@
 # La prova delle 500 interruzioni (Fase 4B, P15)
 
-> **Parte A**: le operazioni sui file del NAS (Fase 4B, P15), qui sotto. **Parte B**: il caricamento del **backup** (Fase 5A, P6), in fondo a questo file (da "Parte B").
+> **Parte A**: le operazioni sui file del NAS (Fase 4B, P15), qui sotto. **Parte B**: il caricamento del **backup** (Fase 5A, P6), più sotto (da "Parte B"). **Parte C**: versioni, scambi, guardiano e "Libera spazio" (Fase 5B, P13), in fondo a questo file (da "Parte C").
 
 | | |
 |---|---|
@@ -341,7 +341,7 @@ Tra un passo e l'altro il mondo cambia: il MediaStore si ricostruisce (`_ID` rin
 | 9 | Il lavoro arriva in fondo | dopo le riprese ogni elemento è `DONE`, `LINKED_EXISTING` o `GONE`; nessun `FAILED` per un guasto passeggero; ogni media ancora sul telefono è al sicuro |
 | 10 | Nessun file fuori posto | niente di nuovo fuori da `Backup/` dell'area privata (né nell'area comune, né nella cartella dell'app salvo i temporanei) |
 | 11 | Il NAS si legge | una lettura che non riesce non passa in silenzio: la scansione del verificatore con problemi è una violazione, e un giro che finisce `COMPLETE` conta in attesa ogni elemento che lascia aperto |
-| 12 | Il motore non lancia | un'eccezione uscita da `run`/`resumeAll` per un guasto del NAS o del telefono è una violazione (contratto di §1.2) |
+| 15 | Il motore non lancia | un'eccezione uscita da `run`/`resumeAll` per un guasto del NAS o del telefono è una violazione (contratto di §1.2). **Era il numero 12 fino alla 5A**: dalla 5B i numeri 12-14 sono gli invarianti della 5B del §5.4 (Parte C, §C1) e questo è il 15 |
 
 I guasti sono **passeggeri** per costruzione: i colpi che cambiano il senso della prova se ripetuti (byte alterati: tre verifiche non tornate sono `VERIFY_FAILED`, E-B18; lettura del telefono che fallisce: tre volte è `UNREADABLE`, D15) sono al più due per giro (`FaultBudget`).
 
@@ -493,7 +493,7 @@ Garanzie dello script: tocca **un solo** dispositivo (`-Serial` o `ANDROID_SERIA
 ## B11. Che cosa conta come superata
 
 La prova del backup (F30) è **superata** quando, tutte insieme:
-1. **JVM**: 2.000 giri su ciascuno dei due motori (riferimento e vero) sul NAS finto e 600 sul simulatore SMB, **zero violazioni** degli invarianti 1-12 (`check.ps1` lo verifica a ogni giro). F1 è corretto: il banco non ha più difetti noti da dichiarare.
+1. **JVM**: 2.000 giri su ciascuno dei due motori (riferimento e vero) sul NAS finto e 600 sul simulatore SMB, **zero violazioni** degli invarianti 1-11 e 15 (ex 12; `check.ps1` lo verifica a ogni giro). F1 è corretto: il banco non ha più difetti noti da dichiarare.
 2. **Mutazioni**: `BackupChaosMutationTest` rosso con l'invariante giusto per tutte e quattro, su entrambi i motori, e verde per lo stack sano.
 3. **PC, area di prova**: ≥ 400 interruzioni sul NAS vero, **zero giri rossi**, nessun errore di autenticazione, area ripulita dalla suite di core-nas; i tre file di rapporto (`backup-area-report-*.txt`, `-progress-*.txt`, `-log-*.txt`) in `core-backup/build/chaos/`.
 4. **Telefono**: ≥ 100 interruzioni (`kill -9` e Wi-Fi) durante il primo backup di `mcg-prova`; a prova ferma il telefono non è cambiato e `area.ps1 -Mode backup -Stage verify` dice "TUTTI GLI INVARIANTI RISPETTATI" (nessun file a metà, nessun doppione, nessuna perdita, nessun temporaneo rimasto); in Diagnostica ogni elemento `DONE`, `LINKED_EXISTING` o `GONE`.
@@ -504,3 +504,213 @@ I risultati sul campo (NAS vero e telefono) si aggiungono qui sotto quando la pr
 ## B12. Tempi
 
 2.000 giri a motore sul NAS finto: ~6 secondi (circa 40.000 file riletti con SHA-256, ~1,1 GB). 600 giri a motore sul simulatore SMB: ~5 secondi. L'intero pacchetto di test del banco (banchi, mutazioni, verificatore, determinismo, runner dietro la guardia): ~40 secondi. Le cacce lunghe: 20.000 giri a motore ~1 minuto, 3.000 giri sul simulatore SMB ~25 secondi. Nessun test usa il tempo vero: le attese del motore (un file aperto dal PC) fanno avanzare un orologio finto, e nessun test dorme. Il runner contro il NAS vero dipende dai file grandi: i giri normali durano secondi, quelli con un video da 200 MB un paio di minuti, uno da 3 GB una ventina di minuti (scrittura, rilettura di verifica, rilettura finale).
+
+---
+
+# Parte C. La prova delle interruzioni della 5B (Fase 5B, P13)
+
+| | |
+|---|---|
+| **Stato** | 19/10/2026 (P13). Il banco della 5A (Parte B) ora ha una **fase 5B** in ogni giro: dopo il caricamento semina qualche media e lavora su **versioni, scambi ("Ripristina originale"), guardiano e "Libera spazio" con la verifica sul momento**, con le stesse interruzioni (e altre nuove) e gli invarianti **12-14** del §5.4 più i 1-11. Il banco JVM gira a ogni `check.ps1` sul NAS finto con due stack: **2.000 giri ciascuno, 7.859 e 7.579 interruzioni in tutto (3.778 e 3.726 nella fase 5B), zero violazioni, ~41 s a stack**; sul **simulatore SMB** con le vere `SmbNasFileOps`/`SmbNasBackupOps` **600 giri ciascuno, 2.418 e 2.376 interruzioni (1.145 e 1.154 nella 5B), zero violazioni, ~25 s**. Quattro difetti nuovi iniettati apposta (§C7) rendono il banco rosso con l'invariante giusto. Ha trovato **tre difetti veri** dei servizi di P8 e P3 (F1, F2, F3, §C6), non corretti: il banco li evita in modo esplicito e `ChaosKnownDefectsTest` prova che li trova quando non li evita. Il runner contro l'area di prova del NAS vero gira anche **solo con la 5B** (`-Stage run5b`): **un giro breve (32 giri, 20 interruzioni, zero rossi) e poi l'unico giro lungo del P13: 506 giri, 401 interruzioni, zero giri rossi, nessun errore di autenticazione, 47 min 56 s** (§C8). Lo script del telefono ha il passo nuovo `-Step edit`, provato **solo contro l'adb finto**; **mai lanciato sul telefono** (F43). |
+| **Dove** | `core-backup/src/test/kotlin/dev/pampa/mycloudgallery/core/backup/chaos/` (il banco: i file nuovi sono `BackupChaos5B*.kt`, più `ChaosKnownDefectsTest.kt`, `FiveBVerifierTest.kt`, `ChaosMediaCatalogTest.kt`), `tools/chaos/area.ps1`, `s25.ps1`, `s25-finto.ps1`, `fake-adb/`, questo file |
+| **Riferimenti** | `docs/fase5-progetto.md` §2.4-§2.5, D17-D22, §5.4 (invarianti 12-14 e interruzioni), riga P13 del §4.4, F43. Parte B (sopra): il banco della 5A, di cui questa è un'estensione |
+
+## C1. Che cosa promette
+
+Versioni, scambi, guardiano e "Libera spazio" devono sopravvivere a interruzioni casuali **senza perdere una versione, senza lasciare vuoto il solito percorso e senza togliere dal telefono una foto che sul NAS non è al sicuro**. Valgono tutti i colpi della Parte B (connessione, sessione, socket, NAS pieno, file aperto dal PC, byte alterati, "Ferma", congelamento, **morte del processo a ogni chiamata e a ogni scrittura dei diari e del catalogo**); in più la 5B ha **punti nuovi** dove un colpo può cadere, prima e dopo:
+
+| Primitiva (nuova) | Che cos'è | Colpi |
+|---|---|---|
+| `ARCHIVE_VERSION`, `RESTORE_VERSION` | le due rinomine con timbro di `NasBackupOps` (archiviare l'attuale in `Versioni/`, riportare un'altra versione al solito percorso); dietro la guardia e nel simulatore SMB sono le vere `SmbNasBackupOps` | i colpi del NAS **e** `PC_EDIT` (il PC modifica il file proprio prima della rinomina: il timbro non torna, `Collision`/`SOURCE_CHANGED`) e `PC_FILE` (un file al nome di destinazione) |
+| `VERSION_CREATE/UPDATE`, `FREE_CREATE/UPDATE` | i diari dei lavori delle versioni e di "Libera spazio" | morte del processo |
+| `CATALOG_RELOCATE`, `CATALOG_RESTORE_ORIGINAL`, `CATALOG_CORRECT`, `FREE_MARK_VERIFIED`, `FREE_FREED` | le scritture del catalogo di P8 e P9 | morte del processo |
+| `PHONE_REWRITE` | la riscrittura di una riga del telefono per una correzione | morte del processo |
+| `PHONE_DIALOG` | l'app viene **uccisa mentre il dialogo di sistema è aperto** (l'esito arriva a un processo che non c'è più) | morte (dopo) |
+
+Tra un passo e l'altro il mondo cambia come sul telefono vero: Samsung "Salva" sopra una foto (prima o dopo che nessuno l'abbia letta), "Ripristina originale" di Samsung, il PC che modifica o crea un file sul NAS, un byte che marcisce con lo stesso timbro (E-B8), il tempo che passa (1-10 ore), il telefono che si riavvia, il MediaStore che si ricostruisce con gli `_ID` rinumerati, una foto cancellata, la share che si congela.
+
+**Gli invarianti** (§5.4). Da 1 a 11 come nella Parte B, applicati anche a `Versioni/`; i nuovi:
+
+| # | Invariante | Come si verifica |
+|---|---|---|
+| 12 | **L'attuale al solito percorso** | a lavoro finito ogni media con versioni ha al solito percorso i byte della versione attuale (lo SHA-256 del catalogo), salvo i byte che il PC ha messo di proposito; nessun solito percorso vuoto se la versione attuale è disponibile |
+| 13 | **Versioni conservate** | a lavoro finito originale e intermedie sono **tutte** sul NAS, quelle non attuali in `Versioni/`, con lo SHA-256 che il catalogo conosce (una versione che c'era e non c'è più è una violazione) |
+| 14 | **"Libera spazio" non sbaglia** | giudicato **al momento in cui un lotto esce verso il dialogo** (non dallo stato finale: dopo il dialogo il telefono e il NAS cambiano): ogni riga del lotto ha una copia privata riletta per intero nello stesso avvio (stesso `bootCount`), da meno di **6 ore monotone**, la cui verità sul NAS e sul telefono è ancora quella (stesso timbro, byte uguali alla versione, riga del telefono ancora quella); più la contabilità finale: nessuna riga tolta dal telefono senza traccia nel diario, nessun elemento "liberato" con la riga ancora sul telefono, nessun "rimasto" con la riga tolta, nessun elemento ancora nel dialogo a lavoro finito |
+| 15 | Il codice non lancia | era il 12 nella Parte B (`Invariant.CONTRACT`): dalla 5B i numeri 12-14 sono quelli del §5.4 e il "contratto" è il 15 |
+
+Anche qui i guasti sono **passeggeri** per costruzione (`FaultBudget`), e un lavoro che non arriva in fondo è l'invariante 9 (`CONVERGENCE`): dopo le riprese ogni lavoro delle versioni è `DONE` o `GONE`, ogni scambio è `DONE`, `GONE` o `FAILED` **per un motivo noto** (il PC ha cambiato il file, la destinazione era occupata), mai per `unexpected`.
+
+## C2. I banchi
+
+| Dove | Che cosa | Quante | Stato |
+|---|---|---|---|
+| **JVM, NAS finto** | `BackupChaosBenchTest`, ora con `BackupChaosConfig(fiveB = Backup5BConfig())`: il giro della 5A (invariato, stesso seme) e poi la fase 5B; due stack: `ReferenceStack` (l'esecutore di riferimento di P0 per il caricamento) e `ProductionStack` (`SafeUploadEngine` di P2). **I servizi della 5B sono sempre i veri** (`NasVersionEngine`, `DefaultVersionKeeper`, `DefaultCorrections`, `BackupPrivateCopyGuardian` di P3, `SafeFreeSpace` di P9): non esiste un motore di riferimento alternativo per la 5B (§C11) | 2.000 giri a stack, 7.859 / 7.579 interruzioni (3.778 / 3.726 nella 5B), ~41 s a stack | **verde** su entrambi |
+| **JVM, simulatore SMB** | `BackupChaosSmbBenchTest`: gli stessi giri con la sessione SMB di produzione e le **vere** `SmbNasFileOps`/`SmbNasBackupOps` (`archiveVersion` e `restoreVersion` comprese) sopra `InMemorySmbBackend`; il test pretende che `ARCHIVE_VERSION`, `RESTORE_VERSION` e `COPY_TO_TEMP` siano state davvero chiamate | 600 giri a stack, 2.418 / 2.376 interruzioni (1.145 / 1.154 nella 5B), ~25 s a stack | **verde** su entrambi |
+| **PC, area di prova del NAS vero** | `BackupNasIntegrationTest` modo `run`, con `MCG_BACKUP_FIVEB=only` (`area.ps1 -Stage run5b`): i media li semina il banco sotto `mcg-it/<giro>/r<N>/` (1-1,5 MB), un colpo per passo, dietro la guardia | ≥ 400 interruzioni | **verde sul NAS vero** (19/10): 506 giri, 401 interruzioni, 0 rossi (§C8) |
+| **Telefono, area di prova** | `s25.ps1 -Mode backup -Step edit` (§C9) | F43 | scritto; **solo contro l'adb finto** |
+
+**I due stack e la fase 5B.** I servizi della 5B sono gli stessi veri su entrambi gli stack; per non fare due volte la stessa fase, lo stack di riferimento rimescola il seme della 5B (`BackupChaosStackFactory.fiveBSalt`) e il motore vero tiene quello di sempre (così il giro sul NAS vero, che usa solo lui, resta ripetibile): il banco JVM fa quindi 4.000 fasi 5B diverse, non 2.000 uguali.
+
+**Copertura** (stack vero, NAS finto; chiamate, colpi prima / dopo, di cui morte): `ARCHIVE_VERSION` 2.729 (283 / 35; 29), `RESTORE_VERSION` 784 (36 / 16; 11), `VERSION_UPDATE` 27.452, `CATALOG_RELOCATE` 6.251, `CATALOG_RESTORE_ORIGINAL` 714, `CATALOG_CORRECT` 436 (4 / 3; 7), `FREE_MARK_VERIFIED` 5.487, `FREE_FREED` 954, `PHONE_REWRITE` 414, `PHONE_DIALOG` 270 morti; sul simulatore SMB (stack vero): `ARCHIVE_VERSION` 796 (92 / 11; 9), `RESTORE_VERSION` 227 (16 / 6; 6), `COPY_TO_TEMP` 203. «Libera spazio» (stack vero, NAS finto): 1.264 lotti controllati dall'invariante 14, 2.544 righe nei lotti, 1.677 tolte dal dialogo simulato; elementi `freed` 2.023, `kept` 494, `dropped` 566, `in_doubt` 35; lavori `version` 3.421 `DONE` e 418 `GONE`, `swap` 859 `DONE` e 62 `FAILED` (sempre per un motivo noto: il PC ha cambiato o occupato il file); guardiano 719 `DONE`.
+
+## C3. Come si lancia
+
+Dal PC, da `C:\VibeCoded Projects\MyCloud-Gallery-2`. Gli stessi comandi della Parte B (§B3) valgono: i banchi JVM (`-Stage jvm`, `-Stage smb`) ora **includono la 5B**. Novità:
+
+```powershell
+# La 5B sul NAS vero: solo la fase 5B (versioni, scambi, guardiano, "Libera spazio") sotto mcg-it/<giro>/
+powershell -ExecutionPolicy Bypass -File tools\chaos\area.ps1 -Mode backup -Stage run5b -Interruptions 20    # giro breve di prova (al massimo 20)
+powershell -ExecutionPolicy Bypass -File tools\chaos\area.ps1 -Mode backup -Stage run5b -Interruptions 400 -TimeoutMinutes 120
+powershell -ExecutionPolicy Bypass -File tools\chaos\area.ps1 -Mode backup -Stage run5b -WithUpload ...      # prima il caricamento della 5A, poi la 5B nello stesso giro
+powershell -ExecutionPolicy Bypass -File tools\chaos\area.ps1 -Mode backup -Stage run5b -DryRun             # le variabili e il comando, senza lanciare
+
+# Il verificatore da solo su uno stato salvato (backup5b-state-<giro>.txt, intestazione "# mcg-backup5b-state 1"): lo riconosce da sé
+powershell -ExecutionPolicy Bypass -File tools\chaos\area.ps1 -Mode backup -Stage state -Manifest core-backup\build\chaos\backup5b-state-12.txt
+
+# Il telefono: dopo il primo backup, modificare 20 foto come Samsung "Salva", rifare il backup, interrompere, verificare
+powershell -ExecutionPolicy Bypass -File tools\chaos\s25.ps1 -Mode backup -Step edit -DryRun -Edits 20 -Seed 42
+powershell -ExecutionPolicy Bypass -File tools\chaos\s25.ps1 -Mode backup -Step edit -Serial <numero> -Edits 20 -Manifest build\chaos\backup-manifest-<giro>.txt
+powershell -ExecutionPolicy Bypass -File tools\chaos\s25.ps1 -Mode backup -Step interrupt -Serial <numero> -Interruptions 100 -Manifest build\chaos\backup-manifest-<giro>.txt -Verify -AllowFreed
+```
+
+**Variabili nuove** (le imposta `area.ps1`):
+
+| Variabile | Significato |
+|---|---|
+| `MCG_BACKUP_FIVEB` | `off` (default: la 5A di prima), `with` (caricamento e poi 5B nello stesso giro), `only` (solo la 5B) |
+| `MCG_BACKUP_CAP` | il **tetto** delle interruzioni del runner, anche se il file delle credenziali dice `backup.rounds=400`: `area.ps1` lo imposta a `-Interruptions` (un giro breve da 20 non diventa mai 400) |
+
+Gli stati salvati dei giri rossi sono due, se serve: `backup-state-<giro>.txt` (5A, Parte B) e `backup5b-state-<giro>.txt` (5B). `-Stage state` guarda l'intestazione e usa il verificatore giusto.
+
+## C4. Come funziona il giro 5B
+
+La fase 5B (`Backup5BPhase`) gira **dopo** il caricamento e la sua verifica, con un seme suo (`seed xor 0x5B5B5B5B5B5B`): i colpi del caricamento restano quelli di prima, bit per bit (`BackupChaosDeterminismTest.lAggiuntaDellaCinqueBNonCambiaIColpiDelCaricamento`), e un giro rosso si rifà dallo stesso seme.
+
+1. **Si semina**: da 3 a 5 media (20-70 KB sul NAS finto, 1-1,5 MB sul NAS vero) di cinque categorie (`FiveBCategory`): al sicuro (`SAFE_PHONE`: l'originale sul telefono e al solito percorso, riletto e verificato), già modificato (`EDITED_SAFE`: l'originale in `Versioni/`, l'attuale anche sul telefono al solito percorso), solo sul NAS (`SOLO_NAS`, E-E3: la correzione di un solo-NAS), con la sola copia comune (`COMMON_ONLY`: il caso del guardiano, D9) e solo sul telefono (`PHONE_ONLY`: mai liberabile, nessuna versione).
+2. **Da 3 a 5 passi**, ognuno con i suoi colpi (sorteggiati per passo, 1-4 nel banco JVM, uno solo sul NAS vero): `EDIT` (modifica sul telefono, lettura, versione nuova sul NAS), `EDIT_TWICE` (due di seguito), `EDIT_WHILE_READ` (Samsung "Salva" **mentre la versione si legge**), `REVERT` ("Ripristina originale" di Samsung: il telefono torna a una versione nota, lo scambio), `RESTORE` ("Ripristina originale" dall'app), `STAGED` (editor esterno su un media solo-NAS), `CORRECT` (correzione di data/luogo/rotazione), `FREE` ("Libera spazio" intero: piano, guardiano, verifica sul momento, controllo del timbro, lotti, dialogo simulato) e `RESUME` (riprendere i lavori dal diario).
+3. **Il dialogo di sistema** è simulato: conferma, conferma parziale, rifiuto, **app uccisa durante il dialogo** (l'esito resta `Unknown` finché la lettura del telefono non lo risolve: `settle()`).
+4. **Tra un passo e l'altro** gli eventi del §C1; dopo ogni morte e a fine passo il verificatore guarda lo stato "a metà" (tutti gli invarianti tranne quelli che valgono solo a lavoro finito). **L'invariante 14 si giudica a ogni lotto** (`checkBatch`), prima che il lotto arrivi al dialogo.
+5. **Fine fase**: tolti i guasti, i servizi si ricostruiscono sugli stessi diari e si **riprende finché non c'è più niente da fare** (al massimo 14 riprese, guardiano compreso: `guardian.ensure(GuardScope.All)`), poi la **rilettura completa senza cache** e gli invarianti a lavoro finito.
+
+**La scansione** (`FiveBWorld.rescan`) riproduce quel che serve alle versioni: la riga del telefono ritrovata o sparita, il ritorno a una versione nota, il file del PC cambiato al solito percorso come versione nuova e, per un media che il PC ha toccato, una copia «presente» che sul NAS non c'è più dichiarata assente (D10). Gira a ogni passo, a ogni ripresa e **prima della verifica finale**: gli invarianti a lavoro finito valgono *dopo* la scansione, come nella vita vera.
+
+**I difetti noti** (§C6) il banco li evita solo se sono in `Backup5BConfig.avoid` (`KnownDefect.F1`, `F2`, `F3`, tutti nel default): `phoneRebuild` non scatta con un lavoro dal telefono aperto (F1), `CORRECT` non scatta con un elemento del guardiano aperto (F2), una modifica del PC non conserva la dimensione (F3).
+
+**Il catalogo del banco** (`ChaosMediaCatalog`) è uno solo per le tre viste di cui i servizi hanno bisogno (`VersionCatalog` di P8, `FreeSpaceCatalog` di P9, la parte del catalogo del guardiano di P3): avvolge `InMemoryVersionCatalog` di P8 e aggiunge le due cose che il catalogo vero fa e quello di P8 no: **una riga che Android ha tolto non è più presente** (la copia del telefono diventa `ABSENT`) e **una rilettura che non torna toglie la verifica** (E-B8: `markVerified` con uno SHA-256 diverso lascia la copia non verificata). Se il catalogo del banco mentisse darebbe falsi rossi o falsi verdi: `ChaosMediaCatalogTest` lo prova.
+
+## C5. Il verificatore, anche da solo
+
+`FiveBVerifier.check(state, fase, showNames)` giudica un `FiveBState` (fatti semplici: file del NAS con SHA-256 e `fileId`, media con le loro versioni e copie, lavori del diario delle versioni con gli stati attraversati, righe di "Libera spazio", note del banco). Come per la 5A lo stato si scrive in un file (`FiveBStateFile`, `# mcg-backup5b-state 1`) e si rilegge: un giro rosso lascia `core-backup/build/chaos/backup5b-state-<giro>.txt`, che si verifica **senza il banco, i servizi o il NAS** (§C3). `FiveBVerifierTest` prova il verificatore **invariante per invariante** con stati fatti a mano (un solo byte diverso lo rompe) e con uno stato salvato, riletto e manomesso.
+
+Per l'**area di prova** e per il **telefono** (niente diario locale) `BackupAreaVerifier` ha due controlli nuovi, solo se il manifesto ha righe `edit=<sha vecchio>|<sha nuovo>|<etichetta>`: scansiona `Versioni/` **in sola lettura** (invarianti 1, 2 e 5 valgono anche lì) e a lavoro finito vuole, per ogni modifica, una sola copia al solito percorso (12) e l'originale in `Versioni/` **o** al solito percorso (13: "Ripristina originale" li scambia, va bene l'una o l'altra disposizione, ma sempre una sola volta ciascuna).
+
+## C6. Difetti e osservazioni trovati
+
+Il banco ha trovato **tre difetti veri** nei servizi di P8 e P3 (F1, F2, F3) e una **osservazione** che non è un difetto (O1). Per decisione del P13 **nessuno è corretto**: il codice di produzione non si tocca. Il banco però **non salta i casi in silenzio**: ogni difetto noto è una voce di `KnownDefect` e il banco lo evita **solo** se la voce è in `Backup5BConfig.avoid` (il default, perché `check.ps1` deve restare verde); `ChaosKnownDefectsTest` prova, per ciascuno, tre cose:
+- il **comportamento di oggi** (verde): lo scenario riprodotto senza giri casuali. Quando diventa rosso il difetto è stato corretto;
+- il **comportamento giusto**, lo stesso scenario con l'asserzione rovesciata, `@Ignore` con il motivo: si riaccende quando il difetto si corregge;
+- **il banco lo trova quando non lo evita** (`avoid = emptySet()`): un giro preciso, rifatto dal suo seme (F1: seme 20261016 giro 116, invariante 9; F2: seme 20261016 giro 633, invariante 2; F3: seme 777 giro 1306, invariante 7). Con tutti gli evitamenti spenti, 2.000 giri su due semi trovano 10 giri rossi (4 + 4 di F1, 1 di F2, 1 di F3).
+
+**F1 (P8, `NasVersionEngine.refreshPhone`): un lavoro `VERSION` nato da una riga del telefono resta `PLANNED` per sempre se il MediaStore si ricostruisce e la foto cambia di nuovo prima che la si sia letta.**
+- *Scenario*: (1) l'utente salva una modifica in Samsung Gallery; la scansione del NAS e del telefono pianifica un lavoro `VERSION` che parte dalla **riga del telefono** (`VersionSource.Phone`, con il suo `_ID`); (2) prima che il lavoro legga i byte, il MediaStore si ricostruisce (E-P12: `_ID` rinumerati, la riga vecchia sparisce dal catalogo); (3) l'utente modifica la foto un'altra volta, quindi la versione nuova ha un'altra riga e un altro timbro; (4) `refreshPhone` non ritrova la riga del lavoro nel catalogo e risponde `Step.Wait`: il lavoro non finisce e non diventa `gone`.
+- *Conseguenze*: "Ripristina originale" dà `NOT_AVAILABLE` (c'è un lavoro aperto sul media) e "Libera spazio" esclude il media per sempre (c'è un lavoro aperto per una qualunque versione: D21). Nessun byte perso, nessun doppione: violato solo il 9 (il lavoro non arriva in fondo; con un video a metà, anche il 6: il temporaneo resta).
+- *Rimedio probabile*: in `refreshPhone`, se il catalogo ha riletto il volume dopo il cambio di versione e non ha **nessuna** copia presente del telefono per quella versione, `gone(job)` (la stessa regola che P2 ha scelto per F1 della Parte B). *Evitamento nel banco*: `phoneRebuild` non scatta se c'è un lavoro aperto con `source is VersionSource.Phone`.
+
+**F2 (P3 `BackupPrivateCopyGuardian.link`, innescato dalle versioni di P8): una copia che il guardiano ha già pubblicato e attaccato al catalogo, ma non ancora segnato `LINKED`, può diventare un doppione.**
+- *Scenario*: il guardiano ha pubblicato la copia privata di un media con la sola copia comune e l'ha già attaccata al catalogo (verificata), ma il processo muore prima di scrivere `LINKED` nel diario; nel frattempo una versione nuova (una correzione di `DefaultCorrections`, o `planStaged`) sposta quella copia in `Versioni/` e pubblica la sua al solito nome; riprendendo, il guardiano trova altri byte al nome finale e rifà la copia: una **seconda copia privata** (`nome (2)`) della stessa versione, che aveva già la sua in `Versioni/`.
+- *Conseguenze*: invariante 2 (due copie visibili degli stessi byte nell'area privata). Nessun byte perso.
+- *Rimedio probabile*: riprendendo un elemento `PUBLISHED`, controllare nel catalogo se la versione ha già una copia privata verificata (anche in `Versioni/`) e in quel caso chiudere l'elemento (`LINKED_EXISTING`); oppure `DefaultCorrections`/`planStaged` non partono con un elemento del guardiano aperto per quella versione. *Evitamento nel banco*: `CORRECT` non scatta se c'è un elemento del guardiano aperto per il media (`guardBusy`).
+
+**F3 (P8, `NasVersionEngine.restore` e `archive` che ritrovano il loro file per identità): una modifica del PC della stessa dimensione, fra una rinomina la cui risposta è andata persa e la ripresa, è presa per il file del lavoro; la copia resta «verificata» con altri byte e nessuna scansione lo vede.**
+- *Scenario* (`ChaosStaleScene.kt`, `staleWindow(keepSize = true)`): (1) un media con l'originale in `Versioni/` e la versione modificata al solito percorso; (2) Samsung «Ripristina originale»: il telefono torna all'originale, la lettura registra il ritorno e parte uno scambio; (3) il lavoro archivia l'attuale in `Versioni/`, poi `restoreVersion` porta l'originale al solito percorso e **il processo muore dopo la rinomina**, prima di `RESTORED`; (4) il **PC modifica sul posto il file appena riportato conservandone la dimensione** (un editor che riscrive i metadati, un byte cambiato: stesso `fileId`, data nuova); (5) il processo riparte: `restoreVersion` risponde `SourceMissing`, il lavoro guarda il solito percorso, `sameIdentity` (`fileId` e **dimensione**) dice «è il mio», `restored(job, src, st.stamp)` scrive nel catalogo **il timbro trovato**, cioè quello del file già modificato, e **tiene la verifica**; lo scambio finisce `DONE`.
+- *Conseguenze*: (a) il catalogo dice l'originale «al sicuro» (copia verificata al solito percorso) con byte che non sono quelli della versione (invariante 7); (b) **la scansione del NAS non lo corregge mai**: il timbro del catalogo è già quello del file, quindi non vede nessuna modifica del PC (test `f3_oggi_loScambioPrende...`: il verdetto a lavoro finito, dopo la scansione, è ancora l'invariante 7); (c) «Libera spazio» **non ne risente**: la verifica sul momento rilegge i byte e li confronta con l'impronta della versione (E-B8), il media esce dal lotto (`f3_oggi_liberaSpazioLoFermaComunque...`); (d) **una versione nuova successiva archivia i byte del PC come se fossero l'originale**: `archiveVersion` riceve il timbro atteso e il timbro torna, quindi non può accorgersene; in `Versioni/` finisce un file chiamato «(originale)» che non lo è, e «Ripristina originale» lo riporterebbe (`f3_oggi_unaVersioneNuova...`). Nessun file è sostituito o perso dall'app: i byte originali li ha sovrascritti il PC.
+- *Frequenza*: rara, serve una morte del processo (o una risposta persa) fra la rinomina e la ripresa **e** una modifica del PC sul posto, senza cambiare dimensione, nello stesso intervallo; il banco con l'evitamento spento l'ha trovata da solo in 2.000 giri su due semi (una volta, seme 777 giro 1306). Lo stesso schema vale per `archived(job, st.stamp)` (la rinomina di archiviazione).
+- *Rimedio probabile*: dopo un ritrovamento per identità non scrivere nel catalogo il timbro trovato ma quello atteso (`src.stamp`): la scansione vedrà la differenza e registrerà la modifica del PC come versione nuova; oppure confrontare anche la data (`NasStamp.sameAs`); oppure rileggere l'impronta prima di dichiarare `RESTORED`/`ARCHIVED` quando il timbro non è quello atteso. *Evitamento nel banco*: `FiveBWorld.pcEdit` non conserva mai la dimensione (se il sorteggio la lascia uguale, un byte in più).
+
+**O1. Il catalogo che ritarda dopo una modifica del PC di un'altra dimensione (giro 122, seme 20261016, stack di riferimento): non è un difetto.** Lo scenario è lo stesso di F3 con la modifica del PC **di un'altra dimensione** (`staleWindow(keepSize = false)`): `sameIdentity` non riconosce il file, il lavoro finisce `FAILED`/`USUAL_PATH_TAKEN` (nessun byte spostato dall'app oltre la rinomina già fatta) e il catalogo continua a dire che l'originale sta in `Versioni/`, dove non c'è più, **finché la scansione del NAS non lo dichiara assente** (D10). Il banco **non evita** questo caso: lo lascia accadere (l'evento «il PC modifica una copia» può cadere su un media con un lavoro aperto), e per la scansione usa il modello di quella vera: una copia presente che sul NAS non c'è più **si dichiara assente**, ma solo per i media che il PC ha toccato (`FiveBWorld.rescan`); per tutti gli altri il catalogo dev'essere già giusto da sé, e l'invariante 7 resta rigoroso. A lavoro finito (dopo la scansione) tutti gli invarianti valgono. Le quattro domande che questo ritardo pone, con i test che rispondono (`StaleCatalogAfterPcEditTest`):
+1. *Un media segnato «al sicuro» con byte diversi?* **No.** Nessuna copia che il catalogo dice presente ha sul NAS byte diversi da quelli della sua versione (o il file c'è ed è giusto, o non c'è). Il segno «al sicuro» invece **è in ritardo**: il ritorno all'originale ha reso attuale l'originale, la cui copia «verificata» non c'è più, e `mediaSafety` risponde «safe» finché la scansione non passa; come per ogni cambiamento fatto dal PC fra due scansioni, è la natura del catalogo (D10). Dopo la scansione non è più «safe» (`domande1e2_...`).
+2. *Una versione persa o sovrascritta?* **No, non dall'app.** I soli byte che mancano sono quelli dell'originale, che il PC ha sovrascritto nel file che ha modificato (e `lostShas` lo sa); il verificatore a metà non trova altro che l'invariante 7: 1, 2, 3, 12 e 13 sono puliti.
+3. *«Libera spazio» toglie qualcosa dal telefono?* **No.** Il piano, che usa solo il catalogo locale (E-S11), vede ancora il media; la verifica sul momento rilegge ogni copia, non trova il file e il media non arriva a nessun lotto: la riga del telefono resta (`domanda3_...`).
+4. *Uno scambio successivo che agisce su dati vecchi senza accorgersene?* **No.** Un altro giro di backup (che pianifica anche gli scambi dei ritorni) e una modifica nuova sul telefono nella stessa finestra **non producono nessun lavoro**: senza una copia al solito percorso nel catalogo `VersionPlanning.head` non ha da dove cominciare (il media non ha più un «solito percorso» finché la scansione non lo ritrova), quindi niente parte su dati vecchi. Il lavoro di prima resta `FAILED` con il suo motivo, nessun byte sparisce, il file del PC resta dov'è, il verificatore non trova altro che il ritardo (`domanda4_...`). Le primitive, comunque, vogliono il timbro atteso e a un file mancante o cambiato rispondono `SourceMissing`/`SourceChanged`. **Nel caso F3, con la stessa dimensione, la risposta alla 1 e alla 4 è sì** (il timbro atteso torna, la copia sbagliata viene archiviata come «originale»).
+
+**Limiti dichiarati (non difetti)**
+- **Il bit che marcisce con lo stesso timbro dopo la verifica sul momento**: la verifica vale 6 ore e il controllo prima del dialogo guarda il **timbro** (dimensione e data), non rilegge una seconda volta: un bit cambiato senza cambiare il timbro (E-B8, L39) fra la rilettura e il dialogo non si vede. È la finestra dichiarata di D21. Il banco fa marcire un bit (`un byte marcisce sul NAS (stesso timbro)`) solo dove **nessun giro di «Libera spazio» ha già riletto una copia**: lì la verifica sul momento lo deve trovare (e il media esce) e il controllo finale lo vede nella rilettura completa; la finestra dopo la verifica non è giudicabile da nessun controllo e non è provata.
+- **Il bit che marcisce non si fa sul NAS vero** (`hashCache = true`): la cache dei timbri nelle verifiche a metà non lo vedrebbe fino alla rilettura finale, che è sempre completa.
+- **La scansione del NAS è un modello**: il banco non esegue lo scansionatore vero (core-index/core-database); riproduce quel che serve alle versioni (le modifiche del PC al solito percorso diventano versioni nuove, le copie sparite dopo un'azione del PC diventano assenti). Il resto del suo comportamento (`relocateNas` per `fileId` in caso di spostamento corroborato, i periodi di grazia di D10) è fuori dal banco.
+
+## C7. Il banco ha i denti
+
+`BackupChaosMutationTest` ha quattro difetti nuovi della 5B (`BackupChaos5BMutants.kt`), con lo stesso schema della Parte B (§B7): ogni difetto è uno stack rotto che avvolge le porte dei servizi sani e ne riproduce l'**effetto**, sopra i decoratori dei colpi. Il caricamento è quello sano; il banco gira con la sola 5B rotta. 500 giri ciascuno sul NAS finto, seme 4242:
+
+| Errore introdotto | Come | Invariante che lo coglie | Giri rossi su 500 |
+|---|---|---|---|
+| **Archiviare senza il timbro** | `archiveVersion` passa il timbro che il NAS dice adesso, non quello del piano: un file cambiato dal PC dopo il piano viene archiviato come "l'attuale" | **7** (la copia del catalogo non ha i byte della sua versione) | 7 |
+| **Sostituire invece di rinominare** | davanti a un nome occupato, pubblicazione, scambio e archiviazione tolgono il file che c'è e mettono il loro | **3** (sostituzione), 6, 7, 9, 12, 13 | 49 |
+| **Liberare con la verifica scaduta** | l'orologio monotono e il conteggio dei riavvii di "Libera spazio" non avanzano: una verifica vecchia di ore vale come nuova | **14** ("verifica scaduta" nel dettaglio) | 24 |
+| **Uno scambio che lascia vuoto il solito percorso** | "Ripristina originale" archivia l'attuale e poi dice di aver riportato l'originale senza riportarlo | **12** (e 7) | 203 |
+
+Come nella Parte B, lo stack sano sugli stessi giri resta **verde** (`lo_stackSanoDellaCinqueBNonFaScattareNiente`) e i quattro difetti della 5A (§B7) restano rossi con gli stessi invarianti: un rosso è colpa del difetto, non del banco. Oggi, riferimento / vero su 500 giri: diario dopo la chiamata 41 / 31 (invariante 6), pubblica prima 36 / 27 (1), salta la rilettura 41 / 32 (1 e 4), pulizia che toglie il temporaneo 22 / 22 (6). I numeri del §B7 sono quelli del 16/10, prima delle revisioni della 5A.
+
+## C8. L'area di prova sul NAS vero
+
+Valgono la guardia, il recinto e l'autotest della Parte B (§B8): `test`, `test2`, `test-comune`, tutto sotto `mcg-it/<giro>/r<N>/`, mai `NAS`, `Public`, `alessio`, `pampa`; il login si prova **una volta sola** e un `AUTH_FAILED` ferma tutto (`AreaAuthStop`). Cambia questo:
+
+- **Le primitive nuove passano dalla guardia**: `GuardedBackupOps.archiveVersion/restoreVersion` controllano la share prima del vero; l'autotest ora le prova su account e share vietati, **zero chiamate al vero** per ogni rifiuto. `GuardedNasSide.pcModify` (il PC che modifica un file) controlla la share come tutto il resto.
+- **Il runner `run5b`** non carica niente (`only`): semina 3-4 media da 1-1,5 MB sotto `mcg-it/<giro>/r<N>/`, fa 3-4 passi con **un colpo per passo** (`FaultMix.SINGLE`, `stepFaults = 1`), con gli eventi che il NAS vero può fare (non l'orologio che avanza di ore né il bit che marcisce: `NasCaps`), la cache dei timbri nelle verifiche a metà e la rilettura finale **sempre completa**.
+- **Il tetto delle interruzioni** `MCG_BACKUP_CAP`: `area.ps1` lo imposta a `-Interruptions`; il runner si ferma appena le interruzioni cadute sono quelle (al massimo `4 x + 5` giri). Il file delle credenziali può avere `backup.rounds=400` senza che un giro da 20 diventi di 400.
+- **Sola lettura di `Versioni/`**: il lettore del verificatore dal manifesto, se ha righe `edit=`, include la radice `Versioni/` (mai in scrittura).
+- **Pulizia**: come la Parte B: `mcg-it/<giro>/` la toglie `NasIntegrationSuiteTest` di core-nas (`gradlew :core-nas:testDebugUnitTest -PnasIntegration`). Il banco non elimina media: le versioni non si cancellano (D17).
+
+**Risultati sul NAS vero (19/10/2026, `area.ps1 -Mode backup -Stage run5b`)**: due lanci, il giro breve e **uno solo** da 400; login riuscito alla prima, nessun `AUTH_FAILED`. Rapporti in `core-backup/build/chaos/backup-area-{report,progress,log}-20261019-181432.txt` (20) e `-181746.txt` (400).
+
+| | Giro breve | Giro da 400 |
+|---|---|---|
+| Giri, giri con violazioni | 32, **0** | 506, **0** |
+| Interruzioni cadute (prima / dopo la chiamata) | 20 (14 / 6) | **401** (194 / 207) |
+| Durata | 155 s | 2.868 s (47 min 56 s; ~5,7 s e ~0,8 interruzioni a giro) |
+| File riletti con SHA-256 | 432 (365 MiB) | 6.721 (5,6 GiB) |
+| Passi (`FREE` / `EDIT` / `RESTORE` / `CORRECT` / `EDIT_WHILE_READ` / `RESUME` / `EDIT_TWICE` / `REVERT` / `STAGED`) | 115 | 1.766 (807 / 314 / 179 / 105 / 100 / 80 / 76 / 75 / 30) |
+
+*I colpi* (400): morte del processo 286 (71%), connessione caduta 63, lettura del telefono fallita 16, socket fermo 9, byte alterati 8, sessione scaduta 7, NAS pieno 7, file aperto dal PC 5 (il mix del NAS vero, `FaultMix.SINGLE`, non fa password rifiutate, «Ferma», congelamenti né file del PC, come per la 5A). *Cosa hanno fatto i servizi*: lavori di versione 686 `DONE` e 105 `GONE` (la foto è sparita prima), scambi 206 `DONE` (nessuno `FAILED`), guardiano 141 `DONE`; «Libera spazio» 321 lotti controllati (680 righe), 422 righe tolte dal dialogo simulato, 534 elementi `freed`, 134 `kept`, 52 `dropped`, 12 `in_doubt`, 26 dialoghi rifiutati, 79 volte l'app uccisa durante il dialogo; 1.787 media seminati.
+
+*Copertura per primitiva* (chiamate; colpi prima / dopo; di cui morte): `ARCHIVE_VERSION` 796 (8 / 9; 4), `RESTORE_VERSION` 198 (5 / 2; 1), `VERSION_UPDATE` 6.696 (39 / 23; 62), `VERSION_CREATE` 915 (5 / 2; 7), `CATALOG_RELOCATE` 1.827 (5 / 14; 19), `CATALOG_RESTORE_ORIGINAL` 182 (1 / 1; 2), `CATALOG_CORRECT` 100 (0 / 1; 1), `FREE_CREATE` 800 (3 / 3; 6), `FREE_UPDATE` 2.290 (7 / 7; 14), `FREE_MARK_VERIFIED` 1.387 (5 / 5; 10), `FREE_FREED` 240 (1 / 0; 1), `PHONE_DIALOG` (79 morti), `COPY_TO_TEMP` 127 (1 / 0), più le primitive del NAS (`OPEN_TEMP`, `WRITE_TEMP`, `FINISH_TEMP`, `PUBLISH_TEMP`, `STAT`, `OPEN`, `READ_ALL`, ...). **Non colpite sul NAS vero** in questo lancio: `READ`, `DELETE_OWN_TEMP`, `PHONE_REWRITE` (110 chiamate, nessun colpo). Con circa un colpo a giro alcune primitive rare non vengono colpite: lo sono centinaia di volte nel banco JVM (2.000 giri a stack, §C2) e nel simulatore SMB.
+
+*Versione del banco*: i due lanci sono precedenti alle ultime modifiche del banco JVM (seme della 5B per stack, `Backup5BConfig.avoid`, la scansione che dichiara assente le copie sparite dopo un'azione del PC). Non cambiano il giro sul NAS vero: lì il PC non modifica file (`NasCaps.pcModify` falso) e il motore vero tiene il seme di prima.
+
+*Osservazioni sul NAS vero (non violazioni)*
+- **`NasSession chiusura lenta: 60000 ms`** compare 101 volte nel log del giro da 400 (3 nel breve): la chiusura della sessione SMB, dopo la morte simulata del processo o una connessione caduta, aspetta il limite di 60 s (`CLOSE_WAIT_MS`, `SmbNasSessionManager`). Succede su un thread a parte e **non rallenta il giro** (101 x 60 s > 48 min) né viola un invariante; la causa non è stata indagata (è codice della 4B).
+- **`BackupVersions verifica non tornata, tentativo 1 di 3`**: 8 volte, quante sono le scritture con byte alterati (E-B18): la verifica rilegge, vede i byte sbagliati e rifà. Come previsto.
+- **Area di prova non pulita**: restano `mcg-it/20261019-181432/` e `mcg-it/20261019-181746/` nelle share di prova (`test`, `test2`, `test-comune`). Non le ho tolte: la pulizia è la suite d'integrazione di core-nas (`gradlew :core-nas:testDebugUnitTest -PnasIntegration`), che al giro dopo le toglie e che qui non è stata lanciata.
+
+## C9. Il telefono (`tools/chaos/s25.ps1 -Mode backup -Step edit`)
+
+Per la prova F43. Si aggiunge un passo alla sequenza della Parte B (§B9) e un'opzione alla verifica:
+
+1. `-Step seed` e il primo backup come prima (manifesto con le impronte delle foto).
+2. **`-Step edit -Edits 20`**: a primo backup finito, modifica 20 foto di `mcg-prova` come farebbe Samsung "Salva" (24 byte casuali in coda con `dd`: un JPEG li ignora, l'immagine non cambia, lo SHA-256 sì) e **aggiunge al manifesto** una riga `edit=<sha256 vecchio>|<sha256 nuovo>|<etichetta>` per ciascuna. `-DryRun` stampa il piano e i comandi, senza `adb`.
+3. Nell'app: **Fai ora** (la lettura del telefono vede 20 versioni nuove, il backup le carica con le versioni di D17); poi `-Step interrupt` come prima (`kill -9` e Wi-Fi) e `-Verify`.
+4. **`-Step verify`** (e `interrupt -Verify`): le impronte del telefono tornano per `sha|etichetta` con le **modifiche ammesse**; con **`-AllowFreed`** i file che "Libera spazio" ha tolto dal telefono non sono un cambiamento. Poi il verificatore sul NAS controlla gli invarianti 12 e 13 per ogni modifica (§C5).
+
+`s25-finto.ps1` ha un stadio nuovo (3b) che prova tutto contro l'adb finto: la modifica, la verifica con le modifiche, un file tolto con e senza `-AllowFreed` (con: verde; senza: rosso). `fake-adb/fake-adb.ps1` ora capisce `dd bs=N count=M`. **Non provato**: la modifica vera con `dd` sul telefono e il flusso con "Libera spazio" e il dialogo di sistema (che nel banco è simulato).
+
+## C10. Che cosa non copre (e chi lo copre)
+
+- **Il dialogo di sistema vero** (`createTrashRequest`/`createDeleteRequest`), le sue risposte e la reale cancellazione di una riga del MediaStore: nel banco è simulato (conferma, parziale, rifiuto, app uccisa). Si prova sul telefono (F43, F34-F42).
+- **Correzioni scritte nel file** (EXIF, rotazione): il banco prova il flusso (`CATALOG_CORRECT`, `PHONE_REWRITE`, la versione che ne nasce) ma non decodifica immagini; le correzioni JPEG/PNG/WebP sono di P8 (`corrections/**`).
+- **Il guardiano con il tetto dei 20 GB** e i file grandi (200 MB, 3 GB) nella 5B: sulla 5B i file sono di decine di KB (NAS finto) o 1-1,5 MB (NAS vero); i grandi sono del caricamento (Parte B, `BigFileResumeTest`).
+- **La riscrittura di una riga con Room**: il banco usa i diari e il catalogo in memoria (che fanno le stesse verifiche di transizione); `RoomFreeSpaceDiary` ha i suoi test (P9).
+- **Il tempo del NAS vero**: sul NAS vero non passano ore; le 6 ore di validità, il riavvio e i salti di tempo si provano su NAS finto e simulatore SMB, e sul campo con F43.
+
+## C11. Che cosa conta come superata
+
+La prova della 5B (F43) è **superata** quando, tutte insieme:
+1. **JVM**: 2.000 giri su ciascuno dei due stack (riferimento e vero) sul NAS finto e 600 sul simulatore SMB, **zero violazioni** degli invarianti 1-15 (`check.ps1` lo verifica a ogni giro). **Nota sullo stack di riferimento**: per la 5B non esiste un "esecutore di riferimento" alternativo (non è stato scritto in P0-B: i servizi di P8 e P9 sono l'unica implementazione), quindi «riferimento» e «vero» differiscono per il **caricamento della 5A** e per il seme della fase 5B (§C2); i servizi della 5B sono gli stessi veri su entrambi. È una scelta dichiarata del P13 (decisioni.md, «Fase 5B: P13»).
+2. **Mutazioni**: i quattro difetti della 5A e i quattro della 5B rossi con l'invariante giusto; lo stack sano verde.
+3. **Difetti noti**: ogni difetto trovato e non corretto ha il suo test del comportamento di oggi (verde), quello del comportamento giusto (`@Ignore` con il motivo) e la prova che il banco lo trova quando non lo evita (§C6).
+4. **PC, area di prova**: ≥ 400 interruzioni sul NAS vero (solo 5B: versioni e scambi), **zero giri rossi**, nessun errore di autenticazione, area ripulita dalla suite di core-nas; i tre file di rapporto in `core-backup/build/chaos/`.
+5. **Telefono**: `-Step edit` con 20 modifiche, poi interruzioni durante il backup, "Ripristina originale" e "Libera spazio" con `kill -9` e Wi-Fi spento a metà; `verify -AllowFreed` e il verificatore sul NAS "TUTTI GLI INVARIANTI RISPETTATI"; in Diagnostica nessun elemento fermo.
+6. Un giro rosso **si rifà** dal suo seme e **si verifica da solo** dal suo stato salvato.
+
+## C12. Tempi
+
+2.000 giri a stack sul NAS finto con la 5B: ~41 s a stack (~235.000 file riletti con SHA-256, ~8,5 GiB). 600 giri a stack sul simulatore SMB: ~25 s. L'intero modulo `core-backup` (511 test, 6 saltati: 3 del NAS vero e 3 `@Ignore` dei difetti noti): ~4 minuti con `--max-workers=2`. Il runner `run5b` sul NAS vero: ~5,7 s per giro e ~0,8 interruzioni per giro, quindi **400 interruzioni sono ~500 giri e ~48 minuti** (il giro da 20 interruzioni: 32 giri, 155 s). Nessun test usa il tempo vero: le ore della 5B fanno avanzare un orologio finto.

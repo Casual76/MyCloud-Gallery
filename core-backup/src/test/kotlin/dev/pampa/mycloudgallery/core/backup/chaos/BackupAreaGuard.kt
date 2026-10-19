@@ -343,6 +343,12 @@ class GuardedNasSide(
     counter.calls.incrementAndGet()
     inner.remove(share, path)
   }
+
+  override suspend fun pcModify(share: String, path: String, bytes: ByteArray, modifiedAt: Long) {
+    guard.checkShare(share)
+    counter.calls.incrementAndGet()
+    inner.pcModify(share, path, bytes, modifiedAt)
+  }
 }
 
 /** Un bersaglio dietro la guardia. */
@@ -397,6 +403,14 @@ object BackupAreaSelfTest {
       mustRefuse("copia verso la share '$share'") { ops.copyToTemp("test", SharePath.of("x"), share, someTemp, null, Purpose.BACKGROUND) }
       mustRefuse("copia dalla share '$share'") { ops.copyToTemp(share, SharePath.of("x"), "test", someTemp, null, Purpose.BACKGROUND) }
       mustRefuse("spazio della share '$share'") { ops.space(share, Purpose.BACKGROUND) }
+      // 5B (P13): le due rinomine delle versioni sono le uniche primitive che spostano un file visibile; passano dalla stessa guardia.
+      val stamp = NasStamp(1, 1, 1)
+      mustRefuse("archiviazione di una versione nella share '$share'") {
+        ops.archiveVersion(share, SharePath.of("Backup", "x.jpg"), SharePath.of("Versioni", "Backup", "x.jpg"), stamp, Purpose.BACKGROUND)
+      }
+      mustRefuse("ripristino di una versione nella share '$share'") {
+        ops.restoreVersion(share, SharePath.of("Versioni", "Backup", "x.jpg"), SharePath.of("Backup", "x.jpg"), stamp, Purpose.BACKGROUND)
+      }
     }
     // I percorsi che escono non esistono nemmeno come SharePath: la costruzione li rifiuta, quindi non arrivano mai a una chiamata.
     for (raw in listOf("../x", "a/../../x", "/x", "\\\\server\\x", "a\\b", "x/./y", ".")) {

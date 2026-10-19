@@ -74,8 +74,53 @@ class BackupChaosMutationTest {
     }
   }
 
+  // --- La 5B (P13): versioni, scambi, "Libera spazio" -------------------------------------------------------------------------------
+
+  private fun runFiveB(stack: FiveBStackFactory, rounds: Int = ROUNDS_5B, target: () -> BackupChaosTarget = { FakeNasTarget() }): BenchResult = runBlocking {
+    // Il caricamento (la 5A) e' quello sano: il difetto e' solo nei servizi della 5B.
+    BackupChaosBench.run(
+      rounds, baseSeed = SEED, target = target(), factory = ProductionStack,
+      config = BackupChaosConfig(fiveB = Backup5BConfig(stack = stack)),
+    )
+  }
+
+  @Test
+  fun lo_stackSanoDellaCinqueBNonFaScattareNiente() {
+    val result = runFiveB(RealFiveBStack)
+    assertWithMessage("controllo 5B: " + result.failureText())
+      .that(result.failures).isEmpty()
+  }
+
+  @Test
+  fun archiviareSenzaTimbroSpostaUnFileCheNonEraQuelloDelCatalogo() {
+    val result = runFiveB(FiveBMutants.archiveWithoutStamp(RealFiveBStack))
+    // Il PC cambia il file attuale proprio prima della rinomina: senza il timbro l'archivio prende i byte del PC e il catalogo crede che siano
+    // quelli della versione (7, e la versione di prima non e' piu' in Versioni/ con i suoi byte: 13).
+    assertDetects("5B archivia senza timbro", result, setOf(Invariant.CATALOG, Invariant.VERSIONS_KEPT))
+  }
+
+  @Test
+  fun sostituireAlPostoDiRinominareCancellaUnFileCheCEra() {
+    val result = runFiveB(FiveBMutants.replaceInsteadOfRename(RealFiveBStack))
+    assertDetects("5B sostituisce", result, setOf(Invariant.REPLACED))
+  }
+
+  @Test
+  fun liberareConUnaVerificaScadutaConsegnaUnLottoAlDialogo() {
+    val result = runFiveB(FiveBMutants.releaseWithExpiredVerification(RealFiveBStack))
+    assertDetects("5B verifica scaduta", result, setOf(Invariant.FREE_SPACE))
+    assertThat(result.failures.flatMap { it.violations }.any { "verifica scaduta" in it.detail }).isTrue()
+  }
+
+  @Test
+  fun unoScambioCheLasciaVuotoIlSolitoPercorsoEUnaViolazione() {
+    val result = runFiveB(FiveBMutants.swapLeavesUsualPathEmpty(RealFiveBStack))
+    assertDetects("5B scambio che lascia vuoto il solito percorso", result, setOf(Invariant.USUAL_PATH))
+  }
+
   private companion object {
     const val SEED = 4242L
     const val ROUNDS = 500
+    const val ROUNDS_5B = 500
   }
 }

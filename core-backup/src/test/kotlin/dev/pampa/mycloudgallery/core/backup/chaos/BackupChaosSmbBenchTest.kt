@@ -23,14 +23,22 @@ class BackupChaosSmbBenchTest {
     val seed = System.getenv("MCG_BACKUP_CHAOS_SEED")?.toLongOrNull() ?: BackupChaosBenchTest.DEFAULT_SEED
     val first = System.getenv("MCG_BACKUP_CHAOS_FIRST_ROUND")?.toIntOrNull() ?: 0
     val dir = File("build/chaos")
-    val result = runBlocking { BackupChaosBench.run(rounds, seed, SimSmbTarget(), factory, firstRound = first, statesDir = dir) }
+    val result = runBlocking {
+      BackupChaosBench.run(rounds, seed, SimSmbTarget(), factory, config = BackupChaosConfig(fiveB = Backup5BConfig()), firstRound = first, statesDir = dir)
+    }
     println(result.summary())
     result.writeReport(File(dir, report))
     assertWithMessage("giri con violazioni:\n" + result.failureText()).that(result.failures).isEmpty()
     assertThat(result.rounds).isEqualTo(rounds)
     assertThat(result.stats.totalFired).isAtLeast(rounds)
     // Le primitive vere sono state chiamate e colpite: creazione e scrittura del temporaneo, punto di ripresa, pubblicazione, cancellazione del proprio temporaneo.
-    for (primitive in listOf(Primitive.OPEN_TEMP, Primitive.WRITE_TEMP, Primitive.CHECKPOINT, Primitive.FINISH_TEMP, Primitive.PUBLISH_TEMP, Primitive.DELETE_OWN_TEMP)) {
+    for (
+      primitive in listOf(
+        Primitive.OPEN_TEMP, Primitive.WRITE_TEMP, Primitive.CHECKPOINT, Primitive.FINISH_TEMP, Primitive.PUBLISH_TEMP, Primitive.DELETE_OWN_TEMP,
+        // 5B: le due rinomine vere delle versioni (`SmbNasFileOps.renameVersion`) e la copia lato server del guardiano.
+        Primitive.ARCHIVE_VERSION, Primitive.RESTORE_VERSION, Primitive.COPY_TO_TEMP,
+      )
+    ) {
       assertWithMessage("$primitive chiamata sulle primitive vere").that(result.stats.callsOf(primitive)).isGreaterThan(0)
     }
   }

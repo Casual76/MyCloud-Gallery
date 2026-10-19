@@ -9,7 +9,11 @@ import java.util.Locale
 // stato salvato, senza il banco, il motore o il NAS (`BackupStateFile`, `BackupVerifierTest`). Nessun segreto: percorsi finti del banco e
 // impronte di contenuti finti.
 
-/** Gli invarianti del §5.4 (1-11) piu' uno: il motore non lancia per un guasto del NAS o del telefono (il suo contratto, §1.2). */
+/**
+ * Gli invarianti del §5.4: da 1 a 11 (la 5A) e, dalla 5B, 12 (l'attuale al solito percorso), 13 (versioni conservate) e 14 ("Libera spazio" non
+ * sbaglia), piu' uno del banco: il motore non lancia per un guasto del NAS o del telefono (il suo contratto, §1.2). Quest'ultimo era il 12 nel
+ * banco della 5A (P6); dalla 5B porta il 15, perche' il 12 del §5.4 e' un altro.
+ */
 enum class Invariant(val number: Int, val label: String) {
   HALF_FILE(1, "nessun file a meta' visibile"),
   DUPLICATE(2, "nessun doppione creato"),
@@ -22,7 +26,10 @@ enum class Invariant(val number: Int, val label: String) {
   CONVERGENCE(9, "il lavoro arriva in fondo"),
   OUT_OF_PLACE(10, "nessun file fuori posto"),
   NAS_READS(11, "il NAS si legge"),
-  CONTRACT(12, "il motore non lancia per un guasto"),
+  USUAL_PATH(12, "l'attuale al solito percorso"),
+  VERSIONS_KEPT(13, "versioni conservate"),
+  FREE_SPACE(14, "\"Libera spazio\" non sbaglia"),
+  CONTRACT(15, "il motore non lancia per un guasto"),
 }
 
 class Violation(val invariant: Invariant, val detail: String) {

@@ -38,6 +38,10 @@ class BenchResult(
     stats.events.entries.sortedByDescending { it.value }.forEach { appendLine("  ${it.key}: ${it.value}") }
     appendLine("stato finale degli elementi del diario:")
     stats.itemStates.entries.sortedByDescending { it.value }.forEach { appendLine("  ${it.key}: ${it.value}") }
+    if (stats.counters.isNotEmpty()) {
+      appendLine("contatori della 5B (versioni, scambi, guardiano, \"Libera spazio\"):")
+      stats.counters.entries.sortedBy { it.key }.forEach { appendLine("  ${it.key}: ${it.value}") }
+    }
     appendLine("copertura per primitiva:")
     append(stats.coverageTable())
   }
@@ -86,7 +90,10 @@ object BackupChaosBench {
       done++
       if (!report.ok) {
         failures += report
-        if (statesDir != null) report.badState?.let { runCatching { BackupStateFile.write(it, File(statesDir, "backup-state-$index.txt")) } }
+        if (statesDir != null) {
+          report.badState?.let { runCatching { BackupStateFile.write(it, File(statesDir, "backup-state-$index.txt")) } }
+          report.badFiveBState?.let { runCatching { FiveBStateFile.write(it, File(statesDir, "backup5b-state-$index.txt")) } }
+        }
         onFailure(report)
       }
       onRound(done, failures.size)

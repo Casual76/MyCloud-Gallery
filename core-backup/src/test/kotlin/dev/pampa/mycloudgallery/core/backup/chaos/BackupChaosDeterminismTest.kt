@@ -11,8 +11,9 @@ import org.junit.Test
  */
 class BackupChaosDeterminismTest {
 
-  private fun report(target: () -> BackupChaosTarget, stack: BackupChaosStackFactory, rounds: Int, first: Int = 0): String {
-    val result = runBlocking { BackupChaosBench.run(rounds, 99L, target(), stack, firstRound = first) }
+  private fun report(target: () -> BackupChaosTarget, stack: BackupChaosStackFactory, rounds: Int, first: Int = 0, fiveB: Boolean = false): String {
+    val config = if (fiveB) BackupChaosConfig(fiveB = Backup5BConfig()) else BackupChaosConfig()
+    val result = runBlocking { BackupChaosBench.run(rounds, 99L, target(), stack, config = config, firstRound = first) }
     return result.summary().lines().filterNot { it.startsWith("durata:") }.joinToString("\n")
   }
 
@@ -27,6 +28,27 @@ class BackupChaosDeterminismTest {
   fun stessoSemeStessaProvaSulSimulatoreSmb() {
     for (stack in listOf(ReferenceStack, ProductionStack)) {
       assertThat(report({ SimSmbTarget() }, stack, 25)).isEqualTo(report({ SimSmbTarget() }, stack, 25))
+    }
+  }
+
+  @Test
+  fun stessoSemeStessaProvaConLaCinqueBSulNasFintoESulSimulatoreSmb() {
+    for (stack in listOf(ReferenceStack, ProductionStack)) {
+      assertThat(report({ FakeNasTarget() }, stack, 60, fiveB = true)).isEqualTo(report({ FakeNasTarget() }, stack, 60, fiveB = true))
+      assertThat(report({ SimSmbTarget() }, stack, 15, fiveB = true)).isEqualTo(report({ SimSmbTarget() }, stack, 15, fiveB = true))
+    }
+  }
+
+  @Test
+  fun lAggiuntaDellaCinqueBNonCambiaIColpiDelCaricamento() {
+    // La fase 5B ha un seme suo: i giri della 5A (i colpi caduti prima della 5B) restano quelli di prima. Il rapporto della 5A pura e' la
+    // parte iniziale di quello con la 5B: stesse interruzioni nel caricamento, stessi passi del caricamento.
+    val plain = runBlocking { BackupChaosBench.run(40, 99L, FakeNasTarget(), ProductionStack) }
+    val with5B = runBlocking { BackupChaosBench.run(40, 99L, FakeNasTarget(), ProductionStack, config = BackupChaosConfig(fiveB = Backup5BConfig())) }
+    assertThat(plain.stats.steps).isEqualTo(with5B.stats.stepKinds.filterKeys { !it.startsWith("5B") }.values.sum())
+    assertThat(plain.stats.mediaTotal).isLessThan(with5B.stats.mediaTotal)
+    for (kind in listOf("RUN_ALL", "RESUME", "RUN_PHOTOS", "RUN_VIDEOS")) {
+      assertThat(with5B.stats.stepKinds[kind] ?: 0).isEqualTo(plain.stats.stepKinds[kind] ?: 0)
     }
   }
 

@@ -9,6 +9,8 @@
     1. la semina (-Step seed): fixture di formati misti + jpeg unici + video "grandi" (di pochi byte), il manifesto con le impronte;
     2. la verifica a telefono invariato (-Step verify -SkipNas): le impronte tornano;
     3. le interruzioni (-Step interrupt, 3 interruzioni con attese di 1 s) e la verifica finale;
+    3b. (5B) le modifiche dopo il primo backup (-Step edit): le righe `edit=` del manifesto, la verifica che le accetta, un file tolto da
+        "Libera spazio" (fallisce, a meno di -AllowFreed);
     4. un file del telefono che cambia: la verifica deve FALLIRE (codice 4);
     5. la pulizia: senza -Yes rifiuta, con -Yes toglie solo le due cartelle di `mcg-prova`.
   Il verificatore sul NAS (area.ps1 -Mode backup -Stage verify) NON viene lanciato (-SkipNas): questo script non tocca mai il NAS.
@@ -75,10 +77,24 @@ try {
   Check "il Wi-Fi e' stato riacceso alla fine" (@($calls | Where-Object { $_ -match 'svc \| wifi \| enable' }).Count -ge 1)
   Check "l'adb finto non ha ricevuto altro che comandi previsti" (@($calls | Where-Object { $_ -match 'non previsto' }).Count -eq 0)
 
+  Write-Host "3b. Modifiche dopo il primo backup (5B: Samsung `"Salva`")"
+  Check "il piano a secco della modifica non esegue niente" ((Invoke-S25 ($common + @("-Step", "edit", "-Edits", "5", "-DryRun"))) -eq 0)
+  Check "la modifica finisce" ((Invoke-S25 ($common + @("-Step", "edit", "-Edits", "5"))) -eq 0)
+  $editLines = @(Get-Content -LiteralPath $manifest | Where-Object { $_ -like "edit=*" })
+  Check "il manifesto ha una riga edit= per ogni foto modificata" ($editLines.Count -eq 5)
+  Check "ogni riga ha due impronte diverse e l'etichetta" (@($editLines | Where-Object { $part = ($_ -replace '^edit=', '') -split '\|'; ($part.Count -lt 3) -or ($part[0] -eq $part[1]) -or ($part[0] -notmatch '^[0-9a-f]{64}$') -or ($part[1] -notmatch '^[0-9a-f]{64}$') }).Count -eq 0)
+  Check "le impronte tornano con le modifiche del manifesto" ((Invoke-S25 ($common + @("-Step", "verify", "-SkipNas"))) -eq 0)
+  # Cio' che "Libera spazio" toglie dal telefono: senza -AllowFreed e' un cambiamento, con no (le altre impronte devono tornare).
+  $editedLabels = @($editLines | ForEach-Object { ($_ -split '\|')[2] })
+  $freed = Get-ChildItem -LiteralPath (Join-Path $phone "sdcard") -Recurse -File | Where-Object { $_.FullName -match 'mcg-prova' -and $editedLabels -notcontains $_.Name -and $_.Extension -ne '.mp4' } | Select-Object -First 1
+  Remove-Item -LiteralPath $freed.FullName -Force
+  Check "un file tolto dal telefono senza -AllowFreed fa fallire (codice 4)" ((Invoke-S25 ($common + @("-Step", "verify", "-SkipNas"))) -eq 4)
+  Check "con -AllowFreed passa" ((Invoke-S25 ($common + @("-Step", "verify", "-SkipNas", "-AllowFreed"))) -eq 0)
+
   Write-Host "4. Un file del telefono cambia"
   $victim = Get-ChildItem -LiteralPath (Join-Path $phone "sdcard\DCIM\mcg-prova") -File | Select-Object -First 1
   Add-Content -LiteralPath $victim.FullName -Value "x"
-  Check "la verifica fallisce con il codice 4" ((Invoke-S25 ($common + @("-Step", "verify", "-SkipNas"))) -eq 4)
+  Check "la verifica fallisce con il codice 4" ((Invoke-S25 ($common + @("-Step", "verify", "-SkipNas", "-AllowFreed"))) -eq 4)
 
   Write-Host "5. Pulizia"
   Check "senza -Yes rifiuta" ((Invoke-S25 ($common + @("-Step", "clean"))) -ne 0)

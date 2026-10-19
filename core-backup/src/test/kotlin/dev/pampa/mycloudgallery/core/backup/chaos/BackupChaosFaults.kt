@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.core.backup.chaos
 import dev.pampa.mycloudgallery.core.nas.contract.AuthBlockReason
 import dev.pampa.mycloudgallery.core.nas.contract.NasError
 import dev.pampa.mycloudgallery.core.nas.contract.NasResult
+import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import java.io.IOException
 import java.util.EnumMap
 import kotlin.random.Random
@@ -79,19 +80,23 @@ enum class FaultKind(val label: String, val bothMoments: Boolean = false) {
 
   /** Il PC crea un file con il nome previsto della destinazione di un elemento aperto (E-B3). */
   PC_FILE("il PC crea un file con il nome previsto"),
+
+  /** 5B (E-E6, D17): il PC modifica sul posto il file su cui la chiamata sta per agire (il solito percorso di un media con versioni). */
+  PC_EDIT("il PC modifica il file attuale"),
   ;
 
   /** Un colpo che non fa fallire la chiamata: la azione avviene e la chiamata prosegue. */
-  val isWorldEvent: Boolean get() = this == USER_STOP || this == FREEZE || this == PC_FILE || this == CORRUPT
+  val isWorldEvent: Boolean get() = this == USER_STOP || this == FREEZE || this == PC_FILE || this == CORRUPT || this == PC_EDIT
 }
 
 enum class Side { NAS_WRITE, NAS_READ, DIARY, CATALOG, PHONE }
 
 /**
  * I punti dove un colpo puo' cadere: tutte le chiamate al NAS (scrittura e lettura), le scritture del diario e del catalogo, le letture del
- * telefono. [kinds] sono i colpi che hanno senso in quel punto.
+ * telefono. [kinds] sono i colpi che hanno senso in quel punto. [fiveB] (P13): i punti della seconda meta' (versioni, scambi, "Libera spazio"):
+ * i giri del caricamento (la 5A) non li pescano mai, cosi' restano quelli di prima.
  */
-enum class Primitive(val side: Side, val kinds: Set<FaultKind>) {
+enum class Primitive(val side: Side, val kinds: Set<FaultKind>, val fiveB: Boolean = false) {
   // Primitive di scrittura (NasBackupOps)
   MKDIRS(Side.NAS_WRITE, NET + DISK_FULL_ONLY + WORLD),
   OPEN_TEMP(Side.NAS_WRITE, NET + DISK_FULL_ONLY + WORLD),
@@ -123,6 +128,25 @@ enum class Primitive(val side: Side, val kinds: Set<FaultKind>) {
   PHONE_LOOKUP(Side.PHONE, KILL_ONLY),
   PHONE_OPEN(Side.PHONE, KILL_ONLY),
   PHONE_READ(Side.PHONE, KILL_ONLY + IO_ONLY),
+
+  // --- 5B (P13): le due rinomine delle versioni (NasBackupOps.archiveVersion/restoreVersion), il diario delle versioni e quello di "Libera
+  // spazio", il catalogo (la posizione che segue il file, "Ripristina originale", le correzioni, la verifica sul momento, le righe liberate),
+  // la riscrittura del telefono e il dialogo di sistema (la morte durante il dialogo: l'esito non arriva mai).
+  ARCHIVE_VERSION(Side.NAS_WRITE, NET + LOCKED_ONLY + WORLD_5B, fiveB = true),
+  RESTORE_VERSION(Side.NAS_WRITE, NET + LOCKED_ONLY + WORLD, fiveB = true),
+  VERSION_CREATE(Side.DIARY, KILL_ONLY, fiveB = true),
+  VERSION_UPDATE(Side.DIARY, KILL_ONLY, fiveB = true),
+  FREE_CREATE(Side.DIARY, KILL_ONLY, fiveB = true),
+  FREE_UPDATE(Side.DIARY, KILL_ONLY, fiveB = true),
+  CATALOG_RELOCATE(Side.CATALOG, KILL_ONLY, fiveB = true),
+  CATALOG_RESTORE_ORIGINAL(Side.CATALOG, KILL_ONLY, fiveB = true),
+  CATALOG_CORRECT(Side.CATALOG, KILL_ONLY, fiveB = true),
+  FREE_MARK_VERIFIED(Side.CATALOG, KILL_ONLY, fiveB = true),
+  FREE_FREED(Side.CATALOG, KILL_ONLY, fiveB = true),
+  PHONE_REWRITE(Side.PHONE, KILL_ONLY, fiveB = true),
+
+  /** Il dialogo di sistema: il banco ci fa cadere la morte "a mano" (l'esito non arriva), non e' un punto che il sorteggio pesca. */
+  PHONE_DIALOG(Side.PHONE, emptySet(), fiveB = true),
   ;
 
   fun allows(kind: FaultKind, moment: Moment): Boolean {
@@ -141,6 +165,7 @@ private val CORRUPT_ONLY: Set<FaultKind> = setOf(FaultKind.CORRUPT)
 private val KILL_ONLY: Set<FaultKind> = setOf(FaultKind.KILL)
 private val IO_ONLY: Set<FaultKind> = setOf(FaultKind.IO_ERROR)
 private val WORLD: Set<FaultKind> = setOf(FaultKind.USER_STOP, FaultKind.FREEZE, FaultKind.PC_FILE)
+private val WORLD_5B: Set<FaultKind> = WORLD + FaultKind.PC_EDIT
 
 /** Dove scatta una regola. Con `>=`: una regola riservata a certe primitive scatta alla prima chiamata utile dal punto indicato in poi. */
 sealed interface Trigger {
@@ -170,13 +195,27 @@ data class FiredFault(val point: Int, val primitive: Primitive, val moment: Mome
   override fun toString(): String = "#$point $primitive ${kind.label} ${if (moment == Moment.BEFORE) "prima" else "dopo"}"
 }
 
-/** Le azioni "del mondo" che un colpo puo' chiedere (l'utente tocca Ferma, la share si congela, il PC crea un file). */
+/**
+ * Il file su cui sta per agire la chiamata che il colpo precede: share, [path] (il file su cui agisce: la sorgente di una rinomina, il
+ * temporaneo che si pubblica) e, se c'e', [other] (dove va: la destinazione). Dati del banco, mai nei rapporti.
+ */
+class NasTarget(val share: String, val path: SharePath, val other: SharePath? = null) {
+  override fun toString(): String = "NasTarget"
+}
+
+/** Le azioni "del mondo" che un colpo puo' chiedere (l'utente tocca Ferma, la share si congela, il PC crea un file o ne modifica uno). */
 interface WorldActions {
   suspend fun userStop()
 
   suspend fun freeze()
 
   suspend fun pcFile()
+
+  /** Il PC crea un file al nome dove la chiamata sta per scrivere (`target.other`, o `target.path`); per default come [pcFile] (la 5A sceglie da se' il nome). */
+  suspend fun pcFileAt(target: NasTarget?) = pcFile()
+
+  /** 5B: il PC modifica sul posto il file su cui la chiamata sta per agire (`target.path`). Per default niente. */
+  suspend fun pcEdit(target: NasTarget?) = Unit
 
   object NONE : WorldActions {
     override suspend fun userStop() = Unit
@@ -236,12 +275,26 @@ class Injector(
   /** Quante chiamate (per tipo) sono passate a colpi armati dall'ultimo [load]. */
   fun callsOf(primitive: Primitive): Int = perPrimitive[primitive] ?: 0
 
-  /** Una chiamata al NAS che restituisce un [NasResult]. [locked] e' il valore dell'esito "file aperto dal PC" della primitiva, se ne ha uno. */
-  suspend fun <T> nas(primitive: Primitive, incarnation: Incarnation, locked: T? = null, block: suspend () -> NasResult<T>): NasResult<T> =
-    nasWrite(primitive, incarnation, locked) { block() }
+  /**
+   * Una chiamata al NAS che restituisce un [NasResult]. [locked] e' il valore dell'esito "file aperto dal PC" della primitiva, se ne ha uno.
+   * [target] (5B): il file su cui agisce, per i colpi del PC (`PC_EDIT`, `PC_FILE` con il nome che si sta per pubblicare).
+   */
+  suspend fun <T> nas(
+    primitive: Primitive,
+    incarnation: Incarnation,
+    locked: T? = null,
+    target: NasTarget? = null,
+    block: suspend () -> NasResult<T>,
+  ): NasResult<T> = nasWrite(primitive, incarnation, locked, target) { block() }
 
   /** Come [nas], per le scritture: il blocco riceve `corrupt` (vero = alterare un byte di cio' che si scrive, senza dirlo). */
-  suspend fun <T> nasWrite(primitive: Primitive, incarnation: Incarnation, locked: T? = null, block: suspend (corrupt: Boolean) -> NasResult<T>): NasResult<T> {
+  suspend fun <T> nasWrite(
+    primitive: Primitive,
+    incarnation: Incarnation,
+    locked: T? = null,
+    target: NasTarget? = null,
+    block: suspend (corrupt: Boolean) -> NasResult<T>,
+  ): NasResult<T> {
     incarnation.checkAlive()
     if (!armed) return block(false)
     val index = countNas(primitive)
@@ -260,7 +313,11 @@ class Injector(
         }
         FaultKind.PC_FILE -> {
           record(primitive, Moment.BEFORE, rule.kind, applied = true)
-          actions.pcFile()
+          actions.pcFileAt(target)
+        }
+        FaultKind.PC_EDIT -> {
+          record(primitive, Moment.BEFORE, rule.kind, applied = true)
+          actions.pcEdit(target)
         }
         FaultKind.CORRUPT -> {
           record(primitive, Moment.BEFORE, rule.kind, applied = true)
@@ -409,7 +466,17 @@ class Injector(
      * al NAS, delle scritture del diario e del catalogo o delle chiamate al telefono. [estimate] e' una stima dei punti del passo: i
      * colpi oltre la fine semplicemente non scattano.
      */
-    fun randomRules(random: Random, estimate: Estimate, maxFaults: Int, mix: FaultMix, budget: FaultBudget): List<FaultRule> {
+    fun randomRules(
+      random: Random,
+      estimate: Estimate,
+      maxFaults: Int,
+      mix: FaultMix,
+      budget: FaultBudget,
+      scope: RuleScope = RuleScope.UPLOAD,
+    ): List<FaultRule> {
+      val storePrimitives = storePrimitivesOf(scope)
+      val phonePrimitives = phonePrimitivesOf(scope)
+      val nasPrimitives = nasPrimitivesOf(scope)
       val count = mix.faultCount(random, maxFaults)
       val rules = ArrayList<FaultRule>()
       repeat(count) {
@@ -417,14 +484,14 @@ class Injector(
         when {
           roll < mix.storeShare -> {
             val moment = if (random.nextBoolean()) Moment.BEFORE else Moment.AFTER
-            val targeted = if (random.nextDouble() < mix.targetedShare) STORE_PRIMITIVES.random(random) else null
+            val targeted = if (random.nextDouble() < mix.targetedShare) storePrimitives.random(random) else null
             val trigger = if (targeted != null) Trigger.OfPrimitive(targeted, 1 + geometric(random, 0.45)) else Trigger.StoreWrite(1 + random.nextInt(maxOf(2, estimate.store)))
             rules += FaultRule(trigger, moment, FaultKind.KILL)
           }
           roll < mix.storeShare + mix.phoneShare -> {
             val kind = if (budget.takeIo(random)) FaultKind.IO_ERROR else FaultKind.KILL
             val moment = if (kind.bothMoments && random.nextBoolean()) Moment.AFTER else Moment.BEFORE
-            val primitive = if (kind == FaultKind.IO_ERROR) Primitive.PHONE_READ else PHONE_PRIMITIVES.random(random)
+            val primitive = if (kind == FaultKind.IO_ERROR) Primitive.PHONE_READ else phonePrimitives.random(random)
             val trigger = if (random.nextBoolean()) Trigger.OfPrimitive(primitive, 1 + geometric(random, 0.4)) else Trigger.PhoneCall(1 + random.nextInt(maxOf(2, estimate.phone)))
             rules += FaultRule(trigger, moment, kind)
           }
@@ -433,7 +500,7 @@ class Injector(
             if (kind == FaultKind.CORRUPT && !budget.takeCorrupt()) kind = FaultKind.DROP
             val moment = if (kind.bothMoments && random.nextBoolean()) Moment.AFTER else Moment.BEFORE
             val trigger = if (random.nextDouble() < mix.targetedShare) {
-              val candidates = NAS_PRIMITIVES.filter { it.allows(kind, moment) }
+              val candidates = nasPrimitives.filter { it.allows(kind, moment) }
               if (candidates.isEmpty()) Trigger.NasCall(1 + random.nextInt(maxOf(2, estimate.nas)))
               else Trigger.OfPrimitive(candidates.random(random), 1 + geometric(random, 0.45))
             } else {
@@ -452,11 +519,38 @@ class Injector(
       return n
     }
 
-    private val NAS_PRIMITIVES = Primitive.entries.filter { (it.side == Side.NAS_WRITE || it.side == Side.NAS_READ) && it != Primitive.COPY_TO_TEMP && it != Primitive.SPACE && it != Primitive.LIST }
-    private val STORE_PRIMITIVES = Primitive.entries.filter { it.side == Side.DIARY || it.side == Side.CATALOG }
-    private val PHONE_PRIMITIVES = Primitive.entries.filter { it.side == Side.PHONE }
+    // Il caricamento (la 5A) pesca solo i suoi punti, come prima di P13: i giri di prima restano quelli di prima. La 5B pesca anche i suoi, e la
+    // copia lato server (il guardiano la usa); mai lo spazio e l'elenco (nessun passo della 5B li chiama a un punto utile).
+    private fun nasPrimitivesOf(scope: RuleScope): List<Primitive> = when (scope) {
+      RuleScope.UPLOAD -> UPLOAD_NAS
+      RuleScope.FIVE_B -> FIVE_B_NAS
+    }
+
+    private fun storePrimitivesOf(scope: RuleScope): List<Primitive> = when (scope) {
+      RuleScope.UPLOAD -> UPLOAD_STORE
+      RuleScope.FIVE_B -> FIVE_B_STORE
+    }
+
+    private fun phonePrimitivesOf(scope: RuleScope): List<Primitive> = when (scope) {
+      RuleScope.UPLOAD -> UPLOAD_PHONE
+      RuleScope.FIVE_B -> FIVE_B_PHONE
+    }
+
+    private val UPLOAD_NAS = Primitive.entries.filter {
+      !it.fiveB && (it.side == Side.NAS_WRITE || it.side == Side.NAS_READ) && it != Primitive.COPY_TO_TEMP && it != Primitive.SPACE && it != Primitive.LIST
+    }
+    private val UPLOAD_STORE = Primitive.entries.filter { !it.fiveB && (it.side == Side.DIARY || it.side == Side.CATALOG) }
+    private val UPLOAD_PHONE = Primitive.entries.filter { !it.fiveB && it.side == Side.PHONE }
+    private val FIVE_B_NAS = Primitive.entries.filter {
+      (it.side == Side.NAS_WRITE || it.side == Side.NAS_READ) && it != Primitive.SPACE && it != Primitive.LIST
+    }
+    private val FIVE_B_STORE = Primitive.entries.filter { it.side == Side.DIARY || it.side == Side.CATALOG }
+    private val FIVE_B_PHONE = Primitive.entries.filter { it.side == Side.PHONE && it.kinds.isNotEmpty() }
   }
 }
+
+/** Da dove si pescano i punti dei colpi casuali: il caricamento (la 5A, com'era) o anche le primitive, i diari e il catalogo della 5B. */
+enum class RuleScope { UPLOAD, FIVE_B }
 
 /** Una stima dei punti di un passo, per posizionare i colpi: i colpi oltre la fine non scattano e non contano. */
 class Estimate(val nas: Int, val store: Int, val phone: Int)
@@ -530,6 +624,23 @@ class FaultMix(
       countWeights = listOf(15, 20, 25, 20, 20),
     )
 
+    /**
+     * 5B (P13): da 1 a 4 colpi per passo (15/30/30/25%), piu' sul diario e sul catalogo (le versioni e "Libera spazio" scrivono molto), e in
+     * piu' il PC che modifica il file attuale proprio prima della rinomina ([FaultKind.PC_EDIT]) o che mette un file al nome che si sta per
+     * pubblicare ([FaultKind.PC_FILE]).
+     */
+    val FIVE_B = FaultMix(
+      storeShare = 0.30,
+      phoneShare = 0.08,
+      targetedShare = 0.55,
+      nasWeights = listOf(
+        FaultKind.DROP to 23, FaultKind.KILL to 22, FaultKind.EXPIRE_SESSION to 6, FaultKind.STALL to 6, FaultKind.DISK_FULL to 3,
+        FaultKind.LOCKED to 6, FaultKind.AUTH to 1, FaultKind.CORRUPT to 6, FaultKind.USER_STOP to 3, FaultKind.FREEZE to 3,
+        FaultKind.PC_FILE to 7, FaultKind.PC_EDIT to 14,
+      ),
+      countWeights = listOf(15, 30, 30, 25),
+    )
+
     /** Un colpo solo per passo (il runner contro il NAS vero: ogni passo vale una interruzione); niente colpi del mondo che il NAS vero non fa. */
     val SINGLE = FaultMix(
       storeShare = 0.25,
@@ -571,6 +682,11 @@ class ChaosStats {
   val stepKinds: MutableMap<String, Int> = HashMap()
   val events: MutableMap<String, Int> = HashMap()
   val itemStates: MutableMap<String, Int> = HashMap()
+
+  /** I contatori della 5B (lavori delle versioni per tipo e stato, lotti di "Libera spazio", righe liberate...): dicono cosa la prova ha davvero fatto. */
+  val counters: MutableMap<String, Long> = HashMap()
+
+  fun count(name: String, n: Long = 1) = synchronized(lock) { counters.merge(name, n, Long::plus) }
 
   fun call(primitive: Primitive) = synchronized(lock) { calls.merge(primitive, 1, Int::plus) }
 

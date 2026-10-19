@@ -56,6 +56,24 @@ import kotlinx.coroutines.sync.withLock
 // =============================================================================================================================
 
 object BackupAreaRunner {
+
+  /** Se e come il giro include la fase 5B (P13): versioni, scambi, guardiano e "Libera spazio" sul NAS vero. */
+  enum class FiveB(val code: String) {
+    /** Solo il caricamento (la 5A, com'era). */
+    OFF("off"),
+
+    /** Il caricamento e poi la 5B nello stesso giro. */
+    WITH("with"),
+
+    /** Solo la 5B: i media li semina il banco, nessun caricamento prima (`area.ps1 -Mode backup -Stage run5b`). */
+    ONLY("only"),
+    ;
+
+    companion object {
+      fun of(raw: String?): FiveB = entries.firstOrNull { it.code == raw?.lowercase() } ?: OFF
+    }
+  }
+
   class Settings(
     /** Le interruzioni da far cadere (`backup.rounds`): 400 sul PC. Una prova breve ne usa al massimo 20. */
     val interruptions: Int,
@@ -69,12 +87,13 @@ object BackupAreaRunner {
     val hugePermille: Int = 8,
     /** Il primo giro: con lo stesso seme di base rifa' un giro rosso sul NAS vero. */
     val firstRound: Int = 0,
+    val fiveB: FiveB = FiveB.OFF,
   )
 
   fun config(settings: Settings): BackupChaosConfig = BackupChaosConfig(
-    minPhotos = 1,
-    maxPhotos = 3,
-    maxVideos = 1,
+    minPhotos = if (settings.fiveB == FiveB.ONLY) 0 else 1,
+    maxPhotos = if (settings.fiveB == FiveB.ONLY) 0 else 3,
+    maxVideos = if (settings.fiveB == FiveB.ONLY) 0 else 1,
     sizeOf = { random, kind ->
       when {
         kind != MediaKind.VIDEO -> settings.mediumBytes + random.nextInt(settings.mediumBytes.toInt() / 2)
@@ -83,14 +102,33 @@ object BackupAreaRunner {
         else -> 3 * settings.mediumBytes
       }
     },
-    minSteps = 2,
-    maxSteps = 3,
+    minSteps = if (settings.fiveB == FiveB.ONLY) 0 else 2,
+    maxSteps = if (settings.fiveB == FiveB.ONLY) 0 else 3,
     mix = FaultMix.SINGLE,
     stepFaults = 1,
     // Sul NAS vero un file non cambiato non si rilegge a ogni verifica; la rilettura finale di ogni giro e' sempre completa.
     hashCache = true,
     phoneEventPercent = 10,
     oldFilesPercent = 0,
+    fiveB = if (settings.fiveB == FiveB.OFF) null else fiveBConfig(settings),
+  )
+
+  /**
+   * La fase 5B sul NAS vero: un colpo per passo, file da 1 MB (le versioni e gli scambi sono rinomine e un caricamento per modifica), niente colpi del
+   * mondo che il NAS vero non fa (il PC che modifica un file, l'orologio che avanza, un byte che marcisce: [NasCaps]); la cache dei timbri nelle
+   * verifiche a meta', la rilettura finale sempre completa.
+   */
+  fun fiveBConfig(settings: Settings): Backup5BConfig = Backup5BConfig(
+    only = settings.fiveB == FiveB.ONLY,
+    minMedia = 3,
+    maxMedia = 4,
+    minSteps = 3,
+    maxSteps = 4,
+    mix = FaultMix.SINGLE,
+    stepFaults = 1,
+    events = true,
+    hashCache = true,
+    sizeOf = { random -> settings.mediumBytes.toInt() + random.nextInt(settings.mediumBytes.toInt() / 2) },
   )
 
   /** Fa i giri necessari. Si ferma appena le interruzioni cadute sono [Settings.interruptions] (ma al massimo `4 x + 5` giri). */
@@ -348,9 +386,15 @@ object BackupAreaGate {
     return Outcome.Ready(credentials, guard)
   }
 
-  /** Le interruzioni da far cadere: `backup.rounds` del file, poi `MCG_BACKUP_ROUNDS`, poi 400. */
-  fun interruptions(credentials: BackupAreaCredentials): Int =
-    credentials.rounds ?: System.getenv("MCG_BACKUP_ROUNDS")?.toIntOrNull() ?: DEFAULT_INTERRUPTIONS
+  /**
+   * Le interruzioni da far cadere: `backup.rounds` del file, poi `MCG_BACKUP_ROUNDS`, poi 400; **mai piu' di `MCG_BACKUP_CAP`** se c'e' (lo imposta
+   * `area.ps1` a `-Interruptions`: un giro breve di prova non diventa per sbaglio quello da 400 perche' il file ha `backup.rounds=400`).
+   */
+  fun interruptions(credentials: BackupAreaCredentials): Int {
+    val wanted = credentials.rounds ?: System.getenv("MCG_BACKUP_ROUNDS")?.toIntOrNull() ?: DEFAULT_INTERRUPTIONS
+    val cap = System.getenv("MCG_BACKUP_CAP")?.toIntOrNull()?.takeIf { it >= 0 }
+    return if (cap == null) wanted else minOf(wanted, cap)
+  }
 
   /** Il video enorme di E-B1: `backup.bigFileMb` del file (3.072 MB = 3 GB nel brief); senza la chiave non c'e'. */
   fun hugeBytes(credentials: BackupAreaCredentials): Long? = credentials.bigFileMb?.let { it.coerceIn(1, 4_096).toLong() shl 20 }
@@ -375,6 +419,7 @@ object BackupAreaGate {
  * app=test|                                                            (share|cartella sotto cui sta .mycloudgallery/)
  * phone=<sha256>|<byte>|<etichetta>                                    (un file del telefono)
  * pre=<sha256>|<share>|<percorso>                                      (un file gia' presente in Backup/ prima del primo backup)
+ * edit=<sha256 vecchio>|<sha256 nuovo>|<etichetta>                     (5B: un file del telefono modificato dopo il primo backup, come Samsung "Salva")
  * ```
  */
 class BackupAreaManifest(
@@ -384,10 +429,14 @@ class BackupAreaManifest(
   val app: List<Pair<String, SharePath?>>,
   val phone: List<PhoneFile>,
   val pre: List<Pre>,
+  val edits: List<Edit> = emptyList(),
 ) {
   class PhoneFile(val sha: Sha256, val size: Long, val label: String)
 
   class Pre(val sha: Sha256, val share: String, val path: String)
+
+  /** Una modifica sul telefono dopo il primo backup: l'originale ([old]) deve stare in `Versioni/` (o al solito percorso), la modifica ([new]) al solito percorso. */
+  class Edit(val old: Sha256, val new: Sha256, val label: String)
 
   fun write(file: File) {
     file.parentFile?.mkdirs()
@@ -402,6 +451,7 @@ class BackupAreaManifest(
     app.forEach { appendLine("app=${it.first}|${it.second?.value.orEmpty()}") }
     phone.forEach { appendLine("phone=${it.sha}|${it.size}|${it.label}") }
     pre.forEach { appendLine("pre=${it.sha}|${it.share}|${it.path}") }
+    edits.forEach { appendLine("edit=${it.old}|${it.new}|${it.label}") }
   }
 
   companion object {
@@ -414,6 +464,7 @@ class BackupAreaManifest(
       val app = ArrayList<Pair<String, SharePath?>>()
       val phone = ArrayList<PhoneFile>()
       val pre = ArrayList<Pre>()
+      val edits = ArrayList<Edit>()
       for ((number, raw) in lines.withIndex()) {
         val line = raw.trim()
         if (line.isEmpty() || line.startsWith("#")) continue
@@ -440,11 +491,15 @@ class BackupAreaManifest(
             if (p.size < 3) bad()
             pre += Pre(Sha256.parse(p[0]), p[1], p.drop(2).joinToString("|"))
           }
+          "edit" -> {
+            if (p.size < 3) bad()
+            edits += Edit(Sha256.parse(p[0]), Sha256.parse(p[1]), p.drop(2).joinToString("|"))
+          }
           else -> bad()
         }
       }
       if (dest.isEmpty()) throw IllegalArgumentException("manifesto senza 'dest'")
-      return BackupAreaManifest(run ?: throw IllegalArgumentException("manifesto senza 'run'"), device, dest, app.ifEmpty { dest }, phone, pre)
+      return BackupAreaManifest(run ?: throw IllegalArgumentException("manifesto senza 'run'"), device, dest, app.ifEmpty { dest }, phone, pre, edits)
     }
   }
 }
@@ -492,6 +547,17 @@ object BackupAreaVerifier {
       bytes += scan.bytesHashed
       scan.problems.forEach { add(Invariant.NAS_READS, it) }
     }
+    // 5B: le versioni stanno in `Versioni/` alla radice della share (Q2 (a)): archiviate, mai tolte. Cartella che puo' non esserci ancora.
+    val versions = ArrayList<NasFileFact>()
+    if (manifest.edits.isNotEmpty()) {
+      for ((share, _) in manifest.dest) {
+        val scan = BackupNasScanner(reader, listOf(ScanRoot(share, VERSIONS_ROOT))).scan(allowCache = false)
+        versions += scan.files
+        hashed += scan.filesHashed
+        bytes += scan.bytesHashed
+        scan.problems.forEach { add(Invariant.NAS_READS, it) }
+      }
+    }
     // I temporanei: .mycloudgallery/tmp sotto ogni cartella dell'app (e' una cartella che puo' non esserci ancora).
     val temps = ArrayList<NasFileFact>()
     for ((share, dir) in manifest.app) {
@@ -501,7 +567,7 @@ object BackupAreaVerifier {
       scan.problems.forEach { add(Invariant.NAS_READS, it) }
     }
 
-    val phoneShas = manifest.phone.map { it.sha }.toSet()
+    val phoneShas = manifest.phone.map { it.sha }.toSet() + manifest.edits.map { it.new }
     val preShas = manifest.pre.map { it.sha }.toSet()
     val preKeys = manifest.pre.map { NasFileFact.keyOf(it.share, it.path) }.toSet()
     val fresh = visible.filter { it.key !in preKeys }
@@ -514,14 +580,37 @@ object BackupAreaVerifier {
     }
     // 1. Nessun file a meta': ogni file nuovo ha i byte di un file del telefono.
     for (f in fresh) if (f.sha !in phoneShas) add(Invariant.HALF_FILE, "un file in Backup/ con byte che non sono di nessun file del telefono")
+    // Dalla 5B anche in `Versioni/` (archiviati: gli originali e le modifiche) ci sono solo byte che il telefono ha avuto.
+    for (f in versions) if (f.sha !in phoneShas && f.sha !in preShas) add(Invariant.HALF_FILE, "un file in Versioni/ con byte che non sono di nessun file del telefono")
     // 2. Nessun doppione: un file del telefono compare una volta sola (anche contando quelli che c'erano gia').
     val count = HashMap<Sha256, Int>()
     visible.forEach { count.merge(it.sha, 1, Int::plus) }
+    versions.forEach { count.merge(it.sha, 1, Int::plus) }
     for (sha in phoneShas) if ((count[sha] ?: 0) > 1) add(Invariant.DUPLICATE, "un file del telefono compare ${count[sha]} volte in Backup/")
     // 4. Nessuna perdita (a lavoro finito).
     if (settled) {
       val missing = manifest.phone.count { (count[it.sha] ?: 0) == 0 && it.sha !in preShas }
       if (missing > 0) add(Invariant.LOSS, "$missing file del telefono non sono sul NAS")
+    }
+    // 5B, 12 e 13: ogni modifica fatta sul telefono dopo il primo backup. A lavoro finito: l'originale e la modifica ci sono, una sola volta ciascuna,
+    // una al solito percorso (`Backup/`) e l'altra in `Versioni/` ("Ripristina originale" le scambia: va bene l'una o l'altra).
+    if (settled) {
+      for (e in manifest.edits) {
+        val oldAtUsual = visible.count { it.sha == e.old }
+        val newAtUsual = visible.count { it.sha == e.new }
+        val oldInVersions = versions.count { it.sha == e.old }
+        val newInVersions = versions.count { it.sha == e.new }
+        if (newAtUsual + newInVersions == 0) {
+          add(Invariant.USUAL_PATH, "una modifica del telefono non e' arrivata sul NAS")
+        } else if (oldAtUsual + newAtUsual != 1) {
+          add(Invariant.USUAL_PATH, "al solito percorso non c'e' una sola versione di una modifica del telefono")
+        }
+        if (oldAtUsual + oldInVersions == 0) {
+          add(Invariant.VERSIONS_KEPT, "l'originale di una modifica del telefono non c'e' piu' sul NAS")
+        } else if (newAtUsual + newInVersions > 0 && oldInVersions + newInVersions != 1) {
+          add(Invariant.VERSIONS_KEPT, "in Versioni/ non c'e' una sola versione di una modifica del telefono")
+        }
+      }
     }
     // 6. Temporanei del backup: a lavoro finito nessuno.
     val ownTemps = temps.filter { t ->
@@ -533,4 +622,7 @@ object BackupAreaVerifier {
   }
 
   private val BACKUP_TEMP = Regex("^[A-Za-z0-9]{26}-bk-[A-Za-z0-9-]+$")
+
+  /** `Versioni/` alla radice della share (Q2 (a)). */
+  private val VERSIONS_ROOT: SharePath = SharePath.of("Versioni")
 }

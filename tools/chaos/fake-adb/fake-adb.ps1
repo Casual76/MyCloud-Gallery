@@ -34,11 +34,14 @@ switch ($cmd) {
     if ($line -match '^svc wifi') { exit 0 }
     if ($line -match '^mkdir -p (.+)$') { foreach ($d in ($Matches[1] -split '\s+')) { New-Item -ItemType Directory -Force -Path (Map-Path $d) | Out-Null }; exit 0 }
     if ($line -match '^cp (\S+) (\S+)$') { Copy-Item -LiteralPath (Map-Path $Matches[1]) -Destination (Map-Path $Matches[2]) -Force; exit 0 }
-    if ($line -match "^sh -c '?dd if=/dev/urandom bs=1048576 count=(\d+) >> (\S+?)'?$") {
-      # 16 byte per MB: il telefono finto non tiene i GB
-      $bytes = New-Object byte[] (16 * [int]$Matches[1])
-      (New-Object System.Random(5)).NextBytes($bytes)
-      $f = Map-Path $Matches[2]
+    if ($line -match "^sh -c '?dd if=/dev/urandom bs=(\d+) count=(\d+) >> (\S+?)'?$") {
+      # Il megabyte vale 16 byte: il telefono finto non tiene i GB. Una modifica (24 byte) e' vera, con byte che cambiano a ogni chiamata.
+      $bs = [int]$Matches[1]
+      $count = [int]$Matches[2]
+      $length = if ($bs -ge 1048576) { 16 * $count } else { $bs * $count }
+      $bytes = New-Object byte[] $length
+      (New-Object System.Random(([int]((Get-Date).Ticks % 1000000)) + 5)).NextBytes($bytes)
+      $f = Map-Path $Matches[3]
       $stream = [System.IO.File]::Open($f, [System.IO.FileMode]::Append)
       $stream.Write($bytes, 0, $bytes.Length)
       $stream.Close()

@@ -2,7 +2,8 @@
 .SYNOPSIS
   Interruzioni casuali sul telefono: la prova delle 500 interruzioni lato telefono. Due modi:
     move    (default) durante una mossa di massa sul NAS (Fase 4B, docs/fase4-progetto.md par. 5.5, P15);
-    backup  durante il primo backup di `mcg-prova` (Fase 5A, docs/fase5-progetto.md par. 5.3 e 5.4, P6).
+    backup  durante il primo backup di `mcg-prova` (Fase 5A, docs/fase5-progetto.md par. 5.3 e 5.4, P6) e, dalla 5B (P13, F43), durante le
+            VERSIONI: foto di `mcg-prova` modificate dopo il primo backup (`-Step edit`, come Samsung "Salva") e salvate di nuovo.
   Come si usa e come si legge il risultato: docs/prova-500.md.
 
 .DESCRIPTION
@@ -22,7 +23,12 @@
                da trasferire); chiede la scansione del MediaStore; scrive il MANIFESTO con `adb shell sha256sum` (impronta, byte, etichetta).
     interrupt  l'utente ha gia' avviato il primo backup nell'app ("Inizia ora"); lo script uccide il processo o spegne il Wi-Fi a tempi casuali (come
                nel modo move), rilancia l'app, aspetta che la ripresa finisca e, con -Verify, passa a `verify`.
-    verify     controlla che il telefono non sia cambiato (le impronte tornano) e lancia il verificatore dal PC sull'area di prova, in sola lettura:
+    edit       (5B) a primo backup finito: modifica -Edits foto di `mcg-prova` aggiungendo in coda 24 byte casuali (un JPEG li ignora: Samsung "Salva"
+               sul telefono) e scrive nel manifesto una riga `edit=<impronta vecchia>|<impronta nuova>|<etichetta>` per ognuna. Poi l'utente rifa il
+               backup nell'app ("Fai ora") e si lancia `interrupt`: l'originale deve finire in `Versioni/`, la modifica al solito percorso (invarianti
+               12 e 13). Sul telefono si possono provare anche "Ripristina originale" (lo scambio) e "Libera spazio" durante le interruzioni.
+    verify     controlla che il telefono non sia cambiato (le impronte tornano; le modifiche del manifesto contano, e con -AllowFreed anche i file che
+               "Libera spazio" ha tolto) e lancia il verificatore dal PC sull'area di prova, in sola lettura:
                tools\chaos\area.ps1 -Mode backup -Stage verify -Manifest <il manifesto>.
     clean      toglie `mcg-prova` dal telefono (solo quelle due cartelle, con -Yes).
   Lo script non scrive sul NAS e non legge altro dal telefono che `mcg-prova`. Il verificatore dal PC sta in core-backup (BackupAreaVerifier).
@@ -38,7 +44,7 @@
   Funziona sulla build debug (run-as) con gli account di prova (par. 5.7); il modo backup rifiuta un pacchetto che non sia di debug.
 
 .PARAMETER Mode                move | backup (default move).
-.PARAMETER Step                Per backup: seed | interrupt | verify | clean (default interrupt).
+.PARAMETER Step                Per backup: seed | edit | interrupt | verify | clean (default interrupt).
 .PARAMETER Serial              Numero di serie del telefono (`adb devices`). Default: ANDROID_SERIAL.
 .PARAMETER Package             Il pacchetto dell'app (default: la build debug, dev.pampa.mycloudgallery.debug).
 .PARAMETER Interruptions       Quante interruzioni (default 100, come chiede il par. 5.5 / 5.4 per il telefono).
@@ -57,6 +63,8 @@
 .PARAMETER Manifest            Il manifesto: per move, quello scritto da `area.ps1 -Mode seed`; per backup, quello scritto da `-Step seed` (o da leggere).
 .PARAMETER Verify              A fine prova lancia il verificatore sull'area (serve -Manifest in move; in backup il manifesto di `seed`).
 .PARAMETER Log                 Dove scrivere il racconto (default: build\chaos\s25-<data>.log).
+.PARAMETER Edits               Per backup/edit: quante foto modificare (default 20).
+.PARAMETER AllowFreed          Per backup/verify: i file che "Libera spazio" ha tolto dal telefono non sono un cambiamento (le altre impronte devono tornare).
 .PARAMETER Photos              Per backup/seed: quante foto in tutto (default 300).
 .PARAMETER BigVideos           Per backup/seed: quanti video grandi (default 2).
 .PARAMETER BigVideoMb          Per backup/seed: quanto e' grande ciascuno, in MB (default 2560).
@@ -87,7 +95,7 @@
 [CmdletBinding()]
 param(
   [ValidateSet("move", "backup")][string]$Mode = "move",
-  [ValidateSet("seed", "interrupt", "verify", "clean")][string]$Step = "interrupt",
+  [ValidateSet("seed", "edit", "interrupt", "verify", "clean")][string]$Step = "interrupt",
   [string]$Serial = $env:ANDROID_SERIAL,
   [string]$Package = "dev.pampa.mycloudgallery.debug",
   [int]$Interruptions = 100,
@@ -105,6 +113,8 @@ param(
   [switch]$Verify,
   [string]$Log,
   [int]$Photos = 300,
+  [int]$Edits = 20,
+  [switch]$AllowFreed,
   [int]$BigVideos = 2,
   [int]$BigVideoMb = 2560,
   [string]$FixturesDir,
@@ -145,7 +155,7 @@ function ConvertTo-PhoneFileList([string[]]$hashLines, [string[]]$sizeLines) {
       if (-not $sizes.ContainsKey($path)) { throw "Manca la dimensione di un file del telefono." }
       # Un file a zero byte non e' un media da salvare (E-M12): il backup non lo carica, quindi non entra nel manifesto.
       if ($sizes[$path] -le 0) { continue }
-      $files += [pscustomobject]@{ Sha = $sha; Size = $sizes[$path]; Label = (($path -split '/')[-1]) }
+      $files += [pscustomobject]@{ Sha = $sha; Size = $sizes[$path]; Label = (($path -split '/')[-1]); Path = $path }
     }
   }
   return $files
@@ -187,6 +197,7 @@ if ($isBackup) {
   if ($Package -notmatch '\.debug$') { Fail "Il modo backup vale solo per la build debug con gli account di prova (D13): il pacchetto deve finire con .debug." }
   if ($Photos -lt 1 -or $Photos -gt 5000) { Fail "-Photos deve stare fra 1 e 5000." }
   if ($BigVideos -lt 0 -or $BigVideos -gt 4) { Fail "-BigVideos deve stare fra 0 e 4." }
+  if ($Edits -lt 1 -or $Edits -gt 500) { Fail "-Edits deve stare fra 1 e 500." }
   if ($BigVideoMb -lt 1 -or $BigVideoMb -gt 4096) { Fail "-BigVideoMb deve stare fra 1 e 4096." }
   if ($DestShare -notmatch '^(test|test2|test-comune)$') { Fail "-DestShare deve essere una share di prova (test, test2, test-comune)." }
   if ($DestDir -notmatch '^[A-Za-z0-9._-]+$' -or $DestDir -match '^\.+$') { Fail "-DestDir deve essere un solo nome di cartella semplice (default mcg-campo)." }
@@ -366,6 +377,54 @@ function Wait-MediaStore([int]$expected) {
   return $seen
 }
 
+function Write-EditPlan {
+  Write-Host "=== PIANO DELLA MODIFICA (a secco): nessun comando adb viene eseguito ===" -ForegroundColor Yellow
+  Write-Host ("Telefono: {0}   Manifesto: {1}   Seme: {2}   Foto da modificare: {3}" -f $serialText, $Manifest, $Seed, $Edits)
+  Write-Host "Cartelle del telefono (le uniche toccate): $($PhoneFolders -join ', ')"
+  Write-Host ""
+  Write-Host "Comandi adb che userebbe:"
+  Write-Host ("  {0,-26} adb -s {1} shell {2}" -f "impronte (sha256sum)", $serialText, $hashCommand)
+  Write-Host ("  {0,-26} adb -s {1} shell {2}" -f "dimensioni (stat)", $serialText, $sizeCommand)
+  Write-Host ("  {0,-26} adb -s {1} shell sh -c 'dd if=/dev/urandom bs=24 count=1 >> <una foto di mcg-prova>'   (per ciascuna delle {2})" -f "una modifica (24 byte in coda)", $serialText, $Edits)
+  Write-Host ("  {0,-26} adb -s {1} shell {2}" -f "scansione del MediaStore", $serialText, $scanCommand)
+  Write-Host ""
+  Write-Host "Poi l'utente rifa il backup nell'app (Fai ora) e si lancia -Step interrupt: l'originale in Versioni/, la modifica al solito percorso." -ForegroundColor Green
+}
+
+# Modifica -Edits foto di `mcg-prova` come farebbe Samsung "Salva" (byte in coda: un JPEG li ignora) e scrive le righe `edit=` nel manifesto.
+function Invoke-Edit {
+  if (-not (Test-Path -LiteralPath $Manifest)) { Fail "Manifesto non trovato: $Manifest (serve quello della semina)." }
+  Initialize-Adb
+  Assert-Debug-App
+  $before = @(Get-PhoneFiles)
+  $candidates = @($before | Where-Object { $_.Label -match '\.jpe?g$' -and $_.Size -gt 0 })
+  if ($candidates.Count -eq 0) { Fail "Nessuna foto JPEG in mcg-prova da modificare." }
+  $random = New-Object System.Random($Seed)
+  $chosen = @($candidates | Sort-Object { $random.Next() } | Select-Object -First $Edits)
+  foreach ($file in $chosen) {
+    # Il percorso viene dal telefono (find nelle due cartelle di prova): dev'essere sotto una di quelle, altrimenti non si tocca.
+    $inside = $false
+    foreach ($folder in $PhoneFolders) { if ($file.Path.StartsWith($folder + "/")) { $inside = $true } }
+    if (-not $inside) { Fail "Un file fuori da mcg-prova: non si tocca." }
+    $dd = Invoke-Adb @("shell", "sh", "-c", "'dd if=/dev/urandom bs=24 count=1 >> $($file.Path)'")
+    if ($dd.Code -ne 0) { Fail "dd sul telefono non e' riuscito." }
+  }
+  Write-Log "Chiedo la scansione del MediaStore..."
+  [void](Invoke-Adb @("shell", $scanCommand))
+  $after = @(Get-PhoneFiles)
+  $text = ""
+  $count = 0
+  foreach ($file in $chosen) {
+    $now = @($after | Where-Object { $_.Path -eq $file.Path } | Select-Object -First 1)
+    if ($now.Count -eq 0 -or $now[0].Sha -eq $file.Sha) { Fail "Una foto non e' cambiata dopo la modifica." }
+    $text += ("edit={0}|{1}|{2}`n" -f $file.Sha, $now[0].Sha, $file.Label)
+    $count++
+  }
+  [System.IO.File]::AppendAllText($Manifest, $text)
+  Write-Log ("Modificate {0} foto di mcg-prova. Manifesto: {1}" -f $count, $Manifest)
+  Write-Host "Adesso, nell'app, rifai il backup (Fai ora) e lancia: s25.ps1 -Mode backup -Step interrupt -Manifest `"$Manifest`" -Verify -AllowFreed" -ForegroundColor Green
+}
+
 function Invoke-Seed {
   Initialize-Adb
   Assert-Debug-App
@@ -446,15 +505,23 @@ function Invoke-VerifyBackup {
   if (-not (Test-Path -LiteralPath $Manifest)) { Fail "Manifesto non trovato: $Manifest" }
   # Il telefono non deve essere cambiato: nella 5A il backup non scrive niente sul telefono.
   Initialize-Adb
-  $expected = @{}
+  # Per etichetta: le impronte che un file puo' avere (quella della semina; dalla 5B anche quella di una modifica: `edit=`).
+  $allowed = @{}
+  $labelsSeeded = @{}
   foreach ($line in (Get-Content -LiteralPath $Manifest)) {
-    if ($line -match '^phone=([0-9a-f]{64})\|(\d+)\|(.+)$') { $expected["$($Matches[1])|$($Matches[2])|$($Matches[3])"] = $true }
+    if ($line -match '^phone=([0-9a-f]{64})\|(\d+)\|(.+)$') { $allowed["$($Matches[1])|$($Matches[3])"] = $true; $labelsSeeded[$Matches[3]] = $true }
+    if ($line -match '^edit=([0-9a-f]{64})\|([0-9a-f]{64})\|(.+)$') { $allowed["$($Matches[1])|$($Matches[3])"] = $true; $allowed["$($Matches[2])|$($Matches[3])"] = $true }
   }
   $now = @{}
-  foreach ($file in (Get-PhoneFiles)) { $now["$($file.Sha)|$($file.Size)|$($file.Label)"] = $true }
-  $changed = @($expected.Keys | Where-Object { -not $now.ContainsKey($_) }).Count + @($now.Keys | Where-Object { -not $expected.ContainsKey($_) }).Count
-  if ($changed -gt 0) { Fail "Il telefono e' cambiato durante la prova ($changed file diversi dal manifesto): nella 5A il backup non tocca il telefono." 4 }
-  Write-Log "Il telefono non e' cambiato: le impronte di mcg-prova tornano con il manifesto."
+  foreach ($file in (Get-PhoneFiles)) { $now["$($file.Sha)|$($file.Label)"] = $true }
+  # Un file con un'impronta che il manifesto non conosce e' un cambiamento; uno che manca lo e' solo se "Libera spazio" non c'entra (-AllowFreed).
+  $unknown = @($now.Keys | Where-Object { -not $allowed.ContainsKey($_) }).Count
+  $nowLabels = @{}
+  foreach ($key in $now.Keys) { $nowLabels[($key -split '\|', 2)[1]] = $true }
+  $missing = @($labelsSeeded.Keys | Where-Object { -not $nowLabels.ContainsKey($_) }).Count
+  $changed = $unknown + $(if ($AllowFreed) { 0 } else { $missing })
+  if ($changed -gt 0) { Fail "Il telefono e' cambiato durante la prova ($changed file diversi dal manifesto): senza modifiche del manifesto il backup non tocca il telefono." 4 }
+  Write-Log ("Il telefono non e' cambiato rispetto al manifesto: le impronte di mcg-prova tornano{0}." -f $(if ($missing -gt 0) { " ($missing file tolti da Libera spazio)" } else { "" }))
   if ($SkipNas) {
     Write-Log "Verifica sul NAS saltata (-SkipNas): solo le impronte del telefono."
     return 0
@@ -480,6 +547,11 @@ function Invoke-Clean {
 if ($isBackup -and $Step -eq "seed") {
   if ($DryRun) { Write-SeedPlan; exit 0 }
   try { Invoke-Seed } finally { Save-Log }
+  exit 0
+}
+if ($isBackup -and $Step -eq "edit") {
+  if ($DryRun) { Write-EditPlan; exit 0 }
+  try { Invoke-Edit } finally { Save-Log }
   exit 0
 }
 if ($isBackup -and $Step -eq "verify") {

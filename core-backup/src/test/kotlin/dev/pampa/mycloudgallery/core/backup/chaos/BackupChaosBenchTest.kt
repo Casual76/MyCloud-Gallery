@@ -30,7 +30,9 @@ class BackupChaosBenchTest {
     val seed = env("MCG_BACKUP_CHAOS_SEED")?.toLong() ?: DEFAULT_SEED
     val first = env("MCG_BACKUP_CHAOS_FIRST_ROUND")?.toInt() ?: 0
     val dir = File("build/chaos")
-    val result = runBlocking { BackupChaosBench.run(rounds, seed, FakeNasTarget(), factory, firstRound = first, statesDir = dir) }
+    val result = runBlocking {
+      BackupChaosBench.run(rounds, seed, FakeNasTarget(), factory, config = BackupChaosConfig(fiveB = Backup5BConfig()), firstRound = first, statesDir = dir)
+    }
     println(result.summary())
     result.writeReport(File(dir, report))
     assertWithMessage("giri con violazioni:\n" + result.failureText()).that(result.failures).isEmpty()

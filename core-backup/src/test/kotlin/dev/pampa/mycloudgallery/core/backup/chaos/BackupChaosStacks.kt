@@ -52,11 +52,20 @@ interface BackupChaosStackFactory {
    * tiene un modello con la stessa regola.
    */
   val cleanerHonorsCitations: Boolean get() = true
+
+  /**
+   * Rimescola il seme della fase 5B (P13). I servizi della 5B sono gli stessi veri su ogni stack: senza questo i due stack del banco farebbero la
+   * **stessa** fase 5B (stessi media, stessi colpi) e le 2.000 prove di ciascuno ne varrebbero 2.000 e non 4.000. Il motore vero tiene 0: i giri
+   * del NAS vero (che usano solo lui) restano quelli di prima.
+   */
+  val fiveBSalt: Long get() = 0L
 }
 
 /** L'esecutore di riferimento di P0 (`InMemoryBackupEngine`): un elemento alla volta, le stesse regole di sicurezza del motore vero. */
 object ReferenceStack : BackupChaosStackFactory {
   override val name: String = "esecutore di riferimento (InMemoryBackupEngine)"
+
+  override val fiveBSalt: Long = 0x2F2F2F2F2F2FL
 
   override fun create(env: EngineEnv): BackupEngine {
     val world = env.world

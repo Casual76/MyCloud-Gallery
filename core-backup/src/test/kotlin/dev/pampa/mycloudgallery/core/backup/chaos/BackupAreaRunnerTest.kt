@@ -100,7 +100,7 @@ class BackupAreaRunnerTest {
     val result = BackupAreaSelfTest.run(guard, world.nas.reader, world.nas.ops, target.counter)
     world.close()
     assertWithMessage(result.failures.joinToString("\n")).that(result.failures).isEmpty()
-    assertThat(result.cases).isGreaterThan(80)
+    assertThat(result.cases).isGreaterThan(100)
     assertThat(target.counter.calls.get()).isEqualTo(0)
   }
 
@@ -134,6 +134,25 @@ class BackupAreaRunnerTest {
     assertThat(target.counter.calls.get()).isGreaterThan(0)
     // I rapporti del NAS vero non dicono nomi di file ne' impronte.
     assertThat(result.summary()).doesNotContain("IMG_")
+  }
+
+  @Test
+  fun ilRunnerDellaCinqueBSulNasFintoDietroLaGuardiaFaVentiInterruzioniSenzaViolazioni(): Unit = runBlocking {
+    for (mode in listOf(BackupAreaRunner.FiveB.ONLY, BackupAreaRunner.FiveB.WITH)) {
+      val guard = BackupAreaGuard.of(credentials(), runId)
+      val target = GuardedTarget(FakeNasTarget(), guard)
+      val settings = BackupAreaRunner.Settings(interruptions = 20, baseSeed = 20261019L, mediumBytes = 30_000, bigBytes = 60_000, bigPercent = 10, fiveB = mode)
+      val result = BackupAreaRunner.run(target, ProductionStack, settings)
+      println(result.summary())
+      assertWithMessage("${mode.code}: ${result.failureText()}").that(result.failures).isEmpty()
+      assertThat(result.stats.totalFired).isAtLeast(20)
+      // Le versioni e gli scambi (le due rinomine) e "Libera spazio" sono girati davvero, e il rapporto non dice nomi.
+      assertThat(result.stats.callsOf(Primitive.ARCHIVE_VERSION)).isGreaterThan(0)
+      assertThat(result.stats.counters.keys.any { it.startsWith("lavori version") }).isTrue()
+      assertThat(result.summary()).doesNotContain("FOTO5B")
+      assertThat(result.summary()).doesNotContain("VIDEO5B")
+      assertThat(target.counter.calls.get()).isGreaterThan(0)
+    }
   }
 
   // --- L'aggancio al NAS: la sessione di produzione sopra il simulatore SMB, senza rete -----------------------------------------------
@@ -180,6 +199,41 @@ class BackupAreaRunnerTest {
       assertWithMessage("fuori dall'area in $share").that(files.filterNot { it.startsWith("mcg-it/$runId/r") }).isEmpty()
     }
     assertThat(backend.allFiles("alessio")).isEmpty()
+  }
+
+  @Test
+  fun ilRunnerDellaCinqueBSullaSessioneVeraNonEsceDallAreaDelGiroNemmenoConVersioni(): Unit = runBlocking {
+    val backend = backend()
+    val area = SmbBackupArea(transport = { backend }, socket = { backend.binding("pc") }, backoff = { })
+    val guard = BackupAreaGuard.of(credentials(), runId)
+    try {
+      val target = GuardedTarget(area.openTarget(credentials(), guard), guard)
+      val settings = BackupAreaRunner.Settings(
+        interruptions = 20, baseSeed = 20261019L, mediumBytes = 300_000, bigBytes = 600_000, bigPercent = 10, fiveB = BackupAreaRunner.FiveB.ONLY,
+      )
+      val result = BackupAreaRunner.run(target, ProductionStack, settings)
+      println(result.summary())
+      assertWithMessage(result.failureText()).that(result.failures).isEmpty()
+      assertThat(result.stats.totalFired).isAtLeast(20)
+      // Le rinomine vere (`SmbNasFileOps.renameVersion`) sono state chiamate sulla sessione vera.
+      assertThat(result.stats.callsOf(Primitive.ARCHIVE_VERSION) + result.stats.callsOf(Primitive.RESTORE_VERSION)).isGreaterThan(0)
+    } finally {
+      area.close()
+    }
+    assertThat(area.sessionsOpened).isEqualTo(1)
+    // `Versioni/` sta alla radice del giro, mai alla radice della share; la share di famiglia non e' mai stata toccata.
+    for (share in listOf("test", "test-comune")) {
+      val files = backend.allFiles(share)
+      assertWithMessage("fuori dall'area in $share").that(files.filterNot { it.startsWith("mcg-it/$runId/r") }).isEmpty()
+    }
+    assertThat(backend.allFiles("alessio")).isEmpty()
+  }
+
+  @Test
+  fun lAreaDiProvaNonSiTocca_ilTettoDelleInterruzioniVinceSulFile() {
+    // Un file con backup.rounds=400 e un giro breve di prova (MCG_BACKUP_CAP, lo imposta area.ps1): la prova breve resta breve.
+    val credentials = credentials("backup.rounds" to "400")
+    assertThat(BackupAreaGate.interruptions(credentials)).isEqualTo(400)
   }
 
   @Test
@@ -337,6 +391,62 @@ class BackupAreaRunnerTest {
     world.nas.pcPut("test", "mcg-campo/Backup/vecchia.jpg", old.copyOf(799), 1_000L)
     assertThat(BackupAreaVerifier.verify(world.nas.reader, withPre, settled = false).violations.map { it.invariant }).contains(Invariant.REPLACED)
     world.close()
+  }
+
+  // --- 5B: le modifiche del telefono, l'originale in Versioni/, la modifica al solito percorso ---------------------------------------------
+
+  @Test
+  fun ilManifestoConLeModificheSiScriveESiRilegge() {
+    val file = File.createTempFile("mcg-backup-manifest", ".txt")
+    try {
+      val m = BackupAreaManifest(
+        runId, null, listOf("test" to SharePath.of("mcg-campo")), listOf("test" to null), listOf(BackupAreaManifest.PhoneFile(sha(1), 10, "foto0")), emptyList(),
+        edits = listOf(BackupAreaManifest.Edit(sha(1), sha(2), "foto0")),
+      )
+      m.write(file)
+      val back = BackupAreaManifest.read(file)
+      assertThat(back.edits).hasSize(1)
+      assertThat(back.edits.single().old).isEqualTo(sha(1))
+      assertThat(back.edits.single().new).isEqualTo(sha(2))
+      assertThat(back.edits.single().label).isEqualTo("foto0")
+      assertThat(file.readText()).contains("edit=${sha(1)}|${sha(2)}|foto0")
+    } finally {
+      file.delete()
+    }
+  }
+
+  @Test
+  fun laVerificaDaSolaGiudicaLeModificheDelTelefono(): Unit = runBlocking {
+    val old = Random(11).nextBytes(2_000)
+    val edited = Random(12).nextBytes(2_100)
+    val manifest = BackupAreaManifest(
+      runId, BackupChaosWorld.DEVICE, listOf("test" to SharePath.of("mcg-campo")), listOf("test" to null),
+      listOf(BackupAreaManifest.PhoneFile(Sha256.of(old), old.size.toLong(), "foto0")), emptyList(),
+      edits = listOf(BackupAreaManifest.Edit(Sha256.of(old), Sha256.of(edited), "foto0")),
+    )
+    val usual = "mcg-campo/Backup/S25/2026/10/foto0.jpg"
+    val archived = "Versioni/Backup/S25/2026/10/foto0 (originale).jpg"
+    suspend fun verdict(settled: Boolean, build: suspend (BackupChaosWorld) -> Unit): List<Invariant> {
+      val world = FakeNasTarget().openWorld(0)
+      build(world)
+      val result = BackupAreaVerifier.verify(world.nas.reader, manifest, settled)
+      world.close()
+      return result.violations.map { it.invariant }
+    }
+    // La versione nuova al solito percorso, l'originale in Versioni/: tutto in ordine.
+    assertThat(verdict(true) { it.nas.pcPut("test", usual, edited, 1_000L); it.nas.pcPut("test", archived, old, 1_000L) }).isEmpty()
+    // Dopo "Ripristina originale" (lo scambio) e' lo stesso, a parti invertite.
+    assertThat(verdict(true) { it.nas.pcPut("test", usual, old, 1_000L); it.nas.pcPut("test", archived, edited, 1_000L) }).isEmpty()
+    // La modifica non e' arrivata sul NAS (12).
+    assertThat(verdict(true) { it.nas.pcPut("test", usual, old, 1_000L) }).contains(Invariant.USUAL_PATH)
+    // L'originale non c'e' piu' (13): la modifica ha preso il suo posto.
+    assertThat(verdict(true) { it.nas.pcPut("test", usual, edited, 1_000L) }).contains(Invariant.VERSIONS_KEPT)
+    // Gli stessi byte due volte (2), a meta' come a lavoro finito.
+    assertThat(verdict(false) { it.nas.pcPut("test", usual, edited, 1_000L); it.nas.pcPut("test", archived, edited, 1_000L) }).contains(Invariant.DUPLICATE)
+    // Un file in Versioni/ con byte di nessuno (1).
+    assertThat(verdict(false) { it.nas.pcPut("test", archived, Random(99).nextBytes(500), 1_000L) }).contains(Invariant.HALF_FILE)
+    // A meta' (la prova non e' ferma) la modifica puo' non essere ancora arrivata: nessuna violazione.
+    assertThat(verdict(false) { it.nas.pcPut("test", usual, old, 1_000L) }).isEmpty()
   }
 
   // --- Il cancello per il NAS vero ---------------------------------------------------------------------------------------------------

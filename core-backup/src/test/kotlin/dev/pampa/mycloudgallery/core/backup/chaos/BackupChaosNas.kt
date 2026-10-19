@@ -43,6 +43,8 @@ class NasCaps(
   val advanceTime: Boolean,
   /** Si puo' togliere un file dal di fuori (la pulizia dei propri file, il PC): il NAS vero no, il banco non puo' eliminare nulla. */
   val housekeeping: Boolean,
+  /** 5B: il PC puo' modificare sul posto un file (byte nuovi, stesso `fileId`): il NAS vero no (il banco non sostituisce niente). */
+  val pcModify: Boolean = housekeeping,
 )
 
 interface NasSide : AutoCloseable {
@@ -59,6 +61,13 @@ interface NasSide : AutoCloseable {
 
   /** La pulizia dei propri file toglie un file (solo con [NasCaps.housekeeping]). */
   suspend fun remove(share: String, path: String)
+
+  /**
+   * 5B: il "PC" modifica sul posto un file che c'e' (byte nuovi e data nuova, o la stessa: il marciume di un bit; stesso `fileId`), solo con
+   * [NasCaps.pcModify]. Nessun colpo.
+   */
+  suspend fun pcModify(share: String, path: String, bytes: ByteArray, modifiedAt: Long): Unit =
+    throw UnsupportedOperationException("questo NAS non lascia modificare un file dal di fuori")
 
   /** Fa passare [ms] (solo con [NasCaps.advanceTime]); l'orologio del banco lo sposta il mondo. */
   fun advanceTime(ms: Long)
@@ -94,6 +103,10 @@ class FakeNasSide(private val clock: FakeBackupClock, deviceId: String, override
 
   override suspend fun remove(share: String, path: String) {
     nas.delete(share, path)
+  }
+
+  override suspend fun pcModify(share: String, path: String, bytes: ByteArray, modifiedAt: Long) {
+    nas.modify(share, path, NasContent.of(bytes), modifiedAt = modifiedAt)
   }
 
   override fun advanceTime(ms: Long) = Unit
@@ -154,6 +167,10 @@ class SimSmbNasSide(private val clock: FakeBackupClock, deviceId: String) : NasS
 
   override suspend fun remove(share: String, path: String) {
     backend.delete(share, path)
+  }
+
+  override suspend fun pcModify(share: String, path: String, bytes: ByteArray, modifiedAt: Long) {
+    backend.put(share, path, bytes, lastWriteMs = modifiedAt)
   }
 
   override fun advanceTime(ms: Long) {

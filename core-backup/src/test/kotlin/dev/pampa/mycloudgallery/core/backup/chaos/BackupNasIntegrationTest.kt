@@ -66,6 +66,8 @@ class BackupNasIntegrationTest {
         baseSeed = seedOf(),
         hugeBytes = BackupAreaGate.hugeBytes(credentials),
         firstRound = System.getenv("MCG_BACKUP_FIRST_ROUND")?.toIntOrNull()?.coerceAtLeast(0) ?: 0,
+        // 5B (P13): `off` (di norma), `with` (il caricamento e poi le versioni, gli scambi, il guardiano e "Libera spazio"), `only` (solo la 5B).
+        fiveB = BackupAreaRunner.FiveB.of(System.getenv("MCG_BACKUP_FIVEB")),
       )
       // L'avanzamento, giro per giro, in un file a parte: la prova lunga (ore) si segue senza aspettare il rapporto.
       val progress = File(dir, "backup-area-progress-${runId.take(15)}.txt").also { it.writeText("") }
@@ -103,7 +105,9 @@ class BackupNasIntegrationTest {
     try {
       // Solo la lettura, e solo le cartelle del manifesto: Backup/ sotto la destinazione e i temporanei della cartella dell'app.
       val roots = manifest.dest.map { (_, dir) -> dir?.child("Backup") ?: SharePath.of("Backup") } +
-        manifest.app.map { (_, dir) -> dir?.child(NasLayout.ROOT.name)?.child("tmp") ?: NasLayout.ROOT.child("tmp") }
+        manifest.app.map { (_, dir) -> dir?.child(NasLayout.ROOT.name)?.child("tmp") ?: NasLayout.ROOT.child("tmp") } +
+        // 5B: le versioni stanno in `Versioni/` alla radice della share (sola lettura, solo se il manifesto ha modifiche).
+        (if (manifest.edits.isNotEmpty()) listOf(SharePath.of("Versioni")) else emptyList())
       val reader = GuardedReader(binding.openReader(ready.credentials, ready.guard), ready.guard, readRoots = roots)
       val settled = System.getenv("MCG_BACKUP_SETTLED")?.lowercase() != "false"
       val verification = BackupAreaVerifier.verify(reader, manifest, settled)

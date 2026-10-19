@@ -68,6 +68,64 @@ class AndroidMediaStoreSourceTest {
     changeWindow = 1_500.milliseconds,
   )
 
+  /** Tutte le righe, una alla volta, con la ripresa dopo l'ultima data: [fresh] rifa' la sorgente a ogni pagina (processo nuovo). */
+  private suspend fun pagesOfOne(fresh: Boolean): List<Long> {
+    val seen = ArrayList<Long>()
+    var after: Long? = null
+    repeat(20) {
+      val page = (if (fresh) newSource() else source).query("external_primary", sinceGeneration = null, afterId = after, limit = 1)
+      if (page.isEmpty()) return seen
+      seen += page.map { it.id }
+      after = page.last().id
+    }
+    error("la ripresa non finisce: $seen")
+  }
+
+  /**
+   * GA-5: `datetaken` 0 e NULL sono due cose diverse per la ripresa (0 viene prima dei NULL nell'ordine decrescente), ma la riga
+   * le fa diventare tutte e due "senza data". La sorgente ricordava il null e riprendeva con `IS NULL AND _id < ?`: le righe con 0
+   * rimaste e i NULL a id piu' alto erano saltati, e la scansione li dava per assenti.
+   */
+  @Test
+  fun ga5_leRigheConDataDiScattoZeroNonSiSaltanoNellaRipresa() = runBlocking<Unit> {
+    provider.insertRow(1, taken = 0)
+    provider.insertRow(2, taken = 0)
+    provider.insertRow(3, taken = 0)
+    provider.insertRow(4, taken = null, name = "senza data.png", mime = "image/png")
+    provider.insertRow(5, taken = 5_000)
+
+    // Dalle piu' recenti: la datata, poi gli zeri (_id decrescente), in fondo la riga senza data.
+    val expected = listOf(5L, 3L, 2L, 1L, 4L)
+    assertThat(pagesOfOne(fresh = false)).containsExactlyElementsIn(expected).inOrder()
+    assertThat(pagesOfOne(fresh = true)).containsExactlyElementsIn(expected).inOrder()
+  }
+
+  /**
+   * GA-5, il finto: le righe senza data (0 o NULL nel MediaStore vero, "senza data" per l'app) arrivano tutte anche a una alla volta. Lo
+   * stesso scenario sul MediaStore vero e' `ga5_…` qui sopra; l'ordine fra le righe senza data puo' differire (il vero mette prima gli zeri
+   * e poi i NULL, il finto per `_id`), la completezza no.
+   */
+  @Test
+  fun ga5_ilMediaStoreFintoDaTutteLeRigheSenzaDataAncheUnaAllaVolta() = runBlocking<Unit> {
+    val fake = dev.pampa.mycloudgallery.core.mediastore.testing.FakeMediaStore().apply { addVolume("external_primary") }
+    fun row(id: Long, taken: Long?) = dev.pampa.mycloudgallery.core.mediastore.contract.MediaStoreRow(
+      volume = "external_primary", id = id, type = RowType.IMAGE, displayName = "IMG_$id.jpg", relativePath = "DCIM/Camera/",
+      mime = "image/jpeg", size = 4_000, dateModifiedMs = 1_760_000_000_000L + id, dateTakenMs = taken,
+    )
+    listOf(row(1, null), row(2, null), row(3, null), row(4, null), row(5, 5_000)).forEach { fake.put(it) }
+
+    val seen = ArrayList<Long>()
+    var after: Long? = null
+    repeat(20) {
+      val page = fake.query("external_primary", sinceGeneration = null, afterId = after, limit = 1)
+      if (page.isEmpty()) return@repeat
+      seen += page.map { it.id }
+      after = page.last().id
+    }
+
+    assertThat(seen).containsExactly(1L, 2L, 3L, 4L, 5L)
+  }
+
   @Test
   fun volumiVersioneEGenerazioneArrivanoDalMediaStore() = runBlocking<Unit> {
     assertThat(source.volumes()).containsExactly("external_primary")

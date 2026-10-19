@@ -71,11 +71,15 @@ class AppLibraryCommands(
   /** Oltre questo la Libreria avvisa senza aprire il selettore (I8): vedi [SHARE_LIMIT]. */
   override val shareLimit: Int get() = SHARE_LIMIT
 
+  /** GA-8: solo i media con una copia sul telefono; quelli che sono solo sul NAS non hanno byte da condividere o da cestinare qui. */
+  override fun onPhone(ids: Set<MediaId>): Set<MediaId> = ids.filterTo(HashSet()) { refOf(it) is MediaRef.Phone }
+
   override fun share(ids: Set<MediaId>): Boolean {
     // Difesa in profondita': la Libreria controlla il tetto prima, ma un chiamante diverso non deve poter aggirarlo.
     if (ids.size > SHARE_LIMIT) return false
     val refs = phoneRefs(ids)
-    if (refs.isEmpty()) return true
+    // GA-8: niente sul telefono = niente da condividere. Mai "fatto" senza averlo fatto: la Libreria dice com'e' andata.
+    if (refs.isEmpty()) return false
     val intent = gallery.intents.share(refs) ?: return false
     return host?.startChooser(intent) ?: false
   }
@@ -88,7 +92,7 @@ class AppLibraryCommands(
   override fun deleteFromPhone(ids: Set<MediaId>): Boolean {
     if (ids.size > DELETE_LIMIT) return false
     val refs = phoneRefs(ids)
-    if (refs.isEmpty()) return true
+    if (refs.isEmpty()) return false
     val sender = gallery.intents.trashRequest(refs, trash = true) ?: return false
     return host?.launchTrashRequest(sender) ?: false
   }

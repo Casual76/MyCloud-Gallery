@@ -173,6 +173,29 @@ class ScanFirstAndVerifyTest {
 
   private fun cameraName(i: Int) = "Camera/IMG_${20240101 + i % 365}_${100000 + i}.jpg"
 
+  /**
+   * NA-6: i lavori in background usano sempre `Verify`, che sulla prima volta legge tutto. Il piede della Libreria mostrava
+   * l'avanzamento solo per `Full`: la prima lettura del NAS non si vedeva. Adesso lo stato dice se e' la prima scansione, qualunque
+   * sia il modo con cui parte; dal secondo giro in poi no.
+   */
+  @Test
+  fun na6_laPrimaScansioneSiRiconoscePiuAncheConVerify() = runTest {
+    piccolo()
+    val first = ArrayList<NasScanStatus.Scanning>()
+    val job = launch(UnconfinedTestDispatcher(testScheduler)) { h.scanner.status.collect { if (it is NasScanStatus.Scanning) first += it } }
+    h.scan(ScanMode.Verify)
+    assertThat(first).isNotEmpty()
+    assertThat(first.all { it.first }).isTrue()
+
+    val later = ArrayList<NasScanStatus.Scanning>()
+    val job2 = launch(UnconfinedTestDispatcher(testScheduler)) { h.scanner.status.collect { if (it is NasScanStatus.Scanning) later += it } }
+    h.scan(ScanMode.Verify)
+    job.cancel()
+    job2.cancel()
+    assertThat(later).isNotEmpty()
+    assertThat(later.none { it.first }).isTrue()
+  }
+
   @Test
   fun loStatoDellaScansioneRaccontaLAvanzamentoEFinisceConIlResoconto() = runTest {
     piccolo()

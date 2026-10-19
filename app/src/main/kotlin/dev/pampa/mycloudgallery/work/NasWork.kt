@@ -6,7 +6,6 @@ import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
-import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
@@ -21,6 +20,7 @@ import dev.pampa.mycloudgallery.core.nasops.contract.PurgeStop
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalStop
 import dev.pampa.mycloudgallery.core.prepare.contract.PrepControl
 import dev.pampa.mycloudgallery.core.prepare.contract.PrepVerdict
+import dev.pampa.mycloudgallery.feature.diagnostics.recording.DiagJob
 import dev.pampa.mycloudgallery.core.rules.BackgroundActivity
 import dev.pampa.mycloudgallery.core.rules.NetworkClass
 import dev.pampa.mycloudgallery.core.rules.Pace
@@ -28,7 +28,6 @@ import dev.pampa.mycloudgallery.core.rules.WorkRequest
 import dev.pampa.mycloudgallery.core.rules.run.BatchResult
 import dev.pampa.mycloudgallery.core.rules.run.CheckpointStore
 import dev.pampa.mycloudgallery.core.rules.run.DetectionCap
-import dev.pampa.mycloudgallery.core.rules.run.EngineStageRules
 import dev.pampa.mycloudgallery.core.rules.run.StageOutcome
 import dev.pampa.mycloudgallery.core.rules.run.StagedRun
 import dev.pampa.mycloudgallery.gallery.GalleryGraph
@@ -95,7 +94,8 @@ object NasWorkScheduling {
   /** A ogni apertura dell'app si verifica di nuovo solo se l'ultima verifica ha piu' di tanto (§1.4). */
   val VERIFY_ON_OPEN_AFTER: Duration = 15.minutes
 
-  private fun connected(): Constraints = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
+  /** RE-11: una rete qualunque, anche senza internet (il NAS e' in LAN): vedi [LanConstraints]. */
+  private fun connected(): Constraints = LanConstraints.anyNetwork()
 
   /** I lavori periodici: idempotente (non sposta quelli gia' pianificati). Le regole decidono comunque se si parte. */
   fun ensure(context: Context) {
@@ -152,7 +152,8 @@ class NasStages(private val graph: AppGraph, private val nas: NasGraph, private 
 
   private fun stage(request: WorkRequest, capped: Boolean = false) = StagedRun(
     request = request,
-    rules = EngineStageRules(graph.rulesEngine, graph.stateProvider),
+    // RE-3: il motore delle regole preceduto dall'attesa della rete (un solo punto per tutti i lavori a tappe).
+    rules = graph.stageRules(),
     ledger = graph.trafficLedger,
     checkpoints = NoCheckpoints,
     roundCap = if (capped) DetectionCap::forNetwork else null,
@@ -161,13 +162,17 @@ class NasStages(private val graph: AppGraph, private val nas: NasGraph, private 
   /** Una tappa di scansione (`INDEX_SYNC`): verifica di tutte le aree, rilevamento con il tetto fuori casa (D22). */
   suspend fun scan(mode: ScanMode = ScanMode.Verify): StageOutcome {
     nas.start()
+    var read = false
     val outcome = stage(WorkRequest.Background(BackgroundActivity.INDEX_SYNC), capped = true).run({ scope, _ ->
       val cap = DetectionCap.byteCap(scope.request, scope.run)
       val reports = nas.scan(mode, SLICE, detectionByteCap = cap) ?: return@run BatchResult(hasMore = false)
       scope.record(reports.sumOf { it.bytesRead })
+      if (readSomething(reports)) read = true
       BatchResult(hasMore = reports.isEmpty() || reports.any { !it.complete && it.stoppedBy != null && it.stoppedBy !in FINAL_STOPS })
     })
-    if (outcome is StageOutcome.Finished) scanBeat.beat(graph.platform.deviceNow())
+    // NA-8: il battito dice "ho guardato il NAS"; una tappa che non ha letto niente (share negata, NAS spento) non lo e'. Prima batteva
+    // lo stesso, e "fermo da N giorni" del riepilogo giornaliero non compariva mai.
+    if (outcome is StageOutcome.Finished && read) scanBeat.beat(graph.platform.deviceNow())
     return outcome
   }
 
@@ -264,6 +269,9 @@ class NasStages(private val graph: AppGraph, private val nas: NasGraph, private 
     /** Un lotto: abbastanza lungo per lavorare, abbastanza breve per fermarsi presto se le regole cambiano. */
     val SLICE: Duration = 60.seconds
 
+    /** NA-8: almeno un'area e' stata elencata davvero in questi giri (una cartella letta): solo allora c'e' un battito da registrare. */
+    internal fun readSomething(reports: List<dev.pampa.mycloudgallery.core.nasmedia.contract.ScanReport>): Boolean = reports.any { it.folders > 0 }
+
     const val HEARTBEAT_SCAN = "heartbeat-nas-scan"
     const val HEARTBEAT_SYNC = "heartbeat-nas-sync"
     const val HEARTBEAT_PREP = "heartbeat-nas-prep"
@@ -287,6 +295,9 @@ abstract class NasWorker(
 
   protected abstract val tag: String
 
+  /** Il lavoro, per l'anello della Diagnostica (solo il nome fisso, RE-4). */
+  protected abstract val diagJob: DiagJob
+
   protected abstract suspend fun stage(stages: NasStages): StageOutcome?
 
   /**
@@ -304,12 +315,16 @@ abstract class NasWorker(
     val outcome = try {
       gallery.runIfActive { NasStages(graph, nas, applicationContext.noBackupFilesDir).let { stage(it) } }
     } catch (e: kotlinx.coroutines.CancellationException) {
+      // Android ha fermato il lavoro: il motivo si salva (prima non si leggeva) e, se e' un limite, arriva alle regole (RE-4, RE-7).
+      StopReports.report(graph, diagJob, StopReports.reasonOf(this))
       throw e
     } catch (e: Exception) {
       GalleryLog.e(tag, e) { "tappa non riuscita" }
+      graph.events.jobFailed(diagJob)
       return Result.success()
     }
     GalleryLog.d(tag) { "tappa: ${outcome?.javaClass?.simpleName}" }
+    outcome?.let { graph.events.stage(diagJob, it) }
     if (triggersSimilarCopies && outcome != null) gallery.similarCopies?.requestRun()
     if (outcome is StageOutcome.Yielded) continuation()?.let { (name, request) -> NasWorkScheduling.continueLater(applicationContext, name, request) }
     return Result.success()
@@ -324,6 +339,7 @@ class NasScanWorker @AssistedInject constructor(
   graph: AppGraph,
 ) : NasWorker(appContext, params, gallery, graph) {
   override val tag: String = "NasScanWorker"
+  override val diagJob: DiagJob = DiagJob.NAS_SCAN
 
   override suspend fun stage(stages: NasStages): StageOutcome = stages.scan()
 
@@ -338,6 +354,7 @@ class IndexSyncWorker @AssistedInject constructor(
   graph: AppGraph,
 ) : NasWorker(appContext, params, gallery, graph) {
   override val tag: String = "IndexSyncWorker"
+  override val diagJob: DiagJob = DiagJob.INDEX_SYNC
 
   override val triggersSimilarCopies: Boolean = true
 
@@ -354,6 +371,7 @@ class PreparationWorker @AssistedInject constructor(
   graph: AppGraph,
 ) : NasWorker(appContext, params, gallery, graph) {
   override val tag: String = "PreparationWorker"
+  override val diagJob: DiagJob = DiagJob.PREPARATION
 
   override suspend fun stage(stages: NasStages): StageOutcome = stages.prepare(gallery.similarCopies?.priority ?: NoUnitPriority)
 
@@ -369,6 +387,7 @@ class NasTrashPurgeWorker @AssistedInject constructor(
   graph: AppGraph,
 ) : NasWorker(appContext, params, gallery, graph) {
   override val tag: String = "NasTrashPurgeWorker"
+  override val diagJob: DiagJob = DiagJob.TRASH_PURGE
 
   override suspend fun stage(stages: NasStages): StageOutcome? = stages.purgeTrash()
 
@@ -385,6 +404,7 @@ class IndexMaintenanceWorker @AssistedInject constructor(
   graph: AppGraph,
 ) : NasWorker(appContext, params, gallery, graph) {
   override val tag: String = "IndexMaintenanceWorker"
+  override val diagJob: DiagJob = DiagJob.INDEX_MAINTENANCE
 
   override suspend fun stage(stages: NasStages): StageOutcome? = stages.maintainIndex()
 
@@ -401,6 +421,7 @@ class PersonalSyncWorker @AssistedInject constructor(
   graph: AppGraph,
 ) : NasWorker(appContext, params, gallery, graph) {
   override val tag: String = "PersonalSyncWorker"
+  override val diagJob: DiagJob = DiagJob.PERSONAL_SYNC
 
   override val triggersSimilarCopies: Boolean = true
 
@@ -418,6 +439,7 @@ class HqPreviewsWorker @AssistedInject constructor(
   graph: AppGraph,
 ) : NasWorker(appContext, params, gallery, graph) {
   override val tag: String = "HqPreviewsWorker"
+  override val diagJob: DiagJob = DiagJob.HQ_PREVIEWS
 
   override suspend fun stage(stages: NasStages): StageOutcome? = stages.hqPreviews()
 

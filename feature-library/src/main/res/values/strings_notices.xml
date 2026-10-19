@@ -14,5 +14,14 @@
   <string name="notice_share_failed_message">Android non ha aperto la condivisione. Prova con meno elementi.</string>
   <string name="notice_delete_failed_title">Non è stato possibile eliminare</string>
   <string name="notice_delete_failed_message">Non è stato eliminato niente. Prova con meno elementi.</string>
+  <!-- GA-8: i media che sono solo sul NAS non si condividono ne' si eliminano dal telefono da qui. -->
+  <string name="notice_share_nas_only_title">Questi elementi sono solo sul NAS</string>
+  <string name="notice_share_nas_only_message">Per condividerli aprili e tocca “Scarica sul telefono”, poi condividi la copia scaricata.</string>
+  <plurals name="notice_share_partial_title">
+    <item quantity="one">Condiviso senza %1$s elemento che è solo sul NAS</item>
+    <item quantity="other">Condivisi senza %1$s elementi che sono solo sul NAS</item>
+  </plurals>
+  <string name="notice_delete_nas_only_title">Questi elementi sono solo sul NAS</string>
+  <string name="notice_delete_nas_only_message">Non c’è niente da eliminare dal telefono. Per toglierli dal NAS aprili uno per uno, o usa Cartelle NAS.</string>
   <string name="notice_dismiss">OK</string>
 </resources>

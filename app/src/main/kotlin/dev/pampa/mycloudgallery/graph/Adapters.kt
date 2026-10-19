@@ -14,6 +14,7 @@ import dev.pampa.mycloudgallery.core.nas.breaker.BreakerRecord
 import dev.pampa.mycloudgallery.core.nas.contract.AuthCircuitBreaker
 import dev.pampa.mycloudgallery.core.nas.contract.BreakerState
 import dev.pampa.mycloudgallery.core.nas.contract.NasAccount
+import dev.pampa.mycloudgallery.core.nas.contract.NasConnState
 import dev.pampa.mycloudgallery.core.nas.contract.TestTarget
 import dev.pampa.mycloudgallery.core.nas.session.SmbNasSessionManager
 import dev.pampa.mycloudgallery.core.network.contract.NasAddress
@@ -24,8 +25,6 @@ import dev.pampa.mycloudgallery.core.network.contract.ProbeResult
 import dev.pampa.mycloudgallery.core.network.contract.ReachabilityProbe
 import dev.pampa.mycloudgallery.core.network.contract.VpnControlConfig
 import dev.pampa.mycloudgallery.core.network.contract.VpnControlConfigStore
-import dev.pampa.mycloudgallery.core.rules.AndroidLimits
-import dev.pampa.mycloudgallery.core.rules.AndroidLimitsSignal
 import dev.pampa.mycloudgallery.core.rules.DeviceRoles
 import dev.pampa.mycloudgallery.core.rules.DeviceRolesSignal
 import dev.pampa.mycloudgallery.core.security.credentials.NasCredentials
@@ -37,12 +36,14 @@ import dev.pampa.mycloudgallery.feature.settings.port.NasAccountSettings
 import kotlin.time.Duration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -98,6 +99,12 @@ class ObservedReachabilityProbe(
   private val delegate: ReachabilityProbe,
   gate: NasRouteGate,
   scope: CoroutineScope,
+  /**
+   * La sessione NAS (verifica funzionale, RE-6): quando il NAS risponde con una sessione (pronta, o in risveglio) una sonda fallita di prima
+   * non vale piu'. Prima l'esito si dimenticava solo al cambio di percorso, e a sessione inattiva l'indicatore restava «NAS non
+   * raggiungibile» anche col NAS tornato.
+   */
+  sessionState: Flow<NasConnState> = emptyFlow(),
 ) : ReachabilityProbe {
 
   private val last = MutableStateFlow<ProbeResult?>(null)
@@ -107,6 +114,11 @@ class ObservedReachabilityProbe(
 
   init {
     scope.launch { gate.routes.collect { last.value = null } }
+    scope.launch {
+      sessionState.collect { state ->
+        if (state is NasConnState.Ready || state is NasConnState.WakingUp) last.value = null
+      }
+    }
   }
 
   override suspend fun tcp445(route: NasRoute.Allowed, nas: NasAddress, timeout: Duration): ProbeResult =
@@ -176,11 +188,6 @@ class AppOnboardingChoices(private val vpnConfig: VpnControlConfigStore) : Onboa
     // Salvare di nuovo toglie anche una sospensione dell'automazione: solo se la scelta e' davvero cambiata.
     if (vpnConfig.config.value != wanted) vpnConfig.save(wanted)
   }
-}
-
-/** I limiti di Android (quote dei job e dei servizi in primo piano): nessuno finche' non ci sono lavori lunghi (Fase 5). */
-object NoAndroidLimits : AndroidLimitsSignal {
-  override val limits: StateFlow<AndroidLimits> = MutableStateFlow(AndroidLimits())
 }
 
 /**

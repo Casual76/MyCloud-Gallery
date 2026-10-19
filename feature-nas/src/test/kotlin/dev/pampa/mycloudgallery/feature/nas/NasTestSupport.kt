@@ -63,6 +63,43 @@ class FakeNasAreas(areas: List<NasArea> = defaultAreas()) : NasAreas {
     state.value = areas
   }
 
+  // NA-10: come il vero (`NasOrganizer.setPrivateAreaExclusions`): salva tutto l'insieme e dice se ci e' riuscito.
+  private val excluded = MutableStateFlow<Set<dev.pampa.mycloudgallery.core.trust.nas.SharePath>>(emptySet())
+  override val privateExclusions: StateFlow<Set<dev.pampa.mycloudgallery.core.trust.nas.SharePath>> = excluded
+
+  /** Senza area privata o senza NAS il vero risponde falso. */
+  var exclusionsFail: Boolean = false
+
+  /** Quante volte e' stata chiesta una verifica del NAS dopo un cambio (il vero la chiede). */
+  var verifies: Int = 0
+    private set
+
+  override suspend fun setPrivateExclusions(folders: Set<dev.pampa.mycloudgallery.core.trust.nas.SharePath>): Boolean {
+    if (exclusionsFail || state.value.none { it.kind == NasAreaKind.PRIVATE }) return false
+    excluded.value = folders
+    verifies++
+    return true
+  }
+
+  // NA-11: un salto che si toglie solo col gesto.
+  private val jump = MutableStateFlow<Long?>(null)
+  override val clockJumpMs: StateFlow<Long?> = jump
+
+  /** Quante volte e' stato fatto il gesto che accetta l'ora. */
+  var clockAccepted: Int = 0
+    private set
+
+  fun jumpTo(ms: Long?) {
+    jump.value = ms
+  }
+
+  override fun acceptClockJump(): Boolean {
+    if (jump.value == null) return false
+    clockAccepted++
+    jump.value = null
+    return true
+  }
+
   companion object {
     fun defaultAreas(): List<NasArea> = listOf(NasArea("test", NasAreaKind.PRIVATE), NasArea("test-comune", NasAreaKind.COMMON))
   }

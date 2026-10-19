@@ -158,6 +158,11 @@
   <string name="diag_evt_config_superseded_guide">Se la configurazione è cambiata dopo la creazione del QR, vale quella firmata letta dal NAS.</string>
   <string name="diag_evt_self_wipe_title">Dispositivo azzerato su segnalazione della famiglia</string>
   <string name="diag_evt_self_wipe_guide">Per usarlo di nuovo va riconfigurato e approvato da capo.</string>
+  <string name="diag_evt_job_result_title">Un lavoro in background</string>
+  <string name="diag_evt_job_failed_title">Un lavoro in background non è riuscito</string>
+  <string name="diag_evt_job_failed_guide">È successo qualcosa che l\'app non si aspettava: il lavoro si è fermato e riprova al prossimo giro. Se si ripete, esporta la diagnostica e mandala a chi mantiene l\'app.</string>
+  <string name="diag_evt_start_failed_title">L\'avvio non ha letto lo stato salvato</string>
+  <string name="diag_evt_start_failed_guide">Riapri l\'app. Se succede ancora, esporta la diagnostica e mandala a chi mantiene l\'app.</string>
 
   <!-- Spazio -->
   <string name="diag_storage_usage_title">Spazio usato dall\'app</string>

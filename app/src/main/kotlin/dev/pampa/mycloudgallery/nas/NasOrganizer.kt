@@ -36,6 +36,7 @@ import dev.pampa.mycloudgallery.core.nasops.contract.NasSpaceState
 import dev.pampa.mycloudgallery.core.nasops.contract.NasTrash
 import dev.pampa.mycloudgallery.core.nasops.contract.NasTrashState
 import dev.pampa.mycloudgallery.core.nasops.contract.OpClocks
+import dev.pampa.mycloudgallery.core.nasops.contract.OpErrorCode
 import dev.pampa.mycloudgallery.core.nasops.contract.OpId
 import dev.pampa.mycloudgallery.core.nasops.contract.OpPlan
 import dev.pampa.mycloudgallery.core.nasops.contract.OpRequest
@@ -169,6 +170,10 @@ class NasOrganizer(
    * qualche elemento li cita (un video a meta' con il telefono fuori casa da giorni, E-B21). Si somma a quelli del diario delle operazioni.
    */
   private val citedTemps: CitedTemps = CitedTemps.NONE,
+  /** NA-11 (D32): di quanto e' saltata l'ora del NAS (la guardia vive in [NasGraph], oltre la vita del processo). */
+  private val clockJump: StateFlow<Long?> = MutableStateFlow(null),
+  /** NA-11: il gesto "L'ora del NAS e' giusta, continua". Vero se c'era un salto. */
+  private val acceptClock: () -> Boolean = { false },
 ) {
 
   /**
@@ -241,6 +246,18 @@ class NasOrganizer(
       .stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     override suspend fun hiddenAmong(plan: OpPlan): Int = hiddenIn(plan)
+
+    // NA-10: le cartelle dell'area privata escluse dalla Libreria (impostazione personale sincronizzata, Q9).
+    override val privateExclusions: StateFlow<Set<SharePath>> = partsFlow
+      .flatMapLatest { p -> p?.personalSettings?.privateAreaExclusions ?: flowOf(emptySet()) }
+      .stateIn(scope, SharingStarted.Eagerly, emptySet())
+
+    override suspend fun setPrivateExclusions(folders: Set<SharePath>): Boolean = setPrivateAreaExclusions(folders)
+
+    // NA-11: il salto dell'ora del NAS e il gesto che lo accetta.
+    override val clockJumpMs: StateFlow<Long?> get() = clockJump
+
+    override fun acceptClockJump(): Boolean = acceptClock()
   }
 
   /** Le voci "Sposta", "Rinomina", "Elimina…" del viewer per un media del NAS (P14): risolte dal catalogo, mai dalla UI. */
@@ -416,6 +433,38 @@ class NasOrganizer(
   suspend fun hasOpenOperations(): Boolean = runCatching { opsStore.ops(OPEN_STATES).isNotEmpty() }.getOrDefault(false)
 
   /**
+   * NA-2: un'esecuzione e' finita ma l'operazione e' rimasta aperta (il NAS e' caduto, un file e' aperto dal PC, le scritture erano
+   * ferme): chiede la ripresa dal diario. Prima lo faceva solo per le operazioni lunghe e all'avvio del processo, mentre il testo
+   * promette "riprende da sola" anche per una rinomina: la voce restava "In attesa" finche' Android non riavviava l'app. Se resta in
+   * attesa solo per file aperti dal PC (E-N13) si riprova quando scade la prima attesa, altrimenti appena c'e' la rete (il lavoro ha il suo
+   * ritardo progressivo se il NAS non risponde ancora).
+   */
+  suspend fun resumeIfLeftOpen() {
+    if (stopped) return
+    val open = runCatching { opsStore.ops(OPEN_STATES) }.getOrNull().orEmpty()
+    if (open.isEmpty()) return
+    val waitingForLockedFiles = open.all { it.state == OpState.PAUSED && it.errorCode == OpErrorCode.LOCKED }
+    jobs.resumeLater(if (waitingForLockedFiles) nextLockedRetryMs() ?: 0L else 0L)
+  }
+
+  /**
+   * NA-2: cio' che teneva ferme le operazioni e' passato (share scongelata, "Riattiva le scritture", ora del NAS accettata): se ce ne sono
+   * di aperte, la ripresa parte appena c'e' la rete.
+   */
+  fun resumeSoon() {
+    if (stopped) return
+    scope.launch { runCatching { if (hasOpenOperations()) jobs.resumeLater(0) } }
+  }
+
+  /**
+   * Chiede una verifica del NAS appena possibile: dopo "Ho controllato, continua" (il giro che usa la franchigia e aggiorna il piede, NA-4,
+   * NA-5) o dopo un'esclusione cambiata (NA-10). E' lo stesso lavoro che parte a fine operazione.
+   */
+  fun requestVerify() {
+    if (!stopped) onOperationsClosed()
+  }
+
+  /**
    * Riprende dal diario per al massimo [budget] (il lavoro delle operazioni). Null senza NAS o a galleria ferma. Mai una conferma nuova:
    * solo cio' che l'utente aveva gia' confermato.
    */
@@ -508,6 +557,27 @@ class NasOrganizer(
 
   /** Le cartelle escluse dalla scansione dell'area privata (E-N15, impostazione personale sincronizzata). */
   fun privateExclusions(): List<SharePath> = partsFlow.value?.personalSettings?.privateAreaExclusions?.value?.toList().orEmpty()
+
+  /**
+   * NA-10: imposta le cartelle escluse dell'area privata. Prima non lo faceva nessuno: la scansione le leggeva ma nessuna schermata le
+   * scriveva. Vale per l'area privata soltanto (l'area comune ha le sue, firmate dalla famiglia); non cambia niente sul NAS; sincronizza
+   * sugli altri dispositivi dell'account e chiede subito una verifica, cosi' la Libreria si aggiorna. Falso senza NAS o senza area privata.
+   */
+  suspend fun setPrivateAreaExclusions(folders: Set<SharePath>): Boolean {
+    val p = partsFlow.value ?: return false
+    if (p.areas.none { it.area == NasArea.PRIVATE }) return false
+    return try {
+      p.personalSettings.setPrivateAreaExclusions(folders)
+      personalChanged()
+      requestVerify()
+      true
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      GalleryLog.w(TAG) { "esclusioni non salvate: ${e.javaClass.simpleName}" }
+      false
+    }
+  }
 
   /** "Mostra le copertine degli album": impostazione personale, vale su tutti i dispositivi dell'account (Q9). */
   fun setShowAlbumCovers(show: Boolean) {
@@ -657,6 +727,11 @@ class NasOrganizer(
             GalleryLog.w(TAG) { "operazione non avviata: ${e.javaClass.simpleName}" }
             StartOutcome.WritesBlocked
           }
+        }
+        // NA-2: se l'esecuzione finisce lasciando l'operazione aperta, la ripresa dal diario si chiede, lunga o breve che sia.
+        owner.scope.launch {
+          runCatching { run.await() }
+          runCatching { owner.resumeIfLeftOpen() }
         }
         val created = owner.scope.async {
           owner.opsStore.observeOps().first { list -> list.any { it.id !in before && it.planHash == plan.hash } }

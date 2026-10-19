@@ -207,8 +207,17 @@ class AndroidMediaStoreSource(
 
   private class ScanKey(val taken: Long?)
 
+  /**
+   * Ricorda la chiave d'ordine dell'ultima riga data. **Solo se ha una data**: la riga la normalizza (`datetaken` 0 o negativo
+   * diventa null), ma per la ripresa 0 e NULL sono due cose diverse (0 viene prima dei NULL nell'ordine decrescente). Con null non si
+   * sa quale delle due fosse: non si ricorda, e [keyOf] la rilegge dal MediaStore con il valore vero (GA-5).
+   */
   private fun remember(row: MediaStoreRow) {
-    synchronized(lastKeys) { lastKeys[keyName(row.volume, row.id)] = row.dateTakenMs }
+    synchronized(lastKeys) {
+      val name = keyName(row.volume, row.id)
+      val taken = row.dateTakenMs
+      if (taken != null) lastKeys[name] = taken else lastKeys.remove(name)
+    }
   }
 
   /** La chiave d'ordine della riga [id]: dalla memoria, o dal MediaStore (anche se nel frattempo e' stata cestinata). */

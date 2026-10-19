@@ -196,6 +196,24 @@ class NetworkDiagnosticsContributorTest {
     assertThat(contributor(LinkFactsSamples.cellular()).collect().codes()).contains("NET_VPN_NOT_CONTROLLABLE")
   }
 
+  /**
+   * Verifica funzionale, RE-1 e RE-2: la voce che dice «concedi il permesso» o «riattiva il controllo» porta dove si fa
+   * (Impostazioni → Rete e VPN); prima non c'era un posto.
+   */
+  @Test
+  fun ilPermessoMancanteEIlControlloFermoPortanoAllaPaginaDoveSiRiattiva() = runTest {
+    controller.capability.value = VpnCapability.PERMISSION_MISSING
+    assertThat(contributor(LinkFactsSamples.cellular()).collect().byCode("NET_VPN_CONTROL")!!.action).isEqualTo(NetworkDiagActions.OPEN_VPN_CONTROL)
+
+    controller.capability.value = VpnCapability.READY
+    for (reason in VpnSuspendReason.entries) {
+      automation.status.value = VpnAutomationStatus.Suspended(reason)
+      val items = contributor(LinkFactsSamples.cellular()).collect()
+      val suspended = items.single { it.code.id == "NET_VPN_LOCKDOWN" || it.code.id == "NET_VPN_NOT_CONTROLLABLE" }
+      assertThat(suspended.action).isEqualTo(NetworkDiagActions.OPEN_VPN_CONTROL)
+    }
+  }
+
   @Test
   fun laRetePoor() = runTest {
     val items = contributor(LinkFactsSamples.homeWifi(congested = true)).collect()

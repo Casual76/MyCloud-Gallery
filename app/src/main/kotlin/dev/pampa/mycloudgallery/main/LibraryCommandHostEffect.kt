@@ -16,6 +16,7 @@ import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
@@ -23,6 +24,8 @@ import androidx.core.content.ContextCompat
 import dev.pampa.mycloudgallery.feature.library.library.LibraryCommands
 import dev.pampa.mycloudgallery.gallery.AppLibraryCommands
 import dev.pampa.mycloudgallery.gallery.LibraryCommandHost
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Lega i comandi della Libreria ([AppLibraryCommands]) all'activity finche' la scheda e' visibile: i dialoghi dei permessi,
@@ -40,7 +43,9 @@ internal fun LibraryCommandHostEffect(commands: LibraryCommands, onAccessChanged
   val app = commands as? AppLibraryCommands ?: return
   val context = LocalContext.current
   val latestOnAccessChanged = rememberUpdatedState(onAccessChanged)
-  val asked = remember { HashSet<String>() }
+  // GA-4: il ricordo delle richieste gia' fatte sta su un file (una rotazione o un riavvio non lo perdono): vedi `PermissionAsks`.
+  val asks = remember(context) { PermissionAsks(context) }
+  LaunchedEffect(asks) { withContext(Dispatchers.IO) { asks.warm() } }
   val permissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
     latestOnAccessChanged.value()
   }
@@ -67,18 +72,19 @@ internal fun LibraryCommandHostEffect(commands: LibraryCommands, onAccessChanged
       /** [wanted] si chiede insieme; basta che manchi uno di [full] perche' la richiesta abbia senso. */
       private fun request(wanted: Array<String>, full: Array<String>) {
         val missing = full.filter { !granted(context, it) }
+        asks.forgetGranted(full.filter { granted(context, it) })
         if (missing.isEmpty() && !needsPartialUpgrade(context, full)) {
           latestOnAccessChanged.value()
           return
         }
         val activity = context.findActivity()
-        // Gia' chiesti in questa sessione e Android non spiega piu' niente: il dialogo non si aprirebbe.
-        val blocked = missing.isNotEmpty() && missing.all { it in asked && activity?.shouldShowRequestPermissionRationale(it) == false }
+        // Gia' chiesti (anche in un'altra sessione) e Android non spiega piu' niente: il dialogo non si aprirebbe.
+        val blocked = PermissionAsks.deniedForGood(missing, asks::asked) { activity?.shouldShowRequestPermissionRationale(it) }
         if (blocked) {
           tryStart(context, Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)))
           return
         }
-        asked += wanted
+        asks.markAsked(wanted.toList())
         permissions.launch(wanted)
       }
     }

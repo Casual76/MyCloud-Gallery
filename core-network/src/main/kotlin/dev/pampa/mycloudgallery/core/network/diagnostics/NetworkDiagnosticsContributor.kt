@@ -63,8 +63,16 @@ object NetworkDiagCodes {
 
 /** Azioni proposte da questo modulo oltre a quelle di `DiagAction` (un'azione sconosciuta si mostra senza tasto). */
 object NetworkDiagActions {
-  /** Ripetere il riconoscimento della rete di casa (E-R16). */
+  /** Ripetere il riconoscimento della rete di casa (E-R16): porta a Impostazioni → Rete e VPN, dove c'e' la raccolta. La esegue :app. */
   val RECAPTURE_HOME = DiagAction("recapture_home")
+
+  /**
+   * Il controllo di WireGuard: consentire il permesso (RE-1) o riattivare il controllo fermo (RE-2). Entrambi stanno in Impostazioni →
+   * Rete e VPN: prima la Diagnostica diceva «riattiva il controllo» o «concedi il permesso» senza un posto dove farlo. La esegue :app.
+   */
+  val OPEN_VPN_CONTROL = DiagAction("open_vpn_control")
+
+  val ALL: List<DiagAction> = listOf(RECAPTURE_HOME, OPEN_VPN_CONTROL)
 }
 
 /** Il confronto con l'impronta di casa come valore esportabile (`HomeMatch` e' un'interfaccia sigillata, non un enum). */
@@ -267,16 +275,16 @@ class NetworkDiagnosticsContributor(
       VpnCapability.READY -> Quad(DiagSeverity.OK, R.string.net_diag_vpn_control_ready, null, null)
       VpnCapability.WIREGUARD_MISSING -> Quad(DiagSeverity.INFO, R.string.net_diag_vpn_control_missing_app, null, null)
       VpnCapability.PERMISSION_MISSING ->
-        Quad(DiagSeverity.INFO, R.string.net_diag_vpn_control_missing_permission, R.string.net_diag_vpn_control_missing_permission_detail, DiagAction.OPEN_APP_DETAILS)
+        Quad(DiagSeverity.INFO, R.string.net_diag_vpn_control_missing_permission, R.string.net_diag_vpn_control_missing_permission_detail, NetworkDiagActions.OPEN_VPN_CONTROL)
       VpnCapability.NOT_CONFIGURED -> Quad(DiagSeverity.INFO, R.string.net_diag_vpn_control_not_configured, null, null)
     }
     items += DiagItem(NetworkDiagCodes.VPN_CONTROL, section, severity, title, detail?.let { DiagText(it) }, action, export)
     if (status is VpnAutomationStatus.Suspended) {
       items += when (status.reason) {
         VpnSuspendReason.LOCKDOWN_SUSPECTED ->
-          DiagItem(NetworkDiagCodes.VPN_LOCKDOWN, section, DiagSeverity.WARNING, R.string.net_diag_vpn_lockdown, DiagText(R.string.net_diag_vpn_lockdown_detail), DiagAction.OPEN_WIREGUARD, export)
+          DiagItem(NetworkDiagCodes.VPN_LOCKDOWN, section, DiagSeverity.WARNING, R.string.net_diag_vpn_lockdown, DiagText(R.string.net_diag_vpn_lockdown_detail), NetworkDiagActions.OPEN_VPN_CONTROL, export)
         VpnSuspendReason.NOT_CONTROLLABLE ->
-          DiagItem(NetworkDiagCodes.VPN_NOT_CONTROLLABLE, section, DiagSeverity.WARNING, R.string.net_diag_vpn_not_controllable, DiagText(R.string.net_diag_vpn_not_controllable_detail), DiagAction.OPEN_WIREGUARD, export)
+          DiagItem(NetworkDiagCodes.VPN_NOT_CONTROLLABLE, section, DiagSeverity.WARNING, R.string.net_diag_vpn_not_controllable, DiagText(R.string.net_diag_vpn_not_controllable_detail), NetworkDiagActions.OPEN_VPN_CONTROL, export)
       }
     }
     return items

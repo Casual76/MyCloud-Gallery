@@ -164,6 +164,47 @@ class SessionTest {
     assertThat(h.breaker.current()).isEqualTo(BreakerState.Closed(BreakerRecord.FIRST_GENERATION))
   }
 
+  /**
+   * Verifica funzionale, RE-9: con la chiave del Keystore invalidata (E-S9) ogni lavoro riapriva un socket e riprovava, e lo stato
+   * diceva "NAS non raggiungibile". Ora la richiesta della password e' una sola e resta ferma: nessuna connessione, nessuna
+   * autenticazione (mai una password sbagliata verso il NAS: l'account non rischia di bloccarsi) finche' una password nuova non c'e'.
+   */
+  @Test
+  fun chiaveInvalidata_laPasswordSiChiedeUnaVoltaESenzaTentativiAutomatici() = runTest {
+    val h = harness()
+    h.credentials.next = { CredentialLoad.NeedsPassword }
+
+    assertThat(h.touch().errorOrNull()).isEqualTo(NasError.CredentialsMissing)
+    assertThat(h.manager.state.value).isEqualTo(NasConnState.Unavailable(NasError.CredentialsMissing))
+    val connections = h.backend.tcpAttempts.get()
+
+    // Cinque lavori dopo, anche su un'altra rete: nessun socket aperto, nessuna autenticazione, sempre lo stesso motivo.
+    repeat(5) { assertThat(h.touch().errorOrNull()).isEqualTo(NasError.CredentialsMissing) }
+    h.gate.allow(Via.VPN, h.backend.binding("vpn-1"))
+    assertThat(h.touch().errorOrNull()).isEqualTo(NasError.CredentialsMissing)
+    assertThat(h.backend.tcpAttempts.get()).isEqualTo(connections)
+    assertThat(h.backend.authenticateCalls.get()).isEqualTo(0)
+    assertThat(h.breaker.current()).isEqualTo(BreakerState.Closed(BreakerRecord.FIRST_GENERATION))
+
+    // L'utente salva una password nuova (da qualunque pagina: la sessione se ne accorge leggendola): un tentativo, riuscito.
+    h.credentials.next = { CredentialLoad.Found(NasCredentials(USER, GOOD_PASSWORD.toCharArray())) }
+    assertThat(h.touch().errorOrNull()).isNull()
+    assertThat(h.backend.authenticateCalls.get()).isEqualTo(1)
+    assertThat(h.manager.state.value).isInstanceOf(NasConnState.Ready::class.java)
+  }
+
+  @Test
+  fun chiaveInvalidata_unGuastoPasseggeroDelKeystoreNonEMaiServeLaPassword() = runTest {
+    val h = harness()
+    h.credentials.next = { CredentialLoad.NeedsPassword }
+    assertThat(h.touch().errorOrNull()).isEqualTo(NasError.CredentialsMissing)
+
+    // Telefono riavviato e non ancora sbloccato: il Keystore non risponde. Non e' "serve la password": si riprova come sempre.
+    h.credentials.next = { CredentialLoad.Unavailable }
+    assertThat(h.touch().errorOrNull()).isEqualTo(NasError.Unexpected(null))
+    assertThat(h.backend.authenticateCalls.get()).isEqualTo(0)
+  }
+
   @Test
   fun epermSullaConnessioneEReteLocaleNegataNonNasSpento() = runTest {
     val h = harness()

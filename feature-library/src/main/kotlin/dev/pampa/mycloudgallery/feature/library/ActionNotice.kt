@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
@@ -44,6 +45,15 @@ internal sealed interface ActionNotice {
 
   /** La richiesta di eliminazione non e' partita. */
   data object DeleteFailed : ActionNotice
+
+  /** Tutta la selezione e' solo sul NAS: da qui non si condivide (GA-8). */
+  data object ShareNasOnly : ActionNotice
+
+  /** Si e' condiviso solo cio' che sta sul telefono: [left] media del NAS non sono partiti (GA-8). */
+  data class SharePartial(val left: Int) : ActionNotice
+
+  /** Tutta la selezione e' solo sul NAS: da qui non si elimina dal telefono (GA-8). */
+  data object DeleteNasOnly : ActionNotice
 }
 
 /**
@@ -101,6 +111,18 @@ internal fun ActionNoticeCard(notice: ActionNotice, backdrop: GlassBackdropState
     ActionNotice.DeleteFailed -> {
       title = stringResource(R.string.notice_delete_failed_title)
       message = stringResource(R.string.notice_delete_failed_message)
+    }
+    ActionNotice.ShareNasOnly -> {
+      title = stringResource(R.string.notice_share_nas_only_title)
+      message = stringResource(R.string.notice_share_nas_only_message)
+    }
+    is ActionNotice.SharePartial -> {
+      title = pluralStringResource(R.plurals.notice_share_partial_title, notice.left, GalleryNumbers.format(notice.left))
+      message = stringResource(R.string.notice_share_nas_only_message)
+    }
+    ActionNotice.DeleteNasOnly -> {
+      title = stringResource(R.string.notice_delete_nas_only_title)
+      message = stringResource(R.string.notice_delete_nas_only_message)
     }
   }
   GalleryGridNotice(

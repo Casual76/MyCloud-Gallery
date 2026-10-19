@@ -11,7 +11,8 @@
       - ACCESS_NETWORK_STATE: leggere le reti (Wi-Fi sottostante, VPN, LinkProperties) per riconoscere casa
         e la VPN di casa, senza permesso di posizione e quindi senza SSID.
       - CONTROL_TUNNELS (di WireGuard, livello "pericoloso"): accendere e spegnere il tunnel di casa
-        (SET_TUNNEL_UP/DOWN). Facoltativo, chiesto solo al passo 11 dell'onboarding.
+        (SET_TUNNEL_UP/DOWN). Facoltativo, chiesto solo da un tocco su "Consenti il controllo" (passo 11 dell'onboarding e
+        Impostazioni, Rete e VPN), con il dialogo di sistema: mai in automatico.
   -->
   <uses-permission android:name="android.permission.INTERNET" />
   <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />

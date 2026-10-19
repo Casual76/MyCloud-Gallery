@@ -54,7 +54,8 @@ class JobSchedulerBackupJobs(context: Context) : BackupJobs {
       putString(EXTRA_TRIGGER, trigger.code)
       putInt(EXTRA_CONFIRMED, if (confirmed) 1 else 0)
     }
-    val builder = JobInfo.Builder(JOB_USER, component).setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY).setExtras(extras)
+    // RE-11: una rete qualunque, anche senza internet (il NAS e' in LAN): `NETWORK_TYPE_ANY` chiede una rete validata.
+    val builder = JobInfo.Builder(JOB_USER, component).setRequiredNetwork(LanConstraints.request()).setExtras(extras)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) builder.setUserInitiated(true)
     try {
       scheduler?.schedule(builder.build())

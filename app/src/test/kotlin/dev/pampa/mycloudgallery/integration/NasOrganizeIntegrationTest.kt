@@ -32,7 +32,11 @@ import dev.pampa.mycloudgallery.core.mediastore.testing.FakeRecentlyDeletedSourc
 import dev.pampa.mycloudgallery.core.model.AccountId
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.nas.contract.Purpose
+import dev.pampa.mycloudgallery.core.library.contract.LibraryNasStatus
 import dev.pampa.mycloudgallery.core.nasmedia.contract.ScanMode
+import dev.pampa.mycloudgallery.core.nas.session.ClockJumpGuard
+import dev.pampa.mycloudgallery.core.nasmedia.contract.UserGesture
+import dev.pampa.mycloudgallery.core.nasmedia.contract.headlineCount
 import dev.pampa.mycloudgallery.core.nasops.contract.ConfirmationSheet
 import dev.pampa.mycloudgallery.core.nasops.contract.NasFolderState
 import dev.pampa.mycloudgallery.core.nasops.contract.NasOperationState
@@ -63,6 +67,9 @@ import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -122,7 +129,14 @@ class NasOrganizeIntegrationTest {
     devices.forEach { it.close() }
   }
 
-  private fun galleryOf(device: TestDevice, account: String, jobs: NasOpsJobs = NasOpsJobs.NONE): GalleryGraph {
+  private fun galleryOf(
+    device: TestDevice,
+    account: String,
+    jobs: NasOpsJobs = NasOpsJobs.NONE,
+    onNasClosed: () -> Unit = {},
+    databaseName: String? = null,
+    scope: CoroutineScope = device.scope,
+  ): GalleryGraph {
     val store = FakeMediaStore().apply { addVolume(PRIMARY) }
     val access = FakePhoneAccessReader(PhoneAccess(MediaAccess.FULL, mediaLocation = true, volumes = setOf(PRIMARY)))
     fun phone(inputs: PhoneInputs): PhoneLibrary {
@@ -142,9 +156,9 @@ class NasOrganizeIntegrationTest {
     }
     return GalleryGraph(
       context = device.context,
-      scope = device.scope,
+      scope = scope,
       parts = GalleryParts(
-        databaseName = null,
+        databaseName = databaseName,
         replicaDir = File(device.context.noBackupFilesDir, "replica"),
         preferencesFile = File(device.context.noBackupFilesDir, "library.preferences_pb"),
         access = access,
@@ -155,6 +169,7 @@ class NasOrganizeIntegrationTest {
         nas = device.graph.nasInputs,
         monotonicMs = { System.nanoTime() / 1_000_000 },
         nasJobs = jobs,
+        onNasOperationsClosed = onNasClosed,
       ),
       setup = device.graph.setup,
       ownerAccount = { AccountId.of(account) },
@@ -291,6 +306,191 @@ class NasOrganizeIntegrationTest {
     assertThat(organizer.parts).isNull()
     assertThat(jobs.cancelled.get()).isAtLeast(1)
     assertThat(organizer.operations.plan(OpRequest.Trash(listOf(item("IMG_0003.jpg"))))).isInstanceOf(PlanOutcome.Rejected::class.java)
+  }
+
+  // --- La verifica funzionale (docs/review/funzionale-fasi-1-5a.md): le voci NA sul grafo vero ---------------------------------------
+
+  /** Una famiglia fondata sul telefono e la sua galleria con il NAS partito. */
+  private suspend fun foundedNas(
+    jobs: NasOpsJobs = NasOpsJobs.NONE,
+    onClosed: () -> Unit = {},
+    databaseName: String? = null,
+  ): Triple<TestDevice, GalleryGraph, NasGraph> {
+    val phone = device("telefono")
+    phone.graph.start()
+    phone.graph.foundFamily()
+    val gallery = galleryOf(phone, TestNas.ADMIN_USER, jobs, onClosed, databaseName)
+    return Triple(phone, gallery, startedNas(gallery))
+  }
+
+  /** 60 foto nell'area comune e il primo giro intero; poi [gone] spariscono dal PC: il giro dopo congela la share (D10). */
+  private suspend fun NasGraph.freezeCommonArea(gallery: GalleryGraph, gone: Int = 35): Int {
+    val paths = (1..60).map { n -> "Foto/IMG_%04d.jpg".format(n) }
+    paths.forEachIndexed { i, path -> backend.put(TestNas.COMMON, path, jpeg(tone = 3 + i * 4), lastWriteMs = time.now() - 2 * DAY) }
+    checkNotNull(scan(ScanMode.Full, 5.minutes))
+    withTimeout(TIMEOUT) { gallery.repository.view(LibraryFilter.ALL).first { it.size == paths.size } }
+    paths.take(gone).forEach { backend.delete(TestNas.COMMON, it) }
+    val reports = checkNotNull(scan(ScanMode.Verify, 5.minutes))
+    assertWithMessage("il giro congela la share: $reports").that(reports.any { it.freeze != null }).isTrue()
+    return gone
+  }
+
+  /**
+   * NA-2: la ripresa dal diario si chiedeva solo per le operazioni lunghe e all'avvio del processo. Una rinomina ferma per un file aperto
+   * dal PC (E-N13) restava "In attesa" finche' Android non riavviava l'app, mentre il testo promette "riprende da sola".
+   */
+  @Test
+  fun na2_unaOperazioneBreveLasciataAperta_chiedeLaRipresaDalDiario() = runBlocking<Unit> {
+    val jobs = RecordingJobs()
+    backend.put(TestNas.COMMON, "Foto/IMG_0001.jpg", jpeg(tone = 80), lastWriteMs = time.now() - 2 * DAY)
+    val (_, gallery, nas) = foundedNas(jobs)
+    checkNotNull(nas.scan(ScanMode.Full, 5.minutes))
+    withTimeout(TIMEOUT) { gallery.repository.view(LibraryFilter.ALL).first { it.size == 1 } }
+    val organizer = nas.organizer
+    val folder = withTimeout(TIMEOUT) {
+      organizer.folders.observe(TestNas.COMMON, SharePath.of("Foto")).first { it is NasFolderState.Listing } as NasFolderState.Listing
+    }
+    val plan = (organizer.operations.plan(OpRequest.Rename(folder.entries.single().toItem(TestNas.COMMON), "Nuova.jpg")) as PlanOutcome.Ready).plan
+    val confirmation = checkNotNull(ConfirmationSheet(plan).tap(organizer.clocks.monotonicMs()))
+    // Il file si apre sul PC prima che l'app lo rinomini.
+    backend.lock(TestNas.COMMON, "Foto/IMG_0001.jpg")
+    val before = jobs.resumes.get()
+
+    organizer.operations.start(plan, confirmation)
+
+    withTimeout(TIMEOUT) { organizer.operations.operations.first { list -> list.any { it is NasOperationState.WaitingLocked } } }
+    withTimeout(TIMEOUT) { while (jobs.resumes.get() == before) kotlinx.coroutines.delay(20) }
+    assertWithMessage("una rinomina non e' un'operazione lunga").that(jobs.userInitiated.get()).isEqualTo(0)
+  }
+
+  /**
+   * NA-5: dopo "Ho controllato, continua" il piede della Libreria restava su "Lavori fermi": lo stato dell'ultimo giro e' `Frozen` fino al
+   * giro dopo, e il piede lo usava come ripiego. NA-4: il gesto chiede subito la verifica (il giro che usa la franchigia).
+   */
+  @Test
+  fun na5_dopoIlGestoIlPiedeNonDiceLavoriFermi_eLaVerificaParte() = runBlocking<Unit> {
+    val closed = AtomicInteger()
+    val (_, gallery, nas) = foundedNas(onClosed = { closed.incrementAndGet() })
+    val gone = nas.freezeCommonArea(gallery)
+    withTimeout(TIMEOUT) { nas.libraryStatus.first { it is LibraryNasStatus.Frozen } }
+    val freeze = nas.frozen.value.getValue(TestNas.COMMON.lowercase())
+    assertThat(freeze.headlineCount).isEqualTo(gone)
+    val before = closed.get()
+
+    assertThat(nas.release(TestNas.COMMON, UserGesture(gone))).isTrue()
+
+    withTimeout(TIMEOUT) { nas.libraryStatus.first { it !is LibraryNasStatus.Frozen } }
+    assertWithMessage("il gesto chiede la verifica del NAS").that(closed.get()).isGreaterThan(before)
+    // La verifica (qui, a mano) usa la franchigia: non ricongela, le assenze si segnano.
+    val after = checkNotNull(nas.scan(ScanMode.Verify, 5.minutes))
+    assertThat(after.none { it.freeze != null }).isTrue()
+    assertThat(after.sumOf { it.vanished }).isEqualTo(gone)
+  }
+
+  /**
+   * NA-7: i congelamenti salvati si conoscono appena parte il NAS, non quando il guardiano arriva a leggerli: il riepilogo giornaliero li
+   * legge subito dopo `start()` e i cancelli delle scritture non devono restare aperti su una share congelata. Il secondo "processo" ha
+   * un ambito che non parte da solo (come un avvio a freddo in cui il guardiano non ha ancora girato).
+   */
+  @Test
+  fun na7_unCongelamentoSalvatoSiConoscePrimaCheIlGuardianoPartaInUnProcessoFreddo() = runBlocking<Unit> {
+    val (phone, firstGallery, firstNas) = foundedNas(databaseName = "nas7.db")
+    firstNas.freezeCommonArea(firstGallery)
+    assertThat(firstNas.frozen.value).hasSize(1)
+
+    // Il processo dopo: stesso database, un ambito sospeso (nessun guardiano gira finche' il test non lo lascia).
+    val scheduler = kotlinx.coroutines.test.TestCoroutineScheduler()
+    val cold = CoroutineScope(SupervisorJob() + kotlinx.coroutines.test.StandardTestDispatcher(scheduler))
+    val gallery = galleryOf(phone, TestNas.ADMIN_USER, databaseName = "nas7.db", scope = cold)
+    try {
+      gallery.core()
+      val nas = checkNotNull(gallery.nas)
+      assertThat(nas.frozen.value).isEmpty()
+
+      assertThat(nas.start()).isTrue()
+
+      assertWithMessage("il congelamento salvato e' noto subito").that(nas.frozen.value).hasSize(1)
+      assertThat(nas.opsGate.statusOf(TestNas.COMMON)).isEqualTo(dev.pampa.mycloudgallery.core.nasops.contract.GateStatus.FROZEN)
+    } finally {
+      // Si lascia correre l'ambito sospeso solo per chiuderlo (anche se un'asserzione e' caduta): senza, `shutdown()` del tearDown
+      // aspetterebbe per sempre dei lavori mai partiti.
+      cold.cancel()
+      scheduler.advanceUntilIdle()
+    }
+  }
+
+  /**
+   * NA-12: un processo nato per il lavoro in background non ha ancora il NAS agganciato (lo fa la galleria, un attimo dopo). Il servizio
+   * delle operazioni, che chiamava `organizer.resumeOperations`, riceveva null e finiva "fatto" senza riprendere niente.
+   */
+  @Test
+  fun na12_unProcessoAppenaNatoAvviaOAspettaIlNasInvecDiFinireFatto() = runBlocking<Unit> {
+    val phone = device("telefono")
+    phone.graph.start()
+    phone.graph.foundFamily()
+    val gallery = galleryOf(phone, TestNas.ADMIN_USER)
+    val nas = checkNotNull(gallery.nas)
+    nas.attachWait = 30.seconds
+    assertThat(nas.organizer.parts).isNull()
+    // Quello che faceva il servizio: nessun NAS agganciato, quindi null, quindi "fatto".
+    assertThat(nas.organizer.resumeOperations(1.minutes)).isNull()
+
+    // La galleria parte da sola, come nel processo vero, mentre il servizio chiede di riprendere.
+    gallery.startWhenReady()
+    val result = nas.resumeOperations(1.minutes)
+
+    assertThat(result).isNotNull()
+    assertThat(nas.organizer.parts).isNotNull()
+  }
+
+  /**
+   * NA-10: la scansione leggeva le cartelle escluse dell'area privata (E-N15) ma nessuna schermata le scriveva. Adesso si impostano,
+   * restano nelle impostazioni personali, la Libreria le toglie alla verifica che segue e non si tocca niente sul NAS.
+   */
+  @Test
+  fun na10_escludereUnaCartellaDellAreaPrivataLaTogliedallaLibreriaSenzaToccareIlNas() = runBlocking<Unit> {
+    val closed = AtomicInteger()
+    val (_, gallery, nas) = foundedNas(onClosed = { closed.incrementAndGet() })
+    backend.put(TestNas.ADMIN_USER, "Album/IMG_0001.jpg", jpeg(tone = 40), lastWriteMs = time.now() - 2 * DAY)
+    backend.put(TestNas.ADMIN_USER, "Altro/IMG_0002.jpg", jpeg(tone = 120), lastWriteMs = time.now() - 2 * DAY)
+    checkNotNull(nas.scan(ScanMode.Full, 5.minutes))
+    withTimeout(TIMEOUT) { gallery.repository.view(LibraryFilter.ALL).first { it.size == 2 } }
+    val organizer = nas.organizer
+    val before = closed.get()
+
+    assertThat(organizer.areas.setPrivateExclusions(setOf(SharePath.of("Album")))).isTrue()
+
+    assertThat(organizer.privateExclusions()).containsExactly(SharePath.of("Album"))
+    assertThat(organizer.areas.privateExclusions.value).containsExactly(SharePath.of("Album"))
+    assertWithMessage("chiede la verifica").that(closed.get()).isGreaterThan(before)
+    time.advance(3 * MINUTE)
+    checkNotNull(nas.scan(ScanMode.Verify, 5.minutes))
+    withTimeout(TIMEOUT) { gallery.repository.view(LibraryFilter.ALL).first { it.size == 1 } }
+    assertWithMessage("niente sul NAS e' stato toccato").that(backend.exists(TestNas.ADMIN_USER, "Album/IMG_0001.jpg")).isTrue()
+  }
+
+  /** NA-11: il salto dell'ora del NAS e' visibile alla UI, e il gesto lo accetta. */
+  @Test
+  fun na11_ilSaltoDellOraSiVedeEIlGestoLoAccetta() = runBlocking<Unit> {
+    val (_, _, nas) = foundedNas()
+    val organizer = nas.organizer
+    assertThat(organizer.areas.clockJumpMs.value).isNull()
+    assertThat(organizer.areas.acceptClockJump()).isFalse()
+
+    // L'ora del NAS salta di 31 giorni in un minuto di orologio monotono (D32): le ancore che la guardia riceve da `watchClock`.
+    val guard = nas.clockGuard
+    guard.onAnchor(1_000_000L, ClockJumpGuard.Reference(elapsedMs = 10_000L, bootId = 1L, wallMs = 1_000_000L))
+    guard.onAnchor(1_000_000L + 31 * DAY, ClockJumpGuard.Reference(elapsedMs = 70_000L, bootId = 1L, wallMs = 1_060_000L))
+
+    // La UI lo vede...
+    val jump = withTimeout(TIMEOUT) { organizer.areas.clockJumpMs.first { it != null } }
+    assertThat(jump).isGreaterThan(30 * DAY)
+    assertThat(nas.clockGuard.blocked).isTrue()
+    // ...e il gesto lo accetta: la sospensione finisce subito (altrimenti sarebbero 24 ore di ora stabile).
+    assertThat(organizer.areas.acceptClockJump()).isTrue()
+    assertThat(organizer.areas.clockJumpMs.value).isNull()
+    assertThat(nas.clockGuard.blocked).isFalse()
+    assertThat(organizer.areas.acceptClockJump()).isFalse()
   }
 
   @Test

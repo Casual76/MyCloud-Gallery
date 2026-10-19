@@ -25,6 +25,7 @@ import dev.pampa.mycloudgallery.feature.settings.family.KitRoute
 import dev.pampa.mycloudgallery.feature.settings.family.StartOverGuideRoute
 import dev.pampa.mycloudgallery.feature.settings.network.NetworkRoute
 import dev.pampa.mycloudgallery.feature.settings.quality.PreviewQualityRoute
+import dev.pampa.mycloudgallery.feature.settings.rules.RulesRoute
 import dev.pampa.mycloudgallery.feature.settings.security.BackupNoticeRoute
 import dev.pampa.mycloudgallery.feature.settings.security.SecurityRoute
 import dev.pampa.mycloudgallery.feature.settings.sharing.SharingRoute
@@ -104,6 +105,10 @@ data object SettingsQualityRoute
 @Serializable
 data object SettingsSharingRoute
 
+/** "Quando lavora l'app": preset, tetto dei dati mobili e roaming (verifica funzionale, RE-8). */
+@Serializable
+data object SettingsRulesRoute
+
 /**
  * Le Impostazioni (P7): Dispositivi (elenco, dettaglio, approvazione, segnala perso), Famiglia (invito, kit di
  * recupero, secondo admin, reset, QR "stato"), Account del NAS (password, indirizzo), Rete e VPN, Sicurezza
@@ -142,6 +147,7 @@ fun NavGraphBuilder.settingsGraph(
             openBackupNotice = { nav.navigate(SettingsBackupRoute) },
             openAbout = { nav.navigate(SettingsAboutRoute) },
             openQuality = { nav.navigate(SettingsQualityRoute) },
+            openRules = { nav.navigate(SettingsRulesRoute) },
             openBackup = openBackup,
             openSharing = { nav.navigate(SettingsSharingRoute) },
           ),
@@ -233,6 +239,9 @@ fun NavGraphBuilder.settingsGraph(
 
     // --- Anteprime del NAS (Fase 4A) ---
     composable<SettingsQualityRoute> { SettingsHost { PreviewQualityRoute(onBack = back) } }
+
+    // --- Quando lavora l'app (verifica funzionale, RE-8) ---
+    composable<SettingsRulesRoute> { SettingsHost { RulesRoute(onBack = back) } }
 
     // --- Condivisioni senza posizione (Fase 5B) ---
     composable<SettingsSharingRoute> { SettingsHost { SharingRoute(onBack = back) } }

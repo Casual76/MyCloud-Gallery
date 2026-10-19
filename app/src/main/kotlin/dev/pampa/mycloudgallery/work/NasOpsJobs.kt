@@ -70,14 +70,15 @@ class JobSchedulerNasOpsJobs(context: Context) : NasOpsJobs {
   private val component = ComponentName(app, NasOpsJobService::class.java)
 
   override fun userInitiated() {
-    val builder = JobInfo.Builder(JOB_USER, component).setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+    // RE-11: una rete qualunque, anche senza internet (il NAS e' in LAN): `NETWORK_TYPE_ANY` chiede una rete validata.
+    val builder = JobInfo.Builder(JOB_USER, component).setRequiredNetwork(LanConstraints.request())
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) builder.setUserInitiated(true)
     schedule(builder.build())
   }
 
   override fun resumeLater(delayMs: Long) {
     val builder = JobInfo.Builder(JOB_RESUME, component)
-      .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+      .setRequiredNetwork(LanConstraints.request())
       .setBackoffCriteria(BACKOFF_MS, JobInfo.BACKOFF_POLICY_EXPONENTIAL)
     if (delayMs > 0) builder.setMinimumLatency(delayMs.coerceAtMost(MAX_DELAY_MS))
     schedule(builder.build())

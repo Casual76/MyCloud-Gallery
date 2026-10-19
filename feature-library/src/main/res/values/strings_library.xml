@@ -70,6 +70,10 @@
   <string name="library_action_delete">Elimina dal telefono</string>
   <string name="library_delete_location_phone">Telefono</string>
   <string name="library_delete_location_phone_detail">Non c’è ancora una copia sul NAS: dopo 30 giorni nel cestino di sistema non si potrà recuperare.</string>
+  <plurals name="library_delete_nas_left">
+    <item quantity="one">%1$s elemento della selezione è solo sul NAS e resta dov’è.</item>
+    <item quantity="other">%1$s elementi della selezione sono solo sul NAS e restano dove sono.</item>
+  </plurals>
   <!-- "Nascondi" con la copertina di un gruppo (P11, nota di P5): si nasconde tutto il gruppo. -->
   <plurals name="library_hide_group_title">
     <item quantity="one">Nascondere %1$s elemento?</item>

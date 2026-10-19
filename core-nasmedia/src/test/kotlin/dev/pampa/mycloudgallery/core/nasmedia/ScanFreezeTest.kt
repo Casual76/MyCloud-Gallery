@@ -2,8 +2,10 @@ package dev.pampa.mycloudgallery.core.nasmedia
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.model.FreezeReason
 import dev.pampa.mycloudgallery.core.model.LocationState
+import dev.pampa.mycloudgallery.core.nasmedia.contract.MassChangeRule
 import dev.pampa.mycloudgallery.core.nasmedia.contract.NasScanStatus
 import dev.pampa.mycloudgallery.core.nasmedia.contract.ScanMode
 import dev.pampa.mycloudgallery.core.nasmedia.contract.ScanStop
@@ -110,6 +112,79 @@ class ScanFreezeTest {
     // E' un gesto, non un permesso permanente: un nuovo cambiamento di massa congela di nuovo.
     h.synthetic.ransomware("test", paths.drop(500), count = 400)
     assertThat(h.scan().freeze).isNotNull()
+  }
+
+  /**
+   * NA-4: "Ho controllato, continua" valeva solo in memoria. Il giro dopo e' di solito in un processo nuovo (il lavoro della notte):
+   * rivedeva le stesse 500 assenze e ricongelava con lo stesso numero, e l'utente doveva confermare di nuovo cio' che aveva gia'
+   * controllato.
+   */
+  @Test
+  fun na4_laConfermaSopravviveAllaMorteDelProcesso() = runTest {
+    val paths = thousand()
+    h.synthetic.ransomware("test", paths, count = 500)
+    val freeze = checkNotNull(h.scan().freeze)
+    assertThat(h.scanner.freezeState.release(UserGesture(freeze.headlineCount))).isTrue()
+
+    // Il processo muore prima del giro: ne parte uno nuovo, stesso catalogo e stesso NAS.
+    h.restartScanner()
+    val accepted = h.scan()
+
+    assertThat(accepted.freeze).isNull()
+    assertThat(accepted.vanished).isEqualTo(500)
+    assertThat(h.store.countPresent(h.me, "test")).isEqualTo(500)
+  }
+
+  /** NA-4, la sicurezza: la conferma vale per quel congelamento, non per i successivi. */
+  @Test
+  fun na4_laConfermaValeSoloPerQuelCongelamento() = runTest {
+    val paths = thousand()
+    h.synthetic.ransomware("test", paths, count = 500)
+    val freeze = checkNotNull(h.scan().freeze)
+    assertThat(h.scanner.freezeState.release(UserGesture(freeze.headlineCount))).isTrue()
+    h.restartScanner()
+    assertThat(h.scan().freeze).isNull()
+    assertWithMessage("la franchigia e' stata usata e tolta").that(h.acceptances.load(h.me, "test")).isNull()
+
+    // Un altro cambiamento di massa, dopo (in un altro processo ancora): congela di nuovo, senza sconti.
+    h.restartScanner()
+    h.synthetic.ransomware("test", paths.drop(500), count = 400)
+    val next = h.scan()
+    assertThat(next.freeze).isNotNull()
+    assertThat(next.vanished).isEqualTo(0)
+  }
+
+  /** Se il giro dopo il gesto trova di piu', ricongela, e la vecchia conferma non resta per i congelamenti dopo. */
+  @Test
+  fun na4_seIlGiroDopoRicongelaLaVecchiaConfermaNonRestaInAttesa() = runTest {
+    val paths = thousand()
+    h.synthetic.ransomware("test", paths, count = 60)
+    val freeze = checkNotNull(h.scan().freeze)
+    assertThat(h.scanner.freezeState.release(UserGesture(freeze.headlineCount))).isTrue()
+    assertThat(h.acceptances.load(h.me, "test")).isNotNull()
+
+    // Prima del giro dopo si cifra altro: quel giro ricongela, e la conferma di prima e' usata.
+    h.synthetic.ransomware("test", paths.drop(60), count = 400)
+    h.restartScanner()
+    assertThat(h.scan().freeze).isNotNull()
+    assertThat(h.acceptances.load(h.me, "test")).isNull()
+  }
+
+  /** Una conferma dimenticata per piu' di sette giorni non si applica a un fatto di un'altra settimana. */
+  @Test
+  fun na4_unaConfermaVecchiaDiSetteGiorniScade() = runTest {
+    val paths = thousand()
+    h.synthetic.ransomware("test", paths, count = 500)
+    val freeze = checkNotNull(h.scan().freeze)
+    assertThat(h.scanner.freezeState.release(UserGesture(freeze.headlineCount))).isTrue()
+
+    // Il NAS e' spento per piu' di una settimana: quando torna, la vecchia conferma non vale piu'.
+    h.advance(MassChangeRule.WINDOW_MILLIS + 60_000)
+    h.restartScanner()
+    val later = h.scan()
+
+    assertThat(later.freeze?.reason).isEqualTo(FreezeReason.VANISHED)
+    assertThat(later.vanished).isEqualTo(0)
   }
 
   @Test

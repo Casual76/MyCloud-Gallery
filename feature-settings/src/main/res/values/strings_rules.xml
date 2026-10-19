@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Quando lavora l'app: preset, tetto dei dati mobili, roaming (verifica funzionale, RE-8). -->
+
+  <string name="settings_rules">Quando lavora l’app</string>
+  <string name="settings_rules_detail">Notte o sempre, dati mobili e roaming</string>
+
+  <string name="rules_title">Quando lavora l’app</string>
+  <string name="rules_section_preset">Quando parte il lavoro</string>
+  <string name="rules_section_preset_detail">Backup, sincronizzazione e preparazione delle anteprime. Con l’app aperta le miniature si caricano comunque.</string>
+
+  <string name="rules_section_mobile">Dati mobili</string>
+  <string name="rules_section_mobile_detail">Quanti dati mobili al mese può usare l’app, in tutto.</string>
+  <string name="rules_cap_preset">Come il preset</string>
+  <string name="rules_cap_preset_detail">%1$s al mese</string>
+  <string name="rules_cap_limit_detail">Al mese, backup e miniature insieme</string>
+  <string name="rules_cap_none">Nessun tetto</string>
+  <string name="rules_cap_none_detail">Nessun limite mensile ai dati mobili</string>
+  <string name="rules_cap_footnote">Il tetto vale anche con l’app aperta. Raggiunto il tetto, i dati mobili si fermano fino al mese dopo; il Wi-Fi non ha limiti.</string>
+
+  <string name="rules_section_roaming">Roaming</string>
+  <string name="rules_roaming">Consenti il roaming</string>
+  <string name="rules_roaming_detail">All’estero i dati possono costare molto. Spento, ogni attività in background resta ferma.</string>
+
+  <string name="rules_footnote">Le scelte valgono subito, senza riavviare niente. Il lavoro pesante, come i video, resta sul Wi-Fi di casa con ogni preset tranne «Massimo».</string>
+</resources>

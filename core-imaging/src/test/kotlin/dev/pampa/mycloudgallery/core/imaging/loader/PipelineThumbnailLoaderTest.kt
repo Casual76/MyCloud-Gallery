@@ -7,6 +7,7 @@ import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.common.coroutines.DefaultDispatcherProvider
 import dev.pampa.mycloudgallery.core.common.coroutines.DispatcherProvider
 import dev.pampa.mycloudgallery.core.imaging.budget.ImagingBudget
+import dev.pampa.mycloudgallery.core.imaging.cache.TrimLevels
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbBucket
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbKey
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbRequest
@@ -125,6 +126,61 @@ class PipelineThumbnailLoaderTest {
     assertThat(loader.stats.value.cachedBytes).isGreaterThan(0)
     assertThat(loader.stats.value.budgetBytes).isEqualTo(budget.thumbnailCacheBytes)
     loader.close()
+  }
+
+  /**
+   * GA-3: l'app va in secondo piano e Android manda `onTrimMemory(BACKGROUND)`: la cache scarta anche le miniature visibili e,
+   * con l'app nascosta, non le richiede. Al ritorno in primo piano la finestra e' la stessa e nessuno la rimanda: `resume` la
+   * riapplica e le miniature tornano, senza che si scorra.
+   */
+  @Test
+  fun ga3_dopoUnTrimInSecondoPianoAlRitornoLeMiniatureVisibiliTornano() = runTest {
+    val source = FakeSource(latencyMs = 10)
+    val loader = loader(source)
+    val a = request(1)
+    val b = request(2)
+    val stateA = loader.image(a.key, a.ref)
+    val stateB = loader.image(b.key, b.ref)
+    loader.window(visible = listOf(a, b), ahead = emptyList())
+    advanceUntilIdle()
+    assertThat(stateA.value).isNotNull()
+    assertThat(stateB.value).isNotNull()
+    val loadedBefore = source.completed.get()
+
+    // Secondo piano: la memoria e' scarsa, il sistema chiede di svuotare tutto.
+    loader.trim(TrimLevels.BACKGROUND)
+    advanceUntilIdle()
+    assertThat(stateA.value).isNull()
+    assertThat(stateB.value).isNull()
+    assertThat(loader.peek(a.key)).isNull()
+    // In secondo piano non si lavora a vuoto.
+    assertThat(source.completed.get()).isEqualTo(loadedBefore)
+
+    // Primo piano: la finestra ricordata si riapplica.
+    loader.resume()
+    advanceUntilIdle()
+    assertThat(stateA.value).isNotNull()
+    assertThat(stateB.value).isNotNull()
+    assertThat(loader.peek(b.key)).isNotNull()
+    loader.close()
+  }
+
+  @Test
+  fun ga3_resumeSenzaNienteDaRichiedereNonFaLavoro() = runTest {
+    val source = FakeSource(latencyMs = 10)
+    val loader = loader(source)
+    val a = request(1)
+    loader.window(visible = listOf(a), ahead = emptyList())
+    advanceUntilIdle()
+    val started = source.calls.size
+
+    loader.resume()
+    advanceUntilIdle()
+
+    assertThat(source.calls).hasSize(started)
+    loader.close()
+    // Dopo la chiusura e' un no-op.
+    loader.resume()
   }
 
   @Test

@@ -1,6 +1,5 @@
 package dev.pampa.mycloudgallery.work
 
-import androidx.work.NetworkType
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.backup.contract.BackupKind
 import dev.pampa.mycloudgallery.core.backup.contract.BackupProblemCode
@@ -60,17 +59,7 @@ class BackupWorkTest {
     assertThat(BackupFollowUp.ofSafety(waiting)).isEqualTo(BackupFollowUp.Wait(WaitReason.PowerSaver))
   }
 
-  @Test
-  fun iVincoliDiWorkManagerSoloPerCicheSiEsprimeEsattamente() {
-    // La carica e la batteria si dicono a WorkManager (che avvisa quando cambiano); le altre attese non programmano niente.
-    assertThat(BackupWorkScheduling.constraintsFor(WaitReason.NeedsPower).requiresCharging()).isTrue()
-    assertThat(BackupWorkScheduling.constraintsFor(WaitReason.BatteryLow(15, 20)).requiresBatteryNotLow()).isTrue()
-    assertThat(BackupWorkScheduling.constraintsFor(WaitReason.PowerSaver).requiresBatteryNotLow()).isTrue()
-    val plain = BackupWorkScheduling.constraintsFor(null)
-    assertThat(plain.requiresCharging()).isFalse()
-    assertThat(plain.requiredNetworkType).isEqualTo(NetworkType.CONNECTED)
-    assertThat(BackupWorkScheduling.constraintsFor(WaitReason.Offline).requiresCharging()).isFalse()
-  }
+  // I vincoli di WorkManager (carica, batteria, rete senza internet) hanno bisogno di Robolectric: vedi LanConstraintsTest.
 
   @Test
   fun ilRitardoFinoAllaFasciaNotturnaEIlRestoNonProgrammaNiente() {

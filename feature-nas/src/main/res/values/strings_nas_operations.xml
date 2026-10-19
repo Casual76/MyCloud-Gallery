@@ -3,6 +3,14 @@
   <!-- Fase 4B, P14: Operazioni in corso (avanzamento e "Ferma"). -->
 
   <string name="nas_ops_title">Operazioni in corso</string>
+  <!-- NA-11 (D32): il salto dell'ora del NAS sospende cestino e indice; "L'ora del NAS e' giusta, continua". -->
+  <string name="nas_ops_clock_title">L’ora del NAS è cambiata di colpo</string>
+  <string name="nas_ops_clock_detail">Per prudenza il cestino e l’indice aspettano che l’ora resti stabile per un giorno. Se hai controllato e l’ora del NAS è giusta, puoi farli riprendere subito.</string>
+  <string name="nas_ops_clock_action">L’ora del NAS è giusta, continua</string>
+  <string name="nas_ops_clock_sheet_title">L’ora del NAS è giusta?</string>
+  <string name="nas_ops_clock_sheet_message">Controlla l’ora dal pannello del NAS. Se è giusta, il cestino e l’indice ripartono da adesso. Se non lo è, aspetta: riprendono da soli quando l’ora resta stabile per un giorno.</string>
+  <string name="nas_ops_clock_sheet_confirm">Sì, l’ora è giusta</string>
+  <string name="nas_ops_clock_sheet_cancel">Aspetta</string>
   <string name="nas_ops_subtitle_none">Nessuna operazione</string>
   <plurals name="nas_ops_subtitle_active">
     <item quantity="one">%1$s in corso</item>

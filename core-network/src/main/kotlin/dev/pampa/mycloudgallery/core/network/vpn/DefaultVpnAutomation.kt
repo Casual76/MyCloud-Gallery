@@ -109,6 +109,9 @@ class DefaultVpnAutomation(
   private var consecutiveFailures = 0
   private var nextAllowedAtMillis = 0L
 
+  /** L'ultimo passo ha visto la sospensione: quando sparisce, i conti del tentativo si azzerano. */
+  private var suspended = false
+
   /** Da quando si aspetta una sessione libera per questo tentativo: sopravvive ai riavvii del passo (primo piano/background). */
   private var idleWaitStart: Pair<Attempt, Long>? = null
 
@@ -144,8 +147,19 @@ class DefaultVpnAutomation(
     val inForeground = appContext.context.value.inForeground
 
     if (suspension != null) {
+      suspended = true
       statusState.value = VpnAutomationStatus.Suspended(suspension)
       return
+    }
+    if (suspended) {
+      // La sospensione l'ha tolta l'utente ("Riattiva il controllo", una prova riuscita, una scelta nuova): si riparte da zero.
+      // Con i conti di prima (tre insuccessi, l'ultimo tentativo sulla stessa rete, l'attesa crescente) il primo comando dopo la
+      // riattivazione non sarebbe partito o avrebbe sospeso di nuovo subito (verifica funzionale, RE-2).
+      suspended = false
+      lastAttempt = null
+      consecutiveFailures = 0
+      nextAllowedAtMillis = 0L
+      idleWaitStart = null
     }
     if (!config.enabled || config.tunnelName.isNullOrBlank() || capability != VpnCapability.READY) {
       statusState.value = VpnAutomationStatus.Off

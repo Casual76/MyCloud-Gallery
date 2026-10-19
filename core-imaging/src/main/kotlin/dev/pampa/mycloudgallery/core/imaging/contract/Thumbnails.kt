@@ -97,6 +97,13 @@ interface ThumbnailLoader {
   /** `onTrimMemory`: riduce la cache secondo il livello (`ComponentCallbacks2.TRIM_MEMORY_*`). */
   fun trim(level: Int)
 
+  /**
+   * L'app torna in primo piano (GA-3). Da `UI_HIDDEN` in su [trim] scarta anche le miniature visibili e, con l'app nascosta, non le
+   * richiede: al ritorno la finestra e' la stessa e nessuno la rimanda, quindi qui si richiedono di nuovo quelle che mancano. Niente da
+   * fare se non e' stato scartato niente. Di serie non fa niente (i caricatori che non scartano nulla).
+   */
+  fun resume() {}
+
   val stats: StateFlow<ThumbStats>
 }
 

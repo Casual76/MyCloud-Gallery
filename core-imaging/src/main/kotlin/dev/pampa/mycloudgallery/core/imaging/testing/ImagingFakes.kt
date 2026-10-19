@@ -147,6 +147,8 @@ class FakeThumbnailLoader(
 ) : ThumbnailLoader {
 
   private val cache = HashMap<ThumbKey, MutableState<ImageBitmap?>>()
+  private val refs = HashMap<ThumbKey, MediaRef>()
+  private var discarded = false
   private val statsFlow = MutableStateFlow(ThumbStats())
 
   /** Le finestre ricevute (visibili, in arrivo), nell'ordine. */
@@ -157,7 +159,10 @@ class FakeThumbnailLoader(
     private set
 
   override fun image(key: ThumbKey, ref: MediaRef): State<ImageBitmap?> = cache.getOrPut(key) {
-    val bitmap = render(ref, key.bucket.px)
+    refs[key] = ref
+    // Dopo un `trim` in secondo piano la cache vera non richiede niente finche' la finestra non e' riapplicata ([resume]): le celle nuove
+    // restano sul segnaposto.
+    val bitmap = if (discarded) null else render(ref, key.bucket.px)
     if (bitmap != null) produced++
     mutableStateOf(bitmap?.asImageBitmap())
   }
@@ -168,11 +173,38 @@ class FakeThumbnailLoader(
     windows += visible to ahead
   }
 
+  /**
+   * Come la cache vera (GA-3): da `UI_HIDDEN` (20) in su si scartano anche le miniature visibili, e le celle che le tenevano tornano sul
+   * segnaposto (lo stato diventa null) finche' non si chiama [resume]. Prima il finto svuotava la mappa ma lasciava alle celle la bitmap
+   * che gia' avevano: nessun test poteva vedere le miniature sparire.
+   */
   override fun trim(level: Int) {
-    cache.clear()
+    if (level < UI_HIDDEN) return
+    cache.values.forEach { it.value = null }
+    discarded = true
+  }
+
+  /** Il primo piano: le miniature scartate si richiedono di nuovo, dalla finestra ricordata. */
+  override fun resume() {
+    if (!discarded) return
+    discarded = false
+    for ((key, state) in cache) {
+      if (state.value != null) continue
+      val ref = refs[key] ?: continue
+      val bitmap = render(ref, key.bucket.px)
+      if (bitmap != null) {
+        produced++
+        state.value = bitmap.asImageBitmap()
+      }
+    }
   }
 
   override val stats: StateFlow<ThumbStats> = statsFlow
+
+  private companion object {
+    /** `ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN`: da qui l'interfaccia non si vede piu'. */
+    const val UI_HIDDEN = 20
+  }
 }
 
 /** Segnaposto finti: un gradiente 32x32 dal contenuto del [ThumbHash] (stesso hash, stessa immagine). */

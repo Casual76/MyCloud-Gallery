@@ -86,10 +86,32 @@ class NasOpsJobsTest {
   }
 
   @Test
-  fun unLavoroNormaleFaUnaTappaSolaESiFaRiprogrammare() = runBlocking<Unit> {
+  fun unLavoroNormaleFaUnaTappaSolaEContinuaSubito() = runBlocking<Unit> {
     val script = Script(RunStop.BUDGET)
-    assertThat(NasOpsJobRun(script::resume, { null }, userInitiated = false).run()).isEqualTo(NasOpsJobEnd.Reschedule)
+    assertThat(NasOpsJobRun(script::resume, { null }, userInitiated = false).run()).isEqualTo(NasOpsJobEnd.Continue)
     assertThat(script.calls).isEqualTo(1)
+  }
+
+  /**
+   * NA-12: una tappa che finisce il tempo ha fatto strada; farla rimandare col ritardo esponenziale di JobScheduler (1, 2, 4... minuti)
+   * allontanava ogni fetta di una mossa lunga dalla precedente. Il tempo finito si continua subito; il ritardo progressivo resta per
+   * quando il NAS non risponde o le scritture sono ferme.
+   */
+  @Test
+  fun na12_ilTempoFinitoSiContinuaSubito_ilNasChePareNonSiRiprovaColRitardo() = runBlocking<Unit> {
+    val long = NasOpsJobRun(Script(*Array(NasOpsJobRun.MAX_SLICES) { RunStop.BUDGET })::resume, { null }, userInitiated = true).run()
+    assertThat(long).isEqualTo(NasOpsJobEnd.Continue)
+    assertThat(NasOpsJobRun(Script(RunStop.NAS_UNREACHABLE)::resume, { null }, userInitiated = false).run()).isEqualTo(NasOpsJobEnd.Reschedule)
+  }
+
+  /**
+   * NA-12: un processo nato per il lavoro non ha ancora il motore del NAS. Prima `resumeOperations` rispondeva null e il lavoro finiva
+   * "fatto" senza fare niente; adesso "il NAS non risponde" e si riprova.
+   */
+  @Test
+  fun na12_seIlNasNonEAncoraPronto_ilLavoroNonFinisceFatto() = runBlocking<Unit> {
+    val notReady = Script(RunStop.NAS_UNREACHABLE)
+    assertThat(NasOpsJobRun(notReady::resume, { null }, userInitiated = false).run()).isNotEqualTo(NasOpsJobEnd.Done)
   }
 
   @Test

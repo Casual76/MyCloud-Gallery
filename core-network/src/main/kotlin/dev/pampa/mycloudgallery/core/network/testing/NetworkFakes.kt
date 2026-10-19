@@ -180,13 +180,32 @@ class FakeHomeCapture(var candidate: HomeCandidate? = null) : HomeCapture {
   override suspend fun candidateFromCurrentWifi(): HomeCandidate? = candidate
 }
 
-/** WireGuard finto: registra i comandi e risponde con [nextResult]. */
+/**
+ * WireGuard finto: registra i comandi e risponde con [nextResult].
+ *
+ * Allineato al vero (verifica funzionale, RE-1): la capacita' cambia **solo rileggendo**, come in `WireGuardVpnController`, dove il
+ * permesso concesso dal dialogo di sistema non si vede finche' non si chiama [refresh]. Ogni [refresh] prende il prossimo di
+ * [capabilityOnRefresh] (vuoto = non cambia). Il vero parte `PERMISSION_MISSING` finche' l'utente non concede il permesso: un test che
+ * parte da `READY` salta quel passo (`FakeVpnControllerParityTest` confronta i due).
+ */
 class FakeVpnController(initial: VpnCapability = VpnCapability.READY) : VpnController {
   override val capability: MutableStateFlow<VpnCapability> = MutableStateFlow(initial)
 
   val commands: MutableList<Boolean> = mutableListOf()
   var nextResult: VpnCommandResult = VpnCommandResult.Confirmed
   var intent: Intent? = null
+
+  /** Le capacita' che le prossime riletture daranno, una per [refresh]. */
+  val capabilityOnRefresh: ArrayDeque<VpnCapability> = ArrayDeque()
+
+  /** Quante volte e' stato chiesto di rileggere. */
+  var refreshes: Int = 0
+    private set
+
+  override fun refresh() {
+    refreshes++
+    capabilityOnRefresh.removeFirstOrNull()?.let { capability.value = it }
+  }
 
   override suspend fun setTunnel(up: Boolean, timeout: Duration): VpnCommandResult {
     commands += up

@@ -117,6 +117,14 @@ class NasRegistryService(
     writer.updateCommonExclusions(excluded)
   }
 
+  override suspend fun updateNasAddress(ip: String): AdminActionResult = mutex.withLock {
+    writer.updateNasAddress(ip)
+  }
+
+  override suspend fun updateHomeUla(prefixes: Set<String>): AdminActionResult = mutex.withLock {
+    writer.updateHomeUla(prefixes)
+  }
+
   /** La scelta dell'admin sui rami in conflitto (`writer.pendingForks`): unire ([recognize]) o rifiutare. */
   suspend fun resolveForks(recognize: Boolean): AdminActionResult = mutex.withLock {
     val result = writer.resolveForks(recognize)

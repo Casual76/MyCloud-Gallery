@@ -4,6 +4,8 @@ import dev.pampa.mycloudgallery.core.nasops.contract.ItemFlow
 import dev.pampa.mycloudgallery.core.nasops.contract.OpPlan
 import dev.pampa.mycloudgallery.core.nasops.contract.PlanSummary
 import dev.pampa.mycloudgallery.core.nasops.contract.PlannedItem
+import dev.pampa.mycloudgallery.core.trust.nas.SharePath
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 // Le aree del NAS che le schermate della 4B mostrano (docs/fase4-progetto.md §1.4, §2.7). Le compone `:app` (P16) da
@@ -49,7 +51,36 @@ interface NasAreas {
    * dell'utente su questo telefono: mai da cio' che si legge dal NAS.
    */
   suspend fun hiddenItems(plan: OpPlan): Set<Int> = HiddenSearch.find(plan, ::hiddenAmong)
+
+  /**
+   * NA-10 (E-N15): le cartelle dell'**area privata** che l'utente ha escluso dalla Libreria. E' un'impostazione personale sincronizzata
+   * fra i dispositivi dell'account (Q9): le legge la scansione a ogni giro. Escludere non cancella ne' sposta niente sul NAS: le foto
+   * della cartella escono dalla Libreria e tornano se la cartella si include di nuovo.
+   */
+  val privateExclusions: StateFlow<Set<SharePath>> get() = NoExclusions
+
+  /**
+   * NA-10: imposta le cartelle escluse (tutte, non una alla volta). Vero se e' stato salvato; falso se non si puo' (nessun NAS, nessuna
+   * area privata). Chiede anche una verifica del NAS, cosi' la Libreria si aggiorna senza aspettare il lavoro della notte.
+   */
+  suspend fun setPrivateExclusions(folders: Set<SharePath>): Boolean = false
+
+  /**
+   * NA-11 (D32): di quanto e' saltata l'ora del NAS (ms, col segno), o null se non c'e' un salto che sospende le scritture. Finche' c'e'
+   * il salto, indice e cestino aspettano che l'ora torni stabile per 24 ore.
+   */
+  val clockJumpMs: StateFlow<Long?> get() = NoClockJump
+
+  /**
+   * NA-11: il gesto "L'ora del NAS e' giusta, continua": la sospensione finisce subito e il cestino riparte da adesso. Viene solo dalla
+   * UI, dopo un tocco di conferma, mai da un dato letto dal NAS. Falso se non c'era un salto.
+   */
+  fun acceptClockJump(): Boolean = false
 }
+
+private val NoExclusions: StateFlow<Set<SharePath>> = MutableStateFlow(emptySet())
+
+private val NoClockJump: StateFlow<Long?> = MutableStateFlow(null)
 
 /** La ricerca dei nascosti fra gli elementi di un piano a partire da "quanti ce ne sono" in un gruppo di elementi. */
 internal object HiddenSearch {

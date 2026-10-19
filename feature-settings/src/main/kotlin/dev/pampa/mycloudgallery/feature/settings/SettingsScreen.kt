@@ -10,6 +10,7 @@ import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.MonitorHeart
 import androidx.compose.material.icons.rounded.PhotoLibrary
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.VpnKey
@@ -55,6 +56,8 @@ class SettingsLinks(
   val openBackupNotice: () -> Unit = {},
   val openAbout: () -> Unit = {},
   val openQuality: () -> Unit = {},
+  /** "Quando lavora l'app" (RE-8): preset, tetto dei dati mobili, roaming. */
+  val openRules: () -> Unit = {},
   /**
    * Fase 5A (D16): la voce "Backup" porta alla pagina del backup di feature-backup, che le Impostazioni non conoscono (i feature non si
    * conoscono: la callback la scrive `:app`). Null = la voce non c'e'.
@@ -187,6 +190,14 @@ fun SettingsScreen(
           tone = FluidTone.Info,
           leading = { RowGlyph(Icons.Rounded.PhotoLibrary) },
           onClick = links.openQuality,
+        )
+        FluidListDivider()
+        FluidListRow(
+          title = stringResource(R.string.settings_rules),
+          subtitle = stringResource(R.string.settings_rules_detail),
+          tone = FluidTone.Info,
+          leading = { RowGlyph(Icons.Rounded.Schedule) },
+          onClick = links.openRules,
         )
       }
     }

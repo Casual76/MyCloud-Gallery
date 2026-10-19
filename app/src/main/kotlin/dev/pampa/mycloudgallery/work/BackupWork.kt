@@ -7,7 +7,6 @@ import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
-import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequest
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
@@ -22,6 +21,7 @@ import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.rules.WaitReason
 import dev.pampa.mycloudgallery.core.rules.run.StageOutcome
 import dev.pampa.mycloudgallery.gallery.GalleryGraph
+import dev.pampa.mycloudgallery.feature.diagnostics.recording.DiagJob
 import dev.pampa.mycloudgallery.graph.AppGraph
 import java.time.Duration as JavaDuration
 import java.time.LocalDateTime
@@ -74,7 +74,8 @@ object BackupWorkScheduling {
     SAFETY(SAFETY_WORK),
   }
 
-  private fun connected(): Constraints = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
+  /** RE-11: una rete qualunque, anche senza internet (il NAS e' in LAN): vedi [LanConstraints]. */
+  private fun connected(): Constraints = LanConstraints.anyNetwork()
 
   /** I lavori periodici: idempotente (non sposta quelli gia' pianificati). Le regole decidono comunque se si parte. */
   fun ensure(context: Context) {
@@ -101,7 +102,7 @@ object BackupWorkScheduling {
    * Per tutte le altre attese: solo la rete. Pura, provata su JVM.
    */
   fun constraintsFor(wait: WaitReason?): Constraints {
-    val builder = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED)
+    val builder = LanConstraints.builder()
     when (wait) {
       WaitReason.NeedsPower -> builder.setRequiresCharging(true)
       is WaitReason.BatteryLow, WaitReason.PowerSaver -> builder.setRequiresBatteryNotLow(true)
@@ -251,6 +252,9 @@ abstract class BackupWorker(
 
   protected abstract val kind: BackupWorkScheduling.Kind
 
+  /** Il lavoro, per l'anello della Diagnostica (solo il nome fisso, RE-4). */
+  protected abstract val diagJob: DiagJob
+
   /** La tappa del lavoro; null = non parte (niente da fare, NAS o backup non configurati). */
   protected abstract suspend fun stage(stages: BackupStages): BackupFollowUp?
 
@@ -259,9 +263,20 @@ abstract class BackupWorker(
     if (!gallery.backgroundWorkAllowed) return Result.success()
     // R1: un errore inatteso si salva come problema visibile e il lavoro finisce `failure` (mai un successo silenzioso, mai un `retry` a oltranza:
     // il lavoro dopo lo chiede la lettura del telefono o il giro periodico, e "Riprova" toglie il segno).
-    val followUp = when (val attempt = attemptStage(tag, onError = { backup.noteUnexpectedError() }) { gallery.runIfActive { stage(BackupStages(graph, backup)) } }) {
-      StageAttempt.Failed -> return Result.failure()
-      is StageAttempt.Done -> attempt.value
+    val followUp = try {
+      when (
+        val attempt = attemptStage(tag, onError = {
+          backup.noteUnexpectedError()
+          graph.events.jobFailed(diagJob)
+        }) { gallery.runIfActive { stage(BackupStages(graph, backup)) } }
+      ) {
+        StageAttempt.Failed -> return Result.failure()
+        is StageAttempt.Done -> attempt.value
+      }
+    } catch (e: kotlinx.coroutines.CancellationException) {
+      // Android ha fermato il lavoro: il motivo si salva e, se e' un limite, arriva alle regole (RE-4, RE-7).
+      StopReports.report(graph, diagJob, StopReports.reasonOf(this))
+      throw e
     }
     GalleryLog.d(tag) { "tappa: ${followUp?.javaClass?.simpleName}" }
     when (followUp) {
@@ -292,6 +307,7 @@ class PhotoBackupWorker @AssistedInject constructor(
 ) : BackupWorker(appContext, params, gallery, graph) {
   override val tag: String = "PhotoBackupWorker"
   override val kind = BackupWorkScheduling.Kind.PHOTOS
+  override val diagJob: DiagJob = DiagJob.PHOTO_BACKUP
 
   override suspend fun stage(stages: BackupStages): BackupFollowUp? = stages.photos()?.let { BackupFollowUp.of(it) }
 }
@@ -305,6 +321,7 @@ class VideoBackupWorker @AssistedInject constructor(
 ) : BackupWorker(appContext, params, gallery, graph) {
   override val tag: String = "VideoBackupWorker"
   override val kind = BackupWorkScheduling.Kind.VIDEOS
+  override val diagJob: DiagJob = DiagJob.VIDEO_BACKUP
 
   override suspend fun stage(stages: BackupStages): BackupFollowUp? = stages.videos()?.let { BackupFollowUp.of(it) }
 }
@@ -319,6 +336,7 @@ class QuickPhotoWorker @AssistedInject constructor(
 ) : BackupWorker(appContext, params, gallery, graph) {
   override val tag: String = "QuickPhotoWorker"
   override val kind = BackupWorkScheduling.Kind.QUICK
+  override val diagJob: DiagJob = DiagJob.QUICK_PHOTOS
 
   override suspend fun stage(stages: BackupStages): BackupFollowUp? = stages.quick()?.let { BackupFollowUp.of(it) }
 }
@@ -333,6 +351,7 @@ class SafetyVerifyWorker @AssistedInject constructor(
 ) : BackupWorker(appContext, params, gallery, graph) {
   override val tag: String = "SafetyVerifyWorker"
   override val kind = BackupWorkScheduling.Kind.SAFETY
+  override val diagJob: DiagJob = DiagJob.BACKUP_SAFETY
 
   override suspend fun stage(stages: BackupStages): BackupFollowUp? = stages.safety()?.let { BackupFollowUp.ofSafety(it) }
 }

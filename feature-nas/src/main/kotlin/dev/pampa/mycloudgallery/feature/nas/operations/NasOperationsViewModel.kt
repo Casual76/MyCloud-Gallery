@@ -8,10 +8,12 @@ import dev.pampa.mycloudgallery.core.nasops.contract.NasOperationState
 import dev.pampa.mycloudgallery.core.nasops.contract.NasOperations
 import dev.pampa.mycloudgallery.core.nasops.contract.OpId
 import dev.pampa.mycloudgallery.core.nasops.contract.OpRules
+import dev.pampa.mycloudgallery.feature.nas.contract.NasAreas
 import javax.inject.Inject
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -25,6 +27,10 @@ import kotlinx.coroutines.launch
 internal data class OperationsUi(
   val active: List<NasOperationState> = emptyList(),
   val closed: List<NasOperationState> = emptyList(),
+  /** NA-11: di quanto e' saltata l'ora del NAS (ms); null = nessun salto che sospende le scritture. */
+  val clockJumpMs: Long? = null,
+  /** NA-11: il foglio "L'ora del NAS e' giusta?" e' aperto. */
+  val askingClock: Boolean = false,
 ) {
   val isEmpty: Boolean get() = active.isEmpty() && closed.isEmpty()
 }
@@ -38,15 +44,37 @@ internal fun operationsUi(all: List<NasOperationState>): OperationsUi = Operatio
 @HiltViewModel
 class NasOperationsViewModel @Inject constructor(
   private val operations: NasOperations,
+  private val areas: NasAreas,
 ) : ViewModel() {
 
-  internal val state: StateFlow<OperationsUi> = operations.operations
-    .map(::operationsUi)
-    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), operationsUi(operations.operations.value))
+  private val asking = MutableStateFlow(false)
+
+  internal val state: StateFlow<OperationsUi> = combine(operations.operations, areas.clockJumpMs, asking) { all, jump, ask ->
+    operationsUi(all).copy(clockJumpMs = jump, askingClock = ask && jump != null)
+  }.stateIn(
+    viewModelScope,
+    SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
+    operationsUi(operations.operations.value).copy(clockJumpMs = areas.clockJumpMs.value),
+  )
 
   /** "Ferma" su [id]. */
   internal fun stop(id: OpId) {
     viewModelScope.launch { operations.cancel(id) }
+  }
+
+  /** NA-11: l'utente tocca "L'ora del NAS e' giusta, continua": prima il foglio che chiede di controllarla davvero. */
+  internal fun askClock() {
+    asking.value = true
+  }
+
+  internal fun dismissClock() {
+    asking.value = false
+  }
+
+  /** NA-11: confermato dal foglio. La sospensione finisce subito (un gesto dell'utente, mai un dato del NAS). */
+  internal fun acceptClock() {
+    asking.value = false
+    areas.acceptClockJump()
   }
 
   private companion object {

@@ -103,13 +103,20 @@ internal suspend fun LibraryTabState.hide(ids: Set<MediaId>) {
   if (attempt { actions.setHidden(ids, true) }) grid.stopSelecting() else notice = ActionNotice.HideFailed
 }
 
-/** Condividi: oltre il tetto del selettore di sistema si avvisa senza provarci (I8); se Android non lo apre, lo si dice. */
+/**
+ * Condividi: oltre il tetto del selettore di sistema si avvisa senza provarci (I8); se Android non lo apre, lo si dice. Si
+ * condivide solo cio' che ha una copia sul telefono (GA-8): se la selezione e' tutta sul NAS si dice come fare, se e' mista
+ * parte il selettore con quelli del telefono e si dice quanti non ci sono.
+ */
 internal fun LibraryTabState.shareSelection(ids: Set<MediaId>) {
+  if (ids.isEmpty()) return
   val limit = commands.shareLimit
+  val onPhone = commands.onPhone(ids)
   when {
-    ids.isEmpty() -> Unit
-    ids.size > limit -> notice = ActionNotice.ShareTooMany(limit)
-    !commands.share(ids) -> notice = ActionNotice.ShareFailed
+    onPhone.isEmpty() -> notice = ActionNotice.ShareNasOnly
+    onPhone.size > limit -> notice = ActionNotice.ShareTooMany(limit)
+    !commands.share(onPhone) -> notice = ActionNotice.ShareFailed
+    onPhone.size < ids.size -> notice = ActionNotice.SharePartial(ids.size - onPhone.size)
   }
 }
 
@@ -445,8 +452,16 @@ internal fun selectionActions(
         GalleryBarAction(
           Icons.Rounded.DeleteOutline,
           stringResource(R.string.library_action_delete),
-          // Oltre il tetto di una richiesta di sistema non si apre nemmeno il foglio: si dice subito quanti se ne possono (I8).
-          { if (selected.size > state.commands.deleteLimit) state.notice = ActionNotice.DeleteTooMany(state.commands.deleteLimit) else onDelete() },
+          // Oltre il tetto di una richiesta di sistema non si apre nemmeno il foglio: si dice subito quanti se ne possono (I8). Se non c'e'
+          // niente sul telefono nemmeno (GA-8): da qui non c'e' niente da eliminare.
+          {
+            val onPhone = state.commands.onPhone(selected.ids)
+            when {
+              onPhone.isEmpty() -> state.notice = ActionNotice.DeleteNasOnly
+              onPhone.size > state.commands.deleteLimit -> state.notice = ActionNotice.DeleteTooMany(state.commands.deleteLimit)
+              else -> onDelete()
+            }
+          },
           destructive = true,
           enabled = any,
         ),
@@ -462,21 +477,26 @@ internal fun LibraryDeleteSheet(visible: Boolean, state: LibraryTabState, onDism
   val grid = state.grid
   val selected by grid.selection.selected.collectAsState()
   var scope by remember { mutableStateOf(GalleryDeleteScope.PhoneOnly) }
+  // GA-8: il foglio conta e tocca solo i media che hanno una copia sul telefono; gli altri, solo sul NAS, restano dove sono e lo dice.
+  val onPhone = remember(selected) { state.commands.onPhone(selected.ids) }
+  val nasLeft = selected.size - onPhone.size
+  val phoneDetail = stringResource(R.string.library_delete_location_phone_detail)
+  val nasLeftDetail = if (nasLeft > 0) pluralStringResource(R.plurals.library_delete_nas_left, nasLeft, GalleryNumbers.format(nasLeft)) else null
   GalleryDeleteSheet(
     visible = visible,
-    count = selected.size.coerceAtLeast(1),
+    count = onPhone.size.coerceAtLeast(1),
     scope = scope,
     onScopeChange = { scope = it },
     locations = listOf(
       GalleryDeleteLocation(
         title = stringResource(R.string.library_delete_location_phone),
         kind = GalleryDeleteLocationKind.Phone,
-        detail = stringResource(R.string.library_delete_location_phone_detail),
+        detail = if (nasLeftDetail != null) "$phoneDetail $nasLeftDetail" else phoneDetail,
       ),
     ),
     onConfirm = {
       // Se la richiesta di sistema non parte la selezione resta aperta e lo si dice (I8).
-      val started = state.commands.deleteFromPhone(selected.ids)
+      val started = onPhone.isNotEmpty() && state.commands.deleteFromPhone(onPhone)
       onDismiss()
       if (started) grid.stopSelecting() else state.notice = ActionNotice.DeleteFailed
     },

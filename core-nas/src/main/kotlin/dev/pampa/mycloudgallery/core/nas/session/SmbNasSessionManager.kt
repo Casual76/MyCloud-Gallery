@@ -158,6 +158,15 @@ class SmbNasSessionManager(
   @Volatile
   private var latch: SecurityLatch? = null
 
+  /**
+   * L'account per cui la password non c'e' piu' (chiave del Keystore invalidata, voce assente o di un altro utente): finche' non si
+   * salva una password nuova non si riapre nessuna connessione, ne' una sola autenticazione, e lo stato resta "serve la password"
+   * (verifica funzionale, RE-9: prima ogni lavoro riapriva il socket e l'app diceva "NAS non raggiungibile"). Si toglie da solo quando
+   * la password torna leggibile, da qualunque via sia stata salvata ([passwordStillMissing]).
+   */
+  @Volatile
+  private var passwordMissingFor: NasAccount? = null
+
   @Volatile
   private var lastConnectTimedOut = false
 
@@ -495,6 +504,7 @@ class SmbNasSessionManager(
       if (held.account == acc && held.networkId == route.binding.networkId) return fail(held.error)
       latch = null
     }
+    if (passwordStillMissing(acc)) return fail(NasError.CredentialsMissing)
     val pinnedGuid = acc.pinnedGuid ?: return fail(NasError.NotAllowedHere(DenyReason.NOT_CONFIGURED))
     val breaker = breakers.forAccount(acc)
     // Interruttore aperto: inutile anche solo la TCP (il controllo vero, sotto lucchetto, e' il passo 4).
@@ -593,6 +603,8 @@ class SmbNasSessionManager(
         is AuthOutcome.Failed -> {
           connection.close()
           if (outcome.error is NasError.InsecureSession) latch = SecurityLatch(outcome.error, route.binding.networkId, acc)
+          // Nessuna password da provare: non e' un errore del NAS e riprovare da soli non serve, finche' non ne arriva una nuova.
+          if (outcome.error == NasError.CredentialsMissing) passwordMissingFor = acc
           return fail(outcome.error)
         }
         is AuthOutcome.Accepted -> outcome.value
@@ -638,6 +650,33 @@ class SmbNasSessionManager(
     if (active.value == 0) scheduleIdle()
     GalleryLog.i(TAG) { "sessione pronta: ${info.dialect}, cifrata=${info.encrypted}, cifrario=${info.cipher}, via=${info.via}" }
     return NasResult.Ok(created)
+  }
+
+  /**
+   * Vero se la password di [acc] manca ancora. Una lettura locale, mai la rete: se nel frattempo e' stata salvata (Impostazioni, ingresso,
+   * recupero) il blocco si toglie e la connessione procede.
+   */
+  private suspend fun passwordStillMissing(acc: NasAccount): Boolean {
+    val held = passwordMissingFor ?: return false
+    if (held != acc) {
+      passwordMissingFor = null
+      return false
+    }
+    val load = try {
+      credentials.load(acc.credentialSlot)
+    } catch (c: CancellationException) {
+      throw c
+    } catch (_: Exception) {
+      CredentialLoad.Unavailable
+    }
+    val usable = when (load) {
+      is CredentialLoad.Found -> load.credentials.use { secret -> secret.username.equals(acc.user, ignoreCase = true) }
+      CredentialLoad.Absent, CredentialLoad.NeedsPassword -> return true
+      // Un guasto passeggero del Keystore non e' "serve la password": si riprova come prima.
+      CredentialLoad.Unavailable -> true
+    }
+    if (usable) passwordMissingFor = null
+    return !usable
   }
 
   private suspend fun authenticateOnce(connection: SmbConnection, secret: NasCredentials): AuthOutcome<SmbSession> {

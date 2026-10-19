@@ -25,6 +25,7 @@ import dev.pampa.mycloudgallery.feature.nas.confirm.NameDraft
 import dev.pampa.mycloudgallery.feature.nas.confirm.NamePurpose
 import dev.pampa.mycloudgallery.feature.nas.confirm.movesIntoCommon
 import dev.pampa.mycloudgallery.feature.nas.contract.NasArea
+import dev.pampa.mycloudgallery.feature.nas.contract.NasAreaKind
 import dev.pampa.mycloudgallery.feature.nas.contract.NasAreas
 import dev.pampa.mycloudgallery.feature.nas.R
 import dev.pampa.mycloudgallery.feature.nas.ui.NasTone
@@ -79,6 +80,8 @@ internal data class FoldersUiState(
   val confirmLeave: OpPlan? = null,
   val name: NameDraft? = null,
   val notice: UiNotice? = null,
+  /** NA-10: le cartelle dell'area privata escluse dalla Libreria. */
+  val exclusions: Set<SharePath> = emptySet(),
 ) {
   /** Le voci da mostrare: l'elenco, o l'ultimo salvato se il NAS non risponde. Le cartelle prima, poi per nome. */
   val entries: List<NasFolderEntry>
@@ -98,6 +101,17 @@ internal data class FoldersUiState(
   val canModify: Boolean get() = where != null && listing is NasFolderState.Listing && !readOnly
 
   val picking: Boolean get() = mode is FoldersMode.PickDestination
+
+  /** NA-10: si sta guardando l'area privata (le esclusioni valgono solo li': l'area comune ha quelle firmate della famiglia). */
+  val inPrivateArea: Boolean
+    get() = where?.let { here -> areas.any { it.kind == NasAreaKind.PRIVATE && it.share.equals(here.share, ignoreCase = true) } } == true
+
+  /** Le cartelle scelte (solo cartelle, e solo nell'area privata) che si possono escludere o includere. */
+  val selectedFolders: List<SharePath>
+    get() = if (!inPrivateArea) emptyList() else entries.filter { it.isFolder && it.path in selection }.map { it.path }
+
+  /** NA-10: tutte le cartelle scelte sono gia' escluse: il gesto le include di nuovo. */
+  val selectionExcluded: Boolean get() = selectedFolders.let { folders -> folders.isNotEmpty() && folders.all { it in exclusions } }
 
   /** Le voci scelte come elementi per le operazioni (con il timbro visto qui). */
   fun selectedItems(): List<NasItem> {
@@ -127,6 +141,7 @@ class NasFoldersViewModel @Inject constructor(
 
   init {
     viewModelScope.launch { areas.areas.collect { list -> mutable.update { it.copy(areas = list) } } }
+    viewModelScope.launch { areas.privateExclusions.collect { excluded -> mutable.update { it.copy(exclusions = excluded) } } }
     viewModelScope.launch {
       operations.operations.collect { ops ->
         val active = ops.count { it.active }
@@ -326,6 +341,35 @@ class NasFoldersViewModel @Inject constructor(
   }
 
   internal fun dismissNotice() = mutable.update { it.copy(notice = null) }
+
+  /**
+   * NA-10: "Escludi dalla Libreria" / "Includi nella Libreria" per le cartelle scelte dell'area privata. Non cambia niente sul NAS: le
+   * foto della cartella escono dalla Libreria (o vi tornano) alla verifica che segue. E' un gesto dell'utente su cartelle che ha davanti.
+   */
+  internal fun toggleExcluded() {
+    val current = mutable.value
+    val folders = current.selectedFolders
+    if (folders.isEmpty()) return
+    val including = current.selectionExcluded
+    val next = if (including) current.exclusions - folders.toSet() else current.exclusions + folders
+    viewModelScope.launch {
+      val saved = try {
+        areas.setPrivateExclusions(next)
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        false
+      }
+      val text = when {
+        !saved -> R.string.nas_folders_exclude_failed
+        including -> R.string.nas_folders_included
+        else -> R.string.nas_folders_excluded
+      }
+      mutable.update {
+        it.copy(notice = UiNotice(text, if (saved) NasTone.Calm else NasTone.Alarm), selecting = false, selection = emptySet())
+      }
+    }
+  }
 
   // --- Il nome: "Nuova cartella" e "Rinomina" --------------------------------------------------------------------------------
 

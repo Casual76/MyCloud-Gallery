@@ -6,8 +6,6 @@ import dev.pampa.mycloudgallery.core.family.contract.TrustStatus
 import dev.pampa.mycloudgallery.core.nas.contract.InvalidateReason
 import dev.pampa.mycloudgallery.core.nas.contract.NasError
 import dev.pampa.mycloudgallery.core.nas.contract.Purpose
-import dev.pampa.mycloudgallery.core.network.contract.NasRoute
-import dev.pampa.mycloudgallery.core.network.contract.NetPlace
 import dev.pampa.mycloudgallery.core.rules.BackgroundActivity
 import dev.pampa.mycloudgallery.core.rules.RuleDecision
 import dev.pampa.mycloudgallery.core.rules.WaitReason
@@ -15,9 +13,7 @@ import dev.pampa.mycloudgallery.core.rules.WorkRequest
 import dev.pampa.mycloudgallery.graph.AppGraph
 import dev.pampa.mycloudgallery.notify.AppNotifications
 import dev.pampa.mycloudgallery.notify.NotifiedRequests
-import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.withTimeoutOrNull
 
 /** Come e' andato un giro del controllo del registro (per i test e la Diagnostica, mai dati personali). */
 enum class TrustSyncOutcome {
@@ -82,7 +78,8 @@ class TrustSyncRun(
       PreflightResult.WipeStarted -> return TrustSyncOutcome.WIPE_STARTED
       is PreflightResult.Stop -> {
         val error = preflight.error
-        if (error is NasError.Auth || error is NasError.AuthBlocked) notifications?.notifyPasswordNeeded()
+        // Anche la chiave del Keystore invalidata (RE-9): nessuna password da provare, serve una nuova.
+        if (error is NasError.Auth || error is NasError.AuthBlocked || error == NasError.CredentialsMissing) notifications?.notifyPasswordNeeded()
         return TrustSyncOutcome.STOPPED
       }
       is PreflightResult.ReadOnly -> return TrustSyncOutcome.READ_ONLY
@@ -109,8 +106,8 @@ class TrustSyncRun(
    * motore delle regole non legge "offline" o "NAS irraggiungibile" solo perche' nessuno ha ancora guardato.
    */
   private suspend fun awaitNetwork() {
-    withTimeoutOrNull(NETWORK_SETTLE) { graph.environment.snapshot.first { it.place != NetPlace.OFFLINE } }
-    if (graph.routeGate.current() is NasRoute.Allowed) graph.statusMonitor.probeNow()
+    // Lo stesso punto comune dei lavori a tappe (RE-3); il controllo del registro sonda sempre il NAS, come ha sempre fatto.
+    graph.networkSettler.settle(alwaysProbe = true)
   }
 
   private suspend fun rulesAllow(): Boolean =
@@ -126,7 +123,4 @@ class TrustSyncRun(
     else -> false
   }
 
-  private companion object {
-    val NETWORK_SETTLE = 5.seconds
-  }
 }

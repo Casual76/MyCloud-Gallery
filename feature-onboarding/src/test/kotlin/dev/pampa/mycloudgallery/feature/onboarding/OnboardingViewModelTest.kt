@@ -19,9 +19,11 @@ import dev.pampa.mycloudgallery.core.family.contract.RecoveryOutcome
 import dev.pampa.mycloudgallery.core.family.contract.StepResult
 import dev.pampa.mycloudgallery.core.nas.contract.NasResult
 import dev.pampa.mycloudgallery.core.nas.contract.ShareAccess
+import dev.pampa.mycloudgallery.core.network.contract.ControlPermissionOutcome
 import dev.pampa.mycloudgallery.core.network.contract.DiscoveredNas
 import dev.pampa.mycloudgallery.core.network.contract.HomeCandidate
 import dev.pampa.mycloudgallery.core.network.contract.NasAddress
+import dev.pampa.mycloudgallery.core.network.contract.VpnCapability
 import dev.pampa.mycloudgallery.core.network.contract.VpnCommandResult
 import dev.pampa.mycloudgallery.core.network.contract.VpnControlConfig
 import dev.pampa.mycloudgallery.core.qr.contract.ScanRejection
@@ -365,6 +367,51 @@ class OnboardingViewModelTest {
     vm.refreshBattery()
     assertThat(vm.ui.value.battery.health?.ignoringBatteryOpt).isTrue()
     assertThat(env.health.reads).isAtLeast(2)
+  }
+
+  /**
+   * Verifica funzionale, RE-1: il permesso di WireGuard si concede fuori dall'app (dialogo di sistema, scheda dell'app) e la capacita' non
+   * cambia da sola. Il passo la rilegge a ogni ingresso e a ogni ritorno in primo piano; senza, restava "manca il permesso" a permesso concesso.
+   */
+  @Test
+  fun ilPassoDellaVpnRileggeIlPermessoAdOgniIngresso() = runTest {
+    val env = TestEnv()
+    env.vpn.capability.value = VpnCapability.PERMISSION_MISSING
+    val vm = env.viewModel()
+    vm.enterVpnStep()
+    assertThat(vm.ui.value.vpn.capability).isEqualTo(VpnCapability.PERMISSION_MISSING)
+
+    // L'utente concede il permesso dalla scheda dell'app e torna: il passo si rilegge.
+    env.vpn.capabilityOnRefresh += VpnCapability.READY
+    vm.enterVpnStep()
+
+    assertThat(vm.ui.value.vpn.capability).isEqualTo(VpnCapability.READY)
+    assertThat(env.vpn.refreshes).isAtLeast(2)
+  }
+
+  @Test
+  fun ilRifiutoDelPermessoRestaNelPassoConIlModoDiRiprovare() = runTest {
+    val env = TestEnv()
+    env.vpn.capability.value = VpnCapability.PERMISSION_MISSING
+    val vm = env.viewModel()
+    vm.enterVpnStep()
+
+    vm.onControlPermissionResult(ControlPermissionOutcome.DENIED)
+    assertThat(vm.ui.value.vpn.permission).isEqualTo(ControlPermissionOutcome.DENIED)
+    assertThat(vm.ui.value.vpn.capability).isEqualTo(VpnCapability.PERMISSION_MISSING)
+
+    // Al ritorno in primo piano il rifiuto non sparisce da solo...
+    vm.enterVpnStep()
+    assertThat(vm.ui.value.vpn.permission).isEqualTo(ControlPermissionOutcome.DENIED)
+
+    vm.onControlPermissionResult(ControlPermissionOutcome.DENIED_FOR_GOOD)
+    assertThat(vm.ui.value.vpn.permission).isEqualTo(ControlPermissionOutcome.DENIED_FOR_GOOD)
+
+    // ...finche' il permesso non c'e': allora il controllo e' pronto e il rifiuto si dimentica.
+    env.vpn.capabilityOnRefresh += VpnCapability.READY
+    vm.onControlPermissionResult(ControlPermissionOutcome.GRANTED)
+    assertThat(vm.ui.value.vpn.capability).isEqualTo(VpnCapability.READY)
+    assertThat(vm.ui.value.vpn.permission).isNull()
   }
 
   @Test

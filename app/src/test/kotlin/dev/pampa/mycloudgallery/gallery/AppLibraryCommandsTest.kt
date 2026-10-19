@@ -88,7 +88,9 @@ class AppLibraryCommandsTest {
 
   private fun ids(count: Int): Set<MediaId> = (1..count).map { MediaId(String.format("00000000-0000-4000-8000-%012d", it)) }.toSet()
 
-  private fun commands(): AppLibraryCommands {
+  private fun commands(): AppLibraryCommands = commandsWith { id -> MediaRef.Phone(GalleryRig.PRIMARY, id.value.takeLast(12).toLong(), "image/jpeg") }
+
+  private fun commandsWith(refOf: (MediaId) -> MediaRef?): AppLibraryCommands {
     val rig = GalleryRig(
       app = app,
       replica = File(temp.root, "replica"),
@@ -97,13 +99,65 @@ class AppLibraryCommandsTest {
       access = GalleryRig.accessOf(MediaAccess.FULL),
       intents = intents,
     ).also { rigs += it }
-    return AppLibraryCommands(rig.gallery) { id -> MediaRef.Phone(GalleryRig.PRIMARY, id.value.takeLast(12).toLong(), "image/jpeg") }
-      .also { it.host = host }
+    return AppLibraryCommands(rig.gallery, refOf).also { it.host = host }
   }
 
   @After
   fun tearDown() {
     rigs.forEach { it.close() }
+  }
+
+  // --- GA-8: i media solo-NAS non risultano "condivisi" o "eliminati" ---------------------------------------------------------
+
+  /** Gli id dispari hanno anche una copia sul telefono; i pari sono solo sul NAS. */
+  private fun mixed(): AppLibraryCommands = commandsWith { id ->
+    val n = id.value.takeLast(12).toLong()
+    if (n % 2 == 1L) MediaRef.Phone(GalleryRig.PRIMARY, n, "image/jpeg") else MediaRef.Nas(locationId = n, contentKey = n, mime = "image/jpeg")
+  }
+
+  @Test
+  fun ga8_onPhoneDiceQualiMediaHannoUnaCopiaSulTelefono() {
+    val commands = mixed()
+
+    val onPhone = commands.onPhone(ids(6))
+
+    assertThat(onPhone).hasSize(3)
+    assertThat(commands.onPhone(emptySet())).isEmpty()
+  }
+
+  @Test
+  fun ga8_condividereSoloMediaDelNasDiceNoENonApreIlSelettore() {
+    val commands = mixed()
+    val nasOnly = ids(6).filter { it !in commands.onPhone(ids(6)) }.toSet()
+
+    // Prima rispondeva "fatto" senza aver fatto niente.
+    assertThat(commands.share(nasOnly)).isFalse()
+
+    assertThat(host.choosers).isEqualTo(0)
+    assertThat(intents.shared).isEmpty()
+  }
+
+  @Test
+  fun ga8_eliminareSoloMediaDelNasDiceNoENonChiedeIlCestino() {
+    val commands = mixed()
+    val nasOnly = ids(6).filter { it !in commands.onPhone(ids(6)) }.toSet()
+
+    assertThat(commands.deleteFromPhone(nasOnly)).isFalse()
+
+    assertThat(host.trashRequests).isEqualTo(0)
+    assertThat(intents.trashed).isEmpty()
+  }
+
+  @Test
+  fun ga8_unaSelezioneMistaTocca_soloQuelliDelTelefono() {
+    val commands = mixed()
+    val onPhone = commands.onPhone(ids(6))
+
+    assertThat(commands.share(onPhone)).isTrue()
+    assertThat(commands.deleteFromPhone(onPhone)).isTrue()
+
+    assertThat(intents.shared.single()).hasSize(3)
+    assertThat(intents.trashed.single()).hasSize(3)
   }
 
   @Test

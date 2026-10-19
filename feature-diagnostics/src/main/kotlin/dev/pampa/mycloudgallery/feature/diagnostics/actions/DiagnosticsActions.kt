@@ -10,6 +10,7 @@ import android.provider.Settings
 import androidx.annotation.StringRes
 import androidx.core.content.IntentCompat
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagAction
+import dev.pampa.mycloudgallery.core.network.diagnostics.NetworkDiagActions
 import dev.pampa.mycloudgallery.feature.diagnostics.R
 
 /**
@@ -71,6 +72,9 @@ object DiagnosticsActions {
     NAS_STOP_WRITES -> R.string.diagnostics_action_nas_stop_writes
     NAS_RESUME_WRITES -> R.string.diagnostics_action_nas_resume_writes
     NAS_RELEASE_FREEZE -> R.string.diagnostics_action_nas_release_freeze
+    // Verifica funzionale, RE-10 e RE-1/RE-2: portano a Impostazioni → Rete e VPN, dove si fanno. Le esegue :app.
+    NetworkDiagActions.RECAPTURE_HOME -> R.string.diagnostics_action_recapture_home
+    NetworkDiagActions.OPEN_VPN_CONTROL -> R.string.diagnostics_action_open_vpn_control
     else -> 0
   }
 

@@ -18,6 +18,7 @@ import dev.pampa.mycloudgallery.core.nas.ops.RenameOutcome
 import dev.pampa.mycloudgallery.core.nas.ops.RmdirOutcome
 import dev.pampa.mycloudgallery.core.nas.ops.TempFinish
 import dev.pampa.mycloudgallery.core.nasops.contract.AcceptOutcome
+import dev.pampa.mycloudgallery.core.nasops.contract.AcceptedPlan
 import dev.pampa.mycloudgallery.core.nasops.contract.ConfirmationGate
 import dev.pampa.mycloudgallery.core.nasops.contract.DoneSummary
 import dev.pampa.mycloudgallery.core.nasops.contract.GateStatus
@@ -61,6 +62,7 @@ import kotlin.time.Duration
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
@@ -83,7 +85,9 @@ import kotlinx.coroutines.sync.withLock
  *  - mai nei log: percorsi, nomi, share, account (solo codici).
  *
  * Esecuzione: [start] e [resumeAll] eseguono gli elementi in ordine, uno alla volta, sotto il lucchetto [NasOpsLock] condiviso con le
- * pulizie; un'operazione si ferma (in pausa) se il NAS non risponde, se le scritture sono bloccate ([OpsGate]) o alla fine del budget,
+ * pulizie. **Un'operazione nuova entra nel diario subito** (NA-1): [start] la registra senza aspettare il lucchetto, cosi' mentre ne gira
+ * una lunga quella nuova si vede "in coda" (`NasOperationState.Planned`) e parte appena il lucchetto e' libero, in ordine di arrivo;
+ * se muore il processo in coda, la riprende `resumeAll` dal diario. Un'operazione si ferma (in pausa) se il NAS non risponde, se le scritture sono bloccate ([OpsGate]) o alla fine del budget,
  * e aspetta i file aperti dal PC con attese crescenti fino a 24 ore (E-N13).
  *
  * Una cartella che il telefono stesso tiene aperta (la Libreria che legge una miniatura sotto di lei) non e' un permesso negato e non e' il PC:
@@ -139,8 +143,19 @@ class NasOpsEngine internal constructor(
   /** Per ogni piano avviato in questo processo, l'istante (monotono) della conferma che l'ha avviato: un doppio tocco non riparte. */
   private val confirmed = HashMap<dev.pampa.mycloudgallery.core.nasops.contract.PlanHash, Long>()
 
+  /**
+   * La registrazione di un'operazione nuova nel diario (NA-1). Breve, **mai tenuta durante l'esecuzione**: cosi' un'operazione che
+   * arriva mentre ne gira una lunga entra subito nel diario e si vede "in coda" (`Planned`) invece di aspettare, invisibile, per ore.
+   * Serializza anche [loadViews], che rilegge il diario e sostituisce le viste: senza, una ripresa potrebbe cancellare la vista di
+   * un'operazione appena registrata. Ordine dei lucchetti: prima `lock.mutex` (esecuzione), poi questo; la registrazione non prende
+   * mai `lock.mutex` mentre lo tiene, quindi non c'e' attesa circolare.
+   */
+  private val registration = Mutex()
+
   /** Ricostruisce lo stato mostrato dal diario (all'avvio, dopo la morte del processo). */
-  private suspend fun loadViews() {
+  private suspend fun loadViews() = registration.withLock { reloadViews() }
+
+  private suspend fun reloadViews() {
     val all = store.ops(OpState.entries.toSet())
     val (open, closed) = all.partition { !it.state.terminal }
     val shown = open + closed.takeLast(OpRules.CLOSED_OPS_SHOWN)
@@ -246,18 +261,44 @@ class NasOpsEngine internal constructor(
     }
     // 2. Il piano e' in ordine anche se la UI avesse sbagliato (area dell'app, cestino altrui, cammini).
     PlanRules.firstViolation(plan, deviceId)?.let { return StartOutcome.PlanInvalid(it) }
-    return lock.mutex.withLock {
-      if (!loaded) loadViews()
+    // 3. Il diario (NA-1): l'operazione e tutti i suoi elementi in una transazione, solo dal piano accettato, **subito**, anche se ne
+    // gira un'altra: da qui l'utente la vede "in coda". Il lucchetto dell'esecuzione si prende dopo, solo per eseguire.
+    val record = when (val registered = register(plan, confirmation, accepted)) {
+      is Registered.Early -> return registered.outcome
+      is Registered.Ok -> registered.record
+    }
+    lock.mutex.withLock {
+      // Dall'attesa puo' essere cambiato tutto (R9): l'utente puo' averla fermata, la ripresa puo' averla chiusa. Cio' che e' chiuso o
+      // fermato dall'utente non si esegue: lo chiude chi l'ha fermato (`cancel`) o la ripresa (`resumeAll`), come sempre.
+      val current = store.op(record.id)
+      if (current == null || current.state.terminal || current.errorCode == OpErrorCode.STOPPED_BY_USER || record.id in cancelRequests) {
+        return@withLock
+      }
+      runOp(record.id, Long.MAX_VALUE, Purpose.INTERACTIVE)
+    }
+    return StartOutcome.Started(record.id)
+  }
+
+  private sealed interface Registered {
+    class Ok(val record: OpRecord) : Registered
+
+    class Early(val outcome: StartOutcome) : Registered
+  }
+
+  private suspend fun register(plan: OpPlan, confirmation: UserConfirmation, accepted: AcceptedPlan): Registered =
+    registration.withLock {
+      if (!loaded) reloadViews()
       // Idempotente sull'impronta del piano: la stessa operazione non chiusa, o la stessa conferma toccata due volte, non ne fa partire
       // una seconda. Un piano uguale a uno gia' CHIUSO con una conferma nuova (rinomina a→b, b→a, di nuovo a→b) e' una richiesta nuova
       // (P15, O1).
       store.opByPlanHash(plan.hash)?.let { existing ->
         val sameConfirmation = synchronized(confirmed) { confirmed[plan.hash] } == confirmation.issuedAtMonotonicMs
-        if (!existing.state.terminal || sameConfirmation) return@withLock StartOutcome.AlreadyStarted(existing.id)
+        if (!existing.state.terminal || sameConfirmation) return@withLock Registered.Early(StartOutcome.AlreadyStarted(existing.id))
       }
-      if (plan.items.any { blockedForUser(it.srcShare) || it.dstShare?.let(::blockedForUser) == true }) return@withLock StartOutcome.WritesBlocked
-      val nasNow = clocks.nasNowMs() ?: return@withLock StartOutcome.WritesBlocked
-      // 3. Il diario: l'operazione e tutti i suoi elementi in una transazione, solo dal piano accettato.
+      if (plan.items.any { blockedForUser(it.srcShare) || it.dstShare?.let(::blockedForUser) == true }) {
+        return@withLock Registered.Early(StartOutcome.WritesBlocked)
+      }
+      val nasNow = clocks.nasNowMs() ?: return@withLock Registered.Early(StartOutcome.WritesBlocked)
       val record = store.create(accepted, OpId(newId()), accountId, nasNow)
       synchronized(confirmed) { confirmed[plan.hash] = confirmation.issuedAtMonotonicMs }
       val tally = Tally()
@@ -265,10 +306,8 @@ class NasOpsEngine internal constructor(
       synchronized(viewsLock) { views[record.id] = View(record, tally) }
       publish()
       GalleryLog.i(TAG) { "operazione avviata: ${plan.kind.code}, ${plan.items.size} elementi" }
-      runOp(record.id, Long.MAX_VALUE, Purpose.INTERACTIVE)
-      StartOutcome.Started(record.id)
+      Registered.Ok(record)
     }
-  }
 
   override suspend fun cancel(id: OpId) {
     // Ferma l'esecuzione prima dell'elemento successivo (il ciclo lo guarda), poi annulla cio' che si puo' annullare.

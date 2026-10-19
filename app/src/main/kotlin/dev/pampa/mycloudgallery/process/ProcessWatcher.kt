@@ -8,8 +8,11 @@ import dev.pampa.mycloudgallery.core.family.contract.SetupState
 import dev.pampa.mycloudgallery.core.family.contract.SyncReason
 import dev.pampa.mycloudgallery.core.nas.contract.BreakerState
 import dev.pampa.mycloudgallery.core.nas.contract.InvalidateReason
+import dev.pampa.mycloudgallery.core.nas.contract.NasConnState
+import dev.pampa.mycloudgallery.core.nas.contract.NasError
 import dev.pampa.mycloudgallery.graph.AppGraph
 import dev.pampa.mycloudgallery.notify.AppNotifications
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
@@ -61,11 +64,13 @@ class ProcessWatcher(
       }
     }
     scope.launch {
-      graph.breaker.state.collect { state ->
-        when {
-          state is BreakerState.Open && !graph.appContext.context.value.inForeground -> notifications.notifyPasswordNeeded()
-          state is BreakerState.Closed -> notifications.cancelPasswordNeeded()
-        }
+      // "Serve la password del NAS": l'interruttore aperto, oppure la chiave del Keystore invalidata (RE-9: nessuna password da provare).
+      // Una volta sola per volta: la notifica cambia solo quando cambia il bisogno, mai a ogni tentativo.
+      combine(graph.breaker.state, graph.session.state) { breaker, session ->
+        breaker is BreakerState.Open || (session as? NasConnState.Unavailable)?.error == NasError.CredentialsMissing
+      }.distinctUntilChanged().collect { needed ->
+        if (needed && !graph.appContext.context.value.inForeground) notifications.notifyPasswordNeeded()
+        if (!needed) notifications.cancelPasswordNeeded()
       }
     }
   }
@@ -84,6 +89,10 @@ class ProcessWatcher(
     graph.appContext.update(inForeground = true, profileActive = true)
     graph.environment.onPermissionsChanged()
     graph.wireGuard.refresh()
+    // RE-7: per un'app visibile la quota dei job non vale. RE-6: se non si sa che il NAS risponda (una sonda fallita, un guasto), si
+    // riguarda: una sola connessione TCP, non sveglia i dischi. Cosi' l'indicatore non resta "non raggiungibile" a NAS tornato.
+    graph.androidLimits.clear()
+    graph.scope.launch { graph.networkSettler.settle() }
     gallery.onForeground()
     // Alla prima apertura lo stato salvato si sta ancora leggendo (AppGraph.start): si aspetta di saperlo.
     graph.scope.launch {

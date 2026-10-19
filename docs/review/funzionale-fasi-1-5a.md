@@ -323,6 +323,15 @@ Le cose più gravi:
 - **Correzione:** `RequestPermission` per `com.wireguard.android.permission.CONTROL_TUNNELS` nel passo VPN e in Rete, poi
   `wireGuard.refresh()`. Dopo un rifiuto definitivo, aprire Info app.
 - **Prova:** sull'S25, `dumpsys package` deve dare `granted=true` dopo il tocco.
+- **Stato: corretta** (19/10). Il permesso si chiede con il dialogo di sistema da un tasto «Consenti il controllo»: nel passo VPN
+  dell'onboarding (quando c'è WireGuard e manca il permesso) e in Impostazioni → Rete e VPN. Dopo il dialogo `VpnController.refresh()`
+  rilegge la capacità (che non cambiava da sola); un rifiuto resta visibile con «Riprova a consentire» e, se Android non mostra più la
+  richiesta (`shouldShowRequestPermissionRationale` falso dopo il rifiuto), con «Apri le impostazioni dell'app»; il passo si rilegge
+  anche a ogni ritorno in primo piano (permesso dato dalla scheda dell'app). La Diagnostica porta a Rete e VPN
+  (`NetworkDiagActions.OPEN_VPN_CONTROL`). Test: `WireGuardPermissionTest` (nome nel manifest, esito del dialogo, parità
+  `FakeVpnController`/vero), `WireGuardVpnControllerTest.ilPermessoConcessoDalDialogoSiVedeSoloRileggendo`,
+  `NetworkViewModelTest.ilPermessoDiWireGuard_…`, `OnboardingViewModelTest.ilPassoDellaVpnRileggeIlPermessoAdOgniIngresso` e
+  `ilRifiutoDelPermessoRestaNelPassoConIlModoDiRiprovare`, `NetworkScreenTest` (i tre tasti), `NetworkDiagnosticsContributorTest`.
 
 #### RE-2 · La sospensione dell'automazione VPN non si toglie più
 - **Gravità:** Blocca. **Stato:** confermato.
@@ -334,6 +343,13 @@ Le cose più gravi:
 - **Scenario:** tre cambi di rete in cui la VPN non viene riconosciuta in 10 secondi. La Rete dice "Fermo" per sempre; la
   Diagnostica dice "riattiva il controllo", ma non c'è dove farlo.
 - **Correzione:** "Riattiva il controllo" in Rete (`clearSuspension()` più refresh), e lo stesso dopo una prova manuale riuscita.
+- **Stato: corretta** (19/10). Due difetti: la sospensione non si toglieva, e anche togliendola (`save`, `clearSuspension`) l'automazione
+  teneva i conti di prima (ultimo tentativo sulla stessa rete, tre insuccessi, attesa crescente): non partiva nessun comando finché la
+  rete non cambiava, e un insuccesso la risospendeva subito. Ora `DefaultVpnAutomation` ricomincia da zero quando vede sparire la
+  sospensione; «Riattiva il controllo» in Rete la toglie (`VpnControlConfigStore.clearSuspension`); una prova a mano riuscita la toglie da sola
+  (per `NOT_CONTROLLABLE` qualunque prova riuscita, per `LOCKDOWN_SUSPECTED` solo lo spegnimento riuscito con la rete che resta). Test (visti rossi
+  prima della correzione): `VpnAutomationTest.riattivareDopoUnaSospensione_…` e `salvareDiNuovoLaScelta_…`; `NetworkViewModelTest.riattivareIlControllo_…`,
+  `unaProvaARiuscita_…`, `dopoIlSospettoDiBloccoSoloSpegnere…`, `unaProvaFallitaNonRiattivaNiente`; `NetworkScreenTest`.
 
 #### RE-3 · I lavori a processo freddo non aspettano la rete
 - **Gravità:** Blocca il lavoro notturno quando succede. **Stato:** plausibile.
@@ -346,6 +362,11 @@ Le cose più gravi:
   dopo 6 ore.
 - **Test:** `FakeNetworkObservationSource` che pubblica la rete dopo 300 ms, poi `BackupStages.photos()` subito: oggi `Waiting(Offline)`.
 - **Correzione:** portare `awaitNetwork()` in un punto comune, prima della prima valutazione delle regole.
+- **Stato: corretta** (19/10), **confermata** da un test sul grafo vero: con la rete che compare 300 ms dopo l'avvio, il giro del backup (`BackupStages`)
+  finiva `Waiting(Offline)`. Ora `AppGraph.stageRules()` è l'unico punto: il motore delle regole preceduto da `NetworkSettler.settle()`
+  (aspetta fino a 5 s che la rete si veda, poi una sonda TCP 445 se non si sa ancora che il NAS risponda), una volta per tappa, prima della prima
+  valutazione. Lo usano `NasStages`, `BackupStages` (anche le foto appena scattate, D34) e, con la sonda sempre, `TrustSyncRun`. Test:
+  `VerificaFunzionaleReteTest.re3_unProcessoFreddoAspettaLaReteInvecePerdereIlGiro` (backup vero) e `re3_leRegoleDiUnaTappa…`.
 
 #### RE-4 · Diagnostica "Ultimi esiti ed errori": sempre vuota
 - **Gravità:** Sbagliata. **Stato:** confermato.
@@ -354,6 +375,12 @@ Le cose più gravi:
   `NasWork.kt:308-310`, `AppGraph.kt:352`).
 - **Correzione:** scrivere nell'anello, con i codici del catalogo, gli esiti dei lavori, `AppGraph.start`, `TrustSyncRun`, la
   VPN e l'interruttore.
+- **Stato: corretta** (19/10). `DiagnosticsRecorder` (in `feature-diagnostics`) scrive nell'anello solo codici e numeri (`ExportValue`: nessun testo
+  libero): le tappe dei lavori (`EVT_JOB_RESULT`: lavoro, esito, motivo dell'attesa, lotti, byte, durata), gli errori inattesi (`EVT_JOB_FAILED`),
+  gli stop di Android (`ACT_JOB_STOPPED`, che prima non si salvavano), la sessione NAS (gli stessi codici `NAS_*` della Diagnostica, e il ritorno),
+  i problemi del backup (`BACKUP_*`), la sospensione della VPN e il fallimento dell'avvio. Un giro a vuoto non scrive niente e lo stesso esito
+  non si riscrive prima di sei ore (dieci minuti per gli errori del NAS). Le righe dei lavori hanno per lo schermo una frase («Backup delle foto:
+  in attesa · Nessuna connessione», solo nel dettaglio, mai esportato). Test: `DiagnosticsRecorderTest`, `VerificaFunzionaleReteTest.re3_…`/`re4_…`/`re7_…`.
 
 #### RE-5 · Cambio indirizzo del NAS e nuova impronta di casa: valgono solo per questo telefono
 - **Gravità:** Sbagliata. **Stato:** confermato. Il guasto per i familiari è plausibile.
@@ -363,6 +390,15 @@ Le cose più gravi:
 - **Scenario (E-R7, E-R16):** il NAS cambia IP. L'admin lo corregge sul suo telefono, ma il QR nuovo porta ancora l'IP vecchio
   e il familiare non entra.
 - **Correzione:** sull'admin, dopo la conferma, `updateConfig` e `commit`.
+- **Stato: corretta** (19/10). Nuove azioni firmate `RegistryService.updateNasAddress` e `updateHomeUla`, con lo stesso controllo
+  dell'admin di `updateCommonExclusions` (`RegistryWriter.adminContext`: dispositivo approvato, chiave di famiglia nella cassaforte a
+  telefono sbloccato; un telefono che non la tiene risponde `NotAdmin`): `FamilyAuthority.updateConfig` + `commit`. La pagina dell'indirizzo e
+  la nuova raccolta dell'impronta le chiamano **dopo** il salvataggio locale (la firma si scrive sul NAS al nuovo indirizzo) e dicono fin dove
+  vale il cambio: per la famiglia (admin, firma riuscita), solo per questo telefono (non admin: gli altri telefoni e i nuovi inviti li aggiorna
+  l'admin), oppure salvato qui ma non firmato, con «Riprova». L'identità del NAS (GUID) resta quella firmata; un indirizzo che il formato non
+  accetta e un'impronta senza nessun /48 ULA valido non firmano niente. Test: `VerificaFunzionaleRegistroTest.re5_…` (registro vero: Done,
+  NotAdmin, la stessa configurazione non firma una versione nuova, l'invito porta i dati nuovi), `AddressViewModelTest`, `NetworkViewModelTest`,
+  `AddressScopeScreenTest`, `NetworkScreenTest`, `VerificaFunzionaleReteTest.re5_…` (grafo vero).
 
 #### RE-6 · Dopo una sonda fallita l'indicatore resta "NAS non raggiungibile"
 - **Gravità:** Sbagliata. **Stato:** plausibile.
@@ -373,12 +409,23 @@ Le cose più gravi:
   dicono "NAS spento" senza provarci.
 - **Test:** `RootViewModelTest` con la `ObservedReachabilityProbe` vera: `TimedOut`, poi `Ready`, poi `Idle`; deve dare
   "a casa, inattivo".
+- **Stato: corretta** (19/10), **confermata** dal test (prima: «NAS non raggiungibile» dopo `Ready` e `Idle`). `ObservedReachabilityProbe`
+  dimentica l'esito anche quando la sessione risponde (pronta o in risveglio); all'ingresso in primo piano, se non si sa che il NAS risponda, una
+  sonda TCP sola (`NetworkSettler`), così l'indicatore e i lavori («NAS spento» senza provarci) non restano fermi a una sonda vecchia. Test:
+  `RootViewModelTest.dopoUnaSondaFallitaIlNasTornatoNonRestaIrraggiungibile`, e i lavori via `NetworkSettler` (RE-3).
 
 #### RE-7 · I limiti di Android non arrivano mai alle regole
 - **Gravità:** Minore. **Stato:** confermato.
 - **Percorso:** `AppGraph.kt:289` lega `NoAndroidLimits` (`Adapters.kt:181-184`), quindi `WaitReason.AndroidLimit` è codice
   morto. `ACT_JOB_STOPPED` non ha contributore e `stopReason` non si salva.
 - **Effetto:** con la quota dei job esaurita la Diagnostica non dice perché i lavori si fermano.
+- **Stato: corretta** (19/10). `AndroidLimitsTracker` (:app) sostituisce `NoAndroidLimits`: quando WorkManager ferma un lavoro per quota,
+  bucket sceso o sfondo limitato (`STOP_REASON_QUOTA`, `APP_STANDBY`, `BACKGROUND_RESTRICTION`) la quota risulta esaurita per un'ora (o finché
+  l'app non torna in primo piano) e le regole dicono «limite di Android raggiunto» invece di far partire lavori che Android fermerebbe. Il motivo
+  di ogni stop si salva nell'anello (`ACT_JOB_STOPPED`, `StopReports`). I budget dei servizi in primo piano restano spenti (l'app non ne usa
+  di quei tipi); gli stop dei lavori dell'utente (UIDT, non soggetti alla quota) non sono ancora registrati; il motivo dello stop c'è da Android 12
+  (API 31): su Android 10 e 11 non si registra niente. Test:
+  `VerificaFunzionaleReteTest.re7_…` (grafo vero: Run → Wait(AndroidLimit) → Run).
 
 #### RE-8 · Preset, tetti dati e roaming non si cambiano dopo l'onboarding
 - **Gravità:** Sbagliata. **Stato:** confermato.
@@ -386,21 +433,44 @@ Le cose più gravi:
   è saltabile. Non c'è nessuna pagina in Impostazioni; la riga "Quando fa il backup" non ha azione.
 - **Effetto:** "Notte" resta per sempre. Le "settimane dei preset" richieste per chiudere la 4B (`fase4-progetto.md:54`) non si
   possono fare dall'app.
+- **Stato: corretta** (19/10). Nuova pagina Impostazioni → «Quando lavora l'app» (`feature-settings/.../rules`): preset (i quattro
+  dell'onboarding), tetto dei dati mobili (come il preset, 500 MB, 1, 2, 5, 10 GB, nessun tetto) e roaming. `RulesChoices` scrive nelle stesse
+  `RuleSettings` dell'onboarding: il preset ha **lo stesso effetto** del passo 8 (preset e fascia notte derivata dall'orario del NAS; le
+  anteprime HQ le decide la pagina delle anteprime); il motore le rilegge da solo. Il tetto Wi-Fi non cambia mai. La riga «Quando fa il backup»
+  della pagina Backup (modulo `feature-backup`, fuori dal perimetro) non ha ancora l'azione: può aprire questa pagina. Test: `RulesSettingsTest`,
+  `VerificaFunzionaleReteTest.re8_…` (onboarding vero e DataStore vero).
 
 #### RE-9 · Chiave del Keystore invalidata: l'app dice "NAS non raggiungibile" invece di chiedere la password
 - **Gravità:** Minore. **Stato:** plausibile.
 - **Percorso:** `SmbNasSessionManager.kt:577` (`CredentialsMissing`) porta a `Unavailable`, mostrato come irraggiungibile
   (`GlobalStatus.kt:73-74`). Nessuna notifica.
+- **Stato: corretta** (19/10), **confermata** dal test (prima: 7 connessioni TCP per 1 sola richiesta). Nessuna password da provare → nessuna autenticazione
+  verso il NAS (l'account non rischia di bloccarsi) e nessun nuovo socket: `SmbNasSessionManager` ricorda l'account senza password e rifiuta ogni
+  connessione con `CredentialsMissing` finché la password non torna leggibile (rilegge il Keystore in locale, quindi vale per ogni via con cui la password
+  viene salvata); un guasto passeggero del Keystore non conta. L'indicatore diventa «Serve la password del NAS» (tocco → password) e la notifica
+  «Serve la password» parte una volta sola. Test: `SessionTest.chiaveInvalidata_…`, `GlobalStatusTest.laChiaveDelKeystoreInvalidata…`,
+  `VerificaFunzionaleReteTest.re9_…` (grafo vero: stato, notifica, nessun socket, password nuova → un tentativo, avviso tolto).
 
 #### RE-10 · La Diagnostica "Rete e NAS" non ha dati di sessione, e "Ripeti il riconoscimento" non ha tasto
 - **Gravità:** Minore. **Stato:** confermato.
 - **Percorso:** `RECAPTURE_HOME` finisce nel ramo `else -> 0` di `DiagnosticsActions.kt:74`, e `AppNavHost.onDiagnosticsAction`
   (righe 247-253) non lo gestisce.
+- **Stato: corretta** (19/10). «Ripeti il riconoscimento» ha l'etichetta (e quindi il tasto) e porta a Impostazioni → Rete e VPN, dove c'è la
+  raccolta; la stessa via per «Consenti il controllo» e «Riattiva il controllo» (`OPEN_VPN_CONTROL`). `diagnosticsRouteOf` è pura. Il titolo parla
+  anche dei «dati di sessione» della sezione Rete e NAS: il corpo della voce non ne descrive nessuno mancante (la sessione NAS è nelle voci `NAS_*`),
+  quindi qui è corretto solo il tasto. Test: `NetworkActionsTest`, `DiagnosticsRoutesTest`, `NetworkDiagnosticsContributorTest`.
 
 #### RE-11 · Con un router senza internet i lavori non girano
 - **Gravità:** Minore. **Stato:** plausibile.
 - **Percorso:** il vincolo `NetworkType.CONNECTED` (`NasWork.kt:98`, `TrustSyncScheduling.kt:134`, `BackupWork`) richiede una
   rete con internet validata, mentre `rete-casa-vpn.md` §5 dice che casa vale anche senza.
+- **Stato: corretta** (19/10), **confermata**: in WorkManager 2.11.2 `NetworkType.CONNECTED` arriva a JobScheduler come `NETWORK_TYPE_ANY`, che
+  Android traduce in una richiesta con `INTERNET` e `VALIDATED` (`LanConstraintsTest.ilVincoloDiPrima_chiedeAndroidUnaReteConInternetValidato`):
+  il Wi-Fi di casa senza WAN non la soddisfa mai. Tutti i vincoli di rete dei lavori (periodici, immediati, a catena, lavori dell'utente UIDT)
+  passano ora da `LanConstraints`: una rete qualunque (Wi-Fi, Ethernet o cellulare), senza internet e senza validazione. Se la rete serve
+  davvero, e se è casa, lo decide il motore delle regole dentro il lavoro. Test (visti rossi rimettendo `CONNECTED`: nessuna richiesta di rete nei
+  lavori): `LanConstraintsTest` (la richiesta, il backup con le sue condizioni di carica e batteria, tutti i lavori periodici veri, la verifica e il
+  controllo del registro immediati, i `JobInfo` dell'utente); `BackupWorkTest` e `TrustSyncSchedulingTest` non pretendono più `CONNECTED`.
 
 ### 2.3 Galleria del telefono
 
@@ -414,42 +484,82 @@ Le cose più gravi:
   Nascosti la mostra ancora.
 - **Perché i test passano:** il fake delle azioni non tocca nessuna vista (`LibraryFakes.kt:84-95`).
 - **Correzione:** una vista viva per i Nascosti finché sono sbloccati, oppure ricaricare dopo ogni azione del viewer.
+- **Stato: corretta** (19/10). `CatalogHidden.read` dà una vista viva (`stateIn` con `WhileSubscribed`): finché la griglia dei
+  Nascosti o il viewer aperto da lì la guardano, si rilegge a ogni cambiamento del catalogo, quindi «Mostra nella Libreria»,
+  «Preferito» ed «Elimina» si vedono (l'elemento esce dalla vista e il viewer passa al vicino con il suo avviso). Quando la pagina
+  esce e `HiddenController` dimentica l'oggetto, la rilettura si ferma; rientrando riparte da quello che c'è. Test:
+  `VerificaFunzionaleGalleriaTest.ga1_…` (grafo vero), `HiddenLiveViewTest` (il finto, stessi passi). Fake allineato:
+  `FakeCollectionsWorld.hiddenLibrary` non dà più una fotografia.
 
 #### GA-2 · In selezione nella Libreria, Indietro esce dall'app
 - **Gravità:** Minore. **Stato:** confermato.
 - **Percorso:** in `feature-library/.../library/LibraryScreen.kt` non c'è un `BackHandler` per la selezione; Raccolte ed
   Eliminati di recente ce l'hanno.
+- **Stato: corretta** (19/10). `BackHandler(enabled = grid.selecting) { grid.stopSelecting() }` in `LibraryScreen` (la selezione si
+  legge già nella composizione della Libreria: nessuna ricomposizione in più). Test: `LibraryTabTest.ga2_…` (Indietro chiude la
+  selezione e non l'app; fuori dalla selezione il tasto resta del sistema).
 
 #### GA-3 · Dopo `onTrimMemory` le miniature visibili spariscono e non tornano finché non si scorre
 - **Gravità:** Sbagliata. **Stato:** confermato nel codice; quanto spesso capita va visto sul telefono.
 - **Percorso:** `GalleryGraph.onTrimMemory` → `PipelineThumbnailLoader.trim`; da `BACKGROUND` svuota tutto
   (`ThumbnailCache.kt:136-140, 221-228`). `repump` c'è solo sotto il livello 20, e `onForeground` non rimanda la finestra.
 - **Test:** `window([A,B])`, poi `trim(BACKGROUND)`, poi primo piano: `image(A)` deve tornare.
+- **Stato: corretta** (19/10). `PipelineThumbnailLoader.resume()` riapplica la finestra che il pianificatore ricorda (parte solo ciò
+  che manca dalla cache: nessun costo se non è stato scartato niente) e `GalleryGraph.onForeground` la chiama; il contratto
+  `ThumbnailLoader` ha `resume()` (di serie non fa niente). Test: `PipelineThumbnailLoaderTest.ga3_…` (rosso prima). Fake
+  allineato: `FakeThumbnailLoader.trim` da `UI_HIDDEN` in su porta a null lo stato delle celle (prima lasciava la bitmap alla cella:
+  nessun test poteva vedere le miniature sparire) e `resume()` le riporta (`ImagingContractTest.ga3_…`). Resta fuori perimetro il
+  selettore 5B (`PickerScreen` fa `window(vuota, vuota)` allo smontarsi): stesso meccanismo, da guardare quando si chiude la 5B.
 
 #### GA-4 · Il primo "Consenti" può non fare niente
 - **Gravità:** Minore. **Stato:** plausibile.
 - **Percorso:** `LibraryCommandHostEffect.kt:43` tiene `asked` in `remember`, e lo perde con una rotazione. Con il permesso già
   negato per sempre, il primo tocco non apre le Impostazioni.
+- **Stato: corretta** (19/10), confermata dal codice (la `MainActivity` non gestisce le rotazioni: si ricrea). Il ricordo di aver già
+  chiesto sta in un file (`PermissionAsks`, SharedPreferences con i soli nomi dei permessi, aperto su un thread di lavoro): sopravvive
+  a rotazione, morte del processo e riavvio. Un permesso poi concesso si dimentica, così se l'utente lo toglie il dialogo di
+  sistema torna ad aprirsi. Test: `PermissionAsksTest` (processo nuovo → «negato per sempre» → Impostazioni al primo tocco). Il
+  passo del backup (`BackupHostEffect`, BK-3) ha lo stesso schema e non è stato toccato.
 
 #### GA-5 · Media con `datetaken = 0` saltati nella ripresa della scansione
 - **Gravità:** Minore. **Stato:** plausibile.
 - **Percorso:** `AndroidMediaStoreSource.kt:359` (0 diventa null nella cache) e `:102-116` (`DATE_TAKEN IS NULL` non prende gli 0).
 - **Test:** `FakeMediaProvider` con tre righe `taken = 0` e `limit = 1`: devono arrivare tutte.
+- **Stato: corretta** (19/10), confermata dal test (rosso prima). La riga normalizza `datetaken` 0 a null, ma per la ripresa 0 e NULL
+  sono diversi (nell'ordine decrescente 0 viene prima dei NULL): la sorgente ricordava il null e riprendeva con
+  `IS NULL AND _id < ?`, saltando gli altri zeri e i NULL a `_id` più alto. Ora una riga senza data non si ricorda e la ripresa la
+  rilegge dal MediaStore con il valore vero. Test: `AndroidMediaStoreSourceTest.ga5_…` (con la sorgente di prima e con una
+  nuova a ogni pagina); parità del finto: `…ga5_ilMediaStoreFinto…` (stesse righe, una alla volta: arrivano tutte).
 
 #### GA-6 · In primo piano la fase METADATI dura 30 secondi e poi si ferma fino al prossimo evento
 - **Gravità:** Minore. **Stato:** confermato.
 - **Percorso:** `DefaultPhoneLibrarySync.kt:138-164`, `PhoneSyncConfig.kt:40`.
 - **Effetto:** nella prima lettura, luogo, foto in movimento e raffiche restano incompleti finché non si riapre l'app.
+- **Stato: corretta** (19/10). In primo piano la fase META lavora a fette (`runMetaSlices`): se il budget di 30 s finisce prima del
+  lavoro (`BudgetExhausted`) parte la fetta dopo, dopo una pausa di 5 s (`PhoneSyncConfig.foregroundMetaPause`); si ferma a `Done`, a una
+  pausa (permessi) o a un fallimento, e un giro nuovo ferma tutto prima. Test: `RunnerAndForegroundTest.ga6_…` (rosso prima).
 
 #### GA-7 · Eliminati di recente: le miniature potrebbero non caricarsi
 - **Gravità:** da provare (F15). **Stato:** plausibile.
 - **Percorso:** `PhoneThumbnailSource.kt:105-114` carica la miniatura senza "includi cestinati".
+- **Stato: non confermata** (19/10), e non dimostrabile fuori dal telefono. Se `loadThumbnail` di un elemento nel cestino riesca lo
+  decide il MediaProvider, che Robolectric non ha; nell'SDK (android-37.0, letto) non c'è un equivalente pubblico di
+  `setIncludePending` per il cestino, quindi il codice non ha nessun interruttore da girare, e nessuna correzione al buio. Se sul
+  telefono le miniature mancassero, la cella resta sul segnaposto (E-M10) e «Ripristina» funziona lo stesso. Resta da guardare
+  nella prova F15: Eliminati di recente dopo aver eliminato qualche foto.
 
 #### GA-8 · "Condividi" ed "Elimina" su una selezione di soli media del NAS risultano riusciti senza fare niente
 - **Gravità:** Minore. **Stato:** confermato. L'hanno trovato sia la revisione della galleria sia quella del NAS.
 - **Percorso:** `gallery/LibraryStates.kt:74-81, 88-94` restituisce `true` se non resta nessun riferimento del telefono. Il
   foglio conta però tutta la selezione (`LibraryParts.kt:459-483`).
 - **Correzione:** escludere i media solo-NAS dal conteggio e dirlo, oppure spegnere le azioni.
+- **Stato: corretta** (19/10). Né Condividi né Elimina dicono più «fatto» senza averlo fatto, e nessuna delle due tocca il NAS (il
+  cestino del NAS passa dal viewer, con le sue conferme). `LibraryCommands.onPhone(ids)` dice quali media hanno una copia sul
+  telefono (`AppLibraryCommands`: `refOf(id) is MediaRef.Phone`). Condividi: tutta la selezione sul NAS → avviso «Questi elementi sono
+  solo sul NAS» con come fare (aprirli e «Scarica sul telefono»); selezione mista → parte il selettore con quelli del telefono e un
+  avviso dice quanti sono rimasti fuori. Elimina: tutta sul NAS → nessun foglio, avviso; mista → il foglio conta e tocca solo quelli
+  del telefono e dice che gli altri restano dove sono. In difesa, `share` e `deleteFromPhone` rispondono falso (non vero) se non c'è
+  niente sul telefono. Test: `LibraryActionNoticeTest.ga8_…` (4), `AppLibraryCommandsTest.ga8_…` (4).
 
 ### 2.4 Il NAS nella Libreria e l'organizzazione del NAS
 
@@ -462,6 +572,13 @@ Le cose più gravi:
 - **Scenario:** è in corso uno spostamento di 2.000 file fra le aree e l'utente crea una cartella o rinomina una foto. Niente
   compare in "Operazioni in corso", la richiesta parte ore dopo e una terza resta appesa.
 - **Correzione:** creare la voce del diario fuori dal lucchetto dell'esecuzione, eseguire con `resumeAll`, mostrare "in coda".
+- **Stato: corretta** (19/10). `NasOpsEngine.start` registra l'operazione nel diario sotto un lucchetto breve (`registration`, mai tenuto
+  durante l'esecuzione) e prende il lucchetto dell'esecuzione dopo, solo per eseguire, in ordine di arrivo: l'operazione nuova si vede
+  subito come «In coda» (`NasOperationState.Planned`, già mostrato da «Operazioni in corso»). Chi arriva dopo aver trovato l'operazione
+  fermata dall'utente (R9) o chiusa non la esegue; «Ferma» su una in coda la annulla senza eseguirla; la stessa richiesta toccata due
+  volte resta `AlreadyStarted`; se muore il processo in coda, la riprende `resumeAll`. Test: `VerificaFunzionaleNasOpsTest.na1_…`
+  (su **entrambi** gli esecutori del kit, con il NAS bloccato a metà del primo). Fake allineato: `InMemoryNasOperations` registra e poi
+  si mette in fila, come il vero.
 
 #### NA-2 · Le operazioni brevi in pausa o in attesa non ripartono da sole
 - **Gravità:** Sbagliata. **Stato:** confermato.
@@ -470,6 +587,11 @@ Le cose più gravi:
 - **Effetto:** un file aperto dal PC (E-N13), il NAS caduto, lo scongelamento: la voce resta "In attesa" finché Android non
   riavvia l'app, mentre il testo promette "riprende da sola" (`strings_nas_operations.xml:96-97`).
 - **Correzione:** `resumeLater(...)` dopo ogni `run` lasciato aperto, e `resumeLater(0)` su scongelamento e "Riattiva".
+- **Stato: corretta** (19/10). `AppNasOperations.start` chiede la ripresa dal diario quando l'esecuzione finisce lasciando l'operazione
+  aperta (`NasOrganizer.resumeIfLeftOpen`: alla scadenza della prima attesa se sono solo file aperti dal PC, altrimenti subito, con la
+  rete e il ritardo progressivo del lavoro), lunga o breve che sia. `resumeSoon()` la chiede quando una share si scongela (a mano o da
+  sola: `watchFreezes`), con «Riattiva le scritture» (`NasGraph.setWritesStopped`) e con l'ora del NAS accettata. Test:
+  `NasOrganizeIntegrationTest.na2_…` (rinomina di un file aperto dal PC: `WaitingLocked` e `resumeLater` chiesto, nessun UIDT).
 
 #### NA-3 · Cartelle NAS mostra per sempre il primo elenco letto
 - **Gravità:** Sbagliata. **Stato:** confermato. La gara della rilettura dopo un'operazione è plausibile.
@@ -477,6 +599,10 @@ Le cose più gravi:
   e vive quanto il processo. Non c'è nessun gesto per aggiornare (`NasFoldersScreen.kt:352-361, 451-462`).
 - **Effetto:** i file copiati dal PC o caricati dal backup non compaiono. Dopo uno spostamento l'origine li mostra ancora, e
   toccarli dà "non c'è più".
+- **Stato: corretta** (19/10), compresa la gara. `NasFolderService.observe` mostra subito l'ultimo elenco noto e **a ogni
+  osservazione** rilegge dal NAS; ogni lettura prende un numero alla partenza e pubblica solo se nessuna partita dopo di lei ha già
+  pubblicato (una lettura lenta, partita prima, non sovrascrive quella nuova). In Cartelle NAS c'è il gesto «Aggiorna» (spento mentre
+  legge). Test: `VerificaFunzionaleNasOpsTest.na3_…` (4: riaprire rilegge, vecchio-poi-nuovo, la gara), `VerificaFunzionaleNasTest.na3_…`.
 
 #### NA-4 · "Ho controllato, continua" non sopravvive alla morte del processo
 - **Gravità:** Sbagliata (alta). **Stato:** confermato.
@@ -485,40 +611,76 @@ Le cose più gravi:
 - **Scenario:** il giro successivo, di solito in un processo nuovo, rivede le stesse 500 assenze e ricongela con lo stesso numero.
 - **Correzione:** salvare la franchigia nel cursore e chiedere `scanNow` dopo il rilascio.
 - **Test:** `ScanFreezeTest` con un `DefaultNasScanner` nuovo sullo stesso store.
+- **Stato: corretta** (19/10), **senza indebolire il congelamento** (F4-D10, E-B19). La franchigia (i conteggi che l'utente ha visto e
+  confermato) si salva in `FreezeAcceptances` (in produzione `FileFreezeAcceptances`, un file sotto `replica/` che l'azzeramento toglie)
+  **prima** di togliere il congelamento dal cursore, e si rilegge in `StoreFreezeState.load`. Vale per quel congelamento soltanto:
+  la usa e la toglie il primo giro completo dopo il gesto **qualunque sia l'esito** (prima restava anche dopo un nuovo congelamento) e
+  scade dopo 7 giorni di ora del NAS; il gesto resta quello di prima (il numero riscritto uguale a quello mostrato). Il gesto chiede
+  anche la verifica (`NasGraph.release` → `requestVerify`), così il giro che la usa parte subito. Test:
+  `ScanFreezeTest.na4_…` (4: processo nuovo, solo quel congelamento, ricongela e la conferma è consumata, scadenza),
+  `FileFreezeAcceptances` in `VerificaFunzionaleNasAppTest.na4_…`. Il banco `ScanHarness` ora tiene la franchigia fuori dallo scanner
+  (sopravvive a `restartScanner`).
 
 #### NA-5 · Il piede della Libreria resta su "Lavori fermi" dopo lo scongelamento
 - **Gravità:** Minore. **Stato:** confermato.
 - **Percorso:** `NasGraph.kt:444` (ripiego su `NasScanStatus.Frozen`) e `GalleryHostViewModel.kt:86-95` (nessun `scanNow`).
+- **Stato: corretta** (19/10). Il piede legge il congelamento da quello che lo scanner dice adesso (`freezeState.frozen`), non
+  dall'ultimo stato del giro (che resta `Frozen` fino al giro dopo), e il gesto chiede subito la verifica (vedi NA-4). Test:
+  `NasOrganizeIntegrationTest.na5_…` (grafo vero: congela, il piede dice «Lavori fermi», il gesto, il piede non lo dice più, la
+  verifica successiva non ricongela e segna le assenze).
 
 #### NA-6 · La prima scansione del NAS non si vede nel piede
 - **Gravità:** Minore. **Stato:** confermato.
 - **Percorso:** i lavori usano sempre `ScanMode.Verify` (`work/NasWork.kt:162, 328`), mentre solo `Full` diventa
   `ScanProgress.First` (`NasGraph.kt:441`).
+- **Stato: corretta** (19/10). `NasScanStatus.Scanning` ha `first`, vero finché la share non ha mai finito un giro completo (dal
+  cursore: `lastFullScanAt == null`), qualunque sia il modo con cui parte; il piede mostra l'avanzamento della prima lettura per `Full`
+  **o** `first`. Dal secondo giro no. Test: `ScanFirstAndVerifyTest.na6_…`.
 
 #### NA-7 · Il riepilogo giornaliero può tacere un congelamento in un processo freddo
 - **Gravità:** Sbagliata. **Stato:** plausibile.
 - **Percorso:** `NasDailySummary.kt:117-121` legge `nas.frozen.value` subito dopo `start()`, ma la mappa si riempie in modo
   asincrono (`NasGraph.kt:588, 613-620`).
 - **Test:** `NasGraph` con un congelamento salvato e `StandardTestDispatcher`: dopo `start()` atteso `frozen.size == 1`.
+- **Stato: corretta** (19/10), confermata dal test con un ambito sospeso (rosso prima). `NasGraph.start` pubblica i congelamenti
+  salvati **subito dopo `freezeState.load()` e prima di rendere visibile il motore**: il riepilogo giornaliero li legge dopo `start()`
+  e i cancelli delle scritture (indice, operazioni dell'utente) non restano aperti su una share congelata nel tempo che il guardiano
+  impiega a partire in un processo appena nato (era anche una piccola finestra di sicurezza, non solo un avviso mancato).
+  Test: `NasOrganizeIntegrationTest.na7_…`.
 
 #### NA-8 · Il battito della scansione batte anche quando non si è letto niente
 - **Gravità:** Minore. **Stato:** confermato.
 - **Percorso:** `NasWork.kt:166-170, 272-276`.
 - **Effetto:** con una share negata "fermo da N giorni" non compare mai.
+- **Stato: corretta** (19/10). Il battito della scansione si scrive solo se almeno un'area è stata elencata davvero
+  (`NasStages.readSomething`: almeno una cartella letta). Test: `VerificaFunzionaleNasAppTest.na8_…`. Toccato `work/NasWork.kt`
+  (solo `NasStages.scan` e una funzione nel `companion`).
 
 #### NA-9 · Toccare la capsula del NAS esegue l'azione della rete
 - **Gravità:** Minore. **Stato:** confermato.
 - **Percorso:** `main/MainScaffold.kt:142` (`onNasStatusClick = onStatusClick`).
 - **Effetto:** "Lavori fermi" apre WireGuard o la password, invece della Diagnostica.
+- **Stato: corretta** (19/10). `MainScaffold` ha `onNasStatusClick` (di serie quello della rete, per i chiamanti che non lo danno);
+  `AppNavHost` lo lega alla Diagnostica. Test: `NasStatusCapsuleTest.na9_…` (un tocco su «Lavori fermi» chiama il NAS e non la rete).
 
 #### NA-10 · Le esclusioni dell'area privata non si possono impostare
 - **Gravità:** Minore. **Stato:** confermato.
 - **Percorso:** `setPrivateAreaExclusions` non ha chiamanti in produzione (`NasGraph.kt:602-608`; E-N15).
+- **Stato: corretta** (19/10). In Cartelle NAS, nell'area privata, scelta una o più cartelle compare «Escludi dalla Libreria» (o
+  «Includi nella Libreria» se sono già escluse); la riga dice «Esclusa dalla Libreria». `NasAreas.setPrivateExclusions` →
+  `NasOrganizer.setPrivateAreaExclusions` (impostazione personale sincronizzata fra i dispositivi dell'account) e chiede subito la verifica:
+  la Libreria le toglie alla scansione che segue, **senza toccare niente sul NAS**. Non c'è nell'area comune (le sue esclusioni sono
+  firmate dalla famiglia: ON-8). Test: `VerificaFunzionaleNasTest.na10_…` (8), `NasOrganizeIntegrationTest.na10_…` (grafo vero).
+  Fake allineato: `FakeNasAreas` salva e conta le verifiche come il vero.
 
 #### NA-11 · Manca il gesto "L'ora del NAS è giusta, continua" (residuo noto, `decisioni.md:444-446`)
 - **Gravità:** Minore. **Stato:** confermato.
 - **Percorso:** `NasGraph.acceptClockJump` non ha chiamanti.
 - **Effetto:** dopo un salto dell'ora si aspettano sempre 24 ore.
+- **Stato: corretta** (19/10). «Operazioni in corso» mostra la scheda «L'ora del NAS è cambiata di colpo» con «L'ora del NAS è giusta,
+  continua»: il tocco apre un foglio («L'ora del NAS è giusta?») e solo «Sì, l'ora è giusta» fa il gesto (`NasGraph.acceptClockJump`,
+  che libera anche le operazioni rimaste ferme). Sta qui e non in Diagnostica perché Diagnostica è dell'altro agente; la voce di
+  Diagnostica (`INDEX_CLOCK_JUMP`) resta solo testo. Test: `VerificaFunzionaleNasTest.na11_…` (4), `NasOrganizeIntegrationTest.na11_…`.
 
 #### NA-12 · Il servizio delle operazioni in un processo freddo finisce senza fare niente, e le tappe si allontanano
 - **Gravità:** Sbagliata. **Stato:** plausibile.
@@ -526,6 +688,13 @@ Le cose più gravi:
   esponenziale di `BUDGET` (`NasOpsJobs.kt:81`).
 - **Effetto:** dopo la morte del processo una mossa lunga avanza a fette sempre più distanti, e "Ferma" sparisce dalla notifica.
 - **Test:** servizio su Robolectric con la galleria non ancora partita: non deve finire `Done`.
+- **Stato: corretta** (19/10). Il servizio chiama `NasGraph.resumeOperations`, che avvia il motore del NAS se il processo è appena nato,
+  aspetta un poco che la galleria lo agganci da sola e, se non c'è ma nel diario ci sono operazioni aperte, risponde «il NAS non risponde»
+  (si riprogramma) invece di null (= «fatto»); null solo senza NAS o ad azzeramento fatto (`resumeCold`). Il backoff: una tappa che finisce
+  il tempo è ora `NasOpsJobEnd.Continue` (lavoro nuovo subito) invece di `Reschedule` (ritardo esponenziale di JobScheduler);
+  `Reschedule` resta per NAS non raggiungibile e scritture ferme. Test: `VerificaFunzionaleNasAppTest.na12_…` (3),
+  `NasOpsJobsTest.na12_…`, `NasOrganizeIntegrationTest.na12_…`. Toccati `work/NasOpsJobService.kt` (`NasOpsJobEnd`, `NasOpsJobRun`, la
+  chiamata del servizio).
 
 ### 2.5 Backup 5A
 
@@ -660,6 +829,14 @@ Le cose più gravi:
 | `FakeBackupSettings`, `FakeBackupGate`, `FakePhoneFolders`, `FakeDeviceFolderProposals` | test di core-backup e dei VM | Sorgenti subito, cancello sempre aperto, nessuna recinzione D13, nessuna lettura del NAS (BK-14) |
 | `BackupRig` | `BackupIntegrationTest`, `SimilarCopiesIntegrationTest` | Grafo vero, ma `round()` chiamato direttamente: salta azioni, lavoro dell'utente, `BackupJobRun` e WorkManager; diario vuoto quando gira QUICK (BK-1, BK-6) |
 
+**Allineati il 19/10 (correzioni RE).** `FakeVpnController` cambia capacità solo rileggendo (`refresh`, `capabilityOnRefresh`), come
+`WireGuardVpnController` che non vede il permesso concesso finché nessuno rilegge (RE-1); il confronto è `WireGuardPermissionTest`. `FakeRegistryService`
+registra `updateNasAddress` e `updateHomeUla` (RE-5); il registro vero lo prova `VerificaFunzionaleRegistroTest.re5_…`. Per RE-3 e RE-6 i test nuovi
+non usano `FakeNasReachabilitySignal(true)` né `FakeReachabilityProbe(Open)`: girano sul grafo vero (`VerificaFunzionaleReteTest`) o con
+`ObservedReachabilityProbe` vera (`RootViewModelTest`). `FakeAndroidLimitsSignal` resta dov'è (inietta limiti voluti in `PresetMatrixTest`); il
+tracker vero è provato sul grafo (RE-7). Il comportamento di `FakeWireGuardPlatform(permission = true)` come default resta (molti test lo
+usano): i test del permesso lo mettono a `false` come sul telefono.
+
 **Allineati il 19/10 (correzioni ON).** `FakeOnboardingCoordinator` usa le regole vere dei passi (`OnboardingRules`,
 le stesse di `DefaultOnboardingCoordinator`: un input solo al suo passo, rinvio E-O1, riprendi, indietro, cambio di percorso,
 essenziale per finire); `FakeJoinFlow` fa i controlli di `start` del vero (forma dell'invito, percorso, casa, scadenza,
@@ -667,6 +844,16 @@ rinnovo); `FakeAdminRecovery` ricorda account e area e vuole il profilo; `FakeRe
 applica la finestra di `ApprovalWindow`. I confronti: `FakeCoordinatorParityTest`, `FakeJoinFlowParityTest`,
 `VerificaFunzionaleRegistroTest`. I flussi 1, 2, 3 e 10 qui sotto hanno ora un test sul grafo vero
 (`VerificaFunzionaleFamigliaTest`), tranne il recupero dell'admin con un'interruzione (coordinatore vero e ViewModel).
+
+**Allineati il 19/10 (correzioni GA e NA).** `FakeThumbnailLoader` perde le miniature da `UI_HIDDEN` in su (le celle tornano sul segnaposto) e le
+ritrova con `resume()` (`ImagingContractTest.ga3_…`, e `PipelineThumbnailLoaderTest.ga3_…` per il vero); `FakeCollectionsWorld.hiddenLibrary`
+dà una vista viva che segue le azioni (`HiddenLiveViewTest`, e `VerificaFunzionaleGalleriaTest.ga1_…` per il vero); `InMemoryNasOperations`
+registra l'operazione e poi si mette in fila (`VerificaFunzionaleNasOpsTest.na1_…` gira sui **due** esecutori); `FakeNasAreas` salva le
+esclusioni, conta le verifiche e ha il salto dell'ora (`VerificaFunzionaleNasTest`); `ScanHarness` tiene la franchigia di «Ho controllato,
+continua» fuori dallo scanner, come il file di produzione (`ScanFreezeTest.na4_…`); `FakeMediaStore` e il MediaStore vero danno le stesse
+righe senza data, una alla volta (`AndroidMediaStoreSourceTest.ga5_…`; l'ordine fra le righe senza data può differire). `RecordingJobs`
+ora verifica che dopo un'operazione breve lasciata aperta la ripresa si chieda (`NasOrganizeIntegrationTest.na2_…`), e `NasOpsJobRun` non è più
+provato solo con `{ null } → Done` (`NasOpsJobsTest.na12_…`, `VerificaFunzionaleNasAppTest.na12_…`).
 
 ---
 

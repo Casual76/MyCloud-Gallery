@@ -32,6 +32,7 @@ import dev.pampa.mycloudgallery.core.nas.contract.NasResult
 import dev.pampa.mycloudgallery.core.network.contract.LocalNetworkAccess
 import dev.pampa.mycloudgallery.core.network.contract.LocalNetworkPermission
 import dev.pampa.mycloudgallery.core.network.contract.NasAddress
+import dev.pampa.mycloudgallery.core.network.contract.ControlPermissionOutcome
 import dev.pampa.mycloudgallery.core.network.contract.VpnCommandResult
 import dev.pampa.mycloudgallery.core.network.contract.VpnControlConfig
 import dev.pampa.mycloudgallery.core.network.contract.VpnControlConfigStore
@@ -527,10 +528,29 @@ class OnboardingViewModel @Inject constructor(
 
   // --- 11. VPN --------------------------------------------------------------------------------------
 
-  /** Entrando nel passo 11: cosa si puo' fare con WireGuard su questo profilo (ogni profilo ha il suo, E-P20). */
+  /**
+   * Entrando nel passo 11 (e a ogni ritorno in primo piano): cosa si puo' fare con WireGuard su questo profilo (ogni profilo ha il suo,
+   * E-P20). Si **rilegge** prima: l'installazione e il permesso cambiano fuori dall'app (dialogo di sistema, scheda dell'app, WireGuard)
+   * e la capacita' non si aggiorna da sola (verifica funzionale, RE-1).
+   */
   fun enterVpnStep() {
     viewModelScope.launch {
-      state.update { it.copy(vpn = VpnUi(capability = guard { vpnController.capability.value })) }
+      guard { vpnController.refresh() }
+      state.update { it.copy(vpn = VpnUi(capability = guard { vpnController.capability.value }, permission = it.vpn.permission)) }
+    }
+  }
+
+  /**
+   * Il dialogo di sistema del permesso di WireGuard e' finito (RE-1). Si rilegge subito; un rifiuto resta nel passo con il modo di
+   * riprovare, perche' senza il permesso la VPN gestita dall'app non parte mai (si puo' sempre andare avanti e usare WireGuard a mano).
+   */
+  fun onControlPermissionResult(outcome: ControlPermissionOutcome) {
+    viewModelScope.launch {
+      guard { vpnController.refresh() }
+      val capability = guard { vpnController.capability.value }
+      state.update {
+        it.copy(vpn = it.vpn.copy(capability = capability, permission = outcome.takeIf { o -> o != ControlPermissionOutcome.GRANTED }))
+      }
     }
   }
 

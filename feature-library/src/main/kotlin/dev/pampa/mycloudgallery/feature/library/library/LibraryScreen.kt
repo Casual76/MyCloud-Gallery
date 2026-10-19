@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.library.library
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -118,6 +119,9 @@ internal fun LibraryScreen(
 
   val keeper = rememberSaveable(saver = positionSaver(grid)) { PositionKeeper(null) }
   SideEffect { keeper.restoreOnce(grid) }
+
+  // GA-2: in selezione "Indietro" esce dalla selezione, non dall'app (come nelle Raccolte e negli Eliminati di recente).
+  BackHandler(enabled = grid.selecting) { grid.stopSelecting() }
 
   val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 

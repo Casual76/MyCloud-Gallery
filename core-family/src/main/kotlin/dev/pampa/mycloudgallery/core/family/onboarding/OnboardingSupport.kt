@@ -106,7 +106,9 @@ internal suspend fun <T> NasSessionManager.onShare(share: String, block: (NasFil
 internal object FamilyConfigFactory {
 
   /** L'indirizzo come lo vuole il registro: un IPv6 letterale va tra parentesi quadre. */
-  fun hostOf(nas: NasFacts): String = if (':' in nas.ip) "[${nas.ip}]" else nas.ip
+  fun hostOf(nas: NasFacts): String = hostOf(nas.ip)
+
+  fun hostOf(ip: String): String = if (':' in ip) "[$ip]" else ip
 
   /** Il contrario di [hostOf]: dall'host firmato all'IP letterale. */
   fun ipOf(host: String): String = host.removePrefix("[").removeSuffix("]")

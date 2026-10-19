@@ -5,6 +5,7 @@ import dev.pampa.mycloudgallery.core.network.TestSnapshots
 import dev.pampa.mycloudgallery.core.network.contract.NetworkSnapshot
 import dev.pampa.mycloudgallery.core.network.contract.VpnCapability
 import dev.pampa.mycloudgallery.core.network.contract.VpnCommandResult
+import dev.pampa.mycloudgallery.core.network.contract.VpnController
 import dev.pampa.mycloudgallery.core.network.contract.VpnControlConfig
 import dev.pampa.mycloudgallery.core.network.contract.VpnSkipReason
 import dev.pampa.mycloudgallery.core.network.testing.FakeNetworkEnvironment
@@ -63,6 +64,24 @@ class WireGuardVpnControllerTest {
     // L'abilitazione e' dell'automazione: per il controllore conta solo il nome del tunnel.
     store.config.value = VpnControlConfig(enabled = false, tunnelName = "casa")
     controller.refresh()
+    assertThat(controller.capability.value).isEqualTo(VpnCapability.READY)
+  }
+
+  /**
+   * Verifica funzionale, RE-1: il permesso di WireGuard lo concede l'utente con il dialogo di sistema, che per l'app e' un'altra
+   * activity: nessun ritorno in primo piano, nessun cambio di configurazione. Se il chiamante non rilegge, la capacita' resta "manca il
+   * permesso" per sempre (le prove e la VPN gestita dall'app non si accendono).
+   */
+  @Test
+  fun ilPermessoConcessoDalDialogoSiVedeSoloRileggendo() {
+    platform.permission = false
+    val controller: VpnController = controller()
+    assertThat(controller.capability.value).isEqualTo(VpnCapability.PERMISSION_MISSING)
+
+    platform.permission = true
+    assertThat(controller.capability.value).isEqualTo(VpnCapability.PERMISSION_MISSING)
+    controller.refresh()
+
     assertThat(controller.capability.value).isEqualTo(VpnCapability.READY)
   }
 

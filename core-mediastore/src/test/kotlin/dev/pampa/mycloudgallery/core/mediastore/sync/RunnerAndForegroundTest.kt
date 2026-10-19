@@ -10,6 +10,7 @@ import dev.pampa.mycloudgallery.core.mediastore.contract.RunResult
 import dev.pampa.mycloudgallery.core.mediastore.contract.SyncReason
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -32,6 +33,60 @@ class RunnerAndForegroundTest : PhoneSyncTestBase() {
     override suspend fun run(budget: Duration, priority: MetaPriority): RunResult {
       calls.incrementAndGet()
       return result
+    }
+  }
+
+  /** Una fase META finta che risponde con gli esiti dati, uno per fetta, poi `Done`. */
+  private class SlicedPass(vararg results: RunResult) : MetadataPass {
+    private val queue = java.util.concurrent.ConcurrentLinkedQueue(results.toList())
+    val calls = AtomicInteger()
+
+    override suspend fun run(budget: Duration, priority: MetaPriority): RunResult {
+      calls.incrementAndGet()
+      return queue.poll() ?: RunResult.Done
+    }
+  }
+
+  // La pausa fra due fette di META in primo piano e' breve nel test (di norma 5 secondi).
+  override val config = PhoneSyncConfig(batchSize = 3, vanishCap = 2, vanishAlarmMin = 50, foregroundMetaPause = 20.milliseconds)
+
+  /**
+   * GA-6: in primo piano la fase META lavora per 30 secondi e poi si fermava fino al prossimo evento: nella prima lettura di
+   * migliaia di foto luogo, foto in movimento e raffiche restavano incompleti finche' non si riapriva l'app. Adesso, finche' il
+   * budget finisce prima del lavoro, parte la fetta dopo; si ferma a `Done`.
+   */
+  @Test
+  fun ga6_inPrimoPianoLaFaseMetaContinuaAFetteFinoAllaFine() = runBlocking<Unit> {
+    store.put(photo(1, taken = T0))
+    val meta = SlicedPass(RunResult.BudgetExhausted(remaining = null), RunResult.BudgetExhausted(remaining = 7), RunResult.Done)
+    val sync = newSync(metadataPass = meta)
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    try {
+      sync.attach(scope)
+      waitUntil { meta.calls.get() >= 3 }
+      // Finita: nessuna fetta in piu' senza un evento nuovo.
+      delay(300)
+      assertThat(meta.calls.get()).isEqualTo(3)
+    } finally {
+      sync.detach()
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun ga6_unaPausaOUnFallimentoFermanoLeFetteSenzaGirareAVuoto() = runBlocking<Unit> {
+    store.put(photo(1, taken = T0))
+    val meta = SlicedPass(RunResult.Paused(PauseReason.MEDIA_LOCATION_DENIED))
+    val sync = newSync(metadataPass = meta)
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    try {
+      sync.attach(scope)
+      waitUntil { meta.calls.get() >= 1 }
+      delay(300)
+      assertThat(meta.calls.get()).isEqualTo(1)
+    } finally {
+      sync.detach()
+      scope.cancel()
     }
   }
 

@@ -38,6 +38,7 @@ import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTab
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagAction
 import dev.pampa.mycloudgallery.core.family.contract.BlockReason
 import dev.pampa.mycloudgallery.core.family.contract.TrustStatus
+import dev.pampa.mycloudgallery.core.network.diagnostics.NetworkDiagActions
 import dev.pampa.mycloudgallery.debugtools.DeveloperTools
 import dev.pampa.mycloudgallery.feature.diagnostics.DiagnosticsGraphRoute
 import dev.pampa.mycloudgallery.feature.diagnostics.actions.DiagnosticsActions
@@ -59,6 +60,7 @@ import dev.pampa.mycloudgallery.feature.onboarding.onboardingGraph
 import dev.pampa.mycloudgallery.feature.onboarding.onboardingRenewal
 import dev.pampa.mycloudgallery.feature.settings.SettingsDevicesRoute
 import dev.pampa.mycloudgallery.feature.settings.SettingsGraphRoute
+import dev.pampa.mycloudgallery.feature.settings.SettingsNetworkRoute
 import dev.pampa.mycloudgallery.feature.settings.SettingsPasswordRoute
 import dev.pampa.mycloudgallery.feature.settings.settingsGraph
 import dev.pampa.mycloudgallery.feature.viewer.ViewerServices
@@ -241,10 +243,13 @@ private fun AwaitingDestination(code: String, actions: RootNavActions, onRenew: 
 }
 
 /** Le azioni della Diagnostica che portano fuori dalla Diagnostica: le sa fare solo :app (i feature non si conoscono). */
-private val DIAGNOSTICS_APP_ACTIONS = setOf(
+internal val DIAGNOSTICS_APP_ACTIONS = setOf(
   DiagAction.REENTER_NAS_PASSWORD,
   DiagAction.OPEN_DEVICES,
   DiagAction.RESUME_ONBOARDING,
+  // Verifica funzionale, RE-10 e RE-1/RE-2: «Ripeti il riconoscimento», «Consenti il controllo», «Riattiva il controllo» stanno in Rete e VPN.
+  NetworkDiagActions.RECAPTURE_HOME,
+  NetworkDiagActions.OPEN_VPN_CONTROL,
   // Fase 4A (§1.4): l'emergenza e lo scongelamento del NAS nella Libreria.
   DiagnosticsActions.NAS_STOP_WRITES,
   DiagnosticsActions.NAS_RESUME_WRITES,
@@ -252,12 +257,19 @@ private val DIAGNOSTICS_APP_ACTIONS = setOf(
 )
 
 private fun onDiagnosticsAction(nav: NavHostController, action: DiagAction) {
-  when (action) {
-    DiagAction.REENTER_NAS_PASSWORD -> nav.navigate(SettingsPasswordRoute)
-    DiagAction.OPEN_DEVICES -> nav.navigate(SettingsDevicesRoute)
-    DiagAction.RESUME_ONBOARDING -> nav.navigate(SettingsGraphRoute)
-    else -> Unit
-  }
+  diagnosticsRouteOf(action)?.let { nav.navigate(it) }
+}
+
+/**
+ * Dove porta un'azione della Diagnostica che esce dalla Diagnostica (null = non e' una di queste). Pura, provata senza schermo: ogni
+ * azione di [DIAGNOSTICS_APP_ACTIONS] che non ha un gestore proprio deve avere una rotta qui, altrimenti sarebbe un tasto che non fa niente.
+ */
+internal fun diagnosticsRouteOf(action: DiagAction): Any? = when (action) {
+  DiagAction.REENTER_NAS_PASSWORD -> SettingsPasswordRoute
+  DiagAction.OPEN_DEVICES -> SettingsDevicesRoute
+  DiagAction.RESUME_ONBOARDING -> SettingsGraphRoute
+  NetworkDiagActions.RECAPTURE_HOME, NetworkDiagActions.OPEN_VPN_CONTROL -> SettingsNetworkRoute
+  else -> null
 }
 
 /**
@@ -297,6 +309,8 @@ private fun MainDestination(nav: NavHostController, status: GlobalStatus, openWi
       }
     },
     onOpenSettings = { nav.navigate(SettingsGraphRoute) },
+    // NA-9: "Lavori fermi" e le altre voci del NAS aprono la Diagnostica; l'azione della rete (WireGuard, la password) resta alla capsula della rete.
+    onNasStatusClick = { nav.navigate(DiagnosticsGraphRoute) },
     // Fase 5A (D16): la capsula del backup nel piede della Libreria porta alla pagina Backup.
     onBackupStatusClick = { nav.openBackupPage() },
     libraryState = state,

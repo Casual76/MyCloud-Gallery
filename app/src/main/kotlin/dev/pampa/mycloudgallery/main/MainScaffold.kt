@@ -96,6 +96,8 @@ fun MainScaffold(
   onStatusClick: () -> Unit,
   onOpenSettings: () -> Unit,
   onBackupStatusClick: () -> Unit = {},
+  // NA-9: la capsula del NAS apre i suoi dettagli (la Diagnostica), non l'azione della rete (WireGuard, la password).
+  onNasStatusClick: () -> Unit = onStatusClick,
   libraryState: LibraryTabState = rememberEmptyLibraryTabState(),
   libraryViewer: ViewerServices? = null,
   collections: (@Composable (CollectionsSlot) -> Unit)? = null,
@@ -139,7 +141,7 @@ fun MainScaffold(
         state = libraryState,
         tabBarScroll = tabBarScroll,
         // I dettagli del NAS (e "Ho controllato, continua" dei lavori fermi) stanno in Diagnostica, come quelli della rete.
-        onNasStatusClick = onStatusClick,
+        onNasStatusClick = onNasStatusClick,
         // Fase 5A (D16): la terza voce del piede apre la pagina Backup.
         onBackupStatusClick = onBackupStatusClick,
       )

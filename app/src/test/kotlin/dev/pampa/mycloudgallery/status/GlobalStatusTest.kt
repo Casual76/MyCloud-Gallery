@@ -72,6 +72,21 @@ class GlobalStatusTest {
     assertThat(GlobalStatus.from(Snapshots.vpnOff(), NasConnState.Idle, breakerOpen = true)).isEqualTo(GlobalStatus.NEEDS_PASSWORD)
   }
 
+  /**
+   * Verifica funzionale, RE-9: con la chiave del Keystore invalidata il NAS risponde ma non c'e' una password da provare. L'indicatore
+   * dice «serve la password» (e il tocco porta alla password), non «NAS non raggiungibile».
+   */
+  @Test
+  fun laChiaveDelKeystoreInvalidataChiedeLaPasswordNonDiceNasIrraggiungibile() {
+    val missing = NasConnState.Unavailable(NasError.CredentialsMissing)
+    assertThat(GlobalStatus.from(Snapshots.home(), missing)).isEqualTo(GlobalStatus.NEEDS_PASSWORD)
+    assertThat(GlobalStatus.from(Snapshots.awayVpnWifi(), missing)).isEqualTo(GlobalStatus.NEEDS_PASSWORD)
+    // Anche con una sonda fallita di prima, e anche senza una rete valida: la password e' il gesto che serve.
+    assertThat(GlobalStatus.from(Snapshots.home(), missing, probe = ProbeResult.TimedOut)).isEqualTo(GlobalStatus.NEEDS_PASSWORD)
+    // Un altro guasto resta "non raggiungibile".
+    assertThat(GlobalStatus.from(Snapshots.home(), NasConnState.Unavailable(NasError.Timeout))).isEqualTo(GlobalStatus.NAS_UNREACHABLE)
+  }
+
   @Test
   fun laPasswordVinceSuTutto() {
     val blocked = NasConnState.AuthBlocked(AuthBlockReason.AUTH_FAILED)

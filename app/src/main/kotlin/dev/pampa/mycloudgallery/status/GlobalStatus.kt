@@ -61,6 +61,9 @@ enum class GlobalStatus(@StringRes val label: Int, val tone: FluidTone, val acti
     ): GlobalStatus {
       // L'interruttore e' persistente: dopo un riavvio la sessione e' "a riposo" ma la password va comunque reinserita.
       if (nas is NasConnState.AuthBlocked || breakerOpen) return NEEDS_PASSWORD
+      // La chiave del Keystore invalidata (E-S9, RE-9): nessuna password da provare. Non e' "NAS non raggiungibile": il NAS risponde, e
+      // serve una password nuova.
+      if (nas is NasConnState.Unavailable && nas.error == NasError.CredentialsMissing) return NEEDS_PASSWORD
       when (network.place) {
         NetPlace.OFFLINE -> return OFFLINE
         NetPlace.UNTRUSTED -> return if (network.vpn.isForeign()) FOREIGN_VPN else UNTRUSTED

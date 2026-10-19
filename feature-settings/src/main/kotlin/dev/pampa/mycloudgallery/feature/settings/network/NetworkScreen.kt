@@ -13,8 +13,20 @@ import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.VpnKey
 import androidx.compose.material.icons.rounded.VpnLock
 import androidx.compose.material.icons.rounded.Wifi
+import android.app.Activity
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.app.ActivityCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -47,6 +59,7 @@ import dev.pampa.mycloudgallery.core.network.contract.VpnCommandResult
 import dev.pampa.mycloudgallery.core.network.contract.VpnObservation
 import dev.pampa.mycloudgallery.core.network.contract.VpnSkipReason
 import dev.pampa.mycloudgallery.core.network.contract.VpnSuspendReason
+import dev.pampa.mycloudgallery.core.network.contract.WireGuardPermission
 import dev.pampa.mycloudgallery.feature.settings.R
 import dev.pampa.mycloudgallery.feature.settings.ui.ConfirmSheet
 import dev.pampa.mycloudgallery.feature.settings.ui.Note
@@ -66,6 +79,14 @@ internal class NetworkActions(
   val onTunnel: (Boolean) -> Unit,
   val onOpenWireGuard: () -> Unit,
   val onConfigureVpn: () -> Unit,
+  /** "Consenti il controllo": il dialogo di sistema del permesso di WireGuard (RE-1). */
+  val onGrantControl: () -> Unit = {},
+  /** Dopo un rifiuto definitivo: la scheda dell'app in Android (RE-1). */
+  val onOpenAppSettings: () -> Unit = {},
+  /** "Riattiva il controllo" dopo una sospensione dell'automazione (RE-2). */
+  val onReactivate: () -> Unit = {},
+  /** "Riprova" quando l'admin ha salvato l'impronta qui ma non nella configurazione firmata (RE-5). */
+  val onRetryShare: () -> Unit = {},
 ) {
   companion object {
     val None = NetworkActions({}, {}, {}, {}, {}, {}, {})
@@ -77,6 +98,13 @@ internal fun NetworkRoute(onBack: () -> Unit, configureVpn: () -> Unit) {
   val viewModel: NetworkViewModel = hiltViewModel()
   val state by viewModel.state.collectAsStateWithLifecycle()
   val context = LocalContext.current
+  // Il permesso di WireGuard (RE-1): il dialogo di sistema parte da un tocco; a rifiuto avvenuto Android dice se lo mostrera' ancora.
+  val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+    val canAskAgain = context.findActivity()?.let { ActivityCompat.shouldShowRequestPermissionRationale(it, WireGuardPermission.NAME) } ?: false
+    viewModel.onControlPermissionResult(WireGuardPermission.outcomeOf(granted, canAskAgain))
+  }
+  // Tornando da WireGuard o dalla scheda dell'app il permesso puo' essere cambiato: si rilegge.
+  LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refreshVpn() }
   NetworkScreen(
     state = state,
     actions = NetworkActions(
@@ -95,8 +123,27 @@ internal fun NetworkRoute(onBack: () -> Unit, configureVpn: () -> Unit) {
         }
       },
       onConfigureVpn = configureVpn,
+      onGrantControl = { permissionLauncher.launch(WireGuardPermission.NAME) },
+      onOpenAppSettings = { context.openAppDetails() },
+      onReactivate = viewModel::reactivateAutomation,
+      onRetryShare = viewModel::retryShareCapture,
     ),
   )
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+  is Activity -> this
+  is ContextWrapper -> baseContext.findActivity()
+  else -> null
+}
+
+/** La scheda dell'app in Android, dove si concedono i permessi che il dialogo non mostra piu'. */
+private fun Context.openAppDetails() {
+  try {
+    startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
+  } catch (_: ActivityNotFoundException) {
+    // Se la scheda dell'app non si apre non c'e' altro da fare.
+  }
 }
 
 /**
@@ -193,7 +240,7 @@ internal fun NetworkScreen(state: NetworkUiState, actions: NetworkActions) {
         FluidListDivider()
         FluidListRow(
           title = stringResource(R.string.network_recapture),
-          subtitle = stringResource(R.string.network_recapture_detail),
+          subtitle = stringResource(if (state.admin) R.string.network_recapture_detail_admin else R.string.network_recapture_detail),
           tone = FluidTone.Info,
           leading = { RowGlyph(Icons.Rounded.Sync) },
           onClick = actions.onCapture,
@@ -246,6 +293,28 @@ internal fun NetworkScreen(state: NetworkUiState, actions: NetworkActions) {
       }
     }
 
+    if (state.vpnCapability == VpnCapability.PERMISSION_MISSING) {
+      item { ControlPermissionBlock(state.permission, actions) }
+    }
+    if (state.automation is VpnAutomationStatus.Suspended) {
+      item {
+        Note(
+          title = stringResource(R.string.network_reactivate_title),
+          message = stringResource(R.string.network_reactivate_message),
+          tone = FluidTone.Warning,
+        )
+      }
+      item {
+        FluidButton(
+          text = stringResource(R.string.network_reactivate),
+          onClick = actions.onReactivate,
+          style = FluidButtonStyle.Filled,
+          size = FluidButtonSize.Large,
+          fillWidth = true,
+        )
+      }
+    }
+
     item { CommandStatus(state.command) }
 
     if (state.vpnCapability == VpnCapability.READY) {
@@ -275,7 +344,11 @@ internal fun NetworkScreen(state: NetworkUiState, actions: NetworkActions) {
         FluidButton(
           text = stringResource(R.string.network_open_wg),
           onClick = actions.onOpenWireGuard,
-          style = if (state.vpnCapability == VpnCapability.READY) FluidButtonStyle.Plain else FluidButtonStyle.Filled,
+          style = if (state.vpnCapability == VpnCapability.READY || state.vpnCapability == VpnCapability.PERMISSION_MISSING) {
+            FluidButtonStyle.Plain
+          } else {
+            FluidButtonStyle.Filled
+          },
           size = FluidButtonSize.Large,
           fillWidth = true,
         )
@@ -398,6 +471,33 @@ private fun VpnCommandResult.shortRes(): Int = when (this) {
   is VpnCommandResult.Skipped -> R.string.cmd_short_skipped
 }
 
+/**
+ * Manca il permesso di comandare WireGuard (RE-1): la frase che dice cosa si sta per chiedere, il tasto che apre il dialogo di Android,
+ * e dopo un rifiuto il modo di riprovare (il dialogo, o la scheda dell'app quando Android non lo mostra piu').
+ */
+@Composable
+private fun ControlPermissionBlock(permission: PermissionUi, actions: NetworkActions) {
+  val (title, message, tone) = when (permission) {
+    PermissionUi.IDLE -> Triple(R.string.wg_grant_title, R.string.wg_grant_message, FluidTone.Info)
+    PermissionUi.DENIED -> Triple(R.string.wg_grant_denied_title, R.string.wg_grant_denied, FluidTone.Warning)
+    PermissionUi.DENIED_FOR_GOOD -> Triple(R.string.wg_grant_blocked_title, R.string.wg_grant_blocked, FluidTone.Warning)
+  }
+  Note(title = stringResource(title), message = stringResource(message), tone = tone)
+  FluidButton(
+    text = stringResource(
+      when (permission) {
+        PermissionUi.IDLE -> R.string.wg_grant
+        PermissionUi.DENIED -> R.string.wg_grant_retry
+        PermissionUi.DENIED_FOR_GOOD -> R.string.wg_open_app_settings
+      },
+    ),
+    onClick = if (permission == PermissionUi.DENIED_FOR_GOOD) actions.onOpenAppSettings else actions.onGrantControl,
+    style = FluidButtonStyle.Filled,
+    size = FluidButtonSize.Large,
+    fillWidth = true,
+  )
+}
+
 /** L'esito dell'ultima prova a mano, nelle parole del §2.4. */
 @Composable
 private fun CommandStatus(command: VpnCommandUi) {
@@ -412,6 +512,9 @@ private fun CommandStatus(command: VpnCommandUi) {
         is VpnCommandResult.Skipped -> Triple(R.string.cmd_skipped_title, result.reason.messageRes(), FluidTone.Info)
       }
       Note(title = stringResource(title), message = stringResource(message), tone = tone)
+      if (command.reactivated) {
+        Note(title = stringResource(R.string.cmd_reactivated_title), message = stringResource(R.string.cmd_reactivated), tone = FluidTone.Success)
+      }
     }
   }
 }
@@ -454,6 +557,27 @@ private fun CaptureStatus(capture: CaptureUi, actions: NetworkActions) {
       ),
       tone = FluidTone.Danger,
     )
-    CaptureUi.Saved -> Note(stringResource(R.string.capture_saved_title), stringResource(R.string.capture_saved), tone = FluidTone.Success)
+    is CaptureUi.Saved -> {
+      Note(
+        title = stringResource(R.string.capture_saved_title),
+        message = stringResource(
+          when (capture.scope) {
+            SaveScope.FAMILY -> R.string.capture_saved_family
+            SaveScope.THIS_PHONE -> R.string.capture_saved_phone
+            SaveScope.FAMILY_FAILED -> R.string.capture_saved_failed
+          },
+        ),
+        tone = if (capture.scope == SaveScope.FAMILY_FAILED) FluidTone.Warning else FluidTone.Success,
+      )
+      if (capture.scope == SaveScope.FAMILY_FAILED) {
+        FluidButton(
+          text = stringResource(R.string.capture_retry),
+          onClick = actions.onRetryShare,
+          style = FluidButtonStyle.Tinted,
+          size = FluidButtonSize.Large,
+          fillWidth = true,
+        )
+      }
+    }
   }
 }

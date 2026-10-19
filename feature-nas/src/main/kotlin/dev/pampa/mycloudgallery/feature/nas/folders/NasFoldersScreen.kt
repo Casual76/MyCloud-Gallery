@@ -30,6 +30,9 @@ import androidx.compose.material.icons.rounded.InsertDriveFile
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.material.icons.rounded.SelectAll
 import androidx.compose.material3.Icon
@@ -130,6 +133,7 @@ fun NasFoldersRoute(
       onRename = viewModel::openRename,
       onMove = viewModel::startMove,
       onTrash = viewModel::requestTrash,
+      onToggleExcluded = viewModel::toggleExcluded,
       onMoveHere = viewModel::moveHere,
       onCancelMove = viewModel::cancelMove,
       onRetry = viewModel::refresh,
@@ -171,6 +175,8 @@ internal class FoldersActions(
   val onRename: () -> Unit = {},
   val onMove: () -> Unit = {},
   val onTrash: () -> Unit = {},
+  /** NA-10: "Escludi dalla Libreria" / "Includi nella Libreria" per le cartelle scelte dell'area privata. */
+  val onToggleExcluded: () -> Unit = {},
   val onMoveHere: () -> Unit = {},
   val onCancelMove: () -> Unit = {},
   val onRetry: () -> Unit = {},
@@ -301,6 +307,14 @@ private fun foldersCommands(state: FoldersUiState, actions: FoldersActions): (@C
   state.where == null -> null
   else -> {
     {
+      // NA-3: l'elenco si rilegge da solo quando si apre la cartella e quando finisce un'operazione, ma se i file li ha messi il PC
+      // mentre si guardava serve un gesto per vederli: prima non ce n'era nessuno.
+      GalleryChromeIconButton(
+        icon = Icons.Rounded.Refresh,
+        contentDescription = stringResource(R.string.nas_folders_refresh),
+        onClick = actions.onRetry,
+        enabled = state.listing != NasFolderState.Loading,
+      )
       GalleryChromeIconButton(
         icon = Icons.Rounded.CreateNewFolder,
         contentDescription = stringResource(R.string.nas_folders_new_folder),
@@ -322,11 +336,24 @@ private fun foldersCommands(state: FoldersUiState, actions: FoldersActions): (@C
 @Composable
 private fun selectionActions(state: FoldersUiState, actions: FoldersActions): List<GalleryBarAction> {
   val any = state.selection.isNotEmpty()
-  return listOf(
-    GalleryBarAction(Icons.Rounded.DriveFileRenameOutline, stringResource(R.string.nas_folders_action_rename), actions.onRename, enabled = state.selection.size == 1),
-    GalleryBarAction(Icons.AutoMirrored.Rounded.DriveFileMove, stringResource(R.string.nas_folders_action_move), actions.onMove, enabled = any),
-    GalleryBarAction(Icons.Rounded.Delete, stringResource(R.string.nas_folders_action_trash), actions.onTrash, destructive = true, enabled = any),
-  )
+  return buildList {
+    add(GalleryBarAction(Icons.Rounded.DriveFileRenameOutline, stringResource(R.string.nas_folders_action_rename), actions.onRename, enabled = state.selection.size == 1))
+    add(GalleryBarAction(Icons.AutoMirrored.Rounded.DriveFileMove, stringResource(R.string.nas_folders_action_move), actions.onMove, enabled = any))
+    // NA-10: nell'area privata una cartella si puo' escludere dalla Libreria (le sue foto restano sul NAS); solo se la scelta e' fatta di
+    // sole cartelle.
+    if (state.inPrivateArea) {
+      val onlyFolders = state.selectedFolders.size == state.selection.size && any
+      add(
+        GalleryBarAction(
+          icon = if (state.selectionExcluded) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff,
+          contentDescription = stringResource(if (state.selectionExcluded) R.string.nas_folders_action_include else R.string.nas_folders_action_exclude),
+          onClick = actions.onToggleExcluded,
+          enabled = onlyFolders,
+        ),
+      )
+    }
+    add(GalleryBarAction(Icons.Rounded.Delete, stringResource(R.string.nas_folders_action_trash), actions.onTrash, destructive = true, enabled = any))
+  }
 }
 
 // --- Il pannello della cartella --------------------------------------------------------------------------------------------
@@ -402,6 +429,7 @@ private fun EntryList(state: FoldersUiState, actions: FoldersActions, insets: Na
         val blocked = state.picking && moving.any { it.share.equals(state.where?.share, ignoreCase = true) && it.path == entry.path }
         EntryRow(
           entry = entry,
+          excluded = entry.isFolder && state.inPrivateArea && entry.path in state.exclusions,
           selecting = state.selecting,
           selected = entry.path in state.selection,
           dimmed = blocked || (state.picking && !entry.isFolder),
@@ -483,6 +511,7 @@ private fun OperationsStrip(count: Int, onOpen: () -> Unit) {
 @Composable
 private fun EntryRow(
   entry: NasFolderEntry,
+  excluded: Boolean,
   selecting: Boolean,
   selected: Boolean,
   dimmed: Boolean,
@@ -506,6 +535,8 @@ private fun EntryRow(
   val countLine = entry.fileCount?.let { countText(R.plurals.nas_files_count, it) }
   val subtitle = when {
     blocked -> stringResource(R.string.nas_folders_moving)
+    // NA-10: una cartella esclusa lo dice, anche in cima: e' il motivo per cui le sue foto non sono in Libreria.
+    excluded -> stringResource(R.string.nas_folders_row_excluded)
     entry.isFolder -> countLine ?: stringResource(R.string.nas_folders_row_folder)
     else -> stringResource(R.string.nas_folders_row_file, NasText.size(entry.size), NasText.date(entry.modifiedAtNas))
   }

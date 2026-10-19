@@ -253,8 +253,15 @@
   <string name="vpn_cap_checking">Controllo WireGuard…</string>
   <string name="vpn_cap_missing_title">WireGuard non è installato</string>
   <string name="vpn_cap_missing_detail">Installa l’app WireGuard e importa il collegamento di casa; poi torna qui.</string>
-  <string name="vpn_cap_permission_title">Manca il permesso di controllo</string>
-  <string name="vpn_cap_permission_detail">In WireGuard apri le Impostazioni e attiva «Consenti il controllo da altre app»; poi torna qui.</string>
+  <string name="vpn_cap_permission_title">Serve il tuo permesso</string>
+  <string name="vpn_cap_permission_detail">Android ti chiede se questa app può comandare WireGuard. Poi, in WireGuard, apri le Impostazioni e attiva «Consenti il controllo da altre app»; e torna qui.</string>
+  <string name="vpn_grant_control">Consenti il controllo</string>
+  <string name="vpn_grant_control_retry">Riprova a consentire</string>
+  <string name="vpn_open_app_settings">Apri le impostazioni dell’app</string>
+  <string name="vpn_cap_denied_title">Permesso non concesso</string>
+  <string name="vpn_cap_denied_detail">Senza il permesso l’app non può accendere né spegnere la VPN: potrai farlo tu da WireGuard. Puoi riprovare, o andare avanti e deciderlo più tardi.</string>
+  <string name="vpn_cap_blocked_title">Android non lo chiede più</string>
+  <string name="vpn_cap_blocked_detail">Hai rifiutato più volte e Android non mostra più la richiesta. Per concederlo apri le impostazioni dell’app, sezione «Permessi»; oppure vai avanti e usa WireGuard a mano.</string>
   <string name="vpn_tunnel_label">Nome del tunnel in WireGuard</string>
   <string name="vpn_tunnel_placeholder">Casa</string>
   <string name="vpn_tunnel_hint">Esattamente come lo vedi nell’elenco dei tunnel di WireGuard.</string>

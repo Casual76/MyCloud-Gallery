@@ -10,6 +10,8 @@ import dev.pampa.mycloudgallery.backup.DataStoreBackupSettingsStorage
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSource
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSources
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagHasher
+import dev.pampa.mycloudgallery.core.common.diagnostics.DiagnosticsLog
+import dev.pampa.mycloudgallery.core.common.diagnostics.NoDiagnosticsLog
 import dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.family.contract.DeviceKeyQr
@@ -49,6 +51,7 @@ import dev.pampa.mycloudgallery.core.family.trust.TrustEngine
 import dev.pampa.mycloudgallery.core.nas.breaker.AuthBreakerRegistry
 import dev.pampa.mycloudgallery.core.nas.breaker.DataStoreBreakerStore
 import dev.pampa.mycloudgallery.core.nas.contract.NasAccount
+import dev.pampa.mycloudgallery.core.nas.contract.NasConnState
 import dev.pampa.mycloudgallery.core.nas.contract.NasCredentialSource
 import dev.pampa.mycloudgallery.core.nas.fs.SmbNasHousekeeping
 import dev.pampa.mycloudgallery.core.nas.fs.SmbShareProbe
@@ -72,14 +75,18 @@ import dev.pampa.mycloudgallery.core.rules.ActivityRulesEngine
 import dev.pampa.mycloudgallery.core.rules.AppContext
 import dev.pampa.mycloudgallery.core.rules.AppContextSignal
 import dev.pampa.mycloudgallery.core.rules.ComposedSystemStateProvider
+import dev.pampa.mycloudgallery.core.rules.run.EngineStageRules
+import dev.pampa.mycloudgallery.core.rules.run.StageRules
 import dev.pampa.mycloudgallery.core.rules.settings.DataStoreRuleSettingsStore
 import dev.pampa.mycloudgallery.core.rules.traffic.DataStoreTrafficLedger
 import dev.pampa.mycloudgallery.core.security.credentials.NasCredentials
 import dev.pampa.mycloudgallery.core.security.credentials.SaveResult
+import dev.pampa.mycloudgallery.feature.diagnostics.recording.DiagnosticsRecorder
 import dev.pampa.mycloudgallery.nas.MutableNasFreezeSignal
 import dev.pampa.mycloudgallery.nas.NasInputs
 import dev.pampa.mycloudgallery.nas.NasShareArea
 import dev.pampa.mycloudgallery.nas.VaultNasCredentialSource
+import dev.pampa.mycloudgallery.work.AndroidLimitsTracker
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -87,9 +94,12 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 
 /**
  * Il grafo dell'app con le implementazioni **vere** di P1-P8 (docs/fase2-progetto.md §4.3, riga P9): rete e casa
@@ -121,7 +131,12 @@ class AppGraph(
    * in release e nelle varianti di misura e' null e la classe non entra nell'APK (tools/check.ps1 lo verifica sul dex).
    */
   shareGuard: ShareGuard? = null,
+  /** L'anello "Ultimi esiti ed errori" della Diagnostica (RE-4): in produzione quello di Hilt, nei test di solito nessuno. */
+  diagnostics: DiagnosticsLog = NoDiagnosticsLog,
 ) {
+
+  /** Chi scrive nell'anello della Diagnostica: lavori, sessione NAS, backup, VPN (solo codici e numeri). */
+  val events = DiagnosticsRecorder(diagnostics, platform.deviceNow)
 
   private val noBackup: File = context.noBackupFilesDir
 
@@ -163,10 +178,8 @@ class AppGraph(
   val environment = LiveNetworkEnvironment(platform.networkObservation, homeStore, platform.localNetworkPermission, scope)
   val routeGate = DefaultNasRouteGate(environment, platform.bindings, scope)
   val homeCapture = ObservedHomeCapture(environment)
-  val reachability = ObservedReachabilityProbe(platform.reachabilityProbe, routeGate, scope)
   val wireGuard = WireGuardVpnController(platform.wireGuard, vpnConfigStore, environment, scope)
   val discovery = platform.discovery(environment)
-  val wakeOnLan = DefaultWakeOnLan(flags, routeGate, reachability, platform.magicPacketSender(environment))
 
   /** App in primo piano e profilo attivo (`AppContextSignal`): lo aggiorna [ProcessWatcher]. */
   val appContext = MutableAppContext()
@@ -189,9 +202,16 @@ class AppGraph(
     shareGuard = shareGuard,
   )
   val nasClock: SessionNasClock = session.nasClock
+
+  /** La sonda TCP con l'ultimo esito; lo dimentica quando la sessione NAS risponde (RE-6). */
+  val reachability = ObservedReachabilityProbe(platform.reachabilityProbe, routeGate, scope, session.state)
+  val wakeOnLan = DefaultWakeOnLan(flags, routeGate, reachability, platform.magicPacketSender(environment))
   val connectionTester = SmbConnectionTester(routeGate, breakers, platform.smbTransport, platform.monotonicClock)
   val shareProbe = SmbShareProbe(session)
   val statusMonitor = NasStatusMonitor(session, routeGate, reachability, { account.value }, scope)
+
+  /** L'attesa della rete in un processo freddo, prima della prima valutazione delle regole di un lavoro (RE-3). */
+  val networkSettler = NetworkSettler(environment, routeGate, statusMonitor)
   val breaker = AccountAuthBreaker(account, accountStore, breakers, scope)
   val sessionActivity = SessionBusyActivity(session, scope)
   val foreignShares: OneShotForeignShares = OneShotForeignShares(
@@ -279,6 +299,9 @@ class AppGraph(
   // --- Regole delle attivita' (core-rules) e diagnostica ------------------------------------------------------------
   val roles = OnboardingRolesSignal(onboardingStore, scope)
 
+  /** I limiti di Android che i lavori incontrano davvero (RE-7), dai motivi di stop di WorkManager. */
+  val androidLimits = AndroidLimitsTracker(scope)
+
   /** "Una share del NAS e' congelata" (D10, P9): lo aggiorna il grafo del NAS, lo legge il motore delle regole. */
   val nasFreeze: MutableNasFreezeSignal = MutableNasFreezeSignal()
   val stateProvider = ComposedSystemStateProvider(
@@ -286,12 +309,21 @@ class AppGraph(
     home = environment,
     nas = statusMonitor,
     roles = roles,
-    limits = NoAndroidLimits,
+    limits = androidLimits,
     app = appContext,
     quality = CombinedNetworkQuality(listOf(environment.quality, statusMonitor), scope),
     freeze = nasFreeze,
   )
   val rulesEngine = ActivityRulesEngine(ruleSettings, trafficLedger, stateProvider)
+
+  /**
+   * Le regole di una tappa di un lavoro (`StagedRun`): il motore vero, preceduto dall'attesa della rete (RE-3). **Un punto solo** per i
+   * lavori del NAS e del backup, cosi' nessuno valuta le regole alla cieca in un processo appena avviato.
+   */
+  fun stageRules(): StageRules = settled(EngineStageRules(rulesEngine, stateProvider))
+
+  /** Le [rules] date, con l'attesa della rete prima della prima valutazione. */
+  fun settled(rules: StageRules): StageRules = SettledStageRules(rules) { networkSettler.settle() }
 
   /**
    * Cio' che il grafo del NAS nella Libreria (Fase 4A, `nas/NasGraph`) riceve da qui: sessione, ora del NAS, fiducia,
@@ -337,6 +369,30 @@ class AppGraph(
   val connectionTestInput = AccountConnectionTestInput(accountStore, profiles)
   val nasAccountSettings = AppNasAccountSettings(account, accountStore, credentials)
 
+  init {
+    watchEvents()
+  }
+
+  /**
+   * Gli eventi che l'anello della Diagnostica riceve da questo grafo (RE-4): la sessione NAS (guasti e ritorno), il controllo della VPN
+   * (sospensione). Gli esiti dei lavori li scrivono i lavori stessi. Parte a grafo costruito: i lavori leggono proprieta' gia' pronte.
+   */
+  private fun watchEvents() {
+    scope.launch {
+      session.state.collect { state ->
+        when (state) {
+          is NasConnState.Unavailable -> events.nasFailure(state.error)
+          is NasConnState.AuthBlocked -> events.nasBlocked(state.reason)
+          is NasConnState.Ready -> events.nasRecovered()
+          else -> Unit
+        }
+      }
+    }
+    scope.launch {
+      vpnConfigStore.suspension.filterNotNull().distinctUntilChanged().collect { events.vpnSuspended(it) }
+    }
+  }
+
   /**
    * All'avvio del processo, prima della prima schermata: finisce un azzeramento interrotto (o legge quello finito) e
    * ricarica lo stato fidato salvato, cosi' lo stato del dispositivo e' giusto anche senza NAS (fuori casa, offline).
@@ -351,6 +407,7 @@ class AppGraph(
       throw e
     } catch (e: Exception) {
       GalleryLog.e(TAG, e) { "avvio della fiducia non riuscito" }
+      events.startFailed()
     } finally {
       started.value = true
     }

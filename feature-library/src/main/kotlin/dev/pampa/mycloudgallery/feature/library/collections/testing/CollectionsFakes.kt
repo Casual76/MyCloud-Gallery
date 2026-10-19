@@ -13,7 +13,6 @@ import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
 import dev.pampa.mycloudgallery.core.library.contract.TimelineView
 import dev.pampa.mycloudgallery.core.library.contract.ViewerItems
 import dev.pampa.mycloudgallery.core.library.testing.FakeTimelineRepository
-import dev.pampa.mycloudgallery.core.library.testing.FakeViewerItems
 import dev.pampa.mycloudgallery.core.library.testing.InMemoryLibraryPreferences
 import dev.pampa.mycloudgallery.core.library.testing.InMemoryTimelineSnapshot
 import dev.pampa.mycloudgallery.core.library.testing.InMemoryTimelineView
@@ -32,6 +31,7 @@ import dev.pampa.mycloudgallery.feature.library.collections.GridEnvironment
 import dev.pampa.mycloudgallery.feature.library.hidden.HiddenLibrary
 import dev.pampa.mycloudgallery.feature.library.trash.TrashHiddenMask
 import java.util.UUID
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 // I fake delle Raccolte, dei Nascosti e degli Eliminati di recente (D23): in src/main, cosi' i test di questo modulo, gli
@@ -94,12 +94,24 @@ class FakeCollectionsWorld(
     var reads: Int = 0
       private set
 
+    /**
+     * **Una vista viva** (GA-1), come il catalogo vero: finche' la pagina dei Nascosti o il viewer aperto da li' la guardano, "Mostra
+     * nella Libreria", "Preferito" ed "Elimina" fatti dal viewer la cambiano. Prima era una fotografia: i test passavano anche se a
+     * schermo non cambiava niente. Il vero smette di rileggere quando nessuno guarda; qui la vista si aggiorna per tutte le letture.
+     */
     override suspend fun read(): ViewerItems {
       reads++
-      val indices = (0 until full.size).filter { full.idAt(it) in hidden }
-      val snapshot = full.subsetOf(indices, seq) { effectiveFlags(it) }
-      return FakeViewerItems(InMemoryTimelineView(snapshot, LibraryFilter.ALL)) { library.ref(it) }
+      val live = MutableStateFlow<TimelineView>(hiddenView())
+      synchronized(liveHidden) { liveHidden += live }
+      return LiveViewerItems(live) { library.ref(it) }
     }
+  }
+
+  private val liveHidden = ArrayList<MutableStateFlow<TimelineView>>()
+
+  private fun hiddenView(): TimelineView {
+    val indices = (0 until full.size).filter { full.idAt(it) in hidden }
+    return InMemoryTimelineView(full.subsetOf(indices, seq) { effectiveFlags(it) }, LibraryFilter.ALL)
   }
 
   /** Il riconoscimento dei nascosti nel cestino: i riferimenti dati sono considerati nascosti. */
@@ -128,6 +140,8 @@ class FakeCollectionsWorld(
   private fun publish() {
     seq++
     repository.publish(visibleSnapshot())
+    val live = synchronized(liveHidden) { liveHidden.toList() }
+    live.forEach { it.value = hiddenView() }
   }
 
   private class LiveViewerItems(

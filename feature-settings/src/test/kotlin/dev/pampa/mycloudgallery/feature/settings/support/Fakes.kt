@@ -70,3 +70,21 @@ internal class FakeAppLockPreferences(initial: AppLockSettings = AppLockSettings
 internal class FakeScreenLockProbe(var status: ScreenLockStatus = ScreenLockStatus.SECURE) : ScreenLockProbe {
   override fun status(): ScreenLockStatus = status
 }
+
+/** Le impostazioni delle regole in memoria: il motore le rilegge da questo flusso, come dal DataStore vero. */
+internal class InMemoryRuleStore(initial: dev.pampa.mycloudgallery.core.rules.settings.RuleSettings = dev.pampa.mycloudgallery.core.rules.settings.RuleSettings()) :
+  dev.pampa.mycloudgallery.core.rules.settings.RuleSettingsStore {
+  private val flow = MutableStateFlow(initial)
+
+  override fun observe(): Flow<dev.pampa.mycloudgallery.core.rules.settings.RuleSettings> = flow
+
+  override suspend fun current(): dev.pampa.mycloudgallery.core.rules.settings.RuleSettings = flow.value
+
+  override suspend fun save(settings: dev.pampa.mycloudgallery.core.rules.settings.RuleSettings) {
+    flow.value = settings
+  }
+
+  override suspend fun update(transform: (dev.pampa.mycloudgallery.core.rules.settings.RuleSettings) -> dev.pampa.mycloudgallery.core.rules.settings.RuleSettings) {
+    flow.value = transform(flow.value)
+  }
+}

@@ -49,7 +49,9 @@ import dev.pampa.mycloudgallery.core.nasmedia.exclude.FileClass
 import dev.pampa.mycloudgallery.core.nasmedia.exclude.MediaTypes
 import dev.pampa.mycloudgallery.core.nasmedia.exclude.SystemNames
 import dev.pampa.mycloudgallery.core.nasmedia.exclude.TemporaryNames
+import dev.pampa.mycloudgallery.core.nasmedia.contract.FreezeAcceptances
 import dev.pampa.mycloudgallery.core.nasmedia.freeze.CursorKeeper
+import dev.pampa.mycloudgallery.core.nasmedia.freeze.InMemoryFreezeAcceptances
 import dev.pampa.mycloudgallery.core.nasmedia.freeze.MassChangeGuard
 import dev.pampa.mycloudgallery.core.nasmedia.freeze.StoreFreezeState
 import dev.pampa.mycloudgallery.core.trust.data.MetaFile
@@ -110,12 +112,14 @@ class DefaultNasScanner(
   private val monotonicMs: () -> Long = { System.nanoTime() / 1_000_000 },
   /** R8 (revisione 4B): cio' che l'app stessa ha tolto dalla share (diario locale): non conta come cambiamento anomalo. */
   private val ownRemovals: OwnRemovals = OwnRemovals.NONE,
+  /** NA-4: dove si ricorda la franchigia di "Ho controllato, continua" fra un processo e l'altro. */
+  acceptances: FreezeAcceptances = InMemoryFreezeAcceptances(),
 ) : NasScanner {
 
   private val keeper = CursorKeeper(store, account, share)
 
   /** Lo stato di congelamento di questa share: lo legge chi decide se scrivere sul NAS, la Libreria, la Diagnostica. */
-  val freezeState: StoreFreezeState = StoreFreezeState(keeper)
+  val freezeState: StoreFreezeState = StoreFreezeState(keeper, acceptances) { runCatching { clock.nowMillis() }.getOrNull() }
 
   private val statusFlow = MutableStateFlow<NasScanStatus>(NasScanStatus.Idle)
   override val status: StateFlow<NasScanStatus> = statusFlow.asStateFlow()
@@ -155,7 +159,7 @@ class DefaultNasScanner(
   // --- Tipi interni ---------------------------------------------------------------------------------------------------
 
   /** Il giro completo in corso (puo' durare piu' tappe): i conteggi che servono al congelamento. */
-  private class Round(val epoch: Long, val knownPresent: Int, val window: ScanWindow? = null) {
+  private class Round(val epoch: Long, val knownPresent: Int, val window: ScanWindow? = null, val first: Boolean = false) {
     var changed = 0
     var notMedia = 0
     var blocked = 0
@@ -330,11 +334,12 @@ class DefaultNasScanner(
         val floor = maxOf(cursor.lastFullScanAt ?: Long.MIN_VALUE, lastEpoch)
         val fresh = keeper.update { it.copy(epoch = if (floor == Long.MIN_VALUE) nasNow else maxOf(nasNow, floor + 1), resumeAfter = null) }
         lastEpoch = checkNotNull(fresh.epoch)
-        activeRound = Round(checkNotNull(fresh.epoch), store.countPresent(account, share), liveWindow(fresh.window))
+        activeRound = Round(checkNotNull(fresh.epoch), store.countPresent(account, share), liveWindow(fresh.window), first = cursor.lastFullScanAt == null)
       } else {
         resumed = true
         val kept = round?.takeIf { it.epoch == epoch }
-        activeRound = kept ?: Round(epoch, store.countPresent(account, share), liveWindow(cursor.window)).also { it.trusted = false }
+        activeRound = kept ?: Round(epoch, store.countPresent(account, share), liveWindow(cursor.window), first = cursor.lastFullScanAt == null)
+          .also { it.trusted = false }
       }
       round = activeRound
       seenAt = activeRound.epoch
@@ -389,6 +394,8 @@ class DefaultNasScanner(
           val freeze = Freeze(verdict.reason, before?.sinceNasMillis ?: nasNow, verdict.diff)
           keeper.update { it.copy(epoch = null, resumeAfter = null, lastFullScanAt = nasNow, freeze = freeze) }
           freezeState.publish(freeze)
+          // NA-4: la franchigia del gesto di prima e' servita a questo giro; i conteggi di adesso sono un congelamento nuovo.
+          freezeState.consumeAcceptance()
           reportedFreeze = freeze
           stoppedBy = ScanStop.FROZEN
           round = null
@@ -1048,7 +1055,7 @@ class DefaultNasScanner(
 
     private fun scanning(): NasScanStatus.Scanning {
       val total = activeRound.knownPresent.takeIf { isRound && it > 0 }
-      return NasScanStatus.Scanning(mode, folders, files, detected, total)
+      return NasScanStatus.Scanning(mode, folders, files, detected, total, first = activeRound.first)
     }
   }
 

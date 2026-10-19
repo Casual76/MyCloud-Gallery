@@ -50,7 +50,8 @@
   <string name="network_ipv6">IPv6 globale</string>
   <string name="network_ipv6_detail">Serve fuori casa per raggiungere il router</string>
   <string name="network_recapture">Raccogli di nuovo l’impronta</string>
-  <string name="network_recapture_detail">Dopo un reset del router: solo dal Wi-Fi di casa</string>
+  <string name="network_recapture_detail">Dopo un reset del router: solo dal Wi-Fi di casa. Cambia solo questo telefono</string>
+  <string name="network_recapture_detail_admin">Dopo un reset del router: solo dal Wi-Fi di casa. Vale anche per i nuovi inviti</string>
 
   <!-- Nuova raccolta -->
   <string name="capture_reading">Leggo la rete Wi-Fi attuale…</string>
@@ -68,7 +69,10 @@
   <string name="capture_mismatch">Su questa rete il NAS non ha la stessa identità: non è casa tua. Non ho salvato niente.</string>
   <string name="capture_failed_title">Non ho potuto verificare</string>
   <string name="capture_saved_title">Impronta aggiornata</string>
-  <string name="capture_saved">Da ora questa è la rete di casa. Gli altri dispositivi la ricavano dalla configurazione firmata della famiglia.</string>
+  <string name="capture_saved_family">Da ora questa è la rete di casa. L’ho scritta anche nella configurazione firmata della famiglia: i nuovi inviti useranno questa.</string>
+  <string name="capture_saved_phone">Da ora questa è la rete di casa, ma solo su questo telefono. Gli altri dispositivi e i nuovi inviti usano ancora quella di prima finché non la aggiorna l’admin della famiglia.</string>
+  <string name="capture_saved_failed">Da ora questa è la rete di casa su questo telefono, ma non sono riuscito a scriverla nella configurazione firmata della famiglia: i nuovi inviti hanno ancora quella di prima.</string>
+  <string name="capture_retry">Riprova a scriverla</string>
   <string name="capture_sheet_title">È la rete di casa?</string>
   <string name="capture_sheet_message">Il NAS qui ha la stessa identità di sempre. Se confermi, questa rete diventa la «casa» dell’app: da qui il NAS si raggiunge senza VPN.</string>
   <string name="capture_sheet_confirm">Sì, è casa mia</string>
@@ -83,7 +87,7 @@
   <string name="wg_pill_not_configured">Da configurare</string>
   <string name="wg_ready">L’app può accendere e spegnere il tunnel di casa.</string>
   <string name="wg_missing">L’app WireGuard non è installata su questo profilo.</string>
-  <string name="wg_permission">Manca il permesso di comandare i tunnel. In WireGuard attiva «Allow remote control apps».</string>
+  <string name="wg_permission">Manca il permesso di comandare i tunnel di WireGuard: toccando «Consenti il controllo» Android te lo chiede.</string>
   <string name="wg_not_configured">Il permesso c’è, ma manca il nome del tunnel di casa.</string>
   <string name="network_automation">Controllo automatico</string>
   <string name="auto_off">Spento: la VPN la accendi e spegni tu</string>
@@ -108,6 +112,18 @@
   <string name="network_try_up">Prova ad accendere la VPN</string>
   <string name="network_try_down">Prova a spegnere la VPN</string>
   <string name="network_open_wg">Apri WireGuard</string>
+  <string name="wg_grant_title">Serve il tuo permesso</string>
+  <string name="wg_grant_message">Android ti chiede se questa app può comandare i tunnel di WireGuard: serve per accendere la VPN fuori casa e spegnerla a casa. In WireGuard deve essere acceso anche «Allow remote control apps».</string>
+  <string name="wg_grant">Consenti il controllo</string>
+  <string name="wg_grant_denied_title">Permesso non concesso</string>
+  <string name="wg_grant_denied">Senza questo permesso l’app non può accendere né spegnere la VPN: la gestisci tu da WireGuard. Puoi riprovare quando vuoi.</string>
+  <string name="wg_grant_retry">Riprova a consentire</string>
+  <string name="wg_grant_blocked_title">Android non lo chiede più</string>
+  <string name="wg_grant_blocked">Hai rifiutato più volte e Android non mostra più la richiesta. Per concederlo apri le impostazioni dell’app, sezione «Permessi».</string>
+  <string name="wg_open_app_settings">Apri le impostazioni dell’app</string>
+  <string name="network_reactivate_title">Il controllo automatico è fermo</string>
+  <string name="network_reactivate_message">Si è fermato da solo per non toglierti la rete. Se hai sistemato WireGuard riattivalo: riparto da zero e mi fermo di nuovo se non risponde.</string>
+  <string name="network_reactivate">Riattiva il controllo</string>
   <string name="network_configure">Configura il controllo</string>
   <string name="network_footnote">«Accesa» o «spenta» le dico solo dopo averlo visto sulla rete: un comando inviato non basta. Ogni profilo del tablet ha il suo WireGuard.</string>
 
@@ -119,6 +135,8 @@
   <string name="cmd_none">Il comando è partito ma la rete non è cambiata: la VPN non è controllabile da qui. Usa «Apri WireGuard».</string>
   <string name="cmd_lost_title">La rete è sparita</string>
   <string name="cmd_lost">Spegnendo il tunnel non c’è più connessione: probabile «VPN sempre attiva con blocco». L’ho riaccesa e ho fermato il controllo automatico.</string>
+  <string name="cmd_reactivated_title">Controllo riattivato</string>
+  <string name="cmd_reactivated">La prova è riuscita: ho riattivato il controllo automatico.</string>
   <string name="cmd_skipped_title">Comando non inviato</string>
   <string name="skip_disabled">Il controllo automatico è spento.</string>
   <string name="skip_already">Il tunnel è già nello stato che hai chiesto.</string>

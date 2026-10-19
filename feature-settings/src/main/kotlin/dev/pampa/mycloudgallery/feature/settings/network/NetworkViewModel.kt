@@ -4,10 +4,15 @@ import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.pampa.mycloudgallery.core.common.log.GalleryLog
+import dev.pampa.mycloudgallery.core.family.contract.AdminActionResult
+import dev.pampa.mycloudgallery.core.family.contract.RegistryService
+import dev.pampa.mycloudgallery.core.family.contract.TrustStatus
 import dev.pampa.mycloudgallery.core.nas.contract.ConnectionTester
 import dev.pampa.mycloudgallery.core.nas.contract.NasError
 import dev.pampa.mycloudgallery.core.nas.contract.Stage
 import dev.pampa.mycloudgallery.core.nas.contract.TestTarget
+import dev.pampa.mycloudgallery.core.network.contract.ControlPermissionOutcome
 import dev.pampa.mycloudgallery.core.network.contract.DenyReason
 import dev.pampa.mycloudgallery.core.network.contract.HomeCandidate
 import dev.pampa.mycloudgallery.core.network.contract.HomeCapture
@@ -22,7 +27,9 @@ import dev.pampa.mycloudgallery.core.network.contract.VpnAutomation
 import dev.pampa.mycloudgallery.core.network.contract.VpnAutomationStatus
 import dev.pampa.mycloudgallery.core.network.contract.VpnCapability
 import dev.pampa.mycloudgallery.core.network.contract.VpnCommandResult
+import dev.pampa.mycloudgallery.core.network.contract.VpnControlConfigStore
 import dev.pampa.mycloudgallery.core.network.contract.VpnController
+import dev.pampa.mycloudgallery.core.network.contract.VpnSuspendReason
 import dev.pampa.mycloudgallery.feature.settings.port.NasAccountSettings
 import dev.pampa.mycloudgallery.feature.settings.port.SettingsClock
 import java.util.Optional
@@ -67,7 +74,32 @@ internal sealed interface CaptureUi {
   /** Non si puo' verificare il NAS (account non collegato). */
   data object CannotVerify : CaptureUi
 
-  data object Saved : CaptureUi
+  /** Salvata su questo telefono; [scope] dice fin dove vale (verifica funzionale, RE-5). */
+  data class Saved(val scope: SaveScope) : CaptureUi
+}
+
+/** Fin dove vale una modifica all'indirizzo del NAS o all'impronta di casa (RE-5). */
+internal enum class SaveScope {
+  /** Anche per la famiglia: l'admin l'ha scritta nella configurazione firmata, da cui nascono i nuovi inviti. */
+  FAMILY,
+
+  /** Solo per questo telefono: chi non e' admin non firma la configurazione, gli altri e gli inviti li aggiorna l'admin. */
+  THIS_PHONE,
+
+  /** L'admin l'ha salvata qui, ma la firma non e' riuscita (NAS non raggiungibile, versione piu' nuova...): "Riprova". */
+  FAMILY_FAILED,
+}
+
+/** Com'e' andata l'ultima richiesta del permesso di WireGuard (RE-1). */
+internal enum class PermissionUi {
+  /** Mai chiesto (o concesso). */
+  IDLE,
+
+  /** Rifiutato: Android lo richiede ancora. */
+  DENIED,
+
+  /** Rifiutato e Android non lo chiede piu': resta la scheda dell'app. */
+  DENIED_FOR_GOOD,
 }
 
 /** L'ultimo comando provato a mano a WireGuard. */
@@ -76,7 +108,8 @@ internal sealed interface VpnCommandUi {
 
   data class Running(val up: Boolean) : VpnCommandUi
 
-  data class Finished(val up: Boolean, val result: VpnCommandResult) : VpnCommandUi
+  /** [reactivated]: la prova riuscita ha tolto la sospensione del controllo automatico (RE-2). */
+  data class Finished(val up: Boolean, val result: VpnCommandResult, val reactivated: Boolean = false) : VpnCommandUi
 }
 
 internal data class NetworkUiState(
@@ -91,6 +124,10 @@ internal data class NetworkUiState(
   val canOpenWireGuard: Boolean = false,
   /** Ora del dispositivo, per scrivere "raccolta il ...". */
   val nowMillis: Long = 0L,
+  /** Questo dispositivo e' l'admin: le sue modifiche all'impronta di casa valgono anche per i nuovi inviti (RE-5). */
+  val admin: Boolean = false,
+  /** L'ultima richiesta del permesso di WireGuard (RE-1). */
+  val permission: PermissionUi = PermissionUi.IDLE,
 )
 
 /**
@@ -110,9 +147,11 @@ internal class NetworkViewModel @Inject constructor(
   private val fingerprintStore: HomeFingerprintStore,
   private val homeCapture: HomeCapture,
   private val vpn: VpnController,
-  automation: VpnAutomation,
+  private val automation: VpnAutomation,
+  private val vpnConfig: VpnControlConfigStore,
   private val tester: ConnectionTester,
   accountSettings: Optional<NasAccountSettings>,
+  private val registry: RegistryService,
   private val clock: SettingsClock,
 ) : ViewModel() {
 
@@ -149,12 +188,14 @@ internal class NetworkViewModel @Inject constructor(
     ),
   )
 
-  val state: StateFlow<NetworkUiState> = combine(facts, local) { base, local ->
+  val state: StateFlow<NetworkUiState> = combine(facts, local, registry.status) { base, local, trust ->
     base.copy(
       capture = local.capture,
       command = local.command,
       canOpenWireGuard = vpn.openWireGuardIntent() != null,
       nowMillis = clock.nowMillis(),
+      admin = trust.isAdmin(),
+      permission = local.permission,
     )
   }.stateIn(
     scope = viewModelScope,
@@ -166,6 +207,38 @@ internal class NetworkViewModel @Inject constructor(
   fun wireGuardIntent(): Intent? = vpn.openWireGuardIntent()
 
   // --- WireGuard ---------------------------------------------------------------------------------------
+
+  /**
+   * Il dialogo di sistema del permesso di WireGuard e' finito (RE-1). Qualunque sia l'esito si rilegge: la capacita' non cambia da
+   * sola, e senza questa riga restava "manca il permesso" anche a permesso concesso. Un rifiuto resta visibile con il modo di riprovare
+   * (il dialogo, oppure la scheda dell'app se Android non lo mostra piu').
+   */
+  fun onControlPermissionResult(outcome: ControlPermissionOutcome) {
+    vpn.refresh()
+    local.update {
+      it.copy(
+        permission = when (outcome) {
+          ControlPermissionOutcome.GRANTED -> PermissionUi.IDLE
+          ControlPermissionOutcome.DENIED -> PermissionUi.DENIED
+          ControlPermissionOutcome.DENIED_FOR_GOOD -> PermissionUi.DENIED_FOR_GOOD
+        },
+      )
+    }
+  }
+
+  /** Si rilegge cio' che Android puo' aver cambiato fuori dall'app: l'installazione di WireGuard, il permesso dato dalla scheda dell'app. */
+  fun refreshVpn() = vpn.refresh()
+
+  /**
+   * "Riattiva il controllo" (RE-2): l'automazione si era fermata da sola (VPN che non risponde, o rete sparita spegnendo il tunnel) e
+   * solo l'utente puo' ripartire. Toglie la sospensione e rilegge; l'automazione riparte da zero.
+   */
+  fun reactivateAutomation() {
+    viewModelScope.launch {
+      vpnConfig.clearSuspension()
+      vpn.refresh()
+    }
+  }
 
   /** Prova a mano ad accendere o spegnere il tunnel di casa. L'esito e' quello *osservato* (§2.4). */
   fun tryTunnel(up: Boolean) {
@@ -179,8 +252,29 @@ internal class NetworkViewModel @Inject constructor(
       } catch (_: Exception) {
         VpnCommandResult.NotObserved
       }
-      local.update { it.copy(command = VpnCommandUi.Finished(up, result)) }
+      val reactivated = result == VpnCommandResult.Confirmed && liftsSuspension(up) && clearSuspensionQuietly()
+      local.update { it.copy(command = VpnCommandUi.Finished(up, result, reactivated)) }
     }
+  }
+
+  /**
+   * Una prova a mano riuscita dimostra che WireGuard risponde (RE-2): se l'automazione era sospesa per questo, si riattiva. Spegnere il
+   * tunnel senza perdere la rete prova anche che il "blocco" sospettato non c'e'; accenderlo no.
+   */
+  private fun liftsSuspension(up: Boolean): Boolean =
+    when ((automation.status.value as? VpnAutomationStatus.Suspended)?.reason) {
+      VpnSuspendReason.NOT_CONTROLLABLE -> true
+      VpnSuspendReason.LOCKDOWN_SUSPECTED -> !up
+      null -> false
+    }
+
+  private suspend fun clearSuspensionQuietly(): Boolean = try {
+    vpnConfig.clearSuspension()
+    true
+  } catch (e: CancellationException) {
+    throw e
+  } catch (_: Exception) {
+    false
   }
 
   // --- impronta di casa --------------------------------------------------------------------------------
@@ -231,7 +325,11 @@ internal class NetworkViewModel @Inject constructor(
     }
   }
 
-  /** L'utente conferma "si', questa e' la rete di casa": solo ora l'impronta si salva. */
+  /**
+   * L'utente conferma "si', questa e' la rete di casa": solo ora l'impronta si salva, su questo telefono. Se e' l'admin la scrive anche nella
+   * configurazione **firmata** della famiglia (E-R16, RE-5): da li' i nuovi inviti prendono "dov'e' casa". Chi non e' admin la cambia solo
+   * per se', e la pagina lo dice. La firma e' quella di ogni azione dell'admin (`RegistryService`): non c'e' un controllo qui.
+   */
   fun confirmCapture() {
     val found = candidate ?: return
     if (local.value.capture !is CaptureUi.Ready) return
@@ -245,8 +343,34 @@ internal class NetworkViewModel @Inject constructor(
         ),
       )
       candidate = null
-      setCapture(CaptureUi.Saved)
+      sharedPrefixes = found.ulaPrefixes
+      setCapture(CaptureUi.Saved(shareWithFamily(found.ulaPrefixes)))
     }
+  }
+
+  /** "Riprova" dopo una firma non riuscita: l'impronta e' gia' salvata qui, si ripete solo la parte della famiglia. */
+  fun retryShareCapture() {
+    val prefixes = sharedPrefixes ?: return
+    if (local.value.capture != CaptureUi.Saved(SaveScope.FAMILY_FAILED)) return
+    viewModelScope.launch { setCapture(CaptureUi.Saved(shareWithFamily(prefixes))) }
+  }
+
+  private suspend fun shareWithFamily(prefixes: Set<String>): SaveScope =
+    when (val result = signHomeUla(prefixes)) {
+      AdminActionResult.Done -> SaveScope.FAMILY
+      AdminActionResult.NotAdmin -> SaveScope.THIS_PHONE
+      else -> {
+        GalleryLog.d(TAG) { "impronta di casa non firmata: ${result.javaClass.simpleName}" }
+        SaveScope.FAMILY_FAILED
+      }
+    }
+
+  private suspend fun signHomeUla(prefixes: Set<String>): AdminActionResult = try {
+    registry.updateHomeUla(prefixes)
+  } catch (e: CancellationException) {
+    throw e
+  } catch (_: Exception) {
+    AdminActionResult.Failed(NasError.Unexpected(null))
   }
 
   fun cancelCapture() {
@@ -261,9 +385,16 @@ internal class NetworkViewModel @Inject constructor(
   private data class Local(
     val capture: CaptureUi = CaptureUi.Idle,
     val command: VpnCommandUi = VpnCommandUi.Idle,
+    val permission: PermissionUi = PermissionUi.IDLE,
   )
 
+  private fun TrustStatus.isAdmin(): Boolean = this is TrustStatus.Approved && admin
+
+  /** I prefissi dell'ultima impronta salvata, per ripetere la firma. */
+  private var sharedPrefixes: Set<String>? = null
+
   private companion object {
+    const val TAG = "NetworkViewModel"
     const val STOP_TIMEOUT_MS = 5_000L
   }
 }

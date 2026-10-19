@@ -46,12 +46,12 @@
     <string name="net_diag_vpn_control_ready">Controllo di WireGuard pronto</string>
     <string name="net_diag_vpn_control_missing_app">WireGuard non è installato</string>
     <string name="net_diag_vpn_control_missing_permission">Controllo di WireGuard non consentito</string>
-    <string name="net_diag_vpn_control_missing_permission_detail">Serve il permesso di controllare i tunnel e, in WireGuard, l\'opzione «Consenti il controllo da altre app». Ogni profilo Android ha il suo WireGuard e il suo permesso.</string>
+    <string name="net_diag_vpn_control_missing_permission_detail">Serve il permesso di controllare i tunnel (lo chiedi da Impostazioni → Rete e VPN) e, in WireGuard, l\'opzione «Consenti il controllo da altre app». Ogni profilo Android ha il suo WireGuard e il suo permesso.</string>
     <string name="net_diag_vpn_control_not_configured">Tunnel di casa non indicato</string>
     <string name="net_diag_vpn_lockdown">Controllo automatico fermo: possibile «VPN sempre attiva con blocco»</string>
-    <string name="net_diag_vpn_lockdown_detail">Spegnere la VPN ha tolto la rete al telefono, quindi l\'app l\'ha riaccesa e ha fermato il controllo automatico. Disattiva «Blocca connessioni senza VPN» nelle impostazioni VPN di Android, poi riattiva il controllo.</string>
+    <string name="net_diag_vpn_lockdown_detail">Spegnere la VPN ha tolto la rete al telefono, quindi l\'app l\'ha riaccesa e ha fermato il controllo automatico. Disattiva «Blocca connessioni senza VPN» nelle impostazioni VPN di Android, poi riattiva il controllo da Impostazioni → Rete e VPN.</string>
     <string name="net_diag_vpn_not_controllable">VPN non controllabile</string>
-    <string name="net_diag_vpn_not_controllable_detail">WireGuard non ha risposto ai comandi dell\'app. Controlla che «Consenti il controllo da altre app» sia acceso e che il nome del tunnel sia giusto, poi riattiva il controllo. Intanto puoi accendere e spegnere la VPN a mano.</string>
+    <string name="net_diag_vpn_not_controllable_detail">WireGuard non ha risposto ai comandi dell\'app. Controlla che «Consenti il controllo da altre app» sia acceso e che il nome del tunnel sia giusto, poi riattiva il controllo da Impostazioni → Rete e VPN. Intanto puoi accendere e spegnere la VPN a mano.</string>
 
     <!-- Qualità, impronta, permesso, sonda -->
     <string name="net_diag_quality_poor">Rete lenta o congestionata</string>

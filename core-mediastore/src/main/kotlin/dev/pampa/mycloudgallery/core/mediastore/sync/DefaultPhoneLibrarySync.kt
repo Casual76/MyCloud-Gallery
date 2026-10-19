@@ -16,6 +16,7 @@ import dev.pampa.mycloudgallery.core.mediastore.contract.PauseReason
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneAccessReader
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneLibrarySync
 import dev.pampa.mycloudgallery.core.mediastore.contract.RowType
+import dev.pampa.mycloudgallery.core.mediastore.contract.RunResult
 import dev.pampa.mycloudgallery.core.mediastore.contract.SyncReason
 import dev.pampa.mycloudgallery.core.mediastore.contract.SyncReport
 import dev.pampa.mycloudgallery.core.mediastore.contract.SyncStatus
@@ -39,6 +40,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -153,13 +155,26 @@ class DefaultPhoneLibrarySync(
       val pass = metadataPass ?: continue
       meta = launch {
         try {
-          pass.run(config.foregroundMetaBudget, priority)
+          runMetaSlices(pass)
         } catch (e: CancellationException) {
           throw e
         } catch (e: Exception) {
           GalleryLog.w(TAG) { "META in primo piano fallita: ${e.javaClass.simpleName}" }
         }
       }
+    }
+  }
+
+  /**
+   * La fase META in primo piano, a fette (GA-6). Una fetta dura al massimo `foregroundMetaBudget`; se il budget finisce prima del
+   * lavoro (nella prima lettura di migliaia di foto: luogo, foto in movimento, raffiche) la fetta dopo parte da sola, dopo una
+   * pausa che lascia respirare il telefono. Finisce con `Done` o con una pausa/un fallimento (permessi, memoria): da li' riparte
+   * solo il giro seguente, che e' quello che sa se la causa e' passata. Un giro nuovo ferma tutto prima (`cancelAndJoin`).
+   */
+  private suspend fun runMetaSlices(pass: MetadataPass) {
+    while (true) {
+      if (pass.run(config.foregroundMetaBudget, priority) !is RunResult.BudgetExhausted) return
+      delay(config.foregroundMetaPause)
     }
   }
 

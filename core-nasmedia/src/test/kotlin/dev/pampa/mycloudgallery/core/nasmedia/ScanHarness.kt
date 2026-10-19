@@ -24,6 +24,7 @@ import dev.pampa.mycloudgallery.core.nasmedia.contract.ScanMode
 import dev.pampa.mycloudgallery.core.nasmedia.contract.ScanReport
 import dev.pampa.mycloudgallery.core.nasmedia.contract.ScanSettings
 import dev.pampa.mycloudgallery.core.nasmedia.detect.NasDetector
+import dev.pampa.mycloudgallery.core.nasmedia.freeze.InMemoryFreezeAcceptances
 import dev.pampa.mycloudgallery.core.nasmedia.scan.ArrivalWatch
 import dev.pampa.mycloudgallery.core.nasmedia.scan.DefaultNasScanner
 import dev.pampa.mycloudgallery.core.nasmedia.scan.ScanConfig
@@ -142,6 +143,9 @@ internal class ScanHarness(
   /** R8: cio' che "l'app" ha tolto dalla share (dal suo diario locale). */
   var ownRemovals: OwnRemovals = OwnRemovals.NONE
 
+  /** NA-4: la franchigia di "Ho controllato, continua" sta fuori dallo scanner (in produzione e' un file): sopravvive a [restartScanner]. */
+  val acceptances = InMemoryFreezeAcceptances()
+
   private fun newScanner() = DefaultNasScanner(
     account = me,
     share = share,
@@ -156,6 +160,7 @@ internal class ScanHarness(
     arrivals = arrivals,
     monotonicMs = { mono },
     ownRemovals = OwnRemovals { share -> ownRemovals.fileIds(share) },
+    acceptances = acceptances,
   )
 
   var scanner: DefaultNasScanner = newScanner()

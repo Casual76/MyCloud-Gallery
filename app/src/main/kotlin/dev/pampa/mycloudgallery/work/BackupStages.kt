@@ -20,7 +20,6 @@ import dev.pampa.mycloudgallery.core.rules.RuleEvaluator
 import dev.pampa.mycloudgallery.core.rules.SystemStateProvider
 import dev.pampa.mycloudgallery.core.rules.WorkRequest
 import dev.pampa.mycloudgallery.core.rules.run.BatchResult
-import dev.pampa.mycloudgallery.core.rules.run.EngineStageRules
 import dev.pampa.mycloudgallery.core.rules.run.StageOutcome
 import dev.pampa.mycloudgallery.core.rules.run.StageRules
 import dev.pampa.mycloudgallery.core.rules.run.StageStats
@@ -28,6 +27,7 @@ import dev.pampa.mycloudgallery.core.rules.run.StagedRun
 import dev.pampa.mycloudgallery.core.rules.settings.QuickPhotoProtection
 import dev.pampa.mycloudgallery.core.rules.settings.RuleSettingsStore
 import dev.pampa.mycloudgallery.core.rules.traffic.TrafficLedger
+import dev.pampa.mycloudgallery.feature.diagnostics.recording.DiagJob
 import dev.pampa.mycloudgallery.graph.AppGraph
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -80,7 +80,8 @@ class SafetyStageOutcome(
  */
 class BackupStages(private val graph: AppGraph, private val backup: BackupGraph) {
 
-  private fun rules(): StageRules = EngineStageRules(graph.rulesEngine, graph.stateProvider)
+  /** RE-3: il motore delle regole preceduto dall'attesa della rete (un solo punto per tutti i lavori a tappe). */
+  private fun rules(): StageRules = graph.stageRules()
 
   private fun staged(request: WorkRequest, rules: StageRules = rules()) = StagedRun(
     request = request,
@@ -101,7 +102,7 @@ class BackupStages(private val graph: AppGraph, private val backup: BackupGraph)
       WorkRequest.Background(activity, writesToNas = true)
     }
     val stageRules = if (trigger == BackupTrigger.QUICK_NEW_PHOTOS) {
-      QuickPhotoStageRules(backup.ruleSettings, RuleEvaluator(), graph.stateProvider, graph.trafficLedger)
+      graph.settled(QuickPhotoStageRules(backup.ruleSettings, RuleEvaluator(), graph.stateProvider, graph.trafficLedger))
     } else {
       rules()
     }
@@ -121,7 +122,16 @@ class BackupStages(private val graph: AppGraph, private val backup: BackupGraph)
       UploadStages.stage(staged(request, stageRules), parts.engine, kind, trigger)
     } ?: return null
     afterRound(kind, outcome)
+    // RE-4: l'esito della tappa nell'anello della Diagnostica (solo il lavoro e numeri; un giro a vuoto non scrive niente).
+    graph.events.stage(diagJob(kind, trigger), outcome.stage)
     return outcome
+  }
+
+  private fun diagJob(kind: BackupKind, trigger: BackupTrigger): DiagJob = when {
+    trigger == BackupTrigger.QUICK_NEW_PHOTOS -> DiagJob.QUICK_PHOTOS
+    trigger == BackupTrigger.FIRST_BACKUP || trigger == BackupTrigger.USER_NOW -> DiagJob.BACKUP_USER
+    kind == BackupKind.PHOTOS -> DiagJob.PHOTO_BACKUP
+    else -> DiagJob.VIDEO_BACKUP
   }
 
   /** La tappa di quando non c'e' niente da caricare. */
@@ -153,6 +163,7 @@ class BackupStages(private val graph: AppGraph, private val backup: BackupGraph)
         RunStop.NAS, RunStop.PHONE -> {
           // Il motivo che le schermate mostrano: pieno, quota, password, sola lettura, permessi del telefono.
           memory.setProblem(last.problem)
+          last.problem?.let { graph.events.backupProblem(it.name) }
           if (last.problem == BackupProblemCode.READ_ONLY_AREA) backup.parts?.share?.let { backup.noteReadOnly(it) }
         }
         RunStop.GATE, RunStop.STOPPED -> Unit
@@ -225,6 +236,8 @@ class BackupStages(private val graph: AppGraph, private val backup: BackupGraph)
         },
       )
       backup.kick()
+      stages.forEach { graph.events.stage(DiagJob.BACKUP_SAFETY, it) }
+      problem?.let { graph.events.backupProblem(it.name) }
       SafetyStageOutcome(stages, verified, mismatched, created, problem)
     }
   }

@@ -33,6 +33,7 @@ import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
+import dev.pampa.mycloudgallery.core.network.contract.ControlPermissionOutcome
 import dev.pampa.mycloudgallery.core.network.contract.VpnCapability
 import dev.pampa.mycloudgallery.core.network.contract.VpnCommandResult
 import dev.pampa.mycloudgallery.feature.onboarding.R
@@ -57,6 +58,10 @@ internal class VpnForm(remoteControl: Boolean = false, tunnelName: String = "") 
 }
 
 internal class VpnActions(
+  /** "Consenti il controllo": il dialogo di sistema del permesso di WireGuard (RE-1). */
+  val onGrantControl: () -> Unit = {},
+  /** Dopo un rifiuto definitivo: la scheda dell'app in Android. */
+  val onOpenAppSettings: () -> Unit = {},
   val onOpenWireGuard: () -> Unit = {},
   val onRunTest: (tunnelName: String) -> Unit = {},
   val onContinue: (remoteControl: Boolean, tunnelName: String?) -> Unit = { _, _ -> },
@@ -191,10 +196,33 @@ private fun CapabilityBlock(ui: VpnUi, form: VpnForm, actions: VpnActions) {
       VpnCapability.PERMISSION_MISSING -> NoticeCard(
         tone = NoticeTone.Caution,
         icon = Icons.Rounded.Warning,
-        title = stringResource(R.string.vpn_cap_permission_title),
-        body = stringResource(R.string.vpn_cap_permission_detail),
+        title = stringResource(
+          when (ui.permission) {
+            null -> R.string.vpn_cap_permission_title
+            ControlPermissionOutcome.DENIED -> R.string.vpn_cap_denied_title
+            else -> R.string.vpn_cap_blocked_title
+          },
+        ),
+        body = stringResource(
+          when (ui.permission) {
+            null -> R.string.vpn_cap_permission_detail
+            ControlPermissionOutcome.DENIED -> R.string.vpn_cap_denied_detail
+            else -> R.string.vpn_cap_blocked_detail
+          },
+        ),
       ) {
-        CardButton(text = stringResource(R.string.action_open_wireguard), onClick = actions.onOpenWireGuard, primary = true)
+        // Il permesso si chiede con il dialogo di sistema (RE-1); dopo un rifiuto si puo' riprovare, o aprire la scheda dell'app
+        // quando Android non lo mostra piu'. "Apri WireGuard" resta: serve anche «Consenti il controllo da altre app».
+        if (ui.permission == ControlPermissionOutcome.DENIED_FOR_GOOD) {
+          CardButton(text = stringResource(R.string.vpn_open_app_settings), onClick = actions.onOpenAppSettings, primary = true)
+        } else {
+          CardButton(
+            text = stringResource(if (ui.permission == null) R.string.vpn_grant_control else R.string.vpn_grant_control_retry),
+            onClick = actions.onGrantControl,
+            primary = true,
+          )
+        }
+        CardButton(text = stringResource(R.string.action_open_wireguard), onClick = actions.onOpenWireGuard, primary = false)
       }
       VpnCapability.NOT_CONFIGURED, VpnCapability.READY -> Unit
     }

@@ -107,6 +107,9 @@ internal object DiagCatalogEntries {
     DiagEntry(DiagCodes.EVT_QR_REJECTED, DiagSection.RECENT_EVENTS, DiagSeverity.WARNING, R.string.diag_evt_qr_rejected_title, R.string.diag_evt_qr_rejected_guide, null),
     DiagEntry(DiagCodes.EVT_CONFIG_SUPERSEDED, DiagSection.RECENT_EVENTS, DiagSeverity.INFO, R.string.diag_evt_config_superseded_title, R.string.diag_evt_config_superseded_guide, null),
     DiagEntry(DiagCodes.EVT_SELF_WIPE, DiagSection.RECENT_EVENTS, DiagSeverity.WARNING, R.string.diag_evt_self_wipe_title, R.string.diag_evt_self_wipe_guide, null),
+    DiagEntry(DiagCodes.EVT_JOB_RESULT, DiagSection.RECENT_EVENTS, DiagSeverity.INFO, R.string.diag_evt_job_result_title, 0, null),
+    DiagEntry(DiagCodes.EVT_JOB_FAILED, DiagSection.RECENT_EVENTS, DiagSeverity.WARNING, R.string.diag_evt_job_failed_title, R.string.diag_evt_job_failed_guide, null),
+    DiagEntry(DiagCodes.EVT_START_FAILED, DiagSection.RECENT_EVENTS, DiagSeverity.WARNING, R.string.diag_evt_start_failed_title, R.string.diag_evt_start_failed_guide, null),
 
     // --- Spazio ------------------------------------------------------------
     DiagEntry(DiagCodes.STORAGE_USAGE, DiagSection.STORAGE, DiagSeverity.INFO, R.string.diag_storage_usage_title, 0, null),

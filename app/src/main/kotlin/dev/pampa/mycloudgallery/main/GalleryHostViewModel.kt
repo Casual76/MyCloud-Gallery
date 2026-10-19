@@ -46,7 +46,7 @@ class GalleryHostViewModel @Inject constructor(
 
   /** "Ferma le scritture sul NAS" / "Riattiva le scritture": l'emergenza dell'utente (D31 resta comunque). */
   fun setNasWritesStopped(stopped: Boolean) {
-    gallery.nas?.emergency?.set(stopped)
+    gallery.nas?.setWritesStopped(stopped)
   }
 
   // --- Fase 4B (P16): organizzare il NAS ----------------------------------------------------------------------------------

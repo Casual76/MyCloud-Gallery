@@ -44,13 +44,22 @@ interface NasOpsEntryPoint {
 }
 
 /**
- * Come finisce un lavoro delle operazioni: tutto fatto, da riprovare con il ritardo di `JobScheduler` (NAS sparito, scritture ferme,
- * tempo finito), oppure da riprendere fra [Later.delayMs] (file aperti dal PC, E-N13).
+ * Come finisce un lavoro delle operazioni: tutto fatto, da riprovare con il ritardo di `JobScheduler` (NAS sparito, scritture ferme),
+ * da continuare subito perche' il tempo della tappa e' finito prima del lavoro ([Continue]), oppure da riprendere fra [Later.delayMs]
+ * (file aperti dal PC, E-N13).
  */
 sealed interface NasOpsJobEnd {
   data object Done : NasOpsJobEnd
 
+  /** Un guasto o una condizione che non c'e': si riprova col ritardo progressivo di `JobScheduler`. */
   data object Reschedule : NasOpsJobEnd
+
+  /**
+   * La tappa e' finita prima del lavoro (NA-12): si continua **subito**, con un lavoro nuovo. Con [Reschedule] ogni tappa di una mossa lunga
+   * si faceva rimandare col ritardo esponenziale di `JobScheduler` (1, 2, 4... minuti): dopo qualche tappa le fette erano ore distanti,
+   * pur avendo fatto strada ogni volta.
+   */
+  data object Continue : NasOpsJobEnd
 
   data class Later(val delayMs: Long) : NasOpsJobEnd
 }
@@ -60,7 +69,8 @@ sealed interface NasOpsJobEnd {
  * da fare. Un lavoro avviato dall'utente ([userInitiated], UIDT) continua finche' serve; uno normale fa una tappa sola (Android lo
  * ferma dopo 10 minuti) e si fa riprogrammare.
  *
- * @param resume `NasOrganizer.resumeOperations`: null = niente NAS o galleria ferma (l'azzeramento).
+ * @param resume `NasGraph.resumeOperations`: null = niente NAS o galleria ferma (l'azzeramento). Un processo appena nato avvia il motore
+ *   del NAS da se' (NA-12) e, se non e' ancora pronto ma nel diario c'e' lavoro, risponde "il NAS non risponde", mai null.
  * @param nextLocked fra quanto scade la prima attesa di un file aperto dal PC.
  */
 class NasOpsJobRun(
@@ -80,7 +90,8 @@ class NasOpsJobRun(
         RunStop.BUDGET -> Unit
       }
     }
-    return NasOpsJobEnd.Reschedule
+    // Il tempo e' finito prima del lavoro, ma si e' fatta strada: la tappa dopo parte subito (NA-12).
+    return NasOpsJobEnd.Continue
   }
 
   companion object {
@@ -126,14 +137,17 @@ class NasOpsJobService : JobService() {
       setNotification(params, AppNotifications.ID_NAS_OPS, NasOpsNotification.build(this, NasOpsProgress.NONE), JOB_END_NOTIFICATION_POLICY_REMOVE)
     }
     val gallery = runCatching { entry().gallery() }.getOrNull()
-    val organizer = gallery?.nas?.organizer ?: return false
+    val nas = gallery?.nas ?: return false
+    val organizer = nas.organizer
     if (!gallery.backgroundWorkAllowed) return false
     registerStop(organizer)
     running[params.jobId] = scope.launch {
       val notifier = launch { followProgress(organizer, userInitiated) }
       val end = try {
         NasOpsJobRun(
-          resume = { budget -> organizer.resumeOperations(budget) },
+          // NA-12: il motore del NAS parte qui se il processo e' appena nato (il servizio girava prima che la galleria lo avesse agganciato,
+          // `resumeOperations` rispondeva null e il lavoro finiva "fatto" senza fare niente).
+          resume = { budget -> nas.resumeOperations(budget) },
           nextLocked = { organizer.nextLockedRetryMs() },
           userInitiated = userInitiated,
         ).run()
@@ -148,6 +162,7 @@ class NasOpsJobService : JobService() {
       }
       GalleryLog.d(TAG) { "lavoro delle operazioni finito: ${end.javaClass.simpleName}" }
       if (end is NasOpsJobEnd.Later) JobSchedulerNasOpsJobs(this@NasOpsJobService).resumeLater(end.delayMs)
+      if (end is NasOpsJobEnd.Continue) JobSchedulerNasOpsJobs(this@NasOpsJobService).resumeLater(0)
       running.remove(params.jobId)
       jobFinished(params, end is NasOpsJobEnd.Reschedule)
     }

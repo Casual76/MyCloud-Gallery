@@ -16,7 +16,8 @@ import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import java.util.Locale
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.launch
 
 /**
  * "Cartelle NAS" (§1.5, P12 su proposta di P0-B): l'elenco di una cartella del NAS per la UI, in **sola lettura**. Le azioni (crea,
@@ -37,24 +38,50 @@ class NasFolderService internal constructor(
 
   private class Cached(val entries: List<NasFolderEntry>, val at: Long?)
 
+  /**
+   * Lo stato mostrato di una cartella e la numerazione delle sue letture (NA-3): ogni lettura prende un numero alla partenza e
+   * pubblica solo se nessuna lettura partita dopo di lei ha gia' pubblicato. Una lettura vecchia che risponde tardi (il NAS lento, un
+   * "Aggiorna" fatto mentre l'altra era in volo) non sovrascrive l'elenco piu' recente.
+   */
+  private class Slot {
+    val state = MutableStateFlow<NasFolderState>(NasFolderState.Loading)
+    var issued = 0L
+    var published = 0L
+  }
+
   private val lock = Any()
   private val cache = HashMap<String, Cached>()
-  private val flows = HashMap<String, MutableStateFlow<NasFolderState>>()
+  private val slots = HashMap<String, Slot>()
 
   private fun keyOf(share: String, dir: SharePath?) = share.lowercase(Locale.ROOT) + "/" + dir?.value.orEmpty().lowercase(Locale.ROOT)
 
-  private fun flowOf(share: String, dir: SharePath?): MutableStateFlow<NasFolderState> =
-    synchronized(lock) { flows.getOrPut(keyOf(share, dir)) { MutableStateFlow(NasFolderState.Loading) } }
+  private fun slotOf(share: String, dir: SharePath?): Slot = synchronized(lock) { slots.getOrPut(keyOf(share, dir)) { Slot() } }
 
-  override fun observe(share: String, dir: SharePath?): Flow<NasFolderState> {
-    val flow = flowOf(share, dir)
-    // Alla prima osservazione si legge dal NAS; dopo, [refresh] aggiorna lo stesso flusso.
-    return flow.onStart { if (flow.value == NasFolderState.Loading) flow.value = load(share, dir) }
+  /**
+   * Chi osserva vede subito l'ultimo elenco noto (o `Loading` la prima volta) e, **a ogni osservazione**, il NAS si rilegge: prima
+   * l'elenco restava quello della prima lettura per tutta la vita del processo (NA-3), e i file copiati dal PC o portati dal backup non
+   * comparivano. [refresh] rilegge su richiesta (un gesto, un'operazione finita).
+   */
+  override fun observe(share: String, dir: SharePath?): Flow<NasFolderState> = channelFlow {
+    val slot = slotOf(share, dir)
+    val updates = launch { slot.state.collect { send(it) } }
+    reload(slot, share, dir)
+    updates.join()
   }
 
   override suspend fun refresh(share: String, dir: SharePath?) {
-    val flow = flowOf(share, dir)
-    flow.value = load(share, dir)
+    reload(slotOf(share, dir), share, dir)
+  }
+
+  private suspend fun reload(slot: Slot, share: String, dir: SharePath?) {
+    val ticket = synchronized(lock) { ++slot.issued }
+    val result = load(share, dir)
+    synchronized(lock) {
+      if (ticket > slot.published) {
+        slot.published = ticket
+        slot.state.value = result
+      }
+    }
   }
 
   private suspend fun load(share: String, dir: SharePath?): NasFolderState {

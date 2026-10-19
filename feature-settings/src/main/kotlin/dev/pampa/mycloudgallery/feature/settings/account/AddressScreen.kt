@@ -34,6 +34,10 @@ import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetTone
+import dev.pampa.mycloudgallery.core.common.log.GalleryLog
+import dev.pampa.mycloudgallery.core.family.contract.AdminActionResult
+import dev.pampa.mycloudgallery.core.family.contract.RegistryService
+import dev.pampa.mycloudgallery.core.family.contract.TrustStatus
 import dev.pampa.mycloudgallery.core.nas.contract.ConnectionTester
 import dev.pampa.mycloudgallery.core.nas.contract.InvalidateReason
 import dev.pampa.mycloudgallery.core.nas.contract.NasError
@@ -42,6 +46,7 @@ import dev.pampa.mycloudgallery.core.nas.contract.Stage
 import dev.pampa.mycloudgallery.core.nas.contract.TestTarget
 import dev.pampa.mycloudgallery.core.network.contract.NasAddress
 import dev.pampa.mycloudgallery.feature.settings.R
+import dev.pampa.mycloudgallery.feature.settings.network.SaveScope
 import dev.pampa.mycloudgallery.feature.settings.port.NasAccountSettings
 import dev.pampa.mycloudgallery.feature.settings.ui.ConfirmSheet
 import dev.pampa.mycloudgallery.feature.settings.ui.Feedback
@@ -68,6 +73,10 @@ internal data class AddressUiState(
   val typed: String = "",
   val phase: AddressPhase = AddressPhase.FORM,
   val feedback: Feedback? = null,
+  /** Questo dispositivo e' l'admin: l'indirizzo nuovo vale anche per i nuovi inviti (RE-5). */
+  val admin: Boolean = false,
+  /** Dopo la conferma: fin dove vale il cambio (RE-5). */
+  val saved: SaveScope? = null,
 ) {
   val parsed: NasAddress? get() = NasAddress.parseOrNull(typed)
 
@@ -87,12 +96,17 @@ internal class AddressViewModel @Inject constructor(
   accountSettings: Optional<NasAccountSettings>,
   private val tester: ConnectionTester,
   private val sessions: NasSessionManager,
+  private val registry: RegistryService,
 ) : ViewModel() {
 
   private val accounts: NasAccountSettings? = accountSettings.orElse(null)
 
   private val _state = MutableStateFlow(
-    AddressUiState(available = accounts?.account?.value != null, currentIp = accounts?.account?.value?.address?.ip),
+    AddressUiState(
+      available = accounts?.account?.value != null,
+      currentIp = accounts?.account?.value?.address?.ip,
+      admin = registry.status.value.isAdmin(),
+    ),
   )
   val state: StateFlow<AddressUiState> = _state.asStateFlow()
 
@@ -147,7 +161,11 @@ internal class AddressViewModel @Inject constructor(
     _state.update { if (it.phase != AddressPhase.DONE) it.copy(phase = AddressPhase.FORM, feedback = null) else it }
   }
 
-  /** La conferma: l'indirizzo cambia, le sessioni vecchie si chiudono. */
+  /**
+   * La conferma: l'indirizzo cambia su questo telefono, le sessioni vecchie si chiudono e, se e' l'admin, l'indirizzo entra anche nella
+   * configurazione **firmata** della famiglia (RE-5): da li' nasce l'indirizzo dei nuovi inviti, che prima restava quello vecchio. Chi non
+   * e' admin lo cambia solo per se', e la pagina lo dice. Prima si cambia qui (la firma si scrive sul NAS al nuovo indirizzo).
+   */
   fun confirm() {
     val address = _state.value.parsed ?: return
     if (_state.value.phase != AddressPhase.CONFIRM) return
@@ -156,13 +174,52 @@ internal class AddressViewModel @Inject constructor(
       try {
         port.updateAddress(address)
         sessions.invalidate(InvalidateReason.USER_REQUEST)
-        _state.update { it.copy(phase = AddressPhase.DONE, currentIp = address.ip) }
+        val scope = shareWithFamily(address.ip)
+        _state.update { it.copy(phase = AddressPhase.DONE, currentIp = address.ip, saved = scope) }
       } catch (e: CancellationException) {
         throw e
       } catch (_: Exception) {
         _state.update { it.copy(phase = AddressPhase.VERIFIED, feedback = Feedback(R.string.address_failed_title, R.string.problem_generic, FluidTone.Danger)) }
       }
     }
+  }
+
+  /** "Riprova" dopo una firma non riuscita: l'indirizzo e' gia' cambiato qui, si ripete solo la parte della famiglia. */
+  fun retryShare() {
+    val ip = _state.value.currentIp ?: return
+    if (_state.value.saved != SaveScope.FAMILY_FAILED) return
+    viewModelScope.launch {
+      try {
+        val scope = shareWithFamily(ip)
+        _state.update { it.copy(saved = scope) }
+      } catch (e: CancellationException) {
+        throw e
+      }
+    }
+  }
+
+  private suspend fun shareWithFamily(ip: String): SaveScope {
+    val result = try {
+      registry.updateNasAddress(ip)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (_: Exception) {
+      AdminActionResult.Failed(NasError.Unexpected(null))
+    }
+    return when (result) {
+      AdminActionResult.Done -> SaveScope.FAMILY
+      AdminActionResult.NotAdmin -> SaveScope.THIS_PHONE
+      else -> {
+        GalleryLog.d(TAG) { "indirizzo del NAS non firmato: ${result.javaClass.simpleName}" }
+        SaveScope.FAMILY_FAILED
+      }
+    }
+  }
+
+  private fun TrustStatus.isAdmin(): Boolean = this is TrustStatus.Approved && admin
+
+  private companion object {
+    const val TAG = "AddressViewModel"
   }
 }
 
@@ -174,6 +231,7 @@ internal class AddressActions(
   val onCancelConfirm: () -> Unit,
   val onEdit: () -> Unit,
   val onConfirm: () -> Unit,
+  val onRetryShare: () -> Unit = {},
 ) {
   companion object {
     val None = AddressActions({}, {}, {}, {}, {}, {}, {})
@@ -194,6 +252,7 @@ internal fun AddressRoute(onBack: () -> Unit) {
       onCancelConfirm = viewModel::cancelConfirm,
       onEdit = viewModel::edit,
       onConfirm = viewModel::confirm,
+      onRetryShare = viewModel::retryShare,
     ),
   )
 }
@@ -226,6 +285,32 @@ internal fun AddressScreen(state: AddressUiState, actions: AddressActions) {
           description = stringResource(R.string.address_done_detail),
           icon = Icons.Rounded.Check,
         )
+      }
+      state.saved?.let { saved ->
+        item {
+          Note(
+            title = stringResource(R.string.address_scope_title),
+            message = stringResource(
+              when (saved) {
+                SaveScope.FAMILY -> R.string.address_scope_family
+                SaveScope.THIS_PHONE -> R.string.address_scope_phone
+                SaveScope.FAMILY_FAILED -> R.string.address_scope_failed
+              },
+            ),
+            tone = if (saved == SaveScope.FAMILY_FAILED) FluidTone.Warning else FluidTone.Info,
+          )
+        }
+        if (saved == SaveScope.FAMILY_FAILED) {
+          item {
+            FluidButton(
+              text = stringResource(R.string.address_retry_share),
+              onClick = actions.onRetryShare,
+              style = FluidButtonStyle.Tinted,
+              size = FluidButtonSize.Large,
+              fillWidth = true,
+            )
+          }
+        }
       }
       item {
         FluidButton(
@@ -320,7 +405,7 @@ internal fun AddressScreen(state: AddressUiState, actions: AddressActions) {
           }
         }
       }
-      item { FluidSectionFootnote(text = stringResource(R.string.address_footnote)) }
+      item { FluidSectionFootnote(text = stringResource(if (state.admin) R.string.address_footnote_admin else R.string.address_footnote)) }
     }
   }
 
@@ -330,7 +415,7 @@ internal fun AddressScreen(state: AddressUiState, actions: AddressActions) {
     icon = Icons.Rounded.SwapHoriz,
     tone = GallerySheetTone.Caution,
     title = stringResource(R.string.address_sheet_title),
-    message = stringResource(R.string.address_sheet_message),
+    message = stringResource(if (state.admin) R.string.address_sheet_message_admin else R.string.address_sheet_message),
     confirmLabel = stringResource(R.string.address_sheet_confirm),
     confirmStyle = FluidButtonStyle.Filled,
     onConfirm = actions.onConfirm,

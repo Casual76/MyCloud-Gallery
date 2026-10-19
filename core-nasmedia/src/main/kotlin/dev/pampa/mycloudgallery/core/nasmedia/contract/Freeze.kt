@@ -115,6 +115,26 @@ interface FreezeState {
 }
 
 /**
+ * I conteggi che l'utente ha controllato e confermato con "Ho controllato, continua" (la franchigia di R9 della revisione 4A), in attesa
+ * del giro che li usa. [atNasMillis] e' l'ora del NAS del gesto: la franchigia vale [MassChangeRule.WINDOW_MILLIS] e non di piu'.
+ */
+data class FreezeAcceptance(val diff: ScanDiff, val atNasMillis: Long)
+
+/**
+ * Dove si ricorda la franchigia di un congelamento scongelato (NA-4). Il giro che la usa e' di solito in un **processo nuovo** (il lavoro
+ * della notte): se restasse solo in memoria il giro rivedrebbe le stesse assenze e ricongelerebbe con lo stesso numero, e l'utente
+ * dovrebbe confermare di nuovo cio' che ha gia' controllato. Vale **per quel congelamento soltanto**: la usa e la toglie il primo giro
+ * completo dopo il gesto (qualunque ne sia l'esito) e scade dopo 7 giorni; i congelamenti successivi chiedono un gesto nuovo.
+ * `:app` la salva su un file in `noBackupFilesDir` (tolto dall'azzeramento); senza, resta in memoria del processo (i test).
+ */
+interface FreezeAcceptances {
+  suspend fun load(account: dev.pampa.mycloudgallery.core.model.AccountId, share: String): FreezeAcceptance?
+
+  /** Ricorda [acceptance] per la share, o la toglie se null. */
+  suspend fun save(account: dev.pampa.mycloudgallery.core.model.AccountId, share: String, acceptance: FreezeAcceptance?)
+}
+
+/**
  * R8 della revisione 4B: i file che **questo dispositivo** ha tolto dalla parte visibile di una share con le sue operazioni (eliminati nel
  * cestino del NAS, spostati in un'altra share), per `fileId`, dal **diario locale** delle operazioni: azioni confermate dall'utente su
  * questo telefono, mai dati letti dal NAS. La scansione non li conta fra gli "spariti" del congelamento (D10): un riordino grande fatto

@@ -66,6 +66,13 @@ interface LibraryCommands {
   fun requestMediaLocation() {}
 
   /**
+   * Quali fra [ids] hanno una copia sul telefono, cioe' su quali [share] e [deleteFromPhone] possono fare davvero qualcosa (GA-8). I
+   * media che sono solo sul NAS non si condividono ne' si eliminano da qui: la Libreria lo dice invece di far credere che sia andata.
+   * Senza un legame con il telefono (anteprime, test) vale per tutti.
+   */
+  fun onPhone(ids: Set<MediaId>): Set<MediaId> = ids
+
+  /**
    * Condividi: l'intent di sistema con gli URI del MediaStore (`PhoneMediaIntents.share`). Vero se il selettore e' partito;
    * falso se Android lo ha rifiutato (troppi URI per la transazione Binder, nessuna app): la Libreria lo dice (I8).
    */

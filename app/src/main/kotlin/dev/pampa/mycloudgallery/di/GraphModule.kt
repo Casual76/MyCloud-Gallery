@@ -11,6 +11,7 @@ import dagger.multibindings.IntoSet
 import dagger.multibindings.Multibinds
 import dev.pampa.mycloudgallery.BuildConfig
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagnosticsContributor
+import dev.pampa.mycloudgallery.core.common.diagnostics.DiagnosticsLog
 import dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags
 import dev.pampa.mycloudgallery.core.family.contract.AdminRecovery
 import dev.pampa.mycloudgallery.core.family.contract.DeviceKeyQr
@@ -96,7 +97,7 @@ object GraphModule {
 
   @Provides
   @Singleton
-  fun graph(@ApplicationContext context: Context, platform: AppPlatform, flags: FeatureFlags): AppGraph {
+  fun graph(@ApplicationContext context: Context, platform: AppPlatform, flags: FeatureFlags, diagnostics: DiagnosticsLog): AppGraph {
     val window = InviteWindowStore(File(context.noBackupFilesDir, WorkManagerTrustSyncScheduler.INVITE_WINDOW_FILE))
     // D33 per tutto il processo (R11 della revisione 4A): anche il test di connessione dell'onboarding e la sessione
     // "estranea" del kit di recupero, che aprono una share con una connessione loro, passano dalla recinzione.
@@ -114,6 +115,8 @@ object GraphModule {
       work = WorkManagerCanceller(context, window),
       // D33: la recinzione delle prove sul campo, solo nella build debug (DeveloperTools di debug); null in release.
       shareGuard = DeveloperTools.shareGuard(),
+      // RE-4: l'anello "Ultimi esiti ed errori" e' legato da sempre, ma nessuno ci scriveva.
+      diagnostics = diagnostics,
     )
   }
 

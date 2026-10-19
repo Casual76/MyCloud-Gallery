@@ -2,9 +2,9 @@ package dev.pampa.mycloudgallery.work
 
 import android.app.Application
 import android.content.Context
+import android.net.NetworkCapabilities
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.Configuration
-import androidx.work.NetworkType
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.testing.SynchronousExecutor
@@ -59,7 +59,10 @@ class TrustSyncSchedulingTest {
     val daily = infos(WorkManagerTrustSyncScheduler.DAILY_WORK)
     assertThat(daily).hasSize(1)
     assertThat(daily.single().periodicityInfo?.repeatIntervalMillis).isEqualTo(WorkManagerTrustSyncScheduler.DAILY.inWholeMilliseconds)
-    assertThat(daily.single().constraints.requiredNetworkType).isEqualTo(NetworkType.CONNECTED)
+    val request = daily.single().constraints.requiredNetworkRequest
+    assertThat(request).isNotNull()
+    assertThat(request!!.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)).isFalse()
+    assertThat(request.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)).isFalse()
     assertThat(daily.single().tags).contains(TrustSyncWorker.TAG)
   }
 

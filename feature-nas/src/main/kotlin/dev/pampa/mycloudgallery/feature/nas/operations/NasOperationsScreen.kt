@@ -16,6 +16,7 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.DriveFileRenameOutline
 import androidx.compose.material.icons.rounded.RestoreFromTrash
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.TaskAlt
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -41,6 +42,9 @@ import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterNote
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterPill
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterTone
+import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryConfirmSheet
+import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetScaffold
+import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetTone
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
 import dev.pampa.mycloudgallery.core.nasops.contract.NasOperationState
@@ -50,6 +54,8 @@ import dev.pampa.mycloudgallery.feature.nas.NasDimens
 import dev.pampa.mycloudgallery.feature.nas.R
 import dev.pampa.mycloudgallery.feature.nas.ui.NasEmptyState
 import dev.pampa.mycloudgallery.feature.nas.ui.NasLabel
+import dev.pampa.mycloudgallery.feature.nas.ui.NasNotice
+import dev.pampa.mycloudgallery.feature.nas.ui.NasTone
 import dev.pampa.mycloudgallery.feature.nas.ui.NasPage
 import dev.pampa.mycloudgallery.feature.nas.ui.NasProgressBar
 import dev.pampa.mycloudgallery.feature.nas.ui.NasSectionTitle
@@ -73,6 +79,9 @@ fun NasOperationsRoute(
   NasOperationsScreen(
     state = state,
     onStop = viewModel::stop,
+    onAskClock = viewModel::askClock,
+    onAcceptClock = viewModel::acceptClock,
+    onDismissClock = viewModel::dismissClock,
     modifier = modifier,
     onBack = onBack,
     hostPadding = hostPadding,
@@ -85,6 +94,9 @@ fun NasOperationsRoute(
 internal fun NasOperationsScreen(
   state: OperationsUi,
   onStop: (OpId) -> Unit,
+  onAskClock: () -> Unit = {},
+  onAcceptClock: () -> Unit = {},
+  onDismissClock: () -> Unit = {},
   modifier: Modifier = Modifier,
   onBack: (() -> Unit)? = null,
   hostPadding: PaddingValues = PaddingValues(),
@@ -104,12 +116,26 @@ internal fun NasOperationsScreen(
     backdropOut = backdropOut,
     hostPadding = hostPadding,
   ) { insets ->
+    ClockJumpSheet(visible = state.askingClock, onConfirm = onAcceptClock, onDismiss = onDismissClock)
     Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
       LazyColumn(
         modifier = Modifier.fillMaxHeight().widthIn(max = NasDimens.DashboardMaxWidth).fillMaxWidth(),
         contentPadding = PaddingValues(start = GalleryDimens.Gutter, end = GalleryDimens.Gutter, top = insets.top, bottom = insets.bottom),
         verticalArrangement = Arrangement.spacedBy(NasDimens.BlockGap),
       ) {
+        // NA-11: il salto dell'ora del NAS ferma le funzioni a scadenza (cestino, indice); qui c'e' il gesto per riprendere.
+        if (state.clockJumpMs != null) {
+          item(key = "clock-jump") {
+            NasNotice(
+              tone = NasTone.Attention,
+              glyph = Icons.Rounded.Schedule,
+              title = stringResource(R.string.nas_ops_clock_title),
+              detail = stringResource(R.string.nas_ops_clock_detail),
+              actionLabel = stringResource(R.string.nas_ops_clock_action),
+              onAction = onAskClock,
+            )
+          }
+        }
         if (state.isEmpty) {
           item(key = "empty") {
             NasEmptyState(
@@ -136,6 +162,41 @@ internal fun NasOperationsScreen(
         }
       }
     }
+  }
+}
+
+// --- NA-11: il foglio "L'ora del NAS e' giusta?" ----------------------------------------------------------------------------------
+
+/**
+ * Il gesto che toglie la sospensione dopo un salto dell'ora del NAS (D32) vuole un secondo tocco: da qui ripartono il cestino e le
+ * funzioni a scadenza, quindi l'utente deve aver guardato l'ora del NAS. Il foglio lo dice con parole semplici; il gesto, comunque, viene
+ * solo da qui.
+ */
+@Composable
+internal fun ClockJumpSheet(visible: Boolean, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+  val title = stringResource(R.string.nas_ops_clock_sheet_title)
+  GalleryConfirmSheet(visible = visible, onDismissRequest = onDismiss, paneTitle = title) {
+    GallerySheetScaffold(
+      icon = Icons.Rounded.Schedule,
+      tone = GallerySheetTone.Caution,
+      title = title,
+      message = stringResource(R.string.nas_ops_clock_sheet_message),
+      actions = {
+        FluidButton(
+          text = stringResource(R.string.nas_ops_clock_sheet_confirm),
+          onClick = onConfirm,
+          size = FluidButtonSize.Large,
+          fillWidth = true,
+        )
+        FluidButton(
+          text = stringResource(R.string.nas_ops_clock_sheet_cancel),
+          onClick = onDismiss,
+          style = FluidButtonStyle.Tinted,
+          size = FluidButtonSize.Large,
+          fillWidth = true,
+        )
+      },
+    )
   }
 }
 

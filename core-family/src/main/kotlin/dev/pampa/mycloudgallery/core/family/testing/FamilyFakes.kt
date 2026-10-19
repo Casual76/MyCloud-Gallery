@@ -432,6 +432,22 @@ class FakeRegistryService(
     exclusionUpdates += excluded
     return nextResult
   }
+
+  /** Gli indirizzi del NAS firmati (RE-5), in ordine. */
+  val addressUpdates: MutableList<String> = mutableListOf()
+
+  /** I prefissi ULA di casa firmati (RE-5), in ordine. */
+  val homeUlaUpdates: MutableList<Set<String>> = mutableListOf()
+
+  override suspend fun updateNasAddress(ip: String): AdminActionResult {
+    addressUpdates += ip
+    return nextResult
+  }
+
+  override suspend fun updateHomeUla(prefixes: Set<String>): AdminActionResult {
+    homeUlaUpdates += prefixes
+    return nextResult
+  }
 }
 
 class FakeTrustGuard(

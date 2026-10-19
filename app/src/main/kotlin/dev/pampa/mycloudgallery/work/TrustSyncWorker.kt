@@ -7,6 +7,8 @@ import androidx.work.WorkerParameters
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
+import dev.pampa.mycloudgallery.feature.diagnostics.recording.DiagJob
+import dev.pampa.mycloudgallery.feature.diagnostics.recording.DiagJobResult
 import dev.pampa.mycloudgallery.graph.AppGraph
 import dev.pampa.mycloudgallery.notify.AppNotifications
 import dev.pampa.mycloudgallery.notify.NotifiedRequests
@@ -36,10 +38,27 @@ class TrustSyncWorker @AssistedInject constructor(
       notifications = notifications,
       notified = NotifiedRequests(File(applicationContext.noBackupFilesDir, NOTIFIED_FILE)),
     )
-    val outcome = run.execute()
+    val outcome = try {
+      run.execute()
+    } catch (e: kotlinx.coroutines.CancellationException) {
+      StopReports.report(graph, DiagJob.TRUST_SYNC, StopReports.reasonOf(this))
+      throw e
+    }
     GalleryLog.d(TAG) { "controllo del registro: $outcome" }
+    recordOutcome(outcome)
     scheduler?.closeInviteWindowIfExpired()
     return Result.success()
+  }
+
+  /** L'esito nell'anello della Diagnostica (RE-4): un dispositivo non configurato non ha niente da dire. */
+  private fun recordOutcome(outcome: TrustSyncOutcome) {
+    val result = when (outcome) {
+      TrustSyncOutcome.NOT_CONFIGURED -> return
+      TrustSyncOutcome.RULES_WAIT -> DiagJobResult.WAITING
+      TrustSyncOutcome.STOPPED -> DiagJobResult.STOPPED
+      TrustSyncOutcome.READ_ONLY, TrustSyncOutcome.WIPE_STARTED, TrustSyncOutcome.DONE -> DiagJobResult.FINISHED
+    }
+    graph.events.result(DiagJob.TRUST_SYNC, result, reason = outcome)
   }
 
   companion object {

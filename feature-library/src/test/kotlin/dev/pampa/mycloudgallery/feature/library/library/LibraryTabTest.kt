@@ -1,6 +1,10 @@
 package dev.pampa.mycloudgallery.feature.library.library
 
 import android.app.Application
+import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedDispatcher
+import androidx.activity.compose.LocalActivity
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -240,6 +244,47 @@ class LibraryTabTest {
     composeRule.onNodeWithText("Fine").performClick()
     assertThat(state.grid.selecting).isFalse()
     assertThat(state.grid.selection.selected.value.isEmpty).isTrue()
+  }
+
+  /**
+   * GA-2: in selezione "Indietro" chiude la selezione, non l'app. Prima la Libreria non aveva un gestore del tasto e il sistema
+   * chiudeva l'activity; le Raccolte e gli Eliminati di recente ce l'avevano gia'. Fuori dalla selezione il tasto resta del sistema.
+   */
+  @Test
+  fun ga2_inSelezioneIndietroEsceDallaSelezioneNonDallApp() {
+    val state = syntheticLibraryState(count = 400)
+    var activity: ComponentActivity? = null
+    var dispatcher: OnBackPressedDispatcher? = null
+    composeRule.setContent {
+      activity = LocalActivity.current as ComponentActivity
+      dispatcher = LocalOnBackPressedDispatcherOwner.current!!.onBackPressedDispatcher
+      MyCloudGalleryTheme(settings = EngineSettings(themeMode = ThemeMode.LIGHT)) {
+        LibraryTab(
+          contentPadding = PaddingValues(bottom = 96.dp),
+          backdropOut = {},
+          onOpenViewer = {},
+          onOpenSettings = {},
+          statusFooter = {},
+          state = state,
+        )
+      }
+    }
+    composeRule.waitForIdle()
+    composeRule.onNodeWithContentDescription("Seleziona").performClick()
+    composeRule.onAllNodesWithContentDescription("Foto, ", substring = true)[0].performClick()
+    assertThat(state.grid.selecting).isTrue()
+
+    composeRule.runOnUiThread { dispatcher!!.onBackPressed() }
+    composeRule.waitForIdle()
+
+    assertThat(state.grid.selecting).isFalse()
+    assertThat(state.grid.selection.selected.value.isEmpty).isTrue()
+    assertWithMessage("l'app non si chiude").that(activity!!.isFinishing).isFalse()
+
+    // Fuori dalla selezione il tasto e' del sistema, come sempre.
+    composeRule.runOnUiThread { dispatcher!!.onBackPressed() }
+    composeRule.waitForIdle()
+    assertThat(activity!!.isFinishing).isTrue()
   }
 
   /**

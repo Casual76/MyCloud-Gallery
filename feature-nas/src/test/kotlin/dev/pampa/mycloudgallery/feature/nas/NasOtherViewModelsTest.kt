@@ -250,7 +250,7 @@ class NasOtherViewModelsTest {
   @Test
   fun ferma_inoltraLAnnullamentoEBasta() = runTest(dispatcher) {
     val scripted = ScriptedNasOperations(kit.clocks)
-    val vm = NasOperationsViewModel(scripted)
+    val vm = NasOperationsViewModel(scripted, areas)
     backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect { } }
     settle()
     assertThat(vm.state.value.isEmpty).isTrue()
@@ -265,7 +265,7 @@ class NasOtherViewModelsTest {
   @Test
   fun unaOperazioneVeraSiVedeAvanzareEFinire() = runTest(dispatcher) {
     kit.putFile("test", "a.txt", byteArrayOf(1))
-    val vm = NasOperationsViewModel(kit.operations)
+    val vm = NasOperationsViewModel(kit.operations, areas)
     backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect { } }
     settle()
     val plan = (kit.operations.plan(OpRequest.Trash(listOf(kit.itemOf("test", "a.txt")))) as PlanOutcome.Ready).plan

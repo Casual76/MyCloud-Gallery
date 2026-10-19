@@ -46,8 +46,19 @@ data class ScanSettings(
 sealed interface NasScanStatus {
   data object Idle : NasScanStatus
 
-  /** In corso: [filesTotal] e' noto solo dopo il primo giro completo (null alla prima scansione). */
-  data class Scanning(val mode: ScanMode, val foldersDone: Int, val filesSeen: Int, val detected: Int, val filesTotal: Int?) : NasScanStatus
+  /**
+   * In corso: [filesTotal] e' noto solo dopo il primo giro completo (null alla prima scansione). [first] e' vero finche' la share non
+   * ha mai finito un giro completo (NA-6): la **prima** scansione, qualunque sia il modo con cui parte. I lavori in background usano
+   * sempre [ScanMode.Verify] (che sulla prima volta legge tutto), quindi il modo da solo non dice se e' la prima.
+   */
+  data class Scanning(
+    val mode: ScanMode,
+    val foldersDone: Int,
+    val filesSeen: Int,
+    val detected: Int,
+    val filesTotal: Int?,
+    val first: Boolean = false,
+  ) : NasScanStatus
 
   /** Ultimo giro finito (o fermato) con questo resoconto. */
   data class Finished(val report: ScanReport) : NasScanStatus

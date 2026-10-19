@@ -62,6 +62,8 @@ import java.util.Locale
 import kotlin.time.Duration
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * L'esecutore di **riferimento** delle operazioni, sopra le primitive di scrittura ([NasFileOps]), la lettura ([NasMediaReader]) e un
@@ -105,6 +107,9 @@ class InMemoryNasOperations(
   private val pauseReasons = HashMap<OpId, PauseReason>()
   private val cancelRequests = HashSet<OpId>()
   private var purpose: Purpose = Purpose.INTERACTIVE
+
+  /** Un'esecuzione alla volta (NA-1): `start` e `resumeAll` si mettono in fila, mentre il diario li vede entrambi. */
+  private val runLock = Mutex()
 
   private class PauseSignal(val reason: PauseReason) : RuntimeException(null, null, false, false)
 
@@ -367,10 +372,16 @@ class InMemoryNasOperations(
     store.opByPlanHash(plan.hash)?.let { return StartOutcome.AlreadyStarted(it.id) }
     if (plan.items.any { blocked(it.srcShare) || it.dstShare?.let(::blocked) == true }) return StartOutcome.WritesBlocked
     val nasNow = clocks.nasNowMs() ?: return StartOutcome.WritesBlocked
+    // NA-1, come l'esecutore vero: l'operazione entra nel diario subito ("in coda") e parte quando l'esecuzione e' libera.
     val record = store.create(accepted, OpId(newId()), accountId, nasNow)
     refreshStates()
-    purpose = Purpose.INTERACTIVE
-    runOp(record.id, Long.MAX_VALUE)
+    runLock.withLock {
+      val current = store.op(record.id)
+      if (current != null && !current.state.terminal && current.errorCode != OpErrorCode.STOPPED_BY_USER) {
+        purpose = Purpose.INTERACTIVE
+        runOp(record.id, Long.MAX_VALUE)
+      }
+    }
     return StartOutcome.Started(record.id)
   }
 
@@ -415,7 +426,9 @@ class InMemoryNasOperations(
     }
   }
 
-  override suspend fun resumeAll(budget: Duration): RunResult {
+  override suspend fun resumeAll(budget: Duration): RunResult = runLock.withLock { resumeLocked(budget) }
+
+  private suspend fun resumeLocked(budget: Duration): RunResult {
     purpose = Purpose.BACKGROUND
     // Dopo la morte del processo lo stato mostrato si ricostruisce dal diario (quello vero lo fa da `observeOps`).
     refreshStates()

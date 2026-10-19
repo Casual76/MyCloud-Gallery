@@ -2,6 +2,8 @@ package dev.pampa.mycloudgallery.integration
 
 import android.content.Context
 import android.content.ContextWrapper
+import dev.pampa.mycloudgallery.core.common.diagnostics.DiagnosticsLog
+import dev.pampa.mycloudgallery.core.common.diagnostics.NoDiagnosticsLog
 import dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags
 import dev.pampa.mycloudgallery.core.family.contract.SetupState
 import dev.pampa.mycloudgallery.core.family.contract.SyncReason
@@ -249,6 +251,8 @@ class TestDevice(
   root: File,
   val platform: TestPlatform,
   flags: FeatureFlags = FeatureFlags.forBuild(debugBuild = true, nasLibrary = true),
+  /** L'anello "Ultimi esiti ed errori" (RE-4): di solito nessuno; i test che guardano gli eventi ne danno uno vero. */
+  diagnostics: DiagnosticsLog = NoDiagnosticsLog,
 ) {
   val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
   val scheduler = RecordingScheduler()
@@ -262,6 +266,7 @@ class TestDevice(
     appVersion = "0.1.0",
     schedulerFactory = { scheduler },
     work = WorkCanceller { workCancelled.incrementAndGet() },
+    diagnostics = diagnostics,
   )
 
   /**

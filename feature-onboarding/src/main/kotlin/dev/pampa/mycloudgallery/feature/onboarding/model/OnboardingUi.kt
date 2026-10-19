@@ -8,6 +8,7 @@ import dev.pampa.mycloudgallery.core.family.contract.OnboardingProblem
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingWarning
 import dev.pampa.mycloudgallery.core.family.contract.RecoveryKitRef
+import dev.pampa.mycloudgallery.core.network.contract.ControlPermissionOutcome
 import dev.pampa.mycloudgallery.core.network.contract.VpnCapability
 import dev.pampa.mycloudgallery.core.network.contract.VpnCommandResult
 import dev.pampa.mycloudgallery.core.qr.contract.ScanRejection
@@ -161,6 +162,11 @@ internal data class VpnUi(
   val test: VpnTestUi = VpnTestUi.Idle,
   val submitting: Boolean = false,
   val problem: OnboardingProblem? = null,
+  /**
+   * Com'e' finita l'ultima richiesta del permesso di WireGuard (verifica funzionale, RE-1): null = non ancora chiesto (o concesso). Un
+   * rifiuto resta visibile con il modo di riprovare, il dialogo o la scheda dell'app.
+   */
+  val permission: ControlPermissionOutcome? = null,
 )
 
 // --- Passo 12: chiave di famiglia e kit -------------------------------------------------------------

@@ -117,12 +117,14 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Il grafo del **NAS nella Libreria** (Fase 4A, P11; docs/fase4-progetto.md §1.4): sessione → `NasMediaReader` →
@@ -189,6 +191,12 @@ class NasGraph(
    */
   private val clockStore = FileClockJumpStore(File(File(noBackup, REPLICA_DIR), CLOCK_FILE))
   val clockGuard: ClockJumpGuard = ClockJumpGuard(clockStore)
+
+  /**
+   * NA-4: "Ho controllato, continua" si ricorda fra un processo e l'altro (il giro dopo il gesto e' di solito in un processo nuovo). Sta
+   * sotto `replica/` come l'ora del NAS: l'azzeramento lo toglie con lei.
+   */
+  private val freezeAcceptances = FileFreezeAcceptances(File(File(noBackup, REPLICA_DIR), FREEZE_ACCEPT_FILE))
 
   /** Le conferme "dati mobili" per media e per sessione (E-V2): una per l'app, condivisa da foto, video e "Scarica". */
   val consent: MobileDataConsent = MobileDataConsent()
@@ -352,6 +360,8 @@ class NasGraph(
 
   init {
     scope.launch { runCatching { watchClock() } }
+    // NA-11: lo stato del salto salvato (fra un processo e l'altro) si legge subito, cosi' la schermata lo vede prima della prima ancora.
+    scope.launch(Dispatchers.IO) { runCatching { clockGuard.blocked } }
   }
 
   // --- Stato: congelamento, Libreria ---------------------------------------------------------------------------------
@@ -397,6 +407,8 @@ class NasGraph(
     localCovers = { covers.on },
     mirrorCovers = { on -> if (covers.on != on) covers.set(on) },
     citedTemps = citedTemps,
+    clockJump = clockGuard.jump,
+    acceptClock = { acceptClockJump() },
   )
 
   private val composer = LibraryNasStatusComposer { monotonicMs() }
@@ -427,7 +439,10 @@ class NasGraph(
    * "L'ora del NAS e' giusta, continua" (D32, R7): il gesto dell'utente che toglie la sospensione. Viene dalla UI (Diagnostica),
    * mai da un dato del NAS. Falso se non c'era un salto.
    */
-  fun acceptClockJump(): Boolean = clockGuard.accept()
+  fun acceptClockJump(): Boolean = clockGuard.accept().also { accepted ->
+    // NA-2: le operazioni ferme per il salto dell'ora (`CLOCK_JUMP`) riprendono.
+    if (accepted) organizer.resumeSoon()
+  }
 
   /** La qualita' delle anteprime (Impostazioni, E-L6): null finche' il NAS non c'e'. */
   val quality: StateFlow<ReplicaQualityState?> = runtimeFlow.flatMapLatest { rt -> rt?.quality?.state ?: flowOf(null) }
@@ -438,10 +453,13 @@ class NasGraph(
     val areas = rt.areas.mapIndexed { i, area ->
       val status = statuses.getOrNull(i)
       val scan = when (status) {
-        is NasScanStatus.Scanning -> if (status.mode == ScanMode.Full) ScanProgress.First(status.filesSeen, status.filesTotal) else ScanProgress.Verifying
+        // NA-6: la prima scansione si vede anche se parte come `Verify` (i lavori usano sempre quella).
+        is NasScanStatus.Scanning -> if (status.mode == ScanMode.Full || status.first) ScanProgress.First(status.filesSeen, status.filesTotal) else ScanProgress.Verifying
         else -> ScanProgress.Idle
       }
-      val freeze = frozen[area.share.lowercase(Locale.ROOT)] ?: (status as? NasScanStatus.Frozen)?.freeze
+      // NA-5: il congelamento e' quello che lo scanner dice adesso, non l'ultimo stato del giro: dopo "Ho controllato, continua" lo stato
+      // del giro resta `Frozen` fino al giro dopo, e il piede dichiarava "Lavori fermi" per un congelamento tolto.
+      val freeze = frozen[area.share.lowercase(Locale.ROOT)] ?: rt.scannerOf(area.share)?.freezeState?.frozen?.value
       NasAreaProgress(
         area = area.area,
         scan = scan,
@@ -565,6 +583,7 @@ class NasGraph(
         monotonicMs = monotonicMs,
         // R8 (revisione 4B): cio' che l'app stessa ha tolto dalla share (diario locale) non fa scattare il congelamento.
         ownRemovals = organizer.ownRemovals,
+        acceptances = freezeAcceptances,
       )
     }
     val rt = Runtime(account, deviceId, areas, replica, quality, sync, publisher, remote, workSource, workUnits, preparer, scanners)
@@ -575,6 +594,10 @@ class NasGraph(
       // R2 (revisione 4A): niente outbox per le share non piu' configurate o non pubblicabili (D31, sola lettura).
       runCatching { publisher.purgeOutbox(areas.map { it.share }.toSet()) }
       scanners.values.forEach { it.freezeState.load() }
+      // NA-7: i congelamenti salvati si conoscono **adesso**, prima che il motore sia visibile: il riepilogo giornaliero li legge subito
+      // dopo `start()`, e i cancelli delle scritture (indice, operazioni dell'utente) non devono restare aperti su una share congelata
+      // nel tempo che il guardiano (`watchFreezes`) impiega a partire in un processo appena avviato.
+      publishFrozen(scanners.mapNotNull { (key, scanner) -> scanner.freezeState.frozen.value?.let { key to it } }.toMap())
       runCatching { preparer.sweepStale() }
     } catch (e: CancellationException) {
       throw e
@@ -610,12 +633,20 @@ class NasGraph(
     detectionByteCap = detectionCap,
   )
 
+  private fun publishFrozen(map: Map<String, Freeze>) {
+    frozenShares.value = map
+    inputs.freezeSignal.update(map.values.map { it.reason })
+  }
+
   private suspend fun watchFreezes(rt: Runtime) {
     val flows = rt.scanners.map { (key, scanner) -> combine(flowOf(key), scanner.freezeState.frozen) { k, f -> k to f } }
     if (flows.isEmpty()) return
+    var previous = frozenShares.value.keys
     combine(flows) { pairs -> pairs.mapNotNull { (k, f) -> f?.let { k to it } }.toMap() }.collect { map ->
-      frozenShares.value = map
-      inputs.freezeSignal.update(map.values.map { it.reason })
+      publishFrozen(map)
+      // NA-2: una share che si scongela (a mano o da sola, quando la situazione torna normale) libera le operazioni rimaste ferme.
+      if (previous.any { it !in map }) organizer.resumeSoon()
+      previous = map.keys
     }
   }
 
@@ -750,11 +781,46 @@ class NasGraph(
   }
 
   /**
+   * Riprende le operazioni dal diario per il lavoro in background (NA-12). Un processo nato per il lavoro puo' non avere ancora il motore
+   * del NAS: lo avvia qui ([start] e' idempotente). Se non parte (la famiglia non e' ancora pronta in questo processo, il catalogo non
+   * c'e') ma il diario ha operazioni aperte, **non e' "niente da fare"**: risponde che il NAS non risponde, e il lavoro si riprogramma.
+   * Null solo senza NAS configurato o a galleria ferma (l'azzeramento).
+   */
+  suspend fun resumeOperations(budget: Duration): dev.pampa.mycloudgallery.core.nasops.contract.RunResult? = resumeCold(
+    start = ::start,
+    // In un processo appena nato la galleria costruisce il catalogo e aggancia il NAS da sola: un poco si aspetta.
+    awaitAttached = { withTimeoutOrNull(attachWait) { organizer.partsState.first { it != null } } != null },
+    resume = { organizer.resumeOperations(budget) },
+    stopped = { stopped.get() },
+    hasOpenOperations = { organizer.hasOpenOperations() },
+  )
+
+  /** NA-12: quanto aspetta, in un processo appena nato, che la galleria aggancia il NAS (i test lo accorciano). */
+  @Volatile internal var attachWait: Duration = ATTACH_WAIT
+
+  /**
    * "Ho controllato, continua" (D10): scongela la share [share] solo con il conteggio che l'utente ha visto. Il gesto viene
    * dalla UI (Diagnostica), mai da un dato del NAS.
    */
-  suspend fun release(share: String, gesture: UserGesture): Boolean =
-    runtimeFlow.value?.scannerOf(share)?.freezeState?.release(gesture) ?: false
+  suspend fun release(share: String, gesture: UserGesture): Boolean {
+    val released = runtimeFlow.value?.scannerOf(share)?.freezeState?.release(gesture) ?: false
+    if (released) {
+      // NA-4/NA-5: la franchigia e' salvata; la verifica parte adesso (il giro che la usa), cosi' il piede e le assenze si aggiornano senza
+      // aspettare il lavoro delle ore piccole. NA-2: le operazioni rimaste ferme dal congelamento riprendono.
+      organizer.requestVerify()
+      organizer.resumeSoon()
+    }
+    return released
+  }
+
+  /**
+   * "Ferma le scritture sul NAS" / "Riattiva le scritture" (Diagnostica, §1.4). Riattivare libera le operazioni rimaste ferme (NA-2): il
+   * testo promette che riprendono da sole.
+   */
+  fun setWritesStopped(stopped: Boolean) {
+    emergency.set(stopped)
+    if (!stopped) organizer.resumeSoon()
+  }
 
   private fun prepBudget(): PrepBudget {
     val memory = context.getSystemService(ActivityManager::class.java)?.memoryClass ?: DEFAULT_MEMORY_CLASS_MB
@@ -776,7 +842,13 @@ class NasGraph(
 
     /** R7: l'ultima ancora dell'ora del NAS e il salto in corso, sotto `replica/` (l'azzeramento la toglie). */
     const val CLOCK_FILE = "nas-clock"
+
+    /** NA-4: la franchigia di "Ho controllato, continua", sotto `replica/` (l'azzeramento la toglie). */
+    const val FREEZE_ACCEPT_FILE = "nas-freeze-accept"
     private const val VERIFY_EVERY_MS = 15 * 60 * 1000L
+
+    /** NA-12: l'attesa del NAS agganciato per il lavoro delle operazioni in un processo appena nato. */
+    private val ATTACH_WAIT: Duration = 20_000.milliseconds
     private const val DEFAULT_MEMORY_CLASS_MB = 256
     private const val MIN_MEMORY_CLASS_MB = 64
   }

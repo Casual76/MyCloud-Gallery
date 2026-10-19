@@ -70,6 +70,34 @@ class ImagingContractTest {
     assertThat(SyntheticThumbnailSource().load(MediaRef.Phone("external_primary", 1, null), 160, CancellationSignal())).isNull()
   }
 
+  /**
+   * GA-3, il finto: come la cache vera, da `UI_HIDDEN` in su le miniature visibili spariscono (la cella torna sul segnaposto) e tornano
+   * con `resume` al primo piano. Lo stesso scenario sul caricatore vero sta in `PipelineThumbnailLoaderTest.ga3_…`.
+   */
+  @Test
+  fun ga3_ilCaricatoreFintoPerdeEritrovaLeMiniatureCome_ilVero() {
+    val loader = FakeThumbnailLoader()
+    val image = loader.image(key, ref)
+    loader.window(listOf(ThumbRequest(key, ref)), emptyList())
+    assertThat(image.value).isNotNull()
+
+    // Una pressione lieve (l'app e' visibile) non toglie niente a chi guarda.
+    loader.trim(10)
+    assertThat(image.value).isNotNull()
+
+    loader.trim(40)
+    assertThat(image.value).isNull()
+    assertThat(loader.peek(key)).isNull()
+
+    loader.resume()
+    assertThat(image.value).isNotNull()
+    assertThat(loader.peek(key)).isNotNull()
+    // Senza niente di scartato, tornare in primo piano non rifa' lavoro.
+    val produced = loader.produced
+    loader.resume()
+    assertThat(loader.produced).isEqualTo(produced)
+  }
+
   @Test
   fun ilSegnapostoDaUnThumbHashEQuelloStesso() {
     val cache = FakePlaceholderCache()

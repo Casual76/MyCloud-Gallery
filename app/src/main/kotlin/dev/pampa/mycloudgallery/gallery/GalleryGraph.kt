@@ -487,8 +487,11 @@ class GalleryGraph(
     override fun refOrNull(id: MediaId): MediaRef? = delegate.refOrNull(id)
   }
 
-  /** I nascosti: **il solo punto** che li legge, e solo dopo lo sblocco (lo garantisce chi chiama, P10). */
-  val hiddenLibrary: HiddenLibrary = HiddenLibrary { CatalogHidden.read(database, core().catalog) }
+  /**
+   * I nascosti: **il solo punto** che li legge, e solo dopo lo sblocco (lo garantisce chi chiama, P10). La vista si rilegge finche' e'
+   * guardata (GA-1); la galleria che si ferma ferma anche lei (`galleryScope`).
+   */
+  val hiddenLibrary: HiddenLibrary = HiddenLibrary { CatalogHidden.read(database, core().catalog, galleryScope) }
 
   /** Quali elementi del cestino di sistema sono nascosti nell'app (si mostrano col segno, solo da sbloccati). */
   val trashMask: TrashHiddenMask = TrashHiddenMask { refs -> CatalogHidden.hiddenAmong(database, core().catalog, refs) }
@@ -603,6 +606,8 @@ class GalleryGraph(
   fun onForeground() {
     foreground = true
     refreshAccess()
+    // GA-3: un `onTrimMemory` in secondo piano ha svuotato le miniature della finestra: al ritorno si richiedono.
+    if (!retired) thumbnails.resume()
     if (startedFlow.value && !retired) attachSync()
   }
 

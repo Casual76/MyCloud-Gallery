@@ -3,6 +3,8 @@ package dev.pampa.mycloudgallery.core.nasmedia.freeze
 import dev.pampa.mycloudgallery.core.model.AccountId
 import dev.pampa.mycloudgallery.core.model.FreezeReason
 import dev.pampa.mycloudgallery.core.nasmedia.contract.Freeze
+import dev.pampa.mycloudgallery.core.nasmedia.contract.FreezeAcceptance
+import dev.pampa.mycloudgallery.core.nasmedia.contract.FreezeAcceptances
 import dev.pampa.mycloudgallery.core.nasmedia.contract.FreezeState
 import dev.pampa.mycloudgallery.core.nasmedia.contract.FreezeVerdict
 import dev.pampa.mycloudgallery.core.nasmedia.contract.MassChangeRule
@@ -80,23 +82,37 @@ class CursorKeeper(val store: NasScanStore, val account: AccountId, val share: S
  * revisione 4A): i conteggi confermati valgono come franchigia, e cio' che li supera di nuovo della soglia congela (60
  * file in `.locked` confermati non lasciano passare la cifratura di tutta la share prima del giro dopo).
  */
-class StoreFreezeState(private val keeper: CursorKeeper) : FreezeState {
+class StoreFreezeState(
+  private val keeper: CursorKeeper,
+  /** NA-4: dove si ricorda la franchigia fra un processo e l'altro. */
+  private val acceptances: FreezeAcceptances = InMemoryFreezeAcceptances(),
+  /** L'ora del NAS adesso, per la scadenza della franchigia; null = non si controlla (i test dei pezzi). */
+  private val nowNas: () -> Long? = { null },
+) : FreezeState {
 
   constructor(store: NasScanStore, account: AccountId, share: String) : this(CursorKeeper(store, account, share))
 
   private val state = MutableStateFlow<Freeze?>(null)
-  private val accepted = AtomicReference<ScanDiff?>(null)
+  private val accepted = AtomicReference<FreezeAcceptance?>(null)
 
   override val frozen: StateFlow<Freeze?> = state.asStateFlow()
 
-  /** Legge lo stato salvato (all'avvio, prima del primo giro: la Libreria deve poter mostrare un congelamento di ieri). */
+  /**
+   * Legge lo stato salvato (all'avvio, prima del primo giro: la Libreria deve poter mostrare un congelamento di ieri) e la franchigia
+   * che un gesto di un processo di prima ha lasciato (NA-4).
+   */
   suspend fun load() {
     state.value = keeper.read().freeze
+    accepted.set(acceptances.load(keeper.account, keeper.share))
   }
 
   override suspend fun release(gesture: UserGesture): Boolean {
     val current = keeper.read().freeze ?: return false
     if (gesture.confirmedCount != current.headlineCount) return false
+    // NA-4: la franchigia si ricorda **prima** di togliere il congelamento: se il processo muore in mezzo, il gesto dell'utente vale
+    // comunque e il giro dopo lo trova (il contrario lo avrebbe perso e ricongelato).
+    val acceptance = FreezeAcceptance(current.diff, nowNas() ?: 0L)
+    acceptances.save(keeper.account, keeper.share, acceptance)
     var released: Freeze? = null
     keeper.update { cursor ->
       // Riletto sotto lucchetto: un giro puo' aver aggiornato il congelamento nel frattempo.
@@ -109,8 +125,13 @@ class StoreFreezeState(private val keeper: CursorKeeper) : FreezeState {
         cursor
       }
     }
-    val freeze = released ?: return false
-    accepted.set(freeze.diff)
+    val freeze = released
+    if (freeze == null) {
+      // Il congelamento era cambiato nel frattempo: il gesto non vale per quello nuovo.
+      acceptances.save(keeper.account, keeper.share, null)
+      return false
+    }
+    accepted.set(acceptance.copy(diff = freeze.diff))
     state.value = null
     return true
   }
@@ -120,16 +141,42 @@ class StoreFreezeState(private val keeper: CursorKeeper) : FreezeState {
     state.value = freeze
   }
 
-  /** I conteggi confermati dall'ultimo gesto valido, una volta sola: il prossimo giro completo li toglie dal giudizio. */
-  internal fun consumeAcceptance(): ScanDiff? = accepted.getAndSet(null)
+  /**
+   * Chiude la franchigia: il primo giro completo dopo il gesto la usa e la toglie, **qualunque sia l'esito** (NA-4). Se il giro dopo trova
+   * di piu' e ricongela, i conteggi nuovi sono un congelamento nuovo e chiedono un gesto nuovo: la vecchia conferma non resta per i
+   * congelamenti successivi.
+   */
+  internal suspend fun consumeAcceptance(): ScanDiff? {
+    val taken = accepted.getAndSet(null) ?: return null
+    acceptances.save(keeper.account, keeper.share, null)
+    return taken.diff
+  }
 
-  /** I conteggi confermati da un gesto non ancora consumato (il giro che lo consuma puo' essere interrotto e ripreso). */
-  internal fun acceptance(): ScanDiff? = accepted.get()
+  /** I conteggi confermati da un gesto non ancora consumato e non scaduto (il giro che li consuma puo' essere interrotto e ripreso). */
+  internal fun acceptance(): ScanDiff? {
+    val current = accepted.get() ?: return null
+    val now = nowNas() ?: return current.diff
+    // Una franchigia dimenticata per una settimana non si applica a un fatto di un'altra settimana.
+    return current.diff.takeIf { now - current.atNasMillis in 0 until MassChangeRule.WINDOW_MILLIS }
+  }
 
   /** C'e' un gesto non ancora consumato. */
   internal fun hasAcceptance(): Boolean = accepted.get() != null
 
   internal fun restoreAcceptance(diff: ScanDiff) {
-    accepted.set(diff)
+    accepted.set(FreezeAcceptance(diff, nowNas() ?: 0L))
+  }
+}
+
+/** La franchigia nella memoria del processo: quello che c'era prima di NA-4, e quello che usano i test dei pezzi. */
+class InMemoryFreezeAcceptances : FreezeAcceptances {
+  private val saved = HashMap<String, FreezeAcceptance>()
+
+  private fun key(account: AccountId, share: String) = "${account.value}/${share.lowercase(java.util.Locale.ROOT)}"
+
+  override suspend fun load(account: AccountId, share: String): FreezeAcceptance? = synchronized(saved) { saved[key(account, share)] }
+
+  override suspend fun save(account: AccountId, share: String, acceptance: FreezeAcceptance?) {
+    synchronized(saved) { if (acceptance == null) saved.remove(key(account, share)) else saved[key(account, share)] = acceptance }
   }
 }

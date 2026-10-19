@@ -1590,6 +1590,111 @@ Nessun contratto di `core-backup` è stato cambiato (richieste in fondo). Le rig
 - Gli screenshot del tablet sono solo quelli principali (un PNG da 2560 px pesa un mega); il resto è provato dai test dei bordi sul tablet.
 - In "Da decidere", "Elimina…" non elimina da sola: apre l'eliminazione di feature-nas (callback `PendingTaskActions`) e il compito si chiude solo dopo; "Tienilo" chiude il compito subito e dice che la domanda non torna.
 
+## Fase 5B: P13, la prova delle 500 interruzioni della 5B (19/10)
+Fonte: `docs/fase5-progetto.md` (§2.4, §2.5, D17-D22, §5.4 invarianti 12-14, riga P13 del §4.4, F43), il banco della 5A (P6, `docs/prova-500.md` Parte B) e i
+servizi di P8 (versioni, scambi, correzioni), P3 (guardiano) e P9 ("Libera spazio"). Perimetro: `core-backup/src/test/.../backup/chaos/**`, `tools/chaos/**`,
+`docs/prova-500.md` (Parte C). **Nessun codice di produzione toccato**: i tre difetti che la prova ha trovato (F1 e F3 in P8, F2 in P3) sono **dichiarati**, non
+corretti. Documento di riferimento: `docs/prova-500.md` Parte C.
+
+**Cosa c'è** (`core-backup/src/test/kotlin/dev/pampa/mycloudgallery/core/backup/chaos/`)
+| File | Cosa |
+|---|---|
+| `BackupChaos5BPhase.kt` | la **fase 5B** di un giro: semina, da 3 a 5 passi (`EDIT`, `EDIT_TWICE`, `EDIT_WHILE_READ`, `REVERT`, `RESTORE`, `STAGED`, `CORRECT`, `FREE`, `RESUME`), eventi tra i passi, dialogo di sistema simulato (conferma, parziale, rifiuto, app uccisa), `checkBatch` (invariante 14), convergenza, rilettura finale |
+| `BackupChaos5BWorld.kt` | `FiveBWorld`: i media del banco (`MediaRec`, cinque `FiveBCategory`), il PC che modifica o crea file, Samsung "Salva", "Ripristina originale", il MediaStore che si ricostruisce, il riavvio, il tempo, il marciume di un bit, la scansione (`rescan`); `KnownDefect` e `Backup5BConfig.avoid` |
+| `BackupChaos5BCatalog.kt`, `BackupChaos5BWrappers.kt` | `ChaosMediaCatalog` (un catalogo solo per `VersionCatalog`, `FreeSpaceCatalog` e la parte del guardiano) e i decoratori dei colpi sui diari e sul catalogo (`ChaosVersionJournal`, `ChaosVersionCatalog`, `ChaosFreeDiary`, `ChaosFreeCatalog`, `ChaosRewriter`) |
+| `BackupChaos5BStacks.kt` | `FiveBStackFactory` / `RealFiveBStack`: i servizi veri (`NasVersionEngine`, `DefaultVersionKeeper`, `DefaultCorrections`, `BackupPrivateCopyGuardian`, `SafeFreeSpace`) legati alle porte avvolte dai colpi |
+| `BackupChaos5BVerifier.kt` | `FiveBVerifier` e `FiveBStateFile` (`# mcg-backup5b-state 1`): gli invarianti su fatti semplici, anche da soli su uno stato salvato |
+| `BackupChaos5BMutants.kt` | i quattro difetti della 5B per `BackupChaosMutationTest` |
+| `BackupChaosFaults.kt` (esteso) | `Primitive` con le 13 voci della 5B, `FaultKind.PC_EDIT`, `FaultMix.FIVE_B`, `RuleScope`, `NasTarget`, `ChaosStats.count` |
+| `BackupAreaRunner.kt`, `BackupAreaGuard.kt`, `BackupNasIntegrationTest.kt` (estesi) | il runner contro il NAS vero con `FiveB {OFF, WITH, ONLY}`, il tetto `MCG_BACKUP_CAP`, il manifesto con `edit=`, `Versioni/` in sola lettura, `archiveVersion`/`restoreVersion` dietro la guardia |
+| `ChaosKnownDefectsTest.kt`, `ChaosStaleScene.kt`, `StaleCatalogAfterPcEditTest.kt` | i tre difetti (oggi / giusto `@Ignore` / il banco li trova), la scena del catalogo che ritarda e le sue quattro domande |
+| `FiveBVerifierTest.kt`, `ChaosMediaCatalogTest.kt` | il verificatore invariante per invariante, il catalogo del banco |
+
+**Scelte**
+- **La 5B è un'estensione del giro della 5A, non un banco a parte**: stesso mondo (NAS, telefono, orologio, cancello), stesso `Injector`, stessi decoratori dei colpi.
+  La fase gira dopo il caricamento con un **seme suo** (`seed xor 0x5B5B5B5B5B5B`): i colpi del caricamento restano **quelli di prima, bit per bit**
+  (`BackupChaosDeterminismTest`), quindi i giri rossi della 5A si rifanno con il loro seme. Sul NAS vero gira anche **da sola** (`only`): nessun caricamento prima.
+- **«Stack di riferimento e vero»** (scelta da confermare): per la 5B **non esiste un esecutore di riferimento** alternativo (P0-B non l'ha scritto: i servizi di
+  P8, P3 e P9 sono l'unica implementazione). I due stack del banco differiscono quindi per il **caricamento della 5A** (`InMemoryBackupEngine` / `SafeUploadEngine`)
+  e per il seme della fase 5B (`fiveBSalt`, perché non facciano due volte la stessa fase); i servizi della 5B sono i veri su entrambi. Un riferimento della 5B sarebbe
+  stato un secondo modello da tenere allineato senza altro scopo.
+- **Il banco non salta un caso reale senza dirlo** (indicazione del coordinatore sul giro 122). I difetti noti sono voci di `KnownDefect`; il banco li evita solo
+  se sono in `Backup5BConfig.avoid` (il default, perché `check.ps1` deve restare verde) e per ognuno `ChaosKnownDefectsTest` prova che **con l'evitamento spento il
+  banco lo trova** (un giro preciso, rifatto dal suo seme). Il catalogo che ritarda dopo una modifica del PC di un'altra dimensione (giro 122) **non si evita**: si
+  lascia accadere, si modella la scansione che lo sistema e si prova con lo scenario che il ritardo è innocuo (O1).
+- **La scansione del NAS è un modello**: `FiveBWorld.rescan` fa quel che serve alle versioni (il telefono ritrovato o sparito, il ritorno a una versione nota, il
+  file del PC come versione nuova, e per un media che il PC ha toccato la copia sparita dichiarata assente, D10). Gira prima della verifica finale. Lo scansionatore vero
+  (`relocateNas` per `fileId`, i periodi di grazia) è fuori dal banco.
+- **Un catalogo solo** (`ChaosMediaCatalog`): le tre viste che i servizi chiedono (versioni, «Libera spazio», guardiano) sullo **stesso** dato, sopra
+  `InMemoryVersionCatalog` di P8. Fa solo le due cose che il catalogo vero fa e quello di P8 no: una riga tolta da Android **non è più presente**, e una rilettura il cui
+  SHA-256 non torna **toglie la verifica** (E-B8). Le regole di sicurezza restano dei servizi.
+- **L'invariante 14 si giudica nel momento in cui un lotto esce** (`checkBatch`), non dallo stato finale: dopo il dialogo il telefono e il NAS cambiano e la
+  consegna non si ricostruisce. Il lotto è sbagliato se una riga non ha una copia privata riletta per intero nello stesso avvio (`bootCount`), da meno di 6 ore
+  monotone, con il timbro, i byte e la riga del telefono di allora. Il resto (nessuna riga tolta senza traccia, `freed` con la riga ancora sul telefono, `kept`
+  con la riga tolta, `in_dialog` a lavoro finito) è contabilità sullo stato finale.
+- **`Invariant.CONTRACT` passa da 12 a 15**: nel §5.4 i numeri 12-14 sono quelli della 5B. Cambia solo il numero stampato (e nelle note di uno stato salvato).
+- **Le primitive nuove del NAS passano dalle decorazioni di sempre**: `ARCHIVE_VERSION` e `RESTORE_VERSION` hanno tutti i colpi del NAS e due del mondo: `PC_EDIT` (il PC
+  modifica il file proprio prima della rinomina, il timbro non torna) e `PC_FILE` (un file al nome di destinazione). Le 5A delegavano le due rinomine senza colpi (nota di P0-B).
+- **La morte durante il dialogo di sistema** (`PHONE_DIALOG`) lascia l'esito `Unknown`: lo risolve `settle()` con la lettura del telefono, come prevede P9.
+- **Sul NAS vero** un colpo per passo, nessun «il PC modifica un file» né orologio che avanza né bit che marcisce (`NasCaps`: il NAS vero non fa passare le ore e la cache
+  dei timbri non li vedrebbe a metà), rilettura finale sempre completa. Tutto sotto `mcg-it/<giro>/` dietro la guardia; `Versioni/` si legge soltanto dal verificatore.
+- **`MCG_BACKUP_CAP`**: il file delle credenziali può avere `backup.rounds=400`; un giro breve da 20 non lo deve mai diventare. `area.ps1` lo imposta.
+
+**Risultati** (19/10/2026)
+| Banco | Giri | Interruzioni | Violazioni | Durata |
+|---|---|---|---|---|
+| JVM, NAS finto, stack di riferimento | 2.000 | 7.859 (3.778 nella fase 5B) | **0** | ~41 s |
+| JVM, NAS finto, motore vero | 2.000 | 7.579 (3.726 nella 5B) | **0** | ~41 s |
+| JVM, simulatore SMB (vere `SmbNasFileOps`/`SmbNasBackupOps`), riferimento / vero | 600 + 600 | 2.418 / 2.376 (1.145 / 1.154 nella 5B) | **0** | ~25 s |
+| NAS vero, area di prova, solo 5B: giro breve | 32 | 20 | **0** | 155 s |
+| NAS vero, area di prova, solo 5B: giro da 400 (l'unico) | 506 | **401** | **0** | 47 min 56 s |
+- **Copertura per primitiva** sul NAS vero (chiamate; colpi prima / dopo): `ARCHIVE_VERSION` 796 (8 / 9), `RESTORE_VERSION` 198 (5 / 2), `VERSION_UPDATE` 6.696 (39 / 23),
+  `CATALOG_RELOCATE` 1.827 (5 / 14), `FREE_MARK_VERIFIED` 1.387 (5 / 5), `PHONE_DIALOG` 79 morti; non colpite in quel lancio: `READ`, `DELETE_OWN_TEMP`, `PHONE_REWRITE`
+  (colpite a decine o centinaia di volte nel banco JVM: `ARCHIVE_VERSION` 2.729 chiamate con 283 / 35 colpi, `RESTORE_VERSION` 784 con 36 / 16, `PHONE_REWRITE` 414, `PHONE_DIALOG` 270 morti).
+- **Mutazioni** (500 giri sul NAS finto, `BackupChaosMutationTest`): archiviare senza il timbro 7 giri rossi (invariante 7), sostituire invece di rinominare 49 (3, 6, 7, 9, 12, 13),
+  liberare con la verifica scaduta 24 (14), uno scambio che lascia vuoto il solito percorso 203 (7 e 12); lo stack sano verde; i quattro difetti della 5A restano rossi.
+- **Modulo `core-backup`**: 511 test, 0 falliti, 6 saltati (3 del NAS vero, 3 `@Ignore` dei difetti noti), ~4 minuti con `--max-workers=2`.
+- **Osservazione sul NAS vero**: `NasSession chiusura lenta: 60000 ms` (101 volte nel giro da 400): la chiusura della sessione SMB dopo una morte simulata aspetta il limite di 60 s
+  (`CLOSE_WAIT_MS` in `SmbNasSessionManager`, codice della 4B). Su un thread a parte: non rallenta il giro né viola un invariante; la causa non è stata indagata.
+- **Area di prova non pulita**: restano `mcg-it/20261019-181432/` e `mcg-it/20261019-181746/` nelle share di prova; le toglie `NasIntegrationSuiteTest` di core-nas al lancio dopo.
+
+**Difetti trovati** (non corretti: li correggono i pacchetti che hanno scritto il codice; per ognuno: test «oggi» verde, test «giusto» `@Ignore`, il banco lo trova se non lo evita)
+- **F1 (P8, `NasVersionEngine.refreshPhone`)**: un lavoro `VERSION` pianificato da una riga del telefono resta `PLANNED` **per sempre** se il MediaStore si ricostruisce
+  (`_ID` rinumerati, E-P12) e la foto cambia un'altra volta prima che il lavoro la legga: `refreshPhone` aspetta una riga che non tornerà (`Step.Wait`, mai `GONE`).
+  Conseguenze: «Ripristina originale» `NOT_AVAILABLE` per quel media, «Libera spazio» lo esclude (c'è un lavoro aperto: D21), con un video a metà anche il temporaneo resta. Nessun byte perso.
+  Rimedio: se il catalogo non ha nessuna copia presente del telefono per la versione del lavoro, `gone(job)`.
+- **F2 (P3, `BackupPrivateCopyGuardian.link`, innescato da P8)**: elemento del guardiano `PUBLISHED` con la copia già nel catalogo ma non `LINKED` (processo morto), poi una versione
+  nuova (correzione, `planStaged`) sposta quella copia in `Versioni/`: il guardiano rifà la copia e crea un **doppione** (`nome (2)`, invariante 2). Rimedio: riprendendo, se la
+  versione ha già una copia privata verificata (anche in `Versioni/`) chiudere l'elemento; o far partire le versioni solo con l'elemento del guardiano `LINKED`.
+- **F3 (P8, `NasVersionEngine.restore` / `archive` per identità)**: dopo una rinomina la cui risposta è andata persa, il lavoro riconosce il suo file per `fileId` e **dimensione**
+  (`sameIdentity`). Se il PC lo modifica sul posto **conservando la dimensione** prima della ripresa, il lavoro lo prende per il suo, scrive nel catalogo il **timbro trovato**
+  (`restored(job, src, st.stamp)`, `archived(job, st.stamp)`) e **tiene la verifica**: il catalogo dice «al sicuro» un originale con **byte diversi**, **la scansione non lo corregge**
+  (il timbro del catalogo è già quello del file) e **una versione nuova archivia i byte del PC come «(originale)»**. «Libera spazio» non ne risente (la verifica sul momento rilegge e
+  confronta con l'impronta). Rara (morte del processo fra la rinomina e la ripresa **e** modifica del PC della stessa dimensione), ma il banco l'ha trovata da solo (seme 777, giro 1306).
+  Rimedio: dopo un ritrovamento per identità scrivere nel catalogo il timbro **atteso** (`src.stamp`), non quello trovato; o confrontare anche la data; o rileggere l'impronta.
+- **O1, non un difetto**: stesso scenario di F3 con una modifica del PC di **un'altra dimensione** (giro 122): `sameIdentity` non riconosce il file, il lavoro finisce `FAILED`/`USUAL_PATH_TAKEN`
+  e il catalogo ritarda (dice l'originale in `Versioni/`, dove non c'è più) finché la scansione non lo dichiara assente. Le quattro domande (al sicuro con byte diversi? versione persa o
+  sovrascritta? «Libera spazio» che toglie? uno scambio su dati vecchi?) hanno risposta **no**, con i test in `StaleCatalogAfterPcEditTest`; il segno «al sicuro» resta in ritardo fino alla scansione,
+  come per ogni cambiamento del PC fra due scansioni (D10).
+
+**Modifiche richieste ai contratti degli altri**
+- **P8**: F1 e F3 (sopra); `BackupItem.flow` ignora `archivesCurrent` (già segnalato): il banco usa il cammino del lavoro (`VersionJob.flow`) per giudicare le transizioni.
+- **P3 / P8**: F2 (sopra).
+- **P0-B / contratti**: `RestoreOutcome` non distingue «scambio fatto ma telefono non riscritto» (già segnalato da P8: il banco lo vede come `Queued` e ripianifica).
+- **P14 (`:app`)**: dopo **ogni** lettura del telefono va chiamato `SafeFreeSpace.settle()` (P9 l'ha scritto): il banco lo fa e senza di esso un esito `Unknown` (app uccisa
+  durante il dialogo di sistema) resterebbe `in_dialog` o `in_doubt` per sempre.
+- **Nessuna modifica al codice di produzione** per far passare il banco.
+
+**Da provare sul campo** (F43, solo `mcg-prova` con D13; il banco non può)
+- `s25.ps1 -Mode backup -Step seed`, primo backup, **`-Step edit -Edits 20`**, «Fai ora» nell'app, poi `-Step interrupt -Verify -AllowFreed` con `kill -9` e Wi-Fi spento durante il caricamento delle versioni.
+- «Ripristina originale» da Samsung Gallery e dall'app, con `kill -9` a metà dello scambio (il solito percorso dal PC non deve restare vuoto a lavoro finito).
+- «Libera spazio» con il **dialogo di sistema vero** (`createTrashRequest`), `kill -9` dell'app mentre è aperto e Wi-Fi spento dopo la verifica sul momento; poi la lettura del telefono risolve gli esiti.
+- Il PC che modifica un file mentre l'app lo archivia (file aperto da Esplora risorse: `SOURCE_CHANGED`), e il caso di F3 (modificare il file con un editor che ne conserva la dimensione subito dopo uno scambio interrotto).
+- Il tempo: le 6 ore e il riavvio del telefono (le ore non passano nel banco del NAS vero).
+
+**Limiti dichiarati**: il bit che marcisce con lo stesso timbro fra la verifica sul momento e il dialogo non si può provare (D21, L39); il dialogo di sistema, la
+decodifica delle immagini corrette, Room e lo scansionatore vero del NAS sono fuori dal banco (`docs/prova-500.md` §C10).
+
 ## Revisione grafica della Libreria da parte dell'utente (13/10)
 Giudizio: le prestazioni della navigazione non sono male, la **grafica no**. Serve molto lavoro, da fare in un **filone grafico
 parallelo** alle fasi successive (insieme ai lavori che non toccano l'app sul momento, per esempio il back-end NAS della Fase 4).
@@ -1693,3 +1798,266 @@ Confronti: `FakeCoordinatorParityTest`, `FakeJoinFlowParityTest`, `VerificaFunzi
 - L'ingresso con lo "stato della famiglia" alza la versione minima ma non confronta l'impronta del contenuto della stessa versione
   (lo fa solo il recupero): una versione uguale con un altro contenuto sarebbe comunque firmata dalla chiave della famiglia.
 - Il riavvio del processo (ON-11) e le pagine nuove vanno provati sul telefono (vedi `docs/famiglia-dispositivi.md` §9, prove 8 e 9).
+
+## Correzioni funzionali: rete e VPN (19/10)
+Le voci RE-1 … RE-11 della verifica funzionale (`docs/review/funzionale-fasi-1-5a.md`, ognuna con "Stato: corretta" e i suoi test). Come
+per ON, ogni difetto ha un test che prima falliva (le prove "viste rosse" sono nominate nel documento della verifica). I flussi che erano
+provati solo con i finti (processo freddo, sonda, limiti di Android, password mancante, indirizzo firmato) ora hanno un test sul grafo
+vero (`VerificaFunzionaleReteTest`, `LanConstraintsTest`).
+
+**Decisioni**
+1. **RE-1: il permesso di WireGuard si chiede da un tocco, mai da solo.** `RequestPermission` con il dialogo di sistema dal tasto «Consenti
+   il controllo» (passo VPN e Impostazioni → Rete e VPN). `VpnController.refresh()` rilegge la capacità, che da sola non cambiava; il passo
+   VPN e la Rete rileggono anche a ogni ritorno in primo piano (permesso dato dalla scheda dell'app). Un rifiuto resta visibile con «Riprova a
+   consentire»; quando Android non mostra piu' il dialogo (`shouldShowRequestPermissionRationale` falso dopo un rifiuto) il tasto diventa
+   «Apri le impostazioni dell'app». Niente nei lavori e niente all'avvio: e' un permesso di un'altra app e lo concede l'utente guardando.
+2. **RE-2: riattivare vuol dire ricominciare da zero.** `DefaultVpnAutomation` azzera ultimo tentativo, insuccessi e attesa quando
+   vede sparire la sospensione (togliendola con «Riattiva il controllo», salvando di nuovo la scelta o con una prova a mano riuscita). Una
+   prova riuscita toglie `NOT_CONTROLLABLE`; `LOCKDOWN_SUSPECTED` solo lo spegnimento riuscito con la rete che resta (altrimenti un blocco
+   vero verrebbe riattivato da una prova qualunque).
+3. **RE-3: un solo punto per aspettare la rete.** `AppGraph.stageRules()` e' il motore delle regole preceduto da `NetworkSettler.settle()` (fino
+   a 5 s che la rete si veda, poi una sonda TCP 445 se non si sa che il NAS risponda), una volta per tappa. Lo usano tutti i lavori
+   (`NasStages`, `BackupStages`, `TrustSyncRun` con la sonda sempre). Il lavoro che parte a processo freddo non finisce piu' "riuscito" a
+   vuoto per una rete che compare 300 ms dopo.
+4. **RE-4: l'anello della Diagnostica si scrive da un posto solo.** `DiagnosticsRecorder` (`feature-diagnostics`) riceve gli eventi del
+   :app (esiti dei lavori, errori inattesi, stop di Android, sessione NAS, problemi del backup, sospensione VPN, avvio fallito) e scrive
+   solo codici e numeri. Per non riempire l'anello ripete lo stesso esito al massimo ogni 6 ore (10 minuti per gli errori del NAS e per gli
+   stop), e un giro a vuoto non scrive niente. Il testo delle righe dei lavori nasce nello schermo (`RecentEventsContributor`), mai
+   nell'esportazione.
+5. **RE-5: l'indirizzo e l'impronta di casa si firmano, ma solo dall'admin, e la pagina dice dove valgono.** Ordine: salvataggio locale,
+   sessione invalidata, poi la firma sul NAS al nuovo indirizzo. Se la firma non riesce il cambio resta locale e c'e' «Riprova»; il non
+   admin cambia solo per se' e la pagina lo dice («gli altri telefoni li aggiorna l'admin»). I telefoni gia' dentro la famiglia **non**
+   adottano da soli un indirizzo firmato (lo legge solo chi entra, `DefaultJoinFlow`): e' un cambio di configurazione locale che si decide
+   con l'utente, non in questa correzione.
+6. **RE-6: l'esito della sonda si dimentica quando la sessione risponde.** `ObservedReachabilityProbe` si azzera anche con la sessione pronta
+   o in risveglio, e all'ingresso in primo piano `ProcessWatcher` fa una sonda sola se non si sa che il NAS risponda.
+7. **RE-7: i limiti di Android arrivano alle regole da quello che Android fa davvero.** `AndroidLimitsTracker` sostituisce `NoAndroidLimits`:
+   uno stop per quota, bucket sceso o sfondo limitato (`STOP_REASON_QUOTA`, `APP_STANDBY`, `BACKGROUND_RESTRICTION`) segna la quota esaurita per
+   un'ora o finche' l'app non torna in primo piano. I budget dei servizi in primo piano restano spenti (non usiamo quei tipi) e gli stop dei
+   lavori dell'utente (UIDT, fuori quota) non si registrano: non toccati i `JobService` dell'altra squadra. Il motivo dello stop
+   (`ListenableWorker.getStopReason`) esiste da Android 12 (API 31): su Android 10 e 11 non si sa e non si registra niente (`StopReports.reasonOf`).
+8. **RE-8: la pagina «Quando lavora l'app» scrive nelle stesse `RuleSettings` dell'onboarding.** Il preset ha lo stesso effetto del passo
+   8 (preset e fascia notte derivata dall'orario del NAS), tetto dei dati mobili e roaming nella stessa pagina; il tetto Wi-Fi non cambia mai
+   (resta quello del preset). Le anteprime HQ restano alla pagina delle anteprime.
+9. **RE-9: password mancante = nessuna connessione, nessun tentativo.** `SmbNasSessionManager` ricorda l'account senza password e rifiuta
+   ogni connessione con `CredentialsMissing` finche' il Keystore non la restituisce (rilegge in locale, quindi vale per qualunque via con cui
+   la password viene salvata); un guasto passeggero non conta come "mancante". Niente autenticazioni a vuoto, quindi niente rischio di bloccare
+   l'account sul NAS. L'indicatore dice «Serve la password del NAS» e la notifica parte una volta sola.
+10. **RE-10: «Ripeti il riconoscimento» e le azioni della VPN portano a Impostazioni → Rete e VPN.** `diagnosticsRouteOf` e' una funzione pura,
+    provata senza interfaccia.
+11. **RE-11: i lavori chiedono una rete, non internet.** `LanConstraints` (una richiesta con Wi-Fi, Ethernet e cellulare, senza `INTERNET` e
+    senza `VALIDATED`) per i lavori periodici, immediati e a catena di WorkManager e per i `JobInfo` dell'utente (UIDT). Se la rete serve
+    davvero e se e' casa lo decide il motore delle regole dentro il lavoro, con il cancello di rete, non il vincolo.
+
+**Modifiche ai contratti e al codice condiviso**
+- `core-network`: `VpnController.refresh()`, `WireGuardPermission` (nome del permesso, `outcomeOf`) e `ControlPermissionOutcome`;
+  `DefaultVpnAutomation` ricomincia da zero dopo una sospensione; azioni della Diagnostica `RECAPTURE_HOME` e `OPEN_VPN_CONTROL`.
+- `core-nas`: `SmbNasSessionManager` rifiuta le connessioni finche' la password manca (RE-9).
+- `core-family`: `RegistryService.updateNasAddress` e `updateHomeUla`, con `RegistryWriter.amendConfig` (la stessa strada di
+  `updateCommonExclusions`), `FamilyConfigFactory.hostOf(ip)`.
+- `feature-settings`: `NetworkViewModel` (registro, sospensione, permesso, ambito del salvataggio), `AddressViewModel` (registro, ambito),
+  pagina `rules` (`RulesChoices`, `RulesViewModel`), riga «Quando lavora l'app»; `feature-onboarding`: solo il permesso nel passo VPN.
+- `feature-diagnostics`: `DiagnosticsRecorder`, i codici e il catalogo dei lavori (`EVT_JOB_RESULT`, `EVT_JOB_FAILED`, `EVT_START_FAILED`), le
+  etichette delle azioni di rete.
+- `:app`: `work/LanConstraints`, `work/StopReports` (`AndroidLimitsTracker`), `graph/StageSupport` (`NetworkSettler`, `SettledStageRules`),
+  `AppGraph` (`stageRules()`, registratore di eventi, `diagnostics` come parametro), `GlobalStatus` (password mancante), `ProcessWatcher`
+  (notifica della password, primo piano), `AppNavHost` (rotte della Diagnostica).
+
+**Sicurezza: cosa e' stato toccato, e perche' non si indebolisce**
+- *Registro firmato (RE-5)*: le due azioni nuove passano da `RegistryWriter.adminContext` come ogni azione dell'admin (dispositivo
+  approvato, chiave di famiglia nella cassaforte a telefono sbloccato, gesto locale). Nessun controllo di fiducia e' stato toccato:
+  `FamilyAuthority.updateConfig` e `commit` sono quelli di prima. Un indirizzo non valido o un'impronta senza un /48 ULA valido non firmano
+  niente; la stessa configurazione non firma una versione nuova.
+- *Sessione NAS (RE-9)*: piu' stretta, mai piu' larga: meno connessioni, nessuna autenticazione senza password. L'interruttore di sicurezza non
+  si apre (non c'e' stato un tentativo).
+- *Anello della Diagnostica (RE-4)*: solo `DiagCode`, gravita' e `ExportValue`; i nomi dei lavori vengono da un enum fisso, mai da
+  nomi, percorsi, share, account o indirizzi.
+- *Vincoli di rete (RE-11)*: il lavoro puo' partire su una rete non validata o non riconosciuta; il divieto di parlare con una rete non
+  riconosciuta resta nel cancello (`NasRouteGate`) e nelle regole.
+- *Permesso di WireGuard (RE-1)*: nessun permesso nuovo (era nel manifest). Si chiede solo da un tocco; la VPN gestita non e' un
+  prerequisito della sicurezza (la sospensione e il blocco della VPN restano come prima). `docs/sicurezza.md`, §4-bis e registro, aggiornati.
+- Nessuna voce chiusa da `docs/review/2-fase2.md` o `docs/review/1.4-core-trust.md` e' stata riaperta.
+
+**Fake allineati al vero**: `FakeVpnController` (la capacita' cambia solo rileggendo: `capabilityOnRefresh`, `refreshes`), `FakeRegistryService`
+(`addressUpdates`, `homeUlaUpdates`), `InMemoryRuleStore` (impostazioni vere dei test di Impostazioni), `ObservedReachabilityProbe` vera nei test
+di `RootViewModelTest` al posto del finto che non falliva mai. Confronti: `WireGuardPermissionTest` (fake/vero), `VerificaFunzionaleRegistroTest`,
+`VerificaFunzionaleReteTest`.
+
+**Residui**
+- La riga «Quando fa il backup» della pagina Backup (`feature-backup`, fuori perimetro) non ha ancora l'azione: puo' aprire la pagina nuova
+  `SettingsRulesRoute`.
+- Gli stop dei lavori dell'utente (UIDT) non si registrano nell'anello: servirebbe `onStopJob` nei `JobService` (`NasOpsJobService` e quello
+  del backup, dell'altra squadra).
+- Un familiare non admin che cambia l'indirizzo lo cambia solo per se'; l'adozione automatica dell'indirizzo firmato sui telefoni gia'
+  nella famiglia non c'e' (da decidere con l'utente: oggi l'indirizzo nuovo lo prende chi entra con un QR nuovo).
+- Da provare sul telefono: il dialogo di `CONTROL_TUNNELS` (`dumpsys package` deve dare `granted=true` dopo il tocco; aperta M10: con
+  WireGuard installato dopo l'app il dialogo potrebbe non comparire), «Serve la password» una volta sola dopo l'invalidazione della chiave,
+  un lavoro notturno a processo freddo, il router senza WAN, e gli stop per quota (vedi `docs/review/funzionale-fasi-1-5a.md`, prove 4, 8, 14 e 15).
+
+## Correzioni funzionali: Libreria e NAS (19/10)
+Le voci GA-1 … GA-8 e NA-1 … NA-12 della verifica funzionale (`docs/review/funzionale-fasi-1-5a.md`, ognuna con il suo "Stato" e i
+suoi test). Ogni difetto ha un test che falliva prima: sono stati visti rossi, rimettendo per una prova il comportamento di prima, i
+test di GA-2, GA-3, GA-5, GA-6, GA-8 e quelli di NA-1 … NA-9 e NA-12 (coda, ripresa, cartelle, franchigia, prima scansione, piede,
+congelamenti a freddo, battito, capsula, lavoro a freddo). GA-1, GA-4, NA-10 e NA-11 aggiungono parti che prima non c'erano (la vista
+viva dei Nascosti, il ricordo su file, l'esclusione e il gesto dell'ora): la prova è sul grafo vero e, per i finti, il test di parità.
+Le voci che erano "plausibili" sono state provate: GA-4, GA-5, GA-6, NA-7 e NA-12 **confermate**; GA-7 **non confermata** (non
+dimostrabile fuori dal telefono, vedi sotto).
+
+**Decisioni**
+1. **GA-8: dalla selezione della Libreria non si fa niente sul NAS.** Condividi ed Elimina dal telefono toccano solo i media che hanno
+   una copia sul telefono (`LibraryCommands.onPhone`); su una selezione tutta sul NAS dicono che non si può e come fare (aprirli e
+   "Scarica sul telefono"; per toglierli dal NAS, uno per uno dal viewer o da Cartelle NAS), su una mista fanno la parte del telefono
+   e dicono quanti sono rimasti fuori. Cestino e download del NAS hanno le loro conferme per file: non si aggirano con un gesto sul
+   gruppo.
+2. **GA-7 non confermata.** Se `loadThumbnail` di un elemento nel cestino riesca lo decide il MediaProvider; nell'SDK 37 non esiste un
+   `setIncludeTrashed` pubblico, quindi non c'è nessun interruttore da girare. Nessuna correzione al buio: da guardare nella prova F15.
+3. **GA-4: il ricordo "ho già chiesto il permesso" sta su un file** (solo i nomi dei permessi), non in `remember`: senza, il primo tocco
+   dopo una rotazione o un riavvio lanciava una richiesta che Android scarta in silenzio.
+4. **NA-1: l'operazione nuova entra subito nel diario e si vede "In coda"**; parte quando il lucchetto dell'esecuzione è libero, in
+   ordine di arrivo. Il finto di riferimento fa lo stesso.
+5. **NA-4: "Ho controllato, continua" si ricorda fra i processi, ma vale una volta sola.** La franchigia (i conteggi visti) sta in un file
+   sotto `replica/`; la usa e la toglie il primo giro completo dopo il gesto **qualunque ne sia l'esito** (prima restava anche dopo un
+   nuovo congelamento, e valeva per quelli dopo) e scade dopo 7 giorni di ora del NAS. Il gesto chiede subito la verifica.
+6. **NA-7: i congelamenti salvati si pubblicano prima che il motore del NAS sia visibile** (non quando il guardiano arriva a leggerli).
+7. **NA-2: la ripresa dal diario si chiede per ogni operazione rimasta aperta**, lunga o breve, e quando passa ciò che la teneva ferma
+   (share scongelata, "Riattiva le scritture", ora del NAS accettata).
+8. **NA-12: una tappa che finisce il tempo continua subito** (`NasOpsJobEnd.Continue`, lavoro nuovo), invece di farsi rimandare col
+   ritardo esponenziale di JobScheduler; il ritardo progressivo resta per NAS non raggiungibile e scritture ferme. Il lavoro, in un
+   processo appena nato, avvia il NAS e lo aspetta: "non pronto con lavoro nel diario" è "il NAS non risponde", mai "fatto".
+9. **NA-10: le esclusioni dell'area privata si impostano da Cartelle NAS** («Escludi dalla Libreria» / «Includi nella Libreria» sulle
+   cartelle scelte), solo nell'area privata (quelle dell'area comune sono firmate dalla famiglia, ON-8). Non cambia niente sul NAS.
+10. **NA-11: il gesto "L'ora del NAS è giusta, continua" sta in "Operazioni in corso"**, con un foglio di conferma, non in Diagnostica
+    (era in perimetro dell'altra squadra). La voce di Diagnostica `INDEX_CLOCK_JUMP` resta solo testo: può rimandare a questa pagina.
+11. **NA-9: la capsula del NAS apre la Diagnostica**, quella della rete resta con la sua azione.
+
+**Modifiche ai contratti e al codice condiviso**
+- `core-imaging`: `ThumbnailLoader.resume()` (GA-3). `core-mediastore`: `PhoneSyncConfig.foregroundMetaPause`, ripresa della sorgente (GA-5, GA-6).
+- `core-nasops`: `NasOpsEngine.start` in due tempi (registrazione / esecuzione), `NasFolderService.observe` che rilegge e pubblica per
+  numero di lettura (NA-1, NA-3).
+- `core-nasmedia`: `FreezeAcceptance` e `FreezeAcceptances` (+ `InMemoryFreezeAcceptances`), `StoreFreezeState` con la franchigia
+  persistita e consumata, `NasScanStatus.Scanning.first` (NA-4, NA-6).
+- `feature-library`: `LibraryCommands.onPhone`, tre avvisi nuovi, il `BackHandler` della selezione (GA-2, GA-8). `feature-nas`:
+  `NasAreas.privateExclusions`/`setPrivateExclusions`/`clockJumpMs`/`acceptClockJump` (di serie vuoti), "Aggiorna", "Escludi dalla
+  Libreria", la scheda e il foglio dell'ora del NAS (NA-3, NA-10, NA-11).
+- `:app`: `gallery/CatalogPorts` (vista viva dei Nascosti), `main/PermissionAsks`, `nas/FileFreezeAcceptances`, `nas/ColdResume`,
+  `NasGraph`/`NasOrganizer` (coda, ripresa, congelamenti, esclusioni, ora), `MainScaffold`/`AppNavHost` (una riga), e in `work/`:
+  `NasOpsJobService` (`Continue`, il servizio che avvia il NAS) e `NasWork` (il battito, NA-8). Gli ultimi due sono dell'altra squadra:
+  tocchi di poche righe, riportati qui.
+
+**Sicurezza: cosa è stato toccato, e perché non si indebolisce**
+- *Operazioni sul NAS (NA-1)*: `ConfirmationGate.accept` e `PlanRules.firstViolation` restano prima di tutto, identici; il diario nasce
+  solo da `OpsStore.create(AcceptedPlan)`, come prima. Cambia solo **quando** si prende il lucchetto dell'esecuzione (dopo la
+  registrazione). Un'operazione in coda non tocca niente sul NAS; quando parte ogni elemento ricontrolla il cancello (congelata, scritture
+  ferme, salto dell'ora) e i timbri come sempre (E-D13), quindi un congelamento o una conferma scaduta nell'attesa fermano l'esecuzione.
+  Se l'utente la ferma mentre aspetta (R9) non si esegue; la stessa richiesta toccata due volte non ne fa partire due. Il lucchetto
+  dell'esecuzione resta uno solo, condiviso con le pulizie: due esecuzioni non si sovrappongono.
+- *Congelamento (NA-4, NA-7)*: la conferma resta il numero riscritto uguale a quello mostrato (doppia conferma); **non vale più di prima,
+  vale meno**: una volta sola, per quel congelamento, con scadenza. È salvata *prima* di togliere il congelamento dal cursore (se il
+  processo muore in mezzo, il gesto che l'utente ha fatto vale ancora; il contrario l'avrebbe perso e ricongelato). Un file illeggibile
+  non dà sconti. NA-7 chiude una piccola finestra: nel tempo fra l'avvio del processo e la partenza del guardiano i cancelli delle
+  scritture potevano vedere "nessun congelamento".
+- *D31 e D33*: `writeGate`, `IndexWriteRules` (recinzione D31) e i temporanei del diario del backup (D33) non sono stati toccati.
+  Il gesto dell'ora del NAS ha un foglio di conferma in più, non uno in meno; la sospensione di 24 ore resta come prima.
+- *Esclusioni (NA-10)*: impostazione personale (area privata dell'account), mai dati letti dal NAS; non cancellano né spostano file.
+- *Nascosti (GA-1)*: la vista dei Nascosti si rilegge solo finché qualcuno la guarda (la pagina sbloccata o il viewer aperto da lì), e
+  si ferma da sola all'uscita: niente dei nascosti si legge fuori da una schermata aperta.
+- Nessuna voce chiusa da `docs/review/4a-fase4a.md` o `docs/review/4b-fase4b.md` è stata riaperta.
+
+**Fake allineati al vero**: `FakeThumbnailLoader` (da `UI_HIDDEN` in su le celle tornano sul segnaposto finché non c'è `resume`),
+`FakeCollectionsWorld.hiddenLibrary` (vista viva), `InMemoryNasOperations` (registra e poi si mette in fila), `FakeNasAreas` (esclusioni,
+verifiche, salto dell'ora), `ScanHarness` (la franchigia sopravvive a `restartScanner`, come il file in produzione). `FakeMediaStore`: i
+due non hanno lo stesso ordine per le righe senza data (il vero mette prima gli zeri, poi i NULL), ma danno le stesse righe: lo prova un test
+di parità. Confronti: `ImagingContractTest.ga3_…`, `HiddenLiveViewTest`, `AndroidMediaStoreSourceTest.ga5_…`,
+`VerificaFunzionaleNasOpsTest.na1_…` (su entrambi gli esecutori).
+
+**Residui**
+- Il selettore per le altre app (5B, P10) svuota la finestra delle miniature della Libreria (`PickerScreen`: `window(vuota, vuota)` allo
+  smontarsi): al ritorno a `MainActivity` nessuno la rimanda. Stesso meccanismo di GA-3, fuori perimetro: da guardare con la 5B.
+- `BackupHostEffect` (BK-3, altra squadra) ha ancora il ricordo "già chiesto" in `remember` (vedi GA-4): può usare `PermissionAsks`.
+- Un'operazione in coda perde il suo posto se muore il processo e la riprende `resumeAll` nell'ordine del diario, non necessariamente in
+  quello di arrivo.
+- Da provare sul telefono: vedi il report e `docs/review/funzionale-fasi-1-5a.md` (prove 7, 8, 9, 12, 13, 16).
+
+## Correzioni della prova 5B: F1, F2, F3 (19/10)
+Fonte: `docs/prova-500.md` Parte C §C6 e la sezione «Fase 5B: P13» qui sopra (i tre difetti, gli evitamenti del banco, i test «oggi» / «giusto» / «il banco
+lo trova»). Perimetro: `core-backup/.../versions/**` (F1, F3, F2 lato versioni), `core-backup/.../safety/BackupPrivateCopyGuardian.kt` (F2), i test di
+`core-backup`, `docs/prova-500.md` Parte C. Nessun contratto cambiato (`VersionJournal`, `VersionCatalog`, `BackupCatalog`, `NasBackupOps` come prima),
+niente in `core-nas`. Nessun NAS vero: il giro sull'area di prova lo rifà l'utente.
+
+**F1 (P8, `NasVersionEngine.refreshPhone`): un lavoro dal telefono non resta mai appeso.**
+- Scelta: la regola proposta, resa completa. Con la riga del lavoro diventata `Stale` si guardano le righe **presenti** della versione nel catalogo: una con il
+  timbro atteso e un altro `PhoneRef` → il lavoro la segue (come prima); la riga di prima ancora presente (il `PhoneRef` contiene la versione del MediaStore:
+  uguale = la lettura del telefono non ha ancora visto il cambio) → si aspetta, mai un `GONE` in anticipo; **in ogni altro caso `GONE`** (`gone(job)` toglie
+  prima il proprio temporaneo; se non ci riesce il giro si ferma e riprova, e c'è comunque la pulizia D33).
+- Perché anche «presente ma con un altro timbro» porta a `GONE` e non ad aspettare: la proposta («nessuna copia presente → `GONE`») lascerebbe appeso il
+  lavoro se la versione fosse sul telefono con un timbro diverso da quello del lavoro (per esempio dopo una ricostruzione che cambia la generazione). `GONE`
+  è sicuro: se la versione serve ancora, il piano del giro dopo ne fa un lavoro nuovo dalla riga di adesso.
+- Test: `ChaosKnownDefectsTest.f1_*` (lo scenario di P13; un video a metà con il temporaneo, tolto prima di `GONE`; la riga di prima ancora nel catalogo:
+  nessun `GONE` in anticipo), `VersionSimulatorTest.f1_*` (simulatore SMB), `ilGiroCheTrovavaF1OraEVerde` (seme 20261016, giro 116).
+
+**F2 (P3 `BackupPrivateCopyGuardian.link`, innescato da P8): nessun doppione della copia del guardiano. Corretto da tutti e due i lati.**
+- **Le versioni** (`NasVersionEngine.archive`): prima di spostare in `Versioni/` il file al solito percorso, se la **sua** versione ha un altro elemento aperto
+  nel diario (`VersionJournal.busy(current.versionId)`: nella tabella vera `backup_item` lo vede per ogni tipo, guardiano e caricamento della 5A compresi) il
+  lavoro aspetta. È la seconda proposta («versioni solo con il guardiano `LINKED`»), resa generale: chiude la finestra per ogni strada che crea una versione
+  (correzione, file preparato, Samsung «Salva» su un media del guardiano) e anche per un elemento della 5A pubblicato e attaccato ma non ancora `LINKED`, che
+  il banco non può provare (nella 5B il caricamento è sempre finito). L'attesa dura quanto l'altro elemento: il guardiano riprende i suoi elementi aperti a
+  ogni giro (`GuardScope.All`).
+- **Il guardiano** (`link`): riprendendo un elemento `PUBLISHED` il cui nome finale è vuoto o ha altri byte, prima di rifare la copia cerca nell'area privata
+  una copia con gli stessi byte (`PrivateCopyFinder.findIdentical`, la deduplica D8, **riletta qui** per intero; il catalogo vero la cerca «in qualunque
+  cartella», `Versioni/` compresa): se c'è, la collega lì (`LINKED`, il nome finale diventa il suo) e non rifà niente. È la prima proposta, ma con la rilettura
+  invece della fiducia nella verifica del catalogo (la porta del guardiano non sa dire «verificata» per una versione, e «al sicuro» nasce da una rilettura).
+  Serve quando la copia è stata spostata comunque (un'altra strada, una finestra futura); con il controllo delle versioni nel banco non scatta più.
+- Scartato: chiudere l'elemento con `LINKED_EXISTING` (da `PUBLISHED` la macchina a stati non lo ammette e il contratto non si cambia qui); `LINKED` è il passo
+  successivo del cammino.
+- Test: `ChaosKnownDefectsTest.f2_unaVersioneNuovaAspetta...` e `f2_ilGuardianoRitrova...` (NAS finto e simulatore SMB), `ilGiroCheTrovavaF2OraEVerde` (seme
+  20261016, giro 633).
+
+**F3 (P8, `NasVersionEngine.restore` / `archive` dopo una risposta persa): nessun file con un timbro diverso da quello atteso resta «verificato».**
+- Scelta: «confrontare anche la data» e «rileggere», insieme (`movedFile`). Dopo una rinomina con la risposta persa (rami `SourceMissing` e `Collision`) il
+  file a destinazione è quello del lavoro solo se ha la sua identità **e** il timbro atteso (dimensione, data, `fileId`; la rinomina non li cambia: su Samba,
+  sul simulatore SMB e sul NAS finto la data del file resta). Se torna solo l'identità (stesso `fileId` e stessa dimensione, un'altra data) vale solo una
+  **rilettura completa** con lo SHA-256 della versione (per uno scambio tornato indietro, `ROLLED_BACK`, la versione dell'attuale archiviato): byte uguali
+  → è il suo e il catalogo riceve il timbro dei byte riletti; diversi, o l'impronta non nota → **non è il suo**: lo scambio finisce `FAILED` /
+  `USUAL_PATH_TAKEN`, la versione aspetta con `SOURCE_CHANGED`, e niente del catalogo segue il file. È esattamente il cammino della modifica di un'altra
+  dimensione (O1), già analizzato con le sue quattro domande (`StaleCatalogAfterPcEditTest`): il catalogo ritarda fino alla scansione, senza copie
+  «verificate» con altri byte.
+- Così vale la regola F4-D8 / L28: «al sicuro» nasce da una rilettura fatta qui o da un timbro **atteso** che coincide, mai da un timbro trovato dopo
+  un'interruzione.
+- Scartata la sola «scrivere nel catalogo il timbro atteso»: la copia al solito percorso sarebbe rimasta «verificata» con altri byte fino alla scansione (e lo
+  scambio `DONE` con l'originale perso). La rilettura costa la lettura del file solo in questo caso raro (risposta persa e data cambiata).
+- Test: `ChaosKnownDefectsTest.f3_*`: lo scambio con la modifica della stessa dimensione (NAS finto e SMB), il «giusto» di P13 (dopo la scansione tutti gli
+  invarianti), «Libera spazio» che non libera, una versione nuova che non archivia i byte del PC come «(originale)», la riscrittura con gli stessi byte
+  riconosciuta dalla rilettura (NAS finto e SMB), l'archiviazione nelle due varianti (`archived`); `ilGiroCheTrovavaF3OraEVerde` (seme 777, giro 1306).
+
+**Il banco senza evitamenti.** Tolte le tre voci di `KnownDefect` (l'enum resta, vuoto, per i difetti futuri: il banco non salta un caso senza dirlo) e i tre
+punti che le usavano: il MediaStore si ricostruisce anche con un lavoro dal telefono aperto, una correzione parte anche con un elemento del guardiano aperto,
+**metà delle modifiche del PC conserva la dimensione**. I sorteggi con `avoid = emptySet()` sono gli stessi di prima: i giri che trovavano i difetti si
+rifanno uguali. I test «oggi» sono tolti, i «giusti» riaccesi, «il banco lo trova» diventati «il giro che lo trovava ora è verde».
+
+**Risultati** (19/10, senza evitamenti, `--max-workers=2`)
+| Banco | Giri | Interruzioni (nella 5B) | Violazioni |
+|---|---|---|---|
+| JVM, NAS finto, seme 20261016, riferimento / vero | 2.000 + 2.000 | 7.861 (3.780) / 7.573 (3.720) | **0** |
+| JVM, NAS finto, seme 777, riferimento / vero | 2.000 + 2.000 | 7.854 (3.831) / 7.520 (3.775) | **0** |
+| JVM, simulatore SMB, riferimento / vero | 600 + 600 | 2.419 (1.146) / 2.374 (1.152) | **0** |
+- Prima della correzione, senza evitamenti, gli stessi 2.000 giri sui due semi davano 10 giri rossi (P13).
+- **Mutazioni**: le quattro della 5B (7, 49, 24, 203 giri rossi su 500) e le quattro della 5A (41 / 31, 36 / 27, 41 / 32, 22 / 22) restano rosse con gli
+  stessi numeri; gli stack sani verdi.
+- **Moduli**: `core-backup` 520 test, 0 falliti, 3 saltati (solo quelli del NAS vero), ~4 minuti; `core-nas` 276 test, 0 falliti, 2 saltati.
+
+**Da provare sul campo** (F43 e area di prova del NAS vero, li fa l'utente)
+- Il giro `area.ps1 -Mode backup -Stage run5b` sul NAS vero con il codice nuovo (le versioni che aspettano il guardiano allungano qualche lavoro di un giro).
+- Sul telefono: un lavoro di versione a metà (video grande), poi il MediaStore che si ricostruisce (aggiornamento di sistema, scheda SD) e una modifica nuova:
+  in Diagnostica nessun lavoro fermo, «Ripristina originale» di nuovo disponibile, nessun temporaneo rimasto.
+- «Ripristina originale» interrotto con `kill -9` subito dopo lo scambio e, prima di riaprire l'app, il file al solito percorso riscritto dal PC con la
+  stessa dimensione (un editor di metadati) o soltanto salvato uguale: nel primo caso lo scambio non riesce e il catalogo si sistema alla scansione, nel
+  secondo riesce.
+- Un media con la sola copia comune: «Libera spazio» (il guardiano) con `kill -9` a metà, poi una correzione o Samsung «Salva» prima della ripresa: una
+  sola copia privata.
+
+**Note (fuori perimetro)**
+- La stessa finestra di F2 per un elemento della 5A (`SafeUploadEngine`, P2) è chiusa dal controllo delle versioni; il motore della 5A non ha la ripresa con
+  la deduplica del guardiano e se la sua copia venisse spostata da un'altra strada la rifarebbe. Da valutare da chi tiene P2.
+- Uno scambio la cui archiviazione ha la risposta persa e il cui attuale archiviato è poi modificato dal PC in `Versioni/` finisce `FAILED` con il solito
+  percorso vuoto: i byte dell'attuale li ha sovrascritti il PC, l'originale resta in `Versioni/`. Era già così con una modifica di un'altra dimensione; il
+  banco non lo prova (il PC del banco non tocca `Versioni/`).

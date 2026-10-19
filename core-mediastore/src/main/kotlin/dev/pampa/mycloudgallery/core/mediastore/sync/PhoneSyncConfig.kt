@@ -23,7 +23,8 @@ import kotlin.time.Duration.Companion.seconds
  * @property purgeCap le assenze scadute dimenticate al massimo in un giro di manutenzione (E-P9).
  * @property maxCandidateHashesPerBatch quante copie gia' note si rileggono per intero, per lotto, per decidere se un file
  *   nuovo e' identico (doppioni di WhatsApp): oltre, nel dubbio, si tiene separato.
- * @property foregroundMetaBudget quanto lavora META in primo piano dopo ogni giro.
+ * @property foregroundMetaBudget quanto lavora META in primo piano dopo ogni giro, per fetta.
+ * @property foregroundMetaPause la pausa fra due fette di META in primo piano, finche' il lavoro non e' finito (GA-6).
  * @property metaBatch media per passo di META.
  * @property metaRetryAfter dopo quanto si riprova un META fallito.
  * @property metaMaxSkips quanti media saltati (senza copia leggibile, permesso della posizione negato) fermano META.
@@ -38,6 +39,7 @@ data class PhoneSyncConfig(
   val purgeCap: Int = 500,
   val maxCandidateHashesPerBatch: Int = 20,
   val foregroundMetaBudget: Duration = 30.seconds,
+  val foregroundMetaPause: Duration = 5.seconds,
   val metaBatch: Int = 20,
   val metaRetryAfter: Duration = 1.hours,
   val metaMaxSkips: Int = 2_000,
@@ -47,5 +49,6 @@ data class PhoneSyncConfig(
     require(fullHashMaxBytes >= 0) { "Soglia dell'hash completo negativa." }
     require(vanishCap > 0 && vanishAlarmMin > 0 && reconcileMaxDirect >= 0 && purgeCap > 0) { "Tetti non validi." }
     require(maxCandidateHashesPerBatch >= 0 && metaBatch > 0 && metaMaxSkips > 0) { "Limiti non validi." }
+    require(!foregroundMetaPause.isNegative()) { "Pausa negativa." }
   }
 }

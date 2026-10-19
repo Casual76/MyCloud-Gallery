@@ -76,6 +76,48 @@ interface VpnController {
 
   /** L'intent che apre WireGuard ("Apri WireGuard"), o null se non e' installato. */
   fun openWireGuardIntent(): Intent?
+
+  /**
+   * Rilegge installazione e permesso di WireGuard e aggiorna [capability]. Va chiamato quando una di queste cose puo' essere
+   * cambiata senza che l'app se ne accorga: dopo il dialogo di sistema del permesso ([WireGuardPermission]), al ritorno da WireGuard
+   * (verifica funzionale, RE-1: senza, la capacita' restava "manca il permesso" anche a permesso concesso).
+   */
+  fun refresh()
+}
+
+/**
+ * Il permesso `CONTROL_TUNNELS` di WireGuard (docs/research/smb-vpn.md §3.1): "pericoloso", quindi lo concede l'utente a runtime con il
+ * dialogo di sistema. Senza, il broadcast `SET_TUNNEL_UP`/`DOWN` non arriva a WireGuard e la VPN gestita dall'app non parte mai
+ * (verifica funzionale, RE-1: nessuno lo chiedeva).
+ */
+object WireGuardPermission {
+
+  /** Il pacchetto dell'app WireGuard ufficiale. */
+  const val PACKAGE = "com.wireguard.android"
+
+  /** Il nome completo del permesso, da chiedere con `requestPermissions`. */
+  const val NAME = "$PACKAGE.permission.CONTROL_TUNNELS"
+
+  /**
+   * Come e' finito il dialogo: concesso, negato ma si puo' chiedere ancora, oppure negato "per sempre" (Android non lo mostra piu': resta
+   * la scheda dell'app). [canAskAgain] e' `shouldShowRequestPermissionRationale` **dopo** il rifiuto.
+   */
+  fun outcomeOf(granted: Boolean, canAskAgain: Boolean): ControlPermissionOutcome = when {
+    granted -> ControlPermissionOutcome.GRANTED
+    canAskAgain -> ControlPermissionOutcome.DENIED
+    else -> ControlPermissionOutcome.DENIED_FOR_GOOD
+  }
+}
+
+/** L'esito della richiesta del permesso di WireGuard. */
+enum class ControlPermissionOutcome {
+  GRANTED,
+
+  /** Rifiutato, ma Android lo richiede ancora: "Riprova". */
+  DENIED,
+
+  /** Rifiutato e Android non lo chiede piu': si apre la scheda dell'app. */
+  DENIED_FOR_GOOD,
 }
 
 /** Perche' l'automazione si e' fermata da sola. */

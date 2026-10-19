@@ -17,11 +17,19 @@ import dev.pampa.mycloudgallery.core.library.index.TimelineIndexReader
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.stateIn
 
 /**
  * La sorgente dell'indice della timeline sopra il catalogo, che pero' nasce dopo (serve l'account): ogni lettura aspetta
@@ -85,14 +93,31 @@ internal class GuardedMediaActions(private val inner: LocalMediaActions) : Local
  */
 internal object CatalogHidden {
 
-  /** I nascosti ancora presenti in qualche posto, dal piu' recente, con i riferimenti ai byte del telefono. */
-  suspend fun read(database: GalleryDatabase, catalog: MediaCatalog): ViewerItems {
+  /**
+   * I nascosti ancora presenti in qualche posto, dal piu' recente, con i riferimenti ai byte del telefono.
+   *
+   * **La vista e' viva** (GA-1): finche' qualcuno la guarda (la griglia dei Nascosti, il viewer aperto da li') si rilegge a ogni
+   * cambiamento del catalogo, cosi' "Mostra nella Libreria", "Preferito" ed "Elimina" fatti dal viewer si vedono subito: l'elemento
+   * che torna in Libreria esce dalla vista e il viewer passa al vicino con il suo avviso. Quando nessuno la guarda piu' (la pagina e'
+   * uscita e [HiddenController] ha dimenticato l'oggetto) la rilettura si ferma da sola: niente resta in ascolto, e niente dei nascosti
+   * viene letto fuori da una schermata sbloccata.
+   *
+   * @param scope dove vive la rilettura: la sua durata la decide chi guarda (`WhileSubscribed`), non lo scope.
+   */
+  suspend fun read(database: GalleryDatabase, catalog: MediaCatalog, scope: CoroutineScope): ViewerItems {
+    val first = load(database, catalog)
+    return LiveHiddenItems(first, scope, catalog.changes.map { }) { load(database, catalog) }
+  }
+
+  /** Una lettura dei nascosti: l'istantanea (per arrivare ai byte) e la vista che la mostra. */
+  private class Loaded(val snapshot: ColumnarTimelineSnapshot, val view: TimelineView)
+
+  private suspend fun load(database: GalleryDatabase, catalog: MediaCatalog): Loaded {
     val rows = database.timelineIndexDao().hiddenRows()
     val refs = if (rows.isEmpty()) emptyMap() else catalog.phoneRefs(rows.map { MediaId(it.mediaId) }).mapKeys { it.key.value }
     // I membri di un gruppo nascosto si vedono uno per uno: qui ogni cella e' un media (niente copertine).
     val snapshot = TimelineIndexReader.fromRows(rows, seq = catalog.changeSeq(), groupSizes = emptyMap(), refs = refs)
-    val view: TimelineView = FilteredTimelineView(snapshot, LibraryFilter.ALL)
-    return SnapshotItems(MutableStateFlow(view), snapshot)
+    return Loaded(snapshot, FilteredTimelineView(snapshot, LibraryFilter.ALL))
   }
 
   /**
@@ -119,12 +144,43 @@ internal object CatalogHidden {
     return hidden
   }
 
-  private class SnapshotItems(
-    override val view: StateFlow<TimelineView>,
-    private val snapshot: ColumnarTimelineSnapshot,
+  /**
+   * Gli elementi nascosti con la vista che segue il catalogo. [view] rilegge all'inizio di ogni ascolto e a ogni cambiamento
+   * ([changes]); una lettura che fallisce (il catalogo si sta chiudendo) lascia la vista com'e'. L'istantanea dei riferimenti si
+   * aggiorna **prima** di pubblicare la vista nuova, cosi' ogni elemento che la vista mostra ha il suo riferimento.
+   */
+  @OptIn(ExperimentalCoroutinesApi::class)
+  private class LiveHiddenItems(
+    first: Loaded,
+    scope: CoroutineScope,
+    changes: Flow<Unit>,
+    reload: suspend () -> Loaded,
   ) : ViewerItems {
+
+    @Volatile
+    private var snapshot: ColumnarTimelineSnapshot = first.snapshot
+
+    override val view: StateFlow<TimelineView> = changes
+      .onStart { emit(Unit) }
+      .mapLatest {
+        try {
+          reload()
+        } catch (e: CancellationException) {
+          throw e
+        } catch (e: Exception) {
+          GalleryLog.w(TAG) { "nascosti non riletti: ${e.javaClass.simpleName}" }
+          null
+        }
+      }
+      .filterNotNull()
+      .onEach { snapshot = it.snapshot }
+      .map { it.view }
+      .stateIn(scope, SharingStarted.WhileSubscribed(), first.view)
+
     override fun ref(id: MediaId): MediaRef = refOrNull(id) ?: throw NoSuchElementException("Nessuna copia leggibile adesso.")
 
-    override fun refOrNull(id: MediaId): MediaRef? = snapshot.indexOf(id).takeIf { it >= 0 }?.let { snapshot.refAt(it) }
+    override fun refOrNull(id: MediaId): MediaRef? = snapshot.let { current -> current.indexOf(id).takeIf { it >= 0 }?.let { current.refAt(it) } }
   }
+
+  private const val TAG = "CatalogHidden"
 }

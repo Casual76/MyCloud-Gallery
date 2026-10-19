@@ -1,6 +1,11 @@
 package dev.pampa.mycloudgallery.feature.onboarding
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
@@ -20,7 +25,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.core.app.ActivityCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -34,6 +41,7 @@ import dev.pampa.mycloudgallery.core.family.contract.OnboardingProgress
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingWarning
 import dev.pampa.mycloudgallery.core.network.contract.LocalNetworkAccess
+import dev.pampa.mycloudgallery.core.network.contract.WireGuardPermission
 import dev.pampa.mycloudgallery.core.qr.QrScanner
 import dev.pampa.mycloudgallery.core.security.screen.OverlayShield
 import dev.pampa.mycloudgallery.feature.onboarding.join.AwaitingApprovalScreen
@@ -499,11 +507,19 @@ private fun StepContent(page: OnboardingDestination.Step, env: HostEnv) {
     OnboardingStep.VPN -> {
       LaunchedEffect(Unit) { vm.enterVpnStep() }
       LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { vm.enterVpnStep() }
+      // Il permesso di WireGuard (RE-1): il dialogo di sistema parte da un tocco; a rifiuto avvenuto Android dice se lo mostrera' ancora.
+      val context = LocalContext.current
+      val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val canAskAgain = context.findActivity()?.let { ActivityCompat.shouldShowRequestPermissionRationale(it, WireGuardPermission.NAME) } ?: false
+        vm.onControlPermissionResult(WireGuardPermission.outcomeOf(granted, canAskAgain))
+      }
       VpnScreen(
         chrome = chrome,
         ui = ui.vpn,
         form = forms.vpn,
         actions = VpnActions(
+          onGrantControl = { permissionLauncher.launch(WireGuardPermission.NAME) },
+          onOpenAppSettings = { env.platform.openAppSettings() },
           onOpenWireGuard = { vm.wireGuardIntent()?.let { env.platform.open(it) } },
           onRunTest = vm::runVpnTest,
           onContinue = vm::submitVpn,
@@ -536,6 +552,12 @@ private fun StepContent(page: OnboardingDestination.Step, env: HostEnv) {
 }
 
 private const val MILLIS_PER_SECOND = 1_000L
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+  is Activity -> this
+  is ContextWrapper -> baseContext.findActivity()
+  else -> null
+}
 
 @Composable
 private fun KeyContent(page: OnboardingDestination.Step, env: HostEnv, chrome: StepChrome) {

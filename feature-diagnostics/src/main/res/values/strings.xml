@@ -169,4 +169,36 @@
   <string name="diagnostics_export_refused_title">Esportazione bloccata</string>
   <string name="diagnostics_export_refused_message">Una riga non rispettava il formato sicuro dell\'esportazione, quindi il file non viene prodotto.</string>
   <string name="diagnostics_export_preparing">Preparo l\'anteprima…</string>
+
+  <!-- Ultimi esiti ed errori: il dettaglio di un lavoro (RE-4). -->
+  <string name="diagnostics_action_recapture_home">Ripeti il riconoscimento</string>
+  <string name="diagnostics_action_open_vpn_control">Apri Rete e VPN</string>
+  <string name="diagnostics_evt_job_detail">%1$s: %2$s</string>
+  <string name="diagnostics_evt_job_detail_reason">%1$s: %2$s · %3$s</string>
+  <string name="diagnostics_evt_stop_detail">%1$s: %2$s</string>
+  <string name="diagnostics_job_nas_scan">Verifica del NAS</string>
+  <string name="diagnostics_job_index_sync">Indice e miniature del NAS</string>
+  <string name="diagnostics_job_preparation">Preparazione delle anteprime</string>
+  <string name="diagnostics_job_hq_previews">Anteprime ad alta qualità</string>
+  <string name="diagnostics_job_trash_purge">Pulizia del cestino del NAS</string>
+  <string name="diagnostics_job_index_maintenance">Manutenzione dell\'indice</string>
+  <string name="diagnostics_job_personal_sync">Dati personali fra i dispositivi</string>
+  <string name="diagnostics_job_photo_backup">Backup delle foto</string>
+  <string name="diagnostics_job_video_backup">Backup dei video</string>
+  <string name="diagnostics_job_quick_photos">Foto appena scattate</string>
+  <string name="diagnostics_job_backup_safety">Verifiche del backup</string>
+  <string name="diagnostics_job_backup_user">Backup avviato da te</string>
+  <string name="diagnostics_job_trust_sync">Controllo del registro di famiglia</string>
+  <string name="diagnostics_job_result_finished">finito</string>
+  <string name="diagnostics_job_result_yielded">fatto in parte, riprende</string>
+  <string name="diagnostics_job_result_stopped">fermato</string>
+  <string name="diagnostics_job_result_waiting">in attesa</string>
+  <string name="diagnostics_job_result_needs_confirmation">serve la tua conferma</string>
+  <string name="diagnostics_job_result_failed">non riuscito</string>
+  <string name="diagnostics_stop_quota">Android ha esaurito la quota dei lavori in background</string>
+  <string name="diagnostics_stop_restricted">Android limita l\'app in background</string>
+  <string name="diagnostics_stop_timeout">Il lavoro ha superato il tempo concesso</string>
+  <string name="diagnostics_stop_constraint">Una condizione è venuta meno (rete, carica, batteria o spazio)</string>
+  <string name="diagnostics_stop_user">L\'hai fermato tu</string>
+  <string name="diagnostics_stop_system">Android l\'ha fermato per altro</string>
 </resources>

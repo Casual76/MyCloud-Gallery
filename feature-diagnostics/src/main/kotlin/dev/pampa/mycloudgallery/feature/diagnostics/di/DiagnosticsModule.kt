@@ -98,5 +98,6 @@ object DiagnosticsContributorsModule {
 
   @Provides
   @IntoSet
-  fun recentEvents(log: DiagnosticsLog): DiagnosticsContributor = RecentEventsContributor(log)
+  fun recentEvents(@ApplicationContext context: Context, log: DiagnosticsLog): DiagnosticsContributor =
+    RecentEventsContributor(log, text = { resId -> if (resId == 0) "" else context.getString(resId) })
 }

@@ -35,6 +35,14 @@
   <string name="nas_folders_empty_offline_title">Niente di salvato</string>
 
   <!-- Azioni sulla selezione -->
+  <string name="nas_folders_refresh">Aggiorna</string>
+  <!-- NA-10: le cartelle dell'area privata che non compaiono nella Libreria (E-N15). Le foto restano sul NAS. -->
+  <string name="nas_folders_action_exclude">Escludi dalla Libreria</string>
+  <string name="nas_folders_action_include">Includi nella Libreria</string>
+  <string name="nas_folders_row_excluded">Esclusa dalla Libreria</string>
+  <string name="nas_folders_excluded">Escluso dalla Libreria. Le foto restano sul NAS: escono dalla Libreria alla prossima verifica e tornano se includi di nuovo.</string>
+  <string name="nas_folders_included">Incluso nella Libreria. Le foto tornano alla prossima verifica.</string>
+  <string name="nas_folders_exclude_failed">Non sono riuscito a salvare la scelta. Riprova fra poco.</string>
   <string name="nas_folders_action_rename">Rinomina</string>
   <string name="nas_folders_action_move">Sposta</string>
   <string name="nas_folders_action_trash">Elimina</string>

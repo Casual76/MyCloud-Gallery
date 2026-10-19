@@ -109,6 +109,8 @@ class VpnAutomationTest {
     }
 
     override fun openWireGuardIntent(): Intent? = null
+
+    override fun refresh() = Unit
   }
 
   private fun TestScope.automation(wg: Wg, tuning: VpnAutomationTuning = VpnAutomationTuning()): DefaultVpnAutomation {
@@ -566,6 +568,60 @@ class VpnAutomationTest {
     settle()
     assertThat(store.suspension.value).isNull()
     assertThat(wg.commands).containsExactly(true)
+  }
+
+  /**
+   * Verifica funzionale, RE-2: dopo la sospensione l'automazione non ripartiva piu'. I conti del tentativo (l'ultimo tentativo sulla
+   * stessa rete, i tre insuccessi, l'attesa crescente) restavano quelli di prima, quindi toglierla non faceva partire nessun comando
+   * finche' la rete non cambiava, e un insuccesso solo la risospendeva.
+   */
+  @Test
+  fun riattivareDopoUnaSospensione_ricominciaDaCapo_ilPrimoComandoParteSubito() = runTest {
+    reactivationScenario { store.clearSuspension() }
+  }
+
+  @Test
+  fun salvareDiNuovoLaScelta_ricominciaDaCapoComeRiattivare() = runTest {
+    reactivationScenario { store.save(VpnControlConfig(enabled = true, tunnelName = "casa")) }
+  }
+
+  private suspend fun TestScope.reactivationScenario(reactivate: suspend () -> Unit) {
+    val wg = Wg(this)
+    val works = wg.behavior
+    wg.behavior = { delay(10.seconds); VpnCommandResult.NotObserved }
+    world.leaveHome()
+    world.vpnOn = true
+    publish()
+    val automation = automation(wg)
+    // Tre arrivi a casa in cui WireGuard ignora il comando: sospesa ("non controllabile").
+    repeat(3) {
+      world.arriveHome()
+      publish()
+      settle(3.minutes)
+    }
+    assertThat(automation.status.value).isEqualTo(VpnAutomationStatus.Suspended(VpnSuspendReason.NOT_CONTROLLABLE))
+    assertThat(wg.commands).hasSize(3)
+
+    // L'utente ha sistemato WireGuard e riattiva il controllo: sulla stessa rete il comando parte subito e questa volta ha effetto.
+    wg.behavior = works
+    reactivate()
+    settle()
+
+    assertThat(store.suspension.value).isNull()
+    assertThat(wg.commands).hasSize(4)
+    assertThat(automation.status.value).isEqualTo(VpnAutomationStatus.Done(up = false, result = VpnCommandResult.Confirmed))
+    assertThat(world.vpnOn).isFalse()
+
+    // E un nuovo insuccesso non la risospende subito: servono ancora tre comandi senza effetto di fila.
+    wg.behavior = { delay(10.seconds); VpnCommandResult.NotObserved }
+    world.leaveHome()
+    world.vpnOn = true
+    publish()
+    world.arriveHome()
+    publish()
+    settle(1.minutes)
+    assertThat(wg.commands).hasSize(5)
+    assertThat(automation.status.value).isNotInstanceOf(VpnAutomationStatus.Suspended::class.java)
   }
 
   @Test

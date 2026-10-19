@@ -1,8 +1,13 @@
 package dev.pampa.mycloudgallery.feature.library.library
 
 import android.app.Application
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Text
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -30,6 +35,14 @@ import dev.pampa.mycloudgallery.feature.library.grid.RegisterComponentActivity
 import dev.pampa.mycloudgallery.feature.library.grid.showThemed
 import dev.pampa.mycloudgallery.feature.library.library.testing.syntheticLibraryState
 import dev.pampa.mycloudgallery.feature.library.photoVideoSummary
+import dev.antigravity.fluidengine.foundation.EngineSettings
+import dev.antigravity.fluidengine.foundation.ThemeMode
+import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalHost
+import dev.antigravity.fluidengine.ui.fluid.LocalFluidGlassModalHostState
+import dev.antigravity.fluidengine.ui.fluid.glassBackdropSource
+import dev.antigravity.fluidengine.ui.fluid.rememberFluidGlassModalHostState
+import dev.antigravity.fluidengine.ui.fluid.rememberGlassBackdrop
+import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Rule
 import org.junit.Test
@@ -75,11 +88,15 @@ class LibraryActionNoticeTest {
     override val deleteLimit: Int = Int.MAX_VALUE,
     private val shareStarts: Boolean = true,
     private val deleteStarts: Boolean = true,
+    /** GA-8: i media che hanno una copia solo sul NAS (da qui non si condividono ne' si eliminano). */
+    private val nasOnly: Set<MediaId> = emptySet(),
   ) : LibraryCommands {
     val shared = mutableListOf<Int>()
     val deleted = mutableListOf<Int>()
 
     override val canDeleteFromPhone: Boolean get() = true
+
+    override fun onPhone(ids: Set<MediaId>): Set<MediaId> = ids - nasOnly
 
     override fun share(ids: Set<MediaId>): Boolean {
       shared += ids.size
@@ -251,6 +268,104 @@ class LibraryActionNoticeTest {
     composeRule.onNodeWithText("Puoi eliminare al massimo 2 elementi alla volta").assertExists()
     composeRule.onAllNodesWithText("Eliminare 3 foto?").assertCountEquals(0)
     assertThat(commands.deleted).isEmpty()
+  }
+
+  // --- GA-8 ---------------------------------------------------------------------------------------------------------
+
+  /** Gli id dei primi [howMany] elementi della vista, nell'ordine in cui `select` li sceglie. */
+  private fun firstIds(state: LibraryTabState, howMany: Int): List<MediaId> {
+    val snapshot = state.grid.view.snapshot
+    val view = state.grid.view
+    return (0 until howMany).map { snapshot.idAt(view.snapshotIndex(it)) }
+  }
+
+  @Test
+  fun ga8_condividereSoloMediaDelNasLoDiceENonApreIlSelettore() {
+    val base = state()
+    val commands = Commands(nasOnly = firstIds(base, 3).toSet())
+    val state = state(commands = commands)
+    show(state)
+    select(state, 3)
+
+    composeRule.onNodeWithContentDescription("Condividi").performClick()
+    composeRule.waitForIdle()
+
+    // Niente "fatto" finto: il selettore non si apre, la Libreria dice com'e' la situazione e la selezione resta.
+    assertThat(commands.shared).isEmpty()
+    composeRule.onNodeWithText("Questi elementi sono solo sul NAS").assertExists()
+    composeRule.onNodeWithText("Per condividerli aprili e tocca “Scarica sul telefono”, poi condividi la copia scaricata.").assertExists()
+    assertThat(state.grid.selecting).isTrue()
+  }
+
+  @Test
+  fun ga8_condividereUnaSelezioneMistaCondivideIlTelefonoEDiceQuantiNo() {
+    val base = state()
+    val commands = Commands(nasOnly = setOf(firstIds(base, 3)[0]))
+    val state = state(commands = commands)
+    show(state)
+    select(state, 3)
+
+    composeRule.onNodeWithContentDescription("Condividi").performClick()
+    composeRule.waitForIdle()
+
+    assertThat(commands.shared).containsExactly(2)
+    composeRule.onNodeWithText("Condiviso senza 1 elemento che è solo sul NAS").assertExists()
+  }
+
+  @Test
+  fun ga8_eliminareSoloMediaDelNasNonApreIlFoglioEDice() {
+    val base = state()
+    val commands = Commands(nasOnly = firstIds(base, 3).toSet())
+    val state = state(commands = commands)
+    show(state)
+    select(state, 3)
+
+    composeRule.onNodeWithContentDescription("Elimina dal telefono").performClick()
+    composeRule.waitForIdle()
+
+    composeRule.onNodeWithText("Questi elementi sono solo sul NAS").assertExists()
+    composeRule.onNodeWithText("Non c’è niente da eliminare dal telefono. Per toglierli dal NAS aprili uno per uno, o usa Cartelle NAS.").assertExists()
+    composeRule.onAllNodesWithText("Eliminare", substring = true).assertCountEquals(0)
+    assertThat(commands.deleted).isEmpty()
+  }
+
+  @Test
+  fun ga8_eliminareUnaSelezioneMistaContaESoloQuelliDelTelefono() {
+    val base = state()
+    val commands = Commands(nasOnly = setOf(firstIds(base, 3)[0]))
+    val state = state(commands = commands)
+    composeRule.setContent {
+      MyCloudGalleryTheme(settings = EngineSettings(themeMode = ThemeMode.LIGHT)) {
+        val modalHost = rememberFluidGlassModalHostState()
+        val backdrop = rememberGlassBackdrop()
+        CompositionLocalProvider(LocalFluidGlassModalHostState provides modalHost) {
+          Box(Modifier.fillMaxSize().glassBackdropSource(backdrop)) {
+            LibraryTab(
+              contentPadding = PaddingValues(bottom = 96.dp),
+              backdropOut = {},
+              onOpenViewer = {},
+              onOpenSettings = {},
+              statusFooter = {},
+              state = state,
+            )
+          }
+          FluidGlassModalHost(state = modalHost, backdrop = backdrop)
+        }
+      }
+    }
+    composeRule.waitForIdle()
+    select(state, 3)
+
+    composeRule.onNodeWithContentDescription("Elimina dal telefono").performClick()
+    composeRule.waitForIdle()
+
+    // Il foglio conta i soli media del telefono (2, non 3) e dice che l'altro, solo sul NAS, resta dov'e'.
+    composeRule.onAllNodesWithText("Eliminare 2 foto?").onFirst().assertExists()
+    composeRule.onAllNodesWithText("1 elemento della selezione è solo sul NAS e resta dov’è.", substring = true).onFirst().assertExists()
+    composeRule.onAllNodesWithText("Elimina dal telefono").onFirst().performClick()
+    composeRule.waitForIdle()
+
+    assertThat(commands.deleted).containsExactly(2)
   }
 
   // --- R5 -----------------------------------------------------------------------------------------------------------

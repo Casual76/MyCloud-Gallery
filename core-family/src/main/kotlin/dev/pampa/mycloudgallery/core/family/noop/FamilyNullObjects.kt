@@ -135,6 +135,10 @@ object NoRegistryService : RegistryService {
     throw UnsupportedOperationException("nessuna famiglia configurata: non si puo' creare un invito")
 
   override suspend fun updateCommonExclusions(excluded: Set<String>): AdminActionResult = AdminActionResult.NotAdmin
+
+  override suspend fun updateNasAddress(ip: String): AdminActionResult = AdminActionResult.NotAdmin
+
+  override suspend fun updateHomeUla(prefixes: Set<String>): AdminActionResult = AdminActionResult.NotAdmin
 }
 
 /** Nessun lavoro: non configurato. */

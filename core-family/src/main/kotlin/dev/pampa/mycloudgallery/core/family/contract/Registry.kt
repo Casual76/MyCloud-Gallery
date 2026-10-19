@@ -148,4 +148,20 @@ interface RegistryService {
    * un dispositivo che non tiene la chiave di famiglia. I percorsi arrivano gia' validati (`SharePath.parseMediaPath`).
    */
   suspend fun updateCommonExclusions(excluded: Set<String>): AdminActionResult
+
+  /**
+   * L'indirizzo del NAS cambiato dall'admin (E-R7: il NAS ha preso un altro IP): sta nella configurazione **firmata**, da cui
+   * `createInvite` prende l'indirizzo del QR. Prima cambiava solo in locale e l'invito nuovo portava ancora quello vecchio (verifica
+   * funzionale, RE-5). Stesso controllo dell'admin di ogni azione firmata ([updateCommonExclusions]): [NotAdmin][AdminActionResult.NotAdmin]
+   * su un dispositivo che non tiene la chiave di famiglia, che l'indirizzo lo cambia solo per se'. [ip] e' un IP letterale (quello che
+   * l'utente ha digitato e la pagina ha verificato, GUID compreso); lo stesso di prima non firma niente.
+   */
+  suspend fun updateNasAddress(ip: String): AdminActionResult
+
+  /**
+   * I prefissi ULA di casa (la rete di casa raccolta di nuovo dopo un reset del router, E-R16) nella configurazione firmata, da cui
+   * `createInvite` prende "dove e' casa" per i nuovi dispositivi. Stesso controllo dell'admin di [updateNasAddress]. I prefissi arrivano
+   * dall'impronta confermata dall'utente; quelli che non sono un /48 ULA non entrano, e senza nessun prefisso valido non si firma niente.
+   */
+  suspend fun updateHomeUla(prefixes: Set<String>): AdminActionResult
 }

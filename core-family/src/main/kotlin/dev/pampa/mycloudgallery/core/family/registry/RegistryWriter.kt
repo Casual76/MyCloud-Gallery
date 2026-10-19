@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.core.family.registry
 
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.family.contract.AdminActionResult
+import dev.pampa.mycloudgallery.core.family.onboarding.FamilyConfigFactory
 import dev.pampa.mycloudgallery.core.family.trust.TrustEngine
 import dev.pampa.mycloudgallery.core.family.trust.UNEXPECTED
 import dev.pampa.mycloudgallery.core.family.trust.onShare
@@ -9,15 +10,18 @@ import dev.pampa.mycloudgallery.core.nas.contract.NasError
 import dev.pampa.mycloudgallery.core.nas.contract.NasResult
 import dev.pampa.mycloudgallery.core.nas.contract.NasSessionManager
 import dev.pampa.mycloudgallery.core.nas.contract.Purpose
+import dev.pampa.mycloudgallery.core.trust.TrustLimits
 import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKeyVault
 import dev.pampa.mycloudgallery.core.trust.nas.NasClock
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import dev.pampa.mycloudgallery.core.trust.registry.CommitResult
 import dev.pampa.mycloudgallery.core.trust.registry.DeviceStatus
 import dev.pampa.mycloudgallery.core.trust.registry.FamilyAuthority
+import dev.pampa.mycloudgallery.core.trust.registry.FamilyConfig
 import dev.pampa.mycloudgallery.core.trust.registry.RegistryDraft
 import dev.pampa.mycloudgallery.core.trust.registry.RegistryFork
 import dev.pampa.mycloudgallery.core.trust.registry.RegistryState
+import dev.pampa.mycloudgallery.core.trust.registry.UlaPrefix
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -145,16 +149,46 @@ class RegistryWriter(
    * di prima: niente da firmare.
    */
   suspend fun updateCommonExclusions(excluded: Set<String>): AdminActionResult {
+    val sorted = excluded.sorted()
+    return amendConfig { it.copy(commonExclusions = sorted) }
+  }
+
+  /**
+   * L'indirizzo del NAS nella configurazione firmata (verifica funzionale, RE-5): prima l'admin lo cambiava solo sul suo telefono e il
+   * QR d'invito portava ancora l'IP vecchio. L'identita' del NAS (GUID) non cambia: l'ha gia' verificata la pagina che ha chiesto la
+   * modifica, e il GUID firmato resta quello di prima.
+   */
+  suspend fun updateNasAddress(ip: String): AdminActionResult {
+    val host = FamilyConfigFactory.hostOf(ip)
+    return amendConfig { it.copy(nasHost = host) }
+  }
+
+  /**
+   * I prefissi ULA di casa nella configurazione firmata (RE-5, E-R16). Come al passo 12 della fondazione: solo i /48 ULA nella forma del
+   * formato, senza ripetizioni, in ordine, al massimo [TrustLimits.MAX_HOME_ULA]. Nessun prefisso valido = nessuna modifica (un invito
+   * senza ULA non e' valido).
+   */
+  suspend fun updateHomeUla(prefixes: Set<String>): AdminActionResult {
+    val canonical = prefixes.mapNotNull(UlaPrefix::canonical).distinct().sorted().take(TrustLimits.MAX_HOME_ULA)
+    if (canonical.isEmpty()) return AdminActionResult.Failed(NasError.PermissionDenied)
+    return amendConfig { it.copy(homeUla = canonical) }
+  }
+
+  /**
+   * Una modifica alla configurazione firmata, con lo stesso controllo dell'admin di ogni azione (dispositivo approvato, chiave di
+   * famiglia nella cassaforte a telefono sbloccato, M3). La stessa configurazione di prima non firma niente.
+   */
+  private suspend fun amendConfig(change: (FamilyConfig) -> FamilyConfig): AdminActionResult {
     val admin = adminContext() ?: return AdminActionResult.NotAdmin
     val config = admin.state.registry.config
-    val sorted = excluded.sorted()
-    if (config.commonExclusions == sorted) return AdminActionResult.Done
     val draft = try {
-      admin.authority.updateConfig(admin.state, config.copy(commonExclusions = sorted))
+      val changed = change(config)
+      if (changed == config) return AdminActionResult.Done
+      admin.authority.updateConfig(admin.state, changed)
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
-      // Una configurazione che il formato non accetta (percorsi o tetti): niente da firmare.
+      // Una configurazione che il formato non accetta (percorsi, indirizzo o tetti): niente da firmare.
       return AdminActionResult.Failed(NasError.PermissionDenied)
     }
     return commit(admin, draft)

@@ -12,6 +12,7 @@ import dev.pampa.mycloudgallery.core.network.contract.VpnController
 import dev.pampa.mycloudgallery.core.network.contract.VpnControlConfigStore
 import dev.pampa.mycloudgallery.core.network.contract.VpnObservation
 import dev.pampa.mycloudgallery.core.network.contract.VpnSkipReason
+import dev.pampa.mycloudgallery.core.network.contract.WireGuardPermission
 import dev.pampa.mycloudgallery.core.network.contract.WireGuardTunnelNames
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -82,7 +83,7 @@ class AndroidWireGuardPlatform(
     context.packageManager.getLaunchIntentForPackage(wireGuardPackage)?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
   companion object {
-    const val WIREGUARD_PACKAGE = "com.wireguard.android"
+    const val WIREGUARD_PACKAGE = WireGuardPermission.PACKAGE
     const val ACTION_UP = "com.wireguard.android.action.SET_TUNNEL_UP"
     const val ACTION_DOWN = "com.wireguard.android.action.SET_TUNNEL_DOWN"
     const val EXTRA_TUNNEL = "tunnel"
@@ -124,7 +125,7 @@ class WireGuardVpnController(
   }
 
   /** Rilegge installazione e permesso. */
-  fun refresh() {
+  override fun refresh() {
     state.value = computeCapability()
   }
 

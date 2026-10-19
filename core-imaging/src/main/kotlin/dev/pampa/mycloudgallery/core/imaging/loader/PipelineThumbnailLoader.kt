@@ -140,6 +140,18 @@ class PipelineThumbnailLoader(
   }
 
   /**
+   * L'app torna in primo piano (GA-3). Un `onTrimMemory` da `UI_HIDDEN` in su scarta anche le miniature visibili e, con l'app in
+   * secondo piano, non le richiede (niente lavoro che nessuno vede): al ritorno la finestra e' la stessa, ma nessuno la rimanda, e le
+   * celle restavano sul segnaposto finche' non si scorreva. Qui si riapplica la finestra che il pianificatore ricorda: parte solo cio'
+   * che manca dalla cache (nessun costo se non e' stato scartato niente).
+   */
+  override fun resume() {
+    if (closed) return
+    scheduler.repump()
+    publishStats()
+  }
+
+  /**
    * Fase 4 (P7): la replica ha ricevuto blob nuovi, oppure il NAS e' di nuovo raggiungibile. Ogni miniatura
    * **provvisoria** per cui adesso c'e' di meglio ([ThumbnailSource.canUpgrade]) si ricarica, e quella mostrata dalla
    * cella resta finche' non arriva la nuova (nessun lampeggio); i fallimenti e le attese si dimenticano, cosi' le celle

@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.core.family.p3
 
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.family.contract.AdminActionResult
+import dev.pampa.mycloudgallery.core.family.contract.InviteParams
 import dev.pampa.mycloudgallery.core.family.contract.TrustStatus
 import dev.pampa.mycloudgallery.core.family.testing.FakeRegistryService
 import dev.pampa.mycloudgallery.core.nas.contract.Purpose
@@ -34,6 +35,77 @@ class VerificaFunzionaleRegistroTest {
     assertThat(admin.engine.state!!.registry.version).isEqualTo(version)
     // Chi non tiene la chiave di famiglia non firma.
     assertThat(tablet.service.updateCommonExclusions(setOf("Altro"))).isEqualTo(AdminActionResult.NotAdmin)
+  }
+
+  /**
+   * RE-5: il NAS cambia IP. L'admin lo corregge e l'invito nuovo deve portare quello nuovo: l'indirizzo dell'invito viene dalla
+   * configurazione **firmata**, che prima nessuno aggiornava.
+   */
+  @Test
+  fun re5_l_indirizzoDelNasCambiatoDallAdminEntraNellaConfigurazioneFirmataENelNuovoInvito() = runTest {
+    val world = FamilyWorld()
+    val admin = world.admin
+    admin.engine.ensureLoaded()
+    val tablet = world.joinApproved("Tablet di Mamma", "mamma")
+    val params = InviteParams("mamma2", "Telefono di Nonna", "mamma2", "night")
+    assertThat(admin.service.createInvite(params).nasIp).isEqualTo("192.168.178.58")
+
+    assertThat(admin.service.updateNasAddress("192.168.178.77")).isEqualTo(AdminActionResult.Done)
+
+    assertThat(admin.engine.state!!.registry.config.nasHost).isEqualTo("192.168.178.77")
+    val invite = admin.service.createInvite(params)
+    assertThat(invite.nasIp).isEqualTo("192.168.178.77")
+    // L'identita' del NAS non cambia con l'indirizzo: stesso GUID di prima.
+    assertThat(invite.nasGuid).isEqualTo(world.config.nasGuid)
+    // Gli altri dispositivi leggono la configurazione dal registro firmato.
+    tablet.service.refresh(Purpose.BACKGROUND)
+    assertThat(tablet.engine.state!!.registry.config.nasHost).isEqualTo("192.168.178.77")
+
+    // Lo stesso indirizzo non firma una versione nuova; un indirizzo che il formato non accetta non firma niente.
+    val version = admin.engine.state!!.registry.version
+    assertThat(admin.service.updateNasAddress("192.168.178.77")).isEqualTo(AdminActionResult.Done)
+    assertThat(admin.engine.state!!.registry.version).isEqualTo(version)
+    assertThat(admin.service.updateNasAddress("non-un-indirizzo")).isInstanceOf(AdminActionResult.Failed::class.java)
+    assertThat(admin.engine.state!!.registry.version).isEqualTo(version)
+  }
+
+  @Test
+  fun re5_laNuovaImprontaDiCasaDellAdminEntraNellaConfigurazioneFirmataENelNuovoInvito() = runTest {
+    val world = FamilyWorld()
+    val admin = world.admin
+    admin.engine.ensureLoaded()
+    val params = InviteParams("mamma", "Tablet di Mamma", "mamma", "night")
+    assertThat(admin.service.createInvite(params).homeUla).containsExactly("fd12:3456:789a::/48")
+
+    // Il router e' stato reimpostato: un ULA nuovo (anche in una forma non canonica, che si riporta al formato).
+    assertThat(admin.service.updateHomeUla(setOf("FD99:1234:5678::/48"))).isEqualTo(AdminActionResult.Done)
+
+    assertThat(admin.engine.state!!.registry.config.homeUla).containsExactly("fd99:1234:5678::/48")
+    assertThat(admin.service.createInvite(params).homeUla).containsExactly("fd99:1234:5678::/48")
+
+    // Un prefisso che non e' un /48 ULA non entra mai; senza nessun prefisso valido non si firma niente (un invito senza ULA e' invalido).
+    val version = admin.engine.state!!.registry.version
+    assertThat(admin.service.updateHomeUla(setOf("2001:db8::/48", "fd99:1234:5678:1::/64"))).isInstanceOf(AdminActionResult.Failed::class.java)
+    assertThat(admin.service.updateHomeUla(emptySet())).isInstanceOf(AdminActionResult.Failed::class.java)
+    assertThat(admin.engine.state!!.registry.version).isEqualTo(version)
+    assertThat(admin.engine.state!!.registry.config.homeUla).containsExactly("fd99:1234:5678::/48")
+  }
+
+  /** Il controllo e' quello di ogni azione firmata dell'admin: chi non tiene la chiave di famiglia non firma niente. */
+  @Test
+  fun re5_chiNonEAdminNonFirmaNullaECambiaSoloPerSe() = runTest {
+    val world = FamilyWorld()
+    world.admin.engine.ensureLoaded()
+    val tablet = world.joinApproved("Tablet di Mamma", "mamma")
+    val before = tablet.engine.state!!.registry.version
+
+    assertThat(tablet.service.updateNasAddress("192.168.178.77")).isEqualTo(AdminActionResult.NotAdmin)
+    assertThat(tablet.service.updateHomeUla(setOf("fd99:1234:5678::/48"))).isEqualTo(AdminActionResult.NotAdmin)
+
+    world.admin.service.refresh(Purpose.BACKGROUND)
+    assertThat(world.admin.engine.state!!.registry.version).isEqualTo(before)
+    assertThat(world.admin.engine.state!!.registry.config.nasHost).isEqualTo("192.168.178.58")
+    assertThat(world.admin.engine.state!!.registry.config.homeUla).containsExactly("fd12:3456:789a::/48")
   }
 
   @Test

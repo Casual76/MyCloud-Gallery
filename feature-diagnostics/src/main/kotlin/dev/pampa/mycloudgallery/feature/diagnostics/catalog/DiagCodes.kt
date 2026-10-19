@@ -114,6 +114,11 @@ object DiagCodes {
   @JvmField val EVT_CONFIG_SUPERSEDED = DiagCode("EVT_CONFIG_SUPERSEDED", setOf("E-O6"))
   @JvmField val EVT_SELF_WIPE = DiagCode("EVT_SELF_WIPE", setOf("E-S2", "C15"))
 
+  // Verifica funzionale, RE-4: gli esiti dei lavori, scritti nell'anello da `DiagnosticsRecorder` (prima nessuno ci scriveva).
+  @JvmField val EVT_JOB_RESULT = DiagCode("EVT_JOB_RESULT")
+  @JvmField val EVT_JOB_FAILED = DiagCode("EVT_JOB_FAILED", setOf("R1"))
+  @JvmField val EVT_START_FAILED = DiagCode("EVT_START_FAILED")
+
   // --- Spazio --------------------------------------------------------------
   @JvmField val STORAGE_USAGE = DiagCode("STORAGE_USAGE")
   @JvmField val STORAGE_PHONE_LOW = DiagCode("STORAGE_PHONE_LOW", setOf("E-P3"))

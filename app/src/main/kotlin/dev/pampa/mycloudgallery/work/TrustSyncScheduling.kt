@@ -5,7 +5,6 @@ import androidx.work.Constraints
 import androidx.work.Data
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
-import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
@@ -131,7 +130,8 @@ class WorkManagerTrustSyncScheduler(
   /** Dopo un azzeramento: niente piu' finestra (i lavori li cancella [WorkManagerCanceller]). */
   fun forgetInviteWindow() = window.clear()
 
-  private fun connected(): Constraints = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
+  /** RE-11: una rete qualunque, anche senza internet (il NAS e' in LAN): vedi [LanConstraints]. */
+  private fun connected(): Constraints = LanConstraints.anyNetwork()
 
   companion object {
     const val DAILY_WORK = "trust-sync-daily"

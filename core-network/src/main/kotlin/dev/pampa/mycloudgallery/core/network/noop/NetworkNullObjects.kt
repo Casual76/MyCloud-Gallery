@@ -81,6 +81,8 @@ object NoVpnController : VpnController {
     VpnCommandResult.Skipped(VpnSkipReason.NOT_CONFIGURED)
 
   override fun openWireGuardIntent(): Intent? = null
+
+  override fun refresh() = Unit
 }
 
 /** Automazione spenta. */

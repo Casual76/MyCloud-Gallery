@@ -57,11 +57,14 @@ import dev.pampa.mycloudgallery.core.trust.registry.DeviceStatus
 import dev.pampa.mycloudgallery.gallery.PhoneLibrary
 import dev.pampa.mycloudgallery.nas.NasGraph
 import dev.pampa.mycloudgallery.nas.NasInputs
+import dev.pampa.mycloudgallery.notify.NasDailySummary
 import java.io.File
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -83,6 +86,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Il grafo del **backup** (Fase 5A, P7; docs/fase5-progetto.md §1.4): il motore del caricamento (P2), le verifiche e il guardiano (P3), il
@@ -224,6 +228,8 @@ class BackupGraph(
       GalleryLog.w(TAG) { "l'area privata e' cambiata: le parti del backup si ricostruiscono" }
       changesWatcher?.cancel()
       changesWatcher = null
+      accessWatcher?.cancel()
+      accessWatcher = null
       partsFlow.value = null
       readOnlyShares.clear()
     }
@@ -233,6 +239,9 @@ class BackupGraph(
     val share = privateShare() ?: return@withLock false
     val deviceId = nasInputs.deviceId() ?: return@withLock false
     val user = nasInputs.account() ?: return@withLock false
+    // BK-14: l'account c'e' (altrimenti non si arriva qui) e puo' essere arrivato dopo le impostazioni: le sorgenti ammesse dalla recinzione
+    // (D13, debug) si ricalcolano con l'account di adesso, prima che il piano le legga.
+    settings.refresh()
     val account = AccountId.of(user)
     val backupCatalog = newBackupCatalog(catalog)
     val session = nasInputs.session
@@ -300,6 +309,9 @@ class BackupGraph(
     partsFlow.value = Parts(share, deviceId, catalog, backupCatalog, planner, engine, light, heavy, guardian)
     // Il catalogo cambia (un media arriva al sicuro, la lettura del telefono porta novita'): le schermate rileggono, accorpato.
     changesWatcher = scope.launch { catalog.changes.collect { kick() } }
+    // BK-13: un permesso dei media che cambia (anche dalle Impostazioni di Android) cambia lo stato senza altri eventi.
+    accessWatcher?.cancel()
+    accessWatcher = scope.launch { phoneProvider()?.access?.state?.collect { kick() } }
     kick()
     true
   }
@@ -312,6 +324,10 @@ class BackupGraph(
     refresher = null
     changesWatcher?.cancel()
     changesWatcher = null
+    accessWatcher?.cancel()
+    accessWatcher = null
+    recheck?.cancel()
+    recheck = null
     partsFlow.value = null
     readOnlyShares.clear()
     inputs.jobs.cancelAll()
@@ -325,19 +341,40 @@ class BackupGraph(
    * il diario, e due motori sullo stesso diario non vanno. Null se dopo [waitFor] il posto e' ancora occupato (un altro giro lungo): il
    * lavoro riparte dopo.
    */
-  suspend fun <T> exclusive(waitFor: Duration = EXCLUSIVE_WAIT, block: suspend () -> T): T? {
+  suspend fun <T> exclusive(waitFor: Duration = EXCLUSIVE_WAIT, forUser: Boolean = false, block: suspend () -> T): T? {
     val deadline = monotonicMs() + waitFor.inWholeMilliseconds
-    // tryLock e non lock + timeout: un'acquisizione che coincide con la scadenza non puo' lasciare il lucchetto preso.
-    while (!runLock.tryLock()) {
-      if (monotonicMs() >= deadline) return null
-      kotlinx.coroutines.delay(EXCLUSIVE_POLL_MS)
-    }
+    // BK-6: un tocco dell'utente ("Inizia ora", "Fai ora", "Riprendi") che aspetta il turno lo dice agli altri lavori, che cedono il passo
+    // al lotto dopo invece di tenerlo per i loro otto minuti ([userIsWaiting]).
+    if (forUser) userWaiters.incrementAndGet()
+    var counted = forUser
     try {
-      return block()
+      // tryLock e non lock + timeout: un'acquisizione che coincide con la scadenza non puo' lasciare il lucchetto preso.
+      while (!runLock.tryLock()) {
+        if (monotonicMs() >= deadline) return null
+        kotlinx.coroutines.delay(EXCLUSIVE_POLL_MS)
+      }
+      // Il turno e' suo: chi aspettava ha finito di aspettare (gli altri lavori possono tornare a lavorare con calma).
+      if (counted) {
+        userWaiters.decrementAndGet()
+        counted = false
+      }
+      try {
+        return block()
+      } finally {
+        runLock.unlock()
+      }
     } finally {
-      runLock.unlock()
+      if (counted) userWaiters.decrementAndGet()
     }
   }
+
+  private val userWaiters = AtomicInteger()
+
+  /**
+   * BK-6: un lavoro avviato dall'utente aspetta il turno. Gli altri lavori del backup (le tappe di sfondo, le verifiche, il guardiano) lo
+   * guardano fra un lotto e l'altro e cedono il passo: si fermano al passo dopo, come a tempo scaduto (il punto di ripresa e' nel diario).
+   */
+  val userIsWaiting: Boolean get() = userWaiters.get() > 0
 
   /**
    * "Ferma" (pagina, notifica): il giro in corso si ferma prima del file successivo e ogni temporaneo resta con il suo punto di ripresa.
@@ -419,15 +456,35 @@ class BackupGraph(
    * video. Vuoto se il cancello e' chiuso, se la cartella del dispositivo non e' stata scelta (il primo backup lo avvia l'utente) o se
    * la scansione dell'area privata non e' finita (§2.11 punto 1: il piano non propone niente).
    */
-  suspend fun next(): Next {
-    val p = parts ?: return Next.Nothing
-    if (!gate.stateOf(p.share).open || settings.deviceFolder.value == null) return Next.Nothing
-    if (inputs.ruleSettings.current().protectNewPhotos && p.planner.next(BackupKind.PHOTOS, 1, BackupTrigger.QUICK_NEW_PHOTOS).isNotEmpty()) return Next.Quick
-    if (p.planner.next(BackupKind.PHOTOS, 1, BackupTrigger.SCHEDULED).isNotEmpty()) return Next.Photos
-    if (p.planner.next(BackupKind.VIDEOS, 1, BackupTrigger.SCHEDULED).isNotEmpty()) return Next.Videos
-    // Elementi aperti nel diario (un giro interrotto, un file aperto dal PC): si riprendono dal lavoro dei tipi.
-    if (store.itemsToResume(1).isNotEmpty()) return Next.Photos
-    return Next.Nothing
+  suspend fun next(): Next = nextAll().firstOrNull() ?: Next.Nothing
+
+  /**
+   * **Tutti** i giri che servono adesso, nell'ordine foto nuove, foto, video (BK-2, BK-10). `next` ne dava uno solo: con una foto nuova da
+   * proteggere subito il lavoro delle foto non veniva nemmeno chiesto, e se il giro rapido aspettava la rete (fuori casa) niente riprendeva il
+   * resto. Un elemento rimasto aperto nel diario riprende dal lavoro del **suo** tipo: un video interrotto dal lavoro dei video, non da quello
+   * delle foto (che lo salta e finisce a vuoto).
+   */
+  suspend fun nextAll(): List<Next> {
+    val p = parts ?: return emptyList()
+    if (!gate.stateOf(p.share).open || settings.deviceFolder.value == null) return emptyList()
+    val out = ArrayList<Next>(3)
+    if (inputs.ruleSettings.current().protectNewPhotos && p.planner.next(BackupKind.PHOTOS, 1, BackupTrigger.QUICK_NEW_PHOTOS).isNotEmpty()) out += Next.Quick
+    if (p.planner.next(BackupKind.PHOTOS, 1, BackupTrigger.SCHEDULED).isNotEmpty() || hasOpenItems(BackupKind.PHOTOS)) out += Next.Photos
+    if (p.planner.next(BackupKind.VIDEOS, 1, BackupTrigger.SCHEDULED).isNotEmpty() || hasOpenItems(BackupKind.VIDEOS)) out += Next.Videos
+    return out
+  }
+
+  /**
+   * C'e' un elemento aperto nel diario (un giro interrotto, un file aperto dal PC) di un media di [kind]? Una query sul diario unito al
+   * catalogo, mai il NAS. I video sono i media `video`; le motion photo, i RAW e le animate vanno con le foto (`BackupKind.of`).
+   */
+  private suspend fun hasOpenItems(kind: BackupKind): Boolean = withContext(Dispatchers.IO) {
+    runCatching {
+      val video = if (kind == BackupKind.VIDEOS) "= 'video'" else "!= 'video'"
+      database.openHelper.readableDatabase.query(
+        "SELECT 1 FROM backup_item i JOIN media m ON m.media_id = i.media_id WHERE i.is_open = 1 AND i.kind = 'new_copy' AND m.kind $video LIMIT 1",
+      ).use { it.moveToFirst() }
+    }.getOrDefault(false)
   }
 
   /** Le impostazioni delle regole (D34: "Proteggi subito le foto nuove"), per la corsa delle foto nuove. */
@@ -445,8 +502,8 @@ class BackupGraph(
   suspend fun hasWork(kind: BackupKind, trigger: BackupTrigger): Boolean {
     val p = parts ?: return false
     if (p.planner.next(kind, 1, trigger).isNotEmpty()) return true
-    // Un elemento rimasto aperto (un giro interrotto, un file aperto dal PC): si riprende dal giro del suo tipo.
-    return trigger != BackupTrigger.QUICK_NEW_PHOTOS && store.itemsToResume(1).isNotEmpty()
+    // Un elemento rimasto aperto (un giro interrotto, un file aperto dal PC): si riprende dal giro del suo tipo (BK-10).
+    return trigger != BackupTrigger.QUICK_NEW_PHOTOS && hasOpenItems(kind)
   }
 
   /** I record e le miniature dei media caricati vanno all'indice: pubblicazione dell'outbox, sulle share vere solo locale (D31). */
@@ -529,6 +586,8 @@ class BackupGraph(
   suspend fun retryProblems(): Boolean {
     val catalog = catalogProvider() ?: return false
     memory.setProblem(null)
+    // BK-3, BK-7: una sola prova per rimettere in discussione anche la sola lettura dell'area (l'admin puo' aver corretto i permessi).
+    runCatching { refreshArea() }
     val ids = withContext(Dispatchers.IO) {
       runCatching {
         database.openHelper.readableDatabase.query(
@@ -545,6 +604,18 @@ class BackupGraph(
     }
     kick()
     return ids.isNotEmpty()
+  }
+
+  /**
+   * BK-3: l'utente e' tornato da un'azione che doveva sistemare il problema che ha fermato l'ultimo giro (la password, lo spazio sul NAS, i
+   * permessi): il problema ricordato si toglie e l'area si rimette alla prova; il giro che segue lo ritrova se il guasto c'e' ancora. Non
+   * tocca i segni dei singoli media ("Riprova" li toglie).
+   */
+  suspend fun forgetRememberedProblem() {
+    if (stopped.get()) return
+    memory.setProblem(null)
+    runCatching { refreshArea() }
+    kick()
   }
 
   /** I temporanei del backup citati dal diario (D33): la pulizia dei propri file non li toglie finche' qualcuno li cita. */
@@ -570,6 +641,12 @@ class BackupGraph(
   private val kicks = Channel<Unit>(Channel.CONFLATED)
   private var refresher: kotlinx.coroutines.Job? = null
   private var changesWatcher: kotlinx.coroutines.Job? = null
+  private var accessWatcher: kotlinx.coroutines.Job? = null
+  private var recheck: kotlinx.coroutines.Job? = null
+
+  /** BK-5: l'avanzamento attraverso i lotti; letto dal file al primo calcolo, scritto quando cambia. */
+  private val progress = RunProgress()
+  private var progressLoaded = false
 
   /** Qualcosa che cambia lo stato e' successo: le schermate lo rileggono (accorpato, mai piu' di una volta ogni [REFRESH_GAP]). */
   fun kick() {
@@ -602,9 +679,25 @@ class BackupGraph(
     scope.launch { nas.runtimeState.collect { kick() } }
     scope.launch { similar.progress.collect { kick() } }
     scope.launch { partsFlow.flatMapLatest { it?.engine?.status ?: emptyFlow() }.collect { kick() } }
+    // BK-13: le regole (preset, soglie) cambiano perche' il backup aspetta.
+    scope.launch { inputs.ruleSettings.observe().collect { kick() } }
+    // BK-11: "Mostra come principale" e "Separa" sono dati personali come preferiti e nascosti: la sincronizzazione parte accorpata.
+    similar.onChoiceSaved = {
+      personalSyncRequests.incrementAndGet()
+      nas.organizer.personalChanged()
+    }
   }
 
+  /** BK-11: quante volte una scelta sulle copie simili ha chiesto la sincronizzazione dei dati personali (per i test e la Diagnostica). */
+  internal val personalSyncRequests = AtomicInteger()
+
   private suspend fun recompute() {
+    // BK-14: le sorgenti ammesse dalla recinzione seguono l'account di adesso (nessun effetto senza recinzione).
+    settings.refresh()
+    if (!progressLoaded) {
+      progressLoaded = true
+      progress.restore(memory.progress())
+    }
     val sources = settings.sources.value
     val share = privateShare()
     val access = phoneProvider()?.access?.state?.value
@@ -615,6 +708,20 @@ class BackupGraph(
     statusFlow.value = status
     sourcesFlow.value = sourceStatuses(catalog, sources)
     footerFlow.value = BackupStatusReducers.footer(status, similar.progress.value.pending)
+    progress.snapshot()?.let { text -> if (!stopped.get()) memory.setProgress(text) }
+    // BK-13: "Sto cercando cosa c'e' gia' sul NAS" e' provvisorio e il riepilogo in cache vale un minuto; se nessun altro evento arriva, lo stato
+    // non diventerebbe mai "assestato". Un solo ricalcolo, fra un minuto, finche' il riepilogo e' provvisorio.
+    if (status is BackupStatus.FirstBackupReady && status.summary.comparing) recheckLater(summaryCache.recheckInMs(monotonicMs()) ?: SUMMARY_REFRESH_MS)
+  }
+
+  private fun recheckLater(afterMs: Long) {
+    synchronized(this) {
+      if (stopped.get() || recheck?.isActive == true) return
+      recheck = scope.launch {
+        kotlinx.coroutines.delay(afterMs)
+        kick()
+      }
+    }
   }
 
   private suspend fun composeStatus(sources: BackupSources, share: String?, access: PhoneAccess?, counts: SafetyCounts): BackupStatus {
@@ -647,19 +754,58 @@ class BackupGraph(
     // R4: "In pausa" prima di tutto il resto (anche mentre il file in volo finisce), cosi' la pagina e la notifica dicono la stessa cosa.
     if (gateState == BackupGateState.PAUSED) return BackupStatus.Stopped(StopBy.USER)
 
-    val engineStatus = parts?.engine?.status?.value
-    if (engineStatus is BackupStatus.Running) return engineStatus
-    memory.lastProblem()?.let { problem -> return BackupStatus.Problem(problem, 0) }
-    if (engineStatus is BackupStatus.Stopped) return engineStatus
-
     val problems = counts.problems.filterKeys { it.marksMedia }
     val queued = (counts.noNasCopy + counts.unverified - problems.values.sum()).coerceAtLeast(0)
+    val engineStatus = parts?.engine?.status?.value
+    // BK-5: l'avanzamento e' cumulativo (fatti + in coda), non quello del lotto da 60 secondi.
+    if (engineStatus is BackupStatus.Running) return progress.reshape(engineStatus, queued, monotonicMs())
+    progress.idle(queued)
+    rememberedProblem(access)?.let { problem -> return BackupStatus.Problem(problem, 0) }
+    if (engineStatus is BackupStatus.Stopped) return engineStatus
+
     if (queued > 0) {
       val bytes = runCatching { store.counts().bytesOpen }.getOrDefault(0L)
-      return BackupStatus.Waiting(queued, bytes, waitReason())
+      return waitingStatus(queued, bytes, waitReason(), stalled = isStalled(queued), storageLow = phoneStorageLow())
     }
     problems.entries.minByOrNull { it.key.ordinal }?.let { (code, count) -> return BackupStatus.Problem(code, count) }
     return BackupStatus.UpToDate(counts.safe, memory.lastComplete())
+  }
+
+  /**
+   * **BK-3**: l'ultimo problema che ha fermato un giro, **se il mondo di adesso lo conferma**. Un problema ricordato non e' un fatto: i permessi
+   * dei media si leggono adesso (se l'utente li ha concessi il problema e' risolto, ed e' tolto: prima restava sulla pagina fino alla notte e
+   * "Consenti" non faceva piu' niente), e la sola lettura dell'area e' stata appena rimessa alla prova (`refreshArea`: se il cancello non e'
+   * piu' `READ_ONLY_AREA` la sola lettura non c'e' piu'). Gli altri (NAS pieno, quota, password) li toglie un giro riuscito, "Riprova" o il
+   * ritorno da un'azione ([AppBackupActions.onPageResumed]): l'app non puo' saperlo da sola.
+   */
+  private suspend fun rememberedProblem(access: PhoneAccess?): BackupProblemCode? {
+    val problem = memory.lastProblem() ?: return null
+    val solved = when (problem) {
+      BackupProblemCode.MEDIA_PERMISSION -> access != null && access.media != MediaAccess.NONE
+      BackupProblemCode.MEDIA_LOCATION -> access != null && access.media != MediaAccess.NONE && access.mediaLocation
+      BackupProblemCode.PARTIAL_ACCESS -> access != null && access.media == MediaAccess.FULL
+      // Qui il cancello non e' `READ_ONLY_AREA` (sarebbe tornato prima): l'area non e' piu' in sola lettura.
+      BackupProblemCode.READ_ONLY_AREA -> true
+      else -> false
+    }
+    if (!solved) return problem
+    // Dopo l'azzeramento la memoria locale non si riscrive.
+    if (!stopped.get()) memory.setProblem(null)
+    return null
+  }
+
+  /** E-P15 (BK-12): il backup ha qualcosa in coda e non fa strada da tre giorni (ora del dispositivo, I8): stessa regola del riepilogo giornaliero. */
+  private suspend fun isStalled(queued: Int): Boolean {
+    val facts = BackupDailyFacts(
+      queued = queued,
+      lastBeatAt = listOfNotNull(memory.photoBeat.lastBeatAt(), memory.videoBeat.lastBeatAt()).maxOrNull(),
+      startedAt = memory.startedAt(),
+      problem = null,
+      lostBeforeBackup = 0,
+      notIntact = 0,
+      commonCopyLost = 0,
+    )
+    return NasDailySummary.backupProblems(facts, deviceNow()).any { it is NasDailySummary.Problem.BackupStalled }
   }
 
   /** D12 e R2: il backup non scrive in [share] perche' non e' di prova, o perche' l'account e' di prova e la recinzione del telefono non c'e'. */
@@ -694,10 +840,8 @@ class BackupGraph(
 
   // --- Il riepilogo del primo backup (una volta, in cache) --------------------------------------------------------------------------
 
-  private class CachedSummary(val key: String, val at: Long, val summary: BackupSummary)
-
   private val summaryLock = Mutex()
-  private var summaryCache: CachedSummary? = null
+  private val summaryCache = SummaryCache(SUMMARY_REFRESH_MS)
 
   /**
    * Il riepilogo del primo backup (§2.11): costa circa 2 query per candidato (13 mila media), quindi si calcola **una volta** e si tiene
@@ -706,14 +850,29 @@ class BackupGraph(
    */
   suspend fun summary(): BackupSummary = summaryLock.withLock {
     val p = parts ?: return@withLock BackupSummary.EMPTY
-    val key = summaryKey(settings.sources.value, similar.progress.value.pending)
+    val sources = settings.sources.value
+    // BK-8: la chiave comprende cio' che il backup ha fatto (media al sicuro e in coda, una query di conteggi): un riepilogo "assestato" non
+    // resta piu' quello di una settimana fa, con i numeri e la stima dell'intero primo backup. Il calcolo pieno costa (due query per
+    // candidato): si rifa' solo se qualcosa e' cambiato davvero.
+    val counts = if (sources.isEmpty) SafetyCounts.ZERO else p.backupCatalog.safetyCounts(sources)
+    val key = summaryKey(sources, similar.progress.value.pending, counts)
     val now = monotonicMs()
-    val cached = summaryCache
-    if (cached != null && cached.key == key && (!cached.summary.comparing || now - cached.at < SUMMARY_REFRESH_MS)) return@withLock cached.summary
-    p.planner.summary().also { summaryCache = CachedSummary(key, now, it) }
+    summaryCache.fresh(key, now)?.let { return@withLock it }
+    p.planner.summary().also { summaryCache.put(key, now, it) }
   }
 
-  private fun summaryKey(sources: BackupSources, pending: Int): String = sources.sources.map { it.id }.sorted().joinToString(",") + "|" + (pending == 0)
+  private fun summaryKey(sources: BackupSources, pending: Int, counts: SafetyCounts): String =
+    sources.sources.map { it.id }.sorted().joinToString(",") + "|" + (pending == 0) + "|" + counts.safe + "|" + counts.noNasCopy + "|" + counts.unverified
+
+  /**
+   * I byte che un lavoro dell'utente deve ancora caricare, per la conferma sui dati mobili e per i tetti (proposta 10). **Mai un'attesa lunga**
+   * davanti a un tocco (BK-8): il riepilogo in un processo nuovo costa secondi; se non e' pronto in [ESTIMATE_WAIT_MS] vale l'ultimo che c'e'
+   * (anche vecchio) o nessuna stima. Le regole usano la stima solo per il tetto e per dirlo nella conferma: senza, la conferma c'e' lo stesso.
+   */
+  suspend fun uploadEstimateBytes(): Long? {
+    val fresh = runCatching { withTimeoutOrNull(ESTIMATE_WAIT_MS) { summary().toUpload.bytes } }.getOrNull()
+    return fresh ?: summaryCache.last()?.toUpload?.bytes
+  }
 
   // --- Condizioni e conteggi --------------------------------------------------------------------------------------------------------
 
@@ -749,14 +908,35 @@ class BackupGraph(
   suspend fun userDecision(estimatedBytes: Long?, confirmed: Boolean): RuleDecision =
     nasInputs.rules.evaluate(WorkRequest.UserInitiated(BackgroundActivity.PHOTO_BACKUP, estimatedBytes, confirmed, writesToNas = true))
 
-  private companion object {
-    const val TAG = "BackupGraph"
+  companion object {
+    private const val TAG = "BackupGraph"
+
+    /**
+     * Lo stato di un backup che ha media in coda e non sta lavorando (BK-12): pura, provata su JVM. I codici che esistevano solo in Diagnostica
+     * o che nessuno produceva arrivano alla pagina con la loro azione: "fermo da 3 giorni" (guida della batteria), il tetto dati raggiunto
+     * ("Fai ora" con conferma) e la memoria del telefono quasi piena. Altrimenti il solito "N in coda" con il suo perche'. Gli altri due
+     * codici (`WAITING_UNLOCK`, `PROFILE_INACTIVE`) non possono comparire qui: la pagina esiste solo con il telefono sbloccato e il profilo
+     * attivo, e un'app che non gira non puo' dirlo.
+     */
+    internal fun waitingStatus(queued: Int, bytes: Long, wait: WaitReason, stalled: Boolean, storageLow: Boolean): BackupStatus = when {
+      stalled -> BackupStatus.Problem(BackupProblemCode.STALE, 0)
+      wait == WaitReason.DATA_CAP -> BackupStatus.Problem(BackupProblemCode.CAP_REACHED, 0)
+      storageLow -> BackupStatus.Problem(BackupProblemCode.PHONE_STORAGE_LOW, 0)
+      else -> BackupStatus.Waiting(queued, bytes, wait)
+    }
+
     val EXCLUSIVE_WAIT: Duration = 90.seconds
-    val REFRESH_GAP: Duration = 1.seconds
-    const val EXCLUSIVE_POLL_MS: Long = 500L
-    const val SUMMARY_REFRESH_MS: Long = 60_000L
-    const val LOW_STORAGE_BYTES: Long = 1L shl 30
-    const val RETRY_LIMIT: Int = 5_000
+
+    /** BK-6: un tocco dell'utente aspetta il turno quanto la tappa piu' lunga (otto minuti piu' un lotto), non 90 secondi. */
+    val USER_EXCLUSIVE_WAIT: Duration = 15.minutes
+
+    /** Quanto un tocco aspetta il calcolo della stima prima di andare avanti senza (BK-8). */
+    private const val ESTIMATE_WAIT_MS: Long = 3_000L
+    private val REFRESH_GAP: Duration = 1.seconds
+    private const val EXCLUSIVE_POLL_MS: Long = 500L
+    private const val SUMMARY_REFRESH_MS: Long = 60_000L
+    private const val LOW_STORAGE_BYTES: Long = 1L shl 30
+    private const val RETRY_LIMIT: Int = 5_000
   }
 }
 

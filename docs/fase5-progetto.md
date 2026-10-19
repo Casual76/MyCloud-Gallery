@@ -437,11 +437,11 @@ La Fase 5 decide **cosa** si mostra e **quando**; il filone grafico decide **com
 | Codice | Messaggio | Azione | Edge case |
 |---|---|---|---|
 | `NAS_UNREACHABLE` | Il NAS non risponde | Riprova · Diagnostica | E-R5 |
-| `NAS_FULL` | Il NAS è pieno | Spazio NAS | E-R9 |
-| `QUOTA` | Spazio del tuo account esaurito | Chiedi all'admin del NAS | E-N13 |
-| `AUTH` | Serve la password del NAS | Inserisci la password | E-R8 |
-| `READ_ONLY_AREA` | La tua area privata è in sola lettura | Chiedi all'admin del NAS | E-N9, E-I19 |
-| `NO_PRIVATE_AREA` | Manca l'area privata | Impostazioni → Aree | E-O2 |
+| `NAS_FULL` | Il NAS è pieno | Spazio NAS · Riprova | E-R9 |
+| `QUOTA` | Spazio del tuo account esaurito | Chiedi all'admin del NAS · Riprova | E-N13 |
+| `AUTH` | Serve la password del NAS | Inserisci la password · Riprova | E-R8 |
+| `READ_ONLY_AREA` | La tua area privata è in sola lettura | Chiedi all'admin del NAS · Riprova | E-N9, E-I19 |
+| `NO_PRIVATE_AREA` | Manca l'area privata | Chiedi all'admin del NAS (la pagina «Impostazioni → Aree» non c'è: le aree si fissano alla fondazione della famiglia e l'app non crea share, E-O3) | E-O2 |
 | `MEDIA_PERMISSION` | Accesso alle foto ritirato | Consenti | E-P15, E-O4 |
 | `MEDIA_LOCATION` | Foto in attesa: serve l'accesso alla posizione delle foto | Consenti | E-P21 |
 | `PARTIAL_ACCESS` | Si salvano solo le foto selezionate | Consenti tutto | E-P1 |

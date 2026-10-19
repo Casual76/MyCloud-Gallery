@@ -27,6 +27,22 @@ internal object LanConstraints {
     .build()
 
   /**
+   * **BK-2**: una rete **non a consumo** (Wi-Fi o Ethernet), sempre senza `INTERNET` e senza `VALIDATED`. Serve a chi aspetta di tornare a casa
+   * ("Proteggi subito le foto nuove" vuole il Wi-Fi di casa): WorkManager la soddisfa solo con un Wi-Fi, mai con i dati mobili, e avvisa quando
+   * arriva (nessun polling). Quale Wi-Fi sia e se sia quello di casa lo decidono le regole dentro il lavoro.
+   */
+  fun unmeteredRequest(): NetworkRequest = NetworkRequest.Builder()
+    .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+    .addTransportType(NetworkCapabilities.TRANSPORT_ETHERNET)
+    .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+    .removeCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    .removeCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    .build()
+
+  /** I vincoli con la rete non a consumo ([unmeteredRequest]); il tipo di riserva vale solo prima di Android 9, che l'app non supporta. */
+  fun unmetered(): Constraints = Constraints.Builder().setRequiredNetworkRequest(unmeteredRequest(), NetworkType.UNMETERED).build()
+
+  /**
    * Il costruttore dei vincoli con la rete gia' impostata. Il tipo di rete di riserva ([NetworkType.CONNECTED]) vale solo prima di
    * Android 9, che l'app non supporta (minSdk 29): sopra, comanda la richiesta.
    */

@@ -2061,3 +2061,78 @@ rifanno uguali. I test «oggi» sono tolti, i «giusti» riaccesi, «il banco lo
 - Uno scambio la cui archiviazione ha la risposta persa e il cui attuale archiviato è poi modificato dal PC in `Versioni/` finisce `FAILED` con il solito
   percorso vuoto: i byte dell'attuale li ha sovrascritti il PC, l'originale resta in `Versioni/`. Era già così con una modifica di un'altra dimensione; il
   banco non lo prova (il PC del banco non tocca `Versioni/`).
+
+## Correzioni funzionali: backup 5A (19/10)
+Le voci BK-1 … BK-14 della verifica funzionale (`docs/review/funzionale-fasi-1-5a.md`, ognuna con il suo "Stato" e i suoi test) e la finestra di F2 nel motore
+della 5A. Ogni difetto ha un test che prima falliva. Visti rossi rimettendo per una prova il comportamento di prima: i due motori e la finestra di F2
+(`VerificaFunzionaleBackupTest.bk1_…`, `f2_…`: 3 rossi su 7, gli altri provano l'API nuova), e 12 dei 16 test sul grafo vero di `VerificaFunzionaleBackupAppTest`
+(BK-3, BK-4, BK-6, BK-7, BK-8, BK-10, BK-12, BK-13; BK-2, BK-11 e `riprova` provano parti che il comportamento di prima non aveva). BK-13 e BK-14, "plausibili",
+sono **confermate**. Il backup 5A aveva i tasti e gli stati che mentivano di più (BK-6 bloccava "Inizia ora"): adesso la pagina e le notifiche dicono quello
+che il backup fa.
+
+**Decisioni**
+1. **BK-6: un tocco dell'utente non si perde; parte dopo e gli altri cedono il passo.** Si è scelto di aspettare il turno invece di interrompere a forza le
+   verifiche: il guardiano e le verifiche non hanno un punto sicuro a metà lotto e una rilettura interrotta è lavoro buttato; fermarsi a un confine di lotto
+   (al massimo 60 secondi) è già il loro modo di finire per tempo. Quindi: il lavoro dell'utente aspetta fino a 15 minuti (la tappa più lunga è di otto,
+   più un lotto) invece di 90 secondi, e **dice che aspetta** (`BackupGraph.userIsWaiting`): tappe di sfondo, guardiano e verifiche non cominciano un altro
+   lotto. Se il turno resta occupato la tappa risponde `occupato` (`BackupStageOutcome.busy`), non «niente da fare» (`null`): il servizio si fa riprogrammare
+   (`RESCHEDULE`), un lavoro di WorkManager si riprova con l'attesa crescente. Nessun file a metà e nessun temporaneo perso: si ferma dove si ferma per
+   tempo (punto di ripresa nel diario).
+2. **BK-1: "Proteggi subito" guida solo ciò che ha creato.** Un elemento di una corsa rapida lasciato a metà (il telefono è uscito di casa) non è più
+   un candidato della corsa dopo (il piano lo vede già pianificato) e lo riprende il lavoro delle foto con le regole del preset: la foto nuova non aspetta più
+   l'arretrato, quella interrotta aspetta il preset. È la lettura più stretta di D34 ("una foto appena scattata si carica appena c'è il Wi-Fi di casa") e
+   la sola che non richiede un campo nuovo nel diario (schema v4 invariato).
+3. **BK-2: tutti i giri che servono, e il rientro a casa.** `afterPhoneRead` chiede foto nuove, foto e video insieme (lavori unici, `KEEP`). Il lavoro rapido
+   che aspetta una rete diversa da casa si rimette in coda su una rete non a consumo con 15 minuti di ritardo (nessuna rete = nessun lavoro; Wi-Fi che non è
+   casa = al massimo un controllo ogni quarto d'ora); non riguarda gli altri lavori né il NAS spento.
+4. **BK-3: un problema ricordato non è un fatto.** Si confronta con il mondo di adesso (permessi, sola lettura) e si toglie da solo se non vale più; per
+   quello che solo l'utente sa (password, spazio, quota) c'è "Riprova" su ogni problema di giro e il ritorno da un'azione (`onPageResumed`).
+5. **BK-4: la pausa finisce quando il lavoro parte.** Prima della decisione non si tocca.
+6. **BK-5: l'avanzamento sta sul catalogo.** `totale = fatti + media ancora in coda`; il motore non lo conosce e non cambia. Il tempo che manca è il ritmo
+   osservato mentre lavorava, da due media in poi.
+7. **BK-8: il riepilogo si ricalcola se il backup ha fatto strada;** la stima davanti a un tocco aspetta al massimo 3 secondi e poi va senza.
+8. **BK-9: nessuna pagina «Aree»;** `NO_PRIVATE_AREA` dice «Chiedi all'admin del NAS». Le aree non si cambiano dopo la fondazione (ON-12c) e l'app non crea
+   share (E-O3): un tasto avrebbe promesso una cosa che nessuna pagina fa.
+9. **BK-10, BK-12, BK-13, BK-14:** come nel documento della verifica. `WAITING_UNLOCK` e `PROFILE_INACTIVE` restano solo nel catalogo dei codici: la pagina
+   che li dovrebbe mostrare non gira mai in quelle condizioni.
+10. **BK-11:** una scelta sulle copie simili chiede la sincronizzazione accorpata (30 s, solo con l'app in primo piano) come preferiti e nascosti.
+11. **F2 nel motore della 5A: chiusa, con lo schema del guardiano.** Al collegamento, se la copia appena pubblicata non c'è più al suo nome (spostata da
+    una versione, da "Cartelle NAS", dal PC), o c'è un file con altri byte, o la pubblicazione è finita con la risposta persa e il finale è sparito, il
+    motore **non ricarica subito**: cerca nell'area privata una copia con gli stessi byte con la deduplica (D8, `ExistingCopyFinder`, riletta per intero qui)
+    e, se c'è, la collega dov'è (`LINKED`, il nome finale diventa il suo; da `PUBLISHED` la macchina a stati non ammette `LINKED_EXISTING`). Se il catalogo non
+    la conosce ancora (la scansione non l'ha vista) il motore ricarica come prima: stesso limite del guardiano. L'esecutore di riferimento non ha questa
+    ripresa (non ha la deduplica con `qh1`): il banco 5A non muove la copia fra pubblicazione e collegamento, e il banco 5B usa il motore vero.
+    Il lato delle versioni (`VersionJournal.busy`) è com'era.
+
+**Modifiche ai contratti e al codice condiviso**
+- `core-backup`: `UploadStages.stage(yieldTo)` e `BackupStageOutcome.busy` (BK-6); `SafeUploadEngine` (BK-1, F2); `DefaultBackupSettings.refresh()` e
+  `BackupSourceFence` (BK-14); `BackupProblemCode.actions` (`RETRY` su `NAS_FULL`, `QUOTA`, `AUTH`, `READ_ONLY_AREA`; `NO_PRIVATE_AREA` → `ASK_ADMIN`);
+  nel `testing`: `ReferenceBackupPlanner(clock)` e il trigger, `InMemoryBackupEngine`, `FakeBackupSettings(fence, account)`.
+- `core-personal`: `SimilarCopiesChoices(onSaved)` (BK-11; `resolve` resta l'ultimo parametro, per la lambda finale).
+- `feature-backup`: `BackupActions.onPageResumed()` (di serie niente), la pagina lo chiama a ogni `ON_RESUME`; la scheda «non è ancora pronto» e `NO_PRIVATE_AREA`
+  senza il tasto delle Aree.
+- `:app`: `backup/` (`BackupGraph`: `nextAll`, `userIsWaiting`, `uploadEstimateBytes`, `rememberedProblem`, `waitingStatus`; `RunProgress`, `SummaryCache`,
+  `BackupRunMemory.progress`; `AppBackupActions`: ordine di `startUser`, ritorno da un'azione, `decide`), `work/` (`BackupStages`, `BackupWork`: `busy`, BK-2;
+  `BackupJobService`; `LanConstraints.unmetered`), `main/BackupHostEffect.kt` (`PermissionAsks`, `permissionStep`; niente «Impostazioni, Aree»).
+
+**Sicurezza: cosa è stato toccato, e perché non si indebolisce**
+- D2: nessuna primitiva nuova; il backup non toglie né sostituisce niente. F2 collega una copia **già esistente** e riletta; non sposta, non cancella, non
+  sovrascrive. BK-1 e BK-6 cambiano solo **quali** elementi si guidano e **quando**.
+- «Al sicuro» nasce solo da una rilettura fatta qui (F4-D8): F2 passa dalla deduplica (SHA-256 riletto) e l'`attach` del catalogo viene prima del diario; un hash
+  o un timbro dell'indice non decidono niente. Un problema ricordato che si toglie da solo (BK-3) non rende mai «al sicuro» un media.
+- D12/D13/R2 invariati: `AppBackupGate` non è stato toccato. Le sorgenti ammesse dalla recinzione (BK-14) si **restringono** soltanto: senza account vale
+  ancora nessuna sorgente; con un account vero la recinzione non si applica, come prima. `check.ps1` cerca ancora `DebugBackupFence` nel dex di release.
+- Il lavoro dell'utente che aspetta (BK-6) non scavalca il cancello, le regole né la pausa: il turno si prende e il cancello si guarda a ogni elemento come
+  sempre. BK-2 chiede un vincolo di rete più stretto (Wi-Fi non a consumo), mai più largo.
+
+**Fake allineati al vero**: `ReferenceBackupPlanner` (trigger), `InMemoryBackupEngine` (corsa rapida), `FakeBackupSettings` (D13), `BackupRig` (lavoro dell'utente,
+azioni, orologio, ingressi). Confronti: `DefaultBackupPlannerTest.bk1_…`, `DefaultBackupSettingsTest.bk14_…`. `FakeBackupOverview`, `FakeBackupGate`,
+`FakePhoneFolders` e `FakeDeviceFolderProposals` restano lavagne scelte dal test.
+
+**Residui**
+- Una corsa rapida lasciata a metà aspetta il lavoro delle foto e le regole del preset (decisione 2).
+- La capsula del piede della Libreria vede «Riattiva le scritture» al primo evento successivo, non subito (la pagina Backup sì, al ritorno): il flag
+  `EmergencyStop` sta in `nas/`, fuori dal perimetro di questa correzione.
+- Il lavoro rapido che aspetta casa riprova ogni quarto d'ora su un Wi-Fi che non lo è: costa un avvio e una valutazione delle regole, mai traffico.
+- F2: una copia spostata che il catalogo non ha ancora visto si ricarica (stesso limite del guardiano).
+- Da provare sul telefono: vedi il report e `docs/review/funzionale-fasi-1-5a.md` (prove 5, 6, 13 della sezione 4).

@@ -14,6 +14,11 @@ enum class BackupAction(override val code: String) : StableCode {
   /** Solo un testo ("Chiedi all'admin del NAS"): nessun tasto. */
   ASK_ADMIN("ask_admin"),
   ENTER_PASSWORD("enter_password"),
+
+  /**
+   * Non la propone piu' nessun problema (BK-9): la pagina "Impostazioni, Aree" non c'e' (le aree si fissano alla fondazione della famiglia e
+   * l'app non crea share, E-O3). Il codice resta, stabile, per i dati gia' scritti.
+   */
   AREAS_SETTINGS("areas_settings"),
   GRANT_MEDIA("grant_media"),
   GRANT_MEDIA_LOCATION("grant_media_location"),
@@ -35,7 +40,9 @@ enum class BackupAction(override val code: String) : StableCode {
  * I problemi del backup (§2.6, "Ogni problema ha un messaggio e un'azione"): **codici stabili**, nello stesso ordine della tabella del
  * progetto (`BackupProblemCatalogTest` la confronta con il documento). Il messaggio e' della UI (P5) e della Diagnostica (P7).
  *
- * @property actions le azioni proposte, nell'ordine ("Riprova · Diagnostica").
+ * @property actions le azioni proposte, nell'ordine ("Riprova · Diagnostica"). **BK-3**: un problema che ferma un giro e che l'utente puo' aver
+ *   risolto fuori dall'app (spazio liberato sul NAS, password cambiata, quota alzata, permessi dell'area corretti) offre anche "Riprova", che toglie
+ *   il problema ricordato e rifa' il giro; l'app non puo' saperlo da sola.
  * @property edgeCases gli edge case del piano coperti (per il catalogo della Diagnostica).
  * @property marksMedia il problema e' di un media e accende [dev.pampa.mycloudgallery.core.model.CellFlags.BACKUP_PROBLEM] (D15);
  *   gli altri fermano o rallentano il giro intero.
@@ -47,11 +54,11 @@ enum class BackupProblemCode(
   val marksMedia: Boolean = false,
 ) : StableCode {
   NAS_UNREACHABLE("nas_unreachable", listOf(BackupAction.RETRY, BackupAction.DIAGNOSTICS), setOf("E-R5")),
-  NAS_FULL("nas_full", listOf(BackupAction.NAS_SPACE), setOf("E-R9")),
-  QUOTA("quota", listOf(BackupAction.ASK_ADMIN), setOf("E-N13")),
-  AUTH("auth", listOf(BackupAction.ENTER_PASSWORD), setOf("E-R8")),
-  READ_ONLY_AREA("read_only_area", listOf(BackupAction.ASK_ADMIN), setOf("E-N9", "E-I19")),
-  NO_PRIVATE_AREA("no_private_area", listOf(BackupAction.AREAS_SETTINGS), setOf("E-O2")),
+  NAS_FULL("nas_full", listOf(BackupAction.NAS_SPACE, BackupAction.RETRY), setOf("E-R9")),
+  QUOTA("quota", listOf(BackupAction.ASK_ADMIN, BackupAction.RETRY), setOf("E-N13")),
+  AUTH("auth", listOf(BackupAction.ENTER_PASSWORD, BackupAction.RETRY), setOf("E-R8")),
+  READ_ONLY_AREA("read_only_area", listOf(BackupAction.ASK_ADMIN, BackupAction.RETRY), setOf("E-N9", "E-I19")),
+  NO_PRIVATE_AREA("no_private_area", listOf(BackupAction.ASK_ADMIN), setOf("E-O2")),
   MEDIA_PERMISSION("media_permission", listOf(BackupAction.GRANT_MEDIA), setOf("E-P15", "E-O4")),
   MEDIA_LOCATION("media_location", listOf(BackupAction.GRANT_MEDIA_LOCATION), setOf("E-P21")),
   PARTIAL_ACCESS("partial_access", listOf(BackupAction.GRANT_ALL_MEDIA), setOf("E-P1")),

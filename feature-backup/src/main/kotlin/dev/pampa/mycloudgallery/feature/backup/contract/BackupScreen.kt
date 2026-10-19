@@ -55,4 +55,10 @@ interface BackupActions {
 
   /** Apre una schermata del backup. */
   fun open(screen: BackupScreen)
+
+  /**
+   * La pagina Backup e' di nuovo davanti all'utente (a ogni ritorno: dalla Diagnostica, dalla password, dal dialogo dei permessi, dallo
+   * sfondo). `:app` ricalcola lo stato (BK-13) e, se l'utente era uscito per sistemare un problema, rifa' il giro (BK-3). Di serie niente.
+   */
+  fun onPageResumed() = Unit
 }

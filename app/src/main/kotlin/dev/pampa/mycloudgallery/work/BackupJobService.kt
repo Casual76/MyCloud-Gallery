@@ -67,6 +67,9 @@ class BackupJobRun(
       while (more) {
         if (slices-- <= 0) return BackupJobEnd.RESCHEDULE
         val outcome = stage(kind) ?: return BackupJobEnd.DONE
+        // BK-6: il turno e' occupato da un altro lavoro del backup (le verifiche, il guardiano) e non si e' liberato in tempo: il tocco
+        // dell'utente non e' "niente da fare", si riprende con il ritardo di `JobScheduler`.
+        if (outcome.busy) return BackupJobEnd.RESCHEDULE
         // "Ferma", cancello chiuso o permessi del telefono: niente da riprovare, nemmeno con l'altro tipo di media.
         when (outcome.last?.stoppedBy) {
           RunStop.STOPPED, RunStop.GATE, RunStop.PHONE -> return BackupJobEnd.DONE
@@ -140,7 +143,7 @@ class BackupJobService : JobService() {
           val attempt = attemptStage(TAG, onError = { backup.noteUnexpectedError() }) {
             val stages = BackupStages(entry.graph(), backup)
             // La stima serve alle regole per la conferma sui dati mobili (proposta 10): il riepilogo e' in cache.
-            val estimate = runCatching { backup.summary().toUpload.bytes }.getOrNull()
+            val estimate = backup.uploadEstimateBytes()
             BackupJobRun(
               stage = { kind -> gallery.runIfActive { stages.round(kind, trigger, userEstimate = estimate, confirmed = confirmed) } },
               userInitiated = userInitiated,

@@ -164,4 +164,12 @@ class RecordingBackupActions : BackupActions {
   override fun open(screen: BackupScreen) {
     opened += screen
   }
+
+  /** Quante volte la pagina e' tornata davanti all'utente (BK-3, BK-13). */
+  var resumedCalls: Int = 0
+    private set
+
+  override fun onPageResumed() {
+    resumedCalls++
+  }
 }

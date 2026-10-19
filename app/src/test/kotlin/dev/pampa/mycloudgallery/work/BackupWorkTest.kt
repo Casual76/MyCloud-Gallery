@@ -48,6 +48,27 @@ class BackupWorkTest {
       .isEqualTo(BackupFollowUp.Wait(WaitReason.Offline))
   }
 
+  /**
+   * **BK-6** (verifica funzionale): un tocco dell'utente non si perde. Il turno del backup e' tenuto da un altro lavoro (le verifiche, il
+   * guardiano) e non si libera: la tappa non e' "niente da fare" (`null`, e il lavoro dell'utente chiudeva con `DONE` e spariva) ma "occupato".
+   */
+  @Test
+  fun bk6_ilTurnoOccupatoNonEDonePerIlLavoroDellUtenteNeNienteDaFarePerIlSeguito() = runBlocking {
+    val busy = BackupStageOutcome(finished, null, busy = true)
+    // Un lavoro di WorkManager si riprova con l'attesa crescente.
+    assertThat(BackupFollowUp.of(busy)).isEqualTo(BackupFollowUp.Retry)
+    // Il lavoro dell'utente si fa riprogrammare, e non passa ai video (il turno e' lo stesso).
+    val script = Script(mapOf(BackupKind.PHOTOS to mutableListOf(busy), BackupKind.VIDEOS to mutableListOf(done())))
+    assertThat(BackupJobRun(script::stage, userInitiated = true).run()).isEqualTo(BackupJobEnd.RESCHEDULE)
+    assertThat(script.asked).containsExactly(BackupKind.PHOTOS)
+    // Anche un lavoro normale: occupato non e' finito.
+    val normal = Script(mapOf(BackupKind.PHOTOS to mutableListOf(busy), BackupKind.VIDEOS to mutableListOf(done())))
+    assertThat(BackupJobRun(normal::stage, userInitiated = false).run()).isEqualTo(BackupJobEnd.RESCHEDULE)
+    // "Niente da fare" resta DONE.
+    val idle = Script(mapOf(BackupKind.PHOTOS to mutableListOf(null), BackupKind.VIDEOS to mutableListOf(done())))
+    assertThat(BackupJobRun(idle::stage, userInitiated = true).run()).isEqualTo(BackupJobEnd.DONE)
+  }
+
   @Test
   fun ilSeguitoDelleVerifiche() {
     val none = SafetyStageOutcome(listOf(finished), 3, 0, 0, null)

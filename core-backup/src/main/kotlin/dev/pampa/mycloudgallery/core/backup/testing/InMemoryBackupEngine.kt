@@ -135,8 +135,8 @@ class InMemoryBackupEngine(
       state.value = BackupStatus.NotConfigured(setOf(BackupSetupStep.DEVICE_FOLDER))
       return BackupRunResult.nothing(RunStop.GATE)
     }
-    val fresh = planner.next(kind, PLAN_PAGE).filter { store.openFor(it.versionId) == null }
-    if (fresh.isNotEmpty()) {
+    val fresh = planner.next(kind, PLAN_PAGE, trigger).filter { store.openFor(it.versionId) == null }
+    val created = if (fresh.isNotEmpty()) {
       store.create(
         fresh.map { c ->
           NewBackupItem(
@@ -144,9 +144,12 @@ class InMemoryBackupEngine(
             share = share, planned = planner.destination(c, device), quickHash = c.quickHash,
           )
         },
-      )
+      ).mapTo(HashSet()) { it.id }
+    } else {
+      emptySet()
     }
-    return resume(budget, kind)
+    // BK-1 (D34): "Proteggi subito le foto nuove" porta avanti solo gli elementi che ha creato, non l'arretrato gia' aperto nel diario.
+    return resume(budget, kind, only = if (trigger == BackupTrigger.QUICK_NEW_PHOTOS) created else null)
   }
 
   override suspend fun resumeAll(budget: Duration): BackupRunResult {
@@ -158,14 +161,15 @@ class InMemoryBackupEngine(
     stopRequested = by
   }
 
-  private suspend fun resume(budget: Duration, kind: BackupKind?): BackupRunResult {
+  private suspend fun resume(budget: Duration, kind: BackupKind?, only: Set<BackupItemId>? = null): BackupRunResult {
     val deadline = clock.monotonicMs() + budget.inWholeMilliseconds
     val tally = Tally()
     val waiting = HashSet<BackupItemId>()
     while (true) {
       if (stopRequested != null) return finish(tally, RunStop.STOPPED, null, waiting.size)
       if (clock.monotonicMs() >= deadline) return finish(tally, RunStop.BUDGET, null, waiting.size)
-      val item = store.itemsToResume(Int.MAX_VALUE).firstOrNull { it.id !in waiting } ?: return finish(tally, RunStop.COMPLETE, null, waiting.size)
+      val item = store.itemsToResume(Int.MAX_VALUE).firstOrNull { it.id !in waiting && (only == null || it.id in only) }
+        ?: return finish(tally, RunStop.COMPLETE, null, waiting.size)
       val gateState = gate.stateOf(item.share)
       if (!gateState.open) return finish(tally, RunStop.GATE, gateState.problem, waiting.size)
       state.value = BackupStatus.Running(

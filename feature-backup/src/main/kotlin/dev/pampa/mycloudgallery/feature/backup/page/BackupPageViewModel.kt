@@ -82,6 +82,9 @@ class BackupPageViewModel @Inject constructor(
   /** "Ferma": prima del file successivo, ogni temporaneo resta con il suo punto di ripresa. */
   fun stop() = acts.stop()
 
+  /** La pagina e' di nuovo davanti all'utente: lo stato si ricalcola e un problema sistemato fuori dalla pagina non resta (BK-3, BK-13). */
+  fun onResumed() = acts.onPageResumed()
+
   /** Un'altra schermata del backup (le impostazioni, la scelta della cartella del dispositivo). */
   fun open(screen: BackupScreen) = acts.open(screen)
 

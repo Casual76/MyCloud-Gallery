@@ -708,12 +708,24 @@ Le cose più gravi:
 - **Correzione:** con `QUICK_NEW_PHOTOS`, guidare solo gli elementi creati da quel giro.
 - **Test:** `BackupIntegrationTest` con 20 elementi vecchi aperti e una foto nuova, budget per un file: deve finire al sicuro
   la foto nuova.
+- **Stato: corretta** (19/10). Un giro `QUICK_NEW_PHOTOS` guida solo gli elementi che ha creato (`SafeUploadEngine.drive(only = …)`): l'arretrato
+  già nel diario lo riprendono i giri normali, con le regole del preset. Una corsa rapida lasciata a metà non rientra nella corsa dopo (il piano la
+  vede già pianificata): la riprende il lavoro delle foto. `ReferenceBackupPlanner` ora legge il trigger come il piano vero (solo foto della
+  fotocamera, mai video, al massimo 24, ultimi 3 giorni dall'ora del NAS) e `InMemoryBackupEngine` guida solo ciò che ha creato. Test:
+  `VerificaFunzionaleBackupTest.bk1_…` (3: motore vero con budget per un file solo, esecutore di riferimento, senza arretrato),
+  `DefaultBackupPlannerTest.bk1_…` (parità fra il piano vero e quello di riferimento).
 
 #### BK-2 · D34 non riparte al rientro a casa se la foto è stata scattata fuori
 - **Gravità:** Sbagliata. **Stato:** confermato.
 - **Percorso:** `work/BackupWork.kt:118-122` (nessun ritardo per le attese di rete), `:269`, e `backup/BackupGraph.kt:425`
   (`next()` restituisce `Quick` prima di foto e video).
 - **Correzione:** rimettere in coda QUICK con il vincolo `UNMETERED`; in `afterPhoneRead` chiedere anche il lavoro delle foto.
+- **Stato: corretta** (19/10). `afterPhoneRead` chiede **tutti** i giri che servono (`BackupGraph.nextAll()`: foto nuove, foto, video; prima
+  uno solo). Il lavoro rapido che aspetta il Wi-Fi di casa (`Offline`, `NetworkNotAllowed`, `NetworkNotTrusted`, `Roaming`) si rimette in coda su
+  una rete non a consumo (`LanConstraints.unmetered`: Wi-Fi o Ethernet, senza INTERNET né VALIDATED come RE-11), con un ritardo di 15 minuti per non
+  girare a ciclo su un Wi-Fi che non è casa; con i dati mobili il vincolo non è soddisfatto e non gira niente. Il NAS irraggiungibile a casa e gli
+  altri lavori non programmano niente (niente polling). Test: `BackupSchedulingTest.bk2_…` e `gliAltriLavori…`,
+  `VerificaFunzionaleBackupAppTest.bk2_laFotoNuovaNonToglieIlLavoroDelleFoto`.
 
 #### BK-3 · Il problema dell'ultimo giro resta sulla pagina dopo che l'utente l'ha risolto
 - **Gravità:** Sbagliata; i tasti non fanno niente. **Stato:** confermato.
@@ -726,6 +738,13 @@ Le cose più gravi:
   la password e per il NAS pieno.
 - **Correzione:** ignorare `MEDIA_*` se l'accesso adesso c'è, azzerare il problema al ritorno da un'azione, "Riprova" su ogni
   problema di giro.
+- **Stato: corretta** (19/10). Il problema ricordato si confronta col mondo di adesso (`BackupGraph.rememberedProblem`): i permessi dei media
+  (`MEDIA_PERMISSION`, `MEDIA_LOCATION`, `PARTIAL_ACCESS`) e la sola lettura dell'area (rimessa alla prova, BK-7) si tolgono da soli quando non valgono
+  più; l'osservatore dell'accesso ai media fa ricalcolare lo stato (BK-13). Gli altri (NAS pieno, quota, password) li toglie un giro riuscito, "Riprova"
+  (ora offerto anche da `NAS_FULL`, `QUOTA`, `AUTH`, `READ_ONLY_AREA`) o il **ritorno da un'azione**: "Inserisci la password", "Spazio NAS" e "Consenti"
+  ricordano di averti mandato fuori, e al ritorno sulla pagina (`BackupActions.onPageResumed`) il problema si toglie e il giro si rifà; senza un'uscita
+  aprire la pagina non cancella niente. Test: `VerificaFunzionaleBackupAppTest.bk3_…` (4), `BackupPageScreenTest.bk3_…`,
+  `BackupViewModelsTest.ilRitornoAllaPaginaArrivaAlleAzioni`. `BackupHostEffect` usa `PermissionAsks` (stesso difetto di GA-4): `BackupPermissionStepTest`.
 
 #### BK-4 · La pausa si toglie anche quando l'utente annulla
 - **Gravità:** Sbagliata. **Stato:** confermato.
@@ -734,6 +753,9 @@ Le cose più gravi:
 - **Scenario:** "Ferma", poi "Riprendi" sui dati mobili, poi "Annulla". La pagina dice ancora "In pausa", ma il backup riparte
   al primo Wi-Fi.
 - **Correzione:** togliere la pausa solo in `confirm()` o quando il lavoro viene programmato.
+- **Stato: corretta** (19/10). `AppBackupActions.startUser` decide prima (`decide` → conferma dei dati mobili) e toglie la pausa solo quando il lavoro
+  viene programmato; "Annulla" la lascia com'era. "Stanotte" la toglie senza lavoro dell'utente. Test:
+  `VerificaFunzionaleBackupAppTest.bk4_annullareLaConfermaDeiDatiMobiliLasciaIlBackupInPausa` e `bk4_riprendiESenzaConferma…`.
 
 #### BK-5 · L'avanzamento del primo backup riparte da zero ogni minuto e il tempo stimato non c'è mai
 - **Gravità:** Sbagliata. **Stato:** confermato.
@@ -742,6 +764,10 @@ Le cose più gravi:
   - `SafeUploadEngine.kt:1192-1200`: contatori del lotto, `etaMillis = null`;
   - `BackupGraph.kt:651`.
 - **Effetto:** "1.240 di 6.658 · circa 1 h 20 min" diventa "37 di 980", e la barra della notifica torna indietro.
+- **Stato: corretta** (19/10). L'avanzamento è cumulativo e sta fuori dal motore (`RunProgress`): fatti e totale vengono dai media ancora in coda del
+  catalogo (`totale = fatti + in coda`, i fatti non scendono mai, le foto nuove allungano il totale); il tempo che manca viene dal ritmo osservato
+  mentre il backup lavorava (nulla prima di due media, il tempo fermo non conta); si ricorda su file (`backup-progress`, tolto dall'azzeramento) e finisce
+  quando non c'è più niente in coda. Test: `RunProgressTest` (8), `VerificaFunzionaleBackupAppTest.bk5_…` (stati veri di un primo backup).
 
 #### BK-6 · "Inizia ora", "Fai ora" e "Riprendi" finiscono senza fare niente se un lavoro in background tiene il turno
 - **Gravità:** Blocca, in quel momento. **Stato:** percorso confermato; quanto spesso capita va misurato.
@@ -753,11 +779,18 @@ Le cose più gravi:
   lavoro dell'utente.
 - **Test:** turno occupato con `exclusive { awaitCancellation() }`, poi `BackupJobRun(..., userInitiated = true)`: atteso
   `RESCHEDULE` (oggi `DONE`).
+- **Stato: corretta** (19/10). **Scelta: parte dopo, e gli altri cedono il passo.** Il lavoro dell'utente aspetta il suo turno fino a 15 minuti (non 90
+  secondi) e intanto lo dice agli altri (`BackupGraph.userIsWaiting`): le tappe di sfondo, il guardiano e le verifiche finiscono il lotto in corso (al
+  massimo 60 secondi) e non ne cominciano altri; se il turno è ancora occupato la tappa dice **occupato** (`BackupStageOutcome.busy`) e il lavoro si
+  fa riprogrammare (`RESCHEDULE`; un lavoro normale `Result.retry()`), mai `DONE`. Test: `VerificaFunzionaleBackupAppTest.bk6_…` (2: occupato → `RESCHEDULE`;
+  aspetta, poi lavora), `VerificaFunzionaleBackupTest.bk6_…` (la tappa cede il passo / non cede se nessuno aspetta), `BackupWorkTest.bk6_…`.
 
 #### BK-7 · L'area segnata "in sola lettura" non si riprova mai nei giri
 - **Gravità:** Minore. **Stato:** confermato.
 - **Percorso:** `BackupStages.kt:112-117` controlla il cancello prima di `refreshArea()`.
 - **Effetto:** dopo che l'admin ha corretto i permessi, il backup resta fermo fino alle verifiche giornaliere.
+- **Stato: corretta** (19/10). `BackupStages.round` rimette alla prova la share prima di guardare il cancello (se è aperto o `READ_ONLY_AREA`).
+  Test: `VerificaFunzionaleBackupAppTest.bk7_unAreaInSolaLetturaSiRimetteAllaProvaEIlGiroCarica`.
 
 #### BK-8 · Il riepilogo del primo backup non si ricalcola più
 - **Gravità:** Minore. **Stato:** confermato.
@@ -766,34 +799,58 @@ Le cose più gravi:
   - il numero di elementi da mettere al sicuro resta vecchio;
   - "Fai ora" sui dati mobili chiede conferma con la stima dell'intero primo backup;
   - in un processo nuovo il calcolo precede la programmazione del lavoro dell'utente.
+- **Stato: corretta** (19/10). La chiave del riepilogo comprende i media al sicuro e in coda (`SummaryCache`): si ricalcola quando il backup ha fatto
+  strada. La stima per "Fai ora" e per il lavoro (`BackupGraph.uploadEstimateBytes`) aspetta al massimo 3 secondi e poi va avanti con l'ultima nota o
+  senza (le regole la usano solo per il tetto e per dirlo nella conferma): la programmazione del lavoro non aspetta più il calcolo di un processo nuovo.
+  Test: `VerificaFunzionaleBackupAppTest.bk8_…`, `SummaryCacheTest`.
 
 #### BK-9 · "Apri Impostazioni, Aree" porta alla radice delle Impostazioni, dove le Aree non ci sono
 - **Gravità:** Minore. **Stato:** confermato.
 - **Percorso:** `main/BackupHostEffect.kt:65`; nessuna pagina Aree in `SettingsNavigation.kt`.
+- **Stato: corretta** (19/10). La pagina "Impostazioni, Aree" non c'è e non può esserci: le aree si fissano alla fondazione della famiglia (ON-12c) e l'app
+  non crea share (E-O3). Il tasto è tolto: `NO_PRIVATE_AREA` propone ora "Chiedi all'admin del NAS" (una frase, nessun tasto) e la scheda "non è ancora
+  pronto" lo dice sotto l'elenco. `BackupAction.AREAS_SETTINGS` resta nell'enum (codice stabile) ma nessun problema lo propone più. Test:
+  `BackupPageScreenTest.bk9_…`, `BackupPiecesTest.bk9_…`.
 
 #### BK-10 · Un video interrotto riprende solo con il lavoro periodico delle 6 ore
 - **Gravità:** Minore. **Stato:** confermato.
 - **Percorso:** `BackupGraph.kt:429` (ogni elemento aperto diventa `Photos`, e il giro delle foto salta i video).
+- **Stato: corretta** (19/10). Un elemento aperto riprende dal lavoro del **suo** tipo (`BackupGraph.hasOpenItems(kind)`, una query sul diario unito al
+  catalogo): `hasWork` e `nextAll` non mandano più un video al lavoro delle foto. Test: `VerificaFunzionaleBackupAppTest.bk10_unVideoInterrottoRiprendeDalLavoroDeiVideo`.
 
 #### BK-11 · "Separa" e "Mostra come principale" non chiedono la sincronizzazione dei dati personali
 - **Gravità:** Minore. **Stato:** confermato.
 - **Percorso:** `GalleryGraph.kt:394-409` chiama `personalChanged()` solo per preferiti e nascosti; `SimilarCopiesGraph.kt:141-143`.
+- **Stato: corretta** (19/10). `SimilarCopiesChoices` avvisa (`onSaved`) dopo ogni scelta scritta; `SimilarCopiesGraph.onChoiceSaved`, impostato da
+  `BackupGraph`, chiede la sincronizzazione accorpata dei dati personali (`NasOrganizer.personalChanged`) come per preferiti e nascosti. Test:
+  `SimilarCopiesChoicesTest` (core-personal), `VerificaFunzionaleBackupAppTest.bk11_…`, `SimilarCopiesIntegrationTest` («Separa» chiede la sincronizzazione).
 
 #### BK-12 · Codici di stato che non arrivano mai alla pagina
 - **Gravità:** Minore. **Stato:** confermato.
 - **Percorso:**
   - `STALE` e `PHONE_STORAGE_LOW` esistono solo in Diagnostica (`BackupDiagnostics.kt:83-86`);
   - `CAP_REACHED`, `WAITING_UNLOCK` e `PROFILE_INACTIVE` non li produce nessuno.
+- **Stato: corretta** (19/10). Arrivano alla pagina `STALE` (backup fermo da 3 giorni con media in coda, stessa regola del riepilogo giornaliero),
+  `CAP_REACHED` (le regole dicono tetto dati) e `PHONE_STORAGE_LOW` (con media in coda), in quest'ordine di gravità (`BackupGraph.waitingStatus`). `WAITING_UNLOCK`
+  e `PROFILE_INACTIVE` **non possono comparire**: la pagina esiste solo con il telefono sbloccato e il profilo attivo, un'app che non gira non può dirlo
+  (restano nel catalogo dei codici). Test: `BackupPiecesTest.bk12_…`, `VerificaFunzionaleBackupAppTest.bk12_…`.
 
 #### BK-13 · Lo stato a volte non si ricalcola (cambio dei permessi, "Riattiva le scritture", cache "Sto cercando…")
 - **Gravità:** Minore. **Stato:** plausibile.
 - **Percorso:** `BackupGraph.kt:592-604`.
 - **Test:** cache su "confronto in corso" e un solo evento entro 60 s: lo stato non diventa mai "assestato".
+- **Stato: confermata e corretta** (19/10). Lo stato si ricalcola anche per i permessi dei media (osservatore dell'accesso), per le regole (preset,
+  soglie), per un riepilogo provvisorio ("sto cercando…": un solo ricontrollo fra un minuto, `SummaryCache.recheckInMs`) e a ogni ritorno sulla pagina Backup
+  (`onPageResumed`): «Riattiva le scritture» non ha un evento che il backup ascolti (`EmergencyStop` è un flag in `nas/`), quindi si vede al ritorno sulla
+  pagina; la capsula del piede della Libreria lo vede al primo evento successivo. Test: `VerificaFunzionaleBackupAppTest.bk13_…` (2), `SummaryCacheTest`.
 
 #### BK-14 · Solo debug (D13): se l'account arriva dopo le impostazioni, nessuna sorgente valida per tutto il processo
 - **Gravità:** Minore, ma tocca le prove sul campo F21 e seguenti. **Stato:** plausibile.
 - **Percorso:** `core-backup/.../settings/DefaultBackupSettings.kt:84-98`.
 - **Test:** `BackupFenceIntegrationTest` con l'account in ritardo: `settings.sources` deve contenere `DCIM/mcg-prova/`.
+- **Stato: confermata e corretta** (19/10). `DefaultBackupSettings.refresh()` ricalcola le sorgenti ammesse con l'account di adesso; la chiamano
+  `BackupGraph.start` e il ricalcolo dello stato (nessun effetto senza recinzione). La regola di D13 sta in `BackupSourceFence`, condivisa con
+  `FakeBackupSettings`. Test: `DefaultBackupSettingsTest.bk14_…` (3, anche la parità del finto col vero), `BackupFenceIntegrationTest.bk14_…` (debug).
 
 ---
 
@@ -854,6 +911,18 @@ continua» fuori dallo scanner, come il file di produzione (`ScanFreezeTest.na4_
 righe senza data, una alla volta (`AndroidMediaStoreSourceTest.ga5_…`; l'ordine fra le righe senza data può differire). `RecordingJobs`
 ora verifica che dopo un'operazione breve lasciata aperta la ripresa si chieda (`NasOrganizeIntegrationTest.na2_…`), e `NasOpsJobRun` non è più
 provato solo con `{ null } → Done` (`NasOpsJobsTest.na12_…`, `VerificaFunzionaleNasAppTest.na12_…`).
+
+**Allineati il 19/10 (correzioni BK).** `ReferenceBackupPlanner` legge il trigger come il piano vero (solo foto della fotocamera, mai video, al massimo 24,
+ultimi 3 giorni; confronto: `DefaultBackupPlannerTest.bk1_…`) e `InMemoryBackupEngine` guida solo gli elementi creati da una corsa rapida
+(`VerificaFunzionaleBackupTest.bk1_ancheIlMotoreDiRiferimento…`); restano diversi `alreadyPlanned` e `ONLY_COMMON_COPY`, che i due motori applicano da sé
+(`store.openFor`, il guardiano). `FakeBackupSettings` applica D13 con la stessa regola delle impostazioni vere (`BackupSourceFence`, `refresh()` quando l'account
+arriva): `DefaultBackupSettingsTest.bk14_ilFintoEIlVeroDannoLeStesseSorgentiInOgniMomento`. `BackupRig` ha il lavoro dell'utente come lo fa il servizio
+(`userJob`: `BackupJobRun` dentro `runIfActive`), le azioni vere della pagina con il verdetto delle regole scelto dal test (`actions`), l'orologio monotono
+e gli ingressi del NAS sostituibili (account che arriva tardi). `FakeBackupOverview` resta una lavagna (lo stato lo sceglie il test, per costruzione): le regole
+che le mancavano (problema vecchio, pausa, avanzamento per lotto, riepilogo in cache) ora sono provate sul grafo vero (`VerificaFunzionaleBackupAppTest`,
+`RunProgressTest`, `SummaryCacheTest`). `FakeBackupGate`, `FakePhoneFolders` e `FakeDeviceFolderProposals` restano lavagne: il cancello vero ha i suoi test
+(`AppBackupGateTest`) e nessuna voce BK dipendeva da loro. I flussi 5, 6 e 13 della sezione 4 hanno ora un test sul grafo vero
+(`VerificaFunzionaleBackupAppTest`, con il WorkManager di prova per le catene dei lavori); restano da provare sul telefono le catene vere di WorkManager e JobScheduler.
 
 ---
 
@@ -941,7 +1010,7 @@ Una riga ciascuno: il percorso è completo nel codice e i dati arrivano alla sch
 **Backup 5A**
 - **Voce Impostazioni e capsula del piede → pagina Backup**; **sorgenti e cartelle aggiuntive**; **cartella del dispositivo**.
 - **"Inizia ora" e "Fai ora"** quando il turno è libero: lavoro avviato dall'utente, giro, copia verificata, "al sicuro".
-- **"Stanotte"**, **"Ferma"** (pagina e notifica), **"Riprova"**, **azioni di navigazione dei problemi** (tranne Aree, BK-9).
+- **"Stanotte"**, **"Ferma"** (pagina e notifica), **"Riprova"**, **azioni di navigazione dei problemi** (Aree: tolta, BK-9).
 - **Riga del viewer**, **copie simili D36** ("Separa", "Mostra come principale"), **verifiche e guardiano**, **lavori periodici**.
 - **D12 in release:** cancello `TEST_ONLY`; pagina, piede e Impostazioni dicono "Backup in prova".
 

@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -32,8 +33,9 @@ import dev.pampa.mycloudgallery.feature.library.collections.CollectionKind
 import dev.pampa.mycloudgallery.feature.library.collections.openCollection
 import dev.pampa.mycloudgallery.feature.nas.contract.NasScreen
 import dev.pampa.mycloudgallery.feature.nas.hub.openNas
-import dev.pampa.mycloudgallery.feature.settings.SettingsGraphRoute
 import dev.pampa.mycloudgallery.feature.settings.SettingsPasswordRoute
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Lega le azioni del backup ([AppBackupActions]) alla schermata finche' la galleria e' visibile (Fase 5A, P7; docs/fase5-progetto.md §2.6):
@@ -48,7 +50,10 @@ internal fun BackupHostEffect(actions: AppBackupActions?, nav: NavController, on
   if (actions == null) return
   val context = LocalContext.current
   val latestOnAccessChanged = rememberUpdatedState(onAccessChanged)
-  val asked = remember { HashSet<String>() }
+  // GA-4: il ricordo "ho gia' chiesto il permesso" sta su un file, non in `remember` (si perdeva con la rotazione e il riavvio del processo, e
+  // il primo "Consenti" lanciava un dialogo che Android scarta in silenzio): vedi `PermissionAsks`.
+  val asks = remember(context) { PermissionAsks(context) }
+  LaunchedEffect(asks) { withContext(Dispatchers.IO) { asks.warm() } }
   val permissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
     latestOnAccessChanged.value()
   }
@@ -61,8 +66,6 @@ internal fun BackupHostEffect(actions: AppBackupActions?, nav: NavController, on
       override fun openDiagnostics() = nav.navigate(DiagnosticsGraphRoute)
 
       override fun openPassword() = nav.navigate(SettingsPasswordRoute)
-
-      override fun openAreasSettings() = nav.navigate(SettingsGraphRoute)
 
       override fun openNas(screen: NasScreen) = nav.openNas(screen)
 
@@ -84,18 +87,16 @@ internal fun BackupHostEffect(actions: AppBackupActions?, nav: NavController, on
       /** [wanted] si chiede insieme; basta che manchi uno di [full] perche' la richiesta abbia senso. */
       private fun request(wanted: Array<String>, full: Array<String>) {
         val missing = full.filter { !granted(context, it) }
-        if (missing.isEmpty() && !needsPartialUpgrade(context, full)) {
-          latestOnAccessChanged.value()
-          return
-        }
         val activity = context.findActivity()
-        val blocked = missing.isNotEmpty() && missing.all { it in asked && activity?.shouldShowRequestPermissionRationale(it) == false }
-        if (blocked) {
-          tryStart(context, Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)))
-          return
+        when (permissionStep(missing, needsPartialUpgrade(context, full), asks, full.filter { granted(context, it) }) { activity?.shouldShowRequestPermissionRationale(it) }) {
+          PermissionStep.GRANTED -> latestOnAccessChanged.value()
+          PermissionStep.SETTINGS ->
+            tryStart(context, Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)))
+          PermissionStep.ASK -> {
+            asks.markAsked(wanted.toList())
+            permissions.launch(wanted)
+          }
         }
-        asked += wanted
-        permissions.launch(wanted)
       }
     }
   }
@@ -104,6 +105,35 @@ internal fun BackupHostEffect(actions: AppBackupActions?, nav: NavController, on
     onDispose { if (actions.host === host) actions.host = null }
   }
   BackupConfirmSheet(actions)
+}
+
+/** Cosa fare a un tocco su "Consenti" (BK-3, GA-4). */
+internal enum class PermissionStep {
+  /** Niente manca: l'accesso si rilegge e basta. */
+  GRANTED,
+
+  /** Android non apre piu' il dialogo (negato per sempre): il tocco porta alle Impostazioni dell'app. */
+  SETTINGS,
+
+  /** Il dialogo di sistema si apre. */
+  ASK,
+}
+
+/**
+ * Il passo di un tocco su "Consenti": pura, provata su JVM. Il ricordo di aver gia' chiesto sta su file ([PermissionAsks]): un processo nuovo
+ * (rotazione, riavvio) sa com'era andata, e un permesso negato per sempre manda alle Impostazioni invece di un dialogo che non si apre.
+ * Un permesso concesso e poi tolto dalle Impostazioni non e' piu' "negato": [granted] lo toglie dal ricordo.
+ */
+internal fun permissionStep(
+  missing: List<String>,
+  partialUpgrade: Boolean,
+  asks: PermissionAsks,
+  granted: List<String>,
+  shouldExplain: (String) -> Boolean?,
+): PermissionStep {
+  asks.forgetGranted(granted)
+  if (missing.isEmpty() && !partialUpgrade) return PermissionStep.GRANTED
+  return if (PermissionAsks.deniedForGood(missing, asks::asked, shouldExplain)) PermissionStep.SETTINGS else PermissionStep.ASK
 }
 
 /** La conferma per i dati mobili, il roaming o il tetto (proposta 10): il testo con la stima lo scrivono le regole, il resto e' del design system. */

@@ -66,12 +66,13 @@ private fun NotConfiguredCard(status: BackupStatus.NotConfigured, actions: Backu
     glyph = Icons.Rounded.Backup,
     title = stringResource(R.string.backup_status_not_configured_title),
     detail = lines.ifEmpty { stringResource(R.string.backup_status_not_configured_detail) },
+    // BK-9: l'area privata non si sistema da una pagina dell'app (l'app non crea share e le aree sono quelle della famiglia): lo dice, e dice chi puo'.
+    hint = if (BackupSetupStep.PRIVATE_AREA in missing) stringResource(R.string.backup_action_ask_admin) else null,
     modifier = modifier,
     actions = {
       // Il primo tasto e' quello pieno, gli altri tonali: una sola cosa e' "la prossima".
       val buttons = buildList<Pair<Int, () -> Unit>> {
         if (BackupSetupStep.MEDIA_PERMISSION in missing) add(R.string.backup_action_grant_media to { actions.perform(BackupAction.GRANT_MEDIA) })
-        if (BackupSetupStep.PRIVATE_AREA in missing) add(R.string.backup_action_areas_settings to { actions.perform(BackupAction.AREAS_SETTINGS) })
         if (BackupSetupStep.SOURCES in missing || BackupSetupStep.DEVICE_FOLDER in missing) {
           add(R.string.backup_status_open_settings to { actions.open(BackupScreen.SETTINGS) })
         }

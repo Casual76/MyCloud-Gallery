@@ -103,6 +103,12 @@ class SimilarCopiesGraph(
   /** Il rilevatore e' pronto (catalogo e dati personali ci sono)? Falso = il confronto non puo' partire. */
   val available: Boolean get() = instance != null || personal() != null
 
+  /**
+   * BK-11: una scelta ("Mostra come principale", "Separa") e' stata salvata fra i dati personali. La imposta `BackupGraph`, che conosce il
+   * motore del NAS: chiede la sincronizzazione accorpata, come per preferiti e nascosti. Di serie niente.
+   */
+  @Volatile var onChoiceSaved: () -> Unit = {}
+
   private val buildLock = Mutex()
 
   @Volatile private var instance: CatalogSimilarCopies? = null
@@ -115,7 +121,7 @@ class SimilarCopiesGraph(
       instance?.let { return@withLock it }
       val catalog = catalogProvider() ?: return@withLock null
       val store = personal() ?: return@withLock null
-      val choices = PersonalSimilarChoices(SimilarCopiesChoices(store, catalog::resolve))
+      val choices = PersonalSimilarChoices(SimilarCopiesChoices(store, onSaved = { onChoiceSaved() }, resolve = catalog::resolve))
       val source: SignatureSource = signatures?.invoke(catalog) ?: CatalogSignatureSource(
         catalog = catalog,
         phone = ImageOriginPhonePixels(ContentImageOrigin(context.applicationContext.contentResolver), budget),

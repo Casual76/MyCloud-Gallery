@@ -197,6 +197,72 @@ class DefaultBackupSettingsTest {
     assertThat(release.sources.value).isEqualTo(BackupSources.DEFAULT)
   }
 
+  /**
+   * **BK-14** (verifica funzionale): l'account NAS puo' arrivare dopo la prima lettura del magazzino (l'archivio degli account risponde
+   * dopo). La recinzione guardava l'account una volta sola, all'arrivo del valore salvato: senza account fallisce chiusa (nessuna sorgente) e
+   * le sorgenti restavano vuote per tutto il processo. Adesso chi sa che l'account e' arrivato chiama `refresh()` e vale l'account di adesso.
+   */
+  @Test
+  fun bk14_conLaRecinzioneEL_accountCheArrivaTardi_leSorgentiSiRicalcolano() = runTest {
+    var account: String? = null
+    val storage = MemoryBackupSettingsStorage(StoredBackupSettings(sourceIds = setOf("camera", "screenshots", prova.id, telegram.id)))
+    val settings = DefaultBackupSettings(storage, backgroundScope, ProvaFence()) { account }
+    settings.awaitLoaded()
+    // Senza account si fallisce chiusi: nessuna sorgente.
+    assertThat(settings.sources.value).isEqualTo(BackupSources.NONE)
+
+    account = "test"
+    settings.refresh()
+
+    assertThat(settings.sources.value.sources).containsExactly(prova)
+    assertThat(settings.chosenSources.value.sources).containsExactly(BackupSource.Camera, BackupSource.Screenshots, prova, telegram)
+    // E' idempotente, e se l'account sparisce (azzeramento) si torna a fallire chiusi.
+    settings.refresh()
+    assertThat(settings.sources.value.sources).containsExactly(prova)
+    account = null
+    settings.refresh()
+    assertThat(settings.sources.value).isEqualTo(BackupSources.NONE)
+  }
+
+  /** Un account vero non e' recintato: l'arrivo tardivo dell'account non toglie niente (e senza recinzione `refresh` non cambia nulla). */
+  @Test
+  fun bk14_unAccountVeroCheArrivaTardiNonRestringeNiente() = runTest {
+    var account: String? = null
+    val storage = MemoryBackupSettingsStorage(StoredBackupSettings(sourceIds = setOf("camera", "screenshots")))
+    val settings = DefaultBackupSettings(storage, backgroundScope, ProvaFence()) { account }
+    settings.awaitLoaded()
+    assertThat(settings.sources.value).isEqualTo(BackupSources.NONE)
+
+    account = "alessio"
+    settings.refresh()
+
+    assertThat(settings.sources.value).isEqualTo(BackupSources.DEFAULT)
+    val noFence = DefaultBackupSettings(storage, backgroundScope, null) { null }
+    noFence.awaitLoaded()
+    noFence.refresh()
+    assertThat(noFence.sources.value).isEqualTo(BackupSources.DEFAULT)
+  }
+
+  /** Il finto fa quello che fa il vero (stesse regole di D13, `BackupSourceFence`): stesso account in ritardo, stesse sorgenti in ogni momento. */
+  @Test
+  fun bk14_ilFintoEIlVeroDannoLeStesseSorgentiInOgniMomento() = runTest {
+    val chosen = BackupSources(setOf(BackupSource.Camera, BackupSource.Screenshots, prova, telegram))
+    for (steps in listOf(listOf<String?>(null, "test", null, "test"), listOf("alessio", "test", "alessio"), listOf("test"))) {
+      var realAccount: String? = steps.first()
+      var fakeAccount: String? = steps.first()
+      val real = DefaultBackupSettings(MemoryBackupSettingsStorage(StoredBackupSettings(sourceIds = BackupSourceCodec.encode(chosen))), backgroundScope, ProvaFence()) { realAccount }
+      val fake = dev.pampa.mycloudgallery.core.backup.testing.FakeBackupSettings(chosen, fence = ProvaFence()) { fakeAccount }
+      real.awaitLoaded()
+      for (account in steps) {
+        realAccount = account
+        fakeAccount = account
+        real.refresh()
+        fake.refresh()
+        assertThat(fake.sources.value).isEqualTo(real.sources.value)
+      }
+    }
+  }
+
   // --- Dati dell'utente: mai nei log ------------------------------------------------------------------------------------------------------------
 
   @Test

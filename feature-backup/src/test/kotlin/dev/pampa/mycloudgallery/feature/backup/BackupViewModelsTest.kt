@@ -107,6 +107,19 @@ class BackupViewModelsTest {
     assertThat(actions.opened).containsExactly(BackupScreen.SETTINGS)
   }
 
+  /** BK-3, BK-13: ogni ritorno alla pagina arriva alle azioni di `:app` (che ricalcolano lo stato e rifanno il giro dopo un problema sistemato). */
+  @Test
+  fun ilRitornoAllaPaginaArrivaAlleAzioni() = runTest(dispatcher) {
+    val actions = RecordingBackupActions()
+    val vm = BackupPageViewModel(Optional.of(FakeBackupOverview()), Optional.empty(), Optional.of(actions))
+    assertThat(actions.resumedCalls).isEqualTo(0)
+    vm.onResumed()
+    vm.onResumed()
+    assertThat(actions.resumedCalls).isEqualTo(2)
+    // Senza porte il ritorno non fa niente, e non lancia.
+    BackupPageViewModel(Optional.empty(), Optional.empty(), Optional.empty()).onResumed()
+  }
+
   @Test
   fun senzaPorteLaPaginaDiceNonConfiguratoENonFaNiente() = runTest(dispatcher) {
     val vm = BackupPageViewModel(Optional.empty(), Optional.empty(), Optional.empty())

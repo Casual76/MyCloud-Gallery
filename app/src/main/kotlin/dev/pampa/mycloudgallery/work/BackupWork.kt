@@ -66,6 +66,13 @@ object BackupWorkScheduling {
 
   private const val BACKOFF_MS = 60_000L
 
+  /**
+   * BK-2: fra due prove di "Proteggi subito" che aspettano il Wi-Fi di casa. Il vincolo di rete e' soddisfatto da qualunque Wi-Fi non a
+   * consumo: su uno che non e' casa (un bar) le regole dicono di nuovo "non e' casa" e la prova si ripete al massimo ogni quarto d'ora, senza
+   * un ciclo. Con i dati mobili il vincolo non e' soddisfatto e non gira niente.
+   */
+  private const val HOME_RETRY_MS = 15 * 60_000L
+
   /** Che cosa chiedere: il tipo di lavoro. */
   enum class Kind(val workName: String) {
     PHOTOS(PHOTOS_WORK),
@@ -122,7 +129,14 @@ object BackupWorkScheduling {
     else -> null
   }
 
-  fun request(kind: Kind, wait: WaitReason? = null, delayMs: Long = 0L): OneTimeWorkRequest {
+  /**
+   * BK-2: la ragione dell'attesa e' "non sono sul Wi-Fi di casa" (nessuna rete, dati mobili, un altro Wi-Fi, roaming). Il NAS irraggiungibile, il
+   * congelamento e le altre no: a casa con il NAS spento riprovare ogni quarto d'ora sarebbe polling.
+   */
+  fun waitsForHomeNetwork(wait: WaitReason): Boolean =
+    wait == WaitReason.Offline || wait is WaitReason.NetworkNotAllowed || wait == WaitReason.NetworkNotTrusted || wait == WaitReason.Roaming
+
+  fun request(kind: Kind, wait: WaitReason? = null, delayMs: Long = 0L, onWifi: Boolean = false): OneTimeWorkRequest {
     val builder = when (kind) {
       Kind.PHOTOS -> OneTimeWorkRequestBuilder<PhotoBackupWorker>()
       Kind.VIDEOS -> OneTimeWorkRequestBuilder<VideoBackupWorker>()
@@ -130,7 +144,7 @@ object BackupWorkScheduling {
       Kind.SAFETY -> OneTimeWorkRequestBuilder<SafetyVerifyWorker>()
     }
     return builder
-      .setConstraints(constraintsFor(wait))
+      .setConstraints(if (onWifi) LanConstraints.unmetered() else constraintsFor(wait))
       .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_MS, TimeUnit.MILLISECONDS)
       .apply { if (delayMs > 0L) setInitialDelay(delayMs, TimeUnit.MILLISECONDS) }
       .addTag(TAG)
@@ -139,8 +153,17 @@ object BackupWorkScheduling {
 
   /** Il lavoro dopo un'attesa delle regole, se c'e' un vincolo esatto ([delayFor]); chiamato dal lavoro stesso, quindi in coda dopo di lui. */
   fun afterWait(context: Context, kind: Kind, wait: WaitReason, now: LocalDateTime = LocalDateTime.now()) {
-    val delay = delayFor(wait, now) ?: return
-    enqueue(context, request(kind, wait, delay), kind, ExistingWorkPolicy.APPEND_OR_REPLACE)
+    val delay = delayFor(wait, now)
+    if (delay != null) {
+      enqueue(context, request(kind, wait, delay), kind, ExistingWorkPolicy.APPEND_OR_REPLACE)
+      return
+    }
+    // BK-2: la foto scattata fuori casa. "Proteggi subito" aspetta il Wi-Fi di casa e nessun altro evento lo avrebbe fatto ripartire al rientro
+    // (la lettura del telefono non ha niente di nuovo, il giro periodico e' fra ore e con Notte parte di notte): il lavoro si rimette in coda su
+    // una rete non a consumo, e WorkManager lo avvia quando il Wi-Fi c'e'. Per gli altri lavori le attese per la rete restano senza lavoro dopo.
+    if (kind == Kind.QUICK && waitsForHomeNetwork(wait)) {
+      enqueue(context, request(kind, wait, HOME_RETRY_MS, onWifi = true), kind, ExistingWorkPolicy.APPEND_OR_REPLACE)
+    }
   }
 
   /** Il lavoro dopo, per un lavoro che ha lasciato altro da fare ([StageOutcome.Yielded]): in coda dopo quello in corso. */
@@ -158,11 +181,14 @@ object BackupWorkScheduling {
   suspend fun afterPhoneRead(context: Context, backup: BackupGraph): Set<Kind> {
     if (!backup.start()) return emptySet()
     val asked = LinkedHashSet<Kind>()
-    when (backup.next()) {
-      BackupGraph.Next.Quick -> asked += Kind.QUICK
-      BackupGraph.Next.Photos -> asked += Kind.PHOTOS
-      BackupGraph.Next.Videos -> asked += Kind.VIDEOS
-      BackupGraph.Next.Nothing -> Unit
+    // BK-2, BK-10: tutti i giri che servono, non il primo soltanto (la foto nuova non toglie il lavoro delle foto, ne' quello dei video).
+    for (next in backup.nextAll()) {
+      when (next) {
+        BackupGraph.Next.Quick -> asked += Kind.QUICK
+        BackupGraph.Next.Photos -> asked += Kind.PHOTOS
+        BackupGraph.Next.Videos -> asked += Kind.VIDEOS
+        BackupGraph.Next.Nothing -> Unit
+      }
     }
     if (backup.guardianHasWork()) asked += Kind.SAFETY
     asked.forEach { kind -> enqueue(context, request(kind), kind, ExistingWorkPolicy.KEEP) }
@@ -190,6 +216,8 @@ sealed interface BackupFollowUp {
   companion object {
     /** Il seguito di una tappa del motore (foto, video, foto nuove). Pura, provata su JVM. */
     fun of(outcome: BackupStageOutcome?): BackupFollowUp {
+      // BK-6: il turno era occupato da un altro lavoro del backup: si riprova con l'attesa crescente di WorkManager.
+      if (outcome?.busy == true) return Retry
       val stage = outcome?.stage ?: return None
       return when (stage) {
         is StageOutcome.Yielded -> Continue

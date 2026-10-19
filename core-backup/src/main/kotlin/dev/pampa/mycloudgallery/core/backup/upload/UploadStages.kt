@@ -11,9 +11,14 @@ import dev.pampa.mycloudgallery.core.rules.run.StagedRun
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
-/** L'esito di una tappa del backup: quello della tappa ([stage]) e l'ultimo giro del motore ([last], null se la tappa non e' partita). */
-class BackupStageOutcome(val stage: StageOutcome, val last: BackupRunResult?) {
-  override fun toString(): String = "BackupStageOutcome(${stage::class.java.simpleName}, ${last?.stoppedBy?.code})"
+/**
+ * L'esito di una tappa del backup: quello della tappa ([stage]) e l'ultimo giro del motore ([last], null se la tappa non e' partita).
+ *
+ * @property busy BK-6: la tappa non e' partita perche' il turno era occupato da un altro lavoro del backup (le verifiche, il guardiano, un altro
+ *   giro) e non si e' liberato in tempo. **Non e' "niente da fare"**: il lavoro di chi aspetta (un tocco dell'utente) va ripreso, non chiuso.
+ */
+class BackupStageOutcome(val stage: StageOutcome, val last: BackupRunResult?, val busy: Boolean = false) {
+  override fun toString(): String = "BackupStageOutcome(${stage::class.java.simpleName}, ${last?.stoppedBy?.code}${if (busy) ", occupato" else ""})"
 }
 
 /**
@@ -25,9 +30,12 @@ class BackupStageOutcome(val stage: StageOutcome, val last: BackupRunResult?) {
  */
 object UploadStages {
 
-  /** Le regole e il registro della tappa [scope] come li vede il motore. */
-  fun control(scope: StageScope<*>): UploadControl = object : UploadControl {
-    override suspend fun proceed(): Boolean = scope.proceed()
+  /**
+   * Le regole e il registro della tappa [scope] come li vede il motore. Con [yieldTo] vero (BK-6: un tocco dell'utente aspetta il turno) il
+   * motore si ferma al passo dopo, come a tempo scaduto: il punto di ripresa e' nel diario, nessun file resta a meta'.
+   */
+  fun control(scope: StageScope<*>, yieldTo: () -> Boolean = { false }): UploadControl = object : UploadControl {
+    override suspend fun proceed(): Boolean = !yieldTo() && scope.proceed()
 
     override suspend fun traffic(bytes: Long) = scope.record(bytes)
   }
@@ -35,6 +43,9 @@ object UploadStages {
   /**
    * Una tappa di backup: giri di [kind] (null = solo la ripresa del diario, dopo un riavvio) chiesti da [trigger], a lotti di [slice].
    * Un giro fermato da "Ferma", dal cancello, dal NAS o dal telefono chiude la tappa (lo stato del motore dice il perche').
+   *
+   * @param yieldTo BK-6: vero = qualcuno (l'utente, con "Inizia ora") aspetta il turno; la tappa finisce al passo dopo senza ricominciare altri
+   *   lotti. Il lavoro rimasto lo riprendono il lavoro dell'utente e quelli dopo, dal diario.
    */
   suspend fun stage(
     staged: StagedRun<Unit>,
@@ -42,13 +53,14 @@ object UploadStages {
     kind: BackupKind?,
     trigger: BackupTrigger,
     slice: Duration = DEFAULT_SLICE,
+    yieldTo: () -> Boolean = { false },
   ): BackupStageOutcome {
     var last: BackupRunResult? = null
     val outcome = staged.run({ scope, _ ->
-      val control = control(scope)
+      val control = control(scope, yieldTo)
       val result = if (kind == null) engine.resumeAll(slice, control) else engine.run(kind, slice, trigger, control)
       last = result
-      BatchResult(hasMore = result.stoppedBy == RunStop.BUDGET)
+      BatchResult(hasMore = result.stoppedBy == RunStop.BUDGET && !yieldTo())
     })
     return BackupStageOutcome(outcome, last)
   }

@@ -13,6 +13,19 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
+ * D13 come regola pura: con una recinzione (debug, account di prova) valgono solo le cartelle che ammette per l'account; **senza account si
+ * fallisce chiusi** (nessuna sorgente); senza recinzione valgono tutte. La usano le impostazioni vere e quelle finte (`FakeBackupSettings`),
+ * cosi' non possono divergere (BK-14).
+ */
+object BackupSourceFence {
+  fun restrict(sources: BackupSources, fence: BackupFence?, account: String?): BackupSources {
+    fence ?: return sources
+    account ?: return BackupSources.NONE
+    return BackupSources(sources.sources.filterTo(LinkedHashSet()) { fence.allowsPhoneFolder(account, BackupPaths.phoneFolderOf(it)) })
+  }
+}
+
+/**
  * Le impostazioni del backup (Fase 5A, P4; `docs/fase5-progetto.md` §2.1, D7, D13), salvate come impostazione **del dispositivo** (non
  * personale) in [storage].
  *
@@ -23,7 +36,8 @@ import kotlinx.coroutines.launch
  *   fa chiedere "Continua li'" o "Nuova cartella", E-B6; dopo una reinstallazione si propone di continuare, E-B16). Poi non cambia: il nome
  *   del dispositivo non e' qui, quindi rinominarlo non la sposta (E-B7). Una seconda scelta diversa e' un errore di programmazione.
  * - **D13**: con la recinzione del telefono (debug con gli account di prova) [sources] contiene solo le cartelle che la recinzione
- *   ammette per l'account; senza account si fallisce chiusi. Il valore scelto resta salvato com'e'.
+ *   ammette per l'account; senza account si fallisce chiusi. Il valore scelto resta salvato com'e'. **BK-14**: l'account puo' arrivare dopo la
+ *   prima lettura del magazzino; chi sa che e' arrivato chiama [refresh], altrimenti le sorgenti sarebbero rimaste vuote per tutto il processo.
  *
  * Finche' il magazzino non ha risposto, [sources] e' vuoto e [deviceFolder] nullo (fallire chiusi: nessuna sorgente, nessuna cartella);
  * [awaitLoaded] aspetta la prima lettura. Un valore illeggibile vale "non scelto".
@@ -81,6 +95,15 @@ class DefaultBackupSettings(
     apply(saved)
   }
 
+  /**
+   * BK-14: ricalcola le sorgenti ammesse con l'account di **adesso**. Il magazzino si legge una volta sola all'avvio e la recinzione guarda
+   * l'account in quel momento: se l'account non c'era ancora (l'archivio degli account risponde dopo), [sources] restava [BackupSources.NONE]
+   * finche' qualcuno non cambiava le impostazioni. Economica e idempotente: la chiamano `BackupGraph.start` e il ricalcolo dello stato.
+   */
+  fun refresh() {
+    effective.value = restrictedByFence(chosen.value)
+  }
+
   private fun apply(stored: StoredBackupSettings) {
     val sources = BackupSourceCodec.decode(stored.sourceIds.orEmpty())
     chosen.value = sources
@@ -89,10 +112,6 @@ class DefaultBackupSettings(
     loadedState.value = true
   }
 
-  /** D13: solo le cartelle che la recinzione ammette per l'account; con una recinzione e senza account, nessuna. */
-  private fun restrictedByFence(sources: BackupSources): BackupSources {
-    val fence = fence ?: return sources
-    val account = account() ?: return BackupSources.NONE
-    return BackupSources(sources.sources.filterTo(LinkedHashSet()) { fence.allowsPhoneFolder(account, BackupPaths.phoneFolderOf(it)) })
-  }
+  /** D13: solo le cartelle che la recinzione ammette per l'account; con una recinzione e senza account, nessuna ([BackupSourceFence]). */
+  private fun restrictedByFence(sources: BackupSources): BackupSources = BackupSourceFence.restrict(sources, fence, account())
 }

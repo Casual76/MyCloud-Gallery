@@ -108,19 +108,30 @@ class BackupStages(private val graph: AppGraph, private val backup: BackupGraph)
     }
     // Il primo backup lo avvia l'utente (cartella del dispositivo, D7); la scansione dell'area privata deve essere finita (§2.11 punto 1).
     if (backup.settings.deviceFolder.value == null || !backup.privateAreaScanned()) return null
+    // BK-7: un'area segnata "in sola lettura" si rimette alla prova prima di guardare il cancello. Prima la prova veniva dopo, e il cancello
+    // chiuso dalla sola lettura la saltava: dopo che l'admin aveva corretto i permessi il backup restava fermo fino alle verifiche giornaliere.
+    var gate = backup.gate.stateOf(parts.share)
+    if (gate.open || gate == BackupGateState.READ_ONLY_AREA) {
+      backup.refreshArea()
+      gate = backup.gate.stateOf(parts.share)
+    }
     // Il cancello chiuso (D12, emergenza, congelamento, sola lettura) non e' "tutto al sicuro": non si tocca la memoria. La pausa dell'utente
     // (R4) e' un "Ferma": il giro dice `STOPPED`, e nemmeno una corsa del lavoro a tappe la scavalca.
-    val gate = backup.gate.stateOf(parts.share)
     if (!gate.open) {
       val stop = if (gate == BackupGateState.PAUSED) RunStop.STOPPED else RunStop.GATE
       return BackupStageOutcome(StageOutcome.Finished(StageStats(0, 0L, 0L, Duration.ZERO, resumed = false)), BackupRunResult.nothing(stop, gate.problem))
     }
-    backup.refreshArea()
-    val outcome = backup.exclusive {
+    // BK-6: un tocco dell'utente non si perde mai. Aspetta il suo turno (fino a quanto dura la tappa piu' lunga, non 90 secondi) e intanto dice
+    // agli altri lavori di cedere il passo; se anche cosi' il turno e' occupato il lavoro dice "occupato" e si fa riprogrammare, non "niente da
+    // fare". Gli altri lavori non cedono il passo a nessuno e, occupati, riprovano con l'attesa di WorkManager.
+    val outcome = backup.exclusive(
+      waitFor = if (userInitiated) BackupGraph.USER_EXCLUSIVE_WAIT else BackupGraph.EXCLUSIVE_WAIT,
+      forUser = userInitiated,
+    ) {
       // Niente da fare (nessun media nuovo in una sorgente, niente a meta' nel diario): il backup e' al passo.
       if (!backup.hasWork(kind, trigger)) return@exclusive idle()
-      UploadStages.stage(staged(request, stageRules), parts.engine, kind, trigger)
-    } ?: return null
+      UploadStages.stage(staged(request, stageRules), parts.engine, kind, trigger, yieldTo = if (userInitiated) NEVER else backup::userIsWaiting)
+    } ?: return busy()
     afterRound(kind, outcome)
     // RE-4: l'esito della tappa nell'anello della Diagnostica (solo il lavoro e numeri; un giro a vuoto non scrive niente).
     graph.events.stage(diagJob(kind, trigger), outcome.stage)
@@ -133,6 +144,10 @@ class BackupStages(private val graph: AppGraph, private val backup: BackupGraph)
     kind == BackupKind.PHOTOS -> DiagJob.PHOTO_BACKUP
     else -> DiagJob.VIDEO_BACKUP
   }
+
+  /** BK-6: il turno era occupato e non si e' liberato in tempo. Non e' "niente da fare": chi aspetta (un tocco dell'utente) si fa riprogrammare. */
+  private fun busy(): BackupStageOutcome =
+    BackupStageOutcome(StageOutcome.Finished(StageStats(0, 0L, 0L, Duration.ZERO, resumed = false)), null, busy = true)
 
   /** La tappa di quando non c'e' niente da caricare. */
   private fun idle(): BackupStageOutcome =
@@ -215,7 +230,8 @@ class BackupStages(private val graph: AppGraph, private val backup: BackupGraph)
               problem = problem ?: report.problem
               // La copia lato server non passa dal telefono: nessun traffico da registrare (se ripiega, i byte sono nel conto del giro).
               scope.record(0)
-              BatchResult(hasMore = report.stoppedBy == RunStop.BUDGET)
+              // BK-6: se un tocco dell'utente aspetta, il guardiano finisce il lotto e cede il turno (riprende alla tappa dopo).
+              BatchResult(hasMore = report.stoppedBy == RunStop.BUDGET && !backup.userIsWaiting)
             })
           }
         },
@@ -265,12 +281,13 @@ class BackupStages(private val graph: AppGraph, private val backup: BackupGraph)
         totals.add(report)
         scope.record(report.bytesRead)
         when (report.stoppedBy) {
-          RunStop.BUDGET -> return@run BatchResult(hasMore = true)
+          // BK-6: con un tocco dell'utente in attesa il lotto e' l'ultimo; il lavoro dopo riprende da dove era.
+          RunStop.BUDGET -> return@run BatchResult(hasMore = !backup.userIsWaiting)
           RunStop.COMPLETE -> index++
           // Cancello chiuso, NAS o telefono non disponibili: le altre verifiche non andrebbero meglio.
           else -> index = order.size
         }
-        if (index < order.size && !scope.proceed()) return@run BatchResult(hasMore = true)
+        if (index < order.size && (backup.userIsWaiting || !scope.proceed())) return@run BatchResult(hasMore = !backup.userIsWaiting)
       }
       BatchResult(hasMore = false)
     })
@@ -301,5 +318,8 @@ class BackupStages(private val graph: AppGraph, private val backup: BackupGraph)
 
     /** Un lotto: abbastanza lungo per lavorare, abbastanza breve per fermarsi presto se le regole cambiano (come i lavori del NAS). */
     val SLICE: Duration = 60.seconds
+
+    /** Nessuno cede il passo: i lavori dell'utente non lo fanno fra loro. */
+    private val NEVER: () -> Boolean = { false }
   }
 }

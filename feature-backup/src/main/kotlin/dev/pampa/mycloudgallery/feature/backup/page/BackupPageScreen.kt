@@ -27,6 +27,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
@@ -82,6 +84,8 @@ fun BackupPageRoute(
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
   LaunchedEffect(openFirstBackup) { if (openFirstBackup) viewModel.openFirstBackup() }
+  // BK-3, BK-13: a ogni ritorno alla pagina (dalla Diagnostica, dalla password, dal dialogo dei permessi) lo stato si ricalcola.
+  LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.onResumed() }
   val actions = remember(viewModel) {
     BackupPageActions(
       perform = viewModel::perform,

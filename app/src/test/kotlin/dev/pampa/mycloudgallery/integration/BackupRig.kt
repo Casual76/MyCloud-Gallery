@@ -4,6 +4,7 @@ import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import dev.pampa.mycloudgallery.backup.AppBackupActions
 import dev.pampa.mycloudgallery.backup.BackupGraph
 import dev.pampa.mycloudgallery.backup.BackupInputs
 import dev.pampa.mycloudgallery.core.backup.contract.BackupFence
@@ -48,6 +49,10 @@ import dev.pampa.mycloudgallery.gallery.PhoneInputs
 import dev.pampa.mycloudgallery.gallery.PhoneLibrary
 import dev.pampa.mycloudgallery.gallery.PhoneRowsSource
 import dev.pampa.mycloudgallery.nas.NasGraph
+import dev.pampa.mycloudgallery.nas.NasInputs
+import dev.pampa.mycloudgallery.core.rules.RuleDecision
+import dev.pampa.mycloudgallery.work.BackupJobEnd
+import dev.pampa.mycloudgallery.work.BackupJobRun
 import dev.pampa.mycloudgallery.work.BackupJobs
 import dev.pampa.mycloudgallery.work.BackupStages
 import java.io.ByteArrayOutputStream
@@ -70,6 +75,10 @@ internal class BackupRig(
   private val fence: BackupFence? = null,
   private val signatures: ((MediaCatalog) -> SignatureSource)? = null,
   private val deviceName: String = "Pixel di prova",
+  /** L'orologio monotono del backup (turni, riepilogo in cache): i test lo fanno correre per non aspettare minuti veri. */
+  private val monotonicMs: () -> Long = { System.nanoTime() / 1_000_000 },
+  /** Cio' che il grafo del NAS vede dell'app: di norma quello del dispositivo; un test puo' cambiarne l'account (che arriva tardi). */
+  private val nasInputs: NasInputs = device.graph.nasInputs,
 ) {
 
   val access = FakePhoneAccessReader(PhoneAccess(MediaAccess.FULL, mediaLocation = true, volumes = setOf(PRIMARY)))
@@ -86,8 +95,8 @@ internal class BackupRig(
       recentlyDeleted = FakeRecentlyDeletedSource(),
       phone = ::phone,
       snapshotDelayMs = 100L,
-      nas = device.graph.nasInputs,
-      monotonicMs = { System.nanoTime() / 1_000_000 },
+      nas = nasInputs,
+      monotonicMs = monotonicMs,
       backup = BackupInputs(
         settingsStorage = device.graph.backupSettingsStorage,
         ruleSettings = device.graph.ruleSettings,
@@ -159,6 +168,21 @@ internal class BackupRig(
 
   /** Le verifiche e il guardiano come li lancia il lavoro delle verifiche. */
   suspend fun safety() = BackupStages(device.graph, backup).safety()
+
+  /**
+   * Il lavoro avviato dall'utente come lo fa `BackupJobService`: foto, poi video, a tappe, dentro `runIfActive`. Prima il rig chiamava `round()`
+   * a mano e saltava il lavoro dell'utente, il turno e la fine del servizio (BK-6).
+   */
+  suspend fun userJob(trigger: BackupTrigger = BackupTrigger.USER_NOW): BackupJobEnd {
+    val stages = BackupStages(device.graph, backup)
+    return BackupJobRun(stage = { kind -> gallery.runIfActive { stages.round(kind, trigger) } }, userInitiated = true).run()
+  }
+
+  /** Le azioni della pagina Backup sul grafo vero, con il verdetto delle regole scelto dal test (la rete di prova e' sempre il Wi-Fi di casa). */
+  fun actions(decide: (suspend (Long?, Boolean) -> RuleDecision)? = null): AppBackupActions {
+    val proposals = checkNotNull(gallery.backupUi).proposals
+    return if (decide == null) AppBackupActions(backup, proposals, device.scope, app) else AppBackupActions(backup, proposals, device.scope, app, decide)
+  }
 
   fun close() {
     device.close()

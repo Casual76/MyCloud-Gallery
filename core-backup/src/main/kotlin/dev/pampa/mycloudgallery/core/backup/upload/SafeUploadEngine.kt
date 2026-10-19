@@ -6,6 +6,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupClock
 import dev.pampa.mycloudgallery.core.backup.contract.BackupGate
 import dev.pampa.mycloudgallery.core.backup.contract.BackupGateState
 import dev.pampa.mycloudgallery.core.backup.contract.BackupItem
+import dev.pampa.mycloudgallery.core.backup.contract.BackupItemId
 import dev.pampa.mycloudgallery.core.backup.contract.BackupKind
 import dev.pampa.mycloudgallery.core.backup.contract.BackupPlanner
 import dev.pampa.mycloudgallery.core.backup.contract.BackupProblemCode
@@ -116,7 +117,12 @@ import kotlinx.coroutines.yield
  *   il giro si ferma solo per i rifiuti globali (permessi, posizione delle foto);
  * - **la fine del file del telefono** si controlla dopo la lettura (R6): un file piu' lungo del MediaStore e' cambiato (E-B15), mai un
  *   prefisso "al sicuro";
- * - **l'elemento di un'altra share aspetta** (R7): se l'area privata cambia a motore costruito, niente si scrive nella share di prima.
+ * - **l'elemento di un'altra share aspetta** (R7): se l'area privata cambia a motore costruito, niente si scrive nella share di prima;
+ * - **"Proteggi subito le foto nuove" guida solo le foto nuove** (BK-1, D34): un giro `QUICK_NEW_PHOTOS` porta avanti solo gli elementi che ha
+ *   creato lui, non l'arretrato gia' nel diario (un primo backup a meta' avrebbe fatto passare la foto appena scattata dopo centinaia di vecchie);
+ * - **la copia appena pubblicata e poi spostata da un'altra via non si rifa'** (F2, lo schema del guardiano): se al collegamento il file non e' piu'
+ *   al suo nome, prima di ricaricare si cerca nell'area privata una copia con gli stessi byte (la deduplica D8, riletta qui per intero) e ci si
+ *   collega; senza, si ricarica come sempre.
  *
  * Non cattura mai `Error` (la "morte del processo" dei test passa) ne' l'annullamento: solo gli errori di I/O della lettura del telefono
  * e, per un elemento alla volta, le eccezioni inattese (vedi sopra). I log dicono solo numeri e codici (§4.3): mai nomi, percorsi, share,
@@ -209,8 +215,10 @@ class SafeUploadEngine(
       return BackupRunResult.nothing(RunStop.GATE)
     }
     return closingOnError {
-      plan(kind, trigger, device)
-      drive(round)
+      val created = plan(kind, trigger, device)
+      // BK-1 (D34): "Proteggi subito" porta al sicuro la foto nuova, non l'arretrato che il diario ha gia' aperto (ripresa per `item_id`: le vecchie
+      // verrebbero per prime). L'arretrato lo riprendono i giri normali, con le regole del preset.
+      drive(round, only = if (trigger == BackupTrigger.QUICK_NEW_PHOTOS) created else null)
     }
   }
 
@@ -242,9 +250,9 @@ class SafeUploadEngine(
    * I candidati nuovi del piano diventano elementi `PLANNED` (D3): solo dati locali, solo destinazioni dentro le radici ammesse. Il piano
    * riceve il trigger del giro (D34: con `QUICK_NEW_PHOTOS` solo le foto nuove della fotocamera).
    */
-  private suspend fun plan(kind: BackupKind, trigger: BackupTrigger, device: DeviceFolder) {
+  private suspend fun plan(kind: BackupKind, trigger: BackupTrigger, device: DeviceFolder): Set<BackupItemId> {
     val fresh = planner.next(kind, config.planPage, trigger).filter { store.openFor(it.versionId) == null }
-    if (fresh.isEmpty()) return
+    if (fresh.isEmpty()) return emptySet()
     var refused = 0
     val items = fresh.mapNotNull { c ->
       val destination = try {
@@ -273,12 +281,17 @@ class SafeUploadEngine(
       )
     }
     if (refused > 0) GalleryLog.w(TAG) { "destinazioni fuori dalle radici ammesse scartate: $refused" }
-    if (items.isNotEmpty()) store.create(items)
+    return if (items.isNotEmpty()) store.create(items).mapTo(HashSet()) { it.id } else emptySet()
   }
 
-  /** Il lavoro di un giro: gli elementi aperti del diario, al piu' [UploadConfig.parallel] in volo. */
-  private suspend fun drive(round: Round): BackupRunResult {
-    val open = store.itemsToResume(RESUME_LIMIT).filter { it.kind == UploadKind.NEW_COPY || (config.driveGuardCopies && it.kind == UploadKind.GUARD_COPY) }
+  /**
+   * Il lavoro di un giro: gli elementi aperti del diario, al piu' [UploadConfig.parallel] in volo. Con [only] solo quelli (BK-1: gli elementi
+   * creati da questo giro di "Proteggi subito le foto nuove"), gli altri restano aperti per i giri normali.
+   */
+  private suspend fun drive(round: Round, only: Set<BackupItemId>? = null): BackupRunResult {
+    val open = store.itemsToResume(RESUME_LIMIT)
+      .filter { it.kind == UploadKind.NEW_COPY || (config.driveGuardCopies && it.kind == UploadKind.GUARD_COPY) }
+      .filter { only == null || it.id in only }
     val ofKind = if (round.kind == null) open else open.filter { item -> round.describe(item)?.let { BackupKind.of(it.kind) == round.kind } ?: true }
     // R7: l'area privata puo' cambiare a motore costruito (l'admin corregge la configurazione). L'elemento di un'altra share aspetta: niente
     // si scrive nella share di prima, ma non ferma neppure gli elementi della share di adesso.
@@ -587,9 +600,7 @@ class SafeUploadEngine(
       is ExistingCopyResult.Found -> {
         val copy = found.copy
         // Solo una copia di questo media e versione nell'area privata del proprietario, con la dimensione giusta: altrimenti si carica.
-        if (copy.share.equals(item.share, ignoreCase = true) && copy.mediaId == item.mediaId && copy.versionId == item.versionId &&
-          copy.stamp.size == item.size
-        ) {
+        if (sameCopy(item, copy)) {
           if (!attach(copy)) return Step.Wait()
           return save(item.copy(state = UploadState.LINKED_EXISTING, finalPath = copy.path, finalStamp = copy.stamp))
         }
@@ -608,6 +619,37 @@ class SafeUploadEngine(
       }
     }
     return save(item.copy(state = UploadState.UPLOADING, temp = tempOf(item), resumeAt = 0))
+  }
+
+  /** La copia proposta e' di questo media e di questa versione, nell'area privata dell'elemento, con la sua dimensione (altrimenti non e' sua). */
+  private fun sameCopy(item: BackupItem, copy: VerifiedCopy): Boolean =
+    copy.share.equals(item.share, ignoreCase = true) && copy.mediaId == item.mediaId && copy.versionId == item.versionId && copy.stamp.size == item.size
+
+  /**
+   * **F2 (lo schema del guardiano di P3)**: la copia appena pubblicata non e' piu' al suo nome (o ci e' un altro file) e il collegamento non e'
+   * ancora avvenuto. Un'altra strada puo' averla spostata nel frattempo (una versione che la porta in `Versioni/`, "Cartelle NAS", il PC): rifarla
+   * lascerebbe due copie degli stessi byte nell'area privata. Prima di ricaricare si cerca allora una copia con gli stessi byte
+   * ([ExistingCopyFinder], la deduplica D8: **riletta qui per intero**, mai un hash o un timbro dell'indice): se c'e', la si collega dov'e' (`LINKED`:
+   * da `PUBLISHED` e' il passo successivo del cammino, il nome finale diventa il suo); altrimenti si ricarica come prima ([redo]).
+   * "Al sicuro" nasce sempre da una rilettura fatta qui (F4-D8): l'aggancio al catalogo (`attach`) viene prima del diario, come in [link].
+   */
+  private suspend fun movedOrRedo(round: Round, item: BackupItem, redo: BackupItem): Step {
+    val sha = item.sha256
+    if (sha != null) {
+      when (val found = round.readLane.withPermit { findExisting(round, item, sha) }) {
+        is ExistingCopyResult.Found -> {
+          val copy = found.copy
+          if (sameCopy(item, copy)) {
+            if (!attach(copy)) return Step.Wait()
+            GalleryLog.d(TAG) { "la copia pubblicata e' stata spostata: collegata dov'e'" }
+            return save(item.copy(state = UploadState.LINKED, finalPath = copy.path, finalStamp = copy.stamp))
+          }
+        }
+        ExistingCopyResult.None -> Unit
+        is ExistingCopyResult.Interrupted -> return Step.Stop(RunStop.NAS, found.problem ?: BackupProblemCode.NAS_UNREACHABLE)
+      }
+    }
+    return save(redo)
   }
 
   /** La porta della deduplica (P3) con il candidato ricostruito dal diario: dimensione, `qh1` letto qui, media e versione. */
@@ -886,12 +928,13 @@ class SafeUploadEngine(
       PublishOutcome.Collision -> collision(round, item, temp, final)
       // La risposta persa (D3, F4-D24): temporaneo assente + finale con dimensione e SHA-256 giusti = pubblicato.
       PublishOutcome.TempMissing -> when (val existing = round.readLane.withPermit { readSha(round, item.share, final) }) {
-        Read.Missing -> save(item.copy(state = back, resumeAt = 0))
+        // Pubblicato (risposta persa) e poi spostato prima che ce ne accorgessimo, oppure mai pubblicato: prima si cerca la copia (F2).
+        Read.Missing -> movedOrRedo(round, item, redo = item.copy(state = back, resumeAt = 0))
         is Read.Fail -> stopFor(round, item, existing.error)
         is Read.Ok -> if (existing.sha == item.sha256 && existing.stamp.size == item.size) {
           save(item.copy(state = UploadState.PUBLISHED, finalStamp = existing.stamp))
         } else {
-          save(item.copy(state = back, resumeAt = 0))
+          movedOrRedo(round, item, redo = item.copy(state = back, resumeAt = 0))
         }
       }
     }
@@ -928,20 +971,23 @@ class SafeUploadEngine(
     val final = item.finalPath ?: return Step.Wait()
     var stamp = when (val st = stat(item.share, final)) {
       is Stat.Fail -> return stopFor(round, item, st.error)
-      // Sparito dal PC fra la pubblicazione e il collegamento: si ricarica.
-      Stat.Missing -> return save(item.copy(state = back, resumeAt = 0))
+      // Sparito (dal PC o spostato da un'altra via) fra la pubblicazione e il collegamento: prima si cerca altrove (F2), poi si ricarica.
+      Stat.Missing -> return movedOrRedo(round, item, redo = item.copy(state = back, resumeAt = 0))
       is Stat.Found -> st.stamp
     }
     val same = item.tempStamp?.let { stamp.sameAs(it) } == true
     if (!same) {
       // Toccato dopo la rinomina: si rilegge tutto; byte diversi = non sono i nostri, si ricarica con un altro nome (mai toccarlo).
       when (val read = round.readLane.withPermit { readSha(round, item.share, final) }) {
-        Read.Missing -> return save(item.copy(state = back, resumeAt = 0))
+        Read.Missing -> return movedOrRedo(round, item, redo = item.copy(state = back, resumeAt = 0))
         is Read.Fail -> return stopFor(round, item, read.error)
         is Read.Ok -> {
           if (read.sha != item.sha256 || read.stamp.size != item.size) {
             val attempt = item.nameAttempt + 1
-            return save(item.copy(state = back, resumeAt = 0, nameAttempt = attempt, finalPath = UploadNames.nameFor(item.planned, attempt)))
+            return movedOrRedo(
+              round, item,
+              redo = item.copy(state = back, resumeAt = 0, nameAttempt = attempt, finalPath = UploadNames.nameFor(item.planned, attempt)),
+            )
           }
           stamp = read.stamp
         }

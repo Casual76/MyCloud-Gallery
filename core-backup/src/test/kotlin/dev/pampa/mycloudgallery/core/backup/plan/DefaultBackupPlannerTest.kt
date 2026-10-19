@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.backup.plan
 
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.backup.contract.BackupKind
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSource
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSources
@@ -377,14 +378,54 @@ class DefaultBackupPlannerTest {
     assertThat(world.planner.next(BackupKind.PHOTOS, 10, BackupTrigger.QUICK_NEW_PHOTOS)).isEmpty()
   }
 
+  /**
+   * **BK-1** (verifica funzionale): il piano di riferimento di P0, che il banco e i test dei motori usano, ignorava il trigger, e cosi' nascondeva
+   * il difetto di "Proteggi subito" (le foto nuove proposte con tutto l'arretrato). Adesso legge il trigger come il piano vero: stesse foto,
+   * stesso ordine, stesso tetto, stesso orizzonte dall'ora del NAS. Il confronto e' su ogni combinazione di tipo, limite e trigger.
+   */
   @Test
-  fun ilPianoDiRiferimentoDiP0_ignoraIlTrigger_laFirmaCompatibile() = runTest {
+  fun bk1_ilPianoDiRiferimentoLeggeIlTriggerCommeIlPianoVero() = runTest {
+    val world = PlanWorld()
+    val now = world.clock.nasNow!!
+    val day = 24 * hour
+    world.add(
+      phoneMedia(1, sortTime = now - hour), // una foto appena scattata
+      phoneMedia(2, source = BackupSource.Screenshots, sortTime = now - hour), // uno screenshot: non della fotocamera
+      phoneMedia(3, MediaKind.VIDEO, sortTime = now - hour, name = "VID_3.mp4"), // un video: mai
+      phoneMedia(4, sortTime = now - 2 * day),
+      phoneMedia(5, sortTime = now - 4 * day), // oltre i 3 giorni: l'arretrato lo prende il giro normale
+      *(10..50).map { phoneMedia(it, sortTime = now - 2 * hour - it * 60_000L) }.toTypedArray(), // piu' del tetto di 24
+    )
+    val real = world.planner
+    val reference = ReferenceBackupPlanner(world.memory, { world.settings.sources.value }, clock = world.clock)
+
+    for (kind in BackupKind.entries) {
+      for (limit in listOf(1, 5, 100)) {
+        assertWithMessage("$kind, limite $limit").that(idsOf(reference.next(kind, limit, BackupTrigger.QUICK_NEW_PHOTOS)))
+          .containsExactlyElementsIn(idsOf(real.next(kind, limit, BackupTrigger.QUICK_NEW_PHOTOS))).inOrder()
+      }
+    }
+    assertThat(reference.next(BackupKind.VIDEOS, 10, BackupTrigger.QUICK_NEW_PHOTOS)).isEmpty()
+    assertThat(reference.next(BackupKind.PHOTOS, 100, BackupTrigger.QUICK_NEW_PHOTOS)).hasSize(DefaultBackupPlanner.QUICK_MAX_ITEMS)
+    // Senza l'ora del NAS non si sa cosa e' recente: come il piano vero, resta il tetto sul numero.
+    world.clock.nasNow = null
+    assertThat(idsOf(reference.next(BackupKind.PHOTOS, 100, BackupTrigger.QUICK_NEW_PHOTOS)))
+      .containsExactlyElementsIn(idsOf(real.next(BackupKind.PHOTOS, 100, BackupTrigger.QUICK_NEW_PHOTOS))).inOrder()
+    // Senza la fotocamera fra le sorgenti: niente.
+    world.settings.sources.value = BackupSources(setOf(BackupSource.Screenshots))
+    assertThat(reference.next(BackupKind.PHOTOS, 10, BackupTrigger.QUICK_NEW_PHOTOS)).isEmpty()
+  }
+
+  /** Il giro normale resta quello di sempre: la firma compatibile risponde come `next(kind, limit)`. */
+  @Test
+  fun ilPianoDiRiferimentoDiP0_perIlGiroNormaleRispondeCome_next() = runTest {
     val world = PlanWorld()
     world.add(phoneMedia(1), phoneMedia(2, MediaKind.VIDEO, name = "v.mp4"))
     val reference = ReferenceBackupPlanner(world.memory)
 
-    // L'aggiunta al contratto e' compatibile: chi non la conosce risponde come `next(kind, limit)`.
-    assertThat(reference.next(BackupKind.PHOTOS, 10, BackupTrigger.QUICK_NEW_PHOTOS)).hasSize(1)
-    assertThat(reference.next(BackupKind.VIDEOS, 10, BackupTrigger.QUICK_NEW_PHOTOS)).hasSize(1)
+    assertThat(reference.next(BackupKind.PHOTOS, 10, BackupTrigger.SCHEDULED)).hasSize(1)
+    assertThat(reference.next(BackupKind.VIDEOS, 10, BackupTrigger.SCHEDULED)).hasSize(1)
+    assertThat(reference.next(BackupKind.PHOTOS, 10, BackupTrigger.SCHEDULED).map { it.mediaId })
+      .containsExactlyElementsIn(reference.next(BackupKind.PHOTOS, 10).map { it.mediaId })
   }
 }

@@ -281,8 +281,6 @@ interface BackupActionsHost {
 
   fun openPassword()
 
-  fun openAreasSettings()
-
   fun openNas(screen: NasScreen)
 
   fun openGalleryTrash()
@@ -307,6 +305,8 @@ class AppBackupActions(
   private val proposals: DeviceFolderProposals,
   private val scope: CoroutineScope,
   private val context: Context,
+  /** Il verdetto delle regole per un lavoro dell'utente (stima in byte, conferma gia' data). Di norma quello vero; i test lo scelgono. */
+  private val decide: suspend (Long?, Boolean) -> RuleDecision = { estimate, confirmed -> backup.userDecision(estimate, confirmed) },
 ) : BackupActions {
 
   @Volatile
@@ -320,6 +320,14 @@ class AppBackupActions(
   /** Il primo backup aspetta che l'utente scelga la cartella ("Continua li'" / "Nuova cartella"): null = niente in attesa. */
   @Volatile
   private var pendingFirst: Boolean? = null
+
+  /**
+   * BK-3: l'utente e' uscito dalla pagina per sistemare un problema che ha fermato un giro (la password, lo spazio sul NAS, i permessi). Al
+   * ritorno ([onPageResumed]) il problema ricordato si toglie e il giro si rifa': se il guasto c'e' ancora, il giro lo ritrova e la pagina lo
+   * ridice; se non c'e' piu', la pagina non resta ferma su un problema risolto fino alla notte.
+   */
+  @Volatile
+  private var fixing: Boolean = false
 
   init {
     scope.launch {
@@ -338,18 +346,42 @@ class AppBackupActions(
         runCatching { BackupWorkScheduling.afterPhoneRead(context, backup) }
       }
       BackupAction.DIAGNOSTICS -> host?.openDiagnostics()
-      BackupAction.NAS_SPACE -> host?.openNas(NasScreen.SPACE)
+      BackupAction.NAS_SPACE -> goFix { it.openNas(NasScreen.SPACE) }
       // Solo un testo ("Chiedi all'admin del NAS"): nessun tasto.
       BackupAction.ASK_ADMIN -> Unit
-      BackupAction.ENTER_PASSWORD -> host?.openPassword()
-      BackupAction.AREAS_SETTINGS -> host?.openAreasSettings()
-      BackupAction.GRANT_MEDIA, BackupAction.GRANT_ALL_MEDIA -> host?.requestMediaAccess()
-      BackupAction.GRANT_MEDIA_LOCATION -> host?.requestMediaLocation()
+      BackupAction.ENTER_PASSWORD -> goFix { it.openPassword() }
+      // BK-9: la pagina "Impostazioni, Aree" non c'e' (le aree si fissano alla fondazione della famiglia e l'app non crea share): nessun
+      // problema propone piu' questa azione, e un vecchio tocco non porta a una pagina dove le Aree non ci sono.
+      BackupAction.AREAS_SETTINGS -> Unit
+      BackupAction.GRANT_MEDIA, BackupAction.GRANT_ALL_MEDIA -> goFix { it.requestMediaAccess() }
+      BackupAction.GRANT_MEDIA_LOCATION -> goFix { it.requestMediaLocation() }
       BackupAction.DO_NOW_CONFIRM -> backupNow()
       BackupAction.OPEN_GALLERY_TRASH -> host?.openGalleryTrash()
       BackupAction.OPEN_NAS_TRASH -> host?.openNas(NasScreen.TRASH)
       BackupAction.FREE_SPACE -> host?.openStorageSettings()
       BackupAction.BATTERY_GUIDE -> host?.openBatteryGuide()
+    }
+  }
+
+  /** Va a sistemare un problema fuori dalla pagina (BK-3): si ricorda di rifare il giro al ritorno. Senza schermata non fa niente. */
+  private fun goFix(go: (BackupActionsHost) -> Unit) {
+    val target = host ?: return
+    fixing = true
+    go(target)
+  }
+
+  /**
+   * La pagina Backup e' di nuovo davanti all'utente (BK-3, BK-13): lo stato si ricalcola sempre (il cambio di una cosa che nessuno annuncia,
+   * come "Riattiva le scritture" in Diagnostica, si vede appena si torna) e, se l'utente era uscito per sistemare un problema, il problema
+   * ricordato si toglie e il giro si rifa'.
+   */
+  override fun onPageResumed() {
+    backup.kick()
+    if (!fixing) return
+    fixing = false
+    scope.launch {
+      runCatching { backup.forgetRememberedProblem() }
+      runCatching { BackupWorkScheduling.afterPhoneRead(context, backup) }
     }
   }
 
@@ -395,13 +427,14 @@ class AppBackupActions(
   }
 
   private suspend fun proceedFirst(tonight: Boolean) {
-    // R4: chi sceglie come partire (anche "Stanotte") non e' piu' in pausa.
-    backup.resumeFromPause()
     if (tonight) {
+      // R4: chi sceglie "Stanotte" non e' piu' in pausa.
+      backup.resumeFromPause()
       // "Stanotte" (la predefinita): il lavoro dei tipi segue il preset; qui si chiede solo che parta il giro delle regole.
       BackupWorkScheduling.afterPhoneRead(context, backup)
       backup.kick()
     } else {
+      // "Inizia ora": la pausa finisce solo se il lavoro parte davvero (BK-4), non se l'utente annulla la conferma dei dati mobili.
       startUser(BackupTrigger.FIRST_BACKUP, confirmed = false)
     }
   }
@@ -420,13 +453,18 @@ class AppBackupActions(
   private fun startUser(trigger: BackupTrigger, confirmed: Boolean) {
     scope.launch {
       try {
-        // R4: "Riprendi" e "Fai ora" sono i due tocchi che finiscono la pausa di "Ferma".
-        backup.resumeFromPause()
-        val estimate = runCatching { backup.summary().toUpload.bytes }.getOrNull()
-        when (val decision = backup.userDecision(estimate, confirmed)) {
-          // Dati mobili, roaming o tetto superato: l'utente ha l'ultima parola, con la stima (proposta 10).
+        // BK-8: la stima non deve far aspettare il tocco (in un processo nuovo il riepilogo costa secondi): al massimo pochi secondi, poi senza.
+        val estimate = backup.uploadEstimateBytes()
+        when (val decision = decide(estimate, confirmed)) {
+          // Dati mobili, roaming o tetto superato: l'utente ha l'ultima parola, con la stima (proposta 10). La pausa di "Ferma" resta: se
+          // annulla, il backup e' ancora in pausa come la pagina dice (BK-4).
           is RuleDecision.NeedsConfirmation -> promptFlow.value = BackupPrompt(decision.message, trigger)
-          else -> backup.jobs.userInitiated(trigger, confirmed)
+          else -> {
+            // R4: "Riprendi" e "Fai ora" finiscono la pausa di "Ferma", ma solo quando il lavoro parte davvero (BK-4): prima la pausa si
+            // toglieva al tocco, anche se poi l'utente toccava "Annulla" sul foglio dei dati mobili, e il backup ripartiva al primo Wi-Fi.
+            backup.resumeFromPause()
+            backup.jobs.userInitiated(trigger, confirmed)
+          }
         }
       } catch (e: CancellationException) {
         throw e

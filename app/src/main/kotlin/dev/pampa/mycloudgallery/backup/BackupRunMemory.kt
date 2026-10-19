@@ -28,6 +28,18 @@ class BackupRunMemory(private val dir: File) {
   private val problemFile = File(dir, LAST_PROBLEM)
   private val startedFile = File(dir, STARTED_AT)
   private val pausedFile = File(dir, USER_PAUSED)
+  private val progressFile = File(dir, PROGRESS)
+
+  /**
+   * BK-5: l'avanzamento del lavoro in corso (`RunProgress.snapshot`, solo sei numeri), cosi' la morte del processo fra due tappe non lo azzera.
+   * Null se non c'e'.
+   */
+  suspend fun progress(): String? = readText(progressFile)
+
+  /** Salva l'avanzamento ([RunProgress.EMPTY] = la campagna e' finita: il file si toglie). */
+  suspend fun setProgress(text: String) {
+    if (text.isEmpty()) withContext(Dispatchers.IO) { progressFile.delete() } else writeText(progressFile, text)
+  }
 
   /** Il segno della pausa in memoria: letto dal file una volta sola, poi aggiornato da [pauseNow] e [setPaused]. */
   @Volatile private var pausedCache: Boolean? = null
@@ -104,9 +116,10 @@ class BackupRunMemory(private val dir: File) {
     private const val LAST_PROBLEM = "backup-last-problem"
     private const val STARTED_AT = "backup-started-at"
     private const val USER_PAUSED = "backup-user-paused"
-    private const val MAX_LENGTH = 40
+    private const val PROGRESS = "backup-progress"
+    private const val MAX_LENGTH = 120
 
     /** I file che l'azzeramento toglie da `noBackupFilesDir`. */
-    val FILES: List<String> = listOf(HEARTBEAT_PHOTOS, HEARTBEAT_VIDEOS, LAST_COMPLETE, LAST_PROBLEM, STARTED_AT, USER_PAUSED)
+    val FILES: List<String> = listOf(HEARTBEAT_PHOTOS, HEARTBEAT_VIDEOS, LAST_COMPLETE, LAST_PROBLEM, STARTED_AT, PROGRESS, USER_PAUSED)
   }
 }

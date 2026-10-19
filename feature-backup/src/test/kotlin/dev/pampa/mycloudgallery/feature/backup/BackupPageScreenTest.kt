@@ -92,6 +92,34 @@ class BackupPageScreenTest : ComposeBackupTest() {
     assertThat(actions.opened).containsExactly(BackupScreen.SETTINGS)
   }
 
+  /**
+   * **BK-9**: l'area privata non si sistema da una pagina dell'app ("Impostazioni, Aree" non c'e': le aree si fissano alla fondazione della famiglia e
+   * l'app non crea share). La scheda lo dice e dice chi puo' farlo, invece di un tasto che portava alla radice delle Impostazioni.
+   */
+  @Test
+  fun bk9_manca_lAreaPrivata_DiceDiChiedereAllAdminENonOffreUnTastoCheNonPortaDaNessunaParte() {
+    start(BackupStatus.NotConfigured(setOf(BackupSetupStep.PRIVATE_AREA)))
+    composeRule.onNodeWithText("• Manca l’area privata sul NAS.", substring = true).assertExists()
+    composeRule.onNodeWithText("Chiedi all’admin del NAS").assertExists()
+    composeRule.onNodeWithText("Apri Impostazioni, Aree").assertDoesNotExist()
+    // Lo stesso come problema di un giro: una frase, nessun tasto.
+    set(BackupStatus.Problem(BackupProblemCode.NO_PRIVATE_AREA, 0))
+    composeRule.onNodeWithText("Chiedi all’admin del NAS").assertExists()
+    composeRule.onNodeWithText("Apri Impostazioni, Aree").assertDoesNotExist()
+    assertThat(actions.performed).isEmpty()
+  }
+
+  /** BK-3: un problema di un giro che l'utente puo' aver risolto fuori dall'app offre "Riprova" accanto alla sua azione. */
+  @Test
+  fun bk3_unNasPienoOUnaQuotaOffronoRiprova() {
+    start(BackupStatus.Problem(BackupProblemCode.NAS_FULL, 0))
+    composeRule.onNodeWithText("Riprova").performClick()
+    assertThat(actions.performed).containsExactly(BackupAction.RETRY)
+    set(BackupStatus.Problem(BackupProblemCode.QUOTA, 0))
+    composeRule.onNodeWithText("Chiedi all’admin del NAS").assertExists()
+    composeRule.onNodeWithText("Riprova").assertExists()
+  }
+
   @Test
   fun inProvaDiceCheSiScriveSoloNelleShareDiProva() {
     start(BackupStatus.TestOnly)

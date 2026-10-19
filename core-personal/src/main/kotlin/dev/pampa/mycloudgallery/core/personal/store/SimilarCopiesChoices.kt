@@ -23,6 +23,12 @@ import dev.pampa.mycloudgallery.core.personal.contract.SimilarCopiesRecords
  */
 class SimilarCopiesChoices(
   private val store: PersonalStore,
+  /**
+   * BK-11: una scelta e' stata scritta sullo store (almeno una voce nuova). Chi sincronizza i dati personali parte da qui: "Mostra come
+   * principale" e "Separa" non partivano, come invece fanno preferiti e nascosti, e la scelta arrivava agli altri dispositivi solo al giro
+   * periodico (fino a sei ore dopo). Di serie niente. Prima di [resolve], che resta l'ultimo parametro (si passa come lambda finale).
+   */
+  private val onSaved: () -> Unit = {},
   private val resolve: suspend (MediaId) -> MediaId? = { it },
 ) {
 
@@ -70,14 +76,18 @@ class SimilarCopiesChoices(
       if (media in wanted) store.set(entry.key, PersonalValue.Flag(false))
     }
     store.set(SimilarCopiesRecords.cover(chosen.value), PersonalValue.Flag(true))
+    onSaved()
   }
 
   /** "Separa": una voce per ogni altra copia del gruppo (la separazione e' simmetrica e vale per sempre). */
   suspend fun saveSeparation(member: MediaId, others: Collection<MediaId>) {
+    var written = false
     for (other in others) {
       if (other == member) continue
       store.set(SimilarCopiesRecords.separation(member.value, other.value), PersonalValue.Flag(true))
+      written = true
     }
+    if (written) onSaved()
   }
 
   /** Le voci `similar_cover` accese (o tutte), con l'identita' **attuale** del media a cui si riferiscono. */

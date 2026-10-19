@@ -12,6 +12,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.PhoneOpen
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneRef
 import dev.pampa.mycloudgallery.core.backup.contract.RunStop
 import dev.pampa.mycloudgallery.debugtools.DeveloperTools
+import dev.pampa.mycloudgallery.nas.NasInputs
 import java.io.File
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -114,6 +115,39 @@ class BackupFenceIntegrationTest {
     // L'elenco delle cartelle da scegliere (Impostazioni → Backup) mostra solo le cartelle di prova.
     val folders = rig.gallery.backupUi!!.phoneFolders.folders().map { (it.source as BackupSource.Folder).relativePath }
     assertThat(folders).containsExactly("DCIM/mcg-prova/", "Pictures/mcg-prova/")
+  }
+
+  /**
+   * **BK-14**: l'account NAS arriva **dopo** le impostazioni del backup. Il magazzino si legge una volta sola all'avvio e la recinzione guardava
+   * l'account in quel momento: senza account fallisce chiusa (nessuna sorgente) e le sorgenti restavano vuote per tutto il processo, quindi nessuna
+   * prova sul campo (F21 e seguenti) caricava niente. Adesso `BackupGraph.start` le ricalcola con l'account di adesso: `DCIM/mcg-prova/` c'e'.
+   */
+  @Test
+  fun bk14_seLAccountArrivaDopoLeImpostazioniLeSorgentiDiProvaCiSono() = runBlocking<Unit> {
+    val backend = TestNas.backend(time)
+    val phone = TestDevice(app, File(temp.root, "telefono-tardi"), TestPlatform(time, backend)).also { devices += it }
+    phone.graph.start()
+    phone.graph.foundFamily()
+    val real = phone.graph.nasInputs
+    var account: String? = null
+    val late = NasInputs(
+      real.flags, real.session, real.nasClock, { account }, real.shares, real.commonExclusions, real.deviceId, real.signer, real.registry,
+      real.trust, real.route, real.rules, real.stateProvider, real.ledger, real.metered, real.freezeSignal, real.lastDiskTouchAt,
+    )
+    val fence = checkNotNull(DeveloperTools.backupFence()) { "in debug la recinzione c'e'" }
+    val rig = BackupRig(app, phone, TestNas.ADMIN_USER, fence = fence, nasInputs = late).also { rigs += it }
+    val settings = rig.backup.settings
+    settings.awaitLoaded()
+    settings.setSources(BackupSources(setOf(BackupSource.Camera, BackupSource.Folder(BackupRig.PRIMARY, "DCIM/mcg-prova/"))))
+    // L'archivio degli account non ha ancora risposto: fallire chiusi, nessuna sorgente.
+    assertThat(settings.sources.value).isEqualTo(BackupSources.NONE)
+
+    account = TestNas.ADMIN_USER
+    rig.open()
+
+    assertThat(settings.sources.value.sources).containsExactly(BackupSource.Folder(BackupRig.PRIMARY, "DCIM/mcg-prova/"))
+    // Il valore scelto resta quello salvato, intero: la recinzione restringe e basta.
+    assertThat(settings.chosenSources.value.sources).containsExactly(BackupSource.Camera, BackupSource.Folder(BackupRig.PRIMARY, "DCIM/mcg-prova/"))
   }
 
   private companion object {

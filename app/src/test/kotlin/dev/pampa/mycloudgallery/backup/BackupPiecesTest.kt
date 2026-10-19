@@ -74,6 +74,38 @@ class BackupPiecesTest {
     assertThat(BackupStatusReducers.waitReasonOf(RuleDecision.Run(network = NetworkClass.HOME_WIFI))).isEqualTo(BackupWait.NEXT_RUN)
   }
 
+  // --- BK-12: i codici che non arrivavano alla pagina -----------------------------------------------------------------------------
+
+  /**
+   * Con media in coda e il backup che non lavora, la pagina dice il perche' con la sua azione: "fermo da 3 giorni" (guida della batteria), il
+   * tetto dati raggiunto ("Fai ora" con conferma) e la memoria del telefono quasi piena. Prima esistevano nel catalogo e nella Diagnostica ma la
+   * pagina diceva sempre "N in coda". Il fermo da giorni vince su tutto (e' il piu' grave), poi il tetto, poi la memoria.
+   */
+  @Test
+  fun bk12_unBackupInCodaDiceIlPercheConLaSuaAzione() {
+    fun status(wait: BackupWait = BackupWait.NEXT_RUN, stalled: Boolean = false, storageLow: Boolean = false) =
+      BackupGraph.waitingStatus(queued = 5, bytes = 100L, wait = wait, stalled = stalled, storageLow = storageLow)
+
+    assertThat(status()).isEqualTo(BackupStatus.Waiting(5, 100L, BackupWait.NEXT_RUN))
+    assertThat(status(wait = BackupWait.CHARGING)).isEqualTo(BackupStatus.Waiting(5, 100L, BackupWait.CHARGING))
+    assertThat(status(stalled = true)).isEqualTo(BackupStatus.Problem(BackupProblemCode.STALE, 0))
+    assertThat(status(wait = BackupWait.DATA_CAP)).isEqualTo(BackupStatus.Problem(BackupProblemCode.CAP_REACHED, 0))
+    assertThat(status(storageLow = true)).isEqualTo(BackupStatus.Problem(BackupProblemCode.PHONE_STORAGE_LOW, 0))
+    assertThat(status(wait = BackupWait.DATA_CAP, stalled = true, storageLow = true)).isEqualTo(BackupStatus.Problem(BackupProblemCode.STALE, 0))
+    assertThat(status(wait = BackupWait.DATA_CAP, storageLow = true)).isEqualTo(BackupStatus.Problem(BackupProblemCode.CAP_REACHED, 0))
+    // Ognuno ha un'azione che l'app sa eseguire.
+    assertThat(BackupProblemCode.STALE.actions).containsExactly(dev.pampa.mycloudgallery.core.backup.contract.BackupAction.BATTERY_GUIDE)
+    assertThat(BackupProblemCode.CAP_REACHED.actions).containsExactly(dev.pampa.mycloudgallery.core.backup.contract.BackupAction.DO_NOW_CONFIRM)
+    assertThat(BackupProblemCode.PHONE_STORAGE_LOW.actions).containsExactly(dev.pampa.mycloudgallery.core.backup.contract.BackupAction.FREE_SPACE)
+  }
+
+  /** BK-9: l'area privata mancante non propone piu' una pagina che non c'e'; dice chi puo' risolverla. */
+  @Test
+  fun bk9_MancaLAreaPrivataDiceDiChiedereAlAdminENonApreUnaPaginaCheNonCe() {
+    assertThat(BackupProblemCode.NO_PRIVATE_AREA.actions).containsExactly(dev.pampa.mycloudgallery.core.backup.contract.BackupAction.ASK_ADMIN)
+    assertThat(BackupProblemCode.entries.flatMap { it.actions }).doesNotContain(dev.pampa.mycloudgallery.core.backup.contract.BackupAction.AREAS_SETTINGS)
+  }
+
   // --- Le verifiche per peso -----------------------------------------------------------------------------------------------------
 
   private fun copy(size: Long) = CopyToVerify(

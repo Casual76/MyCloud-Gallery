@@ -177,6 +177,8 @@ class SimilarCopiesIntegrationTest {
 
     // "Separa" sul telefono: l'altra copia esce dal gruppo per sempre (due celle) e la scelta viaggia come dato personale.
     assertThat(detector.separate(other)).isEqualTo(ChoiceOutcome.APPLIED)
+    // BK-11: la scelta chiede la sincronizzazione dei dati personali accorpata, come preferiti e nascosti (non aspetta il giro periodico).
+    assertThat(a.backup.personalSyncRequests.get()).isEqualTo(1)
     assertThat(detector.groupOf(cover)).isNull()
     a.ids(count = 2)
     phone.graph.trustGuard.preflight(Purpose.BACKGROUND)

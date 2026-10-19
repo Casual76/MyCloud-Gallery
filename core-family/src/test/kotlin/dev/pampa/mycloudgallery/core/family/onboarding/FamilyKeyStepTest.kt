@@ -204,6 +204,24 @@ class FamilyKeyStepTest {
   }
 
   @Test
+  fun daQuiCeGiaUnaFamigliaSiPassaARecuperaLAdminOAEntraComeFamiliare() = runTest(UnconfinedTestDispatcher()) {
+    // Trovato sul campo (19/10): i due tasti del pannello non facevano niente, perche' il cambio di percorso era accettato solo al passo 1.
+    for (path in listOf(OnboardingPath.RECOVER_ADMIN, OnboardingPath.JOIN_QR)) {
+      val f = OnboardingFixture(this)
+      val c = f.coordinator()
+      f.runFounderUntil(c, OnboardingStep.FAMILY_KEY)
+      TestFamily(f.commonFs())
+      assertThat(c.submit(StepInput.RecoveryCodeTyped(c.shownCode().toCharArray()))).isEqualTo(problem(OnboardingProblem.FAMILY_ALREADY_EXISTS))
+
+      expectAdvanced(c.submit(StepInput.ChoosePath(path)))
+      assertThat(f.store.snapshot.progress.path).isEqualTo(path)
+      assertThat(f.current).isNotEqualTo(OnboardingStep.FAMILY_KEY)
+      // La chiave della famiglia mai fondata non resta nella cassaforte.
+      assertThat(f.env.familyKeys.stored).isNull()
+    }
+  }
+
+  @Test
   fun unaFamigliaGiaEsistenteInFondazioneSiRiconosceESiTornaAlPasso4() = runTest(UnconfinedTestDispatcher()) {
     val f = OnboardingFixture(this)
     val c = f.coordinator()

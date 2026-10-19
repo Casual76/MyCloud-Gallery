@@ -421,6 +421,10 @@ internal class OnboardingFlowTest : OnboardingComposeBase() {
     env.coordinator.candidate = home()
     env.coordinator.discovered = listOf(DiscoveredNas("WDMyCloudEX2Ultra", nas))
     env.recovery.kits = NasResult.Ok(listOf(RecoveryKitRef("marta", "kit-2026-10-12", createdAt = 1_760_227_200_000L)))
+    env.coordinator.areas = listOf(
+      AreaCandidate("marta", NasResult.Ok(ShareAccess.READ_WRITE), isPublic = false, hasFamily = false),
+      AreaCandidate("Public", NasResult.Ok(ShareAccess.READ_WRITE), isPublic = true, hasFamily = true),
+    )
     return env
   }
 
@@ -434,6 +438,12 @@ internal class OnboardingFlowTest : OnboardingComposeBase() {
     type(0, "marta")
     type(1, strongPassword)
     click(str(R.string.account_submit))
+    // Le aree prima del kit: il recupero ha bisogno dell'area comune (il registro della famiglia).
+    assertVisible(str(R.string.areas_section_common))
+    composeRule.onAllNodesWithText("Public")[0].performClick()
+    composeRule.onAllNodesWithText("marta")[1].performClick()
+    composeRule.waitForIdle()
+    click(str(R.string.action_continue))
   }
 
   @Test

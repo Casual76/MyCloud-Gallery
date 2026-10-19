@@ -359,7 +359,6 @@ class OnboardingViewModel @Inject constructor(
           state.update {
             it.copy(account = AccountUi(), banner = OnboardingBanner.CREDENTIALS_SAVED)
           }
-          if (isRecoveryPath()) startRecovery()
         }
         is StepResult.Problem -> state.update {
           it.copy(account = AccountUi(problem = result.problem, needsNewPassword = result.problem.isAuthFailure()))
@@ -397,6 +396,10 @@ class OnboardingViewModel @Inject constructor(
         is StepResult.Advanced -> {
           addWarnings(result.warnings)
           state.update { it.copy(areas = it.areas.copy(submitting = false), banner = null) }
+          // Il recupero parte dopo le aree, non dopo l'account: per verificare il kit serve il registro della famiglia, che sta
+          // nell'area comune (senza, il profilo del dispositivo non c'e' e il recupero rispondeva "passo non disponibile";
+          // trovato sul campo il 19/10). Il kit si cerca nell'area privata scelta qui.
+          if (isRecoveryPath()) startRecovery(privateShare)
         }
         is StepResult.Problem -> state.update { it.copy(areas = it.areas.copy(submitting = false, problem = result.problem)) }
       }
@@ -782,18 +785,17 @@ class OnboardingViewModel @Inject constructor(
   private fun isRecoveryPath(): Boolean =
     progress.value.path == OnboardingPath.RECOVER_ADMIN || progress.value.path == OnboardingPath.SECOND_ADMIN
 
-  /** Dopo indirizzo e account dell'admin: si cercano i kit nell'area privata. */
-  private fun startRecovery() {
-    val user = chosenUser.orEmpty()
+  /** Dopo indirizzo, account e aree dell'admin: si cercano i kit nell'area privata. */
+  private fun startRecovery(privateShare: String) {
     state.update {
       it.copy(
         recovery = RecoveryUi(
           secondAdmin = progress.value.path == OnboardingPath.SECOND_ADMIN,
-          privateShare = user,
+          privateShare = privateShare,
         ),
       )
     }
-    searchKits(user)
+    searchKits(privateShare)
   }
 
   /** Cerca i kit di recupero in `recovery/` dell'area privata (solo nomi validi). */

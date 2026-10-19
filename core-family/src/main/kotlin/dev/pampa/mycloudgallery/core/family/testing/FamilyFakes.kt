@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.core.family.testing
 
+import dev.pampa.mycloudgallery.core.family.onboarding.OnboardingPlans
 import dev.pampa.mycloudgallery.core.family.contract.AdminActionResult
 import dev.pampa.mycloudgallery.core.family.contract.AdminRecovery
 import dev.pampa.mycloudgallery.core.family.contract.AreaCandidate
@@ -143,20 +144,8 @@ class FakeOnboardingCoordinator(initial: OnboardingProgress = OnboardingProgress
   companion object {
     private const val RECOVERY_GROUPS = 7
 
-    fun planFor(path: OnboardingPath): List<OnboardingStep> = when (path) {
-      OnboardingPath.FOUND_FAMILY -> OnboardingStep.entries.toList()
-      else -> listOf(
-        OnboardingStep.WELCOME,
-        OnboardingStep.NAS_ADDRESS,
-        OnboardingStep.ACCOUNT,
-        OnboardingStep.ROLES,
-        OnboardingStep.PRESET,
-        OnboardingStep.PERMISSIONS,
-        OnboardingStep.BATTERY,
-        OnboardingStep.VPN,
-        OnboardingStep.SUMMARY,
-      )
-    }
+    /** Gli stessi piani del coordinatore vero (recupero e secondo admin hanno le aree; il finto le saltava, 19/10). */
+    fun planFor(path: OnboardingPath): List<OnboardingStep> = OnboardingPlans.planFor(path)
   }
 }
 

@@ -126,7 +126,10 @@ class DefaultOnboardingCoordinator(
     val snapshot = ready() ?: return problem(OnboardingProblem.STEP_NOT_AVAILABLE)
     val step = stepOf(input)
     val p = snapshot.progress
-    if (p.current != step || step !in p.plan) return problem(OnboardingProblem.STEP_NOT_AVAILABLE)
+    // Il percorso si cambia anche dal passo in cui compare "Qui c'e' gia' una famiglia" (4 o 12(e)), con "Entra come familiare" o
+    // "Recupera l'admin": fino alla fondazione (o alla richiesta inviata) lo permette choosePath, che lo controlla da se'.
+    val changingPath = input is StepInput.ChoosePath
+    if (!changingPath && (p.current != step || step !in p.plan)) return problem(OnboardingProblem.STEP_NOT_AVAILABLE)
     // Fondata la famiglia (o inviata la richiesta), indirizzo, account e aree stanno nella configurazione firmata: non si rifanno.
     val settled = snapshot.foundation?.stage == FamilyKeyStage.FOUNDED || snapshot.join?.registered == true
     if (settled && step in SETTLED_STEPS) return problem(OnboardingProblem.STEP_NOT_AVAILABLE)

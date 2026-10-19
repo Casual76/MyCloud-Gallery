@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Le voci del backup nel menu del viewer (Fase 5B, docs/fase5-progetto.md §1.3 "viewer", §2.4, §2.7, D17-D19, D22, D25, D26, E-D15; P12). Solo frasi
+       fisse e numeri: mai il nome di un file o di una cartella. Le apostrofi sono quelle tipografiche (’). -->
+  <string name="viewer_backup_action_versions">Versioni</string>
+  <string name="viewer_backup_action_view_original">Vedi originale</string>
+  <string name="viewer_backup_action_restore">Ripristina originale</string>
+  <string name="viewer_backup_action_correct">Correggi data e luogo</string>
+  <string name="viewer_backup_action_rotate">Ruota</string>
+  <string name="viewer_backup_action_edit_with">Modifica con…</string>
+  <string name="viewer_backup_action_share_no_location">Condividi senza posizione</string>
+
+  <!-- Condividi (D26, E-X5, E-V7, L41). -->
+  <string name="viewer_backup_share_preparing">Preparo la copia da condividere</string>
+  <string name="viewer_backup_share_preparing_no_location">Tolgo la posizione e controllo il file</string>
+  <string name="viewer_backup_share_preparing_detail">%1$d di %2$d</string>
+  <string name="viewer_backup_share_cancel">Annulla</string>
+  <plurals name="viewer_backup_share_ready_title">
+    <item quantity="one">Posizione tolta e controllata</item>
+    <item quantity="other">Posizione tolta e controllata in %1$d file</item>
+  </plurals>
+  <string name="viewer_backup_share_ready_detail">Il file che condividi non contiene nessuna posizione.</string>
+  <string name="viewer_backup_share_ready_direct_title">Pronto da condividere</string>
+  <string name="viewer_backup_share_stopped_title">Condivisione ferma</string>
+  <string name="viewer_backup_share_with_location">Condividi con la posizione</string>
+  <string name="viewer_backup_share_cancel_sheet">Annulla</string>
+  <string name="viewer_backup_share_understood">Ho capito</string>
+
+  <!-- "Elimina…" → "Ovunque": cosa va nel cestino del NAS oltre alla copia di adesso (E-D15). -->
+  <plurals name="viewer_backup_everywhere_versions">
+    <item quantity="one">%1$d versione precedente</item>
+    <item quantity="other">%1$d versioni precedenti</item>
+  </plurals>
+  <string name="viewer_backup_everywhere_versions_detail">Nella cartella Versioni sul NAS: anche queste vanno nel cestino del NAS.</string>
+  <plurals name="viewer_backup_everywhere_common">
+    <item quantity="one">%1$d copia nell’area comune</item>
+    <item quantity="other">%1$d copie nell’area comune</item>
+  </plurals>
+  <string name="viewer_backup_everywhere_common_detail">Le vedono tutti i familiari.</string>
+</resources>

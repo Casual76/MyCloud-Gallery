@@ -51,7 +51,8 @@ internal data class ViewerCapabilities(
       return ViewerCapabilities(
         favorite = services.actions != null,
         hide = services.actions != null,
-        share = phone && intents != null,
+        // Fase 5B: con il backup legato "Condividi" passa da `:app` e vale anche per un media solo sul NAS (E-V7: lo scarica in cache).
+        share = (phone && intents != null) || services.backupActions?.capabilities?.share == true,
         copy = phone && intents != null,
         trash = phone && intents?.canTrash == true,
         download = ref is MediaRef.Nas && services.download?.canDownload(ref) == true,
@@ -78,6 +79,8 @@ internal class ViewerActionHandlers(
  * @param secure il viewer e' aperto dai Nascosti: la voce e' "Mostra nella Libreria", non "Nascondi".
  * @param nasActions le voci "Sposta" e "Rinomina" di un media del NAS (Fase 4B): nel gruppo di Condividi, Copia e Informazioni.
  * @param nasDelete la voce "Elimina…" di un media del NAS: in fondo, con l'altra voce che cancella.
+ * @param backupActions le voci del backup (Fase 5B, P12): Versioni, Ripristina originale, Correggi, Ruota, Modifica con…, nel gruppo di Condividi.
+ * @param shareWithoutLocation "Rimuovi la posizione" e' acceso: la voce Condividi lo dice ("Condividi senza posizione").
  */
 internal fun viewerMenuEntries(
   resources: Resources,
@@ -87,6 +90,8 @@ internal fun viewerMenuEntries(
   handlers: ViewerActionHandlers,
   nasActions: List<GalleryMenuEntry> = emptyList(),
   nasDelete: List<GalleryMenuEntry> = emptyList(),
+  backupActions: List<GalleryMenuEntry> = emptyList(),
+  shareWithoutLocation: Boolean = false,
 ): List<GalleryMenuEntry> {
   val groups = mutableListOf<List<GalleryMenuEntry>>()
   groups.add(buildList<GalleryMenuEntry> {
@@ -111,7 +116,8 @@ internal fun viewerMenuEntries(
   })
   groups.add(buildList<GalleryMenuEntry> {
     if (capabilities.share) {
-      add(GalleryMenuEntry.Item(resources.getString(R.string.viewer_action_share), handlers.onShare, Icons.Rounded.IosShare))
+      val shareLabel = if (shareWithoutLocation) R.string.viewer_backup_action_share_no_location else R.string.viewer_action_share
+      add(GalleryMenuEntry.Item(resources.getString(shareLabel), handlers.onShare, Icons.Rounded.IosShare))
     }
     if (capabilities.copy) {
       add(GalleryMenuEntry.Item(resources.getString(R.string.viewer_action_copy), handlers.onCopy, Icons.Rounded.ContentCopy))
@@ -120,6 +126,7 @@ internal fun viewerMenuEntries(
       add(GalleryMenuEntry.Item(resources.getString(R.string.viewer_action_download), handlers.onDownload, Icons.Rounded.Download))
     }
     addAll(nasActions)
+    addAll(backupActions)
     add(GalleryMenuEntry.Item(resources.getString(R.string.viewer_action_info), handlers.onInfo, Icons.Rounded.Info))
   })
   groups.add(buildList<GalleryMenuEntry> {

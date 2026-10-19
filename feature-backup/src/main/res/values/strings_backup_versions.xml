@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Le versioni di un media e "Ripristina originale" (Fase 5B, docs/fase5-progetto.md §1.5 `VersionsState`, §2.4, D17, D18, D35, E-E1, E-E2, E-E10; P12).
+       Solo numeri e date: mai il nome di un file o di una cartella. Le apostrofi sono quelle tipografiche (’). -->
+  <string name="backup_versions_title">Versioni</string>
+  <string name="backup_versions_message">Quella di adesso è la versione che vedi nella Libreria. Le altre restano sul NAS, nella cartella Versioni.</string>
+
+  <string name="backup_versions_loading_title">Leggo le versioni…</string>
+  <string name="backup_versions_loading_detail">Un attimo.</string>
+  <string name="backup_versions_unavailable_title">Le versioni non sono ancora pronte</string>
+  <string name="backup_versions_unavailable_detail">Questa funzione si accende quando il backup è collegato.</string>
+  <string name="backup_versions_empty_title">C’è una sola versione</string>
+  <string name="backup_versions_empty_detail">Quando il file viene modificato, le versioni di prima si trovano qui.</string>
+
+  <string name="backup_versions_role_original">Originale</string>
+  <string name="backup_versions_role_original_current">Originale, quello di adesso</string>
+  <string name="backup_versions_role_current">Versione di adesso</string>
+  <string name="backup_versions_role_intermediate">Versione intermedia</string>
+
+  <string name="backup_versions_row_detail">%1$s · %2$s</string>
+  <string name="backup_versions_where_phone">sul telefono</string>
+  <string name="backup_versions_where_nas">sul NAS</string>
+  <string name="backup_versions_where_folder">nella cartella Versioni</string>
+  <string name="backup_versions_where_common">solo nell’area comune</string>
+  <string name="backup_versions_where_nowhere">non so dove sia</string>
+  <string name="backup_versions_where_join">%1$s e %2$s</string>
+  <string name="backup_versions_safe">Al sicuro</string>
+  <string name="backup_versions_unsafe">Da controllare</string>
+  <string name="backup_versions_row_description">%1$s, %2$s, %3$s, %4$s</string>
+  <string name="backup_versions_view_action">Vedi</string>
+
+  <string name="backup_versions_restore">Ripristina originale</string>
+  <string name="backup_versions_close">Chiudi</string>
+  <string name="backup_versions_cancel">Annulla</string>
+  <string name="backup_versions_delete_intermediates">Elimina le intermedie…</string>
+  <string name="backup_versions_intermediates_note">Le versioni intermedie non si tolgono da sole. Se le elimini vanno nel cestino del NAS per 30 giorni.</string>
+
+  <string name="backup_versions_area_common_title">Area comune</string>
+  <string name="backup_versions_area_common_detail">Se questo file viene modificato, la nuova versione la vedranno tutti i familiari.</string>
+  <string name="backup_versions_area_read_only_title">Area in sola lettura</string>
+  <string name="backup_versions_area_read_only_detail">Qui non si può scrivere: una modifica diventerebbe una copia nuova nella tua area.</string>
+
+  <string name="backup_versions_why_only_one">C’è una sola versione: non c’è niente da ripristinare.</string>
+  <string name="backup_versions_why_already_original">L’originale è già quello di adesso.</string>
+  <string name="backup_versions_why_not_safe">L’originale non ha ancora una copia controllata sul NAS: non lo sposto finché non posso tornare indietro.</string>
+  <string name="backup_versions_why_nas_unreachable">Il NAS non risponde. Riprova quando sei a casa.</string>
+  <string name="backup_versions_why_frozen">I lavori sul NAS sono fermi per un cambiamento anomalo: controlla la Diagnostica.</string>
+  <string name="backup_versions_why_read_only">Questa area è in sola lettura: non si può ripristinare.</string>
+  <string name="backup_versions_why_not_mine">Questo media non è tuo: non puoi ripristinarne l’originale.</string>
+  <string name="backup_versions_why_not_available">Il ripristino non è ancora pronto.</string>
+
+  <string name="backup_versions_confirm_title">Ripristinare l’originale?</string>
+  <string name="backup_versions_confirm_message">L’originale torna al suo posto sul NAS e la versione di adesso va nella cartella Versioni. Non si perde niente e non si carica niente.</string>
+  <string name="backup_versions_confirm_back_title">Torna al suo posto</string>
+  <string name="backup_versions_confirm_away_title">Va nella cartella Versioni</string>
+
+  <string name="backup_versions_waiting_title">Il telefono ti chiede un permesso</string>
+  <string name="backup_versions_waiting_detail">Serve per rimettere com’era anche la copia sul telefono, che ha la versione modificata. Se dici di no, l’originale torna comunque sul NAS e il telefono tiene la modifica.</string>
+  <string name="backup_versions_restoring_title">Ripristino l’originale…</string>
+  <string name="backup_versions_restoring_detail">Sposto i file sul NAS. Non carico niente.</string>
+  <string name="backup_versions_done_title">Fatto</string>
+  <string name="backup_versions_done_detail">L’originale è tornato al suo posto sul NAS. Non è stato caricato niente.</string>
+  <string name="backup_versions_done_kept">Sul telefono resta la versione modificata, perché non hai dato il permesso.</string>
+
+  <string name="backup_versions_msg_plan_changed">Nel frattempo qualcosa è cambiato: ho ricalcolato. Controlla e conferma di nuovo.</string>
+  <string name="backup_versions_msg_expired">È passato troppo tempo. Conferma di nuovo.</string>
+  <string name="backup_versions_msg_permission">Senza il permesso del telefono non ho ripristinato niente.</string>
+  <string name="backup_versions_msg_no_dialog">Su questo telefono non posso chiedere il permesso, quindi non ho ripristinato niente.</string>
+</resources>

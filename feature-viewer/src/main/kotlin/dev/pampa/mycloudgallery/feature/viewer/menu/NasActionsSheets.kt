@@ -51,7 +51,12 @@ import java.util.Locale
  * (il cestino di sistema): si chiama per "Solo dal telefono" e, con "Ovunque", insieme al cestino del NAS.
  */
 @Composable
-fun NasActionSheets(controller: NasActionsController, onDeleteFromPhone: () -> Unit) {
+fun NasActionSheets(
+  controller: NasActionsController,
+  onDeleteFromPhone: () -> Unit,
+  extraLocations: List<GalleryDeleteLocation> = emptyList(),
+  onPhoneOnlyDelete: (() -> Unit)? = null,
+) {
   val state by controller.state.collectAsState()
   NasActionSheets(
     state = state,
@@ -60,12 +65,14 @@ fun NasActionSheets(controller: NasActionsController, onDeleteFromPhone: () -> U
     onRenameText = controller::onRenameText,
     onPick = controller::pick,
     onConfirmed = controller::confirmed,
+    // Fase 5B (D22): "Solo dal telefono" puo' passare dalla verifica del backup; "Ovunque" no (la copia del NAS sta per andare nel cestino).
     onPhoneOnly = {
       controller.phoneOnlyDone()
-      onDeleteFromPhone()
+      (onPhoneOnlyDelete ?: onDeleteFromPhone)()
     },
     onEverywhereDone = onDeleteFromPhone,
     onDismiss = controller::dismiss,
+    extraLocations = extraLocations,
   )
 }
 
@@ -81,6 +88,7 @@ internal fun NasActionSheets(
   onPhoneOnly: () -> Unit,
   onEverywhereDone: () -> Unit,
   onDismiss: () -> Unit,
+  extraLocations: List<GalleryDeleteLocation> = emptyList(),
 ) {
   // Un foglio che si chiude fa la sua uscita con il contenuto che aveva, non a vuoto.
   var shown by remember { mutableStateOf<NasActionsState>(NasActionsState.Idle) }
@@ -89,7 +97,7 @@ internal fun NasActionSheets(
   GalleryConfirmSheet(visible = state !is NasActionsState.Idle, onDismissRequest = onDismiss, paneTitle = sheetTitle(showing)) {
     when (showing) {
       NasActionsState.Idle -> Unit
-      is NasActionsState.Delete -> DeleteBody(showing, monotonicMs, onScope, onConfirmed, onPhoneOnly, onEverywhereDone, onDismiss)
+      is NasActionsState.Delete -> DeleteBody(showing, monotonicMs, onScope, onConfirmed, onPhoneOnly, onEverywhereDone, onDismiss, extraLocations)
       is NasActionsState.Rename -> RenameBody(showing, monotonicMs, onRenameText, onConfirmed, onDismiss)
       is NasActionsState.PickDestination -> PickBody(showing, onPick, onDismiss)
       is NasActionsState.ConfirmMove -> MoveBody(showing, monotonicMs, onConfirmed, onDismiss)
@@ -117,12 +125,14 @@ private fun ColumnScope.DeleteBody(
   onPhoneOnly: () -> Unit,
   onEverywhereDone: () -> Unit,
   onDismiss: () -> Unit,
+  extraLocations: List<GalleryDeleteLocation>,
 ) {
   val plan = state.plan
   val sheet = remember(plan) { plan?.let { ConfirmationSheet(it) } }
   NasDeleteSheetContent(
     state = state,
     onScope = onScope,
+    extraLocations = extraLocations,
     onConfirm = {
       // Il tocco sul pulsante: "Solo dal telefono" non tocca il NAS; "Ovunque" confida il piano del cestino del NAS con una conferma.
       when {
@@ -151,7 +161,13 @@ private fun ColumnScope.DeleteBody(
 
 /** Il contenuto del foglio "Elimina…", senza stato (lo mostrano il foglio vero e gli screenshot). */
 @Composable
-internal fun NasDeleteSheetContent(state: NasActionsState.Delete, onScope: (GalleryDeleteScope) -> Unit, onConfirm: () -> Unit, onCancel: () -> Unit) {
+internal fun NasDeleteSheetContent(
+  state: NasActionsState.Delete,
+  onScope: (GalleryDeleteScope) -> Unit,
+  onConfirm: () -> Unit,
+  onCancel: () -> Unit,
+  extraLocations: List<GalleryDeleteLocation> = emptyList(),
+) {
   val target = state.target
   if (!target.onPhone) {
     // Sta solo sul NAS (E-D2): niente scelta del luogo, solo il cestino del NAS.
@@ -198,6 +214,8 @@ internal fun NasDeleteSheetContent(state: NasActionsState.Delete, onScope: (Gall
         ),
       )
     }
+    // Fase 5B (E-D15): le versioni precedenti che "Ovunque" mette nel cestino del NAS, elencate prima di confermare.
+    addAll(extraLocations)
   }
   GalleryDeleteSheetContent(
     count = 1,

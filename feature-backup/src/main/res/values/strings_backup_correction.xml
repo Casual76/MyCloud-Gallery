@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- "Correggi data e luogo" e "Ruota" (Fase 5B, docs/fase5-progetto.md §1.5 `CorrectionState`, §2.4, D19, E-L8, E-E8, E-E9, Q6, L40; P12).
+       Data e luogo sono dell'utente: compaiono a schermo, mai nei log. Le apostrofi sono quelle tipografiche (’). -->
+  <string name="backup_correction_title">Correggi data e luogo</string>
+  <string name="backup_correction_title_rotate">Ruota</string>
+  <string name="backup_correction_generic_title">Correzione</string>
+  <string name="backup_correction_message">La correzione si scrive nel file come versione nuova. L’originale resta al sicuro sul NAS.</string>
+  <string name="backup_correction_message_rotate">La foto si ruota nel file, come versione nuova. L’originale resta al sicuro sul NAS.</string>
+  <string name="backup_correction_loading">Un attimo…</string>
+
+  <string name="backup_correction_date_title">Data e ora</string>
+  <string name="backup_correction_date_now">Adesso: %1$s</string>
+  <string name="backup_correction_date_none">Adesso: senza data</string>
+  <string name="backup_correction_date_field">Data (gg/mm/aaaa)</string>
+  <string name="backup_correction_time_field">Ora (hh:mm)</string>
+  <string name="backup_correction_date_error">Scrivi una data vera, per esempio 03/10/2026.</string>
+  <string name="backup_correction_time_error">Scrivi un’ora vera, per esempio 14:30.</string>
+  <string name="backup_correction_date_value">%1$s alle %2$s</string>
+
+  <string name="backup_correction_place_title">Luogo</string>
+  <string name="backup_correction_place_now">Adesso: %1$s</string>
+  <string name="backup_correction_place_now_unnamed">Adesso: ha un luogo</string>
+  <string name="backup_correction_place_none">Adesso: senza luogo</string>
+  <string name="backup_correction_place_keep">Lascia com’è</string>
+  <string name="backup_correction_place_change">Cambia il luogo</string>
+  <string name="backup_correction_place_clear">Togli il luogo</string>
+  <string name="backup_correction_place_clear_detail">La foto non dirà più dove è stata scattata.</string>
+  <string name="backup_correction_place_search">Cerca un luogo</string>
+  <string name="backup_correction_place_not_found">Non trovo nessun luogo con questo nome.</string>
+  <string name="backup_correction_place_coordinates">Oppure scrivi le coordinate</string>
+  <string name="backup_correction_place_coordinates_hint">Per esempio 45,4642 9,1900</string>
+  <string name="backup_correction_place_missing">Scegli un luogo o scrivi le coordinate.</string>
+  <string name="backup_correction_place_coordinates_error">Le coordinate non vanno bene. Scrivi latitudine e longitudine, per esempio 45,4642 9,1900.</string>
+  <string name="backup_correction_place_chosen">Scelto: %1$s</string>
+  <string name="backup_correction_place_after_set">un luogo nuovo</string>
+  <string name="backup_correction_place_after_clear">senza luogo</string>
+
+  <string name="backup_correction_rotate_title">Rotazione</string>
+  <string name="backup_correction_rotate_none">Come adesso</string>
+  <string name="backup_correction_rotate_right">Ruotata di 90° a destra</string>
+  <string name="backup_correction_rotate_half">Ruotata di 180°</string>
+  <string name="backup_correction_rotate_left">Ruotata di 90° a sinistra</string>
+  <string name="backup_correction_rotate_left_action">Ruota a sinistra</string>
+  <string name="backup_correction_rotate_right_action">Ruota a destra</string>
+
+  <string name="backup_correction_preview_title">Cosa cambia</string>
+  <string name="backup_correction_preview_date">Data e ora: da %1$s a %2$s</string>
+  <string name="backup_correction_preview_place">Luogo: da %1$s a %2$s</string>
+  <string name="backup_correction_preview_rotation">Rotazione: %1$s</string>
+  <string name="backup_correction_preview_nothing">Scegli cosa correggere.</string>
+  <string name="backup_correction_place_unknown_before">nessuno</string>
+  <string name="backup_correction_place_before_unnamed">un luogo</string>
+  <string name="backup_correction_date_unknown_before">nessuna</string>
+
+  <string name="backup_correction_format_note">Questo tipo di file non si scrive: la correzione resta nell’app e il file non cambia.</string>
+
+  <string name="backup_correction_apply">Correggi</string>
+  <string name="backup_correction_cancel">Annulla</string>
+  <string name="backup_correction_close">Chiudi</string>
+
+  <string name="backup_correction_safe_title">Prima la metto al sicuro</string>
+  <string name="backup_correction_safe_detail">Questa foto non ha ancora una copia controllata sul NAS. La metto al sicuro, poi la correggi: così l’originale non si perde.</string>
+  <string name="backup_correction_safe_action">Metti al sicuro adesso</string>
+
+  <string name="backup_correction_waiting_title">Il telefono ti chiede un permesso</string>
+  <string name="backup_correction_waiting_detail">Serve per scrivere la correzione nel file della foto. Se dici di no, non cambia niente.</string>
+  <string name="backup_correction_writing_title">Scrivo la correzione…</string>
+  <string name="backup_correction_writing_detail">Controllo anche che il file si apra bene.</string>
+  <string name="backup_correction_uploading_title">Correzione fatta</string>
+  <string name="backup_correction_uploading_detail">Sto portando la versione corretta sul NAS. Puoi chiudere: il backup continua da solo.</string>
+  <string name="backup_correction_done_title">Fatto</string>
+  <string name="backup_correction_done_detail">La versione corretta è al sicuro sul NAS. L’originale resta nella cartella Versioni.</string>
+  <string name="backup_correction_done_app_title">Corretta solo nell’app</string>
+  <string name="backup_correction_done_app_detail">Questo tipo di file non si scrive: la data e il luogo nuovi valgono nell’app, il file non è cambiato.</string>
+
+  <string name="backup_correction_failed_title">Non è andata</string>
+  <string name="backup_correction_failed_unreadable">Non riesco a leggere il file: non è cambiato niente.</string>
+  <string name="backup_correction_failed_invalid">La copia corretta non si apre bene, quindi l’ho scartata. Il file è com’era.</string>
+  <string name="backup_correction_failed_phone_write">Non sono riuscito a scrivere sul telefono, che ha ancora il file di prima. La correzione resta nell’app e va sul NAS.</string>
+  <string name="backup_correction_failed_not_restored">Attenzione: il file sul telefono si è rovinato. L’originale è al sicuro sul NAS, rimettilo da lì.</string>
+  <string name="backup_correction_failed_full">Sul telefono non c’è abbastanza spazio. Libera un po’ di spazio e riprova.</string>
+  <string name="backup_correction_failed_nas">Il NAS non ha accettato la versione nuova. La correzione resta nell’app e il backup riprova da solo.</string>
+
+  <string name="backup_correction_blocked_title">Per ora non si può</string>
+  <string name="backup_correction_blocked_common">Questo file è nell’area comune: la correzione la vedrebbero tutti i familiari. Da qui non si può ancora.</string>
+  <string name="backup_correction_blocked_read_only">Questa area è in sola lettura: da qui non si può correggere.</string>
+  <string name="backup_correction_blocked_nas">Il NAS non risponde. Riprova quando sei a casa.</string>
+  <string name="backup_correction_blocked_frozen">I lavori sul NAS sono fermi per un cambiamento anomalo: controlla la Diagnostica.</string>
+  <string name="backup_correction_blocked_not_mine">Questo media non è tuo: non puoi correggerlo.</string>
+  <string name="backup_correction_blocked_not_available">La correzione non è ancora pronta.</string>
+  <string name="backup_correction_unavailable_title">Le correzioni non sono ancora pronte</string>
+  <string name="backup_correction_unavailable_detail">Questa funzione si accende quando il backup è collegato.</string>
+
+  <string name="backup_correction_msg_plan_changed">Nel frattempo il file è cambiato: ho ricalcolato. Controlla e correggi di nuovo.</string>
+  <string name="backup_correction_msg_expired">È passato troppo tempo. Correggi di nuovo.</string>
+  <string name="backup_correction_msg_refused">Hai detto di no al telefono: non è cambiato niente.</string>
+  <string name="backup_correction_msg_no_dialog">Su questo telefono non posso chiedere il permesso, quindi non ho corretto niente.</string>
+</resources>

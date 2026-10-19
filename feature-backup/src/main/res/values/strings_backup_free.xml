@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- "Libera spazio" e "Elimina solo dal telefono" (Fase 5B, docs/fase5-progetto.md §1.5 `FreeSpaceState`, §2.5, D21, D22, Q9, E-B8, E-B9, E-B14,
+       E-B22, E-D14, L39; P12). Solo numeri: mai il nome di un file. Le apostrofi sono quelle tipografiche (’). -->
+  <string name="backup_free_title">Libera spazio</string>
+  <string name="backup_free_open">Libera spazio</string>
+
+  <!-- L'avviso forte (C13): sta sempre in cima, in ogni foglio e in ogni passo. -->
+  <string name="backup_free_warning_title">Il NAS non ha un backup esterno</string>
+  <string name="backup_free_warning_detail">Dopo, l’unica copia di queste foto e di questi video sarà sul NAS. Se il NAS si rompe, non si recuperano.</string>
+  <string name="backup_free_permanent_title">Libera subito non si può annullare</string>
+  <string name="backup_free_permanent_detail">Niente cestino di Android e niente 30 giorni: i file vengono tolti dal telefono per sempre.</string>
+
+  <string name="backup_free_idle_title">Sto contando cosa si può liberare…</string>
+  <string name="backup_free_idle_detail">Guardo cosa è già al sicuro sul NAS.</string>
+
+  <string name="backup_free_summary_title">Si possono liberare %1$s</string>
+  <plurals name="backup_free_summary_detail">
+    <item quantity="one">%1$s foto o video è già al sicuro sul NAS. Prima di toglierlo ricontrollo la copia.</item>
+    <item quantity="other">%1$s foto e video sono già al sicuro sul NAS. Prima di toglierli ricontrollo ogni copia.</item>
+  </plurals>
+  <string name="backup_free_summary_empty_title">Per ora non c’è niente da liberare</string>
+  <string name="backup_free_summary_empty_detail">Quello che è al sicuro sul NAS e non è troppo recente compare qui.</string>
+  <string name="backup_free_recent_note">Gli ultimi %1$s giorni restano sul telefono: sono quelli che guardi di più.</string>
+
+  <string name="backup_free_filter_title">Cosa liberare</string>
+  <string name="backup_free_filter_all">Tutto ciò che è al sicuro</string>
+  <string name="backup_free_filter_all_detail">Tranne gli ultimi giorni, che restano sul telefono.</string>
+  <string name="backup_free_filter_videos">Solo i video</string>
+  <string name="backup_free_filter_videos_detail">Sono i file più pesanti.</string>
+  <string name="backup_free_filter_old">Più vecchi di un anno</string>
+  <string name="backup_free_filter_old_detail">Foto e video di più di un anno fa.</string>
+
+  <string name="backup_free_guardian_note">Prima di toglierli faccio una copia privata di quelli che hanno solo la copia nell’area comune: %1$s.</string>
+
+  <string name="backup_free_excluded_title">Non li libero</string>
+  <string name="backup_free_ex_not_verified">Non ancora controllati sul NAS</string>
+  <string name="backup_free_ex_not_verified_detail">Aspettano che il backup li controlli.</string>
+  <string name="backup_free_ex_version_not_safe">Con una versione non al sicuro</string>
+  <string name="backup_free_ex_version_not_safe_detail">Anche le altre versioni devono essere al sicuro sul NAS.</string>
+  <string name="backup_free_ex_in_progress">In caricamento o con un problema</string>
+  <string name="backup_free_ex_in_progress_detail">Prima il backup deve finire o il problema va sistemato.</string>
+  <string name="backup_free_ex_frozen">Lavori fermi</string>
+  <string name="backup_free_ex_frozen_detail">Il NAS ha avuto un cambiamento anomalo: finché non controlli non si libera niente.</string>
+  <string name="backup_free_ex_nas">Il NAS non risponde</string>
+  <string name="backup_free_ex_nas_detail">Mi serve per ricontrollare le copie.</string>
+  <string name="backup_free_ex_fence">Fuori dalla cartella di prova</string>
+  <string name="backup_free_ex_fence_detail">In prova si libera solo la cartella di prova.</string>
+  <string name="backup_free_ex_recent">Degli ultimi giorni</string>
+  <string name="backup_free_ex_recent_detail">Restano sul telefono: sono quelli che guardi di più.</string>
+  <string name="backup_free_ex_copy_changed">La copia sul NAS è cambiata</string>
+  <string name="backup_free_ex_copy_changed_detail">Li lascio sul telefono e rifaccio il backup.</string>
+  <string name="backup_free_ex_gone">Non sono più sul telefono</string>
+  <string name="backup_free_ex_gone_detail">Sono già stati tolti o spostati.</string>
+
+  <string name="backup_free_action">Libera spazio</string>
+  <string name="backup_free_action_now">Libera subito…</string>
+  <string name="backup_free_trash_note">Libera spazio mette i file nel cestino di Android per 30 giorni. Libera subito li toglie per sempre.</string>
+
+  <string name="backup_free_guarding_title">Preparo le copie private</string>
+  <string name="backup_free_guarding_detail">%1$s di %2$s</string>
+  <string name="backup_free_verifying_title">Ricontrollo le copie sul NAS</string>
+  <string name="backup_free_verifying_detail">%1$s di %2$s · %3$s letti</string>
+  <string name="backup_free_verifying_hint">Può durare un po’. Lascia aperta questa pagina.</string>
+  <string name="backup_free_cancel">Annulla</string>
+
+  <plurals name="backup_free_ready_title">
+    <item quantity="one">Pronto: %1$s elemento, %2$s</item>
+    <item quantity="other">Pronto: %1$s elementi, %2$s</item>
+  </plurals>
+  <string name="backup_free_ready_detail_trash">Il telefono ti chiede il permesso di metterli nel cestino di Android.</string>
+  <string name="backup_free_ready_detail_now">Il telefono ti chiede il permesso di toglierli per sempre.</string>
+  <string name="backup_free_ready_valid">La verifica vale ancora %1$s.</string>
+  <string name="backup_free_ready_batch">Lotto %1$d di %2$d</string>
+  <string name="backup_free_ready_action">Libera ora</string>
+  <string name="backup_free_ready_action_now">Elimina per sempre</string>
+  <string name="backup_free_ready_action_next">Continua con il prossimo lotto</string>
+
+  <string name="backup_free_confirming_title">Aspetto la tua risposta</string>
+  <string name="backup_free_confirming_detail">Il telefono ti chiede il permesso (lotto %1$d di %2$d).</string>
+
+  <string name="backup_free_done_title">Liberati %1$s</string>
+  <plurals name="backup_free_done_detail">
+    <item quantity="one">%1$s foto o video tolto dal telefono. Resta sul NAS e lo vedi nella Libreria.</item>
+    <item quantity="other">%1$s foto e video tolti dal telefono. Restano sul NAS e li vedi nella Libreria.</item>
+  </plurals>
+  <string name="backup_free_done_trash">Sono nel cestino di Android per 30 giorni: se ci ripensi li ripristini da Eliminati di recente.</string>
+  <string name="backup_free_done_gone">Sono stati tolti per sempre dal telefono.</string>
+  <plurals name="backup_free_done_kept">
+    <item quantity="one">%1$s è rimasto sul telefono.</item>
+    <item quantity="other">%1$s sono rimasti sul telefono.</item>
+  </plurals>
+  <plurals name="backup_free_done_dropped">
+    <item quantity="one">Per %1$s la copia sul NAS non tornava: l’ho lasciato sul telefono e rifaccio il backup.</item>
+    <item quantity="other">Per %1$s la copia sul NAS non tornava: li ho lasciati sul telefono e rifaccio il backup.</item>
+  </plurals>
+  <string name="backup_free_done_nothing_title">Non ho liberato niente</string>
+  <string name="backup_free_done_nothing_detail">Nessun elemento ha superato i controlli: sono tutti rimasti sul telefono.</string>
+  <string name="backup_free_done_cancelled_title">Non è cambiato niente</string>
+  <string name="backup_free_done_cancelled_detail">Hai detto di no al telefono. Nessun file è stato tolto.</string>
+  <string name="backup_free_done_action">Fatto</string>
+
+  <string name="backup_free_blocked_frozen_title">Lavori fermi</string>
+  <string name="backup_free_blocked_frozen_detail">Il NAS ha avuto un cambiamento anomalo. Finché non controlli non si libera niente.</string>
+  <string name="backup_free_blocked_frozen_action">Apri la Diagnostica</string>
+  <string name="backup_free_blocked_nas_title">Il NAS non risponde</string>
+  <string name="backup_free_blocked_nas_detail">Mi serve per ricontrollare le copie prima di liberare. Riprova quando sei a casa.</string>
+  <string name="backup_free_blocked_rejected_title">Qualcosa è cambiato</string>
+  <string name="backup_free_blocked_rejected_detail">Nel frattempo i file sono cambiati. Ho ricalcolato: controlla e conferma di nuovo.</string>
+  <string name="backup_free_blocked_unavailable_title">Non è ancora disponibile</string>
+  <string name="backup_free_blocked_unavailable_detail">Libera spazio si accende quando il backup è pronto e ha messo al sicuro le foto.</string>
+  <string name="backup_free_blocked_dialog_title">Su questo telefono non si può</string>
+  <string name="backup_free_blocked_dialog_detail">Per togliere i file Android deve poter chiedere il permesso: serve Android 11 o più recente.</string>
+  <string name="backup_free_blocked_expired_title">La verifica è scaduta</string>
+  <string name="backup_free_blocked_expired_detail">Per sicurezza vale solo 6 ore e finisce se il telefono si riavvia. Rifacciamola.</string>
+  <string name="backup_free_blocked_retry">Riprova</string>
+  <string name="backup_free_blocked_restart">Ricomincia</string>
+
+  <!-- I fogli di conferma. -->
+  <string name="backup_free_confirm_title">Liberare spazio?</string>
+  <plurals name="backup_free_confirm_message">
+    <item quantity="one">Tolgo dal telefono %1$s elemento (%2$s). Resta sul NAS.</item>
+    <item quantity="other">Tolgo dal telefono %1$s elementi (%2$s). Restano sul NAS.</item>
+  </plurals>
+  <string name="backup_free_confirm_where_title">Nel cestino di Android</string>
+  <string name="backup_free_confirm_where_detail">Per 30 giorni: se ci ripensi li ripristini da Eliminati di recente.</string>
+  <string name="backup_free_confirm_check_title">Prima ricontrollo ogni copia</string>
+  <string name="backup_free_confirm_check_detail">Se una copia sul NAS non torna, quel file resta sul telefono.</string>
+  <string name="backup_free_confirm_empty">Non c’è niente da liberare con questa scelta.</string>
+  <string name="backup_free_confirm_yes">Sì, libera spazio</string>
+  <string name="backup_free_confirm_no">Annulla</string>
+
+  <string name="backup_free_now_title">Liberare subito?</string>
+  <plurals name="backup_free_now_message">
+    <item quantity="one">Tolgo dal telefono %1$s elemento (%2$s) per sempre, senza passare dal cestino di Android.</item>
+    <item quantity="other">Tolgo dal telefono %1$s elementi (%2$s) per sempre, senza passare dal cestino di Android.</item>
+  </plurals>
+  <string name="backup_free_now_continue">Libera subito</string>
+  <string name="backup_free_now_last_title">Ultima conferma</string>
+  <string name="backup_free_now_last_message">Dopo questo non si torna indietro. L’unica copia sarà sul NAS, che non ha un backup esterno.</string>
+  <string name="backup_free_now_yes">Sì, elimina per sempre</string>
+  <string name="backup_free_now_no">No, tienili</string>
+
+  <!-- "Elimina solo dal telefono" (D22, E-D14, E-B14). -->
+  <string name="backup_free_phone_title">Elimina solo dal telefono</string>
+  <string name="backup_free_phone_message">Il file resta sul NAS. Prima controllo che la copia sul NAS sia al sicuro.</string>
+  <string name="backup_free_phone_loading">Controllo cosa si può togliere…</string>
+  <string name="backup_free_phone_unavailable_title">Per ora non è disponibile</string>
+  <string name="backup_free_phone_unavailable_detail">Questa funzione si accende quando il backup è pronto.</string>
+  <plurals name="backup_free_phone_free">
+    <item quantity="one">%1$s si può togliere: la copia sul NAS è al sicuro.</item>
+    <item quantity="other">%1$s si possono togliere: le copie sul NAS sono al sicuro.</item>
+  </plurals>
+  <plurals name="backup_free_phone_guard">
+    <item quantity="one">%1$s ha solo la copia nell’area comune: prima ne faccio una copia privata.</item>
+    <item quantity="other">%1$s hanno solo la copia nell’area comune: prima ne faccio una copia privata.</item>
+  </plurals>
+  <plurals name="backup_free_phone_safe_first">
+    <item quantity="one">%1$s non è ancora al sicuro sul NAS: prima va messo al sicuro.</item>
+    <item quantity="other">%1$s non sono ancora al sicuro sul NAS: prima vanno messi al sicuro.</item>
+  </plurals>
+  <plurals name="backup_free_phone_wait">
+    <item quantity="one">%1$s si sta caricando o ha un problema: aspetta che finisca.</item>
+    <item quantity="other">%1$s si stanno caricando o hanno un problema: aspetta che finiscano.</item>
+  </plurals>
+  <plurals name="backup_free_phone_frozen">
+    <item quantity="one">%1$s è fermo: il NAS ha avuto un cambiamento anomalo.</item>
+    <item quantity="other">%1$s sono fermi: il NAS ha avuto un cambiamento anomalo.</item>
+  </plurals>
+  <plurals name="backup_free_phone_unavailable">
+    <item quantity="one">%1$s non si può togliere ora: il backup non è pronto.</item>
+    <item quantity="other">%1$s non si possono togliere ora: il backup non è pronto.</item>
+  </plurals>
+  <plurals name="backup_free_phone_fence">
+    <item quantity="one">%1$s è fuori dalla cartella di prova.</item>
+    <item quantity="other">%1$s sono fuori dalla cartella di prova.</item>
+  </plurals>
+  <plurals name="backup_free_phone_not_on_phone">
+    <item quantity="one">%1$s non è sul telefono: non c’è niente da togliere.</item>
+    <item quantity="other">%1$s non sono sul telefono: non c’è niente da togliere.</item>
+  </plurals>
+  <string name="backup_free_phone_choice_title">Cosa fare</string>
+  <string name="backup_free_phone_choice_safe_first">Prima mettilo al sicuro</string>
+  <string name="backup_free_phone_choice_safe_first_detail">Parte il backup e controllo la copia sul NAS. Poi ti riporto qui.</string>
+  <string name="backup_free_phone_choice_free_ready">Togli solo quelli già al sicuro</string>
+  <string name="backup_free_phone_choice_free_ready_detail">Gli altri restano sul telefono.</string>
+  <string name="backup_free_phone_action_safe">Metti al sicuro</string>
+  <string name="backup_free_phone_action_free">Continua</string>
+  <string name="backup_free_phone_close">Chiudi</string>
+</resources>

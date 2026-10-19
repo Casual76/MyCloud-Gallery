@@ -32,6 +32,7 @@ import dev.pampa.mycloudgallery.feature.viewer.details.NoViewerBytes
 import dev.pampa.mycloudgallery.feature.viewer.details.ViewerBytes
 import dev.pampa.mycloudgallery.feature.viewer.download.PhoneDownload
 import dev.pampa.mycloudgallery.feature.viewer.info.MediaBackupStates
+import dev.pampa.mycloudgallery.feature.viewer.menu.BackupMediaActions
 import dev.pampa.mycloudgallery.feature.viewer.menu.NasMediaActions
 import dev.pampa.mycloudgallery.feature.viewer.video.BytesMotionVideoLocator
 import dev.pampa.mycloudgallery.feature.viewer.video.MotionVideoLocator
@@ -74,6 +75,9 @@ import kotlinx.coroutines.withContext
  *   principale" e "Separa"): senza, la sezione non c'e' (D13). Di norma e' la stessa istanza della Diagnostica e del riepilogo del primo backup.
  * @property outsideCopy dove sta una copia di quel gruppo che non e' nell'indice (le copie unite in una cella hanno nell'indice solo la
  *   copertina): senza, il tocco su una riga di una copia fuori indice non apre niente.
+ * @property backupActions Fase 5B (P12, §1.3 "viewer"): le voci del backup nel menu ⋮ (Versioni, Vedi originale, Ripristina originale, Correggi data e luogo, Ruota,
+ *   Modifica con…), "Condividi" con "Rimuovi la posizione" e "Elimina solo dal telefono" con la sua verifica. Il viewer chiede, `:app` apre i fogli di
+ *   feature-backup sopra di lui: senza, le voci non compaiono (D13) e "Condividi" ed "Elimina dal telefono" restano come prima.
  * @property dispatchers i thread di lavoro (letture di dettagli ed EXIF): nei test sono uno solo, senza attese.
  */
 @Immutable
@@ -100,6 +104,7 @@ class ViewerServices(
   val backup: MediaBackupStates? = null,
   val similarCopies: SimilarCopies? = null,
   val outsideCopy: OutsideCopyLookup? = null,
+  val backupActions: BackupMediaActions? = null,
 )
 
 /** Decodifica un'immagine animata (GIF, WebP animato) in un `Drawable` che si anima da solo (E-M11). */

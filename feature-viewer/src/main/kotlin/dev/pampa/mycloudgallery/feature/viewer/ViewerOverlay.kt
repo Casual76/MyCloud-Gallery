@@ -29,6 +29,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -94,10 +95,20 @@ import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.security.screen.SecureScreen
 import dev.pampa.mycloudgallery.feature.viewer.details.ViewerFormat
 import dev.pampa.mycloudgallery.feature.viewer.download.DownloadFailure
+import dev.pampa.mycloudgallery.feature.viewer.menu.BackupActionsController
+import dev.pampa.mycloudgallery.feature.viewer.menu.BackupMenuHandlers
+import dev.pampa.mycloudgallery.feature.viewer.menu.BackupNoticeView
+import dev.pampa.mycloudgallery.feature.viewer.menu.BackupShareNotice
+import dev.pampa.mycloudgallery.feature.viewer.menu.BackupShareRefusedSheet
+import dev.pampa.mycloudgallery.feature.viewer.menu.BackupShareUi
+import dev.pampa.mycloudgallery.feature.viewer.menu.EverywhereSummary
 import dev.pampa.mycloudgallery.feature.viewer.menu.NasActionCapabilities
 import dev.pampa.mycloudgallery.feature.viewer.menu.NasActionHandlers
 import dev.pampa.mycloudgallery.feature.viewer.menu.NasActionSheets
 import dev.pampa.mycloudgallery.feature.viewer.menu.NasActionsController
+import dev.pampa.mycloudgallery.feature.viewer.menu.NasActionsState
+import dev.pampa.mycloudgallery.feature.viewer.menu.backupMenuEntries
+import dev.pampa.mycloudgallery.feature.viewer.menu.everywhereLocations
 import dev.pampa.mycloudgallery.feature.viewer.menu.nasMenuEntries
 import dev.pampa.mycloudgallery.feature.viewer.download.DownloadState
 import dev.pampa.mycloudgallery.feature.viewer.gesture.viewerVerticalDrag
@@ -686,6 +697,14 @@ private fun ViewerOverlays(
   }
   if (nasController != null) LaunchedEffect(nasController, currentRef, currentId) { nasController.bind(currentRef, currentId) }
   val nasTarget = nasController?.target?.collectAsState()?.value
+  // Fase 5B (P12): le voci del backup (Versioni, Ripristina originale, Correggi, Ruota, Modifica con…), "Condividi" con "Rimuovi la posizione" e
+  // "Elimina solo dal telefono" con la sua verifica. Il controller non scrive niente: ogni voce e' una richiesta a `:app`, che apre il foglio sopra il viewer.
+  val backupController = services.backupActions?.let { actions -> remember(actions) { BackupActionsController(actions, scope) } }
+  if (backupController != null) LaunchedEffect(backupController, currentId, currentKind) { backupController.bind(currentId, currentKind == MediaKind.VIDEO) }
+  val backupTarget = backupController?.target?.collectAsState()?.value
+  val shareWithoutLocation = backupController?.removeLocation?.collectAsState()?.value == true
+  val backupShare = backupController?.shareState?.collectAsState()?.value ?: BackupShareUi.Idle
+  val backupNotice = backupController?.notice?.collectAsState()?.value
   val baseCapabilities = currentRef?.let { ViewerCapabilities.of(services, it) } ?: ViewerCapabilities(false, false, false, false, false)
   // E-D1 (piano §2): un media sul telefono e sul NAS ha un solo "Elimina…", con "Solo dal telefono" / "Ovunque" (il foglio del NAS).
   val phoneAndNas = nasTarget?.viaPhoneCopy == true
@@ -695,7 +714,7 @@ private fun ViewerOverlays(
   val handlers = ViewerActionHandlers(
     onToggleFavorite = controller::toggleFavorite,
     onToggleHidden = controller::toggleHidden,
-    onShare = controller::share,
+    onShare = { if (backupController != null && backupController.capabilities.share) backupController.share() else controller.share() },
     onCopy = { controller.copy(copyLabel) },
     onDelete = { if (phoneAndNas) nasController?.requestDelete() else controller.askDelete() },
     onInfo = controller::toggleInfo,
@@ -710,6 +729,11 @@ private fun ViewerOverlays(
   } else {
     null
   }
+  val backupEntries = if (backupController != null) {
+    backupMenuEntries(resources, backupController.capabilities, backupTarget, BackupMenuHandlers(backupController::perform))
+  } else {
+    emptyList()
+  }
   val menu = viewerMenuEntries(
     resources,
     capabilities,
@@ -718,6 +742,8 @@ private fun ViewerOverlays(
     handlers,
     nasActions = nasEntries?.actions.orEmpty(),
     nasDelete = nasEntries?.delete.orEmpty(),
+    backupActions = backupEntries,
+    shareWithoutLocation = shareWithoutLocation,
   )
   val barActions = viewerBarActions(resources, baseCapabilities, isFavorite, handlers)
   val nasNotice = nasController?.notice?.collectAsState()?.value
@@ -725,6 +751,19 @@ private fun ViewerOverlays(
     LaunchedEffect(nasNotice) {
       delay(MessageMillis)
       nasController.dismissNotice()
+    }
+  }
+  // Gli avvisi del backup si spengono da soli come gli altri: la copia pronta e la frase dopo "Modifica con…".
+  if (backupController != null && backupShare is BackupShareUi.Ready) {
+    LaunchedEffect(backupShare) {
+      delay(MessageMillis)
+      backupController.dismissShare()
+    }
+  }
+  if (backupController != null && backupNotice != null) {
+    LaunchedEffect(backupNotice) {
+      delay(MessageMillis)
+      backupController.dismissNotice()
     }
   }
 
@@ -842,6 +881,24 @@ private fun ViewerOverlays(
       ) {
         NasNoticeView(notice = nasNotice, backdrop = backdrop)
       }
+    } else if (backupController != null && (backupShare is BackupShareUi.Preparing || backupShare is BackupShareUi.Ready)) {
+      Box(
+        Modifier
+          .align(Alignment.TopCenter)
+          .statusBarsPadding()
+          .padding(top = MessageTopInset),
+      ) {
+        BackupShareNotice(share = backupShare, backdrop = backdrop, onCancel = backupController::dismissShare)
+      }
+    } else if (backupNotice != null) {
+      Box(
+        Modifier
+          .align(Alignment.TopCenter)
+          .statusBarsPadding()
+          .padding(top = MessageTopInset),
+      ) {
+        BackupNoticeView(notice = backupNotice, backdrop = backdrop)
+      }
     }
   }
 
@@ -927,7 +984,27 @@ private fun ViewerOverlays(
   // Fase 5A (D36): il foglio "Separare questa copia?", accanto agli altri fogli.
   similar.confirmSheet()
   // I fogli delle voci del NAS (P14): "Solo dal telefono" usa il cestino di sistema del viewer.
-  if (nasController != null) NasActionSheets(controller = nasController, onDeleteFromPhone = controller::confirmDelete)
+  if (nasController != null) {
+    // Fase 5B (E-D15, D22): con "Ovunque" il foglio elenca anche le versioni precedenti; "Solo dal telefono" passa dalla verifica del backup.
+    val deleteOpen = nasController.state.collectAsState().value is NasActionsState.Delete
+    val everywhere by produceState<EverywhereSummary?>(initialValue = null, backupController, currentId, deleteOpen) {
+      value = if (deleteOpen) backupController?.everywhere() else null
+    }
+    NasActionSheets(
+      controller = nasController,
+      onDeleteFromPhone = controller::confirmDelete,
+      extraLocations = everywhereLocations(everywhere),
+      onPhoneOnlyDelete = backupController?.let { bc -> { bc.deleteFromPhone(controller::confirmDelete) } },
+    )
+  }
+  // Fase 5B (D26, L41): una condivisione ferma ha il suo foglio, con "Condividi con la posizione" solo come scelta esplicita.
+  if (backupController != null) {
+    BackupShareRefusedSheet(
+      state = backupShare as? BackupShareUi.Refused,
+      onShareWithLocation = backupController::shareWithLocation,
+      onDismiss = backupController::dismissShare,
+    )
+  }
   // L'altra copia di un gruppo che non sta nell'indice: per ultima, sopra tutto il resto.
   outsideCopy?.let { copyId -> OutsideCopyLayer(id = copyId, services = services, playback = playback, onClose = { outsideCopy = null }) }
 }

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- "Da decidere" (Fase 5B, docs/fase5-progetto.md §1.5 `PendingTasksState`, §2.6, D20; P12): cose che l'app propone e che solo l'utente decide.
+       Solo numeri e codici: mai il nome di un file. Le apostrofi sono quelle tipografiche (’). -->
+  <string name="backup_tasks_title">Da decidere</string>
+  <string name="backup_tasks_open">Da decidere</string>
+
+  <string name="backup_tasks_empty_title">Non c’è niente da decidere</string>
+  <string name="backup_tasks_empty_detail">Quando l’app ha bisogno di una tua scelta la trovi qui.</string>
+
+  <plurals name="backup_tasks_summary">
+    <item quantity="one">%1$s cosa aspetta una tua scelta.</item>
+    <item quantity="other">%1$s cose aspettano una tua scelta.</item>
+  </plurals>
+
+  <string name="backup_tasks_video_title">Hai modificato questo video</string>
+  <string name="backup_tasks_video_detail">Dal %2$s: l’originale occupa %1$s sul NAS. Vuoi eliminarlo?</string>
+  <string name="backup_tasks_delete">Elimina l’originale</string>
+  <string name="backup_tasks_keep">Tienilo</string>
+  <string name="backup_tasks_note">Se lo elimini, l’originale va nel cestino del NAS per 30 giorni. Se lo tieni, resta tra le versioni del video e questa domanda non torna.</string>
+
+  <!-- Il riquadro che la pagina Backup mostra per aprire la lista. -->
+  <string name="backup_tasks_entry_title">Da decidere</string>
+  <plurals name="backup_tasks_entry_detail">
+    <item quantity="one">%1$s cosa aspetta una tua scelta.</item>
+    <item quantity="other">%1$s cose aspettano una tua scelta.</item>
+  </plurals>
+  <string name="backup_tasks_entry_action">Vedi</string>
+</resources>

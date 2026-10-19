@@ -36,6 +36,8 @@ import dev.pampa.mycloudgallery.core.family.contract.StaleReason
 import dev.pampa.mycloudgallery.core.family.contract.TrustStatus
 import dev.pampa.mycloudgallery.feature.settings.backup.BackupEntryRow
 import dev.pampa.mycloudgallery.feature.settings.backup.BackupEntryViewModel
+import dev.pampa.mycloudgallery.feature.settings.sharing.SharingEntryRow
+import dev.pampa.mycloudgallery.feature.settings.sharing.SharingEntryViewModel
 import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
 import dev.pampa.mycloudgallery.feature.settings.ui.StatusPill
 import androidx.compose.runtime.getValue
@@ -58,6 +60,11 @@ class SettingsLinks(
    * conoscono: la callback la scrive `:app`). Null = la voce non c'e'.
    */
   val openBackup: (() -> Unit)? = null,
+  /**
+   * Fase 5B (P12): la voce "Condivisioni" (rimuovi la posizione). La pagina e' delle Impostazioni stesse, quindi `settingsGraph` la scrive sempre;
+   * null (il default dello scaffold) = la voce non c'e'.
+   */
+  val openSharing: (() -> Unit)? = null,
 ) {
   companion object {
     val None = SettingsLinks()
@@ -76,6 +83,8 @@ internal fun SettingsRoute(
   val state by viewModel.state.collectAsStateWithLifecycle()
   val backupViewModel: BackupEntryViewModel = hiltViewModel()
   val backup by backupViewModel.status.collectAsStateWithLifecycle()
+  val sharingViewModel: SharingEntryViewModel = hiltViewModel()
+  val removeLocation by sharingViewModel.removeLocation.collectAsStateWithLifecycle()
   SettingsScreen(
     state = state,
     onBack = onBack,
@@ -84,6 +93,7 @@ internal fun SettingsRoute(
     developerSection = developerSection,
     links = links,
     backupStatus = backup,
+    removeLocation = removeLocation,
   )
 }
 
@@ -104,6 +114,7 @@ fun SettingsScreen(
   developerSection: (@Composable () -> Unit)? = null,
   links: SettingsLinks = SettingsLinks.None,
   backupStatus: BackupStatus? = null,
+  removeLocation: Boolean = false,
 ) {
   val family = familyHero(state)
   FluidScreen(
@@ -191,6 +202,11 @@ fun SettingsScreen(
           onClick = links.openSecurity,
         )
         FluidListDivider()
+        // Fase 5B (P12): "Condivisioni", con l'indicatore se la posizione si toglie.
+        links.openSharing?.let { openSharing ->
+          SharingEntryRow(removeLocation = removeLocation, onClick = openSharing)
+          FluidListDivider()
+        }
         // Fase 5A (D16): la voce "Backup" (stato in una frase), solo se `:app` ha scritto dove porta.
         links.openBackup?.let { openBackup ->
           BackupEntryRow(status = backupStatus, onClick = openBackup)

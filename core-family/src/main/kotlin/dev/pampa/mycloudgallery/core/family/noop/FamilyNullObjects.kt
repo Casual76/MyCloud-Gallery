@@ -26,6 +26,7 @@ import dev.pampa.mycloudgallery.core.family.contract.RecoveryCodeDisplay
 import dev.pampa.mycloudgallery.core.family.contract.RecoveryKitRef
 import dev.pampa.mycloudgallery.core.family.contract.RecoveryOutcome
 import dev.pampa.mycloudgallery.core.family.contract.RegistryService
+import dev.pampa.mycloudgallery.core.family.contract.SavedNas
 import dev.pampa.mycloudgallery.core.family.contract.ResetOutcome
 import dev.pampa.mycloudgallery.core.family.contract.SelfWipe
 import dev.pampa.mycloudgallery.core.family.contract.SetupState
@@ -97,6 +98,12 @@ object IdleOnboardingCoordinator : OnboardingCoordinator {
   override suspend fun proposeFolders(): FolderProposal = FolderProposal.EMPTY
 
   override suspend fun recoveryCode(): RecoveryCodeDisplay = RecoveryCodeDisplay(emptyList())
+
+  override suspend fun savedNas(): SavedNas? = null
+
+  override suspend fun recoveryPending(): Boolean = false
+
+  override suspend fun startOver(): StepResult = notAvailable
 }
 
 object NoJoinFlow : JoinFlow {
@@ -126,6 +133,8 @@ object NoRegistryService : RegistryService {
 
   override suspend fun createInvite(params: InviteParams): FamilyInvite =
     throw UnsupportedOperationException("nessuna famiglia configurata: non si puo' creare un invito")
+
+  override suspend fun updateCommonExclusions(excluded: Set<String>): AdminActionResult = AdminActionResult.NotAdmin
 }
 
 /** Nessun lavoro: non configurato. */

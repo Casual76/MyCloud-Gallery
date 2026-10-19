@@ -87,6 +87,12 @@ Le cose più gravi:
   - prima di `start`, mostrare la conferma "È la rete di casa?" (`ConfirmHome`).
 - **Test da aggiungere:** `AppIntegrationTest`, flusso manuale col VM vero su `AppGraph` (o col solo `DefaultJoinFlow`, ma con
   l'invito costruito come lo costruisce il VM). Asserire che si arrivi a `NeedsPassword`.
+- **Stato: corretta** (19/10). La pagina «Entra senza QR» chiede area comune e area privata e «È la rete di casa?»
+  (`ConfirmHome`), costruisce l'invito con `ManualInvite.create` (id e impronta in forma canonica; versione minima dello
+  «stato della famiglia», se scansionato, che riempie anche id e impronta) e «Inserisci a mano» passa a `JOIN_MANUAL`. La
+  pagina «Configura un familiare» dell'admin mostra i dati da leggere a voce. Test: `VerificaFunzionaleFamigliaTest.on1_…`
+  (ViewModel vero su `AppGraph` fino alla richiesta e all'approvazione), `VerificaFunzionaleViewModelTest.on1_…`,
+  `FakeJoinFlowParityTest`, `VerificaFunzionaleOnboardingTest.on1_…`, `VerificaFunzionaleImpostazioniTest.on1_…`.
 
 #### ON-2 · Richiesta d'ingresso scaduta: il telefono nuovo resta in attesa per sempre
 - **Gravità:** Blocca. **Stato:** confermato.
@@ -107,6 +113,11 @@ Le cose più gravi:
 - **Correzione:**
   - nella pagina d'attesa, un tasto "Rifai la richiesta" che riapre la scansione (`JoinFlow.start` con il rinnovo);
   - oppure far partire la finestra solo quando l'admin apre la pagina di approvazione, non quando la vede il lavoro in background.
+- **Stato: corretta** (19/10). Nella pagina d'attesa «Rifai la richiesta» apre la sola rotta `OnboardingRenewRoute` (non
+  l'onboarding intero: F5 resta chiusa) con la scansione e il rinnovo di `JoinFlow` (chiave nuova); finita o lasciata, si
+  torna all'attesa. La finestra di 15 minuti dalla prima vista non cambia (M2). Test: `VerificaFunzionaleFamigliaTest.on2_…`
+  (16 minuti, `WindowExpired`, rinnovo, approvazione), `VerificaFunzionaleViewModelTest.on2_…`, `EntryHardeningTest`,
+  `VerificaFunzionaleRegistroTest.on2_…` (stessa finestra nel registro vero e nel finto).
 
 #### ON-3 · "Recupera l'admin" e "secondo admin" non riprendono dopo la morte del processo
 - **Gravità:** Blocca, in quello scenario. **Stato:** percorso confermato; quanto spesso capita va visto sul telefono.
@@ -132,6 +143,10 @@ Le cose più gravi:
     stato non è admin.
 - **Test:** `OnboardingViewModelTest` con un coordinatore che parte con lo stato dopo le Aree (percorso `RECOVER_ADMIN`) e un
   VM nuovo. Atteso: destinazione `Recovery(Kits)` e ricerca dei kit con l'account salvato.
+- **Stato: corretta** (19/10). Il coordinatore dice se il recupero è a metà (`recoveryPending`: aree fatte, admin non
+  recuperato, onboarding non finito) e dà indirizzo, utente e aree salvati (`savedNas`). Il ViewModel riapre i kit
+  all'avvio e da «Vai alla Libreria», e li cerca con l'account salvato, non con quello in memoria. Test:
+  `VerificaFunzionaleOnboardingTest.on3_…`, `VerificaFunzionaleViewModelTest.on3_…`.
 
 #### ON-4 · Dispositivo revocato o dismesso: fermo per sempre sul vecchio riepilogo dell'onboarding
 - **Gravità:** Blocca. **Stato:** confermato.
@@ -151,6 +166,12 @@ Le cose più gravi:
   - una schermata "Questo dispositivo è stato revocato o dismesso" con "Configura di nuovo", che toglie avanzamento, account e
     chiave come `forgetCompletedWipe`;
   - per il dismesso, decidere fra sola lettura e riconfigurazione, e mostrarlo.
+- **Stato: corretta** (19/10). Con l'onboarding finito e il dispositivo revocato, dismesso o senza stato della famiglia,
+  la pagina della radice dice «Questo dispositivo è stato revocato» (o dismesso) con «Configura di nuovo»
+  (`OnboardingCoordinator.startOver`: chiave del dispositivo, chiave di famiglia, password, account, stato fidato e
+  avanzamento; non le foto né i dati locali). Decisione: il dismesso si comporta come il revocato (si riconfigura, niente
+  sola lettura). Test: `VerificaFunzionaleFamigliaTest.on4_…` (revoca vera, poi rientro con una chiave nuova),
+  `VerificaFunzionaleOnboardingTest.on4_…`, `VerificaFunzionaleViewModelTest.on4_…`.
 
 #### ON-5 · Dopo il reset della famiglia gli altri dispositivi non possono rientrare
 - **Gravità:** Blocca. **Stato:** confermato.
@@ -166,6 +187,10 @@ Le cose più gravi:
 - **Correzione:**
   - "Rientra con un QR nuovo" in Impostazioni → Famiglia (stesso meccanismo di ON-4);
   - un avviso quando il registro mostra una fondazione nuova firmata da un'altra chiave.
+- **Stato: corretta** (19/10). Impostazioni → Famiglia → «Rientra con un QR nuovo» (lo stesso `startOver`, dopo un foglio
+  di conferma; su un admin un avviso in più), visibile anche con il registro «vecchio»; la pagina avvisa quando sul NAS c'è
+  un registro più nuovo non verificabile. Dopo un reset la pagina Reimposta dice di usarla. Test:
+  `VerificaFunzionaleFamigliaTest.on5_…` (reset vero, poi rientro nella famiglia nuova), `VerificaFunzionaleImpostazioniTest.on5_…`.
 
 #### ON-6 · Admin perso senza kit: nessuna via d'uscita
 - **Gravità:** Blocca. **Stato:** confermato nel codice. Potrebbe essere una scelta di sicurezza non scritta: va decisa.
@@ -177,6 +202,14 @@ Le cose più gravi:
   - nell'onboarding "Qui c'è già una famiglia" offre solo "Recupera l'admin" ed "Entra come familiare".
 - **Correzione:** permettere il reset a un dispositivo approvato (con doppia conferma e un avviso a tutti), oppure scrivere
   in `decisioni.md` che senza kit né secondo admin non si può e aggiornare la guida.
+- **Decisione dell'utente (19/10): «via dal PC».** Nessun familiare può azzerare la famiglia dall'app: resta un potere
+  dell'admin, e l'app non ne riceve di nuovi.
+- **Stato: corretta** (19/10). La guida «Ricominciare da zero» spiega come cancellare dal PC solo la cartella
+  `\\<indirizzo del NAS>\<area comune>\.mycloudgallery\family` (con il percorso vero, come lo scrive Esplora file), poi
+  rifare «Crea la famiglia» e far rientrare gli altri dispositivi; avvisa che si perdono la famiglia e i dispositivi
+  registrati, non le foto. Sta dove l'utente la cerca: nel recupero dell'onboarding (nessun kit, codice che non apre), nel
+  recupero delle Impostazioni («Ho perso l'admin») e in Impostazioni → Famiglia. Test: `VerificaFunzionaleViewModelTest.on6_…`,
+  `VerificaFunzionaleImpostazioniTest.on6_…`.
 
 #### ON-7 · "Configura il controllo" (Rete) e "Rivedi la checklist" (Avviso sul backup) aprono il riepilogo dell'onboarding
 - **Gravità:** Blocca; dopo l'onboarding il controllo della VPN non si configura più. **Stato:** confermato.
@@ -198,6 +231,10 @@ Le cose più gravi:
   - nell'host, se `resume` fallisce, uscire (`onDone`);
   - togliere "Rivedi la checklist" dove il passo 13 non c'è.
 - **Test:** coordinatore vero con il passo VPN completato: `resume(VPN)` deve dare `Advanced` (oggi dà `Problem`).
+- **Stato: corretta** (19/10). A onboarding finito `resume` riapre anche un passo locale già fatto (6-11 e 13, se nel piano;
+  mai quelli del NAS). Se non si riapre la pagina esce, e «Indietro» esce sempre dal passo riaperto. «Rivedi la checklist»
+  c'è solo se il passo 13 è nel piano. Test: `VerificaFunzionaleOnboardingTest.on7_…` (coordinatore vero: `resume(VPN)`
+  dà `Advanced`), `VerificaFunzionaleViewModelTest.on7_…`, `VerificaFunzionaleImpostazioniTest.on7_…`, `FakeCoordinatorParityTest`.
 
 #### ON-8 · "Da completare → Cartelle da escludere" non ha nessun effetto
 - **Gravità:** Sbagliata. **Stato:** confermato.
@@ -210,6 +247,10 @@ Le cose più gravi:
 - **Scenario:** l'utente salta "Cartelle", poi da Impostazioni → Da completare esclude "Musica". La voce sparisce, ma la
   musica viene comunque scansionata.
 - **Correzione:** sull'admin, dopo il passo 5 ripreso, `updateConfig` e `commit`. Sugli altri, la voce non deve comparire.
+- **Stato: corretta** (19/10). Dopo la fondazione il passo 5 firma le esclusioni (`RegistryService.updateCommonExclusions`
+  → `FamilyAuthority.updateConfig` → `commit`, con la chiave di famiglia aperta come ogni azione dell'admin); se la firma non
+  riesce il passo resta da completare. Gli altri percorsi non hanno il passo 5. Test: `VerificaFunzionaleOnboardingTest.on8_…`,
+  `VerificaFunzionaleRegistroTest.on8_…`, `VerificaFunzionaleFamigliaTest.on8_…` (fino alle esclusioni che usa la scansione).
 
 #### ON-9 · Un errore nella ricerca dei kit diventa "Non trovo nessun kit"
 - **Gravità:** Sbagliata. **Stato:** confermato.
@@ -219,6 +260,9 @@ Le cose più gravi:
 - **Scenario:** NAS lento, permesso negato o VPN caduta. L'admin legge "nessun kit" e pensa di doverlo dare per perso, quindi
   di dover reimpostare la famiglia.
 - **Correzione:** mostrare il problema (`problemOf(error)`) con "Riprova", e distinguere "nessun kit" da "non riesco a leggere".
+- **Stato: corretta** (19/10). Un errore del NAS nella ricerca dei kit è il suo problema (`NasError.asOnboardingProblem`) con
+  «Riprova»; «nessun kit» solo con l'area letta e vuota. Le Impostazioni lo facevano già. Test:
+  `VerificaFunzionaleViewModelTest.on9_…`.
 
 #### ON-10 · La pagina d'attesa promette la Libreria comune, che non c'è
 - **Gravità:** Sbagliata. **Stato:** confermato.
@@ -228,6 +272,8 @@ Le cose più gravi:
   - ma `AwaitingApproval` registra solo la pagina d'attesa (`AppNavHost.kt:193-195`), e il catalogo esiste solo con `Ready`
     (`GalleryGraph.core`).
 - **Correzione:** togliere la frase, oppure aprire la Libreria in sola lettura durante l'attesa (decisione di prodotto).
+- **Stato: corretta** (19/10). Tolta la frase (decisione: niente Libreria in sola lettura durante l'attesa); anche la
+  nota della pagina della password non dice più «potrai guardare». È un testo: nessun test di comportamento.
 
 #### ON-11 · Dopo un azzeramento, "Configura di nuovo" nello stesso processo lascia la galleria e il NAS spenti
 - **Gravità:** Sbagliata. **Stato:** plausibile. L'ha trovato anche la revisione del NAS.
@@ -240,16 +286,28 @@ Le cose più gravi:
   rientra ed è approvato. La Libreria resta vuota e preferito/nascondi danno errore finché Android non chiude l'app.
 - **Correzione:** dopo "Configura di nuovo" riavviare il processo, oppure ricreare `GalleryGraph`.
 - **Test:** variante di `GalleryShutdownTest`: shutdown → `NotConfigured` → `Ready`. Attesi `coreIfReady() != null` e `nas.start() == true`.
+- **Stato: corretta** (19/10). «Configura di nuovo» dopo un azzeramento riavvia il processo (`ProcessRestart`, in
+  produzione `AndroidProcessRestart`): galleria e NAS ripartono in un processo nuovo. `GalleryShutdownTest` resta com'è
+  (la galleria fermata non riparte nello stesso processo). Test: `VerificaFunzionaleFamigliaTest.on11_…`.
 
 #### ON-12 · Minori dell'onboarding (confermati)
 - **ON-12a.** Se `register` trova il dispositivo già approvato, il VM mostra "Approvato" e `finishJoin` emette `Finished`
   senza finire l'onboarding (`OnboardingViewModel.kt:759-764`, `onDone = {}`). L'utente si ritrova su "Ruoli". Caso raro
   (rientro con la stessa chiave).
+  **Stato: corretta** (19/10): «già approvato» porta ai passi sul telefono (tasto «Continua»), non fuori. Test:
+  `VerificaFunzionaleViewModelTest.on12a_…`, `OnboardingFlowTest.lAdminApprovaEIlDispositivoEntra`.
 - **ON-12b.** L'impronta digitata nel recupero (`TypedFingerprint.normalize`, `contract/Lifecycle.kt`) non trasforma O in 0
   né I/L in 1, a differenza di `Base32.normalizeHumanInput` usato altrove. Un "o" letto dal foglio dà "kit non verificato".
+  **Stato: corretta** (19/10): `TypedFingerprint.normalize` legge gli alias come `Base32.normalizeHumanInput`, solo per il
+  confronto; gli alias stanno fuori dall'alfabeto dell'impronta, quindi un'impronta vera resta se stessa e due impronte
+  diverse restano diverse. Test: `VerificaFunzionaleOnboardingTest.on12b_…`.
 - **ON-12c.** Un admin appena recuperato può tornare alle Aree, cambiarle e rifare il recupero: `SETTLED_STEPS` vale solo
   per famiglia fondata o richiesta inviata (`DefaultOnboardingCoordinator.kt:134-135`). Cambiando l'area comune,
   `syncLocked` leggerebbe il registro dalla share sbagliata.
+  **Stato: corretta** (19/10): con l'admin recuperato percorso e passi 2-4 sono fissati come dopo la fondazione, e «Indietro»
+  non ci torna più (per ogni percorso fissato: prima si arrivava alle aree e da lì non c'era un «avanti»). Test:
+  `VerificaFunzionaleOnboardingTest.on12c_…`, `OnboardingCoordinatorTest.fondataLaFamigliaIndirizzoAccountEAreeNonSiRifanno`,
+  `FakeCoordinatorParityTest`.
 
 ### 2.2 Rete, VPN, Diagnostica, Impostazioni
 
@@ -601,6 +659,14 @@ Le cose più gravi:
 | `ReferenceBackupPlanner` | `BackupTestKit`, `BackupChaosWorld` (500 interruzioni), `PlannerWithEngineTest` | Ignora il trigger, `alreadyPlanned` e `ONLY_COMMON_COPY` (BK-1) |
 | `FakeBackupSettings`, `FakeBackupGate`, `FakePhoneFolders`, `FakeDeviceFolderProposals` | test di core-backup e dei VM | Sorgenti subito, cancello sempre aperto, nessuna recinzione D13, nessuna lettura del NAS (BK-14) |
 | `BackupRig` | `BackupIntegrationTest`, `SimilarCopiesIntegrationTest` | Grafo vero, ma `round()` chiamato direttamente: salta azioni, lavoro dell'utente, `BackupJobRun` e WorkManager; diario vuoto quando gira QUICK (BK-1, BK-6) |
+
+**Allineati il 19/10 (correzioni ON).** `FakeOnboardingCoordinator` usa le regole vere dei passi (`OnboardingRules`,
+le stesse di `DefaultOnboardingCoordinator`: un input solo al suo passo, rinvio E-O1, riprendi, indietro, cambio di percorso,
+essenziale per finire); `FakeJoinFlow` fa i controlli di `start` del vero (forma dell'invito, percorso, casa, scadenza,
+rinnovo); `FakeAdminRecovery` ricorda account e area e vuole il profilo; `FakeRegistryService` cambia stato solo rileggendo e
+applica la finestra di `ApprovalWindow`. I confronti: `FakeCoordinatorParityTest`, `FakeJoinFlowParityTest`,
+`VerificaFunzionaleRegistroTest`. I flussi 1, 2, 3 e 10 qui sotto hanno ora un test sul grafo vero
+(`VerificaFunzionaleFamigliaTest`), tranne il recupero dell'admin con un'interruzione (coordinatore vero e ViewModel).
 
 ---
 

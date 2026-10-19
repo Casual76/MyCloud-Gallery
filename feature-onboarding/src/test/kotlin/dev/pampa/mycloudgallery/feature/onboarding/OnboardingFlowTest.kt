@@ -236,7 +236,10 @@ internal class OnboardingFlowTest : OnboardingComposeBase() {
     click(str(R.string.address_check))
     assertVisible(str(R.string.problem_nas_not_found_title))
     click(str(R.string.action_continue_later))
-    assertThat(h.paused).isEqualTo(1)
+    // Come il coordinatore vero (E-O1): i passi del NAS aspettano e si va avanti con quelli locali, senza pausa.
+    assertThat(h.paused).isEqualTo(0)
+    assertThat(env.coordinator.progress.value.current).isEqualTo(OnboardingStep.BACKUP_SOURCES)
+    assertThat(env.coordinator.progress.value.pending).contains(OnboardingStep.NAS_ADDRESS)
   }
 
   @Test
@@ -383,16 +386,20 @@ internal class OnboardingFlowTest : OnboardingComposeBase() {
   @Test
   fun entraSenzaQrScrivendoIDati() {
     val env = TestEnv()
+    env.coordinator.candidate = home()
     env.join.steps += JoinStep.NeedsPassword
     start(env)
     clickRow(str(R.string.welcome_path_join_manual))
     assertVisible(str(R.string.manual_intro_title))
-    // indirizzo, utente, famiglia, impronta, nome
+    // Senza QR la casa la conferma l'utente (ON-1), prima di contattare il NAS.
+    click(str(R.string.address_home_yes))
+    // indirizzo, utente, famiglia, impronta, area comune, area privata (vuota: quella dell'utente), nome
     type(0, "192.168.178.58")
     type(1, "marta")
-    type(2, "famiglia-rossi")
-    type(3, "K7QD2M9XFA4T")
-    type(4, "Tablet")
+    type(2, SAMPLE_FAMILY_ID.uppercase())
+    type(3, SAMPLE_FINGERPRINT.chunked(4).joinToString(" "))
+    type(4, "Public")
+    type(6, "Tablet")
     click(str(R.string.action_continue))
     assertVisible(str(R.string.join_password_title))
     // l'avviso sulla versione minima del registro compare, e dice di aggiungere lo stato della famiglia
@@ -403,15 +410,23 @@ internal class OnboardingFlowTest : OnboardingComposeBase() {
   fun lAdminApprovaEIlDispositivoEntra() {
     val env = TestEnv()
     env.inviteCodec.known["MCG1:valido"] = sampleInvite()
+    // Come il vero: "gia' approvato" lo dice la richiesta (la chiave c'era), dopo password e nome.
+    env.join.steps += JoinStep.NeedsPassword
+    env.join.steps += JoinStep.NeedsName("Tablet")
     env.join.steps += JoinStep.Approved
     val h = start(env)
     h.scanner.next = "MCG1:valido"
     clickRow(str(R.string.welcome_path_join_qr))
     click(SCAN_BUTTON)
     click(str(R.string.action_continue))
+    type(0, strongPassword)
+    click(str(R.string.join_password_submit))
+    click(str(R.string.join_name_submit))
     assertVisible(str(R.string.approved_title))
-    click(str(R.string.summary_finish))
-    assertThat(h.done).isEqualTo(1)
+    // Gia' approvato (ON-12a): restano i passi sul telefono, l'onboarding non e' finito.
+    click(str(R.string.action_continue))
+    assertThat(h.done).isEqualTo(0)
+    assertVisible(str(R.string.roles_title))
   }
 
   // --- Recupera l'admin e secondo admin -------------------------------------------------------------

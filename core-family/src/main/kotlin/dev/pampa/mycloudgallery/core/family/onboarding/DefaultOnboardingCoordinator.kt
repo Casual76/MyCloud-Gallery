@@ -1,5 +1,7 @@
 package dev.pampa.mycloudgallery.core.family.onboarding
 
+import dev.pampa.mycloudgallery.core.common.log.GalleryLog
+import dev.pampa.mycloudgallery.core.family.contract.AdminActionResult
 import dev.pampa.mycloudgallery.core.family.contract.AreaCandidate
 import dev.pampa.mycloudgallery.core.family.contract.FolderProposal
 import dev.pampa.mycloudgallery.core.family.contract.FolderSurvey
@@ -11,6 +13,7 @@ import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingWarning
 import dev.pampa.mycloudgallery.core.family.contract.PreviewQuality
 import dev.pampa.mycloudgallery.core.family.contract.RecoveryCodeDisplay
+import dev.pampa.mycloudgallery.core.family.contract.SavedNas
 import dev.pampa.mycloudgallery.core.family.contract.StepInput
 import dev.pampa.mycloudgallery.core.family.contract.StepResult
 import dev.pampa.mycloudgallery.core.family.contract.TrustStatus
@@ -19,6 +22,7 @@ import dev.pampa.mycloudgallery.core.nas.contract.ConnectionReport
 import dev.pampa.mycloudgallery.core.nas.contract.NasAccount
 import dev.pampa.mycloudgallery.core.nas.contract.NasError
 import dev.pampa.mycloudgallery.core.nas.contract.NasResult
+import dev.pampa.mycloudgallery.core.nas.contract.Purpose
 import dev.pampa.mycloudgallery.core.nas.contract.ShareAccess
 import dev.pampa.mycloudgallery.core.nas.contract.SmbDialect
 import dev.pampa.mycloudgallery.core.nas.contract.Stage
@@ -50,6 +54,7 @@ import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import dev.pampa.mycloudgallery.core.trust.registry.ShareNames
 import java.time.LocalTime
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -124,22 +129,17 @@ class DefaultOnboardingCoordinator(
 
   private suspend fun dispatch(input: StepInput): StepResult {
     val snapshot = ready() ?: return problem(OnboardingProblem.STEP_NOT_AVAILABLE)
-    val step = stepOf(input)
-    val p = snapshot.progress
-    // Il percorso si cambia anche dal passo in cui compare "Qui c'e' gia' una famiglia" (4 o 12(e)), con "Entra come familiare" o
-    // "Recupera l'admin": fino alla fondazione (o alla richiesta inviata) lo permette choosePath, che lo controlla da se'.
-    val changingPath = input is StepInput.ChoosePath
-    if (!changingPath && (p.current != step || step !in p.plan)) return problem(OnboardingProblem.STEP_NOT_AVAILABLE)
-    // Fondata la famiglia (o inviata la richiesta), indirizzo, account e aree stanno nella configurazione firmata: non si rifanno.
-    val settled = snapshot.foundation?.stage == FamilyKeyStage.FOUNDED || snapshot.join?.registered == true
-    if (settled && step in SETTLED_STEPS) return problem(OnboardingProblem.STEP_NOT_AVAILABLE)
+    // Un passo alla volta (il corrente). Il percorso si cambia anche dal passo in cui compare "Qui c'e' gia' una famiglia"
+    // (4 o 12(e)), con "Entra come familiare" o "Recupera l'admin". Fondata la famiglia, inviata la richiesta o recuperato
+    // l'admin (ON-12c), percorso, indirizzo, account e aree stanno nella configurazione firmata: non si rifanno.
+    if (!OnboardingRules.accepts(snapshot, input, adminApproved())) return problem(OnboardingProblem.STEP_NOT_AVAILABLE)
     return when (input) {
       is StepInput.ChoosePath -> choosePath(snapshot, input.path)
       is StepInput.ConfirmHome -> confirmHome(snapshot, input.isHome)
       is StepInput.NasAddressChosen -> chooseAddress(snapshot, input.address)
       is StepInput.Credentials -> credentials(snapshot, input)
       is StepInput.Areas -> areas(snapshot, input)
-      is StepInput.Folders -> folders(input)
+      is StepInput.Folders -> folders(snapshot, input)
       is StepInput.BackupSources -> backupSources(input)
       is StepInput.Roles -> roles(input)
       is StepInput.PresetChoice -> preset(input)
@@ -152,75 +152,46 @@ class DefaultOnboardingCoordinator(
     }
   }
 
-  private fun stepOf(input: StepInput): OnboardingStep = when (input) {
-    is StepInput.ChoosePath -> OnboardingStep.WELCOME
-    is StepInput.ConfirmHome, is StepInput.NasAddressChosen -> OnboardingStep.NAS_ADDRESS
-    is StepInput.Credentials -> OnboardingStep.ACCOUNT
-    is StepInput.Areas -> OnboardingStep.AREAS
-    is StepInput.Folders -> OnboardingStep.FOLDERS
-    is StepInput.BackupSources -> OnboardingStep.BACKUP_SOURCES
-    is StepInput.Roles -> OnboardingStep.ROLES
-    is StepInput.PresetChoice -> OnboardingStep.PRESET
-    is StepInput.PermissionsReviewed -> OnboardingStep.PERMISSIONS
-    is StepInput.BatteryReviewed -> OnboardingStep.BATTERY
-    is StepInput.VpnSetup -> OnboardingStep.VPN
-    is StepInput.RecoveryCodeTyped -> OnboardingStep.FAMILY_KEY
-    is StepInput.SecurityNotice -> OnboardingStep.SECURITY_NOTICE
-    is StepInput.Finish -> OnboardingStep.SUMMARY
-  }
+  /** Il registro dice "approvato, admin": l'admin e' recuperato (o il secondo admin fatto). */
+  private fun adminApproved(): Boolean = ports.registry.status.value == TrustStatus.Approved(admin = true)
 
   // --- Navigazione -----------------------------------------------------------------------------------
 
   override suspend fun skip(step: OnboardingStep): StepResult = lock.withLock {
     val snapshot = ready() ?: return@withLock problem(OnboardingProblem.STEP_NOT_AVAILABLE)
-    val p = snapshot.progress
-    if (step != p.current || step !in p.plan) return@withLock problem(OnboardingProblem.STEP_NOT_AVAILABLE)
     // E-O1, "Continua piu' tardi": se il NAS non si trova (al passo 2, ma anche dopo, ai passi 3, 4, 5 e 12), tutti i
     // passi che ne hanno bisogno aspettano e si va avanti con quelli locali (6-11, 13). Si riprendono dal riepilogo.
-    val later = step in OnboardingPlans.NAS_DEPENDENT && snapshot.deferrable
-    if (!step.skippable && !later) return@withLock problem(OnboardingProblem.STEP_NOT_AVAILABLE)
-    val skipping = if (later) OnboardingPlans.NAS_DEPENDENT.filter { it in p.plan && it !in p.completed }.toSet() else setOf(step)
+    if (OnboardingRules.skip(snapshot, step) == null) return@withLock problem(OnboardingProblem.STEP_NOT_AVAILABLE)
     var next: OnboardingStep? = null
     store.update { s ->
-      val skipped = s.progress.skipped + skipping
-      // I passi appena rimandati non sono "il prossimo" nemmeno quando si sta riprendendo un passo dal riepilogo: con il
-      // NAS ancora spento si torna ai passi locali o al riepilogo, non al passo 3, poi al 4...
-      next = OnboardingPlans.nextAfter(s.progress.plan, s.progress.completed + (skipping - step), skipped, step, s.resuming)
-      s.copy(
-        progress = s.progress.copy(skipped = skipped, current = next ?: s.progress.plan.last()),
-        resuming = s.resuming && next != null,
-        deferrable = false,
-      )
+      val (skipped, following) = OnboardingRules.skip(s, step) ?: return@update s
+      next = following
+      skipped
     } ?: return@withLock problem(OnboardingProblem.STEP_NOT_AVAILABLE)
     StepResult.Advanced(next)
   }
 
   override suspend fun back() {
     lock.withLock {
-      store.update { s ->
-        val p = s.progress
-        val index = p.plan.indexOf(p.current)
-        if (s.finished || index <= 0) s else s.copy(progress = p.copy(current = p.plan[index - 1]), resuming = false)
-      }
+      val adminApproved = adminApproved()
+      store.update { OnboardingRules.back(it, adminApproved) }
     }
   }
 
   override suspend fun resume(step: OnboardingStep): StepResult = lock.withLock {
     val snapshot = ready() ?: return@withLock problem(OnboardingProblem.STEP_NOT_AVAILABLE)
-    if (step !in snapshot.progress.pending) return@withLock problem(OnboardingProblem.STEP_NOT_AVAILABLE)
-    store.update { it.copy(progress = it.progress.copy(current = step), resuming = true) }
-      ?: return@withLock problem(OnboardingProblem.STEP_NOT_AVAILABLE)
+    // I passi saltati e, a onboarding finito, quelli locali gia' fatti (dalle Impostazioni: WireGuard e checklist, ON-7).
+    if (!OnboardingRules.canResume(snapshot, step)) return@withLock problem(OnboardingProblem.STEP_NOT_AVAILABLE)
+    store.update { OnboardingRules.resume(it, step) ?: it } ?: return@withLock problem(OnboardingProblem.STEP_NOT_AVAILABLE)
     StepResult.Advanced(step)
   }
 
   // --- Passo 1 -----------------------------------------------------------------------------------------
 
   private suspend fun choosePath(snapshot: OnboardingSnapshot, path: OnboardingPath): StepResult {
-    // Una volta fondata la famiglia (o inviata la richiesta) il percorso non si cambia piu'. Prima si': per esempio
-    // dopo "Qui c'e' gia' una famiglia" (12(e)) si puo' scegliere di entrare come familiare.
-    if (snapshot.foundation?.stage == FamilyKeyStage.FOUNDED || snapshot.join?.registered == true) {
-      return problem(OnboardingProblem.STEP_NOT_AVAILABLE)
-    }
+    // Una volta fondata la famiglia (o inviata la richiesta, o recuperato l'admin) il percorso non si cambia piu'. Prima
+    // si': per esempio dopo "Qui c'e' gia' una famiglia" (12(e)) si puo' scegliere di entrare come familiare.
+    if (OnboardingRules.settled(snapshot, adminApproved())) return problem(OnboardingProblem.STEP_NOT_AVAILABLE)
     if (snapshot.foundation != null || pending != null) {
       // Un kit gia' scritto ma una famiglia mai fondata: la chiave non serve piu', non deve restare nella cassaforte.
       pending = null
@@ -228,18 +199,7 @@ class DefaultOnboardingCoordinator(
     }
     val plan = OnboardingPlans.planFor(path)
     val now = ports.deviceNow()
-    store.update { s ->
-      OnboardingSnapshot.EMPTY.copy(
-        progress = OnboardingProgress(
-          path = path,
-          plan = plan,
-          current = plan[1],
-          completed = setOf(OnboardingStep.WELCOME),
-          skipped = emptySet(),
-          startedAt = s.progress.startedAt ?: now,
-        ),
-      )
-    } ?: return problem(OnboardingProblem.STEP_NOT_AVAILABLE)
+    store.update { s -> OnboardingRules.choosePath(s, path, now) } ?: return problem(OnboardingProblem.STEP_NOT_AVAILABLE)
     val warnings = if (path == OnboardingPath.JOIN_MANUAL) setOf(OnboardingWarning.NO_MIN_REGISTRY_VERSION) else emptySet()
     return StepResult.Advanced(plan[1], warnings)
   }
@@ -447,7 +407,7 @@ class DefaultOnboardingCoordinator(
     return survey.propose(common)
   }
 
-  private suspend fun folders(input: StepInput.Folders): StepResult {
+  private suspend fun folders(snapshot: OnboardingSnapshot, input: StepInput.Folders): StepResult {
     if (input.excluded.size > TrustLimits.MAX_COMMON_EXCLUSIONS) return problem(OnboardingProblem.STEP_NOT_AVAILABLE)
     val excluded = try {
       // Come nella configurazione firmata: percorsi di media validi, non piu' lunghi del tetto.
@@ -459,7 +419,24 @@ class DefaultOnboardingCoordinator(
     } catch (e: TrustViolation) {
       return problem(OnboardingProblem.STEP_NOT_AVAILABLE)
     }
+    // Dopo la fondazione (il passo 5 saltato e ripreso da "Da completare") le esclusioni stanno nella configurazione
+    // firmata, che la scansione usa: si firma una versione nuova del registro prima di dire "fatto" (verifica funzionale,
+    // ON-8). Prima della fondazione entrano nella configurazione del passo 12(e).
+    if (snapshot.foundation?.stage == FamilyKeyStage.FOUNDED) {
+      signedExclusionsProblem(ports.registry.updateCommonExclusions(excluded))?.let { return problem(it) }
+    }
     return complete(OnboardingStep.FOLDERS) { it.copy(excluded = excluded) }
+  }
+
+  /** Il problema da mostrare se la configurazione firmata non e' cambiata, o null se e' fatto. */
+  private fun signedExclusionsProblem(result: AdminActionResult): OnboardingProblem? = when (result) {
+    AdminActionResult.Done -> null
+    is AdminActionResult.Failed -> NasProblems.write(result.error)
+    AdminActionResult.NewerExists -> OnboardingProblem.NAS_WRITE_FAILED
+    AdminActionResult.Fork, AdminActionResult.Blocked -> OnboardingProblem.REGISTRY_UNTRUSTED
+    AdminActionResult.NeedsAppUpdate -> OnboardingProblem.NEEDS_APP_UPDATE
+    // Questo dispositivo non apre la chiave di famiglia (non e' admin, o il telefono non ha un blocco schermo sicuro).
+    AdminActionResult.NotAdmin, AdminActionResult.WindowExpired, AdminActionResult.ProofMismatch -> OnboardingProblem.STEP_NOT_AVAILABLE
   }
 
   // --- Passi 6-11: locali --------------------------------------------------------------------------------
@@ -591,23 +568,54 @@ class DefaultOnboardingCoordinator(
     return PendingFoundation(record.familyId, key, code = null, kitVerified = true).also { pending = it }
   }
 
+  // --- Ripresa e "ricomincia" ---------------------------------------------------------------------------------
+
+  override suspend fun savedNas(): SavedNas? {
+    val snapshot = ready() ?: return null
+    val nas = snapshot.nas ?: return null
+    return SavedNas(nas.address(), snapshot.nasUser, snapshot.commonShare, snapshot.privateShare)
+  }
+
+  override suspend fun recoveryPending(): Boolean {
+    val snapshot = ready() ?: return false
+    return OnboardingRules.recoveryPending(snapshot, adminApproved())
+  }
+
+  /**
+   * "Configura di nuovo" (ON-4, ON-5). L'ordine e' quello dell'azzeramento senza i dati locali: prima le chiavi (un
+   * dispositivo che rientra ha un id nuovo, E-S2), poi password e account, lo stato fidato, l'avanzamento; alla fine il
+   * motore della fiducia rilegge e, senza stato ne' chiave, dice "mai configurato". Ogni passo e' idempotente: se il
+   * processo muore a meta' si rifa' da capo.
+   */
+  override suspend fun startOver(): StepResult = lock.withLock {
+    pending = null
+    foundationBlock = null
+    rejected.clear()
+    runCatching { ports.deviceKeys.destroyDeviceKey() }
+    runCatching { ports.familyKeys.destroy() }
+    ports.credentials.remove(NasCredentialSlots.PRIMARY)
+    ports.accounts.clear()
+    ports.trustState.clear()
+    store.update { OnboardingSnapshot.EMPTY } ?: return@withLock problem(OnboardingProblem.STEP_NOT_AVAILABLE)
+    try {
+      ports.registry.refresh(Purpose.ONBOARDING)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      GalleryLog.w(TAG) { "registro non riletto dopo la nuova configurazione (${e.javaClass.simpleName})" }
+    }
+    StepResult.Advanced(OnboardingStep.WELCOME)
+  }
+
   // --- Passo 14 -----------------------------------------------------------------------------------------
 
   private suspend fun finish(snapshot: OnboardingSnapshot): StepResult {
-    if (!essentialsDone(snapshot)) return problem(OnboardingProblem.STEP_NOT_AVAILABLE)
+    if (!OnboardingRules.essentialsDone(snapshot, adminApproved())) return problem(OnboardingProblem.STEP_NOT_AVAILABLE)
     val now = ports.deviceNow()
     val result = complete(OnboardingStep.SUMMARY, applyChoices = true) { it.copy(finished = true, finishedAt = now) }
     val join = snapshot.join
     val manual = join != null && join.manual && join.minRegistryVersion == 0L
     return if (result is StepResult.Advanced && manual) result.copy(warnings = result.warnings + OnboardingWarning.NO_MIN_REGISTRY_VERSION) else result
-  }
-
-  /** Cio' che deve esserci per poter dire "fatto": la famiglia fondata, la richiesta inviata o l'admin recuperato. */
-  private fun essentialsDone(snapshot: OnboardingSnapshot): Boolean = when (snapshot.path) {
-    OnboardingPath.FOUND_FAMILY -> snapshot.foundation?.stage == FamilyKeyStage.FOUNDED
-    OnboardingPath.JOIN_QR, OnboardingPath.JOIN_MANUAL -> snapshot.join?.registered == true
-    OnboardingPath.RECOVER_ADMIN, OnboardingPath.SECOND_ADMIN -> ports.registry.status.value == TrustStatus.Approved(admin = true)
-    null -> false
   }
 
   // --- Comuni -----------------------------------------------------------------------------------------------
@@ -654,7 +662,7 @@ class DefaultOnboardingCoordinator(
 
   private companion object {
     val DISCOVERY_TIMEOUT = 10.seconds
-    val SETTLED_STEPS = setOf(OnboardingStep.NAS_ADDRESS, OnboardingStep.ACCOUNT, OnboardingStep.AREAS)
+    const val TAG = "Onboarding"
     val ACCOUNT_STAGES = setOf(Stage.ROUTE, Stage.TCP, Stage.NEGOTIATE, Stage.GUID, Stage.AUTHENTICATE, Stage.SECURITY_CHECK)
     val REQUIRED_PERMISSIONS = setOf(HealthPermission.NOTIFICATIONS, HealthPermission.MEDIA_IMAGES, HealthPermission.MEDIA_VIDEO)
     val TUNNEL_NAME = Regex("^[A-Za-z0-9_=+.-]{1,15}$")

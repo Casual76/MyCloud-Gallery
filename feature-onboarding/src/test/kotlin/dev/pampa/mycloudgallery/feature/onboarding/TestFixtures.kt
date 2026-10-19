@@ -6,29 +6,43 @@ import androidx.compose.ui.Modifier
 import dev.pampa.mycloudgallery.core.family.contract.FamilyInvite
 import dev.pampa.mycloudgallery.core.family.contract.FamilyStateQr
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingProgress
+import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
 import dev.pampa.mycloudgallery.core.family.testing.FakeAdminRecovery
 import dev.pampa.mycloudgallery.core.family.testing.FakeJoinFlow
 import dev.pampa.mycloudgallery.core.family.testing.FakeOnboardingCoordinator
 import dev.pampa.mycloudgallery.core.family.testing.FakeQrPayloadCodec
+import dev.pampa.mycloudgallery.core.family.testing.FakeRegistryService
 import dev.pampa.mycloudgallery.core.network.testing.FakeLocalNetworkPermission
 import dev.pampa.mycloudgallery.core.network.testing.FakeVpnController
 import dev.pampa.mycloudgallery.core.network.testing.InMemoryVpnControlConfigStore
 import dev.pampa.mycloudgallery.core.qr.contract.ScanVerdict
 import dev.pampa.mycloudgallery.core.rules.platform.health.testing.FakeBackgroundHealthReader
 import dev.pampa.mycloudgallery.core.security.device.ScreenLockStatus
+import dev.pampa.mycloudgallery.core.trust.codec.Base32
 import dev.pampa.mycloudgallery.feature.onboarding.join.ScannerSlot
 import dev.pampa.mycloudgallery.feature.onboarding.platform.OnboardingPlatform
 import dev.pampa.mycloudgallery.feature.onboarding.platform.PermissionKind
 import dev.pampa.mycloudgallery.feature.onboarding.platform.PermissionState
 import dev.pampa.mycloudgallery.feature.onboarding.platform.PermissionsSnapshot
 
-/** I finti di tutto cio' che un [OnboardingViewModel] usa: ogni test li pilota e poi li guarda. */
+/**
+ * I finti di tutto cio' che un [OnboardingViewModel] usa: ogni test li pilota e poi li guarda. Sono collegati fra loro
+ * come i veri (verifica funzionale): l'ingresso controlla percorso e casa del coordinatore e, riuscito, fa avanzare i passi;
+ * il recupero vuole le aree fatte e, riuscito, fa del dispositivo un admin; il registro da' lo stato del dispositivo.
+ */
 internal class TestEnv(
   initial: OnboardingProgress = OnboardingProgress.START,
 ) {
   val coordinator = FakeOnboardingCoordinator(initial)
-  val join = FakeJoinFlow()
-  val recovery = FakeAdminRecovery()
+  val registry = FakeRegistryService()
+  val join = FakeJoinFlow().also { join ->
+    join.coordinator = coordinator
+    join.status = { registry.status.value }
+  }
+  val recovery = FakeAdminRecovery().also { recovery ->
+    recovery.profileReady = { OnboardingStep.AREAS in coordinator.progress.value.completed }
+    recovery.onRecovered = { coordinator.adminRecovered = true }
+  }
   val inviteCodec = FakeQrPayloadCodec<FamilyInvite>()
   val familyStateCodec = FakeQrPayloadCodec<FamilyStateQr>()
   val vpn = FakeVpnController()
@@ -47,6 +61,7 @@ internal class TestEnv(
     healthReader = health,
     localNetwork = localNetwork,
     vpnConfig = vpnConfig,
+    registry = registry,
   )
 }
 
@@ -113,14 +128,18 @@ private fun FakeScannerBox(modifier: Modifier, onRead: () -> Unit) {
 
 internal const val SCAN_BUTTON = "simula lettura"
 
-/** Un invito di prova, completo. */
+/** L'id e l'impronta della famiglia di prova, nella forma canonica (base32 minuscolo di 26 caratteri). */
+internal val SAMPLE_FAMILY_ID: String = Base32.encode(ByteArray(16) { (it * 11 + 3).toByte() })
+internal val SAMPLE_FINGERPRINT: String = Base32.encode(ByteArray(16) { (it * 7 + 5).toByte() })
+
+/** Un invito di prova, completo (valido per le regole vere dell'invito: il finto dell'ingresso le applica). */
 internal fun sampleInvite(
   user: String = "marta",
   device: String = "Tablet — profilo Mamma",
   expiresAtNas: Long = 1_792_000_000_000L,
 ): FamilyInvite = FamilyInvite(
-  familyId = "famiglia-rossi",
-  familyKeyFingerprint = "K7QD2M9XFA4TZ8WC5P3N6R1V",
+  familyId = SAMPLE_FAMILY_ID,
+  familyKeyFingerprint = SAMPLE_FINGERPRINT,
   minRegistryVersion = 3L,
   nasIp = "192.168.178.58",
   nasName = "WDMyCloudEX2Ultra",
@@ -135,8 +154,8 @@ internal fun sampleInvite(
 )
 
 internal fun sampleFamilyState(): FamilyStateQr = FamilyStateQr(
-  familyId = "famiglia-rossi",
-  familyKeyFingerprint = "K7QD2M9XFA4TZ8WC5P3N6R1V",
+  familyId = SAMPLE_FAMILY_ID,
+  familyKeyFingerprint = SAMPLE_FINGERPRINT,
   registryVersion = 12L,
   registryHash = "ab12cd34",
 )

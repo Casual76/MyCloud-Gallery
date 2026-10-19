@@ -806,17 +806,26 @@ class OnboardingCoordinatorTest {
     val c = f.coordinator()
     f.runFounderUntil(c, OnboardingStep.SUMMARY)
     val runs = f.env.tester.runs.size
-    // Tornando indietro si rivedono i passi, ma la configurazione firmata non si cambia.
-    while (f.current != OnboardingStep.AREAS) c.back()
-    assertThat(c.submit(StepInput.Areas("Public", "alessio"))).isEqualTo(problem(OnboardingProblem.STEP_NOT_AVAILABLE))
-    c.back()
-    val password = credentials()
-    assertThat(c.submit(password)).isEqualTo(problem(OnboardingProblem.STEP_NOT_AVAILABLE))
-    assertThat(password.password.all { it == ' ' }).isTrue()
-    c.back()
-    assertThat(f.current).isEqualTo(OnboardingStep.NAS_ADDRESS)
-    assertThat(c.submit(StepInput.ConfirmHome(true))).isEqualTo(problem(OnboardingProblem.STEP_NOT_AVAILABLE))
-    assertThat(c.submit(StepInput.NasAddressChosen(f.env.address))).isEqualTo(problem(OnboardingProblem.STEP_NOT_AVAILABLE))
+    // Tornando indietro si rivedono i passi fino alle cartelle; aree, account e indirizzo stanno nella configurazione firmata
+    // e non si riaprono (sarebbero pagine senza "avanti", ON-12c della verifica funzionale).
+    repeat(20) { c.back() }
+    assertThat(f.current).isEqualTo(OnboardingStep.FOLDERS)
+    // E nemmeno arrivandoci da un avanzamento salvato si rifanno.
+    for (step in listOf(OnboardingStep.AREAS, OnboardingStep.ACCOUNT, OnboardingStep.NAS_ADDRESS)) {
+      f.store.update { it.copy(progress = it.progress.copy(current = step)) }
+      when (step) {
+        OnboardingStep.AREAS -> assertThat(c.submit(StepInput.Areas("Public", "alessio"))).isEqualTo(problem(OnboardingProblem.STEP_NOT_AVAILABLE))
+        OnboardingStep.ACCOUNT -> {
+          val password = credentials()
+          assertThat(c.submit(password)).isEqualTo(problem(OnboardingProblem.STEP_NOT_AVAILABLE))
+          assertThat(password.password.all { it == '\u0000' }).isTrue()
+        }
+        else -> {
+          assertThat(c.submit(StepInput.ConfirmHome(true))).isEqualTo(problem(OnboardingProblem.STEP_NOT_AVAILABLE))
+          assertThat(c.submit(StepInput.NasAddressChosen(f.env.address))).isEqualTo(problem(OnboardingProblem.STEP_NOT_AVAILABLE))
+        }
+      }
+    }
     assertThat(f.env.tester.runs).hasSize(runs)
     assertThat(f.store.snapshot.commonShare).isEqualTo("NAS")
   }

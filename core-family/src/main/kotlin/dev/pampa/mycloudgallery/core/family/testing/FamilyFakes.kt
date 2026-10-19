@@ -1,6 +1,5 @@
 package dev.pampa.mycloudgallery.core.family.testing
 
-import dev.pampa.mycloudgallery.core.family.onboarding.OnboardingPlans
 import dev.pampa.mycloudgallery.core.family.contract.AdminActionResult
 import dev.pampa.mycloudgallery.core.family.contract.AdminRecovery
 import dev.pampa.mycloudgallery.core.family.contract.AreaCandidate
@@ -22,6 +21,7 @@ import dev.pampa.mycloudgallery.core.family.contract.OnboardingPath
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingProblem
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingProgress
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
+import dev.pampa.mycloudgallery.core.family.contract.OnboardingWarning
 import dev.pampa.mycloudgallery.core.family.contract.PendingRequestView
 import dev.pampa.mycloudgallery.core.family.contract.PreflightResult
 import dev.pampa.mycloudgallery.core.family.contract.QrPayloadCodec
@@ -30,6 +30,7 @@ import dev.pampa.mycloudgallery.core.family.contract.RecoveryKitRef
 import dev.pampa.mycloudgallery.core.family.contract.RecoveryOutcome
 import dev.pampa.mycloudgallery.core.family.contract.RegistryService
 import dev.pampa.mycloudgallery.core.family.contract.ResetOutcome
+import dev.pampa.mycloudgallery.core.family.contract.SavedNas
 import dev.pampa.mycloudgallery.core.family.contract.SelfWipe
 import dev.pampa.mycloudgallery.core.family.contract.SetupState
 import dev.pampa.mycloudgallery.core.family.contract.StepInput
@@ -44,14 +45,26 @@ import dev.pampa.mycloudgallery.core.family.contract.TrustSyncScheduler
 import dev.pampa.mycloudgallery.core.family.contract.WipePhase
 import dev.pampa.mycloudgallery.core.family.contract.WipeReason
 import dev.pampa.mycloudgallery.core.family.contract.WritePermit
+import dev.pampa.mycloudgallery.core.family.invite.InviteExpiry
+import dev.pampa.mycloudgallery.core.family.invite.InviteRules
+import dev.pampa.mycloudgallery.core.family.invite.isManual
+import dev.pampa.mycloudgallery.core.family.onboarding.FamilyKeyStage
+import dev.pampa.mycloudgallery.core.family.onboarding.FoundationRecord
+import dev.pampa.mycloudgallery.core.family.onboarding.JoinRecord
+import dev.pampa.mycloudgallery.core.family.onboarding.OnboardingPlans
+import dev.pampa.mycloudgallery.core.family.onboarding.OnboardingRules
+import dev.pampa.mycloudgallery.core.family.onboarding.OnboardingSnapshot
+import dev.pampa.mycloudgallery.core.family.onboarding.completing
 import dev.pampa.mycloudgallery.core.nas.contract.NasAccount
 import dev.pampa.mycloudgallery.core.nas.contract.NasResult
 import dev.pampa.mycloudgallery.core.nas.contract.Purpose
 import dev.pampa.mycloudgallery.core.network.contract.DiscoveredNas
 import dev.pampa.mycloudgallery.core.network.contract.HomeCandidate
 import dev.pampa.mycloudgallery.core.trust.RejectReason
+import dev.pampa.mycloudgallery.core.trust.TrustViolation
 import dev.pampa.mycloudgallery.core.trust.Verdict
 import dev.pampa.mycloudgallery.core.trust.registry.ApprovalProof
+import dev.pampa.mycloudgallery.core.trust.registry.ApprovalWindow
 import dev.pampa.mycloudgallery.core.trust.registry.DeviceStatus
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -66,11 +79,19 @@ class FakeFamilySetupRepository(initial: SetupState = SetupState.NotConfigured) 
 }
 
 /**
- * Un coordinatore finto che avanza da solo: ogni [submit] completa il passo corrente e passa al successivo
- * del piano, salvo che il test abbia messo in coda un esito in [scripted]. Le password ricevute si azzerano
- * subito (come deve fare quello vero) e in [inputs] resta solo il tipo di input.
+ * Un coordinatore finto con le **regole vere** dei passi (`OnboardingRules`, le stesse di `DefaultOnboardingCoordinator`;
+ * verifica funzionale, ON-3 e ON-7: prima il finto aveva regole sue e nascondeva i difetti):
+ *  - un input si accetta solo al suo passo (il cambio di percorso da qualunque passo, finche' niente e' fissato);
+ *  - "salta" rimanda tutti i passi del NAS dopo un "NAS non trovato" (E-O1, anche se l'esito era in [scripted]);
+ *  - "riprendi" guarda i passi da completare e, a onboarding finito, quelli locali gia' fatti (ON-7);
+ *  - "indietro" non fa niente a onboarding finito; il cambio di percorso riparte da capo;
+ *  - "Vai alla Libreria" vuole l'essenziale fatto: la fondazione (passo 12), la richiesta d'ingresso ([joinRegistered],
+ *    la segna `FakeJoinFlow` collegato) o l'admin recuperato ([adminRecovered], lo segna `FakeAdminRecovery` collegato).
  *
- * I piani per percorso sono quelli di un fake, non una decisione di prodotto: il piano vero e' di P4.
+ * Finto e' solo cio' che tocca il NAS e il telefono: ogni input accettato completa il suo passo, salvo che il test abbia
+ * messo in coda un esito in [scripted] (che viene prima di tutto e non cambia l'avanzamento). Le password ricevute si
+ * azzerano subito (come deve fare quello vero) e in [inputs] resta solo il tipo di input. [progress] si puo' anche
+ * scrivere direttamente dal test (per partire da un passo qualunque).
  */
 class FakeOnboardingCoordinator(initial: OnboardingProgress = OnboardingProgress.START) : OnboardingCoordinator {
 
@@ -88,35 +109,109 @@ class FakeOnboardingCoordinator(initial: OnboardingProgress = OnboardingProgress
   var folders: FolderProposal = FolderProposal.EMPTY
   var recoveryGroups: List<String> = List(RECOVERY_GROUPS) { "ABCD" }
 
+  /** "Vai alla Libreria" fatto. */
+  var finished: Boolean = false
+
+  /** Si sta riprendendo un passo: finito quello si va al prossimo da completare. */
+  var resuming: Boolean = false
+
+  /** L'ultimo tentativo non ha trovato il NAS: "Continua piu' tardi" e' ammesso (E-O1). */
+  var deferrable: Boolean = false
+
+  /** La famiglia e' fondata (passo 12 fatto). */
+  var founded: Boolean = false
+
+  /** La richiesta d'ingresso e' sul NAS. */
+  var joinRegistered: Boolean = false
+
+  /** Il registro dice "approvato, admin" (recupero dell'admin o secondo admin riuscito). */
+  var adminRecovered: Boolean = false
+
+  /** Il NAS e le aree salvati: li scrivono gli input dei passi 2-4, o il test. */
+  var saved: SavedNas? = null
+
+  /** "E' la rete di casa?" confermato al passo 2 (o, senza QR, prima dell'ingresso). */
+  var homeConfirmed: Boolean = false
+
+  /** Quante volte e' stato chiesto "Configura di nuovo". */
+  var startOvers: Int = 0
+    private set
+
   override suspend fun submit(input: StepInput): StepResult {
     inputs += input::class.simpleName.orEmpty()
     when (input) {
       is StepInput.Credentials -> input.clear()
       is StepInput.RecoveryCodeTyped -> input.clear()
-      is StepInput.ChoosePath -> progress.value = progress.value.copy(path = input.path, plan = planFor(input.path))
       else -> Unit
     }
-    scripted.removeFirstOrNull()?.let { return it }
-    return advance()
+    scripted.removeFirstOrNull()?.let { result ->
+      // Come il vero: dopo "NAS non trovato" si puo' continuare piu' tardi.
+      if (result is StepResult.Problem) deferrable = result.problem in DEFERRABLE
+      return result
+    }
+    val snapshot = snapshot()
+    if (!OnboardingRules.accepts(snapshot, input, adminRecovered)) return notAvailable()
+    val path = snapshot.path
+    val joining = path == OnboardingPath.JOIN_QR || path == OnboardingPath.JOIN_MANUAL
+    return when (input) {
+      is StepInput.ChoosePath -> {
+        val next = OnboardingRules.choosePath(snapshot, input.path, now = 0L)
+        founded = false
+        joinRegistered = false
+        homeConfirmed = false
+        saved = null
+        apply(next)
+        val warnings = if (input.path == OnboardingPath.JOIN_MANUAL) setOf(OnboardingWarning.NO_MIN_REGISTRY_VERSION) else emptySet()
+        StepResult.Advanced(next.progress.current, warnings)
+      }
+      // "E' casa?" non completa il passo 2 (lo fa l'indirizzo); con il QR la casa la dice l'invito.
+      is StepInput.ConfirmHome -> when {
+        path == OnboardingPath.JOIN_QR -> notAvailable()
+        !input.isHome -> StepResult.Problem(OnboardingProblem.NOT_ON_WIFI)
+        // Come il vero: senza Wi-Fi non c'e' una casa da confermare, e senza ULA nemmeno (E-S10).
+        candidate == null -> StepResult.Problem(OnboardingProblem.NOT_ON_WIFI)
+        candidate?.canBeConfirmed == false -> StepResult.Problem(OnboardingProblem.NO_ULA)
+        else -> {
+          homeConfirmed = true
+          StepResult.Advanced(OnboardingStep.NAS_ADDRESS)
+        }
+      }
+      // Indirizzo e account dell'ingresso con invito li fa JoinFlow.
+      is StepInput.NasAddressChosen -> if (joining) notAvailable() else {
+        saved = SavedNas(input.address, user = null, commonShare = null, privateShare = null)
+        complete(OnboardingStep.NAS_ADDRESS)
+      }
+      is StepInput.Credentials -> if (joining) notAvailable() else {
+        saved = saved?.copy(user = input.user.trim())
+        complete(OnboardingStep.ACCOUNT)
+      }
+      is StepInput.Areas -> {
+        saved = saved?.copy(commonShare = input.commonShare, privateShare = input.privateShare)
+        complete(OnboardingStep.AREAS)
+      }
+      is StepInput.RecoveryCodeTyped -> {
+        founded = true
+        complete(OnboardingStep.FAMILY_KEY)
+      }
+      is StepInput.Finish ->
+        if (!OnboardingRules.essentialsDone(snapshot, adminRecovered)) notAvailable() else complete(OnboardingStep.SUMMARY, finish = true)
+      else -> complete(OnboardingRules.stepOf(input))
+    }
   }
 
   override suspend fun skip(step: OnboardingStep): StepResult {
-    val current = progress.value
-    if (!step.skippable || step != current.current) return StepResult.Problem(OnboardingProblem.STEP_NOT_AVAILABLE)
-    progress.value = current.copy(skipped = current.skipped + step)
-    return move(markCompleted = false)
+    val (next, following) = OnboardingRules.skip(snapshot(), step) ?: return notAvailable()
+    apply(next)
+    return StepResult.Advanced(following)
   }
 
   override suspend fun back() {
-    val current = progress.value
-    val index = current.plan.indexOf(current.current)
-    if (index > 0) progress.value = current.copy(current = current.plan[index - 1])
+    apply(OnboardingRules.back(snapshot(), adminRecovered))
   }
 
   override suspend fun resume(step: OnboardingStep): StepResult {
-    val current = progress.value
-    if (step !in current.skipped) return StepResult.Problem(OnboardingProblem.STEP_NOT_AVAILABLE)
-    progress.value = current.copy(current = step)
+    val next = OnboardingRules.resume(snapshot(), step) ?: return notAvailable()
+    apply(next)
     return StepResult.Advanced(step)
   }
 
@@ -128,32 +223,104 @@ class FakeOnboardingCoordinator(initial: OnboardingProgress = OnboardingProgress
 
   override suspend fun proposeFolders(): FolderProposal = folders
 
-  override suspend fun recoveryCode(): RecoveryCodeDisplay = RecoveryCodeDisplay(recoveryGroups.map { it.toCharArray() })
-
-  private fun advance(): StepResult = move(markCompleted = true)
-
-  private fun move(markCompleted: Boolean): StepResult {
-    val current = progress.value
-    val index = current.plan.indexOf(current.current)
-    val next = current.plan.getOrNull(index + 1)
-    val completed = if (markCompleted) current.completed + current.current else current.completed
-    progress.value = current.copy(current = next ?: current.current, completed = completed)
-    return StepResult.Advanced(next)
+  /** Come il vero: il codice c'e' solo al passo 12 del fondatore, prima della fondazione (dopo: zero gruppi). */
+  override suspend fun recoveryCode(): RecoveryCodeDisplay {
+    val p = progress.value
+    val shown = (p.path == OnboardingPath.FOUND_FAMILY || p.path == null) && p.current == OnboardingStep.FAMILY_KEY && !founded
+    return RecoveryCodeDisplay(if (shown) recoveryGroups.map { it.toCharArray() } else emptyList())
   }
+
+  override suspend fun savedNas(): SavedNas? = saved
+
+  override suspend fun recoveryPending(): Boolean = OnboardingRules.recoveryPending(snapshot(), adminRecovered)
+
+  override suspend fun startOver(): StepResult {
+    startOvers++
+    finished = false
+    resuming = false
+    deferrable = false
+    founded = false
+    joinRegistered = false
+    adminRecovered = false
+    homeConfirmed = false
+    saved = null
+    progress.value = OnboardingProgress.START
+    return StepResult.Advanced(OnboardingStep.WELCOME)
+  }
+
+  /**
+   * La richiesta d'ingresso e' sul NAS (lo fa `FakeJoinFlow` collegato, come `DefaultJoinFlow.finish`): indirizzo e
+   * account diventano fatti insieme e si passa ai passi locali.
+   */
+  fun markJoinRegistered() {
+    joinRegistered = true
+    val afterAddress = snapshot().completing(OnboardingStep.NAS_ADDRESS).first
+    apply(afterAddress.completing(OnboardingStep.ACCOUNT).first)
+  }
+
+  private fun complete(step: OnboardingStep, finish: Boolean = false): StepResult {
+    val (next, following) = snapshot().completing(step)
+    apply(if (finish) next.copy(finished = true) else next)
+    return StepResult.Advanced(following)
+  }
+
+  private fun snapshot(): OnboardingSnapshot {
+    val path = progress.value.path
+    return OnboardingSnapshot(
+      progress = progress.value,
+      finished = finished,
+      resuming = resuming,
+      deferrable = deferrable,
+      foundation = if (founded) FoundationRecord(FamilyKeyStage.FOUNDED, FAKE_ID, FAKE_ID) else null,
+      join = if (joinRegistered) JoinRecord(FAKE_ID, manual = path == OnboardingPath.JOIN_MANUAL, 0L, registered = true, requestedAt = null) else null,
+    )
+  }
+
+  private fun apply(snapshot: OnboardingSnapshot) {
+    finished = snapshot.finished
+    resuming = snapshot.resuming
+    deferrable = snapshot.deferrable
+    progress.value = snapshot.progress
+  }
+
+  private fun notAvailable(): StepResult = StepResult.Problem(OnboardingProblem.STEP_NOT_AVAILABLE)
 
   companion object {
     private const val RECOVERY_GROUPS = 7
+    private const val FAKE_ID = "finto"
+    private val DEFERRABLE = setOf(OnboardingProblem.NAS_NOT_FOUND, OnboardingProblem.NAS_SERVICE_DOWN)
 
     /** Gli stessi piani del coordinatore vero (recupero e secondo admin hanno le aree; il finto le saltava, 19/10). */
     fun planFor(path: OnboardingPath): List<OnboardingStep> = OnboardingPlans.planFor(path)
   }
 }
 
-/** Ingresso finto: ogni chiamata restituisce il prossimo passo da [steps] (o l'ultimo, ripetuto). */
+/**
+ * Ingresso finto: ogni chiamata restituisce il prossimo passo da [steps] (o l'ultimo, ripetuto).
+ *
+ * Allineato al vero (verifica funzionale, ON-1: il finto accettava qualunque invito, percorso e casa). [start] fa prima
+ * i controlli di `DefaultJoinFlow.start` che non toccano la rete, con le stesse regole:
+ *  - la forma dell'invito (`InviteRules`, con o senza QR: id e impronta canonici, aree, account);
+ *  - con [coordinator] collegato, il percorso scelto (QR o senza QR), "e' casa?" confermato per l'invito senza QR e il
+ *    rinnovo della richiesta solo per un dispositivo in attesa ([status]);
+ *  - con [nasNow], la scadenza dell'invito con QR (`InviteExpiry`, ora del NAS).
+ * Con [coordinator] collegato, una richiesta riuscita ([JoinStep.AwaitingApproval] o [JoinStep.Approved]) segna fatti
+ * indirizzo e account come `DefaultJoinFlow.finish`.
+ */
 class FakeJoinFlow(vararg steps: JoinStep) : JoinFlow {
   val steps: ArrayDeque<JoinStep> = ArrayDeque(steps.toList())
   val calls: MutableList<String> = mutableListOf()
   private var last: JoinStep = JoinStep.NeedsPassword
+
+  var coordinator: FakeOnboardingCoordinator? = null
+  var nasNow: Long? = null
+
+  /** Lo stato di questo dispositivo nel registro: si rifa' la richiesta solo "in attesa". */
+  var status: () -> TrustStatus = { TrustStatus.Pending("") }
+
+  /** L'ultimo invito accettato da [start] (per guardare come la schermata lo ha costruito). */
+  var lastInvite: FamilyInvite? = null
+    private set
 
   private fun next(call: String): JoinStep {
     calls += call
@@ -161,17 +328,61 @@ class FakeJoinFlow(vararg steps: JoinStep) : JoinFlow {
     return last
   }
 
-  override suspend fun start(invite: FamilyInvite): JoinStep = next("start")
+  override suspend fun start(invite: FamilyInvite): JoinStep {
+    precheck(invite)?.let { problem ->
+      calls += "start"
+      return JoinStep.Failed(problem)
+    }
+    lastInvite = invite
+    return next("start")
+  }
+
+  private fun precheck(invite: FamilyInvite): OnboardingProblem? {
+    val manual = invite.isManual
+    try {
+      InviteRules.check(invite, manual)
+    } catch (e: TrustViolation) {
+      return OnboardingProblem.INVITE_INVALID
+    }
+    coordinator?.let { c ->
+      val expected = if (manual) OnboardingPath.JOIN_MANUAL else OnboardingPath.JOIN_QR
+      if (c.progress.value.path != expected || (c.joinRegistered && status() !is TrustStatus.Pending)) {
+        return OnboardingProblem.STEP_NOT_AVAILABLE
+      }
+      if (manual && !c.homeConfirmed) return OnboardingProblem.NOT_AT_HOME
+    }
+    val now = nasNow
+    if (!manual && now != null) {
+      when (InviteExpiry.status(invite, now)) {
+        InviteExpiry.Status.VALID -> Unit
+        InviteExpiry.Status.EXPIRED -> return OnboardingProblem.INVITE_EXPIRED
+        InviteExpiry.Status.TOO_FAR -> return OnboardingProblem.INVITE_INVALID
+      }
+    }
+    return null
+  }
 
   override suspend fun authenticate(password: CharArray): JoinStep {
     password.fill('\u0000')
     return next("authenticate")
   }
 
-  override suspend fun register(name: String): JoinStep = next("register")
+  override suspend fun register(name: String): JoinStep {
+    val step = next("register")
+    if (step is JoinStep.AwaitingApproval || step == JoinStep.Approved) coordinator?.markJoinRegistered()
+    return step
+  }
 }
 
-/** Registro finto: stato, dispositivi e richieste si impostano dal test; le azioni restituiscono [nextResult]. */
+/**
+ * Registro finto: stato, dispositivi e richieste si impostano dal test; le azioni restituiscono [nextResult].
+ *
+ * Allineato al vero (verifica funzionale, ON-2 e ON-4: il finto non cambiava mai stato e approvava a qualunque ora):
+ *  - lo stato cambia **rileggendo** il registro: ogni [refresh] prende il prossimo di [statusOnRefresh] (revocato, admin,
+ *    "vecchio"...), come `NasRegistryService` che lo ricalcola dopo la lettura;
+ *  - con [nasNow] impostato, [approve] applica la stessa finestra di 15 minuti del vero (`ApprovalWindow`, dalla prima
+ *    vista annotata in [pendingRequests]) e risponde [AdminActionResult.WindowExpired].
+ */
 class FakeRegistryService(
   status: TrustStatus = TrustStatus.NotConfigured,
   devices: List<DeviceView> = emptyList(),
@@ -187,11 +398,24 @@ class FakeRegistryService(
   val approvals: MutableList<String> = mutableListOf()
   val statusChanges: MutableList<Pair<String, DeviceStatus>> = mutableListOf()
 
+  /** Gli stati che il registro riletto dara', uno per [refresh]; vuoto = lo stato non cambia. */
+  val statusOnRefresh: ArrayDeque<TrustStatus> = ArrayDeque()
+
+  /** L'ora del NAS per la finestra d'approvazione; null = nessun controllo della finestra (i test che non la guardano). */
+  var nasNow: Long? = null
+
+  /** Le esclusioni dell'area comune firmate (ON-8), in ordine. */
+  val exclusionUpdates: MutableList<Set<String>> = mutableListOf()
+
   override suspend fun refresh(purpose: Purpose) {
     refreshes += purpose
+    statusOnRefresh.removeFirstOrNull()?.let { status.value = it }
   }
 
   override suspend fun approve(requestId: String, proof: ApprovalProof): AdminActionResult {
+    val now = nasNow
+    val firstSeen = pendingRequests.value.firstOrNull { it.id == requestId }?.firstSeenAt
+    if (now != null && firstSeen != null && !ApprovalWindow.isOpen(firstSeen, now)) return AdminActionResult.WindowExpired
     approvals += requestId
     return nextResult
   }
@@ -203,6 +427,11 @@ class FakeRegistryService(
 
   override suspend fun createInvite(params: InviteParams): FamilyInvite =
     invite ?: throw IllegalStateException("FakeRegistryService: imposta `invite` nel test")
+
+  override suspend fun updateCommonExclusions(excluded: Set<String>): AdminActionResult {
+    exclusionUpdates += excluded
+    return nextResult
+  }
 }
 
 class FakeTrustGuard(
@@ -274,6 +503,16 @@ class RecordingLocalDataEraser(private val log: OperationLog = OperationLog(), v
   }
 }
 
+/**
+ * Recupero finto: i kit e l'esito li sceglie il test ([kits] puo' anche essere un errore del NAS).
+ *
+ * Allineato al vero (verifica funzionale, ON-9 e il difetto del 19/10: il finto ignorava account, area, errori e il
+ * profilo del dispositivo):
+ *  - [lastSearch] ricorda con quale account (indirizzo e utente) e in quale area privata si e' cercato;
+ *  - [recover] vuole il profilo del dispositivo come `KitAdminRecovery` (account e area comune, cioe' le aree fatte):
+ *    senza ([profileReady] falso) risponde "passo non disponibile";
+ *  - un recupero riuscito chiama [onRecovered] (il coordinatore finto collegato diventa "approvato, admin").
+ */
 class FakeAdminRecovery(
   var kits: NasResult<List<RecoveryKitRef>> = NasResult.Ok(emptyList()),
   var outcome: RecoveryOutcome = RecoveryOutcome.WrongCode,
@@ -281,11 +520,21 @@ class FakeAdminRecovery(
   /** Se l'ultima ricerca ha ricevuto una password (mai la password stessa). */
   var lastSearchHadPassword: Boolean = false
 
+  /** L'account e l'area privata dell'ultima ricerca. */
+  var lastSearch: Pair<NasAccount, String>? = null
+    private set
+
   /** L'impronta digitata dal foglio all'ultimo recupero (revisione 2, F3). */
   var lastTypedFingerprint: String? = null
 
+  /** Il profilo del dispositivo c'e' (account e aree configurati). */
+  var profileReady: () -> Boolean = { true }
+
+  var onRecovered: () -> Unit = {}
+
   override suspend fun findKits(account: NasAccount, privateShare: String, password: CharArray?): NasResult<List<RecoveryKitRef>> {
     lastSearchHadPassword = password != null
+    lastSearch = account to privateShare
     password?.fill('\u0000')
     return kits
   }
@@ -299,6 +548,8 @@ class FakeAdminRecovery(
   ): RecoveryOutcome {
     lastTypedFingerprint = typedFingerprint
     code.fill('\u0000')
+    if (!profileReady()) return RecoveryOutcome.Failed(OnboardingProblem.STEP_NOT_AVAILABLE)
+    if (outcome == RecoveryOutcome.Recovered) onRecovered()
     return outcome
   }
 }

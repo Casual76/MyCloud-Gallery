@@ -53,7 +53,11 @@ class FamilyContractTest {
     // Un passo non saltabile non si salta.
     assertThat(coordinator.skip(OnboardingStep.NAS_ADDRESS)).isEqualTo(StepResult.Problem(OnboardingProblem.STEP_NOT_AVAILABLE))
 
-    repeat(3) { coordinator.submit(StepInput.PermissionsReviewed) } // 2, 3, 4 completati
+    // Come il vero: un input si accetta solo al suo passo.
+    assertThat(coordinator.submit(StepInput.PermissionsReviewed)).isEqualTo(StepResult.Problem(OnboardingProblem.STEP_NOT_AVAILABLE))
+    coordinator.submit(StepInput.NasAddressChosen(dev.pampa.mycloudgallery.core.network.contract.NasAddress("192.168.178.58", null)))
+    coordinator.submit(StepInput.Credentials("mario", "x".repeat(12).toCharArray()))
+    coordinator.submit(StepInput.Areas("NAS", "mario"))
     assertThat(coordinator.progress.value.current).isEqualTo(OnboardingStep.FOLDERS)
     coordinator.skip(OnboardingStep.FOLDERS)
     assertThat(coordinator.progress.value.pending).containsExactly(OnboardingStep.FOLDERS)

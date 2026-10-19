@@ -358,15 +358,16 @@ class AppGraph(
 
   /**
    * L'utente riconfigura un dispositivo azzerato ("Configura di nuovo"): si dimentica il diario dell'azzeramento finito
-   * e si torna "mai configurato" (docs/famiglia-dispositivi.md §1). Non fa niente se l'azzeramento non e' finito.
+   * e si torna "mai configurato" (docs/famiglia-dispositivi.md §1). Non fa niente se l'azzeramento non e' finito. Vero se
+   * ha dimenticato un azzeramento: allora chi chiama riavvia il processo (ON-11, la galleria di questo processo e' ferma).
    */
-  suspend fun forgetCompletedWipe() {
-    if (selfWipe.forgetCompletedWipe()) {
-      // Subito, senza sospensioni in mezzo: tolto il diario il motore della fiducia non deve dire "perso" piu' a lungo del
-      // necessario (lo stato del dispositivo non lo scambia comunque per un azzeramento in corso, DefaultFamilySetupRepository).
-      engine.refreshStatus()
-      onboardingStore.clear()
-    }
+  suspend fun forgetCompletedWipe(): Boolean {
+    if (!selfWipe.forgetCompletedWipe()) return false
+    // Subito, senza sospensioni in mezzo: tolto il diario il motore della fiducia non deve dire "perso" piu' a lungo del
+    // necessario (lo stato del dispositivo non lo scambia comunque per un azzeramento in corso, DefaultFamilySetupRepository).
+    engine.refreshStatus()
+    onboardingStore.clear()
+    return true
   }
 
   /** Il QR della chiave del dispositivo in attesa (`MCGK1:`), se l'ingresso e' a buon punto e la chiave c'e'. */

@@ -1520,6 +1520,76 @@ manifest, `settings.gradle` e build condivisi intatti. **`Mp4Scout` di `core-pre
 - Il caso di un `iTXt` PNG **compresso** con GPS dentro (si ferma la condivisione) non ha una fixture; il caso UTF-16 sì.
 - Le miniature dei file in arrivo non si mostrano (il foglio dice numeri e tipi, come da §1.5): niente decodifica di un'immagine non fidata in schermata.
 
+## Fase 5B: P12, la UI della 5B (19/10)
+Fonte: `docs/fase5-progetto.md` (§1.3 `feature-backup`, `feature-viewer`, `feature-settings`; §1.5 gli stati; §2.3, §2.4, §2.5, §2.7, D13, D19–D22, D26, D31, R7, Q6 (a), Q9 (a), riga P12 del §4.4), `docs/grafica-progetto.md` (§3, P2 e P3, "vetro adattivo"),
+i contratti di P0-B (`PhoneConfirmationSheet`, `FreeSpace`, `VersionKeeper`, `Corrections`, `PendingTasks`) e le sezioni P8, P9, P10, P11 qui sopra. Perimetro: `feature-backup/.../free/**`, `.../versions/**`, `.../tasks/**`;
+`feature-viewer/.../menu/BackupActions*`; `feature-settings/.../sharing/**` (e i loro test e le loro stringhe). Manifest, `settings.gradle`, build condivisi e dipendenze intatti; **niente è legato in `:app`** (lo fa P14, elenco sotto).
+Nessun contratto di `core-backup` è stato cambiato (richieste in fondo). Le righe già esistenti in altri file sono toccate solo dove serviva: `ViewerServices`, `ViewerActions`, `ViewerOverlay`, `NasActionsSheets` (viewer), `SettingsScreen` e `SettingsNavigation` (una riga e una rotta).
+
+**Cosa c'è**
+| Dove | File | Cosa |
+|---|---|---|
+| `feature-backup/free` | `FreeSpaceFlow.kt`, `FreeSpaceViewModel.kt`, `FreeSpaceUi.kt` | la macchina a stati di "Libera spazio" (**vive quanto il processo**, riusabile da un lavoro lanciato dall'utente di P14): piano → guardiano → verifica sul momento → pronto → lotti → fatto; `FreeSpaceUi` ha un caso per ogni stato del §1.5 |
+| | `FreeSpaceScreen.kt`, `FreeSpaceSheets.kt`, `ChoiceRow.kt` | la pagina (avviso forte, "cosa liberare", "non li libero" con i numeri, i due pulsanti) e i due fogli: **"Libera spazio"** (un tocco) e **"Libera subito"** (due gesti distinti) |
+| | `ConfirmTaps.kt` | l'**unico** punto che costruisce `PhoneConfirmationSheet`: `PhoneConfirmation` nasce solo da un tocco |
+| | `DialogBridge.kt`, `FiveBPorts.kt` | la porta `PhoneSystemDialogs` (restituisce un `IntentSender`: feature-backup non conosce `core-mediastore`) e il ponte che lo lancia con `rememberLauncherForActivityResult`; la risposta arriva anche dopo una rotazione |
+| | `PhoneOnlySheet.kt` | il foglio di "Elimina solo dal telefono" (sopra `PhoneOnlyAssessment`: si può liberare / metti prima al sicuro / aspetta / area bloccata) |
+| | `FiveBBindings.kt` | `@BindsOptionalOf` per le porte nuove (`FreeSpace`, `VersionKeeper`, `Corrections`, `PendingTasks`, `BackupClock`, `PhoneSystemDialogs`, `PhoneOnlyAssessor`, `PendingTaskActions`, `VersionActions`, `CorrectionPlaces`): l'app compila anche prima di P14 e le schermate dicono "non ancora pronto" invece di rompersi (fail closed) |
+| `feature-backup/versions` | `VersionsSheet.kt`, `VersionsViewModel.kt`, `VersionsModel.kt` | il foglio **Versioni** (corrente, intermedie, originale; dove sta ogni copia e se è al sicuro), "Vedi originale", **"Ripristina originale"** con riepilogo, permesso di Android e scambio, "Elimina le intermedie…" |
+| | `CorrectionSheet.kt`, `CorrectionViewModel.kt`, `CorrectionModel.kt` | il foglio **Correggi** (data e ora, luogo, rotazione, anteprima di cosa cambia) e i suoi stati: prima al sicuro, permesso, scrittura, caricamento, fatto, "solo nell'app", guasto, bloccato |
+| `feature-backup/tasks` | `PendingTasksScreen.kt`, `PendingTasksViewModel.kt` | **Da decidere** (l'originale di un video modificato: tienilo o eliminalo) e la scheda d'ingresso `PendingTasksEntryCard` per la pagina del backup |
+| `feature-viewer/menu` | `BackupActions.kt`, `BackupActionsController.kt`, `BackupActionsSheets.kt` | le voci del menu ⋮ (Versioni, Vedi originale, Ripristina originale, Correggi data e luogo, Ruota, Modifica con…) solo se `:app` ha legato `BackupMediaActions`; "Condividi" passa da `:app` e dice **"Condividi senza posizione"** quando l'impostazione è accesa; avviso di preparazione, foglio "Condivisione ferma" (non condivide mai da solo), frase dopo un'azione che si spegne da sola |
+| | `NasActionsSheets.kt` (editato) | "Elimina…" elenca anche le versioni precedenti (`extraLocations`) e instrada "Elimina solo dal telefono" al foglio di P12 |
+| `feature-settings/sharing` | `SharingSettings.kt`, `SharingScreen.kt` | l'impostazione **"Rimuovi la posizione"** (spenta di default, C18): porta + implementazione su `SharedPreferences` (un solo valore, niente di personale) + modulo Hilt; la pagina "Condivisioni" con l'interruttore e i formati che si sanno trattare (L41); la riga nelle Impostazioni (`SettingsLinks.openSharing`, la rotta è dentro il grafo) |
+
+**Regole che le schermate rispettano**
+- **Un tocco è la conferma.** `PhoneConfirmation` non si crea mai fuori da `ConfirmTaps` e il foglio si apre solo da un tocco; un foglio riaperto o scaduto (10 minuti di orologio monotonico) riparte da capo e **ricontrolla il piano** (l'hash del piano è nella conferma).
+- **"Libera subito" richiede due gesti distinti.** Il contratto ne impone due con almeno 600 ms in mezzo; la UI aggiunge un secondo pannello ("Ultima conferma") che compare solo dopo il primo gesto, con il pulsante che conta **in un'altra posizione** (in alto "No, tienili", pieno; sotto "Sì, elimina per sempre", rosso) e armato dopo la stessa pausa: un doppio tocco sullo stesso punto non basta. Testato a livello JVM e Compose.
+- **R7 in ogni foglio.** Tutti i fogli passano da `GalleryConfirmSheet`/`GallerySheetScaffold` (velo anti-sovrapposizione `filterTouchesWhenObscured` e `LocalConfirmSheetShield`): `SheetShieldTest` prova, per ciascun foglio, che lo scudo è chiamato quando il foglio è visibile e mai quando è chiuso.
+- **Il dialogo di Android è l'ultima parola.** `Libera spazio` chiede il cestino di Android (30 giorni), `Libera subito` la cancellazione definitiva, entrambi per lotti; rifiutato → "non l'ho tolto"; senza dialogo disponibile (`NOT_AVAILABLE`) l'esito si registra come **sconosciuto** e la pagina dice "non posso confermare", mai "fatto".
+- **Q9 (a):** "Libera spazio" propone tutto ciò che è al sicuro **tranne gli ultimi 30 giorni**, con i filtri "solo video" e "più vecchi di un anno"; ciò che non libera è elencato con i numeri e il perché. Se l'utente parte da una selezione della Libreria, i 30 giorni non si escludono (l'ha scelta lui).
+- **Q6 (a):** HEIC, RAW e video si correggono solo nell'app (la copia del telefono non si riscrive): il foglio finisce con "Corretto solo nell'app" e lo dice.
+- **Avviso forte** se il NAS non ha un backup esterno: tono d'allarme, primo della pagina e di nuovo nell'ultima conferma di "Libera subito" ("l'unica copia sarà sul NAS").
+- **Parole semplici.** Nessun "hash", "SAF", "MediaStore", "EXIF"; un test (`leFrasiSonoSempliciENonHannoGergo`) lo controlla per la pagina Condivisioni.
+- **Grafica (vetro adattivo, C):** solo componenti di `core-designsystem` e di Fluid, nessun colore o dimensione scritta a mano (`NoHandWrittenStyleTest`, `BackupStyleTest`); sui fogli alti il corpo scorre e **i pulsanti restano in vista** anche a 1,3x (prova dei bordi); nessun testo sotto il vetro poco leggibile, nessun controllo sovrapposto.
+
+**Stati del §1.5 composti e provati**: Libera spazio (riepilogo, riepilogo vuoto, conta, guardiano, verifica, pronto, pronto definitivo, dialogo aperto, fatto, fatto-niente, un caso per ogni `FreeSpaceBlockedBy`: area ferma, NAS non raggiungibile, conferma rifiutata, non pronto, niente dialogo, scaduta); "Elimina solo dal telefono" (da liberare, non al sicuro, misto, tutti i consigli); Versioni (lista, lista con avviso, riepilogo, permesso, scambio, fatto, caricamento, non pronto, area comune, originale non al sicuro); Correggi (chiuso, tutto acceso, solo la data, toglie il luogo, ruota, prima al sicuro, permesso, scrittura, carica, fatto, solo nell'app, guasto, bloccato, non pronto); Da decidere (vuota, due, senza il tasto elimina); viewer (menu con e senza backup, con una sola versione, con "senza posizione", preparazione, pronto, condivisione ferma con e senza scelta, "Elimina…" con le versioni); Impostazioni (spenta, accesa, la riga).
+
+**Test** (JVM; Robolectric con grafica nativa e Compose)
+- `feature-backup`: macchina e ViewModel di Libera spazio con i fake di P0-B (`InMemoryFreeSpace`, `TestConfirmations`, `FakeBackupClock`) e una fake `PhoneSystemDialogs` (dialogo concesso, rifiutato, assente; rotazione a metà); i due gesti (600 ms, secondo pannello, scadenza, doppio tocco); le bozze di correzione (data, ora, coordinate, rotazione composta "prima lo specchio, poi i gradi"); i ViewModel di Versioni e Correggi (permesso di scrittura, rifiuto, piano cambiato, polling del caricamento); le schermate in ogni stato; `SheetShieldTest` (R7); la **prova dei bordi** (`FiveBLayoutSuite`, telefono 412 dp e tablet 1280 dp, a 1x e 1,3x: bersagli da 48 dp, dentro lo schermo, niente sopra altro, ogni controllo con un nome, pulsanti dei fogli alti in vista).
+- `feature-viewer`: le voci (`BackupActionsTest`), i fogli (`BackupActionsSheetsTest`, anche a 1,3x), il viewer vero con le voci (`ViewerBackupMenuTest`: senza backup le voci non ci sono, ogni voce è una richiesta a `:app` per il media di adesso, "Condividi" non usa più il percorso di prima, un foglio fermo non condivide da solo).
+- `feature-settings`: l'impostazione (default spento, vale subito, resta dopo un riavvio, un solo valore), il ViewModel, la pagina (interruttore con ruolo e stato per TalkBack, tocco, frasi, formati), la riga, la prova dei bordi su telefono e tablet.
+- Gli screenshot (sotto) sono anche test: se una scena non compone, falliscono.
+
+**Screenshot**: `docs/screenshots/5-P12/` (chiaro e scuro, telefono e tablet, testo 1,3x sulle schermate principali). Si rigenerano con `gradlew :feature-backup:recordRoborazziDebug --tests "dev.pampa.mycloudgallery.feature.backup.free.FiveB*Shots*"`, `gradlew :feature-viewer:recordRoborazziDebug --tests "dev.pampa.mycloudgallery.feature.viewer.menu.BackupActions*Screenshot*"` e `gradlew :feature-settings:recordRoborazziDebug --tests "dev.pampa.mycloudgallery.feature.settings.sharing.Sharing*Shots"`. Prefissi: `libera-spazio-*`, `foglio-libera-spazio-*`, `foglio-libera-subito-*`, `elimina-solo-telefono-*`, `versioni-*`, `correggi-*`, `da-decidere-*`, `viewer-*`, `impostazioni-condivisioni-*`, `impostazioni-voce-condivisioni-*`.
+
+**Da provare sul campo** (solo `mcg-prova`, D12/D13; niente con il NAS vero e niente sul telefono vero finché P14 non lega le porte)
+- I dialoghi veri di Android (cestino e cancellazione definitiva, a lotti; rifiuto; Android 10 senza `createTrashRequest`) con `PhoneSystemDialogs` legato.
+- TalkBack su telefono: il nome letto di ogni riga e di ogni pulsante dei fogli (vedi "Limiti": la riga dell'engine tiene il testo in un nodo figlio) e l'ordine di lettura dei due pannelli di "Libera subito".
+- La leggibilità dei fogli sul vetro vero (Robolectric non sfoca): contrasto del testo del foglio "Libera subito" e "Condivisione ferma" sopra una foto chiara e una scura.
+- Il lavoro lungo di "Libera spazio" con lo schermo che si spegne e con la rotazione a metà verifica.
+
+**Cosa deve legare P14 in `:app`**
+- Hilt: `FreeSpace` (`SafeFreeSpace` + `RoomFreeSpaceDiary`, `BootCounter`, `FreeSpaceCatalog`), `VersionKeeper` (`DefaultVersionKeeper`), `Corrections` (`DefaultCorrections`), `PendingTasks` (`RoomPendingTasks`), `BackupClock` (monotonico), `PhoneSystemDialogs` (mappa `PhoneRef` → `MediaRef.Phone` e `PhoneMediaIntents.trashRequest/deleteRequest/writeRequest`, dietro la recinzione D13), `PhoneOnlyAssessor` (`SafeFreeSpace.assessPhoneOnly`), `PendingTaskActions` ("Elimina…" di feature-nas, poi `PendingTasks.complete`), `VersionActions`, `CorrectionPlaces` (facoltativo), `BackupMediaActions` (per `ViewerServices.backupActions`). `SharingSettings` è già fornita da feature-settings.
+- Navigazione: le rotte `BackupScreen.FREE_SPACE` e `PENDING_TASKS`; la scheda "Da decidere" (`PendingTasksEntryCard`) nella pagina del backup; "Libera spazio" in Raccolte → Utility e nella selezione della Libreria (`FreeSpaceRoute(selection)`).
+- `BackupMediaActions.perform` monta alla radice `VersionsSheetHost`, `CorrectionSheetHost`, `PhoneOnlySheetHost` o `FreeSpaceRoute(selection)`; "Condividi" va su `LocationFreeShare` di P11 (mappato su `BackupShareUi`, con `shareStopText` per i messaggi) e legge `SharingSettings.removeLocation`; `EverywhereSummary` viene da `EverywherePlan`; **le versioni precedenti devono entrare anche in `NasActionTarget.others`**, altrimenti il piano `Trash` della 4B non le contiene.
+- Facoltativo: riusare `FreeSpaceFlow` in un lavoro lanciato dall'utente con la notifica "Pronto: N elementi, X GB".
+
+**Modifiche richieste agli altri** (nessuna fatta)
+- `core-backup/contract`: `FreeSpaceRun` dovrebbe avere `inDoubt` e `kept` (oggi la UI calcola `kept = pronti all'inizio − liberati − scartati dopo`) e `FreeSpaceExclusion` dovrebbe distinguere `NOT_MINE` e `BACKUP_NOT_ACTIVE` (oggi finiscono in "con un problema"). Se si vuole, vanno aggiunti insieme a `SafeFreeSpace` e ai suoi test: non l'ho fatto per non toccare il perimetro di P9.
+- `core-backup/contract`: il significato di `PhoneWriteGrant` va scritto nel contratto: **un permesso che non copre le righe = dialogo rifiutato** (la UI manda `PhoneWriteGrant(emptySet())` e i keeper veri devono rispondere con un rifiuto senza scrivere niente, non con un guasto; il fake e il keeper vero devono comportarsi allo stesso modo, oggi la UI è provata solo con il fake).
+- `COMMON_AREA_NOTICE` non ha un foglio nel contratto: oggi Correggi e Versioni **si fermano** con una nota ("nell'area comune la vedrebbero tutti") e non scrivono. Se si vuole permettere la correzione nell'area comune serve un passo di conferma nel contratto (proposta: `CorrectionReadiness.COMMON_AREA_NOTICE` + `Corrections.acknowledgeCommonArea`).
+- Engine (non si tocca): il campo di testo `FluidTextField` non espone un nome a TalkBack (ho usato l'etichetta sopra), il suo tasto "svuota" è un bersaglio da 28 dp senza nome (spento con `showClearButton = false`), e la barra di `FluidScreen` ha il tasto "Indietro" e il tocco sul titolo alti **44 dp** (`ControlRowHeight`), sotto i 48 dp delle altre pagine nostre.
+- Per `SecurityScreen` (feature-settings, non mio): la riga interruttore usa `Modifier.semantics(mergeDescendants = true) { role = Switch }` ma la riga dell'engine tiene il testo in un figlio che si fonde per conto suo: il nodo dell'interruttore resta **senza nome** per TalkBack. In `SharingScreen` ho aggiunto una `contentDescription` esplicita; la stessa riga andrebbe sistemata in `SecurityScreen` e in `PreviewQuality`.
+
+**Limiti dichiarati e punti aperti**
+- Robolectric non sfoca: il vetro dei fogli non si vede negli screenshot e la leggibilità vera è da guardare sul telefono (sopra). Nelle foto i fogli sono su una superficie piatta.
+- Il foglio di Correggi, a 1,3x e con tutte le sezioni aperte, scorre dentro i 640 dp dell'engine; il corpo scorre e i pulsanti restano, ma una nota in fondo al foglio Versioni si taglia dietro i pulsanti finché non si scorre (`versioni-lista-*`).
+- Nel menu ⋮ "Correggi data e luogo" è la voce più lunga e arriva a pochi pixel dall'icona (`viewer-menu-backup-*`): l'engine non manda a capo le voci.
+- La pagina Libera spazio ha molte schede (avviso, riepilogo, tre scelte, quattro motivi, due pulsanti): pesa a colpo d'occhio su telefono (`libera-spazio-riepilogo-*`); i motivi di esclusione si potrebbero chiudere dietro un "Perché non tutti?" se all'utente pare troppo.
+- Gli screenshot del tablet sono solo quelli principali (un PNG da 2560 px pesa un mega); il resto è provato dai test dei bordi sul tablet.
+- In "Da decidere", "Elimina…" non elimina da sola: apre l'eliminazione di feature-nas (callback `PendingTaskActions`) e il compito si chiude solo dopo; "Tienilo" chiude il compito subito e dice che la domanda non torna.
+
 ## Revisione grafica della Libreria da parte dell'utente (13/10)
 Giudizio: le prestazioni della navigazione non sono male, la **grafica no**. Serve molto lavoro, da fare in un **filone grafico
 parallelo** alle fasi successive (insieme ai lavori che non toccano l'app sul momento, per esempio il back-end NAS della Fase 4).
@@ -1548,3 +1618,78 @@ pillola, angoli e badge sotto i 64 dp, matte del viewer, "Nascondere vale solo i
 - Misure EmbeddingGemma 2 (velocità, RAM, qualità, risoluzione, MRL).
 - Misure sull'S25.
 - Profili secondari del tablet.
+
+## Correzioni funzionali: onboarding e famiglia (19/10)
+Le voci ON-1 … ON-12c della verifica funzionale (`docs/review/funzionale-fasi-1-5a.md`, ognuna con "Stato: corretta" e i suoi
+test). Ogni difetto ha un test che falliva prima: in `core-family` i test del coordinatore vero sono stati visti rossi prima della
+correzione; quelli del ViewModel sono stati visti rossi (12 su 13) rimettendo per una prova i comportamenti di prima. I flussi di
+famiglia che erano provati solo con i finti ora hanno un test sul grafo vero (`VerificaFunzionaleFamigliaTest`: ingresso senza QR
+con il ViewModel vero, richiesta scaduta e rifatta, revoca e rientro, reset e rientro, cartelle firmate, riavvio dopo
+l'azzeramento).
+
+**Decisioni**
+1. **ON-6, "via dal PC" (decisione dell'utente).** Senza admin, kit e codice nessun familiare azzera la famiglia dall'app: resta un
+   potere dell'admin. L'app spiega come farlo dal PC (cancellare solo `.mycloudgallery\family` dell'area comune, con il percorso
+   vero; poi "Crea la famiglia" e "Rientra con un QR nuovo" sugli altri): nel recupero dell'onboarding (nessun kit, codice che
+   non apre), nel recupero delle Impostazioni e in Impostazioni → Famiglia. Si perdono la famiglia e i dispositivi registrati,
+   le foto no. Dettagli in `docs/famiglia-dispositivi.md` §5.
+2. **ON-4: il dismesso si comporta come il revocato.** Niente sola lettura (la Libreria esiste solo con la famiglia pronta): una
+   pagina dice cosa e' successo e offre "Configura di nuovo".
+3. **ON-4 e ON-5: "Configura di nuovo" e "Rientra con un QR nuovo" sono lo stesso gesto** (`OnboardingCoordinator.startOver`):
+   via chiave del dispositivo, chiave di famiglia, password e account del NAS, stato fidato e avanzamento; restano foto, nascosti,
+   preferiti e miniature. Dalle Impostazioni parte solo dopo un foglio di conferma, con un avviso in piu' su un admin.
+4. **ON-2: la richiesta scaduta si rifa' dalla pagina d'attesa** ("Rifai la richiesta"). La finestra di 15 minuti resta contata
+   dalla prima vista dell'admin (M2 della revisione 1.4): spostarla all'apertura della pagina l'avrebbe allungata.
+5. **ON-10: niente Libreria in sola lettura durante l'attesa.** Tolte le frasi che la promettevano.
+6. **ON-11: dopo un azzeramento "Configura di nuovo" riavvia il processo** invece di ricreare `GalleryGraph`: la galleria fermata
+   non riparte nello stesso processo (R7, `GalleryShutdownTest`), e le porte di Hilt puntano a oggetti nati con lei.
+7. **ON-1: l'ingresso senza QR chiede anche le due aree** (il registro sta nell'area comune) e "e' la rete di casa?"; la pagina
+   "Configura un familiare" dell'admin mostra, sotto lo stesso `FLAG_SECURE` del QR, i dati da leggere a voce (indirizzo,
+   account, aree, id e impronta della famiglia). Il QR "stato della famiglia" riempie id e impronta; se id o impronta scritti non
+   coincidono con quelli del QR, l'ingresso non parte (`INVITE_OTHER_FAMILY`).
+8. **ON-7: a onboarding finito si riapre anche un passo locale gia' fatto** (6-11 e 13): il controllo di WireGuard e la checklist
+   dalle Impostazioni. Mai un passo del NAS.
+
+**Modifiche ai contratti e al codice condiviso**
+- `core-family`: `OnboardingCoordinator.savedNas()`, `recoveryPending()`, `startOver()` e `resume` allargato (ON-3, ON-4, ON-5,
+  ON-7); `SavedNas` con `familyFolderForWindows()` (ON-6); `RegistryService.updateCommonExclusions` con
+  `RegistryWriter.updateCommonExclusions` (ON-8); `NasError.asOnboardingProblem()` (ON-9); `ManualInvite.create(…,
+  minRegistryVersion)` (ON-1); `TypedFingerprint.normalize` con gli alias di Crockford (ON-12b); `OnboardingRules`, le regole dei
+  passi in un posto solo, usate dal coordinatore vero e da quello finto (ON-12c compreso: con l'admin recuperato percorso e passi
+  2-4 sono fissati).
+- `feature-onboarding`: pagine "fuori dalla famiglia" e "Ricominciare da zero"; `AwaitingApprovalScreen(onRenew)`,
+  `OnboardingRenewRoute` e `onboardingRenewal()`; il ViewModel riceve anche `RegistryService`.
+- `feature-settings`: "Rientra con un QR nuovo", "Ricominciare da zero", la checklist del backup solo dove il passo 13 c'e',
+  i dati per l'ingresso senza QR nella pagina dell'invito.
+- `:app`: solo navigazione e riavvio. La pagina d'attesa registra la sola rotta del rinnovo (non l'onboarding intero: F5 della
+  revisione 2 resta chiusa, `EntryHardeningTest` lo verifica); `GraphRootPorts` riavvia il processo dopo "Configura di nuovo"
+  (`ProcessRestart`); `AppGraph.forgetCompletedWipe()` dice se ha dimenticato un azzeramento.
+
+**Sicurezza: cosa e' stato toccato, e perche' non si indebolisce**
+- *Invito manuale*: `InviteRules` non pretende piu' la versione minima 0 senza QR; accetta quella del QR "stato della famiglia"
+  (da 0 in su). Alzarla toglie rollback possibili, non ne aggiunge. Id e impronta passano da `Base32.normalizeHumanInput`, come
+  gia' faceva `TrustAnchor.create`: la forma canonica e i controlli dell'ancora restano quelli di prima.
+- *Impronta digitata (ancora del recupero)*: gli alias O → 0, I/L → 1 servono solo al confronto; sono fuori dall'alfabeto
+  dell'impronta, quindi un'impronta vera non cambia e due impronte diverse non diventano uguali (test con 200 coppie).
+- *Firma delle esclusioni*: passa da `RegistryWriter.adminContext` come ogni azione dell'admin (dispositivo approvato, chiave di
+  famiglia dalla cassaforte a telefono sbloccato, M3) e da un gesto locale (E-S11).
+- *"Configura di nuovo"*: toglie solo dati locali e chiavi di questo dispositivo, dopo un gesto confermato; nessuna scrittura sul
+  NAS. La chiave di famiglia di un admin che esce si cancella (un dispositivo fuori dalla famiglia non deve poterne firmare il
+  registro); il foglio lo dice prima.
+- *Rinnovo della richiesta*: lo stesso di `DefaultJoinFlow` (solo "in attesa", chiave nuova); finestra M2 invariata; dalla pagina
+  d'attesa si raggiunge solo la rotta del rinnovo.
+- *Admin recuperato*: percorso e aree fissati come dopo la fondazione (ON-12c): il registro non si legge da una share scelta dopo.
+- Nessuna voce chiusa da `docs/review/2-fase2.md` o `docs/review/1.4-core-trust.md` e' stata riaperta.
+
+**Fake allineati al vero**: `FakeOnboardingCoordinator` (regole vere dei passi), `FakeJoinFlow` (controlli di `start`),
+`FakeAdminRecovery` (account, area, profilo), `FakeRegistryService` (stato che cambia rileggendo, finestra di `ApprovalWindow`).
+Confronti: `FakeCoordinatorParityTest`, `FakeJoinFlowParityTest`, `VerificaFunzionaleRegistroTest`.
+
+9. **ON-12c: fissati indirizzo, account e aree, "indietro" non ci torna piu'.** Prima, dopo la fondazione si tornava fino alle aree
+   (per rivederle) ma non si potevano confermare, e da li' non c'era un "avanti": la stessa trappola sarebbe toccata all'admin
+   recuperato. Ora "indietro" si ferma al primo passo che si puo' rifare (per il fondatore le cartelle).
+
+**Residui**
+- L'ingresso con lo "stato della famiglia" alza la versione minima ma non confronta l'impronta del contenuto della stessa versione
+  (lo fa solo il recupero): una versione uguale con un altro contenuto sarebbe comunque firmata dalla chiave della famiglia.
+- Il riavvio del processo (ON-11) e le pagine nuove vanno provati sul telefono (vedi `docs/famiglia-dispositivi.md` §9, prove 8 e 9).

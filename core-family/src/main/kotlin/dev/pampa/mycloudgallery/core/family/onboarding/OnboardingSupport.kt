@@ -74,6 +74,12 @@ internal object NasProblems {
 }
 
 /**
+ * Un errore del NAS letto fuori dai passi (per esempio la ricerca dei kit di recupero) come problema da mostrare, con le
+ * stesse regole dei passi: le schermate non dicono "nessun kit" quando il NAS non ha risposto (verifica funzionale, ON-9).
+ */
+fun NasError.asOnboardingProblem(): OnboardingProblem = NasProblems.reach(this)
+
+/**
  * Esegue [block] sul file system della share [share], dentro una sessione dell'onboarding. Le chiamate di
  * `NasFileSystem` sono bloccanti e, a differenza di `withShare`, lanciano [NasIoException]: qui diventano un
  * [NasResult], cosi' un errore del NAS non esce mai come eccezione verso le schermate.

@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.core.family.contract
 
 import dev.pampa.mycloudgallery.core.nas.contract.NasAccount
 import dev.pampa.mycloudgallery.core.nas.contract.NasResult
+import dev.pampa.mycloudgallery.core.trust.codec.Base32
 import kotlinx.coroutines.flow.StateFlow
 
 /** Perche' il dispositivo si azzera. */
@@ -112,12 +113,17 @@ interface AdminRecovery {
 /**
  * L'impronta della famiglia scritta a mano, dal foglio del codice di recupero (revisione 2, F3): 26 caratteri base32
  * minuscoli; spazi, trattini e maiuscole si tollerano.
+ *
+ * Come l'ancora dell'invito manuale (`Base32.normalizeHumanInput`) si leggono anche gli alias di Crockford: O per 0, I e
+ * L per 1 (verifica funzionale, ON-12b: una "o" letta dal foglio dava "kit non verificato"). Si normalizza **solo per il
+ * confronto** con l'impronta attesa: gli alias stanno fuori dall'alfabeto dell'impronta (niente i, l, o, u), quindi
+ * un'impronta vera resta se stessa e due impronte diverse non diventano mai uguali.
  */
 object TypedFingerprint {
   const val LENGTH = 26
   private const val ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz"
 
-  fun normalize(typed: String): String = typed.filter { it.isLetterOrDigit() }.lowercase()
+  fun normalize(typed: String): String = Base32.normalizeHumanInput(typed.filter { it.isLetterOrDigit() })
 
   /** Vero se [typed] ha la forma di un'impronta (non dice se e' quella giusta: lo dice il kit). */
   fun isComplete(typed: String): Boolean = normalize(typed).let { it.length == LENGTH && it.all { c -> c in ALPHABET } }

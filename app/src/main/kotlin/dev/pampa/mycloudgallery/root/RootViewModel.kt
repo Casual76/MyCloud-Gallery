@@ -94,8 +94,11 @@ interface RootPorts {
   }
 }
 
-/** [RootPorts] sopra il grafo vero (P9). */
-class GraphRootPorts(private val graph: AppGraph) : RootPorts {
+/**
+ * [RootPorts] sopra il grafo vero (P9). [restart] riavvia il processo dopo "Configura di nuovo" (ON-11): in produzione
+ * [AndroidProcessRestart], nei test un contatore.
+ */
+class GraphRootPorts(private val graph: AppGraph, private val restart: ProcessRestart = ProcessRestart {}) : RootPorts {
   override val probe: StateFlow<ProbeResult?> = graph.reachability.lastResult
   override val breaker: StateFlow<BreakerState> = graph.breaker.state
 
@@ -103,7 +106,10 @@ class GraphRootPorts(private val graph: AppGraph) : RootPorts {
 
   override fun watchApproval(): Flow<TrustStatus> = graph.approvalWatcher.watch()
 
-  override suspend fun reconfigureAfterWipe() = graph.forgetCompletedWipe()
+  override suspend fun reconfigureAfterWipe() {
+    // L'azzeramento ha fermato galleria e NAS di questo processo per sempre: si riparte da un processo nuovo (ON-11).
+    if (graph.forgetCompletedWipe()) restart.restart()
+  }
 }
 
 /**

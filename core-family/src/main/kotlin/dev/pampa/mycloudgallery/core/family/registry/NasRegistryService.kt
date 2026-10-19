@@ -113,6 +113,10 @@ class NasRegistryService(
     result
   }
 
+  override suspend fun updateCommonExclusions(excluded: Set<String>): AdminActionResult = mutex.withLock {
+    writer.updateCommonExclusions(excluded)
+  }
+
   /** La scelta dell'admin sui rami in conflitto (`writer.pendingForks`): unire ([recognize]) o rifiutare. */
   suspend fun resolveForks(recognize: Boolean): AdminActionResult = mutex.withLock {
     val result = writer.resolveForks(recognize)

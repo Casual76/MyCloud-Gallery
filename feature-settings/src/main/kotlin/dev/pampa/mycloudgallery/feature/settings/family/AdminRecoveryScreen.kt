@@ -7,6 +7,7 @@ import androidx.compose.material.icons.rounded.AdminPanelSettings
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.QrCodeScanner
+import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.SwitchAccount
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -68,6 +69,8 @@ internal class RecoveryActions(
   val onAdminPassword: (String) -> Unit = {},
   /** Revisione 2, F3: l'impronta della famiglia scritta dal foglio. */
   val onFingerprint: (String) -> Unit = {},
+  /** Senza kit ne' codice (ON-6): la guida "ricominciare da zero", dal PC. Null = la voce non c'e'. */
+  val onStartOverGuide: (() -> Unit)? = null,
 ) {
   companion object {
     val None = RecoveryActions({}, {}, {}, {}, {}, {}, {}, {}, { ScanVerdict.Ignore }, {}, {})
@@ -75,7 +78,7 @@ internal class RecoveryActions(
 }
 
 @Composable
-internal fun AdminRecoveryRoute(onBack: () -> Unit) {
+internal fun AdminRecoveryRoute(onBack: () -> Unit, openStartOverGuide: (() -> Unit)? = null) {
   val viewModel: AdminRecoveryViewModel = hiltViewModel()
   val state by viewModel.state.collectAsStateWithLifecycle()
   AdminRecoveryScreen(
@@ -94,6 +97,7 @@ internal fun AdminRecoveryRoute(onBack: () -> Unit) {
       onRecover = viewModel::recover,
       onAdminPassword = viewModel::setAdminPassword,
       onFingerprint = viewModel::setFingerprint,
+      onStartOverGuide = openStartOverGuide,
     ),
   )
 }
@@ -164,6 +168,23 @@ internal fun AdminRecoveryScreen(state: RecoveryUiState, actions: RecoveryAction
       RecoveryStage.CODE -> recoveryCode(state, actions)
       RecoveryStage.WORKING -> item { FluidLoadingBlock() }
       RecoveryStage.DONE -> Unit
+    }
+
+    // Senza kit (nessuno trovato) o senza codice (non apre il kit): come si riparte da zero, dal PC (ON-6). Solo dove
+    // si sostituisce l'admin: il secondo admin ha ancora il primo.
+    val guide = actions.onStartOverGuide
+    if (!second && guide != null && (state.stage == RecoveryStage.SEARCH || state.stage == RecoveryStage.CODE)) {
+      item {
+        FluidListGroup {
+          FluidListRow(
+            title = stringResource(R.string.family_startover_link),
+            subtitle = stringResource(R.string.family_startover_link_detail),
+            tone = FluidTone.Danger,
+            leading = { RowGlyph(Icons.Rounded.RestartAlt) },
+            onClick = guide,
+          )
+        }
+      }
     }
   }
 }

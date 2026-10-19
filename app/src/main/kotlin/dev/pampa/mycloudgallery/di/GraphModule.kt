@@ -65,6 +65,7 @@ import dev.pampa.mycloudgallery.graph.AndroidAppPlatform
 import dev.pampa.mycloudgallery.graph.AppGraph
 import dev.pampa.mycloudgallery.graph.AppPlatform
 import dev.pampa.mycloudgallery.notify.AppNotifications
+import dev.pampa.mycloudgallery.root.AndroidProcessRestart
 import dev.pampa.mycloudgallery.root.GraphRootPorts
 import dev.pampa.mycloudgallery.root.RootPorts
 import dev.pampa.mycloudgallery.work.InviteWindowStore
@@ -121,7 +122,7 @@ object GraphModule {
   fun notifications(@ApplicationContext context: Context): AppNotifications = AppNotifications(context)
 
   @Provides
-  fun rootPorts(graph: AppGraph): RootPorts = GraphRootPorts(graph)
+  fun rootPorts(graph: AppGraph, @ApplicationContext context: Context): RootPorts = GraphRootPorts(graph, AndroidProcessRestart(context))
 
   // --- core-network (P2) ----------------------------------------------------------------------------
   @Provides fun networkEnvironment(graph: AppGraph): NetworkEnvironment = graph.environment

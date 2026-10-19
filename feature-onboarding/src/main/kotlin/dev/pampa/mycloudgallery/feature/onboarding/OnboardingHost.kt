@@ -63,6 +63,7 @@ import dev.pampa.mycloudgallery.feature.onboarding.recovery.RecoveryCodePage
 import dev.pampa.mycloudgallery.feature.onboarding.recovery.RecoveryDonePage
 import dev.pampa.mycloudgallery.feature.onboarding.recovery.RecoveryFatePage
 import dev.pampa.mycloudgallery.feature.onboarding.recovery.RecoveryKitsPage
+import dev.pampa.mycloudgallery.feature.onboarding.recovery.RecoveryStartOverPage
 import dev.pampa.mycloudgallery.feature.onboarding.steps.AccountActions
 import dev.pampa.mycloudgallery.feature.onboarding.steps.AccountScreen
 import dev.pampa.mycloudgallery.feature.onboarding.steps.AddressActions
@@ -83,6 +84,7 @@ import dev.pampa.mycloudgallery.feature.onboarding.steps.NasAddressScreen
 import dev.pampa.mycloudgallery.feature.onboarding.steps.PermissionsActions
 import dev.pampa.mycloudgallery.feature.onboarding.steps.PermissionsScreen
 import dev.pampa.mycloudgallery.feature.onboarding.steps.PresetScreen
+import dev.pampa.mycloudgallery.feature.onboarding.steps.RemovedScreen
 import dev.pampa.mycloudgallery.feature.onboarding.steps.RoleAdvice
 import dev.pampa.mycloudgallery.feature.onboarding.steps.RolesScreen
 import dev.pampa.mycloudgallery.feature.onboarding.steps.SecurityNoticeScreen
@@ -148,8 +150,9 @@ internal fun OnboardingHost(
     if (ui.banner != null) haptics.play(FluidHapticEvent.Success)
   }
   val goBack = viewModel.canGoBack(progress, ui)
-  // Da "Da completare" il passo e' l'unico: "indietro" esce, il resto del percorso non c'entra.
-  val resuming = resumeStep != null && destination == OnboardingDestination.Step(resumeStep)
+  // Da "Da completare" (e dagli altri tasti delle Impostazioni) il passo e' l'unico: "indietro" esce, il resto del percorso
+  // non c'entra. Anche se il passo non si e' riaperto: mai fermi su un riepilogo dove "indietro" non fa niente (ON-7).
+  val resuming = resumeStep != null
   // E quando il passo riaperto e' finito (fatto o saltato di nuovo) il coordinatore va avanti: si esce, non si prosegue.
   var reopened by remember { mutableStateOf(false) }
   LaunchedEffect(progress.current, resumeStep) {
@@ -209,6 +212,7 @@ internal fun OnboardingFrame(
 
 /** Il passo evidenziato nella barra laterale: le pagine di "entra" e di "recupera" stanno dove stanno indirizzo e account. */
 private fun sidebarStep(destination: OnboardingDestination, progress: OnboardingProgress): OnboardingStep = when (destination) {
+  OnboardingDestination.Removed -> OnboardingStep.WELCOME
   is OnboardingDestination.Step -> destination.step
   is OnboardingDestination.Join ->
     if (destination.page == JoinPage.Password || destination.page == JoinPage.Name) OnboardingStep.ACCOUNT else OnboardingStep.NAS_ADDRESS
@@ -266,6 +270,7 @@ internal class HostEnv(
   /** "Passo 3 di 14": la posizione nel piano. Il benvenuto e le pagine finali non hanno barra. */
   private fun progressInfo(destination: OnboardingDestination): StepProgressInfo? {
     val step = when (destination) {
+      OnboardingDestination.Removed -> null
       is OnboardingDestination.Step -> destination.step.takeIf { it != OnboardingStep.WELCOME }
       is OnboardingDestination.Join ->
         if (destination.page == JoinPage.Awaiting || destination.page == JoinPage.Approved) null
@@ -292,7 +297,7 @@ internal class HostEnv(
         } else {
           emptySet()
         }
-      is OnboardingDestination.Recovery -> emptySet()
+      is OnboardingDestination.Recovery, OnboardingDestination.Removed -> emptySet()
     }
     return OnboardingWarning.entries.filter { it in wanted && it in ui.warnings }
   }
@@ -318,6 +323,14 @@ internal class HostEnv(
 @Composable
 private fun PageContent(page: OnboardingDestination, env: HostEnv) {
   when (page) {
+    OnboardingDestination.Removed -> env.ui.removal?.let { removal ->
+      RemovedScreen(
+        chrome = env.chrome(page),
+        ui = removal,
+        onStartOver = env.viewModel::startOver,
+        onProblemAction = { env.onProblemAction(it, retry = env.viewModel::startOver) },
+      )
+    }
     is OnboardingDestination.Step -> StepContent(page, env)
     is OnboardingDestination.Join -> JoinContent(page, env)
     is OnboardingDestination.Recovery -> RecoveryContent(page, env)
@@ -576,10 +589,12 @@ private fun JoinContent(page: OnboardingDestination.Join, env: HostEnv) {
       form = forms.manualJoin,
       actions = ManualJoinActions(
         onSubmit = { form ->
-          vm.submitManualJoin(form.ip, form.user, form.familyId, form.fingerprint, form.deviceName)
+          vm.submitManualJoin(form.ip, form.user, form.familyId, form.fingerprint, form.deviceName, form.commonShare, form.privateShare)
         },
         onScanFamilyState = vm::scanFamilyState,
-        onProblemAction = { env.onProblemAction(it) },
+        onProblemAction = { env.onProblemAction(it, retry = vm::refreshManualHome) },
+        onConfirmHome = vm::confirmManualHome,
+        onRefreshHome = vm::refreshManualHome,
       ),
     )
 
@@ -654,7 +669,9 @@ private fun RecoveryContent(page: OnboardingDestination.Recovery, env: HostEnv) 
     onSubmitCode = vm::submitRecoveryCodeForKit,
     onScanFamilyState = vm::scanFamilyState,
     onFinish = vm::finishRecovery,
-    onProblemAction = { env.onProblemAction(it) },
+    // "Riprova" sulla ricerca dei kit che non ha letto l'area (ON-9).
+    onProblemAction = { env.onProblemAction(it, retry = { vm.searchKits(forms.recovery.share.ifBlank { recovery.privateShare }) }) },
+    onStartOverGuide = vm::showStartOverGuide,
   )
   if (recovery.scanningFamilyState) {
     ScanPage(
@@ -676,5 +693,6 @@ private fun RecoveryContent(page: OnboardingDestination.Recovery, env: HostEnv) 
       RecoveryCodePage(chrome = chrome, ui = recovery, form = forms.recovery, actions = actions)
     }
     RecoveryPage.Done -> RecoveryDonePage(chrome = chrome, ui = recovery, fate = forms.recovery.fate, actions = actions)
+    RecoveryPage.StartOver -> RecoveryStartOverPage(chrome = chrome, familyFolder = recovery.startOverPath, onStartFamily = vm::startFamilyFromScratch)
   }
 }

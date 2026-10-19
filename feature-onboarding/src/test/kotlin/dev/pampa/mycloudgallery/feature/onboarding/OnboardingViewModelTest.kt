@@ -392,6 +392,7 @@ class OnboardingViewModelTest {
     }
     val vm = OnboardingViewModel(
       env.coordinator, env.join, env.recovery, env.inviteCodec, env.familyStateCodec, controller, env.health, env.localNetwork, env.vpnConfig,
+      env.registry,
     )
     vm.runVpnTest(" casa ")
     assertThat(seen).isEqualTo(VpnControlConfig(enabled = true, tunnelName = "casa"))
@@ -425,6 +426,7 @@ class OnboardingViewModelTest {
     }
     val custom = OnboardingViewModel(
       env.coordinator, env.join, env.recovery, env.inviteCodec, env.familyStateCodec, controller, env.health, env.localNetwork, env.vpnConfig,
+      env.registry,
     )
     custom.runVpnTest("casa")
     assertThat(env.vpn.commands).containsExactly(true, false, true).inOrder()
@@ -436,7 +438,7 @@ class OnboardingViewModelTest {
 
   @Test
   fun ilCodiceDiRecuperoSiMostraInSetteGruppi() = runTest {
-    val vm = TestEnv().viewModel()
+    val vm = TestEnv(atFamilyKey()).viewModel()
     vm.generateKey()
     assertThat(vm.ui.value.key.page).isEqualTo(KeyPage.ShowCode)
     assertThat(vm.ui.value.key.groups).hasSize(7)
@@ -448,7 +450,7 @@ class OnboardingViewModelTest {
 
   @Test
   fun unCodiceSbagliatoRiportaAllaPaginaDelCodiceSenzaPerderlo() = runTest {
-    val env = TestEnv()
+    val env = TestEnv(atFamilyKey())
     val vm = env.viewModel()
     vm.generateKey()
     env.coordinator.scripted += StepResult.Problem(OnboardingProblem.RECOVERY_CODE_MISMATCH)
@@ -474,7 +476,7 @@ class OnboardingViewModelTest {
 
   @Test
   fun seLaFamigliaEsisteGiaSiTornaAllInizioSenzaIlCodice() = runTest {
-    val env = TestEnv()
+    val env = TestEnv(atFamilyKey())
     val vm = env.viewModel()
     vm.generateKey()
     env.coordinator.scripted += StepResult.Problem(OnboardingProblem.FAMILY_ALREADY_EXISTS)
@@ -496,9 +498,14 @@ class OnboardingViewModelTest {
     assertThat(vm.ui.value.key.page).isEqualTo(KeyPage.ShowCode)
   }
 
+  /** Il passo 12 del fondatore (come il vero, il codice c'e' solo li'). */
+  private fun atFamilyKey() = OnboardingProgress.START.copy(path = OnboardingPath.FOUND_FAMILY, current = OnboardingStep.FAMILY_KEY)
+
   @Test
   fun finireInviaIlSegnaleDiFine() = runTest {
-    val env = TestEnv(OnboardingProgress.START.copy(current = OnboardingStep.SUMMARY))
+    val env = TestEnv(OnboardingProgress.START.copy(path = OnboardingPath.FOUND_FAMILY, current = OnboardingStep.SUMMARY))
+    // Come il vero: si finisce solo con la famiglia fondata.
+    env.coordinator.founded = true
     val vm = env.viewModel()
     vm.events.test {
       vm.finish()
@@ -590,13 +597,15 @@ class OnboardingViewModelTest {
   @Test
   fun entraSenzaQrCostruisceUnInvitoConVersioneMinimaZeroEUnAvviso() = runTest {
     val env = TestEnv()
+    env.coordinator.candidate = candidate()
     env.join.steps += JoinStep.NeedsPassword
     val vm = env.viewModel()
     vm.choosePath(OnboardingPath.JOIN_MANUAL)
-    vm.submitManualJoin("192.168.178.58", "marta", "famiglia-rossi", "K7QD 2M9X FA4T", "Tablet")
+    vm.confirmManualHome(true)
+    vm.submitManualJoin("192.168.178.58", "marta", SAMPLE_FAMILY_ID.uppercase(), SAMPLE_FINGERPRINT.chunked(4).joinToString(" "), "Tablet", "Public")
     val invite = vm.ui.value.join?.invite
     assertThat(invite?.minRegistryVersion).isEqualTo(0L)
-    assertThat(invite?.familyKeyFingerprint).isEqualTo("K7QD2M9XFA4T")
+    assertThat(invite?.familyKeyFingerprint).isEqualTo(SAMPLE_FINGERPRINT)
     assertThat(vm.ui.value.warnings).contains(OnboardingWarning.NO_MIN_REGISTRY_VERSION)
     assertThat(vm.ui.value.join?.page).isEqualTo(JoinPage.Password)
   }
@@ -604,14 +613,18 @@ class OnboardingViewModelTest {
   @Test
   fun loStatoDellaFamigliaAlzaLaVersioneMinima() = runTest {
     val env = TestEnv()
+    env.coordinator.candidate = candidate()
     env.familyStateCodec.known["MCGS1:stato"] = sampleFamilyState()
     env.join.steps += JoinStep.NeedsPassword
     val vm = env.viewModel()
     vm.choosePath(OnboardingPath.JOIN_MANUAL)
+    vm.confirmManualHome(true)
     vm.scanFamilyState()
     assertThat(vm.onScanned("MCGS1:stato")).isEqualTo(ScanVerdict.Accept)
     assertThat(vm.ui.value.join?.familyState?.registryVersion).isEqualTo(12L)
-    vm.submitManualJoin("192.168.178.58", "marta", "famiglia-rossi", "K7QD2M9XFA4T", "Tablet")
+    // Id e impronta vengono gia' dal QR di stato (di un dispositivo approvato): non si riscrivono.
+    assertThat(vm.forms.manualJoin.familyId).isEqualTo(SAMPLE_FAMILY_ID)
+    vm.submitManualJoin("192.168.178.58", "marta", vm.forms.manualJoin.familyId, vm.forms.manualJoin.fingerprint, "Tablet", "Public")
     assertThat(vm.ui.value.join?.invite?.minRegistryVersion).isEqualTo(12L)
     assertThat(vm.ui.value.warnings).doesNotContain(OnboardingWarning.NO_MIN_REGISTRY_VERSION)
   }

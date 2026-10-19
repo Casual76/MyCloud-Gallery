@@ -13,14 +13,21 @@ import dev.pampa.mycloudgallery.feature.onboarding.ui.StepChrome
 /**
  * La rotta con il suo ViewModel (Hilt) e la piattaforma Android (permessi, impostazioni di sistema).
  * [resumeStep] e' il passo da riaprire, se si arriva da "Da completare" (Impostazioni): quando si finisce, si esce.
+ * [renew] e' "Rifai la richiesta" dalla pagina d'attesa (ON-2): finita la richiesta (o lasciata), si esce.
+ * Senza ne' l'uno ne' l'altro e' la pagina della radice: un onboarding gia' finito vuol dire un dispositivo fuori dalla
+ * famiglia (ON-4).
  * [onPause] e' "Continua piu' tardi" (E-O1): lascia la configurazione cosi' com'e', salvata.
  */
 @Composable
-internal fun OnboardingRoute(resumeStep: OnboardingStep?, onDone: () -> Unit, onPause: () -> Unit) {
+internal fun OnboardingRoute(resumeStep: OnboardingStep?, onDone: () -> Unit, onPause: () -> Unit, renew: Boolean = false) {
   val viewModel: OnboardingViewModel = hiltViewModel()
   val platform = rememberAndroidPlatform()
-  LaunchedEffect(resumeStep) {
-    if (resumeStep != null) viewModel.resume(resumeStep)
+  LaunchedEffect(resumeStep, renew) {
+    when {
+      resumeStep != null -> viewModel.resume(resumeStep)
+      renew -> viewModel.startRenewal()
+      else -> viewModel.enterAtRoot()
+    }
   }
   OnboardingHost(
     viewModel = viewModel,

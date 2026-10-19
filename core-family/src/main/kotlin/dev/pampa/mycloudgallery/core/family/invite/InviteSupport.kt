@@ -56,7 +56,8 @@ internal object InviteRules {
   /**
    * Controlla un invito del QR (strutturalmente e nei contenuti). Lancia [TrustViolation] se qualcosa non va.
    * Con [manual] vale la forma dell'ingresso senza QR: GUID e ULA mancano (li sceglie la rete di casa e
-   * l'utente, non l'admin), la scadenza non c'e' e la versione minima e' 0.
+   * l'utente, non l'admin) e la scadenza non c'e'. La versione minima e' 0, oppure quella del QR "stato della famiglia"
+   * scansionato da un dispositivo approvato (M7): alzarla e' sempre lecito (un rollback in meno), abbassarla sotto 0 no.
    */
   fun check(invite: FamilyInvite, manual: Boolean = false): FamilyInvite {
     requireField(TrustIds.isValid(invite.familyId), "invito: id di famiglia")
@@ -71,7 +72,6 @@ internal object InviteRules {
     invite.nasName?.let { TextRules.displayText(it, MAX_NAME_CHARS) }
     if (manual) {
       requireField(invite.nasGuid.isEmpty() && invite.homeUla.isEmpty(), "invito manuale: GUID o ULA presenti")
-      requireField(invite.minRegistryVersion == 0L, "invito manuale: versione minima")
     } else {
       requireField(GUID.matches(invite.nasGuid), "invito: GUID del NAS")
       requireField(invite.homeUla.size in 1..MAX_ULA, "invito: prefissi ULA")

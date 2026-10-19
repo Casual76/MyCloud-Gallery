@@ -226,5 +226,70 @@
   <string name="reset_next_save_kit">Salva il codice del kit nuovo</string>
   <string name="reset_next_save_kit_detail">Su un foglio, in un posto sicuro. Mai in una chat</string>
   <string name="reset_next_reconfigure">Riconfigura ogni dispositivo</string>
-  <string name="reset_next_reconfigure_detail">Mostra un QR d’invito nuovo per ciascuno e approvalo</string>
+  <string name="reset_next_reconfigure_detail">Su ciascuno: Impostazioni, Famiglia, «Rientra con un QR nuovo». Poi mostragli un QR d’invito nuovo e approvalo</string>
+
+  <!-- Rientra con un QR nuovo (ON-5) -->
+  <string name="family_newer_title">Forse la famiglia è stata reimpostata</string>
+  <string name="family_newer_message">Sul NAS c’è un registro più nuovo firmato da un’altra chiave. Se l’admin ha reimpostato la famiglia, rientra con il QR nuovo che ti mostra. Se non te l’ha detto, chiediglielo prima.</string>
+  <string name="family_section_rejoin">Un’altra famiglia</string>
+  <string name="family_rejoin">Rientra con un QR nuovo</string>
+  <string name="family_rejoin_detail">Dopo un reset della famiglia: esci da quella di prima e scansiona il QR nuovo</string>
+  <string name="rejoin_title">Rientra con un QR nuovo</string>
+  <string name="rejoin_eyebrow">Famiglia</string>
+  <string name="rejoin_value">QR nuovo</string>
+  <string name="rejoin_hero_title">Esci e rientra</string>
+  <string name="rejoin_hero_detail">Dopo un reset della famiglia questo dispositivo è rimasto in quella di prima. Esce, torna al benvenuto, e rientra con il QR d’invito nuovo dell’admin.</string>
+  <string name="rejoin_section">Cosa succede</string>
+  <string name="rejoin_forget">Tolgo account, password e chiavi di questo dispositivo</string>
+  <string name="rejoin_forget_detail">Al rientro avrà una chiave nuova: l’admin lo vedrà come un dispositivo nuovo e lo approva di nuovo.</string>
+  <string name="rejoin_scan">Poi scansioni il QR d’invito nuovo</string>
+  <string name="rejoin_scan_detail">Dal benvenuto, «Entra con il QR».</string>
+  <string name="rejoin_keep">Restano su questo telefono</string>
+  <string name="rejoin_keep_detail">Le foto, i nascosti, i preferiti e le miniature.</string>
+  <string name="rejoin_admin_title">Questo dispositivo è un admin</string>
+  <string name="rejoin_admin_message">Uscendo cancella la sua chiave della famiglia di prima. Fallo solo se la famiglia è stata davvero reimpostata.</string>
+  <string name="rejoin_start">Esci dalla famiglia e rientra</string>
+  <string name="rejoin_footnote">Il NAS e le foto non si toccano. Finché non rientri, l’app ti mostra il benvenuto.</string>
+  <string name="rejoin_sheet_title">Esci dalla famiglia?</string>
+  <string name="rejoin_sheet_message">Questo dispositivo dimentica account, password e chiavi della famiglia di prima. Per tornare serve il QR d’invito dell’admin e la sua approvazione.</string>
+  <string name="rejoin_sheet_message_admin">Questo dispositivo dimentica account, password e chiavi, anche la chiave della famiglia di prima. Per tornare serve il QR d’invito dell’admin e la sua approvazione.</string>
+  <string name="rejoin_sheet_confirm">Esci e rientra</string>
+
+  <!-- Ricominciare da zero: l'admin senza telefono, kit e codice (ON-6, "via dal PC") -->
+  <string name="family_start_over">L’admin non ha più né telefono né kit</string>
+  <string name="family_start_over_detail">Senza kit e senza codice si riparte da zero, dal PC</string>
+  <string name="family_startover_link">Non ho né kit né codice</string>
+  <string name="family_startover_link_detail">Come ripartire da zero, dal PC</string>
+  <string name="family_startover_title">Ricominciare da zero</string>
+  <string name="family_startover_eyebrow">Senza admin</string>
+  <string name="family_startover_value">Dal PC</string>
+  <string name="family_startover_hero_title">Si rifà la famiglia</string>
+  <string name="family_startover_hero_detail">L’admin ha perso il telefono e non ha più né kit né codice: l’admin non si recupera. Si cancella la famiglia dal PC e la si crea di nuovo.</string>
+  <string name="family_startover_loss_title">Cosa si perde e cosa no</string>
+  <string name="family_startover_loss_detail">Si perdono la famiglia e l’elenco dei dispositivi registrati: ogni telefono e tablet va configurato di nuovo e riapprovato. Le foto no: restano sul NAS e sui telefoni, con i backup e le versioni.</string>
+  <string name="family_startover_why_title">Perché non lo fa l’app</string>
+  <string name="family_startover_why_detail">Cancellare la famiglia è un potere dell’admin. Senza il suo telefono, il kit o il codice nessun telefono può farlo: lo fai tu dal PC, con un account del NAS che può scrivere nell’area comune.</string>
+  <string name="family_startover_steps_section">Dal PC, in quest’ordine</string>
+  <string name="family_startover_step_open">1. Apri Esplora file</string>
+  <string name="family_startover_step_open_detail">Scrivi questo nella barra dell’indirizzo e premi Invio. Se Windows chiede utente e password, usa un account del NAS che può scrivere nell’area comune.</string>
+  <string name="family_startover_path_unknown">\\\\indirizzo-del-NAS\\area-comune\\.mycloudgallery</string>
+  <string name="family_startover_step_hidden">Se non vedi le cartelle</string>
+  <string name="family_startover_step_hidden_detail">La cartella .mycloudgallery è nascosta: in Esplora file tocca Visualizza, poi Mostra, poi Elementi nascosti.</string>
+  <string name="family_startover_step_delete">Cancella solo la cartella «family»</string>
+  <string name="family_startover_step_delete_detail">Il percorso completo è %1$s. Non toccare le altre cartelle che stanno lì accanto, né le foto.</string>
+  <string name="family_startover_step_delete_detail_unknown">È dentro .mycloudgallery, nell’area comune. Non toccare le altre cartelle che stanno lì accanto, né le foto.</string>
+  <string name="family_startover_step_found">Crea la famiglia nuova</string>
+  <string name="family_startover_step_found_detail">Sul telefono che sarà l’admin: Impostazioni, Famiglia, «Rientra con un QR nuovo», poi «Crea la famiglia». Scriverai su carta un codice di recupero nuovo.</string>
+  <string name="family_startover_step_others">Poi, su ogni altro dispositivo</string>
+  <string name="family_startover_step_others_detail">Impostazioni, Famiglia, «Rientra con un QR nuovo», e scansiona il QR d’invito che gli mostra il nuovo admin.</string>
+  <string name="family_startover_footnote">L’app non cancella niente sul NAS da sola. Il vecchio telefono dell’admin, se ricompare, non fa più parte della famiglia nuova.</string>
+  <string name="family_startover_close">Ho capito</string>
+
+  <!-- Configura un familiare: i dati per chi entra senza QR (ON-1) -->
+  <string name="invite_manual_section">Se non riesce a scansionare</string>
+  <string name="invite_manual_section_detail">«Entra senza QR»: leggigli questi dati a voce, uno per riga. Non sono segreti, ma valgono solo dal tuo schermo.</string>
+  <string name="invite_manual_ip">Indirizzo del NAS</string>
+  <string name="invite_manual_common">Area comune</string>
+  <string name="invite_manual_family_id">Identificativo della famiglia</string>
+  <string name="invite_manual_fingerprint">Impronta della famiglia</string>
 </resources>

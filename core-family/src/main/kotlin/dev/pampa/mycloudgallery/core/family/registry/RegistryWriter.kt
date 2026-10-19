@@ -139,6 +139,27 @@ class RegistryWriter(
     return commit(admin, draft)
   }
 
+  /**
+   * Le esclusioni dell'area comune nella configurazione firmata (verifica funzionale, ON-8): il passo 5 ripreso dopo la
+   * fondazione cambiava solo l'avanzamento locale, e la scansione (che usa quelle firmate) non lo vedeva. Stesse esclusioni
+   * di prima: niente da firmare.
+   */
+  suspend fun updateCommonExclusions(excluded: Set<String>): AdminActionResult {
+    val admin = adminContext() ?: return AdminActionResult.NotAdmin
+    val config = admin.state.registry.config
+    val sorted = excluded.sorted()
+    if (config.commonExclusions == sorted) return AdminActionResult.Done
+    val draft = try {
+      admin.authority.updateConfig(admin.state, config.copy(commonExclusions = sorted))
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      // Una configurazione che il formato non accetta (percorsi o tetti): niente da firmare.
+      return AdminActionResult.Failed(NasError.PermissionDenied)
+    }
+    return commit(admin, draft)
+  }
+
   /** La scelta dell'admin sui rami in attesa: [recognize] li unisce, altrimenti li rifiuta (poi reset). */
   suspend fun resolveForks(recognize: Boolean): AdminActionResult {
     val pending = _pendingForks.value ?: return AdminActionResult.Done

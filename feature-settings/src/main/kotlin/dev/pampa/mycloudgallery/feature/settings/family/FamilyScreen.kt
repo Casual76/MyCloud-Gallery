@@ -6,6 +6,7 @@ import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material.icons.rounded.QrCode2
+import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.SwitchAccount
 import androidx.compose.runtime.Composable
@@ -29,9 +30,11 @@ import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.family.contract.RegistryService
+import dev.pampa.mycloudgallery.core.family.contract.StaleReason
 import dev.pampa.mycloudgallery.core.family.contract.TrustStatus
 import dev.pampa.mycloudgallery.core.trust.registry.DeviceStatus
 import dev.pampa.mycloudgallery.feature.settings.R
+import dev.pampa.mycloudgallery.feature.settings.ui.Note
 import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
@@ -50,6 +53,18 @@ internal data class FamilyUiState(
 
   /** Approvato (admin o no): puo' mostrare lo stato della famiglia e usare il kit. */
   val isMember: Boolean get() = trust is TrustStatus.Approved
+
+  /**
+   * Configurato in una famiglia (approvato, anche con il registro "vecchio"): puo' uscirne e rientrare con un QR nuovo
+   * (ON-5). Dopo un reset fatto da un altro dispositivo questo e' proprio lo stato "vecchio".
+   */
+  val canRejoin: Boolean get() = trust is TrustStatus.Approved || trust is TrustStatus.Stale
+
+  /**
+   * Sul NAS c'e' un registro piu' nuovo che non si verifica con la chiave di questa famiglia: puo' essere un reset fatto
+   * dall'admin (una famiglia nuova, firmata da un'altra chiave). La pagina lo dice, senza deciderlo (ON-5).
+   */
+  val newerUnverified: Boolean get() = trust == TrustStatus.Stale(StaleReason.NEWER_UNVERIFIED)
 }
 
 @HiltViewModel
@@ -83,6 +98,10 @@ internal class FamilyLinks(
   val openSecondAdmin: () -> Unit,
   val openReplaceAdmin: () -> Unit,
   val openReset: () -> Unit,
+  /** "Rientra con un QR nuovo" (ON-5). */
+  val openRejoin: () -> Unit = {},
+  /** "Ricominciare da zero" dal PC, senza admin ne' kit (ON-6). */
+  val openStartOverGuide: () -> Unit = {},
 ) {
   companion object {
     val None = FamilyLinks({}, {}, {}, {}, {}, {}, {})
@@ -110,13 +129,29 @@ internal fun FamilyScreen(state: FamilyUiState, links: FamilyLinks) {
     onBack = links.onBack,
     ambient = FluidAmbient(tone = FluidHeroTone.Tertiary, motif = FluidHeroMotif.Glow),
   ) {
-    if (!state.isMember) {
+    if (!state.isMember && !state.canRejoin) {
       item {
         FluidEmptyState(
           title = stringResource(R.string.family_none_title),
           detail = stringResource(R.string.family_none_detail),
         )
       }
+      return@FluidScreen
+    }
+
+    // Un registro piu' nuovo firmato da un'altra chiave: forse l'admin ha reimpostato la famiglia (ON-5).
+    if (state.newerUnverified) {
+      item {
+        Note(
+          title = stringResource(R.string.family_newer_title),
+          message = stringResource(R.string.family_newer_message),
+          tone = FluidTone.Warning,
+        )
+      }
+    }
+
+    if (!state.isMember) {
+      rejoinSection(links)
       return@FluidScreen
     }
 
@@ -191,6 +226,15 @@ internal fun FamilyScreen(state: FamilyUiState, links: FamilyLinks) {
             leading = { RowGlyph(Icons.Rounded.SwitchAccount) },
             onClick = links.openReplaceAdmin,
           )
+          FluidListDivider()
+          // L'admin ha perso il telefono e non c'e' piu' ne' kit ne' codice: si riparte dal PC (ON-6).
+          FluidListRow(
+            title = stringResource(R.string.family_start_over),
+            subtitle = stringResource(R.string.family_start_over_detail),
+            tone = FluidTone.Danger,
+            leading = { RowGlyph(Icons.Rounded.RestartAlt) },
+            onClick = links.openStartOverGuide,
+          )
         }
       }
       item { FluidSectionFootnote(text = stringResource(R.string.family_admin_footnote)) }
@@ -210,6 +254,24 @@ internal fun FamilyScreen(state: FamilyUiState, links: FamilyLinks) {
         }
       }
       item { FluidSectionFootnote(text = stringResource(R.string.family_danger_footnote)) }
+    }
+
+    rejoinSection(links)
+  }
+}
+
+/** "Rientra con un QR nuovo" (ON-5): dopo un reset, o per passare a un'altra famiglia. */
+private fun androidx.compose.foundation.lazy.LazyListScope.rejoinSection(links: FamilyLinks) {
+  item { FluidSectionHeader(title = stringResource(R.string.family_section_rejoin)) }
+  item {
+    FluidListGroup {
+      FluidListRow(
+        title = stringResource(R.string.family_rejoin),
+        subtitle = stringResource(R.string.family_rejoin_detail),
+        tone = FluidTone.Warning,
+        leading = { RowGlyph(Icons.Rounded.QrCodeScanner) },
+        onClick = links.openRejoin,
+      )
     }
   }
 }

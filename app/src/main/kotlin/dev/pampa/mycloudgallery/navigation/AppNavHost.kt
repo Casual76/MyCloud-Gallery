@@ -52,9 +52,11 @@ import dev.pampa.mycloudgallery.feature.library.collections.openCollection
 import dev.pampa.mycloudgallery.feature.library.library.LibraryTabState
 import dev.pampa.mycloudgallery.feature.library.library.LibraryViewModel
 import dev.pampa.mycloudgallery.feature.onboarding.OnboardingGraphRoute
+import dev.pampa.mycloudgallery.feature.onboarding.OnboardingRenewRoute
 import dev.pampa.mycloudgallery.feature.onboarding.OnboardingResumeRoute
 import dev.pampa.mycloudgallery.feature.onboarding.join.AwaitingApprovalScreen
 import dev.pampa.mycloudgallery.feature.onboarding.onboardingGraph
+import dev.pampa.mycloudgallery.feature.onboarding.onboardingRenewal
 import dev.pampa.mycloudgallery.feature.settings.SettingsDevicesRoute
 import dev.pampa.mycloudgallery.feature.settings.SettingsGraphRoute
 import dev.pampa.mycloudgallery.feature.settings.SettingsPasswordRoute
@@ -190,8 +192,13 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
           )
           with(DeveloperTools) { destinations(nav) }
         }
-        is RootDestination.AwaitingApproval -> composable<AwaitingApprovalRoute> {
-          AwaitingDestination(code = destination.code, actions = actions)
+        is RootDestination.AwaitingApproval -> {
+          composable<AwaitingApprovalRoute> {
+            AwaitingDestination(code = destination.code, actions = actions, onRenew = { nav.navigate(OnboardingRenewRoute) })
+          }
+          // "Rifai la richiesta" (ON-2): la sola pagina del rinnovo (non l'onboarding intero, F5); finita o lasciata, si
+          // torna all'attesa.
+          onboardingRenewal(nav = nav, onPause = actions.pause)
         }
         RootDestination.Wiped -> composable<WipedRoute> {
           WipedScreen(onReconfigure = actions.reconfigure)
@@ -222,7 +229,7 @@ class RootNavActions(
  * Quando l'admin approva, lo stato del dispositivo cambia e la radice porta alla Libreria.
  */
 @Composable
-private fun AwaitingDestination(code: String, actions: RootNavActions) {
+private fun AwaitingDestination(code: String, actions: RootNavActions, onRenew: () -> Unit) {
   val qr = remember { actions.deviceKeyQr() }
   val lifecycle = LocalLifecycleOwner.current.lifecycle
   LaunchedEffect(lifecycle) {
@@ -230,7 +237,7 @@ private fun AwaitingDestination(code: String, actions: RootNavActions) {
       actions.watchApproval().collect { }
     }
   }
-  AwaitingApprovalScreen(code = code, deviceKeyQr = qr)
+  AwaitingApprovalScreen(code = code, deviceKeyQr = qr, onRenew = onRenew)
 }
 
 /** Le azioni della Diagnostica che portano fuori dalla Diagnostica: le sa fare solo :app (i feature non si conoscono). */

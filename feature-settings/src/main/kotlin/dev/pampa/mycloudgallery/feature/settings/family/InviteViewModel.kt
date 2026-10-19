@@ -52,12 +52,21 @@ internal data class InviteUiState(
   override fun toString(): String = "InviteUiState(phase=$phase)"
 }
 
-/** Cio' che l'admin rilegge accanto al QR: per chi e', dove va, quanto vale. */
+/**
+ * Cio' che l'admin rilegge accanto al QR: per chi e', dove va, quanto vale. Piu' i dati per chi entra **senza QR**
+ * (verifica funzionale, ON-1: prima nessuna schermata li mostrava), da leggere a voce: indirizzo del NAS, area comune,
+ * id e impronta della famiglia. Nessuno e' un segreto (li porta anche il QR "stato della famiglia"); stanno sotto lo
+ * stesso `FLAG_SECURE` del QR.
+ */
 internal data class InviteSummary(
   val user: String,
   val deviceName: String,
   val privateShare: String,
   val hoursLeft: Int,
+  val nasIp: String = "",
+  val commonShare: String = "",
+  val familyId: String = "",
+  val fingerprint: String = "",
 )
 
 /**
@@ -129,7 +138,10 @@ internal class InviteViewModel @Inject constructor(
           it.copy(
             phase = InvitePhase.SHOWING,
             qrText = text,
-            summary = InviteSummary(current.user, current.deviceName, share, hours),
+            summary = InviteSummary(
+              current.user, current.deviceName, share, hours,
+              nasIp = invite.nasIp, commonShare = invite.commonShare, familyId = invite.familyId, fingerprint = invite.familyKeyFingerprint,
+            ),
           )
         }
       } catch (e: CancellationException) {

@@ -97,8 +97,11 @@ object InviteScanCheck {
 /**
  * L'ingresso senza QR (§2.2, ultima riga): indirizzo, utente, id della famiglia e impronta **digitati** leggendoli
  * dalla schermata dell'admin, mai ricavati dal NAS (B9: premere "Conferma" su un valore letto dal NAS non verifica
- * niente). La versione minima del registro vale 0 e la Diagnostica avvisa finche' il dispositivo non vede la
- * versione corrente (si alza con il QR "stato della famiglia").
+ * niente), e le due aree (il registro sta nell'area comune: senza, l'invito non c'e'). La versione minima del registro
+ * vale 0 e la Diagnostica avvisa finche' il dispositivo non vede la versione corrente; con il QR "stato della famiglia"
+ * ([minRegistryVersion]) parte gia' da quella. Id e impronta si leggono come li scrive una persona
+ * (`Base32.normalizeHumanInput`: spazi, trattini, maiuscole, O per 0, I e L per 1): e' l'unico punto in cui il testo
+ * digitato diventa un invito (verifica funzionale, ON-1: la pagina toglieva solo gli spazi).
  *
  * Il risultato e' un [FamilyInvite] "manuale": senza GUID (si impara dalla NEGOTIATE sul Wi-Fi che l'utente ha
  * confermato come casa), senza ULA e senza scadenza. [isManual] lo riconosce.
@@ -116,6 +119,7 @@ object ManualInvite {
     commonShare: String,
     privateShare: String,
     deviceName: String,
+    minRegistryVersion: Long = 0L,
   ): Verdict<FamilyInvite> =
     try {
       Verdict.Accepted(
@@ -123,7 +127,7 @@ object ManualInvite {
           FamilyInvite(
             familyId = Base32.normalizeHumanInput(familyId),
             familyKeyFingerprint = Base32.normalizeHumanInput(familyKeyFingerprint),
-            minRegistryVersion = 0L,
+            minRegistryVersion = minRegistryVersion,
             nasIp = nasIp.trim(),
             nasName = null,
             nasGuid = "",

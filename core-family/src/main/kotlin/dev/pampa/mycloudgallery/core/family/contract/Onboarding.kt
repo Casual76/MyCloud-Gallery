@@ -6,6 +6,7 @@ import dev.pampa.mycloudgallery.core.network.contract.DiscoveredNas
 import dev.pampa.mycloudgallery.core.network.contract.HomeCandidate
 import dev.pampa.mycloudgallery.core.network.contract.NasAddress
 import dev.pampa.mycloudgallery.core.rules.Preset
+import dev.pampa.mycloudgallery.core.trust.TrustFormat
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -294,6 +295,32 @@ class RecoveryCodeDisplay(
 }
 
 /**
+ * Il NAS e le aree che l'onboarding ha salvato (passi 2-4, o letti dall'invito), senza segreti. Servono a riprendere
+ * il recupero dell'admin dopo la morte del processo (verifica funzionale, ON-3: prima stavano solo nel ViewModel) e a
+ * scrivere il percorso esatto della cartella della famiglia nella guida "ricominciare da zero" (ON-6). Null i campi
+ * che l'onboarding non ha ancora.
+ */
+data class SavedNas(val address: NasAddress, val user: String?, val commonShare: String?, val privateShare: String?) {
+  /**
+   * La cartella della famiglia sul NAS come la scrive Esplora file di Windows (ON-6, "ricominciare da zero"), per esempio
+   * `\\192.168.178.58\NAS\.mycloudgallery\family`. Null senza area comune o senza un indirizzo che Windows capisca.
+   */
+  fun familyFolderForWindows(): String? {
+    val share = commonShare ?: return null
+    val host = address.ip.takeIf { ':' !in it } ?: address.name ?: return null
+    return "\\\\$host\\$share\\${TrustFormat.ROOT_DIR}\\$FAMILY_FOLDER"
+  }
+
+  /** Mai indirizzi, utenti o nomi di share in un log (§4.2). */
+  override fun toString(): String = "SavedNas(utente=${user != null}, aree=${commonShare != null}/${privateShare != null})"
+
+  private companion object {
+    /** La cartella della famiglia nella cartella dell'app (`docs/formato-nas.md` §2.2). */
+    const val FAMILY_FOLDER = "family"
+  }
+}
+
+/**
  * La logica dei 14 passi (P4), persistente e riprendibile. Le schermate (P6) parlano solo con questa
  * interfaccia: consegnano un [StepInput], ricevono uno [StepResult], seguono [progress].
  *
@@ -312,7 +339,11 @@ interface OnboardingCoordinator {
   /** Torna al passo precedente, senza disfare cio' che e' gia' scritto sul NAS. */
   suspend fun back()
 
-  /** Riapre un passo saltato (dalle Impostazioni, "Da completare"). */
+  /**
+   * Riapre un passo saltato (dal riepilogo o dalle Impostazioni, "Da completare"). A onboarding finito riapre anche un
+   * passo **locale** gia' fatto (6-11, 13, se e' nel piano): dalle Impostazioni si rifanno il controllo di WireGuard e la
+   * checklist del backup (verifica funzionale, ON-7). Mai un passo del NAS gia' fatto (indirizzo, account, aree, chiave).
+   */
   suspend fun resume(step: OnboardingStep): StepResult
 
   /** Passo 2: il candidato a "casa" letto dal Wi-Fi attuale (null senza Wi-Fi). */
@@ -329,4 +360,22 @@ interface OnboardingCoordinator {
 
   /** Passo 12(b): il codice di recupero appena generato, da mostrare una volta. */
   suspend fun recoveryCode(): RecoveryCodeDisplay
+
+  /** Il NAS e le aree salvati (ON-3, ON-6), o null prima del passo 2. */
+  suspend fun savedNas(): SavedNas?
+
+  /**
+   * Vero se il recupero dell'admin (o il secondo admin) e' a meta': aree scelte, ma il registro non dice ancora "approvato,
+   * admin". Le pagine del recupero si riaprono da qui anche dopo la morte del processo (verifica funzionale, ON-3).
+   */
+  suspend fun recoveryPending(): Boolean
+
+  /**
+   * "Configura di nuovo" su un dispositivo revocato, dismesso o rimasto nella famiglia di prima dopo un reset (verifica
+   * funzionale, ON-4 e ON-5): si dimenticano avanzamento, account e password del NAS, stato fidato, chiave del dispositivo
+   * (al rientro ne nasce una nuova, con un id nuovo: E-S2, E-O7) e chiave di famiglia, se c'era. I dati locali (foto del
+   * telefono, nascosti, preferiti, miniature) restano. Parte solo da un gesto confermato dall'utente. Dopo, il dispositivo
+   * e' "mai configurato": benvenuto.
+   */
+  suspend fun startOver(): StepResult
 }

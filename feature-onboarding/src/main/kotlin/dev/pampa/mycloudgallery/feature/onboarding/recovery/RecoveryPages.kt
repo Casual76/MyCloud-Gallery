@@ -93,6 +93,8 @@ internal class RecoveryActions(
   val onScanFamilyState: () -> Unit = {},
   val onFinish: () -> Unit = {},
   val onProblemAction: (ProblemAction) -> Unit = {},
+  /** Senza kit ne' codice: la guida "ricominciare da zero" (ON-6). */
+  val onStartOverGuide: () -> Unit = {},
 )
 
 /** Il codice digitato e' abbastanza lungo da provare ad aprire il kit? (La lunghezza esatta la sa il kit.) */
@@ -153,6 +155,9 @@ internal fun RecoveryKitsPage(
     }
     when {
       !ui.kitsLoaded -> item(key = "loading") { LoadingBlock(label = stringResource(R.string.recovery_kits_loading)) }
+      // L'area non si e' letta (NAS lento, permesso negato, VPN caduta): lo dice il problema qui sotto, con "Riprova". Non e'
+      // "nessun kit" (ON-9).
+      ui.problem != null -> Unit
       ui.noKits || ui.kits.isEmpty() -> item(key = "none") {
         NoticeCard(
           tone = NoticeTone.Caution,
@@ -161,6 +166,7 @@ internal fun RecoveryKitsPage(
           body = stringResource(R.string.recovery_none_detail),
         ) {
           CardButton(text = stringResource(R.string.action_retry), onClick = actions.onRetryKits, primary = true)
+          CardButton(text = stringResource(R.string.startover_link), onClick = actions.onStartOverGuide, primary = false)
         }
       }
       else -> {
@@ -319,7 +325,9 @@ internal fun RecoveryCodePage(
           icon = Icons.Rounded.ErrorOutline,
           title = stringResource(R.string.recovery_wrong_title),
           body = stringResource(R.string.recovery_wrong_detail),
-        )
+        ) {
+          CardButton(text = stringResource(R.string.startover_link_code), onClick = actions.onStartOverGuide, primary = false)
+        }
       }
     }
     item(key = "state-header") {

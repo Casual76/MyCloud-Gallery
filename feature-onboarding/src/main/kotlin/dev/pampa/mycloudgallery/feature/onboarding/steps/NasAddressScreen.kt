@@ -146,7 +146,7 @@ private fun OnboardingProblem?.isHardFailure(): Boolean =
   this == OnboardingProblem.IDENTITY_MISMATCH || this == OnboardingProblem.NAS_INSECURE
 
 @Composable
-private fun HomeSection(
+internal fun HomeSection(
   home: HomeUi,
   onConfirm: (Boolean) -> Unit,
   onRefresh: () -> Unit,

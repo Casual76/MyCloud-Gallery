@@ -38,6 +38,11 @@ internal sealed interface OnboardingDestination {
     override val order: Float get() = RECOVERY_BASE + page.ordinal * SUB_WEIGHT
   }
 
+  /** Il dispositivo non fa piu' parte della famiglia (revocato, dismesso, stato perso): "Configura di nuovo" (ON-4). */
+  data object Removed : OnboardingDestination {
+    override val order: Float get() = 0f
+  }
+
   private companion object {
     const val SUB_WEIGHT = 0.05f
     const val JOIN_BASE = 2.1f
@@ -204,12 +209,20 @@ internal data class JoinUi(
   val problem: OnboardingProblem? = null,
   /** Dopo un errore di password: la password va riscritta (un solo tentativo, E-R8). */
   val needsNewPassword: Boolean = false,
+  /**
+   * Senza QR: "e' la rete di casa?" (ON-1), prima di contattare il NAS. Null dove non si chiede (con il QR, o rifacendo la
+   * richiesta: la casa e' gia' confermata).
+   */
+  val home: HomeUi? = null,
 )
 
 // --- Recupero dell'admin e secondo admin ------------------------------------------------------------
 
-/** Le pagine del recupero, nell'ordine: kit, scelta sul vecchio admin (solo recupero), codice, esito. */
-internal enum class RecoveryPage { Kits, Fate, Code, Done }
+/**
+ * Le pagine del recupero, nell'ordine: kit, scelta sul vecchio admin (solo recupero), codice, esito. In fondo la guida
+ * "ricominciare da zero", per chi non ha piu' ne' kit ne' codice (ON-6).
+ */
+internal enum class RecoveryPage { Kits, Fate, Code, Done, StartOver }
 
 internal data class RecoveryUi(
   val page: RecoveryPage = RecoveryPage.Kits,
@@ -227,8 +240,33 @@ internal data class RecoveryUi(
   val problem: OnboardingProblem? = null,
   /** Il codice digitato non apre il kit: si puo' riprovare quante volte si vuole (e' offline). */
   val wrongCode: Boolean = false,
-  /** Nessun kit nell'area privata. */
+  /** Nessun kit nell'area privata (letta senza errori: un errore e' [problem], ON-9). */
   val noKits: Boolean = false,
+  /** La guida "ricominciare da zero" e' aperta da questa pagina: "indietro" ci torna. */
+  val startOverReturn: RecoveryPage = RecoveryPage.Kits,
+  /** La cartella della famiglia sul NAS come la scrive Esplora file, se si conoscono indirizzo e area comune. */
+  val startOverPath: String? = null,
+)
+
+// --- Dispositivo fuori dalla famiglia (ON-4) --------------------------------------------------------
+
+/** Perche' il dispositivo non fa piu' parte della famiglia. */
+internal enum class RemovalReason {
+  /** L'admin l'ha revocato. */
+  REVOKED,
+
+  /** L'admin l'ha dismesso (non piu' in uso). */
+  RETIRED,
+
+  /** Lo stato della famiglia salvato non c'e' piu' o non si verifica. */
+  OTHER,
+}
+
+internal data class RemovalUi(
+  val reason: RemovalReason,
+  /** "Configura di nuovo" e' in corso. */
+  val busy: Boolean = false,
+  val problem: OnboardingProblem? = null,
 )
 
 // --- Lo stato intero --------------------------------------------------------------------------------
@@ -257,10 +295,13 @@ internal data class OnboardingUiState(
   val summary: SummaryUi = SummaryUi(),
   val join: JoinUi? = null,
   val recovery: RecoveryUi? = null,
+  /** Il dispositivo non fa piu' parte della famiglia (ON-4): al posto del vecchio riepilogo. */
+  val removal: RemovalUi? = null,
 )
 
 /** Il problema che la pagina [destination] mostra adesso, se ce n'e' uno. */
 internal fun OnboardingUiState.activeProblem(destination: OnboardingDestination): OnboardingProblem? = when (destination) {
+  OnboardingDestination.Removed -> removal?.problem
   is OnboardingDestination.Join -> join?.problem
   is OnboardingDestination.Recovery -> recovery?.problem
   is OnboardingDestination.Step -> when (destination.step) {

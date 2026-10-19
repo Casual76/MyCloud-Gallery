@@ -41,6 +41,7 @@ import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
+import dev.pampa.mycloudgallery.core.family.contract.TypedFingerprint
 import dev.pampa.mycloudgallery.core.qr.QrCode
 import dev.pampa.mycloudgallery.core.rules.Preset
 import dev.pampa.mycloudgallery.core.rules.PresetCatalog
@@ -237,6 +238,12 @@ private fun PresetRow(title: String, detail: String, selected: Boolean, onSelect
   )
 }
 
+/** Un dato per l'ingresso senza QR: il nome a sinistra, il valore (in gruppi da 4, come si legge a voce) sotto. */
+@Composable
+private fun ManualRow(label: String, value: String) {
+  FluidListRow(title = value, subtitle = "", eyebrow = label, disclosure = false)
+}
+
 private fun androidx.compose.foundation.lazy.LazyListScope.inviteShown(state: InviteUiState, actions: InviteActions) {
   val summary = state.summary
   item {
@@ -290,6 +297,30 @@ private fun androidx.compose.foundation.lazy.LazyListScope.inviteShown(state: In
           leading = { RowGlyph(Icons.Rounded.Schedule) },
           badge = { FluidRowValue(text = pluralStringResource(R.plurals.invite_expires_value, summary.hoursLeft, summary.hoursLeft)) },
         )
+      }
+    }
+  }
+  // Per chi entra senza QR (ON-1): i dati da leggere a voce, uno per riga.
+  if (summary != null && summary.familyId.isNotEmpty()) {
+    item {
+      FluidSectionHeader(
+        title = stringResource(R.string.invite_manual_section),
+        detail = stringResource(R.string.invite_manual_section_detail),
+      )
+    }
+    item {
+      FluidListGroup {
+        ManualRow(stringResource(R.string.invite_manual_ip), summary.nasIp)
+        FluidListDivider()
+        ManualRow(stringResource(R.string.invite_summary_account), summary.user)
+        FluidListDivider()
+        ManualRow(stringResource(R.string.invite_manual_common), summary.commonShare)
+        FluidListDivider()
+        ManualRow(stringResource(R.string.invite_summary_share), summary.privateShare)
+        FluidListDivider()
+        ManualRow(stringResource(R.string.invite_manual_family_id), TypedFingerprint.grouped(summary.familyId))
+        FluidListDivider()
+        ManualRow(stringResource(R.string.invite_manual_fingerprint), TypedFingerprint.grouped(summary.fingerprint))
       }
     }
   }

@@ -16,15 +16,18 @@ import dev.pampa.mycloudgallery.feature.settings.devices.DeviceDetailRoute
 import dev.pampa.mycloudgallery.feature.settings.devices.DevicesRoute
 import dev.pampa.mycloudgallery.feature.settings.family.AdminRecoveryRoute
 import dev.pampa.mycloudgallery.feature.settings.family.FamilyLinks
+import dev.pampa.mycloudgallery.feature.settings.family.FamilyRejoinRoute
 import dev.pampa.mycloudgallery.feature.settings.family.FamilyResetRoute
 import dev.pampa.mycloudgallery.feature.settings.family.FamilyRoute
 import dev.pampa.mycloudgallery.feature.settings.family.FamilyStateRoute
 import dev.pampa.mycloudgallery.feature.settings.family.InviteRoute
 import dev.pampa.mycloudgallery.feature.settings.family.KitRoute
+import dev.pampa.mycloudgallery.feature.settings.family.StartOverGuideRoute
 import dev.pampa.mycloudgallery.feature.settings.network.NetworkRoute
 import dev.pampa.mycloudgallery.feature.settings.quality.PreviewQualityRoute
-import dev.pampa.mycloudgallery.feature.settings.security.BackupNoticeScreen
+import dev.pampa.mycloudgallery.feature.settings.security.BackupNoticeRoute
 import dev.pampa.mycloudgallery.feature.settings.security.SecurityRoute
+import dev.pampa.mycloudgallery.feature.settings.sharing.SharingRoute
 import dev.pampa.mycloudgallery.feature.settings.ui.SettingsHost
 import kotlinx.serialization.Serializable
 
@@ -64,6 +67,14 @@ data object SettingsFamilyStateRoute
 @Serializable
 data object SettingsResetRoute
 
+/** "Rientra con un QR nuovo": il dispositivo esce dalla famiglia e torna al benvenuto (verifica funzionale, ON-5). */
+@Serializable
+data object SettingsRejoinRoute
+
+/** "Ricominciare da zero" dal PC, senza admin ne' kit (verifica funzionale, ON-6). */
+@Serializable
+data object SettingsStartOverRoute
+
 @Serializable
 data object SettingsAccountRoute
 
@@ -88,6 +99,10 @@ data object SettingsAboutRoute
 /** La qualita' delle anteprime del NAS e le copertine degli album (Fase 4A, P11). */
 @Serializable
 data object SettingsQualityRoute
+
+/** Le condivisioni: "Rimuovi la posizione" (Fase 5B, P12). */
+@Serializable
+data object SettingsSharingRoute
 
 /**
  * Le Impostazioni (P7): Dispositivi (elenco, dettaglio, approvazione, segnala perso), Famiglia (invito, kit di
@@ -128,6 +143,7 @@ fun NavGraphBuilder.settingsGraph(
             openAbout = { nav.navigate(SettingsAboutRoute) },
             openQuality = { nav.navigate(SettingsQualityRoute) },
             openBackup = openBackup,
+            openSharing = { nav.navigate(SettingsSharingRoute) },
           ),
           openDiagnostics = openDiagnostics,
           resumeStep = resumeStep,
@@ -161,6 +177,8 @@ fun NavGraphBuilder.settingsGraph(
             openSecondAdmin = { nav.navigate(SettingsAdminRecoveryRoute(replace = false)) },
             openReplaceAdmin = { nav.navigate(SettingsAdminRecoveryRoute(replace = true)) },
             openReset = { nav.navigate(SettingsResetRoute) },
+            openRejoin = { nav.navigate(SettingsRejoinRoute) },
+            openStartOverGuide = { nav.navigate(SettingsStartOverRoute) },
           ),
         )
       }
@@ -175,7 +193,11 @@ fun NavGraphBuilder.settingsGraph(
         )
       }
     }
-    composable<SettingsAdminRecoveryRoute> { SettingsHost { AdminRecoveryRoute(onBack = back) } }
+    composable<SettingsAdminRecoveryRoute> {
+      SettingsHost { AdminRecoveryRoute(onBack = back, openStartOverGuide = { nav.navigate(SettingsStartOverRoute) }) }
+    }
+    composable<SettingsRejoinRoute> { SettingsHost { FamilyRejoinRoute(onBack = back) } }
+    composable<SettingsStartOverRoute> { SettingsHost { StartOverGuideRoute(onBack = back) } }
     composable<SettingsFamilyStateRoute> { SettingsHost { FamilyStateRoute(onBack = back) } }
     composable<SettingsResetRoute> {
       SettingsHost { FamilyResetRoute(onBack = back, onInvite = { nav.navigate(SettingsInviteRoute) }) }
@@ -205,12 +227,15 @@ fun NavGraphBuilder.settingsGraph(
     }
     composable<SettingsBackupRoute> {
       SettingsHost {
-        BackupNoticeScreen(onBack = back, onReviewChecklist = { resumeStep(OnboardingStep.SECURITY_NOTICE) })
+        BackupNoticeRoute(onBack = back, onReviewChecklist = { resumeStep(OnboardingStep.SECURITY_NOTICE) })
       }
     }
 
     // --- Anteprime del NAS (Fase 4A) ---
     composable<SettingsQualityRoute> { SettingsHost { PreviewQualityRoute(onBack = back) } }
+
+    // --- Condivisioni senza posizione (Fase 5B) ---
+    composable<SettingsSharingRoute> { SettingsHost { SharingRoute(onBack = back) } }
 
     // --- Informazioni e licenze ---
     composable<SettingsAboutRoute> { SettingsHost { AboutRoute(onBack = back) } }

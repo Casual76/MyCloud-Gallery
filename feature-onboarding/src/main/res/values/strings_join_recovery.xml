@@ -37,6 +37,12 @@
   <string name="manual_state_scan_detail">Un QR che mostra un dispositivo già approvato. Senza, entro con la versione minima più bassa e resta un avviso in Diagnostica.</string>
   <string name="manual_state_scanned">Stato della famiglia letto</string>
   <string name="manual_state_scanned_detail">Versione minima del registro: %1$d.</string>
+  <string name="manual_common_share">Area comune</string>
+  <string name="manual_common_share_hint">La cartella del NAS dove sta la famiglia, come te la legge l’admin (per esempio NAS).</string>
+  <string name="manual_private_share">Area privata</string>
+  <string name="manual_private_share_hint">La tua cartella sul NAS. Se la lasci vuota è quella con il nome dell’utente.</string>
+  <string name="manual_home_section">La rete di casa</string>
+  <string name="manual_home_section_detail">Senza QR non so se questo Wi-Fi è quello di casa: me lo dici tu, prima che contatti il NAS.</string>
 
   <!-- Riepilogo dell'invito -->
   <string name="summary_invite_title">Controlla l’invito</string>
@@ -62,7 +68,7 @@
   <string name="recovery_fingerprint_label">Impronta della famiglia (dal foglio)</string>
   <string name="recovery_fingerprint_hint">Le 26 lettere e cifre scritte sul foglio sotto il codice. Con il QR «Stato della famiglia» non servono.</string>
   <string name="join_password_weak_ask_admin">Chiedi a chi gestisce il NAS di cambiarla: l’app la usa anche fuori casa.</string>
-  <string name="join_password_footnote">Con la password entri in sola lettura: potrai guardare, ma i tuoi dati non verranno accettati finché l’admin non ti approva.</string>
+  <string name="join_password_footnote">Dopo la password mandi la richiesta all’admin. Finché non ti approva, questo dispositivo non vede la Libreria della famiglia e i suoi dati non vengono accettati.</string>
   <string name="join_name_title">Come ti chiami qui?</string>
   <string name="join_name_subtitle">È il nome con cui l’admin vedrà questo dispositivo.</string>
   <string name="join_name_submit">Invia la richiesta</string>
@@ -71,7 +77,7 @@
   <string name="join_name_hint_detail">Per esempio «Tablet — profilo Mamma»: così l’admin sa chi sta approvando.</string>
   <string name="approved_title">Sei dentro!</string>
   <string name="approved_subtitle">L’admin ti ha approvato.</string>
-  <string name="approved_detail">Ora questo dispositivo fa parte della famiglia: puoi guardare e aggiungere foto.</string>
+  <string name="approved_detail">Questo dispositivo fa già parte della famiglia. Finisci gli ultimi passi sul telefono e arrivi alla Libreria.</string>
 
   <string name="awaiting_title">In attesa dell’admin</string>
   <string name="awaiting_subtitle">Solo lettura finché non ti approva.</string>
@@ -90,7 +96,10 @@
   <string name="awaiting_waiting">In attesa…</string>
   <string name="awaiting_waiting_detail">Ricontrollo ogni 10 secondi, solo con l’app aperta.</string>
   <string name="awaiting_continue">Intanto finisci la configurazione</string>
-  <string name="awaiting_note">Puoi già guardare la Libreria comune. Le tue foto entreranno nella famiglia dopo l’approvazione.</string>
+  <string name="awaiting_note">Finché l’admin non ti approva, la Libreria della famiglia non si apre e le tue foto non entrano nella famiglia.</string>
+  <string name="awaiting_renew_title">La richiesta è scaduta?</string>
+  <string name="awaiting_renew_detail">L’admin ha 15 minuti per approvarti da quando vede la richiesta. Se ti dice che è scaduta, rifalla: ti chiedo di nuovo l’invito e la password, e avrai un codice nuovo.</string>
+  <string name="awaiting_renew_action">Rifai la richiesta</string>
 
   <!-- Recupero dell'admin e secondo admin -->
   <string name="recovery_title">Recupera l’admin</string>
@@ -144,4 +153,48 @@
   <string name="recovery_done_old_revoked">Il vecchio admin è revocato</string>
   <string name="recovery_done_old_detail">Lo vedi nell’elenco dei dispositivi.</string>
   <string name="recovery_done_footnote">Il kit di recupero resta quello di prima.</string>
+
+  <!-- Ricominciare da zero: l'admin senza telefono, kit e codice (ON-6, "via dal PC") -->
+  <string name="startover_link">Non ho né kit né codice</string>
+  <string name="startover_link_code">Non ho più il codice</string>
+  <string name="startover_title">Ricominciare da zero</string>
+  <string name="startover_subtitle">Senza kit e senza codice l’admin non si recupera: si rifà la famiglia.</string>
+  <string name="startover_loss_title">Cosa si perde e cosa no</string>
+  <string name="startover_loss_detail">Si perdono la famiglia e l’elenco dei dispositivi registrati: ogni telefono e tablet va configurato di nuovo e riapprovato. Le foto no: restano sul NAS e sui telefoni, con i backup e le versioni.</string>
+  <string name="startover_why_title">Perché non lo fa l’app</string>
+  <string name="startover_why_detail">Cancellare la famiglia è un potere dell’admin. Senza il suo telefono, il kit o il codice nessun telefono può farlo: lo fai tu dal PC, con un account del NAS che può scrivere nell’area comune.</string>
+  <string name="startover_steps_section">Dal PC, in quest’ordine</string>
+  <string name="startover_step_open">1. Apri Esplora file</string>
+  <string name="startover_step_open_detail">Scrivi questo nella barra dell’indirizzo e premi Invio. Se Windows chiede utente e password, usa un account del NAS che può scrivere nell’area comune.</string>
+  <string name="startover_path_unknown">\\\\indirizzo-del-NAS\\area-comune\\.mycloudgallery</string>
+  <string name="startover_step_hidden">2. Se non vedi le cartelle</string>
+  <string name="startover_step_hidden_detail">La cartella .mycloudgallery è nascosta: in Esplora file tocca Visualizza, poi Mostra, poi Elementi nascosti.</string>
+  <string name="startover_step_delete">3. Cancella solo la cartella «family»</string>
+  <string name="startover_step_delete_detail">Il percorso completo è %1$s. Non toccare le altre cartelle che stanno lì accanto, né le foto.</string>
+  <string name="startover_step_delete_detail_unknown">È dentro .mycloudgallery, nell’area comune. Non toccare le altre cartelle che stanno lì accanto, né le foto.</string>
+  <string name="startover_step_found">4. Torna qui e crea la famiglia</string>
+  <string name="startover_step_found_detail">Rifai la configurazione da admin: scriverai su carta un codice di recupero nuovo. Se la cartella c’è ancora, al passo delle aree te lo dico.</string>
+  <string name="startover_step_others">5. Poi, su ogni altro dispositivo</string>
+  <string name="startover_step_others_detail">Impostazioni, Famiglia, «Rientra con un QR nuovo», e scansiona il QR d’invito che gli mostri.</string>
+  <string name="startover_action">Ho cancellato la cartella: crea la famiglia</string>
+  <string name="startover_footnote">L’app non cancella niente sul NAS da sola. Il vecchio telefono dell’admin, se ricompare, non fa più parte della famiglia nuova.</string>
+
+  <!-- Dispositivo fuori dalla famiglia (ON-4) -->
+  <string name="removed_title_revoked">Questo dispositivo è stato revocato</string>
+  <string name="removed_title_retired">Questo dispositivo è stato dismesso</string>
+  <string name="removed_title_other">Questo dispositivo non fa più parte della famiglia</string>
+  <string name="removed_subtitle">Non vede più il NAS della famiglia.</string>
+  <string name="removed_why_title">Cosa è successo</string>
+  <string name="removed_detail_revoked">L’admin lo ha tolto dalla famiglia. Le foto di questo telefono restano dove sono.</string>
+  <string name="removed_detail_retired">L’admin lo ha segnato come non più in uso. Le foto di questo telefono restano dove sono.</string>
+  <string name="removed_detail_other">Lo stato della famiglia salvato qui non c’è più o non si verifica, per esempio dopo un reset della famiglia. Le foto di questo telefono restano dove sono.</string>
+  <string name="removed_again_section">Per usarlo di nuovo</string>
+  <string name="removed_again_forget">Tolgo account, password e chiavi di questo dispositivo</string>
+  <string name="removed_again_forget_detail">Al rientro avrà una chiave nuova: l’admin lo vedrà come un dispositivo nuovo.</string>
+  <string name="removed_again_join">Poi entri con il QR dell’admin</string>
+  <string name="removed_again_join_detail">Oppure recuperi l’admin, se il kit è tuo. L’admin ti approva di nuovo.</string>
+  <string name="removed_again_keep">Restano su questo telefono</string>
+  <string name="removed_again_keep_detail">Le foto, i nascosti, i preferiti e le miniature.</string>
+  <string name="removed_action">Configura di nuovo</string>
+  <string name="removed_footnote">Se pensi che sia un errore, chiedi all’admin prima di configurare di nuovo.</string>
 </resources>

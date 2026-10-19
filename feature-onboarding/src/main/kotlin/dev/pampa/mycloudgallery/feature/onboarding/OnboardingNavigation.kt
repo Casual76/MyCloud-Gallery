@@ -28,6 +28,13 @@ data class OnboardingResumeRoute(val stepName: String) {
 }
 
 /**
+ * "Rifai la richiesta" dalla pagina d'attesa dell'approvazione (verifica funzionale, ON-2): la scansione (o i dati a
+ * mano) di nuovo, con il rinnovo della richiesta di `JoinFlow`. Finita o lasciata, si torna all'attesa.
+ */
+@Serializable
+data object OnboardingRenewRoute
+
+/**
  * Le schermate dell'onboarding (scheletro P0, schermate P6). [onDone] lo fornisce :app: e' l'unica uscita
  * verso il resto dell'app (i feature non si conoscono). Dopo [onDone] la destinazione la decide lo stato
  * (`SetupState`), non questa callback.
@@ -44,5 +51,16 @@ fun NavGraphBuilder.onboardingGraph(nav: NavController, onDone: () -> Unit, onPa
       val route = entry.toRoute<OnboardingResumeRoute>()
       OnboardingRoute(resumeStep = route.step, onDone = { if (!nav.popBackStack()) onDone() }, onPause = onPause)
     }
+  }
+}
+
+/**
+ * La sola pagina "Rifai la richiesta" (ON-2), per la pagina d'attesa dell'approvazione. **Non** il grafo intero: la radice
+ * registra per ogni stato solo le destinazioni raggiungibili da li' (revisione 2, F5), e da "in attesa" l'onboarding (il
+ * passo corrente, i passi da riprendere) non deve esserlo. Finita o lasciata la richiesta si torna all'attesa.
+ */
+fun NavGraphBuilder.onboardingRenewal(nav: NavController, onPause: () -> Unit = {}) {
+  composable<OnboardingRenewRoute> {
+    OnboardingRoute(resumeStep = null, onDone = { nav.popBackStack() }, onPause = onPause, renew = true)
   }
 }

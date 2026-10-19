@@ -13,9 +13,12 @@ import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.MainActivity
 import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
 import dev.pampa.mycloudgallery.core.family.contract.BlockReason
+import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
 import dev.pampa.mycloudgallery.feature.diagnostics.DiagnosticsGraphRoute
 import dev.pampa.mycloudgallery.feature.nas.contract.NasScreen
+import dev.pampa.mycloudgallery.feature.onboarding.OnboardingCurrentStepRoute
 import dev.pampa.mycloudgallery.feature.onboarding.OnboardingGraphRoute
+import dev.pampa.mycloudgallery.feature.onboarding.OnboardingResumeRoute
 import dev.pampa.mycloudgallery.feature.settings.SettingsDevicesRoute
 import dev.pampa.mycloudgallery.feature.settings.SettingsGraphRoute
 import dev.pampa.mycloudgallery.root.RootDestination
@@ -124,6 +127,8 @@ class EntryHardeningTest {
     assertThat(flags and WindowManager.LayoutParams.FLAG_SECURE).isNotEqualTo(0)
     // Da qui non si arriva altrove: niente galleria, Impostazioni, Diagnostica o onboarding con un intent costruito.
     assertUnreachable(nav, MainRoute, SettingsGraphRoute, SettingsDevicesRoute, DiagnosticsGraphRoute, OnboardingGraphRoute)
+    // "Rifai la richiesta" (ON-2) aggiunge la sola sua pagina: il passo corrente e quelli da riprendere restano fuori.
+    assertUnreachable(nav, OnboardingCurrentStepRoute, OnboardingResumeRoute(OnboardingStep.VPN))
     assertNasUnreachable(nav)
   }
 

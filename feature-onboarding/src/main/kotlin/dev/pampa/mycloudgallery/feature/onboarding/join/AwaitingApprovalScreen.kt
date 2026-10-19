@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Compare
 import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.TaskAlt
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -28,8 +29,11 @@ import dev.pampa.mycloudgallery.core.qr.QrCode
 import dev.pampa.mycloudgallery.core.security.screen.OverlayShield
 import dev.pampa.mycloudgallery.core.security.screen.SensitiveScreen
 import dev.pampa.mycloudgallery.feature.onboarding.R
+import dev.pampa.mycloudgallery.feature.onboarding.ui.CardButton
 import dev.pampa.mycloudgallery.feature.onboarding.ui.CodeGroups
 import dev.pampa.mycloudgallery.feature.onboarding.ui.DockAction
+import dev.pampa.mycloudgallery.feature.onboarding.ui.NoticeCard
+import dev.pampa.mycloudgallery.feature.onboarding.ui.NoticeTone
 import dev.pampa.mycloudgallery.feature.onboarding.ui.OnboardingDimens
 import dev.pampa.mycloudgallery.feature.onboarding.ui.StepChrome
 import dev.pampa.mycloudgallery.feature.onboarding.ui.StepScaffold
@@ -45,6 +49,10 @@ import dev.pampa.mycloudgallery.feature.onboarding.ui.stepAmbient
  * E' pubblica per :app, che la mostra anche quando il dispositivo e' gia' registrato e l'app viene riaperta; senza il
  * QR (lo stato salvato porta solo il codice) mostra solo il codice. Con [onContinue] (dentro l'onboarding) c'e' il tasto
  * per finire intanto i passi sul telefono.
+ *
+ * Con [onRenew] (la pagina d'attesa della radice, verifica funzionale ON-2) c'e' "Rifai la richiesta": se l'admin vede la
+ * richiesta e approva dopo piu' di 15 minuti, la sua app risponde "scaduta" e il dispositivo deve rifarla, con una chiave
+ * nuova. Prima da qui non c'era nessun tasto e l'unica uscita era cancellare i dati dell'app.
  */
 @Composable
 fun AwaitingApprovalScreen(
@@ -52,6 +60,7 @@ fun AwaitingApprovalScreen(
   deviceKeyQr: String?,
   modifier: Modifier = Modifier,
   onContinue: (() -> Unit)? = null,
+  onRenew: (() -> Unit)? = null,
 ) {
   // Revisione 2, F5: il codice e' cio' che l'admin digita per approvare. Nessuna sovrapposizione di un'altra app
   // (che potrebbe coprirlo con un codice falso) e niente cattura dello schermo ne' anteprima nei recenti.
@@ -138,6 +147,18 @@ fun AwaitingApprovalScreen(
           badge = { FluidSpinner() },
           disclosure = false,
         )
+      }
+    }
+    onRenew?.let { renew ->
+      item(key = "renew") {
+        NoticeCard(
+          tone = NoticeTone.Info,
+          icon = Icons.Rounded.Refresh,
+          title = stringResource(R.string.awaiting_renew_title),
+          body = stringResource(R.string.awaiting_renew_detail),
+        ) {
+          CardButton(text = stringResource(R.string.awaiting_renew_action), onClick = renew, primary = true)
+        }
       }
     }
     item(key = "footnote") { FluidSectionFootnote(text = stringResource(R.string.awaiting_note)) }

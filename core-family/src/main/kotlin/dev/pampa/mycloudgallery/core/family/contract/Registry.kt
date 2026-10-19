@@ -140,4 +140,12 @@ interface RegistryService {
 
   /** Crea l'invito e apre la finestra d'invito di 24 h (`TrustSyncScheduler.setInviteWindow`). */
   suspend fun createInvite(params: InviteParams): FamilyInvite
+
+  /**
+   * Le cartelle da escludere dell'area comune, cambiate dall'admin dopo la fondazione (il passo 5 ripreso da "Da
+   * completare", verifica funzionale ON-8): stanno nella configurazione **firmata**, quindi si firma e si pubblica una
+   * versione nuova del registro (`FamilyAuthority.updateConfig` → `commit`). [NotAdmin][AdminActionResult.NotAdmin] su
+   * un dispositivo che non tiene la chiave di famiglia. I percorsi arrivano gia' validati (`SharePath.parseMediaPath`).
+   */
+  suspend fun updateCommonExclusions(excluded: Set<String>): AdminActionResult
 }

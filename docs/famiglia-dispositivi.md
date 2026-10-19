@@ -145,6 +145,28 @@ versione minima quella della fondazione. Il codice del kit nuovo resta in `recov
 conferma la riscrittura. I dati vecchi restano (ignorati); i dispositivi non migrati restano nella famiglia vecchia e vedono la
 fondazione nuova come un file firmato da un'altra chiave.
 
+**Rientrare in una famiglia** (verifica funzionale del 19/10, ON-4 e ON-5): un dispositivo revocato, dismesso, senza stato della
+famiglia, o rimasto in quella di prima dopo un reset, esce con `OnboardingCoordinator.startOver` ("Configura di nuovo" nella
+pagina della radice; Impostazioni → Famiglia → "Rientra con un QR nuovo", dopo un foglio di conferma). Si tolgono, in
+quest'ordine, la chiave del dispositivo (al rientro ne nasce una nuova, quindi un id nuovo: E-S2, E-O7), la chiave di famiglia se
+c'era, password e account del NAS, lo stato fidato e l'avanzamento; poi il motore rilegge e, senza stato ne' chiave, dice "mai
+configurato". Le foto, i nascosti, i preferiti e le miniature restano. Il dismesso si comporta come il revocato: niente sola
+lettura, si riconfigura e l'admin riapprova. La pagina Famiglia avvisa quando sul NAS c'e' un registro piu' nuovo che non si
+verifica (`Stale(NEWER_UNVERIFIED)`), senza decidere da sola che e' un reset.
+
+**Senza admin, senza kit e senza codice** (decisione dell'utente del 19/10, "via dal PC", ON-6): nessun familiare puo' azzerare la
+famiglia dall'app, e l'app non riceve poteri nuovi. La guida "Ricominciare da zero" (nel recupero dell'onboarding quando non ci
+sono kit o il codice non apre, nel recupero delle Impostazioni e in Impostazioni → Famiglia) spiega come farlo dal PC:
+1. Esplora file, `\\<indirizzo del NAS>\<area comune>\.mycloudgallery` (l'app scrive il percorso vero, da `SavedNas`), con un
+   account del NAS che scrive nell'area comune; la cartella e' nascosta (Visualizza → Mostra → Elementi nascosti);
+2. si cancella **solo** `family` (registro, richieste, segnalazioni): `devices`, `trash`, `leases`, i kit nell'area privata e
+   le foto restano;
+3. su un telefono si rifa' "Crea la famiglia" (chiave, kit e codice nuovi), poi ogni altro dispositivo "Rientra con un QR nuovo".
+
+Si perdono la famiglia e l'elenco dei dispositivi registrati; le foto no. Se la cartella c'e' ancora, "Crea la famiglia" si ferma al
+passo 4 ("Qui c'e' gia' una famiglia"). Il vecchio telefono dell'admin, se ricompare, firma per la famiglia di prima: i dispositivi
+della famiglia nuova non lo accettano (l'ancora e' un'altra).
+
 ---
 
 ## 6. Diagnostica (fiducia)
@@ -213,3 +235,8 @@ fondazione nuova come un file firmato da un'altra chiave.
 5. Recupero dell'admin su un telefono "nuovo" (profilo pulito) con il QR di stato del tablet: il vecchio S25 si azzera al ricollegamento.
 6. Reset della famiglia: QR nuovo sul tablet, il kit nuovo si apre con il codice nuovo.
 7. Telefono admin senza blocco schermo: niente approvazioni (`NotAdmin`), niente reset.
+8. (Verifica funzionale, 19/10) Tablet "Entra senza QR": dati letti dalla pagina "Configura un familiare" dell'admin, "e' casa",
+   password, richiesta, approvazione. Poi lasciare passare 16 minuti prima di approvare: "Rifai la richiesta" dalla pagina
+   d'attesa, codice nuovo, approvazione.
+9. (Verifica funzionale, 19/10) Tablet revocato dall'S25: pagina "revocato" con "Configura di nuovo", rientro con un QR nuovo.
+   Reset della famiglia sull'S25: sul tablet, Impostazioni → Famiglia → "Rientra con un QR nuovo".

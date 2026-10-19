@@ -49,7 +49,9 @@ import dev.pampa.mycloudgallery.core.network.contract.NasAddress
 import dev.pampa.mycloudgallery.core.security.input.SecureInput
 import dev.pampa.mycloudgallery.core.security.screen.SensitiveScreen
 import dev.pampa.mycloudgallery.feature.onboarding.R
+import dev.pampa.mycloudgallery.feature.onboarding.model.HomeUi
 import dev.pampa.mycloudgallery.feature.onboarding.model.JoinUi
+import dev.pampa.mycloudgallery.feature.onboarding.steps.HomeSection
 import dev.pampa.mycloudgallery.feature.onboarding.steps.UserIssue
 import dev.pampa.mycloudgallery.feature.onboarding.steps.userIssue
 import dev.pampa.mycloudgallery.feature.onboarding.ui.DockAction
@@ -79,6 +81,8 @@ internal class ManualJoinForm(
   familyId: String = "",
   fingerprint: String = "",
   deviceName: String = "",
+  commonShare: String = "",
+  privateShare: String = "",
 ) {
   var ip: String by mutableStateOf(ip)
   var user: String by mutableStateOf(user)
@@ -86,16 +90,26 @@ internal class ManualJoinForm(
   var fingerprint: String by mutableStateOf(fingerprint)
   var deviceName: String by mutableStateOf(deviceName)
 
+  /** L'area comune (il registro della famiglia sta li'): senza, l'invito non c'e' (ON-1). */
+  var commonShare: String by mutableStateOf(commonShare)
+
+  /** L'area privata: vuota = quella con il nome dell'utente, come nell'invito dell'admin. */
+  var privateShare: String by mutableStateOf(privateShare)
+
   val address: NasAddress? get() = NasAddress.parseOrNull(ip)
   val userIssue: UserIssue? get() = userIssue(user)
   val isComplete: Boolean
-    get() = address != null && userIssue == null && familyId.isNotBlank() && fingerprint.isNotBlank() && deviceName.isNotBlank()
+    get() = address != null && userIssue == null && familyId.isNotBlank() && fingerprint.isNotBlank() && deviceName.isNotBlank() &&
+      commonShare.isNotBlank()
 }
 
 internal class ManualJoinActions(
   val onSubmit: (ManualJoinForm) -> Unit = {},
   val onScanFamilyState: () -> Unit = {},
   val onProblemAction: (ProblemAction) -> Unit = {},
+  /** "E' la rete di casa?" (ON-1): si' o no. */
+  val onConfirmHome: (Boolean) -> Unit = {},
+  val onRefreshHome: () -> Unit = {},
 )
 
 /**
@@ -113,6 +127,9 @@ internal fun JoinManualPage(
   modifier: Modifier = Modifier,
 ) {
   val ipInvalid = form.ip.isNotBlank() && form.address == null
+  // Senza QR la casa la conferma l'utente (ON-1): finche' non l'ha fatto "Continua" non contatta il NAS. Rifacendo la
+  // richiesta (home null) e' gia' confermata.
+  val homeReady = ui.home == null || ui.home is HomeUi.Confirmed
   StepScaffold(
     title = stringResource(R.string.manual_title),
     subtitle = stringResource(R.string.manual_subtitle),
@@ -121,8 +138,8 @@ internal fun JoinManualPage(
     modifier = modifier,
     primary = DockAction(
       label = stringResource(R.string.action_continue),
-      onClick = { if (form.isComplete) actions.onSubmit(form) },
-      enabled = form.isComplete && !ui.busy,
+      onClick = { if (form.isComplete && homeReady) actions.onSubmit(form) },
+      enabled = form.isComplete && homeReady && !ui.busy,
       loading = ui.busy,
     ),
   ) {
@@ -133,6 +150,14 @@ internal fun JoinManualPage(
         title = stringResource(R.string.manual_intro_title),
         body = stringResource(R.string.manual_intro_detail),
       )
+    }
+    ui.home?.let { home ->
+      item(key = "home-header") {
+        FluidSectionHeader(title = stringResource(R.string.manual_home_section), detail = stringResource(R.string.manual_home_section_detail))
+      }
+      item(key = "home") {
+        HomeSection(home = home, onConfirm = actions.onConfirmHome, onRefresh = actions.onRefreshHome, onProblemAction = actions.onProblemAction)
+      }
     }
     item(key = "fields-header") { FluidSectionHeader(title = stringResource(R.string.manual_section)) }
     item(key = "fields") {
@@ -192,12 +217,34 @@ internal fun JoinManualPage(
           ),
         )
         FluidTextField(
+          value = form.commonShare,
+          onValueChange = { form.commonShare = it },
+          label = stringResource(R.string.manual_common_share),
+          supportingText = stringResource(R.string.manual_common_share_hint),
+          keyboardOptions = KeyboardOptions(
+            capitalization = KeyboardCapitalization.None,
+            autoCorrectEnabled = false,
+            imeAction = ImeAction.Next,
+          ),
+        )
+        FluidTextField(
+          value = form.privateShare,
+          onValueChange = { form.privateShare = it },
+          label = stringResource(R.string.manual_private_share),
+          supportingText = stringResource(R.string.manual_private_share_hint),
+          keyboardOptions = KeyboardOptions(
+            capitalization = KeyboardCapitalization.None,
+            autoCorrectEnabled = false,
+            imeAction = ImeAction.Next,
+          ),
+        )
+        FluidTextField(
           value = form.deviceName,
           onValueChange = { form.deviceName = it },
           label = stringResource(R.string.manual_device_name),
           placeholder = stringResource(R.string.manual_device_name_placeholder),
           keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-          keyboardActions = KeyboardActions(onDone = { if (form.isComplete) actions.onSubmit(form) }),
+          keyboardActions = KeyboardActions(onDone = { if (form.isComplete && homeReady) actions.onSubmit(form) }),
         )
       }
     }
@@ -508,7 +555,8 @@ internal fun JoinApprovedPage(chrome: StepChrome, onFinish: () -> Unit, modifier
     chrome = chrome,
     ambient = stepAmbient(OnboardingStep.SUMMARY),
     modifier = modifier,
-    primary = DockAction(label = stringResource(R.string.summary_finish), onClick = onFinish),
+    // Gia' approvato (ON-12a): restano i passi sul telefono, non la Libreria.
+    primary = DockAction(label = stringResource(R.string.action_continue), onClick = onFinish),
   ) {
     item(key = "hero") {
       Column(

@@ -21,8 +21,12 @@ import dev.pampa.mycloudgallery.core.family.contract.QrPayloads
 import dev.pampa.mycloudgallery.core.family.contract.RecoveryCodeDisplay
 import dev.pampa.mycloudgallery.core.family.contract.RecoveryKitRef
 import dev.pampa.mycloudgallery.core.family.contract.RecoveryOutcome
+import dev.pampa.mycloudgallery.core.family.contract.RegistryService
 import dev.pampa.mycloudgallery.core.family.contract.StepInput
 import dev.pampa.mycloudgallery.core.family.contract.StepResult
+import dev.pampa.mycloudgallery.core.family.contract.TrustStatus
+import dev.pampa.mycloudgallery.core.family.invite.ManualInvite
+import dev.pampa.mycloudgallery.core.family.onboarding.asOnboardingProblem
 import dev.pampa.mycloudgallery.core.nas.contract.NasAccount
 import dev.pampa.mycloudgallery.core.nas.contract.NasResult
 import dev.pampa.mycloudgallery.core.network.contract.LocalNetworkAccess
@@ -38,6 +42,7 @@ import dev.pampa.mycloudgallery.core.rules.Preset
 import dev.pampa.mycloudgallery.core.rules.platform.health.BackgroundHealthReader
 import dev.pampa.mycloudgallery.core.trust.RejectReason
 import dev.pampa.mycloudgallery.core.trust.Verdict
+import dev.pampa.mycloudgallery.core.trust.codec.Base32
 import dev.pampa.mycloudgallery.feature.onboarding.model.AccountUi
 import dev.pampa.mycloudgallery.feature.onboarding.model.AddressUi
 import dev.pampa.mycloudgallery.feature.onboarding.model.AreasUi
@@ -55,6 +60,8 @@ import dev.pampa.mycloudgallery.feature.onboarding.model.OnboardingDestination
 import dev.pampa.mycloudgallery.feature.onboarding.model.OnboardingUiState
 import dev.pampa.mycloudgallery.feature.onboarding.model.RecoveryPage
 import dev.pampa.mycloudgallery.feature.onboarding.model.RecoveryUi
+import dev.pampa.mycloudgallery.feature.onboarding.model.RemovalReason
+import dev.pampa.mycloudgallery.feature.onboarding.model.RemovalUi
 import dev.pampa.mycloudgallery.feature.onboarding.model.SummaryUi
 import dev.pampa.mycloudgallery.feature.onboarding.model.VpnTestUi
 import dev.pampa.mycloudgallery.feature.onboarding.model.VpnUi
@@ -68,13 +75,18 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** Quello che il ViewModel dice alla pagina una volta sola. */
 internal sealed interface OnboardingEvent {
-  /** L'onboarding e' finito: `onDone` di :app. Dopo, la destinazione la decide `SetupState`. */
+  /**
+   * Si esce dalla pagina: l'onboarding e' finito (`onDone` di :app, poi la destinazione la decide `SetupState`), oppure
+   * il passo riaperto dalle Impostazioni non si riapre (ON-7), oppure la richiesta rifatta dalla pagina d'attesa e' partita
+   * o e' stata lasciata (ON-2).
+   */
   data object Finished : OnboardingEvent
 }
 
@@ -107,6 +119,7 @@ class OnboardingViewModel @Inject constructor(
   private val healthReader: BackgroundHealthReader,
   private val localNetwork: LocalNetworkPermission,
   private val vpnConfig: VpnControlConfigStore,
+  private val registry: RegistryService,
 ) : ViewModel() {
 
   /** L'avanzamento, dal coordinatore (salvato a ogni passo, E-O9). */
@@ -125,14 +138,18 @@ class OnboardingViewModel @Inject constructor(
   private var foldersJob: Job? = null
   private var recoveryDisplay: RecoveryCodeDisplay? = null
   private var extraShares: List<String> = emptyList()
-  private var chosenAddress: NasAddress? = null
-  private var chosenUser: String? = null
   private var homeCandidate: HomeCandidateUi? = null
   private var oldAdminFate: OldAdminFate? = null
 
   @Volatile
   private var lastRejectedText: String? = null
   private var joinClosed = false
+
+  /** Si rifa' la richiesta dalla pagina d'attesa (ON-2): finito (o lasciato) l'ingresso, si esce. */
+  private var renewing = false
+
+  /** La pagina e' quella della radice (non un passo riaperto dalle Impostazioni): un onboarding finito qui vuol dire "fuori dalla famiglia" (ON-4). */
+  private var atRoot = false
 
   init {
     viewModelScope.launch {
@@ -148,16 +165,75 @@ class OnboardingViewModel @Inject constructor(
           (p.current == OnboardingStep.NAS_ADDRESS || p.current == OnboardingStep.ACCOUNT) && state.value.join == null && !joinClosed
         ) {
           state.update { it.copy(join = JoinUi(page = if (path == OnboardingPath.JOIN_MANUAL) JoinPage.Manual else JoinPage.Scan)) }
+          if (path == OnboardingPath.JOIN_MANUAL) loadManualHome()
         }
       }
+    }
+    viewModelScope.launch {
+      // Un recupero dell'admin a meta' (aree fatte, admin non ancora recuperato) riprende dai kit anche dopo la morte del
+      // processo: prima il recupero viveva solo qui, e al riavvio si finiva su "Ruoli" senza uscita (ON-3).
+      if (guard { coordinator.recoveryPending() } == true && state.value.recovery == null) reopenRecovery()
     }
   }
 
   // --- Generale -------------------------------------------------------------------------------------
 
-  /** Riapre un passo saltato (arrivando da "Da completare" nelle Impostazioni). */
+  /**
+   * Riapre un passo (dal riepilogo, o arrivando da "Da completare" e dagli altri tasti delle Impostazioni). Se il passo non
+   * si riapre non si resta su una pagina che non c'entra (il riepilogo, con "indietro" che non fa niente): si esce (ON-7).
+   */
   fun resume(step: OnboardingStep) {
-    viewModelScope.launch { guard { coordinator.resume(step) } }
+    viewModelScope.launch {
+      if (guardResult { coordinator.resume(step) } is StepResult.Problem) eventFlow.tryEmit(OnboardingEvent.Finished)
+    }
+  }
+
+  /**
+   * La pagina e' quella della radice (stato del dispositivo "non configurato"): se l'onboarding risulta finito, il
+   * dispositivo e' stato revocato, dismesso o ha perso lo stato della famiglia, e invece del vecchio riepilogo si dice
+   * cosa e' successo, con "Configura di nuovo" (ON-4).
+   */
+  fun enterAtRoot() {
+    if (atRoot) return
+    atRoot = true
+    viewModelScope.launch {
+      combine(coordinator.progress, registry.status) { progress, status -> progress to status }.collect { (progress, status) ->
+        // Finito e "fuori": revocato, dismesso o senza stato. Con "approvato" o "in attesa" la radice sta gia' andando
+        // altrove (Libreria, attesa): niente pagina in mezzo.
+        val reason = removalReasonOf(status).takeIf { OnboardingStep.SUMMARY in progress.completed }
+        state.update { s ->
+          when {
+            reason == null -> s.copy(removal = null)
+            s.removal == null -> s.copy(removal = RemovalUi(reason = reason))
+            else -> s.copy(removal = s.removal.copy(reason = reason))
+          }
+        }
+      }
+    }
+  }
+
+  private fun removalReasonOf(status: TrustStatus): RemovalReason? = when (status) {
+    TrustStatus.Revoked -> RemovalReason.REVOKED
+    TrustStatus.Retired -> RemovalReason.RETIRED
+    TrustStatus.NotConfigured -> RemovalReason.OTHER
+    is TrustStatus.Approved, is TrustStatus.Pending, is TrustStatus.Stale, TrustStatus.Lost -> null
+  }
+
+  /**
+   * "Configura di nuovo" (ON-4, e dalle Impostazioni ON-5): il coordinatore dimentica account, password, chiavi e stato
+   * della famiglia; si riparte dal benvenuto.
+   */
+  fun startOver() {
+    state.update { s -> s.copy(removal = s.removal?.copy(busy = true, problem = null)) }
+    viewModelScope.launch {
+      when (val result = guardResult { coordinator.startOver() }) {
+        is StepResult.Advanced -> {
+          joinClosed = false
+          state.update { OnboardingUiState(isSystemUser = it.isSystemUser) }
+        }
+        is StepResult.Problem -> state.update { s -> s.copy(removal = s.removal?.copy(busy = false, problem = result.problem)) }
+      }
+    }
   }
 
   /** Il permesso per la rete locale (ramo per il target 37): compare al passo 9 solo se e' negato. */
@@ -168,6 +244,7 @@ class OnboardingViewModel @Inject constructor(
 
   /** Cosa mostrare adesso: una pagina di "entra", una di "recupera", oppure il passo corrente. */
   internal fun destination(progress: OnboardingProgress, ui: OnboardingUiState): OnboardingDestination = when {
+    ui.removal != null -> OnboardingDestination.Removed
     ui.join != null -> OnboardingDestination.Join(ui.join.page)
     ui.recovery != null -> OnboardingDestination.Recovery(ui.recovery.page)
     progress.current == OnboardingStep.FAMILY_KEY -> OnboardingDestination.Step(progress.current, ui.key.page.ordinal)
@@ -193,6 +270,7 @@ class OnboardingViewModel @Inject constructor(
 
   /** Dove si puo' tornare dalla pagina di adesso (per mostrare o nascondere la freccia di ritorno). */
   internal fun canGoBack(progress: OnboardingProgress, ui: OnboardingUiState): Boolean = when {
+    ui.removal != null -> false
     ui.join != null -> ui.join.page in setOf(JoinPage.Scan, JoinPage.Manual, JoinPage.Summary, JoinPage.Password) && !ui.join.busy
     ui.recovery != null -> ui.recovery.page != RecoveryPage.Done && !ui.recovery.busy
     progress.current == OnboardingStep.FAMILY_KEY -> ui.key.page == KeyPage.Intro && !ui.key.busy || ui.key.page == KeyPage.Retype
@@ -267,6 +345,8 @@ class OnboardingViewModel @Inject constructor(
         is StepResult.Problem -> state.update { it.copy(welcomeBusy = false, welcomeProblem = result.problem) }
       }
       if (path == OnboardingPath.JOIN_QR || path == OnboardingPath.JOIN_MANUAL) joinClosed = false
+      // L'avviso sulla versione minima lo aggiunge l'invito senza QR, se manca lo stato della famiglia.
+      if (result is StepResult.Advanced && path == OnboardingPath.JOIN_MANUAL) loadManualHome()
     }
   }
 
@@ -324,7 +404,6 @@ class OnboardingViewModel @Inject constructor(
   /** Controlla il NAS: TCP, NEGOTIATE, identita'. Nessuna password parte (§2.1 passo 2). */
   fun checkNas(address: NasAddress) {
     discoveryJob?.cancel()
-    chosenAddress = address
     state.update { it.copy(address = it.address.copy(checking = true, discovering = false, problem = null)) }
     viewModelScope.launch {
       when (val result = guardResult { coordinator.submit(StepInput.NasAddressChosen(address)) }) {
@@ -343,7 +422,6 @@ class OnboardingViewModel @Inject constructor(
    * azzerata, ma una copia in piu' non deve restare).
    */
   fun submitAccount(user: String, password: CharArray) {
-    chosenUser = user
     state.update { it.copy(account = AccountUi(submitting = true)) }
     viewModelScope.launch {
       val input = StepInput.Credentials(user, password)
@@ -572,7 +650,11 @@ class OnboardingViewModel @Inject constructor(
           state.update { it.copy(summary = SummaryUi()) }
           eventFlow.tryEmit(OnboardingEvent.Finished)
         }
-        is StepResult.Problem -> state.update { it.copy(summary = SummaryUi(problem = result.problem)) }
+        is StepResult.Problem -> {
+          state.update { it.copy(summary = SummaryUi(problem = result.problem)) }
+          // Il recupero dell'admin non e' finito: non "passo non disponibile" senza uscita, ma le pagine del recupero (ON-3).
+          if (guard { coordinator.recoveryPending() } == true) reopenRecovery()
+        }
       }
     }
   }
@@ -623,9 +705,19 @@ class OnboardingViewModel @Inject constructor(
       is Verdict.Accepted -> {
         state.update { s ->
           s.copy(
-            join = s.join?.copy(familyState = verdict.value, scanningFamilyState = false, rejection = null),
+            join = s.join?.copy(
+              familyState = verdict.value,
+              scanningFamilyState = false,
+              rejection = null,
+              page = if (s.join.invite == null) JoinPage.Manual else s.join.page,
+            ),
             recovery = s.recovery?.copy(familyState = verdict.value, scanningFamilyState = false),
           )
+        }
+        // Senza QR: id e impronta della famiglia vengono gia' dal QR di un dispositivo approvato (non dal NAS), non si riscrivono.
+        if (state.value.join != null) {
+          if (forms.manualJoin.familyId.isBlank()) forms.manualJoin.familyId = verdict.value.familyId
+          if (forms.manualJoin.fingerprint.isBlank()) forms.manualJoin.fingerprint = verdict.value.familyKeyFingerprint
         }
         ScanVerdict.Accept
       }
@@ -638,17 +730,75 @@ class OnboardingViewModel @Inject constructor(
     else -> ScanRejection.MALFORMED
   }
 
-  /** Dalla scansione ai dati a mano. */
+  /**
+   * Dalla scansione ai dati a mano. Il percorso diventa quello senza QR (ON-1): `JoinFlow` vuole il percorso giusto per
+   * l'invito, e "e' la rete di casa?" si chiede solo li'. Rifacendo la richiesta (ON-2) il percorso non si cambia piu'.
+   */
   fun joinEnterManually() {
     lastRejectedText = null
-    updateJoin { it.copy(page = JoinPage.Manual, rejection = null, scanningFamilyState = false, problem = null) }
+    viewModelScope.launch {
+      if (!switchJoinPath(OnboardingPath.JOIN_MANUAL)) return@launch
+      updateJoin { it.copy(page = JoinPage.Manual, rejection = null, scanningFamilyState = false, problem = null) }
+      loadManualHome()
+    }
   }
 
-  /** Dai dati a mano alla scansione dell'invito. */
+  /** Dai dati a mano alla scansione dell'invito (il percorso torna quello con il QR). */
   fun joinScanInvite() {
     lastRejectedText = null
-    updateJoin { it.copy(page = JoinPage.Scan, rejection = null, scanningFamilyState = false, invite = null, problem = null) }
+    viewModelScope.launch {
+      if (!switchJoinPath(OnboardingPath.JOIN_QR)) return@launch
+      updateJoin { it.copy(page = JoinPage.Scan, rejection = null, scanningFamilyState = false, invite = null, problem = null) }
+    }
   }
+
+  /** Il percorso dell'ingresso diventa [path] (se non lo e' gia'). Falso se il coordinatore non lo permette: il problema si vede. */
+  private suspend fun switchJoinPath(path: OnboardingPath): Boolean {
+    if (progress.value.path == path) return true
+    return when (val result = guardResult { coordinator.submit(StepInput.ChoosePath(path)) }) {
+      is StepResult.Advanced -> true
+      is StepResult.Problem -> {
+        updateJoin { it.copy(problem = result.problem, rejection = null) }
+        false
+      }
+    }
+  }
+
+  /** Senza QR: la rete attuale, per la domanda "e' la rete di casa?" (nessuna rete e' contattata). */
+  private fun loadManualHome() {
+    // Rifacendo la richiesta la casa e' gia' confermata (e il passo 2 non si rifa').
+    if (renewing) {
+      updateJoin { it.copy(home = null) }
+      return
+    }
+    updateJoin { it.copy(home = HomeUi.Loading) }
+    viewModelScope.launch {
+      val candidate = guard { coordinator.homeCandidate() }
+      val home = candidate?.let { HomeCandidateUi(it.ipv4Subnet, it.gatewayV4, it.dnsDomain, canConfirm = it.canBeConfirmed) }
+      homeCandidate = home
+      updateJoin { it.copy(home = home?.let { c -> HomeUi.Ask(c) } ?: HomeUi.NoWifi) }
+    }
+  }
+
+  /** Senza QR non c'e' un ULA da confrontare: "e' casa" lo conferma l'utente, prima di contattare il NAS (ON-1). */
+  fun confirmManualHome(isHome: Boolean) {
+    val candidate = homeCandidate
+    if (!isHome) {
+      updateJoin { it.copy(home = HomeUi.NotHome, problem = null) }
+      return
+    }
+    viewModelScope.launch {
+      when (val result = guardResult { coordinator.submit(StepInput.ConfirmHome(true)) }) {
+        is StepResult.Problem -> updateJoin { it.copy(problem = result.problem) }
+        is StepResult.Advanced -> updateJoin {
+          if (candidate != null) it.copy(home = HomeUi.Confirmed(candidate), problem = null) else it.copy(problem = OnboardingProblem.NOT_ON_WIFI)
+        }
+      }
+    }
+  }
+
+  /** Si torna alla domanda "e' casa?" (Wi-Fi cambiato, impostazioni del Wi-Fi). */
+  fun refreshManualHome() = loadManualHome()
 
   /** Lo "stato della famiglia" (M7) si scansiona dalla pagina dei dati a mano o da quella del recupero. */
   fun scanFamilyState() {
@@ -673,28 +823,45 @@ class OnboardingViewModel @Inject constructor(
   }
 
   /**
-   * "Entra senza QR": i dati scritti a mano diventano un invito con la versione minima del registro 0 (o quella dello
-   * "stato della famiglia" se c'e', M7). Il GUID del NAS e i prefissi di casa non si conoscono: li fornisce la
-   * configurazione **firmata** letta dal NAS dopo l'autenticazione (mai dal NAS in chiaro, B9).
+   * "Entra senza QR": i dati scritti a mano diventano un invito (`ManualInvite`: id e impronta letti come li scrive una
+   * persona, le due aree, la versione minima del registro 0 o quella dello "stato della famiglia" se c'e', M7). Il GUID
+   * del NAS e i prefissi di casa non si conoscono: li fornisce la configurazione **firmata** letta dal NAS dopo
+   * l'autenticazione (mai dal NAS in chiaro, B9). Prima l'invito non aveva le aree e non si normalizzava: non poteva
+   * riuscire (ON-1). [privateShare] vuota = quella con il nome dell'utente, come nell'invito dell'admin.
    */
-  fun submitManualJoin(ip: String, user: String, familyId: String, fingerprint: String, deviceName: String) {
+  fun submitManualJoin(
+    ip: String,
+    user: String,
+    familyId: String,
+    fingerprint: String,
+    deviceName: String,
+    commonShare: String,
+    privateShare: String = "",
+  ) {
     val current = state.value.join ?: return
     val familyState = current.familyState
-    val invite = FamilyInvite(
-      familyId = familyId.trim(),
-      familyKeyFingerprint = fingerprint.filter { !it.isWhitespace() },
-      minRegistryVersion = familyState?.registryVersion ?: 0L,
-      nasIp = ip.trim(),
-      nasName = null,
-      nasGuid = "",
-      homeUla = emptyList(),
-      commonShare = "",
-      privateShare = "",
-      nasUser = user.trim(),
+    // Lo "stato della famiglia" e i dati scritti devono dire la stessa famiglia: altrimenti uno dei due e' di un'altra (E-O5).
+    if (familyState != null &&
+      (Base32.normalizeHumanInput(familyId) != familyState.familyId || Base32.normalizeHumanInput(fingerprint) != familyState.familyKeyFingerprint)
+    ) {
+      updateJoin { it.copy(problem = OnboardingProblem.INVITE_OTHER_FAMILY) }
+      return
+    }
+    val verdict = ManualInvite.create(
+      familyId = familyId,
+      familyKeyFingerprint = fingerprint,
+      nasIp = ip,
+      nasUser = user,
+      commonShare = commonShare.trim(),
+      privateShare = privateShare.trim().ifBlank { user.trim() },
       deviceName = deviceName.trim(),
-      presetName = null,
-      expiresAtNas = Long.MAX_VALUE,
+      minRegistryVersion = familyState?.registryVersion ?: 0L,
     )
+    val invite = (verdict as? Verdict.Accepted)?.value
+    if (invite == null) {
+      updateJoin { it.copy(problem = OnboardingProblem.INVITE_INVALID) }
+      return
+    }
     if (familyState == null) addWarnings(setOf(OnboardingWarning.NO_MIN_REGISTRY_VERSION))
     updateJoin { it.copy(invite = invite) }
     continueJoin()
@@ -754,13 +921,33 @@ class OnboardingViewModel @Inject constructor(
   fun continueAfterRequest() {
     joinClosed = true
     state.update { it.copy(join = null) }
+    // Rifacendo la richiesta dalla pagina d'attesa (ON-2) i passi sul telefono sono gia' fatti: si torna all'attesa.
+    if (renewing) eventFlow.tryEmit(OnboardingEvent.Finished)
   }
 
-  /** L'onboarding "entra" e' finito (approvato): si esce. */
+  /**
+   * Il dispositivo era gia' approvato (la chiave c'era, ON-12a): niente attesa, ma i passi sul telefono restano da fare
+   * (ruoli, preset, permessi...). Prima qui si usciva senza finire l'onboarding e si restava su "Ruoli" dopo un tasto che
+   * diceva "Vai alla Libreria".
+   */
   fun finishJoin() {
     joinClosed = true
     state.update { it.copy(join = null) }
-    eventFlow.tryEmit(OnboardingEvent.Finished)
+    if (renewing) eventFlow.tryEmit(OnboardingEvent.Finished)
+  }
+
+  /**
+   * "Rifai la richiesta" dalla pagina d'attesa (ON-2): la finestra di 15 minuti dell'admin e' scaduta e la richiesta va
+   * rifatta, con una chiave nuova (`JoinFlow.start` la rinnova finche' il dispositivo e' in attesa). Si riapre la scansione
+   * (o i dati a mano, per chi e' entrato senza QR); finita la richiesta, o lasciata, si torna all'attesa.
+   */
+  fun startRenewal() {
+    if (renewing) return
+    renewing = true
+    joinClosed = false
+    val manual = progress.value.path == OnboardingPath.JOIN_MANUAL
+    state.update { it.copy(join = JoinUi(page = if (manual) JoinPage.Manual else JoinPage.Scan), removal = null) }
+    if (manual) loadManualHome()
   }
 
   private fun backFromJoin(join: JoinUi) {
@@ -777,6 +964,10 @@ class OnboardingViewModel @Inject constructor(
   private fun leaveJoin() {
     joinClosed = true
     state.update { it.copy(join = null) }
+    if (renewing) {
+      eventFlow.tryEmit(OnboardingEvent.Finished)
+      return
+    }
     viewModelScope.launch { guard { coordinator.back() } }
   }
 
@@ -793,30 +984,58 @@ class OnboardingViewModel @Inject constructor(
           secondAdmin = progress.value.path == OnboardingPath.SECOND_ADMIN,
           privateShare = privateShare,
         ),
+        summary = SummaryUi(),
       )
     }
     searchKits(privateShare)
   }
 
-  /** Cerca i kit di recupero in `recovery/` dell'area privata (solo nomi validi). */
+  /** Il recupero a meta' riprende dai kit, con l'area privata salvata (ON-3). */
+  private suspend fun reopenRecovery() {
+    val nas = guard { coordinator.savedNas() }
+    startRecovery(nas?.privateShare ?: nas?.user.orEmpty())
+  }
+
+  /**
+   * Cerca i kit di recupero in `recovery/` dell'area privata (solo nomi validi). Indirizzo e utente vengono
+   * dall'avanzamento salvato, non da questa pagina: ci sono anche dopo la morte del processo (ON-3). Un errore del NAS
+   * non e' "nessun kit" (ON-9): NAS lento, permesso negato o VPN caduta si dicono con il loro problema e "Riprova".
+   */
   fun searchKits(privateShare: String) {
-    val address = chosenAddress
-    val user = chosenUser
     updateRecovery { it.copy(kitsLoaded = false, noKits = false, problem = null, privateShare = privateShare) }
     viewModelScope.launch {
-      if (address == null || user == null) {
-        updateRecovery { it.copy(kitsLoaded = true, noKits = true) }
+      val nas = guard { coordinator.savedNas() }
+      val user = nas?.user
+      if (nas == null || user == null) {
+        updateRecovery { it.copy(kitsLoaded = true, problem = OnboardingProblem.STEP_NOT_AVAILABLE) }
         return@launch
       }
-      val account = NasAccount(address = address, user = user, credentialSlot = RecoveryAccounts.slotFor(user), pinnedGuid = null)
+      val account = NasAccount(address = nas.address, user = user, credentialSlot = RecoveryAccounts.slotFor(user), pinnedGuid = null)
       when (val result = guard { adminRecovery.findKits(account, privateShare.trim().ifBlank { user }) }) {
         is NasResult.Ok -> updateRecovery {
           it.copy(kitsLoaded = true, kits = result.value.sortedByDescending { kit -> kit.createdAt ?: 0L }, selectedKit = 0, noKits = result.value.isEmpty())
         }
-        is NasResult.Err -> updateRecovery { it.copy(kitsLoaded = true, kits = emptyList(), noKits = true) }
-        null -> updateRecovery { it.copy(kitsLoaded = true, noKits = true, problem = OnboardingProblem.STEP_NOT_AVAILABLE) }
+        is NasResult.Err -> updateRecovery { it.copy(kitsLoaded = true, kits = emptyList(), noKits = false, problem = result.error.asOnboardingProblem()) }
+        null -> updateRecovery { it.copy(kitsLoaded = true, problem = OnboardingProblem.STEP_NOT_AVAILABLE) }
       }
     }
+  }
+
+  /**
+   * Senza kit ne' codice (ON-6, scelta dell'utente "via dal PC"): la guida per ripartire da zero, con il percorso esatto
+   * della cartella della famiglia sul NAS. L'app non cancella niente: lo fa l'utente dal PC.
+   */
+  fun showStartOverGuide() {
+    viewModelScope.launch {
+      val path = guard { coordinator.savedNas() }?.familyFolderForWindows()
+      updateRecovery { it.copy(page = RecoveryPage.StartOver, startOverReturn = it.page, startOverPath = path) }
+    }
+  }
+
+  /** Cancellata la cartella dal PC: si rifa' la famiglia da capo (passo 1, "Crea la famiglia"). */
+  fun startFamilyFromScratch() {
+    state.update { it.copy(recovery = null) }
+    choosePath(OnboardingPath.FOUND_FAMILY)
   }
 
   private fun updateRecovery(transform: (RecoveryUi) -> RecoveryUi) =
@@ -879,6 +1098,7 @@ class OnboardingViewModel @Inject constructor(
           it.copy(page = if (it.secondAdmin) RecoveryPage.Kits else RecoveryPage.Fate, wrongCode = false, problem = null)
         }
       RecoveryPage.Done -> Unit
+      RecoveryPage.StartOver -> updateRecovery { it.copy(page = it.startOverReturn) }
     }
   }
 

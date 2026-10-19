@@ -387,8 +387,10 @@ class FamilyKeyStepTest {
     assertThat(f.env.nas.calls).isEmpty()
     assertThat(f.env.familyKeys.stores).isEqualTo(1)
     assertThat((f.commonFs().read(NasLayout.registryFile(1), 100_000) as NasRead.Data).bytes).isEqualTo(registry)
-    // E dopo la fondazione il percorso non si cambia piu'.
-    while (f.current != OnboardingStep.WELCOME) c.back()
+    // E dopo la fondazione il percorso non si cambia piu' (e indietro non si torna oltre le cartelle: aree, account e
+    // indirizzo sono nella configurazione firmata).
+    repeat(20) { c.back() }
+    assertThat(f.current).isEqualTo(OnboardingStep.FOLDERS)
     assertThat(c.submit(StepInput.ChoosePath(OnboardingPath.JOIN_QR))).isEqualTo(problem(OnboardingProblem.STEP_NOT_AVAILABLE))
   }
 

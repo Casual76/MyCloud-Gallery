@@ -4,7 +4,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.Checklist
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.res.stringResource
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.fluidengine.ui.fluid.FluidAmbient
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
@@ -19,20 +25,51 @@ import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
+import dev.pampa.mycloudgallery.core.family.contract.OnboardingCoordinator
+import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
 import dev.pampa.mycloudgallery.feature.settings.R
 import dev.pampa.mycloudgallery.feature.settings.ui.Note
 import dev.pampa.mycloudgallery.feature.settings.ui.RowNumber
+import javax.inject.Inject
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+
+/**
+ * Rivedere la checklist ha senso solo dove il passo 13 c'e': nel piano di chi ha creato la famiglia. Chi e' entrato con
+ * un invito o ha recuperato l'admin non ce l'ha, e "Rivedi la checklist" lo portava sul riepilogo dell'onboarding senza
+ * via d'uscita (verifica funzionale, ON-7).
+ */
+@HiltViewModel
+internal class BackupNoticeViewModel @Inject constructor(coordinator: OnboardingCoordinator) : ViewModel() {
+  val canReview: StateFlow<Boolean> = coordinator.progress
+    .map { OnboardingStep.SECURITY_NOTICE in it.plan }
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS), OnboardingStep.SECURITY_NOTICE in coordinator.progress.value.plan)
+
+  private companion object {
+    const val STOP_TIMEOUT_MS = 5_000L
+  }
+}
+
+/** La pagina con il suo ViewModel: il tasto della checklist solo se il passo 13 e' nel piano (ON-7). */
+@Composable
+internal fun BackupNoticeRoute(onBack: () -> Unit, onReviewChecklist: () -> Unit) {
+  val viewModel: BackupNoticeViewModel = hiltViewModel()
+  val canReview by viewModel.canReview.collectAsStateWithLifecycle()
+  BackupNoticeScreen(onBack = onBack, onReviewChecklist = onReviewChecklist.takeIf { canReview })
+}
 
 /**
  * L'avviso sul backup esterno (`sicurezza.md` §1 e §9, passo 13 dell'onboarding, C13): il NAS ha due dischi che
  * si copiano a vicenda, **non e' un backup**. L'avviso resta in Impostazioni finche' la famiglia non ha deciso.
  *
  * E' una pagina di sola lettura con la checklist: la scelta "fatto/dopo" si fa nel passo 13 dell'onboarding,
- * che [onReviewChecklist] riapre. Qui non si segna niente di cio' che l'app non puo' verificare (un disco
- * USB attaccato al NAS o una voce del FRITZ!Box non si leggono).
+ * che [onReviewChecklist] riapre (null: il passo 13 non e' nel piano di questo dispositivo, il tasto non c'e'). Qui non si
+ * segna niente di cio' che l'app non puo' verificare (un disco USB attaccato al NAS o una voce del FRITZ!Box non si leggono).
  */
 @Composable
-internal fun BackupNoticeScreen(onBack: () -> Unit, onReviewChecklist: () -> Unit) {
+internal fun BackupNoticeScreen(onBack: () -> Unit, onReviewChecklist: (() -> Unit)?) {
   FluidScreen(
     title = stringResource(R.string.backup_title),
     onBack = onBack,
@@ -78,14 +115,16 @@ internal fun BackupNoticeScreen(onBack: () -> Unit, onReviewChecklist: () -> Uni
       }
     }
     item { FluidSectionFootnote(text = stringResource(R.string.backup_footnote)) }
-    item {
-      FluidButton(
-        text = stringResource(R.string.backup_review),
-        onClick = onReviewChecklist,
-        size = FluidButtonSize.Large,
-        fillWidth = true,
-        leading = { androidx.compose.material3.Icon(Icons.Rounded.Checklist, contentDescription = null) },
-      )
+    onReviewChecklist?.let { review ->
+      item {
+        FluidButton(
+          text = stringResource(R.string.backup_review),
+          onClick = review,
+          size = FluidButtonSize.Large,
+          fillWidth = true,
+          leading = { androidx.compose.material3.Icon(Icons.Rounded.Checklist, contentDescription = null) },
+        )
+      }
     }
     item {
       FluidButton(

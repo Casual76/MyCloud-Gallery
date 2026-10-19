@@ -8,10 +8,12 @@ import dev.pampa.mycloudgallery.core.nas.ops.CopyOutcome
 import dev.pampa.mycloudgallery.core.nas.ops.DeleteOutcome
 import dev.pampa.mycloudgallery.core.nas.ops.NasSpaceInfo
 import dev.pampa.mycloudgallery.core.nas.ops.PublishOutcome
+import dev.pampa.mycloudgallery.core.nas.ops.RenameOutcome
 import dev.pampa.mycloudgallery.core.nas.ops.backup.AppendOnlyNasAccess
 import dev.pampa.mycloudgallery.core.nas.ops.backup.BackupTempWriter
 import dev.pampa.mycloudgallery.core.nas.ops.backup.NasBackupOps
 import dev.pampa.mycloudgallery.core.nas.ops.backup.ReopenOutcome
+import dev.pampa.mycloudgallery.core.nas.ops.backup.VersionPaths
 import dev.pampa.mycloudgallery.core.network.contract.DenyReason
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 
@@ -47,6 +49,18 @@ object NoNasBackupOps : NasBackupOps {
 
   override suspend fun deleteOwnTemp(share: String, temp: SharePath, purpose: Purpose): NasResult<DeleteOutcome> =
     NasResult.Err(backupNotConfigured)
+
+  // 5B (P0-B): nessuna rinomina senza NAS. I percorsi sbagliati restano un errore di programmazione anche qui, cosi' un chiamante che li
+  // sbaglia lo scopre nei test e non solo con un NAS vero.
+  override suspend fun archiveVersion(share: String, from: SharePath, to: SharePath, expect: NasStamp, purpose: Purpose): NasResult<RenameOutcome> {
+    VersionPaths.requireArchive(from, to)
+    return NasResult.Err(backupNotConfigured)
+  }
+
+  override suspend fun restoreVersion(share: String, from: SharePath, to: SharePath, expect: NasStamp, purpose: Purpose): NasResult<RenameOutcome> {
+    VersionPaths.requireRestore(from, to)
+    return NasResult.Err(backupNotConfigured)
+  }
 
   override suspend fun space(share: String, purpose: Purpose): NasResult<NasSpaceInfo> = NasResult.Err(backupNotConfigured)
 }

@@ -57,6 +57,11 @@ class AppLibraryCommandsTest {
       trashed += refs
       return PendingIntent.getActivity(app, 0, Intent(), PendingIntent.FLAG_IMMUTABLE).intentSender
     }
+
+    // Fase 5B (P0-B): le due richieste nuove di sistema non servono ai comandi della Libreria; qui non si fanno mai.
+    override fun deleteRequest(refs: List<MediaRef.Phone>): IntentSender? = null
+
+    override fun writeRequest(refs: List<MediaRef.Phone>): IntentSender? = null
   }
 
   private class RecordingHost(var accepts: Boolean = true) : LibraryCommandHost {

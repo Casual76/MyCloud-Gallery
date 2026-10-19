@@ -206,6 +206,11 @@ dependencies {
   // (D13) sta in src/debug (`DeveloperTools`), mai nella release.
   implementation project(':core-backup')
   implementation project(':feature-backup')
+  // Fase 5B (docs/fase5-progetto.md §1.1, §1.4, P0-B): le integrazioni con le altre app. Il manifest del modulo porta nell'app i QUATTRO
+  // componenti approvati (Q5 (a)): PickerActivity, ShareReceiverActivity, MediaDocumentsProvider e FileProvider, scheletri che non agiscono
+  // finche' P10 e P11 non li riempiono; l'elenco e' chiuso in `releaseManifestPolicy` e in docs/sicurezza.md §4-bis. `:app` lega le porte
+  // (EntryGate, MediaDocuments) e lo sblocco dell'app alle activity d'ingresso in P14.
+  implementation project(':feature-integrations')
 
   // --- Il design system (engine-ui porta Compose, Material 3, activity-compose e lifecycle) ----------
   implementation project(':engine-ui')

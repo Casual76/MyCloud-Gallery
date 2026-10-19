@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- I nomi con cui le altre app vedono MyCloud Gallery (Fase 5B, docs/fase5-progetto.md D23, D24): nei selettori di foto e documenti e nel
+       foglio di condivisione. Nessun dato dell'utente. -->
+  <string name="integrations_picker_label">MyCloud Gallery</string>
+  <string name="integrations_receiver_label">Salva sul NAS</string>
+  <string name="integrations_documents_root_title">MyCloud Gallery</string>
+</resources>

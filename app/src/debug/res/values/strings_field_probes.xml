@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- SOLO build debug (Fase 5B, P0-B; docs/android.md "Da verificare con l'app di prova"): le prove guidate T-09, T-14, T-15 e T-16, sulle sole cartelle
+       di prova del telefono (DCIM/mcg-prova e Pictures/mcg-prova). Il resoconto e' di soli numeri. -->
+  <string name="probe_entry_title">Prove guidate T-09, T-14, T-15, T-16</string>
+  <string name="probe_entry_detail">Cestino, selettori, condivisioni in arrivo e «Modifica con…» sulle cartelle mcg-prova del telefono; un resoconto di soli numeri da copiare in docs/android.md.</string>
+
+  <string name="probe_title">Prove guidate</string>
+  <string name="probe_subtitle">Solo sulle cartelle mcg-prova del telefono. Semina prima con tools/chaos/s25.ps1 -Mode seed.</string>
+  <string name="probe_back">Indietro</string>
+  <!-- I nomi dei componenti di prova nel selettore di sistema e nel foglio di condivisione. -->
+  <string name="probe_picker_label">MCG prova (T-14)</string>
+  <string name="probe_receiver_label">MCG prova (T-15)</string>
+
+  <string name="probe_section_env">Ambiente</string>
+  <string name="probe_env_title">Controlla l’ambiente</string>
+  <string name="probe_env_detail">Versione di Android, righe in mcg-prova e quante app gestiscono scelta, condivisione e modifica.</string>
+  <string name="probe_no_rows">Nessuna riga in mcg-prova: semina le cartelle e riprova.</string>
+
+  <string name="probe_section_t09">T-09 · Cestino</string>
+  <string name="probe_t09_base_title">1 · Fotografia di riferimento</string>
+  <string name="probe_t09_base_detail">Prima di cestinare in Samsung Gallery. Poi cestina una foto di mcg-prova nella Galleria e torna qui.</string>
+  <string name="probe_t09_compare_title">2 · Confronta con il riferimento</string>
+  <string name="probe_t09_compare_detail">Dopo ogni gesto nella Galleria (cestina, ripristina, svuota il cestino): righe sparite, nuove, con lo stesso _ID.</string>
+  <string name="probe_t09_trash_title">3 · Cestina 5 foto con l’app</string>
+  <string name="probe_t09_trash_detail">Il dialogo di sistema (createTrashRequest). Poi guarda se il cestino di Samsung Gallery le mostra e rispondi qui sotto.</string>
+  <string name="probe_t09_samsung_yes">Le mostra</string>
+  <string name="probe_t09_samsung_no">Non le mostra</string>
+  <string name="probe_t09_restore_title">4 · Ripristina quelle foto</string>
+  <string name="probe_t09_restore_detail">Rimette al loro posto le righe cestinate dall’app (il cestino di Android le tiene 30 giorni).</string>
+  <string name="probe_t09_many_title">5 · Cestina fino a 500 foto con l’app</string>
+  <string name="probe_t09_many_detail">Tutte le righe di mcg-prova, al massimo 500, in una richiesta sola. Poi «Ripristina» le rimette.</string>
+  <string name="probe_t09_write_title">6 · Permesso di scrittura e riscrittura</string>
+  <string name="probe_t09_write_detail">createWriteRequest su una foto e riscrittura con i suoi stessi byte (non cambia il contenuto).</string>
+  <string name="probe_nothing_to_do">Niente da fare: nessuna foto adatta in mcg-prova.</string>
+  <string name="probe_need_baseline">Prima la fotografia di riferimento.</string>
+
+  <string name="probe_section_t14">T-14 · Selettori e provider dei documenti</string>
+  <string name="probe_t14_form_label">Come si consegna il media</string>
+  <string name="probe_form_direct">Diretto</string>
+  <string name="probe_form_proxy">A richiesta</string>
+  <string name="probe_form_copy">Copia prima</string>
+  <string name="probe_t14_latency_label">Latenza simulata a ogni lettura</string>
+  <string name="probe_latency_0">0 ms</string>
+  <string name="probe_latency_200">200 ms</string>
+  <string name="probe_t14_count_label">File consegnati dal selettore</string>
+  <string name="probe_count_1">Uno</string>
+  <string name="probe_count_3">Tre</string>
+  <string name="probe_t14_how_title">Come provare</string>
+  <string name="probe_t14_how_detail">Scegli la forma, poi in Gmail («Allega file»), WhatsApp («Documento»), Telegram e Google Messaggi scegli «MCG prova (T-14)» o la radice «MCG prova». Torna qui e aggiorna il resoconto. Ripeti con le altre forme.</string>
+
+  <string name="probe_section_t15">T-15 · Condivisioni in arrivo</string>
+  <string name="probe_t15_mode_label">Cosa fa la ricezione di prova</string>
+  <string name="probe_t15_read_now">Legge subito</string>
+  <string name="probe_t15_close_first">Chiude prima</string>
+  <string name="probe_t15_how_title">Come provare</string>
+  <string name="probe_t15_how_detail">Da Samsung Gallery, I miei file, Chrome, Quick Share e WhatsApp condividi foto e un video grande verso «MCG prova (T-15)». Con «Chiude prima» non legge: poi riprova qui, subito e dopo aver chiuso l’app.</string>
+  <string name="probe_t15_retest_title">Riprova ad aprire le condivisioni ricevute</string>
+  <string name="probe_t15_retest_detail">Quante si aprono ancora e quante no (il permesso di lettura dura oltre l’activity? e dopo la morte del processo?).</string>
+  <string name="probe_t15_clear_title">Dimentica le condivisioni ricevute</string>
+  <string name="probe_t15_clear_detail">Toglie gli indirizzi registrati (non il resoconto).</string>
+
+  <string name="probe_section_t16">T-16 · «Modifica con…»</string>
+  <string name="probe_t16_view_title">1 · Apri una foto in Samsung Gallery</string>
+  <string name="probe_t16_view_detail">ACTION_VIEW verso Samsung Gallery. Modifica e salva («Salva», «Salva copia», «Ripristina originale»), torna qui e confronta.</string>
+  <string name="probe_t16_compare_title">2 · Confronta dopo la modifica</string>
+  <string name="probe_t16_compare_detail">La stessa riga è cambiata? Una riga nuova con la stessa data di scatto? Le colonne ORIGINAL_DOCUMENT_ID, DOCUMENT_ID, INSTANCE_ID.</string>
+  <string name="probe_t16_edit_title">3 · Modifica una copia in cache</string>
+  <string name="probe_t16_edit_detail">ACTION_EDIT con una copia servita dal FileProvider in lettura e scrittura (Google Foto, OneDrive). Salva e torna qui.</string>
+  <string name="probe_t16_no_gallery">Samsung Gallery non risponde: ACTION_VIEW non è partito.</string>
+
+  <string name="probe_section_report">Resoconto</string>
+  <string name="probe_report_footnote">Solo numeri, una riga per misura. Copialo in docs/android.md, sezione «Resoconto delle prove guidate».</string>
+  <string name="probe_report_empty">Nessuna misura ancora.</string>
+  <string name="probe_report_refresh">Aggiorna</string>
+  <string name="probe_report_copy">Copia</string>
+  <string name="probe_report_save">Salva su file</string>
+  <string name="probe_report_reset">Azzera i numeri</string>
+  <string name="probe_report_copied">Resoconto copiato.</string>
+  <string name="probe_report_saved">Salvato in field-probe-report.txt, nella cartella files dell’app (adb pull).</string>
+</resources>

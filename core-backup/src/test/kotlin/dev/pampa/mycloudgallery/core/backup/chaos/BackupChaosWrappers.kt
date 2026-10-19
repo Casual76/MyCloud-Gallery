@@ -45,6 +45,7 @@ import dev.pampa.mycloudgallery.core.nas.ops.CopyOutcome
 import dev.pampa.mycloudgallery.core.nas.ops.DeleteOutcome
 import dev.pampa.mycloudgallery.core.nas.ops.NasSpaceInfo
 import dev.pampa.mycloudgallery.core.nas.ops.PublishOutcome
+import dev.pampa.mycloudgallery.core.nas.ops.RenameOutcome
 import dev.pampa.mycloudgallery.core.nas.ops.TempFinish
 import dev.pampa.mycloudgallery.core.nas.ops.backup.BackupTempWriter
 import dev.pampa.mycloudgallery.core.nas.ops.backup.NasBackupOps
@@ -97,6 +98,14 @@ class ChaosBackupOps(
 
   override suspend fun deleteOwnTemp(share: String, temp: SharePath, purpose: Purpose): NasResult<DeleteOutcome> =
     injector.nas(Primitive.DELETE_OWN_TEMP, incarnation, locked = DeleteOutcome.Locked as DeleteOutcome) { inner.deleteOwnTemp(share, temp, purpose) }
+
+  // 5B (P0-B): le rinomine delle versioni passano senza colpi. P13 aggiunge `ARCHIVE_VERSION` e `RESTORE_VERSION` a `Primitive` (con la
+  // morte prima e dopo, e il file cambiato dal PC): oggi nessun giro della 5A le chiama, e aggiungerle all'enum cambierebbe i giri casuali.
+  override suspend fun archiveVersion(share: String, from: SharePath, to: SharePath, expect: NasStamp, purpose: Purpose): NasResult<RenameOutcome> =
+    inner.archiveVersion(share, from, to, expect, purpose)
+
+  override suspend fun restoreVersion(share: String, from: SharePath, to: SharePath, expect: NasStamp, purpose: Purpose): NasResult<RenameOutcome> =
+    inner.restoreVersion(share, from, to, expect, purpose)
 
   override suspend fun space(share: String, purpose: Purpose): NasResult<NasSpaceInfo> =
     injector.nas(Primitive.SPACE, incarnation) { inner.space(share, purpose) }

@@ -51,6 +51,19 @@ class WritableMediaProvider : ContentProvider() {
   /** Le righe inserite (id e nome) in ordine, per i test. */
   val inserted: MutableList<Pair<Long, String>> = ArrayList()
 
+  /** Fase 5B (P0-B): le aperture in ordine, con l'URI e il modo (per provare `requireOriginal` e quante letture fa la riscrittura). */
+  val opens: MutableList<Pair<Uri, String>> = ArrayList()
+
+  /** Fase 5B: se vero, aprire in scrittura lancia `SecurityException`, come senza il permesso di `createWriteRequest`. */
+  var denyWrite: Boolean = false
+
+  /**
+   * Fase 5B: le letture (aperture in sola lettura, contate da 1) che restituiscono byte alterati (un telefono che rilegge male): la
+   * rilettura di verifica della riscrittura non torna. Le altre letture sono pulite.
+   */
+  var tamperedReads: Set<Int> = emptySet()
+  private var readCount = 0
+
   /** Chiamato dentro `insert` prima di scegliere il nome: un altro scrittore che arriva per primo (la gara sul nome). */
   var beforeInsert: (() -> Unit)? = null
 
@@ -229,9 +242,16 @@ class WritableMediaProvider : ContentProvider() {
   }
 
   override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor {
+    opens += uri to mode
     failOpens?.let { throw if (it is FileNotFoundException) it else FileNotFoundException().apply { initCause(it) } }
     val id = uri.lastPathSegment?.toLongOrNull() ?: throw FileNotFoundException("URI senza _ID")
     val file = files[id] ?: throw FileNotFoundException("Riga sparita")
+    if (denyWrite && 'w' in mode) throw SecurityException("Nessun permesso di scrittura per questa riga.")
+    if (mode == "r" && ++readCount in tamperedReads) {
+      val altered = file.readBytes().also { if (it.isNotEmpty()) it[it.size / 2] = (it[it.size / 2].toInt() xor 0x5A).toByte() }
+      val temp = File.createTempFile("tampered-$id-", ".bin").apply { writeBytes(altered); deleteOnExit() }
+      return ParcelFileDescriptor.open(temp, ParcelFileDescriptor.MODE_READ_ONLY)
+    }
     return ParcelFileDescriptor.open(file, ParcelFileDescriptor.parseMode(mode))
   }
 

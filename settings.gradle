@@ -65,6 +65,11 @@ include ':feature-nas'       // Cartelle NAS, Spazio NAS, Eliminati di recente d
 include ':core-backup'       // piano, caricamento (diario e macchina a stati), verifiche, deduplica, guardiano, stato
 include ':feature-backup'    // impostazioni e pagina del backup, primo backup (5B: versioni, Libera spazio, attivita' in sospeso)
 
+// Fase 5B (docs/fase5-progetto.md §1.1, P0-B): le integrazioni con le altre app. Vede core-backup, la Libreria, le miniature e i contratti di
+// core-mediastore, ma NON core-nas ne' core-nasops: i byte di un media solo-NAS arrivano da una porta che :app lega a NasMediaReader. Ha i
+// quattro componenti approvati (Q5): PickerActivity, ShareReceiverActivity, MediaDocumentsProvider e FileProvider, come scheletri.
+include ':feature-integrations' // selettore per le altre app, provider dei documenti, ricezione delle condivisioni, "Modifica con..."
+
 // --- fluid-engine (inizio) ---
 def engineDir = file('engine')
 if (engineDir.exists()) {

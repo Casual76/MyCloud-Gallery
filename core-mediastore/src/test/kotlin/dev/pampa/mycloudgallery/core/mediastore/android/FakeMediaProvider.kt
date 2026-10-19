@@ -50,6 +50,10 @@ class FakeMediaProvider : ContentProvider() {
   val openedUris: MutableList<Uri> = ArrayList()
   val trashRequests: MutableList<Pair<List<Uri>, Int?>> = ArrayList()
 
+  /** Fase 5B (P0-B): le richieste di eliminazione e di scrittura di sistema (`createDeleteRequest`, `createWriteRequest`). */
+  val deleteRequests: MutableList<List<Uri>> = ArrayList()
+  val writeRequests: MutableList<List<Uri>> = ArrayList()
+
   override fun onCreate(): Boolean {
     db = SQLiteDatabase.create(null)
     db.execSQL(
@@ -194,6 +198,14 @@ class FakeMediaProvider : ContentProvider() {
       val pending = PendingIntent.getActivity(context, 0, Intent("dev.pampa.TRASH"), PendingIntent.FLAG_IMMUTABLE)
       Bundle().apply { putParcelable(EXTRA_RESULT, pending) }
     }
+    CREATE_DELETE_REQUEST_CALL, CREATE_WRITE_REQUEST_CALL -> {
+      @Suppress("DEPRECATION")
+      val clip = extras?.getParcelable<ClipData>(EXTRA_CLIP_DATA)
+      val uris = (0 until (clip?.itemCount ?: 0)).map { clip!!.getItemAt(it).uri }
+      if (method == CREATE_DELETE_REQUEST_CALL) deleteRequests += uris else writeRequests += uris
+      val pending = PendingIntent.getActivity(context, 0, Intent("dev.pampa.$method"), PendingIntent.FLAG_IMMUTABLE)
+      Bundle().apply { putParcelable(EXTRA_RESULT, pending) }
+    }
     else -> null
   }
 
@@ -235,6 +247,8 @@ class FakeMediaProvider : ContentProvider() {
     const val GET_VERSION_CALL = "get_version"
     const val GET_GENERATION_CALL = "get_generation"
     const val CREATE_TRASH_REQUEST_CALL = "create_trash_request"
+    const val CREATE_DELETE_REQUEST_CALL = "create_delete_request"
+    const val CREATE_WRITE_REQUEST_CALL = "create_write_request"
     const val EXTRA_CLIP_DATA = "clip_data"
     const val EXTRA_CONTENT_VALUES = "content_values"
     const val EXTRA_RESULT = "result"

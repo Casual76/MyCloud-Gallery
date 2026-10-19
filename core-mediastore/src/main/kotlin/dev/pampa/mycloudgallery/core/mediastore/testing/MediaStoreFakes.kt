@@ -115,6 +115,26 @@ class FakePhoneMediaIntents(override var canTrash: Boolean = true) : PhoneMediaI
     trashRequests += refs to trash
     return null
   }
+
+  /** Fase 5B (P0-B): le richieste di eliminazione e di scrittura valide, nell'ordine (distinte, al massimo 2.000, solo con il cestino di sistema). */
+  val deleteRequests: MutableList<List<MediaRef.Phone>> = mutableListOf()
+  val writeRequests: MutableList<List<MediaRef.Phone>> = mutableListOf()
+
+  override fun deleteRequest(refs: List<MediaRef.Phone>): IntentSender? {
+    validRequest(refs)?.let { deleteRequests += it }
+    return null
+  }
+
+  override fun writeRequest(refs: List<MediaRef.Phone>): IntentSender? {
+    validRequest(refs)?.let { writeRequests += it }
+    return null
+  }
+
+  /** Le righe distinte di una richiesta valida come la vuole Android (11+, non vuota, al massimo 2.000), o null: nessuna richiesta parziale. */
+  private fun validRequest(refs: List<MediaRef.Phone>): List<MediaRef.Phone>? {
+    val distinct = refs.distinct()
+    return if (!canTrash || distinct.isEmpty() || distinct.size > PhoneMediaIntents.MAX_REQUEST_URIS) null else distinct
+  }
 }
 
 /** Un cestino di sistema con gli elementi scelti dal test. */

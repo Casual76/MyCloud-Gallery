@@ -1141,7 +1141,9 @@ partono solo da azioni locali confermate**, con tetti per giro. Come la garantis
      private); **pubblicare senza sostituire** (`publishTemp`: rinomina che fallisce se il nome esiste); togliere i
      **propri** temporanei (`deleteOwnTemp`); chiedere lo spazio (`space`). Nella 5B anche **rinominare verso e da
      `Versioni/`** (`archiveVersion`, `restoreVersion`), nella stessa share, senza sostituire e con il timbro (dimensione,
-     data, `fileId`) obbligatorio e controllato sullo stesso handle prima della rinomina.
+     data, `fileId`) obbligatorio e controllato sullo stesso handle prima della rinomina. Una delle due estremita' sta sempre
+     sotto `Versioni/` (la cartella di destinazione si crea prima con `mkdirs`) e l'altra e' un percorso di media, mai un'area dell'app
+     (`VersionPaths`, P0-B 19/10).
    - **Cosa non puo' fare**: nessuna di queste azioni toglie byte di un media (il solo file che si toglie e' un proprio
      temporaneo, mai un media). Niente cestino, niente rinomina libera, niente `deleteIfUnchanged`. `core-backup` non vede
      `NasFileOps`, `DestructiveNasAccess`, `ConfirmationIssuer` ne' `core-nasops`. Cio' che toglie un file dal NAS

@@ -33,6 +33,28 @@ interface PhoneMediaIntents {
    * la lancia con `startIntentSenderForResult`. Null se il cestino non c'e' ([canTrash] falso) o [refs] e' vuoto.
    */
   fun trashRequest(refs: List<MediaRef.Phone>, trash: Boolean): IntentSender?
+
+  /**
+   * Fase 5B (P0-B, D21 "Libera subito"): la richiesta di **eliminare** [refs] per sempre, dal dialogo di sistema (`createDeleteRequest`,
+   * Android 11+). Solo dopo la seconda conferma con due gesti distinti (`PhoneConfirmation` di core-backup) e il controllo del timbro di
+   * ogni copia: lo decide `FreeSpace` di core-backup, questa e' solo l'ultima porta. L'app non cancella mai da
+   * sola: se l'utente rifiuta il dialogo non cambia niente. Al massimo [MAX_REQUEST_URIS] elementi (come il cestino); null se [canTrash]
+   * e' falso, [refs] e' vuoto o ne ha di piu' (meglio niente che una richiesta parziale silenziosa).
+   */
+  fun deleteRequest(refs: List<MediaRef.Phone>): IntentSender?
+
+  /**
+   * Fase 5B (P0-B, D19, E-E10): la richiesta di **scrivere** su [refs] (`createWriteRequest`, Android 11+): il permesso, dato dall'utente
+   * nel dialogo di sistema, di riscrivere questi file (correzioni, "Ripristina originale"). Senza `MANAGE_MEDIA` e senza accesso a tutti i file:
+   * la scrittura vera la fa [PhoneMediaRewriter] solo dopo questo consenso, solo se l'originale e' al sicuro. Stessi limiti e stesso `null` di
+   * [deleteRequest].
+   */
+  fun writeRequest(refs: List<MediaRef.Phone>): IntentSender?
+
+  companion object {
+    /** Il massimo di URI per richiesta di sistema (Android 11+: cestino, eliminazione, scrittura). */
+    const val MAX_REQUEST_URIS: Int = 2_000
+  }
 }
 
 /**

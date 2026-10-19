@@ -853,3 +853,48 @@ Decisione: quando e come alzare il target a 37.
 **T-25 — Trasferimento dispositivo a dispositivo e Smart Switch.**
 Passi: app di prova con dati e chiave Keystore, con `allowBackup="false"` e con `dataExtractionRules` che escludono tutto in `<device-transfer>`; Smart Switch dal Tab S9 all'S25 e viceversa; verificare quali file, preferenze e database arrivano e se le credenziali restano.
 Decisione: configurazione del manifest (1.5) e testo per E-O8.
+
+### Resoconto delle prove guidate (Fase 5B, P0-B)
+
+**Stato: da fare con il telefono.** Le prove T-09, T-14, T-15 e T-16 sono pronte come **schermata di debug** dell'app (non eseguite: P0-B non usa il telefono). Si trova **solo nella build debug**: *Impostazioni → Sviluppo → «Prove guidate T-09, T-14, T-15, T-16»* (classi `FieldProbe*` in `app/src/debug/.../debugtools/probes/`, componenti nel manifest di debug; nella release non esistono, né nel manifest né nel dex: lo controlla `tools/check.ps1`). Nota: la richiesta parlava di «Diagnostica → Sviluppo», ma la voce «Sviluppo» sta già sotto Impostazioni (`DeveloperTools`): la schermata è lì.
+
+*Come si fa.* Sul telefono (S25, poi Tab S9):
+1. `tools\chaos\s25.ps1 -Mode seed` per riempire `DCIM/mcg-prova/` e `Pictures/mcg-prova/` (servono almeno 500 righe per la prova (f) di T-09; la semina di oggi ne produce circa 300, vedi i punti aperti in `docs/decisioni.md`, «Fase 5B: P0-B»).
+2. Installare la build debug (a cura dell'utente, non da una sessione di Claude) e dare i permessi sui media.
+3. Aprire la schermata e seguire i passi numerati di ogni sezione. Prima «Controlla l'ambiente».
+4. In fondo: «Aggiorna», poi «Copia» (appunti) o «Salva su file» (`field-probe-report.txt` nella cartella `files` dell'app, da prendere con `adb pull`) e incollare il resoconto qui sotto.
+
+**Recinzione.** Le prove leggono e toccano **solo** `DCIM/mcg-prova/` e `Pictures/mcg-prova/`: una sola funzione legge il MediaStore (`FieldProbePhone.rows()`, selezione per percorso uguale e controllo doppio sul risultato) e nessuna richiesta di sistema nomina una riga fuori da lì (`FieldProbeFlowTest`). Niente si cancella per sempre: il cestino di Android tiene 30 giorni e «Ripristina» rimette le foto. La riscrittura di T-09 usa gli **stessi byte** della foto. La modifica di T-16 (b) lavora su una **copia in cache**.
+
+**Come si legge il resoconto.** Una riga `chiave=numero` per misura, **solo numeri**: mai nomi di file, percorsi, share, account, id di media o impronte. Le app che chiamano sono un codice: 1 Gmail, 2 WhatsApp, 3 Telegram, 4 Google Messaggi, 5 Samsung Messaggi, 6 OneDrive, 7 Google Drive, 8 I miei file, 9 Chrome, 10 Samsung Gallery, 11 Google Foto, 12 Quick Share, 13 DocumentsUI, 99 altra. Le misure ripetute hanno un indice finale (`t09.diff_missing.2` è il secondo «Confronta»). Una riga con una chiave sconosciuta o con un valore che non è un numero non entra mai (`FieldProbeReportTest`).
+
+| Chiave | Cosa dice (e cosa decide) |
+|---|---|
+| `env.sdk`, `env.rows`, `env.rows_images`, `env.rows_videos` | Versione di Android e righe di prova. Con meno di 500 righe la prova (f) di T-09 non è piena. |
+| `t09.base_rows` | Righe nella fotografia di riferimento. |
+| `t09.diff_missing.N`, `t09.diff_new.N`, `t09.diff_trashed.N`, `t09.diff_same_id_present.N`, `t09.diff_other_id_back.N` | Dopo cestinare, ripristinare o svuotare in Samsung Gallery: righe sparite, righe con `_ID` nuovo, righe cestinate (`IS_TRASHED`), righe rimaste con lo stesso `_ID` e la stessa impronta, e file **tornati con un `_ID` diverso**. Decide la finestra di tolleranza e il testo di E-P11 (T-09 a, b, c). |
+| `t09.diff_generation_delta.N`, `t09.diff_deleted_files.N` | Di quanto è salita la generazione del volume e quante voci di `deleted_files` riguardano le righe del riferimento (-1 = tabella non leggibile). |
+| `t09.trash_requested`, `t09.trash_result`, `t09.trash_is_trashed`, `t09.trash_visible_default`, `t09.trash_expires_days_min`, `t09.trash_expires_days_max`, `t09.trash_in_samsung` | `createTrashRequest` su 5 foto: esito del dialogo (`-1` accettato, `0` rifiutato), quante risultano cestinate, quante restano visibili senza `MATCH_TRASHED`, **giorni alla scadenza** (atteso 30) e se il cestino di Samsung Gallery le mostra (risposta dell'utente, 1 o 0). T-09 d, e. |
+| `t09.untrash_requested`, `t09.untrash_result`, `t09.untrash_is_trashed`, `t09.untrash_same_ids` | Il ripristino con `createTrashRequest(trash = false)`: le righe tornano con gli stessi `_ID`? |
+| `t09.many_requested`, `t09.many_result`, `t09.many_is_trashed` | La richiesta con tutte le righe di prova (al massimo 500): esito e quante risultano cestinate. T-09 f. Decide se serve `MANAGE_MEDIA` (atteso di no). |
+| `t09.write_dialog`, `t09.write_code`, `t09.write_size_before`, `t09.write_size_after`, `t09.write_generation_delta`, `t09.write_ms` | `createWriteRequest` su una foto e riscrittura con gli stessi byte: dialogo (-1 o 0), codice (0 riscritta e riletta, 1 nessun permesso, 2 sparita, 3 file diverso, 4 fallita e ripristinata, 5 fallita **non** ripristinata, 6 foto non leggibile), dimensioni, generazione, millisecondi. D19, E-E10. |
+| `t14.handlers_get_content`, `t14.handlers_pick`, `t14.own_handler` | Quante app gestiscono «scegli un file» (con le `<queries>` del manifest di debug) e quante sono le nostre. |
+| `t14.picker_launched`, `t14.picker_multiple`, `t14.picker_mime`, `t14.picker_caller`, `t14.picker_action`, `t14.form`, `t14.latency_ms`, `t14.count` | Chi ha aperto il selettore di prova e con quale azione (1 `GET_CONTENT`, 2 `PICK`), che tipo chiedeva (1 immagini, 2 video, 3 qualunque, 9 altro), se in selezione multipla, e con quali impostazioni abbiamo risposto (forma 1 diretto dal MediaStore, 2 a richiesta, 3 copia in cache prima). |
+| `t14.serve_opens`, `t14.serve_reads`, `t14.serve_bytes`, `t14.serve_first_read_ms`, `t14.serve_duration_ms`, `t14.serve_backward_seeks`, `t14.serve_reached_eof`, `t14.serve_copy_ms`, `t14.serve_queries`, `t14.serve_type_queries` | Come l'altra app **legge** il file consegnato: aperture, letture, byte, tempo alla prima lettura, durata, salti all'indietro, se arriva in fondo, durata della copia (forma 3), interrogazioni di nome e dimensione e di tipo. Decide streaming contro «scarica prima» (5.3, punto 3). |
+| `t14.docs_root_queries`, `t14.docs_child_queries`, `t14.docs_doc_queries`, `t14.docs_opens`, `t14.docs_caller` | Il provider di documenti di prova: quante volte DocumentsUI chiede radici, figli, documenti, aperture, e chi. Dice se Gmail, WhatsApp e Telegram mostrano la radice «MCG prova». |
+| `t15.handlers_send`, `t15.handlers_send_multiple`, `t15.own_handler` | Quante app ricevono `SEND` e `SEND_MULTIPLE` di immagini, e se la nostra c'è. |
+| `t15.received`, `t15.action`, `t15.streams`, `t15.clip_items`, `t15.grant_flag`, `t15.scheme_content`, `t15.scheme_file`, `t15.scheme_other`, `t15.perm_granted`, `t15.caller` | Cosa arriva: quante condivisioni, con quale azione (1 `SEND`, 2 `SEND_MULTIPLE`), quanti flussi, quanti elementi nella `ClipData`, se il sistema ha dato il permesso di lettura, lo schema degli indirizzi (`content`, `file`, altro), se il permesso risulta concesso e chi ha condiviso. Decide il rifiuto di `file://` e la strategia di copia (C18, 5.3 punto 5). |
+| `t15.open_ok`, `t15.open_fail`, `t15.bytes`, `t15.open_ms_avg`, `t15.read_ms_total`, `t15.closed_first` | Aperture e letture subito alla ricezione (con «Legge subito») o nessuna (con «Chiude prima»). |
+| `t15.reopen_ok`, `t15.reopen_denied`, `t15.reopen_age_s`, `t15.reopen_after_restart` | **Il permesso di lettura dura?** Riprovando dopo aver chiuso l'activity (e dopo la morte del processo): quante condivisioni si aprono ancora e quante no, età della più vecchia, e se il processo è ripartito dalla ricezione (1). Decide se la copia deve essere **subito** (D24). |
+| `t16.handlers_edit`, `t16.handlers_view` | Quante app gestiscono `ACTION_EDIT` e `ACTION_VIEW` di immagini. Atteso: Samsung Gallery non risponde a `EDIT`. |
+| `t16.view_launched`, `t16.view_same_id.N`, `t16.view_row_changed.N`, `t16.view_rows_new.N`, `t16.view_new_same_taken.N`, `t16.view_size_delta.N`, `t16.view_generation_delta.N` | Dopo «Salva», «Salva copia» e «Ripristina originale» in Samsung Gallery: la stessa riga c'è e ha cambiato impronta? Ci sono righe nuove con la **stessa data di scatto** (E-X3)? Di quanto sono cambiate dimensione e generazione? Decide l'algoritmo di rilevamento delle versioni (5.3, punto 6). |
+| `t16.col_original_document_id.N`, `t16.col_document_id.N`, `t16.col_instance_id.N` | Quante righe hanno valorizzate le tre colonne dopo la modifica (T-16 c). |
+| `t16.edit_launched`, `t16.edit_result_code`, `t16.edit_result_has_data`, `t16.edit_bytes_changed`, `t16.edit_size_before`, `t16.edit_size_after`, `t16.edit_new_files` | `ACTION_EDIT` con una copia del `FileProvider` in lettura e scrittura (Google Foto, OneDrive): esito, se c'è un risultato, se i **byte della copia sono cambiati**, dimensioni, file nuovi accanto. |
+
+**Il resoconto.** Incollare qui, con data e telefono, un blocco per ogni giro di prove:
+
+```
+(nessuna prova ancora eseguita)
+```
+
+**Esiti da riportare** nelle tabelle di 4.2 bis, 5.2 bis e nelle decisioni di 4.3 e 5.3 dopo le prove: finestra di tolleranza di E-P11 (T-09 a, b, c), necessità di `MANAGE_MEDIA` (T-09 f), forma della risposta per i media solo-NAS (T-14), strategia di copia delle condivisioni (T-15), algoritmo delle versioni (T-16).

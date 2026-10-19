@@ -15,6 +15,7 @@ import dev.pampa.mycloudgallery.core.nas.ops.NasOpsPaths
 import dev.pampa.mycloudgallery.core.nas.ops.NasSpaceInfo
 import dev.pampa.mycloudgallery.core.nas.ops.NasTempWriter
 import dev.pampa.mycloudgallery.core.nas.ops.PublishOutcome
+import dev.pampa.mycloudgallery.core.nas.ops.RenameOutcome
 import dev.pampa.mycloudgallery.core.nas.ops.SmbNasFileOps
 import dev.pampa.mycloudgallery.core.nas.ops.TempFinish
 import dev.pampa.mycloudgallery.core.nas.session.SmbNasSessionManager
@@ -126,6 +127,22 @@ internal class SmbNasBackupOps(private val ops: NasFileOps) : NasBackupOps {
   override suspend fun deleteOwnTemp(share: String, temp: SharePath, purpose: Purpose): NasResult<DeleteOutcome> {
     requireBackupTemp(temp)
     return ops.deleteOwnTemp(share, temp, purpose)
+  }
+
+  /**
+   * 5B (P0-B): le due rinomine delle versioni (D17, D18) sono di P8. Qui i **percorsi** si controllano gia' (un errore di programmazione,
+   * come le altre primitive) e poi la vista risponde con un **errore esplicito** (`STATUS_NOT_IMPLEMENTED`), mai un successo finto: niente
+   * si sposta, il chiamante (che nella 5A non le chiama) vede un guasto del NAS. P8 le sostituisce con la rinomina sopra
+   * `SmbNasFileOps.rename` (stesso handle, timbro obbligatorio, senza sostituire), provata sul simulatore SMB e sul NAS vero.
+   */
+  override suspend fun archiveVersion(share: String, from: SharePath, to: SharePath, expect: NasStamp, purpose: Purpose): NasResult<RenameOutcome> {
+    VersionPaths.requireArchive(from, to)
+    return NasResult.Err(NasError.Unexpected(STATUS_NOT_IMPLEMENTED))
+  }
+
+  override suspend fun restoreVersion(share: String, from: SharePath, to: SharePath, expect: NasStamp, purpose: Purpose): NasResult<RenameOutcome> {
+    VersionPaths.requireRestore(from, to)
+    return NasResult.Err(NasError.Unexpected(STATUS_NOT_IMPLEMENTED))
   }
 
   override suspend fun space(share: String, purpose: Purpose): NasResult<NasSpaceInfo> = ops.space(share, purpose)

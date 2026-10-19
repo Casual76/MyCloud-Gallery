@@ -1019,6 +1019,103 @@ l'utente vede (da confermare):
   campo") non sono state fatte (nessun telefono). Di R3: un file il cui unico nome e' quello del temporaneo lo toglie `deleteOwnTemp` (come
   gia' le altre vie del motore e la pulizia D33); il collegamento simbolico non si crea via SMB e non e' stato provato sul WD.
 
+## Fase 5B: fondamenta e contratti (P0-B, 19/10)
+Fonte: `docs/fase5-progetto.md` (§0.2, §0.3, §1.1-§1.5, §2.4, §2.5, §2.7, D17-D35, §4.3, riga P0-B del §4.4, §6.4, risposte Q2, Q5, Q6, Q8, Q9 del §9.1),
+`docs/sicurezza.md`, `docs/review/5a-fase5a.md`. Consegna il modulo, i contratti, i null-object e i fake su cui partono in parallelo P8 (versioni e
+correzioni), P9 ("Libera spazio"), P10 (selettore e provider), P11 (arrivi, "Modifica con…", senza posizione) e P13 (prova delle 500 interruzioni
+della 5B). Nessuna dipendenza esterna nuova, nessun permesso Android nuovo. **Nessuna logica di produzione** oltre a due eccezioni volute: la
+riscrittura di un file del telefono (`MediaStorePhoneMediaRewriter`, perché è il punto in cui l'app può lasciare un file a metà e va provato subito) e
+le richieste di sistema di `core-mediastore`. Tutto il resto sono firme, tipi, regole pure, null-object e fake funzionanti.
+
+**Nuovo modulo `:feature-integrations`** (`settings.gradle`, `galleryModules`, `app/build.gradle`; vede `core-backup`, `core-library`, `core-imaging`,
+`core-mediastore`, `core-designsystem`; **cieco a `core-nas` e `core-nasops`**): `contract/` (`IntegrationPorts`: `MediaDocuments`, `DocumentReader`,
+`DocumentIds`, `EntryDecision`; i byte di un media solo-NAS arrivano da una porta che `:app` lega a `NasMediaReader`), `noop/`, `testing/`
+(`IntegrationFakes`), `NoNetworkSourcesTest`, `NoWallClockSourcesTest`, e i **quattro componenti approvati** come scheletri che non agiscono:
+`PickerActivity` e `ShareReceiverActivity` chiudono con `RESULT_CANCELED` senza leggere l'intento; `MediaDocumentsProvider` non ha radici e non apre
+documenti; `IntegrationFileProvider` serve solo `cacheDir/share/` e `cacheDir/edit/`. Le activity hanno `taskAffinity=""` e stanno fuori dai recenti.
+
+**Contratti** (una riga ciascuno; tutti con null-object che fallisce chiuso e fake funzionante)
+| Dove | Cosa | Per chi |
+|---|---|---|
+| `core-nas/ops/backup` | `NasBackupOps.archiveVersion` e `restoreVersion`: rinomina nella stessa share, **timbro obbligatorio** (`NasStamp`, mai nullo), **una sola estremità sotto `Versioni/`**, mai sostituire, nessuna cancellazione. `VersionPaths` (`requireArchive`, `requireRestore`, `mirrorOf`) controlla i percorsi in ogni implementazione. Insieme chiuso di primitive, provato dal test di architettura. `SmbNasBackupOps` controlla i percorsi e risponde `NOT_IMPLEMENTED`; il fake (`InMemoryNasMedia.backupView`) le esegue davvero (`FakeNasOp.ARCHIVE_VERSION`, `RESTORE_VERSION`, guasti prima e dopo) | P8 (la parte SMB: chiama `SmbNasFileOps.rename`), P13 |
+| `core-metadata/contract` | `MetadataChange` (`GeoChange`, data, rotazione), `MetadataWriter` (`WriteOutcome`: scritto, non supportato `WriteUnsupported`, fallito `WriteFailure`) e `LocationStripper` (`StripOutcome.Stripped` porta il tipo dell'uscita; `StripUnsupported`); fake `testing/WritingFakes.kt`; `exifinterface` passa a `implementation` | P8, P11 |
+| `core-mediastore` | `PhoneMediaIntents.deleteRequest` e `writeRequest` (insieme a `trashRequest`: solo con il dialogo di sistema, righe distinte, al massimo 2.000, da Android 11); `PhoneMediaRewriter.replace(ref, file, sha)` con `RewriteResult` (`Replaced`, `NotGranted`, `Gone`, `SourceMismatch`, `Failed(code, restored)`); **adattatore vero** `MediaStorePhoneMediaRewriter` (copia di sicurezza, scrittura `rw` senza troncare, rilettura con `setRequireOriginal`, ripristino se non torna, lavoro non annullabile); `NoPhoneMediaRewriter`; `FakeMediaStore` che simula i dialoghi (accetta, rifiuta, parziale, app uccisa), i permessi concessi e la riscrittura | P8, P9, P14 |
+| `core-backup/contract` | `PhoneConfirmation` (costruttore `internal`, `PhoneConfirmationIssuer`, `PhoneConfirmationSheet`, `ConfirmablePlan` + `PhonePlanHash`: vale per un piano, 10 minuti monotoni, 600 ms fra i due tocchi di "Libera subito"); `PhoneRewriter` + `PhoneWriteGrant` (la porta del riscrittore, che `:app` mappa su `PhoneMediaRewriter` con la recinzione D13) | P8, P9, P12 |
+| `core-backup/contract` | `VersionKeeper` (piano delle versioni di un media, "Ripristina originale" con conferma e permesso di scrittura), `VersionEntry`/`VersionRole`/`VersionPlace`/`RestoreOutcome` | P8, P12 |
+| `core-backup/contract` | `Corrections` (piano e `apply` di una correzione di data, luogo o rotazione: conferma, permesso del dialogo, originale al sicuro prima), `CorrectionPlan`/`CorrectionOutcome` | P8, P12 |
+| `core-backup/contract` | `FreeSpace` ("Libera spazio" in cinque passi: `plan`, `verify`, `resume`, `nextBatch`, `recordOutcome`), `FreeSpaceRules` (avviso forte sempre nel piano, verifica valida 6 ore monotone e non sopravvive a un riavvio, lotti di al massimo 2.000, timbro ricontrollato prima di ogni dialogo, ultimi 30 giorni esclusi di default, i mai: non verificati, in errore, in caricamento, congelati, NAS irraggiungibile; **le liste non crescono mai da dati del NAS**, E-S11) | P9, P12 |
+| `core-backup/contract` | `PendingTasks` ("Da decidere": `tasks`, `dismiss`, `complete`) | P8, P12 |
+| `core-backup/contract` | `IncomingUploads` (`stage` copia subito con `IncomingLimits`, `save` solo con una `PhoneConfirmation` legata a `IncomingSavePlan`, `discard`) | P11, P12 |
+| `core-backup/contract` | `EditSessions` (`begin` → `EditBegin`, `settle` → `EditOutcome`; finestra di `EditSessionRules`) | P11, P12 |
+| `feature-integrations/contract` | `MediaDocuments` + `DocumentReader` + `DocumentIds` (id opachi, mai percorsi) | P10 |
+
+Fake e null-object stanno in `core-backup/testing/FiveBFakes.kt` e `noop/BackupFiveBNullObjects.kt`. `core-backup` ora vede `core-metadata` con `api`
+(le firme delle correzioni usano `MetadataChange`).
+
+**Come è garantito il perimetro** (`Phase5BArchitectureTest`, `core-common`; i suoi ingressi, compreso il manifest di debug, la policy, `sicurezza.md` e
+`tools/check.ps1`, sono dichiarati in `core-common/build.gradle`)
+- `feature-integrations` dipende solo da ciò che il §1.1 permette, non vede `core-nas` né `core-nasops` (né per compilatore, né per nomi) e ha i
+  pacchetti e i test di guardia dei moduli, nessun permesso.
+- `PhoneConfirmation` ha il costruttore `internal`; emittente e foglio solo nella UI (`feature-backup`, `feature-integrations`, `feature-viewer`,
+  `:app`) e, in `core-backup`, nei fake e nei test; i servizi che toccano il telefono (`FreeSpace.verify`, `VersionKeeper.restoreOriginal`,
+  `Corrections.apply`, `IncomingUploads.save`) la pretendono nella firma.
+- `NasBackupOps` ha un insieme **chiuso** di primitive (le sette della 5A, `archiveVersion`, `restoreVersion`); le due rinomine hanno il timbro non
+  nullo e ogni implementazione chiama `VersionPaths`.
+- Richieste di sistema (`create…Request`) e riscrittore solo in `core-mediastore` (e il riscrittore in `:app`), nel codice che va in un APK.
+- Solo `:app` e `feature-integrations` dichiarano componenti; i quattro approvati con le loro esposizioni; `MANAGE_DOCUMENTS` sul provider dei documenti;
+  `releaseManifestPolicy` e `docs/sicurezza.md` §4-bis d'accordo; `FileProvider` solo `share/` e `edit/`; le prove guidate (`FieldProbe*`) solo in
+  `app/src/debug` e `app/src/testDebug`, ogni componente del manifest di debug è una prova, e `tools/check.ps1` le cerca nel dex di release.
+- **Provato il 19/10 reintroducendo ogni violazione** (il test corrispondente fallisce, poi si toglie e torna verde), in sei giri e con tutte le
+  asserzioni di ogni test: un modulo fuori dal §1.1 e `core-nas` fra le dipendenze; `core-nas` e il nome delle primitive nei sorgenti di
+  `feature-integrations`; un `uses-permission` nel suo manifest; un `NoNetworkSourcesTest` o un `NoWallClockSourcesTest` tolto; l'emittente della
+  conferma in `core-library`; `PhoneConfirmation(` costruita in `feature-library`; il costruttore reso pubblico; `FreeSpace.verify` senza conferma;
+  una rinomina libera in `NasBackupOps`; il timbro reso nullo; `requireRestore` tolto da un'implementazione; `createTrashRequest` in
+  `feature-library`; `PhoneMediaRewriter` in `core-library`; un componente in più nel manifest di `feature-integrations` e in `feature-library`, e uno dei
+  quattro dichiarato anche in `:app`; il
+  `FileProvider` esportato o con un'altra radice; un componente senza permesso dove serve `MANAGE_DOCUMENTS`; un esportato tolto dalla policy o un
+  permesso proibito aggiunto; `MANAGE_MEDIA` tolto dai rifiuti per nome; il provider dei documenti tolto dal §4-bis; un `FieldProbe*` in `app/src/main`
+  e un componente non di prova nel manifest di debug; `FieldProbe` tolto da `tools/check.ps1`. (Una prima versione del controllo su `check.ps1` passava
+  anche senza il nome: lo trovava in un commento. Ora legge solo i nomi fra apici.)
+
+**Manifest e policy.** `feature-integrations/src/main/AndroidManifest.xml` dichiara i quattro componenti e nient'altro, e si fonde nel manifest di
+`:app` (nessuna copia in `app/src/main`). `releaseManifestPolicy`: i tre esportati in `allowedExported`, `MANAGE_DOCUMENTS` per il provider in
+`exportedRequiresPermission`, e una novità, `forbiddenPermissions` (`MANAGE_MEDIA` e `MANAGE_EXTERNAL_STORAGE`, rifiutati per nome con la ragione). `tools/check.ps1`
+controlla anche che i quattro siano nel manifest dell'APK di release con la giusta esposizione e che nessun componente di prova ci sia. `docs/sicurezza.md`: §4-bis, C17,
+checklist e §8.
+
+**Prove guidate T-09, T-14, T-15, T-16** (solo debug, **non eseguite**): *Impostazioni → Sviluppo → "Prove guidate…"* (`app/src/debug/.../debugtools/probes/`,
+tutte `FieldProbe*`, 12 file; manifest e `<queries>` in `app/src/debug/AndroidManifest.xml`). Leggono e toccano solo `DCIM/mcg-prova/` e
+`Pictures/mcg-prova/`; il resoconto è di soli numeri (insieme chiuso di chiavi in `FieldProbeKey`, una riga `chiave=numero`, nessun nome, percorso o
+indirizzo; gli indirizzi delle condivisioni ricevute stanno in un file privato fuori dal resoconto); sopravvive alla morte del processo (T-15 la provoca). La
+tabella delle chiavi e il posto per il resoconto sono in `docs/android.md` («Resoconto delle prove guidate»). Provate sul MediaStore finto
+(`FieldProbeFlowTest`: recinzione, cestino, ripristino, richiesta di 500, scrittura con gli stessi byte, `ACTION_VIEW`; `FieldProbeReportTest`;
+`FieldProbeMathTest`). Assenti dalla release: `$debugRemnants` di `tools/check.ps1` (`FieldProbe`, `debugtools/probes`, `field-probe`, `fieldprobe`) e il
+manifest.
+
+**Modifiche ai contratti che P8-P13 devono conoscere** (rispetto al §1.2/§2 del progetto, scoperte scrivendo i fake)
+- `NasBackupOps.archiveVersion/restoreVersion`: la cartella di destinazione sotto `Versioni/` va creata **prima** con `mkdirs`; il timbro è obbligatorio; il
+  sorgente deve essere un file (una cartella dà `SourceChanged(null)`); la parte SMB sta in `SmbNasBackupOps` (non in `SmbNasFileOps`), che per la rinomina
+  userà `SmbNasFileOps.rename` con lo stesso timbro.
+- `FreeSpace`: `resume` esiste (la verifica prosegue a tappe) e `recordOutcome` restituisce il `FreeSpaceRun` aggiornato; la conferma si controlla in `verify`.
+- `PendingTasks.complete` è nuovo: lo chiama `:app` quando l'operazione "Elimina…" della 4B è partita.
+- `IncomingUploads.discard` e `IncomingSavePlan` (la conferma è legata allo stage e alla destinazione) sono nuovi; `stage` non avvia nessun caricamento.
+- `EditSessions.begin` restituisce `EditBegin` (sessione o motivo per cui non c'è); `VersionEntry` porta `isCurrent` e `VersionRole.ORIGINAL`/`EDITED`.
+- `PhoneRewriter` è una porta di `core-backup` (che non vede `core-mediastore`): `:app` la mappa su `PhoneMediaRewriter`, con la recinzione D13 in debug.
+- `StripOutcome.Stripped` porta il tipo dell'uscita (l'HEIC diventa JPEG). `Mp4Scout` di `core-prepare` non si può usare da `core-metadata`: lo scrittore
+  dei video usa `IsoBmff` di `core-metadata`.
+- `core-backup` → `core-metadata` è `api`; `exifinterface` in `core-metadata` è `implementation`.
+- I wrapper del caos di `core-backup` (`GuardedBackupOps`, `ChaosBackupOps`) delegano le due rinomine senza entrate nuove in `Primitive`: P13 le aggiunge.
+- I quattro componenti sono già nel manifest e nella policy (il §4.4 lo metteva in P14): P14 resta con `AppLockGate` su più activity, la navigazione e la prova con `adb`.
+  Nota per chi installa la build sul telefono: i componenti sono abilitati ma inerti (le activity chiudono subito), quindi compaiono già nei selettori e nel
+  foglio di condivisione delle altre app, senza fare niente.
+
+**Punti aperti**
+- La semina dello script `tools/chaos/s25.ps1 -Mode seed` produce circa 300 righe: la prova (f) di T-09 vuole almeno 500. Servono più foto di prova (a cura di chi esegue).
+- La schermata delle prove sta sotto Impostazioni → Sviluppo, non sotto Diagnostica: «Sviluppo» è già lì (`DeveloperTools`).
+- Le prove T-09, T-14, T-15, T-16 non sono eseguite: il resoconto in `docs/android.md` è vuoto. Dai loro esiti dipendono la finestra di tolleranza del cestino di
+  Samsung (E-P11), l'eventuale `MANAGE_MEDIA` (atteso di no), la forma della risposta per i media solo-NAS, la strategia di copia delle condivisioni e l'algoritmo delle versioni.
+- Il `FileProvider` di androidx non si può provare con un URI su Windows (la radice ha un separatore in più): `FileProviderPathsTest` legge il file XML e le radici configurate.
+
 ## Revisione grafica della Libreria da parte dell'utente (13/10)
 Giudizio: le prestazioni della navigazione non sono male, la **grafica no**. Serve molto lavoro, da fare in un **filone grafico
 parallelo** alle fasi successive (insieme ai lavori che non toccano l'app sul momento, per esempio il back-end NAS della Fase 4).

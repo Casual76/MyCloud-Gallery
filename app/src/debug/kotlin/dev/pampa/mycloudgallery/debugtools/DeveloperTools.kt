@@ -18,6 +18,8 @@ import dev.pampa.mycloudgallery.core.imaging.contract.ThumbnailSource
 import dev.pampa.mycloudgallery.core.imaging.testing.SyntheticThumbnailSource
 import dev.pampa.mycloudgallery.core.nas.fence.ShareFence
 import dev.pampa.mycloudgallery.core.nas.session.ShareGuard
+import dev.pampa.mycloudgallery.debugtools.probes.FieldProbeScreen
+import dev.pampa.mycloudgallery.debugtools.probes.FieldProbesRoute
 import dev.pampa.mycloudgallery.gallery.DebugLibraryKit
 import dev.pampa.mycloudgallery.gallery.SyntheticLibraryKit
 import java.io.File
@@ -40,7 +42,9 @@ data object CatalogRoute
  *   memoria passati dalla scansione vera, in un database separato ([SyntheticNasKit]); con "libreria mista" (G2) la
  *   griglia mostra tutti i segni di presenza e il piede lo stato del NAS scelto da `adb` ([MixedPresenceRepository]);
  * - la **recinzione delle share di prova** (D33, [shareGuard]);
- * - (Fase 5A) la **recinzione del telefono** del backup con gli account di prova (D13, [backupFence]).
+ * - (Fase 5A) la **recinzione del telefono** del backup con gli account di prova (D13, [backupFence]);
+ * - (Fase 5B, P0-B) le **prove guidate** T-09, T-14, T-15 e T-16 (`probes/`): Impostazioni → Sviluppo → "Prove guidate", sulle sole cartelle `mcg-prova`
+ *   del telefono, con un resoconto di soli numeri. I loro componenti di prova stanno nel manifest di debug (`app/src/debug/AndroidManifest.xml`).
  *
  * La versione release di questo file (src/release) non ha niente: nessuna di queste classi entra nell'APK di release
  * (tools/check.ps1 cerca il catalogo e i package `testing` nel dex di release).
@@ -71,6 +75,10 @@ internal object DeveloperTools {
     composable<CatalogRoute> {
       ComponentCatalogPlaceholder(onBack = { nav.popBackStack() })
     }
+    // Fase 5B (P0-B): le prove guidate sul campo (T-09, T-14, T-15, T-16).
+    composable<FieldProbesRoute> {
+      FieldProbeScreen(onBack = { nav.popBackStack() })
+    }
   }
 
   fun settingsSection(nav: NavController): (@Composable () -> Unit)? = {
@@ -97,6 +105,12 @@ internal object DeveloperTools {
           SyntheticNasKit.request(mixed = true)
           nav.popBackStack()
         },
+      )
+      FluidListDivider()
+      FluidListRow(
+        title = stringResource(R.string.probe_entry_title),
+        subtitle = stringResource(R.string.probe_entry_detail),
+        onClick = { nav.navigate(FieldProbesRoute) },
       )
     }
   }

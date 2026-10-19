@@ -1,0 +1,82 @@
+// Le integrazioni con le altre app (docs/fase5-progetto.md §1.1, §1.5, §2.7, D23-D26, D29, C17, C18; riga P0-B del §4.4): scegliere foto per le
+// altre app (`PickerActivity`, `MediaDocumentsProvider`), ricevere le condivisioni (`ShareReceiverActivity`), le sessioni di "Modifica con…" e
+// la condivisione senza posizione (`FileProvider`). Modulo e scheletri dei quattro componenti approvati (Q5 (a)) di P0-B; la logica e' di P10
+// (selettore e provider) e P11 (arrivi, "Modifica con…", senza posizione), le schermate di P12.
+//
+// **I componenti sono scheletri che non agiscono**: le due activity chiudono subito con `RESULT_CANCELED` senza leggere l'intento, il provider non
+// ha radici e non apre documenti, il `FileProvider` espone solo `cacheDir/share/` e `cacheDir/edit/`. Il manifest (`src/main/AndroidManifest.xml`)
+// e' l'elenco chiuso dei componenti, uguale a `releaseManifestPolicy` (gradle/verify-release-manifest.gradle) e a docs/sicurezza.md §4-bis: P10 e
+// P11 riempiono le classi, **non** toccano il manifest (regola dei brief: manifest e build sono di P0-B e P14).
+//
+// Vede i contratti di core-backup (conferma, arrivi, sessioni, correzioni), la Libreria e le miniature, i contratti di core-mediastore (richieste
+// di sistema, URI) e il design system; **non** vede core-nas ne' core-nasops (§1.1): i byte di un media solo-NAS arrivano da una porta che `:app`
+// lega a `NasMediaReader` (`contract/IntegrationPorts.kt`). I `feature-*` non si conoscono fra loro.
+//
+// D7 della Fase 2: @HiltViewModel (KSP). D28: nessuna rete in questo modulo (NoNetworkSourcesTest). §4.3: nessun orologio del telefono
+// nelle decisioni (NoWallClockSourcesTest). Stringhe in `values/strings_integrations_<area>.xml`, uno per area.
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+  id 'org.jetbrains.kotlin.plugin.compose'
+  id 'org.jetbrains.kotlin.plugin.serialization'
+  id 'com.google.devtools.ksp'
+  id 'com.google.dagger.hilt.android'
+  id 'io.github.takahirom.roborazzi'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.feature.integrations'
+
+  buildFeatures {
+    compose = true
+  }
+
+  testOptions {
+    unitTests.all {
+      maxHeapSize = '2g'
+    }
+  }
+}
+
+dependencies {
+  // api: la conferma, gli arrivi e le sessioni di core-backup e i componenti di core-designsystem compaiono nelle firme.
+  api project(':core-backup')
+  api project(':core-designsystem')
+
+  // La Libreria e le miniature (§1.1), per la griglia del selettore (stessa pipeline) e le voci con un'anteprima; i contratti del telefono
+  // (core-mediastore: richieste di sistema, URI, riscrittura) per scegliere e consegnare le righe del MediaStore.
+  implementation project(':core-library')
+  implementation project(':core-imaging')
+  implementation project(':core-mediastore')
+
+  implementation project(':core-common')
+  implementation project(':core-model')
+
+  // Il FileProvider (androidx.core, gia' nel grafo con engine-ui; stessa versione dell'engine).
+  implementation appDeps.coreKtx
+
+  implementation appDeps.hiltAndroid
+  ksp appDeps.hiltCompiler
+  implementation appDeps.hiltNavigationCompose
+  implementation appDeps.navigationCompose
+  implementation appDeps.lifecycleViewModelCompose
+  implementation appDeps.lifecycleRuntimeCompose
+  implementation appDeps.coroutinesAndroid
+  implementation appDeps.serializationCore
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+  testImplementation appDeps.androidxTestExtJunit
+  testImplementation platform("androidx.compose:compose-bom:${engine.composeBom}")
+  testImplementation appDeps.composeUiTestJunit4
+  testImplementation appDeps.composeUiTestManifest
+  testImplementation appDeps.roborazzi
+  testImplementation appDeps.roborazziCompose
+  testImplementation appDeps.roborazziJunitRule
+}

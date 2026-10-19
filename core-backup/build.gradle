@@ -10,8 +10,13 @@
 // porta `PhoneBytes` (legata da :app). Lo verifica `Phase5ArchitectureTest` (core-common).
 //
 // Pacchetti: `contract`, `noop`, `testing` (fake, esecutore di riferimento `InMemoryBackupEngine`, verificatore degli invarianti del
-// §5.4 per il banco di P6). core-nas, core-database, core-index, core-prepare, core-metadata e core-rules sono `implementation`:
-// nessun loro tipo nelle firme dei contratti, cosi' feature-backup (che dipende da qui) resta cieca a core-nas (§1.1).
+// §5.4 per il banco di P6). core-nas, core-database, core-index, core-prepare e core-rules sono `implementation`: nessun loro tipo nelle
+// firme dei contratti, cosi' feature-backup (che dipende da qui) resta cieca a core-nas (§1.1). Fa eccezione core-metadata (`api`, dalla 5B):
+// `MetadataChange` e `GeoChange` sono nella firma di `Corrections`.
+//
+// Fase 5B (P0-B): `contract/` ha anche i servizi della seconda meta' (`VersionKeeper`, `Corrections`, `FreeSpace`, `PendingTasks`,
+// `IncomingUploads`, `EditSessions`) con la conferma `PhoneConfirmation`; `noop/BackupFiveBNullObjects.kt` e `testing/FiveBFakes.kt` hanno i
+// loro null-object e fake. La logica e' di P8 (versioni, correzioni, attivita'), P9 ("Libera spazio") e P11 (arrivi, sessioni).
 //
 // D28: nessuna rete in questo modulo (NoNetworkSourcesTest): SMB solo dai contratti di core-nas. §4.3 e D31: nessun orologio del
 // telefono nelle decisioni (NoWallClockSourcesTest): orologio monotono per le durate, ora del NAS per cio' che si scrive.
@@ -54,7 +59,9 @@ dependencies {
   implementation project(':core-database')
   implementation project(':core-index')
   implementation project(':core-prepare')
-  implementation project(':core-metadata')
+  // api (Fase 5B, P0-B): `MetadataChange`/`GeoChange` compaiono nelle firme di `Corrections` (la UI di P12 compone la richiesta di correzione).
+  // E' l'unico modulo "metadati" che le schermate vedono, e solo i tipi: lo scrittore (`MetadataWriter`) lo lega :app.
+  api project(':core-metadata')
   implementation project(':core-rules')
 
   testImplementation appDeps.coroutinesTest

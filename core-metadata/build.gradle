@@ -4,11 +4,15 @@
 // Pacchetti: `contract`, `noop`, `testing` (vedi core-places), `format` (lettori dei contenitori, internal) ed
 // `extract` (l'estrattore vero e gli adattatori Android).
 //
-// EXIF, XMP, HEIC, DNG, PNG e WebP si leggono con codice proprio (`format/`): i byte arrivano a intervalli e in
+// EXIF, XMP, HEIC, DNG, PNG e WebP si LEGGONO con codice proprio (`format/`): i byte arrivano a intervalli e in
 // modo `suspend` (`MediaBytes`), mentre ExifInterface vuole uno stream bloccante, e il suo lettore HEIF passa da
-// MediaMetadataRetriever (non gira su JVM). In produzione quindi androidx.exifinterface non serve piu': resta come
-// `testImplementation`, l'oracolo indipendente con cui i test confrontano il nostro lettore e i file di prova
-// (core-metadata/src/test/.../ExifInterfaceCrossCheckTest). Se non si vuole nemmeno quello, basta togliere la riga.
+// MediaMetadataRetriever (non gira su JVM). Per la lettura androidx.exifinterface resta l'oracolo indipendente con cui i test
+// confrontano il nostro lettore e i file di prova (core-metadata/src/test/.../ExifInterfaceCrossCheckTest).
+//
+// Fase 5B (P0-B, D19, D26, D28): per SCRIVERE i metadati (`write/`, P8: data, luogo e orientamento di JPEG, PNG e WebP) e per togliere la
+// posizione da una copia (`strip/`, P11) androidx.exifinterface torna in produzione (`implementation`): e' la stessa libreria e la stessa
+// versione che `:core-imaging` ha gia' nell'APK (nessuna dipendenza nuova, checksum gia' in gradle/verification-metadata.xml). Contratti,
+// null-object e fake: `contract/Writing.kt`, `noop/`, `testing/WritingFakes.kt`.
 // ThumbHash e' un'implementazione propria dall'algoritmo pubblico (nessuna libreria).
 //
 // I test usano le fixture di tools/fixtures/src (Java, solo JDK): lo stesso codice genera il set per il telefono. Si
@@ -67,8 +71,10 @@ dependencies {
 
   implementation appDeps.coreKtx
 
+  // Fase 5B (P0-B): scrittura dei metadati e rimozione della posizione (P8, P11). Prima era solo `testImplementation` (l'oracolo).
+  implementation appDeps.exifinterface
+
   testImplementation files(fixturesJar.map { it.archiveFile })
-  testImplementation appDeps.exifinterface
   testImplementation appDeps.coroutinesTest
   testImplementation appDeps.robolectric
   testImplementation appDeps.androidxTestCore

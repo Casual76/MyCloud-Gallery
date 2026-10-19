@@ -98,6 +98,10 @@ object NoPhoneMediaIntents : PhoneMediaIntents {
   override fun share(refs: List<MediaRef.Phone>): Intent? = null
 
   override fun trashRequest(refs: List<MediaRef.Phone>, trash: Boolean): IntentSender? = null
+
+  override fun deleteRequest(refs: List<MediaRef.Phone>): IntentSender? = null
+
+  override fun writeRequest(refs: List<MediaRef.Phone>): IntentSender? = null
 }
 
 /** Nessun cestino di sistema (Android 10, o nessun accesso). */

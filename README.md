@@ -68,8 +68,8 @@ segnaposto e almeno un test.
 | `:feature-settings` | Impostazioni, famiglia e dispositivi | family, network, nas, qr, security, rules, designsystem |
 | `:feature-diagnostics` | Diagnostica locale ed esportazione senza dati personali | common, rules, network, nas, family, designsystem |
 | `:core-places` | luoghi offline da GeoNames (asset `places.mcgp1`), fusi orari, nomi in italiano | common, model |
-| `:core-metadata` | lettura dei metadati (EXIF, contenitori video, foto in movimento), ThumbHash | common, model, places |
-| `:core-mediastore` | lettura del MediaStore e sincronizzazione della Libreria del telefono (scansione, META, impronte) | common, model, database, metadata, places |
+| `:core-metadata` | lettura dei metadati (EXIF, contenitori video, foto in movimento), ThumbHash; 5B: contratti per scrivere data, luogo e rotazione (`MetadataWriter`) e togliere la posizione (`LocationStripper`) | common, model, places |
+| `:core-mediastore` | lettura del MediaStore e sincronizzazione della Libreria del telefono (scansione, META, impronte); 5B: richieste di sistema (cestino, cancellazione, scrittura) e riscrittura di un file del telefono con copia di sicurezza (`PhoneMediaRewriter`) | common, model, database, metadata, places |
 | `:core-imaging` | miniature, segnaposto, decodifica per il viewer con i tetti di memoria | common, model; dalla Fase 4 index e nas (`implementation`) |
 | `:core-library` | indice della timeline, istantanea su disco, layout della griglia, raccolte, date (`text/GalleryDates`), stato del NAS nel piede (`LibraryNasStatus`, Fase 4) | common, model, database, imaging; dalla Fase 4 index (`implementation`) |
 | `:feature-library` | Libreria, Raccolte, Nascosti ed Eliminati di recente | common, model, designsystem, imaging, library, mediastore, places, security |
@@ -110,6 +110,12 @@ che passano solo `core-nas` e `core-backup`): crea e pubblica senza sostituire, 
 Chi legge il NAS o mostra la Libreria (`core-index`, `core-nasmedia`, `core-prepare`, `core-personal`, `core-library`,
 `core-imaging`) **non vede** `core-backup`. `core-nasops` riceve solo la porta `CitedTemps` (la pulizia dei propri file rispetta i
 temporanei del backup). `Phase4ArchitectureTest` e' esteso a queste regole.
+
+**Fase 5B (P0-B).** `feature-integrations` porta in release i quattro componenti approvati come scheletri inerti (selettore `PickerActivity`, ricezione
+`ShareReceiverActivity`, `MediaDocumentsProvider` protetto da `MANAGE_DOCUMENTS`, `FileProvider` non esportato); `NasBackupOps` ha solo due rinomine in piu'
+(`archiveVersion` e `restoreVersion`, con il timbro obbligatorio, una estremita' sotto `Versioni/`); una `PhoneConfirmation` nasce solo da un tocco su un
+foglio della UI. `Phase5BArchitectureTest` tiene il perimetro. Le prove guidate T-09, T-14, T-15 e T-16 sono una schermata della sola build debug
+(Impostazioni → Sviluppo), assente dalla release; il loro resoconto, di soli numeri, va in `docs/android.md`.
 
 Dalla Fase 2 ogni modulo nuovo ha tre package fissi (docs/fase2-progetto.md, D6):
 - `contract`: le interfacce e i tipi che gli altri moduli usano (con KDoc che spiega il perche');

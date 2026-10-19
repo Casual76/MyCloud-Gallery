@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!--
+      Il tema delle activity d'ingresso delle integrazioni (Fase 5B, P0-B): la finestra e' trasparente e senza barre, perche' compare sopra
+      l'app che ha chiesto una foto o ha condiviso un file e deve sparire in un istante. Compose dipinge tutto (tema Fluid); nessun colore
+      scritto a mano, solo il trasparente di sistema.
+  -->
+  <style name="Theme.MyCloudGallery.Integrations" parent="android:Theme.Material.NoActionBar">
+    <item name="android:windowIsTranslucent">true</item>
+    <item name="android:windowBackground">@android:color/transparent</item>
+    <item name="android:statusBarColor">@android:color/transparent</item>
+    <item name="android:navigationBarColor">@android:color/transparent</item>
+  </style>
+</resources>

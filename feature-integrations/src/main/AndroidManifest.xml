@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!--
+      :feature-integrations (Fase 5B, P0-B): i QUATTRO componenti nuovi che l'utente ha approvato il 15/10/2026 (D29, Q5 (a)), e nient'altro.
+      L'elenco e' chiuso e identico a `releaseManifestPolicy` (gradle/verify-release-manifest.gradle) e a docs/sicurezza.md §4-bis; il test di
+      architettura (`Phase5BArchitectureTest`) e `ManifestComponentsTest` lo confrontano. Nessun permesso Android nuovo: niente
+      `uses-permission` qui, ne' `MANAGE_MEDIA`, ne' accesso a tutti i file, ne' servizi in primo piano.
+
+      **Ogni componente e' uno scheletro che non agisce** (P10 e P11 riempiono le classi, **non** il manifest: dipendenze, permessi e manifest
+      sono di P0-B e P14, §4.3). Le due activity chiudono con RESULT_CANCELED senza leggere l'intento; il provider non ha radici e non apre
+      documenti; il FileProvider serve solo `cacheDir/share/` e `cacheDir/edit/`. Una porta d'ingresso esportata non compie mai un'azione
+      senza un tocco dell'utente (C17); il blocco dell'app (`AppLockGate`) precede ogni schermata d'ingresso (P14).
+
+      Le activity hanno `taskAffinity=""` e stanno fuori dai recenti, come la MainActivity (StrandHogg, F13), e NON sono `singleTask`: restituiscono
+      un risultato al task di chi le ha chieste (la MainActivity, `singleTask`, non puo').
+  -->
+  <application>
+
+    <!-- Il selettore per le altre app (D23): `GET_CONTENT` e `PICK` di immagini e video, e nient'altro. Esportata per costruzione. -->
+    <activity
+        android:name="dev.pampa.mycloudgallery.feature.integrations.picker.PickerActivity"
+        android:excludeFromRecents="true"
+        android:exported="true"
+        android:label="@string/integrations_picker_label"
+        android:taskAffinity=""
+        android:theme="@style/Theme.MyCloudGallery.Integrations">
+      <intent-filter>
+        <action android:name="android.intent.action.GET_CONTENT" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.OPENABLE" />
+        <data android:mimeType="image/*" />
+        <data android:mimeType="video/*" />
+      </intent-filter>
+      <intent-filter>
+        <action android:name="android.intent.action.PICK" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <data android:mimeType="image/*" />
+        <data android:mimeType="video/*" />
+      </intent-filter>
+    </activity>
+
+    <!-- La ricezione delle condivisioni (D24): `SEND` e `SEND_MULTIPLE` di immagini e video, e nient'altro. Nessuna azione senza "Salva sul NAS". -->
+    <activity
+        android:name="dev.pampa.mycloudgallery.feature.integrations.receive.ShareReceiverActivity"
+        android:excludeFromRecents="true"
+        android:exported="true"
+        android:label="@string/integrations_receiver_label"
+        android:taskAffinity=""
+        android:theme="@style/Theme.MyCloudGallery.Integrations">
+      <intent-filter>
+        <action android:name="android.intent.action.SEND" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <data android:mimeType="image/*" />
+        <data android:mimeType="video/*" />
+      </intent-filter>
+      <intent-filter>
+        <action android:name="android.intent.action.SEND_MULTIPLE" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <data android:mimeType="image/*" />
+        <data android:mimeType="video/*" />
+      </intent-filter>
+    </activity>
+
+    <!--
+        Il provider dei documenti (D23): radice "MyCloud Gallery" nei selettori di documenti (Gmail, WhatsApp, Telegram). Esportato, ma protetto da
+        MANAGE_DOCUMENTS: solo il sistema (DocumentsUI) puo' interrogarlo. Id dei documenti opachi, mai percorsi; nascosti esclusi.
+    -->
+    <provider
+        android:name="dev.pampa.mycloudgallery.feature.integrations.provider.MediaDocumentsProvider"
+        android:authorities="${applicationId}.integrations.documents"
+        android:exported="true"
+        android:grantUriPermissions="true"
+        android:permission="android.permission.MANAGE_DOCUMENTS">
+      <intent-filter>
+        <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+      </intent-filter>
+    </provider>
+
+    <!--
+        Il FileProvider (D25, D26): copie in cache per "Modifica con…" e per le condivisioni senza posizione. NON esportato; i permessi li da' l'app
+        uno per uno (`grantUriPermissions`) con FLAG_GRANT_READ_URI_PERMISSION e ClipData e li revoca dopo l'uso. Solo `cacheDir/share/` e
+        `cacheDir/edit/` (res/xml/integration_file_paths.xml).
+    -->
+    <provider
+        android:name="dev.pampa.mycloudgallery.feature.integrations.share.IntegrationFileProvider"
+        android:authorities="${applicationId}.integrations.files"
+        android:exported="false"
+        android:grantUriPermissions="true">
+      <meta-data
+          android:name="android.support.FILE_PROVIDER_PATHS"
+          android:resource="@xml/integration_file_paths" />
+    </provider>
+
+  </application>
+
+</manifest>

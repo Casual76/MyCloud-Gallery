@@ -24,6 +24,17 @@ android {
         include '*/src/*/java/**/*.java'
         exclude 'engine/**', 'spike/**', '**/build/**'
       }).withPropertyName('galleryModuleSources')
+      // Fase 5B (P0-B): Phase5BArchitectureTest legge anche il manifest di debug di :app (i componenti delle prove guidate), il FileProvider
+      // (res/xml dei moduli), la policy del manifest di release, il documento di sicurezza e `tools/check.ps1` (i resti di debug cercati nel
+      // dex di release). Anche questi sono ingressi: se cambiano, il test si riesegue.
+      inputs.files(fileTree(rootDir) {
+        include '*/src/*/AndroidManifest.xml'
+        include '*/src/*/res/xml/*.xml'
+        include 'gradle/verify-release-manifest.gradle'
+        include 'docs/sicurezza.md'
+        include 'tools/check.ps1'
+        exclude 'engine/**', 'spike/**', '**/build/**'
+      }).withPropertyName('galleryPolicyFiles')
     }
   }
 }

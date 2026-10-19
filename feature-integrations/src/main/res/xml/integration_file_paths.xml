@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Le sole cartelle che il FileProvider delle integrazioni serve (Fase 5B, D29, C17): `cacheDir/share/` (copie da condividere, anche senza
+    posizione) e `cacheDir/edit/` (copie per "Modifica con…"). Niente `files-path`, niente `external-*`, niente radici: un file fuori da queste due
+    cartelle non ha un URI. `cacheDir/rewrite/` (le copie di sicurezza di PhoneMediaRewriter) e `noBackupFilesDir/incoming/` non si servono mai.
+    Il test `FileProviderPathsTest` e `Phase5BArchitectureTest` fanno fallire un cambiamento.
+-->
+<paths>
+  <cache-path name="share" path="share/" />
+  <cache-path name="edit" path="edit/" />
+</paths>

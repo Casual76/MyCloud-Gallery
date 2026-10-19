@@ -8,15 +8,19 @@ import dev.pampa.mycloudgallery.core.nas.ops.DeleteOutcome
 import dev.pampa.mycloudgallery.core.nas.ops.NasOpsPaths
 import dev.pampa.mycloudgallery.core.nas.ops.NasSpaceInfo
 import dev.pampa.mycloudgallery.core.nas.ops.PublishOutcome
+import dev.pampa.mycloudgallery.core.nas.ops.RenameOutcome
 import dev.pampa.mycloudgallery.core.nas.ops.TempFinish
 import dev.pampa.mycloudgallery.core.trust.crypto.TrustIds
 import dev.pampa.mycloudgallery.core.trust.nas.NasLayout
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import java.io.Closeable
+import java.text.Normalizer
 
 // Fase 5A (docs/fase5-progetto.md §1.2 "core-nas: primitive in sola aggiunta", D2, D4, D5, D33; formato-nas.md §9 punto 8):
 // le primitive del BACKUP. Contratto, null-object e fake di P0; la vista vera sopra `SmbNasFileOps` (con `reopenTemp` e il
-// punto di ripresa) e' di P2, `archiveVersion`/`restoreVersion` arrivano nella 5B (P8).
+// punto di ripresa) e' di P2. Fase 5B (P0-B, D17, D18): `archiveVersion` e `restoreVersion`, le uniche due primitive che SPOSTANO un
+// file visibile (sempre con il suo timbro, mai verso un nome occupato); contratto, null-object e fake sono di P0-B, la vista SMB vera
+// e' di P8.
 //
 // **Solo core-backup vede `NasBackupOps`.** Le stesse tre barriere delle primitive della 4B, con un marcatore suo:
 //  1. il test di architettura (`Phase5ArchitectureTest`, core-common): nessun sorgente fuori da `core-nas` e `core-backup` nomina
@@ -29,6 +33,14 @@ import java.io.Closeable
 // propri temporanei del backup, leggere lo spazio. Nessuna di queste toglie o cambia byte di un file visibile: niente rinomina libera,
 // niente cestino, niente cancellazione di un media, nemmeno i temporanei delle operazioni della 4B (`-op-`). Il backup gira da solo,
 // ogni notte, da dati locali e senza una conferma per file: deve essere INCAPACE di distruggere (D2).
+//
+// **Cosa aggiunge la 5B: due rinomine vincolate, nessuna cancellazione.** Le versioni (D17) spostano il file attuale in `Versioni/`
+// ([NasBackupOps.archiveVersion]) e, per "Ripristina originale" (D18), riportano l'originale al suo posto
+// ([NasBackupOps.restoreVersion]). Sono rinomine dentro la stessa share, **senza sostituire**, con il timbro del file **obbligatorio** e
+// controllato sullo stesso handle prima del `SET_INFO`; una delle due estremita' sta sempre sotto `Versioni/` ([VersionPaths]) e l'altra e'
+// un percorso di media, mai un'area dell'app. I byte non si perdono (la rinomina li conserva, con lo stesso `fileId`) e nessun file si
+// toglie: una versione intermedia si elimina solo dal foglio di `feature-nas` (cestino del NAS, D20). L'insieme dei metodi di questa vista
+// e' chiuso e lo controlla `Phase5BArchitectureTest`: chi aggiungesse una rinomina libera, un cestino o una cancellazione lo fa fallire.
 
 /**
  * Marcatore di adesione: la dichiarazione scrive sul NAS **in sola aggiunta** (il backup). Usarla senza l'argomento `-opt-in` del
@@ -101,6 +113,26 @@ interface NasBackupOps {
 
   /** Toglie il **proprio** temporaneo del backup [temp] (qualunque dimensione). Assente = `DeleteOutcome.Missing`. */
   suspend fun deleteOwnTemp(share: String, temp: SharePath, purpose: Purpose): NasResult<DeleteOutcome>
+
+  /**
+   * 5B (D17): archivia la versione **attuale** [from] spostandola in [to], sotto `Versioni/` della stessa [share] ([VersionPaths]).
+   * Rinomina **senza sostituire** (`RenameOutcome.Collision` se [to] c'e' gia', anche per le sole maiuscole), con [expect]
+   * **obbligatorio**: dimensione, data di modifica e `fileId` si controllano sullo stesso handle, prima del `SET_INFO`; un file diverso
+   * (modificato dal PC, sostituito) e' `SourceChanged` e niente si muove (`SOURCE_CHANGED` del diario, D17). Una cartella al posto del
+   * file e' `SourceChanged` (non si archiviano cartelle). La cartella di [to] deve esistere (`NasError.NotFound`: il chiamante fa prima
+   * [mkdirs]), come per ogni rinomina della 4B. Il timbro dopo la rinomina ha lo stesso `fileId`: il chiamante lo scrive nel diario e la
+   * scansione riconosce l'archiviazione per identita' (E-N1). Mai verso o da `.mycloudgallery/` ([VersionPaths.requireArchive]).
+   * **Non toglie niente**: se il lavoro si interrompe a meta', il file e' al vecchio o al nuovo nome, con tutti i suoi byte.
+   */
+  suspend fun archiveVersion(share: String, from: SharePath, to: SharePath, expect: NasStamp, purpose: Purpose): NasResult<RenameOutcome>
+
+  /**
+   * 5B (D18, "Ripristina originale"): l'inversa di [archiveVersion]. Riporta [from], sotto `Versioni/`, al suo posto [to] (un percorso di
+   * media fuori da `Versioni/`) nella stessa [share] ([VersionPaths.requireRestore]). Stesse garanzie: senza sostituire (il solito
+   * percorso deve essere libero: l'attuale va prima in `Versioni/`, e' lo scambio `SWAP` del diario), timbro obbligatorio controllato
+   * sullo stesso handle, la cartella di [to] deve esistere, nessun file si toglie.
+   */
+  suspend fun restoreVersion(share: String, from: SharePath, to: SharePath, expect: NasStamp, purpose: Purpose): NasResult<RenameOutcome>
 
   /** Lo spazio della share. Tocca i dischi: solo prima di un file oltre 1 GB o dopo un `DISK_FULL` (§2.2, E-R9). */
   suspend fun space(share: String, purpose: Purpose): NasResult<NasSpaceInfo>
@@ -196,5 +228,53 @@ object NasBackupPaths {
     val rest = path.name.removePrefix("$deviceId-")
     if (!rest.startsWith("$TEMP_MARK-")) return false
     return TOKEN.matches(rest.removePrefix("$TEMP_MARK-"))
+  }
+}
+
+/**
+ * Dove stanno le versioni precedenti (D17, Q2 (a)): `<share>/Versioni/` alla **radice di ogni share**, che rispecchia i percorsi
+ * ("Versioni/Backup/S25 di Mario/2026/10/IMG_1234 (originale).jpg"). E' una cartella normale della share, non firmata, visibile dal PC
+ * (N1 di `docs/formato-nas.md`). Puro e senza effetti: lo usano il fake, la vista SMB e core-backup per rifiutare un percorso sbagliato
+ * **prima** di toccare il NAS (un errore di programmazione, `IllegalArgumentException`, mai un `NasResult`).
+ */
+object VersionPaths {
+
+  /** Il nome della cartella alla radice di ogni share. */
+  const val VERSIONS_DIR: String = "Versioni"
+
+  private fun isVersionsName(component: String): Boolean =
+    Normalizer.normalize(component, Normalizer.Form.NFKC).equals(VERSIONS_DIR, ignoreCase = true)
+
+  /** Vero se [path] sta dentro `Versioni/` (non la cartella stessa): anche con maiuscole o forme di compatibilita' diverse, come l'area dell'app. */
+  fun isInVersions(path: SharePath): Boolean = path.components.size > 1 && isVersionsName(path.components[0])
+
+  /** Vero se [path] e' la cartella `Versioni/` stessa. */
+  fun isVersionsRoot(path: SharePath): Boolean = path.components.size == 1 && isVersionsName(path.components[0])
+
+  /**
+   * Il percorso in `Versioni/` che rispecchia [path] (un percorso di media fuori da `Versioni/`): `Versioni/` piu' le sue componenti. La
+   * cartella di una versione e' quella del file che archivia; il nome ("(originale)", "(versione del ...)") lo sceglie P8.
+   */
+  fun mirrorOf(path: SharePath): SharePath {
+    requireMediaOutsideVersions(path)
+    return SharePath.of(VERSIONS_DIR, *path.components.toTypedArray())
+  }
+
+  /** [NasBackupOps.archiveVersion]: da un file di media fuori da `Versioni/` a un percorso sotto `Versioni/`. */
+  fun requireArchive(from: SharePath, to: SharePath) {
+    requireMediaOutsideVersions(from)
+    require(isInVersions(to) && NasOpsPaths.isMediaPath(to)) { "Si archivia sotto Versioni/." }
+  }
+
+  /** [NasBackupOps.restoreVersion]: da un percorso sotto `Versioni/` a un file di media fuori da `Versioni/`. */
+  fun requireRestore(from: SharePath, to: SharePath) {
+    require(isInVersions(from) && NasOpsPaths.isMediaPath(from)) { "Si ripristina da Versioni/." }
+    requireMediaOutsideVersions(to)
+  }
+
+  private fun requireMediaOutsideVersions(path: SharePath) {
+    require(NasOpsPaths.isMediaPath(path) && !isInVersions(path) && !isVersionsRoot(path)) {
+      "Un file di media fuori da Versioni/ e fuori dall'area dell'app."
+    }
   }
 }

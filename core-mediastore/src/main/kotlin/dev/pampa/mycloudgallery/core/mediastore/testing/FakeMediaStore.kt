@@ -4,10 +4,12 @@ import android.media.MediaDataSource
 import dev.pampa.mycloudgallery.core.mediastore.contract.DeletedRow
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaStoreRow
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaStoreSource
+import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneMediaIntents
 import dev.pampa.mycloudgallery.core.mediastore.contract.RowType
 import dev.pampa.mycloudgallery.core.mediastore.sync.MediaStoreRowLookup
 import dev.pampa.mycloudgallery.core.mediastore.sync.OriginalBytesUnavailableException
 import dev.pampa.mycloudgallery.core.metadata.contract.MediaBytes
+import dev.pampa.mycloudgallery.core.model.MediaRef
 import java.io.FileNotFoundException
 import java.io.IOException
 import kotlinx.coroutines.flow.Flow
@@ -326,6 +328,103 @@ class FakeMediaStore : MediaStoreSource, MediaStoreRowLookup {
     }
     changed.tryEmit(Unit)
   }
+
+  // --- Fase 5B (P0-B, docs/fase5-progetto.md §5.2 "Dialoghi di sistema"): i dialoghi di sistema simulati e la riscrittura ------------
+
+  /** Le richieste di sistema con cui l'app tocca i file del telefono: cestino e ripristino, eliminazione, permesso di scrittura. */
+  enum class SystemRequest { TRASH, UNTRASH, DELETE, WRITE }
+
+  /** Come risponde l'utente al dialogo di sistema simulato. */
+  sealed interface DialogAnswer {
+    /** Accetta tutto. */
+    data object Accept : DialogAnswer
+
+    /** Rifiuta: niente cambia. */
+    data object Refuse : DialogAnswer
+
+    /** Accetta solo una parte: gli `_ID` elencati (il dialogo di sistema non permette di togliere voci, ma la risposta puo' essere parziale). */
+    data class AcceptOnly(val ids: Set<Long>) : DialogAnswer
+
+    /**
+     * L'app e' stata uccisa mentre il dialogo era aperto: il dialogo e' del sistema e l'utente risponde lo stesso ([userAccepts]), ma
+     * l'app **non riceve** la risposta ([DialogResult.delivered] falso). Lo stato del telefono cambia se ha accettato.
+     */
+    data class AppKilled(val userAccepts: Boolean) : DialogAnswer
+  }
+
+  /** Cosa e' successo nel dialogo: [granted] sono le righe su cui la richiesta ha avuto effetto; [delivered] falso se l'app era morta. */
+  class DialogResult(val granted: List<MediaRef.Phone>, val delivered: Boolean) {
+    override fun toString(): String = "DialogResult(${granted.size} righe, delivered=$delivered)"
+  }
+
+  /** Le richieste risolte, in ordine: (tipo, numero di righe chieste). Per provare i lotti da 2.000 e che non si chiede mai piu' del dovuto. */
+  val resolvedRequests: MutableList<Pair<SystemRequest, Int>> = ArrayList()
+
+  private val writeGrants = HashSet<Pair<String, Long>>()
+
+  /**
+   * Risolve una richiesta di sistema ([PhoneMediaIntents.trashRequest]/`deleteRequest`/`writeRequest`) come la risolverebbe l'utente: gli
+   * effetti sul telefono sono quelli di Android (cestino: la riga resta invisibile; eliminazione: la riga sparisce in `deleted_files`;
+   * scrittura: il permesso per la riga, [hasWriteGrant]). Le righe che non ci sono (piu') non hanno effetto, come nel dialogo vero.
+   */
+  fun resolveRequest(request: SystemRequest, refs: List<MediaRef.Phone>, answer: DialogAnswer): DialogResult {
+    require(refs.size <= PhoneMediaIntents.MAX_REQUEST_URIS) { "Una richiesta di sistema ha al massimo ${PhoneMediaIntents.MAX_REQUEST_URIS} URI." }
+    resolvedRequests += request to refs.size
+    val accepted: List<MediaRef.Phone> = when (answer) {
+      DialogAnswer.Accept -> refs
+      DialogAnswer.Refuse -> emptyList()
+      is DialogAnswer.AcceptOnly -> refs.filter { it.mediaStoreId in answer.ids }
+      is DialogAnswer.AppKilled -> if (answer.userAccepts) refs else emptyList()
+    }
+    val applied = accepted.filter { apply(request, it) }
+    return DialogResult(applied, delivered = answer !is DialogAnswer.AppKilled)
+  }
+
+  private fun apply(request: SystemRequest, ref: MediaRef.Phone): Boolean {
+    val v = volumeMap[ref.volume] ?: return false
+    if (!v.mounted || ref.mediaStoreId !in v.rows) return false
+    when (request) {
+      SystemRequest.TRASH -> trash(ref.volume, ref.mediaStoreId)
+      SystemRequest.UNTRASH -> untrash(ref.volume, ref.mediaStoreId)
+      SystemRequest.DELETE -> remove(ref.volume, ref.mediaStoreId)
+      SystemRequest.WRITE -> writeGrants += ref.volume to ref.mediaStoreId
+    }
+    return true
+  }
+
+  /** Se l'app ha il permesso di scrivere sulla riga (dopo un `createWriteRequest` accettato). */
+  fun hasWriteGrant(volume: String, id: Long): Boolean = (volume to id) in writeGrants
+
+  /** Il permesso decade con il processo (e col riavvio del telefono): dopo una morte l'app deve chiederlo di nuovo. */
+  fun clearWriteGrants() {
+    writeGrants.clear()
+  }
+
+  /**
+   * Riscrive i byte della riga (Samsung "Salva", `PhoneMediaRewriter`): stessa riga e stesso `_ID`, dimensione e data di modifica nuove,
+   * generazione che sale. Non cambia il cestino ne' lo stato in attesa. Lancia se la riga non c'e'.
+   */
+  fun rewrite(volume: String, id: Long, content: ByteArray, dateModifiedMs: Long): MediaStoreRow {
+    val v = volumeMap.getValue(volume)
+    val old = v.rows.getValue(id)
+    val row = MediaStoreRow(
+      volume = old.volume, id = old.id, type = old.type, displayName = old.displayName, relativePath = old.relativePath,
+      mime = old.mime, size = content.size.toLong(), dateModifiedMs = dateModifiedMs, dateTakenMs = old.dateTakenMs, width = old.width,
+      height = old.height, orientation = old.orientation, durationMs = old.durationMs, ownerPackage = old.ownerPackage,
+    )
+    val stored = store(v, row, Explicit(content.copyOf()))
+    changed.tryEmit(Unit)
+    return stored
+  }
+
+  /** I byte della riga adesso (per i test con file piccoli), o null se la riga non c'e'. */
+  fun bytesOf(volume: String, id: Long): ByteArray? {
+    val content = volumeMap[volume]?.content?.get(id) ?: return null
+    return content.read(0, content.size.toInt())
+  }
+
+  /** Se la riga e' nel cestino di sistema (invisibile, ma c'e'). */
+  fun isTrashed(volume: String, id: Long): Boolean = volumeMap[volume]?.trashed?.containsKey(id) == true
 
   // --- MediaStoreSource --------------------------------------------------------------------------------
 

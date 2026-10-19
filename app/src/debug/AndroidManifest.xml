@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!--
+      SOLO build debug (Fase 5B, P0-B; riga P0-B del §4.4 di docs/fase5-progetto.md): i componenti delle PROVE GUIDATE T-14 e T-15 (docs/android.md) e le
+      dichiarazioni di visibilita' dei pacchetti con cui l'app conta quante altre app gestiscono scelta, condivisione e modifica. Questo manifest si
+      fonde SOLO nella variante debug: la release non lo vede, quindi non ha questi componenti (verifyReleaseManifest e tools/check.ps1 lo controllano
+      sul manifest fuso e sul dex). Ogni classe si chiama `FieldProbe...` e sta in `debugtools/probes`: il test di architettura
+      (`Phase5BArchitectureTest`) le tiene solo li' e fa fallire un componente di debug che non sia una prova.
+  -->
+  <queries>
+    <intent>
+      <action android:name="android.intent.action.GET_CONTENT" />
+      <category android:name="android.intent.category.OPENABLE" />
+      <data android:mimeType="image/*" />
+    </intent>
+    <intent>
+      <action android:name="android.intent.action.PICK" />
+      <data android:mimeType="image/*" />
+    </intent>
+    <intent>
+      <action android:name="android.intent.action.SEND" />
+      <data android:mimeType="image/jpeg" />
+    </intent>
+    <intent>
+      <action android:name="android.intent.action.SEND_MULTIPLE" />
+      <data android:mimeType="image/*" />
+    </intent>
+    <intent>
+      <action android:name="android.intent.action.EDIT" />
+      <data android:mimeType="image/*" />
+    </intent>
+    <intent>
+      <action android:name="android.intent.action.VIEW" />
+      <data android:mimeType="image/*" />
+    </intent>
+    <package android:name="com.sec.android.gallery3d" />
+    <package android:name="com.google.android.apps.photos" />
+    <package android:name="com.microsoft.skydrive" />
+  </queries>
+
+  <application>
+
+    <!-- T-14: il selettore di prova (GET_CONTENT e PICK): conta la richiesta e risponde con 1 o 3 media di mcg-prova nella forma scelta. -->
+    <activity
+        android:name="dev.pampa.mycloudgallery.debugtools.probes.FieldProbePickerActivity"
+        android:excludeFromRecents="true"
+        android:exported="true"
+        android:label="@string/probe_picker_label"
+        android:taskAffinity=""
+        android:theme="@style/Theme.MyCloudGallery.Integrations">
+      <intent-filter>
+        <action android:name="android.intent.action.GET_CONTENT" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.OPENABLE" />
+        <data android:mimeType="image/*" />
+        <data android:mimeType="video/*" />
+      </intent-filter>
+      <intent-filter>
+        <action android:name="android.intent.action.PICK" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <data android:mimeType="image/*" />
+        <data android:mimeType="video/*" />
+      </intent-filter>
+    </activity>
+
+    <!-- T-15: la ricezione di prova (SEND e SEND_MULTIPLE): registra cosa arriva e apre subito i flussi, o li lascia per la riprova. -->
+    <activity
+        android:name="dev.pampa.mycloudgallery.debugtools.probes.FieldProbeShareActivity"
+        android:excludeFromRecents="true"
+        android:exported="true"
+        android:label="@string/probe_receiver_label"
+        android:taskAffinity=""
+        android:theme="@style/Theme.MyCloudGallery.Integrations">
+      <intent-filter>
+        <action android:name="android.intent.action.SEND" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <data android:mimeType="image/*" />
+        <data android:mimeType="video/*" />
+      </intent-filter>
+      <intent-filter>
+        <action android:name="android.intent.action.SEND_MULTIPLE" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <data android:mimeType="image/*" />
+        <data android:mimeType="video/*" />
+      </intent-filter>
+    </activity>
+
+    <!-- T-14: i file di prova che il selettore consegna (forme "a richiesta" e "copia in cache"). NON esportato. -->
+    <provider
+        android:name="dev.pampa.mycloudgallery.debugtools.probes.FieldProbeFilesProvider"
+        android:authorities="${applicationId}.fieldprobe"
+        android:exported="false"
+        android:grantUriPermissions="true" />
+
+    <!-- T-14: la radice "MCG prova" nei selettori di documenti. Esportato ma protetto da MANAGE_DOCUMENTS, come quello vero. -->
+    <provider
+        android:name="dev.pampa.mycloudgallery.debugtools.probes.FieldProbeDocumentsProvider"
+        android:authorities="${applicationId}.fieldprobe.documents"
+        android:exported="true"
+        android:grantUriPermissions="true"
+        android:permission="android.permission.MANAGE_DOCUMENTS">
+      <intent-filter>
+        <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+      </intent-filter>
+    </provider>
+
+  </application>
+
+</manifest>

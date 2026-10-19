@@ -30,6 +30,7 @@ import dev.pampa.mycloudgallery.core.nas.ops.backup.NasBackupOps
 import dev.pampa.mycloudgallery.core.nas.ops.backup.NasBackupPaths
 import dev.pampa.mycloudgallery.core.nas.ops.backup.ReopenOutcome
 import dev.pampa.mycloudgallery.core.nas.ops.backup.TempPoint
+import dev.pampa.mycloudgallery.core.nas.ops.backup.VersionPaths
 import dev.pampa.mycloudgallery.core.nas.session.SmbErrors
 import dev.pampa.mycloudgallery.core.trust.crypto.TrustIds
 import dev.pampa.mycloudgallery.core.trust.nas.NasFileSystem
@@ -112,6 +113,9 @@ enum class FakeNasOp {
 
   // Fase 5A (NasBackupOps): la riapertura di un temporaneo del backup con l'accorciamento al punto di ripresa (D5).
   REOPEN_TEMP,
+
+  // Fase 5B (P0-B, NasBackupOps): le due rinomine delle versioni, verso e da `Versioni/` (D17, D18).
+  ARCHIVE_VERSION, RESTORE_VERSION,
 }
 
 /** Come risponde la copia lato server di `NasFileOps.copyToTemp` (E-D12). */
@@ -673,6 +677,30 @@ class InMemoryNasMedia(
       return ops.deleteOwnTemp(share, temp, purpose)
     }
 
+    /**
+     * 5B (P0-B, D17): archivia [from] in [to] sotto `Versioni/`. Stessa semantica della rinomina della 4B (senza sostituire, la cartella di
+     * [to] deve esistere, timbro controllato prima di muovere, guasti prima e dopo, share in sola lettura) piu' i limiti della vista: i
+     * percorsi giusti ([VersionPaths]) e solo **file** (una cartella al posto del file e' `SourceChanged`: non si archiviano cartelle).
+     */
+    override suspend fun archiveVersion(share: String, from: SharePath, to: SharePath, expect: NasStamp, purpose: Purpose): NasResult<RenameOutcome> {
+      VersionPaths.requireArchive(from, to)
+      return moveVersion(FakeNasOp.ARCHIVE_VERSION, share, from, to, expect)
+    }
+
+    /** 5B (P0-B, D18): l'inversa di [archiveVersion]: da `Versioni/` al solito percorso, che deve essere libero. */
+    override suspend fun restoreVersion(share: String, from: SharePath, to: SharePath, expect: NasStamp, purpose: Purpose): NasResult<RenameOutcome> {
+      VersionPaths.requireRestore(from, to)
+      return moveVersion(FakeNasOp.RESTORE_VERSION, share, from, to, expect)
+    }
+
+    private fun moveVersion(op: FakeNasOp, share: String, from: SharePath, to: SharePath, expect: NasStamp): NasResult<RenameOutcome> =
+      guarded(SimOp.RENAME, op, share, from, write = true) {
+        val state = shares[key(share)] ?: return@guarded NasResult.Err(NasError.ShareMissing(share))
+        // Una cartella non si sposta con questa vista: per il chiamante e' "non e' il file che mi aspettavo".
+        if (node(state, from.components)?.isDirectory == true) return@guarded NasResult.Ok(RenameOutcome.SourceChanged(null))
+        ops.move(state, share, from, to, expect, createParents = false)
+      }
+
     override suspend fun space(share: String, purpose: Purpose): NasResult<NasSpaceInfo> = ops.space(share, purpose)
 
     private inner class BackupWriter(
@@ -766,7 +794,7 @@ class InMemoryNasMedia(
     }
 
     /** Rinomina [from] in [to] (senza sostituire); le cartelle che mancano a [to] si creano solo con [createParents]. */
-    private fun move(
+    fun move(
       state: ShareState,
       share: String,
       from: SharePath,

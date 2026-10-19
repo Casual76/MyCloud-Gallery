@@ -22,13 +22,16 @@
                                 nessun codice solo-debug dentro, (Fase 3) nessun `ProfileInstallReceiver` (il
                                 receiver del Macrobenchmark torna solo nella variante benchmarkRelease) e (Fase 4B, D29)
                                 ogni `*JobService` protetto da BIND_JOB_SERVICE: quello delle operazioni lunghe sui
-                                file del NAS (UIDT) non e' nemmeno esportato
+                                file del NAS (UIDT) non e' nemmeno esportato; e (Fase 5B, P0-B) i quattro componenti di
+                                :feature-integrations ci sono con la giusta esposizione (selettore, ricezione e provider dei
+                                documenti esportati, il FileProvider NO) e nessun componente delle prove guidate `FieldProbe*`
     7b. nessun resto di debug  nel dex dell'APK di release non compaiono la Libreria sintetica, il marcatore della famiglia
                                 "pronta", `DebugSyntheticSize`, il sink di logcat e il catalogo dei componenti (I4 della
                                 revisione di sicurezza), ne' (Fase 4A, D33) la recinzione delle prove `ShareFence` e il NAS
                                 sintetico del menu di debug, ne' (revisione 4B, F20) il gancio che accorcia i 30 giorni del
                                 cestino del NAS, ne' (Fase 5A, D13) la recinzione del telefono del backup in debug
-                                (`DebugBackupFence`, le cartelle `mcg-prova` e la radice `mcg-campo`): lettura diretta del dex,
+                                (`DebugBackupFence`, le cartelle `mcg-prova` e la radice `mcg-campo`), ne' (Fase 5B, P0-B) le prove
+                                guidate T-09, T-14, T-15 e T-16 (`FieldProbe*`, `debugtools/probes`, `field-probe`): lettura diretta del dex,
                                 FALLISCE se non lo legge; e (R11 della revisione 4A) gli esiti di R8 della release: `ShareFence`
                                 tolta per intero in usage.txt e assente da mapping.txt (una classe fusa in un'altra non lascia il
                                 suo nome nel dex)
@@ -598,6 +601,28 @@ Step "APK di release: non debuggable, backup escluso, nessun componente esposto"
   if (-not ($exported | Where-Object { $_.Name -eq "dev.pampa.mycloudgallery.MainActivity" })) {
     $problems += "la launcher activity non risulta esportata: il lettore del manifest non funziona o l'app non si avvia"
   }
+  # Fase 5B (P0-B): i componenti delle prove guidate (`FieldProbe*`, solo nel manifest di debug) non devono essere nel manifest di release,
+  # nemmeno non esportati.
+  foreach ($component in @($facts.Components | Where-Object { $_.Name -match 'debugtools\.probes\.|FieldProbe' })) {
+    $problems += ("un componente delle prove guidate e' nella release: <{0}> {1}" -f $component.Kind, $component.Name)
+  }
+  # Fase 5B (P0-B): i quattro componenti di `:feature-integrations` ci sono, con la forma approvata: le due activity e il provider dei
+  # documenti esportati (quest'ultimo con MANAGE_DOCUMENTS, gia' pretesa sopra), il FileProvider NON esportato. Se uno manca il lettore del
+  # manifest non funziona o il modulo non e' stato legato all'app.
+  $integrations = @(
+    @{ Name = "dev.pampa.mycloudgallery.feature.integrations.picker.PickerActivity"; Exported = $true },
+    @{ Name = "dev.pampa.mycloudgallery.feature.integrations.receive.ShareReceiverActivity"; Exported = $true },
+    @{ Name = "dev.pampa.mycloudgallery.feature.integrations.provider.MediaDocumentsProvider"; Exported = $true },
+    @{ Name = "dev.pampa.mycloudgallery.feature.integrations.share.IntegrationFileProvider"; Exported = $false }
+  )
+  foreach ($expected in $integrations) {
+    $found = @($facts.Components | Where-Object { $_.Name -eq $expected.Name })
+    if ($found.Count -eq 0) {
+      $problems += ("manca nella release il componente approvato dalla 5B: {0}" -f $expected.Name)
+    } elseif ([bool]$found[0].Exported -ne $expected.Exported) {
+      $problems += ("{0} ha esportato={1}, doveva essere {2}" -f $expected.Name, [bool]$found[0].Exported, $expected.Exported)
+    }
+  }
   Write-Host ("        componenti: {0}, esportati: {1}" -f @($facts.Components).Count, (($exported | ForEach-Object { $_.Name }) -join ", ")) -ForegroundColor DarkGray
 
   if ($problems.Count -gt 0) { return ($problems -join "; ") }
@@ -633,9 +658,13 @@ $debugRemnants = @(
   "DebugTrashRetention", "debug-trash-retention",
   # Fase 5A (P0, D13): la recinzione del telefono del backup con gli account di prova (DeveloperTools di debug, app/src/debug) e le
   # cartelle che recinta: in release DeveloperTools.backupFence() risponde null e niente di questo deve esistere.
-  "DebugBackupFence", "mcg-prova", "mcg-campo"
+  "DebugBackupFence", "mcg-prova", "mcg-campo",
+  # Fase 5B (P0-B): le prove guidate T-09, T-14, T-15 e T-16 (schermata, selettore e ricezione di prova, provider di file e di documenti di
+  # prova, resoconto di soli numeri): classi `FieldProbe*` in app/src/debug, componenti nel manifest di debug, cartella `field-probe`.
+  # In release DeveloperTools torna senza la rotta e niente di questo deve esistere (ne' nel dex ne' nel manifest).
+  "FieldProbe", "debugtools/probes", "field-probe", "fieldprobe"
 )
-Step "nessun resto degli strumenti di debug nel dex di release (Libreria e NAS sintetici, famiglia pronta, sink di logcat, ShareFence D33, cestino corto F20, recinzione del telefono D13)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
+Step "nessun resto degli strumenti di debug nel dex di release (Libreria e NAS sintetici, famiglia pronta, sink di logcat, ShareFence D33, cestino corto F20, recinzione del telefono D13, prove guidate 5B)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
   $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
   if (-not $apk) { return "nessun APK di release in app\build\outputs\apk\release" }

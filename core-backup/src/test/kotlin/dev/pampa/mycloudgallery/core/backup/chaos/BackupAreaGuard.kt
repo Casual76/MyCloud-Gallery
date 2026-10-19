@@ -14,6 +14,7 @@ import dev.pampa.mycloudgallery.core.nas.ops.CopyOutcome
 import dev.pampa.mycloudgallery.core.nas.ops.DeleteOutcome
 import dev.pampa.mycloudgallery.core.nas.ops.NasSpaceInfo
 import dev.pampa.mycloudgallery.core.nas.ops.PublishOutcome
+import dev.pampa.mycloudgallery.core.nas.ops.RenameOutcome
 import dev.pampa.mycloudgallery.core.nas.ops.TempFinish
 import dev.pampa.mycloudgallery.core.nas.ops.backup.BackupTempWriter
 import dev.pampa.mycloudgallery.core.nas.ops.backup.NasBackupOps
@@ -270,6 +271,17 @@ class GuardedBackupOps(
   override suspend fun deleteOwnTemp(share: String, temp: SharePath, purpose: Purpose): NasResult<DeleteOutcome> {
     pass(share)
     return inner.deleteOwnTemp(share, temp, purpose).stopOnAuth()
+  }
+
+  // 5B (P0-B): le rinomine delle versioni passano dalla stessa guardia della share. I loro colpi nel banco sono di P13.
+  override suspend fun archiveVersion(share: String, from: SharePath, to: SharePath, expect: NasStamp, purpose: Purpose): NasResult<RenameOutcome> {
+    pass(share)
+    return inner.archiveVersion(share, from, to, expect, purpose).stopOnAuth()
+  }
+
+  override suspend fun restoreVersion(share: String, from: SharePath, to: SharePath, expect: NasStamp, purpose: Purpose): NasResult<RenameOutcome> {
+    pass(share)
+    return inner.restoreVersion(share, from, to, expect, purpose).stopOnAuth()
   }
 
   override suspend fun space(share: String, purpose: Purpose): NasResult<NasSpaceInfo> {

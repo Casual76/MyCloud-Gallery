@@ -11,7 +11,8 @@
 //   - un componente ammesso perche' protetto (`exportedRequiresPermission`) non dichiara quel permesso;
 //   - c'e' un componente vietato in release (`forbiddenComponents`): dalla Fase 3, il ProfileInstallReceiver del
 //     profilo di benchmark (torna solo nella variante benchmarkRelease, che non passa da questo controllo);
-//   - c'e' un permesso Android che non e' nell'elenco qui sotto;
+//   - c'e' un permesso Android che non e' nell'elenco qui sotto, o uno di quelli che l'app ha deciso di non chiedere mai
+//     (`forbiddenPermissions`, dalla Fase 5B: `MANAGE_MEDIA` e l'accesso a tutti i file, D19);
 //   - un permesso con un tetto di SDK (`permissionMaxSdk`) non dichiara quel `android:maxSdkVersion`;
 //   - un servizio il cui nome finisce per `JobService` non e' protetto da `android.permission.BIND_JOB_SERVICE` (Fase 4B, D29: il
 //     JobService delle operazioni lunghe sui file del NAS non e' esportato e solo il sistema puo' legarlo).
@@ -30,11 +31,21 @@ ext.releaseManifestPolicy = [
     // esportato per forza (lo lega il sistema), ma solo chi ha BIND_JOB_SERVICE (cioe' il sistema stesso)
     // puo' farlo: il controllo qui sotto pretende quel permesso sul componente. docs/sicurezza.md §8.
     'androidx.work.impl.background.systemjob.SystemJobService',
+    // Fase 5B (P0-B, D29, risposta Q5 (a) dell'utente del 15/10/2026): i TRE componenti nuovi esportati, di `:feature-integrations`. Le due
+    // activity sono porte d'ingresso d'altre app (selettore: solo GET_CONTENT e PICK; ricezione: solo SEND e SEND_MULTIPLE, di immagini e
+    // video) e nel P0-B sono scheletri che chiudono con RESULT_CANCELED senza leggere l'intento; il provider dei documenti e' protetto da
+    // MANAGE_DOCUMENTS (qui sotto). Il FileProvider NON e' esportato e non compare in questo elenco. Righe in docs/sicurezza.md §4-bis.
+    'dev.pampa.mycloudgallery.feature.integrations.picker.PickerActivity',
+    'dev.pampa.mycloudgallery.feature.integrations.receive.ShareReceiverActivity',
+    'dev.pampa.mycloudgallery.feature.integrations.provider.MediaDocumentsProvider',
   ],
   // Per i componenti esportati qui sopra che devono essere protetti: il permesso che il componente DEVE
   // dichiarare (android:permission). Senza, o con un altro, il manifest non passa.
   exportedRequiresPermission: [
     'androidx.work.impl.background.systemjob.SystemJobService': 'android.permission.BIND_JOB_SERVICE',
+    // Fase 5B (P0-B): il provider dei documenti lo interroga solo il sistema (DocumentsUI), mai un'altra app: MANAGE_DOCUMENTS e' un permesso
+    // `signature` del sistema. Senza, un'app qualunque potrebbe elencare e aprire i media dell'utente.
+    'dev.pampa.mycloudgallery.feature.integrations.provider.MediaDocumentsProvider': 'android.permission.MANAGE_DOCUMENTS',
   ],
   // Permessi ammessi nel manifest fuso. {applicationId} e' sostituito con l'id dell'app.
   allowedPermissions: [
@@ -88,6 +99,12 @@ ext.releaseManifestPolicy = [
     // stesse due garanzie (non esportato, BIND_JOB_SERVICE: `verify` le pretende per ogni `*JobService`). Nessun permesso nuovo.
     'android.permission.RUN_USER_INITIATED_JOBS',
   ],
+  // Permessi che l'app ha deciso di NON chiedere mai (il motivo e' nel messaggio): nessuna libreria deve portarli in silenzio. Gia' fuori
+  // dall'elenco qui sopra; qui il rifiuto ha un nome e una ragione (Fase 5B, P0-B, D19 e docs/sicurezza.md §4-bis "Non richiesti").
+  forbiddenPermissions: [
+    'android.permission.MANAGE_MEDIA'            : 'le modifiche e le eliminazioni passano dai dialoghi di sistema (createWriteRequest, createTrashRequest, createDeleteRequest): seconda conferma gratuita, nessun permesso speciale',
+    'android.permission.MANAGE_EXTERNAL_STORAGE' : 'non serve accedere a tutti i file: i media si leggono dal MediaStore e le cartelle le sceglie l utente con i selettori di sistema',
+  ],
   // Permessi che sono ammessi SOLO con un tetto di SDK: nome -> android:maxSdkVersion atteso. Senza l'attributo (o con un
   // altro valore) il manifest non passa: un READ_EXTERNAL_STORAGE senza tetto chiederebbe l'accesso ai file anche su
   // Android 13+, dove i permessi giusti sono READ_MEDIA_*.
@@ -120,6 +137,9 @@ abstract class VerifyReleaseManifest extends DefaultTask {
 
   @Input
   abstract ListProperty<String> getAllowedPermissions()
+
+  @Input
+  abstract MapProperty<String, String> getForbiddenPermissions()
 
   @Input
   abstract MapProperty<String, String> getPermissionMaxSdk()
@@ -186,7 +206,10 @@ abstract class VerifyReleaseManifest extends DefaultTask {
     ['uses-permission', 'uses-permission-sdk-23', 'uses-permission-sdk-m'].each { tag ->
       root."${tag}".each { permission ->
         String name = attr(permission, 'name')
-        if (!(name in allowedPerms)) {
+        String forbiddenWhy = forbiddenPermissions.get()[name]
+        if (forbiddenWhy != null) {
+          problems << "permesso VIETATO: ${name} (${forbiddenWhy})".toString()
+        } else if (!(name in allowedPerms)) {
           problems << "permesso non ammesso: ${name} (documentalo in docs/sicurezza.md 4-bis e aggiungilo a releaseManifestPolicy)".toString()
         }
         String expectedMax = permissionMaxSdk.get()[name]
@@ -223,6 +246,7 @@ ext.registerVerifyReleaseManifest = { variant, mergedManifestArtifact ->
     allowedExported.set(releaseManifestPolicy.allowedExported)
     exportedRequiresPermission.set(releaseManifestPolicy.exportedRequiresPermission)
     allowedPermissions.set(releaseManifestPolicy.allowedPermissions)
+    forbiddenPermissions.set(releaseManifestPolicy.forbiddenPermissions)
     permissionMaxSdk.set(releaseManifestPolicy.permissionMaxSdk)
     forbiddenComponents.set(releaseManifestPolicy.forbiddenComponents)
   }

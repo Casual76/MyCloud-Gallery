@@ -24,6 +24,9 @@ import java.util.Locale
  * - [trashRequest]: `MediaStore.createTrashRequest`, cioe' il dialogo di sistema (una seconda conferma gratuita): l'app
  *   non cancella mai da sola e non chiede `MANAGE_MEDIA`. Al massimo [MAX_TRASH_URIS] elementi per richiesta, il limite di
  *   Android 11+: oltre, nessuna richiesta (meglio niente che una richiesta parziale silenziosa).
+ * - [deleteRequest] e [writeRequest] (Fase 5B, P0-B): `createDeleteRequest` e `createWriteRequest`, stessi limiti e stesso dialogo di
+ *   sistema. Sono le due sole altre vie con cui l'app tocca i file del telefono (insieme alle proprie righe `IS_PENDING`): "Libera
+ *   subito" e le riscritture di `PhoneMediaRewriter`.
  */
 class AndroidPhoneMediaIntents(context: Context) : PhoneMediaIntents {
 
@@ -61,14 +64,33 @@ class AndroidPhoneMediaIntents(context: Context) : PhoneMediaIntents {
 
   override fun trashRequest(refs: List<MediaRef.Phone>, trash: Boolean): IntentSender? {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
-    val uris = refs.distinct().map(::uriOf)
-    if (uris.isEmpty() || uris.size > MAX_TRASH_URIS) return null
+    val uris = requestUris(refs) ?: return null
     return MediaStore.createTrashRequest(resolver, uris, trash).intentSender
   }
 
+  /** Fase 5B (D21): `createDeleteRequest`, il dialogo di sistema che elimina per sempre ("Libera subito"). Mai da un tocco solo (lo decide `core-backup`). */
+  override fun deleteRequest(refs: List<MediaRef.Phone>): IntentSender? {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
+    val uris = requestUris(refs) ?: return null
+    return MediaStore.createDeleteRequest(resolver, uris).intentSender
+  }
+
+  /** Fase 5B (D19, E-E10): `createWriteRequest`, il permesso di sistema per riscrivere questi file (correzioni, "Ripristina originale"). */
+  override fun writeRequest(refs: List<MediaRef.Phone>): IntentSender? {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
+    val uris = requestUris(refs) ?: return null
+    return MediaStore.createWriteRequest(resolver, uris).intentSender
+  }
+
+  /** Gli URI distinti di [refs]; null se sono nessuno o oltre il limite di una richiesta (meglio niente che una richiesta parziale). */
+  private fun requestUris(refs: List<MediaRef.Phone>): List<Uri>? {
+    val uris = refs.distinct().map(::uriOf)
+    return if (uris.isEmpty() || uris.size > MAX_TRASH_URIS) null else uris
+  }
+
   companion object {
-    /** Il massimo di URI per richiesta di sistema (Android 11+, `MediaStore.createTrashRequest`). */
-    const val MAX_TRASH_URIS: Int = 2_000
+    /** Il massimo di URI per richiesta di sistema (Android 11+: cestino, eliminazione e scrittura). */
+    const val MAX_TRASH_URIS: Int = PhoneMediaIntents.MAX_REQUEST_URIS
 
     /** Il tipo comune: tutte immagini, tutti video, oppure qualunque tipo ([ANY]). */
     internal fun shareType(refs: List<MediaRef.Phone>): String {

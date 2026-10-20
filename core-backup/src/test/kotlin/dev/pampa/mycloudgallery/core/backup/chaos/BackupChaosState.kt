@@ -30,6 +30,9 @@ enum class Invariant(val number: Int, val label: String) {
   VERSIONS_KEPT(13, "versioni conservate"),
   FREE_SPACE(14, "\"Libera spazio\" non sbaglia"),
   CONTRACT(15, "il motore non lancia per un guasto"),
+
+  /** D-13 (prove sul campo): un giro non finisce "completo" mentre il NAS tiene occupato un temporaneo di un elemento aperto. */
+  BUSY(16, "un file occupato non chiude il giro"),
 }
 
 class Violation(val invariant: Invariant, val detail: String) {

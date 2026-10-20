@@ -189,8 +189,11 @@ class SafeUploadEngine(
     /** Si va avanti con l'elemento riscritto (eventualmente terminale). */
     class Next(val item: BackupItem) : Step
 
-    /** L'elemento aspetta: [retryAfterMs] null = il prossimo giro; altrimenti si riprova in questo giro dopo l'attesa (E-N13). */
-    class Wait(val retryAfterMs: Long? = null) : Step
+    /**
+     * L'elemento aspetta: [retryAfterMs] null = il prossimo giro; altrimenti si riprova in questo giro dopo l'attesa (E-N13). [busy] (D-13): aspetta
+     * un file che il NAS tiene occupato; se il giro finisce cosi', non e' "completo" ([RunStop.BUSY]).
+     */
+    class Wait(val retryAfterMs: Long? = null, val busy: Boolean = false) : Step
 
     /** Il giro si ferma. */
     class Stop(val stop: RunStop, val problem: BackupProblemCode? = null) : Step
@@ -332,10 +335,21 @@ class SafeUploadEngine(
 
   private fun finish(round: Round, queue: WorkQueue?, halt: Halt?): BackupRunResult {
     val waiting = queue?.waiting() ?: 0
-    val stop = halt?.stop ?: RunStop.COMPLETE
+    // D-13: un elemento rimasto ad aspettare un file occupato sul NAS non lascia il giro "completo" (prima: "fatti=0 · aperti=3 · stop=complete",
+    // il lavoro finiva e il backup aspettava sei ore). Neanche "a tempo scaduto", se non resta altro da fare che aspettare: si riprova presto con
+    // l'attesa crescente di chi guida il lavoro, non con un lotto dopo l'altro a vuoto.
+    val busy = queue != null && round.busyCount() > 0
+    val stop = when {
+      halt == null -> if (busy) RunStop.BUSY else RunStop.COMPLETE
+      // Solo il tempo del giro: una fermata delle regole (la rete, la batteria, il tetto dei dati, la tappa) resta `BUDGET`, cosi' chi guida il
+      // lavoro la vede e aspetta come sempre (D-6: il lavoro dell'utente aspetta la rete).
+      halt.stop == RunStop.BUDGET && !round.stoppedByRules && busy && queue?.onlyBusyLeft() == true -> RunStop.BUSY
+      else -> halt.stop
+    }
     state.value = when {
       halt?.problem != null -> BackupStatus.Problem(halt.problem, 0)
       stop == RunStop.STOPPED -> BackupStatus.Stopped(stopRequested ?: StopBy.USER)
+      stop == RunStop.BUSY -> BackupStatus.Waiting(waiting, 0, WaitReason.NAS_BUSY)
       waiting > 0 -> BackupStatus.Waiting(waiting, 0, WaitReason.NEXT_RUN)
       else -> BackupStatus.UpToDate(round.done.get() + round.linked.get(), clock.nasNowMs())
     }
@@ -356,7 +370,10 @@ class SafeUploadEngine(
     while (true) {
       if (!round.mayContinue()) return
       val taken = queue.take() ?: return
-      val item = store.item(taken.id)?.takeIf { !it.state.terminal } ?: continue
+      val item = store.item(taken.id)?.takeIf { !it.state.terminal } ?: run {
+        round.notBusy(taken)
+        null
+      } ?: continue
       val gateState = gateOf(item)
       if (!gateState.open) {
         // R5: un arrivo diretto a una share chiusa (l'area comune congelata, una sola lettura, il backup in prova) aspetta da solo: il giro
@@ -369,7 +386,12 @@ class SafeUploadEngine(
         queue.park()
         return
       }
-      driveItem(round, queue, item)
+      round.active.incrementAndGet()
+      try {
+        driveItem(round, queue, item)
+      } finally {
+        round.active.decrementAndGet()
+      }
       round.publishRunning(queue)
     }
   }
@@ -390,6 +412,8 @@ class SafeUploadEngine(
       }
       when (step) {
         is Step.Next -> {
+          // D-13: l'elemento e' andato avanti: se aspettava un file occupato, non lo aspetta piu'.
+          round.notBusy(start)
           item = step.item
           if (item.state.terminal) {
             dropRaw(item)
@@ -398,7 +422,10 @@ class SafeUploadEngine(
           }
         }
         is Step.Wait -> {
-          queue.defer(item, step.retryAfterMs)
+          // D-13: un elemento trovato occupato in questo giro resta "occupato" finche' non va avanti, anche se dopo aspetta altro (la riga del
+          // telefono): il NAS tiene ancora il file e il giro non e' "completo".
+          if (step.busy) round.markBusy(item)
+          queue.defer(item, step.retryAfterMs, step.busy || round.isBusy(item.id.value))
           return
         }
         is Step.Stop -> {
@@ -438,6 +465,7 @@ class SafeUploadEngine(
    */
   private suspend fun parkOnError(round: Round, item: BackupItem, error: Exception) {
     GalleryLog.e(TAG) { "errore inatteso (${error::class.java.simpleName}): elemento fermo con ${BackupProblemCode.UNEXPECTED.code}" }
+    round.notBusy(item)
     val stored = store.item(item.id)
     if (stored != null && stored.state.terminal) {
       // L'elemento era gia' arrivato a un'uscita: niente da parcheggiare.
@@ -531,7 +559,7 @@ class SafeUploadEngine(
         UploadState.PUBLISHING -> publish(round, item, back = UploadState.UPLOADING)
         UploadState.PUBLISHED -> link(round, item, back = UploadState.UPLOADING)
         // Collegato nel catalogo: DONE (la copia locale si toglie prima del passo, in [saveItem]).
-        UploadState.LINKED -> save(item.copy(state = UploadState.DONE))
+        UploadState.LINKED -> exit(round, item.copy(state = UploadState.DONE))
         else -> error("Stato ${item.state.code} fuori dal cammino dei file in arrivo.")
       }
     }
@@ -671,7 +699,7 @@ class SafeUploadEngine(
   private suspend fun gone(round: Round, item: BackupItem, lost: Boolean): Step {
     dropTempIfAny(round, item)?.let { return it }
     if (lost) markMedia(item, BackupProblemCode.LOST_BEFORE_BACKUP)
-    return save(item.copy(state = UploadState.GONE, problem = if (lost) BackupProblemCode.LOST_BEFORE_BACKUP else null))
+    return exit(round, item.copy(state = UploadState.GONE, problem = if (lost) BackupProblemCode.LOST_BEFORE_BACKUP else null))
   }
 
   /** D15: un file che non si legge (o vuoto, E-M12): mai caricato, mai "al sicuro", segno del problema sul media. */
@@ -679,7 +707,7 @@ class SafeUploadEngine(
     dropTempIfAny(round, item)?.let { return it }
     markMedia(item, BackupProblemCode.UNREADABLE)
     GalleryLog.w(TAG) { "file del telefono illeggibile: elemento fermo con ${BackupProblemCode.UNREADABLE.code}" }
-    return save(item.copy(state = UploadState.FAILED, problem = BackupProblemCode.UNREADABLE))
+    return exit(round, item.copy(state = UploadState.FAILED, problem = BackupProblemCode.UNREADABLE))
   }
 
   // --- INCOMING (D24, P14): la copia locale di un file in arrivo ------------------------------------------------------------------
@@ -882,10 +910,13 @@ class SafeUploadEngine(
           is ReopenOutcome.Reopened -> {
             writer = o.writer
             from = start.resumeAt
+            // D-13: il NAS l'ha lasciato: l'elemento non aspetta piu' un file occupato (un giro fermato dal tempo a meta' file non e' `BUSY`).
+            round.notBusy(start)
           }
           // Assente o piu' corto del punto salvato: da capo ("da capo" nel diario prima di tutto).
           ReopenOutcome.Missing, is ReopenOutcome.TooShort -> return Pumped.Then(save(start.copy(resumeAt = 0)))
-          ReopenOutcome.Locked -> return Pumped.Then(lockedWait(round, start))
+          // D-13: il NAS tiene ancora occupato il proprio temporaneo (una nostra connessione morta che non ha ancora chiuso).
+          ReopenOutcome.Locked -> return Pumped.Then(ownTempBusy(round, start))
           // R3: al nome del temporaneo c'e' un altro file (un collegamento, un'altra identita') e niente e' stato toccato. Da capo: il passo
           // dopo trova il nome occupato e lo toglie con deleteOwnTemp, che toglie solo il NOME (un collegamento fisico lascia il file al suo
           // altro nome, uno simbolico la sua destinazione; un punto di rianalisi non si toglie), poi crea un temporaneo nuovo.
@@ -900,15 +931,22 @@ class SafeUploadEngine(
         is NasResult.Ok -> {
           writer = r.value
           from = 0
+          round.notBusy(start)
         }
         is NasResult.Err -> {
           if (r.error != NasError.Exists) return Pumped.Then(stopFor(round, start, r.error))
           // Il diario dice "da capo": il temporaneo rimasto (senza punto di ripresa) e' solo nostro e si toglie, poi si ricrea.
-          return Pumped.Then(dropTemp(round, start, temp) ?: Step.Next(start))
+          return Pumped.Then(dropTemp(round, start, temp, OnHeld.FORWARD) ?: Step.Next(start))
         }
       }
     }
-    return writer.use { pump(round, start, writer, from, source) }
+    return writer.use {
+      // D-13: un passo del diario appena il temporaneo e' stato riaperto per riprenderlo. Se il processo muore da qui con la rete gia' giu', il NAS
+      // tiene occupato il file per conto della connessione morta; da quanto l'elemento e' fermo lo dice l'ora di questo passo
+      // ([UploadConfig.busyRestartAfterMs]), non quella del punto di ripresa di ore prima. Un temporaneo nuovo ha appena il suo passo ("da capo").
+      if (from > 0) saveItem(start)
+      pump(round, start, writer, from, source)
+    }
   }
 
   /** Le scritture da 1 MiB e i punti di ripresa ogni 64 MiB (D5); traffico registrato prima di ogni punto (§2.2 "Traffico"). */
@@ -1028,7 +1066,8 @@ class SafeUploadEngine(
     return when (val read = round.readLane.withPermit { readSha(round, item.share, temp) }) {
       // Il temporaneo non c'e' piu': si rifa', senza contare un tentativo.
       Read.Missing -> save(item.copy(state = back, resumeAt = 0))
-      is Read.Fail -> stopFor(round, item, read.error)
+      // D-13: il NAS tiene occupato il proprio temporaneo (non si apre nemmeno in lettura).
+      is Read.Fail -> if (read.error == NasError.FileBusy) ownTempBusy(round, item) else stopFor(round, item, read.error)
       is Read.Ok -> if (read.sha == expected && read.stamp.size == item.size) {
         save(item.copy(state = UploadState.VERIFIED, tempStamp = read.stamp)).also { dropRaw(item) }
       } else {
@@ -1043,13 +1082,13 @@ class SafeUploadEngine(
     GalleryLog.w(TAG) { "verifica non tornata, tentativo $attempts di ${UploadStateMachine.MAX_VERIFY_ATTEMPTS}" }
     if (attempts >= UploadStateMachine.MAX_VERIFY_ATTEMPTS) return verifyFailed(round, saveItem(item.copy(verifyAttempts = attempts)))
     val again = saveItem(item.copy(state = back, resumeAt = 0, verifyAttempts = attempts))
-    return dropTemp(round, again, temp) ?: Step.Next(again)
+    return dropTemp(round, again, temp, OnHeld.FORWARD) ?: Step.Next(again)
   }
 
   private suspend fun verifyFailed(round: Round, item: BackupItem): Step {
     dropTempIfAny(round, item)?.let { return it }
     markMedia(item, BackupProblemCode.VERIFY_FAILED)
-    return save(item.copy(state = UploadState.FAILED, problem = BackupProblemCode.VERIFY_FAILED))
+    return exit(round, item.copy(state = UploadState.FAILED, problem = BackupProblemCode.VERIFY_FAILED))
   }
 
   // --- VERIFIED / PUBLISHING: pubblicazione senza sostituire (D6, E-B3, F4-D24) -----------------------------------------------
@@ -1064,7 +1103,7 @@ class SafeUploadEngine(
   private suspend fun refuse(round: Round, item: BackupItem): Step {
     GalleryLog.e(TAG) { "destinazione fuori dalle radici ammesse: elemento fermo, niente pubblicato" }
     dropTempIfAny(round, item)?.let { return it }
-    return save(item.copy(state = UploadState.FAILED))
+    return exit(round, item.copy(state = UploadState.FAILED))
   }
 
   private suspend fun publish(round: Round, item: BackupItem, back: UploadState): Step {
@@ -1085,8 +1124,8 @@ class SafeUploadEngine(
         }
         save(item.copy(state = UploadState.PUBLISHED, finalStamp = stamp))
       }
-      // E-N13: aperto dal PC: attese crescenti.
-      PublishOutcome.Locked -> lockedWait(round, item)
+      // E-N13, D-13: il temporaneo e' occupato (aperto dal PC, o tenuto dal NAS per una nostra connessione morta).
+      PublishOutcome.Locked -> ownTempBusy(round, item)
       PublishOutcome.Collision -> collision(round, item, temp, final)
       // La risposta persa (D3, F4-D24): temporaneo assente + finale con dimensione e SHA-256 giusti = pubblicato.
       PublishOutcome.TempMissing -> when (val existing = round.readLane.withPermit { readSha(round, item.share, final) }) {
@@ -1109,11 +1148,14 @@ class SafeUploadEngine(
       Read.Missing -> Step.Next(item)
       is Read.Fail -> stopFor(round, item, existing.error)
       is Read.Ok -> if (existing.sha == item.sha256 && existing.stamp.size == item.size) {
-        // Lo stesso file c'era gia' (ripresa, reinstallazione, copia dal PC): il proprio temporaneo si toglie e si collega.
+        // Lo stesso file c'era gia' (ripresa, reinstallazione, copia dal PC): il proprio temporaneo si toglie e si collega. D-13: prima i
+        // temporanei dei tentativi di prima, cosi' un errore di rete a meta' non lascia l'elemento senza il suo temporaneo ("pubblicato" al giro
+        // dopo un file che c'era gia').
+        dropEarlierTemps(round, item)?.let { return it }
         dropTemp(round, item, temp) ?: run {
           val at = clock.nasNowMs() ?: return@run Step.Wait()
           if (!attach(VerifiedCopy(item.mediaId, item.versionId, item.share, final, existing.stamp, at))) return@run Step.Wait()
-          save(item.copy(state = UploadState.LINKED_EXISTING, finalStamp = existing.stamp))
+          exit(round, item.copy(state = UploadState.LINKED_EXISTING, finalStamp = existing.stamp))
         }
       } else {
         val attempt = item.nameAttempt + 1
@@ -1177,6 +1219,8 @@ class SafeUploadEngine(
   // --- LINKED: record e immagini all'indice (D10), poi DONE -----------------------------------------------------------------
 
   private suspend fun finishLinked(round: Round, item: BackupItem): Step {
+    // D-13: il media e' gia' al sicuro; prima di chiudere l'elemento si tolgono i temporanei dei tentativi di prima (finche' li cita il diario).
+    dropEarlierTemps(round, item)?.let { return it }
     if (indexing.enabled) publishIndex(round, item)
     return save(item.copy(state = UploadState.DONE))
   }
@@ -1246,13 +1290,28 @@ class SafeUploadEngine(
     return dropTemp(round, item, temp)
   }
 
-  /** Toglie il **proprio** temporaneo del backup; null = tolto o assente. Un nome che non e' un nostro file non si tocca: si aspetta. */
-  private suspend fun dropTemp(round: Round, item: BackupItem, temp: SharePath): Step? =
+  /** D-13: che cosa fa un elemento il cui temporaneo da togliere e' occupato sul NAS. */
+  private enum class OnHeld {
+    /** Aspetta (attese crescenti, poi il prossimo giro), come per un file aperto dal PC (E-N13): l'elemento e' occupato ([lockedWait]). */
+    WAIT,
+
+    /** Il temporaneo serve all'elemento per andare avanti: [ownTempBusy] (attese e, oltre il tetto, un temporaneo nuovo). */
+    FORWARD,
+  }
+
+  /**
+   * Toglie il **proprio** temporaneo del backup; null = tolto o assente. Un nome che non e' un nostro file non si tocca: si aspetta. Occupato:
+   * secondo [onHeld].
+   */
+  private suspend fun dropTemp(round: Round, item: BackupItem, temp: SharePath, onHeld: OnHeld = OnHeld.WAIT): Step? =
     when (val d = ops.deleteOwnTemp(item.share, temp, config.purpose)) {
       is NasResult.Err -> stopFor(round, item, d.error)
       is NasResult.Ok -> when (d.value) {
         DeleteOutcome.Deleted, DeleteOutcome.Missing -> null
-        DeleteOutcome.Locked -> lockedWait(round, item)
+        DeleteOutcome.Locked -> when (onHeld) {
+          OnHeld.WAIT -> lockedWait(round, item)
+          OnHeld.FORWARD -> ownTempBusy(round, item)
+        }
         DeleteOutcome.NotAFile, is DeleteOutcome.SizeChanged -> {
           GalleryLog.w(TAG) { "al nome del temporaneo c'e' altro: l'elemento aspetta" }
           Step.Wait()
@@ -1260,10 +1319,79 @@ class SafeUploadEngine(
       }
     }
 
-  /** E-N13: un file aperto da un altro programma. Attese crescenti nello stesso giro, poi il prossimo giro. */
+  /**
+   * E-N13, D-13: un file che il NAS tiene occupato (aperto dal PC, o tenuto per conto di una nostra connessione morta). Attese crescenti nello
+   * stesso giro, poi il prossimo giro; in ogni caso l'elemento e' **occupato** e il giro non e' "completo" ([RunStop.BUSY]).
+   */
   private fun lockedWait(round: Round, item: BackupItem): Step {
     val n = round.lockedWaits(item)
-    return if (n >= config.lockedRetries) Step.Wait() else Step.Wait(config.lockedFirstWaitMs shl n)
+    return if (n >= config.lockedRetries) Step.Wait(busy = true) else Step.Wait(config.lockedFirstWaitMs shl n, busy = true)
+  }
+
+  /**
+   * **D-13**: il **proprio** temporaneo di [item] e' occupato sul NAS. Di solito e' l'handle di una nostra connessione morta (il processo e'
+   * morto, o il Wi-Fi e' caduto, senza che il NAS lo sapesse): il NAS lo tiene finche' non si accorge che dall'altra parte non c'e' piu' nessuno
+   * (misure sul WD in docs/decisioni.md). Se l'elemento e' fermo da oltre [UploadConfig.busyRestartAfterMs] riparte su un temporaneo nuovo
+   * ([restartOnNewTemp]); altrimenti attese crescenti ([lockedWait]).
+   */
+  private suspend fun ownTempBusy(round: Round, item: BackupItem): Step = restartOnNewTemp(round, item) ?: lockedWait(round, item)
+
+  /**
+   * D-13: si riparte **da capo** su un temporaneo nuovo, il tentativo dopo dello stesso elemento (NasBackupPaths.nextAttempt), scritto nel
+   * diario **prima** di ogni effetto (D3), come ogni temporaneo. Il vecchio non si tocca: resta citato dal diario finche' l'elemento e' aperto
+   * ([BackupStore.citedTemps]) e lo toglie [dropEarlierTemps] quando il NAS lo lascia. Mai un file che non sia un nostro temporaneo del backup
+   * (D2, E-B21). Solo per una copia nuova o un file in arrivo **ancora in caricamento** (`UPLOADING`: il temporaneo non e' completo, e un file del
+   * telefono cambiato nel frattempo fa ricominciare comunque, E-B15), al piu' [UploadConfig.maxTempAttempts] volte; null = niente (si aspetta).
+   * Mai da un temporaneo completo (`UPLOADED`, `VERIFIED`, `PUBLISHING`): da li' non si scarta piu' niente (L38), si aspetta che il NAS lo lasci.
+   */
+  private suspend fun restartOnNewTemp(round: Round, item: BackupItem): Step? {
+    if (item.kind != UploadKind.NEW_COPY && item.kind != UploadKind.INCOMING) return null
+    if (item.state != UploadState.UPLOADING) return null
+    val temp = item.temp ?: return null
+    val attempt = NasBackupPaths.attemptOf(temp) ?: return null
+    if (attempt >= config.maxTempAttempts) return null
+    val next = NasBackupPaths.nextAttempt(temp)?.takeIf { NasBackupPaths.isBackupTempOf(it, deviceId) } ?: return null
+    val since = store.lastStepAt(item.id) ?: return null
+    val now = clock.nasNowMs() ?: return null
+    if (now - since < config.busyRestartAfterMs) return null
+    GalleryLog.w(TAG) { "temporaneo occupato sul NAS da ${(now - since) / 60_000} min: si riparte da capo su un temporaneo nuovo (tentativo ${attempt + 1})" }
+    round.earlierPending(item)
+    return save(item.copy(state = UploadState.UPLOADING, temp = next, resumeAt = 0, resumeId = null, tempStamp = null))
+  }
+
+  /**
+   * D-13: i temporanei dei tentativi **di prima** di [item] (ripartito su un temporaneo nuovo), tolti prima che l'elemento finisca: solo i nostri
+   * temporanei del backup (deleteOwnTemp, D2). Finche' l'elemento e' aperto li cita il diario (derivati dal temporaneo di adesso), e la pulizia
+   * dei propri file non li tocca (D33). Uno ancora occupato fa aspettare l'elemento **al prossimo giro, senza dire "occupato"**: non serve piu'
+   * a niente (l'elemento va avanti sul temporaneo nuovo, il media e' gia' al sicuro o l'elemento sta per finire), il NAS lo tiene per ore, e un
+   * giro `BUSY` farebbe dire alla pagina "riprovo tra poco" e riprovare i lavori per niente. Null = tolti.
+   */
+  private suspend fun dropEarlierTemps(round: Round, item: BackupItem): Step? {
+    val temp = item.temp ?: return null
+    val earlier = NasBackupPaths.earlierAttempts(temp)
+    if (earlier.isEmpty() || round.earlierDone(item)) return null
+    for (old in earlier) {
+      when (val d = ops.deleteOwnTemp(item.share, old, config.purpose)) {
+        is NasResult.Err -> return stopFor(round, item, d.error)
+        is NasResult.Ok -> when (d.value) {
+          DeleteOutcome.Deleted, DeleteOutcome.Missing -> Unit
+          DeleteOutcome.Locked -> {
+            GalleryLog.d(TAG) { "temporaneo di un tentativo di prima ancora occupato sul NAS: l'elemento lo riprova al prossimo giro" }
+            return Step.Wait()
+          }
+          // Al nome c'e' altro (una cartella, un file cambiato da qualcuno): non si tocca.
+          DeleteOutcome.NotAFile, is DeleteOutcome.SizeChanged -> GalleryLog.w(TAG) { "al nome di un temporaneo di prima c'e' altro: resta" }
+        }
+      }
+    }
+    round.earlierCleared(item)
+    return null
+  }
+
+  /** L'uscita di un elemento (terminale): prima i temporanei dei tentativi di prima (D-13), poi il passo del diario. */
+  private suspend fun exit(round: Round, item: BackupItem): Step {
+    dropEarlierTemps(round, item)?.let { return it }
+    return save(item)
   }
 
   private fun stopFor(round: Round, item: BackupItem, error: NasError): Step = when {
@@ -1340,6 +1468,33 @@ class SafeUploadEngine(
     private val readFailures = HashMap<Long, Int>()
     private val descriptions = HashMap<Pair<MediaId, VersionId>, UploadDescription?>()
 
+    /** I lavoratori che stanno portando avanti un elemento adesso (non quelli fermi su un'attesa della coda). */
+    val active = AtomicInteger()
+
+    /** D-13: il `BUDGET` del giro l'hanno deciso le regole della tappa (non il tempo del giro): resta `BUDGET` anche con solo file occupati. */
+    @Volatile
+    var stoppedByRules = false
+
+    /** D-13: gli elementi che aspettano un file occupato sul NAS (l'ultimo esito del loro passo). */
+    private val busyItems = HashSet<Long>()
+
+    /** D-13: i temporanei dei tentativi di prima gia' tolti (o lasciati) in questo giro, per elemento. */
+    private val earlierGone = HashSet<Long>()
+
+    fun earlierDone(item: BackupItem): Boolean = synchronized(lock) { item.id.value in earlierGone }
+
+    fun earlierCleared(item: BackupItem) = synchronized(lock) { earlierGone += item.id.value }
+
+    fun earlierPending(item: BackupItem) = synchronized(lock) { earlierGone -= item.id.value }
+
+    fun markBusy(item: BackupItem) = synchronized(lock) { busyItems += item.id.value }
+
+    fun notBusy(item: BackupItem) = synchronized(lock) { busyItems -= item.id.value }
+
+    fun isBusy(id: Long): Boolean = synchronized(lock) { id in busyItems }
+
+    fun busyCount(): Int = synchronized(lock) { busyItems.size }
+
     fun stopWith(stop: RunStop, problem: BackupProblemCode?) {
       halt.compareAndSet(null, Halt(stop, problem))
     }
@@ -1362,6 +1517,7 @@ class SafeUploadEngine(
         return false
       }
       if (!controlLock.withLock { control.proceed() }) {
+        if (halt.get() == null) stoppedByRules = true
         stopWith(RunStop.BUDGET, null)
         return false
       }
@@ -1413,6 +1569,12 @@ class SafeUploadEngine(
       queue?.let(::publishRunning)
     }
 
+    /** D-13: il giro aspetta soltanto un file che il NAS tiene occupato: "Il NAS tiene ancora occupato un file: riprovo tra poco". */
+    fun publishBusy(queue: WorkQueue) {
+      if (halt.get() != null) return
+      state.value = BackupStatus.Waiting(queue.waiting() + 1, 0, WaitReason.NAS_BUSY)
+    }
+
     fun publishRunning(queue: WorkQueue) {
       if (halt.get() != null) return
       state.value = BackupStatus.Running(
@@ -1433,6 +1595,9 @@ class SafeUploadEngine(
     private val ready = ArrayDeque(items)
     private val later = ArrayList<Pair<BackupItem, Long>>()
     private val parked = AtomicInteger()
+
+    /** D-13: quanti degli elementi fermi al prossimo giro aspettano qualcos'altro che un file occupato (altro lavoro da fare). */
+    private val parkedOther = AtomicInteger()
     val total: Int = items.size
     val totalBytes: Long = items.sumOf { it.size }
 
@@ -1446,18 +1611,26 @@ class SafeUploadEngine(
           first
         }
         val wait = (next.second - clock.monotonicMs()).coerceAtLeast(0)
+        val busy = round.isBusy(next.first.id.value)
         if (clock.monotonicMs() + wait >= round.deadline) {
           parked.incrementAndGet()
+          if (!busy) parkedOther.incrementAndGet()
           continue
         }
-        if (wait > 0) sleep(wait)
+        if (wait > 0) {
+          // D-13: nessuno lavora e si aspetta un file che il NAS tiene occupato: lo stato lo dice, non "Backup in corso" (la Libreria diceva
+          // "in corso: 0 di 3" con i video fermi). Torna "in corso" appena un elemento va avanti.
+          if (busy && round.active.get() == 0) round.publishBusy(this)
+          sleep(wait)
+        }
         return next.first
       }
     }
 
-    suspend fun defer(item: BackupItem, retryAfterMs: Long?) {
+    suspend fun defer(item: BackupItem, retryAfterMs: Long?, busy: Boolean = false) {
       if (retryAfterMs == null) {
         parked.incrementAndGet()
+        if (!busy) parkedOther.incrementAndGet()
       } else {
         mutex.withLock { later += item to (clock.monotonicMs() + retryAfterMs) }
       }
@@ -1465,10 +1638,14 @@ class SafeUploadEngine(
 
     fun park() {
       parked.incrementAndGet()
+      parkedOther.incrementAndGet()
     }
 
     /** Gli elementi che aspettano il prossimo giro (o che il giro fermato non ha toccato). */
     fun waiting(): Int = parked.get() + ready.size + later.size
+
+    /** D-13: nel giro fermato dal tempo resta solo da aspettare file occupati (nessun elemento pronto o fermo per altro). */
+    fun onlyBusyLeft(): Boolean = ready.isEmpty() && parkedOther.get() == 0 && later.all { round.isBusy(it.first.id.value) }
   }
 
   companion object {

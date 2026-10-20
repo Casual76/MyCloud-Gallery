@@ -229,6 +229,11 @@ object Mutants {
       return inner.citedTemps()
     }
 
+    override suspend fun lastStepAt(id: BackupItemId): Long? {
+      flush()
+      return inner.lastStepAt(id)
+    }
+
     override suspend fun counts(): BackupDiaryCounts {
       flush()
       return inner.counts()

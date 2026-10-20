@@ -124,6 +124,7 @@ class BackupFooterTest {
       LibraryBackupWait.BATTERY to "Attesa batteria",
       LibraryBackupWait.NAS to "Attesa NAS",
       LibraryBackupWait.NEXT_RUN to "Al prossimo giro",
+      LibraryBackupWait.NAS_BUSY to "File occupato sul NAS, riprovo tra poco",
       LibraryBackupWait.OTHER to "Attesa delle regole",
     )
     assertThat(phrases.keys).containsExactlyElementsIn(LibraryBackupWait.entries)

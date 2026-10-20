@@ -152,6 +152,7 @@ internal fun queuedReasonRes(reason: WaitReason?): Int = when (reason) {
   WaitReason.NAS -> R.string.viewer_backup_wait_nas
   WaitReason.COMPARING -> R.string.viewer_backup_wait_comparing
   WaitReason.NEXT_RUN, null -> R.string.viewer_backup_wait_next_run
+  WaitReason.NAS_BUSY -> R.string.viewer_backup_wait_nas_busy
 }
 
 /**

@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.backup
 
+import dev.pampa.mycloudgallery.core.backup.contract.BackupKind
 import dev.pampa.mycloudgallery.core.backup.contract.BackupProblemCode
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.graph.HeartbeatStore
@@ -29,6 +30,10 @@ class BackupRunMemory(private val dir: File) {
   private val startedFile = File(dir, STARTED_AT)
   private val pausedFile = File(dir, USER_PAUSED)
   private val progressFile = File(dir, PROGRESS)
+  private val busyPhotosFile = File(dir, BUSY_PHOTOS)
+  private val busyVideosFile = File(dir, BUSY_VIDEOS)
+
+  private fun busyFile(kind: BackupKind) = if (kind == BackupKind.VIDEOS) busyVideosFile else busyPhotosFile
 
   /**
    * BK-5: l'avanzamento del lavoro in corso (`RunProgress.snapshot`, solo sei numeri), cosi' la morte del processo fra due tappe non lo azzera.
@@ -65,6 +70,26 @@ class BackupRunMemory(private val dir: File) {
 
   suspend fun setProblem(problem: BackupProblemCode?) {
     if (problem == null) withContext(Dispatchers.IO) { problemFile.delete() } else writeText(problemFile, problem.code)
+  }
+
+  /**
+   * D-13 (prove sul campo): l'ultimo giro di [kind] e' finito perche' il NAS teneva occupato un file del backup (`RunStop.BUSY`): l'ora del NAS di
+   * allora, o null. Regge alla morte del processo: la pagina dice "Il NAS tiene ancora occupato un file: riprovo tra poco" finche' un giro dello
+   * stesso tipo non va avanti (le foto finite non lo tolgono ai video).
+   */
+  suspend fun busySince(kind: BackupKind): Long? = readLong(busyFile(kind))
+
+  /** Un tipo di media ha l'ultimo giro fermo su un file occupato ([busySince]). */
+  suspend fun anyBusy(): Boolean = busySince(BackupKind.PHOTOS) != null || busySince(BackupKind.VIDEOS) != null
+
+  /** Segna (con l'ora del NAS, se non c'era gia') o toglie (null) il giro di [kind] fermo su un file occupato. */
+  suspend fun setBusy(kind: BackupKind, nasMs: Long?) {
+    val file = busyFile(kind)
+    if (nasMs == null) {
+      withContext(Dispatchers.IO) { file.delete() }
+    } else if (busySince(kind) == null) {
+      writeText(file, nasMs.toString())
+    }
   }
 
   /**
@@ -117,9 +142,13 @@ class BackupRunMemory(private val dir: File) {
     private const val STARTED_AT = "backup-started-at"
     private const val USER_PAUSED = "backup-user-paused"
     private const val PROGRESS = "backup-progress"
+    private const val BUSY_PHOTOS = "backup-nas-busy-photos"
+    private const val BUSY_VIDEOS = "backup-nas-busy-videos"
     private const val MAX_LENGTH = 120
 
     /** I file che l'azzeramento toglie da `noBackupFilesDir`. */
-    val FILES: List<String> = listOf(HEARTBEAT_PHOTOS, HEARTBEAT_VIDEOS, LAST_COMPLETE, LAST_PROBLEM, STARTED_AT, PROGRESS, USER_PAUSED)
+    val FILES: List<String> = listOf(
+      HEARTBEAT_PHOTOS, HEARTBEAT_VIDEOS, LAST_COMPLETE, LAST_PROBLEM, STARTED_AT, PROGRESS, BUSY_PHOTOS, BUSY_VIDEOS, USER_PAUSED,
+    )
   }
 }

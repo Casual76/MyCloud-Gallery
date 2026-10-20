@@ -5,6 +5,7 @@ import dev.pampa.mycloudgallery.core.nas.smb.SmbChangeHandle
 import dev.pampa.mycloudgallery.core.nas.smb.SmbDirEntry
 import dev.pampa.mycloudgallery.core.nas.smb.SmbDirectory
 import dev.pampa.mycloudgallery.core.nas.smb.SmbFileInfo
+import dev.pampa.mycloudgallery.core.nas.smb.SmbOpenMode
 import dev.pampa.mycloudgallery.core.nas.smb.SmbReadFile
 import dev.pampa.mycloudgallery.core.nas.smb.SmbShare
 import dev.pampa.mycloudgallery.core.nas.smb.SmbWriteFile
@@ -113,7 +114,7 @@ internal class TrackingShare(private val inner: SmbShare, private val handles: O
   override fun openForChange(path: String, exclusive: Boolean): SmbChangeHandle = inner.openForChange(path, exclusive)
 
   // Fase 5A (D5): la riapertura del proprio temporaneo del backup (scrittura, mai seguita dal registro degli handle di lettura).
-  override fun openExistingForWrite(path: String): SmbWriteFile = inner.openExistingForWrite(path)
+  override fun openExistingForWrite(path: String, shareMode: SmbOpenMode): SmbWriteFile = inner.openExistingForWrite(path, shareMode)
 
   override fun close() = inner.close()
 }

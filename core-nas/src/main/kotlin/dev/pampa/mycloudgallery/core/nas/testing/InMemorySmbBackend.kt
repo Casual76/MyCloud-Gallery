@@ -537,6 +537,17 @@ class InMemorySmbBackend(
   /** Gli handle dei client ancora aperti sul server (tutte le connessioni). */
   val openHandles: Int get() = synchronized(lock) { handles.values.sumOf { it.size } }
 
+  /**
+   * D-13 (misure sul WD, `docs/decisioni.md`): i file di [share] (percorsi in minuscolo) che una connessione **abbandonata** ([abandonAllConnections]:
+   * morta per il client, viva per il NAS) tiene con un handle che non lascia scrivere agli altri (il temporaneo in scrittura, una rinomina a meta'):
+   * chi li apre riceve "occupato" finche' il NAS non se ne accorge ([reapAbandoned]). Le letture condividono tutto e non contano.
+   */
+  fun pathsHeldByAbandoned(share: String): Set<String> = synchronized(lock) {
+    val state = shareState(share)
+    handles.values.flatten().filter { it.state === state && it.connection.abandoned && !it.mode.shareWrite && !it.node.isDirectory }
+      .mapNotNullTo(LinkedHashSet()) { h -> state.nodes.entries.firstOrNull { it.value === h.node }?.key }
+  }
+
   /** Gli handle ancora aperti sul server su [path] (per i test). */
   fun openHandlesOn(share: String, path: String): Int = synchronized(lock) {
     val node = shareState(share).nodes[key(split(path))] ?: return 0
@@ -910,7 +921,7 @@ class InMemorySmbBackend(
       }
     }
 
-    override fun createExclusive(path: String): SmbWriteFile = perform(SimOp.CREATE, path, lost = { (it as SimOpen).lost() }) {
+    override fun createExclusive(path: String, shareMode: SmbOpenMode): SmbWriteFile = perform(SimOp.CREATE, path, lost = { (it as SimOpen).lost() }) {
       requireWrite()
       synchronized(lock) {
         val state = state()
@@ -924,7 +935,7 @@ class InMemorySmbBackend(
           state.add(key(parts), it)
           state.touchParent(key(parts), now)
         }
-        SimWriteFile(this, node, open(state, node, SmbOpenMode.CREATE_EXCLUSIVE, key(parts)))
+        SimWriteFile(this, node, open(state, node, writeMode(shareMode), key(parts)))
       }
     }
 
@@ -1012,7 +1023,7 @@ class InMemorySmbBackend(
     // Fase 5A (D5): il proprio temporaneo del backup riaperto per riprenderlo. Mai creato (FILE_OPEN: nome assente = 0xC0000034), in
     // esclusiva come il temporaneo appena creato, senza seguire un collegamento (FILE_OPEN_REPARSE_POINT): lo stato del nodo stesso
     // arriva sullo stesso handle, attributi compresi. Un file aperto dal PC risponde SHARING_VIOLATION.
-    override fun openExistingForWrite(path: String): SmbWriteFile = perform(SimOp.OPEN_WRITE, path, lost = { (it as SimOpen).lost() }) {
+    override fun openExistingForWrite(path: String, shareMode: SmbOpenMode): SmbWriteFile = perform(SimOp.OPEN_WRITE, path, lost = { (it as SimOpen).lost() }) {
       requireWrite()
       synchronized(lock) {
         val parts = split(path)
@@ -1021,11 +1032,16 @@ class InMemorySmbBackend(
         val found = lookup(state, parts)
         if (found.isDirectory) throw SmbStatusException(NtStatus.FILE_IS_A_DIRECTORY)
         checkUnlocked(path, forRead = false)
-        SimWriteFile(this, found, open(state, found, SmbOpenMode.CREATE_EXCLUSIVE, key(parts)), found.info())
+        SimWriteFile(this, found, open(state, found, writeMode(shareMode), key(parts)), found.info())
       }
     }
 
     override fun close() = Unit
+
+    /** I diritti del temporaneo (lettura, scrittura, cancellazione) con le sole condivisioni di [shareMode], come `SmbjTransport`. */
+    private fun writeMode(shareMode: SmbOpenMode): SmbOpenMode = SmbOpenMode.CREATE_EXCLUSIVE.copy(
+      shareRead = shareMode.shareRead, shareWrite = shareMode.shareWrite, shareDelete = shareMode.shareDelete,
+    )
 
     /**
      * La chiave attuale di [node] (dopo eventuali rinomine), o null se non c'e' piu'. Per un file con piu' nomi, [opened] (il nome con cui

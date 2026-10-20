@@ -31,4 +31,6 @@
   <string name="backup_wait_nas">Aspetta che il NAS risponda.</string>
   <string name="backup_wait_comparing">Sta ancora confrontando con il NAS.</string>
   <string name="backup_wait_next_run">Riprende al prossimo giro.</string>
+  <!-- D-13: il NAS tiene ancora occupato un file del backup (una connessione caduta che il NAS non ha ancora chiuso). -->
+  <string name="backup_wait_nas_busy">Il NAS tiene ancora occupato un file: riprovo tra poco.</string>
 </resources>

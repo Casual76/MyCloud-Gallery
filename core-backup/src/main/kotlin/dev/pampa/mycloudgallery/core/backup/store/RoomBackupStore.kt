@@ -21,6 +21,7 @@ import dev.pampa.mycloudgallery.core.model.NasStamp
 import dev.pampa.mycloudgallery.core.model.QuickHash
 import dev.pampa.mycloudgallery.core.model.Sha256
 import dev.pampa.mycloudgallery.core.model.VersionId
+import dev.pampa.mycloudgallery.core.nas.ops.backup.NasBackupPaths
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 
 /**
@@ -32,7 +33,8 @@ import dev.pampa.mycloudgallery.core.trust.nas.SharePath
  * - `create` e' **idempotente per versione e tipo**: un elemento aperto per la stessa versione e lo stesso tipo si restituisce, mai un
  *   secondo (invariante 2 del §5.4), anche dentro lo stesso lotto.
  * Gli istanti `created_at`/`updated_at` sono l'ora del NAS ([BackupClock.nasNowMs]) quando c'e', mai l'orologio del telefono (D31):
- * servono solo a chi guarda il diario, nessuna decisione li usa.
+ * servono a chi guarda il diario e (D-13) `updated_at` al motore, per sapere da quanto un elemento e' fermo su un temporaneo occupato
+ * ([lastStepAt]; 0 = ora del NAS non nota: non si sa).
  */
 class RoomBackupStore(private val database: GalleryDatabase, private val clock: BackupClock) : BackupStore {
 
@@ -74,7 +76,11 @@ class RoomBackupStore(private val database: GalleryDatabase, private val clock: 
         before.kind == item.kind && before.mediaId == item.mediaId && before.versionId == item.versionId &&
           before.share == item.share && before.planned == item.planned && before.size == item.size,
       ) { "L'identita' di un elemento del diario non cambia." }
-      require(before.temp == null || before.temp == item.temp) { "Il temporaneo di un elemento non cambia una volta scritto." }
+      // D-13: il temporaneo non cambia una volta scritto, se non per passare a un tentativo dopo dello stesso elemento (il NAS teneva occupato il
+      // vecchio): i tentativi di prima restano citati ([citedTemps]) finche' l'elemento e' aperto.
+      require(before.temp == null || before.temp == item.temp || before.temp.isEarlierAttemptOf(item.temp)) {
+        "Il temporaneo di un elemento non cambia una volta scritto."
+      }
       check(UploadStateMachine.canTransition(before.flow, before.state, item.state)) {
         "Transizione non ammessa: ${before.state.code} -> ${item.state.code} (${before.flow.code})."
       }
@@ -86,7 +92,14 @@ class RoomBackupStore(private val database: GalleryDatabase, private val clock: 
   override suspend fun openFor(versionId: VersionId): BackupItem? =
     dao.openForVersion(versionId.value).map { it.toItem() }.firstOrNull { it.kind != UploadKind.INCOMING }
 
-  override suspend fun citedTemps(): Set<SharePath> = dao.citedTemps().mapTo(LinkedHashSet()) { SharePath.parse(it) }
+  override suspend fun citedTemps(): Set<SharePath> = dao.citedTemps().flatMapTo(LinkedHashSet()) { raw ->
+    val temp = SharePath.parse(raw)
+    // D-13: anche i temporanei dei tentativi di prima dello stesso elemento (il motore li toglie quando il NAS li lascia).
+    listOf(temp) + NasBackupPaths.earlierAttempts(temp)
+  }
+
+  // D-13: 0 e' "ora del NAS non nota" (un elemento creato senza sessione): non "fermo da sempre", che farebbe ripartire subito da capo.
+  override suspend fun lastStepAt(id: BackupItemId): Long? = dao.updatedAt(id.value)?.takeIf { it > 0 }
 
   override suspend fun counts(): BackupDiaryCounts = database.transaction {
     val byState = dao.countsByState().mapNotNull { row -> STATES[row.status]?.let { it to row.count } }.toMap()
@@ -94,6 +107,9 @@ class RoomBackupStore(private val database: GalleryDatabase, private val clock: 
   }
 
   private companion object {
+    /** D-13: [this] e' il temporaneo di un tentativo di prima di [later] (stesso elemento, stessa cartella). */
+    fun SharePath.isEarlierAttemptOf(later: SharePath?): Boolean = later != null && this in NasBackupPaths.earlierAttempts(later)
+
     /** R14: [this] va nella stessa share e nella stessa cartella di [other] (il nome del file puo' cambiare da un'app all'altra: la cartella no). */
     fun BackupItem.sameDestinationAs(other: NewBackupItem): Boolean =
       share.equals(other.share, ignoreCase = true) && planned.components.dropLast(1).map { it.lowercase() } == other.planned.components.dropLast(1).map { it.lowercase() }

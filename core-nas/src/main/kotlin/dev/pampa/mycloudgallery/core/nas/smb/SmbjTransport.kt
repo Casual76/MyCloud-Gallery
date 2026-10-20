@@ -259,7 +259,7 @@ private class SmbjShare(override val name: String, private val share: DiskShare,
 
   override fun removeEmptyDirectory(path: String) = guard.io { share.rmdir(path, false) }
 
-  override fun createExclusive(path: String): SmbWriteFile = guard.io {
+  override fun createExclusive(path: String, shareMode: SmbOpenMode): SmbWriteFile = guard.io {
     val file = share.openFile(
       path,
       EnumSet.of(
@@ -270,7 +270,7 @@ private class SmbjShare(override val name: String, private val share: DiskShare,
         AccessMask.DELETE,
       ),
       EnumSet.of(FileAttributes.FILE_ATTRIBUTE_NORMAL),
-      SmbOpenMode.CREATE_EXCLUSIVE.shareAccess(),
+      shareMode.shareAccess(),
       SMB2CreateDisposition.FILE_CREATE,
       EnumSet.of(SMB2CreateOptions.FILE_NON_DIRECTORY_FILE),
     )
@@ -280,7 +280,7 @@ private class SmbjShare(override val name: String, private val share: DiskShare,
   // Fase 5A (D5): il PROPRIO temporaneo del backup riaperto per riprenderlo. FILE_OPEN (mai crearlo), gli stessi diritti e la stessa
   // esclusiva del temporaneo appena creato, FILE_OPEN_REPARSE_POINT (un collegamento al suo nome si apre per quello che e', mai la sua
   // destinazione) e lo stato letto subito sullo stesso handle: chi chiama rifiuta una cartella o un punto di rianalisi prima di toccarlo.
-  override fun openExistingForWrite(path: String): SmbWriteFile = guard.io {
+  override fun openExistingForWrite(path: String, shareMode: SmbOpenMode): SmbWriteFile = guard.io {
     val file = share.openFile(
       path,
       EnumSet.of(
@@ -291,7 +291,7 @@ private class SmbjShare(override val name: String, private val share: DiskShare,
         AccessMask.DELETE,
       ),
       EnumSet.noneOf(FileAttributes::class.java),
-      SmbOpenMode.CREATE_EXCLUSIVE.shareAccess(),
+      shareMode.shareAccess(),
       SMB2CreateDisposition.FILE_OPEN,
       EnumSet.of(SMB2CreateOptions.FILE_NON_DIRECTORY_FILE, SMB2CreateOptions.FILE_OPEN_REPARSE_POINT),
     )

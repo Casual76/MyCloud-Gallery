@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.backup
 
 import com.google.common.truth.Truth.assertThat
+import dev.pampa.mycloudgallery.core.backup.contract.BackupKind
 import java.io.File
 import kotlinx.coroutines.runBlocking
 import org.junit.Rule
@@ -65,5 +66,24 @@ class BackupPauseTest {
   fun lAzzeramentoTogliAncheLaPausa() {
     // L'azzeramento cancella i file di `FILES` (LocalDataEraserTest): la pausa e' fra questi.
     assertThat(BackupRunMemory.FILES).contains("backup-user-paused")
+  }
+
+  /**
+   * D-13: il giro fermo su un file occupato sul NAS si ricorda per tipo di media e regge alla morte del processo (la pagina lo dice anche dopo);
+   * un giro delle foto finito non lo toglie ai video. L'azzeramento toglie i due file.
+   */
+  @Test
+  fun d13_ilGiroFermoSuUnFileOccupatoSiRicordaPerTipo() = runBlocking<Unit> {
+    val memory = BackupRunMemory(folder.root)
+    memory.setBusy(BackupKind.VIDEOS, 5_000L)
+    memory.setBusy(BackupKind.VIDEOS, 9_000L)
+    memory.setBusy(BackupKind.PHOTOS, null)
+    val reborn = BackupRunMemory(folder.root)
+    assertThat(reborn.busySince(BackupKind.VIDEOS)).isEqualTo(5_000L)
+    assertThat(reborn.busySince(BackupKind.PHOTOS)).isNull()
+    assertThat(reborn.anyBusy()).isTrue()
+    reborn.setBusy(BackupKind.VIDEOS, null)
+    assertThat(reborn.anyBusy()).isFalse()
+    assertThat(BackupRunMemory.FILES).containsAtLeast("backup-nas-busy-photos", "backup-nas-busy-videos")
   }
 }

@@ -63,7 +63,13 @@ class ChaosBackupOps(
   private val inner: NasBackupOps,
   private val injector: Injector,
   private val incarnation: Incarnation,
+  /** D-13: dove il NAS ha risposto "occupato" (non un colpo: il NAS vero o simulato), come chiavi `share:percorso`; null = non si registra. */
+  private val busyHits: MutableSet<String>? = null,
 ) : NasBackupOps {
+  private fun hit(share: String, path: SharePath) {
+    busyHits?.add(NasFileFact.keyOf(share, path.value))
+  }
+
   override val ownerDeviceId: String get() = inner.ownerDeviceId
 
   override suspend fun mkdirs(share: String, dir: SharePath, purpose: Purpose): NasResult<Unit> =
@@ -76,7 +82,11 @@ class ChaosBackupOps(
     }
 
   override suspend fun reopenTemp(share: String, temp: SharePath, keepBytes: Long, tempId: Long, purpose: Purpose): NasResult<ReopenOutcome> =
-    when (val reopened = injector.nas(Primitive.REOPEN_TEMP, incarnation, locked = ReopenOutcome.Locked as ReopenOutcome) { inner.reopenTemp(share, temp, keepBytes, tempId, purpose) }) {
+    when (
+      val reopened = injector.nas(Primitive.REOPEN_TEMP, incarnation, locked = ReopenOutcome.Locked as ReopenOutcome) {
+        inner.reopenTemp(share, temp, keepBytes, tempId, purpose).also { if ((it as? NasResult.Ok)?.value == ReopenOutcome.Locked) hit(share, temp) }
+      }
+    ) {
       is NasResult.Err -> reopened
       is NasResult.Ok -> when (val outcome = reopened.value) {
         is ReopenOutcome.Reopened -> NasResult.Ok(ReopenOutcome.Reopened(ChaosBackupWriter(outcome.writer, injector, incarnation)))
@@ -95,11 +105,13 @@ class ChaosBackupOps(
 
   override suspend fun publishTemp(share: String, temp: SharePath, final: SharePath, purpose: Purpose): NasResult<PublishOutcome> =
     injector.nas(Primitive.PUBLISH_TEMP, incarnation, locked = PublishOutcome.Locked as PublishOutcome, target = NasTarget(share, temp, final)) {
-      inner.publishTemp(share, temp, final, purpose)
+      inner.publishTemp(share, temp, final, purpose).also { if ((it as? NasResult.Ok)?.value == PublishOutcome.Locked) hit(share, temp) }
     }
 
   override suspend fun deleteOwnTemp(share: String, temp: SharePath, purpose: Purpose): NasResult<DeleteOutcome> =
-    injector.nas(Primitive.DELETE_OWN_TEMP, incarnation, locked = DeleteOutcome.Locked as DeleteOutcome) { inner.deleteOwnTemp(share, temp, purpose) }
+    injector.nas(Primitive.DELETE_OWN_TEMP, incarnation, locked = DeleteOutcome.Locked as DeleteOutcome) {
+      inner.deleteOwnTemp(share, temp, purpose).also { if ((it as? NasResult.Ok)?.value == DeleteOutcome.Locked) hit(share, temp) }
+    }
 
   // 5B (P13): le due rinomine delle versioni sono punti dove cade un colpo (connessione, morte prima o dopo, file aperto dal PC) e dove il PC puo'
   // modificare il file proprio prima della rinomina (`PC_EDIT`: il timbro obbligatorio deve accorgersene). Nei giri della 5A non si chiamano mai.
@@ -155,6 +167,8 @@ class ChaosReader(
   private val inner: NasMediaReader,
   private val injector: Injector,
   private val incarnation: Incarnation,
+  /** D-13: come [ChaosBackupOps]: un'apertura a cui il NAS ha risposto "occupato". */
+  private val busyHits: MutableSet<String>? = null,
 ) : NasMediaReader {
 
   override suspend fun list(
@@ -169,7 +183,11 @@ class ChaosReader(
     injector.nas(Primitive.STAT, incarnation) { inner.stat(share, path, purpose) }
 
   override suspend fun open(share: String, path: SharePath, purpose: Purpose): NasResult<NasRandomFile> =
-    when (val opened = injector.nas(Primitive.OPEN, incarnation) { inner.open(share, path, purpose) }) {
+    when (
+      val opened = injector.nas(Primitive.OPEN, incarnation) {
+        inner.open(share, path, purpose).also { if ((it as? NasResult.Err)?.error == dev.pampa.mycloudgallery.core.nas.contract.NasError.FileBusy) busyHits?.add(NasFileFact.keyOf(share, path.value)) }
+      }
+    ) {
       is NasResult.Err -> opened
       is NasResult.Ok -> NasResult.Ok(ChaosRandomFile(opened.value, injector, incarnation))
     }
@@ -262,6 +280,11 @@ class ChaosDiary(
   override suspend fun citedTemps(): Set<SharePath> {
     incarnation.checkAlive()
     return inner.citedTemps()
+  }
+
+  override suspend fun lastStepAt(id: BackupItemId): Long? {
+    incarnation.checkAlive()
+    return inner.lastStepAt(id)
   }
 
   override suspend fun counts(): BackupDiaryCounts {

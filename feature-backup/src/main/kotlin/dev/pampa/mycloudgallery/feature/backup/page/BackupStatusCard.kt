@@ -163,6 +163,7 @@ private fun waitRes(reason: WaitReason): Int = when (reason) {
   WaitReason.NAS -> R.string.backup_wait_nas
   WaitReason.COMPARING -> R.string.backup_wait_comparing
   WaitReason.NEXT_RUN -> R.string.backup_wait_next_run
+  WaitReason.NAS_BUSY -> R.string.backup_wait_nas_busy
 }
 
 @Composable

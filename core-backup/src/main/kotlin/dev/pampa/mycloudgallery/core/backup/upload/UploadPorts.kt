@@ -130,6 +130,12 @@ interface UploadIndexing {
  * @property maxStepsPerItem i passi di un elemento in un giro: oltre, aspetta il prossimo (difesa contro un ciclo che non avanza).
  * @property allowedRoots le radici in cui il backup puo' pubblicare (§2.2 "Regole"): `Backup/` della share, o quella recintata (D13).
  * @property driveGuardCopies se il motore guida anche gli elementi del guardiano (`GUARD_COPY`, D9). Di default no: sono di P3.
+ * @property busyRestartAfterMs D-13: un elemento in caricamento fermo da tanto (ora del NAS dall'ultimo passo del diario) su un **proprio**
+ *   temporaneo che il NAS tiene occupato (una connessione morta che il NAS non ha ancora chiuso) riparte su un temporaneo nuovo (il tentativo
+ *   dopo); il vecchio resta, citato dal diario finche' l'elemento e' aperto, e il motore lo toglie prima che l'elemento finisca, quando il NAS lo
+ *   lascia (fino ad allora l'elemento aspetta il giro dopo, senza dire "occupato"). Dieci minuti: piu' o meno quanto costa ricaricare un video da
+ *   3 GB sul Wi-Fi di casa, contro un'attesa che sul WD puo' durare ore (misure in `docs/decisioni.md`, D-13).
+ * @property maxTempAttempts D-13: i temporanei nuovi al massimo per un elemento (oltre, si aspetta che il NAS lasci l'ultimo).
  */
 data class UploadConfig(
   val chunkBytes: Int = 1 shl 20,
@@ -147,6 +153,8 @@ data class UploadConfig(
   val allowedRoots: List<SharePath> = listOf(SharePath.of("Backup")),
   val driveGuardCopies: Boolean = false,
   val purpose: Purpose = Purpose.BACKGROUND,
+  val busyRestartAfterMs: Long = 10L * 60_000L,
+  val maxTempAttempts: Int = 3,
 ) {
   init {
     require(chunkBytes > 0 && checkpointBytes >= chunkBytes) { "Misure di scrittura non valide." }
@@ -156,6 +164,7 @@ data class UploadConfig(
       "Tetti non validi."
     }
     require(allowedRoots.isNotEmpty()) { "Almeno una radice ammessa." }
+    require(busyRestartAfterMs >= 0 && maxTempAttempts >= 0) { "Tetti dell'occupato non validi." }
   }
 
   /** [path] e' dentro una radice ammessa (e non e' la radice stessa). */

@@ -77,6 +77,9 @@ enum class LibraryBackupWait {
   /** Al prossimo giro programmato. */
   NEXT_RUN,
 
+  /** D-13: il NAS tiene ancora occupato un file del backup; si riprova tra poco, da soli. */
+  NAS_BUSY,
+
   /** Un altro motivo del motore delle regole (Diagnostica → Attivita' lo dice per esteso). */
   OTHER,
 }

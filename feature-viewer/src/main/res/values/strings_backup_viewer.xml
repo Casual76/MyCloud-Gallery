@@ -23,6 +23,7 @@
   <string name="viewer_backup_wait_nas">Aspetta che il NAS risponda.</string>
   <string name="viewer_backup_wait_comparing">Prima confronto con le copie già sul NAS.</string>
   <string name="viewer_backup_wait_next_run">Parte al prossimo giro.</string>
+  <string name="viewer_backup_wait_nas_busy">Il NAS tiene ancora occupato un file: riprovo tra poco.</string>
 
   <string name="viewer_backup_uploading">In caricamento sul NAS</string>
   <string name="viewer_backup_verifying">Controllo della copia sul NAS</string>

@@ -26,9 +26,15 @@ import dev.pampa.mycloudgallery.core.rules.run.StageOutcome
 import dev.pampa.mycloudgallery.gallery.GalleryGraph
 import dev.pampa.mycloudgallery.feature.diagnostics.recording.DiagJob
 import dev.pampa.mycloudgallery.graph.AppGraph
+import dev.pampa.mycloudgallery.core.network.contract.NasRoute
+import dev.pampa.mycloudgallery.core.network.contract.ProbeResult
 import java.time.Duration as JavaDuration
 import java.time.LocalDateTime
 import java.util.concurrent.TimeUnit
+import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * I lavori del **backup** (Fase 5A, P7; docs/fase5-progetto.md §1.4, §2.8, D11, D34). Tutti **a tappe** (`StagedRun`: regole prima di
@@ -276,6 +282,13 @@ sealed interface BackupFollowUp {
   /** Un errore del NAS: si riprova con l'attesa crescente di WorkManager. */
   data object Retry : BackupFollowUp
 
+  /**
+   * **D-13** (prove sul campo): un file del backup e' ancora occupato sul NAS (`RunStop.BUSY`: di solito l'handle di una nostra connessione morta).
+   * Non e' "niente da fare": si riprova presto, con l'attesa crescente di chi guida il lavoro; intanto gli altri tipi di media vanno avanti (il
+   * giro delle foto occupato non ferma quello dei video) e i lavori dopo si chiedono come a fine giro.
+   */
+  data object Busy : BackupFollowUp
+
   companion object {
     /** Il seguito di una tappa del motore (foto, video, foto nuove). Pura, provata su JVM. */
     fun of(outcome: BackupStageOutcome?): BackupFollowUp {
@@ -288,7 +301,12 @@ sealed interface BackupFollowUp {
         is StageOutcome.Stopped -> Wait(stage.reason)
         // Serve la conferma dell'utente (dati mobili): la chiede la pagina, non un lavoro.
         is StageOutcome.NeedsConfirmation -> None
-        is StageOutcome.Finished -> if (outcome.last?.stoppedBy == RunStop.NAS) Retry else None
+        // D-13: un file occupato sul NAS (`BUSY`) non e' "niente da fare": si riprova presto, con l'attesa crescente di chi guida il lavoro.
+        is StageOutcome.Finished -> when (outcome.last?.stoppedBy) {
+          RunStop.NAS -> Retry
+          RunStop.BUSY -> Busy
+          else -> None
+        }
       }
     }
 
@@ -384,18 +402,25 @@ abstract class BackupWorker(
       BackupFollowUp.Continue -> continueLater()
       is BackupFollowUp.Wait -> afterWait(followUp.reason)
       BackupFollowUp.Retry -> return Result.retry()
-      BackupFollowUp.None, null -> {
-        // Fine giro: se nel frattempo e' arrivato altro in una sorgente (o il giro delle foto ha lasciato i video), il lavoro del tipo giusto.
-        try {
-          BackupWorkScheduling.afterPhoneRead(applicationContext, backup)
-        } catch (e: kotlinx.coroutines.CancellationException) {
-          throw e
-        } catch (e: Exception) {
-          GalleryLog.w(tag) { "lavoro dopo non chiesto: ${e.javaClass.simpleName}" }
-        }
+      // D-13: questo lavoro si riprova presto; i lavori degli altri tipi (i video dietro le foto) si chiedono come a fine giro (`KEEP`: questo resta).
+      BackupFollowUp.Busy -> {
+        askNext(backup)
+        return Result.retry()
       }
+      BackupFollowUp.None, null -> askNext(backup)
     }
     return Result.success()
+  }
+
+  /** Fine giro: se nel frattempo e' arrivato altro in una sorgente (o il giro delle foto ha lasciato i video), il lavoro del tipo giusto. */
+  private suspend fun askNext(backup: BackupGraph) {
+    try {
+      BackupWorkScheduling.afterPhoneRead(applicationContext, backup)
+    } catch (e: kotlinx.coroutines.CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      GalleryLog.w(tag) { "lavoro dopo non chiesto: ${e.javaClass.simpleName}" }
+    }
   }
 }
 
@@ -488,7 +513,12 @@ class UserResumeWorker @AssistedInject constructor(
       else -> BackupTrigger.USER_NOW
     }
 
-  override suspend fun stage(stages: BackupStages): BackupFollowUp? = userResumeStage { kind -> stages.round(kind, trigger) }
+  override suspend fun stage(stages: BackupStages): BackupFollowUp? {
+    // D-12: WorkManager fa partire la ripresa appena c'e' un Wi-Fi, prima che il percorso verso il NAS e la sessione siano pronti: si aspettano
+    // (con un tetto), e solo un NAS davvero irraggiungibile fa aspettare il quarto d'ora.
+    awaitNasReady(graph)
+    return userResumeStage { kind -> stages.round(kind, trigger) }
+  }
 
   override fun continueLater() = BackupWorkScheduling.userResume(applicationContext, trigger, policy = ExistingWorkPolicy.APPEND_OR_REPLACE)
 
@@ -496,11 +526,54 @@ class UserResumeWorker @AssistedInject constructor(
 }
 
 /**
+ * **D-12** (prove sul campo): la ripresa del lavoro dell'utente partiva 3 secondi dopo il ritorno del Wi-Fi (il vincolo di WorkManager e' "un Wi-Fi"),
+ * **un secondo prima** della sessione del NAS: le regole vedevano il NAS non ancora raggiungibile, la tappa diceva "aspetta" e la ripresa si
+ * riprogrammava fra un quarto d'ora, mentre la pagina prometteva "Riprende da solo". Qui, prima della tappa e al piu' [cap]: il percorso verso il NAS
+ * consentito ([routeAllowed]: casa riconosciuta, VPN), il NAS che risponde ([reachable]: la sonda TCP alla 445, ripetuta ogni [retryEvery]) e la
+ * sessione aperta ([openSession], come D-2 con `ensureFreshClock`: un solo tentativo, l'interruttore dell'autenticazione vale come sempre). Vero se
+ * tutto e' pronto; falso dopo [cap]: allora la tappa parte comunque e le regole dicono "NAS irraggiungibile" solo se lo e' davvero. Pura, provata
+ * su JVM.
+ */
+internal suspend fun awaitNasReachable(
+  routeAllowed: suspend () -> Unit,
+  reachable: suspend () -> Boolean,
+  openSession: suspend () -> Unit,
+  cap: kotlin.time.Duration = NAS_READY_WAIT,
+  retryEvery: kotlin.time.Duration = NAS_PROBE_GAP,
+): Boolean = withTimeoutOrNull(cap) {
+  routeAllowed()
+  while (!reachable()) delay(retryEvery)
+  openSession()
+  true
+} ?: false
+
+/** D-12: [awaitNasReachable] con il percorso, la sonda e la sessione dell'app. */
+internal suspend fun awaitNasReady(graph: AppGraph, cap: kotlin.time.Duration = NAS_READY_WAIT): Boolean {
+  if (graph.account.value == null) return false
+  val ready = awaitNasReachable(
+    routeAllowed = { graph.routeGate.routes.first { it is NasRoute.Allowed } },
+    reachable = { graph.statusMonitor.isReachable.value || graph.statusMonitor.probeNow() is ProbeResult.Open },
+    openSession = { graph.session.ensureFreshClock() },
+    cap = cap,
+  )
+  if (!ready) GalleryLog.d("UserResumeWorker") { "NAS non pronto entro ${cap.inWholeSeconds} s: decidono le regole" }
+  return ready
+}
+
+/** D-12: quanto la ripresa aspetta, al massimo, il percorso, il NAS e la sessione dopo il ritorno del Wi-Fi. */
+internal val NAS_READY_WAIT: kotlin.time.Duration = 30.seconds
+
+/** D-12: ogni quanto si riprova la sonda TCP mentre si aspetta il NAS (solo una connessione, non sveglia i dischi). */
+internal val NAS_PROBE_GAP: kotlin.time.Duration = 2.seconds
+
+/**
  * D-6: una tappa della ripresa del lavoro dell'utente: le foto, poi i video (D11). Un tipo senza niente da fare passa all'altro; il primo che
  * lavora, aspetta o trova un errore decide il seguito. "Ferma", il cancello chiuso e i permessi del telefono chiudono la ripresa. Un'attesa della
- * rete (anche la conferma dei dati mobili o del roaming, che qui non si chiede) e' un'attesa del Wi-Fi. Pura, provata su JVM.
+ * rete (anche la conferma dei dati mobili o del roaming, che qui non si chiede) e' un'attesa del Wi-Fi. D-13: un tipo fermo su un file occupato
+ * passa all'altro, e alla fine la ripresa si riprova presto ([BackupFollowUp.Busy]). Pura, provata su JVM.
  */
 internal suspend fun userResumeStage(stage: suspend (BackupKind) -> BackupStageOutcome?): BackupFollowUp? {
+  var busy = false
   for (kind in BackupJobRun.KINDS) {
     val outcome = stage(kind) ?: return null
     when (outcome.last?.stoppedBy) {
@@ -519,10 +592,11 @@ internal suspend fun userResumeStage(stage: suspend (BackupKind) -> BackupStageO
     }
     when (val followUp = BackupFollowUp.of(outcome)) {
       BackupFollowUp.None -> Unit
+      BackupFollowUp.Busy -> busy = true
       else -> return followUp
     }
   }
-  return BackupFollowUp.None
+  return if (busy) BackupFollowUp.Busy else BackupFollowUp.None
 }
 
 /** Le verifiche (non verificate, `FULL_HASH`, rotazione) e il guardiano delle copie private (D9, D14). */

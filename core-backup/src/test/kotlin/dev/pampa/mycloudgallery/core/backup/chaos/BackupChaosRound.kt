@@ -8,7 +8,9 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupTrigger
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneDenied
 import dev.pampa.mycloudgallery.core.backup.contract.RunStop
 import dev.pampa.mycloudgallery.core.backup.contract.StopBy
+import dev.pampa.mycloudgallery.core.backup.contract.UploadState
 import dev.pampa.mycloudgallery.core.backup.testing.FakePhoneBytes
+import dev.pampa.mycloudgallery.core.nas.ops.backup.NasBackupPaths
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.nas.testing.NasContent
 import java.util.Locale
@@ -44,6 +46,11 @@ class BackupChaosConfig(
   val stepFaults: Int? = null,
   /** Le riprese dopo cui un elemento ancora aperto e' "non arriva in fondo". */
   val resumeBound: Int = 12,
+  /**
+   * D-13: percentuale delle morti del processo con la rete gia' giu' (il NAS tiene occupati i temporanei aperti dalla connessione morta finche' non
+   * se ne accorge). Con la rete su il WD li lascia subito (misure in docs/decisioni.md).
+   */
+  val deadConnectionPercent: Int = 30,
   /** Percentuale di media colpiti da un evento del telefono a meta' lettura (riscrittura, sparizione, `_ID` rinumerati). */
   val phoneEventPercent: Int = 17,
   /** Gli eventi tra un passo e l'altro (telefono, tempo, PC). Il NAS vero non fa passare il tempo ne' lascia togliere file. */
@@ -120,6 +127,9 @@ class BackupChaosRound(
   private val diaryViolations = ArrayList<String>()
   private val engineNotes = ArrayList<Note>()
   private val removedCited = ArrayList<String>()
+
+  /** D-13: dove il NAS ha risposto "occupato" al motore nel giro del motore in corso ([checkRun]). */
+  private val busyHits = java.util.Collections.synchronizedSet(LinkedHashSet<String>())
 
   private val violations = LinkedHashMap<String, Violation>()
   private val stepLog = ArrayList<String>()
@@ -198,7 +208,7 @@ class BackupChaosRound(
     if (size > FakeBigLimit) NasContent.virtual(size, random.nextLong()) else NasContent.of(random.nextBytes(size.toInt()))
 
   private suspend fun setUp() {
-    scanner = BackupNasScanner.ofShares(world.nas.reader, world.nas.shares, useCache = config.hashCache)
+    scanner = BackupNasScanner.ofShares(world.nas.reader, world.nas.shares, useCache = config.hashCache, held = world.nas::peekHeld)
     injector = Injector(stats, onConnectionLost = { world.nas.connectionLost() }, actions = Actions())
     val photos = config.minPhotos + random.nextInt(config.maxPhotos - config.minPhotos + 1)
     val videos = random.nextInt(config.maxVideos + 1)
@@ -277,8 +287,8 @@ class BackupChaosRound(
     val inc = incarnation
     val env = EngineEnv(
       world = world,
-      ops = ChaosBackupOps(world.nas.ops, injector, inc),
-      reader = ChaosReader(world.nas.reader, injector, inc),
+      ops = ChaosBackupOps(world.nas.ops, injector, inc, busyHits),
+      reader = ChaosReader(world.nas.reader, injector, inc, busyHits),
       store = ChaosDiary(world.store, injector, inc, diaryLog, diaryViolations),
       catalog = ChaosCatalog(world.catalog, injector, inc),
       phone = ChaosPhone(world.phone.port, injector, inc),
@@ -297,9 +307,12 @@ class BackupChaosRound(
   private suspend fun died(cause: ChaosDeath?) {
     deaths++
     stats.restart()
-    log += "morte del processo #$deaths${cause?.let { " (${it.primitive} ${if (it.moment == Moment.BEFORE) "prima" else "dopo"})" }.orEmpty()}"
-    // Il sistema chiude i socket del processo morto: il NAS chiude i suoi handle.
-    world.nas.processDied()
+    // D-13: con la rete su il sistema chiude i socket del processo morto e il NAS chiude i suoi handle; con la rete giu' il NAS li tiene.
+    val networkDown = random.nextInt(100) < config.deadConnectionPercent
+    log += "morte del processo #$deaths${cause?.let { " (${it.primitive} ${if (it.moment == Moment.BEFORE) "prima" else "dopo"})" }.orEmpty()}" +
+      if (networkDown) " con la rete gia' giu'" else ""
+    if (networkDown) stats.event("D-13: morte del processo con la rete gia' giu' (il NAS tiene i temporanei aperti)")
+    world.nas.processDied(networkDown)
     midCheck("dopo la morte #$deaths")
     restartEngine()
   }
@@ -363,7 +376,10 @@ class BackupChaosRound(
         }
         StepKind.RUN_PHOTOS -> runKind(BackupKind.PHOTOS)
         StepKind.RUN_VIDEOS -> runKind(BackupKind.VIDEOS)
-        StepKind.RESUME -> checkRun(engine.resumeAll(1.hours), null)
+        StepKind.RESUME -> {
+          busyHits.clear()
+          checkRun(engine.resumeAll(1.hours), null)
+        }
       }
     }
     // Si tara sui passi arrivati in fondo senza colpi: una morte taglia il passo e falserebbe la media.
@@ -393,16 +409,32 @@ class BackupChaosRound(
   }
 
   private suspend fun runKind(kind: BackupKind) {
+    busyHits.clear()
     checkRun(engine.run(kind, 1.hours, BackupTrigger.SCHEDULED), kind)
   }
 
-  /** Un giro che finisce `COMPLETE` non lascia in silenzio un elemento aperto: ogni elemento ancora aperto e' contato fra quelli in attesa (invariante 11). */
+  /**
+   * Un giro che finisce `COMPLETE` non lascia in silenzio un elemento aperto: ogni elemento ancora aperto e' contato fra quelli in attesa (invariante
+   * 11). D-13 (invariante 16): e non finisce `COMPLETE` se in questo giro il motore ha trovato occupato (dal NAS, per una connessione morta che
+   * lo tiene ancora) il temporaneo di un elemento rimasto aperto che ne ha bisogno (in caricamento, caricato, verificato o in pubblicazione). Un
+   * elemento che aspetta altro (la riga del telefono) e non ha toccato il NAS non conta: il motore non poteva saperlo. Nemmeno il tentativo di
+   * prima di un elemento ripartito su un temporaneo nuovo: non serve piu' (il media va avanti, o e' gia' al sicuro), resta citato dal diario e
+   * il motore lo toglie a un giro dopo.
+   */
   private suspend fun checkRun(result: BackupRunResult, kind: BackupKind?) {
     if (result.stoppedBy != RunStop.COMPLETE) return
-    val open = world.store.itemsToResume(Int.MAX_VALUE).count { kind == null || world.kindOf(it) == kind }
+    val openItems = world.store.itemsToResume(Int.MAX_VALUE).filter { kind == null || world.kindOf(it) == kind }
+    val open = openItems.size
     if (open > result.waiting) {
       engineNotes += Note(Invariant.NAS_READS, "un giro finito COMPLETE lascia $open elementi aperti ma ne conta ${result.waiting} in attesa")
     }
+    val held = world.nas.heldByDeadConnections().intersect(busyHits.toSet())
+    if (held.isEmpty()) return
+    val busy = openItems.count { item ->
+      val temp = item.temp ?: return@count false
+      item.state in NEEDS_TEMP && NasFileFact.keyOf(item.share, temp.value) in held
+    }
+    if (busy > 0) engineNotes += Note(Invariant.BUSY, "un giro finito COMPLETE lascia $busy elementi fermi su un temporaneo occupato")
   }
 
   /** Arma i colpi del passo; restituisce le unita' di lavoro (media da caricare piu' elementi da riprendere). Dove cadono, lo stima sul lavoro. */
@@ -459,6 +491,11 @@ class BackupChaosRound(
       }
       roll < 78 -> if (world.nas.caps.housekeeping) timeAndClean()
       roll < 90 -> pcFileNow()
+      roll < 95 -> if (world.nas.caps.advanceTime) minutesPass()
+      roll < 98 -> {
+        world.nas.reapDeadConnections()
+        happened("il NAS si accorge delle connessioni morte")
+      }
       else -> Unit
     }
   }
@@ -505,9 +542,20 @@ class BackupChaosRound(
     happened("una foto cancellata dal telefono")
   }
 
+  /**
+   * D-13: passano venti minuti e il NAS tiene ancora i temporanei delle connessioni morte (non se ne accorge prima di ore): oltre il tetto il motore
+   * vero riparte su un temporaneo nuovo, il vecchio resta citato dal diario e si toglie quando il NAS lo lascia.
+   */
+  private fun minutesPass() {
+    world.advanceTime(BUSY_WAIT_MS)
+    happened("passano venti minuti (i file occupati restano occupati)")
+  }
+
   /** Due giorni e la pulizia dei propri file (D33, E-B21): un temporaneo fermo da giorni, citato dal diario, resta. */
   private suspend fun timeAndClean() {
     world.advanceTime(2 * BackupChaosWorld.DAY_MS)
+    // D-13: in due giorni il NAS si e' accorto delle connessioni morte da un pezzo.
+    world.nas.reapDeadConnections()
     val cited = world.store.citedTemps().mapTo(HashSet()) { it.value.lowercase(Locale.ROOT) }
     val removed = world.housekeeping(factory.cleanerHonorsCitations, cited)
     removedCited += removed.filter { it.lowercase(Locale.ROOT) in cited }
@@ -546,6 +594,8 @@ class BackupChaosRound(
   private suspend fun finish() {
     injector.disarm()
     resetAfterStep()
+    // D-13: alla fine il NAS si accorge delle connessioni morte (ore dopo): i loro file tornano liberi e il lavoro arriva in fondo.
+    world.nas.reapDeadConnections()
     restartEngine()
     converge()
     // La rilettura finale: ogni file, per intero, senza nessuna cache (invariante 5).
@@ -555,6 +605,9 @@ class BackupChaosRound(
     val state = world.capture(before.values, scan, diaryLog, removedCited, notes(scan))
     BackupVerifier.check(state, Phase.FINAL, showNames = !redact).forEach { record(it, "a lavoro finito", state) }
     world.store.all().forEach { stats.item(it.state.code) }
+    // D-13: quanti elementi sono ripartiti su un temporaneo nuovo perche' il NAS teneva occupato il vecchio oltre il tetto.
+    world.store.all().filter { item -> item.temp?.let { NasBackupPaths.attemptOf(it) }?.let { it > 0 } == true }
+      .forEach { _ -> stats.event("D-13: elemento ripartito su un temporaneo nuovo") }
   }
 
   /** Tolti i guasti, si riprende dal diario finche' non c'e' piu' niente da fare (al massimo [BackupChaosConfig.resumeBound] riprese). */
@@ -564,6 +617,7 @@ class BackupChaosRound(
       guarded {
         runKind(BackupKind.PHOTOS)
         runKind(BackupKind.VIDEOS)
+        busyHits.clear()
         checkRun(engine.resumeAll(1.hours), null)
       }
       val open = world.store.itemsToResume(Int.MAX_VALUE)
@@ -576,6 +630,12 @@ class BackupChaosRound(
   private companion object {
     /** Il seme della fase 5B e' quello del giro rimescolato: la fase ha le sue scelte e non tocca quelle del caricamento. */
     const val FIVE_B_SALT = 0x5B5B5B5B5B5BL
+
+    /** D-13: il tempo dell'evento "passano venti minuti" (oltre il tetto del motore per ripartire su un temporaneo nuovo). */
+    const val BUSY_WAIT_MS = 20L * 60_000L
+
+    /** D-13: gli stati in cui un elemento ha bisogno del suo temporaneo per andare avanti (invariante 16). */
+    val NEEDS_TEMP = setOf(UploadState.UPLOADING, UploadState.UPLOADED, UploadState.VERIFIED, UploadState.PUBLISHING)
 
     /** Oltre questa taglia un contenuto del telefono e' virtuale (generato da un seme): non si tiene in memoria. */
     const val FakeBigLimit = 4L shl 20

@@ -258,4 +258,32 @@ class RunProgressTest {
     // 15 media fatti per 1.500 byte: 100 byte l'uno, 100 media in tutto.
     assertThat(b.bytesTotal).isEqualTo(10_000L)
   }
+
+  /**
+   * D-11 (prove sul campo): dopo la morte del processo il conteggio ripartiva dal lotto ("Video: 0 di 3"). Una coda vuota di passaggio (i conteggi
+   * del catalogo non ancora pronti in un processo appena nato) chiudeva la campagna salvata. Una coda vuota la chiude solo se il motore e'
+   * d'accordo (l'ultimo giro e' finito senza niente in attesa).
+   */
+  @Test
+  fun d11_unaCodaVuotaNonConfermataNonChiudeLaCampagna() {
+    val progress = RunProgress()
+    progress.reshape(batch(done = 0, bytesDone = 0), queued = 216, nowMs = 0, remainingBytes = 9_000_000L)
+    progress.reshape(batch(done = 213, bytesDone = 4_000_000), queued = 3, nowMs = 60_000, remainingBytes = 5_000_000L)
+    val saved = checkNotNull(progress.snapshot())
+
+    // Il processo muore e riparte: un ricalcolo vede la coda a zero (conteggi non ancora pronti) e il motore non ha ancora fatto un giro.
+    val reborn = RunProgress()
+    reborn.restore(saved)
+    assertThat(reborn.idle(queued = 0, confirmed = false)).isFalse()
+    assertThat(reborn.snapshot()).isNull()
+    // I conteggi tornano: 3 in coda, il giro riparte dal suo lotto (0 di 3) ma la campagna continua.
+    val resumed = reborn.reshape(videos(done = 0, total = 3, bytesDone = 0L, bytesTotal = 5_000_000L), queued = 3, nowMs = 0, remainingBytes = 5_000_000L)
+    assertThat(resumed.done).isEqualTo(213)
+    assertThat(resumed.total).isEqualTo(216)
+    assertThat(resumed.bytesDone).isEqualTo(4_000_000L)
+
+    // Il motore ha finito tutto (ultimo giro senza niente in attesa): adesso si', la campagna si chiude.
+    assertThat(reborn.idle(queued = 0, confirmed = true)).isTrue()
+    assertThat(reborn.snapshot()).isEqualTo(RunProgress.EMPTY)
+  }
 }

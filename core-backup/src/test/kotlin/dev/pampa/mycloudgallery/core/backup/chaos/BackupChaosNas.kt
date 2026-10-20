@@ -78,8 +78,24 @@ interface NasSide : AutoCloseable {
   /**
    * Il processo e' morto: il sistema chiude i socket del processo morto e il NAS chiude i suoi handle (le scritture a meta', l'apertura di cui
    * la risposta e' andata persa). Il processo nuovo parte con una connessione nuova (la lezione della prova F16 della 4B, docs/prova-500.md §6bis).
+   *
+   * D-13 (misure sul WD): con [networkDown] la rete era gia' giu' (Wi-Fi caduto, morte durante la caduta): il NAS non riceve ne' FIN ne' RST e
+   * tiene gli handle della connessione morta, quindi il temporaneo in scrittura resta **occupato** finche' il NAS non se ne accorge
+   * ([reapDeadConnections]). Di serie (un NAS che non lo sa simulare) come una morte con la rete su.
    */
-  suspend fun processDied() = connectionLost()
+  suspend fun processDied(networkDown: Boolean = false) = connectionLost()
+
+  /** D-13: il NAS si accorge delle connessioni morte (il controllo del TCP, ore dopo) e lascia i file che tenevano occupati. */
+  fun reapDeadConnections() = Unit
+
+  /** D-13: i file tenuti occupati adesso da una connessione morta, come chiavi `share:percorso` in minuscolo ([NasFileFact.keyOf]). */
+  fun heldByDeadConnections(): Set<String> = emptySet()
+
+  /**
+   * D-13: i byte di un file che una connessione morta tiene occupato, letti dal NAS stesso (nessun client lo puo' aprire: sul campo la verifica dal
+   * PC trovava "FileBusy"). Solo per l'osservatore del banco, che deve comunque vedere che cosa c'e'; null per ogni altro file.
+   */
+  fun peekHeld(share: String, path: String): ByteArray? = null
 
   /** Un contenuto virtuale grande che il NAS finto non deve tenere in memoria. */
   fun registerKnown(content: NasContent) = Unit
@@ -112,6 +128,18 @@ class FakeNasSide(private val clock: FakeBackupClock, deviceId: String, override
   override fun advanceTime(ms: Long) = Unit
 
   override suspend fun connectionLost() = Unit
+
+  // D-13: con la rete su il WD chiude subito gli handle (RST 0,25 s, FIN 0,02 s); con la rete giu' li tiene (connessione muta: 330 s e oltre).
+  override suspend fun processDied(networkDown: Boolean) {
+    if (networkDown) nas.abandonOpenBackupWriters() else nas.closeOpenBackupWriters()
+  }
+
+  override fun reapDeadConnections() = nas.reapDeadConnections()
+
+  override fun heldByDeadConnections(): Set<String> = nas.heldByDeadConnections
+
+  override fun peekHeld(share: String, path: String): ByteArray? =
+    if (NasFileFact.keyOf(share, path) in nas.heldByDeadConnections) nas.bytes(share, path) else null
 
   override fun registerKnown(content: NasContent) = nas.registerKnownContent(content)
 
@@ -183,6 +211,21 @@ class SimSmbNasSide(private val clock: FakeBackupClock, deviceId: String) : NasS
     manager.invalidate(InvalidateReason.SUSPECT_CONNECTION)
   }
 
+  // D-13: con la rete giu' la connessione resta viva per il NAS con i suoi handle (il simulatore la "abbandona"); il processo nuovo ne apre un'altra.
+  override suspend fun processDied(networkDown: Boolean) {
+    if (!networkDown) return connectionLost()
+    backend.abandonAllConnections()
+    manager.invalidate(InvalidateReason.SUSPECT_CONNECTION)
+  }
+
+  override fun reapDeadConnections() = backend.reapAbandoned()
+
+  override fun heldByDeadConnections(): Set<String> =
+    shares.flatMapTo(LinkedHashSet()) { s -> backend.pathsHeldByAbandoned(s).map { "${s.lowercase(Locale.ROOT)}:$it" } }
+
+  override fun peekHeld(share: String, path: String): ByteArray? =
+    if (NasFileFact.keyOf(share, path) in heldByDeadConnections()) backend.bytes(share, path) else null
+
   override fun describe(): String = "simulatore SMB di core-nas con la sessione e le primitive del backup vere, share ${shares.joinToString()}"
 
   override fun close() {
@@ -234,11 +277,17 @@ class BackupNasScanner(
   private val reader: NasMediaReader,
   private val roots: List<ScanRoot>,
   private val useCache: Boolean = false,
+  /** D-13: i byte di un file tenuto occupato da una connessione morta, visti dal NAS stesso (nessun client lo apre); null = nessuno. */
+  private val held: (String, String) -> ByteArray? = { _, _ -> null },
 ) {
   companion object {
     /** Tutte le share per intero, dalla radice. */
-    fun ofShares(reader: NasMediaReader, shares: List<String>, useCache: Boolean = false): BackupNasScanner =
-      BackupNasScanner(reader, shares.map { ScanRoot(it) }, useCache)
+    fun ofShares(
+      reader: NasMediaReader,
+      shares: List<String>,
+      useCache: Boolean = false,
+      held: (String, String) -> ByteArray? = { _, _ -> null },
+    ): BackupNasScanner = BackupNasScanner(reader, shares.map { ScanRoot(it) }, useCache, held)
   }
 
   private data class CacheKey(val share: String, val path: String, val size: Long, val modifiedAt: Long, val fileId: Long?)
@@ -301,7 +350,11 @@ class BackupNasScanner(
     var last: String? = null
     repeat(Attempts.READ_ATTEMPTS) {
       when (val opened = reader.open(share, path, Purpose.BACKGROUND)) {
-        is NasResult.Err -> last = "apertura non riuscita (${opened.error::class.simpleName})"
+        is NasResult.Err -> {
+          // D-13: un file che una connessione morta tiene occupato non lo apre nessuno: l'osservatore lo guarda dal NAS stesso.
+          if (opened.error == dev.pampa.mycloudgallery.core.nas.contract.NasError.FileBusy) held(share, path.value)?.let { return Sha256.of(it) }
+          last = "apertura non riuscita (${opened.error::class.simpleName})"
+        }
         is NasResult.Ok -> {
           val read = opened.value.use { reader.readAll(it, { _, _ -> }, null) }
           when (read) {

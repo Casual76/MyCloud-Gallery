@@ -121,6 +121,9 @@ class InMemoryBackupEngine(
     /** L'elemento aspetta il prossimo giro (file aperto, ora del NAS mancante, riga del telefono da ritrovare). */
     data object Wait : Step
 
+    /** D-13: l'elemento aspetta un file che il NAS tiene occupato: il giro non e' "completo" ([RunStop.BUSY]). */
+    data object Busy : Step
+
     /** Il giro si ferma. */
     class Stop(val stop: RunStop, val problem: BackupProblemCode? = null) : Step
   }
@@ -165,11 +168,13 @@ class InMemoryBackupEngine(
     val deadline = clock.monotonicMs() + budget.inWholeMilliseconds
     val tally = Tally()
     val waiting = HashSet<BackupItemId>()
+    val busy = HashSet<BackupItemId>()
     while (true) {
       if (stopRequested != null) return finish(tally, RunStop.STOPPED, null, waiting.size)
       if (clock.monotonicMs() >= deadline) return finish(tally, RunStop.BUDGET, null, waiting.size)
+      // D-13: con un elemento fermo su un file occupato il giro non e' "completo".
       val item = store.itemsToResume(Int.MAX_VALUE).firstOrNull { it.id !in waiting && (only == null || it.id in only) }
-        ?: return finish(tally, RunStop.COMPLETE, null, waiting.size)
+        ?: return finish(tally, if (busy.isEmpty()) RunStop.COMPLETE else RunStop.BUSY, null, waiting.size)
       val gateState = gate.stateOf(item.share)
       if (!gateState.open) return finish(tally, RunStop.GATE, gateState.problem, waiting.size)
       state.value = BackupStatus.Running(
@@ -178,6 +183,10 @@ class InMemoryBackupEngine(
       )
       when (val step = drive(item, deadline, tally)) {
         Step.Wait -> waiting += item.id
+        Step.Busy -> {
+          waiting += item.id
+          busy += item.id
+        }
         is Step.Stop -> return finish(tally, step.stop, step.problem, waiting.size)
         is Step.Next -> Unit
       }
@@ -188,6 +197,7 @@ class InMemoryBackupEngine(
     state.value = when {
       problem != null -> BackupStatus.Problem(problem, 0)
       stop == RunStop.STOPPED -> BackupStatus.Stopped(stopRequested ?: StopBy.USER)
+      stop == RunStop.BUSY -> BackupStatus.Waiting(waiting, 0, WaitReason.NAS_BUSY)
       waiting > 0 -> BackupStatus.Waiting(waiting, 0, WaitReason.NEXT_RUN)
       else -> BackupStatus.UpToDate(tally.done + tally.linked, clock.nasNowMs())
     }
@@ -311,7 +321,7 @@ class InMemoryBackupEngine(
     if (temp != null && (item.state == UploadState.UPLOADING || item.state == UploadState.COPYING)) {
       when (val d = ops.deleteOwnTemp(item.share, temp, purpose)) {
         is NasResult.Err -> return stopFor(d.error)
-        is NasResult.Ok -> if (d.value == DeleteOutcome.Locked) return Step.Wait
+        is NasResult.Ok -> if (d.value == DeleteOutcome.Locked) return Step.Busy
       }
     }
     if (lost) catalog.markProblem(item.mediaId, BackupProblemCode.LOST_BEFORE_BACKUP)
@@ -374,7 +384,7 @@ class InMemoryBackupEngine(
             }
             // Assente, piu' corto del punto salvato o un altro file al suo nome (R3): da capo ("da capo" nel diario prima di tutto).
             ReopenOutcome.Missing, is ReopenOutcome.TooShort, ReopenOutcome.Foreign -> return save(item.copy(resumeAt = 0, resumeId = null))
-            ReopenOutcome.Locked -> return Step.Wait
+            ReopenOutcome.Locked -> return Step.Busy
           }
         }
       } else {
@@ -388,7 +398,7 @@ class InMemoryBackupEngine(
             // Il diario dice "da capo": il temporaneo rimasto (senza punto di ripresa) e' solo nostro e si toglie.
             return when (val d = ops.deleteOwnTemp(item.share, temp, purpose)) {
               is NasResult.Err -> stopFor(d.error)
-              is NasResult.Ok -> if (d.value == DeleteOutcome.Locked) Step.Wait else Step.Next(item)
+              is NasResult.Ok -> if (d.value == DeleteOutcome.Locked) Step.Busy else Step.Next(item)
             }
           }
         }
@@ -461,10 +471,11 @@ class InMemoryBackupEngine(
         CopyOutcome.SourceMissing, is CopyOutcome.SourceChanged -> gone(item, lost = false)
         CopyOutcome.TempExists -> when (val d = ops.deleteOwnTemp(item.share, temp, purpose)) {
           is NasResult.Err -> stopFor(d.error)
-          is NasResult.Ok -> if (d.value == DeleteOutcome.Locked) Step.Wait else Step.Next(item)
+          is NasResult.Ok -> if (d.value == DeleteOutcome.Locked) Step.Busy else Step.Next(item)
         }
         // Il ripiego dal telefono (E-D12) e' di P3.
-        CopyOutcome.NotSupported, CopyOutcome.Locked -> Step.Wait
+        CopyOutcome.NotSupported -> Step.Wait
+        CopyOutcome.Locked -> Step.Busy
       }
     }
   }
@@ -486,7 +497,7 @@ class InMemoryBackupEngine(
           val counted = saveItem(item.copy(verifyAttempts = attempts))
           when (val d = ops.deleteOwnTemp(item.share, temp, purpose)) {
             is NasResult.Err -> return stopFor(d.error)
-            is NasResult.Ok -> if (d.value == DeleteOutcome.Locked) return Step.Wait
+            is NasResult.Ok -> if (d.value == DeleteOutcome.Locked) return Step.Busy
           }
           catalog.markProblem(item.mediaId, BackupProblemCode.VERIFY_FAILED)
           save(counted.copy(state = UploadState.FAILED, problem = BackupProblemCode.VERIFY_FAILED))
@@ -495,7 +506,7 @@ class InMemoryBackupEngine(
           val again = saveItem(item.copy(state = back, resumeAt = 0, verifyAttempts = attempts))
           when (val d = ops.deleteOwnTemp(item.share, temp, purpose)) {
             is NasResult.Err -> stopFor(d.error)
-            is NasResult.Ok -> if (d.value == DeleteOutcome.Locked) Step.Wait else Step.Next(again)
+            is NasResult.Ok -> if (d.value == DeleteOutcome.Locked) Step.Busy else Step.Next(again)
           }
         }
       }
@@ -521,7 +532,7 @@ class InMemoryBackupEngine(
         }
         save(item.copy(state = UploadState.PUBLISHED, finalStamp = stamp))
       }
-      PublishOutcome.Locked -> Step.Wait
+      PublishOutcome.Locked -> Step.Busy
       PublishOutcome.Collision -> when (val existing = readSha(item.share, final, tally)) {
         Read.Missing -> Step.Next(item)
         is Read.Fail -> stopFor(existing.error)
@@ -529,7 +540,7 @@ class InMemoryBackupEngine(
           // Lo stesso file c'era gia' (ripresa, reinstallazione, copia dal PC): si collega e il proprio temporaneo si toglie.
           when (val d = ops.deleteOwnTemp(item.share, temp, purpose)) {
             is NasResult.Err -> return stopFor(d.error)
-            is NasResult.Ok -> if (d.value == DeleteOutcome.Locked) return Step.Wait
+            is NasResult.Ok -> if (d.value == DeleteOutcome.Locked) return Step.Busy
           }
           val at = clock.nasNowMs() ?: return Step.Wait
           catalog.attachVerifiedCopies(listOf(VerifiedCopy(item.mediaId, item.versionId, item.share, final, existing.stamp, at)))
@@ -631,7 +642,8 @@ class InMemoryBackupEngine(
     return Sha256(md.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) })
   }
 
-  private fun stopFor(error: NasError): Step = Step.Stop(RunStop.NAS, problemFor(error))
+  /** Un errore del NAS ferma il giro; un file occupato (D-13, E-N13) fa aspettare solo l'elemento. */
+  private fun stopFor(error: NasError): Step = if (error == NasError.FileBusy) Step.Busy else Step.Stop(RunStop.NAS, problemFor(error))
 
   companion object {
     /** Scritture da 1 MiB (§2.2). */

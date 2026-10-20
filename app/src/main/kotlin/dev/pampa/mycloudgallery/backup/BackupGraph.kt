@@ -821,6 +821,19 @@ class BackupGraph(
 
   /** BK-5: l'avanzamento attraverso i lotti; letto dal file al primo calcolo, scritto quando cambia. */
   private val progress = RunProgress()
+
+  /**
+   * D-11: l'ultima tappa non ha trovato niente da fare, ne' per il suo tipo ne' per l'altro (dal piano e dal diario, non dai conteggi): conferma
+   * che la campagna e' finita anche senza un giro del motore in questo processo ([composeStatus]). Lo toglie il prossimo giro ([roundStarting]).
+   */
+  @Volatile
+  private var nothingToDo = false
+
+  /** D-11: vedi [nothingToDo]; lo stato si ricalcola. */
+  fun noteNothingToDo() {
+    nothingToDo = true
+    kick()
+  }
   private var progressLoaded = false
 
   /** Qualcosa che cambia lo stato e' successo: le schermate lo rileggono (accorpato, mai piu' di una volta ogni [REFRESH_GAP]). */
@@ -946,7 +959,11 @@ class BackupGraph(
     val engineStatus = parts?.engine?.status?.value
     // BK-5: l'avanzamento e' cumulativo (fatti + in coda), non quello del lotto da 60 secondi. D-11: con i byte veri che restano da caricare.
     if (engineStatus is BackupStatus.Running) return progress.reshape(engineStatus, queued, monotonicMs(), remainingBytes(sources))
-    if (progress.idle(queued)) GalleryLog.d(TAG) { "avanzamento: campagna chiusa (niente in coda)" }
+    // D-11: una coda vuota chiude la campagna solo se il backup e' d'accordo (l'ultimo giro del motore e' finito senza niente in attesa, o una tappa
+    // non ha trovato niente da fare per nessun tipo): uno zero di passaggio dei conteggi chiudeva la campagna e ne toglieva il file ("Video: 0 di 3"
+    // dopo una morte).
+    val confirmed = engineStatus is BackupStatus.UpToDate || nothingToDo
+    if (progress.idle(queued, confirmed)) GalleryLog.d(TAG) { "avanzamento: campagna chiusa (niente in coda)" }
     rememberedProblem(access)?.let { problem -> return BackupStatus.Problem(problem, 0) }
     if (engineStatus is BackupStatus.Stopped) return engineStatus
 
@@ -954,7 +971,13 @@ class BackupGraph(
       // D-9 (prove sul campo): "Da caricare" sono i byte dei media in coda sul catalogo. Prima venivano solo dal diario, che ha gli elementi di un
       // giro alla volta: "296 in coda · Da caricare: 0 B". Senza il catalogo, quello che sa il diario.
       val bytes = remainingBytes(sources) ?: runCatching { store.counts().bytesOpen }.getOrDefault(0L)
-      return waitingStatus(queued, bytes, waitReason(), stalled = isStalled(queued), storageLow = phoneStorageLow())
+      // D-13 (prove sul campo): il NAS tiene occupato un file del backup (adesso, nel giro che aspetta, o all'ultimo giro finito): lo stato lo dice,
+      // "riprovo tra poco", non "al prossimo giro" (sei ore) ne' "in corso" con i video fermi. Un'attesa delle regole (il Wi-Fi, la carica, il NAS
+      // che non risponde) vince: e' quella che fa aspettare adesso.
+      val busy = (engineStatus is BackupStatus.Waiting && engineStatus.reason == WaitReason.NAS_BUSY) || memory.anyBusy()
+      val rules = waitReason()
+      val wait = if (busy && rules == WaitReason.NEXT_RUN) WaitReason.NAS_BUSY else rules
+      return waitingStatus(queued, bytes, wait, stalled = isStalled(queued), storageLow = phoneStorageLow())
     }
     problems.entries.minByOrNull { it.key.ordinal }?.let { (code, count) -> return BackupStatus.Problem(code, count) }
     // P14 (5B, D17, E-E6): versioni ferme perche' il PC ha cambiato il file sul NAS. Non e' un problema di un media: lo dice la pagina, con la
@@ -1008,6 +1031,7 @@ class BackupGraph(
    * backup in mano, prima di far girare il motore; senza catalogo o senza sorgenti non fa niente.
    */
   suspend fun roundStarting() {
+    nothingToDo = false
     try {
       val catalog = backupCatalogOrNull() ?: return
       val sources = settings.sources.value

@@ -386,9 +386,17 @@ interface BackupStore {
 
   /**
    * D33: i temporanei citati dagli elementi non finiti. `:app` li passa (con quelli del diario delle operazioni) alla pulizia dei
-   * propri file di core-nasops (`CitedTemps`): finche' un elemento li cita, nessuno li toglie.
+   * propri file di core-nasops (`CitedTemps`): finche' un elemento li cita, nessuno li toglie. D-13: un elemento ripartito su un temporaneo
+   * nuovo (`NasBackupPaths.tempFor` con il tentativo) cita anche quelli dei tentativi di prima (`NasBackupPaths.earlierAttempts`), che il
+   * motore toglie prima che l'elemento finisca, quando il NAS non li tiene piu' occupati.
    */
   suspend fun citedTemps(): Set<SharePath>
+
+  /**
+   * D-13: l'ora del NAS (ms) dell'ultimo passo scritto per l'elemento [id] (`updated_at` del diario), o null se non si sa. Il motore la usa
+   * per sapere da quanto un elemento e' fermo su un file che il NAS tiene occupato. Di serie null (il tetto non scatta mai).
+   */
+  suspend fun lastStepAt(id: BackupItemId): Long? = null
 
   /** Quanti elementi per stato. */
   suspend fun counts(): BackupDiaryCounts

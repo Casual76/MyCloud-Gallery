@@ -394,4 +394,86 @@ class BackupWorkTest {
     assertThat(cancelled).isInstanceOf(kotlinx.coroutines.CancellationException::class.java)
     assertThat(order).isEmpty()
   }
+
+  // --- D-13 e D-12 (prove sul campo) ----------------------------------------------------------------------------------------------
+
+  /**
+   * D-13: un giro fermo su un file che il NAS tiene occupato (`BUSY`) non e' "niente da fare": i lavori si riprovano presto con l'attesa crescente
+   * di WorkManager (o di `JobScheduler` per il lavoro dell'utente), e la ripresa con il Wi-Fi pure. Prima finiva `DONE`/`None` e il backup aspettava
+   * sei ore. Le foto occupate non fermano i video: si fanno, e poi si riprova.
+   */
+  @Test
+  fun d13_unGiroFermoSuUnFileOccupatoSiRiprovaPresto() = runBlocking {
+    assertThat(BackupFollowUp.of(outcome(finished, RunStop.BUSY))).isEqualTo(BackupFollowUp.Busy)
+    val busyVideos = Script(mapOf(BackupKind.PHOTOS to mutableListOf(done()), BackupKind.VIDEOS to mutableListOf(outcome(finished, RunStop.BUSY))))
+    assertThat(BackupJobRun(busyVideos::stage, userInitiated = true).run()).isEqualTo(BackupJobEnd.RESCHEDULE)
+    val busyPhotos = Script(mapOf(BackupKind.PHOTOS to mutableListOf(outcome(finished, RunStop.BUSY)), BackupKind.VIDEOS to mutableListOf(done())))
+    assertThat(BackupJobRun(busyPhotos::stage, userInitiated = true).run()).isEqualTo(BackupJobEnd.RESCHEDULE)
+    assertThat(busyPhotos.asked).containsExactly(BackupKind.PHOTOS, BackupKind.VIDEOS).inOrder()
+    val resumed = Script(mapOf(BackupKind.PHOTOS to mutableListOf(outcome(finished, RunStop.BUSY)), BackupKind.VIDEOS to mutableListOf(done())))
+    assertThat(userResumeStage(resumed::stage)).isEqualTo(BackupFollowUp.Busy)
+    assertThat(resumed.asked).containsExactly(BackupKind.PHOTOS, BackupKind.VIDEOS).inOrder()
+    // Un'attesa delle regole sui video decide lei (la ripresa aspetta il Wi-Fi), anche dopo le foto occupate.
+    val thenWifi = Script(
+      mapOf(
+        BackupKind.PHOTOS to mutableListOf(outcome(finished, RunStop.BUSY)),
+        BackupKind.VIDEOS to mutableListOf(stoppedFor(WaitReason.NasUnreachable)),
+      ),
+    )
+    assertThat(userResumeStage(thenWifi::stage)).isEqualTo(BackupFollowUp.Wait(WaitReason.NasUnreachable))
+  }
+
+  /**
+   * D-12: la ripresa parte appena c'e' un Wi-Fi, prima del percorso verso il NAS e della sessione. Aspetta (con un tetto) il percorso, la risposta
+   * del NAS (la sonda ripetuta) e la sessione, e solo dopo la tappa: le regole non vedono piu' un NAS "non ancora pronto".
+   */
+  @Test
+  fun d12_laRipresaAspettaIlPercorsoIlNasELaSessionePrimaDellaTappa() = runBlocking {
+    val steps = ArrayList<String>()
+    var probes = 0
+    val ready = awaitNasReachable(
+      routeAllowed = {
+        kotlinx.coroutines.delay(200)
+        steps += "percorso"
+      },
+      reachable = {
+        probes++
+        steps += "sonda"
+        probes >= 3
+      },
+      openSession = { steps += "sessione" },
+      cap = 5.minutes,
+      retryEvery = kotlin.time.Duration.parse("10ms"),
+    )
+    assertThat(ready).isTrue()
+    assertThat(steps).containsExactly("percorso", "sonda", "sonda", "sonda", "sessione").inOrder()
+  }
+
+  /** D-12: un NAS davvero irraggiungibile non fa aspettare oltre il tetto: la tappa parte e le regole dicono "irraggiungibile". */
+  @Test
+  fun d12_unNasDavveroIrraggiungibileNonFaAspettareOltreIlTetto() = runBlocking {
+    var session = false
+    val ready = awaitNasReachable(
+      routeAllowed = {},
+      reachable = { false },
+      openSession = { session = true },
+      cap = kotlin.time.Duration.parse("300ms"),
+      retryEvery = kotlin.time.Duration.parse("20ms"),
+    )
+    assertThat(ready).isFalse()
+    assertThat(session).isFalse()
+    // Senza percorso (non e' casa) si aspetta solo il tetto, senza sonde.
+    var probed = false
+    val away = awaitNasReachable(
+      routeAllowed = { kotlinx.coroutines.awaitCancellation() },
+      reachable = {
+        probed = true
+        true
+      },
+      openSession = {},
+      cap = kotlin.time.Duration.parse("200ms"),
+    )
+    assertThat(away).isFalse()
+    assertThat(probed).isFalse()
+  }
 }

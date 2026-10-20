@@ -128,8 +128,13 @@ class BackupStages(private val graph: AppGraph, private val backup: BackupGraph)
       waitFor = if (userInitiated) BackupGraph.USER_EXCLUSIVE_WAIT else BackupGraph.EXCLUSIVE_WAIT,
       forUser = userInitiated,
     ) {
-      // Niente da fare (nessun media nuovo in una sorgente, niente a meta' nel diario): il backup e' al passo.
-      if (!backup.hasWork(kind, trigger)) return@exclusive idle()
+      // Niente da fare (nessun media nuovo in una sorgente, niente a meta' nel diario): il backup e' al passo. D-11: se non c'e' niente nemmeno
+      // per l'altro tipo, lo si dice all'avanzamento, che puo' chiudere la campagna anche senza un giro del motore in questo processo.
+      if (!backup.hasWork(kind, trigger)) {
+        val other = if (kind == BackupKind.PHOTOS) BackupKind.VIDEOS else BackupKind.PHOTOS
+        if (!backup.hasWork(other, BackupTrigger.SCHEDULED)) backup.noteNothingToDo()
+        return@exclusive idle()
+      }
       // BK-5: la coda di adesso sul catalogo e' il punto da cui l'avanzamento conta i media messi al sicuro da questo giro.
       backup.roundStarting()
       UploadStages.stage(staged(request, stageRules), parts.engine, kind, trigger, yieldTo = if (userInitiated) NEVER else backup::userIsWaiting)
@@ -208,11 +213,22 @@ class BackupStages(private val graph: AppGraph, private val backup: BackupGraph)
       when (last.stoppedBy) {
         RunStop.COMPLETE -> {
           memory.setProblem(null)
+          memory.setBusy(kind, null)
           backup.clock.nasNowMs()?.let { memory.markComplete(it) }
           beat(kind)
         }
         RunStop.BUDGET -> {
           memory.setProblem(null)
+          if (last.done + last.linked > 0) {
+            memory.setBusy(kind, null)
+            beat(kind)
+          }
+        }
+        // D-13: un file del backup e' ancora occupato sul NAS: non e' "finito" (nessun "ultimo giro completo") e la pagina lo dice; il lavoro si
+        // riprova presto ([BackupFollowUp.Retry]). Un giro che ha comunque messo al sicuro qualcosa batte.
+        RunStop.BUSY -> {
+          memory.setProblem(null)
+          memory.setBusy(kind, backup.clock.nasNowMs() ?: 1L)
           if (last.done + last.linked > 0) beat(kind)
         }
         RunStop.NAS, RunStop.PHONE -> {

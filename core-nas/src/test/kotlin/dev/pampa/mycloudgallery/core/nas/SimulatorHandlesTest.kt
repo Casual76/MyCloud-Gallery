@@ -125,4 +125,34 @@ class SimulatorHandlesTest {
     sim.delete(SHARE, "b.jpg")
     assertThat(sim.exists(SHARE, "b.jpg")).isFalse()
   }
+
+  /**
+   * D-13, come sul WD (misure del 20/10, `docs/nas-sessione.md`): il temporaneo in scrittura di una connessione morta **con la rete su** (il client
+   * chiude il socket) e' subito libero; quello di una connessione persa senza che il NAS lo sappia resta occupato per chi lo riapre in esclusiva,
+   * e il simulatore lo dice ([InMemorySmbBackend.pathsHeldByAbandoned]), finche' il NAS non se ne accorge. Aperto condividendo lettura, scrittura e
+   * cancellazione, una riapertura con le stesse condivisioni passa subito.
+   */
+  @Test
+  fun d13_unTemporaneoDiUnaConnessionePersaRestaOccupatoComeSulWd() {
+    val (dying, closeDying) = client()
+    dying.mkdir("tmp")
+    dying.createExclusive("tmp\\a")
+    closeDying()
+    val (fresh, _) = client()
+    fresh.openExistingForWrite("tmp\\a").close()
+
+    val (lost, _) = client()
+    lost.createExclusive("tmp\\b")
+    val shared = dev.pampa.mycloudgallery.core.nas.smb.SmbOpenMode.CREATE_EXCLUSIVE.copy(shareRead = true, shareWrite = true, shareDelete = true)
+    lost.createExclusive("tmp\\c", shared)
+    backend.abandonAllConnections()
+    val (next, _) = client()
+    assertThat(status { next.openExistingForWrite("tmp\\b") }).isEqualTo(NtStatus.SHARING_VIOLATION)
+    assertThat(backend.pathsHeldByAbandoned(SHARE)).containsExactly("tmp/b")
+    next.openExistingForWrite("tmp\\c", shared).close()
+    assertThat(status { next.openExistingForWrite("tmp\\c") }).isEqualTo(NtStatus.SHARING_VIOLATION)
+    backend.reapAbandoned()
+    next.openExistingForWrite("tmp\\b").close()
+    assertThat(backend.pathsHeldByAbandoned(SHARE)).isEmpty()
+  }
 }

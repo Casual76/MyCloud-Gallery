@@ -65,6 +65,9 @@ interface SmbConnection : Closeable {
    * UNA autenticazione NTLMv2: ogni chiamata e' un tentativo di login sul NAS (rischio di blocco, §3.3). Chi la
    * chiama deve essere passato dall'interruttore di sicurezza. [password] non viene conservata dall'adattatore
    * oltre la durata della chiamata (smbj ne tiene una copia che l'adattatore azzera subito dopo).
+   *
+   * Niente `PreviousSessionId` (D-13): il WD risponde `STATUS_INVALID_PARAMETER` a ogni `SESSION_SETUP` che lo porta (misure in
+   * `docs/decisioni.md`), quindi il login non puo' chiedere al NAS di chiudere la nostra sessione di prima rimasta viva da lui.
    */
   @Throws(IOException::class)
   fun authenticate(user: String, password: CharArray): SmbSession
@@ -205,9 +208,13 @@ interface SmbShare : Closeable {
    * Crea un file nuovo in esclusiva (`FILE_CREATE` = `O_CREAT|O_EXCL` in Samba): `0xC0000035` se il nome
    * esiste gia', anche con maiuscole diverse. L'handle ha il diritto `DELETE` (serve alla rinomina e alla
    * pulizia del proprio temporaneo).
+   *
+   * [shareMode] sono le condivisioni chieste: in produzione sempre [SmbOpenMode.CREATE_EXCLUSIVE] (nessuno apre il file finche' lo si
+   * scrive). Un altro valore lo passano solo le misure del banco d'integrazione (D-13: che cosa fa il NAS con un handle condiviso
+   * lasciato aperto da una connessione morta). Contano solo le condivisioni: i diritti chiesti restano quelli di sempre.
    */
   @Throws(IOException::class)
-  fun createExclusive(path: String): SmbWriteFile
+  fun createExclusive(path: String, shareMode: SmbOpenMode = SmbOpenMode.CREATE_EXCLUSIVE): SmbWriteFile
 
   /** Crea una cartella (`FILE_CREATE`): `0xC0000035` se esiste gia'. */
   @Throws(IOException::class)
@@ -258,9 +265,12 @@ interface SmbShare : Closeable {
    * aperto da un altro programma.
    *
    * Di default non c'e' (`NOT_SUPPORTED`): un trasporto che non la implementa non riprende niente (il backup ricomincia da zero).
+   *
+   * [shareMode]: come per [createExclusive], in produzione sempre [SmbOpenMode.CREATE_EXCLUSIVE]; un altro valore solo dalle misure del banco.
    */
   @Throws(IOException::class)
-  fun openExistingForWrite(path: String): SmbWriteFile = throw SmbStatusException(NtStatus.NOT_SUPPORTED)
+  fun openExistingForWrite(path: String, shareMode: SmbOpenMode = SmbOpenMode.CREATE_EXCLUSIVE): SmbWriteFile =
+    throw SmbStatusException(NtStatus.NOT_SUPPORTED)
 
   override fun close()
 }

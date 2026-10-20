@@ -91,7 +91,8 @@ class BackupChaosWorld(
   val share: String = nas.shares[0]
   val commonShare: String = nas.shares[1]
   val phone = FakePhoneBytes()
-  val store = InMemoryBackupStore()
+  /** Il diario ricorda l'ora del NAS dell'ultimo passo (D-13: da quanto un elemento e' fermo su un file occupato). */
+  val store = InMemoryBackupStore(nasNow = { clock.nasNow })
   val catalog = InMemoryBackupCatalog(share, commonShare)
   val gate = FakeBackupGate()
   var folder: DeviceFolder? = DeviceFolder(FOLDER_NAME)
@@ -244,6 +245,8 @@ class BackupChaosWorld(
       if (!NasBackupPaths.isBackupTempOf(path, deviceId)) continue
       if (now - entry.modifiedAt < DAY_MS) continue
       if (honorCitations && path.value.lowercase(Locale.ROOT) in cited) continue
+      // D-13: un file che il NAS tiene occupato non si toglie (la cancellazione risponderebbe "occupato"); lo si riprova al giro dopo.
+      if (NasFileFact.keyOf(share, path.value) in nas.heldByDeadConnections()) continue
       nas.remove(share, path.value)
       removed += path.value
     }

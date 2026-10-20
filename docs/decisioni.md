@@ -3280,3 +3280,116 @@ quello a un thread legge `NotConfigured` subito dopo `start()`, quello con i thr
 **Lasciato fuori (da decidere).** Lo stato salvato che non si riverifica (`markUntrusted`) resta «non configurato» e porta ancora alla pagina «fuori dalla famiglia» (con il testo
 «non c'e' piu' o non si verifica»): R7 parlava anche di questo, ma non e' un guasto passeggero e la correzione voluta riguardava il Keystore. `preflight` con il Keystore che non
 risponde lancia come prima (chiuso); non ha un `StopReason` suo.
+
+## Prove sul campo, riprova: D-13, D-12 e il resto di D-11 (21/10)
+Fonte: `docs/prove-campo-esiti.md`, "Riprova con `6c19a33`" (F30: dopo 100 interruzioni due video fermi con il temporaneo occupato sul NAS, il giro dei video
+"completo" in 30 secondi e il lavoro chiuso; la ripresa partita prima della sessione; il conteggio ripartito dal lotto).
+
+**Le misure sul WD** (`t17` della suite d'integrazione, area `mcg-it/<giro>/` della share `test`, PC cablato, una connessione fatta "morire" senza nessuna
+richiesta SMB; tabella completa in `docs/nas-sessione.md`, "D-13"). Il temporaneo e' aperto come lo apre il backup: `FILE_CREATE`, nessuna condivisione,
+nessun oplock, nessun lease, nessun handle durevole (smbj 0.15 non li chiede: non c'e' niente da togliere).
+
+| Modo | Che cosa vede una connessione nuova |
+|---|---|
+| Morte con la rete su, RST | libero dopo 0,25 s |
+| Morte con la rete su, FIN | libero dopo 0,02 s |
+| Rete andata senza che il NAS lo sappia (connessione muta) | **occupato per tutti i 330 s guardati**; il NAS non manda niente alla connessione e non la chiude |
+| Temporaneo aperto condividendo lettura, scrittura e cancellazione, connessione muta | riapertura condivisa subito; in esclusiva `FileBusy` |
+| Login con `PreviousSessionId` | **`STATUS_INVALID_PARAMETER` sempre** (sessione viva o gia' chiusa; il campo su tutte le richieste, solo sulla prima, solo sulle seguenti) |
+
+Quindi: una morte o una caduta con la rete su non lascia niente; con la rete **gia' giu'** il NAS tiene l'handle finche' non se ne accorge, cioe' fino al keepalive
+del TCP (ore) o finche' non ha qualcosa da mandare a un telefono tornato con lo stesso indirizzo. Sul campo: oltre 30 minuti.
+
+**Decisioni**
+1. **D-13 (a): un file occupato non chiude mai il giro.** `RunStop.BUSY` nuovo: un elemento rimasto ad aspettare un file occupato (riapertura, ripresa,
+   verifica, pubblicazione o cancellazione del proprio temporaneo: `Locked`/`FileBusy`; anche un file aperto dal PC, E-N13) fa finire il giro `BUSY`, mai
+   `COMPLETE`; anche a tempo del giro scaduto, se resta solo da aspettare file occupati (niente lotti a vuoto); una fermata delle **regole** resta `BUDGET` (chi
+   guida il lavoro le vede e aspetta come sempre, D-6). Un elemento il cui file torna libero nel giro (la riapertura riesce) non e' piu' "occupato". Stato:
+   `Waiting(NAS_BUSY)` ("Il NAS tiene ancora occupato un file: riprovo tra poco"), gia' durante le attese nel giro (prima la Libreria diceva "Backup in corso" con
+   i video fermi). Il seguito e' `BackupFollowUp.Busy`: WorkManager (attesa crescente, 1 minuto e poi il doppio) e `JobScheduler` per il lavoro dell'utente
+   (`RESCHEDULE`), con le regole di sempre; "Fai ora" rilancia subito. Le foto occupate non fermano i video (il lavoro dell'utente e la ripresa passano all'altro
+   tipo e si riprovano alla fine; i lavori di WorkManager chiedono i lavori dopo come a fine giro). `BackupRunMemory` ricorda il giro occupato **per tipo** (file
+   `backup-nas-busy-photos`/`-videos`, tolti da un giro di quel tipo che va avanti o finisce; l'azzeramento li toglie): la pagina lo dice anche dopo la morte del
+   processo, ma un'attesa delle regole (Wi-Fi, carica, NAS che non risponde) vince. L'esecutore di riferimento fa lo stesso (`Step.Busy`).
+2. **D-13 (b): il modo di apertura non cambia.** `PreviousSessionId` (il modo previsto da SMB per far chiudere al NAS la nostra sessione di prima) il WD lo
+   rifiuta. Le condivisioni (lettura, scrittura, cancellazione) farebbero riaprire subito, ma toglierebbero l'esclusiva del temporaneo: una connessione morta
+   che il NAS tiene ancora (o il kernel del telefono che consegna tardi una scrittura rimasta nel socket) potrebbe scrivere nel temporaneo **dopo** la verifica
+   completa, anche nel file gia' pubblicato (la rinomina tiene l'handle), e il controllo dell'hash non se ne accorgerebbe piu'. Resta `CREATE_EXCLUSIVE`; il
+   parametro `shareMode` di `SmbShare.createExclusive`/`openExistingForWrite` serve solo alle misure del banco. Da rivalutare se un firmware accettasse
+   `PreviousSessionId` (`t17` lo misura di nuovo).
+3. **D-13 (c): oltre il tetto, un temporaneo nuovo.** Se il proprio temporaneo di un elemento **in caricamento** (`UPLOADING`) e' occupato e l'elemento e' fermo
+   da **10 minuti** (ora del NAS dall'ultimo passo del diario: `BackupStore.lastStepAt`, la colonna `updated_at` che c'era gia', 0 = "non si sa"; il motore scrive
+   un passo appena il temporaneo e' riaperto, cosi' l'eta' e' quella dell'handle rimasto) il motore riparte da capo sul tentativo dopo
+   (`NasBackupPaths.nextAttempt`: `<io>-bk-<id>-<n>`), scritto nel diario **prima** di crearlo (D3). Dieci minuti: piu' o meno quanto costa ricaricare un video
+   da 3 GB sul Wi-Fi di casa, contro un'attesa che sul WD dura ore. Al piu' 3 tentativi nuovi per elemento. Mai da un temporaneo **completo** (`UPLOADED`,
+   `VERIFIED`, `PUBLISHING`): da li' non si scarta piu' niente (L38; ricominciare rileggerebbe il telefono, e un media cambiato nel frattempo perderebbe la
+   versione gia' caricata), si aspetta che il NAS lo lasci (`BUSY`); con il backup l'handle che resta e' quasi sempre quello in scrittura, cioe' in caricamento.
+   Il vecchio **non si tocca**: il diario lo cita finche' l'elemento e' aperto (`citedTemps` deriva i tentativi di prima da quello attuale; nessuna colonna nuova)
+   e il motore lo toglie con `deleteOwnTemp` prima che l'elemento finisca. Se e' ancora occupato l'elemento aspetta il **prossimo giro**, senza dire "occupato":
+   il temporaneo vecchio non serve piu' a niente (il media e' gia' al sicuro, l'elemento resta `LINKED`), il WD lo tiene per ore, e un giro `BUSY` farebbe dire
+   alla pagina "riprovo tra poco" e riprovare i lavori per niente. Il giro finisce quindi `COMPLETE` con un elemento in attesa. Il diario accetta un temporaneo
+   diverso solo se e' un tentativo dopo dello stesso elemento (Room e il finto). Mai altro che un nostro temporaneo del backup (D2, E-B21).
+4. **D-13, la ripresa resta una ripresa.** Se il NAS lascia il temporaneo prima del tetto si riprende dal punto di ripresa (al piu' 64 MiB ricaricati, un solo
+   accorciamento, la verifica completa dopo): nessun doppione, nessun file a meta' visibile.
+5. **D-12: la ripresa aspetta il NAS.** `UserResumeWorker` prima della tappa aspetta, al piu' **30 s**, il percorso verso il NAS (casa riconosciuta), la risposta
+   del NAS (la sonda TCP alla 445, ripetuta ogni 2 s) e la sessione (`ensureFreshClock`, come D-2: un tentativo, l'interruttore vale). Poi la tappa: solo un NAS
+   davvero irraggiungibile fa aspettare il quarto d'ora.
+6. **D-11, il resto.** La campagna dell'avanzamento (`RunProgress`) si chiudeva con qualunque coda vuota vista da un ricalcolo dello stato, anche di passaggio, e
+   con lei spariva il suo file: dopo una morte o un "Fai ora" la pagina ripartiva dal lotto ("Video: 0 di 3"). La causa esatta sul telefono non e' stata vista (lo
+   zero di passaggio piu' probabile: i conteggi del catalogo non ancora pronti in un processo appena nato, o un segno di problema su un media poi tolto); la
+   correzione vale per tutte: una coda vuota chiude la campagna solo se lo dice anche il backup: l'ultimo giro del motore e' finito senza niente in attesa
+   (`UpToDate`), o una tappa non ha trovato niente da fare ne' per il suo tipo ne' per l'altro (`BackupGraph.noteNothingToDo`, dal piano e dal diario: in un
+   processo nuovo senza lavoro il motore non gira). "Backup in corso" con i video fermi: vedi 1.
+
+**Il banco.** `area.ps1 -Mode backup -Stage jvm` sa simulare l'occupato dopo la morte come sul WD: una morte su tre "con la rete gia' giu'" lascia occupati i
+temporanei aperti (`InMemoryNasMedia.abandonOpenBackupWriters`; nel simulatore SMB `abandonAllConnections`), il NAS se ne accorge con due giorni che passano, con
+un evento suo o alla fine (`reapDeadConnections`), un evento "passano venti minuti" fa scattare il tetto. Invariante nuovo, il 16: un giro che il NAS ha fermato sul
+temporaneo occupato di un elemento aperto che ne ha bisogno (in caricamento, caricato, verificato, in pubblicazione) non finisce `COMPLETE`; il tentativo di prima
+di un elemento ripartito non conta (vedi 3). L'osservatore del banco legge i file occupati dal NAS stesso (`peekHeld`: sul campo la
+verifica dal PC diceva `FileBusy`) e la pulizia dei propri file non toglie un file occupato.
+
+**Lasciato fuori (da decidere).** Le condivisioni sul temporaneo (punto 2): piu' veloci dopo una caduta, meno esclusive; scelta conservativa. Il tetto di 10
+minuti e il limite di 3 tentativi sono stime, da tarare con F30 sul telefono. Il giro `COMPLETE` con un elemento che aspetta solo di togliere il temporaneo di
+prima (punto 3): la lettera di (a) chiederebbe `BUSY`, ma il media e' al sicuro e `BUSY` per ore sarebbe una pagina allarmata e lavori riprovati per niente.
+
+**La revisione.** Un agente di revisione ha riletto le modifiche prima del commit; ne vengono le correzioni gia' scritte sopra: niente da capo da un temporaneo
+completo (L38), il tentativo di prima occupato non tiene il giro `BUSY` per ore, `BUDGET` delle regole che resta `BUDGET`, l'occupato che si toglie quando la
+riapertura riesce, le foto occupate che non fermano i video, la memoria dell'occupato per tipo e dietro le attese delle regole, `updated_at` = 0 come "non si
+sa", i tentativi di prima tolti prima del proprio temporaneo nella collisione, la campagna che si chiude anche senza un giro del motore.
+
+**Test.** Uno per comportamento, rosso senza la correzione (provato togliendo la correzione nel codice, dove il test non nasce con l'API nuova):
+- `ProveCampoD13EngineTest` (`core-backup`, motore vero sul NAS finto che tiene occupato il temporaneo come una connessione morta): il giro finisce `BUSY` e non
+  `COMPLETE`; durante l'attesa lo stato dice `NAS_BUSY` e non "in corso"; se il NAS lascia il temporaneo prima del tetto la ripresa resta una ripresa (stesso
+  temporaneo, un solo accorciamento, un solo file pubblicato e verificato); oltre il tetto si riparte sul tentativo dopo, il vecchio resta intatto e citato,
+  l'elemento aspetta `LINKED` con il giro `COMPLETE` e il motore lo toglie quando il NAS lo lascia; sotto il tetto nessun temporaneo nuovo; un temporaneo completo
+  (in pubblicazione) non riparte mai da capo; una fermata delle regole resta `BUDGET`.
+- `RoomBackupStoreTest.d13_...`: il diario accetta come temporaneo nuovo solo il tentativo dopo e cita i vecchi; senza l'ora del NAS l'ultimo passo "non si sa".
+- `core-nas`: `SimulatorHandlesTest.d13_...` (il simulatore SMB tiene occupato come il WD), `NasBackupOpsContractTest.d13_...` (i nomi dei tentativi),
+  `NasIntegrationSuiteTest.t17` (le misure, solo con `-PnasIntegration`; `ZombieRelay` fa da ponte TCP fra la prova e il NAS per far morire la connessione).
+- `app`: `BackupWorkTest.d13_...` (un giro `BUSY` si riprova, `Busy`/`RESCHEDULE`, e le foto occupate non fermano i video), `d12_...` (la ripresa aspetta
+  percorso, sonda e sessione, e al piu' il tetto se il NAS non c'e'), `RunProgressTest.d11_...` (una coda vuota non confermata non chiude la campagna),
+  `BackupPauseTest.d13_...` (l'occupato ricordato per tipo, regge alla morte), `BackupPiecesTest` e `BackupFooterTest` (la capsula dice "occupato").
+- Il banco (vedi sopra), invariante 16.
+
+**Esiti.** Il banco del backup (`BackupChaosBenchTest`, lo stesso di `area.ps1 -Mode backup -Stage jvm`, con `--max-workers=2`): 2.000 giri sul NAS finto per
+l'esecutore di riferimento e per il motore vero, 600 sul simulatore SMB per ciascuno, **0 giri con violazioni** su tutti e quattro; sul motore vero 554 morti
+"con la rete gia' giu'" (172 sul simulatore SMB), 212 "venti minuti" e 6 elementi ripartiti su un temporaneo nuovo (3 sul simulatore). I test del motore sono
+rossi togliendo una per volta le correzioni (`finish` che ignora l'occupato, il temporaneo nuovo spento o permesso da un temporaneo completo, il `BUDGET`
+delle regole, l'attesa "occupata" del tentativo di prima). `tools\check.ps1 -NoDaemon` **verde**, in una copia isolata (`git worktree` con solo queste
+modifiche, `org.gradle.workers.max=2`, Kotlin nel processo di Gradle): nell'albero principale il `classes.jar` di core-backup era tenuto aperto dal daemon
+Gradle dopo il lint di `:app` (non fermato). Test per modulo: core-backup 591, core-nas 279, app 557, feature-library 530, feature-backup 566,
+feature-viewer 485, core-database 164, core-library 162, nessuno fallito.
+
+**Da provare sul telefono** (F30 ripresa, con l'APK di debug nuovo installato sopra, `adb install -r`, i dati restano):
+1. *I due temporanei bloccati di F30.* Se il NAS li tiene ancora, al primo lavoro la riapertura risponde "occupato" e, siccome l'ultimo passo del diario e'
+   di ore prima, il motore riparte subito sul tentativo 1 (log `BackupUpload`: "temporaneo occupato sul NAS da N min: si riparte da capo su un temporaneo
+   nuovo (tentativo 1)"): i due video si ricaricano da capo e finiscono al sicuro; i vecchi temporanei restano finche' il NAS non li lascia e li toglie un giro
+   dopo. Se il NAS li ha gia' lasciati, i video riprendono dal punto di ripresa. In nessun caso "stop=complete" con i video fermi.
+2. *F30 di nuovo* (interruzioni con il Wi-Fi che cade durante il caricamento dei video): mentre il NAS tiene un temporaneo la pagina dice "Il NAS tiene ancora
+   occupato un file: riprovo tra poco" (la Libreria "File occupato sul NAS, riprovo tra poco"), il log dice `stop=busy` e il lavoro si riprova in pochi minuti;
+   dopo 10 minuti fermo l'elemento riparte su un temporaneo nuovo. Alla fine, dal PC "a lavoro finito": tutto al sicuro, nessun doppione, nessun file a meta'
+   visibile, `.mycloudgallery/tmp/` vuota quando il NAS ha lasciato i vecchi temporanei.
+3. *D-12.* Un lavoro dell'utente che aspetta il Wi-Fi: spento il Wi-Fi per qualche minuto e riacceso, la ripresa parte entro mezzo minuto dalla sessione,
+   senza il quarto d'ora (nel log di `UserResumeWorker` nessun "NAS non pronto entro 30 s").
+4. *D-11.* Durante una campagna lunga (molti media in coda) il processo ucciso (`adb shell am kill`) o un "Fai ora": il conteggio riprende da dove era
+   ("213 di 216"), non dal lotto ("0 di 3").

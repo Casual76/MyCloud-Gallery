@@ -103,6 +103,8 @@ class BackupJobRun(
     ready()
     val started = time.markNow()
     var waited = Duration.ZERO
+    // D-13: un tipo fermo su un file occupato sul NAS non ferma l'altro; alla fine il lavoro si fa riprogrammare (si riprova presto).
+    var busy = false
     for (kind in KINDS) {
       var slices = if (userInitiated) maxSlices else 1
       var more = true
@@ -130,13 +132,17 @@ class BackupJobRun(
         when (BackupFollowUp.of(outcome)) {
           BackupFollowUp.Continue -> Unit
           BackupFollowUp.Retry -> return BackupJobEnd.RESCHEDULE
+          BackupFollowUp.Busy -> {
+            busy = true
+            more = false
+          }
           // Le altre attese delle regole (caldo, congelamento) o la conferma del tetto dei dati: lo dice la pagina, non un lavoro che ritenta.
           is BackupFollowUp.Wait -> return BackupJobEnd.DONE
           BackupFollowUp.None -> more = false
         }
       }
     }
-    return BackupJobEnd.DONE
+    return if (busy) BackupJobEnd.RESCHEDULE else BackupJobEnd.DONE
   }
 
   companion object {

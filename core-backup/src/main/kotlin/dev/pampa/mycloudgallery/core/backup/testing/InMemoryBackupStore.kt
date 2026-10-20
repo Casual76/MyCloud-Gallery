@@ -9,6 +9,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.UploadKind
 import dev.pampa.mycloudgallery.core.backup.contract.UploadState
 import dev.pampa.mycloudgallery.core.backup.contract.UploadStateMachine
 import dev.pampa.mycloudgallery.core.model.VersionId
+import dev.pampa.mycloudgallery.core.nas.ops.backup.NasBackupPaths
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 
 /**
@@ -16,8 +17,11 @@ import dev.pampa.mycloudgallery.core.trust.nas.SharePath
  * da [UploadStateMachine], un elemento sconosciuto, un cambio d'identita' (tipo, media, versione, share, destinazione prevista) e i tipi
  * della 5B; e' idempotente per versione e tipo (nessun secondo elemento aperto). Sopravvive alla "morte del processo": e' il disco.
  * Tiene il registro delle transizioni ([transitions]) per il controllo del diario del banco (§5.4, invariante 8).
+ *
+ * D-13: come la colonna `updated_at` di Room, ricorda l'ora del NAS di [nasNow] all'ultimo passo di ogni elemento ([lastStepAt]); il temporaneo
+ * cambia solo per passare a un tentativo dopo dello stesso elemento, e i tentativi di prima restano citati ([citedTemps]).
  */
-class InMemoryBackupStore : BackupStore {
+class InMemoryBackupStore(private val nasNow: () -> Long? = { null }) : BackupStore {
 
   /** Una transizione scritta: (elemento, da, a). */
   data class Transition(val item: BackupItemId, val from: UploadState, val to: UploadState)
@@ -26,6 +30,7 @@ class InMemoryBackupStore : BackupStore {
   private val items = LinkedHashMap<Long, BackupItem>()
   private var nextId = 1L
   private val log = ArrayList<Transition>()
+  private val stepAt = HashMap<Long, Long>()
 
   /** Tutte le transizioni scritte, in ordine (anche le riscritture dello stesso stato). */
   val transitions: List<Transition> get() = synchronized(lock) { log.toList() }
@@ -53,6 +58,7 @@ class InMemoryBackupStore : BackupStore {
           guardSource = new.guardSource,
         )
         this.items[item.id.value] = item
+        nasNow()?.let { stepAt[item.id.value] = it }
         log += Transition(item.id, UploadState.PLANNED, UploadState.PLANNED)
         item
       }
@@ -78,6 +84,7 @@ class InMemoryBackupStore : BackupStore {
         quickHash = item.quickHash,
       )
       items[created.id.value] = created
+      nasNow()?.let { stepAt[created.id.value] = it }
       log += Transition(created.id, UploadState.PLANNED, UploadState.PLANNED)
       created
     }
@@ -99,7 +106,13 @@ class InMemoryBackupStore : BackupStore {
       check(UploadStateMachine.canTransition(before.flow, before.state, item.state)) {
         "Transizione non ammessa: ${before.state.code} -> ${item.state.code} (${before.flow.code})."
       }
+      // D-13: come Room, il temporaneo cambia solo per il tentativo dopo dello stesso elemento.
+      val oldTemp = before.temp
+      require(oldTemp == null || oldTemp == item.temp || (item.temp != null && oldTemp in NasBackupPaths.earlierAttempts(item.temp))) {
+        "Il temporaneo di un elemento non cambia una volta scritto."
+      }
       items[item.id.value] = item
+      nasNow()?.let { stepAt[item.id.value] = it }
       log += Transition(item.id, before.state, item.state)
     }
   }
@@ -114,8 +127,10 @@ class InMemoryBackupStore : BackupStore {
     share.equals(other.share, ignoreCase = true) && planned.components.dropLast(1).map { it.lowercase() } == other.planned.components.dropLast(1).map { it.lowercase() }
 
   override suspend fun citedTemps(): Set<SharePath> = synchronized(lock) {
-    items.values.filter { !it.state.terminal }.mapNotNullTo(LinkedHashSet()) { it.temp }
+    items.values.filter { !it.state.terminal }.mapNotNull { it.temp }.flatMapTo(LinkedHashSet()) { listOf(it) + NasBackupPaths.earlierAttempts(it) }
   }
+
+  override suspend fun lastStepAt(id: BackupItemId): Long? = synchronized(lock) { stepAt[id.value] }
 
   override suspend fun counts(): BackupDiaryCounts = synchronized(lock) {
     BackupDiaryCounts(

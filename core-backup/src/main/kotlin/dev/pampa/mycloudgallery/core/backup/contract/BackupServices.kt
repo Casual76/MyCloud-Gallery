@@ -29,6 +29,13 @@ enum class RunStop(override val code: String) : StableCode {
 
   /** Permessi del telefono (E-P15, E-P21): il giro si ferma. */
   PHONE("phone"),
+
+  /**
+   * D-13 (prove sul campo): un file sul NAS e' ancora occupato (il proprio temporaneo tenuto da una connessione morta, un file aperto dal PC,
+   * E-N13) e l'elemento non e' andato avanti in questo giro. **Non e' "finito"**: niente e' stato tralasciato, si riprova presto con un'attesa
+   * crescente (WorkManager, `JobScheduler`), nel rispetto delle regole. Lo stato dice "Il NAS tiene ancora occupato un file: riprovo tra poco".
+   */
+  BUSY("busy"),
 }
 
 /**

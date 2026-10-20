@@ -15,6 +15,7 @@ import dev.pampa.mycloudgallery.core.nas.smb.SmbConnection
 import dev.pampa.mycloudgallery.core.nas.smb.SmbCopyChunk
 import dev.pampa.mycloudgallery.core.nas.smb.SmbDirectory
 import dev.pampa.mycloudgallery.core.nas.smb.SmbFileInfo
+import dev.pampa.mycloudgallery.core.nas.smb.SmbOpenMode
 import dev.pampa.mycloudgallery.core.nas.smb.SmbReadFile
 import dev.pampa.mycloudgallery.core.nas.smb.SmbSession
 import dev.pampa.mycloudgallery.core.nas.smb.SmbShare
@@ -236,9 +237,9 @@ internal class TestAreaTransport(private val delegate: SmbTransport, private val
       return call { inner.openRead(path) }
     }
 
-    override fun createExclusive(path: String): SmbWriteFile {
+    override fun createExclusive(path: String, shareMode: SmbOpenMode): SmbWriteFile {
       check(path, SmbAccess.CREATE)
-      return WriteFile(call { inner.createExclusive(path) })
+      return WriteFile(call { inner.createExclusive(path, shareMode) })
     }
 
     override fun mkdir(path: String) {
@@ -277,9 +278,9 @@ internal class TestAreaTransport(private val delegate: SmbTransport, private val
     }
 
     // Fase 5A (D5): la riapertura del proprio temporaneo del backup scrive come una creazione: stessa guardia di CREATE.
-    override fun openExistingForWrite(path: String): SmbWriteFile {
+    override fun openExistingForWrite(path: String, shareMode: SmbOpenMode): SmbWriteFile {
       check(path, SmbAccess.CREATE)
-      return WriteFile(call { inner.openExistingForWrite(path) })
+      return WriteFile(call { inner.openExistingForWrite(path, shareMode) })
     }
 
     override fun close() = inner.close()

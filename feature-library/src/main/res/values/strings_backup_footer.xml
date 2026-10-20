@@ -23,6 +23,8 @@
   <string name="backup_footer_wait_battery">Attesa batteria</string>
   <string name="backup_footer_wait_nas">Attesa NAS</string>
   <string name="backup_footer_wait_next_run">Al prossimo giro</string>
+  <!-- D-13: il NAS tiene ancora occupato un file del backup (una connessione caduta che il NAS non ha ancora chiuso): si riprova da soli. -->
+  <string name="backup_footer_wait_nas_busy">File occupato sul NAS, riprovo tra poco</string>
   <string name="backup_footer_wait_other">Attesa delle regole</string>
 
   <string name="backup_footer_first">Primo backup: %1$s di %2$s</string>

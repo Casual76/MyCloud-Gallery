@@ -46,7 +46,8 @@ class BackupTestKit(
   }
   val ops: NasBackupOps = nas.backupOps(deviceId)
   val phone = FakePhoneBytes()
-  val store = InMemoryBackupStore()
+  /** Il diario ricorda l'ora del NAS dell'ultimo passo (D-13). */
+  val store = InMemoryBackupStore(nasNow = { clock.nasNow })
   val catalog = InMemoryBackupCatalog(share, commonShare)
   val gate = FakeBackupGate()
   var sources: BackupSources = BackupSources.DEFAULT

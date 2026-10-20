@@ -38,6 +38,7 @@ import dev.pampa.mycloudgallery.core.nas.ops.RmdirOutcome
 import dev.pampa.mycloudgallery.core.nas.ops.SmbNasFileOps
 import dev.pampa.mycloudgallery.core.nas.ops.TempFinish
 import dev.pampa.mycloudgallery.core.nas.ops.backup.BackupTempWriter
+import dev.pampa.mycloudgallery.core.nas.ops.backup.NasBackupOps
 import dev.pampa.mycloudgallery.core.nas.ops.backup.NasBackupOpsFactory
 import dev.pampa.mycloudgallery.core.nas.ops.backup.NasBackupPaths
 import dev.pampa.mycloudgallery.core.nas.ops.backup.ReopenOutcome
@@ -47,6 +48,7 @@ import dev.pampa.mycloudgallery.core.nas.session.MonotonicClock
 import dev.pampa.mycloudgallery.core.nas.session.NasSessionConfig
 import dev.pampa.mycloudgallery.core.nas.session.OpContext
 import dev.pampa.mycloudgallery.core.nas.session.SmbNasSessionManager
+import dev.pampa.mycloudgallery.core.nas.smb.SmbOpenMode
 import dev.pampa.mycloudgallery.core.nas.smb.SmbStatusException
 import dev.pampa.mycloudgallery.core.nas.smb.SmbjTransport
 import dev.pampa.mycloudgallery.core.nas.testing.InMemoryBreakerStore
@@ -687,6 +689,148 @@ class NasIntegrationSuiteTest {
     }
   }
 
+  /**
+   * **D-13** (prove sul campo: dopo 100 interruzioni due video restavano "in caricamento" con il temporaneo occupato sul NAS): che cosa fa il WD
+   * con l'handle di un temporaneo del backup lasciato aperto da una connessione **morta senza chiudere** (nessuna `CLOSE`, nessun `LOGOFF`), e
+   * quanto a lungo una connessione nuova lo trova occupato. Il temporaneo e' aperto come lo apre il motore (`NasBackupOps.openTemp`: `FILE_CREATE`,
+   * lettura/scrittura/cancellazione, **nessuna condivisione**, nessun oplock, nessun handle durevole ne' lease: smbj 0.15 non li chiede); la
+   * connessione nuova lo riprende come il motore (`reopenTemp`, con i controlli di R3). Ogni connessione morta passa dal ripetitore
+   * ([ZombieRelay]) e nessuna richiesta SMB parte quando "muore":
+   *  - (a1) il processo muore con la rete su, il kernel manda **RST**; (a2) lo stesso con **FIN**;
+   *  - (b) la rete se ne va senza che il NAS lo sappia (**connessione muta**): per [MUTE_WATCH_S] secondi si riprova la ripresa e si contano i
+   *    byte che il NAS manda alla connessione muta (un suo controllo della connessione);
+   *  - (c) un temporaneo aperto **condividendo lettura, scrittura e cancellazione**, lasciato da una connessione muta: la riapertura in scrittura
+   *    con le stesse condivisioni e quella in esclusiva.
+   * Alla fine ogni connessione morta riceve RST (il NAS chiude i suoi handle) e la pulizia della suite toglie tutto il giro. Circa 7 minuti.
+   *
+   * Misurato il 20/10 (anche un login con `PreviousSessionId`, che il WD rifiuta sempre con `STATUS_INVALID_PARAMETER`, su ogni richiesta
+   * `SESSION_SETUP` e anche per una sessione gia' chiusa: tolto, vedi `docs/decisioni.md`, D-13).
+   *
+   * Da solo: `gradlew :core-nas:testDebugUnitTest -PnasIntegration -PmcgTestTimeoutMinutes=45 --tests "*NasIntegrationSuiteTest.t17*"`.
+   */
+  @Test
+  fun t17_handleDiUnaConnessioneMortaSulNasVero() = runBlockingBounded("t17_handleDiUnaConnessioneMortaSulNasVero", ZOMBIE_WAIT_SECONDS) {
+    val purpose = Purpose.BACKGROUND
+    val data = ByteArray(8 * MIB).also(SecureRandom()::nextBytes)
+    val main = NasBackupOpsFactory.createForTestArea(manager, OPS_DEVICE, area)
+    val lines = ArrayList<String>()
+    val relays = ArrayList<ZombieRelay>()
+    val zombies = ArrayList<SmbNasSessionManager>()
+
+    /** Una sessione nuova (un login) che passa dal ripetitore. */
+    suspend fun zombie(): Pair<SmbNasSessionManager, RelayBinding> {
+      val binding = RelayBinding(TimedDirectBinding("pc-ripetitore"))
+      val zombieGate = FakeNasRouteGate().apply { allow(Via.HOME_LAN, binding) }
+      // Nessuna chiusura per inattivita' durante la prova: la sessione "morta" non deve mandare un LOGOFF da sola.
+      val made = newManager(NasSessionConfig(idleTimeout = 60.minutes), routeGate = zombieGate)
+      zombies += made
+      val first = made.withShare(share, Purpose.INTERACTIVE) { }
+      if (first is NasResult.Err) throw AssertionError("sessione della prova non partita: ${first.error} (nessun altro tentativo)")
+      relays += binding.last
+      return made to binding
+    }
+
+    /** Un temporaneo del backup aperto da [ops] come fa il motore, con 8 MiB e il punto di ripresa; lo scrittore resta aperto. */
+    suspend fun openAndWrite(ops: NasBackupOps, id: Long): Pair<SharePath, TempPoint> {
+      val temp = NasBackupPaths.tempFor(OPS_DEVICE, id)
+      val writer = ops.openTemp(share, temp, purpose).okOrNull() ?: throw AssertionError("temporaneo $id non creato")
+      writeRange(writer, data, 0, data.size.toLong())
+      return temp to writer.checkpoint().okOrNull()!!
+    }
+
+    /** Riprende [temp] da [via] finche' non si riapre o finche' passa [withinMs]: i ms che sono serviti (null = sempre occupato) e l'ultimo esito. */
+    suspend fun reopenWithin(via: NasBackupOps, temp: SharePath, point: TempPoint, withinMs: Long, everyMs: Long): Pair<Long?, String> {
+      val started = System.nanoTime()
+      var last: String
+      while (true) {
+        val outcome = via.reopenTemp(share, temp, point.length, checkNotNull(point.fileId) { "il WD non dice l'identita'" }, purpose)
+        val value = outcome.okOrNull()
+        last = value?.toString() ?: (outcome.errorOrNull()?.toString() ?: "?")
+        if (value is ReopenOutcome.Reopened) {
+          value.writer.close()
+          return ((System.nanoTime() - started) / 1_000_000) to last
+        }
+        if (value != ReopenOutcome.Locked) return null to last
+        if ((System.nanoTime() - started) / 1_000_000 >= withinMs) return null to last
+        kotlinx.coroutines.delay(everyMs)
+      }
+    }
+
+    val out = NasIntegrationConfig.reportFile("d13-handle.txt").also { it.appendText("--- giro ${RUN_ID.take(15)}\n") }
+
+    /** Ogni misura si scrive subito: se una prova dopo fallisce, quelle prima restano. */
+    fun note(line: String) {
+      lines += line
+      out.appendText(line + "\n")
+    }
+
+    try {
+      // (a1) Morte con la rete su: RST.
+      val (z1, b1) = zombie()
+      val (t1, p1) = openAndWrite(NasBackupOpsFactory.createForTestArea(z1, OPS_DEVICE, area), 1701)
+      b1.last.cutRst()
+      val (rst, rstLast) = reopenWithin(main, t1, p1, withinMs = 60_000, everyMs = 200)
+      note("(a1) morte con RST: ripresa da una connessione nuova dopo ${rst ?: "oltre 60000"} ms ($rstLast)")
+
+      // (a2) Morte con la rete su: FIN.
+      val (z2, b2) = zombie()
+      val (t2, p2) = openAndWrite(NasBackupOpsFactory.createForTestArea(z2, OPS_DEVICE, area), 1702)
+      b2.last.cutFin()
+      val (fin, finLast) = reopenWithin(main, t2, p2, withinMs = 60_000, everyMs = 200)
+      note("(a2) morte con FIN: ripresa da una connessione nuova dopo ${fin ?: "oltre 60000"} ms ($finLast)")
+
+      // (b) Connessione muta (la rete se ne va senza che il NAS lo sappia).
+      val (z3, b3) = zombie()
+      val (t3, p3) = openAndWrite(NasBackupOpsFactory.createForTestArea(z3, OPS_DEVICE, area), 1703)
+      val relay3 = b3.last
+      relay3.freeze()
+      val frozenAt = System.currentTimeMillis()
+      val (mute, muteLast) = reopenWithin(main, t3, p3, withinMs = MUTE_WATCH_S * 1000L, everyMs = 15_000)
+      val muteText = if (mute == null) "sempre occupata per $MUTE_WATCH_S s" else "riuscita dopo $mute ms"
+      val closedText = relay3.nasClosedAt.get().takeIf { it > 0 }?.let { "dopo ${(it - frozenAt) / 1000} s" } ?: "no"
+      note(
+        "(b) connessione muta: ripresa $muteText ($muteLast); byte mandati dal NAS alla connessione muta: " +
+          "${relay3.bytesFromNasAfterFreeze.get()}; il NAS l'ha chiusa: $closedText",
+      )
+
+      // (c) Temporaneo condiviso (lettura, scrittura, cancellazione) lasciato da una connessione muta.
+      val (shared, b5) = zombie()
+      val t5 = full(NasBackupPaths.tempFor(OPS_DEVICE, 1705))
+      val sharedMode = SmbOpenMode.CREATE_EXCLUSIVE.copy(shareRead = true, shareWrite = true, shareDelete = true)
+      opOn(shared, share) { ctx ->
+        FsOps.mkdirs(ctx, checkNotNull(t5.parent()))
+        // L'handle resta aperto: e' quello che la connessione muta tiene sul NAS.
+        ctx.share.createExclusive(t5.smb(), sharedMode).write(data, 0, 0, MIB)
+      }
+      b5.last.freeze()
+      val sharedOutcome = attemptOpen { opOn(manager, share) { ctx -> ctx.share.openExistingForWrite(t5.smb(), sharedMode).close() } }
+      val exclusiveOutcome = attemptOpen { opOn(manager, share) { ctx -> ctx.share.openExistingForWrite(t5.smb()).close() } }
+      note("(c) temporaneo condiviso lasciato da una connessione muta: riapertura condivisa = $sharedOutcome; in esclusiva = $exclusiveOutcome")
+
+      report += "D-13 handle di una connessione morta sul WD: " + lines.joinToString("; ")
+      assertWithMessage(lines.joinToString("\n")).that(rst).isNotNull()
+    } finally {
+      // Ogni connessione morta si chiude con RST: il NAS chiude i suoi handle e la pulizia della suite puo' togliere tutto.
+      relays.forEach { it.close() }
+      zombies.forEach { runCatching { it.invalidate(InvalidateReason.USER_REQUEST) } }
+      kotlinx.coroutines.delay(3_000)
+    }
+  }
+
+  /** Una riapertura grezza: "riaperto" o l'errore. */
+  private suspend fun attemptOpen(block: suspend () -> Unit): String = try {
+    block()
+    "riaperto"
+  } catch (e: AssertionError) {
+    e.message ?: "errore"
+  }
+
+  private suspend fun <T> opOn(on: SmbNasSessionManager, shareName: String, block: (OpContext) -> T): T =
+    when (val result = on.runOp(shareName, Purpose.BACKGROUND, idempotent = false, touchesDisk = true, op = block)) {
+      is NasResult.Ok -> result.value
+      is NasResult.Err -> throw AssertionError("${result.error}")
+    }
+
   private suspend fun writeRange(writer: BackupTempWriter, data: ByteArray, from: Long, to: Long) {
     var offset = from
     while (offset < to) {
@@ -718,6 +862,10 @@ class NasIntegrationSuiteTest {
     private const val BIG_CHUNKS = 64
     private const val BIG_BYTES = BIG_CHUNKS.toLong() * MIB
     private const val SEED = 20261014L
+
+    /** D-13 (t17): quanto si guarda la connessione muta, e il tetto della prova intera. */
+    private const val MUTE_WATCH_S = 330
+    private const val ZOMBIE_WAIT_SECONDS: Long = 900L
 
     /** L'interruttore condiviso da tutti i test della suite (vive quanto la JVM dei test). */
     private val SHARED_STORE = InMemoryBreakerStore()
@@ -826,11 +974,12 @@ class NasIntegrationSuiteTest {
       breakers: AuthBreakerRegistry = AuthBreakerRegistry(SHARED_STORE, scope),
       user: String = credentials.user,
       password: CharArray = credentials.password,
+      routeGate: FakeNasRouteGate = gate,
     ): SmbNasSessionManager {
       val acc = if (user == credentials.user) account else NasAccount(account.address, user, "it2", account.pinnedGuid)
       return SmbNasSessionManager(
         account = { acc },
-        routeGate = gate,
+        routeGate = routeGate,
         credentials = { CredentialLoad.Found(NasCredentials(user, password.copyOf())) },
         breakers = breakers,
         scope = scope,

@@ -95,6 +95,8 @@ internal object ReceivedStates {
       }
       is BackupStatus.Waiting -> when (backup.reason) {
         WaitReason.NAS, WaitReason.WIFI, WaitReason.HOME_WIFI, WaitReason.DATA_CAP -> ReceivedStatus.NETWORK
+        // D-13: un file occupato sul NAS e' un'attesa breve: il file ricevuto resta in coda e riparte da solo.
+        WaitReason.NAS_BUSY -> ReceivedStatus.QUEUED
         else -> ReceivedStatus.QUEUED
       }
       is BackupStatus.Stopped -> if (backup.by == StopBy.USER) ReceivedStatus.PAUSED else ReceivedStatus.QUEUED

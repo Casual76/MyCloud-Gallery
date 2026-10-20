@@ -220,3 +220,22 @@ elenchi, nessun temporaneo altrui toccato; nessuna richiesta verso una share fuo
   all'autotest della guardia (`TestAreaSelfTest`).
 - **Con le chiavi nuove**: copia tra share (`share2`), privacy fra account (`user2`, `password2`, `privateShare2`).
 - **Sul campo**: ripetere le misure dall'S25 sul Wi-Fi e sulla VPN (con 4 flussi in interattivo).
+
+## D-13: un handle lasciato da una connessione morta (20/10/2026, PC cablato, WD EX2 Ultra, Samba 4.17)
+Prova `t17` della suite (`NasIntegrationSuiteTest`, area `mcg-it/<giro>/` della share `test`), con un ripetitore nel processo dei test
+(`ZombieRelay`) che fa "morire" una connessione senza nessuna richiesta SMB (niente `CLOSE`, niente `LOGOFF`). Il temporaneo e' aperto come lo apre
+il backup: `FILE_CREATE`, lettura/scrittura/cancellazione, **nessuna condivisione**; smbj 0.15 non chiede oplock, lease ne' handle durevoli (letto nel
+bytecode: `SMB2_OPLOCK_LEVEL_NONE`, nessun create context). La connessione nuova lo riprende come il motore (`reopenTemp`).
+
+| Come muore la connessione | Che cosa vede una connessione nuova |
+|---|---|
+| Il processo muore con la rete su, il kernel manda **RST** | temporaneo libero dopo **246 ms** |
+| Il processo muore con la rete su, il kernel manda **FIN** | temporaneo libero dopo **21 ms** |
+| La rete se ne va senza che il NAS lo sappia (connessione **muta**: il PC risponde ancora a livello TCP) | **occupato** (`SHARING_VIOLATION`) per tutti i **330 s** guardati; in quel tempo il NAS non manda **nessun byte** alla connessione muta (niente keepalive di SMB) e non la chiude |
+| Come sopra, ma il temporaneo aperto **condividendo** lettura, scrittura e cancellazione | una riapertura con le stesse condivisioni **passa subito**; una in esclusiva resta `FileBusy` |
+| Login nuovo con `PreviousSessionId` (MS-SMB2 2.2.5) | **sempre `STATUS_INVALID_PARAMETER`**, anche per una sessione gia' chiusa e su qualunque richiesta `SESSION_SETUP` del login (tutte, solo la prima, solo le seguenti; `t18`, tolta dopo la misura): sul WD la chiusura della sessione di prima non si puo' chiedere |
+
+Che cosa vuol dire per il telefono: una morte del processo (o una caduta del Wi-Fi) con la rete su non lascia niente di occupato. Una morte con la
+rete **gia' giu'** lascia la connessione viva per il NAS, con il suo handle, finche' il NAS non se ne accorge: siccome non manda niente di suo,
+succede solo con il keepalive del TCP (Linux: due ore di silenzio e poi le sonde) o quando ha qualcosa da mandare e il telefono, tornato con lo
+stesso indirizzo, risponde RST. Sul campo (F30) due temporanei sono rimasti occupati oltre 30 minuti. Le decisioni in `docs/decisioni.md`, D-13.

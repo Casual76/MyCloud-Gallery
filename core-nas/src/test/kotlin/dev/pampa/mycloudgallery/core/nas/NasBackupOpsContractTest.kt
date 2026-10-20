@@ -195,4 +195,25 @@ class NasBackupOpsContractTest {
       kotlinx.coroutines.runBlocking { view.deleteOwnTemp("test", NasLayout.ROOT.child("tmp").child("$me-op-1-0"), purpose) }
     }
   }
+
+  /** D-13: i tentativi del temporaneo di un elemento: il nome del tentativo dopo, quelli di prima, e niente per un nome che non e' nella forma. */
+  @Test
+  fun d13_iTentativiDelTemporaneoDiUnElemento() {
+    val device = dev.pampa.mycloudgallery.core.trust.crypto.TrustIds.random()
+    val first = NasBackupPaths.tempFor(device, 42)
+    assertThat(NasBackupPaths.attemptOf(first)).isEqualTo(0)
+    assertThat(NasBackupPaths.earlierAttempts(first)).isEmpty()
+    val second = checkNotNull(NasBackupPaths.nextAttempt(first))
+    assertThat(second).isEqualTo(NasBackupPaths.tempFor(device, 42, 1))
+    val third = checkNotNull(NasBackupPaths.nextAttempt(second))
+    assertThat(third).isEqualTo(NasBackupPaths.tempFor(device, 42, 2))
+    assertThat(NasBackupPaths.attemptOf(third)).isEqualTo(2)
+    assertThat(NasBackupPaths.earlierAttempts(third)).containsExactly(first, second).inOrder()
+    assertThat(NasBackupPaths.isBackupTempOf(third, device)).isTrue()
+    // Un nome che non e' un temporaneo del backup nella forma di tempFor non si interpreta.
+    val foreign = first.parent()!!.child("$device-op-42")
+    assertThat(NasBackupPaths.attemptOf(foreign)).isNull()
+    assertThat(NasBackupPaths.nextAttempt(foreign)).isNull()
+    assertThat(NasBackupPaths.earlierAttempts(foreign)).isEmpty()
+  }
 }

@@ -205,4 +205,57 @@ class RoomBackupStoreTest {
     assertThat(h.kit.nas.bytes(h.kit.share, "Backup/${BackupTestKit.DEVICE_FOLDER}/2026/10/VID_1.mp4")!!.toList()).isEqualTo(data.toList())
     assertThat(store.counts().byState[UploadState.DONE]).isEqualTo(1)
   }
+
+  /**
+   * D-13: il temporaneo di un elemento cambia solo per passare al tentativo dopo dello stesso elemento (il NAS teneva occupato il vecchio), e i
+   * tentativi di prima restano citati finche' l'elemento e' aperto (la pulizia dei propri file non li tocca). L'ora del NAS dell'ultimo passo
+   * ([RoomBackupStore.lastStepAt]) e' quella dell'ultima scrittura, come la colonna `updated_at`.
+   */
+  @Test
+  fun d13_unTemporaneoNuovoSoloPerIlTentativoDopoEIVecchiRestanoCitati() = runBlocking<Unit> {
+    val db = database()
+    val store = RoomBackupStore(db, clock)
+    val item = store.create(listOf(newItem(db.seeded()))).single()
+    val first = NasBackupPaths.tempFor(BackupTestKit.DEVICE, item.id.value)
+    val uploading = item.copy(state = UploadState.HASHED, sha256 = Sha256("c".repeat(64))).also { store.update(it) }
+      .copy(state = UploadState.UPLOADING, temp = first, resumeAt = 1_000)
+    store.update(uploading)
+    val at = clock.nasNow!!
+    assertThat(store.lastStepAt(item.id)).isEqualTo(at)
+    // Un altro nome, o un tentativo di un altro elemento: errori di programmazione.
+    assertThrows(IllegalArgumentException::class.java) {
+      runBlocking { store.update(uploading.copy(temp = NasBackupPaths.tempFor(BackupTestKit.DEVICE, item.id.value + 1, 1))) }
+    }
+    assertThrows(IllegalArgumentException::class.java) { runBlocking { store.update(uploading.copy(temp = SharePath.parse(".mycloudgallery/tmp/altro"))) } }
+    // Il tentativo dopo: si scrive, e cita anche il primo.
+    clock.advance(60_000)
+    val second = NasBackupPaths.nextAttempt(first)!!
+    store.update(uploading.copy(temp = second, resumeAt = 0, resumeId = null))
+    assertThat(store.item(item.id)!!.temp).isEqualTo(second)
+    assertThat(store.citedTemps()).containsExactly(second, first)
+    assertThat(store.lastStepAt(item.id)).isEqualTo(at + 60_000)
+    // Non si torna indietro.
+    assertThrows(IllegalArgumentException::class.java) { runBlocking { store.update(uploading.copy(temp = first)) } }
+    // Finito l'elemento, nessuno dei due e' piu' citato.
+    store.update(uploading.copy(temp = second, resumeAt = 0, state = UploadState.FAILED))
+    assertThat(store.citedTemps()).isEmpty()
+  }
+
+  /**
+   * D-13: un elemento creato senza l'ora del NAS (nessuna sessione) ha `updated_at` = 0: "non si sa", non "fermo da sempre" (il motore ripartirebbe
+   * subito da capo su un temporaneo nuovo). Il primo passo scritto con l'ora del NAS la da'.
+   */
+  @Test
+  fun d13_senzaLOraDelNasLUltimoPassoNonSiSa() = runBlocking<Unit> {
+    val db = database()
+    val noClock = FakeBackupClock(nasNow = null)
+    val store = RoomBackupStore(db, noClock)
+    val item = store.create(listOf(newItem(db.seeded()))).single()
+    assertThat(store.lastStepAt(item.id)).isNull()
+    store.update(item.copy(state = UploadState.HASHED, sha256 = Sha256("d".repeat(64))))
+    assertThat(store.lastStepAt(item.id)).isNull()
+    noClock.nasNow = FakeBackupClock.DEFAULT_NAS_NOW
+    store.update(store.item(item.id)!!.copy(state = UploadState.UPLOADING, temp = NasBackupPaths.tempFor(BackupTestKit.DEVICE, item.id.value)))
+    assertThat(store.lastStepAt(item.id)).isEqualTo(FakeBackupClock.DEFAULT_NAS_NOW)
+  }
 }

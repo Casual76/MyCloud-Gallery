@@ -38,6 +38,9 @@ class BackupPiecesTest {
     assertThat(BackupStatusReducers.footer(BackupStatus.NotConfigured(emptySet()), 0)).isEqualTo(LibraryBackupStatus.Idle)
     assertThat(BackupStatusReducers.footer(BackupStatus.TestOnly, 0)).isEqualTo(LibraryBackupStatus.TestOnly)
     assertThat(BackupStatusReducers.footer(BackupStatus.UpToDate(10, 5L), 0)).isEqualTo(LibraryBackupStatus.AllSafe(5L))
+    // D-11, D-13: un file occupato sul NAS e' un'attesa breve, non "in corso" (la capsula diceva "Backup in corso: 0 di 3" con i video fermi).
+    assertThat(BackupStatusReducers.footer(BackupStatus.Waiting(2, 1L, BackupWait.NAS_BUSY), 0))
+      .isEqualTo(LibraryBackupStatus.Queued(2, dev.pampa.mycloudgallery.core.library.contract.LibraryBackupWait.NAS_BUSY))
     assertThat(BackupStatusReducers.footer(BackupStatus.Waiting(312, 1L, BackupWait.CHARGING), 0))
       .isEqualTo(LibraryBackupStatus.Queued(312, LibraryBackupWait.CHARGING))
     assertThat(BackupStatusReducers.footer(BackupStatus.Stopped(dev.pampa.mycloudgallery.core.backup.contract.StopBy.USER), 0))

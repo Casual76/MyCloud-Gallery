@@ -229,6 +229,41 @@ object NasBackupPaths {
     if (!rest.startsWith("$TEMP_MARK-")) return false
     return TOKEN.matches(rest.removePrefix("$TEMP_MARK-"))
   }
+
+  /** `<dispositivo>-bk-<elemento>` con il tentativo facoltativo `-<n>` ([tempFor]). */
+  private val ATTEMPT = Regex("^([0-9a-z]{26})-$TEMP_MARK-([0-9]{1,18})(?:-([0-9]{1,9}))?$")
+
+  /**
+   * D-13: il tentativo del temporaneo [temp] (0 senza suffisso, `n` per `-<n>`), o null se [temp] non e' un temporaneo del backup nella forma
+   * di [tempFor]. Un nome che non torna non si interpreta.
+   */
+  fun attemptOf(temp: SharePath): Int? {
+    val match = ATTEMPT.matchEntire(temp.name) ?: return null
+    return match.groupValues[3].takeIf { it.isNotEmpty() }?.toIntOrNull() ?: 0
+  }
+
+  /**
+   * D-13: il temporaneo del tentativo dopo [temp], nella stessa cartella e per lo stesso elemento e dispositivo; null se [temp] non e' nella
+   * forma di [tempFor]. Il motore ci passa quando il NAS tiene occupato il temporaneo di prima oltre il tetto: il vecchio non si tocca.
+   */
+  fun nextAttempt(temp: SharePath): SharePath? {
+    val match = ATTEMPT.matchEntire(temp.name) ?: return null
+    val attempt = (match.groupValues[3].takeIf { it.isNotEmpty() }?.toIntOrNull() ?: 0) + 1
+    val parent = temp.parent() ?: return null
+    return parent.child("${match.groupValues[1]}-$TEMP_MARK-${match.groupValues[2]}-$attempt")
+  }
+
+  /**
+   * D-13: i temporanei dei tentativi **prima** di [temp] (0 .. n-1), nella stessa cartella; vuoto per il primo tentativo o per un nome che non
+   * e' nella forma di [tempFor]. Sono ancora dell'elemento (il diario li cita finche' l'elemento e' aperto) finche' il motore non li toglie.
+   */
+  fun earlierAttempts(temp: SharePath): List<SharePath> {
+    val match = ATTEMPT.matchEntire(temp.name) ?: return emptyList()
+    val attempt = match.groupValues[3].takeIf { it.isNotEmpty() }?.toIntOrNull() ?: 0
+    val parent = temp.parent() ?: return emptyList()
+    val base = "${match.groupValues[1]}-$TEMP_MARK-${match.groupValues[2]}"
+    return (0 until attempt).map { k -> parent.child(if (k == 0) base else "$base-$k") }
+  }
 }
 
 /**

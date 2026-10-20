@@ -65,6 +65,7 @@ object BackupStatusReducers {
     WaitReason.BATTERY -> LibraryBackupWait.BATTERY
     WaitReason.NAS -> LibraryBackupWait.NAS
     WaitReason.NEXT_RUN -> LibraryBackupWait.NEXT_RUN
+    WaitReason.NAS_BUSY -> LibraryBackupWait.NAS_BUSY
     WaitReason.THERMAL, WaitReason.DATA_CAP, WaitReason.COMPARING -> LibraryBackupWait.OTHER
   }
 

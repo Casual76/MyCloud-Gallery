@@ -139,6 +139,7 @@ private fun waitRes(wait: LibraryBackupWait): Int = when (wait) {
   LibraryBackupWait.BATTERY -> R.string.backup_footer_wait_battery
   LibraryBackupWait.NAS -> R.string.backup_footer_wait_nas
   LibraryBackupWait.NEXT_RUN -> R.string.backup_footer_wait_next_run
+  LibraryBackupWait.NAS_BUSY -> R.string.backup_footer_wait_nas_busy
   LibraryBackupWait.OTHER -> R.string.backup_footer_wait_other
 }
 

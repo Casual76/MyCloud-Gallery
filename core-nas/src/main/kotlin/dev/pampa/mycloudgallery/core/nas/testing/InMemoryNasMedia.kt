@@ -164,6 +164,12 @@ class InMemoryNasMedia(
   private val locked = HashSet<String>()
   private val nextFileId = AtomicLong(1000)
 
+  /** D-13: gli scrittori dei temporanei del backup ancora aperti (share e temporaneo), per [abandonOpenBackupWriters]. */
+  private val openBackupWriters = LinkedHashSet<Pair<String, String>>()
+
+  /** D-13: i temporanei tenuti occupati da una connessione morta che il NAS non ha ancora chiuso (chiave di [locked]). */
+  private val zombieHolds = LinkedHashSet<String>()
+
   /** Se non null, ogni operazione fallisce con questo errore. */
   @Volatile var failWith: NasError? = null
 
@@ -278,6 +284,38 @@ class InMemoryNasMedia(
   fun unlock(share: String, path: String) {
     synchronized(lock) { locked -= lockKey(share, path) }
   }
+
+  /**
+   * **D-13** (misure sul WD, `docs/decisioni.md`): il processo e' morto, o il Wi-Fi e' caduto, **con la rete gia' giu'**. Il NAS non riceve ne'
+   * FIN ne' RST e tiene vivi gli handle della connessione morta: ogni temporaneo del backup che uno scrittore teneva aperto resta **occupato**
+   * (apertura, ripresa, pubblicazione e cancellazione rispondono "occupato") finche' il NAS non se ne accorge ([reapDeadConnections]). Gli
+   * scrittori non servono piu' a nessuno. Restituisce i temporanei tenuti. Con la rete su (RST o FIN) il WD li lascia in meno di un secondo:
+   * allora basta [closeOpenBackupWriters].
+   */
+  fun abandonOpenBackupWriters(): List<String> = synchronized(lock) {
+    val held = openBackupWriters.map { (share, temp) -> lockKey(share, temp).also { k -> locked += k; zombieHolds += k } to temp }
+    openBackupWriters.clear()
+    held.map { it.second }
+  }
+
+  /** D-13: il processo e' morto con la rete su: il NAS chiude subito gli handle della connessione (misurato: RST 0,25 s, FIN 0,02 s). */
+  fun closeOpenBackupWriters() {
+    synchronized(lock) { openBackupWriters.clear() }
+  }
+
+  /** D-13: il NAS si accorge delle connessioni morte (il controllo della connessione del TCP, ore dopo) e lascia i loro temporanei. */
+  fun reapDeadConnections() {
+    synchronized(lock) {
+      locked -= zombieHolds
+      zombieHolds.clear()
+    }
+  }
+
+  /** D-13: i temporanei tenuti adesso da una connessione morta (percorsi come chiavi: share:percorso in minuscolo). */
+  val heldByDeadConnections: Set<String> get() = synchronized(lock) { zombieHolds.toSet() }
+
+  /** D-13: [path] di [share] e' occupato (dal PC o da una connessione morta). */
+  fun isLocked(share: String, path: String): Boolean = synchronized(lock) { lockKey(share, path) in locked }
 
   fun exists(share: String, path: String): Boolean = synchronized(lock) {
     shares[key(share)]?.nodes?.containsKey(key(split(path))) == true
@@ -631,7 +669,7 @@ class InMemoryNasMedia(
         val node = Node(temp.name, false, content, now, now, nextFileId.incrementAndGet(), NasAttributes.ARCHIVE)
         state.nodes[key(temp.components)] = node
         touchParent(state, temp.components, now)
-        NasResult.Ok(BackupWriter(share, temp, node, content))
+        NasResult.Ok(BackupWriter(share, temp, node, content).also { synchronized(lock) { openBackupWriters += share to temp.value } })
       }
     }
 
@@ -651,7 +689,7 @@ class InMemoryNasMedia(
         node.content = content
         node.modifiedAt = nasNow()
         backupTruncations.incrementAndGet()
-        NasResult.Ok(ReopenOutcome.Reopened(BackupWriter(share, temp, node, content)))
+        NasResult.Ok(ReopenOutcome.Reopened(BackupWriter(share, temp, node, content).also { synchronized(lock) { openBackupWriters += share to temp.value } }))
       }
     }
 
@@ -750,6 +788,7 @@ class InMemoryNasMedia(
 
       override fun close() {
         closed = true
+        synchronized(lock) { openBackupWriters -= share to temp.value }
       }
     }
   }

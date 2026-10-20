@@ -116,6 +116,9 @@ enum class WaitReason(override val code: String) : StableCode {
   /** §2.11: prima del primo backup si aspetta la fine della scansione dell'area privata e del confronto delle copie simili. */
   COMPARING("comparing"),
   NEXT_RUN("next_run"),
+
+  /** D-13: il NAS tiene ancora occupato un file del backup (`RunStop.BUSY`): si riprova tra poco, da soli. */
+  NAS_BUSY("nas_busy"),
 }
 
 /** Che cosa manca per poter fare il backup (`BackupStatus.NotConfigured`). */

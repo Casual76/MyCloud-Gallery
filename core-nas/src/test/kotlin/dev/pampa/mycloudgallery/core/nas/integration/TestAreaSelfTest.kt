@@ -15,6 +15,7 @@ import dev.pampa.mycloudgallery.core.nas.smb.SmbConnection
 import dev.pampa.mycloudgallery.core.nas.smb.SmbCopyChunk
 import dev.pampa.mycloudgallery.core.nas.smb.SmbDirectory
 import dev.pampa.mycloudgallery.core.nas.smb.SmbFileInfo
+import dev.pampa.mycloudgallery.core.nas.smb.SmbOpenMode
 import dev.pampa.mycloudgallery.core.nas.smb.SmbReadFile
 import dev.pampa.mycloudgallery.core.nas.smb.SmbShare
 import dev.pampa.mycloudgallery.core.nas.smb.SmbSpace
@@ -144,7 +145,7 @@ internal object TestAreaSelfTest {
 
     override fun openRead(path: String): SmbReadFile = count()
 
-    override fun createExclusive(path: String): SmbWriteFile {
+    override fun createExclusive(path: String, shareMode: SmbOpenMode): SmbWriteFile {
       calls.incrementAndGet()
       return object : SmbWriteFile {
         override fun write(buffer: ByteArray, fileOffset: Long, bufferOffset: Int, length: Int): Int = count()

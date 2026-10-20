@@ -72,6 +72,10 @@ interface BackupDiaryDao {
   @Query(CITED_TEMPS_SQL)
   suspend fun citedTemps(): List<String>
 
+  /** D-13: l'ora (del NAS) dell'ultimo passo scritto per un elemento, null se l'elemento non c'e'. */
+  @Query("SELECT updated_at FROM backup_item WHERE item_id = :itemId")
+  suspend fun updatedAt(itemId: Long): Long?
+
   /** Quanti elementi per stato (pagina del backup, Diagnostica): legge solo l'indice di `state`. */
   @Query(COUNTS_BY_STATE_SQL)
   suspend fun countsByState(): List<StatusCount>

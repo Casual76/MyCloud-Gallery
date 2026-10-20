@@ -196,5 +196,7 @@ class OpenJobsStore(private val inner: BackupStore, private val journal: Version
 
   override suspend fun citedTemps(): Set<SharePath> = inner.citedTemps() + journal.citedTemps()
 
+  override suspend fun lastStepAt(id: BackupItemId): Long? = inner.lastStepAt(id)
+
   override suspend fun counts(): BackupDiaryCounts = inner.counts()
 }

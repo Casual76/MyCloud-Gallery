@@ -121,9 +121,14 @@ internal class RunProgress {
   /**
    * Il backup non sta lavorando adesso. Senza niente in coda la campagna e' finita e si azzera; con altro da fare resta (e il ritmo non
    * conta il tempo fermo: la prossima tappa riparte da [reshape] senza un "tick" precedente). Vero se ha chiuso una campagna.
+   *
+   * **D-11** (prove sul campo): "niente in coda" chiude la campagna solo se e' [confirmed], cioe' se lo dice anche il motore (l'ultimo giro e'
+   * finito senza niente in attesa). Prima bastava una coda vuota vista da un ricalcolo dello stato, anche di passaggio (conteggi del catalogo non
+   * ancora pronti in un processo appena nato, un segno di problema su un media poi tolto): la campagna si chiudeva, il suo file spariva e dopo una
+   * morte la pagina ripartiva dal lotto ("Video: 0 di 3").
    */
-  fun idle(queued: Int): Boolean {
-    if (queued == 0) {
+  fun idle(queued: Int, confirmed: Boolean = true): Boolean {
+    if (queued == 0 && confirmed) {
       val closing = base != NONE || done != 0
       if (closing) changedSinceSnapshot = true
       reset()

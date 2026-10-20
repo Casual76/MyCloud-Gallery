@@ -696,12 +696,15 @@ class DefaultOnboardingCoordinator(
   /**
    * Questo dispositivo tiene la chiave di famiglia? Il fondatore (la fondazione e' nell'avanzamento), l'admin recuperato e il
    * secondo admin (il loro percorso), o un admin approvato nel registro. Non apre la cassaforte: con il Keystore guasto non si
-   * potrebbe, ed e' proprio il caso in cui l'avviso serve. Nel dubbio, vero.
+   * potrebbe, ed e' proprio il caso in cui l'avviso serve. Nel dubbio, vero: anche quando il Keystore dice che la chiave c'e'
+   * ma non la da' (il motore della fiducia lo vede: `TrustStatus.KeystoreUnavailable`, R7), perche' allora il registro non dice
+   * piu' "admin" e senza questa riga l'avviso dell'admin spariva.
    */
   override suspend fun holdsFamilyKey(): Boolean {
     val snapshot = ready() ?: return true
     if (snapshot.foundation != null || OnboardingRules.isRecoveryPath(snapshot.path)) return true
-    return adminApproved() || (snapshot.finished && !keystoreResponds())
+    val keystoreDown = ports.registry.status.value == TrustStatus.KeystoreUnavailable || !keystoreResponds()
+    return adminApproved() || (snapshot.finished && keystoreDown)
   }
 
   // --- Passo 14 -----------------------------------------------------------------------------------------

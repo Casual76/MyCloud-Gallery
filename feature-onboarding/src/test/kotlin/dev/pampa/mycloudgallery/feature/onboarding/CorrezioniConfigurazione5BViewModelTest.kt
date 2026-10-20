@@ -134,4 +134,27 @@ class CorrezioniConfigurazione5BViewModelTest {
     vm.startOver()
     assertThat(destination(vm)).isEqualTo(OnboardingDestination.Step(OnboardingStep.WELCOME))
   }
+
+  /**
+   * R7, il residuo: con il Keystore che non risponde lo stato e' `KeystoreUnavailable`, non "non configurato". La pagina della
+   * radice in onboarding non diventa "fuori dalla famiglia" (la radice mostra la pagina con "Riprova"), e il tasto "Configura di
+   * nuovo" di questa pagina non c'e' e non fa niente.
+   */
+  @Test
+  fun r7_conIlKeystoreCheNonRispondeNessunaPaginaFuoriDallaFamiglia() = runTest {
+    val env = removedEnv(OnboardingPath.FOUND_FAMILY, TrustStatus.KeystoreUnavailable)
+    env.coordinator.founded = true
+    val vm = env.viewModel()
+    vm.enterAtRoot()
+
+    assertThat(vm.ui.value.removal).isNull()
+    assertThat(destination(vm)).isNotEqualTo(OnboardingDestination.Removed)
+    vm.askStartOver()
+    vm.startOver()
+    assertThat(env.coordinator.startOvers).isEqualTo(0)
+
+    // Se lo stato passa a "non configurato" (per esempio lo stato salvato tolto davvero), la pagina di sempre torna.
+    env.registry.status.value = TrustStatus.NotConfigured
+    assertThat(destination(vm)).isEqualTo(OnboardingDestination.Removed)
+  }
 }

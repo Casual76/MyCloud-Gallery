@@ -61,6 +61,9 @@
   <string name="hero_inactive_value">Fermo</string>
   <string name="hero_inactive_title">Questo dispositivo non è più attivo</string>
   <string name="hero_inactive_detail">È stato dismesso, revocato o segnato come perso: non può più scrivere sul NAS.</string>
+  <string name="hero_keystore_value">In pausa</string>
+  <string name="hero_keystore_title">Il telefono non riesce a usare le chiavi di sicurezza</string>
+  <string name="hero_keystore_detail">Finché non rispondono, l’app non scrive niente sul NAS e non approva dispositivi. Chiudi e riapri l’app; se non basta, riavvia il telefono.</string>
   <string name="hero_pending_value">In attesa</string>
   <string name="hero_pending_title">Aspetti l’approvazione</string>
   <string name="hero_pending_detail">Finché l’admin non approva questo dispositivo resta in sola lettura.</string>

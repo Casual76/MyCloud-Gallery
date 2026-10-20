@@ -58,6 +58,7 @@ import java.io.File
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -107,15 +108,31 @@ object TestNas {
   }
 }
 
-/** La chiave del dispositivo in software (stessa curva del Keystore). */
+/**
+ * La chiave del dispositivo in software (stessa curva del Keystore), con gli stessi comportamenti di `AndroidKeystoreKeyProvider`:
+ * `deviceSigner` crea la chiave se manca, `hasDeviceKey` non la crea mai, la distruzione di una chiave che non c'e' non fa niente.
+ * [broken] e' un Keystore che non risponde (R7), come quello dei test di core-family: ogni domanda lancia e niente cambia, e quando
+ * torna la chiave e' la stessa di prima (`SoftwareKeysParityTest`). Prima qui non c'era: il grafo vero non si provava con un
+ * Keystore guasto.
+ */
 class SoftwareKeys : KeyProvider {
   @Volatile private var key: FamilyKey? = null
 
-  override fun deviceSigner(): Signer = synchronized(this) { key ?: FamilyKey.generate().also { key = it } }
+  /** Il Keystore non risponde: `hasDeviceKey`, `deviceSigner` e la distruzione lanciano. */
+  @Volatile var broken: Boolean = false
 
-  override fun hasDeviceKey(): Boolean = key != null
+  override fun deviceSigner(): Signer = synchronized(this) {
+    check(!broken) { "Keystore non disponibile" }
+    key ?: FamilyKey.generate().also { key = it }
+  }
+
+  override fun hasDeviceKey(): Boolean {
+    check(!broken) { "Keystore non disponibile" }
+    return key != null
+  }
 
   override fun destroyDeviceKey() {
+    check(!broken) { "Keystore non disponibile" }
     key = null
   }
 }
@@ -256,8 +273,10 @@ class TestDevice(
   diagnostics: DiagnosticsLog = NoDiagnosticsLog,
   /** Il riavvio del processo che "Configura di nuovo" chiede se la galleria era partita (R6): di solito niente; un test lo conta. */
   restart: ProcessRestart = ProcessRestart {},
+  /** Dove vive il grafo: di solito i thread di `Dispatchers.Default`; D-7 lo mette su un thread solo per rendere la corsa ripetibile. */
+  dispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) {
-  val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+  val scope = CoroutineScope(SupervisorJob() + dispatcher)
   val scheduler = RecordingScheduler()
   val workCancelled = AtomicLong(0)
   val context = DeviceContext(base, root)

@@ -57,16 +57,31 @@ class MutableNasClock(var now: Long = NAS_NOON) : NasClock {
   }
 }
 
-/** Chiave del dispositivo in software (stessa curva del Keystore). */
+/**
+ * Chiave del dispositivo in software (stessa curva del Keystore), con gli stessi comportamenti di `AndroidKeystoreKeyProvider`:
+ * `deviceSigner` crea la chiave se manca, `hasDeviceKey` non la crea mai, la distruzione di una chiave che non c'e' non fa niente.
+ * [broken] e' un Keystore che non risponde (R7), come `SoftwareKeyProvider.broken` di `support`: ogni domanda lancia e niente cambia,
+ * e quando torna la chiave e' la stessa di prima (`SoftwareKeysParityTest`).
+ */
 class SoftwareKeys : KeyProvider {
   private var key: FamilyKey? = null
   var failDestroy: Boolean = false
 
-  override fun deviceSigner(): Signer = key ?: FamilyKey.generate().also { key = it }
+  /** Il Keystore non risponde: `hasDeviceKey`, `deviceSigner` e la distruzione lanciano. */
+  var broken: Boolean = false
 
-  override fun hasDeviceKey(): Boolean = key != null
+  override fun deviceSigner(): Signer {
+    check(!broken) { "Keystore non disponibile" }
+    return key ?: FamilyKey.generate().also { key = it }
+  }
+
+  override fun hasDeviceKey(): Boolean {
+    check(!broken) { "Keystore non disponibile" }
+    return key != null
+  }
 
   override fun destroyDeviceKey() {
+    check(!broken) { "Keystore non disponibile" }
     if (failDestroy) throw IllegalStateException("Keystore occupato")
     key = null
   }

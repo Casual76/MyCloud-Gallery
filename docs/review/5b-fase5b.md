@@ -272,6 +272,15 @@
   `CorrezioniConfigurazione5BViewModelTest` (il tasto apre la conferma e non tocca niente; annulla; la conferma configura; l'admin vede l'avviso, il familiare no; il problema delle chiavi e il «Riprova»
   che chiede di nuovo), `StartOverSheetTest` (la pagina non configura con un tocco; il foglio di un admin dice cosa si perde e il kit), `CorrezioniConfigurazione5BTest` (Keystore guasto: la chiave di
   famiglia resta, niente si tocca) e quello di `feature-settings`.
+- **Residuo: chiuso** (20/10, `docs/decisioni.md`, «Avvio e Keystore: D-7 a monte e il residuo di R7»). Un Keystore che non risponde con uno stato della famiglia salvato e' ora
+  `TrustStatus.KeystoreUnavailable` (`TrustEngine`), e `SetupResolver` ne fa `SetupState.Blocked(KEYSTORE_UNAVAILABLE)`: mai piu' «non configurato», quindi mai la pagina «fuori dalla famiglia».
+  Resta chiuso: nessun permesso di scrittura, `preflight` non da' `Proceed`, `adminContext` non c'e' (approvazioni e cambi di stato: `NotAdmin`), nessuno stato del dispositivo pubblicato, nessuna richiesta
+  da approvare, `TrustSyncRun` si ferma. L'avvio non si ferma piu' al Keystore (`DeviceSelfWipe.resumeIfInterrupted` non lancia e non azzera). La radice mostra la pagina «Il telefono non riesce a usare le
+  chiavi di sicurezza in questo momento» con «Riprova» (ricalcola lo stato come all'avvio) e la spiegazione; «Configura di nuovo» e' un'uscita in fondo, dietro lo stesso `StartOverSheet` con l'avviso
+  dell'admin (`holdsFamilyKey` nel dubbio vero anche per `KeystoreUnavailable`). Impostazioni, Dispositivi, Diagnostica e la pagina della radice in onboarding lo gestiscono. Test: `KeystoreNonDisponibileTest`
+  (core-family), `SetupRepositoryTest.r7_…`, `CorrezioniConfigurazione5BTest.r7_conLoStatoKeystoreNonDisponibile…` e `r7_ilFintoRispondeComeIlVero…` (parita' del coordinatore finto),
+  `SoftwareKeysParityTest` (core-family e `:app`: i Keystore finti come la classe vera), `CorrezioniConfigurazione5BViewModelTest.r7_conIlKeystoreCheNonRisponde…`, `RootViewModelTest.r7_…` (il flusso:
+  «Riprova», il foglio, il problema delle chiavi) e `AvvioEChiaviAppTest.r7_…` (grafo vero con il Keystore guasto, «Riprova» guarito, «Configura di nuovo» che non tocca niente).
 
 ---
 
@@ -508,7 +517,8 @@ Solo `mcg-prova`/`mcg-campo` con D13, sull'S25, e l'area di prova del NAS.
 - **I10**: sul WD, `fileId` di un file prima e dopo una rinomina e di una copia fatta da Esplora risorse (non deve mai essere 0).
 - **Tolleranza di 2 minuti**: sblocco nella ricezione, poi entro 2 minuti `am start -a android.intent.action.GET_CONTENT -t image/*` da `adb`: il selettore si apre senza sblocco; dopo 2 minuti chiede lo sblocco.
 - **F39 con `adb`** come previsto: `content query --uri content://<pacchetto>.integrations.documents/root` da `adb shell` deve dare `SecurityException`; un URI consegnato dopo 6 ore non si apre.
-- **R7**: non si simula un guasto del Keystore; dopo la correzione, controllare che la pagina "fuori dalla famiglia" chieda la conferma.
+- **R7**: non si simula un guasto del Keystore; dopo la correzione, controllare che la pagina "fuori dalla famiglia" chieda la conferma. Residuo (20/10): la pagina «Keystore non disponibile» si guarda
+  solo nelle prove a schermo (`ScaffoldScreenshotTest.fermoChiavi`); sul telefono si controlla che un avvio normale non passi mai da «fuori dalla famiglia» ne' da questa pagina.
 - **Il resto, come previsto**: F34-F43 della 5B (`docs/decisioni.md`, «Fase 5B: P14»), il giro `run5b` sul NAS vero con il codice dopo F1-F3.
 
 ## Checklist della 5B (`docs/sicurezza.md` §7, "Fase 5")

@@ -15,6 +15,7 @@ import dev.pampa.mycloudgallery.core.security.lock.AppLockGate
 import dev.pampa.mycloudgallery.core.security.lock.SystemCredentialAuthenticator
 import dev.pampa.mycloudgallery.lock.LockedScreen
 import dev.pampa.mycloudgallery.navigation.AppNavHost
+import dev.pampa.mycloudgallery.navigation.KeystoreActions
 import dev.pampa.mycloudgallery.navigation.RootNavActions
 import dev.pampa.mycloudgallery.root.RootViewModel
 
@@ -60,6 +61,14 @@ internal fun AppRoot(
         reconfigure = rootViewModel::reconfigure,
         // "Continua piu' tardi" senza passi locali da fare: la configurazione e' salvata, l'app va in secondo piano.
         pause = { context.findActivity()?.moveTaskToBack(true) },
+        // R7: la pagina "Keystore non disponibile".
+        keystore = KeystoreActions(
+          state = rootViewModel.keystore,
+          retry = rootViewModel::retryKeystore,
+          askStartOver = rootViewModel::askKeystoreStartOver,
+          cancelStartOver = rootViewModel::cancelKeystoreStartOver,
+          confirmStartOver = rootViewModel::confirmKeystoreStartOver,
+        ),
       )
     }
     AppNavHost(destination = destination, status = status, actions = actions)

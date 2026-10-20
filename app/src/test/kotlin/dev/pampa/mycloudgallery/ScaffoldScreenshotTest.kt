@@ -29,6 +29,8 @@ import dev.pampa.mycloudgallery.feature.settings.SettingsUiState
 import dev.pampa.mycloudgallery.lock.LockedScreen
 import dev.pampa.mycloudgallery.main.MainScaffold
 import dev.pampa.mycloudgallery.root.BlockedScreen
+import dev.pampa.mycloudgallery.root.KeystoreUi
+import dev.pampa.mycloudgallery.root.KeystoreUnavailableScreen
 import dev.pampa.mycloudgallery.root.WipedScreen
 import dev.pampa.mycloudgallery.status.GlobalStatus
 import androidx.test.core.app.ApplicationProvider
@@ -137,6 +139,12 @@ internal abstract class ScaffoldScreenshotBase(private val dark: Boolean, privat
   @Test
   fun fermo() = shoot("fermo-aggiornare") {
     BlockedScreen(reason = BlockReason.NEEDS_APP_UPDATE)
+  }
+
+  /** R7: il Keystore non risponde. "Riprova" in primo piano, "Configura di nuovo" solo in fondo. */
+  @Test
+  fun fermoChiavi() = shoot("fermo-chiavi") {
+    KeystoreUnavailableScreen(KeystoreUi(stillUnavailable = true), onRetry = {}, onAskStartOver = {}, onCancelStartOver = {}, onConfirmStartOver = {})
   }
 
   @Test

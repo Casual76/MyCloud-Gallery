@@ -23,6 +23,7 @@ import dev.pampa.mycloudgallery.core.family.testing.RecordingSelfWipe
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 
@@ -113,7 +114,50 @@ class SetupRepositoryTest {
     assertThat(resolve(finished, TrustStatus.Approved(true), wipe = WipePhase.DONE)).isEqualTo(SetupState.Ready(true))
   }
 
+  /**
+   * R7 della revisione 5B: lo stato salvato con un Keystore che non risponde e' una pagina ferma con "Riprova", mai "non configurato"
+   * (che porta alla pagina "fuori dalla famiglia" e a "Configura di nuovo"). L'onboarding in corso e l'azzeramento vincono come sempre.
+   */
+  @Test
+  fun r7_unKeystoreCheNonRispondeEUnaPaginaFermaMaiNonConfigurato() {
+    val admin = StoreState.Ready(snapshot(OnboardingPath.FOUND_FAMILY, finished = true))
+    val member = StoreState.Ready(snapshot(OnboardingPath.JOIN_QR, finished = true, requestedAt = 5L))
+    val keystore = SetupState.Blocked(BlockReason.KEYSTORE_UNAVAILABLE)
+    assertThat(resolve(admin, TrustStatus.KeystoreUnavailable)).isEqualTo(keystore)
+    assertThat(resolve(member, TrustStatus.KeystoreUnavailable)).isEqualTo(keystore)
+    assertThat(resolve(trust = TrustStatus.KeystoreUnavailable)).isEqualTo(keystore)
+    assertThat(resolve(StoreState.Ready(snapshot(OnboardingPath.JOIN_QR)), TrustStatus.KeystoreUnavailable)).isInstanceOf(SetupState.Onboarding::class.java)
+    assertThat(resolve(admin, TrustStatus.KeystoreUnavailable, WipePhase.DEVICE_KEY_DESTROYED)).isEqualTo(SetupState.Blocked(BlockReason.WIPE_IN_PROGRESS))
+    assertThat(resolve(stored = StoreState.Loading, trust = TrustStatus.KeystoreUnavailable)).isEqualTo(SetupState.Loading)
+  }
+
   // --- Il collegamento ai flussi ------------------------------------------------------------------------
+
+  /**
+   * D-7 (prove sul campo): lo stato si calcola un passo dopo le fonti. Subito dopo che il motore della fiducia ha detto "approvato"
+   * lo stato dice ancora "non configurato" (calcolato con il valore iniziale): [DefaultFamilySetupRepository.awaitSourcesSeen] torna
+   * solo quando lo stato l'ha visto. E' l'attesa che `AppGraph.start` fa prima di dare il via.
+   */
+  @Test
+  fun d7_awaitSourcesSeenTornaSoloQuandoLoStatoHaVistoLaFiducia() = runTest {
+    val store = InMemoryOnboardingStateStore(snapshot(OnboardingPath.FOUND_FAMILY, finished = true))
+    val registry = FakeRegistryService()
+    val wipe = RecordingSelfWipe()
+    val repo = DefaultFamilySetupRepository(store, registry, wipe, backgroundScope) { 0L }
+    runCurrent()
+    assertThat(repo.state.value).isEqualTo(SetupState.NotConfigured)
+    repo.awaitSourcesSeen() // gia' viste: torna subito
+
+    registry.status.value = TrustStatus.Approved(admin = true)
+    assertThat(repo.state.value).isEqualTo(SetupState.NotConfigured) // un passo indietro: il valore che il via non deve far vedere
+    repo.awaitSourcesSeen()
+    assertThat(repo.state.value).isEqualTo(SetupState.Ready(admin = true))
+
+    // Anche la fase dell'azzeramento conta: un azzeramento appena letto dal diario non resta nascosto dietro lo stato di prima.
+    wipe.progress.value = WipePhase.DEVICE_KEY_DESTROYED
+    repo.awaitSourcesSeen()
+    assertThat(repo.state.value).isEqualTo(SetupState.Blocked(BlockReason.WIPE_IN_PROGRESS))
+  }
 
   @Test
   fun ilRepositorySegueAvanzamentoRegistroEAzzeramento() = runTest(UnconfinedTestDispatcher()) {

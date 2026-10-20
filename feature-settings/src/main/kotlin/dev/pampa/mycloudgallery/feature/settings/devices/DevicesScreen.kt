@@ -95,6 +95,16 @@ internal fun DevicesScreen(
       )
     }
 
+    // R7: il Keystore non risponde: l'elenco resta (ultima lettura), ma si dice che da qui non si cambia niente.
+    if (state.trust is TrustStatus.KeystoreUnavailable) {
+      item {
+        Note(
+          title = stringResource(R.string.devices_keystore_title),
+          message = stringResource(R.string.devices_keystore_message),
+          tone = FluidTone.Warning,
+        )
+      }
+    }
     (state.trust as? TrustStatus.Stale)?.let { stale ->
       item {
         Note(

@@ -49,6 +49,12 @@ enum class BlockReason {
 
   /** Telefono appena riavviato e mai sbloccato: le chiavi non si leggono ancora (BFU). */
   STORAGE_LOCKED,
+
+  /**
+   * Il Keystore non risponde ([TrustStatus.KeystoreUnavailable], R7 della revisione 5B): lo stato della famiglia c'e' ma non si
+   * puo' usare. Si riprova; "Configura di nuovo" resta un'uscita secondaria, dietro la conferma.
+   */
+  KEYSTORE_UNAVAILABLE,
 }
 
 /** La fonte di [SetupState] (contratto P0, implementazione P4). */

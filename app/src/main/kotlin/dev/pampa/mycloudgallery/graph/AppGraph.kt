@@ -92,19 +92,22 @@ import dev.pampa.mycloudgallery.work.AndroidLimitsTracker
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Il grafo dell'app con le implementazioni **vere** di P1-P8 (docs/fase2-progetto.md §4.3, riga P9): rete e casa
@@ -324,9 +327,16 @@ class AppGraph(
    * Lo stato del dispositivo (`SetupState`) per la prima schermata. Resta `Loading` finche' [start] non ha letto il
    * diario dell'azzeramento e lo stato fidato salvato: senza, un dispositivo azzerato o approvato mostrerebbe per un
    * attimo il benvenuto.
+   *
+   * **D-7**: dopo il via si segue lo stato della famiglia da quel momento (`flatMapLatest`), non un suo valore ricordato. Con
+   * `combine` il via poteva arrivare prima dell'ultimo valore dello stato della famiglia, e passava quello vecchio ("non
+   * configurato", calcolato prima che la fiducia fosse letta). [start] da' il via solo quando lo stato della famiglia ha visto la
+   * fiducia letta, quindi il primo valore dopo il via e' gia' quello giusto.
    */
+  @OptIn(ExperimentalCoroutinesApi::class)
   val setup: FamilySetupRepository = object : FamilySetupRepository {
-    override val state: StateFlow<SetupState> = combine(started, familySetup.state) { ready, state -> if (ready) state else SetupState.Loading }
+    override val state: StateFlow<SetupState> = started
+      .flatMapLatest { ready -> if (ready) familySetup.state else flowOf(SetupState.Loading) }
       .stateIn(scope, SharingStarted.Eagerly, SetupState.Loading)
   }
 
@@ -452,7 +462,12 @@ class AppGraph(
   /**
    * All'avvio del processo, prima della prima schermata: finisce un azzeramento interrotto (o legge quello finito) e
    * ricarica lo stato fidato salvato, cosi' lo stato del dispositivo e' giusto anche senza NAS (fuori casa, offline).
-   * Idempotente.
+   * Idempotente: e' anche il "Riprova" della pagina "Keystore non disponibile" (R7), che richiede la chiave al Keystore.
+   *
+   * **D-7** (prove sul campo): il via ([started]) arriva solo quando lo stato della famiglia ha visto la fiducia appena letta
+   * ([DefaultFamilySetupRepository.awaitSourcesSeen]). Prima arrivava subito: lo stato della famiglia si calcola un passo dopo, e in
+   * un processo appena nato chi guardava [setup] subito dopo l'avvio vedeva per un attimo "non configurato" (la UI un lampo, i
+   * lavori "niente da fare"). Le attese di `awaitBackupReady` (`work/BackupJobService`) e `GalleryGraph.awaitReady` restano come cintura.
    */
   suspend fun start() {
     try {
@@ -460,10 +475,17 @@ class AppGraph(
       engine.ensureLoaded()
       engine.refreshStatus()
     } catch (e: kotlinx.coroutines.CancellationException) {
+      started.value = true
       throw e
     } catch (e: Exception) {
       GalleryLog.e(TAG, e) { "avvio della fiducia non riuscito" }
       events.startFailed()
+    }
+    try {
+      // Un tetto solo contro un grafo fermo (scope annullato): lo stato della famiglia si calcola in pochi millisecondi.
+      if (withTimeoutOrNull(SETUP_SEEN_TIMEOUT_MS) { familySetup.awaitSourcesSeen() } == null) {
+        GalleryLog.w(TAG) { "lo stato della famiglia non ha visto la fiducia in tempo: si parte lo stesso" }
+      }
     } finally {
       started.value = true
     }
@@ -508,6 +530,9 @@ class AppGraph(
 
     /** Il tempo che `restartSoon` lascia a chi sta finendo di salvare prima che il processo si riavvii. */
     const val RESTART_DELAY_MS = 1_000L
+
+    /** D-7: il tetto dell'attesa che lo stato della famiglia veda la fiducia letta da [start] (di solito pochi millisecondi). */
+    const val SETUP_SEEN_TIMEOUT_MS = 10_000L
 
     /** Un DataStore di preferenze in `noBackupFilesDir/datastore`, uno per file e per processo. */
     fun preferences(context: Context, scope: CoroutineScope, name: String): DataStore<Preferences> =

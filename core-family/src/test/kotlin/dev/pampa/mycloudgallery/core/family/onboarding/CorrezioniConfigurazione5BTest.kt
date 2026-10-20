@@ -8,6 +8,7 @@ import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
 import dev.pampa.mycloudgallery.core.family.contract.StepInput
 import dev.pampa.mycloudgallery.core.family.contract.StepResult
 import dev.pampa.mycloudgallery.core.family.contract.TrustSnapshot
+import dev.pampa.mycloudgallery.core.family.contract.TrustStatus
 import dev.pampa.mycloudgallery.core.family.invite.DefaultJoinFlow
 import dev.pampa.mycloudgallery.core.family.setup.NasCredentialSlots
 import dev.pampa.mycloudgallery.core.family.support.OnboardingFixture
@@ -17,6 +18,7 @@ import dev.pampa.mycloudgallery.core.family.support.TestFamily
 import dev.pampa.mycloudgallery.core.family.support.doStep
 import dev.pampa.mycloudgallery.core.family.support.expectAdvanced
 import dev.pampa.mycloudgallery.core.family.support.runFounderUntil
+import dev.pampa.mycloudgallery.core.family.testing.FakeOnboardingCoordinator
 import dev.pampa.mycloudgallery.core.network.contract.HomeFingerprint
 import dev.pampa.mycloudgallery.core.trust.crypto.TrustIds
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -158,6 +160,53 @@ class CorrezioniConfigurazione5BTest {
     val m = member.coordinator()
     expectAdvanced(m.submit(StepInput.ChoosePath(OnboardingPath.JOIN_QR)))
     assertThat(m.holdsFamilyKey()).isFalse()
+  }
+
+  /**
+   * R7, il residuo: quando il Keystore dice che la chiave c'e' ma non la da' (`TrustStatus.KeystoreUnavailable` dal motore della
+   * fiducia), il registro non dice piu' "admin" e `keystoreResponds()` e' vero: prima il foglio di "Configura di nuovo" perdeva
+   * l'avviso dell'admin. Nel dubbio, ora c'e'.
+   */
+  @Test
+  fun r7_conLoStatoKeystoreNonDisponibileNelDubbioEUnAdmin() = runTest(UnconfinedTestDispatcher()) {
+    val f = OnboardingFixture(this)
+    val c = f.coordinator()
+    f.memberFinished(c, TestFamily(f.env.nas.share("NAS"), nasGuid = null), "familiare")
+    assertThat(c.holdsFamilyKey()).isFalse()
+
+    f.env.registry.status.value = TrustStatus.KeystoreUnavailable
+
+    assertThat(c.holdsFamilyKey()).isTrue()
+  }
+
+  /**
+   * Parita' del finto (`FakeOnboardingCoordinator`, quello dei test delle schermate) con il vero quando il Keystore non risponde:
+   * stesso esito di "Configura di nuovo" (niente si tocca) e stesso avviso dell'admin, prima e dopo che il Keystore guarisce. Prima il
+   * finto non dava l'avviso a un familiare con il Keystore guasto, il vero si'.
+   */
+  @Test
+  fun r7_ilFintoRispondeComeIlVeroConIlKeystoreCheNonRisponde() = runTest(UnconfinedTestDispatcher()) {
+    val f = OnboardingFixture(this)
+    val real = f.coordinator()
+    f.memberFinished(real, TestFamily(f.env.nas.share("NAS"), nasGuid = null), "familiare")
+    val fake = FakeOnboardingCoordinator().apply {
+      finished = true
+      joinRegistered = true
+    }
+
+    f.env.deviceKeys.broken = true
+    fake.keystoreDown = true
+    assertThat(fake.holdsFamilyKey()).isEqualTo(real.holdsFamilyKey())
+    assertThat(fake.holdsFamilyKey()).isTrue()
+    val realResult = real.startOver()
+    assertThat(fake.startOver()).isEqualTo(realResult)
+    assertThat(realResult).isEqualTo(problem(OnboardingProblem.KEYS_NOT_REMOVED))
+    assertThat(fake.finished).isEqualTo(f.store.snapshot.finished)
+
+    f.env.deviceKeys.broken = false
+    fake.keystoreDown = false
+    assertThat(fake.holdsFamilyKey()).isEqualTo(real.holdsFamilyKey())
+    assertThat(fake.holdsFamilyKey()).isFalse()
   }
 
   // --- R6: i dati del vecchio account non passano al nuovo -----------------------------------------------------------------

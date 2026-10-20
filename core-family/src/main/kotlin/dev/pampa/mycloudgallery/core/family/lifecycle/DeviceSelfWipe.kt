@@ -97,7 +97,19 @@ class DeviceSelfWipe(
     // non scrivibile; [persist] va avanti lo stesso, perche' azzerare conta di piu'). Il segno che resta e' questo: la
     // chiave del dispositivo non c'e' piu' ma lo stato fidato si'. Nessun altro percorso toglie la chiave lasciando lo
     // stato (la fase 5 lo cancella), quindi e' un azzeramento interrotto: si finisce.
-    if (!keys.hasDeviceKey() && hasTrustState()) {
+    // R7: un Keystore che non risponde non dice se la chiave c'e'. Non si azzera (sarebbe distruttivo per un guasto passeggero) e
+    // non si lancia: prima l'eccezione fermava l'avvio prima che il motore della fiducia rileggesse lo stato, e il dispositivo
+    // sembrava "non configurato". Il motore vede lo stesso guasto e lo stato diventa "Keystore non disponibile" (chiuso); il
+    // controllo si rifa' al prossimo avvio o con "Riprova".
+    val keyPresent = try {
+      keys.hasDeviceKey()
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      GalleryLog.w(TAG) { "Keystore che non risponde: controllo dell'azzeramento interrotto rimandato (${e.javaClass.simpleName})" }
+      return
+    }
+    if (!keyPresent && hasTrustState()) {
       GalleryLog.w(TAG) { "chiave sparita con lo stato fidato ancora presente: si completa l'azzeramento" }
       run(WipeReason.MARKED_LOST)
     }

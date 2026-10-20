@@ -73,11 +73,15 @@ import dev.pampa.mycloudgallery.main.LibraryCommandHostEffect
 import dev.pampa.mycloudgallery.main.LocalViewerHost
 import dev.pampa.mycloudgallery.main.MainScaffold
 import dev.pampa.mycloudgallery.root.BlockedScreen
+import dev.pampa.mycloudgallery.root.KeystoreUi
+import dev.pampa.mycloudgallery.root.KeystoreUnavailableScreen
 import dev.pampa.mycloudgallery.root.RootDestination
 import dev.pampa.mycloudgallery.root.WipedScreen
 import dev.pampa.mycloudgallery.status.GlobalStatus
 import dev.pampa.mycloudgallery.status.StatusAction
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
@@ -219,7 +223,12 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
           WipedScreen(onReconfigure = actions.reconfigure)
         }
         is RootDestination.Blocked -> composable<BlockedRoute> { entry ->
-          BlockedScreen(reason = entry.toRoute<BlockedRoute>().reason)
+          // R7: la pagina con "Riprova" (e l'uscita "Configura di nuovo") la decide lo stato del dispositivo, mai l'argomento della rotta.
+          if (destination.reason == BlockReason.KEYSTORE_UNAVAILABLE) {
+            KeystoreDestination(actions.keystore)
+          } else {
+            BlockedScreen(reason = entry.toRoute<BlockedRoute>().reason)
+          }
         }
         // L'uscita dall'onboarding la decide lo stato (SetupState): onDone non deve fare niente. "Continua piu' tardi"
         // quando non c'e' un passo locale da fare (ingresso, recupero) manda l'app in secondo piano, a configurazione salvata.
@@ -236,7 +245,35 @@ class RootNavActions(
   val watchApproval: () -> Flow<TrustStatus>,
   val reconfigure: () -> Unit,
   val pause: () -> Unit,
+  /** La pagina "Keystore non disponibile" (R7). */
+  val keystore: KeystoreActions = KeystoreActions.None,
 )
+
+/** La pagina "Keystore non disponibile" (R7): lo stato e i gesti, da `RootViewModel`. */
+class KeystoreActions(
+  val state: StateFlow<KeystoreUi>,
+  val retry: () -> Unit,
+  val askStartOver: () -> Unit,
+  val cancelStartOver: () -> Unit,
+  val confirmStartOver: () -> Unit,
+) {
+  companion object {
+    /** Nessuna azione (test della navigazione che non arrivano alla pagina). */
+    val None = KeystoreActions(MutableStateFlow(KeystoreUi()), {}, {}, {}, {})
+  }
+}
+
+@Composable
+private fun KeystoreDestination(actions: KeystoreActions) {
+  val ui by actions.state.collectAsStateWithLifecycle()
+  KeystoreUnavailableScreen(
+    ui = ui,
+    onRetry = actions.retry,
+    onAskStartOver = actions.askStartOver,
+    onCancelStartOver = actions.cancelStartOver,
+    onConfirmStartOver = actions.confirmStartOver,
+  )
+}
 
 /**
  * L'attesa dell'approvazione (E-S14): codice e QR della chiave (pagina di feature-onboarding). Il registro si rilegge

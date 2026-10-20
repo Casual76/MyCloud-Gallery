@@ -13,6 +13,7 @@ import dev.pampa.mycloudgallery.core.nas.contract.NasSessionManager
 import dev.pampa.mycloudgallery.core.nas.contract.Purpose
 import dev.pampa.mycloudgallery.core.trust.RejectReason
 import dev.pampa.mycloudgallery.core.trust.Verdict
+import dev.pampa.mycloudgallery.core.trust.crypto.EcPublicKey
 import dev.pampa.mycloudgallery.core.trust.crypto.KeyProvider
 import dev.pampa.mycloudgallery.core.trust.crypto.TrustIds
 import dev.pampa.mycloudgallery.core.trust.data.HeadMark
@@ -288,26 +289,28 @@ class TrustEngine(
   /** Dopo ogni cambio: lo stato di questo dispositivo e, se il registro accettato dice "perso", l'azzeramento. */
   private suspend fun afterChange() {
     val current = state
-    val me = try {
-      myDeviceId()
-    } catch (e: CancellationException) {
-      throw e
-    } catch (e: Exception) {
-      null
-    }
+    val identity = identity()
+    val me = (identity as? Identity.Known)?.id
     if (current != null && me != null && current.mustSelfWipe(me) && selfWipe.progress.value == null) {
       GalleryLog.w(TAG) { "il registro firmato dice che questo dispositivo e' perso: azzeramento" }
       _status.value = TrustStatus.Lost
       selfWipe.run(WipeReason.MARKED_LOST)
     }
-    _status.value = computeStatus(current, me)
+    _status.value = computeStatus(current, identity)
   }
 
-  private fun computeStatus(current: RegistryState?, me: String?): TrustStatus {
+  private fun computeStatus(current: RegistryState?, identity: Identity): TrustStatus {
     if (selfWipe.progress.value != null) return TrustStatus.Lost
-    if (current == null || me == null) return TrustStatus.NotConfigured
-    val entry = current.registry.device(me)
-      ?: return TrustStatus.Pending(keys.deviceSigner().publicKey.let(ApprovalCodes::of))
+    // Nessuno stato fidato: non configurato, qualunque cosa dica il Keystore (non c'e' niente da proteggere ne' da ritrovare).
+    if (current == null) return TrustStatus.NotConfigured
+    val me = when (identity) {
+      // R7: lo stato c'e' ma il Keystore non risponde. Prima diventava "non configurato" e la pagina "fuori dalla famiglia" offriva
+      // "Configura di nuovo" per un guasto passeggero. Resta chiuso (nessuna fiducia) ma si dice per quello che e'.
+      Identity.KeystoreFailed -> return TrustStatus.KeystoreUnavailable
+      Identity.NoKey -> return TrustStatus.NotConfigured
+      is Identity.Known -> identity
+    }
+    val entry = current.registry.device(me.id) ?: return TrustStatus.Pending(ApprovalCodes.of(me.publicKey))
     return when (entry.status) {
       DeviceStatus.LOST -> TrustStatus.Lost
       DeviceStatus.REVOKED -> TrustStatus.Revoked
@@ -316,14 +319,38 @@ class TrustEngine(
     }
   }
 
-  /** Recompute (per esempio dopo la lettura degli stati dei dispositivi). */
+  /**
+   * Recompute (per esempio dopo la lettura degli stati dei dispositivi, all'avvio, o con "Riprova" dalla pagina delle chiavi):
+   * richiede di nuovo la chiave al Keystore, quindi un Keystore tornato a rispondere ridà lo stato di prima.
+   */
   fun refreshStatus() {
-    val me = try {
-      myDeviceId()
-    } catch (e: Exception) {
-      null
+    _status.value = computeStatus(state, identity())
+  }
+
+  /**
+   * Chi e' questo dispositivo per il Keystore, chiesto una volta sola per ogni calcolo dello stato: la sua chiave, nessuna chiave,
+   * oppure nessuna risposta (R7). Non crea mai la chiave: `deviceSigner()` si chiama solo se `hasDeviceKey()` dice che c'e'.
+   */
+  private fun identity(): Identity = try {
+    if (keys.hasDeviceKey()) {
+      val publicKey = keys.deviceSigner().publicKey
+      Identity.Known(TrustIds.deviceIdOf(publicKey), publicKey)
+    } else {
+      Identity.NoKey
     }
-    _status.value = computeStatus(state, me)
+  } catch (e: CancellationException) {
+    throw e
+  } catch (e: Exception) {
+    GalleryLog.w(TAG) { "il Keystore non risponde: stato chiuso finche' non torna (${e.javaClass.simpleName})" }
+    Identity.KeystoreFailed
+  }
+
+  private sealed interface Identity {
+    class Known(val id: String, val publicKey: EcPublicKey) : Identity
+
+    data object NoKey : Identity
+
+    data object KeystoreFailed : Identity
   }
 
   private companion object {

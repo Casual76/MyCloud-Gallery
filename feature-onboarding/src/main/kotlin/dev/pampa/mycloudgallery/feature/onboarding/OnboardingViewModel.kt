@@ -217,7 +217,8 @@ class OnboardingViewModel @Inject constructor(
     TrustStatus.Revoked -> RemovalReason.REVOKED
     TrustStatus.Retired -> RemovalReason.RETIRED
     TrustStatus.NotConfigured -> RemovalReason.OTHER
-    is TrustStatus.Approved, is TrustStatus.Pending, is TrustStatus.Stale, TrustStatus.Lost -> null
+    // R7: il Keystore che non risponde non e' "fuori dalla famiglia": la radice mostra la sua pagina (Riprova), mai questa.
+    is TrustStatus.Approved, is TrustStatus.Pending, is TrustStatus.Stale, TrustStatus.Lost, TrustStatus.KeystoreUnavailable -> null
   }
 
   /**

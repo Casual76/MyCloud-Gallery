@@ -313,6 +313,13 @@ private fun familyHero(state: SettingsUiState): FamilyHero = when {
     title = { stringResource(R.string.hero_stale_title) },
     description = { stringResource(staleDetail(state.trust.reason)) },
   )
+  // R7: il Keystore non risponde. Mai l'apertura "tutto a posto" (l'ultimo ramo): niente fiducia finche' non torna.
+  state.trust is TrustStatus.KeystoreUnavailable -> FamilyHero(
+    tone = FluidHeroTone.Alert,
+    value = { stringResource(R.string.hero_keystore_value) },
+    title = { stringResource(R.string.hero_keystore_title) },
+    description = { stringResource(R.string.hero_keystore_detail) },
+  )
   state.trust is TrustStatus.Revoked || state.trust is TrustStatus.Retired || state.trust is TrustStatus.Lost -> FamilyHero(
     tone = FluidHeroTone.Alert,
     value = { stringResource(R.string.hero_inactive_value) },

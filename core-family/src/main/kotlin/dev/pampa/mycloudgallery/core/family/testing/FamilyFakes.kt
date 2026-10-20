@@ -141,6 +141,13 @@ class FakeOnboardingCoordinator(initial: OnboardingProgress = OnboardingProgress
   var keysStuck: Boolean = false
 
   /**
+   * Il Keystore non risponde (R7), come `SoftwareKeyProvider.broken` sotto il coordinatore vero: "Configura di nuovo" si ferma senza
+   * toccare niente e, a onboarding finito, il dispositivo potrebbe essere un admin ([holdsFamilyKey] vero: nel dubbio l'avviso).
+   * Diverso da [keysStuck], che vale anche per una chiave che risponde ma non si toglie (R19): li' il vero non da' l'avviso in piu'.
+   */
+  var keystoreDown: Boolean = false
+
+  /**
    * Punto 10 delle prove sul campo: le aree comuni che hanno una famiglia (null = tutte, come prima). Come il vero, il recupero dell'admin e il
    * secondo admin su un'area senza famiglia si fermano al passo 4 con [OnboardingProblem.NO_FAMILY_IN_AREA].
    */
@@ -249,13 +256,16 @@ class FakeOnboardingCoordinator(initial: OnboardingProgress = OnboardingProgress
 
   override suspend fun recoveryPending(): Boolean = OnboardingRules.recoveryPending(snapshot(), adminRecovered)
 
-  /** Come il vero: il fondatore, l'admin recuperato e il secondo admin tengono la chiave di famiglia (R7). */
+  /**
+   * Come il vero: il fondatore, l'admin recuperato e il secondo admin tengono la chiave di famiglia (R7); a onboarding finito, con il
+   * Keystore che non risponde ([keystoreDown]), nel dubbio anche gli altri.
+   */
   override suspend fun holdsFamilyKey(): Boolean =
-    founded || adminRecovered || OnboardingRules.isRecoveryPath(progress.value.path)
+    founded || adminRecovered || OnboardingRules.isRecoveryPath(progress.value.path) || (finished && keystoreDown)
 
   override suspend fun startOver(): StepResult {
     startOvers++
-    if (keysStuck) return StepResult.Problem(OnboardingProblem.KEYS_NOT_REMOVED)
+    if (keysStuck || keystoreDown) return StepResult.Problem(OnboardingProblem.KEYS_NOT_REMOVED)
     finished = false
     resuming = false
     deferrable = false

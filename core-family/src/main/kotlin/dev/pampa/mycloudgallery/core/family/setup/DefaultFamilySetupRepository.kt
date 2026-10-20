@@ -13,10 +13,12 @@ import dev.pampa.mycloudgallery.core.family.onboarding.OnboardingSnapshot
 import dev.pampa.mycloudgallery.core.family.onboarding.OnboardingStateStore
 import dev.pampa.mycloudgallery.core.family.onboarding.StoreState
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 /**
  * Dove si trova questo dispositivo nella vita della famiglia ([SetupState]), ricavato da tre fonti:
@@ -27,13 +29,16 @@ import kotlinx.coroutines.flow.stateIn
  * La decisione e' [SetupResolver.resolve], una funzione pura con la sua tabella di casi; qui c'e' solo
  * il collegamento ai flussi e l'ora dell'azzeramento.
  *
+ * Lo stato si calcola un passo dopo le fonti (le si osserva su [scope]): chi ha appena cambiato una fonte e vuole che lo stato
+ * l'abbia gia' vista lo aspetta con [awaitSourcesSeen] (D-7, l'avvio di `AppGraph`).
+ *
  * @param scope la vita del processo: dove si raccolgono i flussi.
  * @param deviceNow l'ora del dispositivo (ms), per datare un azzeramento visto per la prima volta.
  */
 class DefaultFamilySetupRepository(
   store: OnboardingStateStore,
-  registry: RegistryService,
-  wipe: SelfWipe,
+  private val registry: RegistryService,
+  private val wipe: SelfWipe,
   scope: CoroutineScope,
   private val deviceNow: () -> Long = System::currentTimeMillis,
 ) : FamilySetupRepository {
@@ -46,7 +51,37 @@ class DefaultFamilySetupRepository(
   /** Vero dal momento in cui un azzeramento finito e' stato dimenticato finche' il registro dice ancora "perso". */
   private var forgotten = false
 
-  override val state: StateFlow<SetupState> =
+  private val current = MutableStateFlow<SetupState>(SetupState.Loading)
+
+  /** Lo stato della fiducia e la fase dell'azzeramento da cui viene il valore di adesso di [state]; null prima del primo calcolo. */
+  private val seen = MutableStateFlow<SeenSources?>(null)
+
+  override val state: StateFlow<SetupState> = current.asStateFlow()
+
+  init {
+    scope.launch {
+      resolved(store).collect { (setup, sources) ->
+        // Prima lo stato, poi cio' che ha visto: chi aspetta [seen] trova gia' [state] aggiornato.
+        current.value = setup
+        seen.value = sources
+      }
+    }
+  }
+
+  /**
+   * **D-7** (prove sul campo): ritorna quando [state] e' stato calcolato con lo stato della fiducia (`RegistryService.status`) e la
+   * fase dell'azzeramento (`SelfWipe.progress`) **di adesso**, o di dopo. Il valore di [state] si calcola su [scope], un passo dopo
+   * le fonti: senza questa attesa, in un processo appena nato, l'avvio dichiarava finita la lettura della fiducia mentre [state]
+   * diceva ancora "non configurato" (calcolato con lo stato iniziale del motore della fiducia).
+   *
+   * Le fonti si confrontano con quelle che il calcolo ha visto, non con un valore passato da chi chiama: se nel frattempo cambiano
+   * ancora, si aspetta anche quel cambio (mai un valore piu' vecchio di quello letto da chi chiama).
+   */
+  suspend fun awaitSourcesSeen() {
+    combine(seen, registry.status, wipe.progress) { seenNow, trust, phase -> seenNow == SeenSources(trust, phase) }.first { it }
+  }
+
+  private fun resolved(store: OnboardingStateStore) =
     combine(store.state, registry.status, wipe.progress) { stored, trust, phase ->
       // L'ora dell'azzeramento: la prima volta che lo si vede finito (P3 non la espone, e l'eraser puo' aver
       // cancellato anche i nostri dati). Se non e' finito o non e' mai iniziato, si dimentica.
@@ -66,8 +101,11 @@ class DefaultFamilySetupRepository(
       if (phase != null || trust != TrustStatus.Lost) forgotten = false
       lastPhase = phase
       val effectiveTrust = if (forgotten) TrustStatus.NotConfigured else trust
-      SetupResolver.resolve(stored, effectiveTrust, phase, wipeObservedAt ?: 0L)
-    }.stateIn(scope, SharingStarted.Eagerly, SetupState.Loading)
+      SetupResolver.resolve(stored, effectiveTrust, phase, wipeObservedAt ?: 0L) to SeenSources(trust, phase)
+    }
+
+  /** Le fonti (quelle vere, prima delle correzioni) da cui e' venuto un valore di [state]. */
+  private data class SeenSources(val trust: TrustStatus, val phase: WipePhase?)
 }
 
 /**
@@ -84,6 +122,8 @@ class DefaultFamilySetupRepository(
  *    `Blocked(NEEDS_APP_UPDATE)`; rami in conflitto → `Blocked(REGISTRY_FORK)`; revocato o dismesso →
  *    `NotConfigured` (per riusare il dispositivo si ricomincia da capo e si riapprova, con una chiave nuova);
  *    il registro solo "vecchio" o non riletto (`Stale` senza gravita') non cambia lo stato di chi era approvato;
+ *    stato salvato con un Keystore che non risponde → `Blocked(KEYSTORE_UNAVAILABLE)` (R7: mai "non configurato", che porta
+ *    alla pagina "fuori dalla famiglia" e a "Configura di nuovo");
  * 6. altrimenti `NotConfigured`.
  */
 object SetupResolver {
@@ -107,6 +147,7 @@ object SetupResolver {
     is TrustStatus.Approved -> SetupState.Ready(trust.admin)
     is TrustStatus.Pending -> SetupState.AwaitingApproval(trust.code, snapshot.join?.requestedAt ?: 0L)
     TrustStatus.Retired, TrustStatus.Revoked, TrustStatus.NotConfigured, TrustStatus.Lost -> SetupState.NotConfigured
+    TrustStatus.KeystoreUnavailable -> SetupState.Blocked(BlockReason.KEYSTORE_UNAVAILABLE)
     is TrustStatus.Stale -> when (trust.reason) {
       StaleReason.NEEDS_APP_UPDATE -> SetupState.Blocked(BlockReason.NEEDS_APP_UPDATE)
       StaleReason.EQUIVOCATION -> SetupState.Blocked(BlockReason.REGISTRY_FORK)

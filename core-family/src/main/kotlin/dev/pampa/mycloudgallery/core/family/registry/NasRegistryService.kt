@@ -175,7 +175,15 @@ class NasRegistryService(
 
   private suspend fun refreshPending(purpose: Purpose) {
     val state = engine.state ?: return
-    val me = engine.myDeviceId() ?: return
+    val me = try {
+      engine.myDeviceId()
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      // R7: con il Keystore che non risponde non si sa se e' l'admin: nessuna richiesta da approvare (e l'eccezione non esce).
+      _pending.value = emptyList()
+      return
+    } ?: return
     val entry = state.registry.device(me)
     if (entry?.status != DeviceStatus.APPROVED || !entry.admin) {
       _pending.value = emptyList()

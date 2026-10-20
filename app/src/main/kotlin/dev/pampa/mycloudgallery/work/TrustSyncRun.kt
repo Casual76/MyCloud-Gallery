@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.work
 
+import dev.pampa.mycloudgallery.core.family.contract.BlockReason
 import dev.pampa.mycloudgallery.core.family.contract.PreflightResult
 import dev.pampa.mycloudgallery.core.family.contract.SetupState
 import dev.pampa.mycloudgallery.core.family.contract.TrustStatus
@@ -68,9 +69,12 @@ class TrustSyncRun(
   }
 
   private suspend fun run(): TrustSyncOutcome {
-    when (graph.setup.state.first { it !is SetupState.Loading }) {
+    when (val state = graph.setup.state.first { it !is SetupState.Loading }) {
       SetupState.Loading, SetupState.NotConfigured, is SetupState.Onboarding, is SetupState.Wiped -> return TrustSyncOutcome.NOT_CONFIGURED
-      is SetupState.AwaitingApproval, is SetupState.Ready, is SetupState.Blocked -> Unit
+      // R7: il Keystore non risponde nemmeno dopo l'avvio qui sopra (che lo richiede): senza chiave non c'e' niente da controllare ne'
+      // da firmare. Si riprova al prossimo giro, all'apertura dell'app o con "Riprova".
+      is SetupState.Blocked -> if (state.reason == BlockReason.KEYSTORE_UNAVAILABLE) return TrustSyncOutcome.STOPPED
+      is SetupState.AwaitingApproval, is SetupState.Ready -> Unit
     }
     awaitNetwork()
     if (!rulesAllow()) return TrustSyncOutcome.RULES_WAIT

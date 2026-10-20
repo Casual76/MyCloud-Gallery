@@ -16,7 +16,7 @@ import dev.pampa.mycloudgallery.core.family.registry.DeviceStatusBook
 import dev.pampa.mycloudgallery.core.family.registry.RegistryWriter
 
 /** Lo stato proprio come enum esportabile (`ExportValue.Enum`): mai il codice d'approvazione o un nome. */
-enum class OwnTrustState { NOT_CONFIGURED, PENDING, APPROVED, ADMIN, RETIRED, REVOKED, LOST, STALE }
+enum class OwnTrustState { NOT_CONFIGURED, PENDING, APPROVED, ADMIN, RETIRED, REVOKED, LOST, STALE, KEYSTORE_UNAVAILABLE }
 
 /** I codici della sezione "Fiducia" della Diagnostica (§2.6), con gli edge case che coprono. */
 object TrustDiagCodes {
@@ -70,7 +70,12 @@ class TrustDiagnostics(
     val own = ownState(status)
     items += item(
       TrustDiagCodes.STATE,
-      if (own == OwnTrustState.STALE || own == OwnTrustState.PENDING) DiagSeverity.INFO else DiagSeverity.OK,
+      when (own) {
+        OwnTrustState.STALE, OwnTrustState.PENDING -> DiagSeverity.INFO
+        // R7: il Keystore non risponde, niente fiducia finche' non torna.
+        OwnTrustState.KEYSTORE_UNAVAILABLE -> DiagSeverity.ERROR
+        else -> DiagSeverity.OK
+      },
       R.string.trust_diag_state,
       action = DiagAction.OPEN_DEVICES,
       export = buildMap {
@@ -135,6 +140,7 @@ class TrustDiagnostics(
       TrustStatus.Revoked -> OwnTrustState.REVOKED
       TrustStatus.Lost -> OwnTrustState.LOST
       is TrustStatus.Stale -> OwnTrustState.STALE
+      TrustStatus.KeystoreUnavailable -> OwnTrustState.KEYSTORE_UNAVAILABLE
     }
   }
 }

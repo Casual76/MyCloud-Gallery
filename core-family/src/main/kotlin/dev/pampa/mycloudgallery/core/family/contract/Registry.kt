@@ -41,6 +41,14 @@ sealed interface TrustStatus {
   data object Lost : TrustStatus
 
   data class Stale(val reason: StaleReason) : TrustStatus
+
+  /**
+   * C'e' uno stato della famiglia salvato, ma il Keystore non risponde (R7 della revisione 5B: per esempio dopo un aggiornamento
+   * di sistema): non si sa quale sia la chiave di questo dispositivo, quindi nemmeno se e' approvato. **Chiuso**: niente fiducia,
+   * niente scritture firmate, niente approvazioni. Non e' "non configurato": la chiave, la chiave di famiglia e lo stato ci sono
+   * ancora, e quando il Keystore torna a rispondere lo stato si ricalcola uguale a prima.
+   */
+  data object KeystoreUnavailable : TrustStatus
 }
 
 /** Il ruolo del dispositivo, come si mostra nell'elenco. */

@@ -80,7 +80,15 @@ class RegistryWriter(
   suspend fun adminContext(): AdminContext? {
     if (!engine.ensureLoaded()) return null
     val state = engine.state ?: return null
-    val me = engine.myDeviceId() ?: return null
+    val me = try {
+      engine.myDeviceId()
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      // R7: il Keystore non risponde, non si sa chi e' questo dispositivo: nessuna azione dell'admin (prima l'eccezione usciva).
+      GalleryLog.w(TAG) { "Keystore che non risponde: niente azioni dell'admin" }
+      null
+    } ?: return null
     if (state.statusOf(me) != DeviceStatus.APPROVED) return null
     if (state.registry.device(me)?.admin != true) return null
     val key = try {

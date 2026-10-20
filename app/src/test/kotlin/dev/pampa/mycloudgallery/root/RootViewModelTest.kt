@@ -4,7 +4,9 @@ import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.family.contract.BlockReason
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingProgress
 import dev.pampa.mycloudgallery.core.family.contract.SetupState
+import dev.pampa.mycloudgallery.core.family.contract.StepResult
 import dev.pampa.mycloudgallery.core.family.testing.FakeFamilySetupRepository
+import dev.pampa.mycloudgallery.core.family.testing.FakeOnboardingCoordinator
 import dev.pampa.mycloudgallery.core.nas.contract.NasConnState
 import dev.pampa.mycloudgallery.core.nas.contract.SessionInfo
 import dev.pampa.mycloudgallery.core.nas.contract.SmbDialect
@@ -82,6 +84,8 @@ class RootViewModelTest {
       SetupState.Ready(admin = false) to RootDestination.Main,
       SetupState.Wiped(at = 0L) to RootDestination.Wiped,
       SetupState.Blocked(BlockReason.NEEDS_APP_UPDATE) to RootDestination.Blocked(BlockReason.NEEDS_APP_UPDATE),
+      // R7: il Keystore che non risponde e' una pagina ferma sua, mai l'onboarding ("fuori dalla famiglia").
+      SetupState.Blocked(BlockReason.KEYSTORE_UNAVAILABLE) to RootDestination.Blocked(BlockReason.KEYSTORE_UNAVAILABLE),
     )
     for ((state, destination) in expectations) {
       rig.setup.state.value = state
@@ -97,6 +101,114 @@ class RootViewModelTest {
     assertThat(startRoute(RootDestination.Wiped)).isEqualTo(WipedRoute)
     val blocked = startRoute(RootDestination.Blocked(BlockReason.STORAGE_LOCKED)) as BlockedRoute
     assertThat(blocked.reason).isEqualTo(BlockReason.STORAGE_LOCKED)
+  }
+
+  // --- R7: la pagina "Keystore non disponibile" ------------------------------------------------------------------------
+
+  /**
+   * Le porte della pagina sopra il coordinatore finto (allineato al vero: `CorrezioniConfigurazione5BTest` di core-family) e un
+   * Keystore che si guarisce dal test. "Riprova" guarito riporta lo stato di prima (qui: la Libreria).
+   */
+  private class KeystorePorts(val coordinator: FakeOnboardingCoordinator, val setup: FakeFamilySetupRepository) : RootPorts by RootPorts.None {
+    var rechecks = 0
+
+    override suspend fun recheckKeys(): Boolean {
+      rechecks++
+      if (!coordinator.keystoreDown) setup.state.value = SetupState.Ready(admin = true)
+      return !coordinator.keystoreDown
+    }
+
+    override suspend fun holdsFamilyKey(): Boolean = coordinator.holdsFamilyKey()
+
+    override suspend fun startOver(): StepResult =
+      coordinator.startOver().also { if (it is StepResult.Advanced) setup.state.value = SetupState.NotConfigured }
+  }
+
+  private class KeystoreRig(member: Boolean = true) {
+    val setup = FakeFamilySetupRepository(SetupState.Blocked(BlockReason.KEYSTORE_UNAVAILABLE))
+    val coordinator = FakeOnboardingCoordinator().apply {
+      finished = true
+      if (member) joinRegistered = true else founded = true
+      keystoreDown = true
+    }
+    val ports = KeystorePorts(coordinator, setup)
+    val viewModel = RootViewModel(
+      setup, FakeNetworkEnvironment(Snapshots.offline()), FakeNasSessionManager(), FakeVpnController(), AppLockController { 0L }, flowOf(AppLockSettings()), ports,
+    )
+  }
+
+  @Test
+  fun r7_riprovaRicalcolaLoStatoEConIlKeystoreGuaritoSiTornaAllaLibreria() = runTest {
+    val rig = KeystoreRig()
+    val vm = rig.viewModel
+    assertThat(vm.destination.value).isEqualTo(RootDestination.Blocked(BlockReason.KEYSTORE_UNAVAILABLE))
+    assertThat(vm.keystore.value).isEqualTo(KeystoreUi())
+
+    // Ancora guasto: la pagina resta e lo dice.
+    vm.retryKeystore()
+    assertThat(rig.ports.rechecks).isEqualTo(1)
+    assertThat(vm.keystore.value.retrying).isFalse()
+    assertThat(vm.keystore.value.stillUnavailable).isTrue()
+    assertThat(vm.destination.value).isEqualTo(RootDestination.Blocked(BlockReason.KEYSTORE_UNAVAILABLE))
+
+    // Guarito: lo stato di prima, e la pagina, se tornasse, riparte pulita.
+    rig.coordinator.keystoreDown = false
+    vm.retryKeystore()
+    assertThat(rig.ports.rechecks).isEqualTo(2)
+    assertThat(vm.destination.value).isEqualTo(RootDestination.Main)
+    assertThat(vm.keystore.value).isEqualTo(KeystoreUi())
+    // "Riprova" non tocca mai niente.
+    assertThat(rig.coordinator.startOvers).isEqualTo(0)
+  }
+
+  @Test
+  fun r7_configuraDiNuovoPassaSoloDalFoglioConLAvvisoDellAdmin() = runTest {
+    val rig = KeystoreRig(member = true)
+    val vm = rig.viewModel
+
+    // Senza il foglio aperto la conferma non fa niente (un tocco fuori posto, un doppio tocco).
+    vm.confirmKeystoreStartOver()
+    assertThat(rig.coordinator.startOvers).isEqualTo(0)
+
+    vm.askKeystoreStartOver()
+    assertThat(vm.keystore.value.confirming).isTrue()
+    // Con il Keystore che non risponde non si sa se e' un admin: nel dubbio il foglio dice che si perde la chiave di famiglia.
+    assertThat(vm.keystore.value.holdsKey).isTrue()
+    assertThat(rig.coordinator.startOvers).isEqualTo(0)
+
+    vm.cancelKeystoreStartOver()
+    assertThat(vm.keystore.value.confirming).isFalse()
+    vm.confirmKeystoreStartOver()
+    assertThat(rig.coordinator.startOvers).isEqualTo(0)
+    assertThat(vm.destination.value).isEqualTo(RootDestination.Blocked(BlockReason.KEYSTORE_UNAVAILABLE))
+  }
+
+  @Test
+  fun r7_configuraDiNuovoConfermatoConIlKeystoreGuastoNonToccaNienteEPoiSiRiprovaDalFoglio() = runTest {
+    val rig = KeystoreRig(member = false)
+    val vm = rig.viewModel
+    vm.askKeystoreStartOver()
+    assertThat(vm.keystore.value.holdsKey).isTrue()
+
+    vm.confirmKeystoreStartOver()
+
+    assertThat(rig.coordinator.startOvers).isEqualTo(1)
+    assertThat(vm.keystore.value.problem).isEqualTo(KeystoreProblem.KEYS_NOT_REMOVED)
+    assertThat(vm.keystore.value.busy).isFalse()
+    assertThat(vm.keystore.value.confirming).isFalse()
+    assertThat(rig.coordinator.finished).isTrue() // niente toccato
+    assertThat(vm.destination.value).isEqualTo(RootDestination.Blocked(BlockReason.KEYSTORE_UNAVAILABLE))
+
+    // Chi vuole davvero ricominciare (la chiave e' guasta per sempre, il Keystore risponde): di nuovo dal foglio, poi il benvenuto.
+    rig.coordinator.keystoreDown = false
+    vm.confirmKeystoreStartOver()
+    assertThat(rig.coordinator.startOvers).isEqualTo(1)
+    vm.askKeystoreStartOver()
+    assertThat(vm.keystore.value.problem).isNull()
+    vm.confirmKeystoreStartOver()
+    assertThat(rig.coordinator.startOvers).isEqualTo(2)
+    assertThat(vm.destination.value).isEqualTo(RootDestination.Onboarding)
+    assertThat(vm.keystore.value).isEqualTo(KeystoreUi())
   }
 
   @Test

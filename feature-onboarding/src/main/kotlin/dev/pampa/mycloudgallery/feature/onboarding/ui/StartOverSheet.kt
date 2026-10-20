@@ -27,10 +27,11 @@ import dev.pampa.mycloudgallery.feature.onboarding.R
  * Il punto in cui un foglio di conferma dell'onboarding si apre davvero. I fogli del design system sono pop-up in vetro che
  * vivono in un `FluidGlassModalHost` alla radice: durante l'onboarding la radice non ne ha uno (la Libreria non c'e'), e senza
  * host il foglio **non si apre**. Se un host c'e' gia' lo si usa, se no se ne mette uno qui, sopra la sola pagina corrente
- * (la stessa regola di `SettingsHost`).
+ * (la stessa regola di `SettingsHost`). Pubblico per la pagina della radice "Keystore non disponibile" di `:app` (R7), che non ha
+ * un host suo.
  */
 @Composable
-internal fun OnboardingSheetHost(content: @Composable () -> Unit) {
+fun OnboardingSheetHost(content: @Composable () -> Unit) {
   if (LocalFluidGlassModalHostState.current != null) {
     content()
     return
@@ -60,9 +61,12 @@ internal fun OnboardingSheetHost(content: @Composable () -> Unit) {
  * Su un admin ([holdsKey]) il foglio dice cosa si perde (la chiave di famiglia: senza non si approvano dispositivi) e come si
  * riprende (il kit di recupero con il suo codice, "Recupera l'admin" dal benvenuto). Se la causa e' sconosciuta
  * ([unknownCause], "lo stato non c'e' piu'") ricorda che puo' essere un guasto passeggero del telefono.
+ *
+ * Pubblico perche' lo usa anche la pagina della radice "Keystore non disponibile" di `:app` (R7): la stessa conferma, con lo stesso
+ * avviso dell'admin, per l'uscita secondaria di chi vuole davvero ricominciare.
  */
 @Composable
-internal fun StartOverSheet(
+fun StartOverSheet(
   visible: Boolean,
   holdsKey: Boolean,
   unknownCause: Boolean,

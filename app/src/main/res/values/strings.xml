@@ -34,6 +34,22 @@
   <string name="blocked_fork">Il registro della famiglia ha versioni in conflitto: serve l’intervento dell’admin.</string>
   <string name="blocked_wipe">Un azzeramento è in corso e riprenderà da solo.</string>
   <string name="blocked_storage">Sblocca il telefono almeno una volta dopo l’accensione per continuare.</string>
+  <string name="blocked_keystore">Il telefono non riesce a usare le chiavi di sicurezza in questo momento.</string>
+
+  <!-- Keystore che non risponde (R7): Riprova come azione principale, "Configura di nuovo" solo come uscita secondaria -->
+  <string name="keystore_title">Chiavi di sicurezza non disponibili</string>
+  <string name="keystore_subtitle">MyCloud Gallery è in pausa su questo telefono</string>
+  <string name="keystore_reason_title">Il telefono non riesce a usare le chiavi di sicurezza in questo momento</string>
+  <string name="keystore_detail">Succede a volte dopo un aggiornamento di sistema o un riavvio. La famiglia, le chiavi e le foto sono ancora al loro posto: finché il telefono non risponde, l’app non apre la Libreria, non scrive niente sul NAS e non approva dispositivi.</string>
+  <string name="keystore_retry">Riprova</string>
+  <string name="keystore_still">Il telefono non risponde ancora. Riavvialo e riprova: di solito basta.</string>
+  <string name="keystore_why_title">Perché non ti propongo di configurare di nuovo</string>
+  <string name="keystore_why_detail">Configurare di nuovo toglie account, password e chiavi di questo dispositivo. Se è un admin perde anche la chiave della famiglia, che si riprende solo con il kit di recupero e il suo codice. Per un guasto passeggero non serve.</string>
+  <string name="keystore_start_over_section">Se il problema non passa</string>
+  <string name="keystore_start_over">Configura di nuovo</string>
+  <string name="keystore_start_over_detail">Solo se hai già riavviato il telefono e riprovato. Prima di togliere qualsiasi cosa ti chiedo di confermare.</string>
+  <string name="keystore_problem_keys">Il telefono non è riuscito a togliere le chiavi: account, password e stato della famiglia sono rimasti com’erano. Riprova più tardi.</string>
+  <string name="keystore_problem_other">Non è stato possibile configurare di nuovo. Riprova.</string>
 
   <string name="wiped_reason_title">Era stato segnalato come perso</string>
   <string name="wiped_reconfigure">Configura di nuovo</string>

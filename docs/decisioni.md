@@ -3222,3 +3222,61 @@ I file toccati da questo lavoro: `RunProgress`, `BackupGraph` (`queuedOf`, `roun
 relazioni XML della seconda esecuzione sono tutte nuove): 1.096 s la prima, 447 s la seconda. Test per modulo: `app` 515, `core-prepare` 99, `core-database` 162, `core-backup` 574, `core-library` 162, `core-mediastore` 141,
 `feature-backup` 564. Le suite contro il NAS vero (`-PnasIntegration`: `core-nas`, `core-backup`, `core-nasops`, `area.ps1`) **non** sono nel controllo e non le ho lanciate: `check.ps1` non passa quel flag e senza i test si
 saltano con `Assume` prima di leggere le credenziali.
+
+## Avvio e Keystore: D-7 a monte e il residuo di R7 (20/10)
+Perimetro: la causa di D-7 (il commit `6c19a33` l'aveva aggirata nei lavori) e il residuo di R7 della revisione 5B (`docs/review/5b-fase5b.md`): un Keystore che
+non risponde sembrava "non configurato".
+
+**Decisioni**
+1. **D-7, il via quando lo stato della famiglia ha visto la fiducia.** Causa: `AppGraph.start()` metteva il via (`started`) subito dopo `engine.refreshStatus()`,
+   ma `DefaultFamilySetupRepository` calcola lo stato un passo dopo, su `scope`; e `setup` era `combine(started, familySetup.state)`, che al via poteva usare
+   l'ultimo valore ricordato. In un processo appena nato, a onboarding finito, quel valore era "non configurato" (calcolato con lo stato iniziale del motore della
+   fiducia). Correzione: il repository pubblica lo stato e **poi** le fonti con cui l'ha calcolato (stato della fiducia, fase dell'azzeramento);
+   `awaitSourcesSeen()` torna quando lo stato e' stato calcolato con le fonti di adesso (confrontate con quelle vere, non con un valore passato: un cambio nel
+   frattempo si aspetta). `start()` lo aspetta prima del via (tetto di 10 s, solo contro un grafo fermo; poi parte lo stesso, con un log); `setup` segue lo stato
+   della famiglia **da dopo** il via (`flatMapLatest`), mai un valore ricordato. Invariato: `SetupState` resta `Loading` finche' `start()` non ha finito; la pagina
+   "fuori dalla famiglia" vuole l'onboarding finito; un `start()` annullato da' il via come prima; `awaitBackupReady` (`BackupJobService`) e `GalleryGraph.awaitReady` restano come cintura.
+2. **R7, uno stato distinto e chiuso.** `TrustStatus.KeystoreUnavailable`: c'e' uno stato della famiglia salvato ma il Keystore lancia su `hasDeviceKey` o
+   `deviceSigner` (`TrustEngine` chiede la chiave una volta per calcolo e non la crea mai). Senza stato salvato resta "non configurato" (non c'e' niente da
+   ritrovare); senza chiave, come prima. `SetupResolver` ne fa `Blocked(KEYSTORE_UNAVAILABLE)`, con la precedenza di sempre (azzeramento, archivio, onboarding in
+   corso, azzerato vincono). Chiuso: niente `WritePermit`, `preflight` non da' `Proceed` (lancia, come prima), `RegistryWriter.adminContext` e' null (approvazioni,
+   cambi di stato e configurazione: `NotAdmin`; prima l'eccezione usciva), `DeviceStatusBook.publishIfDue` non pubblica, le richieste in attesa si svuotano,
+   `TrustSyncRun` si ferma (`STOPPED`) dopo il suo `start()`. Diagnostica: `OwnTrustState.KEYSTORE_UNAVAILABLE`, gravita' errore.
+3. **R7, l'avvio non si ferma al Keystore.** `DeviceSelfWipe.resumeIfInterrupted` chiede `hasDeviceKey()` per il caso F7 (chiave sparita con lo stato fidato: un
+   azzeramento interrotto). Se lancia: niente azzeramento (sarebbe distruttivo per un guasto passeggero) e niente eccezione. Prima l'eccezione fermava `start()`
+   prima che il motore rileggesse lo stato, e il dispositivo restava "non configurato". Il controllo di F7 si rifa' al prossimo avvio o con "Riprova".
+4. **R7, la pagina.** La radice mostra `KeystoreUnavailableScreen` (la sceglie lo stato del dispositivo, non l'argomento della rotta): «Il telefono non riesce a usare
+   le chiavi di sicurezza in questo momento», cosa resta fermo, **«Riprova»** come azione principale (`AppGraph.start()`: ricalcola lo stato chiedendo di nuovo la
+   chiave; se non basta lo dice e suggerisce il riavvio) e il perche' non si propone di configurare di nuovo. «Configura di nuovo» e' un tasto semplice in fondo,
+   "se il problema non passa", e apre lo stesso `StartOverSheet` della pagina "fuori dalla famiglia" (con l'avviso che puo' essere un guasto del telefono) e lo
+   stesso `startOver`, che con il Keystore che non risponde non tocca niente (`KEYS_NOT_REMOVED`, detto nella pagina). `holdsFamilyKey` e' vero nel dubbio anche
+   con `KeystoreUnavailable` a onboarding finito: quando il Keystore da' `hasDeviceKey` ma non la chiave il registro non dice piu' "admin" e l'avviso spariva. Aprire
+   l'app rifa' il controllo da sola (`ProcessWatcher` chiede `TrustSyncRun` anche per `Blocked`, e `TrustSyncRun` comincia con `start()`).
+5. **R7, le altre schermate.** `OnboardingViewModel` non fa la pagina "fuori dalla famiglia" per `KeystoreUnavailable`; le Impostazioni mostrano un'apertura
+   «chiavi non disponibili» invece di «tutto a posto»; Dispositivi una nota «da qui non si cambia niente»; `BlockedScreen` ha un testo di riserva. `StartOverSheet`
+   e `OnboardingSheetHost` sono pubblici per la pagina della radice.
+6. **I finti.** I Keystore finti di P3 (`p3.SoftwareKeys`) e dell'app (`integration.SoftwareKeys`) avevano solo la chiave sana: hanno `broken` come quello dei test
+   dell'onboarding (`SoftwareKeyProvider`), e `SoftwareKeysParityTest` (core-family e `:app`) li tiene uguali alla classe vera (`hasDeviceKey` non crea, `deviceSigner`
+   crea e poi da' la stessa, guasto = ogni domanda lancia e niente cambia, guarito = la chiave di prima). `FakeOnboardingCoordinator` non dava l'avviso dell'admin a
+   un familiare con il Keystore guasto (il vero si'): `keystoreDown` lo allinea, con la parita' in `CorrezioniConfigurazione5BTest.r7_ilFintoRispondeComeIlVero…`.
+
+**Test.** D-7: `AvvioEChiaviAppTest.d7_inUnProcessoAppenaNatoLoStatoNonPassaMaiPerNonConfigurato` (grafo vero su un thread solo, avvio sullo stesso thread: la corsa
+diventa ripetibile; **rosso senza la correzione**, verde con) e `d7_subitoDopoLAvvioLoStatoEQuelloVero` (thread di sempre, 5 processi di fila);
+`SetupRepositoryTest.d7_awaitSourcesSeen…`. R7: `KeystoreNonDisponibileTest` (core-family: stato, Keystore guarito, nessuna scrittura firmata ne' approvazione,
+avvio che non azzera), `SetupRepositoryTest.r7_…`, `CorrezioniConfigurazione5BTest.r7_…`, `CorrezioniConfigurazione5BViewModelTest.r7_conIlKeystoreCheNonRisponde…`,
+`RootViewModelTest.r7_…` (il flusso della pagina), `AvvioEChiaviAppTest.r7_…` (grafo vero), `ScaffoldScreenshotTest.fermoChiavi`.
+
+**Esiti.** `tools\check.ps1 -NoDaemon` verde in una copia isolata con solo queste modifiche (`git worktree`, `--max-workers` 2, Kotlin nel processo di Gradle): nell'albero
+principale il `classes.jar` di core-family era tenuto aperto da un daemon che non era di questa sessione (non fermato). Test eseguiti sul serio nei moduli toccati: core-family 277,
+feature-onboarding 700, feature-settings 532, `:app` 552, nessuno fallito. I due test di D-7 di `AvvioEChiaviAppTest` sono **rossi** con l'avvio di prima (riportato solo nella copia):
+quello a un thread legge `NotConfigured` subito dopo `start()`, quello con i thread di sempre lo vede passare in 5 processi.
+
+**Da provare sul telefono.**
+- D-7: con l'app configurata, `am force-stop` e riapertura (e `kill -9` durante un backup dell'utente): nessun lampo del benvenuto o di «fuori dalla famiglia»; nel log `TrustSyncWorker`
+  non dice `NOT_CONFIGURED` dopo un avvio a freddo; il lavoro dell'utente ripartito non finisce `DONE` a vuoto.
+- R7: un guasto vero del Keystore non si provoca; si controlla che nessun avvio normale passi dalla pagina «Chiavi di sicurezza non disponibili» ne' da «fuori dalla famiglia», e che
+  la pagina e il foglio si vedano bene nelle prove a schermo (`ScaffoldScreenshotTest.fermoChiavi`, chiaro e scuro, telefono e tablet).
+
+**Lasciato fuori (da decidere).** Lo stato salvato che non si riverifica (`markUntrusted`) resta «non configurato» e porta ancora alla pagina «fuori dalla famiglia» (con il testo
+«non c'e' piu' o non si verifica»): R7 parlava anche di questo, ma non e' un guasto passeggero e la correzione voluta riguardava il Keystore. `preflight` con il Keystore che non
+risponde lancia come prima (chiuso); non ha un `StopReason` suo.

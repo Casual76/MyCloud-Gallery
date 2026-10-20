@@ -78,7 +78,14 @@ class DeviceStatusBook(
    */
   suspend fun publishIfDue(purpose: Purpose): Boolean = mutex.withLock {
     val state = engine.state ?: return@withLock false
-    val me = engine.myDeviceId() ?: return@withLock false
+    // R7: con il Keystore che non risponde non si pubblica niente (e l'eccezione non esce dalla rilettura del registro).
+    val me = try {
+      engine.myDeviceId()
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      null
+    } ?: return@withLock false
     if (state.statusOf(me) != DeviceStatus.APPROVED) return@withLock false
     val profile = engine.profile() ?: return@withLock false
     val now = engine.nasNow()

@@ -142,9 +142,11 @@ class FiveBButtonsTest {
     // Le facciate arrivano ai servizi veri: il custode risponde per il media (un null-object direbbe "non disponibile").
     val id = rig.gallery.repository.view(LibraryFilter.ALL).first { it.size == 1 }.let { it.snapshot.idAt(it.snapshotIndex(0)) }
     assertThat(FiveBModule.versionKeeper(gallery).plan(id).restore).isEqualTo(RestoreAvailability.ONLY_ONE_VERSION)
-    // "Elimina solo dal telefono" valuta il media (non "non disponibile" per tutti).
+    // "Elimina solo dal telefono" valuta il media (non "non disponibile" per tutti). Correzioni 5B (fake divergente della verifica funzionale):
+    // prima bastava `toString()`, sempre vero; la foto e' al sicuro sulla share di prova, quindi si puo' togliere con il flusso della 5B.
     val advice = FiveBModule.phoneOnlyAssessor(ui).assess(setOf(id))
-    assertThat(advice.toString()).isNotEmpty()
+    assertThat(advice.advice.getValue(id)).isEqualTo(dev.pampa.mycloudgallery.core.backup.free.PhoneOnlyAdvice.FREE)
+    assertThat(advice.notOnNas).isEmpty()
     // Il viewer della galleria riceve le voci del backup.
     assertThat(gallery.viewerServices.backupActions).isSameInstanceAs(p.ui.mediaActions)
     // Le integrazioni hanno le porte vere: la ricezione mette in coda nel diario del backup.

@@ -178,6 +178,82 @@ class ShareReceiverActivityTest {
     scenario.close()
   }
 
+  /**
+   * IN-3 della verifica funzionale 5B: l'app e' chiusa, WhatsApp condivide, il processo nasce e sta ancora leggendo il suo stato. La schermata non
+   * dice "Prima configura MyCloud Gallery" (era una corsa) e non apre lo sblocco: aspetta, e appena lo stato c'e' copia da sola.
+   */
+  @Test
+  fun in3_aFreddoAspettaLoStatoENonDiceMaiPrimaConfigura() {
+    gate.decision = EntryDecision.LOADING
+    install()
+    val scenario = launch(send(shared("a.jpg", ReceiveSamples.jpeg(3_000, 1))))
+
+    assertThat(compose.onAllNodesWithText("Prima configura MyCloud Gallery").fetchSemanticsNodes()).isEmpty()
+    assertThat(compose.onAllNodesWithText("MyCloud Gallery è bloccata").fetchSemanticsNodes()).isEmpty()
+    assertThat(SharingProvider.opens.get()).isEqualTo(0) // niente si apre finche' non si sa
+
+    gate.decision = EntryDecision.ALLOWED
+    waitForText("1 foto", partial = true)
+    assertThat(SharingProvider.opens.get()).isEqualTo(1)
+    scenario.close()
+  }
+
+  /** IN-10: annullata la credenziale di sistema non si riapre da sola in ciclo (parte una volta, poi solo con il tasto). */
+  @Test
+  fun in10_annullareLaCredenzialeNonLaRiapreInCiclo() {
+    gate.decision = EntryDecision.NEEDS_UNLOCK
+    IntegrationPorts.install(gate, null)
+    ReceivePorts.install(uploads, destinations, unlockThatFails())
+
+    val scenario = launch(send(shared("a.jpg", ReceiveSamples.jpeg())))
+    waitForText("MyCloud Gallery è bloccata")
+    assertThat(unlocks.get()).isEqualTo(1)
+    scenario.moveToState(androidx.lifecycle.Lifecycle.State.STARTED)
+    scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
+    scenario.moveToState(androidx.lifecycle.Lifecycle.State.STARTED)
+    scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
+    compose.waitForIdle()
+    assertThat(unlocks.get()).isEqualTo(1)
+    // Il tasto riprova.
+    compose.onNodeWithText("Sblocca").performClick()
+    compose.waitForIdle()
+    assertThat(unlocks.get()).isEqualTo(2)
+    scenario.close()
+  }
+
+  /** IN-6: col backup in prova (D12, R2) la schermata lo dice **prima di copiare** e non apre il flusso dell'altra app. */
+  @Test
+  fun in6_ConIlBackupInProvaDiceInProvaENonCopiaNiente() {
+    destinations.trialOnly = true
+    install()
+    val scenario = launch(send(shared("a.jpg", ReceiveSamples.jpeg(3_000, 1))))
+
+    waitForText("Backup in prova")
+    compose.onNodeWithText("Il backup è ancora in prova", substring = true).assertExists()
+    assertThat(SharingProvider.opens.get()).isEqualTo(0)
+    assertThat(incoming.listFiles().orEmpty().toList()).isEmpty()
+    assertThat(compose.onAllNodesWithText("In quella cartella non si può scrivere", substring = true).fetchSemanticsNodes()).isEmpty()
+    compose.onNodeWithText("Chiudi").performClick()
+    compose.waitForIdle()
+    assertThat(scenario.result.resultCode).isEqualTo(Activity.RESULT_CANCELED)
+  }
+
+  /** IN-11: con i file spariti "Riprova" chiudeva la schermata: adesso il tasto dice "Chiudi". */
+  @Test
+  fun in11_ConIFileSpariti_IlTastoDiceChiudiNonRiprova() {
+    install()
+    val scenario = launch(send(shared("a.jpg", ReceiveSamples.jpeg(3_000, 1))))
+    waitForText("Salva sul NAS", partial = false)
+    compose.waitUntil(10_000) { compose.onAllNodesWithText("Non carico niente", substring = true).fetchSemanticsNodes().isNotEmpty() }
+    incoming.deleteRecursively()
+    compose.onAllNodesWithText("Salva sul NAS")[1].performClick()
+    waitForText("I file copiati non ci sono più", partial = true)
+    assertThat(compose.onAllNodesWithText("Riprova").fetchSemanticsNodes()).isEmpty()
+    compose.onNodeWithText("Chiudi", useUnmergedTree = false).performClick()
+    compose.waitForIdle()
+    assertThat(scenario.result.resultCode).isEqualTo(Activity.RESULT_CANCELED)
+  }
+
   @Test
   fun dopoLoSbloccoLaCopiaPartedaSolaEIlCaricamentoNo() {
     gate.decision = EntryDecision.NEEDS_UNLOCK

@@ -51,6 +51,13 @@ class PhoneOnlyAssessment(val advice: Map<MediaId, PhoneOnlyAdvice>) {
   /** I media da mettere prima al sicuro (backup e verifica: `:app` avvia "Fai ora" e, finito, ripropone il foglio). */
   val toSafeguard: Set<MediaId> get() = advice.filterValues { it == PhoneOnlyAdvice.SAFE_FIRST }.keys
 
+  /**
+   * LS-1 (decisione dell'utente del 20/10, "Elimina con avviso"): i media che **non risultano al sicuro sul NAS** (backup non attivo, nessuna
+   * copia privata verificata, in caricamento o con un problema, area ferma, fuori dalla cartella di prova). Per loro il viewer offre il cestino
+   * di Android (30 giorni) **dopo un avviso** e una conferma in piu'; per quelli al sicuro vale il flusso della 5B ([freeFilter]).
+   */
+  val notOnNas: Set<MediaId> get() = advice.filterValues { it in NOT_ON_NAS }.keys
+
   /** Il filtro del piano per i media liberabili adesso, o null se non ce ne sono. */
   val freeFilter: FreeSpaceFilter?
     get() {
@@ -61,6 +68,15 @@ class PhoneOnlyAssessment(val advice: Map<MediaId, PhoneOnlyAdvice>) {
   override fun toString(): String = "PhoneOnlyAssessment(${advice.size} media)"
 
   internal companion object {
+    /** LS-1: i consigli di un media che non risulta al sicuro sul NAS. */
+    private val NOT_ON_NAS: Set<PhoneOnlyAdvice> = setOf(
+      PhoneOnlyAdvice.SAFE_FIRST,
+      PhoneOnlyAdvice.WAIT,
+      PhoneOnlyAdvice.FROZEN,
+      PhoneOnlyAdvice.UNAVAILABLE,
+      PhoneOnlyAdvice.OUTSIDE_TEST_FENCE,
+    )
+
     /** Il consiglio per un media dagli esiti delle sue copie del telefono (il piu' grave vince). */
     fun adviceOf(outcomes: List<CopyOutcome>, unavailable: Boolean): PhoneOnlyAdvice {
       if (outcomes.isEmpty()) return PhoneOnlyAdvice.NOT_ON_PHONE
@@ -77,7 +93,7 @@ class PhoneOnlyAssessment(val advice: Map<MediaId, PhoneOnlyAdvice>) {
           is CopyOutcome.Excluded -> when (outcome.reason) {
             FreeSpaceExclusion.OUTSIDE_TEST_FENCE -> PhoneOnlyAdvice.OUTSIDE_TEST_FENCE
             FreeSpaceExclusion.AREA_FROZEN -> PhoneOnlyAdvice.FROZEN
-            FreeSpaceExclusion.IN_PROGRESS_OR_ERROR -> PhoneOnlyAdvice.WAIT
+            FreeSpaceExclusion.IN_PROGRESS_OR_ERROR, FreeSpaceExclusion.AWAITING_PHONE -> PhoneOnlyAdvice.WAIT
             FreeSpaceExclusion.NAS_UNREACHABLE, FreeSpaceExclusion.NOT_MINE, FreeSpaceExclusion.BACKUP_NOT_ACTIVE -> PhoneOnlyAdvice.UNAVAILABLE
             FreeSpaceExclusion.NOT_VERIFIED, FreeSpaceExclusion.VERSION_NOT_SAFE, FreeSpaceExclusion.RECENT,
             FreeSpaceExclusion.COPY_CHANGED, FreeSpaceExclusion.GONE_FROM_PHONE,

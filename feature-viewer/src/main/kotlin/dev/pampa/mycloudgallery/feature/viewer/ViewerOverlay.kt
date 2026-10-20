@@ -997,6 +997,8 @@ private fun ViewerOverlays(
       onDeleteFromPhone = controller::confirmDelete,
       extraLocations = everywhereLocations(everywhere),
       onPhoneOnlyDelete = backupController?.let { bc -> { bc.deleteFromPhone(controller::confirmDelete) } },
+      // Correzioni 5B (LS-14): "Ovunque" toglie dal telefono anche le altre copie del media.
+      onEverywherePhone = backupController?.let { bc -> { bc.deleteEverywhereFromPhone(controller::confirmDelete) } },
     )
   }
   // Fase 5B (D26, L41): una condivisione ferma ha il suo foglio, con "Condividi con la posizione" solo come scelta esplicita.

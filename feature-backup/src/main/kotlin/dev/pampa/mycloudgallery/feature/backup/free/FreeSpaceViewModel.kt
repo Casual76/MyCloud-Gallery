@@ -13,6 +13,10 @@ import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupActions
 import java.util.Optional
 import javax.inject.Inject
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -28,9 +32,13 @@ class FreeSpaceViewModel @Inject constructor(
   dialogs: Optional<PhoneSystemDialogs>,
   clock: Optional<BackupClock>,
   actions: Optional<BackupActions>,
+  runs: Optional<FreeSpaceRuns>,
 ) : ViewModel() {
 
   private val freeSpace: FreeSpace? = service.orElse(null)
+
+  /** LS-2: il giro fuori dalla pagina (`:app`: lavoro avviato dall'utente, notifica, ripresa); senza, la pagina lo porta avanti da se'. */
+  private val outsideRuns: FreeSpaceRuns? = runs.orElse(null)
   private val systemDialogs: PhoneSystemDialogs = dialogs.orElse(NoPhoneSystemDialogs)
   private val monotonic: BackupClock? = clock.orElse(null)
   private val outside: BackupActions? = actions.orElse(null)
@@ -67,10 +75,15 @@ class FreeSpaceViewModel @Inject constructor(
     if (machine != null && startedWith == selection to recent) return
     startedWith = selection to recent
     machine?.stop()
+    // Ogni macchina ha il suo scope (figlio della pagina): quella di prima smette davvero di ascoltare.
+    machineScope?.cancel()
+    val scope = CoroutineScope(viewModelScope.coroutineContext + SupervisorJob(viewModelScope.coroutineContext[Job]))
+    machineScope = scope
     val next = FreeSpaceFlow(
       service = service,
-      scope = viewModelScope,
+      scope = scope,
       systemDialogs = systemDialogs.available,
+      runs = outsideRuns ?: FreeSpaceDriver(service, scope),
       selection = selection,
       excludeRecentDays = recent,
     )
@@ -81,6 +94,7 @@ class FreeSpaceViewModel @Inject constructor(
   }
 
   private var startedWith: Pair<Set<MediaId>?, Int>? = null
+  private var machineScope: CoroutineScope? = null
 
   /** I filtri: tutto il sicuro, solo i video, piu' vecchi di un anno. */
   fun choose(kind: FreeSpaceKind) {

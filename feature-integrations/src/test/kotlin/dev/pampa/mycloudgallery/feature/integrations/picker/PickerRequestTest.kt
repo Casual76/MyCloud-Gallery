@@ -50,6 +50,52 @@ class PickerRequestTest {
     assertThat(PickerRequest.from(pick)!!.action).isEqualTo(PickerAction.PICK)
   }
 
+  /**
+   * IN-13 della verifica funzionale 5B: il `PICK` classico (`Intent(ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)`) arriva con il tipo del
+   * MediaStore (`vnd.android.cursor.dir/image`), che non entrava nel filtro del manifest e `PickerRequest` rifiutava.
+   */
+  @Test
+  fun in13_ilPickClassicoConIlTipoDelMediaStoreSiServe() {
+    val images = request(Intent.ACTION_PICK, type = "vnd.android.cursor.dir/image")!!
+    assertThat(images.action).isEqualTo(PickerAction.PICK)
+    assertThat(images.images).isTrue()
+    assertThat(images.videos).isFalse()
+    assertThat(images.mimeFilters).containsExactly("image/*")
+    assertThat(images.acceptsMime("image/jpeg")).isTrue()
+    assertThat(images.acceptsMime("video/mp4")).isFalse()
+
+    val videos = request(Intent.ACTION_PICK, type = "vnd.android.cursor.dir/video")!!
+    assertThat(videos.images).isFalse()
+    assertThat(videos.videos).isTrue()
+    assertThat(videos.acceptsMime("video/mp4")).isTrue()
+
+    // Altri tipi del MediaStore (audio, voce singola) non sono un'immagine ne' un video: nessun tipo, richiesta rifiutata.
+    assertThat(request(Intent.ACTION_PICK, type = "vnd.android.cursor.dir/audio")).isNull()
+    assertThat(request(Intent.ACTION_PICK, type = "vnd.android.cursor.item/image")).isNull()
+  }
+
+  @Test
+  fun in13_ilPickConUnIndirizzoDelMediaStoreESenzaTipoDiceSoloSeSonoImmaginiOVideo_SenzaMaiAprirlo() {
+    fun pick(uri: String) = PickerRequest.from(Intent(Intent.ACTION_PICK, Uri.parse(uri)))!!
+    pick("content://media/external/images/media").let {
+      assertThat(it.images).isTrue()
+      assertThat(it.videos).isFalse()
+    }
+    pick("content://media/external/video/media").let {
+      assertThat(it.images).isFalse()
+      assertThat(it.videos).isTrue()
+    }
+    // Un indirizzo che non e' del MediaStore, o che non dice niente: foto e video, come sempre. Nemmeno qui si apre (non c'e' un resolver in gioco).
+    for (uri in listOf("content://altra.app/images/x", "content://media/external/audio/media", "file:///sdcard/x")) {
+      val request = pick(uri)
+      assertThat(request.images).isTrue()
+      assertThat(request.videos).isTrue()
+    }
+    // Il tipo dell'indirizzo vale solo per PICK: GET_CONTENT con lo stesso indirizzo resta "foto e video".
+    val getContent = PickerRequest.from(Intent(Intent.ACTION_GET_CONTENT, Uri.parse("content://media/external/images/media")))!!
+    assertThat(getContent.videos).isTrue()
+  }
+
   @Test
   fun leAzioniChePerNoNonSonoSonoRifiutate() {
     for (action in listOf(Intent.ACTION_VIEW, Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE, Intent.ACTION_MAIN, "azione.sconosciuta", "", null)) {

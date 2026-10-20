@@ -42,7 +42,22 @@ import dev.pampa.mycloudgallery.integrations.IntegrationsGraph
 import dev.pampa.mycloudgallery.core.security.lock.AppLockController
 import dev.pampa.mycloudgallery.core.security.lock.AppLockSettings
 import dev.pampa.mycloudgallery.feature.integrations.contract.EntryDecision
+import dev.pampa.mycloudgallery.feature.integrations.contract.DocumentEntry
+import dev.pampa.mycloudgallery.feature.integrations.contract.DocumentId
+import dev.pampa.mycloudgallery.feature.integrations.contract.IntegrationPorts
+import dev.pampa.mycloudgallery.feature.integrations.picker.PickerAction
+import dev.pampa.mycloudgallery.feature.integrations.picker.PickerDeliverer
+import dev.pampa.mycloudgallery.feature.integrations.picker.PickerDelivery
+import dev.pampa.mycloudgallery.feature.integrations.picker.PickerPorts
+import dev.pampa.mycloudgallery.feature.integrations.picker.PickerRequest
 import dev.pampa.mycloudgallery.feature.integrations.provider.DocumentLabels
+import dev.pampa.mycloudgallery.feature.integrations.provider.LibraryMediaDocuments
+import dev.pampa.mycloudgallery.feature.integrations.provider.PreparedCopies
+import dev.pampa.mycloudgallery.core.metadata.strip.LocationTraceRecheck
+import dev.pampa.mycloudgallery.core.metadata.strip.LocationVerdict
+import android.provider.DocumentsContract
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.withTimeout
 import dev.pampa.mycloudgallery.work.BackupStages
@@ -271,8 +286,12 @@ class FiveBIntegrationTest {
 
   // --- Selettore e provider: i solo-NAS escono, i nascosti mai -------------------------------------------------------------------
 
-  /** Le integrazioni come le monta l'app (blocco spento: il cancello d'ingresso e' aperto con la famiglia pronta). */
-  private fun integrations(rig: BackupRig): IntegrationsGraph {
+  /**
+   * Le integrazioni come le monta l'app (blocco spento: il cancello d'ingresso e' aperto con la famiglia pronta). "Rimuovi la posizione" di serie
+   * **spenta** (come lo e' per un utente che non l'ha accesa): i test di selettore e provider qui sotto provano la consegna dell'originale; quella con
+   * l'impostazione accesa ha i suoi test (`ilSelettoreEIlProviderConLaPosizioneDaTogliere...`).
+   */
+  private fun integrations(rig: BackupRig, removeLocation: StateFlow<Boolean> = MutableStateFlow(false)): IntegrationsGraph {
     val lock = AppLockController().apply { updateSettings(AppLockSettings()) }
     return IntegrationsGraph(
       context = rig.device.context,
@@ -282,6 +301,7 @@ class FiveBIntegrationTest {
       lockSettings = flowOf(AppLockSettings()),
       familyReady = { true },
       shareProbe = rig.device.graph.shareProbe,
+      removeLocation = removeLocation,
     )
   }
 
@@ -423,6 +443,118 @@ class FiveBIntegrationTest {
     assertThat(backend.bytes(TestNas.ADMIN_USER, "Archivio/mare.jpg")?.toList()).isEqualTo(withGps.toList())
     ready.lease.release()
     assertThat(sent.exists()).isFalse()
+  }
+
+  /**
+   * Decisione dell'utente del 20/10/2026, sul grafo vero (la Libreria, `AppShareSource`, lo stripper e i lettori dell'app; solo l'indirizzo del
+   * `FileProvider` e' finto): "Rimuovi la posizione" vale anche per il selettore e per il provider. Una foto solo sul NAS con il GPS: con
+   * l'impostazione accesa il selettore la consegna come documento del provider che apre la **copia** (senza GPS, ricontrollata col rilevatore
+   * indipendente) e il provider fa lo stesso per chi la apre sfogliando; l'originale sul NAS non si tocca; spenta, escono i byte dell'originale.
+   */
+  @Test
+  fun ilSelettoreEIlProviderConLaPosizioneDaTogliereConsegnanoLaCopiaDiUnSoloNas() = runBlocking {
+    val backend = TestNas.backend(time)
+    val withGps = jpegWithGps(BackupRig.jpeg(tone = 120))
+    backend.put(TestNas.ADMIN_USER, "Archivio/mare.jpg", withGps, lastWriteMs = time.now() - 2 * DAY)
+    val (rig, _) = phoneWithSafePhotos(backend, count = 1)
+    val id = mediaAt(rig, "Archivio/mare.jpg")
+    val graph = integrations(rig)
+    var removeLocation = true
+    val share = LocationFreeShare(
+      cache = graph.shareCache,
+      source = AppShareSource({ rig.gallery.coreIfReady()?.catalog }, rig.gallery.intents, rig.device.context.contentResolver, { rig.device.graph.nasInputs.session.mediaReader() }),
+      stripper = DefaultLocationStripper(LocationRechecks.standard(rig.gallery.newExtractor(), AndroidPreviewDecoder(), ZoneId.of("UTC"))),
+      uris = CacheUris { file -> Uri.fromFile(file) },
+      revoker = UriRevoker { },
+    )
+    val preparer = PreparedCopies(share, { removeLocation }, rig.device.scope, io = kotlinx.coroutines.Dispatchers.Unconfined)
+    val labels = DocumentLabels("MyCloud Gallery", "Recenti", "Cartelle NAS")
+    val documents = LibraryMediaDocuments(graph.library, labels, preparer = preparer)
+    val request = PickerRequest(PickerAction.GET_CONTENT, images = true, videos = true, allowMultiple = true, localOnly = false, mimeFilters = listOf("*/*"))
+    val authority = "prova.integrations.documents"
+
+    fun readAll(token: DocumentId): ByteArray = runBlocking {
+      checkNotNull(documents.open(token)) { "non si apre" }.use { r ->
+        val out = java.io.ByteArrayOutputStream()
+        val buf = ByteArray(4_096)
+        var at = 0L
+        while (true) {
+          val n = r.read(at, buf, 0, buf.size)
+          if (n <= 0) break
+          out.write(buf, 0, n)
+          at += n
+        }
+        out.toByteArray()
+      }
+    }
+
+    fun hasLocation(bytes: ByteArray): Boolean {
+      val file = File(temp.root, "ricevuto-${System.nanoTime()}.jpg").apply { writeBytes(bytes) }
+      val exif = ExifInterface(file.path).getLatLong(FloatArray(2))
+      val traces = LocationTraceRecheck().check(file, "image/jpeg") != LocationVerdict.CLEAR
+      return exif || traces
+    }
+
+    // Il selettore: un documento del provider (anche se la foto fosse del telefono), che apre la copia senza posizione.
+    val delivery = PickerDeliverer(graph.library, documents, request, authority, preparer = preparer).prepare(setOf(id)) as PickerDelivery.Ready
+    val token = DocumentId(DocumentsContract.getDocumentId(delivery.uris.single()))
+    assertThat(delivery.uris.single().authority).isEqualTo(authority)
+    assertThat(hasLocation(withGps)).isTrue() // la fixture ha davvero una posizione
+    val delivered = readAll(token)
+    assertThat(hasLocation(delivered)).isFalse()
+    assertThat(delivered.size.toLong()).isEqualTo(documents.entry(token)!!.size)
+    // Il provider sfogliando: la stessa cosa, una copia senza posizione.
+    val root = documents.roots().single().rootDocument
+    val nasFolders = documents.children(root, 10).single { it.displayName == labels.nasFolders }
+    val private = documents.children(nasFolders.id, 10).single { it.displayName == graph.labels.privateArea }
+    val archive = documents.children(private.id, 50).single { it.isFolder && it.displayName == "Archivio" }
+    val browsed = documents.children(archive.id, 50).single { it.displayName == "mare.jpg" }
+    assertThat(browsed.size).isEqualTo(delivered.size.toLong()) // la copia c'e' gia' (l'ha preparata il selettore): la dimensione e' la sua
+    assertThat(hasLocation(readAll(browsed.id))).isFalse()
+    // Una copia ancora da fare non dichiara una dimensione (la copia e' piu' piccola dell'originale).
+    preparer.releaseAll()
+    val unprepared = documents.children(archive.id, 50).single { it.displayName == "mare.jpg" }
+    assertThat(unprepared.size).isEqualTo(DocumentEntry.UNKNOWN_SIZE)
+    // L'originale sul NAS non e' stato toccato (D2).
+    assertThat(backend.bytes(TestNas.ADMIN_USER, "Archivio/mare.jpg")?.toList()).isEqualTo(withGps.toList())
+
+    // Spenta: escono i byte dell'originale, com'era prima della decisione.
+    documents.revokeAll()
+    removeLocation = false
+    val plain = PickerDeliverer(graph.library, documents, request, authority, preparer = preparer).prepare(setOf(id)) as PickerDelivery.Ready
+    val plainBytes = readAll(DocumentId(DocumentsContract.getDocumentId(plain.uris.single())))
+    assertThat(plainBytes.toList()).isEqualTo(withGps.toList())
+  }
+
+  /** Il grafo lega l'impostazione: acceso, il provider prepara le copie e il selettore le riceve dalla stessa preparazione; senza impostazione legata si toglie. */
+  @Test
+  fun ilGrafoLegaLImpostazioneAlSelettoreEAlProvider() = runBlocking {
+    val backend = TestNas.backend(time)
+    val (rig, _) = phoneWithSafePhotos(backend, count = 1)
+    val setting = MutableStateFlow(true)
+    val graph = integrations(rig, removeLocation = setting)
+    graph.install()
+    try {
+      assertThat(PickerPorts.preparer).isSameInstanceAs(graph.preparedCopies)
+      assertThat(graph.preparedCopies.removeLocation()).isTrue()
+      assertThat(graph.documents.preparesOnOpen()).isTrue()
+      setting.value = false
+      assertThat(graph.documents.preparesOnOpen()).isFalse()
+    } finally {
+      PickerPorts.reset()
+      IntegrationPorts.reset()
+    }
+    // Un grafo senza l'impostazione legata fallisce chiuso: la posizione si toglie.
+    val unbound = IntegrationsGraph(
+      context = rig.device.context,
+      gallery = rig.gallery,
+      scope = rig.device.scope,
+      lock = AppLockController().apply { updateSettings(AppLockSettings()) },
+      lockSettings = flowOf(AppLockSettings()),
+      familyReady = { true },
+      shareProbe = rig.device.graph.shareProbe,
+    )
+    assertThat(unbound.documents.preparesOnOpen()).isTrue()
   }
 
   /** [jpeg] con la posizione GPS nell'EXIF (45,5 N, 9,2 E). */

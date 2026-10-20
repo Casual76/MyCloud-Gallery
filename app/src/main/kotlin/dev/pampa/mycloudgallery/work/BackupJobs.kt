@@ -40,6 +40,14 @@ interface BackupJobs {
    */
   fun versionWork(kind: BackupKind) = Unit
 
+  /**
+   * Correzioni 5B (LS-2): la verifica di "Libera spazio" come lavoro avviato dall'utente (UIDT su Android 14+, con la sua notifica), chiesto dal
+   * tocco di conferma o dalla pagina che ritrova un giro a meta' (l'app e' davanti all'utente, come vuole Android). Ospita il giro del processo e,
+   * dopo la morte del processo, lo riprende dal diario. Vero se e' in coda (o lo era gia'); di norma falso (test, varianti senza NAS): il giro va
+   * avanti finche' il processo vive.
+   */
+  fun freeSpaceWork(): Boolean = false
+
   /** L'azzeramento: niente piu' lavori del backup in coda. */
   fun cancelAll()
 
@@ -93,6 +101,26 @@ class JobSchedulerBackupJobs(context: Context) : BackupJobs {
     BackupWorkScheduling.versionWork(app, kind)
   }
 
+  /** LS-2: il lavoro che ospita la verifica di "Libera spazio". Se c'e' gia' (in coda o in corso) non si riprogramma: lo sostituirebbe. */
+  override fun freeSpaceWork(): Boolean {
+    val jobs = scheduler ?: return false
+    if (jobs.getPendingJob(JOB_FREE_SPACE) != null) return true
+    val builder = JobInfo.Builder(JOB_FREE_SPACE, component).setRequiredNetwork(LanConstraints.request())
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) builder.setUserInitiated(true)
+    return try {
+      jobs.schedule(builder.build()) == JobScheduler.RESULT_SUCCESS
+    } catch (e: IllegalStateException) {
+      GalleryLog.w(TAG) { "lavoro di Libera spazio non programmato: ${e.javaClass.simpleName}" }
+      false
+    } catch (e: SecurityException) {
+      GalleryLog.w(TAG) { "lavoro di Libera spazio non programmato: ${e.javaClass.simpleName}" }
+      false
+    } catch (e: IllegalArgumentException) {
+      GalleryLog.w(TAG) { "lavoro di Libera spazio non programmato: ${e.javaClass.simpleName}" }
+      false
+    }
+  }
+
   /** Il lavoro dell'utente per una condivisione grande: falso se Android non lo accetta (allora vale WorkManager). */
   private fun scheduleIncoming(): Boolean {
     val extras = PersistableBundle().apply { putString(EXTRA_TRIGGER, BackupTrigger.INCOMING.code) }
@@ -115,6 +143,7 @@ class JobSchedulerBackupJobs(context: Context) : BackupJobs {
   override fun cancelAll() {
     scheduler?.cancel(JOB_USER)
     scheduler?.cancel(JOB_INCOMING)
+    scheduler?.cancel(JOB_FREE_SPACE)
   }
 
   companion object {
@@ -125,6 +154,9 @@ class JobSchedulerBackupJobs(context: Context) : BackupJobs {
 
     /** D24 (P14): il caricamento di una condivisione grande ("Salva sul NAS"), UIDT. Diverso da [JOB_USER]: non lo sostituisce. */
     const val JOB_INCOMING: Int = 1_000_104
+
+    /** Correzioni 5B (LS-2): la verifica di "Libera spazio", UIDT. Diverso dagli altri: non li sostituisce. */
+    const val JOB_FREE_SPACE: Int = 1_000_105
 
     const val EXTRA_TRIGGER: String = "trigger"
     const val EXTRA_CONFIRMED: String = "confirmed"

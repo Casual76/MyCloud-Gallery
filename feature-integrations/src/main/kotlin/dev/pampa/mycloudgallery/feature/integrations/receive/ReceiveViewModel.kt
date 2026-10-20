@@ -12,9 +12,9 @@ import dev.pampa.mycloudgallery.core.backup.contract.IncomingUploads
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneConfirmationSheet
 import dev.pampa.mycloudgallery.feature.integrations.contract.EntryDecision
 import dev.pampa.mycloudgallery.feature.integrations.contract.EntryGate
+import dev.pampa.mycloudgallery.feature.integrations.picker.UnlockFailure
 import dev.pampa.mycloudgallery.feature.integrations.share.FlowCounters
 import dev.pampa.mycloudgallery.feature.integrations.share.ReceiveCounter
-import java.io.IOException
 import java.util.concurrent.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -61,6 +61,12 @@ enum class ReceiveScreenState {
   /** "Salva sul NAS" e' in corso. */
   SAVING,
 
+  /**
+   * IN-6 della verifica funzionale 5B: il backup e' ancora in prova (D12, R2): in questa versione "Salva sul NAS" non scrive da nessuna parte.
+   * Si dice **prima di copiare** (prima si copiavano fino a 4 GiB e poi si diceva "In quella cartella non si puo' scrivere" per ogni cartella).
+   */
+  TEST_ONLY,
+
   /** In coda: si caricheranno appena si puo'. */
   DONE,
 
@@ -81,6 +87,21 @@ enum class ReceiveFailure {
 
   /** Il diario non ha accettato (nessun backup configurato, share di prova). */
   UNAVAILABLE,
+
+  /** IN-6: il backup e' ancora in prova (D12, R2): sul NAS non si scrive. Non e' colpa della cartella scelta. */
+  TEST_ONLY,
+}
+
+/** IN-11: perche' i file in coda non partono subito, se il NAS non risponde: spento/fuori casa, oppure dati mobili senza consenso. */
+enum class NasWait {
+  /** Il NAS risponde: la coda parte da sola. */
+  NONE,
+
+  /** Il NAS non risponde adesso. */
+  OFFLINE,
+
+  /** Dati mobili: i file aspettano il Wi-Fi di casa (non e' che il NAS non risponda). */
+  METERED,
 }
 
 /** Lo stato della schermata. Nessun nome di file, percorso o id. */
@@ -96,10 +117,19 @@ class ReceiveUi(
   val choices: List<DestinationChoice> = emptyList(),
   val selected: DestinationChoice? = null,
   val queued: Int = 0,
-  val nasReachable: Boolean = true,
+  /** IN-11: perche' la coda non parte subito, detto dopo "In coda" (la prova del NAS non fa piu' aspettare la schermata). */
+  val nasWait: NasWait = NasWait.NONE,
   val failure: ReceiveFailure? = null,
   val unlocking: Boolean = false,
   val unlockFailed: Boolean = false,
+  /** IN-10: perche' lo sblocco non e' riuscito, se lo si sa. */
+  val unlockFailure: UnlockFailure? = null,
+  /** IN-11: dei file copiati non c'e' nessuna cartella dove salvarli (anche se altri file sono stati rifiutati). */
+  val noFolder: Boolean = false,
+  /** IN-12: file copiati che al tocco non si leggevano piu' e non sono in coda. */
+  val notQueued: Int = 0,
+  /** IN-11: la cartella scelta non ha altre cartelle (che la Libreria conosca): "Apri la cartella scelta" lo dice invece di mostrare una lista vuota. */
+  val noSubfolders: Boolean = false,
 ) {
   fun copy(
     screen: ReceiveScreenState = this.screen,
@@ -112,11 +142,18 @@ class ReceiveUi(
     choices: List<DestinationChoice> = this.choices,
     selected: DestinationChoice? = this.selected,
     queued: Int = this.queued,
-    nasReachable: Boolean = this.nasReachable,
+    nasWait: NasWait = this.nasWait,
     failure: ReceiveFailure? = this.failure,
     unlocking: Boolean = this.unlocking,
     unlockFailed: Boolean = this.unlockFailed,
-  ): ReceiveUi = ReceiveUi(screen, stage, photos, videos, bytes, rejected, trail, choices, selected, queued, nasReachable, failure, unlocking, unlockFailed)
+    unlockFailure: UnlockFailure? = this.unlockFailure,
+    noFolder: Boolean = this.noFolder,
+    notQueued: Int = this.notQueued,
+    noSubfolders: Boolean = this.noSubfolders,
+  ): ReceiveUi = ReceiveUi(
+    screen, stage, photos, videos, bytes, rejected, trail, choices, selected, queued, nasWait, failure, unlocking, unlockFailed, unlockFailure, noFolder,
+    notQueued, noSubfolders,
+  )
 
   /** Il foglio avvisa "Lo vedranno tutti i familiari" quando la cartella scelta e' dell'area comune (D24). */
   val commonNotice: Boolean get() = selected?.destination?.area == DestinationArea.COMMON
@@ -158,6 +195,7 @@ class ReceiveViewModel(
   private var saved = false
   private var stagingJob: Job? = null
   private var savingJob: Job? = null
+  private var loadingJob: Job? = null
 
   /** Se il cancello e' chiuso dopo la partenza, che cosa copre la schermata; lo stato vero sta in [hiddenState]. */
   private var hiddenBy: ReceiveScreenState? = null
@@ -178,13 +216,32 @@ class ReceiveViewModel(
   /** Rilegge il cancello. Si chiama a ogni ritorno in primo piano: il blocco puo' essersi chiuso mentre si era altrove. */
   fun refreshGate() {
     if (_outcome.value != null) return
-    when (gate.decide()) {
+    apply(gate.decide())
+  }
+
+  private fun apply(decision: EntryDecision) {
+    when (decision) {
       EntryDecision.ALLOWED -> {
         reveal()
         begin()
       }
       EntryDecision.NEEDS_UNLOCK -> cover(ReceiveScreenState.LOCKED, ReceiveCounter.LOCKED)
       EntryDecision.NOT_READY -> cover(ReceiveScreenState.NOT_READY, ReceiveCounter.NOT_READY)
+      EntryDecision.LOADING -> awaitLoaded()
+    }
+  }
+
+  /**
+   * IN-3: a processo freddo l'app sta ancora leggendo il suo stato (configurazione, impostazioni del blocco): non si decide e non si mostra niente
+   * (la schermata resta vuota), si aspetta che l'abbia letto e allora si decide. Prima si rispondeva "Prima configura MyCloud Gallery" o si apriva
+   * lo sblocco, e nessuno ricontrollava. Se l'attesa finisce senza risposta non si offre niente (fallire chiusi); il prossimo ritorno in primo
+   * piano riprova.
+   */
+  private fun awaitLoaded() {
+    if (loadingJob?.isActive == true) return
+    loadingJob = scope.launch {
+      val decided = gate.decideAfterLoading()
+      if (_outcome.value == null) apply(if (decided == EntryDecision.LOADING) EntryDecision.NOT_READY else decided)
     }
   }
 
@@ -210,12 +267,12 @@ class ReceiveViewModel(
 
   fun beginUnlock(): Boolean {
     if (_ui.value.unlocking || _ui.value.screen != ReceiveScreenState.LOCKED) return false
-    _ui.update { it.copy(unlocking = true, unlockFailed = false) }
+    _ui.update { it.copy(unlocking = true, unlockFailed = false, unlockFailure = null) }
     return true
   }
 
-  fun endUnlock(unlocked: Boolean) {
-    _ui.update { it.copy(unlocking = false, unlockFailed = !unlocked) }
+  fun endUnlock(unlocked: Boolean, failure: UnlockFailure? = null) {
+    _ui.update { it.copy(unlocking = false, unlockFailed = !unlocked, unlockFailure = if (unlocked) null else failure) }
     if (unlocked) refreshGate()
   }
 
@@ -226,6 +283,11 @@ class ReceiveViewModel(
     started = true
     mutate { it.copy(screen = ReceiveScreenState.STAGING, unlockFailed = false) }
     stagingJob = scope.launch {
+      // IN-6: il backup in prova non scrive sul NAS: si dice subito, senza copiare niente (prima: fino a 4 GiB copiati, poi un messaggio sbagliato).
+      if (blockedByTrial()) {
+        mutate { it.copy(screen = ReceiveScreenState.TEST_ONLY) }
+        return@launch
+      }
       val stage = try {
         uploads.stage(streams())
       } catch (e: CancellationException) {
@@ -243,8 +305,9 @@ class ReceiveViewModel(
       val roots = if (stage.accepted.isEmpty()) emptyList() else destinations.roots()
       if (stage.accepted.isEmpty() || roots.isEmpty()) {
         // Niente di buono, o nessuna cartella dove salvare: le copie, se ci sono, si tolgono subito.
-        if (stage.accepted.isNotEmpty()) uploads.discard(stage.id)
-        mutate { it.copy(screen = ReceiveScreenState.NOTHING, rejected = rejected, stage = null) }
+        val noFolder = stage.accepted.isNotEmpty()
+        if (noFolder) uploads.discard(stage.id)
+        mutate { it.copy(screen = ReceiveScreenState.NOTHING, rejected = rejected, stage = null, noFolder = noFolder) }
         return@launch
       }
       mutate {
@@ -268,7 +331,7 @@ class ReceiveViewModel(
   /** Sceglie [choice] come cartella di destinazione. */
   fun select(choice: DestinationChoice) {
     if (_ui.value.screen != ReceiveScreenState.READY) return
-    mutate { it.copy(selected = choice) }
+    mutate { it.copy(selected = choice, noSubfolders = false) }
   }
 
   /** Apre [choice] per vederne le sottocartelle; la scelta passa a lei. */
@@ -277,7 +340,12 @@ class ReceiveViewModel(
     scope.launch {
       val children = destinations.children(choice)
       mutate { current ->
-        if (current.screen != ReceiveScreenState.READY) current else current.copy(trail = current.trail + choice, choices = children, selected = choice)
+        when {
+          current.screen != ReceiveScreenState.READY -> current
+          // IN-11: nessuna sottocartella nota alla Libreria: non si apre una lista vuota, lo si dice sotto il tasto.
+          children.isEmpty() -> current.copy(selected = choice, noSubfolders = true)
+          else -> current.copy(trail = current.trail + choice, choices = children, selected = choice, noSubfolders = false)
+        }
       }
     }
   }
@@ -289,7 +357,7 @@ class ReceiveViewModel(
       val trail = _ui.value.trail.dropLast(1)
       val choices = if (trail.isEmpty()) destinations.roots() else destinations.children(trail.last())
       mutate { current ->
-        if (current.screen != ReceiveScreenState.READY) current else current.copy(trail = trail, choices = choices, selected = trail.lastOrNull() ?: choices.firstOrNull())
+        if (current.screen != ReceiveScreenState.READY) current else current.copy(trail = trail, choices = choices, selected = trail.lastOrNull() ?: choices.firstOrNull(), noSubfolders = false)
       }
     }
   }
@@ -319,27 +387,46 @@ class ReceiveViewModel(
           uploads.save(stage, destination, confirmation)
         } catch (e: CancellationException) {
           throw e
-        } catch (_: IOException) {
+        } catch (_: Exception) {
+          // IN-12: non solo `IOException`. Un errore del database (disco pieno: `SQLiteException`) chiudeva l'app; qui e' "non disponibile".
           IncomingSaveOutcome.Unavailable
         }
       }
       when (outcome) {
         is IncomingSaveOutcome.Queued -> {
           saved = true
-          val reachable = try {
-            destinations.nasReachable()
-          } catch (e: CancellationException) {
-            throw e
-          } catch (_: Exception) {
-            false
-          }
-          mutate { it.copy(screen = ReceiveScreenState.DONE, queued = outcome.items, nasReachable = reachable) }
+          // IN-11: "In coda" subito; la prova del NAS (fino a 5 s col NAS spento) non fa piu' aspettare la schermata, corregge la frase dopo.
+          mutate { it.copy(screen = ReceiveScreenState.DONE, queued = outcome.items, notQueued = (stage.accepted.size - outcome.items).coerceAtLeast(0)) }
+          checkNasWait()
         }
         is IncomingSaveOutcome.Rejected -> fail(ReceiveFailure.CONFIRMATION)
-        IncomingSaveOutcome.DestinationNotAllowed -> fail(ReceiveFailure.DESTINATION)
+        IncomingSaveOutcome.DestinationNotAllowed -> fail(if (blockedByTrial()) ReceiveFailure.TEST_ONLY else ReceiveFailure.DESTINATION)
         IncomingSaveOutcome.StageGone -> fail(ReceiveFailure.GONE)
         IncomingSaveOutcome.Unavailable -> fail(ReceiveFailure.UNAVAILABLE)
       }
+    }
+  }
+
+  /** Il backup in prova (D12, R2) non scrive da nessuna parte; un errore della porta non lo dice (si prova a salvare e basta). */
+  private suspend fun blockedByTrial(): Boolean = try {
+    destinations.savingBlockedByTrial()
+  } catch (e: CancellationException) {
+    throw e
+  } catch (_: Exception) {
+    false
+  }
+
+  /** IN-11: dopo "In coda", perche' non parte subito se il NAS non risponde; la schermata e' gia' "In coda". */
+  private fun checkNasWait() {
+    scope.launch {
+      val wait = try {
+        destinations.nasWait()
+      } catch (e: CancellationException) {
+        throw e
+      } catch (_: Exception) {
+        NasWait.OFFLINE
+      }
+      mutate { current -> if (current.screen == ReceiveScreenState.DONE) current.copy(nasWait = wait) else current }
     }
   }
 
@@ -347,11 +434,14 @@ class ReceiveViewModel(
     mutate { it.copy(screen = ReceiveScreenState.FAILED, failure = reason) }
   }
 
-  /** Dopo un errore si torna alla scelta della cartella (le copie ci sono ancora), se ci sono. */
+  /**
+   * Dopo un errore si torna alla scelta della cartella (le copie ci sono ancora), se ci sono. Con i file spariti (o il backup in prova, o senza
+   * niente da riprovare) non c'e' da riprovare: la schermata finisce (e il tasto dice "Chiudi", IN-11).
+   */
   fun retry() {
     val current = _ui.value
     if (current.screen != ReceiveScreenState.FAILED) return
-    if (current.failure == ReceiveFailure.GONE || current.stage == null) {
+    if (current.failure == ReceiveFailure.GONE || current.failure == ReceiveFailure.TEST_ONLY || current.stage == null) {
       cancel()
     } else {
       mutate { it.copy(screen = ReceiveScreenState.READY, failure = null) }
@@ -365,6 +455,7 @@ class ReceiveViewModel(
     // Un salvataggio in corso non si interrompe a meta': o e' in coda o non lo e'.
     if (savingJob?.isActive == true) return
     stagingJob?.cancel()
+    loadingJob?.cancel()
     discardUnsaved()
     _outcome.value = ReceiveOutcome.FINISHED
   }

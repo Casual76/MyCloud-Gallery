@@ -2,7 +2,7 @@ package dev.pampa.mycloudgallery.feature.integrations.provider
 
 import android.content.Context
 import android.provider.DocumentsContract
-import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
+import dev.pampa.mycloudgallery.core.library.contract.TimelineView
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.feature.integrations.R
@@ -11,6 +11,7 @@ import dev.pampa.mycloudgallery.feature.integrations.contract.DocumentId
 import dev.pampa.mycloudgallery.feature.integrations.contract.DocumentReader
 import dev.pampa.mycloudgallery.feature.integrations.contract.DocumentRoot
 import dev.pampa.mycloudgallery.feature.integrations.contract.MediaDocuments
+import dev.pampa.mycloudgallery.feature.integrations.share.ShareNames
 
 // Fase 5B (P10, docs/fase5-progetto.md §2.7, D23, C17; E-H1, E-X1): i documenti del provider, sopra la Libreria per le altre app.
 // Implementa la porta `MediaDocuments` di P0-B (radice, cartelle, documenti, apertura) e ci aggiunge cio' che serve al selettore per
@@ -64,7 +65,16 @@ class LibraryMediaDocuments(
   private val library: IntegrationLibrary,
   private val labels: DocumentLabels,
   private val table: DocumentIdTable = DocumentIdTable(),
+  private val clock: DocumentClock = DocumentClock.Monotonic,
+  /**
+   * "Rimuovi la posizione" (decisione del 20/10/2026): con l'impostazione accesa un documento si apre **solo** come copia senza posizione preparata da
+   * qui; di serie ([NoPreparation]) l'impostazione non c'e' e si apre l'originale, come prima.
+   */
+  private val preparer: DeliveryPreparer = NoPreparation,
 ) : MediaDocuments, DocumentIssuer {
+
+  /** Quando e' stata l'ultima ricerca di una cartella fra tutte quelle note (IN-2): non piu' di una ogni [REDISCOVER_GAP_MS]. */
+  private var lastRediscoveryAt: Long = Long.MIN_VALUE
 
   // --- MediaDocuments ---------------------------------------------------------------------------------------------------
 
@@ -95,7 +105,7 @@ class LibraryMediaDocuments(
       is DocumentTarget.Folder -> directory(id, found.label ?: labels.nasFolders)
       is DocumentTarget.Media -> {
         if (!stillVisible(id, target.id)) return null
-        library.fileInfos(listOf(target.id))[target.id]?.let { file(id, it) }
+        library.fileInfos(listOf(target.id))[target.id]?.let { file(id, target.id, it) }
       }
     }
   }
@@ -104,6 +114,14 @@ class LibraryMediaDocuments(
     val target = (found(id)?.target as? DocumentTarget.Media) ?: return null
     // La vista di ADESSO: un media nascosto dopo la nascita dell'id, o sparito, non si apre piu' (E-H1).
     if (!stillVisible(id, target.id)) return null
+    // "Rimuovi la posizione" acceso: si apre solo la copia senza posizione (se non c'e' la si prepara, e se non si riesce non si apre niente: mai
+    // l'originale al suo posto).
+    if (preparer.removeLocation()) {
+      return when (val batch = preparer.prepare(listOf(target.id), delivered = table.isDelivered(id))) {
+        is PreparedBatch.Ready -> preparer.open(target.id)
+        is PreparedBatch.Refused -> throw LocationRemovalRefused(batch.stop)
+      }
+    }
     return when (val ref = library.items.refOrNull(target.id)) {
       is MediaRef.Phone -> library.openPhone(ref)
       is MediaRef.Nas -> library.openNas(ref)
@@ -123,17 +141,33 @@ class LibraryMediaDocuments(
 
   override fun isDelivered(id: DocumentId): Boolean = table.isDelivered(id)
 
-  override fun revoke(ids: Collection<DocumentId>) = table.revoke(ids)
+  override fun preparesOnOpen(): Boolean = preparer.removeLocation()
 
-  override fun revokeAll() = table.revokeAll()
+  override fun revoke(ids: Collection<DocumentId>) {
+    releaseCopiesOf(ids)
+    table.revoke(ids)
+  }
+
+  override fun revokeAll() {
+    table.revokeAll()
+    preparer.releaseAll()
+  }
+
+  /** Le copie senza posizione degli id [ids] (se sono id di media) si tolgono con loro. */
+  private fun releaseCopiesOf(ids: Collection<DocumentId>) {
+    val media = ids.mapNotNull { (table.resolve(it) as? DocumentResolution.Found)?.target as? DocumentTarget.Media }.map { it.id }
+    if (media.isNotEmpty()) preparer.release(media)
+  }
 
   // --- Elenchi ----------------------------------------------------------------------------------------------------------
 
   private suspend fun recent(limit: Int): List<DocumentEntry> {
-    val snapshot = snapshot()
-    val ids = ArrayList<MediaId>(minOf(limit, snapshot.size))
+    // IN-9: la vista della Libreria, non l'indice intero (con l'accesso parziale la vista e' una parte dell'indice).
+    val view = view()
+    val snapshot = view.snapshot
+    val ids = ArrayList<MediaId>(minOf(limit, view.size))
     var i = 0
-    while (i < snapshot.size && ids.size < limit) ids += snapshot.idAt(i++)
+    while (i < view.size && ids.size < limit) ids += snapshot.idAt(view.snapshotIndex(i++))
     return files(ids)
   }
 
@@ -155,7 +189,7 @@ class LibraryMediaDocuments(
   private suspend fun files(ids: List<MediaId>): List<DocumentEntry> {
     if (ids.isEmpty()) return emptyList()
     val infos = library.fileInfos(ids)
-    return ids.mapNotNull { id -> infos[id]?.let { file(table.idFor(DocumentTarget.Media(id)), it) } }
+    return ids.mapNotNull { id -> infos[id]?.let { file(table.idFor(DocumentTarget.Media(id)), id, it) } }
   }
 
   // --- Voci -------------------------------------------------------------------------------------------------------------
@@ -163,35 +197,73 @@ class LibraryMediaDocuments(
   private fun directory(id: DocumentId, name: String): DocumentEntry =
     DocumentEntry(id, name, DocumentsContract.Document.MIME_TYPE_DIR, 0L, null, isFolder = true)
 
-  private fun file(id: DocumentId, info: MediaFileInfo): DocumentEntry =
-    DocumentEntry(id, safeName(info.displayName, FALLBACK_FILE), safeMime(info.mime), info.size.coerceAtLeast(0), info.modifiedAtMillis, isFolder = false)
+  /**
+   * La voce di un media. Con "Rimuovi la posizione" acceso descrive la **copia**, non l'originale: nome, tipo e dimensione veri se la copia c'e' gia',
+   * altrimenti nome e tipo come saranno (un HEIC diventa JPEG) e **nessuna dimensione** (la copia e' piu' piccola: una dimensione sbagliata farebbe
+   * leggere un file troncato a chi si fida della colonna).
+   */
+  private fun file(id: DocumentId, media: MediaId, info: MediaFileInfo): DocumentEntry {
+    if (!preparer.removeLocation()) {
+      return DocumentEntry(id, safeName(info.displayName, FALLBACK_FILE), safeMime(info.mime), info.size.coerceAtLeast(0), info.modifiedAtMillis, isFolder = false)
+    }
+    preparer.infoOf(media)?.let {
+      return DocumentEntry(id, safeName(it.displayName, FALLBACK_FILE), safeMime(it.mime), it.size.coerceAtLeast(0), info.modifiedAtMillis, isFolder = false)
+    }
+    val mime = if (info.mime.lowercase().let { m -> m == "image/heic" || m == "image/heif" }) "image/jpeg" else info.mime
+    return DocumentEntry(
+      id, safeName(ShareNames.of(info.displayName, mime), FALLBACK_FILE), safeMime(mime), DocumentEntry.UNKNOWN_SIZE, info.modifiedAtMillis, isFolder = false,
+    )
+  }
 
   // --- Visibilita' (E-H1) -----------------------------------------------------------------------------------------------
 
-  private fun snapshot(): TimelineSnapshot = library.items.view.value.snapshot
+  private fun view(): TimelineView = library.items.view.value
 
-  private fun isVisible(id: MediaId): Boolean = snapshot().indexOf(id) >= 0
+  private fun isVisible(id: MediaId): Boolean = view().viewIndexOf(id) >= 0
 
   /** Vero se il media di [token] e' ancora nella vista; altrimenti lo conta, revoca il token e dice di no. */
   private fun stillVisible(token: DocumentId, id: MediaId): Boolean {
     if (isVisible(id)) return true
     IntegrationCounters.add(IntegrationCounter.HIDDEN_STOPPED)
     table.revoke(listOf(token))
+    // Un media nascosto non lascia nemmeno la sua copia senza posizione in cache.
+    preparer.release(listOf(id))
     return false
   }
 
-  private fun found(id: DocumentId): DocumentResolution.Found? = when (val r = table.resolve(id)) {
+  private suspend fun found(id: DocumentId): DocumentResolution.Found? = when (val r = table.resolve(id)) {
     is DocumentResolution.Found -> r
     DocumentResolution.Expired -> {
       IntegrationCounters.add(IntegrationCounter.PROVIDER_EXPIRED)
       null
     }
-    DocumentResolution.Unknown -> null
+    DocumentResolution.Unknown -> rediscoverFolder(id)
+  }
+
+  /**
+   * IN-2: un id sconosciuto puo' essere quello stabile di una cartella che DocumentsUI ricorda da prima del riavvio del processo (la tabella e' in
+   * memoria e riparte vuota). Si ricalcola l'id di ogni cartella nota alla Libreria con la stessa chiave: se ce n'e' una, la tabella la ricorda e si
+   * risponde come se non fosse mai sparita. Un id che non e' di nessuna cartella (un media scaduto, un id inventato) resta sconosciuto: nessun
+   * oracolo, e la ricerca non si ripete piu' di una volta ogni pochi secondi (un id sbagliato dopo l'altro non fa leggere il catalogo ogni volta).
+   */
+  private suspend fun rediscoverFolder(id: DocumentId): DocumentResolution.Found? {
+    val now = clock.elapsedMs()
+    if (lastRediscoveryAt != Long.MIN_VALUE && now - lastRediscoveryAt < REDISCOVER_GAP_MS) return null
+    lastRediscoveryAt = now
+    for (folder in library.nasFolderIndex()) {
+      if (table.folderIdOf(folder.key) != id) continue
+      table.rememberFolder(id, folder.key, safeName(folder.name, FALLBACK_FOLDER))
+      return table.resolve(id) as? DocumentResolution.Found
+    }
+    return null
   }
 
   companion object {
     /** L'id della radice per il sistema: una costante dell'app, non un dato. */
     const val ROOT_ID: String = "mcg-root"
+
+    /** Fra due ricerche di una cartella fra tutte quelle note (IN-2). */
+    private const val REDISCOVER_GAP_MS = 5_000L
 
     private const val FALLBACK_FILE = "media"
     private const val FALLBACK_FOLDER = "cartella"

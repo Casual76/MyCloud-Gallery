@@ -6,6 +6,8 @@ import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.feature.integrations.contract.DocumentId
 import dev.pampa.mycloudgallery.feature.integrations.contract.EntryDecision
+import dev.pampa.mycloudgallery.feature.integrations.contract.DocumentReader
+import dev.pampa.mycloudgallery.feature.integrations.provider.DeliveryPreparer
 import dev.pampa.mycloudgallery.feature.integrations.provider.DocumentIdTable
 import dev.pampa.mycloudgallery.feature.integrations.provider.DocumentIssuer
 import dev.pampa.mycloudgallery.feature.integrations.provider.DocumentLabels
@@ -15,10 +17,15 @@ import dev.pampa.mycloudgallery.feature.integrations.provider.IntegrationCounter
 import dev.pampa.mycloudgallery.feature.integrations.provider.LibraryMediaDocuments
 import dev.pampa.mycloudgallery.feature.integrations.provider.NasReach
 import dev.pampa.mycloudgallery.feature.integrations.provider.NasUnreachableReason
+import dev.pampa.mycloudgallery.feature.integrations.provider.NoPreparation
+import dev.pampa.mycloudgallery.feature.integrations.provider.PreparedBatch
+import dev.pampa.mycloudgallery.feature.integrations.provider.PreparedInfo
+import dev.pampa.mycloudgallery.feature.integrations.share.ShareStop
 import dev.pampa.mycloudgallery.core.library.testing.SyntheticLibrary
 import dev.pampa.mycloudgallery.feature.integrations.provider.testing.FakeIntegrationLibrary
 import dev.pampa.mycloudgallery.feature.integrations.testing.FakeEntryGate
 import java.util.Random
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
@@ -74,11 +81,12 @@ class PickerViewModelTest {
     library: FakeIntegrationLibrary = FakeIntegrationLibrary(),
     issuerWrap: (DocumentIssuer) -> DocumentIssuer = { it },
     probeMs: Long = 5_000,
+    preparer: DeliveryPreparer = NoPreparation,
   ): Rig {
     val gate = FakeEntryGate(decision)
     val table = DocumentIdTable(random = Random(5))
-    val documents = LibraryMediaDocuments(library, labels, table)
-    val vm = PickerViewModel(request, gate, library, issuerWrap(documents), authority, vmScope(), probeMs)
+    val documents = LibraryMediaDocuments(library, labels, table, preparer = preparer)
+    val vm = PickerViewModel(request, gate, library, issuerWrap(documents), authority, vmScope(), probeMs, preparer)
     return Rig(library, gate, table, documents, vm)
   }
 
@@ -99,6 +107,96 @@ class PickerViewModelTest {
   private val Rig.ui get() = vm.ui.value
 
   // --- Il cancello (E-X7) -----------------------------------------------------------------------------------------------
+
+  /**
+   * IN-3 della verifica funzionale 5B: a processo freddo l'app sta ancora leggendo il suo stato. Il selettore non decide e non mostra niente (prima:
+   * "Prima configura MyCloud Gallery" o lo sblocco senza richiesta), aspetta, e quando lo stato c'e' decide da solo.
+   */
+  @Test
+  fun in3_aFreddoIlSelettoreAspettaLoStatoEPoiMostraLaGriglia() = runTest {
+    val r = rig(decision = EntryDecision.LOADING)
+    r.vm.refreshGate()
+    runCurrent() // senza far scorrere il tempo: l'attesa e' in corso
+    assertThat(r.ui.screen).isEqualTo(PickerScreenState.CHECKING) // ne' "non pronta" ne' lo sblocco
+    assertThat(r.ui.items.size).isEqualTo(0)
+    r.gate.decision = EntryDecision.ALLOWED
+    advanceUntilIdle()
+    assertThat(r.ui.screen).isEqualTo(PickerScreenState.GRID)
+    assertThat(r.ui.items.size).isGreaterThan(0)
+  }
+
+  @Test
+  fun in3_seLoStatoNonArrivaNonSiMostraNiente_EIlRitornoRiprova() = runTest {
+    val r = rig(decision = EntryDecision.LOADING)
+    r.gate.loadTimeoutMs = 50
+    r.open(this)
+    assertThat(r.ui.screen).isEqualTo(PickerScreenState.NOT_READY)
+    r.gate.decision = EntryDecision.ALLOWED
+    r.open(this)
+    assertThat(r.ui.screen).isEqualTo(PickerScreenState.GRID)
+  }
+
+  /** IN-10: chi annulla la schermata di sistema non legge "Non sono riuscito a sbloccare"; chi non ha un blocco schermo legge cosa fare. */
+  @Test
+  fun in10_loSbloccoDiceIlMotivoSeLoSa() = runTest {
+    val r = rig(decision = EntryDecision.NEEDS_UNLOCK)
+    r.open(this)
+    assertThat(r.vm.beginUnlock()).isTrue()
+    r.vm.endUnlock(false, UnlockFailure.CANCELLED)
+    assertThat(r.ui.unlockFailed).isTrue()
+    assertThat(r.ui.unlockFailure).isEqualTo(UnlockFailure.CANCELLED)
+    assertThat(r.vm.beginUnlock()).isTrue() // il tasto resta
+    assertThat(r.ui.unlockFailure).isNull()
+    r.vm.endUnlock(false, UnlockFailure.NO_SCREEN_LOCK)
+    assertThat(r.ui.unlockFailure).isEqualTo(UnlockFailure.NO_SCREEN_LOCK)
+    // Le notifiche della vista non cancellano il motivo.
+    r.library.showAll()
+    advanceUntilIdle()
+    assertThat(r.ui.screen).isEqualTo(PickerScreenState.LOCKED)
+    assertThat(r.ui.unlockFailure).isEqualTo(UnlockFailure.NO_SCREEN_LOCK)
+  }
+
+  // --- Accesso parziale (IN-9) ---------------------------------------------------------------------------------------------
+
+  /**
+   * IN-9: con l'accesso parziale la vista della Libreria e' una parte dell'indice. La griglia del selettore scorreva l'indice intero e offriva anche
+   * le foto che il telefono non concede (senza miniatura) e i solo-NAS che la Libreria nasconde; e una scelta fuori dalla vista usciva lo stesso.
+   */
+  @Test
+  fun in9_conLAccessoParzialeLaGrigliaEQuellaDellaVista() = runTest {
+    val r = rig()
+    val allowed = r.library.visibleIds.filterIndexed { n, _ -> n % 9 == 4 }.toSet()
+    r.library.restrictView(allowed)
+    r.open(this)
+    assertThat(r.ui.items.size).isEqualTo(allowed.size)
+    assertThat((0 until r.ui.items.size).map { r.ui.items.idAt(it) }.toSet()).isEqualTo(allowed)
+
+    // La concessione cambia mentre la griglia e' aperta: cio' che non e' piu' concesso esce dalla selezione.
+    val keep = allowed.first()
+    val drop = allowed.last()
+    r.vm.onTap(keep)
+    r.vm.onTap(drop)
+    r.library.restrictView(setOf(keep))
+    advanceUntilIdle()
+    assertThat(r.ui.selected).containsExactly(keep)
+    assertThat(r.ui.items.size).isEqualTo(1)
+  }
+
+  @Test
+  fun in9_UnaScelta_FuoriDallaVista_NonEsceAnche_SeLIndiceLaConosce() = runTest {
+    val r = rig()
+    val allowed = r.library.phoneIds().take(2).toSet()
+    r.library.restrictView(allowed)
+    r.open(this)
+    val outside = r.library.phoneIds().first { it !in allowed }
+    // Anche se qualcuno ci arriva (una selezione fatta prima della restrizione), la consegna ricontrolla la vista di adesso.
+    r.library.showAll()
+    r.vm.onTap(outside)
+    r.library.restrictView(allowed)
+    r.vm.confirm()
+    advanceUntilIdle()
+    assertThat(r.vm.outcome.value).isNull()
+  }
 
   @Test
   fun conLAppBloccata_PrimaLoSblocco_EdellaLibreriaNonRestaNiente_E_X7() = runTest {
@@ -266,12 +364,28 @@ class PickerViewModelTest {
 
   // --- Un tocco e la consegna --------------------------------------------------------------------------------------------
 
+  /**
+   * R8 della revisione di sicurezza 5B: senza `EXTRA_ALLOW_MULTIPLE` un tocco sceglie (una sola, un altro tocco la sostituisce, lo stesso la toglie)
+   * e la consegna e' "Scegli": un tocco da una sovrapposizione non consegna niente da solo.
+   */
   @Test
-  fun senzaSceltaMultiplaUnTocco_Consegna() = runTest {
+  fun r8_senzaSceltaMultiplaUnTocco_Sceglie_EServeScegli() = runTest {
     val r = rig(request = request(multiple = false))
     r.open(this)
-    val id = r.library.phoneIds().first()
-    r.vm.onTap(id)
+    val ids = r.library.phoneIds()
+    r.vm.onTap(ids[0])
+    advanceUntilIdle()
+    assertThat(r.vm.outcome.value).isNull() // niente e' uscito
+    assertThat(r.vm.ui.value.selected).containsExactly(ids[0])
+    r.vm.onTap(ids[1]) // un'altra scelta sostituisce la prima
+    assertThat(r.vm.ui.value.selected).containsExactly(ids[1])
+    r.vm.onTap(ids[1]) // lo stesso tocco la toglie
+    assertThat(r.vm.ui.value.selected).isEmpty()
+    r.vm.confirm() // niente da consegnare
+    advanceUntilIdle()
+    assertThat(r.vm.outcome.value).isNull()
+    r.vm.onTap(ids[0])
+    r.vm.confirm()
     advanceUntilIdle()
     val out = r.vm.outcome.value as PickerOutcome.Deliver
     assertThat(out.uris).hasSize(1)
@@ -444,5 +558,129 @@ class PickerViewModelTest {
     r.library.phoneIds().take(2).forEach { r.vm.onTap(it) }
     assertThat(r.ui.toString()).matches("PickerUi\\(GRID, 2 scelti\\)")
     assertThat(PickerNotice.NothingAvailable.toString()).doesNotContain("IMG_")
+  }
+
+  // --- "Rimuovi la posizione" acceso: le copie si preparano prima di consegnare (decisione del 20/10/2026) ------------------------
+
+  /** Una preparazione scritta dal test: ferma dove si vuole, risponde "pronta" o "fermata per...", ricorda cosa le e' stato chiesto. */
+  private class ScriptedPreparer(var on: Boolean = true) : DeliveryPreparer {
+    var hold: CompletableDeferred<Unit>? = null
+    var refuse: PreparedBatch.Refused? = null
+    val asked = ArrayList<List<MediaId>>()
+    val released = ArrayList<MediaId>()
+
+    override fun removeLocation(): Boolean = on
+
+    override suspend fun prepare(ids: List<MediaId>, delivered: Boolean, onItem: (Int, Int) -> Unit, onBytes: (Long, Long) -> Unit): PreparedBatch {
+      asked += ids
+      onItem(0, ids.size)
+      onBytes(10L, 100L)
+      hold?.await()
+      refuse?.let { return it }
+      onItem(ids.size, ids.size)
+      return PreparedBatch.Ready(ids)
+    }
+
+    override fun infoOf(id: MediaId): PreparedInfo? = null
+
+    override fun open(id: MediaId): DocumentReader? = null
+
+    override fun release(ids: Collection<MediaId>) {
+      released += ids
+    }
+
+    override fun releaseAll() = Unit
+  }
+
+  @Test
+  fun conLaPosizioneDaTogliereLaConsegnaMostraLAvanzamentoEPoiEsceConIdDelProvider() = runTest {
+    val preparer = ScriptedPreparer().apply { hold = CompletableDeferred() }
+    val r = rig(preparer = preparer)
+    r.open(this)
+    val ids = r.library.phoneIds().take(2) + r.library.nasOnlyIds().take(1)
+    ids.forEach { r.vm.onTap(it) }
+
+    r.vm.confirm()
+    runCurrent()
+
+    // La preparazione e' in corso: niente e' uscito, e la schermata ha l'avanzamento (media fatti e byte del media in corso).
+    assertThat(r.vm.ui.value.screen).isEqualTo(PickerScreenState.DELIVERING)
+    assertThat(r.vm.ui.value.progress).isEqualTo(PickerProgress(done = 0, total = 3, bytesDone = 10, bytesTotal = 100))
+    assertThat(r.vm.outcome.value).isNull()
+    preparer.hold!!.complete(Unit)
+    advanceUntilIdle()
+
+    val out = r.vm.outcome.value as PickerOutcome.Deliver
+    // Anche le foto del telefono escono come documenti del provider (con la copia senza posizione), mai come indirizzi del MediaStore.
+    assertThat(out.uris).hasSize(3)
+    out.uris.forEach { assertThat(it.authority).isEqualTo(authority) }
+    assertThat(preparer.asked.single()).containsExactlyElementsIn(ids)
+  }
+
+  @Test
+  fun annullareLaPreparazioneTornaAllaGrigliaConLaSceltaENienteEsce() = runTest {
+    val preparer = ScriptedPreparer().apply { hold = CompletableDeferred() }
+    val r = rig(preparer = preparer)
+    r.open(this)
+    val ids = r.library.phoneIds().take(2)
+    ids.forEach { r.vm.onTap(it) }
+    r.vm.confirm()
+    runCurrent()
+    assertThat(r.vm.ui.value.screen).isEqualTo(PickerScreenState.DELIVERING)
+
+    r.vm.cancelDelivery()
+    advanceUntilIdle()
+
+    assertThat(r.vm.ui.value.screen).isEqualTo(PickerScreenState.GRID)
+    assertThat(r.vm.ui.value.progress).isNull()
+    assertThat(r.vm.ui.value.selected).containsExactlyElementsIn(ids)
+    assertThat(r.vm.outcome.value).isNull()
+    // E la preparazione non riparte da sola: la consegna e' finita.
+    preparer.hold!!.complete(Unit)
+    advanceUntilIdle()
+    assertThat(r.vm.outcome.value).isNull()
+  }
+
+  @Test
+  fun unFileCheNonSiPuoSenzaPosizioneSiTogliDallaSceltaENienteEsce() = runTest {
+    val r0 = FakeIntegrationLibrary()
+    val ids = r0.phoneIds().take(3)
+    val preparer = ScriptedPreparer().apply { refuse = PreparedBatch.Refused(ShareStop.CANNOT_REMOVE_LOCATION, ids[1]) }
+    val r = rig(library = r0, preparer = preparer)
+    r.open(this)
+    ids.forEach { r.vm.onTap(it) }
+
+    r.vm.confirm()
+    advanceUntilIdle()
+
+    assertThat(r.vm.outcome.value).isNull()
+    assertThat(r.vm.ui.value.screen).isEqualTo(PickerScreenState.GRID)
+    assertThat(r.vm.ui.value.notice).isEqualTo(PickerNotice.NoLocation(ShareStop.CANNOT_REMOVE_LOCATION, removedFromChoice = true))
+    assertThat(r.vm.ui.value.selected).containsExactly(ids[0], ids[2])
+    // Con un altro "Scegli" gli altri escono.
+    preparer.refuse = null
+    r.vm.confirm()
+    advanceUntilIdle()
+    assertThat((r.vm.outcome.value as PickerOutcome.Deliver).uris).hasSize(2)
+  }
+
+  @Test
+  fun conLaPosizioneDaTogliereSiScelgonoAlPiuCentoElementi() = runTest {
+    val preparer = ScriptedPreparer()
+    val r = rig(preparer = preparer)
+    r.open(this)
+    val ids = r.library.phoneIds()
+    ids.take(100).forEach { r.vm.onTap(it) }
+    assertThat(r.vm.ui.value.selected).hasSize(100)
+
+    r.vm.onTap(ids[100])
+
+    assertThat(r.vm.ui.value.selected).hasSize(100)
+    assertThat(r.vm.ui.value.notice).isEqualTo(PickerNotice.TooMany(100))
+    // Spenta, il tetto torna quello di sempre.
+    preparer.on = false
+    r.vm.dismissNotice()
+    r.vm.onTap(ids[100])
+    assertThat(r.vm.ui.value.selected).hasSize(101)
   }
 }

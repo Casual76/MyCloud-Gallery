@@ -16,6 +16,7 @@ import java.io.IOException
 import java.io.InputStream
 import java.security.MessageDigest
 import java.util.EnumMap
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.CancellationException
@@ -89,6 +90,14 @@ class IncomingStager(
   private val guard = BlockingGuard(io)
   private val temps = AtomicInteger()
 
+  /**
+   * IN-1 della verifica funzionale 5B: le condivisioni copiate da QUESTO processo e non ancora scartate. La pulizia dell'avvio ([sweep]) gira in
+   * parallelo con la prima condivisione di un processo nato proprio per riceverla (l'app era chiusa): senza questo insieme toglieva la cartella
+   * appena copiata prima del tocco su "Salva sul NAS" (nessuna riga di `incoming_item` la cita ancora). Una condivisione di un processo di
+   * prima, invece, non ha piu' nessuna schermata che la aspetta: quella si toglie.
+   */
+  private val ownStages: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
   // --- Copiare --------------------------------------------------------------------------------------------------------------------
 
   /**
@@ -98,6 +107,8 @@ class IncomingStager(
   suspend fun stage(streams: List<IncomingStream>): IncomingStage {
     val id = IncomingStageId(newId())
     val dir = File(root, id.value)
+    // Prima di creare la cartella: da quel momento la pulizia dell'avvio non la tocca.
+    ownStages += id.value
     val rejected = EnumMap<IncomingReject, Int>(IncomingReject::class.java)
     fun reject(reason: IncomingReject, count: Int = 1) {
       rejected[reason] = (rejected[reason] ?: 0) + count
@@ -137,6 +148,7 @@ class IncomingStager(
     } finally {
       // Una cancellazione o un guasto non lasciano file a meta'; una condivisione senza niente di buono non lascia nemmeno la cartella.
       if (!finished || accepted.isEmpty()) {
+        ownStages -= id.value
         withContext(NonCancellable + io) {
           if (!dir.deleteRecursively()) {
             // Un lavoro abbandonato (flusso fermo, cancellazione) puo' tenere ancora aperto un file: su Windows non si toglie. Si riprova finche' non lo
@@ -250,15 +262,18 @@ class IncomingStager(
   /** L'utente rinuncia, o la condivisione e' vecchia: la cartella si toglie. Idempotente. */
   suspend fun discard(id: IncomingStageId) {
     withContext(NonCancellable + io) { File(root, id.value).deleteRecursively() }
+    ownStages -= id.value
   }
 
   /**
    * All'avvio dell'app: toglie ogni condivisione che il database non cita ([keep] = gli `stage_id` degli `incoming_item` aperti) e i resti di
-   * copie a meta' (`.w*`) nelle altre. Cio' che e' in coda per il NAS non si tocca.
+   * copie a meta' (`.w*`) nelle altre. Cio' che e' in coda per il NAS non si tocca, e nemmeno le condivisioni ricevute da questo processo (IN-1:
+   * in attesa di una scelta dell'utente, o in copia adesso).
    */
   fun sweep(keep: Set<String>) {
     val children = root.listFiles() ?: return
     for (child in children) {
+      if (child.isDirectory && child.name in ownStages) continue
       if (child.isDirectory && child.name in keep) {
         child.listFiles { f -> f.name.startsWith(".w") }?.forEach { it.delete() }
       } else {

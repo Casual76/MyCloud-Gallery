@@ -9,6 +9,8 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupGateState
 import dev.pampa.mycloudgallery.core.backup.contract.BackupProblemCode
 import dev.pampa.mycloudgallery.core.backup.contract.HashRecord
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneRef
+import dev.pampa.mycloudgallery.core.backup.contract.PhoneRowNow
+import dev.pampa.mycloudgallery.core.backup.contract.BackupCatalog
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneRewrite
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneRewriter
 import dev.pampa.mycloudgallery.core.backup.contract.TrashBatch
@@ -194,15 +196,21 @@ class CatalogVersionCatalog(
  * [FreeSpaceCatalog] (P9) sul catalogo vero: le pagine dei media con una copia sul telefono (`phoneMedia`, dall'indice della timeline), il
  * grafo di ogni media con il giorno, l'ordine, il problema del backup e il MIME dell'attuale; `markVerified` com'e'; `freedFromPhone` segna
  * assenti le righe che Android ha tolto (la cella resta "solo NAS", E-P11). **L'unica fonte degli elenchi** (E-S11).
+ *
+ * Correzioni 5B: LS-12, `phoneRowOf` con la stessa ricetta del backup ([backup], `CatalogBackupCatalog.phoneRowOf`): una riga consegnata ad
+ * Android e rinumerata dal MediaStore si risolve con la lettura del telefono. LS-15: le pagine portano gia' giorno e ordine, e per loro la riga
+ * dell'indice non si rilegge (una query in meno per media, a ogni piano).
  */
-class CatalogFreeSpaceCatalog(private val catalog: MediaCatalog) : FreeSpaceCatalog {
+class CatalogFreeSpaceCatalog(private val catalog: MediaCatalog, private val backup: BackupCatalog? = null) : FreeSpaceCatalog {
 
   override suspend fun phoneMedia(after: FreeSpaceCursor?, limit: Int): List<FreeSpaceMedia> {
     val page = catalog.phoneMedia(after?.let { CatalogPhoneCursor(it.sortTime, it.mediaId) }, limit)
-    return page.mapNotNull { row -> freeMedia(row.mediaId, row.localDay, row.sortTime) }
+    return page.mapNotNull { row -> freeMedia(row.mediaId, Known(row.localDay?.takeIf { it != 0 }, row.sortTime)) }
   }
 
-  override suspend fun media(ids: Collection<MediaId>): List<FreeSpaceMedia> = ids.distinct().mapNotNull { freeMedia(it, null, null) }
+  override suspend fun media(ids: Collection<MediaId>): List<FreeSpaceMedia> = ids.distinct().mapNotNull { freeMedia(it, null) }
+
+  override suspend fun phoneRowOf(mediaId: MediaId, versionId: VersionId, stale: PhoneRef): PhoneRowNow? = backup?.phoneRowOf(mediaId, versionId, stale)
 
   override suspend fun markVerified(location: LocationId, readBack: Sha256, atMillis: Long): Boolean =
     catalog.markVerified(location, readBack, atMillis)
@@ -211,14 +219,18 @@ class CatalogFreeSpaceCatalog(private val catalog: MediaCatalog) : FreeSpaceCata
     if (locations.isNotEmpty()) catalog.markPhoneLocationsVanished(locations)
   }
 
-  private suspend fun freeMedia(id: MediaId, localDay: Int?, sortTime: Long?): FreeSpaceMedia? {
+  /** Giorno e ordine gia' letti dalla pagina del catalogo. */
+  private class Known(val localDay: Int?, val sortTime: Long)
+
+  private suspend fun freeMedia(id: MediaId, known: Known?): FreeSpaceMedia? {
     val media = catalog.media(id) ?: return null
-    val row = catalog.indexRows(listOf(media.id)).firstOrNull()
+    // LS-15: la riga dell'indice serve solo se la pagina non ha gia' detto giorno e ordine.
+    val row = if (known == null) catalog.indexRows(listOf(media.id)).firstOrNull() else null
     val problem = catalog.mediaSafety(media.id)?.problem?.let(CatalogBackupCatalog::problemOf)
     return FreeSpaceMedia(
       media = media,
-      localDay = localDay ?: row?.localDay?.takeIf { it != 0 },
-      sortTime = sortTime ?: row?.sortTime ?: 0L,
+      localDay = if (known != null) known.localDay else row?.localDay?.takeIf { it != 0 },
+      sortTime = known?.sortTime ?: row?.sortTime ?: 0L,
       problem = problem,
       mime = catalog.versionMetadata(media.currentVersionId)?.mimeType,
     )

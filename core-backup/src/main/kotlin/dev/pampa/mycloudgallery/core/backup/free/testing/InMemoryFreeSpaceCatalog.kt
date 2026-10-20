@@ -1,6 +1,8 @@
 package dev.pampa.mycloudgallery.core.backup.free.testing
 
 import dev.pampa.mycloudgallery.core.backup.contract.BackupProblemCode
+import dev.pampa.mycloudgallery.core.backup.contract.PhoneRef
+import dev.pampa.mycloudgallery.core.backup.contract.PhoneRowNow
 import dev.pampa.mycloudgallery.core.backup.free.FreeSpaceCatalog
 import dev.pampa.mycloudgallery.core.backup.free.FreeSpaceCursor
 import dev.pampa.mycloudgallery.core.backup.free.FreeSpaceMedia
@@ -10,6 +12,7 @@ import dev.pampa.mycloudgallery.core.model.Media
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaLocation
 import dev.pampa.mycloudgallery.core.model.Sha256
+import dev.pampa.mycloudgallery.core.model.VersionId
 
 // Fase 5B, P9: il catalogo di "Libera spazio" in memoria, con il grafo vero dei media (`Media` di core-model: piu' versioni, piu' posizioni,
 // verifiche), per i test di P9, P13 e P14. Le stesse regole del catalogo vero che contano qui: `markVerified` confronta lo SHA-256 letto con
@@ -26,6 +29,12 @@ class InMemoryFreeSpaceCatalog : FreeSpaceCatalog {
 
   /** Le copie del telefono che Android ha tolto, nell'ordine in cui il catalogo le ha sapute. */
   val freed: MutableList<LocationId> = java.util.Collections.synchronizedList(ArrayList())
+
+  /**
+   * LS-12: dove la lettura del telefono ha ritrovato la riga di una versione dopo un cambio di versione del MediaStore (come
+   * `BackupCatalog.phoneRowOf`). Senza voce: null, "non si sa" (il default della porta).
+   */
+  val phoneRows: MutableMap<VersionId, PhoneRowNow> = java.util.concurrent.ConcurrentHashMap()
 
   /** Le pagine chieste (per provare che il piano scorre il catalogo a pagine). */
   @Volatile var pages: Int = 0
@@ -79,6 +88,8 @@ class InMemoryFreeSpaceCatalog : FreeSpaceCatalog {
     verifications += location to ok
     ok
   }
+
+  override suspend fun phoneRowOf(mediaId: MediaId, versionId: VersionId, stale: PhoneRef): PhoneRowNow? = phoneRows[versionId]
 
   override suspend fun freedFromPhone(locations: List<LocationId>) {
     synchronized(lock) {

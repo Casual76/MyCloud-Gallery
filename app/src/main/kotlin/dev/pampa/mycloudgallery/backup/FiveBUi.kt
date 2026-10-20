@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.backup
 
 import android.content.Context
 import android.content.Intent
+import android.content.IntentSender
 import dev.pampa.mycloudgallery.R
 import dev.pampa.mycloudgallery.core.backup.contract.EditBegin
 import dev.pampa.mycloudgallery.core.backup.contract.EditOutcome
@@ -15,6 +16,8 @@ import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.database.MediaCatalog
 import dev.pampa.mycloudgallery.core.metadata.write.ExifMetadataWriter
 import dev.pampa.mycloudgallery.core.model.ExifOrientation
+import dev.pampa.mycloudgallery.core.model.Location
+import dev.pampa.mycloudgallery.core.model.LocationState
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.MediaRef
@@ -55,7 +58,25 @@ sealed interface FiveBSheet {
 
   class Correction(val subject: CorrectionSubject, val mode: CorrectionMode) : FiveBSheet
 
-  data class PhoneOnly(val ids: Set<MediaId>) : FiveBSheet
+  /**
+   * "Elimina solo dal telefono". [fromViewer] (correzioni 5B, LS-1): dal viewer, per un media che non risulta al sicuro sul NAS il foglio offre il
+   * cestino di Android dopo l'avviso; [isVideo] sceglie le parole.
+   */
+  data class PhoneOnly(val ids: Set<MediaId>, val fromViewer: Boolean = false, val isVideo: Boolean = false) : FiveBSheet
+}
+
+/**
+ * Correzioni 5B (LS-6): una richiesta di aprire "Libera spazio" con la sua selezione ([selection] null = tutto il sicuro). La rotta la prende una
+ * volta, entrando, e se ne ricorda il numero ([serial]): dopo una ricreazione dell'activity la ritrova qui; dopo la morte del processo, se la
+ * selezione non e' stata salvata nella rotta, la pagina si chiude invece di allargarsi a "tutto il sicuro".
+ */
+class FreeSpaceRequest(val serial: Long, val selection: Set<MediaId>?) {
+  override fun toString(): String = "FreeSpaceRequest(#$serial, ${selection?.size ?: "tutti"})"
+}
+
+/** Correzioni 5B (LS-1, LS-14): il cestino di Android per delle righe del telefono, da lanciare dall'activity (una volta sola). */
+class PhoneTrashRequest(val sender: IntentSender, val serial: Long) {
+  override fun toString(): String = "PhoneTrashRequest(#$serial)"
 }
 
 /**
@@ -139,9 +160,83 @@ class FiveBUi(
   /** Ogni valore nuovo chiede alla navigazione di aprire "Libera spazio" (con [freeSpaceSelection]). */
   val freeSpaceRequests: StateFlow<Long> = freeSpaceFlow.asStateFlow()
 
+  /** LS-6: la richiesta che la prossima rotta "Libera spazio" prendera' entrando, e le ultime fatte (per ritrovarle dopo una ricreazione). */
+  @Volatile
+  private var pendingRequest: FreeSpaceRequest? = null
+  private val recentRequests = java.util.concurrent.ConcurrentHashMap<Long, FreeSpaceRequest>()
+
   fun openFreeSpace(selection: Set<MediaId>?) {
-    freeSpaceSelection = selection?.takeIf { it.isNotEmpty() }
-    freeSpaceFlow.value = next()
+    val request = FreeSpaceRequest(next(), selection?.takeIf { it.isNotEmpty() })
+    freeSpaceSelection = request.selection
+    recentRequests[request.serial] = request
+    recentRequests.keys.sorted().dropLast(KEPT_REQUESTS).forEach { recentRequests.remove(it) }
+    pendingRequest = request
+    freeSpaceFlow.value = request.serial
+  }
+
+  /**
+   * LS-6: la rotta "Libera spazio" che si apre prende la richiesta che l'ha aperta, una volta. Null = nessuna (aperta da altrove, per esempio dal
+   * problema "Memoria del telefono quasi piena"): tutto il sicuro.
+   */
+  fun takeFreeSpaceRequest(): FreeSpaceRequest? = synchronized(this) { pendingRequest.also { pendingRequest = null } }
+
+  /** LS-6: una richiesta di prima (la rotta ricreata la ritrova); null dopo la morte del processo. */
+  fun freeSpaceRequest(serial: Long): FreeSpaceRequest? = recentRequests[serial]
+
+  // --- Correzioni 5B (LS-2): il giro di "Libera spazio" fuori dalla pagina -------------------------------------------------------
+
+  /** Il giro del processo: la notifica "Pronto" chiede di riaprire la pagina ([FiveBFreeSpaceRuns.openRequest]). */
+  val freeRuns: FiveBFreeSpaceRuns get() = fiveB.freeRuns
+
+  // --- Correzioni 5B (LS-1, LS-14): il cestino di Android chiesto dalla radice -------------------------------------------------
+
+  private val trashFlow = MutableStateFlow<PhoneTrashRequest?>(null)
+
+  /** Il dialogo del cestino di Android da lanciare dall'activity (`FiveBHostEffect`). */
+  val trashRequests: StateFlow<PhoneTrashRequest?> = trashFlow.asStateFlow()
+
+  /** L'activity ha lanciato [request]: non si rilancia. */
+  fun trashLaunched(request: PhoneTrashRequest) {
+    trashFlow.compareAndSet(request, null)
+  }
+
+  /**
+   * LS-1, decisione dell'utente "Elimina con avviso": dal foglio "Elimina solo dal telefono", dopo l'avviso "non e' sul NAS" e il tocco su "Elimina
+   * dal telefono", **come nella 4B**: il dialogo del sistema per il cestino di Android (30 giorni, si recupera da Eliminati di recente) per le
+   * righe del telefono di [ids]. L'app non toglie niente da sola: il permesso lo da' l'utente nel dialogo. Nessuna copia del NAS si tocca.
+   */
+  fun trashFromPhone(ids: Set<MediaId>) {
+    scope.launch {
+      val refs = phoneCopies(ids)
+      if (refs.isEmpty()) return@launch sayHere(R.string.fiveb_trash_nothing)
+      askTrash(refs)
+    }
+  }
+
+  private fun askTrash(refs: List<MediaRef.Phone>) {
+    val sender = try {
+      backup.fiveB.trashRequest(refs)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      GalleryLog.w(TAG) { "richiesta del cestino non riuscita (${e.javaClass.simpleName})" }
+      null
+    }
+    if (sender == null) sayHere(R.string.fiveb_trash_failed) else trashFlow.value = PhoneTrashRequest(sender, next())
+  }
+
+  /** Le righe del telefono presenti di [ids], dal catalogo (tutte le copie del telefono di ogni media). */
+  private suspend fun phoneCopies(ids: Set<MediaId>): List<MediaRef.Phone> {
+    val cat = catalog() ?: return emptyList()
+    return ids.flatMap { id ->
+      val media = cat.media(id) ?: return@flatMap emptyList()
+      val mime = cat.versionMetadata(media.currentVersionId)?.mimeType
+      media.locations.filter { it.state == LocationState.PRESENT }.mapNotNull { loc ->
+        val phone = loc.location as? Location.Phone ?: return@mapNotNull null
+        val rowId = phone.mediaStoreId ?: return@mapNotNull null
+        MediaRef.Phone(phone.volume, rowId, mime)
+      }
+    }.distinct()
   }
 
   // --- "Elimina…" delle versioni precedenti -------------------------------------------------------------------------------------
@@ -331,7 +426,11 @@ class FiveBUi(
         BackupMenuAction.ROTATE -> openCorrection(id, CorrectionMode.ROTATE)
         BackupMenuAction.EDIT_WITH -> startEdit(id)
         BackupMenuAction.EDIT_DOWNLOAD -> startEdit(id, download = true)
-        BackupMenuAction.PHONE_ONLY_DELETE -> sheetFlow.value = FiveBSheet.PhoneOnly(setOf(id))
+        // LS-1: dal viewer il foglio sa offrire il cestino di Android per un media che non risulta al sicuro sul NAS.
+        BackupMenuAction.PHONE_ONLY_DELETE -> scope.launch {
+          val video = catalog()?.media(id)?.kind == MediaKind.VIDEO
+          sheetFlow.value = FiveBSheet.PhoneOnly(setOf(id), fromViewer = true, isVideo = video)
+        }
         // Non dichiarata (`viewOriginal = false`): il viewer non la mostra.
         BackupMenuAction.VIEW_ORIGINAL -> Unit
       }
@@ -353,6 +452,17 @@ class FiveBUi(
 
     override fun dismissNotice() {
       noticeFlow.value = null
+    }
+
+    /**
+     * LS-14: "Ovunque" toglie dal telefono **tutte** le copie del media (anche quella di "Scarica sul telefono" in `Pictures/MyCloud Gallery`, che il
+     * backup altrimenti ricaricherebbe), con un solo dialogo del sistema. Con una copia sola resta il cestino del viewer (falso), come prima.
+     */
+    override suspend fun deleteEverywhereFromPhone(id: MediaId): Boolean {
+      val refs = phoneCopies(setOf(id))
+      if (refs.size <= 1) return false
+      askTrash(refs)
+      return true
     }
 
     override suspend fun everywhere(id: MediaId): EverywhereSummary? {
@@ -436,5 +546,8 @@ class FiveBUi(
 
   private companion object {
     const val TAG = "BackupFiveBUi"
+
+    /** LS-6: quante richieste di "Libera spazio" si ricordano per le rotte ricreate. */
+    const val KEPT_REQUESTS = 8
   }
 }

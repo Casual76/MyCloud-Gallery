@@ -166,7 +166,10 @@ object BackupWorkScheduling {
     // BK-2: la foto scattata fuori casa. "Proteggi subito" aspetta il Wi-Fi di casa e nessun altro evento lo avrebbe fatto ripartire al rientro
     // (la lettura del telefono non ha niente di nuovo, il giro periodico e' fra ore e con Notte parte di notte): il lavoro si rimette in coda su
     // una rete non a consumo, e WorkManager lo avvia quando il Wi-Fi c'e'. Per gli altri lavori le attese per la rete restano senza lavoro dopo.
+    // IN-5: lo stesso per i file ricevuti ("Salva sul NAS" e' un gesto dell'utente): fuori casa, o col NAS spento, il file aspetta e riparte da solo.
     if (kind == Kind.QUICK && waitsForHomeNetwork(wait)) {
+      enqueue(context, request(kind, wait, HOME_RETRY_MS, onWifi = true), kind, ExistingWorkPolicy.APPEND_OR_REPLACE)
+    } else if (kind == Kind.INCOMING && (waitsForHomeNetwork(wait) || wait == WaitReason.NasUnreachable)) {
       enqueue(context, request(kind, wait, HOME_RETRY_MS, onWifi = true), kind, ExistingWorkPolicy.APPEND_OR_REPLACE)
     }
   }
@@ -405,7 +408,11 @@ class IncomingUploadWorker @AssistedInject constructor(
   override val kind = BackupWorkScheduling.Kind.INCOMING
   override val diagJob: DiagJob = DiagJob.BACKUP_INCOMING
 
-  override suspend fun stage(stages: BackupStages): BackupFollowUp? = stages.incoming()?.let { BackupFollowUp.of(it) }
+  override suspend fun stage(stages: BackupStages): BackupFollowUp? = stages.incoming()?.let { outcome ->
+    // IN-5: sui dati mobili o in roaming le regole chiedono la conferma dell'utente e il file ricevuto aspetta il Wi-Fi: lo si riprova su una rete non
+    // a consumo (come "Proteggi subito", BK-2). Gli altri lavori lo lasciano alla pagina; qui l'utente aveva solo condiviso un file.
+    if (outcome.stage is StageOutcome.NeedsConfirmation) BackupFollowUp.Wait(WaitReason.NetworkNotTrusted) else BackupFollowUp.of(outcome)
+  }
 }
 
 /** Le verifiche (non verificate, `FULL_HASH`, rotazione) e il guardiano delle copie private (D9, D14). */

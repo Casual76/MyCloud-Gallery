@@ -156,26 +156,35 @@ class BackupStages(private val graph: AppGraph, private val backup: BackupGraph)
   /**
    * D24 (P14): i **file in arrivo** ("Salva sul NAS"): una tappa del motore con il trigger `INCOMING`. Non servono la cartella del dispositivo
    * ne' la scansione dell'area privata (la cartella l'ha scelta l'utente); il cancello lo guarda il motore a ogni elemento, quello della share
-   * di **destinazione** (D12, R2, D13, congelamento, sola lettura, pausa). Un lavoro dell'utente ([userInitiated], una condivisione grande) non
-   * scavalca la conferma dei dati mobili: le regole la chiedono e il file aspetta il lavoro dopo. Null: il backup non parte.
+   * di **destinazione** (D12, R2, D13, congelamento, sola lettura, pausa). Null: il backup non parte.
+   *
+   * **IN-5 della verifica funzionale 5B: un salvataggio chiesto dall'utente e' un lavoro dell'utente**, qualunque sia la sua grandezza
+   * (`UserInitiated`, e il turno esclusivo dell'utente). Prima una foto piccola partiva come `Background(PHOTO_BACKUP)` e con il preset Notte (il
+   * predefinito) aspettava la notte, la carica e il Wi-Fi di casa, mentre un video da 1 GB partiva subito: il file "in coda" arrivava sul NAS la
+   * notte dopo. Restano le regole di un lavoro dell'utente: niente rete, niente NAS, congelamento, caldo estremo e i dati mobili (che chiedono
+   * conferma: il file aspetta il Wi-Fi, vedi [BackupWorkScheduling.afterWait]). [userInitiated] dice solo se e' il lavoro UIDT (attesa del turno piu'
+   * lunga); [stop] e' il "Ferma" dei file ricevuti (IN-7): il giro finisce al passo dopo, i file restano in coda.
    */
-  suspend fun incoming(userInitiated: Boolean = false): BackupStageOutcome? {
+  suspend fun incoming(userInitiated: Boolean = false, stop: () -> Boolean = { false }): BackupStageOutcome? {
     if (!backup.start()) return null
     val parts = backup.parts ?: return null
-    val request = if (userInitiated) {
-      WorkRequest.UserInitiated(BackgroundActivity.PHOTO_BACKUP, null, false, writesToNas = true)
-    } else {
-      WorkRequest.Background(BackgroundActivity.PHOTO_BACKUP, writesToNas = true)
-    }
+    val request = WorkRequest.UserInitiated(BackgroundActivity.PHOTO_BACKUP, null, false, writesToNas = true)
     val outcome = backup.exclusive(
       waitFor = if (userInitiated) BackupGraph.USER_EXCLUSIVE_WAIT else BackupGraph.EXCLUSIVE_WAIT,
-      forUser = userInitiated,
+      forUser = true,
     ) {
       if (!backup.hasOpenIncoming()) return@exclusive idle()
-      UploadStages.stage(staged(request), parts.engine, BackupKind.PHOTOS, BackupTrigger.INCOMING, yieldTo = if (userInitiated) NEVER else backup::userIsWaiting)
+      UploadStages.stage(staged(request), parts.engine, BackupKind.PHOTOS, BackupTrigger.INCOMING, yieldTo = stop)
     } ?: return busy()
     outcome.last?.let { last ->
       GalleryLog.d(TAG) { "arrivi: fatti=${last.done} collegati=${last.linked} persi=${last.gone} falliti=${last.failed} aperti=${last.waiting} stop=${last.stoppedBy.code}" }
+      // IN-7: un NAS pieno, la quota o la password per un arrivo arrivano alla memoria e alla pagina come per ogni altro giro (prima il giro degli
+      // arrivi non le diceva a nessuno). Un giro riuscito non toglie un problema che non e' suo: lo toglie un giro delle foto o "Riprova".
+      val problem = last.problem
+      if ((last.stoppedBy == RunStop.NAS || last.stoppedBy == RunStop.PHONE) && problem != null) {
+        backup.memory.setProblem(problem)
+        graph.events.backupProblem(problem.name)
+      }
     }
     backup.kick()
     graph.events.stage(DiagJob.BACKUP_INCOMING, outcome.stage)

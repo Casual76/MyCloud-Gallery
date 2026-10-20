@@ -85,6 +85,13 @@ enum class FreeSpaceExclusion(override val code: String) : StableCode {
    * al sicuro per questo flusso.
    */
   BACKUP_NOT_ACTIVE("backup_not_active"),
+
+  /**
+   * LS-12 della verifica funzionale 5B: la riga e' gia' stata proposta al telefono in un altro giro (il dialogo di sistema e' aperto, o la risposta
+   * non e' arrivata): finche' la lettura del telefono non dice se Android l'ha tolta, non entra in un altro piano. Prima si contava come "in
+   * caricamento o con un problema".
+   */
+  AWAITING_PHONE("awaiting_phone"),
 }
 
 /** Gli avvisi che il foglio mostra sempre (C13). */

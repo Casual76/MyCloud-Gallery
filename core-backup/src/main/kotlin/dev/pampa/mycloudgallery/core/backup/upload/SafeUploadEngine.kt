@@ -350,6 +350,12 @@ class SafeUploadEngine(
       val item = store.item(taken.id)?.takeIf { !it.state.terminal } ?: continue
       val gateState = gateOf(item)
       if (!gateState.open) {
+        // R5: un arrivo diretto a una share chiusa (l'area comune congelata, una sola lettura, il backup in prova) aspetta da solo: il giro
+        // continua con gli altri. Per tutti gli altri, e per i cancelli che valgono per tutto (pausa, emergenza, famiglia non pronta), si ferma.
+        if (waitsAlone(item, gateState)) {
+          queue.park()
+          continue
+        }
         round.stopForGate(gateState)
         queue.park()
         return
@@ -405,7 +411,7 @@ class SafeUploadEngine(
       }
       val gateState = gateOf(item)
       if (!gateState.open) {
-        round.stopForGate(gateState)
+        if (!waitsAlone(item, gateState)) round.stopForGate(gateState)
         queue.park()
         return
       }
@@ -441,7 +447,7 @@ class SafeUploadEngine(
       }
     }
     try {
-      catalog.markProblem(fresh.mediaId, BackupProblemCode.UNEXPECTED)
+      markMedia(fresh, BackupProblemCode.UNEXPECTED)
     } catch (e: CancellationException) {
       throw e
     } catch (_: Exception) {
@@ -455,6 +461,14 @@ class SafeUploadEngine(
   /** Il cancello di un elemento: quello del backup per la sua share, o (D24) quello dei file in arrivo per la share di destinazione. */
   private fun gateOf(item: BackupItem): BackupGateState =
     if (item.kind == UploadKind.INCOMING) incoming?.gate?.stateOf(item.share) ?: BackupGateState.NOT_READY else gate.stateOf(item.share)
+
+  /**
+   * R5 della revisione di sicurezza 5B: il cancello chiuso di un file in arrivo ferma solo lui se riguarda la sua share di destinazione
+   * (congelata, in sola lettura, non piu' dell'utente, backup in prova): chiude le scritture di **quella** share, non il backup privato. Pausa
+   * dell'utente (R4), emergenza e famiglia non pronta valgono per tutto, e fermano il giro come per ogni altro elemento.
+   */
+  private fun waitsAlone(item: BackupItem, gateState: BackupGateState): Boolean =
+    item.kind == UploadKind.INCOMING && gateState != BackupGateState.PAUSED && gateState != BackupGateState.WRITES_STOPPED && gateState != BackupGateState.NOT_READY
 
   /** Dove si puo' pubblicare un elemento: le radici del backup, o (D24) la cartella scelta per un file in arrivo. */
   private fun allows(item: BackupItem, path: SharePath): Boolean =
@@ -526,6 +540,16 @@ class SafeUploadEngine(
   }
 
   private suspend fun save(item: BackupItem): Step = Step.Next(saveItem(item))
+
+  /**
+   * Il segno di un problema sul media dell'elemento (lo toglie dai candidati del piano finche' l'utente non tocca "Riprova"). R15 della revisione di
+   * sicurezza 5B: **mai per un file in arrivo**. Il suo media puo' essere uno che esisteva gia' (gli stessi byte, ritrovati per SHA-256): un arrivo
+   * che non riesce non deve togliere dal backup una foto dell'utente che non c'entra. Il problema resta sull'elemento del diario (`FAILED`, con la
+   * sua copia locale che non si perde).
+   */
+  private suspend fun markMedia(item: BackupItem, problem: BackupProblemCode) {
+    if (item.kind != UploadKind.INCOMING) catalog.markProblem(item.mediaId, problem)
+  }
 
   private fun tempOf(item: BackupItem): SharePath = NasBackupPaths.tempFor(deviceId, item.id.value)
 
@@ -637,14 +661,14 @@ class SafeUploadEngine(
   /** `GONE` (E-B4, E-B15): prima il proprio temporaneo incompleto (citato dal diario finche' l'elemento e' aperto), poi l'uscita. */
   private suspend fun gone(round: Round, item: BackupItem, lost: Boolean): Step {
     dropTempIfAny(round, item)?.let { return it }
-    if (lost) catalog.markProblem(item.mediaId, BackupProblemCode.LOST_BEFORE_BACKUP)
+    if (lost) markMedia(item, BackupProblemCode.LOST_BEFORE_BACKUP)
     return save(item.copy(state = UploadState.GONE, problem = if (lost) BackupProblemCode.LOST_BEFORE_BACKUP else null))
   }
 
   /** D15: un file che non si legge (o vuoto, E-M12): mai caricato, mai "al sicuro", segno del problema sul media. */
   private suspend fun unreadable(round: Round, item: BackupItem): Step {
     dropTempIfAny(round, item)?.let { return it }
-    catalog.markProblem(item.mediaId, BackupProblemCode.UNREADABLE)
+    markMedia(item, BackupProblemCode.UNREADABLE)
     GalleryLog.w(TAG) { "file del telefono illeggibile: elemento fermo con ${BackupProblemCode.UNREADABLE.code}" }
     return save(item.copy(state = UploadState.FAILED, problem = BackupProblemCode.UNREADABLE))
   }
@@ -1009,7 +1033,7 @@ class SafeUploadEngine(
 
   private suspend fun verifyFailed(round: Round, item: BackupItem): Step {
     dropTempIfAny(round, item)?.let { return it }
-    catalog.markProblem(item.mediaId, BackupProblemCode.VERIFY_FAILED)
+    markMedia(item, BackupProblemCode.VERIFY_FAILED)
     return save(item.copy(state = UploadState.FAILED, problem = BackupProblemCode.VERIFY_FAILED))
   }
 
@@ -1227,8 +1251,13 @@ class SafeUploadEngine(
     return if (n >= config.lockedRetries) Step.Wait() else Step.Wait(config.lockedFirstWaitMs shl n)
   }
 
-  private fun stopFor(round: Round, item: BackupItem, error: NasError): Step =
-    if (error == NasError.FileBusy) lockedWait(round, item) else Step.Stop(RunStop.NAS, UploadNames.problemFor(error))
+  private fun stopFor(round: Round, item: BackupItem, error: NasError): Step = when {
+    error == NasError.FileBusy -> lockedWait(round, item)
+    // R5: la share di destinazione di un arrivo che rifiuta la scrittura (sola lettura per questo account) o che non c'e' piu' e' un fatto di quella
+    // share: l'arrivo aspetta (e il cancello, che lo sa, lo dira'), il giro dei media del telefono non si ferma per lui.
+    item.kind == UploadKind.INCOMING && (error == NasError.PermissionDenied || error is NasError.ShareMissing) -> Step.Wait()
+    else -> Step.Stop(RunStop.NAS, UploadNames.problemFor(error))
+  }
 
   private sealed interface Read {
     class Ok(val sha: Sha256, val stamp: NasStamp) : Read

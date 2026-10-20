@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.feature.backup.free
 
 import androidx.compose.runtime.Immutable
 import dev.pampa.mycloudgallery.core.backup.contract.FreeSpaceBlock
+import dev.pampa.mycloudgallery.core.backup.contract.FreeSpaceExclusion
 import dev.pampa.mycloudgallery.core.backup.contract.FreeSpaceKind
 import dev.pampa.mycloudgallery.core.backup.contract.FreeSpacePlan
 
@@ -48,11 +49,17 @@ internal sealed interface FreeSpaceUi {
   /** Sto contando cosa si puo' liberare. */
   data object Idle : FreeSpaceUi
 
-  /** Il riepilogo: quanti e quanti GB, gli esclusi per motivo, il filtro scelto. */
-  data class Summary(val plan: FreeSpacePlan, val kind: FreeSpaceKind) : FreeSpaceUi
+  /**
+   * Il riepilogo: quanti e quanti GB, gli esclusi per motivo, il filtro scelto. [nasTimeKnown] falso (LS-11): l'ora del NAS non e' ancora nota e
+   * ogni media datato conta come recente; la pagina lo dice e ricalcola quando arriva.
+   */
+  data class Summary(val plan: FreeSpacePlan, val kind: FreeSpaceKind, val nasTimeKnown: Boolean = true) : FreeSpaceUi
 
-  /** Il guardiano fa le copie private dei media con la sola copia comune (D9). */
-  data class Guarding(val done: Int, val total: Int) : FreeSpaceUi
+  /**
+   * Il guardiano fa le copie private dei media con la sola copia comune (D9). [waitingForBackup] (LS-8): aspetta che il backup finisca il file
+   * che sta caricando (prima "0 di N" senza spiegazione).
+   */
+  data class Guarding(val done: Int, val total: Int, val waitingForBackup: Boolean = false) : FreeSpaceUi
 
   /** La verifica sul momento: rilettura completa di ogni copia privata (D21). */
   data class Verifying(val done: Int, val total: Int, val bytes: Long) : FreeSpaceUi
@@ -72,8 +79,10 @@ internal sealed interface FreeSpaceUi {
 
   /**
    * Finito. [items] e [freedBytes] sono cio' che Android ha confermato; [toAndroidTrash] dice se sono nel cestino (30 giorni) o tolti per sempre;
-   * [kept] sono quelli rimasti sul telefono perche' l'utente non ha confermato (o Android non l'ha detto); [dropped] quelli usciti perche' la
-   * copia sul NAS non tornava (E-B8, L39); [cancelled] = l'utente ha rifiutato il dialogo.
+   * [kept] sono quelli rimasti sul telefono perche' l'utente non ha confermato (o ha detto di no prima del loro lotto); [dropped] quelli usciti
+   * durante il giro, e [droppedBy] per motivo (LS-7: il motivo vero di ognuno, non sempre "la copia non tornava"); [cancelled] = l'utente ha
+   * rifiutato un dialogo (anche dopo che altri lotti erano gia' liberati, LS-7); [changedBeforeStart] i media confermati che erano gia' cambiati
+   * quando il giro e' partito (LS-13: restano sul telefono); [inDoubt] quelli consegnati ad Android di cui non si sa ancora l'esito (LS-12).
    */
   data class Done(
     val items: Int,
@@ -82,6 +91,9 @@ internal sealed interface FreeSpaceUi {
     val kept: Int,
     val dropped: Int,
     val cancelled: Boolean,
+    val droppedBy: Map<FreeSpaceExclusion, Int> = emptyMap(),
+    val changedBeforeStart: Int = 0,
+    val inDoubt: Int = 0,
   ) : FreeSpaceUi
 
   data class Blocked(val reason: FreeSpaceBlockedBy) : FreeSpaceUi

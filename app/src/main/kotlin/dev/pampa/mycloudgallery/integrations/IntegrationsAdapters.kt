@@ -3,6 +3,8 @@ package dev.pampa.mycloudgallery.integrations
 import android.content.ContentResolver
 import android.net.Uri
 import androidx.fragment.app.FragmentActivity
+import dev.pampa.mycloudgallery.core.backup.contract.BackupGate
+import dev.pampa.mycloudgallery.core.backup.contract.BackupGateState
 import dev.pampa.mycloudgallery.core.backup.contract.DestinationArea
 import dev.pampa.mycloudgallery.core.backup.contract.EditSession
 import dev.pampa.mycloudgallery.core.backup.contract.EditSessionId
@@ -10,6 +12,8 @@ import dev.pampa.mycloudgallery.core.backup.contract.EditSessionState
 import dev.pampa.mycloudgallery.core.backup.contract.EditTarget
 import dev.pampa.mycloudgallery.core.backup.contract.NasDestination
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneRef
+import dev.pampa.mycloudgallery.backup.IncomingMetadata
+import dev.pampa.mycloudgallery.backup.LocalFileBytes
 import dev.pampa.mycloudgallery.core.database.GalleryDatabase
 import dev.pampa.mycloudgallery.core.database.MediaCatalog
 import dev.pampa.mycloudgallery.core.database.entity.EditSessionEntity
@@ -18,6 +22,9 @@ import dev.pampa.mycloudgallery.core.imaging.contract.ThumbnailLoader
 import dev.pampa.mycloudgallery.core.library.contract.ViewerItems
 import dev.pampa.mycloudgallery.core.mediastore.android.ContentUriMediaBytes
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneMediaIntents
+import dev.pampa.mycloudgallery.core.metadata.contract.ExtractHints
+import dev.pampa.mycloudgallery.core.metadata.contract.Extraction
+import dev.pampa.mycloudgallery.core.metadata.contract.MetadataExtractor
 import dev.pampa.mycloudgallery.core.model.AccountId
 import dev.pampa.mycloudgallery.core.model.Location
 import dev.pampa.mycloudgallery.core.model.LocationId
@@ -30,6 +37,8 @@ import dev.pampa.mycloudgallery.core.model.NasPath
 import dev.pampa.mycloudgallery.core.model.QuickHash
 import dev.pampa.mycloudgallery.core.model.Sha256
 import dev.pampa.mycloudgallery.core.model.VersionId
+import dev.pampa.mycloudgallery.core.model.WorkStage
+import dev.pampa.mycloudgallery.core.model.domain.WorkRules
 import dev.pampa.mycloudgallery.core.nas.contract.NasMediaReader
 import dev.pampa.mycloudgallery.core.nas.contract.NasRandomFile
 import dev.pampa.mycloudgallery.core.nas.contract.NasResult
@@ -37,6 +46,7 @@ import dev.pampa.mycloudgallery.core.nas.contract.Purpose
 import dev.pampa.mycloudgallery.core.nas.ops.backup.VersionPaths
 import dev.pampa.mycloudgallery.core.nasmedia.detect.NasMediaBytes
 import dev.pampa.mycloudgallery.core.security.lock.AppLockController
+import dev.pampa.mycloudgallery.core.security.lock.AuthAvailability
 import dev.pampa.mycloudgallery.core.security.lock.AuthPromptText
 import dev.pampa.mycloudgallery.core.security.lock.AuthResult
 import dev.pampa.mycloudgallery.core.security.lock.BiometricPromptAuthenticator
@@ -56,6 +66,7 @@ import dev.pampa.mycloudgallery.feature.integrations.edit.GalleryDownloads
 import dev.pampa.mycloudgallery.feature.integrations.edit.NasCopy
 import dev.pampa.mycloudgallery.feature.integrations.edit.StoredEditSession
 import dev.pampa.mycloudgallery.feature.integrations.picker.EntryUnlock
+import dev.pampa.mycloudgallery.feature.integrations.picker.UnlockFailure
 import dev.pampa.mycloudgallery.feature.integrations.provider.IntegrationLibrary
 import dev.pampa.mycloudgallery.feature.integrations.provider.MediaFileInfo
 import dev.pampa.mycloudgallery.feature.integrations.provider.NasFolder
@@ -64,6 +75,7 @@ import dev.pampa.mycloudgallery.feature.integrations.provider.NasReach
 import dev.pampa.mycloudgallery.feature.integrations.provider.NasUnreachableReason
 import dev.pampa.mycloudgallery.feature.integrations.receive.DestinationChoice
 import dev.pampa.mycloudgallery.feature.integrations.receive.IncomingDestinations
+import dev.pampa.mycloudgallery.feature.integrations.receive.NasWait
 import dev.pampa.mycloudgallery.feature.integrations.receive.ReceiveUnlock
 import dev.pampa.mycloudgallery.feature.integrations.share.OpenedForShare
 import dev.pampa.mycloudgallery.feature.integrations.share.ShareOpen
@@ -75,9 +87,15 @@ import dev.pampa.mycloudgallery.nas.NasShareArea
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
+import java.time.ZoneId
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -89,22 +107,60 @@ import kotlinx.coroutines.withTimeoutOrNull
 /**
  * Il cancello delle activity d'ingresso (C17, E-X7): la famiglia pronta e il blocco **valutato adesso** (`AppLockController.isUnlockedNow`,
  * nota di P10: prima il blocco si richiudeva solo al ritorno della `MainActivity`, e con lei in secondo piano restava aperto per le altre app).
+ *
+ * IN-3 della verifica funzionale 5B: a **processo freddo**, quando un'altra app chiama il selettore, la ricezione o il provider dei documenti, la
+ * configurazione salvata e le impostazioni del blocco si stanno ancora leggendo (`AppGraph.start()` e `AppLockController.follow` girano dopo
+ * `onCreate`). Prima il cancello rispondeva "non pronta" (la schermata diceva "Prima configura MyCloud Gallery") o "chiusa" per una corsa, e
+ * nessuno lo ricontrollava. Adesso risponde [EntryDecision.LOADING] finche' non sa, e [decideAfterLoading] aspetta che lo sappia.
+ *
+ * @param familyLoading la configurazione salvata si sta ancora leggendo (`SetupState.Loading`).
+ * @param familyChanges emette quando lo stato della famiglia cambia (per aspettare il caricamento e per notificare le radici).
  */
-class AppEntryGate(private val lock: AppLockController, private val familyReady: () -> Boolean) : EntryGate {
+class AppEntryGate(
+  private val lock: AppLockController,
+  private val familyReady: () -> Boolean,
+  private val familyLoading: () -> Boolean = { false },
+  private val familyChanges: Flow<Unit> = emptyFlow(),
+) : EntryGate {
+
   override fun decide(): EntryDecision = when {
+    familyLoading() -> EntryDecision.LOADING
     !familyReady() -> EntryDecision.NOT_READY
+    // Le impostazioni del blocco non sono ancora lette: non si sa se l'app e' bloccata (prima: "chiusa", quindi una richiesta di sblocco che
+    // non poteva partire). Se non si leggono mai, [decideAfterLoading] finisce e chi chiama non offre niente (fallire chiusi).
+    lock.settings.value == null -> EntryDecision.LOADING
     lock.isUnlockedNow() -> EntryDecision.ALLOWED
     else -> EntryDecision.NEEDS_UNLOCK
   }
+
+  override suspend fun decideAfterLoading(timeoutMs: Long): EntryDecision {
+    if (decide() != EntryDecision.LOADING) return decide()
+    withTimeoutOrNull(timeoutMs) {
+      combine(familyChanges.onStart { emit(Unit) }, lock.settings) { _, _ -> Unit }.first { decide() != EntryDecision.LOADING }
+    }
+    return decide()
+  }
+
+  /** Le decisioni di adesso e ogni volta che cambiano lo stato della famiglia o il blocco: le radici del provider dei documenti si notificano da qui. */
+  fun decisions(): Flow<EntryDecision> =
+    combine(familyChanges.onStart { emit(Unit) }, lock.state, lock.settings) { _, _, _ -> decide() }.distinctUntilChanged()
 }
 
 /**
  * Lo sblocco di un'activity d'ingresso (selettore, ricezione): la credenziale di sistema (`BiometricPromptAuthenticator`), poi
  * `endEntryAuthentication` (con la `MainActivity` fuori dal primo piano vale la tolleranza di due minuti). Falso se uno sblocco e' gia' in corso
- * o non c'e' niente da sbloccare.
+ * o non c'e' niente da sbloccare. IN-10: [lastFailure] dice perche' l'ultimo non e' riuscito (annullato, nessun blocco schermo, altro), cosi' la
+ * schermata non dice "Non sono riuscito" a chi ha solo annullato e dice cosa fare a chi non ha una credenziale.
  */
 class AppEntryUnlock(private val lock: AppLockController) : EntryUnlock, ReceiveUnlock {
+
+  @Volatile
+  private var failure: UnlockFailure? = null
+
+  override fun lastFailure(): UnlockFailure? = failure
+
   override suspend fun unlock(activity: FragmentActivity): Boolean {
+    failure = null
     if (lock.isUnlockedNow()) return true
     if (!lock.beginAuthentication()) return lock.isUnlockedNow()
     var ok = false
@@ -113,11 +169,23 @@ class AppEntryUnlock(private val lock: AppLockController) : EntryUnlock, Receive
         title = activity.getString(dev.pampa.mycloudgallery.core.security.R.string.core_security_prompt_title),
         subtitle = activity.getString(dev.pampa.mycloudgallery.core.security.R.string.core_security_prompt_subtitle),
       )
-      ok = BiometricPromptAuthenticator(activity).authenticate(text) == AuthResult.Success
+      val result = BiometricPromptAuthenticator(activity).authenticate(text)
+      ok = result == AuthResult.Success
+      if (!ok) failure = failureOf(result)
     } finally {
       lock.endEntryAuthentication(ok)
     }
-    return ok && lock.isUnlockedNow()
+    val unlocked = ok && lock.isUnlockedNow()
+    if (ok && !unlocked) failure = UnlockFailure.OTHER
+    return unlocked
+  }
+
+  internal companion object {
+    fun failureOf(result: AuthResult): UnlockFailure = when (result) {
+      AuthResult.Cancelled -> UnlockFailure.CANCELLED
+      is AuthResult.NotAvailable -> if (result.reason == AuthAvailability.NO_SCREEN_LOCK) UnlockFailure.NO_SCREEN_LOCK else UnlockFailure.OTHER
+      else -> UnlockFailure.OTHER
+    }
   }
 }
 
@@ -149,6 +217,46 @@ class CatalogNasFolders(private val database: GalleryDatabase) {
     names.toList()
   }
 
+  /**
+   * IN-2: **tutte** le cartelle di [share] note al catalogo (con le cartelle intermedie, a ogni profondita'), nello stesso spelling con cui le dà
+   * [children] scendendo da una cartella all'altra (la prima scritta incontrata, senza badare alle maiuscole): le chiavi delle cartelle devono
+   * coincidere con quelle che il provider ha già dato a DocumentsUI. Una sola lettura del catalogo (non una per cartella). Mai `Versioni/`.
+   */
+  suspend fun allFolders(account: AccountId, share: String): List<SharePath> = withContext(Dispatchers.IO) {
+    class Node(val name: String) {
+      val children = java.util.TreeMap<String, Node>(String.CASE_INSENSITIVE_ORDER)
+    }
+    val root = Node("")
+    runCatching {
+      database.openHelper.readableDatabase.query(
+        "SELECT MIN(nas_path) FROM media_location WHERE location_type = 'nas' AND state = 'present' AND account_id = ? AND share_key = ? GROUP BY folder_key LIMIT ?",
+        arrayOf<Any?>(account.value, Location.Nas.shareKeyOf(share), FOLDER_ROWS),
+      ).use { c ->
+        while (c.moveToNext()) {
+          val path = c.getString(0) ?: continue
+          val parent = path.substringBeforeLast('/', "")
+          if (parent.isEmpty()) continue
+          var node = root
+          for (component in parent.split('/')) {
+            if (component.isEmpty()) continue
+            node = node.children.getOrPut(component) { Node(component) }
+          }
+        }
+      }
+    }
+    val out = ArrayList<SharePath>()
+    fun walk(node: Node, at: SharePath?) {
+      for (child in node.children.values) {
+        val path = runCatching { at?.child(child.name) ?: SharePath.of(child.name) }.getOrNull() ?: continue
+        if (VersionPaths.isInVersions(path) || VersionPaths.isVersionsRoot(path)) continue
+        out += path
+        walk(child, path)
+      }
+    }
+    walk(root, null)
+    out
+  }
+
   /** I media con una copia presente direttamente in [folder] di [share] (al piu' [limit]); il chiamante li ricontrolla con la vista. */
   suspend fun mediaIn(account: AccountId, share: String, folder: SharePath?, limit: Int): List<MediaId> = withContext(Dispatchers.IO) {
     val key = Location.Nas.folderKey(account, share, folder?.let { runCatching { NasPath.of(it.value) }.getOrNull() })
@@ -163,6 +271,50 @@ class CatalogNasFolders(private val database: GalleryDatabase) {
 
   private companion object {
     const val FOLDER_ROWS = 20_000
+  }
+}
+
+/**
+ * IN-8: i metadati di un file in arrivo dai suoi byte locali, con lo stesso estrattore della Libreria (data di scatto, tipo, dimensioni, durata,
+ * segnaposto): scritti nella versione del media appena nato e la fase META segnata fatta (la lettura del telefono non la rifarebbe: la posizione e' del
+ * NAS). Un limite di tempo per file: un video enorme con il `moov` in fondo non fa aspettare "Salva sul NAS". Non lancia.
+ */
+class AppIncomingMetadata(
+  private val extractor: MetadataExtractor,
+  private val catalog: suspend () -> MediaCatalog?,
+  private val zone: () -> ZoneId = ZoneId::systemDefault,
+  private val timeoutMs: Long = TIMEOUT_MS,
+) : IncomingMetadata {
+
+  override suspend fun read(mediaId: MediaId, versionId: VersionId, file: File, mime: String, displayName: String?, arrivedAtMs: Long) {
+    val cat = catalog() ?: return
+    val bytes = try {
+      LocalFileBytes(file)
+    } catch (_: IOException) {
+      return
+    }
+    try {
+      val hints = ExtractHints(
+        mime = mime,
+        displayName = displayName ?: file.name,
+        relativePath = "",
+        scanZone = zone(),
+        // La data di arrivo e' il ripiego (stimata) se il file non ha una data di scatto.
+        dateModifiedMs = arrivedAtMs,
+      )
+      val extraction = withTimeoutOrNull(timeoutMs) { extractor.extract(bytes, hints) } ?: return
+      if (extraction !is Extraction.Read) return
+      cat.updateMetadata(versionId, extraction.metadata, extraction.kind)
+      cat.workStates(mediaId).firstOrNull { it.stage == WorkStage.META }?.let { state ->
+        cat.updateWork(mediaId, WorkRules.succeeded(state, versionId, arrivedAtMs))
+      }
+    } finally {
+      bytes.close()
+    }
+  }
+
+  companion object {
+    const val TIMEOUT_MS: Long = 4_000L
   }
 }
 
@@ -239,6 +391,19 @@ class AppIntegrationLibrary(
     }
   }
 
+  override suspend fun nasFolderIndex(): List<NasFolder> {
+    val me = account() ?: return emptyList()
+    val out = ArrayList<NasFolder>()
+    for (area in areas()) {
+      out += NasFolder(FolderKeys.of(area.share, null), if (area.area == NasArea.PRIVATE) labels.privateArea else labels.commonArea)
+      for (path in folders.allFolders(me, area.share)) {
+        if (out.size >= IntegrationLibrary.MAX_FOLDER_INDEX) return out
+        out += NasFolder(FolderKeys.of(area.share, path), path.value.substringAfterLast('/'))
+      }
+    }
+    return out
+  }
+
   override suspend fun mediaIn(folder: NasFolderKey, limit: Int): List<MediaId> {
     val me = account() ?: return emptyList()
     val (share, path) = FolderKeys.parse(folder) ?: return emptyList()
@@ -256,7 +421,8 @@ internal object FolderKeys {
   fun parse(key: NasFolderKey): Pair<String, SharePath?>? {
     val share = key.value.substringBefore(SEP, "").ifEmpty { return null }
     val path = key.value.substringAfter(SEP, "")
-    return share to if (path.isEmpty()) null else runCatching { SharePath.of(path) }.getOrNull() ?: return null
+    // `SharePath.of` accetta un solo componente: un percorso annidato ("Archivio/2025/Mare") non si apriva e l'albero si fermava al secondo livello.
+    return share to if (path.isEmpty()) null else runCatching { SharePath.parse(path) }.getOrNull() ?: return null
   }
 }
 
@@ -335,7 +501,10 @@ class AppIncomingDestinations(
   private val fenceRoot: () -> SharePath?,
   private val folders: CatalogNasFolders,
   private val labels: IntegrationLabels,
-  private val reachable: suspend () -> Boolean,
+  /** Il NAS risponde adesso, e se no perche' (IN-11: i dati mobili non sono "NAS spento"). */
+  private val reach: suspend () -> NasReach,
+  /** IN-6: il cancello degli arrivi per una share: `TEST_ONLY` (D12, R2) vuol dire che in questa versione non si scrive. Null senza backup. */
+  private val gate: BackupGate? = null,
 ) : IncomingDestinations {
 
   override suspend fun roots(): List<DestinationChoice> {
@@ -357,7 +526,24 @@ class AppIncomingDestinations(
     }
   }
 
-  override suspend fun nasReachable(): Boolean = runCatching { reachable() }.getOrDefault(false)
+  override suspend fun nasReachable(): Boolean = nasWait() == NasWait.NONE
+
+  override suspend fun nasWait(): NasWait = when (val r = runCatching { reach() }.getOrNull()) {
+    NasReach.Reachable -> NasWait.NONE
+    is NasReach.Unreachable -> if (r.reason == NasUnreachableReason.METERED) NasWait.METERED else NasWait.OFFLINE
+    null -> NasWait.OFFLINE
+  }
+
+  /**
+   * IN-6 della verifica funzionale 5B: in release D12 e R2 chiudono ogni scrittura della 5B sulle share vere (il cancello degli arrivi risponde
+   * `TEST_ONLY`): "Salva sul NAS" non riuscirebbe mai, ma lo diceva dopo aver copiato fino a 4 GiB, e con la frase "In quella cartella non si puo'
+   * scrivere" per ogni cartella. Vero se **tutte** le aree dell'utente sono chiuse per questo motivo (nel dubbio si prova a salvare).
+   */
+  override suspend fun savingBlockedByTrial(): Boolean {
+    val g = gate ?: return false
+    val mine = areas()
+    return mine.isNotEmpty() && mine.all { g.stateOf(it.share) == BackupGateState.TEST_ONLY }
+  }
 }
 
 /**

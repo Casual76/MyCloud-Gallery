@@ -6,9 +6,12 @@ import android.content.Context
 import android.content.Intent
 import android.database.Cursor
 import android.os.CancellationSignal
+import android.os.Handler
+import android.os.Looper
 import android.os.OperationCanceledException
 import android.os.ParcelFileDescriptor
 import android.provider.DocumentsProvider
+import android.widget.Toast
 import dev.pampa.mycloudgallery.feature.integrations.R
 import dev.pampa.mycloudgallery.feature.integrations.contract.DocumentEntry
 import dev.pampa.mycloudgallery.feature.integrations.contract.DocumentId
@@ -16,6 +19,8 @@ import dev.pampa.mycloudgallery.feature.integrations.contract.DocumentIds
 import dev.pampa.mycloudgallery.feature.integrations.contract.DocumentReader
 import dev.pampa.mycloudgallery.feature.integrations.contract.EntryDecision
 import dev.pampa.mycloudgallery.feature.integrations.contract.IntegrationPorts
+import dev.pampa.mycloudgallery.feature.integrations.picker.PickerActivity
+import dev.pampa.mycloudgallery.feature.integrations.share.ShareStop
 import java.io.FileNotFoundException
 import java.util.concurrent.CancellationException
 import java.util.concurrent.TimeoutException
@@ -53,8 +58,8 @@ class MediaDocumentsProvider : DocumentsProvider() {
   override fun queryRoots(projection: Array<out String>?): Cursor {
     env.guard.requireSystem()
     IntegrationCounters.add(IntegrationCounter.PROVIDER_QUERIES)
-    val locked = when (IntegrationPorts.entryGate.decide()) {
-      EntryDecision.NOT_READY -> return DocumentRows.roots(projection, emptyList(), "", null, 0)
+    val locked = when (decision()) {
+      EntryDecision.NOT_READY, EntryDecision.LOADING -> return DocumentRows.roots(projection, emptyList(), "", null, 0)
       EntryDecision.NEEDS_UNLOCK -> true
       EntryDecision.ALLOWED -> false
     }
@@ -130,15 +135,25 @@ class MediaDocumentsProvider : DocumentsProvider() {
     }
     var handedOver = false
     try {
+      val documents = IntegrationPorts.documents
+      // "Rimuovi la posizione" acceso: l'apertura puo' dover preparare la copia, che dura piu' di una lettura (e si annulla con il segnale).
+      val deadline = if (documents.preparesOnOpen()) env.prepareDeadlineMs else env.openDeadlineMs
       val reader: DocumentReader = try {
-        blocking(signal) { IntegrationPorts.documents.open(id) }
+        blocking(signal, deadline) { documents.open(id) }
       } catch (e: TimeoutException) {
         IntegrationCounters.add(IntegrationCounter.PROVIDER_OPEN_REFUSED)
-        throw FileNotFoundException("Il NAS non risponde.")
+        throw FileNotFoundException(if (documents.preparesOnOpen()) env.noLocationText(null) else "Il NAS non risponde.")
       } catch (e: OperationCanceledException) {
         throw e
       } catch (e: SecurityException) {
         throw e
+      } catch (e: LocationRemovalRefused) {
+        // Fallire chiusi: la posizione non si e' potuta togliere, quindi niente si consegna (mai l'originale). L'altra app riceve un errore e l'utente
+        // vede perche'.
+        IntegrationCounters.add(IntegrationCounter.PROVIDER_OPEN_REFUSED)
+        val text = env.noLocationText(e.stop)
+        env.tell(text)
+        throw FileNotFoundException(text)
       } catch (e: Exception) {
         null
       } ?: run {
@@ -171,9 +186,9 @@ class MediaDocumentsProvider : DocumentsProvider() {
    * chiede lo sblocco; un documento **consegnato** (sbloccato e toccato nel nostro selettore) si serve comunque finche' l'id vale.
    */
   private fun authorize(id: DocumentId, listing: Boolean) {
-    when (IntegrationPorts.entryGate.decide()) {
+    when (decision()) {
       EntryDecision.ALLOWED -> Unit
-      EntryDecision.NOT_READY -> {
+      EntryDecision.NOT_READY, EntryDecision.LOADING -> {
         IntegrationCounters.add(IntegrationCounter.PROVIDER_OPEN_REFUSED)
         throw FileNotFoundException("Non disponibile.")
       }
@@ -187,12 +202,32 @@ class MediaDocumentsProvider : DocumentsProvider() {
     }
   }
 
+  /**
+   * Il cancello d'ingresso, **dopo** che l'app ha letto il suo stato (IN-3): a processo freddo il provider risponde a DocumentsUI mentre la
+   * configurazione e le impostazioni del blocco si stanno ancora leggendo, e prima rispondeva "non pronta" (nessuna radice) senza che nessuno lo
+   * correggesse. Qui si aspetta fino a [ProviderTuning.loadWaitMs] (il thread del binder puo' aspettare un attimo, mai a lungo); se ancora non
+   * c'e' risposta vale "non pronta" e la radice appare appena lo stato e' letto (le radici si notificano a ogni cambio: `IntegrationsGraph`).
+   */
+  private fun decision(): EntryDecision {
+    val gate = IntegrationPorts.entryGate
+    val now = gate.decide()
+    if (now != EntryDecision.LOADING) return now
+    val waited = try {
+      blocking(null) { gate.decideAfterLoading(ProviderTuning.loadWaitMs) }
+    } catch (e: TimeoutException) {
+      EntryDecision.LOADING
+    } catch (e: OperationCanceledException) {
+      EntryDecision.LOADING
+    }
+    return if (waited == EntryDecision.LOADING) EntryDecision.NOT_READY else waited
+  }
+
   /** Chiama una funzione sospesa dal thread del binder, con la scadenza (E-X1). `TimeoutException` alla scadenza; [signal] la annulla. */
-  private fun <T> blocking(signal: CancellationSignal?, block: suspend () -> T): T {
+  private fun <T> blocking(signal: CancellationSignal?, deadlineMs: Long = env.openDeadlineMs, block: suspend () -> T): T {
     val job = SupervisorJob()
     signal?.setOnCancelListener { job.cancel() }
     try {
-      return runBlocking(job) { withTimeout(env.openDeadlineMs) { block() } }
+      return runBlocking(job) { withTimeout(deadlineMs) { block() } }
     } catch (e: TimeoutCancellationException) {
       throw TimeoutException("Scaduto.")
     } catch (e: CancellationException) {
@@ -206,6 +241,7 @@ class MediaDocumentsProvider : DocumentsProvider() {
   private class Env(val context: Context) {
     val authority: String = DocumentsAuthority.of(context)
     val openDeadlineMs: Long = ProviderTuning.openDeadlineMs
+    val prepareDeadlineMs: Long = ProviderTuning.prepareDeadlineMs
     val guard = CallerGuard(ProviderTuning.callerChecks?.invoke(context) ?: AndroidCallerChecks(context), authority)
     val descriptors = ProxyDescriptors(
       opener = ProviderTuning.proxyOpener?.invoke(context) ?: StorageProxyOpener(context),
@@ -217,6 +253,26 @@ class MediaDocumentsProvider : DocumentsProvider() {
     /** "Sblocca": un tocco che apre l'app (immutabile ed esplicito sul nostro pacchetto: C17). */
     fun authenticationRequired(): AuthenticationRequiredException =
       AuthenticationRequiredException(SecurityException("Sblocca l'app."), unlockPendingIntent(context))
+
+    /** La frase per chi non riceve un file perche' la posizione non si toglie (senza nomi: solo il motivo). */
+    fun noLocationText(stop: ShareStop?): String = context.getString(
+      when (stop) {
+        null -> R.string.integrations_documents_error_no_location_slow
+        ShareStop.NO_SPACE, ShareStop.TOO_BIG, ShareStop.TOO_MANY -> R.string.integrations_documents_error_no_location_space
+        ShareStop.NAS_UNREACHABLE -> R.string.integrations_documents_error_no_location_nas
+        ShareStop.CANNOT_REMOVE_LOCATION, ShareStop.LOCATION_REMAINS -> R.string.integrations_documents_error_no_location
+        else -> R.string.integrations_documents_error_no_location_failed
+      },
+    )
+
+    /** Lo dice anche all'utente, che e' nell'altra app: un avviso breve (il testo non porta nomi). Mai un errore se non si puo'. */
+    fun tell(text: String) {
+      try {
+        Handler(Looper.getMainLooper()).post { Toast.makeText(context, text, Toast.LENGTH_LONG).show() }
+      } catch (_: RuntimeException) {
+        // Resta l'errore all'altra app.
+      }
+    }
   }
 }
 
@@ -231,6 +287,8 @@ internal object ProviderTuning {
   @Volatile var slots: (() -> DescriptorSlots)? = null
   @Volatile var readDeadlineMs: Long = DocumentPolicy.READ_DEADLINE_MS
   @Volatile var openDeadlineMs: Long = DocumentPolicy.OPEN_DEADLINE_MS
+  @Volatile var prepareDeadlineMs: Long = DocumentPolicy.PREPARE_DEADLINE_MS
+  @Volatile var loadWaitMs: Long = DocumentPolicy.LOAD_WAIT_MS
 
   fun reset() {
     callerChecks = null
@@ -239,15 +297,18 @@ internal object ProviderTuning {
     slots = null
     readDeadlineMs = DocumentPolicy.READ_DEADLINE_MS
     openDeadlineMs = DocumentPolicy.OPEN_DEADLINE_MS
+    prepareDeadlineMs = DocumentPolicy.PREPARE_DEADLINE_MS
+    loadWaitMs = DocumentPolicy.LOAD_WAIT_MS
   }
 }
 
 /**
- * Il tocco che accompagna "serve lo sblocco" (E-X7): apre l'app (la sua schermata di blocco). `PendingIntent` **immutabile** e con un intento
- * **esplicito** sul nostro pacchetto: l'altra app non puo' cambiarne la destinazione (C17).
+ * Il tocco che accompagna "serve lo sblocco" (E-X7): apre la schermata di sblocco del selettore (`PickerActivity` con [PickerActivity.ACTION_UNLOCK]),
+ * non la `MainActivity` (IN-4: con il blocco "Subito" quella, tornando a DocumentsUI, richiudeva il blocco senza tolleranza e lo sblocco non finiva
+ * mai; l'activity d'ingresso usa la finestra di tolleranza e restituisce un risultato a DocumentsUI). `PendingIntent` **immutabile** e con un intento
+ * **esplicito** sul nostro componente: l'altra app non puo' cambiarne la destinazione (C17).
  */
 internal fun unlockPendingIntent(context: Context): PendingIntent {
-  val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
-    ?: Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setPackage(context.packageName)
-  return PendingIntent.getActivity(context, 0, launch, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+  val unlock = Intent(PickerActivity.ACTION_UNLOCK).setClassName(context.packageName, PickerActivity::class.java.name)
+  return PendingIntent.getActivity(context, 0, unlock, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
 }

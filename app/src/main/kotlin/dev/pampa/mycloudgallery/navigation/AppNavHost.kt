@@ -176,7 +176,13 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
           // Fase 4B (P16): Cartelle NAS, Spazio NAS, Eliminati di recente del NAS, Operazioni in corso (rotte a schermo intero).
           nasGraph(nav = nav, onOpenFile = nasOpener::open)
           // Fase 5A (P7): la pagina Backup, le impostazioni, la cartella del dispositivo e il riepilogo del primo backup.
-          if (gallery?.backupAvailable == true) backupGraph(nav, freeSpaceSelection = { gallery.fiveB?.freeSpaceSelection })
+          if (gallery?.backupAvailable == true) {
+            backupGraph(
+              nav,
+              takeFreeSpaceRequest = { gallery.fiveB?.takeFreeSpaceRequest() },
+              freeSpaceRequest = { serial -> gallery.fiveB?.freeSpaceRequest(serial) },
+            )
+          }
           // "Da completare" nelle Impostazioni riapre i passi saltati dell'onboarding.
           onboardingGraph(nav = nav, onDone = {}, onPause = actions.pause)
           settingsGraph(

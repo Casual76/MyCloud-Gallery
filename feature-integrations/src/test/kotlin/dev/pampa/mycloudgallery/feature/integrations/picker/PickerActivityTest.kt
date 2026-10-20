@@ -123,6 +123,151 @@ class PickerActivityTest {
     assertThat(scenario.result.resultData).isNull()
   }
 
+  /**
+   * IN-3 della verifica funzionale 5B: a processo freddo (Gmail "Allega file", un'altra app) l'app sta ancora leggendo il suo stato. La schermata non
+   * dice "Prima configura MyCloud Gallery" e non apre lo sblocco: aspetta, e quando lo stato c'e' mostra la griglia da sola.
+   */
+  @Test
+  fun in3_aFreddoNonDiceMaiPrimaConfiguraEAspettaLoStato() {
+    gate.decision = EntryDecision.LOADING
+    install()
+    val scenario = launch(intent())
+    assertThat(compose.onAllNodesWithText("Prima configura MyCloud Gallery").fetchSemanticsNodes()).isEmpty()
+    assertThat(compose.onAllNodesWithText("MyCloud Gallery è bloccata").fetchSemanticsNodes()).isEmpty()
+    assertThat(cells()).isEmpty()
+    assertThat(unlock.calls).isEqualTo(0)
+    gate.decision = EntryDecision.ALLOWED
+    compose.waitUntil(5_000) { cells().isNotEmpty() }
+    scenario.close()
+  }
+
+  @Test
+  fun in3_aFreddoConIlBloccoAspettaPoiChiedeLoSbloccoUnaVolta() {
+    gate.decision = EntryDecision.LOADING
+    install()
+    val scenario = launch(intent())
+    gate.decision = EntryDecision.NEEDS_UNLOCK
+    compose.waitUntil(5_000) { cells().isNotEmpty() } // lo sblocco finto riesce da solo
+    assertThat(unlock.calls).isEqualTo(1)
+    scenario.close()
+  }
+
+  // --- Lo sblocco chiesto dal provider dei documenti (IN-4) ---------------------------------------------------------------
+
+  private fun unlockIntent(): Intent = Intent(context, PickerActivity::class.java).setAction(PickerActivity.ACTION_UNLOCK)
+
+  /**
+   * IN-4: con il blocco "Subito" lo sblocco chiesto da DocumentsUI passava dalla `MainActivity` e non finiva mai. Adesso lo fa questa schermata:
+   * niente griglia, niente Libreria, la credenziale di sistema; riuscito, `RESULT_OK` (DocumentsUI rilegge); poi il cancello e' aperto.
+   */
+  @Test
+  fun in4_loSbloccoPerIlProviderRestituisceOkSenzaMostrareLaLibreria() {
+    gate.decision = EntryDecision.NEEDS_UNLOCK
+    install()
+    val scenario = ActivityScenario.launchActivityForResult<PickerActivity>(unlockIntent())
+    compose.waitForIdle()
+    assertThat(unlock.calls).isEqualTo(1)
+    assertThat(scenario.result.resultCode).isEqualTo(Activity.RESULT_OK)
+    assertThat(scenario.result.resultData).isNull() // niente da consegnare: e' solo uno sblocco
+    assertThat(gate.decision).isEqualTo(EntryDecision.ALLOWED)
+    assertThat(library.fileInfoCalls.get()).isEqualTo(0)
+    assertThat(IntegrationCounters.get(IntegrationCounter.PICKER_OPENED)).isEqualTo(0L)
+  }
+
+  @Test
+  fun in4_seLoSbloccoNonRiesceRestaLaSchermataDiSbloccoEIlTastoRiprova() {
+    gate.decision = EntryDecision.NEEDS_UNLOCK
+    unlock.succeeds = false
+    unlock.failure = UnlockFailure.OTHER
+    install()
+    val scenario = ActivityScenario.launchActivityForResult<PickerActivity>(unlockIntent())
+    compose.waitForIdle()
+    compose.onNodeWithText("MyCloud Gallery è bloccata").assertExists()
+    compose.onNodeWithText("Non sono riuscito a sbloccare. Riprova.").assertExists()
+    assertThat(cells()).isEmpty()
+    unlock.succeeds = true
+    compose.onNodeWithText("Sblocca").performClick()
+    compose.waitForIdle()
+    assertThat(scenario.result.resultCode).isEqualTo(Activity.RESULT_OK)
+    assertThat(unlock.calls).isEqualTo(2)
+  }
+
+  @Test
+  fun in4_chiudereLaSchermataDiSbloccoAnnulla() {
+    gate.decision = EntryDecision.NEEDS_UNLOCK
+    unlock.succeeds = false
+    unlock.failure = UnlockFailure.CANCELLED
+    install()
+    val scenario = ActivityScenario.launchActivityForResult<PickerActivity>(unlockIntent())
+    compose.waitForIdle()
+    compose.onNodeWithContentDescription("Annulla").performClick()
+    compose.waitForIdle()
+    assertThat(scenario.result.resultCode).isEqualTo(Activity.RESULT_CANCELED)
+  }
+
+  // --- Sblocco: motivo e nessun ciclo (IN-10) -------------------------------------------------------------------------------
+
+  /** IN-10: chi annulla la schermata di sistema non legge "Non sono riuscito" (il tasto resta); chi non ha un blocco schermo legge cosa fare. */
+  @Test
+  fun in10_senzaBloccoSchermoLaSchermataDiceCosaFare_ELAnnullareNonDiceNiente() {
+    gate.decision = EntryDecision.NEEDS_UNLOCK
+    unlock.succeeds = false
+    unlock.failure = UnlockFailure.NO_SCREEN_LOCK
+    install()
+    val scenario = launch(intent())
+    compose.onNodeWithText("Il telefono non ha un blocco schermo", substring = true).assertExists()
+    assertThat(compose.onAllNodesWithText("Non sono riuscito a sbloccare. Riprova.").fetchSemanticsNodes()).isEmpty()
+    unlock.failure = UnlockFailure.CANCELLED
+    compose.onNodeWithText("Sblocca").performClick()
+    compose.waitForIdle()
+    assertThat(compose.onAllNodesWithText("Non sono riuscito a sbloccare", substring = true).fetchSemanticsNodes()).isEmpty()
+    assertThat(compose.onAllNodesWithText("Il telefono non ha un blocco schermo", substring = true).fetchSemanticsNodes()).isEmpty()
+    compose.onNodeWithText("Sblocca").assertExists()
+    scenario.close()
+  }
+
+  /**
+   * IN-10: la schermata delle credenziali mette in pausa l'activity; annullando, `onResume` riapriva il prompt in ciclo. Parte da sola una volta
+   * sola per activity; dopo, solo con il tasto.
+   */
+  @Test
+  fun in10_annullareLaCredenzialeNonRiapreIlPromptInCiclo() {
+    gate.decision = EntryDecision.NEEDS_UNLOCK
+    unlock.succeeds = false
+    unlock.failure = UnlockFailure.CANCELLED
+    install()
+    val scenario = launch(intent())
+    assertThat(unlock.calls).isEqualTo(1)
+    scenario.moveToState(androidx.lifecycle.Lifecycle.State.STARTED)
+    scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
+    scenario.moveToState(androidx.lifecycle.Lifecycle.State.STARTED)
+    scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
+    compose.waitForIdle()
+    assertThat(unlock.calls).isEqualTo(1)
+    scenario.close()
+  }
+
+  // --- Sovrapposizioni (R8) ----------------------------------------------------------------------------------------------------
+
+  /** R8 della revisione di sicurezza 5B: come la ricezione, il selettore scarta i tocchi che passano attraverso una sovrapposizione di un'altra app. */
+  @Test
+  fun r8_ilSelettoreScartaITocchiAttraversoUnaSovrapposizione() {
+    install()
+    val scenario = launch(intent())
+    compose.waitUntil(5_000) { cells().isNotEmpty() }
+    scenario.onActivity { activity -> assertThat(activity.window.decorView.filterTouchesWhenObscured).isTrue() }
+    scenario.close()
+    // Anche la schermata di sblocco (e quella di sblocco del provider).
+    gate.decision = EntryDecision.NEEDS_UNLOCK
+    unlock.hangs = true
+    val locked = launch(intent())
+    locked.onActivity { activity -> assertThat(activity.window.decorView.filterTouchesWhenObscured).isTrue() }
+    locked.close()
+    val onlyUnlock = ActivityScenario.launchActivityForResult<PickerActivity>(unlockIntent())
+    onlyUnlock.onActivity { activity -> assertThat(activity.window.decorView.filterTouchesWhenObscured).isTrue() }
+    onlyUnlock.close()
+  }
+
   // --- Il blocco dell'app (E-X7) ------------------------------------------------------------------------------------------
 
   @Test
@@ -170,12 +315,36 @@ class PickerActivityTest {
 
   // --- Scegliere ----------------------------------------------------------------------------------------------------------
 
+  /**
+   * R8 della revisione di sicurezza 5B: anche con una scelta sola un tocco sceglie e basta; la foto esce solo con "Scegli". Un tocco che arriva
+   * attraverso la sovrapposizione di un'altra app non consegna piu' una foto dell'utente da solo.
+   */
+  @Test
+  fun r8_unTocco_SceglieMaNonConsegna_ServeScegli() {
+    install()
+    val scenario = launch(intent(localOnly = true))
+    compose.waitUntil(5_000) { cells().isNotEmpty() }
+    compose.onAllNodes(hasContentDescription("Foto", substring = true) and hasClickAction())[0].performClick()
+    compose.waitForIdle()
+    compose.onNodeWithText("1 scelto").assertExists()
+    assertThat(scenario.state.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)).isTrue() // ancora aperta: niente e' uscito
+    assertThat(IntegrationCounters.get(IntegrationCounter.PICKER_DELIVERED)).isEqualTo(0L)
+    // Un altro tocco sostituisce la scelta (e' una scelta sola), e lo stesso tocco la toglie.
+    compose.onAllNodes(hasContentDescription("Foto", substring = true) and hasClickAction())[1].performClick()
+    compose.waitForIdle()
+    compose.onNodeWithText("1 scelto").assertExists()
+    compose.onNodeWithText("Scegli 1 elemento").performClick()
+    compose.waitForIdle()
+    assertThat(scenario.result.resultData.clipData!!.itemCount).isEqualTo(1)
+  }
+
   @Test
   fun unTocco_ConsegnaUnaSolaCopiaConIlSoloPermessoDiLettura() {
     install()
     val scenario = launch(intent(localOnly = true))
     compose.waitUntil(5_000) { cells().isNotEmpty() }
     compose.onAllNodes(hasContentDescription("Foto", substring = true) and hasClickAction())[0].performClick()
+    compose.onNodeWithText("Scegli 1 elemento").performClick()
     compose.waitForIdle()
     val result = scenario.result
     assertThat(result.resultCode).isEqualTo(Activity.RESULT_OK)
@@ -193,6 +362,7 @@ class PickerActivityTest {
     val scenario = launch(intent(type = "*/*"))
     compose.waitUntil(5_000) { compose.onAllNodesWithContentDescription("solo sul NAS", substring = true).fetchSemanticsNodes().isNotEmpty() }
     compose.onAllNodes(hasContentDescription("solo sul NAS", substring = true) and hasClickAction())[0].performClick()
+    compose.onNodeWithText("Scegli 1 elemento").performClick()
     compose.waitForIdle()
     val data = scenario.result.resultData
     val uri = data.data!!
@@ -227,6 +397,7 @@ class PickerActivityTest {
     val scenario = launch(intent(type = "*/*"))
     compose.waitUntil(5_000) { compose.onAllNodesWithContentDescription("solo sul NAS", substring = true).fetchSemanticsNodes().isNotEmpty() }
     compose.onAllNodes(hasContentDescription("solo sul NAS", substring = true) and hasClickAction())[0].performClick()
+    compose.onNodeWithText("Scegli 1 elemento").performClick()
     compose.waitForIdle()
     compose.waitUntil(5_000) { compose.onAllNodesWithText("Il NAS non risponde", substring = true).fetchSemanticsNodes().isNotEmpty() }
     assertThat(scenario.state.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)).isTrue()

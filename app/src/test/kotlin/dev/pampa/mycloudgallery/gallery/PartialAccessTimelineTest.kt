@@ -6,6 +6,7 @@ import dev.pampa.mycloudgallery.core.library.testing.FakeTimelineRepository
 import dev.pampa.mycloudgallery.core.library.testing.SyntheticLibrary
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.feature.integrations.provider.testing.FakeIntegrationLibrary
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
@@ -86,6 +87,36 @@ class PartialAccessTimelineTest {
     selection.value = emptySet()
 
     assertThat(sized()).isEqualTo(0)
+  }
+
+  /**
+   * IN-9 della verifica funzionale 5B, parita' del finto: selettore e provider provano l'accesso parziale con `FakeIntegrationLibrary.restrictView`.
+   * Quella vista deve essere, elemento per elemento, quella vera (`SubsetView`): stessa dimensione, stesso ordine, stesse posizioni, e un id fuori
+   * dalla selezione che non si trova (-1) anche se l'indice lo conosce.
+   */
+  @Test
+  fun in9_ilFintoDelSelettoreEDelProviderHaLaVistaDiSubsetView() {
+    val fake = FakeIntegrationLibrary(synthetic = library)
+    // Non in ordine e con un doppione di proposito: la selezione e' un insieme, e la vista segue l'ordine dell'indice.
+    val allowed = listOf(41, 7, 12, 59, 0, 30, 7).map { library.snapshot.idAt(it) }.toSet()
+    val real = SubsetView(base.view(LibraryFilter.ALL).value, allowed)
+
+    fake.restrictView(allowed)
+    val fakeView = fake.items.view.value
+
+    assertThat(fakeView.size).isEqualTo(real.size)
+    assertThat(fakeView.size).isEqualTo(6)
+    for (i in 0 until real.size) {
+      assertThat(fakeView.snapshotIndex(i)).isEqualTo(real.snapshotIndex(i))
+    }
+    for (index in 0 until library.snapshot.size) {
+      val id = library.snapshot.idAt(index)
+      assertThat(fakeView.viewIndexOf(id)).isEqualTo(real.viewIndexOf(id))
+    }
+    // Un id fuori dalla selezione non e' nella vista, nemmeno se l'indice (l'istantanea) lo conosce.
+    val outside = library.snapshot.idAt(13)
+    assertThat(fakeView.viewIndexOf(outside)).isEqualTo(-1)
+    assertThat(real.viewIndexOf(outside)).isEqualTo(-1)
   }
 
   @Test

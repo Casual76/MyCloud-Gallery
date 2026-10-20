@@ -26,6 +26,12 @@
   <string name="integrations_picker_loading_title">Preparo la consegna</string>
   <string name="integrations_picker_loading_detail">Un momento: controllo che tutto sia pronto.</string>
 
+  <!-- "Rimuovi la posizione" acceso: il selettore consegna solo copie senza posizione e le prepara prima (con l'avanzamento e "Annulla"). -->
+  <string name="integrations_picker_preparing_title">Tolgo la posizione dai file</string>
+  <string name="integrations_picker_preparing_detail">Preparo copie senza posizione da consegnare: i tuoi originali non cambiano.</string>
+  <string name="integrations_picker_preparing_count">%1$d di %2$d</string>
+  <string name="integrations_picker_preparing_cancel">Annulla</string>
+
   <string name="integrations_picker_empty_title">Niente da scegliere</string>
   <string name="integrations_picker_empty_detail">Qui compaiono le foto e i video della tua libreria che l’altra app può usare.</string>
 
@@ -33,6 +39,7 @@
   <string name="integrations_picker_locked_detail">Sblocca con la credenziale del telefono per scegliere foto e video.</string>
   <string name="integrations_picker_unlock">Sblocca</string>
   <string name="integrations_picker_unlock_failed">Non sono riuscito a sbloccare. Riprova.</string>
+  <string name="integrations_picker_unlock_no_screen_lock">Il telefono non ha un blocco schermo: impostalo nelle impostazioni del telefono, oppure apri MyCloud Gallery e spegni il suo blocco.</string>
 
   <string name="integrations_picker_not_ready_title">Prima configura MyCloud Gallery</string>
   <string name="integrations_picker_not_ready_detail">Apri l’app e completa la configurazione, poi torna a scegliere foto e video.</string>
@@ -44,6 +51,12 @@
   <string name="integrations_picker_notice_too_many_nas_size">Hai scelto %1$d media solo sul NAS per %2$s: se ne possono consegnare al massimo %3$d e %4$s alla volta. Togline qualcuno.</string>
   <string name="integrations_picker_notice_too_many">Si possono scegliere al massimo %1$d elementi alla volta.</string>
   <string name="integrations_picker_notice_nothing">Nessuno degli elementi scelti è disponibile adesso.</string>
+  <string name="integrations_picker_notice_no_location_removed">Questo file non si può condividere senza posizione: l’ho tolto dalla scelta e non ho consegnato niente. Tocca “Scegli” per consegnare gli altri, oppure spegni “Rimuovi la posizione” in Impostazioni → Condivisioni.</string>
+  <string name="integrations_picker_notice_no_location_format">Un file scelto non si può condividere senza posizione e non ho consegnato niente. Togli i file che non vanno, oppure spegni “Rimuovi la posizione” in Impostazioni → Condivisioni.</string>
+  <string name="integrations_picker_notice_no_location_space">Non c’è abbastanza spazio libero sul telefono per togliere la posizione dai file scelti: non ho consegnato niente. Libera spazio o scegline meno.</string>
+  <string name="integrations_picker_notice_no_location_big">I file scelti sono troppi o troppo grandi per togliere la posizione tutti insieme: non ho consegnato niente. Scegline meno.</string>
+  <string name="integrations_picker_notice_no_location_gone">Un file scelto non è più disponibile: l’ho tolto dalla scelta e non ho consegnato niente. Tocca “Scegli” per consegnare gli altri.</string>
+  <string name="integrations_picker_notice_no_location_failed">Non sono riuscito a togliere la posizione dai file scelti: non ho consegnato niente. Riprova.</string>
   <string name="integrations_picker_notice_dismiss">Chiudi il messaggio</string>
 
   <plurals name="integrations_picker_skipped_toast">

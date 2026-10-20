@@ -365,6 +365,95 @@ class MediaDocumentsProviderTest {
     assertThat(shadow.isActivityIntent).isTrue()
     val intent = shadow.savedIntent
     assertThat(intent.component?.packageName ?: intent.`package`).isEqualTo(ProviderTestSupport.context.packageName)
+    // IN-4: lo sblocco chiesto da DocumentsUI passa dall'activity d'ingresso (tolleranza di due minuti, risultato a chi chiede), non dalla MainActivity.
+    assertThat(intent.component?.className).isEqualTo("dev.pampa.mycloudgallery.feature.integrations.picker.PickerActivity")
+    assertThat(intent.action).isEqualTo(dev.pampa.mycloudgallery.feature.integrations.picker.PickerActivity.ACTION_UNLOCK)
+  }
+
+  // --- A processo freddo (IN-3) ---------------------------------------------------------------------------------------------
+
+  /**
+   * IN-3 della verifica funzionale 5B: DocumentsUI interroga il provider appena il processo nasce, mentre l'app sta ancora leggendo la
+   * configurazione salvata e le impostazioni del blocco. Prima la risposta era "non pronta" (nessuna radice), e nessuno la correggeva.
+   */
+  @Test
+  fun in3_aFreddoLaRadiceAspettaCheLAppAbbiaLettoLoStatoEPoiCE() {
+    gate.decision = EntryDecision.LOADING
+    val provider = provider()
+    val lateReady = Thread {
+      Thread.sleep(150)
+      gate.decision = EntryDecision.ALLOWED
+    }
+    lateReady.start()
+    roots(provider).use { cursor ->
+      assertThat(cursor.count).isEqualTo(1) // ha aspettato lo stato invece di rispondere "non pronta"
+      cursor.moveToFirst()
+      assertThat(cursor.isNull(cursor.getColumnIndexOrThrow(Root.COLUMN_SUMMARY))).isTrue() // sbloccata: nessun "Bloccata"
+    }
+    lateReady.join()
+  }
+
+  @Test
+  fun in3_aFreddoConLaSchermataDiSbloccoLaRadiceDiceBloccataEnonNonPronta() {
+    gate.decision = EntryDecision.LOADING
+    val provider = provider()
+    Thread {
+      Thread.sleep(100)
+      gate.decision = EntryDecision.NEEDS_UNLOCK
+    }.start()
+    roots(provider).use { cursor ->
+      assertThat(cursor.count).isEqualTo(1)
+      cursor.moveToFirst()
+      assertThat(cursor.getString(cursor.getColumnIndexOrThrow(Root.COLUMN_SUMMARY))).contains("Bloccata")
+    }
+  }
+
+  @Test
+  fun in3_seLoStatoNonArrivaMaiNonCeNienteEUnaCartellaNonSiApre() {
+    ProviderTuning.loadWaitMs = 100
+    gate.decision = EntryDecision.LOADING
+    val provider = provider()
+    roots(provider).use { assertThat(it.count).isEqualTo(0) }
+    assertThrows(FileNotFoundException::class.java) { provider.queryChildDocuments("aaaaaaaaaaaaaaaaaaaaaaaa", null, null as String?) }
+    // Appena lo stato e' letto tutto torna (le radici si notificano a ogni cambio: `IntegrationsGraph`).
+    gate.decision = EntryDecision.ALLOWED
+    roots(provider).use { assertThat(it.count).isEqualTo(1) }
+  }
+
+  // --- Dopo un riavvio del processo (IN-2) ----------------------------------------------------------------------------------
+
+  /**
+   * IN-2: gli id della radice e delle cartelle erano nuovi a ogni processo e DocumentsUI li tiene nella cache di sistema: dopo un riavvio
+   * "Allega file" di Gmail apriva `queryChildDocuments(vecchioToken)` e trovava `FileNotFoundException`. Adesso il processo nuovo (altra tabella,
+   * altra istanza di tutto, stessa chiave su file) risponde agli stessi indirizzi.
+   */
+  @Test
+  fun in2_dopoUnRiavvioDelProcessoGliIndirizziCheDocumentsUiRicordaSiAprono() {
+    val keyFile = java.io.File.createTempFile("doc-id", ".key").also { it.delete(); it.deleteOnExit() }
+    fun processo(seed: Long) = LibraryMediaDocuments(library, labels, DocumentIdTable(clock, java.util.Random(seed), idKey = FileDocumentIdKey(keyFile, java.util.Random(seed))))
+    IntegrationPorts.install(gate, processo(1))
+    val provider = provider()
+    val root = rootDocumentId(provider)
+    val rootChildren = children(provider, root)
+    val nasFolders = rootChildren.first { it.name == "Cartelle NAS" }
+    val areas = children(provider, nasFolders.id)
+    val area = areas.first { it.name == "Area privata" }
+    val holidays = children(provider, area.id).single()
+    assertThat(holidays.name).isEqualTo("Vacanze")
+    val holidaysFiles = children(provider, holidays.id).map { it.name }
+    assertThat(holidaysFiles).isNotEmpty()
+    val media = children(provider, rootChildren.first { it.name == "Recenti" }.id).first().id
+
+    // Il processo muore e rinasce: tutto nuovo in memoria. DocumentsUI ha ancora i vecchi indirizzi.
+    IntegrationPorts.install(gate, processo(2))
+    val reborn = provider()
+    assertThat(rootDocumentId(reborn)).isEqualTo(root)
+    assertThat(children(reborn, root).map { it.id }).containsExactlyElementsIn(rootChildren.map { it.id }).inOrder()
+    assertThat(children(reborn, nasFolders.id).map { it.id }).containsExactlyElementsIn(areas.map { it.id }).inOrder()
+    assertThat(children(reborn, area.id).single().id).isEqualTo(holidays.id)
+    assertThat(children(reborn, holidays.id).map { it.name }).containsExactlyElementsIn(holidaysFiles)
+    // I media invece no: il loro id e' a scadenza, vale per quel processo e non torna.
+    assertThrows(FileNotFoundException::class.java) { reborn.queryDocument(media, null) }
   }
 
   @Test

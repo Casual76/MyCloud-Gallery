@@ -51,7 +51,8 @@ class RoomBackupStore(private val database: GalleryDatabase, private val clock: 
 
   override suspend fun createIncoming(item: NewBackupItem): BackupItem = database.transaction {
     require(item.kind == UploadKind.INCOMING && item.phone == null && item.sha256 != null) { "Un file in arrivo, con il suo SHA-256." }
-    dao.openForVersion(item.versionId.value).map { it.toItem() }.firstOrNull { it.kind == UploadKind.INCOMING } ?: run {
+    // R14: lo stesso arrivo e' quello della stessa versione **nella stessa share e nella stessa cartella**; una destinazione diversa e' un elemento nuovo.
+    dao.openForVersion(item.versionId.value).map { it.toItem() }.firstOrNull { it.kind == UploadKind.INCOMING && it.sameDestinationAs(item) } ?: run {
       val entity = item.toEntity(clock.nasNowMs() ?: 0L)
       val id = dao.insert(entity)
       entity.copy(itemId = id, isOpen = true).toItem()
@@ -82,7 +83,8 @@ class RoomBackupStore(private val database: GalleryDatabase, private val clock: 
     }
   }
 
-  override suspend fun openFor(versionId: VersionId): BackupItem? = dao.openForVersion(versionId.value).firstOrNull()?.toItem()
+  override suspend fun openFor(versionId: VersionId): BackupItem? =
+    dao.openForVersion(versionId.value).map { it.toItem() }.firstOrNull { it.kind != UploadKind.INCOMING }
 
   override suspend fun citedTemps(): Set<SharePath> = dao.citedTemps().mapTo(LinkedHashSet()) { SharePath.parse(it) }
 
@@ -92,6 +94,10 @@ class RoomBackupStore(private val database: GalleryDatabase, private val clock: 
   }
 
   private companion object {
+    /** R14: [this] va nella stessa share e nella stessa cartella di [other] (il nome del file puo' cambiare da un'app all'altra: la cartella no). */
+    fun BackupItem.sameDestinationAs(other: NewBackupItem): Boolean =
+      share.equals(other.share, ignoreCase = true) && planned.components.dropLast(1).map { it.lowercase() } == other.planned.components.dropLast(1).map { it.lowercase() }
+
     val KINDS: Map<String, UploadKind> = UploadKind.entries.associateBy { it.code }
     val STATES: Map<String, UploadState> = UploadState.entries.associateBy { it.code }
     val PROBLEMS: Map<String, BackupProblemCode> = BackupProblemCode.entries.associateBy { it.code }

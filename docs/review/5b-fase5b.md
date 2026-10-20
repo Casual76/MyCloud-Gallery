@@ -8,7 +8,7 @@
 | **Tipo** | Revisione avversariale in sola lettura. Nessuna correzione al codice di produzione. Nessun NAS vero, nessun telefono, nessun `adb`. |
 | **Data** | 20/10/2026 |
 | **Metodo** | Lettura del codice: ogni via che toglie o riscrive un file del telefono (`SafeFreeSpace`, `DefaultVersionKeeper.restoreOriginal`, `DefaultCorrections`, `MediaStorePhoneMediaRewriter`, e le vie della Fase 3 e della 4B ancora vive), ogni porta esportata (manifest, `CallerGuard`, `DocumentIdTable`, `EntryGate`, `AppLockController`), ogni via che scrive sul NAS (versioni, scambi, `INCOMING`) e lo stripper della posizione con i suoi lettori. Tre revisori di supporto, in sola lettura, hanno letto in parallelo le versioni e i file in arrivo, la posizione e le correzioni nel file, e il codice di fiducia toccato dalle correzioni; **ogni loro voce riportata qui e' stata ricontrollata nel codice**. Due **test temporanei**, eseguiti con `--max-workers=2` e poi cancellati insieme ai risultati e alle classi compilate: (1) sul custode vero (`DefaultVersionKeeper` su `VersionWorld`, core-backup) per R3; (2) sullo stripper vero (`DefaultLocationStripper` con i lettori di serie, core-metadata, Robolectric) per R1 e R2. Esiti sotto le voci. Nessun file del repository e' rimasto modificato a parte questo documento. |
-| **Stato** | **Aperta**: tutte le voci, tranne R1, R2, R4, R12, R13 (corrette il 20/10: «Correzioni 5B: posizione e Condividi» in `docs/decisioni.md`). |
+| **Stato** | **Aperta**: tutte le voci, tranne R1, R2, R4, R12, R13 (corrette il 20/10: «Correzioni 5B: posizione e Condividi» in `docs/decisioni.md`) e R5, R8, R11, R14 (corrette il 20/10: «Correzioni 5B: integrazioni»); R15 corretta in parte (resta `incomingMedia` in `core-database`). |
 
 ## Riepilogo
 
@@ -202,8 +202,8 @@
   (`feature-library/.../LibraryShare.kt`); il viewer senza backup ha la sola voce "Condividi" dello stesso canale, che rispetta l'impostazione (meglio
   del rifiuto proposto); con l'impostazione accesa "Copia" non compare. Test: `CondividiSenzaPosizioneAppTest.r4_laSelezioneConLImpostazioneAccesaNonUsaMaiGliOriginali`,
   `r4_unaSelezioneFermaHaIlSuoFoglioEConLaPosizioneSoloSeLoSceglie`, `r4_ilViewerSenzaBackupRispettaLImpostazione` (:app);
-  `ViewerBackupMenuTest.conRimuoviLaPosizioneAccesaCopiaNonCe_MC2`. Resta (informativa, fuori perimetro): selettore e provider dei documenti consegnano
-  gli originali, e la pagina Condivisioni non lo dice.
+  `ViewerBackupMenuTest.conRimuoviLaPosizioneAccesaCopiaNonCe_MC2`. Superata dal 20/10 (decisione dell'utente, «Correzioni 5B: integrazioni» in `docs/decisioni.md`): selettore e provider dei documenti, che consegnavano
+  gli originali, con l'impostazione accesa consegnano una copia senza posizione (L41).
 
 ### R5. Un file in arrivo verso una share chiusa ferma tutto il backup privato
 
@@ -216,7 +216,14 @@
 - **Scenario (a, e):** fuori casa l'utente salva una ricevuta nell'area comune; resta in coda (E-X8). Poi il PC di un familiare cifra file nell'area comune e la scansione **congela la share comune**. Ogni giro del backup prende per primo l'arrivo, `IncomingGate.stateOf(comune)` = `FROZEN`, e il giro si chiude con `Problem(FROZEN)`: nessuna foto nuova va nell'area privata finche' dura il congelamento. Con `READ_ONLY_AREA` o `NO_PRIVATE_AREA` scoperti dopo la messa in coda il blocco e' permanente: l'elemento non diventa mai `FAILED`.
 - **Confermato:** **si'** (catena del codice). `IncomingEveryCallTest` usa un solo cancello e nessun giro misto.
 - **Correzione proposta:** per un `INCOMING`, cancello chiuso o errore della sua share **parcheggiano solo quell'elemento** (`queue.park()` senza `stopWith`), oppure gli `INCOMING` si guidano solo con `BackupTrigger.INCOMING`; `NO_PRIVATE_AREA` e `READ_ONLY_AREA` persistenti → `FAILED` con la copia locale che resta. Test: un arrivo verso l'area comune congelata e una foto nuova nella stessa coda: la foto arriva nell'area privata.
-- **Stato:** aperta.
+- **Stato: corretta** (20/10, `docs/decisioni.md` «Correzioni 5B: integrazioni»). Un arrivo con il cancello della **sua** share chiuso (area comune congelata,
+  sola lettura, non piu' dell'utente, backup in prova) aspetta da solo: nei giri normali (foto, video, ripresa) e nel giro dei soli arrivi il motore lo
+  mette da parte (`waitsAlone`, `queue.park()`) e va avanti con il resto; la pausa dell'utente (R4), l'emergenza e la famiglia non pronta valgono per tutto e
+  fermano il giro come per ogni elemento. Un rifiuto della share di destinazione scoperto scrivendo (`PermissionDenied`, share sparita) e' `Step.Wait()`
+  dell'arrivo, non `Step.Stop` del giro (prima: `READ_ONLY_AREA` per tutti). Non fatto: portare a `FAILED` un arrivo bloccato per sempre (resta in attesa
+  con la sua copia locale, come ogni arrivo, e riparte da solo se il cancello si riapre). Test: `IncomingIsolationTest.r5_*` (5: l'incidente della
+  voce, ogni cancello chiuso per motivi di quella share, il giro dei soli arrivi, pausa/emergenza/famiglia che restano globali, il rifiuto in scrittura).
+  Prova di mutazione: con `waitsAlone` sempre falso sono rossi 3 dei 5 `IncomingIsolationTest.r5_*` (quelli del cancello chiuso; gli altri due provano cio' che resta globale).
 
 ### R6. Dopo "Configura di nuovo" con un altro account i dati del vecchio account restano, si vedono e si pubblicano nell'area privata del nuovo
 
@@ -277,7 +284,12 @@
 - **Scenario (b):** un'app con il permesso di disegnare sopra apre il selettore con un intento esplicito (app sbloccata, o blocco spento) e copre la griglia con un gioco "tocca qui": il tocco consegna una foto dell'utente, con il permesso di lettura, all'app che l'ha chiesta.
 - **Confermato:** la protezione manca (lettura); lo sfruttamento e' plausibile.
 - **Correzione proposta:** la stessa `protectFromOverlays()` della ricezione nel selettore (e nel suo pannello di sblocco); un test come quello della ricezione.
-- **Stato:** aperta.
+- **Stato: corretta** (20/10). (1) `OverlayShield.protect(window)` (`filterTouchesWhenObscured` e, da Android 12, `setHideOverlayWindows`) e' ora nel selettore
+  e nel suo pannello di sblocco, come gia' nella ricezione (che usa lo stesso oggetto). (2) Difesa in profondita': senza `EXTRA_ALLOW_MULTIPLE` un tocco
+  su un elemento **sceglie ma non consegna**; la consegna parte solo da «Scegli» (barra sempre presente, `PickerViewModel.confirm`), cosi' un tocco
+  rubato non porta una foto all'app che l'ha chiesta. Costo: un tocco in piu' per chi sceglie una foto sola (scelta dichiarata in `docs/decisioni.md`).
+  Test: `PickerActivityTest.r8_*` (2: i tocchi attraverso una sovrapposizione si scartano; un tocco sceglie, serve «Scegli»),
+  `PickerViewModelTest.r8_*`. Resta la prova sul telefono (un filtro dello schermo mentre si apre il selettore). Prova di mutazione: senza `OverlayShield.protect` sono rossi `PickerActivityTest.r8_*` (2); con la consegna al tocco, `PickerViewModelTest.r8_*` e `PickerActivityTest.r8_unTocco…`.
 
 ### R9. Riscrittura del telefono: nessun recupero dopo la morte del processo
 
@@ -314,7 +326,12 @@
 - **Scenario (b):** un editor ostile alterna l'intestazione: impronta e copia su A (non un media), controllo del tipo su B (intestazione JPEG). Un file che non e' un media, o un video al posto di una foto, diventa la versione attuale sul NAS.
 - **Confermato:** l'ordine **si'**; lo sfruttamento richiede tentativi.
 - **Correzione proposta:** una sola lettura che copia nel file privato di lavoro; impronta e tipo sulla copia.
-- **Stato:** aperta.
+- **Stato: corretta** (20/10). Una lettura sola del file della cache, che un editor ostile puo' ancora scrivere: `DefaultEditSessions.copyPrivately` lo copia nel file di
+  lavoro privato e calcola SHA-256, dimensione, `qh1` e i primi byte per il tipo **sugli stessi byte**; il tipo (media dello stesso genere, non vuoto,
+  sotto i tetti) si giudica su quella copia e la versione che si registra e' quella copia, mai una seconda lettura. La prima lettura (impronta del file
+  com'e') serve solo a sapere se i byte sono cambiati e non entra mai in una versione; oltre il tetto non si legge nemmeno. Se l'editor rimette i byte
+  di prima fra le due letture, non c'e' niente da registrare. Test: `DefaultEditSessionsTest.r11_*` (un editor che alterna l'intestazione: un file che
+  non e' un media, o un video al posto di una foto, non diventa una versione). Prova di mutazione: con una seconda lettura per il tipo `DefaultEditSessionsTest.r11_*` diventa rosso.
 
 ### R12. La correzione "togli il luogo" lascia la posizione nell'XMP
 
@@ -349,7 +366,11 @@
 - **Scenario (e):** fuori casa l'utente salva una foto ricevuta nell'area privata, poi la ricondivide scegliendo l'area comune ("lo vedranno tutti"): il file va solo nell'area privata, la seconda riga dice "caricato" e i familiari non lo ricevono.
 - **Confermato:** **si'**.
 - **Correzione proposta:** idempotenza per (versione, share, percorso previsto); una destinazione diversa crea un elemento nuovo. Test: due `enqueue` con destinazioni diverse prima di un giro.
-- **Stato:** aperta.
+- **Stato: corretta** (20/10). `createIncoming` (Room e in memoria) e' idempotente per (versione, share, **cartella** di destinazione), senza badare alle
+  maiuscole e non al nome del file (che puo' cambiare da un'app all'altra): una destinazione diversa e' un elemento nuovo, con la sua riga
+  `incoming_item` e la sua copia locale; lo stesso arrivo toccato due volte nella stessa cartella resta uno. Test: `IncomingStoreTest.r14_*` (2: Room e in
+  memoria), `Correzioni5BIntegrazioniAppTest.r14_*` (grafo vero: gli stessi byte in `Ricevute/` e in `Viaggi/`, entrambi arrivano e le due righe sono
+  caricate). Prova di mutazione: con `sameDestinationAs` sempre vero `IncomingStoreTest.r14_*_Room` diventa rosso.
 
 ### R15. Un file in arrivo legato a un media esistente gli mette i segni di problema e ne blocca il backup
 
@@ -358,7 +379,12 @@
 - **Scenario (e):** l'utente condivide dalla Galleria verso "Salva sul NAS" (area comune) una sua foto non ancora al sicuro. Con R5 l'arrivo resta aperto, e finche' resta aperto ne' la 5A ne' il guardiano la mettono al sicuro nell'area privata; se la verifica fallisce tre volte il media del telefono prende `VERIFY_FAILED` ed esce dal piano della 5A. Un arrivo uguale a un media nascosto, o di un altro account, vi si aggancia: il file salvato non si vede, o e' "non mio".
 - **Confermato:** **si'** (lettura).
 - **Correzione proposta:** il segno del problema solo su un media creato dall'arrivo (`created = true`); `openFor` della 5A e del guardiano ignora gli `INCOMING` verso un'altra share; `incomingMedia` sceglie solo media propri e non nascosti, altrimenti ne crea uno nuovo.
-- **Stato:** aperta.
+- **Stato: corretta in parte** (20/10). (1) Un arrivo che non riesce (`UNEXPECTED`, `LOST_BEFORE_BACKUP`, `UNREADABLE`, `VERIFY_FAILED`) non mette piu' il segno del
+  problema sul media (`SafeUploadEngine.markMedia`): il problema resta sull'elemento (`FAILED`, con la sua copia locale). (2) `BackupStore.openFor(versionId)`,
+  che usano il piano della 5A e il guardiano, **ignora gli arrivi**: un arrivo aperto non ferma piu' la messa al sicuro di quella versione. Non fatto (e'
+  in `core-database`, fuori dal perimetro di questo gruppo): `MediaCatalog.incomingMedia` prende ancora qualunque versione con lo stesso SHA-256, anche
+  di un media nascosto o di un altro account; il file salvato non si vede (o non e' «mio»), senza altri effetti. Test: `IncomingStoreTest.r15_*` (2),
+  `IncomingIsolationTest.r15_*` (il motore: un arrivo con la copia locale cambiata va a `FAILED` e il media non ha nessun problema). Prova di mutazione: con `markMedia` che segna sempre e con `openFor` che vede gli arrivi sono rossi `IncomingIsolationTest.r15_*` e `IncomingStoreTest.r15_*_Room`.
 
 ### R16. Uno scambio senza conferma puo' partire da un file dell'area comune cambiato da un altro account
 

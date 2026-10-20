@@ -31,6 +31,10 @@ import org.junit.Test
  * **rovinata conservando il timbro** (solo la rilettura lo vede). Dopo ogni interruzione: (a) ogni lotto che esce, anche dalla ripresa a
  * meta', contiene solo righe con le copie integre adesso (verita' del NAS finto); (b) nessuna riga tolta dal telefono perde la traccia nel
  * diario, nessuna riga e' data per liberata senza esserlo; (c) alla fine tutto cio' che e' al sicuro e' liberato, quella rovinata no.
+ *
+ * Correzioni 5B ("Libera spazio", 20/10): (d) LS-13, un media diventa al sicuro **dopo** il foglio (il primo backup lavora): non entra mai nel
+ * giro confermato (ogni lotto contiene solo righe del piano che l'utente ha visto) e si libera con il giro dopo; (e) LS-2, la ripresa passa da
+ * `active()`, il giro rimasto aperto come lo ritrovano la pagina e il lavoro avviato dall'utente dopo la morte del processo.
  */
 class FreeSpaceEveryCallTest {
 
@@ -49,10 +53,21 @@ class FreeSpaceEveryCallTest {
     return Case(good, tampered)
   }
 
-  /** Un "processo": piano, conferma, verifica a tappe, lotti fino in fondo; ogni lotto controllato quando esce. */
-  private suspend fun flow(b: FreeSpaceBench, space: SafeFreeSpace, stats: Stats, budget: Duration = 1.hours) {
+  /**
+   * Un "processo": piano, conferma, verifica a tappe, lotti fino in fondo; ogni lotto controllato quando esce. [afterConfirm] succede fra il
+   * tocco e la verifica (LS-13: un media che diventa al sicuro mentre il foglio e' aperto).
+   */
+  private suspend fun flow(
+    b: FreeSpaceBench,
+    space: SafeFreeSpace,
+    stats: Stats,
+    budget: Duration = 1.hours,
+    afterConfirm: (suspend () -> Unit)? = null,
+  ) {
     val plan = space.plan(dev.pampa.mycloudgallery.core.backup.contract.FreeSpaceFilter())
     val confirmation = dev.pampa.mycloudgallery.core.backup.testing.TestConfirmations.confirm(plan, b.clock.monotonicMs())
+    b.confirmedPhones[plan.hash] = plan.items.mapTo(HashSet()) { it.phone }
+    afterConfirm?.invoke()
     batches(b, space, space.verify(plan, confirmation, budget), stats, budget)
   }
 
@@ -64,6 +79,10 @@ class FreeSpaceEveryCallTest {
       val batch = space.nextBatch(run) ?: return
       stats.batches++
       assertWithMessage("lotto ${batch.index}: invariante 14").that(b.batchViolations(batch)).isEmpty()
+      // LS-13: solo righe del piano che l'utente ha confermato per questo giro, mai una in piu'.
+      val confirmed = b.confirmedPhones[run.planHash]
+      assertWithMessage("lotto ${batch.index}: il piano confermato e' noto").that(confirmed).isNotNull()
+      assertWithMessage("lotto ${batch.index}: solo righe confermate").that(confirmed!!).containsAtLeastElementsIn(batch.items.map { it.phone })
       run = space.recordOutcome(batch, b.dialog(batch))
     }
   }
@@ -76,9 +95,9 @@ class FreeSpaceEveryCallTest {
     }
     b.restart()
     assertWithMessage("traccia a meta'").that(b.trackingViolations(settled = false)).isEmpty()
-    val last = b.diary.runs().lastOrNull()
-    if (last != null) {
-      val resumed = b.space.resume(runOf(last), 1.hours)
+    // LS-2: il giro rimasto aperto si ritrova come lo ritrovano la pagina e il lavoro avviato dall'utente (nei limiti di validita').
+    val resumed = b.space.active()
+    if (resumed != null) {
       if (reboot) assertThat(resumed.state).isNotEqualTo(FreeSpaceRunState.READY)
       batches(b, b.space, resumed, stats)
     }
@@ -86,12 +105,18 @@ class FreeSpaceEveryCallTest {
     flow(b, b.space, stats)
   }
 
-  private suspend fun finalChecks(b: FreeSpaceBench, case: Case, label: String) {
+  /** LS-13: il media che diventa al sicuro mentre il foglio del primo "processo" e' aperto. */
+  private class Late(var made: FreeSpaceBench.Made? = null) {
+    val phoneId: Long get() = checkNotNull(made?.phoneId) { "Il media arrivato dopo il foglio non c'e'." }
+  }
+
+  private suspend fun finalChecks(b: FreeSpaceBench, case: Case, label: String, late: Late? = null) {
     assertWithMessage("$label: traccia").that(b.trackingViolations(settled = true)).isEmpty()
     assertWithMessage("$label: la copia rovinata non si libera").that(b.phone.ref(case.tampered.phoneId!!)).isNotNull()
     assertWithMessage("$label: il telefono ha ancora i suoi byte").that(b.phone.sha256(case.tampered.phoneId!!))
       .isEqualTo(Sha256.of(case.tampered.data.getValue(case.tampered.current)))
-    assertWithMessage("$label: tutto il resto liberato").that(b.removed.map { it.mediaStoreId }).containsExactlyElementsIn(case.freeable.map { it.phoneId })
+    val expected = case.freeable.map { it.phoneId } + listOfNotNull(late?.phoneId)
+    assertWithMessage("$label: tutto il resto liberato").that(b.removed.map { it.mediaStoreId }).containsExactlyElementsIn(expected)
     val tamperedItems = b.diary.everything().map { it.second }.filter { it.mediaId == case.tampered.id }
     assertWithMessage("$label: mai consegnata ad Android").that(tamperedItems.filter { it.state.handedToAndroid }).isEmpty()
   }
@@ -103,9 +128,12 @@ class FreeSpaceEveryCallTest {
     val cleanCase = setup(clean)
     val counter = FaultPlan()
     clean.nas.readFaults = counter
-    flow(clean, clean.space, stats)
+    val cleanLate = Late()
+    flow(clean, clean.space, stats, afterConfirm = { cleanLate.made = clean.safe() })
     clean.nas.readFaults = null
-    finalChecks(clean, cleanCase, "pulito")
+    // Il media arrivato dopo il foglio si libera con il giro dopo.
+    flow(clean, clean.space, stats)
+    finalChecks(clean, cleanCase, "pulito", cleanLate)
     val total = counter.operations
     assertWithMessage("chiamate contate").that(total).isAtLeast(20)
     for (n in 1..total) {
@@ -114,14 +142,15 @@ class FreeSpaceEveryCallTest {
         val case = setup(b)
         val fault = FaultPlan().at(n, phase, SimFault.DropConnection)
         b.nas.readFaults = fault
-        flow(b, b.space, stats)
+        val late = Late()
+        flow(b, b.space, stats, afterConfirm = { late.made = b.safe() })
         b.nas.readFaults = null
         val label = "guasto alla chiamata $n/$total $phase"
         assertWithMessage("$label: il guasto e' scattato").that(fault.fired).hasSize(1)
         stats.interruptions++
         recover(b, stats, reboot = false)
         stats.rounds++
-        finalChecks(b, case, label)
+        finalChecks(b, case, label, late)
       }
     }
     assertThat(stats.interruptions).isEqualTo(2 * total)
@@ -140,8 +169,10 @@ class FreeSpaceEveryCallTest {
     val clean = FreeSpaceBench()
     val cleanCase = setup(clean)
     val counter = BackupDeath()
-    flow(clean, dying(clean, counter), stats)
-    finalChecks(clean, cleanCase, "pulito")
+    val cleanLate = Late()
+    flow(clean, dying(clean, counter), stats, afterConfirm = { cleanLate.made = clean.safe() })
+    flow(clean, clean.space, stats)
+    finalChecks(clean, cleanCase, "pulito", cleanLate)
     val total = counter.steps
     assertWithMessage("scritture contate").that(total).isAtLeast(10)
     for (n in 1..total) {
@@ -149,8 +180,9 @@ class FreeSpaceEveryCallTest {
         val b = FreeSpaceBench()
         val case = setup(b)
         val death = BackupDeath(n, after)
+        val late = Late()
         try {
-          flow(b, dying(b, death), stats)
+          flow(b, dying(b, death), stats, afterConfirm = { late.made = b.safe() })
         } catch (_: ProcessDeath) {
           // il processo e' morto: si butta cio' che sta in memoria e si riparte dal diario
         }
@@ -159,7 +191,7 @@ class FreeSpaceEveryCallTest {
         stats.interruptions++
         recover(b, stats, reboot)
         stats.rounds++
-        finalChecks(b, case, label)
+        finalChecks(b, case, label, late)
       }
     }
     assertThat(stats.interruptions).isEqualTo(2 * total)
@@ -218,12 +250,6 @@ class FreeSpaceEveryCallTest {
     assertThat(resumed.state).isEqualTo(FreeSpaceRunState.EXPIRED)
     assertThat(b.removed).isEmpty()
   }
-
-  private fun runOf(record: FreeRunRecord): FreeSpaceRun = FreeSpaceRun(
-    id = record.id, planHash = record.planHash, state = record.state, permanent = record.permanent,
-    guardedDone = 0, guardedTotal = 0, verifiedDone = 0, verifiedTotal = 0, verifiedBytes = 0, readyItems = 0, readyBytes = 0,
-    batchesTotal = 0, batchesDone = record.batchesDone, freedItems = 0, freedBytes = 0,
-  )
 }
 
 /** Il diario che muore: le scritture contano come passi (le letture no). */

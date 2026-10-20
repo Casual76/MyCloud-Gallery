@@ -8,6 +8,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.FreeSpaceRunId
 import dev.pampa.mycloudgallery.core.backup.contract.FreeSpaceRunState
 import dev.pampa.mycloudgallery.core.backup.contract.PhonePlanHash
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneRef
+import dev.pampa.mycloudgallery.core.backup.contract.PhoneRowNow
 import dev.pampa.mycloudgallery.core.model.FileStamp
 import dev.pampa.mycloudgallery.core.model.LocationId
 import dev.pampa.mycloudgallery.core.model.Media
@@ -79,6 +80,14 @@ interface FreeSpaceCatalog {
    * avviso al catalogo, e una chiamata persa non perde niente.
    */
   suspend fun freedFromPhone(locations: List<LocationId>)
+
+  /**
+   * LS-12 della verifica funzionale 5B: dove sta adesso la riga del telefono della versione [versionId] di [mediaId], per un elemento consegnato
+   * ad Android la cui riga [stale] non vale piu' (`PhoneLookup.Stale`: MediaStore ricostruito, `_ID` rinumerati). E' la stessa ricetta del
+   * backup (`BackupCatalog.phoneRowOf`): [PhoneRowNow.Absent] solo se la lettura del telefono ha riletto **tutto** il volume dopo il cambio e la
+   * versione non ha piu' una riga presente. Null = non si sa (l'elemento resta in dubbio): e' il default, prudente.
+   */
+  suspend fun phoneRowOf(mediaId: MediaId, versionId: VersionId, stale: PhoneRef): PhoneRowNow? = null
 }
 
 /**
@@ -250,5 +259,16 @@ interface FreeSpaceDiary {
    */
   suspend fun handedPhoneLocations(): Set<LocationId> = runs().flatMapTo(HashSet()) { run ->
     items(run.id).filter { it.state == FreeItemState.IN_DIALOG || it.state == FreeItemState.IN_DOUBT }.map { it.phoneLocation }
+  }
+
+  /** LS-2: i giri non finiti, dal piu' vecchio (quello da riprendere all'apertura della pagina o dal lavoro dopo la morte del processo). */
+  suspend fun openRuns(): List<FreeRunRecord> = runs().filter { !it.state.terminal }
+
+  /**
+   * LS-15: i giri con elementi consegnati ad Android e non risolti (`IN_DIALOG`, `IN_DOUBT`), dal piu' vecchio: solo questi servono a `settle`,
+   * che prima scorreva tutti i giri della storia (non si potano mai). Con Room una query sull'indice di `free_space_item.state`.
+   */
+  suspend fun runsToSettle(): List<FreeRunRecord> = runs().filter { run ->
+    items(run.id).any { it.state == FreeItemState.IN_DIALOG || it.state == FreeItemState.IN_DOUBT }
   }
 }

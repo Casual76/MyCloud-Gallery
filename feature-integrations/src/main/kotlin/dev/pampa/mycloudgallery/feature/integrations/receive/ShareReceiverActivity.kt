@@ -1,7 +1,5 @@
 package dev.pampa.mycloudgallery.feature.integrations.receive
 
-import android.annotation.SuppressLint
-import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import androidx.activity.OnBackPressedCallback
@@ -10,17 +8,23 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
 import dev.pampa.mycloudgallery.feature.integrations.contract.IntegrationPorts
+import dev.pampa.mycloudgallery.feature.integrations.picker.OverlayShield
+import dev.pampa.mycloudgallery.feature.integrations.picker.UnlockFailure
 import dev.pampa.mycloudgallery.feature.integrations.share.FlowCounters
 import dev.pampa.mycloudgallery.feature.integrations.share.ReceiveCounter
 import java.util.concurrent.CancellationException
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
@@ -43,6 +47,9 @@ import kotlinx.coroutines.launch
 class ShareReceiverActivity : FragmentActivity() {
 
   private var viewModel: ReceiveViewModel? = null
+
+  /** IN-10: la schermata di sblocco parte da sola una volta per activity; dopo, con il tasto (un "Annulla" non la riapre in ciclo). */
+  private var autoPrompted = false
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
@@ -112,31 +119,27 @@ class ShareReceiverActivity : FragmentActivity() {
         finish()
       }
     }
-  }
-
-  /**
-   * La finestra non prende tocchi attraverso una sovrapposizione: un'app che disegna sopra non fa premere "Salva sul NAS" al posto dell'utente.
-   * `HIDE_OVERLAY_WINDOWS` non e' nel manifest di questo modulo (nessun permesso nuovo qui, §4.3): lo porta `core-security` nel manifest di `:app`.
-   * Senza, `setHideOverlayWindows` lancia e resta il filtro dei tocchi oscurati.
-   */
-  @SuppressLint("MissingPermission")
-  private fun protectFromOverlays() {
-    window.decorView.filterTouchesWhenObscured = true
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-      try {
-        window.setHideOverlayWindows(true)
-      } catch (_: SecurityException) {
-        // Resta il filtro dei tocchi oscurati.
+    // IN-3, IN-10: la credenziale di sistema si chiede da sola quando la schermata e' bloccata, una volta per activity: anche se la schermata
+    // diventa "bloccata" dopo (l'app stava leggendo il suo stato), e senza riaprirla in ciclo dopo un "Annulla".
+    lifecycleScope.launch {
+      repeatOnLifecycle(Lifecycle.State.RESUMED) {
+        model.ui.map { it.screen }.distinctUntilChanged().collect { screen ->
+          if (screen == ReceiveScreenState.LOCKED && !autoPrompted) {
+            autoPrompted = true
+            startUnlock()
+          }
+        }
       }
     }
   }
 
+  /** La finestra non prende tocchi attraverso una sovrapposizione: un'app che disegna sopra non fa premere "Salva sul NAS" al posto dell'utente. */
+  private fun protectFromOverlays() = OverlayShield.protect(window)
+
   override fun onResume() {
     super.onResume()
-    val model = viewModel ?: return
     // Il blocco puo' essersi chiuso mentre si era altrove: il cancello si rilegge a ogni ritorno (E-X7).
-    model.refreshGate()
-    if (model.ui.value.screen == ReceiveScreenState.LOCKED) startUnlock()
+    viewModel?.refreshGate()
   }
 
   /** Lo sblocco con la credenziale di sistema. Una volta per volta; se l'utente annulla si riprova con il tasto. */
@@ -145,15 +148,16 @@ class ShareReceiverActivity : FragmentActivity() {
     if (!model.beginUnlock()) return
     lifecycleScope.launch {
       var unlocked = false
+      val unlock = ReceivePorts.unlock
       try {
-        unlocked = ReceivePorts.unlock.unlock(this@ShareReceiverActivity)
+        unlocked = unlock.unlock(this@ShareReceiverActivity)
       } catch (e: CancellationException) {
         model.endUnlock(false)
         throw e
       } catch (e: Exception) {
         unlocked = false
       }
-      model.endUnlock(unlocked)
+      model.endUnlock(unlocked, if (unlocked) null else unlock.lastFailure() ?: UnlockFailure.OTHER)
     }
   }
 }

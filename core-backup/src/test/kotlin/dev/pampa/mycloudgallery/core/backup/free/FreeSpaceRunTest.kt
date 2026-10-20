@@ -102,18 +102,14 @@ class FreeSpaceRunTest {
     bench.clock.monotonic += PhoneConfirmationRules.MAX_AGE_MS + 1
     assertThat(bench.space.verify(plan, confirmation, 1.hours).blocked).isEqualTo(FreeSpaceBlock.CONFIRMATION_REJECTED)
 
-    // Un media al sicuro in piu' dopo il foglio: il piano ricalcolato e' un altro, serve un altro tocco.
+    // LS-13 della verifica funzionale 5B: un media al sicuro in piu' dopo il foglio non rifiuta piu' la conferma, ma **non entra** nel giro
+    // (la lista non cresce mai); una copia con un timbro diverso (il PC l'ha toccata dopo il foglio) esce. Lo provano `Correzioni5BLiberaSpazioTest`
+    // e il caso "arrivato dopo il foglio" di `FreeSpaceEveryCallTest`. Qui: un piano di un altro filtro non vale.
     val (plan2, confirmation2) = bench.confirmed()
-    bench.safe()
-    assertThat(bench.space.verify(plan2, confirmation2, 1.hours).blocked).isEqualTo(FreeSpaceBlock.CONFIRMATION_REJECTED)
-
-    // La copia privata ha un timbro diverso (il PC l'ha toccata dopo il foglio e la scansione l'ha visto): un altro piano.
-    val m = bench.safe()
-    val (plan3, confirmation3) = bench.confirmed()
-    bench.catalog.change(m.id) { media ->
-      media.copy(locations = media.locations.map { if (it.isNas) it.copy(stamp = it.stamp.copy(modifiedAtMillis = it.stamp.modifiedAtMillis + 1)) else it })
-    }
-    assertThat(bench.space.verify(plan3, confirmation3, 1.hours).blocked).isEqualTo(FreeSpaceBlock.CONFIRMATION_REJECTED)
+    val other = FreeSpaceFilter(kind = dev.pampa.mycloudgallery.core.backup.contract.FreeSpaceKind.VIDEOS_ONLY)
+    val otherPlan = bench.space.plan(other)
+    assertThat(bench.space.verify(otherPlan, confirmation2, 1.hours).blocked).isEqualTo(FreeSpaceBlock.CONFIRMATION_REJECTED)
+    assertThat(plan2.hash).isNotEqualTo(otherPlan.hash)
 
     // Una conferma da un istante monotono nel futuro non e' di questo avvio del telefono.
     val (plan4, _) = bench.confirmed()

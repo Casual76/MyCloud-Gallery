@@ -37,6 +37,9 @@
         <category android:name="android.intent.category.DEFAULT" />
         <data android:mimeType="image/*" />
         <data android:mimeType="video/*" />
+        <!-- Il `PICK` classico con un indirizzo del MediaStore (IN-13): il tipo e' quello del MediaStore, non `image/*`. Solo per `PICK`. -->
+        <data android:mimeType="vnd.android.cursor.dir/image" />
+        <data android:mimeType="vnd.android.cursor.dir/video" />
       </intent-filter>
     </activity>
 

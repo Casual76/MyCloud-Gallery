@@ -11,6 +11,10 @@
   <string name="integrations_receive_locked_detail">Sblocca con la credenziale del telefono per salvare i file sul NAS.</string>
   <string name="integrations_receive_unlock">Sblocca</string>
   <string name="integrations_receive_unlock_failed">Non sono riuscito a sbloccare. Riprova.</string>
+  <string name="integrations_receive_unlock_no_screen_lock">Il telefono non ha un blocco schermo: impostalo nelle impostazioni del telefono, oppure apri MyCloud Gallery e spegni il suo blocco.</string>
+
+  <string name="integrations_receive_trial_title">Backup in prova</string>
+  <string name="integrations_receive_trial_detail">Il backup è ancora in prova: per ora sul NAS non salvo i file ricevuti. Non ho copiato niente.</string>
 
   <string name="integrations_receive_not_ready_title">Prima configura MyCloud Gallery</string>
   <string name="integrations_receive_not_ready_detail">Apri l’app e completa la configurazione, poi condividi di nuovo i file.</string>
@@ -44,6 +48,7 @@
   <string name="integrations_receive_where">Dove li salvo</string>
   <string name="integrations_receive_up">Cartella di sopra</string>
   <string name="integrations_receive_open_folder">Apri la cartella scelta</string>
+  <string name="integrations_receive_no_subfolders">Qui dentro non ci sono altre cartelle.</string>
   <string name="integrations_receive_area_private">Area privata</string>
   <string name="integrations_receive_area_common">Area comune</string>
   <string name="integrations_receive_common_notice">Lo vedranno tutti i familiari.</string>
@@ -62,6 +67,11 @@
     <item quantity="other">%1$d file in coda</item>
   </plurals>
   <string name="integrations_receive_done_detail">Li carico sul NAS e controllo che arrivino interi. Puoi chiudere: la coda prosegue da sola.</string>
+  <string name="integrations_receive_done_metered">Stai usando i dati mobili: tengo i file sul telefono e li carico appena sei sul Wi-Fi di casa.</string>
+  <plurals name="integrations_receive_done_not_queued">
+    <item quantity="one">%1$d file copiato non si legge più e non l’ho messo in coda.</item>
+    <item quantity="other">%1$d file copiati non si leggono più e non li ho messi in coda.</item>
+  </plurals>
   <string name="integrations_receive_done_offline">Il NAS non risponde adesso: tengo i file sul telefono e li carico appena risponde.</string>
 
   <string name="integrations_receive_failed_title">Non sono riuscito a salvare</string>

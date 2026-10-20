@@ -180,7 +180,9 @@ class ReceiveViewModelTest {
     waitFor(model, ReceiveScreenState.DONE)
 
     assertThat(model.ui.value.queued).isEqualTo(3)
-    assertThat(model.ui.value.nasReachable).isFalse() // "lo salvo appena risponde": le copie locali restano in coda
+    // IN-11: "In coda" subito; la prova del NAS corregge la frase dopo, senza far aspettare la schermata.
+    waitUntil { model.ui.value.nasWait == NasWait.OFFLINE }
+    assertThat(model.ui.value.nasWait).isEqualTo(NasWait.OFFLINE) // "lo salvo appena risponde": le copie locali restano in coda
     assertThat(queue.enqueued.single().second).hasSize(3)
     assertThat(stageDirs()).hasSize(1) // i file restano finche' il diario li cita
     // Chiudere dopo "in coda" non li tocca.
@@ -252,6 +254,21 @@ class ReceiveViewModelTest {
     waitFor(model, ReceiveScreenState.NOTHING)
 
     assertThat(model.ui.value.rejected).isEmpty() // non e' un rifiuto dei file: manca la cartella
+    assertThat(model.ui.value.noFolder).isTrue()
+    waitUntil { stageDirs().isEmpty() }
+  }
+
+  /** IN-11: dei file buoni senza cartella, e altri rifiutati: la schermata dice che manca la cartella (prima: "nessuno dei file si puo' salvare"). */
+  @Test
+  fun in11_conDeiRifiutiESenzaCartellaLaSchermataDiceCheMancaLaCartella() {
+    val streams = listOf(incomingStream(ReceiveSamples.jpeg(3_000, 1)), incomingStream(ReceiveSamples.fakeJpegThatIsHtml()))
+    val model = model(streams, dest = FakeIncomingDestinations(roots = emptyList()))
+
+    model.refreshGate()
+    waitFor(model, ReceiveScreenState.NOTHING)
+
+    assertThat(model.ui.value.rejected).containsExactly(IncomingReject.NOT_MEDIA, 1)
+    assertThat(model.ui.value.noFolder).isTrue() // ci sono dei rifiuti, ma il motivo principale e' la cartella che manca
     waitUntil { stageDirs().isEmpty() }
   }
 
@@ -272,6 +289,145 @@ class ReceiveViewModelTest {
     queue.allowed = true
     model.save()
     waitFor(model, ReceiveScreenState.DONE)
+  }
+
+  /**
+   * IN-12 della verifica funzionale 5B: `save` intercettava solo `IOException`; un errore del database (disco pieno: `SQLiteException` di Room) o una
+   * qualunque `RuntimeException` chiudeva l'app. Adesso e' "non disponibile" e si puo' riprovare.
+   */
+  @Test
+  fun in12_unErroreCheNonEDiIoNonChiudeLAppEMostraNonDisponibile() {
+    val model = model()
+    model.refreshGate()
+    waitFor(model, ReceiveScreenState.READY)
+
+    queue.failWith = android.database.sqlite.SQLiteFullException("disco pieno")
+    model.save()
+    waitFor(model, ReceiveScreenState.FAILED)
+    assertThat(model.ui.value.failure).isEqualTo(ReceiveFailure.UNAVAILABLE)
+
+    queue.failWith = IllegalStateException("altro")
+    model.retry()
+    waitFor(model, ReceiveScreenState.READY)
+    model.save()
+    waitFor(model, ReceiveScreenState.FAILED)
+    assertThat(model.ui.value.failure).isEqualTo(ReceiveFailure.UNAVAILABLE)
+
+    queue.failWith = null
+    model.retry()
+    model.save()
+    waitFor(model, ReceiveScreenState.DONE)
+  }
+
+  /** IN-12: dei file copiati che al tocco non si leggono piu' non spariscono in silenzio: "In coda" dice quanti non ci sono. */
+  @Test
+  fun in12_ISalvatiCheNonSiLeggonoPiuSiContano() {
+    val model = model()
+    model.refreshGate()
+    waitFor(model, ReceiveScreenState.READY)
+    queue.skipOne = true // il diario vero salta il file di cui non legge piu' l'impronta
+
+    model.save()
+    waitFor(model, ReceiveScreenState.DONE)
+
+    assertThat(model.ui.value.queued).isEqualTo(2)
+    assertThat(model.ui.value.notQueued).isEqualTo(1)
+  }
+
+  // --- Cancello: a processo freddo (IN-3) e backup in prova (IN-6) ----------------------------------------------------------
+
+  /**
+   * IN-3 della verifica funzionale 5B: a processo freddo l'app sta ancora leggendo il suo stato. La schermata non decide e non mostra niente (prima:
+   * "Prima configura MyCloud Gallery"), aspetta, e quando lo stato c'e' decide da sola, senza un ritorno in primo piano.
+   */
+  @Test
+  fun in3_aFreddoLaSchermataAspettaLoStatoEPoiCopiaDaSola() {
+    gate.decision = EntryDecision.LOADING
+    val model = model()
+
+    model.refreshGate()
+    Thread.sleep(150)
+    assertThat(model.ui.value.screen).isEqualTo(ReceiveScreenState.CHECKING) // niente "non pronta", niente sblocco, niente copia
+    assertThat(asked).isEqualTo(0)
+
+    gate.decision = EntryDecision.ALLOWED
+    waitFor(model, ReceiveScreenState.READY)
+    assertThat(asked).isEqualTo(1)
+  }
+
+  @Test
+  fun in3_aFreddoPoiBloccataMostraLoSbloccoENonNonPronta() {
+    gate.decision = EntryDecision.LOADING
+    val model = model()
+    model.refreshGate()
+    gate.decision = EntryDecision.NEEDS_UNLOCK
+    waitFor(model, ReceiveScreenState.LOCKED)
+    assertThat(asked).isEqualTo(0)
+  }
+
+  /** Se lo stato non arriva mai non si offre niente (fallire chiusi) e il prossimo ritorno in primo piano riprova. */
+  @Test
+  fun in3_seLoStatoNonArrivaNonSiOffreNiente_EIlRitornoRiprova() {
+    gate.loadTimeoutMs = 80
+    gate.decision = EntryDecision.LOADING
+    val model = model()
+    model.refreshGate()
+    waitFor(model, ReceiveScreenState.NOT_READY)
+    assertThat(asked).isEqualTo(0)
+
+    gate.decision = EntryDecision.ALLOWED
+    model.refreshGate()
+    waitFor(model, ReceiveScreenState.READY)
+  }
+
+  /** IN-6: il backup in prova (D12, R2) non scrive: si dice **prima di copiare**. Prima: fino a 4 GiB copiati e poi "In quella cartella non si puo' scrivere". */
+  @Test
+  fun in6_ConIlBackupInProvaNonSiCopiaNienteELaSchermataDiceInProva() {
+    destinations.trialOnly = true
+    val model = model()
+
+    model.refreshGate()
+    waitFor(model, ReceiveScreenState.TEST_ONLY)
+
+    assertThat(asked).isEqualTo(0) // i flussi dell'altra app non si sono nemmeno aperti
+    assertThat(stageDirs()).isEmpty()
+    assertThat(queue.enqueued).isEmpty()
+  }
+
+  /** IN-6: se il diario rifiuta perche' e' diventato "in prova" dopo la copia, il motivo e' quello e non "quella cartella". */
+  @Test
+  fun in6_SeLaProvaArrivaDopoLaCopiaIlMotivoEInProva() {
+    val model = model()
+    model.refreshGate()
+    waitFor(model, ReceiveScreenState.READY)
+    queue.allowed = false
+    destinations.trialOnly = true
+
+    model.save()
+    waitFor(model, ReceiveScreenState.FAILED)
+
+    assertThat(model.ui.value.failure).isEqualTo(ReceiveFailure.TEST_ONLY)
+    model.retry() // non c'e' da riprovare: chiude
+    assertThat(model.outcome.value).isEqualTo(ReceiveOutcome.FINISHED)
+  }
+
+  // --- "In coda": la prova del NAS non fa aspettare (IN-11) -----------------------------------------------------------------------
+
+  @Test
+  fun in11_InCodaArrivaSubitoELaProvaDelNasCorreggeLaFraseDopo() {
+    destinations.wait = NasWait.METERED
+    destinations.nasProbeDelayMs = 400
+    val model = model()
+    model.refreshGate()
+    waitFor(model, ReceiveScreenState.READY)
+
+    model.save()
+    waitFor(model, ReceiveScreenState.DONE)
+    // La schermata e' gia' "In coda" mentre la prova (che col NAS spento dura fino a 5 s) non e' finita.
+    assertThat(model.ui.value.nasWait).isEqualTo(NasWait.NONE)
+    assertThat(model.ui.value.queued).isEqualTo(3)
+
+    waitUntil { model.ui.value.nasWait == NasWait.METERED }
   }
 
   @Test

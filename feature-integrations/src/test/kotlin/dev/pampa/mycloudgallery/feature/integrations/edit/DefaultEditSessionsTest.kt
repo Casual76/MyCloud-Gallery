@@ -19,6 +19,7 @@ import dev.pampa.mycloudgallery.core.model.Sha256
 import dev.pampa.mycloudgallery.core.model.VersionId
 import dev.pampa.mycloudgallery.core.model.VersionKind
 import dev.pampa.mycloudgallery.feature.integrations.edit.testing.FakeEditCatalog
+import dev.pampa.mycloudgallery.feature.integrations.receive.IncomingMime
 import dev.pampa.mycloudgallery.feature.integrations.edit.testing.FakeGalleryDownloads
 import dev.pampa.mycloudgallery.feature.integrations.edit.testing.FakeNasCopies
 import dev.pampa.mycloudgallery.feature.integrations.edit.testing.InMemoryEditSessionStore
@@ -541,6 +542,40 @@ class DefaultEditSessionsTest {
     }
     assertThat(catalog.edited).isEmpty() // il catalogo non e' stato toccato: l'originale resta com'era
     assertThat(FlowCounters.edit.get(EditCounter.RESULT_REFUSED)).isEqualTo(hostile.size.toLong())
+  }
+
+  /**
+   * R11 della revisione di sicurezza 5B: l'impronta, il controllo del tipo e la copia nel file preparato erano tre letture diverse di un file che
+   * l'editor puo' ancora scrivere. Un editor ostile alterna i byte: impronta e copia su un file che non e' un media, controllo del tipo su un JPEG.
+   * Adesso la copia nel file privato e' una lettura sola e impronta, tipo e byte da caricare sono quelli di quella lettura.
+   */
+  @Test
+  fun r11_unEditorCheAlternaIByteNonFaDiventareUnaVersioneUnFileCheNonEUnMedia() {
+    val hostile = "<!DOCTYPE html><html>non sono una foto</html>".toByteArray() + ByteArray(2_000) { 0x41 }
+    val good = ReceiveBytes.jpeg(seed = 77, size = 6_000)
+    val opens = java.util.concurrent.atomic.AtomicInteger()
+    // Ogni lettura del file della cache vede l'altra faccia dell'editor: prima il file ostile, poi il JPEG, poi di nuovo l'ostile...
+    val flipping: (File) -> java.io.InputStream = { java.io.ByteArrayInputStream(if (opens.getAndIncrement() % 2 == 0) hostile else good) }
+    sessions = DefaultEditSessions(
+      phone = phone, rows = phone, catalog = catalog, store = store, nasCopies = nas, downloads = downloads, staged = staged, planner = planner,
+      cache = cache, clock = clock, uris = uris, revoker = revoker, io = Dispatchers.Unconfined, openForRead = flipping,
+    )
+    val session = nasOnly()
+    cacheFile(session).writeBytes(good) // il file vero: la lettura "alternata" passa da `openForRead`
+    val v2 = VersionId.random()
+    catalog.addEditedResult = v2
+
+    val outcome = settle(session)
+
+    // Qualunque cosa sia diventata la versione, i byte che il motore carichera' sono un media e sono quelli dell'impronta registrata.
+    for ((_, _, recorded) in catalog.edited) {
+      val kept = checkNotNull(staged.file(recorded)).readBytes()
+      assertThat(sha(kept)).isEqualTo(recorded)
+      assertThat(IncomingMime.of(kept.copyOf(minOf(kept.size, IncomingMime.HEAD_BYTES)), null)).isNotNull()
+    }
+    if (outcome is EditOutcome.NewVersion) assertThat(catalog.edited).hasSize(1) else assertThat(catalog.edited).isEmpty()
+    // E il file non si legge piu' di due volte: una per sapere se e' cambiato, una per copiarlo (tipo e impronta vengono da quella copia).
+    assertThat(opens.get()).isAtMost(2)
   }
 
   @Test

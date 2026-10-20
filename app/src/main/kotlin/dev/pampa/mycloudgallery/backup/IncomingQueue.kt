@@ -23,9 +23,11 @@ import dev.pampa.mycloudgallery.core.database.entity.IncomingItemEntity
 import dev.pampa.mycloudgallery.core.database.transaction
 import dev.pampa.mycloudgallery.core.metadata.contract.MediaBytes
 import dev.pampa.mycloudgallery.core.model.Fingerprint
+import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.QuickHash
 import dev.pampa.mycloudgallery.core.model.QuickHashAlgorithm
+import dev.pampa.mycloudgallery.core.model.VersionId
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import dev.pampa.mycloudgallery.feature.integrations.receive.IncomingFiles
 import dev.pampa.mycloudgallery.feature.integrations.receive.IncomingQueue
@@ -60,6 +62,25 @@ object IncomingStates {
 }
 
 /**
+ * IN-8 della verifica funzionale 5B: i metadati di un file in arrivo, letti dai **byte locali** (la copia in `incoming/`) appena nasce il suo media.
+ * Il cammino `INCOMING` del motore va da `LINKED` a `DONE` senza preparare ne' leggere niente, e la scansione vede la posizione come gia' nota: senza
+ * questo il media ricevuto restava senza data (1/1/1970 in fondo alla timeline), senza tipo e senza segnaposto. Lo lega `IntegrationsGraph` (ha
+ * l'estrattore della Libreria); senza, il media nasce com'era (con la data di arrivo al posto di 1970).
+ */
+fun interface IncomingMetadata {
+  /** Legge [file] (di tipo [mime]) e scrive i metadati nella versione [versionId]. Non lancia: un file che non si legge si dice al caricamento. */
+  suspend fun read(mediaId: MediaId, versionId: VersionId, file: File, mime: String, displayName: String?, arrivedAtMs: Long)
+}
+
+/**
+ * La data provvisoria di un file in arrivo (IN-8 della verifica funzionale 5B): l'ora del NAS se la si conosce, altrimenti quella della copia sul telefono,
+ * **mai 0** (l'1/1/1970, in fondo alla timeline). La data di scatto vera, se il file ne ha una, la scrive subito dopo la lettura dei metadati.
+ */
+internal object IncomingArrival {
+  fun provisionalMs(nasNowMs: Long?, file: File): Long = nasNowMs ?: file.lastModified().takeIf { it > 0L } ?: 1L
+}
+
+/**
  * La coda dei file in arrivo (porta `IncomingQueue` di feature-integrations). [destinationAllowed]: la share e' l'area privata o comune
  * dell'account con l'area giusta, il cancello degli arrivi non la chiude per sempre (D12, R2, sola lettura, area altrui: no; congelamento,
  * emergenza e pausa: si mette in coda e si aspetta), la cartella non e' l'area dell'app ne' `Versioni/` e, con la recinzione di D13, sta sotto
@@ -78,6 +99,10 @@ class AppIncomingQueue(
   /** Dopo una messa in coda: il lavoro che carica (avviato dall'utente se grande, D24). */
   private val onQueued: (userInitiated: Boolean) -> Unit,
 ) : IncomingQueue {
+
+  /** IN-8: la lettura dei metadati dei file in arrivo. La mette `IntegrationsGraph` (ha l'estrattore); null = il media nasce senza. */
+  @Volatile
+  var metadata: IncomingMetadata? = null
 
   override suspend fun destinationAllowed(dest: NasDestination): Boolean {
     val share = when (dest.area) {
@@ -100,7 +125,21 @@ class AppIncomingQueue(
     for (item in stage.accepted) {
       val file = files.fileOf(stage.id, item) ?: continue
       val quick = withContext(Dispatchers.IO) { quickHashOf(file, item.size) } ?: continue
-      val media = cat.incomingMedia(Fingerprint(item.size, quick, item.sha256), kindOf(item.mime), clock.nasNowMs() ?: 0L)
+      // IN-8: la data provvisoria del media e' quella dell'arrivo (l'ora del NAS, o quella della copia sul telefono), mai 1/1/1970; la data di scatto vera,
+      // se il file ne ha una, arriva subito sotto dai suoi byte.
+      val arrivedAt = IncomingArrival.provisionalMs(clock.nasNowMs(), file)
+      val media = cat.incomingMedia(Fingerprint(item.size, quick, item.sha256), kindOf(item.mime), arrivedAt)
+      if (media.created) {
+        metadata?.let { reader ->
+          try {
+            reader.read(media.mediaId, media.versionId, file, item.mime, item.displayName, arrivedAt)
+          } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+          } catch (e: Exception) {
+            GalleryLog.w(TAG) { "metadati di un arrivo non letti (${e.javaClass.simpleName}): resta la data di arrivo" }
+          }
+        }
+      }
       val planned = dest.folder.child(IncomingNames.of(item))
       database.transaction {
         val created = store.createIncoming(
@@ -151,6 +190,7 @@ class AppIncomingQueue(
   }
 
   companion object {
+    private const val TAG = "BackupArrivi"
     private const val PROBE_NAME = "file.jpg"
 
     /** `qh1` di un file locale (testa e coda come la lettura del telefono, `QuickHashAlgorithm`). Null se il file non si legge o e' cambiato. */
@@ -257,45 +297,55 @@ class AppIncomingLocalFiles(private val database: GalleryDatabase, private val r
   }
 
   private class LocalFile(file: File) : IncomingLocalFile {
-    private val raf = RandomAccessFile(file, "r")
-    private val lock = Any()
-    private val length = raf.length()
+    private val source = LocalFileBytes(file)
 
-    override val bytes: MediaBytes = object : MediaBytes {
-      override val size: Long get() = length
+    override val bytes: MediaBytes get() = source
 
-      override suspend fun read(range: LongRange): ByteArray = withContext(Dispatchers.IO) {
-        synchronized(lock) {
-          if (range.isEmpty() || range.first >= length || range.last < 0) return@synchronized ByteArray(0)
-          val from = maxOf(range.first, 0L)
-          val to = minOf(range.last, length - 1)
-          val out = ByteArray((to - from + 1).toInt())
-          raf.seek(from)
-          raf.readFully(out)
-          out
-        }
-      }
-
-      override fun dataSource(): MediaDataSource = object : MediaDataSource() {
-        override fun readAt(position: Long, buffer: ByteArray, offset: Int, size: Int): Int = synchronized(lock) {
-          if (position >= length) return -1
-          val n = minOf(size.toLong(), length - position).toInt()
-          raf.seek(position)
-          raf.readFully(buffer, offset, n)
-          n
-        }
-
-        override fun getSize(): Long = length
-
-        override fun close() = Unit
-      }
-    }
-
-    override fun close() = raf.close()
+    override fun close() = source.close()
   }
 
   private companion object {
     const val TAG = "BackupArrivi"
     val SAFE = Regex("^[A-Za-z0-9-]{1,128}$")
   }
+}
+
+/**
+ * I byte di un file locale (la copia in `incoming/`), a intervalli, per il motore e per la lettura dei metadati (IN-8). Un file aperto una volta sola
+ * e chiuso da chi lo usa. Le letture sono sincronizzate: il motore e `MediaMetadataRetriever` possono leggere da thread diversi.
+ */
+class LocalFileBytes(file: File) : MediaBytes, java.io.Closeable {
+  private val raf = RandomAccessFile(file, "r")
+  private val lock = Any()
+  private val length = raf.length()
+
+  override val size: Long get() = length
+
+  override suspend fun read(range: LongRange): ByteArray = withContext(Dispatchers.IO) {
+    synchronized(lock) {
+      if (range.isEmpty() || range.first >= length || range.last < 0) return@synchronized ByteArray(0)
+      val from = maxOf(range.first, 0L)
+      val to = minOf(range.last, length - 1)
+      val out = ByteArray((to - from + 1).toInt())
+      raf.seek(from)
+      raf.readFully(out)
+      out
+    }
+  }
+
+  override fun dataSource(): MediaDataSource = object : MediaDataSource() {
+    override fun readAt(position: Long, buffer: ByteArray, offset: Int, size: Int): Int = synchronized(lock) {
+      if (position >= length) return -1
+      val n = minOf(size.toLong(), length - position).toInt()
+      raf.seek(position)
+      raf.readFully(buffer, offset, n)
+      n
+    }
+
+    override fun getSize(): Long = length
+
+    override fun close() = Unit
+  }
+
+  override fun close() = raf.close()
 }

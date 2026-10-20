@@ -315,11 +315,50 @@ class IncomingStagerTest {
     assertThat(File(root, a.id.value).exists()).isFalse()
     runBlocking { stager.discard(a.id) } // idempotente
 
-    stager.sweep(keep = setOf(b.id.value))
+    // La pulizia dell'avvio la fa un processo NUOVO (IN-1): uno stager nuovo non conosce le condivisioni di quello di prima.
+    stager().sweep(keep = setOf(b.id.value))
 
     assertThat(root.listNames()).containsExactly(b.id.value)
     assertThat(File(root, b.id.value).listNames()).containsExactly(b.accepted.single().name) // la citata resta, il resto a meta' no
     assertThat(File(root, c.id.value).exists()).isFalse()
+  }
+
+  /**
+   * IN-1 della verifica funzionale 5B: l'app e' chiusa, WhatsApp condivide, il processo nasce e la pulizia dell'avvio (che gira in parallelo,
+   * dopo il caricamento del catalogo) toglieva la cartella appena copiata prima del tocco su "Salva sul NAS": "I file copiati non ci sono piu'".
+   * Una condivisione ricevuta da QUESTO processo (in attesa di una scelta dell'utente, o appena messa in coda) non si tocca; quelle di un
+   * processo di prima e i resti a meta' si'.
+   */
+  @Test
+  fun in1_laPuliziaDellAvvioNonTogliLeCondivisioniRicevuteInQuestoProcesso() {
+    val stager = stager()
+    val waiting = stage(stager, incomingStream(ReceiveSamples.jpeg(3_000, 1)))
+    // Una condivisione di un processo morto, mai salvata, e una cartella con un resto a meta'.
+    val old = File(root, "ab".repeat(16)).also { it.mkdirs() }
+    File(old, "c".repeat(64)).writeBytes(ReceiveSamples.jpeg(1_000, 9))
+
+    stager.sweep(keep = emptySet()) // nessun arrivo in coda nel database: e' la prima condivisione di questo processo
+
+    assertThat(File(root, waiting.id.value).exists()).isTrue()
+    assertThat(stager.isIntact(waiting)).isTrue()
+    assertThat(old.exists()).isFalse()
+  }
+
+  @Test
+  fun in1_unaCondivisioneInCorsoNonSiTocca_ElaScartataSiTogliePerDavvero() {
+    val stager = stager()
+    // Un resto `.w` a meta' dentro una condivisione di questo processo: la pulizia dell'avvio non le toglie nemmeno la cartella.
+    val stage = stage(stager, incomingStream(ReceiveSamples.jpeg(3_000, 1)))
+    File(File(root, stage.id.value), ".w5").writeText("a meta'")
+
+    stager.sweep(keep = emptySet())
+    assertThat(File(root, stage.id.value).exists()).isTrue()
+
+    // Scartata dall'utente (Annulla): la cartella se ne va, e un giro dopo non c'e' piu' niente da proteggere.
+    runBlocking { stager.discard(stage.id) }
+    assertThat(File(root, stage.id.value).exists()).isFalse()
+    stager.sweep(keep = emptySet())
+    assertThat(root.listNames()).isEmpty()
   }
 
   @Test

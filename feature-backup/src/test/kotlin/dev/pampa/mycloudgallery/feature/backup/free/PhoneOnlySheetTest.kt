@@ -158,7 +158,7 @@ class PhoneOnlySheetTest : ComposeBackupTallTest() {
   fun ilViewModelValutaIMediaEPreselezionaLaScelta() = runTest(dispatcher) {
     val assessor = PhoneOnlyAssessor { assessment(PhoneOnlyAdvice.FREE, PhoneOnlyAdvice.SAFE_FIRST) }
     val actions = RecordingBackupActions()
-    val vm = PhoneOnlyViewModel(Optional.of(assessor), Optional.of(actions))
+    val vm = PhoneOnlyViewModel(Optional.of(assessor), Optional.of(actions), Optional.empty())
     vm.bind(setOf(id(1), id(2)))
     val ui = vm.state.value as PhoneOnlyUi.Advice
     assertThat(ui.safeFirst).isTrue()
@@ -170,7 +170,7 @@ class PhoneOnlySheetTest : ComposeBackupTallTest() {
 
   @Test
   fun senzaLaValutazioneLaFunzioneNonEPronta() = runTest(dispatcher) {
-    val vm = PhoneOnlyViewModel(Optional.empty(), Optional.empty())
+    val vm = PhoneOnlyViewModel(Optional.empty(), Optional.empty(), Optional.empty())
     vm.bind(setOf<MediaId>(id(1)))
     assertThat(vm.state.value).isEqualTo(PhoneOnlyUi.Unavailable)
   }

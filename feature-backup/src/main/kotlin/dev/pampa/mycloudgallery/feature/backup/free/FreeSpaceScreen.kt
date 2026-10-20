@@ -172,7 +172,7 @@ internal fun FreeSpaceScreen(
             )
           }
           is FreeSpaceUi.Summary -> summary(state, actions)
-          is FreeSpaceUi.Guarding -> progress(state.done, state.total, bytes = null, actions = actions)
+          is FreeSpaceUi.Guarding -> progress(state.done, state.total, bytes = null, actions = actions, waitingForBackup = state.waitingForBackup)
           is FreeSpaceUi.Verifying -> progress(state.done, state.total, bytes = state.bytes, actions = actions)
           is FreeSpaceUi.Ready -> ready(state, nowMs, actions)
           is FreeSpaceUi.Confirming -> item(key = "confirming") {
@@ -247,6 +247,10 @@ private fun LazyListScope.summary(state: FreeSpaceUi.Summary, actions: FreeSpace
   if (plan.filter.excludeRecentDays > 0) {
     item(key = "recent") { BackupNote(stringResource(R.string.backup_free_recent_note, plan.filter.excludeRecentDays)) }
   }
+  // LS-11: senza l'ora del NAS ogni media con una data conta come recente (fallire chiusi): lo si dice, e il riepilogo si ricalcola da solo.
+  if (!state.nasTimeKnown) {
+    item(key = "nas-time") { BackupNote(stringResource(R.string.backup_free_nas_time_note)) }
+  }
   item(key = "filter-title") { BackupSectionTitle(stringResource(R.string.backup_free_filter_title)) }
   item(key = "filter") {
     FluidListGroup {
@@ -318,19 +322,24 @@ internal fun exclusionText(reason: FreeSpaceExclusion): Pair<Int, Int> = when (r
   FreeSpaceExclusion.GONE_FROM_PHONE -> R.string.backup_free_ex_gone to R.string.backup_free_ex_gone_detail
   FreeSpaceExclusion.NOT_MINE -> R.string.backup_free_ex_not_mine to R.string.backup_free_ex_not_mine_detail
   FreeSpaceExclusion.BACKUP_NOT_ACTIVE -> R.string.backup_free_ex_backup_inactive to R.string.backup_free_ex_backup_inactive_detail
+  FreeSpaceExclusion.AWAITING_PHONE -> R.string.backup_free_ex_awaiting to R.string.backup_free_ex_awaiting_detail
 }
 
 // --- Guardiano e verifica sul momento ----------------------------------------------------------------------------------------------
 
-/** Il guardiano ([bytes] null) e la verifica sul momento: la stessa scheda, con la barra che avanza. */
-private fun LazyListScope.progress(done: Int, total: Int, bytes: Long?, actions: FreeSpaceActions) {
+/**
+ * Il guardiano ([bytes] null) e la verifica sul momento: la stessa scheda, con la barra che avanza. LS-8: con [waitingForBackup] il guardiano
+ * aspetta che il backup finisca il file in corso, e la scheda lo dice (prima "0 di N" senza spiegazione).
+ */
+private fun LazyListScope.progress(done: Int, total: Int, bytes: Long?, actions: FreeSpaceActions, waitingForBackup: Boolean = false) {
   item(key = "progress") {
     BackupCard(
       tone = BackupTone.Working,
       glyph = Icons.Rounded.Shield,
       title = stringResource(if (bytes == null) R.string.backup_free_guarding_title else R.string.backup_free_verifying_title),
       detail = if (bytes == null) {
-        stringResource(R.string.backup_free_guarding_detail, BackupText.count(done), BackupText.count(total))
+        val counts = stringResource(R.string.backup_free_guarding_detail, BackupText.count(done), BackupText.count(total))
+        if (waitingForBackup) counts + " · " + stringResource(R.string.backup_free_guarding_waiting) else counts
       } else {
         stringResource(R.string.backup_free_verifying_detail, BackupText.count(done), BackupText.count(total), BackupText.size(bytes))
       },
@@ -383,28 +392,56 @@ private fun LazyListScope.done(state: FreeSpaceUi.Done, actions: FreeSpaceAction
       tone = if (nothing) BackupTone.Waiting else BackupTone.Calm,
       glyph = if (nothing) Icons.Rounded.Shield else Icons.Rounded.CheckCircle,
       title = when {
-        state.cancelled -> stringResource(R.string.backup_free_done_cancelled_title)
+        // LS-7: "non e' cambiato niente" solo se davvero niente e' stato tolto; dopo un primo lotto liberato si dice quanto.
+        state.cancelled && nothing -> stringResource(R.string.backup_free_done_cancelled_title)
         nothing -> stringResource(R.string.backup_free_done_nothing_title)
         else -> stringResource(R.string.backup_free_done_title, BackupText.size(state.freedBytes))
       },
       detail = buildString {
         when {
-          state.cancelled -> append(stringResource(R.string.backup_free_done_cancelled_detail))
+          state.cancelled && nothing -> append(stringResource(R.string.backup_free_done_cancelled_detail))
           nothing -> append(stringResource(R.string.backup_free_done_nothing_detail))
           else -> {
             append(pluralStringResource(R.plurals.backup_free_done_detail, state.items, BackupText.count(state.items)))
             append(' ').append(stringResource(if (state.toAndroidTrash) R.string.backup_free_done_trash else R.string.backup_free_done_gone))
+            // LS-7: un "no" al lotto dopo il primo: quelli gia' liberati restano liberati, gli altri restano sul telefono.
+            if (state.cancelled) append(' ').append(stringResource(R.string.backup_free_done_stopped))
           }
         }
         if (state.kept > 0 && !state.cancelled && !nothing) {
           append(' ').append(pluralStringResource(R.plurals.backup_free_done_kept, state.kept, BackupText.count(state.kept)))
         }
-        if (state.dropped > 0) {
-          append(' ').append(pluralStringResource(R.plurals.backup_free_done_dropped, state.dropped, BackupText.count(state.dropped)))
+        // LS-13: i media confermati che erano gia' cambiati quando il giro e' partito.
+        if (state.changedBeforeStart > 0) {
+          append(' ').append(pluralStringResource(R.plurals.backup_free_done_changed, state.changedBeforeStart, BackupText.count(state.changedBeforeStart)))
+        }
+        droppedLines(state).forEach { append(' ').append(it) }
+        // LS-12: consegnati ad Android, esito non ancora noto.
+        if (state.inDoubt > 0) {
+          append(' ').append(pluralStringResource(R.plurals.backup_free_done_in_doubt, state.inDoubt, BackupText.count(state.inDoubt)))
         }
       },
       actions = { BackupButton(label = stringResource(R.string.backup_free_done_action), onClick = actions.done) },
     )
+  }
+}
+
+/**
+ * LS-7: chi e' uscito durante il giro, con il motivo vero (prima tutti "la copia sul NAS non tornava", anche "gia' tolto" o "in caricamento").
+ * Senza il dettaglio per motivo (un giro raccontato prima delle correzioni) resta la frase di sempre.
+ */
+@Composable
+private fun droppedLines(state: FreeSpaceUi.Done): List<String> {
+  if (state.droppedBy.isEmpty()) {
+    return if (state.dropped > 0) listOf(pluralStringResource(R.plurals.backup_free_done_dropped, state.dropped, BackupText.count(state.dropped))) else emptyList()
+  }
+  return FreeSpaceExclusion.entries.filter { (state.droppedBy[it] ?: 0) > 0 }.map { reason ->
+    val count = state.droppedBy.getValue(reason)
+    if (reason == FreeSpaceExclusion.NOT_VERIFIED) {
+      pluralStringResource(R.plurals.backup_free_done_dropped, count, BackupText.count(count))
+    } else {
+      pluralStringResource(R.plurals.backup_free_done_dropped_by, count, BackupText.count(count), stringResource(exclusionText(reason).first))
+    }
   }
 }
 

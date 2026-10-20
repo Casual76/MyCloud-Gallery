@@ -358,7 +358,9 @@ interface BackupStore {
 
   /**
    * 5B (P14, D24): scrive l'elemento `INCOMING` di un file in arrivo (`PLANNED`, con lo SHA-256 della copia locale gia' nel diario: la lettura lo
-   * deve ritrovare). Idempotente come [create]: un elemento aperto della stessa versione e dello stesso tipo si restituisce. La chiama solo la
+   * deve ritrovare). Idempotente come [create], ma per **versione, share e cartella di destinazione** (R14): lo stesso file salvato due volte nella
+   * stessa cartella e' un elemento; salvato in una cartella o in una share diversa e' un altro (prima il secondo "Salva sul NAS" diventava il primo e
+   * l'utente non trovava il file dove l'aveva scelto). La chiama solo la
    * coda dei file in arrivo, dopo il tocco dell'utente su "Salva sul NAS" (E-S11). Di serie non c'e' (un diario della 5A non la conosce).
    */
   suspend fun createIncoming(item: NewBackupItem): BackupItem = throw UnsupportedOperationException("Questo diario non accetta file in arrivo.")
@@ -375,7 +377,11 @@ interface BackupStore {
    */
   suspend fun update(item: BackupItem)
 
-  /** L'elemento aperto per la versione [versionId], se c'e'. */
+  /**
+   * L'elemento aperto per la versione [versionId], se c'e'. R15: **non** vale per i file in arrivo ([UploadKind.INCOMING]): un arrivo ritrova la
+   * versione dai suoi byte (puo' essere una foto dell'utente che esisteva gia') e va in un'altra share o cartella; non deve far credere che la
+   * versione sia gia' in coda per il backup, ne' farla saltare dal piano e dal guardiano.
+   */
   suspend fun openFor(versionId: VersionId): BackupItem?
 
   /**

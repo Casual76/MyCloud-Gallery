@@ -84,7 +84,17 @@ internal class FreeSpaceBench {
     listOf(NasShare(me, PRIVATE, NasArea.PRIVATE), NasShare(me, COMMON, NasArea.COMMON)),
   )
 
-  fun engine(diary: FreeSpaceDiary = this.diary, catalog: FreeSpaceCatalog = this.catalog, reader: NasMediaReader = nas.reader): SafeFreeSpace =
+  /**
+   * LS-11: come `:app` raggiunge il NAS quando l'ora del NAS non c'e' ancora (una sessione la mette). Di serie niente: l'ora resta com'e'.
+   */
+  var reachNas: suspend () -> Unit = {}
+
+  fun engine(
+    diary: FreeSpaceDiary = this.diary,
+    catalog: FreeSpaceCatalog = this.catalog,
+    reader: NasMediaReader = nas.reader,
+    guardian: PrivateCopyGuardian = this.guardian,
+  ): SafeFreeSpace =
     SafeFreeSpace(
       catalog = catalog,
       diary = diary,
@@ -101,6 +111,7 @@ internal class FreeSpaceBench {
       areas = { areas },
       fence = fence,
       systemDialogs = { systemDialogs },
+      reachNas = { reachNas() },
       today = { today },
       pageSize = 7,
     )
@@ -288,6 +299,9 @@ internal class FreeSpaceBench {
     val (plan, confirmation) = confirmed(filter, permanent)
     return space.verify(plan, confirmation, budget)
   }
+
+  /** LS-13: le righe di ogni piano confermato, per impronta (un lotto contiene solo righe del piano che l'utente ha visto). */
+  val confirmedPhones: MutableMap<dev.pampa.mycloudgallery.core.backup.contract.PhonePlanHash, Set<PhoneRef>> = HashMap()
 
   /** I lotti presentati al dialogo di sistema, in ordine. */
   val presented: MutableList<TrashBatch> = ArrayList()

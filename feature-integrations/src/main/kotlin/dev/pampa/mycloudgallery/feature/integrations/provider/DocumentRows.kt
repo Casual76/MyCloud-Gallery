@@ -85,7 +85,7 @@ object DocumentRows {
     Document.COLUMN_DISPLAY_NAME -> entry.displayName
     Document.COLUMN_LAST_MODIFIED -> entry.modifiedAtMillis
     Document.COLUMN_FLAGS -> if (entry.isFolder) FOLDER_FLAGS else 0
-    Document.COLUMN_SIZE -> if (entry.isFolder) null else entry.size
+    Document.COLUMN_SIZE -> if (entry.isFolder || entry.size == dev.pampa.mycloudgallery.feature.integrations.contract.DocumentEntry.UNKNOWN_SIZE) null else entry.size
     else -> null
   }
 }

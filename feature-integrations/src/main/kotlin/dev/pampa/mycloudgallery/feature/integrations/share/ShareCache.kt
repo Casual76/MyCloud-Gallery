@@ -26,10 +26,22 @@ class ShareCache(
   /** `cacheDir/edit/`. */
   val editRoot: File = File(cacheDir, EDIT)
 
+  /**
+   * Le cartelle di `share/` create da QUESTO processo: la pulizia dell'avvio non le tocca. Con il provider dei documenti e il selettore la prima chiamata
+   * di un processo nato proprio per rispondere (DocumentsUI, Gmail) puo' preparare una copia mentre la pulizia dell'avvio (che gira in parallelo, dopo il
+   * caricamento del catalogo) passa: senza questo la toglieva da sotto i piedi (stessa corsa di IN-1 per i file in arrivo).
+   */
+  private val own: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
   /** Una cartella nuova per una condivisione: `share/<token>/`. Lancia `IOException` se non si puo' creare. */
   fun newShareDir(): File {
-    val dir = File(shareRoot, token())
-    if (!dir.mkdirs() && !dir.isDirectory) throw IOException("Cartella di condivisione non creata.")
+    val name = token()
+    own += name
+    val dir = File(shareRoot, name)
+    if (!dir.mkdirs() && !dir.isDirectory) {
+      own -= name
+      throw IOException("Cartella di condivisione non creata.")
+    }
     return dir
   }
 
@@ -53,7 +65,8 @@ class ShareCache(
    * opachi). Idempotente; un file che non si toglie resta per il giro dopo.
    */
   fun sweepAtStart(keepEdit: Set<String>) {
-    deleteChildren(shareRoot) { true }
+    // Le copie di questo processo (una condivisione o una consegna gia' in corso) restano; quelle di un processo morto no.
+    deleteChildren(shareRoot) { it.name !in own }
     deleteChildren(editRoot) { it.name !in keepEdit }
   }
 
@@ -61,6 +74,7 @@ class ShareCache(
   fun deleteTree(file: File) {
     if (!isInside(file)) return
     file.deleteRecursively()
+    if (file.parentFile == shareRoot) own -= file.name
   }
 
   /** [file] sta dentro `share/` o `edit/` (per percorso canonico: un collegamento simbolico non porta fuori). */

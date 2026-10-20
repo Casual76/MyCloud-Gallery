@@ -62,6 +62,7 @@ import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import dev.pampa.mycloudgallery.core.trust.registry.DeviceStatus
 import dev.pampa.mycloudgallery.gallery.PhoneLibrary
 import dev.pampa.mycloudgallery.nas.NasGraph
+import dev.pampa.mycloudgallery.notify.AppFreeSpaceNotices
 import dev.pampa.mycloudgallery.nas.NasInputs
 import dev.pampa.mycloudgallery.notify.NasDailySummary
 import java.io.File
@@ -219,6 +220,13 @@ class BackupGraph(
     // VE-10, MC-3: un lavoro delle versioni nato adesso chiede subito il lavoro del suo tipo.
     onVersionWork = { kind -> inputs.jobs.versionWork(kind) },
     safeguard = { id -> safeguard(id) },
+    // Correzioni 5B (LS-2): la verifica di "Libera spazio" fuori dalla pagina, in un lavoro avviato dall'utente, con la notifica "Pronto".
+    scope = scope,
+    freeSpaceWork = { inputs.jobs.freeSpaceWork() },
+    notices = AppFreeSpaceNotices(context),
+    foreground = foreground,
+    // LS-8: il guardiano aspetta il turno al massimo per una tappa del giro (non 15 minuti), e intanto la pagina lo dice.
+    guardianTurn = { wait, block -> exclusive(wait, forUser = true) { block() } },
   )
 
   // --- Cio' che nasce in start --------------------------------------------------------------------------------------------------
@@ -539,13 +547,14 @@ class BackupGraph(
     // P14, VE-1: i lavori delle versioni aperti (correzioni, risultati degli editor, scambi dopo un ripristino del telefono) girano con il lavoro
     // del tipo del loro media (un video con i video, con le sue regole); quelli che aspettano il PC (`SOURCE_CHANGED`) no: niente polling, li
     // riprende la fine di una scansione del NAS ([afterNasScan]) o il giro periodico.
+    // Correzioni 5B: anche una copia di "Scarica sul telefono" modificata in Galleria che diventerebbe una versione (E-E7).
     if (p.planner.next(BackupKind.PHOTOS, 1, BackupTrigger.SCHEDULED).isNotEmpty() || hasOpenItems(BackupKind.PHOTOS) ||
-      hasOpenVersionWork(BackupKind.PHOTOS, waiting = false)
+      hasOpenVersionWork(BackupKind.PHOTOS, waiting = false) || fiveB.downloadVersionWaiting(BackupKind.PHOTOS)
     ) {
       out += Next.Photos
     }
     if (p.planner.next(BackupKind.VIDEOS, 1, BackupTrigger.SCHEDULED).isNotEmpty() || hasOpenItems(BackupKind.VIDEOS) ||
-      hasOpenVersionWork(BackupKind.VIDEOS, waiting = false)
+      hasOpenVersionWork(BackupKind.VIDEOS, waiting = false) || fiveB.downloadVersionWaiting(BackupKind.VIDEOS)
     ) {
       out += Next.Videos
     }
@@ -584,7 +593,10 @@ class BackupGraph(
     if (trigger == BackupTrigger.QUICK_NEW_PHOTOS) return false
     // P14, VE-1: un lavoro delle versioni aperto gira con il lavoro del tipo del suo media (anche quelli che aspettano il PC: il giro ricalcola
     // il piano). Prima solo le foto lo vedevano: un video modificato saliva con le regole delle foto.
-    return hasOpenItems(kind) || hasOpenVersionWork(kind, waiting = true)
+    if (hasOpenItems(kind) || hasOpenVersionWork(kind, waiting = true)) return true
+    // Correzioni 5B (nota dell'agente delle versioni): una copia di "Scarica sul telefono" modificata in Galleria (E-E7) da sola non faceva
+    // partire nessun giro. Conta solo se diventerebbe davvero un lavoro della versione (mai un giro a vuoto per un candidato che non lo diventa).
+    return fiveB.downloadVersionWaiting(kind)
   }
 
   /**

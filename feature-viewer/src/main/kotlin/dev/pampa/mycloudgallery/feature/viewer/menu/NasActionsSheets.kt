@@ -56,6 +56,8 @@ fun NasActionSheets(
   onDeleteFromPhone: () -> Unit,
   extraLocations: List<GalleryDeleteLocation> = emptyList(),
   onPhoneOnlyDelete: (() -> Unit)? = null,
+  /** LS-14: "Ovunque" toglie dal telefono tutte le copie del media (con il backup); senza, il cestino del viewer per quella di adesso. */
+  onEverywherePhone: (() -> Unit)? = null,
 ) {
   val state by controller.state.collectAsState()
   NasActionSheets(
@@ -70,7 +72,7 @@ fun NasActionSheets(
       controller.phoneOnlyDone()
       (onPhoneOnlyDelete ?: onDeleteFromPhone)()
     },
-    onEverywhereDone = onDeleteFromPhone,
+    onEverywhereDone = onEverywherePhone ?: onDeleteFromPhone,
     onDismiss = controller::dismiss,
     extraLocations = extraLocations,
   )

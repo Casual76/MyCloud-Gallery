@@ -104,15 +104,19 @@ class FiveBFreeSpaceTest {
   }
 
   @Test
-  fun lConfermaVaConIlPianoDiAdessoEUnPianoCambiatoBloccaIlGiro() = runTest {
+  fun laConfermaValePerIlPianoVisto_eUnElementoInPiuNonEntraMai() = runTest {
     space.candidates += listOf(item(1), item(2))
     val (plan, confirmation) = confirmed()
-    // Fra il foglio e il tocco arriva un elemento in piu' (una verifica del backup, un altro dispositivo): la conferma non vale.
+    // Correzioni 5B (LS-13): fra il foglio e il tocco arriva un elemento in piu' (una verifica del backup, un altro dispositivo). La conferma
+    // vale per il piano visto e il giro parte, ma l'elemento nuovo non entra mai (la lista non cresce).
     space.candidates += item(3)
     val run = space.verify(plan, confirmation, 5.minutes)
-    assertThat(run.state).isEqualTo(FreeSpaceRunState.BLOCKED)
-    assertThat(run.blocked).isEqualTo(FreeSpaceBlock.CONFIRMATION_REJECTED)
-    assertThat(space.nextBatch(run)).isNull()
+    assertThat(run.state).isEqualTo(FreeSpaceRunState.READY)
+    assertThat(run.readyItems).isEqualTo(2)
+    assertThat(checkNotNull(space.nextBatch(run)).items.map { it.phone.mediaStoreId }).containsExactly(1L, 2L)
+    // Una conferma per un altro piano non vale.
+    val other = space.plan(FreeSpaceFilter(kind = dev.pampa.mycloudgallery.core.backup.contract.FreeSpaceKind.VIDEOS_ONLY), false)
+    assertThat(space.verify(other, confirmation, 5.minutes).blocked).isEqualTo(FreeSpaceBlock.CONFIRMATION_REJECTED)
     // Una conferma scaduta (piu' di 10 minuti) non vale.
     val (plan2, old) = confirmed()
     clock.advance(11 * 60 * 1000L)

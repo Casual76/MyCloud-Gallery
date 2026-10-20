@@ -5,11 +5,20 @@ import dev.pampa.mycloudgallery.feature.integrations.contract.DocumentId
 import java.security.SecureRandom
 import java.util.Base64
 import java.util.Random
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
 
-// Fase 5B (P10, docs/fase5-progetto.md §2.7, D23, C17; E-X1): gli id opachi dei documenti. Un id e' un **token casuale** (18 byte di
-// `SecureRandom`, 24 caratteri URL-safe) che la tabella lega a cio' che rappresenta; non contiene, non deriva e non permette di ricavare un
-// percorso, una share, un account, un id del MediaStore o del NAS, un `MediaId`, un nome. Vive in memoria, vale per questo avvio del processo e
-// scade (E-X1: un URI usato dopo che il permesso e' scaduto non apre piu' niente).
+// Fase 5B (P10, docs/fase5-progetto.md §2.7, D23, C17; E-X1): gli id opachi dei documenti. Nessun id contiene o permette di ricavare un percorso, una
+// share, un account, un id del MediaStore o del NAS, un `MediaId`, un nome.
+//
+// Due famiglie, con regole diverse (IN-2 della verifica funzionale 5B):
+//  - gli id dei **media** sono token casuali (18 byte di `SecureRandom`, 24 caratteri URL-safe), in memoria, validi per questo avvio del processo,
+//    a scadenza e revocabili (E-X1: un URI usato dopo che il permesso e' scaduto non apre piu' niente);
+//  - gli id della **radice** e delle **cartelle** ("Recenti", "Cartelle NAS", le cartelle del NAS) sono **stabili**: derivati con una chiave locale
+//    (HMAC-SHA256 di un'etichetta e, per una cartella, della sua chiave opaca; 18 byte, 24 caratteri), uguali a ogni avvio del processo finche' la
+//    chiave non ruota (azzeramento dell'app, famiglia che cambia). DocumentsUI tiene le radici e gli ultimi percorsi nella cache di sistema: con id
+//    nuovi a ogni processo, dopo un riavvio "Allega file" di Gmail non trovava piu' niente. Non dicono mai cio' che e' dietro (senza la chiave non
+//    si ricavano ne' si indovinano) e non danno nessun accesso ai media, che passano sempre dalla vista di adesso e dal loro id a scadenza.
 
 /** Che cosa rappresenta un documento. Mai in un URI: sta nella tabella, dietro un token. */
 sealed interface DocumentTarget {
@@ -45,9 +54,10 @@ sealed interface DocumentResolution {
 }
 
 /**
- * La tabella degli id dei documenti. Tre id sono fissi per tutto l'avvio (radice, "Recenti", "Cartelle NAS"); gli altri nascono quando un
- * elenco li chiede ([idFor]) o quando il selettore consegna un media ([idFor] con `delivered`), e **scadono** ([DocumentPolicy.BROWSE_ID_TTL_MS],
- * [DocumentPolicy.DELIVERED_ID_TTL_MS], a scorrimento) o escono per capienza (i meno usati). Un id consegnato non esce per colpa dello sfoglio.
+ * La tabella degli id dei documenti. Quelli della radice, di "Recenti", di "Cartelle NAS" e delle cartelle sono **stabili** (derivati con una chiave
+ * locale, IN-2; non scadono); quelli dei media nascono quando un elenco li chiede ([idFor]) o quando il selettore consegna un media ([idFor] con
+ * `delivered`), e **scadono** ([DocumentPolicy.BROWSE_ID_TTL_MS], [DocumentPolicy.DELIVERED_ID_TTL_MS], a scorrimento) o escono per capienza (i meno
+ * usati). Un id consegnato non esce per colpa dello sfoglio.
  *
  * Thread-safe: la chiamano i thread del binder.
  */
@@ -58,25 +68,29 @@ class DocumentIdTable(
   private val deliveredTtlMs: Long = DocumentPolicy.DELIVERED_ID_TTL_MS,
   private val browseCapacity: Int = DocumentPolicy.BROWSE_ID_CAPACITY,
   private val deliveredCapacity: Int = DocumentPolicy.DELIVERED_ID_CAPACITY,
+  /** La chiave locale degli id stabili (IN-2). Di default una chiave in memoria: gli id valgono per questo oggetto; `:app` ne passa una su file. */
+  private val idKey: DocumentIdKey = InMemoryDocumentIdKey(random),
 ) {
 
   private class Entry(val token: String, val target: DocumentTarget, var label: String?, var expiresAt: Long, var delivered: Boolean)
 
+  // Gli id stabili: i tre fissi si derivano alla prima richiesta (la chiave si legge dal file solo allora, mai all'avvio del processo).
+  private var key: ByteArray? = null
   private val pinnedById = HashMap<String, DocumentTarget>()
   private val pinnedByTarget = HashMap<DocumentTarget, String>()
+
+  // Le cartelle viste (id derivato -> chiave opaca e nome), in ordine d'accesso: servono a risolvere un id che arriva da DocumentsUI. Dopo un riavvio
+  // sono vuote e si ricostruiscono dalla Libreria ([rememberFolder]).
+  private class FolderEntry(val key: NasFolderKey, var label: String?)
+
+  private val folders = object : LinkedHashMap<String, FolderEntry>(256, 0.75f, true) {
+    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, FolderEntry>?): Boolean = size > FOLDER_CAPACITY
+  }
 
   // Ordine d'accesso: il primo e' il meno usato.
   private val browse = LinkedHashMap<String, Entry>(256, 0.75f, true)
   private val delivered = LinkedHashMap<String, Entry>(256, 0.75f, true)
   private val byTarget = HashMap<DocumentTarget, Entry>()
-
-  init {
-    for (fixed in listOf(DocumentTarget.Root, DocumentTarget.Recent, DocumentTarget.NasFolders)) {
-      val token = newToken()
-      pinnedById[token] = fixed
-      pinnedByTarget[fixed] = token
-    }
-  }
 
   /** Quanti id non fissi ci sono (scaduti compresi, finche' nessuno li cerca). */
   val size: Int @Synchronized get() = byTarget.size
@@ -87,7 +101,11 @@ class DocumentIdTable(
    */
   @Synchronized
   fun idFor(target: DocumentTarget, label: String? = null, delivered: Boolean = false): DocumentId {
-    pinnedByTarget[target]?.let { return DocumentId(it) }
+    stableIdOf(target)?.let { id ->
+      // Una cartella ricorda il suo nome da mostrare; l'id non cambia mai con il nome.
+      if (target is DocumentTarget.Folder) rememberFolder(id, target.key, label)
+      return id
+    }
     val now = clock.elapsedMs()
     val existing = byTarget[target]
     if (existing != null && now >= existing.expiresAt) {
@@ -119,7 +137,9 @@ class DocumentIdTable(
   /** Cerca [id]. Un id valido si rinnova (scorrimento); uno scaduto si toglie. */
   @Synchronized
   fun resolve(id: DocumentId): DocumentResolution {
+    ensureKey()
     pinnedById[id.value]?.let { return DocumentResolution.Found(it, null, delivered = false) }
+    folders[id.value]?.let { return DocumentResolution.Found(DocumentTarget.Folder(it.key), it.label, delivered = false) }
     val entry = delivered[id.value] ?: browse[id.value] ?: return DocumentResolution.Unknown
     val now = clock.elapsedMs()
     if (now >= entry.expiresAt) {
@@ -143,12 +163,69 @@ class DocumentIdTable(
     for (id in ids) (delivered[id.value] ?: browse[id.value])?.let { remove(it) }
   }
 
-  /** Revoca ogni id non fisso (azzeramento dell'app, famiglia che cambia). */
+  /**
+   * Revoca ogni id: quelli dei media escono dalla tabella, e la chiave degli id stabili **ruota** (azzeramento dell'app, famiglia che cambia): la
+   * radice e le cartelle di prima non valgono piu'. Chi lo chiama notifica le radici al sistema (`IntegrationsGraph`).
+   */
   @Synchronized
   fun revokeAll() {
     browse.clear()
     delivered.clear()
     byTarget.clear()
+    folders.clear()
+    pinnedById.clear()
+    pinnedByTarget.clear()
+    key = null
+    idKey.rotate()
+  }
+
+  /** L'id stabile di una cartella del NAS ([key] opaca): lo stesso a ogni avvio del processo, finche' la chiave degli id non ruota. */
+  @Synchronized
+  fun folderIdOf(key: NasFolderKey): DocumentId {
+    ensureKey()
+    return DocumentId(derive(FOLDER_TAG, key.value))
+  }
+
+  /**
+   * Ricorda che [id] e' la cartella [key] (con il nome da mostrare, se si sa): dopo un riavvio del processo una cartella che DocumentsUI ricorda
+   * si ritrova dalla Libreria e si rimette qui. Un id che non e' quello derivato da [key] non si ricorda (nessuno lo scrive da fuori).
+   */
+  @Synchronized
+  fun rememberFolder(id: DocumentId, key: NasFolderKey, label: String? = null) {
+    if (id != folderIdOf(key)) return
+    val entry = folders[id.value]
+    if (entry == null) folders[id.value] = FolderEntry(key, label) else if (label != null) entry.label = label
+  }
+
+  /** L'id stabile di [target] se e' una delle quattro forme stabili (radice, "Recenti", "Cartelle NAS", una cartella); null per un media. */
+  private fun stableIdOf(target: DocumentTarget): DocumentId? {
+    ensureKey()
+    return when (target) {
+      DocumentTarget.Root, DocumentTarget.Recent, DocumentTarget.NasFolders -> DocumentId(checkNotNull(pinnedByTarget[target]))
+      is DocumentTarget.Folder -> DocumentId(derive(FOLDER_TAG, target.key.value))
+      is DocumentTarget.Media -> null
+    }
+  }
+
+  /** La chiave si legge alla prima richiesta (dal file, se c'e'): i tre id fissi si derivano da lei. */
+  private fun ensureKey() {
+    if (key != null) return
+    key = idKey.bytes()
+    for ((tag, fixed) in listOf(ROOT_TAG to DocumentTarget.Root, RECENT_TAG to DocumentTarget.Recent, NAS_FOLDERS_TAG to DocumentTarget.NasFolders)) {
+      val id = derive(tag, "")
+      pinnedById[id] = fixed
+      pinnedByTarget[fixed] = id
+    }
+  }
+
+  /** HMAC-SHA256 con la chiave locale di [tag] e [payload], i primi 18 byte, in base64 URL-safe senza riempimento: 24 caratteri. */
+  private fun derive(tag: String, payload: String): String {
+    val mac = Mac.getInstance("HmacSHA256")
+    mac.init(SecretKeySpec(checkNotNull(key), "HmacSHA256"))
+    mac.update(tag.toByteArray(Charsets.UTF_8))
+    mac.update(0)
+    mac.update(payload.toByteArray(Charsets.UTF_8))
+    return Base64.getUrlEncoder().withoutPadding().encodeToString(mac.doFinal().copyOf(TOKEN_BYTES))
   }
 
   private fun ttlOf(entry: Entry): Long = if (entry.delivered) deliveredTtlMs else browseTtlMs
@@ -181,12 +258,20 @@ class DocumentIdTable(
       val bytes = ByteArray(TOKEN_BYTES)
       random.nextBytes(bytes)
       val token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
-      if (token !in browse && token !in delivered && token !in pinnedById) return token
+      if (token !in browse && token !in delivered && token !in pinnedById && token !in folders) return token
     }
   }
 
   private companion object {
     /** 18 byte = 144 bit: non si indovina. In base64 URL-safe sono 24 caratteri, tutti ammessi da `DocumentIds.isOpaque`. */
     const val TOKEN_BYTES: Int = 18
+
+    /** Quante cartelle la tabella ricorda al massimo (le meno usate escono per prime: si ritrovano dalla Libreria). */
+    const val FOLDER_CAPACITY: Int = 4_096
+
+    const val ROOT_TAG = "root"
+    const val RECENT_TAG = "recent"
+    const val NAS_FOLDERS_TAG = "nas-folders"
+    const val FOLDER_TAG = "folder"
   }
 }

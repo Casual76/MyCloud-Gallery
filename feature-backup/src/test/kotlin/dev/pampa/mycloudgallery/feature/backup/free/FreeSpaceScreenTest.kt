@@ -133,6 +133,8 @@ class FreeSpaceScreenTest : ComposeBackupTallTest() {
       "Il NAS non risponde", "Fuori dalla cartella di prova", "Degli ultimi giorni", "La copia sul NAS è cambiata", "Non sono più sul telefono",
       // P14: i due motivi nuovi del contratto (prima finivano fra "con un problema").
       "Di un altro familiare", "Backup non attivo",
+      // Correzioni 5B (LS-12): le righe gia' proposte al telefono.
+      "In attesa della risposta del telefono",
     )
     assertThat(titles).hasSize(FreeSpaceExclusion.entries.size)
     for (title in titles) composeRule.onNodeWithText(title).assertExists()
@@ -186,7 +188,8 @@ class FreeSpaceScreenTest : ComposeBackupTallTest() {
     showState(FreeSpaceUi.Verifying(340, 1_240, 4_200_000_000L))
     composeRule.onNodeWithText("Ricontrollo le copie sul NAS").assertExists()
     composeRule.onNodeWithText(gb("340 di 1.240 · 4,2 GB letti")).assertExists()
-    composeRule.onNodeWithText("Può durare un po’. Lascia aperta questa pagina.").assertExists()
+    // LS-2: la verifica va avanti fuori dalla pagina (prima: "Lascia aperta questa pagina").
+    composeRule.onNodeWithText("Può durare un po’. Puoi uscire da questa pagina: quando è pronto ti avviso con una notifica.").assertExists()
     button("Annulla").performClick()
     assertThat(calls.cancel).isEqualTo(1)
   }
@@ -265,6 +268,51 @@ class FreeSpaceScreenTest : ComposeBackupTallTest() {
     showState(FreeSpaceUi.Done(items = 0, freedBytes = 0, toAndroidTrash = true, kept = 0, dropped = 0, cancelled = true))
     composeRule.onNodeWithText("Non è cambiato niente").assertExists()
     composeRule.onNodeWithText("Hai detto di no al telefono. Nessun file è stato tolto.").assertExists()
+  }
+
+  // --- Correzioni 5B ("Libera spazio", 20/10) -------------------------------------------------------------------------------------
+
+  /** LS-7: un "no" dopo un lotto gia' liberato dice quanto e' stato liberato, non "nessun file e' stato tolto". */
+  @Test
+  fun ls7_unNoDopoUnLottoGiaLiberatoDiceQuanto() {
+    showState(FreeSpaceUi.Done(items = 2_000, freedBytes = 2_000_000_000L, toAndroidTrash = true, kept = 2_500, dropped = 0, cancelled = true))
+    composeRule.onNodeWithText(gb("Liberati 2,0 GB")).assertExists()
+    composeRule.onNodeWithText("Poi hai detto di no al telefono: gli altri restano sul telefono.", substring = true).assertExists()
+    assertThat(composeRule.onAllNodes(hasText("Nessun file è stato tolto", substring = true)).fetchSemanticsNodes()).isEmpty()
+  }
+
+  /** LS-7: chi e' uscito durante il giro ha il suo motivo vero (prima tutti "la copia sul NAS non tornava"). */
+  @Test
+  fun ls7_ogniUscitaHaIlSuoMotivo() {
+    val by = mapOf(FreeSpaceExclusion.NOT_VERIFIED to 1, FreeSpaceExclusion.COPY_CHANGED to 2, FreeSpaceExclusion.GONE_FROM_PHONE to 3)
+    showState(FreeSpaceUi.Done(items = 5, freedBytes = 5_000_000L, toAndroidTrash = true, kept = 0, dropped = 6, cancelled = false, droppedBy = by))
+    composeRule.onNodeWithText("Per 1 la copia sul NAS non tornava", substring = true).assertExists()
+    composeRule.onNodeWithText("2 sono rimasti sul telefono · La copia sul NAS è cambiata.", substring = true).assertExists()
+    composeRule.onNodeWithText("3 sono rimasti sul telefono · Non sono più sul telefono.", substring = true).assertExists()
+  }
+
+  /** LS-12, LS-13: la fine dice i media cambiati dopo la conferma e quelli di cui il telefono non ha ancora detto l'esito. */
+  @Test
+  fun ls12_ls13_laFineDiceICambiatiEQuelliInDubbio() {
+    showState(
+      FreeSpaceUi.Done(items = 5, freedBytes = 5_000_000L, toAndroidTrash = true, kept = 0, dropped = 0, cancelled = false, changedBeforeStart = 2, inDoubt = 1),
+    )
+    composeRule.onNodeWithText("2 erano cambiati dopo la tua conferma: sono rimasti sul telefono.", substring = true).assertExists()
+    composeRule.onNodeWithText("Per 1 aspetto di sapere dal telefono se l’ha tolto", substring = true).assertExists()
+  }
+
+  /** LS-11: senza l'ora del NAS il riepilogo dice perche' i media datati restano sul telefono. */
+  @Test
+  fun ls11_senzaLOraDelNasIlRiepilogoLoDice() {
+    showState(FreeSpaceUi.Summary(FreeSpaceSamples.plan(items = 3), FreeSpaceKind.ALL, nasTimeKnown = false))
+    composeRule.onNodeWithText("Non conosco ancora la data del NAS", substring = true).assertExists()
+  }
+
+  /** LS-8: il guardiano che aspetta il turno del backup lo dice (prima "0 di 3" senza spiegazione). */
+  @Test
+  fun ls8_ilGuardianoCheAspettaIlBackupLoDice() {
+    showState(FreeSpaceUi.Guarding(0, 3, waitingForBackup = true))
+    composeRule.onNodeWithText("aspetto che il backup finisca il file che sta caricando", substring = true).assertExists()
   }
 
   // --- Quando non si puo' ---------------------------------------------------------------------------------------------------------

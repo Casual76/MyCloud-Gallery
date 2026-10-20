@@ -129,7 +129,7 @@ object ReceiveUiSamples {
 
   fun nothing(rejected: Map<IncomingReject, Int> = manyRejected) = ReceiveUi(screen = ReceiveScreenState.NOTHING, rejected = rejected)
 
-  fun done(offline: Boolean = false) = ReceiveUi(screen = ReceiveScreenState.DONE, queued = 3, nasReachable = !offline)
+  fun done(offline: Boolean = false) = ReceiveUi(screen = ReceiveScreenState.DONE, queued = 3, nasWait = if (offline) NasWait.OFFLINE else NasWait.NONE)
 
   fun failed(reason: ReceiveFailure = ReceiveFailure.DESTINATION) = ReceiveUi(screen = ReceiveScreenState.FAILED, stage = stage, failure = reason)
 

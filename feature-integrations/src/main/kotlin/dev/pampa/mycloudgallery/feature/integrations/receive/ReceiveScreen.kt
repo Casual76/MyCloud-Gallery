@@ -52,6 +52,7 @@ import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeIconButton
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustration
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
 import dev.pampa.mycloudgallery.feature.integrations.R
+import dev.pampa.mycloudgallery.feature.integrations.picker.UnlockFailure
 
 // Fase 5B (P11, docs/fase5-progetto.md §1.5 `IncomingState`, §2.7, D24, D30; E-X2, E-X7, E-X8, E-S11): la schermata di "Salva sul NAS". Funzionale, solo
 // con i componenti che il design system ha gia' (D30): le righe e i bottoni di Fluid, `GalleryIllustration`, `GalleryChromeIconButton`, i colori e le
@@ -99,7 +100,7 @@ internal fun ReceiveScreen(ui: ReceiveUi, actions: ReceiveActions, modifier: Mod
           action = stringResource(R.string.integrations_receive_unlock),
           onAction = actions.onUnlock,
           loading = ui.unlocking,
-          footnote = if (ui.unlockFailed) stringResource(R.string.integrations_receive_unlock_failed) else null,
+          footnote = unlockFootnote(ui),
         )
         ReceiveScreenState.NOT_READY -> ReceiveMessage(
           icon = Icons.Rounded.Settings,
@@ -112,11 +113,20 @@ internal fun ReceiveScreen(ui: ReceiveUi, actions: ReceiveActions, modifier: Mod
         ReceiveScreenState.STAGING -> ReceiveBusy(R.string.integrations_receive_staging_title, R.string.integrations_receive_staging_detail)
         ReceiveScreenState.SAVING -> ReceiveBusy(R.string.integrations_receive_saving_title, R.string.integrations_receive_saving_detail)
         ReceiveScreenState.READY -> ReceiveReady(ui, actions)
+        ReceiveScreenState.TEST_ONLY -> ReceiveMessage(
+          icon = Icons.Rounded.Settings,
+          tone = GalleryIllustrationTone.Caution,
+          title = stringResource(R.string.integrations_receive_trial_title),
+          detail = stringResource(R.string.integrations_receive_trial_detail),
+          action = stringResource(R.string.integrations_receive_close),
+          onAction = actions.onCancel,
+        )
         ReceiveScreenState.NOTHING -> ReceiveMessage(
           icon = Icons.Rounded.PhotoLibrary,
           tone = GalleryIllustrationTone.Caution,
           title = stringResource(R.string.integrations_receive_nothing_title),
-          detail = stringResource(if (ui.rejected.isEmpty()) R.string.integrations_receive_nothing_no_folder else R.string.integrations_receive_nothing_detail),
+          // IN-11: se dei file buoni non hanno una cartella dove andare, lo si dice anche quando altri file sono stati rifiutati.
+          detail = stringResource(if (ui.noFolder || ui.rejected.isEmpty()) R.string.integrations_receive_nothing_no_folder else R.string.integrations_receive_nothing_detail),
           action = stringResource(R.string.integrations_receive_close),
           onAction = actions.onCancel,
           footnote = rejectedLines(ui.rejected).takeIf { it.isNotEmpty() }?.joinToString("\n"),
@@ -126,7 +136,7 @@ internal fun ReceiveScreen(ui: ReceiveUi, actions: ReceiveActions, modifier: Mod
           icon = Icons.Rounded.CheckCircle,
           tone = GalleryIllustrationTone.Brand,
           title = pluralStringResource(R.plurals.integrations_receive_done_title, ui.queued, ui.queued),
-          detail = stringResource(if (ui.nasReachable) R.string.integrations_receive_done_detail else R.string.integrations_receive_done_offline),
+          detail = doneDetail(ui),
           action = stringResource(R.string.integrations_receive_close),
           onAction = actions.onClose,
         )
@@ -135,7 +145,8 @@ internal fun ReceiveScreen(ui: ReceiveUi, actions: ReceiveActions, modifier: Mod
           tone = GalleryIllustrationTone.Caution,
           title = stringResource(R.string.integrations_receive_failed_title),
           detail = stringResource(failureText(ui.failure)),
-          action = stringResource(R.string.integrations_receive_retry),
+          // IN-11: con i file spariti (o il backup in prova) non c'e' da riprovare: il tasto chiude, e lo dice.
+          action = stringResource(if (ui.failure == ReceiveFailure.GONE || ui.failure == ReceiveFailure.TEST_ONLY) R.string.integrations_receive_close else R.string.integrations_receive_retry),
           onAction = actions.onRetry,
         )
       }
@@ -272,6 +283,13 @@ private fun ReceiveDestinations(ui: ReceiveUi, actions: ReceiveActions) {
         style = FluidButtonStyle.Tinted,
         fillWidth = true,
       )
+      if (ui.noSubfolders) {
+        Text(
+          text = stringResource(R.string.integrations_receive_no_subfolders),
+          style = MaterialTheme.typography.bodyMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+      }
     }
   }
 }
@@ -389,9 +407,32 @@ private fun ReceiveMessage(
 
 // --- Testi --------------------------------------------------------------------------------------------------------------------
 
+/** IN-10: la frase sotto "Sblocca": niente se l'utente ha solo annullato, cosa fare se il telefono non ha un blocco schermo, altrimenti "riprova". */
+@Composable
+private fun unlockFootnote(ui: ReceiveUi): String? = when {
+  !ui.unlockFailed -> null
+  ui.unlockFailure == UnlockFailure.CANCELLED -> null
+  ui.unlockFailure == UnlockFailure.NO_SCREEN_LOCK -> stringResource(R.string.integrations_receive_unlock_no_screen_lock)
+  else -> stringResource(R.string.integrations_receive_unlock_failed)
+}
+
+/** Il dettaglio di "In coda": la frase di sempre; il NAS spento o i dati mobili (IN-11) lo dicono come sono; i file non letti (IN-12) si contano. */
+@Composable
+private fun doneDetail(ui: ReceiveUi): String {
+  val base = stringResource(
+    when (ui.nasWait) {
+      NasWait.NONE -> R.string.integrations_receive_done_detail
+      NasWait.OFFLINE -> R.string.integrations_receive_done_offline
+      NasWait.METERED -> R.string.integrations_receive_done_metered
+    },
+  )
+  return if (ui.notQueued > 0) base + "\n" + pluralStringResource(R.plurals.integrations_receive_done_not_queued, ui.notQueued, ui.notQueued) else base
+}
+
 private fun failureText(failure: ReceiveFailure?): Int = when (failure) {
   ReceiveFailure.CONFIRMATION -> R.string.integrations_receive_failed_confirmation
   ReceiveFailure.DESTINATION -> R.string.integrations_receive_failed_destination
+  ReceiveFailure.TEST_ONLY -> R.string.integrations_receive_trial_detail
   ReceiveFailure.GONE -> R.string.integrations_receive_failed_gone
   ReceiveFailure.UNAVAILABLE, null -> R.string.integrations_receive_failed_unavailable
 }

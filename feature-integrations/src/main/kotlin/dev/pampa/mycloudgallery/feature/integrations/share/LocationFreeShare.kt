@@ -37,10 +37,16 @@ class LocationFreeShare(
 ) {
 
   /**
-   * Prepara i file di [items] per la condivisione. [onProgress] riceve quanti sono fatti e quanti sono in tutto (a ogni media). Non lancia per
-   * un guasto del file system o del NAS: lo dice con [SharePreparation.Stopped].
+   * Prepara i file di [items] per la condivisione. [onProgress] riceve quanti sono fatti e quanti sono in tutto (a ogni media); [onBytes] quanti byte
+   * del media in corso sono gia' copiati e quanti sono (a ogni blocco: un video grande non lascia la barra ferma). Non lancia per un guasto del
+   * file system o del NAS: lo dice con [SharePreparation.Stopped].
    */
-  suspend fun prepare(items: List<MediaId>, removeLocation: Boolean, onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }): SharePreparation {
+  suspend fun prepare(
+    items: List<MediaId>,
+    removeLocation: Boolean,
+    onProgress: (done: Int, total: Int) -> Unit = { _, _ -> },
+    onBytes: (done: Long, total: Long) -> Unit = { _, _ -> },
+  ): SharePreparation {
     if (items.isEmpty()) return stopped(ShareStop.NOTHING, 0)
     if (items.size > ShareLimits.MAX_ITEMS) return stopped(ShareStop.TOO_MANY, ShareLimits.MAX_ITEMS)
     val dir = try {
@@ -60,7 +66,7 @@ class LocationFreeShare(
           ShareOpen.NasUnreachable -> return stopped(ShareStop.NAS_UNREACHABLE, index)
           is ShareOpen.Opened -> result.media
         }
-        val outcome = opened.use { media -> shareOne(media, File(dir, index.toString()), index, removeLocation, copiedBytes) }
+        val outcome = opened.use { media -> shareOne(media, File(dir, index.toString()), index, removeLocation, copiedBytes, onBytes) }
         when (outcome) {
           is Item.Stop -> return stopped(outcome.stop, index)
           is Item.Direct -> {
@@ -97,7 +103,14 @@ class LocationFreeShare(
     class Copy(val file: SharedFile) : Item
   }
 
-  private suspend fun shareOne(media: OpenedForShare, itemDir: File, index: Int, removeLocation: Boolean, copiedSoFar: Long): Item {
+  private suspend fun shareOne(
+    media: OpenedForShare,
+    itemDir: File,
+    index: Int,
+    removeLocation: Boolean,
+    copiedSoFar: Long,
+    onBytes: (done: Long, total: Long) -> Unit,
+  ): Item {
     // Impostazione spenta e media del telefono: si condivide com'e', senza copiare (nessuna posizione da togliere, nessun ripiego).
     media.phoneUri?.let { phone ->
       if (!removeLocation) return Item.Direct(SharedFile(phone, media.mime, media.bytes.size, file = null))
@@ -112,7 +125,7 @@ class LocationFreeShare(
       if (!itemDir.mkdirs() && !itemDir.isDirectory) return@withContext Item.Stop(ShareStop.FAILED)
       val work = File(itemDir, WORK)
       try {
-        copy(media.bytes, work)
+        copy(media.bytes, work, onBytes)
       } catch (_: IOException) {
         return@withContext Item.Stop(ShareStop.UNAVAILABLE)
       } catch (_: SecurityException) {
@@ -152,8 +165,9 @@ class LocationFreeShare(
   }
 
   /** Copia [bytes] in [target] a blocchi. Lancia `IOException` se la lettura si accorcia o il disco finisce. */
-  private suspend fun copy(bytes: MediaBytes, target: File) {
+  private suspend fun copy(bytes: MediaBytes, target: File, onBytes: (done: Long, total: Long) -> Unit) {
     val size = bytes.size
+    onBytes(0L, size)
     target.outputStream().use { out ->
       var at = 0L
       while (at < size) {
@@ -163,6 +177,7 @@ class LocationFreeShare(
         if (chunk.isEmpty()) throw IOException("Lettura accorciata.")
         out.write(chunk)
         at += chunk.size
+        onBytes(at, size)
       }
     }
   }

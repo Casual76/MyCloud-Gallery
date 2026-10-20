@@ -170,6 +170,35 @@ class RoomFreeSpaceDiaryTest {
     assertThat(d.nextBatch(stopped)).isNull()
   }
 
+  /**
+   * LS-2 e LS-15 della verifica funzionale 5B: su Room i giri aperti (da riprendere) e quelli con righe consegnate ad Android e non risolte (da
+   * risolvere dopo la lettura del telefono) sono due query sullo stato, non tutta la storia dei giri a ogni lettura del telefono.
+   */
+  @Test
+  fun ls15_giriApertiEGiriDaRisolvere_sonoQuerySulloStato() = runBlocking<Unit> {
+    val bench = FreeSpaceBench()
+    val m = bench.safe()
+    val db = database()
+    db.seed(bench)
+    val diary = RoomFreeSpaceDiary(db, bench.clock)
+    val item = FreeItemRecord(
+      index = 0, state = FreeItemState.PLANNED, mediaId = m.id, versionId = m.current, phoneLocation = m.phoneLocation!!, phone = m.phoneRef,
+      phoneStamp = null, mime = null, size = 4_096, needsGuardian = false, plannedCopy = null,
+    )
+    fun run(state: FreeSpaceRunState, items: List<FreeItemRecord>) =
+      runBlocking { diary.create(NewFreeRun(state, FreeSpaceKind.ALL, 30, false, PhonePlanHash.builder("prova").build(), FreeValidity(1, 7)), items) }
+    // Un giro finito senza niente in sospeso, uno finito con una riga ancora nel dialogo, uno a meta' verifica.
+    run(FreeSpaceRunState.DONE, emptyList())
+    val handed = run(FreeSpaceRunState.READY, listOf(item))
+    diary.update(handed, listOf(item.copy(state = FreeItemState.VERIFIED)))
+    diary.update(handed, listOf(item.copy(state = FreeItemState.IN_DIALOG, batchIndex = 1)))
+    diary.update(handed.copy(state = FreeSpaceRunState.EXPIRED))
+    val open = run(FreeSpaceRunState.VERIFYING, listOf(item))
+    assertThat(diary.runs()).hasSize(3)
+    assertThat(diary.openRuns().map { it.id }).containsExactly(open.id)
+    assertThat(diary.runsToSettle().map { it.id }).containsExactly(handed.id)
+  }
+
   @Test
   fun leRegoleDelDiarioValgonoAncheSuRoom() = runBlocking<Unit> {
     val bench = FreeSpaceBench()

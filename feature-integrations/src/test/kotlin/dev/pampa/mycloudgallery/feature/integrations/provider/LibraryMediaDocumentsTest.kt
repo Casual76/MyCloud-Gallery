@@ -105,6 +105,70 @@ class LibraryMediaDocumentsTest {
     assertThat(holidays.all { !it.isFolder }).isTrue()
   }
 
+  // --- Dopo un riavvio (IN-2) -----------------------------------------------------------------------------------------
+
+  private fun fileKey(): FileDocumentIdKey {
+    val file = java.io.File.createTempFile("doc-id", ".key").also { it.delete(); it.deleteOnExit() }
+    return FileDocumentIdKey(file, java.util.Random(1))
+  }
+
+  @Test
+  fun in2_unaCartellaRicordataDaDocumentsUiSiRitrovaDopoIlRiavvio_EUnIdInventatoNo() {
+    val key = fileKey()
+    val before = LibraryMediaDocuments(library, labels, DocumentIdTable(idKey = key))
+    val root = run { before.roots().single().rootDocument }
+    val nas = run { before.children(root, 10).last() }
+    val area = run { before.children(nas.id, 10).first { it.displayName == "Area privata" } }
+    val holidays = run { before.children(area.id, 10).single() }
+
+    // Il processo nuovo: tutto vuoto in memoria, la stessa chiave sul file.
+    val after = LibraryMediaDocuments(library, labels, DocumentIdTable(idKey = key))
+    assertThat(run { after.roots().single().rootDocument }).isEqualTo(root)
+    assertThat(run { after.entry(nas.id) }?.displayName).isEqualTo("Cartelle NAS")
+    assertThat(run { after.entry(holidays.id) }?.displayName).isEqualTo("Vacanze") // anche il nome, dalla Libreria
+    assertThat(run { after.children(holidays.id, 500) }).isNotEmpty()
+    assertThat(library.folderIndexCalls.get()).isEqualTo(1)
+
+    // Un id che non e' di nessuna cartella resta sconosciuto, e la ricerca non si ripete a ogni id sbagliato (pochi secondi fra una e l'altra).
+    val invented = DocumentId("aaaaaaaaaaaaaaaaaaaaaaaa")
+    assertThat(run { after.entry(invented) }).isNull()
+    assertThat(run { after.children(invented, 10) }).isEmpty()
+    assertThat(library.folderIndexCalls.get()).isEqualTo(1)
+  }
+
+  @Test
+  fun in2_laRicercaDiUnaCartellaNonSiRipeteTroppoSpesso() {
+    var now = 0L
+    val clock = DocumentClock { now }
+    val documents = LibraryMediaDocuments(library, labels, DocumentIdTable(idKey = fileKey()), clock)
+    repeat(5) { run { documents.entry(DocumentId("bbbbbbbbbbbbbbbbbbbbbbb$it")) } }
+    assertThat(library.folderIndexCalls.get()).isEqualTo(1)
+    now += 6_000
+    run { documents.entry(DocumentId("ccccccccccccccccccccccc0")) }
+    assertThat(library.folderIndexCalls.get()).isEqualTo(2)
+  }
+
+  // --- Accesso parziale (IN-9) ----------------------------------------------------------------------------------------------
+
+  /**
+   * IN-9 della verifica funzionale 5B: con l'accesso parziale ("solo le foto selezionate") la vista della Libreria e' una parte dell'indice. I Recenti
+   * dei documenti scorrevano l'indice intero e mostravano anche le foto che il telefono non concede (senza miniatura) e i solo-NAS che la Libreria nasconde.
+   */
+  @Test
+  fun in9_conLAccessoParzialeIRecentiSonoLaVistaNonLIndice() {
+    val allowed = library.visibleIds.filterIndexed { n, _ -> n % 7 == 3 }.toSet()
+    library.restrictView(allowed)
+    val names = recent(limit = 500)
+    assertThat(names).hasSize(allowed.size)
+    // Un media fuori dalla vista non si descrive, non si apre, e il suo id (se ne esisteva uno) si revoca.
+    val outside = library.visibleIds.first { it !in allowed }
+    val token = documents.issue(outside)
+    assertThat(token).isNull()
+    assertThat(IntegrationCounters.get(IntegrationCounter.HIDDEN_STOPPED)).isEqualTo(1L)
+    val inside = allowed.first()
+    assertThat(documents.issue(inside)).isNotNull()
+  }
+
   // --- Nascosti (E-H1) ------------------------------------------------------------------------------------------------
 
   @Test

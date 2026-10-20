@@ -182,6 +182,13 @@ interface BackupMediaActions {
   fun dismissNotice() = Unit
 
   /**
+   * LS-14 della verifica funzionale 5B: "Ovunque" confermato per un media del telefono. Se [id] ha piu' di una copia sul telefono (anche quella di
+   * "Scarica sul telefono", che il backup altrimenti ricaricherebbe) `:app` le toglie tutte con un solo dialogo del cestino di Android e risponde
+   * vero; falso = resta il cestino del viewer per la copia di adesso, come prima. Di default falso.
+   */
+  suspend fun deleteEverywhereFromPhone(id: MediaId): Boolean = false
+
+  /**
    * I posti di una copia che "Ovunque" toglie e che il foglio "Elimina…" non conosce: le versioni precedenti in `Versioni/`, le altre aree (E-D15).
    * Dal catalogo locale. Null = non si sa (nessun custode): il foglio non dice niente di piu'.
    */

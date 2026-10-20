@@ -112,6 +112,30 @@ interface IntegrationLibrary {
 
   /** I media di una cartella, dal catalogo, al piu' [limit]. Chi la chiama li ricontrolla contro [items]: i nascosti non escono comunque. */
   suspend fun mediaIn(folder: NasFolderKey, limit: Int): List<MediaId>
+
+  /**
+   * IN-2: **tutte** le cartelle note (le aree e ogni sottocartella, a ogni profondita'), per ritrovare una cartella da un id stabile che DocumentsUI
+   * ricorda dopo un riavvio del processo (la tabella degli id e' in memoria e riparte vuota). Al piu' [MAX_FOLDER_INDEX]. Il default le cerca a
+   * partire dalla radice con [nasFolders]; `:app` ne ha una versione con una sola lettura del catalogo.
+   */
+  suspend fun nasFolderIndex(): List<NasFolder> {
+    val out = ArrayList<NasFolder>()
+    val pending = ArrayDeque<NasFolderKey?>()
+    pending.addLast(null)
+    while (pending.isNotEmpty() && out.size < MAX_FOLDER_INDEX) {
+      for (folder in nasFolders(pending.removeFirst())) {
+        if (out.size >= MAX_FOLDER_INDEX) break
+        out += folder
+        pending.addLast(folder.key)
+      }
+    }
+    return out
+  }
+
+  companion object {
+    /** Il tetto dell'elenco di tutte le cartelle (come le righe che il catalogo legge per le cartelle di un'area). */
+    const val MAX_FOLDER_INDEX: Int = 20_000
+  }
 }
 
 /** Nessuna Libreria: l'app non e' pronta. Falliscono tutti chiusi (vuoto, null). */

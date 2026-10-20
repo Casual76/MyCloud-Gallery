@@ -23,4 +23,13 @@
   <string name="fiveb_free_space_subtitle">Togli dal telefono le foto e i video già al sicuro sul NAS</string>
   <string name="fiveb_delete_started">Messo nel cestino del NAS per 30 giorni.</string>
   <string name="fiveb_delete_nothing">Non ci sono copie da eliminare di questa versione.</string>
+
+  <!-- IN-7: la notifica dei file ricevuti da un'altra app ("Salva sul NAS", lavoro grande). Solo numeri. -->
+  <string name="notify_incoming_title">Salvataggio sul NAS</string>
+  <string name="notify_incoming_starting">Preparo i file ricevuti…</string>
+  <plurals name="notify_incoming_progress">
+    <item quantity="one">%1$s di %2$s file ricevuto</item>
+    <item quantity="other">%1$s di %2$s file ricevuti</item>
+  </plurals>
+  <string name="notify_incoming_stopping">Mi fermo prima del prossimo file…</string>
 </resources>

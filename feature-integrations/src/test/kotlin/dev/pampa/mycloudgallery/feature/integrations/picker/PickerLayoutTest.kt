@@ -8,11 +8,13 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.feature.integrations.provider.DocumentPolicy
 import dev.pampa.mycloudgallery.feature.integrations.provider.NasUnreachableReason
+import dev.pampa.mycloudgallery.feature.integrations.share.ShareStop
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -61,10 +63,12 @@ abstract class PickerLayoutTests : PickerComposeBase() {
     "griglia con tre scelti" to PickerSamples.grid(library, multi, selected = 3),
     "avviso NAS" to PickerSamples.grid(library, multi, selected = 2, notice = PickerNotice.NasUnreachable(NasUnreachableReason.OFFLINE)),
     "avviso troppi" to PickerSamples.grid(library, multi, selected = 2, notice = PickerNotice.TooManyNasOnly(120, 3L * 1024 * 1024 * 1024)),
+    "avviso posizione" to PickerSamples.grid(library, multi, selected = 2, notice = PickerNotice.NoLocation(ShareStop.CANNOT_REMOVE_LOCATION, removedFromChoice = true)),
     "bloccata" to PickerUi(PickerScreenState.LOCKED),
     "sblocco non riuscito" to PickerUi(PickerScreenState.LOCKED, unlockFailed = true),
     "non pronta" to PickerUi(PickerScreenState.NOT_READY),
     "in consegna" to PickerUi(PickerScreenState.DELIVERING),
+    "in consegna con avanzamento" to PickerUi(PickerScreenState.DELIVERING, progress = PickerProgress(done = 1, total = 3, bytesDone = 40, bytesTotal = 100)),
     "vuota" to PickerUi(PickerScreenState.GRID),
   )
 
@@ -77,18 +81,19 @@ abstract class PickerLayoutTests : PickerComposeBase() {
       for ((name, state) in states()) {
         composeRule.runOnIdle { ui.value = state }
         composeRule.waitForIdle()
-        if (state.screen == PickerScreenState.DELIVERING || state.screen == PickerScreenState.CHECKING) continue // niente da toccare
+        // Niente da toccare, salvo "Annulla" mentre si preparano le copie senza posizione.
+        if ((state.screen == PickerScreenState.DELIVERING && state.progress == null) || state.screen == PickerScreenState.CHECKING) continue
         assertBounds("$name ${fontScale}x")
       }
     }
   }
 
   @Test
-  fun conUnaSolaScelta_NonCEIlTastoScegli() {
+  fun conUnaSolaScelta_CEIlTastoScegli_R8() {
+    // R8: anche la scelta singola ha "Scegli" (un tocco sceglie, non consegna).
     val single = PickerSamples.request(multiple = false)
     show { PickerScreen(ui = PickerSamples.grid(library, single), request = single, env = env, actions = PickerActions()) }
-    assertThat(composeRule.onAllNodes(hasText("Scegli")).fetchSemanticsNodes()).isEmpty()
-    assertThat(composeRule.onAllNodes(hasText("elementi", substring = true)).fetchSemanticsNodes()).isEmpty()
+    assertThat(composeRule.onAllNodes(hasText("Scegli")).fetchSemanticsNodes()).isNotEmpty()
     assertBounds("scelta singola")
   }
 
@@ -123,6 +128,30 @@ abstract class PickerLayoutTests : PickerComposeBase() {
     val headings = composeRule.onAllNodes(SemanticsMatcher("intestazione") { it.config.contains(SemanticsProperties.Heading) }).fetchSemanticsNodes()
     val titles = headings.flatMap { it.config.getOrNull(SemanticsProperties.Text).orEmpty().map { text -> text.text } }
     assertThat(titles.joinToString(" ")).contains("Scegli da MyCloud Gallery")
+  }
+
+  /** "Rimuovi la posizione" acceso: mentre si preparano le copie la schermata dice cosa succede, a che punto e' e si puo' annullare. */
+  @Test
+  fun mentreSiTogliaLaPosizioneSiVedeLAvanzamentoESiPuoAnnullare() {
+    var cancelled = 0
+    val ui = PickerUi(PickerScreenState.DELIVERING, progress = PickerProgress(done = 1, total = 3, bytesDone = 40, bytesTotal = 100))
+    show { PickerScreen(ui = ui, request = multi, env = env, actions = PickerActions(onCancelDelivery = { cancelled++ })) }
+
+    composeRule.onNodeWithText("Tolgo la posizione dai file").assertExists()
+    composeRule.onNodeWithText("2 di 3").assertExists()
+    composeRule.onNodeWithText("Preparo copie senza posizione da consegnare: i tuoi originali non cambiano.").assertExists()
+    assertBounds("in consegna con avanzamento")
+    // L'"Annulla" della preparazione (quello in alto, con l'icona, chiude il selettore): un tocco ferma solo la preparazione.
+    composeRule.onNodeWithText("Annulla").performClick()
+    assertThat(cancelled).isEqualTo(1)
+  }
+
+  @Test
+  fun lAvvisoDellaPosizioneDiceCheNienteEStatoConsegnato() {
+    val removed = PickerSamples.grid(library, multi, selected = 2, notice = PickerNotice.NoLocation(ShareStop.CANNOT_REMOVE_LOCATION, removedFromChoice = true))
+    show { PickerScreen(ui = removed, request = multi, env = env, actions = PickerActions()) }
+    composeRule.onNodeWithText("Questo file non si può condividere senza posizione", substring = true).assertExists()
+    composeRule.onNodeWithText("non ho consegnato niente", substring = true).assertExists()
   }
 
   @Test

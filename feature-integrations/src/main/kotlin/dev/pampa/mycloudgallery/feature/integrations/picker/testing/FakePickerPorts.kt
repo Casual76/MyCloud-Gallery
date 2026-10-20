@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.feature.integrations.picker.testing
 import androidx.fragment.app.FragmentActivity
 import dev.pampa.mycloudgallery.feature.integrations.contract.EntryDecision
 import dev.pampa.mycloudgallery.feature.integrations.picker.EntryUnlock
+import dev.pampa.mycloudgallery.feature.integrations.picker.UnlockFailure
 import dev.pampa.mycloudgallery.feature.integrations.testing.FakeEntryGate
 import kotlinx.coroutines.awaitCancellation
 
@@ -18,6 +19,9 @@ class FakeEntryUnlock(
   var hangs: Boolean = false,
 ) : EntryUnlock {
 
+  /** Perche' non e' riuscito (IN-10): come `AppEntryUnlock`, che lo ricava dall'esito della credenziale di sistema. */
+  var failure: UnlockFailure? = UnlockFailure.OTHER
+
   var calls: Int = 0
     private set
 
@@ -27,4 +31,6 @@ class FakeEntryUnlock(
     if (succeeds) gate.decision = EntryDecision.ALLOWED
     return succeeds
   }
+
+  override fun lastFailure(): UnlockFailure? = if (succeeds) null else failure
 }

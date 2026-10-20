@@ -17,6 +17,19 @@
   <string name="notify_backup_stopping">Metto in pausa prima del prossimo elemento…</string>
   <string name="notify_backup_stop">Ferma</string>
 
+  <!-- Correzioni 5B (LS-2): la verifica di "Libera spazio" come lavoro avviato dall'utente, e la notifica "Pronto". Solo numeri. -->
+  <string name="notify_free_space_title">Libera spazio</string>
+  <string name="notify_free_space_starting">Ricontrollo le copie sul NAS…</string>
+  <string name="notify_free_space_guarding">Preparo le copie private: %1$s di %2$s</string>
+  <string name="notify_free_space_verifying">Ricontrollo le copie sul NAS: %1$s di %2$s</string>
+  <plurals name="notify_free_space_ready">
+    <item quantity="one">Pronto: %1$s elemento, %2$s. Tocca per liberare.</item>
+    <item quantity="other">Pronto: %1$s elementi, %2$s. Tocca per liberare.</item>
+  </plurals>
+  <!-- Correzioni 5B (LS-1): "Elimina solo dal telefono" di un media non sul NAS, il cestino di Android chiesto dalla radice dell'app. -->
+  <string name="fiveb_trash_failed">Il telefono non ha accettato la richiesta del cestino.</string>
+  <string name="fiveb_trash_nothing">Non è più sul telefono.</string>
+
   <!-- La conferma prima di un backup sui dati mobili, in roaming o oltre il tetto (proposta 10): il testo con la stima lo scrivono le regole. -->
   <string name="backup_confirm_title">Avviare il backup adesso?</string>
   <string name="backup_confirm_go">Continua</string>

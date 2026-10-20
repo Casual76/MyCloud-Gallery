@@ -77,6 +77,15 @@ class BackupActionsController(
     if (id != null && actions.capabilities.phoneOnlyDelete) actions.perform(BackupMenuAction.PHONE_ONLY_DELETE, id) else fallback()
   }
 
+  /**
+   * LS-14: "Ovunque" confermato. La copia del NAS va nel cestino del NAS (il foglio della 4B); dal telefono tutte le copie del media (`:app`), o
+   * [fallback] (il cestino del viewer, dal thread del viewer) se ce n'e' una sola.
+   */
+  fun deleteEverywhereFromPhone(fallback: () -> Unit) {
+    val id = current ?: return fallback()
+    scope.launch { if (!actions.deleteEverywhereFromPhone(id)) fallback() }
+  }
+
   /** "Condividi con la posizione": solo dopo che l'utente l'ha scelto nel foglio di un rifiuto. */
   fun shareWithLocation() = actions.shareWithLocation()
 

@@ -60,8 +60,8 @@ data class PickerRequest(
         Intent.ACTION_PICK -> PickerAction.PICK
         else -> return null
       }
-      val extraTypes = safe { intent.getStringArrayExtra(Intent.EXTRA_MIME_TYPES) }.orEmpty().mapNotNull { normalize(it) }
-      val typed = if (extraTypes.isNotEmpty()) extraTypes else listOfNotNull(safe { intent.type }?.let { normalize(it) })
+      val extraTypes = safe { intent.getStringArrayExtra(Intent.EXTRA_MIME_TYPES) }.orEmpty().mapNotNull { canonical(it) }
+      val typed = if (extraTypes.isNotEmpty()) extraTypes else listOfNotNull(safe { intent.type }?.let { canonical(it) } ?: mediaStoreKind(intent, action))
       // Nessun tipo (un'azione esplicita senza tipo): foto e video, come il tipo jolly di tutto.
       val filters = typed.distinct()
       val images = filters.isEmpty() || filters.any { it == "*/*" || it.startsWith("image/") }
@@ -75,6 +75,33 @@ data class PickerRequest(
         localOnly = safe { intent.getBooleanExtra(Intent.EXTRA_LOCAL_ONLY, false) } ?: false,
         mimeFilters = filters,
       )
+    }
+
+    /**
+     * IN-13 della verifica funzionale 5B: il `PICK` classico (`Intent(ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)`) arriva con il tipo
+     * del MediaStore, `vnd.android.cursor.dir/image` o `.../video`. Prima non era un tipo di immagini ne' di video e la richiesta si rifiutava.
+     * Vale come tutte le immagini / tutti i video.
+     */
+    private fun canonical(raw: String): String? = when (val type = normalize(raw)) {
+      "vnd.android.cursor.dir/image" -> "image/*"
+      "vnd.android.cursor.dir/video" -> "video/*"
+      else -> type
+    }
+
+    /**
+     * Un `PICK` con un indirizzo del MediaStore e senza tipo (`content://media/external/images/media`): dice solo se si vogliono immagini o video.
+     * L'indirizzo si **legge come testo**, non si apre mai (nemmeno qui). Altro: nessun tipo.
+     */
+    private fun mediaStoreKind(intent: Intent, action: PickerAction): String? {
+      if (action != PickerAction.PICK) return null
+      val data = safe { intent.data } ?: return null
+      if (data.scheme != "content" || !data.authority.equals("media", ignoreCase = true)) return null
+      val segments = data.pathSegments.map { it.lowercase(Locale.ROOT) }
+      return when {
+        "images" in segments -> "image/*"
+        "video" in segments -> "video/*"
+        else -> null
+      }
     }
 
     private val TYPE = Regex("^(\\*|[a-z0-9][a-z0-9.+-]{0,100})/(\\*|[a-z0-9][a-z0-9.+_-]{0,100})$")

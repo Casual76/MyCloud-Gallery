@@ -7,19 +7,43 @@ import dev.pampa.mycloudgallery.feature.integrations.contract.DocumentRoot
 import dev.pampa.mycloudgallery.feature.integrations.contract.EntryDecision
 import dev.pampa.mycloudgallery.feature.integrations.contract.EntryGate
 import dev.pampa.mycloudgallery.feature.integrations.contract.MediaDocuments
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 
 // Fase 5B (P0-B): i fake delle porte delle integrazioni, per i test di P10 (selettore e provider), P11 e P12 (stati scelti dal test, nessun NAS,
 // nessun telefono). Mai nella release: tools/check.ps1 vieta i package `testing` nel dex.
 
-/** Il cancello d'ingresso scelto dal test; di default aperto. */
-class FakeEntryGate(var decision: EntryDecision = EntryDecision.ALLOWED) : EntryGate {
+/**
+ * Il cancello d'ingresso scelto dal test; di default aperto. Come quello vero, mentre dice [EntryDecision.LOADING] [decideAfterLoading] aspetta che il
+ * test lo cambi (IN-3): prima il finto decideva sempre subito, e la corsa del processo freddo non si poteva provare.
+ */
+class FakeEntryGate(decision: EntryDecision = EntryDecision.ALLOWED) : EntryGate {
+  private val current = MutableStateFlow(decision)
+
+  var decision: EntryDecision
+    get() = current.value
+    set(value) {
+      current.value = value
+    }
+
   /** Quante volte e' stato interrogato (un'activity d'ingresso lo chiede prima di mostrare qualunque cosa). */
   var asked: Int = 0
     private set
 
   override fun decide(): EntryDecision {
     asked++
-    return decision
+    return current.value
+  }
+
+  /** Quanto aspetta al massimo, qualunque cosa chieda chi lo chiama (per provare lo stato che non arriva mai senza aspettare 10 s). */
+  @Volatile
+  var loadTimeoutMs: Long? = null
+
+  override suspend fun decideAfterLoading(timeoutMs: Long): EntryDecision {
+    asked++
+    if (current.value != EntryDecision.LOADING) return current.value
+    return withTimeoutOrNull(loadTimeoutMs ?: timeoutMs) { current.first { it != EntryDecision.LOADING } } ?: current.value
   }
 }
 

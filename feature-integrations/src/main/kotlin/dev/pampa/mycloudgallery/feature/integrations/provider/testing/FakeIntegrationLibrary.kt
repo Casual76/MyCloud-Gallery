@@ -192,6 +192,23 @@ class FakeIntegrationLibrary(
     publish(synthetic.snapshot)
   }
 
+  /**
+   * L'accesso parziale (E-P1, "foto selezionate"), come lo fa `PartialAccessTimeline`: l'**indice** resta intero e la **vista** e' solo la parte che il
+   * telefono concede, nello stesso ordine. IN-9 della verifica funzionale 5B: il finto aveva sempre la vista uguale all'indice, e selettore e provider
+   * che scorrevano l'indice non se ne accorgevano. Il test di parita' sta in `:app` (`PartialAccessTimelineTest`).
+   */
+  fun restrictView(allowed: Set<MediaId>) {
+    viewFlow.value = SubsetOfSnapshotView(synthetic.snapshot, allowed)
+  }
+
+  /** Quante volte e' stato chiesto l'elenco di tutte le cartelle (IN-2: la ricerca di un id stabile dopo un riavvio). */
+  val folderIndexCalls = AtomicInteger()
+
+  override suspend fun nasFolderIndex(): List<NasFolder> {
+    folderIndexCalls.incrementAndGet()
+    return super.nasFolderIndex()
+  }
+
   override fun phoneUri(ref: MediaRef.Phone): Uri = "content://media/${ref.volume}/${ref.mediaStoreId}".toUri()
 
   override suspend fun fileInfos(ids: List<MediaId>): Map<MediaId, MediaFileInfo> {
@@ -273,6 +290,23 @@ class FakeIntegrationLibrary(
 
   /** Il flag di presenza di una cella, per i test. */
   fun isNasOnly(index: Int): Boolean = synthetic.snapshot.hasFlag(index, CellFlags.ON_NAS) && !synthetic.snapshot.hasFlag(index, CellFlags.ON_PHONE)
+}
+
+/** La vista di un accesso parziale: gli elementi dell'indice che stanno in [allowed], nell'ordine dell'indice (come `SubsetView` di `:app`). */
+private class SubsetOfSnapshotView(override val snapshot: TimelineSnapshot, allowed: Set<MediaId>) : TimelineView {
+  private val map: IntArray = allowed.map { snapshot.indexOf(it) }.filter { it >= 0 }.sorted().toIntArray()
+
+  override val filter: LibraryFilter get() = LibraryFilter.ALL
+  override val size: Int get() = map.size
+
+  override fun snapshotIndex(viewIndex: Int): Int = map[viewIndex]
+
+  override fun viewIndexOf(id: MediaId): Int {
+    val index = snapshot.indexOf(id)
+    if (index < 0) return -1
+    val found = map.binarySearch(index)
+    return if (found >= 0) found else -1
+  }
 }
 
 /** Un indice senza alcuni media, come lo costruirebbe il catalogo dopo averli nascosti. */

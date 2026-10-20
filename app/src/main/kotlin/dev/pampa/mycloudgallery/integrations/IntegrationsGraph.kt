@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.Application
 import android.content.Context
 import android.os.Bundle
+import android.provider.DocumentsContract
 import dev.pampa.mycloudgallery.R
 import dev.pampa.mycloudgallery.backup.IncomingStates
 import dev.pampa.mycloudgallery.core.backup.contract.BackupClock
@@ -38,11 +39,15 @@ import dev.pampa.mycloudgallery.feature.diagnostics.catalog.DiagCatalog
 import dev.pampa.mycloudgallery.feature.integrations.contract.IntegrationPorts
 import dev.pampa.mycloudgallery.feature.integrations.edit.DefaultEditSessions
 import dev.pampa.mycloudgallery.feature.integrations.picker.PickerPorts
+import dev.pampa.mycloudgallery.feature.integrations.provider.DocumentIdTable
 import dev.pampa.mycloudgallery.feature.integrations.provider.DocumentLabels
+import dev.pampa.mycloudgallery.feature.integrations.provider.DocumentsAuthority
+import dev.pampa.mycloudgallery.feature.integrations.provider.FileDocumentIdKey
 import dev.pampa.mycloudgallery.feature.integrations.provider.IntegrationCounters
 import dev.pampa.mycloudgallery.feature.integrations.provider.LibraryMediaDocuments
 import dev.pampa.mycloudgallery.feature.integrations.provider.NasReach
 import dev.pampa.mycloudgallery.feature.integrations.provider.NasUnreachableReason
+import dev.pampa.mycloudgallery.feature.integrations.provider.PreparedCopies
 import dev.pampa.mycloudgallery.feature.integrations.receive.DefaultIncomingUploads
 import dev.pampa.mycloudgallery.feature.integrations.receive.IncomingStager
 import dev.pampa.mycloudgallery.feature.integrations.receive.ReceivePorts
@@ -60,6 +65,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -96,6 +102,10 @@ class IntegrationsGraph(
   private val dispatchers: DispatcherProvider = DefaultDispatcherProvider,
   /** "Rimuovi la posizione" (Impostazioni → Condivisioni). Senza l'impostazione legata la posizione si toglie: si fallisce chiusi. */
   private val removeLocation: StateFlow<Boolean> = MutableStateFlow(true),
+  /** IN-3: la configurazione salvata si sta ancora leggendo (`SetupState.Loading`): il cancello d'ingresso aspetta invece di dire "non pronta". */
+  private val familyLoading: () -> Boolean = { false },
+  /** IN-3, IN-2: emette quando lo stato della famiglia cambia (per aspettare il caricamento e per notificare le radici ai selettori di documenti). */
+  private val familyChanges: Flow<Unit> = emptyFlow(),
 ) {
 
   private val nasInputs = gallery.parts.nas
@@ -122,7 +132,7 @@ class IntegrationsGraph(
 
   // --- Ingresso ---------------------------------------------------------------------------------------------------------------------
 
-  val entryGate: AppEntryGate = AppEntryGate(lock, familyReady)
+  val entryGate: AppEntryGate = AppEntryGate(lock, familyReady, familyLoading, familyChanges)
 
   val unlock: AppEntryUnlock = AppEntryUnlock(lock)
 
@@ -133,8 +143,8 @@ class IntegrationsGraph(
     if (inputs.route.current() !is NasRoute.Allowed) return NasReach.Unreachable(NasUnreachableReason.OFFLINE)
     if (inputs.metered()) return NasReach.Unreachable(NasUnreachableReason.METERED)
     val probe = shareProbe ?: return NasReach.Unreachable(NasUnreachableReason.UNAVAILABLE)
-    val share = areas().first().share
-    val ok = withTimeoutOrNull(PROBE_TIMEOUT_MS) { probe.probe(share) } is NasResult.Ok
+    // IN-13: non solo la prima area (se manca o rifiuta, il NAS che risponde con l'altra sembrava spento): basta che una risponda, nel tempo di una.
+    val ok = withTimeoutOrNull(PROBE_TIMEOUT_MS) { areas().any { probe.probe(it.share) is NasResult.Ok } } == true
     return if (ok) NasReach.Reachable else NasReach.Unreachable(NasUnreachableReason.OFFLINE)
   }
 
@@ -153,9 +163,6 @@ class IntegrationsGraph(
     folders = folders,
     labels = labels,
   )
-
-  /** Il provider dei documenti e chi consegna i solo-NAS (id opachi, revoca). */
-  val documents: LibraryMediaDocuments = LibraryMediaDocuments(library, DocumentLabels.from(context))
 
   // --- Ricevere (D24) -------------------------------------------------------------------------------------------------------------
 
@@ -177,7 +184,8 @@ class IntegrationsGraph(
     fenceRoot = { backup?.fiveB?.fenceRoot() },
     folders = folders,
     labels = labels,
-    reachable = { nasReach() == NasReach.Reachable },
+    reach = ::nasReach,
+    gate = backup?.fiveB?.incomingGate,
   )
 
   // --- Condividere e modificare (D25, D26) ----------------------------------------------------------------------------------------
@@ -213,6 +221,25 @@ class IntegrationsGraph(
     removeLocation = removeLocation,
     holder = ShareHolder(scope),
     scope = scope,
+  )
+
+  /**
+   * "Rimuovi la posizione" vale anche per il selettore e per il provider dei documenti (decisione dell'utente del 20/10/2026): con l'impostazione accesa
+   * cio' che un'altra app riceve da qui e' una copia senza posizione, fatta con lo stesso stripper di "Condividi" ([share]) e tolta quando l'id scade o
+   * si revoca. Se la posizione non si toglie, niente si consegna. Senza l'impostazione legata vale "togli" (fallire chiusi).
+   */
+  val preparedCopies: PreparedCopies = PreparedCopies(share, { removeLocation.value }, scope)
+
+  /**
+   * Il provider dei documenti e chi consegna i solo-NAS (id opachi, revoca). IN-2: gli id della radice e delle cartelle sono derivati con una chiave
+   * locale su file (`noBackupFilesDir/integrations/doc-id.key`): restano uguali a ogni avvio del processo, cosi' DocumentsUI, che li tiene nella cache
+   * di sistema, ritrova la radice dopo un riavvio. Ruotano all'azzeramento ([revokeAll]).
+   */
+  val documents: LibraryMediaDocuments = LibraryMediaDocuments(
+    library,
+    DocumentLabels.from(context),
+    DocumentIdTable(idKey = FileDocumentIdKey(File(File(context.noBackupFilesDir, "integrations"), "doc-id.key"))),
+    preparer = preparedCopies,
   )
 
   private val editLock = Mutex()
@@ -266,12 +293,29 @@ class IntegrationsGraph(
     if (installed) return
     installed = true
     scope.launch { runCatching { lock.follow(lockSettings) } }
+    wireIncomingMetadata()
     IntegrationPorts.install(entryGate, documents)
-    PickerPorts.install(library, unlock)
+    PickerPorts.install(library, unlock, preparedCopies)
     ReceivePorts.install(uploads, destinations, unlock)
     gallery.onShutdown { revokeAll() }
     followActivities()
+    // IN-2: le radici si notificano al sistema quando cambia cio' che la radice dice (l'app diventa pronta, il blocco cambia): DocumentsUI le tiene
+    // nella cache di sistema finche' nessuno gliene dice una nuova, e a freddo la prima risposta puo' essere stata "non pronta".
+    scope.launch { runCatching { entryGate.decisions().collect { notifyRoots() } } }
     scope.launch(Dispatchers.IO) { atStart() }
+  }
+
+  /** IN-8: i metadati dei file in arrivo si leggono dai byte locali, con l'estrattore della Libreria (la coda li chiede appena nasce il loro media). */
+  internal fun wireIncomingMetadata() {
+    backup?.fiveB?.incomingQueue?.metadata = AppIncomingMetadata(gallery.newExtractor(), catalog)
+  }
+
+  /** Dice a DocumentsUI di rileggere le radici del provider dei documenti (`ContentResolver.notifyChange` sull'indirizzo delle radici). */
+  internal fun notifyRoots() {
+    runCatching {
+      val app = context.applicationContext
+      app.contentResolver.notifyChange(DocumentsContract.buildRootsUri(DocumentsAuthority.of(app)), null)
+    }
   }
 
   /**
@@ -320,6 +364,8 @@ class IntegrationsGraph(
   /** Azzeramento dell'app o famiglia che cambia: nessun id dei documenti vale piu', le porte tornano ai null-object. */
   fun revokeAll() {
     runCatching { documents.revokeAll() }
+    // IN-2: gli id della radice sono cambiati (la chiave e' ruotata): DocumentsUI li rilegge.
+    notifyRoots()
     runCatching { shares.releaseAll() }
     IntegrationPorts.reset()
     PickerPorts.reset()

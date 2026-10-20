@@ -7,6 +7,11 @@ import dev.pampa.mycloudgallery.core.security.lock.AppLockSettings
 import dev.pampa.mycloudgallery.core.security.lock.AppLockTimeout
 import dev.pampa.mycloudgallery.core.security.lock.MonotonicClock
 import dev.pampa.mycloudgallery.feature.integrations.contract.EntryDecision
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import org.junit.Test
 
 /**
@@ -19,7 +24,9 @@ class AppEntryGateTest {
   private var now = 1_000_000L
   private val lock = AppLockController(MonotonicClock { now })
   private var ready = true
-  private val gate = AppEntryGate(lock) { ready }
+  private var loading = false
+  private val changes = MutableSharedFlow<Unit>(replay = 1)
+  private val gate = AppEntryGate(lock, familyReady = { ready }, familyLoading = { loading }, familyChanges = changes)
 
   private fun enable(timeout: AppLockTimeout) = lock.updateSettings(AppLockSettings(AppLockMode.SYSTEM_CREDENTIAL, timeout))
 
@@ -40,8 +47,70 @@ class AppEntryGateTest {
 
   @Test
   fun impostazioniNonLetteNonEntraNessuno() {
-    // A processo freddo, prima che le impostazioni del blocco siano lette: chiuso (fail closed).
-    assertThat(gate.decide()).isEqualTo(EntryDecision.NEEDS_UNLOCK)
+    // A processo freddo, prima che le impostazioni del blocco siano lette: non si sa ancora (IN-3), e intanto non entra nessuno.
+    assertThat(gate.decide()).isEqualTo(EntryDecision.LOADING)
+  }
+
+  /**
+   * IN-3 della verifica funzionale 5B: a processo freddo la configurazione salvata e le impostazioni del blocco si stanno ancora leggendo. Prima il
+   * cancello rispondeva "non pronta" (la schermata: "Prima configura MyCloud Gallery") o "chiusa" per una corsa. Adesso risponde `LOADING` e
+   * `decideAfterLoading` aspetta che lo stato sia letto.
+   */
+  @Test
+  fun in3_aFreddoIlCancelloNonDecideFinoAQuandoLoStatoNonELetto() = runTest {
+    loading = true
+    assertThat(gate.decide()).isEqualTo(EntryDecision.LOADING)
+    // Anche con le impostazioni del blocco gia' lette: la famiglia non lo e'.
+    lock.updateSettings(AppLockSettings())
+    assertThat(gate.decide()).isEqualTo(EntryDecision.LOADING)
+
+    // Lo stato arriva mentre si aspetta: la decisione e' quella vera.
+    val waiting = async { gate.decideAfterLoading(10_000) }
+    runCurrent()
+    assertThat(waiting.isCompleted).isFalse()
+    loading = false
+    changes.emit(Unit)
+    assertThat(waiting.await()).isEqualTo(EntryDecision.ALLOWED)
+  }
+
+  @Test
+  fun in3_leImpostazioniDelBloccoCheArrivanoDopoSbloccanoL_Attesa() = runTest {
+    val waiting = async { gate.decideAfterLoading(10_000) }
+    runCurrent()
+    assertThat(waiting.isCompleted).isFalse()
+    enable(AppLockTimeout.AFTER_5_MINUTES) // le impostazioni sono lette: acceso e, a freddo, bloccato
+    assertThat(waiting.await()).isEqualTo(EntryDecision.NEEDS_UNLOCK)
+  }
+
+  @Test
+  fun in3_seLoStatoNonArrivaMaiL_AttesaFinisceEResta_LOADING() = runTest {
+    loading = true
+    assertThat(gate.decideAfterLoading(500)).isEqualTo(EntryDecision.LOADING)
+  }
+
+  @Test
+  fun in3_unaFamigliaNonProntaNonAspettaLeImpostazioniDelBlocco() {
+    ready = false
+    assertThat(gate.decide()).isEqualTo(EntryDecision.NOT_READY)
+  }
+
+  /** IN-2: le decisioni (da cui le radici dei documenti si notificano) cambiano quando cambia lo stato o il blocco, e non si ripetono. */
+  @Test
+  fun in2_leDecisioniSegueLoStatoELoSbloccoSenzaRipetersi() = runTest {
+    loading = true
+    val seen = ArrayList<EntryDecision>()
+    val job = launch(kotlinx.coroutines.test.UnconfinedTestDispatcher(testScheduler)) { gate.decisions().collect { seen += it } }
+    assertThat(seen).containsExactly(EntryDecision.LOADING)
+    loading = false
+    lock.updateSettings(AppLockSettings())
+    changes.emit(Unit)
+    assertThat(seen.last()).isEqualTo(EntryDecision.ALLOWED)
+    enable(AppLockTimeout.AFTER_1_MINUTE)
+    assertThat(seen.last()).isEqualTo(EntryDecision.ALLOWED) // acceso mentre si e' dentro l'app: non la richiude
+    lock.lockNow()
+    assertThat(seen.last()).isEqualTo(EntryDecision.NEEDS_UNLOCK)
+    assertThat(seen.zipWithNext().none { (a, b) -> a == b }).isTrue()
+    job.cancel()
   }
 
   @Test

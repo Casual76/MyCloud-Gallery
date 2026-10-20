@@ -264,6 +264,27 @@ class BackupActionsTest {
     assertThat(fallback).isEqualTo(1)
   }
 
+  /**
+   * LS-14 della verifica funzionale 5B: "Ovunque" confermato chiede a `:app` di togliere tutte le copie del telefono del media; se ce n'e' una sola
+   * resta il cestino del viewer (prima: sempre e solo il cestino del viewer, per la copia guardata).
+   */
+  @Test
+  fun ls14_ovunqueTogliTutteLeCopieDelTelefono_oIlCestinoDelViewer() = runTest(UnconfinedTestDispatcher()) {
+    var fallback = 0
+    val many = FakeBackupMediaActions(morePhoneCopies = true)
+    val controller = controller(many)
+    controller.bind(BackupActionsSamples.media, isVideo = false)
+    controller.deleteEverywhereFromPhone { fallback++ }
+    assertThat(many.everywherePhone).containsExactly(BackupActionsSamples.media)
+    assertThat(fallback).isEqualTo(0)
+
+    val one = FakeBackupMediaActions(morePhoneCopies = false)
+    val single = controller(one)
+    single.bind(BackupActionsSamples.media, isVideo = false)
+    single.deleteEverywhereFromPhone { fallback++ }
+    assertThat(fallback).isEqualTo(1)
+  }
+
   @Test
   fun ovunqueChiedeLeCopieInPiuAlBackup() = runTest(UnconfinedTestDispatcher()) {
     val fake = FakeBackupMediaActions(everywhereSummary = EverywhereSummary(previousVersions = 2))

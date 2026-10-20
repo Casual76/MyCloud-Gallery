@@ -18,7 +18,9 @@ import dev.pampa.mycloudgallery.core.backup.contract.Corrections
 import dev.pampa.mycloudgallery.core.backup.contract.FreeSpace
 import dev.pampa.mycloudgallery.core.backup.contract.FreeSpaceFilter
 import dev.pampa.mycloudgallery.core.backup.contract.FreeSpacePlan
+import dev.pampa.mycloudgallery.core.backup.contract.FreeSpaceBlock
 import dev.pampa.mycloudgallery.core.backup.contract.FreeSpaceRun
+import dev.pampa.mycloudgallery.core.backup.contract.FreeSpaceRunState
 import dev.pampa.mycloudgallery.core.backup.contract.GuardReport
 import dev.pampa.mycloudgallery.core.backup.contract.GuardScope
 import dev.pampa.mycloudgallery.core.backup.contract.NasVersionPlan
@@ -53,6 +55,7 @@ import dev.pampa.mycloudgallery.core.backup.versions.FiveBPorts
 import dev.pampa.mycloudgallery.core.backup.versions.NasVersionEngine
 import dev.pampa.mycloudgallery.core.backup.versions.RoomVersionJournal
 import dev.pampa.mycloudgallery.core.backup.versions.VersionFranchise
+import dev.pampa.mycloudgallery.core.backup.versions.VersionPlanning
 import dev.pampa.mycloudgallery.core.backup.versions.VersionedBackupEngine
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.database.GalleryDatabase
@@ -63,18 +66,25 @@ import dev.pampa.mycloudgallery.core.metadata.write.ExifMetadataWriter
 import dev.pampa.mycloudgallery.core.metadata.write.WrittenFileCheck
 import dev.pampa.mycloudgallery.core.model.AccountId
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.model.NasAreaLookup
 import dev.pampa.mycloudgallery.core.model.NasShare
 import dev.pampa.mycloudgallery.core.nas.contract.NasMediaReader
 import dev.pampa.mycloudgallery.core.nas.contract.NasSessionManager
+import dev.pampa.mycloudgallery.core.nas.contract.Purpose
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import dev.pampa.mycloudgallery.feature.backup.free.PhoneSystemDialogs
 import dev.pampa.mycloudgallery.nas.NasShareArea
+import dev.pampa.mycloudgallery.notify.FreeSpaceNotices
+import android.content.IntentSender
 import java.io.File
 import java.time.ZoneId
 import kotlin.time.Duration
+import kotlin.time.TimeSource
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -128,6 +138,19 @@ class FiveBGraph(
   private val onVersionWork: (BackupKind) -> Unit = {},
   /** VE-3: "Metti al sicuro adesso" per un media (lo fa il backup: verifica sul momento o "Fai ora"). */
   private val safeguard: suspend (MediaId) -> SafeguardStart = { SafeguardStart.UNAVAILABLE },
+  /** Correzioni 5B (LS-2): lo scope del processo, dove il giro di "Libera spazio" va avanti fuori dalla pagina. */
+  scope: CoroutineScope? = null,
+  /** LS-2: chiede il lavoro avviato dall'utente che ospita la verifica (con la sua notifica); falso = non programmato. */
+  freeSpaceWork: () -> Boolean = { false },
+  /** LS-2: la notifica "Pronto: N elementi, X GB. Tocca per liberare". */
+  notices: FreeSpaceNotices = FreeSpaceNotices.NONE,
+  /** LS-2: l'app e' davanti all'utente (allora la notifica "Pronto" non serve: la pagina lo dice). */
+  foreground: () -> Boolean = { false },
+  /**
+   * LS-8: il turno del backup per il guardiano di "Libera spazio", con un'attesa massima (una tappa del giro, non 15 minuti). Null = il turno
+   * non si e' liberato in tempo.
+   */
+  private val guardianTurn: suspend (Duration, suspend () -> Any?) -> Any? = { _, block -> exclusive(block) },
 ) {
 
   // --- Nel costruttore: niente I/O ------------------------------------------------------------------------------------------------
@@ -193,6 +216,12 @@ class FiveBGraph(
   /** I dialoghi di sistema per le schermate della 5B (Android 11+), con la recinzione di D13 riga per riga. */
   val systemDialogs: PhoneSystemDialogs = AppPhoneSystemDialogs(inputs.intents, fence, account) { row -> inputs.rowFolders?.folderOf(row) }
 
+  /**
+   * Correzioni 5B (LS-1, LS-14): il dialogo del cestino di Android (30 giorni) per [refs], come il cestino del viewer della 4B: dopo il tocco
+   * dell'utente su un foglio; il permesso lo da' il sistema. Null se il sistema non ha il dialogo.
+   */
+  fun trashRequest(refs: List<MediaRef.Phone>): IntentSender? = inputs.intents.trashRequest(refs, trash = true)
+
   /** I servizi nati con il NAS e il catalogo. */
   class Parts internal constructor(
     val share: String,
@@ -208,6 +237,15 @@ class FiveBGraph(
   val partsState: StateFlow<Parts?> = partsFlow.asStateFlow()
 
   val parts: Parts? get() = partsFlow.value
+
+  /** LS-10: le parti di "Libera spazio" ci sono (il backup e' partito); prima la pagina aspetta invece di dire "niente da liberare". */
+  private val freeReady = MutableStateFlow(false)
+
+  /** LS-8: il guardiano di "Libera spazio" aspetta che il backup finisca il file che sta caricando. */
+  private val guardianWaiting = MutableStateFlow(false)
+
+  /** LS-11: come "Libera spazio" raggiunge il NAS per l'ora del NAS (una sessione sull'area privata, nessun file letto); niente senza parti. */
+  private var reachNas: suspend () -> Unit = {}
 
   /**
    * Costruisce i servizi per l'area privata [share] e restituisce il motore del backup **con le versioni nella stessa tappa**
@@ -242,13 +280,16 @@ class FiveBGraph(
       zone = inputs.zone,
     )
     val services = FiveBFactory.create(session, deviceId, share, ports)
-    val freeCatalog = CatalogFreeSpaceCatalog(catalog)
+    val freeCatalog = CatalogFreeSpaceCatalog(catalog, backupCatalog)
+    // LS-11: l'ora del NAS la mette la prima sessione del processo; "Libera spazio" la chiede prima di dire che il NAS non risponde.
+    val reach: suspend () -> Unit = { session.withShare(share, Purpose.INTERACTIVE) { } }
+    reachNas = reach
     val free = SafeFreeSpace(
       catalog = freeCatalog,
       diary = freeDiary,
       backupStore = store,
       versions = services.keeper,
-      guardian = ExclusiveGuardian(guardian, exclusive),
+      guardian = ExclusiveGuardian(guardian, guardianTurn, guardianWaiting),
       reader = reader,
       phone = phone,
       gate = gate,
@@ -259,9 +300,11 @@ class FiveBGraph(
       areas = ::areas,
       fence = fence,
       systemDialogs = { inputs.intents.canTrash },
+      reachNas = reach,
       zone = inputs.zone(),
     )
     partsFlow.value = Parts(share, services.engine, services.keeper, services.corrections, free, EverywhereCopies(freeCatalog, ::accountId, ::areas, fence))
+    freeReady.value = true
     val versions = services.engine ?: return engine
     // E-E7 (nota di P8): le copie scaricate in `Pictures/MyCloud Gallery` e modificate in Galleria sono versioni dei media del NAS, anche se la
     // cartella non e' una sorgente del backup.
@@ -276,12 +319,47 @@ class FiveBGraph(
         backupCatalog?.candidates(CandidateQuery(downloads, kind, null, DOWNLOAD_PAGE)).orEmpty()
       }
     }
+    downloadCandidates = extra
+    versionCatalog = CatalogVersionCatalog(catalog, ::accountId)
     return VersionedBackupEngine(engine, versions, planner, clock, extra = extra)
+  }
+
+  /** E-E7: i candidati delle versioni in `Pictures/MyCloud Gallery/` (gli stessi che il motore aggiunge al piano), dopo [build]. */
+  private var downloadCandidates: suspend (BackupKind) -> List<BackupCandidate> = { emptyList() }
+  private var versionCatalog: CatalogVersionCatalog? = null
+
+  /**
+   * Correzioni 5B (nota dell'agente delle versioni, LA-4): una copia di "Scarica sul telefono" modificata in Galleria (E-E7) aspetta di diventare
+   * una versione **e lo diventerebbe davvero** adesso: non ha gia' un lavoro aperto, e il piano delle versioni la accetta (media proprio, un
+   * solito percorso nell'area privata, dentro la radice di prova di D13). Prima `hasWork` non la contava e, da sola, non faceva partire nessun
+   * giro; contare ogni candidato invece avrebbe fatto girare il backup a vuoto per uno che non diventa mai un lavoro. Solo dati locali.
+   */
+  suspend fun downloadVersionWaiting(kind: BackupKind): Boolean {
+    val p = parts ?: return false
+    if (p.versions == null) return false
+    val catalog = versionCatalog ?: return false
+    val root = fenceRoot()
+    for (c in downloadCandidates(kind)) {
+      if (c.original || journal.busy(c.versionId)) continue
+      val media = catalog.media(c.mediaId) ?: continue
+      val job = VersionPlanning.phoneVersion(media, p.share, c.versionId, c.phone, c.stamp) ?: continue
+      if (root == null || under(job.usualPath, root)) return true
+    }
+    return false
+  }
+
+  /** D13: lo stesso controllo del motore delle versioni (il percorso sta sotto la radice di prova). */
+  private fun under(path: SharePath, root: SharePath): Boolean {
+    val c = path.components
+    val r = root.components
+    return c.size > r.size && r.indices.all { c[it].equals(r[it], ignoreCase = true) }
   }
 
   /** L'azzeramento o un cambio d'area: niente resta legato al vecchio NAS. */
   fun clear() {
     partsFlow.value = null
+    freeReady.value = false
+    reachNas = {}
   }
 
   // --- All'avvio e dopo la lettura del telefono ---------------------------------------------------------------------------------
@@ -366,7 +444,12 @@ class FiveBGraph(
     override suspend fun verify(plan: FreeSpacePlan, confirmation: PhoneConfirmation, budget: Duration): FreeSpaceRun =
       port().verify(plan, confirmation, budget)
 
-    override suspend fun resume(run: FreeSpaceRun, budget: Duration): FreeSpaceRun = port().resume(run, budget)
+    /**
+     * LS-5: senza le parti (tolte a meta' giro: un cambio d'area, l'azzeramento) il giro e' fermo "non disponibile". Prima il null-object
+     * restituiva il giro com'era e la pagina chiedeva un'altra tappa senza fine.
+     */
+    override suspend fun resume(run: FreeSpaceRun, budget: Duration): FreeSpaceRun =
+      parts?.freeSpace?.resume(run, budget) ?: run.copy(state = FreeSpaceRunState.BLOCKED, blocked = FreeSpaceBlock.NOT_AVAILABLE)
 
     override suspend fun nextBatch(run: FreeSpaceRun): TrashBatch? = port().nextBatch(run)
 
@@ -413,6 +496,25 @@ class FiveBGraph(
     /** VE-3: lo fa il backup (verifica sul momento della copia sul NAS, o "Fai ora" per un media del telefono in una sorgente). */
     override suspend fun safeguard(mediaId: MediaId): SafeguardStart = if (parts == null) SafeguardStart.UNAVAILABLE else safeguard.invoke(mediaId)
   }
+
+  /**
+   * Correzioni 5B (LS-2): il giro di "Libera spazio" del processo. Va avanti fuori dalla pagina (nello scope del grafo), dentro un lavoro avviato
+   * dall'utente con la notifica, e si ritrova dal diario dopo la morte del processo (nello stesso avvio, entro le 6 ore). Lo legge la pagina
+   * (porta `FreeSpaceRuns`), lo ospita `BackupJobService`.
+   */
+  val freeRuns: FiveBFreeSpaceRuns = FiveBFreeSpaceRuns(
+    service = freeSpace,
+    scope = scope ?: CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    clock = clock,
+    active = { parts?.freeSpace?.active() },
+    abandon = { id -> parts?.freeSpace?.abandon(id) },
+    ready = freeReady.asStateFlow(),
+    waitingForBackup = guardianWaiting.asStateFlow(),
+    reachNas = { reachNas() },
+    startWork = freeSpaceWork,
+    notices = notices,
+    foreground = foreground,
+  )
 
   /** "Elimina solo dal telefono" (D22): dal catalogo locale; senza servizi, nessun media si puo' liberare. */
   suspend fun assessPhoneOnly(ids: Set<MediaId>): PhoneOnlyAssessment =
@@ -511,11 +613,30 @@ class FiveBGraph(
 /**
  * Il guardiano visto da "Libera spazio" (D9, E-B14): **uno alla volta** con il motore e le verifiche del backup. Se il turno non si libera, il
  * giro aspetta (`BUDGET`: niente fatto, si riprende) invece di scrivere insieme al motore.
+ *
+ * LS-8 della verifica funzionale 5B: il turno si aspetta al massimo una tappa del giro ([budget]), non 15 minuti, e intanto [waiting] lo dice
+ * alla pagina ("aspetto che il backup finisca il file che sta caricando"); il giro riprova alla tappa dopo. Il guardiano, poi, ha il tempo
+ * che resta della tappa.
  */
-private class ExclusiveGuardian(
+internal class ExclusiveGuardian(
   private val inner: PrivateCopyGuardian,
-  private val exclusive: suspend (suspend () -> Any?) -> Any?,
+  private val turn: suspend (Duration, suspend () -> Any?) -> Any?,
+  private val waiting: MutableStateFlow<Boolean>,
 ) : PrivateCopyGuardian {
-  override suspend fun ensure(scope: GuardScope, budget: Duration): GuardReport =
-    exclusive { inner.ensure(scope, budget) } as GuardReport? ?: GuardReport(0, 0, 0, 0, 0L, RunStop.BUDGET)
+  override suspend fun ensure(scope: GuardScope, budget: Duration): GuardReport {
+    val asked = TimeSource.Monotonic.markNow()
+    waiting.value = true
+    val report = try {
+      turn(budget) {
+        waiting.value = false
+        inner.ensure(scope, (budget - asked.elapsedNow()).coerceAtLeast(Duration.ZERO))
+      } as GuardReport?
+    } catch (e: Throwable) {
+      waiting.value = false
+      throw e
+    }
+    // Il turno non si e' liberato in tempo: il giro aspetta ancora il backup (la pagina lo dice finche' una tappa non lo trova libero).
+    waiting.value = report == null
+    return report ?: GuardReport(0, 0, 0, 0, 0L, RunStop.BUDGET)
+  }
 }

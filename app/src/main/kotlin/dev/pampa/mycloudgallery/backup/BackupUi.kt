@@ -358,7 +358,9 @@ class AppBackupActions(
       BackupAction.DO_NOW_CONFIRM -> backupNow()
       BackupAction.OPEN_GALLERY_TRASH -> host?.openGalleryTrash()
       BackupAction.OPEN_NAS_TRASH -> host?.openNas(NasScreen.TRASH)
-      BackupAction.FREE_SPACE -> host?.openStorageSettings()
+      // Correzioni 5B (LS-9): "Memoria del telefono quasi piena" → "Libera spazio" apre la pagina della 5B (tutto il sicuro); le impostazioni di
+      // Android solo dove la pagina non puo' esserci (senza il dialogo di sistema, Android 10).
+      BackupAction.FREE_SPACE -> if (backup.fiveB.systemDialogs.available) host?.openScreen(BackupScreen.FREE_SPACE) else host?.openStorageSettings()
       BackupAction.BATTERY_GUIDE -> host?.openBatteryGuide()
     }
   }

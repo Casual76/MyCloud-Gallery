@@ -80,6 +80,41 @@ class BackupSchedulingTest {
     }
   }
 
+  /**
+   * IN-5 della verifica funzionale 5B: "Salva sul NAS" e' un gesto dell'utente. Un file ricevuto mentre si e' fuori casa, o col NAS spento, aspettava
+   * per sempre (nessun evento lo faceva ripartire se non la prossima lettura del telefono o il periodico di 6 ore). Come "Proteggi subito" (BK-2):
+   * il lavoro si rimette in coda su una rete non a consumo.
+   */
+  @Test
+  fun in5_unFileRicevutoFuoriCasaOColNasSpentoAspettaUnaReteENonLaProssimaNotte() {
+    val waits = listOf(
+      WaitReason.NetworkNotAllowed(NetworkClass.MOBILE),
+      WaitReason.Offline,
+      WaitReason.NetworkNotTrusted,
+      WaitReason.Roaming,
+      WaitReason.NasUnreachable,
+    )
+    for (wait in waits) {
+      workManager.cancelAllWork().result.get()
+
+      BackupWorkScheduling.afterWait(context, BackupWorkScheduling.Kind.INCOMING, wait)
+
+      val work = waiting(BackupWorkScheduling.INCOMING_WORK).single()
+      val network = checkNotNull(work.constraints.requiredNetworkRequest) { "$wait: nessun vincolo di rete" }
+      assertWithMessage("$wait: rete non a consumo").that(network.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)).isTrue()
+      assertWithMessage("$wait: mai i dati mobili").that(network.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)).isFalse()
+      assertWithMessage("$wait: un ritardo").that(work.initialDelayMillis).isAtLeast(10 * 60_000L)
+    }
+  }
+
+  @Test
+  fun in5_ilCongelamentoEGliAltriMotiviNonProgrammanoNienteNiente_polling() {
+    for (wait in listOf(WaitReason.ProfileInactive, WaitReason.Frozen(FreezeReason.VANISHED))) {
+      BackupWorkScheduling.afterWait(context, BackupWorkScheduling.Kind.INCOMING, wait)
+      assertWithMessage("$wait").that(waiting(BackupWorkScheduling.INCOMING_WORK)).isEmpty()
+    }
+  }
+
   @Test
   fun lAttesaDellaCaricaResta_UnVincoloEsatto() {
     BackupWorkScheduling.afterWait(context, BackupWorkScheduling.Kind.QUICK, WaitReason.NeedsPower)

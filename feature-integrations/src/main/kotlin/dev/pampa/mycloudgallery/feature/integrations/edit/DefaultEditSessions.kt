@@ -28,7 +28,7 @@ import dev.pampa.mycloudgallery.feature.integrations.share.ShareCache
 import dev.pampa.mycloudgallery.feature.integrations.share.UriRevoker
 import java.io.File
 import java.io.IOException
-import java.io.RandomAccessFile
+import java.io.InputStream
 import java.security.MessageDigest
 import kotlin.coroutines.CoroutineContext
 import kotlinx.coroutines.Dispatchers
@@ -75,6 +75,11 @@ class DefaultEditSessions(
   /** D13: in debug con gli account di prova "Modifica con…" tocca solo le cartelle recintate; di default tutte. */
   private val phoneFolderAllowed: (relativePath: String) -> Boolean = { true },
   private val io: CoroutineContext = Dispatchers.IO,
+  /**
+   * Come si apre in lettura un file della cache che un editor esterno puo' ancora scrivere (R11): un punto solo, cosi' si vede (e un test prova) quante
+   * volte e con quali byte si legge.
+   */
+  private val openForRead: (File) -> InputStream = { it.inputStream() },
 ) : EditSessions {
 
   private val mutex = Mutex()
@@ -270,37 +275,76 @@ class DefaultEditSessions(
     val original = stored.snapshot.cacheSha256 ?: return EditOutcome.Unreadable
     if (!file.isFile) return EditOutcome.Unreadable
     val isVideo = catalog.media(session.mediaId)?.isVideo ?: false
-    val digest = withContext(io) { digestOf(file) } ?: return EditOutcome.Unreadable
-    if (digest.sha256 == original) {
-      // I byte non sono cambiati: l'editor puo' aver salvato altrove (Google Foto di solito scrive un file nuovo). Stessa data di scatto, nata dopo.
-      return attributeCopy(stored, isVideo, ownId = null, volumes = setOf(PRIMARY_VOLUME), sameFolderOnly = false, toleranceMs = EditAttribution.NAS_TAKEN_TOLERANCE_MS)
-        ?: EditOutcome.Unchanged
-    }
-    // I byte sono cambiati: l'editor ha scritto nella copia. E' input non fidato: si controlla prima di farne una versione.
-    if (!acceptable(file, digest.size, isVideo)) {
+    // Oltre il tetto non si legge nemmeno (un editor puo' aver gonfiato la copia): rifiutato, la sessione resta aperta.
+    if (file.length() > IncomingLimits.MAX_FILE_BYTES) {
       FlowCounters.edit.add(EditCounter.RESULT_REFUSED)
       return EditOutcome.Unreadable
     }
-    return recordEdited(session, file, digest)
+    // La prima lettura serve solo a sapere se i byte sono cambiati: il suo risultato non entra mai in una versione (R11).
+    val digest = withContext(io) { digestOf(file) } ?: return EditOutcome.Unreadable
+    if (digest.sha256 == original) return unchangedInCache(stored, isVideo)
+    // I byte sono cambiati: l'editor ha scritto nella copia. E' input non fidato, e l'editor puo' ancora scriverla: il file si copia UNA volta in un file
+    // privato (R11) e impronta, tipo e byte da caricare sono quelli di quella copia, mai di una seconda lettura.
+    val copy = withContext(io) { copyPrivately(file) }
+    if (copy == null) {
+      FlowCounters.edit.add(EditCounter.RESULT_REFUSED)
+      return EditOutcome.Unreadable
+    }
+    if (copy.digest.sha256 == original) {
+      // Nel frattempo l'editor ha rimesso i byte di prima: non c'e' niente da registrare.
+      copy.work.delete()
+      return unchangedInCache(stored, isVideo)
+    }
+    if (!acceptable(copy, isVideo)) {
+      copy.work.delete()
+      FlowCounters.edit.add(EditCounter.RESULT_REFUSED)
+      return EditOutcome.Unreadable
+    }
+    return recordEdited(session, copy)
   }
 
-  /** Il risultato dell'editor e' un media dello stesso genere, non vuoto, sotto i tetti. */
-  private suspend fun acceptable(file: File, size: Long, isVideo: Boolean): Boolean {
-    if (size <= 0 || size > IncomingLimits.MAX_FILE_BYTES) return false
-    val head = withContext(io) { file.inputStream().use { it.readNBytesCompat(IncomingMime.HEAD_BYTES) } }
-    val mime = IncomingMime.of(head, null) ?: return false
+  /** I byte non sono cambiati: l'editor puo' aver salvato altrove (Google Foto di solito scrive un file nuovo). Stessa data di scatto, nata dopo. */
+  private suspend fun unchangedInCache(stored: StoredEditSession, isVideo: Boolean): EditOutcome =
+    attributeCopy(stored, isVideo, ownId = null, volumes = setOf(PRIMARY_VOLUME), sameFolderOnly = false, toleranceMs = EditAttribution.NAS_TAKEN_TOLERANCE_MS)
+      ?: EditOutcome.Unchanged
+
+  /** Il file della cache copiato in un file di lavoro privato (`noBackupFilesDir`), con le impronte e i primi byte **di quella copia**. */
+  private class PrivateCopy(val work: File, val digest: Digest, val head: ByteArray)
+
+  /**
+   * R11: una lettura sola del file della cache (che un editor ostile puo' ancora scrivere) che lo copia nel file di lavoro e ne calcola, sugli stessi
+   * byte, SHA-256, dimensione, `qh1` e i primi byte per il tipo. Null se non si legge, se e' vuoto o se supera il tetto (la copia si toglie).
+   */
+  private fun copyPrivately(source: File): PrivateCopy? {
+    val work = staged.newWorkFile()
+    var done = false
+    try {
+      val result = openForRead(source).use { input -> work.outputStream().use { out -> digestOf(input, out) } } ?: return null
+      if (result.first.size <= 0) return null
+      done = true
+      return PrivateCopy(work, result.first, result.second)
+    } catch (_: IOException) {
+      return null
+    } finally {
+      if (!done) work.delete()
+    }
+  }
+
+  /** Il risultato dell'editor e' un media dello stesso genere, non vuoto, sotto i tetti: giudicato sui byte della copia privata. */
+  private fun acceptable(copy: PrivateCopy, isVideo: Boolean): Boolean {
+    if (copy.digest.size <= 0 || copy.digest.size > IncomingLimits.MAX_FILE_BYTES) return false
+    val mime = IncomingMime.of(copy.head, null) ?: return false
     return mime.startsWith("video/") == isVideo
   }
 
   /** `StagedVersionFiles.keep`, poi la versione nel catalogo, poi il lavoro `VERSION` (P8): in questo ordine, ogni passo si puo' ripetere. */
-  private suspend fun recordEdited(session: EditSession, file: File, digest: Digest): EditOutcome {
-    val work = staged.newWorkFile()
+  private suspend fun recordEdited(session: EditSession, copy: PrivateCopy): EditOutcome {
+    val digest = copy.digest
     val kept = withContext(io) {
       try {
-        file.copyTo(work, overwrite = false)
-        staged.keep(work, digest.sha256, session.mediaId)
+        staged.keep(copy.work, digest.sha256, session.mediaId)
       } catch (e: IOException) {
-        work.delete()
+        copy.work.delete()
         null
       }
     } ?: return EditOutcome.Unreadable
@@ -403,47 +447,58 @@ class DefaultEditSessions(
 
   private class Digest(val sha256: Sha256, val quickHash: QuickHash, val size: Long)
 
-  /** SHA-256 e `qh1` di un file locale, a blocchi. */
+  /** SHA-256 e `qh1` di un file locale, a blocchi, in una lettura sola dal flusso di [openForRead]. */
   private fun digestOf(file: File): Digest? = try {
-    val size = file.length()
-    val sha = MessageDigest.getInstance("SHA-256")
-    val regions = QuickHashAlgorithm.regions(size)
-    val head = ByteArray(if (regions.size <= 1) size.toInt() else QuickHashAlgorithm.CHUNK_BYTES)
-    val tail = ByteArray(if (regions.size <= 1) 0 else QuickHashAlgorithm.CHUNK_BYTES)
-    RandomAccessFile(file, "r").use { raf ->
-      val buffer = ByteArray(BUFFER)
-      var position = 0L
-      while (position < size) {
-        val n = raf.read(buffer, 0, minOf(buffer.size.toLong(), size - position).toInt())
-        if (n <= 0) throw IOException("Lettura accorciata.")
-        sha.update(buffer, 0, n)
-        overlap(buffer, n, position, head, 0L)
-        if (tail.isNotEmpty()) overlap(buffer, n, position, tail, size - tail.size)
-        position += n
-      }
-    }
-    Digest(Sha256(sha.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }), QuickHashAlgorithm.compute(size, head, tail), size)
+    openForRead(file).use { input -> digestOf(input, null)?.first }
   } catch (_: IOException) {
     null
   }
 
-  /** Copia in [target] (che comincia all'offset [targetStart] del file) la parte di [chunk] (che comincia all'offset [chunkStart]). */
-  private fun overlap(chunk: ByteArray, length: Int, chunkStart: Long, target: ByteArray, targetStart: Long) {
-    val from = maxOf(chunkStart, targetStart)
-    val to = minOf(chunkStart + length, targetStart + target.size)
-    if (from >= to) return
-    System.arraycopy(chunk, (from - chunkStart).toInt(), target, (from - targetStart).toInt(), (to - from).toInt())
-  }
-
-  private fun java.io.InputStream.readNBytesCompat(limit: Int): ByteArray {
-    val buffer = ByteArray(limit)
-    var total = 0
-    while (total < limit) {
-      val n = read(buffer, total, limit - total)
+  /**
+   * Legge [input] fino alla fine una volta sola: SHA-256, dimensione, `qh1` (testa e coda) e i primi byte, e (se [copy] c'e') li scrive li'. I tre
+   * valori descrivono i byte letti **in questo passaggio**: se un editor li cambia mentre si leggono, sono comunque quelli copiati (R11).
+   * Null e un [IOException] di chi chiama se il flusso e' piu' lungo di [IncomingLimits.MAX_FILE_BYTES] (si smette di leggere al tetto).
+   */
+  private fun digestOf(input: InputStream, copy: java.io.OutputStream?): Pair<Digest, ByteArray>? {
+    val sha = MessageDigest.getInstance("SHA-256")
+    val chunk = QuickHashAlgorithm.CHUNK_BYTES
+    val first = ByteArray(2 * chunk)
+    var firstLength = 0
+    val ring = ByteArray(chunk)
+    var size = 0L
+    val buffer = ByteArray(BUFFER)
+    while (true) {
+      val n = input.read(buffer)
       if (n < 0) break
-      total += n
+      if (n == 0) continue
+      sha.update(buffer, 0, n)
+      copy?.write(buffer, 0, n)
+      if (firstLength < first.size) {
+        val take = minOf(n, first.size - firstLength)
+        System.arraycopy(buffer, 0, first, firstLength, take)
+        firstLength += take
+      }
+      var done = 0
+      while (done < n) {
+        val at = (size % chunk).toInt()
+        val take = minOf(n - done, chunk - at)
+        System.arraycopy(buffer, done, ring, at, take)
+        size += take
+        done += take
+      }
+      if (size > IncomingLimits.MAX_FILE_BYTES) return null
     }
-    return buffer.copyOf(total)
+    val head: ByteArray
+    val tail: ByteArray
+    if (size <= 2L * chunk) {
+      head = first.copyOf(size.toInt())
+      tail = ByteArray(0)
+    } else {
+      head = first.copyOf(chunk)
+      tail = ByteArray(chunk) { ring[((size % chunk).toInt() + it) % chunk] }
+    }
+    val digest = Digest(Sha256(sha.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }), QuickHashAlgorithm.compute(size, head, tail), size)
+    return digest to first.copyOf(minOf(firstLength, IncomingMime.HEAD_BYTES))
   }
 
   companion object {

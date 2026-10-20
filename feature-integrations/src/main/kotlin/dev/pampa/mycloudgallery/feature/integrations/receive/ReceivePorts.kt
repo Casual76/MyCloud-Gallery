@@ -4,6 +4,7 @@ import androidx.fragment.app.FragmentActivity
 import dev.pampa.mycloudgallery.core.backup.contract.IncomingUploads
 import dev.pampa.mycloudgallery.core.backup.contract.NasDestination
 import dev.pampa.mycloudgallery.core.backup.noop.NoIncomingUploads
+import dev.pampa.mycloudgallery.feature.integrations.picker.UnlockFailure
 
 // Fase 5B (P11, docs/fase5-progetto.md §1.1, §2.7, D24, C17, E-X7, E-X8): le PORTE di `ShareReceiverActivity` che `IntegrationPorts` (P0-B) non ha. La
 // activity la crea il sistema (un'altra app condivide un file), quindi non si inietta dal costruttore: `:app` le installa una volta all'avvio (P14),
@@ -34,6 +35,18 @@ interface IncomingDestinations {
 
   /** Il NAS risponde adesso? Serve solo a dire "lo salvo appena risponde" invece di "salvato" (E-X8). */
   suspend fun nasReachable(): Boolean
+
+  /**
+   * IN-11: come [nasReachable], ma dice anche perche' non risponde: sui dati mobili senza consenso il NAS "non risponde" per scelta
+   * dell'utente, e la frase giusta e' "aspetto il Wi-Fi di casa". Il default distingue solo raggiungibile / non raggiungibile.
+   */
+  suspend fun nasWait(): NasWait = if (nasReachable()) NasWait.NONE else NasWait.OFFLINE
+
+  /**
+   * IN-6: il backup e' ancora in prova (D12, R2) e "Salva sul NAS" non scrive da nessuna parte? Si chiede **prima di copiare** i file. Il default
+   * dice di no (i test e le varianti senza cancello).
+   */
+  suspend fun savingBlockedByTrial(): Boolean = false
 }
 
 /** Nessuna cartella: la schermata dice che l'app non e' pronta. */
@@ -52,6 +65,9 @@ object NoIncomingDestinations : IncomingDestinations {
  */
 fun interface ReceiveUnlock {
   suspend fun unlock(activity: FragmentActivity): Boolean
+
+  /** IN-10: perche' l'ultimo [unlock] non e' riuscito, se lo si sa. Null = riuscito, o non si sa. */
+  fun lastFailure(): UnlockFailure? = null
 }
 
 /** Nessuno sblocco: non si sblocca mai (l'app resta chiusa). */

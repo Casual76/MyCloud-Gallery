@@ -56,6 +56,11 @@
   <string name="backup_free_ex_not_mine_detail">Sono foto e video di un altro account: le libera chi li ha fatti.</string>
   <string name="backup_free_ex_backup_inactive">Backup non attivo</string>
   <string name="backup_free_ex_backup_inactive_detail">Senza un backup acceso e la tua area privata non posso sapere se sono al sicuro.</string>
+  <!-- Correzioni 5B (LS-12): una riga gia' proposta al telefono in un altro giro. -->
+  <string name="backup_free_ex_awaiting">In attesa della risposta del telefono</string>
+  <string name="backup_free_ex_awaiting_detail">Li ho già proposti al telefono: aspetto di sapere se li ha tolti.</string>
+  <!-- Correzioni 5B (LS-11): l'ora del NAS non e' ancora nota. -->
+  <string name="backup_free_nas_time_note">Non conosco ancora la data del NAS: per sicurezza le foto e i video con una data restano sul telefono. Ricalcolo appena raggiungo il NAS.</string>
 
   <string name="backup_free_action">Libera spazio</string>
   <string name="backup_free_action_now">Libera subito…</string>
@@ -65,7 +70,9 @@
   <string name="backup_free_guarding_detail">%1$s di %2$s</string>
   <string name="backup_free_verifying_title">Ricontrollo le copie sul NAS</string>
   <string name="backup_free_verifying_detail">%1$s di %2$s · %3$s letti</string>
-  <string name="backup_free_verifying_hint">Può durare un po’. Lascia aperta questa pagina.</string>
+  <string name="backup_free_verifying_hint">Può durare un po’. Puoi uscire da questa pagina: quando è pronto ti avviso con una notifica.</string>
+  <!-- Correzioni 5B (LS-8): il guardiano aspetta il turno del backup. -->
+  <string name="backup_free_guarding_waiting">aspetto che il backup finisca il file che sta caricando</string>
   <string name="backup_free_cancel">Annulla</string>
 
   <plurals name="backup_free_ready_title">
@@ -97,6 +104,22 @@
   <plurals name="backup_free_done_dropped">
     <item quantity="one">Per %1$s la copia sul NAS non tornava: l’ho lasciato sul telefono e rifaccio il backup.</item>
     <item quantity="other">Per %1$s la copia sul NAS non tornava: li ho lasciati sul telefono e rifaccio il backup.</item>
+  </plurals>
+  <!-- Correzioni 5B (LS-7): il motivo vero di chi e' uscito; un "no" dopo un lotto gia' liberato. -->
+  <plurals name="backup_free_done_dropped_by">
+    <item quantity="one">%1$s è rimasto sul telefono · %2$s.</item>
+    <item quantity="other">%1$s sono rimasti sul telefono · %2$s.</item>
+  </plurals>
+  <string name="backup_free_done_stopped">Poi hai detto di no al telefono: gli altri restano sul telefono.</string>
+  <!-- Correzioni 5B (LS-13): media confermati che erano gia' cambiati quando il giro e' partito. -->
+  <plurals name="backup_free_done_changed">
+    <item quantity="one">%1$s era cambiato dopo la tua conferma: è rimasto sul telefono.</item>
+    <item quantity="other">%1$s erano cambiati dopo la tua conferma: sono rimasti sul telefono.</item>
+  </plurals>
+  <!-- Correzioni 5B (LS-12): consegnati ad Android, esito non ancora noto. -->
+  <plurals name="backup_free_done_in_doubt">
+    <item quantity="one">Per %1$s aspetto di sapere dal telefono se l’ha tolto: lo vedo alla prossima lettura delle foto.</item>
+    <item quantity="other">Per %1$s aspetto di sapere dal telefono se li ha tolti: lo vedo alla prossima lettura delle foto.</item>
   </plurals>
   <string name="backup_free_done_nothing_title">Non ho liberato niente</string>
   <string name="backup_free_done_nothing_detail">Nessun elemento ha superato i controlli: sono tutti rimasti sul telefono.</string>
@@ -185,10 +208,33 @@
   </plurals>
   <string name="backup_free_phone_choice_title">Cosa fare</string>
   <string name="backup_free_phone_choice_safe_first">Prima mettilo al sicuro</string>
-  <string name="backup_free_phone_choice_safe_first_detail">Parte il backup e controllo la copia sul NAS. Poi ti riporto qui.</string>
+  <string name="backup_free_phone_choice_safe_first_detail">Parte il backup e controllo la copia sul NAS: questo foglio si aggiorna da solo.</string>
   <string name="backup_free_phone_choice_free_ready">Togli solo quelli già al sicuro</string>
   <string name="backup_free_phone_choice_free_ready_detail">Gli altri restano sul telefono.</string>
   <string name="backup_free_phone_action_safe">Metti al sicuro</string>
   <string name="backup_free_phone_action_free">Continua</string>
   <string name="backup_free_phone_close">Chiudi</string>
+
+  <!-- Correzioni 5B (LS-1, decisione dell'utente "Elimina con avviso"): dal viewer, un media che non risulta al sicuro sul NAS va nel cestino di
+       Android come nella 4B, dopo questo avviso. -->
+  <string name="backup_free_phone_not_on_nas_title_photo">Questa foto non è sul NAS</string>
+  <string name="backup_free_phone_not_on_nas_title_video">Questo video non è sul NAS</string>
+  <string name="backup_free_phone_not_on_nas_title_many">Non sono sul NAS</string>
+  <string name="backup_free_phone_not_on_nas_inactive">Il backup non è attivo su questo telefono: sul NAS non c’è una copia controllata dall’app.</string>
+  <string name="backup_free_phone_not_on_nas_not_verified">Sul NAS non c’è ancora una copia controllata dall’app.</string>
+  <string name="backup_free_phone_not_on_nas_wait">Il backup la sta ancora caricando, o ha avuto un problema.</string>
+  <string name="backup_free_phone_not_on_nas_frozen">Il NAS ha avuto un cambiamento anomalo: la copia non si può controllare.</string>
+  <string name="backup_free_phone_not_on_nas_fence">In prova l’app controlla solo la cartella di prova.</string>
+  <string name="backup_free_phone_not_on_nas_trash">Se la elimini dal telefono va nel cestino di Android: la recuperi da Eliminati di recente per 30 giorni, poi non ci sarà più da nessuna parte.</string>
+  <string name="backup_free_phone_action_trash">Elimina dal telefono</string>
+
+  <!-- Correzioni 5B (LS-4): "Metti al sicuro" fa partire cio' che serve a quel media e il foglio si aggiorna da solo. -->
+  <string name="backup_free_phone_safeguarding_title">Sto mettendo al sicuro…</string>
+  <string name="backup_free_phone_safeguarding_detail">Parte il backup e controllo la copia sul NAS. Il foglio si aggiorna da solo quando ho finito.</string>
+  <string name="backup_free_phone_note_sources_title">Questa cartella non è nel backup</string>
+  <string name="backup_free_phone_note_sources_detail">Aggiungi la cartella nelle impostazioni del backup: quando la copia è controllata sul NAS potrai toglierla dal telefono.</string>
+  <string name="backup_free_phone_note_not_now_title">Adesso non posso metterla al sicuro</string>
+  <string name="backup_free_phone_note_not_now_detail">Il backup non è pronto: riprova più tardi dalla pagina Backup.</string>
+  <string name="backup_free_phone_note_waiting_title">Non è ancora al sicuro</string>
+  <string name="backup_free_phone_note_waiting_detail">Il backup ci sta ancora lavorando: riapri questo foglio più tardi.</string>
 </resources>

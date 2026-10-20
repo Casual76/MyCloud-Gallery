@@ -68,7 +68,17 @@ internal class FakeBackupMediaActions(
   var everywhereSummary: EverywhereSummary? = null,
   /** VE-4: il formato si scrive (si ruota davvero). */
   var rotatable: Boolean = true,
+  /** LS-14: il media ha piu' copie sul telefono (`:app` le toglie tutte con un dialogo suo). */
+  var morePhoneCopies: Boolean = false,
 ) : BackupMediaActions {
+
+  /** LS-14: i media per cui "Ovunque" ha chiesto a `:app` di togliere tutte le copie del telefono. */
+  val everywherePhone = ArrayList<MediaId>()
+
+  override suspend fun deleteEverywhereFromPhone(id: MediaId): Boolean {
+    everywherePhone += id
+    return morePhoneCopies
+  }
 
   val performed = ArrayList<Pair<BackupMenuAction, MediaId>>()
   val shared = ArrayList<List<MediaId>>()

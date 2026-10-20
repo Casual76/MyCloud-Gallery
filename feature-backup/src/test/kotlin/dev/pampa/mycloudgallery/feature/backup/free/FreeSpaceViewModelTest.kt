@@ -47,11 +47,12 @@ class FreeSpaceViewModelTest {
     Optional.of(dialogs),
     Optional.of(clock),
     Optional.of(actions),
+    Optional.empty(),
   )
 
   @Test
   fun senzaIServiziDiceCheNonEPronto() = runTest(dispatcher) {
-    val vm = FreeSpaceViewModel(Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty())
+    val vm = FreeSpaceViewModel(Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty())
     vm.start(selection = null)
     assertThat(vm.state.value).isEqualTo(FreeSpaceUi.Blocked(FreeSpaceBlockedBy.NOT_AVAILABLE))
     vm.openConfirm()

@@ -23,6 +23,13 @@ enum class EntryDecision {
 
   /** L'app non e' configurata (onboarding, famiglia non pronta, dispositivo revocato): non si offre niente. */
   NOT_READY,
+
+  /**
+   * IN-3 della verifica funzionale 5B: l'app sta ancora **leggendo il suo stato** (la configurazione salvata, le impostazioni del blocco). A processo
+   * freddo, quando un'altra app ci chiama, e' il caso normale per qualche istante: non si decide (prima si rispondeva "Prima configura MyCloud
+   * Gallery" o "chiusa" per una corsa). Non si mostra niente; chi decide aspetta ([EntryGate.decideAfterLoading]).
+   */
+  LOADING,
 }
 
 /**
@@ -31,6 +38,18 @@ enum class EntryDecision {
  */
 fun interface EntryGate {
   fun decide(): EntryDecision
+
+  /**
+   * IN-3: come [decide], ma se l'app sta ancora leggendo il suo stato ([EntryDecision.LOADING]) aspetta che lo abbia letto, al massimo [timeoutMs]
+   * (orologio monotono, mai l'ora del telefono). Dopo l'attesa puo' ancora rispondere [EntryDecision.LOADING]: chi la chiama non offre niente.
+   * Il default non aspetta (i cancelli che non hanno uno stato da caricare).
+   */
+  suspend fun decideAfterLoading(timeoutMs: Long = LOAD_WAIT_MS): EntryDecision = decide()
+
+  companion object {
+    /** Quanto un'activity d'ingresso aspetta che l'app legga il suo stato prima di non offrire niente. */
+    const val LOAD_WAIT_MS: Long = 10_000L
+  }
 }
 
 /**
@@ -57,7 +76,11 @@ object DocumentIds {
 /** Una radice del provider ("MyCloud Gallery": Recenti, Cartelle NAS). Il titolo e' una stringa dell'app, non un dato. */
 data class DocumentRoot(val rootId: String, val rootDocument: DocumentId)
 
-/** Un documento o una cartella del provider. Il nome e' un dato dell'utente: mai nei log. */
+/**
+ * Un documento o una cartella del provider. Il nome e' un dato dell'utente: mai nei log. [size] e' [UNKNOWN_SIZE] quando non si sa: con
+ * "Rimuovi la posizione" acceso la copia senza posizione e' piu' piccola dell'originale e si fa solo quando serve, quindi finche' non c'e' non si
+ * dichiara nessuna dimensione (un'altra app che si fidasse di una dimensione sbagliata leggerebbe un file troncato).
+ */
 data class DocumentEntry(
   val id: DocumentId,
   val displayName: String,
@@ -67,7 +90,11 @@ data class DocumentEntry(
   val isFolder: Boolean,
 ) {
   init {
-    require(size >= 0) { "Dimensione negativa." }
+    require(size >= UNKNOWN_SIZE) { "Dimensione negativa." }
+  }
+
+  companion object {
+    const val UNKNOWN_SIZE: Long = -1L
   }
 
   override fun toString(): String = "DocumentEntry(${if (isFolder) "cartella" else mime}, $size B)"
@@ -94,8 +121,20 @@ interface MediaDocuments {
 
   suspend fun entry(id: DocumentId): DocumentEntry?
 
-  /** Apre [id] in lettura, o null se non c'e' (piu'), non e' leggibile adesso o il NAS non risponde entro la scadenza. */
+  /**
+   * Apre [id] in lettura, o null se non c'e' (piu'), non e' leggibile adesso o il NAS non risponde entro la scadenza.
+   *
+   * Con "Rimuovi la posizione" acceso apre **solo la copia senza posizione** (mai l'originale): se non c'e' la prepara, e se non si riesce a toglierla
+   * lancia una [dev.pampa.mycloudgallery.feature.integrations.provider.LocationRemovalRefused] (il provider la rende all'altra app come errore con
+   * il motivo). Non lancia altro per i guasti: quelli sono `null`.
+   */
   suspend fun open(id: DocumentId): DocumentReader?
+
+  /**
+   * Vero se [open] puo' dover preparare una copia (togliere la posizione): puo' durare molto piu' di una lettura, e il provider gli da' il tempo
+   * di [dev.pampa.mycloudgallery.feature.integrations.provider.DocumentPolicy.PREPARE_DEADLINE_MS] invece di quello di una lettura.
+   */
+  fun preparesOnOpen(): Boolean = false
 }
 
 /**

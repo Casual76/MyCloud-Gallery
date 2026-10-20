@@ -8,6 +8,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
 import dev.pampa.mycloudgallery.backup.FiveBUi
+import dev.pampa.mycloudgallery.backup.NoFreeSpaceRuns
 import dev.pampa.mycloudgallery.core.backup.contract.BackupClock
 import dev.pampa.mycloudgallery.core.backup.contract.Corrections
 import dev.pampa.mycloudgallery.core.backup.contract.FreeSpace
@@ -23,6 +24,7 @@ import dev.pampa.mycloudgallery.core.backup.noop.NoVersionKeeper
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagnosticsContributor
 import dev.pampa.mycloudgallery.core.security.lock.AppLockController
 import dev.pampa.mycloudgallery.core.security.lock.AppLockSettings
+import dev.pampa.mycloudgallery.feature.backup.free.FreeSpaceRuns
 import dev.pampa.mycloudgallery.feature.backup.free.NoPhoneSystemDialogs
 import dev.pampa.mycloudgallery.feature.backup.free.PhoneOnlyAssessor
 import dev.pampa.mycloudgallery.feature.backup.free.PhoneSystemDialogs
@@ -38,6 +40,7 @@ import dev.pampa.mycloudgallery.integrations.IntegrationsGraph
 import java.util.Optional
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 
 /**
  * Le porte della **5B** (P12) legate alle implementazioni vere (P14), in debug e in release: un `@Provides` per porta accende l'`Optional` di
@@ -56,6 +59,12 @@ object FiveBModule {
   @Provides fun corrections(gallery: GalleryGraph): Corrections = gallery.backup?.fiveB?.corrections ?: NoCorrections
 
   @Provides fun pendingTasks(gallery: GalleryGraph): PendingTasks = gallery.backup?.fiveB?.pendingTasks ?: NoPendingTasks
+
+  /**
+   * Correzioni 5B (LS-2): il giro di "Libera spazio" fuori dalla pagina (lavoro avviato dall'utente, notifica "Pronto", ripresa dal diario). Senza
+   * backup non e' mai pronto.
+   */
+  @Provides fun freeSpaceRuns(gallery: GalleryGraph): FreeSpaceRuns = gallery.backup?.fiveB?.freeRuns ?: NoFreeSpaceRuns
 
   /** L'orologio con cui le schermate datano le conferme: lo stesso con cui i servizi le controllano. */
   @Provides fun backupClock(gallery: GalleryGraph): BackupClock = gallery.backup?.clock ?: MonotonicOnlyBackupClock
@@ -116,6 +125,9 @@ object FiveBModule {
     familyReady = { setup.state.value is SetupState.Ready },
     shareProbe = graph.shareProbe,
     removeLocation = sharing.removeLocation,
+    // IN-3: a processo freddo lo stato si sta ancora leggendo; il cancello d'ingresso aspetta invece di dire "non pronta".
+    familyLoading = { setup.state.value is SetupState.Loading },
+    familyChanges = setup.state.map { },
   )
 
   @Provides

@@ -12,6 +12,16 @@ object DocumentPolicy {
   /** E-X1: aprire un documento (il NAS puo' dover aprire una sessione) non aspetta piu' di cosi'. Poi `FileNotFoundException`, mai un'attesa infinita. */
   const val OPEN_DEADLINE_MS: Long = 15_000
 
+  /**
+   * "Rimuovi la posizione" acceso: aprire un documento puo' dover **preparare la copia senza posizione** (scaricarla dal NAS, ricostruirla, ricontrollarla).
+   * Il tempo che un'altra app aspetta all'apertura prima di ricevere un errore (la copia non resta a meta': si toglie). Per i video grandi solo-NAS
+   * conviene il selettore di MyCloud Gallery, che prepara prima con la barra di avanzamento e il tasto "Annulla".
+   */
+  const val PREPARE_DEADLINE_MS: Long = 180_000
+
+  /** IN-3: quanto il provider aspetta, a processo freddo, che l'app abbia letto il suo stato prima di rispondere "non pronta". */
+  const val LOAD_WAIT_MS: Long = 4_000
+
   /** E-X1: **ogni** lettura di un pezzo di un documento solo-NAS ha questa scadenza (scadenza a ogni lettura, 15 s, §2.7). */
   const val READ_DEADLINE_MS: Long = 15_000
 

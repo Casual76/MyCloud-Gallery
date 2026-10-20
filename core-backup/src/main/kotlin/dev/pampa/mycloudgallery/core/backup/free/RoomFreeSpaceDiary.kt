@@ -112,6 +112,13 @@ class RoomFreeSpaceDiary(private val database: GalleryDatabase, private val cloc
 
   override suspend fun runs(): List<FreeRunRecord> = dao.runsInState(RUN_STATES.keys.toList()).map { it.toRecord() }
 
+  /** LS-2: solo i giri non finiti (una query sullo stato, non tutta la storia). */
+  override suspend fun openRuns(): List<FreeRunRecord> = dao.runsInState(OPEN_RUN_STATES).map { it.toRecord() }
+
+  /** LS-15: solo i giri con righe consegnate ad Android e non risolte, dall'indice di `free_space_item.state`. */
+  override suspend fun runsToSettle(): List<FreeRunRecord> =
+    dao.itemsInStates(HANDED_UNRESOLVED).map { it.runId }.distinct().sorted().mapNotNull { dao.run(it)?.toRecord() }
+
   /** P14: una query sola sull'indice di `free_space_item.state` (non scorre tutti i giri). */
   override suspend fun handedPhoneLocations(): Set<LocationId> =
     dao.phoneLocationsInStates(HANDED_UNRESOLVED).mapTo(HashSet()) { LocationId(it) }
@@ -132,6 +139,7 @@ class RoomFreeSpaceDiary(private val database: GalleryDatabase, private val cloc
     fun modeOf(permanent: Boolean): String = if (permanent) TrashMode.DELETE_NOW.code else TrashMode.ANDROID_TRASH.code
 
     val HANDED_UNRESOLVED: List<String> = listOf(FreeItemState.IN_DIALOG.code, FreeItemState.IN_DOUBT.code)
+    val OPEN_RUN_STATES: List<String> = FreeSpaceRunState.entries.filter { !it.terminal }.map { it.code }
     val HANDED_OR_FREED: List<String> = listOf(FreeItemState.IN_DIALOG.code, FreeItemState.IN_DOUBT.code, FreeItemState.FREED.code)
     val BLOCKS: Map<String, FreeSpaceBlock> = FreeSpaceBlock.entries.associateBy { it.code }
 

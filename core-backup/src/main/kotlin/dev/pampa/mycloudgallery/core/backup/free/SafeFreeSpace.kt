@@ -16,6 +16,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.FreeSpaceRules
 import dev.pampa.mycloudgallery.core.backup.contract.FreeSpaceRun
 import dev.pampa.mycloudgallery.core.backup.contract.FreeSpaceRunId
 import dev.pampa.mycloudgallery.core.backup.contract.FreeSpaceRunState
+import dev.pampa.mycloudgallery.core.backup.contract.GuardReport
 import dev.pampa.mycloudgallery.core.backup.contract.GuardScope
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneBytes
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneConfirmation
@@ -23,6 +24,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.PhoneConfirmationCheck
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneConfirmationRules
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneLookup
 import dev.pampa.mycloudgallery.core.backup.contract.PhonePlanHash
+import dev.pampa.mycloudgallery.core.backup.contract.PhoneRowNow
 import dev.pampa.mycloudgallery.core.backup.contract.PrivateCopyGuardian
 import dev.pampa.mycloudgallery.core.backup.contract.RunStop
 import dev.pampa.mycloudgallery.core.backup.contract.TrashBatch
@@ -44,6 +46,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -56,8 +59,9 @@ import kotlinx.coroutines.sync.withLock
  * 1. [plan]: dal **catalogo locale** ([FreeSpaceCatalog]) le copie del telefono liberabili, con gli esclusi per motivo ([FreeSpaceEvaluator]).
  *    Non legge il NAS (E-S11): il NAS fa solo da cancello, puo' togliere un elemento, mai aggiungerlo. Di default tutto il sicuro tranne
  *    gli ultimi 30 giorni (Q9);
- * 2. [verify]: la conferma ([PhoneConfirmation]) si controlla contro il piano **ricalcolato adesso** (impronta, 10 minuti, due tocchi per
- *    "Libera subito"); poi il giro si scrive nel diario ([FreeSpaceDiary]), con l'istante monotono e il conteggio dei riavvii (la validita');
+ * 2. [verify]: la conferma ([PhoneConfirmation]) si controlla contro il piano che l'utente ha visto (impronta, 10 minuti, due tocchi per
+ *    "Libera subito") e il giro prende solo i suoi elementi che il piano **ricalcolato adesso** ha ancora identici (LS-13: mai uno in piu');
+ *    poi il giro si scrive nel diario ([FreeSpaceDiary]), con l'istante monotono e il conteggio dei riavvii (la validita');
  * 3. il guardiano ([PrivateCopyGuardian]) per i media con la sola copia comune (D9, E-B14); quelli che non riescono escono;
  * 4. la **verifica sul momento**: ogni copia privata da proteggere riletta per intero ([NasRereader]: SHA-256 adesso, timbro uguale prima e
  *    dopo), lo SHA-256 letto passato al catalogo ([FreeSpaceCatalog.markVerified], E-B8); una copia che non torna fa uscire l'elemento;
@@ -99,6 +103,12 @@ class SafeFreeSpace(
   private val fence: BackupFence? = null,
   /** Android 11+: senza `createTrashRequest`/`createDeleteRequest` "Libera spazio" non esiste (D14). */
   private val systemDialogs: () -> Boolean = { true },
+  /**
+   * LS-11 della verifica funzionale 5B: l'ora del NAS vive solo in memoria e la mette la prima sessione SMB del processo. Senza, [verify] prova a
+   * raggiungere il NAS (`:app`: una sessione sull'area privata, nessun file letto) prima di dire "il NAS non risponde": a casa, appena aperta
+   * l'app, la verifica diceva "NAS non raggiungibile" solo perche' nessuno l'aveva ancora contattato.
+   */
+  private val reachNas: suspend () -> Unit = {},
   /** Il fuso per "oggi" (Q9); l'istante e' sempre l'ora del NAS. */
   zone: ZoneId = ZoneId.systemDefault(),
   /** Oggi, per i filtri "ultimi 30 giorni" e "piu' vecchi di un anno": dall'ora del NAS, mai dall'orologio del telefono. */
@@ -166,9 +176,9 @@ class SafeFreeSpace(
         when (outcome) {
           is CopyOutcome.Excluded -> skip(outcome.reason)
           is CopyOutcome.Ready -> {
-            // Gia' consegnata ad Android in un altro giro (dialogo aperto, esito in dubbio): non due volte.
+            // Gia' consegnata ad Android in un altro giro (dialogo aperto, esito in dubbio): non due volte. LS-12: con il suo motivo.
             if (outcome.phoneLocation in handed) {
-              skip(FreeSpaceExclusion.IN_PROGRESS_OR_ERROR)
+              skip(FreeSpaceExclusion.AWAITING_PHONE)
               continue
             }
             if (outcome.guardVersions.isNotEmpty() && fm.id !in guardedMedia) {
@@ -215,20 +225,48 @@ class SafeFreeSpace(
 
   // --- 2. La conferma, il giro, il guardiano e la verifica ------------------------------------------------------------------
 
-  override suspend fun verify(plan: FreeSpacePlan, confirmation: PhoneConfirmation, budget: Duration): FreeSpaceRun = mutex.withLock {
+  override suspend fun verify(plan: FreeSpacePlan, confirmation: PhoneConfirmation, budget: Duration): FreeSpaceRun {
     val deadline = deadlineOf(budget)
-    val startedAt = clock.monotonicMs()
-    if (!systemDialogs()) return@withLock blockedRun(plan, FreeSpaceBlock.NO_SYSTEM_DIALOG)
-    val scene = scene()
-    blockOf(scene)?.let { return@withLock blockedRun(plan, it) }
-    // E-B9: senza l'ora del NAS nessuna sessione l'ha mai raggiunto, e una copia non si segna "verificata adesso".
-    if (clock.nasNowMs() == null) return@withLock blockedRun(plan, FreeSpaceBlock.NAS_UNREACHABLE)
-    // La conferma vale per il piano RICALCOLATO adesso: un elemento in piu', un timbro diverso, un altro filtro vogliono un altro tocco.
-    val fresh = draft(plan.filter, plan.permanent, scene)
-    if (PhoneConfirmationRules.check(fresh.plan, confirmation, startedAt) != PhoneConfirmationCheck.Valid) {
-      return@withLock blockedRun(plan, FreeSpaceBlock.CONFIRMATION_REJECTED)
+    // LS-11: senza l'ora del NAS (nessuna sessione ancora in questo processo) si prova a raggiungerlo, fuori dal lucchetto.
+    if (clock.nasNowMs() == null) reachNasQuietly()
+    return when (val begun = mutex.withLock { begin(plan, confirmation) }) {
+      is Begun.Refused -> begun.run
+      is Begun.Started -> drive(begun.rec.id, deadline) { unknownRun(begun.rec.id, begun.rec.planHash, begun.rec.permanent) }
     }
-    val records = fresh.items.mapIndexed { index, d ->
+  }
+
+  /** Com'e' andato l'inizio di un giro. */
+  private sealed interface Begun {
+    class Started(val rec: FreeRunRecord) : Begun
+
+    /** Il giro non parte: e' nel diario, bloccato con il suo motivo. */
+    class Refused(val run: FreeSpaceRun) : Begun
+  }
+
+  /**
+   * La conferma e il giro, sotto il lucchetto.
+   *
+   * **LS-13 della verifica funzionale 5B.** La conferma vale per il piano **che l'utente ha visto** ([plan]: impronta, 10 minuti, due tocchi per
+   * "Libera subito"), e il giro prende solo gli elementi di quel piano che il piano **ricalcolato adesso** ha ancora **identici** (stesso media,
+   * versione, riga, dimensione e copia decisa): un elemento diventato al sicuro dopo il foglio non entra mai (la lista non cresce), uno cambiato o
+   * uscito resta sul telefono. Prima ogni differenza rifiutava la conferma: durante il primo backup, con media che diventano al sicuro ogni
+   * minuto, "Qualcosa e' cambiato" a ogni tentativo. La sicurezza non cambia: ogni elemento del giro e' stato confermato dall'utente **e** passa
+   * le regole adesso, e poi la verifica sul momento lo rilegge per intero.
+   */
+  private suspend fun begin(plan: FreeSpacePlan, confirmation: PhoneConfirmation): Begun {
+    val startedAt = clock.monotonicMs()
+    if (!systemDialogs()) return Begun.Refused(blockedRun(plan, FreeSpaceBlock.NO_SYSTEM_DIALOG))
+    val scene = scene()
+    blockOf(scene)?.let { return Begun.Refused(blockedRun(plan, it)) }
+    // E-B9: senza l'ora del NAS nessuna sessione l'ha mai raggiunto, e una copia non si segna "verificata adesso".
+    if (clock.nasNowMs() == null) return Begun.Refused(blockedRun(plan, FreeSpaceBlock.NAS_UNREACHABLE))
+    if (PhoneConfirmationRules.check(plan, confirmation, startedAt) != PhoneConfirmationCheck.Valid) {
+      return Begun.Refused(blockedRun(plan, FreeSpaceBlock.CONFIRMATION_REJECTED))
+    }
+    val fresh = draft(plan.filter, plan.permanent, scene)
+    val confirmed = plan.items.mapTo(HashSet(), ::keyOf)
+    val kept = fresh.items.filter { keyOf(it.item) in confirmed }
+    val records = kept.mapIndexed { index, d ->
       val o = d.outcome
       FreeItemRecord(
         index = index,
@@ -251,51 +289,125 @@ class SafeFreeSpace(
     }
     // Un giro alla volta: uno ancora aperto (un foglio di ieri, un doppio tocco) si chiude. Un suo lotto gia' nel dialogo resta tracciato:
     // la risposta si registra lo stesso, o la risolve la prova del telefono.
-    for (old in diary.runs()) if (!old.state.terminal) end(old, FreeSpaceRunState.EXPIRED)
+    for (old in diary.openRuns()) end(old, FreeSpaceRunState.EXPIRED)
     val validity = FreeValidity(startedAt, boot.current())
+    // L'impronta del giro e' quella del piano confermato (LS-13): e' cio' che l'utente ha visto.
     val created = diary.create(
-      NewFreeRun(state, fresh.plan.filter.kind, fresh.plan.filter.excludeRecentDays, fresh.plan.permanent, fresh.plan.hash, validity),
+      NewFreeRun(state, plan.filter.kind, plan.filter.excludeRecentDays, plan.permanent, plan.hash, validity),
       records,
     )
     liveRuns[created.id.value] = validity
     remember(created.id, records)
-    advance(created, deadline)
+    return Begun.Started(created)
   }
 
-  override suspend fun resume(run: FreeSpaceRun, budget: Duration): FreeSpaceRun = mutex.withLock {
-    val deadline = deadlineOf(budget)
-    val record = diary.run(run.id) ?: return@withLock unknownRun(run.id, run.planHash, run.permanent)
-    advance(record, deadline)
+  override suspend fun resume(run: FreeSpaceRun, budget: Duration): FreeSpaceRun =
+    drive(run.id, deadlineOf(budget)) { unknownRun(run.id, run.planHash, run.permanent) }
+
+  /**
+   * LS-2 della verifica funzionale 5B: il giro rimasto aperto (l'ultimo non finito), da riprendere all'apertura della pagina o dal lavoro avviato
+   * dall'utente dopo la morte del processo. **Nei limiti di sempre**: vale 6 ore di orologio monotono dal suo inizio e solo nello stesso avvio
+   * del telefono (con il conteggio dei riavvii; senza, solo nello stesso processo), altrimenti si chiude qui (`EXPIRED`) e si rifa' dal piano.
+   * Prima la pagina ripartiva sempre dal riepilogo e il diario serviva solo dentro la stessa visita. Null = nessun giro aperto.
+   */
+  suspend fun active(): FreeSpaceRun? = mutex.withLock {
+    val rec = diary.openRuns().lastOrNull() ?: return@withLock null
+    runOf(checked(rec))
   }
+
+  /**
+   * LS-2: "Annulla" durante la verifica. Il giro si chiude (`CANCELLED`) e non si riprende piu' (ne' dalla pagina ne' dal lavoro): prima
+   * restava aperto nel diario. Un suo lotto gia' consegnato ad Android resta tracciato. Null = giro sconosciuto.
+   */
+  suspend fun abandon(id: FreeSpaceRunId): FreeSpaceRun? = mutex.withLock {
+    val rec = diary.run(id) ?: return@withLock null
+    runOf(if (rec.state.terminal) rec else end(rec, FreeSpaceRunState.CANCELLED))
+  }
+
+  /** LS-13: cio' che rende "lo stesso" un elemento fra il piano confermato e quello di adesso (i campi dell'impronta del piano). */
+  private data class ItemKey(
+    val mediaId: MediaId,
+    val versionId: dev.pampa.mycloudgallery.core.model.VersionId,
+    val volume: String,
+    val mediaStoreId: Long,
+    val mediaStoreVersion: String,
+    val size: Long,
+    val copySize: Long?,
+    val copyModifiedAt: Long?,
+    val copyFileId: Long?,
+  )
+
+  private fun keyOf(item: FreeSpaceItem): ItemKey = ItemKey(
+    item.mediaId, item.versionId, item.phone.volume, item.phone.mediaStoreId, item.phone.mediaStoreVersion, item.size,
+    item.safeCopy?.size, item.safeCopy?.modifiedAtMillis, item.safeCopy?.fileId,
+  )
 
   private fun deadlineOf(budget: Duration): Long = clock.monotonicMs() + budget.inWholeMilliseconds.coerceAtLeast(0)
 
-  /** Porta avanti il giro fino a [deadline]: guardiano, poi verifica. Restituisce il giro com'e'. */
-  private suspend fun advance(start: FreeRunRecord, deadline: Long): FreeSpaceRun {
-    var rec = settleForeignDialog(start)
-    if (rec.state.terminal) return runOf(rec)
-    if (!isValid(rec)) return runOf(end(rec, FreeSpaceRunState.EXPIRED))
-    blockOf(scene())?.let { return runOf(end(rec, FreeSpaceRunState.BLOCKED, it)) }
-    if (rec.state == FreeSpaceRunState.GUARDING) rec = guardStep(rec, deadline)
-    if (rec.state == FreeSpaceRunState.VERIFYING) rec = verifyStep(rec, deadline)
-    return runOf(rec)
+  /** LS-11: una sessione del NAS (l'ora del NAS); un errore non esce di qui: senza l'ora, il giro dira' "il NAS non risponde". */
+  private suspend fun reachNasQuietly() {
+    try {
+      reachNas()
+    } catch (e: CancellationException) {
+      throw e
+    } catch (_: Exception) {
+      // Resta senza l'ora del NAS: [begin] lo dice.
+    }
   }
 
-  /** 3. Il guardiano (D9, E-B14): poi ogni elemento che aspettava si rivaluta dal catalogo; chi non ha ancora la copia privata esce. */
-  private suspend fun guardStep(rec: FreeRunRecord, deadline: Long): FreeRunRecord {
-    val waiting = itemsOf(rec.id).filter { it.state == FreeItemState.GUARD }
+  /**
+   * Porta avanti il giro [id] fino a [deadline]: guardiano, poi verifica. Restituisce il giro com'e' ([unknown] se il diario non lo conosce).
+   *
+   * **LS-8 della verifica funzionale 5B.** Il guardiano aspetta il turno del backup (uno alla volta con il motore) e scrive le copie private:
+   * gira **fuori** dal lucchetto di "Libera spazio". Prima lo teneva per tutta l'attesa (fino a 15 minuti con "Fai ora" in corso): intanto
+   * `settle()` dopo la lettura del telefono, i lotti e "Annulla" aspettavano. Dopo, il giro si rilegge dal diario: se nel frattempo e' finito
+   * (un giro nuovo, "Annulla") non si va avanti.
+   */
+  private suspend fun drive(id: FreeSpaceRunId, deadline: Long, unknown: () -> FreeSpaceRun): FreeSpaceRun {
+    val waiting = mutex.withLock {
+      val rec = checked(diary.run(id) ?: return unknown())
+      if (rec.state != FreeSpaceRunState.GUARDING) return verifyNow(rec, deadline)
+      itemsOf(rec.id).filter { it.state == FreeItemState.GUARD }
+    }
+    var report: GuardReport? = null
     if (waiting.isNotEmpty()) {
       val left = deadline - clock.monotonicMs()
-      if (left <= 0) return rec
-      val report = guardian.ensure(GuardScope.Media(waiting.mapTo(LinkedHashSet()) { it.mediaId }), left.milliseconds)
-      when (report.stoppedBy) {
-        // La tappa e' finita: il guardiano riprende dal suo diario alla prossima.
-        RunStop.BUDGET -> return rec
-        RunStop.NAS -> return end(rec, FreeSpaceRunState.BLOCKED, FreeSpaceBlock.NAS_UNREACHABLE)
-        // Finito, o il cancello non lo lascia scrivere (pausa, sola lettura): conta cio' che c'e' adesso nel catalogo.
-        else -> Unit
-      }
+      if (left <= 0) return mutex.withLock { runOf(diary.run(id) ?: return unknown()) }
+      report = guardian.ensure(GuardScope.Media(waiting.mapTo(LinkedHashSet()) { it.mediaId }), left.milliseconds)
     }
+    return mutex.withLock {
+      var rec = diary.run(id) ?: return unknown()
+      if (rec.state == FreeSpaceRunState.GUARDING) rec = guardStep(rec, report)
+      verifyNow(rec, deadline)
+    }
+  }
+
+  /** Il giro com'e' prima di lavorarci: gli esiti di un processo morto, la validita' (6 ore, stesso avvio), il cancello. */
+  private suspend fun checked(start: FreeRunRecord): FreeRunRecord {
+    val rec = settleForeignDialog(start)
+    if (rec.state.terminal) return rec
+    if (!isValid(rec)) return end(rec, FreeSpaceRunState.EXPIRED)
+    blockOf(scene())?.let { return end(rec, FreeSpaceRunState.BLOCKED, it) }
+    return rec
+  }
+
+  /** La verifica sul momento, se il giro e' a quel punto; poi il giro com'e'. */
+  private suspend fun verifyNow(rec: FreeRunRecord, deadline: Long): FreeSpaceRun =
+    runOf(if (rec.state == FreeSpaceRunState.VERIFYING) verifyStep(rec, deadline) else rec)
+
+  /**
+   * 3. Il guardiano (D9, E-B14) ha lavorato ([report], null = niente da fare): ogni elemento che aspettava si rivaluta dal catalogo; chi non ha
+   * ancora la copia privata esce.
+   */
+  private suspend fun guardStep(rec: FreeRunRecord, report: GuardReport?): FreeRunRecord {
+    when (report?.stoppedBy) {
+      // La tappa e' finita (o il turno del backup non si e' liberato): il guardiano riprende dal suo diario alla prossima.
+      RunStop.BUDGET -> return rec
+      RunStop.NAS -> return end(rec, FreeSpaceRunState.BLOCKED, FreeSpaceBlock.NAS_UNREACHABLE)
+      // Finito, o il cancello non lo lascia scrivere (pausa, sola lettura): conta cio' che c'e' adesso nel catalogo.
+      else -> Unit
+    }
+    val waiting = itemsOf(rec.id).filter { it.state == FreeItemState.GUARD }
     val scene = scene()
     val facts = catalog.media(waiting.map { it.mediaId }.toSet()).associateBy { it.id }
     val changed = waiting.map { item ->
@@ -461,13 +573,7 @@ class SafeFreeSpace(
   private suspend fun reofferable(rec: FreeRunRecord, index: Int): List<FreeItemRecord> {
     val open = itemsOf(rec.id).filter { it.state == FreeItemState.IN_DIALOG && it.batchIndex == index }
     val proofs = open.map { item -> item to item.phone?.let { phone.lookup(it) } }
-    val settled = proofs.mapNotNull { (item, now) ->
-      when (now) {
-        PhoneLookup.Gone -> item.copy(state = FreeItemState.FREED)
-        null, PhoneLookup.Stale, is PhoneLookup.Denied -> item.copy(state = FreeItemState.IN_DOUBT)
-        is PhoneLookup.Present -> null
-      }
-    }
+    val settled = proofs.mapNotNull { (item, now) -> if (now is PhoneLookup.Present) null else provenBy(item, now) }
     if (settled.isNotEmpty()) {
       write(rec, settled)
       tellCatalog(settled)
@@ -556,7 +662,7 @@ class SafeFreeSpace(
     for (id in ids) {
       val outcomes = found[id]?.let { rules.evaluate(it, scene, excludeRecentDays = 0) }.orEmpty()
         // Una copia gia' consegnata a un dialogo di sistema aspetta il suo esito.
-        .map { if (it is CopyOutcome.Ready && it.phoneLocation in handed) CopyOutcome.Excluded(it.phoneLocation, FreeSpaceExclusion.IN_PROGRESS_OR_ERROR) else it }
+        .map { if (it is CopyOutcome.Ready && it.phoneLocation in handed) CopyOutcome.Excluded(it.phoneLocation, FreeSpaceExclusion.AWAITING_PHONE) else it }
       advice[id] = PhoneOnlyAssessment.adviceOf(outcomes, unavailable)
     }
     return PhoneOnlyAssessment(advice)
@@ -602,7 +708,8 @@ class SafeFreeSpace(
    */
   suspend fun settle(): Int = mutex.withLock {
     var settled = 0
-    for (rec in diary.runs()) {
+    // LS-15: solo i giri con righe consegnate e non risolte (prima tutta la storia dei giri, a ogni lettura del telefono).
+    for (rec in diary.runsToSettle()) {
       val before = itemsOf(rec.id).count { it.state == FreeItemState.IN_DOUBT || it.state == FreeItemState.IN_DIALOG }
       if (before == 0) continue
       settleForeignDialog(rec, alsoInDoubt = true)
@@ -614,6 +721,12 @@ class SafeFreeSpace(
   /**
    * Gli elementi `IN_DIALOG` di un lotto che **questo** processo non ha consegnato (il processo di prima e' morto durante il dialogo o
    * subito dopo): si risolvono con la prova del telefono, mai dati per liberati senza.
+   *
+   * LS-12: anche il lotto di **questo** processo di un giro finito (scaduto, chiuso da un giro nuovo) la cui risposta non e' arrivata (il lavoro
+   * della pagina chiuso prima di `recordOutcome`): nessuno lo riproporra' piu', e prima restava `IN_DIALOG` (fuori da ogni piano) fino alla
+   * morte del processo. Ma il suo dialogo **puo' essere ancora aperto** e rispondere dopo (la risposta si registra anche a giro finito): per
+   * questo vale solo la prova che la riga non c'e' piu' (liberata); una riga ancora sul telefono resta nel dialogo, con il suo motivo nel
+   * riepilogo, finche' arriva la risposta o finche' il processo muore (allora e' un lotto "di un processo morto", qui sopra).
    */
   private suspend fun settleForeignDialog(rec: FreeRunRecord, alsoInDoubt: Boolean = false): FreeRunRecord {
     val mine = pendingBatch[rec.id.value]
@@ -621,9 +734,11 @@ class SafeFreeSpace(
     val open = items.filter {
       (it.state == FreeItemState.IN_DIALOG && it.batchIndex != mine) || (alsoInDoubt && it.state == FreeItemState.IN_DOUBT)
     }
-    if (open.isEmpty()) return rec
+    val ownLeft = if (rec.state.terminal && mine != null) items.filter { it.state == FreeItemState.IN_DIALOG && it.batchIndex == mine } else emptyList()
+    if (open.isEmpty() && ownLeft.isEmpty()) return rec
     // Un lotto consegnato da un processo morto e' chiuso: le righe che il telefono non sa dire passano a IN_DOUBT, mai piu' riproposte.
-    val changed = open.map { proven(it) }.filter { new -> open.first { it.index == new.index }.state != new.state }
+    val changed = open.map { proven(it) }.filter { new -> open.first { it.index == new.index }.state != new.state } +
+      ownLeft.map { proven(it) }.filter { it.state == FreeItemState.FREED }
     val closesBatch = open.any { it.state == FreeItemState.IN_DIALOG && it.batchIndex == rec.batchesDone + 1 }
     val after = items.map { item -> changed.firstOrNull { it.index == item.index } ?: item }
     val state = if (rec.state == FreeSpaceRunState.READY && after.none { it.state == FreeItemState.VERIFIED }) FreeSpaceRunState.DONE else rec.state
@@ -635,13 +750,29 @@ class SafeFreeSpace(
   }
 
   /** La prova del telefono per un elemento dal destino sconosciuto: assente = liberato, presente = rimasto, altrimenti in dubbio. */
-  private suspend fun proven(item: FreeItemRecord): FreeItemRecord {
-    val ref = item.phone ?: return item.copy(state = FreeItemState.IN_DOUBT)
-    return when (phone.lookup(ref)) {
-      PhoneLookup.Gone -> item.copy(state = FreeItemState.FREED)
-      is PhoneLookup.Present -> item.copy(state = FreeItemState.KEPT)
-      PhoneLookup.Stale, is PhoneLookup.Denied -> item.copy(state = FreeItemState.IN_DOUBT)
+  private suspend fun proven(item: FreeItemRecord): FreeItemRecord = provenBy(item, item.phone?.let { phone.lookup(it) })
+
+  /**
+   * L'esito di un elemento consegnato ad Android dalla riga del telefono adesso ([now], null = l'elemento non sa la sua riga).
+   *
+   * LS-12: una riga `Stale` (MediaStore ricostruito, `_ID` rinumerati) restava in dubbio per sempre. Adesso la risolve la lettura del telefono, con
+   * la stessa ricetta del backup ([FreeSpaceCatalog.phoneRowOf]): la versione non ha piu' una riga presente dopo la rilettura completa del
+   * volume = liberata; ha una riga presente con un altro `_ID` = rimasta; altrimenti (lettura non finita, catalogo in ritardo, non si sa) resta in
+   * dubbio. Mai "liberata" senza una prova.
+   */
+  private suspend fun provenBy(item: FreeItemRecord, now: PhoneLookup?): FreeItemRecord {
+    val ref = item.phone
+    val state = when (now) {
+      PhoneLookup.Gone -> FreeItemState.FREED
+      is PhoneLookup.Present -> FreeItemState.KEPT
+      PhoneLookup.Stale -> when (val row = ref?.let { catalog.phoneRowOf(item.mediaId, item.versionId, it) }) {
+        PhoneRowNow.Absent -> FreeItemState.FREED
+        is PhoneRowNow.At -> if (row.ref == ref) FreeItemState.IN_DOUBT else FreeItemState.KEPT
+        PhoneRowNow.Rereading, null -> FreeItemState.IN_DOUBT
+      }
+      null, is PhoneLookup.Denied -> FreeItemState.IN_DOUBT
     }
+    return item.copy(state = state)
   }
 
   private suspend fun tellCatalog(changed: List<FreeItemRecord>) {

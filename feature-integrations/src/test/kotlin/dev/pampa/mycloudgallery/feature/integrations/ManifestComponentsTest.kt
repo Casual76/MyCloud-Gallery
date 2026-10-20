@@ -66,8 +66,13 @@ class ManifestComponentsTest {
     val filters = filters(picker)
     assertThat(filters).hasSize(2)
     assertThat(filters.map { it.first }).containsExactly(setOf("android.intent.action.GET_CONTENT"), setOf("android.intent.action.PICK"))
-    for ((_, categories, types) in filters) {
-      assertThat(types).containsExactly("image/*", "video/*")
+    for ((actions, categories, types) in filters) {
+      // IN-13: il `PICK` classico con un indirizzo del MediaStore porta i tipi del MediaStore; `GET_CONTENT` no.
+      if (actions == setOf("android.intent.action.PICK")) {
+        assertThat(types).containsExactly("image/*", "video/*", "vnd.android.cursor.dir/image", "vnd.android.cursor.dir/video")
+      } else {
+        assertThat(types).containsExactly("image/*", "video/*")
+      }
       assertThat(categories - setOf("android.intent.category.DEFAULT", "android.intent.category.OPENABLE")).isEmpty()
       assertThat(categories).contains("android.intent.category.DEFAULT")
     }

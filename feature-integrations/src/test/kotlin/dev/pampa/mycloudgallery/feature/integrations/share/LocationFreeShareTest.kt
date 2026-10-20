@@ -337,6 +337,25 @@ class LocationFreeShareTest {
     assertThat(cache.editRoot.listFiles()!!.map { it.name }).containsExactly(keep)
   }
 
+  /**
+   * Selettore e provider preparano copie nella stessa cache: la prima chiamata di un processo nato per rispondere (DocumentsUI, Gmail) puo' preparare
+   * una copia mentre la pulizia dell'avvio passa (stessa corsa di IN-1). Quella copia, di questo processo, resta; i resti di un processo morto no.
+   */
+  @Test
+  fun lAvvioNonTogliLeCopieDiQuestoProcessoMaTogliQuelleDiUnoMorto() {
+    val mine = cache.newShareDir()
+    File(mine, "0/foto.jpg").apply { parentFile!!.mkdirs(); writeBytes(byteArrayOf(1)) }
+    File(cache.shareRoot, "di-un-processo-morto/0/vecchia.jpg").apply { parentFile!!.mkdirs(); writeBytes(byteArrayOf(2)) }
+
+    cache.sweepAtStart(keepEdit = emptySet())
+
+    assertThat(File(mine, "0/foto.jpg").exists()).isTrue()
+    assertThat(File(cache.shareRoot, "di-un-processo-morto").exists()).isFalse()
+    // Tolta la copia (rilascio), la cartella non e' piu' protetta e non resta niente.
+    cache.deleteTree(mine)
+    assertThat(mine.exists()).isFalse()
+  }
+
   @Test
   fun inCacheNonSiEsceDalleDueRadici() {
     val token = ShareCache.randomToken()

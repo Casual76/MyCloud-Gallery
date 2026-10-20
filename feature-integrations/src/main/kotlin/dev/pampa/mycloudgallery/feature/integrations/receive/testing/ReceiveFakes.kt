@@ -10,6 +10,7 @@ import dev.pampa.mycloudgallery.feature.integrations.receive.DestinationChoice
 import dev.pampa.mycloudgallery.feature.integrations.receive.IncomingDestinations
 import dev.pampa.mycloudgallery.feature.integrations.receive.IncomingFiles
 import dev.pampa.mycloudgallery.feature.integrations.receive.IncomingQueue
+import dev.pampa.mycloudgallery.feature.integrations.receive.NasWait
 import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.io.InputStream
@@ -45,11 +46,32 @@ class FakeIncomingDestinations(
 
   var reachable: Boolean = true
 
+  /** Se non e' null, perche' il NAS non risponde (default: offline se `reachable` e' falso). Come `AppIncomingDestinations`: i dati mobili non sono "NAS spento". */
+  var wait: NasWait? = null
+
+  /** IN-6: il backup in prova (D12, R2): niente si salva, e si dice prima di copiare. */
+  var trialOnly: Boolean = false
+
+  /** Quanto dura la prova del NAS (col NAS spento, fino a 5 s): la schermata non la aspetta piu' prima di dire "In coda". */
+  var nasProbeDelayMs: Long = 0
+
+  /** Quante volte e' stata chiesta la prova del NAS. */
+  var probes: Int = 0
+    private set
+
   override suspend fun roots(): List<DestinationChoice> = roots
 
   override suspend fun children(parent: DestinationChoice): List<DestinationChoice> = children[parent].orEmpty()
 
   override suspend fun nasReachable(): Boolean = reachable
+
+  override suspend fun nasWait(): NasWait {
+    probes++
+    if (nasProbeDelayMs > 0) kotlinx.coroutines.delay(nasProbeDelayMs)
+    return wait ?: if (reachable) NasWait.NONE else NasWait.OFFLINE
+  }
+
+  override suspend fun savingBlockedByTrial(): Boolean = trialOnly
 
   companion object {
     fun choice(name: String, area: DestinationArea = DestinationArea.PRIVATE, folder: String = name): DestinationChoice =
@@ -64,7 +86,10 @@ class FakeIncomingDestinations(
 class FakeIncomingQueue : IncomingQueue {
 
   var allowed: Boolean = true
-  var failWith: IOException? = null
+
+  /** Come il diario vero con un file di cui non legge piu' l'impronta (IN-12): salta il primo e non lo mette in coda. */
+  var skipOne: Boolean = false
+  var failWith: Exception? = null
   val enqueued: MutableList<Pair<NasDestination, List<String>>> = ArrayList()
   var lastStage: IncomingStage? = null
 
@@ -74,7 +99,7 @@ class FakeIncomingQueue : IncomingQueue {
     failWith?.let { throw it }
     lastStage = stage
     // Come farebbe il diario vero: ogni file locale deve esistere ed essere leggibile.
-    val names = stage.accepted.mapNotNull { item -> files.fileOf(stage.id, item)?.takeIf { it.isFile }?.let { item.name } }
+    val names = stage.accepted.mapNotNull { item -> files.fileOf(stage.id, item)?.takeIf { it.isFile }?.let { item.name } }.let { if (skipOne) it.drop(1) else it }
     enqueued += dest to names
     return names.size
   }

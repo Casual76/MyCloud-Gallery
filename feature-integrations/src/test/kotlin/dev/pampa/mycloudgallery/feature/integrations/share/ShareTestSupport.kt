@@ -12,6 +12,7 @@ import dev.pampa.mycloudgallery.core.metadata.extract.VideoMetadataParsing
 import dev.pampa.mycloudgallery.core.metadata.strip.DefaultLocationStripper
 import dev.pampa.mycloudgallery.core.metadata.strip.ExifInterfaceLocationRecheck
 import dev.pampa.mycloudgallery.core.metadata.strip.ExtractorLocationRecheck
+import dev.pampa.mycloudgallery.core.metadata.strip.HeicToJpeg
 import dev.pampa.mycloudgallery.core.metadata.strip.LocationRecheck
 import dev.pampa.mycloudgallery.core.metadata.strip.LocationVerdict
 import dev.pampa.mycloudgallery.core.places.testing.FakePlaces
@@ -123,8 +124,17 @@ internal object ShareSamples {
       if (contains(file.readBytes(), "©xyz")) LocationVerdict.HAS_LOCATION else LocationVerdict.CLEAR
   }
 
-  /** Lo stripper vero con i lettori veri (l'estrattore dell'app e `ExifInterface`) e, per i video, il lettore di prova. */
-  fun stripper(): DefaultLocationStripper {
+  /** Un HEIC "di prova": il solo `ftyp` con la marca `heic` basta a riconoscerlo; i pixel li mette il convertitore finto del test. */
+  fun heicBytes(): ByteArray = box("ftyp", "heic".toByteArray(), byteArrayOf(0, 0, 0, 0), "mif1".toByteArray(), "heic".toByteArray()) + ByteArray(256) { 3 }
+
+  /** Una GIF: un formato che non si sa trattare, quindi non si condivide senza posizione (L41). */
+  fun gifBytes(): ByteArray = "GIF89a".toByteArray(Charsets.ISO_8859_1) + ByteArray(64) { 1 }
+
+  /**
+   * Lo stripper vero con i lettori veri (l'estrattore dell'app e `ExifInterface`) e, per i video, il lettore di prova. [heic] e' il convertitore dei
+   * pixel di un HEIC (su JVM `ImageDecoder` non decodifica HEVC: il test ne mette uno suo).
+   */
+  fun stripper(heic: HeicToJpeg = HeicToJpeg.NotAvailable): DefaultLocationStripper {
     val places = FakePlaces()
     val extractor = DefaultMetadataExtractor(
       geocoder = places,
@@ -136,6 +146,7 @@ internal object ShareSamples {
     )
     return DefaultLocationStripper(
       listOf(ExtractorLocationRecheck(extractor, AndroidPreviewDecoder(), ZoneId.of("Europe/Rome")), ExifInterfaceLocationRecheck(), VideoBoxReader()),
+      heic = heic,
     )
   }
 }

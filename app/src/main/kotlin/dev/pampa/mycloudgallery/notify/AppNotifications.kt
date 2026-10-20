@@ -208,6 +208,12 @@ class AppNotifications(context: Context) {
 
     /** L'avanzamento del backup (UIDT, Fase 5A): una notifica sola, tolta alla fine del lavoro. */
     const val ID_BACKUP = 1005
+
+    /** Correzioni 5B (LS-2): la verifica di "Libera spazio" (UIDT) e poi "Pronto: N elementi, X GB. Tocca per liberare". */
+    const val ID_FREE_SPACE = 1006
+
+    /** Correzioni 5B (IN-7): i file ricevuti da un'altra app ("Salva sul NAS", lavoro grande, UIDT): "N di M", con il suo "Ferma". */
+    const val ID_INCOMING = 1007
     private const val REQUEST_OPEN_APP = 0
     private const val TAG = "Notifications"
   }

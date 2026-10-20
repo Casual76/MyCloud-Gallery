@@ -106,6 +106,34 @@ class BackupNotificationTest {
     assertThat(posted.channelId).isEqualTo(AppNotifications.CHANNEL_NAS)
   }
 
+  /**
+   * IN-7 della verifica funzionale 5B: la notifica del lavoro dei file ricevuti ("Salva sul NAS") seguiva `backup.status`: senza la cartella del
+   * dispositivo diceva "Sto riprendendo il backup…", altrimenti i numeri delle foto del telefono; e il suo "Ferma" metteva in pausa **tutto**.
+   * Adesso ha il suo titolo, i suoi numeri (N di M file ricevuti) e un "Ferma" diverso, che non puo' arrivare al lavoro sbagliato.
+   */
+  @Test
+  fun in7_laNotificaDeiFileRicevutiDiceNDiMEHaUnFermaTuttoSuo() {
+    val notification = BackupNotification.build(app, BackupProgress.incoming(done = 2, total = 5))
+    assertThat(notification.extras.getCharSequence(Notification.EXTRA_TITLE).toString()).isEqualTo("Salvataggio sul NAS")
+    assertThat(text(notification)).isEqualTo("2 di 5 file ricevuti")
+    assertThat(text(notification.publicVersion)).isEmpty()
+    assertThat(notification.actions).hasLength(1)
+    val intent = shadowOf(notification.actions[0].actionIntent)
+    assertThat(intent.isBroadcastIntent).isTrue()
+    assertThat(intent.savedIntent.`package`).isEqualTo(app.packageName)
+    assertThat(intent.flags and PendingIntent.FLAG_IMMUTABLE).isEqualTo(PendingIntent.FLAG_IMMUTABLE)
+    // Un'azione diversa da quella del backup delle foto: "Ferma" dei file ricevuti non mette in pausa il backup.
+    assertThat(intent.savedIntent.action).isEqualTo(BackupNotification.stopAction(app, incoming = true))
+    assertThat(BackupNotification.stopAction(app, incoming = true)).isNotEqualTo(BackupNotification.stopAction(app))
+    // All'inizio (nessun numero) e fermandosi, senza numeri e senza azione.
+    assertThat(text(BackupNotification.build(app, BackupProgress.incoming(0, 0)))).isEqualTo("Preparo i file ricevuti…")
+    val stopping = BackupNotification.build(app, BackupProgress.incoming(1, 3), stopping = true)
+    assertThat(text(stopping)).isEqualTo("Mi fermo prima del prossimo file…")
+    assertThat(stopping.actions).isNull()
+    // Un solo file: la forma singolare.
+    assertThat(text(BackupNotification.build(app, BackupProgress.incoming(0, 1)))).isEqualTo("0 di 1 file ricevuto")
+  }
+
   @Test
   fun ilCanaleDelBackupEsisteESilenzioso() {
     AppNotifications(app).createChannels()

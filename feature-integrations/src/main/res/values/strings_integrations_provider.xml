@@ -7,4 +7,11 @@
   <string name="integrations_documents_locked_summary">Bloccata: sbloccala dall’app</string>
   <string name="integrations_documents_error_nas">Il NAS non risponde.</string>
   <string name="integrations_documents_error_generic">Non riesco a leggere questa cartella adesso.</string>
+
+  <!-- "Rimuovi la posizione" acceso: cio' che l'altra app e l'utente leggono quando la copia senza posizione non si puo' fare. Mai l'originale al suo posto. -->
+  <string name="integrations_documents_error_no_location">Questo file non si può condividere senza posizione.</string>
+  <string name="integrations_documents_error_no_location_space">Non c’è abbastanza spazio sul telefono per togliere la posizione da questo file, che quindi non si condivide.</string>
+  <string name="integrations_documents_error_no_location_nas">Il NAS non risponde: non posso togliere la posizione da questo file, che quindi non si condivide.</string>
+  <string name="integrations_documents_error_no_location_failed">Non sono riuscito a togliere la posizione da questo file, che quindi non si condivide.</string>
+  <string name="integrations_documents_error_no_location_slow">Ci vuole troppo a togliere la posizione da questo file: sceglilo dal selettore di MyCloud Gallery, che mostra l’avanzamento.</string>
 </resources>

@@ -61,7 +61,8 @@ class InMemoryBackupStore : BackupStore {
 
   override suspend fun createIncoming(item: NewBackupItem): BackupItem = synchronized(lock) {
     require(item.kind == UploadKind.INCOMING && item.phone == null && item.sha256 != null) { "Un file in arrivo, con il suo SHA-256." }
-    openForLocked(item.versionId)?.takeIf { it.kind == UploadKind.INCOMING } ?: run {
+    // R14: lo stesso arrivo e' quello della stessa versione nella stessa share e nella stessa cartella (come `RoomBackupStore`).
+    items.values.firstOrNull { it.versionId == item.versionId && !it.state.terminal && it.kind == UploadKind.INCOMING && it.sameDestinationAs(item) } ?: run {
       val created = BackupItem(
         id = BackupItemId(nextId++),
         kind = UploadKind.INCOMING,
@@ -105,8 +106,12 @@ class InMemoryBackupStore : BackupStore {
 
   override suspend fun openFor(versionId: VersionId): BackupItem? = synchronized(lock) { openForLocked(versionId) }
 
+  // R15: gli arrivi non contano (come `RoomBackupStore.openFor`): un file in arrivo per un'altra share non blocca il backup della versione.
   private fun openForLocked(versionId: VersionId): BackupItem? =
-    items.values.firstOrNull { it.versionId == versionId && !it.state.terminal }
+    items.values.firstOrNull { it.versionId == versionId && !it.state.terminal && it.kind != UploadKind.INCOMING }
+
+  private fun BackupItem.sameDestinationAs(other: NewBackupItem): Boolean =
+    share.equals(other.share, ignoreCase = true) && planned.components.dropLast(1).map { it.lowercase() } == other.planned.components.dropLast(1).map { it.lowercase() }
 
   override suspend fun citedTemps(): Set<SharePath> = synchronized(lock) {
     items.values.filter { !it.state.terminal }.mapNotNullTo(LinkedHashSet()) { it.temp }

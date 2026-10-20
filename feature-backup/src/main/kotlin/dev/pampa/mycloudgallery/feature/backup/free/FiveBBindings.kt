@@ -48,6 +48,10 @@ abstract class FiveBOptionalBindingsModule {
   @BindsOptionalOf
   abstract fun phoneOnlyAssessor(): PhoneOnlyAssessor
 
+  /** Correzioni 5B (LS-2): il giro di "Libera spazio" fuori dalla pagina (lavoro avviato dall'utente, notifica "Pronto", ripresa). */
+  @BindsOptionalOf
+  abstract fun freeSpaceRuns(): FreeSpaceRuns
+
   @BindsOptionalOf
   abstract fun pendingTaskActions(): PendingTaskActions
 

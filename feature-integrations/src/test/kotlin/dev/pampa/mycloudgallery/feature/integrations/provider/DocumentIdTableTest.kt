@@ -73,10 +73,105 @@ class DocumentIdTableTest {
     val folders = table.idFor(DocumentTarget.NasFolders)
     assertThat(setOf(root, recent, folders)).hasSize(3)
     clock.now = 10_000_000
-    table.revokeAll()
+    // Non scadono: nemmeno dopo ore (sono stabili, IN-2).
     assertThat(table.idFor(DocumentTarget.Root)).isEqualTo(root)
     assertThat((table.resolve(recent) as DocumentResolution.Found).target).isEqualTo(DocumentTarget.Recent)
     assertThat(table.size).isEqualTo(0)
+  }
+
+  private fun keyFile() = java.io.File.createTempFile("doc-id", ".key").also { it.delete(); it.deleteOnExit() }
+
+  /**
+   * IN-2 della verifica funzionale 5B: gli id della radice e delle cartelle erano token casuali nuovi a ogni processo e DocumentsUI li tiene in cache,
+   * quindi dopo un riavvio "Allega file" di Gmail non trovava piu' niente. Adesso sono derivati con una chiave locale su file: lo stesso processo
+   * nuovo, con lo stesso file, ridA gli stessi id.
+   */
+  @Test
+  fun in2_radiceERecentiECartelleSonoUgualiDopoUnRiavvioDelProcesso() {
+    val file = keyFile()
+    val first = DocumentIdTable(Clock(), Random(1), idKey = FileDocumentIdKey(file, Random(1)))
+    val folder = DocumentTarget.Folder(NasFolderKey("alessio\u001FVacanze/Mare"))
+    val ids = listOf(DocumentTarget.Root, DocumentTarget.Recent, DocumentTarget.NasFolders, folder).map { first.idFor(it, label = "Mare") }
+
+    // Il processo nuovo: tabella nuova (vuota), altro generatore casuale, stesso file della chiave.
+    val second = DocumentIdTable(Clock(), Random(999), idKey = FileDocumentIdKey(file, Random(999)))
+    val again = listOf(DocumentTarget.Root, DocumentTarget.Recent, DocumentTarget.NasFolders, folder).map { second.idFor(it, label = "Mare") }
+
+    assertThat(again).isEqualTo(ids)
+    assertThat(ids.toSet()).hasSize(4)
+    // Una chiave diversa (un altro telefono, o dopo l'azzeramento) da' id diversi: gli id non dipendono da niente che si indovini.
+    val other = DocumentIdTable(Clock(), Random(5), idKey = FileDocumentIdKey(keyFile(), Random(5)))
+    assertThat(other.idFor(DocumentTarget.Root)).isNotEqualTo(ids[0])
+    assertThat(other.idFor(folder)).isNotEqualTo(ids[3])
+  }
+
+  @Test
+  fun in2_gliIdStabiliSonoOpachiNonDicononiLaCartellaENonSiIndovinano() {
+    val table = DocumentIdTable(Clock(), Random(1), idKey = FileDocumentIdKey(keyFile(), Random(1)))
+    val key = NasFolderKey("alessio\u001FFoto/Vacanze 2025/Mare")
+    val id = table.idFor(DocumentTarget.Folder(key), label = "Mare")
+    assertThat(DocumentIds.isOpaque(id.value)).isTrue()
+    assertThat(id.value).hasLength(24)
+    for (part in listOf("alessio", "Foto", "Vacanze", "2025", "Mare")) assertThat(id.value).doesNotContain(part)
+    assertThat(java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(key.value.toByteArray())).isNotEqualTo(id.value)
+    // Lo stesso percorso da' sempre lo stesso id; un percorso diverso (anche di una lettera) un altro.
+    assertThat(table.idFor(DocumentTarget.Folder(key))).isEqualTo(id)
+    assertThat(table.idFor(DocumentTarget.Folder(NasFolderKey("alessio\u001FFoto/Vacanze 2025/Mar")))).isNotEqualTo(id)
+  }
+
+  @Test
+  fun in2_unaCartellaDopoIlRiavvioSiRisolveSoloQuandoLaLibreriaLaRicorda() {
+    val file = keyFile()
+    val key = NasFolderKey("alessio\u001FVacanze")
+    val id = DocumentIdTable(Clock(), Random(1), idKey = FileDocumentIdKey(file, Random(1))).idFor(DocumentTarget.Folder(key), label = "Vacanze")
+
+    val restarted = DocumentIdTable(Clock(), Random(2), idKey = FileDocumentIdKey(file, Random(2)))
+    // La tabella riparte vuota: l'id non si risolve da solo (nessun percorso e' ricavabile da lui)...
+    assertThat(restarted.resolve(id)).isEqualTo(DocumentResolution.Unknown)
+    // ...ma la radice e le cartelle virtuali si': sono stabili e si derivano.
+    assertThat((restarted.resolve(restarted.idFor(DocumentTarget.Recent)) as DocumentResolution.Found).target).isEqualTo(DocumentTarget.Recent)
+    // Chi ha la Libreria ricorda la cartella; un nome o un id inventato non entra.
+    restarted.rememberFolder(id, key, "Vacanze")
+    val found = restarted.resolve(id) as DocumentResolution.Found
+    assertThat(found.target).isEqualTo(DocumentTarget.Folder(key))
+    assertThat(found.label).isEqualTo("Vacanze")
+    restarted.rememberFolder(DocumentId("aaaaaaaaaaaaaaaaaaaaaaaa"), key, "Falsa")
+    assertThat(restarted.resolve(DocumentId("aaaaaaaaaaaaaaaaaaaaaaaa"))).isEqualTo(DocumentResolution.Unknown)
+  }
+
+  @Test
+  fun in2_lAzzeramentoFaRuotareLaChiaveEGliIdVecchiNonValgonoPiu() {
+    val file = keyFile()
+    val table = DocumentIdTable(Clock(), Random(1), idKey = FileDocumentIdKey(file, Random(1)))
+    val key = NasFolderKey("alessio\u001FVacanze")
+    val root = table.idFor(DocumentTarget.Root)
+    val folder = table.idFor(DocumentTarget.Folder(key), label = "Vacanze")
+    val media = table.idFor(media(), delivered = true)
+
+    table.revokeAll()
+
+    assertThat(table.resolve(root)).isEqualTo(DocumentResolution.Unknown)
+    assertThat(table.resolve(folder)).isEqualTo(DocumentResolution.Unknown)
+    assertThat(table.resolve(media)).isEqualTo(DocumentResolution.Unknown)
+    assertThat(table.idFor(DocumentTarget.Root)).isNotEqualTo(root)
+    assertThat(table.idFor(DocumentTarget.Folder(key))).isNotEqualTo(folder)
+    // La chiave nuova e' quella sul file: un processo nuovo vede gli id di adesso, non quelli di prima.
+    val restarted = DocumentIdTable(Clock(), Random(3), idKey = FileDocumentIdKey(file, Random(3)))
+    assertThat(restarted.idFor(DocumentTarget.Root)).isEqualTo(table.idFor(DocumentTarget.Root))
+  }
+
+  @Test
+  fun in2_unaChiaveRovinataOChePiovePerTerraNonRompeNiente() {
+    // File di una lunghezza sbagliata: se ne fa una nuova. Cartella impossibile da scrivere: la chiave vale per il processo.
+    val bad = keyFile().also { it.writeBytes(ByteArray(7)) }
+    val key = FileDocumentIdKey(bad, Random(1))
+    assertThat(key.bytes()).hasLength(32)
+    assertThat(bad.length()).isEqualTo(32L)
+    val blocker = java.io.File.createTempFile("blocca", ".tmp").also { it.deleteOnExit() }
+    val impossible = FileDocumentIdKey(java.io.File(blocker, "sotto/doc-id.key"), Random(2))
+    val first = impossible.bytes()
+    assertThat(first).hasLength(32)
+    assertThat(impossible.bytes()).isEqualTo(first) // stessa nel processo
   }
 
   @Test
@@ -141,6 +236,15 @@ class DocumentIdTableTest {
     assertThat(table.resolve(ids[1])).isEqualTo(DocumentResolution.Unknown)
     assertThat(table.resolve(ids[0])).isInstanceOf(DocumentResolution.Found::class.java)
     assertThat(table.resolve(ids[2])).isInstanceOf(DocumentResolution.Found::class.java)
+  }
+
+  @Test
+  fun unaRevocaDiUnIdNonToccaGliStabili() {
+    val table = table()
+    val key = NasFolderKey("alessio\u001FVacanze")
+    val folder = table.idFor(DocumentTarget.Folder(key), label = "Vacanze")
+    table.revoke(listOf(folder, table.idFor(DocumentTarget.Root)))
+    assertThat(table.resolve(folder)).isInstanceOf(DocumentResolution.Found::class.java)
   }
 
   @Test

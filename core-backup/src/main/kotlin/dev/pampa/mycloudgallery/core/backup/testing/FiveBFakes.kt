@@ -287,10 +287,11 @@ class FakePhoneRewriter : PhoneRewriter {
 /**
  * "Libera spazio" di riferimento, per la UI di P12 e i test di P9: il catalogo ([candidates]) e i guasti li sceglie il test; il resto segue il
  * contratto. Il piano esclude per filtro, per "ultimi 30 giorni" e per motivo; **la lista nasce dai candidati locali e non cresce mai** (E-S11);
- * `verify` controlla la conferma contro il piano ricalcolato, fa uscire le copie che non tornano alla rilettura ([failVerification]) e fissa
- * i 6 ore di validita' sull'orologio monotono; `nextBatch` ricontrolla il timbro di ogni copia ([changeAfterVerification]) e dà lotti da
- * 2.000; `recordOutcome` conta solo cio' che Android ha confermato. Una sola tappa fa tutto: il tempo di una verifica vera lo simula `budget` = 0
- * solo nei test di P9.
+ * `verify` controlla la conferma contro il piano che l'utente ha visto e, come il vero (LS-13 della verifica funzionale 5B), prende solo i suoi
+ * elementi che il piano ricalcolato ha ancora uguali (mai uno in piu'); fa uscire le copie che non tornano alla rilettura ([failVerification])
+ * e fissa i 6 ore di validita' sull'orologio monotono; `nextBatch` ricontrolla il timbro di ogni copia ([changeAfterVerification]) e dà lotti da
+ * 2.000; `recordOutcome` conta solo cio' che Android ha confermato. Di serie una sola tappa fa tutto; con [verifySteps] (correzioni 5B, LS-2 e
+ * LS-5) la verifica va a tappe come quella vera, e con [stuck] una tappa non fa avanzare niente (le parti del backup tolte a meta').
  *
  * @param todayLocalDay oggi come `aaaammgg`, per i filtri "ultimi 30 giorni" e "piu' vecchi di un anno" (mai l'orologio del telefono).
  */
@@ -317,6 +318,23 @@ class InMemoryFreeSpace(
   /** Se valorizzato, nessun giro parte: area congelata (E-B22) o NAS irraggiungibile (E-B9). */
   var block: FreeSpaceBlock? = null
 
+  /** Correzioni 5B (LS-2): quante tappe di `resume` servono alla verifica sul momento prima di "pronto". 0 = subito. */
+  var verifySteps: Int = 0
+
+  /** Correzioni 5B (LS-5): `resume` restituisce il giro com'e', senza avanzare (come il null-object quando le parti del backup spariscono). */
+  var stuck: Boolean = false
+
+  /** Correzioni 5B (LS-2): quanto dura una tappa di `resume` (orologio delle coroutine: nei test, il tempo virtuale). */
+  var stepDelayMs: Long = 0
+
+  /** Le tappe chieste con `resume`. */
+  var resumes: Int = 0
+    private set
+
+  /** I piani calcolati (LS-15: quante volte la pagina lo ricalcola). */
+  var plans: Int = 0
+    private set
+
   /** I lotti presentati, nell'ordine. */
   val presented: MutableList<TrashBatch> = ArrayList()
 
@@ -326,12 +344,14 @@ class InMemoryFreeSpace(
     var ready: MutableList<FreeSpaceItem>,
     val dropped: MutableMap<FreeSpaceExclusion, Int>,
     var inDoubt: Int = 0,
+    var stepsLeft: Int = 0,
   )
 
   private val runs = HashMap<Long, RunData>()
   private var nextRunId = 1L
 
   override suspend fun plan(filter: FreeSpaceFilter, permanent: Boolean): FreeSpacePlan {
+    plans++
     val excluded = HashMap<FreeSpaceExclusion, Int>()
     fun skip(reason: FreeSpaceExclusion) {
       excluded[reason] = (excluded[reason] ?: 0) + 1
@@ -353,11 +373,15 @@ class InMemoryFreeSpace(
   }
 
   override suspend fun verify(plan: FreeSpacePlan, confirmation: PhoneConfirmation, budget: Duration): FreeSpaceRun {
-    val fresh = plan(plan.filter, plan.permanent)
     val reason = block
     if (reason != null) return blockedRun(plan, reason)
-    if (PhoneConfirmationRules.check(fresh, confirmation, clock.monotonicMs()) != PhoneConfirmationCheck.Valid) {
+    if (PhoneConfirmationRules.check(plan, confirmation, clock.monotonicMs()) != PhoneConfirmationCheck.Valid) {
       return blockedRun(plan, FreeSpaceBlock.CONFIRMATION_REJECTED)
+    }
+    // LS-13: solo gli elementi del piano confermato che il piano di adesso ha ancora uguali.
+    val confirmed = plan.items.mapTo(HashSet(), ::keyOf)
+    val fresh = plan(plan.filter, plan.permanent).let { now ->
+      FreeSpacePlan(now.filter, now.permanent, now.items.filter { keyOf(it) in confirmed }, now.excluded, now.needsGuardian)
     }
     val dropped = HashMap<FreeSpaceExclusion, Int>()
     val ready = ArrayList<FreeSpaceItem>()
@@ -366,14 +390,19 @@ class InMemoryFreeSpace(
     }
     val id = FreeSpaceRunId(nextRunId++)
     val batches = (ready.size + FreeSpaceRules.MAX_BATCH - 1) / FreeSpaceRules.MAX_BATCH
+    val staged = verifySteps > 0 && ready.isNotEmpty()
     val run = FreeSpaceRun(
       id = id,
-      planHash = fresh.hash,
-      state = if (ready.isEmpty()) FreeSpaceRunState.DONE else FreeSpaceRunState.READY,
+      planHash = plan.hash,
+      state = when {
+        ready.isEmpty() -> FreeSpaceRunState.DONE
+        staged -> FreeSpaceRunState.VERIFYING
+        else -> FreeSpaceRunState.READY
+      },
       permanent = fresh.permanent,
       guardedDone = fresh.needsGuardian,
       guardedTotal = fresh.needsGuardian,
-      verifiedDone = fresh.items.size,
+      verifiedDone = if (staged) 0 else fresh.items.size,
       verifiedTotal = fresh.items.size,
       verifiedBytes = fresh.totalBytes,
       readyItems = ready.size,
@@ -385,14 +414,40 @@ class InMemoryFreeSpace(
       dropped = dropped,
       validUntilMonotonicMs = clock.monotonicMs() + FreeSpaceRules.VERIFICATION_VALID_MS,
     )
-    runs[id.value] = RunData(fresh, run, ready, dropped)
+    runs[id.value] = RunData(fresh, run, ready, dropped, stepsLeft = if (staged) verifySteps else 0)
     return run
   }
 
   override suspend fun resume(run: FreeSpaceRun, budget: Duration): FreeSpaceRun {
+    resumes++
     val data = runs[run.id.value] ?: return run
-    return expireIfNeeded(data)
+    if (stuck) return data.run
+    if (stepDelayMs > 0) kotlinx.coroutines.delay(stepDelayMs)
+    val now = expireIfNeeded(data)
+    if (now.state != FreeSpaceRunState.VERIFYING) return now
+    data.stepsLeft--
+    val total = now.verifiedTotal
+    data.run = if (data.stepsLeft <= 0) {
+      now.copy(state = FreeSpaceRunState.READY, verifiedDone = total)
+    } else {
+      now.copy(verifiedDone = total * (verifySteps - data.stepsLeft) / verifySteps)
+    }
+    return data.run
   }
+
+  /** Correzioni 5B (LS-2): il giro rimasto aperto, come `SafeFreeSpace.active` (l'ultimo non finito, scaduto se oltre le 6 ore). */
+  fun active(): FreeSpaceRun? = runs.values.lastOrNull { it.run.isActive }?.let { expireIfNeeded(it) }
+
+  /** Correzioni 5B (LS-2): "Annulla", come `SafeFreeSpace.abandon`. */
+  fun abandon(id: FreeSpaceRunId): FreeSpaceRun? {
+    val data = runs[id.value] ?: return null
+    if (data.run.isActive) data.run = data.run.copy(state = FreeSpaceRunState.CANCELLED)
+    return data.run
+  }
+
+  /** LS-13: cio' che rende "lo stesso" un elemento fra il piano confermato e quello di adesso (i campi dell'impronta del piano). */
+  private fun keyOf(item: FreeSpaceItem): List<Any?> =
+    listOf(item.mediaId, item.versionId, item.phone, item.size, item.safeCopy?.size, item.safeCopy?.modifiedAtMillis, item.safeCopy?.fileId)
 
   override suspend fun nextBatch(run: FreeSpaceRun): TrashBatch? {
     val data = runs[run.id.value] ?: return null

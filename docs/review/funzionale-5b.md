@@ -486,6 +486,12 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
 - **Correzione, da decidere con l'utente:**
   - quando "Libera spazio" non c'e', tornare al cestino del viewer della 4B;
   - oppure tenere il blocco, ma dirlo con le parole giuste.
+- **Stato: corretta** (20/10, decisione dell'utente «Elimina con avviso», `docs/decisioni.md` «Correzioni 5B: Libera spazio»). Dal viewer, un media che **non risulta al sicuro sul NAS**
+  (backup non attivo come in release con D12/R2, nessuna copia privata verificata, in caricamento, area ferma, fuori da D13: `PhoneOnlyAssessment.notOnNas`)
+  ha nel foglio l'avviso "Questa foto non è sul NAS" con il perche' e "la recuperi da Eliminati di recente per 30 giorni"; il tocco su "Elimina dal
+  telefono" chiede al sistema il cestino di Android (`createTrashRequest`, come la 4B) per le sue righe, dalla radice (`FiveBUi.trashFromPhone`). Con il
+  backup attivo c'e' anche "Metti al sicuro" (preselezionata). Un media al sicuro segue la 5B. "Libera spazio" resta chiuso senza backup attivo. Test:
+  `Correzioni5BLiberaSpazioAppTest.ls1_*` (release, grafo vero), `Correzioni5BSoloDalTelefonoTest.ls1_*`.
 
 #### LS-2 · La verifica sul momento vive quanto la pagina: niente lavoro avviato dall'utente, niente notifica "Pronto", niente ripresa
 - **Gravità:** Sbagliata. **Stato:** confermato.
@@ -502,6 +508,11 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
 - **Correzione:**
   - `FreeSpaceFlow` in un lavoro avviato dall'utente (`BackupJobService` con un id suo, come per gli arrivi), con la notifica;
   - un metodo del contratto per riprendere all'apertura il giro attivo.
+- **Stato: corretta** (20/10, `docs/decisioni.md` «Correzioni 5B: Libera spazio»). Il giro sta in un oggetto del processo (`FiveBFreeSpaceRuns`, porta `FreeSpaceRuns`, conduttore
+  `FreeSpaceDriver`), ospitato dal lavoro avviato dall'utente (`BackupJobService`, id `1_000_105`, UIDT) con la notifica dell'avanzamento e poi "Pronto: N
+  elementi, X GB. Tocca per liberare"; al ritorno l'app apre la pagina. Dopo la morte del processo il lavoro (o la pagina) ritrova il giro dal diario
+  (`SafeFreeSpace.active`: 6 ore monotone, stesso avvio, altrimenti scaduto). "Annulla" lo chiude (`abandon`). Test: `Correzioni5BLiberaSpazioTest.ls2_*`,
+  `FreeSpaceEveryCallTest` (ripresa da `active()` sotto guasti e morti), `Correzioni5BLiberaSpazioFlowTest.ls2_*`, `Correzioni5BLiberaSpazioAppTest.ls2_*`.
 
 #### LS-3 · "Elimina solo dal telefono" dal viewer apre "Libera spazio" sotto il viewer
 - **Gravità:** Sbagliata. **Stato:** confermato (anche dall'agente LS).
@@ -510,6 +521,8 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - Il viewer e' disegnato sopra tutta la navigazione (`main/GalleryRoot.kt:139-142`: prima `content()`, poi `ViewerLayer`), e nessuno lo chiude.
 - **Scenario:** il foglio si chiude e resta la foto nel viewer: sembra che non sia successo niente. "Libera spazio" compare solo chiudendo il viewer.
 - **Correzione:** chiudere il viewer (`LocalViewerHost.current?.close()`) prima di navigare.
+- **Stato: corretta** (20/10). `FiveBHostEffect` chiude il viewer (`LocalViewerHost.current?.close()`) prima di aprire "Libera spazio". Senza test
+  automatico (servirebbe il viewer vero composto sopra la navigazione): da vedere in F38.
 
 #### LS-4 · "Prima mettilo al sicuro" non riporta mai al foglio, e per molti media non puo' riuscire
 - **Gravità:** Sbagliata. **Stato:** confermato.
@@ -520,6 +533,9 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - Niente verifica quei media in particolare: una copia non verificata resta tale fino alle verifiche notturne.
   - Un media fuori dalle sorgenti non si carica mai. E' lo stesso difetto di VE-3.
 - **Correzione:** come VE-3. Oppure una frase onesta, con l'indicazione di aggiungere la cartella alle sorgenti.
+- **Stato: corretta** (20/10). "Metti al sicuro" chiama `Corrections.safeguard` per ognuno dei media non al sicuro (`BackupGraph.safeguard`: verifica sul
+  momento o "Fai ora"); il foglio resta aperto ("Sto mettendo al sicuro…") e si aggiorna da solo quando la valutazione cambia; fuori dalle sorgenti dice
+  "Questa cartella non è nel backup", se non parte niente "Adesso non posso metterla al sicuro". Test: `Correzioni5BSoloDalTelefonoTest.ls4_*`.
 
 #### LS-5 · Se le parti del backup spariscono durante la verifica, la pagina gira all'infinito sul thread principale (ANR)
 - **Gravità:** Blocca, in quel caso raro. **Stato:** confermato (agente LS, ricontrollato).
@@ -531,6 +547,9 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - `NoFreeSpace.resume` restituisce lo stesso giro senza sospendersi (`core-backup/.../noop/BackupFiveBNullObjects.kt:92`).
   - Il ciclo gira su `viewModelScope`, cioe' sul thread principale.
 - **Correzione:** `NoFreeSpace.resume` risponde `BLOCKED`/`NOT_AVAILABLE`, e il ciclo esce se il giro non avanza.
+- **Stato: corretta** (20/10). La facciata senza parti risponde `BLOCKED`/`NOT_AVAILABLE`; il conduttore (`FreeSpaceDriver`) si ferma se il servizio
+  restituisce lo stesso giro, e gira nello scope del grafo, non sul thread principale. Test: `Correzioni5BLiberaSpazioFlowTest.ls5_*` (una tappa sola,
+  prima infinita), `Correzioni5BLiberaSpazioAppTest.ls5_ls10_*`.
 
 #### LS-6 · Dopo la morte del processo, "Libera spazio" di una selezione diventa "tutto il sicuro"
 - **Gravità:** Sbagliata. **Stato:** confermato.
@@ -541,6 +560,8 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
 - **Scenario:** "Elimina solo dal telefono" di una foto → "Libera spazio" con quella foto. L'app va in secondo piano e Android la chiude. Al ritorno la
   pagina propone "tutto il sicuro tranne gli ultimi 30 giorni", cioe' migliaia di media.
 - **Correzione:** tenere gli id nello stato salvato (`SavedStateHandle` o `rememberSaveable`).
+- **Stato: corretta** (20/10). La selezione sta nello stato salvato della rotta (`FreeSpaceSelection`): gli id fino a 500, oltre solo il numero della
+  richiesta (che ritrova il processo vivo); persa dopo la morte del processo, la pagina **si chiude**, mai "tutto il sicuro". Test: `FreeSpaceSelectionTest`.
 
 #### LS-7 · Un rifiuto al secondo lotto dice "Nessun file è stato tolto"; tutti gli usciti hanno lo stesso motivo
 - **Gravità:** Sbagliata. **Stato:** confermato (ricontrollato).
@@ -551,6 +572,8 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - La riga degli usciti (`:402`) dice "la copia sul NAS non tornava" per ogni uscita, anche "gia' tolto" o "in caricamento".
   - I test provano solo il rifiuto del primo lotto (`FreeSpaceFlowTest.kt:164`).
 - **Correzione:** "N liberati, poi ti sei fermato", e il motivo vero di ogni uscita.
+- **Stato: corretta** (20/10). "Liberati X … Poi hai detto di no al telefono: gli altri restano sul telefono"; i rimasti contano anche i lotti non
+  proposti; ogni uscita con il suo motivo (`FreeSpaceUi.Done.droppedBy`). Test: `Correzioni5BLiberaSpazioFlowTest.ls7_*`, `FreeSpaceScreenTest.ls7_*`.
 
 #### LS-8 · Il guardiano aspetta fino a 15 minuti il turno del backup tenendo il lucchetto di "Libera spazio": "0 di N" senza spiegazione
 - **Gravità:** Minore. **Stato:** confermato nel codice.
@@ -560,6 +583,9 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - Intanto `SafeFreeSpace` tiene il suo lucchetto (`SafeFreeSpace.kt:218`, `:265`, `:290`), quindi aspetta anche `settle()` dopo una lettura del telefono.
   - Allo scadere il guardiano risponde `BUDGET` e la pagina riprova senza fine.
 - **Correzione:** uno stato "aspetto il backup", e l'attesa del turno fuori dal lucchetto.
+- **Stato: corretta** (20/10). Il guardiano gira fuori dal lucchetto di "Libera spazio" (`SafeFreeSpace.drive`), aspetta il turno al massimo una tappa
+  (`ExclusiveGuardian`) e la scheda dice "aspetto che il backup finisca il file che sta caricando". Test: `Correzioni5BLiberaSpazioTest.ls8_*` (rosso con il
+  guardiano sotto il lucchetto), `FreeSpaceScreenTest.ls8_*`.
 
 #### LS-9 · "Libera spazio" del problema "Memoria del telefono quasi piena" apre le impostazioni di Android
 - **Gravità:** Minore. **Stato:** confermato (agenti LS e LA).
@@ -568,6 +594,8 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - `AppBackupActions.perform` la manda a `openStorageSettings()` (`app/.../backup/BackupUi.kt:361`; `main/BackupHostEffect.kt:78-80`), non alla pagina
     che dalla 5B esiste.
 - **Correzione:** aprire `BackupScreen.FREE_SPACE` quando c'e', altrimenti le impostazioni.
+- **Stato: corretta** (20/10). `BackupAction.FREE_SPACE` apre `BackupScreen.FREE_SPACE` (tutto il sicuro); le impostazioni di Android solo senza il
+  dialogo del sistema. Test: `Correzioni5BLiberaSpazioAppTest.ls9_*`.
 
 #### LS-10 · Appena aperta l'app, riepilogo vuoto "niente da liberare" che non si ricalcola
 - **Gravità:** Minore. **Stato:** confermato.
@@ -577,6 +605,8 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - La pagina dice "Per ora non c'è niente da liberare" e non si ricalcola quando le parti arrivano.
   - Lo stato `Blocked(NOT_AVAILABLE)` del ViewModel (`FreeSpaceViewModel.kt:52-53`) non si raggiunge mai, perche' `FiveBModule` da' sempre una porta.
 - **Correzione:** la facciata risponde "non ancora pronto" invece di un piano vuoto, e la pagina segue `FiveBGraph.partsState`.
+- **Stato: corretta** (20/10). La pagina segue `FreeSpaceRuns.ready` (le parti in `FiveBGraph`): "Non è ancora disponibile" e poi il riepilogo, da
+  solo. Test: `Correzioni5BLiberaSpazioFlowTest.ls10_*`, `Correzioni5BLiberaSpazioAppTest.ls5_ls10_*`.
 
 #### LS-11 · Senza l'ora del NAS tutto e' "degli ultimi 30 giorni", e la verifica dice "NAS non raggiungibile"
 - **Gravità:** Minore. **Stato:** plausibile.
@@ -586,6 +616,9 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - `verify` risponde `NAS_UNREACHABLE` (`SafeFreeSpace.kt:225`) anche a casa, finche' nessuno ha aperto una sessione SMB. All'apertura la scansione la
     apre dopo qualche secondo.
 - **Prova:** avvio a freddo e subito Raccolte → Libera spazio. Contare gli esclusi "recenti" e vedere se la pagina si aggiorna.
+- **Stato: corretta** (20/10). `verify` senza l'ora del NAS prova a raggiungerlo (`reachNas`, una sessione sull'area privata) prima di dire "non
+  risponde"; la pagina all'apertura fa lo stesso senza aspettare, lo dice nel riepilogo e ricalcola quando l'ora arriva. Test:
+  `Correzioni5BLiberaSpazioTest.ls11_*`, `Correzioni5BLiberaSpazioFlowTest.ls11_*`, `FreeSpaceScreenTest.ls11_*`. Da misurare in F37 (avvio a freddo).
 
 #### LS-12 · Righe "in dubbio" o "nel dialogo" spiegate male, e alcune mai risolte
 - **Gravità:** Minore. **Stato:** confermato (etichetta); plausibile (righe mai risolte).
@@ -594,6 +627,10 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - Una riga `IN_DOUBT` con la riga del telefono `Stale` (MediaStore ricostruito) non si risolve mai (`:643`).
   - Una riga `IN_DIALOG` del processo vivo non la risolve `settle()` (filtro `mine`, `:619-623`) se il lavoro e' stato annullato prima di
     `recordOutcome`: per esempio un secondo tocco su "Libera ora" durante il controllo finale.
+- **Stato: corretta** (20/10). Motivo proprio nel riepilogo (`FreeSpaceExclusion.AWAITING_PHONE`); una riga `Stale` si risolve con la lettura del
+  telefono (`FreeSpaceCatalog.phoneRowOf`, la ricetta del backup); il lotto di questo processo di un giro finito si da' per liberato solo con la prova (il
+  dialogo puo' ancora rispondere: una riga ancora presente aspetta); un secondo tocco su "Libera ora" non annulla piu' il primo. Test:
+  `Correzioni5BLiberaSpazioTest.ls12_*`, `Correzioni5BLiberaSpazioFlowTest.ls12_*`, `FreeSpaceScreenTest.ls12_ls13_*`.
 
 #### LS-13 · "Qualcosa è cambiato" a ogni tentativo mentre il backup lavora
 - **Gravità:** Sbagliata. **Stato:** plausibile.
@@ -601,6 +638,9 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - L'impronta del piano copre ogni elemento (`core-backup/.../contract/FreeSpace.kt:153-169`), e `verify` la ricalcola (`SafeFreeSpace.kt:228`).
   - Con "Tutto il sicuro" durante il primo backup basta un media che diventa al sicuro fra l'apertura del foglio e il tocco.
 - **Prova:** "Libera spazio" con "Tutto il sicuro" a primo backup in corso.
+- **Stato: corretta** (20/10). La conferma vale per il piano visto; il giro prende solo i suoi elementi ancora identici nel piano di adesso (mai uno in
+  piu'), e la fine dice quanti erano cambiati. Test: `Correzioni5BLiberaSpazioTest.ls13_*` (rossi prima), il caso "arrivato dopo il foglio" in
+  `FreeSpaceEveryCallTest`, `Correzioni5BLiberaSpazioFlowTest.ls13_*`. Da provare in F37 durante il primo backup.
 
 #### LS-14 · "Ovunque" toglie una sola copia del telefono
 - **Gravità:** Minore. **Stato:** plausibile.
@@ -608,6 +648,9 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - `EverywherePlan.phoneCopies` (`core-backup/.../free/EverywhereCopies.kt:142-148`) non lo usa nessuno.
   - Il viewer cestina solo il riferimento di adesso (`feature-viewer/.../ViewerController.kt:383-388`).
   - Una seconda copia sul telefono resta, per esempio quella di "Scarica sul telefono" in `Pictures/MyCloud Gallery`, e il backup puo' ricaricarla.
+- **Stato: corretta** (20/10). "Ovunque" toglie dal telefono tutte le copie del media con un solo dialogo del cestino
+  (`BackupMediaActions.deleteEverywhereFromPhone`); con una copia sola resta il cestino del viewer. Test: `Correzioni5BLiberaSpazioAppTest.ls14_*`,
+  `BackupActionsTest.ls14_*`.
 
 #### LS-15 · Costi: circa 5 query per media del telefono, ripetute tre volte per conferma; diario quadratico
 - **Gravità:** Minore. **Stato:** plausibile, da misurare con F37.
@@ -616,6 +659,10 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - Il piano si calcola all'apertura, all'apertura del foglio (senza indicatore) e dentro `verify`.
   - `RoomFreeSpaceDiary.update` rilegge tutti gli elementi del giro a ogni scrittura (`RoomFreeSpaceDiary.kt:84`).
   - `settle()` scorre tutti i giri storici (`SafeFreeSpace.kt:605`), che non si potano mai.
+- **Stato: corretta in parte** (20/10). `settle()` solo sui giri con righe da risolvere, la ripresa solo sui giri aperti (query su Room), le pagine
+  del catalogo senza la riga dell'indice, il foglio che riusa il piano del riepilogo. Resta `RoomFreeSpaceDiary.update`, che rilegge gli elementi del giro a
+  ogni scrittura (serve una query per indice in core-database): da misurare in F37. Test: `RoomFreeSpaceDiaryTest.ls15_*`,
+  `Correzioni5BLiberaSpazioFlowTest.ls15_*`.
 
 ### 2.4 Integrazioni: selettore, provider dei documenti, ricezione (IN)
 
@@ -637,6 +684,12 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - la pulizia salta le cartelle create da questo processo (un insieme nello stager) e quelle giovani (monotono);
   - oppure la pulizia gira prima di installare `ReceivePorts`.
 - **Prova:** `am force-stop`, poi una condivisione con 3–5 s di attesa prima di "Salva".
+- **Stato: corretta** (20/10, `docs/decisioni.md` «Correzioni 5B: integrazioni»). Prima strada, con un insieme invece dell'eta': `IncomingStager` tiene le condivisioni copiate da
+  **questo processo** e non ancora scartate (`ownStages`: la cartella vi entra prima di essere creata) e `sweep` le salta, comprese quella in copia
+  adesso e quelle che aspettano la scelta della cartella. Il resto di un processo morto non ha piu' una schermata che lo aspetta e si toglie come
+  prima. Test: `Correzioni5BIntegrazioniAppTest.in1_*` (grafo vero: la pulizia d'avvio arriva dopo la copia e prima del tocco, la condivisione c'e' ancora
+  e "Salva sul NAS" la mette in coda; il resto di un processo morto si toglie), `IncomingStagerTest.in1_*` (2). Prova di mutazione: senza `ownStages` i due `IncomingStagerTest.in1_*` diventano rossi.
+  Resta la prova sul telefono (F40: forza l'arresto, poi una condivisione con 3-5 s prima di "Salva").
 
 #### IN-2 · Provider dei documenti: gli id della radice cambiano a ogni processo e le radici non si notificano mai
 - **Gravità:** Blocca, per Gmail "Allega file" e per il "Documento" di WhatsApp e Telegram. **Stato:** plausibile, alta probabilita'. Gli id sono
@@ -656,6 +709,25 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   1. Gmail → Allega → MyCloud Gallery.
   2. `am kill` del pacchetto.
   3. Di nuovo Gmail → Allega → MyCloud Gallery.
+- **Stato: corretta** (20/10). **Schema degli id** (`DocumentIdTable`, `DocumentIdKey`):
+  - **radice, "Recenti", "Cartelle NAS" e cartelle del NAS**: stabili. `HMAC-SHA256(chiave locale, etichetta | chiave opaca della cartella)`, troncato a
+    18 byte e scritto in base64 URL-safe (24 caratteri); uguali a ogni avvio del processo finche' la chiave non ruota. La chiave (32 byte casuali) sta in
+    `noBackupFilesDir/integrations/doc-id.key` (fuori dal backup di Android), si legge alla prima richiesta (mai all'avvio del processo), ruota con
+    l'azzeramento dell'app (`revokeAll`) e, se il file non si legge o non si scrive, vale per il processo (come prima, ma senza rompere niente). Un id non
+    contiene percorso, share, account o nome e non si indovina senza la chiave; apre solo una cartella, mai un media.
+  - **documenti dei media**: invariati. Token casuali di 18 byte in memoria, a scadenza (a scorrimento, piu' lunga se consegnati) e revocabili: dopo la
+    scadenza o la revoca non aprono piu' niente (E-X1).
+  - **una cartella dopo un riavvio**: `LibraryMediaDocuments.found` ritrova l'id che DocumentsUI ricorda ricalcolando gli id da
+    `IntegrationLibrary.nasFolderIndex()` (`AppIntegrationLibrary`: una sola lettura del catalogo, al piu' 20.000 cartelle, mai `Versioni/`), non piu' di una
+    ricerca ogni 5 s; un id inventato resta sconosciuto.
+  - **radici notificate**: `IntegrationsGraph.install()` ascolta `AppEntryGate.decisions()` e notifica `DocumentsContract.buildRootsUri` a ogni cambio
+    (stato letto, blocco acceso, sbloccato, richiuso); l'azzeramento ruota la chiave e notifica.
+  - Trovato dal test: `FolderKeys.parse` (`:app`) usava `SharePath.of` su un percorso intero e rifiutava ogni cartella oltre il secondo livello, quindi
+    l'albero "Cartelle NAS" si fermava li' e i media delle cartelle annidate non si elencavano. Ora `SharePath.parse`.
+  - Test: `DocumentIdTableTest.in2_*` (5), `LibraryMediaDocumentsTest.in2_*` (2), `MediaDocumentsProviderTest.in2_*`,
+    `Correzioni5BIntegrazioniAppTest.in2_*` (2: le radici si notificano; un processo nuovo con la stessa chiave ritrova una cartella a tre livelli con lo
+    stesso id e la camminata completa da' gli stessi id), `AppEntryGateTest.in2_*`. Prova di mutazione: con una chiave casuale a ogni processo (id nuovi a ogni avvio, com'era) sono rossi `DocumentIdTableTest.in2_*` (3), `LibraryMediaDocumentsTest.in2_*` e `MediaDocumentsProviderTest.in2_*`; senza la notifica delle radici e con `FolderKeys.parse` com'era, i due `Correzioni5BIntegrazioniAppTest.in2_*`.
+  - Resta la prova sul telefono (F39: Gmail, `am kill`, di nuovo Gmail).
 
 #### IN-3 · A processo freddo selettore e ricezione dicono "Prima configura MyCloud Gallery", o non riescono a sbloccare, e non si ricontrollano
 - **Gravità:** Sbagliata. **Stato:** plausibile: e' una corsa.
@@ -669,6 +741,13 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - Testi: "Apri l'app e completa la configurazione, poi condividi di nuovo i file." (`strings_integrations_receive.xml:15-16`, `..._picker.xml:37-38`).
 - **Correzione:** un esito `LOADING` del cancello ("sto aprendo…") e l'osservazione di `setup.state` e delle impostazioni del blocco come flussi.
 - **Prova:** forza l'arresto, poi 10 ingressi consecutivi da Gmail e da WhatsApp.
+- **Stato: corretta** (20/10). `EntryDecision.LOADING` ("sto leggendo lo stato") e `EntryGate.decideAfterLoading(timeoutMs)` (10 s di serie; 4 s nel
+  provider, che risponde a un thread del binder). `AppEntryGate` guarda la famiglia (`familyLoading`, `familyChanges`: `setup.state`) e le impostazioni del
+  blocco come flussi, e dice `LOADING` finche' una delle due non e' letta. Selettore e ricezione aspettano (mai "Prima configura MyCloud Gallery" per una
+  corsa) e, se lo stato non arriva, mostrano "non pronta" con "Riprova" al ritorno; il provider risponde dopo l'attesa e le radici si notificano appena
+  lo stato e' letto (IN-2). Test: `AppEntryGateTest.in3_*` (4), `PickerViewModelTest.in3_*` (2), `PickerActivityTest.in3_*` (2),
+  `ReceiveViewModelTest.in3_*` (3), `ShareReceiverActivityTest.in3_*`, `MediaDocumentsProviderTest.in3_*` (3). Prova di mutazione: se la ricezione non aspetta (`LOADING` diventa subito «non pronta») sono rossi `ReceiveViewModelTest.in3_*` (2) e `ShareReceiverActivityTest.in3_*`.
+  Resta la prova sul telefono (forza l'arresto, poi 10 ingressi consecutivi da Gmail e da WhatsApp).
 
 #### IN-4 · Provider con il blocco "Subito": DocumentsUI non si sblocca mai
 - **Gravità:** Sbagliata. **Stato:** la logica e' confermata dall'agente IN; il comportamento di DocumentsUI va provato.
@@ -678,6 +757,11 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - Tornando a DocumentsUI scatta `onAppBackgrounded`, e con timeout 0 `isUnlockedNow()` richiude subito.
 - **Scenario:** Gmail → Allega → MyCloud → Sblocca → indietro → di nuovo "Sblocca", senza fine.
 - **Correzione:** un'activity d'ingresso leggera che usa `endEntryAuthentication`, oppure la tolleranza anche per lo sblocco nato dal provider.
+- **Stato: corretta** (20/10); il comportamento di DocumentsUI resta da provare sul telefono. L'`AuthenticationRequiredException` porta un
+  `PendingIntent` immutabile ed **esplicito** verso `PickerActivity` con l'azione `ACTION_UNLOCK` (non piu' la `MainActivity`): un'activity d'ingresso
+  leggera che usa `endEntryAuthentication` (la tolleranza di 2 minuti vale, anche con "Subito"), non mostra la Libreria e finisce con `RESULT_OK` appena
+  sbloccato, cosi' DocumentsUI riprova da solo; se lo sblocco non riesce resta la sua schermata con il motivo e "Riprova"; "Annulla" chiude. Test:
+  `MediaDocumentsProviderTest.ilTocco_Sblocca_EImmutabileEdEsplicito…`, `PickerActivityTest.in4_*` (3), `ManifestComponentsTest`. Prova di mutazione: con il tocco di nuovo sulla `MainActivity` il test del provider e' rosso.
 
 #### IN-5 · "Salva sul NAS" di una condivisione piccola aspetta la notte; un'attesa di rete non si ripianifica
 - **Gravità:** Sbagliata. **Stato:** confermato (agenti IN e LA; il preset predefinito e' Notte, `core-rules/.../settings/RuleSettings.kt:45`).
@@ -694,6 +778,12 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - trattare l'arrivo come gesto dell'utente: `UserInitiated`, o un lavoro con le sole regole di rete;
   - in alternativa dire "lo carico stanotte";
   - in ogni caso, applicare a `INCOMING` il nuovo tentativo su rete non a consumo di BK-2.
+- **Stato: corretta** (20/10). Un "Salva sul NAS" e' un gesto dell'utente, di qualunque grandezza: `BackupStages.incoming` e' sempre
+  `WorkRequest.UserInitiated` col turno esclusivo dell'utente (restano la rete, il NAS, il congelamento, il caldo e i dati mobili che chiedono conferma;
+  niente fascia, niente carica, niente preset Notte). `userInitiated` dice solo se il lavoro e' il UIDT (attesa del turno piu' lunga). Un'attesa di rete
+  (rete non fidata, dati mobili, roaming, NAS non raggiungibile) e una conferma dei dati mobili si ripianificano come BK-2: `BackupWorkScheduling.afterWait`
+  per `INCOMING` rimette in coda il lavoro su una rete non a consumo, e riparte da solo al rientro. Test: `Correzioni5BIntegrazioniAppTest.in5_*` (con
+  Notte fuori fascia, senza carica e col Wi-Fi: la foto piccola sale subito), `BackupSchedulingTest.in5_*` (2). Prova di mutazione: come lavoro di fondo (`WorkRequest.Background`) `Correzioni5BIntegrazioniAppTest.in5_*` diventa rosso.
 
 #### IN-6 · In release "Salva sul NAS" non riesce mai, con un messaggio sbagliato e dopo aver copiato tutto
 - **Gravità:** Sbagliata. **Stato:** confermato (agenti IN e LA).
@@ -704,6 +794,14 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
     a 4 GiB, e' gia' fatta.
   - `AppIncomingDestinations.roots()` non guarda il cancello (`IntegrationsAdapters.kt:341`).
 - **Correzione:** un esito "Backup in prova", controllato prima di copiare.
+- **Stato: corretta** (20/10). **Causa:** non e' un difetto di scrittura. In release D12 chiude ogni scrittura della 5B sulle share vere e R2 su un account
+  di prova, quindi il cancello degli arrivi risponde `TEST_ONLY` per tutte le aree e "Salva sul NAS" non puo' riuscire in questa versione (fino a Q3);
+  era sbagliato il modo: lo si scopriva dopo aver copiato (fino a 4 GiB) e con la frase «In quella cartella non si può scrivere». Ora
+  `IncomingDestinations.savingBlockedByTrial()` (`AppIncomingDestinations`: **tutte** le aree dell'utente chiuse con `BackupGateState.TEST_ONLY`) si
+  chiede in `ReceiveViewModel.begin()` **prima di copiare**: la schermata `TEST_ONLY` dice "Backup in prova" e non copia niente. Se la prova arriva dopo
+  la copia (cancello cambiato nel frattempo) l'esito e' `ReceiveFailure.TEST_ONLY` con la stessa frase. In debug, con una share di prova, il cancello e'
+  aperto e niente cambia. Test: `Correzioni5BIntegrazioniAppTest.in6_*` (release: bloccato, nessuna copia, `DestinationNotAllowed` anche dal motore;
+  debug: aperto), `ReceiveViewModelTest.in6_*` (2), `ShareReceiverActivityTest.in6_*`.
 
 #### IN-7 · I file in arrivo non hanno stato: invisibili finche' non salgono, problemi nascosti, notifica e "Ferma" del lavoro grande sbagliati
 - **Gravità:** Sbagliata. **Stato:** confermato (agenti IN e LA).
@@ -724,6 +822,15 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - una notifica degli arrivi con N di M e uno stop solo per `INCOMING`;
   - i problemi degli arrivi in `memory`;
   - una riga "Ricevuti in coda" nella pagina Backup, con riprova e scarta.
+- **Stato: corretta in parte** (20/10). Fatto: (1) i file in arrivo hanno **la loro notifica** (id 1007, "Salvataggio sul NAS", «N di M file
+  ricevuti», solo numeri, dal diario degli arrivi: `BackupProgress.incoming`, `followIncomingProgress`), non piu' il testo del backup delle foto; (2) il suo
+  **"Ferma" e' solo suo**: un'azione e un ricevitore propri (`BackupNotification.stopAction(context, incoming = true)`), un `IncomingStop` per lavoro che
+  chiede al giro di finire al passo dopo (nessun file a meta', i file restano in coda), mai la pausa R4 di tutto il backup; anche lo "Stop" di Android
+  sul lavoro degli arrivi non mette in pausa le foto; (3) un NAS pieno, la quota o la password per un arrivo arrivano alla **memoria** dei problemi e
+  agli eventi come per ogni altro giro (`BackupStages.incoming`). **Non fatto** (fuori dal perimetro di questo gruppo: pagina Backup e Libreria): la
+  riga «Ricevuti in coda» con riprova e scarta nella pagina Backup, e un modo di riprovare o togliere gli arrivi `FAILED` (tengono la copia locale
+  come prima: `IncomingStates.KEEP`). Il media di un arrivo resta invisibile nella Libreria finche' non e' sul NAS (E-X8 invariato). Test:
+  `BackupNotificationTest.in7_*`, `Correzioni5BIntegrazioniAppTest.in5_*` (il giro degli arrivi).
 
 #### IN-8 · Il media ricevuto arriva nella Libreria senza la sua data e senza metadati
 - **Gravità:** Sbagliata. **Stato:** plausibile.
@@ -735,6 +842,11 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
 - **Correzione:**
   - una data provvisoria che si corregge alla prima ora del NAS nota;
   - i metadati del file in arrivo letti dai byte locali, come fa `PreparingUploadIndexing` per il backup.
+- **Stato: corretta** (20/10); la copertina del video resta da provare sul telefono (F40). La data: `AppIncomingQueue` usa l'ora del NAS se nota,
+  altrimenti la data del file in arrivo (`lastModified`), **mai 0** (l'1/1/1970). I metadati: se il media e' nato dall'arrivo (`created`), `AppIncomingMetadata`
+  li legge dai **byte locali** con l'estrattore dell'app (data di scatto con il fuso, dimensioni, durata, tipo) e li scrive nel catalogo
+  (`MediaCatalog.updateMetadata`): la data di scatto vince su quella d'arrivo. Il resto (miniatura, indice del NAS) lo fa la preparazione normale
+  dopo il caricamento. Test: `Correzioni5BIntegrazioniAppTest.in8_*` (2: con EXIF 2020; senza EXIF, come WhatsApp, la data d'arrivo; e la data provvisoria senza l'ora del NAS e' quella della copia, mai 0: con 0 il test e' rosso).
 
 #### IN-9 · Selettore e provider ignorano l'accesso parziale ("solo le foto selezionate")
 - **Gravità:** Sbagliata. **Stato:** l'elenco e' confermato dall'agente IN; la concessione e' plausibile.
@@ -743,6 +855,11 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - Il selettore (`PickerViewModel.kt:134-135`) e il provider (`LibraryMediaDocuments.kt:171`, `recent`) scorrono lo snapshot, non la vista.
   - Mostrano quindi anche le foto non concesse (senza miniatura) e i solo-NAS che la Libreria nasconde.
 - **Correzione:** iterare sulla vista (`snapshotIndex`/`viewIndexOf`).
+- **Stato: corretta** (20/10). Selettore e provider scorrono la **vista** della Libreria (`snapshotIndex(viewIndex)`), non l'indice: la griglia del selettore
+  (`PickerItems.of(view, ...)`), "Recenti" del provider (`recent`) e il controllo prima di consegnare (`viewIndexOf`) vedono solo cio' che la Libreria
+  mostra, quindi con l'accesso parziale non compaiono ne' le foto non concesse ne' i solo-NAS che la Libreria nasconde, e un id fuori dalla vista non
+  esce nemmeno se l'indice lo conosce. **Finto allineato:** `FakeIntegrationLibrary.restrictView` (indice intero, vista parziale) e **test di parita'**
+  `PartialAccessTimelineTest.in9_*` (`:app`) contro `SubsetView`. Test: `PickerViewModelTest.in9_*` (2), `LibraryMediaDocumentsTest.in9_*`. Prova di mutazione: con «Recenti» dall'indice `LibraryMediaDocumentsTest.in9_*` e' rosso.
 
 #### IN-10 · Sblocco nelle activity d'ingresso: senza credenziale di sistema e' un vicolo cieco; "Annulla" puo' riaprire il prompt
 - **Gravità:** Minore. **Stato:** plausibile.
@@ -750,6 +867,11 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - Senza una credenziale di sistema (`NotAvailable`), "Sblocca" dice solo "Non sono riuscito a sbloccare".
   - Il prompt riparte a ogni `onResume` (`PickerActivity.kt:95`, `ShareReceiverActivity.kt:139`): se la schermata delle credenziali mette in pausa
     l'activity, annullare la riapre in ciclo.
+- **Stato: corretta** (20/10); resta da provare con un telefono senza blocco schermo (T-14). Lo sblocco dice il perche': `UnlockFailure`
+  (`CANCELLED`, `NO_SCREEN_LOCK`, `OTHER`) da `EntryUnlock.lastFailure()` / `ReceiveUnlock.lastFailure()`; senza credenziale di sistema la schermata spiega cosa
+  fare («imposta un blocco schermo») invece del generico «Non sono riuscito a sbloccare»; «Annulla» non dice niente. Il prompt parte **una volta** per
+  schermata (`autoPrompted`, `repeatOnLifecycle`) e non si riapre in ciclo se la schermata delle credenziali mette in pausa l'activity; «Sblocca» lo
+  rilancia. Test: `PickerActivityTest.in10_*` (2), `ShareReceiverActivityTest.in10_*`, `PickerViewModelTest.in10_*`.
 
 #### IN-11 · Piccoli difetti della schermata di ricezione
 - **Gravità:** Minore. **Stato:** confermato (agente IN).
@@ -759,12 +881,22 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - Su "niente da salvare" con dei rifiuti e senza cartelle, il testo non dice che manca la cartella.
   - Col NAS spento il passaggio "Salvo…" dura fino a 5 s (la sonda).
   - Sui dati mobili la frase dice "il NAS non risponde".
+- **Stato: corretta** (20/10) per tutti e cinque i punti. (1) «Apri la cartella scelta» non porta piu' a una schermata vuota: se non ci sono
+  sottocartelle lo dice (`noSubfolders`) e resta dov'e'. (2) «Riprova» chiude la schermata per `GONE` e `TEST_ONLY` (non c'e' niente da ritentare) e riprova
+  per `FAILED`. (3) «Niente da salvare» con dei rifiuti e senza cartelle dice che manca la cartella (`noFolder`). (4) Col NAS spento il passaggio «Salvo…»
+  non aspetta piu' la sonda: si mette in coda subito e la frase giusta (`nasWait`) arriva dopo, asincrona (`checkNasWait`). (5) Sui dati mobili la frase e'
+  «lo carico appena sei su Wi-Fi», non «il NAS non risponde» (`NasWait.METERED`; `NasReach.Unreachable` ha il motivo). Test: `ReceiveViewModelTest.in11_*` (2),
+  `ShareReceiverActivityTest.in11_*`, `Correzioni5BIntegrazioniAppTest.in11_*`.
 
 #### IN-12 · Un errore che non e' di I/O al salvataggio chiude l'app; un file illeggibile si scarta in silenzio
 - **Gravità:** Minore. **Stato:** plausibile.
 - **Percorso:**
   - `ReceiveViewModel.save` intercetta solo `IOException` (`ReceiveViewModel.kt:322`): una `SQLiteException` di Room (disco pieno) chiude l'app.
   - Un `quickHashOf` nullo salta il file senza dirlo, e il numero "in coda" e' piu' basso di quello copiato (`IncomingQueue.kt:102`).
+- **Stato: corretta** (20/10). `ReceiveViewModel.save` intercetta ogni `Exception` (non la cancellazione), non solo `IOException`: una `SQLiteException`
+  per il disco pieno mostra «non disponibile» e non chiude l'app. Un file copiato che al momento della coda non si legge piu' (impronta nulla in
+  `AppIncomingQueue.enqueue`) non sparisce piu' in silenzio: `outcome.items` e' piu' basso dei file accettati e la schermata dice «N file copiati non si
+  leggono più e non li ho messi in coda» (`notQueued`). Test: `ReceiveViewModelTest.in12_*` (2).
 
 #### IN-13 · La prova del NAS guarda solo la prima area; `PICK` classico non servito
 - **Gravità:** Minore. **Stato:** confermato.
@@ -772,6 +904,12 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - `IntegrationsGraph.nasReach` sonda solo `areas().first()` (`IntegrationsGraph.kt:128`).
   - `PICK` con un URI del MediaStore (`vnd.android.cursor.dir/image`) non entra nel filtro del manifest, e `PickerRequest.from` lo rifiuterebbe.
   - In debug compaiono anche le voci "MCG prova (T-14/T-15)" e una radice "MCG prova": chi prova puo' scegliere quella sbagliata.
+- **Stato: corretta in parte** (20/10). (1) `IntegrationsGraph.nasReach` sonda **tutte** le aree: basta una che risponde per dire `Reachable`; se
+  nessuna risponde, `Unreachable` con il motivo. (2) `PICK` classico con il tipo del MediaStore (`vnd.android.cursor.dir/image` e `.../video`) e' nel
+  manifest e `PickerRequest.from` lo serve (immagini o video secondo il tipo; audio e «voce singola» restano rifiutati); un `PICK` con un indirizzo del
+  MediaStore e senza tipo si legge dal percorso dell'indirizzo, senza mai aprirlo. (3) Le voci di debug «MCG prova (T-14/T-15)» e la radice «MCG prova»
+  **non sono toccate**: esistono solo nella build di debug e servono a quelle prove guidate; in release non ci sono. Test:
+  `Correzioni5BIntegrazioniAppTest.in13_*`, `PickerRequestTest.in13_*` (2), `ManifestComponentsTest`.
 
 ### 2.5 Lavori, Diagnostica, "Separa", prove guidate, debug/release (LA)
 

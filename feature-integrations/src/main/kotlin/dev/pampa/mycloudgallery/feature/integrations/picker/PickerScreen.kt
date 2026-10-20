@@ -24,6 +24,7 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -71,6 +72,7 @@ import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.feature.integrations.R
 import dev.pampa.mycloudgallery.feature.integrations.provider.DocumentPolicy
 import dev.pampa.mycloudgallery.feature.integrations.provider.NasUnreachableReason
+import dev.pampa.mycloudgallery.feature.integrations.share.ShareStop
 import kotlin.math.max
 import kotlin.math.min
 
@@ -106,6 +108,8 @@ class PickerActions(
   val onCancel: () -> Unit = {},
   val onUnlock: () -> Unit = {},
   val onDismissNotice: () -> Unit = {},
+  /** "Annulla" mentre si preparano le copie senza posizione. */
+  val onCancelDelivery: () -> Unit = {},
 )
 
 @Composable
@@ -134,7 +138,7 @@ internal fun PickerScreen(
           action = stringResource(R.string.integrations_picker_unlock),
           onAction = actions.onUnlock,
           loading = ui.unlocking,
-          footnote = if (ui.unlockFailed) stringResource(R.string.integrations_picker_unlock_failed) else null,
+          footnote = unlockFootnote(ui),
         )
         PickerScreenState.NOT_READY -> PickerMessage(
           icon = Icons.Rounded.Settings,
@@ -144,11 +148,12 @@ internal fun PickerScreen(
           action = stringResource(R.string.integrations_picker_close),
           onAction = actions.onCancel,
         )
-        PickerScreenState.DELIVERING -> PickerBusy()
+        PickerScreenState.DELIVERING -> PickerBusy(ui.progress, actions.onCancelDelivery)
         PickerScreenState.GRID -> PickerBody(ui, request, env, actions)
       }
     }
-    if (ui.screen == PickerScreenState.GRID && request.allowMultiple) {
+    // R8: anche con una scelta sola un tocco sceglie e "Scegli" consegna (un tocco da una sovrapposizione non consegna niente da solo).
+    if (ui.screen == PickerScreenState.GRID) {
       PickerBottomBar(selected = ui.selected.size, onConfirm = actions.onConfirm)
     }
   }
@@ -193,7 +198,16 @@ private fun subtitleOf(request: PickerRequest): String = stringResource(
   },
 )
 
-// --- Barra in basso (solo scelta multipla) --------------------------------------------------------------------------------
+/** IN-10: la frase sotto "Sblocca": niente se l'utente ha solo annullato, cosa fare se il telefono non ha un blocco schermo, altrimenti "riprova". */
+@Composable
+private fun unlockFootnote(ui: PickerUi): String? = when {
+  !ui.unlockFailed -> null
+  ui.unlockFailure == UnlockFailure.CANCELLED -> null
+  ui.unlockFailure == UnlockFailure.NO_SCREEN_LOCK -> stringResource(R.string.integrations_picker_unlock_no_screen_lock)
+  else -> stringResource(R.string.integrations_picker_unlock_failed)
+}
+
+// --- Barra in basso --------------------------------------------------------------------------------
 
 @Composable
 private fun PickerBottomBar(selected: Int, onConfirm: () -> Unit) {
@@ -296,7 +310,7 @@ private fun PickerCell(
   }
   GalleryMediaCell(
     contentDescription = description,
-    selectionMode = request.allowMultiple,
+    selectionMode = true,
     selected = selected,
     loaded = shown != null,
     onClick = { actions.onTap(id) },
@@ -403,33 +417,63 @@ internal fun noticeText(notice: PickerNotice): String {
       }
     is PickerNotice.TooMany -> stringResource(R.string.integrations_picker_notice_too_many, notice.max)
     PickerNotice.NothingAvailable -> stringResource(R.string.integrations_picker_notice_nothing)
+    is PickerNotice.NoLocation -> stringResource(
+      when (notice.stop) {
+        ShareStop.NO_SPACE -> R.string.integrations_picker_notice_no_location_space
+        ShareStop.TOO_BIG, ShareStop.TOO_MANY -> R.string.integrations_picker_notice_no_location_big
+        ShareStop.UNAVAILABLE -> R.string.integrations_picker_notice_no_location_gone
+        ShareStop.CANNOT_REMOVE_LOCATION, ShareStop.LOCATION_REMAINS ->
+          if (notice.removedFromChoice) R.string.integrations_picker_notice_no_location_removed else R.string.integrations_picker_notice_no_location_format
+        else -> R.string.integrations_picker_notice_no_location_failed
+      },
+    )
   }
 }
 
 // --- Stati senza griglia --------------------------------------------------------------------------------------------------
 
 @Composable
-private fun PickerBusy() {
+private fun PickerBusy(progress: PickerProgress?, onCancel: () -> Unit) {
   Column(
     modifier = Modifier.fillMaxSize().padding(24.dp),
     horizontalAlignment = Alignment.CenterHorizontally,
     verticalArrangement = Arrangement.Center,
   ) {
     FluidSpinner(size = 32.dp)
+    // "Rimuovi la posizione" acceso: si preparano le copie (un video solo-NAS puo' volerci un po'), con l'avanzamento e "Annulla".
+    val preparing = progress != null
     Text(
-      text = stringResource(R.string.integrations_picker_loading_title),
+      text = stringResource(if (preparing) R.string.integrations_picker_preparing_title else R.string.integrations_picker_loading_title),
       modifier = Modifier.padding(top = 16.dp),
       style = MaterialTheme.typography.titleMedium,
       color = MaterialTheme.colorScheme.onSurface,
       textAlign = TextAlign.Center,
     )
     Text(
-      text = stringResource(R.string.integrations_picker_loading_detail),
+      text = stringResource(if (preparing) R.string.integrations_picker_preparing_detail else R.string.integrations_picker_loading_detail),
       modifier = Modifier.padding(top = 4.dp),
       style = MaterialTheme.typography.bodyMedium,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
       textAlign = TextAlign.Center,
     )
+    if (progress != null) {
+      Text(
+        text = stringResource(R.string.integrations_picker_preparing_count, (progress.done + 1).coerceAtMost(progress.total), progress.total),
+        modifier = Modifier.padding(top = 12.dp),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurface,
+        textAlign = TextAlign.Center,
+      )
+      val fraction = if (progress.bytesTotal > 0) (progress.bytesDone.toFloat() / progress.bytesTotal).coerceIn(0f, 1f) else 0f
+      LinearProgressIndicator(progress = { fraction }, modifier = Modifier.padding(top = 8.dp).widthIn(max = PickerDimens.MessageMaxWidth).fillMaxWidth())
+      FluidButton(
+        text = stringResource(R.string.integrations_picker_preparing_cancel),
+        onClick = onCancel,
+        modifier = Modifier.padding(top = 16.dp),
+        size = FluidButtonSize.Large,
+        style = FluidButtonStyle.Tinted,
+      )
+    }
   }
 }
 

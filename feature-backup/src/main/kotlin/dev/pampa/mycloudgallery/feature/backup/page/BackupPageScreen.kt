@@ -329,9 +329,11 @@ private fun LazyListScope.deviceSection(state: BackupPageUi, actions: BackupPage
         },
         tone = FluidTone.Info,
         leading = { Icon(imageVector = Icons.Rounded.Folder, contentDescription = null) },
-        // La cartella si sceglie una volta (D7): scelta, non si tocca piu'.
-        disclosure = folder == null,
-        onClick = if (folder == null) ({ actions.open(BackupScreen.DEVICE_FOLDER) }) else null,
+        // La cartella si sceglie una volta (D7): scelta, non si tocca piu'. D-9 (prove sul campo): si sceglie **con** il primo backup, dal
+        // suo riepilogo ("Stanotte" o "Inizia ora"), mai da sola. Prima la riga apriva la scelta della cartella e, scelta li', il primo backup
+        // partiva al giro delle regole senza che l'utente avesse visto la stima di tempo, traffico e batteria (§2.11).
+        disclosure = folder == null && state.status is BackupStatus.FirstBackupReady,
+        onClick = if (folder == null && state.status is BackupStatus.FirstBackupReady) actions.openSheet else null,
       )
       FluidListDivider()
       FluidListRow(

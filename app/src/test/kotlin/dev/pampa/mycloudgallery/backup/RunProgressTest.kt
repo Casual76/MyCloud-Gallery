@@ -187,6 +187,65 @@ class RunProgressTest {
     assertThat(quiet.snapshot()).isNull()
   }
 
+  // --- D-11 (prove sul campo): byte e tempo veri con foto piccole e video grandi --------------------------------------------------
+
+  private fun videos(done: Int, total: Int, bytesDone: Long, bytesTotal: Long) = BackupStatus.Running(
+    kind = BackupKind.VIDEOS, done = done, total = total, bytesDone = bytesDone, bytesTotal = bytesTotal, etaMillis = null,
+    trigger = BackupTrigger.USER_NOW,
+  )
+
+  /**
+   * D-11: 291 foto da 44 byte fatte in 44 secondi, poi 5 video da 1,08 GB. Prima la pagina diceva "109 kB di 111 kB · meno di un minuto" per
+   * dieci minuti: totale e tempo venivano dal numero dei media. Con i byte che restano il totale e' quello vero e il tempo viene dal modello del
+   * riepilogo (scrittura e rilettura dei byte, costo per file), tarato sul ritmo visto.
+   */
+  @Test
+  fun d11_conIByteCheRestanoTotaleETempoSonoQuelliVeri() {
+    val video = 1_080_000_000L
+    val progress = RunProgress()
+    progress.reshape(batch(done = 0, bytesDone = 0, bytesTotal = 291 * 44L), queued = 296, nowMs = 0, remainingBytes = 291 * 44L + 5 * video)
+    // Le foto: tre tappe in 44 secondi.
+    progress.reshape(batch(done = 100, bytesDone = 4_400), queued = 196, nowMs = 15_000, remainingBytes = 191 * 44L + 5 * video)
+    progress.reshape(batch(done = 200, bytesDone = 8_800), queued = 96, nowMs = 30_000, remainingBytes = 91 * 44L + 5 * video)
+    val photosDone = progress.reshape(batch(done = 291, bytesDone = 12_804), queued = 5, nowMs = 44_000, remainingBytes = 5 * video)
+
+    assertThat(photosDone.done).isEqualTo(291)
+    assertThat(photosDone.total).isEqualTo(296)
+    assertThat(photosDone.bytesTotal).isEqualTo(12_804L + 5 * video)
+    // Il tempo: il modello per 5 file e 5,4 GB da scrivere e rileggere (circa 15 minuti), tarato sul ritmo delle foto. Mai "meno di un minuto".
+    val eta = checkNotNull(photosDone.etaMillis)
+    assertThat(eta).isAtLeast(10 * minute)
+    assertThat(eta).isAtMost(60 * minute)
+
+    // Il giro dei video parte (il motore riparte da zero) e il primo video sale: i byte salgono con lui, il totale e' caricati + da caricare.
+    progress.reshape(videos(done = 0, total = 5, bytesDone = 0L, bytesTotal = 5 * video), queued = 5, nowMs = 45_000, remainingBytes = 5 * video)
+    val midway = progress.reshape(videos(done = 0, total = 5, bytesDone = 500_000_000L, bytesTotal = 5 * video), queued = 5, nowMs = 104_000, remainingBytes = 5 * video - 448L * (1 shl 20))
+    assertThat(midway.bytesDone).isEqualTo(12_804L + 500_000_000L)
+    assertThat(midway.bytesTotal).isEqualTo(midway.bytesDone + 5 * video - 448L * (1 shl 20))
+    assertThat(midway.etaMillis).isLessThan(eta + minute)
+  }
+
+  /** D-11: i byte caricati mentre si lavorava sopravvivono alla morte del processo; un file di prima (sei numeri) si legge ancora. */
+  @Test
+  fun d11_laTaraturaSopravviveAllaMorteDelProcesso() {
+    val progress = RunProgress()
+    progress.reshape(batch(done = 0, bytesDone = 0), queued = 10, nowMs = 0, remainingBytes = 10_000_000L)
+    progress.reshape(batch(done = 4, bytesDone = 4_000_000), queued = 6, nowMs = 20_000, remainingBytes = 6_000_000L)
+    val saved = checkNotNull(progress.snapshot())
+    assertThat(saved.split(';')).hasSize(7)
+
+    val reborn = RunProgress()
+    reborn.restore(saved)
+    val resumed = reborn.reshape(batch(done = 0, bytesDone = 0), queued = 6, nowMs = 0, remainingBytes = 6_000_000L)
+    assertThat(resumed.done).isEqualTo(4)
+    assertThat(resumed.bytesDone).isEqualTo(4_000_000L)
+    assertThat(resumed.etaMillis).isEqualTo(progress.reshape(batch(done = 4, bytesDone = 4_000_000), queued = 6, nowMs = 20_000, remainingBytes = 6_000_000L).etaMillis)
+
+    val old = RunProgress()
+    old.restore("30;6628;0;0;60000;30")
+    assertThat(old.reshape(batch(done = 0), queued = 6_628, nowMs = 0).done).isEqualTo(30)
+  }
+
   @Test
   fun iByteSiSommanoFraILotti_EIlTotaleSiStimaDalRitmoDeiByte() {
     val progress = RunProgress()

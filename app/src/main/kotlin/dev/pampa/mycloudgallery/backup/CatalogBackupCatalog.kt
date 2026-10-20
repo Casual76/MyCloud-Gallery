@@ -74,10 +74,17 @@ class CatalogBackupCatalog(
     return catalog.backupCandidates(sources, query.kind.toCatalog(), after, query.limit).map { it.toCandidate() }
   }
 
-  override suspend fun safetyCounts(sources: BackupSources): SafetyCounts {
+  override suspend fun safetyCounts(sources: BackupSources): SafetyCounts = safetyCounts(sources, BackupSources.NONE)
+
+  override suspend fun queuedBytes(sources: BackupSources): Long? {
+    val chosen = catalogSources(sources)
+    return if (chosen.isEmpty()) 0L else catalog.queuedBytes(chosen)
+  }
+
+  override suspend fun safetyCounts(sources: BackupSources, outside: BackupSources): SafetyCounts {
     val chosen = catalogSources(sources)
     if (chosen.isEmpty()) return SafetyCounts.ZERO
-    val counts = catalog.safetyCounts(chosen)
+    val counts = catalog.safetyCounts(chosen, catalogSources(outside).filterIsInstanceTo(LinkedHashSet<CatalogSource.Folder>()))
     val problems = HashMap<BackupProblemCode, Int>()
     for ((code, n) in counts.problems) problemOf(code)?.let { problems.merge(it, n, Int::plus) }
     return SafetyCounts(counts.safe, counts.unverified, counts.onlyCommonCopy, counts.noNasCopy, counts.lost, problems)

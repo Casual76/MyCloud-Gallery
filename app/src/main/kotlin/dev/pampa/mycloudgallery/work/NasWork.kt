@@ -312,6 +312,9 @@ abstract class NasWorker(
   final override suspend fun doWork(): Result {
     val nas = gallery.nas ?: return Result.success()
     if (!gallery.backgroundWorkAllowed) return Result.success()
+    // D-7 (prove sul campo): in un processo appena nato (il giro periodico parte di solito a processo morto) lo stato del dispositivo puo' passare
+    // un attimo per "non configurato" e `runIfActive` rispondeva "niente da fare": il lavoro finiva consumato. Si aspetta, poco, la famiglia pronta.
+    gallery.awaitReady(COLD_START_WAIT)
     val outcome = try {
       gallery.runIfActive { NasStages(graph, nas, applicationContext.noBackupFilesDir).let { stage(it) } }
     } catch (e: kotlinx.coroutines.CancellationException) {

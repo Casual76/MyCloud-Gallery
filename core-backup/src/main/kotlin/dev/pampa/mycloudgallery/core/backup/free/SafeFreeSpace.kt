@@ -146,8 +146,28 @@ class SafeFreeSpace(
 
   // --- 1. Il piano -------------------------------------------------------------------------------------------------------------
 
-  /** Il piano non tocca lo stato del motore (solo il catalogo locale): non aspetta una tappa di verifica in corso. */
-  override suspend fun plan(filter: FreeSpaceFilter, permanent: Boolean): FreeSpacePlan = draft(filter, permanent, scene()).plan
+  /**
+   * Il piano non tocca lo stato del motore (solo il catalogo locale): non aspetta una tappa di verifica in corso.
+   *
+   * D-10: chi chiede un piano e' l'utente, nella pagina dell'app. Il dialogo di sistema di un processo morto sta sopra l'app, nello stesso task:
+   * se l'utente e' qui, quel dialogo non c'e' piu' e la sua risposta, se c'e' stata, e' gia' nel telefono. Prima del piano quindi gli esiti rimasti
+   * in dubbio per un dialogo che poteva ancora rispondere si chiudono ([closeDeadDialogs]): la riga ancora sul telefono e' rimasta e si puo'
+   * proporre di nuovo, quella sparita e' liberata.
+   */
+  override suspend fun plan(filter: FreeSpaceFilter, permanent: Boolean): FreeSpacePlan {
+    closeDeadDialogs()
+    return draft(filter, permanent, scene()).plan
+  }
+
+  /** D-10: gli esiti dei dialoghi dei processi morti, con il dialogo ormai chiuso. Solo se il lucchetto e' libero: il piano non aspetta. */
+  private suspend fun closeDeadDialogs() {
+    if (!mutex.tryLock()) return
+    try {
+      for (rec in diary.runsToSettle()) settleForeignDialog(rec, alsoInDoubt = true, dialogOver = true)
+    } finally {
+      mutex.unlock()
+    }
+  }
 
   /** Un elemento del piano con cio' che serve dopo (copie da rileggere, guardiano). */
   internal class DraftItem(val outcome: CopyOutcome.Ready) {
@@ -728,7 +748,7 @@ class SafeFreeSpace(
    * questo vale solo la prova che la riga non c'e' piu' (liberata); una riga ancora sul telefono resta nel dialogo, con il suo motivo nel
    * riepilogo, finche' arriva la risposta o finche' il processo muore (allora e' un lotto "di un processo morto", qui sopra).
    */
-  private suspend fun settleForeignDialog(rec: FreeRunRecord, alsoInDoubt: Boolean = false): FreeRunRecord {
+  private suspend fun settleForeignDialog(rec: FreeRunRecord, alsoInDoubt: Boolean = false, dialogOver: Boolean = false): FreeRunRecord {
     val mine = pendingBatch[rec.id.value]
     val items = itemsOf(rec.id)
     val open = items.filter {
@@ -737,7 +757,7 @@ class SafeFreeSpace(
     val ownLeft = if (rec.state.terminal && mine != null) items.filter { it.state == FreeItemState.IN_DIALOG && it.batchIndex == mine } else emptyList()
     if (open.isEmpty() && ownLeft.isEmpty()) return rec
     // Un lotto consegnato da un processo morto e' chiuso: le righe che il telefono non sa dire passano a IN_DOUBT, mai piu' riproposte.
-    val changed = open.map { proven(it) }.filter { new -> open.first { it.index == new.index }.state != new.state } +
+    val changed = open.map { afterDeadDialog(it, rec, dialogOver) }.filter { new -> open.first { it.index == new.index }.state != new.state } +
       ownLeft.map { proven(it) }.filter { it.state == FreeItemState.FREED }
     val closesBatch = open.any { it.state == FreeItemState.IN_DIALOG && it.batchIndex == rec.batchesDone + 1 }
     val after = items.map { item -> changed.firstOrNull { it.index == item.index } ?: item }
@@ -751,6 +771,25 @@ class SafeFreeSpace(
 
   /** La prova del telefono per un elemento dal destino sconosciuto: assente = liberato, presente = rimasto, altrimenti in dubbio. */
   private suspend fun proven(item: FreeItemRecord): FreeItemRecord = provenBy(item, item.phone?.let { phone.lookup(it) })
+
+  /**
+   * **D-10** (prove sul campo): l'esito di un elemento consegnato al dialogo di un processo che non c'e' piu' (o rimasto in dubbio). Il dialogo
+   * di sistema non muore con l'app: resta aperto, e l'utente puo' toccare "Consenti" dopo che il processo nuovo e' ripartito e ha gia' guardato
+   * il telefono. Una riga ancora sul telefono quindi **non e' "rimasta" finche' quel dialogo puo' rispondere**: resta in dubbio (sempre fuori da
+   * ogni altro dialogo, [FreeSpaceDiary.handedPhoneLocations]) e la lettura del telefono dopo la risolve: liberata se la riga se ne va. Diventa
+   * rimasta quando il dialogo non conta piu': la verifica del giro e' scaduta (6 ore), il telefono si e' riavviato ([isValid]) o l'utente e' tornato
+   * nella pagina a chiedere un piano ([dialogOver], vedi [plan]).
+   *
+   * Prima diventava subito `KEPT`, che e' finale: sull'S25 il processo e' ripartito con il dialogo aperto, i 5 elementi sono finiti `kept`, poi
+   * "Consenti" ha tolto i file dal telefono e il diario diceva "rimasti" per righe che non c'erano piu' (invariante 14). Niente si libera di piu':
+   * qui si decide solo come contare cio' che Android ha gia' fatto.
+   */
+  private suspend fun afterDeadDialog(item: FreeItemRecord, rec: FreeRunRecord, dialogOver: Boolean): FreeItemRecord {
+    val now = item.phone?.let { phone.lookup(it) }
+    // La stessa riga e' ancora li': il dialogo di allora puo' ancora toglierla.
+    if (now is PhoneLookup.Present && !dialogOver && isValid(rec)) return item.copy(state = FreeItemState.IN_DOUBT)
+    return provenBy(item, now)
+  }
 
   /**
    * L'esito di un elemento consegnato ad Android dalla riga del telefono adesso ([now], null = l'elemento non sa la sua riga).

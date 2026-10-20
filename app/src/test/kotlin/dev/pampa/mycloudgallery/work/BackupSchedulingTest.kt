@@ -10,8 +10,11 @@ import androidx.work.testing.SynchronousExecutor
 import androidx.work.testing.WorkManagerTestInitHelper
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
+import dev.pampa.mycloudgallery.core.backup.contract.BackupTrigger
 import dev.pampa.mycloudgallery.core.model.FreezeReason
+import dev.pampa.mycloudgallery.core.rules.ConfirmationKind
 import dev.pampa.mycloudgallery.core.rules.NetworkClass
+import dev.pampa.mycloudgallery.core.rules.ThermalStatus
 import dev.pampa.mycloudgallery.core.rules.WaitReason
 import org.junit.Before
 import org.junit.Test
@@ -113,6 +116,43 @@ class BackupSchedulingTest {
       BackupWorkScheduling.afterWait(context, BackupWorkScheduling.Kind.INCOMING, wait)
       assertWithMessage("$wait").that(waiting(BackupWorkScheduling.INCOMING_WORK)).isEmpty()
     }
+  }
+
+  /**
+   * D-6 delle prove sul campo: il lavoro dell'utente che non ritrova la rete passa a una ripresa che parte **appena c'e' un Wi-Fi** (nessun
+   * ritardo, nessun polling), con il trigger del tocco ("Inizia ora" resta il primo backup). Mai sui dati mobili.
+   */
+  @Test
+  fun d6_ilLavoroDellUtenteSenzaReteRiparteColPrimoWifi() {
+    BackupWorkScheduling.userResume(context, BackupTrigger.FIRST_BACKUP)
+
+    val work = waiting(BackupWorkScheduling.USER_RESUME_WORK).single()
+    val network = checkNotNull(work.constraints.requiredNetworkRequest) { "nessun vincolo di rete" }
+    assertThat(network.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)).isTrue()
+    assertThat(network.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)).isFalse()
+    assertThat(network.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)).isTrue()
+    assertThat(network.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)).isFalse()
+    assertThat(work.initialDelayMillis).isEqualTo(0L)
+    val request = workManager.getWorkInfosForUniqueWork(BackupWorkScheduling.USER_RESUME_WORK).get().single()
+    assertThat(request.tags).contains(BackupWorkScheduling.TAG)
+    // Una ripresa gia' in attesa basta: un secondo arrivo non ne aggiunge un'altra.
+    BackupWorkScheduling.userResume(context, BackupTrigger.USER_NOW)
+    assertThat(waiting(BackupWorkScheduling.USER_RESUME_WORK)).hasSize(1)
+  }
+
+  /** D-6: la ripresa che trova un Wi-Fi che non e' casa (o il NAS spento) riprova su un Wi-Fi fra un quarto d'ora; il caldo non programma niente. */
+  @Test
+  fun d6_laRipresaFuoriCasaRiprovaSulWifiIlRestoNo() {
+    for (wait in listOf(WaitReason.NetworkNotTrusted, WaitReason.NasUnreachable, WaitReason.Offline, WaitReason.ConfirmationRequired(setOf(ConfirmationKind.MOBILE_DATA)))) {
+      workManager.cancelAllWork().result.get()
+      BackupWorkScheduling.afterUserWait(context, BackupTrigger.USER_NOW, wait)
+      val work = waiting(BackupWorkScheduling.USER_RESUME_WORK).single()
+      assertWithMessage("$wait: un ritardo").that(work.initialDelayMillis).isAtLeast(10 * 60_000L)
+      assertWithMessage("$wait: mai i dati mobili").that(checkNotNull(work.constraints.requiredNetworkRequest).hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)).isFalse()
+    }
+    workManager.cancelAllWork().result.get()
+    BackupWorkScheduling.afterUserWait(context, BackupTrigger.USER_NOW, WaitReason.Thermal(ThermalStatus.CRITICAL))
+    assertThat(waiting(BackupWorkScheduling.USER_RESUME_WORK)).isEmpty()
   }
 
   @Test

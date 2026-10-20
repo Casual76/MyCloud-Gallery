@@ -316,15 +316,22 @@ class BackupPageScreenTest : ComposeBackupTest() {
     composeRule.onNodeWithText("Nessuna sorgente scelta").assertExists()
   }
 
+  /**
+   * La cartella scelta non si tocca. D-9 (prove sul campo): quella non ancora scelta si sceglie con il primo backup, dal suo riepilogo: la riga
+   * apre il foglio "Primo backup" con la stima, mai la scelta della cartella da sola (che faceva partire il primo backup senza riepilogo).
+   */
   @Test
-  fun laCartellaDelDispositivoScelta_NonSiTocca_ENonScelta_SiApre() {
+  fun laCartellaDelDispositivoScelta_NonSiTocca_ENonScelta_ApreIlRiepilogoDelPrimoBackup() {
     start(BackupStatus.UpToDate(1, null))
     composeRule.onNodeWithText("Le copie vanno in «S25 di Mario».").assertExists()
     composeRule.onNodeWithText("Impostazioni del backup", substring = true).assertExists()
-    composeRule.runOnIdle { ui.value = ui.value.copy(deviceFolder = null) }
+    composeRule.runOnIdle { ui.value = page(BackupStatus.FirstBackupReady(BackupSamples.firstBackupSummary)).copy(deviceFolder = null) }
     composeRule.waitForIdle()
     composeRule.onNodeWithText("Si sceglie prima del primo backup.").performClick()
-    assertThat(actions.opened).containsExactly(BackupScreen.DEVICE_FOLDER)
+    composeRule.waitForIdle()
+    assertThat(actions.opened).isEmpty()
+    assertThat(ui.value.sheetOpen).isTrue()
+    button("Inizia ora").assertExists()
   }
 
   @Test

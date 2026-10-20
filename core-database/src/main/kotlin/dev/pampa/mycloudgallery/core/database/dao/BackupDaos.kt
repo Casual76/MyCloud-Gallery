@@ -190,6 +190,10 @@ interface BackupQueryDao {
   @RawQuery
   suspend fun codeCounts(query: SupportSQLiteQuery): List<CodeCountRow>
 
+  /** Una somma (una colonna, una riga): i byte in coda del backup ([BackupQueries.queuedBytes]). */
+  @RawQuery
+  suspend fun total(query: SupportSQLiteQuery): Long
+
   /** Le share con area privata dell'account (di norma una: `LocalDeviceProfile.privateShare`). */
   /**
    * P14 (P9, `FreeSpaceCatalog.phoneMedia`): i media con una copia **presente** sul telefono (presenza derivata `phone_only` o

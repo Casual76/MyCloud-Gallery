@@ -149,8 +149,12 @@ class BackupSettingsViewModel @Inject constructor(
     viewModelScope.launch { rulesPort.setProtectNewPhotos(on) }
   }
 
-  /** Apre la scelta della cartella del dispositivo (D7). */
-  fun openDeviceFolder() = acts.open(BackupScreen.DEVICE_FOLDER)
+  /**
+   * La cartella del dispositivo (D7) si sceglie con il primo backup: apre il suo riepilogo (la pagina Backup con il foglio "Primo backup"), da cui
+   * "Stanotte" o "Inizia ora" la scelgono. D-9 (prove sul campo): prima apriva la scelta della cartella da sola e il primo backup partiva al
+   * giro delle regole senza che l'utente vedesse la stima (§2.11).
+   */
+  fun openDeviceFolder() = acts.open(BackupScreen.FIRST_BACKUP)
 
   private companion object {
     const val StopTimeoutMillis = 5_000L

@@ -104,12 +104,15 @@ object BackupQueries {
     return SimpleSQLiteQuery(sql.toString(), args.toTypedArray())
   }
 
-  /** I conteggi per stato di sicurezza dei media propri delle sorgenti (`MediaCatalog.safetyCounts`). Null se non ci sono sorgenti. */
-  fun safetyByStatus(me: String, sources: Collection<CatalogSource>): SupportSQLiteQuery? {
+  /**
+   * I conteggi per stato di sicurezza dei media propri delle sorgenti (`MediaCatalog.safetyCounts`). Null se non ci sono sorgenti. Con [outside]
+   * non conta i media che hanno una posizione del telefono in una di quelle cartelle ([inSources]).
+   */
+  fun safetyByStatus(me: String, sources: Collection<CatalogSource>, outside: Collection<CatalogSource.Folder> = emptyList()): SupportSQLiteQuery? {
     val filter = SourceFilter(sources)
     if (filter.isEmpty) return null
     val args = ArrayList<Any?>()
-    val where = inSources(filter, args)
+    val where = inSources(filter, args, outside)
     args.add(0, me)
     return SimpleSQLiteQuery(
       "SELECT m.safety AS status, COUNT(*) AS count FROM media m WHERE m.owner_account = ? AND $where GROUP BY m.safety",
@@ -117,12 +120,31 @@ object BackupQueries {
     )
   }
 
-  /** I problemi del backup per codice dei media propri delle sorgenti (`MediaCatalog.safetyCounts`). Null se non ci sono sorgenti. */
-  fun problemsByCode(me: String, sources: Collection<CatalogSource>): SupportSQLiteQuery? {
+  /**
+   * D-9, D-11 (prove sul campo): i byte da caricare dei media propri delle sorgenti che aspettano il backup senza una copia sul NAS (`no_nas_copy`,
+   * gli stessi di [safetyByStatus]) e senza un problema che li ferma: la dimensione della versione attuale. Null se non ci sono sorgenti.
+   * Prima la pagina diceva "Da caricare: 0 B" con 296 media in coda: i byte venivano solo dal diario, che ha gli elementi di un giro alla volta.
+   */
+  fun queuedBytes(me: String, sources: Collection<CatalogSource>): SupportSQLiteQuery? {
     val filter = SourceFilter(sources)
     if (filter.isEmpty) return null
     val args = ArrayList<Any?>()
     val where = inSources(filter, args)
+    args.add(0, me)
+    return SimpleSQLiteQuery(
+      "SELECT COALESCE(SUM(v.size), 0) FROM media m JOIN media_version v ON v.version_id = m.current_version_id " +
+        "WHERE m.owner_account = ? AND m.safety = 'no_nas_copy' AND $where " +
+        "AND NOT EXISTS (SELECT 1 FROM backup_problem p WHERE p.media_id = m.media_id AND p.marks_cell = 1)",
+      args.toTypedArray(),
+    )
+  }
+
+  /** I problemi del backup per codice dei media propri delle sorgenti (`MediaCatalog.safetyCounts`). Null se non ci sono sorgenti. */
+  fun problemsByCode(me: String, sources: Collection<CatalogSource>, outside: Collection<CatalogSource.Folder> = emptyList()): SupportSQLiteQuery? {
+    val filter = SourceFilter(sources)
+    if (filter.isEmpty) return null
+    val args = ArrayList<Any?>()
+    val where = inSources(filter, args, outside)
     args.add(0, me)
     return SimpleSQLiteQuery(
       "SELECT p.code AS code, COUNT(*) AS count FROM backup_problem p JOIN media m ON m.media_id = p.media_id " +
@@ -131,13 +153,25 @@ object BackupQueries {
     )
   }
 
-  /** Il media appartiene a una sorgente: per `MediaSource`, o con una posizione del telefono in una delle cartelle. */
-  private fun inSources(filter: SourceFilter, args: MutableList<Any?>): String {
+  /**
+   * Il media appartiene a una sorgente: per `MediaSource`, o con una posizione del telefono in una delle cartelle. Con [outside] (le cartelle
+   * scelte, per le righe della fotocamera e degli screenshot della pagina Backup) **non** ci appartiene un media con una posizione del telefono
+   * in una di quelle cartelle: la cartella scelta vince sul tipo (O-2, come il piano), e ogni media sta in una riga sola.
+   */
+  private fun inSources(filter: SourceFilter, args: MutableList<Any?>, outside: Collection<CatalogSource.Folder> = emptyList()): String {
     val media = filter.mediaClause("m", args)
-    if (filter.folders.isEmpty()) return "($media)"
-    val folders = filter.folderClause("l", args)
-    return "($media OR EXISTS (SELECT 1 FROM media_version v JOIN media_location l ON l.version_id = v.version_id " +
-      "WHERE v.media_id = m.media_id AND l.location_type = 'phone' AND $folders))"
+    val belongs = if (filter.folders.isEmpty()) {
+      "($media)"
+    } else {
+      val folders = filter.folderClause("l", args)
+      "($media OR EXISTS (SELECT 1 FROM media_version v JOIN media_location l ON l.version_id = v.version_id " +
+        "WHERE v.media_id = m.media_id AND l.location_type = 'phone' AND $folders))"
+    }
+    val excluded = SourceFilter(outside)
+    if (excluded.folders.isEmpty()) return belongs
+    val chosen = excluded.folderClause("x", args)
+    return "($belongs AND NOT EXISTS (SELECT 1 FROM media_version xv JOIN media_location x ON x.version_id = xv.version_id " +
+      "WHERE xv.media_id = m.media_id AND x.location_type = 'phone' AND $chosen))"
   }
 
   /**

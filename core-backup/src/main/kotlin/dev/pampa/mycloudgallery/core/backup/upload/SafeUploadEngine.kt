@@ -314,9 +314,18 @@ class SafeUploadEngine(
     if (foreign.isNotEmpty()) GalleryLog.w(TAG) { "elementi di un'altra area: ${foreign.size} aspettano (la share non e' piu' quella del motore)" }
     val queue = WorkQueue(round, mine)
     repeat(foreign.size) { queue.park() }
+    round.queue = queue
     round.publishRunning(queue)
-    coroutineScope {
-      repeat(config.parallel) { launch { worker(round, queue) } }
+    try {
+      coroutineScope {
+        repeat(config.parallel) { launch { worker(round, queue) } }
+      }
+    } catch (e: CancellationException) {
+      // D-6 (prove sul campo): Android ha fermato il lavoro (la sua rete e' sparita, la morte del lavoro, l'azzeramento) a meta' giro. Lo stato
+      // non resta "in corso": la pagina diceva "Backup in corso, avviato da te" per un lavoro che non c'era piu'. Ogni elemento resta con il suo
+      // punto di ripresa nel diario.
+      if (state.value is BackupStatus.Running) state.value = BackupStatus.Stopped(stopRequested ?: StopBy.SYSTEM)
+      throw e
     }
     return finish(round, queue, round.halt.get())
   }
@@ -908,6 +917,7 @@ class SafeUploadEngine(
     var offset = from
     var lastPoint = from
     var unrecorded = 0L
+    var published = from
     val buffer = config.chunkBytes.toLong()
     try {
       while (offset < item.size) {
@@ -937,6 +947,11 @@ class SafeUploadEngine(
         round.uploaded.addAndGet(n.toLong())
         unrecorded += n
         offset += n
+        // D-11: i byte caricati si vedono mentre il file sale, non solo alla sua fine.
+        if (offset - published >= PROGRESS_BYTES) {
+          published = offset
+          round.publishProgress()
+        }
         if (offset - lastPoint >= config.checkpointBytes && offset < item.size) {
           when (val cp = writer.checkpoint()) {
             is NasResult.Err -> return failedWrite(round, item, cp.error)
@@ -1387,6 +1402,17 @@ class SafeUploadEngine(
       return found
     }
 
+    /** La coda del giro, per l'avanzamento durante un file lungo ([publishProgress]). */
+    @Volatile var queue: WorkQueue? = null
+
+    /**
+     * D-11 (prove sul campo): l'avanzamento anche **durante** un file lungo. Prima lo stato si ripubblicava solo a fine elemento: per i dieci
+     * minuti del caricamento di un video da 2,5 GB la pagina restava ferma sui byte delle foto ("109 kB di 111 kB").
+     */
+    fun publishProgress() {
+      queue?.let(::publishRunning)
+    }
+
     fun publishRunning(queue: WorkQueue) {
       if (halt.get() != null) return
       state.value = BackupStatus.Running(
@@ -1447,6 +1473,9 @@ class SafeUploadEngine(
 
   companion object {
     private const val TAG = "BackupUpload"
+
+    /** D-11: ogni quanti byte caricati di un file lo stato del giro si ripubblica (circa un secondo di caricamento sul Wi-Fi di casa). */
+    private const val PROGRESS_BYTES = 8L shl 20
 
     /** Gli elementi aperti letti a ogni giro (il piano ne crea al piu' una pagina per giro). */
     private const val RESUME_LIMIT = 10_000

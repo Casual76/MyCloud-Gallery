@@ -5,6 +5,7 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
+import androidx.work.Data
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequest
@@ -16,6 +17,7 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dev.pampa.mycloudgallery.backup.BackupGraph
 import dev.pampa.mycloudgallery.core.backup.contract.BackupKind
+import dev.pampa.mycloudgallery.core.backup.contract.BackupTrigger
 import dev.pampa.mycloudgallery.core.backup.contract.RunStop
 import dev.pampa.mycloudgallery.core.backup.upload.BackupStageOutcome
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
@@ -53,10 +55,14 @@ object BackupWorkScheduling {
   const val QUICK_WORK = "backup-quick-photos"
   const val SAFETY_WORK = "backup-safety"
   const val INCOMING_WORK = "backup-incoming"
+  const val USER_RESUME_WORK = "backup-user-resume"
   const val PHOTOS_PERIODIC_WORK = "backup-photos-periodic"
   const val VIDEOS_PERIODIC_WORK = "backup-videos-periodic"
   const val SAFETY_PERIODIC_WORK = "backup-safety-periodic"
   const val TAG = "backup"
+
+  /** D-6: il trigger del lavoro dell'utente ripreso con il Wi-Fi ([userResume]), negli input del lavoro. */
+  const val INPUT_TRIGGER = "trigger"
 
   /** Il giro periodico di chi non e' sveglio: ogni sei ore, le regole decidono se si parte. */
   val PERIOD: kotlin.time.Duration = NasWorkScheduling.PERIOD
@@ -83,6 +89,7 @@ object BackupWorkScheduling {
     QUICK(QUICK_WORK),
     SAFETY(SAFETY_WORK),
     INCOMING(INCOMING_WORK),
+    USER_RESUME(USER_RESUME_WORK),
   }
 
   /** RE-11: una rete qualunque, anche senza internet (il NAS e' in LAN): vedi [LanConstraints]. */
@@ -147,6 +154,7 @@ object BackupWorkScheduling {
       Kind.QUICK -> OneTimeWorkRequestBuilder<QuickPhotoWorker>()
       Kind.SAFETY -> OneTimeWorkRequestBuilder<SafetyVerifyWorker>()
       Kind.INCOMING -> OneTimeWorkRequestBuilder<IncomingUploadWorker>()
+      Kind.USER_RESUME -> OneTimeWorkRequestBuilder<UserResumeWorker>()
     }
     return builder
       .setConstraints(if (onWifi) LanConstraints.unmetered() else constraintsFor(wait))
@@ -171,6 +179,37 @@ object BackupWorkScheduling {
       enqueue(context, request(kind, wait, HOME_RETRY_MS, onWifi = true), kind, ExistingWorkPolicy.APPEND_OR_REPLACE)
     } else if (kind == Kind.INCOMING && (waitsForHomeNetwork(wait) || wait == WaitReason.NasUnreachable)) {
       enqueue(context, request(kind, wait, HOME_RETRY_MS, onWifi = true), kind, ExistingWorkPolicy.APPEND_OR_REPLACE)
+    }
+  }
+
+  /**
+   * **D-6** (prove sul campo): il lavoro dell'utente ("Inizia ora", "Fai ora") ha perso la rete e non l'ha ritrovata in tempo. Riparte da solo
+   * quando c'e' un Wi-Fi: una rete non a consumo, come BK-2 (WorkManager avvisa quando arriva, nessun polling), con le regole di un lavoro
+   * dell'utente: vale la sua scelta (nessuna fascia, nessuna carica), mai i dati mobili senza la sua conferma. Prima il lavoro finiva e il backup
+   * restava fermo fino al giro periodico (6 ore). Unico: con [ExistingWorkPolicy.KEEP] una ripresa gia' in attesa basta. "Ferma" lo chiude (il
+   * giro trova la pausa), l'azzeramento lo toglie con tutti i lavori.
+   */
+  fun userResume(context: Context, trigger: BackupTrigger, delayMs: Long = 0L, policy: ExistingWorkPolicy = ExistingWorkPolicy.KEEP) {
+    enqueue(context, userResumeRequest(trigger, delayMs), Kind.USER_RESUME, policy)
+  }
+
+  /** D-6: la richiesta della ripresa del lavoro dell'utente: solo su un Wi-Fi, con il suo trigger. */
+  fun userResumeRequest(trigger: BackupTrigger, delayMs: Long = 0L): OneTimeWorkRequest = OneTimeWorkRequestBuilder<UserResumeWorker>()
+    .setConstraints(LanConstraints.unmetered())
+    .setInputData(Data.Builder().putString(INPUT_TRIGGER, trigger.code).build())
+    .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_MS, TimeUnit.MILLISECONDS)
+    .apply { if (delayMs > 0L) setInitialDelay(delayMs, TimeUnit.MILLISECONDS) }
+    .addTag(TAG)
+    .build()
+
+  /**
+   * D-6: la ripresa del lavoro dell'utente ha trovato un'attesa delle regole. Per la rete (un Wi-Fi che non e' casa, il NAS che non risponde, la
+   * conferma dei dati mobili) si riprova su un Wi-Fi dopo un quarto d'ora, come BK-2 e IN-5; per il resto (il caldo, il congelamento) niente: lo
+   * dice la pagina, e il giro periodico o un tocco riprendono.
+   */
+  fun afterUserWait(context: Context, trigger: BackupTrigger, wait: WaitReason) {
+    if (waitsForHomeNetwork(wait) || wait == WaitReason.NasUnreachable || wait == WaitReason.PoorNetwork || wait is WaitReason.ConfirmationRequired) {
+      userResume(context, trigger, HOME_RETRY_MS, ExistingWorkPolicy.APPEND_OR_REPLACE)
     }
   }
 
@@ -310,9 +349,19 @@ abstract class BackupWorker(
   /** La tappa del lavoro; null = non parte (niente da fare, NAS o backup non configurati). */
   protected abstract suspend fun stage(stages: BackupStages): BackupFollowUp?
 
+  /** Il lavoro dopo, per una tappa che ha lasciato altro da fare. */
+  protected open fun continueLater() = BackupWorkScheduling.continueLater(applicationContext, kind)
+
+  /** Il lavoro dopo un'attesa delle regole, se serve ([BackupWorkScheduling.afterWait]). */
+  protected open fun afterWait(reason: WaitReason) = BackupWorkScheduling.afterWait(applicationContext, kind, reason)
+
   final override suspend fun doWork(): Result {
     val backup = gallery.backup ?: return Result.success()
     if (!gallery.backgroundWorkAllowed) return Result.success()
+    // D-7: WorkManager riprende un lavoro interrotto dalla morte del processo in un processo appena nato. Prima di dire "niente da fare" si
+    // aspetta che il backup sia pronto (stato del dispositivo, impostazioni, account): prima il lavoro finiva consumato e la catena delle tappe
+    // si fermava fino al giro periodico. Se non diventa pronto in tempo, la tappa lo dice da sola, come prima.
+    awaitBackupReady(gallery, backup)
     // R1: un errore inatteso si salva come problema visibile e il lavoro finisce `failure` (mai un successo silenzioso, mai un `retry` a oltranza:
     // il lavoro dopo lo chiede la lettura del telefono o il giro periodico, e "Riprova" toglie il segno).
     val followUp = try {
@@ -332,8 +381,8 @@ abstract class BackupWorker(
     }
     GalleryLog.d(tag) { "tappa: ${followUp?.javaClass?.simpleName}" }
     when (followUp) {
-      BackupFollowUp.Continue -> BackupWorkScheduling.continueLater(applicationContext, kind)
-      is BackupFollowUp.Wait -> BackupWorkScheduling.afterWait(applicationContext, kind, followUp.reason)
+      BackupFollowUp.Continue -> continueLater()
+      is BackupFollowUp.Wait -> afterWait(followUp.reason)
       BackupFollowUp.Retry -> return Result.retry()
       BackupFollowUp.None, null -> {
         // Fine giro: se nel frattempo e' arrivato altro in una sorgente (o il giro delle foto ha lasciato i video), il lavoro del tipo giusto.
@@ -413,6 +462,67 @@ class IncomingUploadWorker @AssistedInject constructor(
     // a consumo (come "Proteggi subito", BK-2). Gli altri lavori lo lasciano alla pagina; qui l'utente aveva solo condiviso un file.
     if (outcome.stage is StageOutcome.NeedsConfirmation) BackupFollowUp.Wait(WaitReason.NetworkNotTrusted) else BackupFollowUp.of(outcome)
   }
+}
+
+/**
+ * **D-6** (prove sul campo): il lavoro dell'utente ("Inizia ora", "Fai ora") ripreso quando torna il Wi-Fi ([BackupWorkScheduling.userResume]).
+ * Fa quello che faceva il lavoro dell'utente, a tappe di WorkManager: le foto, poi i video, con le regole di un lavoro dell'utente e il suo
+ * trigger. Mai i dati mobili: la conferma non si chiede a nessuno, si aspetta il Wi-Fi. Finisce quando non c'e' piu' niente da fare, con "Ferma"
+ * o con il cancello chiuso; da li' il backup torna ai lavori delle regole.
+ */
+@HiltWorker
+class UserResumeWorker @AssistedInject constructor(
+  @Assisted appContext: Context,
+  @Assisted params: WorkerParameters,
+  gallery: GalleryGraph,
+  graph: AppGraph,
+) : BackupWorker(appContext, params, gallery, graph) {
+  override val tag: String = "UserResumeWorker"
+  override val kind = BackupWorkScheduling.Kind.USER_RESUME
+  override val diagJob: DiagJob = DiagJob.BACKUP_USER
+
+  /** Il trigger del tocco dell'utente ("Inizia ora" o "Fai ora"); qualunque altro valore vale "Fai ora". */
+  private val trigger: BackupTrigger
+    get() = when (val t = JobSchedulerBackupJobs.triggerOf(inputData.getString(BackupWorkScheduling.INPUT_TRIGGER))) {
+      BackupTrigger.FIRST_BACKUP -> t
+      else -> BackupTrigger.USER_NOW
+    }
+
+  override suspend fun stage(stages: BackupStages): BackupFollowUp? = userResumeStage { kind -> stages.round(kind, trigger) }
+
+  override fun continueLater() = BackupWorkScheduling.userResume(applicationContext, trigger, policy = ExistingWorkPolicy.APPEND_OR_REPLACE)
+
+  override fun afterWait(reason: WaitReason) = BackupWorkScheduling.afterUserWait(applicationContext, trigger, reason)
+}
+
+/**
+ * D-6: una tappa della ripresa del lavoro dell'utente: le foto, poi i video (D11). Un tipo senza niente da fare passa all'altro; il primo che
+ * lavora, aspetta o trova un errore decide il seguito. "Ferma", il cancello chiuso e i permessi del telefono chiudono la ripresa. Un'attesa della
+ * rete (anche la conferma dei dati mobili o del roaming, che qui non si chiede) e' un'attesa del Wi-Fi. Pura, provata su JVM.
+ */
+internal suspend fun userResumeStage(stage: suspend (BackupKind) -> BackupStageOutcome?): BackupFollowUp? {
+  for (kind in BackupJobRun.KINDS) {
+    val outcome = stage(kind) ?: return null
+    when (outcome.last?.stoppedBy) {
+      RunStop.STOPPED, RunStop.GATE, RunStop.PHONE -> return BackupFollowUp.None
+      else -> Unit
+    }
+    if (BackupJobRun.waitsForNetwork(outcome)) {
+      return BackupFollowUp.Wait(
+        when (val waiting = outcome.stage) {
+          is StageOutcome.Waiting -> waiting.reason
+          is StageOutcome.Stopped -> waiting.reason
+          is StageOutcome.NeedsConfirmation -> WaitReason.ConfirmationRequired(waiting.decision.kinds)
+          else -> WaitReason.NetworkNotTrusted
+        },
+      )
+    }
+    when (val followUp = BackupFollowUp.of(outcome)) {
+      BackupFollowUp.None -> Unit
+      else -> return followUp
+    }
+  }
+  return BackupFollowUp.None
 }
 
 /** Le verifiche (non verificate, `FULL_HASH`, rotazione) e il guardiano delle copie private (D9, D14). */

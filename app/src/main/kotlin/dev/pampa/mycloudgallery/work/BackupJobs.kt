@@ -82,7 +82,9 @@ class JobSchedulerBackupJobs(context: Context) : BackupJobs {
     val builder = JobInfo.Builder(JOB_USER, component).setRequiredNetwork(LanConstraints.request()).setExtras(extras)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) builder.setUserInitiated(true)
     try {
-      scheduler?.schedule(builder.build())
+      // D-8 (prove sul campo): Android rifiuta un lavoro dell'utente chiesto con l'app non in primo piano con un esito, non con un'eccezione.
+      // Prima l'esito si ignorava e il tocco spariva senza una traccia: adesso almeno il log lo dice.
+      if (scheduler?.schedule(builder.build()) == JobScheduler.RESULT_FAILURE) GalleryLog.w(TAG) { "lavoro del backup rifiutato da Android" }
     } catch (e: IllegalStateException) {
       // UIDT chiesto con l'app non visibile: il backup riprende con i lavori a tappe.
       GalleryLog.w(TAG) { "lavoro del backup non programmato: ${e.javaClass.simpleName}" }

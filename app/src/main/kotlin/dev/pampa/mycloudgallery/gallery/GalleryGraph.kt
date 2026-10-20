@@ -85,6 +85,7 @@ import dev.pampa.mycloudgallery.nas.NasInputs
 import dev.pampa.mycloudgallery.work.NasOpsJobs
 import java.io.File
 import java.time.ZoneId
+import kotlin.time.Duration
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -115,6 +116,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Cio' che cambia fra il telefono vero, le varianti di misura e i test d'integrazione.
@@ -404,6 +406,19 @@ class GalleryGraph(
     } catch (_: GalleryStoppedException) {
       null
     }
+  }
+
+  /**
+   * **D-7** (prove sul campo): un lavoro partito in un processo appena nato aspetta, al massimo [timeout], che la famiglia sia **pronta**,
+   * invece di fidarsi del primo stato che non e' piu' "in caricamento". All'avvio lo stato del dispositivo puo' passare un attimo per "non
+   * configurato": l'avvio dichiara finita la lettura della fiducia un istante prima che lo stato della famiglia la veda, e [coreIfReady]
+   * rispondeva null. Il lavoro del backup dell'utente rilanciato da Android dopo la morte del processo finiva cosi' in 0,4 secondi con "niente
+   * da fare". Vero se la famiglia e' pronta e la galleria viva; falso dopo [timeout] (un dispositivo davvero non pronto) o a galleria ferma.
+   */
+  suspend fun awaitReady(timeout: Duration): Boolean {
+    if (retired) return false
+    val ready = withTimeoutOrNull(timeout) { setup.state.first { it is SetupState.Ready } }
+    return ready != null && !retired
   }
 
   private suspend fun builtCore(): GalleryCore {

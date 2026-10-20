@@ -944,14 +944,16 @@ class BackupGraph(
     val problems = counts.problems.filterKeys { it.marksMedia }
     val queued = queuedOf(counts)
     val engineStatus = parts?.engine?.status?.value
-    // BK-5: l'avanzamento e' cumulativo (fatti + in coda), non quello del lotto da 60 secondi.
-    if (engineStatus is BackupStatus.Running) return progress.reshape(engineStatus, queued, monotonicMs())
-    progress.idle(queued)
+    // BK-5: l'avanzamento e' cumulativo (fatti + in coda), non quello del lotto da 60 secondi. D-11: con i byte veri che restano da caricare.
+    if (engineStatus is BackupStatus.Running) return progress.reshape(engineStatus, queued, monotonicMs(), remainingBytes(sources))
+    if (progress.idle(queued)) GalleryLog.d(TAG) { "avanzamento: campagna chiusa (niente in coda)" }
     rememberedProblem(access)?.let { problem -> return BackupStatus.Problem(problem, 0) }
     if (engineStatus is BackupStatus.Stopped) return engineStatus
 
     if (queued > 0) {
-      val bytes = runCatching { store.counts().bytesOpen }.getOrDefault(0L)
+      // D-9 (prove sul campo): "Da caricare" sono i byte dei media in coda sul catalogo. Prima venivano solo dal diario, che ha gli elementi di un
+      // giro alla volta: "296 in coda · Da caricare: 0 B". Senza il catalogo, quello che sa il diario.
+      val bytes = remainingBytes(sources) ?: runCatching { store.counts().bytesOpen }.getOrDefault(0L)
       return waitingStatus(queued, bytes, waitReason(), stalled = isStalled(queued), storageLow = phoneStorageLow())
     }
     problems.entries.minByOrNull { it.key.ordinal }?.let { (code, count) -> return BackupStatus.Problem(code, count) }
@@ -970,6 +972,34 @@ class BackupGraph(
     val problems = counts.problems.filterKeys { it.marksMedia }
     val held = fiveB.sourceChangedCurrentMedia()
     return (counts.noNasCopy + counts.unverified - problems.values.sum() - held).coerceAtLeast(0)
+  }
+
+  /**
+   * D-9, D-11 (prove sul campo): i byte che restano da caricare: quelli dei media in coda sul catalogo (senza copia sul NAS) meno quelli gia'
+   * arrivati nei temporanei dei file a meta' (il punto di ripresa del diario, ogni 64 MiB) o gia' caricati e non ancora collegati. Null se il
+   * catalogo non lo sa. Due query, mai il NAS.
+   */
+  private suspend fun remainingBytes(sources: BackupSources): Long? {
+    if (sources.isEmpty) return null
+    val queuedBytes = try {
+      backupCatalogOrNull()?.queuedBytes(sources)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      null
+    } ?: return null
+    return (queuedBytes - inFlightBytes()).coerceAtLeast(0L)
+  }
+
+  /** I byte gia' sul NAS degli elementi aperti del diario che il catalogo conta ancora in coda: il punto di ripresa, o il file intero dopo il caricamento. */
+  private suspend fun inFlightBytes(): Long = withContext(Dispatchers.IO) {
+    runCatching {
+      database.openHelper.readableDatabase.query(
+        "SELECT COALESCE(SUM(CASE WHEN state = 'uploading' THEN resume_at " +
+          "WHEN state IN ('uploaded', 'verified', 'publishing', 'published') THEN size ELSE 0 END), 0) " +
+          "FROM backup_item WHERE is_open = 1 AND kind = 'new_copy'",
+      ).use { c -> if (c.moveToFirst()) c.getLong(0) else 0L }
+    }.getOrDefault(0L)
   }
 
   /**
@@ -1043,8 +1073,15 @@ class BackupGraph(
     all += BackupSource.Camera
     all += BackupSource.Screenshots
     all += chosen.sources
+    // Le cartelle scelte vincono sul tipo (O-2, come il piano): uno screenshot dentro una cartella scelta sta nella riga della cartella, non anche
+    // in quella degli screenshot. Prima compariva due volte nella pagina.
+    val folders = BackupSources(chosen.sources.filterIsInstanceTo(LinkedHashSet<BackupSource.Folder>()))
     return all.map { source ->
-      val counts = catalog.safetyCounts(BackupSources(setOf(source)))
+      val counts = if (source is BackupSource.Folder) {
+        catalog.safetyCounts(BackupSources(setOf(source)))
+      } else {
+        catalog.safetyCounts(BackupSources(setOf(source)), outside = folders)
+      }
       val problems = counts.problems.filterKeys { it.marksMedia }
       val media = counts.safe + counts.unverified + counts.onlyCommonCopy + counts.noNasCopy + counts.lost
       SourceStatus(

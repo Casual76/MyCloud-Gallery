@@ -1,6 +1,9 @@
 package dev.pampa.mycloudgallery.backup
 
 import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
+import dev.pampa.mycloudgallery.core.rules.estimate.BackupCosts
+import dev.pampa.mycloudgallery.core.rules.estimate.DeviceMeasures
+import dev.pampa.mycloudgallery.core.rules.estimate.Workload
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -22,6 +25,11 @@ import java.util.concurrent.atomic.AtomicInteger
  * di una campagna aveva un fatto in meno: totale 23 invece di 24, per tutta la campagna.
  * Per questo il giro che parte dice quanti ne ha in coda il catalogo ([roundStarting]), e i fatti gia' compiuti al primo sguardo sono la
  * differenza con la coda di adesso: stessa fonte, stesso istante, nessun media in volo perso.
+ *
+ * **D-11** (prove sul campo): con i byte che restano da caricare (`remainingBytes`, dal catalogo e dal diario) il totale dei byte e' quello vero
+ * (caricati + da caricare) e il tempo che manca viene dallo stesso modello del riepilogo del primo backup (`BackupCosts`: costo per file, scrittura
+ * e rilettura), tarato sul ritmo osservato. Prima si stimavano tutti e due **dal numero** dei media: con 291 foto da 44 byte fatte e 5 video da
+ * 2,5 GB in coda la pagina diceva "109 kB di 111 kB · meno di un minuto" per dieci minuti, e il totale scendeva quando cambiava la media.
  */
 internal class RunProgress {
 
@@ -31,6 +39,9 @@ internal class RunProgress {
   private var roundBytes = 0L
   private var activeMs = 0L
   private var activeDone = 0
+
+  /** D-11: i byte caricati mentre il backup lavorava (con [activeMs] e [activeDone] tarano il modello del tempo che manca). */
+  private var activeBytes = 0L
   private var lastRunningAt: Long? = null
   private var changedSinceSnapshot = false
 
@@ -48,8 +59,11 @@ internal class RunProgress {
     queuedAtRoundStart.set(queued)
   }
 
-  /** Il progresso da mostrare per lo stato del motore [running] (di questo lotto), con [queued] media ancora in coda e l'ora monotona [nowMs]. */
-  fun reshape(running: BackupStatus.Running, queued: Int, nowMs: Long): BackupStatus.Running {
+  /**
+   * Il progresso da mostrare per lo stato del motore [running] (di questo lotto), con [queued] media ancora in coda e l'ora monotona [nowMs].
+   * [remainingBytes] sono i byte che restano da caricare (null = non si sanno: totale e tempo si stimano dal numero dei media, come prima).
+   */
+  fun reshape(running: BackupStatus.Running, queued: Int, nowMs: Long, remainingBytes: Long? = null): BackupStatus.Running {
     val previousTick = lastRunningAt
     // Si consuma sempre: serve solo al primo sguardo di una campagna, e non deve restare per un giro che non lo e'.
     val startedWith = queuedAtRoundStart.getAndSet(NONE)
@@ -61,6 +75,7 @@ internal class RunProgress {
       roundBytes = running.bytesDone
       activeMs = 0L
       activeDone = done
+      activeBytes = 0L
     } else {
       val delta = base - queued
       if (delta > 0) {
@@ -68,7 +83,9 @@ internal class RunProgress {
         if (previousTick != null) activeDone += delta
       }
       // I byte del lotto ripartono da zero a ogni lotto: si sommano le differenze, mai il valore del lotto intero.
-      bytesDone += if (running.bytesDone >= roundBytes) running.bytesDone - roundBytes else running.bytesDone
+      val moreBytes = if (running.bytesDone >= roundBytes) running.bytesDone - roundBytes else running.bytesDone
+      bytesDone += moreBytes
+      if (previousTick != null) activeBytes += moreBytes
       roundBytes = running.bytesDone
     }
     if (previousTick != null) activeMs += (nowMs - previousTick).coerceIn(0L, MAX_STEP_MS)
@@ -77,43 +94,66 @@ internal class RunProgress {
     changedSinceSnapshot = true
 
     val total = done + queued
+    if (remainingBytes != null) {
+      // D-11: i byte veri e il tempo dal modello del riepilogo, tarato su cio' che si e' visto.
+      val left = remainingBytes.coerceAtLeast(0L)
+      return running.copy(done = done, total = total, bytesDone = bytesDone, bytesTotal = bytesDone + left, etaMillis = modelEta(queued, left))
+    }
     val eta = if (activeDone >= MIN_SAMPLES && activeMs > 0L && queued > 0) activeMs * queued / activeDone else null
     val bytesTotal = if (done > 0 && bytesDone > 0L) maxOf(bytesDone, bytesDone * total / done) else bytesDone + (running.bytesTotal - running.bytesDone).coerceAtLeast(0L)
     return running.copy(done = done, total = total, bytesDone = bytesDone, bytesTotal = bytesTotal, etaMillis = eta)
   }
 
   /**
-   * Il backup non sta lavorando adesso. Senza niente in coda la campagna e' finita e si azzera; con altro da fare resta (e il ritmo non
-   * conta il tempo fermo: la prossima tappa riparte da [reshape] senza un "tick" precedente).
+   * D-11: il tempo che manca per [queued] media e [remainingBytes] byte con il modello del riepilogo del primo backup (`BackupCosts`: costo per
+   * file, scrittura e rilettura di verifica). Appena si e' visto lavorare abbastanza (due media e [MIN_ACTIVE_MS]) il modello si tara sul ritmo
+   * vero: il tempo osservato diviso quello che il modello avrebbe previsto per lo stesso lavoro, fra [MIN_PACE] e [MAX_PACE].
    */
-  fun idle(queued: Int) {
+  private fun modelEta(queued: Int, remainingBytes: Long): Long? {
+    if (queued <= 0) return null
+    val ahead = BackupCosts.seconds(Workload(queued.toLong(), remainingBytes), Workload(0L, 0L), MEASURES)
+    val seen = BackupCosts.seconds(Workload(activeDone.toLong(), activeBytes), Workload(0L, 0L), MEASURES)
+    val calibrated = activeDone >= MIN_SAMPLES && activeMs >= MIN_ACTIVE_MS && seen > 0.0
+    val pace = if (calibrated) (activeMs / 1_000.0 / seen).coerceIn(MIN_PACE, MAX_PACE) else 1.0
+    return (ahead * pace * 1_000.0).toLong()
+  }
+
+  /**
+   * Il backup non sta lavorando adesso. Senza niente in coda la campagna e' finita e si azzera; con altro da fare resta (e il ritmo non
+   * conta il tempo fermo: la prossima tappa riparte da [reshape] senza un "tick" precedente). Vero se ha chiuso una campagna.
+   */
+  fun idle(queued: Int): Boolean {
     if (queued == 0) {
-      if (base != NONE || done != 0) changedSinceSnapshot = true
+      val closing = base != NONE || done != 0
+      if (closing) changedSinceSnapshot = true
       reset()
       queuedAtRoundStart.set(NONE)
-    } else {
-      lastRunningAt = null
+      return closing
     }
+    lastRunningAt = null
+    return false
   }
 
   /** Il testo da salvare se qualcosa e' cambiato dall'ultima volta (null = niente da scrivere); [EMPTY] = togliere il file. */
   fun snapshot(): String? {
     if (!changedSinceSnapshot) return null
     changedSinceSnapshot = false
-    return if (base == NONE && done == 0) EMPTY else listOf(done, base, bytesDone, roundBytes, activeMs, activeDone).joinToString(";")
+    return if (base == NONE && done == 0) EMPTY else listOf(done, base, bytesDone, roundBytes, activeMs, activeDone, activeBytes).joinToString(";")
   }
 
   /** Ripristina quello che [snapshot] aveva salvato (processo nuovo). Un testo illeggibile vale "niente". */
   fun restore(text: String?) {
     reset()
     val parts = text?.split(';')?.mapNotNull { it.toLongOrNull() } ?: return
-    if (parts.size != 6 || parts.any { it < 0 && it != NONE.toLong() }) return
+    // Sei numeri (prima di D-11) o sette (con i byte caricati mentre si lavorava).
+    if ((parts.size != 6 && parts.size != 7) || parts.any { it < 0 && it != NONE.toLong() }) return
     done = parts[0].toInt()
     base = parts[1].toInt()
     bytesDone = parts[2]
     roundBytes = parts[3]
     activeMs = parts[4]
     activeDone = parts[5].toInt()
+    activeBytes = parts.getOrNull(6) ?: 0L
   }
 
   private fun reset() {
@@ -123,6 +163,7 @@ internal class RunProgress {
     roundBytes = 0L
     activeMs = 0L
     activeDone = 0
+    activeBytes = 0L
     lastRunningAt = null
   }
 
@@ -137,5 +178,15 @@ internal class RunProgress {
 
     /** Fra due osservazioni oltre questo tempo il backup non lavorava davvero (processo fermo, schermo spento): non si conta. */
     private const val MAX_STEP_MS = 30_000L
+
+    /** D-11: le misure del riepilogo del primo backup (lo stesso modello, la stessa stima entro il 30%). */
+    private val MEASURES: DeviceMeasures = DeviceMeasures.PHASE_0
+
+    /** D-11: quanto lavoro osservato serve prima di tarare il modello sul ritmo vero. */
+    private const val MIN_ACTIVE_MS = 10_000L
+
+    /** D-11: la taratura resta fra un quarto e quattro volte il modello (un inizio lento o una raffica non stravolgono la stima). */
+    private const val MIN_PACE = 0.25
+    private const val MAX_PACE = 4.0
   }
 }

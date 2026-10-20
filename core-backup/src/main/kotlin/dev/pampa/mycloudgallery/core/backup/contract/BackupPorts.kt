@@ -199,6 +199,19 @@ interface BackupCatalog {
 
   suspend fun safetyCounts(sources: BackupSources): SafetyCounts
 
+  /**
+   * Come [safetyCounts], ma senza i media che hanno una posizione del telefono in una delle cartelle di [outside]: le righe della fotocamera e
+   * degli screenshot della pagina Backup, dove una cartella scelta vince sul tipo come nel piano (O-2). Di norma uguale a [safetyCounts]: i
+   * cataloghi finti che non hanno cartelle non devono fare altro.
+   */
+  suspend fun safetyCounts(sources: BackupSources, outside: BackupSources): SafetyCounts = safetyCounts(sources)
+
+  /**
+   * D-9, D-11: i byte da caricare dei media propri delle [sources] ancora senza una copia sul NAS (la dimensione della versione attuale), per
+   * "Da caricare" e per l'avanzamento. Null = il catalogo non lo sa (i cataloghi finti): chi chiede ripiega su cio' che sa il diario.
+   */
+  suspend fun queuedBytes(sources: BackupSources): Long? = null
+
   // --- Caricamento (P2) -------------------------------------------------------------------------------------------------------
 
   /** La riga del telefono attuale della versione (dopo una rinumerazione degli `_ID`, E-P12), o null se il catalogo non la sa. */

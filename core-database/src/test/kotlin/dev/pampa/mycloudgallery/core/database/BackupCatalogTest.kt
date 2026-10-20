@@ -120,6 +120,34 @@ class BackupCatalogTest : CatalogTestBase() {
   }
 
   /**
+   * Seguito di O-2 (prove sul campo): nei conteggi delle righe della fotocamera e degli screenshot (pagina Backup) un media che ha una posizione
+   * del telefono in una cartella scelta non conta: sta nella riga della cartella, come nel piano. Prima uno screenshot in `mcg-prova` contava
+   * due volte. Senza cartelle da escludere i conteggi sono quelli di sempre.
+   */
+  @Test
+  fun iConteggiFuoriDalleCartelleScelteNonContanoDueVolteUnoScreenshotDellaCartella() = runBlocking<Unit> {
+    val folder = CatalogSource.Folder("external_primary", "DCIM/mcg-prova/")
+    addPhone(1, path = "DCIM/mcg-prova/", source = MediaSource.SCREENSHOT)
+    addPhone(2, path = "Pictures/Screenshots/", source = MediaSource.SCREENSHOT)
+    addPhone(3, path = "DCIM/mcg-prova/", source = MediaSource.OTHER)
+    addPhone(4, path = "DCIM/Camera/", source = MediaSource.CAMERA)
+    val screenshots = setOf<CatalogSource>(CatalogSource.Screenshots)
+    catalog.markBackupProblem(addPhone(5, path = "DCIM/mcg-prova/", source = MediaSource.SCREENSHOT), "verify_failed")
+
+    // Senza esclusioni: tutti gli screenshot, anche quelli della cartella.
+    assertThat(catalog.safetyCounts(screenshots).noNasCopy).isEqualTo(3)
+    assertThat(catalog.safetyCounts(screenshots).problems).containsExactly("verify_failed", 1)
+    // Fuori dalla cartella scelta: solo lo screenshot che sta altrove, e nessun problema della cartella.
+    val outside = catalog.safetyCounts(screenshots, outside = setOf(folder))
+    assertThat(outside.noNasCopy).isEqualTo(1)
+    assertThat(outside.problems).isEmpty()
+    // La riga della cartella li ha tutti; la fotocamera non cambia; una cartella che non c'entra non toglie niente.
+    assertThat(catalog.safetyCounts(setOf(folder)).noNasCopy).isEqualTo(3)
+    assertThat(catalog.safetyCounts(setOf(CatalogSource.Camera), outside = setOf(folder)).noNasCopy).isEqualTo(1)
+    assertThat(catalog.safetyCounts(screenshots, outside = setOf(CatalogSource.Folder("external_primary", "Pictures/Telegram/"))).noNasCopy).isEqualTo(3)
+  }
+
+  /**
    * O-2 (prove sul campo): uno "Screenshot_….png" dentro una cartella scelta dall'utente si salva con quella cartella, anche con la sorgente
    * Screenshot accesa: prima vinceva il tipo e finiva in `Screenshot/` sul NAS. Fuori dalle cartelle scelte gli screenshot restano della loro sorgente.
    */

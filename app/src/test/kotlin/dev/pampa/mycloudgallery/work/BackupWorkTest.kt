@@ -1,13 +1,18 @@
 package dev.pampa.mycloudgallery.work
 
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.backup.contract.BackupKind
 import dev.pampa.mycloudgallery.core.backup.contract.BackupProblemCode
 import dev.pampa.mycloudgallery.core.backup.contract.BackupRunResult
 import dev.pampa.mycloudgallery.core.backup.contract.RunStop
 import dev.pampa.mycloudgallery.core.backup.upload.BackupStageOutcome
+import dev.pampa.mycloudgallery.core.rules.ConfirmationKind
 import dev.pampa.mycloudgallery.core.rules.NetworkClass
+import dev.pampa.mycloudgallery.core.rules.RuleDecision
+import dev.pampa.mycloudgallery.core.rules.ThermalStatus
 import dev.pampa.mycloudgallery.core.rules.TimeWindow
+import dev.pampa.mycloudgallery.core.rules.TrafficEstimate
 import dev.pampa.mycloudgallery.core.rules.WaitReason
 import dev.pampa.mycloudgallery.core.rules.run.NextStage
 import dev.pampa.mycloudgallery.core.rules.run.StageOutcome
@@ -16,6 +21,8 @@ import dev.pampa.mycloudgallery.core.rules.run.YieldReason
 import java.time.LocalDateTime
 import java.time.LocalTime
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.TestTimeSource
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
 
@@ -147,14 +154,155 @@ class BackupWorkTest {
     assertThat(BackupJobRun(nas::stage, userInitiated = true).run()).isEqualTo(BackupJobEnd.RESCHEDULE)
     val waiting = Script(
       mapOf(
-        BackupKind.PHOTOS to mutableListOf(outcome(StageOutcome.Waiting(WaitReason.Offline, emptyList(), stats))),
+        BackupKind.PHOTOS to mutableListOf(outcome(StageOutcome.Waiting(WaitReason.Thermal(ThermalStatus.CRITICAL), emptyList(), stats))),
         BackupKind.VIDEOS to mutableListOf(done()),
       ),
     )
-    // Le regole non lasciano partire (o serve la conferma): lo dice la pagina, il lavoro non ritenta e non passa ai video.
+    // Le regole non lasciano partire per una ragione che non e' la rete (il caldo): lo dice la pagina, il lavoro non ritenta e non passa ai video.
     assertThat(BackupJobRun(waiting::stage, userInitiated = true).run()).isEqualTo(BackupJobEnd.DONE)
     assertThat(waiting.asked).containsExactly(BackupKind.PHOTOS)
     Unit
+  }
+
+  // --- D-6 (prove sul campo): una caduta della rete non chiude il lavoro dell'utente --------------------------------------------
+
+  private fun waitingFor(reason: WaitReason) = outcome(StageOutcome.Waiting(reason, emptyList(), stats))
+
+  private fun stoppedFor(reason: WaitReason) = outcome(StageOutcome.Stopped(reason, emptyList(), stats), RunStop.BUDGET)
+
+  private fun needsConfirmation(vararg kinds: ConfirmationKind) =
+    outcome(StageOutcome.NeedsConfirmation(RuleDecision.NeedsConfirmation(kinds.toSet(), TrafficEstimate(null, 0L, null)), stats))
+
+  /**
+   * D-6: sul telefono il Wi-Fi spento a meta' di un video ha fermato il lavoro (Android lo ha rilanciato sui dati mobili), le regole hanno detto
+   * "conferma per i dati mobili" e il lavoro e' finito `DONE` in 2 secondi; al ritorno del Wi-Fi niente lo ha fatto ripartire. Adesso il lavoro
+   * aspetta che la rete cambi e riprova lo stesso tipo di media: la prima tappa dei video dopo il cambio riprende dal diario.
+   */
+  @Test
+  fun d6_unLavoroDellUtenteAspettaCheLaReteTorniERiprendeDaSolo() = runBlocking {
+    val script = Script(
+      mapOf(
+        BackupKind.PHOTOS to mutableListOf(waitingFor(WaitReason.Offline), done()),
+        BackupKind.VIDEOS to mutableListOf(
+          stoppedFor(WaitReason.ConfirmationRequired(setOf(ConfirmationKind.MOBILE_DATA))),
+          needsConfirmation(ConfirmationKind.MOBILE_DATA),
+          waitingFor(WaitReason.NasUnreachable),
+          yielded(),
+          done(),
+        ),
+      ),
+    )
+    var changes = 0
+    val end = BackupJobRun(script::stage, userInitiated = true, networkChange = {
+      changes++
+      true
+    }).run()
+
+    assertThat(end).isEqualTo(BackupJobEnd.DONE)
+    assertThat(changes).isEqualTo(4)
+    assertThat(script.asked).containsExactly(
+      BackupKind.PHOTOS, BackupKind.PHOTOS, BackupKind.VIDEOS, BackupKind.VIDEOS, BackupKind.VIDEOS, BackupKind.VIDEOS, BackupKind.VIDEOS,
+    ).inOrder()
+  }
+
+  /** D-6: la rete non torna in tempo: il lavoro dell'utente non finisce "fatto", passa a quello che riparte con il Wi-Fi. */
+  @Test
+  fun d6_seLaReteNonTornaIlLavoroPassaAllaRipresaColWifi() = runBlocking {
+    val waits = listOf(
+      waitingFor(WaitReason.Offline),
+      waitingFor(WaitReason.NetworkNotTrusted),
+      stoppedFor(WaitReason.Offline),
+      waitingFor(WaitReason.NetworkNotAllowed(NetworkClass.MOBILE)),
+      needsConfirmation(ConfirmationKind.ROAMING),
+    )
+    for (wait in waits) {
+      val script = Script(mapOf(BackupKind.PHOTOS to mutableListOf(wait), BackupKind.VIDEOS to mutableListOf(done())))
+      assertWithMessage("${wait.stage}").that(BackupJobRun(script::stage, userInitiated = true).run()).isEqualTo(BackupJobEnd.AWAIT_NETWORK)
+      assertThat(script.asked).containsExactly(BackupKind.PHOTOS)
+    }
+  }
+
+  /** D-6: la pazienza e' per tutto il lavoro: un'attesa che la consuma tutta non ne apre un'altra. */
+  @Test
+  fun d6_laPazienzaValePerTuttoIlLavoro() = runBlocking {
+    val time = TestTimeSource()
+    val script = Script(mapOf(BackupKind.PHOTOS to MutableList(10) { waitingFor(WaitReason.Offline) }, BackupKind.VIDEOS to mutableListOf(done())))
+    val asked = mutableListOf<Duration>()
+    val run = BackupJobRun(script::stage, userInitiated = true, patience = 10.minutes, time = time, networkChange = { within ->
+      asked += within
+      time += 6.minutes
+      true
+    })
+    assertThat(run.run()).isEqualTo(BackupJobEnd.AWAIT_NETWORK)
+    // 10 minuti, poi i 4 che restano, poi niente.
+    assertThat(asked).containsExactly(10.minutes, 4.minutes).inOrder()
+    assertThat(script.asked).hasSize(3)
+  }
+
+  /** D-6: non sono attese della rete il tetto dei dati (lo conferma l'utente) e un lavoro normale (lo riprende il suo giro). */
+  @Test
+  fun d6_ilTettoDeiDatiEUnLavoroNormaleNonAspettanoLaRete() = runBlocking {
+    var changes = 0
+    val change: suspend (Duration) -> Boolean = {
+      changes++
+      true
+    }
+    val cap = Script(
+      mapOf(
+        BackupKind.PHOTOS to mutableListOf(needsConfirmation(ConfirmationKind.MOBILE_DATA, ConfirmationKind.OVER_CAP)),
+        BackupKind.VIDEOS to mutableListOf(done()),
+      ),
+    )
+    assertThat(BackupJobRun(cap::stage, userInitiated = true, networkChange = change).run()).isEqualTo(BackupJobEnd.DONE)
+    val normal = Script(mapOf(BackupKind.PHOTOS to mutableListOf(waitingFor(WaitReason.Offline)), BackupKind.VIDEOS to mutableListOf(done())))
+    assertThat(BackupJobRun(normal::stage, userInitiated = false, networkChange = change).run()).isEqualTo(BackupJobEnd.DONE)
+    assertThat(changes).isEqualTo(0)
+  }
+
+  /** D-7: prima della prima tappa il lavoro aspetta che il processo sia pronto; le tappe partono dopo. */
+  @Test
+  fun d7_ilLavoroAspettaIlProcessoProntoPrimaDellaPrimaTappa() = runBlocking {
+    val order = mutableListOf<String>()
+    val script = Script(mapOf(BackupKind.PHOTOS to mutableListOf(done()), BackupKind.VIDEOS to mutableListOf(done())))
+    val run = BackupJobRun(
+      stage = { kind ->
+        order += "tappa"
+        script.stage(kind)
+      },
+      userInitiated = true,
+      ready = {
+        order += "pronto"
+        true
+      },
+    )
+    assertThat(run.run()).isEqualTo(BackupJobEnd.DONE)
+    assertThat(order).containsExactly("pronto", "tappa", "tappa").inOrder()
+  }
+
+  /** D-6: la ripresa con il Wi-Fi fa una tappa delle foto, poi dei video; un'attesa della rete e' un'attesa del Wi-Fi. */
+  @Test
+  fun d6_laRipresaColWifiFaFotoPoiVideoEAspettaIlWifi() = runBlocking {
+    val bothDone = Script(mapOf(BackupKind.PHOTOS to mutableListOf(done()), BackupKind.VIDEOS to mutableListOf(done())))
+    assertThat(userResumeStage(bothDone::stage)).isEqualTo(BackupFollowUp.None)
+    assertThat(bothDone.asked).containsExactly(BackupKind.PHOTOS, BackupKind.VIDEOS).inOrder()
+
+    val videosLeft = Script(mapOf(BackupKind.PHOTOS to mutableListOf(done()), BackupKind.VIDEOS to mutableListOf(yielded())))
+    assertThat(userResumeStage(videosLeft::stage)).isEqualTo(BackupFollowUp.Continue)
+
+    val mobile = Script(mapOf(BackupKind.PHOTOS to mutableListOf(needsConfirmation(ConfirmationKind.MOBILE_DATA)), BackupKind.VIDEOS to mutableListOf(done())))
+    assertThat(userResumeStage(mobile::stage)).isEqualTo(BackupFollowUp.Wait(WaitReason.ConfirmationRequired(setOf(ConfirmationKind.MOBILE_DATA))))
+    assertThat(mobile.asked).containsExactly(BackupKind.PHOTOS)
+
+    val away = Script(mapOf(BackupKind.PHOTOS to mutableListOf(done()), BackupKind.VIDEOS to mutableListOf(waitingFor(WaitReason.NetworkNotTrusted))))
+    assertThat(userResumeStage(away::stage)).isEqualTo(BackupFollowUp.Wait(WaitReason.NetworkNotTrusted))
+
+    // "Ferma" (la pausa) chiude la ripresa, senza provare i video.
+    val paused = Script(mapOf(BackupKind.PHOTOS to mutableListOf(outcome(finished, RunStop.STOPPED)), BackupKind.VIDEOS to mutableListOf(done())))
+    assertThat(userResumeStage(paused::stage)).isEqualTo(BackupFollowUp.None)
+    assertThat(paused.asked).containsExactly(BackupKind.PHOTOS)
+
+    val notStarting = Script(mapOf(BackupKind.PHOTOS to mutableListOf(null), BackupKind.VIDEOS to mutableListOf(done())))
+    assertThat(userResumeStage(notStarting::stage)).isNull()
   }
 
   @Test

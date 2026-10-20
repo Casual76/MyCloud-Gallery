@@ -52,10 +52,13 @@ import dev.pampa.mycloudgallery.gallery.PhoneRowsSource
 import dev.pampa.mycloudgallery.nas.NasGraph
 import dev.pampa.mycloudgallery.nas.NasInputs
 import dev.pampa.mycloudgallery.core.rules.RuleDecision
+import dev.pampa.mycloudgallery.core.family.contract.FamilySetupRepository
 import dev.pampa.mycloudgallery.work.BackupJobEnd
-import dev.pampa.mycloudgallery.work.BackupJobRun
 import dev.pampa.mycloudgallery.work.BackupJobs
 import dev.pampa.mycloudgallery.work.BackupStages
+import dev.pampa.mycloudgallery.work.networkChanges
+import dev.pampa.mycloudgallery.work.userBackupRun
+import kotlinx.coroutines.flow.Flow
 import java.io.ByteArrayOutputStream
 import java.io.File
 import kotlin.time.Duration.Companion.minutes
@@ -82,6 +85,8 @@ internal class BackupRig(
   private val nasInputs: NasInputs = device.graph.nasInputs,
   /** Fase 5B (P14): i dialoghi, il riscrittore e il controllo del telefono finti sopra [store]; null = quelli di Android (non usati dai test 5A). */
   fiveB: ((FakeMediaStore) -> FiveBInputs)? = null,
+  /** Lo stato del dispositivo che la galleria vede: di norma quello del dispositivo; D-7 lo fa passare per "non configurato" all'avvio. */
+  setup: FamilySetupRepository = device.graph.setup,
 ) {
 
   val access = FakePhoneAccessReader(PhoneAccess(MediaAccess.FULL, mediaLocation = true, volumes = setOf(PRIMARY)))
@@ -111,7 +116,7 @@ internal class BackupRig(
       ),
       similarSignatures = signatures,
     ),
-    setup = device.graph.setup,
+    setup = setup,
     ownerAccount = { AccountId.of(account) },
     clock = { device.platform.time.now() },
   )
@@ -174,13 +179,12 @@ internal class BackupRig(
   suspend fun safety() = BackupStages(device.graph, backup).safety()
 
   /**
-   * Il lavoro avviato dall'utente come lo fa `BackupJobService`: foto, poi video, a tappe, dentro `runIfActive`. Prima il rig chiamava `round()`
-   * a mano e saltava il lavoro dell'utente, il turno e la fine del servizio (BK-6).
+   * Il lavoro avviato dall'utente come lo fa `BackupJobService` (`userBackupRun`): foto, poi video, a tappe, dentro `runIfActive`, con l'attesa
+   * del processo pronto (D-7) e della rete che torna (D-6, [changes]). Prima il rig chiamava `round()` a mano e saltava il lavoro dell'utente, il
+   * turno e la fine del servizio (BK-6).
    */
-  suspend fun userJob(trigger: BackupTrigger = BackupTrigger.USER_NOW): BackupJobEnd {
-    val stages = BackupStages(device.graph, backup)
-    return BackupJobRun(stage = { kind -> gallery.runIfActive { stages.round(kind, trigger) } }, userInitiated = true).run()
-  }
+  suspend fun userJob(trigger: BackupTrigger = BackupTrigger.USER_NOW, changes: Flow<Unit> = networkChanges(device.graph)): BackupJobEnd =
+    userBackupRun(gallery, device.graph, backup, trigger, confirmed = false, userInitiated = true, changes = changes).run()
 
   /** Le azioni della pagina Backup sul grafo vero, con il verdetto delle regole scelto dal test (la rete di prova e' sempre il Wi-Fi di casa). */
   fun actions(decide: (suspend (Long?, Boolean) -> RuleDecision)? = null): AppBackupActions {

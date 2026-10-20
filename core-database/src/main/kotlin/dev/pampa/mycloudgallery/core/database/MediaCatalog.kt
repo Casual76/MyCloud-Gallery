@@ -948,12 +948,16 @@ class MediaCatalog(
   /**
    * I conteggi della sicurezza dei media propri delle [sources] (`BackupCatalog.safetyCounts`): per stato e i problemi del
    * backup per codice. Legge i derivati (`safety`) e la tabella dei problemi: nessun grafo.
+   *
+   * Con [outside] (le cartelle scelte) non conta i media che hanno una posizione del telefono in una di quelle cartelle: le righe della
+   * fotocamera e degli screenshot della pagina Backup, dove la cartella scelta vince sul tipo come nel piano (O-2). Prima uno screenshot dentro
+   * una cartella scelta si contava due volte, nella riga Screenshot e in quella della cartella.
    */
-  suspend fun safetyCounts(sources: Set<CatalogSource>): CatalogSafetyCounts {
+  suspend fun safetyCounts(sources: Set<CatalogSource>, outside: Set<CatalogSource.Folder> = emptySet()): CatalogSafetyCounts {
     val me = localAccount.value
-    val byStatus = BackupQueries.safetyByStatus(me, sources)?.let { backupQueryDao.statusCounts(it) }?.associate { it.status to it.count }
+    val byStatus = BackupQueries.safetyByStatus(me, sources, outside)?.let { backupQueryDao.statusCounts(it) }?.associate { it.status to it.count }
       ?: return CatalogSafetyCounts.ZERO
-    val problems = BackupQueries.problemsByCode(me, sources)?.let { backupQueryDao.codeCounts(it) }.orEmpty().associate { it.code to it.count }
+    val problems = BackupQueries.problemsByCode(me, sources, outside)?.let { backupQueryDao.codeCounts(it) }.orEmpty().associate { it.code to it.count }
     return CatalogSafetyCounts(
       safe = byStatus[SafetyStatus.SAFE.code] ?: 0,
       unverified = byStatus[SafetyStatus.PRIVATE_COPY_UNVERIFIED.code] ?: 0,
@@ -963,6 +967,13 @@ class MediaCatalog(
       problems = problems,
     )
   }
+
+  /**
+   * D-9, D-11 (prove sul campo): i byte da caricare dei media propri delle [sources] ancora senza una copia sul NAS e senza un problema che li
+   * ferma (`BackupCatalog.queuedBytes`): la dimensione della versione attuale. Zero senza sorgenti.
+   */
+  suspend fun queuedBytes(sources: Set<CatalogSource>): Long =
+    BackupQueries.queuedBytes(localAccount.value, sources)?.let { backupQueryDao.total(it) } ?: 0L
 
   /**
    * D8 (`BackupCatalog.privateCopies`): le copie dell'area privata [share] **del proprietario** (l'account del dispositivo) con la

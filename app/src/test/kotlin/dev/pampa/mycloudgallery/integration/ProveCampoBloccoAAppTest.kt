@@ -1,13 +1,22 @@
 package dev.pampa.mycloudgallery.integration
 
 import android.app.Application
+import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import androidx.work.ListenableWorker
+import androidx.work.WorkerFactory
+import androidx.work.WorkerParameters
+import androidx.work.testing.TestListenableWorkerBuilder
+import dev.pampa.mycloudgallery.core.common.diagnostics.RingDiagnosticsLog
+import dev.pampa.mycloudgallery.feature.diagnostics.catalog.DiagCodes
+import dev.pampa.mycloudgallery.work.NasScanWorker
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSource
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSources
 import dev.pampa.mycloudgallery.core.backup.contract.RunStop
 import dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags
+import dev.pampa.mycloudgallery.core.family.contract.FamilySetupRepository
 import dev.pampa.mycloudgallery.core.family.contract.SetupState
 import dev.pampa.mycloudgallery.core.nas.contract.BreakerState
 import dev.pampa.mycloudgallery.core.nasmedia.contract.ScanStop
@@ -15,7 +24,10 @@ import dev.pampa.mycloudgallery.core.nas.testing.InMemorySmbBackend
 import dev.pampa.mycloudgallery.core.rules.run.StageOutcome
 import dev.pampa.mycloudgallery.work.NasStages
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.After
@@ -79,8 +91,8 @@ class ProveCampoBloccoAAppTest {
   }
 
   /** La galleria del processo nuovo con il NAS avviato, ma senza nessuna operazione sul NAS: e' il momento in cui parte il lavoro. */
-  private suspend fun galleryOf(phone: TestDevice): BackupRig {
-    val rig = BackupRig(app, phone, TestNas.ADMIN_USER).also { rigs += it }
+  private suspend fun galleryOf(phone: TestDevice, setup: FamilySetupRepository = phone.graph.setup): BackupRig {
+    val rig = BackupRig(app, phone, TestNas.ADMIN_USER, setup = setup).also { rigs += it }
     rig.gallery.startWhenReady()
     withTimeout(TIMEOUT_MS) { rig.gallery.started.first { it } }
     check(rig.nas.start()) { "il NAS non parte" }
@@ -106,6 +118,71 @@ class ProveCampoBloccoAAppTest {
     // Il battito della verifica c'e': il riepilogo giornaliero non dira' "fermo da N giorni".
     assertThat(stages.scanBeat.lastBeatAt()).isNotNull()
   }
+
+  /**
+   * D-2 nei lavori periodici (prove sul campo, ripresa con `test`): la scansione falliva a **ogni** avvio del processo, anche in background, e la
+   * scansione periodica di 6 ore parte di solito proprio a processo morto. Il lavoro periodico (`NasWorkScheduling.SCAN_WORK`) e quello "adesso"
+   * sono lo stesso `NasScanWorker`: qui gira il lavoro vero, come lo lancia WorkManager, in un processo freddo. Apre la sessione prima di leggere
+   * l'ora del NAS, finisce la scansione e in Diagnostica non lascia nessun "errore inatteso" (`EVT_JOB_FAILED`, prima "tappa non riuscita").
+   */
+  @Test
+  fun d2_laScansionePeriodicaInUnProcessoFreddoApreLaSessioneEFinisceSenzaErroriInattesi() = runBlocking<Unit> {
+    val ring = RingDiagnosticsLog()
+    val first = device("telefono")
+    first.graph.start()
+    first.graph.foundFamily()
+    backend.put(TestNas.COMMON, "Foto/2024/IMG_0001.jpg", BackupRig.jpeg(tone = 40), lastWriteMs = time.now() - 2 * DAY)
+    first.close()
+    val phone = TestDevice(app, File(temp.root, "telefono"), first.platform, flags, ring).also { devices += it }
+    phone.graph.start()
+    phone.graph.awaitSetup { it is SetupState.Ready }
+    val rig = galleryOf(phone)
+    assertWithMessage("l'ora del NAS non deve avere ancora un'ancora").that(phone.graph.nasClock.nowMillisOrNull()).isNull()
+
+    val result = scanWorker(rig, phone).doWork()
+
+    assertThat(result).isEqualTo(ListenableWorker.Result.success())
+    val reports = rig.nas.lastScan.value
+    assertWithMessage("giri: $reports").that(reports.none { it.stoppedBy == ScanStop.UNAVAILABLE }).isTrue()
+    assertThat(reports.sumOf { it.detected }).isEqualTo(1)
+    assertThat(phone.graph.nasClock.nowMillisOrNull()).isNotNull()
+    val events = ring.snapshot()
+    assertWithMessage("eventi: $events").that(events.none { it.code == DiagCodes.EVT_JOB_FAILED }).isTrue()
+  }
+
+  /**
+   * D-7 sui lavori del NAS: in un processo appena nato lo stato del dispositivo passa un attimo per "non configurato". Il lavoro della scansione
+   * partito in quel momento rispondeva "niente da fare" (la galleria "non pronta") e finiva consumato; adesso aspetta la famiglia pronta e scansiona.
+   */
+  @Test
+  fun d7_laScansioneInUnProcessoAppenaNatoAspettaLaFamigliaProntaENonVaPersa() = runBlocking<Unit> {
+    val phone = coldPhone()
+    val setup = ColdStartSetup(phone.graph.setup, phone.scope)
+    val rig = galleryOf(phone, setup)
+    setup.override.value = SetupState.NotConfigured
+    setup.state.await { it == SetupState.NotConfigured }
+    val settle = launch(Dispatchers.Default) {
+      delay(300)
+      setup.override.value = null
+    }
+
+    val result = scanWorker(rig, phone).doWork()
+    settle.join()
+
+    assertThat(result).isEqualTo(ListenableWorker.Result.success())
+    val reports = rig.nas.lastScan.value
+    assertWithMessage("giri: $reports").that(reports.sumOf { it.detected }).isEqualTo(1)
+  }
+
+  /** Il lavoro `NasScanWorker` come lo crea WorkManager, sul grafo e sulla galleria del test. */
+  private fun scanWorker(rig: BackupRig, phone: TestDevice): NasScanWorker = TestListenableWorkerBuilder<NasScanWorker>(app)
+    .setWorkerFactory(
+      object : WorkerFactory() {
+        override fun createWorker(appContext: Context, workerClassName: String, workerParameters: WorkerParameters): ListenableWorker =
+          NasScanWorker(appContext, workerParameters, rig.gallery, phone.graph)
+      },
+    )
+    .build()
 
   @Test
   fun d2_conLaPasswordRifiutataLaScansioneSiFermaESenzaNuoviTentativi() = runBlocking<Unit> {

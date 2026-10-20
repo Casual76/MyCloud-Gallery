@@ -208,12 +208,16 @@ class BackupViewModelsTest {
     assertThat(vm.state.value.protectNewPhotos).isTrue()
   }
 
+  /**
+   * D-9 (prove sul campo): la cartella del dispositivo dalle impostazioni porta al riepilogo del primo backup, non alla scelta della cartella da
+   * sola. Scelta li', il primo backup partiva al giro delle regole e il riepilogo con la stima non compariva piu'.
+   */
   @Test
-  fun laCartellaDelDispositivoDallImpostazioniSiApreMaNonSiCambia() = runTest(dispatcher) {
+  fun d9_laCartellaDelDispositivoDalleImpostazioniApreIlRiepilogoDelPrimoBackup() = runTest(dispatcher) {
     val actions = RecordingBackupActions()
     val vm = BackupSettingsViewModel(Optional.of(FakeBackupSettings()), Optional.empty(), Optional.empty(), Optional.of(actions))
     vm.openDeviceFolder()
-    assertThat(actions.opened).containsExactly(BackupScreen.DEVICE_FOLDER)
+    assertThat(actions.opened).containsExactly(BackupScreen.FIRST_BACKUP)
   }
 
   // --- La cartella del dispositivo -------------------------------------------------------------------------------------------

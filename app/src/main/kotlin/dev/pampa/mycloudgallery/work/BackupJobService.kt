@@ -37,7 +37,23 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import dev.pampa.mycloudgallery.core.rules.ConfirmationKind
+import dev.pampa.mycloudgallery.core.rules.WaitReason as RulesWaitReason
+import dev.pampa.mycloudgallery.core.rules.run.StageOutcome
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Cio' che il servizio prende dal grafo (Hilt non inietta un `JobService` senza `@AndroidEntryPoint`: si chiede all'applicazione). */
 @EntryPoint
@@ -50,13 +66,26 @@ interface BackupEntryPoint {
   fun notifications(): AppNotifications
 }
 
-/** Come finisce un lavoro del backup avviato dall'utente: tutto fatto (o niente da fare), oppure da riprendere con il ritardo di `JobScheduler`. */
-enum class BackupJobEnd { DONE, RESCHEDULE }
+/**
+ * Come finisce un lavoro del backup avviato dall'utente: tutto fatto (o niente da fare), da riprendere con il ritardo di `JobScheduler`, oppure
+ * (D-6) in attesa della rete: il lavoro dell'utente passa a [BackupWorkScheduling.userResume], che riparte quando torna il Wi-Fi.
+ */
+enum class BackupJobEnd { DONE, RESCHEDULE, AWAIT_NETWORK }
 
 /**
  * Il giro di un lavoro del backup, senza Android (provato su JVM): prima le **foto**, poi i **video** (D11), ognuno a tappe finche' c'e'
  * altro da fare. Un lavoro avviato dall'utente ([userInitiated], UIDT) continua finche' serve ([maxSlices] tappe); uno normale fa una
  * tappa sola per tipo (Android lo ferma dopo 10 minuti) e si fa riprogrammare.
+ *
+ * **D-7** (prove sul campo): prima della prima tappa [ready] aspetta che il processo sia pronto. Dopo la morte del processo Android rilancia il
+ * lavoro in un processo appena nato, e la prima tappa diceva "non parte" (stato del dispositivo ancora di passaggio, account e impostazioni
+ * non ancora letti): il lavoro finiva in 0,4 secondi con `DONE` e il backup restava fermo fino al giro periodico.
+ *
+ * **D-6** (prove sul campo): un lavoro dell'utente che trova la rete andata (nessuna rete, una rete che non e' casa, il NAS che non risponde, i
+ * dati mobili senza la conferma) non finisce: aspetta che la rete cambi ([networkChange], al massimo [patience] in tutto) e riprova lo stesso
+ * tipo di media, con le regole di un lavoro dell'utente. Se la rete non torna in tempo il lavoro finisce con [BackupJobEnd.AWAIT_NETWORK]: chi
+ * lo guida lo passa a un lavoro che riparte da solo con il Wi-Fi (mai sui dati mobili senza conferma). Prima finiva `DONE` e niente lo
+ * faceva ripartire fino al giro periodico (6 ore). I punti di ripresa restano quelli del diario.
  *
  * @param stage una tappa del tipo dato; null = non parte (niente NAS, galleria ferma, cartella non scelta).
  */
@@ -64,8 +93,16 @@ class BackupJobRun(
   private val stage: suspend (BackupKind) -> BackupStageOutcome?,
   private val userInitiated: Boolean,
   private val maxSlices: Int = MAX_SLICES,
+  private val ready: suspend () -> Boolean = { true },
+  private val networkChange: suspend (Duration) -> Boolean = { false },
+  private val patience: Duration = NETWORK_PATIENCE,
+  private val time: TimeSource = TimeSource.Monotonic,
 ) {
   suspend fun run(): BackupJobEnd {
+    // D-7: se non diventa pronto in tempo la tappa lo dice da sola ("non parte"), come prima.
+    ready()
+    val started = time.markNow()
+    var waited = Duration.ZERO
     for (kind in KINDS) {
       var slices = if (userInitiated) maxSlices else 1
       var more = true
@@ -80,10 +117,20 @@ class BackupJobRun(
           RunStop.STOPPED, RunStop.GATE, RunStop.PHONE -> return BackupJobEnd.DONE
           else -> Unit
         }
+        // D-6: la rete se n'e' andata. Si aspetta che cambi (un evento, nessun polling) e si riprova lo stesso tipo.
+        if (userInitiated && waitsForNetwork(outcome)) {
+          val left = patience - waited
+          val mark = time.markNow()
+          val changed = left.isPositive() && networkChange(left)
+          waited += mark.elapsedNow()
+          if (changed) continue
+          GalleryLog.d(TAG) { "rete non tornata in ${started.elapsedNow().inWholeSeconds} s: il lavoro dell'utente aspetta il Wi-Fi" }
+          return BackupJobEnd.AWAIT_NETWORK
+        }
         when (BackupFollowUp.of(outcome)) {
           BackupFollowUp.Continue -> Unit
           BackupFollowUp.Retry -> return BackupJobEnd.RESCHEDULE
-          // Le regole non lasciano partire o serve la conferma dell'utente: lo dice la pagina, non un lavoro che ritenta.
+          // Le altre attese delle regole (caldo, congelamento) o la conferma del tetto dei dati: lo dice la pagina, non un lavoro che ritenta.
           is BackupFollowUp.Wait -> return BackupJobEnd.DONE
           BackupFollowUp.None -> more = false
         }
@@ -93,12 +140,105 @@ class BackupJobRun(
   }
 
   companion object {
+    private const val TAG = "BackupJobRun"
+
     /** Foto prima dei video (D11). */
     val KINDS: List<BackupKind> = listOf(BackupKind.PHOTOS, BackupKind.VIDEOS)
 
     /** Un lavoro dell'utente: al massimo 2 ore di tappe, poi si fa riprogrammare (UIDT resta tale). */
     const val MAX_SLICES: Int = 15
+
+    /**
+     * D-6: quanto un lavoro dell'utente aspetta, in tutto, che la rete torni prima di passare al lavoro che riparte con il Wi-Fi. Copre un Wi-Fi
+     * che cade per qualche secondo o il riavvio del router; oltre, tenere sveglio il telefono non vale la pena (il lavoro che aspetta il Wi-Fi
+     * non costa niente finche' il Wi-Fi non c'e').
+     */
+    val NETWORK_PATIENCE: Duration = 10.minutes
+
+    /**
+     * D-6: la tappa aspetta la rete: nessuna rete, una rete che non e' casa (o non ammessa), il NAS che non risponde, la rete lenta, il roaming,
+     * oppure i dati mobili o il roaming che chiedono la conferma dell'utente (mai spesi senza: si aspetta il Wi-Fi). Non lo e' la conferma per il
+     * tetto dei dati, che chiede l'utente, ne' il caldo o il congelamento. Pura, provata su JVM.
+     */
+    fun waitsForNetwork(outcome: BackupStageOutcome): Boolean = when (val stage = outcome.stage) {
+      is StageOutcome.Waiting -> networkWait(stage.reason)
+      is StageOutcome.Stopped -> networkWait(stage.reason)
+      is StageOutcome.NeedsConfirmation -> onlyNetworkConfirmation(stage.decision.kinds)
+      is StageOutcome.Finished, is StageOutcome.Yielded -> false
+    }
+
+    private fun networkWait(reason: RulesWaitReason): Boolean = when (reason) {
+      RulesWaitReason.Offline, RulesWaitReason.NetworkNotTrusted, RulesWaitReason.NasUnreachable, RulesWaitReason.PoorNetwork,
+      RulesWaitReason.Roaming, RulesWaitReason.HeavyNeedsHomeWifi, is RulesWaitReason.NetworkNotAllowed,
+      -> true
+      is RulesWaitReason.ConfirmationRequired -> onlyNetworkConfirmation(reason.kinds)
+      else -> false
+    }
+
+    private fun onlyNetworkConfirmation(kinds: Set<ConfirmationKind>): Boolean = kinds.isNotEmpty() && ConfirmationKind.OVER_CAP !in kinds
   }
+}
+
+/**
+ * **D-7**: aspetta, al massimo [timeout], che il backup di questo processo sia pronto a dire se c'e' qualcosa da fare: la famiglia pronta
+ * ([GalleryGraph.awaitReady]), le impostazioni del backup lette dal loro magazzino (prima la cartella del dispositivo e' nulla e le sorgenti sono
+ * vuote: "niente da fare") e le parti del backup costruite (account, aree e chiave arrivano dai loro archivi un attimo dopo l'avvio). In un
+ * processo gia' avviato non costa niente. Falso se non e' pronto in tempo: allora la tappa dice da sola "non parte", come prima.
+ */
+internal suspend fun awaitBackupReady(gallery: GalleryGraph, backup: BackupGraph, timeout: Duration = COLD_START_WAIT): Boolean =
+  withTimeoutOrNull(timeout) {
+    if (!gallery.awaitReady(timeout)) return@withTimeoutOrNull false
+    backup.settings.awaitLoaded()
+    // Solo qui, all'avvio del lavoro: l'account e le aree arrivano dai loro archivi; nessuna attesa se il backup e' gia' partito.
+    while (!backup.start()) delay(READY_RETRY_MS)
+    true
+  } ?: false
+
+/** D-7: quanto un lavoro aspetta, al massimo, che il processo appena nato sia pronto. */
+internal val COLD_START_WAIT: Duration = 30.seconds
+
+private const val READY_RETRY_MS = 250L
+
+/**
+ * D-6: "la rete e' cambiata" per un lavoro che la aspetta: il posto della rete (casa, fuori, nessuna rete, VPN) o la raggiungibilita' del NAS
+ * cambiano, oppure Android dice al lavoro che la sua rete e' cambiata ([extra], `JobService.onNetworkChanged`). Ogni raccolta parte dallo stato
+ * di quel momento: conta solo cio' che cambia dopo. Le regole decidono poi se si riparte.
+ */
+internal fun networkChanges(graph: AppGraph, extra: Flow<Unit> = emptyFlow()): Flow<Unit> = merge(
+  graph.environment.snapshot.map { it.place }.distinctUntilChanged().drop(1).map { },
+  graph.statusMonitor.isReachable.drop(1).map { },
+  extra,
+)
+
+/**
+ * Il lavoro del backup dell'utente ("Inizia ora", "Fai ora") come lo fa girare [BackupJobService], e come lo prova il banco dei test: le tappe
+ * dentro `GalleryGraph.runIfActive`, prima l'attesa del processo pronto (D-7), a una caduta della rete l'attesa che cambi (D-6). La stima per la
+ * conferma sui dati mobili (proposta 10) si chiede una volta, a processo pronto.
+ */
+internal fun userBackupRun(
+  gallery: GalleryGraph,
+  graph: AppGraph,
+  backup: BackupGraph,
+  trigger: BackupTrigger,
+  confirmed: Boolean,
+  userInitiated: Boolean,
+  changes: Flow<Unit> = networkChanges(graph),
+): BackupJobRun {
+  val stages = BackupStages(graph, backup)
+  var estimate: Long? = null
+  var estimated = false
+  return BackupJobRun(
+    stage = { kind ->
+      if (!estimated) {
+        estimated = true
+        estimate = backup.uploadEstimateBytes()
+      }
+      gallery.runIfActive { stages.round(kind, trigger, userEstimate = estimate, confirmed = confirmed) }
+    },
+    userInitiated = userInitiated,
+    ready = { awaitBackupReady(gallery, backup) },
+    networkChange = { within -> withTimeoutOrNull(within) { changes.first() } != null },
+  )
 }
 
 /**
@@ -129,6 +269,9 @@ class BackupJobService : JobService() {
 
   @Volatile
   private var currentIncomingStop: IncomingStop? = null
+
+  /** D-6: i cambi di rete che Android annuncia al lavoro in corso (Android 14+). */
+  private val networkChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
 
   private fun entry(): BackupEntryPoint = EntryPointAccessors.fromApplication(applicationContext, BackupEntryPoint::class.java)
 
@@ -161,25 +304,25 @@ class BackupJobService : JobService() {
           followProgress(entry.notifications(), backup, userInitiated)
         }
       }
+      val graph = entry.graph()
+      // D-6: Android dice al lavoro che la sua rete e' cambiata (dati mobili → Wi-Fi): conta come un cambio della rete per chi la aspetta.
+      val changes = networkChanges(graph, networkChanged)
       val end = try {
         // R1: un errore inatteso si salva come problema visibile (la pagina non resta "in corso") e il lavoro finisce: mai un RESCHEDULE a
         // oltranza di un lavoro dell'utente che ogni volta muore allo stesso punto.
         when (
           val attempt = attemptStage(TAG, onError = { backup.noteUnexpectedError() }) {
-            val stages = BackupStages(entry.graph(), backup)
             if (trigger == BackupTrigger.INCOMING) {
               // D24 (P14): una condivisione grande ("Salva sul NAS"): solo i file in arrivo, a tappe, con la stessa notifica e lo stesso "Ferma".
+              val stages = BackupStages(graph, backup)
               BackupJobRun(
                 stage = { kind -> if (kind == BackupKind.PHOTOS) gallery.runIfActive { stages.incoming(userInitiated, incomingStop::requested) } else null },
                 userInitiated = userInitiated,
+                ready = { awaitBackupReady(gallery, backup) },
+                networkChange = { within -> withTimeoutOrNull(within) { changes.first() } != null },
               ).run()
             } else {
-              // La stima serve alle regole per la conferma sui dati mobili (proposta 10): il riepilogo e' in cache.
-              val estimate = backup.uploadEstimateBytes()
-              BackupJobRun(
-                stage = { kind -> gallery.runIfActive { stages.round(kind, trigger, userEstimate = estimate, confirmed = confirmed) } },
-                userInitiated = userInitiated,
-              ).run()
+              userBackupRun(gallery, graph, backup, trigger, confirmed, userInitiated, changes).run()
             }
           }
         ) {
@@ -191,10 +334,24 @@ class BackupJobService : JobService() {
         if (!userInitiated) NotificationManagerCompat.from(this@BackupJobService).cancel(notificationId)
       }
       GalleryLog.d(TAG) { "lavoro del backup finito: ${end.name}" }
+      // D-6: la rete non e' tornata in tempo. Il lavoro dell'utente passa a quello che riparte da solo con il Wi-Fi (regole dell'utente, mai
+      // i dati mobili senza conferma); i file ricevuti al loro lavoro, che aspetta il Wi-Fi allo stesso modo (IN-5).
+      if (end == BackupJobEnd.AWAIT_NETWORK) {
+        if (incoming) BackupWorkScheduling.incoming(this@BackupJobService) else BackupWorkScheduling.userResume(this@BackupJobService, trigger)
+      }
       running.remove(params.jobId)
       jobFinished(params, end == BackupJobEnd.RESCHEDULE)
     }
     return true
+  }
+
+  /**
+   * D-6: la rete del lavoro e' cambiata (per esempio dai dati mobili al Wi-Fi di casa). Il lavoro dell'utente che aspetta la rete riprova
+   * subito; uno che lavora non cambia niente (le regole lo rivalutano da sole). Prima Android lo diceva al vuoto: "onNetworkChanged() not
+   * implemented".
+   */
+  override fun onNetworkChanged(params: JobParameters) {
+    networkChanged.tryEmit(Unit)
   }
 
   override fun onStopJob(params: JobParameters): Boolean {

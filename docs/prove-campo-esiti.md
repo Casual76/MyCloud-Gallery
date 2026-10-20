@@ -376,3 +376,93 @@ Un solo tentativo, nessun altro: come da regole mi sono fermato e non ho lanciat
 - **Telefono:** `mcg-prova` con 302 file. Le 6 foto liberate sono nel cestino di Samsung Gallery (elenco in §R.3).
 - **NAS:** in `test/mcg-campo/` restano `Backup/` (296 media verificati) e le due cartelle vuote `prova-4b-rinominata` e `sotto`. Le toglie l'utente dal PC, o un'altra sessione con "Elimina" dell'app, che passa dal cestino in `.mycloudgallery/`.
 - **Accessi al NAS dal PC:** dopo la verifica di V.1 nessuno.
+
+
+---
+
+# Riprova con `6c19a33` (20/10/2026, 21:02–22:55)
+
+| | |
+|---|---|
+| **Ambiente** | APK di debug di `6c19a33`, installato dall'orchestratore con `install -r` (dati conservati): account `test`, area privata `test`, area comune `test-comune`. "Attiva Wi-Fi automaticamente" è spento: le cadute del Wi-Fi ora durano quanto chiesto (controllato: `wifi_on=0` per tutti i 30 s di F23). Batteria dal 68% al 63%. |
+| **Nuova semina** | `s25.ps1 -Step clean -Yes` (alle 21:12), poi `-Step seed` con il giro `20261020-211253-5c0e6864`, `-Seed 42 -Photos 520 -BigVideos 3 -BigVideoMb 3072`, fixture rigenerati senza i tre finti. Risultato: **528 file, 9,66 GB**, tre video da 3 GB. Le copie del giro precedente sul NAS (296) non le ho toccate. Il manifesto nuovo e la sua copia per la verifica stanno nella cartella di appoggio della sessione, non nel repo. Per la verifica dal PC il manifesto ha in più 296 righe `pre=` (i file del giro precedente, con il loro percorso, presi dal catalogo dell'app). |
+| **Esito in breve** | Corretti e provati: D-2, D-6 (F23 e la caduta lunga), D-7 (morti singole) e D-10 (tutte e due le varianti). D-11 è migliorato. D-9 è provato solo in parte. **F30 non è passata**: dopo le 100 interruzioni il backup non arriva in fondo da solo. Due dei tre video restano "in caricamento" da più di 25 minuti e i loro temporanei sul NAS risultano occupati (`FileBusy`, D-13). La verifica dal PC (un tentativo, login accettato) non trova file a metà, doppioni né sostituzioni: solo quei 2 file che non si aprono. |
+
+## Q.1 Esiti
+
+| Id | Esito | Misure e note |
+|---|---|---|
+| D-2 (3 avvii a freddo) | **passata** | 3 volte `force-stop` e poi `am start`: nessun `NasScanWorker: tappa non riuscita`. "sessione pronta" 0,7–1,4 s dopo l'avvio, poi i giri "Verify". Al 3° avvio la scansione completa dell'area arriva a `completo=true` in circa 2 minuti. In tutta la sessione: **0 fallimenti su 74 avvii del processo** (prima erano 11 su 13). |
+| D-9 (riepilogo dalla cartella del dispositivo) | **non provabile del tutto** | La cartella del dispositivo era già scelta ("Telefono di test", dal giro di prima) e si sceglie una volta sola: senza cancellare i dati dell'app la strada del primo backup non si rifà. Provata la seconda parte: con 3 video in coda la pagina dice "3 in coda · Riprende al prossimo giro. **Da caricare: 4,4 GB**", non più 0 B. |
+| D-11 (avanzamento) | **migliorato, con un resto** | Durante i video il totale comprende i video e i byte salgono: "Video: 213 di 431 · 109 MB di 9,7 GB · circa 46 min", poi "210 MB di 9,7 GB · circa 38 min", poi "956 MB di 9,7 GB · circa 28 min". Il tempo che manca è in minuti. Resta: dopo una morte o un nuovo "Fai ora" il conteggio riparte dal lotto ("Video: 0 di 3 · 0 B di 4,4 GB · circa 13 min"). La capsula della Libreria ha detto "Backup in corso: 0 di 3 · circa 13 min" anche mentre i due video bloccati di D-13 non andavano avanti. |
+| Backup in background | **osservazione** | Dopo la semina il backup è partito da solo con le regole: 215 foto nuove (giro "photos" alle 21:14), poi i video. "Ferma" e poi "Riprendi" l'hanno fatto diventare un lavoro dell'utente ("avviato da te"). |
+| F23 (Wi-Fi spento 30 s durante i video, dopo circa 1,1 GiB) | **passata** | Nessun "lavoro del backup finito: DONE". Durante lo stacco la pagina dice "Backup fermo · Android ha fermato il lavoro. Riprende da solo." Wi-Fi riacceso alle 21:18:11, "sessione pronta" alle 21:18:15, caricamento ripartito da solo entro le 21:18:22 (circa 11 s), pagina "Backup in corso, avviato da te". |
+| F23 lunga (stacco di oltre 10 minuti) | **passata la parte di D-6, con un difetto** (D-12) | Sei stacchi da 120 s di fila (1 s di Wi-Fi fra uno e l'altro, 21:24–21:36), lo strumento ammette al massimo 120 s a stacco. Alle 21:35:43 compaiono "rete non tornata in 600 s: il lavoro dell'utente aspetta il Wi-Fi" e "lavoro del backup finito: **AWAIT_NETWORK**". Al ritorno del Wi-Fi (21:36:12) `UserResumeWorker` parte dopo 3 s, ma **un secondo prima della sessione NAS pronta**: la sua tappa dice "Wait" e il lavoro si riprogramma **fra 15 minuti**. Nel frattempo la pagina diceva "Android ha fermato il lavoro. Riprende da solo." e non riprendeva. È ripartito alle 21:37 con "Fai ora" (necessario per cominciare F30). |
+| F24 / D-7 (7 morti, `-WifiPercent 0`, 21:18–21:23) | **passata** | Mai un "DONE" sotto il secondo, nessun "DONE" in tutto. Dopo ogni morte il caricamento è ripreso: 120–590 MiB caricati in ogni intervallo fra due morti. Dopo 4 morti su 7 compare "giro photos" subito dopo "sessione pronta". Nelle altre il lavoro è ripartito senza un giro finito nel log, ma i byte salivano. Un paio di volte Android ha messo un ritardo di 11 s al riavvio del servizio. |
+| F30 (100 interruzioni miste, seme 7, 21:38–22:28) | **fallita** (D-13) | 58 morti e 42 cadute del Wi-Fi vere (3–20 s). Durante le interruzioni nessun "DONE", nessuna attesa della rete scaduta, nessun crash, 58 avvii del processo. Le interruzioni n. 92 e 94 hanno fatto cadere il lavoro dell'utente nel ritardo crescente di Android (prossima partenza 22:32, ripartito da solo). **Ma**: alle 22:34 il giro dei video finisce in 30 s con "fatti=0 · aperti=3 · stop=complete" e il lavoro chiude "DONE"; la pagina dice "3 in coda · Al prossimo giro". "Fai ora" (22:37) fa lo stesso. Dopo, uno dei tre video si sblocca: caricato alle 22:42, verificato e chiuso da `UserResumeWorker` alle 22:49. Gli altri due sono **fermi dalle 22:24 e dalle 22:25** (punti di ripresa 1,74 GB e 0,38 GB su 3 GB). Alle 22:55 la pagina dice "2 in coda · Al prossimo giro". |
+| F30, verifica dal PC (un tentativo, sola lettura, `-NotSettled`) | **quasi pulita** | Login accettato. "file riletti con SHA-256: 726 (5.243.032 KiB) · **2 VIOLAZIONI** [11. il NAS si legge] un file non si rilegge: apertura non riuscita (**FileBusy**)", due volte. Nessun file a metà visibile, nessun doppione, nessun file del giro di prima cambiato (296 righe `pre=`). I due file occupati sono quasi certamente i temporanei dei due video bloccati (il rapporto non dà nomi). La verifica "a lavoro finito" non si può fare finché quei due video non finiscono. |
+| F30, telefono | **passata** | `s25.ps1 -Step verify -SkipNas -AllowFreed`: impronte uguali al manifesto; mancano solo i 3 file liberati da F37. |
+| F37 / D-10, "Consenti" dopo la morte | **passata** | 3 foto → "Libera ora" → dialogo "spostare 3 foto nel cestino?" → `kill -9` dell'app (22:40:09) → "Consenti". I file escono dal telefono. Dopo il riavvio dell'app il giro 3 è `done` con **i 3 elementi `freed`** (22:41:13). |
+| F37 / D-10, "Rifiuta" dopo la morte | **passata** | Altre 3 foto (su 4 scelte, una era già solo sul NAS) → "Libera ora" → `kill -9` → "Rifiuta". I file restano sul telefono e il giro 4 resta `ready` con gli elementi `in_dialog`. Riaperta la pagina "Libera spazio" ("Sto contando cosa si può liberare…"), diventano **`kept`** (22:44:52). |
+| D-3 (testi) | **visto** | Raccolte → "Eliminati di recente · Su questo telefono si ripristina da Galleria → Cestino". |
+| Wi-Fi automatico (O-6) | **risolto per le prove** | Con l'impostazione spenta dall'utente le cadute durano il tempo chiesto. |
+
+## Q.2 Difetti nuovi
+
+### D-13 (alta, blocca F30): dopo molte interruzioni due video restano "in caricamento" con il temporaneo occupato sul NAS, e il backup si chiude come finito
+**Passi.**
+1. Primo backup di tre video da 3 GB.
+2. `s25.ps1 -Mode backup -Step interrupt -Interruptions 100 -Seed 7` (58 morti e 42 cadute del Wi-Fi).
+3. Alla fine aspettare la ripresa da sola, poi toccare "Fai ora".
+
+**Cosa si vede.**
+- Ogni giro dei video dura 30 s e finisce con "giro videos: fatti=0 · aperti=2 (o 3) · stop=complete", poi "lavoro del backup finito: DONE" (oppure `UserResumeWorker: tappa: None`).
+- Gli elementi restano `uploading` senza nessun aggiornamento.
+- Pagina: "2 in coda · Al prossimo giro".
+- La verifica dal PC trova 2 file che non si aprono (`FileBusy`).
+
+**Ipotesi.**
+- I temporanei sono tenuti aperti sul NAS da handle di sessioni morte: una morte del processo con il Wi-Fi giù, quindi senza chiusura della connessione, oppure handle "durevoli" di SMB3 che il NAS conserva per la riconnessione.
+- Il motore li trova occupati e chiude il giro come "complete" invece di dire "occupato, riprovo": così il lavoro finisce e il backup aspetta 6 ore.
+- Uno dei tre si è sbloccato da solo dopo circa mezz'ora; gli altri due erano ancora occupati dopo 30 minuti.
+
+**Da guardare:**
+- che cosa fa il motore quando `reopenTemp` risponde `Locked`/`FileBusy` su un **proprio** temporaneo;
+- se le aperture usano handle durevoli;
+- la durata del blocco sul WD.
+
+**Log:**
+```
+22:34:29.325 D/MyCloud/BackupStages: giro videos: fatti=0 collegati=0 persi=0 falliti=0 aperti=3 stop=complete
+22:34:29.329 D/MyCloud/BackupJobService: lavoro del backup finito: DONE
+22:37:32.928 D/MyCloud/BackupStages: giro videos: fatti=0 ... aperti=3 stop=complete        (dopo "Fai ora")
+22:49:42.911 D/MyCloud/BackupStages: giro videos: fatti=1 ... aperti=2 stop=complete        (UserResumeWorker)
+verifica dal PC, -NotSettled: 2 VIOLAZIONI [11. il NAS si legge] ... apertura non riuscita (FileBusy)
+```
+
+### D-12 (media): dopo una caduta lunga `UserResumeWorker` parte prima della sessione e si rimanda di 15 minuti
+**Passi.**
+1. Backup dell'utente in corso.
+2. Wi-Fi giù per più di 10 minuti: arriva `AWAIT_NETWORK`.
+3. Riaccendere il Wi-Fi.
+
+**Cosa si vede.** `UserResumeWorker` parte 3 s dopo il ritorno del Wi-Fi (vincolo di rete soddisfatto). La tappa risponde "Wait" perché la sessione NAS arriva solo 1 s dopo ("sessione pronta" alle 21:36:16, la tappa alle 21:36:15). Il lavoro si riprogramma con il ritardo di un quarto d'ora. Intanto la pagina dice "Riprende da solo".
+
+**Rimedio probabile.** Prima della tappa aspettare la sessione o la raggiungibilità del NAS (come `awaitReady` di D-7), oppure trattare "NAS non ancora pronto subito dopo un cambio di rete" come un'attesa breve, non da 15 minuti.
+
+### Osservazioni
+- **Traffico misurato.** Il contatore `wlan0` comprende anche le altre app. Alle 22:35 il Wi-Fi trasmetteva circa 12–14 MB/s mentre i lavori della nostra app erano fermi (nessun lavoro attivo; i byte di `netstats` per la nostra app non salivano). Per i byte del backup fa fede il diario (`resume_at`, `uploaded`) o un contatore per UID, non `/proc/net/dev`. Anche le misure di traffico della mattina vanno lette così.
+- **Ritardo di Android.** Dopo molte morti di fila Android rimanda il lavoro dell'utente con un ritardo crescente: alle 22:25 la prossima partenza era fra 8 minuti. È il comportamento del sistema e il backup è ripartito da solo; va tenuto presente nei tempi di F30.
+- **Scansione del NAS.** Ogni giro "Verify" ritrova come nuovi centinaia di file ("rilevati=700…") anche senza novità. Sono quasi certamente i resti di `mcg-it/`: vedi F3 in §V.2.
+- **Tema.** Il telefono è passato al tema scuro durante la sessione. L'app lo segue, quindi gli screenshot di prima e di dopo hanno colori diversi.
+
+## Q.3 Stato lasciato
+- **Wi-Fi:** acceso.
+- **Batteria:** 63%.
+- **App:** in primo piano, nessuna pausa. La pagina dice "2 in coda · Al prossimo giro": i due video bloccati da D-13.
+- **Telefono:** `mcg-prova` con 525 file. Le 3 foto liberate da F37 sono nel cestino di Samsung Gallery: `IMG_mcg_0293.jpg`, `IMG_mcg_0328.jpg`, `IMG_mcg_0338.jpg`. Restano anche le 6 del giro di prima, se l'utente non le ha già tolte.
+- **NAS:** `test/mcg-campo/Backup/Telefono di test/` con 726 file (296 del giro di prima, 430 di questo). Due temporanei dei video sono in `.mycloudgallery/tmp` e risultano occupati. Restano anche le due cartelle vuote `prova-4b-rinominata` e `sotto` (§V.2).
+- **Accessi al NAS dal PC:** uno solo in questo giro, la verifica "a metà", con login accettato.
+- **Da rifare dopo la correzione di D-13 e D-12:**
+  - F30 completa, con la verifica "a lavoro finito";
+  - la ripresa dopo una caduta lunga.

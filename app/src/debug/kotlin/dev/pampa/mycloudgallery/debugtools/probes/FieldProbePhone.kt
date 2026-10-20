@@ -38,6 +38,35 @@ internal class ProbeRow(
 }
 
 /**
+ * SOLO build debug (Fase 5B, LA-7 della verifica funzionale): una riga di riferimento salvata su file fra un passaggio e l'altro di una prova a
+ * piu' tempi. **Solo numeri**: l'`_ID`, la dimensione, la data di modifica, la data di scatto e la generazione, separati da tabulazioni. Quello
+ * che T-09 e T-16 confrontano dopo (`FieldProbeMath.diff`, `compareView`) e' proprio questo; il resto della riga si rilegge dal telefono.
+ */
+internal object ProbeRowMarks {
+
+  fun encode(row: ProbeRow): String =
+    listOf(row.id.toString(), row.size.toString(), row.dateModifiedSec.toString(), row.dateTakenMs?.toString().orEmpty(), row.generationModified?.toString().orEmpty())
+      .joinToString("\t")
+
+  /** La riga di riferimento di [line], con i soli campi che il confronto usa (gli altri hanno un valore neutro); null se la riga non ha la forma. */
+  fun decode(line: String): ProbeRow? {
+    val parts = line.split('\t')
+    if (parts.size != FIELDS) return null
+    val id = parts[0].toLongOrNull() ?: return null
+    val size = parts[1].toLongOrNull() ?: return null
+    val modified = parts[2].toLongOrNull() ?: return null
+    val taken = parts[3].takeIf { it.isNotEmpty() }?.let { it.toLongOrNull() ?: return null }
+    val generation = parts[4].takeIf { it.isNotEmpty() }?.let { it.toLongOrNull() ?: return null }
+    return ProbeRow(
+      id = id, isVideo = false, mime = null, size = size, dateModifiedSec = modified, dateTakenMs = taken, generationModified = generation,
+      isTrashed = false, dateExpiresSec = null, relativePath = "", originalDocumentId = null, documentId = null, instanceId = null,
+    )
+  }
+
+  private const val FIELDS = 5
+}
+
+/**
  * SOLO build debug (Fase 5B, P0-B): la **recinzione** delle prove guidate sul telefono (D13 applicata alle prove T): l'unico punto da cui le prove
  * leggono il MediaStore, e legge **solo** `DCIM/mcg-prova/` e `Pictures/mcg-prova/` (le cartelle che lo script di semina `tools/chaos/s25.ps1 -Mode
  * seed` riempie). Nessuna prova tocca una riga fuori da queste due cartelle: le richieste di sistema (cestino, scrittura) partono da qui e
@@ -112,6 +141,9 @@ internal class FieldProbePhone(context: Context) {
 
   /** Il riferimento alla riga, quello che le richieste di sistema e il riscrittore vogliono. */
   fun refOf(row: ProbeRow): MediaRef.Phone = MediaRef.Phone(VOLUME, row.id, row.mime)
+
+  /** VE-2: il riferimento **senza MIME**, come quello con cui i fogli della 5B chiedono il dialogo di sistema (`AppPhoneSystemDialogs`). */
+  fun untypedRefOf(row: ProbeRow): MediaRef.Phone = MediaRef.Phone(VOLUME, row.id, null)
 
   /** L'URI `content://media` della riga (la collezione del tipo). */
   fun uriOf(row: ProbeRow): Uri {

@@ -49,22 +49,34 @@
   <string name="backup_versions_why_not_mine">Questo media non è tuo: non puoi ripristinarne l’originale.</string>
   <string name="backup_versions_why_not_available">Il ripristino non è ancora pronto.</string>
   <string name="backup_versions_why_busy">Sto ancora lavorando su questo media: riprova fra poco.</string>
+  <string name="backup_versions_why_current_not_safe">La versione di adesso non ha ancora una copia controllata sul NAS: ripristinando l’originale la perderesti. Prima il backup la mette al sicuro, poi potrai ripristinare.</string>
+  <string name="backup_versions_why_paused">Il backup è in pausa: riprendilo dalla pagina Backup per ripristinare l’originale.</string>
+  <string name="backup_versions_why_test_only">Il backup è ancora in prova: per ora sul NAS non scrivo.</string>
 
   <string name="backup_versions_confirm_title">Ripristinare l’originale?</string>
-  <string name="backup_versions_confirm_message">L’originale torna al suo posto sul NAS e la versione di adesso va nella cartella Versioni. Non si perde niente e non si carica niente.</string>
+  <string name="backup_versions_confirm_message">L’originale torna al suo posto sul NAS e la versione di adesso, che ha già una copia controllata, va nella cartella Versioni. Non si carica niente.</string>
+  <string name="backup_versions_confirm_phone_title">Sul telefono c’è la versione modificata</string>
+  <string name="backup_versions_confirm_phone_detail">Con il tuo permesso la rimetto com’era, ma solo se è ancora quella al sicuro sul NAS. Una modifica più nuova non la tocco.</string>
   <string name="backup_versions_confirm_back_title">Torna al suo posto</string>
   <string name="backup_versions_confirm_away_title">Va nella cartella Versioni</string>
 
   <string name="backup_versions_waiting_title">Il telefono ti chiede un permesso</string>
   <string name="backup_versions_waiting_detail">Serve per rimettere com’era anche la copia sul telefono, che ha la versione modificata. Se dici di no, l’originale torna comunque sul NAS e il telefono tiene la modifica.</string>
   <string name="backup_versions_restoring_title">Ripristino l’originale…</string>
-  <string name="backup_versions_restoring_detail">Sposto i file sul NAS. Non carico niente.</string>
+  <string name="backup_versions_restoring_detail">Sposto i file sul NAS. Non carico niente. Se il backup sta lavorando, aspetto che finisca il lotto.</string>
   <string name="backup_versions_done_title">Fatto</string>
   <string name="backup_versions_done_detail">L’originale è tornato al suo posto sul NAS. Non è stato caricato niente.</string>
   <string name="backup_versions_done_kept">Sul telefono resta la versione modificata, perché non hai dato il permesso.</string>
+  <string name="backup_versions_done_kept_pending">Sul telefono resta la versione modificata. Quando lo scambio sul NAS è finito puoi ripetere il ripristino.</string>
+  <string name="backup_versions_done_kept_failed">Non sono riuscito a rimettere com’era la copia sul telefono: resta la versione modificata, intatta.</string>
+  <string name="backup_versions_done_kept_changed">Sul telefono la foto è cambiata dopo l’ultima lettura: non l’ho toccata. Il backup la salva come versione nuova, niente è perso.</string>
+  <string name="backup_versions_started_title">Ripristino avviato</string>
+  <string name="backup_versions_started_detail">Lo scambio sul NAS è partito: il backup lo finisce da solo. Non è stato caricato niente.</string>
 
   <string name="backup_versions_msg_plan_changed">Nel frattempo qualcosa è cambiato: ho ricalcolato. Controlla e conferma di nuovo.</string>
   <string name="backup_versions_msg_expired">È passato troppo tempo. Conferma di nuovo.</string>
   <string name="backup_versions_msg_permission">Senza il permesso del telefono non ho ripristinato niente.</string>
   <string name="backup_versions_msg_no_dialog">Su questo telefono non posso chiedere il permesso, quindi non ho ripristinato niente.</string>
+  <string name="backup_versions_msg_dialog_failed">Il telefono non ha accettato la richiesta di permesso: non ho ripristinato niente.</string>
+  <string name="backup_versions_msg_busy">Il backup stava finendo un lotto e non ha lasciato il turno: non ho fatto niente. Riprova fra poco.</string>
 </resources>

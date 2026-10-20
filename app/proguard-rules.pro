@@ -34,3 +34,13 @@
 -keep class dev.pampa.mycloudgallery.backup.AppBackupGate {
     public *** stateOf(java.lang.String);
 }
+
+# --- Fase 5B (LA-5 della verifica funzionale): il cancello dei file in arrivo ------------------------------------------------------------
+# "Salva sul NAS" scrive nella share di destinazione (anche quella comune): il suo cancello (`IncomingGate.stateOf`) applica D12 (share non di
+# prova: `TEST_ONLY`) e R2 (release con un account di prova: `TEST_ONLY`) come quello del backup. R8 non deve ne' toglierlo ne' fonderlo in
+# un'altra classe: tools/check.ps1 (stesso passo "D12 e R2 nella release") legge il bytecode della release e prova che `stateOf` chiama
+# `backupMayWriteTo` e `backupMayWriteAs`, risponde TEST_ONLY e che qualche classe del backup lo istanzia. Le decisioni le tiene
+# core-common/consumer-rules.pro.
+-keep class dev.pampa.mycloudgallery.backup.IncomingGate {
+    public *** stateOf(java.lang.String);
+}

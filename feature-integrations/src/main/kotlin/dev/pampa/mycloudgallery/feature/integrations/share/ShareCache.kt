@@ -8,9 +8,10 @@ import java.security.SecureRandom
 // (copie da condividere, anche senza posizione) e `cacheDir/edit/` (copie per "Modifica con…"). Qui si decide come si chiamano i file (token
 // casuali, mai un nome dell'utente nel percorso), che non si esce mai dalle due radici, e cosa si butta all'avvio.
 //
-// Niente orologio: i nomi vengono da `SecureRandom`, la pulizia all'avvio non guarda l'eta' dei file (D31, §4.3). Dopo un riavvio del processo
-// una copia da condividere non serve piu' a nessuno (la condivisione e' un gesto di pochi secondi) e una sessione di modifica di cui il
-// processo non ricorda piu' niente non si puo' piu' attribuire; le sessioni ancora aperte nel database tengono le loro copie (`keepEdit`).
+// Niente orologio: i nomi vengono da `SecureRandom`, la pulizia all'avvio non guarda l'eta' dei file (D31, §4.3). Una copia da condividere vive
+// finche' l'altra app non ha finito (`ShareHolder`, correzioni 5B MC-1), e comunque non oltre l'avvio successivo del processo: qui si toglie. Una
+// sessione di modifica di cui il processo non ricorda piu' niente non si puo' piu' attribuire; le sessioni ancora aperte nel database tengono
+// le loro copie (`keepEdit`).
 
 class ShareCache(
   cacheDir: File,

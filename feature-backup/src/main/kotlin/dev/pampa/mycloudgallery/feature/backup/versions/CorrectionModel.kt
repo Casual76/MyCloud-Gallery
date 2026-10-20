@@ -258,6 +258,9 @@ enum class CorrectionMessage {
 
   /** Il dialogo del sistema non c'e' su questo telefono. */
   NO_SYSTEM_DIALOG,
+
+  /** VE-2: il sistema non ha accettato la richiesta di permesso (o il dialogo non si e' aperto): niente e' stato toccato. */
+  SYSTEM_DIALOG_FAILED,
 }
 
 /** Cosa mostra il foglio delle correzioni (§1.5 `CorrectionState`). */
@@ -289,8 +292,20 @@ internal sealed interface CorrectionUi {
     val fields: Set<CorrectionField> get() = draft.fields
   }
 
-  /** Un media del telefono non e' ancora al sicuro: prima il backup e la verifica (D19). */
-  data class NeedsSafeFirst(val subject: CorrectionSubject) : CorrectionUi
+  /**
+   * Un media del telefono non e' ancora al sicuro: prima il backup e la verifica (D19). VE-3: [outsideSources] = sta in una cartella che il
+   * backup non guarda (il tasto non c'e' e la frase lo dice); [notNow] = niente si puo' far partire adesso; [stillWaiting] = il lavoro e'
+   * partito ma non ha ancora finito mentre il foglio era aperto.
+   */
+  data class NeedsSafeFirst(
+    val subject: CorrectionSubject,
+    val outsideSources: Boolean = false,
+    val notNow: Boolean = false,
+    val stillWaiting: Boolean = false,
+  ) : CorrectionUi
+
+  /** VE-3: "Metti al sicuro adesso" e' partito (verifica sul momento della copia sul NAS, o backup del telefono): il foglio aspetta e poi riapre. */
+  data class Safeguarding(val subject: CorrectionSubject) : CorrectionUi
 
   /** Il sistema chiede il permesso di riscrivere la riga del telefono. */
   data class AwaitingSystemDialog(val rows: Int) : CorrectionUi

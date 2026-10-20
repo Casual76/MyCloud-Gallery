@@ -77,6 +77,31 @@ class VerificaFunzionaleImpostazioniTest {
     assertThat(vm.state.value.feedback).isNotNull()
   }
 
+  /** R7 e R19 della revisione di sicurezza della Fase 5B: se le chiavi non si tolgono la pagina lo dice e il dispositivo resta com'era. */
+  @Test
+  fun r19_ilGuastoDelleChiaviSiVedeConIlSuoMessaggioENienteCambia() = runTest {
+    val coordinator = FakeOnboardingCoordinator(progressOf(OnboardingPath.FOUND_FAMILY)).also {
+      it.founded = true
+      it.finished = true
+      it.keysStuck = true
+    }
+    val vm = FamilyRejoinViewModel(FakeRegistryService(TrustStatus.Approved(admin = true)), coordinator)
+
+    vm.ask()
+    vm.confirm()
+
+    // Il fondatore e' ancora il fondatore: lo stato non e' stato toccato, e il messaggio e' quello delle chiavi (non il generico).
+    assertThat(vm.state.value.stage).isEqualTo(RejoinStage.INTRO)
+    assertThat(vm.state.value.feedback?.message).isEqualTo(dev.pampa.mycloudgallery.feature.settings.R.string.problem_keys_not_removed)
+    assertThat(coordinator.finished).isTrue()
+    assertThat(coordinator.founded).isTrue()
+    // E con il Keystore guarito si riprova dallo stesso foglio.
+    coordinator.keysStuck = false
+    vm.ask()
+    vm.confirm()
+    assertThat(vm.state.value.stage).isEqualTo(RejoinStage.DONE)
+  }
+
   // --- ON-7 -----------------------------------------------------------------------------------------------------------
 
   @Test

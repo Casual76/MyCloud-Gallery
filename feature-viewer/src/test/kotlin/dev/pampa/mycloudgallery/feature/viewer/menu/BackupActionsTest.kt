@@ -75,6 +75,8 @@ class BackupActionsTest {
       RestoreAvailability.AVAILABLE, RestoreAvailability.ORIGINAL_NOT_SAFE, RestoreAvailability.NAS_UNREACHABLE, RestoreAvailability.FROZEN,
       // P14: un lavoro in corso sul media (una versione, uno scambio): la voce c'e', il foglio dice "riprova fra poco".
       RestoreAvailability.READ_ONLY_AREA, RestoreAvailability.BUSY,
+      // R3, VE-7: la versione di adesso non al sicuro, la pausa, la prova: la voce c'e' e il foglio dice perche' adesso no.
+      RestoreAvailability.CURRENT_NOT_SAFE, RestoreAvailability.PAUSED, RestoreAvailability.TEST_ONLY,
     )
     val notOffered = listOf(
       RestoreAvailability.ONLY_ONE_VERSION, RestoreAvailability.ALREADY_ORIGINAL, RestoreAvailability.NOT_MINE, RestoreAvailability.NOT_AVAILABLE,
@@ -82,6 +84,30 @@ class BackupActionsTest {
     assertThat(offered + notOffered).containsExactlyElementsIn(RestoreAvailability.entries)
     for (restore in offered) assertThat(labels(entries(plan = BackupActionsSamples.plan(restore)))).contains("Ripristina originale")
     for (restore in notOffered) assertThat(labels(entries(plan = BackupActionsSamples.plan(restore)))).doesNotContain("Ripristina originale")
+  }
+
+  /** VE-4: un formato che non si scrive (HEIC, RAW) non si ruota: la voce non c'e' (diceva "fatto" e la foto restava storta). */
+  @Test
+  fun ve4_unFormatoCheNonSiScriveNonSiRuota() {
+    val heic = backupMenuEntries(resources, BackupActionsSamples.everything, BackupMenuTarget(BackupActionsSamples.plan(), isVideo = false, rotatable = false), none)
+    assertThat(labels(heic)).doesNotContain("Ruota")
+    assertThat(labels(heic)).contains("Correggi data e luogo")
+  }
+
+  /** MC-5: "Scarica e modifica in Galleria" c'e' per un solo-NAS (prima non la chiamava nessuno), non per un media del telefono. */
+  @Test
+  fun mc5_scaricaEModificaSoloPerUnSoloNas() {
+    val caps = BackupActionsSamples.everything.copy(editDownload = true)
+    val nasOnly = BackupActionsSamples.plan(
+      versions = listOf(
+        BackupActionsSamples.entry(1, dev.pampa.mycloudgallery.core.backup.contract.VersionRole.ORIGINAL, current = false, places = setOf(dev.pampa.mycloudgallery.core.backup.contract.VersionPlace.NAS_VERSIONS_FOLDER)),
+        BackupActionsSamples.entry(2, dev.pampa.mycloudgallery.core.backup.contract.VersionRole.EDITED, current = true, places = setOf(dev.pampa.mycloudgallery.core.backup.contract.VersionPlace.NAS_USUAL_PATH)),
+      ),
+    )
+    assertThat(labels(entries(capabilities = caps, plan = nasOnly))).contains("Scarica e modifica in Galleria")
+    assertThat(labels(entries(capabilities = caps))).doesNotContain("Scarica e modifica in Galleria")
+    assertThat(labels(entries(capabilities = caps, plan = null))).doesNotContain("Scarica e modifica in Galleria")
+    assertThat(labels(entries(plan = nasOnly))).doesNotContain("Scarica e modifica in Galleria")
   }
 
   @Test
@@ -182,6 +208,15 @@ class BackupActionsTest {
     assertThat(fake.planRequests).isEqualTo(1)
     controller.bind(null, isVideo = false)
     assertThat(controller.target.value).isNull()
+  }
+
+  /** VE-4: il controller chiede a `:app` se il media si ruota davvero e lo mette nel bersaglio del menu. */
+  @Test
+  fun ve4_ilControllerChiedeSeSiRuota() = runTest(UnconfinedTestDispatcher()) {
+    val fake = FakeBackupMediaActions(rotatable = false)
+    val controller = controller(fake)
+    controller.bind(BackupActionsSamples.media, isVideo = false)
+    assertThat(controller.target.value!!.rotatable).isFalse()
   }
 
   @Test

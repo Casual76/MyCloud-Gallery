@@ -9,6 +9,7 @@ import dev.pampa.mycloudgallery.core.metadata.contract.WriteOutcome
 import dev.pampa.mycloudgallery.core.metadata.contract.WriteUnsupported
 import dev.pampa.mycloudgallery.core.metadata.format.ContainerType
 import dev.pampa.mycloudgallery.core.metadata.format.Sniffer
+import dev.pampa.mycloudgallery.core.metadata.strip.LocationTraces
 import java.io.File
 import java.io.IOException
 import java.time.Instant
@@ -26,6 +27,10 @@ import kotlin.math.abs
 // sostituire), si scrive li', si rilegge con `ExifInterface` che i valori ci siano; se qualcosa va storto la destinazione si toglie e il
 // sorgente resta com'era. Il chiamante (le correzioni di core-backup, P8) non si fida comunque: rilegge la copia con l'estrattore dell'app
 // e la decodifica ([ExtractingFileCheck]) prima che valga. Nessun log con dati dell'utente (date, coordinate, nomi).
+//
+// Correzioni 5B (R12): "togli il luogo" toglie tutto il blocco GPS dell'EXIF (anche ora e data GPS) e la nota del produttore, poi il luogo
+// dall'XMP, dai testi dei PNG e dalla parte video di una motion photo (`LocationClear`), e la copia si rilegge con il rilevatore indipendente
+// delle condivisioni (`LocationTraces`): se resta una traccia, la correzione non si scrive nel file.
 
 /**
  * Lo scrittore dei metadati per JPEG, PNG e WebP (D19, Q6 (a)). Il tipo si legge dai **byte** del sorgente (`Sniffer`), mai dal nome ne' dal
@@ -77,6 +82,11 @@ class ExifMetadataWriter(private val maxBytes: Long = MAX_SOURCE_BYTES) : Metada
         false
       }
       if (!written) return WriteOutcome.Failed(WriteFailure.IO)
+      // "Togli il luogo": anche l'XMP, i testi e il video incorporato, poi il controllo indipendente. Se non si puo', il file non cambia (L40).
+      if (change.geo == GeoChange.Clear) {
+        if (!LocationClear.inPlace(dst, type)) return WriteOutcome.Unsupported(WriteUnsupported.FORMAT)
+        if (!LocationTraces.scan(dst).clean) return WriteOutcome.Unsupported(WriteUnsupported.FORMAT)
+      }
       // Rilettura con ExifInterface: i valori chiesti devono esserci. Se non ci sono, questa variante del formato non si scrive (la
       // correzione resta nell'app, come per i formati della Q6).
       if (!readsBack(dst, change)) return WriteOutcome.Unsupported(WriteUnsupported.FORMAT)
@@ -106,7 +116,11 @@ class ExifMetadataWriter(private val maxBytes: Long = MAX_SOURCE_BYTES) : Metada
     change.takenAtUtcMillis?.let { utc -> writeDate(exif, utc, change.offsetMinutes) }
     when (val geo = change.geo) {
       GeoChange.Keep -> Unit
-      GeoChange.Clear -> LOCATION_TAGS.forEach { exif.setAttribute(it, null) }
+      GeoChange.Clear -> {
+        // Tutto il blocco GPS (anche ora, data e velocita': senza voci il blocco sparisce) e la nota del produttore, che alcune marche usano per le coordinate.
+        GPS_TAGS.forEach { exif.setAttribute(it, null) }
+        exif.setAttribute(ExifInterface.TAG_MAKER_NOTE, null)
+      }
       is GeoChange.Set -> {
         exif.setLatLong(geo.point.latitude, geo.point.longitude)
         val altitude = geo.point.altitudeMeters
@@ -182,13 +196,18 @@ class ExifMetadataWriter(private val maxBytes: Long = MAX_SOURCE_BYTES) : Metada
     private val GPS_DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy:MM:dd", Locale.ROOT)
 
     /**
-     * Le etichette della posizione che "togli il luogo" svuota: coordinate, altitudine, direzione, destinazione, velocita', area e metodo.
-     * L'ora GPS resta (non e' un luogo).
+     * Tutte le etichette del blocco GPS, che "togli il luogo" svuota: senza voci `ExifInterface` non scrive piu' il blocco, e il rilevatore delle
+     * condivisioni (che vuole il blocco GPS vuoto) e' d'accordo. Correzioni 5B (R12): prima l'ora GPS restava; adesso no (la data di scatto c'e'
+     * gia', e un blocco GPS con la sola ora e' ancora un blocco GPS).
      */
-    private val LOCATION_TAGS: List<String> = listOf(
+    private val GPS_TAGS: List<String> = listOf(
+      ExifInterface.TAG_GPS_VERSION_ID,
       ExifInterface.TAG_GPS_LATITUDE, ExifInterface.TAG_GPS_LATITUDE_REF,
       ExifInterface.TAG_GPS_LONGITUDE, ExifInterface.TAG_GPS_LONGITUDE_REF,
       ExifInterface.TAG_GPS_ALTITUDE, ExifInterface.TAG_GPS_ALTITUDE_REF,
+      ExifInterface.TAG_GPS_TIMESTAMP, ExifInterface.TAG_GPS_DATESTAMP,
+      ExifInterface.TAG_GPS_SATELLITES, ExifInterface.TAG_GPS_STATUS, ExifInterface.TAG_GPS_MEASURE_MODE, ExifInterface.TAG_GPS_DOP,
+      ExifInterface.TAG_GPS_MAP_DATUM, ExifInterface.TAG_GPS_DIFFERENTIAL,
       ExifInterface.TAG_GPS_AREA_INFORMATION, ExifInterface.TAG_GPS_PROCESSING_METHOD,
       ExifInterface.TAG_GPS_DEST_LATITUDE, ExifInterface.TAG_GPS_DEST_LATITUDE_REF,
       ExifInterface.TAG_GPS_DEST_LONGITUDE, ExifInterface.TAG_GPS_DEST_LONGITUDE_REF,

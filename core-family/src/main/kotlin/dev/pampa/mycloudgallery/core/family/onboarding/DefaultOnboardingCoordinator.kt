@@ -56,6 +56,7 @@ import java.time.LocalTime
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -586,17 +587,30 @@ class DefaultOnboardingCoordinator(
    * dispositivo che rientra ha un id nuovo, E-S2), poi password e account, lo stato fidato, l'avanzamento; alla fine il
    * motore della fiducia rilegge e, senza stato ne' chiave, dice "mai configurato". Ogni passo e' idempotente: se il
    * processo muore a meta' si rifa' da capo.
+   *
+   * **Le chiavi non si fingono tolte** (R19): ogni distruzione si ripete e, se non riesce, si ferma qui con
+   * [OnboardingProblem.KEYS_NOT_REMOVED] senza toccare il resto (la pagina resta quella di prima e si riprova). **Un Keystore
+   * che non risponde** si riconosce prima di distruggere qualsiasi cosa (R7): lo stato "non configurato" nasce anche da un
+   * guasto passeggero (`TrustEngine`), e la chiave di famiglia di un admin non deve andare persa per quello.
+   *
+   * **Di chi sono i dati** (R6): l'impronta di account e NAS che si lasciano resta nell'avanzamento nuovo
+   * ([OnboardingSnapshot.previousOwner]); alla fine dell'onboarding [finish] decide se i dati locali restano (stessa persona,
+   * stesso NAS) o si tolgono (un'altra persona). L'impronta di casa si dimentica: ogni percorso d'ingresso la registra di nuovo,
+   * e quella di prima non deve contare per un NAS diverso.
    */
   override suspend fun startOver(): StepResult = lock.withLock {
     pending = null
     foundationBlock = null
     rejected.clear()
-    runCatching { ports.deviceKeys.destroyDeviceKey() }
-    runCatching { ports.familyKeys.destroy() }
+    val leaving = ready() ?: return@withLock problem(OnboardingProblem.STEP_NOT_AVAILABLE)
+    if (!keystoreResponds()) return@withLock problem(OnboardingProblem.KEYS_NOT_REMOVED)
+    if (!destroyKeys()) return@withLock problem(OnboardingProblem.KEYS_NOT_REMOVED)
     ports.credentials.remove(NasCredentialSlots.PRIMARY)
     ports.accounts.clear()
     ports.trustState.clear()
-    store.update { OnboardingSnapshot.EMPTY } ?: return@withLock problem(OnboardingProblem.STEP_NOT_AVAILABLE)
+    ports.homeFingerprints.clear()
+    val leftOwner = OwnerStamp.of(leaving.nas, leaving.nasUser) ?: leaving.previousOwner
+    store.update { OnboardingSnapshot.EMPTY.copy(previousOwner = leftOwner) } ?: return@withLock problem(OnboardingProblem.STEP_NOT_AVAILABLE)
     try {
       ports.registry.refresh(Purpose.ONBOARDING)
     } catch (e: CancellationException) {
@@ -604,18 +618,94 @@ class DefaultOnboardingCoordinator(
     } catch (e: Exception) {
       GalleryLog.w(TAG) { "registro non riletto dopo la nuova configurazione (${e.javaClass.simpleName})" }
     }
+    ports.afterStartOver()
     StepResult.Advanced(OnboardingStep.WELCOME)
+  }
+
+  /** Il Keystore risponde (R7): chiedere se c'e' la chiave del dispositivo non la crea e non la tocca, e lancia se il Keystore e' guasto. */
+  private fun keystoreResponds(): Boolean =
+    try {
+      ports.deviceKeys.hasDeviceKey()
+      true
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      GalleryLog.w(TAG) { "Keystore che non risponde: niente si toglie (${e.javaClass.simpleName})" }
+      false
+    }
+
+  /**
+   * Toglie la chiave del dispositivo e poi quella di famiglia (R19). Ognuna si ripete fino a [KEY_ATTEMPTS] volte con una
+   * breve attesa (un guasto del Keystore e' quasi sempre passeggero); vero solo se tutte e due sono tolte. La chiave del
+   * dispositivo si controlla dopo averla distrutta; quella di famiglia non ha un modo di chiedere "ci sei ancora?": una
+   * distruzione che non lancia vale come riuscita (la cassaforte la toglie o lancia).
+   */
+  private suspend fun destroyKeys(): Boolean =
+    destroyWithRetry("chiave del dispositivo") {
+      ports.deviceKeys.destroyDeviceKey()
+      !ports.deviceKeys.hasDeviceKey()
+    } && destroyWithRetry("chiave di famiglia") {
+      ports.familyKeys.destroy()
+      true
+    }
+
+  private suspend fun destroyWithRetry(what: String, destroy: () -> Boolean): Boolean {
+    for (attempt in 1..KEY_ATTEMPTS) {
+      try {
+        if (destroy()) return true
+        GalleryLog.w(TAG) { "$what ancora presente dopo il tentativo $attempt" }
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        GalleryLog.w(TAG) { "$what non tolta al tentativo $attempt (${e.javaClass.simpleName})" }
+      }
+      if (attempt < KEY_ATTEMPTS) delay(KEY_RETRY_MS)
+    }
+    return false
+  }
+
+  /**
+   * Questo dispositivo tiene la chiave di famiglia? Il fondatore (la fondazione e' nell'avanzamento), l'admin recuperato e il
+   * secondo admin (il loro percorso), o un admin approvato nel registro. Non apre la cassaforte: con il Keystore guasto non si
+   * potrebbe, ed e' proprio il caso in cui l'avviso serve. Nel dubbio, vero.
+   */
+  override suspend fun holdsFamilyKey(): Boolean {
+    val snapshot = ready() ?: return true
+    if (snapshot.foundation != null || OnboardingRules.isRecoveryPath(snapshot.path)) return true
+    return adminApproved() || (snapshot.finished && !keystoreResponds())
   }
 
   // --- Passo 14 -----------------------------------------------------------------------------------------
 
   private suspend fun finish(snapshot: OnboardingSnapshot): StepResult {
     if (!OnboardingRules.essentialsDone(snapshot, adminApproved())) return problem(OnboardingProblem.STEP_NOT_AVAILABLE)
+    eraseOtherAccountData(snapshot)?.let { return problem(it) }
     val now = ports.deviceNow()
-    val result = complete(OnboardingStep.SUMMARY, applyChoices = true) { it.copy(finished = true, finishedAt = now) }
+    val result = complete(OnboardingStep.SUMMARY, applyChoices = true) { it.copy(finished = true, finishedAt = now, previousOwner = null) }
     val join = snapshot.join
     val manual = join != null && join.manual && join.minRegistryVersion == 0L
     return if (result is StepResult.Advanced && manual) result.copy(warnings = result.warnings + OnboardingWarning.NO_MIN_REGISTRY_VERSION) else result
+  }
+
+  /**
+   * R6: "Configura di nuovo" con un altro account (o un altro NAS) non lascia sul telefono i dati del vecchio. E' qui, a un
+   * passo dal finire, perche' fino a [finish] la Libreria non esiste (`SetupState.Ready` vuole l'onboarding finito): niente di
+   * quello che c'e' sul telefono si vede ne' si pubblica prima. Stessa persona sullo stesso NAS: i dati restano (ON-4, ON-5).
+   * Se l'impronta del nuovo non si sa calcolare non si sa di chi siano i dati: nel dubbio si tolgono.
+   * Null = si puo' finire; altrimenti il problema (la fine si ferma e si riprova, la Libreria non si apre).
+   */
+  private suspend fun eraseOtherAccountData(snapshot: OnboardingSnapshot): OnboardingProblem? {
+    val previous = snapshot.previousOwner ?: return null
+    if (OwnerStamp.of(snapshot.nas, snapshot.nasUser) == previous) return null
+    val erased = try {
+      ports.previousData.erase()
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      GalleryLog.e(TAG, e) { "dati del vecchio account non tolti" }
+      false
+    }
+    return if (erased) null else OnboardingProblem.LOCAL_DATA_NOT_REMOVED
   }
 
   // --- Comuni -----------------------------------------------------------------------------------------------
@@ -669,5 +759,9 @@ class DefaultOnboardingCoordinator(
     const val MAX_NAME_CHARS = 253
     const val PUBLIC_SHARE = "Public"
     const val COMMON_DEFAULT_SHARE = "NAS"
+
+    /** R19: quante volte si prova a togliere una chiave, e l'attesa fra un tentativo e l'altro (un guasto del Keystore e' quasi sempre passeggero). */
+    const val KEY_ATTEMPTS = 3
+    const val KEY_RETRY_MS = 300L
   }
 }

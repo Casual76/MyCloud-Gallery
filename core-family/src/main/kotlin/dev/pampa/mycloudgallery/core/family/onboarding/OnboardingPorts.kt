@@ -82,6 +82,22 @@ object IgnoreOnboardingChoices : OnboardingChoicesSink {
 }
 
 /**
+ * I dati locali di un'altra persona (R6 della revisione 5B): dopo "Configura di nuovo" con un account o un NAS diverso, alla
+ * fine dell'onboarding e prima che la Libreria si apra, il telefono toglie cio' che era del vecchio account (catalogo dei
+ * solo-NAS, dati personali, miniature e anteprime, diari, cache). Mai le foto del telefono, mai il NAS. Lo implementa `:app`
+ * con l'azzeramento (`LocalDataEraser`) senza le fasi che toccano l'onboarding in corso.
+ */
+fun interface PreviousAccountData {
+  /** Vero se tutto e' stato tolto; falso = la fine dell'onboarding si ferma e si riprova. */
+  suspend fun erase(): Boolean
+}
+
+/** Nessuno toglie niente (i test che non lo provano): i dati restano. */
+object KeepPreviousAccountData : PreviousAccountData {
+  override suspend fun erase(): Boolean = true
+}
+
+/**
  * Tutto cio' che [DefaultOnboardingCoordinator] e [dev.pampa.mycloudgallery.core.family.invite.DefaultJoinFlow]
  * usano degli altri moduli, in un posto solo (`:app` lo costruisce una volta, i test con i fake).
  *
@@ -89,6 +105,10 @@ object IgnoreOnboardingChoices : OnboardingChoicesSink {
  * @property deviceNow l'ora del dispositivo (ms): solo per misurare i tempi dell'onboarding, mai per decidere.
  * @property allowUserRetry riapre l'interruttore di un account preciso dopo una password nuova scritta dall'utente
  *   ([reopenBreakerFor]); lo collega `:app` (P9) al registro degli interruttori di `core-nas`.
+ * @property previousData toglie i dati locali del vecchio account quando chi rientra e' un altro (R6, [PreviousAccountData]).
+ * @property afterStartOver si chiama alla fine di "Configura di nuovo", a tutto salvato: `:app` ci riavvia il processo se la
+ *   galleria era gia' partita (non riparte nello stesso processo, come per l'azzeramento, ON-11) e il catalogo ha ancora il
+ *   proprietario di prima. Nei test non fa niente.
  */
 class OnboardingPorts(
   val homeCapture: HomeCapture,
@@ -115,6 +135,8 @@ class OnboardingPorts(
   val deviceNow: () -> Long = System::currentTimeMillis,
   val random: SecureRandom = SecureRandom(),
   val allowUserRetry: (suspend (NasAccount) -> Unit)? = null,
+  val previousData: PreviousAccountData = KeepPreviousAccountData,
+  val afterStartOver: () -> Unit = {},
 ) {
 
   /**

@@ -29,6 +29,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.PrivateCopyGuardian
 import dev.pampa.mycloudgallery.core.backup.contract.RestoreAvailability
 import dev.pampa.mycloudgallery.core.backup.contract.RestoreOutcome
 import dev.pampa.mycloudgallery.core.backup.contract.RunStop
+import dev.pampa.mycloudgallery.core.backup.contract.SafeguardStart
 import dev.pampa.mycloudgallery.core.backup.contract.TrashBatch
 import dev.pampa.mycloudgallery.core.backup.contract.TrashOutcome
 import dev.pampa.mycloudgallery.core.backup.contract.VersionKeeper
@@ -116,10 +117,17 @@ class FiveBGraph(
   private val privateShare: () -> String?,
   private val commonShare: () -> String?,
   private val shares: () -> List<NasShareArea>,
-  catalogProvider: suspend () -> MediaCatalog?,
+  private val catalogProvider: suspend () -> MediaCatalog?,
   /** Uno alla volta con il backup (`BackupGraph.exclusive` con un tocco dell'utente che aspetta): null = il turno non si e' liberato. */
   private val exclusive: suspend (suspend () -> Any?) -> Any?,
   onIncomingQueued: (userInitiated: Boolean) -> Unit,
+  /**
+   * VE-10, MC-3 della verifica funzionale 5B: un lavoro delle versioni nato da un fatto locale (uno scambio dopo un ripristino fatto sul
+   * telefono, la modifica di un solo-NAS) chiede subito il lavoro del suo tipo, invece di aspettare il giro periodico (fino a 12 ore).
+   */
+  private val onVersionWork: (BackupKind) -> Unit = {},
+  /** VE-3: "Metti al sicuro adesso" per un media (lo fa il backup: verifica sul momento o "Fai ora"). */
+  private val safeguard: suspend (MediaId) -> SafeguardStart = { SafeguardStart.UNAVAILABLE },
 ) {
 
   // --- Nel costruttore: niente I/O ------------------------------------------------------------------------------------------------
@@ -136,8 +144,15 @@ class FiveBGraph(
   /** I file preparati delle versioni (correzioni, risultati degli editor) in `noBackupFilesDir/versions/`. */
   val staged: DirectoryStagedFiles = DirectoryStagedFiles(File(noBackupDir, VERSIONS_DIR))
 
-  /** D32: i file che le versioni hanno messo o spostato, per la guardia dei cambiamenti di massa della scansione. */
-  val franchise: VersionFranchise = VersionFranchise(journal)
+  /**
+   * D32: i file che le versioni hanno messo o spostato, per la guardia dei cambiamenti di massa della scansione. R17: solo finche' il catalogo
+   * non ha seguito la rinomina e per una settimana d'ora del NAS.
+   */
+  val franchise: VersionFranchise = VersionFranchise(
+    journal = journal,
+    catalog = { catalogProvider()?.let { CatalogVersionCatalog(it, ::accountId) } },
+    nasNowMs = { clock.nasNowMs() },
+  )
 
   /** Il cancello dei file in arrivo (share di destinazione, D12, R2, congelamento, emergenza, sola lettura, pausa). */
   val incomingGate: IncomingGate = IncomingGate(gateInputs, commonShare)
@@ -252,7 +267,14 @@ class FiveBGraph(
     // cartella non e' una sorgente del backup.
     val downloads = BackupSources(setOf(BackupSource.Folder(PRIMARY_VOLUME, DOWNLOADS_FOLDER)))
     val extra: suspend (BackupKind) -> List<BackupCandidate> = { kind ->
-      backupCatalog?.candidates(CandidateQuery(downloads, kind, null, DOWNLOAD_PAGE)).orEmpty()
+      // LA-3 della verifica funzionale 5B: anche questa cartella passa dalla recinzione di D13 (debug, account di prova), come le sorgenti del
+      // piano. Una riga che la lettura recintata non apre (`NOT_SELECTED`) farebbe un lavoro `VERSION` che aspetta per sempre. Con la recinzione
+      // e senza account, niente (fallire chiusi, come `MediaStorePhoneBytes`); in release la recinzione non c'e'.
+      if (fence != null && account()?.let { fence.allowsPhoneFolder(it, DOWNLOADS_FOLDER) } != true) {
+        emptyList()
+      } else {
+        backupCatalog?.candidates(CandidateQuery(downloads, kind, null, DOWNLOAD_PAGE)).orEmpty()
+      }
     }
     return VersionedBackupEngine(engine, versions, planner, clock, extra = extra)
   }
@@ -271,6 +293,16 @@ class FiveBGraph(
    * file e righe locali.
    */
   suspend fun atStart(catalog: MediaCatalog) {
+    // R9: una riscrittura del telefono lasciata a meta' da un processo morto (correzione, "Ripristina originale") si rimette com'era dalla sua
+    // copia di sicurezza, prima di ogni altra cosa.
+    try {
+      val recovery = inputs.rewriter().recover()
+      if (recovery.restored + recovery.pending > 0) GalleryLog.w(TAG) { "riscritture interrotte: ${recovery.restored} rimesse, ${recovery.pending} in attesa" }
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      GalleryLog.w(TAG) { "recupero delle riscritture non riuscito (${e.javaClass.simpleName})" }
+    }
     runCatching { staged.dropLeftoverWork() }.onFailure { GalleryLog.w(TAG) { "file di lavoro delle versioni non ripuliti" } }
     runCatching { pendingTasks.refresh() }.onFailure { GalleryLog.w(TAG) { "attivita' in sospeso non rilette" } }
     settle()
@@ -301,17 +333,27 @@ class FiveBGraph(
   suspend fun realign(ids: Collection<MediaId>): Int {
     val engine = parts?.versions ?: return 0
     var planned = 0
+    val kinds = HashSet<BackupKind>()
     for (id in ids.distinct()) {
       try {
-        if (engine.planRealign(id) != null) planned++
+        if (engine.planRealign(id) != null) {
+          planned++
+          kinds += kindOf(id)
+        }
       } catch (e: CancellationException) {
         throw e
       } catch (e: Exception) {
         GalleryLog.w(TAG) { "scambio dopo il ripristino non pianificato (${e.javaClass.simpleName})" }
       }
     }
+    // VE-10: lo scambio parte con il lavoro del suo tipo, adesso (prima solo il diario: lo prendeva il giro periodico, fino a 12 ore).
+    kinds.forEach(onVersionWork)
     return planned
   }
+
+  /** Il giro a cui appartiene il media (VE-1): i video con i video, il resto con le foto. */
+  private suspend fun kindOf(id: MediaId): BackupKind =
+    catalogProvider()?.media(id)?.kind?.let(BackupKind::of) ?: BackupKind.PHOTOS
 
   // --- Le facciate per le schermate (Hilt): leggono i servizi al momento della chiamata ---------------------------------------------
 
@@ -339,10 +381,15 @@ class FiveBGraph(
 
     override suspend fun restoreOriginal(mediaId: MediaId, confirmation: PhoneConfirmation, writeGrant: PhoneWriteGrant?): RestoreOutcome {
       val keeper = port()
+      // VE-8: piano, conferma e permesso del telefono non toccano niente: si sanno subito, senza aspettare il turno del backup (fino a 15 minuti).
+      keeper.precheck(mediaId, confirmation, writeGrant)?.let { return it }
       @Suppress("UNCHECKED_CAST")
       return exclusive { keeper.restoreOriginal(mediaId, confirmation, writeGrant) } as RestoreOutcome?
         ?: RestoreOutcome.Unavailable(RestoreAvailability.BUSY)
     }
+
+    override suspend fun precheck(mediaId: MediaId, confirmation: PhoneConfirmation, writeGrant: PhoneWriteGrant?): RestoreOutcome? =
+      port().precheck(mediaId, confirmation, writeGrant)
   }
 
   /** Le correzioni (P8, D19): la scrittura e il lavoro `VERSION` girano uno alla volta con il backup. */
@@ -353,9 +400,18 @@ class FiveBGraph(
 
     override suspend fun apply(plan: CorrectionPlan, confirmation: PhoneConfirmation, writeGrant: PhoneWriteGrant?): CorrectionOutcome {
       val corrections = port()
+      // VE-8: il permesso del telefono si chiede subito, non dopo il turno del backup.
+      corrections.precheck(plan, confirmation, writeGrant)?.let { return it }
+      // VE-7: il turno che non si libera e' "occupato", non "non pronta".
       return exclusive { corrections.apply(plan, confirmation, writeGrant) } as CorrectionOutcome?
-        ?: CorrectionOutcome.Unavailable(CorrectionReadiness.NOT_AVAILABLE)
+        ?: CorrectionOutcome.Unavailable(CorrectionReadiness.BUSY)
     }
+
+    override suspend fun precheck(plan: CorrectionPlan, confirmation: PhoneConfirmation, writeGrant: PhoneWriteGrant?): CorrectionOutcome? =
+      port().precheck(plan, confirmation, writeGrant)
+
+    /** VE-3: lo fa il backup (verifica sul momento della copia sul NAS, o "Fai ora" per un media del telefono in una sorgente). */
+    override suspend fun safeguard(mediaId: MediaId): SafeguardStart = if (parts == null) SafeguardStart.UNAVAILABLE else safeguard.invoke(mediaId)
   }
 
   /** "Elimina solo dal telefono" (D22): dal catalogo locale; senza servizi, nessun media si puo' liberare. */
@@ -371,12 +427,31 @@ class FiveBGraph(
    */
   suspend fun planStaged(mediaId: MediaId, versionId: dev.pampa.mycloudgallery.core.model.VersionId, sha256: dev.pampa.mycloudgallery.core.model.Sha256, size: Long): Boolean {
     val engine = parts?.versions ?: return false
-    return try {
+    val planned = try {
       engine.planStaged(mediaId, versionId, sha256, size) != null
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
       GalleryLog.w(TAG) { "lavoro della versione preparata non pianificato (${e.javaClass.simpleName})" }
+      false
+    }
+    // MC-3: la versione va sul NAS adesso, con il lavoro del suo tipo, non al giro periodico (con Notte, di notte).
+    if (planned) onVersionWork(kindOf(mediaId))
+    return planned
+  }
+
+  /**
+   * MC-4: "Modifica con…" di un solo-NAS si apre solo se la modifica potra' diventare una versione sul NAS (un solito percorso proprio nell'area
+   * privata, sotto la radice di D13). Senza i servizi, no.
+   */
+  suspend fun editVersionReady(mediaId: MediaId): Boolean {
+    val engine = parts?.versions ?: return false
+    return try {
+      engine.canPlanStaged(mediaId)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      GalleryLog.w(TAG) { "prontezza della modifica non letta (${e.javaClass.simpleName})" }
       false
     }
   }
@@ -391,6 +466,31 @@ class FiveBGraph(
         "SELECT COUNT(*) FROM backup_item WHERE kind = 'version' AND is_open = 1 AND hold = 'source_changed'",
       ).use { c -> if (c.moveToFirst()) c.getInt(0) else 0 }
     }.getOrDefault(0)
+  }
+
+  /**
+   * VE-9: quanti media sono "in coda" solo perche' la loro versione attuale aspetta il PC (`SOURCE_CHANGED`): la pagina non li conta fra quelli in
+   * coda, cosi' dice "Versioni in attesa del computer" invece di "1 in coda · prossimo giro" per sempre.
+   */
+  suspend fun sourceChangedCurrentMedia(): Int = withContext(Dispatchers.IO) {
+    runCatching {
+      database.openHelper.readableDatabase.query(
+        "SELECT COUNT(DISTINCT i.media_id) FROM backup_item i JOIN media m ON m.media_id = i.media_id " +
+          "WHERE i.kind = 'version' AND i.is_open = 1 AND i.hold = 'source_changed' AND i.version_id = m.current_version_id",
+      ).use { c -> if (c.moveToFirst()) c.getInt(0) else 0 }
+    }.getOrDefault(0)
+  }
+
+  /** VE-10: i tipi (foto, video) che hanno versioni ferme per il PC: dopo una scansione del NAS ripartono con il lavoro del loro tipo. */
+  suspend fun sourceChangedKinds(): Set<BackupKind> = withContext(Dispatchers.IO) {
+    runCatching {
+      database.openHelper.readableDatabase.query(
+        "SELECT DISTINCT m.kind = 'video' FROM backup_item i JOIN media m ON m.media_id = i.media_id " +
+          "WHERE i.kind = 'version' AND i.is_open = 1 AND i.hold = 'source_changed'",
+      ).use { c ->
+        buildSet { while (c.moveToNext()) add(if (c.getInt(0) == 1) BackupKind.VIDEOS else BackupKind.PHOTOS) }
+      }
+    }.getOrDefault(emptySet())
   }
 
   private companion object {

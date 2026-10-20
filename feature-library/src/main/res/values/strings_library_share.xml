@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- "Condividi" dalla selezione con "Rimuovi la posizione" acceso (correzioni 5B, R4, MC-2). Nessun dato dell'utente: mai il nome di un file. -->
+  <string name="library_share_preparing">Tolgo la posizione e controllo i file</string>
+  <string name="library_share_progress">%1$d di %2$d</string>
+  <string name="library_share_cancel">Annulla</string>
+  <string name="library_share_stopped_title">Condivisione ferma</string>
+  <string name="library_share_with_location">Condividi con la posizione</string>
+  <string name="library_share_understood">Ho capito</string>
+</resources>

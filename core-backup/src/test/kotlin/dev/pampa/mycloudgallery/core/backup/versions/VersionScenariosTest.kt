@@ -426,32 +426,7 @@ class VersionScenariosTest {
     assertThat(w.violations(before, final = true)).isEmpty()
   }
 
-  /** D32: la franchigia del congelamento sono i `fileId` che le versioni hanno spostato o messo, dal diario locale; nient'altro. */
-  @Test
-  fun franchigia_iFileSpostatiOPubblicatiDalleVersioniENientAltro() = runTest {
-    val w = world()
-    val seed = w.seedSafe()
-    val originalFileId = w.files().getValue(seed.usualPath.value).second!!
-    val untouched = w.seedSafe(name = "Altro.jpg")
-    val untouchedId = w.files().getValue(untouched.usualPath.value).second!!
-    w.editOnPhone(seed)
-    w.engine.planPhoneVersions(listOf(w.candidate(seed.mediaId, seed.phoneId!!)))
-    w.runUntilQuiet()
-    val published = w.files().getValue(seed.usualPath.value).second!!
-    val franchise = VersionFranchise(w.journal)
-    assertThat(franchise.fileIds(share)).containsExactly(originalFileId, published)
-    assertThat(franchise.fileIds(share)).doesNotContain(untouchedId)
-    assertThat(franchise.fileIds(VersionWorld.COMMON_SHARE)).isEmpty()
-    // Dopo uno scambio (E-E2) anche l'originale riportato al suo posto (stessa identita' di prima).
-    w.revertOnPhone(seed)
-    w.engine.planRealign(seed.mediaId)
-    w.runUntilQuiet()
-    assertThat(franchise.fileIds(share)).containsExactly(originalFileId, published)
-    // Un file cambiato dal PC (un'altra identita') non e' mai nella franchigia.
-    w.nas.delete(share, untouched.usualPath.value)
-    w.nas.putFile(share, untouched.usualPath.value, NasContent.of(w.bytes(100)))
-    assertThat(franchise.fileIds(share)).doesNotContain(w.files().getValue(untouched.usualPath.value).second)
-  }
+  // D32: la franchigia del congelamento (e R17: solo la rinomina attesa, per una settimana) e' in `Revisione5BVersioniTest`.
 
   private fun keeper(w: VersionWorld) = DefaultVersionKeeper(
     share = w.share,

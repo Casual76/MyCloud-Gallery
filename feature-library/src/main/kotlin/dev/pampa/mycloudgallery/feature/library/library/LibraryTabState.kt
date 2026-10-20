@@ -81,6 +81,18 @@ interface LibraryCommands {
   /** Il massimo di elementi che [share] accetta in una volta. Oltre, la Libreria avvisa e non chiama [share] (I8). */
   val shareLimit: Int get() = Int.MAX_VALUE
 
+  /**
+   * Correzioni 5B (R4, MC-2): con "Rimuovi la posizione" acceso [share] prepara una copia senza posizione di ogni media, e puo' durare: qui
+   * l'avanzamento e il rifiuto con il motivo. Senza un legame (anteprime, test) resta [LibraryShare.Idle].
+   */
+  val shareProgress: StateFlow<LibraryShare> get() = NoLibraryShare
+
+  /** "Annulla" mentre si prepara, o la chiusura del foglio di una condivisione ferma: niente parte. */
+  fun cancelShare() {}
+
+  /** "Condividi con la posizione" nel foglio di una condivisione ferma: la scelta esplicita dell'utente, mai un ripiego. */
+  fun shareWithLocation() {}
+
   /** Se eliminare dal telefono si puo' (D14: su Android 10 il cestino di sistema non c'e', e l'azione nemmeno). */
   val canDeleteFromPhone: Boolean get() = false
 

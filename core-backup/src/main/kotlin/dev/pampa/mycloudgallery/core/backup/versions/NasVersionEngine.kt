@@ -4,6 +4,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupCandidate
 import dev.pampa.mycloudgallery.core.backup.contract.BackupClock
 import dev.pampa.mycloudgallery.core.backup.contract.BackupGate
 import dev.pampa.mycloudgallery.core.backup.contract.BackupGateState
+import dev.pampa.mycloudgallery.core.backup.contract.BackupKind
 import dev.pampa.mycloudgallery.core.backup.contract.BackupProblemCode
 import dev.pampa.mycloudgallery.core.backup.contract.HashRecord
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneBytes
@@ -139,6 +140,18 @@ class NasVersionEngine(
     return journal.create(new)
   }
 
+  /**
+   * MC-4 della verifica funzionale 5B: una versione preparata di [mediaId] (il risultato di un editor esterno) avrebbe il suo lavoro `VERSION`?
+   * Serve un solito percorso proprio nell'**area privata** (dalla 5B non si scrive mai nell'area comune) e, con D13, sotto la radice di prova.
+   * Si chiede **prima** di aprire "Modifica con…": una modifica accettata e mai caricata vivrebbe solo nell'app. Solo dati locali.
+   */
+  suspend fun canPlanStaged(mediaId: MediaId): Boolean {
+    val media = catalog.media(mediaId) ?: return false
+    if (!media.mine) return false
+    val head = VersionPlanning.head(media, share, media.currentVersionId, exclude = null) ?: return false
+    return fenced(head.copy.path)
+  }
+
   /** "Ripristina originale" (D18): il lavoro `SWAP` del media, o null se non si puo' (originale o attuale non verificati, nessuna versione). */
   suspend fun planSwap(mediaId: MediaId): VersionJob? {
     val media = catalog.media(mediaId) ?: return null
@@ -152,9 +165,15 @@ class NasVersionEngine(
    * E-E2: il telefono e' tornato a una versione nota (Samsung "Ripristina originale"; la lettura del telefono l'ha riconosciuto,
    * `RevertedToVersion`) e il catalogo dice gia' che quella e' l'attuale: sul NAS le due versioni si **scambiano** (`SWAP`), senza caricare
    * niente e senza conferma (non cancella e non sostituisce niente: due rinomine dei file del media stesso). Null se non serve o non si puo'.
+   *
+   * R16 della revisione 5B: E-E2 e' un fatto **del telefono**. Lo scambio senza conferma nasce solo se la versione attuale e' arrivata dal
+   * telefono (una riga del telefono su quella versione, anche se nel frattempo e' stata tolta o liberata); un ritorno a una versione nota visto
+   * solo dalla scansione del NAS (un familiare che copia dal PC un file dell'area comune sopra un altro) lascia le righe del telefono dove sono e
+   * non sposta niente nell'area privata.
    */
   suspend fun planRealign(mediaId: MediaId): VersionJob? {
     val media = catalog.media(mediaId) ?: return null
+    if (media.current.phone.isEmpty()) return null
     if (journal.forMedia(mediaId).any { !it.state.terminal }) return null
     val new = VersionPlanning.realign(media, share) ?: return null
     if (!fenced(new.usualPath)) return null
@@ -188,8 +207,19 @@ class NasVersionEngine(
 
   // --- I giri ----------------------------------------------------------------------------------------------------------------
 
-  /** Un giro: i lavori aperti del diario di questa share, dal piu' vecchio, entro [budget]. */
-  suspend fun run(budget: Duration, control: UploadControl = UploadControl.FREE): VersionRunResult {
+  /**
+   * Un giro: i lavori aperti del diario di questa share, dal piu' vecchio, entro [budget].
+   *
+   * VE-1 della verifica funzionale 5B: con [kinds] solo i lavori dei media di quei tipi (`BackupKind.of`): il giro delle foto non porta su un
+   * video modificato da 3 GB con le regole delle foto (e il giro dei video lo riprende con le sue). Con [only] solo quei lavori ("Proteggi
+   * subito" guida solo le versioni pianificate dal suo giro, come BK-1). Gli altri lavori restano nel diario per il loro giro.
+   */
+  suspend fun run(
+    budget: Duration,
+    control: UploadControl = UploadControl.FREE,
+    kinds: Set<BackupKind>? = null,
+    only: Set<VersionJobId>? = null,
+  ): VersionRunResult {
     stopRequested = false
     val round = Round(clock.monotonicMs() + budget.inWholeMilliseconds, control)
     val gateState = gate.stateOf(share)
@@ -197,6 +227,8 @@ class NasVersionEngine(
     recoverStaged()
     val jobs = journal.open(config.openLimit)
     for (job in jobs) {
+      if (only != null && job.id !in only) continue
+      if (kinds != null && kindOf(job) !in kinds) continue
       if (!job.share.equals(share, ignoreCase = true) || !fenced(job.usualPath)) {
         // R7: un lavoro di un'altra share aspetta; niente si scrive nella share di prima. D13: nemmeno fuori dalla radice di prova.
         round.waiting++
@@ -210,6 +242,9 @@ class NasVersionEngine(
     }
     return round.finish(null)
   }
+
+  /** Il giro a cui appartiene un lavoro: quello del tipo del suo media (un media che non c'e' piu' va con le foto, che lo chiudono). */
+  private suspend fun kindOf(job: VersionJob): BackupKind = catalog.media(job.mediaId)?.kind?.let(BackupKind::of) ?: BackupKind.PHOTOS
 
   /** Porta avanti un solo lavoro (un "Ripristina originale" o una correzione appena confermati). Il lavoro com'e' dopo, o null se non c'e'. */
   suspend fun runJob(id: VersionJobId, budget: Duration, control: UploadControl = UploadControl.FREE): VersionJob? {

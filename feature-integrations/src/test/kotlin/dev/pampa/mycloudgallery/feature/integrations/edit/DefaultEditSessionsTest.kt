@@ -134,8 +134,8 @@ class DefaultEditSessionsTest {
   fun quandoUnaSessioneNonSiPuoAprireDiceIlMotivo_E_X1() {
     photoOnPhone()
 
-    clock.nasNow = null // nessuna sessione NAS ha ancorato l'ora
-    assertThat(runBlocking { sessions.begin(mediaId, EditTarget.PHONE_GALLERY) }).isEqualTo(EditBegin.Unavailable(EditUnavailable.NAS_UNREACHABLE))
+    clock.nasNow = null // nessuna sessione NAS ha ancorato l'ora: una copia dal NAS non si apre (MC-6: una foto del telefono si', sotto)
+    assertThat(runBlocking { sessions.begin(mediaId, EditTarget.NAS_CACHE) }).isEqualTo(EditBegin.Unavailable(EditUnavailable.NAS_UNREACHABLE))
     clock.nasNow = FakeBackupClock.DEFAULT_NAS_NOW
 
     // Un media che non e' di questo account, o che il catalogo non conosce.
@@ -152,6 +152,36 @@ class DefaultEditSessionsTest {
     assertThat(runBlocking { sessions.begin(mediaId, EditTarget.PHONE_GALLERY) }).isEqualTo(EditBegin.Unavailable(EditUnavailable.GONE_FROM_PHONE))
     assertThat(FlowCounters.edit.get(EditCounter.BEGIN_UNAVAILABLE)).isEqualTo(5L)
     assertThat(store.sessions).isEmpty()
+  }
+
+  /**
+   * MC-6 della verifica funzionale 5B: fuori casa a processo freddo l'ora del NAS non c'e'. Prima "Modifica con…" di una foto del **telefono**
+   * rispondeva "Il NAS non risponde"; adesso la sessione nasce e dura 30 minuti di orologio monotono di questo processo. Un riavvio la chiude
+   * (il monotono riparte da zero): non si attribuisce a una sessione un cambiamento che non si puo' datare.
+   */
+  @Test
+  fun mc6_unaFotoDelTelefonoSiModificaAncheSenzaLOraDelNas() {
+    photoOnPhone()
+    clock.nasNow = null
+    val session = begin()
+    assertThat(session.state).isEqualTo(EditSessionState.OPEN)
+    // Dentro la mezz'ora monotona la sessione resta aperta (niente cambiato: resta in attesa).
+    assertThat(settle(session)).isEqualTo(EditOutcome.Unchanged)
+    assertThat(stateOf(session)).isEqualTo(EditSessionState.OPEN)
+    // L'ora del NAS arriva dopo (a casa): non fa scadere la sessione monotona.
+    clock.nasNow = FakeBackupClock.DEFAULT_NAS_NOW
+    assertThat(settle(session)).isEqualTo(EditOutcome.Unchanged)
+    // Oltre la mezz'ora di monotono: scaduta.
+    clock.monotonic += EditSessionRules.WINDOW_MS + 1
+    assertThat(settle(session)).isEqualTo(EditOutcome.Expired)
+    assertThat(stateOf(session)).isEqualTo(EditSessionState.EXPIRED)
+
+    // Un'altra sessione monotona e un riavvio: il processo nuovo non la conosce e la chiude.
+    clock.nasNow = null
+    val again = begin()
+    sessions = service()
+    runBlocking { sessions.expireStale() }
+    assertThat(stateOf(again)).isEqualTo(EditSessionState.EXPIRED)
   }
 
   @Test

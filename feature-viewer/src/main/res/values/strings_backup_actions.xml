@@ -8,6 +8,7 @@
   <string name="viewer_backup_action_correct">Correggi data e luogo</string>
   <string name="viewer_backup_action_rotate">Ruota</string>
   <string name="viewer_backup_action_edit_with">Modifica con…</string>
+  <string name="viewer_backup_action_edit_download">Scarica e modifica in Galleria</string>
   <string name="viewer_backup_action_share_no_location">Condividi senza posizione</string>
 
   <!-- Condividi (D26, E-X5, E-V7, L41). -->

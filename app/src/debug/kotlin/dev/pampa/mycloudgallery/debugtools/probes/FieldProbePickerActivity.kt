@@ -20,6 +20,8 @@ class FieldProbePickerActivity : Activity() {
     super.onCreate(savedInstanceState)
     val store = FieldProbeStore.of(this)
     store.add(FieldProbeKey.T14_PICKER_LAUNCHED)
+    // LA-8: ogni apertura ha la sua riga (`t14.picker_caller.2`...): con una riga sola ogni app nuova cancellava chi aveva chiesto prima.
+    val n = (store.get(FieldProbeKey.T14_PICKER_LAUNCHED) ?: 1L).toInt()
     store.set(
       FieldProbeKey.T14_PICKER_ACTION,
       when (intent?.action) {
@@ -27,10 +29,11 @@ class FieldProbePickerActivity : Activity() {
         Intent.ACTION_PICK -> 2L
         else -> 0L
       },
+      n,
     )
-    store.set(FieldProbeKey.T14_PICKER_MULTIPLE, if (intent?.getBooleanExtra(Intent.EXTRA_ALLOW_MULTIPLE, false) == true) 1L else 0L)
-    store.set(FieldProbeKey.T14_PICKER_MIME, FieldProbeMath.mimeCode(intent?.type))
-    store.set(FieldProbeKey.T14_PICKER_CALLER, FieldProbeCaller.codeOf(callingPackage ?: referrer?.takeIf { it.scheme == "android-app" }?.host))
+    store.set(FieldProbeKey.T14_PICKER_MULTIPLE, if (intent?.getBooleanExtra(Intent.EXTRA_ALLOW_MULTIPLE, false) == true) 1L else 0L, n)
+    store.set(FieldProbeKey.T14_PICKER_MIME, FieldProbeMath.mimeCode(intent?.type), n)
+    store.set(FieldProbeKey.T14_PICKER_CALLER, FieldProbeCaller.codeOf(callingPackage ?: referrer?.takeIf { it.scheme == "android-app" }?.host), n)
 
     val phone = FieldProbePhone(this)
     val wanted = if (intent?.getBooleanExtra(Intent.EXTRA_ALLOW_MULTIPLE, false) == true) (store.get(FieldProbeKey.T14_COUNT) ?: 1L).toInt() else 1

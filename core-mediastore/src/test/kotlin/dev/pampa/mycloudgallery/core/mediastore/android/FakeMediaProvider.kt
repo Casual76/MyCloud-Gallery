@@ -50,6 +50,9 @@ class FakeMediaProvider : ContentProvider() {
   val openedUris: MutableList<Uri> = ArrayList()
   val trashRequests: MutableList<Pair<List<Uri>, Int?>> = ArrayList()
 
+  /** VE-2: se vero, il sistema non crea le richieste di eliminazione e di scrittura (un errore che l'adattatore non deve far uscire). */
+  var failRequests: Boolean = false
+
   /** Fase 5B (P0-B): le richieste di eliminazione e di scrittura di sistema (`createDeleteRequest`, `createWriteRequest`). */
   val deleteRequests: MutableList<List<Uri>> = ArrayList()
   val writeRequests: MutableList<List<Uri>> = ArrayList()
@@ -202,6 +205,11 @@ class FakeMediaProvider : ContentProvider() {
       @Suppress("DEPRECATION")
       val clip = extras?.getParcelable<ClipData>(EXTRA_CLIP_DATA)
       val uris = (0 until (clip?.itemCount ?: 0)).map { clip!!.getItemAt(it).uri }
+      // VE-2: come il MediaProvider vero, solo URI di immagini, video o audio per id; un `files/<id>` si rifiuta con un'eccezione.
+      if (failRequests) throw IllegalStateException("Richiesta di sistema non creata.")
+      require(uris.all { it.pathSegments.getOrNull(1) in TYPED_COLLECTIONS && it.lastPathSegment?.toLongOrNull() != null }) {
+        "All requested items must be referenced by specific ID"
+      }
       if (method == CREATE_DELETE_REQUEST_CALL) deleteRequests += uris else writeRequests += uris
       val pending = PendingIntent.getActivity(context, 0, Intent("dev.pampa.$method"), PendingIntent.FLAG_IMMUTABLE)
       Bundle().apply { putParcelable(EXTRA_RESULT, pending) }
@@ -252,5 +260,6 @@ class FakeMediaProvider : ContentProvider() {
     const val EXTRA_CLIP_DATA = "clip_data"
     const val EXTRA_CONTENT_VALUES = "content_values"
     const val EXTRA_RESULT = "result"
+    val TYPED_COLLECTIONS = setOf("images", "video", "audio")
   }
 }

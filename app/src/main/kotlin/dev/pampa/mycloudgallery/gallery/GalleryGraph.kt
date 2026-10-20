@@ -350,6 +350,13 @@ class GalleryGraph(
   @Volatile
   var fiveB: FiveBHooks? = null
 
+  /**
+   * Correzioni 5B (R4, MC-2): ogni "Condividi" dell'app (`AppShares` delle integrazioni, con "Rimuovi la posizione"), legato dall'applicazione
+   * all'avvio come [fiveB] ma **anche senza backup**: il viewer senza backup e la selezione della Libreria non mandano piu' gli originali.
+   */
+  @Volatile
+  var shares: dev.pampa.mycloudgallery.integrations.AppShares? = null
+
   /** Le porte delle schermate del backup (pagina, impostazioni, viewer, Impostazioni): adattatori sul grafo del backup. */
   val backupUi: BackupUi? = backup?.let { b -> BackupUi(b, database, galleryScope, context, parts.nas?.account ?: { null }) }
 
@@ -566,7 +573,8 @@ class GalleryGraph(
       similarCopies = similarCopies,
       outsideCopy = similarCopies?.let { OutsideCopyLookup { id -> outsideCopyOf(id) } },
       // Fase 5B (P14): Versioni, Ripristina originale, Correggi, Ruota, "Modifica con…", "Condividi" con o senza posizione, "Ovunque".
-      backupActions = fiveB?.mediaActions,
+      // Correzioni 5B (R4): senza backup restano le voci di "Condividi" (con "Rimuovi la posizione"), non il percorso di prima con l'originale.
+      backupActions = fiveB?.mediaActions ?: shares?.viewerActions(),
     )
   }
 

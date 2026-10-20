@@ -155,7 +155,7 @@ class VersionedBackupEngine(
     if (trigger == BackupTrigger.INCOMING) return upload.run(kind, budget, trigger, control)
     val started = clock.monotonicMs()
     // Solo dati locali (E-S11): i candidati del piano della 5A di questo giro.
-    try {
+    val planned = try {
       versions.planPhoneVersions(planner.next(kind, planPage, trigger) + extra(kind).filter { !it.original })
     } catch (e: kotlinx.coroutines.CancellationException) {
       throw e
@@ -163,8 +163,12 @@ class VersionedBackupEngine(
       // Il piano delle versioni non ferma il caricamento: la versione aspetta il giro dopo (la 5A non la carica: non ha un lavoro aperto,
       // ma il suo candidato resta tale e il piano delle versioni riprova). Solo il tipo dell'errore nel log.
       GalleryLog.w(TAG) { "piano delle versioni non riuscito (${e::class.java.simpleName})" }
+      emptyList()
     }
-    val first = versions.run(budget, control)
+    // VE-1: le versioni del tipo del giro, con le sue regole; "Proteggi subito" solo quelle che ha pianificato lui (la foto nuova non aspetta
+    // l'arretrato, BK-1).
+    val only = if (trigger == BackupTrigger.QUICK_NEW_PHOTOS) planned.mapTo(HashSet()) { it.id } else null
+    val first = versions.run(budget, control, kinds = setOf(kind), only = only)
     if (first.stoppedBy !in GO_ON) return merge(first, null)
     val left = budget - (clock.monotonicMs() - started).milliseconds
     if (!left.isPositive()) return merge(first, null).copy(stoppedBy = RunStop.BUDGET)

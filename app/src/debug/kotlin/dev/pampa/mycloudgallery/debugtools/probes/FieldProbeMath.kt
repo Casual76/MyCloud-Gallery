@@ -66,6 +66,8 @@ internal object FieldProbeMath {
     RewriteResult.NotGranted -> 1L
     RewriteResult.Gone -> 2L
     RewriteResult.SourceMismatch -> 3L
+    // R3 della revisione 5B: il riscrittore controlla i byte che la riga ha adesso. La prova riscrive una foto con i suoi stessi byte, quindi non dovrebbe mai succedere: se succede la foto e' cambiata fra il dialogo e la scrittura.
+    RewriteResult.RowChanged -> 7L
     is RewriteResult.Failed -> if (result.restored) 4L else 5L
   }
 

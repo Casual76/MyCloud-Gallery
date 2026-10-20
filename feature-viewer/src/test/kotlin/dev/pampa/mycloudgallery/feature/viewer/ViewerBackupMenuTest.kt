@@ -168,6 +168,28 @@ class ViewerBackupMenuTest : ViewerTestBase() {
   }
 
   @Test
+  fun lAvvisoProntaSiSpegneDaSoloMaLaCopiaNonSiRilascia_MC1() {
+    // Correzioni 5B (MC-1): prima spegnere l'avviso dopo 3,2 secondi toglieva la copia e revocava il permesso, e WhatsApp non la riceveva.
+    val backup = FakeBackupMediaActions()
+    showWith(backup)
+    backup.shareState.value = BackupShareUi.Ready(verified = 1, direct = 0)
+    composeRule.waitUntil(TIMEOUT) { hasText("Il file che condividi non contiene nessuna posizione.") }
+    composeRule.mainClock.advanceTimeBy(4_000)
+    composeRule.waitForIdle()
+    assertThat(backup.hideShareNoticeCalls).isEqualTo(1)
+    assertThat(backup.dismissShareCalls).isEqualTo(0)
+  }
+
+  @Test
+  fun conRimuoviLaPosizioneAccesaCopiaNonCe_MC2() {
+    val backup = FakeBackupMediaActions()
+    backup.removeLocation.value = true
+    showWith(backup)
+    openMenu()
+    assertThat(hasText("Copia")).isFalse()
+  }
+
+  @Test
   fun unaFraseDopoUnAzioneSiVedeESiSpegneDaSola() {
     val backup = FakeBackupMediaActions()
     showWith(backup)

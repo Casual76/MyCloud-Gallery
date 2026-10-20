@@ -6,6 +6,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.os.Build
 import android.os.PersistableBundle
+import dev.pampa.mycloudgallery.core.backup.contract.BackupKind
 import dev.pampa.mycloudgallery.core.backup.contract.BackupTrigger
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 
@@ -31,6 +32,13 @@ interface BackupJobs {
    * altrimenti il lavoro a tappe di WorkManager. Di norma niente (test, varianti senza NAS): gli arrivi aspettano il giro dopo.
    */
   fun incoming(userInitiated: Boolean) = Unit
+
+  /**
+   * VE-10, MC-3 della verifica funzionale 5B: un lavoro delle versioni e' nato adesso da un fatto locale (uno scambio dopo un ripristino fatto
+   * sul telefono, la modifica di un solo-NAS, le versioni ferme per il PC dopo una scansione): il lavoro a tappe di [kind] (unico, `KEEP`), con
+   * le sue regole. Di norma niente (test, varianti senza NAS).
+   */
+  fun versionWork(kind: BackupKind) = Unit
 
   /** L'azzeramento: niente piu' lavori del backup in coda. */
   fun cancelAll()
@@ -79,6 +87,10 @@ class JobSchedulerBackupJobs(context: Context) : BackupJobs {
 
   override fun incoming(userInitiated: Boolean) {
     if (!userInitiated || !scheduleIncoming()) BackupWorkScheduling.incoming(app)
+  }
+
+  override fun versionWork(kind: BackupKind) {
+    BackupWorkScheduling.versionWork(app, kind)
   }
 
   /** Il lavoro dell'utente per una condivisione grande: falso se Android non lo accetta (allora vale WorkManager). */

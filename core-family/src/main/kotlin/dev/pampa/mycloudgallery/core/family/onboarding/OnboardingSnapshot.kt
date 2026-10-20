@@ -86,6 +86,9 @@ data class JoinRecord(
  * @property resuming si sta riprendendo un passo saltato: finito quello si passa al prossimo da completare, non al seguente.
  * @property deferrable E-O1: l'ultimo tentativo al passo 2 non ha trovato il NAS, e "Continua piu' tardi" e' ammesso.
  * @property homeConfirmed il Wi-Fi che l'utente ha confermato come "casa" (passo 2, o ingresso manuale).
+ * @property previousOwner l'impronta ([OwnerStamp]) dell'account e del NAS che "Configura di nuovo" ha lasciato (R6): serve
+ *   solo a dire, alla fine del nuovo onboarding, se chi rientra e' un'altra persona. Sopravvive a `startOver` e al cambio di
+ *   percorso, si toglie alla fine. Mai in chiaro: e' un riassunto.
  */
 data class OnboardingSnapshot(
   val progress: OnboardingProgress,
@@ -102,6 +105,7 @@ data class OnboardingSnapshot(
   val choices: OnboardingChoices = OnboardingChoices(),
   val foundation: FoundationRecord? = null,
   val join: JoinRecord? = null,
+  val previousOwner: String? = null,
 ) {
   val path: OnboardingPath? get() = progress.path
 

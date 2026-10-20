@@ -550,4 +550,136 @@ class SimilarCopiesProjectionTest {
     assertThat(choices.chosenCover(emptyList())).isNull()
     assertThat(choices.separatedPairs(listOf(x))).isEmpty()
   }
+
+  // --- "Mostra questa come principale" fra dispositivi con id diversi (LA-2 della verifica funzionale della 5B) --------------------------
+
+  @Test
+  fun conIdDiversiLaCopertinaSceltaSulTelefonoArrivaSulTabletEIlRilevatoreLaLegge() = runBlocking<Unit> {
+    val a = newPhone()
+    val b = newPhone()
+    val (xA, xB) = apart(a, b, 301)
+    val (yA, yB) = apart(a, b, 302)
+    val (zA, zB) = apart(a, b, 303)
+    a.group(listOf(xA, yA, zA), cover = xA)
+    b.group(listOf(xB, yB, zB), cover = xB)
+    val phone = world.device(projection = a.projection)
+    val tablet = world.device(projection = b.projection)
+
+    SimilarCopiesChoices(phone.store) { a.catalog.resolve(it) }.saveCover(yA, listOf(xA, zA))
+    a.catalog.setSimilarCover(a.catalog.similarGroupOf(xA)!!.group, yA)
+    phone.syncOnce()
+    val report = tablet.syncOnce()
+
+    // La voce nomina la copia con l'id del telefono, che il tablet non conosce: la ritrova per impronta.
+    assertThat(report.unresolved).isEqualTo(0)
+    assertThat(b.catalog.similarGroupOf(xB)!!.cover).isEqualTo(yB)
+    // E il rilevatore del tablet, che rifa' i gruppi, la legge con le identita' del tablet: prima restava null e la copertina tornava
+    // quella della regola al giro dopo.
+    assertThat(SimilarCopiesChoices(tablet.store) { b.catalog.resolve(it) }.chosenCover(listOf(xB, yB, zB))).isEqualTo(yB)
+    assertThat(SimilarCopiesChoices(phone.store) { a.catalog.resolve(it) }.chosenCover(listOf(xA, yA, zA))).isEqualTo(yA)
+  }
+
+  @Test
+  fun conIdDiversiLaSceltaPiuRecenteVinceSuiDueDispositivi() = runBlocking<Unit> {
+    val a = newPhone()
+    val b = newPhone()
+    val (xA, xB) = apart(a, b, 311)
+    val (yA, yB) = apart(a, b, 312)
+    val (zA, zB) = apart(a, b, 313)
+    a.group(listOf(xA, yA, zA), cover = xA)
+    b.group(listOf(xB, yB, zB), cover = xB)
+    val phone = world.device(projection = a.projection)
+    val tablet = world.device(projection = b.projection)
+
+    // Il telefono sceglie y; il tablet, piu' tardi, sceglie z. Nessuno dei due ha ancora visto l'altro, e gli id sono diversi.
+    SimilarCopiesChoices(phone.store) { a.catalog.resolve(it) }.saveCover(yA, listOf(xA, zA))
+    a.catalog.setSimilarCover(a.catalog.similarGroupOf(xA)!!.group, yA)
+    world.clock.advance(10_000)
+    SimilarCopiesChoices(tablet.store) { b.catalog.resolve(it) }.saveCover(zB, listOf(xB, yB))
+    b.catalog.setSimilarCover(b.catalog.similarGroupOf(xB)!!.group, zB)
+
+    phone.syncOnce()
+    tablet.syncOnce()
+    phone.syncOnce()
+
+    // Vince la piu' recente, su entrambi, anche per chi legge la scelta dallo stato (il rilevatore): il telefono prima ignorava la voce
+    // del tablet (id sconosciuto) e vedeva solo la propria.
+    assertThat(a.catalog.similarGroupOf(xA)!!.cover).isEqualTo(zA)
+    assertThat(b.catalog.similarGroupOf(xB)!!.cover).isEqualTo(zB)
+    assertThat(SimilarCopiesChoices(phone.store) { a.catalog.resolve(it) }.chosenCover(listOf(xA, yA, zA))).isEqualTo(zA)
+    assertThat(SimilarCopiesChoices(tablet.store) { b.catalog.resolve(it) }.chosenCover(listOf(xB, yB, zB))).isEqualTo(zB)
+  }
+
+  @Test
+  fun conIdDiversiUnaNuovaSceltaSpegneQuellaDellAltroDispositivo() = runBlocking<Unit> {
+    val a = newPhone()
+    val b = newPhone()
+    val (xA, xB) = apart(a, b, 321)
+    val (yA, yB) = apart(a, b, 322)
+    a.group(listOf(xA, yA), cover = xA)
+    b.group(listOf(xB, yB), cover = xB)
+    val phone = world.device(projection = a.projection)
+    val tablet = world.device(projection = b.projection)
+    SimilarCopiesChoices(phone.store) { a.catalog.resolve(it) }.saveCover(yA, listOf(xA))
+    phone.syncOnce()
+    tablet.syncOnce()
+    val onTablet = SimilarCopiesChoices(tablet.store) { b.catalog.resolve(it) }
+    assertThat(onTablet.chosenCover(listOf(xB, yB))).isEqualTo(yB)
+
+    // Il tablet cambia idea: sceglie x. La voce che il telefono aveva acceso su y (con l'id del telefono) deve spegnersi, altrimenti
+    // resta una seconda scelta accesa che la prossima lettura potrebbe preferire.
+    world.clock.advance(10_000)
+    onTablet.saveCover(xB, listOf(yB))
+
+    assertThat(onTablet.chosenCover(listOf(xB, yB))).isEqualTo(xB)
+    val on = tablet.store.effective().filter { (key, entry) ->
+      key.field == PersonalFields.SIMILAR_COVER && (entry.value as? PersonalValue.Flag)?.on == true
+    }
+    assertThat(on).hasSize(1)
+  }
+
+  @Test
+  fun lOrdineDiArrivoNonCambiaLaCopertinaNemmenoConUnaVoceDiAltroDispositivo() = runBlocking<Unit> {
+    val a = newPhone()
+    val x = a.nasCopy(331)
+    val y = a.nasCopy(332)
+    val z = a.nasCopy(333)
+    val group = a.group(listOf(x, y, z), cover = x)
+    // La voce piu' recente e' di un altro dispositivo e nomina z con un id che qui non c'e': si ritrova per impronta.
+    val foreignZ = PersonalEntry(
+      SimilarCopiesRecords.cover(MediaId.random().value), 2_000, author, PersonalValue.Flag(true), a.projection.fingerprintOfMedia(z.value),
+    )
+    val ownY = PersonalEntry(SimilarCopiesRecords.cover(y.value), 1_000, author, PersonalValue.Flag(true))
+    val state = mapOf(ownY.key to ownY, foreignZ.key to foreignZ)
+
+    // Arriva prima la piu' vecchia, con quella dell'altro dispositivo gia' nello stato: prima non la vedeva e la copertina diventava y.
+    assertThat(a.projection.apply(ownY, state)).isEqualTo(ProjectionResult.APPLIED)
+    assertThat(a.catalog.similarGroup(group)!!.cover).isEqualTo(z)
+    assertThat(a.projection.apply(foreignZ, state)).isEqualTo(ProjectionResult.APPLIED)
+    assertThat(a.catalog.similarGroup(group)!!.cover).isEqualTo(z)
+  }
+
+  @Test
+  fun conIdDiversiUnaCopertinaConUnaImprontaAmbiguaNonSceglieNienteECopertinaNonCambia() = runBlocking<Unit> {
+    val a = newPhone()
+    val b = newPhone()
+    val xA = a.nasCopy(341)
+    val zA = a.nasCopy(342)
+    // Sul tablet ci sono due media con l'impronta rapida di x (L32: diversi solo nel mezzo): quale dei due ha scelto l'utente? Nessuno.
+    val x1 = b.nasCopy("Foto/t1.jpg", twinOf(341, 1))
+    val x2 = b.nasCopy("Foto/t2.jpg", twinOf(341, 2))
+    val zB = b.nasCopy(342)
+    a.group(listOf(xA, zA), cover = zA)
+    b.group(listOf(x1, x2, zB), cover = zB)
+    val phone = world.device(projection = a.projection)
+    val tablet = world.device(projection = b.projection)
+    SimilarCopiesChoices(phone.store) { a.catalog.resolve(it) }.saveCover(xA, listOf(zA))
+    phone.syncOnce()
+    tablet.syncOnce()
+
+    // Un'impronta che indica due media non indica nessuno: la scelta resta in attesa, mai applicata a uno dei due a caso.
+    assertThat(b.catalog.similarGroupOf(zB)!!.cover).isEqualTo(zB)
+    assertThat(tablet.store.reproject()).isEqualTo(1)
+    assertThat(SimilarCopiesChoices(tablet.store) { b.catalog.resolve(it) }.chosenCover(listOf(x1, x2, zB))).isNull()
+  }
 }

@@ -166,6 +166,9 @@ class FieldProbeFlowTest {
     probe.prepareWrite()
     val asked = intents.writeRequests.single()
     assertThat(asked.map { it.mediaStoreId }).containsExactly(1L)
+    // VE-2: il dialogo si chiede come lo chiede l'app (riferimento senza MIME); la collezione la sceglie l'adattatore dal tipo della riga, e la
+    // riscrittura vera qui sotto apre lo stesso URI.
+    assertThat(asked.single().mime).isNull()
     probe.finishWrite(Activity.RESULT_OK)
     assertThat(store.get(FieldProbeKey.T09_WRITE_DIALOG)).isEqualTo(Activity.RESULT_OK.toLong())
     assertThat(store.get(FieldProbeKey.T09_WRITE_CODE)).isEqualTo(0L)

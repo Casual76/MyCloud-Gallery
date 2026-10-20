@@ -56,6 +56,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.PhoneRewriter
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneWriteGrant
 import dev.pampa.mycloudgallery.core.backup.contract.RestoreAvailability
 import dev.pampa.mycloudgallery.core.backup.contract.RestoreOutcome
+import dev.pampa.mycloudgallery.core.backup.contract.SafeguardStart
 import dev.pampa.mycloudgallery.core.backup.contract.TrashBatch
 import dev.pampa.mycloudgallery.core.backup.contract.TrashItem
 import dev.pampa.mycloudgallery.core.backup.contract.TrashMode
@@ -124,7 +125,21 @@ class InMemoryVersionKeeper(private val clock: BackupClock = FakeBackupClock()) 
   override suspend fun plan(mediaId: MediaId): NasVersionPlan =
     plans[mediaId] ?: NasVersionPlan(mediaId, emptyList(), VersionArea.OWN_PRIVATE, RestoreAvailability.ONLY_ONE_VERSION)
 
+  /** R3: le righe del telefono che hanno una versione diversa da quella al sicuro (il riscrittore vero non le tocca: `PHONE_CHANGED`). */
+  val phoneRowsChanged: MutableSet<PhoneRef> = HashSet()
+
   override suspend fun restoreOriginal(mediaId: MediaId, confirmation: PhoneConfirmation, writeGrant: PhoneWriteGrant?): RestoreOutcome {
+    precheck(mediaId, confirmation, writeGrant)?.let { return it }
+    val rows = phoneRowsToRewrite[mediaId].orEmpty()
+    restored += mediaId
+    plans[mediaId] = swapped(plan(mediaId))
+    if (rows.isNotEmpty() && !writeGrant!!.coversAll(rows)) return RestoreOutcome.PhoneNotRewritten(PhoneKeptReason.PERMISSION_DENIED)
+    if (rows.any { it in phoneRowsChanged }) return RestoreOutcome.PhoneNotRewritten(PhoneKeptReason.PHONE_CHANGED)
+    return RestoreOutcome.Queued
+  }
+
+  /** VE-8, come il custode vero: piano, conferma e permesso del telefono, senza toccare niente. */
+  override suspend fun precheck(mediaId: MediaId, confirmation: PhoneConfirmation, writeGrant: PhoneWriteGrant?): RestoreOutcome? {
     val plan = plan(mediaId)
     if (plan.restore != RestoreAvailability.AVAILABLE) return RestoreOutcome.Unavailable(plan.restore)
     val check = PhoneConfirmationRules.check(plan, confirmation, clock.monotonicMs())
@@ -133,10 +148,7 @@ class InMemoryVersionKeeper(private val clock: BackupClock = FakeBackupClock()) 
     // Come il custode vero (contratto di `PhoneWriteGrant`, P14): null = il dialogo non e' stato chiesto, niente si tocca; un permesso che
     // non copre le righe = l'utente ha detto no: lo scambio sul NAS si fa e il telefono tiene la modifica.
     if (rows.isNotEmpty() && writeGrant == null) return RestoreOutcome.NeedsPhoneWrite(rows)
-    restored += mediaId
-    plans[mediaId] = swapped(plan)
-    if (rows.isNotEmpty() && !writeGrant!!.coversAll(rows)) return RestoreOutcome.PhoneNotRewritten(PhoneKeptReason.PERMISSION_DENIED)
-    return RestoreOutcome.Queued
+    return null
   }
 
   /** Dopo lo scambio: l'originale e' l'attuale (al solito percorso), la versione di prima e' in `Versioni/` e il ripristino non serve piu'. */
@@ -172,6 +184,17 @@ class ScriptedCorrections(private val clock: BackupClock = FakeBackupClock()) : 
   /** I piani eseguiti, nell'ordine. */
   val applied: MutableList<CorrectionPlan> = ArrayList()
 
+  /** VE-3: che cosa risponde "Metti al sicuro adesso" (e, se parte, la prontezza che il piano ha dopo). */
+  var safeguardAnswer: SafeguardStart = SafeguardStart.UNAVAILABLE
+  var readinessAfterSafeguard: CorrectionReadiness? = null
+  val safeguarded: MutableList<MediaId> = ArrayList()
+
+  override suspend fun safeguard(mediaId: MediaId): SafeguardStart {
+    safeguarded += mediaId
+    if (safeguardAnswer == SafeguardStart.STARTED) readinessAfterSafeguard?.let { readiness = it }
+    return safeguardAnswer
+  }
+
   private var counter = 100L
 
   override suspend fun plan(mediaId: MediaId, change: CorrectionRequest): CorrectionPlan =
@@ -180,17 +203,15 @@ class ScriptedCorrections(private val clock: BackupClock = FakeBackupClock()) : 
   override suspend fun apply(plan: CorrectionPlan, confirmation: PhoneConfirmation, writeGrant: PhoneWriteGrant?): CorrectionOutcome {
     val fresh = plan(plan.mediaId, plan.request)
     if (fresh.hash != plan.hash) return CorrectionOutcome.PlanChanged
-    when (fresh.readiness) {
-      CorrectionReadiness.READY -> Unit
-      CorrectionReadiness.NEEDS_SAFE_FIRST -> return CorrectionOutcome.NeedsSafeFirst
-      CorrectionReadiness.FORMAT_NOT_WRITABLE -> return CorrectionOutcome.FormatNotWritable
-      else -> return CorrectionOutcome.Unavailable(fresh.readiness)
+    if (fresh.readiness == CorrectionReadiness.FORMAT_NOT_WRITABLE) {
+      // VE-4, come il servizio vero: una rotazione solo nell'app non si fa (non la vedrebbe nessuno).
+      return if (fresh.request.change.orientation != null) {
+        CorrectionOutcome.Unavailable(CorrectionReadiness.ROTATION_NOT_WRITABLE)
+      } else {
+        CorrectionOutcome.FormatNotWritable
+      }
     }
-    val check = PhoneConfirmationRules.check(fresh, confirmation, clock.monotonicMs())
-    if (check != PhoneConfirmationCheck.Valid) return CorrectionOutcome.Rejected(check)
-    if (fresh.phoneRows.isNotEmpty() && (writeGrant == null || !writeGrant.coversAll(fresh.phoneRows))) {
-      return CorrectionOutcome.NeedsWriteGrant(fresh.phoneRows)
-    }
+    precheck(plan, confirmation, writeGrant)?.let { return it }
     failNext?.let {
       failNext = null
       return CorrectionOutcome.Failed(it)
@@ -198,10 +219,35 @@ class ScriptedCorrections(private val clock: BackupClock = FakeBackupClock()) : 
     applied += fresh
     return CorrectionOutcome.Done(VersionId(uuidOf(counter++)))
   }
+
+  /** VE-8, come il servizio vero: piano invariato, prontezza, conferma e permesso del telefono, senza toccare niente. */
+  override suspend fun precheck(plan: CorrectionPlan, confirmation: PhoneConfirmation, writeGrant: PhoneWriteGrant?): CorrectionOutcome? {
+    val fresh = plan(plan.mediaId, plan.request)
+    if (fresh.hash != plan.hash) return CorrectionOutcome.PlanChanged
+    when (fresh.readiness) {
+      CorrectionReadiness.READY -> Unit
+      CorrectionReadiness.NEEDS_SAFE_FIRST -> return CorrectionOutcome.NeedsSafeFirst
+      CorrectionReadiness.FORMAT_NOT_WRITABLE -> return null
+      else -> return CorrectionOutcome.Unavailable(fresh.readiness)
+    }
+    val check = PhoneConfirmationRules.check(fresh, confirmation, clock.monotonicMs())
+    if (check != PhoneConfirmationCheck.Valid) return CorrectionOutcome.Rejected(check)
+    if (fresh.phoneRows.isNotEmpty() && (writeGrant == null || !writeGrant.coversAll(fresh.phoneRows))) {
+      return CorrectionOutcome.NeedsWriteGrant(fresh.phoneRows)
+    }
+    return null
+  }
 }
 
-/** La riscrittura del telefono finta (porta di core-backup): permessi e riga scelti dal test, SHA-256 controllato come il contratto. */
+/**
+ * La riscrittura del telefono finta (porta di core-backup): permessi e riga scelti dal test, SHA-256 controllato come il contratto. R3: una riga
+ * con un contenuto noto ([rowContents]) diverso dall'impronta attesa non si tocca ([PhoneRewrite.RowChanged]); con i byte nuovi gia' sopra e'
+ * fatta. Senza un contenuto noto la riga ha quello atteso.
+ */
 class FakePhoneRewriter : PhoneRewriter {
+
+  /** L'impronta dei byte che una riga ha adesso (solo per le righe che il test sceglie). */
+  val rowContents: MutableMap<PhoneRef, Sha256> = HashMap()
 
   /** Le righe per cui il dialogo di sistema ha dato il permesso. */
   val granted: MutableSet<PhoneRef> = HashSet()
@@ -214,7 +260,7 @@ class FakePhoneRewriter : PhoneRewriter {
 
   val replaced: MutableList<PhoneRef> = ArrayList()
 
-  override suspend fun replace(ref: PhoneRef, mime: String?, file: File, expectedSha256: Sha256): PhoneRewrite {
+  override suspend fun replace(ref: PhoneRef, mime: String?, file: File, expectedSha256: Sha256, currentSha256: Sha256): PhoneRewrite {
     val bytes = try {
       file.readBytes()
     } catch (_: java.io.IOException) {
@@ -222,12 +268,16 @@ class FakePhoneRewriter : PhoneRewriter {
     }
     if (Sha256.of(bytes) != expectedSha256) return PhoneRewrite.SourceMismatch
     if (ref in gone) return PhoneRewrite.Gone
+    val now = rowContents[ref] ?: currentSha256
+    if (now == expectedSha256) return PhoneRewrite.Replaced(expectedSha256, bytes.size.toLong())
+    if (now != currentSha256) return PhoneRewrite.RowChanged
     if (ref !in granted) return PhoneRewrite.NotGranted
     failNext?.let {
       failNext = null
       return it
     }
     replaced += ref
+    rowContents[ref] = expectedSha256
     return PhoneRewrite.Replaced(expectedSha256, bytes.size.toLong())
   }
 }

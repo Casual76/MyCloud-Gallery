@@ -78,7 +78,6 @@ object FiveBModule {
     gallery: GalleryGraph,
     graph: AppGraph,
     integrations: IntegrationsGraph,
-    sharing: SharingSettings,
   ): Optional<FiveBUi> {
     val backup = gallery.backup ?: return Optional.empty()
     return Optional.of(
@@ -89,13 +88,15 @@ object FiveBModule {
         operations = { gallery.nas?.organizer?.operations },
         monotonicMs = gallery.parts.monotonicMs,
         integrations = integrations,
-        sharing = sharing,
         scope = graph.scope,
       ),
     )
   }
 
-  /** Le integrazioni (selettore, documenti, ricevuti, modifica, condivisioni): una per processo, installata dall'applicazione. */
+  /**
+   * Le integrazioni (selettore, documenti, ricevuti, modifica, condivisioni): una per processo, installata dall'applicazione. Correzioni 5B (R4):
+   * "Rimuovi la posizione" arriva qui, non alle sole voci del backup: vale per ogni "Condividi", anche senza backup e dalla Libreria.
+   */
   @Provides
   @Singleton
   fun integrations(
@@ -105,6 +106,7 @@ object FiveBModule {
     lock: AppLockController,
     @LockSettings lockSettings: Flow<@JvmSuppressWildcards AppLockSettings>,
     setup: FamilySetupRepository,
+    sharing: SharingSettings,
   ): IntegrationsGraph = IntegrationsGraph(
     context = context.applicationContext,
     gallery = gallery,
@@ -113,6 +115,7 @@ object FiveBModule {
     lockSettings = lockSettings,
     familyReady = { setup.state.value is SetupState.Ready },
     shareProbe = graph.shareProbe,
+    removeLocation = sharing.removeLocation,
   )
 
   @Provides

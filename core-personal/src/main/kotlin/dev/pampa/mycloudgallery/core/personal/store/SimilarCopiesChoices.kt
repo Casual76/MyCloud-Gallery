@@ -120,35 +120,50 @@ class SimilarCopiesChoices(
    */
   private suspend fun separations(accept: (MediaId) -> Boolean): List<Pair<PersonalKey, Pair<MediaId, MediaId>>> {
     val out = ArrayList<Pair<PersonalKey, Pair<MediaId, MediaId>>>()
-    val byId = HashMap<String, MediaId?>()
-    val byFingerprint = HashMap<PersonalFingerprint, MediaId?>()
-    suspend fun locate(raw: String, fingerprint: PersonalFingerprint?): MediaId? {
-      // Un id che non e' un'identita' di media (testo ostile) non si cerca nemmeno per impronta, come nella proiezione.
-      val id = runCatching { MediaId(raw) }.getOrNull() ?: return null
-      val known = byId.getOrPut(raw) { runCatching { resolve(id) }.getOrNull() }
-      if (known != null || fingerprint == null) return known
-      return byFingerprint.getOrPut(fingerprint) { store.mediaWithFingerprint(fingerprint) }
-    }
+    val locator = Locator()
     for ((key, entry) in store.effective()) {
       if (key.kind != PersonalKind.MEDIA_FLAG || !PersonalFields.isSimilarApart(key.field)) continue
       if (!SimilarCopiesRecords.separates(entry.value)) continue
       val (low, high) = SimilarCopiesRecords.separatedPair(key) ?: continue
-      val a = locate(low, entry.fingerprint)?.takeIf(accept) ?: continue
-      val b = locate(high, SimilarCopiesRecords.otherFingerprint(entry.value))?.takeIf(accept) ?: continue
+      val a = locator.locate(low, entry.fingerprint)?.takeIf(accept) ?: continue
+      val b = locator.locate(high, SimilarCopiesRecords.otherFingerprint(entry.value))?.takeIf(accept) ?: continue
       if (a != b) out += key to (if (a.value <= b.value) a to b else b to a)
     }
     return out
   }
 
-  /** Le voci `similar_cover` accese (o tutte), con l'identita' **attuale** del media a cui si riferiscono. */
+  /**
+   * Le voci `similar_cover` accese (o tutte), con l'identita' **attuale** del media a cui si riferiscono: per id, e chi non si ritrova per
+   * id per impronta (quella della voce, se indica un media solo). **La stessa regola di "Separa"** ([Locator], 20/10, LA-2 della verifica
+   * funzionale della 5B): una voce scritta da un altro dispositivo nomina il media con l'id di li', che qui puo' non esserci (D7, D8);
+   * risolta solo per id la scelta restava ignorata e il rilevatore, al giro dopo, rimetteva la copertina della regola.
+   */
   private suspend fun coverEntries(onlyOn: Boolean): List<Pair<MediaId, PersonalEntry>> {
     val out = ArrayList<Pair<MediaId, PersonalEntry>>()
+    val locator = Locator()
     for ((key, entry) in store.effective()) {
       if (key.kind != PersonalKind.MEDIA_FLAG || key.field != PersonalFields.SIMILAR_COVER) continue
       if (onlyOn && (entry.value as? PersonalValue.Flag)?.on != true) continue
-      val media = runCatching { resolve(MediaId(key.subject)) }.getOrNull() ?: continue
+      val media = locator.locate(key.subject, entry.fingerprint) ?: continue
       out += media to entry
     }
     return out
+  }
+
+  /**
+   * Ritrova un media nominato da una voce: per id (anche tramite un alias, [resolve]) e, se non c'e', per impronta **solo se indica un media
+   * solo** ([PersonalStore.mediaWithFingerprint]; due media con la stessa impronta rapida non si confondono, L32). Un id che non e' un'identita'
+   * di media (testo ostile) non si cerca nemmeno per impronta. Le risposte si ricordano per tutta la lettura: il rilevatore chiede a ogni secondo.
+   */
+  private inner class Locator {
+    private val byId = HashMap<String, MediaId?>()
+    private val byFingerprint = HashMap<PersonalFingerprint, MediaId?>()
+
+    suspend fun locate(raw: String, fingerprint: PersonalFingerprint?): MediaId? {
+      val id = runCatching { MediaId(raw) }.getOrNull() ?: return null
+      val known = byId.getOrPut(raw) { runCatching { resolve(id) }.getOrNull() }
+      if (known != null || fingerprint == null) return known
+      return byFingerprint.getOrPut(fingerprint) { store.mediaWithFingerprint(fingerprint) }
+    }
   }
 }

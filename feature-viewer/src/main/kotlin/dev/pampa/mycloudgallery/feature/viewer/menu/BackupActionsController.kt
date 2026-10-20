@@ -53,7 +53,7 @@ class BackupActionsController(
     }
     // Finche' il custode non risponde il menu ha le voci che non dipendono dalle versioni; non c'e' una voce che sparisce e ricompare per nulla.
     targetFlow.value = BackupMenuTarget(plan = null, isVideo = isVideo)
-    job = scope.launch { targetFlow.value = BackupMenuTarget(actions.versionPlan(id), isVideo) }
+    job = scope.launch { targetFlow.value = BackupMenuTarget(actions.versionPlan(id), isVideo, rotatable = actions.canRotate(id)) }
   }
 
   /** Una voce del menu toccata dall'utente. */
@@ -82,6 +82,9 @@ class BackupActionsController(
 
   /** "Annulla" / "Ho capito" nel foglio o nell'avviso di una condivisione. */
   fun dismissShare() = actions.dismissShare()
+
+  /** L'avviso "Pronta" che si spegne da solo: solo lo stato, la copia resta finche' l'altra app non ha finito (MC-1). */
+  fun hideShareNotice() = actions.hideShareNotice()
 
   fun dismissNotice() = actions.dismissNotice()
 

@@ -6,6 +6,7 @@ import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.backup.contract.NasVersionPlan
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneConfirmation
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneConfirmationRules
+import dev.pampa.mycloudgallery.core.backup.contract.PhoneKeptReason
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneWriteGrant
 import dev.pampa.mycloudgallery.core.backup.contract.RestoreAvailability
 import dev.pampa.mycloudgallery.core.backup.contract.RestoreOutcome
@@ -128,7 +129,7 @@ class VersionsViewModelTest {
     vm.askRestore()
     val plan = (vm.state.value as VersionsUi.ConfirmRestore).plan
     vm.restore(confirmationFor(plan))
-    assertThat(vm.state.value).isEqualTo(VersionsUi.Restored(plan, phoneKeptEdited = false))
+    assertThat(vm.state.value).isEqualTo(VersionsUi.Restored(plan))
     assertThat(keeper.restored).containsExactly(VersionSamples.media)
   }
 
@@ -173,7 +174,7 @@ class VersionsViewModelTest {
     assertThat(keeper.restored).isEmpty()
 
     vm.bridge.answered(true)
-    assertThat(vm.state.value).isEqualTo(VersionsUi.Restored(plan, phoneKeptEdited = false))
+    assertThat(vm.state.value).isEqualTo(VersionsUi.Restored(plan))
     assertThat(keeper.restored).containsExactly(VersionSamples.media)
   }
 
@@ -210,7 +211,53 @@ class VersionsViewModelTest {
     vm.bind(VersionSamples.media, VersionsStart.RESTORE)
     vm.restore(confirmationFor((vm.state.value as VersionsUi.ConfirmRestore).plan))
     vm.bridge.answered(false)
-    assertThat(vm.state.value).isEqualTo(VersionsUi.Restored(plan, phoneKeptEdited = true))
+    assertThat(vm.state.value).isEqualTo(VersionsUi.Restored(plan, kept = PhoneKeptReason.PERMISSION_DENIED))
+  }
+
+  /**
+   * VE-2: il sistema rifiuta la richiesta di permesso con un'eccezione (prima: un `files/<id>`). Prima l'eccezione usciva dal ViewModel e l'app
+   * si chiudeva al tocco; adesso il foglio torna alla lista, lo dice e niente e' toccato.
+   */
+  @Test
+  fun ve2_unRifiutoDelSistemaNonChiudeLAppENonToccaNiente() = runTest(dispatcher) {
+    keeper.setPlan(VersionSamples.plan())
+    keeper.phoneRowsToRewrite[VersionSamples.media] = listOf(VersionSamples.phoneRow)
+    dialogs.failure = IllegalArgumentException("All requested items must be referenced by specific ID")
+    val vm = viewModel()
+    vm.bind(VersionSamples.media, VersionsStart.RESTORE)
+    vm.restore(confirmationFor((vm.state.value as VersionsUi.ConfirmRestore).plan))
+    assertThat((vm.state.value as VersionsUi.Listing).message).isEqualTo(VersionsMessage.SYSTEM_DIALOG_FAILED)
+    assertThat(keeper.restored).isEmpty()
+  }
+
+  /** R3: la riga del telefono era cambiata e il riscrittore non l'ha toccata: il foglio lo dice con la sua ragione. */
+  @Test
+  fun r3_laRigaCambiataNonToccataHaLaSuaRagione() = runTest(dispatcher) {
+    keeper.setPlan(VersionSamples.plan())
+    keeper.phoneRowsToRewrite[VersionSamples.media] = listOf(VersionSamples.phoneRow)
+    keeper.phoneRowsChanged += VersionSamples.phoneRow
+    val vm = viewModel()
+    vm.bind(VersionSamples.media, VersionsStart.RESTORE)
+    val plan = (vm.state.value as VersionsUi.ConfirmRestore).plan
+    vm.restore(confirmationFor(plan))
+    vm.bridge.answered(true)
+    assertThat(vm.state.value).isEqualTo(VersionsUi.Restored(plan, kept = PhoneKeptReason.PHONE_CHANGED))
+  }
+
+  /** VE-8: il turno del backup non si e' liberato in tempo: la lista lo dice (prima tornava muta). */
+  @Test
+  fun ve8_ilTurnoNonLiberatoSiDice() = runTest(dispatcher) {
+    val plan = VersionSamples.plan()
+    val busy = object : VersionKeeper {
+      override suspend fun plan(mediaId: MediaId): NasVersionPlan = plan
+
+      override suspend fun restoreOriginal(mediaId: MediaId, confirmation: PhoneConfirmation, writeGrant: PhoneWriteGrant?): RestoreOutcome =
+        RestoreOutcome.Unavailable(RestoreAvailability.BUSY)
+    }
+    val vm = viewModel(busy)
+    vm.bind(VersionSamples.media, VersionsStart.RESTORE)
+    vm.restore(confirmationFor(plan))
+    assertThat((vm.state.value as VersionsUi.Listing).message).isEqualTo(VersionsMessage.BACKUP_BUSY)
   }
 
   @Test
@@ -218,6 +265,8 @@ class VersionsViewModelTest {
     keeper.setPlan(VersionSamples.plan())
     keeper.phoneRowsToRewrite[VersionSamples.media] = listOf(VersionSamples.phoneRow)
     dialogs.missing = true
+    // Un telefono senza il dialogo e' un Android 10: anche il vero dice `available = false` (VE-2 distingue un rifiuto del sistema).
+    dialogs.available = false
     val vm = viewModel()
     vm.bind(VersionSamples.media, VersionsStart.RESTORE)
     vm.restore(confirmationFor((vm.state.value as VersionsUi.ConfirmRestore).plan))

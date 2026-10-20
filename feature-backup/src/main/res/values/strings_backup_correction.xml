@@ -62,11 +62,16 @@
   <string name="backup_correction_safe_title">Prima la metto al sicuro</string>
   <string name="backup_correction_safe_detail">Questa foto non ha ancora una copia controllata sul NAS. La metto al sicuro, poi la correggi: così l’originale non si perde.</string>
   <string name="backup_correction_safe_action">Metti al sicuro adesso</string>
+  <string name="backup_correction_safe_outside">Questa foto sta in una cartella che il backup non guarda. Aggiungi la cartella nelle impostazioni del backup: quando la copia è controllata sul NAS potrai correggerla.</string>
+  <string name="backup_correction_safe_not_now">Adesso non posso metterla al sicuro: il backup non è pronto o la copia sul NAS non si legge. Riprova più tardi.</string>
+  <string name="backup_correction_safe_still">Il controllo è partito ma non è ancora finito. Puoi chiudere: quando la copia è al sicuro potrai correggerla.</string>
+  <string name="backup_correction_safeguarding_title">La metto al sicuro…</string>
+  <string name="backup_correction_safeguarding_detail">Controllo la copia sul NAS, o la carico se manca. Quando è al sicuro il foglio si riapre da solo.</string>
 
   <string name="backup_correction_waiting_title">Il telefono ti chiede un permesso</string>
   <string name="backup_correction_waiting_detail">Serve per scrivere la correzione nel file della foto. Se dici di no, non cambia niente.</string>
   <string name="backup_correction_writing_title">Scrivo la correzione…</string>
-  <string name="backup_correction_writing_detail">Controllo anche che il file si apra bene.</string>
+  <string name="backup_correction_writing_detail">Controllo anche che il file si apra bene. Se il backup sta lavorando, aspetto che finisca il lotto.</string>
   <string name="backup_correction_uploading_title">Correzione fatta</string>
   <string name="backup_correction_uploading_detail">Sto portando la versione corretta sul NAS. Puoi chiudere: il backup continua da solo.</string>
   <string name="backup_correction_done_title">Fatto</string>
@@ -81,6 +86,7 @@
   <string name="backup_correction_failed_not_restored">Attenzione: il file sul telefono si è rovinato. L’originale è al sicuro sul NAS, rimettilo da lì.</string>
   <string name="backup_correction_failed_full">Sul telefono non c’è abbastanza spazio. Libera un po’ di spazio e riprova.</string>
   <string name="backup_correction_failed_nas">Il NAS non ha accettato la versione nuova. La correzione resta nell’app e il backup riprova da solo.</string>
+  <string name="backup_correction_failed_phone_changed">Sul telefono una copia di questa foto è cambiata dopo l’ultima lettura: non l’ho toccata. La versione corretta va comunque sul NAS e il backup salva anche quella cambiata.</string>
 
   <string name="backup_correction_blocked_title">Per ora non si può</string>
   <string name="backup_correction_blocked_common">Questo file è nell’area comune: la correzione la vedrebbero tutti i familiari. Da qui non si può ancora.</string>
@@ -89,6 +95,10 @@
   <string name="backup_correction_blocked_frozen">I lavori sul NAS sono fermi per un cambiamento anomalo: controlla la Diagnostica.</string>
   <string name="backup_correction_blocked_not_mine">Questo media non è tuo: non puoi correggerlo.</string>
   <string name="backup_correction_blocked_not_available">La correzione non è ancora pronta.</string>
+  <string name="backup_correction_blocked_paused">Il backup è in pausa: riprendilo dalla pagina Backup per correggere questa foto.</string>
+  <string name="backup_correction_blocked_test_only">Il backup è ancora in prova: per ora sul NAS non scrivo.</string>
+  <string name="backup_correction_blocked_busy">Sto ancora lavorando su questo media, o il backup sta finendo un lotto: riprova fra poco.</string>
+  <string name="backup_correction_blocked_rotation">Questo tipo di file non si ruota dall’app: la rotazione non si vedrebbe da nessuna parte. Ruotalo in Galleria.</string>
   <string name="backup_correction_unavailable_title">Le correzioni non sono ancora pronte</string>
   <string name="backup_correction_unavailable_detail">Questa funzione si accende quando il backup è collegato.</string>
 
@@ -96,4 +106,5 @@
   <string name="backup_correction_msg_expired">È passato troppo tempo. Correggi di nuovo.</string>
   <string name="backup_correction_msg_refused">Hai detto di no al telefono: non è cambiato niente.</string>
   <string name="backup_correction_msg_no_dialog">Su questo telefono non posso chiedere il permesso, quindi non ho corretto niente.</string>
+  <string name="backup_correction_msg_dialog_failed">Il telefono non ha accettato la richiesta di permesso: non ho corretto niente.</string>
 </resources>

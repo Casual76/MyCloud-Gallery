@@ -70,13 +70,19 @@ class RegistryWriter(
 
   /**
    * Il contesto dell'admin, o null se questo dispositivo non lo e': registro fidato caricato, dispositivo
-   * approvato, chiave di famiglia nella cassaforte e uguale a quella che deve firmare la prossima versione.
+   * approvato **e segnato admin nel registro firmato**, chiave di famiglia nella cassaforte e uguale a quella che deve firmare
+   * la prossima versione.
+   *
+   * Il segno admin (R19 della revisione 5B) non da' il potere, che e' la chiave: toglie quello che una chiave rimasta per
+   * sbaglio nella cassaforte (una distruzione fallita in silenzio, un ex admin rientrato come familiare con un id nuovo) non
+   * deve poter fare, cioe' firmare la configurazione della famiglia da un dispositivo che la famiglia non conosce come admin.
    */
   suspend fun adminContext(): AdminContext? {
     if (!engine.ensureLoaded()) return null
     val state = engine.state ?: return null
     val me = engine.myDeviceId() ?: return null
     if (state.statusOf(me) != DeviceStatus.APPROVED) return null
+    if (state.registry.device(me)?.admin != true) return null
     val key = try {
       familyKeys.load(state.trustedFamilyKey)
     } catch (e: CancellationException) {

@@ -21,7 +21,7 @@ internal object BackupActionsSamples {
 
   fun versionId(n: Int) = VersionId(UUID(0x5B13, n.toLong()).toString())
 
-  private fun entry(n: Int, role: VersionRole, current: Boolean, places: Set<VersionPlace>) = VersionEntry(
+  fun entry(n: Int, role: VersionRole, current: Boolean, places: Set<VersionPlace>) = VersionEntry(
     versionId = versionId(n),
     role = role,
     isCurrent = current,
@@ -66,12 +66,15 @@ internal class FakeBackupMediaActions(
   override var capabilities: BackupMenuCapabilities = BackupActionsSamples.everything,
   var plan: NasVersionPlan? = BackupActionsSamples.plan(),
   var everywhereSummary: EverywhereSummary? = null,
+  /** VE-4: il formato si scrive (si ruota davvero). */
+  var rotatable: Boolean = true,
 ) : BackupMediaActions {
 
   val performed = ArrayList<Pair<BackupMenuAction, MediaId>>()
   val shared = ArrayList<List<MediaId>>()
   var shareWithLocationCalls = 0
   var dismissShareCalls = 0
+  var hideShareNoticeCalls = 0
   var dismissNoticeCalls = 0
   var planRequests = 0
 
@@ -100,9 +103,15 @@ internal class FakeBackupMediaActions(
     dismissShareCalls++
   }
 
+  override fun hideShareNotice() {
+    hideShareNoticeCalls++
+  }
+
   override fun dismissNotice() {
     dismissNoticeCalls++
   }
 
   override suspend fun everywhere(id: MediaId): EverywhereSummary? = everywhereSummary
+
+  override suspend fun canRotate(id: MediaId): Boolean = rotatable
 }

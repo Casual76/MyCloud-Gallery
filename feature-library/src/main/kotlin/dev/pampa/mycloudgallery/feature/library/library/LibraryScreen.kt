@@ -108,6 +108,8 @@ internal fun LibraryScreen(
   val phone by state.phone.collectAsState()
   val nas by state.nas.collectAsState()
   val backup by state.backup.collectAsState()
+  // Correzioni 5B (R4, MC-2): la condivisione senza posizione della selezione (avanzamento, rifiuto).
+  val share by state.commands.shareProgress.collectAsState()
   val backdrop = rememberGlassBackdrop()
   SideEffect { backdropOut(backdrop) }
   val scope = rememberCoroutineScope()
@@ -128,7 +130,7 @@ internal fun LibraryScreen(
   // La riga di chrome in alto (cresce con il testo grande): e' la linea sotto cui comincia la griglia.
   val topChrome = gridTopChromeHeight()
   val showPermission = phone.access == MediaAccess.NONE
-  val noticesShown = !showPermission && hasNotices(phone, state.notice)
+  val noticesShown = !showPermission && hasNotices(phone, state.notice, share)
   if (!noticesShown && noticesHeightPx != 0) SideEffect { noticesHeightPx = 0 }
   val noticesHeight = with(density) { noticesHeightPx.toDp() }
   val topPadding = if (noticesHeightPx > 0) topChrome + GalleryChromeDefaults.Gap + noticesHeight + GalleryChromeDefaults.Gap else topChrome
@@ -183,6 +185,7 @@ internal fun LibraryScreen(
         commands = state.commands,
         notice = state.notice,
         onDismissNotice = { state.notice = null },
+        share = share,
         backdrop = backdrop,
         modifier = Modifier
           .align(Alignment.TopCenter)
@@ -224,6 +227,11 @@ internal fun LibraryScreen(
 
     LibraryDeleteSheet(visible = deleting, state = state, onDismiss = { deleting = false })
     LibraryHideGroupSheet(visible = hidingGroups, state = state, onDismiss = { hidingGroups = false })
+    LibraryShareRefusedSheet(
+      state = share as? LibraryShare.Refused,
+      onShareWithLocation = state.commands::shareWithLocation,
+      onDismiss = state.commands::cancelShare,
+    )
   }
 }
 

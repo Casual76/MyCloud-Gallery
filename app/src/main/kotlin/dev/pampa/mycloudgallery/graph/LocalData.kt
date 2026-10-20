@@ -3,8 +3,10 @@ package dev.pampa.mycloudgallery.graph
 import android.content.Context
 import dev.pampa.mycloudgallery.backup.BackupRunMemory
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
+import dev.pampa.mycloudgallery.core.database.GalleryDatabase
 import dev.pampa.mycloudgallery.core.family.contract.LocalDataEraser
 import dev.pampa.mycloudgallery.core.family.lifecycle.FileWipeJournal
+import dev.pampa.mycloudgallery.core.family.onboarding.PreviousAccountData
 import dev.pampa.mycloudgallery.core.network.contract.VpnControlConfig
 import dev.pampa.mycloudgallery.feature.diagnostics.contributors.HeartbeatSource
 import dev.pampa.mycloudgallery.nas.NasGraph
@@ -79,10 +81,12 @@ fun interface GalleryStopper {
  */
 class AppLocalDataEraser(private val context: Context, private val graph: AppGraph) : LocalDataEraser {
 
-  override suspend fun eraseAll(): Boolean {
+  /** Un passo dopo l'altro: un fallimento lo registra e segna l'azzeramento come non finito, senza fermare gli altri. */
+  private class Steps {
     var ok = true
-    /** Esegue un passo; vero se e' riuscito. Un fallimento lo registra e segna l'azzeramento come non finito. */
-    suspend fun step(name: String, block: suspend () -> Unit): Boolean {
+
+    /** Esegue un passo; vero se e' riuscito. */
+    suspend fun run(name: String, block: suspend () -> Unit): Boolean {
       try {
         block()
         return true
@@ -94,38 +98,70 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
         return false
       }
     }
-    step("onboarding") { graph.onboardingStore.clear() }
-    step("account") { graph.accountStore.clear() }
-    step("casa") { graph.homeStore.clear() }
-    step("vpn") { graph.vpnConfigStore.save(VpnControlConfig.OFF) }
-    step("battito") { graph.heartbeat.clear() }
+  }
+
+  override suspend fun eraseAll(): Boolean {
+    val steps = Steps()
+    steps.run("onboarding") { graph.onboardingStore.clear() }
+    steps.run("account") { graph.accountStore.clear() }
+    steps.run("casa") { graph.homeStore.clear() }
+    steps.run("vpn") { graph.vpnConfigStore.save(VpnControlConfig.OFF) }
+    steps.run("battito") { graph.heartbeat.clear() }
+    eraseGalleryData(steps, stopGallery = true, allDatabases = true)
+    return steps.ok
+  }
+
+  /**
+   * I dati locali **di un account** e solo quelli (R6 della revisione 5B): catalogo (i media dei solo-NAS, le righe del telefono,
+   * i diari del backup, di "Libera spazio" e delle sessioni di modifica), replica e pacchi dell'indice, dati personali,
+   * miniature e anteprime, file preparati delle versioni, file in arrivo, cache (anche di modifica e di condivisione), impostazioni
+   * del backup. **Non** l'avanzamento dell'onboarding in corso, l'account del NAS, l'impronta di casa, il controllo di
+   * WireGuard, le chiavi, e mai le foto del telefono ne' il NAS. Chiude solo il database della galleria: gli altri (WorkManager)
+   * restano aperti.
+   *
+   * [stopGallery]: ferma la galleria viva prima (R7). Serve solo se in questo processo la famiglia e' stata pronta
+   * ([AppGraph.galleryMayRun]): una galleria mai partita non ha niente da fermare, e `GalleryGraph.shutdown` toglierebbe le porte
+   * delle integrazioni per il resto del processo. Una galleria fermata non riparte nello stesso processo.
+   *
+   * Vero se e' andato tutto bene; un errore lascia la fine dell'onboarding ferma e si riprova (e' idempotente).
+   */
+  suspend fun eraseAccountData(stopGallery: Boolean): Boolean {
+    val steps = Steps()
+    eraseGalleryData(steps, stopGallery = stopGallery, allDatabases = false)
+    return steps.ok
+  }
+
+  private suspend fun eraseGalleryData(steps: Steps, stopGallery: Boolean, allDatabases: Boolean) {
     // R7: la galleria viva si ferma (e si aspetta) PRIMA di toccare i suoi file; se non si ferma, i file restano.
-    if (step("galleria") { graph.galleryStopper?.stop() }) {
-      // Fase 5A (P7): il backup si e' gia' fermato per primo (`GalleryGraph.shutdown`); le sue impostazioni (cartella del dispositivo,
-      // sorgenti scelte) appartengono alla famiglia che si lascia.
-      step("backup") { graph.backupSettingsStorage.clear() }
-      step("file") {
-        withContext(Dispatchers.IO) {
-          if (!deleteChildren(context.cacheDir)) ok = false
+    val stopped = if (stopGallery) steps.run("galleria") { graph.galleryStopper?.stop() } else true
+    if (!stopped) return
+    // Fase 5A (P7): il backup si e' gia' fermato per primo (`GalleryGraph.shutdown`); le sue impostazioni (cartella del dispositivo,
+    // sorgenti scelte) appartengono alla famiglia che si lascia.
+    steps.run("backup") { graph.backupSettingsStorage.clear() }
+    steps.run("file") {
+      withContext(Dispatchers.IO) {
+        if (!deleteChildren(context.cacheDir)) steps.ok = false
+        if (allDatabases) {
           for (name in context.databaseList()) {
-            if (!context.deleteDatabase(name) && File(context.getDatabasePath(name).path).exists()) ok = false
+            if (!context.deleteDatabase(name) && File(context.getDatabasePath(name).path).exists()) steps.ok = false
           }
-          for (dir in MEDIA_DIRS) {
-            val target = File(context.noBackupFilesDir, dir)
-            if (target.exists() && !target.deleteRecursively()) ok = false
-          }
-          // Fase 4A (P11): il NAS nella Libreria. I pacchi stanno gia' in `replica/`, l'outbox dell'indice no (miniature
-          // preparate qui, in attesa di pubblicazione): si toglie con i piccoli file di stato (tentativi, emergenza, battiti).
-          // Fase 4B (P16): il registro locale dei dati personali (`personal/`). Il diario delle operazioni e del cestino sta nel
-          // database (tolto qui sopra); le operazioni in corso e i loro lavori li ha gia' fermati la galleria (NasOrganizer.stop).
-          for (name in NAS_FILES) {
-            val target = File(context.noBackupFilesDir, name)
-            if (target.exists() && !target.deleteRecursively()) ok = false
-          }
+        } else if (!context.deleteDatabase(GalleryDatabase.NAME) && File(context.getDatabasePath(GalleryDatabase.NAME).path).exists()) {
+          steps.ok = false
+        }
+        for (dir in MEDIA_DIRS) {
+          val target = File(context.noBackupFilesDir, dir)
+          if (target.exists() && !target.deleteRecursively()) steps.ok = false
+        }
+        // Fase 4A (P11): il NAS nella Libreria. I pacchi stanno gia' in `replica/`, l'outbox dell'indice no (miniature
+        // preparate qui, in attesa di pubblicazione): si toglie con i piccoli file di stato (tentativi, emergenza, battiti).
+        // Fase 4B (P16): il registro locale dei dati personali (`personal/`). Il diario delle operazioni e del cestino sta nel
+        // database (tolto qui sopra); le operazioni in corso e i loro lavori li ha gia' fermati la galleria (NasOrganizer.stop).
+        for (name in NAS_FILES) {
+          val target = File(context.noBackupFilesDir, name)
+          if (target.exists() && !target.deleteRecursively()) steps.ok = false
         }
       }
     }
-    return ok
   }
 
   private fun deleteChildren(dir: File?): Boolean {
@@ -133,11 +169,19 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
     return dir.listFiles().orEmpty().all { it.deleteRecursively() }
   }
 
-  private companion object {
-    const val TAG = "LocalDataEraser"
+  companion object {
+    private const val TAG = "LocalDataEraser"
 
-    /** Le cartelle dei dati della galleria in `noBackupFilesDir` (le riempiono le fasi 3-6). Mai la radice. */
-    val MEDIA_DIRS = listOf("thumbnails", "previews", "replica")
+    /**
+     * Le cartelle dei dati della galleria in `noBackupFilesDir` (le riempiono le fasi 3-6). Mai la radice. Dalla 5B anche i file
+     * preparati delle versioni (correzioni, risultati degli editor) e le copie dei file ricevuti: stavano fuori dall'elenco, e un
+     * azzeramento li lasciava sul telefono.
+     */
+    val MEDIA_DIRS = listOf("thumbnails", "previews", "replica", VERSIONS_DIR, INCOMING_DIR)
+
+    /** Le due cartelle della 5B in `noBackupFilesDir`: i nomi sono quelli di `FiveBGraph` (privati), e `CorrezioniConfigurazione5BAppTest` li incrocia con i file veri. */
+    const val VERSIONS_DIR = "versions"
+    const val INCOMING_DIR = "incoming"
 
     /**
      * I file e le cartelle del NAS nella Libreria in `noBackupFilesDir` (Fase 4A): outbox, tentativi, emergenza, battiti; dalla 4B il
@@ -154,5 +198,23 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
       NasStages.HEARTBEAT_SYNC,
       NasStages.HEARTBEAT_PREP,
     ) + BackupRunMemory.FILES
+  }
+}
+
+/**
+ * I dati del vecchio account, tolti alla fine di un onboarding fatto con un altro account o un altro NAS (R6 della revisione 5B):
+ * l'azzeramento dei dati locali senza le parti che toccano l'onboarding in corso (`AppLocalDataEraser.eraseAccountData`).
+ *
+ * "Configura di nuovo" ha gia' riavviato il processo se la galleria era partita (`AppGraph`), quindi qui di norma non c'e' niente da
+ * fermare. Se c'e' (il riavvio non e' riuscito) si ferma la galleria, si tolgono i dati e il processo si riavvia subito dopo:
+ * una galleria fermata non riparte, e la Libreria resterebbe vuota fino al prossimo avvio.
+ */
+class AppPreviousAccountData(private val eraser: AppLocalDataEraser, private val graph: AppGraph) : PreviousAccountData {
+
+  override suspend fun erase(): Boolean {
+    val running = graph.galleryMayRun()
+    val erased = eraser.eraseAccountData(stopGallery = running)
+    if (erased && running) graph.restartSoon()
+    return erased
   }
 }

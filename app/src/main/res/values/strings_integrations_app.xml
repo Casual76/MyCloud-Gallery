@@ -8,6 +8,9 @@
 
   <string name="fiveb_edit_started">Modifica il file e torna qui: salvo la modifica come nuova versione.</string>
   <string name="fiveb_edit_no_gallery">Galleria Samsung non c’è su questo telefono: scarica il file e modificalo con un’altra app.</string>
+  <string name="fiveb_edit_no_editor">Nessuna app di modifica accetta questa foto: prova «Scarica e modifica in Galleria».</string>
+  <string name="fiveb_edit_no_editor_video">Nessuna app di modifica accetta questo video: prova «Scarica e modifica in Galleria».</string>
+  <string name="fiveb_edit_not_saveable">Da qui questa modifica non si potrebbe salvare sul NAS (il file sta nell’area comune o fuori dall’area di prova), quindi non la apro.</string>
   <string name="fiveb_edit_new_version">Salvata la modifica: è la nuova versione.</string>
   <string name="fiveb_edit_new_media">L’app ha salvato una copia nuova: la trovi nella Libreria.</string>
   <string name="fiveb_edit_restored">Ripristinato l’originale.</string>
@@ -19,4 +22,5 @@
   <string name="fiveb_free_space_title">Libera spazio</string>
   <string name="fiveb_free_space_subtitle">Togli dal telefono le foto e i video già al sicuro sul NAS</string>
   <string name="fiveb_delete_started">Messo nel cestino del NAS per 30 giorni.</string>
+  <string name="fiveb_delete_nothing">Non ci sono copie da eliminare di questa versione.</string>
 </resources>

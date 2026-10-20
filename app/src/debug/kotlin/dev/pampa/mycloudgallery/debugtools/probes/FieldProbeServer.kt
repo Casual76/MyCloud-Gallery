@@ -63,11 +63,13 @@ internal class FieldProbeServer(context: Context, private val phone: FieldProbeP
   @Throws(FileNotFoundException::class)
   fun open(row: ProbeRow, caller: Long): ParcelFileDescriptor {
     store.add(FieldProbeKey.T14_SERVE_OPENS)
-    store.set(FieldProbeKey.T14_DOCS_CALLER, caller)
+    // LA-8: un valore per ogni chiamante diverso (`t14.docs_caller.2`...), non uno solo che la app dopo cancella; e la prima lettura di ogni apertura.
+    store.recordDistinct(FieldProbeKey.T14_DOCS_CALLER, caller)
+    val openIndex = (store.get(FieldProbeKey.T14_SERVE_OPENS) ?: 1L).toInt()
     return when (form) {
       FieldProbeForm.MEDIASTORE -> direct(row)
       FieldProbeForm.CACHE_COPY -> copied(row)
-      FieldProbeForm.PROXY -> proxied(row)
+      FieldProbeForm.PROXY -> proxied(row, openIndex)
     }
   }
 
@@ -87,7 +89,7 @@ internal class FieldProbeServer(context: Context, private val phone: FieldProbeP
     return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
   }
 
-  private fun proxied(row: ProbeRow): ParcelFileDescriptor {
+  private fun proxied(row: ProbeRow, openIndex: Int): ParcelFileDescriptor {
     val uri = phone.uriOf(row)
     val source = resolver.openFileDescriptor(if (row.isVideo) uri else android.provider.MediaStore.setRequireOriginal(uri), "r")
       ?: throw FileNotFoundException("Nessun descrittore.")
@@ -107,7 +109,7 @@ internal class FieldProbeServer(context: Context, private val phone: FieldProbeP
           if (latencyMs > 0) Thread.sleep(latencyMs)
           if (firstRead) {
             firstRead = false
-            store.setIfAbsent(FieldProbeKey.T14_SERVE_FIRST_READ_MS, SystemClock.elapsedRealtime() - openedAt)
+            store.setIfAbsent(FieldProbeKey.T14_SERVE_FIRST_READ_MS, SystemClock.elapsedRealtime() - openedAt, openIndex)
           }
           if (offset < lastEnd) store.add(FieldProbeKey.T14_SERVE_BACKWARD_SEEKS)
           val read = channel.read(ByteBuffer.wrap(data, 0, size), offset).coerceAtLeast(0)

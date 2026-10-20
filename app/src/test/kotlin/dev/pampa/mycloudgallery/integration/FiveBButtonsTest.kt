@@ -101,9 +101,11 @@ class FiveBButtonsTest {
   private fun ports(rig: BackupRig): Ports {
     val gallery = rig.gallery
     val lock = AppLockController().apply { updateSettings(AppLockSettings()) }
-    val integrations = FiveBModule.integrations(rig.device.context, gallery, rig.device.graph, lock, flowOf(AppLockSettings()), rig.device.graph.setup)
-    val ui = FiveBModule.fiveBUi(rig.device.context, gallery, rig.device.graph, integrations, SharedPrefsSharingSettings(rig.device.context)).get()
+    val sharing = SharedPrefsSharingSettings(rig.device.context)
+    val integrations = FiveBModule.integrations(rig.device.context, gallery, rig.device.graph, lock, flowOf(AppLockSettings()), rig.device.graph.setup, sharing)
+    val ui = FiveBModule.fiveBUi(rig.device.context, gallery, rig.device.graph, integrations).get()
     // Come `MyCloudGalleryApp.onCreate`.
+    gallery.shares = integrations.shares
     gallery.fiveB = GalleryGraph.FiveBHooks(ui.mediaActions) { ids -> ui.openFreeSpace(ids) }
     return Ports(gallery, integrations, ui)
   }
@@ -163,6 +165,8 @@ class FiveBButtonsTest {
         BackupMenuAction.VERSIONS, BackupMenuAction.RESTORE_ORIGINAL -> true
         BackupMenuAction.CORRECT, BackupMenuAction.ROTATE -> caps.correct
         BackupMenuAction.EDIT_WITH -> caps.editWith
+        // MC-5: "Scarica e modifica in Galleria" (il viewer la mostra solo per un solo-NAS).
+        BackupMenuAction.EDIT_DOWNLOAD -> caps.editDownload
         BackupMenuAction.PHONE_ONLY_DELETE -> caps.phoneOnlyDelete
         BackupMenuAction.VIEW_ORIGINAL -> caps.viewOriginal
       }
@@ -176,7 +180,7 @@ class FiveBButtonsTest {
           BackupMenuAction.CORRECT, BackupMenuAction.ROTATE -> assertThat(ui.sheet.first { it != null }).isInstanceOf(FiveBSheet.Correction::class.java)
           BackupMenuAction.PHONE_ONLY_DELETE -> assertThat(ui.sheet.first { it != null }).isInstanceOf(FiveBSheet.PhoneOnly::class.java)
           // "Modifica con…": la sessione si apre e l'activity riceve l'intento per l'editor (o, se non si puo', una frase per l'utente).
-          BackupMenuAction.EDIT_WITH -> {
+          BackupMenuAction.EDIT_WITH, BackupMenuAction.EDIT_DOWNLOAD -> {
             val launched = ui.launches.first { it != null || actions.notice.value != null }
             assertWithMessage("modifica: ${actions.notice.value}").that(launched).isNotNull()
           }

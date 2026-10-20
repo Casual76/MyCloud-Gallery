@@ -9,9 +9,10 @@ import java.io.File
 
 /**
  * Fase 5B (P0-B, docs/fase5-progetto.md §5.2): il riscrittore del telefono finto, sopra [FakeMediaStore]. Si comporta come il contratto di
- * [PhoneMediaRewriter] (e come l'adattatore vero): senza il permesso di `writeRequest` per la riga non scrive ([RewriteResult.NotGranted]),
- * un file che non ha lo SHA-256 atteso non si scrive, una riga sparita e' [RewriteResult.Gone], e un guasto programmato lascia la riga come
- * era o, nel caso grave ([failNext] con `restored = false`), a meta'. Dopo una scrittura riuscita la riga ha gli stessi `_ID` e volume, byte,
+ * [PhoneMediaRewriter] (e come l'adattatore vero): senza il permesso di `writeRequest` per l'URI che apre (la collezione del tipo della riga,
+ * VE-2) non scrive ([RewriteResult.NotGranted]), un file che non ha lo SHA-256 atteso non si scrive, una riga sparita e' [RewriteResult.Gone],
+ * una riga che non ha l'impronta attesa non si tocca ([RewriteResult.RowChanged], R3; con i byte nuovi gia' sulla riga e' fatta), e un guasto
+ * programmato lascia la riga come era o, nel caso grave ([failNext] con `restored = false`), a meta'. Dopo una scrittura riuscita la riga ha gli stessi `_ID` e volume, byte,
  * dimensione e data di modifica nuovi (generazione che sale): la lettura del telefono la vede come una modifica del file (`ContentChanged`).
  *
  * @param nowMs la data di modifica che prende la riga riscritta (un orologio finto: mai quello del telefono).
@@ -30,7 +31,7 @@ class FakePhoneMediaRewriter(
   /** Se vero, la prossima riscrittura scrive byte sbagliati: la rilettura non torna e i byte di prima si rimettono (`HASH_MISMATCH`, ripristinato). */
   var corruptNext: Boolean = false
 
-  override suspend fun replace(ref: MediaRef.Phone, file: File, expectedSha256: Sha256): RewriteResult {
+  override suspend fun replace(ref: MediaRef.Phone, file: File, expectedSha256: Sha256, currentSha256: Sha256): RewriteResult {
     val bytes = try {
       file.readBytes()
     } catch (_: java.io.IOException) {
@@ -38,6 +39,11 @@ class FakePhoneMediaRewriter(
     }
     if (Sha256.of(bytes) != expectedSha256) return RewriteResult.SourceMismatch
     val before = store.bytesOf(ref.volume, ref.mediaStoreId) ?: return RewriteResult.Gone
+    // R3, nell'ordine dell'adattatore vero (la copia di sicurezza si legge prima di aprire in scrittura): la riga deve avere i byte della
+    // versione al sicuro; con quelli nuovi gia' sopra e' fatta (risposta persa).
+    val now = Sha256.of(before)
+    if (now == expectedSha256) return RewriteResult.Replaced(expectedSha256, bytes.size.toLong())
+    if (now != currentSha256) return RewriteResult.RowChanged
     if (!store.hasWriteGrant(ref.volume, ref.mediaStoreId)) return RewriteResult.NotGranted
 
     failNext?.let { failure ->

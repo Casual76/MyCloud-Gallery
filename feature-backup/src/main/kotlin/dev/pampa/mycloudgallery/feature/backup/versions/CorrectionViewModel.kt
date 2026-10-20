@@ -14,11 +14,12 @@ import dev.pampa.mycloudgallery.core.backup.contract.PhoneConfirmation
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneConfirmationCheck
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneRef
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneWriteGrant
+import dev.pampa.mycloudgallery.core.backup.contract.SafeguardStart
 import dev.pampa.mycloudgallery.core.backup.contract.VersionKeeper
+import dev.pampa.mycloudgallery.core.metadata.contract.GeoChange
 import dev.pampa.mycloudgallery.core.metadata.contract.MetadataChange
 import dev.pampa.mycloudgallery.core.model.ExifOrientation
 import dev.pampa.mycloudgallery.core.model.VersionId
-import dev.pampa.mycloudgallery.feature.backup.contract.BackupActions
 import dev.pampa.mycloudgallery.feature.backup.free.DialogAnswer
 import dev.pampa.mycloudgallery.feature.backup.free.DialogBridge
 import dev.pampa.mycloudgallery.feature.backup.free.NoPhoneSystemDialogs
@@ -45,7 +46,6 @@ class CorrectionViewModel @Inject constructor(
   dialogs: Optional<PhoneSystemDialogs>,
   clock: Optional<BackupClock>,
   places: Optional<CorrectionPlaces>,
-  backup: Optional<BackupActions>,
 ) : ViewModel() {
 
   private val service: Corrections? = corrections.orElse(null)
@@ -53,7 +53,6 @@ class CorrectionViewModel @Inject constructor(
   private val systemDialogs: PhoneSystemDialogs = dialogs.orElse(NoPhoneSystemDialogs)
   private val monotonic: BackupClock? = clock.orElse(null)
   private val finder: CorrectionPlaces? = places.orElse(null)
-  private val backupActions: BackupActions? = backup.orElse(null)
 
   /** Il ponte verso il dialogo del sistema: la schermata lo collega (`BindDialogBridge`). */
   internal val bridge = DialogBridge()
@@ -87,7 +86,7 @@ class CorrectionViewModel @Inject constructor(
       plan = null,
       canSearchPlaces = finder != null,
     )
-    probe(subject)
+    probe(subject, mode)
   }
 
   /** Chiude il foglio: niente resta in giro (il prossimo `bind` riparte da capo). */
@@ -100,14 +99,15 @@ class CorrectionViewModel @Inject constructor(
   }
 
   /**
-   * Prima che l'utente scriva niente: la correzione si puo' fare? Il piano dipende dal media (al sicuro, area, formato, NAS), non da cosa si
-   * cambia, quindi una richiesta qualunque lo dice. Cosi' un foglio che non puo' funzionare lo dice subito, non dopo aver scritto la data.
+   * Prima che l'utente scriva niente: la correzione si puo' fare? Il piano dipende dal media (al sicuro, area, formato, NAS) e, per un formato
+   * che non si scrive, da cosa si cambia (VE-4: la rotazione non si fa, data e luogo si'): la richiesta di prova e' quella del modo del foglio.
+   * Cosi' un foglio che non puo' funzionare lo dice subito, non dopo aver scritto la data.
    */
-  private fun probe(subject: CorrectionSubject) {
+  private fun probe(subject: CorrectionSubject, mode: CorrectionMode) {
     val corrections = service ?: return
     planJob?.cancel()
     planJob = viewModelScope.launch {
-      val plan = corrections.plan(subject.mediaId, CorrectionRequest(MetadataChange(orientation = ExifOrientation.ROTATE_90)))
+      val plan = corrections.plan(subject.mediaId, probeRequest(mode))
       flow.update { current ->
         if (current is CorrectionUi.Editing && current.subject.mediaId == subject.mediaId) route(plan.readiness, subject, current) else current
       }
@@ -161,9 +161,49 @@ class CorrectionViewModel @Inject constructor(
   /** Il luogo scelto fra i risultati. */
   fun choosePlace(choice: PlaceChoice) = edit { it.copy(chosenPlace = choice, coordinatesText = "") }
 
-  /** "Metti al sicuro adesso": parte il backup (lo fa `:app`); poi si riapre il foglio. */
+  /**
+   * VE-3, "Metti al sicuro adesso": `:app` fa partire cio' che serve a **questo** media (la verifica sul momento della sua copia sul NAS, o il
+   * backup del telefono se sta in una sorgente) e il foglio lo mostra; quando la prontezza cambia il foglio si riapre da solo. Se il media sta
+   * fuori dalle sorgenti, o non c'e' niente da far partire, il foglio lo dice invece di restare uguale.
+   */
   fun safeguardNow() {
-    backupActions?.backupNow()
+    val corrections = service ?: return
+    val waiting = flow.value as? CorrectionUi.NeedsSafeFirst ?: return
+    val subject = waiting.subject
+    val mode = this.mode
+    job?.cancel()
+    job = viewModelScope.launch {
+      flow.value = CorrectionUi.Safeguarding(subject)
+      when (corrections.safeguard(subject.mediaId)) {
+        SafeguardStart.STARTED -> Unit
+        SafeguardStart.NOT_IN_SOURCES -> {
+          flow.value = CorrectionUi.NeedsSafeFirst(subject, outsideSources = true)
+          return@launch
+        }
+        SafeguardStart.UNAVAILABLE -> {
+          flow.value = CorrectionUi.NeedsSafeFirst(subject, notNow = true)
+          return@launch
+        }
+      }
+      repeat(MAX_POLLS) {
+        delay(POLL_MS)
+        val readiness = corrections.plan(subject.mediaId, probeRequest(mode)).readiness
+        if (readiness != CorrectionReadiness.NEEDS_SAFE_FIRST) {
+          // Al sicuro (o fermo per un'altra ragione): il foglio riparte da capo con la prontezza di adesso.
+          this@CorrectionViewModel.subject = null
+          bind(subject, mode)
+          return@launch
+        }
+      }
+      flow.value = CorrectionUi.NeedsSafeFirst(subject, stillWaiting = true)
+    }
+  }
+
+  /** La richiesta con cui si chiede la prontezza: la rotazione per "Ruota", per il resto un cambio di luogo (vale per ogni formato). */
+  private fun probeRequest(mode: CorrectionMode): CorrectionRequest = if (mode == CorrectionMode.ROTATE) {
+    CorrectionRequest(MetadataChange(orientation = ExifOrientation.ROTATE_90))
+  } else {
+    CorrectionRequest(MetadataChange(geo = GeoChange.Clear))
   }
 
   /**
@@ -182,9 +222,16 @@ class CorrectionViewModel @Inject constructor(
         val rows = outcome.rows
         flow.value = CorrectionUi.AwaitingSystemDialog(rows.size)
         when (askWrite(rows)) {
-          DialogAnswer.ALLOWED -> outcome = corrections.apply(plan, confirmation, PhoneWriteGrant(rows.toSet()))
+          DialogAnswer.ALLOWED -> {
+            flow.value = CorrectionUi.Writing
+            outcome = corrections.apply(plan, confirmation, PhoneWriteGrant(rows.toSet()))
+          }
           DialogAnswer.REFUSED -> return@launch backToEditing(editing, CorrectionMessage.PERMISSION_REFUSED)
-          DialogAnswer.NOT_AVAILABLE -> return@launch backToEditing(editing, CorrectionMessage.NO_SYSTEM_DIALOG)
+          // VE-2: un telefono con il dialogo che non ha accettato la richiesta non e' "un telefono senza dialogo".
+          DialogAnswer.NOT_AVAILABLE -> return@launch backToEditing(
+            editing,
+            if (systemDialogs.available) CorrectionMessage.SYSTEM_DIALOG_FAILED else CorrectionMessage.NO_SYSTEM_DIALOG,
+          )
         }
       }
       when (val result = outcome) {
@@ -223,9 +270,18 @@ class CorrectionViewModel @Inject constructor(
     }
   }
 
+  /** VE-2: un errore del sistema nel creare o lanciare il dialogo non chiude l'app: e' "niente dialogo" e niente si tocca. */
   private suspend fun askWrite(rows: List<PhoneRef>): DialogAnswer {
-    val sender = systemDialogs.writeRequest(rows) ?: return DialogAnswer.NOT_AVAILABLE
-    return bridge.ask(sender)
+    val sender = try {
+      systemDialogs.writeRequest(rows)
+    } catch (_: RuntimeException) {
+      null
+    } ?: return DialogAnswer.NOT_AVAILABLE
+    return try {
+      bridge.ask(sender)
+    } catch (_: RuntimeException) {
+      DialogAnswer.NOT_AVAILABLE
+    }
   }
 
   private companion object {

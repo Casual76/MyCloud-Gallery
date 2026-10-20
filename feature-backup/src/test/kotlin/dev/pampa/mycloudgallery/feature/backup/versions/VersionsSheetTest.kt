@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneConfirmation
+import dev.pampa.mycloudgallery.core.backup.contract.PhoneKeptReason
 import dev.pampa.mycloudgallery.core.backup.contract.RestoreAvailability
 import dev.pampa.mycloudgallery.core.backup.contract.VersionArea
 import dev.pampa.mycloudgallery.core.model.VersionId
@@ -174,9 +175,14 @@ class VersionsSheetTest : ComposeBackupTallTest() {
   fun ilRiepilogoDiceCosaTornaECosaVaInVersioni() {
     showState(VersionsUi.ConfirmRestore(VersionSamples.plan()))
     composeRule.onNodeWithText("Ripristinare l’originale?").assertExists()
-    composeRule.onNodeWithText("Non si perde niente e non si carica niente.", substring = true).assertExists()
+    // R3: il foglio dice il vero. La versione di adesso ha gia' una copia controllata (altrimenti il ripristino non si offre) e la riga del
+    // telefono si rimette com'era solo se e' ancora quella al sicuro.
+    composeRule.onNodeWithText("che ha già una copia controllata", substring = true).assertExists()
+    composeRule.onNodeWithText("Non si carica niente.", substring = true).assertExists()
     composeRule.onNodeWithText("Torna al suo posto").assertExists()
     composeRule.onNodeWithText("Va nella cartella Versioni").assertExists()
+    composeRule.onNodeWithText("Sul telefono c’è la versione modificata").assertExists()
+    composeRule.onNodeWithText("Una modifica più nuova non la tocco.", substring = true).assertExists()
   }
 
   @Test
@@ -225,12 +231,14 @@ class VersionsSheetTest : ComposeBackupTallTest() {
   fun mentreLoScambioPartePaginaAspetta() {
     showState(VersionsUi.Restoring(VersionSamples.plan()))
     composeRule.onNodeWithText("Ripristino l’originale…").assertExists()
-    composeRule.onNodeWithText("Sposto i file sul NAS. Non carico niente.").assertExists()
+    composeRule.onNodeWithText("Sposto i file sul NAS. Non carico niente.", substring = true).assertExists()
+    // VE-8: se il backup sta lavorando, il foglio dice che aspetta il lotto.
+    composeRule.onNodeWithText("aspetto che finisca il lotto", substring = true).assertExists()
   }
 
   @Test
   fun fattoDiceCheNienteESuNaCaricato() {
-    showState(VersionsUi.Restored(VersionSamples.plan(), phoneKeptEdited = false))
+    showState(VersionsUi.Restored(VersionSamples.plan()))
     composeRule.onNodeWithText("Fatto").assertExists()
     composeRule.onNodeWithText("Non è stato caricato niente.", substring = true).assertExists()
     button("Chiudi").performClick()
@@ -239,8 +247,33 @@ class VersionsSheetTest : ComposeBackupTallTest() {
 
   @Test
   fun seIlTelefonoTieneLaModificaLoDice() {
-    showState(VersionsUi.Restored(VersionSamples.plan(), phoneKeptEdited = true))
+    showState(VersionsUi.Restored(VersionSamples.plan(), kept = PhoneKeptReason.PERMISSION_DENIED))
     composeRule.onNodeWithText("Sul telefono resta la versione modificata, perché non hai dato il permesso.").assertExists()
+  }
+
+  /**
+   * R3 della revisione 5B: ogni ragione per cui il telefono tiene la modifica ha la sua frase (prima: sempre "non hai dato il permesso", anche
+   * quando il permesso c'era). La riga cambiata e non toccata dice che niente e' perso.
+   */
+  @Test
+  fun r3_ilFoglioDiceIlVeroSuCiocheResSulTelefono() {
+    showState(VersionsUi.Restored(VersionSamples.plan(), kept = PhoneKeptReason.PHONE_CHANGED))
+    composeRule.onNodeWithText("non l’ho toccata", substring = true).assertExists()
+    composeRule.onNodeWithText("perché non hai dato il permesso", substring = true).assertDoesNotExist()
+    showState(VersionsUi.Restored(VersionSamples.plan(), kept = PhoneKeptReason.SWAP_NOT_FINISHED))
+    composeRule.onNodeWithText("Ripristino avviato").assertExists()
+    composeRule.onNodeWithText("L’originale è tornato al suo posto sul NAS", substring = true).assertDoesNotExist()
+    showState(VersionsUi.Restored(VersionSamples.plan(), kept = PhoneKeptReason.REWRITE_FAILED))
+    composeRule.onNodeWithText("resta la versione modificata, intatta", substring = true).assertExists()
+  }
+
+  /** R3: la lista dice perche' non si puo' ripristinare quando la versione di adesso non e' al sicuro; il riepilogo dice cosa succede al telefono. */
+  @Test
+  fun r3_laVersioneNonAlSicuroELaRigaDelTelefono() {
+    showState(VersionsUi.Listing(VersionSamples.plan(restore = RestoreAvailability.CURRENT_NOT_SAFE), canView = false, canDeleteIntermediates = false))
+    composeRule.onNodeWithText("ripristinando l’originale la perderesti", substring = true).assertExists()
+    showState(VersionsUi.Listing(VersionSamples.plan(restore = RestoreAvailability.PAUSED), canView = false, canDeleteIntermediates = false))
+    composeRule.onNodeWithText("Il backup è in pausa", substring = true).assertExists()
   }
 
   @Test

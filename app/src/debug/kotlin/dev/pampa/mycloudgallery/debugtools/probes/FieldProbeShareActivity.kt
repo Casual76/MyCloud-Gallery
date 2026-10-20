@@ -25,22 +25,27 @@ class FieldProbeShareActivity : Activity() {
     val received = intent
     val uris = streamsOf(received)
     store.add(FieldProbeKey.T15_RECEIVED)
-    store.set(FieldProbeKey.T15_ACTION, if (received?.action == Intent.ACTION_SEND_MULTIPLE) 2L else 1L)
-    store.set(FieldProbeKey.T15_STREAMS, uris.size.toLong())
-    store.set(FieldProbeKey.T15_CLIP_ITEMS, (received?.clipData?.itemCount ?: 0).toLong())
-    store.set(FieldProbeKey.T15_GRANT_FLAG, if (received != null && received.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0) 1L else 0L)
-    store.set(FieldProbeKey.T15_SCHEME_CONTENT, uris.count { it.scheme == "content" }.toLong())
-    store.set(FieldProbeKey.T15_SCHEME_FILE, uris.count { it.scheme == "file" }.toLong())
-    store.set(FieldProbeKey.T15_SCHEME_OTHER, uris.count { it.scheme != "content" && it.scheme != "file" }.toLong())
+    // LA-8: ogni ricezione ha la sua riga (`t15.caller.2`...): con una riga sola ogni app nuova cancellava i numeri della precedente.
+    val n = (store.get(FieldProbeKey.T15_RECEIVED) ?: 1L).toInt()
+    store.set(FieldProbeKey.T15_ACTION, if (received?.action == Intent.ACTION_SEND_MULTIPLE) 2L else 1L, n)
+    store.set(FieldProbeKey.T15_STREAMS, uris.size.toLong(), n)
+    store.set(FieldProbeKey.T15_CLIP_ITEMS, (received?.clipData?.itemCount ?: 0).toLong(), n)
+    store.set(FieldProbeKey.T15_GRANT_FLAG, if (received != null && received.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0) 1L else 0L, n)
+    store.set(FieldProbeKey.T15_SCHEME_CONTENT, uris.count { it.scheme == "content" }.toLong(), n)
+    store.set(FieldProbeKey.T15_SCHEME_FILE, uris.count { it.scheme == "file" }.toLong(), n)
+    store.set(FieldProbeKey.T15_SCHEME_OTHER, uris.count { it.scheme != "content" && it.scheme != "file" }.toLong(), n)
     store.set(
       FieldProbeKey.T15_PERM_GRANTED,
       uris.count { checkUriPermission(it, Process.myPid(), Process.myUid(), Intent.FLAG_GRANT_READ_URI_PERMISSION) == PackageManager.PERMISSION_GRANTED }.toLong(),
+      n,
     )
-    store.set(FieldProbeKey.T15_CALLER, FieldProbeCaller.codeOf(callingPackage ?: referrer?.takeIf { it.scheme == "android-app" }?.host))
+    store.set(FieldProbeKey.T15_CALLER, FieldProbeCaller.codeOf(callingPackage ?: referrer?.takeIf { it.scheme == "android-app" }?.host), n)
     store.addShares(uris.map { it.toString() }, SystemClock.elapsedRealtime())
 
     val closeFirst = store.get(FieldProbeKey.T15_CLOSED_FIRST) == 1L
     if (closeFirst || uris.isEmpty()) {
+      // Le prove lo uccidono apposta: i numeri di questa ricezione devono essere gia' su file.
+      store.flush()
       finish()
       return
     }
@@ -70,11 +75,12 @@ class FieldProbeShareActivity : Activity() {
           fail++
         }
       }
-      store.set(FieldProbeKey.T15_OPEN_OK, ok)
-      store.set(FieldProbeKey.T15_OPEN_FAIL, fail)
-      store.set(FieldProbeKey.T15_BYTES, bytes)
-      store.set(FieldProbeKey.T15_OPEN_MS_AVG, if (ok > 0) openMs / ok else 0L)
-      store.set(FieldProbeKey.T15_READ_MS_TOTAL, readMs)
+      store.set(FieldProbeKey.T15_OPEN_OK, ok, n)
+      store.set(FieldProbeKey.T15_OPEN_FAIL, fail, n)
+      store.set(FieldProbeKey.T15_BYTES, bytes, n)
+      store.set(FieldProbeKey.T15_OPEN_MS_AVG, if (ok > 0) openMs / ok else 0L, n)
+      store.set(FieldProbeKey.T15_READ_MS_TOTAL, readMs, n)
+      store.flush()
       runOnUiThread { finish() }
     }, "field-probe-share").start()
   }

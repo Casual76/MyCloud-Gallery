@@ -118,11 +118,13 @@ class CatalogPersonalProjection(
     val group = catalog.similarGroupOf(id) ?: return ProjectionResult.APPLIED
     val members = group.members.map { it.mediaId }.toSet()
     val candidates = LinkedHashMap<MediaId, PersonalEntry>()
-    // Le voci dello stato (con l'id che avevano quando sono state scritte: un'unione o l'adozione dell'indice puo' averlo sostituito).
+    // Le voci dello stato (con l'id che avevano quando sono state scritte: un'unione o l'adozione dell'indice puo' averlo sostituito,
+    // e una voce di un altro dispositivo puo' averne uno che qui non c'e': allora si ritrova per impronta).
     for ((key, other) in state) {
       if (key.kind != PersonalKind.MEDIA_FLAG || key.field != PersonalFields.SIMILAR_COVER || key == entry.key) continue
       if ((other.value as? PersonalValue.Flag)?.on != true) continue
-      val media = mediaIdOrNull(key.subject)?.let { catalog.resolve(it) } ?: continue
+      // Con l'id con cui e' scritta o, se qui non c'e' (voce di un altro dispositivo), con l'impronta: la stessa regola di "Separa" (LA-2).
+      val media = resolve(key.subject, other.fingerprint) ?: continue
       if (media in members) candidates.merge(media, other) { old, new -> if (PersonalMerge.compare(new, old) > 0) new else old }
     }
     candidates.merge(id, entry) { old, new -> if (PersonalMerge.compare(new, old) > 0) new else old }

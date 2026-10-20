@@ -262,13 +262,19 @@ class FiveBServicesTest {
     val bytes = byteArrayOf(1, 2, 3, 4)
     val file: File = temp.newFile().apply { writeBytes(bytes) }
     val sha = Sha256.of(bytes)
-    assertThat(rewriter.replace(ref, "image/jpeg", file, sha)).isEqualTo(PhoneRewrite.NotGranted)
+    val before = Sha256.of(byteArrayOf(7))
+    assertThat(rewriter.replace(ref, "image/jpeg", file, sha, before)).isEqualTo(PhoneRewrite.NotGranted)
     rewriter.granted += ref
-    assertThat(rewriter.replace(ref, "image/jpeg", file, Sha256.of(byteArrayOf(9)))).isEqualTo(PhoneRewrite.SourceMismatch)
-    assertThat(rewriter.replace(ref, "image/jpeg", file, sha)).isEqualTo(PhoneRewrite.Replaced(sha, 4))
+    assertThat(rewriter.replace(ref, "image/jpeg", file, Sha256.of(byteArrayOf(9)), before)).isEqualTo(PhoneRewrite.SourceMismatch)
+    // R3: una riga con una versione che non e' quella al sicuro non si tocca.
+    rewriter.rowContents[ref] = Sha256.of(byteArrayOf(8))
+    assertThat(rewriter.replace(ref, "image/jpeg", file, sha, before)).isEqualTo(PhoneRewrite.RowChanged)
+    assertThat(rewriter.replaced).isEmpty()
+    rewriter.rowContents[ref] = before
+    assertThat(rewriter.replace(ref, "image/jpeg", file, sha, before)).isEqualTo(PhoneRewrite.Replaced(sha, 4))
     rewriter.gone += ref
-    assertThat(rewriter.replace(ref, "image/jpeg", file, sha)).isEqualTo(PhoneRewrite.Gone)
-    assertThat(NoPhoneRewriter.replace(ref, null, file, sha)).isEqualTo(PhoneRewrite.NotGranted)
+    assertThat(rewriter.replace(ref, "image/jpeg", file, sha, before)).isEqualTo(PhoneRewrite.Gone)
+    assertThat(NoPhoneRewriter.replace(ref, null, file, sha, before)).isEqualTo(PhoneRewrite.NotGranted)
   }
 
   // --- Attivita' in sospeso --------------------------------------------------------------------------------------------------------

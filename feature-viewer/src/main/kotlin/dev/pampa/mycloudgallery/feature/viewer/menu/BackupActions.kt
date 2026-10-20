@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.feature.viewer.menu
 
 import android.content.res.Resources
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.EditCalendar
 import androidx.compose.material.icons.rounded.Layers
@@ -11,6 +12,7 @@ import androidx.compose.material.icons.rounded.RotateRight
 import androidx.compose.runtime.Immutable
 import dev.pampa.mycloudgallery.core.backup.contract.NasVersionPlan
 import dev.pampa.mycloudgallery.core.backup.contract.RestoreAvailability
+import dev.pampa.mycloudgallery.core.backup.contract.VersionPlace
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuEntry
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.viewer.R
@@ -46,6 +48,12 @@ enum class BackupMenuAction {
 
   /** "Elimina solo dal telefono" (D22): il foglio di feature-backup che valuta il media e apre "Libera spazio". */
   PHONE_ONLY_DELETE,
+
+  /**
+   * MC-5 della verifica funzionale 5B: "Scarica e modifica in Galleria" per un solo-NAS (D25, E-E7): la copia scaricata in `Pictures/MyCloud Gallery`
+   * si apre in Galleria e la modifica diventa una versione del media del NAS. Prima non la chiamava nessuno.
+   */
+  EDIT_DOWNLOAD,
 }
 
 /** Che cosa `:app` sa fare per questo viewer. Un campo falso = la voce non compare. */
@@ -61,6 +69,8 @@ data class BackupMenuCapabilities(
   val share: Boolean = false,
   /** "Elimina solo dal telefono" passa dal foglio di feature-backup (verifica sul momento, timbro, dialogo del sistema). */
   val phoneOnlyDelete: Boolean = false,
+  /** MC-5: "Scarica e modifica in Galleria" per un solo-NAS. */
+  val editDownload: Boolean = false,
 )
 
 /**
@@ -98,7 +108,11 @@ class BackupNotice(val text: String, val ok: Boolean) {
 class BackupMenuTarget(
   val plan: NasVersionPlan?,
   val isVideo: Boolean,
+  /** VE-4: il file si ruota davvero (JPEG, PNG, WebP). Un HEIC o un RAW non si scrivono: "Ruota" non si offre (diceva "fatto" e restava storta). */
+  val rotatable: Boolean = true,
 ) {
+  /** Il media sta sul telefono (la versione di adesso ha una riga del telefono); null finche' il piano non c'e'. */
+  val onPhone: Boolean? get() = plan?.current?.let { VersionPlace.PHONE in it.places }
   val versions: Int get() = plan?.versions?.size ?: 0
 
   /** L'originale e' gia' la versione di adesso, o non c'e': niente da ripristinare e niente da guardare a parte. */
@@ -113,6 +127,8 @@ class BackupMenuTarget(
       null, RestoreAvailability.ONLY_ONE_VERSION, RestoreAvailability.ALREADY_ORIGINAL, RestoreAvailability.NOT_MINE, RestoreAvailability.NOT_AVAILABLE -> false
       RestoreAvailability.AVAILABLE, RestoreAvailability.ORIGINAL_NOT_SAFE, RestoreAvailability.NAS_UNREACHABLE, RestoreAvailability.FROZEN,
       RestoreAvailability.READ_ONLY_AREA, RestoreAvailability.BUSY,
+      // R3, VE-7: la voce resta e il foglio dice perche' adesso no (prima, in pausa, spariva senza una parola).
+      RestoreAvailability.CURRENT_NOT_SAFE, RestoreAvailability.PAUSED, RestoreAvailability.TEST_ONLY,
       -> true
     }
 
@@ -131,6 +147,9 @@ interface BackupMediaActions {
   /** Il piano delle versioni di [id] (solo catalogo e diario locale: nessuna lettura del NAS), o null se non c'e' un custode. */
   suspend fun versionPlan(id: MediaId): NasVersionPlan? = null
 
+  /** VE-4: [id] si puo' ruotare davvero (il formato si scrive nel file). Di default si'. */
+  suspend fun canRotate(id: MediaId): Boolean = true
+
   /**
    * Una voce scelta dall'utente: `:app` apre il foglio o l'activity giusta sopra il viewer. Solo da un tocco: il viewer non la chiama mai da solo.
    */
@@ -148,8 +167,14 @@ interface BackupMediaActions {
   /** "Condividi con la posizione": la scelta esplicita dell'utente dopo un rifiuto (D26, L41). */
   fun shareWithLocation() = Unit
 
-  /** Chiude un rifiuto o annulla la preparazione. */
+  /** Chiude un rifiuto o annulla la preparazione. Una copia gia' consegnata all'altra app non si tocca: la rilascia `:app` quando ha finito. */
   fun dismissShare() = Unit
+
+  /**
+   * L'avviso "Pronta" si spegne da solo (correzioni 5B, MC-1): **solo lo stato della schermata**. La copia e il permesso restano finche' l'altra app
+   * non ha finito: WhatsApp e Telegram leggono il file dopo che l'utente ha scelto la chat, ben oltre i secondi dell'avviso.
+   */
+  fun hideShareNotice() = Unit
 
   /** Una frase breve per l'utente dopo un'azione (es. la sessione di "Modifica con…"). */
   val notice: StateFlow<BackupNotice?> get() = NoNotice
@@ -209,11 +234,16 @@ internal fun backupMenuEntries(
   val owned = target?.owned != false
   if (capabilities.correct && owned) {
     add(GalleryMenuEntry.Item(resources.getString(R.string.viewer_backup_action_correct), { onAction(BackupMenuAction.CORRECT) }, Icons.Rounded.EditCalendar))
-    if (target?.isVideo != true) {
+    // VE-4: niente "Ruota" per un video ne' per un formato che non si scrive (la rotazione non si vedrebbe da nessuna parte).
+    if (target?.isVideo != true && target?.rotatable != false) {
       add(GalleryMenuEntry.Item(resources.getString(R.string.viewer_backup_action_rotate), { onAction(BackupMenuAction.ROTATE) }, Icons.Rounded.RotateRight))
     }
   }
   if (capabilities.editWith && owned) {
     add(GalleryMenuEntry.Item(resources.getString(R.string.viewer_backup_action_edit_with), { onAction(BackupMenuAction.EDIT_WITH) }, Icons.Rounded.Edit))
+  }
+  // MC-5: per un solo-NAS anche "Scarica e modifica in Galleria" (la Galleria non apre i file di un'altra app).
+  if (capabilities.editDownload && owned && target?.onPhone == false) {
+    add(GalleryMenuEntry.Item(resources.getString(R.string.viewer_backup_action_edit_download), { onAction(BackupMenuAction.EDIT_DOWNLOAD) }, Icons.Rounded.Download))
   }
 }

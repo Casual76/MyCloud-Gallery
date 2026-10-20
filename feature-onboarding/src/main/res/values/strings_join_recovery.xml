@@ -194,7 +194,12 @@
   <string name="removed_again_join">Poi entri con il QR dell’admin</string>
   <string name="removed_again_join_detail">Oppure recuperi l’admin, se il kit è tuo. L’admin ti approva di nuovo.</string>
   <string name="removed_again_keep">Restano su questo telefono</string>
-  <string name="removed_again_keep_detail">Le foto, i nascosti, i preferiti e le miniature.</string>
+  <string name="removed_again_keep_detail">Le foto. I nascosti, i preferiti e le miniature restano se rientri con lo stesso account sullo stesso NAS: con un altro account si tolgono, perché sono di un’altra persona.</string>
   <string name="removed_action">Configura di nuovo</string>
+  <string name="removed_sheet_title">Configuri di nuovo questo dispositivo?</string>
+  <string name="removed_sheet_message">Questo dispositivo dimentica account, password e chiavi della famiglia di prima. Per tornare serve il QR d’invito dell’admin e la sua approvazione. Le foto restano.</string>
+  <string name="removed_sheet_message_admin">Questo dispositivo ha la chiave della famiglia, cioè è un admin: configurandolo di nuovo la perde. Senza quella chiave non può più approvare dispositivi né cambiare la famiglia, e si riprende solo con il kit di recupero e il suo codice («Recupera l’admin», dal benvenuto). Se non hai il kit e il codice, non continuare.</string>
+  <string name="removed_sheet_message_admin_other">Questo dispositivo ha la chiave della famiglia, cioè è un admin: configurandolo di nuovo la perde. Senza quella chiave non può più approvare dispositivi né cambiare la famiglia, e si riprende solo con il kit di recupero e il suo codice («Recupera l’admin», dal benvenuto). Se il telefono ha solo avuto un guasto, riavvialo e riapri l’app prima di scegliere: se non hai il kit e il codice, non continuare.</string>
+  <string name="removed_sheet_confirm">Configura di nuovo</string>
   <string name="removed_footnote">Se pensi che sia un errore, chiedi all’admin prima di configurare di nuovo.</string>
 </resources>

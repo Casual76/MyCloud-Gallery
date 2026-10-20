@@ -7,6 +7,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupClock
 import dev.pampa.mycloudgallery.core.backup.contract.NasVersionPlan
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneConfirmation
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneConfirmationCheck
+import dev.pampa.mycloudgallery.core.backup.contract.PhoneKeptReason
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneRef
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneWriteGrant
 import dev.pampa.mycloudgallery.core.backup.contract.RestoreAvailability
@@ -124,43 +125,62 @@ class VersionsViewModel @Inject constructor(
     job?.cancel()
     job = viewModelScope.launch {
       flow.value = VersionsUi.Restoring(plan)
+      // VE-8: il primo passo (serve il permesso del telefono?) risponde senza aspettare il turno del backup.
       var outcome = keeper.restoreOriginal(id, confirmation, null)
-      var keptEdited = false
+      var refused = false
       if (outcome is RestoreOutcome.NeedsPhoneWrite) {
         val rows = outcome.rows
         flow.value = VersionsUi.AwaitingSystemDialog(plan, rows.size)
         outcome = when (askWrite(rows)) {
-          DialogAnswer.ALLOWED -> keeper.restoreOriginal(id, confirmation, PhoneWriteGrant(rows.toSet()))
+          DialogAnswer.ALLOWED -> {
+            flow.value = VersionsUi.Restoring(plan)
+            keeper.restoreOriginal(id, confirmation, PhoneWriteGrant(rows.toSet()))
+          }
           DialogAnswer.REFUSED -> {
-            keptEdited = true
+            refused = true
+            flow.value = VersionsUi.Restoring(plan)
             // Il permesso che non copre le righe: lo scambio sul NAS si fa, il telefono resta com'e' (E-E10).
             keeper.restoreOriginal(id, confirmation, PhoneWriteGrant(emptySet()))
           }
           DialogAnswer.NOT_AVAILABLE -> {
-            load(VersionsStart.LIST, VersionsMessage.NO_SYSTEM_DIALOG)
+            // VE-2: un telefono con il dialogo (Android 11+) che non ha accettato la richiesta non e' "un telefono senza dialogo".
+            load(VersionsStart.LIST, if (systemDialogs.available) VersionsMessage.SYSTEM_DIALOG_FAILED else VersionsMessage.NO_SYSTEM_DIALOG)
             return@launch
           }
         }
       }
       when (val result = outcome) {
-        RestoreOutcome.Queued -> flow.value = VersionsUi.Restored(plan, phoneKeptEdited = keptEdited)
-        // P14: lo scambio sul NAS c'e' (o e' in coda) ma il telefono non e' stato riscritto (permesso negato, scambio non ancora finito, riscrittura
-        // non riuscita e riga rimessa com'era): il foglio dice che sul telefono resta la versione modificata.
-        is RestoreOutcome.PhoneNotRewritten -> flow.value = VersionsUi.Restored(plan, phoneKeptEdited = true)
+        RestoreOutcome.Queued -> flow.value = VersionsUi.Restored(plan, kept = if (refused) PhoneKeptReason.PERMISSION_DENIED else null)
+        // P14: lo scambio sul NAS c'e' (o e' in coda) ma il telefono non e' stato riscritto: il foglio dice perche' (permesso negato, scambio non
+        // ancora finito, riscrittura non riuscita, riga cambiata e non toccata per R3).
+        is RestoreOutcome.PhoneNotRewritten -> flow.value = VersionsUi.Restored(plan, kept = result.reason)
         // Non si e' fatto niente: il telefono voleva il permesso e non c'e' stato modo di scambiare senza.
         is RestoreOutcome.NeedsPhoneWrite -> load(VersionsStart.LIST, VersionsMessage.PHONE_PERMISSION_MISSING)
         is RestoreOutcome.Rejected -> load(
           VersionsStart.RESTORE,
           if (result.check == PhoneConfirmationCheck.Expired) VersionsMessage.CONFIRMATION_EXPIRED else VersionsMessage.PLAN_CHANGED,
         )
-        // Il piano non permette il ripristino (il NAS non risponde, area ferma...): la lista lo spiega con il piano ricalcolato.
-        is RestoreOutcome.Unavailable -> load(VersionsStart.LIST)
+        // Il piano non permette il ripristino (il NAS non risponde, area ferma...): la lista lo spiega con il piano ricalcolato. VE-8: il turno del
+        // backup non si e' liberato in tempo (`BUSY`): la lista lo dice, non torna muta.
+        is RestoreOutcome.Unavailable -> load(VersionsStart.LIST, if (result.reason == RestoreAvailability.BUSY) VersionsMessage.BACKUP_BUSY else null)
       }
     }
   }
 
+  /**
+   * VE-2: il dialogo del sistema. Un errore del sistema nel crearlo o nel lanciarlo non chiude l'app: e' "niente dialogo", niente si tocca e il
+   * foglio lo dice.
+   */
   private suspend fun askWrite(rows: List<PhoneRef>): DialogAnswer {
-    val sender = systemDialogs.writeRequest(rows) ?: return DialogAnswer.NOT_AVAILABLE
-    return bridge.ask(sender)
+    val sender = try {
+      systemDialogs.writeRequest(rows)
+    } catch (_: RuntimeException) {
+      null
+    } ?: return DialogAnswer.NOT_AVAILABLE
+    return try {
+      bridge.ask(sender)
+    } catch (_: RuntimeException) {
+      DialogAnswer.NOT_AVAILABLE
+    }
   }
 }

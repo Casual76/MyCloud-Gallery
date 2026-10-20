@@ -219,6 +219,8 @@ class VerificaFunzionaleViewModelTest {
     env.registry.status.value = TrustStatus.Retired
     assertThat(vm.ui.value.removal?.reason).isEqualTo(RemovalReason.RETIRED)
 
+    // R7: il tasto apre il foglio di conferma; solo la conferma configura di nuovo.
+    vm.askStartOver()
     vm.startOver()
     assertThat(env.coordinator.startOvers).isEqualTo(1)
     assertThat(destination(vm)).isEqualTo(OnboardingDestination.Step(OnboardingStep.WELCOME))

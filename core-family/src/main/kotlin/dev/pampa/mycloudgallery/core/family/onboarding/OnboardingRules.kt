@@ -62,10 +62,14 @@ internal object OnboardingRules {
     return !(settled && step in SETTLED_STEPS)
   }
 
-  /** Il percorso scelto: si riparte da capo con il suo piano (al passo 2), tenendo solo l'ora d'inizio. */
+  /**
+   * Il percorso scelto: si riparte da capo con il suo piano (al passo 2), tenendo solo l'ora d'inizio e il ricordo di chi ha
+   * lasciato "Configura di nuovo" ([OnboardingSnapshot.previousOwner], R6: cambiare percorso non lo cancella).
+   */
   fun choosePath(s: OnboardingSnapshot, path: OnboardingPath, now: Long): OnboardingSnapshot {
     val plan = OnboardingPlans.planFor(path)
     return OnboardingSnapshot.EMPTY.copy(
+      previousOwner = s.previousOwner,
       progress = OnboardingProgress(
         path = path,
         plan = plan,

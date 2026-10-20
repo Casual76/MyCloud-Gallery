@@ -15,6 +15,7 @@ import androidx.work.WorkerParameters
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dev.pampa.mycloudgallery.backup.BackupGraph
+import dev.pampa.mycloudgallery.core.backup.contract.BackupKind
 import dev.pampa.mycloudgallery.core.backup.contract.RunStop
 import dev.pampa.mycloudgallery.core.backup.upload.BackupStageOutcome
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
@@ -204,6 +205,15 @@ object BackupWorkScheduling {
   /** D24 (P14): "Salva sul NAS" ha messo dei file in coda: il lavoro degli arrivi (unico, `KEEP`: uno in coda li prende tutti). */
   fun incoming(context: Context) {
     enqueue(context, request(Kind.INCOMING), Kind.INCOMING, ExistingWorkPolicy.KEEP)
+  }
+
+  /**
+   * VE-10, MC-3: un lavoro delle versioni nato adesso (uno scambio, la modifica di un solo-NAS, le versioni ferme per il PC dopo una scansione):
+   * il lavoro del tipo del media (unico, `KEEP`), che le regole del suo tipo fanno partire. Nessun polling: lo chiede chi ha creato il lavoro.
+   */
+  fun versionWork(context: Context, kind: BackupKind) {
+    val work = if (kind == BackupKind.VIDEOS) Kind.VIDEOS else Kind.PHOTOS
+    enqueue(context, request(work), work, ExistingWorkPolicy.KEEP)
   }
 
   private fun enqueue(context: Context, request: OneTimeWorkRequest, kind: Kind, policy: ExistingWorkPolicy) {

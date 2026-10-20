@@ -133,17 +133,17 @@ class SystemRequestsFakeTest {
     val rewriter = FakePhoneMediaRewriter(store)
 
     // Senza il permesso del dialogo niente si scrive.
-    assertThat(rewriter.replace(ref, file, Sha256.of(newBytes))).isEqualTo(RewriteResult.NotGranted)
+    assertThat(rewriter.replace(ref, file, Sha256.of(newBytes), Sha256.of(oldBytes))).isEqualTo(RewriteResult.NotGranted)
     assertThat(store.bytesOf(VOLUME, 10)!!.toList()).isEqualTo(oldBytes.toList())
 
     store.resolveRequest(SystemRequest.WRITE, listOf(ref), DialogAnswer.Accept)
     // Un file che non ha lo SHA-256 atteso non si scrive.
-    assertThat(rewriter.replace(ref, file, Sha256.of(oldBytes))).isEqualTo(RewriteResult.SourceMismatch)
+    assertThat(rewriter.replace(ref, file, Sha256.of(oldBytes), Sha256.of(oldBytes))).isEqualTo(RewriteResult.SourceMismatch)
     // Una riga sparita e' Gone.
-    assertThat(rewriter.replace(MediaRef.Phone(VOLUME, 404, "image/jpeg"), file, Sha256.of(newBytes))).isEqualTo(RewriteResult.Gone)
+    assertThat(rewriter.replace(MediaRef.Phone(VOLUME, 404, "image/jpeg"), file, Sha256.of(newBytes), Sha256.of(oldBytes))).isEqualTo(RewriteResult.Gone)
 
     val before = store.row(VOLUME, 10)!!
-    val result = rewriter.replace(ref, file, Sha256.of(newBytes)) as RewriteResult.Replaced
+    val result = rewriter.replace(ref, file, Sha256.of(newBytes), Sha256.of(oldBytes)) as RewriteResult.Replaced
     assertThat(result.size).isEqualTo(3_000L)
     assertThat(store.bytesOf(VOLUME, 10)!!.toList()).isEqualTo(newBytes.toList())
     // Stessa riga, stessa identita': solo timbro e generazione nuovi (la lettura del telefono la vede come una modifica).
@@ -163,16 +163,16 @@ class SystemRequestsFakeTest {
     store.resolveRequest(SystemRequest.WRITE, listOf(ref), DialogAnswer.Accept)
 
     rewriter.corruptNext = true
-    assertThat(rewriter.replace(ref, file, Sha256.of(newBytes))).isEqualTo(RewriteResult.Failed(RewriteCodes.HASH_MISMATCH, restored = true))
+    assertThat(rewriter.replace(ref, file, Sha256.of(newBytes), Sha256.of(oldBytes))).isEqualTo(RewriteResult.Failed(RewriteCodes.HASH_MISMATCH, restored = true))
     assertThat(store.bytesOf(VOLUME, 11)!!.toList()).isEqualTo(oldBytes.toList())
 
     rewriter.failNext = RewriteResult.Failed(RewriteCodes.PHONE_FULL, restored = true)
-    assertThat(rewriter.replace(ref, file, Sha256.of(newBytes))).isEqualTo(RewriteResult.Failed(RewriteCodes.PHONE_FULL, restored = true))
+    assertThat(rewriter.replace(ref, file, Sha256.of(newBytes), Sha256.of(oldBytes))).isEqualTo(RewriteResult.Failed(RewriteCodes.PHONE_FULL, restored = true))
     assertThat(store.bytesOf(VOLUME, 11)!!.toList()).isEqualTo(oldBytes.toList())
 
     // Il caso grave: a meta' e non ripristinato. Il telefono ha un file corto: il chiamante lo deve dire.
     rewriter.failNext = RewriteResult.Failed(RewriteCodes.WRITE_ERROR, restored = false)
-    assertThat(rewriter.replace(ref, file, Sha256.of(newBytes))).isEqualTo(RewriteResult.Failed(RewriteCodes.WRITE_ERROR, restored = false))
+    assertThat(rewriter.replace(ref, file, Sha256.of(newBytes), Sha256.of(oldBytes))).isEqualTo(RewriteResult.Failed(RewriteCodes.WRITE_ERROR, restored = false))
     assertThat(store.bytesOf(VOLUME, 11)!!.size).isLessThan(newBytes.size)
     assertThat(rewriter.replaced).isEmpty()
   }
@@ -181,7 +181,56 @@ class SystemRequestsFakeTest {
   fun senzaIlLegameVeroNienteSiRiscrive() = runTest {
     val ref = put(12)
     val file = temp.newFile().apply { writeBytes(byteArrayOf(1, 2, 3)) }
-    assertThat(NoPhoneMediaRewriter.replace(ref, file, Sha256.of(byteArrayOf(1, 2, 3)))).isEqualTo(RewriteResult.NotGranted)
+    assertThat(NoPhoneMediaRewriter.replace(ref, file, Sha256.of(byteArrayOf(1, 2, 3)), Sha256.of(byteArrayOf(4)))).isEqualTo(RewriteResult.NotGranted)
+  }
+
+  /**
+   * R3 della revisione 5B: il riscrittore finto, come quello vero, scrive solo su una riga che ha l'impronta attesa (la versione al sicuro sul
+   * NAS). Una modifica fatta sul telefono e non ancora salvata non si sovrascrive; una riga che ha gia' i byte nuovi e' fatta.
+   */
+  @Test
+  fun r3_unaRigaCheNonHaLImprontaAttesaNonSiTocca() = runTest {
+    val oldBytes = FakeMediaContent.jpeg(4_000, seed = 21)
+    val unsaved = FakeMediaContent.jpeg(4_200, seed = 22)
+    val ref = put(13, content = unsaved)
+    val newBytes = FakeMediaContent.jpeg(3_000, seed = 23)
+    val file = temp.newFile().apply { writeBytes(newBytes) }
+    val rewriter = FakePhoneMediaRewriter(store)
+    store.resolveRequest(SystemRequest.WRITE, listOf(ref), DialogAnswer.Accept)
+
+    // La riga ha una modifica che non e' quella al sicuro (oldBytes): niente si scrive.
+    assertThat(rewriter.replace(ref, file, Sha256.of(newBytes), Sha256.of(oldBytes))).isEqualTo(RewriteResult.RowChanged)
+    assertThat(store.bytesOf(VOLUME, 13)!!.toList()).isEqualTo(unsaved.toList())
+    assertThat(rewriter.replaced).isEmpty()
+
+    // Con i byte nuovi gia' sulla riga (una riscrittura finita con la risposta persa) e' fatta, senza scrivere di nuovo.
+    val again = put(14, content = newBytes)
+    store.resolveRequest(SystemRequest.WRITE, listOf(again), DialogAnswer.Accept)
+    assertThat(rewriter.replace(again, file, Sha256.of(newBytes), Sha256.of(oldBytes))).isEqualTo(RewriteResult.Replaced(Sha256.of(newBytes), 3_000))
+    assertThat(rewriter.replaced).isEmpty()
+  }
+
+  /**
+   * VE-2 della verifica funzionale 5B: il permesso del dialogo vale per l'URI chiesto. Il telefono finto ora lo sa: la collezione e' quella del
+   * tipo della riga (come `AndroidPhoneMediaIntents.requestUriOf`), un riferimento senza tipo su una riga che non c'e' e' un `files/<id>` che il
+   * sistema rifiuta, e il riscrittore apre la stessa collezione.
+   */
+  @Test
+  fun ve2_ilPermessoValePerLUriDellaCollezioneDelTipoDellaRiga() = runTest {
+    store.put(MediaStoreRow(VOLUME, 30, RowType.VIDEO, "VID_30.mp4", "DCIM/mcg-prova/", null, size = 9, dateModifiedMs = 1_000, dateTakenMs = 2_000), ByteArray(9) { 1 })
+    // Un riferimento senza MIME (come quello dei dialoghi della 5B): la collezione e' quella del video.
+    val untyped = MediaRef.Phone(VOLUME, 30, null)
+    assertThat(store.requestCollectionOf(untyped)).isEqualTo(FakeMediaStore.RequestCollection.VIDEO)
+    store.resolveRequest(SystemRequest.WRITE, listOf(untyped), DialogAnswer.Accept)
+    assertThat(store.hasWriteGrant(VOLUME, 30)).isTrue()
+    // Il MIME del riferimento non vince sul tipo della riga.
+    val image = put(31)
+    store.resolveRequest(SystemRequest.WRITE, listOf(MediaRef.Phone(VOLUME, image.mediaStoreId, "video/mp4")), DialogAnswer.Accept)
+    assertThat(store.hasWriteGrant(VOLUME, 31)).isTrue()
+    // Una riga che non c'e' e un riferimento senza tipo: `files/<id>`, rifiutato come sul telefono vero.
+    assertThrows(IllegalArgumentException::class.java) {
+      store.resolveRequest(SystemRequest.WRITE, listOf(MediaRef.Phone(VOLUME, 999, null)), DialogAnswer.Accept)
+    }
   }
 
   private companion object {

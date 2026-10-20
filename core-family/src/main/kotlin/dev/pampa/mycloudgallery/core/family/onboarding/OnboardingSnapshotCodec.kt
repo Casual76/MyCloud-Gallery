@@ -53,6 +53,7 @@ internal object OnboardingSnapshotCodec {
       "fnd" to s.foundation?.let {
         jsonObject("st" to it.stage.name.json(), "fam" to it.familyId.json(), "key" to it.keyPublic.json())
       },
+      "prv" to s.previousOwner?.json(),
       "jn" to s.join?.let {
         jsonObject(
           "fam" to it.familyId.json(),
@@ -117,6 +118,7 @@ internal object OnboardingSnapshotCodec {
           keyPublic = f.string("key") ?: return null,
         )
       },
+      previousOwner = root.string("prv"),
       join = root.obj("jn")?.let { j ->
         JoinRecord(
           familyId = j.string("fam") ?: return null,

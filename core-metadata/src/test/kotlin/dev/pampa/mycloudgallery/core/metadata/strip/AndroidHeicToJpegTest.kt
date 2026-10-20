@@ -43,7 +43,7 @@ class AndroidHeicToJpegTest {
     assertThat(ExifInterface(out).latLong).isNull()
     assertThat(ExifInterface(out).getAttribute(ExifInterface.TAG_MODEL)).isNull()
     assertThat(StripFixtures.contains(bytes, "GPSLatitude")).isFalse()
-    assertThat(RawLocationRecheck().check(out, "image/jpeg")).isEqualTo(LocationVerdict.CLEAR)
+    assertThat(LocationTraceRecheck().check(out, "image/jpeg")).isEqualTo(LocationVerdict.CLEAR)
   }
 
   @Test

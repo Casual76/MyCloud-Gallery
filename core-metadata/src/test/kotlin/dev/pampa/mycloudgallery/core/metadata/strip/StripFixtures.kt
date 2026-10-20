@@ -67,18 +67,27 @@ internal object StripFixtures {
 
   // --- Video ---------------------------------------------------------------------------------------------------------------------
 
-  /** Un MP4 (come le registrazioni di Android) con la posizione in `udta/©xyz`. */
-  fun mp4WithLocation(brand: String = "isom", mdatBytes: Int = 2048): ByteArray = IsoFixtures.mp4(
-    IsoFixtures.Mp4Spec().apply { this.brand = brand; this.mdatBytes = mdatBytes; creationSeconds = IsoFixtures.mp4Seconds(1_710_238_530_000L); iso6709 = ISO6709 },
-  )
+  /** `©xyz` (Android, Samsung, Pixel): la posizione come stringa ISO 6709. */
+  fun xyz(text: String = ISO6709): ByteArray {
+    val body = text.toByteArray(Charsets.ISO_8859_1)
+    return Bytes().u32be(8L + 4 + body.size).u8(0xA9).ascii("xyz").u16be(body.size).u16be(0x15C7).raw(body).toBytes()
+  }
 
+  /** Un MP4 (come le registrazioni di Android) con una traccia video e una audio e la posizione in `udta/©xyz`. */
+  fun mp4WithLocation(brand: String = "isom"): ByteArray =
+    LocationFixtures.mp4(listOf(LocationFixtures.video(), LocationFixtures.audio()), brand = brand, moovExtra = listOf(IsoFixtures.box("udta", xyz()))).bytes
+
+  /** Un MP4 senza tracce e senza posizione (solo `mvhd`): per i lettori, non per lo stripper (senza video ne' audio non si condivide). */
   fun mp4WithoutLocation(): ByteArray = IsoFixtures.mp4(IsoFixtures.Mp4Spec().apply { creationSeconds = IsoFixtures.mp4Seconds(1_710_238_530_000L) })
+
+  /** Un MP4 con video e audio e nessuna posizione. */
+  fun mp4Clean(): LocationFixtures.Built = LocationFixtures.mp4(listOf(LocationFixtures.video(), LocationFixtures.audio()))
 
   private fun u32(v: Long): ByteArray = Bytes().u32be(v).toBytes()
 
   private fun ascii(text: String): ByteArray = Bytes.ascii4(text)
 
-  private val MVHD: ByteArray = IsoFixtures.fullBox(
+  val MVHD: ByteArray = IsoFixtures.fullBox(
     "mvhd", 0, 0,
     Bytes().u32be(0).u32be(0).u32be(1000).u32be(3000).u32be(0x00010000L).u16be(0x0100).u16be(0).u32be(0).u32be(0)
       .u32be(0x00010000L).u32be(0).u32be(0).u32be(0).u32be(0x00010000L).u32be(0).u32be(0).u32be(0).u32be(0x40000000L)
@@ -86,8 +95,8 @@ internal object StripFixtures {
   )
 
   /**
-   * Un MOV di Apple: `moov/meta` in stile QuickTime (senza versione) con `hdlr mdta`, la tabella `keys` e `ilst`. Chiavi, in ordine:
-   * `com.apple.quicktime.make` (1), `com.apple.quicktime.location.ISO6709` (2), `com.apple.quicktime.model` (3).
+   * Un MOV di Apple con video e audio: `moov/meta` in stile QuickTime (senza versione) con `hdlr mdta`, la tabella `keys` e `ilst`. Chiavi, in
+   * ordine: `com.apple.quicktime.make` (1), `com.apple.quicktime.location.ISO6709` (2), `com.apple.quicktime.model` (3).
    */
   fun movWithApplePosition(): ByteArray {
     val keyNames = listOf("com.apple.quicktime.make", "com.apple.quicktime.location.ISO6709", "com.apple.quicktime.model")
@@ -101,21 +110,20 @@ internal object StripFixtures {
     val ilst = IsoFixtures.box("ilst", item(1, "Apple"), item(2, ISO6709), item(3, "iPhone 15"))
     val hdlr = IsoFixtures.fullBox("hdlr", 0, 0, u32(0), ascii("mdta"), ByteArray(12), byteArrayOf(0))
     val meta = IsoFixtures.box("meta", hdlr, keys, ilst)
-    val moov = IsoFixtures.box("moov", MVHD, meta)
-    return Bytes.concat(IsoFixtures.box("ftyp", ascii("qt  "), u32(0), ascii("qt  ")), IsoFixtures.box("mdat", ByteArray(512)), moov)
+    return LocationFixtures.mp4(listOf(LocationFixtures.video(), LocationFixtures.audio()), brand = "qt  ", moovExtra = listOf(meta)).bytes
   }
 
-  /** Un MP4 con l'XMP in un riquadro `uuid` (come lo scrivono alcuni editor) e le coordinate dentro. */
+  /** Un MP4 con video e audio e l'XMP in un riquadro `uuid` in cima al file (come lo scrivono alcuni editor), con le coordinate dentro. */
   fun mp4WithXmpUuid(): ByteArray {
     val uuid = byteArrayOf(
       0xBE.toByte(), 0x7A, 0xCF.toByte(), 0xCB.toByte(), 0x97.toByte(), 0xA9.toByte(), 0x42, 0xE8.toByte(),
       0x9C.toByte(), 0x71, 0x99.toByte(), 0x94.toByte(), 0x91.toByte(), 0xE3.toByte(), 0xAF.toByte(), 0xAC.toByte(),
     )
     val xmp = IsoFixtures.box("uuid", uuid, xmpWithGps().toByteArray(Charsets.UTF_8))
-    return Bytes.concat(IsoFixtures.box("ftyp", ascii("isom"), u32(0x200), ascii("isom")), IsoFixtures.box("moov", MVHD), IsoFixtures.box("mdat", ByteArray(256)), xmp)
+    return LocationFixtures.mp4(listOf(LocationFixtures.video(), LocationFixtures.audio()), topExtra = listOf(xmp)).bytes
   }
 
-  /** Un MP4 con una traccia di metadati a tempo del formato [entry] (`camm` di Google, `gpmd` di GoPro): punti GPS che non si possono togliere. */
+  /** Un MP4 con la sola traccia di metadati a tempo del formato [entry] (`camm` di Google, `gpmd` di GoPro), senza video ne' audio. */
   fun mp4WithTimedTrack(entry: String): ByteArray {
     val stsd = IsoFixtures.fullBox("stsd", 0, 0, u32(1), Bytes().u32be(16).ascii(entry).zeros(8).toBytes())
     val stbl = IsoFixtures.box("stbl", stsd)
@@ -123,9 +131,9 @@ internal object StripFixtures {
     return Bytes.concat(IsoFixtures.box("ftyp", ascii("isom"), u32(0x200), ascii("isom")), IsoFixtures.box("moov", MVHD, trak), IsoFixtures.box("mdat", ByteArray(256)))
   }
 
-  /** Una motion photo di Google: un JPEG con EXIF e XMP con GPS e, in coda, un MP4 che porta la sua `©xyz`. */
+  /** Una motion photo di Google: un JPEG con EXIF e XMP con GPS e, in coda, un MP4 con video e audio che porta la sua `©xyz`. */
   fun motionPhoto(): ByteArray {
-    val video = mp4WithLocation(mdatBytes = 512)
+    val video = mp4WithLocation()
     return MotionFixtures.googleV1(ImageFixtures.noise(96, 64, 5), exifWithGps(), video)
   }
 

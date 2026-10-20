@@ -53,6 +53,7 @@ import dev.pampa.mycloudgallery.core.trust.crypto.Signer
 import dev.pampa.mycloudgallery.graph.AppCredentialStore
 import dev.pampa.mycloudgallery.graph.AppGraph
 import dev.pampa.mycloudgallery.graph.AppPlatform
+import dev.pampa.mycloudgallery.root.ProcessRestart
 import java.io.File
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.time.Duration
@@ -253,6 +254,8 @@ class TestDevice(
   flags: FeatureFlags = FeatureFlags.forBuild(debugBuild = true, nasLibrary = true),
   /** L'anello "Ultimi esiti ed errori" (RE-4): di solito nessuno; i test che guardano gli eventi ne danno uno vero. */
   diagnostics: DiagnosticsLog = NoDiagnosticsLog,
+  /** Il riavvio del processo che "Configura di nuovo" chiede se la galleria era partita (R6): di solito niente; un test lo conta. */
+  restart: ProcessRestart = ProcessRestart {},
 ) {
   val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
   val scheduler = RecordingScheduler()
@@ -267,6 +270,7 @@ class TestDevice(
     schedulerFactory = { scheduler },
     work = WorkCanceller { workCancelled.incrementAndGet() },
     diagnostics = diagnostics,
+    restart = restart,
   )
 
   /**

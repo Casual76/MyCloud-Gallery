@@ -108,6 +108,7 @@
   <string name="fb_auth_error">Android non ha completato la verifica. Riprova.</string>
 
   <!-- Problemi dei passi lunghi (recupero, reset) -->
+  <string name="problem_keys_not_removed">Non sono riuscito a togliere le chiavi di questo dispositivo: il telefono non ha risposto. Non ho cambiato niente. Aspetta qualche secondo, o riavvia il telefono, e riprova.</string>
   <string name="problem_generic">Qualcosa non ha funzionato. Riprova fra poco.</string>
   <string name="problem_unreachable">Il NAS non si raggiunge da qui. Controlla di essere a casa o con la VPN accesa e riprova.</string>
   <string name="problem_write_failed">Il NAS non ha accettato la scrittura. Nulla è stato cambiato a metà: puoi riprovare.</string>

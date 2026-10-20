@@ -137,6 +137,9 @@ class FakeOnboardingCoordinator(initial: OnboardingProgress = OnboardingProgress
   var startOvers: Int = 0
     private set
 
+  /** Il Keystore non risponde o le chiavi non si tolgono (R7, R19): "Configura di nuovo" si ferma come quello vero, senza toccare niente. */
+  var keysStuck: Boolean = false
+
   override suspend fun submit(input: StepInput): StepResult {
     inputs += input::class.simpleName.orEmpty()
     when (input) {
@@ -234,8 +237,13 @@ class FakeOnboardingCoordinator(initial: OnboardingProgress = OnboardingProgress
 
   override suspend fun recoveryPending(): Boolean = OnboardingRules.recoveryPending(snapshot(), adminRecovered)
 
+  /** Come il vero: il fondatore, l'admin recuperato e il secondo admin tengono la chiave di famiglia (R7). */
+  override suspend fun holdsFamilyKey(): Boolean =
+    founded || adminRecovered || OnboardingRules.isRecoveryPath(progress.value.path)
+
   override suspend fun startOver(): StepResult {
     startOvers++
+    if (keysStuck) return StepResult.Problem(OnboardingProblem.KEYS_NOT_REMOVED)
     finished = false
     resuming = false
     deferrable = false

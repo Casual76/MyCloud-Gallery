@@ -104,6 +104,8 @@ object IdleOnboardingCoordinator : OnboardingCoordinator {
   override suspend fun recoveryPending(): Boolean = false
 
   override suspend fun startOver(): StepResult = notAvailable
+
+  override suspend fun holdsFamilyKey(): Boolean = false
 }
 
 object NoJoinFlow : JoinFlow {

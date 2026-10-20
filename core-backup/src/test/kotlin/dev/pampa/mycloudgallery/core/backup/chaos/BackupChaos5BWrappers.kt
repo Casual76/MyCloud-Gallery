@@ -182,6 +182,6 @@ class ChaosRewriter(
   private val injector: Injector,
   private val incarnation: Incarnation,
 ) : PhoneRewriter {
-  override suspend fun replace(ref: PhoneRef, mime: String?, file: File, expectedSha256: Sha256): PhoneRewrite =
-    injector.phone(Primitive.PHONE_REWRITE, incarnation) { inner.replace(ref, mime, file, expectedSha256) }
+  override suspend fun replace(ref: PhoneRef, mime: String?, file: File, expectedSha256: Sha256, currentSha256: Sha256): PhoneRewrite =
+    injector.phone(Primitive.PHONE_REWRITE, incarnation) { inner.replace(ref, mime, file, expectedSha256, currentSha256) }
 }

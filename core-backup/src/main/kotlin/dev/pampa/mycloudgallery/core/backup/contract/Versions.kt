@@ -83,6 +83,13 @@ enum class RestoreAvailability(override val code: String) : StableCode {
   /** L'originale non ha una copia privata verificata: non si sposta ne' si riscrive un file senza poter tornare indietro. */
   ORIGINAL_NOT_SAFE("original_not_safe"),
 
+  /**
+   * R3 della revisione 5B: la versione di adesso, o quella che il telefono ha sulle righe da riscrivere, **non ha ancora una copia privata
+   * verificata** (una modifica fatta sul telefono e non ancora salvata dal backup). Ripristinare l'originale adesso la perderebbe: prima il
+   * backup la mette al sicuro come versione, poi si puo' ripristinare.
+   */
+  CURRENT_NOT_SAFE("current_not_safe"),
+
   /** Il NAS non risponde (E-B9). */
   NAS_UNREACHABLE("nas_unreachable"),
 
@@ -94,6 +101,12 @@ enum class RestoreAvailability(override val code: String) : StableCode {
 
   /** Non e' un media di questo account. */
   NOT_MINE("not_mine"),
+
+  /** VE-7 della verifica funzionale 5B: il backup e' in pausa ("Ferma"): lo scambio sul NAS aspetta "Riprendi". */
+  PAUSED("paused"),
+
+  /** VE-7: il backup e' in prova (D12, R2 della 5A: una share o un account che non sono di prova): sul NAS non si scrive. */
+  TEST_ONLY("test_only"),
 
   /**
    * P14: un'altra versione o un altro scambio di questo media sono ancora in corso (un lavoro aperto nel diario del backup): si aspetta che
@@ -157,6 +170,12 @@ enum class PhoneKeptReason(override val code: String) : StableCode {
 
   /** La riscrittura non e' riuscita (o l'originale riletto dal NAS non tornava): il telefono e' com'era. */
   REWRITE_FAILED("rewrite_failed"),
+
+  /**
+   * R3 della revisione 5B: sul telefono c'era una versione diversa da quella al sicuro sul NAS (modificata dopo l'ultima lettura del telefono):
+   * il riscrittore non l'ha toccata. Il backup la salvera' come versione nuova; niente e' perso.
+   */
+  PHONE_CHANGED("phone_changed"),
 }
 
 /** L'esito di "Ripristina originale" ([VersionKeeper.restoreOriginal]). Solo numeri e codici. */
@@ -202,4 +221,11 @@ interface VersionKeeper {
    * di sistema per quelle righe: senza, la risposta e' [RestoreOutcome.NeedsPhoneWrite].
    */
   suspend fun restoreOriginal(mediaId: MediaId, confirmation: PhoneConfirmation, writeGrant: PhoneWriteGrant? = null): RestoreOutcome
+
+  /**
+   * VE-8 della verifica funzionale 5B: la parte di [restoreOriginal] che **non tocca niente** (piano, conferma, righe del telefono da
+   * riscrivere), da chiamare **prima** di aspettare il turno del backup: cosi' il permesso del dialogo si chiede subito, non dopo un lotto.
+   * Null = si puo' procedere (con il turno); altrimenti l'esito che [restoreOriginal] darebbe adesso, senza aver toccato niente. Di default null.
+   */
+  suspend fun precheck(mediaId: MediaId, confirmation: PhoneConfirmation, writeGrant: PhoneWriteGrant? = null): RestoreOutcome? = null
 }

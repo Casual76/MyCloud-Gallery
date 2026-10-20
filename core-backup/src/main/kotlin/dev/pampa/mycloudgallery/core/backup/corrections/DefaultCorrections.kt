@@ -101,14 +101,17 @@ class DefaultCorrections(
     val current = media.current
     val rows = current.phone.filter { it.present }.map { it.ref }
     val route = if (rows.isNotEmpty()) CorrectionRoute.PHONE else CorrectionRoute.NAS_ONLY
-    return CorrectionPlan(mediaId, change, current.versionId, route, readiness(media, route), if (route == CorrectionRoute.PHONE) rows else emptyList())
+    return CorrectionPlan(mediaId, change, current.versionId, route, readiness(media, route, change), if (route == CorrectionRoute.PHONE) rows else emptyList())
   }
 
-  private suspend fun readiness(media: VersionedMedia, route: CorrectionRoute): CorrectionReadiness {
+  private suspend fun readiness(media: VersionedMedia, route: CorrectionRoute, change: CorrectionRequest): CorrectionReadiness {
     if (!media.mine) return CorrectionReadiness.NOT_MINE
     val mime = media.mime
-    // Q6 (a): solo JPEG, PNG e WebP si scrivono nel file; un video o un tipo ignoto mai.
-    if (media.kind.isVideo || mime == null || !writer.canWrite(mime)) return CorrectionReadiness.FORMAT_NOT_WRITABLE
+    // Q6 (a): solo JPEG, PNG e WebP si scrivono nel file; un video o un tipo ignoto mai. VE-4: la rotazione di un formato che non si scrive non
+    // si fa nemmeno "nell'app": miniature e viewer leggono l'orientamento dai byte del file e la foto resterebbe storta dopo un "fatto".
+    if (media.kind.isVideo || mime == null || !writer.canWrite(mime)) {
+      return if (change.change.orientation != null) CorrectionReadiness.ROTATION_NOT_WRITABLE else CorrectionReadiness.FORMAT_NOT_WRITABLE
+    }
     val current = media.current
     val ownCopies = current.nas.filter { VersionPlanning.isOwnPrivate(it, share) }
     // D35: un media che sta solo nell'area comune (o di un'area senza copia propria) vuole il foglio "la vedranno tutti".
@@ -119,13 +122,16 @@ class DefaultCorrections(
       BackupGateState.OPEN -> Unit
       BackupGateState.FROZEN, BackupGateState.WRITES_STOPPED -> return CorrectionReadiness.FROZEN
       BackupGateState.READ_ONLY_AREA -> return CorrectionReadiness.READ_ONLY_AREA
+      // VE-7: la pausa e il backup in prova hanno la loro frase (prima tutto era "non e' ancora pronta").
+      BackupGateState.PAUSED -> return CorrectionReadiness.PAUSED
+      BackupGateState.TEST_ONLY -> return CorrectionReadiness.TEST_ONLY
       else -> return CorrectionReadiness.NOT_AVAILABLE
     }
     // D19: prima al sicuro (l'originale sul NAS, riletto qui): la copia privata verificata della versione e il suo SHA-256.
     if (current.fullHash == null || ownCopies.none { it.verifiedAtMillis != null }) return CorrectionReadiness.NEEDS_SAFE_FIRST
     if (usualCopy(current) == null) return CorrectionReadiness.NOT_AVAILABLE
-    // Un'altra versione dello stesso media in corso: prima finisce quella.
-    if (journal.forMedia(media.mediaId).any { !it.state.terminal }) return CorrectionReadiness.NOT_AVAILABLE
+    // Un'altra versione dello stesso media in corso: prima finisce quella (VE-7: lo dice).
+    if (journal.forMedia(media.mediaId).any { !it.state.terminal }) return CorrectionReadiness.BUSY
     return if (route == CorrectionRoute.PHONE || ownCopies.isNotEmpty()) CorrectionReadiness.READY else CorrectionReadiness.NOT_AVAILABLE
   }
 
@@ -133,18 +139,10 @@ class DefaultCorrections(
     version.nas.firstOrNull { VersionPlanning.isOwnPrivate(it, share) && !VersionPaths.isInVersions(it.path) && it.verifiedAtMillis != null }
 
   override suspend fun apply(plan: CorrectionPlan, confirmation: PhoneConfirmation, writeGrant: PhoneWriteGrant?): CorrectionOutcome {
-    val fresh = plan(plan.mediaId, plan.request)
-    if (fresh.hash != plan.hash) return CorrectionOutcome.PlanChanged
-    when (fresh.readiness) {
-      CorrectionReadiness.READY -> Unit
-      CorrectionReadiness.NEEDS_SAFE_FIRST -> return CorrectionOutcome.NeedsSafeFirst
-      CorrectionReadiness.FORMAT_NOT_WRITABLE -> return inAppOnly(fresh, confirmation)
-      else -> return CorrectionOutcome.Unavailable(fresh.readiness)
-    }
-    val check = PhoneConfirmationRules.check(fresh, confirmation, clock.monotonicMs())
-    if (check != PhoneConfirmationCheck.Valid) return CorrectionOutcome.Rejected(check)
-    if (fresh.route == CorrectionRoute.PHONE && (writeGrant == null || !writeGrant.coversAll(fresh.phoneRows))) {
-      return CorrectionOutcome.NeedsWriteGrant(fresh.phoneRows)
+    val fresh = when (val prepared = prepare(plan, confirmation, writeGrant)) {
+      is Prepared.Stop -> return prepared.outcome
+      is Prepared.InApp -> return inAppOnly(prepared.plan, confirmation)
+      is Prepared.Go -> prepared.plan
     }
     val media = catalog.media(fresh.mediaId) ?: return CorrectionOutcome.PlanChanged
     val current = media.current
@@ -201,7 +199,8 @@ class DefaultCorrections(
       var outcome: CorrectionOutcome = CorrectionOutcome.Done(newVersion)
       if (fresh.route == CorrectionRoute.PHONE) {
         for (ref in fresh.phoneRows) {
-          val failure = rewrite(ref, mime, kept, facts.sha256) ?: continue
+          // R3: ogni riga (non solo la prima, gia' riletta) deve avere ancora i byte della versione al sicuro, [expected].
+          val failure = rewrite(ref, mime, kept, facts.sha256, expected) ?: continue
           outcome = CorrectionOutcome.Failed(failure)
           break
         }
@@ -215,8 +214,41 @@ class DefaultCorrections(
     }
   }
 
+  /** VE-8: piano, prontezza, conferma e permesso del telefono, senza toccare niente; null = si procede (con il turno del backup). */
+  override suspend fun precheck(plan: CorrectionPlan, confirmation: PhoneConfirmation, writeGrant: PhoneWriteGrant?): CorrectionOutcome? =
+    (prepare(plan, confirmation, writeGrant) as? Prepared.Stop)?.outcome
+
+  private sealed interface Prepared {
+    class Stop(val outcome: CorrectionOutcome) : Prepared
+
+    /** Q6 (a): la correzione resta nell'app (il catalogo, con la conferma): nel turno del backup come il resto. */
+    class InApp(val plan: CorrectionPlan) : Prepared
+
+    class Go(val plan: CorrectionPlan) : Prepared
+  }
+
+  /** La parte di [apply] che non tocca niente (passo 1): il piano ricalcolato e confrontato, la prontezza, la conferma, il permesso. */
+  private suspend fun prepare(plan: CorrectionPlan, confirmation: PhoneConfirmation, writeGrant: PhoneWriteGrant?): Prepared {
+    val fresh = plan(plan.mediaId, plan.request)
+    if (fresh.hash != plan.hash) return Prepared.Stop(CorrectionOutcome.PlanChanged)
+    when (fresh.readiness) {
+      CorrectionReadiness.READY -> Unit
+      CorrectionReadiness.NEEDS_SAFE_FIRST -> return Prepared.Stop(CorrectionOutcome.NeedsSafeFirst)
+      CorrectionReadiness.FORMAT_NOT_WRITABLE -> return Prepared.InApp(fresh)
+      else -> return Prepared.Stop(CorrectionOutcome.Unavailable(fresh.readiness))
+    }
+    val check = PhoneConfirmationRules.check(fresh, confirmation, clock.monotonicMs())
+    if (check != PhoneConfirmationCheck.Valid) return Prepared.Stop(CorrectionOutcome.Rejected(check))
+    if (fresh.route == CorrectionRoute.PHONE && (writeGrant == null || !writeGrant.coversAll(fresh.phoneRows))) {
+      return Prepared.Stop(CorrectionOutcome.NeedsWriteGrant(fresh.phoneRows))
+    }
+    return Prepared.Go(fresh)
+  }
+
   /** Q6 (a): la correzione resta nell'app e nell'indice, il file non si tocca. Anche questa vuole la conferma dell'utente. */
   private suspend fun inAppOnly(plan: CorrectionPlan, confirmation: PhoneConfirmation): CorrectionOutcome {
+    // VE-4: una rotazione solo nell'app non la mostra nessuno: non si registra e non si dice "fatto".
+    if (plan.request.change.orientation != null) return CorrectionOutcome.Unavailable(CorrectionReadiness.ROTATION_NOT_WRITABLE)
     val check = PhoneConfirmationRules.check(plan, confirmation, clock.monotonicMs())
     if (check != PhoneConfirmationCheck.Valid) return CorrectionOutcome.Rejected(check)
     val base = plan.baseVersion ?: return CorrectionOutcome.Unavailable(CorrectionReadiness.NOT_AVAILABLE)
@@ -224,11 +256,15 @@ class DefaultCorrections(
     return CorrectionOutcome.FormatNotWritable
   }
 
-  /** Una riga del telefono riscritta con la copia corretta: null = fatto (o la riga non c'e' piu'), altrimenti il guasto. */
-  private suspend fun rewrite(ref: PhoneRef, mime: String, file: File, sha256: Sha256): CorrectionFailure? =
-    when (val r = rewriter.replace(ref, mime, file, sha256)) {
+  /**
+   * Una riga del telefono riscritta con la copia corretta, solo se ha ancora i byte [current] della versione al sicuro (R3): null = fatto (o la
+   * riga non c'e' piu'), altrimenti il guasto.
+   */
+  private suspend fun rewrite(ref: PhoneRef, mime: String, file: File, sha256: Sha256, current: Sha256): CorrectionFailure? =
+    when (val r = rewriter.replace(ref, mime, file, sha256, current)) {
       is PhoneRewrite.Replaced -> null
       PhoneRewrite.Gone -> null
+      PhoneRewrite.RowChanged -> CorrectionFailure.PHONE_CHANGED
       PhoneRewrite.NotGranted, PhoneRewrite.SourceMismatch -> CorrectionFailure.PHONE_WRITE_FAILED
       is PhoneRewrite.Failed -> {
         GalleryLog.w(TAG) { "riscrittura del telefono non riuscita (${r.code}, ripristinata ${r.restored})" }

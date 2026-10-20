@@ -43,7 +43,10 @@
                                 e' istanziata da `BackupGraph` (un cancello tolto, fuso o scollegato fa FALLIRE il passo). E (R2 della
                                 revisione 5A) il cancello chiama anche `FeatureFlags.backupMayWriteAs` e risponde `TEST_ONLY`: in
                                 release un account di prova non scrive in nessuna share (D13, la recinzione del telefono, c'e' solo in
-                                debug); anche `backupBlocksTestAccounts` e `backupMayWriteAs` devono stare nel dex e in mapping.txt
+                                debug); anche `backupBlocksTestAccounts` e `backupMayWriteAs` devono stare nel dex e in mapping.txt.
+                                E (LA-5 della verifica funzionale della 5B) il SECONDO cancello, quello dei file in arrivo ("Salva sul
+                                NAS", `IncomingGate.stateOf`, la share di destinazione): stessa prova, cioe' chiama `backupMayWriteTo` e
+                                `backupMayWriteAs`, risponde `TEST_ONLY` dopo ognuna ed e' istanziato da una classe del backup
     7c. niente servizi         l'APK di release non ha nessun `META-INF/services/dev.pampa.*` (ne' un file di servizio che
                                 nomini una classe `dev.pampa.*`): le varianti di misura legano le loro classi con Hilt, mai
                                 con `ServiceLoader` (R6)
@@ -307,7 +310,14 @@ public class DexGateFacts {
   public bool StateOfReturnsTestOnly;
   public bool StateOfCallsAccountDecision;
   public bool StateOfReturnsTestOnlyForAccount;
+  public bool IncomingClassFound;
+  public bool IncomingStateOfFound;
+  public bool IncomingStateOfCallsDecision;
+  public bool IncomingStateOfReturnsTestOnly;
+  public bool IncomingStateOfCallsAccountDecision;
+  public bool IncomingStateOfReturnsTestOnlyForAccount;
   public List<string> Instantiators = new List<string>();
+  public List<string> IncomingInstantiators = new List<string>();
   public List<string> DecisionCallers = new List<string>();
   public List<string> AccountDecisionCallers = new List<string>();
   public int Lines;
@@ -315,6 +325,7 @@ public class DexGateFacts {
 
 public static class DexGateReader {
   const string GateClass = "Ldev/pampa/mycloudgallery/backup/AppBackupGate;";
+  const string IncomingClass = "Ldev/pampa/mycloudgallery/backup/IncomingGate;";
   const string MainClass = "Ldev/pampa/mycloudgallery/MainActivity;";
   const string Decision = "Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;.backupMayWriteTo:(Ljava/lang/String;)Z";
   const string AccountDecision = "Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;.backupMayWriteAs:(Ljava/lang/String;)Z";
@@ -341,12 +352,14 @@ public static class DexGateReader {
           cls = m.Groups[1].Value; method = ""; sawDecisionInStateOf = false; sawAccountDecisionInStateOf = false;
           if (cls == MainClass) facts.SawMainActivity = true;
           if (cls == GateClass) facts.GateClassFound = true;
+          if (cls == IncomingClass) facts.IncomingClassFound = true;
           continue;
         }
         m = NameLine.Match(line);
         if (m.Success) {
           method = m.Groups[1].Value; sawDecisionInStateOf = false; sawAccountDecisionInStateOf = false;
           if (cls == GateClass && method == "stateOf") facts.StateOfFound = true;
+          if (cls == IncomingClass && method == "stateOf") facts.IncomingStateOfFound = true;
           continue;
         }
         var insn = InsnLine.Match(line);
@@ -356,15 +369,23 @@ public static class DexGateReader {
         if (op.StartsWith("invoke") && rest.Contains(Decision)) {
           facts.DecisionCallers.Add(here);
           if (cls == GateClass && method == "stateOf") { facts.StateOfCallsDecision = true; sawDecisionInStateOf = true; }
+          if (cls == IncomingClass && method == "stateOf") { facts.IncomingStateOfCallsDecision = true; sawDecisionInStateOf = true; }
         } else if (op.StartsWith("invoke") && rest.Contains(AccountDecision)) {
           facts.AccountDecisionCallers.Add(here);
           if (cls == GateClass && method == "stateOf") { facts.StateOfCallsAccountDecision = true; sawAccountDecisionInStateOf = true; }
+          if (cls == IncomingClass && method == "stateOf") { facts.IncomingStateOfCallsAccountDecision = true; sawAccountDecisionInStateOf = true; }
         } else if (op == "new-instance" && rest.Contains(GateClass)) {
           facts.Instantiators.Add(here);
+        } else if (op == "new-instance" && rest.Contains(IncomingClass)) {
+          facts.IncomingInstantiators.Add(here);
         } else if (op.StartsWith("sget") && rest.Contains(TestOnly) && cls == GateClass && method == "stateOf") {
           // D12: la risposta TEST_ONLY dopo la decisione per share; R2: la risposta TEST_ONLY dopo la decisione per account.
           if (sawDecisionInStateOf) facts.StateOfReturnsTestOnly = true;
           if (sawAccountDecisionInStateOf) facts.StateOfReturnsTestOnlyForAccount = true;
+        } else if (op.StartsWith("sget") && rest.Contains(TestOnly) && cls == IncomingClass && method == "stateOf") {
+          // LA-5: lo stesso per il cancello dei file in arrivo.
+          if (sawDecisionInStateOf) facts.IncomingStateOfReturnsTestOnly = true;
+          if (sawAccountDecisionInStateOf) facts.IncomingStateOfReturnsTestOnlyForAccount = true;
         }
       }
       process.WaitForExit();
@@ -758,9 +779,26 @@ Step "D12 e R2 nella release: FeatureFlags.backupTestSharesOnly, backupMayWriteT
   elseif (-not ($gate.Instantiators | Where-Object { $_ -like "Ldev/pampa/mycloudgallery/backup/BackupGraph;.*" })) {
     $problems += ("AppBackupGate e' istanziato solo da " + (($gate.Instantiators | Select-Object -Unique) -join ", ") + ", non da BackupGraph")
   }
+  # LA-5 (verifica funzionale della 5B): il secondo cancello, quello dei file in arrivo ("Salva sul NAS" scrive nella share di
+  # destinazione, anche quella comune). Stessa prova di quello del backup: se R8 lo togliesse, lo fondesse o ne perdesse una decisione, i
+  # file ricevuti andrebbero in una share vera anche in release. Lo tiene app\proguard-rules.pro; lo istanzia una classe del backup.
+  if (-not $gate.IncomingClassFound) { $problems += "IncomingGate non e' nel dex di release: il cancello dei file in arrivo e' stato tolto o fuso (D12 e R2 non valgono per Salva sul NAS)" }
+  elseif (-not $gate.IncomingStateOfFound) { $problems += "IncomingGate.stateOf non e' nel dex di release" }
+  else {
+    if (-not $gate.IncomingStateOfCallsDecision) { $problems += "IncomingGate.stateOf non chiama FeatureFlags.backupMayWriteTo: D12 non governa i file in arrivo" }
+    elseif (-not $gate.IncomingStateOfReturnsTestOnly) { $problems += "IncomingGate.stateOf non risponde BackupGateState.TEST_ONLY dopo la decisione D12" }
+    if (-not $gate.IncomingStateOfCallsAccountDecision) { $problems += "IncomingGate.stateOf non chiama FeatureFlags.backupMayWriteAs: in release un account di prova riceverebbe file senza la recinzione D13 (R2)" }
+    elseif (-not $gate.IncomingStateOfReturnsTestOnlyForAccount) { $problems += "IncomingGate.stateOf non risponde BackupGateState.TEST_ONLY dopo la decisione per account (R2)" }
+  }
+  if ($gate.IncomingInstantiators.Count -eq 0) { $problems += "nessun codice istanzia IncomingGate: il cancello dei file in arrivo non e' collegato" }
+  elseif (-not ($gate.IncomingInstantiators | Where-Object { $_ -like "Ldev/pampa/mycloudgallery/backup/*" })) {
+    $problems += ("IncomingGate e' istanziato solo da " + (($gate.IncomingInstantiators | Select-Object -Unique) -join ", ") + ", non da una classe del backup")
+  }
   if ($problems.Count -gt 0) { return ($problems -join "; ") }
   Write-Host ("        cancello D12 e R2 provato nel bytecode: stateOf -> backupMayWriteTo -> TEST_ONLY e stateOf -> backupMayWriteAs -> TEST_ONLY, istanziato da {0}, decisioni chiamate da {1} e {2} metodi ({3} righe di dexdump)" -f
     (($gate.Instantiators | Select-Object -Unique) -join ", "), @($gate.DecisionCallers | Select-Object -Unique).Count, @($gate.AccountDecisionCallers | Select-Object -Unique).Count, $gate.Lines) -ForegroundColor DarkGray
+  Write-Host ("        cancello dei file in arrivo (LA-5) provato nel bytecode: IncomingGate.stateOf -> backupMayWriteTo/backupMayWriteAs -> TEST_ONLY, istanziato da {0}" -f
+    (($gate.IncomingInstantiators | Select-Object -Unique) -join ", ")) -ForegroundColor DarkGray
 }
 
 # R6: nessun file di servizio nostro nell'APK di release. `ServiceLoader` e' un canale dichiarativo e invisibile: un file in

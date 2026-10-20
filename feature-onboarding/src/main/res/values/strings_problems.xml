@@ -84,6 +84,10 @@
   <string name="problem_registry_detail">L’elenco dei dispositivi non ha le firme giuste: potrebbe essere stato modificato o essere vecchio. Non vado avanti. Avvisa l’admin, che può controllarlo.</string>
   <string name="problem_update_title">Serve un aggiornamento dell’app</string>
   <string name="problem_update_detail">Sul NAS ci sono dati scritti da una versione più nuova di MyCloud Gallery. Aggiorna l’app e riprova: finché non lo fai, non tocco niente.</string>
+  <string name="problem_keys_title">Non ho tolto le chiavi di questo dispositivo</string>
+  <string name="problem_keys_detail">Il telefono non ha risposto quando ho provato a togliere le chiavi, e finché non ci riesco non cambio niente: la famiglia di prima resta com’era. Aspetta qualche secondo, o riavvia il telefono, e riprova.</string>
+  <string name="problem_old_data_title">Non ho tolto i dati di prima</string>
+  <string name="problem_old_data_detail">Questo telefono aveva i dati di un altro account e non sono riuscito a toglierli. Finché restano non apro la Libreria. Riprova: le foto del telefono e il NAS non si toccano.</string>
   <string name="problem_step_unavailable_title">Questo passo non è disponibile adesso</string>
   <string name="problem_step_unavailable_detail">Qualcosa non è nell’ordine giusto. Riprova fra un attimo: se succede ancora, torna indietro e riparti dal passo prima.</string>
 </resources>

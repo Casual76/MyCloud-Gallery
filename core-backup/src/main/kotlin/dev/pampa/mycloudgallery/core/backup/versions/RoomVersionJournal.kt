@@ -94,6 +94,10 @@ class RoomVersionJournal(private val database: GalleryDatabase, private val cloc
   override suspend fun inShare(share: String): List<VersionJob> =
     dao.ofKindsInShare(KINDS.keys.toList(), share).mapNotNull { it.toJob() }
 
+  /** R17: solo i lavori aggiornati da [sinceNasMs] in poi (la colonna `updated_at` e' l'ora del NAS dell'ultimo passo). */
+  override suspend fun inShareSince(share: String, sinceNasMs: Long): List<VersionJob> =
+    dao.ofKindsInShare(KINDS.keys.toList(), share).filter { it.updatedAt >= sinceNasMs }.mapNotNull { it.toJob() }
+
   override suspend fun citedTemps(): Set<SharePath> = open(OPEN_SCAN).mapNotNullTo(LinkedHashSet()) { it.temp }
 
   // --- Righe ------------------------------------------------------------------------------------------------------------------

@@ -1,27 +1,28 @@
 package dev.pampa.mycloudgallery.core.metadata.strip
 
 import android.media.MediaMetadataRetriever
+import androidx.exifinterface.media.ExifInterface
 import dev.pampa.mycloudgallery.core.metadata.contract.ExtractHints
 import dev.pampa.mycloudgallery.core.metadata.contract.Extraction
 import dev.pampa.mycloudgallery.core.metadata.contract.MetadataExtractor
 import dev.pampa.mycloudgallery.core.metadata.extract.PreviewDecoder
-import dev.pampa.mycloudgallery.core.metadata.format.ContainerType
-import dev.pampa.mycloudgallery.core.metadata.format.Sniffer
 import dev.pampa.mycloudgallery.core.metadata.write.FileMediaBytes
 import java.io.File
 import java.io.IOException
-import java.io.RandomAccessFile
 import java.time.ZoneId
 import java.util.Locale
 import kotlinx.coroutines.runBlocking
 
-// Fase 5B, P11 (docs/fase5-progetto.md D26, E-X5, §6.1 "Posizione che esce nelle condivisioni"): il RICONTROLLO. "Il file condiviso non contiene
-// GPS (verificato)": si dimostra, non si presume. Una copia senza posizione si rilegge con piu' lettori **indipendenti**, e la condivisione
-// parte solo se tutti dicono "nessuna posizione":
+// Fase 5B, P11 (docs/fase5-progetto.md D26, E-X5, §6.1 "Posizione che esce nelle condivisioni"), con le correzioni 5B (R1, R2): il RICONTROLLO. "Il
+// file condiviso non contiene GPS (verificato)": si dimostra, non si presume. Una copia senza posizione si rilegge con piu' lettori, e la
+// condivisione parte solo se tutti dicono "nessuna posizione":
+//  - per primo, sempre, il rilevatore indipendente (`LocationTraceRecheck`, `LocationTraces.kt`): scritto da zero, non riusa niente dello stripper,
+//    guarda i byte del file finale (EXIF GPS, nomi XMP con gps/latitude/longitude, ISO 6709, `©xyz`, `loci`, tracce non audio/video);
 //  - l'estrattore dell'app (lo stesso che legge il telefono e il NAS) e, per le foto, anche il decodificatore: la copia deve essere ancora un media;
-//  - `ExifInterface` per le foto (un altro lettore dell'EXIF, scritto da altri) e `MediaMetadataRetriever` per i video (il lettore del sistema);
-//  - una scansione grezza dei byte (`RawLocationRecheck`): l'XMP e le scatole dei video, che gli altri non guardano.
-// Un lettore che non riesce a leggere la copia non assolve: e' un "non so", e la condivisione si ferma (si fallisce chiusi).
+//  - `ExifInterface` per le foto (un altro lettore dell'EXIF, scritto da altri) e `MediaMetadataRetriever` per i video (il lettore del sistema).
+// Prima i "lettori indipendenti" non lo erano: per i video due erano lo stesso `MediaMetadataRetriever` e il lettore grezzo era il piano dello
+// stripper, quindi dove lo stripper non guardava non guardava nessuno (R1). Un lettore che non riesce a leggere la copia non assolve: e' un "non
+// so", e la condivisione si ferma (si fallisce chiusi).
 
 /** Il parere di un lettore su una copia. */
 enum class LocationVerdict {
@@ -93,10 +94,36 @@ class ExifInterfaceLocationRecheck : LocationRecheck {
 
   override fun appliesTo(mime: String): Boolean = !isVideo(mime)
 
-  override fun check(file: File, mime: String): LocationVerdict = when (ImageLocationStrip.exifHasGps(file)) {
-    true -> LocationVerdict.HAS_LOCATION
-    false -> LocationVerdict.CLEAR
-    null -> LocationVerdict.UNREADABLE
+  override fun check(file: File, mime: String): LocationVerdict = try {
+    val exif = ExifInterface(file)
+    if (GPS_TAGS.any { exif.getAttribute(it) != null } || exif.latLong != null) LocationVerdict.HAS_LOCATION else LocationVerdict.CLEAR
+  } catch (_: IOException) {
+    LocationVerdict.UNREADABLE
+  } catch (_: RuntimeException) {
+    // Un file che ExifInterface non sa leggere non e' un file di cui si possa dire "senza posizione": il chiamante fallisce chiuso.
+    LocationVerdict.UNREADABLE
+  }
+
+  private companion object {
+    /** Tutte le etichette del blocco GPS dell'EXIF: coordinate, quota, direzione, velocita', area, ora e data GPS, metodo, errore. */
+    val GPS_TAGS: List<String> = listOf(
+      ExifInterface.TAG_GPS_VERSION_ID,
+      ExifInterface.TAG_GPS_LATITUDE_REF, ExifInterface.TAG_GPS_LATITUDE,
+      ExifInterface.TAG_GPS_LONGITUDE_REF, ExifInterface.TAG_GPS_LONGITUDE,
+      ExifInterface.TAG_GPS_ALTITUDE_REF, ExifInterface.TAG_GPS_ALTITUDE,
+      ExifInterface.TAG_GPS_TIMESTAMP, ExifInterface.TAG_GPS_DATESTAMP,
+      ExifInterface.TAG_GPS_SATELLITES, ExifInterface.TAG_GPS_STATUS, ExifInterface.TAG_GPS_MEASURE_MODE, ExifInterface.TAG_GPS_DOP,
+      ExifInterface.TAG_GPS_SPEED_REF, ExifInterface.TAG_GPS_SPEED,
+      ExifInterface.TAG_GPS_TRACK_REF, ExifInterface.TAG_GPS_TRACK,
+      ExifInterface.TAG_GPS_IMG_DIRECTION_REF, ExifInterface.TAG_GPS_IMG_DIRECTION,
+      ExifInterface.TAG_GPS_MAP_DATUM,
+      ExifInterface.TAG_GPS_DEST_LATITUDE_REF, ExifInterface.TAG_GPS_DEST_LATITUDE,
+      ExifInterface.TAG_GPS_DEST_LONGITUDE_REF, ExifInterface.TAG_GPS_DEST_LONGITUDE,
+      ExifInterface.TAG_GPS_DEST_BEARING_REF, ExifInterface.TAG_GPS_DEST_BEARING,
+      ExifInterface.TAG_GPS_DEST_DISTANCE_REF, ExifInterface.TAG_GPS_DEST_DISTANCE,
+      ExifInterface.TAG_GPS_PROCESSING_METHOD, ExifInterface.TAG_GPS_AREA_INFORMATION,
+      ExifInterface.TAG_GPS_DIFFERENTIAL, ExifInterface.TAG_GPS_H_POSITIONING_ERROR,
+    )
   }
 }
 
@@ -133,49 +160,9 @@ class MediaMetadataLocationRecheck : LocationRecheck {
 }
 
 /**
- * Il lettore grezzo, sempre in coda a quelli iniettati: guarda i byte, non si fida di nessun parser. Foto: l'XMP (in ogni suo pacchetto) e
- * le scatole dei video incorporati; video: le scatole di posizione, le chiavi di QuickTime, l'XMP e le tracce di metadati a tempo.
+ * I lettori di serie: l'estrattore dell'app, `ExifInterface` per le foto, `MediaMetadataRetriever` per i video. Li lega `:app`; il rilevatore
+ * indipendente non sta qui perche' lo stripper lo mette sempre davanti da solo.
  */
-class RawLocationRecheck : LocationRecheck {
-
-  override fun appliesTo(mime: String): Boolean = true
-
-  override fun check(file: File, mime: String): LocationVerdict = try {
-    RandomAccessFile(file, "r").use { raf ->
-      val raw = RawFile(raf)
-      val head = raw.read(0, SNIFF_BYTES)
-      val sniffed = Sniffer.sniff(head, mime)
-      when (sniffed.type) {
-        ContainerType.JPEG, ContainerType.PNG, ContainerType.WEBP -> imageVerdict(raw, sniffed.type)
-        ContainerType.MP4 -> when {
-          !IsoLocation.plan(raw, 0, raw.length).isClean -> LocationVerdict.HAS_LOCATION
-          // Un video senza indice (`moov`) non si riproduce: non e' una copia da consegnare.
-          !IsoLocation.hasMovie(raw, 0, raw.length) -> LocationVerdict.UNREADABLE
-          else -> LocationVerdict.CLEAR
-        }
-        else -> LocationVerdict.UNREADABLE
-      }
-    }
-  } catch (_: IOException) {
-    LocationVerdict.UNREADABLE
-  } catch (_: SecurityException) {
-    LocationVerdict.UNREADABLE
-  }
-
-  private fun imageVerdict(raw: RawFile, type: ContainerType): LocationVerdict {
-    if (ImageXmp.hasGps(raw, type)) return LocationVerdict.HAS_LOCATION
-    for (region in EmbeddedIso.regions(raw)) {
-      if (!IsoLocation.plan(raw, region.start, region.end).isClean) return LocationVerdict.HAS_LOCATION
-    }
-    return LocationVerdict.CLEAR
-  }
-
-  private companion object {
-    const val SNIFF_BYTES = 256
-  }
-}
-
-/** I lettori di serie: l'estrattore dell'app, `ExifInterface` per le foto, `MediaMetadataRetriever` per i video. Li lega `:app`. */
 object LocationRechecks {
 
   fun standard(extractor: MetadataExtractor, decoder: PreviewDecoder?, zone: ZoneId): List<LocationRecheck> =

@@ -178,7 +178,7 @@ internal object FiveBLayoutSuite {
       "riepilogo" to VersionsUi.ConfirmRestore(plan),
       "permesso" to VersionsUi.AwaitingSystemDialog(plan, 1),
       "scambio" to VersionsUi.Restoring(plan),
-      "fatto" to VersionsUi.Restored(plan, phoneKeptEdited = true),
+      "fatto" to VersionsUi.Restored(plan, kept = dev.pampa.mycloudgallery.core.backup.contract.PhoneKeptReason.PERMISSION_DENIED),
       "caricamento" to VersionsUi.Loading,
       "non pronto" to VersionsUi.Unavailable,
     )

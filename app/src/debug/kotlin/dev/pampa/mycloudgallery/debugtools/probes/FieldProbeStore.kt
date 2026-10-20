@@ -3,6 +3,8 @@ package dev.pampa.mycloudgallery.debugtools.probes
 import android.content.Context
 import java.io.File
 import java.util.Properties
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * SOLO build debug (Fase 5B, P0-B): il resoconto delle prove guidate e lo stato che le attraversa. **Solo numeri**: ogni valore e' un `Long` sotto
@@ -13,12 +15,24 @@ import java.util.Properties
  * Lo scrivono i componenti di prova (activity e provider, che il sistema crea in questo stesso processo) e la schermata: tutto passa dal blocco
  * [lock]. Niente rete, niente orologio da muro nelle decisioni.
  */
-internal class FieldProbeStore private constructor(private val dir: File) {
+internal class FieldProbeStore private constructor(private val dir: File, private val deferred: Boolean) {
 
   private val lock = Any()
   private val values = LinkedHashMap<String, Long>()
   private val countersFile = File(dir, COUNTERS)
   private val sharesFile = File(dir, SHARES)
+
+  /** Ci sono numeri in memoria non ancora scritti sul file (solo con la scrittura differita). */
+  private var dirty = false
+  private var scheduled = false
+
+  /** Quante volte il file dei numeri e' stato riscritto (per provare che una lettura misurata non lo riscrive ogni volta, LA-8). */
+  var writes: Int = 0
+    private set
+
+  private val flusher by lazy {
+    Executors.newSingleThreadScheduledExecutor { runnable -> Thread(runnable, "field-probe-store").apply { isDaemon = true } }
+  }
 
   init {
     dir.mkdirs()
@@ -75,14 +89,95 @@ internal class FieldProbeStore private constructor(private val dir: File) {
     (values.keys.filter { it.startsWith(prefix) }.mapNotNull { it.removePrefix(prefix).toIntOrNull() }.maxOrNull() ?: 0) + 1
   }
 
+  /**
+   * Scrive [value] sotto [key] **solo se non c'e' gia'** fra le righe indicizzate di [key]: un valore per ogni cosa diversa vista (LA-8, i chiamanti
+   * di T-14: prima `docs_caller` aveva una riga sola e ogni app nuova cancellava la precedente).
+   */
+  fun recordDistinct(key: FieldProbeKey, value: Long) {
+    synchronized(lock) {
+      val prefix = key.code + "."
+      if (values.entries.any { it.key.startsWith(prefix) && it.value == value }) return
+      values[FieldProbeKey.lineKey(key, nextIndex(key))] = value
+      save()
+    }
+  }
+
   /** Il resoconto: `chiave=valore`, una per riga, in ordine di chiave. */
   fun render(): String = FieldProbeReport.render(synchronized(lock) { values.toMap() })
 
-  /** Azzera i numeri (non gli indirizzi delle condivisioni: servono ancora a T-15). */
+  /**
+   * Azzera le **misure** (non gli indirizzi delle condivisioni: servono ancora a T-15, ne' lo stato delle prove a piu' tempi, [saveSession]).
+   * Le **scelte** della schermata (forma, latenza, numero di file, modo di T-15, [CHOICES]) restano: non sono misure, la schermata le mostra
+   * ancora e provider e activity le leggono da qui; azzerate qui, la schermata diceva una forma e i componenti ne usavano un'altra (LA-6).
+   */
   fun resetNumbers() {
     synchronized(lock) {
+      val kept = CHOICES.mapNotNull { key -> values[key.code]?.let { key.code to it } }
       values.clear()
+      kept.forEach { (code, value) -> values[code] = value }
       save()
+    }
+  }
+
+  /**
+   * Scrive le scelte della schermata che non sono state ancora fatte, con il valore di partenza (quello che provider e activity usano senza una
+   * scelta). Cosi' il resoconto dice sempre quale forma, latenza e numero di file sono stati usati, anche senza un tocco su un chip (LA-6).
+   */
+  fun seedChoices() {
+    synchronized(lock) {
+      var changed = false
+      for ((key, default) in CHOICE_DEFAULTS) {
+        if (key.code !in values) {
+          values[key.code] = default
+          changed = true
+        }
+      }
+      if (changed) save()
+    }
+  }
+
+  // --- Lo stato delle prove a piu' tempi (LA-7) -----------------------------------------------------------------------------------
+
+  /**
+   * Salva lo stato di una prova che si fa in piu' passaggi ([name] e' `[a-z0-9_]+`): la fotografia di riferimento di T-09 e T-16, le righe
+   * cestinate, la copia in modifica. Sono **numeri e nomi di file di prova** (`_ID`, dimensioni, date), su un file privato accanto ai numeri e
+   * **mai nel resoconto**. Servono perche' T-09 e T-16 mandano in Samsung Gallery: Android puo' chiudere l'app, o la schermata ricrearsi, e al
+   * ritorno "Confronta" non trovava piu' il riferimento.
+   */
+  fun saveSession(name: String, lines: List<String>) {
+    synchronized(lock) {
+      val file = sessionFile(name)
+      if (lines.isEmpty()) {
+        file.delete()
+        return
+      }
+      val temp = File(dir, file.name + ".tmp")
+      temp.writeText(lines.joinToString("\n") + "\n")
+      if (!temp.renameTo(file)) {
+        file.delete()
+        temp.renameTo(file)
+      }
+    }
+  }
+
+  /** Lo stato salvato di [name], o null se non c'e'. */
+  fun loadSession(name: String): List<String>? = synchronized(lock) {
+    sessionFile(name).takeIf { it.isFile }?.readLines()?.filter { it.isNotEmpty() }
+  }
+
+  private fun sessionFile(name: String): File {
+    require(SESSION_NAME.matches(name)) { "Nome dello stato non valido." }
+    return File(dir, "session-$name.txt")
+  }
+
+  /** Scrive subito quello che e' ancora in memoria (la scrittura differita lo fa da sola dopo [FLUSH_DELAY_MS]). */
+  fun flush() {
+    synchronized(lock) {
+      scheduled = false
+      if (dirty) {
+        write()
+        dirty = false
+      }
     }
   }
 
@@ -124,7 +219,23 @@ internal class FieldProbeStore private constructor(private val dir: File) {
     }
   }
 
+  /**
+   * Chi ha cambiato un numero chiama questo, sotto [lock]. Con la scrittura **differita** (lo store del processo) il file si riscrive una volta
+   * sola ogni [FLUSH_DELAY_MS], fuori dal thread di chi misura: una lettura di T-14 cambiava fino a quattro numeri e riscriveva il file ogni volta,
+   * proprio dove si misurano i tempi (LA-8). Nei test (`forTest`) si scrive subito, come prima.
+   */
   private fun save() {
+    if (!deferred) {
+      write()
+      return
+    }
+    dirty = true
+    if (scheduled) return
+    scheduled = true
+    flusher.schedule({ flush() }, FLUSH_DELAY_MS, TimeUnit.MILLISECONDS)
+  }
+
+  private fun write() {
     val properties = Properties()
     values.forEach { (k, v) -> properties.setProperty(k, v.toString()) }
     val temp = File(dir, "$COUNTERS.tmp")
@@ -133,11 +244,32 @@ internal class FieldProbeStore private constructor(private val dir: File) {
       countersFile.delete()
       temp.renameTo(countersFile)
     }
+    writes++
   }
 
   companion object {
     private const val COUNTERS = "counters.properties"
     private const val SHARES = "t15-uris.txt"
+    private val SESSION_NAME = Regex("^[a-z0-9_]{1,32}$")
+
+    /** Dopo quanti ms dall'ultimo cambiamento il file dei numeri si riscrive (scrittura differita). Abbastanza poco perche' una morte del processo non lo perda. */
+    private const val FLUSH_DELAY_MS = 150L
+
+    /** Le scelte della schermata di T-14 e T-15: configurazione della prova, non misure (restano all'azzeramento). */
+    private val CHOICES: List<FieldProbeKey> = listOf(
+      FieldProbeKey.T14_FORM,
+      FieldProbeKey.T14_LATENCY_MS,
+      FieldProbeKey.T14_COUNT,
+      FieldProbeKey.T15_CLOSED_FIRST,
+    )
+
+    /** I valori di partenza delle scelte: gli stessi che provider e activity usano quando non ce n'e' una (`FieldProbeForm.of(null)`, 0 ms, 1 file, legge subito). */
+    private val CHOICE_DEFAULTS: List<Pair<FieldProbeKey, Long>> = listOf(
+      FieldProbeKey.T14_FORM to FieldProbeForm.of(null).code,
+      FieldProbeKey.T14_LATENCY_MS to 0L,
+      FieldProbeKey.T14_COUNT to 1L,
+      FieldProbeKey.T15_CLOSED_FIRST to 0L,
+    )
 
     /** Un numero che cambia a ogni avvio del processo: la sua identita' per T-15 (il processo e' ripartito dalla ricezione?). */
     private val PROCESS_MARKER: Long = System.nanoTime()
@@ -148,11 +280,14 @@ internal class FieldProbeStore private constructor(private val dir: File) {
     /** Lo store del processo, nella cartella privata `noBackupFilesDir/field-probe/`. */
     fun of(context: Context): FieldProbeStore =
       instance ?: synchronized(this) {
-        instance ?: FieldProbeStore(File(context.applicationContext.noBackupFilesDir, "field-probe")).also { instance = it }
+        instance ?: FieldProbeStore(File(context.applicationContext.noBackupFilesDir, "field-probe"), deferred = true).also { instance = it }
       }
 
-    /** Per i test: uno store in una cartella scelta, non condiviso. */
-    fun forTest(dir: File): FieldProbeStore = FieldProbeStore(dir)
+    /** Per i test: uno store in una cartella scelta, non condiviso, che scrive subito. */
+    fun forTest(dir: File): FieldProbeStore = FieldProbeStore(dir, deferred = false)
+
+    /** Per i test della scrittura differita: come quello del processo, in una cartella scelta. */
+    fun forTestDeferred(dir: File): FieldProbeStore = FieldProbeStore(dir, deferred = true)
   }
 }
 

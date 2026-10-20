@@ -203,6 +203,12 @@ interface VersionJournal {
   /** Tutti i lavori di una share, terminali compresi (la franchigia del congelamento, D32). */
   suspend fun inShare(share: String): List<VersionJob>
 
+  /**
+   * R17 della revisione 5B: i lavori di una share, terminali compresi, il cui ultimo passo e' stato scritto (ora del NAS del diario) da
+   * [sinceNasMs] in poi: la franchigia vale solo per i lavori recenti. Di default tutti (un diario che non tiene l'ora).
+   */
+  suspend fun inShareSince(share: String, sinceNasMs: Long): List<VersionJob> = inShare(share)
+
   /** D33: i temporanei citati dai lavori aperti (la pulizia dei propri file non li toglie). */
   suspend fun citedTemps(): Set<SharePath>
 }

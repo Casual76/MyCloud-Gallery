@@ -13,6 +13,8 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupSources
 import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSummary
 import dev.pampa.mycloudgallery.core.backup.contract.BackupTrigger
+import dev.pampa.mycloudgallery.core.backup.contract.SafeguardStart
+import dev.pampa.mycloudgallery.core.backup.contract.VerifyScope
 import dev.pampa.mycloudgallery.core.backup.contract.ExistingCopiesProgress
 import dev.pampa.mycloudgallery.core.backup.contract.ExistingCopiesState
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneBytes
@@ -46,7 +48,10 @@ import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneAccess
 import dev.pampa.mycloudgallery.core.nasmedia.contract.OwnChanges
 import dev.pampa.mycloudgallery.core.model.AccountId
 import dev.pampa.mycloudgallery.core.model.NasArea
+import dev.pampa.mycloudgallery.core.model.Location
+import dev.pampa.mycloudgallery.core.model.LocationState
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.model.MediaSource
 import dev.pampa.mycloudgallery.core.nas.contract.NasBrowser
 import dev.pampa.mycloudgallery.core.nas.contract.NasResult
 import dev.pampa.mycloudgallery.core.nas.contract.ShareAccess
@@ -211,6 +216,9 @@ class BackupGraph(
       kick()
       inputs.jobs.incoming(userInitiated)
     },
+    // VE-10, MC-3: un lavoro delle versioni nato adesso chiede subito il lavoro del suo tipo.
+    onVersionWork = { kind -> inputs.jobs.versionWork(kind) },
+    safeguard = { id -> safeguard(id) },
   )
 
   // --- Cio' che nasce in start --------------------------------------------------------------------------------------------------
@@ -528,12 +536,19 @@ class BackupGraph(
     if (!gate.stateOf(p.share).open || settings.deviceFolder.value == null) return emptyList()
     val out = ArrayList<Next>(3)
     if (inputs.ruleSettings.current().protectNewPhotos && p.planner.next(BackupKind.PHOTOS, 1, BackupTrigger.QUICK_NEW_PHOTOS).isNotEmpty()) out += Next.Quick
-    // P14: i lavori delle versioni aperti (correzioni, risultati degli editor, scambi dopo un ripristino del telefono) girano con le foto; quelli
-    // che aspettano il PC (`SOURCE_CHANGED`) no: niente polling, li riprende il giro periodico.
-    if (p.planner.next(BackupKind.PHOTOS, 1, BackupTrigger.SCHEDULED).isNotEmpty() || hasOpenItems(BackupKind.PHOTOS) || hasOpenVersionWork(waiting = false)) {
+    // P14, VE-1: i lavori delle versioni aperti (correzioni, risultati degli editor, scambi dopo un ripristino del telefono) girano con il lavoro
+    // del tipo del loro media (un video con i video, con le sue regole); quelli che aspettano il PC (`SOURCE_CHANGED`) no: niente polling, li
+    // riprende la fine di una scansione del NAS ([afterNasScan]) o il giro periodico.
+    if (p.planner.next(BackupKind.PHOTOS, 1, BackupTrigger.SCHEDULED).isNotEmpty() || hasOpenItems(BackupKind.PHOTOS) ||
+      hasOpenVersionWork(BackupKind.PHOTOS, waiting = false)
+    ) {
       out += Next.Photos
     }
-    if (p.planner.next(BackupKind.VIDEOS, 1, BackupTrigger.SCHEDULED).isNotEmpty() || hasOpenItems(BackupKind.VIDEOS)) out += Next.Videos
+    if (p.planner.next(BackupKind.VIDEOS, 1, BackupTrigger.SCHEDULED).isNotEmpty() || hasOpenItems(BackupKind.VIDEOS) ||
+      hasOpenVersionWork(BackupKind.VIDEOS, waiting = false)
+    ) {
+      out += Next.Videos
+    }
     return out
   }
 
@@ -567,18 +582,80 @@ class BackupGraph(
     if (p.planner.next(kind, 1, trigger).isNotEmpty()) return true
     // Un elemento rimasto aperto (un giro interrotto, un file aperto dal PC): si riprende dal giro del suo tipo (BK-10).
     if (trigger == BackupTrigger.QUICK_NEW_PHOTOS) return false
-    // P14: un lavoro delle versioni aperto gira con le foto (anche quelli che aspettano il PC: il giro ricalcola il piano).
-    return hasOpenItems(kind) || (kind == BackupKind.PHOTOS && hasOpenVersionWork(waiting = true))
+    // P14, VE-1: un lavoro delle versioni aperto gira con il lavoro del tipo del suo media (anche quelli che aspettano il PC: il giro ricalcola
+    // il piano). Prima solo le foto lo vedevano: un video modificato saliva con le regole delle foto.
+    return hasOpenItems(kind) || hasOpenVersionWork(kind, waiting = true)
   }
 
-  /** P14: lavori delle versioni o degli scambi aperti nel diario. Con [waiting] falso, senza quelli che aspettano il PC (`SOURCE_CHANGED`). */
-  private suspend fun hasOpenVersionWork(waiting: Boolean): Boolean = withContext(Dispatchers.IO) {
+  /**
+   * P14: lavori delle versioni o degli scambi aperti nel diario per i media di [kind] (VE-1: i video sono i media `video`, come in
+   * [hasOpenItems]). Con [waiting] falso, senza quelli che aspettano il PC (`SOURCE_CHANGED`).
+   */
+  private suspend fun hasOpenVersionWork(kind: BackupKind, waiting: Boolean): Boolean = withContext(Dispatchers.IO) {
     runCatching {
-      val held = if (waiting) "" else " AND (hold IS NULL OR hold != 'source_changed')"
+      val held = if (waiting) "" else " AND (i.hold IS NULL OR i.hold != 'source_changed')"
+      val video = if (kind == BackupKind.VIDEOS) "= 'video'" else "!= 'video'"
       database.openHelper.readableDatabase.query(
-        "SELECT 1 FROM backup_item WHERE is_open = 1 AND kind IN ('version', 'swap')$held LIMIT 1",
+        "SELECT 1 FROM backup_item i JOIN media m ON m.media_id = i.media_id " +
+          "WHERE i.is_open = 1 AND i.kind IN ('version', 'swap') AND m.kind $video$held LIMIT 1",
       ).use { it.moveToFirst() }
     }.getOrDefault(false)
+  }
+
+  /**
+   * VE-10: alla fine di una scansione del NAS le versioni ferme perche' il PC aveva cambiato il file (`SOURCE_CHANGED`) ripartono con il lavoro
+   * del loro tipo: la scansione ha registrato il file del PC e il piano si ricalcola. Prima ripartivano solo con il giro periodico (fino a 12
+   * ore), mentre la frase prometteva "riparto da solo dopo la prossima verifica del NAS". Solo il diario e il catalogo.
+   */
+  suspend fun afterNasScan() {
+    if (parts == null) return
+    for (kind in fiveB.sourceChangedKinds()) inputs.jobs.versionWork(kind)
+  }
+
+  /**
+   * VE-3 della verifica funzionale 5B, "Metti al sicuro adesso" (foglio "Prima la metto al sicuro" di una correzione): cio' che serve a **questo**
+   * media. Prima il tasto chiedeva solo "Fai ora", che non vede un media fuori dalle sorgenti e non verifica un solo-NAS.
+   * - Una copia privata della versione attuale non ancora riletta (un solo-NAS letto dalla scansione): la verifica sul momento di quella copia
+   *   (`OnTheSpot`, come "Libera spazio"), uno alla volta con il resto del backup. "Al sicuro" nasce solo da quella rilettura.
+   * - Una riga del telefono in una sorgente del backup: "Fai ora" (il lavoro dell'utente; sui dati mobili le regole chiedono conferma).
+   * - Una riga fuori dalle sorgenti: [SafeguardStart.NOT_IN_SOURCES], il foglio lo dice. Altrimenti niente da far partire.
+   */
+  suspend fun safeguard(id: MediaId): SafeguardStart {
+    val p = parts ?: return SafeguardStart.UNAVAILABLE
+    val media = p.catalog.media(id) ?: return SafeguardStart.UNAVAILABLE
+    val current = media.currentVersionId
+    val here = media.locations.filter { it.versionId == current && it.state == LocationState.PRESENT }
+    val unverified = here.any { l ->
+      val nas = l.location as? Location.Nas
+      nas != null && nas.share.equals(p.share, ignoreCase = true) && l.verifiedAtMillis == null
+    }
+    if (unverified) {
+      val size = media.versions.firstOrNull { it.id == current }?.fingerprint?.size ?: 0L
+      val verifier = if (size >= SizeFilteredCatalog.HEAVY_BYTES) p.heavyVerifier else p.lightVerifier
+      scope.launch {
+        try {
+          exclusive(USER_EXCLUSIVE_WAIT, forUser = true) { verifier.verify(VerifyScope.OnTheSpot(setOf(id)), SAFEGUARD_BUDGET) }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+          throw e
+        } catch (e: Exception) {
+          GalleryLog.w(TAG) { "verifica sul momento non riuscita (${e.javaClass.simpleName})" }
+        }
+        kick()
+      }
+      return SafeguardStart.STARTED
+    }
+    val phone = here.firstNotNullOfOrNull { it.location as? Location.Phone } ?: return SafeguardStart.UNAVAILABLE
+    val sources = settings.sources.value
+    val inSources = when {
+      media.source == MediaSource.CAMERA && BackupSource.Camera in sources -> true
+      media.source == MediaSource.SCREENSHOT && BackupSource.Screenshots in sources -> true
+      else -> BackupSource.Folder(phone.volume, phone.relativePath.ifEmpty { "/" }) in sources
+    }
+    if (!inSources) return SafeguardStart.NOT_IN_SOURCES
+    // Il primo backup lo avvia l'utente dalla pagina (cartella del dispositivo, D7): da qui non si sceglie.
+    if (settings.deviceFolder.value == null) return SafeguardStart.UNAVAILABLE
+    inputs.jobs.userInitiated(BackupTrigger.USER_NOW, confirmed = false)
+    return SafeguardStart.STARTED
   }
 
   /** D24 (P14): file in arrivo in coda nel diario (aperti). Una query, mai il NAS. */
@@ -842,7 +919,10 @@ class BackupGraph(
     if (gateState == BackupGateState.PAUSED) return BackupStatus.Stopped(StopBy.USER)
 
     val problems = counts.problems.filterKeys { it.marksMedia }
-    val queued = (counts.noNasCopy + counts.unverified - problems.values.sum()).coerceAtLeast(0)
+    // VE-9: un media la cui versione attuale aspetta il PC (`SOURCE_CHANGED`) non e' "in coda": lo dice "Versioni in attesa del computer" (sotto).
+    // Prima contava fra i media in coda e la pagina diceva per sempre "1 in coda · prossimo giro".
+    val held = fiveB.sourceChangedCurrentMedia()
+    val queued = (counts.noNasCopy + counts.unverified - problems.values.sum() - held).coerceAtLeast(0)
     val engineStatus = parts?.engine?.status?.value
     // BK-5: l'avanzamento e' cumulativo (fatti + in coda), non quello del lotto da 60 secondi.
     if (engineStatus is BackupStatus.Running) return progress.reshape(engineStatus, queued, monotonicMs())
@@ -1019,6 +1099,9 @@ class BackupGraph(
 
     /** BK-6: un tocco dell'utente aspetta il turno quanto la tappa piu' lunga (otto minuti piu' un lotto), non 90 secondi. */
     val USER_EXCLUSIVE_WAIT: Duration = 15.minutes
+
+    /** VE-3: quanto puo' durare la verifica sul momento di "Metti al sicuro adesso" (una copia, anche un video grande). */
+    private val SAFEGUARD_BUDGET: Duration = 10.minutes
 
     /** Quanto un tocco aspetta il calcolo della stima prima di andare avanti senza (BK-8). */
     private const val ESTIMATE_WAIT_MS: Long = 3_000L

@@ -117,6 +117,8 @@ object GraphModule {
       shareGuard = DeveloperTools.shareGuard(),
       // RE-4: l'anello "Ultimi esiti ed errori" e' legato da sempre, ma nessuno ci scriveva.
       diagnostics = diagnostics,
+      // R6: "Configura di nuovo" riavvia il processo se la galleria era gia' partita (come dopo un azzeramento, ON-11).
+      restart = AndroidProcessRestart(context),
     )
   }
 

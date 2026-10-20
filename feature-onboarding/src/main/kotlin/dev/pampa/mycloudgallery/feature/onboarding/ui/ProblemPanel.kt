@@ -204,6 +204,14 @@ internal fun OnboardingProblem.spec(): ProblemSpec = when (this) {
     Icons.Rounded.ErrorOutline, NoticeTone.Caution, R.string.problem_step_unavailable_title, R.string.problem_step_unavailable_detail,
     listOf(ProblemAction.RETRY),
   )
+  OnboardingProblem.KEYS_NOT_REMOVED -> ProblemSpec(
+    Icons.Rounded.KeyOff, NoticeTone.Caution, R.string.problem_keys_title, R.string.problem_keys_detail,
+    listOf(ProblemAction.RETRY),
+  )
+  OnboardingProblem.LOCAL_DATA_NOT_REMOVED -> ProblemSpec(
+    Icons.Rounded.FolderOff, NoticeTone.Caution, R.string.problem_old_data_title, R.string.problem_old_data_detail,
+    listOf(ProblemAction.RETRY),
+  )
 }
 
 /**

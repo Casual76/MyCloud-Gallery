@@ -327,7 +327,7 @@ class FiveBPhoneSheetShots(dark: Boolean) : FiveBShotBase(dark, "telefono") {
   fun versioniPermesso() = shoot("versioni-ripristina-permesso") { VersionsOver(VersionsUi.AwaitingSystemDialog(VersionSamples.plan(), 1)) }
 
   @Test
-  fun versioniFatto() = shoot("versioni-ripristina-fatto") { VersionsOver(VersionsUi.Restored(VersionSamples.plan(), phoneKeptEdited = true)) }
+  fun versioniFatto() = shoot("versioni-ripristina-fatto") { VersionsOver(VersionsUi.Restored(VersionSamples.plan(), kept = dev.pampa.mycloudgallery.core.backup.contract.PhoneKeptReason.PERMISSION_DENIED)) }
 
   // --- Correggi ---------------------------------------------------------------------------------------------------------------------
 

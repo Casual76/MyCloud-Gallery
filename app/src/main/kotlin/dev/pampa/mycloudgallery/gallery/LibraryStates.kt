@@ -14,6 +14,7 @@ import dev.pampa.mycloudgallery.debugtools.DeveloperTools
 import dev.pampa.mycloudgallery.feature.library.grid.MediaGridState
 import dev.pampa.mycloudgallery.feature.library.library.LibraryCommands
 import dev.pampa.mycloudgallery.feature.library.library.LibraryDebugHooks
+import dev.pampa.mycloudgallery.feature.library.library.LibraryShare
 import dev.pampa.mycloudgallery.feature.library.library.LibraryStateSource
 import dev.pampa.mycloudgallery.feature.library.library.LibraryTabState
 import dev.pampa.mycloudgallery.feature.viewer.ViewerServices
@@ -80,8 +81,26 @@ class AppLibraryCommands(
     val refs = phoneRefs(ids)
     // GA-8: niente sul telefono = niente da condividere. Mai "fatto" senza averlo fatto: la Libreria dice com'e' andata.
     if (refs.isEmpty()) return false
+    // Correzioni 5B (R4, MC-2): con "Rimuovi la posizione" acceso la selezione passa dalla stessa via del viewer (copie senza posizione,
+    // ricontrollate; la scelta dell'app la lancia `ShareHostEffect`), mai dagli originali del MediaStore. Avanzamento e rifiuto: [shareProgress].
+    val shares = gallery.shares
+    if (shares != null && shares.removeLocation.value) {
+      shares.library.start(ids.filter { refOf(it) is MediaRef.Phone })
+      return true
+    }
     val intent = gallery.intents.share(refs) ?: return false
     return host?.startChooser(intent) ?: false
+  }
+
+  // Senza il legame con le integrazioni (solo i test dei comandi) la Libreria non ha condivisioni da mostrare.
+  override val shareProgress: StateFlow<LibraryShare> get() = gallery.shares?.libraryProgress ?: IDLE_SHARE
+
+  override fun cancelShare() {
+    gallery.shares?.library?.cancel()
+  }
+
+  override fun shareWithLocation() {
+    gallery.shares?.library?.shareWithLocation()
   }
 
   override val canDeleteFromPhone: Boolean get() = gallery.intents.canTrash
@@ -116,6 +135,8 @@ class AppLibraryCommands(
 
     /** Il massimo di URI che `MediaStore.createTrashRequest` accetta (Android 11+): oltre, nessuna richiesta. */
     const val DELETE_LIMIT: Int = AndroidPhoneMediaIntents.MAX_TRASH_URIS
+
+    private val IDLE_SHARE: StateFlow<LibraryShare> = MutableStateFlow(LibraryShare.Idle)
   }
 }
 

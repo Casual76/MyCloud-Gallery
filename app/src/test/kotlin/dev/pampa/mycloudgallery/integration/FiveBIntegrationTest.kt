@@ -253,7 +253,9 @@ class FiveBIntegrationTest {
     // Il dialogo di sistema (la porta dei dialoghi dell'app lo chiede per quelle righe); l'utente dice si'.
     backup.fiveB.systemDialogs.writeRequest(rows)
     assertThat(phoneIntents.writeRequests.single().map { it.mediaStoreId }).containsExactlyElementsIn(rows.map { it.mediaStoreId })
-    rig.store.resolveRequest(FakeMediaStore.SystemRequest.WRITE, rows.map { MediaRef.Phone(it.volume, it.mediaStoreId, null) }, FakeMediaStore.DialogAnswer.Accept)
+    // VE-2: si risolve proprio la richiesta che l'app ha fatto (righe senza MIME); il telefono finto, come quello vero, da' il permesso per l'URI
+    // della collezione del tipo della riga, e la riscrittura apre quello. Prima il finto concedeva per (volume, `_ID`) in qualunque collezione.
+    rig.store.resolveRequest(FakeMediaStore.SystemRequest.WRITE, phoneIntents.writeRequests.single(), FakeMediaStore.DialogAnswer.Accept)
     assertThat(keeper.restoreOriginal(id, confirmation, PhoneWriteGrant(rows.toSet()))).isEqualTo(RestoreOutcome.Queued)
 
     // Sul NAS le due copie si sono scambiate (due rinomine), sul telefono c'e' di nuovo l'originale; nel catalogo l'originale e' l'attuale.

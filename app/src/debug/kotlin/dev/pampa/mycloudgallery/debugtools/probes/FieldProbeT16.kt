@@ -64,6 +64,54 @@ internal class FieldProbeT16(
   private var editSizeBefore: Long = 0
   private var editSiblingsBefore: Set<String> = emptySet()
 
+  init {
+    restore()
+  }
+
+  /**
+   * LA-7: il riferimento di "Apri in Samsung Gallery" e la copia in modifica stanno anche su file ([FieldProbeStore.saveSession]). Le due prove
+   * mandano in un'altra app e al ritorno la schermata puo' essere stata ricreata: "Confronta" diceva "Prima la fotografia di riferimento", e
+   * `finishEdit` non trovava piu' la copia (con i permessi ancora aperti sull'indirizzo).
+   */
+  private fun restore() {
+    store.loadSession(SESSION_VIEW)?.let { lines ->
+      baseline = lines.filter { it.startsWith(ROW) }.mapNotNull { ProbeRowMarks.decode(it.removePrefix(ROW)) }
+      viewed = lines.firstNotNullOfOrNull { if (it.startsWith(VIEWED)) ProbeRowMarks.decode(it.removePrefix(VIEWED)) else null }
+    }
+    store.loadSession(SESSION_EDIT)?.let { lines ->
+      val name = lines.firstNotNullOfOrNull { if (it.startsWith(EDIT_FILE)) it.removePrefix(EDIT_FILE) else null } ?: return@let
+      // Solo il nome di un file di prova di `cacheDir/edit/`: mai un percorso.
+      if (!EDIT_NAME.matches(name)) return@let
+      val file = File(File(context.cacheDir, "edit"), name)
+      editFile = file
+      editUri = runCatching { FileProvider.getUriForFile(context, context.packageName + ".integrations.files", file) }.getOrNull()
+      editShaBefore = lines.firstNotNullOfOrNull { if (it.startsWith(EDIT_SHA)) it.removePrefix(EDIT_SHA) else null }
+      editSizeBefore = lines.firstNotNullOfOrNull { if (it.startsWith(EDIT_SIZE)) it.removePrefix(EDIT_SIZE).toLongOrNull() else null } ?: 0L
+      editSiblingsBefore = lines.filter { it.startsWith(EDIT_SIBLING) }.map { it.removePrefix(EDIT_SIBLING) }.toSet()
+    }
+  }
+
+  private fun persistView() {
+    val lines = ArrayList<String>()
+    baseline.forEach { lines += ROW + ProbeRowMarks.encode(it) }
+    viewed?.let { lines += VIEWED + ProbeRowMarks.encode(it) }
+    store.saveSession(SESSION_VIEW, lines)
+  }
+
+  private fun persistEdit() {
+    val file = editFile
+    if (file == null) {
+      store.saveSession(SESSION_EDIT, emptyList())
+      return
+    }
+    val lines = ArrayList<String>()
+    lines += EDIT_FILE + file.name
+    editShaBefore?.let { lines += EDIT_SHA + it }
+    lines += EDIT_SIZE + editSizeBefore
+    editSiblingsBefore.forEach { lines += EDIT_SIBLING + it }
+    store.saveSession(SESSION_EDIT, lines)
+  }
+
   // --- a) c) ACTION_VIEW verso Samsung Gallery ----------------------------------------------------------------------------------------
 
   /** L'intento per aprire la prima foto di prova in Samsung Gallery, con il riferimento preso prima. Null se non ci sono foto. */
@@ -71,6 +119,7 @@ internal class FieldProbeT16(
     baseline = phone.rows()
     val row = FieldProbeMath.pick(baseline, 1, photosOnly = true).firstOrNull() ?: return null
     viewed = row
+    persistView()
     return Intent(Intent.ACTION_VIEW)
       .setDataAndType(phone.uriOf(row), row.mime ?: "image/jpeg")
       .setPackage(SAMSUNG_GALLERY)
@@ -123,6 +172,7 @@ internal class FieldProbeT16(
     editShaBefore = sha256(file)
     editSizeBefore = file.length()
     editSiblingsBefore = dir.list()?.toSet().orEmpty()
+    persistEdit()
     val edit = Intent(Intent.ACTION_EDIT)
       .setDataAndType(uri, row.mime ?: "image/jpeg")
       .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
@@ -145,6 +195,7 @@ internal class FieldProbeT16(
     file.parentFile?.listFiles()?.filter { it.name.startsWith("probe-") }?.forEach { it.delete() }
     editFile = null
     editUri = null
+    persistEdit()
   }
 
   private fun sha256(file: File): String {
@@ -165,6 +216,17 @@ internal class FieldProbeT16(
     const val SAMSUNG_GALLERY: String = "com.sec.android.gallery3d"
 
     private const val BUFFER = 64 * 1024
+    private const val SESSION_VIEW = "t16_view"
+    private const val SESSION_EDIT = "t16_edit"
+    private const val ROW = "row="
+    private const val VIEWED = "viewed="
+    private const val EDIT_FILE = "edit_file="
+    private const val EDIT_SHA = "edit_sha="
+    private const val EDIT_SIZE = "edit_size="
+    private const val EDIT_SIBLING = "edit_sibling="
+
+    /** Il nome di una copia di modifica di prova (`probe-<_ID>.jpg`): il solo nome che si rilegge dal file di stato. */
+    private val EDIT_NAME = Regex("^probe-[0-9]{1,19}\\.jpg$")
   }
 }
 
@@ -192,10 +254,12 @@ internal object FieldProbeT15 {
       }
       if (opened) ok++ else denied++
     }
-    store.set(FieldProbeKey.T15_REOPEN_OK, ok)
-    store.set(FieldProbeKey.T15_REOPEN_DENIED, denied)
-    store.set(FieldProbeKey.T15_REOPEN_AGE_S, oldestMs / MILLIS_PER_SECOND)
-    store.set(FieldProbeKey.T15_REOPEN_AFTER_RESTART, if (restarted) 1 else 0)
+    // LA-8: ogni riprova ha il suo blocco indicizzato (`t15.reopen_ok.2`...): la seconda non cancella la prima, e si vede cosa cambia col tempo.
+    val index = store.nextIndex(FieldProbeKey.T15_REOPEN_OK)
+    store.set(FieldProbeKey.T15_REOPEN_OK, ok, index)
+    store.set(FieldProbeKey.T15_REOPEN_DENIED, denied, index)
+    store.set(FieldProbeKey.T15_REOPEN_AGE_S, oldestMs / MILLIS_PER_SECOND, index)
+    store.set(FieldProbeKey.T15_REOPEN_AFTER_RESTART, if (restarted) 1 else 0, index)
   }
 
   private const val MILLIS_PER_SECOND = 1000L

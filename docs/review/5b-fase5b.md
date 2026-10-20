@@ -8,7 +8,7 @@
 | **Tipo** | Revisione avversariale in sola lettura. Nessuna correzione al codice di produzione. Nessun NAS vero, nessun telefono, nessun `adb`. |
 | **Data** | 20/10/2026 |
 | **Metodo** | Lettura del codice: ogni via che toglie o riscrive un file del telefono (`SafeFreeSpace`, `DefaultVersionKeeper.restoreOriginal`, `DefaultCorrections`, `MediaStorePhoneMediaRewriter`, e le vie della Fase 3 e della 4B ancora vive), ogni porta esportata (manifest, `CallerGuard`, `DocumentIdTable`, `EntryGate`, `AppLockController`), ogni via che scrive sul NAS (versioni, scambi, `INCOMING`) e lo stripper della posizione con i suoi lettori. Tre revisori di supporto, in sola lettura, hanno letto in parallelo le versioni e i file in arrivo, la posizione e le correzioni nel file, e il codice di fiducia toccato dalle correzioni; **ogni loro voce riportata qui e' stata ricontrollata nel codice**. Due **test temporanei**, eseguiti con `--max-workers=2` e poi cancellati insieme ai risultati e alle classi compilate: (1) sul custode vero (`DefaultVersionKeeper` su `VersionWorld`, core-backup) per R3; (2) sullo stripper vero (`DefaultLocationStripper` con i lettori di serie, core-metadata, Robolectric) per R1 e R2. Esiti sotto le voci. Nessun file del repository e' rimasto modificato a parte questo documento. |
-| **Stato** | **Aperta**: tutte le voci. |
+| **Stato** | **Aperta**: tutte le voci, tranne R1, R2, R4, R12, R13 (corrette il 20/10: «Correzioni 5B: posizione e Condividi» in `docs/decisioni.md`). |
 
 ## Riepilogo
 
@@ -118,7 +118,14 @@
   2. controllare tutte le voci di `stsd`; fermare un `meta` con `iinf`/`iloc`, un `uuid` sconosciuto con dimensione non nulla, `moof` con `udta`;
   3. un lettore grezzo che **non** sia il piano dello stripper (per esempio una ricerca in tutto il file, fuori da `mdat`, dei nomi di posizione e delle stringhe ISO 6709);
   4. fixture e test per ognuno di questi casi; in F42 un video di drone o dashcam, se la famiglia ne ha.
-- **Stato:** aperta.
+- **Stato:** corretta (20/10, `docs/decisioni.md` «Correzioni 5B: posizione e Condividi»). Un video si ricostruisce per elenco di cio' che si tiene
+  (`core-metadata/.../strip/IsoClean.kt`): restano `ftyp`, `moov` con `mvhd` e le sole tracce `vide`/`soun` (con `tkhd`, `edts`, `mdia` e le tabelle
+  dei campioni), e in `mdat` i soli byte dei loro campioni; ogni altra traccia, `udta`, `meta`, `uuid`, `free` e riquadro sconosciuto diventa `free`
+  azzerato, stessa dimensione. Frammentato, senza `moov`, senza audio ne' video, tabelle che puntano fuori da `mdat`: la condivisione si ferma. Il
+  controllo finale e' un rilevatore scritto da zero (`strip/LocationTraces.kt`: EXIF GPS, nomi XMP, `©xyz`/`loci`, ISO 6709, NMEA, `GPS5`, tracce non
+  audio/video) piu' l'estrattore e `MediaMetadataRetriever`. Test: `PosizioneNascostaTest.djiTracciaDjmdTolta`, `cammComeSecondaVoceTolta`,
+  `goproGpmdTolta`, `appleMebxTolta`, `motionPhotoConLaPosizioneNelVideo`, `ilRilevatoreTrovaLaPosizioneInOgniFixtureNonPulita`; `IsoCleanTest`
+  (core-metadata). Con lo stripper di prima i quattro video uscivano `Stripped` con la posizione (`gpmd` rifiutato).
 
 ### R2. "Senza posizione": una foto con la posizione nell'XMP sotto un nome che non e' `GPS…`, o dove il camminatore non guarda, esce con il GPS
 
@@ -134,7 +141,13 @@
   1. ricostruire le immagini per elenco di cio' che si tiene (JPEG: SOI, DQT, DHT, SOF, DRI, SOS con i dati, EOI, ICC, piu' un EXIF minimo nuovo senza GPS; PNG: IHDR, PLTE, IDAT, IEND, tRNS, gAMA, cHRM, sRGB, iCCP, pHYs; WebP: VP8, VP8L, VP8X, ALPH, ANIM, ANMF, ICCP); riattaccare il video di una motion photo solo se dichiarato nell'XMP e ripulito;
   2. nel ricontrollo grezzo un rifiuto prudente, senza maiuscole, su `gps`, `latitude`, `longitud`, `longtitude` in qualunque nome di proprieta' e su un'intestazione TIFF con il tag 0x8825, in tutto il file fuori dai dati compressi; riassemblare l'XMP esteso per GUID prima di cercare;
   3. decidere e scrivere in L41 se "posizione" comprende i nomi di luogo testuali (`photoshop:City`, `Iptc4xmpCore:Location`, IPTC-IIM): oggi restano.
-- **Stato:** aperta.
+- **Stato:** corretta (20/10). JPEG, PNG, WebP e il JPEG nato da un HEIC si ricostruiscono per elenco di cio' che si tiene (`strip/ImageRebuild.kt`):
+  i dati dell'immagine, il profilo colore e un EXIF scritto da zero con orientamento e data (`strip/MinimalExif.kt`); fuori l'XMP intero (anche esteso),
+  APP13, MPF, commenti, `tEXt`/`zTXt`/`iTXt`, `eXIf` di prima, cio' che segue EOI (tranne il video di una motion photo, ricostruito e dichiarato da un
+  XMP nuovo). I nomi di luogo testuali quindi non escono piu' (scritto in L41). Il rilevatore finale riassembla l'XMP esteso per GUID e guarda i nomi in
+  ogni spazio dei nomi. Test: `PosizioneNascostaTest.droneDjiLXmpDroneDjiSparisce`, `xmpEstesoSpezzatoSparisce`, `app13DiPhotoshopSparisce`,
+  `pngConTestiEXmpSparisconoEIlPngResta`, `heicConUnConvertitoreCheSiPortaDietroLXmp`; `DefaultLocationStripperTest` (core-metadata). Con lo stripper
+  di prima uscivano tutti `Stripped` con la posizione.
 
 ---
 
@@ -156,7 +169,20 @@
   2. in `swapTo` per "Ripristina originale": l'attuale da spostare deve essere la versione attuale del catalogo;
   3. contratto del riscrittore: `replace(ref, file, attesoNuovo, attesoAdesso)` con la versione del MediaStore; se `before` non e' l'impronta attesa della riga, `SourceMismatch` e niente si scrive (copre anche il catalogo in ritardo e l'`_ID` riciclato, e le righe successive delle correzioni);
   4. il foglio dice quale versione c'e' sul telefono e che cosa ne sara'.
-- **Stato:** aperta.
+- **Stato: corretta** (20/10, `docs/decisioni.md` «Correzioni 5B: versioni e correzioni»). Tutti e quattro i punti.
+  - **La regola del riscrittore** (`PhoneMediaRewriter.replace(ref, file, attesoNuovo, attesoAdesso)`, e la stessa nella porta `PhoneRewriter` di core-backup):
+    prima di scrivere i byte della riga si copiano e se ne calcola lo SHA-256; devono essere quelli della versione che si sostituisce **e che e' al sicuro
+    sul NAS** (il chiamante passa solo l'impronta di una versione con una copia privata verificata). Altrimenti `RowChanged` e niente si scrive; con i
+    byte nuovi gia' sopra e' fatta (una risposta persa). Copre il catalogo in ritardo, l'`_ID` riciclato e le righe successive delle correzioni.
+  - `availability` (e di nuovo `restoreOriginal`): la versione di adesso e quelle sulle righe del telefono da riscrivere devono essere al sicuro, se no
+    `CURRENT_NOT_SAFE` ("prima il backup la mette al sicuro") e niente si tocca; `swap` sposta in `Versioni/` solo la versione **attuale**.
+  - La riga cambiata dopo l'ultima lettura: lo scambio sul NAS c'e' (due rinomine, nessun file perso) e il telefono non si tocca:
+    `PhoneNotRewritten(PHONE_CHANGED)`, il foglio lo dice; le correzioni: `CorrectionFailure.PHONE_CHANGED`.
+  - Il foglio dice il vero: il riepilogo non promette piu' «non si perde niente» senza condizioni, dice che sul telefono c'e' la versione modificata e
+    che si rimette com'era solo se e' ancora quella al sicuro; dopo, ogni ragione per cui il telefono tiene la modifica ha la sua frase.
+  - Test: `Revisione5BVersioniTest.r3_*` (4, core-backup: lo scenario della revisione, il catalogo in ritardo, lo scambio dalla sola attuale, la seconda
+    riga di una correzione; rossi sul codice di prima), `MediaStorePhoneMediaRewriterTest.r3_*` (riscrittore vero), `SystemRequestsFakeTest.r3_*`
+    (riscrittore finto allineato), `VersionsSheetTest.r3_*`, `VersionsViewModelTest.r3_*`.
 
 ### R4. "Condividi" dalla selezione della Libreria (e dal viewer senza backup) ignora "Rimuovi la posizione"
 
@@ -171,7 +197,13 @@
 - **Confermato:** **si'** (lettura): nessuna via della selezione passa da `LocationFreeShare`. La fuga reale dipende da chi riceve (plausibile).
 - **Collegato (informativo):** il selettore e il provider dei documenti consegnano sempre i byte originali (anche i solo-NAS), qualunque sia l'impostazione. D23/D26 non lo vietano, ma la pagina dice «Quando condividi con un'altra app»: va detto, o applicato anche li'.
 - **Correzione proposta:** con l'impostazione accesa, la selezione della Libreria passa da `LocationFreeShare.prepare(ids, true)` (lo stesso foglio "Condivisione ferma"); senza `FiveBUi` e con l'impostazione accesa, "Condividi" si rifiuta con il motivo invece di usare il percorso di prima; la pagina dice esattamente dove vale. Test: la selezione con l'impostazione accesa non chiama mai `PhoneMediaIntents.share`.
-- **Stato:** aperta.
+- **Stato:** corretta (20/10). Ogni "Condividi" passa da `app/.../integrations/AppShares.kt` (legato dalle integrazioni, che ci sono anche senza
+  backup): la selezione della Libreria con l'impostazione accesa usa `LocationFreeShare` e mostra avanzamento e foglio "Condivisione ferma"
+  (`feature-library/.../LibraryShare.kt`); il viewer senza backup ha la sola voce "Condividi" dello stesso canale, che rispetta l'impostazione (meglio
+  del rifiuto proposto); con l'impostazione accesa "Copia" non compare. Test: `CondividiSenzaPosizioneAppTest.r4_laSelezioneConLImpostazioneAccesaNonUsaMaiGliOriginali`,
+  `r4_unaSelezioneFermaHaIlSuoFoglioEConLaPosizioneSoloSeLoSceglie`, `r4_ilViewerSenzaBackupRispettaLImpostazione` (:app);
+  `ViewerBackupMenuTest.conRimuoviLaPosizioneAccesaCopiaNonCe_MC2`. Resta (informativa, fuori perimetro): selettore e provider dei documenti consegnano
+  gli originali, e la pagina Condivisioni non lo dice.
 
 ### R5. Un file in arrivo verso una share chiusa ferma tutto il backup privato
 
@@ -197,7 +229,17 @@
 - **Scenario (e):** il tablet di Alice viene revocato e passa a Bob. La pagina "fuori dalla famiglia" offre "Configura di nuovo"; Bob entra con il suo account. Nella Libreria restano le foto private di Alice in cache (anche per il selettore delle altre app) e i nascosti di Alice dietro il blocco dell'app di Bob; al primo giro dei dati personali nascosti, preferiti, album e impronte `qh1` di Alice finiscono firmati nella share privata di Bob. Oggi D31 limita la pubblicazione alle share di prova; la Libreria locale no.
 - **Confermato:** il percorso del registro e della pubblicazione **si'** (lettura); la visibilita' in Libreria dipende dal calcolo di `presence` delle posizioni non piu' scansionate (plausibile).
 - **Correzione proposta:** `startOver` ricorda la coppia (account, GUID del NAS) di prima; se il rientro avviene con un account o un NAS diverso, prima di tutto la cancellazione dei dati locali dell'azzeramento (personali, replica, miniature, anteprime, posizioni del vecchio account, franchigie, cache di modifica e condivisione; non le foto del telefono) e `homeFingerprints.clear()`; `NasPersonalSync.publish` pubblica solo voci scritte da dispositivi dell'account corrente. Test sul grafo vero: `startOver`, rientro con un altro account, zero voci nella sua share e zero media del primo account visibili.
-- **Stato:** aperta.
+- **Stato: corretta** (20/10). `startOver` salva un riassunto (SHA-256 troncato di GUID del NAS e account, mai in chiaro) di chi lascia in `OnboardingSnapshot.previousOwner`, che
+  sopravvive al cambio di percorso, e dimentica l'impronta di casa. A «Vai alla Libreria» (`finish`, l'unico punto che apre la Libreria: `SetupState.Ready` vuole l'onboarding finito) il
+  coordinatore lo confronta con chi e' rientrato: **un altro account o un altro NAS** → `AppLocalDataEraser.eraseAccountData` toglie i dati locali di prima (database della galleria con
+  catalogo dei solo-NAS e diari, replica e pacchi, dati personali, miniature e anteprime, **file preparati delle versioni e copie dei file ricevuti**, cache, impostazioni del backup) **prima**
+  di finire, senza toccare l'onboarding in corso, l'account, la casa, le chiavi, le foto del telefono e il NAS; se non riesce non finisce (`LOCAL_DATA_NOT_REMOVED`). Lo stesso account sullo
+  stesso NAS tiene i dati (ON-4, ON-5). Con la galleria gia' partita in quel processo «Configura di nuovo» riavvia il processo (`AppGraph.afterStartOver`, come dopo un azzeramento): il
+  catalogo non tiene il proprietario di prima e nessuna galleria e' viva quando si tolgono i dati. Trovato strada facendo: l'azzeramento intero non toglieva `versions/` e `incoming/` della
+  5B (ora si'). Test: `CorrezioniConfigurazione5BTest` (core-family: il riassunto, stesso account, altro NAS, tolta che fallisce e si riprova, cambio di percorso, codec) e
+  `CorrezioniConfigurazione5BAppTest` (:app, grafo vero con simulatore SMB: tablet revocato, «Configura di nuovo», processo nuovo, altro account → dati tolti prima di finire; stesso account →
+  restano; nessun riavvio senza galleria viva; `eraseAccountData` non tocca l'onboarding; i nomi delle due cartelle sono quelli di `FiveBGraph`). Non fatto, perche' superfluo con i dati
+  tolti: `NasPersonalSync.publish` che filtra le voci per dispositivi dell'account corrente.
 
 ### R7. "Configura di nuovo" dalla pagina "fuori dalla famiglia": un tocco, nessuna conferma, e dopo un guasto del Keystore distrugge la chiave di famiglia dell'admin
 
@@ -211,7 +253,18 @@
 - **Scenario (e):** l'unico admin apre l'app dopo un aggiornamento di sistema e il Keystore lancia su `deviceSigner()`. La pagina dice «Lo stato della famiglia salvato qui non c'e' piu'» con "Configura di nuovo"; un tocco e spariscono chiave del dispositivo, chiave di famiglia e password.
 - **Confermato:** il percorso **si'**; l'innesco (un guasto passeggero del Keystore) e' plausibile.
 - **Correzione proposta:** lo stesso foglio di conferma delle Impostazioni (con l'avviso dell'admin se la cassaforte ha la chiave); distinguere "stato non leggibile / Keystore guasto" (pagina `Blocked`, riprova) da "non configurato"; con il motivo `OTHER` non distruggere la chiave di famiglia senza una seconda conferma. Controllare che a freddo la radice non mostri la pagina prima del primo calcolo dello stato.
-- **Stato:** aperta.
+- **Stato: corretta** (20/10). «Configura di nuovo» dalla pagina «fuori dalla famiglia» apre un foglio di conferma (`askStartOver` → `StartOverSheet`, con un host dei pop-up suo: in onboarding la radice non ne
+  ha uno) e solo la conferma chiama `startOver`; «Annulla» e chiudere non confermano e «Riprova» dopo un problema riapre il foglio. Per un admin (`OnboardingCoordinator.holdsFamilyKey`: fondatore, admin
+  recuperato o secondo admin, o approvato admin nel registro; nel dubbio si') il foglio dice che si perde la chiave di famiglia, che senza non si approvano dispositivi ne' si cambia la famiglia, che
+  si riprende solo con il kit di recupero e il suo codice («Recupera l'admin», dal benvenuto) e che senza non si deve continuare; con la causa sconosciuta aggiunge che puo' essere un guasto del
+  telefono. Lo stesso avviso e' nel foglio delle Impostazioni. **Una chiave di famiglia non si distrugge per un guasto temporaneo del Keystore:** `startOver` chiede `hasDeviceKey()` prima di toccare
+  qualsiasi cosa e, se lancia, risponde `KEYS_NOT_REMOVED` lasciando tutto com'era. Residuo dichiarato: `TrustEngine` continua a dare «non configurato» quando il Keystore lancia (fail-closed), quindi la
+  pagina puo' ancora comparire in quel caso; uno stato nuovo (`StaleReason`, pagina `Blocked`) toccava `TrustEngine`, `SetupResolver` e quattro schermate ed e' rimasto fuori. Controllato a freddo:
+  la radice non mostra la pagina prima del primo calcolo dello stato (`SetupState` resta `Loading` finche' `AppGraph.start()` non ha riletto il diario dell'azzeramento e calcolato lo stato fidato), e la pagina
+  vuole anche l'onboarding finito (`SUMMARY` completato). Test:
+  `CorrezioniConfigurazione5BViewModelTest` (il tasto apre la conferma e non tocca niente; annulla; la conferma configura; l'admin vede l'avviso, il familiare no; il problema delle chiavi e il «Riprova»
+  che chiede di nuovo), `StartOverSheetTest` (la pagina non configura con un tocco; il foglio di un admin dice cosa si perde e il kit), `CorrezioniConfigurazione5BTest` (Keystore guasto: la chiave di
+  famiglia resta, niente si tocca) e quello di `feature-settings`.
 
 ---
 
@@ -233,7 +286,14 @@
 - **Scenario (e):** batteria finita o processo ucciso durante `writeInPlace` di un JPEG da 30 MB (correzione o "Ripristina originale"): la riga resta con l'inizio nuovo e la coda vecchia. La lettura del telefono lo vede come una modifica e il backup lo carica come **nuova versione attuale**; la copia buona del telefono resta orfana in cache e si perde alla pulizia della cache.
 - **Confermato:** **si'** (nessun recupero nel codice).
 - **Correzione proposta:** prima della scrittura un diario in `noBackupFilesDir` (riga, versione del MediaStore, impronta vecchia e nuova) con la copia di sicurezza accanto, sincronizzato; all'avvio, una riga che non ha ne' l'impronta vecchia ne' la nuova si ripristina, poi si pulisce.
-- **Stato:** aperta.
+- **Stato: corretta** (20/10). Copia di sicurezza e diario (URI, impronta di prima e nuova, scritto in un temporaneo sincronizzato e poi rinominato) in
+  `noBackupFilesDir/rewrite/`, **prima** di toccare la riga; si tolgono solo con la riga a posto (nuova, com'era o mai toccata). `recover()` all'avvio
+  (`FiveBGraph.atStart`, prima di tutto il resto) e prima di ogni riscrittura: riga con i byte nuovi o con quelli di prima = a posto; sparita = niente;
+  altrimenti la copia (solo se ha l'impronta di prima) si rimette e si rilegge. Senza permesso (decaduto) diario e copia restano per la volta dopo. Una
+  riscrittura alla volta in tutto il processo. Test: `MediaStorePhoneMediaRewriterTest.r9_*` (2: riga a meta' rimessa da un riscrittore nuovo; senza
+  permesso aspetta), `Correzioni5BVersioniAppTest.r9_*` (il recupero parte all'avvio). Resta: se il backup legge la riga a meta' **prima** del recupero la
+  carica come versione (rimessa la riga, la lettura del telefono vede il ritorno a una versione nota e lo scambio la porta in `Versioni/`): una versione
+  intermedia in piu', nessun byte perso.
 
 ### R10. "Ripristina originale" di un video: rilettura oscurata
 
@@ -242,7 +302,10 @@
 - **Scenario (e):** si riscrive il video originale; la rilettura dall'URI oscurato da' un'altra impronta (`HASH_MISMATCH`); il ripristino rimette la copia di sicurezza **oscurata**; la risposta e' `restored=true`. Il video sul telefono perde per sempre `©xyz` e ogni nuovo tentativo fallisce.
 - **Confermato:** plausibile (dipende da come MediaProvider oscura i video per un'app che non ne e' proprietaria).
 - **Correzione proposta:** `setRequireOriginal` per ogni media (come `AndroidMediaStoreSource`); le eccezioni a runtime diventano `Failed`/`NotGranted`; il controllo di R3.3 fermerebbe il caso prima di scrivere.
-- **Stato:** aperta.
+- **Stato: corretta** (20/10). `setRequireOriginal` per foto e video (copia di sicurezza, rilettura, recupero); senza `ACCESS_MEDIA_LOCATION` l'apertura
+  lancia e diventa `Failed(ORIGINAL_UNREADABLE, restored = true)` senza toccare niente; le altre eccezioni a runtime sono `Failed`, mai fuori dal
+  riscrittore. In piu' il controllo di R3: una copia oscurata ha un'altra impronta e la riga non si scrive. Test: `MediaStorePhoneMediaRewriterTest.r10_*`
+  (2: anche i video si leggono con i byte originali; senza il permesso della posizione niente si tocca).
 
 ### R11. "Modifica con…" di un solo-NAS: il tipo si controlla su byte diversi da quelli caricati
 
@@ -260,7 +323,11 @@
 - **Scenario (e):** l'utente toglie il luogo da una foto e poi la condivide con l'impostazione spenta, o da Samsung Gallery: chi riceve legge la posizione dall'XMP.
 - **Confermato:** **si'**.
 - **Correzione proposta:** per `GeoChange.Clear` la stessa pulizia di `ImageLocationStrip` (con le correzioni di R2) e il ricontrollo grezzo.
-- **Stato:** aperta.
+- **Stato:** corretta (20/10). "Togli il luogo" toglie tutto il blocco GPS (anche ora e data GPS) e la nota del produttore, poi sul posto
+  (`core-metadata/.../write/LocationClear.kt`) le proprieta' del luogo dall'XMP (`XmpLocationScrub`: gps, latitude, longitude, altitude, location e i
+  nomi di luogo, in ogni spazio dei nomi), l'XMP esteso e l'APP13 (azzerati), i testi dei PNG con il luogo, la parte video di una motion photo
+  (`IsoClean`); poi lo stesso rilevatore indipendente delle condivisioni. Se resta una traccia o non si puo' pulire: `WriteUnsupported.FORMAT`, la
+  correzione resta nell'app (come L40). Test: `TogliIlLuogoTest` (core-metadata).
 
 ### R13. Un XMP costruito apposta blocca un thread per ore
 
@@ -269,7 +336,11 @@
 - **Scenario (a, c):** un familiare mette nell'area comune un PNG con un `iTXt` di 4 MiB fatto di `<GPSA<GPSA…`; l'utente lo condivide "senza posizione" e un thread di I/O resta occupato per ore.
 - **Confermato:** **si'** (analisi dell'espressione).
 - **Correzione proposta:** uno scanner lineare dei nomi di proprieta', o un tetto molto piu' basso per l'XMP da pulire (oltre, si ferma la condivisione).
-- **Stato:** aperta.
+- **Stato:** corretta (20/10). Le condivisioni non analizzano piu' l'XMP (lo tolgono intero). La pulizia di "togli il luogo" e' uno scanner lineare
+  senza espressioni regolari (`write/XmpLocationScrub.kt`): tetto di 1 MiB per pacchetto e 2 secondi, e un tag, un valore o un elemento che non si chiude
+  ferma subito (`unsupported`) invece di riprovare dal byte dopo. Anche il rilevatore finale e' lineare, con tetti di dimensione (16 MiB per pacchetto e
+  per testo compresso) e di tempo (5 minuti per file). Test: `XmpLocationScrubTest.unXmpCostruitoApposta_SiFermaSubitoInvecheDiBloccareUnThread`
+  (core-metadata: 1 MiB di `<GPSA` in meno di un secondo).
 
 ### R14. Due "Salva sul NAS" degli stessi byte verso destinazioni diverse diventano uno
 
@@ -296,7 +367,11 @@
 - **Scenario (a):** una mia foto ha nell'area comune sia l'originale O sia la modifica E. Un familiare di un altro account copia O sopra E dal PC. La scansione dell'area comune fa `RevertedToVersion(O)`, l'attuale del mio media diventa O, e al giro dopo nella **mia area privata** O torna al solito percorso ed E va in `Versioni/`, mentre il telefono mostra ancora E.
 - **Confermato:** **si'** (catena del codice).
 - **Correzione proposta:** annunciare `reverts` solo per una posizione del telefono (E-E2 e' un fatto del telefono), o richiedere in `planRealign` una riga del telefono presente sulla versione attuale. Test: una scansione dell'area comune con un ritorno a una versione nota non crea nessuno `SWAP`.
-- **Stato:** aperta.
+- **Stato: corretta** (20/10). In `NasVersionEngine.planRealign`: lo scambio senza conferma nasce solo se la versione attuale ha una riga del telefono
+  (presente o tolta dopo: il banco delle interruzioni ha mostrato che "presente" e' troppo stretto, una foto riportata all'originale in Galleria e poi
+  liberata dal telefono non si riallineava piu'). Un ritorno visto solo dalla scansione del NAS lascia le righe del telefono sulla modifica: niente si
+  sposta nell'area privata. Test: `Revisione5BVersioniTest.r16_unRitornoVistoDallaScansioneDelNasNonFaUnoScambio` (rosso prima; lo stesso ritorno fatto
+  sul telefono lo scambio lo fa ancora); banchi delle interruzioni verdi.
 
 ### R17. La franchigia D32 vale per `fileId` e per sempre
 
@@ -305,7 +380,13 @@
 - **Scenario (a):** un ransomware che cifra sul posto (stesso `fileId`) non fa contare fra i "cambiati" i file che le versioni hanno mai toccato; su ext4 un `fileId` si puo' riusare per un file nuovo; un file trovato al solito percorso (non scritto dall'app) entra in franchigia.
 - **Confermato:** la logica **si'**; l'impatto e' plausibile e cresce con l'uso.
 - **Correzione proposta:** esentare la coppia (`fileId`, timbro che l'app ha prodotto) e solo finche' la scansione vede quel timbro; limitarla ai lavori dopo l'ultima scansione completa; escludere `LINKED_EXISTING` e i timbri trovati.
-- **Stato:** aperta.
+- **Stato: corretta** (20/10), nel perimetro di core-backup (il contratto `OwnChanges` di core-nasmedia passa ancora soli `fileId`). `VersionFranchise` da'
+  un `fileId` solo se: il lavoro e' **recente** (una settimana d'ora del NAS dall'ultimo passo del diario, `VersionJournal.inShareSince`; senza l'ora del
+  NAS nessuna franchigia); il timbro e' **prodotto dall'app** (archiviazione, pubblicazione, ripristino; mai il file trovato di un `LINKED_EXISTING`); il
+  catalogo **non ha ancora seguito quella rinomina** (per quel `fileId` nessuna copia, o solo il timbro di prima). Con il timbro dell'app il catalogo e' in
+  pari e da li' un cambiamento sul posto con lo stesso `fileId` (un ransomware) conta fra i "cambiati"; con un altro timbro la scansione l'ha gia' visto.
+  In pratica la franchigia copre solo la finestra fra la rinomina sul NAS e il catalogo che la segue. Test: `Revisione5BVersioniTest.r17_*` (rosso prima:
+  catalogo in ritardo = franchigia; in pari = niente; oltre la settimana = niente; senza l'ora del NAS = niente).
 
 ### R18. Il rinnovo della richiesta senza QR non usa il GUID gia' fissato e riporta a 0 la versione minima
 
@@ -314,7 +395,11 @@
 - **Scenario (a, e):** durante il rinnovo l'utente digita un IP sbagliato, o un impostore in LAN risponde ripetendo il GUID pubblico: l'NTLMv2 parte verso un NAS che il dispositivo sapeva gia' non essere quello giusto; e il registro accettato al rinnovo si verifica con versione minima 0.
 - **Confermato:** **si'**.
 - **Correzione proposta:** nel rinnovo `expectedGuid` = il GUID gia' fissato (o quello firmato) con `IDENTITY_MISMATCH`, e versione minima = massimo fra la precedente e la nuova.
-- **Stato:** aperta.
+- **Stato: corretta** (20/10). `DefaultJoinFlow.start`, nel rinnovo (dispositivo gia' registrato e in attesa), usa il GUID gia' fissato come atteso quando l'invito non ne porta uno (la `NEGOTIATE` lo
+  confronta prima della password, quindi un NAS con un altro GUID non vede mai la password), rifiuta senza toccare la rete un invito con un altro GUID (`IDENTITY_MISMATCH`) e non riporta a 0
+  la versione minima: il massimo fra quella dell'invito, quella fissata alla prima richiesta e quella dello stato fidato della stessa famiglia (`JoinSession.minRegistryVersion`), usato per
+  `JoinRecord` e per l'ancora di `RegistrySync`. La prima richiesta senza QR resta a 0 (L22, non cambia). Test: `CorrezioniIngresso5BTest` (6; i primi 5 rossi sul codice di prima: GUID noto,
+  impostore in LAN, invito con un altro GUID, versione minima nel record, registro piu' vecchio = rollback).
 
 ### R19. `startOver` ignora il fallimento della distruzione delle chiavi
 
@@ -323,7 +408,11 @@
 - **Scenario (e):** un ex admin rientra come familiare con la chiave di famiglia rimasta nella cassaforte (distruzione fallita in silenzio). Approvato, cambiare indirizzo o impronta di casa (RE-5) **firma** la configurazione della famiglia.
 - **Confermato:** plausibile (serve un errore del Keystore).
 - **Correzione proposta:** se la distruzione fallisce, `Problem` e niente procede; in `adminContext` richiedere anche `device(me).admin`.
-- **Stato:** aperta.
+- **Stato: corretta** (20/10). `startOver` non ignora piu' la distruzione delle chiavi: ognuna (dispositivo, poi famiglia) si ripete fino a tre volte con 300 ms, la chiave del dispositivo si
+  ricontrolla, e se non riesce risponde `KEYS_NOT_REMOVED` **senza toccare il resto** (account, password, stato fidato, avanzamento): la pagina resta quella di prima e si riprova. Ed e' piu'
+  stretto `RegistryWriter.adminContext`: oltre a «approvato» e alla chiave nella cassaforte vuole che il registro firmato segni **questo** dispositivo come admin, cosi' una chiave rimasta su un ex
+  admin rientrato come familiare (id nuovo, non admin) non firma piu' indirizzo, impronta di casa o esclusioni. Test: `CorrezioniConfigurazione5BTest` (guasto che dura, guasto passeggero ripetuto),
+  `CorrezioniAdmin5BTest` (rosso sul codice di prima: il familiare con la chiave firmava).
 
 ---
 
@@ -404,6 +493,8 @@ Le voci generali della Fase 5 che riguardano la 5B:
   - Manca F40. Dopo la copia restano R5, R14, R15.
 - [ ] **Condividere con "rimuovi posizione": il file non contiene GPS.**
   - **Non regge**: R1, R2, R4; per i video i lettori non sono indipendenti.
+  - Dopo le correzioni 5B (20/10): R1, R2, R4 corrette (stripper per elenco di cio' che si tiene, rilevatore indipendente, ogni "Condividi" con
+    l'impostazione). Manca F42 con `exiftool` sui file veri.
 - [ ] **FileProvider: permessi revocati dopo l'uso; flag di lettura espliciti sugli URI condivisi (Android 17 e 18).**
   - Regge in lettura: solo `share/` ed `edit/`, `ClipData` e solo lettura per le condivisioni, revoca prima di cancellare.
   - `FileProvider.getUriForFile` non si prova su JVM: F42.
@@ -427,6 +518,7 @@ Le voci (5B):
 - [x] **Correzioni e "Ripristina originale" sul telefono solo con il dialogo di sistema e l'originale al sicuro.**
   - La voce, cosi' come e' scritta, e' confermata: ogni riscrittura vuole il permesso del dialogo; l'originale (o la versione corretta) e' al sicuro e riletto prima.
   - Pero' non copriva R3: si propone di aggiungere alla stessa riga «**e la versione che si sovrascrive sul telefono e' al sicuro, controllata sui byte della riga di adesso**».
+  - 20/10: R3 corretta (la regola del riscrittore sopra); la riga della checklist puo' prendere quella frase.
 
 Delle voci "per ogni fase, sempre":
 - nessun permesso Android nuovo; i soli componenti esportati nuovi sono i tre approvati (confermato);

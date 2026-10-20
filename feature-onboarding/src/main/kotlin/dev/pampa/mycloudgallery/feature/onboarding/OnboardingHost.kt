@@ -335,8 +335,11 @@ private fun PageContent(page: OnboardingDestination, env: HostEnv) {
       RemovedScreen(
         chrome = env.chrome(page),
         ui = removal,
+        onAskStartOver = env.viewModel::askStartOver,
+        onCancelStartOver = env.viewModel::cancelStartOver,
         onStartOver = env.viewModel::startOver,
-        onProblemAction = { env.onProblemAction(it, retry = env.viewModel::startOver) },
+        // "Riprova" dopo un problema chiede di nuovo la conferma: chiavi e account non si toccano senza un gesto confermato.
+        onProblemAction = { env.onProblemAction(it, retry = env.viewModel::askStartOver) },
       )
     }
     is OnboardingDestination.Step -> StepContent(page, env)

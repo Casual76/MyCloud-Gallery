@@ -53,6 +53,7 @@ internal fun OnboardingProblem.toFeedback(): Feedback = when (this) {
   OnboardingProblem.REGISTRY_UNTRUSTED -> Feedback(R.string.fb_failed_title, R.string.problem_registry_untrusted, FluidTone.Danger)
   OnboardingProblem.NEEDS_APP_UPDATE -> Feedback(R.string.fb_update_title, R.string.fb_update, FluidTone.Warning)
   OnboardingProblem.STEP_NOT_AVAILABLE -> Feedback(R.string.fb_failed_title, R.string.problem_not_available, FluidTone.Warning)
+  OnboardingProblem.KEYS_NOT_REMOVED -> Feedback(R.string.fb_failed_title, R.string.problem_keys_not_removed, FluidTone.Warning)
   else -> Feedback(R.string.fb_failed_title, R.string.problem_generic, FluidTone.Danger)
 }
 

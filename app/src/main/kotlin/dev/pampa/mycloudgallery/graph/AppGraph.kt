@@ -86,9 +86,12 @@ import dev.pampa.mycloudgallery.nas.MutableNasFreezeSignal
 import dev.pampa.mycloudgallery.nas.NasInputs
 import dev.pampa.mycloudgallery.nas.NasShareArea
 import dev.pampa.mycloudgallery.nas.VaultNasCredentialSource
+import dev.pampa.mycloudgallery.root.ProcessRestart
 import dev.pampa.mycloudgallery.work.AndroidLimitsTracker
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -97,6 +100,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -133,6 +137,11 @@ class AppGraph(
   shareGuard: ShareGuard? = null,
   /** L'anello "Ultimi esiti ed errori" della Diagnostica (RE-4): in produzione quello di Hilt, nei test di solito nessuno. */
   diagnostics: DiagnosticsLog = NoDiagnosticsLog,
+  /**
+   * Il riavvio del processo (ON-11): in produzione `AndroidProcessRestart`, nei test un contatore o niente. Lo chiede "Configura di
+   * nuovo" se in questo processo la galleria e' gia' partita (R6): non riparte, e il catalogo avrebbe ancora il proprietario di prima.
+   */
+  private val restart: ProcessRestart = ProcessRestart {},
 ) {
 
   /** Chi scrive nell'anello della Diagnostica: lavori, sessione NAS, backup, VPN (solo codici e numeri). */
@@ -228,7 +237,8 @@ class AppGraph(
   // --- Fiducia, registro, ciclo di vita (P3) ------------------------------------------------------------------
   val trustStore = FileTrustStateStore(File(noBackup, TRUST_FILE))
   val sightings = FileApprovalSightings(File(noBackup, SIGHTINGS_FILE))
-  val eraser: LocalDataEraser = AppLocalDataEraser(context, this)
+  private val localEraser = AppLocalDataEraser(context, this)
+  val eraser: LocalDataEraser = localEraser
   val selfWipe: DeviceSelfWipe = DeviceSelfWipe(
     journal = FileWipeJournal(File(noBackup, FileWipeJournal.FILE_NAME)),
     keys = platform.deviceKeys,
@@ -278,6 +288,10 @@ class AppGraph(
     nasClock = nasClock,
     deviceNow = platform.deviceNow,
     allowUserRetry = breaker::allowUserRetry,
+    // R6: i dati del vecchio account non passano al nuovo (si tolgono alla fine dell'onboarding, prima che la Libreria si apra).
+    previousData = AppPreviousAccountData(localEraser, this),
+    // "Configura di nuovo": con la galleria gia' partita in questo processo si riparte da uno nuovo, come per l'azzeramento (ON-11).
+    afterStartOver = { if (galleryMayRun()) restart.restart() },
   )
   val folderSurvey = DefaultFolderSurvey({ share -> session.browser(share) })
   val coordinator = DefaultOnboardingCoordinator(onboardingStore, onboardingPorts, folderSurvey, scope)
@@ -285,6 +299,23 @@ class AppGraph(
 
   private val started = MutableStateFlow(false)
   private val familySetup = DefaultFamilySetupRepository(onboardingStore, registry, selfWipe, scope, platform.deviceNow)
+
+  /** Vero se in questo processo la famiglia e' stata pronta almeno una volta: la galleria puo' essere partita. */
+  private val readyOnce = AtomicBoolean(false)
+
+  /**
+   * La galleria del telefono puo' essere partita in questo processo (la Libreria nasce con la famiglia pronta). Se si', un
+   * azzeramento o la tolta dei dati di un altro account la ferma per sempre in questo processo (R7): serve riavviarlo.
+   */
+  fun galleryMayRun(): Boolean = readyOnce.get()
+
+  /** Riavvia il processo fra poco: il tempo di salvare cio' che la funzione in corso sta finendo (R6, solo se il riavvio di "Configura di nuovo" non c'e' stato). */
+  fun restartSoon() {
+    scope.launch {
+      delay(RESTART_DELAY_MS)
+      restart.restart()
+    }
+  }
 
   /**
    * Lo stato del dispositivo (`SetupState`) per la prima schermata. Resta `Loading` finche' [start] non ha letto il
@@ -294,6 +325,13 @@ class AppGraph(
   val setup: FamilySetupRepository = object : FamilySetupRepository {
     override val state: StateFlow<SetupState> = combine(started, familySetup.state) { ready, state -> if (ready) state else SetupState.Loading }
       .stateIn(scope, SharingStarted.Eagerly, SetupState.Loading)
+  }
+
+  init {
+    scope.launch {
+      setup.state.first { it is SetupState.Ready }
+      readyOnce.set(true)
+    }
   }
 
   // --- Regole delle attivita' (core-rules) e diagnostica ------------------------------------------------------------
@@ -449,6 +487,9 @@ class AppGraph(
     const val TRUST_FILE = "trust-state"
     const val SIGHTINGS_FILE = "approval-sightings"
     const val HEARTBEAT_FILE = "heartbeat"
+
+    /** Il tempo che `restartSoon` lascia a chi sta finendo di salvare prima che il processo si riavvii. */
+    const val RESTART_DELAY_MS = 1_000L
 
     /** Un DataStore di preferenze in `noBackupFilesDir/datastore`, uno per file e per processo. */
     fun preferences(context: Context, scope: CoroutineScope, name: String): DataStore<Preferences> =

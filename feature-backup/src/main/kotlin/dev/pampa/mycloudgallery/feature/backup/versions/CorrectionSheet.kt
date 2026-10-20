@@ -80,12 +80,16 @@ private fun CorrectionSheetRoute(
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
   BindDialogBridge(viewModel.bridge)
-  LaunchedEffect(subject, visible, mode) {
-    if (visible) {
+  // VE-5: azzerato solo all'apertura, non dopo una rotazione dello schermo.
+  SheetOpening(
+    key = "correzione-${subject.mediaId.value}-${mode.name}",
+    visible = visible,
+    onOpen = {
       viewModel.reset()
       viewModel.bind(subject, mode)
-    }
-  }
+    },
+    onReturn = { viewModel.bind(subject, mode) },
+  )
   val taps = rememberConfirmTaps((state as? CorrectionUi.Editing)?.plan, viewModel::monotonicMs)
   CorrectionSheet(
     visible = visible,
@@ -156,13 +160,30 @@ internal fun CorrectionSheetContent(state: CorrectionUi, taps: ConfirmTaps?, act
       icon = Icons.Rounded.Shield,
       title = stringResource(R.string.backup_correction_generic_title),
       rowTitle = stringResource(R.string.backup_correction_safe_title),
-      rowDetail = stringResource(R.string.backup_correction_safe_detail),
+      rowDetail = stringResource(
+        when {
+          state.outsideSources -> R.string.backup_correction_safe_outside
+          state.notNow -> R.string.backup_correction_safe_not_now
+          state.stillWaiting -> R.string.backup_correction_safe_still
+          else -> R.string.backup_correction_safe_detail
+        },
+      ),
       tone = FluidTone.Warning,
       modifier = modifier,
       actions = {
-        BackupButton(label = stringResource(R.string.backup_correction_safe_action), onClick = actions.safeguardNow)
+        // VE-3: il tasto c'e' solo se puo' fare qualcosa per questo media.
+        if (!state.outsideSources) BackupButton(label = stringResource(R.string.backup_correction_safe_action), onClick = actions.safeguardNow)
         CloseButton(actions.close)
       },
+    )
+    is CorrectionUi.Safeguarding -> StatusSheet(
+      icon = Icons.Rounded.Shield,
+      title = stringResource(R.string.backup_correction_generic_title),
+      rowTitle = stringResource(R.string.backup_correction_safeguarding_title),
+      rowDetail = stringResource(R.string.backup_correction_safeguarding_detail),
+      busy = true,
+      modifier = modifier,
+      actions = { CloseButton(actions.close) },
     )
     is CorrectionUi.AwaitingSystemDialog -> StatusSheet(
       icon = Icons.Rounded.EditCalendar,
@@ -226,6 +247,7 @@ private fun failureRes(code: CorrectionFailure): Int = when (code) {
   CorrectionFailure.PHONE_NOT_RESTORED -> R.string.backup_correction_failed_not_restored
   CorrectionFailure.PHONE_FULL -> R.string.backup_correction_failed_full
   CorrectionFailure.NAS_FAILED -> R.string.backup_correction_failed_nas
+  CorrectionFailure.PHONE_CHANGED -> R.string.backup_correction_failed_phone_changed
 }
 
 private fun blockedRes(reason: CorrectionReadiness): Int = when (reason) {
@@ -234,6 +256,10 @@ private fun blockedRes(reason: CorrectionReadiness): Int = when (reason) {
   CorrectionReadiness.NAS_UNREACHABLE -> R.string.backup_correction_blocked_nas
   CorrectionReadiness.FROZEN -> R.string.backup_correction_blocked_frozen
   CorrectionReadiness.NOT_MINE -> R.string.backup_correction_blocked_not_mine
+  CorrectionReadiness.PAUSED -> R.string.backup_correction_blocked_paused
+  CorrectionReadiness.TEST_ONLY -> R.string.backup_correction_blocked_test_only
+  CorrectionReadiness.BUSY -> R.string.backup_correction_blocked_busy
+  CorrectionReadiness.ROTATION_NOT_WRITABLE -> R.string.backup_correction_blocked_rotation
   CorrectionReadiness.NOT_AVAILABLE, CorrectionReadiness.READY, CorrectionReadiness.NEEDS_SAFE_FIRST, CorrectionReadiness.FORMAT_NOT_WRITABLE ->
     R.string.backup_correction_blocked_not_available
 }
@@ -308,7 +334,8 @@ private fun EditingContent(state: CorrectionUi.Editing, taps: ConfirmTaps?, acti
         DateSection(state, actions)
         PlaceSection(state, actions)
       }
-      RotationSection(state, actions)
+      // VE-4: un formato che non si scrive non si ruota (nessuno mostrerebbe la rotazione): la voce non c'e'.
+      if (state.readiness != CorrectionReadiness.FORMAT_NOT_WRITABLE) RotationSection(state, actions)
       PreviewSection(state)
     },
     actions = {
@@ -337,6 +364,7 @@ private fun MessageRow(message: CorrectionMessage) {
     CorrectionMessage.CONFIRMATION_EXPIRED -> R.string.backup_correction_msg_expired
     CorrectionMessage.PERMISSION_REFUSED -> R.string.backup_correction_msg_refused
     CorrectionMessage.NO_SYSTEM_DIALOG -> R.string.backup_correction_msg_no_dialog
+    CorrectionMessage.SYSTEM_DIALOG_FAILED -> R.string.backup_correction_msg_dialog_failed
   }
   FluidListGroup {
     FluidListRow(

@@ -221,11 +221,35 @@ class OnboardingViewModel @Inject constructor(
   }
 
   /**
+   * Il tocco su "Configura di nuovo" apre il foglio di conferma e basta (R7 della revisione 5B): dalla pagina "fuori dalla
+   * famiglia" distruggeva chiave del dispositivo, chiave di famiglia e password con un tocco solo, e dopo un guasto passeggero
+   * del Keystore (che qui sembra "non configurato") toglieva la chiave di un admin. Il foglio dice cosa si perde, per un admin
+   * anche come si recupera (kit e codice). Anche "Riprova" dopo un problema passa da qui: si conferma di nuovo.
+   */
+  fun askStartOver() {
+    val removal = state.value.removal ?: return
+    if (removal.busy || removal.confirming) return
+    viewModelScope.launch {
+      val holds = guard { coordinator.holdsFamilyKey() } ?: true // nel dubbio, l'avviso in piu'
+      state.update { s ->
+        s.copy(removal = s.removal?.takeIf { !it.busy }?.copy(confirming = true, holdsKey = holds, problem = null) ?: s.removal)
+      }
+    }
+  }
+
+  /** Il foglio si chiude senza confermare: non succede niente. */
+  fun cancelStartOver() {
+    state.update { s -> s.copy(removal = s.removal?.takeIf { !it.busy }?.copy(confirming = false) ?: s.removal) }
+  }
+
+  /**
    * "Configura di nuovo" (ON-4, e dalle Impostazioni ON-5): il coordinatore dimentica account, password, chiavi e stato
-   * della famiglia; si riparte dal benvenuto.
+   * della famiglia; si riparte dal benvenuto. **Solo dopo la conferma del foglio** ([askStartOver]).
    */
   fun startOver() {
-    state.update { s -> s.copy(removal = s.removal?.copy(busy = true, problem = null)) }
+    val removal = state.value.removal
+    if (removal == null || !removal.confirming || removal.busy) return
+    state.update { s -> s.copy(removal = s.removal?.copy(busy = true, confirming = false, problem = null)) }
     viewModelScope.launch {
       when (val result = guardResult { coordinator.startOver() }) {
         is StepResult.Advanced -> {

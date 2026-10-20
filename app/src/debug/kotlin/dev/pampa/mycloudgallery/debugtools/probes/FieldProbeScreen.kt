@@ -9,11 +9,13 @@ import android.content.IntentSender
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.material3.Text
@@ -22,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -53,6 +56,11 @@ data object FieldProbesRoute
 /** Cosa aspetta il risultato del dialogo di sistema o dell'altra app, per sapere come finire quando torna. */
 private enum class Pending { TRASH, TRASH_MANY, RESTORE, WRITE, VIEW, EDIT }
 
+/** Le sezioni della schermata: l'avviso di un tocco compare in fondo alla sezione del tocco, non in cima (LA-8). */
+private enum class Section { ENV, T09, T14, T15, T16, REPORT }
+
+private class Notice(val section: Section, @StringRes val text: Int)
+
 /**
  * SOLO build debug (Fase 5B, P0-B; riga P0-B del §4.4 di docs/fase5-progetto.md): la schermata delle **prove guidate** T-09 (cestino), T-14 (selettori e
  * provider dei documenti), T-15 (condivisioni in arrivo) e T-16 ("Modifica con…"). Si apre da Impostazioni → Sviluppo. Ogni passo e' una riga da toccare;
@@ -78,10 +86,30 @@ internal fun FieldProbeScreen(onBack: () -> Unit) {
     )
   }
   val t16 = remember { FieldProbeT16(context, phone, store) }
+  // LA-6: le scelte che nessuno ha ancora toccato diventano esplicite, cosi' il resoconto dice quale forma e quale latenza sono state usate.
+  var report by remember {
+    store.seedChoices()
+    mutableStateOf(store.render())
+  }
+  var notice by remember { mutableStateOf<Notice?>(null) }
+  // LA-7: cosa si aspetta dal dialogo o dall'altra app sopravvive alla ricreazione della schermata (e alla morte del processo).
+  var pendingName by rememberSaveable { mutableStateOf<String?>(null) }
 
-  var report by remember { mutableStateOf(store.render()) }
-  var message by remember { mutableStateOf<Int?>(null) }
-  var pending by remember { mutableStateOf<Pending?>(null) }
+  fun pendingNow(): Pending? = pendingName?.let { name -> Pending.entries.firstOrNull { it.name == name } }
+
+  fun setPending(value: Pending?) {
+    pendingName = value?.name
+  }
+
+  fun say(section: Section, text: Int?) {
+    notice = text?.let { Notice(section, it) }
+  }
+
+  /** L'avviso dell'ultimo tocco, in fondo alla sezione in cui e' stato fatto (LA-8: stava sempre sotto "Ambiente"). */
+  fun LazyListScope.noticeItem(section: Section) {
+    val shown = notice?.takeIf { it.section == section } ?: return
+    item(key = "notice-${section.name}") { FluidSectionFootnote(text = stringResource(shown.text)) }
+  }
   var form by remember { mutableStateOf(FieldProbeForm.of(store.get(FieldProbeKey.T14_FORM)).code) }
   var latency by remember { mutableStateOf(store.get(FieldProbeKey.T14_LATENCY_MS) ?: 0L) }
   var count by remember { mutableStateOf(store.get(FieldProbeKey.T14_COUNT) ?: 1L) }
@@ -92,8 +120,8 @@ internal fun FieldProbeScreen(onBack: () -> Unit) {
   }
 
   val senderLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
-    val finished = pending
-    pending = null
+    val finished = pendingNow()
+    setPending(null)
     scope.launch {
       when (finished) {
         Pending.TRASH -> t09.finishTrash(result.resultCode, many = false)
@@ -106,19 +134,19 @@ internal fun FieldProbeScreen(onBack: () -> Unit) {
     }
   }
   val activityLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-    val finished = pending
-    pending = null
+    val finished = pendingNow()
+    setPending(null)
     if (finished == Pending.EDIT) t16.finishEdit(result.resultCode, result.data)
     refresh()
   }
 
   fun startRequest(sender: IntentSender?, kind: Pending) {
     if (sender == null) {
-      message = R.string.probe_nothing_to_do
+      say(Section.T09, R.string.probe_nothing_to_do)
       return
     }
-    message = null
-    pending = kind
+    say(Section.T09, null)
+    setPending(kind)
     senderLauncher.launch(IntentSenderRequest.Builder(sender).build())
   }
 
@@ -133,13 +161,13 @@ internal fun FieldProbeScreen(onBack: () -> Unit) {
           onClick = {
             val rows = t09.environment()
             FieldProbeHandlers.measure(context, store)
-            message = if (rows == 0) R.string.probe_no_rows else null
+            say(Section.ENV, if (rows == 0) R.string.probe_no_rows else null)
             refresh()
           },
         )
       }
     }
-    message?.let { item { FluidSectionFootnote(text = stringResource(it)) } }
+    noticeItem(Section.ENV)
 
     // --- T-09 -------------------------------------------------------------------------------------------------------------
     item { FluidSectionHeader(title = stringResource(R.string.probe_section_t09)) }
@@ -149,7 +177,7 @@ internal fun FieldProbeScreen(onBack: () -> Unit) {
           title = stringResource(R.string.probe_t09_base_title),
           subtitle = stringResource(R.string.probe_t09_base_detail),
           onClick = {
-            message = if (t09.takeBaseline() == 0) R.string.probe_no_rows else null
+            say(Section.T09, if (t09.takeBaseline() == 0) R.string.probe_no_rows else null)
             refresh()
           },
         )
@@ -159,7 +187,7 @@ internal fun FieldProbeScreen(onBack: () -> Unit) {
           subtitle = stringResource(R.string.probe_t09_compare_detail),
           onClick = {
             scope.launch {
-              message = if (t09.compare()) null else R.string.probe_need_baseline
+              say(Section.T09, if (t09.compare()) null else R.string.probe_need_baseline)
               refresh()
             }
           },
@@ -201,6 +229,7 @@ internal fun FieldProbeScreen(onBack: () -> Unit) {
         )
       }
     }
+    noticeItem(Section.T09)
 
     // --- T-14 -------------------------------------------------------------------------------------------------------------
     item { FluidSectionHeader(title = stringResource(R.string.probe_section_t14)) }
@@ -247,6 +276,7 @@ internal fun FieldProbeScreen(onBack: () -> Unit) {
         )
       }
     }
+    noticeItem(Section.T14)
 
     // --- T-15 -------------------------------------------------------------------------------------------------------------
     item { FluidSectionHeader(title = stringResource(R.string.probe_section_t15)) }
@@ -302,7 +332,7 @@ internal fun FieldProbeScreen(onBack: () -> Unit) {
           onClick = {
             val intent = t16.prepareView()
             if (intent == null) {
-              message = R.string.probe_nothing_to_do
+              say(Section.T16, R.string.probe_nothing_to_do)
             } else {
               val launched = try {
                 context.startActivity(intent)
@@ -311,7 +341,7 @@ internal fun FieldProbeScreen(onBack: () -> Unit) {
                 false
               }
               t16.markViewLaunched(launched)
-              message = if (launched) null else R.string.probe_t16_no_gallery
+              say(Section.T16, if (launched) null else R.string.probe_t16_no_gallery)
               refresh()
             }
           },
@@ -321,7 +351,7 @@ internal fun FieldProbeScreen(onBack: () -> Unit) {
           title = stringResource(R.string.probe_t16_compare_title),
           subtitle = stringResource(R.string.probe_t16_compare_detail),
           onClick = {
-            message = if (t16.compareView()) null else R.string.probe_need_baseline
+            say(Section.T16, if (t16.compareView()) null else R.string.probe_need_baseline)
             refresh()
           },
         )
@@ -332,15 +362,16 @@ internal fun FieldProbeScreen(onBack: () -> Unit) {
           onClick = {
             val intent = t16.prepareEdit()
             if (intent == null) {
-              message = R.string.probe_nothing_to_do
+              say(Section.T16, R.string.probe_nothing_to_do)
             } else {
-              pending = Pending.EDIT
+              setPending(Pending.EDIT)
               activityLauncher.launch(intent)
             }
           },
         )
       }
     }
+    noticeItem(Section.T16)
 
     // --- Resoconto --------------------------------------------------------------------------------------------------------
     item { FluidSectionHeader(title = stringResource(R.string.probe_section_report)) }
@@ -356,20 +387,27 @@ internal fun FieldProbeScreen(onBack: () -> Unit) {
         FluidButton(text = stringResource(R.string.probe_report_refresh), onClick = { refresh() }, size = FluidButtonSize.Medium, style = FluidButtonStyle.Tinted)
         FluidButton(text = stringResource(R.string.probe_report_copy), onClick = {
           copy(context, report)
-          message = R.string.probe_report_copied
+          say(Section.REPORT, R.string.probe_report_copied)
         }, size = FluidButtonSize.Medium)
         FluidButton(text = stringResource(R.string.probe_report_save), onClick = {
           save(context, report)
-          message = R.string.probe_report_saved
+          say(Section.REPORT, R.string.probe_report_saved)
         }, size = FluidButtonSize.Medium, style = FluidButtonStyle.Tinted)
       }
     }
     item {
       FluidButton(text = stringResource(R.string.probe_report_reset), onClick = {
+        // LA-6: si azzerano le misure, non le scelte (forma, latenza, file, modo di T-15): la schermata le mostra ancora e i componenti le usano.
         store.resetNumbers()
+        store.seedChoices()
+        form = FieldProbeForm.of(store.get(FieldProbeKey.T14_FORM)).code
+        latency = store.get(FieldProbeKey.T14_LATENCY_MS) ?: 0L
+        count = store.get(FieldProbeKey.T14_COUNT) ?: 1L
+        closeFirst = store.get(FieldProbeKey.T15_CLOSED_FIRST) == 1L
         refresh()
       }, size = FluidButtonSize.Medium, style = FluidButtonStyle.Tinted)
     }
+    noticeItem(Section.REPORT)
     item { FluidSectionFootnote(text = stringResource(R.string.probe_report_footnote)) }
   }
 }

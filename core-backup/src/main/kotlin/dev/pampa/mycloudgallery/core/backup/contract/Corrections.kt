@@ -69,6 +69,22 @@ enum class CorrectionReadiness(override val code: String) : StableCode {
 
   NOT_MINE("not_mine"),
 
+  /** VE-7 della verifica funzionale 5B: il backup e' in pausa ("Ferma"): la versione corretta aspetta "Riprendi". */
+  PAUSED("paused"),
+
+  /** VE-7: il backup e' in prova (D12, R2 della 5A): sul NAS non si scrive. */
+  TEST_ONLY("test_only"),
+
+  /** VE-7: un'altra versione di questo media e' ancora in corso (un lavoro aperto nel diario), o il backup non ha liberato il turno: prima finisce quello. */
+  BUSY("busy"),
+
+  /**
+   * VE-4 della verifica funzionale 5B: "Ruota" di un formato che non si scrive nel file (HEIC, RAW): una rotazione solo nell'app non la
+   * mostrerebbe nessuno (miniature e viewer leggono l'orientamento dai byte del file), quindi non si fa e non si dice "fatto". Data e luogo si
+   * correggono nell'app come prima (Q6 (a)).
+   */
+  ROTATION_NOT_WRITABLE("rotation_not_writable"),
+
   /** Nessuna implementazione legata (null-object). */
   NOT_AVAILABLE("not_available"),
 }
@@ -134,6 +150,27 @@ enum class CorrectionFailure(override val code: String) : StableCode {
 
   /** Il NAS non ha accettato la versione nuova (rete, quota, spazio): la correzione e' nell'app e riprova con il backup. */
   NAS_FAILED("nas_failed"),
+
+  /**
+   * R3 della revisione 5B: una riga del telefono non aveva l'impronta della versione al sicuro (cambiata dopo l'ultima lettura): non e' stata
+   * toccata. La versione corretta va comunque sul NAS; la riga la salva il backup come versione nuova.
+   */
+  PHONE_CHANGED("phone_changed"),
+}
+
+/**
+ * VE-3 della verifica funzionale 5B: che cosa ha fatto "Metti al sicuro adesso" (foglio "Prima la metto al sicuro") per un media. Prima il tasto
+ * chiedeva solo "Fai ora", che non vede un media fuori dalle sorgenti e non verifica un solo-NAS: il foglio restava uguale per giorni.
+ */
+enum class SafeguardStart(override val code: String) : StableCode {
+  /** E' partito il lavoro che lo mette al sicuro (la verifica sul momento della sua copia sul NAS, o il backup del telefono). */
+  STARTED("started"),
+
+  /** Il media sta in una cartella del telefono che il backup non guarda: va aggiunta alle sorgenti (o il media resta com'e'). */
+  NOT_IN_SOURCES("not_in_sources"),
+
+  /** Niente da far partire adesso (backup non pronto, nessuna copia da verificare): il foglio lo dice. */
+  UNAVAILABLE("unavailable"),
 }
 
 /** L'esito di [Corrections.apply]. Solo numeri e codici. */
@@ -177,4 +214,18 @@ interface Corrections {
    * [CorrectionOutcome.NeedsWriteGrant] e non si e' toccato niente.
    */
   suspend fun apply(plan: CorrectionPlan, confirmation: PhoneConfirmation, writeGrant: PhoneWriteGrant?): CorrectionOutcome
+
+  /**
+   * VE-8 della verifica funzionale 5B: la parte di [apply] che **non tocca niente** (piano ricalcolato, prontezza, conferma, permesso del
+   * telefono), da chiamare prima di aspettare il turno del backup. Null = si puo' procedere (con il turno); altrimenti l'esito che [apply]
+   * darebbe adesso, senza aver toccato niente. Di default null.
+   */
+  suspend fun precheck(plan: CorrectionPlan, confirmation: PhoneConfirmation, writeGrant: PhoneWriteGrant?): CorrectionOutcome? = null
+
+  /**
+   * VE-3: "Metti al sicuro adesso" per [mediaId] (prontezza `NEEDS_SAFE_FIRST`): la verifica sul momento della copia privata non ancora
+   * riletta, o il backup del telefono se il media sta in una sorgente. Non tocca il file; il foglio poi ricontrolla la prontezza. Lo lega `:app`
+   * (sa del backup); di default [SafeguardStart.UNAVAILABLE].
+   */
+  suspend fun safeguard(mediaId: MediaId): SafeguardStart = SafeguardStart.UNAVAILABLE
 }

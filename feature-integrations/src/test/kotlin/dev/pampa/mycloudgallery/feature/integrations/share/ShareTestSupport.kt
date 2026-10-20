@@ -53,15 +53,38 @@ internal object ShareSamples {
   private fun box(type: String, vararg parts: ByteArray): ByteArray {
     val body = parts.fold(ByteArray(0)) { a, b -> a + b }
     val size = 8 + body.size
-    return byteArrayOf((size ushr 24).toByte(), (size ushr 16).toByte(), (size ushr 8).toByte(), size.toByte()) + type.toByteArray(Charsets.ISO_8859_1) + body
+    return u32(size.toLong()) + type.toByteArray(Charsets.ISO_8859_1) + body
   }
 
-  /** Un MP4 come le registrazioni di Android: la posizione in `moov/udta/©xyz`. */
+  private fun fullBox(type: String, flags: Int, vararg parts: ByteArray): ByteArray = box(type, byteArrayOf(0, 0, 0, flags.toByte()), *parts)
+
+  private fun u32(v: Long): ByteArray = byteArrayOf((v ushr 24).toByte(), (v ushr 16).toByte(), (v ushr 8).toByte(), v.toByte())
+
+  private fun u16(v: Int): ByteArray = byteArrayOf((v ushr 8).toByte(), v.toByte())
+
+  /**
+   * Un MP4 come le registrazioni di Android: una traccia video (un campione che occupa tutto `mdat`) e la posizione in `moov/udta/©xyz`.
+   * Correzioni 5B: lo stripper tiene le sole tracce audio e video, quindi un video di prova deve averne una.
+   */
   fun gpsMp4(mdatBytes: Int = 2_048): ByteArray {
     val text = ISO6709.toByteArray(Charsets.ISO_8859_1)
-    val xyz = byteArrayOf(0, 0, 0, (12 + text.size).toByte(), 0xA9.toByte(), 'x'.code.toByte(), 'y'.code.toByte(), 'z'.code.toByte(), 0, text.size.toByte(), 0x15, 0xC7.toByte()) + text
+    val xyz = u32(12L + text.size) + byteArrayOf(0xA9.toByte(), 'x'.code.toByte(), 'y'.code.toByte(), 'z'.code.toByte()) + u16(text.size) + u16(0x15C7) + text
+    val ftyp = box("ftyp", "isom".toByteArray(), byteArrayOf(0, 0, 2, 0), "isom".toByteArray())
+    val mdat = box("mdat", ByteArray(mdatBytes) { 7 })
+    val sampleAt = ftyp.size + 8L
+    val tkhd = fullBox("tkhd", 3, ByteArray(80))
+    val mdhd = fullBox("mdhd", 0, u32(0), u32(0), u32(1000), u32(3000), u16(0x55C4), u16(0))
+    val hdlr = fullBox("hdlr", 0, u32(0), "vide".toByteArray(), ByteArray(12), byteArrayOf(0))
+    val vmhd = fullBox("vmhd", 1, ByteArray(8))
+    val dinf = box("dinf", fullBox("dref", 0, u32(1), fullBox("url ", 1)))
+    val stsd = fullBox("stsd", 0, u32(1), box("avc1", ByteArray(6), u16(1), ByteArray(70)))
+    val stts = fullBox("stts", 0, u32(1), u32(1), u32(3000))
+    val stsc = fullBox("stsc", 0, u32(1), u32(1), u32(1), u32(1))
+    val stsz = fullBox("stsz", 0, u32(0), u32(1), u32(mdatBytes.toLong()))
+    val stco = fullBox("stco", 0, u32(1), u32(sampleAt))
+    val trak = box("trak", tkhd, box("mdia", mdhd, hdlr, box("minf", vmhd, dinf, box("stbl", stsd, stts, stsc, stsz, stco))))
     val mvhd = box("mvhd", ByteArray(100))
-    return box("ftyp", "isom".toByteArray(), byteArrayOf(0, 0, 2, 0), "isom".toByteArray()) + box("mdat", ByteArray(mdatBytes) { 7 }) + box("moov", mvhd, box("udta", xyz))
+    return ftyp + mdat + box("moov", mvhd, trak, box("udta", xyz))
   }
 
   /** La posizione di una foto, letta con `ExifInterface` del sistema (un lettore scritto da altri), o null. */

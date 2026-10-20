@@ -27,10 +27,11 @@ import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowMediaMetadataRetriever
 
 /**
- * Fase 5B, P11 (D26, E-X5, L41, §6.1): la posizione tolta da una copia e **ricontrollata**. Per ogni formato (JPEG, PNG, WebP, MP4, MOV, HEIC
- * delle fixture, piu' la motion photo): la copia non ha piu' nessuna coordinata (EXIF, XMP, scatole del video), l'estrattore dell'app la rilegge
- * senza luogo, `ExifInterface` non trova etichette GPS, la copia si decodifica (foto) o ha ancora il suo `moov` (video), il resto dei metadati
- * (data, fotocamera, orientamento) c'e' ancora, e il sorgente e' intatto byte per byte.
+ * Fase 5B, P11 (D26, E-X5, L41, §6.1), con le correzioni 5B (R1, R2): la posizione tolta da una copia e **ricontrollata**. Per ogni formato (JPEG,
+ * PNG, WebP, MP4, MOV, HEIC delle fixture, piu' la motion photo): la copia non ha piu' nessuna coordinata (EXIF, XMP, scatole del video), il
+ * rilevatore indipendente non ci trova niente, l'estrattore dell'app la rilegge senza luogo, `ExifInterface` non trova etichette GPS, la copia si
+ * decodifica (foto) o ha ancora il suo `moov` con video e audio (video); restano **solo** orientamento e data (fotocamera, XMP e il resto no: si
+ * tiene per elenco), e il sorgente e' intatto byte per byte. I posti nascosti (DJI, `mebx`, XMP esteso, APP13...) sono in [PosizioneNascostaTest].
  *
  * Il lato duro e' **fallire chiusi**: se togliere la posizione non riesce, la destinazione non esiste e il risultato non e' [StripOutcome.Stripped].
  */
@@ -77,9 +78,13 @@ class DefaultLocationStripperTest {
     assertThat(StripFixtures.contains(bytes, "GPSProcessingMethod")).isFalse()
     // Ancora una foto: si decodifica.
     assertThat(AndroidPreviewDecoder().decode(bytes, 64)).isNotNull()
-    // Il resto di cio' che l'utente si aspetta di vedere c'e' ancora.
-    assertThat(exif.getAttribute(ExifInterface.TAG_MODEL)).isEqualTo("SM-S931B")
+    // Restano orientamento e data (con fuso e millisecondi); la fotocamera no: si tiene solo cio' che e' in elenco.
+    assertThat(exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, 0)).isEqualTo(6)
     assertThat(exif.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL)).isEqualTo("2024:03:12 10:15:30")
+    assertThat(exif.getAttribute(ExifInterface.TAG_OFFSET_TIME_ORIGINAL)).isEqualTo("+01:00")
+    assertThat(exif.getAttribute(ExifInterface.TAG_MODEL)).isNull()
+    assertThat(exif.getAttribute(ExifInterface.TAG_MAKE)).isNull()
+    assertThat(LocationTraces.scan(copy).clean).isTrue()
     assertThat(source.length()).isGreaterThan(0)
   }
 
@@ -100,8 +105,9 @@ class DefaultLocationStripperTest {
     assertThat(result).isEqualTo(StripOutcome.Stripped("image/jpeg"))
     assertCleanPhoto(source, out, "image/jpeg")
     assertThat(sha(source)).isEqualTo(before) // il sorgente non si tocca mai
-    // Una proprieta' innocua dell'XMP resta (non si butta via l'XMP: si tolgono le sole proprieta' GPS).
-    assertThat(StripFixtures.contains(out.readBytes(), "dc:creator")).isTrue()
+    // L'XMP non si pulisce: non c'e' piu', intero (anche le proprieta' innocue: si tiene per elenco, e l'XMP non c'e').
+    assertThat(StripFixtures.contains(out.readBytes(), "dc:creator")).isFalse()
+    assertThat(StripFixtures.contains(out.readBytes(), "xmpmeta")).isFalse()
   }
 
   @Test
@@ -154,11 +160,11 @@ class DefaultLocationStripperTest {
     val source = src("xmp-only.jpg", StripFixtures.jpeg(exif = StripFixtures.exifWithoutGps()))
     val out = dst("out.jpg")
     assertThat(ExifInterface(source).latLong).isNull()
-    assertThat(RawLocationRecheck().check(source, "image/jpeg")).isEqualTo(LocationVerdict.HAS_LOCATION)
+    assertThat(LocationTraceRecheck().check(source, "image/jpeg")).isEqualTo(LocationVerdict.HAS_LOCATION)
 
     assertThat(stripper.strip(source, out, "image/jpeg")).isEqualTo(StripOutcome.Stripped("image/jpeg"))
 
-    assertThat(RawLocationRecheck().check(out, "image/jpeg")).isEqualTo(LocationVerdict.CLEAR)
+    assertThat(LocationTraceRecheck().check(out, "image/jpeg")).isEqualTo(LocationVerdict.CLEAR)
     assertThat(StripFixtures.contains(out.readBytes(), "GPSLatitude")).isFalse()
   }
 
@@ -181,15 +187,16 @@ class DefaultLocationStripperTest {
     assertThat(StripFixtures.contains(stripped, "+45.4642")).isFalse()
     assertThat(StripFixtures.indexOf(stripped, byteArrayOf(0xA9.toByte(), 'x'.code.toByte(), 'y'.code.toByte(), 'z'.code.toByte()))).isEqualTo(-1)
     assertThat(StripFixtures.contains(stripped, "free")).isTrue()
-    // Ancora un video che si riproduce: ftyp, mdat e moov sono dove erano (stessi offset).
+    // Ancora un video che si riproduce: ftyp, mdat e moov sono dove erano (stessi offset), con la traccia video e quella audio.
     assertThat(StripFixtures.contains(stripped, "moov")).isTrue()
+    assertThat(LocationFixtures.handlers(stripped)).containsExactly("vide", "soun").inOrder()
     assertThat(stripped.copyOfRange(0, original.indexOfFirst4("udta"))).isEqualTo(original.copyOfRange(0, original.indexOfFirst4("udta")))
     assertThat((read(out, "video/mp4") as Extraction.Read).metadata.location).isNull()
     assertThat(sha(source)).isEqualTo(MessageDigest.getInstance("SHA-256").digest(original).toList())
   }
 
   @Test
-  fun movDiAppleLaVoceDellaPosizioneSparisceLAltraResta() {
+  fun movDiAppleIlMetaDiQuickTimeSparisceIntero() {
     val original = StripFixtures.movWithApplePosition()
     val source = src("a.mov", original)
     val out = playable(dst("out.mov"))
@@ -203,14 +210,14 @@ class DefaultLocationStripperTest {
     assertThat(stripped.size).isEqualTo(original.size)
     assertThat(StripFixtures.contains(stripped, ISO6709)).isFalse()
     assertThat(StripFixtures.contains(stripped, "location")).isFalse()
-    // Le altre voci (marca e modello) ci sono ancora, con le loro chiavi.
-    assertThat(StripFixtures.contains(stripped, "com.apple.quicktime.make")).isTrue()
-    assertThat(StripFixtures.contains(stripped, "iPhone 15")).isTrue()
-    assertThat(StripFixtures.contains(stripped, "Apple")).isTrue()
+    // Il `meta` di QuickTime non si pulisce chiave per chiave: sparisce intero (anche marca e modello), le tracce restano.
+    assertThat(StripFixtures.contains(stripped, "com.apple.quicktime.make")).isFalse()
+    assertThat(StripFixtures.contains(stripped, "iPhone 15")).isFalse()
+    assertThat(LocationFixtures.handlers(stripped)).containsExactly("vide", "soun").inOrder()
   }
 
   @Test
-  fun mp4ConXmpInUnRiquadroUuidLeCoordinateSparisconoSulPosto() {
+  fun mp4ConXmpInUnRiquadroUuidIlRiquadroSparisce() {
     val original = StripFixtures.mp4WithXmpUuid()
     val source = src("a.mp4", original)
     val out = playable(dst("out.mp4"))
@@ -221,16 +228,18 @@ class DefaultLocationStripperTest {
     val stripped = out.readBytes()
     assertThat(stripped.size).isEqualTo(original.size)
     assertThat(StripFixtures.contains(stripped, "GPSLatitude")).isFalse()
-    assertThat(StripFixtures.contains(stripped, "dc:creator")).isTrue()
+    assertThat(StripFixtures.contains(stripped, "dc:creator")).isFalse() // il riquadro sconosciuto diventa `free`, vuoto
   }
 
   @Test
-  fun unaTracciaDiMetadatiATempoConIPuntiGpsFermaLaCondivisione() {
+  fun unVideoConLaSolaTracciaDiMetadatiNonSiCondivide() {
+    // Tolta la traccia dei punti GPS non resterebbe un video: la condivisione si ferma (le tracce accanto a video e audio, invece, si tolgono:
+    // `PosizioneNascostaTest`).
     for (entry in listOf("camm", "gpmd")) {
       val source = src("t-$entry.mp4", StripFixtures.mp4WithTimedTrack(entry))
       val out = playable(dst("out-$entry.mp4"))
 
-      assertThat(stripper.strip(source, out, "video/mp4")).isEqualTo(StripOutcome.StillHasLocation)
+      assertThat(stripper.strip(source, out, "video/mp4")).isEqualTo(StripOutcome.Unsupported(StripUnsupported.FORMAT))
 
       assertWithMessage(entry).that(out.exists()).isFalse()
     }
@@ -251,7 +260,7 @@ class DefaultLocationStripperTest {
 
   @Test
   fun unVideoSenzaPosizioneNonCambiaUnByte() {
-    val original = StripFixtures.mp4WithoutLocation()
+    val original = StripFixtures.mp4Clean().bytes
     val source = src("a.mp4", original)
     val out = playable(dst("out.mp4"))
 
@@ -278,8 +287,12 @@ class DefaultLocationStripperTest {
     // Il video incorporato c'e' ancora (ftyp e moov): e' una motion photo, non solo una foto.
     assertThat(StripFixtures.contains(stripped, "ftyp")).isTrue()
     assertThat(StripFixtures.contains(stripped, "moov")).isTrue()
-    assertThat(RawLocationRecheck().check(out, "image/jpeg")).isEqualTo(LocationVerdict.CLEAR)
-    assertThat(RawLocationRecheck().check(source, "image/jpeg")).isEqualTo(LocationVerdict.HAS_LOCATION)
+    assertThat(LocationTraceRecheck().check(out, "image/jpeg")).isEqualTo(LocationVerdict.CLEAR)
+    assertThat(LocationTraceRecheck().check(source, "image/jpeg")).isEqualTo(LocationVerdict.HAS_LOCATION)
+    // Il video riattaccato ha ancora video e audio, ed e' dichiarato da un XMP nuovo (solo la sua lunghezza).
+    val start = StripFixtures.indexOf(stripped, "ftyp".toByteArray()) - 4
+    assertThat(LocationFixtures.handlers(stripped, start)).containsExactly("vide", "soun").inOrder()
+    assertThat(StripFixtures.contains(stripped, "MotionPhoto")).isTrue()
   }
 
   // --- HEIC → JPEG ---------------------------------------------------------------------------------------------------------------
@@ -301,15 +314,18 @@ class DefaultLocationStripperTest {
   }
 
   @Test
-  fun unConvertitoreChePortaUnaPosizioneNonFaPassareLaCondivisione() {
-    // Un convertitore sbagliato (restituisce un JPEG che ha ancora le coordinate): il ricontrollo lo ferma e la destinazione non resta.
+  fun unConvertitoreChePortaUnaPosizioneNonLaFaPassare() {
+    // Un convertitore sbagliato (restituisce un JPEG con l'EXIF GPS): il JPEG si ricostruisce come ogni altro, e la posizione non passa.
     val leaky = DefaultLocationStripper(StripFixtures.rechecks(), heic = FakeHeicToJpeg(leak = true))
     val source = src("a.heic", StripFixtures.heic())
     val out = dst("out.jpg")
 
-    assertThat(leaky.strip(source, out, "image/heic")).isEqualTo(StripOutcome.StillHasLocation)
+    assertThat(leaky.strip(source, out, "image/heic")).isEqualTo(StripOutcome.Stripped("image/jpeg"))
 
-    assertThat(out.exists()).isFalse()
+    assertThat(ExifInterface(out).latLong).isNull()
+    assertThat(LocationTraces.scan(out).clean).isTrue()
+    // Il file di lavoro della conversione non resta accanto alla copia.
+    assertThat(folder.root.listFiles()!!.map { it.name }.filter { it.endsWith(".heic.jpg") }).isEmpty()
   }
 
   @Test
@@ -434,14 +450,15 @@ class DefaultLocationStripperTest {
 
     assertThat(extractor.check(withExif, "image/jpeg")).isEqualTo(LocationVerdict.HAS_LOCATION)
     assertThat(ExifInterfaceLocationRecheck().check(withExif, "image/jpeg")).isEqualTo(LocationVerdict.HAS_LOCATION)
-    assertThat(RawLocationRecheck().check(withXmp, "image/jpeg")).isEqualTo(LocationVerdict.HAS_LOCATION)
+    assertThat(LocationTraceRecheck().check(withExif, "image/jpeg")).isEqualTo(LocationVerdict.HAS_LOCATION)
+    assertThat(LocationTraceRecheck().check(withXmp, "image/jpeg")).isEqualTo(LocationVerdict.HAS_LOCATION)
     assertThat(extractor.check(video, "video/mp4")).isEqualTo(LocationVerdict.HAS_LOCATION)
-    assertThat(RawLocationRecheck().check(video, "video/mp4")).isEqualTo(LocationVerdict.HAS_LOCATION)
+    assertThat(LocationTraceRecheck().check(video, "video/mp4")).isEqualTo(LocationVerdict.HAS_LOCATION)
     // E su file puliti dicono tutti "nessuna posizione".
     val clean = src("c.jpg", StripFixtures.jpeg(exif = StripFixtures.exifWithoutGps(), xmp = null))
     assertThat(extractor.check(clean, "image/jpeg")).isEqualTo(LocationVerdict.CLEAR)
     assertThat(ExifInterfaceLocationRecheck().check(clean, "image/jpeg")).isEqualTo(LocationVerdict.CLEAR)
-    assertThat(RawLocationRecheck().check(clean, "image/jpeg")).isEqualTo(LocationVerdict.CLEAR)
+    assertThat(LocationTraceRecheck().check(clean, "image/jpeg")).isEqualTo(LocationVerdict.CLEAR)
   }
 
   // --- Aiuti ---------------------------------------------------------------------------------------------------------------------

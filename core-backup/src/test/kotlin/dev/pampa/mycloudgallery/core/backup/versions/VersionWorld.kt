@@ -58,7 +58,7 @@ class VersionWorld(
   }
   val ops: NasBackupOps = nas.backupOps(deviceId)
   val phone = FakePhoneBytes()
-  val journal = InMemoryVersionJournal()
+  val journal = InMemoryVersionJournal(nasNow = { clock.nasNow })
   val catalog = InMemoryVersionCatalog(mapOf(share to NasArea.PRIVATE, commonShare to NasArea.COMMON))
   val staged = DirectoryStagedFiles(File(root, "versions"))
   val gate = FakeBackupGate()
@@ -309,7 +309,8 @@ class VersionWorld(
 
 /**
  * La riscrittura del telefono sopra il telefono finto (come `MediaStorePhoneMediaRewriter` di core-mediastore vista dalla porta): solo con il
- * permesso del dialogo per quella riga ([granted]), solo un file con lo SHA-256 atteso; scrive i byte sulla riga (timbro nuovo).
+ * permesso del dialogo per quella riga ([granted]), solo un file con lo SHA-256 atteso, solo su una riga che ha adesso i byte della versione
+ * al sicuro (R3: altrimenti `RowChanged`; con i byte nuovi gia' sopra e' fatta); scrive i byte sulla riga (timbro nuovo).
  */
 class PhoneRowRewriter(private val phone: FakePhoneBytes) : PhoneRewriter {
   val granted: MutableSet<Long> = HashSet()
@@ -317,10 +318,14 @@ class PhoneRowRewriter(private val phone: FakePhoneBytes) : PhoneRewriter {
   val replaced: MutableList<Long> = ArrayList()
   private var modified = 900_000L
 
-  override suspend fun replace(ref: PhoneRef, mime: String?, file: File, expectedSha256: Sha256): PhoneRewrite {
+  override suspend fun replace(ref: PhoneRef, mime: String?, file: File, expectedSha256: Sha256, currentSha256: Sha256): PhoneRewrite {
     val bytes = file.readBytes()
     if (Sha256.of(bytes) != expectedSha256) return PhoneRewrite.SourceMismatch
     if (phone.stamp(ref.mediaStoreId) == null) return PhoneRewrite.Gone
+    // R3, nell'ordine del riscrittore vero (la copia di sicurezza si legge prima di aprire in scrittura).
+    val now = phone.sha256(ref.mediaStoreId)
+    if (now == expectedSha256) return PhoneRewrite.Replaced(expectedSha256, bytes.size.toLong())
+    if (now != currentSha256) return PhoneRewrite.RowChanged
     if (ref.mediaStoreId !in granted) return PhoneRewrite.NotGranted
     failNext?.let {
       failNext = null

@@ -360,7 +360,29 @@ class FakeMediaStore : MediaStoreSource, MediaStoreRowLookup {
   /** Le richieste risolte, in ordine: (tipo, numero di righe chieste). Per provare i lotti da 2.000 e che non si chiede mai piu' del dovuto. */
   val resolvedRequests: MutableList<Pair<SystemRequest, Int>> = ArrayList()
 
-  private val writeGrants = HashSet<Pair<String, Long>>()
+  /**
+   * VE-2 della verifica funzionale 5B: la collezione dell'URI con cui l'app chiede una richiesta di sistema (e con cui la riscrittura apre la
+   * riga). Come `AndroidPhoneMediaIntents.requestUriOf`: il tipo della riga, se c'e'; se no il MIME del riferimento; se no `files/`, che il
+   * MediaProvider vero **rifiuta** in ogni `create*Request`.
+   */
+  enum class RequestCollection { IMAGES, VIDEO, FILES }
+
+  /** La collezione della richiesta per [ref], con la regola dell'adattatore vero. */
+  fun requestCollectionOf(ref: MediaRef.Phone): RequestCollection {
+    val v = volumeMap[ref.volume]
+    val row = v?.rows?.get(ref.mediaStoreId)
+    return when {
+      row?.type == RowType.IMAGE -> RequestCollection.IMAGES
+      row?.type == RowType.VIDEO -> RequestCollection.VIDEO
+      ref.mime?.startsWith("video/") == true -> RequestCollection.VIDEO
+      ref.mime?.startsWith("image/") == true -> RequestCollection.IMAGES
+      else -> RequestCollection.FILES
+    }
+  }
+
+  // VE-2: il permesso vale per l'URI chiesto, cioe' per (collezione, volume, `_ID`), come sul telefono vero; non per la riga in qualunque
+  // collezione (era cosi' prima, e nascondeva un dialogo chiesto su `files/<id>` e una scrittura su `images/media/<id>`).
+  private val writeGrants = HashSet<Triple<RequestCollection, String, Long>>()
 
   /**
    * Risolve una richiesta di sistema ([PhoneMediaIntents.trashRequest]/`deleteRequest`/`writeRequest`) come la risolverebbe l'utente: gli
@@ -369,6 +391,8 @@ class FakeMediaStore : MediaStoreSource, MediaStoreRowLookup {
    */
   fun resolveRequest(request: SystemRequest, refs: List<MediaRef.Phone>, answer: DialogAnswer): DialogResult {
     require(refs.size <= PhoneMediaIntents.MAX_REQUEST_URIS) { "Una richiesta di sistema ha al massimo ${PhoneMediaIntents.MAX_REQUEST_URIS} URI." }
+    // VE-2: come il MediaProvider vero, una richiesta su `files/<id>` (riga senza tipo noto) si rifiuta con un'eccezione.
+    require(refs.none { requestCollectionOf(it) == RequestCollection.FILES }) { "Le richieste di sistema vogliono URI di immagini o video per id." }
     resolvedRequests += request to refs.size
     val accepted: List<MediaRef.Phone> = when (answer) {
       DialogAnswer.Accept -> refs
@@ -387,13 +411,20 @@ class FakeMediaStore : MediaStoreSource, MediaStoreRowLookup {
       SystemRequest.TRASH -> trash(ref.volume, ref.mediaStoreId)
       SystemRequest.UNTRASH -> untrash(ref.volume, ref.mediaStoreId)
       SystemRequest.DELETE -> remove(ref.volume, ref.mediaStoreId)
-      SystemRequest.WRITE -> writeGrants += ref.volume to ref.mediaStoreId
+      SystemRequest.WRITE -> writeGrants += Triple(requestCollectionOf(ref), ref.volume, ref.mediaStoreId)
     }
     return true
   }
 
-  /** Se l'app ha il permesso di scrivere sulla riga (dopo un `createWriteRequest` accettato). */
-  fun hasWriteGrant(volume: String, id: Long): Boolean = (volume to id) in writeGrants
+  /**
+   * Se l'app ha il permesso di scrivere sulla riga **con l'URI che la riscrittura apre** (la collezione del tipo della riga, dopo un
+   * `createWriteRequest` accettato per quello stesso URI).
+   */
+  fun hasWriteGrant(volume: String, id: Long): Boolean {
+    val type = volumeMap[volume]?.rows?.get(id)?.type ?: return false
+    val collection = if (type == RowType.VIDEO) RequestCollection.VIDEO else RequestCollection.IMAGES
+    return Triple(collection, volume, id) in writeGrants
+  }
 
   /** Il permesso decade con il processo (e col riavvio del telefono): dopo una morte l'app deve chiederlo di nuovo. */
   fun clearWriteGrants() {

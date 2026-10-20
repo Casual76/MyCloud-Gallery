@@ -58,7 +58,7 @@ internal enum class FieldProbeKey(val code: String) {
   T09_MANY_IS_TRASHED("t09.many_is_trashed"),
   T09_WRITE_DIALOG("t09.write_dialog"),
 
-  /** 0 = riscritta e riletta, 1 = nessun permesso, 2 = sparita, 3 = file diverso, 4 = fallita e ripristinata, 5 = fallita e NON ripristinata, 6 = foto non leggibile. */
+  /** 0 = riscritta e riletta, 1 = nessun permesso, 2 = sparita, 3 = file diverso, 4 = fallita e ripristinata, 5 = fallita e NON ripristinata, 6 = foto non leggibile, 7 = la riga e' cambiata prima di scrivere, 8 = riscritta con un byte in piu' ma NON rimessa com'era. */
   T09_WRITE_CODE("t09.write_code"),
   T09_WRITE_SIZE_BEFORE("t09.write_size_before"),
   T09_WRITE_SIZE_AFTER("t09.write_size_after"),

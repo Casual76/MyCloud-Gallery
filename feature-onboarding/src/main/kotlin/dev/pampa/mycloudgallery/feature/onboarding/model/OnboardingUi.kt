@@ -273,6 +273,10 @@ internal data class RemovalUi(
   /** "Configura di nuovo" e' in corso. */
   val busy: Boolean = false,
   val problem: OnboardingProblem? = null,
+  /** Il foglio di conferma e' aperto (R7): "Configura di nuovo" distrugge chiavi, e non parte con un tocco solo. */
+  val confirming: Boolean = false,
+  /** Questo dispositivo tiene la chiave di famiglia (e' un admin): il foglio dice cosa si perde e come si recupera (R7). */
+  val holdsKey: Boolean = false,
 )
 
 // --- Lo stato intero --------------------------------------------------------------------------------

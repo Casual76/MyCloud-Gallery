@@ -15,6 +15,7 @@ import dev.pampa.mycloudgallery.core.family.onboarding.JoinRecord
 import dev.pampa.mycloudgallery.core.family.onboarding.NasFacts
 import dev.pampa.mycloudgallery.core.family.onboarding.NasProblems
 import dev.pampa.mycloudgallery.core.family.onboarding.OnboardingPorts
+import dev.pampa.mycloudgallery.core.family.onboarding.OnboardingSnapshot
 import dev.pampa.mycloudgallery.core.family.onboarding.OnboardingStateStore
 import dev.pampa.mycloudgallery.core.family.onboarding.RejectedCredentials
 import dev.pampa.mycloudgallery.core.family.onboarding.StoreState
@@ -101,6 +102,12 @@ class DefaultJoinFlow(
     val provisionalFingerprint: Boolean,
     /** Si rifa' la richiesta di un dispositivo gia' in attesa (finestra dell'admin scaduta): serve una chiave nuova. */
     var renewKey: Boolean,
+    /**
+     * La versione minima del registro che l'ancora pretende. Quella dell'invito; nel rinnovo (R18) mai meno di quella gia'
+     * fissata alla prima richiesta e di quella del registro accettato allora: un invito senza QR vale 0, ma il rinnovo non
+     * deve accettare un registro piu' vecchio di quello che questo dispositivo ha gia' visto.
+     */
+    val minRegistryVersion: Long,
   ) {
     var state: RegistryState? = null
     var requestBytes: ByteArray? = null
@@ -127,6 +134,15 @@ class DefaultJoinFlow(
       return@withLock JoinStep.Failed(OnboardingProblem.STEP_NOT_AVAILABLE)
     }
     val address = NasAddress.parseOrNull(invite.nasIp, invite.nasName) ?: return@withLock JoinStep.Failed(OnboardingProblem.INVITE_INVALID)
+    // R18: rifacendo la richiesta il NAS e la famiglia sono gia' quelli fissati la prima volta. Il GUID noto vale come quello
+    // dell'invito (che senza QR non c'e'): la password non parte verso un NAS che il dispositivo sapeva gia' non essere quello
+    // giusto, e un invito che ne porta un altro non va nemmeno provato. La versione minima non scende mai.
+    val knownGuid = snapshot.nas?.guid?.takeIf { renewing && it.isNotBlank() }
+    val inviteGuid = invite.nasGuid.takeIf { it.isNotEmpty() }
+    if (knownGuid != null && inviteGuid != null && !knownGuid.equals(inviteGuid, ignoreCase = true)) {
+      return@withLock JoinStep.Failed(OnboardingProblem.IDENTITY_MISMATCH)
+    }
+    val minVersion = if (renewing) renewalMinVersion(invite, snapshot) else invite.minRegistryVersion
 
     // Casa: prima di toccare la rete.
     if (ports.localNetwork.status() == LocalNetworkAccess.DENIED) return@withLock JoinStep.Failed(OnboardingProblem.LOCAL_NETWORK_DENIED)
@@ -150,7 +166,7 @@ class DefaultJoinFlow(
 
     // TCP, NEGOTIATE, GUID uguale a quello dell'invito. Sulla rete sbagliata il cancello nega e non parte nulla.
     val stages = setOf(Stage.ROUTE, Stage.TCP, Stage.NEGOTIATE, Stage.GUID)
-    val expectedGuid = invite.nasGuid.takeIf { it.isNotEmpty() }
+    val expectedGuid = inviteGuid ?: knownGuid
     val report = ports.tester.run(TestTarget(address, user = null, share = null, expectedGuid = expectedGuid, candidate = candidate), null, stages)
     val failure = failureOf(report, stages)
     if (failure != null) {
@@ -191,11 +207,11 @@ class DefaultJoinFlow(
         privateShare = invite.privateShare,
         homeConfirmed = candidate ?: s.homeConfirmed,
         choices = if (preset != null) s.choices.copy(preset = preset) else s.choices,
-        join = JoinRecord(invite.familyId, manual, invite.minRegistryVersion, registered = s.join?.registered == true, requestedAt = s.join?.requestedAt),
+        join = JoinRecord(invite.familyId, manual, minVersion, registered = s.join?.registered == true, requestedAt = s.join?.requestedAt),
         deferrable = false,
       )
     } ?: return@withLock failStart(provisional, OnboardingProblem.STEP_NOT_AVAILABLE)
-    session = JoinSession(invite, address, invite.commonShare, facts.serverGuid, candidate, provisional, renewKey = renewing)
+    session = JoinSession(invite, address, invite.commonShare, facts.serverGuid, candidate, provisional, renewKey = renewing, minRegistryVersion = minVersion)
     JoinStep.NeedsPassword
   }
 
@@ -261,7 +277,7 @@ class DefaultJoinFlow(
     ports.breaker.onNewPasswordSaved()
 
     // Il registro firmato, con l'ancora del QR: da qui in poi vale la configurazione firmata (E-O6).
-    val anchor = TrustAnchor.create(s.invite.familyId, s.invite.familyKeyFingerprint, s.invite.minRegistryVersion)
+    val anchor = TrustAnchor.create(s.invite.familyId, s.invite.familyKeyFingerprint, s.minRegistryVersion)
       ?: return abandon(OnboardingProblem.INVITE_INVALID)
     val synced = ports.sessions.onShare(s.commonShare) { fs -> RegistrySync(fs).refresh(null, anchor) }
     val result = when (synced) {
@@ -272,7 +288,7 @@ class DefaultJoinFlow(
     // Nessun registro che l'ancora del QR accetti: un'altra famiglia, un'impronta diversa, o niente (E-O5).
     val state = result.state ?: return abandon(
       // Un registro piu' vecchio di quello del QR (o nessuno dove il QR dice che c'e' una versione) e' un rollback.
-      if (result.rejected.count(RejectReason.ROLLBACK) > 0 || (result.rejected.total == 0 && s.invite.minRegistryVersion > 1)) {
+      if (result.rejected.count(RejectReason.ROLLBACK) > 0 || (result.rejected.total == 0 && s.minRegistryVersion > 1)) {
         OnboardingProblem.REGISTRY_UNTRUSTED
       } else {
         OnboardingProblem.INVITE_OTHER_FAMILY
@@ -397,7 +413,7 @@ class DefaultJoinFlow(
       ),
     )
     store.update { snap ->
-      val join = JoinRecord(s.invite.familyId, s.invite.isManual, s.invite.minRegistryVersion, registered = true, requestedAt = requestedAt)
+      val join = JoinRecord(s.invite.familyId, s.invite.isManual, s.minRegistryVersion, registered = true, requestedAt = requestedAt)
       val withJoin = snap.copy(join = join)
       // Indirizzo e account sono fatti insieme: se il processo muore prima di qui si riparte dalla scansione.
       // (Rifacendo la richiesta di un dispositivo gia' in attesa, i passi sono gia' fatti e non cambia niente.)
@@ -411,6 +427,22 @@ class DefaultJoinFlow(
     } catch (e: Exception) {
       GalleryLog.w(TAG) { "registro non riletto subito (${e.javaClass.simpleName})" }
     }
+  }
+
+  /**
+   * La versione minima del registro per il rinnovo della richiesta (R18): la piu' alta fra quella dell'invito, quella fissata alla
+   * prima richiesta e quella del registro accettato allora (lo stato fidato della stessa famiglia). Un'ancora si alza e basta.
+   */
+  private suspend fun renewalMinVersion(invite: FamilyInvite, snapshot: OnboardingSnapshot): Long {
+    val first = snapshot.join?.takeIf { it.familyId == invite.familyId }?.minRegistryVersion ?: 0L
+    val trusted = try {
+      ports.trustState.load()?.takeIf { it.familyId == invite.familyId }?.minRegistryVersion ?: 0L
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      0L
+    }
+    return maxOf(invite.minRegistryVersion, first, trusted)
   }
 
   // --- Comuni ---------------------------------------------------------------------------------------------

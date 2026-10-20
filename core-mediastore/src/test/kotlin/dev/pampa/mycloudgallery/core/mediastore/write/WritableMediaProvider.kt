@@ -1,5 +1,7 @@
 package dev.pampa.mycloudgallery.core.mediastore.write
 
+import android.app.PendingIntent
+import android.content.ClipData
 import android.content.ContentProvider
 import android.content.ContentResolver
 import android.content.ContentValues
@@ -67,6 +69,19 @@ class WritableMediaProvider : ContentProvider() {
   /** Chiamato dentro `insert` prima di scegliere il nome: un altro scrittore che arriva per primo (la gara sul nome). */
   var beforeInsert: (() -> Unit)? = null
 
+  /** R10 della revisione 5B: se falso, aprire una riga con `requireOriginal` lancia come senza `ACCESS_MEDIA_LOCATION`. */
+  var locationGranted: Boolean = true
+
+  /**
+   * VE-2 della verifica funzionale 5B: con [perUriGrants] la scrittura vale solo per gli URI (senza parametri) che un `createWriteRequest` ha
+   * chiesto e l'utente ha accettato ([writeGrants]), come sul telefono vero; senza, ogni scrittura e' permessa (salvo [denyWrite]).
+   */
+  var perUriGrants: Boolean = false
+  val writeGrants: MutableSet<String> = HashSet()
+
+  /** Le richieste di scrittura di sistema ricevute, con i loro URI. */
+  val writeRequests: MutableList<List<Uri>> = ArrayList()
+
   override fun onCreate(): Boolean {
     db = SQLiteDatabase.create(null)
     db.execSQL(
@@ -123,6 +138,11 @@ class WritableMediaProvider : ContentProvider() {
   fun pendingIds(): List<Long> = allRows().filter { it.pending }.map { it.id }
 
   fun contentOf(id: Long): ByteArray? = files[id]?.readBytes()
+
+  /** R9: i byte della riga cambiati senza passare dal provider (una scrittura rimasta a meta' quando il processo e' morto). */
+  fun overwrite(id: Long, content: ByteArray) {
+    files.getValue(id).writeBytes(content)
+  }
 
   fun rowOf(id: Long): Map<String, Any?>? =
     db.rawQuery("SELECT * FROM files WHERE _id = ?", arrayOf(id.toString())).use {
@@ -247,6 +267,12 @@ class WritableMediaProvider : ContentProvider() {
     val id = uri.lastPathSegment?.toLongOrNull() ?: throw FileNotFoundException("URI senza _ID")
     val file = files[id] ?: throw FileNotFoundException("Riga sparita")
     if (denyWrite && 'w' in mode) throw SecurityException("Nessun permesso di scrittura per questa riga.")
+    if (perUriGrants && 'w' in mode && uri.buildUpon().clearQuery().build().toString() !in writeGrants) {
+      throw SecurityException("Nessun permesso di scrittura per questo URI.")
+    }
+    if (uri.getBooleanQueryParameter("requireOriginal", false) && !locationGranted) {
+      throw UnsupportedOperationException("Serve ACCESS_MEDIA_LOCATION per l'originale")
+    }
     if (mode == "r" && ++readCount in tamperedReads) {
       val altered = file.readBytes().also { if (it.isNotEmpty()) it[it.size / 2] = (it[it.size / 2].toInt() xor 0x5A).toByte() }
       val temp = File.createTempFile("tampered-$id-", ".bin").apply { writeBytes(altered); deleteOnExit() }
@@ -257,12 +283,28 @@ class WritableMediaProvider : ContentProvider() {
 
   override fun call(method: String, arg: String?, extras: Bundle?): Bundle? = when (method) {
     "get_version" -> Bundle().apply { putString(Intent.EXTRA_TEXT, versions) }
+    "create_write_request" -> {
+      @Suppress("DEPRECATION")
+      val clip = extras?.getParcelable<ClipData>("clip_data")
+      val uris = (0 until (clip?.itemCount ?: 0)).map { clip!!.getItemAt(it).uri }
+      // Come il MediaProvider vero: solo URI di immagini, video o audio per id; `files/<id>` si rifiuta.
+      require(uris.all { it.pathSegments.getOrNull(1) in TYPED && it.lastPathSegment?.toLongOrNull() != null }) {
+        "All requested items must be referenced by specific ID"
+      }
+      writeRequests += uris
+      // L'utente accetta: il permesso vale per quegli URI.
+      writeGrants += uris.map { it.buildUpon().clearQuery().build().toString() }
+      val pending = PendingIntent.getActivity(context, 0, Intent("dev.pampa.write"), PendingIntent.FLAG_IMMUTABLE)
+      Bundle().apply { putParcelable("result", pending) }
+    }
     else -> null
   }
 
   override fun getType(uri: Uri): String? = null
 
   companion object {
+    private val TYPED = setOf("images", "video", "audio")
+
     /** Registra il provider per l'autorita' `media` (una sola volta per test). */
     fun register(): WritableMediaProvider {
       val info = ProviderInfo().apply { authority = MediaStore.AUTHORITY }

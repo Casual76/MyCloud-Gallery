@@ -341,7 +341,19 @@ class NasScanWorker @AssistedInject constructor(
   override val tag: String = "NasScanWorker"
   override val diagJob: DiagJob = DiagJob.NAS_SCAN
 
-  override suspend fun stage(stages: NasStages): StageOutcome = stages.scan()
+  override suspend fun stage(stages: NasStages): StageOutcome = stages.scan().also { outcome ->
+    // VE-10 (Fase 5B): a scansione finita le versioni ferme perche' il PC aveva cambiato il file ripartono con il lavoro del loro tipo (la
+    // scansione ha registrato il file del PC). Prima aspettavano il giro periodico, fino a 12 ore. Solo il diario: nessun polling.
+    if (outcome is StageOutcome.Finished) {
+      try {
+        gallery.backup?.afterNasScan()
+      } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        GalleryLog.w(tag) { "versioni ferme non richieste dopo la scansione: ${e.javaClass.simpleName}" }
+      }
+    }
+  }
 
   override fun continuation() = NasWorkScheduling.SCAN_NOW_WORK to OneTimeWorkRequestBuilder<NasScanWorker>().addTag(NasWorkScheduling.TAG).build()
 }

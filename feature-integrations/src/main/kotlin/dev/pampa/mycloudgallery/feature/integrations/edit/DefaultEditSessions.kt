@@ -53,7 +53,9 @@ import kotlinx.coroutines.withContext
 // `StagedVersionFiles.keep`, poi la versione nel catalogo, poi `NasVersionEngine.planStaged`.
 //
 // **Il tempo e' del NAS** (D31): la sessione dura 30 minuti di ora del NAS e sopravvive alla morte del processo (e' nel database). Oltre, un
-// cambiamento non e' piu' della sessione: lo sara' di una versione normale (E-E5), che la lettura del telefono riconosce da sola. Nel dubbio non si
+// cambiamento non e' piu' della sessione: lo sara' di una versione normale (E-E5), che la lettura del telefono riconosce da sola. MC-6 della verifica
+// funzionale 5B: una foto del telefono aperta in Galleria **senza** l'ora del NAS (fuori casa a processo freddo) ha una sessione di 30 minuti di
+// orologio monotono di questo processo, che un riavvio chiude; le copie dal NAS vogliono comunque l'ora del NAS. Nel dubbio non si
 // unisce (piu' di una candidata): un media nuovo costa al piu' un doppione, un'unione sbagliata e' il danno peggiore. Nessun log: solo i contatori.
 
 class DefaultEditSessions(
@@ -77,6 +79,12 @@ class DefaultEditSessions(
 
   private val mutex = Mutex()
 
+  /**
+   * MC-6 della verifica funzionale 5B: le sessioni di una foto del telefono aperte **senza l'ora del NAS** (fuori casa a processo freddo, o prima
+   * del primo contatto SMB) si misurano con l'orologio monotono di questo processo: la scadenza sta qui, non nel database, e un riavvio la chiude.
+   */
+  private val monotonicDeadlines = HashMap<Long, Long>()
+
   // --- begin ---------------------------------------------------------------------------------------------------------------------
 
   override suspend fun begin(mediaId: MediaId, target: EditTarget): EditBegin = mutex.withLock {
@@ -93,7 +101,10 @@ class DefaultEditSessions(
   }
 
   private suspend fun doBegin(mediaId: MediaId, target: EditTarget): EditBegin {
-    val now = clock.nasNowMs() ?: return EditBegin.Unavailable(EditUnavailable.NAS_UNREACHABLE)
+    // MC-6: una foto del telefono in Galleria Samsung non ha bisogno del NAS. Senza l'ora del NAS la sessione si misura in monotono (sopra); prima
+    // rispondeva "Il NAS non risponde" anche fuori casa per una foto che sta sul telefono. Le copie dal NAS vogliono l'ora del NAS (D31).
+    val now = clock.nasNowMs()
+    if (now == null && target != EditTarget.PHONE_GALLERY) return EditBegin.Unavailable(EditUnavailable.NAS_UNREACHABLE)
     val media = catalog.media(mediaId) ?: return EditBegin.Unavailable(EditUnavailable.NOT_MINE)
     if (!media.mine) return EditBegin.Unavailable(EditUnavailable.NOT_MINE)
     // Una sola sessione aperta per media: la nuova sostituisce la vecchia (che si chiude e toglie la sua copia), ma solo se la nuova nasce davvero:
@@ -102,18 +113,18 @@ class DefaultEditSessions(
     val started = when (target) {
       EditTarget.PHONE_GALLERY -> beginOnPhone(media, target, media.phoneRefs, now)
       EditTarget.NAS_DOWNLOAD -> when (val download = downloads.downloadForEdit(mediaId)) {
-        is GalleryDownload.Saved -> beginOnPhone(media, target, listOf(download.ref), now)
+        is GalleryDownload.Saved -> beginOnPhone(media, target, listOf(download.ref), checkNotNull(now))
         GalleryDownload.Unreachable -> EditBegin.Unavailable(EditUnavailable.NAS_UNREACHABLE)
         GalleryDownload.Unavailable -> EditBegin.Unavailable(EditUnavailable.NOT_AVAILABLE)
         GalleryDownload.Full -> EditBegin.Unavailable(EditUnavailable.PHONE_FULL)
       }
-      EditTarget.NAS_CACHE -> beginInCache(media, now)
+      EditTarget.NAS_CACHE -> beginInCache(media, checkNotNull(now))
     }
     if (started is EditBegin.Started) for (old in previous) finish(old, EditSessionState.CANCELLED)
     return started
   }
 
-  private suspend fun beginOnPhone(media: EditMedia, target: EditTarget, refs: List<PhoneRef>, now: Long): EditBegin {
+  private suspend fun beginOnPhone(media: EditMedia, target: EditTarget, refs: List<PhoneRef>, now: Long?): EditBegin {
     for (ref in refs) {
       // Un `_ID` letto con un'altra versione del MediaStore non prova niente (E-P22): la riga non si apre.
       if (ref.mediaStoreVersion != phone.version(ref.volume)) continue
@@ -127,12 +138,27 @@ class DefaultEditSessions(
         takenAtUtcMs = row.dateTakenMs,
         cacheSha256 = null,
       )
-      val session = store.create(
-        EditSessionDraft(media.mediaId, media.currentVersion, target, ref, null, now, now + EditAttribution.WINDOW_MS, snapshot),
-      )
+      val started = now ?: MONOTONIC_MARK
+      val expires = if (now == null) MONOTONIC_MARK else now + EditAttribution.WINDOW_MS
+      val session = store.create(EditSessionDraft(media.mediaId, media.currentVersion, target, ref, null, started, expires, snapshot))
+      if (now == null) monotonicDeadlines[session.id.value] = clock.monotonicMs() + EditAttribution.WINDOW_MS
       return EditBegin.Started(session)
     }
     return EditBegin.Unavailable(EditUnavailable.GONE_FROM_PHONE)
+  }
+
+  /** MC-6: una sessione misurata in monotono (aperta senza l'ora del NAS): inizio e scadenza nel database sono [MONOTONIC_MARK]. */
+  private fun isMonotonic(session: EditSession): Boolean =
+    session.startedAtNasMillis == MONOTONIC_MARK && session.expiresAtNasMillis == MONOTONIC_MARK
+
+  /**
+   * La sessione e' scaduta adesso: con l'ora del NAS (D31), o in monotono per una sessione aperta senza (MC-6). Una sessione monotona che questo
+   * processo non conosce (un riavvio, una morte del processo) e' scaduta: il monotono riparte da zero.
+   */
+  private fun expiredNow(session: EditSession, nasNow: Long?): Boolean = if (isMonotonic(session)) {
+    monotonicDeadlines[session.id.value]?.let { clock.monotonicMs() > it } ?: true
+  } else {
+    nasNow != null && EditAttribution.expired(nasNow, session.expiresAtNasMillis)
   }
 
   private suspend fun beginInCache(media: EditMedia, now: Long): EditBegin {
@@ -186,8 +212,7 @@ class DefaultEditSessions(
   private suspend fun doSettle(stored: StoredEditSession): EditOutcome {
     val session = stored.session
     if (session.state.terminal) return if (session.state == EditSessionState.SETTLED) EditOutcome.Unchanged else EditOutcome.Expired
-    val now = clock.nasNowMs()
-    if (now != null && EditAttribution.expired(now, session.expiresAtNasMillis)) {
+    if (expiredNow(session, clock.nasNowMs())) {
       finish(stored, EditSessionState.EXPIRED)
       return EditOutcome.Expired
     }
@@ -346,7 +371,7 @@ class DefaultEditSessions(
     val now = clock.nasNowMs()
     val keep = HashSet<String>()
     for (stored in store.open()) {
-      if (now != null && EditAttribution.expired(now, stored.session.expiresAtNasMillis)) {
+      if (expiredNow(stored.session, now)) {
         finish(stored, EditSessionState.EXPIRED)
         FlowCounters.edit.add(EditCounter.EXPIRED)
       } else {
@@ -371,6 +396,7 @@ class DefaultEditSessions(
       }
     }
     store.setState(stored.session.id, state)
+    monotonicDeadlines.remove(stored.session.id.value)
   }
 
   // --- Piccole cose --------------------------------------------------------------------------------------------------------------------
@@ -423,6 +449,12 @@ class DefaultEditSessions(
   companion object {
     /** Il volume principale: dove un editor esterno salva le sue copie. */
     const val PRIMARY_VOLUME: String = "external_primary"
+
+    /**
+     * MC-6: inizio e scadenza nel database di una sessione aperta senza l'ora del NAS (un'ora del NAS vera non e' mai 0): la sua scadenza sta in
+     * memoria, misurata in monotono, e con un riavvio la sessione e' scaduta.
+     */
+    const val MONOTONIC_MARK: Long = 0L
 
     private const val BUFFER = 256 * 1024
   }

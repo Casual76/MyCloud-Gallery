@@ -70,6 +70,8 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
     notifications.createChannels()
     // Fase 5B (P14): prima di qualunque componente creato dal sistema (selettore, provider, ricezione) e di qualunque schermata.
     integrations.install()
+    // Correzioni 5B (R4, MC-2): "Condividi" con l'impostazione per il viewer (anche senza backup) e per la selezione della Libreria.
+    gallery.shares = integrations.shares
     fiveB.ifPresent { ui -> gallery.fiveB = GalleryGraph.FiveBHooks(ui.mediaActions) { ids -> ui.openFreeSpace(ids) } }
     ProcessWatcher(
       graph = graph,

@@ -13,6 +13,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.PendingTaskId
 import dev.pampa.mycloudgallery.core.backup.free.EverywhereArea
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.database.MediaCatalog
+import dev.pampa.mycloudgallery.core.metadata.write.ExifMetadataWriter
 import dev.pampa.mycloudgallery.core.model.ExifOrientation
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
@@ -28,12 +29,6 @@ import dev.pampa.mycloudgallery.feature.backup.versions.CorrectionSubject
 import dev.pampa.mycloudgallery.feature.backup.versions.VersionActions
 import dev.pampa.mycloudgallery.feature.backup.versions.VersionsStart
 import dev.pampa.mycloudgallery.feature.integrations.edit.EditIntents
-import dev.pampa.mycloudgallery.feature.integrations.share.ShareIntents
-import dev.pampa.mycloudgallery.feature.integrations.share.ShareLease
-import dev.pampa.mycloudgallery.feature.integrations.share.SharePreparation
-import dev.pampa.mycloudgallery.feature.integrations.share.ShareStop
-import dev.pampa.mycloudgallery.feature.integrations.share.shareStopText
-import dev.pampa.mycloudgallery.feature.settings.sharing.SharingSettings
 import dev.pampa.mycloudgallery.feature.viewer.menu.BackupMediaActions
 import dev.pampa.mycloudgallery.feature.viewer.menu.BackupMenuAction
 import dev.pampa.mycloudgallery.feature.viewer.menu.BackupMenuCapabilities
@@ -49,7 +44,6 @@ import java.time.Instant
 import java.time.ZoneOffset
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -73,13 +67,14 @@ class VersionDeleteRequest(val target: NasActionTarget, val taskId: PendingTaskI
   override fun toString(): String = "VersionDeleteRequest(${target.everywhereItems.size} copie)"
 }
 
-/** Un intento che `:app` lancia dall'activity (serve un'activity viva): l'editor di "Modifica con…" o la scelta dell'app di "Condividi". */
+/**
+ * Un intento che `:app` lancia dall'activity (serve un'activity viva): l'editor di "Modifica con…". La scelta dell'app di "Condividi" la lancia
+ * `ShareHostEffect` (correzioni 5B: anche senza backup).
+ */
 sealed interface FiveBLaunch {
   val serial: Long
 
-  class Edit(val intent: Intent, val session: EditSession, override val serial: Long) : FiveBLaunch
-
-  class Share(val intent: Intent, override val serial: Long) : FiveBLaunch
+  class Edit(val intent: Intent, val session: EditSession, override val serial: Long, val isVideo: Boolean = false) : FiveBLaunch
 }
 
 /**
@@ -98,7 +93,6 @@ class FiveBUi(
   private val operations: () -> NasOperations?,
   private val monotonicMs: () -> Long,
   private val integrations: IntegrationsGraph,
-  private val sharing: SharingSettings?,
   private val scope: CoroutineScope,
 ) {
 
@@ -160,11 +154,21 @@ class FiveBUi(
     scope.launch {
       val target = versionCopiesTarget(mediaId, versions)
       if (target == null) {
-        say(R.string.fiveb_edit_unavailable, ok = false)
+        // VE-6: la frase giusta ("niente da eliminare", non "non posso aprire la modifica") e dove l'utente e' (non nel viewer piu' tardi).
+        sayHere(R.string.fiveb_delete_nothing)
         return@launch
       }
       deleteFlow.value = VersionDeleteRequest(target, taskId, next())
     }
+  }
+
+  /**
+   * VE-6: il foglio "Elimina…" non parte (il NAS non risponde, l'area e' in sola lettura...): prima restava aperto con il tasto spento e il motivo
+   * non si vedeva da nessuna parte. Adesso il motivo si dice e la richiesta si toglie.
+   */
+  fun deleteRefused(request: VersionDeleteRequest, text: String) {
+    if (deleteFlow.value === request) deleteFlow.value = null
+    rootNoticeFlow.value = text
   }
 
   /** Le azioni del foglio "Elimina…" per una richiesta: il bersaglio e' gia' deciso (le copie di quelle versioni), le operazioni sono della 4B. */
@@ -182,7 +186,8 @@ class FiveBUi(
   /** L'operazione e' partita: l'attivita' "Da decidere" (se c'e') si chiude (`PendingTasks.complete`). */
   fun deleteStarted(request: VersionDeleteRequest) {
     if (deleteFlow.value === request) deleteFlow.value = null
-    say(R.string.fiveb_delete_started, ok = true)
+    // VE-6: la frase si vede adesso, alla radice (prima la mostrava solo il viewer, alla prossima foto aperta).
+    sayHere(R.string.fiveb_delete_started)
     val task = request.taskId ?: return
     scope.launch { runCatching { fiveB.pendingTasks.complete(task) } }
   }
@@ -226,26 +231,24 @@ class FiveBUi(
       is FiveBLaunch.Edit -> if (ok) {
         say(R.string.fiveb_edit_started, ok = true)
       } else {
-        // L'editor non c'e' (Samsung Gallery assente): la sessione si chiude e la copia in cache si toglie.
+        // L'editor non c'e': la sessione si chiude e la copia in cache si toglie. MC-5: la frase dipende da cosa si apriva (Galleria Samsung per un
+        // media del telefono o una copia scaricata; un editor qualunque per un solo-NAS, con "Scarica e modifica in Galleria" come strada).
         scope.launch { runCatching { integrations.editSessions()?.cancel(launch.session) } }
-        say(R.string.fiveb_edit_no_gallery, ok = false)
-      }
-      is FiveBLaunch.Share -> if (!ok) {
-        releaseShare()
-        shareFlow.value = BackupShareUi.Idle
+        val text = when {
+          launch.session.target != EditTarget.NAS_CACHE -> R.string.fiveb_edit_no_gallery
+          launch.isVideo -> R.string.fiveb_edit_no_editor_video
+          else -> R.string.fiveb_edit_no_editor
+        }
+        say(text, ok = false)
       }
     }
   }
 
   /**
-   * L'app torna davanti all'utente (dalla condivisione o dall'editor): i permessi della condivisione si revocano e le copie si tolgono (D26),
-   * le sessioni di "Modifica con…" aperte si leggono (`settle`, D25).
+   * L'app torna davanti all'utente (dall'editor): le sessioni di "Modifica con…" aperte si leggono (`settle`, D25). Le copie delle condivisioni
+   * non si toccano qui: le rilascia il custode di `AppShares` quando l'altra app ha finito (correzioni 5B, MC-1).
    */
   fun onResume() {
-    if (shareFlow.value is BackupShareUi.Ready && launchFlow.value == null) {
-      releaseShare()
-      shareFlow.value = BackupShareUi.Idle
-    }
     scope.launch { settleEdits() }
   }
 
@@ -277,41 +280,24 @@ class FiveBUi(
     noticeFlow.value = BackupNotice(context.getString(text), ok)
   }
 
+  // VE-6: le frasi delle azioni nate fuori dal viewer (fogli alla radice, "Da decidere"): si dicono adesso, dove l'utente e'.
+  private val rootNoticeFlow = MutableStateFlow<String?>(null)
+
+  /** Una frase per l'utente fuori dal viewer (la mostra `FiveBHostEffect`), null se non ce n'e'. */
+  val rootNotice: StateFlow<String?> = rootNoticeFlow.asStateFlow()
+
+  fun dismissRootNotice() {
+    rootNoticeFlow.value = null
+  }
+
+  private fun sayHere(text: Int) {
+    rootNoticeFlow.value = context.getString(text)
+  }
+
   // --- "Condividi" (D26) --------------------------------------------------------------------------------------------------------
 
-  private val shareFlow = MutableStateFlow<BackupShareUi>(BackupShareUi.Idle)
-  private var shareJob: Job? = null
-  private var lease: ShareLease? = null
-  private var lastShare: List<MediaId> = emptyList()
-
-  private fun releaseShare() {
-    lease?.release()
-    lease = null
-  }
-
-  private fun startShare(ids: List<MediaId>, removeLocation: Boolean) {
-    shareJob?.cancel()
-    releaseShare()
-    lastShare = ids
-    shareFlow.value = BackupShareUi.Preparing(0, ids.size, removeLocation)
-    shareJob = scope.launch {
-      val prepared = integrations.share.prepare(ids, removeLocation) { done, total ->
-        shareFlow.value = BackupShareUi.Preparing(done, total, removeLocation)
-      }
-      when (prepared) {
-        is SharePreparation.Ready -> {
-          lease = prepared.lease
-          shareFlow.value = BackupShareUi.Ready(verified = prepared.stripped, direct = prepared.files.size - prepared.stripped)
-          launchFlow.value = FiveBLaunch.Share(Intent.createChooser(ShareIntents.send(prepared.files), null), next())
-        }
-        is SharePreparation.Stopped -> shareFlow.value = BackupShareUi.Refused(
-          message = shareStopText(context, prepared.stop),
-          // L41: "Condividi con la posizione" solo se e' la posizione che non si toglie, e solo come scelta esplicita dell'utente.
-          canShareWithLocation = removeLocation && prepared.stop in WITH_LOCATION_CHOICE,
-        )
-      }
-    }
-  }
+  /** Correzioni 5B (R4, MC-1): "Condividi" del viewer e' il canale del viewer di `AppShares`, lo stesso che c'e' anche senza backup. */
+  private val shares get() = integrations.shares
 
   // --- Le voci del backup nel viewer ---------------------------------------------------------------------------------------------
 
@@ -322,9 +308,20 @@ class FiveBUi(
       viewOriginal = false,
       share = true,
       phoneOnlyDelete = true,
+      // MC-5: "Scarica e modifica in Galleria" per i solo-NAS.
+      editDownload = true,
     )
 
     override suspend fun versionPlan(id: MediaId): NasVersionPlan? = runCatching { fiveB.versionKeeper.plan(id) }.getOrNull()
+
+    /** VE-4: si ruota solo un formato che si scrive nel file (JPEG, PNG, WebP): la rotazione di un HEIC o di un RAW non la mostrerebbe nessuno. */
+    override suspend fun canRotate(id: MediaId): Boolean {
+      val cat = catalog() ?: return false
+      val media = cat.media(id) ?: return false
+      if (media.kind == MediaKind.VIDEO) return false
+      val mime = cat.versionMetadata(media.currentVersionId)?.mimeType ?: return false
+      return ExifMetadataWriter().canWrite(mime)
+    }
 
     override fun perform(action: BackupMenuAction, id: MediaId) {
       when (action) {
@@ -333,27 +330,24 @@ class FiveBUi(
         BackupMenuAction.CORRECT -> openCorrection(id, CorrectionMode.ALL)
         BackupMenuAction.ROTATE -> openCorrection(id, CorrectionMode.ROTATE)
         BackupMenuAction.EDIT_WITH -> startEdit(id)
+        BackupMenuAction.EDIT_DOWNLOAD -> startEdit(id, download = true)
         BackupMenuAction.PHONE_ONLY_DELETE -> sheetFlow.value = FiveBSheet.PhoneOnly(setOf(id))
         // Non dichiarata (`viewOriginal = false`): il viewer non la mostra.
         BackupMenuAction.VIEW_ORIGINAL -> Unit
       }
     }
 
-    override val removeLocation: StateFlow<Boolean> = sharing?.removeLocation ?: MutableStateFlow(false)
+    override val removeLocation: StateFlow<Boolean> get() = shares.removeLocation
 
-    override val shareState: StateFlow<BackupShareUi> = shareFlow.asStateFlow()
+    override val shareState: StateFlow<BackupShareUi> get() = shares.viewer.state
 
-    override fun share(ids: List<MediaId>) = startShare(ids, removeLocation.value)
+    override fun share(ids: List<MediaId>) = shares.viewer.start(ids)
 
-    override fun shareWithLocation() {
-      if (lastShare.isNotEmpty()) startShare(lastShare, removeLocation = false)
-    }
+    override fun shareWithLocation() = shares.viewer.shareWithLocation()
 
-    override fun dismissShare() {
-      shareJob?.cancel()
-      releaseShare()
-      shareFlow.value = BackupShareUi.Idle
-    }
+    override fun dismissShare() = shares.viewer.cancel()
+
+    override fun hideShareNotice() = shares.viewer.hideNotice()
 
     override val notice: StateFlow<BackupNotice?> = noticeFlow.asStateFlow()
 
@@ -396,8 +390,15 @@ class FiveBUi(
     )
   }
 
-  /** "Modifica con…" (D25): la sessione (telefono → Samsung Gallery; solo-NAS → copia in cache e `ACTION_EDIT`), poi l'intento dall'activity. */
-  private fun startEdit(id: MediaId) {
+  /**
+   * "Modifica con…" (D25): la sessione (telefono → Samsung Gallery; solo-NAS → copia in cache e `ACTION_EDIT`, o con [download] "Scarica e
+   * modifica in Galleria", MC-5), poi l'intento dall'activity.
+   *
+   * MC-4: per un solo-NAS la modifica deve poter diventare una versione sul NAS (un solito percorso nell'area privata; dalla 5B non si scrive
+   * nell'area comune; con D13 sotto la radice di prova). Se non puo', lo si dice **prima** di aprire l'editor: prima la modifica si accettava
+   * ("Salvata: e' la nuova versione") e non si caricava mai, viveva solo nell'app.
+   */
+  private fun startEdit(id: MediaId, download: Boolean = false) {
     scope.launch {
       val sessions = integrations.editSessions() ?: return@launch say(R.string.fiveb_edit_unavailable, ok = false)
       val cat = catalog() ?: return@launch say(R.string.fiveb_edit_unavailable, ok = false)
@@ -405,14 +406,20 @@ class FiveBUi(
       val onPhone = cat.phoneRefs(listOf(id))[id] != null
       val mime = cat.versionMetadata(media.currentVersionId)?.mimeType ?: if (media.kind == MediaKind.VIDEO) "video/*" else "image/*"
       val isVideo = media.kind == MediaKind.VIDEO
-      when (val begin = sessions.begin(id, if (onPhone) EditTarget.PHONE_GALLERY else EditTarget.NAS_CACHE)) {
+      val target = when {
+        onPhone -> EditTarget.PHONE_GALLERY
+        download -> EditTarget.NAS_DOWNLOAD
+        else -> EditTarget.NAS_CACHE
+      }
+      if (target != EditTarget.PHONE_GALLERY && !fiveB.editVersionReady(id)) return@launch say(R.string.fiveb_edit_not_saveable, ok = false)
+      when (val begin = sessions.begin(id, target)) {
         is EditBegin.Started -> {
           val intent = EditIntents.forSession(begin.session, integrations.uris, integrations.shareCache, mime, isVideo)
           if (intent == null) {
             runCatching { sessions.cancel(begin.session) }
             say(R.string.fiveb_edit_unavailable, ok = false)
           } else {
-            launchFlow.value = FiveBLaunch.Edit(intent, begin.session, next())
+            launchFlow.value = FiveBLaunch.Edit(intent, begin.session, next(), isVideo = isVideo)
           }
         }
         is EditBegin.Unavailable -> say(unavailableText(begin.reason), ok = false)
@@ -429,8 +436,5 @@ class FiveBUi(
 
   private companion object {
     const val TAG = "BackupFiveBUi"
-
-    /** Le fermate per cui ha senso offrire "Condividi con la posizione" (la posizione non si toglie da questo file). */
-    val WITH_LOCATION_CHOICE = setOf(ShareStop.CANNOT_REMOVE_LOCATION, ShareStop.LOCATION_REMAINS)
   }
 }

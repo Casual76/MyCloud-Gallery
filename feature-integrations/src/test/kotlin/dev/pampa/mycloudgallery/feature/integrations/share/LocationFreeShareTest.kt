@@ -80,7 +80,9 @@ class LocationFreeShareTest {
     val file = shared.file!!
     assertThat(file.name).isEqualTo("Mare 2024.jpg") // il nome dell'utente, ripulito, con l'estensione del tipo vero
     assertThat(ShareSamples.latLong(file)).isNull()
-    assertThat(ShareSamples.model(file)).isEqualTo("SM-S931B") // il resto dei dati resta
+    // Correzioni 5B: si tiene per elenco. La data resta, la fotocamera no.
+    assertThat(ShareSamples.model(file)).isNull()
+    assertThat(android.media.ExifInterface(file.path).getAttribute(android.media.ExifInterface.TAG_DATETIME_ORIGINAL)).isEqualTo("2024:03:12 10:15:30")
     assertThat(file.length()).isEqualTo(shared.size)
     // La copia letta (con la posizione) non resta in cache: solo il file consegnato.
     assertThat(leftovers()).containsExactly("Mare 2024.jpg")

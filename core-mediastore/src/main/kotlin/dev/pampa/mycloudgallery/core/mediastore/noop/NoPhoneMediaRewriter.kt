@@ -11,5 +11,6 @@ import java.io.File
  * ne' legge** ne' la riga ne' il file. Cosi' una correzione o un "Ripristina originale" senza il legame vero lascia il telefono com'e'.
  */
 object NoPhoneMediaRewriter : PhoneMediaRewriter {
-  override suspend fun replace(ref: MediaRef.Phone, file: File, expectedSha256: Sha256): RewriteResult = RewriteResult.NotGranted
+  override suspend fun replace(ref: MediaRef.Phone, file: File, expectedSha256: Sha256, currentSha256: Sha256): RewriteResult =
+    RewriteResult.NotGranted
 }

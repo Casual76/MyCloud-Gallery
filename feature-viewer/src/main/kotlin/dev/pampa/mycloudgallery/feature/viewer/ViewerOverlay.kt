@@ -708,7 +708,8 @@ private fun ViewerOverlays(
   val baseCapabilities = currentRef?.let { ViewerCapabilities.of(services, it) } ?: ViewerCapabilities(false, false, false, false, false)
   // E-D1 (piano §2): un media sul telefono e sul NAS ha un solo "Elimina…", con "Solo dal telefono" / "Ovunque" (il foglio del NAS).
   val phoneAndNas = nasTarget?.viaPhoneCopy == true
-  val capabilities = if (phoneAndNas) baseCapabilities.copy(trash = false) else baseCapabilities
+  // Correzioni 5B (MC-2): con "Rimuovi la posizione" acceso "Copia" non c'e': metterebbe negli appunti l'indirizzo dell'originale, posizione compresa.
+  val capabilities = baseCapabilities.copy(trash = baseCapabilities.trash && !phoneAndNas, copy = baseCapabilities.copy && !shareWithoutLocation)
   val isFavorite = controller.isFavorite(currentId)
   val copyLabel = stringResource(R.string.viewer_copy_label)
   val handlers = ViewerActionHandlers(
@@ -753,11 +754,12 @@ private fun ViewerOverlays(
       nasController.dismissNotice()
     }
   }
-  // Gli avvisi del backup si spengono da soli come gli altri: la copia pronta e la frase dopo "Modifica con…".
+  // Gli avvisi del backup si spengono da soli come gli altri: la copia pronta e la frase dopo "Modifica con…". Correzioni 5B (MC-1): spegnere
+  // l'avviso "Pronta" e' solo lo stato; la copia e il permesso restano finche' l'altra app non ha finito (li rilascia `:app`).
   if (backupController != null && backupShare is BackupShareUi.Ready) {
     LaunchedEffect(backupShare) {
       delay(MessageMillis)
-      backupController.dismissShare()
+      backupController.hideShareNotice()
     }
   }
   if (backupController != null && backupNotice != null) {

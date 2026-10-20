@@ -13,16 +13,24 @@ internal class FakePhoneSystemDialogs(private val context: Context, override var
   /** Il telefono non ha il dialogo: le richieste rispondono null. */
   var missing: Boolean = false
 
+  /**
+   * VE-2, parita' con il vero di prima: il sistema rifiuta la richiesta con un'eccezione (un `files/<id>` dato a `createWriteRequest`). Prima il
+   * finto non lanciava mai e nascondeva che nessuno la intercettava.
+   */
+  var failure: RuntimeException? = null
+
   val removeRequests: MutableList<TrashBatch> = ArrayList()
   val writeRequests: MutableList<List<PhoneRef>> = ArrayList()
 
   override fun removeRequest(batch: TrashBatch): IntentSender? {
+    failure?.let { throw it }
     if (missing) return null
     removeRequests += batch
     return sender()
   }
 
   override fun writeRequest(rows: List<PhoneRef>): IntentSender? {
+    failure?.let { throw it }
     if (missing) return null
     writeRequests += rows
     return sender()

@@ -124,6 +124,11 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
 - **Test:** in `VerificaFunzionaleBackupAppTest`, un `VERSION` di video aperto e una foto nuova, giro `QUICK` con il budget per un file:
   - la foto deve finire, il video restare;
   - `afterPhoneRead` deve chiedere `VIDEOS`.
+- **Stato: corretta** (20/10, `docs/decisioni.md` «Correzioni 5B: versioni e correzioni»). `NasVersionEngine.run(..., kinds, only)` guida solo i lavori
+  dei media del tipo del giro (`BackupKind.of`); `VersionedBackupEngine` passa il tipo, e con `QUICK_NEW_PHOTOS` solo le versioni pianificate dal giro
+  stesso (`only`, come BK-1). `BackupGraph.hasWork` e `nextAll` contano i lavori delle versioni per tipo di media (`hasOpenVersionWork(kind, …)`): un video
+  modificato chiede il lavoro dei video, con le regole di `VIDEO_BACKUP`. Test: `Revisione5BVersioniTest.ve1_*` (motore), `Correzioni5BVersioniAppTest.ve1_*`
+  (grafo vero: un giro delle foto non lo tocca, quello dei video lo finisce; `nextAll` = solo video), rossi prima.
 
 #### VE-2 · I dialoghi di sistema si chiedono con l'indirizzo generico `files/<id>`: probabile chiusura dell'app, o permesso che non serve
 - **Gravità:** Blocca (se la prova conferma). **Stato:** plausibile, probabile.
@@ -161,6 +166,22 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - Aggiungere un test che confronti l'URI del dialogo con quello della scrittura.
 - **Prova sul campo (prima di F34–F37):** T-09 con il dialogo costruito come lo costruisce l'app (riferimento senza tipo) e la riscrittura con il tipo;
   "Libera spazio" di un file con i metadati non letti.
+- **Stato: corretta** (20/10). La prova sul telefono resta da fare (T-09), ma la correzione non dipende da come risponde il MediaProvider:
+  - **l'URI** di ogni richiesta di sistema (cestino, eliminazione, scrittura) e della riscrittura e' quello della collezione del **tipo della riga**, letto
+    adesso dal MediaStore (`MEDIA_TYPE`: `MediaStore.Images`/`Video`); se la riga non si legge, quello del MIME; senza nessuno dei due, nessuna richiesta
+    (mai `files/`). Lo stesso calcolo (`AndroidPhoneMediaIntents.requestUriOf`) lo usa `MediaStorePhoneMediaRewriter`: dialogo e scrittura hanno lo stesso
+    URI. Vale anche per il cestino di "Libera spazio" quando il catalogo non ha il MIME.
+  - **le eccezioni**: `create*Request` dentro un `try`; `AppPhoneSystemDialogs` ripete la protezione; `VersionsViewModel` e `CorrectionViewModel`
+    intercettano la creazione e il lancio del dialogo e dicono «Il telefono non ha accettato la richiesta di permesso» (diverso da «su questo telefono
+    non posso chiederlo»). L'app non si chiude piu' al tocco.
+  - **i finti**: `FakeMediaStore` da' il permesso per (collezione, volume, `_ID`) con la regola dell'adattatore vero e rifiuta `files/` come AOSP; il
+    riscrittore finto apre la collezione del tipo della riga; il `PhoneSystemDialogs` finto di feature-backup puo' lanciare (`failure`). Test di parita':
+    `AndroidSystemRequestsTest.ve2_ilTelefonoFintoSceglieLaCollezioneComeQuelloVero`.
+  - **T-09** chiede il dialogo con il riferimento **senza tipo**, come i fogli dell'app (`FieldProbePhone.untypedRefOf`), e riscrive con il tipo: sul
+    telefono prova proprio la coppia di indirizzi dell'app (`FieldProbeFlowTest` lo controlla).
+  - Test: `AndroidSystemRequestsTest.ve2_*` (3, il primo rosso prima con l'eccezione), `MediaStorePhoneMediaRewriterTest.ve2_dialogoEScritturaUsanoLoStessoUri`
+    (permessi per URI: il dialogo senza tipo e la scrittura hanno lo stesso URI), `SystemRequestsFakeTest.ve2_*`, `VersionsViewModelTest.ve2_*`,
+    `CorrectionViewModelTest.ve2_*`; `FiveBIntegrationTest` risolve ora proprio la richiesta che l'app ha fatto.
 
 #### VE-3 · "Metti al sicuro adesso" (Correggi) non fa niente che si veda, e per molti media non puo' fare niente
 - **Gravità:** Sbagliata. **Stato:** confermato.
@@ -183,6 +204,13 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - in ogni caso, uno stato "sto mettendo al sicuro…" che ricontrolla la prontezza e riapre la correzione.
   - Stessa cosa per LS-4.
 - **Test:** `CorrectionViewModel` con il servizio vero su `AppGraph` e un solo-NAS non verificato: al tocco lo stato deve cambiare e la verifica partire.
+- **Stato: corretta** (20/10). `Corrections.safeguard(mediaId)` (lo lega `:app`, `BackupGraph.safeguard`): una copia privata non riletta (un solo-NAS) →
+  la verifica sul momento di quella copia (`OnTheSpot`, come "Libera spazio", uno alla volta con il backup); una riga del telefono in una sorgente →
+  "Fai ora"; fuori dalle sorgenti → `NOT_IN_SOURCES`. Il foglio mostra "La metto al sicuro…", ricontrolla la prontezza ogni 3 secondi e si riapre da solo
+  quando e' al sicuro; fuori dalle sorgenti lo dice e il tasto non c'e'; "Non posso adesso" e "non e' ancora finito" hanno la loro frase. Test:
+  `Correzioni5BVersioniAppTest.ve3_*` (grafo vero: camera → lavoro dell'utente; `Pictures/Altro/` → fuori dalle sorgenti; solo-NAS → la copia diventa
+  verificata), `CorrectionViewModelTest` (il foglio cambia e si riapre; fuori dalle sorgenti), `CorrectionSheetTest.ve3_*`. LS-4 ("Prima mettilo al
+  sicuro" di "Elimina solo dal telefono") non e' toccato.
 
 #### VE-4 · "Ruota" di un HEIC o di un RAW dice "fatto", ma la foto non gira da nessuna parte
 - **Gravità:** Sbagliata. **Stato:** confermato.
@@ -198,6 +226,11 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
 - **Correzione:** una delle due:
   - la pipeline delle immagini applica la rotazione di `metadata_correction` a miniature e viewer;
   - "Ruota" non si offre per i formati che non si scrivono.
+- **Stato: corretta** (20/10), con la seconda strada: la rotazione di un formato che non si scrive **non si fa e non dice "fatto"** (la prima, applicare
+  la rotazione del catalogo a miniature e viewer, toccherebbe core-imaging, fuori perimetro). Il menu del viewer non offre "Ruota" per HEIC e RAW
+  (`BackupMediaActions.canRotate`: il formato si scrive?); il foglio "Correggi" di un formato che non si scrive non ha la sezione della rotazione; il
+  servizio risponde `ROTATION_NOT_WRITABLE` a una richiesta con la rotazione e non la registra. Data e luogo restano correggibili nell'app (Q6 (a)).
+  Test: `Revisione5BVersioniTest.ve4_*`, `BackupActionsTest.ve4_*` (2), `CorrectionSheetTest.ve4_*`.
 
 #### VE-5 · Ruotare lo schermo durante "Ripristina originale" o una correzione interrompe il lavoro, e il permesso dato si perde
 - **Gravità:** Minore. **Stato:** confermato nel codice.
@@ -214,6 +247,9 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - Se la rotazione cade durante lo scambio, lo scambio lo finisce il backup, ma la riga del telefono non si riscrive piu'.
 - **Correzione:** `reset()` solo alla chiusura del foglio o al cambio di media, non a ogni composizione: per esempio una chiave salvata con
   `rememberSaveable`, oppure lasciare decidere a `bind` ("stesso media, niente").
+- **Stato: corretta** (20/10). `SheetOpening` (feature-backup): il foglio si azzera solo quando si apre o cambia media o modo; il segno "aperto" sta in
+  `rememberSaveable` e sopravvive alla ricreazione, che chiama solo `bind` (stesso media: niente). Il ViewModel e il ponte dei dialoghi restano quelli.
+  Test: `SheetOpeningTest.ve5_*` (`StateRestorationTester`: dopo la ricreazione nessun nuovo azzeramento; chiuso e riaperto si', rosso prima).
 
 #### VE-6 · "Da decidere" ed "Elimina le intermedie…": il foglio "Elimina…" non dice perche' non parte, e le frasi compaiono nel viewer piu' tardi
 - **Gravità:** Minore. **Stato:** confermato.
@@ -226,6 +262,10 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - Senza copie da eliminare la frase e' quella della modifica: "Non posso aprire la modifica adesso" (`FiveBUi.kt:159-168`).
 - **Correzione:** l'avviso del controller nel foglio o nella pagina "Da decidere"; la richiesta tolta anche alla chiusura; una frase propria per
   "nessuna copia da eliminare".
+- **Stato: corretta in parte** (20/10). Un piano rifiutato del foglio "Elimina…" si dice e il foglio si chiude (`FiveBUi.deleteRefused`); "Eliminazione
+  avviata" e "nessuna copia da eliminare" (frase sua) si dicono adesso, alla radice (`FiveBUi.rootNotice`, un avviso di sistema da `FiveBHostEffect`), non
+  nel viewer alla prossima foto. Resta: la richiesta non si toglie se l'utente chiude il foglio senza confermare (lo stato del controller della 4B e'
+  interno a feature-viewer); una richiesta nuova la sostituisce, quindi non ha effetti.
 
 #### VE-7 · Ragioni diverse finiscono tutte in "non è ancora pronta": pausa, backup in prova, un'altra versione in corso
 - **Gravità:** Minore. **Stato:** confermato.
@@ -242,6 +282,11 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
     "Backup in prova".
 - **Scenario:** ieri l'utente ha toccato "Ferma"; oggi "Ripristina originale" non e' piu' nel menu e "Correggi" dice "non è ancora pronta".
 - **Correzione:** codici propri (`PAUSED`, `TEST_ONLY`, e `BUSY` anche per le correzioni) con la loro frase; per la pausa, "Riprendi il backup".
+- **Stato: corretta** (20/10). `RestoreAvailability.PAUSED`/`TEST_ONLY`, `CorrectionReadiness.PAUSED`/`TEST_ONLY`/`BUSY` (anche il turno che non si libera
+  e' `BUSY`), ognuno con la sua frase ("Il backup e' in pausa: riprendilo dalla pagina Backup", "e' ancora in prova"); il menu del viewer offre ancora
+  "Ripristina originale" e il foglio dice perche' adesso no. Le altre schermate di release ("Libera spazio") non sono toccate. Test:
+  `Revisione5BVersioniTest.ve7_*`, `CorrectionSheetTest.ogniMotivoPerCuiNonSiPuoDiceLaSuaFrase`, `BackupActionsTest.ilRipristinoSiOffreSoloQuandoHaSenso`,
+  `VersionsSheetTest.r3_laVersioneNonAlSicuroELaRigaDelTelefono`.
 
 #### VE-8 · "Ripristina originale" e "Correggi" aspettano in silenzio il turno del backup, anche solo per sapere che serve il permesso
 - **Gravità:** Minore. **Stato:** confermato nel codice.
@@ -255,6 +300,10 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - Dopo 15 minuti la risposta e' `BUSY`/`NOT_AVAILABLE`, e il foglio torna alla lista senza spiegazioni (`VersionsViewModel.kt:157`).
 - **Correzione:** chiedere il permesso prima di entrare nel turno, perche' quali righe servano lo dice gia' il solo catalogo; uno stato "aspetto che il
   backup finisca il lotto".
+- **Stato: corretta** (20/10). `VersionKeeper.precheck` e `Corrections.precheck` (piano, conferma, permesso del telefono: niente si tocca) girano **fuori**
+  dal turno: le facciate di `FiveBGraph` rispondono subito `NeedsPhoneWrite`/`NeedsWriteGrant` e solo dopo il permesso aspettano il turno. "Ripristino…" e
+  "Scrivo la correzione…" dicono che, se il backup sta lavorando, si aspetta che finisca il lotto; un turno che non si libera in 15 minuti torna alla lista
+  con la sua frase (`VersionsMessage.BACKUP_BUSY`) o con `BUSY`. Test: `Revisione5BVersioniTest.ve8_*`, `VersionsViewModelTest.ve8_*`.
 
 #### VE-9 · "Versioni in attesa del computer" (`SOURCE_CHANGED`) non compare mai nella pagina Backup ne' nel piede
 - **Gravità:** Sbagliata. **Stato:** confermato (agente LA, ricontrollato).
@@ -267,6 +316,8 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
 - **Scenario:** Samsung "Salva", poi il PC cambia il file sul NAS. La pagina dice "1 in coda · prossimo giro", mai "Versioni in attesa del computer".
 - **Correzione:** guardare le attese prima del ramo `queued > 0`, oppure togliere da `queued` i media con un lavoro fermo per `source_changed`.
 - **Test:** un lavoro con `hold='source_changed'` su una foto della fotocamera; leggere `status`.
+- **Stato: corretta** (20/10). I media la cui versione attuale aspetta il PC (`FiveBGraph.sourceChangedCurrentMedia`) non contano fra quelli in coda: con
+  solo quelli la pagina dice "Versioni in attesa del computer". Test: `Correzioni5BVersioniAppTest.ve9_*` (grafo vero, rosso prima).
 
 #### VE-10 · Scambi e versioni ferme ripartono solo con il giro periodico
 - **Gravità:** Minore. **Stato:** confermato (versioni ferme); plausibile (scambio di Samsung).
@@ -282,6 +333,10 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - `planRealign` e `realign` chiedono il lavoro delle foto;
   - la fine di una scansione con dei `source_changed` aperti lo chiede anche lei;
   - la frase va allineata al comportamento.
+- **Stato: corretta** (20/10). `FiveBGraph.realign` (dopo la lettura del telefono e all'avvio) chiede il lavoro del tipo del media appena pianifica uno
+  scambio (`BackupJobs.versionWork`, `KEEP`); la fine di una scansione del NAS (`NasScanWorker`) chiede il lavoro dei tipi con versioni ferme per il PC
+  (`BackupGraph.afterNasScan`). La frase ("riparto da solo dopo la prossima verifica del NAS") adesso e' vera e non cambia. Test:
+  `Correzioni5BVersioniAppTest.ve10_*` (2, rossi prima).
 
 ### 2.2 "Modifica con…" e "Condividi" (MC)
 
@@ -313,6 +368,13 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - separare "spegni l'avviso" (solo stato) da "rilascia" (con "Annulla" durante la preparazione, o piu' tardi);
   - tenere la copia per qualche minuto, o fino alla condivisione successiva, e non svuotare all'avvio le copie giovani.
 - **Test:** `ViewerBackupMenuTest` con `FiveBUi` vero, o con un finto che rilascia come il vero: 3,2 s dopo `Ready` la copia esiste ancora.
+- **Stato:** corretta (20/10, `docs/decisioni.md` «Correzioni 5B: posizione e Condividi»). Spegnere l'avviso e' solo lo stato (`hideShareNotice`); la
+  copia consegnata passa al custode (`feature-integrations/.../share/ShareHolder.kt`, legato in `app/.../integrations/AppShares.kt`), che la rilascia
+  quando l'altra app ha finito: un minuto dopo il ritorno dell'utente nell'app (un'activity che torna davanti dopo una pausa), comunque dopo mezz'ora, e
+  all'avvio successivo (`ShareCache.sweepAtStart`). "Annulla" e la chiusura del foglio non toccano una copia gia' consegnata. Test:
+  `ShareHolderTest` (feature-integrations), `CondividiSenzaPosizioneAppTest.mc1_laCopiaConsegnataRestaDopoLAvvisoEFinoAlRitornoNellApp` (:app),
+  `ViewerBackupMenuTest.lAvvisoProntaSiSpegneDaSoloMaLaCopiaNonSiRilascia_MC1` (feature-viewer). Il rischio vicino della morte del processo resta (la
+  pulizia d'avvio e' la regola "comunque all'avvio successivo"): da guardare in F42.
 
 #### MC-2 · La selezione della Libreria condivide sempre con la posizione
 - **Gravità:** Sbagliata: una promessa di privacy non mantenuta. **Stato:** confermato.
@@ -324,6 +386,9 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
     (agente IN).
 - **Scenario:** l'utente ha acceso "Rimuovi la posizione" proprio per WhatsApp. Condivide tre foto dalla selezione: partono con il GPS.
 - **Correzione:** far passare la selezione da `FiveBUi.share` quando l'impostazione e' accesa, oppure dire nella selezione che la posizione resta.
+- **Stato:** corretta (20/10). Con l'impostazione accesa la selezione passa dallo stesso canale del viewer (`AppShares`, anche senza backup), con
+  avanzamento e foglio "Condivisione ferma" nella Libreria; "Copia" del viewer non compare. Test: `CondividiSenzaPosizioneAppTest.r4_*` e
+  `conLImpostazioneSpentaLaSelezioneRestaQuellaDiPrima` (:app), `ViewerBackupMenuTest.conRimuoviLaPosizioneAccesaCopiaNonCe_MC2` (feature-viewer).
 
 #### MC-3 · "Modifica con…" di un solo-NAS: la versione resta solo nell'app finche' non passa un giro del backup qualunque
 - **Gravità:** Sbagliata. **Stato:** confermato il ritardo; plausibile cio' che la Libreria mostra nel frattempo.
@@ -343,6 +408,9 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
 - **Correzione:**
   - dopo `planStaged`, chiedere il lavoro delle foto, oppure un `runJob` breve come per le correzioni;
   - rendere corrente la versione nuova solo quando c'e' la copia verificata.
+- **Stato: corretta** (20/10), con la prima strada: `FiveBGraph.planStaged` chiede subito il lavoro del tipo del media (`BackupJobs.versionWork`). La
+  seconda (la versione corrente solo a copia verificata) non e' fatta: cambierebbe `MediaCatalog.addEditedVersion` e il modello delle versioni. Test:
+  `Correzioni5BVersioniAppTest.mc3_*` (rosso prima).
 
 #### MC-4 · "Modifica con…" di un solo-NAS dell'area comune (o, in debug, fuori da `mcg-campo/`): la modifica si accetta e non si carica mai
 - **Gravità:** Sbagliata: in quel caso la modifica vive solo in `noBackupFilesDir`. **Stato:** confermato.
@@ -363,6 +431,11 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
 - **Correzione:**
   - prima di aprire la sessione, la stessa prontezza delle correzioni (`COMMON_AREA_NOTICE`, recinzione D13);
   - in `recordEdited`, creare la versione nel catalogo solo se il lavoro puo' nascere.
+- **Stato: corretta** (20/10), con la prima strada: **prima** di aprire "Modifica con…" (e "Scarica e modifica") di un solo-NAS si chiede se la modifica
+  potra' diventare una versione sul NAS (`NasVersionEngine.canPlanStaged`: un solito percorso proprio nell'area privata, sotto la radice di D13); se no
+  l'app lo dice ("Da qui questa modifica non si potrebbe salvare sul NAS…") e non apre l'editor. `recordEdited` (feature-integrations) non e' cambiato:
+  con il controllo prima, la versione nasce solo per un media che puo' averla. Test: `Revisione5BVersioniTest.mc4_*` (area comune e recinzione D13),
+  `Correzioni5BVersioniAppTest.mc3_*` (l'area privata si').
 
 #### MC-5 · "Scarica e modifica in Galleria" non si raggiunge; senza un editor, la frase parla di Galleria Samsung
 - **Gravità:** Minore. **Stato:** confermato.
@@ -375,6 +448,11 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - In debug con un account di prova, la riga scaricata in `Pictures/MyCloud Gallery/` sarebbe comunque fuori dalla recinzione D13
     (`app/src/debug/.../debugtools/DebugBackupFence.kt`) → `GONE_FROM_PHONE` (`DefaultEditSessions.kt:121`). Vedi anche LA-3.
 - **Correzione:** la voce "Scarica e modifica in Galleria" per i solo-NAS, o come scelta dopo un lancio fallito, con la frase giusta per tipo di media.
+- **Stato: corretta** (20/10). Voce nuova del menu del viewer `EDIT_DOWNLOAD` per i solo-NAS (`BackupMenuCapabilities.editDownload`, il media non sta sul
+  telefono secondo il piano delle versioni) → `EditTarget.NAS_DOWNLOAD`. Un lancio fallito dice la frase giusta: Galleria Samsung assente per un media del
+  telefono o una copia scaricata; "nessuna app di modifica accetta questa foto/questo video: prova «Scarica e modifica in Galleria»" per un solo-NAS.
+  Test: `BackupActionsTest.mc5_*`, `FiveBButtonsTest.ogniVoceDelBackupNelViewerFaQualcosa`. LA-3 (la riga scaricata fuori dalla recinzione D13 in debug)
+  e' corretta a parte (sotto).
 
 #### MC-6 · "Modifica con…" di una foto del telefono, fuori casa e a processo freddo: "Il NAS non risponde"
 - **Gravità:** Minore: una scelta documentata, da rivedere. **Stato:** confermato.
@@ -386,6 +464,10 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - A casa succede lo stesso appena aperta l'app, prima del primo contatto SMB.
   - Decisioni P14, tabella "Le righe P14": "lasciato così… da riguardare con F41".
 - **Correzione:** per `PHONE_GALLERY`, misurare la sessione con il monotono, azzerato al riavvio, come propone P11.
+- **Stato: corretta** (20/10). `DefaultEditSessions`: senza l'ora del NAS una sessione `PHONE_GALLERY` nasce lo stesso, con inizio e scadenza
+  `MONOTONIC_MARK` nel database e la scadenza (30 minuti) misurata con l'orologio monotono di questo processo; un'ora del NAS arrivata dopo non la fa
+  scadere; un riavvio la chiude (`expireStale`). Le copie dal NAS (`NAS_CACHE`, `NAS_DOWNLOAD`) vogliono ancora l'ora del NAS. Test:
+  `DefaultEditSessionsTest.mc6_*`.
 
 ### 2.3 "Libera spazio", "Elimina solo dal telefono", "Ovunque" (LS)
 
@@ -703,6 +785,10 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - Il file contiene quindi soltanto codice e gravita'. Nessun test controlla questo contributore.
 - **Scenario:** decisioni P14 chiede di guardare `INTEGRATIONS_COUNTERS` durante F34–F42, ma l'esportazione e' vuota.
 - **Correzione:** una famiglia di chiavi per i contatori, per esempio `[a-z]+_[a-z_]+` limitata ai prefissi noti, e lo stesso test di chiavi del backup.
+- **Stato: corretta** (20/10). `ExportKeys` ha le 55 chiavi dei contatori (`IntegrationCounter`, `ReceiveCounter`, `EditCounter`, `ShareCounter`) piu' `entryAllowed` e `receiveReady`, una per una
+  come le altre: niente famiglia a regex (avrebbe fatto passare anche `share_mario_rossi`). `IntegrationsGraph.counterExport` costruisce i valori. Test: `IntegrationsCountersExportTest` (:app): ogni chiave
+  del contributore e' nell'elenco; ogni contatore del codice e' in elenco (uno nuovo senza chiave fa fallire il test); il file esportato ha i numeri e i flag (prima solo codice e gravita'); un nome fuori
+  elenco, anche con la forma di un contatore, non passa.
 
 #### LA-2 · "Mostra come principale" non passa all'altro dispositivo quando gli id sono diversi
 - **Gravità:** Sbagliata. **Stato:** confermato per l'id (ricontrollato); plausibile se il gruppo si forma dopo l'arrivo della voce.
@@ -715,6 +801,12 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
 - **Nota:** "Separa" e' corretto: chiave, valore con l'impronta e `onChoiceSaved` → `personalChanged` sono collegati. Annullare una separazione non e'
   promesso (§2.12 punto 7).
 - **Correzione:** la stessa regola di "Separa" (`fingerprintOfMedia`/`mediaWithFingerprint`) per la copertina.
+- **Stato: corretta** (20/10). `SimilarCopiesChoices` ritrova il media di una voce `similar_cover` come «Separa»: una sola classe (`Locator`) per id (anche tramite un alias) e, se non c'e', per impronta **solo
+  se indica un media solo**; `chosenCover` e `saveCover` (che spegne la voce accesa dell'altro dispositivo) leggono cosi' la scelta, e `CatalogPersonalProjection.applySimilarCover` fa lo stesso per le
+  voci dello stato. Il rilevatore di core-library (`CatalogSimilarCopies`, righe 292 e 378) non cambia: chiede `chosenCover` e ora lo ottiene. Il secondo sintomo («se il gruppo si forma dopo l'arrivo
+  della voce la scelta si perde») era lo stesso: il rilevatore non ritrovava la voce. Test: `SimilarCopiesProjectionTest`, 5 casi nuovi con id diversi sui due dispositivi (4 rossi sul codice di
+  prima): la scelta del telefono arriva e il rilevatore del tablet la legge; vince la piu' recente su entrambi; una scelta nuova spegne quella dell'altro; l'ordine d'arrivo non cambia la copertina;
+  un'impronta ambigua non sceglie niente.
 
 #### LA-3 · Debug con un account di prova (D13): le versioni di E-E7 restano aperte per sempre
 - **Gravità:** Minore. **Stato:** confermato (agente LA).
@@ -724,6 +816,19 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
     (`NasVersionEngine.kt:436`).
   - Il lavoro non si chiude, non dice niente, e `nextAll` continua a chiedere il giro delle foto. Va provato con un account vero (vedi MC-5).
 - **Correzione:** in debug, non proporre come candidati le righe fuori dalla recinzione (o chiudere quei lavori con un codice).
+- **Stato: aperta, non corretta qui** (20/10). Il percorso e' confermato nel codice e la correzione e' piccola, ma sta in `FiveBGraph` (`app/.../backup/FiveBGraph.kt:253-257`), file dell'agente delle versioni
+  e fuori dal perimetro di questa correzione. Il difetto: i candidati extra di E-E7 (`backupCatalog.candidates(CandidateQuery(downloads, ...))`, la cartella `Pictures/MyCloud Gallery/`) non passano dalla
+  recinzione D13, che invece filtra le sorgenti del piano (`DefaultBackupPlanner`: `fence.allowsPhoneFolder`); con un account di prova il lavoro `VERSION` nasce, la lettura recintata risponde
+  `NOT_SELECTED` e il motore aspetta per sempre. Patch proposta (debug soltanto, in release `fence` e' null): nell'`extra` di `FiveBGraph` restituire `emptyList()` se
+  `fence?.allowsPhoneFolder(account, "Pictures/MyCloud Gallery/") == false`; test: un candidato fuori recinzione non diventa un lavoro `VERSION`.
+- **Stato: corretta** (20/10, dall'agente delle versioni, con la patch proposta qui sopra). Nell'`extra` di `FiveBGraph` i candidati di
+  `Pictures/MyCloud Gallery/` passano dalla recinzione di D13 come le sorgenti del piano; con la recinzione e senza account non passa niente (fallire
+  chiusi, come `MediaStorePhoneBytes`); in release la recinzione e' null e non cambia niente. Test (grafo vero, `Correzioni5BVersioniAppTest`):
+  `la3_unaCopiaScaricataFuoriDallaRecinzioneNonDiventaUnLavoroCheAspettaPerSempre` (rosso prima: il lavoro nasceva e `nextAll` chiedeva le foto) e il
+  caso di controllo `la3_senzaRecinzioneLaCopiaScaricataModificataDiventaUnaVersione` (E-E7 resta: senza recinzione la copia modificata sale).
+  Trovato scrivendo il test, **non corretto**: la copia scaricata e modificata da sola non fa partire nessun giro (`BackupGraph.hasWork` non conta i
+  candidati di `Pictures/MyCloud Gallery/`, e `BackupStages.round` senza lavoro non chiama il motore): sale col primo giro che parte per altro. Il
+  test ci aggiunge una foto nuova della fotocamera. Il rimedio va pensato con LA-4 (`docs/decisioni.md`, «Correzioni 5B: versioni e correzioni»).
 
 #### LA-4 · Possibile andirivieni fra i lavori delle foto, degli arrivi e del guardiano
 - **Gravità:** Minore. **Stato:** plausibile.
@@ -733,6 +838,12 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - Basta un `VERSION` fermo in un'attesa non "tenuta" (rete, `journal.busy`, LA-3) e un altro tipo con lavoro aperto perche' i lavori si richiamino a
     vicenda.
 - **Prova:** contare le esecuzioni WorkManager di fila in quella condizione.
+- **Stato: non confermata come ciclo; nessuna correzione** (20/10). Riletti `BackupWork.kt` e `BackupGraph.nextAll`: un lavoro che finisce con `None` chiede (`KEEP`) i lavori con una richiesta ancora aperta,
+  ma quello del **suo** tipo non puo' essere accodato mentre lui gira (`KEEP` con un lavoro in corso), e le attese vere (`Waiting`, `Stopped`, errore del NAS) non passano da li' (`afterWait`, `Retry`). Un andirivieni
+  stabile servirebbe a **due tipi** di lavoro con una richiesta aperta che non si chiude e un giro che finisce senza fare niente e senza attesa; l'unica richiesta di questo genere che ho trovato e'
+  quella di LA-3 (un `VERSION` fermo che `hasOpenVersionWork(false)` fa chiedere al lavoro delle foto): da sola costa un giro a vuoto per ogni lettura del telefono, non un ciclo. Non ho toccato `work/` (fuori
+  dal perimetro): se la prova del telefono lo vedesse (contare le esecuzioni di WorkManager di fila con un `VERSION` fermo e un arrivo aperto) il rimedio e' non richiamare `afterPhoneRead` da un giro che
+  non ha fatto niente.
 
 #### LA-5 · Il cancello degli arrivi non e' verificato nel dex di release
 - **Gravità:** Minore. **Stato:** confermato.
@@ -740,6 +851,9 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - `tools/check.ps1:317` e `proguard-rules.pro` controllano solo `AppBackupGate.stateOf`.
   - `IncomingGate.stateOf` (`app/.../backup/FiveBAdapters.kt:339-352`), che porta D12/R2 a "Salva sul NAS", no.
   - Il comportamento e' giusto (i membri sono tenuti da `core-common/consumer-rules.pro`): manca solo il controllo.
+- **Stato: corretta** (20/10). `tools/check.ps1`, nel passo "D12 e R2 nella release", legge nel dex di release anche `IncomingGate.stateOf`: chiama `backupMayWriteTo` e `backupMayWriteAs`, risponde `TEST_ONLY` dopo ognuna
+  ed e' istanziato da una classe del backup (un cancello tolto, fuso o con una decisione in meno fa FALLIRE il passo). `app/proguard-rules.pro` lo tiene come tiene `AppBackupGate`. Provato il lettore del dex su un
+  `dexdump` finto con quattro casi (a posto, senza decisione per account, senza `TEST_ONLY`, solo `AppBackupGate`) e la sintassi dello script; il passo vero (APK di release) non l'ho lanciato: lo fa `check.ps1`.
 
 #### LA-6 · Prove guidate: "Azzera i numeri" cancella anche le scelte della schermata
 - **Gravità:** Sbagliata (solo debug). **Stato:** confermato (agente LA).
@@ -748,6 +862,9 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
     (`FieldProbeStore.kt:82`).
   - Le variabili della schermata (`:85-88`) mostrano ancora le scelte vecchie, mentre provider e activity usano i valori di default.
   - Senza un tocco su un chip, il resoconto non dice quale forma e' stata usata.
+- **Stato: corretta** (20/10). «Azzera i numeri» azzera le misure e **tiene le scelte** della schermata (forma, latenza, numero di file, modo di T-15: `FieldProbeStore.resetNumbers`); la schermata le rende esplicite
+  all'apertura e dopo l'azzeramento (`seedChoices`) e rilegge le sue variabili dallo store, cosi' non mostra una forma e i componenti ne usano un'altra e il resoconto dice sempre quale forma e' stata usata.
+  Test: `FieldProbeCorrezioni5BTest` (`azzerareLeMisureTieneLeScelteDellaSchermata`, `leScelteNonFatteDiventanoEsplicite...`).
 
 #### LA-7 · Prove guidate: il riferimento e le righe di T-09 e T-16 si perdono con la morte del processo o con la ricreazione
 - **Gravità:** Sbagliata (solo debug). **Stato:** plausibile.
@@ -757,6 +874,10 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
     - "Confronta" dice "Prima la fotografia di riferimento";
     - "Ripristina" non trova le righe.
   - I contatori sopravvivono, queste variabili no.
+- **Stato: corretta** (20/10). Il riferimento di T-09, le righe cestinate, la foto in scrittura, il riferimento di T-16 e la copia in modifica stanno anche su file (`FieldProbeStore.saveSession`: soli numeri e il nome
+  `probe-<id>.jpg`, mai nel resoconto) e `FieldProbeT09`/`FieldProbeT16` si ripristinano alla creazione; cosa si aspetta dal dialogo (`Pending`) e' un `rememberSaveable`. Test: `FieldProbeCorrezioni5BTest` (T-09:
+  confronto, cestino e ripristino, riscrittura dopo un «processo nuovo»; T-16: confronto e fine della modifica con permessi revocati e copia tolta; un nome che non e' di una copia di prova non riapre niente). Per effetto di R3 (il riscrittore non scrive se la riga ha gia' i byte attesi) la riscrittura di T-09 ora usa un byte in piu' in coda e poi
+  rimette la foto com'era (codici 7 e 8 nel resoconto).
 
 #### LA-8 · Prove guidate: messaggi lontani dai tasti, chiavi T-14/T-15 sovrascritte, scritture del contatore a ogni lettura
 - **Gravità:** Minore. **Stato:** confermato (agente LA).
@@ -765,6 +886,10 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - `picker_caller`, `docs_caller` e `reopen_*` non sono indicizzati e si sovrascrivono fra un'app e l'altra.
   - `setIfAbsent` registra solo il primo `serve_first_read_ms`.
   - `FieldProbeServer.kt:115-118` scrive il file dei contatori fino a tre volte a ogni `onRead`, proprio dove T-14 misura i tempi.
+- **Stato: corretta** (20/10). Il messaggio di un tocco compare in fondo alla sua sezione (`noticeItem`); `picker_*` e `t15.*` di ogni ricezione hanno un indice (una riga per ogni app); `docs_caller` ha un valore per
+  chiamante (`recordDistinct`); `serve_first_read_ms` e' per apertura; la riprova di T-15 scrive un blocco indicizzato per volta; lo store del processo scrive il file in differita (150 ms, fuori dalla lettura misurata)
+  invece di riscriverlo fino a quattro volte a ogni `onRead` (`flush` quando una ricezione finisce, perche' T-15 uccide il processo apposta). Test: `FieldProbeCorrezioni5BTest` (righe per chiamante, prima lettura per
+  apertura, riprove, 200 scritture contro 2).
 
 ---
 

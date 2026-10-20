@@ -60,6 +60,25 @@ object ExportKeys {
     "safe", "queued", "unverified", "onlyCommonCopy", "noNasCopy", "sources", "folderChosen", "gate", "backupStatus", "done", "linked",
     "gone", "waiting", "bytesUploaded", "bytesReread", "diaryOpen", "diaryBytesOpen", "pending", "similarRunning", "available",
     "lastProblem", "startedAgeMs", "lastCompleteAgeMs", "beatAgeMs",
+    // Le integrazioni (Fase 5B: `INTEGRATIONS_COUNTERS` di :app). I due flag; i contatori vengono subito dopo. Solo flag e numeri:
+    // mai un nome di file, una share, un account, un id di media, un pacchetto di un'altra app.
+    "entryAllowed", "receiveReady",
+    // I contatori delle integrazioni (LA-1 della verifica funzionale della 5B): i codici fissi di `IntegrationCounter` (selettore, documenti,
+    // nascosti fermati) e di `FlowCounters` (ricezione, "Modifica con…", condivisione senza posizione), uno per uno come ogni altra chiave:
+    // niente famiglia, cosi' un contatore nuovo si esporta solo dopo essere stato aggiunto qui (lo ricorda `IntegrationsCountersExportTest`).
+    "hidden_stopped",
+    "picker_cancelled", "picker_delivered", "picker_delivered_nas_only", "picker_locked", "picker_nas_unreachable", "picker_not_ready",
+    "picker_opened", "picker_refused_request", "picker_skipped", "picker_too_many",
+    "provider_expired", "provider_locked", "provider_open_refused", "provider_opened", "provider_queries", "provider_read_cancelled",
+    "provider_read_errors", "provider_read_timeouts", "provider_strangers_refused",
+    "receive_discarded", "receive_locked", "receive_not_ready", "receive_opened", "receive_refused_request", "receive_rejected_file_scheme",
+    "receive_rejected_no_space", "receive_rejected_not_media", "receive_rejected_own_provider", "receive_rejected_stage_too_big",
+    "receive_rejected_too_large", "receive_rejected_too_many", "receive_rejected_unreadable", "receive_save_rejected", "receive_saved",
+    "receive_staged_items",
+    "edit_begin_unavailable", "edit_begun", "edit_expired", "edit_result_refused", "edit_settled_from_copy", "edit_settled_new_media",
+    "edit_settled_new_version", "edit_settled_restored", "edit_settled_unchanged", "edit_unreadable",
+    "share_items_direct", "share_items_stripped", "share_prepared", "share_released", "share_stopped_failed", "share_stopped_format",
+    "share_stopped_limits", "share_stopped_location_remains", "share_stopped_unavailable",
   )
 
   /**

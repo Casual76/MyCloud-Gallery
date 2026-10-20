@@ -1,6 +1,9 @@
 package dev.pampa.mycloudgallery.integrations
 
+import android.app.Activity
+import android.app.Application
 import android.content.Context
+import android.os.Bundle
 import dev.pampa.mycloudgallery.R
 import dev.pampa.mycloudgallery.backup.IncomingStates
 import dev.pampa.mycloudgallery.core.backup.contract.BackupClock
@@ -48,6 +51,7 @@ import dev.pampa.mycloudgallery.feature.integrations.share.FileProviderUris
 import dev.pampa.mycloudgallery.feature.integrations.share.FlowCounters
 import dev.pampa.mycloudgallery.feature.integrations.share.LocationFreeShare
 import dev.pampa.mycloudgallery.feature.integrations.share.ShareCache
+import dev.pampa.mycloudgallery.feature.integrations.share.ShareHolder
 import dev.pampa.mycloudgallery.gallery.GalleryGraph
 import dev.pampa.mycloudgallery.nas.NasShareArea
 import java.io.File
@@ -56,6 +60,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -88,6 +94,8 @@ class IntegrationsGraph(
   private val familyReady: () -> Boolean,
   private val shareProbe: ShareProbe?,
   private val dispatchers: DispatcherProvider = DefaultDispatcherProvider,
+  /** "Rimuovi la posizione" (Impostazioni → Condivisioni). Senza l'impostazione legata la posizione si toglie: si fallisce chiusi. */
+  private val removeLocation: StateFlow<Boolean> = MutableStateFlow(true),
 ) {
 
   private val nasInputs = gallery.parts.nas
@@ -180,7 +188,10 @@ class IntegrationsGraph(
 
   val revoker: ContextUriRevoker = ContextUriRevoker(context.applicationContext)
 
-  /** "Condividi senza posizione": copia, strip, ricontrollo con i lettori dell'app (estrattore, `ExifInterface`, `MediaMetadataRetriever`). */
+  /**
+   * "Condividi senza posizione": copia, ricostruzione per elenco di cio' che si tiene, ricontrollo con il rilevatore indipendente e con i lettori
+   * dell'app (estrattore, `ExifInterface`, `MediaMetadataRetriever`).
+   */
   val share: LocationFreeShare = LocationFreeShare(
     cache = shareCache,
     source = AppShareSource(catalog, gallery.intents, context.applicationContext.contentResolver, ::reader),
@@ -190,6 +201,18 @@ class IntegrationsGraph(
     ),
     uris = uris,
     revoker = revoker,
+  )
+
+  /**
+   * Correzioni 5B (R4, MC-1, MC-2): ogni "Condividi" dell'app (viewer con e senza backup, selezione della Libreria) con l'impostazione, e il custode
+   * che rilascia una copia consegnata solo quando l'altra app ha finito.
+   */
+  val shares: AppShares = AppShares(
+    context = context.applicationContext,
+    prepare = { ids, remove, progress -> share.prepare(ids, remove, progress) },
+    removeLocation = removeLocation,
+    holder = ShareHolder(scope),
+    scope = scope,
   )
 
   private val editLock = Mutex()
@@ -247,7 +270,33 @@ class IntegrationsGraph(
     PickerPorts.install(library, unlock)
     ReceivePorts.install(uploads, destinations, unlock)
     gallery.onShutdown { revokeAll() }
+    followActivities()
     scope.launch(Dispatchers.IO) { atStart() }
+  }
+
+  /**
+   * Correzioni 5B (MC-1): il custode delle condivisioni sa quando l'utente esce dall'app (un'activity va in pausa: la scelta dell'app, l'altra app) e
+   * quando torna (un'activity torna davanti): e' il segnale che l'altra app ha finito con la copia.
+   */
+  private fun followActivities() {
+    val application = context.applicationContext as? Application ?: return
+    application.registerActivityLifecycleCallbacks(
+      object : Application.ActivityLifecycleCallbacks {
+        override fun onActivityPaused(activity: Activity) = shares.appLeft()
+
+        override fun onActivityResumed(activity: Activity) = shares.appReturned()
+
+        override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
+
+        override fun onActivityStarted(activity: Activity) = Unit
+
+        override fun onActivityStopped(activity: Activity) = Unit
+
+        override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
+
+        override fun onActivityDestroyed(activity: Activity) = Unit
+      },
+    )
   }
 
   /**
@@ -271,6 +320,7 @@ class IntegrationsGraph(
   /** Azzeramento dell'app o famiglia che cambia: nessun id dei documenti vale piu', le porte tornano ai null-object. */
   fun revokeAll() {
     runCatching { documents.revokeAll() }
+    runCatching { shares.releaseAll() }
     IntegrationPorts.reset()
     PickerPorts.reset()
     ReceivePorts.reset()
@@ -283,10 +333,10 @@ class IntegrationsGraph(
     override val section: DiagSection = DiagSection.BACKUP
 
     override suspend fun collect(): List<DiagItem> {
-      val export = LinkedHashMap<String, ExportValue>()
-      (IntegrationCounters.snapshot() + FlowCounters.snapshot()).toSortedMap().forEach { (code, n) -> export[code] = ExportValue.Num(n) }
-      export["entryAllowed"] = ExportValue.Flag(entryGate.decide() == dev.pampa.mycloudgallery.feature.integrations.contract.EntryDecision.ALLOWED)
-      export["receiveReady"] = ExportValue.Flag(uploads != null)
+      val export = counterExport(
+        entryAllowed = entryGate.decide() == dev.pampa.mycloudgallery.feature.integrations.contract.EntryDecision.ALLOWED,
+        receiveReady = uploads != null,
+      )
       return listOf(DiagItem(COUNTERS, section, DiagSeverity.INFO, DiagCatalog.titleOf(COUNTERS), null, null, export))
     }
   }
@@ -297,5 +347,19 @@ class IntegrationsGraph(
 
     /** La voce della Diagnostica con i contatori delle integrazioni (P10, P11). */
     val COUNTERS: DiagCode = DiagCode("INTEGRATIONS_COUNTERS")
+
+    /**
+     * I valori della voce `INTEGRATIONS_COUNTERS` come arrivano alla Diagnostica: un numero per ogni contatore (codice fisso di
+     * `IntegrationCounter` e di `FlowCounters`) e i due flag. Tutte le chiavi devono stare in `ExportKeys` (LA-1 della verifica
+     * funzionale della 5B: non ci stavano, e il file esportato aveva solo il codice e la gravita'); lo prova
+     * `IntegrationsCountersExportTest`.
+     */
+    internal fun counterExport(entryAllowed: Boolean, receiveReady: Boolean): LinkedHashMap<String, ExportValue> {
+      val export = LinkedHashMap<String, ExportValue>()
+      (IntegrationCounters.snapshot() + FlowCounters.snapshot()).toSortedMap().forEach { (code, n) -> export[code] = ExportValue.Num(n) }
+      export["entryAllowed"] = ExportValue.Flag(entryAllowed)
+      export["receiveReady"] = ExportValue.Flag(receiveReady)
+      return export
+    }
   }
 }

@@ -93,6 +93,7 @@ class FieldProbeMathTest {
     assertThat(FieldProbeMath.rewriteCode(RewriteResult.NotGranted)).isEqualTo(1L)
     assertThat(FieldProbeMath.rewriteCode(RewriteResult.Gone)).isEqualTo(2L)
     assertThat(FieldProbeMath.rewriteCode(RewriteResult.SourceMismatch)).isEqualTo(3L)
+    assertThat(FieldProbeMath.rewriteCode(RewriteResult.RowChanged)).isEqualTo(7L)
     assertThat(FieldProbeMath.rewriteCode(RewriteResult.Failed(RewriteCodes.WRITE_ERROR, restored = true))).isEqualTo(4L)
     assertThat(FieldProbeMath.rewriteCode(RewriteResult.Failed(RewriteCodes.WRITE_ERROR, restored = false))).isEqualTo(5L)
   }

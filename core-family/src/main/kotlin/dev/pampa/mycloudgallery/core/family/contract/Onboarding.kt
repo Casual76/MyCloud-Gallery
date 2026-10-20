@@ -238,6 +238,20 @@ enum class OnboardingProblem {
 
   /** Il passo chiesto non e' quello corrente, o non si puo' saltare. */
   STEP_NOT_AVAILABLE,
+
+  /**
+   * "Configura di nuovo" (R7, R19 della revisione 5B): il Keystore non risponde, o le chiavi di questo telefono non si sono
+   * potute togliere nemmeno ripetendo. Non si va avanti: la chiave di famiglia di un admin non si distrugge per un guasto
+   * passeggero, e una chiave rimasta non si fa passare per tolta. Si riprova.
+   */
+  KEYS_NOT_REMOVED,
+
+  /**
+   * Fine dell'onboarding con un account o un NAS diverso da quello lasciato con "Configura di nuovo" (R6): i dati di prima
+   * (catalogo, dati personali, miniature, diari) non si sono potuti togliere dal telefono. La Libreria non si apre sopra i
+   * dati di un'altra persona: si riprova.
+   */
+  LOCAL_DATA_NOT_REMOVED,
 }
 
 /** Avvisi che non fermano il passo. */
@@ -372,10 +386,24 @@ interface OnboardingCoordinator {
 
   /**
    * "Configura di nuovo" su un dispositivo revocato, dismesso o rimasto nella famiglia di prima dopo un reset (verifica
-   * funzionale, ON-4 e ON-5): si dimenticano avanzamento, account e password del NAS, stato fidato, chiave del dispositivo
-   * (al rientro ne nasce una nuova, con un id nuovo: E-S2, E-O7) e chiave di famiglia, se c'era. I dati locali (foto del
-   * telefono, nascosti, preferiti, miniature) restano. Parte solo da un gesto confermato dall'utente. Dopo, il dispositivo
-   * e' "mai configurato": benvenuto.
+   * funzionale, ON-4 e ON-5): si dimenticano avanzamento, account e password del NAS, stato fidato, impronta di casa,
+   * chiave del dispositivo (al rientro ne nasce una nuova, con un id nuovo: E-S2, E-O7) e chiave di famiglia, se c'era.
+   * Parte solo da un gesto confermato dall'utente. Dopo, il dispositivo e' "mai configurato": benvenuto.
+   *
+   * **Le chiavi non si fingono tolte** (R19): una distruzione che fallisce si ripete, e se non riesce e' un
+   * [OnboardingProblem.KEYS_NOT_REMOVED] e niente altro si tocca. **Un Keystore che non risponde** (R7) fa lo stesso prima
+   * di toccare qualsiasi cosa: la chiave di famiglia di un admin non si distrugge per un guasto passeggero.
+   *
+   * **I dati locali** (foto del telefono, nascosti, preferiti, miniature, catalogo) restano finche' chi rientra e' la stessa
+   * persona sullo stesso NAS; se il rientro e' con un altro account o un altro NAS, alla fine dell'onboarding, prima che la
+   * Libreria si apra, si tolgono (R6, [OnboardingProblem.LOCAL_DATA_NOT_REMOVED]). Mai le foto del telefono ne' il NAS.
    */
   suspend fun startOver(): StepResult
+
+  /**
+   * Vero se questo dispositivo tiene (o potrebbe tenere) la chiave di famiglia, cioe' e' un admin: "Configura di nuovo" la
+   * distrugge, e solo il kit di recupero con il suo codice la riporta (R7). Nel dubbio (Keystore che non risponde) vale
+   * vero: l'avviso in piu' non costa niente, la chiave persa si'.
+   */
+  suspend fun holdsFamilyKey(): Boolean
 }

@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.feature.backup.versions
 
 import androidx.compose.runtime.Immutable
 import dev.pampa.mycloudgallery.core.backup.contract.NasVersionPlan
+import dev.pampa.mycloudgallery.core.backup.contract.PhoneKeptReason
 import dev.pampa.mycloudgallery.core.backup.contract.RestoreAvailability
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.VersionId
@@ -47,6 +48,12 @@ enum class VersionsMessage {
 
   /** Il dialogo del sistema non c'e' su questo telefono. */
   NO_SYSTEM_DIALOG,
+
+  /** VE-2: il sistema non ha accettato la richiesta di permesso (o il dialogo non si e' aperto): niente e' stato toccato. */
+  SYSTEM_DIALOG_FAILED,
+
+  /** VE-8: il backup non ha lasciato il turno in tempo (finiva un lotto): niente e' stato toccato, si riprova fra poco. */
+  BACKUP_BUSY,
 }
 
 /** Cosa mostra il foglio delle versioni (§1.5 `VersionsState`). */
@@ -76,14 +83,20 @@ internal sealed interface VersionsUi {
   /** Lo scambio e' partito. */
   data class Restoring(val plan: NasVersionPlan) : VersionsUi
 
-  /** Fatto. [phoneKeptEdited]: l'utente non ha dato il permesso e il telefono tiene la versione modificata (E-E10). */
-  data class Restored(val plan: NasVersionPlan, val phoneKeptEdited: Boolean) : VersionsUi
+  /**
+   * Fatto. [kept]: perche' il telefono tiene la versione modificata (null = riscritto, o niente da riscrivere): l'utente non ha dato il permesso
+   * (E-E10), lo scambio non e' ancora finito, la riscrittura non e' riuscita, o la riga era cambiata e non e' stata toccata (R3).
+   */
+  data class Restored(val plan: NasVersionPlan, val kept: PhoneKeptReason? = null) : VersionsUi {
+    val phoneKeptEdited: Boolean get() = kept != null
+  }
 }
 
 /** Se "Ripristina originale" si puo' offrire: c'e' qualcosa da ripristinare (non una sola versione, non gia' l'originale). */
 internal fun RestoreAvailability.isOffered(): Boolean = when (this) {
   RestoreAvailability.ONLY_ONE_VERSION, RestoreAvailability.ALREADY_ORIGINAL, RestoreAvailability.NOT_MINE, RestoreAvailability.NOT_AVAILABLE -> false
   RestoreAvailability.AVAILABLE, RestoreAvailability.ORIGINAL_NOT_SAFE, RestoreAvailability.NAS_UNREACHABLE, RestoreAvailability.FROZEN,
-  RestoreAvailability.READ_ONLY_AREA, RestoreAvailability.BUSY,
+  RestoreAvailability.READ_ONLY_AREA, RestoreAvailability.BUSY, RestoreAvailability.CURRENT_NOT_SAFE, RestoreAvailability.PAUSED,
+  RestoreAvailability.TEST_ONLY,
   -> true
 }

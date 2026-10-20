@@ -8,6 +8,7 @@ import dev.pampa.mycloudgallery.core.family.onboarding.OnboardingChoicesSink
 import dev.pampa.mycloudgallery.core.family.onboarding.OnboardingPorts
 import dev.pampa.mycloudgallery.core.family.onboarding.OnboardingSnapshot
 import dev.pampa.mycloudgallery.core.family.onboarding.OnboardingStateStore
+import dev.pampa.mycloudgallery.core.family.onboarding.PreviousAccountData
 import dev.pampa.mycloudgallery.core.family.onboarding.StoreState
 import dev.pampa.mycloudgallery.core.family.setup.NasAccountStore
 import dev.pampa.mycloudgallery.core.family.testing.FakeRegistryService
@@ -179,18 +180,38 @@ class InMemoryNasAccountStore : NasAccountStore {
   }
 }
 
-/** La chiave del dispositivo in software (stessa curva del Keystore). */
+/**
+ * La chiave del dispositivo in software (stessa curva del Keystore). I guasti si pilotano dal test: [broken] fa lanciare ogni
+ * domanda (un Keystore che non risponde, R7), [destroyFailures] le prossime distruzioni che lanciano (R19).
+ */
 class SoftwareKeyProvider : KeyProvider {
   private var key: FamilyKey? = null
   var destroyed: Int = 0
     private set
 
-  override fun deviceSigner(): Signer = key ?: FamilyKey.generate().also { key = it }
+  /** Il Keystore non risponde: `hasDeviceKey`, `deviceSigner` e la distruzione lanciano. */
+  var broken: Boolean = false
 
-  override fun hasDeviceKey(): Boolean = key != null
+  /** Quante delle prossime distruzioni lanciano (poi riescono). */
+  var destroyFailures: Int = 0
+
+  override fun deviceSigner(): Signer {
+    check(!broken) { "Keystore non disponibile" }
+    return key ?: FamilyKey.generate().also { key = it }
+  }
+
+  override fun hasDeviceKey(): Boolean {
+    check(!broken) { "Keystore non disponibile" }
+    return key != null
+  }
 
   override fun destroyDeviceKey() {
+    check(!broken) { "Keystore non disponibile" }
     destroyed++
+    if (destroyFailures > 0) {
+      destroyFailures--
+      throw IllegalStateException("distruzione non riuscita")
+    }
     key = null
   }
 }
@@ -202,6 +223,11 @@ class InMemoryFamilyKeyVault(var secure: Boolean = true) : FamilyKeyVault {
   var stores: Int = 0
     private set
 
+  /** Quante delle prossime distruzioni lanciano (R19); [destroyAttempts] conta anche quelle. */
+  var destroyFailures: Int = 0
+  var destroyAttempts: Int = 0
+    private set
+
   override fun store(key: FamilyKey) {
     check(secure) { "Il dispositivo admin deve avere un blocco schermo sicuro." }
     stores++
@@ -211,6 +237,11 @@ class InMemoryFamilyKeyVault(var secure: Boolean = true) : FamilyKeyVault {
   override fun load(expected: EcPublicKey): FamilyKey? = stored?.takeIf { it.publicKey == expected }
 
   override fun destroy() {
+    destroyAttempts++
+    if (destroyFailures > 0) {
+      destroyFailures--
+      throw IllegalStateException("distruzione non riuscita")
+    }
     stored = null
   }
 }
@@ -228,6 +259,21 @@ class InMemoryRuleSettingsStore(initial: RuleSettings = RuleSettings()) : RuleSe
 
   override suspend fun update(transform: (RuleSettings) -> RuleSettings) {
     mutable.value = transform(mutable.value)
+  }
+}
+
+/** I dati del vecchio account (R6): ricorda quante volte si e' chiesto di toglierli e com'era l'avanzamento in quel momento. */
+class RecordingPreviousData(var result: Boolean = true) : PreviousAccountData {
+  var erasures: Int = 0
+    private set
+
+  /** Cosa guardare al momento della richiesta (il test lo imposta: per esempio "l'onboarding non e' ancora finito"). */
+  var onErase: () -> Unit = {}
+
+  override suspend fun erase(): Boolean {
+    erasures++
+    onErase()
+    return result
   }
 }
 
@@ -282,6 +328,10 @@ class TestEnv {
   val rules = InMemoryRuleSettingsStore()
   val health = FakeBackgroundHealthReader(BackgroundHealth.UNKNOWN)
   val choices = RecordingChoicesSink()
+  val previousData = RecordingPreviousData()
+
+  /** Quante volte "Configura di nuovo" ha chiesto di riavviare il processo (R6). */
+  var restarts: Int = 0
   var deviceDescription = DeviceDescription(model = "SM-S931B", defaultName = "Telefono di Alessio")
 
   /** P9: la porta che riapre l'interruttore di un account preciso (null = il comportamento di prima, con [breaker]). */
@@ -312,6 +362,8 @@ class TestEnv {
     deviceNow = { deviceNow },
     random = java.security.SecureRandom(),
     allowUserRetry = allowUserRetry,
+    previousData = previousData,
+    afterStartOver = { restarts++ },
   )
 
   val address: NasAddress = NasAddress(TEST_IP, "MyCloudEX2Ultra.fritz.box")

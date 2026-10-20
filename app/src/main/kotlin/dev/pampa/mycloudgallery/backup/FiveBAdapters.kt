@@ -258,18 +258,20 @@ class PhoneRowFence(
 }
 
 /**
- * [PhoneRewriter] (core-backup) sul riscrittore vero di core-mediastore (`MediaStorePhoneMediaRewriter`: copia di sicurezza, scrittura senza
- * troncare, rilettura, ripristino), **dietro la recinzione D13**: una riga fuori da `mcg-prova` con un account di prova non si scrive
- * (`NotGranted`, niente toccato).
+ * [PhoneRewriter] (core-backup) sul riscrittore vero di core-mediastore (`MediaStorePhoneMediaRewriter`: copia di sicurezza, controllo
+ * dell'impronta della riga (R3), diario (R9), scrittura senza troncare, rilettura, ripristino), **dietro la recinzione D13**: una riga fuori da
+ * `mcg-prova` con un account di prova non si scrive (`NotGranted`, niente toccato). L'URI lo sceglie il riscrittore dal tipo della riga (VE-2),
+ * lo stesso del dialogo di sistema.
  */
 class AppPhoneRewriter(private val rewriter: PhoneMediaRewriter, private val fence: PhoneRowFence) : PhoneRewriter {
-  override suspend fun replace(ref: PhoneRef, mime: String?, file: File, expectedSha256: Sha256): PhoneRewrite {
+  override suspend fun replace(ref: PhoneRef, mime: String?, file: File, expectedSha256: Sha256, currentSha256: Sha256): PhoneRewrite {
     if (!fence.allows(ref.volume, ref.mediaStoreId)) return PhoneRewrite.NotGranted
-    return when (val r = rewriter.replace(MediaRef.Phone(ref.volume, ref.mediaStoreId, mime), file, expectedSha256)) {
+    return when (val r = rewriter.replace(MediaRef.Phone(ref.volume, ref.mediaStoreId, mime), file, expectedSha256, currentSha256)) {
       is RewriteResult.Replaced -> PhoneRewrite.Replaced(r.sha256, r.size)
       RewriteResult.NotGranted -> PhoneRewrite.NotGranted
       RewriteResult.Gone -> PhoneRewrite.Gone
       RewriteResult.SourceMismatch -> PhoneRewrite.SourceMismatch
+      RewriteResult.RowChanged -> PhoneRewrite.RowChanged
       is RewriteResult.Failed -> PhoneRewrite.Failed(r.code, r.restored)
     }
   }
@@ -283,6 +285,10 @@ class AppPhoneRewriter(private val rewriter: PhoneMediaRewriter, private val fen
  * **D13** (debug, account di prova): un lotto di "Libera spazio" arriva gia' filtrato da `SafeFreeSpace` (fuori da `mcg-prova` = escluso nel
  * piano e di nuovo al controllo finale, prima del dialogo); una richiesta di scrittura si controlla qui riga per riga ([rowFolder]: la cartella
  * letta dal MediaStore) e con una riga fuori recinto, o non leggibile, non c'e' dialogo (null). Senza recinzione (release) nessun controllo.
+ *
+ * **VE-2 della verifica funzionale 5B.** I riferimenti delle righe qui non hanno il MIME: e' l'adattatore di core-mediastore che sceglie la
+ * collezione dal tipo della riga (immagini o video, mai `files/`), la stessa che apre la riscrittura; un rifiuto del sistema non esce mai da qui
+ * (niente dialogo).
  */
 class AppPhoneSystemDialogs(
   private val intents: PhoneMediaIntents,
@@ -295,9 +301,11 @@ class AppPhoneSystemDialogs(
 
   override fun removeRequest(batch: TrashBatch): IntentSender? {
     val refs = batch.items.map { MediaRef.Phone(it.phone.volume, it.phone.mediaStoreId, it.mime) }
-    return when (batch.mode) {
-      TrashMode.ANDROID_TRASH -> intents.trashRequest(refs, trash = true)
-      TrashMode.DELETE_NOW -> intents.deleteRequest(refs)
+    return safely {
+      when (batch.mode) {
+        TrashMode.ANDROID_TRASH -> intents.trashRequest(refs, trash = true)
+        TrashMode.DELETE_NOW -> intents.deleteRequest(refs)
+      }
     }
   }
 
@@ -307,7 +315,19 @@ class AppPhoneSystemDialogs(
       val me = account() ?: return null
       if (rows.any { row -> rowFolder(row)?.let { f.allowsPhoneFolder(me, it) } != true }) return null
     }
-    return intents.writeRequest(rows.map { MediaRef.Phone(it.volume, it.mediaStoreId, null) })
+    return safely { intents.writeRequest(rows.map { MediaRef.Phone(it.volume, it.mediaStoreId, null) }) }
+  }
+
+  /** VE-2: qualunque rifiuto del sistema e' "niente dialogo": l'eccezione non arriva al tocco (prima: l'app si chiudeva). */
+  private inline fun safely(block: () -> IntentSender?): IntentSender? = try {
+    block()
+  } catch (e: RuntimeException) {
+    GalleryLog.w(TAG) { "richiesta di sistema non creata (${e.javaClass.simpleName})" }
+    null
+  }
+
+  private companion object {
+    const val TAG = "BackupDialoghi"
   }
 }
 

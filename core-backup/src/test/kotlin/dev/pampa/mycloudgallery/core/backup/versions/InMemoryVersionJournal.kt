@@ -20,6 +20,8 @@ import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 class InMemoryVersionJournal(
   firstId: Long = 1_000_001,
   private val others: suspend (VersionId) -> Boolean = { false },
+  /** L'ora del NAS con cui si data l'ultimo passo di un lavoro (come `updated_at` di Room, R17); null = non si data. */
+  private val nasNow: () -> Long? = { null },
 ) : VersionJournal {
 
   data class Transition(val job: VersionJobId, val from: UploadState, val to: UploadState, val flow: UploadFlow)
@@ -28,6 +30,7 @@ class InMemoryVersionJournal(
   private val jobs = LinkedHashMap<Long, VersionJob>()
   private var nextId = firstId
   private val log = ArrayList<Transition>()
+  private val updatedAt = HashMap<Long, Long>()
 
   val transitions: List<Transition> get() = synchronized(lock) { log.toList() }
 
@@ -50,6 +53,7 @@ class InMemoryVersionJournal(
       sha256 = job.sha256,
     )
     jobs[created.id.value] = created
+    nasNow()?.let { updatedAt[created.id.value] = it }
     log += Transition(created.id, UploadState.PLANNED, UploadState.PLANNED, created.flow)
     created
   }
@@ -75,6 +79,7 @@ class InMemoryVersionJournal(
         "Transizione non ammessa: ${before.state.code} -> ${job.state.code} (${before.flow.code})."
       }
       jobs[job.id.value] = job
+      nasNow()?.let { updatedAt[job.id.value] = it }
       log += Transition(job.id, before.state, job.state, before.flow)
     }
   }
@@ -86,6 +91,11 @@ class InMemoryVersionJournal(
 
   override suspend fun inShare(share: String): List<VersionJob> = synchronized(lock) {
     jobs.values.filter { it.share.equals(share, ignoreCase = true) }
+  }
+
+  /** R17: come Room, solo i lavori con l'ultimo passo da [sinceNasMs] in poi (un lavoro mai datato vale sempre). */
+  override suspend fun inShareSince(share: String, sinceNasMs: Long): List<VersionJob> = synchronized(lock) {
+    jobs.values.filter { it.share.equals(share, ignoreCase = true) && (updatedAt[it.id.value] ?: Long.MAX_VALUE) >= sinceNasMs }
   }
 
   override suspend fun citedTemps(): Set<SharePath> = synchronized(lock) {

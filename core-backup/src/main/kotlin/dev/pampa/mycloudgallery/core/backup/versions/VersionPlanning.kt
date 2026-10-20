@@ -103,11 +103,15 @@ object VersionPlanning {
   /**
    * "Ripristina originale" dall'app (D18, E-E10): lo scambio fra il file al solito percorso e l'originale in `Versioni/`. Null se l'originale
    * e' gia' l'attuale o non si puo' (vedi [swapTo]).
+   *
+   * R3 della revisione 5B: il file da spostare in `Versioni/` deve essere quello della **versione attuale** del catalogo. Se al solito percorso
+   * c'e' un'altra versione (l'attuale e' una modifica non ancora salvata, sta solo sul telefono o in un file preparato), lo scambio non si fa:
+   * l'attuale resterebbe fuori dal NAS e il ripristino la toglierebbe dal telefono.
    */
   fun swap(media: VersionedMedia, share: String): NewVersionJob? {
     val original = media.original ?: return null
     if (media.currentVersionId == original.versionId) return null
-    return swapTo(media, share, original.versionId)
+    return swapTo(media, share, original.versionId, from = media.currentVersionId)
   }
 
   /**
@@ -120,16 +124,18 @@ object VersionPlanning {
   /**
    * Lo scambio (`SWAP`, D18): [target] torna al solito percorso dalla sua copia in `Versioni/`, il file che ora sta al solito percorso (di
    * un'altra versione dello **stesso** media) va in `Versioni/`. Entrambi copie private **verificate**: nessuno spostamento di un file di
-   * cui non si e' sicuri. Null se [target] e' gia' al solito percorso, se una delle due copie manca o non e' verificata.
+   * cui non si e' sicuri. Null se [target] e' gia' al solito percorso, se una delle due copie manca o non e' verificata. Con [from] il file al
+   * solito percorso deve essere proprio di quella versione (R3: "Ripristina originale" sposta la versione attuale, nessun'altra).
    */
-  fun swapTo(media: VersionedMedia, share: String, target: VersionId): NewVersionJob? {
+  fun swapTo(media: VersionedMedia, share: String, target: VersionId, from: VersionId? = null): NewVersionJob? {
     if (!media.mine) return null
     val version = media.version(target) ?: return null
     if (version.nas.any { isUsual(it, share) }) return null
     val archived = version.nas
       .filter { isOwnPrivate(it, share) && VersionPaths.isInVersions(it.path) && it.verifiedAtMillis != null }
       .minByOrNull { it.locationId.value } ?: return null
-    val (headVersion, usual) = media.versions.asReversed().filter { it.versionId != target }.firstNotNullOfOrNull { v ->
+    val heads = media.versions.asReversed().filter { it.versionId != target && (from == null || it.versionId == from) }
+    val (headVersion, usual) = heads.firstNotNullOfOrNull { v ->
       v.nas.filter { isUsual(it, share) && it.verifiedAtMillis != null }.minByOrNull { it.locationId.value }?.let { v to it }
     } ?: return null
     return NewVersionJob(

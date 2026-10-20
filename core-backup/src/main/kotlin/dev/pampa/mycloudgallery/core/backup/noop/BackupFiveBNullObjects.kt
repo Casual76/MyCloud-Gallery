@@ -136,5 +136,6 @@ object NoEditSessions : EditSessions {
 
 /** Nessuna riscrittura del telefono: "nessun permesso", la riga non e' toccata e il file non e' aperto. */
 object NoPhoneRewriter : PhoneRewriter {
-  override suspend fun replace(ref: PhoneRef, mime: String?, file: File, expectedSha256: Sha256): PhoneRewrite = PhoneRewrite.NotGranted
+  override suspend fun replace(ref: PhoneRef, mime: String?, file: File, expectedSha256: Sha256, currentSha256: Sha256): PhoneRewrite =
+    PhoneRewrite.NotGranted
 }

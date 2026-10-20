@@ -45,6 +45,12 @@ sealed interface PhoneRewrite {
   data object SourceMismatch : PhoneRewrite
 
   /**
+   * R3 della revisione 5B: la riga adesso non ha l'impronta attesa (quella della versione che si sostituisce, al sicuro sul NAS): una modifica
+   * non ancora salvata, il catalogo in ritardo, un `_ID` riciclato. Niente e' stato scritto.
+   */
+  data object RowChanged : PhoneRewrite
+
+  /**
    * La scrittura non e' riuscita ([code] stabile: `PHONE_FULL`, `WRITE_ERROR`, `HASH_MISMATCH`). [restored] dice se la riga e' tornata com'era;
    * falso e' il caso grave: la sola copia buona e' quella sul NAS (l'originale era al sicuro, D19) e l'utente va avvisato.
    */
@@ -55,9 +61,16 @@ sealed interface PhoneRewrite {
  * La riscrittura di un file del telefono (D19, E-E10). `:app` la lega a `PhoneMediaRewriter` di core-mediastore (con D13: in debug con gli
  * account di prova solo `mcg-prova`). Si chiama solo dopo un [PhoneConfirmation] valida, con il permesso del dialogo di sistema per quella
  * riga e con l'originale **al sicuro** sul NAS: lo garantisce la sequenza che la usa, non questa porta.
+ *
+ * **R3 della revisione 5B, la regola del riscrittore:** prima di scrivere, i byte che la riga ha adesso devono avere `currentSha256`, l'impronta
+ * della versione che si sostituisce **e che e' al sicuro sul NAS**; altrimenti [PhoneRewrite.RowChanged] e niente si scrive. Chi chiama passa
+ * solo l'impronta di una versione con una copia privata verificata.
  */
 interface PhoneRewriter {
 
-  /** Riscrive [ref] (di tipo [mime], se noto) con il contenuto di [file], che deve avere SHA-256 [expectedSha256]. */
-  suspend fun replace(ref: PhoneRef, mime: String?, file: File, expectedSha256: Sha256): PhoneRewrite
+  /**
+   * Riscrive [ref] (di tipo [mime], se noto) con il contenuto di [file], che deve avere SHA-256 [expectedSha256], solo se la riga ha adesso
+   * l'impronta [currentSha256].
+   */
+  suspend fun replace(ref: PhoneRef, mime: String?, file: File, expectedSha256: Sha256, currentSha256: Sha256): PhoneRewrite
 }

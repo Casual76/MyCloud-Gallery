@@ -68,6 +68,7 @@ import dev.pampa.mycloudgallery.main.GalleryHostViewModel
 import dev.pampa.mycloudgallery.main.GalleryRoot
 import dev.pampa.mycloudgallery.main.BackupHostEffect
 import dev.pampa.mycloudgallery.main.FiveBHostEffect
+import dev.pampa.mycloudgallery.integrations.ShareHostEffect
 import dev.pampa.mycloudgallery.main.LibraryCommandHostEffect
 import dev.pampa.mycloudgallery.main.LocalViewerHost
 import dev.pampa.mycloudgallery.main.MainScaffold
@@ -153,6 +154,8 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
   // Fase 5B (P14): i fogli alla radice (Versioni, Correggi, "Elimina solo dal telefono", "Elimina…" delle versioni), "Libera spazio" con la
   // selezione e gli intenti verso le altre app ("Modifica con…", "Condividi").
   if (gallery != null) FiveBHostEffect(gallery.fiveB, nav)
+  // Correzioni 5B (R4, MC-1, MC-2): la scelta dell'app di "Condividi" (viewer e selezione della Libreria), anche senza backup.
+  if (gallery != null) ShareHostEffect(gallery.shares)
   NavHost(
     navController = nav,
     startDestination = startRoute(destination),

@@ -111,6 +111,12 @@ class VersionKeeperTest {
     // Un'altra modifica dopo il foglio: il piano non e' piu' quello.
     val fresh = TestConfirmations.confirm(s.keeper.plan(s.seed.mediaId), s.w.clock.monotonic)
     s.w.editOnPhone(s.seed)
+    // R3: la modifica nuova non e' ancora al sicuro: il ripristino non si puo' fare (la perderebbe).
+    assertThat(s.keeper.restoreOriginal(s.seed.mediaId, fresh, PhoneWriteGrant(emptySet())))
+      .isEqualTo(RestoreOutcome.Unavailable(RestoreAvailability.CURRENT_NOT_SAFE))
+    // Salvata dal backup, il piano e' un altro (una versione in piu'): la conferma di prima non vale.
+    s.w.engine.planPhoneVersions(listOf(s.w.candidate(s.seed.mediaId, s.seed.phoneId!!)))
+    s.w.runUntilQuiet()
     assertThat(s.keeper.restoreOriginal(s.seed.mediaId, fresh, PhoneWriteGrant(emptySet())))
       .isEqualTo(RestoreOutcome.Rejected(PhoneConfirmationCheck.WrongPlan))
     assertThat(s.w.journal.all().none { it.kind == UploadKind.SWAP }).isTrue()

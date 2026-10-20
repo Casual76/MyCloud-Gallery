@@ -25,6 +25,8 @@ import dev.pampa.mycloudgallery.feature.onboarding.ui.NoticeTone
 import dev.pampa.mycloudgallery.feature.onboarding.ui.ProblemAction
 import dev.pampa.mycloudgallery.feature.onboarding.ui.ProblemPanel
 import dev.pampa.mycloudgallery.feature.onboarding.ui.StepChrome
+import dev.pampa.mycloudgallery.feature.onboarding.ui.OnboardingSheetHost
+import dev.pampa.mycloudgallery.feature.onboarding.ui.StartOverSheet
 import dev.pampa.mycloudgallery.feature.onboarding.ui.StepScaffold
 import dev.pampa.mycloudgallery.feature.onboarding.ui.stepAmbient
 
@@ -33,15 +35,39 @@ import dev.pampa.mycloudgallery.feature.onboarding.ui.stepAmbient
  * lo stato della famiglia salvato non c'e' piu' (per esempio dopo un reset). Prima qui restava il vecchio riepilogo con
  * "Vai alla Libreria", che non faceva niente. Revocato e dismesso hanno la stessa uscita (decisione del 19/10, ON-4): la
  * Libreria del NAS non c'e' piu' e il dispositivo si configura di nuovo, con una chiave nuova e una nuova approvazione.
- * "Configura di nuovo" dimentica account, password e chiavi (non le foto ne' i dati locali).
+ * "Configura di nuovo" dimentica account, password e chiavi (non le foto). Il tasto non parte da solo: apre un foglio di
+ * conferma (R7 della revisione 5B), che per un admin dice cosa si perde e come si recupera.
  */
 @Composable
 internal fun RemovedScreen(
   chrome: StepChrome,
   ui: RemovalUi,
+  onAskStartOver: () -> Unit,
+  onCancelStartOver: () -> Unit,
   onStartOver: () -> Unit,
   onProblemAction: (ProblemAction) -> Unit,
   modifier: Modifier = Modifier,
+) {
+  // Il foglio di conferma ha bisogno di un host dei pop-up: in onboarding la radice non ne ha (la Libreria non c'e' ancora).
+  OnboardingSheetHost {
+    RemovedContent(chrome, ui, onAskStartOver, onProblemAction, modifier)
+    StartOverSheet(
+      visible = ui.confirming,
+      holdsKey = ui.holdsKey,
+      unknownCause = ui.reason == RemovalReason.OTHER,
+      onDismiss = onCancelStartOver,
+      onConfirm = onStartOver,
+    )
+  }
+}
+
+@Composable
+private fun RemovedContent(
+  chrome: StepChrome,
+  ui: RemovalUi,
+  onAskStartOver: () -> Unit,
+  onProblemAction: (ProblemAction) -> Unit,
+  modifier: Modifier,
 ) {
   StepScaffold(
     title = stringResource(
@@ -57,7 +83,7 @@ internal fun RemovedScreen(
     modifier = modifier,
     primary = DockAction(
       label = stringResource(R.string.removed_action),
-      onClick = onStartOver,
+      onClick = onAskStartOver,
       enabled = !ui.busy,
       loading = ui.busy,
     ),

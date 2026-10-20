@@ -358,12 +358,12 @@ internal fun LibraryFooter(state: LibraryTabState, phone: LibraryPhoneStatus, st
 }
 
 /** Se [LibraryNotices] mostra qualcosa: serve a chi misura la loro altezza per sapere quando e' tornata a zero. */
-internal fun hasNotices(phone: LibraryPhoneStatus, notice: ActionNotice?): Boolean =
-  phone.access == MediaAccess.PARTIAL || phone.pendingLocation > 0 || notice != null
+internal fun hasNotices(phone: LibraryPhoneStatus, notice: ActionNotice?, share: LibraryShare = LibraryShare.Idle): Boolean =
+  phone.access == MediaAccess.PARTIAL || phone.pendingLocation > 0 || notice != null || share is LibraryShare.Preparing
 
 /**
  * Gli avvisi sotto la barra: accesso parziale (E-P1), foto in attesa del permesso della posizione (E-P21) e, in cima, l'azione
- * dell'utente che non e' riuscita o non e' partita ([notice], R8 e I8).
+ * dell'utente che non e' riuscita o non e' partita ([notice], R8 e I8) e la condivisione senza posizione che si prepara ([share], R4).
  */
 @Composable
 internal fun LibraryNotices(
@@ -373,11 +373,13 @@ internal fun LibraryNotices(
   modifier: Modifier = Modifier,
   notice: ActionNotice? = null,
   onDismissNotice: () -> Unit = {},
+  share: LibraryShare = LibraryShare.Idle,
 ) {
-  if (!hasNotices(phone, notice)) return
+  if (!hasNotices(phone, notice, share)) return
   val partial = phone.access == MediaAccess.PARTIAL
   val pending = phone.pendingLocation > 0
   Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(NoticeSpacing), horizontalAlignment = Alignment.CenterHorizontally) {
+    if (share is LibraryShare.Preparing) LibraryShareNotice(share = share, backdrop = backdrop, onCancel = commands::cancelShare)
     if (notice != null) ActionNoticeCard(notice = notice, backdrop = backdrop, onDismiss = onDismissNotice)
     if (partial) {
       GalleryGridNotice(

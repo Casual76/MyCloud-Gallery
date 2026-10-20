@@ -135,6 +135,14 @@ class InMemoryVersionCatalog(private val areas: Map<String, NasArea>) : VersionC
     }
   }
 
+  /**
+   * R16: la **scansione del NAS** riconosce un ritorno a una versione nota (un familiare che copia dal PC un file sopra un altro, nell'area
+   * comune): l'attuale del media diventa [to], le righe del telefono restano dove sono.
+   */
+  fun nasReverted(mediaId: MediaId, to: VersionId) {
+    synchronized(lock) { media.getValue(mediaId).current = to }
+  }
+
   /** Una riga nuova del telefono attribuita al media come sua versione (l'editor che salva una copia dentro una sessione, E-X3). */
   fun phoneCopyAsVersion(mediaId: MediaId, ref: PhoneRef, stamp: FileStamp, size: Long): VersionId = synchronized(lock) {
     val m = media.getValue(mediaId)

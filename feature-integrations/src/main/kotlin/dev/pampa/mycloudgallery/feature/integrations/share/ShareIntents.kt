@@ -45,8 +45,9 @@ class ContextUriRevoker(private val context: Context) : UriRevoker {
 
 /**
  * Cio' che una condivisione (o una sessione di modifica) ha in giro: indirizzi con permessi e file in cache. [release] revoca i permessi e toglie
- * i file; si puo' chiamare piu' volte (la seconda non fa niente). Va chiamato alla fine dell'uso: quando l'utente torna nell'app dopo la
- * condivisione, o la sessione si chiude. Se il processo muore prima, `ShareCache.sweepAtStart` toglie i file all'avvio dopo.
+ * i file; si puo' chiamare piu' volte (la seconda non fa niente). Va chiamato alla fine dell'uso: per una condivisione quando l'altra app ha
+ * finito (`ShareHolder`: al ritorno dell'utente nell'app, o dopo mezz'ora; mai allo spegnersi di un avviso, correzioni 5B MC-1), per una sessione
+ * di modifica quando si chiude. Se il processo muore prima, `ShareCache.sweepAtStart` toglie i file all'avvio dopo.
  */
 class ShareLease(
   private val uris: List<Uri>,

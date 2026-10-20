@@ -13,6 +13,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -28,6 +29,7 @@ import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidStatusBadge
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.backup.contract.NasVersionPlan
+import dev.pampa.mycloudgallery.core.backup.contract.PhoneKeptReason
 import dev.pampa.mycloudgallery.core.backup.contract.RestoreAvailability
 import dev.pampa.mycloudgallery.core.backup.contract.VersionArea
 import dev.pampa.mycloudgallery.core.backup.contract.VersionEntry
@@ -73,12 +75,16 @@ private fun VersionsSheetRoute(
 ) {
   val state by viewModel.state.collectAsStateWithLifecycle()
   BindDialogBridge(viewModel.bridge)
-  LaunchedEffect(mediaId, visible, start) {
-    if (visible) {
+  SheetOpening(
+    key = "versioni-${mediaId.value}-${start.name}",
+    visible = visible,
+    onOpen = {
       viewModel.reset()
       viewModel.bind(mediaId, start)
-    }
-  }
+    },
+    // Stesso foglio dopo una ricreazione (rotazione dello schermo): il ViewModel e' lo stesso e tiene il suo lavoro.
+    onReturn = { viewModel.bind(mediaId, start) },
+  )
   val plan = (state as? VersionsUi.ConfirmRestore)?.plan
   val taps = rememberConfirmTaps(plan, viewModel::monotonicMs)
   VersionsSheet(
@@ -95,6 +101,26 @@ private fun VersionsSheetRoute(
     ),
     onDismissRequest = onDismiss,
   )
+}
+
+/**
+ * VE-5 della verifica funzionale 5B: un foglio della 5B si azzera ([onOpen]) solo quando si apre o cambia [key], non a ogni composizione nuova.
+ * Una rotazione dello schermo ricrea la composizione: prima il foglio chiamava di nuovo `reset()` e cancellava il lavoro in corso, con il
+ * permesso del dialogo appena dato. Il segno "aperto" sopravvive alla ricreazione; dopo una ricreazione si chiama [onReturn].
+ */
+@Composable
+internal fun SheetOpening(key: String, visible: Boolean, onOpen: () -> Unit, onReturn: () -> Unit) {
+  var opened by rememberSaveable(key) { mutableStateOf(false) }
+  LaunchedEffect(key, visible) {
+    when {
+      !visible -> opened = false
+      !opened -> {
+        opened = true
+        onOpen()
+      }
+      else -> onReturn()
+    }
+  }
 }
 
 /** Le uscite del foglio: tutte partono da un tocco. */
@@ -324,6 +350,9 @@ private fun RestoreReason(restore: RestoreAvailability) {
     RestoreAvailability.NOT_MINE -> R.string.backup_versions_why_not_mine
     RestoreAvailability.NOT_AVAILABLE -> R.string.backup_versions_why_not_available
     RestoreAvailability.BUSY -> R.string.backup_versions_why_busy
+    RestoreAvailability.CURRENT_NOT_SAFE -> R.string.backup_versions_why_current_not_safe
+    RestoreAvailability.PAUSED -> R.string.backup_versions_why_paused
+    RestoreAvailability.TEST_ONLY -> R.string.backup_versions_why_test_only
   }
   FluidListGroup {
     FluidListRow(
@@ -343,6 +372,8 @@ private fun MessageGroup(message: VersionsMessage) {
     VersionsMessage.CONFIRMATION_EXPIRED -> R.string.backup_versions_msg_expired
     VersionsMessage.PHONE_PERMISSION_MISSING -> R.string.backup_versions_msg_permission
     VersionsMessage.NO_SYSTEM_DIALOG -> R.string.backup_versions_msg_no_dialog
+    VersionsMessage.SYSTEM_DIALOG_FAILED -> R.string.backup_versions_msg_dialog_failed
+    VersionsMessage.BACKUP_BUSY -> R.string.backup_versions_msg_busy
   }
   FluidListGroup {
     FluidListRow(
@@ -375,6 +406,19 @@ private fun ConfirmContent(state: VersionsUi.ConfirmRestore, taps: ConfirmTaps?,
         plan.current?.takeIf { it.versionId != plan.original?.versionId }?.let { current ->
           FluidListDivider()
           ConfirmRow(R.string.backup_versions_confirm_away_title, current)
+        }
+      }
+      // R3: il foglio dice quale versione c'e' sul telefono e che cosa ne sara'.
+      if (plan.versions.any { it.role != VersionRole.ORIGINAL && VersionPlace.PHONE in it.places }) {
+        FluidListGroup {
+          FluidListRow(
+            title = stringResource(R.string.backup_versions_confirm_phone_title),
+            subtitle = stringResource(R.string.backup_versions_confirm_phone_detail),
+            tone = FluidTone.Info,
+            leading = { Icon(imageVector = Icons.Rounded.Photo, contentDescription = null) },
+            titleMaxLines = 2,
+            disclosure = false,
+          )
         }
       }
     },
@@ -414,17 +458,18 @@ private fun ConfirmRow(titleRes: Int, entry: VersionEntry) {
 
 @Composable
 private fun RestoredContent(state: VersionsUi.Restored, actions: VersionsSheetActions, modifier: Modifier) {
+  val swapPending = state.kept == PhoneKeptReason.SWAP_NOT_FINISHED
   GallerySheetScaffold(
     icon = Icons.Rounded.CheckCircle,
     tone = GallerySheetTone.Brand,
-    title = stringResource(R.string.backup_versions_done_title),
-    message = stringResource(R.string.backup_versions_done_detail),
+    title = stringResource(if (swapPending) R.string.backup_versions_started_title else R.string.backup_versions_done_title),
+    message = stringResource(if (swapPending) R.string.backup_versions_started_detail else R.string.backup_versions_done_detail),
     modifier = modifier,
     body = {
-      if (state.phoneKeptEdited) {
+      state.kept?.let { reason ->
         FluidListGroup {
           FluidListRow(
-            title = stringResource(R.string.backup_versions_done_kept),
+            title = stringResource(keptRes(reason)),
             subtitle = "",
             tone = FluidTone.Info,
             leading = { Icon(imageVector = Icons.Rounded.Warning, contentDescription = null) },
@@ -435,6 +480,14 @@ private fun RestoredContent(state: VersionsUi.Restored, actions: VersionsSheetAc
     },
     actions = { BackupButton(label = stringResource(R.string.backup_versions_close), onClick = actions.close, style = FluidButtonStyle.Tinted) },
   )
+}
+
+/** Perche' sul telefono resta la versione modificata: ogni ragione la sua frase (prima diceva sempre "non hai dato il permesso"). */
+private fun keptRes(reason: PhoneKeptReason): Int = when (reason) {
+  PhoneKeptReason.PERMISSION_DENIED -> R.string.backup_versions_done_kept
+  PhoneKeptReason.SWAP_NOT_FINISHED -> R.string.backup_versions_done_kept_pending
+  PhoneKeptReason.REWRITE_FAILED -> R.string.backup_versions_done_kept_failed
+  PhoneKeptReason.PHONE_CHANGED -> R.string.backup_versions_done_kept_changed
 }
 
 // --- Gli stati senza scelte ---------------------------------------------------------------------------------------------------

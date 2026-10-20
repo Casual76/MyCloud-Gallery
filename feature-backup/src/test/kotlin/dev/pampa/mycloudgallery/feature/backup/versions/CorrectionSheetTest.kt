@@ -268,6 +268,7 @@ class CorrectionSheetTest : ComposeBackupTallTest() {
       CorrectionMessage.CONFIRMATION_EXPIRED to "È passato troppo tempo.",
       CorrectionMessage.PERMISSION_REFUSED to "Hai detto di no al telefono: non è cambiato niente.",
       CorrectionMessage.NO_SYSTEM_DIALOG to "Su questo telefono non posso chiedere il permesso",
+      CorrectionMessage.SYSTEM_DIALOG_FAILED to "Il telefono non ha accettato la richiesta di permesso",
     )
     assertThat(expected.keys).containsExactlyElementsIn(CorrectionMessage.entries)
     for ((message, text) in expected) {
@@ -312,6 +313,7 @@ class CorrectionSheetTest : ComposeBackupTallTest() {
       CorrectionFailure.PHONE_NOT_RESTORED to "Attenzione: il file sul telefono si è rovinato.",
       CorrectionFailure.PHONE_FULL to "Sul telefono non c’è abbastanza spazio.",
       CorrectionFailure.NAS_FAILED to "Il NAS non ha accettato la versione nuova.",
+      CorrectionFailure.PHONE_CHANGED to "non l’ho toccata",
     )
     assertThat(expected.keys).containsExactlyElementsIn(CorrectionFailure.entries)
     for ((code, text) in expected) {
@@ -329,11 +331,38 @@ class CorrectionSheetTest : ComposeBackupTallTest() {
       CorrectionReadiness.FROZEN to "I lavori sul NAS sono fermi",
       CorrectionReadiness.NOT_MINE to "Questo media non è tuo",
       CorrectionReadiness.NOT_AVAILABLE to "La correzione non è ancora pronta.",
+      // VE-7: pausa, prova e lavoro in corso hanno la loro frase (prima: tutti "non è ancora pronta").
+      CorrectionReadiness.PAUSED to "Il backup è in pausa",
+      CorrectionReadiness.TEST_ONLY to "Il backup è ancora in prova",
+      CorrectionReadiness.BUSY to "Sto ancora lavorando su questo media",
+      // VE-4: la rotazione di un formato che non si scrive non si fa.
+      CorrectionReadiness.ROTATION_NOT_WRITABLE to "non si ruota dall’app",
     )
     for ((reason, text) in expected) {
       showState(CorrectionUi.Blocked(reason))
       composeRule.onNodeWithText(text, substring = true).assertExists()
     }
+  }
+
+  /** VE-4: un formato che non si scrive (HEIC, RAW) non offre la rotazione: nessuno la vedrebbe, e il foglio non dice "fatto". */
+  @Test
+  fun ve4_unFormatoCheNonSiScriveNonOffreLaRotazione() {
+    showState(editing(readiness = CorrectionReadiness.FORMAT_NOT_WRITABLE))
+    absent("Ruota a destra")
+    absent("Rotazione")
+    composeRule.onNodeWithText("Data e ora").assertExists()
+  }
+
+  /** VE-3: "Metti al sicuro adesso" fa vedere che lavora; fuori dalle sorgenti lo dice e non offre un tasto che non puo' fare niente. */
+  @Test
+  fun ve3_laMessaAlSicuroSiVedeEFuoriDalleSorgentiLoDice() {
+    showState(CorrectionUi.Safeguarding(subject))
+    composeRule.onNodeWithText("La metto al sicuro…").assertExists()
+    showState(CorrectionUi.NeedsSafeFirst(subject, outsideSources = true))
+    composeRule.onNodeWithText("in una cartella che il backup non guarda", substring = true).assertExists()
+    absent("Metti al sicuro adesso")
+    showState(CorrectionUi.NeedsSafeFirst(subject, stillWaiting = true))
+    composeRule.onNodeWithText("non è ancora finito", substring = true).assertExists()
   }
 
   @Test

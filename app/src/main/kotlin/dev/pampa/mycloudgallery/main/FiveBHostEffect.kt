@@ -1,11 +1,13 @@
 package dev.pampa.mycloudgallery.main
 
+import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -32,9 +34,9 @@ import kotlinx.coroutines.flow.first
  * - i fogli che il viewer chiede ([FiveBUi.sheet]): Versioni (anche al riepilogo di "Ripristina originale"), Correggi / Ruota, "Elimina solo dal
  *   telefono" (che apre "Libera spazio" con la selezione);
  * - il foglio "Elimina…" della 4B sulle copie di versioni precedenti ("Da decidere", "Elimina le intermedie…"): la conferma e' del foglio;
- * - gli intenti verso le altre app (l'editor di "Modifica con…", la scelta dell'app di "Condividi"), lanciati dall'activity;
+ * - l'intento verso l'editor di "Modifica con…", lanciato dall'activity (la scelta dell'app di "Condividi" la lancia `ShareHostEffect`);
  * - la pagina "Libera spazio" quando una selezione la chiede;
- * - al ritorno dell'utente: i permessi della condivisione si revocano e le sessioni di modifica si leggono.
+ * - al ritorno dell'utente: le sessioni di modifica si leggono (le copie condivise le rilascia il custode di `AppShares`, MC-1).
  *
  * Niente parte da solo: tutto e' la risposta a un tocco gia' avvenuto in un foglio o nel viewer.
  */
@@ -48,9 +50,9 @@ internal fun FiveBHostEffect(ui: FiveBUi?, nav: NavController) {
   val launch by ui.launches.collectAsStateWithLifecycle()
   LaunchedEffect(launch) {
     val request = launch ?: return@LaunchedEffect
+    // "Condividi" non passa piu' di qui: lo lancia `ShareHostEffect`, che c'e' anche senza backup (correzioni 5B, R4).
     val ok = when (request) {
       is FiveBLaunch.Edit -> EditIntents.launch(context, request.intent)
-      is FiveBLaunch.Share -> EditIntents.launch(context, request.intent)
     }
     ui.launched(request, ok)
   }
@@ -89,6 +91,14 @@ internal fun FiveBHostEffect(ui: FiveBUi?, nav: NavController) {
 
   val delete by ui.deleteRequest.collectAsStateWithLifecycle()
   delete?.let { request -> VersionDeleteSheet(ui, request) }
+
+  // VE-6: le frasi delle azioni nate fuori dal viewer ("Da decidere", "Elimina le intermedie…") si dicono adesso, dove l'utente e'.
+  val rootNotice by ui.rootNotice.collectAsStateWithLifecycle()
+  LaunchedEffect(rootNotice) {
+    val text = rootNotice ?: return@LaunchedEffect
+    Toast.makeText(context, text, Toast.LENGTH_LONG).show()
+    ui.dismissRootNotice()
+  }
 }
 
 /** Il foglio "Elimina…" della 4B per le copie di versioni precedenti: piano, conferma del foglio, cestino del NAS (30 giorni). */
@@ -103,9 +113,17 @@ private fun VersionDeleteSheet(ui: FiveBUi, request: VersionDeleteRequest) {
     controller.target.filterNotNull().first()
     controller.requestDelete()
   }
+  val resources = LocalResources.current
   LaunchedEffect(controller) {
-    controller.notice.filterNotNull().first { it.started }
-    ui.deleteStarted(request)
+    // VE-6: un piano rifiutato (NAS che non risponde, sola lettura) si dice e il foglio si chiude; prima restava aperto con il tasto spento.
+    val notice = controller.notice.filterNotNull().first()
+    if (notice.started) {
+      ui.deleteStarted(request)
+    } else {
+      controller.dismissNotice()
+      controller.dismiss()
+      ui.deleteRefused(request, resources.getString(notice.text))
+    }
   }
   NasActionSheets(controller = controller, onDeleteFromPhone = {})
 }

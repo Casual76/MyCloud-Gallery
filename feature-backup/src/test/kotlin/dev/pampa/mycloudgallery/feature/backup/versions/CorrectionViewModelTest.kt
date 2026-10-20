@@ -11,6 +11,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.Corrections
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneConfirmation
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneConfirmationRules
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneWriteGrant
+import dev.pampa.mycloudgallery.core.backup.contract.SafeguardStart
 import dev.pampa.mycloudgallery.core.backup.testing.FakeBackupClock
 import dev.pampa.mycloudgallery.core.backup.testing.InMemoryVersionKeeper
 import dev.pampa.mycloudgallery.core.backup.testing.ScriptedCorrections
@@ -19,7 +20,7 @@ import dev.pampa.mycloudgallery.core.model.ExifOrientation
 import dev.pampa.mycloudgallery.core.model.GeoPoint
 import dev.pampa.mycloudgallery.core.model.VersionId
 import dev.pampa.mycloudgallery.feature.backup.free.FakePhoneSystemDialogs
-import dev.pampa.mycloudgallery.feature.backup.testing.RecordingBackupActions
+
 import java.time.LocalDateTime
 import java.util.Optional
 import kotlinx.coroutines.Dispatchers
@@ -51,7 +52,7 @@ class CorrectionViewModelTest {
   private val dialogs = FakePhoneSystemDialogs(ApplicationProvider.getApplicationContext())
   private val corrections = ScriptedCorrections(clock)
   private val keeper = InMemoryVersionKeeper(clock)
-  private val actions = RecordingBackupActions()
+
 
   private val subject = CorrectionSubject(
     mediaId = VersionSamples.media,
@@ -81,7 +82,6 @@ class CorrectionViewModelTest {
     Optional.of(dialogs),
     Optional.of(clock),
     Optional.ofNullable(places),
-    Optional.of(actions),
   )
 
   private fun CorrectionViewModel.editing() = state.value as CorrectionUi.Editing
@@ -113,8 +113,43 @@ class CorrectionViewModelTest {
     val vm = viewModel()
     vm.bind(subject, CorrectionMode.ALL)
     assertThat(vm.state.value).isEqualTo(CorrectionUi.NeedsSafeFirst(subject))
+    // VE-3: "Metti al sicuro adesso" fa partire il lavoro di questo media, il foglio lo mostra e si riapre quando e' al sicuro.
+    corrections.safeguardAnswer = SafeguardStart.STARTED
+    corrections.readinessAfterSafeguard = CorrectionReadiness.READY
     vm.safeguardNow()
-    assertThat(actions.backupNowCalls).isEqualTo(1)
+    assertThat(corrections.safeguarded).containsExactly(subject.mediaId)
+    assertThat(vm.state.value).isEqualTo(CorrectionUi.Safeguarding(subject))
+    advanceTimeBy(3_100)
+    assertThat(vm.editing().readiness).isEqualTo(CorrectionReadiness.READY)
+  }
+
+  /** VE-3: un media fuori dalle sorgenti del backup non si mette al sicuro da qui: il foglio lo dice e il tasto non c'e' piu'. */
+  @Test
+  fun ve3_fuoriDalleSorgentiLoDiceInveceDiRestareUguale() = runTest(dispatcher) {
+    corrections.readiness = CorrectionReadiness.NEEDS_SAFE_FIRST
+    corrections.safeguardAnswer = SafeguardStart.NOT_IN_SOURCES
+    val vm = viewModel()
+    vm.bind(subject, CorrectionMode.ALL)
+    vm.safeguardNow()
+    assertThat(vm.state.value).isEqualTo(CorrectionUi.NeedsSafeFirst(subject, outsideSources = true))
+    corrections.safeguardAnswer = SafeguardStart.UNAVAILABLE
+    vm.reset()
+    vm.bind(subject, CorrectionMode.ALL)
+    vm.safeguardNow()
+    assertThat(vm.state.value).isEqualTo(CorrectionUi.NeedsSafeFirst(subject, notNow = true))
+  }
+
+  /** VE-2: un rifiuto del sistema alla richiesta di permesso non chiude l'app: si torna a scrivere con la frase giusta, niente toccato. */
+  @Test
+  fun ve2_unRifiutoDelSistemaNonChiudeLApp() = runTest(dispatcher) {
+    corrections.phoneRows = listOf(VersionSamples.phoneRow)
+    dialogs.failure = IllegalArgumentException("All requested items must be referenced by specific ID")
+    val vm = viewModel()
+    vm.bind(subject, CorrectionMode.ALL)
+    vm.edit { it.copy(changeDate = true, dateText = "03/10/2026", timeText = "10:00") }
+    vm.apply(vm.confirmation())
+    assertThat(vm.editing().message).isEqualTo(CorrectionMessage.SYSTEM_DIALOG_FAILED)
+    assertThat(corrections.applied).isEmpty()
   }
 
   @Test
@@ -241,6 +276,8 @@ class CorrectionViewModelTest {
   fun senzaIlDialogoDelSistemaNonSiCorreggeNiente() = runTest(dispatcher) {
     corrections.phoneRows = listOf(VersionSamples.phoneRow)
     dialogs.missing = true
+    // Un telefono senza il dialogo e' un Android 10: anche il vero dice `available = false` (VE-2 distingue un rifiuto del sistema).
+    dialogs.available = false
     val vm = viewModel()
     vm.bind(subject, CorrectionMode.ALL)
     vm.edit { it.copy(place = PlaceEdit.CLEAR) }

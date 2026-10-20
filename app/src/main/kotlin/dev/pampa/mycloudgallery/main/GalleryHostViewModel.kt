@@ -11,6 +11,7 @@ import dev.pampa.mycloudgallery.feature.library.library.LibraryTabState
 import dev.pampa.mycloudgallery.feature.viewer.ViewerServices
 import dev.pampa.mycloudgallery.gallery.AppLibraryStates
 import dev.pampa.mycloudgallery.gallery.GalleryGraph
+import dev.pampa.mycloudgallery.integrations.AppShares
 import dev.pampa.mycloudgallery.backup.FiveBUi
 import java.util.Optional
 import javax.inject.Inject
@@ -38,6 +39,9 @@ class GalleryHostViewModel @Inject constructor(
 
   /** Fase 5B (P14): i fogli alla radice, "Libera spazio" con la selezione e gli intenti verso le altre app; null senza backup. */
   val fiveB: FiveBUi? = fiveB.orElse(null)
+
+  /** Correzioni 5B (R4, MC-1): ogni "Condividi" dell'app (viewer e selezione), con o senza backup; null solo prima che l'app lo leghi. */
+  val shares: AppShares? get() = gallery.shares
 
   /** Il viewer delle Raccolte, dei Nascosti e delle griglie filtrate: il grafo vero. */
   val viewerServices: ViewerServices get() = gallery.viewerServices

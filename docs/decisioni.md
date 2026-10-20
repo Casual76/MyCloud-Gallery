@@ -2202,6 +2202,8 @@ dal backup; se sul tablet un id e' diverso (capita da solo, a caso) le copie dev
 dati personali, e il confronto non deve riunirle.
 
 ## Fase 5B: P14, la 5B nell'app (20/10)
+
+**Confermate dall'utente (20/10):** (1) "Ripristina originale" con il permesso di scrittura negato: lo scambio sul NAS si fa e il telefono tiene la modifica (E-E10, non la proposta di P12); (2) dalla 5B la modifica di una foto gia' al sicuro e' una versione: l'originale va in `Versioni/` con una rinomina, intatto (`BackupIntegrationTest.eB15` aggiornato).
 Fonte: `docs/fase5-progetto.md` (§1.4, §2.4, §2.5, §2.7, riga P14 del §4.4, §5.6 F34–F45, §6.4, §9.1), le sezioni P0-B…P13 e «Correzioni della prova 5B»
 qui sopra, le note di passaggio dei pacchetti (ogni riga «P14» e «!!» e' qui sotto, fatta o motivata), `docs/review/funzionale-fasi-1-5a.md` (i difetti
 da non ripetere: tasti che non fanno niente, porte mai legate, condizioni non vere al momento della chiamata, finti diversi dai veri). Nessuna

@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.core.personal.store
 
+import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalApplyResult
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalEntry
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalFingerprint
@@ -133,6 +134,11 @@ class LedgerPersonalStore(
     ensureLoaded()
     effectiveNow()
   }
+
+  /** Dal catalogo, attraverso la proiezione: niente stato dello store, quindi fuori dal lucchetto. */
+  override suspend fun fingerprintOfMedia(mediaId: String): PersonalFingerprint? = projection.fingerprintOfMedia(mediaId)
+
+  override suspend fun mediaWithFingerprint(fingerprint: PersonalFingerprint): MediaId? = projection.mediaWithFingerprint(fingerprint)
 
   override suspend fun undated(): List<PersonalKey> = lock.withLock {
     ensureLoaded()

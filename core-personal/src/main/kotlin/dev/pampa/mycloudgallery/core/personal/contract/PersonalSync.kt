@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.core.personal.contract
 
+import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.StableCode
 import dev.pampa.mycloudgallery.core.trust.data.HeadMark
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
@@ -118,6 +119,20 @@ interface PersonalStore {
    * simili fatta senza rete: il gruppo non si deve riformare, E-L13). Di serie lo stato unito.
    */
   suspend fun effective(): Map<PersonalKey, PersonalEntry> = entries.value
+
+  /**
+   * L'impronta (dimensione e `qh1`) del media [mediaId] del catalogo di questo dispositivo, per una voce che lo nomina senza esserne
+   * il soggetto: l'altro media di una separazione fra copie simili ([PersonalValue.Apart]). Null se il catalogo non lo conosce. Di
+   * serie null (nessun catalogo).
+   */
+  suspend fun fingerprintOfMedia(mediaId: String): PersonalFingerprint? = null
+
+  /**
+   * Il media del catalogo di questo dispositivo con l'impronta [fingerprint], **solo se e' uno** (§2.9: due media con la stessa impronta
+   * rapida, L32, non si confondono mai): per ritrovare il media di una voce scritta da un altro dispositivo con un id che qui non c'e'.
+   * Null se non c'e' o se sono piu' di uno. Di serie null (nessun catalogo).
+   */
+  suspend fun mediaWithFingerprint(fingerprint: PersonalFingerprint): MediaId? = null
 }
 
 /** L'ultima testa `personal` pubblicata da questo dispositivo: serve a non ripubblicare cio' che e' gia' sul NAS e a rispettare M3. */

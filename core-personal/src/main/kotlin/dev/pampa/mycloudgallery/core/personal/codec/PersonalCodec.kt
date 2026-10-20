@@ -7,6 +7,7 @@ import dev.pampa.mycloudgallery.core.personal.contract.PersonalKey
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalKind
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalLimits
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalValue
+import dev.pampa.mycloudgallery.core.personal.contract.SimilarCopiesRecords
 import dev.pampa.mycloudgallery.core.trust.RejectReason
 import dev.pampa.mycloudgallery.core.trust.TrustLimits
 import dev.pampa.mycloudgallery.core.trust.TrustViolation
@@ -71,7 +72,11 @@ private inline fun <T> fieldOf(block: () -> T): T =
  * - `media`: il soggetto (id del media o dell'album, o [dev.pampa.mycloudgallery.core.personal.contract.PersonalFields.SETTINGS_SUBJECT]);
  * - `field`: il campo;
  * - `fp` (facoltativo): `{"qh":…,"size":…}`, `qh1` in base32 e dimensione del media, per ritrovarlo se le identita' divergono;
- * - `value` (assente = lapide): vero/falso, intero o testo.
+ * - `value` (assente = lapide): vero/falso, intero o testo. Nella voce di una separazione fra copie simili (chiave
+ *   [dev.pampa.mycloudgallery.core.personal.contract.SimilarCopiesRecords.separation]) un testo e' l'impronta dell'altro media,
+ *   `<qh1 in base32>:<dimensione>` ([PersonalValue.Apart]): un testo d'altra forma li' scarta il segmento come ogni campo fuori forma.
+ *   E' un testo per il formato: nessun campo e nessun tipo di valore nuovo, quindi nessuna versione nuova (§10); una versione
+ *   precedente lo legge come un testo e non separa niente.
  *
  * Il **tipo** non e' nel corpo: lo dice la chiave della tabella (impronta di tipo, soggetto e campo), che chi legge ricalcola per
  * ogni tipo. Una chiave che non e' l'impronta di nessun tipo noto scarta il segmento.
@@ -117,7 +122,7 @@ object PersonalRecords {
       val fingerprint = if ("fp" in rest.members) f.obj("fp") { g -> readFingerprint(g) } else null
       ensure(!TextRules.hasForbidden(field) && !TextRules.hasForbidden(subject), RejectReason.INVALID_FIELD, "voce: caratteri non ammessi")
       val key = keyOf(tableKey, subject, field)
-      fieldOf { PersonalEntry(key, at, author, valueOf(rawValue), fingerprint) }
+      fieldOf { PersonalEntry(key, at, author, valueOf(rawValue, key), fingerprint) }
     }
   }
 
@@ -137,14 +142,19 @@ object PersonalRecords {
     return fieldOf { PersonalFingerprint(size, QuickHash(hex(bytes))) }
   }
 
-  private fun valueOf(raw: JsonValue?): PersonalValue = when (raw) {
+  private fun valueOf(raw: JsonValue?, key: PersonalKey): PersonalValue = when (raw) {
     null -> PersonalValue.Removed
     is JsonBool -> PersonalValue.Flag(raw.value)
     is JsonInt -> PersonalValue.Number(raw.value)
     is JsonString -> {
       ensure(raw.value.length <= PersonalValue.MAX_TEXT, RejectReason.TOO_LARGE, "voce: testo troppo lungo")
       ensure(!TextRules.hasForbidden(raw.value), RejectReason.INVALID_FIELD, "voce: caratteri non ammessi")
-      PersonalValue.Text(raw.value)
+      // Il testo di una separazione e' l'impronta dell'altro media, in una forma sola.
+      if (SimilarCopiesRecords.separatedPair(key) == null) {
+        PersonalValue.Text(raw.value)
+      } else {
+        PersonalValue.Apart.parse(raw.value) ?: violation(RejectReason.INVALID_FIELD, "voce: impronta della separazione")
+      }
     }
     else -> violation(RejectReason.MALFORMED, "voce: valore")
   }
@@ -161,6 +171,7 @@ object PersonalRecords {
         is PersonalValue.Flag -> value.on.json()
         is PersonalValue.Number -> value.value.json()
         is PersonalValue.Text -> value.text.json()
+        is PersonalValue.Apart -> value.text.json()
         PersonalValue.Removed -> null
       },
     )

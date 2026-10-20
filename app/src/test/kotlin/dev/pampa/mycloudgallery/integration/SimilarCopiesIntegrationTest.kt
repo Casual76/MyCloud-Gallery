@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
+import dev.pampa.mycloudgallery.core.database.entity.MediaAliasEntity
 import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
 import dev.pampa.mycloudgallery.core.library.similar.ChoiceOutcome
 import dev.pampa.mycloudgallery.core.library.similar.CopyPlace
@@ -105,8 +106,22 @@ class SimilarCopiesIntegrationTest {
     return (0 until view.size).map { view.snapshot.idAt(view.snapshotIndex(it)) }
   }
 
+  /**
+   * Le identita' dei file del NAS convergono al minore (D7) e un media con la copia sul telefono tiene la sua (D8): fra due dispositivi la
+   * stessa foto puo' avere lo stesso id o due id diversi, e quale dei due casi capita dipende da quale id casuale e' minore. Le due prove
+   * qui sotto fissano il caso invece di prendere quello che capita: la scelta deve arrivare in entrambi.
+   */
   @Test
-  fun laCopiaRicompressataEL_originaleStannoInUnaCellaESeparaArrivaAllAltroDispositivo() = runBlocking<Unit> {
+  fun laCopiaRicompressataEL_originaleStannoInUnaCellaESeparaArrivaAllAltroDispositivo_stessiId() = runBlocking<Unit> {
+    separaArrivaAllAltroDispositivo(sameIds = true)
+  }
+
+  @Test
+  fun laCopiaRicompressataEL_originaleStannoInUnaCellaESeparaArrivaAllAltroDispositivo_idDiversi() = runBlocking<Unit> {
+    separaArrivaAllAltroDispositivo(sameIds = false)
+  }
+
+  private suspend fun separaArrivaAllAltroDispositivo(sameIds: Boolean) {
     val backend = TestNas.backend(time)
     val phone = TestDevice(app, File(temp.root, "telefono"), TestPlatform(time, backend)).also { devices += it }
     phone.graph.start()
@@ -142,8 +157,10 @@ class SimilarCopiesIntegrationTest {
     a.nas.flushOutbox()
 
     // Il tablet non ha l'originale sul telefono: lo conosce solo dal NAS (la copia nell'area privata e quella ricompressa nell'area comune).
+    // Con gli stessi id scarica l'indice prima della scansione e adotta le identita' del telefono dove sono minori delle sue (D7); con id
+    // diversi non lo scarica, e i due file del NAS hanno solo le identita' che il tablet ha dato loro.
     val b = rig(tablet, backend)
-    b.open(adoptIndex = true)
+    b.open(adoptIndex = sameIds)
     assertWithMessage("catalogo del tablet: ${b.dump()}").that(b.mediaCount()).isEqualTo(2)
 
     // Prima del confronto sono due celle: l'originale (telefono e NAS) e la copia ricompressa del NAS.
@@ -175,6 +192,24 @@ class SimilarCopiesIntegrationTest {
     val tabletCover = b.ids(count = 1).single()
     assertThat(checkNotNull(tabletDetector.groupOf(tabletCover)).copies).hasSize(2)
 
+    // Il caso delle identita', fissato. La voce di "Separa" nomina i due media con gli id del telefono.
+    val catalog = b.gallery.core().catalog
+    if (sameIds) {
+      // Dove il tablet ha tenuto il suo id (era il minore: D7), l'adozione non lascia traccia di quello del telefono. La prova mette il tablet
+      // nello stato del caso "stessi id" (l'id del telefono si risolve qui) con un alias, come quello che lascia un'adozione nell'altro verso.
+      val phoneCatalog = a.gallery.core().catalog
+      for (id in listOf(cover, other)) {
+        if (catalog.resolve(id) != null) continue
+        val fingerprint = checkNotNull(phoneCatalog.media(id)).currentVersion.fingerprint
+        val here = b.gallery.database.versionDao().byQuickFingerprint(fingerprint.size, fingerprint.quickHash.hex).map { it.mediaId }.distinct().single()
+        b.gallery.database.mediaDao().insertAlias(MediaAliasEntity(aliasId = id.value, mediaId = here, mergedAt = time.now()))
+      }
+      assertWithMessage("tablet: ${b.allIds()}").that(listOf(cover, other).map { catalog.resolve(it) }).doesNotContain(null)
+    } else {
+      // Nessuno dei due id del telefono e' noto al tablet: la voce si puo' ritrovare solo per impronta.
+      assertWithMessage("tablet: ${b.allIds()}").that(listOf(cover, other).map { catalog.resolve(it) }).containsExactly(null, null)
+    }
+
     // "Separa" sul telefono: l'altra copia esce dal gruppo per sempre (due celle) e la scelta viaggia come dato personale.
     assertThat(detector.separate(other)).isEqualTo(ChoiceOutcome.APPLIED)
     // BK-11: la scelta chiede la sincronizzazione dei dati personali accorpata, come preferiti e nascosti (non aspetta il giro periodico).
@@ -191,25 +226,17 @@ class SimilarCopiesIntegrationTest {
     assertWithMessage("tablet: $applied").that(applied.applied).isAtLeast(1)
     assertThat(applied.rejected).isEmpty()
 
-    // La scelta nomina i due media con le identita' del telefono (`similar_apart:<id>`). Il tablet la porta al catalogo se conosce entrambe:
-    // le identita' dei file del NAS convergono al minore (D7) e un media con la copia sul telefono tiene la sua (D8), quindi dopo la prima
-    // lettura dell'indice possono coincidere o no. Se coincidono le sue due copie tornano due celle, subito e per sempre; se no la voce
-    // resta in attesa (`unresolved`) e le copie restano unite finche' il tablet non conosce l'identita' (limite dichiarato in decisioni.md).
-    val catalog = b.gallery.core().catalog
-    val tabletKnowsBoth = listOf(cover, other).all { catalog.resolve(it) != null }
+    // La scelta nomina i due media con le identita' del telefono (`similar_apart:<id>`) e porta l'impronta di entrambi: il tablet li ritrova
+    // per id o, se non li conosce, per impronta. In tutti e due i casi le sue due copie tornano due celle, subito e per sempre.
+    assertWithMessage("tablet: $applied").that(applied.unresolved).isEqualTo(0)
     val rerun = tabletDetector.run(60.seconds)
-    if (tabletKnowsBoth) {
-      val twoCells = withTimeoutOrNull(30.seconds) { b.gallery.repository.view(LibraryFilter.ALL).first { it.size == 2 } }
-      assertWithMessage("tablet dopo Separa: giro=$rerun; telefono: copertina=$cover altra=$other; tablet: ${b.allIds()}").that(twoCells).isNotNull()
-      assertThat(b.groupedCount()).isEqualTo(0)
-      // Il confronto non le riunisce piu': separare e' per sempre.
-      tabletDetector.run(60.seconds)
-      assertThat(b.groupedCount()).isEqualTo(0)
-      b.ids(count = 2)
-    } else {
-      assertWithMessage("tablet: $applied").that(applied.unresolved).isAtLeast(1)
-      assertThat(b.groupedCount()).isEqualTo(2)
-    }
+    val twoCells = withTimeoutOrNull(30.seconds) { b.gallery.repository.view(LibraryFilter.ALL).first { it.size == 2 } }
+    assertWithMessage("tablet dopo Separa: giro=$rerun; telefono: copertina=$cover altra=$other; tablet: ${b.allIds()}").that(twoCells).isNotNull()
+    assertThat(b.groupedCount()).isEqualTo(0)
+    // Il confronto non le riunisce piu': separare e' per sempre.
+    tabletDetector.run(60.seconds)
+    assertThat(b.groupedCount()).isEqualTo(0)
+    b.ids(count = 2)
     assertThat(backend.fileCount(TestNas.COMMON)).isAtLeast(1)
   }
 

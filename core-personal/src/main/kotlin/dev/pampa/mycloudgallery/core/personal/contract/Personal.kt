@@ -88,6 +88,7 @@ object PersonalFields {
   // media, come preferito e nascosto) con campi nuovi: il formato della classe `personal` NON cambia (il tipo si riconosce dalla
   // chiave, e `MEDIA_FLAG` c'e' gia'; una versione precedente dell'app le legge e le lascia stare, la proiezione sul catalogo
   // risponde NOT_PROJECTED ai campi che non conosce). Le costruisce [SimilarCopiesRecords]; le proietta sul catalogo P15.
+  // 20/10: il valore di una separazione porta l'impronta dell'altro media ([PersonalValue.Apart]), un testo per il formato: vedi li'.
 
   /** "Mostra questa come principale": [PersonalValue.Flag] vero sulla copia scelta; fra due scelte vince la piu' recente. */
   const val SIMILAR_COVER: String = "similar_cover"
@@ -97,7 +98,8 @@ object PersonalFields {
 
   /**
    * Il campo della separazione da [otherMediaId] ("Separa", E-L13): `similar_apart:<id dell'altro media>`. Una voce per coppia,
-   * sul media minore: la separazione e' simmetrica e vale per sempre ([PersonalValue.Removed] la toglie).
+   * sul media minore: la separazione e' simmetrica e vale per sempre ([PersonalValue.Removed] la toglie). Il valore e'
+   * [PersonalValue.Apart] (l'impronta dell'altro media), o `true` se la voce e' del formato di prima ([SimilarCopiesRecords.apart]).
    */
   fun similarApart(otherMediaId: String): String = "$SIMILAR_APART:$otherMediaId"
 
@@ -112,7 +114,7 @@ object PersonalFields {
 /**
  * Le chiavi delle due scelte dell'utente sulle copie simili (D36, §2.12), come **firme**: la logica (quale copertina vince, quando un
  * gruppo si scioglie, la proiezione sulle tabelle locali di P1) e' di P15. Nessuna versione nuova del formato: sono voci `MEDIA_FLAG`
- * con i campi di [PersonalFields] (vedi la nota li').
+ * con i campi di [PersonalFields] (vedi la nota li'), e il valore di una separazione e' un testo ([PersonalValue.Apart]).
  */
 object SimilarCopiesRecords {
 
@@ -120,8 +122,8 @@ object SimilarCopiesRecords {
   fun cover(mediaId: String): PersonalKey = PersonalKey(PersonalKind.MEDIA_FLAG, mediaId, PersonalFields.SIMILAR_COVER)
 
   /**
-   * La voce "[a] e [b] non sono copie simili" (valore: [PersonalValue.Flag] vero; lapide = di nuovo unibili). Simmetrica: la stessa
-   * chiave per (a, b) e (b, a), sul media minore, cosi' due dispositivi che separano la stessa coppia scrivono la stessa voce.
+   * La voce "[a] e [b] non sono copie simili" (valore: [apart]; lapide = di nuovo unibili). Simmetrica: la stessa chiave per (a, b) e
+   * (b, a), sul media minore, cosi' due dispositivi che separano la stessa coppia con gli stessi id scrivono la stessa voce.
    */
   fun separation(a: String, b: String): PersonalKey {
     require(a != b) { "Una separazione e' fra due media diversi." }
@@ -129,12 +131,25 @@ object SimilarCopiesRecords {
     return PersonalKey(PersonalKind.MEDIA_FLAG, low, PersonalFields.similarApart(high))
   }
 
-  /** La coppia separata da [key], o null se [key] non e' una separazione. */
+  /** La coppia separata da [key] (il soggetto, poi l'altro media del campo), o null se [key] non e' una separazione. */
   fun separatedPair(key: PersonalKey): Pair<String, String>? {
     if (key.kind != PersonalKind.MEDIA_FLAG) return null
     val other = PersonalFields.similarApartOther(key.field) ?: return null
     return key.subject to other
   }
+
+  /**
+   * Il valore di una separazione: [PersonalValue.Apart] con l'impronta di [other], l'**altro** media (quello del campo; l'impronta del
+   * soggetto la porta la voce, [PersonalEntry.fingerprint]). Senza impronta (un media che questo catalogo non conosce) resta il `true`
+   * del formato di prima, che gli altri dispositivi ritrovano solo per id.
+   */
+  fun apart(other: PersonalFingerprint?): PersonalValue = if (other == null) PersonalValue.Flag(true) else PersonalValue.Apart(other)
+
+  /** Vero se [value] separa: [PersonalValue.Apart] o il `true` del formato di prima. La lapide e il flag spento no (di nuovo unibili). */
+  fun separates(value: PersonalValue): Boolean = value is PersonalValue.Apart || (value as? PersonalValue.Flag)?.on == true
+
+  /** L'impronta dell'altro media di una separazione, se la voce la porta (null nel formato di prima: si ritrova solo per id). */
+  fun otherFingerprint(value: PersonalValue): PersonalFingerprint? = (value as? PersonalValue.Apart)?.other
 }
 
 /**
@@ -182,10 +197,57 @@ sealed interface PersonalValue {
 
   data object Removed : PersonalValue
 
+  /**
+   * Una separazione fra copie simili ("Separa", D36), con l'impronta dell'**altro** media della coppia, quello che la chiave nomina nel
+   * campo (`similar_apart:<id>`): un altro dispositivo, dove la stessa foto puo' avere un altro id (D7, D8), lo ritrova anche per
+   * impronta, come ritrova il soggetto con [PersonalEntry.fingerprint]. Solo nelle voci di una separazione.
+   *
+   * Nel formato e' un **testo** ([text], §5.5-bis): nessun campo nuovo e nessun tipo nuovo di valore, quindi nessuna versione nuova.
+   * Una versione precedente dell'app lo legge come un testo qualunque, non lo prende per una separazione (non separa niente) e non
+   * scarta il segmento; questa versione legge come prima il `true` delle voci scritte prima (l'altro media solo per id).
+   */
+  data class Apart(val other: PersonalFingerprint) : PersonalValue {
+
+    /** La forma nel formato: `qh1` in base32 (52 caratteri, come `fp.qh`), `:`, la dimensione in decimale (senza zeri davanti). */
+    val text: String get() = "${Base32.encode(bytesOfHex(other.quickHash.hex))}:${other.size}"
+
+    /** Mai l'impronta di un media dell'utente nei log. */
+    override fun toString(): String = "Apart"
+
+    companion object {
+      private const val QUICK_HASH_BYTES = 32
+      private val SIZE = Regex("^(0|[1-9][0-9]{0,18})$")
+
+      /** Il valore scritto come [text], o null se [text] non ha esattamente quella forma (una sola scrittura per ogni impronta). */
+      fun parse(text: String): Apart? {
+        val colon = text.indexOf(':')
+        if (colon != Base32.encodedLength(QUICK_HASH_BYTES)) return null
+        val quick = text.substring(0, colon)
+        val size = text.substring(colon + 1)
+        if (!SIZE.matches(size) || !Base32.isCanonical(quick, QUICK_HASH_BYTES)) return null
+        val bytes = size.toLongOrNull() ?: return null
+        return Apart(PersonalFingerprint(bytes, QuickHash(hexOf(Base32.decodeExact(quick, QUICK_HASH_BYTES)))))
+      }
+    }
+  }
+
   companion object {
     const val MAX_TEXT: Int = 1024
   }
 }
+
+private fun hexOf(bytes: ByteArray): String {
+  val digits = "0123456789abcdef"
+  val out = CharArray(bytes.size * 2)
+  bytes.forEachIndexed { i, b ->
+    val v = b.toInt() and 0xff
+    out[i * 2] = digits[v ushr 4]
+    out[i * 2 + 1] = digits[v and 0x0f]
+  }
+  return String(out)
+}
+
+private fun bytesOfHex(text: String): ByteArray = ByteArray(text.length / 2) { i -> text.substring(i * 2, i * 2 + 2).toInt(16).toByte() }
 
 /** Dimensione e `qh1` del media, per ritrovarlo se le identita' divergono fra dispositivi (§2.9). */
 data class PersonalFingerprint(val size: Long, val quickHash: QuickHash) {
@@ -211,6 +273,7 @@ data class PersonalEntry(
   init {
     require(TrustIds.isValid(author)) { "L'autore e' un id di dispositivo." }
     require(atNas >= 0) { "Ora negativa." }
+    require(value !is PersonalValue.Apart || SimilarCopiesRecords.separatedPair(key) != null) { "L'impronta dell'altro media e' solo di una separazione." }
   }
 
   override fun toString(): String = "PersonalEntry(${key.kind.code}, at=$atNas)"
@@ -288,9 +351,9 @@ object PersonalMerge {
   }
 
   /**
-   * L'ordine dei valori a parita' di ora e di autore: flag (falso prima), numeri, lapide, testi. Nessuna conversione in testo
-   * (un numero negativo non deve ordinarsi male): e' un ordine totale perche' ogni valore ha un solo rango e dentro il rango un
-   * solo confronto.
+   * L'ordine dei valori a parita' di ora e di autore: flag (falso prima), numeri, lapide, testi, separazioni con l'impronta
+   * ([PersonalValue.Apart], per la loro forma nel formato). Nessuna conversione in testo (un numero negativo non deve ordinarsi
+   * male): e' un ordine totale perche' ogni valore ha un solo rango e dentro il rango un solo confronto.
    */
   fun compareValues(a: PersonalValue, b: PersonalValue): Int {
     val byRank = rank(a).compareTo(rank(b))
@@ -299,6 +362,7 @@ object PersonalMerge {
       is PersonalValue.Flag -> a.on.compareTo((b as PersonalValue.Flag).on)
       is PersonalValue.Number -> a.value.compareTo((b as PersonalValue.Number).value)
       is PersonalValue.Text -> a.text.compareTo((b as PersonalValue.Text).text)
+      is PersonalValue.Apart -> a.text.compareTo((b as PersonalValue.Apart).text)
       PersonalValue.Removed -> 0
     }
   }
@@ -308,6 +372,7 @@ object PersonalMerge {
     is PersonalValue.Number -> 1
     PersonalValue.Removed -> 2
     is PersonalValue.Text -> 3
+    is PersonalValue.Apart -> 4
   }
 
   /** Senza impronta prima di con impronta; poi dimensione e `qh1`. */

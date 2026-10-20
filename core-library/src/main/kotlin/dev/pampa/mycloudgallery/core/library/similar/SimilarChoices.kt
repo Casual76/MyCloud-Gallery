@@ -19,7 +19,11 @@ interface SimilarChoices {
    */
   suspend fun chosenCover(members: Collection<MediaId>): MediaId?
 
-  /** Le coppie separate dall'utente con entrambi i media in [ids]. */
+  /**
+   * Le coppie separate dall'utente con entrambi i media in [ids], con le identita' di questo catalogo: anche quelle separate su un altro
+   * dispositivo, dove la stessa foto puo' avere un altro id (la voce porta l'impronta di entrambi i media e si ritrova anche cosi'; mai
+   * se l'impronta indica piu' media). Il rilevatore non decide niente dagli id: "Separa" vale uguale su ogni dispositivo.
+   */
   suspend fun separatedPairs(ids: Collection<MediaId>): SeparatedPairs
 
   /**

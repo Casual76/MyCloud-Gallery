@@ -46,6 +46,12 @@ interface PersonalProjection {
   /** Dimensione e `qh1` del media a cui si riferisce [key] (per ritrovarlo su un altro dispositivo, §2.9), o null. */
   suspend fun fingerprintOf(key: PersonalKey): PersonalFingerprint?
 
+  /** Dimensione e `qh1` del media [mediaId] (l'altro media di una separazione, [PersonalValue.Apart]), o null. Di serie null. */
+  suspend fun fingerprintOfMedia(mediaId: String): PersonalFingerprint? = null
+
+  /** Il media con l'impronta [fingerprint], solo se e' uno (mai uno a caso fra piu' candidati), o null. Di serie null. */
+  suspend fun mediaWithFingerprint(fingerprint: PersonalFingerprint): MediaId? = null
+
   /**
    * I preferiti e i nascosti di ogni media che ha una riga nel catalogo (acceso o spento), qualunque ne sia la storia: lo store
    * adotta come proprie le differenze dallo stato unito che non sono ancora una voce (preferiti fatti prima che la
@@ -131,33 +137,45 @@ class CatalogPersonalProjection(
    * dal gruppo il media con piu' separazioni **dentro il gruppo** (chi e' stato separato ha una voce per ogni altra copia, quindi ha il
    * grado piu' alto), uno alla volta, finche' nel gruppo non resta nessuna coppia separata. Se il grado piu' alto e' di piu' media (le
    * voci di una stessa separazione si scrivono una alla volta) non si sceglie: si aspetta la voce dopo, e se non arriva il rilevatore
-   * rifa' i gruppi con tutte le separazioni. Un gruppo rimasto con una copia sola si scioglie (`MediaCatalog.separate`). Non scrive voci: il rilevatore
-   * legge le stesse voci e non rifa' mai il gruppo. Una lapide (di nuovo unibili) non fa niente: al giro dopo il rilevatore puo' riunirle.
+   * rifa' i gruppi con tutte le separazioni. Rimasti in due, separati, il gruppo si scioglie (`MediaCatalog.separate`). Non scrive voci:
+   * il rilevatore legge le stesse voci e non rifa' mai il gruppo. Una lapide (di nuovo unibili) non fa niente: al giro dopo il
+   * rilevatore puo' riunirle.
+   *
+   * **Id diversi** (20/10). La voce nomina i due media con gli id del dispositivo che l'ha scritta, che qui possono non esserci (D7, D8):
+   * il soggetto si ritrova anche con l'impronta della voce, l'altro con quella del valore ([PersonalValue.Apart]); una voce del formato
+   * di prima (`true`) ritrova l'altro solo per id. Un'impronta che indica piu' media non indica nessuno: la voce resta in attesa e non
+   * separa una copia a caso (E-S11: una voce letta dal NAS e' un dato). Lo stesso per le separazioni dello stato. Chi esce non dipende
+   * mai dagli id locali: dai legami (gli stessi su ogni dispositivo), e due soli media escono entrambi.
    */
   private suspend fun applySimilarApart(entry: PersonalEntry, state: Map<PersonalKey, PersonalEntry>): ProjectionResult {
     val (low, high) = SimilarCopiesRecords.separatedPair(entry.key) ?: return ProjectionResult.NOT_PROJECTED
     if (mediaIdOrNull(low) == null || mediaIdOrNull(high) == null) return ProjectionResult.NOT_PROJECTED
-    if ((entry.value as? PersonalValue.Flag)?.on != true) return ProjectionResult.APPLIED
+    if (!SimilarCopiesRecords.separates(entry.value)) return ProjectionResult.APPLIED
     val a = resolve(low, entry.fingerprint)
-    val b = resolve(high, null)
+    val b = resolve(high, SimilarCopiesRecords.otherFingerprint(entry.value))
     if (a == null || b == null) return ProjectionResult.UNRESOLVED
+    // Le due copie sono qui un media solo (un'unione): non c'e' niente da separare.
+    if (a == b) return ProjectionResult.APPLIED
     val group = catalog.similarGroupOf(a) ?: return ProjectionResult.APPLIED
     val members = group.members.map { it.mediaId }
     if (b !in members) return ProjectionResult.APPLIED
-    // Le coppie separate dentro il gruppo: questa e quelle dello stato (con l'id con cui sono state scritte, risolto all'identita' attuale).
+    // Le coppie separate dentro il gruppo: questa e quelle dello stato (con gli id con cui sono state scritte, ritrovate qui per id o impronta).
     val edges = HashSet<Pair<MediaId, MediaId>>()
     edges += orderedPair(a, b)
     val inGroup = members.toSet()
     for ((stateKey, separation) in state) {
       if (stateKey.kind != PersonalKind.MEDIA_FLAG || !PersonalFields.isSimilarApart(stateKey.field)) continue
-      if ((separation.value as? PersonalValue.Flag)?.on != true) continue
-      val (lowRaw, highRaw) = SimilarCopiesRecords.separatedPair(stateKey) ?: continue
-      val x = mediaIdOrNull(lowRaw)?.let { catalog.resolve(it) } ?: continue
-      val y = mediaIdOrNull(highRaw)?.let { catalog.resolve(it) } ?: continue
-      if (x != y && x in inGroup && y in inGroup) edges += orderedPair(x, y)
+      val pair = separatedMedia(stateKey, separation) ?: continue
+      if (pair.first in inGroup && pair.second in inGroup) edges += pair
     }
     val remaining = members.toMutableSet()
     while (edges.isNotEmpty()) {
+      if (remaining.size == 2) {
+        // Due soli media, separati: il gruppo si scioglie, ed escono entrambi. Nessuna scelta di chi esce, quindi niente che dipenda dagli
+        // id locali (la stessa foto puo' averne due diversi su due dispositivi) ne' dall'ordine di arrivo delle voci.
+        remaining.forEach { catalog.separate(it) }
+        break
+      }
       val degree = HashMap<MediaId, Int>()
       for ((x, y) in edges) {
         degree[x] = (degree[x] ?: 0) + 1
@@ -165,14 +183,10 @@ class CatalogPersonalProjection(
       }
       val most = degree.values.max()
       val top = degree.filterValues { it == most }.keys
-      val leaver = when {
-        top.size == 1 -> top.single()
-        // Due soli media: esce uno qualunque, il gruppo si scioglie in ogni caso (l'identita' maggiore, uguale su ogni dispositivo).
-        remaining.size == 2 -> top.maxBy { it.value }
-        // Piu' media con lo stesso grado (di solito la prima di piu' voci di una stessa separazione, scritte una alla volta): non si sa
-        // ancora chi e' stato separato. Si aspetta la voce dopo; se non arriva, il rilevatore rifa' i gruppi con tutte le separazioni.
-        else -> break
-      }
+      // Piu' media con lo stesso grado (di solito la prima di piu' voci di una stessa separazione, scritte una alla volta): non si sa
+      // ancora chi e' stato separato. Si aspetta la voce dopo; se non arriva, il rilevatore rifa' i gruppi con tutte le separazioni.
+      if (top.size != 1) break
+      val leaver = top.single()
       catalog.separate(leaver)
       remaining -= leaver
       edges.removeAll { it.first == leaver || it.second == leaver }
@@ -180,15 +194,36 @@ class CatalogPersonalProjection(
     return ProjectionResult.APPLIED
   }
 
+  /**
+   * Le due copie di una separazione accesa ([key], [entry]) nel catalogo di qui, per id o per impronta, in ordine d'identita'. Null se non
+   * e' una separazione accesa, se un media non si ritrova (o la sua impronta ne indica piu' d'uno) o se sono qui lo stesso media.
+   */
+  private suspend fun separatedMedia(key: PersonalKey, entry: PersonalEntry): Pair<MediaId, MediaId>? {
+    if (!SimilarCopiesRecords.separates(entry.value)) return null
+    val (lowRaw, highRaw) = SimilarCopiesRecords.separatedPair(key) ?: return null
+    if (mediaIdOrNull(lowRaw) == null || mediaIdOrNull(highRaw) == null) return null
+    val x = resolve(lowRaw, entry.fingerprint) ?: return null
+    val y = resolve(highRaw, SimilarCopiesRecords.otherFingerprint(entry.value)) ?: return null
+    return if (x == y) null else orderedPair(x, y)
+  }
+
   private fun orderedPair(x: MediaId, y: MediaId): Pair<MediaId, MediaId> = if (x.value <= y.value) x to y else y to x
 
-  override suspend fun fingerprintOf(key: PersonalKey): PersonalFingerprint? {
-    if (key.kind != PersonalKind.MEDIA_FLAG) return null
-    val id = mediaIdOrNull(key.subject) ?: return null
+  override suspend fun fingerprintOf(key: PersonalKey): PersonalFingerprint? =
+    if (key.kind != PersonalKind.MEDIA_FLAG) null else fingerprintOfMedia(key.subject)
+
+  override suspend fun fingerprintOfMedia(mediaId: String): PersonalFingerprint? {
+    val id = mediaIdOrNull(mediaId) ?: return null
     val media = catalog.media(id) ?: return null
     val fingerprint = media.currentVersion.fingerprint
     return PersonalFingerprint(fingerprint.size, fingerprint.quickHash)
   }
+
+  override suspend fun mediaWithFingerprint(fingerprint: PersonalFingerprint): MediaId? =
+    database.versionDao().byQuickFingerprint(fingerprint.size, fingerprint.quickHash.hex)
+      .mapNotNull { catalog.resolve(MediaId(it.mediaId)) }
+      .distinct()
+      .singleOrNull()
 
   override suspend fun localFlags(): List<LocalFlag> {
     val out = ArrayList<LocalFlag>()
@@ -212,10 +247,6 @@ class CatalogPersonalProjection(
 
   private suspend fun resolve(subject: String, fingerprint: PersonalFingerprint?): MediaId? {
     mediaIdOrNull(subject)?.let { id -> catalog.resolve(id)?.let { return it } }
-    if (fingerprint == null) return null
-    val candidates = database.versionDao().byQuickFingerprint(fingerprint.size, fingerprint.quickHash.hex)
-      .mapNotNull { catalog.resolve(MediaId(it.mediaId)) }
-      .distinct()
-    return candidates.singleOrNull()
+    return fingerprint?.let { mediaWithFingerprint(it) }
   }
 }

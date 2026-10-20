@@ -10,6 +10,7 @@ import dev.pampa.mycloudgallery.core.personal.contract.PersonalKind
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalPublication
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalRules
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalValue
+import dev.pampa.mycloudgallery.core.personal.contract.SimilarCopiesRecords
 import dev.pampa.mycloudgallery.core.personal.store.FilePersonalLedger
 import dev.pampa.mycloudgallery.core.personal.store.LedgerPersonalStore
 import dev.pampa.mycloudgallery.core.personal.store.LedgerSnapshot
@@ -358,10 +359,15 @@ class LedgerStoreTest {
       PersonalEntry(PersonalKey(PersonalKind.ALBUM, "a", PersonalFields.ALBUM_DEFINITION), NAS_NOW, me, PersonalValue.Text("Oslo è")),
       PersonalEntry(PersonalKey(PersonalKind.ALBUM, "a", PersonalFields.ALBUM_ORDER), NAS_NOW, me, PersonalValue.Number(-4)),
       PersonalEntry(PersonalKey(PersonalKind.ALBUM, "a", PersonalFields.albumItem(m2)), NAS_NOW, me, PersonalValue.Removed),
+      // 20/10: una separazione con l'impronta dell'altro media.
+      PersonalEntry(SimilarCopiesRecords.separation(m1, m2), NAS_NOW, me, PersonalValue.Apart(PersonalFingerprint(9, QuickHash("cd".repeat(32)))), fp),
     )
     return LedgerSnapshot(
       entries = entries.associateBy { it.key },
-      pending = mapOf(flagKey(m2, PersonalFields.HIDDEN) to PendingChange(PersonalValue.Flag(true), fp)),
+      pending = mapOf(
+        flagKey(m2, PersonalFields.HIDDEN) to PendingChange(PersonalValue.Flag(true), fp),
+        SimilarCopiesRecords.separation(m2, mediaId(3)) to PendingChange(PersonalValue.Apart(fp), null),
+      ),
       unprojected = setOf(hid1),
       marks = mapOf(other to HeadMark(7, "cafe")),
       published = PersonalPublication(4, HeadMark(4, "babe"), NAS_NOW, setOf("x", "y"), 5),

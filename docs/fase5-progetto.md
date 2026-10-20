@@ -454,6 +454,7 @@ La Fase 5 decide **cosa** si mostra e **quando**; il filone grafico decide **com
 | `UNREADABLE` | N file del telefono illeggibili | Riprova · Diagnostica | D15, E-M12 |
 | `COMMON_COPY_LOST` | N media spariti dall'area comune | Recuperalo dal cestino del NAS | E-B13, L44 |
 | `UNEXPECTED` | N media con un errore inatteso | Riprova · Diagnostica | R1 |
+| `SOURCE_CHANGED` | N versioni aspettano: il file sul NAS è stato cambiato dal PC (P14, 5B) | Diagnostica | E-E6 |
 | `PHONE_STORAGE_LOW` | Memoria del telefono quasi piena | Libera spazio | E-P3 |
 | `STALE` | Backup fermo da 3 giorni | Guida: batteria "Illimitata", "Mai in sospensione" | E-P15, E-P2 |
 | `WAITING_UNLOCK` | Il telefono si è riavviato: riprende allo sblocco | — | E-P13 |
@@ -867,7 +868,7 @@ Operazioni coperte: caricamento di foto e video grandi, deduplica, guardiano, ve
 | F29 | E-B13, E-B14, Q4: da Cartelle NAS spostare 20 foto proprie in `test-comune`; poi `test2` cancella dal PC le copie comuni | copie private in `Backup/Area comune/` (Q4 a); dopo la cancellazione restano; Libreria "al sicuro" |
 | F30 | Prova delle 500 interruzioni del backup | runner dal PC ≥ 400, telefono ≥ 100: invarianti del §5.4 veri |
 | F31 | E-R9, E-N13 (facoltativa): quota piccola sull'account `test` dalla dashboard | "Spazio del tuo account esaurito", nessun file a metà; tolta la quota riprende |
-| F31-bis | E-B23, E-L10…E-L12: in `mcg-campo/` della share di prova, prima del backup, copie di alcune foto di `mcg-prova` identiche, ricompresse, con EXIF riscritto e convertite da HEIC (preparate dal PC), più una raffica | riepilogo con i tre numeri giusti; le identiche collegate senza caricare; le simili caricate e unite in una cella con la copertina giusta; la raffica intatta; "Separa" sul telefono e il tablet di prova vede la separazione |
+| F31-bis | E-B23, E-L10…E-L12: in `mcg-campo/` della share di prova, prima del backup, copie di alcune foto di `mcg-prova` identiche, ricompresse, con EXIF riscritto e convertite da HEIC (preparate dal PC), più una raffica | riepilogo con i tre numeri giusti; le identiche collegate senza caricare; le simili caricate e unite in una cella con la copertina giusta; la raffica intatta; "Separa" sul telefono e il tablet di prova vede la separazione (due celle subito dopo la sincronizzazione dei dati personali, e il confronto non le riunisce) **anche se sul tablet le stesse copie hanno id diversi** (20/10: la voce porta l'impronta di entrambe; il caso capita da solo, a caso, quando l'id del tablet e' il minore); poi "Separa" sul tablet e il telefono vede la separazione |
 | F32 | (chiusura 5B, Q3 (b)) APK di release, account vero, D12 spento: primo backup vero dell'S25 su `alessio` | tempo, traffico e batteria entro ±30% del riepilogo; dal PC struttura `Backup/<dispositivo>/AAAA/MM/`, niente toccato fuori da lì |
 | F33 | Una settimana con Notte e una con Bilanciato, backup acceso (insieme a F18 della Fase 4) | meno del 2% di batteria al giorno con Notte; stime entro ±30% |
 | F34 | (5B) Samsung Gallery: "Salva" su una foto al sicuro, poi "Ripristina originale", poi "Salva copia" | versione al solito percorso e originale in `Versioni/`; scambio; media nuovo (T-16, parte a) |

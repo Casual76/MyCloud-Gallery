@@ -788,6 +788,41 @@ della tabella qui sopra.
 - Archiviare una versione (5B) e' una **rinomina** nella stessa share: i byte e il `fileId` non cambiano, e la scansione la
   riconosce per `fileId` (E-N1) senza rifare il lavoro.
 
+**Il record `personal`** (4B, M7; JSON canonico, codec `PersonalRecords` di `core-personal`): una *voce* `(tipo, soggetto, campo) →
+valore`. Il tipo non sta nel corpo: lo dice la chiave della tabella, che chi legge ricalcola per ogni tipo noto.
+
+| Campo | Forma | Note |
+|---|---|---|
+| `at` | ms, ora del NAS della modifica, entro il periodo plausibile del formato | D32: mai l'orologio del telefono |
+| `author` | id del dispositivo (26 caratteri base32) | chi ha fatto la modifica, non chi pubblica (lo stato e' unito, D26) |
+| `media` | il soggetto: id del media o dell'album, o `settings`; al massimo 128 caratteri | deve corrispondere alla chiave |
+| `field` | il campo, al massimo 128 caratteri | deve corrispondere alla chiave |
+| `fp` | `{"qh":…,"size":…}`, facoltativo | `qh1` in base32 e dimensione del **soggetto**: lo si ritrova se gli id divergono fra dispositivi |
+| `value` | `true`/`false`, intero o testo (al massimo 1024 caratteri, senza caratteri vietati); assente = lapide | il significato dipende dal campo |
+
+Un campo sconosciuto, un valore `null`, un oggetto o un elenco come valore, un testo fuori forma dove il campo ne chiede una
+rifiutano il segmento.
+
+**Separazioni fra copie simili (Fase 5, D36; impronta dell'altro media dal 20/10).** "Separa" e' una voce `media_flag` sul media
+minore, campo `similar_apart:<id dell'altro media>`, con gli id del dispositivo che l'ha scritta. Fra due dispositivi la stessa foto
+puo' avere id diversi (D7 converge al minore, D8 tiene l'id di un media con la copia sul telefono): per questo la voce porta
+l'impronta di **entrambi** i media, quella del soggetto in `fp` e quella dell'altro nel `value`.
+- `value` = il testo `<qh1 in base32>:<dimensione>` (52 caratteri, `:`, la dimensione in decimale senza zeri davanti): separati, e chi
+  legge ritrova l'altro media per id o per questa impronta. Una sola scrittura per ogni impronta; un altro testo in una separazione
+  rifiuta il segmento (`INVALID_FIELD`).
+- `value` = `true` (voci scritte prima del 20/10, che sul NAS di prova possono esserci): separati, e l'altro media si ritrova **solo
+  per id**, come allora. Chi scrive usa `true` solo se non conosce l'impronta dell'altro media.
+- Lapide (nessun `value`): di nuovo unibili. Vale per la chiave, quindi anche con id diversi; la scrive chi riunisce, su ogni
+  separazione che da lui nomina la stessa coppia (per id o per impronta).
+- **Regola di chi legge** (soggetto e altro media allo stesso modo): l'identita' attuale dell'id (anche tramite un alias); se qui
+  non c'e', l'impronta, **solo se indica un media solo**. Due media con la stessa impronta rapida (L32, o una raffica che il catalogo
+  tiene separata) non ne indicano nessuno: la voce resta in attesa e non separa una copia a caso. Una voce letta dal NAS e' un dato,
+  non un comando (E-S11): decide solo quali copie restano fuori da un gruppo che il dispositivo ricalcola da se'.
+- **Versione**: nessuna. Il valore e' un testo, che la versione 1 gia' ammette, e non c'e' nessun campo nuovo: una versione
+  precedente dell'app legge il segmento intero, prende quel testo per un testo qualunque e non separa niente (le copie restano unite
+  li' finche' non si aggiorna), senza scartare le altre voci. L'impronta sta nel corpo, quindi la copre l'impronta del segmento
+  elencata nella testa firmata, come ogni altro byte della voce.
+
 ### 5.6 Prenotazione (tipo 4)
 
 `family`, `device`, `share`, `resource` (chiave del lavoro, al massimo 256 caratteri), `generation`,

@@ -67,6 +67,11 @@ class PersonalMergeTest {
       PersonalValue.Text(""),
       PersonalValue.Text("a"),
       PersonalValue.Text("b"),
+      // 20/10: le separazioni con l'impronta dell'altro media (anche con un testo uguale alla loro forma nel formato: altro rango).
+      PersonalValue.Apart(fp(1, 'a')),
+      PersonalValue.Apart(fp(2, 'a')),
+      PersonalValue.Apart(fp(1, 'b')),
+      PersonalValue.Text(PersonalValue.Apart(fp(1, 'a')).text),
     )
     for (a in values) {
       for (b in values) {

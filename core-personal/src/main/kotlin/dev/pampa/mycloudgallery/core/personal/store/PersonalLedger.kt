@@ -209,6 +209,11 @@ class FilePersonalLedger(private val file: File) : PersonalLedger {
           out.writeUTF(value.text)
         }
         PersonalValue.Removed -> out.writeByte(TAG_REMOVED)
+        is PersonalValue.Apart -> {
+          out.writeByte(TAG_APART)
+          out.writeLong(value.other.size)
+          out.writeUTF(value.other.quickHash.hex)
+        }
       }
     }
 
@@ -218,6 +223,7 @@ class FilePersonalLedger(private val file: File) : PersonalLedger {
       TAG_NUMBER -> PersonalValue.Number(input.readLong())
       TAG_TEXT -> PersonalValue.Text(input.readUTF())
       TAG_REMOVED -> PersonalValue.Removed
+      TAG_APART -> PersonalValue.Apart(PersonalFingerprint(input.readLong(), QuickHash(input.readUTF())))
       else -> throw IOException("valore sconosciuto")
     }
 
@@ -244,5 +250,11 @@ class FilePersonalLedger(private val file: File) : PersonalLedger {
     private const val TAG_NUMBER = 2
     private const val TAG_TEXT = 3
     private const val TAG_REMOVED = 4
+
+    /**
+     * Una separazione con l'impronta dell'altro media (20/10). Un tag in piu' nella stessa versione: questa versione legge i file di
+     * prima; un file scritto da qui e letto da una versione precedente vale "vuoto", come un file rovinato (lo stato torna dal NAS).
+     */
+    private const val TAG_APART = 5
   }
 }

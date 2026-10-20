@@ -954,13 +954,9 @@ notifica di avanzamento di un primo backup lungo resti viva con l'app chiusa (UI
 dica "Backup in prova" con un account non di prova.
 
 **Rischi e punti aperti**
-- **"Separa" fra due dispositivi dipende da identita' uguali.** La scelta nomina i due media con gli id del dispositivo che l'ha fatta (voce
-  `similar_apart:<id>`); l'altro dispositivo risolve il primo anche per impronta, il secondo solo per id. Le identita' dei file del NAS
-  convergono al minore (D7) e un media con la copia sul telefono tiene la sua (D8): fra due dispositivi gli id di una stessa foto possono
-  restare diversi, e allora la voce resta "in attesa" (`unresolved`) e le copie restano unite sull'altro dispositivo finche' non le separa
-  anche li. Nel test di integrazione i due id sono casuali: il ramo "stessi id" e il ramo "id diversi" si alternano, entrambi con le loro
-  verifiche; il caso "stessi id" e' provato a parte da `SimilarCopiesProjectionTest` di core-personal (`unSeparaSulTelefonoArrivaSulTabletEScioglieIlGruppo`). Da guardare in F31-bis; una correzione (portare nella voce anche
-  l'impronta del secondo media) tocca il formato dei dati personali e non e' del P7.
+- ~~"Separa" fra due dispositivi dipende da identita' uguali.~~ **Risolto il 20/10**: la voce porta l'impronta di entrambi i media e
+  l'altro dispositivo li ritrova per id o per impronta; il test di integrazione prova i due casi ("stessi id" e "id diversi") ogni volta.
+  Vedi "Separa fra dispositivi per impronta (20/10)" in fondo.
 - **Verifica di un video molto grande** (copia gia' sul NAS da un vecchio backup, rotazione annuale, rilettura finale di un caricamento
   notturno): lo SHA-256 non si riprende e un file iniziato si rilegge fino in fondo; oltre circa dieci minuti di lettura (da ~7 GB in su sulla
   rete di casa) il sistema puo' fermare il lavoro e la rilettura riparte da zero a ogni giro (nota di P3, non cambiata dal P7). Il
@@ -2136,3 +2132,71 @@ azioni, orologio, ingressi). Confronti: `DefaultBackupPlannerTest.bk1_…`, `Def
 - Il lavoro rapido che aspetta casa riprova ogni quarto d'ora su un Wi-Fi che non lo è: costa un avvio e una valutazione delle regole, mai traffico.
 - F2: una copia spostata che il catalogo non ha ancora visto si ricarica (stesso limite del guardiano).
 - Da provare sul telefono: vedi il report e `docs/review/funzionale-fasi-1-5a.md` (prove 5, 6, 13 della sezione 4).
+
+## Separa fra dispositivi per impronta (20/10)
+Chiude il rischio aperto del P7 ("Separa" fra due dispositivi dipende da identita' uguali). La voce `similar_apart:<id>` nomina le due copie con
+gli id del dispositivo che l'ha scritta; l'altro dispositivo ritrovava il soggetto anche per impronta, l'altro media solo per id. Con id diversi
+(D7 converge al minore, D8 tiene l'id di un media con la copia sul telefono) la voce restava "in attesa" per sempre e le copie restavano unite.
+
+**Decisioni**
+1. **L'impronta dell'altro media sta nel valore, come testo** (`formato-nas.md` §5.5-bis). Il valore di una separazione e'
+   `<qh1 in base32>:<dimensione>` (`PersonalValue.Apart` nel codice) invece di `true`; l'impronta del soggetto resta in `fp`. Scartato un campo
+   nuovo della voce (`fp2`): nella versione 1 un campo sconosciuto rifiuta il segmento intero, quindi un'app di prima avrebbe perso tutte le voci
+   del segmento (preferiti, nascosti, album), e servirebbe la versione 2 del formato, che e' di core-trust e comune a ogni file firmato. Un testo
+   la versione 1 lo ammette gia': **nessuna versione nuova** (la strada di D36: campi nuovi dentro `media_flag`). Un'app di prima legge il
+   segmento, prende il testo per un testo e non separa niente: le copie restano unite li' finche' non si aggiorna, nessun'altra voce si perde.
+   In questa versione il codec lo legge solo nelle chiavi di una separazione e in una forma sola: un altro testo li' rifiuta il segmento, come
+   ogni campo fuori forma. L'impronta e' nel corpo, quindi la copre l'impronta del segmento elencata nella testa firmata.
+2. **Le voci di prima si leggono come prima**: `true` separa, e l'altro media si ritrova solo per id. Nessuna migrazione; un "Separa" rifatto
+   sulla stessa coppia scrive il valore nuovo. Chi scrive usa ancora `true` solo se il suo catalogo non conosce l'altro media.
+3. **Una regola sola per ritrovare i due media**, nella proiezione (`CatalogPersonalProjection`, per la voce che arriva e per le separazioni
+   dello stato con cui si contano i gradi) e nelle scelte che legge il rilevatore (`SimilarCopiesChoices.separatedPairs`, dietro la porta
+   `SimilarChoices` di core-library): l'id (anche tramite un alias), altrimenti l'impronta **se indica un media solo**. Un'impronta che indica
+   piu' media (L32, due copie che il catalogo tiene separate) non indica nessuno: la voce resta in attesa e non separa una copia a caso (E-S11).
+4. **Chi esce dal gruppo non dipende dagli id locali.** Il grado (le separazioni di un media dentro il gruppo) si conta sui legami, che dopo la
+   risoluzione per impronta sono gli stessi su ogni dispositivo. L'unico caso che usava l'id ("due soli media: esce l'identita' maggiore") ora fa
+   uscire entrambi: il gruppo si scioglieva comunque, quindi il risultato e' quello di prima, senza una scelta. Il rilevatore
+   (`SimilarGroupPlanner`) non decideva niente dagli id: legge le coppie gia' risolte, e non cambia.
+5. **La lapide** vale per la chiave, quindi arriva anche con id diversi. Per scriverla da un dispositivo con id diversi c'e'
+   `SimilarCopiesChoices.removeSeparation(a, b)`: la mette su ogni separazione che da li' nomina quella coppia, comprese quelle scritte
+   dall'altro dispositivo (due "Separa" della stessa coppia su due dispositivi con id diversi sono due voci). Nessuna UI la chiama ancora.
+6. **Il test di integrazione non alterna piu'**: `SimilarCopiesIntegrationTest` ha due prove, `_stessiId` (il tablet adotta l'indice; dove ha
+   tenuto il suo id, la prova gli fa conoscere quello del telefono con un alias) e `_idDiversi` (il tablet non scarica l'indice: nessun id in
+   comune, verificato). Tutte e due chiedono zero voci in attesa, due celle sul tablet e un confronto che non le riunisce.
+
+**Modifiche ai contratti e al codice condiviso** (solo `core-personal`, piu' un commento della porta `SimilarChoices` di core-library)
+- `PersonalValue.Apart` (`text`, `parse`); `PersonalMerge` (rango dopo i testi); `PersonalEntry` (`Apart` solo in una separazione);
+  `SimilarCopiesRecords.apart`, `separates`, `otherFingerprint`.
+- `PersonalStore.fingerprintOfMedia` e `mediaWithFingerprint` (di serie null), le stesse in `PersonalProjection`; `LedgerPersonalStore` le passa
+  alla proiezione. Codec: il testo di una separazione e' un `Apart`. Registro locale (`FilePersonalLedger`): un tag in piu' nella stessa versione.
+- `SimilarCopiesChoices`: `saveSeparation` scrive l'impronta dell'altro media, `separatedPairs` ritrova per impronta, `removeSeparation` nuova.
+- `:app/src/main` non cambia: la costruzione di `SimilarCopiesChoices` (store e `catalog::resolve`) e l'adattatore restano quelli, l'impronta
+  passa dallo store. Nessuna query nuova in core-database (`versionDao().byQuickFingerprint`, `MediaCatalog.resolve`).
+
+**Sicurezza e privacy**
+- L'impronta sta solo nei dati personali: area privata dell'account, segmenti elencati da una testa firmata, registro locale in
+  `noBackupFilesDir`. `PersonalValue.Apart.toString()` non la contiene: mai nei log, nelle notifiche o in Diagnostica.
+- Una voce letta dal NAS non separa mai una copia sbagliata: un'impronta con piu' candidati non risolve, un soggetto che non e' un'identita' non
+  si cerca nemmeno per impronta, una voce non tocca altro che l'appartenenza a un gruppo che il dispositivo ricalcola da se'.
+
+**Prove**
+- core-personal, rosse prima e verdi dopo: `conIdDiversiUnSeparaSulTelefonoScioglieIlGruppoAncheSulTablet`,
+  `conIdDiversiSeparandoUnaCopiaDaTreEsceLaStessaCopiaAncheSulTablet`. Nuove: impronta ambigua (`...NonSeparaNienteEResta_inAttesa`), voce
+  del formato di prima (`unaVoceNelFormatoDiPrimaSiLeggeComePrima_soloPerId`), lapide con id diversi dai due lati, forma e lettura ostile del
+  valore e lettura "di prima" (`SimilarCopiesRecordsTest`), ordine totale (`PersonalMergeTest`), registro locale (`LedgerStoreTest`).
+- `SimilarCopiesIntegrationTest` (grafo vero di `:app`): sul codice di prima `_stessiId` verde e `_idDiversi` rossa (`unresolved=1`, le copie
+  restano unite sul tablet); con la correzione verdi tutte e due. Provata in un worktree staccato su `e559397` con le sole modifiche di questa
+  correzione: nell'albero di lavoro `feature-backup` era a meta' del P14 e non compilava.
+- Cambiata la premessa di `unaSeparazioneArrivataPrimaCheIlTabletConoscaLaCopiaSiApplicaQuandoArriva`: "il tablet non conosce la copia" voleva
+  dire "la ha con un altro id", che ora si ritrova per impronta; ora la copia sul tablet non c'e' ancora, e la voce si applica quando arriva.
+
+**Residui**
+- Un'app di prima (sul NAS di prova) non vede le separazioni nuove: le copie restano unite li' finche' non si aggiorna.
+- L'impronta e' quella della versione corrente quando si separa: un dispositivo che dell'altro media conosce solo una versione diversa (una
+  modifica fatta dopo) lo ritrova solo per id. `byQuickFingerprint` cerca fra tutte le versioni del catalogo.
+- Una separazione con id che qui non ci sono costa una ricerca per impronta in piu' a ogni lettura (proiezione, giro del rilevatore): le
+  separazioni sono poche.
+
+**Da provare sul campo (F31-bis, S25 e tablet di prova)**: "Separa" sul telefono e sul tablet, con le copie dell'area comune e quelle caricate
+dal backup; se sul tablet un id e' diverso (capita da solo, a caso) le copie devono tornare due celle lo stesso, dopo la sincronizzazione dei
+dati personali, e il confronto non deve riunirle.

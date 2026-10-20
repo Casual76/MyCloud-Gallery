@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -102,10 +103,31 @@ class CatalogTimelineRepository(
     firstSnapshot.await()
   }
 
-  override fun view(f: LibraryFilter): StateFlow<TimelineView> =
-    views.computeIfAbsent(f) { filter ->
-      MutableStateFlow<TimelineView>(snapshotFlow.value?.let { FilteredTimelineView(it, filter) } ?: EmptyTimelineView(filter))
+  /**
+   * Solo per i test: gira fra la lettura dell'indice e l'iscrizione della vista nuova in [view], cioe' dove un indice nuovo puo' arrivare
+   * senza che [publish] veda ancora la vista.
+   */
+  internal var viewRegistrationHook: (() -> Unit)? = null
+
+  /**
+   * La vista per [f]. La prima richiesta la crea; **dopo** averla iscritta la riallinea all'indice di adesso: [publish] aggiorna solo le
+   * viste che gia' conosce, e un indice pubblicato fra la lettura e l'iscrizione le sfuggiva (la vista restava sull'indice vecchio fino al
+   * cambiamento successivo: una Libreria vuota, o un test fermo per 20 secondi, senza che nessun altro lo notasse).
+   */
+  override fun view(f: LibraryFilter): StateFlow<TimelineView> {
+    views[f]?.let { return it }
+    val created = MutableStateFlow<TimelineView>(snapshotFlow.value?.let { FilteredTimelineView(it, f) } ?: EmptyTimelineView(f))
+    viewRegistrationHook?.invoke()
+    val flow = views.putIfAbsent(f, created) ?: created
+    if (flow === created) {
+      // L'indice si rilegge dentro l'aggiornamento: un `publish` che arriva adesso scrive uno piu' nuovo e questo non lo riporta indietro.
+      created.update { current ->
+        val latest = snapshotFlow.value
+        if (latest == null || current.snapshot === latest) current else FilteredTimelineView(latest, f)
+      }
     }
+    return flow
+  }
 
   /** Aspetta che l'indice abbia almeno la sequenza [seq] (dopo una scrittura del catalogo). */
   suspend fun awaitSeq(seq: Long) {

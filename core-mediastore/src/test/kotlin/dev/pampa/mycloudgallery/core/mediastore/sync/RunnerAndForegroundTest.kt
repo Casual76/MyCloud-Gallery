@@ -3,11 +3,13 @@ package dev.pampa.mycloudgallery.core.mediastore.sync
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess
+import dev.pampa.mycloudgallery.core.mediastore.contract.MediaStoreSource
 import dev.pampa.mycloudgallery.core.mediastore.contract.MetaPriority
 import dev.pampa.mycloudgallery.core.mediastore.contract.MetadataPass
 import dev.pampa.mycloudgallery.core.mediastore.contract.PauseReason
 import dev.pampa.mycloudgallery.core.mediastore.contract.RunResult
 import dev.pampa.mycloudgallery.core.mediastore.contract.SyncReason
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -17,6 +19,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Test
@@ -158,6 +162,42 @@ class RunnerAndForegroundTest : PhoneSyncTestBase() {
       store.put(photo(3, taken = T0 + 2 * MINUTE))
       delay(300)
       assertThat(mediaCount()).isEqualTo(2)
+    } finally {
+      sync.detach()
+      scope.cancel()
+    }
+  }
+
+  /**
+   * In primo piano ci si iscrive ai segnali (cambiamenti del MediaStore, permessi) **prima** della prima lettura: una foto scattata mentre
+   * la prima lettura e' in corso, e prima che l'iscrizione parta, non lascia traccia e la Libreria non la mostra fino al segnale dopo (il
+   * ciclo lanciava gli ascoltatori con un `launch` che parte quando il thread e' libero, e leggeva subito; i test sotto carico cadevano per
+   * un timeout di 20 s, e ci giravano intorno con `delay(100)`). Qui il ciclo gira su un thread solo, come un telefono carico: se gli
+   * ascoltatori non sono partiti prima della lettura, la sorgente li trova ancora spenti.
+   */
+  @Test
+  fun inPrimoPianoCiSiIscriveAiSegnaliPrimaDellaPrimaLettura() = runBlocking<Unit> {
+    store.put(photo(1, taken = T0))
+    val listening = AtomicBoolean(false)
+    val listeningAtFirstRead = java.util.concurrent.atomic.AtomicReference<Boolean?>(null)
+    val watched = object : MediaStoreSource by store {
+      override suspend fun volumes(): Set<String> {
+        listeningAtFirstRead.compareAndSet(null, listening.get())
+        return store.volumes()
+      }
+
+      override fun changes(): Flow<Unit> = store.changes().onStart { listening.set(true) }
+    }
+    val sync = DefaultPhoneLibrarySync(
+      source = watched, access = access, catalog = catalog, reads = reads, clock = { now }, monotonicMs = { mono },
+      dispatchers = InlineDispatchers, config = config,
+    )
+    val oneThread = Dispatchers.Default.limitedParallelism(1)
+    val scope = CoroutineScope(SupervisorJob() + oneThread)
+    try {
+      sync.attach(scope)
+      waitUntil { mediaCount() == 1 }
+      assertThat(listeningAtFirstRead.get()).isTrue()
     } finally {
       sync.detach()
       scope.cancel()

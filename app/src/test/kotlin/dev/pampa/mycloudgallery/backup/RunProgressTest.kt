@@ -46,6 +46,61 @@ class RunProgressTest {
     }
   }
 
+  /**
+   * Il catalogo mette un media "al sicuro" prima che il motore lo conti fra i fatti (il motore pubblica ancora le immagini all'indice e chiude
+   * il diario). Se il primo sguardo cade li' in mezzo, i media in volo non sono ne' nei fatti del motore ne' nella coda del catalogo: il totale
+   * di una campagna da 24 media partiva da 23 (e la barra finiva "23 di 23"). Il giro che parte dice quanti ne ha in coda il catalogo, e i fatti
+   * gia' compiuti sono la differenza con la coda di adesso: la stessa fonte per entrambi i numeri.
+   */
+  @Test
+  fun ilCatalogoInAnticipoSulMotore_NonFaPerdereUnMediaNelTotale() {
+    val progress = RunProgress()
+    progress.roundStarting(queued = 24)
+    // Il motore dice 16 fatti, ma il catalogo ne ha gia' 17 al sicuro: il diciassettesimo e' ancora nel suo ultimo passo. In coda ne restano 7.
+    val first = progress.reshape(batch(done = 16, total = 24), queued = 7, nowMs = 0)
+    assertThat(first.total).isEqualTo(24)
+    assertThat(first.done).isEqualTo(17)
+
+    // Poi il motore recupera: il suo conto non conta piu', e la barra arriva a 24 di 24 senza mai tornare indietro.
+    var last = first
+    for (queued in 6 downTo 0) {
+      val next = progress.reshape(batch(done = 24 - queued - 1, total = 24), queued = queued, nowMs = (7 - queued) * 1_000L)
+      assertThat(next.total).isEqualTo(24)
+      assertThat(next.done).isAtLeast(last.done)
+      last = next
+    }
+    assertThat(last.done).isEqualTo(24)
+  }
+
+  @Test
+  fun ilMotoreInAnticipoSulCatalogo_NonAllungaIlTotale() {
+    val progress = RunProgress()
+    progress.roundStarting(queued = 24)
+    // Il motore ha contato 5 fatti e il catalogo, letto un attimo prima, ne conosce 4: i fatti sono quelli del catalogo, il totale resta 24.
+    val first = progress.reshape(batch(done = 5, total = 24), queued = 20, nowMs = 0)
+    assertThat(first.done).isEqualTo(4)
+    assertThat(first.total).isEqualTo(24)
+  }
+
+  @Test
+  fun lAnnuncioDelGiroServeSoloAlPrimoSguardoDiUnaCampagna() {
+    val progress = RunProgress()
+    progress.roundStarting(queued = 100)
+    progress.reshape(batch(done = 0), queued = 100, nowMs = 0)
+    progress.reshape(batch(done = 10), queued = 90, nowMs = 10_000)
+    // Un lotto nuovo della stessa campagna annuncia la sua coda di adesso: la campagna non riparte, il totale non cambia.
+    progress.roundStarting(queued = 90)
+    val next = progress.reshape(batch(done = 3, total = 90), queued = 87, nowMs = 20_000)
+    assertThat(next.done).isEqualTo(13)
+    assertThat(next.total).isEqualTo(100)
+    // E l'annuncio non resta per un'altra campagna: finita questa, una nuova parte dal conto del motore (senza un annuncio suo).
+    progress.roundStarting(queued = 50)
+    progress.idle(queued = 0)
+    val fresh = progress.reshape(batch(done = 1, total = 3), queued = 2, nowMs = 30 * minute)
+    assertThat(fresh.done).isEqualTo(1)
+    assertThat(fresh.total).isEqualTo(3)
+  }
+
   @Test
   fun ilTempoCheMancaNonCeFinoAlSecondoMedia_PoiViene_DalRitmoOsservato() {
     val progress = RunProgress()

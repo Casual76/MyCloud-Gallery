@@ -13,9 +13,12 @@ import java.nio.file.Files
 import java.util.UUID
 import kotlin.random.Random
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -118,6 +121,40 @@ class CatalogTimelineRepositoryTest {
     assertThat(third.rebuilds).isEqualTo(1)
     assertThat(third.snapshot.value!!.indexOf(MediaId(m))).isEqualTo(-1)
     assertThat(store.read()!!.snapshot.indexOf(MediaId(m))).isEqualTo(-1)
+  }
+
+  /**
+   * Una vista chiesta per la prima volta mentre si pubblica un indice nuovo non resta sul vecchio. `view` leggeva l'indice, creava la vista e
+   * solo dopo la iscriveva; `publish` aggiorna le viste iscritte: un indice pubblicato in mezzo non la raggiungeva, e la vista restava vuota (o
+   * vecchia) fino al cambiamento successivo. `GalleryIntegrationTest` aspettava 20 secondi un indice che era gia' arrivato, una volta ogni
+   * qualche migliaio di giri e di piu' sotto carico. La corsa si provoca apposta: l'indice nuovo arriva proprio nella finestra.
+   */
+  @Test
+  fun unaVistaChiestaMentreSiPubblicaUnIndiceNuovoNonRestaSulVecchio() = runBlocking<Unit> {
+    val source = model(50)
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    try {
+      val repo = CatalogTimelineRepository(source, null, scope)
+      repo.start()
+      val before = repo.snapshot.value!!
+      val gone = source.media.keys.first()
+      // Fra la lettura dell'indice e l'iscrizione della vista un altro thread pubblica l'indice senza il primo media.
+      repo.viewRegistrationHook = { runBlocking { repo.forget(listOf(MediaId(gone))) } }
+
+      val view = repo.view(LibraryFilter.ALL)
+
+      repo.viewRegistrationHook = null
+      val after = repo.snapshot.value!!
+      assertThat(after).isNotSameInstanceAs(before)
+      assertThat(view.value.snapshot).isSameInstanceAs(after)
+      assertThat(view.value.size).isEqualTo(49)
+      // La vista e' una sola per filtro, e da qui in poi segue gli indici come sempre.
+      assertThat(repo.view(LibraryFilter.ALL)).isSameInstanceAs(view)
+      repo.forget(listOf(MediaId(source.media.keys.drop(1).first())))
+      assertThat(view.value.size).isEqualTo(48)
+    } finally {
+      scope.cancel()
+    }
   }
 
   @Test

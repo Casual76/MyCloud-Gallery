@@ -659,10 +659,13 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - Il piano si calcola all'apertura, all'apertura del foglio (senza indicatore) e dentro `verify`.
   - `RoomFreeSpaceDiary.update` rilegge tutti gli elementi del giro a ogni scrittura (`RoomFreeSpaceDiary.kt:84`).
   - `settle()` scorre tutti i giri storici (`SafeFreeSpace.kt:605`), che non si potano mai.
-- **Stato: corretta in parte** (20/10). `settle()` solo sui giri con righe da risolvere, la ripresa solo sui giri aperti (query su Room), le pagine
-  del catalogo senza la riga dell'indice, il foglio che riusa il piano del riepilogo. Resta `RoomFreeSpaceDiary.update`, che rilegge gli elementi del giro a
-  ogni scrittura (serve una query per indice in core-database): da misurare in F37. Test: `RoomFreeSpaceDiaryTest.ls15_*`,
-  `Correzioni5BLiberaSpazioFlowTest.ls15_*`.
+- **Stato: corretta** (21/10). Il 20/10: `settle()` solo sui giri con righe da risolvere, la ripresa solo sui giri aperti (query su Room), le pagine
+  del catalogo senza la riga dell'indice, il foglio che riusa il piano del riepilogo. Il 21/10 il resto: `RoomFreeSpaceDiary.update` legge solo gli
+  elementi che la chiamata cambia, con `FreeSpaceDao.itemsAt` (per indice, dalla chiave primaria `run_id, item_index`; a blocchi da 500 per il limite di
+  variabili di SQLite), non piu' tutto il giro a ogni scrittura. Schema v4 invariato (nessuna colonna e nessun indice nuovi: `4.json` e' lo stesso). Test:
+  `RoomFreeSpaceDiaryTest.ls15_*` (le istruzioni di Room: una sola lettura, per quell'indice; 1.200 elementi insieme = 500 + 500 + 200),
+  `FreeSpaceItemsAtTest` (core-database: ordine, giro giusto, piano della query sulla chiave primaria), `Correzioni5BLiberaSpazioFlowTest.ls15_*`.
+  Resta da misurare sul telefono (F37, 50 GB) quanto pesano le query per media del piano dentro `verify`, che servono (e' il piano di adesso).
 
 ### 2.4 Integrazioni: selettore, provider dei documenti, ricezione (IN)
 

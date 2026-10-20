@@ -374,6 +374,14 @@ interface FreeSpaceDao {
   @Query("SELECT * FROM free_space_item WHERE run_id = :runId ORDER BY item_index")
   suspend fun items(runId: Long): List<FreeSpaceItemEntity>
 
+  /**
+   * LS-15: solo gli elementi del giro con questi indici, dalla chiave primaria (`run_id`, `item_index`): la scrittura del diario cambia pochi
+   * elementi per volta e non deve rileggere tutto il giro (migliaia di righe) a ogni chiamata. Chi chiama passa al piu' 500 indici per volta
+   * (SQLite su Android 10 ammette 999 variabili per istruzione).
+   */
+  @Query("SELECT * FROM free_space_item WHERE run_id = :runId AND item_index IN (:indexes) ORDER BY item_index")
+  suspend fun itemsAt(runId: Long, indexes: List<Int>): List<FreeSpaceItemEntity>
+
   /** Gli elementi di un lotto, in ordine. */
   @Query("SELECT * FROM free_space_item WHERE run_id = :runId AND batch_index = :batchIndex ORDER BY item_index")
   suspend fun batch(runId: Long, batchIndex: Int): List<FreeSpaceItemEntity>

@@ -130,6 +130,8 @@ class BackupStages(private val graph: AppGraph, private val backup: BackupGraph)
     ) {
       // Niente da fare (nessun media nuovo in una sorgente, niente a meta' nel diario): il backup e' al passo.
       if (!backup.hasWork(kind, trigger)) return@exclusive idle()
+      // BK-5: la coda di adesso sul catalogo e' il punto da cui l'avanzamento conta i media messi al sicuro da questo giro.
+      backup.roundStarting()
       UploadStages.stage(staged(request, stageRules), parts.engine, kind, trigger, yieldTo = if (userInitiated) NEVER else backup::userIsWaiting)
     } ?: return busy()
     afterRound(kind, outcome)

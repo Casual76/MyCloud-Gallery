@@ -81,7 +81,8 @@ class RoomFreeSpaceDiary(private val database: GalleryDatabase, private val cloc
       check(run.batchesDone >= stored.batchesDone) { "I lotti fatti non tornano indietro." }
       val now = clock.nasNowMs() ?: stored.updatedAt
       if (items.isNotEmpty()) {
-        val existing = dao.items(run.id.value).associateBy { it.itemIndex }
+        // LS-15: solo gli elementi che questa chiamata cambia, per indice (prima si rileggevano tutti quelli del giro a ogni scrittura).
+        val existing = items.map { it.index }.distinct().chunked(INDEX_CHUNK).flatMap { dao.itemsAt(run.id.value, it) }.associateBy { it.itemIndex }
         for (item in items) {
           val old = existing[item.index] ?: throw IllegalArgumentException("Elemento sconosciuto.")
           require(
@@ -137,6 +138,9 @@ class RoomFreeSpaceDiary(private val database: GalleryDatabase, private val cloc
     val REASONS: Map<String, FreeSpaceExclusion> = FreeSpaceExclusion.entries.associateBy { it.code }
 
     fun modeOf(permanent: Boolean): String = if (permanent) TrashMode.DELETE_NOW.code else TrashMode.ANDROID_TRASH.code
+
+    /** Quanti indici per interrogazione di `itemsAt`: SQLite su Android 10 ammette 999 variabili, una e' il giro. */
+    const val INDEX_CHUNK = 500
 
     val HANDED_UNRESOLVED: List<String> = listOf(FreeItemState.IN_DIALOG.code, FreeItemState.IN_DOUBT.code)
     val OPEN_RUN_STATES: List<String> = FreeSpaceRunState.entries.filter { !it.terminal }.map { it.code }

@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.backup
 
 import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * **BK-5** (verifica funzionale): l'avanzamento di un lavoro del backup attraverso i lotti e le tappe. Il motore pubblica lo stato `Running` per
@@ -14,6 +15,13 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
  *
  * Una campagna finisce quando non c'e' piu' niente in coda; se il backup si ferma (pausa, problema, regole) con altro da fare resta, e
  * continua alla ripresa. Si ricorda su file ([snapshot], [restore]): la morte del processo fra due tappe non la azzera. Solo numeri.
+ *
+ * **Il punto di partenza sta sul catalogo, non sul motore.** Il catalogo mette un media "al sicuro" prima che il motore lo conti fra i fatti:
+ * dopo la copia verificata il motore pubblica ancora le immagini all'indice e chiude il suo diario, e solo allora `done` sale. Chi guarda
+ * `done` del motore e `queued` del catalogo nello stesso istante vede quindi i media in volo come "ne' fatti ne' in coda", e il primo stato
+ * di una campagna aveva un fatto in meno: totale 23 invece di 24, per tutta la campagna.
+ * Per questo il giro che parte dice quanti ne ha in coda il catalogo ([roundStarting]), e i fatti gia' compiuti al primo sguardo sono la
+ * differenza con la coda di adesso: stessa fonte, stesso istante, nessun media in volo perso.
  */
 internal class RunProgress {
 
@@ -26,16 +34,33 @@ internal class RunProgress {
   private var lastRunningAt: Long? = null
   private var changedSinceSnapshot = false
 
+  /**
+   * I media in coda sul catalogo quando e' partito l'ultimo giro del motore ([NONE] = nessun giro annunciato). Lo scrive chi avvia il giro
+   * (un thread di lavoro), lo legge il ricalcolo dello stato: per questo e' atomico, e chi lo legge lo consuma.
+   */
+  private val queuedAtRoundStart = AtomicInteger(NONE)
+
+  /**
+   * Un giro del motore sta per partire e il catalogo ha [queued] media in coda (lo stesso conto di `reshape`). Se questo giro e' l'inizio di una
+   * campagna, il primo stato visto parte da qui: vedi la nota della classe.
+   */
+  fun roundStarting(queued: Int) {
+    queuedAtRoundStart.set(queued)
+  }
+
   /** Il progresso da mostrare per lo stato del motore [running] (di questo lotto), con [queued] media ancora in coda e l'ora monotona [nowMs]. */
   fun reshape(running: BackupStatus.Running, queued: Int, nowMs: Long): BackupStatus.Running {
     val previousTick = lastRunningAt
+    // Si consuma sempre: serve solo al primo sguardo di una campagna, e non deve restare per un giro che non lo e'.
+    val startedWith = queuedAtRoundStart.getAndSet(NONE)
     if (base == NONE) {
-      // L'inizio di una campagna (o di quello che se ne vede): i media del lotto gia' fatti contano, quelli di prima non si sanno.
-      done = running.done
+      // L'inizio di una campagna (o di quello che se ne vede): i media del lotto gia' fatti contano, quelli di prima non si sanno. Quanti sono lo
+      // dice il catalogo (coda di quando il giro e' partito meno coda di adesso); senza l'annuncio del giro, il conto del motore.
+      done = if (startedWith != NONE) (startedWith - queued).coerceAtLeast(0) else running.done
       bytesDone = running.bytesDone
       roundBytes = running.bytesDone
       activeMs = 0L
-      activeDone = running.done
+      activeDone = done
     } else {
       val delta = base - queued
       if (delta > 0) {
@@ -65,6 +90,7 @@ internal class RunProgress {
     if (queued == 0) {
       if (base != NONE || done != 0) changedSinceSnapshot = true
       reset()
+      queuedAtRoundStart.set(NONE)
     } else {
       lastRunningAt = null
     }

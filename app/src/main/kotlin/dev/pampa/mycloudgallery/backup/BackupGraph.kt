@@ -942,10 +942,7 @@ class BackupGraph(
     if (gateState == BackupGateState.PAUSED) return BackupStatus.Stopped(StopBy.USER)
 
     val problems = counts.problems.filterKeys { it.marksMedia }
-    // VE-9: un media la cui versione attuale aspetta il PC (`SOURCE_CHANGED`) non e' "in coda": lo dice "Versioni in attesa del computer" (sotto).
-    // Prima contava fra i media in coda e la pagina diceva per sempre "1 in coda · prossimo giro".
-    val held = fiveB.sourceChangedCurrentMedia()
-    val queued = (counts.noNasCopy + counts.unverified - problems.values.sum() - held).coerceAtLeast(0)
+    val queued = queuedOf(counts)
     val engineStatus = parts?.engine?.status?.value
     // BK-5: l'avanzamento e' cumulativo (fatti + in coda), non quello del lotto da 60 secondi.
     if (engineStatus is BackupStatus.Running) return progress.reshape(engineStatus, queued, monotonicMs())
@@ -962,6 +959,36 @@ class BackupGraph(
     // Diagnostica; riparte da solo dopo la verifica del NAS.
     fiveB.sourceChangedHolds().takeIf { it > 0 }?.let { return BackupStatus.Problem(BackupProblemCode.SOURCE_CHANGED, it) }
     return BackupStatus.UpToDate(counts.safe, memory.lastComplete())
+  }
+
+  /**
+   * I media ancora da mettere al sicuro, sul catalogo (gli stessi della pagina). VE-9: un media la cui versione attuale aspetta il PC
+   * (`SOURCE_CHANGED`) non e' "in coda": lo dice "Versioni in attesa del computer". Prima contava fra i media in coda e la pagina diceva per
+   * sempre "1 in coda · prossimo giro".
+   */
+  private suspend fun queuedOf(counts: SafetyCounts): Int {
+    val problems = counts.problems.filterKeys { it.marksMedia }
+    val held = fiveB.sourceChangedCurrentMedia()
+    return (counts.noNasCopy + counts.unverified - problems.values.sum() - held).coerceAtLeast(0)
+  }
+
+  /**
+   * **BK-5**: un giro del motore sta per partire. L'avanzamento si appoggia alla coda di adesso sul catalogo, non ai fatti del motore, che
+   * arrivano un po' dopo il catalogo (vedi [RunProgress]): il primo stato visto di una campagna parte da qui. Va chiamato col turno del
+   * backup in mano, prima di far girare il motore; senza catalogo o senza sorgenti non fa niente.
+   */
+  suspend fun roundStarting() {
+    try {
+      val catalog = backupCatalogOrNull() ?: return
+      val sources = settings.sources.value
+      if (sources.isEmpty) return
+      progress.roundStarting(queuedOf(catalog.safetyCounts(sources)))
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      // Un conto per la barra non deve fermare il backup: il primo stato si appoggia ai fatti del motore, come prima.
+      GalleryLog.w(TAG) { "coda di partenza non letta: ${e.javaClass.simpleName}" }
+    }
   }
 
   /**

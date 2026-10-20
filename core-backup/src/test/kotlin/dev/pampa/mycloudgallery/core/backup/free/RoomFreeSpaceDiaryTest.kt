@@ -1,6 +1,8 @@
 package dev.pampa.mycloudgallery.core.backup.free
 
 import android.app.Application
+import androidx.room.Room
+import androidx.room.RoomDatabase
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.backup.contract.FreeSpaceExclusion
@@ -11,6 +13,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.FreeSpaceRunState
 import dev.pampa.mycloudgallery.core.backup.contract.PhonePlanHash
 import dev.pampa.mycloudgallery.core.backup.testing.TestConfirmations
 import dev.pampa.mycloudgallery.core.database.GalleryDatabase
+import dev.pampa.mycloudgallery.core.database.GalleryMigrations
 import dev.pampa.mycloudgallery.core.database.entity.MediaEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaVersionEntity
 import dev.pampa.mycloudgallery.core.database.transaction
@@ -197,6 +200,55 @@ class RoomFreeSpaceDiaryTest {
     assertThat(diary.runs()).hasSize(3)
     assertThat(diary.openRuns().map { it.id }).containsExactly(open.id)
     assertThat(diary.runsToSettle().map { it.id }).containsExactly(handed.id)
+  }
+
+  /**
+   * LS-15 della verifica funzionale 5B: `update` rileggeva **tutti** gli elementi del giro a ogni scrittura (un giro da 5.000 media = 5.000 righe
+   * lette per cambiarne una, a ogni tappa). Adesso legge solo gli indici che la chiamata cambia (`FreeSpaceDao.itemsAt`, dalla chiave
+   * primaria), a blocchi da 500 (SQLite su Android 10 ammette 999 variabili per istruzione). Il registro delle istruzioni di Room lo prova:
+   * il comportamento (le regole di sopra) non cambia, lo prova il resto di questa classe.
+   */
+  @Test
+  fun ls15_unaScritturaLeggeSoloGliElementiCheCambia() = runBlocking<Unit> {
+    val bench = FreeSpaceBench()
+    val m = bench.safe()
+    val statements = java.util.concurrent.CopyOnWriteArrayList<Pair<String, List<Any?>>>()
+    val db = Room.inMemoryDatabaseBuilder(context, GalleryDatabase::class.java)
+      .addMigrations(*GalleryMigrations.ALL)
+      .setQueryCallback({ sql, args -> statements += sql to args }, Runnable::run)
+      .build().also { opened += it }
+    db.seed(bench)
+    val diary = RoomFreeSpaceDiary(db, bench.clock)
+    fun item(index: Int, state: FreeItemState = FreeItemState.PLANNED) = FreeItemRecord(
+      index = index, state = state, mediaId = m.id, versionId = m.current, phoneLocation = m.phoneLocation!!, phone = m.phoneRef,
+      phoneStamp = null, mime = null, size = 4_096, needsGuardian = false, plannedCopy = null,
+    )
+    val all = (0 until 1_200).map { item(it) }
+    val run = diary.create(NewFreeRun(FreeSpaceRunState.VERIFYING, FreeSpaceKind.ALL, 30, false, PhonePlanHash.builder("prova").build(), FreeValidity(1, 7)), all)
+
+    fun itemReads(): List<Pair<String, List<Any?>>> =
+      statements.filter { (sql, _) -> sql.trimStart().startsWith("SELECT", ignoreCase = true) && sql.contains("free_space_item") }
+
+    // Un elemento su 1.200: una sola lettura degli elementi, per quell'indice (e il giro che la chiama).
+    statements.clear()
+    diary.update(run, listOf(item(700, FreeItemState.VERIFIED)))
+    val one = itemReads()
+    assertThat(one).hasSize(1)
+    assertThat(one.single().first).contains("item_index IN")
+    assertThat(one.single().second).containsExactly(run.id.value, 700L)
+
+    // Nessun elemento (il giro cambia da solo): nessuna lettura degli elementi.
+    statements.clear()
+    diary.update(run.copy(state = FreeSpaceRunState.READY))
+    assertThat(itemReads()).isEmpty()
+
+    // Tutti e 1.200 insieme: a blocchi (500 + 500 + 200), mai piu' di 501 variabili in un'istruzione, e nessuna lettura di tutto il giro.
+    statements.clear()
+    diary.update(run.copy(state = FreeSpaceRunState.READY), all.map { item(it.index, FreeItemState.VERIFIED) })
+    val chunks = itemReads()
+    assertThat(chunks.map { it.second.size - 1 }).containsExactly(500, 500, 200).inOrder()
+    assertThat(chunks.all { (sql, _) -> sql.contains("item_index IN") }).isTrue()
+    assertThat(diary.items(run.id).map { it.state }.toSet()).containsExactly(FreeItemState.VERIFIED)
   }
 
   @Test

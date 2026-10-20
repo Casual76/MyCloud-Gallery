@@ -69,8 +69,8 @@ class ManualPrepClock(startNanos: Long = 0) : PrepClock {
   }
 }
 
-/** I record base da una mappa (la chiave e' la chiave di contenuto): il catalogo finto. */
-class MapPrepRecords(val records: MutableMap<String, MetaFile> = HashMap()) : PrepRecordSource {
+/** I record base da una mappa (la chiave e' la chiave di contenuto): il catalogo finto. Letto da piu' media insieme, quindi una mappa concorrente. */
+class MapPrepRecords(val records: MutableMap<String, MetaFile> = ConcurrentHashMap()) : PrepRecordSource {
   override suspend fun baseFor(share: String, item: WorkItem): MetaFile? = records[item.contentKey.hex]
 }
 

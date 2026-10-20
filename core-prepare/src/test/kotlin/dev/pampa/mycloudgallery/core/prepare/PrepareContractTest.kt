@@ -32,6 +32,10 @@ import dev.pampa.mycloudgallery.core.trust.data.SegmentClass
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import kotlin.random.Random
 import kotlin.time.Duration.Companion.minutes
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -63,6 +67,33 @@ class PrepareContractTest {
     val budget = PrepBudget(memoryClassMb = 512, cores = 8)
     assertThat(budget.heavyDecodes).isEqualTo(1)
     assertThat(budget.maxTempBytes).isEqualTo(512L * 1024 * 1024)
+  }
+
+  /**
+   * Il giro vero apre e prepara piu' media **insieme** (`PrepBudget.parallelMedia`, su `Dispatchers.Default`): i finti li chiamano da piu' thread.
+   * `FakePrepInputs.requests` era un `ArrayList` senza protezione: due aperture insieme perdevano una richiesta o lanciavano
+   * `ArrayIndexOutOfBoundsException`, che il giro conta come un media fallito. Cosi' `PreparationRunTest` cadeva a caso (`prepared` 1 invece di
+   * 2, o il timeout di 30 s dell'annullamento), di piu' sotto carico. Qui la corsa si provoca apposta: nessuna richiesta si perde.
+   */
+  @Test
+  fun iFintiReggonoLeAperturePiuMediaInsieme() = runBlocking<Unit> {
+    val items = (0 until 16).map { item(Random(it).nextBytes(100), MediaKind.PHOTO, "$it.jpg") }
+    val inputs = FakePrepInputs()
+    val preparer = FakePreparer()
+    val workers = 8
+    val each = 2_000
+    coroutineScope {
+      repeat(workers) { w ->
+        launch(Dispatchers.Default) {
+          repeat(each) { n ->
+            inputs.open("test-comune", items[(w + n) % items.size])
+            preparer.prepare(PrepareSource.Bytes(ByteArrayMediaBytes(ByteArray(10)), MediaKind.PHOTO, null), PrepSpec())
+          }
+        }
+      }
+    }
+    assertThat(inputs.requests).hasSize(workers * each)
+    assertThat(preparer.prepared).hasSize(workers * each)
   }
 
   @Test

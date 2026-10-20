@@ -1106,7 +1106,7 @@ manifest.
   foglio di condivisione delle altre app, senza fare niente.
 
 **Punti aperti**
-- La semina dello script `tools/chaos/s25.ps1 -Mode seed` produce circa 300 righe: la prova (f) di T-09 vuole almeno 500. Servono più foto di prova (a cura di chi esegue).
+- La semina dello script `tools/chaos/s25.ps1 -Mode backup -Step seed` produce circa 300 righe: la prova (f) di T-09 vuole almeno 500. Servono più foto di prova (a cura di chi esegue).
 - La schermata delle prove sta sotto Impostazioni → Sviluppo, non sotto Diagnostica: «Sviluppo» è già lì (`DeveloperTools`).
 - Le prove T-09, T-14, T-15, T-16 non sono eseguite: il resoconto in `docs/android.md` è vuoto. Dai loro esiti dipendono la finestra di tolleranza del cestino di
   Samsung (E-P11), l'eventuale `MANAGE_MEDIA` (atteso di no), la forma della risposta per i media solo-NAS, la strategia di copia delle condivisioni e l'algoritmo delle versioni.
@@ -2770,7 +2770,7 @@ Solo dal telefono" del viewer non eliminava piu' niente (una regressione rispett
 **Residui**
 - LS-3 non ha un test automatico (servirebbe il viewer vero composto sopra la navigazione): una riga, da vedere in F38.
 - LS-15: `RoomFreeSpaceDiary.update` rilegge ancora gli elementi del giro a ogni scrittura (serve una query per indice in `FreeSpaceDao`, core-database):
-  da misurare con F37 su 50 GB prima di cambiarla. Il piano rifa' ancora le query per media dentro `verify` (necessario: e' il piano di adesso).
+  da misurare con F37 su 50 GB prima di cambiarla. **Chiuso il 21/10** (`itemsAt`, vedi «Test instabili e LS-15»). Il piano rifa' ancora le query per media dentro `verify` (necessario: e' il piano di adesso).
 - LS-12: una riga di un lotto di questo processo, rimasta sul telefono a giro finito, resta "in attesa della risposta del telefono" fino alla risposta o
   alla morte del processo (scelta: il dialogo puo' ancora rispondere).
 - La notifica "Pronto" non c'e' se l'utente ha negato le notifiche (come le altre); la pagina si apre comunque al ritorno nell'app.
@@ -3148,3 +3148,77 @@ per sempre senza modo di riprovarli o toglierli.
   Libreria dice «N file ricevuti non salvati» e porta alla pagina; con l'app in secondo piano arriva la notifica «File ricevuti non salvati» e il tocco apre la pagina Backup.
 - «Scarta» con la conferma: la copia sparisce dall'elenco e, controllato da PC, **il NAS non e' cambiato**; un file che sta salendo non si scarta; uno gia' arrivato dice «E' gia' sul NAS».
 - TalkBack sull'elenco: ogni scheda e' una frase, i tasti dicono la cartella; testo a 1,3x e schermo da tablet.
+
+## Test instabili e LS-15 (21/10)
+Perimetro: i test che cadevano a caso (`tools/check.ps1` doveva essere verde sempre, non una volta su due) e il resto di LS-15. Nessun commit. Per ogni test: prima la
+causa vera (riprodotta, non indovinata), poi se sta nel test o nel codice, poi la correzione, poi **una** prova di stabilita' alla fine. La prova e' una ripetizione dentro un
+solo JVM (`JUnitCore` in un test temporaneo, tolto), spesso con 8 processi che bruciano CPU e 6 che scrivono e sincronizzano file su disco.
+
+**Come si rilanciano davvero i test.** `testDebugUnitTest` e' cacheable: con `org.gradle.caching=true` un secondo `check.ps1` a sorgenti uguali risponde `FROM-CACHE` (o `UP-TO-DATE`)
+e **non esegue niente**, quindi "verde due volte" non prova la stabilita'. Per eseguire i test sul serio: `GRADLE_OPTS="-Dorg.gradle.caching=false -Dorg.gradle.workers.max=4"` (Gradle legge
+cosi' le proprieta' `org.gradle.*`) e togliere prima le cartelle `*/build/test-results`. Sempre `--no-daemon` per le prove ripetute: su Windows il daemon tiene aperti i `classes.jar` dei moduli
+(compilazione e KSP nello stesso processo) e la build dopo, che li deve riscrivere, cade con "Il file e' utilizzato da un altro processo".
+
+| Test | Dove sta la causa | Correzione |
+|---|---|---|
+| `PreparationRunTest.unGiroPubblica…`, `annullareIlGiro…` (e `seIlFileECambiato…`, `unDecoderMancante…`, visti nelle prove) | **nel finto**, `FakePrepInputs` (src/main/testing) | lista e mappe thread-safe |
+| `VerificaFunzionaleBackupAppTest.bk5_…` | **nel codice di produzione**, `RunProgress` | il conto parte dalla coda del catalogo, non dai fatti del motore |
+| `GalleryIntegrationTest` (timeout di 20 s) | **nel codice di produzione**, due corse | `CatalogTimelineRepository.view` e `DefaultPhoneLibrarySync.foregroundLoop` |
+| `P9FlowsPhoneScreenshotTest.impostazioniDellAdmin…` | **non trovata** | niente (vedi sotto) |
+
+**1. `PreparationRunTest`: un `ArrayList` toccato da piu' media insieme.** Il giro di preparazione apre fino a `parallelMedia` media insieme su `Dispatchers.Default`.
+`FakePrepInputs.requests` era un `mutableListOf()`: due `open` insieme lo rompevano ogni tanto (`ArrayIndexOutOfBoundsException`, o una richiesta persa). Il giro vero
+l'inghiotte in `safely` e conta il media come fallito (`result.failed` 1, `prepared` 1 invece di 2): `unGiroPubblica…` ("expected: 2 but was: 1"); se a cadere e' il primo media
+dell'annullamento, `pending.records` resta 0 e l'attesa di `annullareIlGiro…` scade ("Timed out waiting for 30000 ms"). Sotto carico la finestra si allarga. Riprodotto con la classe lanciata 2.880 volte
+in parallelo (96 thread × 30 giri = 51.840 test): da 1 a 3 cadute per prova, con il log `media saltato: ArrayIndexOutOfBoundsException`. Correzione: `FakePrepInputs.requests`
+e `FakePreparer.prepared` sono `CopyOnWriteArrayList`, `FakePrepInputs.opens`, `MapPrepRecords.records` e `FakePreparer.failures` sono `ConcurrentHashMap`. Il giro di produzione era giusto.
+Test che la mostra: `PrepareContractTest.iFintiReggonoLeAperturePiuMediaInsieme` (8 thread × 2.000 aperture; sul finto di prima ne contava 15.065 su 16.000).
+**Esito: 3 prove da 51.840 test (155.520), 0 falliti**, con 8 processi che bruciano CPU.
+
+**2. BK-5: il catalogo conta un media prima del motore.** Il catalogo mette un media "al sicuro" (`attach`) **prima** che il motore lo conti fra i fatti: dopo la copia verificata il motore
+pubblica ancora le immagini all'indice (`publishIndex`) e chiude il diario, e solo allora `done` sale. `RunProgress` prendeva il primo `done` dal motore e la coda dal catalogo, letti in due
+momenti: i media in volo (fino a `parallel`) non erano ne' fatti ne' in coda, e il totale di una campagna da 24 media partiva da 23 per tutta la campagna (`Running(done=16, total=23)`;
+la barra finiva "23 di 23"). Era un difetto del codice, non del test. Correzione: il giro che parte dice quanti media ha in coda il catalogo (`BackupStages.round` →
+`BackupGraph.roundStarting` → `RunProgress.roundStarting`, dentro il turno del backup, prima del motore) e i fatti gia' compiuti al primo sguardo sono la differenza con la coda di adesso:
+stessa fonte per entrambi i numeri. Senza l'annuncio (arrivi, lavori che non passano di li') vale il conto del motore come prima. Test: `RunProgressTest.ilCatalogoInAnticipoSulMotore_…`,
+`ilMotoreInAnticipoSulCatalogo_…`, `lAnnuncioDelGiroServeSoloAlPrimoSguardoDiUnaCampagna` (rossi senza la correzione: "expected: 24 but was: 23"). **Esito: 148 passi su 148 senza carico,
+134 su 134 con 8 processi che bruciano CPU** (prima: 5 volte su 6 rosso).
+
+**3. `GalleryIntegrationTest`: due corse di produzione.**
+- `CatalogTimelineRepository.view` leggeva l'indice, creava la vista e solo dopo la iscriveva in `views`; `publish` aggiorna solo le viste iscritte. Un indice pubblicato in quella finestra non
+  raggiungeva la vista, che restava vuota (o vecchia) fino al cambiamento dopo: nel test `startAndSync` aspettava 20 s un indice che c'era gia'. Caduta osservata: 1 su 14.000 esecuzioni
+  (2.000 giri × 7 test, 8 processi CPU), `laDiagnosticaDellaGalleriaEsportaSoloChiaviAmmesse` → `startAndSync` → `awaitView`. Prova causale: allargando la finestra di 2 ms nel vecchio codice,
+  17 test su 21 cadono tutti con lo stesso segno (`vista=0 indice=N`: l'indice e' giusto, la vista no). Correzione: la vista si iscrive per prima e poi si riallinea all'indice di adesso
+  (`update` che rilegge l'indice, cosi' un `publish` piu' nuovo non viene riportato indietro). Test: `CatalogTimelineRepositoryTest.unaVistaChiestaMentreSiPubblicaUnIndiceNuovoNonRestaSulVecchio`
+  (con `viewRegistrationHook`, interno, che pubblica proprio nella finestra; rosso sul codice di prima).
+- `DefaultPhoneLibrarySync.foregroundLoop` lanciava gli ascoltatori (cambiamenti del MediaStore, permessi) con `launch` e leggeva subito: gli ascoltatori partivano dopo l'inizio della prima lettura e
+  un cambiamento in mezzo non lasciava traccia (i test ci giravano intorno con `delay(100)`/`delay(200)`). Correzione: `CoroutineStart.UNDISPATCHED`, ci si iscrive prima di leggere. Test:
+  `RunnerAndForegroundTest.inPrimoPianoCiSiIscriveAiSegnaliPrimaDellaPrimaLettura` (un thread solo; rosso prima). Per il `callbackFlow` di Android la registrazione dell'osservatore resta un salto di
+  dispatcher dopo: non l'ho toccata (nessun telefono, nessun emulatore), la finestra e' molto piu' stretta di prima ma non zero.
+**Esito: 12.257 test (1.751 × 7), 0 falliti**, con 8 processi che bruciano CPU (prima 1 su 14.000 nelle stesse condizioni).
+
+**4. `P9FlowsPhoneScreenshotTest.impostazioniDellAdminConUnaRichiestaInAttesa`: causa non trovata.** Non e' riprodotto: 1.571 giri del corpo del test (due dispositivi, invito, richiesta, `refresh`,
+chiusura) senza Compose, con 8 processi CPU e 6 di disco; 486 + circa 240 esecuzioni della classe vera; 0 falliti, 0 eccezioni di coroutine non gestite. In piu': nell'intera suite `:app` (517 test) un
+gestore registrato per ogni eccezione non gestita non ha visto niente; `closeScope` dura al massimo 13 ms anche sotto carico (il tetto di 10 s non c'entra). Ho escluso: DataStore con uno scope che
+sopravvive al dispositivo (tutti gli archivi di `AppGraph` stanno nello scope del dispositivo; le uniche eccezioni sono `DataStoreLibraryPreferences` di `GalleryGraph`, `CredentialVault` e
+`AppLockSettingsStore`, non montati da questo test), file scritti in modo non atomico (`FileTrustStateStore`, `FileApprovalSightings`: un mutex per istanza, nome del temporaneo per file), thread fuori
+dalle coroutine (nessuno). Resta l'ipotesi di una causa di ambiente: su Windows il rinomina atomico del temporaneo di DataStore (`renameTo`) o la cancellazione della cartella cadono se Defender o l'indicizzatore
+tengono il file aperto (durante questo lavoro ho visto piu' volte "file utilizzato da un altro processo" sui `classes.jar`). Se ricapita, il segno e' un `IOException` sul percorso del DataStore: serve il
+suo `stackTrace` intero (il gestore di eccezioni temporaneo usato qui e' tolto).
+
+**5. LS-15, il resto.** `RoomFreeSpaceDiary.update` rilegge solo gli elementi che la chiamata cambia: `FreeSpaceDao.itemsAt(runId, indexes)`, dalla chiave primaria (`run_id`, `item_index`), a blocchi da 500
+indici (SQLite su Android 10 ammette 999 variabili). **Schema v4 invariato**: una query non entra nello schema, nessuna colonna e nessun indice nuovi, `4.json` e' lo stesso e `ExportedSchemaTest` non
+cambia (nessuna migrazione). Comportamento invariato: stesse regole, stessi errori ("Elemento sconosciuto." per un indice che non c'e'); `FreeSpaceEveryCallTest` e `FattoQuando55Test` verdi.
+Test: `RoomFreeSpaceDiaryTest.ls15_unaScritturaLeggeSoloGliElementiCheCambia` (il registro delle istruzioni di Room: 1 elemento su 1.200 = una lettura per quell'indice; 1.200 insieme = 500 + 500 + 200;
+rosso sul codice di prima: `SELECT * FROM free_space_item WHERE run_id = ? ORDER BY item_index`), `FreeSpaceItemsAtTest` in core-database (ordine, giro giusto, indici assenti ignorati, piano della query: `SEARCH … USING INDEX`,
+niente `SCAN` ne' `TEMP B-TREE`). LS-15 e' "corretta" in `docs/review/funzionale-5b.md`; resta da misurare sul telefono (F37) il costo delle query per media del piano dentro `verify`, che servono.
+
+**Nota di lavoro.** Un altro agente ha lavorato nello stesso albero mentre facevo questo (modifiche a `MediaCatalog`, `AppGraph`, `BackupPageScreen`, `docs/android.md`, `docs/prove-campo*.md` e altri): le build e i test li ho
+fatti in una copia isolata con solo le mie modifiche, per non mescolare le due cose ne' i loro `build/`. Per sbloccare un `classes.jar` tenuto aperto ho terminato un daemon Gradle (47364, avviato da una mia build alle 18:11).
+I file toccati da questo lavoro: `RunProgress`, `BackupGraph` (`queuedOf`, `roundStarting`), `BackupStages` (una riga), `RoomFreeSpaceDiary`, `FreeSpaceDao.itemsAt`, `CatalogTimelineRepository`, `DefaultPhoneLibrarySync`,
+`PrepareFakes`/`PrepareEngineFakes` e i loro test, piu' `FreeSpaceItemsAtTest` (nuovo) e questa sezione.
+
+**Esiti.** `tools\check.ps1 -NoDaemon` **verde due volte di seguito**, in una copia con solo queste modifiche, con i test eseguiti sul serio (cache disattivata, `*/build/test-results` tolti prima di ogni giro; le 847
+relazioni XML della seconda esecuzione sono tutte nuove): 1.096 s la prima, 447 s la seconda. Test per modulo: `app` 515, `core-prepare` 99, `core-database` 162, `core-backup` 574, `core-library` 162, `core-mediastore` 141,
+`feature-backup` 564. Le suite contro il NAS vero (`-PnasIntegration`: `core-nas`, `core-backup`, `core-nasops`, `area.ps1`) **non** sono nel controllo e non le ho lanciate: `check.ps1` non passa quel flag e senza i test si
+saltano con `Assume` prima di leggere le credenziali.

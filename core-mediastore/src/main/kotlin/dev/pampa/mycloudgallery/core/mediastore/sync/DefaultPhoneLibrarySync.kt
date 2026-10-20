@@ -36,6 +36,7 @@ import java.util.Locale
 import kotlin.time.Duration
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
@@ -139,9 +140,12 @@ class DefaultPhoneLibrarySync(
    */
   private suspend fun foregroundLoop() = coroutineScope {
     val triggers = Channel<SyncReason>(Channel.CONFLATED)
+    // Prima ci si iscrive ai segnali, poi si legge: con un `launch` normale gli ascoltatori partivano quando il thread era libero, cioe' dopo
+    // l'inizio della prima lettura, e una foto scattata (o un permesso cambiato) in quell'intervallo non lasciava traccia fino al segnale
+    // dopo. `UNDISPATCHED` li fa partire qui, subito: quando la prima lettura comincia, qualunque cambiamento arriva in `triggers`.
+    launch(start = CoroutineStart.UNDISPATCHED) { source.changes().collect { triggers.trySend(SyncReason.CONTENT_CHANGE) } }
+    launch(start = CoroutineStart.UNDISPATCHED) { access.state.drop(1).collect { triggers.trySend(SyncReason.PERMISSION_CHANGED) } }
     triggers.trySend(SyncReason.FOREGROUND)
-    launch { source.changes().collect { triggers.trySend(SyncReason.CONTENT_CHANGE) } }
-    launch { access.state.drop(1).collect { triggers.trySend(SyncReason.PERMISSION_CHANGED) } }
     var meta: Job? = null
     for (reason in triggers) {
       meta?.cancelAndJoin()

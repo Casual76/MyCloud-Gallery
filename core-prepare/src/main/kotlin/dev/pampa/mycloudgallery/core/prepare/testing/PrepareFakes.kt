@@ -29,6 +29,8 @@ import dev.pampa.mycloudgallery.core.trust.data.MetaFile
 import dev.pampa.mycloudgallery.core.trust.data.PrepFailure
 import dev.pampa.mycloudgallery.core.trust.data.SegmentClass
 import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.time.Duration
 
 // I fake di core-prepare (P0): in src/main per i test di P6, P11 e di chi sta a valle. Mai nella release.
@@ -40,14 +42,15 @@ import kotlin.time.Duration
  * nulla: le dimensioni sono quelle chieste da [PrepSpec]. Con [failures] si programmano i fallimenti per tipo di media.
  */
 class FakePreparer(
-  val failures: MutableMap<MediaKind, PrepResult.Failed> = HashMap(),
+  val failures: MutableMap<MediaKind, PrepResult.Failed> = ConcurrentHashMap(),
 ) : Preparer {
 
   /** Byte letti in tutto (per provare "video mai scaricati interi"). */
   @Volatile var bytesRead: Long = 0
     private set
 
-  val prepared: MutableList<PrepareSource> = mutableListOf()
+  /** Le sorgenti preparate: il giro vero ne prepara piu' d'una insieme (`PrepBudget.parallelMedia`), quindi la lista regge le scritture concorrenti. */
+  val prepared: MutableList<PrepareSource> = CopyOnWriteArrayList()
 
   override suspend fun prepare(source: PrepareSource, spec: PrepSpec): PrepResult {
     failures[source.kind]?.let { return it }
@@ -94,9 +97,16 @@ class FakePreparer(
   }
 }
 
-/** Gli originali finti: per ogni chiave di contenuto il test mette un [PrepOpen]. */
-class FakePrepInputs(val opens: MutableMap<String, PrepOpen> = HashMap()) : PrepInputs {
-  val requests: MutableList<WorkItem> = mutableListOf()
+/**
+ * Gli originali finti: per ogni chiave di contenuto il test mette un [PrepOpen].
+ *
+ * Il giro vero apre piu' media **insieme** (`PrepBudget.parallelMedia`, su `Dispatchers.Default`): [open] arriva da piu' thread. [requests]
+ * era un `ArrayList` senza protezione e due aperture insieme lo rompevano ogni tanto (`ArrayIndexOutOfBoundsException`, o una richiesta
+ * persa): il giro la contava come un media fallito e un test su ~20.000 cadeva a caso, di piu' sotto carico. Adesso lista e mappa reggono le
+ * scritture concorrenti.
+ */
+class FakePrepInputs(val opens: MutableMap<String, PrepOpen> = ConcurrentHashMap()) : PrepInputs {
+  val requests: MutableList<WorkItem> = CopyOnWriteArrayList()
 
   override suspend fun open(share: String, item: WorkItem): PrepOpen {
     requests += item

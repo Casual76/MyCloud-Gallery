@@ -176,6 +176,24 @@ class BackupFooterTest {
     composeRule.onNodeWithText("1 cancellato prima del backup").assertExists()
   }
 
+  /**
+   * IN-7 (correzioni 5B): i file che un'altra app ha condiviso e che non si sono salvati sul NAS lo dicono nel piede (la frase breve con il numero e cosa
+   * fare), e il tocco porta alla pagina Backup, dove sta "Ricevuti in coda" con "Riprova" e "Scarta".
+   */
+  @Test
+  fun iFileRicevutiNonSalvatiLoDiconoEIlToccoPortaAllaPagina() {
+    show(LibraryBackupStatus.Problem(code = "incoming_failed", count = 2))
+    composeRule.onNodeWithText("2 file ricevuti non salvati").assertExists()
+    composeRule.onNodeWithText("Riprova o scartali da Backup.").assertExists()
+    composeRule.onNodeWithText("2 file ricevuti non salvati").performClick()
+    assertThat(backupClicks).isEqualTo(1)
+    show(LibraryBackupStatus.Problem(code = "incoming_failed", count = 1))
+    composeRule.onNodeWithText("1 file ricevuto non salvato").assertExists()
+    // Senza il numero (un conto che non si e' letto) la frase breve resta chiara.
+    show(LibraryBackupStatus.Problem(code = "incoming_failed", count = 0))
+    composeRule.onNodeWithText("File ricevuti non salvati").assertExists()
+  }
+
   @Test
   fun unCodiceCheNonConoscePortaComunqueAllaPagina() {
     show(LibraryBackupStatus.Problem(code = "un_problema_futuro", count = 0))

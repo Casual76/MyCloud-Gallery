@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.database.entity
 
 import androidx.room.ColumnInfo
+import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -374,6 +375,18 @@ data class IncomingItemEntity(
 ) {
   // Nome del file, cartella scelta e share: dati dell'utente.
   override fun toString(): String = "IncomingItemEntity(#$incomingId, $state, $size B)"
+}
+
+/**
+ * IN-7: un file in arrivo con lo stato e il problema del suo elemento del diario (`backup_item`, null se l'elemento non c'e' piu'). Le colonne sono
+ * quelle di `IncomingDao.observeQueue`: serve a dire "in attesa" o "in caricamento" senza una seconda lettura per file.
+ */
+data class IncomingQueueRow(
+  @Embedded val item: IncomingItemEntity,
+  @ColumnInfo(name = "item_state") val itemState: String?,
+  @ColumnInfo(name = "item_problem") val itemProblem: String?,
+) {
+  override fun toString(): String = "IncomingQueueRow(${item.state}, ${itemState ?: "senza elemento"})"
 }
 
 /**

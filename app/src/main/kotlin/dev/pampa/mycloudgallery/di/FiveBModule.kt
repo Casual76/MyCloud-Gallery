@@ -28,6 +28,8 @@ import dev.pampa.mycloudgallery.feature.backup.free.FreeSpaceRuns
 import dev.pampa.mycloudgallery.feature.backup.free.NoPhoneSystemDialogs
 import dev.pampa.mycloudgallery.feature.backup.free.PhoneOnlyAssessor
 import dev.pampa.mycloudgallery.feature.backup.free.PhoneSystemDialogs
+import dev.pampa.mycloudgallery.feature.backup.received.NoReceivedQueue
+import dev.pampa.mycloudgallery.feature.backup.received.ReceivedQueue
 import dev.pampa.mycloudgallery.feature.backup.tasks.PendingTaskActions
 import dev.pampa.mycloudgallery.feature.backup.versions.NoVersionActions
 import dev.pampa.mycloudgallery.feature.backup.versions.VersionActions
@@ -59,6 +61,9 @@ object FiveBModule {
   @Provides fun corrections(gallery: GalleryGraph): Corrections = gallery.backup?.fiveB?.corrections ?: NoCorrections
 
   @Provides fun pendingTasks(gallery: GalleryGraph): PendingTasks = gallery.backup?.fiveB?.pendingTasks ?: NoPendingTasks
+
+  /** IN-7: "Ricevuti in coda" (i file che un'altra app ha condiviso e che non sono ancora sul NAS). Senza backup non c'e' niente da mostrare. */
+  @Provides fun receivedQueue(gallery: GalleryGraph): ReceivedQueue = gallery.backup?.fiveB?.receivedQueue ?: NoReceivedQueue
 
   /**
    * Correzioni 5B (LS-2): il giro di "Libera spazio" fuori dalla pagina (lavoro avviato dall'utente, notifica "Pronto", ripresa dal diario). Senza

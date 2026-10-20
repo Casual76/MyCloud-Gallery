@@ -39,6 +39,9 @@ internal object BackupDimens {
   /** Il glifo in testa a una scheda di stato. */
   val CardGlyph: Dp = 24.dp
 
+  /** IN-7: il lato della miniatura di un file ricevuto nell'elenco "Ricevuti in coda". */
+  val ReceivedThumb: Dp = 64.dp
+
   /** Lo spazio interno di uno stato vuoto a tutta pagina. */
   val StatePadding: Dp = 32.dp
 

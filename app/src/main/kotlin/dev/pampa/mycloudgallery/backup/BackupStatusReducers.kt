@@ -19,8 +19,23 @@ object BackupStatusReducers {
    * di 6.658", il problema piu' grave, "Backup in prova". Un backup non configurato non dice niente (la pagina lo spiega).
    *
    * @param similarPending quanti candidati aspettano il confronto delle copie simili (§2.11 punto 6).
+   * @param incomingProblems IN-7: quanti file ricevuti da un'altra app non si sono caricati e aspettano un "Riprova" o uno "Scarta". Il piede lo dice
+   *   (porta alla pagina Backup, dove sta "Ricevuti in coda") **quando non ha niente di piu' urgente**: un problema del backup, "Backup in prova", il
+   *   confronto o un giro in corso restano al loro posto; "Tutto al sicuro", "N in coda" e il piede muto lasciano il posto ai file non salvati.
    */
-  fun footer(status: BackupStatus, similarPending: Int): LibraryBackupStatus = when (status) {
+  fun footer(status: BackupStatus, similarPending: Int, incomingProblems: Int = 0): LibraryBackupStatus {
+    val base = footerOf(status, similarPending)
+    if (incomingProblems <= 0) return base
+    return when (base) {
+      LibraryBackupStatus.Idle, is LibraryBackupStatus.AllSafe, is LibraryBackupStatus.Queued -> LibraryBackupStatus.Problem(INCOMING_FAILED_CODE, incomingProblems)
+      else -> base
+    }
+  }
+
+  /** Il codice stabile con cui il piede dice "N file ricevuti non salvati" (nessun `BackupProblemCode`: non e' un problema del backup delle foto). */
+  const val INCOMING_FAILED_CODE: String = "incoming_failed"
+
+  private fun footerOf(status: BackupStatus, similarPending: Int): LibraryBackupStatus = when (status) {
     is BackupStatus.NotConfigured -> LibraryBackupStatus.Idle
     BackupStatus.TestOnly -> LibraryBackupStatus.TestOnly
     is BackupStatus.FirstBackupReady ->

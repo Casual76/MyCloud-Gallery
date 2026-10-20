@@ -16,8 +16,12 @@ import dev.pampa.mycloudgallery.feature.backup.contract.BackupOverview
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupScreen
 import dev.pampa.mycloudgallery.feature.backup.noop.NoBackupActions
 import dev.pampa.mycloudgallery.feature.backup.noop.NoBackupOverview
+import dev.pampa.mycloudgallery.feature.backup.received.ReceivedCounts
+import dev.pampa.mycloudgallery.feature.backup.received.ReceivedItem
+import dev.pampa.mycloudgallery.feature.backup.received.ReceivedQueue
 import java.util.Optional
 import javax.inject.Inject
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -40,6 +44,8 @@ internal data class BackupPageUi(
   val sheetOpen: Boolean,
   /** 5B (P14): quante attivita' "Da decidere" sono aperte (la scheda d'ingresso compare solo con almeno una). */
   val pendingTasks: Int = 0,
+  /** 5B (IN-7): i file ricevuti da un'altra app che non sono ancora sul NAS (la scheda "Ricevuti in coda" compare solo con almeno uno). */
+  val received: ReceivedCounts = ReceivedCounts.NONE,
 )
 
 @HiltViewModel
@@ -48,6 +54,7 @@ class BackupPageViewModel @Inject constructor(
   settings: Optional<BackupSettings>,
   actions: Optional<BackupActions>,
   tasks: Optional<PendingTasks> = Optional.empty(),
+  received: Optional<ReceivedQueue> = Optional.empty(),
 ) : ViewModel() {
 
   private val port: BackupOverview = overview.orElse(NoBackupOverview)
@@ -57,12 +64,16 @@ class BackupPageViewModel @Inject constructor(
 
   private val pending: StateFlow<List<PendingTask>> = tasks.orElse(null)?.tasks ?: MutableStateFlow(emptyList())
 
-  internal val state: StateFlow<BackupPageUi> = combine(port.status, port.sources, folder, sheet, pending) { status, sources, deviceFolder, open, open5b ->
+  private val receivedItems: StateFlow<List<ReceivedItem>> = received.orElse(null)?.items ?: MutableStateFlow(emptyList())
+
+  private val base: Flow<BackupPageUi> = combine(port.status, port.sources, folder, sheet, pending) { status, sources, deviceFolder, open, open5b ->
     BackupPageUi(status = status, sources = sources, deviceFolder = deviceFolder, sheetOpen = open, pendingTasks = open5b.size)
-  }.stateIn(
+  }
+
+  internal val state: StateFlow<BackupPageUi> = combine(base, receivedItems) { ui, arrived -> ui.copy(received = ReceivedCounts.of(arrived)) }.stateIn(
     scope = viewModelScope,
     started = SharingStarted.WhileSubscribed(StopTimeoutMillis),
-    initialValue = BackupPageUi(port.status.value, port.sources.value, folder.value, sheet.value, pending.value.size),
+    initialValue = BackupPageUi(port.status.value, port.sources.value, folder.value, sheet.value, pending.value.size, ReceivedCounts.of(receivedItems.value)),
   )
 
   /** Il riepilogo del primo backup (§2.11): il foglio si apre da un tocco, o da solo quando si arriva dalla rotta `backup/first`. */

@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- "Ricevuti in coda" (correzioni 5B, IN-7 della verifica funzionale; docs/fase5-progetto.md §2.7, D24, E-X8): i file che un'altra app ha condiviso e
+       che l'utente ha mandato sul NAS con "Salva sul NAS". Solo numeri e la cartella di destinazione (un dato dell'utente, che si mostra): mai il nome di un
+       file. Le apostrofi sono quelle tipografiche (’). -->
+  <string name="backup_received_title">Ricevuti in coda</string>
+
+  <!-- La scheda della pagina Backup: compare solo con almeno un file. -->
+  <string name="backup_received_entry_title">Ricevuti in coda</string>
+  <string name="backup_received_entry_waiting">%1$s in attesa</string>
+  <string name="backup_received_entry_uploading">%1$s in caricamento</string>
+  <plurals name="backup_received_entry_problems">
+    <item quantity="one">%1$s con un problema</item>
+    <item quantity="other">%1$s con un problema</item>
+  </plurals>
+  <string name="backup_received_entry_action">Vedi</string>
+
+  <!-- L'elenco. -->
+  <plurals name="backup_received_summary">
+    <item quantity="one">%1$s file ricevuto non è ancora sul NAS.</item>
+    <item quantity="other">%1$s file ricevuti non sono ancora sul NAS.</item>
+  </plurals>
+  <string name="backup_received_empty_title">Non c’è niente in coda</string>
+  <string name="backup_received_empty_detail">I file che un’altra app ti manda e che salvi sul NAS restano qui finché non ci sono arrivati.</string>
+  <string name="backup_received_folder">Nella cartella %1$s</string>
+  <string name="backup_received_folder_root">Nella cartella principale</string>
+  <string name="backup_received_kind_photo">Foto</string>
+  <string name="backup_received_kind_video">Video</string>
+  <string name="backup_received_kind_size">%1$s · %2$s</string>
+  <string name="backup_received_retry">Riprova</string>
+  <string name="backup_received_discard">Scarta</string>
+  <string name="backup_received_retry_for">Riprova: %1$s</string>
+  <string name="backup_received_discard_for">Scarta: %1$s</string>
+  <string name="backup_received_note">Scartare toglie solo la copia sul telefono: sul NAS non cambia niente.</string>
+
+  <!-- Lo stato di un file, in una frase. -->
+  <string name="backup_received_status_queued">In coda: parte appena possibile.</string>
+  <string name="backup_received_status_network">In attesa di rete: parte quando il NAS risponde.</string>
+  <string name="backup_received_status_trial">Backup in prova: in questa versione non si scrive ancora sul NAS.</string>
+  <string name="backup_received_status_folder_locked">Cartella bloccata: adesso non ci si può scrivere.</string>
+  <string name="backup_received_status_nas_full">NAS pieno: libera spazio e poi riprova.</string>
+  <string name="backup_received_status_quota">Quota esaurita: chiedi all’admin del NAS.</string>
+  <string name="backup_received_status_password">Serve la password del NAS.</string>
+  <string name="backup_received_status_frozen">Scritture ferme per cambiamenti anomali: controlla la Diagnostica.</string>
+  <string name="backup_received_status_paused">Backup in pausa: riprende con “Riprendi”.</string>
+  <string name="backup_received_status_unavailable">L’app non è pronta a scrivere sul NAS.</string>
+  <string name="backup_received_status_uploading">Lo sto caricando sul NAS.</string>
+  <string name="backup_received_status_verifying">Controllo che sia arrivato intero.</string>
+  <string name="backup_received_status_copy_changed">La copia sul telefono non si legge o è cambiata.</string>
+  <string name="backup_received_status_not_intact">Sul NAS non è arrivato intero, dopo tre controlli.</string>
+  <string name="backup_received_status_folder_refused">La cartella non può ricevere il file.</string>
+  <string name="backup_received_status_copy_missing">La copia sul telefono non c’è più: non si può salvare.</string>
+  <string name="backup_received_status_failed">Qualcosa è andato storto.</string>
+
+  <!-- La frase dopo un tocco. -->
+  <string name="backup_received_notice_queued">Rimesso in coda: parte appena possibile.</string>
+  <string name="backup_received_notice_blocked">Non riprovo adesso. %1$s</string>
+  <string name="backup_received_notice_no_copy">La copia sul telefono non c’è più: non si può riprovare. Puoi scartarlo.</string>
+  <string name="backup_received_notice_saved">È già sul NAS, o sta per arrivarci: non c’è niente da fare.</string>
+  <string name="backup_received_notice_discarded">Scartato. Sul NAS non è cambiato niente.</string>
+  <string name="backup_received_notice_uploading">Lo sto caricando adesso: aspetta che finisca.</string>
+  <string name="backup_received_notice_unknown">Questo file non è più in coda.</string>
+
+  <!-- Il foglio di conferma di "Scarta". -->
+  <string name="backup_received_discard_title">Scartare questo file?</string>
+  <string name="backup_received_discard_message">La copia sul telefono viene eliminata e il file non sarà salvato sul NAS. Sul NAS non cambia niente: se ci è già arrivato, resta dov’è.</string>
+  <string name="backup_received_discard_confirm">Scarta</string>
+  <string name="backup_received_discard_cancel">Annulla</string>
+</resources>

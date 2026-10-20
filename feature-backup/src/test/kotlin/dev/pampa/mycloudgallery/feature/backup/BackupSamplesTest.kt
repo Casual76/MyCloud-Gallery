@@ -57,6 +57,6 @@ class BackupSamplesTest {
     val routes = BackupScreen.entries.map { it.route }
     assertThat(routes.toSet()).hasSize(routes.size)
     routes.forEach { assertThat(it).matches("^backup/[a-z-]+$") }
-    assertThat(BackupScreen.entries.filter { it.phase5B }).containsExactly(BackupScreen.FREE_SPACE, BackupScreen.PENDING_TASKS)
+    assertThat(BackupScreen.entries.filter { it.phase5B }).containsExactly(BackupScreen.FREE_SPACE, BackupScreen.PENDING_TASKS, BackupScreen.RECEIVED)
   }
 }

@@ -8,7 +8,7 @@
 | **Tipo** | Revisione avversariale in sola lettura. Nessuna correzione al codice di produzione. Nessun NAS vero, nessun telefono, nessun `adb`. |
 | **Data** | 20/10/2026 |
 | **Metodo** | Lettura del codice: ogni via che toglie o riscrive un file del telefono (`SafeFreeSpace`, `DefaultVersionKeeper.restoreOriginal`, `DefaultCorrections`, `MediaStorePhoneMediaRewriter`, e le vie della Fase 3 e della 4B ancora vive), ogni porta esportata (manifest, `CallerGuard`, `DocumentIdTable`, `EntryGate`, `AppLockController`), ogni via che scrive sul NAS (versioni, scambi, `INCOMING`) e lo stripper della posizione con i suoi lettori. Tre revisori di supporto, in sola lettura, hanno letto in parallelo le versioni e i file in arrivo, la posizione e le correzioni nel file, e il codice di fiducia toccato dalle correzioni; **ogni loro voce riportata qui e' stata ricontrollata nel codice**. Due **test temporanei**, eseguiti con `--max-workers=2` e poi cancellati insieme ai risultati e alle classi compilate: (1) sul custode vero (`DefaultVersionKeeper` su `VersionWorld`, core-backup) per R3; (2) sullo stripper vero (`DefaultLocationStripper` con i lettori di serie, core-metadata, Robolectric) per R1 e R2. Esiti sotto le voci. Nessun file del repository e' rimasto modificato a parte questo documento. |
-| **Stato** | **Aperta**: tutte le voci, tranne R1, R2, R4, R12, R13 (corrette il 20/10: «Correzioni 5B: posizione e Condividi» in `docs/decisioni.md`) e R5, R8, R11, R14 (corrette il 20/10: «Correzioni 5B: integrazioni»); R15 corretta in parte (resta `incomingMedia` in `core-database`). |
+| **Stato** | **Aperta**: tutte le voci, tranne R1, R2, R4, R12, R13 (corrette il 20/10: «Correzioni 5B: posizione e Condividi» in `docs/decisioni.md`) e R5, R8, R11, R14 (corrette il 20/10: «Correzioni 5B: integrazioni»); R15 (corretta il 20/10 in due tempi: `markMedia` e `openFor` nelle integrazioni, `incomingMedia` in «Ricevuti in coda (20/10)»). |
 
 ## Riepilogo
 
@@ -70,7 +70,7 @@
    - **Nessuna sostituzione**; nome dell'altra app ripulito e validato da `SharePath`; il percorso locale nasce solo dall'hash (`IncomingQueue.kt:181-190`).
    - **La copia locale si toglie solo dopo** `DONE`/`LINKED_EXISTING`, prima del passo terminale del diario (`SafeUploadEngine.kt:519-526`, `IncomingQueue.kt:234-249`); `GONE` e `FAILED` la lasciano.
    - **Nell'area comune dalla 5B**: le versioni e le correzioni non ci scrivono (`COMMON_AREA_NOTICE`); "Salva sul NAS" **si'**, per scelta dell'utente e con l'avviso (D24), e solo su una share di prova fino a Q3. Il default e' l'area privata.
-   - **Restano**: R5 (un arrivo verso una share chiusa ferma il backup privato), R14, R15.
+   - **Restavano**: R5 (un arrivo verso una share chiusa ferma il backup privato), R14, R15 (tutte corrette il 20/10).
 5. **Posizione tolta.**
    - **Regge**: con la posizione da togliere non esce mai l'URI del telefono; una condivisione e' tutta o niente; il tipo si decide dai byte; il JPEG nato da un HEIC si ricontrolla; servono almeno due lettori e un lettore che non legge non assolve; la copia letta con la posizione si cancella (`LocationFreeShare.kt:84-137`, `DefaultLocationStripper.kt:41-155`).
    - **Non regge**: R1 (video), R2 (foto), R4 (selezione della Libreria e viewer senza backup). Per i video l'estrattore e il secondo lettore sono lo stesso `MediaMetadataRetriever` (`VideoProbes.kt:24-32`, `LocationRecheck.kt:107-133`) e il lettore grezzo e' lo stesso piano dello stripper (`LocationRecheck.kt:149-171`): i "lettori indipendenti" condividono i punti ciechi.
@@ -379,12 +379,18 @@
 - **Scenario (e):** l'utente condivide dalla Galleria verso "Salva sul NAS" (area comune) una sua foto non ancora al sicuro. Con R5 l'arrivo resta aperto, e finche' resta aperto ne' la 5A ne' il guardiano la mettono al sicuro nell'area privata; se la verifica fallisce tre volte il media del telefono prende `VERIFY_FAILED` ed esce dal piano della 5A. Un arrivo uguale a un media nascosto, o di un altro account, vi si aggancia: il file salvato non si vede, o e' "non mio".
 - **Confermato:** **si'** (lettura).
 - **Correzione proposta:** il segno del problema solo su un media creato dall'arrivo (`created = true`); `openFor` della 5A e del guardiano ignora gli `INCOMING` verso un'altra share; `incomingMedia` sceglie solo media propri e non nascosti, altrimenti ne crea uno nuovo.
-- **Stato: corretta in parte** (20/10). (1) Un arrivo che non riesce (`UNEXPECTED`, `LOST_BEFORE_BACKUP`, `UNREADABLE`, `VERIFY_FAILED`) non mette piu' il segno del
+- **Stato: corretta** (20/10, in due tempi). **Primo tempo:** (1) un arrivo che non riesce (`UNEXPECTED`, `LOST_BEFORE_BACKUP`, `UNREADABLE`, `VERIFY_FAILED`) non mette piu' il segno del
   problema sul media (`SafeUploadEngine.markMedia`): il problema resta sull'elemento (`FAILED`, con la sua copia locale). (2) `BackupStore.openFor(versionId)`,
-  che usano il piano della 5A e il guardiano, **ignora gli arrivi**: un arrivo aperto non ferma piu' la messa al sicuro di quella versione. Non fatto (e'
-  in `core-database`, fuori dal perimetro di questo gruppo): `MediaCatalog.incomingMedia` prende ancora qualunque versione con lo stesso SHA-256, anche
-  di un media nascosto o di un altro account; il file salvato non si vede (o non e' «mio»), senza altri effetti. Test: `IncomingStoreTest.r15_*` (2),
-  `IncomingIsolationTest.r15_*` (il motore: un arrivo con la copia locale cambiata va a `FAILED` e il media non ha nessun problema). Prova di mutazione: con `markMedia` che segna sempre e con `openFor` che vede gli arrivi sono rossi `IncomingIsolationTest.r15_*` e `IncomingStoreTest.r15_*_Room`.
+  che usano il piano della 5A e il guardiano, **ignora gli arrivi**: un arrivo aperto non ferma piu' la messa al sicuro di quella versione. Test:
+  `IncomingStoreTest.r15_*` (2), `IncomingIsolationTest.r15_*` (il motore: un arrivo con la copia locale cambiata va a `FAILED` e il media non ha nessun problema).
+  Prova di mutazione: con `markMedia` che segna sempre e con `openFor` che vede gli arrivi sono rossi `IncomingIsolationTest.r15_*` e `IncomingStoreTest.r15_*_Room`.
+  **Secondo tempo (`core-database`):** (3) `MediaCatalog.incomingMedia` cerca fra le versioni con gli stessi byte **solo i media dello stesso account e non
+  nascosti** (E-H1); un media ancora senza posizione, cioe' il primo arrivo uguale in volo (R14), e' dell'utente e vale; fra piu' candidati preferisce quello
+  che si vede; nel dubbio ne nasce **uno nuovo**. Un arrivo uguale a un nascosto non gli si aggancia piu' (il file salvato si vede, il nascosto non prende copie
+  che non ha chiesto, resta nascosto), e uno uguale al media di un altro account non diventa "mio". Test: `CatalogFiveBTest.r15_*` (4: il nascosto, un altro
+  account, il secondo arrivo uguale che si aggancia al primo e mai al nascosto, il media dell'utente che resta quello giusto) e, sul grafo vero,
+  `RicevutiInCodaAppTest.r15_*` (la foto nascosta e lo stesso file ricevuto: nasce un media visibile, il nascosto non cambia). Rossi prima della correzione
+  (`incomingMedia` com'era): tre dei quattro di `CatalogFiveBTest.r15_*` (il quarto e' la guardia del caso normale).
 
 ### R16. Uno scambio senza conferma puo' partire da un file dell'area comune cambiato da un altro account
 
@@ -516,7 +522,7 @@ Le voci generali della Fase 5 che riguardano la 5B:
   - Manca F37. Resta R3 come via indiretta, e I1, I2.
 - [ ] **Condivisioni in arrivo: limiti, tipo verificato dai byte, rifiuto di URI di file dell'app, flussi copiati subito.**
   - Regge in lettura (risposta 2, ultime voci; risposta 4).
-  - Manca F40. Dopo la copia restano R5, R14, R15.
+  - Manca F40. Dopo la copia restavano R5, R14, R15 (corrette il 20/10).
 - [ ] **Condividere con "rimuovi posizione": il file non contiene GPS.**
   - **Non regge**: R1, R2, R4; per i video i lettori non sono indipendenti.
   - Dopo le correzioni 5B (20/10): R1, R2, R4 corrette (stripper per elenco di cio' che si tiene, rilevatore indipendente, ogni "Condividi" con

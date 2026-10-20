@@ -16,6 +16,7 @@ import dev.pampa.mycloudgallery.core.database.entity.FreeSpaceItemEntity
 import dev.pampa.mycloudgallery.core.database.entity.FreeSpaceRunEntity
 import dev.pampa.mycloudgallery.core.database.entity.GroupIdRow
 import dev.pampa.mycloudgallery.core.database.entity.IncomingItemEntity
+import dev.pampa.mycloudgallery.core.database.entity.IncomingQueueRow
 import dev.pampa.mycloudgallery.core.database.entity.MetadataCorrectionEntity
 import dev.pampa.mycloudgallery.core.database.entity.NasCopyMismatchEntity
 import dev.pampa.mycloudgallery.core.database.entity.NasCopyRow
@@ -25,6 +26,7 @@ import dev.pampa.mycloudgallery.core.database.entity.PhonePlaceRow
 import dev.pampa.mycloudgallery.core.database.entity.SimilarCandidateRow
 import dev.pampa.mycloudgallery.core.database.entity.StatusCount
 import dev.pampa.mycloudgallery.core.database.entity.VisualSignatureEntity
+import kotlinx.coroutines.flow.Flow
 
 // I DAO dello schema v4 (Fase 5, docs/modello-dati.md §12). Semplici di proposito: righe dentro e fuori, nessuna regola. Le regole
 // stanno in chi li usa (P2 il diario, P3 le verifiche, P8-P14 la 5B); il grafo dei media, "al sicuro" e i gruppi li scrive sempre e
@@ -423,6 +425,36 @@ interface IncomingDao {
   /** P14: le condivisioni con almeno un file in uno di questi stati (la pulizia di `incoming/` all'avvio tiene queste). */
   @Query("SELECT DISTINCT stage_id FROM incoming_item WHERE state IN (:states)")
   suspend fun stagesInStates(states: List<String>): List<String>
+
+  /**
+   * IN-7 della verifica funzionale 5B ("Ricevuti in coda" della pagina Backup): i file in questi stati con lo stato e il problema del loro elemento del
+   * diario, dal piu' vecchio. Un flusso: si rilegge quando cambia una riga di `incoming_item` **o** di `backup_item` (il caricamento che avanza non
+   * cambia `incoming_item`). Dall'indice di `state` per `incoming_item` e di `backup_item_id` per la giunzione (una riga per file).
+   */
+  @Query(
+    "SELECT i.*, b.state AS item_state, b.problem AS item_problem FROM incoming_item i " +
+      "LEFT JOIN backup_item b ON b.item_id = i.backup_item_id WHERE i.state IN (:states) ORDER BY i.created_at, i.incoming_id",
+  )
+  fun observeQueue(states: List<String>): Flow<List<IncomingQueueRow>>
+
+  /** IN-7: la stessa fotografia, una volta sola. */
+  @Query(
+    "SELECT i.*, b.state AS item_state, b.problem AS item_problem FROM incoming_item i " +
+      "LEFT JOIN backup_item b ON b.item_id = i.backup_item_id WHERE i.incoming_id = :incomingId",
+  )
+  suspend fun queueRow(incomingId: Long): IncomingQueueRow?
+
+  /** IN-7: quanti file sono in questi stati (il piede della Libreria e la notifica contano i problemi). Dall'indice di `state`. */
+  @Query("SELECT COUNT(*) FROM incoming_item WHERE state IN (:states)")
+  suspend fun countInStates(states: List<String>): Int
+
+  /** IN-7: lo stesso conto come flusso (la notifica dei problemi lo segue). */
+  @Query("SELECT COUNT(*) FROM incoming_item WHERE state IN (:states)")
+  fun observeCountInStates(states: List<String>): Flow<Int>
+
+  /** IN-7: "Scarta" toglie la riga dal diario degli arrivi (la copia locale la toglie chi chiama). Il NAS non c'entra. */
+  @Query("DELETE FROM incoming_item WHERE incoming_id = :incomingId")
+  suspend fun delete(incomingId: Long): Int
 }
 
 /** Le correzioni solo nell'app (`metadata_correction`, Q6 (a), P14): una riga per versione. */

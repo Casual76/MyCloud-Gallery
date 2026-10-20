@@ -99,4 +99,12 @@
   <string name="backup_footer_waiting_unlock_detail">Il backup riprende allo sblocco.</string>
   <string name="backup_footer_profile_inactive_label">Profilo non attivo</string>
   <string name="backup_footer_profile_inactive_detail">Il backup riprende quando il profilo torna attivo.</string>
+  <!-- Correzioni 5B (IN-7): i file ricevuti da un'altra app che non si sono salvati sul NAS ("Ricevuti in coda" nella pagina Backup). Non e' un
+       BackupProblemCode: la tabella dei problemi del piede lo conosce per codice. -->
+  <string name="backup_footer_incoming_failed_label">File ricevuti non salvati</string>
+  <plurals name="backup_footer_incoming_failed_label_count">
+    <item quantity="one">%1$s file ricevuto non salvato</item>
+    <item quantity="other">%1$s file ricevuti non salvati</item>
+  </plurals>
+  <string name="backup_footer_incoming_failed_detail">Riprova o scartali da Backup.</string>
 </resources>

@@ -46,6 +46,7 @@ import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.feature.backup.BackupDimens
 import dev.pampa.mycloudgallery.feature.backup.R
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupScreen
+import dev.pampa.mycloudgallery.feature.backup.received.ReceivedEntryCard
 import dev.pampa.mycloudgallery.feature.backup.tasks.PendingTasksEntryCard
 import dev.pampa.mycloudgallery.feature.backup.first.FirstBackupSheet
 import dev.pampa.mycloudgallery.feature.backup.ui.BackupLabel
@@ -130,6 +131,10 @@ internal fun BackupPageScreen(
         // 5B (P14, D20): "Da decidere", solo se c'e' qualcosa da decidere.
         if (state.pendingTasks > 0) {
           item(key = "pending-tasks") { PendingTasksEntryCard(count = state.pendingTasks, onOpen = { actions.open(BackupScreen.PENDING_TASKS) }) }
+        }
+        // 5B (IN-7): "Ricevuti in coda", solo se un'altra app ha mandato qualcosa che non e' ancora sul NAS.
+        if (state.received.total > 0) {
+          item(key = "received") { ReceivedEntryCard(counts = state.received, onOpen = { actions.open(BackupScreen.RECEIVED) }) }
         }
         otherProblems(state, actions)
         sourcesSection(state.sources)

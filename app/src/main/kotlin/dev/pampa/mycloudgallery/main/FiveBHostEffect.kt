@@ -76,6 +76,22 @@ internal fun FiveBHostEffect(ui: FiveBUi?, nav: NavController) {
     }
   }
 
+  // IN-7: la notifica ha detto che dei file ricevuti non si sono salvati: quando l'utente torna, la pagina Backup si apre (la scheda "Ricevuti in coda"
+  // sta in cima). Se e' gia' su una pagina del backup non si sposta.
+  LaunchedEffect(ui) {
+    var seen = ui.receivedRequests.value
+    ui.receivedRequests.collect { serial ->
+      if (serial != seen) {
+        seen = serial
+        val here = nav.currentDestination?.route
+        if (here != BackupScreen.PAGE.route && here != BackupScreen.RECEIVED.route) {
+          viewer?.close()
+          nav.navigate(BackupScreen.PAGE.route)
+        }
+      }
+    }
+  }
+
   // LS-2: la verifica di "Libera spazio" e' pronta e la notifica l'ha detto: quando l'utente torna, la pagina si apre (con la selezione del giro).
   val readyRun by ui.freeRuns.openRequest.collectAsStateWithLifecycle()
   LaunchedEffect(readyRun) {

@@ -81,6 +81,13 @@ internal object BackupFooterProblems {
     problem("stale", GalleryFooterTone.Attention, Icons.Rounded.Warning, R.string.backup_footer_stale_label, R.string.backup_footer_stale_detail),
     problem("waiting_unlock", GalleryFooterTone.Waiting, Icons.Rounded.Schedule, R.string.backup_footer_waiting_unlock_label, R.string.backup_footer_waiting_unlock_detail),
     problem("profile_inactive", GalleryFooterTone.Waiting, Icons.Rounded.Schedule, R.string.backup_footer_profile_inactive_label, R.string.backup_footer_profile_inactive_detail),
+    // Correzioni 5B (IN-7): i file che un'altra app ha condiviso e che non si sono salvati sul NAS. Non e' un `BackupProblemCode` (non riguarda le foto del
+    // telefono): lo compone `:app` (`BackupStatusReducers.INCOMING_FAILED_CODE`) solo quando il backup non ha niente di piu' urgente da dire. Il tocco porta alla
+    // pagina Backup, dove sta "Ricevuti in coda" con "Riprova" e "Scarta".
+    problem(
+      "incoming_failed", GalleryFooterTone.Attention, Icons.Rounded.Warning, R.string.backup_footer_incoming_failed_label,
+      R.string.backup_footer_incoming_failed_detail, R.plurals.backup_footer_incoming_failed_label_count,
+    ),
   )
 
   private val byCode: Map<String, FooterProblem> = all.associateBy { it.code }

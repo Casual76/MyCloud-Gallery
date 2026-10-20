@@ -32,4 +32,14 @@
     <item quantity="other">%1$s di %2$s file ricevuti</item>
   </plurals>
   <string name="notify_incoming_stopping">Mi fermo prima del prossimo file…</string>
+  <!-- IN-7: i file ricevuti che non si sono caricati. Accanto ai numeri del lavoro, e da soli dopo la sua fine. Solo numeri. -->
+  <plurals name="notify_incoming_problems">
+    <item quantity="one">%1$s con un problema</item>
+    <item quantity="other">%1$s con un problema</item>
+  </plurals>
+  <string name="notify_incoming_problems_title">File ricevuti non salvati</string>
+  <plurals name="notify_incoming_problems_text">
+    <item quantity="one">%1$s file ricevuto non è stato salvato sul NAS. Apri Backup per riprovare o scartarlo.</item>
+    <item quantity="other">%1$s file ricevuti non sono stati salvati sul NAS. Apri Backup per riprovare o scartarli.</item>
+  </plurals>
 </resources>

@@ -34,7 +34,7 @@ import dev.pampa.mycloudgallery.feature.backup.BackupDimens
 // `NasNotice` di feature-nas: i feature non si conoscono, e D30 vieta uno stile nuovo.
 
 /**
- * La scheda di stato: il glifo del tono, il [title], la [detail] e, se serve, una barra di avanzamento ([progress]) o il cerchio che
+ * La scheda di stato: il glifo del tono (o un pezzo suo, [leading]), il [title], la [detail] e, se serve, una barra di avanzamento ([progress]) o il cerchio che
  * gira ([busy]) e i tasti ([actions]). Sta nel contenuto (non e' vetro: non galleggia). Per TalkBack titolo e frase sono una cosa sola;
  * i tasti sono bersagli a parte, da 48 dp o piu'.
  */
@@ -48,6 +48,7 @@ internal fun BackupCard(
   hint: String? = null,
   progress: Float? = null,
   busy: Boolean = false,
+  leading: (@Composable () -> Unit)? = null,
   actions: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
   val style = backupToneStyle(tone, MaterialTheme.colorScheme)
@@ -59,7 +60,10 @@ internal fun BackupCard(
       .padding(BackupDimens.CardPadding),
     horizontalArrangement = Arrangement.spacedBy(BackupDimens.BlockGap),
   ) {
-    if (busy) {
+    // IN-7: una scheda puo' avere al posto del glifo un pezzo suo (la miniatura di un file ricevuto).
+    if (leading != null) {
+      leading()
+    } else if (busy) {
       FluidSpinner(size = BackupDimens.CardGlyph, color = style.glyph)
     } else {
       Icon(imageVector = glyph, contentDescription = null, tint = style.glyph, modifier = Modifier.size(BackupDimens.CardGlyph))

@@ -9,6 +9,7 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupScreen
 import dev.pampa.mycloudgallery.feature.backup.free.FreeSpaceRoute
+import dev.pampa.mycloudgallery.feature.backup.received.ReceivedRoute
 import dev.pampa.mycloudgallery.feature.backup.tasks.PendingTasksRoute
 import dev.pampa.mycloudgallery.feature.backup.folder.DeviceFolderRoute
 import dev.pampa.mycloudgallery.feature.backup.page.BackupPageRoute
@@ -44,6 +45,8 @@ fun NavGraphBuilder.backupGraph(
     }
   }
   composable(BackupScreen.PENDING_TASKS.route) { PendingTasksRoute(onBack = back) }
+  // IN-7: i file ricevuti da un'altra app che non sono ancora sul NAS, con "Riprova" e "Scarta".
+  composable(BackupScreen.RECEIVED.route) { ReceivedRoute(onBack = back) }
 }
 
 /** Apre la pagina Backup (dal piede della Libreria e dalla voce delle Impostazioni). */

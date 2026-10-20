@@ -2969,10 +2969,10 @@ viewer. (Non e' codice di questo gruppo: lo applica chi ha «Libera spazio».)
   riferimento sia con il motore vero). `tools/check.ps1` non lanciato (come da brief).
 
 **Limiti e punti aperti**
-- **IN-7, non fatto**: la riga «Ricevuti in coda» con riprova e scarta nella pagina Backup (e il conto degli arrivi in `queued`), e un modo di riprovare o togliere
+- **IN-7, non fatto allora (fatto dopo: «Ricevuti in coda (20/10)»)**: la riga «Ricevuti in coda» con riprova e scarta nella pagina Backup (e il conto degli arrivi in `queued`), e un modo di riprovare o togliere
   gli arrivi `FAILED` (tengono la copia locale come prima). Sono UI di `feature-backup`, fuori da questo gruppo; il media di un arrivo resta invisibile
   nella Libreria finche' non e' sul NAS (E-X8 invariato).
-- **R15, non fatto**: `MediaCatalog.incomingMedia` (`core-database`) prende ancora qualunque versione con lo stesso SHA-256, anche di un media nascosto o di un
+- **R15, non fatto allora (fatto dopo: «Ricevuti in coda (20/10)»)**: `MediaCatalog.incomingMedia` (`core-database`) prende ancora qualunque versione con lo stesso SHA-256, anche di un media nascosto o di un
   altro account; il file salvato non si vede o non e' «mio». Nessun effetto sul backup (sistemati `markMedia` e `openFor`).
 - **R5**: un arrivo bloccato per sempre (sola lettura permanente) non diventa `FAILED`: aspetta con la sua copia locale e riparte se il cancello si riapre.
 - **IN-13**: le voci di debug «MCG prova (T-14/T-15)» non sono toccate (solo debug).
@@ -3000,3 +3000,151 @@ viewer. (Non e' codice di questo gruppo: lo applica chi ha «Libera spazio».)
 - **T-14**: il selettore da OneDrive, I miei file e Google Drive; `PICK` classico con il tipo del MediaStore; sul telefono senza blocco schermo il messaggio
   dice cosa fare; con «foto selezionate» il selettore e «Recenti» mostrano solo quelle concesse; un filtro dello schermo acceso mentre si apre il selettore
   scarta i tocchi (R8).
+
+## Ricevuti in coda (20/10)
+Fonte: `docs/review/funzionale-5b.md` IN-7 (la parte che restava) e `docs/review/5b-fase5b.md` R15 (`incomingMedia`). Perimetro: `feature-backup` (pagina e
+stringhe), in `:app` `backup/IncomingQueue.kt`, `backup/FiveBReceived.kt` (nuovo), `FiveBUi`, `FiveBGraph`, `FiveBModule`, `notify/`, `navigation/`,
+`core-database` (`incomingMedia` e le query sugli arrivi), il piede della Libreria (`feature-library`, solo la frase). Un file in arrivo e' un media che
+un'altra app condivide e che l'utente manda sul NAS con «Salva sul NAS»: il suo media nasce **invisibile** (presenza `none`) e finche' non e' sul NAS la
+Libreria non lo mostra. E-X8 promette «con lo stato»; fino a qui nessuna schermata leggeva `incoming_item`, e gli arrivi `FAILED` tenevano la copia locale
+per sempre senza modo di riprovarli o toglierli.
+
+**La scheda e l'elenco**
+- **Scheda «Ricevuti in coda»** nella pagina Backup (`ReceivedEntryCard`, accanto a «Da decidere»): **solo se c'e' almeno un file**; dice «2 in attesa · 1 in
+  caricamento · 3 con un problema» (le parti a zero non ci sono); tono Attenzione con un problema, Lavoro se qualcosa sale, Attesa altrimenti; il tocco su
+  «Vedi» apre l'elenco (`BackupScreen.RECEIVED`, rotta `backup/received`).
+- **L'elenco** (`ReceivedScreen`): una scheda per file, **problemi per primi**, poi quelli che salgono, poi gli altri, a pari punto dal piu' vecchio. Ogni
+  scheda: la **miniatura dalla copia locale** (`ThumbnailUtils` su un thread di lavoro; un segnaposto con il glifo del tipo finche' non c'e' o se non si legge),
+  «Nella cartella Viaggi/Estate» (la cartella di destinazione: dato dell'utente, mostrato e mai nei log), lo **stato in una frase**, «Foto · 3,2 MB» e i tasti
+  **«Riprova»** e **«Scarta»** (50 dp, uno a fianco dell'altro; per TalkBack «Riprova: Nella cartella Ricevute», perche' nell'elenco i tasti sono tanti e
+  uguali). Un file che sale non ha tasti; uno senza copia sul telefono ha solo «Scarta». In fondo: «Scartare toglie solo la copia sul telefono: sul NAS non
+  cambia niente.» Dopo un tocco una scheda in cima dice com'e' andata (rimesso in coda, non riprovo adesso perche'..., e' gia' sul NAS, scartato...).
+- **Gli stati** (`ReceivedStatus`, 17 valori, codici stabili, un `when` esaustivo per il testo): in attesa (in coda, in attesa di rete, Backup in prova,
+  cartella bloccata, NAS pieno, quota esaurita, serve la password, scritture ferme, in pausa, l'app non e' pronta), in caricamento (lo sto caricando,
+  controllo che sia arrivato intero), con un problema (la copia sul telefono non si legge o e' cambiata, non e' arrivato intero, la cartella non puo'
+  ricevere il file, la copia non c'e' piu', qualcosa e' andato storto). `ReceivedStates.of` (pura) li decide: per un file in coda vince il **cancello della
+  sua share** (`TEST_ONLY`, sola lettura, congelamento/emergenza, pausa, famiglia non pronta), poi il motore (se sta girando e l'elemento e' a meta'
+  cammino), poi il problema ricordato dal giro (NAS pieno, quota, password, NAS spento) o l'attesa delle regole (rete, Wi-Fi di casa, tetto dei dati);
+  fascia, carica e preset Notte non entrano (IN-5: un salvataggio e' un gesto dell'utente). Un file che il motore ha lasciato ha il suo problema, dal problema
+  dell'elemento del diario (`unreadable`, `verify_failed`, `unexpected`; senza un problema ricordato e' una cartella rifiutata).
+- **Come si legge**: `IncomingDao.observeQueue` (un `SELECT i.*, b.state, b.problem ... LEFT JOIN backup_item` su `incoming_item`: un flusso che si rifa' anche
+  quando avanza solo il diario del backup), unito allo stato del backup **ridotto** (senza i numeri che cambiano a ogni passo: l'elenco si rifa' solo se cambia
+  una frase) e messo in `StateFlow` con `WhileSubscribed`. Niente I/O finche' nessuno guarda.
+
+**«Riprova»** (`AppReceivedQueue.retry`, `AppIncomingQueue.blockOf/requeue/askJob`)
+- Con **gli stessi cancelli di «Salva sul NAS»**: `destinationAllowed` ora e' `blockOf(dest) == null`, quindi la regola e' una sola. D12 e R2 (`TEST_ONLY`:
+  «Backup in prova»), sola lettura, area che non e' piu' dell'utente (la share di una riga si confronta con l'area privata e comune di **adesso**), `Versioni/`
+  e l'area dell'app, la radice di prova di D13; congelamento, emergenza e pausa **mettono in coda e aspettano**, come quando si salva. Se un cancello vieta non
+  cambia niente (ne' la riga, ne' il diario) e non si chiede nessun lavoro: la risposta dice quale cancello (`ReceivedRetry.Blocked`).
+- Un file `FAILED` o `GONE` con la copia locale: l'elemento del diario che ha rinunciato e' **terminale e non si riapre** (`UploadStateMachine`), quindi ne
+  nasce **uno nuovo** (`createIncoming`, stessi byte, stessa destinazione; il media si cerca di nuovo con `incomingMedia`, quindi con le regole di R15) e la riga
+  di `incoming_item` torna «in coda» legata a lui, **nella stessa transazione**. Un file in coda con l'elemento ancora aperto non ne ha bisogno: basta chiedere
+  il lavoro. Il lavoro e' **un lavoro dell'utente come «Salva sul NAS»** (`onQueued`: IN-5, turno esclusivo dell'utente; UIDT solo oltre i 256 MiB).
+- Senza la copia sul telefono: la riga si segna `GONE` e l'esito e' «la copia non c'e' piu'», niente da riprovare (resta «Scarta»). Un file che il motore ha
+  finito ma di cui la riga non ha saputo (morte del processo fra i due passi) non si carica due volte: si sistema la riga e l'esito e' «e' gia' sul NAS».
+- `IncomingStates.KEEP` ora comprende anche `GONE`: un arrivo «sparito» per un'unione del catalogo ha ancora il suo file e prima la pulizia dell'avvio lo
+  toglieva in silenzio; adesso lo si puo' riprovare o scartare.
+
+**«Scarta»** (`AppReceivedQueue.discard`)
+- Dopo una **conferma** (foglio «Scartare questo file?»: «La copia sul telefono viene eliminata e il file non sara' salvato sul NAS. Sul NAS non cambia niente:
+  se ci e' gia' arrivato, resta dov'e'»). Toglie la **copia locale** (solo il file di quella riga dentro `incoming/`, con un nome dall'hash; la cartella della
+  condivisione se resta vuota) e poi la **riga** di `incoming_item`; se la copia non se ne va la riga resta (mai una copia che nessuna riga cita).
+- **Non tocca mai il NAS**: nessun codice di questo percorso chiama il NAS. E **non e' «scartabile» un file che ha gia' i byte completi sul NAS**: da `UPLOADED` in
+  poi il motore finisce da solo (rilegge, pubblica, collega) senza la copia locale, quindi scartare darebbe comunque un file sul NAS: e' «caricato». L'esito e'
+  «e' gia' sul NAS, o sta per arrivarci» (`ReceivedDiscard.AlreadySaved`), niente cambia. Un file che **sta salendo adesso** (`HASHED` o `UPLOADING` con il motore in giro: i byte letti possono stare in
+  memoria del motore, che li carica senza la copia locale) si scarta dopo (`Uploading`). Si scartano sempre `FAILED` e `GONE`, un file ancora `PLANNED` (aspetta il suo turno) e,
+  con il motore fermo, anche `HASHED` e `UPLOADING`.
+- L'elemento aperto del diario del backup **non si chiude da qui** (una corsa col motore che lo sta leggendo farebbe lanciare una transizione illegale a lui):
+  senza la sua riga il motore lo trova al giro dopo, la copia locale non c'e' e lo chiude come `GONE` (provato sul grafo vero: nessun fallito, niente sul NAS,
+  nessun arrivo aperto). Il media invisibile che era nato per lui resta nel catalogo senza posizioni (inoffensivo: se gli stessi byte tornano lo riusa, R14).
+
+**Il piede della Libreria e le notifiche**
+- **Piede** (`BackupStatusReducers.footer(..., incomingProblems)`, `BackupGraph.recompute`): se ci sono file con un problema (`FAILED`/`GONE`) dice **«N file ricevuti
+  non salvati»** (codice `incoming_failed`, tono Attenzione, «Riprova o scartali da Backup.»; il tocco porta alla pagina Backup, dove la scheda e' in cima) **quando non ha
+  niente di piu' urgente**: il piede muto («Backup non configurato»), «Tutto al sicuro» e «N in coda» gli lasciano il posto; un problema del backup, «Backup in
+  prova», il confronto e un giro in corso restano al loro posto. Non e' un `BackupProblemCode` (non riguarda le foto del telefono): il piede lo conosce per codice
+  stringa (`BackupFooterProblems`). Il conto e' una query sull'indice di `state`, mai il NAS; «Riprova» e «Scarta» avvisano `BackupGraph.kick` perche' si ricalcoli.
+- **Notifica del lavoro** (id 1007): «2 di 5 file ricevuti · 1 con un problema». Un file che non si e' caricato non e' «fatto»: prima usciva dalla coda e la
+  notifica diceva «5 di 5». `BackupProgress.incoming(done, total, problems)`; `followIncomingProgress` conta i problemi nati nel giro.
+- **Notifica dei problemi** (id 1008, canale «Problemi del NAS», `IncomingProblemNotification`): «File ricevuti non salvati» e il numero, **solo numeri**; resta dopo la
+  fine del lavoro (quella del lavoro se ne va con lui). La posta `IncomingProblemWatcher`, che segue il conto dei problemi per tutta la vita del processo: la **prima
+  lettura** e' il punto di partenza e non avvisa; un conto che **sale** con l'app in secondo piano avvisa; con l'app davanti no (lo vede il piede); a zero la
+  notifica se ne va. **Il tocco porta alla riga**, senza rompere C17 (il tocco di una notifica apre soltanto l'app: intent del launcher, immutabile, senza extra):
+  come per «Libera spazio» dopo la notifica «Pronto», l'app sa dove andare (`FiveBUi.receivedRequests`, `FiveBHostEffect`) e al ritorno apre la pagina Backup se non
+  e' gia' su una pagina del backup. Nessuna azione sulla notifica: «Riprova» e «Scarta» si toccano nella pagina, dopo il blocco dell'app.
+
+**R15: `MediaCatalog.incomingMedia`**
+- Prima prendeva **qualunque** versione con lo stesso SHA-256: un arrivo uguale a un media **nascosto** gli si agganciava (il file salvato non si vedeva e il nascosto
+  prendeva una copia che non aveva chiesto: nascosto contagioso, E-H1) e uno uguale a un media di **un altro account** diventava «mio». Adesso valgono solo i media
+  **dello stesso account** (`owner_account`) **e non nascosti**; un media ancora senza posizione (il primo arrivo uguale, in volo) e' dell'utente e vale, cosi' R14 resta
+  com'era (gli stessi byte in due cartelle: un solo media, due elementi); fra piu' candidati si preferisce quello che si vede; **nel dubbio ne nasce uno nuovo**. Sul grafo
+  vero (`RicevutiInCodaAppTest.r15_*`): la foto nascosta e lo stesso file ricevuto → un media nuovo, visibile appena e' sul NAS; il nascosto resta nascosto e senza copie
+  in piu'. Il catalogo non li fonde (provato).
+
+**Contratti cambiati e nuovi**
+- Nuovi (`feature-backup/received/`): `ReceivedQueue` (porta: `items`, `thumbnail`, `retry`, `discard`; opzionale per Dagger, `NoReceivedQueue`), `ReceivedItem`,
+  `ReceivedStatus`, `ReceivedPhase`, `ReceivedCounts`, `ReceivedRetry`, `ReceivedDiscard`; `BackupScreen.RECEIVED`; `BackupPageUi.received`; `BackupPageViewModel(received)`;
+  `ReceivedViewModel`, `ReceivedScreen`, `ReceivedRoute`, `ReceivedEntryCard`; il finto `FakeReceivedQueue` e `ReceivedSamples` (package `testing`).
+- `core-database`: `IncomingDao.observeQueue/queueRow/countInStates/observeCountInStates/delete`, `IncomingQueueRow`; `MediaCatalog.incomingMedia` (R15). Nessuna
+  migrazione: nessuna tabella nuova.
+- `:app`: `AppReceivedQueue`, `ReceivedStates`, `IncomingProblemWatcher` (`backup/FiveBReceived.kt`); `AppIncomingQueue.blockOf/destinationOf/requeue/askJob`;
+  `AppIncomingLocalFiles.localFileOf/discardLocal`; `IncomingStates.PROBLEMS/LISTED` e `KEEP` con `GONE`; `FiveBGraph.receivedQueue`; `FiveBUi.receivedRequests/openReceived`;
+  `FiveBModule.receivedQueue`; `BackupProgress.problems`; `IncomingProblemNotification/IncomingProblemNotices`, `AppNotifications.ID_INCOMING_PROBLEMS`;
+  `BackupStatusReducers.footer(..., incomingProblems)` e `INCOMING_FAILED_CODE`.
+- **Toccato fuori dall'elenco del brief, con il minimo** (necessario): `backup/BackupGraph.kt` (due punti: passa `backupStatus` e `onReceivedChanged` a `FiveBGraph` e legge il
+  conto dei problemi nel ricalcolo del piede), `backup/BackupStatusReducers.kt` (il parametro del piede), `work/BackupJobService.kt` (`followIncomingProgress` conta i
+  problemi del giro: senza, la notifica 1007 non poteva dirli).
+
+**Sicurezza**
+- Nessun permesso nuovo, nessun componente nuovo nel manifest. La notifica 1008 e' una notifica come le altre: solo numeri (la versione pubblica non ne ha nemmeno), il tocco
+  apre solo l'app (C17). «Riprova» non scavalca nessun cancello (la regola e' quella di «Salva sul NAS», una sola); «Scarta» non chiama il NAS e non esce da `incoming/`
+  (un nome di riga che non sia un hash non tocca niente: `ReceivedGatesTest.scartaNonEsceMaiDaIncoming`). Mai nomi di file, percorsi, share o account nei log. R15 chiude il
+  caso in cui un arrivo diventava il media di un altro account o rendeva visibile, di fatto, qualcosa di nascosto.
+
+**Test** (prima → dopo)
+- R15: `CatalogFiveBTest.r15_*` (4), rossi prima su `incomingMedia` com'era (3 su 4; il quarto e' la guardia del caso normale), poi verdi; `RicevutiInCodaAppTest.r15_*` (grafo vero).
+- Query: `IncomingQueueDaoTest` (5: l'elenco con lo stato dell'elemento, la riga singola, i conti come flusso, il caricamento che avanza che rifa' la coda, «Scarta» che toglie
+  solo la riga).
+- Pagina e elenco: `ReceivedViewModelTest` (10), `ReceivedScreenTest` (15: ogni stato con la sua frase, cartella/tipo/peso, i tasti per stato, i nomi per TalkBack, la conferma, le frasi dopo
+  un tocco, la miniatura, 48 dp e niente sovrapposizioni a 1x e a 1,3x), `ReceivedTabletLayoutTest`, `ReceivedEntryCardTest` (la scheda: assente a zero, i conti, il tocco; la pagina
+  la mostra insieme a «Da decidere»; il ViewModel della pagina).
+- Stati e cancelli: `ReceivedStatesTest` (pura: ogni stato, il cancello che vince, `canDiscard`), `ReceivedGatesTest` (10, con il Room vero: ogni stato del cancello, la share,
+  la radice di D13, `Versioni/`, il file grande, l'elemento aperto, «Scarta» e il motore).
+- Grafo vero in `:app`: `RicevutiInCodaAppTest` (13: la lista che dice «in attesa» e si svuota quando il file e' sul NAS; «Riprova» dopo una copia cambiata, due volte, la seconda
+  buona: il file sale riletto; in release dice «Backup in prova» e non cambia niente; verso `Versioni/`, l'area dell'app e una share altrui dice «cartella bloccata»; senza copia
+  locale; «Scarta» che toglie riga e copia e lascia il NAS **byte per byte** com'era, e il motore che chiude l'orfano; un file gia' pubblicato che non si scarta; un file caricato;
+  il piede; la notifica e la richiesta di aprire la pagina; R15), `FiveBButtonsTest` (la porta legata al grafo vero, non al null-object).
+- Notifiche e piede: `IncomingProblemNotificationTest`, `IncomingProblemWatcherTest` (anche le regole del piede), `BackupFooterTest.iFileRicevutiNonSalvati...`,
+  `BackupFooterProblemsTest`.
+- **Prove di mutazione** (tolta a mano la correzione, tutto il resto com'e', poi rimessa): con `incomingMedia` come prima sono rossi `CatalogFiveBTest.r15_*` (3) e
+  `RicevutiInCodaAppTest.r15_*`; con «Riprova» senza `blockOf` sono rossi `ReceivedGatesTest` (3: i cancelli, la share, la radice di D13) e
+  `RicevutiInCodaAppTest.riprovaInRelease...` e `riprovaVerso...`; con «Scarta» senza la guardia di `canDiscard` sono rossi `ReceivedGatesTest.scartaGuardaLoStatoDelMotore` e
+  `RicevutiInCodaAppTest.unFileGiaPubblicatoNonSiScarta...`.
+- Screenshot in `docs/screenshots/5-IN7/` (chiaro e scuro, telefono e tablet, testo grande): l'elenco tipico, solo problemi, solo attese, vuoto, la frase dopo «Riprova» e quando
+  e' bloccata, la conferma di «Scarta», la pagina Backup con la scheda (anche solo attese) e senza. Si rifanno con
+  `gradlew :feature-backup:recordRoborazziDebug --tests "*Received*Shots*"`.
+- **Esiti** (20/10, `--max-workers=4`, una build alla volta): `:core-database` **160 test, 0 falliti**; `:feature-backup` **564, 0 falliti**; `:feature-library` **530, 0 falliti**; `:app`
+  **512, 0 falliti**. `tools\check.ps1` (engine, checksum, `assembleDebug`, `assembleRelease`, `galleryTest`, `galleryLint`, ispezione dell'APK di release, D12/R2 nel dex) **tutto OK**,
+  con una avvertenza: `VerificaFunzionaleBackupAppTest.bk5_glIStatiInCorsoSonoCumulativiENonTornanoIndietro` **e' instabile gia' su HEAD** (su una copia pulita del commit `6698c00` fallisce
+  5 volte su 6, `expected: 24 but was: 23`: il catalogo conta un media fatto prima che il motore lo conti, e il primo stato dell'avanzamento ha un fatto in meno), non c'entra con questo
+  lavoro e sta fuori dal perimetro; per far finire il controllo l'ho tolto **solo in una copia di verifica** del repo (`@Ignore`), non nel repo. Segnalato come attivita' a parte.
+  Anche i test di `:core-library` sono caduti una volta per un crollo della JVM di prova (`EXCEPTION_ACCESS_VIOLATION` nella grafica nativa di Robolectric, modulo non toccato) e alla seconda
+  esecuzione e' passato.
+
+**Limiti e punti aperti**
+- «Riprova» di un file la cui copia sul telefono e' **cambiata** (stessa dimensione, byte diversi) lo rimette in coda e il motore ritrova lo stesso problema: l'utente vede di
+  nuovo «La copia sul telefono non si legge o e' cambiata» (e puo' scartarlo). Non si rilegge tutto il file in «Riprova» per non farlo due volte (lo fa il motore).
+- Un file in coda con il motore fermo e l'elemento a meta' caricamento (`UPLOADING`) si scarta: il temporaneo sul NAS lo toglie il motore quando chiude l'orfano (`GONE`), non «Scarta».
+- Il media invisibile di un arrivo scartato resta nel catalogo senza posizioni (inoffensivo).
+- La notifica dei problemi non si rifa' se l'utente la toglie a mano e il conto non sale; e quella di un processo precedente non si aggiorna (il piede e la pagina dicono il numero giusto).
+- Il tocco sulla notifica porta alla pagina Backup anche se l'utente apre l'app a ore di distanza da un'altra via, come «Libera spazio» dopo «Pronto»: stesso compromesso, scelto per C17.
+- Il piede dice i file non salvati solo se non ha niente di piu' urgente: durante un giro in corso o con un problema del backup non compaiono, ma la scheda nella pagina Backup c'e' sempre.
+
+**Da provare sul campo** (F40, solo `mcg-prova`, D12/D13)
+- Una foto WhatsApp e un video da Chrome verso «Salva sul NAS», col NAS **spento**: nella pagina Backup compare «Ricevuti in coda» con «2 in attesa», nell'elenco le miniature, la
+  cartella e «In attesa di rete»; accendere il NAS e vederli salire («Lo sto caricando sul NAS.») e sparire; la Libreria li mostra solo adesso.
+- In release la scheda dice «Backup in prova» e «Riprova» risponde «Non riprovo adesso. Backup in prova...» senza cambiare niente.
+- Far fallire un arrivo (cambiare la copia in `incoming/` non si puo' senza root: usare un NAS pieno, o la share in sola lettura): la scheda dice «con un problema»; il piede della
+  Libreria dice «N file ricevuti non salvati» e porta alla pagina; con l'app in secondo piano arriva la notifica «File ricevuti non salvati» e il tocco apre la pagina Backup.
+- «Scarta» con la conferma: la copia sparisce dall'elenco e, controllato da PC, **il NAS non e' cambiato**; un file che sta salendo non si scarta; uno gia' arrivato dice «E' gia' sul NAS».
+- TalkBack sull'elenco: ogni scheda e' una frase, i tasti dicono la cartella; testo a 1,3x e schermo da tablet.

@@ -1385,16 +1385,26 @@ class MediaCatalog(
 
   /**
    * D24 (P14, la coda dei file in arrivo): il media e la versione che un file in arrivo ("Salva sul NAS") diventera'. Se il catalogo conosce
-   * gia' una versione con gli stessi byte (SHA-256 [fingerprint]), e' quella: il file caricato ne sara' una copia in piu'. Altrimenti nasce un
-   * media nuovo con una sola versione e **nessuna posizione** (presenza `none`: la Libreria non lo mostra finche' il backup non attacca la copia
-   * verificata sul NAS). [sortTimeHint] e' l'ordine provvisorio (la data di scatto vera arriva con META). Proprietario: l'account del dispositivo.
+   * gia' una versione con gli stessi byte (SHA-256 [fingerprint]) **di un media dell'utente e non nascosto**, e' quella: il file caricato ne sara'
+   * una copia in piu'. Altrimenti nasce un media nuovo con una sola versione e **nessuna posizione** (presenza `none`: la Libreria non lo mostra
+   * finche' il backup non attacca la copia verificata sul NAS). [sortTimeHint] e' l'ordine provvisorio (la data di scatto vera arriva con META).
+   * Proprietario: l'account del dispositivo.
+   *
+   * **R15 della revisione di sicurezza 5B.** Prima si prendeva qualunque versione con quei byte: un arrivo uguale a un media **nascosto** gli si
+   * agganciava (il file salvato non si vedeva mai, e il nascosto prendeva una copia che non aveva chiesto: E-H1, nascosto contagioso) e uno uguale a
+   * un media di **un altro account** diventava "suo". Adesso valgono solo i media dello stesso account e non nascosti; un media ancora senza posizione
+   * (il primo arrivo uguale, in volo: R14) e' dell'utente e vale. Fra piu' candidati si preferisce quello che si vede. Nel dubbio ne nasce uno nuovo.
    */
   suspend fun incomingMedia(fingerprint: Fingerprint, kind: MediaKind, sortTimeHint: Long): CatalogIncomingMedia = write { tx ->
     val hash = requireNotNull(fingerprint.fullHash) { "Un file in arrivo ha il suo SHA-256." }
-    versionDao.byFullHash(hash.hex).firstOrNull { it.size == fingerprint.size }?.let { known ->
-      val owner = resolve(MediaId(known.mediaId)) ?: MediaId(known.mediaId)
-      return@write CatalogIncomingMedia(owner, VersionId(known.versionId), created = false)
-    }
+    val known = versionDao.byFullHash(hash.hex).filter { it.size == fingerprint.size }.mapNotNull { version ->
+      val owner = resolve(MediaId(version.mediaId)) ?: MediaId(version.mediaId)
+      val row = mediaDao.get(owner.value) ?: return@mapNotNull null
+      if (row.ownerAccount != localAccount.value) return@mapNotNull null
+      if (personalDao.get(owner.value)?.hidden == true) return@mapNotNull null
+      Triple(owner, VersionId(version.versionId), row.presence != Presence.NONE.code)
+    }.sortedByDescending { it.third }.firstOrNull()
+    if (known != null) return@write CatalogIncomingMedia(known.first, known.second, created = false)
     val now = clock()
     val mediaId = MediaId.random()
     val version = MediaVersion(VersionId.random(), VersionKind.ORIGINAL, null, fingerprint, now)

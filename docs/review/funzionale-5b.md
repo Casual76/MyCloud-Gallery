@@ -822,15 +822,30 @@ il commit successivo, `2b7ea2c`, tocca solo `docs/decisioni.md`.
   - una notifica degli arrivi con N di M e uno stop solo per `INCOMING`;
   - i problemi degli arrivi in `memory`;
   - una riga "Ricevuti in coda" nella pagina Backup, con riprova e scarta.
-- **Stato: corretta in parte** (20/10). Fatto: (1) i file in arrivo hanno **la loro notifica** (id 1007, "Salvataggio sul NAS", «N di M file
+- **Stato: corretta** (20/10, in due tempi). **Primo tempo:** (1) i file in arrivo hanno **la loro notifica** (id 1007, "Salvataggio sul NAS", «N di M file
   ricevuti», solo numeri, dal diario degli arrivi: `BackupProgress.incoming`, `followIncomingProgress`), non piu' il testo del backup delle foto; (2) il suo
   **"Ferma" e' solo suo**: un'azione e un ricevitore propri (`BackupNotification.stopAction(context, incoming = true)`), un `IncomingStop` per lavoro che
   chiede al giro di finire al passo dopo (nessun file a meta', i file restano in coda), mai la pausa R4 di tutto il backup; anche lo "Stop" di Android
   sul lavoro degli arrivi non mette in pausa le foto; (3) un NAS pieno, la quota o la password per un arrivo arrivano alla **memoria** dei problemi e
-  agli eventi come per ogni altro giro (`BackupStages.incoming`). **Non fatto** (fuori dal perimetro di questo gruppo: pagina Backup e Libreria): la
-  riga «Ricevuti in coda» con riprova e scarta nella pagina Backup, e un modo di riprovare o togliere gli arrivi `FAILED` (tengono la copia locale
-  come prima: `IncomingStates.KEEP`). Il media di un arrivo resta invisibile nella Libreria finche' non e' sul NAS (E-X8 invariato). Test:
-  `BackupNotificationTest.in7_*`, `Correzioni5BIntegrazioniAppTest.in5_*` (il giro degli arrivi).
+  agli eventi come per ogni altro giro (`BackupStages.incoming`). Test: `BackupNotificationTest.in7_*`, `Correzioni5BIntegrazioniAppTest.in5_*` (il giro
+  degli arrivi).
+  **Secondo tempo (pagina Backup, Libreria, notifica):** (4) la scheda **«Ricevuti in coda»** nella pagina Backup (`feature-backup/received/`), solo se c'e'
+  almeno un file, con i conti «in attesa · in caricamento · con un problema»; il tocco su «Vedi» apre l'elenco (rotta `backup/received`), una scheda per
+  file con la **miniatura dalla copia locale**, la cartella di destinazione, lo **stato in una frase** (in attesa di rete, Backup in prova, cartella
+  bloccata, NAS pieno, quota, password, scritture ferme, in pausa, lo sto caricando, la copia e' cambiata, non e' arrivato intero...) e **«Riprova»** e
+  **«Scarta»** (bersagli da 50 dp, nome per TalkBack con la cartella, testo a 1,3x). (5) **«Riprova»** (`AppReceivedQueue.retry`) rimette in coda con **gli
+  stessi cancelli di «Salva sul NAS»** (`AppIncomingQueue.blockOf`, la stessa regola di `destinationAllowed`: D12, R2, D13, la share, `Versioni/`, l'area
+  dell'app; il congelamento, l'emergenza e la pausa mettono in coda e aspettano), crea un **elemento nuovo** del diario (quello che ha rinunciato e'
+  terminale) e chiede il lavoro dell'utente come «Salva sul NAS» (IN-5); se un cancello vieta non cambia niente e dice quale. (6) **«Scarta»**, dopo una
+  conferma, toglie la riga di `incoming_item` e la copia sul telefono e **non tocca mai il NAS**: un file che ha gia' i byte completi sul NAS (da `UPLOADED`
+  in poi: il motore finisce da solo) o che sta salendo adesso non si scarta ("e' gia' sul NAS" / "lo sto caricando"). (7) Il **piede della Libreria** dice
+  «N file ricevuti non salvati» (codice `incoming_failed`, tono Attenzione, il tocco porta alla pagina Backup) quando non ha niente di piu' urgente, e la
+  notifica del lavoro dice «2 di 5 file ricevuti · 1 con un problema» (un file che non si e' caricato non e' "fatto"); una notifica **a parte** (id 1008,
+  «File ricevuti non salvati», solo il numero) avvisa quando un file non si salva con l'app in secondo piano e, al ritorno, l'app porta alla pagina Backup
+  (il tocco apre solo l'app: C17). (8) Gli arrivi `GONE` tengono la copia locale (`IncomingStates.KEEP`): un arrivo "sparito" per un'unione del catalogo ha
+  ancora il suo file e adesso si puo' riprovare o scartare. Il media di un arrivo resta invisibile nella Libreria finche' non e' sul NAS (E-X8 invariato):
+  adesso lo stato si vede qui. Test: `RicevutiInCodaAppTest` (grafo vero), `ReceivedGatesTest`, `ReceivedStatesTest`, `IncomingProblemWatcherTest`,
+  `IncomingProblemNotificationTest`, `ReceivedViewModelTest`, `ReceivedScreenTest`, `ReceivedEntryCardTest`, `BackupFooterTest`, `IncomingQueueDaoTest`.
 
 #### IN-8 · Il media ricevuto arriva nella Libreria senza la sua data e senza metadati
 - **Gravità:** Sbagliata. **Stato:** plausibile.

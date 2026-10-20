@@ -309,10 +309,13 @@ class BackupJobService : JobService() {
   private suspend fun followIncomingProgress(notifications: AppNotifications, backup: BackupGraph, database: GalleryDatabase, userInitiated: Boolean) {
     val dao = database.incomingDao()
     val start = dao.inState(IncomingStates.QUEUED).size
+    val startProblems = dao.countInStates(IncomingStates.PROBLEMS)
     var last: BackupProgress? = null
-    backup.status.map { dao.inState(IncomingStates.QUEUED).size }.distinctUntilChanged().collect { queued ->
-      val done = (start - queued).coerceAtLeast(0)
-      val progress = BackupProgress.incoming(done, maxOf(start, done + queued))
+    backup.status.map { dao.inState(IncomingStates.QUEUED).size to dao.countInStates(IncomingStates.PROBLEMS) }.distinctUntilChanged().collect { (queued, problemsNow) ->
+      // IN-7: un file che non si e' caricato non e' "fatto": esce dalla coda ma la notifica lo conta a parte ("2 di 5 file ricevuti · 1 con un problema").
+      val problems = (problemsNow - startProblems).coerceAtLeast(0)
+      val done = (start - queued - problems).coerceAtLeast(0)
+      val progress = BackupProgress.incoming(done, maxOf(start, done + queued + problems), problems)
       if (progress == last || !notifications.canNotify()) return@collect
       last = progress
       if (!userInitiated && queued == 0) return@collect

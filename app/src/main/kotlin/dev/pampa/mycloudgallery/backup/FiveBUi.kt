@@ -43,6 +43,8 @@ import dev.pampa.mycloudgallery.feature.viewer.menu.NasLocationInfo
 import dev.pampa.mycloudgallery.feature.viewer.menu.NasMediaActions
 import dev.pampa.mycloudgallery.feature.viewer.menu.NasAreaScope
 import dev.pampa.mycloudgallery.integrations.IntegrationsGraph
+import dev.pampa.mycloudgallery.notify.AppIncomingProblemNotices
+import dev.pampa.mycloudgallery.notify.IncomingProblemNotices
 import java.time.Instant
 import java.time.ZoneOffset
 import kotlinx.coroutines.CancellationException
@@ -115,12 +117,47 @@ class FiveBUi(
   private val monotonicMs: () -> Long,
   private val integrations: IntegrationsGraph,
   private val scope: CoroutineScope,
+  /** IN-7: chi avvisa quando un file ricevuto non si carica (di serie la notifica vera; i test ne scelgono una). */
+  incomingNotices: IncomingProblemNotices = AppIncomingProblemNotices(context),
 ) {
 
   private val fiveB get() = backup.fiveB
   private var serial = 0L
 
   private fun next(): Long = synchronized(this) { ++serial }
+
+  // --- IN-7: "Ricevuti in coda" ----------------------------------------------------------------------------------------------------
+
+  private val receivedFlow = MutableStateFlow(0L)
+
+  /**
+   * Ogni valore nuovo chiede alla navigazione di portare l'utente alla pagina Backup, dove sta "Ricevuti in coda" ([FiveBHostEffect]). Lo chiede la
+   * notifica dei file ricevuti non salvati quando l'app e' in secondo piano: il tocco sulla notifica apre solo l'app (C17), e al ritorno l'app sa dove
+   * andare (come "Libera spazio" dopo la notifica "Pronto").
+   */
+  val receivedRequests: StateFlow<Long> = receivedFlow.asStateFlow()
+
+  fun openReceived() {
+    receivedFlow.value = next()
+  }
+
+  init {
+    // La notifica "N file ricevuti non salvati": segue il conto dei file con un problema per tutta la vita del processo.
+    scope.launch {
+      try {
+        IncomingProblemWatcher(
+          problems = fiveB.receivedQueue.problems(),
+          notices = incomingNotices,
+          foreground = { fiveB.freeRuns.appInForeground },
+          openRequest = ::openReceived,
+        ).run()
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        GalleryLog.w(TAG) { "avviso dei file ricevuti non salvati fermo (${e.javaClass.simpleName})" }
+      }
+    }
+  }
 
   // --- Porte di feature-backup ----------------------------------------------------------------------------------------------------
 

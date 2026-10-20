@@ -28,6 +28,9 @@ enum class BackupScreen(val route: String, val phase5B: Boolean = false) {
 
   /** 5B: le attivita' in sospeso, "Da decidere" (D20). */
   PENDING_TASKS("backup/pending", phase5B = true),
+
+  /** 5B (IN-7): i file ricevuti da un'altra app che non sono ancora sul NAS, "Ricevuti in coda" (D24, E-X8). */
+  RECEIVED("backup/received", phase5B = true),
 }
 
 /**

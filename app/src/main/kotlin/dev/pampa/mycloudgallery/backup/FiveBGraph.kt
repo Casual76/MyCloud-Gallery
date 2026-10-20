@@ -6,6 +6,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupClock
 import dev.pampa.mycloudgallery.core.backup.contract.BackupKind
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSource
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSources
+import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
 import dev.pampa.mycloudgallery.core.backup.contract.CandidateQuery
 import dev.pampa.mycloudgallery.core.backup.contract.BackupFence
 import dev.pampa.mycloudgallery.core.backup.contract.BackupGate
@@ -151,6 +152,13 @@ class FiveBGraph(
    * non si e' liberato in tempo.
    */
   private val guardianTurn: suspend (Duration, suspend () -> Any?) -> Any? = { _, block -> exclusive(block) },
+  /**
+   * IN-7: lo stato del backup, per dire di ogni file ricevuto a che punto e' (si chiede al primo uso: il grafo del backup nasce con questo). Di serie
+   * "in prova", che non dice niente di sbagliato.
+   */
+  private val backupStatus: () -> StateFlow<BackupStatus> = { MutableStateFlow(BackupStatus.TestOnly) },
+  /** IN-7: qualcosa dei file ricevuti e' cambiato (un "Riprova", uno "Scarta"): lo stato del backup e il piede della Libreria si ricalcolano. */
+  private val onReceivedChanged: () -> Unit = {},
 ) {
 
   // --- Nel costruttore: niente I/O ------------------------------------------------------------------------------------------------
@@ -196,6 +204,20 @@ class FiveBGraph(
     fenceRoot = ::fenceRoot,
     clock = clock,
     onQueued = onIncomingQueued,
+  )
+
+  /**
+   * IN-7 ("Ricevuti in coda"): i file ricevuti che non sono ancora sul NAS, con "Riprova" e "Scarta". Si legge da `incoming_item` e dal diario del
+   * backup, con gli stessi cancelli di "Salva sul NAS". Non fa I/O finche' nessuno lo guarda.
+   */
+  val receivedQueue: AppReceivedQueue = AppReceivedQueue(
+    database = database,
+    queue = incomingQueue,
+    files = incomingFiles,
+    gate = incomingGate,
+    backupStatus = backupStatus,
+    scope = scope ?: CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    onChanged = onReceivedChanged,
   )
 
   /** Il motore carica i file in arrivo con queste porte (D24): copie locali, cancello della destinazione, radice di D13. */

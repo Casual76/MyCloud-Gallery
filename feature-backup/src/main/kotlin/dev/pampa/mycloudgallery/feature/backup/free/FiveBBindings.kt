@@ -9,6 +9,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.Corrections
 import dev.pampa.mycloudgallery.core.backup.contract.FreeSpace
 import dev.pampa.mycloudgallery.core.backup.contract.PendingTasks
 import dev.pampa.mycloudgallery.core.backup.contract.VersionKeeper
+import dev.pampa.mycloudgallery.feature.backup.received.ReceivedQueue
 import dev.pampa.mycloudgallery.feature.backup.tasks.PendingTaskActions
 import dev.pampa.mycloudgallery.feature.backup.versions.CorrectionPlaces
 import dev.pampa.mycloudgallery.feature.backup.versions.VersionActions
@@ -21,7 +22,7 @@ import dev.pampa.mycloudgallery.feature.backup.versions.VersionActions
  * I servizi sono i contratti di core-backup: [FreeSpace] ("Libera spazio"), [VersionKeeper] (versioni e "Ripristina originale"), [Corrections]
  * (data, luogo, rotazione), [PendingTasks] ("Da decidere"), [BackupClock] (l'orologio monotono con cui si datano i tocchi di conferma, lo
  * stesso con cui i servizi li controllano). Le porte sono di questo modulo: [PhoneSystemDialogs], [PhoneOnlyAssessor], [PendingTaskActions],
- * [VersionActions], [CorrectionPlaces]. `BackupActions` e' gia' dichiarata da `BackupOptionalBindingsModule`.
+ * [VersionActions], [CorrectionPlaces], [ReceivedQueue] ("Ricevuti in coda", IN-7). `BackupActions` e' gia' dichiarata da `BackupOptionalBindingsModule`.
  */
 @Module
 @InstallIn(SingletonComponent::class)
@@ -54,6 +55,10 @@ abstract class FiveBOptionalBindingsModule {
 
   @BindsOptionalOf
   abstract fun pendingTaskActions(): PendingTaskActions
+
+  /** Correzioni 5B (IN-7): "Ricevuti in coda", i file che un'altra app ha condiviso e che non sono ancora sul NAS. */
+  @BindsOptionalOf
+  abstract fun receivedQueue(): ReceivedQueue
 
   @BindsOptionalOf
   abstract fun versionActions(): VersionActions

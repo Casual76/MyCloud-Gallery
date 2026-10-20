@@ -18,6 +18,7 @@ import dev.pampa.mycloudgallery.core.backup.upload.IncomingLocalFiles
 import dev.pampa.mycloudgallery.core.backup.upload.IncomingUploadPorts
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.database.GalleryDatabase
+import dev.pampa.mycloudgallery.core.database.CatalogIncomingMedia
 import dev.pampa.mycloudgallery.core.database.MediaCatalog
 import dev.pampa.mycloudgallery.core.database.entity.IncomingItemEntity
 import dev.pampa.mycloudgallery.core.database.transaction
@@ -27,8 +28,11 @@ import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.QuickHash
 import dev.pampa.mycloudgallery.core.model.QuickHashAlgorithm
+import dev.pampa.mycloudgallery.core.model.Sha256
 import dev.pampa.mycloudgallery.core.model.VersionId
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
+import dev.pampa.mycloudgallery.feature.backup.received.ReceivedRetry
+import dev.pampa.mycloudgallery.feature.backup.received.ReceivedStatus
 import dev.pampa.mycloudgallery.feature.integrations.receive.IncomingFiles
 import dev.pampa.mycloudgallery.feature.integrations.receive.IncomingQueue
 import java.io.File
@@ -57,8 +61,17 @@ object IncomingStates {
   /** Non caricato (verifica fallita, copia locale cambiata, destinazione rifiutata): la copia locale **resta**. */
   const val FAILED: String = "failed"
 
-  /** Le condivisioni che la pulizia all'avvio deve tenere (file ancora utili all'utente). */
-  val KEEP: List<String> = listOf(QUEUED, FAILED)
+  /**
+   * Le condivisioni che la pulizia all'avvio deve tenere (file ancora utili all'utente). IN-7: anche [GONE], perche' un arrivo "sparito" per un'unione
+   * del catalogo (non perche' la copia mancava) ha ancora il suo file, e adesso l'utente lo puo' riprovare o scartare da "Ricevuti in coda".
+   */
+  val KEEP: List<String> = listOf(QUEUED, FAILED, GONE)
+
+  /** IN-7: i file che non si sono caricati e aspettano una scelta dell'utente ("Riprova" o "Scarta"): il piede della Libreria e la notifica li contano. */
+  val PROBLEMS: List<String> = listOf(FAILED, GONE)
+
+  /** IN-7: quelli che "Ricevuti in coda" elenca: in coda e con un problema (i caricati non servono piu'). */
+  val LISTED: List<String> = listOf(QUEUED, FAILED, GONE)
 }
 
 /**
@@ -104,18 +117,42 @@ class AppIncomingQueue(
   @Volatile
   var metadata: IncomingMetadata? = null
 
-  override suspend fun destinationAllowed(dest: NasDestination): Boolean {
+  override suspend fun destinationAllowed(dest: NasDestination): Boolean = blockOf(dest) == null
+
+  /**
+   * IN-7: perche' [dest] non e' ammessa adesso, con le **stesse** regole di [destinationAllowed] (D12, R2, D13, la share, il congelamento...); null =
+   * ammessa. "Riprova" di "Ricevuti in coda" lo chiede prima di rimettere in coda e dice all'utente quale cancello lo vieta.
+   */
+  suspend fun blockOf(dest: NasDestination): ReceivedStatus? {
     val share = when (dest.area) {
       DestinationArea.PRIVATE -> privateShare()
       DestinationArea.COMMON -> commonShare()
-    } ?: return false
-    if (!share.equals(dest.share, ignoreCase = true)) return false
+    } ?: return ReceivedStatus.UNAVAILABLE
+    if (!share.equals(dest.share, ignoreCase = true)) return ReceivedStatus.FOLDER_LOCKED
     when (gate.stateOf(dest.share)) {
       BackupGateState.OPEN, BackupGateState.PAUSED, BackupGateState.FROZEN, BackupGateState.WRITES_STOPPED -> Unit
-      BackupGateState.NOT_READY, BackupGateState.NO_PRIVATE_AREA, BackupGateState.TEST_ONLY, BackupGateState.READ_ONLY_AREA -> return false
+      BackupGateState.TEST_ONLY -> return ReceivedStatus.TRIAL
+      BackupGateState.READ_ONLY_AREA -> return ReceivedStatus.FOLDER_LOCKED
+      BackupGateState.NOT_READY, BackupGateState.NO_PRIVATE_AREA -> return ReceivedStatus.UNAVAILABLE
     }
     // La stessa regola che il motore applica prima di caricare (un file di prova nella cartella scelta).
-    return runCatching { IncomingUploadPorts(NoLocalFiles, gate, fenceRoot()).allows(dest.folder.child(PROBE_NAME)) }.getOrDefault(false)
+    val allowed = runCatching { IncomingUploadPorts(NoLocalFiles, gate, fenceRoot()).allows(dest.folder.child(PROBE_NAME)) }.getOrDefault(false)
+    return if (allowed) null else ReceivedStatus.FOLDER_LOCKED
+  }
+
+  /**
+   * IN-7: la destinazione di un arrivo gia' in coda, dalla sua riga: la share e la cartella di allora e l'area che quella share ha **adesso** (null se non
+   * e' piu' l'area privata o comune dell'utente, o se la riga non ha una cartella valida).
+   */
+  fun destinationOf(row: IncomingItemEntity): NasDestination? {
+    val share = row.destShare ?: return null
+    val folder = runCatching { SharePath.parse(row.destFolder ?: return null) }.getOrNull() ?: return null
+    val area = when {
+      share.equals(privateShare(), ignoreCase = true) -> DestinationArea.PRIVATE
+      share.equals(commonShare(), ignoreCase = true) -> DestinationArea.COMMON
+      else -> return null
+    }
+    return NasDestination(share, folder, area)
   }
 
   override suspend fun enqueue(stage: IncomingStage, dest: NasDestination, files: IncomingFiles): Int {
@@ -129,17 +166,7 @@ class AppIncomingQueue(
       // se il file ne ha una, arriva subito sotto dai suoi byte.
       val arrivedAt = IncomingArrival.provisionalMs(clock.nasNowMs(), file)
       val media = cat.incomingMedia(Fingerprint(item.size, quick, item.sha256), kindOf(item.mime), arrivedAt)
-      if (media.created) {
-        metadata?.let { reader ->
-          try {
-            reader.read(media.mediaId, media.versionId, file, item.mime, item.displayName, arrivedAt)
-          } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-          } catch (e: Exception) {
-            GalleryLog.w(TAG) { "metadati di un arrivo non letti (${e.javaClass.simpleName}): resta la data di arrivo" }
-          }
-        }
-      }
+      if (media.created) readMetadata(media, file, item.mime, item.displayName, arrivedAt)
       val planned = dest.folder.child(IncomingNames.of(item))
       database.transaction {
         val created = store.createIncoming(
@@ -179,6 +206,61 @@ class AppIncomingQueue(
     }
     if (queued > 0) onQueued(bytes >= dev.pampa.mycloudgallery.core.backup.contract.IncomingLimits.USER_INITIATED_JOB_BYTES)
     return queued
+  }
+
+  /**
+   * IN-7, "Riprova" di "Ricevuti in coda": mette di nuovo in coda un arrivo che non si e' caricato ([IncomingStates.FAILED] o [IncomingStates.GONE]) e
+   * di cui la copia locale [file] c'e' ancora. L'elemento del diario che ha rinunciato e' terminale e non si riapre mai: ne nasce **uno nuovo**
+   * (`createIncoming`, stessi byte, stessa destinazione) e la riga di `incoming_item` torna "in coda" legata a lui, nella stessa transazione. Il media
+   * e la versione si cercano di nuovo per gli stessi byte ([MediaCatalog.incomingMedia], con le regole di R15). Chi chiama ha gia' controllato i cancelli
+   * ([blockOf]) e chiede il lavoro dopo ([askJob]). [ReceivedRetry.NoCopy] se la copia non si legge piu' (di un'altra dimensione), `Blocked(UNAVAILABLE)`
+   * se il catalogo non c'e' ancora.
+   */
+  suspend fun requeue(row: IncomingItemEntity, dest: NasDestination, file: File): ReceivedRetry {
+    val cat = catalog() ?: return ReceivedRetry.Blocked(ReceivedStatus.UNAVAILABLE)
+    val quick = withContext(Dispatchers.IO) { quickHashOf(file, row.size) } ?: return ReceivedRetry.NoCopy
+    val sha = Sha256(row.sha256)
+    val arrivedAt = IncomingArrival.provisionalMs(clock.nasNowMs(), file)
+    val media = cat.incomingMedia(Fingerprint(row.size, quick, sha), kindOf(row.mime), arrivedAt)
+    if (media.created) readMetadata(media, file, row.mime, row.displayName, arrivedAt)
+    val item = IncomingItem(row.fileName, sha, row.size, row.mime, row.displayName)
+    database.transaction {
+      val created = store.createIncoming(
+        NewBackupItem(
+          kind = UploadKind.INCOMING,
+          mediaId = media.mediaId,
+          versionId = media.versionId,
+          size = row.size,
+          phone = null,
+          expected = null,
+          share = dest.share,
+          planned = dest.folder.child(IncomingNames.of(item)),
+          quickHash = quick,
+          sha256 = sha,
+        ),
+      )
+      database.incomingDao().update(row.copy(state = IncomingStates.QUEUED, backupItemId = created.id.value, updatedAt = clock.nasNowMs() ?: row.updatedAt))
+    }
+    return ReceivedRetry.Queued
+  }
+
+  /**
+   * IN-7: chiede il lavoro che carica, dopo un "Riprova": un lavoro dell'utente (IN-5), avviato da un tocco, UIDT se il file e' grande (come "Salva sul
+   * NAS"). [bytes] e' il peso del file.
+   */
+  fun askJob(bytes: Long) {
+    onQueued(bytes >= dev.pampa.mycloudgallery.core.backup.contract.IncomingLimits.USER_INITIATED_JOB_BYTES)
+  }
+
+  private suspend fun readMetadata(media: CatalogIncomingMedia, file: File, mime: String, displayName: String?, arrivedAt: Long) {
+    val reader = metadata ?: return
+    try {
+      reader.read(media.mediaId, media.versionId, file, mime, displayName, arrivedAt)
+    } catch (e: kotlinx.coroutines.CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      GalleryLog.w(TAG) { "metadati di un arrivo non letti (${e.javaClass.simpleName}): resta la data di arrivo" }
+    }
   }
 
   private fun kindOf(mime: String): MediaKind = if (mime.lowercase(Locale.ROOT).startsWith("video/")) MediaKind.VIDEO else MediaKind.PHOTO
@@ -294,6 +376,20 @@ class AppIncomingLocalFiles(private val database: GalleryDatabase, private val r
     if (!SAFE.matches(row.stageId) || !SAFE.matches(row.fileName)) return null
     val file = File(File(root, row.stageId), row.fileName)
     return file.takeIf { it.isFile }
+  }
+
+  /** IN-7: la copia locale di una riga di `incoming_item`, o null se non c'e' piu'. Per la miniatura e per "Riprova" di "Ricevuti in coda". */
+  fun localFileOf(row: IncomingItemEntity): File? = fileOf(row)
+
+  /**
+   * IN-7, "Scarta": toglie la copia locale di [row] (e la cartella della condivisione se resta vuota). Solo il file di questa riga, dentro `incoming/`: il
+   * NAS non c'entra. Vero se la copia non c'e' piu' (tolta adesso o gia' assente).
+   */
+  suspend fun discardLocal(row: IncomingItemEntity): Boolean = withContext(Dispatchers.IO) {
+    val file = fileOf(row) ?: return@withContext true
+    val removed = file.delete() || !file.exists()
+    if (removed) file.parentFile?.let { dir -> if (dir.listFiles().isNullOrEmpty()) dir.delete() }
+    removed
   }
 
   private class LocalFile(file: File) : IncomingLocalFile {

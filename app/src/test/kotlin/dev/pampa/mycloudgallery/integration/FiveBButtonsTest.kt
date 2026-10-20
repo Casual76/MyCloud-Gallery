@@ -24,6 +24,7 @@ import dev.pampa.mycloudgallery.core.security.lock.AppLockController
 import dev.pampa.mycloudgallery.core.security.lock.AppLockSettings
 import dev.pampa.mycloudgallery.di.FiveBModule
 import dev.pampa.mycloudgallery.feature.backup.free.NoPhoneSystemDialogs
+import dev.pampa.mycloudgallery.feature.backup.received.NoReceivedQueue
 import dev.pampa.mycloudgallery.feature.backup.versions.NoVersionActions
 import dev.pampa.mycloudgallery.feature.settings.sharing.SharedPrefsSharingSettings
 import dev.pampa.mycloudgallery.feature.viewer.menu.BackupMenuAction
@@ -119,7 +120,7 @@ class FiveBButtonsTest {
     val module = File("src/main/kotlin/dev/pampa/mycloudgallery/di/FiveBModule.kt")
     assertWithMessage("il modulo delle porte della 5B sta in src/main").that(module.isFile).isTrue()
     val release = File("src/release").walkTopDown().filter { it.isFile && it.extension == "kt" }.map { it.readText() }.toList()
-    for (port in listOf("FreeSpace", "VersionKeeper", "Corrections", "PendingTasks", "PhoneSystemDialogs", "FiveBUi", "IntegrationsGraph")) {
+    for (port in listOf("FreeSpace", "VersionKeeper", "Corrections", "PendingTasks", "ReceivedQueue", "PhoneSystemDialogs", "FiveBUi", "IntegrationsGraph")) {
       assertWithMessage("src/release non tocca $port").that(release.none { Regex("""\b$port\b""").containsMatchIn(it) }).isTrue()
     }
   }
@@ -134,6 +135,9 @@ class FiveBButtonsTest {
     assertThat(FiveBModule.versionKeeper(gallery)).isNotSameInstanceAs(NoVersionKeeper)
     assertThat(FiveBModule.corrections(gallery)).isNotSameInstanceAs(NoCorrections)
     assertThat(FiveBModule.pendingTasks(gallery)).isNotSameInstanceAs(NoPendingTasks)
+    // IN-7: "Ricevuti in coda" e' legata alla coda vera dei file ricevuti (non al null-object che non mostra mai niente).
+    assertThat(FiveBModule.receivedQueue(gallery)).isNotSameInstanceAs(NoReceivedQueue)
+    assertThat(FiveBModule.receivedQueue(gallery)).isSameInstanceAs(gallery.backup!!.fiveB.receivedQueue)
     assertThat(FiveBModule.backupClock(gallery)).isNotSameInstanceAs(MonotonicOnlyBackupClock)
     assertThat(FiveBModule.phoneSystemDialogs(ui)).isNotSameInstanceAs(NoPhoneSystemDialogs)
     assertThat(FiveBModule.phoneSystemDialogs(ui).available).isTrue()

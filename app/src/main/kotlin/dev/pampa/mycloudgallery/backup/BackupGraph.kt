@@ -227,6 +227,9 @@ class BackupGraph(
     foreground = foreground,
     // LS-8: il guardiano aspetta il turno al massimo per una tappa del giro (non 15 minuti), e intanto la pagina lo dice.
     guardianTurn = { wait, block -> exclusive(wait, forUser = true) { block() } },
+    // IN-7 ("Ricevuti in coda"): lo stato del backup (a ogni file ricevuto la sua frase) e il ricalcolo del piede dopo un "Riprova" o uno "Scarta".
+    backupStatus = { status },
+    onReceivedChanged = ::kick,
   )
 
   // --- Cio' che nasce in start --------------------------------------------------------------------------------------------------
@@ -883,7 +886,15 @@ class BackupGraph(
     val status = composeStatus(sources, share, access, counts)
     statusFlow.value = status
     sourcesFlow.value = sourceStatuses(catalog, sources)
-    footerFlow.value = BackupStatusReducers.footer(status, similar.progress.value.pending)
+    // IN-7: i file ricevuti che non si sono caricati lo dicono anche qui (una query sull'indice di `state`, mai il NAS).
+    val incomingProblems = try {
+      fiveB.receivedQueue.problemCount()
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      0
+    }
+    footerFlow.value = BackupStatusReducers.footer(status, similar.progress.value.pending, incomingProblems)
     progress.snapshot()?.let { text -> if (!stopped.get()) memory.setProgress(text) }
     // BK-13: "Sto cercando cosa c'e' gia' sul NAS" e' provvisorio e il riepilogo in cache vale un minuto; se nessun altro evento arriva, lo stato
     // non diventerebbe mai "assestato". Un solo ricalcolo, fra un minuto, finche' il riepilogo e' provvisorio.

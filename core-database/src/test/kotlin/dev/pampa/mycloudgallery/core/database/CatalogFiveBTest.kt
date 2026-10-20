@@ -3,14 +3,20 @@ package dev.pampa.mycloudgallery.core.database
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.database.Db.T0
+import dev.pampa.mycloudgallery.core.model.AccountId
 import dev.pampa.mycloudgallery.core.model.CaptureTimeSource
 import dev.pampa.mycloudgallery.core.model.FileStamp
 import dev.pampa.mycloudgallery.core.model.Location
 import dev.pampa.mycloudgallery.core.model.LocationState
 import dev.pampa.mycloudgallery.core.model.MediaKind
+import dev.pampa.mycloudgallery.core.model.MediaSource
+import dev.pampa.mycloudgallery.core.model.NasArea
+import dev.pampa.mycloudgallery.core.model.NasPath
+import dev.pampa.mycloudgallery.core.model.NasShare
 import dev.pampa.mycloudgallery.core.model.PersonalFlags
 import dev.pampa.mycloudgallery.core.model.Presence
 import dev.pampa.mycloudgallery.core.model.VersionKind
+import dev.pampa.mycloudgallery.core.model.domain.Observation
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -170,5 +176,78 @@ class CatalogFiveBTest : CatalogTestBase() {
       created.mediaId, created.versionId, nasLocation("Ricevute/IMG.jpg"), FileStamp(fresh.size, T0), verifiedAtMillis = T0,
     )
     assertThat(db.mediaDao().get(created.mediaId.value)!!.presence).isEqualTo(Presence.NAS_ONLY.code)
+  }
+
+  // --- R15 (revisione di sicurezza 5B): un arrivo si aggancia solo a un media dell'utente e non nascosto -------------------------------
+
+  /**
+   * R15: `incomingMedia` prendeva **qualunque** versione con gli stessi byte. Un arrivo uguale a un media nascosto gli si agganciava: il file salvato
+   * sul NAS non si vedeva mai nella Libreria (il media restava nascosto) e il nascosto prendeva una copia che non era sua (E-H1).
+   */
+  @Test
+  fun r15_unArrivoUgualeAUnNascostoNonSiAggancia_NeNasceUnoNuovoEIlNascostoResta() = runBlocking<Unit> {
+    val hidden = phoneMedia(11)
+    catalog.setPersonalFlags(hidden, PersonalFlags(hidden = true))
+
+    val arrival = catalog.incomingMedia(smallFull(11), MediaKind.PHOTO, T0)
+
+    assertThat(arrival.created).isTrue()
+    assertThat(arrival.mediaId).isNotEqualTo(hidden)
+    assertThat(arrival.versionId).isNotEqualTo(catalog.versionOf(hidden))
+    // Il nuovo media e' dell'utente, non nascosto, e dopo il caricamento verificato si vede, "solo NAS".
+    catalog.attachCopy(arrival.mediaId, arrival.versionId, nasLocation("Ricevute/IMG_11.jpg"), FileStamp(2_000, T0), verifiedAtMillis = T0)
+    assertThat(db.mediaDao().get(arrival.mediaId.value)!!.presence).isEqualTo(Presence.NAS_ONLY.code)
+    assertThat(db.personalDao().get(arrival.mediaId.value)?.hidden ?: false).isFalse()
+    // Il nascosto non ha preso nessuna copia sul NAS: com'era, e sempre nascosto.
+    assertThat(catalog.media(hidden)!!.locations.filter { it.isNas }).isEmpty()
+    assertThat(db.personalDao().get(hidden.value)!!.hidden).isTrue()
+    assertThat(db.mediaDao().get(hidden.value)!!.presence).isEqualTo(Presence.PHONE_ONLY.code)
+  }
+
+  /** R15: gli stessi byte in un'area privata di un altro account non sono "miei": l'arrivo non si aggancia al media di un altro. */
+  @Test
+  fun r15_unArrivoUgualeAUnMediaDiUnAltroAccountNonSiAggancia() = runBlocking<Unit> {
+    val maria = AccountId.of("maria")
+    catalog.registerShare(NasShare(maria, "maria", NasArea.PRIVATE))
+    val theirs = catalog.recordAll(
+      listOf(Observation(Location.Nas(maria, "maria", NasPath.of("Foto/stessa.jpg")), FileStamp(2_000, T0), smallFull(12), MediaKind.PHOTO, MediaSource.OTHER)),
+      seenAt = T0,
+    ).single().mediaId!!
+    assertThat(db.mediaDao().get(theirs.value)!!.ownerAccount).isEqualTo(maria.value)
+
+    val arrival = catalog.incomingMedia(smallFull(12), MediaKind.PHOTO, T0)
+
+    assertThat(arrival.created).isTrue()
+    assertThat(arrival.mediaId).isNotEqualTo(theirs)
+    assertThat(db.mediaDao().get(arrival.mediaId.value)!!.ownerAccount).isEqualTo(Db.ME.value)
+    // Il media di Maria non ha ricevuto niente.
+    assertThat(catalog.media(theirs)!!.locations).hasSize(1)
+  }
+
+  /**
+   * R15, la parte che deve restare com'era (R14): lo stesso arrivo toccato due volte, o in due cartelle, si aggancia al media **dell'utente** che il
+   * primo ha creato (ancora senza posizione), mai al nascosto con gli stessi byte.
+   */
+  @Test
+  fun r15_ilSecondoArrivoUgualeSiAgganciaAlPrimoMediaDellUtenteMaiAlNascosto() = runBlocking<Unit> {
+    val hidden = phoneMedia(13)
+    catalog.setPersonalFlags(hidden, PersonalFlags(hidden = true))
+    val first = catalog.incomingMedia(smallFull(13), MediaKind.PHOTO, T0)
+    val second = catalog.incomingMedia(smallFull(13), MediaKind.PHOTO, T0)
+    assertThat(first.created).isTrue()
+    assertThat(second).isEqualTo(first.copy(created = false))
+    assertThat(second.mediaId).isNotEqualTo(hidden)
+  }
+
+  /** R15: un media dell'utente, non nascosto e che si vede, resta quello a cui l'arrivo si aggancia (nessun cambiamento per il caso normale). */
+  @Test
+  fun r15_unMediaDellUtenteVisibileEQuelloGiusto() = runBlocking<Unit> {
+    val mine = phoneMedia(14)
+    val hidden = phoneMedia(15)
+    catalog.setPersonalFlags(hidden, PersonalFlags(hidden = true))
+    val known = catalog.incomingMedia(smallFull(14), MediaKind.PHOTO, T0)
+    assertThat(known.created).isFalse()
+    assertThat(known.mediaId).isEqualTo(mine)
+    assertThat(known.versionId).isEqualTo(catalog.versionOf(mine))
   }
 }

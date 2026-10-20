@@ -26,12 +26,18 @@ data class BackupProgress(
   val userPaused: Boolean = false,
   /** IN-7: sono i file ricevuti da un'altra app ("Salva sul NAS"), con il loro titolo, i loro numeri e il loro "Ferma". */
   val incoming: Boolean = false,
+  /** IN-7: quanti dei file ricevuti di questo giro non si sono caricati ("2 di 5 file ricevuti · 1 con un problema"). Solo per i file ricevuti. */
+  val problems: Int = 0,
 ) {
   companion object {
     val NONE = BackupProgress(0, 0, paused = false, running = false)
 
-    /** IN-7: [done] file ricevuti caricati su [total]; con total 0 la notifica dice che si sta cominciando. */
-    fun incoming(done: Int, total: Int): BackupProgress = BackupProgress(done, total, paused = false, running = total > 0, incoming = true)
+    /**
+     * IN-7: [done] file ricevuti caricati su [total]; con total 0 la notifica dice che si sta cominciando. [problems] sono quelli del giro che non si sono
+     * caricati: non contano fra i fatti e la notifica li dice a parte.
+     */
+    fun incoming(done: Int, total: Int, problems: Int = 0): BackupProgress =
+      BackupProgress(done, total, paused = false, running = total > 0, incoming = true, problems = problems.coerceAtLeast(0))
 
     fun of(status: BackupStatus): BackupProgress = when (status) {
       is BackupStatus.Running -> BackupProgress(status.done, status.total, paused = false, running = true)
@@ -98,7 +104,7 @@ object BackupNotification {
 
   /** IN-7: la notifica dei file ricevuti: "N di M", solo numeri, e un "Ferma" che ferma solo loro. */
   private fun buildIncoming(app: Context, progress: BackupProgress, stopping: Boolean): Notification {
-    val text = when {
+    val base = when {
       stopping -> app.getString(R.string.notify_incoming_stopping)
       !progress.running -> app.getString(R.string.notify_incoming_starting)
       else -> app.resources.getQuantityString(
@@ -107,6 +113,12 @@ object BackupNotification {
         GalleryNumbers.format(progress.done),
         GalleryNumbers.format(progress.total),
       )
+    }
+    // IN-7: un file che non si e' caricato non e' "fatto": la notifica lo dice (solo il numero), e il tocco apre l'app, che porta a "Ricevuti in coda".
+    val text = if (progress.problems > 0 && !stopping) {
+      base + " · " + app.resources.getQuantityString(R.plurals.notify_incoming_problems, progress.problems, GalleryNumbers.format(progress.problems))
+    } else {
+      base
     }
     val publicVersion = NotificationCompat.Builder(app, AppNotifications.CHANNEL_BACKUP)
       .setSmallIcon(R.drawable.ic_stat_gallery)

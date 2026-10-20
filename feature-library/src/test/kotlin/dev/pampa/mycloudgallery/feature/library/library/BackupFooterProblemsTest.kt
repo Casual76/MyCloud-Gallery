@@ -61,6 +61,21 @@ class BackupFooterProblemsTest {
       assertWithMessage("${problem.code}: plurale").that(xml).contains("""<plurals name="backup_footer_${problem.code}_label_count">""")
     }
     assertThat(BackupFooterProblems.all.filter { it.labelCount != null }.map { it.code })
-      .containsExactly("lost_before_backup", "verify_failed", "common_copy_lost", "unreadable", "unexpected")
+      .containsExactly("lost_before_backup", "verify_failed", "common_copy_lost", "unreadable", "unexpected", "incoming_failed")
+  }
+
+  /**
+   * IN-7: i file ricevuti non salvati hanno la loro frase, e non coprono mai un allarme: e' un'attenzione (si sistema da Backup), non un allarme e non
+   * un'attesa che passa da sola.
+   */
+  @Test
+  fun iFileRicevutiNonSalvatiHannoLaLoroFrase() {
+    val problem = BackupFooterProblems.of("incoming_failed")
+    assertThat(problem).isNotSameInstanceAs(BackupFooterProblems.generic)
+    assertThat(problem.code).isEqualTo("incoming_failed")
+    assertThat(problem.tone).isEqualTo(GalleryFooterTone.Attention)
+    assertThat(problem.labelCount).isNotNull()
+    assertThat(xml).contains("""<string name="backup_footer_incoming_failed_label">File ricevuti non salvati</string>""")
+    assertThat(xml).contains("""<string name="backup_footer_incoming_failed_detail">""")
   }
 }

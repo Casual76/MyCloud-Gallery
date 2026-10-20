@@ -214,6 +214,9 @@ class AppNotifications(context: Context) {
 
     /** Correzioni 5B (IN-7): i file ricevuti da un'altra app ("Salva sul NAS", lavoro grande, UIDT): "N di M", con il suo "Ferma". */
     const val ID_INCOMING = 1007
+
+    /** IN-7: "N file ricevuti non salvati" (restano in "Ricevuti in coda"), anche dopo la fine del lavoro dei file ricevuti. */
+    const val ID_INCOMING_PROBLEMS = 1008
     private const val REQUEST_OPEN_APP = 0
     private const val TAG = "Notifications"
   }

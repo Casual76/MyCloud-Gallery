@@ -32,6 +32,9 @@ enum class DiagJob {
   BACKUP_SAFETY,
   BACKUP_USER,
   TRUST_SYNC,
+
+  /** Fase 5B (P14, D24): il caricamento dei file ricevuti da un'altra app ("Salva sul NAS"). */
+  BACKUP_INCOMING,
 }
 
 /** Com'e' finita una tappa di un lavoro (`StageOutcome` in parole fisse). */

@@ -5,6 +5,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupItem
 import dev.pampa.mycloudgallery.core.backup.contract.BackupItemId
 import dev.pampa.mycloudgallery.core.backup.contract.BackupStore
 import dev.pampa.mycloudgallery.core.backup.contract.NewBackupItem
+import dev.pampa.mycloudgallery.core.backup.contract.UploadKind
 import dev.pampa.mycloudgallery.core.backup.contract.UploadState
 import dev.pampa.mycloudgallery.core.backup.contract.UploadStateMachine
 import dev.pampa.mycloudgallery.core.model.VersionId
@@ -55,6 +56,29 @@ class InMemoryBackupStore : BackupStore {
         log += Transition(item.id, UploadState.PLANNED, UploadState.PLANNED)
         item
       }
+    }
+  }
+
+  override suspend fun createIncoming(item: NewBackupItem): BackupItem = synchronized(lock) {
+    require(item.kind == UploadKind.INCOMING && item.phone == null && item.sha256 != null) { "Un file in arrivo, con il suo SHA-256." }
+    openForLocked(item.versionId)?.takeIf { it.kind == UploadKind.INCOMING } ?: run {
+      val created = BackupItem(
+        id = BackupItemId(nextId++),
+        kind = UploadKind.INCOMING,
+        state = UploadState.PLANNED,
+        mediaId = item.mediaId,
+        versionId = item.versionId,
+        size = item.size,
+        phone = null,
+        expected = null,
+        share = item.share,
+        planned = item.planned,
+        sha256 = item.sha256,
+        quickHash = item.quickHash,
+      )
+      items[created.id.value] = created
+      log += Transition(created.id, UploadState.PLANNED, UploadState.PLANNED)
+      created
     }
   }
 

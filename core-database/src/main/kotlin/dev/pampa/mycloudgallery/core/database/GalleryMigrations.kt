@@ -250,13 +250,18 @@ private object Migration3To4 : Migration(3, 4) {
       "`sha256` TEXT, `quick_hash` TEXT, `temp_size` INTEGER, `temp_modified_at` INTEGER, `temp_file_id` INTEGER, `final_size` INTEGER, " +
       "`final_modified_at` INTEGER, `final_file_id` INTEGER, `verify_attempts` INTEGER NOT NULL, `guard_share` TEXT, " +
       "`guard_path` TEXT, `guard_size` INTEGER, `guard_modified_at` INTEGER, `guard_file_id` INTEGER, `problem` TEXT, " +
-      "`created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, FOREIGN KEY(`media_id`) REFERENCES `media`(`media_id`) " +
+      "`created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, `version_target` TEXT, `current_version_id` TEXT, " +
+      "`current_location_id` INTEGER, `current_size` INTEGER, `current_modified_at` INTEGER, `current_file_id` INTEGER, " +
+      "`current_original` INTEGER, `archive_path` TEXT, `archive_attempt` INTEGER NOT NULL, `archived_size` INTEGER, " +
+      "`archived_modified_at` INTEGER, `archived_file_id` INTEGER, `hold` TEXT, `source_location_id` INTEGER, `staged_sha256` TEXT, " +
+      "FOREIGN KEY(`media_id`) REFERENCES `media`(`media_id`) " +
       "ON UPDATE NO ACTION ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED, FOREIGN KEY(`version_id`) REFERENCES " +
       "`media_version`(`version_id`) ON UPDATE NO ACTION ON DELETE NO ACTION DEFERRABLE INITIALLY DEFERRED)",
     "CREATE INDEX IF NOT EXISTS `index_backup_item_is_open_item_id` ON `backup_item` (`is_open`, `item_id`)",
     "CREATE INDEX IF NOT EXISTS `index_backup_item_version_id_is_open` ON `backup_item` (`version_id`, `is_open`)",
     "CREATE INDEX IF NOT EXISTS `index_backup_item_media_id` ON `backup_item` (`media_id`)",
     "CREATE INDEX IF NOT EXISTS `index_backup_item_state` ON `backup_item` (`state`)",
+    "CREATE INDEX IF NOT EXISTS `index_backup_item_kind_item_id` ON `backup_item` (`kind`, `item_id`)",
     "CREATE TABLE IF NOT EXISTS `backup_problem` (`media_id` TEXT NOT NULL, `code` TEXT NOT NULL, `marks_cell` INTEGER NOT " +
       "NULL, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`media_id`), FOREIGN KEY(`media_id`) REFERENCES `media`(`media_id`) " +
       "ON UPDATE NO ACTION ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED)",
@@ -288,12 +293,15 @@ private object Migration3To4 : Migration(3, 4) {
     "CREATE TABLE IF NOT EXISTS `free_space_run` (`run_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `state` TEXT NOT " +
       "NULL, `filter` TEXT NOT NULL, `exclude_recent_days` INTEGER NOT NULL, `plan_hash` TEXT NOT NULL, `delete_mode` TEXT " +
       "NOT NULL, `item_count` INTEGER NOT NULL, `total_bytes` INTEGER NOT NULL, `batches_total` INTEGER NOT NULL, " +
-      "`batches_done` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL)",
+      "`batches_done` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, `valid_from_monotonic` " +
+      "INTEGER, `boot_count` INTEGER, `blocked` TEXT)",
     "CREATE INDEX IF NOT EXISTS `index_free_space_run_state` ON `free_space_run` (`state`)",
     "CREATE TABLE IF NOT EXISTS `free_space_item` (`run_id` INTEGER NOT NULL, `item_index` INTEGER NOT NULL, `state` TEXT " +
       "NOT NULL, `media_id` TEXT NOT NULL, `version_id` TEXT NOT NULL, `phone_location_id` INTEGER NOT NULL, " +
       "`nas_location_id` INTEGER, `size` INTEGER NOT NULL, `verified_size` INTEGER, `verified_modified_at` INTEGER, " +
-      "`verified_file_id` INTEGER, `batch_index` INTEGER, `reason` TEXT, `updated_at` INTEGER NOT NULL, PRIMARY KEY(`run_id`, " +
+      "`verified_file_id` INTEGER, `batch_index` INTEGER, `reason` TEXT, `updated_at` INTEGER NOT NULL, `phone_volume` TEXT, " +
+      "`phone_ms_id` INTEGER, `phone_ms_version` TEXT, `phone_size` INTEGER, `phone_modified_at` INTEGER, `phone_generation` " +
+      "INTEGER, `mime` TEXT, `needs_guardian` INTEGER NOT NULL, `checks` TEXT, PRIMARY KEY(`run_id`, " +
       "`item_index`), FOREIGN KEY(`run_id`) REFERENCES `free_space_run`(`run_id`) ON UPDATE NO ACTION ON DELETE CASCADE " +
       "DEFERRABLE INITIALLY DEFERRED, FOREIGN KEY(`media_id`) REFERENCES `media`(`media_id`) ON UPDATE NO ACTION ON DELETE NO " +
       "ACTION DEFERRABLE INITIALLY DEFERRED, FOREIGN KEY(`version_id`) REFERENCES `media_version`(`version_id`) ON UPDATE NO " +
@@ -302,6 +310,7 @@ private object Migration3To4 : Migration(3, 4) {
     "CREATE INDEX IF NOT EXISTS `index_free_space_item_media_id` ON `free_space_item` (`media_id`)",
     "CREATE INDEX IF NOT EXISTS `index_free_space_item_version_id` ON `free_space_item` (`version_id`)",
     "CREATE INDEX IF NOT EXISTS `index_free_space_item_run_id_batch_index` ON `free_space_item` (`run_id`, `batch_index`)",
+    "CREATE INDEX IF NOT EXISTS `index_free_space_item_state` ON `free_space_item` (`state`)",
     "CREATE TABLE IF NOT EXISTS `incoming_item` (`incoming_id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `stage_id` TEXT " +
       "NOT NULL, `state` TEXT NOT NULL, `file_name` TEXT NOT NULL, `display_name` TEXT, `sha256` TEXT NOT NULL, `size` " +
       "INTEGER NOT NULL, `mime` TEXT NOT NULL, `dest_share` TEXT, `dest_folder` TEXT, `backup_item_id` INTEGER, `created_at` " +
@@ -310,6 +319,11 @@ private object Migration3To4 : Migration(3, 4) {
     "CREATE INDEX IF NOT EXISTS `index_incoming_item_state_created_at` ON `incoming_item` (`state`, `created_at`)",
     "CREATE INDEX IF NOT EXISTS `index_incoming_item_stage_id` ON `incoming_item` (`stage_id`)",
     "CREATE INDEX IF NOT EXISTS `index_incoming_item_backup_item_id` ON `incoming_item` (`backup_item_id`)",
+    // P14 (prima del rilascio della v4): le correzioni solo nell'app (Q6 (a)).
+    "CREATE TABLE IF NOT EXISTS `metadata_correction` (`version_id` TEXT NOT NULL, `taken_at_utc` INTEGER, `offset_minutes` " +
+      "INTEGER, `geo` TEXT, `latitude` REAL, `longitude` REAL, `orientation_degrees` INTEGER, `mirrored` INTEGER, `corrected_at` " +
+      "INTEGER NOT NULL, PRIMARY KEY(`version_id`), FOREIGN KEY(`version_id`) REFERENCES `media_version`(`version_id`) ON UPDATE " +
+      "NO ACTION ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED)",
   )
 }
 

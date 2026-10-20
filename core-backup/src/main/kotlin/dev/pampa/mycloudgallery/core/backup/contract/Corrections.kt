@@ -49,7 +49,13 @@ enum class CorrectionReadiness(override val code: String) : StableCode {
   /** HEIC, RAW, video (Q6, L40, E-E8): la correzione resta nell'app e nell'indice, il file non si tocca. */
   FORMAT_NOT_WRITABLE("format_not_writable"),
 
-  /** Area comune: serve il foglio "La modifica sara' visibile a tutti i familiari" (D35, E-E9). */
+  /**
+   * Area comune (D35, E-E9): il media proprio sta **solo** nell'area comune. **Scelta del P14: dalla 5B non si scrive mai nell'area comune**
+   * (ne' una versione corretta, ne' un'archiviazione in `Versioni/` dell'area comune): la versione la vedrebbero e la cambierebbero tutti i
+   * familiari, e un'archiviazione sposterebbe un file che altri vedono senza che lo sappiano (D2: il backup aggiunge solo nell'area privata).
+   * La correzione si ferma qui, senza scrivere niente, e la UI lo dice ("nell'area comune la vedrebbero tutti"). Un foglio di conferma
+   * ("La modifica sara' visibile a tutti i familiari") e' rimandato a dopo la chiusura della 5B (Q3), insieme alle scritture vere.
+   */
   COMMON_AREA_NOTICE("common_area_notice"),
 
   /** Area in sola lettura: la correzione diventerebbe un media nuovo nell'area privata (D35, E-N9). */

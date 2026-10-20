@@ -281,12 +281,14 @@ internal object DiagCatalogEntries {
     DiagEntry(DiagCodes.BACKUP_UNREADABLE, DiagSection.BACKUP, DiagSeverity.WARNING, R.string.diag_backup_unreadable_title, R.string.diag_backup_unreadable_guide, null),
     DiagEntry(DiagCodes.BACKUP_COMMON_COPY_LOST, DiagSection.BACKUP, DiagSeverity.ERROR, R.string.diag_backup_common_copy_lost_title, R.string.diag_backup_common_copy_lost_guide, null),
     DiagEntry(DiagCodes.BACKUP_UNEXPECTED, DiagSection.BACKUP, DiagSeverity.WARNING, R.string.diag_backup_unexpected_title, R.string.diag_backup_unexpected_guide, null),
+    DiagEntry(DiagCodes.BACKUP_SOURCE_CHANGED, DiagSection.BACKUP, DiagSeverity.WARNING, R.string.diag_backup_source_changed_title, R.string.diag_backup_source_changed_guide, null),
     DiagEntry(DiagCodes.BACKUP_PHONE_STORAGE_LOW, DiagSection.BACKUP, DiagSeverity.WARNING, R.string.diag_backup_phone_storage_low_title, R.string.diag_backup_phone_storage_low_guide, null),
     DiagEntry(DiagCodes.BACKUP_STALE, DiagSection.BACKUP, DiagSeverity.WARNING, R.string.diag_backup_stale_title, R.string.diag_backup_stale_guide, DiagAction.OPEN_BATTERY_SETTINGS),
     DiagEntry(DiagCodes.BACKUP_WAITING_UNLOCK, DiagSection.BACKUP, DiagSeverity.INFO, R.string.diag_backup_waiting_unlock_title, R.string.diag_backup_waiting_unlock_guide, null),
     DiagEntry(DiagCodes.BACKUP_PROFILE_INACTIVE, DiagSection.BACKUP, DiagSeverity.INFO, R.string.diag_backup_profile_inactive_title, R.string.diag_backup_profile_inactive_guide, null),
     DiagEntry(DiagCodes.BACKUP_LAST_ROUND, DiagSection.BACKUP, DiagSeverity.INFO, R.string.diag_backup_last_round_title, R.string.diag_backup_last_round_guide, null),
     DiagEntry(DiagCodes.BACKUP_SIMILAR_COPIES, DiagSection.BACKUP, DiagSeverity.INFO, R.string.diag_backup_similar_copies_title, R.string.diag_backup_similar_copies_guide, null),
+    DiagEntry(DiagCodes.INTEGRATIONS_COUNTERS, DiagSection.BACKUP, DiagSeverity.INFO, R.string.diag_integrations_counters_title, R.string.diag_integrations_counters_guide, null),
 
     // --- Rete e NAS --------------------------------------------------------
     DiagEntry(DiagCodes.DIAG_SECTION_UNAVAILABLE, DiagSection.NETWORK_AND_NAS, DiagSeverity.WARNING, R.string.diag_diag_section_unavailable_title, R.string.diag_diag_section_unavailable_guide, null),

@@ -7,6 +7,7 @@ import android.graphics.Color
 import dev.pampa.mycloudgallery.backup.AppBackupActions
 import dev.pampa.mycloudgallery.backup.BackupGraph
 import dev.pampa.mycloudgallery.backup.BackupInputs
+import dev.pampa.mycloudgallery.backup.FiveBInputs
 import dev.pampa.mycloudgallery.core.backup.contract.BackupFence
 import dev.pampa.mycloudgallery.core.backup.contract.BackupKind
 import dev.pampa.mycloudgallery.core.backup.contract.BackupTrigger
@@ -79,6 +80,8 @@ internal class BackupRig(
   private val monotonicMs: () -> Long = { System.nanoTime() / 1_000_000 },
   /** Cio' che il grafo del NAS vede dell'app: di norma quello del dispositivo; un test puo' cambiarne l'account (che arriva tardi). */
   private val nasInputs: NasInputs = device.graph.nasInputs,
+  /** Fase 5B (P14): i dialoghi, il riscrittore e il controllo del telefono finti sopra [store]; null = quelli di Android (non usati dai test 5A). */
+  fiveB: ((FakeMediaStore) -> FiveBInputs)? = null,
 ) {
 
   val access = FakePhoneAccessReader(PhoneAccess(MediaAccess.FULL, mediaLocation = true, volumes = setOf(PRIMARY)))
@@ -104,6 +107,7 @@ internal class BackupRig(
         deviceName = { deviceName },
         fence = fence,
         jobs = jobs,
+        fiveB = fiveB?.invoke(store),
       ),
       similarSignatures = signatures,
     ),

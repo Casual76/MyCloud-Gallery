@@ -75,6 +75,8 @@ internal object BackupFooterProblems {
       "unexpected", GalleryFooterTone.Attention, Icons.Rounded.Warning, R.string.backup_footer_unexpected_label,
       R.string.backup_footer_unexpected_detail, R.plurals.backup_footer_unexpected_label_count,
     ),
+    // P14 (5B, D17, E-E6): il PC ha cambiato il file mentre una versione aspettava; niente si sposta, riparte da sola.
+    problem("source_changed", GalleryFooterTone.Waiting, Icons.Rounded.Schedule, R.string.backup_footer_source_changed_label, R.string.backup_footer_source_changed_detail),
     problem("phone_storage_low", GalleryFooterTone.Attention, Icons.Rounded.Warning, R.string.backup_footer_phone_storage_low_label, R.string.backup_footer_phone_storage_low_detail),
     problem("stale", GalleryFooterTone.Attention, Icons.Rounded.Warning, R.string.backup_footer_stale_label, R.string.backup_footer_stale_detail),
     problem("waiting_unlock", GalleryFooterTone.Waiting, Icons.Rounded.Schedule, R.string.backup_footer_waiting_unlock_label, R.string.backup_footer_waiting_unlock_detail),

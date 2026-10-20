@@ -316,6 +316,8 @@ internal fun exclusionText(reason: FreeSpaceExclusion): Pair<Int, Int> = when (r
   FreeSpaceExclusion.RECENT -> R.string.backup_free_ex_recent to R.string.backup_free_ex_recent_detail
   FreeSpaceExclusion.COPY_CHANGED -> R.string.backup_free_ex_copy_changed to R.string.backup_free_ex_copy_changed_detail
   FreeSpaceExclusion.GONE_FROM_PHONE -> R.string.backup_free_ex_gone to R.string.backup_free_ex_gone_detail
+  FreeSpaceExclusion.NOT_MINE -> R.string.backup_free_ex_not_mine to R.string.backup_free_ex_not_mine_detail
+  FreeSpaceExclusion.BACKUP_NOT_ACTIVE -> R.string.backup_free_ex_backup_inactive to R.string.backup_free_ex_backup_inactive_detail
 }
 
 // --- Guardiano e verifica sul momento ----------------------------------------------------------------------------------------------

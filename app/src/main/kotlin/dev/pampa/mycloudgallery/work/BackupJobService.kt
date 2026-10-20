@@ -15,6 +15,7 @@ import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import dev.pampa.mycloudgallery.backup.BackupGraph
 import dev.pampa.mycloudgallery.core.backup.contract.BackupKind
+import dev.pampa.mycloudgallery.core.backup.contract.BackupTrigger
 import dev.pampa.mycloudgallery.core.backup.contract.RunStop
 import dev.pampa.mycloudgallery.core.backup.contract.StopBy
 import dev.pampa.mycloudgallery.core.backup.upload.BackupStageOutcome
@@ -142,12 +143,20 @@ class BackupJobService : JobService() {
         when (
           val attempt = attemptStage(TAG, onError = { backup.noteUnexpectedError() }) {
             val stages = BackupStages(entry.graph(), backup)
-            // La stima serve alle regole per la conferma sui dati mobili (proposta 10): il riepilogo e' in cache.
-            val estimate = backup.uploadEstimateBytes()
-            BackupJobRun(
-              stage = { kind -> gallery.runIfActive { stages.round(kind, trigger, userEstimate = estimate, confirmed = confirmed) } },
-              userInitiated = userInitiated,
-            ).run()
+            if (trigger == BackupTrigger.INCOMING) {
+              // D24 (P14): una condivisione grande ("Salva sul NAS"): solo i file in arrivo, a tappe, con la stessa notifica e lo stesso "Ferma".
+              BackupJobRun(
+                stage = { kind -> if (kind == BackupKind.PHOTOS) gallery.runIfActive { stages.incoming(userInitiated) } else null },
+                userInitiated = userInitiated,
+              ).run()
+            } else {
+              // La stima serve alle regole per la conferma sui dati mobili (proposta 10): il riepilogo e' in cache.
+              val estimate = backup.uploadEstimateBytes()
+              BackupJobRun(
+                stage = { kind -> gallery.runIfActive { stages.round(kind, trigger, userEstimate = estimate, confirmed = confirmed) } },
+                userInitiated = userInitiated,
+              ).run()
+            }
           }
         ) {
           StageAttempt.Failed -> BackupJobEnd.DONE

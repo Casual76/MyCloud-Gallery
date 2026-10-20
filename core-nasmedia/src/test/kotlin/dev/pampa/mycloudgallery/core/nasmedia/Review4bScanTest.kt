@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.core.nasmedia
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.model.FreezeReason
+import dev.pampa.mycloudgallery.core.nasmedia.contract.OwnChanges
 import dev.pampa.mycloudgallery.core.nasmedia.contract.OwnRemovals
 import dev.pampa.mycloudgallery.core.nasmedia.contract.ScanMode
 import kotlinx.coroutines.test.runTest
@@ -59,5 +60,31 @@ class Review4bScanTest {
     val freeze = checkNotNull(h.scan().freeze)
     assertThat(freeze.reason).isEqualTo(FreezeReason.VANISHED)
     assertThat(freeze.diff.vanished).isEqualTo(60)
+  }
+
+  // --- D32 (5B, P14): la franchigia delle versioni (`VersionFranchise` di P8) collegata alla guardia ----------------------------------
+
+  /** Le prime [n] foto riscritte al loro posto (stesso nome e `fileId`, byte nuovi): come una versione messa dall'app o un ransomware. */
+  private fun rewriteInPlace(n: Int) {
+    h.synthetic.encryptInPlace("test", (0 until n).map { "Foto/f$it.jpg" })
+  }
+
+  @Test
+  fun d32_centoVersioniMesseDalleVersioniDiQuestoDispositivoNonCongelanoLaShare() = runTest {
+    val ids = thousand()
+    rewriteInPlace(100)
+    h.ownChanges = OwnChanges { share -> if (share == "test") ids.take(100).toSet() else emptySet() }
+    assertThat(h.scan().freeze).isNull()
+  }
+
+  @Test
+  fun d32_leStesseCentoRiscritturePerAltraViaCongelanoComePrima() = runTest {
+    val ids = thousand()
+    rewriteInPlace(100)
+    // Il diario delle versioni ricorda altri file: la franchigia non vale per identita' diverse.
+    h.ownChanges = OwnChanges { ids.drop(900).toSet() }
+    val freeze = checkNotNull(h.scan().freeze)
+    assertThat(freeze.reason).isEqualTo(FreezeReason.CHANGED)
+    assertThat(freeze.diff.changed).isEqualTo(100)
   }
 }

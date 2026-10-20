@@ -43,6 +43,7 @@ import dev.pampa.mycloudgallery.core.database.MediaCatalog
 import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupStatus
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneAccess
+import dev.pampa.mycloudgallery.core.nasmedia.contract.OwnChanges
 import dev.pampa.mycloudgallery.core.model.AccountId
 import dev.pampa.mycloudgallery.core.model.NasArea
 import dev.pampa.mycloudgallery.core.model.MediaId
@@ -126,6 +127,8 @@ class BackupGraph(
   private val similar: SimilarCopiesGraph,
   private val familyReady: () -> Boolean,
   private val monotonicMs: () -> Long,
+  /** Fase 5B (P14): cio' che le versioni, le correzioni e "Libera spazio" ricevono dall'app (dialoghi e riscrittore del telefono, controllo). */
+  fiveBInputs: FiveBInputs,
   private val foreground: () -> Boolean = { false },
   /** L'ora del dispositivo (ms): solo per "da quando il backup e' attivo" (E-P15); mai per decidere su file o scadenze. */
   private val deviceNow: () -> Long = { System.currentTimeMillis() },
@@ -164,18 +167,18 @@ class BackupGraph(
    * **Il cancello D12** (e D32): vedi [AppBackupGate]. Lo guardano il motore (prima di ogni elemento), le verifiche e il guardiano.
    * `FeatureFlags.backupMayWriteTo` e' la sola decisione su "share vera o di prova".
    */
-  val gate: BackupGate = AppBackupGate(
-    BackupGateInputs(
-      flags = nasInputs.flags,
-      familyReady = { familyReady() && nasInputs.trust.writePermit() != null },
-      privateShare = ::privateShare,
-      account = { nasInputs.account() },
-      writesStopped = { nas.emergency.stopped },
-      frozen = { share -> nas.frozen.value.containsKey(share.lowercase(Locale.ROOT)) },
-      readOnly = { share -> share.lowercase(Locale.ROOT) in readOnlyShares },
-      paused = memory::isPaused,
-    ),
+  private val gateInputs = BackupGateInputs(
+    flags = nasInputs.flags,
+    familyReady = { familyReady() && nasInputs.trust.writePermit() != null },
+    privateShare = ::privateShare,
+    account = { nasInputs.account() },
+    writesStopped = { nas.emergency.stopped },
+    frozen = { share -> nas.frozen.value.containsKey(share.lowercase(Locale.ROOT)) },
+    readOnly = { share -> share.lowercase(Locale.ROOT) in readOnlyShares },
+    paused = memory::isPaused,
   )
+
+  val gate: BackupGate = AppBackupGate(gateInputs)
 
   /** Il telefono come lo legge il backup: righe e byte del MediaStore, con la recinzione di D13. */
   val phone: PhoneBytes = MediaStorePhoneBytes(
@@ -183,6 +186,31 @@ class BackupGraph(
     access = { phoneProvider()?.access?.state?.value ?: PhoneAccess.NONE },
     fence = inputs.fence,
     account = { nasInputs.account() },
+  )
+
+  /**
+   * **La 5B** (P14): versioni e correzioni, "Libera spazio", file in arrivo. Nasce qui senza I/O (diari, coda degli arrivi, facciate per le
+   * schermate); i servizi nascono in [start] con il motore. Chi scrive sul NAS o sul telefono gira **uno alla volta** con il backup
+   * ([exclusive], come un tocco dell'utente che aspetta il turno).
+   */
+  val fiveB: FiveBGraph = FiveBGraph(
+    noBackupDir = noBackup,
+    database = database,
+    clock = clock,
+    store = store,
+    gateInputs = gateInputs,
+    inputs = fiveBInputs,
+    fence = inputs.fence,
+    account = { nasInputs.account() },
+    privateShare = ::privateShare,
+    commonShare = ::commonShare,
+    shares = { nasInputs.shares() },
+    catalogProvider = catalogProvider,
+    exclusive = { block -> exclusive(USER_EXCLUSIVE_WAIT, forUser = true) { block() } },
+    onIncomingQueued = { userInitiated ->
+      kick()
+      inputs.jobs.incoming(userInitiated)
+    },
   )
 
   // --- Cio' che nasce in start --------------------------------------------------------------------------------------------------
@@ -230,7 +258,10 @@ class BackupGraph(
       changesWatcher = null
       accessWatcher?.cancel()
       accessWatcher = null
+      revertsWatcher?.cancel()
+      revertsWatcher = null
       partsFlow.value = null
+      fiveB.clear()
       readOnlyShares.clear()
     }
     if (!nas.start()) return@withLock false
@@ -278,11 +309,13 @@ class BackupGraph(
       // D10: chi carica prepara. L'indice dei media caricati rispetta D31 (sulle share vere solo locale) e i cancelli dell'indice.
       indexing = PreparingUploadIndexing(runtime.preparer, runtime.publisher, CatalogUploadRecords(catalog)),
       foreground = foreground,
+      incoming = fiveB.incomingPorts(),
     )
     // D13: con la recinzione, il backup scrive solo sotto `mcg-campo/Backup/` delle share di prova.
     val fenceRoot = inputs.fence?.destinationRoot(user)
     val config = UploadConfig(allowedRoots = listOf(BackupRoots.of(fenceRoot)))
-    val engine = BackupEngineFactory.create(session, deviceId, share, ports, config)
+    // D24 (P14): i file in arrivo li carica lo stesso motore, con il cancello della share di destinazione e la radice di D13.
+    val uploads = BackupEngineFactory.create(session, deviceId, share, ports, config)
     val reader = session.mediaReader()
     val protectedBytes: suspend () -> Long? = { protectedBytes(share) }
     val light = BackupSafetyVerifier(
@@ -305,6 +338,9 @@ class BackupGraph(
       commonShare = ::commonShare,
       destinationRoot = { fenceRoot },
     )
+    // P14: le versioni del telefono si pianificano prima di ogni giro della 5A e girano nella stessa tappa (una modifica non va su come
+    // "nome (2)"); i servizi della 5B (versioni, correzioni, "Libera spazio") nascono con la stessa area, lo stesso cancello e lo stesso catalogo.
+    val engine = fiveB.build(session, deviceId, share, catalog, phone, gate, guardian, reader, planner, uploads, backupCatalog)
     if (stopped.get()) return@withLock false
     partsFlow.value = Parts(share, deviceId, catalog, backupCatalog, planner, engine, light, heavy, guardian)
     // Il catalogo cambia (un media arriva al sicuro, la lettura del telefono porta novita'): le schermate rileggono, accorpato.
@@ -312,8 +348,28 @@ class BackupGraph(
     // BK-13: un permesso dei media che cambia (anche dalle Impostazioni di Android) cambia lo stato senza altri eventi.
     accessWatcher?.cancel()
     accessWatcher = scope.launch { phoneProvider()?.access?.state?.collect { kick() } }
+    // P14 (E-E2): la lettura del telefono ha riconosciuto che una riga e' tornata a una versione nota: lo scambio sul NAS si pianifica subito
+    // (solo il diario: lo esegue il giro dopo, uno alla volta con il resto).
+    revertsWatcher?.cancel()
+    revertsWatcher = scope.launch { catalog.reverts.collect { id -> fiveB.realign(listOf(id)) } }
     kick()
     true
+  }
+
+  /**
+   * P14, all'avvio del processo (dopo [start]): file di lavoro delle correzioni, attivita' in sospeso, esiti di "Libera spazio" in dubbio, scambi
+   * persi. Solo dati locali; senza backup non fa niente.
+   */
+  suspend fun atStart() {
+    if (!start()) return
+    val catalog = parts?.catalog ?: return
+    fiveB.atStart(catalog)
+  }
+
+  /** P14: dopo ogni lettura del telefono (app aperta o lavoro di fondo) gli esiti in dubbio di "Libera spazio" si risolvono con il telefono. */
+  suspend fun afterPhoneRead() {
+    if (parts == null) return
+    fiveB.settle()
   }
 
   /** L'azzeramento (R7): niente parte piu' in questo processo; il giro in corso si ferma prima del file successivo. Prima di ogni cancellazione. */
@@ -326,9 +382,12 @@ class BackupGraph(
     changesWatcher = null
     accessWatcher?.cancel()
     accessWatcher = null
+    revertsWatcher?.cancel()
+    revertsWatcher = null
     recheck?.cancel()
     recheck = null
     partsFlow.value = null
+    fiveB.clear()
     readOnlyShares.clear()
     inputs.jobs.cancelAll()
     if (engine != null) scope.launch { runCatching { engine.stop(StopBy.RESET) } }
@@ -469,7 +528,11 @@ class BackupGraph(
     if (!gate.stateOf(p.share).open || settings.deviceFolder.value == null) return emptyList()
     val out = ArrayList<Next>(3)
     if (inputs.ruleSettings.current().protectNewPhotos && p.planner.next(BackupKind.PHOTOS, 1, BackupTrigger.QUICK_NEW_PHOTOS).isNotEmpty()) out += Next.Quick
-    if (p.planner.next(BackupKind.PHOTOS, 1, BackupTrigger.SCHEDULED).isNotEmpty() || hasOpenItems(BackupKind.PHOTOS)) out += Next.Photos
+    // P14: i lavori delle versioni aperti (correzioni, risultati degli editor, scambi dopo un ripristino del telefono) girano con le foto; quelli
+    // che aspettano il PC (`SOURCE_CHANGED`) no: niente polling, li riprende il giro periodico.
+    if (p.planner.next(BackupKind.PHOTOS, 1, BackupTrigger.SCHEDULED).isNotEmpty() || hasOpenItems(BackupKind.PHOTOS) || hasOpenVersionWork(waiting = false)) {
+      out += Next.Photos
+    }
     if (p.planner.next(BackupKind.VIDEOS, 1, BackupTrigger.SCHEDULED).isNotEmpty() || hasOpenItems(BackupKind.VIDEOS)) out += Next.Videos
     return out
   }
@@ -503,7 +566,26 @@ class BackupGraph(
     val p = parts ?: return false
     if (p.planner.next(kind, 1, trigger).isNotEmpty()) return true
     // Un elemento rimasto aperto (un giro interrotto, un file aperto dal PC): si riprende dal giro del suo tipo (BK-10).
-    return trigger != BackupTrigger.QUICK_NEW_PHOTOS && hasOpenItems(kind)
+    if (trigger == BackupTrigger.QUICK_NEW_PHOTOS) return false
+    // P14: un lavoro delle versioni aperto gira con le foto (anche quelli che aspettano il PC: il giro ricalcola il piano).
+    return hasOpenItems(kind) || (kind == BackupKind.PHOTOS && hasOpenVersionWork(waiting = true))
+  }
+
+  /** P14: lavori delle versioni o degli scambi aperti nel diario. Con [waiting] falso, senza quelli che aspettano il PC (`SOURCE_CHANGED`). */
+  private suspend fun hasOpenVersionWork(waiting: Boolean): Boolean = withContext(Dispatchers.IO) {
+    runCatching {
+      val held = if (waiting) "" else " AND (hold IS NULL OR hold != 'source_changed')"
+      database.openHelper.readableDatabase.query(
+        "SELECT 1 FROM backup_item WHERE is_open = 1 AND kind IN ('version', 'swap')$held LIMIT 1",
+      ).use { it.moveToFirst() }
+    }.getOrDefault(false)
+  }
+
+  /** D24 (P14): file in arrivo in coda nel diario (aperti). Una query, mai il NAS. */
+  suspend fun hasOpenIncoming(): Boolean = withContext(Dispatchers.IO) {
+    runCatching {
+      database.openHelper.readableDatabase.query("SELECT 1 FROM backup_item WHERE is_open = 1 AND kind = 'incoming' LIMIT 1").use { it.moveToFirst() }
+    }.getOrDefault(false)
   }
 
   /** I record e le miniature dei media caricati vanno all'indice: pubblicazione dell'outbox, sulle share vere solo locale (D31). */
@@ -642,6 +724,7 @@ class BackupGraph(
   private var refresher: kotlinx.coroutines.Job? = null
   private var changesWatcher: kotlinx.coroutines.Job? = null
   private var accessWatcher: kotlinx.coroutines.Job? = null
+  private var revertsWatcher: kotlinx.coroutines.Job? = null
   private var recheck: kotlinx.coroutines.Job? = null
 
   /** BK-5: l'avanzamento attraverso i lotti; letto dal file al primo calcolo, scritto quando cambia. */
@@ -682,6 +765,10 @@ class BackupGraph(
     // BK-13: le regole (preset, soglie) cambiano perche' il backup aspetta.
     scope.launch { inputs.ruleSettings.observe().collect { kick() } }
     // BK-11: "Mostra come principale" e "Separa" sono dati personali come preferiti e nascosti: la sincronizzazione parte accorpata.
+    // P14 (D22, E-D15): "Ovunque" del viewer prende le copie di tutte le versioni (anche quelle in `Versioni/`) dall'elenco del backup.
+    nas.organizer.everywhere = { id -> fiveB.everywhere(id) }
+    // P14 (D32): i file che le versioni hanno messo o spostato non fanno scattare il congelamento della scansione per "cambiati".
+    nas.ownChanges = OwnChanges { share -> fiveB.franchiseFileIds(share) }
     similar.onChoiceSaved = {
       personalSyncRequests.incrementAndGet()
       nas.organizer.personalChanged()
@@ -768,6 +855,9 @@ class BackupGraph(
       return waitingStatus(queued, bytes, waitReason(), stalled = isStalled(queued), storageLow = phoneStorageLow())
     }
     problems.entries.minByOrNull { it.key.ordinal }?.let { (code, count) -> return BackupStatus.Problem(code, count) }
+    // P14 (5B, D17, E-E6): versioni ferme perche' il PC ha cambiato il file sul NAS. Non e' un problema di un media: lo dice la pagina, con la
+    // Diagnostica; riparte da solo dopo la verifica del NAS.
+    fiveB.sourceChangedHolds().takeIf { it > 0 }?.let { return BackupStatus.Problem(BackupProblemCode.SOURCE_CHANGED, it) }
     return BackupStatus.UpToDate(counts.safe, memory.lastComplete())
   }
 

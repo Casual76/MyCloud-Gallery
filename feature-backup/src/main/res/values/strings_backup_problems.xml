@@ -59,6 +59,12 @@
     <item quantity="other">%1$s media con un errore inatteso</item>
   </plurals>
   <string name="backup_problem_unexpected_detail">Un errore che l’app non si aspettava ha fermato questo file, non gli altri: non conta come «al sicuro». «Riprova» lo rilegge; se si ripete, apri la Diagnostica.</string>
+  <string name="backup_problem_source_changed_title">Versioni in attesa del computer</string>
+  <plurals name="backup_problem_source_changed_title_count">
+    <item quantity="one">%1$s versione in attesa del computer</item>
+    <item quantity="other">%1$s versioni in attesa del computer</item>
+  </plurals>
+  <string name="backup_problem_source_changed_detail">Un computer ha cambiato il file sul NAS mentre la versione nuova aspettava. Non sposto niente: riparto da solo dopo la prossima verifica del NAS.</string>
   <string name="backup_problem_generic_title">Problema con il backup</string>
   <string name="backup_problem_generic_detail">Apri la Diagnostica per i dettagli.</string>
   <string name="backup_problem_phone_storage_low_title">Memoria del telefono quasi piena</string>

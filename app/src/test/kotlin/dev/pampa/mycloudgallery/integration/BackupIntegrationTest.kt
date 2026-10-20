@@ -290,10 +290,13 @@ class BackupIntegrationTest {
     rig.readPhone()
     val next = rig.round(BackupKind.PHOTOS, BackupTrigger.USER_NOW)
 
-    // L'originale sul NAS e' intatto, byte per byte, con lo stesso nome: nessuna sostituzione, nessun file tolto.
-    assertThat(backend.bytes(TestNas.ADMIN_USER, stored.single())).isEqualTo(original)
-    val files = filesUnder(backend, TestNas.ADMIN_USER, "Backup")
-    assertThat(files).contains(stored.single())
+    // L'originale sul NAS e' intatto, byte per byte: nessuna sostituzione, nessun file tolto. Dalla 5B (P14, D17) la modifica e' una versione
+    // dello stesso media: l'originale passa in `Versioni/` con una rinomina (l'unica automatica, D2) e la modifica prende il solito percorso, al
+    // posto di un "nome (2)".
+    val files = filesUnder(backend, TestNas.ADMIN_USER, "Backup") + filesUnder(backend, TestNas.ADMIN_USER, "Versioni")
+    assertThat(files.count { backend.bytes(TestNas.ADMIN_USER, it)!!.contentEquals(original) }).isEqualTo(1)
+    assertThat(filesUnder(backend, TestNas.ADMIN_USER, "Versioni")).hasSize(1)
+    assertThat(backend.bytes(TestNas.ADMIN_USER, stored.single())).isEqualTo(edited)
     assertWithMessage("giro dopo la modifica: ${next?.last}").that(next?.last?.stoppedBy).isNotEqualTo(RunStop.NAS)
     // Nessun temporaneo rimasto, ne' un file che non sia l'originale o la modifica (mai byte misti).
     assertThat(filesUnder(backend, TestNas.ADMIN_USER, ".mycloudgallery/tmp").filter { "-bk-" in it }).isEmpty()
@@ -328,7 +331,7 @@ class BackupIntegrationTest {
     val ids = db.query("SELECT media_id, current_version_id FROM media LIMIT 1").use { c -> check(c.moveToFirst()); c.getString(0) to c.getString(1) }
     db.execSQL(
       "INSERT INTO backup_item (kind, state, is_open, media_id, version_id, size, share, planned_path, name_attempt, temp_path, resume_at, " +
-        "verify_attempts, created_at, updated_at) VALUES ('new_copy', 'uploading', 1, ?, ?, 256, ?, 'Backup/x/a.jpg', 0, ?, 0, 0, 0, 0)",
+        "verify_attempts, created_at, updated_at, archive_attempt) VALUES ('new_copy', 'uploading', 1, ?, ?, 256, ?, 'Backup/x/a.jpg', 0, ?, 0, 0, 0, 0, 0)",
       arrayOf<Any?>(ids.first, ids.second, TestNas.ADMIN_USER, tempPath),
     )
     assertThat(backup.citedTemps().map { it.value }).contains(tempPath)

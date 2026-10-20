@@ -91,7 +91,9 @@ class FreeSpacePlanTest {
     assertThat(plan.itemCount).isEqualTo(2)
     assertThat(plan.items.map { it.mediaId }).contains(good.id)
     assertThat(plan.excluded).containsExactly(
-      FreeSpaceExclusion.NOT_VERIFIED, 4,
+      FreeSpaceExclusion.NOT_VERIFIED, 3,
+      // P14: un media non proprio ha il suo motivo (prima finiva fra i non verificati).
+      FreeSpaceExclusion.NOT_MINE, 1,
       FreeSpaceExclusion.IN_PROGRESS_OR_ERROR, 2,
       FreeSpaceExclusion.VERSION_NOT_SAFE, 1,
     )
@@ -138,7 +140,8 @@ class FreeSpacePlanTest {
       bench.gate.default = state
       val plan = bench.space.plan(FreeSpaceFilter())
       assertThat(plan.isEmpty).isTrue()
-      assertThat(plan.excluded).containsExactly(FreeSpaceExclusion.NOT_VERIFIED, 1)
+      // P14: "il backup non e' attivo" ha il suo motivo (prima finiva fra i non verificati).
+      assertThat(plan.excluded).containsExactly(FreeSpaceExclusion.BACKUP_NOT_ACTIVE, 1)
     }
   }
 

@@ -36,6 +36,7 @@ import java.util.concurrent.TimeUnit
  * - [QuickPhotoWorker] (`PHOTO_BACKUP` con le regole di D34): le foto appena scattate, anche fuori fascia;
  * - [SafetyVerifyWorker]: il guardiano, le copie non verificate, `FULL_HASH` e la rotazione annuale (Q10), con la regola dell'attivita'
  *   del tipo di media;
+ * - [IncomingUploadWorker] (P14, D24): i file ricevuti da un'altra app e messi in coda con "Salva sul NAS" (`PHOTO_BACKUP`);
  * - il primo backup e "Fai ora" non sono lavori di WorkManager: li avvia l'utente ([BackupJobService], UIDT).
  *
  * **Trigger, nessun polling**: a fine giro di `PhoneSyncWorker`, [QuickPhotoWorker] o [PhotoBackupWorker] ([BackupWorkScheduling.afterPhoneRead])
@@ -50,6 +51,7 @@ object BackupWorkScheduling {
   const val VIDEOS_WORK = "backup-videos"
   const val QUICK_WORK = "backup-quick-photos"
   const val SAFETY_WORK = "backup-safety"
+  const val INCOMING_WORK = "backup-incoming"
   const val PHOTOS_PERIODIC_WORK = "backup-photos-periodic"
   const val VIDEOS_PERIODIC_WORK = "backup-videos-periodic"
   const val SAFETY_PERIODIC_WORK = "backup-safety-periodic"
@@ -79,6 +81,7 @@ object BackupWorkScheduling {
     VIDEOS(VIDEOS_WORK),
     QUICK(QUICK_WORK),
     SAFETY(SAFETY_WORK),
+    INCOMING(INCOMING_WORK),
   }
 
   /** RE-11: una rete qualunque, anche senza internet (il NAS e' in LAN): vedi [LanConstraints]. */
@@ -142,6 +145,7 @@ object BackupWorkScheduling {
       Kind.VIDEOS -> OneTimeWorkRequestBuilder<VideoBackupWorker>()
       Kind.QUICK -> OneTimeWorkRequestBuilder<QuickPhotoWorker>()
       Kind.SAFETY -> OneTimeWorkRequestBuilder<SafetyVerifyWorker>()
+      Kind.INCOMING -> OneTimeWorkRequestBuilder<IncomingUploadWorker>()
     }
     return builder
       .setConstraints(if (onWifi) LanConstraints.unmetered() else constraintsFor(wait))
@@ -191,8 +195,15 @@ object BackupWorkScheduling {
       }
     }
     if (backup.guardianHasWork()) asked += Kind.SAFETY
+    // D24 (P14): file ricevuti rimasti in coda (processo morto, NAS spento, regole): il lavoro degli arrivi, dal diario.
+    if (backup.hasOpenIncoming()) asked += Kind.INCOMING
     asked.forEach { kind -> enqueue(context, request(kind), kind, ExistingWorkPolicy.KEEP) }
     return asked
+  }
+
+  /** D24 (P14): "Salva sul NAS" ha messo dei file in coda: il lavoro degli arrivi (unico, `KEEP`: uno in coda li prende tutti). */
+  fun incoming(context: Context) {
+    enqueue(context, request(Kind.INCOMING), Kind.INCOMING, ExistingWorkPolicy.KEEP)
   }
 
   private fun enqueue(context: Context, request: OneTimeWorkRequest, kind: Kind, policy: ExistingWorkPolicy) {
@@ -367,6 +378,24 @@ class QuickPhotoWorker @AssistedInject constructor(
   override val diagJob: DiagJob = DiagJob.QUICK_PHOTOS
 
   override suspend fun stage(stages: BackupStages): BackupFollowUp? = stages.quick()?.let { BackupFollowUp.of(it) }
+}
+
+/**
+ * D24 (P14): i file ricevuti da un'altra app ("Salva sul NAS"), dal diario del backup: caricati con il caricamento sicuro, riletti, collegati;
+ * solo dopo la copia locale si toglie. Il cancello e' quello della share di destinazione (D12, R2, D13).
+ */
+@HiltWorker
+class IncomingUploadWorker @AssistedInject constructor(
+  @Assisted appContext: Context,
+  @Assisted params: WorkerParameters,
+  gallery: GalleryGraph,
+  graph: AppGraph,
+) : BackupWorker(appContext, params, gallery, graph) {
+  override val tag: String = "IncomingUploadWorker"
+  override val kind = BackupWorkScheduling.Kind.INCOMING
+  override val diagJob: DiagJob = DiagJob.BACKUP_INCOMING
+
+  override suspend fun stage(stages: BackupStages): BackupFollowUp? = stages.incoming()?.let { BackupFollowUp.of(it) }
 }
 
 /** Le verifiche (non verificate, `FULL_HASH`, rotazione) e il guardiano delle copie private (D9, D14). */

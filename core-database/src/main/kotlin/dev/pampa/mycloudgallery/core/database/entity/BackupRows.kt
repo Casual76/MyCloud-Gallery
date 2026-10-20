@@ -85,3 +85,12 @@ data class SimilarCandidateRow(
 
 /** Un gruppo e il suo tipo (elenco dei gruppi di copie simili). */
 data class GroupIdRow(@ColumnInfo(name = "group_id") val groupId: String)
+
+/** P14 (P9, "Libera spazio"): un media con una copia sul telefono, nell'ordine della Libreria (`MediaCatalog.phoneMedia`). */
+data class PhoneMediaRow(
+  @ColumnInfo(name = "media_id") val mediaId: String,
+  @ColumnInfo(name = "sort_time") val sortTime: Long,
+  @ColumnInfo(name = "local_day") val localDay: Int,
+) {
+  override fun toString(): String = "PhoneMediaRow"
+}

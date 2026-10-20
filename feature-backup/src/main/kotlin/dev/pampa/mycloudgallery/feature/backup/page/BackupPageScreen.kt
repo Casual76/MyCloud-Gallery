@@ -46,6 +46,7 @@ import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.feature.backup.BackupDimens
 import dev.pampa.mycloudgallery.feature.backup.R
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupScreen
+import dev.pampa.mycloudgallery.feature.backup.tasks.PendingTasksEntryCard
 import dev.pampa.mycloudgallery.feature.backup.first.FirstBackupSheet
 import dev.pampa.mycloudgallery.feature.backup.ui.BackupLabel
 import dev.pampa.mycloudgallery.feature.backup.ui.BackupPage
@@ -126,6 +127,10 @@ internal fun BackupPageScreen(
         verticalArrangement = Arrangement.spacedBy(BackupDimens.BlockGap),
       ) {
         item(key = "status") { BackupStatusCard(status = state.status, actions = actions, onOpenSummary = actions.openSheet) }
+        // 5B (P14, D20): "Da decidere", solo se c'e' qualcosa da decidere.
+        if (state.pendingTasks > 0) {
+          item(key = "pending-tasks") { PendingTasksEntryCard(count = state.pendingTasks, onOpen = { actions.open(BackupScreen.PENDING_TASKS) }) }
+        }
         otherProblems(state, actions)
         sourcesSection(state.sources)
         deviceSection(state, actions)

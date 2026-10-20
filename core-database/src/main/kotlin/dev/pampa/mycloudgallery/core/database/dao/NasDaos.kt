@@ -571,6 +571,14 @@ interface IdentityDao {
   @Query("UPDATE free_space_item SET version_id = :to WHERE version_id = :from")
   suspend fun renameVersionInFreeSpaceItems(from: String, to: String)
 
+  /** P14: la correzione solo nell'app segue la versione. */
+  @Query("UPDATE metadata_correction SET version_id = :to WHERE version_id = :from")
+  suspend fun renameVersionInCorrections(from: String, to: String)
+
+  /** P14: l'attuale da archiviare di un lavoro delle versioni (colonna senza chiave esterna: il lavoro la confronta col catalogo). */
+  @Query("UPDATE backup_item SET current_version_id = :to WHERE current_version_id = :from")
+  suspend fun renameVersionInBackupCurrents(from: String, to: String)
+
   /** Tutte le colonne che puntano al media [from] passano a [to] (stesso ordine di `MEDIA_REFERENCES`). */
   suspend fun renameMedia(from: String, to: String) {
     renameMediaRow(from, to)
@@ -603,5 +611,7 @@ interface IdentityDao {
     renameVersionInPendingTasks(from, to)
     renameVersionInEditSessions(from, to)
     renameVersionInFreeSpaceItems(from, to)
+    renameVersionInCorrections(from, to)
+    renameVersionInBackupCurrents(from, to)
   }
 }

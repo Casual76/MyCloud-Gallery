@@ -73,7 +73,8 @@ class BackupActionsTest {
   fun ilRipristinoSiOffreSoloQuandoHaSenso() {
     val offered = listOf(
       RestoreAvailability.AVAILABLE, RestoreAvailability.ORIGINAL_NOT_SAFE, RestoreAvailability.NAS_UNREACHABLE, RestoreAvailability.FROZEN,
-      RestoreAvailability.READ_ONLY_AREA,
+      // P14: un lavoro in corso sul media (una versione, uno scambio): la voce c'e', il foglio dice "riprova fra poco".
+      RestoreAvailability.READ_ONLY_AREA, RestoreAvailability.BUSY,
     )
     val notOffered = listOf(
       RestoreAvailability.ONLY_ONE_VERSION, RestoreAvailability.ALREADY_ORIGINAL, RestoreAvailability.NOT_MINE, RestoreAvailability.NOT_AVAILABLE,

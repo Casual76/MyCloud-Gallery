@@ -89,6 +89,13 @@ enum class BackupProblemCode(
    * numero 0 e' l'errore di un intero lavoro (`BackupWork`, `BackupJobService`): la pagina non resta "in corso" e non lo ripete all'infinito.
    */
   UNEXPECTED("unexpected", listOf(BackupAction.RETRY, BackupAction.DIAGNOSTICS), setOf("R1"), marksMedia = true),
+
+  /**
+   * 5B (P8, P14; D17, E-E6): il PC ha modificato o tolto il file al solito percorso mentre il backup ne salvava una versione nuova. **Niente si
+   * sposta**: la versione nuova resta nel suo temporaneo (citato dal diario) finche' la scansione del NAS non registra il file del PC, poi va in
+   * `Versioni/` o al suo posto. Si risolve da solo; il numero dice quante versioni aspettano. Nessun segno sul media (non e' un suo problema).
+   */
+  SOURCE_CHANGED("source_changed", listOf(BackupAction.DIAGNOSTICS), setOf("E-E6")),
   PHONE_STORAGE_LOW("phone_storage_low", listOf(BackupAction.FREE_SPACE), setOf("E-P3")),
   STALE("stale", listOf(BackupAction.BATTERY_GUIDE), setOf("E-P15", "E-P2")),
   WAITING_UNLOCK("waiting_unlock", emptyList(), setOf("E-P13")),

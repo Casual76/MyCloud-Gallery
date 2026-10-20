@@ -25,6 +25,13 @@ interface BackupJobs {
    */
   fun userInitiated(trigger: BackupTrigger, confirmed: Boolean)
 
+  /**
+   * D24 (P14): dei file in arrivo sono in coda nel diario ("Salva sul NAS"). [userInitiated] = la condivisione e' grande (oltre
+   * `IncomingLimits.USER_INITIATED_JOB_BYTES`): un lavoro avviato dall'utente con la sua notifica, chiesto dal tocco con l'activity visibile;
+   * altrimenti il lavoro a tappe di WorkManager. Di norma niente (test, varianti senza NAS): gli arrivi aspettano il giro dopo.
+   */
+  fun incoming(userInitiated: Boolean) = Unit
+
   /** L'azzeramento: niente piu' lavori del backup in coda. */
   fun cancelAll()
 
@@ -43,6 +50,7 @@ interface BackupJobs {
  * (`setJobSchedulerJobIdRange`) e diverso da quelli delle operazioni sul NAS: programmare di nuovo lo stesso id sostituisce quello in coda.
  */
 class JobSchedulerBackupJobs(context: Context) : BackupJobs {
+  // P14: anche il lavoro dei file in arrivo (UIDT con un id suo, o WorkManager per le condivisioni piccole).
 
   private val app: Context = context.applicationContext ?: context
   private val scheduler: JobScheduler? get() = app.getSystemService(JobScheduler::class.java)
@@ -69,8 +77,32 @@ class JobSchedulerBackupJobs(context: Context) : BackupJobs {
     }
   }
 
+  override fun incoming(userInitiated: Boolean) {
+    if (!userInitiated || !scheduleIncoming()) BackupWorkScheduling.incoming(app)
+  }
+
+  /** Il lavoro dell'utente per una condivisione grande: falso se Android non lo accetta (allora vale WorkManager). */
+  private fun scheduleIncoming(): Boolean {
+    val extras = PersistableBundle().apply { putString(EXTRA_TRIGGER, BackupTrigger.INCOMING.code) }
+    val builder = JobInfo.Builder(JOB_INCOMING, component).setRequiredNetwork(LanConstraints.request()).setExtras(extras)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) builder.setUserInitiated(true)
+    return try {
+      scheduler?.schedule(builder.build()) == JobScheduler.RESULT_SUCCESS
+    } catch (e: IllegalStateException) {
+      GalleryLog.w(TAG) { "lavoro degli arrivi non programmato: ${e.javaClass.simpleName}" }
+      false
+    } catch (e: SecurityException) {
+      GalleryLog.w(TAG) { "lavoro degli arrivi non programmato: ${e.javaClass.simpleName}" }
+      false
+    } catch (e: IllegalArgumentException) {
+      GalleryLog.w(TAG) { "lavoro degli arrivi non programmato: ${e.javaClass.simpleName}" }
+      false
+    }
+  }
+
   override fun cancelAll() {
     scheduler?.cancel(JOB_USER)
+    scheduler?.cancel(JOB_INCOMING)
   }
 
   companion object {
@@ -79,11 +111,17 @@ class JobSchedulerBackupJobs(context: Context) : BackupJobs {
     /** Il lavoro avviato dall'utente (UIDT). Fuori da [JobSchedulerNasOpsJobs.WORK_MANAGER_JOB_IDS] e diverso da quelli della 4B. */
     const val JOB_USER: Int = 1_000_103
 
+    /** D24 (P14): il caricamento di una condivisione grande ("Salva sul NAS"), UIDT. Diverso da [JOB_USER]: non lo sostituisce. */
+    const val JOB_INCOMING: Int = 1_000_104
+
     const val EXTRA_TRIGGER: String = "trigger"
     const val EXTRA_CONFIRMED: String = "confirmed"
 
-    /** Il trigger scritto negli extra, solo uno dei due valori ammessi (qualunque altro vale "Fai ora"). */
-    fun triggerOf(code: String?): BackupTrigger =
-      if (code == BackupTrigger.FIRST_BACKUP.code) BackupTrigger.FIRST_BACKUP else BackupTrigger.USER_NOW
+    /** Il trigger scritto negli extra, solo uno dei tre valori ammessi (qualunque altro vale "Fai ora"). */
+    fun triggerOf(code: String?): BackupTrigger = when (code) {
+      BackupTrigger.FIRST_BACKUP.code -> BackupTrigger.FIRST_BACKUP
+      BackupTrigger.INCOMING.code -> BackupTrigger.INCOMING
+      else -> BackupTrigger.USER_NOW
+    }
   }
 }

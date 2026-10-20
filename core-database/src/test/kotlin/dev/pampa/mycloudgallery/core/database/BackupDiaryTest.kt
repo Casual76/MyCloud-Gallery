@@ -120,7 +120,7 @@ class BackupDiaryTest : CatalogTestBase() {
     try {
       val insert = sql.compileStatement(
         "INSERT INTO backup_item (kind, state, is_open, media_id, version_id, size, share, planned_path, name_attempt, resume_at, " +
-          "verify_attempts, created_at, updated_at) VALUES ('new_copy', ?, ?, ?, ?, 2000, 'alessio', ?, 0, 0, 0, 0, 0)",
+          "verify_attempts, created_at, updated_at, archive_attempt) VALUES ('new_copy', ?, ?, ?, ?, 2000, 'alessio', ?, 0, 0, 0, 0, 0, 0)",
       )
       val random = Random(5)
       for (i in 0 until 100_000) {

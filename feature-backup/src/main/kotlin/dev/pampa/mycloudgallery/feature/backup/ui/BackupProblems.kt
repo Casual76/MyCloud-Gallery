@@ -126,6 +126,11 @@ internal object BackupProblemTexts {
       BackupTone.Attention, Icons.Rounded.Warning, R.string.backup_problem_unexpected_title, R.string.backup_problem_unexpected_detail,
       titleCount = R.plurals.backup_problem_unexpected_title_count,
     ),
+    // P14 (5B, D17, E-E6): il file sul NAS l'ha cambiato il PC mentre una versione nuova aspettava. Niente si sposta; riparte da solo.
+    "source_changed" to ProblemText(
+      BackupTone.Waiting, Icons.Rounded.Schedule, R.string.backup_problem_source_changed_title, R.string.backup_problem_source_changed_detail,
+      titleCount = R.plurals.backup_problem_source_changed_title_count,
+    ),
   )
 }
 

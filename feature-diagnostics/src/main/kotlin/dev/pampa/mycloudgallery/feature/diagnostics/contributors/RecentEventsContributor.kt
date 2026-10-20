@@ -110,6 +110,7 @@ class RecentEventsContributor(
       DiagJob.BACKUP_SAFETY -> R.string.diagnostics_job_backup_safety
       DiagJob.BACKUP_USER -> R.string.diagnostics_job_backup_user
       DiagJob.TRUST_SYNC -> R.string.diagnostics_job_trust_sync
+      DiagJob.BACKUP_INCOMING -> R.string.diagnostics_job_backup_incoming
     }
 
     @StringRes

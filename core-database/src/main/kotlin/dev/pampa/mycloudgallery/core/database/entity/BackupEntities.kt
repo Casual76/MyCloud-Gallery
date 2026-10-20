@@ -47,6 +47,8 @@ import androidx.room.PrimaryKey
     Index(value = ["media_id"]),
     // I conteggi per stato (pagina del backup, Diagnostica) leggono solo questo indice.
     Index(value = ["state"]),
+    // 5B (P14): i lavori di un tipo (versioni e scambi di una share per la franchigia, D32; gli arrivi): la tabella cresce di una riga per file.
+    Index(value = ["kind", "item_id"]),
   ],
 )
 data class BackupItemEntity(
@@ -93,6 +95,29 @@ data class BackupItemEntity(
   @ColumnInfo(name = "problem") val problem: String?,
   @ColumnInfo(name = "created_at") val createdAt: Long,
   @ColumnInfo(name = "updated_at") val updatedAt: Long,
+  // --- 5B (P8, colonne di P14): i lavori `version` e `swap` (D17, D18). NULL per gli elementi della 5A e per gli arrivi ---
+  // Dove va la versione nuova (`VersionTarget`: solito percorso o `Versioni/`).
+  @ColumnInfo(name = "version_target") val versionTarget: String? = null,
+  // L'attuale da spostare in `Versioni/` (`CurrentFile`): versione, posizione nel catalogo, timbro (dimensione, data, `FileId`), se e' l'originale.
+  // NULL = nessuna attuale da spostare (cammino `version_direct`, D17): il cammino del lavoro si legge da qui.
+  @ColumnInfo(name = "current_version_id") val currentVersionId: String? = null,
+  @ColumnInfo(name = "current_location_id") val currentLocationId: Long? = null,
+  @ColumnInfo(name = "current_size") val currentSize: Long? = null,
+  @ColumnInfo(name = "current_modified_at") val currentModifiedAt: Long? = null,
+  @ColumnInfo(name = "current_file_id") val currentFileId: Long? = null,
+  @ColumnInfo(name = "current_original") val currentOriginal: Boolean? = null,
+  // Il nome in `Versioni/` (scritto prima della rinomina), i tentativi dopo un nome occupato e il timbro dopo l'archiviazione.
+  @ColumnInfo(name = "archive_path") val archivePath: String? = null,
+  @ColumnInfo(name = "archive_attempt") val archiveAttempt: Int = 0,
+  @ColumnInfo(name = "archived_size") val archivedSize: Long? = null,
+  @ColumnInfo(name = "archived_modified_at") val archivedModifiedAt: Long? = null,
+  @ColumnInfo(name = "archived_file_id") val archivedFileId: Long? = null,
+  // Perche' il lavoro aspetta o e' finito senza fare il suo (`VersionHold`: `source_changed`, `usual_path_taken`, `rolled_back`).
+  @ColumnInfo(name = "hold") val hold: String? = null,
+  // Lo scambio: la posizione nel catalogo della versione da riportare (il percorso e il timbro stanno in `guard_path`/`guard_*`).
+  @ColumnInfo(name = "source_location_id") val sourceLocationId: Long? = null,
+  // Un file preparato (correzione, editor esterno): il suo SHA-256.
+  @ColumnInfo(name = "staged_sha256") val stagedSha256: String? = null,
 ) {
   // Percorsi, share, impronte: dati dell'utente, mai nei log.
   override fun toString(): String = "BackupItemEntity(#$itemId, $kind, $state)"
@@ -237,8 +262,9 @@ data class EditSessionEntity(
 
 /**
  * Un giro di "Libera spazio" (`free_space_run`, D21, §2.5): il filtro, l'impronta del piano a cui la conferma e' legata
- * ([planHash]), il modo (cestino di Android o "Libera subito") e l'avanzamento a lotti da 2.000. **La verifica sul momento non
- * si salva** (vale 6 ore di orologio monotono e non sopravvive a un riavvio): chi riprende un giro dopo un riavvio la rifa'.
+ * ([planHash]), il modo (cestino di Android o "Libera subito") e l'avanzamento a lotti da 2.000. **La verifica sul momento vale 6 ore
+ * di orologio monotono e non sopravvive a un riavvio**: dal P14 il giro ne salva l'inizio monotono e il conteggio dei riavvii, cosi' dopo la
+ * morte del processo (stesso avvio) riprende; dopo un riavvio e' scaduto e si rifa' dal piano.
  */
 @Entity(tableName = "free_space_run", indices = [Index(value = ["state"])])
 data class FreeSpaceRunEntity(
@@ -254,6 +280,13 @@ data class FreeSpaceRunEntity(
   @ColumnInfo(name = "batches_done") val batchesDone: Int,
   @ColumnInfo(name = "created_at") val createdAt: Long,
   @ColumnInfo(name = "updated_at") val updatedAt: Long,
+  // P14 (colonne facoltative di P9): da quando vale la verifica sul momento. L'istante e' dell'orologio **monotono** (vale solo nello stesso
+  // avvio) e [bootCount] e' il conteggio dei riavvii di allora: un giro a meta' riprende dopo la morte del processo, mai dopo un riavvio.
+  // NULL = validita' non nota (il giro e' scaduto: fallisce chiuso).
+  @ColumnInfo(name = "valid_from_monotonic") val validFromMonotonic: Long? = null,
+  @ColumnInfo(name = "boot_count") val bootCount: Long? = null,
+  // Perche' il giro e' fermo (`FreeSpaceBlock`), se lo e'.
+  @ColumnInfo(name = "blocked") val blocked: String? = null,
 )
 
 /**
@@ -276,6 +309,8 @@ data class FreeSpaceRunEntity(
     Index(value = ["media_id"]),
     Index(value = ["version_id"]),
     Index(value = ["run_id", "batch_index"]),
+    // P14: le righe consegnate ad Android e non risolte (`in_dialog`, `in_doubt`) di tutti i giri, senza scorrerli.
+    Index(value = ["state"]),
   ],
 )
 data class FreeSpaceItemEntity(
@@ -293,6 +328,18 @@ data class FreeSpaceItemEntity(
   @ColumnInfo(name = "batch_index") val batchIndex: Int?,
   @ColumnInfo(name = "reason") val reason: String?,
   @ColumnInfo(name = "updated_at") val updatedAt: Long,
+  // P14 (colonne facoltative di P9): la riga del telefono con il suo timbro (il controllo finale prima del dialogo), il tipo, il segno "prima
+  // il guardiano" e le copie rilette di tutte le versioni da proteggere ([checks], testo: una riga per copia con versione, posizione, share,
+  // percorso e timbro). NULL = non salvate (un giro senza non va avanti dopo la morte del processo).
+  @ColumnInfo(name = "phone_volume") val phoneVolume: String? = null,
+  @ColumnInfo(name = "phone_ms_id") val phoneMediaStoreId: Long? = null,
+  @ColumnInfo(name = "phone_ms_version") val phoneMediaStoreVersion: String? = null,
+  @ColumnInfo(name = "phone_size") val phoneSize: Long? = null,
+  @ColumnInfo(name = "phone_modified_at") val phoneModifiedAt: Long? = null,
+  @ColumnInfo(name = "phone_generation") val phoneGeneration: Long? = null,
+  @ColumnInfo(name = "mime") val mime: String? = null,
+  @ColumnInfo(name = "needs_guardian") val needsGuardian: Boolean = false,
+  @ColumnInfo(name = "checks") val checks: String? = null,
 ) {
   override fun toString(): String = "FreeSpaceItemEntity(run=$runId, #$itemIndex, $state, $size B)"
 }
@@ -327,4 +374,40 @@ data class IncomingItemEntity(
 ) {
   // Nome del file, cartella scelta e share: dati dell'utente.
   override fun toString(): String = "IncomingItemEntity(#$incomingId, $state, $size B)"
+}
+
+/**
+ * Una correzione di data, luogo o rotazione **solo nell'app** (`metadata_correction`, Q6 (a), L40; P14): per i formati che non si scrivono nel
+ * file (HEIC, RAW, video) la correzione resta nel catalogo e nell'indice, e **sopravvive alla rilettura dei metadati** (fase META): i valori
+ * qui si applicano sopra quelli letti dal file ogni volta che una versione riceve i suoi metadati. Una riga per versione; i campi NULL non
+ * correggono niente. Con cascata: segue la versione (un'unione la sposta sul sopravvissuto, `MergeReferencesTest`).
+ *
+ * - [takenAtUtc], [offsetMinutes]: la data di scatto corretta (l'istante e il fuso);
+ * - [geo]: `set` (con [latitude], [longitude]) o `clear` (luogo tolto); NULL = luogo com'e';
+ * - [orientationDegrees], [mirrored]: la rotazione corretta.
+ */
+@Entity(
+  tableName = "metadata_correction",
+  foreignKeys = [
+    ForeignKey(entity = MediaVersionEntity::class, parentColumns = ["version_id"], childColumns = ["version_id"], onDelete = ForeignKey.CASCADE, deferred = true),
+  ],
+)
+data class MetadataCorrectionEntity(
+  @PrimaryKey @ColumnInfo(name = "version_id") val versionId: String,
+  @ColumnInfo(name = "taken_at_utc") val takenAtUtc: Long?,
+  @ColumnInfo(name = "offset_minutes") val offsetMinutes: Int?,
+  @ColumnInfo(name = "geo") val geo: String?,
+  @ColumnInfo(name = "latitude") val latitude: Double?,
+  @ColumnInfo(name = "longitude") val longitude: Double?,
+  @ColumnInfo(name = "orientation_degrees") val orientationDegrees: Int?,
+  @ColumnInfo(name = "mirrored") val mirrored: Boolean?,
+  @ColumnInfo(name = "corrected_at") val correctedAt: Long,
+) {
+  // Data e luogo dello scatto: dati dell'utente.
+  override fun toString(): String = "MetadataCorrectionEntity"
+
+  companion object {
+    const val GEO_SET: String = "set"
+    const val GEO_CLEAR: String = "clear"
+  }
 }

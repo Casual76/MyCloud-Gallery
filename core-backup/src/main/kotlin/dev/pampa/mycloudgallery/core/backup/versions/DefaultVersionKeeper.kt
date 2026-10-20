@@ -8,6 +8,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.PhoneConfirmation
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneConfirmationCheck
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneConfirmationRules
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneRef
+import dev.pampa.mycloudgallery.core.backup.contract.PhoneKeptReason
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneRewrite
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneRewriter
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneWriteGrant
@@ -115,8 +116,8 @@ class DefaultVersionKeeper(
     val originalSafe = original.nas.any { VersionPlanning.isOwnPrivate(it, share) && VersionPaths.isInVersions(it.path) && it.verifiedAtMillis != null }
     if (!originalSafe) return RestoreAvailability.ORIGINAL_NOT_SAFE
     if (VersionPlanning.swap(media, share) == null) return RestoreAvailability.NOT_AVAILABLE
-    // Un'altra versione o un altro scambio di questo media gia' in corso: si aspetta che finisca.
-    if (journal.forMedia(media.mediaId).any { !it.state.terminal }) return RestoreAvailability.NOT_AVAILABLE
+    // Un'altra versione o un altro scambio di questo media gia' in corso: si aspetta che finisca (P14: lo dice, non "non disponibile").
+    if (journal.forMedia(media.mediaId).any { !it.state.terminal }) return RestoreAvailability.BUSY
     return RestoreAvailability.AVAILABLE
   }
 
@@ -131,10 +132,12 @@ class DefaultVersionKeeper(
     if (rows.isNotEmpty() && writeGrant == null) return RestoreOutcome.NeedsPhoneWrite(rows)
     val job = engine.planSwap(mediaId) ?: return RestoreOutcome.Unavailable(RestoreAvailability.NOT_AVAILABLE)
     val after = engine.runJob(job.id, budget)
-    if (after?.state == UploadState.DONE && rows.isNotEmpty() && writeGrant != null && writeGrant.coversAll(rows)) {
-      rewritePhone(mediaId, rows)
-    }
-    return RestoreOutcome.Queued
+    if (rows.isEmpty()) return RestoreOutcome.Queued
+    // PhoneWriteGrant (contratto): un permesso che non copre le righe = l'utente ha detto no al dialogo. Lo scambio sul NAS e' fatto, il
+    // telefono tiene la modifica; non e' un guasto.
+    if (writeGrant == null || !writeGrant.coversAll(rows)) return RestoreOutcome.PhoneNotRewritten(PhoneKeptReason.PERMISSION_DENIED)
+    if (after?.state != UploadState.DONE) return RestoreOutcome.PhoneNotRewritten(PhoneKeptReason.SWAP_NOT_FINISHED)
+    return if (rewritePhone(mediaId, rows)) RestoreOutcome.Queued else RestoreOutcome.PhoneNotRewritten(PhoneKeptReason.REWRITE_FAILED)
   }
 
   private fun phoneRowsToRewrite(media: VersionedMedia): List<PhoneRef> {
@@ -147,28 +150,38 @@ class DefaultVersionKeeper(
    * versione nel catalogo); solo allora si riscrivono le righe (il riscrittore ricontrolla l'impronta, scrive, rilegge, ripristina se non
    * torna). Un guasto lascia il telefono com'era: la versione modificata resta li', il piano lo dice.
    */
-  private suspend fun rewritePhone(mediaId: MediaId, rows: List<PhoneRef>) {
-    val media = catalog.media(mediaId) ?: return
-    val original = media.original ?: return
-    val expected = original.fullHash ?: return
-    val copy = original.nas.firstOrNull { VersionPlanning.isOwnPrivate(it, share) && !VersionPaths.isInVersions(it.path) } ?: return
+  /** Vero se ogni riga e' stata riscritta con l'originale verificato. */
+  private suspend fun rewritePhone(mediaId: MediaId, rows: List<PhoneRef>): Boolean {
+    val media = catalog.media(mediaId) ?: return false
+    val original = media.original ?: return false
+    val expected = original.fullHash ?: return false
+    val copy = original.nas.firstOrNull { VersionPlanning.isOwnPrivate(it, share) && !VersionPaths.isInVersions(it.path) } ?: return false
     val work = staged.newWorkFile()
+    var all = true
     try {
-      if (!readInto(copy.share, copy, work, expected)) return
+      if (!readInto(copy.share, copy, work, expected)) return false
       for (ref in rows) {
         when (val r = rewriter.replace(ref, media.mime, work, expected)) {
           is PhoneRewrite.Replaced -> Unit
-          is PhoneRewrite.Failed -> GalleryLog.w(TAG) { "riscrittura del telefono non riuscita (${r.code}, ripristinata ${r.restored})" }
-          else -> GalleryLog.w(TAG) { "riscrittura del telefono non fatta (${r::class.java.simpleName})" }
+          is PhoneRewrite.Failed -> {
+            all = false
+            GalleryLog.w(TAG) { "riscrittura del telefono non riuscita (${r.code}, ripristinata ${r.restored})" }
+          }
+          else -> {
+            all = false
+            GalleryLog.w(TAG) { "riscrittura del telefono non fatta (${r::class.java.simpleName})" }
+          }
         }
       }
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
+      all = false
       GalleryLog.w(TAG) { "originale non riscritto sul telefono (${e::class.java.simpleName})" }
     } finally {
       work.delete()
     }
+    return all
   }
 
   /** Legge per intero la copia in [target] calcolando lo SHA-256: vero se e' [expected]. */

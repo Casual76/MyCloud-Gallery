@@ -454,7 +454,7 @@ La Fase 5 decide **cosa** si mostra e **quando**; il filone grafico decide **com
 | `UNREADABLE` | N file del telefono illeggibili | Riprova · Diagnostica | D15, E-M12 |
 | `COMMON_COPY_LOST` | N media spariti dall'area comune | Recuperalo dal cestino del NAS | E-B13, L44 |
 | `UNEXPECTED` | N media con un errore inatteso | Riprova · Diagnostica | R1 |
-| `SOURCE_CHANGED` | N versioni aspettano: il file sul NAS è stato cambiato dal PC (P14, 5B) | Diagnostica | E-E6 |
+| `SOURCE_CHANGED` | N versioni in attesa del computer: il file sul NAS è stato cambiato dal PC (P14, 5B) | Diagnostica | E-E6 |
 | `PHONE_STORAGE_LOW` | Memoria del telefono quasi piena | Libera spazio | E-P3 |
 | `STALE` | Backup fermo da 3 giorni | Guida: batteria "Illimitata", "Mai in sospensione" | E-P15, E-P2 |
 | `WAITING_UNLOCK` | Il telefono si è riavviato: riprende allo sblocco | — | E-P13 |

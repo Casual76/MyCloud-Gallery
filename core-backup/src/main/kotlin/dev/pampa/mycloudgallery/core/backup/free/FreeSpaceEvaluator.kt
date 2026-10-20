@@ -128,12 +128,12 @@ internal class FreeSpaceEvaluator(private val store: BackupStore, private val ve
       // E-B22, D32: area congelata o scritture ferme. "Libera spazio" si fida dell'area privata: ferma con lei.
       BackupGateState.FROZEN, BackupGateState.WRITES_STOPPED -> return FreeSpaceExclusion.AREA_FROZEN
       // Nessun backup attivo (nessuna area privata, famiglia non pronta, D12 o R2: "Backup in prova"): niente e' al sicuro per questo flusso.
-      null, BackupGateState.NO_PRIVATE_AREA, BackupGateState.NOT_READY, BackupGateState.TEST_ONLY -> return FreeSpaceExclusion.NOT_VERIFIED
+      null, BackupGateState.NO_PRIVATE_AREA, BackupGateState.NOT_READY, BackupGateState.TEST_ONLY -> return FreeSpaceExclusion.BACKUP_NOT_ACTIVE
       BackupGateState.OPEN, BackupGateState.PAUSED, BackupGateState.READ_ONLY_AREA -> Unit
     }
-    val me = scene.me ?: return FreeSpaceExclusion.NOT_VERIFIED
+    val me = scene.me ?: return FreeSpaceExclusion.BACKUP_NOT_ACTIVE
     // Non proprio: nessuna copia sotto il mio controllo da cui ripartire (il contratto: i media non propri non entrano mai in un piano).
-    if (fm.media.owner != me) return FreeSpaceExclusion.NOT_VERIFIED
+    if (fm.media.owner != me) return FreeSpaceExclusion.NOT_MINE
     if (fm.problem?.marksMedia == true) return FreeSpaceExclusion.IN_PROGRESS_OR_ERROR
     // Un elemento aperto nel diario del backup per una qualunque versione: caricamento, guardiano, versione o scambio in corso.
     for (version in fm.media.versions) {

@@ -33,6 +33,7 @@ import dev.pampa.mycloudgallery.core.nasmedia.contract.NasScanCursor
 import dev.pampa.mycloudgallery.core.nasmedia.contract.NasScanStatus
 import dev.pampa.mycloudgallery.core.nasmedia.contract.NasScanStore
 import dev.pampa.mycloudgallery.core.nasmedia.contract.NasScanner
+import dev.pampa.mycloudgallery.core.nasmedia.contract.OwnChanges
 import dev.pampa.mycloudgallery.core.nasmedia.contract.OwnRemovals
 import dev.pampa.mycloudgallery.core.nasmedia.contract.NasSeen
 import dev.pampa.mycloudgallery.core.nasmedia.contract.ScanDiff
@@ -114,6 +115,8 @@ class DefaultNasScanner(
   private val ownRemovals: OwnRemovals = OwnRemovals.NONE,
   /** NA-4: dove si ricorda la franchigia di "Ho controllato, continua" fra un processo e l'altro. */
   acceptances: FreezeAcceptances = InMemoryFreezeAcceptances(),
+  /** D32 (5B, P14): i file che le versioni di questo dispositivo hanno messo a quel posto (diario locale): non sono "cambiati" anomali. */
+  private val ownChanges: OwnChanges = OwnChanges.NONE,
 ) : NasScanner {
 
   private val keeper = CursorKeeper(store, account, share)
@@ -415,6 +418,21 @@ class DefaultNasScanner(
       }
     }
 
+    /** D32 (P14): i `fileId` messi dalle versioni di questo dispositivo, letti una volta per tappa (un guasto = nessuna franchigia). */
+    private var ownChanged: Set<Long>? = null
+
+    private suspend fun isOwnChange(fileId: Long?): Boolean {
+      if (fileId == null) return false
+      val ids = ownChanged ?: try {
+        ownChanges.fileIds(share)
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        emptySet()
+      }.also { ownChanged = it }
+      return fileId in ids
+    }
+
     /** R8: quante posizioni non viste in questo giro sono file che l'app stessa ha tolto dalla share (stesso `fileId` del diario). */
     private suspend fun ownRemovedUnseen(epoch: Long): Int {
       val ids = try {
@@ -624,7 +642,8 @@ class DefaultNasScanner(
           if (k.adoptedQuickHash != null) adoptedList += c else unchangedList += c
           continue
         }
-        if (k != null) {
+        // D32 (P14): un file che le versioni di questo dispositivo hanno messo a quel posto (stesso `fileId` del diario) non e' anomalo.
+        if (k != null && !isOwnChange(stamp.fileId)) {
           folderChanged++
           changed++
         }

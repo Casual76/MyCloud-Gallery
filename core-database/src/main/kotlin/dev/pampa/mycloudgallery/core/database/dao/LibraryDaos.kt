@@ -263,4 +263,16 @@ interface MergeDao {
 
   @Query("UPDATE free_space_item SET version_id = :to WHERE version_id = :from")
   suspend fun repointFreeSpaceItemVersion(from: String, to: String)
+
+  /** P14: l'attuale da archiviare di un lavoro delle versioni segue la versione (colonna senza chiave esterna). */
+  @Query("UPDATE backup_item SET current_version_id = :to WHERE current_version_id = :from")
+  suspend fun repointBackupItemCurrent(from: String, to: String)
+
+  /** P14: una sola correzione solo nell'app per versione: se la versione di destinazione ne ha gia' una resta quella. */
+  @Query("UPDATE OR IGNORE metadata_correction SET version_id = :to WHERE version_id = :from")
+  suspend fun repointMetadataCorrection(from: String, to: String)
+
+  /** P14 (E-X3): cambia il tipo e il genitore di una versione (la copia di un editor diventa una versione `edited`). */
+  @Query("UPDATE media_version SET kind = :kind, parent_version_id = :parentId WHERE version_id = :versionId")
+  suspend fun setVersionKind(versionId: String, kind: String, parentId: String?)
 }

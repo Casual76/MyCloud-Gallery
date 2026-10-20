@@ -1,9 +1,12 @@
 package dev.pampa.mycloudgallery.core.backup.upload
 
 import dev.pampa.mycloudgallery.core.backup.contract.BackupEngine
+import dev.pampa.mycloudgallery.core.backup.contract.BackupGate
+import dev.pampa.mycloudgallery.core.backup.contract.BackupItemId
 import dev.pampa.mycloudgallery.core.backup.contract.BackupKind
 import dev.pampa.mycloudgallery.core.backup.contract.BackupRunResult
 import dev.pampa.mycloudgallery.core.backup.contract.BackupTrigger
+import dev.pampa.mycloudgallery.core.backup.contract.UploadState
 import dev.pampa.mycloudgallery.core.metadata.contract.MediaBytes
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
@@ -12,6 +15,8 @@ import dev.pampa.mycloudgallery.core.model.QuickHash
 import dev.pampa.mycloudgallery.core.model.Sha256
 import dev.pampa.mycloudgallery.core.model.VersionId
 import dev.pampa.mycloudgallery.core.nas.contract.Purpose
+import dev.pampa.mycloudgallery.core.nas.ops.NasOpsPaths
+import dev.pampa.mycloudgallery.core.nas.ops.backup.VersionPaths
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import kotlin.time.Duration
 
@@ -159,4 +164,49 @@ data class UploadConfig(
     val r = root.components
     c.size > r.size && r.indices.all { c[it].equals(r[it], ignoreCase = true) }
   }
+}
+
+// --- Fase 5B (P14): i file in arrivo da altre app (D24, elementi `INCOMING` del diario) ------------------------------------------------
+
+/** La copia locale di un file in arrivo, aperta in lettura (in `noBackupFilesDir/incoming/`). La chiude chi la usa. */
+interface IncomingLocalFile : java.io.Closeable {
+  val bytes: MediaBytes
+}
+
+/**
+ * I file in arrivo che il motore carica (D24, E-X8): la copia locale di ogni elemento `INCOMING` e cosa farne a lavoro finito. `:app` (P14) la
+ * lega alle righe di `incoming_item` (che sanno quale file locale carica quale elemento) e ai file di `IncomingStager`. Mai nomi nei log.
+ */
+interface IncomingLocalFiles {
+
+  /** La copia locale dell'elemento [id], o null se non c'e' piu' (tolta, ripulita): l'elemento esce (`GONE`), niente si carica. */
+  suspend fun open(id: BackupItemId): IncomingLocalFile?
+
+  /**
+   * L'elemento [id] e' finito in [state] (terminale). Con `DONE` o `LINKED_EXISTING` (la copia e' sul NAS, riletta per intero e collegata nel
+   * catalogo) la copia locale **si toglie**; con `GONE` o `FAILED` resta (l'utente non perde il file). Idempotente: si puo' chiamare due volte.
+   */
+  suspend fun finished(id: BackupItemId, state: UploadState)
+}
+
+/**
+ * Come il motore carica i file in arrivo (D24; null in [SafeUploadEngine] = gli elementi `INCOMING` aspettano). Stesso caricamento sicuro di
+ * ogni elemento (temporaneo proprio, rilettura completa, pubblicazione senza sostituire, "nome (2)" se occupato), con tre differenze: i byte
+ * vengono da [files] (non dal telefono), la destinazione e' la cartella scelta dall'utente nell'area privata **o comune** dell'account (non
+ * `Backup/`), e il cancello e' [gate], che vale per la share di destinazione (D12, R2, congelamento, emergenza, sola lettura, pausa).
+ *
+ * @property root D13: con la recinzione di debug, la radice sotto cui si puo' pubblicare (`mcg-campo`); null = tutta la share, fuori
+ *   dall'area dell'app e da `Versioni/`.
+ */
+class IncomingUploadPorts(val files: IncomingLocalFiles, val gate: BackupGate, val root: SharePath? = null) {
+
+  /** [path] e' un file di media dove un arrivo puo' essere pubblicato: fuori dall'area dell'app e da `Versioni/`, dentro [root] se c'e'. */
+  fun allows(path: SharePath): Boolean {
+    if (!NasOpsPaths.isMediaPath(path) || VersionPaths.isInVersions(path) || VersionPaths.isVersionsRoot(path)) return false
+    val r = root?.components ?: return true
+    val c = path.components
+    return c.size > r.size && r.indices.all { c[it].equals(r[it], ignoreCase = true) }
+  }
+
+  override fun toString(): String = "IncomingUploadPorts"
 }

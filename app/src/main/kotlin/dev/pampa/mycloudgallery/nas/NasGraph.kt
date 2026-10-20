@@ -81,6 +81,7 @@ import dev.pampa.mycloudgallery.core.nas.session.ClockJumpGuard
 import dev.pampa.mycloudgallery.core.nas.contract.Purpose
 import dev.pampa.mycloudgallery.core.nasmedia.contract.Freeze
 import dev.pampa.mycloudgallery.core.nasmedia.contract.NasScanStatus
+import dev.pampa.mycloudgallery.core.nasmedia.contract.OwnChanges
 import dev.pampa.mycloudgallery.core.nasmedia.contract.ScanMode
 import dev.pampa.mycloudgallery.core.nasmedia.contract.ScanReport
 import dev.pampa.mycloudgallery.core.nasmedia.contract.ScanSettings
@@ -168,6 +169,13 @@ class NasGraph(
   /** Fase 5A (P7, D33): i temporanei citati dal diario del backup (lo compone `GalleryGraph`: il backup nasce dopo il NAS). */
   private val citedTemps: CitedTemps = CitedTemps.NONE,
 ) {
+
+  /**
+   * Fase 5B (P14, D32): la franchigia delle versioni per la guardia dei cambiamenti di massa della scansione (i file che il backup ha messo o
+   * spostato in `Versioni/`). La lega il backup, che nasce dopo il NAS; finche' non c'e', nessuna franchigia (la guardia vale per tutto).
+   */
+  @Volatile
+  var ownChanges: OwnChanges = OwnChanges.NONE
 
   val enabled: Boolean get() = inputs.flags.nasLibrary
 
@@ -584,6 +592,8 @@ class NasGraph(
         // R8 (revisione 4B): cio' che l'app stessa ha tolto dalla share (diario locale) non fa scattare il congelamento.
         ownRemovals = organizer.ownRemovals,
         acceptances = freezeAcceptances,
+        // Fase 5B (P14, D32): i file che le versioni hanno messo o spostato (franchigia del diario delle versioni) non sono "cambiati".
+        ownChanges = OwnChanges { s -> ownChanges.fileIds(s) },
       )
     }
     val rt = Runtime(account, deviceId, areas, replica, quality, sync, publisher, remote, workSource, workUnits, preparer, scanners)

@@ -84,6 +84,8 @@ class BackupDiagnostics(private val backup: BackupGraph, private val similar: Si
       }
     }
     if (backup.phoneStorageLow()) problems.getOrPut(BackupProblemCode.PHONE_STORAGE_LOW) { 0 }
+    // P14 (5B): le versioni che aspettano perche' il PC ha cambiato il file (D17, E-E6), dal diario locale.
+    runCatching { backup.fiveB.sourceChangedHolds() }.getOrDefault(0).takeIf { it > 0 }?.let { problems[BackupProblemCode.SOURCE_CHANGED] = it }
     problems.entries.sortedBy { it.key.ordinal }.forEach { (code, count) ->
       val diagCode = BackupDiagCodes.of(code)
       val severity = DiagCatalog.entry(diagCode)?.severity ?: DiagSeverity.WARNING

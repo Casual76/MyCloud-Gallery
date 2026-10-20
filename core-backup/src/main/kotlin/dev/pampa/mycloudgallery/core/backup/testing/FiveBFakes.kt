@@ -49,6 +49,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.PhoneConfirmation
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneConfirmationCheck
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneConfirmationIssuer
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneConfirmationRules
+import dev.pampa.mycloudgallery.core.backup.contract.PhoneKeptReason
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneRef
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneRewrite
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneRewriter
@@ -129,9 +130,12 @@ class InMemoryVersionKeeper(private val clock: BackupClock = FakeBackupClock()) 
     val check = PhoneConfirmationRules.check(plan, confirmation, clock.monotonicMs())
     if (check != PhoneConfirmationCheck.Valid) return RestoreOutcome.Rejected(check)
     val rows = phoneRowsToRewrite[mediaId].orEmpty()
-    if (rows.isNotEmpty() && (writeGrant == null || !writeGrant.coversAll(rows))) return RestoreOutcome.NeedsPhoneWrite(rows)
+    // Come il custode vero (contratto di `PhoneWriteGrant`, P14): null = il dialogo non e' stato chiesto, niente si tocca; un permesso che
+    // non copre le righe = l'utente ha detto no: lo scambio sul NAS si fa e il telefono tiene la modifica.
+    if (rows.isNotEmpty() && writeGrant == null) return RestoreOutcome.NeedsPhoneWrite(rows)
     restored += mediaId
     plans[mediaId] = swapped(plan)
+    if (rows.isNotEmpty() && !writeGrant!!.coversAll(rows)) return RestoreOutcome.PhoneNotRewritten(PhoneKeptReason.PERMISSION_DENIED)
     return RestoreOutcome.Queued
   }
 
@@ -380,10 +384,17 @@ class InMemoryFreeSpace(
     when (outcome) {
       is TrashOutcome.Confirmed -> {
         val freed = batch.items.filter { it.phone in outcome.confirmed }
-        run = run.copy(freedItems = run.freedItems + freed.size, freedBytes = run.freedBytes + freed.sumOf { it.size })
+        run = run.copy(
+          freedItems = run.freedItems + freed.size,
+          freedBytes = run.freedBytes + freed.sumOf { it.size },
+          kept = run.kept + batch.items.size - freed.size,
+        )
       }
-      TrashOutcome.Refused -> run = run.copy(state = FreeSpaceRunState.CANCELLED)
-      TrashOutcome.Unknown -> data.inDoubt += batch.items.size
+      TrashOutcome.Refused -> run = run.copy(state = FreeSpaceRunState.CANCELLED, kept = run.kept + batch.items.size)
+      TrashOutcome.Unknown -> {
+        data.inDoubt += batch.items.size
+        run = run.copy(inDoubt = run.inDoubt + batch.items.size)
+      }
     }
     val done = run.batchesDone + 1
     val state = when {

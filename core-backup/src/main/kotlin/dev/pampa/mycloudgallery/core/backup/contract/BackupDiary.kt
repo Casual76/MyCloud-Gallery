@@ -295,6 +295,11 @@ data class BackupItem(
   val verifyAttempts: Int = 0,
   val guardSource: GuardSource? = null,
   val problem: BackupProblemCode? = null,
+  /**
+   * P14: un elemento `VERSION` sposta l'attuale in `Versioni/` (cammino `VERSION`) o no (`VERSION_DIRECT`: nessuna attuale da spostare). Lo
+   * dice il diario (colonna `current_version_id`); per gli altri tipi non conta.
+   */
+  val archivesCurrent: Boolean = true,
 ) {
   init {
     require(size >= 0) { "Dimensione negativa." }
@@ -302,7 +307,7 @@ data class BackupItem(
     require(nameAttempt >= 0 && verifyAttempts >= 0) { "Contatori negativi." }
   }
 
-  val flow: UploadFlow get() = UploadStateMachine.flowOf(kind)
+  val flow: UploadFlow get() = UploadStateMachine.flowOf(kind, archivesCurrent)
 
   override fun toString(): String = "BackupItem(#$id, ${kind.code}, ${state.code})"
 }
@@ -350,6 +355,13 @@ interface BackupStore {
    * ([UploadKind.phase5B]) nella 5A e' un errore di programmazione.
    */
   suspend fun create(items: List<NewBackupItem>): List<BackupItem>
+
+  /**
+   * 5B (P14, D24): scrive l'elemento `INCOMING` di un file in arrivo (`PLANNED`, con lo SHA-256 della copia locale gia' nel diario: la lettura lo
+   * deve ritrovare). Idempotente come [create]: un elemento aperto della stessa versione e dello stesso tipo si restituisce. La chiama solo la
+   * coda dei file in arrivo, dopo il tocco dell'utente su "Salva sul NAS" (E-S11). Di serie non c'e' (un diario della 5A non la conosce).
+   */
+  suspend fun createIncoming(item: NewBackupItem): BackupItem = throw UnsupportedOperationException("Questo diario non accetta file in arrivo.")
 
   suspend fun item(id: BackupItemId): BackupItem?
 

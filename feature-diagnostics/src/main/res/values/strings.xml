@@ -188,6 +188,7 @@
   <string name="diagnostics_job_quick_photos">Foto appena scattate</string>
   <string name="diagnostics_job_backup_safety">Verifiche del backup</string>
   <string name="diagnostics_job_backup_user">Backup avviato da te</string>
+  <string name="diagnostics_job_backup_incoming">File ricevuti da salvare</string>
   <string name="diagnostics_job_trust_sync">Controllo del registro di famiglia</string>
   <string name="diagnostics_job_result_finished">finito</string>
   <string name="diagnostics_job_result_yielded">fatto in parte, riprende</string>

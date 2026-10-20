@@ -51,7 +51,8 @@ class BackupFooterProblemsTest {
     val alarm = BackupFooterProblems.all.filter { it.tone == GalleryFooterTone.Alarm }.map { it.code }
     assertThat(alarm).containsAtLeast("auth", "quota", "nas_full", "media_permission", "read_only_area", "no_private_area", "frozen", "verify_failed")
     val calm = BackupFooterProblems.all.filter { it.tone == GalleryFooterTone.Waiting }.map { it.code }
-    assertThat(calm).containsExactly("test_only", "waiting_unlock", "profile_inactive")
+    // P14: anche le versioni ferme per il PC ripartono da sole (dopo la verifica del NAS): un'attesa, non un allarme.
+    assertThat(calm).containsExactly("test_only", "source_changed", "waiting_unlock", "profile_inactive")
   }
 
   @Test

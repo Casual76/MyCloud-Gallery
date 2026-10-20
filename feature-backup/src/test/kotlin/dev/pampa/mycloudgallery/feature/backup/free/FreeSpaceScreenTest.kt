@@ -131,6 +131,8 @@ class FreeSpaceScreenTest : ComposeBackupTallTest() {
     val titles = listOf(
       "Non ancora controllati sul NAS", "Con una versione non al sicuro", "In caricamento o con un problema", "Lavori fermi",
       "Il NAS non risponde", "Fuori dalla cartella di prova", "Degli ultimi giorni", "La copia sul NAS è cambiata", "Non sono più sul telefono",
+      // P14: i due motivi nuovi del contratto (prima finivano fra "con un problema").
+      "Di un altro familiare", "Backup non attivo",
     )
     assertThat(titles).hasSize(FreeSpaceExclusion.entries.size)
     for (title in titles) composeRule.onNodeWithText(title).assertExists()

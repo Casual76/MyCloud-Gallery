@@ -36,6 +36,8 @@ class BackupEnginePorts(
   val indexing: UploadIndexing = UploadIndexing.NONE,
   /** L'app e' in primo piano (lettura e preparazione a priorita' bassa). */
   val foreground: () -> Boolean = { false },
+  /** 5B (P14, D24): i file in arrivo da caricare; null = gli elementi `INCOMING` aspettano. */
+  val incoming: IncomingUploadPorts? = null,
 )
 
 /**
@@ -75,6 +77,7 @@ object BackupEngineFactory {
       indexing = ports.indexing,
       config = config,
       foreground = ports.foreground,
+      incoming = ports.incoming,
     )
   }
 

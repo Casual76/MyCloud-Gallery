@@ -48,6 +48,7 @@
   <string name="backup_versions_why_read_only">Questa area è in sola lettura: non si può ripristinare.</string>
   <string name="backup_versions_why_not_mine">Questo media non è tuo: non puoi ripristinarne l’originale.</string>
   <string name="backup_versions_why_not_available">Il ripristino non è ancora pronto.</string>
+  <string name="backup_versions_why_busy">Sto ancora lavorando su questo media: riprova fra poco.</string>
 
   <string name="backup_versions_confirm_title">Ripristinare l’originale?</string>
   <string name="backup_versions_confirm_message">L’originale torna al suo posto sul NAS e la versione di adesso va nella cartella Versioni. Non si perde niente e non si carica niente.</string>

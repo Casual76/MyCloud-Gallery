@@ -6,6 +6,7 @@ import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.backup.contract.BackupProblemCode
 import dev.pampa.mycloudgallery.core.backup.contract.NewBackupItem
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneRef
+import dev.pampa.mycloudgallery.core.backup.contract.UploadFlow
 import dev.pampa.mycloudgallery.core.backup.contract.UploadKind
 import dev.pampa.mycloudgallery.core.backup.contract.UploadState
 import dev.pampa.mycloudgallery.core.backup.store.RoomBackupStore
@@ -34,7 +35,7 @@ import org.robolectric.RobolectricTestRunner
 
 /**
  * Fase 5B, P8: il diario delle versioni su Room ([RoomVersionJournal]) nella stessa tabella del diario del backup (`backup_item`, schema
- * v4). Ogni campo di un lavoro torna uguale (anche cio' che lo schema non ha, nella nota); le transizioni fuori dalla macchina, i cambi
+ * v4). Ogni campo di un lavoro torna uguale (dal P14 nelle colonne delle versioni); le transizioni fuori dalla macchina, i cambi
  * d'identita' e di cammino sono rifiutati; la creazione e' idempotente. **Insieme al diario della 5A** (`RoomBackupStore`): la 5A vede i
  * lavori delle versioni come elementi aperti della versione (nessuna copia nuova in parallelo), ne cita i temporanei (D33) e li salta senza
  * errori; le versioni vedono i caricamenti della 5A. E il motore vero che riprende da un database chiuso e riaperto.
@@ -171,6 +172,9 @@ class RoomVersionJournalTest {
     val resumed = store.itemsToResume(100)
     assertThat(resumed.map { it.kind }).containsExactly(UploadKind.SWAP, UploadKind.VERSION)
     assertThat(resumed.all { it.problem == null }).isTrue()
+    // P14: la 5A legge il cammino giusto (colonna `current_version_id`): lo scambio e' `SWAP`, la versione senza attuale `VERSION_DIRECT`.
+    assertThat(resumed.first { it.kind == UploadKind.VERSION }.flow).isEqualTo(UploadFlow.VERSION_DIRECT)
+    assertThat(resumed.first { it.kind == UploadKind.SWAP }.flow).isEqualTo(UploadFlow.SWAP)
     // Le versioni: un caricamento della 5A aperto rende la versione occupata; i suoi elementi non sono lavori delle versioni.
     store.create(listOf(NewBackupItem(UploadKind.NEW_COPY, media, other, 10, ref, FileStamp(10, 5, 3), "test", SharePath.parse("Backup/S25/2026/10/X.jpg"))))
     assertThat(journal.busy(other)).isTrue()

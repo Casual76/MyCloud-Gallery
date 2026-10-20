@@ -330,3 +330,60 @@ class SimilarMember(
 class SimilarGroupInfo(val group: MediaGroupId, val cover: MediaId?, val members: List<SimilarMember>, val hidden: Boolean) {
   override fun toString(): String = "SimilarGroupInfo(${members.size})"
 }
+
+// --- Fase 5B (P14): cio' che "Libera spazio", "Modifica con…", le correzioni e i file in arrivo chiedono al catalogo -------------------
+
+/** Un media con una copia sul telefono, nell'ordine della Libreria ([MediaCatalog.phoneMedia]). [localDay] null = senza data. */
+data class CatalogPhoneMedia(val mediaId: MediaId, val sortTime: Long, val localDay: Int?) {
+  override fun toString(): String = "CatalogPhoneMedia"
+}
+
+/** Il cursore delle pagine di [MediaCatalog.phoneMedia]: `sort_time` decrescente, poi id decrescente. */
+data class CatalogPhoneCursor(val sortTime: Long, val mediaId: MediaId) {
+  override fun toString(): String = "CatalogPhoneCursor"
+}
+
+/** Il luogo di una correzione solo nell'app (Q6 (a)). */
+sealed interface InAppGeo {
+  /** Il luogo resta com'e'. */
+  data object Keep : InAppGeo
+
+  /** Il luogo corretto. */
+  class Set(val latitude: Double, val longitude: Double) : InAppGeo {
+    init {
+      require(latitude in -90.0..90.0 && longitude in -180.0..180.0) { "Coordinate fuori intervallo." }
+    }
+
+    override fun toString(): String = "InAppGeo.Set"
+  }
+
+  /** Il luogo tolto. */
+  data object Clear : InAppGeo
+}
+
+/**
+ * Una correzione **solo nell'app** (Q6 (a), L40; [MediaCatalog.correctInApp]): la data (istante e fuso), il luogo e la rotazione (gradi e
+ * specchio) che valgono per la versione al posto di quelli letti dal file. I campi null non correggono niente.
+ */
+data class InAppCorrection(
+  val takenAtUtcMillis: Long? = null,
+  val offsetMinutes: Int? = null,
+  val geo: InAppGeo = InAppGeo.Keep,
+  val orientationDegrees: Int? = null,
+  val mirrored: Boolean? = null,
+) {
+  init {
+    require(offsetMinutes == null || (takenAtUtcMillis != null && offsetMinutes in -18 * 60..18 * 60)) { "Fuso non valido." }
+    require(orientationDegrees == null || orientationDegrees in setOf(0, 90, 180, 270)) { "Rotazione non valida." }
+    require((orientationDegrees == null) == (mirrored == null)) { "Rotazione e specchio vanno insieme." }
+  }
+
+  val isEmpty: Boolean get() = takenAtUtcMillis == null && geo == InAppGeo.Keep && orientationDegrees == null
+
+  override fun toString(): String = "InAppCorrection"
+}
+
+/** Esito di [MediaCatalog.incomingMedia]: il media e la versione che un file in arrivo diventera' (nuovo, o gia' noto per gli stessi byte). */
+data class CatalogIncomingMedia(val mediaId: MediaId, val versionId: VersionId, val created: Boolean) {
+  override fun toString(): String = "CatalogIncomingMedia(nuovo=$created)"
+}

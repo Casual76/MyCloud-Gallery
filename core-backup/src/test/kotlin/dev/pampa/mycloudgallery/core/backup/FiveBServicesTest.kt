@@ -24,6 +24,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.PendingTask
 import dev.pampa.mycloudgallery.core.backup.contract.PendingTaskKind
 import dev.pampa.mycloudgallery.core.backup.contract.PendingTaskState
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneConfirmationCheck
+import dev.pampa.mycloudgallery.core.backup.contract.PhoneKeptReason
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneRef
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneRewrite
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneWriteGrant
@@ -140,10 +141,24 @@ class FiveBServicesTest {
     val confirmation = TestConfirmations.confirm(keeper.plan(media), clock.monotonicMs())
 
     assertThat(keeper.restoreOriginal(media, confirmation)).isEqualTo(RestoreOutcome.NeedsPhoneWrite(listOf(row)))
-    assertThat(keeper.restoreOriginal(media, confirmation, PhoneWriteGrant(setOf(PhoneRef("external_primary", 43, "v1")))))
-      .isEqualTo(RestoreOutcome.NeedsPhoneWrite(listOf(row)))
     assertThat(keeper.restored).isEmpty()
     assertThat(keeper.restoreOriginal(media, confirmation, PhoneWriteGrant(setOf(row)))).isEqualTo(RestoreOutcome.Queued)
+  }
+
+  /**
+   * P14, il contratto di `PhoneWriteGrant` (lo stesso nel finto e nel custode vero): un permesso che **non copre** le righe vuol dire che
+   * l'utente ha detto no al dialogo. Lo scambio sul NAS si fa, il telefono tiene la modifica, e la risposta lo dice.
+   */
+  @Test
+  fun unPermessoCheNonCopreLeRigheEUnDialogoNegato() = runTest {
+    val keeper = InMemoryVersionKeeper(clock)
+    keeper.setPlan(versionPlan())
+    val row = PhoneRef("external_primary", 42, "v1")
+    keeper.phoneRowsToRewrite[media] = listOf(row)
+    val confirmation = TestConfirmations.confirm(keeper.plan(media), clock.monotonicMs())
+    assertThat(keeper.restoreOriginal(media, confirmation, PhoneWriteGrant(emptySet())))
+      .isEqualTo(RestoreOutcome.PhoneNotRewritten(PhoneKeptReason.PERMISSION_DENIED))
+    assertThat(keeper.restored).containsExactly(media)
   }
 
   @Test

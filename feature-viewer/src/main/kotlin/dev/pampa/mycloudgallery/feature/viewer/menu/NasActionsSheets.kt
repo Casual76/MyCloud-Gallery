@@ -176,7 +176,8 @@ internal fun NasDeleteSheetContent(
       icon = Icons.Rounded.DeleteForever,
       tone = GallerySheetTone.Destructive,
       title = title,
-      message = stringResource(R.string.viewer_nas_delete_nas_only_message),
+      // Fase 5B (E-D15): anche le versioni precedenti vanno nel cestino del NAS, e il foglio lo dice prima di confermare.
+      message = (listOf(stringResource(R.string.viewer_nas_delete_nas_only_message)) + extraLocations.map { it.title }).joinToString(" "),
       actions = {
         FluidButton(
           text = stringResource(R.string.viewer_nas_delete_nas_only_confirm),
@@ -204,7 +205,8 @@ internal fun NasDeleteSheetContent(
         deletable = target.writable,
       ),
     )
-    target.others.forEach { other ->
+    // Le versioni precedenti (E-D15) sono nella loro riga ([extraLocations]): qui solo le altre aree.
+    target.others.filterNot { it.previousVersion }.forEach { other ->
       add(
         GalleryDeleteLocation(
           title = stringResource(if (other.kind == NasLocationInfo.Kind.NAS_COMMON) R.string.viewer_nas_delete_nas_common else R.string.viewer_nas_delete_nas_private),

@@ -99,6 +99,8 @@ class PhoneSyncWorker @AssistedInject constructor(
     // puo' essere sparita mentre la sola copia sul NAS e' nell'area comune => il guardiano. Dal catalogo e dal diario, nessun polling.
     gallery.backup?.let { backup ->
       try {
+        // Fase 5B (P14, P9): gli esiti in dubbio di "Libera spazio" (dialogo di sistema di un processo morto) si risolvono con il telefono.
+        gallery.runIfActive { backup.afterPhoneRead() }
         BackupWorkScheduling.afterPhoneRead(applicationContext, backup)
       } catch (e: kotlinx.coroutines.CancellationException) {
         throw e

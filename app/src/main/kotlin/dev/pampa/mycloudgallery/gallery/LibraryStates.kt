@@ -86,6 +86,13 @@ class AppLibraryCommands(
 
   override val canDeleteFromPhone: Boolean get() = gallery.intents.canTrash
 
+  // Fase 5B (P14, D21): "Libera spazio" sulla selezione, se il backup c'e' e il sistema ha i dialoghi (Android 11+).
+  override val canFreeSpace: Boolean get() = gallery.fiveB != null && gallery.intents.canTrash
+
+  override fun freeSpace(ids: Set<MediaId>) {
+    gallery.fiveB?.freeSpace?.invoke(ids)
+  }
+
   /** Il tetto di una richiesta di cestino di sistema (Android 11+). */
   override val deleteLimit: Int get() = DELETE_LIMIT
 

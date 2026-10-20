@@ -76,6 +76,15 @@ enum class FreeSpaceExclusion(override val code: String) : StableCode {
 
   /** La riga del telefono non c'e' piu' (cancellata, gia' liberata). */
   GONE_FROM_PHONE("gone_from_phone"),
+
+  /** P14 (proposta di P9 e P12): il media non e' di questo account (un familiare, un'altra area privata): non si libera mai da qui. */
+  NOT_MINE("not_mine"),
+
+  /**
+   * P14 (proposta di P9 e P12): il backup non e' attivo (nessuna area privata, famiglia non pronta, "Backup in prova" per D12 o R2): niente e'
+   * al sicuro per questo flusso.
+   */
+  BACKUP_NOT_ACTIVE("backup_not_active"),
 }
 
 /** Gli avvisi che il foglio mostra sempre (C13). */
@@ -241,6 +250,13 @@ data class FreeSpaceRun(
   val dropped: Map<FreeSpaceExclusion, Int> = emptyMap(),
   val validUntilMonotonicMs: Long? = null,
   val blocked: FreeSpaceBlock? = null,
+  /**
+   * P14 (proposta di P12): gli elementi consegnati ad Android il cui esito non si sa ancora (app uccisa con il dialogo aperto, riga
+   * rinumerata): **non** liberati e **non** persi; li risolve la lettura del telefono (`settle`).
+   */
+  val inDoubt: Int = 0,
+  /** P14 (proposta di P12): gli elementi consegnati ad Android e rimasti sul telefono (dialogo rifiutato o non confermato per quella riga). */
+  val kept: Int = 0,
 ) {
   /** Il giro va ancora avanti con `verify`/`resume` o con i lotti. */
   val isActive: Boolean get() = !state.terminal

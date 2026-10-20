@@ -16,9 +16,11 @@ import dev.pampa.mycloudgallery.core.database.entity.FreeSpaceItemEntity
 import dev.pampa.mycloudgallery.core.database.entity.FreeSpaceRunEntity
 import dev.pampa.mycloudgallery.core.database.entity.GroupIdRow
 import dev.pampa.mycloudgallery.core.database.entity.IncomingItemEntity
+import dev.pampa.mycloudgallery.core.database.entity.MetadataCorrectionEntity
 import dev.pampa.mycloudgallery.core.database.entity.NasCopyMismatchEntity
 import dev.pampa.mycloudgallery.core.database.entity.NasCopyRow
 import dev.pampa.mycloudgallery.core.database.entity.PendingTaskEntity
+import dev.pampa.mycloudgallery.core.database.entity.PhoneMediaRow
 import dev.pampa.mycloudgallery.core.database.entity.PhonePlaceRow
 import dev.pampa.mycloudgallery.core.database.entity.SimilarCandidateRow
 import dev.pampa.mycloudgallery.core.database.entity.StatusCount
@@ -75,6 +77,17 @@ interface BackupDiaryDao {
   /** I byte degli elementi aperti. */
   @Query("SELECT COALESCE(SUM(size), 0) FROM backup_item WHERE is_open = 1")
   suspend fun openBytes(): Long
+
+  /**
+   * 5B (P14): gli elementi di questi tipi in una share, terminali compresi, dal piu' vecchio (la franchigia del congelamento legge tutte le
+   * versioni e gli scambi della share, D32). La share si confronta senza maiuscole, come Samba.
+   */
+  @Query("SELECT * FROM backup_item WHERE kind IN (:kinds) AND share = :share COLLATE NOCASE ORDER BY item_id")
+  suspend fun ofKindsInShare(kinds: List<String>, share: String): List<BackupItemEntity>
+
+  /** 5B (P14): gli elementi aperti di un tipo, dal piu' vecchio (i lavori delle versioni, gli arrivi). */
+  @Query("SELECT * FROM backup_item WHERE kind = :kind AND is_open = 1 ORDER BY item_id LIMIT :limit")
+  suspend fun openOfKind(kind: String, limit: Int): List<BackupItemEntity>
 
   companion object {
     const val ITEMS_TO_RESUME_SQL: String = "SELECT * FROM backup_item WHERE is_open = 1 ORDER BY item_id LIMIT :limit"
@@ -176,6 +189,28 @@ interface BackupQueryDao {
   suspend fun codeCounts(query: SupportSQLiteQuery): List<CodeCountRow>
 
   /** Le share con area privata dell'account (di norma una: `LocalDeviceProfile.privateShare`). */
+  /**
+   * P14 (P9, `FreeSpaceCatalog.phoneMedia`): i media con una copia **presente** sul telefono (presenza derivata `phone_only` o
+   * `phone_and_nas`), dal piu' recente (`sort_time`, poi id, decrescenti), dopo il cursore: dall'indice (`sort_time`, `media_id`) della
+   * timeline, nessun ordinamento in memoria. Tutti i media, propri e no: le regole di "Libera spazio" decidono.
+   */
+  @Query(
+    "SELECT media_id, sort_time, local_day FROM media WHERE presence IN ('phone_only', 'phone_and_nas') " +
+      "AND (sort_time < :sortTime OR (sort_time = :sortTime AND media_id < :mediaId)) ORDER BY sort_time DESC, media_id DESC LIMIT :limit",
+  )
+  suspend fun phoneMediaAfter(sortTime: Long, mediaId: String, limit: Int): List<PhoneMediaRow>
+
+  /** P14: i media con piu' di una versione (dall'indice di `media_version.media_id`). */
+  @Query("SELECT media_id FROM media_version GROUP BY media_id HAVING COUNT(*) > 1 ORDER BY media_id LIMIT :limit")
+  suspend fun mediaWithVersions(limit: Int): List<String>
+
+  /** La prima pagina di [phoneMediaAfter]. */
+  @Query(
+    "SELECT media_id, sort_time, local_day FROM media WHERE presence IN ('phone_only', 'phone_and_nas') " +
+      "ORDER BY sort_time DESC, media_id DESC LIMIT :limit",
+  )
+  suspend fun phoneMediaFirst(limit: Int): List<PhoneMediaRow>
+
   @Query("SELECT share_key FROM nas_share WHERE account_id = :account AND area = 'private' ORDER BY share_key")
   suspend fun privateShareKeys(account: String): List<String>
 
@@ -344,6 +379,17 @@ interface FreeSpaceDao {
   /** Gli elementi che riguardano una posizione del telefono (la lettura del telefono "lo sa" prima di segnarla assente). */
   @Query("SELECT * FROM free_space_item WHERE phone_location_id = :locationId ORDER BY run_id DESC, item_index")
   suspend fun forPhoneLocation(locationId: Long): List<FreeSpaceItemEntity>
+
+  /**
+   * P14 (richiesta di P9): gli elementi in questi stati di **tutti** i giri, dall'indice di `state` (le righe consegnate ad Android e non
+   * risolte, senza scorrere i giri).
+   */
+  @Query("SELECT * FROM free_space_item WHERE state IN (:states) ORDER BY run_id, item_index")
+  suspend fun itemsInStates(states: List<String>): List<FreeSpaceItemEntity>
+
+  /** P14: le posizioni del telefono degli elementi in questi stati (la lettura del telefono: liberata, nel dialogo, in dubbio = non persa). */
+  @Query("SELECT DISTINCT phone_location_id FROM free_space_item WHERE state IN (:states)")
+  suspend fun phoneLocationsInStates(states: List<String>): List<Long>
 }
 
 /** I file in arrivo da altre app (`incoming_item`, D24): righe dentro e fuori. */
@@ -365,4 +411,27 @@ interface IncomingDao {
 
   @Query("SELECT * FROM incoming_item WHERE stage_id = :stageId ORDER BY incoming_id")
   suspend fun ofStage(stageId: String): List<IncomingItemEntity>
+
+  /** P14: tutti i file di uno stato con il loro elemento del diario (per la ripresa del caricamento). */
+  @Query("SELECT * FROM incoming_item WHERE backup_item_id IS NOT NULL AND state = :state ORDER BY incoming_id")
+  suspend fun linkedInState(state: String): List<IncomingItemEntity>
+
+  /** P14: il file in arrivo che un elemento `INCOMING` del diario del backup carica (dall'indice di `backup_item_id`). */
+  @Query("SELECT * FROM incoming_item WHERE backup_item_id = :backupItemId ORDER BY incoming_id")
+  suspend fun forBackupItem(backupItemId: Long): List<IncomingItemEntity>
+
+  /** P14: le condivisioni con almeno un file in uno di questi stati (la pulizia di `incoming/` all'avvio tiene queste). */
+  @Query("SELECT DISTINCT stage_id FROM incoming_item WHERE state IN (:states)")
+  suspend fun stagesInStates(states: List<String>): List<String>
+}
+
+/** Le correzioni solo nell'app (`metadata_correction`, Q6 (a), P14): una riga per versione. */
+@Dao
+interface MetadataCorrectionDao {
+
+  @Upsert
+  suspend fun upsert(row: MetadataCorrectionEntity)
+
+  @Query("SELECT * FROM metadata_correction WHERE version_id = :versionId")
+  suspend fun get(versionId: String): MetadataCorrectionEntity?
 }

@@ -770,6 +770,8 @@ class SafeFreeSpace(
       dropped = items.filter { it.state == FreeItemState.DROPPED }.groupingBy { it.reason!! }.eachCount(),
       validUntilMonotonicMs = rec.validity?.let { it.startMonotonicMs + FreeSpaceRules.VERIFICATION_VALID_MS },
       blocked = rec.blocked ?: blockedRuns[rec.id.value],
+      inDoubt = items.count { it.state == FreeItemState.IN_DOUBT },
+      kept = items.count { it.state == FreeItemState.KEPT },
     )
   }
 

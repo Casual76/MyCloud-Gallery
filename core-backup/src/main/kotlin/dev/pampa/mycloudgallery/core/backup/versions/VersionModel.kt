@@ -376,6 +376,12 @@ data class VersionConfig(
   val maxNameAttempts: Int = 999,
   val maxStepsPerJob: Int = 200,
   val openLimit: Int = 1_000,
+  /**
+   * D13 (P14): con la recinzione di debug e un account di prova, la radice di prova (`mcg-campo`). Solo i media il cui solito percorso sta
+   * sotto di lei hanno lavori delle versioni (le loro `Versioni/` stanno in `<radice>/Versioni/`, `VersionPaths`); gli altri non si toccano
+   * mai. Null = nessuna recinzione.
+   */
+  val fenceRoot: SharePath? = null,
 ) {
   init {
     require(chunkBytes > 0 && checkpointBytes >= chunkBytes) { "Misure di scrittura non valide." }

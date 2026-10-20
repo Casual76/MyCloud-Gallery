@@ -4,7 +4,10 @@ import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
+import dev.pampa.mycloudgallery.backup.FiveBUi
 import dev.pampa.mycloudgallery.gallery.GalleryGraph
+import dev.pampa.mycloudgallery.integrations.IntegrationsGraph
+import java.util.Optional
 import dev.pampa.mycloudgallery.graph.AppGraph
 import dev.pampa.mycloudgallery.notify.AppNotifications
 import dev.pampa.mycloudgallery.process.GalleryLifecycle
@@ -45,6 +48,14 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
   @Inject
   lateinit var notifications: AppNotifications
 
+  /** Fase 5B (P14): le porte del selettore, del provider dei documenti e della ricezione, installate prima di ogni richiesta. */
+  @Inject
+  lateinit var integrations: IntegrationsGraph
+
+  /** Fase 5B (P14): le schermate della 5B e le voci del backup nel viewer (solo con il backup). */
+  @Inject
+  lateinit var fiveB: Optional<FiveBUi>
+
   override val workManagerConfiguration: Configuration
     get() = Configuration.Builder()
       .setWorkerFactory(workerFactory)
@@ -57,6 +68,9 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
     // Nella build release questa funzione e' vuota: vedi src/release/.../AppLogging.kt.
     installLogging()
     notifications.createChannels()
+    // Fase 5B (P14): prima di qualunque componente creato dal sistema (selettore, provider, ricezione) e di qualunque schermata.
+    integrations.install()
+    fiveB.ifPresent { ui -> gallery.fiveB = GalleryGraph.FiveBHooks(ui.mediaActions) { ids -> ui.openFreeSpace(ids) } }
     ProcessWatcher(
       graph = graph,
       notifications = notifications,

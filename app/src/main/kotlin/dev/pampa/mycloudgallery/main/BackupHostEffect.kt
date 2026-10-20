@@ -59,9 +59,8 @@ internal fun BackupHostEffect(actions: AppBackupActions?, nav: NavController, on
   }
   val host = remember(context, nav) {
     object : BackupActionsHost {
-      override fun openScreen(screen: BackupScreen) {
-        if (!screen.phase5B) nav.navigate(screen.route)
-      }
+      // Fase 5B (P14): anche "Libera spazio" e "Da decidere" sono rotte registrate (`backupGraph`).
+      override fun openScreen(screen: BackupScreen) = nav.navigate(screen.route)
 
       override fun openDiagnostics() = nav.navigate(DiagnosticsGraphRoute)
 

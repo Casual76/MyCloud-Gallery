@@ -122,7 +122,11 @@ import kotlinx.coroutines.yield
  *   creato lui, non l'arretrato gia' nel diario (un primo backup a meta' avrebbe fatto passare la foto appena scattata dopo centinaia di vecchie);
  * - **la copia appena pubblicata e poi spostata da un'altra via non si rifa'** (F2, lo schema del guardiano): se al collegamento il file non e' piu'
  *   al suo nome, prima di ricaricare si cerca nell'area privata una copia con gli stessi byte (la deduplica D8, riletta qui per intero) e ci si
- *   collega; senza, si ricarica come sempre.
+ *   collega; senza, si ricarica come sempre;
+ * - **i file in arrivo** (5B, P14; D24, E-X8: elementi `INCOMING`, con [incoming]): lo stesso caricamento sicuro, con i byte della copia locale
+ *   in `incoming/` (lo SHA-256 e' gia' nel diario e la lettura lo deve ritrovare), la destinazione scelta dall'utente nell'area privata o comune
+ *   ([IncomingUploadPorts.allows], con D13 sotto la radice di prova) e il cancello della share di destinazione ([IncomingUploadPorts.gate]).
+ *   Pubblicato senza sostituire ("nome (2)"), riletto, collegato nel catalogo, **poi** la copia locale si toglie. Mai prima.
  *
  * Non cattura mai `Error` (la "morte del processo" dei test passa) ne' l'annullamento: solo gli errori di I/O della lettura del telefono
  * e, per un elemento alla volta, le eccezioni inattese (vedi sopra). I log dicono solo numeri e codici (§4.3): mai nomi, percorsi, share,
@@ -150,6 +154,8 @@ class SafeUploadEngine(
   private val lowPriority: () -> CoroutineContext = { LowPriority.dispatcher },
   /** Le attese crescenti di un file aperto dal PC (E-N13): nei test l'orologio finto. */
   private val sleep: suspend (Long) -> Unit = { delay(it) },
+  /** 5B (P14, D24): i file in arrivo da caricare (elementi `INCOMING`); null = aspettano. */
+  private val incoming: IncomingUploadPorts? = null,
 ) : StagedBackupEngine {
 
   init {
@@ -204,8 +210,12 @@ class SafeUploadEngine(
   }
 
   override suspend fun run(kind: BackupKind, budget: Duration, trigger: BackupTrigger, control: UploadControl): BackupRunResult {
-    require(trigger != BackupTrigger.INCOMING) { "I caricamenti in arrivo sono della 5B." }
     stopRequested = null
+    if (trigger == BackupTrigger.INCOMING) {
+      // D24 (P14): solo i file in arrivo, di ogni tipo, ognuno con il cancello della sua share. Nessun piano: li ha messi in coda l'utente.
+      val round = Round(null, trigger, control, clock.monotonicMs() + budget.inWholeMilliseconds)
+      return closingOnError { drive(round, kinds = setOf(UploadKind.INCOMING)) }
+    }
     val round = Round(kind, trigger, control, clock.monotonicMs() + budget.inWholeMilliseconds)
     val gateState = gate.stateOf(share)
     if (!gateState.open) return finish(round, null, haltFor(gateState))
@@ -288,14 +298,19 @@ class SafeUploadEngine(
    * Il lavoro di un giro: gli elementi aperti del diario, al piu' [UploadConfig.parallel] in volo. Con [only] solo quelli (BK-1: gli elementi
    * creati da questo giro di "Proteggi subito le foto nuove"), gli altri restano aperti per i giri normali.
    */
-  private suspend fun drive(round: Round, only: Set<BackupItemId>? = null): BackupRunResult {
+  private suspend fun drive(round: Round, only: Set<BackupItemId>? = null, kinds: Set<UploadKind>? = null): BackupRunResult {
     val open = store.itemsToResume(RESUME_LIMIT)
-      .filter { it.kind == UploadKind.NEW_COPY || (config.driveGuardCopies && it.kind == UploadKind.GUARD_COPY) }
+      .filter {
+        it.kind == UploadKind.NEW_COPY || (config.driveGuardCopies && it.kind == UploadKind.GUARD_COPY) ||
+          (incoming != null && it.kind == UploadKind.INCOMING)
+      }
       .filter { only == null || it.id in only }
+      .filter { kinds == null || it.kind in kinds }
     val ofKind = if (round.kind == null) open else open.filter { item -> round.describe(item)?.let { BackupKind.of(it.kind) == round.kind } ?: true }
     // R7: l'area privata puo' cambiare a motore costruito (l'admin corregge la configurazione). L'elemento di un'altra share aspetta: niente
-    // si scrive nella share di prima, ma non ferma neppure gli elementi della share di adesso.
-    val (mine, foreign) = ofKind.partition { it.share.equals(share, ignoreCase = true) }
+    // si scrive nella share di prima, ma non ferma neppure gli elementi della share di adesso. Un file in arrivo ha la sua share (privata o
+    // comune) e il suo cancello ([gateOf]).
+    val (mine, foreign) = ofKind.partition { it.kind == UploadKind.INCOMING || it.share.equals(share, ignoreCase = true) }
     if (foreign.isNotEmpty()) GalleryLog.w(TAG) { "elementi di un'altra area: ${foreign.size} aspettano (la share non e' piu' quella del motore)" }
     val queue = WorkQueue(round, mine)
     repeat(foreign.size) { queue.park() }
@@ -333,7 +348,7 @@ class SafeUploadEngine(
       if (!round.mayContinue()) return
       val taken = queue.take() ?: return
       val item = store.item(taken.id)?.takeIf { !it.state.terminal } ?: continue
-      val gateState = gate.stateOf(item.share)
+      val gateState = gateOf(item)
       if (!gateState.open) {
         round.stopForGate(gateState)
         queue.park()
@@ -388,7 +403,7 @@ class SafeUploadEngine(
         queue.park()
         return
       }
-      val gateState = gate.stateOf(item.share)
+      val gateState = gateOf(item)
       if (!gateState.open) {
         round.stopForGate(gateState)
         queue.park()
@@ -433,8 +448,29 @@ class SafeUploadEngine(
       GalleryLog.w(TAG) { "segno del problema non scritto" }
     }
     dropRaw(fresh)
-    store.update(fresh.copy(state = UploadState.FAILED, problem = BackupProblemCode.UNEXPECTED))
+    saveItem(fresh.copy(state = UploadState.FAILED, problem = BackupProblemCode.UNEXPECTED))
     round.count(UploadState.FAILED)
+  }
+
+  /** Il cancello di un elemento: quello del backup per la sua share, o (D24) quello dei file in arrivo per la share di destinazione. */
+  private fun gateOf(item: BackupItem): BackupGateState =
+    if (item.kind == UploadKind.INCOMING) incoming?.gate?.stateOf(item.share) ?: BackupGateState.NOT_READY else gate.stateOf(item.share)
+
+  /** Dove si puo' pubblicare un elemento: le radici del backup, o (D24) la cartella scelta per un file in arrivo. */
+  private fun allows(item: BackupItem, path: SharePath): Boolean =
+    if (item.kind == UploadKind.INCOMING) incoming?.allows(path) == true else config.allows(path)
+
+  /** Un file in arrivo finito: la copia locale si toglie solo se e' sul NAS e collegata (lo decide [IncomingLocalFiles.finished]). */
+  private suspend fun afterTerminal(item: BackupItem) {
+    if (item.kind != UploadKind.INCOMING) return
+    try {
+      incoming?.files?.finished(item.id, item.state)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (_: Exception) {
+      // La copia locale resta: la pulizia all'avvio la toglie se nessun elemento aperto la cita piu'.
+      GalleryLog.w(TAG) { "copia locale di un arrivo non sistemata" }
+    }
   }
 
   private suspend fun advance(round: Round, item: BackupItem): Step = when (item.kind) {
@@ -459,11 +495,32 @@ class SafeUploadEngine(
       UploadState.LINKED -> save(item.copy(state = UploadState.DONE))
       else -> error("Stato ${item.state.code} fuori dal cammino del guardiano.")
     }
-    // La 5B non si esegue qui (il diario della 5A non li accetta comunque).
-    UploadKind.VERSION, UploadKind.SWAP, UploadKind.INCOMING -> Step.Wait()
+    // D24 (P14): i file in arrivo, con il caricamento sicuro di sempre e i byte della copia locale.
+    UploadKind.INCOMING -> if (incoming == null) {
+      Step.Wait()
+    } else {
+      when (item.state) {
+        UploadState.PLANNED -> readIncoming(round, item)
+        UploadState.HASHED -> beforeUpload(round, item)
+        UploadState.UPLOADING -> uploadIncoming(round, item)
+        UploadState.UPLOADED -> verify(round, item, back = UploadState.UPLOADING)
+        UploadState.VERIFIED -> toPublishing(round, item)
+        UploadState.PUBLISHING -> publish(round, item, back = UploadState.UPLOADING)
+        UploadState.PUBLISHED -> link(round, item, back = UploadState.UPLOADING)
+        // Collegato nel catalogo: DONE (la copia locale si toglie prima del passo, in [saveItem]).
+        UploadState.LINKED -> save(item.copy(state = UploadState.DONE))
+        else -> error("Stato ${item.state.code} fuori dal cammino dei file in arrivo.")
+      }
+    }
+    // Versioni e scambi li esegue il motore delle versioni (P8), non questo.
+    UploadKind.VERSION, UploadKind.SWAP -> Step.Wait()
   }
 
   private suspend fun saveItem(item: BackupItem): BackupItem {
+    // D24 (P14): un file in arrivo che finisce sistema la sua copia locale **prima** del passo terminale del diario (idempotente): una morte fra
+    // i due rifa' il passo, mai una copia locale dimenticata. La copia si toglie solo se e' sul NAS e collegata (DONE, LINKED_EXISTING: il
+    // collegamento nel catalogo viene prima di questi passi).
+    if (item.kind == UploadKind.INCOMING && item.state.terminal) afterTerminal(item)
     store.update(item)
     return item
   }
@@ -592,6 +649,67 @@ class SafeUploadEngine(
     return save(item.copy(state = UploadState.FAILED, problem = BackupProblemCode.UNREADABLE))
   }
 
+  // --- INCOMING (D24, P14): la copia locale di un file in arrivo ------------------------------------------------------------------
+
+  /**
+   * `PLANNED` di un file in arrivo: la copia locale si rilegge per intero e deve dare lo SHA-256 scritto nel diario quando l'utente ha toccato
+   * "Salva sul NAS" (la copia non e' cambiata). Copia sparita = `GONE` (niente da caricare); byte diversi o file illeggibile = `FAILED` con
+   * `UNREADABLE` (la copia resta per l'utente). Nessuna deduplica: l'utente ha scelto una cartella e il file va li'.
+   */
+  private suspend fun readIncoming(round: Round, item: BackupItem): Step {
+    val files = incoming?.files ?: return Step.Wait()
+    // La destinazione si controlla prima di leggere: una cartella non ammessa (D13 fuori dalla radice di prova, l'area dell'app, `Versioni/`)
+    // non riceve niente, nemmeno un temporaneo.
+    if (!allows(item, item.planned)) return refuse(round, item)
+    val expected = item.sha256 ?: return unreadable(round, item)
+    val local = files.open(item.id) ?: return gone(round, item, lost = false)
+    var ioError = false
+    val read = local.use { file ->
+      if (file.bytes.size != item.size) {
+        null
+      } else {
+        round.readLane.withPermit {
+          withContext(readContext()) {
+            try {
+              PhoneReading.read(file.bytes, item.size, config.chunkBytes, keepInMemory = item.size <= config.inMemoryMaxBytes)
+            } catch (_: IOException) {
+              ioError = true
+              null
+            }
+          }
+        }
+      }
+    }
+    // Un errore di lettura (non dei byte diversi): si riprova subito, al piu' [UploadConfig.phoneReadRetries] volte per giro (D15).
+    if (ioError) return if (round.readFailed(item) >= config.phoneReadRetries) unreadable(round, item) else Step.Next(item)
+    if (read == null || !read.endsAtSize || read.sha256 != expected) return unreadable(round, item)
+    when (catalog.recordFullHash(item.mediaId, item.versionId, read.sha256)) {
+      HashRecord.RECORDED, HashRecord.SAME -> Unit
+      // Il catalogo non ha piu' la versione (un'unione l'ha tradotta in un'altra) o dice altri byte: non si carica da qui.
+      HashRecord.CONFLICT, HashRecord.UNKNOWN_VERSION -> return gone(round, item, lost = false)
+    }
+    val hashed = save(item.copy(state = UploadState.HASHED, quickHash = read.quickHash))
+    read.memory?.let { keepRaw(item, Raw(read.sha256, it)) }
+    return hashed
+  }
+
+  /** `UPLOADING` di un file in arrivo: come la copia nuova, con i byte in memoria o quelli della copia locale. */
+  private suspend fun uploadIncoming(round: Round, item: BackupItem): Step {
+    if (item.verifyAttempts >= UploadStateMachine.MAX_VERIFY_ATTEMPTS) return verifyFailed(round, item)
+    val temp = item.temp ?: return save(item.copy(temp = tempOf(item), resumeAt = 0))
+    rawOf(item)?.let { raw ->
+      return afterPump(round, round.uploadLane.withPermit { writeTemp(round, item, temp, InMemoryMediaBytes(raw.bytes)) })
+    }
+    val files = incoming?.files ?: return Step.Wait()
+    val local = files.open(item.id) ?: return gone(round, item, lost = false)
+    val pumped = local.use { file ->
+      // La copia locale non e' piu' quella letta: non si carica (la verifica lo scoprirebbe comunque).
+      if (file.bytes.size != item.size) return unreadable(round, item)
+      round.uploadLane.withPermit { writeTemp(round, item, temp, file.bytes) }
+    }
+    return afterPump(round, pumped)
+  }
+
   // --- HASHED: deduplica (D8) o inizio del caricamento ------------------------------------------------------------------------
 
   private suspend fun afterHash(round: Round, item: BackupItem): Step {
@@ -609,6 +727,11 @@ class SafeUploadEngine(
       ExistingCopyResult.None -> Unit
       is ExistingCopyResult.Interrupted -> return Step.Stop(RunStop.NAS, found.problem ?: BackupProblemCode.NAS_UNREACHABLE)
     }
+    return beforeUpload(round, item)
+  }
+
+  /** §2.2 "Spazio" e l'inizio del caricamento (il temporaneo nel diario prima di scrivere). */
+  private suspend fun beforeUpload(round: Round, item: BackupItem): Step {
     // §2.2 "Spazio": prima di un file oltre 1 GB lo spazio deve bastare con 1 GiB di margine (tocca i dischi: solo qui).
     if (item.size > config.spaceCheckBytes) {
       when (val space = ops.space(item.share, config.purpose)) {
@@ -894,7 +1017,7 @@ class SafeUploadEngine(
 
   private suspend fun toPublishing(round: Round, item: BackupItem): Step {
     val final = item.finalPath ?: UploadNames.nameFor(item.planned, item.nameAttempt)
-    if (!config.allows(final)) return refuse(round, item)
+    if (!allows(item, final)) return refuse(round, item)
     return save(item.copy(state = UploadState.PUBLISHING, finalPath = final))
   }
 
@@ -908,7 +1031,7 @@ class SafeUploadEngine(
   private suspend fun publish(round: Round, item: BackupItem, back: UploadState): Step {
     val temp = item.temp ?: return Step.Wait()
     val final = item.finalPath ?: return toPublishing(round, item)
-    if (!config.allows(final)) return refuse(round, item)
+    if (!allows(item, final)) return refuse(round, item)
     val r = ops.publishTemp(item.share, temp, final, config.purpose)
     if (r is NasResult.Err) {
       // Un file al posto di una cartella della destinazione: non si tocca niente, l'elemento aspetta (gli altri vanno avanti).

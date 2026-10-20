@@ -19,6 +19,7 @@ import dev.pampa.mycloudgallery.core.nas.contract.NasRandomFile
 import dev.pampa.mycloudgallery.core.nas.contract.NasResult
 import dev.pampa.mycloudgallery.core.nas.contract.Purpose
 import dev.pampa.mycloudgallery.core.nas.testing.InMemoryNasMedia
+import dev.pampa.mycloudgallery.core.nasmedia.contract.OwnChanges
 import dev.pampa.mycloudgallery.core.nasmedia.contract.OwnRemovals
 import dev.pampa.mycloudgallery.core.nasmedia.contract.ScanMode
 import dev.pampa.mycloudgallery.core.nasmedia.contract.ScanReport
@@ -143,6 +144,9 @@ internal class ScanHarness(
   /** R8: cio' che "l'app" ha tolto dalla share (dal suo diario locale). */
   var ownRemovals: OwnRemovals = OwnRemovals.NONE
 
+  /** D32 (P14): cio' che le versioni di "questo dispositivo" hanno messo a un posto (franchigia, dal diario locale). */
+  var ownChanges: OwnChanges = OwnChanges.NONE
+
   /** NA-4: la franchigia di "Ho controllato, continua" sta fuori dallo scanner (in produzione e' un file): sopravvive a [restartScanner]. */
   val acceptances = InMemoryFreezeAcceptances()
 
@@ -161,6 +165,7 @@ internal class ScanHarness(
     monotonicMs = { mono },
     ownRemovals = OwnRemovals { share -> ownRemovals.fileIds(share) },
     acceptances = acceptances,
+    ownChanges = OwnChanges { share -> ownChanges.fileIds(share) },
   )
 
   var scanner: DefaultNasScanner = newScanner()

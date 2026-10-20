@@ -117,15 +117,25 @@ class NasVersionEngine(
       if (journal.busy(c.versionId)) continue
       val media = catalog.media(c.mediaId) ?: continue
       val new = VersionPlanning.phoneVersion(media, share, c.versionId, c.phone, c.stamp) ?: continue
+      if (!fenced(new.usualPath)) continue
       out += journal.create(new)
     }
     return out
+  }
+
+  /** D13 (P14): con la recinzione di debug ([VersionConfig.fenceRoot]) solo i media sotto la radice di prova hanno versioni; senza, tutti. */
+  private fun fenced(usualPath: SharePath): Boolean {
+    val root = config.fenceRoot ?: return true
+    val c = usualPath.components
+    val r = root.components
+    return c.size > r.size && r.indices.all { c[it].equals(r[it], ignoreCase = true) }
   }
 
   /** Un file preparato (una correzione, un editor esterno) della versione [versionId] diventa un lavoro `VERSION`. Null se non si puo'. */
   suspend fun planStaged(mediaId: MediaId, versionId: VersionId, sha256: Sha256, size: Long): VersionJob? {
     val media = catalog.media(mediaId) ?: return null
     val new = VersionPlanning.stagedVersion(media, share, versionId, VersionSource.Staged(sha256), size) ?: return null
+    if (!fenced(new.usualPath)) return null
     return journal.create(new)
   }
 
@@ -133,6 +143,7 @@ class NasVersionEngine(
   suspend fun planSwap(mediaId: MediaId): VersionJob? {
     val media = catalog.media(mediaId) ?: return null
     val new = VersionPlanning.swap(media, share) ?: return null
+    if (!fenced(new.usualPath)) return null
     if (journal.forMedia(mediaId).any { !it.state.terminal && it.kind == UploadKind.VERSION }) return null
     return journal.create(new)
   }
@@ -146,6 +157,7 @@ class NasVersionEngine(
     val media = catalog.media(mediaId) ?: return null
     if (journal.forMedia(mediaId).any { !it.state.terminal }) return null
     val new = VersionPlanning.realign(media, share) ?: return null
+    if (!fenced(new.usualPath)) return null
     return journal.create(new)
   }
 
@@ -169,7 +181,7 @@ class NasVersionEngine(
         // media porta il segno del problema e il file resta per "Riprova".
         journal.forMedia(entry.mediaId).any { it.state == UploadState.FAILED && (it.source as? VersionSource.Staged)?.sha256 == entry.sha256 } -> Unit
         else -> VersionPlanning.stagedVersion(media, share, version.versionId, VersionSource.Staged(entry.sha256), entry.size)
-          ?.let { journal.create(it) }
+          ?.takeIf { fenced(it.usualPath) }?.let { journal.create(it) }
       }
     }
   }
@@ -185,8 +197,8 @@ class NasVersionEngine(
     recoverStaged()
     val jobs = journal.open(config.openLimit)
     for (job in jobs) {
-      if (!job.share.equals(share, ignoreCase = true)) {
-        // R7: un lavoro di un'altra share aspetta; niente si scrive nella share di prima.
+      if (!job.share.equals(share, ignoreCase = true) || !fenced(job.usualPath)) {
+        // R7: un lavoro di un'altra share aspetta; niente si scrive nella share di prima. D13: nemmeno fuori dalla radice di prova.
         round.waiting++
         continue
       }
@@ -203,7 +215,7 @@ class NasVersionEngine(
   suspend fun runJob(id: VersionJobId, budget: Duration, control: UploadControl = UploadControl.FREE): VersionJob? {
     stopRequested = false
     val job = journal.job(id) ?: return null
-    if (job.state.terminal || !job.share.equals(share, ignoreCase = true)) return job
+    if (job.state.terminal || !job.share.equals(share, ignoreCase = true) || !fenced(job.usualPath)) return job
     val round = Round(clock.monotonicMs() + budget.inWholeMilliseconds, control)
     if (gate.stateOf(share).open) drive(round, job)
     return journal.job(id)

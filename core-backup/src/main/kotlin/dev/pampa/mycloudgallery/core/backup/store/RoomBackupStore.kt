@@ -49,6 +49,15 @@ class RoomBackupStore(private val database: GalleryDatabase, private val clock: 
     }
   }
 
+  override suspend fun createIncoming(item: NewBackupItem): BackupItem = database.transaction {
+    require(item.kind == UploadKind.INCOMING && item.phone == null && item.sha256 != null) { "Un file in arrivo, con il suo SHA-256." }
+    dao.openForVersion(item.versionId.value).map { it.toItem() }.firstOrNull { it.kind == UploadKind.INCOMING } ?: run {
+      val entity = item.toEntity(clock.nasNowMs() ?: 0L)
+      val id = dao.insert(entity)
+      entity.copy(itemId = id, isOpen = true).toItem()
+    }
+  }
+
   override suspend fun item(id: BackupItemId): BackupItem? = dao.get(id.value)?.toItem()
 
   override suspend fun itemsToResume(limit: Int): List<BackupItem> {
@@ -68,7 +77,8 @@ class RoomBackupStore(private val database: GalleryDatabase, private val clock: 
       check(UploadStateMachine.canTransition(before.flow, before.state, item.state)) {
         "Transizione non ammessa: ${before.state.code} -> ${item.state.code} (${before.flow.code})."
       }
-      dao.update(item.toEntity(createdAt = stored.createdAt, updatedAt = clock.nasNowMs() ?: stored.updatedAt))
+      // Le colonne delle versioni (P14) le scrive solo il loro diario: qui restano quelle che c'erano.
+      dao.update(item.toEntity(createdAt = stored.createdAt, updatedAt = clock.nasNowMs() ?: stored.updatedAt).withVersionColumnsOf(stored))
     }
   }
 
@@ -200,8 +210,28 @@ class RoomBackupStore(private val database: GalleryDatabase, private val clock: 
         },
         // Un codice che questa versione non conosce (scritto da una piu' nuova) non e' un problema di questa.
         problem = problem?.let { PROBLEMS[it] },
+        // P14: una versione senza attuale da spostare ha il cammino `VERSION_DIRECT` (colonna `current_version_id`).
+        archivesCurrent = this.kind != UploadKind.VERSION.code || currentVersionId != null,
       )
     }
+
+    fun BackupItemEntity.withVersionColumnsOf(stored: BackupItemEntity): BackupItemEntity = copy(
+      versionTarget = stored.versionTarget,
+      currentVersionId = stored.currentVersionId,
+      currentLocationId = stored.currentLocationId,
+      currentSize = stored.currentSize,
+      currentModifiedAt = stored.currentModifiedAt,
+      currentFileId = stored.currentFileId,
+      currentOriginal = stored.currentOriginal,
+      archivePath = stored.archivePath,
+      archiveAttempt = stored.archiveAttempt,
+      archivedSize = stored.archivedSize,
+      archivedModifiedAt = stored.archivedModifiedAt,
+      archivedFileId = stored.archivedFileId,
+      hold = stored.hold,
+      sourceLocationId = stored.sourceLocationId,
+      stagedSha256 = stored.stagedSha256,
+    )
 
     fun nasStamp(size: Long?, modifiedAt: Long?, fileId: Long?): NasStamp? =
       if (size != null && modifiedAt != null) NasStamp(size, modifiedAt, fileId) else null

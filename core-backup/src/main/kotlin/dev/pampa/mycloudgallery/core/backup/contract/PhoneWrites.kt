@@ -10,8 +10,16 @@ import java.io.File
 
 /**
  * Il permesso di scrittura che l'utente ha dato nel dialogo di sistema (`createWriteRequest`) per alcune righe del telefono. Lo costruisce la
- * UI (o `:app`) quando il dialogo torna con "accetto"; vale per **quelle** righe e per questo avvio del processo. Un permesso non coperto
- * dalle righe della correzione e' come nessun permesso. Mai nei log (le righe sono dati dell'utente).
+ * UI (o `:app`) quando il dialogo torna con "accetto"; vale per **quelle** righe e per questo avvio del processo. Mai nei log (le righe sono
+ * dati dell'utente).
+ *
+ * **Il significato di un permesso che non copre le righe** (P14, contratto per la UI, per i servizi veri e per i fake):
+ * - `null` = il dialogo **non e' ancora stato chiesto**: il servizio risponde che serve (`NeedsPhoneWrite`, `NeedsPhoneWrite` delle
+ *   correzioni) e **non tocca niente**;
+ * - un permesso che **non copre** tutte le righe che servono (anche `PhoneWriteGrant(emptySet())`) = **l'utente ha detto no** al dialogo: il
+ *   servizio non scrive sul telefono, non lo tratta come un guasto e fa solo cio' che si puo' senza riscrivere il telefono ("Ripristina
+ *   originale": lo scambio sul NAS si fa e il telefono tiene la modifica, `RestoreOutcome.PhoneNotRewritten(PERMISSION_DENIED)`; una
+ *   correzione di un media del telefono: niente, `CorrectionOutcome` di rifiuto).
  */
 class PhoneWriteGrant(val rows: Set<PhoneRef>) {
 

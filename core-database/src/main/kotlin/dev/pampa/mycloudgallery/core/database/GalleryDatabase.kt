@@ -20,6 +20,7 @@ import dev.pampa.mycloudgallery.core.database.dao.LocationDao
 import dev.pampa.mycloudgallery.core.database.dao.MediaDao
 import dev.pampa.mycloudgallery.core.database.dao.MediaStoreCursorDao
 import dev.pampa.mycloudgallery.core.database.dao.MergeDao
+import dev.pampa.mycloudgallery.core.database.dao.MetadataCorrectionDao
 import dev.pampa.mycloudgallery.core.database.dao.NasCopyMismatchDao
 import dev.pampa.mycloudgallery.core.database.dao.NasOpsDao
 import dev.pampa.mycloudgallery.core.database.dao.NasScanDao
@@ -43,6 +44,7 @@ import dev.pampa.mycloudgallery.core.database.entity.EmbeddingEntity
 import dev.pampa.mycloudgallery.core.database.entity.FreeSpaceItemEntity
 import dev.pampa.mycloudgallery.core.database.entity.FreeSpaceRunEntity
 import dev.pampa.mycloudgallery.core.database.entity.IncomingItemEntity
+import dev.pampa.mycloudgallery.core.database.entity.MetadataCorrectionEntity
 import dev.pampa.mycloudgallery.core.database.entity.IndexHeadEntity
 import dev.pampa.mycloudgallery.core.database.entity.IndexOutboxBlobEntity
 import dev.pampa.mycloudgallery.core.database.entity.IndexOutboxRecordEntity
@@ -134,6 +136,8 @@ import dev.pampa.mycloudgallery.core.database.entity.WorkStateEntity
     FreeSpaceRunEntity::class,
     FreeSpaceItemEntity::class,
     IncomingItemEntity::class,
+    // v4, P14 (prima del rilascio della v4): le correzioni solo nell'app (Q6 (a))
+    MetadataCorrectionEntity::class,
   ],
   version = GalleryDatabase.VERSION,
   exportSchema = true,
@@ -199,6 +203,8 @@ abstract class GalleryDatabase : RoomDatabase() {
   abstract fun freeSpaceDao(): FreeSpaceDao
 
   abstract fun incomingDao(): IncomingDao
+
+  abstract fun metadataCorrectionDao(): MetadataCorrectionDao
 
   companion object {
     /** Nome del file del database nella cartella privata dell'app. */

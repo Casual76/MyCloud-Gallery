@@ -6,6 +6,11 @@ import android.os.SystemClock
 import dev.pampa.mycloudgallery.backup.BackupGraph
 import dev.pampa.mycloudgallery.backup.BackupInputs
 import dev.pampa.mycloudgallery.backup.BackupUi
+import dev.pampa.mycloudgallery.backup.FiveBInputs
+import dev.pampa.mycloudgallery.backup.MediaStoreRowFolders
+import dev.pampa.mycloudgallery.backup.SettingsBootCounter
+import dev.pampa.mycloudgallery.core.mediastore.write.MediaStorePhoneMediaRewriter
+import dev.pampa.mycloudgallery.core.metadata.write.ExtractingFileCheck
 import dev.pampa.mycloudgallery.backup.SimilarCopiesGraph
 import dev.pampa.mycloudgallery.core.common.coroutines.DefaultDispatcherProvider
 import dev.pampa.mycloudgallery.core.common.coroutines.DispatcherProvider
@@ -313,12 +318,37 @@ class GalleryGraph(
       similar = similarCopies,
       familyReady = { setup.state.value is SetupState.Ready },
       monotonicMs = parts.monotonicMs,
+      fiveBInputs = parts.backup.fiveB ?: androidFiveBInputs(),
       foreground = { foreground },
       deviceNow = { System.currentTimeMillis() },
     )
   } else {
     null
   }
+
+  /**
+   * Fase 5B (P14): i dialoghi di sistema (Android 11+), il riscrittore delle righe del telefono (copia di sicurezza, rilettura), il controllo
+   * della copia corretta con l'estrattore e il decodificatore dell'app, `BOOT_COUNT` e la cartella di una riga (D13).
+   */
+  private fun androidFiveBInputs(): FiveBInputs {
+    val app = context.applicationContext
+    return FiveBInputs(
+      intents = parts.intents,
+      rewriter = { MediaStorePhoneMediaRewriter(app, dispatchers) },
+      fileCheck = { ExtractingFileCheck(newExtractor(), AndroidPreviewDecoder(), ZoneId.systemDefault()) },
+      bootCounter = SettingsBootCounter(app.contentResolver),
+      rowFolders = MediaStoreRowFolders(app.contentResolver),
+    )
+  }
+
+  /**
+   * Fase 5B (P14): cio' che le schermate della 5B danno alla galleria (le voci del backup nel viewer, "Libera spazio" sulla selezione della
+   * Libreria). Nascono dopo la galleria (dipendono da lei): le lega l'applicazione all'avvio, prima di qualunque schermata.
+   */
+  class FiveBHooks(val mediaActions: dev.pampa.mycloudgallery.feature.viewer.menu.BackupMediaActions, val freeSpace: (Set<MediaId>) -> Unit)
+
+  @Volatile
+  var fiveB: FiveBHooks? = null
 
   /** Le porte delle schermate del backup (pagina, impostazioni, viewer, Impostazioni): adattatori sul grafo del backup. */
   val backupUi: BackupUi? = backup?.let { b -> BackupUi(b, database, galleryScope, context, parts.nas?.account ?: { null }) }
@@ -535,6 +565,8 @@ class GalleryGraph(
       backup = backupUi?.mediaStates,
       similarCopies = similarCopies,
       outsideCopy = similarCopies?.let { OutsideCopyLookup { id -> outsideCopyOf(id) } },
+      // Fase 5B (P14): Versioni, Ripristina originale, Correggi, Ruota, "Modifica con…", "Condividi" con o senza posizione, "Ovunque".
+      backupActions = fiveB?.mediaActions,
     )
   }
 
@@ -582,6 +614,8 @@ class GalleryGraph(
             runCatching { n.start() }
             // Il backup parte dopo il NAS: area privata, chiave del dispositivo e catalogo servono tutti (senza, non parte niente).
             backup?.let { b -> runCatching { b.start() } }
+            // Fase 5B (P14): file di lavoro, attivita' in sospeso, esiti di "Libera spazio" in dubbio, scambi persi (solo dati locali).
+            backup?.let { b -> runCatching { b.atStart() } }
             // Fase 5A (D36): con il registro dei dati personali pronto il confronto delle copie simili puo' partire.
             similarCopies?.requestRun()
           }
@@ -590,6 +624,12 @@ class GalleryGraph(
         similarCopies?.let { detector ->
           galleryScope.launch {
             phoneStatus.map { it is SyncStatus.Idle }.distinctUntilChanged().filter { it }.collect { detector.requestRun() }
+          }
+        }
+        // Fase 5B (P14): dopo ogni lettura del telefono gli esiti in dubbio di "Libera spazio" si risolvono con il telefono (P9).
+        backup?.let { b ->
+          galleryScope.launch {
+            phoneStatus.map { it is SyncStatus.Idle }.distinctUntilChanged().filter { it }.collect { runCatching { b.afterPhoneRead() } }
           }
         }
         if (foreground) attachSync()
@@ -682,6 +722,8 @@ class GalleryGraph(
   suspend fun shutdown() {
     lifecycle.withLock {
       if (retired) return
+      // Fase 5B (P14): le integrazioni revocano subito gli id dei documenti e tornano ai null-object (anche se la galleria non e' mai partita).
+      shutdownHooks.forEach { hook -> runCatching { hook() } }
       if (coreFlow.value == null && !coreDeferred.isActive) return
       val running = synchronized(workLock) {
         retired = true
@@ -706,6 +748,13 @@ class GalleryGraph(
         }
       }
     }
+  }
+
+  private val shutdownHooks = java.util.concurrent.CopyOnWriteArrayList<() -> Unit>()
+
+  /** Fase 5B (P14): cio' che va fatto all'azzeramento prima di fermare la galleria (la revoca degli id dei documenti delle integrazioni). */
+  fun onShutdown(hook: () -> Unit) {
+    shutdownHooks += hook
   }
 
   private fun currentSync(): PhoneLibrarySync? = parts.benchSync ?: coreFlow.value?.phone?.sync

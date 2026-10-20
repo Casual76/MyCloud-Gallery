@@ -148,3 +148,18 @@ fun interface OwnRemovals {
     val NONE: OwnRemovals = OwnRemovals { emptySet() }
   }
 }
+
+/**
+ * D32 (Fase 5B, P14; franchigia delle versioni di P8, `VersionFranchise`): i file che **le versioni di questo dispositivo** hanno messo o
+ * riportato in una share (la versione nuova pubblicata al solito percorso, l'originale riportato da "Ripristina originale", l'attuale spostato
+ * in `Versioni/`), per `fileId`, dal **diario locale**: mai dati letti dal NAS. La scansione non li conta fra i "cambiati" del congelamento
+ * (D10): un file cambiato al suo posto con lo **stesso** `fileId` che il diario ricorda e' opera dell'app. Un file cambiato dal PC, da un altro
+ * dispositivo o da un ransomware ha un altro `fileId` (o lo stesso file senza una voce del diario) e conta come prima.
+ */
+fun interface OwnChanges {
+  suspend fun fileIds(share: String): Set<Long>
+
+  companion object {
+    val NONE: OwnChanges = OwnChanges { emptySet() }
+  }
+}

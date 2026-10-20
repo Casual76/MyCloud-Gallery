@@ -26,12 +26,12 @@ import dev.pampa.mycloudgallery.core.trust.nas.SharePath
  * cammino che non cambia, `create` idempotente per versione e tipo. Ogni scrittura e' una transazione; gli istanti sono l'ora del NAS.
  *
  * **Le colonne.** Quelle del caricamento valgono com'e' (telefono, timbro atteso, share, `planned_path` = solito percorso, nome finale,
- * temporaneo e punto di ripresa, impronte, timbri del temporaneo e del finale, tentativi); `guard_path` e il timbro `guard_*` sono la
- * versione da riportare di uno scambio (in `Versioni/`). Cio' che lo schema v4 non ha (l'attuale da spostare, il nome in `Versioni/` e il
- * timbro dopo l'archiviazione, la destinazione, la ragione di un'attesa) sta in una **nota** nella colonna di testo `problem`, con un prefisso
- * che nessun codice di problema ha ([NOTE_PREFIX]): il diario del backup della 5A (`RoomBackupStore`) legge un codice che non conosce come
- * "nessun problema", per costruzione. E' una soluzione **provvisoria**, senza migrazione; le colonne vere sono una richiesta per lo schema
- * (vedi `docs/decisioni.md`, "Fase 5B: P8").
+ * temporaneo e punto di ripresa, impronte, timbri del temporaneo e del finale, tentativi, `problem` = il problema del lavoro); `guard_path` e
+ * il timbro `guard_*` sono la versione da riportare di uno scambio (in `Versioni/`). Le colonne delle versioni (P14, schema v4 prima del
+ * rilascio: niente migrazione) tengono il resto: la destinazione (`version_target`), l'attuale da spostare (`current_*`: se manca il cammino
+ * e' `VERSION_DIRECT`), il nome in `Versioni/` con i tentativi e il timbro dopo l'archiviazione (`archive_*`, `archived_*`), la ragione di
+ * un'attesa (`hold`), la posizione della versione da riportare (`source_location_id`) e lo SHA-256 di un file preparato (`staged_sha256`).
+ * Prima del P14 queste stavano in una nota nella colonna `problem`.
  */
 class RoomVersionJournal(private val database: GalleryDatabase, private val clock: BackupClock) : VersionJournal {
 
@@ -50,7 +50,7 @@ class RoomVersionJournal(private val database: GalleryDatabase, private val cloc
         share = job.share,
         usualPath = job.usualPath,
         source = job.source,
-        extras = Extras(target = job.target, current = job.current, stagedSha = (job.source as? VersionSource.Staged)?.sha256),
+        extras = Extras(target = job.target, current = job.current),
         sha256 = job.sha256,
         createdAt = now,
         updatedAt = now,
@@ -90,20 +90,15 @@ class RoomVersionJournal(private val database: GalleryDatabase, private val cloc
 
   override suspend fun forMedia(mediaId: MediaId): List<VersionJob> = dao.forMedia(mediaId.value).mapNotNull { it.toJob() }
 
-  override suspend fun inShare(share: String): List<VersionJob> {
-    // Nessuna query del DAO per tipo e share (P1): gli id dei lavori delle versioni si leggono direttamente, poi le righe dal DAO.
-    val ids = ArrayList<Long>()
-    database.openHelper.readableDatabase.query(SHARE_SQL, arrayOf(share)).use { cursor ->
-      while (cursor.moveToNext()) ids += cursor.getLong(0)
-    }
-    return ids.mapNotNull { dao.get(it)?.toJob() }
-  }
+  /** P14: una query del DAO per tipo e share (dall'indice `kind`, `item_id`). */
+  override suspend fun inShare(share: String): List<VersionJob> =
+    dao.ofKindsInShare(KINDS.keys.toList(), share).mapNotNull { it.toJob() }
 
   override suspend fun citedTemps(): Set<SharePath> = open(OPEN_SCAN).mapNotNullTo(LinkedHashSet()) { it.temp }
 
   // --- Righe ------------------------------------------------------------------------------------------------------------------
 
-  /** Cio' che lo schema v4 non ha, nella nota della colonna `problem`. */
+  /** Le colonne delle versioni (P14). */
   private data class Extras(
     val target: VersionTarget = VersionTarget.USUAL_PATH,
     val current: CurrentFile? = null,
@@ -112,8 +107,6 @@ class RoomVersionJournal(private val database: GalleryDatabase, private val cloc
     val archivedStamp: NasStamp? = null,
     val hold: VersionHold? = null,
     val problem: BackupProblemCode? = null,
-    val sourceLocation: LocationId? = null,
-    val stagedSha: Sha256? = null,
   )
 
   private fun entityOf(job: VersionJob, createdAt: Long, updatedAt: Long): BackupItemEntity = entityOf(
@@ -134,8 +127,6 @@ class RoomVersionJournal(private val database: GalleryDatabase, private val cloc
       archivedStamp = job.archivedStamp,
       hold = job.hold,
       problem = job.problem,
-      sourceLocation = (job.source as? VersionSource.InVersions)?.locationId,
-      stagedSha = (job.source as? VersionSource.Staged)?.sha256,
     ),
     sha256 = job.sha256,
     quickHash = job.quickHash,
@@ -178,6 +169,7 @@ class RoomVersionJournal(private val database: GalleryDatabase, private val cloc
   ): BackupItemEntity {
     val phone = source as? VersionSource.Phone
     val back = source as? VersionSource.InVersions
+    val current = extras.current
     return BackupItemEntity(
       itemId = id,
       kind = kind.code,
@@ -213,9 +205,24 @@ class RoomVersionJournal(private val database: GalleryDatabase, private val cloc
       guardSize = back?.stamp?.size,
       guardModifiedAt = back?.stamp?.modifiedAtMillis,
       guardFileId = back?.stamp?.fileId,
-      problem = encode(extras),
+      problem = extras.problem?.code,
       createdAt = createdAt,
       updatedAt = updatedAt,
+      versionTarget = extras.target.code,
+      currentVersionId = current?.versionId?.value,
+      currentLocationId = current?.locationId?.value,
+      currentSize = current?.stamp?.size,
+      currentModifiedAt = current?.stamp?.modifiedAtMillis,
+      currentFileId = current?.stamp?.fileId,
+      currentOriginal = current?.original,
+      archivePath = extras.archivePath?.value,
+      archiveAttempt = extras.archiveAttempt,
+      archivedSize = extras.archivedStamp?.size,
+      archivedModifiedAt = extras.archivedStamp?.modifiedAtMillis,
+      archivedFileId = extras.archivedStamp?.fileId,
+      hold = extras.hold?.code,
+      sourceLocationId = back?.locationId?.value,
+      stagedSha256 = (source as? VersionSource.Staged)?.sha256?.hex,
     )
   }
 
@@ -223,7 +230,7 @@ class RoomVersionJournal(private val database: GalleryDatabase, private val cloc
   private fun BackupItemEntity.toJob(): VersionJob? {
     val kind = KINDS[kind] ?: return null
     val state = STATES[state] ?: return null
-    val extras = problem?.let { decode(it) } ?: return null
+    val extras = extrasOf(this)
     val volume = phoneVolume
     val msId = phoneMediaStoreId
     val msVersion = phoneMediaStoreVersion
@@ -232,8 +239,8 @@ class RoomVersionJournal(private val database: GalleryDatabase, private val cloc
       volume != null && msId != null && msVersion != null ->
         VersionSource.Phone(PhoneRef(volume, msId, msVersion), FileStamp(expectedSize ?: return null, expectedModifiedAt ?: return null, expectedGeneration))
       kind == UploadKind.SWAP && gPath != null ->
-        VersionSource.InVersions(SharePath.parse(gPath), nasStamp(guardSize, guardModifiedAt, guardFileId) ?: return null, extras.sourceLocation)
-      else -> VersionSource.Staged(extras.stagedSha ?: return null)
+        VersionSource.InVersions(SharePath.parse(gPath), nasStamp(guardSize, guardModifiedAt, guardFileId) ?: return null, sourceLocationId?.let(::LocationId))
+      else -> VersionSource.Staged(stagedSha256?.let(::Sha256) ?: return null)
     }
     return VersionJob(
       id = VersionJobId(itemId),
@@ -266,14 +273,8 @@ class RoomVersionJournal(private val database: GalleryDatabase, private val cloc
   }
 
   internal companion object {
-    /** Il prefisso della nota: nessun codice di `BackupProblemCode` comincia cosi'. */
-    const val NOTE_PREFIX: String = "mcg-versioni-1;"
-
     /** Quanti elementi aperti si leggono al massimo per trovare i lavori delle versioni (gli aperti della 5A sono di piu'). */
     private const val OPEN_SCAN: Int = 100_000
-
-    private const val SHARE_SQL: String =
-      "SELECT item_id FROM backup_item WHERE kind IN ('version', 'swap') AND share = ? COLLATE NOCASE ORDER BY item_id"
 
     private val KINDS: Map<String, UploadKind> = listOf(UploadKind.VERSION, UploadKind.SWAP).associateBy { it.code }
     private val STATES: Map<String, UploadState> = UploadState.entries.associateBy { it.code }
@@ -284,61 +285,22 @@ class RoomVersionJournal(private val database: GalleryDatabase, private val cloc
     private fun nasStamp(size: Long?, modifiedAt: Long?, fileId: Long?): NasStamp? =
       if (size != null && modifiedAt != null) NasStamp(size, modifiedAt, fileId) else null
 
-    /** I tre caratteri della nota (`%`, `;`, `=`) si scrivono come `%25`, `%3B`, `%3D`; tutto il resto resta com'e'. */
-    private fun esc(value: String): String = value.replace("%", "%25").replace(";", "%3B").replace("=", "%3D")
-
-    private fun unesc(value: String): String = value.replace("%3D", "=").replace("%3B", ";").replace("%25", "%")
-
-    private fun encode(e: Extras): String {
-      val out = LinkedHashMap<String, String>()
-      out["t"] = e.target.code
-      e.current?.let { c ->
-        out["cv"] = c.versionId.value
-        c.locationId?.let { out["cl"] = it.value.toString() }
-        out["cs"] = c.stamp.size.toString()
-        out["cm"] = c.stamp.modifiedAtMillis.toString()
-        c.stamp.fileId?.let { out["ci"] = it.toString() }
-        out["co"] = if (c.original) "1" else "0"
-      }
-      e.archivePath?.let { out["ap"] = it.value }
-      if (e.archiveAttempt != 0) out["aa"] = e.archiveAttempt.toString()
-      e.archivedStamp?.let { s ->
-        out["as"] = s.size.toString()
-        out["am"] = s.modifiedAtMillis.toString()
-        s.fileId?.let { out["ai"] = it.toString() }
-      }
-      e.hold?.let { out["h"] = it.code }
-      e.problem?.let { out["p"] = it.code }
-      e.sourceLocation?.let { out["sl"] = it.value.toString() }
-      e.stagedSha?.let { out["ss"] = it.hex }
-      return NOTE_PREFIX + out.entries.joinToString(";") { "${it.key}=${esc(it.value)}" }
-    }
-
-    /** La nota, o null se la colonna non e' una nota delle versioni. */
-    private fun decode(text: String): Extras? {
-      if (!text.startsWith(NOTE_PREFIX)) return null
-      val map = text.removePrefix(NOTE_PREFIX).split(';').filter { it.isNotEmpty() }.associate { pair ->
-        val at = pair.indexOf('=')
-        pair.substring(0, at) to unesc(pair.substring(at + 1))
-      }
-      val current = map["cv"]?.let { v ->
-        CurrentFile(
-          versionId = VersionId(v),
-          locationId = map["cl"]?.let { LocationId(it.toLong()) },
-          stamp = NasStamp(map.getValue("cs").toLong(), map.getValue("cm").toLong(), map["ci"]?.toLong()),
-          original = map["co"] == "1",
-        )
-      }
+    /** Le colonne delle versioni di una riga (un codice che questa versione non conosce non vale: nessuna attesa, nessun problema). */
+    private fun extrasOf(e: BackupItemEntity): Extras {
+      val currentId = e.currentVersionId
+      val currentStamp = nasStamp(e.currentSize, e.currentModifiedAt, e.currentFileId)
       return Extras(
-        target = TARGETS[map["t"]] ?: VersionTarget.USUAL_PATH,
-        current = current,
-        archivePath = map["ap"]?.let { SharePath.parse(it) },
-        archiveAttempt = map["aa"]?.toInt() ?: 0,
-        archivedStamp = map["as"]?.let { NasStamp(it.toLong(), map.getValue("am").toLong(), map["ai"]?.toLong()) },
-        hold = map["h"]?.let { HOLDS[it] },
-        problem = map["p"]?.let { PROBLEMS[it] },
-        sourceLocation = map["sl"]?.let { LocationId(it.toLong()) },
-        stagedSha = map["ss"]?.let { Sha256(it) },
+        target = e.versionTarget?.let { TARGETS[it] } ?: VersionTarget.USUAL_PATH,
+        current = if (currentId != null && currentStamp != null) {
+          CurrentFile(VersionId(currentId), e.currentLocationId?.let(::LocationId), currentStamp, e.currentOriginal == true)
+        } else {
+          null
+        },
+        archivePath = e.archivePath?.let { SharePath.parse(it) },
+        archiveAttempt = e.archiveAttempt,
+        archivedStamp = nasStamp(e.archivedSize, e.archivedModifiedAt, e.archivedFileId),
+        hold = e.hold?.let { HOLDS[it] },
+        problem = e.problem?.let { PROBLEMS[it] },
       )
     }
   }

@@ -67,6 +67,7 @@ import dev.pampa.mycloudgallery.feature.viewer.ViewerServices
 import dev.pampa.mycloudgallery.main.GalleryHostViewModel
 import dev.pampa.mycloudgallery.main.GalleryRoot
 import dev.pampa.mycloudgallery.main.BackupHostEffect
+import dev.pampa.mycloudgallery.main.FiveBHostEffect
 import dev.pampa.mycloudgallery.main.LibraryCommandHostEffect
 import dev.pampa.mycloudgallery.main.LocalViewerHost
 import dev.pampa.mycloudgallery.main.MainScaffold
@@ -149,6 +150,9 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
   val nasOpener = remember(gallery, viewer) { NasFileOpener(openerScope, gallery, viewer) }
   // Fase 5A (P7): le azioni del backup (navigazione, permessi, conferma dei dati mobili) vivono finche' la galleria e' visibile.
   if (gallery != null) BackupHostEffect(gallery.backupActions, nav, onAccessChanged = gallery::refreshAccess)
+  // Fase 5B (P14): i fogli alla radice (Versioni, Correggi, "Elimina solo dal telefono", "Elimina…" delle versioni), "Libera spazio" con la
+  // selezione e gli intenti verso le altre app ("Modifica con…", "Condividi").
+  if (gallery != null) FiveBHostEffect(gallery.fiveB, nav)
   NavHost(
     navController = nav,
     startDestination = startRoute(destination),
@@ -169,7 +173,7 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
           // Fase 4B (P16): Cartelle NAS, Spazio NAS, Eliminati di recente del NAS, Operazioni in corso (rotte a schermo intero).
           nasGraph(nav = nav, onOpenFile = nasOpener::open)
           // Fase 5A (P7): la pagina Backup, le impostazioni, la cartella del dispositivo e il riepilogo del primo backup.
-          if (gallery?.backupAvailable == true) backupGraph(nav)
+          if (gallery?.backupAvailable == true) backupGraph(nav, freeSpaceSelection = { gallery.fiveB?.freeSpaceSelection })
           // "Da completare" nelle Impostazioni riapre i passi saltati dell'onboarding.
           onboardingGraph(nav = nav, onDone = {}, onPause = actions.pause)
           settingsGraph(
@@ -291,7 +295,7 @@ private fun MainDestination(nav: NavHostController, status: GlobalStatus, openWi
     nasOpener.services = libraryViewer
   }
   val nasConfigured by gallery.nasConfigured.collectAsStateWithLifecycle()
-  val nasGroups = nasCollectionGroups(nasConfigured)
+  val nasGroups = nasCollectionGroups(nasConfigured) + utilityCollectionGroups(gallery.fiveB != null)
 
   LibraryCommandHostEffect(state.commands, onAccessChanged = gallery::refreshAccess)
   ReportLibraryDrawn(state)
@@ -325,8 +329,13 @@ private fun MainDestination(nav: NavHostController, status: GlobalStatus, openWi
         statusHeader = slot.statusHeader,
         // Fase 4B (P16): "Sul NAS". Sul telefono la voce apre la sua rotta, sul tablet la pagina sta nel pannello di dettaglio.
         extraGroups = nasGroups,
-        onOpenEntry = { entry -> nasScreenOf(entry.code)?.let(nav::openNas) },
-        entryDetail = { entry -> NasEntryDetail(entry, nav, slot.contentPadding, nasOpener) },
+        onOpenEntry = { entry ->
+          // Fase 5B (P14): "Libera spazio" (Utilita') apre la sua pagina senza selezione.
+          if (isFreeSpaceEntry(entry.code)) gallery.fiveB?.openFreeSpace(null) else nasScreenOf(entry.code)?.let(nav::openNas)
+        },
+        entryDetail = { entry ->
+          if (isFreeSpaceEntry(entry.code)) FreeSpaceEntryDetail(slot.contentPadding) else NasEntryDetail(entry, nav, slot.contentPadding, nasOpener)
+        },
       )
     },
   )

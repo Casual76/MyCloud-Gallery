@@ -323,6 +323,7 @@ private fun RestoreReason(restore: RestoreAvailability) {
     RestoreAvailability.READ_ONLY_AREA -> R.string.backup_versions_why_read_only
     RestoreAvailability.NOT_MINE -> R.string.backup_versions_why_not_mine
     RestoreAvailability.NOT_AVAILABLE -> R.string.backup_versions_why_not_available
+    RestoreAvailability.BUSY -> R.string.backup_versions_why_busy
   }
   FluidListGroup {
     FluidListRow(

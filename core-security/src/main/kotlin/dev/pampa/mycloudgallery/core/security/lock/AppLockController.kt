@@ -53,6 +53,12 @@ class AppLockController(private val clock: MonotonicClock = SystemMonotonicClock
   private var backgroundedAt: Long? = null
   private var authenticating = false
 
+  /** La `MainActivity` e' in primo piano (fra `ON_START` e `ON_STOP`). Le activity d'ingresso (selettore, ricezione) non lo cambiano. */
+  private var foreground = false
+
+  /** P14: l'istante (monotono) dell'ultimo sblocco fatto da un'activity d'ingresso con la `MainActivity` fuori dal primo piano. */
+  private var entryUnlockedAt: Long? = null
+
   /** Vero mentre e' in corso uno sblocco (la schermata di sistema e' aperta). */
   val isAuthenticating: Boolean @Synchronized get() = authenticating
 
@@ -92,6 +98,7 @@ class AppLockController(private val clock: MonotonicClock = SystemMonotonicClock
   /** L'app esce dal primo piano (non per un cambio di configurazione come la rotazione). */
   @Synchronized
   fun onAppBackgrounded() {
+    foreground = false
     if (authenticating) return
     // Conta la PRIMA uscita: un secondo evento senza ritorno in mezzo non deve allungare il tempo concesso.
     if (_settings.value?.isEnabled == true && _state.value == AppLockState.UNLOCKED && backgroundedAt == null) {
@@ -102,6 +109,9 @@ class AppLockController(private val clock: MonotonicClock = SystemMonotonicClock
   /** L'app torna in primo piano: richiude se e' passato il timeout. */
   @Synchronized
   fun onAppForegrounded() {
+    foreground = true
+    // La tolleranza di uno sblocco d'ingresso vale solo fuori dall'app: entrando, vale il timeout scelto dall'utente.
+    entryUnlockedAt = null
     val since = backgroundedAt ?: return
     backgroundedAt = null
     val current = _settings.value ?: return
@@ -126,5 +136,57 @@ class AppLockController(private val clock: MonotonicClock = SystemMonotonicClock
       _state.value = AppLockState.UNLOCKED
       backgroundedAt = null
     }
+  }
+
+  /**
+   * P14 (nota di P10): il blocco valutato **adesso**, per le porte d'ingresso (il selettore, il provider dei documenti, la ricezione) che
+   * lavorano mentre la `MainActivity` e' in secondo piano. Senza, il blocco si richiudeva solo al ritorno della `MainActivity`
+   * ([onAppForegrounded]): con la `MainActivity` in secondo piano l'app restava sbloccata per sempre per le altre app.
+   *
+   * Sbloccata adesso = blocco spento, oppure sbloccata e (la `MainActivity` e' in primo piano, o dall'uscita non e' passato il timeout).
+   * Passato il timeout l'app **si richiude qui** (anche per la `MainActivity`, che al ritorno trova la schermata di blocco). Dopo uno sblocco
+   * fatto da un'activity d'ingresso vale una finestra di tolleranza di [ENTRY_GRACE_MS] (anche con "Subito"): un'altra app che sfoglia i
+   * documenti subito dopo lo sblocco non lo richiede a ogni cartella. Un orologio che torna indietro richiude (fail closed); impostazioni non
+   * ancora lette = non sbloccata.
+   */
+  @Synchronized
+  fun isUnlockedNow(): Boolean {
+    val current = _settings.value ?: return false
+    if (!current.isEnabled) return true
+    if (_state.value != AppLockState.UNLOCKED) return false
+    val since = backgroundedAt ?: return true
+    val elapsed = clock.elapsedRealtimeMillis() - since
+    val limit = if (entryUnlockedAt == since) maxOf(current.timeout.millis, ENTRY_GRACE_MS) else current.timeout.millis
+    if (elapsed < 0 || elapsed >= limit) {
+      _state.value = AppLockState.LOCKED
+      backgroundedAt = null
+      entryUnlockedAt = null
+      return false
+    }
+    return true
+  }
+
+  /**
+   * P14: chiude uno sblocco chiesto da un'activity d'ingresso (selettore, ricezione) con la credenziale di sistema. Se riuscito sblocca; con la
+   * `MainActivity` fuori dal primo piano l'app resta "fuori" (il tempo conta da adesso) con la finestra di tolleranza di [ENTRY_GRACE_MS].
+   */
+  @Synchronized
+  fun endEntryAuthentication(success: Boolean) {
+    authenticating = false
+    if (!success || _settings.value?.isEnabled != true) return
+    _state.value = AppLockState.UNLOCKED
+    if (foreground) {
+      backgroundedAt = null
+      entryUnlockedAt = null
+    } else {
+      val now = clock.elapsedRealtimeMillis()
+      backgroundedAt = now
+      entryUnlockedAt = now
+    }
+  }
+
+  companion object {
+    /** La tolleranza dopo uno sblocco d'ingresso (proposta di P10): due minuti di orologio monotono. */
+    const val ENTRY_GRACE_MS: Long = 120_000L
   }
 }

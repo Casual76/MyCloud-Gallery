@@ -95,6 +95,12 @@ enum class RestoreAvailability(override val code: String) : StableCode {
   /** Non e' un media di questo account. */
   NOT_MINE("not_mine"),
 
+  /**
+   * P14: un'altra versione o un altro scambio di questo media sono ancora in corso (un lavoro aperto nel diario del backup): si aspetta che
+   * finisca, poi si puo' ripristinare.
+   */
+  BUSY("busy"),
+
   /** Nessuna implementazione legata (null-object). */
   NOT_AVAILABLE("not_available"),
 }
@@ -138,10 +144,34 @@ class NasVersionPlan(
   override fun toString(): String = "NasVersionPlan(${versions.size} versioni, ${restore.code})"
 }
 
+/** Perche' la copia del telefono non e' stata riscritta con l'originale ([RestoreOutcome.PhoneNotRewritten]). */
+enum class PhoneKeptReason(override val code: String) : StableCode {
+  /** L'utente ha detto no al dialogo di sistema (un [PhoneWriteGrant] che non copre le righe). */
+  PERMISSION_DENIED("permission_denied"),
+
+  /**
+   * Lo scambio sul NAS non e' finito dentro la chiamata (NAS lento, giro fermato): il backup lo finisce, ma la riscrittura del telefono vale
+   * solo con il permesso di adesso e non si rimanda. Si puo' ripetere "Ripristina originale" a scambio finito.
+   */
+  SWAP_NOT_FINISHED("swap_not_finished"),
+
+  /** La riscrittura non e' riuscita (o l'originale riletto dal NAS non tornava): il telefono e' com'era. */
+  REWRITE_FAILED("rewrite_failed"),
+}
+
 /** L'esito di "Ripristina originale" ([VersionKeeper.restoreOriginal]). Solo numeri e codici. */
 sealed interface RestoreOutcome {
-  /** L'avvio e' fatto: lo scambio (`SWAP`, nessun byte caricato) e' nel diario; il motore lo porta avanti. */
+  /**
+   * L'avvio e' fatto: lo scambio (`SWAP`, nessun byte caricato) e' nel diario; il motore lo porta avanti. Se c'era da riscrivere il telefono,
+   * e' riscritto.
+   */
   data object Queued : RestoreOutcome
+
+  /**
+   * P14: lo scambio sul NAS e' fatto (o nel diario, e il backup lo finisce) ma la copia del telefono **non** e' stata riscritta: resta la versione
+   * modificata, per [reason]. La UI lo dice ("Sul NAS l'originale e' tornato; sul telefono resta la modifica").
+   */
+  data class PhoneNotRewritten(val reason: PhoneKeptReason) : RestoreOutcome
 
   /**
    * Il NAS e' a posto ma la copia del telefono e' la versione modificata e va riscritta (E-E10): serve il permesso di sistema per [rows]

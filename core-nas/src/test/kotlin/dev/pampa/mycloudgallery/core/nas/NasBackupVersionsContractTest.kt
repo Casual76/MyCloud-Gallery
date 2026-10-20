@@ -217,4 +217,29 @@ class NasBackupVersionsContractTest {
     assertThrows(IllegalArgumentException::class.java) { VersionPaths.mirrorOf(p("Versioni/x.jpg")) }
     assertThrows(IllegalArgumentException::class.java) { VersionPaths.mirrorOf(p(".mycloudgallery/x")) }
   }
+
+  /**
+   * D13 (P14): con la recinzione di debug il backup scrive solo sotto la radice di prova (`mcg-campo/`): anche le versioni ci restano,
+   * nella `Versioni/` di quella cartella, mai alla radice della share. Fuori dalle cartelle `mcg-*` non cambia niente (Q2 (a)).
+   */
+  @Test
+  fun d13_leVersioniDiUnFileDellaRadiceDiProvaRestanoDentroLaRadice() {
+    val fenced = p("mcg-campo/Backup/S25/2026/10/IMG_1.jpg")
+    val mirror = VersionPaths.mirrorOf(fenced)
+    assertThat(mirror.value).isEqualTo("mcg-campo/Versioni/Backup/S25/2026/10/IMG_1.jpg")
+    assertThat(mirror.components.first()).isEqualTo("mcg-campo")
+    assertThat(VersionPaths.isInVersions(mirror)).isTrue()
+    assertThat(VersionPaths.isInVersions(fenced)).isFalse()
+    assertThat(VersionPaths.isVersionsRoot(p("mcg-campo/Versioni"))).isTrue()
+    assertThat(VersionPaths.isInVersions(p("MCG-campo/versioni/x.jpg"))).isTrue()
+    // Archiviare e ripristinare dentro la radice di prova sono ammessi; un file della radice di prova non va mai in `Versioni/` della share.
+    VersionPaths.requireArchive(fenced, mirror)
+    VersionPaths.requireRestore(mirror, fenced)
+    // Solo le cartelle `mcg-*` alla radice: piu' in profondita' `Versioni` e' una cartella qualunque, e `mcg-` da solo non e' una radice di prova.
+    assertThat(VersionPaths.isInVersions(p("Backup/mcg-campo/Versioni/x.jpg"))).isFalse()
+    assertThat(VersionPaths.isInVersions(p("mcg-/Versioni/x.jpg"))).isFalse()
+    assertThat(VersionPaths.mirrorOf(p("Foto/IMG_2.jpg")).value).isEqualTo("Versioni/Foto/IMG_2.jpg")
+    assertThrows(IllegalArgumentException::class.java) { VersionPaths.mirrorOf(p("mcg-campo/Versioni/x.jpg")) }
+    assertThrows(IllegalArgumentException::class.java) { VersionPaths.mirrorOf(p("mcg-campo/Versioni")) }
+  }
 }

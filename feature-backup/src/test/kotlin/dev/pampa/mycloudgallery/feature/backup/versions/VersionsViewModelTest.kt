@@ -177,16 +177,22 @@ class VersionsViewModelTest {
     assertThat(keeper.restored).containsExactly(VersionSamples.media)
   }
 
+  /**
+   * P14: il custode di riferimento si comporta come quello vero (contratto di `PhoneWriteGrant`, E-E10): un permesso che non copre le righe e' il
+   * dialogo negato, lo scambio sul NAS si fa e il telefono tiene la modifica (`PhoneNotRewritten`); il foglio lo dice.
+   */
   @Test
-  fun senzaIlPermessoDelTelefonoNonSiRipristinaNienteConIlCustodeDiRiferimento() = runTest(dispatcher) {
-    keeper.setPlan(VersionSamples.plan())
+  fun senzaIlPermessoDelTelefonoIlCustodeDiRiferimentoScambiaSoloSulNas() = runTest(dispatcher) {
+    val plan = VersionSamples.plan()
+    keeper.setPlan(plan)
     keeper.phoneRowsToRewrite[VersionSamples.media] = listOf(VersionSamples.phoneRow)
     val vm = viewModel()
     vm.bind(VersionSamples.media, VersionsStart.RESTORE)
     vm.restore(confirmationFor((vm.state.value as VersionsUi.ConfirmRestore).plan))
     vm.bridge.answered(false)
-    assertThat((vm.state.value as VersionsUi.Listing).message).isEqualTo(VersionsMessage.PHONE_PERMISSION_MISSING)
-    assertThat(keeper.restored).isEmpty()
+    assertThat(vm.state.value).isInstanceOf(VersionsUi.Restored::class.java)
+    assertThat((vm.state.value as VersionsUi.Restored).phoneKeptEdited).isTrue()
+    assertThat(keeper.restored).containsExactly(VersionSamples.media)
   }
 
   /** Il custode vero (P8): un permesso che non copre le righe = "dialogo negato" -> si scambia solo sul NAS e il telefono tiene la modifica. */

@@ -38,6 +38,10 @@
   <string name="diag_backup_unreadable_title">Backup: file del telefono illeggibili</string>
   <string name="diag_backup_unreadable_guide">Il telefono non riesce a leggere questi file (o sono vuoti): non si caricano e non contano come al sicuro. «Riprova» li rilegge.</string>
   <string name="diag_backup_unexpected_title">Backup: errore inatteso</string>
+  <string name="diag_integrations_counters_title">Altre app: scelte, ricevuti, modifiche, condivisioni</string>
+  <string name="diag_integrations_counters_guide">Quante volte le altre app hanno usato la galleria in questo avvio: foto scelte e consegnate, file ricevuti e messi in coda, modifiche e condivisioni, con i rifiuti per motivo. Solo numeri, mai nomi di file.</string>
+  <string name="diag_backup_source_changed_title">Backup: versioni in attesa del PC</string>
+  <string name="diag_backup_source_changed_guide">Il file sul NAS è stato cambiato da un computer mentre una versione nuova aspettava di andare al suo posto. Non sposto niente: la versione nuova resta da parte finché la verifica del NAS non registra il file del computer, poi il backup riparte da solo. Non serve fare niente; se il numero non scende dopo una verifica del NAS, esporta la Diagnostica.</string>
   <string name="diag_backup_unexpected_guide">Un errore che l\'app non si aspettava ha fermato un file (o un giro intero): quel file non conta come al sicuro e gli altri vanno avanti. «Riprova» dalla pagina Backup lo rilegge; se si ripete, esporta la Diagnostica per capire dove.</string>
   <string name="diag_backup_common_copy_lost_title">Backup: media spariti dall\'area comune</string>
   <string name="diag_backup_common_copy_lost_guide">La loro unica copia stava nell\'area comune e qualcuno l\'ha tolta prima che l\'app ne facesse una privata. Recuperale dal cestino del NAS (restano 30 giorni).</string>

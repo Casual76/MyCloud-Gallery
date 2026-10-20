@@ -36,7 +36,8 @@ class Fase5ACatalogTest {
   @Test
   fun nessunCodiceDelBackupStaFuoriDallaTabella() {
     val rows = problemRows().keys.map { "BACKUP_$it" }.toSet()
-    val stateCodes = setOf("BACKUP_STATE", "BACKUP_LAST_ROUND", "BACKUP_SIMILAR_COPIES")
+    // P14: nella stessa sezione anche i contatori delle integrazioni della 5B (selettore, documenti, ricevuti, modifica, condivisioni).
+    val stateCodes = setOf("BACKUP_STATE", "BACKUP_LAST_ROUND", "BACKUP_SIMILAR_COPIES", "INTEGRATIONS_COUNTERS")
     val inCatalog = DiagCatalog.entriesOf(DiagSection.BACKUP).map { it.code.id }.toSet()
     assertThat(inCatalog - rows - stateCodes).isEmpty()
     assertThat(inCatalog).containsAtLeastElementsIn(rows + stateCodes)

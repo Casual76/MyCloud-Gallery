@@ -429,7 +429,7 @@ class VerificaFunzionaleBackupAppTest {
     val ids = db.query("SELECT media_id, current_version_id FROM media WHERE kind = 'video' LIMIT 1").use { c -> check(c.moveToFirst()); c.getString(0) to c.getString(1) }
     db.execSQL(
       "INSERT INTO backup_item (kind, state, is_open, media_id, version_id, size, share, planned_path, name_attempt, temp_path, resume_at, " +
-        "verify_attempts, created_at, updated_at) VALUES ('new_copy', 'uploading', 1, ?, ?, 40000, ?, 'Backup/x/VID_77.mp4', 0, NULL, 0, 0, 0, 0)",
+        "verify_attempts, created_at, updated_at, archive_attempt) VALUES ('new_copy', 'uploading', 1, ?, ?, 40000, ?, 'Backup/x/VID_77.mp4', 0, NULL, 0, 0, 0, 0, 0)",
       arrayOf<Any?>(ids.first, ids.second, share),
     )
 

@@ -13,6 +13,8 @@ import dev.pampa.mycloudgallery.core.index.replica.store.RoomReplicaStore
 import dev.pampa.mycloudgallery.core.index.store.RoomIndexPublishStore
 import dev.pampa.mycloudgallery.core.model.AccountId
 import dev.pampa.mycloudgallery.core.model.Location
+import dev.pampa.mycloudgallery.core.backup.free.EverywhereArea
+import dev.pampa.mycloudgallery.core.backup.free.EverywherePlan
 import dev.pampa.mycloudgallery.core.model.LocationId
 import dev.pampa.mycloudgallery.core.model.LocationState
 import dev.pampa.mycloudgallery.core.model.MediaId
@@ -307,6 +309,14 @@ class NasOrganizer(
   // --- Vita ---------------------------------------------------------------------------------------------------------------
 
   @Volatile private var stopped = false
+
+  /**
+   * Fase 5B (P14, D22, E-D15): le copie di **tutte** le versioni di un media per "Ovunque" (`EverywhereCopies` del backup, dal catalogo locale):
+   * le versioni precedenti in `Versioni/` vanno nel cestino con il resto e il foglio le conta. Lo lega il backup; null = solo le copie che il
+   * catalogo da' come prima.
+   */
+  @Volatile
+  var everywhere: (suspend (MediaId) -> EverywherePlan?)? = null
   private var watcher: Job? = null
 
   /**
@@ -608,6 +618,7 @@ class NasOrganizer(
         NasLocationInfo(if (otherArea.area == NasArea.PRIVATE) NasLocationInfo.Kind.NAS_PRIVATE else NasLocationInfo.Kind.NAS_COMMON)
       }
     // Dove si puo' spostare: la radice di ogni area (non quella in cui il file e' gia', se e' gia' alla radice).
+    val all = media?.let { everywhereOthers(it.id, info.locationId) } ?: others
     val destinations = p.areas
       .filterNot { it.share.equals(nas.share, ignoreCase = true) && path.parent() == null }
       .map { NasMoveDestination(it.share, null, it.area.toScope(), areaLabel(it.area)) }
@@ -622,7 +633,7 @@ class NasOrganizer(
       // "Solo dal telefono" qui non avrebbe niente da eliminare.
       onPhone = false,
       isVideo = media?.kind == MediaKind.VIDEO,
-      others = others,
+      others = all,
       destinations = destinations,
     )
   }
@@ -636,33 +647,53 @@ class NasOrganizer(
     val p = partsFlow.value ?: return null
     val catalog = catalogProvider() ?: return null
     val media = catalog.media(id) ?: return null
-    class Copy(val area: NasShareArea, val item: NasItem)
+    class Copy(val area: NasShareArea, val item: NasItem, val current: Boolean, val locationId: LocationId)
     val copies = media.locations.mapNotNull { place ->
       val nas = place.location as? Location.Nas ?: return@mapNotNull null
       val info = catalog.nasLocationAt(nas) ?: return@mapNotNull null
       if (info.state != LocationState.PRESENT) return@mapNotNull null
       val area = p.areas.firstOrNull { it.share.equals(nas.share, ignoreCase = true) } ?: return@mapNotNull null
       val path = runCatching { SharePath.parseMediaPath(nas.path.value) }.getOrNull() ?: return@mapNotNull null
-      Copy(area, NasItem(share = nas.share, path = path, isFolder = false, size = info.stamp.size, stamp = info.stamp))
-    }.sortedBy { if (it.area.area == NasArea.PRIVATE) 0 else 1 }
-    val first = copies.firstOrNull() ?: return null
+      Copy(area, NasItem(share = nas.share, path = path, isFolder = false, size = info.stamp.size, stamp = info.stamp), place.versionId == media.currentVersionId, info.locationId)
+    }.sortedWith(compareBy({ if (it.area.area == NasArea.PRIVATE) 0 else 1 }, { if (it.current) 0 else 1 }))
+    // Il bersaglio e' una copia della versione attuale (Fase 5B: mai una versione precedente in `Versioni/`), se c'e'.
+    val first = copies.firstOrNull { it.current } ?: copies.firstOrNull() ?: return null
     return NasActionTarget(
       item = first.item,
       scope = first.area.area.toScope(),
       writable = true,
       onPhone = true,
       isVideo = media.kind == MediaKind.VIDEO,
-      others = copies.drop(1).map { copy ->
+      others = everywhereOthers(id, first.locationId) ?: copies.filter { it !== first }.map { copy ->
         NasLocationInfo(
           kind = if (copy.area.area == NasArea.PRIVATE) NasLocationInfo.Kind.NAS_PRIVATE else NasLocationInfo.Kind.NAS_COMMON,
           writable = true,
           item = copy.item,
+          previousVersion = !copy.current,
         )
       },
       destinations = emptyList(),
       hidden = isHidden(id),
       viaPhoneCopy = true,
     )
+  }
+
+  /**
+   * Fase 5B (E-D15): le altre copie di "Ovunque" dall'elenco del backup (tutte le versioni, solo l'account, D13), senza quella del bersaglio
+   * ([main]). Null senza l'elenco o se il backup dice di non toccare il media (fuori dalla recinzione di D13: allora vale l'elenco di prima).
+   */
+  private suspend fun everywhereOthers(id: MediaId, main: LocationId): List<NasLocationInfo>? {
+    val hook = everywhere ?: return null
+    val plan = runCatching { hook(id) }.getOrNull() ?: return null
+    if (plan.blocked != null) return null
+    return plan.nasCopies.filter { it.location != main }.map { copy ->
+      NasLocationInfo(
+        kind = if (copy.area == EverywhereArea.COMMON) NasLocationInfo.Kind.NAS_COMMON else NasLocationInfo.Kind.NAS_PRIVATE,
+        writable = true,
+        item = NasItem(share = copy.share, path = copy.path, isFolder = false, size = copy.stamp.size, stamp = copy.stamp),
+        previousVersion = !copy.isCurrent,
+      )
+    }
   }
 
   /** L'utente ha nascosto [id] nella Libreria (dati personali proiettati sul catalogo). */

@@ -78,7 +78,7 @@ class PhoneOnlyAssessment(val advice: Map<MediaId, PhoneOnlyAdvice>) {
             FreeSpaceExclusion.OUTSIDE_TEST_FENCE -> PhoneOnlyAdvice.OUTSIDE_TEST_FENCE
             FreeSpaceExclusion.AREA_FROZEN -> PhoneOnlyAdvice.FROZEN
             FreeSpaceExclusion.IN_PROGRESS_OR_ERROR -> PhoneOnlyAdvice.WAIT
-            FreeSpaceExclusion.NAS_UNREACHABLE -> PhoneOnlyAdvice.UNAVAILABLE
+            FreeSpaceExclusion.NAS_UNREACHABLE, FreeSpaceExclusion.NOT_MINE, FreeSpaceExclusion.BACKUP_NOT_ACTIVE -> PhoneOnlyAdvice.UNAVAILABLE
             FreeSpaceExclusion.NOT_VERIFIED, FreeSpaceExclusion.VERSION_NOT_SAFE, FreeSpaceExclusion.RECENT,
             FreeSpaceExclusion.COPY_CHANGED, FreeSpaceExclusion.GONE_FROM_PHONE,
             -> PhoneOnlyAdvice.SAFE_FIRST

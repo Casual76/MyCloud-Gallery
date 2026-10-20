@@ -8,6 +8,8 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupAction
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSettings
 import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
 import dev.pampa.mycloudgallery.core.backup.contract.DeviceFolder
+import dev.pampa.mycloudgallery.core.backup.contract.PendingTask
+import dev.pampa.mycloudgallery.core.backup.contract.PendingTasks
 import dev.pampa.mycloudgallery.core.backup.contract.SourceStatus
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupActions
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupOverview
@@ -36,6 +38,8 @@ internal data class BackupPageUi(
   val deviceFolder: DeviceFolder?,
   /** Il foglio del primo backup e' aperto. */
   val sheetOpen: Boolean,
+  /** 5B (P14): quante attivita' "Da decidere" sono aperte (la scheda d'ingresso compare solo con almeno una). */
+  val pendingTasks: Int = 0,
 )
 
 @HiltViewModel
@@ -43,6 +47,7 @@ class BackupPageViewModel @Inject constructor(
   overview: Optional<BackupOverview>,
   settings: Optional<BackupSettings>,
   actions: Optional<BackupActions>,
+  tasks: Optional<PendingTasks> = Optional.empty(),
 ) : ViewModel() {
 
   private val port: BackupOverview = overview.orElse(NoBackupOverview)
@@ -50,12 +55,14 @@ class BackupPageViewModel @Inject constructor(
   private val acts: BackupActions = actions.orElse(NoBackupActions)
   private val sheet = MutableStateFlow(false)
 
-  internal val state: StateFlow<BackupPageUi> = combine(port.status, port.sources, folder, sheet) { status, sources, deviceFolder, open ->
-    BackupPageUi(status = status, sources = sources, deviceFolder = deviceFolder, sheetOpen = open)
+  private val pending: StateFlow<List<PendingTask>> = tasks.orElse(null)?.tasks ?: MutableStateFlow(emptyList())
+
+  internal val state: StateFlow<BackupPageUi> = combine(port.status, port.sources, folder, sheet, pending) { status, sources, deviceFolder, open, open5b ->
+    BackupPageUi(status = status, sources = sources, deviceFolder = deviceFolder, sheetOpen = open, pendingTasks = open5b.size)
   }.stateIn(
     scope = viewModelScope,
     started = SharingStarted.WhileSubscribed(StopTimeoutMillis),
-    initialValue = BackupPageUi(port.status.value, port.sources.value, folder.value, sheet.value),
+    initialValue = BackupPageUi(port.status.value, port.sources.value, folder.value, sheet.value, pending.value.size),
   )
 
   /** Il riepilogo del primo backup (§2.11): il foglio si apre da un tocco, o da solo quando si arriva dalla rotta `backup/first`. */

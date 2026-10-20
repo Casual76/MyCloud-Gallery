@@ -260,10 +260,10 @@ object SchemaSeeds {
         "phone_ms_version, expected_size, expected_modified_at, expected_generation, share, planned_path, final_path, name_attempt, " +
         "temp_path, resume_at, resume_file_id, sha256, quick_hash, temp_size, temp_modified_at, temp_file_id, final_size, " +
         "final_modified_at, final_file_id, verify_attempts, guard_share, guard_path, guard_size, guard_modified_at, guard_file_id, " +
-        "problem, created_at, updated_at) VALUES ($BACKUP_ITEM_ID, 'new_copy', 'uploading', 1, '$MEDIA_ID', '$VERSION_ID', 300000, " +
+        "problem, created_at, updated_at, archive_attempt) VALUES ($BACKUP_ITEM_ID, 'new_copy', 'uploading', 1, '$MEDIA_ID', '$VERSION_ID', 300000, " +
         "'external_primary', 42, 'store-v1', 300000, $T0, 7, 'alessio', 'Backup/S25/2025/10/IMG_0001.jpg', " +
         "'Backup/S25/2025/10/IMG_0001 (2).jpg', 1, '.mycloudgallery/tmp/tablet-bk-1', 134217728, $RESUME_FILE_ID, '$FULL', '$QUICK', " +
-        "300000, $T0, $FILE_ID, NULL, NULL, NULL, 2, 'NAS', 'Famiglia/IMG_0001.jpg', 300000, $T0, $FILE_ID, NULL, $T0, $T0)",
+        "300000, $T0, $FILE_ID, NULL, NULL, NULL, 2, 'NAS', 'Famiglia/IMG_0001.jpg', 300000, $T0, $FILE_ID, NULL, $T0, $T0, 0)",
     )
     db.execSQL("INSERT INTO backup_problem (media_id, code, marks_cell, updated_at) VALUES ('$MEDIA_ID', 'verify_failed', 1, $T0)")
     db.execSQL("INSERT INTO nas_copy_mismatch (location_id, size, modified_at, found_at) VALUES (2, 300000, $T0, ${T0 + 5})")
@@ -285,8 +285,8 @@ object SchemaSeeds {
     )
     db.execSQL(
       "INSERT INTO free_space_item (run_id, item_index, state, media_id, version_id, phone_location_id, nas_location_id, size, " +
-        "verified_size, verified_modified_at, verified_file_id, batch_index, reason, updated_at) VALUES (1, 0, 'verified', '$MEDIA_ID', " +
-        "'$VERSION_ID', 1, 2, 300000, 300000, $T0, $FILE_ID, 0, NULL, $T0)",
+        "verified_size, verified_modified_at, verified_file_id, batch_index, reason, updated_at, needs_guardian) VALUES (1, 0, 'verified', " +
+        "'$MEDIA_ID', '$VERSION_ID', 1, 2, 300000, 300000, $T0, $FILE_ID, 0, NULL, $T0, 0)",
     )
     db.execSQL(
       "INSERT INTO incoming_item (incoming_id, stage_id, state, file_name, display_name, sha256, size, mime, dest_share, dest_folder, " +

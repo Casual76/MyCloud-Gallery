@@ -13,12 +13,16 @@ import dev.pampa.mycloudgallery.core.database.entity.MediaEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaGroupEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaLocationEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaPersonalEntity
+import dev.pampa.mycloudgallery.core.database.entity.MetadataCorrectionEntity
 import dev.pampa.mycloudgallery.core.database.entity.NasCopyMismatchEntity
 import dev.pampa.mycloudgallery.core.database.entity.NasCopyRow
 import dev.pampa.mycloudgallery.core.database.entity.NasRefRow
 import dev.pampa.mycloudgallery.core.database.entity.SimilarCandidateRow
 import dev.pampa.mycloudgallery.core.database.entity.VisualSignatureEntity
 import dev.pampa.mycloudgallery.core.model.AccountId
+import dev.pampa.mycloudgallery.core.model.CaptureTime
+import dev.pampa.mycloudgallery.core.model.CaptureTimeConfidence
+import dev.pampa.mycloudgallery.core.model.CaptureTimeSource
 import dev.pampa.mycloudgallery.core.model.CellFlags
 import dev.pampa.mycloudgallery.core.model.ContentKey
 import dev.pampa.mycloudgallery.core.model.CorrectionField
@@ -26,6 +30,7 @@ import dev.pampa.mycloudgallery.core.model.EmbeddingVector
 import dev.pampa.mycloudgallery.core.model.FileStamp
 import dev.pampa.mycloudgallery.core.model.Fingerprint
 import dev.pampa.mycloudgallery.core.model.FingerprintMatch
+import dev.pampa.mycloudgallery.core.model.GeoPoint
 import dev.pampa.mycloudgallery.core.model.Location
 import dev.pampa.mycloudgallery.core.model.LocationId
 import dev.pampa.mycloudgallery.core.model.LocationKey
@@ -132,6 +137,7 @@ class MediaCatalog(
   private val signatureDao = database.visualSignatureDao()
   private val backupQueryDao = database.backupQueryDao()
   private val similarDao = database.similarDao()
+  private val correctionDao = database.metadataCorrectionDao()
 
   private val writeLock = Mutex()
   private val changeFlow = MutableSharedFlow<CatalogChange>(
@@ -145,6 +151,21 @@ class MediaCatalog(
    * resta indietro di oltre [CHANGE_BUFFER] cambiamenti perde i piu' vecchi e lo vede dal salto di `seq`.
    */
   val changes: SharedFlow<CatalogChange> = changeFlow.asSharedFlow()
+
+  private val revertFlow = MutableSharedFlow<MediaId>(extraBufferCapacity = CHANGE_BUFFER, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+  /**
+   * P14 (E-E2, nota di P8): i media che la lettura del telefono ha visto **tornare a una versione nota** (Samsung "Ripristina originale",
+   * `LinkDecision.RevertedToVersion`), dopo il commit. Il backup ne scambia le versioni sul NAS (`NasVersionEngine.planRealign`). Chi si perde un
+   * annuncio (processo morto) li ritrova con [mediaWithVersions] all'avvio.
+   */
+  val reverts: SharedFlow<MediaId> = revertFlow.asSharedFlow()
+
+  /** P14: i media con piu' di una versione (al piu' [limit]): l'avvio ricontrolla se le loro versioni sul NAS vanno rimesse in pari. */
+  suspend fun mediaWithVersions(limit: Int): List<MediaId> {
+    require(limit > 0) { "Il tetto e' positivo." }
+    return backupQueryDao.mediaWithVersions(limit).map(::MediaId)
+  }
 
   /** Che cosa fare quando le regole chiedono l'hash completo e chi chiama non puo' calcolarlo. */
   enum class WhenUndecided {
@@ -770,7 +791,9 @@ class MediaCatalog(
    * e' ancora la versione corrente (una lettura arrivata dopo una modifica non cambia il tipo).
    */
   suspend fun updateMetadata(versionId: VersionId, metadata: MediaMetadata, kind: MediaKind? = null): Unit = write { tx ->
-    versionDao.upsertMetadata(metadata.toEntity(versionId, clock()))
+    // P14 (Q6 (a)): una correzione solo nell'app vale sopra i metadati letti dal file, anche a ogni rilettura di META.
+    val corrected = correctionDao.get(versionId.value)?.let { applyCorrection(metadata, it) } ?: metadata
+    versionDao.upsertMetadata(corrected.toEntity(versionId, clock()))
     versionDao.get(versionId.value)?.let { version ->
       val mediaId = MediaId(version.mediaId)
       tx.touch(mediaId)
@@ -1130,6 +1153,273 @@ class MediaCatalog(
     }
   }
 
+  // --- Fase 5B (P14): "Libera spazio", "Modifica con…", correzioni solo nell'app, file in arrivo -------------------------------------
+  //
+  // Le operazioni che le porte della 5B chiedono al catalogo (`FreeSpaceCatalog`, `EditCatalog`, `VersionCatalog.correctInApp`, la coda dei
+  // file in arrivo). Come tutto il resto: una transazione per chiamata, solo dati locali, mai dati letti dal NAS che decidono (E-S11).
+
+  /**
+   * P9 (`FreeSpaceCatalog.phoneMedia`): una pagina dei media con una copia **presente** sul telefono, dal piu' recente (`sort_time`, poi
+   * identita', decrescenti), dopo [after]. Tutti i media, propri e no: le regole di "Libera spazio" decidono. Dall'indice della timeline.
+   */
+  suspend fun phoneMedia(after: CatalogPhoneCursor?, limit: Int): List<CatalogPhoneMedia> {
+    require(limit > 0) { "Il tetto e' positivo." }
+    val rows = if (after == null) backupQueryDao.phoneMediaFirst(limit) else backupQueryDao.phoneMediaAfter(after.sortTime, after.mediaId.value, limit)
+    return rows.map { CatalogPhoneMedia(MediaId(it.mediaId), it.sortTime, it.localDay.takeIf { day -> day != 0 }) }
+  }
+
+  /**
+   * P8/P14 (`VersionCatalog.relocate`): un file proprio spostato dalle versioni (archiviato in `Versioni/` o riportato al solito percorso) e'
+   * **la stessa posizione** in un altro percorso della stessa share, con il timbro dopo la rinomina; **la verifica resta** (i byte sono gli
+   * stessi: una rinomina non li cambia). Falso se la posizione non c'e' piu' o se al percorso nuovo il catalogo conosce gia' un'altra posizione
+   * (la scansione l'ha vista per prima): allora non si tocca niente e la scansione mette in pari.
+   */
+  suspend fun relocateKeepingVerification(locationId: LocationId, to: Location.Nas, stamp: FileStamp): Boolean = write { tx ->
+    val before = locationDao.get(locationId.value)?.toDomain() ?: return@write false
+    val other = locationDao.byKey(to.key.value)
+    if (other != null && other.locationId != locationId.value) return@write false
+    val moved = before.copy(
+      location = to,
+      stamp = stamp,
+      state = LocationState.PRESENT,
+      absentSinceMillis = null,
+      verifiedAtMillis = before.verifiedAtMillis,
+      lastSeenAtMillis = clock(),
+    )
+    locationDao.update(moved.toEntity())
+    val mediaId = mediaOf(locationId)
+    tx.touch(mediaId)
+    tx.refChanged(mediaId)
+    true
+  }
+
+  /**
+   * P9 (`FreeSpaceCatalog.freedFromPhone`): Android ha tolto queste copie del telefono (dialogo di sistema confermato, o lettura del telefono
+   * dopo un esito sconosciuto). Diventano **assenti** come una riga sparita dal MediaStore (la finestra di tolleranza resta: un ripristino dal
+   * cestino di Android le ricollega, E-P11), cosi' la Libreria mostra subito la cella "solo NAS". Solo posizioni del telefono presenti; il
+   * resto si salta. Quante ne ha segnate.
+   */
+  suspend fun markPhoneLocationsVanished(ids: Collection<LocationId>): Int = write { tx ->
+    var marked = 0
+    for (id in ids.distinct()) {
+      val location = locationDao.get(id.value)?.toDomain() ?: continue
+      if (location.location !is Location.Phone || location.state != LocationState.PRESENT) continue
+      locationDao.update(LocationRules.vanished(location, clock()).toEntity())
+      tx.touch(mediaOf(location.id))
+      marked++
+    }
+    marked
+  }
+
+  /**
+   * P11 (`EditCatalog.mediaOfPhoneRow`): il media che ha la riga del telefono `_ID` [mediaStoreId] del volume [volume], letta con la versione
+   * [mediaStoreVersion] del MediaStore (un `_ID` di un'altra versione puo' essere di un altro file, E-P22). Null se il catalogo non la conosce.
+   */
+  suspend fun mediaOfPhoneRow(volume: String, mediaStoreId: Long, mediaStoreVersion: String): MediaId? {
+    val row = locationDao.byMediaStoreId(volume, mediaStoreId)
+      .firstOrNull { it.mediaStoreVersion == mediaStoreVersion && it.state == LocationState.PRESENT.code } ?: return null
+    return locationDao.mediaIdOf(row.locationId)?.let { resolve(MediaId(it)) }
+  }
+
+  /**
+   * P14 (D13): la cartella (`RELATIVE_PATH`) della riga del telefono `_ID` [mediaStoreId] di [volume], com'e' nel catalogo; null se il catalogo
+   * non la conosce. La recinzione di debug la confronta prima di scrivere o togliere una riga (riscrittura, dialoghi di sistema).
+   */
+  suspend fun phoneRowFolder(volume: String, mediaStoreId: Long): String? =
+    locationDao.byMediaStoreId(volume, mediaStoreId).firstOrNull { it.state == LocationState.PRESENT.code }?.relativePath
+
+  /**
+   * P11 (E-E3, `EditCatalog.addEditedVersion`): il risultato di un editor esterno su un media (gia' tenuto come file preparato, con [sha256],
+   * [quickHash] e [size]) diventa una versione `EDITED` figlia di [parent] e la versione corrente, **senza posizione**: la pubblica il lavoro
+   * `VERSION` del backup, che poi attacca la copia verificata. Null se il media non c'e' piu', se [parent] non e' una sua versione o se i byte
+   * sono quelli di una versione gia' nota del media (non e' una versione nuova). Mai una sostituzione: le versioni di prima restano.
+   */
+  suspend fun addEditedVersion(into: MediaId, parent: VersionId, sha256: Sha256, quickHash: QuickHash, size: Long): VersionId? = write { tx ->
+    val id = resolve(into) ?: return@write null
+    val media = mediaDao.graph(id.value)?.toDomain() ?: return@write null
+    if (media.versions.none { it.id == parent }) return@write null
+    if (media.versions.any { it.fingerprint.fullHash == sha256 }) return@write null
+    val plan = VersionRules.edited(media, parent, Fingerprint(size, quickHash, sha256), clock())
+    persist(tx, media, plan)
+    checkNotNull(plan.newVersion).id
+  }
+
+  /**
+   * P11 (E-X3, `EditCatalog.linkCopyAsVersion`): [copy] e' il media nato dalla riga che un editor ha scritto come copia ("Salva copia") durante una
+   * sessione di "Modifica con…" di [into]: era una versione di [into]. La sua versione diventa una versione `EDITED` di [into] figlia di [parent]
+   * e la corrente; le sue posizioni la seguono; i riferimenti di [copy] (album, diari, attivita') passano a [into]; [copy] resta come alias.
+   *
+   * **Nel dubbio non si unisce** (null, niente cambia): [copy] o [into] che non ci sono, lo stesso media, [parent] che non e' di [into], una copia
+   * che non e' appena nata (piu' di una versione, in un gruppo), un nascosto (E-H1), proprietari diversi, byte uguali a una versione di [into]
+   * (non e' una versione nuova: la lettura del telefono li unisce da sola per hash completo). Mai una sostituzione.
+   */
+  suspend fun linkCopyAsVersion(into: MediaId, copy: MediaId, parent: VersionId): VersionId? = write { tx ->
+    val target = resolve(into) ?: return@write null
+    val source = resolve(copy) ?: return@write null
+    if (target == source) return@write null
+    val targetMedia = mediaDao.graph(target.value)?.toDomain() ?: return@write null
+    val sourceMedia = mediaDao.graph(source.value)?.toDomain() ?: return@write null
+    if (targetMedia.versions.none { it.id == parent }) return@write null
+    if (sourceMedia.versions.size != 1 || sourceMedia.groupId != null) return@write null
+    if (personalDao.get(target.value)?.hidden == true || personalDao.get(source.value)?.hidden == true) return@write null
+    if (setOfNotNull(targetMedia.owner, sourceMedia.owner).size > 1) return@write null
+    val version = sourceMedia.versions.single()
+    val hash = version.fingerprint.fullHash
+    if (hash != null && targetMedia.versions.any { it.fingerprint.fullHash == hash }) return@write null
+    val now = clock()
+    // 1. La versione (e con lei le sue posizioni, che puntano alla versione) passa a [into] come modifica di [parent].
+    mergeDao.moveVersion(version.id.value, target.value, parent.value)
+    mergeDao.setVersionKind(version.id.value, VersionKind.EDITED.code, parent.value)
+    // 2. I riferimenti della copia (come in un'unione): album, copertine, diari del backup, attivita', sessioni, "Libera spazio".
+    mergeDao.copyAlbumItems(source.value, target.value)
+    mergeDao.repointAlbumCovers(source.value, target.value)
+    mergeDao.repointGroupCovers(source.value, target.value)
+    mergeDao.repointBackupItemMedia(source.value, target.value)
+    mergeDao.repointBackupProblem(source.value, target.value)
+    mergeDao.repointPendingTaskMedia(source.value, target.value)
+    mergeDao.repointEditSessionMedia(source.value, target.value)
+    mergeDao.repointFreeSpaceItemMedia(source.value, target.value)
+    // 3. La versione nuova e' la corrente: i pixel sono cambiati, le fasi si rifanno.
+    mediaDao.setCurrentVersion(target.value, version.id.value, now)
+    val states = workDao.forMedia(target.value).map { it.toDomain() }
+    workDao.upsert(WorkRules.invalidate(states, WorkStage.entries.toSet(), version.id, now).map { it.toEntity(target) })
+    // 4. La copia resta come alias (anche gli alias che puntavano a lei); la sua riga se ne va (in cascata le sue righe ricalcolabili).
+    mergeDao.repointAliases(source.value, target.value)
+    mediaDao.insertAlias(MediaAliasEntity(aliasId = source.value, mediaId = target.value, mergedAt = now))
+    mediaDao.delete(source.value)
+    tx.touch(target)
+    tx.touch(source)
+    tx.markChanged(target, structural = true)
+    tx.markChanged(source, structural = true)
+    version.id
+  }
+
+  /**
+   * Q6 (a), L40 (`VersionCatalog.correctInApp`): una correzione di data, luogo o rotazione di un formato che non si scrive nel file (HEIC, RAW,
+   * video) resta **nell'app e nell'indice**: si salva per la versione [versionId] di [mediaId] e vale subito sui suoi metadati e **a ogni
+   * rilettura** di META ([updateMetadata]). Il file non si tocca. Una correzione dopo l'altra si somma (i campi nuovi vincono). Il nome del
+   * luogo di un luogo corretto qui non si ricalcola (resta vuoto: il geocodificatore e' dell'app). Falso se il media o la versione non ci sono.
+   */
+  suspend fun correctInApp(mediaId: MediaId, versionId: VersionId, correction: InAppCorrection): Boolean = write { tx ->
+    val id = resolve(mediaId) ?: return@write false
+    val version = versionDao.get(versionId.value) ?: return@write false
+    if (version.mediaId != id.value || correction.isEmpty) return@write false
+    val now = clock()
+    val row = mergedCorrection(correctionDao.get(versionId.value), versionId, correction, now)
+    correctionDao.upsert(row)
+    val metadata = versionDao.metadata(versionId.value)?.toDomain() ?: MediaMetadata()
+    versionDao.upsertMetadata(applyCorrection(metadata, row).toEntity(versionId, now))
+    tx.touch(id)
+    tx.markChanged(id, structural = false)
+    true
+  }
+
+  /** La correzione solo nell'app di [versionId], se c'e' (viewer, test). */
+  suspend fun inAppCorrection(versionId: VersionId): InAppCorrection? = correctionDao.get(versionId.value)?.let { row ->
+    InAppCorrection(
+      takenAtUtcMillis = row.takenAtUtc,
+      offsetMinutes = row.offsetMinutes,
+      geo = when (row.geo) {
+        MetadataCorrectionEntity.GEO_SET -> InAppGeo.Set(checkNotNull(row.latitude), checkNotNull(row.longitude))
+        MetadataCorrectionEntity.GEO_CLEAR -> InAppGeo.Clear
+        else -> InAppGeo.Keep
+      },
+      orientationDegrees = row.orientationDegrees,
+      mirrored = row.mirrored,
+    )
+  }
+
+  private fun mergedCorrection(before: MetadataCorrectionEntity?, versionId: VersionId, c: InAppCorrection, now: Long): MetadataCorrectionEntity {
+    val geo = c.geo
+    return MetadataCorrectionEntity(
+      versionId = versionId.value,
+      takenAtUtc = c.takenAtUtcMillis ?: before?.takenAtUtc,
+      offsetMinutes = if (c.takenAtUtcMillis != null) c.offsetMinutes else before?.offsetMinutes,
+      geo = when (geo) {
+        InAppGeo.Keep -> before?.geo
+        is InAppGeo.Set -> MetadataCorrectionEntity.GEO_SET
+        InAppGeo.Clear -> MetadataCorrectionEntity.GEO_CLEAR
+      },
+      latitude = when (geo) {
+        InAppGeo.Keep -> before?.latitude
+        is InAppGeo.Set -> geo.latitude
+        InAppGeo.Clear -> null
+      },
+      longitude = when (geo) {
+        InAppGeo.Keep -> before?.longitude
+        is InAppGeo.Set -> geo.longitude
+        InAppGeo.Clear -> null
+      },
+      orientationDegrees = c.orientationDegrees ?: before?.orientationDegrees,
+      mirrored = c.mirrored ?: before?.mirrored,
+      correctedAt = now,
+    )
+  }
+
+  /** I metadati [metadata] con sopra la correzione solo nell'app [row]: la data dell'utente e' esatta, il luogo corretto non ha un nome. */
+  private fun applyCorrection(metadata: MediaMetadata, row: MetadataCorrectionEntity): MediaMetadata {
+    var out = metadata
+    row.takenAtUtc?.let { at ->
+      out = out.copy(
+        captureTime = CaptureTime(
+          utcMillis = at,
+          offsetMinutes = row.offsetMinutes ?: metadata.captureTime?.offsetMinutes ?: 0,
+          confidence = CaptureTimeConfidence.EXACT,
+          source = CaptureTimeSource.USER_CORRECTION,
+        ),
+      )
+    }
+    when (row.geo) {
+      MetadataCorrectionEntity.GEO_SET -> {
+        val lat = row.latitude
+        val lon = row.longitude
+        if (lat != null && lon != null) out = out.copy(location = GeoPoint(lat, lon), place = null)
+      }
+      MetadataCorrectionEntity.GEO_CLEAR -> out = out.copy(location = null, place = null)
+    }
+    val degrees = row.orientationDegrees
+    val mirrored = row.mirrored
+    if (degrees != null && mirrored != null) out = out.copy(orientationDegrees = degrees, mirrored = mirrored)
+    return out
+  }
+
+  /**
+   * D24 (P14, la coda dei file in arrivo): il media e la versione che un file in arrivo ("Salva sul NAS") diventera'. Se il catalogo conosce
+   * gia' una versione con gli stessi byte (SHA-256 [fingerprint]), e' quella: il file caricato ne sara' una copia in piu'. Altrimenti nasce un
+   * media nuovo con una sola versione e **nessuna posizione** (presenza `none`: la Libreria non lo mostra finche' il backup non attacca la copia
+   * verificata sul NAS). [sortTimeHint] e' l'ordine provvisorio (la data di scatto vera arriva con META). Proprietario: l'account del dispositivo.
+   */
+  suspend fun incomingMedia(fingerprint: Fingerprint, kind: MediaKind, sortTimeHint: Long): CatalogIncomingMedia = write { tx ->
+    val hash = requireNotNull(fingerprint.fullHash) { "Un file in arrivo ha il suo SHA-256." }
+    versionDao.byFullHash(hash.hex).firstOrNull { it.size == fingerprint.size }?.let { known ->
+      val owner = resolve(MediaId(known.mediaId)) ?: MediaId(known.mediaId)
+      return@write CatalogIncomingMedia(owner, VersionId(known.versionId), created = false)
+    }
+    val now = clock()
+    val mediaId = MediaId.random()
+    val version = MediaVersion(VersionId.random(), VersionKind.ORIGINAL, null, fingerprint, now)
+    mediaDao.insert(
+      MediaEntity(
+        mediaId = mediaId.value,
+        kind = kind.code,
+        source = MediaSource.OTHER.code,
+        ownerAccount = localAccount.value,
+        groupId = null,
+        currentVersionId = version.id.value,
+        createdAt = now,
+        updatedAt = now,
+        sortTime = sortTimeHint,
+        presence = Presence.NONE.code,
+        safety = SafetyStatus.LOST.code,
+        localDay = TimelineRules.localDay(sortTimeHint, zone()),
+      ),
+    )
+    versionDao.insert(version.toEntity(mediaId))
+    workDao.upsert(WorkRules.initialStates(kind, version.id, now).map { it.toEntity(mediaId) })
+    tx.touch(mediaId)
+    CatalogIncomingMedia(mediaId, version.id, created = true)
+  }
+
   private fun NasCopyRow.toNasCopy(): CatalogNasCopy = CatalogNasCopy(
     locationId = LocationId(locationId),
     mediaId = MediaId(mediaId),
@@ -1391,6 +1681,9 @@ class MediaCatalog(
      * tornata" ([releaseRecoveredLostMedia]) le risolve in un colpo solo alla fine, in [refreshDerived].
      */
     val phoneSeen = LinkedHashSet<Long>()
+
+    /** P14 (E-E2): i media tornati a una versione nota in questa transazione ([reverts], dopo il commit). */
+    val reverted = LinkedHashSet<MediaId>()
     var structural = false
     var areas: NasAreaLookup? = null
     var seq: Long? = null
@@ -1430,6 +1723,7 @@ class MediaCatalog(
     }
     // Dopo il commit: chi riceve il cambiamento e rilegge vede gia' i dati nuovi.
     tx.seq?.let { changeFlow.tryEmit(CatalogChange(it, tx.changed.toSet(), tx.structural)) }
+    tx.reverted.forEach { revertFlow.tryEmit(it) }
     result
   }
 
@@ -1696,6 +1990,8 @@ class MediaCatalog(
         val plan = VersionRules.revertedAt(media, decision.locationId, decision.versionId, observation.stamp, now)
         persist(tx, media, plan, observed = mapOf(decision.locationId to observation.location), seenAt = seenAt)
         learnFullHash(tx, decision.versionId, observation.fingerprint)
+        // P14 (E-E2): il telefono e' tornato a una versione nota: dopo il commit si annuncia, il backup scambia le versioni sul NAS.
+        tx.reverted += decision.mediaId
         decision.mediaId to decision.locationId
       }
 
@@ -1836,6 +2132,9 @@ class MediaCatalog(
       mergeDao.repointPendingTaskVersion(from.value, to.value)
       mergeDao.repointEditSessionVersion(from.value, to.value)
       mergeDao.repointFreeSpaceItemVersion(from.value, to.value)
+      // P14: la correzione solo nell'app segue la versione (se la destinazione ne ha gia' una resta quella).
+      mergeDao.repointMetadataCorrection(from.value, to.value)
+      mergeDao.repointBackupItemCurrent(from.value, to.value)
     }
     // 2. Le altre versioni passano al sopravvissuto, con posizioni e metadati.
     plan.movedVersions.forEach { mergeDao.moveVersion(it.id.value, survivor, it.parentId?.value) }
@@ -2256,6 +2555,8 @@ class MediaCatalog(
       "pending_task.version_id",
       "edit_session.version_id",
       "free_space_item.version_id",
+      // P14: le correzioni solo nell'app (Q6 (a)) seguono la versione
+      "metadata_correction.version_id",
     )
 
     /**

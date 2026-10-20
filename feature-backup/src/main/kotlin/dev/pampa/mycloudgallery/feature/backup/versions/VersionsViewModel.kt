@@ -144,6 +144,9 @@ class VersionsViewModel @Inject constructor(
       }
       when (val result = outcome) {
         RestoreOutcome.Queued -> flow.value = VersionsUi.Restored(plan, phoneKeptEdited = keptEdited)
+        // P14: lo scambio sul NAS c'e' (o e' in coda) ma il telefono non e' stato riscritto (permesso negato, scambio non ancora finito, riscrittura
+        // non riuscita e riga rimessa com'era): il foglio dice che sul telefono resta la versione modificata.
+        is RestoreOutcome.PhoneNotRewritten -> flow.value = VersionsUi.Restored(plan, phoneKeptEdited = true)
         // Non si e' fatto niente: il telefono voleva il permesso e non c'e' stato modo di scambiare senza.
         is RestoreOutcome.NeedsPhoneWrite -> load(VersionsStart.LIST, VersionsMessage.PHONE_PERMISSION_MISSING)
         is RestoreOutcome.Rejected -> load(

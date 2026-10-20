@@ -273,12 +273,18 @@ object DiagCodes {
   @JvmField val BACKUP_UNREADABLE = DiagCode("BACKUP_UNREADABLE", setOf("D15", "E-M12"))
   @JvmField val BACKUP_COMMON_COPY_LOST = DiagCode("BACKUP_COMMON_COPY_LOST", setOf("E-B13", "L44"))
   @JvmField val BACKUP_UNEXPECTED = DiagCode("BACKUP_UNEXPECTED", setOf("R1"))
+
+  /** Fase 5B (P14): delle versioni aspettano perche' il file sul NAS e' stato cambiato dal PC (D17, E-E6). */
+  @JvmField val BACKUP_SOURCE_CHANGED = DiagCode("BACKUP_SOURCE_CHANGED", setOf("E-E6"))
   @JvmField val BACKUP_PHONE_STORAGE_LOW = DiagCode("BACKUP_PHONE_STORAGE_LOW", setOf("E-P3"))
   @JvmField val BACKUP_STALE = DiagCode("BACKUP_STALE", setOf("E-P15", "E-P2"))
   @JvmField val BACKUP_WAITING_UNLOCK = DiagCode("BACKUP_WAITING_UNLOCK", setOf("E-P13"))
   @JvmField val BACKUP_PROFILE_INACTIVE = DiagCode("BACKUP_PROFILE_INACTIVE", setOf("E-P19"))
   @JvmField val BACKUP_LAST_ROUND = DiagCode("BACKUP_LAST_ROUND")
   @JvmField val BACKUP_SIMILAR_COPIES = DiagCode("BACKUP_SIMILAR_COPIES")
+
+  /** Fase 5B (P14): i contatori delle integrazioni (selettore, documenti, ricevuti, modifica, condivisioni), solo codici e numeri. */
+  @JvmField val INTEGRATIONS_COUNTERS = DiagCode("INTEGRATIONS_COUNTERS", setOf("C17", "D23", "D24"))
 
   // I codici di `PhoneLibraryDiagnostics` (core-mediastore, P2): stessi id e stessi edge case di
   // `PhoneLibraryDiagCodes`, scritti come letterali perche' questo modulo non dipende da core-mediastore.

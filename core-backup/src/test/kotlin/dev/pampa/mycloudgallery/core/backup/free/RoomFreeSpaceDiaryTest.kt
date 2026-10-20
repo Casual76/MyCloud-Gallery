@@ -89,9 +89,11 @@ class RoomFreeSpaceDiaryTest {
     val rows = db.freeSpaceDao().items(run.id.value)
     assertThat(rows.map { it.state }.toSet()).containsExactly(FreeItemState.VERIFIED.code)
     assertThat(rows.all { it.nasLocationId != null && it.verifiedSize != null && it.verifiedModifiedAt != null }).isTrue()
-    // Cio' che non tengono torna null: la validita' non e' nel diario (il motore la ricorda finche' il processo vive).
-    assertThat(diary.run(run.id)!!.validity).isNull()
-    assertThat(diary.items(run.id).all { it.phone == null && it.checks == null }).isTrue()
+    // P14 (colonne facoltative di P9): il diario e' completo. La validita' (inizio monotono e riavvii), la riga del telefono e le copie rilette.
+    assertThat(diary.run(run.id)!!.validity?.bootCount).isEqualTo(7L)
+    assertThat(diary.run(run.id)!!.validity?.startMonotonicMs).isNotNull()
+    assertThat(diary.items(run.id).all { it.phone != null && it.phoneStamp != null && !it.checks.isNullOrEmpty() }).isTrue()
+    assertThat(diary.items(run.id).count { it.needsGuardian }).isEqualTo(1)
 
     val batch = space.nextBatch(run)!!
     assertThat(bench.batchViolations(batch).filter { "dialogo" !in it }).isEmpty()
@@ -108,8 +110,9 @@ class RoomFreeSpaceDiaryTest {
   }
 
   /**
-   * Dopo la morte vera del processo (database chiuso e riaperto) il giro a meta' non va avanti e le righe nel dialogo restano tracciate. Nome
-   * corto di proposito: Robolectric lo mette nel percorso del database, e su Windows un percorso troppo lungo non si apre.
+   * Dopo la morte vera del processo (database chiuso e riaperto) le righe nel dialogo restano tracciate e, con il diario completo del P14, la
+   * riga del telefono le risolve; un giro a meta' verifica **riprende nello stesso avvio** e scade dopo un riavvio. Nome corto di proposito:
+   * Robolectric lo mette nel percorso del database, e su Windows un percorso troppo lungo non si apre.
    */
   @Test
   fun laMorteVeraDelProcesso() = runBlocking<Unit> {
@@ -129,20 +132,17 @@ class RoomFreeSpaceDiaryTest {
     val second = database(name)
     val diary = RoomFreeSpaceDiary(second, bench.clock)
     val resumed = bench.engine(diary = diary).resume(run, 1.hours)
-    // Nessuna prova possibile senza la riga del telefono nel diario: le tre righe sono "in dubbio" (mai liberate, mai riproposte), per
-    // posizione del telefono, finche' la lettura del telefono non le risolve.
-    assertThat(resumed.isActive).isFalse()
-    assertThat(resumed.freedItems).isEqualTo(0)
-    assertThat(second.freeSpaceDao().items(run.id.value).map { it.state }).containsExactly(
-      FreeItemState.IN_DOUBT.code, FreeItemState.IN_DOUBT.code, FreeItemState.IN_DOUBT.code,
-    )
-    assertThat(diary.handedPhoneLocations()).hasSize(3)
-    // E un piano nuovo non le ripropone.
-    val again = bench.engine(diary = diary).plan(FreeSpaceFilter())
-    assertThat(again.isEmpty).isTrue()
-    assertThat(again.excluded).containsExactly(FreeSpaceExclusion.IN_PROGRESS_OR_ERROR, 3)
+    // P14: la riga del telefono e' nel diario, quindi la prova del telefono si fa subito: la riga tolta da Android e' liberata, le altre due
+    // sono rimaste (mai liberate, mai date per perse). Nessuna riga resta "nel dialogo".
+    assertThat(resumed.freedItems).isEqualTo(1)
+    val states = second.freeSpaceDao().items(run.id.value).map { it.state }
+    assertThat(states.count { it == FreeItemState.FREED.code }).isEqualTo(1)
+    assertThat(states).doesNotContain(FreeItemState.IN_DIALOG.code)
+    assertThat(states.filter { it != FreeItemState.FREED.code }.toSet()).containsAnyOf(FreeItemState.KEPT.code, FreeItemState.IN_DOUBT.code)
+    // La lettura del telefono sa che la riga liberata e' liberata, non persa.
+    assertThat(diary.freedOrHandedPhoneLocations()).isNotEmpty()
 
-    // Un giro a meta' verifica, dopo la morte del processo: scaduto (la validita' non e' nel diario), niente lotti.
+    // Un giro a meta' verifica, dopo la morte del processo, nello stesso avvio: riprende (la validita' e' nel diario) e arriva ai lotti.
     val other = FreeSpaceBench()
     repeat(2) { other.safe() }
     val third = database("free-space-b-${System.nanoTime()}.db")
@@ -152,8 +152,22 @@ class RoomFreeSpaceDiaryTest {
     val half = a.verify(p, TestConfirmations.confirm(p, other.clock.monotonicMs()), Duration.ZERO)
     assertThat(half.state).isEqualTo(FreeSpaceRunState.VERIFYING)
     val b = other.engine(diary = RoomFreeSpaceDiary(third, other.clock))
-    assertThat(b.resume(half, 1.hours).state).isEqualTo(FreeSpaceRunState.EXPIRED)
-    assertThat(b.nextBatch(half)).isNull()
+    val ready = b.resume(half, 1.hours)
+    assertThat(ready.state).isEqualTo(FreeSpaceRunState.READY)
+    assertThat(b.nextBatch(ready)).isNotNull()
+
+    // Dopo un riavvio del telefono (conteggio diverso) un giro a meta' e' scaduto: niente lotti.
+    val after = FreeSpaceBench()
+    repeat(2) { after.safe() }
+    val fourth = database("free-space-c-${System.nanoTime()}.db")
+    fourth.seed(after)
+    val c = after.engine(diary = RoomFreeSpaceDiary(fourth, after.clock))
+    val q = c.plan(FreeSpaceFilter())
+    val stopped = c.verify(q, TestConfirmations.confirm(q, after.clock.monotonicMs()), Duration.ZERO)
+    after.bootCount = 8
+    val d = after.engine(diary = RoomFreeSpaceDiary(fourth, after.clock))
+    assertThat(d.resume(stopped, 1.hours).state).isEqualTo(FreeSpaceRunState.EXPIRED)
+    assertThat(d.nextBatch(stopped)).isNull()
   }
 
   @Test

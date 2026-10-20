@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fase 5B (P14): le parole che :app scrive per le integrazioni e per le voci del backup nel viewer. Mai un dato dell'utente. -->
+<resources>
+  <string name="integrations_area_private">Area privata</string>
+  <string name="integrations_area_common">Area comune</string>
+  <!-- La cartella in cui "Salva sul NAS" propone di mettere i file ricevuti (nome di una cartella sul NAS). -->
+  <string name="integrations_received_folder">Ricevute</string>
+
+  <string name="fiveb_edit_started">Modifica il file e torna qui: salvo la modifica come nuova versione.</string>
+  <string name="fiveb_edit_no_gallery">Galleria Samsung non c’è su questo telefono: scarica il file e modificalo con un’altra app.</string>
+  <string name="fiveb_edit_new_version">Salvata la modifica: è la nuova versione.</string>
+  <string name="fiveb_edit_new_media">L’app ha salvato una copia nuova: la trovi nella Libreria.</string>
+  <string name="fiveb_edit_restored">Ripristinato l’originale.</string>
+  <string name="fiveb_edit_unavailable">Non posso aprire la modifica adesso.</string>
+  <string name="fiveb_edit_not_mine">Questo media è di un altro familiare: non lo modifico.</string>
+  <string name="fiveb_edit_nas_unreachable">Il NAS non risponde: riprova quando sei a casa.</string>
+  <string name="fiveb_edit_phone_full">La memoria del telefono è piena.</string>
+  <string name="fiveb_utility_group">Utilità</string>
+  <string name="fiveb_free_space_title">Libera spazio</string>
+  <string name="fiveb_free_space_subtitle">Togli dal telefono le foto e i video già al sicuro sul NAS</string>
+  <string name="fiveb_delete_started">Messo nel cestino del NAS per 30 giorni.</string>
+</resources>

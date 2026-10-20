@@ -112,7 +112,7 @@ class BackupMenuTarget(
     get() = when (plan?.restore) {
       null, RestoreAvailability.ONLY_ONE_VERSION, RestoreAvailability.ALREADY_ORIGINAL, RestoreAvailability.NOT_MINE, RestoreAvailability.NOT_AVAILABLE -> false
       RestoreAvailability.AVAILABLE, RestoreAvailability.ORIGINAL_NOT_SAFE, RestoreAvailability.NAS_UNREACHABLE, RestoreAvailability.FROZEN,
-      RestoreAvailability.READ_ONLY_AREA,
+      RestoreAvailability.READ_ONLY_AREA, RestoreAvailability.BUSY,
       -> true
     }
 

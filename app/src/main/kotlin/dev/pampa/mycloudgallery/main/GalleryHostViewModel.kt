@@ -11,6 +11,8 @@ import dev.pampa.mycloudgallery.feature.library.library.LibraryTabState
 import dev.pampa.mycloudgallery.feature.viewer.ViewerServices
 import dev.pampa.mycloudgallery.gallery.AppLibraryStates
 import dev.pampa.mycloudgallery.gallery.GalleryGraph
+import dev.pampa.mycloudgallery.backup.FiveBUi
+import java.util.Optional
 import javax.inject.Inject
 import dev.pampa.mycloudgallery.core.model.Location
 import dev.pampa.mycloudgallery.core.model.MediaId
@@ -31,7 +33,11 @@ import kotlinx.coroutines.launch
 class GalleryHostViewModel @Inject constructor(
   private val gallery: GalleryGraph,
   private val states: AppLibraryStates,
+  fiveB: Optional<FiveBUi>,
 ) : ViewModel() {
+
+  /** Fase 5B (P14): i fogli alla radice, "Libera spazio" con la selezione e gli intenti verso le altre app; null senza backup. */
+  val fiveB: FiveBUi? = fiveB.orElse(null)
 
   /** Il viewer delle Raccolte, dei Nascosti e delle griglie filtrate: il grafo vero. */
   val viewerServices: ViewerServices get() = gallery.viewerServices

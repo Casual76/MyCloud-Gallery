@@ -56,6 +56,7 @@ class Fase5ACodeCatalogTest(private val id: String, private val edgeCases: Set<S
       arrayOf("BACKUP_UNREADABLE", setOf("D15", "E-M12")),
       arrayOf("BACKUP_COMMON_COPY_LOST", setOf("E-B13", "L44")),
       arrayOf("BACKUP_UNEXPECTED", setOf("R1")),
+      arrayOf("BACKUP_SOURCE_CHANGED", setOf("E-E6")),
       arrayOf("BACKUP_PHONE_STORAGE_LOW", setOf("E-P3")),
       arrayOf("BACKUP_STALE", setOf("E-P15", "E-P2")),
       arrayOf("BACKUP_WAITING_UNLOCK", setOf("E-P13")),

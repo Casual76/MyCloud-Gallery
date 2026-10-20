@@ -238,4 +238,81 @@ class AppLockControllerTest {
     assertThat(AppLockSettings(AppLockMode.OFF).isEnabled).isFalse()
     assertThat(AppLockSettings(AppLockMode.SYSTEM_CREDENTIAL).isEnabled).isTrue()
   }
+
+  // --- P14: il blocco valutato adesso per le porte d'ingresso (selettore, provider, ricezione) -------------------------------------------
+
+  @Test
+  fun p14_conLaMainActivityInSecondoPianoIlBloccoSiRichiudeAdessoNonSoloAlRitorno() {
+    startUnlocked(AppLockTimeout.AFTER_1_MINUTE)
+    controller.onAppForegrounded()
+    assertThat(controller.isUnlockedNow()).isTrue()
+    controller.onAppBackgrounded()
+    clock.now += 59_000
+    assertThat(controller.isUnlockedNow()).isTrue()
+    // Passato il timeout, con la MainActivity ancora in secondo piano (nessun onAppForegrounded): il cancello e' chiuso subito.
+    clock.now += 1_000
+    assertThat(controller.isUnlockedNow()).isFalse()
+    assertThat(controller.state.value).isEqualTo(AppLockState.LOCKED)
+    // E resta chiuso anche dopo, e per la MainActivity che torna.
+    clock.now += 10_000_000
+    assertThat(controller.isUnlockedNow()).isFalse()
+    controller.onAppForegrounded()
+    assertThat(controller.state.value).isEqualTo(AppLockState.LOCKED)
+  }
+
+  @Test
+  fun p14_conSubitoUnIngressoDaUnAltraAppChiedeSempreLoSblocco() {
+    startUnlocked(AppLockTimeout.IMMEDIATELY)
+    controller.onAppForegrounded()
+    controller.onAppBackgrounded()
+    assertThat(controller.isUnlockedNow()).isFalse()
+  }
+
+  @Test
+  fun p14_unoSbloccoDIngressoValeLaFinestraDiTolleranzaPoiSiRichiude() {
+    startUnlocked(AppLockTimeout.IMMEDIATELY)
+    controller.onAppForegrounded()
+    controller.onAppBackgrounded()
+    assertThat(controller.isUnlockedNow()).isFalse()
+    assertThat(controller.beginAuthentication()).isTrue()
+    controller.endEntryAuthentication(success = true)
+    assertThat(controller.isUnlockedNow()).isTrue()
+    clock.now += AppLockController.ENTRY_GRACE_MS - 1
+    assertThat(controller.isUnlockedNow()).isTrue()
+    clock.now += 1
+    assertThat(controller.isUnlockedNow()).isFalse()
+    // Un orologio che torna indietro richiude (fail closed).
+    assertThat(controller.beginAuthentication()).isTrue()
+    controller.endEntryAuthentication(success = true)
+    clock.now -= 5
+    assertThat(controller.isUnlockedNow()).isFalse()
+  }
+
+  @Test
+  fun p14_entrandoNellAppDopoUnoSbloccoDIngressoValeIlTimeoutDellUtente() {
+    startUnlocked(AppLockTimeout.IMMEDIATELY)
+    controller.onAppForegrounded()
+    controller.onAppBackgrounded()
+    controller.isUnlockedNow()
+    controller.beginAuthentication()
+    controller.endEntryAuthentication(success = true)
+    clock.now += 10_000
+    // La MainActivity torna: con "Subito" il ritorno nell'app chiede lo sblocco (la tolleranza era solo per le altre app).
+    controller.onAppForegrounded()
+    assertThat(controller.state.value).isEqualTo(AppLockState.LOCKED)
+  }
+
+  @Test
+  fun p14_unoSbloccoDIngressoFallitoNonSblocca_eSenzaImpostazioniNienteEntra() {
+    assertThat(controller.isUnlockedNow()).isFalse()
+    startUnlocked(AppLockTimeout.IMMEDIATELY)
+    controller.onAppForegrounded()
+    controller.onAppBackgrounded()
+    controller.isUnlockedNow()
+    assertThat(controller.beginAuthentication()).isTrue()
+    controller.endEntryAuthentication(success = false)
+    assertThat(controller.isUnlockedNow()).isFalse()
+    controller.updateSettings(AppLockSettings(AppLockMode.OFF))
+    assertThat(controller.isUnlockedNow()).isTrue()
+  }
 }

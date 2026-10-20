@@ -30,9 +30,11 @@ enum class NasAreaScope {
 
 /**
  * Un posto in cui il media si trova, per l'elenco del foglio "Elimina…". [writable] falso = sola lettura per l'utente (E-D11). [item] e' la
- * copia del NAS in quel posto (con il timbro visto): con "Ovunque" va nel cestino anche lei, se si puo' scrivere.
+ * copia del NAS in quel posto (con il timbro visto): con "Ovunque" va nel cestino anche lei, se si puo' scrivere. [previousVersion] (Fase 5B,
+ * E-D15): la copia di una versione precedente (in `Versioni/`): va nel cestino con "Ovunque", e il foglio la conta nella riga delle versioni
+ * precedenti invece di elencarla come un'altra area.
  */
-data class NasLocationInfo(val kind: Kind, val writable: Boolean = true, val item: NasItem? = null) {
+data class NasLocationInfo(val kind: Kind, val writable: Boolean = true, val item: NasItem? = null, val previousVersion: Boolean = false) {
   enum class Kind { PHONE, NAS_PRIVATE, NAS_COMMON }
 
   override fun toString(): String = "NasLocationInfo(${kind.name})"

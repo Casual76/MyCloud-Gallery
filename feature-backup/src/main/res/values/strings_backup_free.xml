@@ -52,6 +52,10 @@
   <string name="backup_free_ex_copy_changed_detail">Li lascio sul telefono e rifaccio il backup.</string>
   <string name="backup_free_ex_gone">Non sono più sul telefono</string>
   <string name="backup_free_ex_gone_detail">Sono già stati tolti o spostati.</string>
+  <string name="backup_free_ex_not_mine">Di un altro familiare</string>
+  <string name="backup_free_ex_not_mine_detail">Sono foto e video di un altro account: le libera chi li ha fatti.</string>
+  <string name="backup_free_ex_backup_inactive">Backup non attivo</string>
+  <string name="backup_free_ex_backup_inactive_detail">Senza un backup acceso e la tua area privata non posso sapere se sono al sicuro.</string>
 
   <string name="backup_free_action">Libera spazio</string>
   <string name="backup_free_action_now">Libera subito…</string>

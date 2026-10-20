@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
@@ -447,6 +448,25 @@ internal fun selectionActions(
         enabled = any,
       ),
     )
+    // Fase 5B (P14, D21): "Libera spazio" per i media scelti, solo quelli con una copia sul telefono; la pagina verifica e conferma.
+    if (state.commands.canFreeSpace) {
+      add(
+        GalleryBarAction(
+          Icons.Rounded.CleaningServices,
+          stringResource(R.string.library_action_free_space),
+          {
+            val onPhone = state.commands.onPhone(selected.ids)
+            if (onPhone.isEmpty()) {
+              state.notice = ActionNotice.DeleteNasOnly
+            } else {
+              state.commands.freeSpace(onPhone)
+              grid.stopSelecting()
+            }
+          },
+          enabled = any,
+        ),
+      )
+    }
     if (state.commands.canDeleteFromPhone) {
       add(
         GalleryBarAction(

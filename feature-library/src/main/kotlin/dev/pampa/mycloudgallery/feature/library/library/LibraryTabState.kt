@@ -92,6 +92,12 @@ interface LibraryCommands {
 
   /** Il massimo di elementi che una richiesta di eliminazione accetta (limite di Android). Oltre, la Libreria avvisa. */
   val deleteLimit: Int get() = Int.MAX_VALUE
+
+  /** Fase 5B (P14, D21): "Libera spazio" sulla selezione c'e' (il backup e' legato). Senza, l'azione non compare. */
+  val canFreeSpace: Boolean get() = false
+
+  /** Fase 5B (P14): apre "Libera spazio" per [ids] (la pagina di feature-backup verifica e chiede la conferma; qui niente si toglie). */
+  fun freeSpace(ids: Set<MediaId>) {}
 }
 
 /** Nessuna richiesta: la Libreria vuota della release prima del grafo vero. */

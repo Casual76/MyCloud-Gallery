@@ -153,6 +153,35 @@ class BackupStages(private val graph: AppGraph, private val backup: BackupGraph)
   private fun idle(): BackupStageOutcome =
     BackupStageOutcome(StageOutcome.Finished(StageStats(0, 0L, 0L, Duration.ZERO, resumed = false)), BackupRunResult.nothing(RunStop.COMPLETE))
 
+  /**
+   * D24 (P14): i **file in arrivo** ("Salva sul NAS"): una tappa del motore con il trigger `INCOMING`. Non servono la cartella del dispositivo
+   * ne' la scansione dell'area privata (la cartella l'ha scelta l'utente); il cancello lo guarda il motore a ogni elemento, quello della share
+   * di **destinazione** (D12, R2, D13, congelamento, sola lettura, pausa). Un lavoro dell'utente ([userInitiated], una condivisione grande) non
+   * scavalca la conferma dei dati mobili: le regole la chiedono e il file aspetta il lavoro dopo. Null: il backup non parte.
+   */
+  suspend fun incoming(userInitiated: Boolean = false): BackupStageOutcome? {
+    if (!backup.start()) return null
+    val parts = backup.parts ?: return null
+    val request = if (userInitiated) {
+      WorkRequest.UserInitiated(BackgroundActivity.PHOTO_BACKUP, null, false, writesToNas = true)
+    } else {
+      WorkRequest.Background(BackgroundActivity.PHOTO_BACKUP, writesToNas = true)
+    }
+    val outcome = backup.exclusive(
+      waitFor = if (userInitiated) BackupGraph.USER_EXCLUSIVE_WAIT else BackupGraph.EXCLUSIVE_WAIT,
+      forUser = userInitiated,
+    ) {
+      if (!backup.hasOpenIncoming()) return@exclusive idle()
+      UploadStages.stage(staged(request), parts.engine, BackupKind.PHOTOS, BackupTrigger.INCOMING, yieldTo = if (userInitiated) NEVER else backup::userIsWaiting)
+    } ?: return busy()
+    outcome.last?.let { last ->
+      GalleryLog.d(TAG) { "arrivi: fatti=${last.done} collegati=${last.linked} persi=${last.gone} falliti=${last.failed} aperti=${last.waiting} stop=${last.stoppedBy.code}" }
+    }
+    backup.kick()
+    graph.events.stage(DiagJob.BACKUP_INCOMING, outcome.stage)
+    return outcome
+  }
+
   suspend fun photos(): BackupStageOutcome? = round(BackupKind.PHOTOS, BackupTrigger.SCHEDULED)
 
   suspend fun videos(): BackupStageOutcome? = round(BackupKind.VIDEOS, BackupTrigger.SCHEDULED)

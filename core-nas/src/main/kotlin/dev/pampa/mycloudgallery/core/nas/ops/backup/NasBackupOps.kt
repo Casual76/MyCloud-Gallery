@@ -242,22 +242,53 @@ object VersionPaths {
   /** Il nome della cartella alla radice di ogni share. */
   const val VERSIONS_DIR: String = "Versioni"
 
-  private fun isVersionsName(component: String): Boolean =
-    Normalizer.normalize(component, Normalizer.Form.NFKC).equals(VERSIONS_DIR, ignoreCase = true)
+  /**
+   * D13 (P14): le cartelle delle prove sul campo cominciano con questo prefisso (la radice di scrittura della recinzione del telefono in
+   * debug; il suo nome intero sta solo nella build di debug). Per i file sotto una di queste cartelle **le versioni stanno nella `Versioni/` di
+   * quella cartella** (`<radice di prova>/Versioni/Backup/...`), cosi' la recinzione ("con un account di prova si scrive solo sotto la radice di
+   * prova") resta chiusa anche per le versioni. Per tutti gli altri file `Versioni/` resta alla radice della share (Q2 (a)).
+   */
+  const val FIELD_ROOT_PREFIX: String = "mcg-"
 
-  /** Vero se [path] sta dentro `Versioni/` (non la cartella stessa): anche con maiuscole o forme di compatibilita' diverse, come l'area dell'app. */
-  fun isInVersions(path: SharePath): Boolean = path.components.size > 1 && isVersionsName(path.components[0])
+  private fun normalized(component: String): String = Normalizer.normalize(component, Normalizer.Form.NFKC)
 
-  /** Vero se [path] e' la cartella `Versioni/` stessa. */
-  fun isVersionsRoot(path: SharePath): Boolean = path.components.size == 1 && isVersionsName(path.components[0])
+  private fun isVersionsName(component: String): Boolean = normalized(component).equals(VERSIONS_DIR, ignoreCase = true)
+
+  /** Vero se [component] e' una cartella delle prove sul campo (D13): prefisso [FIELD_ROOT_PREFIX] e almeno un carattere dopo. */
+  fun isFieldRoot(component: String): Boolean {
+    val name = normalized(component)
+    return name.length > FIELD_ROOT_PREFIX.length && name.startsWith(FIELD_ROOT_PREFIX, ignoreCase = true)
+  }
+
+  /** Quante componenti precedono `Versioni/` per [path]: 1 sotto una cartella delle prove sul campo (D13), altrimenti 0. */
+  private fun versionsDepth(components: List<String>): Int = if (components.size > 1 && isFieldRoot(components[0])) 1 else 0
 
   /**
-   * Il percorso in `Versioni/` che rispecchia [path] (un percorso di media fuori da `Versioni/`): `Versioni/` piu' le sue componenti. La
-   * cartella di una versione e' quella del file che archivia; il nome ("(originale)", "(versione del ...)") lo sceglie P8.
+   * Vero se [path] sta dentro `Versioni/` (non la cartella stessa): anche con maiuscole o forme di compatibilita' diverse, come l'area dell'app.
+   * `Versioni/` alla radice della share, o (D13) alla radice di una cartella delle prove sul campo; mai piu' in profondita'.
+   */
+  fun isInVersions(path: SharePath): Boolean {
+    val c = path.components
+    if (c.size > 1 && isVersionsName(c[0])) return true
+    return c.size > 2 && isFieldRoot(c[0]) && isVersionsName(c[1])
+  }
+
+  /** Vero se [path] e' una cartella `Versioni/` stessa (alla radice o, D13, in una cartella delle prove sul campo). */
+  fun isVersionsRoot(path: SharePath): Boolean {
+    val c = path.components
+    return (c.size == 1 && isVersionsName(c[0])) || (c.size == 2 && isFieldRoot(c[0]) && isVersionsName(c[1]))
+  }
+
+  /**
+   * Il percorso in `Versioni/` che rispecchia [path] (un percorso di media fuori da `Versioni/`): `Versioni/` piu' le sue componenti, oppure,
+   * per un file sotto una cartella delle prove sul campo (D13), `<cartella>/Versioni/` piu' le componenti che seguono. La cartella di una
+   * versione e' quella del file che archivia; il nome ("(originale)", "(versione del ...)") lo sceglie P8.
    */
   fun mirrorOf(path: SharePath): SharePath {
     requireMediaOutsideVersions(path)
-    return SharePath.of(VERSIONS_DIR, *path.components.toTypedArray())
+    val c = path.components
+    val depth = versionsDepth(c)
+    return SharePath.of(*(c.take(depth) + VERSIONS_DIR + c.drop(depth)).toTypedArray())
   }
 
   /** [NasBackupOps.archiveVersion]: da un file di media fuori da `Versioni/` a un percorso sotto `Versioni/`. */

@@ -212,6 +212,27 @@ cancello AppBackupGate      -> famiglia pronta, area privata, share di prova (D1
   vedono in una cella sola, con "Mostra come principale" e "Separa" nel pannello del viewer.
 - **Diagnostica e riepilogo giornaliero**: codici del backup (`BACKUP_*`), soli numeri; il NAS continua ad avere una sola notifica al giorno.
 
+**La 5B nell'app (P14).** Dentro `BackupGraph` nasce `backup/FiveBGraph` (versioni e correzioni, "Libera spazio", file in arrivo), con gli
+stessi cancelli; le integrazioni hanno il loro `integrations/IntegrationsGraph`, installato da `MyCloudGalleryApp.onCreate` prima di
+qualunque richiesta di un'altra app:
+
+```
+lettura del telefono -> versioni del telefono pianificate PRIMA del giro della 5A, nella stessa tappa (VersionedBackupEngine)
+                     -> "Libera spazio": esiti in dubbio risolti (settle); un ritorno a una versione nota -> scambio sul NAS
+"Salva sul NAS"      -> incoming/ -> elemento INCOMING del diario -> caricamento sicuro, rilettura, collegamento -> copia locale tolta
+Versioni / Correggi / "Elimina solo dal telefono" -> fogli alla radice della galleria (main/FiveBHostEffect), conferme solo dal tocco
+selettore, provider, ricezione -> EntryGate: famiglia pronta e blocco dell'app valutato ADESSO (isUnlockedNow)
+```
+
+- **Porte**: `di/FiveBModule.kt` lega `FreeSpace`, `VersionKeeper`, `Corrections`, `PendingTasks`, `BackupClock`, i dialoghi di sistema
+  (con la recinzione D13 riga per riga), "Elimina solo dal telefono", "Da decidere", "Elimina le intermedie…" e le voci del backup nel viewer
+  (`backup/FiveBUi.kt`); le facciate vanno ai servizi veri appena il backup parte (`FiveBButtonsTest`: nessuna e' un null-object).
+- **Navigazione**: "Libera spazio" in Raccolte → Utilita' e nella selezione della Libreria; "Da decidere" nella pagina Backup.
+- **D12/R2/D13** valgono anche qui: le versioni con un account di prova stanno sotto `mcg-campo/Versioni/`, i file in arrivo passano dal
+  cancello della share di **destinazione**; dalla 5B non si scrive mai nell'area comune (correzioni e versioni si fermano con un avviso).
+- **Lavori**: i file in arrivo con `IncomingUploadWorker` (o, per una condivisione grande, `BackupJobService` con l'id `1_000_104`).
+- **Prove**: `FiveBIntegrationTest` (sei percorsi interi sul grafo vero, finti solo NAS e telefono), `FiveBButtonsTest`, `AppEntryGateTest`.
+
 Il Fluid Engine e' in `engine/` (submodule, agganciato al tag **engine-2.13.0**); entrano nel build solo
 `engine-foundation` e `engine-ui`. Per aggiungerne altri: `engine\tools\engine-install.ps1 -AppRoot . -Modules
 engine-ui,engine-storage` (e rigenerare i checksum).

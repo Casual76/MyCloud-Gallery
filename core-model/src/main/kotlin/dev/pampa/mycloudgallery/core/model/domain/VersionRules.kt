@@ -58,6 +58,29 @@ object VersionRules {
     return plan(media, version, listOf(moved), version.id)
   }
 
+  /**
+   * Fase 5B (P14, E-E3): il risultato di un editor esterno su un media solo-NAS, gia' tenuto come file preparato, diventa una versione
+   * [VersionKind.EDITED] figlia di [parentId] (una versione del media) e la corrente. **Nessun posto la contiene ancora**: il file lo pubblica
+   * il lavoro `VERSION` del backup, che poi attacca la copia verificata. Le posizioni di prima restano sulle versioni di prima.
+   */
+  fun edited(
+    media: Media,
+    parentId: VersionId,
+    fingerprint: Fingerprint,
+    nowMillis: Long,
+    newVersionId: VersionId = VersionId.random(),
+  ): VersionPlan {
+    media.version(parentId)
+    val version = MediaVersion(
+      id = newVersionId,
+      kind = VersionKind.EDITED,
+      parentId = parentId,
+      fingerprint = fingerprint,
+      createdAtMillis = nowMillis,
+    )
+    return plan(media, version, emptyList(), version.id)
+  }
+
   /** Il file in [locationId] e' tornato ai byte di [versionId], gia' nota (E-E2): nessuna versione nuova. */
   fun revertedAt(
     media: Media,

@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.core.backup.versions
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.backup.contract.BackupGateState
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneConfirmationCheck
+import dev.pampa.mycloudgallery.core.backup.contract.PhoneKeptReason
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneWriteGrant
 import dev.pampa.mycloudgallery.core.backup.contract.RestoreAvailability
 import dev.pampa.mycloudgallery.core.backup.contract.RestoreOutcome
@@ -86,7 +87,8 @@ class VersionKeeperTest {
     val plan = s.keeper.plan(s.seed.mediaId)
     // L'utente ha detto no al dialogo di sistema: un permesso che non copre la riga.
     val outcome = s.keeper.restoreOriginal(s.seed.mediaId, TestConfirmations.confirm(plan, s.w.clock.monotonic), PhoneWriteGrant(emptySet()))
-    assertThat(outcome).isEqualTo(RestoreOutcome.Queued)
+    // P14: la risposta dice che lo scambio e' fatto e il telefono no (contratto di `PhoneWriteGrant`).
+    assertThat(outcome).isEqualTo(RestoreOutcome.PhoneNotRewritten(PhoneKeptReason.PERMISSION_DENIED))
     assertThat(s.w.sha(share, s.seed.usualPath.value)).isEqualTo(Sha256.of(s.seed.content))
     assertThat(s.w.phone.sha256(s.seed.phoneId!!)).isEqualTo(s.v1Bytes)
     assertThat(s.rewriter.replaced).isEmpty()

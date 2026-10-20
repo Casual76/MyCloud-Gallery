@@ -44,17 +44,32 @@ class NetworkSettler(
  * Le regole di una tappa con l'attesa della rete prima della **prima** valutazione ([NetworkSettler.settle], una volta per tappa): il
  * punto comune a tutti i lavori a tappe, cosi' nessuno parte alla cieca in un processo freddo (RE-3). Le valutazioni a lavoro iniziato
  * (`running = true`) passano dritte.
+ *
+ * [ready] (D-2, prove sul campo) si chiama una volta, quando la prima valutazione dice «vai» e prima del primo lotto: in un processo freddo
+ * il lavoro partiva prima che qualcuno avesse aperto la sessione del NAS, l'ora del NAS non aveva ancora un'ancora e la scansione si
+ * fermava con un errore (il lavoro "adesso" era consumato). Solo dopo il «vai»: se le regole dicono di aspettare non si apre niente.
  */
-class SettledStageRules(private val inner: StageRules, private val settle: suspend () -> Unit) : StageRules {
+class SettledStageRules(
+  private val inner: StageRules,
+  private val settle: suspend () -> Unit,
+  private val ready: suspend () -> Unit = {},
+) : StageRules {
 
   private var settled = false
+
+  private var readied = false
 
   override suspend fun decide(request: WorkRequest, running: Boolean): RuleDecision {
     if (!running && !settled) {
       settled = true
       settle()
     }
-    return inner.decide(request, running)
+    val decision = inner.decide(request, running)
+    if (!running && !readied && decision is RuleDecision.Run) {
+      readied = true
+      ready()
+    }
+    return decision
   }
 
   override suspend fun isPluggedIn(): Boolean = inner.isPluggedIn()

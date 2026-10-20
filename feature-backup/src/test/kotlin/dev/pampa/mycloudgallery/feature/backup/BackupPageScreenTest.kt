@@ -13,15 +13,21 @@ import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.backup.contract.BackupAction
 import dev.pampa.mycloudgallery.core.backup.contract.BackupKind
 import dev.pampa.mycloudgallery.core.backup.contract.BackupProblemCode
+import dev.pampa.mycloudgallery.core.backup.contract.BackupSource
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSetupStep
 import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
 import dev.pampa.mycloudgallery.core.backup.contract.BackupTrigger
+import dev.pampa.mycloudgallery.core.backup.contract.SourceStatus
 import dev.pampa.mycloudgallery.core.backup.contract.StopBy
 import dev.pampa.mycloudgallery.core.backup.contract.WaitReason
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupScreen
 import dev.pampa.mycloudgallery.feature.backup.page.BackupPageActions
 import dev.pampa.mycloudgallery.feature.backup.page.BackupPageScreen
 import dev.pampa.mycloudgallery.feature.backup.page.BackupPageUi
+import dev.pampa.mycloudgallery.feature.backup.page.SourceState
+import dev.pampa.mycloudgallery.feature.backup.page.SourcesHalt
+import dev.pampa.mycloudgallery.feature.backup.page.sourceState
+import dev.pampa.mycloudgallery.feature.backup.page.sourcesHalt
 import dev.pampa.mycloudgallery.feature.backup.page.otherProblems
 import dev.pampa.mycloudgallery.feature.backup.testing.BackupSamples
 import dev.pampa.mycloudgallery.feature.backup.testing.RecordingBackupActions
@@ -245,6 +251,45 @@ class BackupPageScreenTest : ComposeBackupTest() {
     composeRule.onNodeWithText("Telegram").assertExists()
     composeRule.onNodeWithText("Non salvata").assertExists()
     composeRule.onNodeWithText("Al sicuro").assertExists()
+  }
+
+  /**
+   * D-4 (prove sul campo): con il backup in prova (D12) le righe dicevano "In corso · 0 al sicuro · 957 in coda", ma il backup non partira' mai.
+   * Ora dicono che e' fermo e perche'; con il backup che puo' lavorare la stessa riga e' di nuovo "In corso".
+   */
+  @Test
+  fun conIlBackupInProvaLeSorgentiDiconoCheEFermoENonInCorso() {
+    val waiting = listOf(SourceStatus(BackupSource.Camera, active = true, media = 957, safe = 0, queued = 957, problems = emptyMap()))
+    start(BackupStatus.TestOnly, sources = waiting)
+    composeRule.onNodeWithText("In corso").assertDoesNotExist()
+    composeRule.onNodeWithText("Fermo").assertExists()
+    composeRule.onNodeWithText("957 media · 0 al sicuro · 957 da salvare · fermo: il backup è in prova e scrive solo nelle share di prova").assertExists()
+    composeRule.onNodeWithText("in coda", substring = true).assertDoesNotExist()
+
+    composeRule.runOnIdle { ui.value = page(BackupStatus.Running(BackupKind.PHOTOS, 1, 957, 10, 1_000, null, BackupTrigger.USER_NOW), waiting) }
+    composeRule.waitForIdle()
+    composeRule.onNodeWithText("In corso").assertExists()
+    composeRule.onNodeWithText("957 media · 0 al sicuro · 957 in coda").assertExists()
+  }
+
+  /** D-4: quali stati fermano tutte le sorgenti; "Al sicuro", i problemi e le sorgenti spente restano quello che sono. */
+  @Test
+  fun lePilloleDelleSorgentiSeguonoLoStatoDelBackup() {
+    assertThat(sourcesHalt(BackupStatus.TestOnly)).isEqualTo(SourcesHalt.TEST_ONLY)
+    assertThat(sourcesHalt(BackupStatus.NotConfigured(setOf(BackupSetupStep.DEVICE_FOLDER)))).isEqualTo(SourcesHalt.NOT_CONFIGURED)
+    assertThat(sourcesHalt(BackupStatus.Stopped(StopBy.USER))).isEqualTo(SourcesHalt.PAUSED)
+    assertThat(sourcesHalt(BackupStatus.FirstBackupReady(dev.pampa.mycloudgallery.core.backup.contract.BackupSummary.EMPTY))).isEqualTo(SourcesHalt.FIRST_BACKUP)
+    assertThat(sourcesHalt(BackupStatus.Stopped(StopBy.SYSTEM))).isNull()
+    assertThat(sourcesHalt(BackupStatus.Waiting(3, 30, WaitReason.WIFI))).isNull()
+    assertThat(sourcesHalt(BackupStatus.UpToDate(1, null))).isNull()
+
+    fun row(safe: Int, queued: Int, active: Boolean = true, problems: Map<BackupProblemCode, Int> = emptyMap()) =
+      SourceStatus(BackupSource.Camera, active, media = 10, safe = safe, queued = queued, problems = problems)
+    assertThat(sourceState(row(0, 10), 0, SourcesHalt.TEST_ONLY)).isEqualTo(SourceState.Halted)
+    assertThat(sourceState(row(0, 10), 0, null)).isEqualTo(SourceState.Working)
+    assertThat(sourceState(row(10, 0), 0, SourcesHalt.TEST_ONLY)).isEqualTo(SourceState.Safe)
+    assertThat(sourceState(row(5, 5, problems = mapOf(BackupProblemCode.LOST_BEFORE_BACKUP to 1)), 1, SourcesHalt.TEST_ONLY)).isEqualTo(SourceState.Problem)
+    assertThat(sourceState(row(0, 10, active = false), 0, SourcesHalt.TEST_ONLY)).isEqualTo(SourceState.Off)
   }
 
   @Test

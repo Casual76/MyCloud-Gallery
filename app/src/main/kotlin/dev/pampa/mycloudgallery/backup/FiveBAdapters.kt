@@ -219,6 +219,10 @@ class CatalogFreeSpaceCatalog(private val catalog: MediaCatalog, private val bac
     if (locations.isNotEmpty()) catalog.markPhoneLocationsVanished(locations)
   }
 
+  override suspend fun freedRowsFromPhone(rows: Map<LocationId, Long?>) {
+    if (rows.isNotEmpty()) catalog.markPhoneRowsVanished(rows)
+  }
+
   /** Giorno e ordine gia' letti dalla pagina del catalogo. */
   private class Known(val localDay: Int?, val sortTime: Long)
 

@@ -90,6 +90,19 @@ class ProbeMediaProvider : ContentProvider() {
     db.update("files", ContentValues().apply { put("is_trashed", 0); putNull("date_expires"); put("generation_modified", ++generation) }, "_id = ?", arrayOf(id.toString()))
   }
 
+  /**
+   * D-3: il cestino di sistema su One UI (`createTrashRequest` confermato) sposta il file nel Cestino di Galleria: la riga resta con lo stesso
+   * `_ID`, in un'altra cartella ([path]) e con il tipo di media [mediaType] (0 = non media), non cestinata. Con [path] di prova la riga torna.
+   */
+  fun moveRow(id: Long, path: String, mediaType: Int) {
+    db.update(
+      "files",
+      ContentValues().apply { put("relative_path", path); put("media_type", mediaType); put("generation_modified", ++generation) },
+      "_id = ?",
+      arrayOf(id.toString()),
+    )
+  }
+
   /** Samsung "cestina": la riga sparisce dal MediaStore. */
   fun vanishRow(id: Long) {
     db.delete("files", "_id = ?", arrayOf(id.toString()))

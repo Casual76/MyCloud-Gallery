@@ -178,4 +178,21 @@ class FileNameAndSourceTest {
     assertThat(source("DCIM/Camera/", "x.jpg", owner = "com.whatsapp").source).isEqualTo(MediaSource.WHATSAPP)
     assertThat(source("Download/Quick Share/", "IMG-20240312-WA0001.jpg").source).isEqualTo(MediaSource.WHATSAPP)
   }
+
+  /**
+   * O-2 (prove sul campo): le cartelle che hanno il loro interruttore nel backup si riconoscono dal percorso, non dal nome del file. Uno
+   * "Screenshot_….png" dentro `DCIM/mcg-prova/` e' uno screenshot, ma la sua cartella resta una cartella che l'utente puo' scegliere.
+   */
+  @Test
+  fun leCartelleDellaFotocameraEDegliScreenshotSiRiconosconoDalPercorso() {
+    assertThat(SourceClassifier.folderOwner("DCIM/Camera/")).isEqualTo(MediaSource.CAMERA)
+    assertThat(SourceClassifier.folderOwner("/dcim/camera/sottocartella")).isEqualTo(MediaSource.CAMERA)
+    assertThat(SourceClassifier.folderOwner("Pictures/Screenshots/")).isEqualTo(MediaSource.SCREENSHOT)
+    assertThat(SourceClassifier.folderOwner("DCIM/Screenshots/")).isEqualTo(MediaSource.SCREENSHOT)
+    assertThat(SourceClassifier.folderOwner("Movies/Screen recordings/")).isEqualTo(MediaSource.SCREENSHOT)
+    assertThat(SourceClassifier.folderOwner("DCIM/mcg-prova/")).isNull()
+    assertThat(SourceClassifier.folderOwner("Pictures/mcg-prova/")).isNull()
+    assertThat(SourceClassifier.folderOwner("DCIM/CameraRoll/")).isNull()
+    assertThat(source("DCIM/mcg-prova/", "Screenshot_20240312_101530_Chrome.png").source).isEqualTo(MediaSource.SCREENSHOT)
+  }
 }

@@ -53,6 +53,7 @@ import dev.pampa.mycloudgallery.core.nas.breaker.DataStoreBreakerStore
 import dev.pampa.mycloudgallery.core.nas.contract.NasAccount
 import dev.pampa.mycloudgallery.core.nas.contract.NasConnState
 import dev.pampa.mycloudgallery.core.nas.contract.NasCredentialSource
+import dev.pampa.mycloudgallery.core.nas.contract.errorOrNull
 import dev.pampa.mycloudgallery.core.nas.fs.SmbNasHousekeeping
 import dev.pampa.mycloudgallery.core.nas.fs.SmbShareProbe
 import dev.pampa.mycloudgallery.core.nas.session.SessionNasClock
@@ -292,6 +293,8 @@ class AppGraph(
     previousData = AppPreviousAccountData(localEraser, this),
     // "Configura di nuovo": con la galleria gia' partita in questo processo si riparte da uno nuovo, come per l'azzeramento (ON-11).
     afterStartOver = { if (galleryMayRun()) restart.restart() },
+    // Passo 4: le share escluse dalla recinzione delle prove (D33, solo debug) si dicono "escluse per l'account di prova", non "accesso negato".
+    shareGuard = shareGuard,
   )
   val folderSurvey = DefaultFolderSurvey({ share -> session.browser(share) })
   val coordinator = DefaultOnboardingCoordinator(onboardingStore, onboardingPorts, folderSurvey, scope)
@@ -360,8 +363,23 @@ class AppGraph(
    */
   fun stageRules(): StageRules = settled(EngineStageRules(rulesEngine, stateProvider))
 
-  /** Le [rules] date, con l'attesa della rete prima della prima valutazione. */
-  fun settled(rules: StageRules): StageRules = SettledStageRules(rules) { networkSettler.settle() }
+  /** Le [rules] date, con l'attesa della rete prima della prima valutazione e l'ora del NAS pronta prima del primo lotto (D-2). */
+  fun settled(rules: StageRules): StageRules = SettledStageRules(rules, settle = { networkSettler.settle() }, ready = { readyNasClock() })
+
+  /**
+   * D-2 (prove sul campo, blocco A): dopo un avvio a freddo la scansione del NAS partiva 180 ms prima che la sessione fosse pronta, l'ora del
+   * NAS non aveva un'ancora e il lavoro "adesso" finiva consumato; ripartiva solo al ritorno in primo piano o dopo 6 ore. Qui, quando le regole
+   * di una tappa hanno detto «vai», si apre la sessione (o si aspetta quella che qualcun altro sta aprendo: la connessione e' a volo unico) con
+   * tutti i controlli di sempre, e il primo lotto trova l'ora del NAS. Con un'ancora fresca o una sessione aperta non costa niente.
+   *
+   * Un errore vero resta quello che era: password rifiutata o interruttore aperto (nessuna autenticazione nuova, §3.3), NAS spento, percorso
+   * negato. Nessun nuovo tentativo qui: la tappa parte comunque e incontra lo stesso errore, come prima.
+   */
+  private suspend fun readyNasClock() {
+    if (account.value == null) return
+    val error = session.ensureFreshClock().errorOrNull() ?: return
+    GalleryLog.d(TAG) { "ora del NAS non pronta prima della tappa: ${error.javaClass.simpleName}" }
+  }
 
   /**
    * Cio' che il grafo del NAS nella Libreria (Fase 4A, `nas/NasGraph`) riceve da qui: sessione, ora del NAS, fiducia,

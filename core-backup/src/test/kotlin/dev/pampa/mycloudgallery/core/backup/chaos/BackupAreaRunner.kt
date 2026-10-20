@@ -18,6 +18,7 @@ import dev.pampa.mycloudgallery.core.nas.ops.TempFinish
 import dev.pampa.mycloudgallery.core.nas.ops.backup.NasBackupOps
 import dev.pampa.mycloudgallery.core.nas.ops.backup.NasBackupOpsFactory
 import dev.pampa.mycloudgallery.core.nas.ops.backup.NasBackupPaths
+import dev.pampa.mycloudgallery.core.nas.ops.backup.VersionPaths
 import dev.pampa.mycloudgallery.core.nas.session.MonotonicClock
 import dev.pampa.mycloudgallery.core.nas.session.SmbNasSessionManager
 import dev.pampa.mycloudgallery.core.nas.smb.SmbTransport
@@ -420,6 +421,7 @@ object BackupAreaGate {
  * phone=<sha256>|<byte>|<etichetta>                                    (un file del telefono)
  * pre=<sha256>|<share>|<percorso>                                      (un file gia' presente in Backup/ prima del primo backup)
  * edit=<sha256 vecchio>|<sha256 nuovo>|<etichetta>                     (5B: un file del telefono modificato dopo il primo backup, come Samsung "Salva")
+ * notmedia=<sha256>|<byte>|<etichetta>                                 (O-1: un file finto del telefono, non un media: E-M12, il backup NON lo carica)
  * ```
  */
 class BackupAreaManifest(
@@ -430,6 +432,11 @@ class BackupAreaManifest(
   val phone: List<PhoneFile>,
   val pre: List<Pre>,
   val edits: List<Edit> = emptyList(),
+  /**
+   * O-1 delle prove sul campo: i fixture finti di `mcg-prova` (`casuali.png`, `testo.jpg`, `video-falso.mp4`). Non sono media (E-M12): l'app li
+   * ignora e li segnala, il backup non li carica. Sul NAS devono **mancare**: la loro presenza e' un errore, la loro assenza no.
+   */
+  val notMedia: List<PhoneFile> = emptyList(),
 ) {
   class PhoneFile(val sha: Sha256, val size: Long, val label: String)
 
@@ -452,6 +459,7 @@ class BackupAreaManifest(
     phone.forEach { appendLine("phone=${it.sha}|${it.size}|${it.label}") }
     pre.forEach { appendLine("pre=${it.sha}|${it.share}|${it.path}") }
     edits.forEach { appendLine("edit=${it.old}|${it.new}|${it.label}") }
+    notMedia.forEach { appendLine("notmedia=${it.sha}|${it.size}|${it.label}") }
   }
 
   companion object {
@@ -465,6 +473,7 @@ class BackupAreaManifest(
       val phone = ArrayList<PhoneFile>()
       val pre = ArrayList<Pre>()
       val edits = ArrayList<Edit>()
+      val notMedia = ArrayList<PhoneFile>()
       for ((number, raw) in lines.withIndex()) {
         val line = raw.trim()
         if (line.isEmpty() || line.startsWith("#")) continue
@@ -495,11 +504,15 @@ class BackupAreaManifest(
             if (p.size < 3) bad()
             edits += Edit(Sha256.parse(p[0]), Sha256.parse(p[1]), p.drop(2).joinToString("|"))
           }
+          "notmedia" -> {
+            if (p.size < 3) bad()
+            notMedia += PhoneFile(Sha256.parse(p[0]), p[1].toLongOrNull() ?: bad(), p.drop(2).joinToString("|"))
+          }
           else -> bad()
         }
       }
       if (dest.isEmpty()) throw IllegalArgumentException("manifesto senza 'dest'")
-      return BackupAreaManifest(run ?: throw IllegalArgumentException("manifesto senza 'run'"), device, dest, app.ifEmpty { dest }, phone, pre, edits)
+      return BackupAreaManifest(run ?: throw IllegalArgumentException("manifesto senza 'run'"), device, dest, app.ifEmpty { dest }, phone, pre, edits, notMedia)
     }
   }
 }
@@ -547,11 +560,13 @@ object BackupAreaVerifier {
       bytes += scan.bytesHashed
       scan.problems.forEach { add(Invariant.NAS_READS, it) }
     }
-    // 5B: le versioni stanno in `Versioni/` alla radice della share (Q2 (a)): archiviate, mai tolte. Cartella che puo' non esserci ancora.
+    // 5B: le versioni stanno dove le mette l'app (`VersionPaths.mirrorOf`): `Versioni/` alla radice della share (Q2 (a)) o, per una destinazione
+    // sotto una cartella delle prove sul campo (D13, `mcg-campo`), nella `Versioni/` di quella cartella. Archiviate, mai tolte. Cartella che puo'
+    // non esserci ancora. Prima si guardava sempre la radice della share: sul telefono l'invariante 13 era rosso senza un difetto.
     val versions = ArrayList<NasFileFact>()
     if (manifest.edits.isNotEmpty()) {
-      for ((share, _) in manifest.dest) {
-        val scan = BackupNasScanner(reader, listOf(ScanRoot(share, VERSIONS_ROOT))).scan(allowCache = false)
+      for ((share, root) in manifest.dest.map { (share, dir) -> share to versionsRootOf(dir) }.distinct()) {
+        val scan = BackupNasScanner(reader, listOf(ScanRoot(share, root))).scan(allowCache = false)
         versions += scan.files
         hashed += scan.filesHashed
         bytes += scan.bytesHashed
@@ -578,10 +593,14 @@ object BackupAreaVerifier {
       if (now == null) add(Invariant.REPLACED, "un file che c'era prima del backup non c'e' piu'")
       else if (now.sha != p.sha) add(Invariant.REPLACED, "un file che c'era prima del backup ha altri byte")
     }
+    // O-1: i file finti del telefono (non media, E-M12) non vanno sul NAS. Si dicono per quello che sono, non come "file a meta'".
+    val notMediaShas = manifest.notMedia.map { it.sha }.toSet() - phoneShas
+    val notMediaOnNas = (fresh + versions).count { it.sha in notMediaShas }
+    if (notMediaOnNas > 0) add(Invariant.OUT_OF_PLACE, "$notMediaOnNas file finti del telefono (non media, E-M12) sono sul NAS: il backup non li deve caricare")
     // 1. Nessun file a meta': ogni file nuovo ha i byte di un file del telefono.
-    for (f in fresh) if (f.sha !in phoneShas) add(Invariant.HALF_FILE, "un file in Backup/ con byte che non sono di nessun file del telefono")
+    for (f in fresh) if (f.sha !in phoneShas && f.sha !in notMediaShas) add(Invariant.HALF_FILE, "un file in Backup/ con byte che non sono di nessun file del telefono")
     // Dalla 5B anche in `Versioni/` (archiviati: gli originali e le modifiche) ci sono solo byte che il telefono ha avuto.
-    for (f in versions) if (f.sha !in phoneShas && f.sha !in preShas) add(Invariant.HALF_FILE, "un file in Versioni/ con byte che non sono di nessun file del telefono")
+    for (f in versions) if (f.sha !in phoneShas && f.sha !in preShas && f.sha !in notMediaShas) add(Invariant.HALF_FILE, "un file in Versioni/ con byte che non sono di nessun file del telefono")
     // 2. Nessun doppione: un file del telefono compare una volta sola (anche contando quelli che c'erano gia').
     val count = HashMap<Sha256, Int>()
     visible.forEach { count.merge(it.sha, 1, Int::plus) }
@@ -623,6 +642,14 @@ object BackupAreaVerifier {
 
   private val BACKUP_TEMP = Regex("^[A-Za-z0-9]{26}-bk-[A-Za-z0-9-]+$")
 
-  /** `Versioni/` alla radice della share (Q2 (a)). */
-  private val VERSIONS_ROOT: SharePath = SharePath.of("Versioni")
+  /**
+   * La cartella `Versioni/` dove l'app archivia le versioni dei file sotto `Backup/` della destinazione [dir] (null = radice della share): la
+   * stessa regola dell'app, `VersionPaths.mirrorOf`. `Versioni/` alla radice della share (Q2 (a)); con la destinazione sotto una cartella delle
+   * prove sul campo (D13: `mcg-campo`) la `Versioni/` di quella cartella, perche' la recinzione resta chiusa anche per le versioni.
+   */
+  internal fun versionsRootOf(dir: SharePath?): SharePath {
+    val sample = ((dir?.child("Backup")) ?: SharePath.of("Backup")).child("foto.jpg")
+    val mirror = VersionPaths.mirrorOf(sample).components
+    return SharePath.of(*mirror.take(mirror.indexOf(VersionPaths.VERSIONS_DIR) + 1).toTypedArray())
+  }
 }

@@ -26,6 +26,7 @@ import dev.pampa.mycloudgallery.core.nas.contract.NegotiationFacts
 import dev.pampa.mycloudgallery.core.nas.contract.ShareAccess
 import dev.pampa.mycloudgallery.core.nas.contract.SmbDialect
 import dev.pampa.mycloudgallery.core.nas.contract.Stage
+import dev.pampa.mycloudgallery.core.nas.fence.ShareFence
 import dev.pampa.mycloudgallery.core.network.contract.DenyReason
 import dev.pampa.mycloudgallery.core.network.contract.LocalNetworkAccess
 import dev.pampa.mycloudgallery.core.network.testing.Snapshots
@@ -536,6 +537,53 @@ class OnboardingCoordinatorTest {
     assertThat(byName.getValue("Timeout").access).isEqualTo(NasResult.Err(NasError.Timeout))
   }
 
+  /**
+   * Prove sul campo, punto 8: con l'account di prova `test` la recinzione delle prove (D33, `ShareFence` in debug) esclude `Public` e `NAS`. La
+   * riga diceva "Accesso negato" mentre la dashboard del NAS mostrava l'accesso consentito. Ora la share e' esclusa (non si prova nemmeno) e le
+   * share di prova si propongono da sole, subito dopo quella dell'account: `test-comune` non si scrive piu' a mano.
+   */
+  @Test
+  fun conUnAccountDiProvaLeShareDiProvaSiPropongonoELeAltreSonoEscluse() = runTest(UnconfinedTestDispatcher()) {
+    val f = OnboardingFixture(this)
+    f.env.shareGuard = ShareFence
+    f.env.probe.access = mapOf(
+      "test" to NasResult.Ok(ShareAccess.READ_WRITE),
+      "test-comune" to NasResult.Ok(ShareAccess.READ_WRITE),
+      "test2" to NasResult.Ok(ShareAccess.DENIED),
+      // Se si provassero, risponderebbero "si scrive": l'esclusione e' della recinzione, non del NAS.
+      "Public" to NasResult.Ok(ShareAccess.READ_WRITE),
+      "NAS" to NasResult.Ok(ShareAccess.READ_WRITE),
+    )
+    val c = f.coordinator()
+    f.runFounderUntil(c, OnboardingStep.ACCOUNT)
+    expectAdvanced(c.submit(credentials(user = "test")))
+
+    val areas = c.proposeAreas(extra = listOf("Archivio"))
+    assertThat(areas.map { it.share }).containsExactly("test", "test-comune", "test2", "Public", "NAS", "Archivio").inOrder()
+    val byName = areas.associateBy { it.share }
+    assertThat(areas.filter { it.fenced }.map { it.share }).containsExactly("Public", "NAS", "Archivio")
+    assertThat(byName.getValue("Public").access).isEqualTo(NasResult.Ok(ShareAccess.DENIED))
+    assertThat(byName.getValue("Public").isPublic).isTrue()
+    // Le share di prova si provano davvero: `test2` e' di un altro account e il NAS dice "accesso negato" (quello vero).
+    assertThat(byName.getValue("test-comune").access).isEqualTo(NasResult.Ok(ShareAccess.READ_WRITE))
+    assertThat(byName.getValue("test2").fenced).isFalse()
+    assertThat(byName.getValue("test2").access).isEqualTo(NasResult.Ok(ShareAccess.DENIED))
+    // E si va avanti con le due share di prova, senza scriverne il nome.
+    assertThat(expectAdvanced(c.submit(StepInput.Areas("test-comune", "test"))).next).isEqualTo(OnboardingStep.FOLDERS)
+  }
+
+  /** Punto 8: con un account vero la recinzione non tocca niente e le share di prova non si propongono. */
+  @Test
+  fun conUnAccountVeroLeAreeProposteNonCambiano() = runTest(UnconfinedTestDispatcher()) {
+    val f = OnboardingFixture(this)
+    f.env.shareGuard = ShareFence
+    val c = f.atAreasStep()
+    val areas = c.proposeAreas()
+    assertThat(areas.map { it.share }).containsExactly("alessio", "Public", "NAS").inOrder()
+    assertThat(areas.none { it.fenced }).isTrue()
+    assertThat(areas.associateBy { it.share }.getValue("NAS").access).isEqualTo(NasResult.Ok(ShareAccess.READ_WRITE))
+  }
+
   @Test
   fun leAreeBuoneVannoAvantiEUnaShareScoperta_siAvvisaComeSoft() = runTest(UnconfinedTestDispatcher()) {
     val f = OnboardingFixture(this)
@@ -605,6 +653,40 @@ class OnboardingCoordinatorTest {
     assertThat(g.current).isEqualTo(OnboardingStep.AREAS)
     expectAdvanced(d.submit(StepInput.Areas("NAS", "alessio")))
     assertThat(g.current).isEqualTo(OnboardingStep.ROLES)
+  }
+
+  /**
+   * Punto 10 delle prove sul campo: "Recupera l'admin" (e "Secondo admin") su un'area comune senza famiglia. Prima si andava avanti, si cercavano
+   * i kit e si diceva "Non trovo nessun kit"; ora il passo 4 si ferma con "qui non c'e' nessuna famiglia". Un errore del NAS nel controllo non e'
+   * "nessuna famiglia": e' il suo problema (con "Riprova"). Con la famiglia presente si va avanti come prima.
+   */
+  @Test
+  fun recuperoSuUnAreaSenzaFamigliaLoDiceENonCercaIKit() = runTest(UnconfinedTestDispatcher()) {
+    for (path in listOf(OnboardingPath.RECOVER_ADMIN, OnboardingPath.SECOND_ADMIN)) {
+      val f = OnboardingFixture(this)
+      val c = f.coordinator()
+      expectAdvanced(c.submit(StepInput.ChoosePath(path)))
+      expectAdvanced(c.submit(StepInput.ConfirmHome(true)))
+      expectAdvanced(c.submit(StepInput.NasAddressChosen(f.env.address)))
+      expectAdvanced(c.submit(credentials()))
+      assertThat(f.current).isEqualTo(OnboardingStep.AREAS)
+
+      assertWithMessage("$path").that(c.submit(StepInput.Areas("NAS", "alessio"))).isEqualTo(problem(OnboardingProblem.NO_FAMILY_IN_AREA))
+      assertThat(f.current).isEqualTo(OnboardingStep.AREAS)
+
+      // Il NAS non risponde durante il controllo: e' "NAS non raggiungibile", non "nessuna famiglia".
+      f.env.nas.error = NasError.Timeout
+      val unreachable = c.submit(StepInput.Areas("NAS", "alessio"))
+      assertThat(unreachable).isNotEqualTo(problem(OnboardingProblem.NO_FAMILY_IN_AREA))
+      assertThat(unreachable).isInstanceOf(StepResult.Problem::class.java)
+      f.env.nas.error = null
+
+      // Un'altra area, con la famiglia: si va avanti come prima.
+      f.env.probe.access = f.env.probe.access + ("Famiglia" to NasResult.Ok(ShareAccess.READ_WRITE))
+      f.env.nas.share("Famiglia").put(NasLayout.registryFile(1), ByteArray(300) { 7 })
+      expectAdvanced(c.submit(StepInput.Areas("Famiglia", "alessio")))
+      assertThat(f.current).isEqualTo(OnboardingStep.ROLES)
+    }
   }
 
   // --- Passo 5 ----------------------------------------------------------------------------------------------
@@ -844,6 +926,8 @@ class OnboardingCoordinatorTest {
   fun iPassiDelRecuperoDellAdminNonSiFinisconoSenzaChiaveRecuperata() = runTest(UnconfinedTestDispatcher()) {
     val f = OnboardingFixture(this)
     val c = f.coordinator()
+    // Un secondo admin si aggiunge dove c'e' una famiglia (punto 10 delle prove sul campo): nell'area comune c'e' il registro.
+    f.env.nas.share("NAS").put(NasLayout.registryFile(1), ByteArray(300) { 7 })
     expectAdvanced(c.submit(StepInput.ChoosePath(OnboardingPath.SECOND_ADMIN)))
     expectAdvanced(c.submit(StepInput.ConfirmHome(true)))
     expectAdvanced(c.submit(StepInput.NasAddressChosen(f.env.address)))

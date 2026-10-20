@@ -24,6 +24,7 @@ import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryBarButton
+import dev.pampa.mycloudgallery.core.designsystem.state.phoneTrashText
 import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
 import dev.pampa.mycloudgallery.feature.library.R
 import dev.pampa.mycloudgallery.feature.library.countText
@@ -246,7 +247,8 @@ private fun CollectionGroup(
 @Composable
 private fun rowSubtitle(row: CollectionRow): String = when (row.kind) {
   CollectionKind.HIDDEN -> stringResource(R.string.collection_hidden_subtitle)
-  CollectionKind.RECENTLY_DELETED -> stringResource(R.string.collection_recently_deleted_subtitle)
+  CollectionKind.RECENTLY_DELETED ->
+    stringResource(phoneTrashText(R.string.collection_recently_deleted_subtitle, R.string.collection_recently_deleted_subtitle_gallery))
   else -> {
     val count = row.count ?: 0
     if (count == 0) stringResource(R.string.collection_count_none) else countText(R.plurals.collection_count, count)

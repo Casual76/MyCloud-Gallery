@@ -27,6 +27,8 @@
   <string name="viewer_delete_title_photo">Eliminare la foto dal telefono?</string>
   <string name="viewer_delete_title_video">Eliminare il video dal telefono?</string>
   <string name="viewer_delete_message">Va nel cestino del telefono per 30 giorni: la ritrovi in «Eliminati di recente» e puoi ripristinarla. Non c’è ancora una copia sul NAS, quindi per ora questo è l’unico esemplare.</string>
+  <!-- D-3 (prove sul campo): su One UI il cestino del telefono è quello di Galleria. -->
+  <string name="viewer_delete_message_gallery">Va nel Cestino di Galleria per 30 giorni: la ripristini da Galleria → Cestino. Non c’è ancora una copia sul NAS, quindi per ora questo è l’unico esemplare.</string>
   <string name="viewer_delete_confirm">Elimina dal telefono</string>
 
   <!-- Foglio: apri in Mappe (D18) -->

@@ -42,6 +42,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.FreeSpaceExclusion
 import dev.pampa.mycloudgallery.core.backup.contract.FreeSpaceKind
 import dev.pampa.mycloudgallery.core.backup.contract.FreeSpacePlan
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneConfirmation
+import dev.pampa.mycloudgallery.core.designsystem.state.phoneTrashText
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.backup.BackupDimens
@@ -300,7 +301,7 @@ private fun LazyListScope.summary(state: FreeSpaceUi.Summary, actions: FreeSpace
       )
     }
   }
-  item(key = "trash-note") { BackupNote(stringResource(R.string.backup_free_trash_note)) }
+  item(key = "trash-note") { BackupNote(stringResource(phoneTrashText(R.string.backup_free_trash_note, R.string.backup_free_trash_note_gallery))) }
 }
 
 private fun filterText(kind: FreeSpaceKind): Pair<Int, Int> = when (kind) {
@@ -403,7 +404,7 @@ private fun LazyListScope.done(state: FreeSpaceUi.Done, actions: FreeSpaceAction
           nothing -> append(stringResource(R.string.backup_free_done_nothing_detail))
           else -> {
             append(pluralStringResource(R.plurals.backup_free_done_detail, state.items, BackupText.count(state.items)))
-            append(' ').append(stringResource(if (state.toAndroidTrash) R.string.backup_free_done_trash else R.string.backup_free_done_gone))
+            append(' ').append(stringResource(if (state.toAndroidTrash) phoneTrashText(R.string.backup_free_done_trash, R.string.backup_free_done_trash_gallery) else R.string.backup_free_done_gone))
             // LS-7: un "no" al lotto dopo il primo: quelli gia' liberati restano liberati, gli altri restano sul telefono.
             if (state.cancelled) append(' ').append(stringResource(R.string.backup_free_done_stopped))
           }

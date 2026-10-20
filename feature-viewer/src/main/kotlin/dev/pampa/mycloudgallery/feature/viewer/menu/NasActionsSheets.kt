@@ -34,6 +34,7 @@ import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryDeleteScope
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryDeleteSheetContent
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetScaffold
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetTone
+import dev.pampa.mycloudgallery.core.designsystem.state.phoneTrashText
 import dev.pampa.mycloudgallery.core.nasops.contract.ConfirmationSheet
 import dev.pampa.mycloudgallery.core.nasops.contract.OpPlan
 import dev.pampa.mycloudgallery.core.nasops.contract.PlanWarning
@@ -198,7 +199,8 @@ internal fun NasDeleteSheetContent(
   val nasKind = if (target.scope == NasAreaScope.COMMON) GalleryDeleteLocationKind.NasShared else GalleryDeleteLocationKind.NasPrivate
   val nasTitle = stringResource(if (target.scope == NasAreaScope.COMMON) R.string.viewer_nas_delete_nas_common else R.string.viewer_nas_delete_nas_private)
   val locations = buildList {
-    add(GalleryDeleteLocation(stringResource(R.string.viewer_nas_delete_phone), GalleryDeleteLocationKind.Phone, stringResource(R.string.viewer_nas_delete_phone_detail)))
+    val phoneDetail = stringResource(phoneTrashText(R.string.viewer_nas_delete_phone_detail, R.string.viewer_nas_delete_phone_detail_gallery))
+    add(GalleryDeleteLocation(stringResource(R.string.viewer_nas_delete_phone), GalleryDeleteLocationKind.Phone, phoneDetail))
     add(
       GalleryDeleteLocation(
         title = nasTitle,

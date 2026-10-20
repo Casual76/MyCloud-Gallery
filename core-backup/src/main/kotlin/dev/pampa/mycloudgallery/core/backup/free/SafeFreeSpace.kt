@@ -776,8 +776,9 @@ class SafeFreeSpace(
   }
 
   private suspend fun tellCatalog(changed: List<FreeItemRecord>) {
-    val freed = changed.filter { it.state == FreeItemState.FREED }.map { it.phoneLocation }
-    if (freed.isNotEmpty()) catalog.freedFromPhone(freed)
+    // D-3: con la riga consegnata, cosi' una posizione gia' ricollegata a un'altra riga (ripristinata dal Cestino di Galleria) resta presente.
+    val freed = changed.filter { it.state == FreeItemState.FREED }.associate { it.phoneLocation to it.phone?.mediaStoreId }
+    if (freed.isNotEmpty()) catalog.freedRowsFromPhone(freed)
   }
 
   // --- Regole comuni -----------------------------------------------------------------------------------------------------------

@@ -70,6 +70,9 @@ class FakeMediaStore : MediaStoreSource, MediaStoreRowLookup {
     /** `_ID` cestinati (cestino di sistema) e la generazione del cestino. */
     val trashed = HashMap<Long, Long>()
 
+    /** D-3: `_ID` nel Cestino di Galleria su One UI, con la riga tenuta ma fuori da ogni query dell'app. */
+    val oneUiTrashed = HashSet<Long>()
+
     /** La chiave d'ordine di ogni `_ID` mai visto: la ripresa dopo una riga sparita continua da li' (come la keyset). */
     val sortKeys = HashMap<Long, Long>()
     var selection: Set<Long>? = null
@@ -245,6 +248,7 @@ class FakeMediaStore : MediaStoreSource, MediaStoreRowLookup {
     v.content.remove(id)
     v.pending -= id
     v.trashed -= id
+    v.oneUiTrashed -= id
     changed.tryEmit(Unit)
   }
 
@@ -274,6 +278,27 @@ class FakeMediaStore : MediaStoreSource, MediaStoreRowLookup {
     val content = v.content.getValue(id)
     remove(volume, id)
     return SamsungTrashed(row, content)
+  }
+
+  /**
+   * Il cestino di sistema su One UI come l'ha visto l'S25 (D-3 delle prove sul campo, `docs/prove-campo-esiti.md`): `createTrashRequest`
+   * confermato sposta il file nel Cestino di Galleria (`Android/.Trash/com.sec.android.gallery3d`, con `.nomedia`) e la riga **resta con lo
+   * stesso `_ID`**, ma fuori da ogni query dell'app: non e' in `deleted_files` e non risulta cestinata. La generazione sale (la riga e'
+   * cambiata) senza una riga visibile che lo spieghi.
+   */
+  fun oneUiTrash(volume: String, id: Long) {
+    val v = volumeMap.getValue(volume)
+    require(id in v.rows) { "Riga sconosciuta." }
+    v.generation++
+    v.oneUiTrashed += id
+    changed.tryEmit(Unit)
+  }
+
+  /** Galleria → Cestino → Ripristina su One UI: la stessa riga torna al suo posto, stesso `_ID`, stessi byte, generazione nuova. */
+  fun oneUiRestore(volume: String, id: Long): MediaStoreRow {
+    val v = volumeMap.getValue(volume)
+    require(v.oneUiTrashed.remove(id)) { "Riga non nel Cestino di Galleria." }
+    return touch(v, id)
   }
 
   /**
@@ -527,7 +552,9 @@ class FakeMediaStore : MediaStoreSource, MediaStoreRowLookup {
 
   private fun visible(v: FakeVolume): List<MediaStoreRow> {
     val selection = v.selection
-    return v.rows.values.filter { it.id !in v.pending && it.id !in v.trashed && (selection == null || it.id in selection) }
+    return v.rows.values.filter {
+      it.id !in v.pending && it.id !in v.trashed && it.id !in v.oneUiTrashed && (selection == null || it.id in selection)
+    }
   }
 
   private fun store(v: FakeVolume, row: MediaStoreRow, content: Content): MediaStoreRow {

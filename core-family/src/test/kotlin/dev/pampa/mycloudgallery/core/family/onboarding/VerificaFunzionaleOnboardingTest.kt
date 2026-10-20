@@ -22,6 +22,7 @@ import dev.pampa.mycloudgallery.core.trust.Verdict
 import dev.pampa.mycloudgallery.core.trust.codec.Base32
 import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKey
 import dev.pampa.mycloudgallery.core.trust.crypto.TrustIds
+import dev.pampa.mycloudgallery.core.trust.nas.NasLayout
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -45,6 +46,8 @@ class VerificaFunzionaleOnboardingTest {
 
   /** Recupero dell'admin (o secondo admin) fino alle aree fatte: e' li' che parte la ricerca del kit. */
   private suspend fun OnboardingFixture.recoveryAfterAreas(c: DefaultOnboardingCoordinator, path: OnboardingPath = OnboardingPath.RECOVER_ADMIN) {
+    // Si recupera dove c'e' una famiglia (punto 10 delle prove sul campo): nell'area comune c'e' il registro.
+    env.nas.share("NAS").put(NasLayout.registryFile(1), ByteArray(300) { 7 })
     expectAdvanced(c.submit(StepInput.ChoosePath(path)))
     expectAdvanced(c.submit(StepInput.ConfirmHome(true)))
     expectAdvanced(c.submit(StepInput.NasAddressChosen(env.address)))

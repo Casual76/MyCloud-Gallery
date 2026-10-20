@@ -10,6 +10,7 @@ import dev.pampa.mycloudgallery.core.nas.contract.ConnectionTester
 import dev.pampa.mycloudgallery.core.nas.contract.NasAccount
 import dev.pampa.mycloudgallery.core.nas.contract.NasSessionManager
 import dev.pampa.mycloudgallery.core.nas.contract.ShareProbe
+import dev.pampa.mycloudgallery.core.nas.session.ShareGuard
 import dev.pampa.mycloudgallery.core.network.contract.HomeCapture
 import dev.pampa.mycloudgallery.core.network.contract.HomeFingerprintStore
 import dev.pampa.mycloudgallery.core.network.contract.LocalNetworkPermission
@@ -137,6 +138,11 @@ class OnboardingPorts(
   val allowUserRetry: (suspend (NasAccount) -> Unit)? = null,
   val previousData: PreviousAccountData = KeepPreviousAccountData,
   val afterStartOver: () -> Unit = {},
+  /**
+   * La recinzione delle prove (D33, `ShareFence` in debug, null in release): le stesse regole della sessione. Al passo 4 serve solo a dire
+   * "esclusa per l'account di prova" invece di "accesso negato" (la sessione la applica comunque prima di qualunque richiesta).
+   */
+  val shareGuard: ShareGuard? = null,
 ) {
 
   /**

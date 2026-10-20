@@ -13,6 +13,7 @@
   <string name="viewer_nas_delete_nas_private">NAS · La mia area</string>
   <string name="viewer_nas_delete_nas_common">NAS · Area comune</string>
   <string name="viewer_nas_delete_phone_detail">Nel cestino di Android per 30 giorni.</string>
+  <string name="viewer_nas_delete_phone_detail_gallery">Nel Cestino di Galleria per 30 giorni.</string>
   <string name="viewer_nas_delete_nas_detail">Nel cestino del NAS per 30 giorni.</string>
   <string name="viewer_nas_delete_nas_read_only">Non hai il permesso di eliminare qui.</string>
   <string name="viewer_nas_delete_nas_only_photo_title">Eliminare questa foto dal NAS?</string>

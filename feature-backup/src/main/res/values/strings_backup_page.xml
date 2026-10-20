@@ -64,6 +64,15 @@
   <string name="backup_source_state_working">In corso</string>
   <string name="backup_source_state_problem">Da controllare</string>
   <string name="backup_source_state_off">Non salvata</string>
+  <!-- D-4 (prove sul campo): con il backup fermo le righe non dicono «In corso» e i media che mancano sono «da salvare», non «in coda». -->
+  <string name="backup_source_state_halted">Fermo</string>
+  <string name="backup_source_state_paused">In pausa</string>
+  <string name="backup_source_state_not_started">Da avviare</string>
+  <string name="backup_source_to_save">%1$s da salvare</string>
+  <string name="backup_source_halt_test_only">fermo: il backup è in prova e scrive solo nelle share di prova</string>
+  <string name="backup_source_halt_not_configured">fermo: il backup non è ancora configurato</string>
+  <string name="backup_source_halt_first_backup">il primo backup non è ancora partito</string>
+  <string name="backup_source_halt_paused">in pausa finché non tocchi «Riprendi»</string>
 
   <string name="backup_device_folder_title">Cartella del dispositivo</string>
   <string name="backup_device_folder_chosen">Le copie vanno in «%1$s».</string>

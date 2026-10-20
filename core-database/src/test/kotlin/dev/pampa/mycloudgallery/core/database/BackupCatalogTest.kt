@@ -119,6 +119,27 @@ class BackupCatalogTest : CatalogTestBase() {
     assertThat(first.dateEstimated).isTrue()
   }
 
+  /**
+   * O-2 (prove sul campo): uno "Screenshot_….png" dentro una cartella scelta dall'utente si salva con quella cartella, anche con la sorgente
+   * Screenshot accesa: prima vinceva il tipo e finiva in `Screenshot/` sul NAS. Fuori dalle cartelle scelte gli screenshot restano della loro sorgente.
+   */
+  @Test
+  fun unoScreenshotInUnaCartellaSceltaSiSalvaConLaCartella() = runBlocking<Unit> {
+    val folder = CatalogSource.Folder("external_primary", "DCIM/mcg-prova/")
+    val inFolder = addPhone(1, path = "DCIM/mcg-prova/", source = MediaSource.SCREENSHOT)
+    val elsewhere = addPhone(2, path = "Pictures/Screenshots/", source = MediaSource.SCREENSHOT)
+    val cameraNamed = addPhone(3, path = "DCIM/mcg-prova/", source = MediaSource.OTHER)
+
+    val both = candidates(setOf(CatalogSource.Screenshots, folder)).associate { it.mediaId to it.source }
+    assertThat(both).containsExactly(inFolder, folder, elsewhere, CatalogSource.Screenshots, cameraNamed, folder)
+    // Con la sola cartella (la sorgente Screenshot spenta, o tolta dalla recinzione D13) lo screenshot della cartella c'e' lo stesso.
+    val onlyFolder = candidates(setOf(folder)).associate { it.mediaId to it.source }
+    assertThat(onlyFolder).containsExactly(inFolder, folder, cameraNamed, folder)
+    // Con la sola sorgente Screenshot restano tutti e due gli screenshot, ognuno della sorgente Screenshot.
+    val onlyScreenshots = candidates(setOf(CatalogSource.Screenshots)).associate { it.mediaId to it.source }
+    assertThat(onlyScreenshots).containsExactly(inFolder, CatalogSource.Screenshots, elsewhere, CatalogSource.Screenshots)
+  }
+
   @Test
   fun lePagineDeiCandidatiRipartonoDalCursoreSenzaSaltiNeRipetizioni() = runBlocking<Unit> {
     val ids = (1..23).map { addPhone(it) }

@@ -766,6 +766,54 @@ class OnboardingViewModelTest {
     assertThat(vm.ui.value.recovery?.page).isEqualTo(RecoveryPage.Code)
   }
 
+  /**
+   * Punto 10 delle prove sul campo: "Recupera l'admin" scelto su un'area comune senza famiglia. Prima si cercavano i kit e si diceva solo "Non
+   * trovo nessun kit": l'utente finiva sulle istruzioni per cancellare una cartella `family` che non c'era. Adesso il passo 4 si ferma con
+   * "qui non c'e' nessuna famiglia", i kit non si cercano, e si puo' scegliere un'altra area (dove la famiglia c'e': si va avanti come prima)
+   * oppure passare a "Crea la famiglia".
+   */
+  @Test
+  fun ilRecuperoSuUnAreaSenzaFamigliaLoDiceEProponeDiCrearlaODiCambiareArea() = runTest {
+    val env = TestEnv()
+    env.coordinator.familyShares = setOf("famiglia")
+    env.recovery.kits = NasResult.Ok(listOf(kit()))
+    val vm = env.viewModel()
+    vm.choosePath(OnboardingPath.RECOVER_ADMIN)
+    vm.checkNas(nas)
+    vm.submitAccount("marta", "password-lunga".toCharArray())
+
+    vm.submitAreas("test-comune", "marta")
+    assertThat(vm.ui.value.areas.problem).isEqualTo(OnboardingProblem.NO_FAMILY_IN_AREA)
+    assertThat(vm.progress.value.current).isEqualTo(OnboardingStep.AREAS)
+    // Nessuna ricerca di kit, nessuna pagina "Non trovo nessun kit".
+    assertThat(env.recovery.lastSearch).isNull()
+    assertThat(vm.ui.value.recovery).isNull()
+
+    // "Scegli un'altra area": l'elenco torna, e con l'area della famiglia si va avanti come prima.
+    vm.changeArea()
+    assertThat(vm.ui.value.areas.problem).isNull()
+    vm.submitAreas("famiglia", "marta")
+    assertThat(vm.ui.value.recovery?.kits).hasSize(1)
+    assertThat(env.recovery.lastSearch?.second).isEqualTo("marta")
+  }
+
+  /** Punto 10: dalla stessa pagina, "Crea la famiglia" passa al percorso del fondatore. */
+  @Test
+  fun dallAreaSenzaFamigliaSiPassaACreareLaFamiglia() = runTest {
+    val env = TestEnv()
+    env.coordinator.familyShares = emptySet()
+    val vm = env.viewModel()
+    vm.choosePath(OnboardingPath.SECOND_ADMIN)
+    vm.checkNas(nas)
+    vm.submitAccount("marta", "password-lunga".toCharArray())
+    vm.submitAreas("test-comune", "marta")
+    assertThat(vm.ui.value.areas.problem).isEqualTo(OnboardingProblem.NO_FAMILY_IN_AREA)
+
+    vm.choosePath(OnboardingPath.FOUND_FAMILY)
+    assertThat(vm.progress.value.path).isEqualTo(OnboardingPath.FOUND_FAMILY)
+    assertThat(env.recovery.lastSearch).isNull()
+  }
+
   @Test
   fun senzaKitSiDiceECheNonCeNeSono() = runTest {
     val env = TestEnv()

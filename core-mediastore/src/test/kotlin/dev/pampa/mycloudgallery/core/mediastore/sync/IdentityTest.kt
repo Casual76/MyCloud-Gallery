@@ -116,6 +116,39 @@ class IdentityTest : PhoneSyncTestBase() {
     assertThat(catalog.phoneRefs(listOf(id)).getValue(id).mediaStoreId).isEqualTo(77L)
   }
 
+  /**
+   * D-3 delle prove sul campo: sull'S25 il cestino di sistema (`createTrashRequest`) porta il file nel Cestino di Galleria e la riga resta con lo
+   * stesso `_ID`, fuori da ogni query dell'app; Galleria → Cestino → Ripristina la rimette al suo posto con lo **stesso** `_ID`. La lettura del
+   * telefono la vede sparire (riconciliazione: niente in `deleted_files`) e poi la ricollega al suo media dalle impronte: nessun media nuovo,
+   * nessuna versione nuova, preferito e nascosto conservati.
+   */
+  @Test
+  fun cestinoDiOneUiRipristinoConLoStessoIdRicollegaIlMedia() = runBlocking<Unit> {
+    val row = store.put(photo(1, taken = T0))
+    store.put(photo(2, taken = T0 + MINUTE))
+    val sync = newSync()
+    sync.syncNow(SyncReason.APP_START)
+    val id = mediaAt(row)!!
+    catalog.setPersonalFlags(id, PersonalFlags(favorite = true, hidden = true))
+
+    store.oneUiTrash(PRIMARY, 1)
+    sync.syncNow(SyncReason.CONTENT_CHANGE)
+    assertThat(stateAt(row)).isEqualTo(LocationState.ABSENT)
+    assertThat(mediaCount()).isEqualTo(2)
+
+    store.oneUiRestore(PRIMARY, 1)
+    val back = sync.syncNow(SyncReason.CONTENT_CHANGE)
+    assertThat(back.added).isEqualTo(0)
+    assertThat(mediaAt(row)).isEqualTo(id)
+    assertThat(stateAt(row)).isEqualTo(LocationState.PRESENT)
+    assertThat(mediaCount()).isEqualTo(2)
+    assertThat(db.versionDao().forMedia(id.value)).hasSize(1)
+    val flags = db.personalDao().get(id.value)!!
+    assertThat(flags.favorite).isTrue()
+    assertThat(flags.hidden).isTrue()
+    assertThat(catalog.phoneRefs(listOf(id)).getValue(id).mediaStoreId).isEqualTo(1L)
+  }
+
   @Test
   fun cestinoDiSamsungRipristinoInUnAltraCartellaESpostamento() = runBlocking<Unit> {
     val row = store.put(photo(1, taken = T0))

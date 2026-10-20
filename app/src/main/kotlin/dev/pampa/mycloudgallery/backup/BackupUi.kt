@@ -14,6 +14,7 @@ import dev.pampa.mycloudgallery.core.backup.settings.DeviceFolderPolicy
 import dev.pampa.mycloudgallery.core.backup.settings.FolderDecision
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.database.GalleryDatabase
+import dev.pampa.mycloudgallery.core.metadata.contract.SourceClassifier
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaSource
 import dev.pampa.mycloudgallery.core.model.SafetyStatus
@@ -68,6 +69,10 @@ class AppBackupOverview(backup: BackupGraph) : BackupOverview, BackupEntryStatus
  * cartella con numero e peso. Il catalogo e' la stessa verita' da cui il piano sceglie i candidati: una seconda lettura completa del
  * MediaStore (decine di migliaia di righe) per riempire una pagina delle impostazioni non serve. Le cartelle della fotocamera e degli
  * screenshot hanno il loro interruttore e non si ripetono; con la recinzione di D13 (debug, account di prova) solo le due cartelle di prova.
+ *
+ * O-2 (prove sul campo): quelle cartelle si riconoscono dal **percorso** (`SourceClassifier.folderOwner`), non dal tipo del media. Prima si
+ * toglievano gli screenshot ovunque fossero: due "Screenshot_….png" dentro `mcg-prova` non si contavano nella loro cartella, e una cartella
+ * con soli screenshot non si poteva nemmeno scegliere. Un file in una cartella scelta si salva con quella cartella, qualunque sia il suo tipo.
  */
 class CatalogPhoneFolders(
   private val database: GalleryDatabase,
@@ -82,13 +87,15 @@ class CatalogPhoneFolders(
       "SELECT l.volume, l.relative_path, COUNT(*), COALESCE(SUM(l.size), 0) FROM media_location l " +
         "JOIN media_version v ON v.version_id = l.version_id JOIN media m ON m.media_id = v.media_id " +
         "WHERE l.location_type = 'phone' AND l.state = 'present' AND l.volume IS NOT NULL AND l.relative_path IS NOT NULL " +
-        "AND m.source NOT IN (?, ?) GROUP BY l.volume, l.relative_path ORDER BY COUNT(*) DESC LIMIT ?",
-      arrayOf<Any?>(MediaSource.CAMERA.code, MediaSource.SCREENSHOT.code, MAX_FOLDERS),
+        "GROUP BY l.volume, l.relative_path ORDER BY COUNT(*) DESC LIMIT ?",
+      arrayOf<Any?>(MAX_FOLDERS + OWNED_FOLDERS_ROOM),
     ).use { c ->
-      while (c.moveToNext()) {
+      while (c.moveToNext() && out.size < MAX_FOLDERS) {
         val volume = c.getString(0)
         val path = c.getString(1)
         if (volume.isBlank() || path.isBlank()) continue
+        // Le cartelle della fotocamera e degli screenshot hanno il loro interruttore (O-2: per percorso, non per tipo).
+        if (SourceClassifier.folderOwner(path) != null) continue
         // Fail closed: con una recinzione senza account noto non si offre niente.
         if (fence != null && (me == null || !fence.allowsPhoneFolder(me, path))) continue
         out += PhoneFolder(BackupSource.Folder(volume, path), media = c.getInt(2), bytes = c.getLong(3))
@@ -99,6 +106,9 @@ class CatalogPhoneFolders(
 
   private companion object {
     const val MAX_FOLDERS = 200
+
+    /** Posto in piu' per le cartelle della fotocamera e degli screenshot, che si leggono e poi si saltano. */
+    const val OWNED_FOLDERS_ROOM = 16
   }
 }
 

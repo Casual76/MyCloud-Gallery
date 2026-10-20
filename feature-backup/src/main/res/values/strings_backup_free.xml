@@ -65,6 +65,8 @@
   <string name="backup_free_action">Libera spazio</string>
   <string name="backup_free_action_now">Libera subito…</string>
   <string name="backup_free_trash_note">Libera spazio mette i file nel cestino di Android per 30 giorni. Libera subito li toglie per sempre.</string>
+  <!-- D-3 (prove sul campo): su One UI il cestino del telefono è quello di Galleria; l’app non lo vede e non ripristina da lì. -->
+  <string name="backup_free_trash_note_gallery">Libera spazio mette i file nel Cestino di Galleria per 30 giorni. Libera subito li toglie per sempre.</string>
 
   <string name="backup_free_guarding_title">Preparo le copie private</string>
   <string name="backup_free_guarding_detail">%1$s di %2$s</string>
@@ -96,6 +98,7 @@
     <item quantity="other">%1$s foto e video tolti dal telefono. Restano sul NAS e li vedi nella Libreria.</item>
   </plurals>
   <string name="backup_free_done_trash">Sono nel cestino di Android per 30 giorni: se ci ripensi li ripristini da Eliminati di recente.</string>
+  <string name="backup_free_done_trash_gallery">Sono nel Cestino di Galleria per 30 giorni: se ci ripensi li ripristini da Galleria → Cestino. Tornati al loro posto, l’app li riconosce senza ricaricarli.</string>
   <string name="backup_free_done_gone">Sono stati tolti per sempre dal telefono.</string>
   <plurals name="backup_free_done_kept">
     <item quantity="one">%1$s è rimasto sul telefono.</item>
@@ -150,7 +153,9 @@
     <item quantity="other">Tolgo dal telefono %1$s elementi (%2$s). Restano sul NAS.</item>
   </plurals>
   <string name="backup_free_confirm_where_title">Nel cestino di Android</string>
+  <string name="backup_free_confirm_where_title_gallery">Nel Cestino di Galleria</string>
   <string name="backup_free_confirm_where_detail">Per 30 giorni: se ci ripensi li ripristini da Eliminati di recente.</string>
+  <string name="backup_free_confirm_where_detail_gallery">Per 30 giorni: se ci ripensi li ripristini da Galleria → Cestino.</string>
   <string name="backup_free_confirm_check_title">Prima ricontrollo ogni copia</string>
   <string name="backup_free_confirm_check_detail">Se una copia sul NAS non torna, quel file resta sul telefono.</string>
   <string name="backup_free_confirm_empty">Non c’è niente da liberare con questa scelta.</string>
@@ -226,6 +231,7 @@
   <string name="backup_free_phone_not_on_nas_frozen">Il NAS ha avuto un cambiamento anomalo: la copia non si può controllare.</string>
   <string name="backup_free_phone_not_on_nas_fence">In prova l’app controlla solo la cartella di prova.</string>
   <string name="backup_free_phone_not_on_nas_trash">Se la elimini dal telefono va nel cestino di Android: la recuperi da Eliminati di recente per 30 giorni, poi non ci sarà più da nessuna parte.</string>
+  <string name="backup_free_phone_not_on_nas_trash_gallery">Se la elimini dal telefono va nel Cestino di Galleria: la recuperi da lì per 30 giorni, poi non ci sarà più da nessuna parte.</string>
   <string name="backup_free_phone_action_trash">Elimina dal telefono</string>
 
   <!-- Correzioni 5B (LS-4): "Metti al sicuro" fa partire cio' che serve a quel media e il foglio si aggiorna da solo. -->

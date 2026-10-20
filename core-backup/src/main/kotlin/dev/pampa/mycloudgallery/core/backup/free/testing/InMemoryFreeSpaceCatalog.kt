@@ -6,6 +6,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.PhoneRowNow
 import dev.pampa.mycloudgallery.core.backup.free.FreeSpaceCatalog
 import dev.pampa.mycloudgallery.core.backup.free.FreeSpaceCursor
 import dev.pampa.mycloudgallery.core.backup.free.FreeSpaceMedia
+import dev.pampa.mycloudgallery.core.model.Location
 import dev.pampa.mycloudgallery.core.model.LocationId
 import dev.pampa.mycloudgallery.core.model.LocationState
 import dev.pampa.mycloudgallery.core.model.Media
@@ -91,10 +92,15 @@ class InMemoryFreeSpaceCatalog : FreeSpaceCatalog {
 
   override suspend fun phoneRowOf(mediaId: MediaId, versionId: VersionId, stale: PhoneRef): PhoneRowNow? = phoneRows[versionId]
 
-  override suspend fun freedFromPhone(locations: List<LocationId>) {
+  override suspend fun freedFromPhone(locations: List<LocationId>) = freedRowsFromPhone(locations.associateWith { null })
+
+  /** Come il catalogo vero (D-3): una posizione ricollegata a un'altra riga del telefono (un `_ID` diverso da quello consegnato) resta. */
+  override suspend fun freedRowsFromPhone(rows: Map<LocationId, Long?>) {
     synchronized(lock) {
-      for (location in locations) {
+      for ((location, mediaStoreId) in rows) {
         val fm = byId.values.firstOrNull { m -> m.media.locations.any { it.id == location } } ?: continue
+        val now = (fm.media.location(location).location as? Location.Phone)?.mediaStoreId
+        if (mediaStoreId != null && now != null && now != mediaStoreId) continue
         val updated = fm.media.copy(
           locations = fm.media.locations.map {
             if (it.id == location && it.state != LocationState.ABSENT) it.copy(state = LocationState.ABSENT, absentSinceMillis = 0) else it

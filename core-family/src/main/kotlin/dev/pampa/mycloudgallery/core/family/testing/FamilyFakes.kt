@@ -140,6 +140,12 @@ class FakeOnboardingCoordinator(initial: OnboardingProgress = OnboardingProgress
   /** Il Keystore non risponde o le chiavi non si tolgono (R7, R19): "Configura di nuovo" si ferma come quello vero, senza toccare niente. */
   var keysStuck: Boolean = false
 
+  /**
+   * Punto 10 delle prove sul campo: le aree comuni che hanno una famiglia (null = tutte, come prima). Come il vero, il recupero dell'admin e il
+   * secondo admin su un'area senza famiglia si fermano al passo 4 con [OnboardingProblem.NO_FAMILY_IN_AREA].
+   */
+  var familyShares: Set<String>? = null
+
   override suspend fun submit(input: StepInput): StepResult {
     inputs += input::class.simpleName.orEmpty()
     when (input) {
@@ -189,8 +195,14 @@ class FakeOnboardingCoordinator(initial: OnboardingProgress = OnboardingProgress
         complete(OnboardingStep.ACCOUNT)
       }
       is StepInput.Areas -> {
-        saved = saved?.copy(commonShare = input.commonShare, privateShare = input.privateShare)
-        complete(OnboardingStep.AREAS)
+        val recovering = path == OnboardingPath.RECOVER_ADMIN || path == OnboardingPath.SECOND_ADMIN
+        val families = familyShares
+        if (recovering && families != null && families.none { it.equals(input.commonShare.trim(), ignoreCase = true) }) {
+          StepResult.Problem(OnboardingProblem.NO_FAMILY_IN_AREA)
+        } else {
+          saved = saved?.copy(commonShare = input.commonShare, privateShare = input.privateShare)
+          complete(OnboardingStep.AREAS)
+        }
       }
       is StepInput.RecoveryCodeTyped -> {
         founded = true

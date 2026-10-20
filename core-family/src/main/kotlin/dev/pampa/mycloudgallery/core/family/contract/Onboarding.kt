@@ -212,6 +212,14 @@ enum class OnboardingProblem {
   /** Passo 4 o 12(e): qui c'e' gia' una famiglia ("Recupera l'admin" o "Entra come familiare"). */
   FAMILY_ALREADY_EXISTS,
 
+  /**
+   * Prove sul campo (punto 10): "Recupera l'admin", "Secondo admin" o "Entra come familiare" su un'area comune dove non c'e' nessuna famiglia
+   * (nessun `family/registry/…1`, lo stesso controllo di "Qui c'e' gia' una famiglia"). Prima si cercavano i kit e si diceva solo "Non trovo
+   * nessun kit", e l'utente finiva sulle istruzioni per cancellare una cartella che non c'era. Si propone "Crea la famiglia" o un'altra area.
+   * Un errore del NAS durante il controllo non e' questo problema: si dice il suo, con "Riprova".
+   */
+  NO_FAMILY_IN_AREA,
+
   /** Passo 12(c): il codice riscritto non coincide. */
   RECOVERY_CODE_MISMATCH,
 
@@ -282,12 +290,16 @@ sealed interface StepResult {
  * Un'area candidata al passo 4: una share provata con `ShareProbe`.
  *
  * @property hasFamily nella share c'e' gia' `family/registry/...1`: "Qui c'e' gia' una famiglia".
+ * @property fenced la share la esclude la recinzione delle prove (D33, solo debug, con un account di prova), non il NAS: non si prova
+ *   nemmeno e non si puo' scegliere ([access] e' `DENIED`). La pagina lo dice con parole sue: prima diceva "Accesso negato" e chi guardava
+ *   la dashboard del NAS vedeva l'accesso consentito.
  */
 data class AreaCandidate(
   val share: String,
   val access: NasResult<ShareAccess>,
   val isPublic: Boolean?,
   val hasFamily: Boolean,
+  val fenced: Boolean = false,
 )
 
 /**

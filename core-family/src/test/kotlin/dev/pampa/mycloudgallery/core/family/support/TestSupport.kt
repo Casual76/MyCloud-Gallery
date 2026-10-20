@@ -31,6 +31,7 @@ import dev.pampa.mycloudgallery.core.nas.contract.Stage
 import dev.pampa.mycloudgallery.core.nas.contract.StageOutcome
 import dev.pampa.mycloudgallery.core.nas.contract.StageResult
 import dev.pampa.mycloudgallery.core.nas.contract.TestTarget
+import dev.pampa.mycloudgallery.core.nas.session.ShareGuard
 import dev.pampa.mycloudgallery.core.nas.testing.FakeAuthCircuitBreaker
 import dev.pampa.mycloudgallery.core.nas.testing.FakeNasSessionManager
 import dev.pampa.mycloudgallery.core.nas.testing.FakeShareProbe
@@ -337,6 +338,9 @@ class TestEnv {
   /** P9: la porta che riapre l'interruttore di un account preciso (null = il comportamento di prima, con [breaker]). */
   var allowUserRetry: (suspend (NasAccount) -> Unit)? = null
 
+  /** La recinzione delle prove (D33): di solito nessuna, come in release. */
+  var shareGuard: ShareGuard? = null
+
   fun ports(): OnboardingPorts = OnboardingPorts(
     homeCapture = capture,
     homeFingerprints = fingerprints,
@@ -364,6 +368,7 @@ class TestEnv {
     allowUserRetry = allowUserRetry,
     previousData = previousData,
     afterStartOver = { restarts++ },
+    shareGuard = shareGuard,
   )
 
   val address: NasAddress = NasAddress(TEST_IP, "MyCloudEX2Ultra.fritz.box")

@@ -60,6 +60,12 @@ internal enum class ProblemAction(@param:StringRes val label: Int) {
   SCAN_AGAIN(R.string.action_scan_again),
   ENTER_MANUALLY(R.string.action_enter_manually),
   BACK_TO_CODE(R.string.action_back_to_code),
+
+  /** Punto 10: in quest'area non c'e' una famiglia, si passa a "Crea la famiglia". */
+  FOUND_FAMILY(R.string.action_found_family),
+
+  /** Punto 10: un'altra area comune (al passo 4, o un altro invito nell'ingresso). */
+  CHANGE_AREA(R.string.action_change_area),
 }
 
 /**
@@ -155,6 +161,11 @@ internal fun OnboardingProblem.spec(): ProblemSpec = when (this) {
     listOf(ProblemAction.JOIN_AS_MEMBER, ProblemAction.RECOVER_ADMIN),
     big = true,
   )
+  OnboardingProblem.NO_FAMILY_IN_AREA -> ProblemSpec(
+    Icons.Rounded.Groups, NoticeTone.Info, R.string.problem_no_family_title, R.string.problem_no_family_detail,
+    listOf(ProblemAction.FOUND_FAMILY, ProblemAction.CHANGE_AREA),
+    big = true,
+  )
   OnboardingProblem.RECOVERY_CODE_MISMATCH -> ProblemSpec(
     Icons.Rounded.ErrorOutline, NoticeTone.Danger, R.string.problem_code_mismatch_title, R.string.problem_code_mismatch_detail,
     listOf(ProblemAction.BACK_TO_CODE),
@@ -225,16 +236,19 @@ internal fun ProblemPanel(
   problem: OnboardingProblem,
   onAction: (ProblemAction) -> Unit,
   modifier: Modifier = Modifier,
+  /** Titolo e testo con i dati della pagina (il nome dell'area, punto 10), al posto di quelli generici del problema. */
+  title: String? = null,
+  detail: String? = null,
 ) {
   val spec = problem.spec()
   if (spec.big) {
-    BigProblem(spec = spec, onAction = onAction, modifier = modifier)
+    BigProblem(spec = spec, onAction = onAction, modifier = modifier, title = title, detail = detail)
   } else {
     NoticeCard(
       tone = spec.tone,
       icon = spec.icon,
-      title = stringResource(spec.title),
-      body = stringResource(spec.detail),
+      title = title ?: stringResource(spec.title),
+      body = detail ?: stringResource(spec.detail),
       modifier = modifier,
     ) {
       spec.actions.forEachIndexed { index, action ->
@@ -245,7 +259,7 @@ internal fun ProblemPanel(
 }
 
 @Composable
-private fun BigProblem(spec: ProblemSpec, onAction: (ProblemAction) -> Unit, modifier: Modifier = Modifier) {
+private fun BigProblem(spec: ProblemSpec, onAction: (ProblemAction) -> Unit, modifier: Modifier = Modifier, title: String? = null, detail: String? = null) {
   val tone = when (spec.tone) {
     NoticeTone.Danger -> GalleryIllustrationTone.Danger
     NoticeTone.Caution -> GalleryIllustrationTone.Caution
@@ -265,13 +279,13 @@ private fun BigProblem(spec: ProblemSpec, onAction: (ProblemAction) -> Unit, mod
       verticalArrangement = Arrangement.spacedBy(OnboardingDimens.TextGap),
     ) {
       Text(
-        text = stringResource(spec.title),
+        text = title ?: stringResource(spec.title),
         style = MaterialTheme.typography.headlineSmall,
         color = MaterialTheme.colorScheme.onSurface,
         textAlign = TextAlign.Center,
       )
       Text(
-        text = stringResource(spec.detail),
+        text = detail ?: stringResource(spec.detail),
         style = MaterialTheme.typography.bodyLarge,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = TextAlign.Center,

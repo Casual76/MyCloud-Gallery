@@ -66,6 +66,10 @@ try {
   Check "i file sono solo in DCIM\mcg-prova e Pictures\mcg-prova" (@($onPhone | Where-Object { $_.FullName -notmatch '\\sdcard\\(DCIM|Pictures)\\mcg-prova\\' }).Count -eq 0)
   Check "ogni riga del manifesto ha impronta, byte ed etichetta" (@($phoneLines | Where-Object { $_ -notmatch '^phone=[0-9a-f]{64}\|\d+\|.+$' }).Count -eq 0)
   Check "ci sono i due video grandi" (@($onPhone | Where-Object { $_.Name -like "VID_mcg_grande_*.mp4" }).Count -eq 2)
+  # O-1: i fixture finti (non media, E-M12) sono nel manifesto come notmedia=, mai come phone= (sul NAS devono mancare).
+  $notMediaLines = @($lines | Where-Object { $_ -like "notmedia=*" })
+  $fakesAsPhone = @($phoneLines | Where-Object { $_ -match '\|(casuali\.png|testo\.jpg|video-falso\.mp4)$' }).Count
+  Check "i fixture finti sono notmedia=, non phone=" (($notMediaLines.Count -eq 3) -and ($fakesAsPhone -eq 0))
 
   Write-Host "2. Verifica a telefono invariato"
   Check "le impronte tornano" ((Invoke-S25 ($common + @("-Step", "verify", "-SkipNas"))) -eq 0)

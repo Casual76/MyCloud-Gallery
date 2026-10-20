@@ -19,6 +19,7 @@ import dev.pampa.mycloudgallery.core.model.domain.Observation
 import dev.pampa.mycloudgallery.core.nas.contract.ListOutcome
 import dev.pampa.mycloudgallery.core.nas.contract.NasEntry
 import dev.pampa.mycloudgallery.core.nas.contract.NasError
+import dev.pampa.mycloudgallery.core.nas.contract.NasIoException
 import dev.pampa.mycloudgallery.core.nas.contract.NasMediaReader
 import dev.pampa.mycloudgallery.core.nas.contract.NasResult
 import dev.pampa.mycloudgallery.core.nas.contract.Purpose
@@ -257,7 +258,17 @@ class DefaultNasScanner(
     private var folderNotMediaRead = 0
 
     suspend fun execute(): ScanReport {
-      nasNow = clock.nowMillis()
+      // D-2 (prove sul campo): senza l'ora del NAS (nessuna sessione aperta in questo processo, o una sessione che non si apre) il giro
+      // non parte ed e' "non raggiungibile", come un elenco che non risponde. Prima l'eccezione usciva dalla tappa e il lavoro la contava
+      // come un errore inatteso.
+      nasNow = try {
+        clock.nowMillis()
+      } catch (e: NasIoException) {
+        stoppedBy = ScanStop.UNAVAILABLE
+        statusFlow.value = NasScanStatus.Unavailable(scanFailureCode(e.error))
+        GalleryLog.d(TAG) { "giro ${mode::class.simpleName}: ora del NAS non disponibile" }
+        return report()
+      }
       try {
         startRound()
         val reachedEnd = when (mode) {

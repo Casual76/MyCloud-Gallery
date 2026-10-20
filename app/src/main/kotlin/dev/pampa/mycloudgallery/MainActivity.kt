@@ -2,17 +2,21 @@ package dev.pampa.mycloudgallery
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.fragment.app.FragmentActivity
 import dagger.hilt.android.AndroidEntryPoint
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
+import dev.pampa.mycloudgallery.core.designsystem.state.LocalPhoneTrash
+import dev.pampa.mycloudgallery.core.designsystem.state.PhoneTrash
 import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
 import dev.pampa.mycloudgallery.core.security.lock.AppLockController
 import dev.pampa.mycloudgallery.core.security.lock.BiometricPromptAuthenticator
@@ -45,10 +49,13 @@ class MainActivity : FragmentActivity() {
     val authenticator = BiometricPromptAuthenticator(this)
     setContent {
       MyCloudGalleryTheme {
-        // I tag di test come id delle risorse (docs/bench/README.md §6-ter): i selettori del collaudo li trovano per tag
-        // (`g1-chrome-*`) invece che per testo. Solo semantica: niente cambia nell'aspetto.
-        Box(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
-          AppRoot(lockController = lockController, authenticator = authenticator)
+        // D-3 (prove sul campo): su One UI il cestino del telefono e' quello di Galleria; le schermate lo dicono con le parole giuste.
+        CompositionLocalProvider(LocalPhoneTrash provides PhoneTrash.of(Build.MANUFACTURER)) {
+          // I tag di test come id delle risorse (docs/bench/README.md §6-ter): i selettori del collaudo li trovano per tag
+          // (`g1-chrome-*`) invece che per testo. Solo semantica: niente cambia nell'aspetto.
+          Box(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
+            AppRoot(lockController = lockController, authenticator = authenticator)
+          }
         }
       }
     }

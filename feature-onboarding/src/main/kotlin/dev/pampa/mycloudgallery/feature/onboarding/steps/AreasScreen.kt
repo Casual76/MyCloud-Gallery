@@ -62,10 +62,13 @@ internal class AreasActions(
   val onProblemAction: (ProblemAction) -> Unit = {},
 )
 
-/** Cosa si puo' fare in una share, in una parola (con l'errore di rete distinto da "non esiste"). */
-internal enum class AreaState { READ_WRITE, READ_ONLY, DENIED, MISSING, UNREACHABLE }
+/**
+ * Cosa si puo' fare in una share, in una parola (con l'errore di rete distinto da "non esiste"). [FENCED]: la esclude la recinzione delle
+ * prove (D33) con un account di prova, non il NAS (punto 8 delle prove sul campo: prima diceva "Accesso negato").
+ */
+internal enum class AreaState { READ_WRITE, READ_ONLY, DENIED, FENCED, MISSING, UNREACHABLE }
 
-internal fun AreaCandidate.state(): AreaState = when (val result = access) {
+internal fun AreaCandidate.state(): AreaState = if (fenced) AreaState.FENCED else when (val result = access) {
   is NasResult.Ok -> when (result.value) {
     ShareAccess.READ_WRITE -> AreaState.READ_WRITE
     ShareAccess.READ_ONLY -> AreaState.READ_ONLY
@@ -91,10 +94,12 @@ internal fun AreasScreen(
   actions: AreasActions,
   modifier: Modifier = Modifier,
 ) {
-  val accessible = ui.candidates.count { it.state() != AreaState.DENIED && it.state() != AreaState.MISSING && it.state() != AreaState.UNREACHABLE }
+  val accessible = ui.candidates.count { it.state() == AreaState.READ_WRITE || it.state() == AreaState.READ_ONLY }
   val writable = ui.candidates.count { it.state() == AreaState.READ_WRITE }
   val noAccess = !ui.loading && (ui.problem == OnboardingProblem.NO_ACCESSIBLE_SHARE || accessible == 0)
   val familyExists = ui.problem == OnboardingProblem.FAMILY_ALREADY_EXISTS
+  // Punto 10 delle prove sul campo: "Recupera l'admin" o "Secondo admin" su un'area comune senza famiglia.
+  val noFamily = ui.problem == OnboardingProblem.NO_FAMILY_IN_AREA
   val common = form.commonShare
   val privateShare = form.privateShare
   StepScaffold(
@@ -103,7 +108,7 @@ internal fun AreasScreen(
     chrome = chrome,
     ambient = stepAmbient(OnboardingStep.AREAS, urgent = noAccess),
     modifier = modifier,
-    primary = if (noAccess || familyExists) {
+    primary = if (noAccess || familyExists || noFamily) {
       null
     } else {
       DockAction(
@@ -123,6 +128,14 @@ internal fun AreasScreen(
       }
       familyExists -> item(key = "family") {
         ProblemPanel(problem = OnboardingProblem.FAMILY_ALREADY_EXISTS, onAction = actions.onProblemAction)
+      }
+      noFamily -> item(key = "no-family") {
+        ProblemPanel(
+          problem = OnboardingProblem.NO_FAMILY_IN_AREA,
+          onAction = actions.onProblemAction,
+          title = common?.let { stringResource(R.string.problem_no_family_title_named, it) },
+          detail = common?.let { stringResource(R.string.problem_no_family_detail_named, it) },
+        )
       }
       else -> {
         if (writable < 2 || ui.problem == OnboardingProblem.COMMON_AREA_NOT_WRITABLE) {
@@ -178,7 +191,8 @@ internal fun AreasScreen(
       }
     }
     if (ui.problem != null && ui.problem != OnboardingProblem.NO_ACCESSIBLE_SHARE &&
-      ui.problem != OnboardingProblem.FAMILY_ALREADY_EXISTS && ui.problem != OnboardingProblem.COMMON_AREA_NOT_WRITABLE
+      ui.problem != OnboardingProblem.FAMILY_ALREADY_EXISTS && ui.problem != OnboardingProblem.COMMON_AREA_NOT_WRITABLE &&
+      ui.problem != OnboardingProblem.NO_FAMILY_IN_AREA
     ) {
       item(key = "problem") { ProblemPanel(problem = ui.problem, onAction = actions.onProblemAction) }
     }
@@ -235,6 +249,7 @@ private fun AreaState.label(): Int = when (this) {
   AreaState.READ_WRITE -> R.string.areas_state_read_write
   AreaState.READ_ONLY -> R.string.areas_state_read_only
   AreaState.DENIED -> R.string.areas_state_denied
+  AreaState.FENCED -> R.string.areas_state_fenced
   AreaState.MISSING -> R.string.areas_state_missing
   AreaState.UNREACHABLE -> R.string.areas_state_unreachable
 }

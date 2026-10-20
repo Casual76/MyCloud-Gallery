@@ -47,8 +47,25 @@ internal enum class FieldProbeKey(val code: String) {
   T09_TRASH_EXPIRES_DAYS_MIN("t09.trash_expires_days_min"),
   T09_TRASH_EXPIRES_DAYS_MAX("t09.trash_expires_days_max"),
 
+  /**
+   * D-3 delle prove sul campo: dopo il cestino dell'app, quante righe della richiesta sono uscite dalle cartelle di prova (One UI le sposta nel
+   * Cestino di Galleria); di quelle, quante l'app vede ancora con lo stesso `_ID` sotto `Android/.Trash/`, quante con `IS_TRASHED = 1`, e quante
+   * non vede piu' per niente.
+   */
+  T09_TRASH_OUT_OF_FOLDERS("t09.trash_out_of_folders"),
+  T09_TRASH_IN_GALLERY_TRASH("t09.trash_in_gallery_trash"),
+  T09_TRASH_ELSEWHERE_IS_TRASHED("t09.trash_elsewhere_is_trashed"),
+  T09_TRASH_GONE("t09.trash_gone"),
+
   /** La risposta dell'utente: 1 = il cestino di Samsung Gallery mostra le foto cestinate dall'app, 0 = no. */
   T09_TRASH_IN_SAMSUNG("t09.trash_in_samsung"),
+
+  /**
+   * D-3: "Ripristina" con le foto fuori dalle cartelle di prova (nel Cestino di Galleria): l'app non le puo' ripristinare, lo dice e conta quante
+   * sono; e quante sono gia' tornate al loro posto con lo stesso `_ID` (ripristinate da Galleria → Cestino).
+   */
+  T09_UNTRASH_IN_GALLERY("t09.untrash_in_gallery"),
+  T09_UNTRASH_BACK_SAME_ID("t09.untrash_back_same_id"),
   T09_UNTRASH_REQUESTED("t09.untrash_requested"),
   T09_UNTRASH_RESULT("t09.untrash_result"),
   T09_UNTRASH_IS_TRASHED("t09.untrash_is_trashed"),

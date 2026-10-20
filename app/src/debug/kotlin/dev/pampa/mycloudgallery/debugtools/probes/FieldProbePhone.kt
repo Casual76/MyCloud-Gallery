@@ -38,6 +38,16 @@ internal class ProbeRow(
 }
 
 /**
+ * SOLO build debug (D-3 delle prove sul campo): dove stanno le righe che la prova ha cestinato, solo conteggi. [inFolders] nelle cartelle di
+ * prova (al loro posto, anche se cestinate), [inGalleryTrash] nel Cestino di Galleria con lo stesso `_ID`, [elsewhere] in un'altra cartella,
+ * [gone] non piu' visibili all'app con quell'`_ID`; [trashed] quante, fra quelle trovate, hanno `IS_TRASHED = 1`.
+ */
+internal data class ProbeWhere(val inFolders: Int, val inGalleryTrash: Int, val elsewhere: Int, val trashed: Int, val gone: Int) {
+  /** Uscite dalle cartelle di prova: nel Cestino di Galleria, altrove o sparite. */
+  val outOfFolders: Int get() = inGalleryTrash + elsewhere + gone
+}
+
+/**
  * SOLO build debug (Fase 5B, LA-7 della verifica funzionale): una riga di riferimento salvata su file fra un passaggio e l'altro di una prova a
  * piu' tempi. **Solo numeri**: l'`_ID`, la dimensione, la data di modifica, la data di scatto e la generazione, separati da tabulazioni. Quello
  * che T-09 e T-16 confrontano dopo (`FieldProbeMath.diff`, `compareView`) e' proprio questo; il resto della riga si rilegge dal telefono.
@@ -69,8 +79,9 @@ internal object ProbeRowMarks {
 /**
  * SOLO build debug (Fase 5B, P0-B): la **recinzione** delle prove guidate sul telefono (D13 applicata alle prove T): l'unico punto da cui le prove
  * leggono il MediaStore, e legge **solo** `DCIM/mcg-prova/` e `Pictures/mcg-prova/` (le cartelle che lo script di semina `tools/chaos/s25.ps1 -Mode
- * seed` riempie). Nessuna prova tocca una riga fuori da queste due cartelle: le richieste di sistema (cestino, scrittura) partono da qui e
- * da nessun'altra parte.
+ * backup -Step seed` riempie). Nessuna prova tocca una riga fuori da queste due cartelle: le richieste di sistema (cestino, scrittura) partono da
+ * qui e da nessun'altra parte. L'unica lettura fuori dalle cartelle e' [whereAre]: per `_ID`, solo delle righe che la prova stessa ha preso da
+ * qui e mandato nel cestino, e ne restituisce solo dove stanno a grandi linee (D-3), mai un percorso.
  */
 internal class FieldProbePhone(context: Context) {
 
@@ -132,6 +143,47 @@ internal class FieldProbePhone(context: Context) {
     return out
   }
 
+  /**
+   * D-3 delle prove sul campo: dove stanno adesso le righe [ids] che la prova ha cestinato (prese dalle cartelle di prova), cercate per `_ID` in
+   * tutto il volume, anche cestinate, anche fuori dai media: nelle cartelle di prova, nel Cestino di Galleria (`Android/.Trash/`), altrove, o
+   * sparite per l'app. Solo i conteggi escono di qui: nessun percorso, nessun nome.
+   */
+  fun whereAre(ids: Collection<Long>): ProbeWhere {
+    if (ids.isEmpty() || Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return ProbeWhere(0, 0, 0, 0, 0)
+    val wanted = ids.distinct().take(MAX_WHERE)
+    val args = Bundle().apply {
+      putString(ContentResolver.QUERY_ARG_SQL_SELECTION, "${MediaStore.MediaColumns._ID} IN (${wanted.joinToString(",") { "?" }})")
+      putStringArray(ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, wanted.map { it.toString() }.toTypedArray())
+      putInt(MediaStore.QUERY_ARG_MATCH_TRASHED, MediaStore.MATCH_INCLUDE)
+      putInt(MediaStore.QUERY_ARG_MATCH_PENDING, MediaStore.MATCH_INCLUDE)
+    }
+    val projection = arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.IS_TRASHED, MediaStore.MediaColumns.RELATIVE_PATH)
+    var inFolders = 0
+    var inGalleryTrash = 0
+    var elsewhere = 0
+    var trashed = 0
+    val cursor = try {
+      resolver.query(MediaStore.Files.getContentUri(VOLUME), projection, args, null)
+    } catch (_: SecurityException) {
+      null
+    } catch (_: IllegalArgumentException) {
+      null
+    }
+    cursor?.use {
+      while (it.moveToNext()) {
+        val path = it.getString(2).orEmpty()
+        if (it.getInt(1) == 1) trashed++
+        when {
+          path in FOLDERS -> inFolders++
+          path.startsWith(GALLERY_TRASH_PREFIX, ignoreCase = true) -> inGalleryTrash++
+          else -> elsewhere++
+        }
+      }
+    }
+    val found = inFolders + inGalleryTrash + elsewhere
+    return ProbeWhere(inFolders = inFolders, inGalleryTrash = inGalleryTrash, elsewhere = elsewhere, trashed = trashed, gone = wanted.size - found)
+  }
+
   /** La generazione del volume adesso, o 0. */
   fun generation(): Long = try {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) MediaStore.getGeneration(appContext, VOLUME) else 0L
@@ -164,5 +216,11 @@ internal class FieldProbePhone(context: Context) {
 
     /** Le due cartelle di prova (D13, `DebugBackupFence`): le sole che le prove toccano. */
     val FOLDERS: List<String> = listOf("DCIM/mcg-prova/", "Pictures/mcg-prova/")
+
+    /** Il Cestino di Samsung Gallery e degli altri cestini di One UI (`Android/.Trash/<pacchetto>/`). */
+    const val GALLERY_TRASH_PREFIX: String = "Android/.Trash/"
+
+    /** Quante righe al massimo si cercano per `_ID` (le variabili di una query SQLite). */
+    private const val MAX_WHERE = 900
   }
 }

@@ -140,6 +140,10 @@ function Fail([string]$message, [int]$code = 1) {
 # --- Le cartelle del telefono che il backup puo' leggere (D13): scritte qui, mai da un parametro -------------------------------------
 $PhoneFolders = @("/sdcard/DCIM/mcg-prova", "/sdcard/Pictures/mcg-prova")
 
+# --- O-1 delle prove sul campo: i fixture finti (non sono media, E-M12). L'app li ignora e li segnala, il backup NON li carica: nel manifesto
+# stanno come `notmedia=` e sul NAS devono mancare (la verifica dell'area da' errore se ci sono, mai se mancano). Nomi scritti qui, minuscoli.
+$NotMediaFixtures = @("casuali.png", "testo.jpg", "video-falso.mp4")
+
 # --- L'uscita di `sha256sum` e di `stat` sul telefono diventa il manifesto (par. 5.4: il manifesto da `adb shell sha256sum`) -------------
 # hashLines: "<64 esadecimali>  <percorso>"; sizeLines: "<byte> <percorso>". L'etichetta e' solo il nome del file (la cartella e' `mcg-prova`).
 function ConvertTo-PhoneFileList([string[]]$hashLines, [string[]]$sizeLines) {
@@ -155,7 +159,10 @@ function ConvertTo-PhoneFileList([string[]]$hashLines, [string[]]$sizeLines) {
       if (-not $sizes.ContainsKey($path)) { throw "Manca la dimensione di un file del telefono." }
       # Un file a zero byte non e' un media da salvare (E-M12): il backup non lo carica, quindi non entra nel manifesto.
       if ($sizes[$path] -le 0) { continue }
-      $files += [pscustomobject]@{ Sha = $sha; Size = $sizes[$path]; Label = (($path -split '/')[-1]); Path = $path }
+      $label = ($path -split '/')[-1]
+      # O-1: un fixture finto resta nell'elenco (il telefono lo ha) ma e' segnato: nel manifesto e' `notmedia=`, non `phone=`.
+      $notMedia = $NotMediaFixtures -contains $label.ToLowerInvariant()
+      $files += [pscustomobject]@{ Sha = $sha; Size = $sizes[$path]; Label = $label; Path = $path; NotMedia = $notMedia }
     }
   }
   return $files
@@ -163,7 +170,10 @@ function ConvertTo-PhoneFileList([string[]]$hashLines, [string[]]$sizeLines) {
 
 function New-BackupManifestText([string]$runId, [string]$deviceId, [string]$destShare, [string]$destDir, $files) {
   $lines = @("# mcg-backup-manifest 1", "run=$runId", "device=$deviceId", "dest=$destShare|$destDir", "app=$destShare|")
-  foreach ($file in $files) { $lines += ("phone={0}|{1}|{2}" -f $file.Sha, $file.Size, $file.Label) }
+  foreach ($file in $files) {
+    $key = if ($file.NotMedia) { "notmedia" } else { "phone" }
+    $lines += ("{0}={1}|{2}|{3}" -f $key, $file.Sha, $file.Size, $file.Label)
+  }
   return ($lines -join "`n") + "`n"
 }
 
@@ -172,17 +182,19 @@ if ($SelfTest) {
     "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  /sdcard/DCIM/mcg-prova/vuoto.jpg",
     "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae  /sdcard/DCIM/mcg-prova/IMG_0001.jpg",
     "fcde2b2edba56bf408601fb721fe9b5c338d10ee429ea04fae5511b68fbf8fb9 */sdcard/Pictures/mcg-prova/VID_big_1.mp4",
+    "b5bb9d8014a0f9b1d61e21e796d78dccdf1352f23cd32812f4850b878ae4944c  /sdcard/DCIM/mcg-prova/testo.jpg",
     "una riga che non e' un hash"
   )
-  $size = @("0 /sdcard/DCIM/mcg-prova/vuoto.jpg", "1234 /sdcard/DCIM/mcg-prova/IMG_0001.jpg", "2684354560 /sdcard/Pictures/mcg-prova/VID_big_1.mp4")
+  $size = @("0 /sdcard/DCIM/mcg-prova/vuoto.jpg", "1234 /sdcard/DCIM/mcg-prova/IMG_0001.jpg", "2684354560 /sdcard/Pictures/mcg-prova/VID_big_1.mp4", "22 /sdcard/DCIM/mcg-prova/testo.jpg")
   $files = @(ConvertTo-PhoneFileList $hash $size)
   $text = New-BackupManifestText "20261016-101500-1a2b3c4d" "" "test" "mcg-campo" $files
   $expected = "# mcg-backup-manifest 1`nrun=20261016-101500-1a2b3c4d`ndevice=`ndest=test|mcg-campo`napp=test|`n" +
     "phone=2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae|1234|IMG_0001.jpg`n" +
-    "phone=fcde2b2edba56bf408601fb721fe9b5c338d10ee429ea04fae5511b68fbf8fb9|2684354560|VID_big_1.mp4`n"
+    "phone=fcde2b2edba56bf408601fb721fe9b5c338d10ee429ea04fae5511b68fbf8fb9|2684354560|VID_big_1.mp4`n" +
+    "notmedia=b5bb9d8014a0f9b1d61e21e796d78dccdf1352f23cd32812f4850b878ae4944c|22|testo.jpg`n"
   Write-Host $text
   if ($text -ne $expected) { Fail "SelfTest: il manifesto non e' quello atteso." 3 }
-  Write-Host "SelfTest: la conversione dell'uscita di sha256sum nel manifesto e' giusta (un file a zero byte e una riga estranea scartati)." -ForegroundColor Green
+  Write-Host "SelfTest: la conversione dell'uscita di sha256sum nel manifesto e' giusta (un file a zero byte e una riga estranea scartati, un fixture finto come notmedia)." -ForegroundColor Green
   exit 0
 }
 
@@ -397,7 +409,8 @@ function Invoke-Edit {
   Initialize-Adb
   Assert-Debug-App
   $before = @(Get-PhoneFiles)
-  $candidates = @($before | Where-Object { $_.Label -match '\.jpe?g$' -and $_.Size -gt 0 })
+  # O-1: mai un fixture finto (testo.jpg non e' una foto: il backup non lo carica, quindi non avrebbe versioni).
+  $candidates = @($before | Where-Object { $_.Label -match '\.jpe?g$' -and $_.Size -gt 0 -and -not $_.NotMedia })
   if ($candidates.Count -eq 0) { Fail "Nessuna foto JPEG in mcg-prova da modificare." }
   $random = New-Object System.Random($Seed)
   $chosen = @($candidates | Sort-Object { $random.Next() } | Select-Object -First $Edits)
@@ -510,6 +523,8 @@ function Invoke-VerifyBackup {
   $labelsSeeded = @{}
   foreach ($line in (Get-Content -LiteralPath $Manifest)) {
     if ($line -match '^phone=([0-9a-f]{64})\|(\d+)\|(.+)$') { $allowed["$($Matches[1])|$($Matches[3])"] = $true; $labelsSeeded[$Matches[3]] = $true }
+    # O-1: i fixture finti sono sul telefono come gli altri (il backup non li carica, ma il telefono li tiene).
+    if ($line -match '^notmedia=([0-9a-f]{64})\|(\d+)\|(.+)$') { $allowed["$($Matches[1])|$($Matches[3])"] = $true; $labelsSeeded[$Matches[3]] = $true }
     if ($line -match '^edit=([0-9a-f]{64})\|([0-9a-f]{64})\|(.+)$') { $allowed["$($Matches[1])|$($Matches[3])"] = $true; $allowed["$($Matches[2])|$($Matches[3])"] = $true }
   }
   $now = @{}

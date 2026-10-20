@@ -12,6 +12,8 @@
   <string name="action_scan_again">Scansiona di nuovo</string>
   <string name="action_enter_manually">Inserisci a mano</string>
   <string name="action_back_to_code">Rivedi il codice</string>
+  <string name="action_found_family">Crea la famiglia</string>
+  <string name="action_change_area">Scegli un’altra area</string>
   <string name="common_dismiss">Nascondi</string>
   <string name="code_group_spoken">Gruppo %1$d di %2$d: %3$s</string>
 
@@ -59,6 +61,11 @@
   <string name="problem_common_area_title">Manca un’area comune in cui si può scrivere</string>
   <string name="problem_common_area_detail">L’area comune è una cartella condivisa dove tutta la famiglia può scrivere. L’app non crea cartelle sul NAS: creane una dalla dashboard (o scegline un’altra), poi aggiorna l’elenco.</string>
   <string name="problem_family_exists_title">Qui c’è già una famiglia</string>
+  <!-- Punto 10 delle prove sul campo: recupero o ingresso su un’area comune senza famiglia. -->
+  <string name="problem_no_family_title">Qui non c’è nessuna famiglia</string>
+  <string name="problem_no_family_detail">Nell’area comune scelta non c’è ancora nessuna famiglia di MyCloud Gallery: non c’è un admin da recuperare né una famiglia in cui entrare. Puoi crearla adesso, o scegliere un’altra area.</string>
+  <string name="problem_no_family_title_named">In «%1$s» non c’è ancora nessuna famiglia</string>
+  <string name="problem_no_family_detail_named">In «%1$s» non c’è nessuna famiglia di MyCloud Gallery: non c’è un admin da recuperare e non servono kit. Puoi creare la famiglia adesso, o scegliere un’altra area comune.</string>
   <string name="problem_family_exists_detail">Nell’area comune scelta esiste già una famiglia di MyCloud Gallery e non ne creo una seconda sopra. Se sei un familiare, entra; se eri l’admin e hai perso il telefono, recupera l’admin con il codice di recupero.</string>
 
   <!-- Passo 12: chiave e kit -->

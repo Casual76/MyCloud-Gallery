@@ -28,6 +28,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.PhoneConfirmationRules
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryConfirmSheet
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetScaffold
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetTone
+import dev.pampa.mycloudgallery.core.designsystem.state.phoneTrashText
 import dev.pampa.mycloudgallery.feature.backup.R
 import dev.pampa.mycloudgallery.feature.backup.ui.BackupButton
 import dev.pampa.mycloudgallery.feature.backup.ui.BackupText
@@ -85,8 +86,8 @@ internal fun FreeConfirmContent(
       StrongWarning(permanent = false)
       FluidListGroup {
         FluidListRow(
-          title = stringResource(R.string.backup_free_confirm_where_title),
-          subtitle = stringResource(R.string.backup_free_confirm_where_detail),
+          title = stringResource(phoneTrashText(R.string.backup_free_confirm_where_title, R.string.backup_free_confirm_where_title_gallery)),
+          subtitle = stringResource(phoneTrashText(R.string.backup_free_confirm_where_detail, R.string.backup_free_confirm_where_detail_gallery)),
           tone = FluidTone.Neutral,
           leading = { Icon(imageVector = Icons.Rounded.Delete, contentDescription = null) },
           disclosure = false,

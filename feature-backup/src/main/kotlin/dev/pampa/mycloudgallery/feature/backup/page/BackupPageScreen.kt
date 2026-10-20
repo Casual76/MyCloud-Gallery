@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.backup.page
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -41,6 +42,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupProblemCode
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSource
 import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
 import dev.pampa.mycloudgallery.core.backup.contract.SourceStatus
+import dev.pampa.mycloudgallery.core.backup.contract.StopBy
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeIconButton
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.feature.backup.BackupDimens
@@ -137,7 +139,7 @@ internal fun BackupPageScreen(
           item(key = "received") { ReceivedEntryCard(counts = state.received, onOpen = { actions.open(BackupScreen.RECEIVED) }) }
         }
         otherProblems(state, actions)
-        sourcesSection(state.sources)
+        sourcesSection(state.sources, sourcesHalt(state.status))
         deviceSection(state, actions)
       }
     }
@@ -186,7 +188,35 @@ private fun LazyListScope.otherProblems(state: BackupPageUi, actions: BackupPage
 
 // --- Le sorgenti -----------------------------------------------------------------------------------------------------------------
 
-private fun LazyListScope.sourcesSection(sources: List<SourceStatus>) {
+/**
+ * D-4 (prove sul campo): perche' le sorgenti non si salvano adesso, anche se hanno media da salvare; null = il backup puo' lavorare. Con il
+ * backup "in prova" (D12) le righe dicevano "In corso · 0 al sicuro · N in coda" e sembrava un backup al lavoro, mentre non partira' mai finche'
+ * la share non e' di prova. Il perche' lungo lo dice la scheda in cima; la riga dice che e' fermo, con poche parole.
+ */
+internal enum class SourcesHalt(@StringRes val pill: Int, @StringRes val reason: Int) {
+  /** D12: il backup scrive solo nelle share di prova. */
+  TEST_ONLY(R.string.backup_source_state_halted, R.string.backup_source_halt_test_only),
+
+  /** Manca un passo della configurazione (area privata, sorgenti, cartella del dispositivo, permesso). */
+  NOT_CONFIGURED(R.string.backup_source_state_halted, R.string.backup_source_halt_not_configured),
+
+  /** Il riepilogo del primo backup aspetta "Stanotte" o "Inizia ora" (§2.11). */
+  FIRST_BACKUP(R.string.backup_source_state_not_started, R.string.backup_source_halt_first_backup),
+
+  /** "Ferma" dell'utente (R4): una pausa che dura finche' non tocca "Riprendi". */
+  PAUSED(R.string.backup_source_state_paused, R.string.backup_source_halt_paused),
+}
+
+/** Lo stato del backup che ferma tutte le sorgenti, o null. Android che ferma un lavoro (`StopBy.SYSTEM`) non e' una fermata: riprende da solo. */
+internal fun sourcesHalt(status: BackupStatus): SourcesHalt? = when (status) {
+  BackupStatus.TestOnly -> SourcesHalt.TEST_ONLY
+  is BackupStatus.NotConfigured -> SourcesHalt.NOT_CONFIGURED
+  is BackupStatus.FirstBackupReady -> SourcesHalt.FIRST_BACKUP
+  is BackupStatus.Stopped -> if (status.by == StopBy.USER) SourcesHalt.PAUSED else null
+  else -> null
+}
+
+private fun LazyListScope.sourcesSection(sources: List<SourceStatus>, halt: SourcesHalt?) {
   item(key = "sources-title") { BackupSectionTitle(stringResource(R.string.backup_section_sources)) }
   if (sources.isEmpty()) {
     item(key = "sources-empty") { SourcesEmpty() }
@@ -196,7 +226,7 @@ private fun LazyListScope.sourcesSection(sources: List<SourceStatus>) {
     FluidListGroup {
       sources.forEachIndexed { index, source ->
         if (index > 0) FluidListDivider()
-        SourceRow(source)
+        SourceRow(source, halt)
       }
     }
   }
@@ -215,19 +245,17 @@ private fun SourcesEmpty() {
   }
 }
 
-/** Una sorgente: il nome, quanti media e quanti al sicuro, quanti in coda e con problemi, e una pillola con lo stato. */
+/**
+ * Una sorgente: il nome, quanti media e quanti al sicuro, quanti in coda e con problemi, e una pillola con lo stato. Con il backup fermo
+ * ([halt], D-4) la pillola non dice "In corso" e i media che mancano sono "da salvare", non "in coda", con il perche' in poche parole.
+ */
 @Composable
-private fun SourceRow(source: SourceStatus) {
+private fun SourceRow(source: SourceStatus, halt: SourcesHalt?) {
   val name = sourceName(source.source)
   val problems = source.problems.values.sum()
-  val line = sourceLine(source, problems)
-  val state = when {
-    !source.active -> SourceState.Off
-    problems > 0 -> SourceState.Problem
-    source.queued > 0 || source.safe < source.media -> SourceState.Working
-    else -> SourceState.Safe
-  }
-  val pill = stringResource(state.label)
+  val state = sourceState(source, problems, halt)
+  val line = sourceLine(source, problems, halt.takeIf { state == SourceState.Halted })
+  val pill = stringResource(if (state == SourceState.Halted && halt != null) halt.pill else state.label)
   FluidListRow(
     title = name,
     subtitle = line,
@@ -250,21 +278,35 @@ private fun SourceRow(source: SourceStatus) {
   )
 }
 
-private enum class SourceState(val label: Int, val tone: FluidTone) {
+internal enum class SourceState(val label: Int, val tone: FluidTone) {
   Safe(R.string.backup_source_state_safe, FluidTone.Success),
   Working(R.string.backup_source_state_working, FluidTone.Info),
+
+  /** D-4: ci sono media da salvare ma il backup e' fermo (la pillola e' quella di [SourcesHalt]). */
+  Halted(R.string.backup_source_state_halted, FluidTone.Neutral),
   Problem(R.string.backup_source_state_problem, FluidTone.Warning),
   Off(R.string.backup_source_state_off, FluidTone.Neutral),
 }
 
+/** Lo stato di una riga: "In corso" solo se il backup puo' lavorare (D-4); i problemi e "Al sicuro" restano quello che sono. */
+internal fun sourceState(source: SourceStatus, problems: Int, halt: SourcesHalt?): SourceState = when {
+  !source.active -> SourceState.Off
+  problems > 0 -> SourceState.Problem
+  source.queued > 0 || source.safe < source.media -> if (halt != null) SourceState.Halted else SourceState.Working
+  else -> SourceState.Safe
+}
+
 @Composable
-private fun sourceLine(source: SourceStatus, problems: Int): String {
-  val parts = ArrayList<String>(4)
+private fun sourceLine(source: SourceStatus, problems: Int, halt: SourcesHalt?): String {
+  val parts = ArrayList<String>(5)
   parts += pluralStringResource(R.plurals.backup_source_media, source.media, BackupText.count(source.media))
   if (source.active) {
     parts += stringResource(R.string.backup_source_safe, BackupText.count(source.safe))
-    if (source.queued > 0) parts += stringResource(R.string.backup_source_queued, BackupText.count(source.queued))
+    if (source.queued > 0) {
+      parts += stringResource(if (halt != null) R.string.backup_source_to_save else R.string.backup_source_queued, BackupText.count(source.queued))
+    }
     if (problems > 0) parts += pluralStringResource(R.plurals.backup_source_problems, problems, BackupText.count(problems))
+    if (halt != null) parts += stringResource(halt.reason)
   } else {
     parts += stringResource(R.string.backup_source_not_saved)
   }

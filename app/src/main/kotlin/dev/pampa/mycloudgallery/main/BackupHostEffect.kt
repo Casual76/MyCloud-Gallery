@@ -27,6 +27,8 @@ import dev.pampa.mycloudgallery.backup.BackupActionsHost
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryConfirmSheet
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetScaffold
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetTone
+import dev.pampa.mycloudgallery.core.designsystem.state.LocalPhoneTrash
+import dev.pampa.mycloudgallery.core.designsystem.state.PhoneTrash
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupScreen
 import dev.pampa.mycloudgallery.feature.diagnostics.DiagnosticsGraphRoute
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionKind
@@ -49,6 +51,7 @@ import kotlinx.coroutines.withContext
 internal fun BackupHostEffect(actions: AppBackupActions?, nav: NavController, onAccessChanged: () -> Unit) {
   if (actions == null) return
   val context = LocalContext.current
+  val phoneTrash = LocalPhoneTrash.current
   val latestOnAccessChanged = rememberUpdatedState(onAccessChanged)
   // GA-4: il ricordo "ho gia' chiesto il permesso" sta su un file, non in `remember` (si perdeva con la rotazione e il riavvio del processo, e
   // il primo "Consenti" lanciava un dialogo che Android scarta in silenzio): vedi `PermissionAsks`.
@@ -57,7 +60,7 @@ internal fun BackupHostEffect(actions: AppBackupActions?, nav: NavController, on
   val permissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
     latestOnAccessChanged.value()
   }
-  val host = remember(context, nav) {
+  val host = remember(context, nav, phoneTrash) {
     object : BackupActionsHost {
       // Fase 5B (P14): anche "Libera spazio" e "Da decidere" sono rotte registrate (`backupGraph`).
       override fun openScreen(screen: BackupScreen) = nav.navigate(screen.route)
@@ -68,7 +71,15 @@ internal fun BackupHostEffect(actions: AppBackupActions?, nav: NavController, on
 
       override fun openNas(screen: NasScreen) = nav.openNas(screen)
 
-      override fun openGalleryTrash() = nav.openCollection(CollectionKind.RECENTLY_DELETED)
+      /**
+       * "Apri il cestino di Galleria" (E-B4). D-3 (prove sul campo): su One UI il cestino e' quello di Galleria e la pagina "Eliminati di
+       * recente" dell'app non lo vede: si apre Galleria (l'app delle foto predefinita), da cui si va in Cestino. Se non si apre, la pagina
+       * dell'app, che lo spiega. Su Android "puro" il cestino di sistema e' proprio quella pagina.
+       */
+      override fun openGalleryTrash() {
+        if (phoneTrash == PhoneTrash.GALLERY && tryStart(context, Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_GALLERY))) return
+        nav.openCollection(CollectionKind.RECENTLY_DELETED)
+      }
 
       override fun requestMediaAccess() = request(mediaPermissions() + Manifest.permission.ACCESS_MEDIA_LOCATION, full = mediaPermissions())
 

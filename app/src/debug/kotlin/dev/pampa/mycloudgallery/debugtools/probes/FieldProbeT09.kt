@@ -147,6 +147,14 @@ internal class FieldProbeT09(
       store.set(FieldProbeKey.T09_TRASH_EXPIRES_DAYS_MIN, min)
       store.set(FieldProbeKey.T09_TRASH_EXPIRES_DAYS_MAX, max)
     }
+    // D-3: dove sono finite le righe che non sono piu' nelle cartelle di prova (su One UI: il Cestino di Galleria). Solo conteggi.
+    if (resultCode == Activity.RESULT_OK) {
+      val where = phone.whereAre(trashedIds)
+      store.set(FieldProbeKey.T09_TRASH_OUT_OF_FOLDERS, where.outOfFolders.toLong())
+      store.set(FieldProbeKey.T09_TRASH_IN_GALLERY_TRASH, where.inGalleryTrash.toLong())
+      store.set(FieldProbeKey.T09_TRASH_ELSEWHERE_IS_TRASHED, (where.trashed - relevant.count { it.isTrashed }).coerceAtLeast(0).toLong())
+      store.set(FieldProbeKey.T09_TRASH_GONE, where.gone.toLong())
+    }
   }
 
   /** La risposta dell'utente: il cestino di Samsung Gallery mostra le foto cestinate dall'app? */
@@ -154,12 +162,29 @@ internal class FieldProbeT09(
     store.set(FieldProbeKey.T09_TRASH_IN_SAMSUNG, if (shown) 1 else 0)
   }
 
-  /** Rimette al loro posto le righe cestinate dall'ultima richiesta (`createTrashRequest` con `trash = false`). */
-  fun prepareRestore(): IntentSender? {
-    val trashed = phone.rows().filter { it.id in trashedIds && it.isTrashed }
-    if (trashed.isEmpty()) return null
-    store.set(FieldProbeKey.T09_UNTRASH_REQUESTED, trashed.size.toLong())
-    return intents.trashRequest(trashed.map(phone::refOf), false)
+  /**
+   * Rimette al loro posto le righe cestinate dall'ultima richiesta (`createTrashRequest` con `trash = false`), se sono nel cestino di sistema al
+   * loro posto. D-3 delle prove sul campo: su One UI sono nel Cestino di Galleria e l'app non le puo' ripristinare. Prima la prova diceva "nessuna
+   * foto adatta"; adesso lo dice ([RestoreStart.InGalleryTrash]) e lo misura, e misura anche il ritorno dopo Galleria → Cestino → Ripristina
+   * ([RestoreStart.AlreadyBack]: stesso `_ID` al suo posto).
+   */
+  fun prepareRestore(): RestoreStart {
+    if (trashedIds.isEmpty()) return RestoreStart.Nothing
+    val rows = phone.rows().filter { it.id in trashedIds }
+    val trashed = rows.filter { it.isTrashed }
+    if (trashed.isNotEmpty()) {
+      store.set(FieldProbeKey.T09_UNTRASH_REQUESTED, trashed.size.toLong())
+      return intents.trashRequest(trashed.map(phone::refOf), false)?.let { RestoreStart.Dialog(it) } ?: RestoreStart.Nothing
+    }
+    val back = rows.count { !it.isTrashed }
+    val where = phone.whereAre(trashedIds)
+    store.set(FieldProbeKey.T09_UNTRASH_IN_GALLERY, where.outOfFolders.toLong())
+    store.set(FieldProbeKey.T09_UNTRASH_BACK_SAME_ID, back.toLong())
+    return when {
+      where.outOfFolders > 0 -> RestoreStart.InGalleryTrash(where.outOfFolders)
+      back > 0 -> RestoreStart.AlreadyBack(back)
+      else -> RestoreStart.Nothing
+    }
   }
 
   fun finishRestore(resultCode: Int) {
@@ -237,6 +262,21 @@ internal class FieldProbeT09(
         store.set(FieldProbeKey.T09_WRITE_GENERATION_DELTA, (after.generationModified ?: 0L) - generationBefore)
       }
     }
+  }
+
+  /** Che cosa fa "Ripristina quelle foto" (D-3). */
+  sealed interface RestoreStart {
+    /** Le righe sono nel cestino di sistema al loro posto: il dialogo `createTrashRequest(false)`. */
+    class Dialog(val sender: IntentSender) : RestoreStart
+
+    /** [count] righe sono uscite dalle cartelle di prova (One UI: Cestino di Galleria): si ripristinano solo da Galleria → Cestino. */
+    data class InGalleryTrash(val count: Int) : RestoreStart
+
+    /** Le righe sono gia' tornate al loro posto con lo stesso `_ID` (ripristinate da Galleria). */
+    data class AlreadyBack(val count: Int) : RestoreStart
+
+    /** Niente da ripristinare: nessun cestino fatto dalla prova. */
+    data object Nothing : RestoreStart
   }
 
   companion object {

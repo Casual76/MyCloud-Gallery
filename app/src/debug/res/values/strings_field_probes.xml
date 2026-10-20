@@ -6,7 +6,7 @@
   <string name="probe_entry_detail">Cestino, selettori, condivisioni in arrivo e «Modifica con…» sulle cartelle mcg-prova del telefono; un resoconto di soli numeri da copiare in docs/android.md.</string>
 
   <string name="probe_title">Prove guidate</string>
-  <string name="probe_subtitle">Solo sulle cartelle mcg-prova del telefono. Semina prima con tools/chaos/s25.ps1 -Mode seed.</string>
+  <string name="probe_subtitle">Solo sulle cartelle mcg-prova del telefono. Semina prima con tools/chaos/s25.ps1 -Mode backup -Step seed (per T-09 (f) con -Photos 520).</string>
   <string name="probe_back">Indietro</string>
   <!-- I nomi dei componenti di prova nel selettore di sistema e nel foglio di condivisione. -->
   <string name="probe_picker_label">MCG prova (T-14)</string>
@@ -27,7 +27,11 @@
   <string name="probe_t09_samsung_yes">Le mostra</string>
   <string name="probe_t09_samsung_no">Non le mostra</string>
   <string name="probe_t09_restore_title">4 · Ripristina quelle foto</string>
-  <string name="probe_t09_restore_detail">Rimette al loro posto le righe cestinate dall’app (il cestino di Android le tiene 30 giorni).</string>
+  <string name="probe_t09_restore_detail">Rimette al loro posto le righe cestinate dall’app (il cestino di Android le tiene 30 giorni). Su One UI sono nel Cestino di Galleria: la prova lo dice e lo misura.</string>
+  <!-- D-3 (prove sul campo): su One UI le foto cestinate dall’app sono nel Cestino di Galleria, non nel cestino di Android. -->
+  <string name="probe_t09_restore_in_gallery">Le foto sono nel Cestino di Galleria: l’app non le può ripristinare. Ripristinale da Galleria → Cestino, poi tocca di nuovo «4 · Ripristina quelle foto» per misurare il ritorno.</string>
+  <string name="probe_t09_restore_already_back">Le foto sono già tornate al loro posto con lo stesso _ID (ripristinate da Galleria): misurato nel resoconto.</string>
+  <string name="probe_t09_restore_nothing">Niente da ripristinare: prima «3 · Cestina 5 foto con l’app».</string>
   <string name="probe_t09_many_title">5 · Cestina fino a 500 foto con l’app</string>
   <string name="probe_t09_many_detail">Tutte le righe di mcg-prova, al massimo 500, in una richiesta sola. Poi «Ripristina» le rimette.</string>
   <string name="probe_t09_write_title">6 · Permesso di scrittura e riscrittura</string>

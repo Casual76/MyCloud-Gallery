@@ -11,6 +11,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryConfirmSheet
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetScaffold
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetTone
+import dev.pampa.mycloudgallery.core.designsystem.state.phoneTrashText
 
 /**
  * Il foglio "Elimina dal telefono" (D14). In Fase 3 si elimina **solo dal telefono, nel cestino di sistema** (30 giorni,
@@ -32,7 +33,7 @@ internal fun DeleteSheet(
       icon = Icons.Rounded.DeleteForever,
       tone = GallerySheetTone.Destructive,
       title = title,
-      message = stringResource(R.string.viewer_delete_message),
+      message = stringResource(phoneTrashText(R.string.viewer_delete_message, R.string.viewer_delete_message_gallery)),
       actions = {
         FluidButton(
           text = stringResource(R.string.viewer_delete_confirm),

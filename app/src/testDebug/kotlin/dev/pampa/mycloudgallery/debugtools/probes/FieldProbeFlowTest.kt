@@ -157,6 +157,59 @@ class FieldProbeFlowTest {
     assertThat(FieldProbeReport.isNumbersOnly(store.render())).isTrue()
   }
 
+  /**
+   * D-3 delle prove sul campo: su One UI il cestino dell'app manda le foto nel Cestino di Galleria. Prima "Ripristina quelle foto" diceva "nessuna
+   * foto adatta in mcg-prova" senza misurare niente. Adesso la prova misura dove sono finite le righe (stesso `_ID` sotto `Android/.Trash/`, o
+   * sparite), dice che si ripristinano da Galleria → Cestino senza chiedere nessun dialogo, e misura il ritorno con lo stesso `_ID`.
+   */
+  @Test
+  fun d3_conIlCestinoDiGalleriaIlRipristinoLoDiceELoMisura() = runBlocking<Unit> {
+    val probe = t09()
+    probe.prepareTrash(3, many = false)
+    assertThat(intents.trashRequests.single().first.map { it.mediaStoreId }).containsExactly(1L, 2L, 3L).inOrder()
+
+    // One UI: due righe nel Cestino di Galleria con lo stesso _ID (non media, non cestinate), la terza non si vede piu'.
+    provider.moveRow(1, "Android/.Trash/com.sec.android.gallery3d/", mediaType = 0)
+    provider.moveRow(2, "Android/.Trash/com.sec.android.gallery3d/", mediaType = 0)
+    provider.vanishRow(3)
+    probe.finishTrash(Activity.RESULT_OK, many = false)
+    assertThat(store.get(FieldProbeKey.T09_TRASH_IS_TRASHED)).isEqualTo(0L)
+    assertThat(store.get(FieldProbeKey.T09_TRASH_VISIBLE_DEFAULT)).isEqualTo(0L)
+    assertThat(store.get(FieldProbeKey.T09_TRASH_OUT_OF_FOLDERS)).isEqualTo(3L)
+    assertThat(store.get(FieldProbeKey.T09_TRASH_IN_GALLERY_TRASH)).isEqualTo(2L)
+    assertThat(store.get(FieldProbeKey.T09_TRASH_ELSEWHERE_IS_TRASHED)).isEqualTo(0L)
+    assertThat(store.get(FieldProbeKey.T09_TRASH_GONE)).isEqualTo(1L)
+
+    // "Ripristina": nessun dialogo (l'app non le puo' ripristinare), la prova lo dice e lo misura.
+    val inGallery = probe.prepareRestore()
+    assertThat(inGallery).isEqualTo(FieldProbeT09.RestoreStart.InGalleryTrash(3))
+    assertThat(intents.trashRequests).hasSize(1)
+    assertThat(store.get(FieldProbeKey.T09_UNTRASH_IN_GALLERY)).isEqualTo(3L)
+    assertThat(store.get(FieldProbeKey.T09_UNTRASH_BACK_SAME_ID)).isEqualTo(0L)
+
+    // Galleria → Cestino → Ripristina: le righe tornano al loro posto con lo stesso _ID.
+    provider.moveRow(1, "DCIM/mcg-prova/", mediaType = 1)
+    provider.moveRow(2, "DCIM/mcg-prova/", mediaType = 1)
+    val back = probe.prepareRestore()
+    assertThat(back).isEqualTo(FieldProbeT09.RestoreStart.InGalleryTrash(1))
+    assertThat(store.get(FieldProbeKey.T09_UNTRASH_BACK_SAME_ID)).isEqualTo(2L)
+    assertThat(intents.trashRequests).hasSize(1)
+    assertThat(FieldProbeReport.isNumbersOnly(store.render())).isTrue()
+  }
+
+  /** D-3: senza nessun cestino fatto dalla prova "Ripristina" non ha niente da fare; con tutte le righe tornate lo dice. */
+  @Test
+  fun d3_ilRipristinoSenzaCestinoNonFaNienteEConLeRigheTornateLoDice() = runBlocking<Unit> {
+    val probe = t09()
+    assertThat(probe.prepareRestore()).isEqualTo(FieldProbeT09.RestoreStart.Nothing)
+    probe.prepareTrash(1, many = false)
+    provider.moveRow(1, "Android/.Trash/com.sec.android.gallery3d/", mediaType = 0)
+    probe.finishTrash(Activity.RESULT_OK, many = false)
+    provider.moveRow(1, "DCIM/mcg-prova/", mediaType = 1)
+    assertThat(probe.prepareRestore()).isEqualTo(FieldProbeT09.RestoreStart.AlreadyBack(1))
+    assertThat(intents.trashRequests).hasSize(1)
+  }
+
   @Test
   fun ilPermessoDiScritturaRiscriveLaFotoConISuoiStessiByte() = runBlocking<Unit> {
     val rewriter = MediaStorePhoneMediaRewriter(context, undoDir = File(temp.root, "undo"))

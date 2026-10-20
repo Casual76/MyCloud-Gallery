@@ -326,6 +326,35 @@ class BackupAreaRunnerTest {
     }
   }
 
+  /**
+   * O-1 delle prove sul campo: i fixture finti (non media, E-M12) stanno nel manifesto come `notmedia=` e sul NAS devono mancare. La loro assenza
+   * non e' una perdita (4); la loro presenza e' un errore (10), detto per quello che e' e non come un file a meta' (1).
+   */
+  @Test
+  fun iFileFintiDelTelefonoDevonoMancareDalNas(): Unit = runBlocking {
+    val photo = Random(21).nextBytes(1_500)
+    val fake = "solo testo, non una foto".toByteArray()
+    val m = BackupAreaManifest(
+      runId, null, listOf("test" to SharePath.of("mcg-campo")), listOf("test" to null),
+      listOf(BackupAreaManifest.PhoneFile(Sha256.of(photo), photo.size.toLong(), "IMG_0001.jpg")), emptyList(),
+      notMedia = listOf(BackupAreaManifest.PhoneFile(Sha256.of(fake), fake.size.toLong(), "testo.jpg")),
+    )
+    assertThat(BackupAreaManifest.parse(m.text().lines()).notMedia.single().label).isEqualTo("testo.jpg")
+    assertThat(m.text()).contains("notmedia=${Sha256.of(fake)}|${fake.size}|testo.jpg")
+
+    // Il backup ha caricato la foto e non il file finto: tutto in ordine, nessuna perdita.
+    val world = FakeNasTarget().openWorld(0)
+    world.nas.pcPut("test", "mcg-campo/Backup/S25/2026/10/IMG_0001.jpg", photo, 1_000L)
+    val fine = BackupAreaVerifier.verify(world.nas.reader, m, settled = true)
+    assertWithMessage(fine.text()).that(fine.violations).isEmpty()
+
+    // Il file finto e' finito sul NAS: e' un errore, con il suo nome di invariante (10), non un file a meta'.
+    world.nas.pcPut("test", "mcg-campo/Backup/S25/2026/10/testo.jpg", fake, 1_000L)
+    val wrong = BackupAreaVerifier.verify(world.nas.reader, m, settled = true).violations.map { it.invariant }
+    assertThat(wrong).containsExactly(Invariant.OUT_OF_PLACE)
+    world.close()
+  }
+
   /** Il manifesto come lo scrive `tools\chaos\s25.ps1 -Mode backup -Step seed` (l'uscita di `s25.ps1 -SelfTest`): deve restare leggibile da qui. */
   @Test
   fun ilManifestoDelloScriptDelTelefonoSiLegge() {
@@ -337,6 +366,7 @@ class BackupAreaRunnerTest {
       app=test|
       phone=2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae|1234|IMG_0001.jpg
       phone=fcde2b2edba56bf408601fb721fe9b5c338d10ee429ea04fae5511b68fbf8fb9|2684354560|VID_big_1.mp4
+      notmedia=b5bb9d8014a0f9b1d61e21e796d78dccdf1352f23cd32812f4850b878ae4944c|22|testo.jpg
     """.trimIndent()
     val m = BackupAreaManifest.parse(text.lines())
     assertThat(m.runId).isEqualTo("20261016-101500-1a2b3c4d")
@@ -345,6 +375,7 @@ class BackupAreaRunnerTest {
     assertThat(m.dest.single().second?.value).isEqualTo("mcg-campo")
     assertThat(m.phone.map { it.size }).containsExactly(1234L, 2684354560L).inOrder()
     assertThat(m.phone.map { it.label }).containsExactly("IMG_0001.jpg", "VID_big_1.mp4").inOrder()
+    assertThat(m.notMedia.map { it.label }).containsExactly("testo.jpg")
   }
 
   @Test
@@ -425,7 +456,8 @@ class BackupAreaRunnerTest {
       edits = listOf(BackupAreaManifest.Edit(Sha256.of(old), Sha256.of(edited), "foto0")),
     )
     val usual = "mcg-campo/Backup/S25/2026/10/foto0.jpg"
-    val archived = "Versioni/Backup/S25/2026/10/foto0 (originale).jpg"
+    // D13: sotto la cartella delle prove sul campo le versioni stanno nella sua `Versioni/`, come le mette l'app (`VersionPaths.mirrorOf`).
+    val archived = "mcg-campo/Versioni/Backup/S25/2026/10/foto0 (originale).jpg"
     suspend fun verdict(settled: Boolean, build: suspend (BackupChaosWorld) -> Unit): List<Invariant> {
       val world = FakeNasTarget().openWorld(0)
       build(world)
@@ -447,6 +479,17 @@ class BackupAreaRunnerTest {
     assertThat(verdict(false) { it.nas.pcPut("test", archived, Random(99).nextBytes(500), 1_000L) }).contains(Invariant.HALF_FILE)
     // A meta' (la prova non e' ferma) la modifica puo' non essere ancora arrivata: nessuna violazione.
     assertThat(verdict(false) { it.nas.pcPut("test", usual, old, 1_000L) }).isEmpty()
+    // L'invariante non si allenta: l'originale nella `Versioni/` alla radice della share, fuori dalla recinzione, non conta (13).
+    assertThat(verdict(true) { it.nas.pcPut("test", usual, edited, 1_000L); it.nas.pcPut("test", "Versioni/Backup/S25/2026/10/foto0 (originale).jpg", old, 1_000L) })
+      .contains(Invariant.VERSIONS_KEPT)
+  }
+
+  /** La radice delle versioni del verificatore e' quella dell'app: alla radice della share, o (D13) nella cartella delle prove sul campo. */
+  @Test
+  fun laRadiceDelleVersioniEQuellaDellApp() {
+    assertThat(BackupAreaVerifier.versionsRootOf(null).value).isEqualTo("Versioni")
+    assertThat(BackupAreaVerifier.versionsRootOf(SharePath.of("mcg-campo")).value).isEqualTo("mcg-campo/Versioni")
+    assertThat(BackupAreaVerifier.versionsRootOf(SharePath.of("Famiglia")).value).isEqualTo("Versioni")
   }
 
   // --- Il cancello per il NAS vero ---------------------------------------------------------------------------------------------------

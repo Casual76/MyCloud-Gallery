@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.core.family.onboarding
 
+import dev.pampa.mycloudgallery.core.common.featureflags.TestShares
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.family.contract.AdminActionResult
 import dev.pampa.mycloudgallery.core.family.contract.AreaCandidate
@@ -332,13 +333,30 @@ class DefaultOnboardingCoordinator(
 
   // --- Passo 4: aree ------------------------------------------------------------------------------------
 
+  /**
+   * Le share da provare al passo 4: quella con il nome dell'account, `Public`, `NAS` e quelle scritte dall'utente. Con un account di prova
+   * (`test`, `test2`) anche le share di prova (`TestShares.SHARES`), subito dopo la sua: sono le sole che la recinzione delle prove (D33) lascia
+   * usare, e prima l'utente doveva scrivere `test-comune` a mano. Una share esclusa dalla recinzione non si prova: la riga lo dice
+   * ([AreaCandidate.fenced]) invece di "accesso negato". Con gli account veri non cambia niente.
+   */
   override suspend fun proposeAreas(extra: List<String>): List<AreaCandidate> {
     val snapshot = ready() ?: return emptyList()
     val user = snapshot.nasUser ?: return emptyList()
     val seen = HashSet<String>()
-    val names = (listOf(user, PUBLIC_SHARE, COMMON_DEFAULT_SHARE) + extra)
+    val testShares = if (TestShares.isTestAccount(user.trim())) TestShares.SHARES.sorted() else emptyList()
+    val names = (listOf(user) + testShares + listOf(PUBLIC_SHARE, COMMON_DEFAULT_SHARE) + extra)
       .filter { validShare(it) != null && seen.add(it.lowercase()) }
+    val guard = ports.shareGuard
     val proposal = names.map { share ->
+      if (guard != null && !guard.allows(user, share)) {
+        return@map AreaCandidate(
+          share = share,
+          access = NasResult.Ok(ShareAccess.DENIED),
+          isPublic = if (share.equals(PUBLIC_SHARE, ignoreCase = true)) true else null,
+          hasFamily = false,
+          fenced = true,
+        )
+      }
       val access = ports.shareProbe.probe(share)
       val usable = access.okOrNull().let { it == ShareAccess.READ_ONLY || it == ShareAccess.READ_WRITE }
       AreaCandidate(
@@ -353,10 +371,13 @@ class DefaultOnboardingCoordinator(
   }
 
   /** Nella share c'e' gia' `family/registry/…1`? Basta sapere se il file esiste: si legge un byte, mai di piu'. */
-  private suspend fun hasFamily(share: String): Boolean =
+  private suspend fun hasFamily(share: String): Boolean = familyAt(share).okOrNull() == true
+
+  /** Come [hasFamily], ma un errore del NAS resta un errore (punto 10: "nessuna famiglia" solo se il NAS l'ha detto). */
+  private suspend fun familyAt(share: String): NasResult<Boolean> =
     when (val read = ports.sessions.onShare(share) { fs -> fs.read(NasLayout.registryFile(1), 1) }) {
-      is NasResult.Ok -> read.value !is NasRead.NotFound
-      is NasResult.Err -> false
+      is NasResult.Ok -> NasResult.Ok(read.value !is NasRead.NotFound)
+      is NasResult.Err -> read
     }
 
   private suspend fun areas(snapshot: OnboardingSnapshot, input: StepInput.Areas): StepResult {
@@ -377,6 +398,14 @@ class DefaultOnboardingCoordinator(
 
     // "Qui c'e' gia' una famiglia": chi la crea non la sovrascrive (si recupera l'admin o si entra come familiare).
     if (snapshot.path == OnboardingPath.FOUND_FAMILY && hasFamily(common)) return problem(OnboardingProblem.FAMILY_ALREADY_EXISTS)
+    // Punto 10 delle prove sul campo: recuperare l'admin (o diventarne un secondo) ha senso solo dove c'e' una famiglia. Senza, non si cercano i
+    // kit: si dice che li' non c'e' nessuna famiglia e si propone di crearla o di scegliere un'altra area. Un errore del NAS resta il suo.
+    if (snapshot.path == OnboardingPath.RECOVER_ADMIN || snapshot.path == OnboardingPath.SECOND_ADMIN) {
+      when (val family = familyAt(common)) {
+        is NasResult.Err -> return failNas(NasProblems.reach(family.error))
+        is NasResult.Ok -> if (!family.value) return problem(OnboardingProblem.NO_FAMILY_IN_AREA)
+      }
+    }
 
     val warnings = HashSet<OnboardingWarning>()
     if (common.equals(PUBLIC_SHARE, ignoreCase = true) || private.equals(PUBLIC_SHARE, ignoreCase = true)) {

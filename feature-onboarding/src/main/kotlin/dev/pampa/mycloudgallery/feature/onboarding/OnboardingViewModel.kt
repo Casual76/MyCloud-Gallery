@@ -346,6 +346,18 @@ class OnboardingViewModel @Inject constructor(
   /** Il passo e' stato finito e si puo' passare oltre (usato da "Da completare": un solo passo, poi si esce). */
   fun clearProblem(step: OnboardingStep) = setStepProblem(step, null)
 
+  /**
+   * Punto 10 delle prove sul campo, "Scegli un'altra area" davanti a "qui non c'e' nessuna famiglia": al passo 4 si torna all'elenco delle aree;
+   * nell'ingresso, a un altro invito (lo stesso modo in cui si e' arrivati: QR o a mano).
+   */
+  fun changeArea() {
+    if (state.value.join != null) {
+      if (progress.value.path == OnboardingPath.JOIN_MANUAL) joinEnterManually() else joinScanInvite()
+      return
+    }
+    clearProblem(OnboardingStep.AREAS)
+  }
+
   // --- 1. Benvenuto ---------------------------------------------------------------------------------
 
   /** Passo 1: il percorso scelto. Dopo, per "entra" parte la scansione, per "recupera" l'indirizzo del NAS. */

@@ -403,11 +403,12 @@ class DefaultJoinFlowTest {
 
   @Test
   fun unNasSenzaFamigliaEUnQrDiUnaFamigliaCheNonCe_E_O5() = runTest(UnconfinedTestDispatcher()) {
-    // L'area comune e' vuota: il QR parla di una famiglia che qui non esiste.
+    // L'area comune e' vuota: il QR parla di una famiglia che qui non esiste. Punto 10 delle prove sul campo: si dice proprio questo ("in
+    // quest'area non c'e' nessuna famiglia", con "Crea la famiglia" o un'altra area), non "e' di un'altra famiglia".
     val j = Fixture(this, withFamily = false)
     j.choose()
     assertThat(j.join.start(j.family.invite())).isEqualTo(JoinStep.NeedsPassword)
-    assertThat(j.join.authenticate(j.password)).isEqualTo(problem(OnboardingProblem.INVITE_OTHER_FAMILY))
+    assertThat(j.join.authenticate(j.password)).isEqualTo(problem(OnboardingProblem.NO_FAMILY_IN_AREA))
     assertThat(j.env.credentials.removed).containsExactly("nas-primary")
     assertThat(j.env.accounts.current()).isNull()
   }

@@ -290,6 +290,13 @@ class DefaultJoinFlow(
       // Un registro piu' vecchio di quello del QR (o nessuno dove il QR dice che c'e' una versione) e' un rollback.
       if (result.rejected.count(RejectReason.ROLLBACK) > 0 || (result.rejected.total == 0 && s.minRegistryVersion > 1)) {
         OnboardingProblem.REGISTRY_UNTRUSTED
+      } else if (result.rejected.total == 0) {
+        // Punto 10 delle prove sul campo: nessun registro da rifiutare. Se nell'area non c'e' proprio una famiglia lo si dice ("Crea la
+        // famiglia" o un'altra area), invece di "e' di un'altra famiglia"; un errore del NAS nel controllo resta il suo, con "Riprova".
+        when (val first = ports.sessions.onShare(s.commonShare) { fs -> fs.read(NasLayout.registryFile(1), 1) }) {
+          is NasResult.Err -> NasProblems.reach(first.error, joining = true)
+          is NasResult.Ok -> if (first.value is NasRead.NotFound) OnboardingProblem.NO_FAMILY_IN_AREA else OnboardingProblem.INVITE_OTHER_FAMILY
+        }
       } else {
         OnboardingProblem.INVITE_OTHER_FAMILY
       },

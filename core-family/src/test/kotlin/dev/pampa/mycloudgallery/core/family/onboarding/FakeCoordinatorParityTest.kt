@@ -17,6 +17,7 @@ import dev.pampa.mycloudgallery.core.family.testing.FakeOnboardingCoordinator
 import dev.pampa.mycloudgallery.core.nas.contract.NasError
 import dev.pampa.mycloudgallery.core.nas.contract.Stage
 import dev.pampa.mycloudgallery.core.rules.Preset
+import dev.pampa.mycloudgallery.core.trust.nas.NasLayout
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -156,6 +157,8 @@ class FakeCoordinatorParityTest {
   @Test
   fun ilRecuperoDellAdminFinisceSoloConLAdminRecuperato() = runTest(UnconfinedTestDispatcher()) {
     val p = Both(this)
+    // Il recupero ha senso dove c'e' una famiglia (punto 10): nell'area comune c'e' il registro.
+    p.f.env.nas.share("NAS").put(NasLayout.registryFile(1), ByteArray(300) { 7 })
     p.submit { StepInput.ChoosePath(OnboardingPath.RECOVER_ADMIN) }
     p.stepsUntil(OnboardingStep.ROLES)
     assertWithMessage("recupero a meta'").that(p.fake.recoveryPending()).isEqualTo(p.real.recoveryPending())
@@ -167,6 +170,19 @@ class FakeCoordinatorParityTest {
     // Recuperato l'admin, le aree non si cambiano piu' (ON-12c).
     p.back()
     p.submit { StepInput.Finish }
+  }
+
+  /** Punto 10 delle prove sul campo: il recupero su un'area comune senza famiglia si ferma al passo 4 nei due, poi con un'altra area va avanti. */
+  @Test
+  fun ilRecuperoSuUnAreaSenzaFamigliaSiFermaAlloStessoModo() = runTest(UnconfinedTestDispatcher()) {
+    val p = Both(this)
+    p.fake.familyShares = setOf("Famiglia")
+    p.f.env.probe.access = p.f.env.probe.access + ("Famiglia" to dev.pampa.mycloudgallery.core.nas.contract.NasResult.Ok(dev.pampa.mycloudgallery.core.nas.contract.ShareAccess.READ_WRITE))
+    p.f.env.nas.share("Famiglia").put(NasLayout.registryFile(1), ByteArray(300) { 7 })
+    p.submit { StepInput.ChoosePath(OnboardingPath.RECOVER_ADMIN) }
+    p.stepsUntil(OnboardingStep.AREAS)
+    p.submit { StepInput.Areas("NAS", "alessio") }
+    p.submit { StepInput.Areas("Famiglia", "alessio") }
   }
 
   @Test

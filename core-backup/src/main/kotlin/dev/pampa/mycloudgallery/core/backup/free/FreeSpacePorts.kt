@@ -82,6 +82,14 @@ interface FreeSpaceCatalog {
   suspend fun freedFromPhone(locations: List<LocationId>)
 
   /**
+   * D-3 delle prove sul campo: come [freedFromPhone], ma ogni posizione si segna assente solo se sta ancora sulla riga consegnata ad Android
+   * ([rows]: posizione → `_ID` di quella riga; null = non noto, si segna come prima). Su One UI il file va nel Cestino di Galleria e l'utente lo
+   * puo' ripristinare da li' prima che un esito sconosciuto si risolva: se la lettura del telefono l'ha gia' ricollegato a un'altra riga (un
+   * `_ID` nuovo), la posizione resta presente. Senza, la Libreria lo mostrava "solo NAS" con il file sul telefono. Di serie: [freedFromPhone].
+   */
+  suspend fun freedRowsFromPhone(rows: Map<LocationId, Long?>) = freedFromPhone(rows.keys.toList())
+
+  /**
    * LS-12 della verifica funzionale 5B: dove sta adesso la riga del telefono della versione [versionId] di [mediaId], per un elemento consegnato
    * ad Android la cui riga [stale] non vale piu' (`PhoneLookup.Stale`: MediaStore ricostruito, `_ID` rinumerati). E' la stessa ricetta del
    * backup (`BackupCatalog.phoneRowOf`): [PhoneRowNow.Absent] solo se la lettura del telefono ha riletto **tutto** il volume dopo il cambio e la

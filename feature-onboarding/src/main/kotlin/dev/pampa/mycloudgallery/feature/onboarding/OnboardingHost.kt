@@ -324,6 +324,8 @@ internal class HostEnv(
       ProblemAction.SCAN_AGAIN -> viewModel.joinScanInvite()
       ProblemAction.ENTER_MANUALLY -> viewModel.joinEnterManually()
       ProblemAction.BACK_TO_CODE -> viewModel.showCodeAgain()
+      ProblemAction.FOUND_FAMILY -> viewModel.choosePath(OnboardingPath.FOUND_FAMILY)
+      ProblemAction.CHANGE_AREA -> viewModel.changeArea()
     }
   }
 }

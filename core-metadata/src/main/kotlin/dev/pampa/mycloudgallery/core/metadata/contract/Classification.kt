@@ -77,6 +77,21 @@ object SourceClassifier {
     return Classified(MediaSource.OTHER, emptySet())
   }
 
+  /**
+   * La sorgente che possiede la **cartella** [relativePath], qualunque sia il nome del file (O-2 delle prove sul campo): `CAMERA` per
+   * `DCIM/Camera/`, `SCREENSHOT` per le cartelle degli screenshot e delle registrazioni dello schermo, null per tutte le altre. Le cartelle
+   * possedute hanno il loro interruttore nel backup ("Fotocamera", "Screenshot"); le altre l'utente le sceglie una per una, e un file che sta
+   * li' si salva con la sua cartella anche se si chiama "Screenshot_...".
+   */
+  fun folderOwner(relativePath: String): MediaSource? {
+    val path = normalize(relativePath)
+    return when {
+      SCREENSHOT_FOLDERS.any { path.startsWith(it) } || SCREEN_RECORDING_FOLDERS.any { path.startsWith(it) } -> MediaSource.SCREENSHOT
+      path.startsWith("dcim/camera/") -> MediaSource.CAMERA
+      else -> null
+    }
+  }
+
   private val VIDEO_EXTENSIONS = setOf("mp4", "mov", "m4v", "3gp", "3g2", "mkv", "webm", "avi")
 
   /** Minuscolo, con `/`, senza `/` iniziale e con `/` finale: `DCIM\Camera` e `/DCIM/Camera/` danno `dcim/camera/`. */

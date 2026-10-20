@@ -919,13 +919,15 @@ class MediaCatalog(
       mediaStoreId = checkNotNull(mediaStoreId) { "Candidato senza _ID." },
       mediaStoreVersion = checkNotNull(mediaStoreVersion) { "Candidato senza versione del MediaStore." },
     )
-    // La sorgente: per `MediaSource` se e' una di quelle scelte, altrimenti la cartella in cui sta la riga scelta.
-    val chosen: CatalogSource = when {
-      source == MediaSource.CAMERA.code && CatalogSource.Camera in sources -> CatalogSource.Camera
-      source == MediaSource.SCREENSHOT.code && CatalogSource.Screenshots in sources -> CatalogSource.Screenshots
-      else -> sources.filterIsInstance<CatalogSource.Folder>().firstOrNull { it.volume == volume && it.relativePath == relativePath }
-        ?: sources.first()
-    }
+    // La sorgente: la cartella scelta in cui sta la riga, se c'e'; altrimenti per `MediaSource`. O-2 (prove sul campo): prima vinceva il tipo,
+    // e uno "Screenshot_….png" dentro una cartella scelta finiva in `Screenshot/` sul NAS (o, con la sorgente Screenshot spenta o fuori dalla
+    // recinzione D13, contava come non suo). Un file in una cartella scelta dall'utente si salva con quella cartella, qualunque sia il suo tipo.
+    val chosen: CatalogSource = sources.filterIsInstance<CatalogSource.Folder>().firstOrNull { it.volume == volume && it.relativePath == relativePath }
+      ?: when {
+        source == MediaSource.CAMERA.code && CatalogSource.Camera in sources -> CatalogSource.Camera
+        source == MediaSource.SCREENSHOT.code && CatalogSource.Screenshots in sources -> CatalogSource.Screenshots
+        else -> sources.first()
+      }
     return CatalogBackupCandidate(
       mediaId = MediaId(mediaId),
       versionId = VersionId(versionId),
@@ -1199,11 +1201,20 @@ class MediaCatalog(
    * cestino di Android le ricollega, E-P11), cosi' la Libreria mostra subito la cella "solo NAS". Solo posizioni del telefono presenti; il
    * resto si salta. Quante ne ha segnate.
    */
-  suspend fun markPhoneLocationsVanished(ids: Collection<LocationId>): Int = write { tx ->
+  suspend fun markPhoneLocationsVanished(ids: Collection<LocationId>): Int = markPhoneRowsVanished(ids.associateWith { null })
+
+  /**
+   * D-3 delle prove sul campo: come [markPhoneLocationsVanished], ma una posizione si segna solo se sta ancora sulla riga consegnata ad
+   * Android ([rows]: posizione → `_ID` di quella riga; null = non noto). Su One UI il file va nel Cestino di Galleria e l'utente puo'
+   * ripristinarlo prima che l'esito si risolva: una posizione che la lettura del telefono ha gia' ricollegato a un'altra riga resta presente.
+   */
+  suspend fun markPhoneRowsVanished(rows: Map<LocationId, Long?>): Int = write { tx ->
     var marked = 0
-    for (id in ids.distinct()) {
+    for ((id, mediaStoreId) in rows) {
       val location = locationDao.get(id.value)?.toDomain() ?: continue
-      if (location.location !is Location.Phone || location.state != LocationState.PRESENT) continue
+      val phone = location.location as? Location.Phone ?: continue
+      if (location.state != LocationState.PRESENT) continue
+      if (mediaStoreId != null && phone.mediaStoreId != null && phone.mediaStoreId != mediaStoreId) continue
       locationDao.update(LocationRules.vanished(location, clock()).toEntity())
       tx.touch(mediaOf(location.id))
       marked++

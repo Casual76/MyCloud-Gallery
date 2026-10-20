@@ -213,7 +213,16 @@ internal fun FieldProbeScreen(onBack: () -> Unit) {
         FluidListRow(
           title = stringResource(R.string.probe_t09_restore_title),
           subtitle = stringResource(R.string.probe_t09_restore_detail),
-          onClick = { startRequest(t09.prepareRestore(), Pending.RESTORE) },
+          onClick = {
+            // D-3: su One UI le foto sono nel Cestino di Galleria; la prova lo dice e lo misura invece di "nessuna foto adatta".
+            when (val start = t09.prepareRestore()) {
+              is FieldProbeT09.RestoreStart.Dialog -> startRequest(start.sender, Pending.RESTORE)
+              is FieldProbeT09.RestoreStart.InGalleryTrash -> say(Section.T09, R.string.probe_t09_restore_in_gallery)
+              is FieldProbeT09.RestoreStart.AlreadyBack -> say(Section.T09, R.string.probe_t09_restore_already_back)
+              FieldProbeT09.RestoreStart.Nothing -> say(Section.T09, R.string.probe_t09_restore_nothing)
+            }
+            refresh()
+          },
         )
         FluidListDivider()
         FluidListRow(

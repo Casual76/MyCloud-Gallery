@@ -61,6 +61,7 @@ import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeTextButton
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryWall
 import dev.pampa.mycloudgallery.core.designsystem.media.GalleryMediaCell
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
+import dev.pampa.mycloudgallery.core.designsystem.state.phoneTrashText
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryOnPhoto
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbBucket
@@ -230,7 +231,7 @@ internal fun RecentlyDeletedScreen(
             CollectionEmptyState(
               icon = Icons.Rounded.Delete,
               title = stringResource(R.string.trash_empty_title),
-              detail = stringResource(R.string.trash_empty_detail),
+              detail = stringResource(phoneTrashText(R.string.trash_empty_detail, R.string.trash_empty_detail_gallery)),
             )
           }
         } else {
@@ -326,12 +327,16 @@ private fun Centered(topPadding: Dp, bottomPadding: Dp, content: @Composable () 
   }
 }
 
-/** La frase che distingue questo cestino da quello della Galleria di Samsung (E-P11). */
+/**
+ * La frase che distingue questo cestino da quello della Galleria di Samsung (E-P11). D-3 (prove sul campo): su One UI quello che l'app
+ * elimina va nel Cestino di Galleria e qui non compare: la pagina lo dice e manda a Galleria → Cestino, invece di promettere un ripristino.
+ */
 @Composable
 private fun Explainer(hiddenNote: Boolean) {
   FluidInlineMessage(
-    message = stringResource(R.string.trash_explainer) + if (hiddenNote) " " + stringResource(R.string.trash_hidden_note) else "",
-    title = stringResource(R.string.trash_explainer_title),
+    message = stringResource(phoneTrashText(R.string.trash_explainer, R.string.trash_explainer_gallery)) +
+      if (hiddenNote) " " + stringResource(R.string.trash_hidden_note) else "",
+    title = stringResource(phoneTrashText(R.string.trash_explainer_title, R.string.trash_explainer_title_gallery)),
     modifier = Modifier
       .fillMaxWidth()
       .padding(horizontal = GalleryDimens.Gutter, vertical = CollectionsDimens.ExplainerGap),

@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 6 (P8, docs/fase6-progetto.md §2.6, D15, D20, D41): la pagina Impostazioni → Ricerca e modelli. -->
+  <string name="models_title">Ricerca e modelli</string>
+  <string name="models_subtitle">Cercare per contenuto avviene sul telefono: niente esce da qui.</string>
+
+  <!-- Ruolo Indicizzatore (D15, Q3) -->
+  <string name="models_section_indexer">Analisi delle foto</string>
+  <string name="models_indexer_title">Analizza le foto di questo dispositivo</string>
+  <string name="models_indexer_detail">Un dispositivo che analizza calcola una volta per tutta la famiglia ciò che serve a cercare per contenuto. Lo scegli tu, dispositivo per dispositivo.</string>
+  <string name="models_indexer_state_on">Indicizzatore</string>
+  <string name="models_indexer_state_off">Non analizza</string>
+  <string name="models_indexer_measuring">Sto misurando il dispositivo…</string>
+  <string name="models_indexer_probe">Misura: %1$s immagini al secondo (%2$s)</string>
+  <string name="models_backend_gpu">con la GPU</string>
+  <string name="models_backend_cpu">con il processore</string>
+  <plurals name="models_indexer_estimate">
+    <item quantity="one">Analizzare %1$s media richiede circa una notte.</item>
+    <item quantity="other">Analizzare %1$s media richiede circa %2$d notti.</item>
+  </plurals>
+  <string name="models_indexer_nothing">Non c’è niente da analizzare.</string>
+  <string name="models_index_now">Indicizza ora</string>
+
+  <!-- Stato del calcolo (AiStatus) -->
+  <string name="models_status_title">Stato dell’analisi</string>
+  <string name="models_status_off">Questo dispositivo non analizza le foto.</string>
+  <string name="models_status_model_missing">Serve il modello di analisi: scaricalo qui sotto.</string>
+  <string name="models_status_idle">Tutto analizzato, per ora.</string>
+  <string name="models_status_running">Analizzati %1$s media su %2$s.</string>
+  <string name="models_status_running_eta">Analizzati %1$s media su %2$s, mancano circa %3$d minuti.</string>
+  <string name="models_status_waiting_rules">In attesa: lo permettono le regole di rete e batteria.</string>
+  <string name="models_status_waiting_network">In attesa di una rete.</string>
+  <string name="models_status_waiting_nas">In attesa del NAS.</string>
+  <string name="models_status_waiting_storage">In attesa di spazio libero.</string>
+  <string name="models_status_waiting_hot">In pausa: il telefono è caldo.</string>
+  <string name="models_status_waiting_preparation">In attesa che le foto siano preparate.</string>
+  <string name="models_status_buffer_only">Analizzato ciò che c’era in locale: %1$s media. Il resto aspetta il NAS.</string>
+
+  <!-- Aree senza indicizzatori (E-I12) -->
+  <string name="models_section_areas">Aree senza chi le analizza</string>
+  <string name="models_area_common">Nessun dispositivo analizza l’area comune.</string>
+  <string name="models_area_private">Nessun dispositivo analizza la tua area privata.</string>
+
+  <!-- Copertura (D31) -->
+  <string name="models_section_coverage">Copertura della ricerca</string>
+  <string name="models_coverage_complete">La ricerca per contenuto copre tutti i media.</string>
+  <string name="models_coverage_partial">La ricerca per contenuto copre %1$s media su %2$s.</string>
+  <string name="models_coverage_model_missing">La ricerca per contenuto è ferma: manca il modello (%1$s).</string>
+  <string name="models_coverage_updating">Aggiornamento della ricerca: %1$d%%.</string>
+  <string name="models_reason_preparation">In attesa della preparazione: %1$s</string>
+  <string name="models_reason_indexer_rules">In attesa delle regole del dispositivo che analizza: %1$s</string>
+  <string name="models_reason_no_indexer">Area senza chi la analizza: %1$s</string>
+  <string name="models_reason_model_missing">Modello assente: %1$s</string>
+  <string name="models_reason_phone_only">Solo sul telefono di un dispositivo che non analizza: %1$s</string>
+  <string name="models_reason_unsupported">Formato non supportato: %1$s</string>
+  <string name="models_reason_text_reading_off">Lettura del testo non attiva: %1$s</string>
+
+  <!-- Lettura del testo (D41, Q4, Q13) -->
+  <string name="models_section_reading">Lettura del testo nelle foto</string>
+  <string name="models_reading_title">Leggi il testo nelle foto</string>
+  <string name="models_reading_off">Spenta. Le parole dentro le foto non si cercano.</string>
+  <string name="models_reading_off_action">Scopri e attiva</string>
+  <string name="models_reading_on_here">Attiva per il tuo account, anche su questo dispositivo.</string>
+  <string name="models_reading_on_not_here">Attiva per il tuo account, ma non su questo dispositivo.</string>
+  <string name="models_reading_disabling">Sto spegnendo la lettura del testo…</string>
+  <string name="models_reading_changed">Il testo della spiegazione è cambiato: leggilo e conferma.</string>
+  <string name="models_reading_changed_action">Leggi il nuovo testo</string>
+  <string name="models_reading_exclude">Non su questo dispositivo</string>
+  <string name="models_reading_include">Usa anche su questo dispositivo</string>
+  <string name="models_reading_disable">Spegni</string>
+  <string name="models_reading_disable_title">Spegnere la lettura del testo?</string>
+  <string name="models_reading_disable_message">Da quel momento ML Kit non parte più, su nessun dispositivo del tuo account. Il testo già letto resta e si può cercare.</string>
+  <string name="models_reading_coverage_note">Il testo letto copre solo i media su cui la lettura è stata attiva su qualche dispositivo della famiglia.</string>
+
+  <!-- Modelli (D20) -->
+  <string name="models_section_models">Modelli</string>
+  <string name="models_model_query">Ricerca per contenuto</string>
+  <string name="models_model_index">Analisi delle foto</string>
+  <string name="models_model_cutout">Ritaglio del soggetto</string>
+  <string name="models_model_detail">%1$s · %2$s</string>
+  <string name="models_state_absent">Non scaricato</string>
+  <string name="models_state_queued">In coda</string>
+  <string name="models_state_fetching">Scaricamento: %1$s di %2$s</string>
+  <string name="models_state_fetching_short">In arrivo</string>
+  <string name="models_state_verifying">Verifica in corso</string>
+  <string name="models_state_ready">Pronto</string>
+  <string name="models_state_failed">Problema</string>
+  <string name="models_source_nas">dal NAS</string>
+  <string name="models_source_https">da Internet</string>
+  <string name="models_source_pc">dal PC</string>
+  <string name="models_source_bundled">dentro l’app</string>
+  <string name="models_download_now">Scarica ora</string>
+  <string name="models_remove">Rimuovi</string>
+  <string name="models_remove_title">Rimuovere il modello?</string>
+  <string name="models_remove_message_query">Senza questo modello la ricerca per contenuto si ferma su questo dispositivo: restano le date, i luoghi e il testo già letto. Potrai scaricarlo di nuovo.</string>
+  <string name="models_remove_message_index">Senza questo modello questo dispositivo non analizza più le foto. Quelle già analizzate restano. Potrai scaricarlo di nuovo.</string>
+  <string name="models_remove_confirm">Rimuovi il modello</string>
+  <string name="models_cancel">Annulla</string>
+  <string name="models_space">Spazio dell’indice: vettori %1$s, testo %2$s.</string>
+
+  <!-- Cronologia (D32, Q5) -->
+  <string name="models_section_history">Ricerche recenti</string>
+  <string name="models_history_clear">Cancella le ricerche recenti</string>
+  <string name="models_history_none">Nessuna ricerca da cancellare. Restano solo su questo telefono.</string>
+  <plurals name="models_history_detail">
+    <item quantity="one">Una ricerca, solo su questo telefono.</item>
+    <item quantity="other">%1$s ricerche, solo su questo telefono.</item>
+  </plurals>
+</resources>

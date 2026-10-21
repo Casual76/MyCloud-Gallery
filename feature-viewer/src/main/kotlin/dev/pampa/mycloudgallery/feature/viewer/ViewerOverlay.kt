@@ -109,6 +109,7 @@ import dev.pampa.mycloudgallery.feature.viewer.menu.NasActionSheets
 import dev.pampa.mycloudgallery.feature.viewer.menu.NasActionsController
 import dev.pampa.mycloudgallery.feature.viewer.menu.NasActionsState
 import dev.pampa.mycloudgallery.feature.viewer.menu.backupMenuEntries
+import dev.pampa.mycloudgallery.feature.viewer.menu.similarMenuEntries
 import dev.pampa.mycloudgallery.feature.viewer.menu.everywhereLocations
 import dev.pampa.mycloudgallery.feature.viewer.menu.nasMenuEntries
 import dev.pampa.mycloudgallery.feature.viewer.download.DownloadState
@@ -773,6 +774,12 @@ private fun ViewerOverlays(
     backupActions = backupEntries,
     shareWithoutLocation = shareWithoutLocation,
     onPlayMotion = if (controller.motionAvailable(currentId)) controller::playMotion else null,
+    similarActions = similarMenuEntries(
+      resources,
+      services.similarSearch.availability(currentId),
+      onFind = { services.similarSearch.findSimilar(currentId) },
+      onExplain = { state.message = ViewerMessage.SimilarUnavailable },
+    ),
   )
   val barActions = viewerBarActions(resources, baseCapabilities, isFavorite, handlers)
   val nasNotice = nasController?.notice?.collectAsState()?.value

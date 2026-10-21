@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 6 (P8, §2.6): la voce "Ricerca e modelli" delle Impostazioni. -->
+  <string name="settings_search">Ricerca e modelli</string>
+  <string name="settings_search_detail">Cerca per contenuto, scarica i modelli e scegli se questo dispositivo analizza le foto.</string>
+  <string name="settings_search_summary">%1$s · %2$s</string>
+  <string name="settings_search_indexer_on">Questo dispositivo analizza le foto</string>
+  <string name="settings_search_indexer_off">Questo dispositivo non analizza le foto</string>
+  <string name="settings_search_reading_on">lettura del testo attiva</string>
+  <string name="settings_search_reading_off">lettura del testo spenta</string>
+  <string name="settings_search_pill_model">Manca un modello</string>
+</resources>

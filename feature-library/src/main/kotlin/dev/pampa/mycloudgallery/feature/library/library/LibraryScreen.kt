@@ -350,9 +350,8 @@ private fun libraryMenu(state: LibraryTabState, onOpenSettings: () -> Unit, scop
     }
   }
   val filters = if (state.timeline != null) {
-    // Fase 6 (P0): `LibraryFilter.DOCUMENTS` esiste come firma, ma il chip "Documenti" lo accende P8 quando il bit derivato c'e'
-    // davvero (D34): fino ad allora la Libreria non lo propone (un filtro sempre vuoto non serve a nessuno).
-    LibraryFilter.entries.filter { it != LibraryFilter.DOCUMENTS || state.filter == LibraryFilter.DOCUMENTS }
+    // Fase 6 (P8, D34): il chip "Documenti" e' fra i filtri rapidi; un catalogo senza il bit `CellFlags.DOCUMENT` mostra lo stato vuoto del filtro.
+    QuickFilters
       .map { filter -> GalleryFilterOption(filterLabel(filter), selected = filter == state.filter) { scope.launch { state.chooseFilter(filter) } } }
   } else {
     emptyList()

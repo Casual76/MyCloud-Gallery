@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 6 (P8, D30, E-Q14): la voce "Trova simili" del menu del viewer. -->
+  <string name="similar_find">Trova simili</string>
+  <string name="viewer_msg_similar_title">Non posso trovare simili</string>
+  <string name="viewer_msg_similar_detail">Questa foto non è ancora stata analizzata. Appena lo sarà, potrai cercare le foto che le somigliano.</string>
+</resources>

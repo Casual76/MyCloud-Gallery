@@ -34,7 +34,8 @@ internal object HalfTable {
 }
 
 /**
- * Il file in sola aggiunta di uno spazio. Un record:
+ * Il file in sola aggiunta di uno spazio, **little-endian** (l'ordine dei processori Android e x86: la seconda passata copia i
+ * float16 dalla mappatura senza scambiare byte). Un record:
  * `MCGV` (4) · versione (1) · ricetta (1) · fotogramma (1) · bit (1: istante presente) · chiave (32) · istante ms (4) ·
  * `dim` float16 · CRC32 dei byte precedenti (4). Tutti i record di uno spazio hanno la stessa lunghezza ([recordSize]).
  *
@@ -55,7 +56,7 @@ internal class VectorFile(val file: File, val dimension: Int) : Closeable {
 
   /** Aggiunge [records] in fondo (una scrittura, poi `force`): le posizioni di ognuno. Prima di ogni riga dell'indice (D22). */
   fun append(records: List<VectorRecord>): LongArray {
-    val buffer = ByteBuffer.allocate(recordSize * records.size).order(ByteOrder.BIG_ENDIAN)
+    val buffer = ByteBuffer.allocate(recordSize * records.size).order(ByteOrder.LITTLE_ENDIAN)
     val crc = CRC32()
     for (r in records) {
       require(r.halves.size == dimension) { "Dimensione diversa da quella dello spazio." }
@@ -101,7 +102,7 @@ internal class VectorFile(val file: File, val dimension: Int) : Closeable {
     val buf = slice(offset) ?: throw IllegalStateException("Record fuori dal file.")
     val dup = buf.duplicate()
     dup.position(HEADER)
-    dup.slice().order(ByteOrder.BIG_ENDIAN).asShortBuffer().get(into, 0, count)
+    dup.slice().order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(into, 0, count)
   }
 
   /** Il prodotto scalare esatto (float32 sui valori float16) fra [query] e il record a [offset]. [scratch] di [dimension]. */
@@ -123,13 +124,15 @@ internal class VectorFile(val file: File, val dimension: Int) : Closeable {
   }
 
   private fun slice(offset: Long): ByteBuffer? {
-    if (offset < 0 || offset % recordSize != 0L || offset + recordSize > length) return null
+    if (offset < 0 || offset % recordSize != 0L) return null
     var m = map
+    // La dimensione del file (una chiamata al sistema) si chiede solo oltre la parte gia' mappata.
     if (m == null || offset + recordSize > mapped) {
       synchronized(this) {
         m = map
         if (m == null || offset + recordSize > mapped) {
           val size = length
+          if (offset + recordSize > size) return null
           require(size <= Int.MAX_VALUE) { "File dei vettori oltre 2 GiB: va compattato." }
           m = channel.map(FileChannel.MapMode.READ_ONLY, 0, size)
           map = m
@@ -140,7 +143,7 @@ internal class VectorFile(val file: File, val dimension: Int) : Closeable {
     val dup = m!!.duplicate()
     dup.position(offset.toInt())
     dup.limit((offset + recordSize).toInt())
-    return dup.slice().order(ByteOrder.BIG_ENDIAN)
+    return dup.slice().order(ByteOrder.LITTLE_ENDIAN)
   }
 
   private fun checksumOk(buf: ByteBuffer): Boolean {

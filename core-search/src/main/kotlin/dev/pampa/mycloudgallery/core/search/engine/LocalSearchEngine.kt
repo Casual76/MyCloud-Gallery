@@ -85,11 +85,12 @@ class LocalSearchEngine(
       if (query == null) {
         notices += if (embedding.readiness.value is SearchReadiness.PreparingContent) SearchNotice.PreparingContentSearch else SearchNotice.OnlyFiltersAndText
       } else {
-        content = core.withMap(snapshot) { map -> ContentScorer.score(query, candidates, map, TwoPassIndex(core.index, map), SearchThresholds.ZL) }
+        content = core.withMap(snapshot) { map -> ContentScorer.score(query, candidates, map, TwoPassIndex(core.index, map), SearchThresholds.ZC, SearchThresholds.ZL) }
       }
     }
     val hits = text.hits(words, exact)
     val onlyFilters = parsed.semantic == null && words.isEmpty() && exact.isEmpty()
+    val corrections = ArrayList<Pair<SearchNotice, Set<Int>>>()
     val (map, scored) = core.withMap(snapshot) { map ->
       val t = FloatArray(snapshot.size)
       if (hits != null) {
@@ -100,19 +101,25 @@ class LocalSearchEngine(
           val score = hits.score(key)
           if (score > 0f) textIndex[key]?.forEach { p -> if (isCandidate[p] && score > t[p]) t[p] = score }
         }
-        // Un refuso corretto si dice solo se la parola corretta e' in una cella visibile fra i candidati (D29).
+        // Un refuso corretto si dice solo se la parola corretta e' in una cella **fra i risultati** (dopo il filtro dei nascosti):
+        // il vocabolario contiene anche le parole dei nascosti (D29).
         hits.corrected.forEachIndexed { i, (typed, fixed) ->
-          val visible = hits.corrections[i].second.any { k -> textIndex[k]?.any { isCandidate[it] } == true }
-          if (visible) notices += SearchNotice.TypoCorrected(fixed, typed)
+          val where = hits.corrections[i].second.flatMapTo(HashSet()) { k -> textIndex[k]?.filter { isCandidate[it] }.orEmpty() }
+          if (where.isNotEmpty()) corrections += SearchNotice.TypoCorrected(fixed, typed) to where
         }
       }
       map to buildScored(candidates, content, t, onlyFilters, hits != null)
     }
     core.refreshCoverage(snapshot)
-    return core.finish(
+    val results = core.finish(
       snapshot, map, chips, scored, onlyFilters, Thresholds(SearchThresholds.ZC, SearchThresholds.ZL, SearchThresholds.S_MIN),
       request.order, notices.distinct(),
     )
+    if (corrections.isEmpty()) return results
+    val shown = HashSet<Int>()
+    for (v in listOf(results.confident, results.likely)) for (i in 0 until v.size) shown += v.snapshotIndex(i)
+    val told = corrections.filter { (_, where) -> where.any { it in shown } }.map { it.first }
+    return if (told.isEmpty()) results else results.copy(notices = (results.notices + told).distinct())
   }
 
   override suspend fun similar(media: MediaId, order: ResultOrder): SearchResults = similarSearch.similar(media, order)

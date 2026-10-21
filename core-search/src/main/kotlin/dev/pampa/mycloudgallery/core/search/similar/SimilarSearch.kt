@@ -30,7 +30,7 @@ internal class SimilarSearch(private val core: SearchCore) {
     val found = core.withMap(snapshot) { map ->
       val query = queryOf(map.slots.copyOfRange(map.start[position], map.start[position + 1])) ?: return@withMap null
       val candidates = IntArray(snapshot.size - 1) { if (it < position) it else it + 1 }
-      map to ContentScorer.score(query, candidates, map, TwoPassIndex(core.index, map), SearchThresholds.ZLS)
+      map to ContentScorer.score(query, candidates, map, TwoPassIndex(core.index, map), SearchThresholds.ZS, SearchThresholds.ZLS)
     } ?: return core.empty(listOf(chip), order)
     val (map, content) = found
     val scored = content.positions.indices.sortedBy { content.positions[it] }.map {

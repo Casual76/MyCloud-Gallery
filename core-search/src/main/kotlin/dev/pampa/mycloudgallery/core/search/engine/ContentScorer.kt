@@ -33,8 +33,10 @@ internal class ContentScores(
  *   stesse classi dell'esecutore di riferimento a forza bruta.
  * - **Oltre**: prima passata int8 su tutte; mediana e `σ = 1,4826 x MAD` dal coseno **esatto** di un campione fisso di
  *   [EXACT_STATS] celle a passo costante (la prima passata ha una scala sua: le soglie sono calibrate sul coseno vero); poi seconda
- *   passata sulle migliori [RERANK] della prima, e ancora sulle successive finche' un blocco porta celle con `z >= zLow - 0,5` (cosi'
- *   nessun "meno probabile" resta fuori perche' la prima passata lo aveva messo un po' piu' in basso).
+ *   passata sulle migliori [RERANK] della prima, e ancora su blocchi doppi dei successivi finche' un blocco e' fitto di sicuri
+ *   (almeno l'1% con `z >= zSure - 0,5`): le ricerche con migliaia di risultati veri li trovano tutti, le code del rumore no.
+ *   Esatto quanto basta (D24): fino a [EXACT_STATS] celle con vettore tutte hanno il coseno esatto e le classi sono quelle del
+ *   riferimento; oltre, un "meno probabile" isolato nel rumore che la prima passata mette in basso puo' mancare.
  * - Le celle non rilette hanno `z` sconosciuto: sono fuori (sotto la soglia bassa).
  */
 internal object ContentScorer {
@@ -42,8 +44,9 @@ internal object ContentScorer {
   const val EXACT_STATS: Int = 8_192
   const val RERANK: Int = 1_000
   private const val EXTEND_MARGIN = 0.5f
+  private const val DENSE = 100
 
-  fun score(query: FloatArray, candidates: IntArray, map: CellMap, two: TwoPassIndex, zLow: Float): ContentScores {
+  fun score(query: FloatArray, candidates: IntArray, map: CellMap, two: TwoPassIndex, zSure: Float, zLow: Float): ContentScores {
     val withVec = candidates.filter { map.hasVector(it) }.toIntArray()
     val n = withVec.size
     if (n < 2) return ContentScores.none(n)
@@ -77,8 +80,10 @@ internal object ContentScorer {
         val block = topRange(coarse.scores, count, next).filter { exactS[it].isNaN() && exactM[it] == -1 }.toIntArray()
         reread(block)
         count = next
-        val anyHigh = block.any { !exactS[it].isNaN() && z(exactS[it], median, sigma) >= zLow - EXTEND_MARGIN }
-        if (!anyHigh) break
+        // Si continua solo dentro una serie fitta di sicuri (almeno l'1% del blocco): migliaia di foto del cane sono tutte trovate,
+        // mentre le code del rumore (sparse in tutta la prima passata) non fanno rileggere la Libreria intera.
+        val sure = block.count { !exactS[it].isNaN() && z(exactS[it], median, sigma) >= zSure - EXTEND_MARGIN }
+        if (sure < maxOf(1, block.size / DENSE)) break
       }
     }
     val kept = (0 until n).filter { !exactS[it].isNaN() }

@@ -192,6 +192,29 @@ class ViewerLiveTextTest : LiveTextViewerBase() {
   }
 
   @Test
+  fun e_V13_chiusaLaSelezioneIlPagerScorreDinuovo() {
+    selectWord(0, 1)
+    pager().performTouchInput { click(Offset(40f, visibleSize.height * 0.3f)) }
+    composeRule.mainClock.advanceTimeBy(1_000)
+    composeRule.waitForIdle()
+    assertThat(hasNode(START)).isFalse()
+    pager().performTouchInput { swipeLeft() }
+    composeRule.waitForIdle()
+    composeRule.onNodeWithContentDescription("${startIndex + 2} di ${fixture.library.count}").assertExists()
+  }
+
+  @Test
+  fun indietroChiudePrimaLaSelezioneEPoiIlViewer() {
+    selectWord(0, 1)
+    composeRule.runOnUiThread { composeRule.activity.onBackPressedDispatcher.onBackPressed() }
+    composeRule.waitForIdle()
+    assertThat(hasNode(START)).isFalse()
+    composeRule.mainClock.advanceTimeBy(1_000)
+    assertThat(closed).isEqualTo(0)
+    composeRule.onNodeWithContentDescription("Chiudi").assertExists()
+  }
+
+  @Test
   fun unaNuovaPressioneSuUnAltraParolaCambiaLaSelezione() {
     selectWord(0, 0)
     longPress(at(text, 1, 4))

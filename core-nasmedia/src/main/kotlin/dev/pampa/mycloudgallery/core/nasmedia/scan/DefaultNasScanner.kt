@@ -118,6 +118,11 @@ class DefaultNasScanner(
   acceptances: FreezeAcceptances = InMemoryFreezeAcceptances(),
   /** D32 (5B, P14): i file che le versioni di questo dispositivo hanno messo a quel posto (diario locale): non sono "cambiati" anomali. */
   private val ownChanges: OwnChanges = OwnChanges.NONE,
+  /**
+   * D-16 (prove sul campo): i file gia' riconosciuti "non media" (E-M12) con il timbro con cui li abbiamo letti. Di serie solo del processo; l'app
+   * passa una memoria su file ([FileNotMediaMemory]) perche' dopo un avvio a freddo la verifica non riapra tutti i documenti della share.
+   */
+  private val notMediaMemory: NotMediaMemory = InMemoryNotMediaMemory(),
 ) : NasScanner {
 
   private val keeper = CursorKeeper(store, account, share)
@@ -143,21 +148,17 @@ class DefaultNasScanner(
   private var freezeLoaded = false
   private var lastEpoch = Long.MIN_VALUE
 
-  /**
-   * I file gia' riconosciuti come "non media" (E-M12) con il timbro con cui li abbiamo letti: finche' il timbro non cambia
-   * non si rileggono a ogni giro (un `.jpg` che dentro e' testo costerebbe 128-192 KiB di lettura ogni volta). Solo del
-   * processo e con un tetto: dopo un riavvio si rileggono una volta.
-   */
-  private val notMediaMemory = object : LinkedHashMap<LocationKey, NasStamp>(64, 0.75f, false) {
-    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<LocationKey, NasStamp>?): Boolean = size > MAX_NOT_MEDIA_MEMORY
-  }
-
   override suspend fun scan(mode: ScanMode, budget: Duration): ScanReport = runLock.withLock {
     if (!freezeLoaded) {
       freezeState.load()
       freezeLoaded = true
     }
-    Run(mode, budget).execute()
+    try {
+      Run(mode, budget).execute()
+    } finally {
+      // D-16: i "non media" riconosciuti in questa scansione si salvano anche se e' stata interrotta (il lavoro conta, e non si perde con il processo).
+      notMediaMemory.save()
+    }
   }
 
   // --- Tipi interni ---------------------------------------------------------------------------------------------------
@@ -831,9 +832,7 @@ class DefaultNasScanner(
 
     // --- E-N1: spostati senza leggere ---------------------------------------------------------------------------------
 
-    private fun isRememberedNotMedia(c: Cand): Boolean = synchronized(notMediaMemory) {
-      notMediaMemory[c.key]?.let { it.size == c.entry.size && it.modifiedAtMillis == c.entry.modifiedAt } == true
-    }
+    private fun isRememberedNotMedia(c: Cand): Boolean = notMediaMemory.matches(c.key, c.entry.stamp)
 
     private suspend fun relocate(pending: MutableList<Cand>) {
       if (activeRound.knownPresent == 0 && isRound) return
@@ -974,6 +973,8 @@ class DefaultNasScanner(
             is Detection.Media -> {
               detected++
               val c = p.cand
+              // D-16: tornato a essere un media (un file cambiato che adesso si legge): il ricordo di "non media" cade.
+              notMediaMemory.forget(c.key)
               if (!arrivals.isStable(c.key, c.name, d.stamp, nasNow)) {
                 // Cambiato fra l'elenco e l'apertura: ancora in scrittura.
                 arriving++
@@ -987,7 +988,7 @@ class DefaultNasScanner(
               detected++
               notMedia++
               if (p.cand.known != null) folderNotMediaRead++
-              synchronized(notMediaMemory) { notMediaMemory[p.cand.key] = p.cand.entry.stamp }
+              notMediaMemory.remember(p.cand.key, p.cand.entry.stamp)
             }
             is Detection.Unreadable -> {
               detected++
@@ -1091,7 +1092,6 @@ class DefaultNasScanner(
 
   private companion object {
     const val TAG = "NasScan"
-    const val MAX_NOT_MEDIA_MEMORY = 50_000
 
     /** R8: i `fileId` tolti dall'app si cercano nel catalogo a blocchi (una query per blocco). */
     const val OWN_REMOVALS_CHUNK = 500

@@ -15,6 +15,7 @@ import dev.pampa.mycloudgallery.core.imaging.contract.ViewerImageSource
 import dev.pampa.mycloudgallery.core.imaging.noop.NoPlaceholderCache
 import dev.pampa.mycloudgallery.core.imaging.noop.NoThumbnailLoader
 import dev.pampa.mycloudgallery.core.imaging.noop.NoViewerImageSource
+import dev.pampa.mycloudgallery.core.imaging.viewer.NasLink
 import dev.pampa.mycloudgallery.core.imaging.viewer.OriginalFetcher
 import dev.pampa.mycloudgallery.core.library.contract.LocalMediaActions
 import dev.pampa.mycloudgallery.core.library.similar.SimilarCopies
@@ -68,6 +69,9 @@ import kotlinx.coroutines.withContext
  *   sulla nitida che c'e'. Di norma e' la stessa `NasImageOrigin` che e' dietro [images].
  * @property nasVideo i video del NAS in streaming (Fase 4, D19): senza, un video del NAS non parte e il viewer dice che il
  *   NAS non risponde.
+ * @property link D-15 (prove sul campo): la rete di adesso rispetto al NAS. Il viewer rilegge cio' che la rete rende falso quando cambia: "Servono i dati
+ *   mobili" non resta dopo il ritorno del Wi-Fi, un video fermo dalla VPN spenta riparte quando si accende. Di norma e' lo stesso collegamento che
+ *   sta dietro [nasVideo], [originals] e [download]; senza, la pagina si rifa solo con "Riprova".
  * @property download "Scarica sul telefono" (Fase 4, D20): senza, la voce non compare nel menu (D13).
  * @property nasActions "Sposta", "Rinomina" ed "Elimina…" per un media del NAS (Fase 4B, P14/P16): senza, le voci non compaiono (D13).
  * @property backup lo stato del backup di un media per la riga "Backup" del pannello informazioni (Fase 5A, D16): senza, la riga non c'e' (D13).
@@ -105,6 +109,7 @@ class ViewerServices(
   val similarCopies: SimilarCopies? = null,
   val outsideCopy: OutsideCopyLookup? = null,
   val backupActions: BackupMediaActions? = null,
+  val link: NasLink? = null,
 )
 
 /** Decodifica un'immagine animata (GIF, WebP animato) in un `Drawable` che si anima da solo (E-M11). */

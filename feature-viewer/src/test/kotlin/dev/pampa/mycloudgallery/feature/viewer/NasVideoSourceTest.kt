@@ -8,9 +8,11 @@ import androidx.media3.datasource.DataSource
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.common.testing.NoNetworkSources
+import dev.pampa.mycloudgallery.core.imaging.contract.UnavailableReason
 import dev.pampa.mycloudgallery.core.imaging.viewer.testing.ScriptedNasReader
 import dev.pampa.mycloudgallery.core.imaging.viewer.MobileDataConsent
 import dev.pampa.mycloudgallery.core.imaging.viewer.NasMediaLocation
+import dev.pampa.mycloudgallery.core.imaging.viewer.NasNetwork
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.nas.testing.InMemoryNasMedia
 import dev.pampa.mycloudgallery.core.nas.testing.NasContent
@@ -83,6 +85,35 @@ class NasVideoSourceTest {
   @Test
   fun unVideoSparitoDalCatalogoEMissing_EV6() = runBlocking<Unit> {
     assertThat(nasVideo().check(ref)).isEqualTo(NasVideoGate.Missing)
+  }
+
+  /**
+   * D-15 delle prove sul campo: con la VPN spenta fuori casa il NAS non si raggiunge, e proporre i dati mobili sarebbe dire il falso. Il cancello guarda
+   * prima il percorso (nessuna conferma lo supera), poi il consumo; ogni volta con la rete di adesso.
+   */
+  @Test
+  fun d15_ilCancelloSegueLaReteDiAdessoEPrimaVieneIlPercorso() = runBlocking<Unit> {
+    add()
+    val link = ChangingLink(NasNetwork.VPN_OFF)
+    val video = NasVideoSource(reader, { locations[it.locationId] }, link = link, consent = consent)
+
+    assertThat(video.check(ref)).isEqualTo(NasVideoGate.Unreachable(UnavailableReason.VPN_OFF_AWAY))
+    // Nemmeno la conferma dei dati mobili lo supera: il NAS non si raggiunge.
+    consent.confirm(ref)
+    assertThat(video.check(ref)).isEqualTo(NasVideoGate.Unreachable(UnavailableReason.VPN_OFF_AWAY))
+    link.value = NasNetwork.OFFLINE
+    assertThat(video.check(ref)).isEqualTo(NasVideoGate.Unreachable(UnavailableReason.OFFLINE))
+    link.value = NasNetwork.NOT_ALLOWED
+    assertThat(video.check(ref)).isEqualTo(NasVideoGate.Unreachable(UnavailableReason.NOT_ALLOWED_HERE))
+    // La VPN si accende sui dati mobili: ora il percorso c'e', e vale la conferma data.
+    link.value = NasNetwork.METERED
+    assertThat(video.check(ref)).isEqualTo(NasVideoGate.Ready(1_234_567))
+    consent.reset()
+    assertThat(video.check(ref)).isEqualTo(NasVideoGate.NeedsMobileData(1_234_567))
+    // Torna il Wi-Fi: libero, senza conferma.
+    link.value = NasNetwork.OPEN
+    assertThat(video.check(ref)).isEqualTo(NasVideoGate.Ready(1_234_567))
+    assertThat(reader.opens.get()).isEqualTo(0)
   }
 
   @Test

@@ -1,10 +1,13 @@
 package dev.pampa.mycloudgallery.core.imaging.viewer
 
+import dev.pampa.mycloudgallery.core.imaging.contract.UnavailableReason
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.model.NasStamp
 import dev.pampa.mycloudgallery.core.model.Sha256
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 
 // Dove sta, sul NAS, il media che il viewer sta aprendo (Fase 4, P8; docs/fase4-progetto.md §2.6). Contratto nuovo di
 // questo pacchetto: `MediaRef.Nas` porta solo l'id della posizione (il percorso del NAS e' un dato sensibile come il GPS
@@ -52,16 +55,61 @@ fun interface NasMediaLocator {
 }
 
 /**
+ * Cosa dice la rete **di adesso** del NAS (D-15 delle prove sul campo). Prima il viewer sapeva solo "a consumo o no" e lo valutava una volta: con la
+ * VPN spenta fuori casa proponeva i dati mobili (che non servono, il NAS non si raggiunge) e, tornato il Wi-Fi, restava su "Servono i dati mobili".
+ */
+enum class NasNetwork {
+  /** Si puo' leggere dal NAS senza costo: Wi-Fi di casa, o la VPN su una rete non a consumo. */
+  OPEN,
+
+  /** Si puo' leggere, ma a consumo (dati mobili, anche attraverso la VPN, o un hotspot): serve la conferma dell'utente per quel media (E-V2). */
+  METERED,
+
+  /** Fuori casa con la VPN di casa spenta: il NAS non si raggiunge, nemmeno con i dati mobili. */
+  VPN_OFF,
+
+  /** Nessuna rete. */
+  OFFLINE,
+
+  /** Una rete da cui l'app non contatta il NAS: non riconosciuta, VPN non di casa, rete locale negata da Android, pagina d'accesso, niente configurato. */
+  NOT_ALLOWED,
+}
+
+/**
  * Se il collegamento verso il NAS e' a consumo (dati mobili, anche attraverso la VPN, o un hotspot): D23, E-V2. L'originale
  * di un media che non e' sul telefono non si scarica senza che l'utente l'abbia accettato per quel media.
+ *
+ * D-15: oltre al consumo dice come stanno il percorso e la rete ([network]) e avvisa quando cambiano ([changes]); i due metodi in piu' hanno un
+ * valore di serie (solo `isMetered`), cosi' una `NasLink { ... }` di prima continua a valere.
  */
 fun interface NasLink {
   fun isMetered(): Boolean
+
+  /** La rete di adesso rispetto al NAS. Di serie: a consumo o libera, secondo [isMetered]. */
+  fun network(): NasNetwork = if (isMetered()) NasNetwork.METERED else NasNetwork.OPEN
+
+  /**
+   * La rete a ogni suo cambiamento, **cominciando da quella di adesso** (come uno `StateFlow`). Chi mostra uno stato che dipende dalla rete
+   * lo rilegge quando cambia, invece di tenere quello di quando e' stato calcolato. Di serie: niente cambia mai.
+   */
+  val changes: Flow<NasNetwork> get() = emptyFlow()
 
   companion object {
     /** Nessuna rete a consumo (casa): di default, e per i test. */
     val Unmetered: NasLink = NasLink { false }
   }
+}
+
+/**
+ * Perche' adesso l'originale di un media del NAS non si legge, o null se si puo' (anche a consumo se l'utente l'ha [confirmed]). L'ordine conta
+ * (D-15): prima il percorso (senza VPN fuori casa i dati mobili non servono a niente, e proporli sarebbe dire il falso), poi il consumo.
+ */
+fun NasLink.blockedReason(confirmed: Boolean): UnavailableReason? = when (network()) {
+  NasNetwork.OPEN -> null
+  NasNetwork.METERED -> if (confirmed) null else UnavailableReason.NEEDS_MOBILE_DATA_CONFIRMATION
+  NasNetwork.VPN_OFF -> UnavailableReason.VPN_OFF_AWAY
+  NasNetwork.OFFLINE -> UnavailableReason.OFFLINE
+  NasNetwork.NOT_ALLOWED -> UnavailableReason.NOT_ALLOWED_HERE
 }
 
 /**

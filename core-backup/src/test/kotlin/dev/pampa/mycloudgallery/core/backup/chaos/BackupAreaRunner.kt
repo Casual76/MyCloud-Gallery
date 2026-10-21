@@ -587,11 +587,25 @@ object BackupAreaVerifier {
     val preKeys = manifest.pre.map { NasFileFact.keyOf(it.share, it.path) }.toSet()
     val fresh = visible.filter { it.key !in preKeys }
 
-    // 3. Quelli che c'erano non sono cambiati.
+    // 3. Quelli che c'erano non sono cambiati. D-14 delle prove sul campo: salvo una modifica del telefono fatta apposta (`edit=`) su un file che il
+    // backup aveva collegato a una copia gia' sul NAS: la modifica va al solito percorso, che e' proprio quello della copia, e l'originale in
+    // `Versioni/`. Non e' una sostituzione solo se i byte di adesso sono quelli di una modifica **successiva** nella catena di quel file e i byte di
+    // prima stanno ancora in `Versioni/`; senza uno dei due e' una sostituzione come prima (l'invariante non si allenta: cambia solo cio' che e' lecito).
+    val chains = editChains(manifest.edits)
+    val laterThan = HashMap<Sha256, Set<Sha256>>()
+    for (chain in chains) chain.forEachIndexed { i, sha -> laterThan[sha] = chain.drop(i + 1).toSet() }
     for (p in manifest.pre) {
       val now = visible.firstOrNull { it.key == NasFileFact.keyOf(p.share, p.path) }
-      if (now == null) add(Invariant.REPLACED, "un file che c'era prima del backup non c'e' piu'")
-      else if (now.sha != p.sha) add(Invariant.REPLACED, "un file che c'era prima del backup ha altri byte")
+      val edited = laterThan[p.sha].orEmpty().isNotEmpty()
+      val kept = edited && versions.any { it.sha == p.sha }
+      when {
+        // Fra l'archiviazione e la pubblicazione il solito percorso e' vuoto per un istante: a meta' va bene, se l'originale e' gia' al sicuro.
+        now == null -> if (settled || !kept) add(Invariant.REPLACED, "un file che c'era prima del backup non c'e' piu'")
+        now.sha == p.sha -> Unit
+        now.sha in laterThan[p.sha].orEmpty() ->
+          if (!kept) add(Invariant.REPLACED, "un file che c'era prima del backup e' stato aggiornato da una modifica del telefono ma il suo originale non e' in Versioni/")
+        else -> add(Invariant.REPLACED, "un file che c'era prima del backup ha altri byte")
+      }
     }
     // O-1: i file finti del telefono (non media, E-M12) non vanno sul NAS. Si dicono per quello che sono, non come "file a meta'".
     val notMediaShas = manifest.notMedia.map { it.sha }.toSet() - phoneShas
@@ -611,22 +625,27 @@ object BackupAreaVerifier {
       val missing = manifest.phone.count { (count[it.sha] ?: 0) == 0 && it.sha !in preShas }
       if (missing > 0) add(Invariant.LOSS, "$missing file del telefono non sono sul NAS")
     }
-    // 5B, 12 e 13: ogni modifica fatta sul telefono dopo il primo backup. A lavoro finito: l'originale e la modifica ci sono, una sola volta ciascuna,
-    // una al solito percorso (`Backup/`) e l'altra in `Versioni/` ("Ripristina originale" le scambia: va bene l'una o l'altra).
+    // 5B, 12 e 13: ogni file modificato sul telefono dopo il primo backup, **una volta per file** (D-14: un file modificato piu' volte e' una catena
+    // `originale → v1 → v2`, e le righe `edit=` sono una per passo). A lavoro finito: l'ultima versione e l'originale ci sono, ogni byte una volta
+    // sola, una sola versione della catena al solito percorso (`Backup/`) e le altre in `Versioni/` ("Ripristina originale" le scambia: va bene
+    // quella o un'altra). Una versione intermedia puo' non essere mai arrivata sul NAS (due modifiche fra un backup e l'altro): non e' una perdita.
     if (settled) {
-      for (e in manifest.edits) {
-        val oldAtUsual = visible.count { it.sha == e.old }
-        val newAtUsual = visible.count { it.sha == e.new }
-        val oldInVersions = versions.count { it.sha == e.old }
-        val newInVersions = versions.count { it.sha == e.new }
-        if (newAtUsual + newInVersions == 0) {
+      for (chain in chains) {
+        val first = chain.first()
+        val last = chain.last()
+        fun usual(sha: Sha256) = visible.count { it.sha == sha }
+        fun archived(sha: Sha256) = versions.count { it.sha == sha }
+        val atUsual = chain.sumOf { usual(it) }
+        val arrived = chain.count { usual(it) + archived(it) > 0 }
+        val inVersions = chain.sumOf { archived(it) }
+        if (usual(last) + archived(last) == 0) {
           add(Invariant.USUAL_PATH, "una modifica del telefono non e' arrivata sul NAS")
-        } else if (oldAtUsual + newAtUsual != 1) {
+        } else if (atUsual != 1) {
           add(Invariant.USUAL_PATH, "al solito percorso non c'e' una sola versione di una modifica del telefono")
         }
-        if (oldAtUsual + oldInVersions == 0) {
+        if (usual(first) + archived(first) == 0) {
           add(Invariant.VERSIONS_KEPT, "l'originale di una modifica del telefono non c'e' piu' sul NAS")
-        } else if (newAtUsual + newInVersions > 0 && oldInVersions + newInVersions != 1) {
+        } else if (usual(last) + archived(last) > 0 && inVersions != arrived - 1) {
           add(Invariant.VERSIONS_KEPT, "in Versioni/ non c'e' una sola versione di una modifica del telefono")
         }
       }
@@ -641,6 +660,46 @@ object BackupAreaVerifier {
   }
 
   private val BACKUP_TEMP = Regex("^[A-Za-z0-9]{26}-bk-[A-Za-z0-9-]+$")
+
+  /**
+   * D-14: le righe `edit=` come catene, una per file: `[originale, v1, v2, …]`. `s25.ps1 -Step edit` scrive una riga per ogni modifica, partendo dalle
+   * impronte di adesso del telefono, quindi la seconda modifica dello stesso file ha come impronta vecchia la nuova della prima. Una catena per ogni
+   * impronta che e' una vecchia e non una nuova; le righe che non stanno in nessuna catena (un giro chiuso, mai nel manifesto vero) valgono da sole.
+   */
+  internal fun editChains(edits: List<BackupAreaManifest.Edit>): List<List<Sha256>> {
+    if (edits.isEmpty()) return emptyList()
+    val next = LinkedHashMap<Sha256, Sha256>()
+    for (e in edits) next.putIfAbsent(e.old, e.new)
+    val news = edits.mapTo(HashSet()) { it.new }
+    val chains = ArrayList<List<Sha256>>()
+    val covered = HashSet<Sha256>()
+    for (head in next.keys.filter { it !in news }) {
+      val chain = arrayListOf(head)
+      var cur = head
+      while (true) {
+        val following = next[cur] ?: break
+        if (following in chain) break
+        chain += following
+        cur = following
+      }
+      chains += chain
+      covered += chain
+    }
+    for (e in edits) if (e.old !in covered && e.new !in covered) chains += listOf(e.old, e.new)
+    return chains
+  }
+
+  /**
+   * Le cartelle che la verifica legge, e le sole che la guardia le lascia leggere: `Backup/` sotto ogni destinazione, i temporanei di ogni cartella
+   * dell'app e, se il manifesto ha modifiche, la `Versioni/` di ogni destinazione (D-14: prima era sempre `Versioni/` alla radice della share, fuori
+   * da `mcg-campo/`, e con le modifiche nel manifesto la guardia fermava tutta la verifica). Sono le stesse cartelle che [verify] percorre.
+   */
+  internal fun readRootsOf(manifest: BackupAreaManifest): List<SharePath> =
+    (
+      manifest.dest.map { (_, dir) -> dir?.child("Backup") ?: SharePath.of("Backup") } +
+        manifest.app.map { (_, dir) -> dir?.child(NasLayout.ROOT.name)?.child("tmp") ?: NasLayout.ROOT.child("tmp") } +
+        (if (manifest.edits.isNotEmpty()) manifest.dest.map { (_, dir) -> versionsRootOf(dir) } else emptyList())
+      ).distinct()
 
   /**
    * La cartella `Versioni/` dove l'app archivia le versioni dei file sotto `Backup/` della destinazione [dir] (null = radice della share): la

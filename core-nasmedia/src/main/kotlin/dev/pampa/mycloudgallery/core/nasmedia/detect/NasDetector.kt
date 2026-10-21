@@ -190,6 +190,13 @@ class NasDetector(
   }
 
   companion object {
+    /**
+     * La "generazione" del riconoscitore, per chi ricorda i suoi esiti fra un processo e l'altro (D-16, `FileNotMediaMemory`): da alzare quando
+     * cambia cio' che il rilevamento riconosce come media (un formato in piu', un controllo diverso). Con un'altra generazione i file gia'
+     * riconosciuti "non media" si rileggono una volta.
+     */
+    const val CLASSIFIER_REVISION: Int = 1
+
     /** Tetto di byte per un rilevamento di immagine: testa, coda e le pagine che l'EXIF, l'XMP e i riquadri HEIC chiedono. */
     const val IMAGE_LIMIT: Long = 2L * 1024 * 1024
 

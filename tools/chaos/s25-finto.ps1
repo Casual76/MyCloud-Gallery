@@ -9,8 +9,9 @@
     1. la semina (-Step seed): fixture di formati misti + jpeg unici + video "grandi" (di pochi byte), il manifesto con le impronte;
     2. la verifica a telefono invariato (-Step verify -SkipNas): le impronte tornano;
     3. le interruzioni (-Step interrupt, 3 interruzioni con attese di 1 s) e la verifica finale;
-    3b. (5B) le modifiche dopo il primo backup (-Step edit): le righe `edit=` del manifesto, la verifica che le accetta, un file tolto da
-        "Libera spazio" (fallisce, a meno di -AllowFreed);
+    3b. (5B) le modifiche dopo il primo backup (-Step edit): le righe `edit=` del manifesto, la verifica che le accetta, una seconda tornata
+        sulle stesse foto (D-14: le righe si concatenano, la vecchia impronta e' la nuova della precedente), un file tolto da "Libera spazio"
+        (fallisce, a meno di -AllowFreed);
     4. un file del telefono che cambia: la verifica deve FALLIRE (codice 4);
     5. la pulizia: senza -Yes rifiuta, con -Yes toglie solo le due cartelle di `mcg-prova`.
   Il verificatore sul NAS (area.ps1 -Mode backup -Stage verify) NON viene lanciato (-SkipNas): questo script non tocca mai il NAS.
@@ -88,6 +89,18 @@ try {
   Check "il manifesto ha una riga edit= per ogni foto modificata" ($editLines.Count -eq 5)
   Check "ogni riga ha due impronte diverse e l'etichetta" (@($editLines | Where-Object { $part = ($_ -replace '^edit=', '') -split '\|'; ($part.Count -lt 3) -or ($part[0] -eq $part[1]) -or ($part[0] -notmatch '^[0-9a-f]{64}$') -or ($part[1] -notmatch '^[0-9a-f]{64}$') }).Count -eq 0)
   Check "le impronte tornano con le modifiche del manifesto" ((Invoke-S25 ($common + @("-Step", "verify", "-SkipNas"))) -eq 0)
+  # D-14: una seconda modifica delle stesse foto (stesso seme: stesse foto) concatena le righe `edit=`. La vecchia impronta di una riga e' la nuova
+  # della precedente: il verificatore dell'area (BackupAreaVerifier.editChains) le segue in catena, una sola volta per file, e non le giudica come
+  # modifiche separate (sul campo 3 foto due volte e una tre volte). Il formato delle righe lo scrive solo questo script: si prova qui.
+  Check "una seconda modifica delle stesse foto finisce" ((Invoke-S25 ($common + @("-Step", "edit", "-Edits", "5"))) -eq 0)
+  $allEdits = @(Get-Content -LiteralPath $manifest | Where-Object { $_ -like "edit=*" })
+  Check "il manifesto ha ora 10 righe edit=" ($allEdits.Count -eq 10)
+  if ($allEdits.Count -eq 10) {
+    $firstNew = @($allEdits[0..4] | ForEach-Object { (($_ -replace '^edit=', '') -split '\|')[1] })
+    $secondOld = @($allEdits[5..9] | ForEach-Object { (($_ -replace '^edit=', '') -split '\|')[0] })
+    Check "ogni riga della seconda tornata parte dall'impronta nuova della prima (catena)" (@($secondOld | Where-Object { $firstNew -contains $_ }).Count -eq 5)
+  }
+  Check "le impronte tornano anche con la catena" ((Invoke-S25 ($common + @("-Step", "verify", "-SkipNas"))) -eq 0)
   # Cio' che "Libera spazio" toglie dal telefono: senza -AllowFreed e' un cambiamento, con no (le altre impronte devono tornare).
   $editedLabels = @($editLines | ForEach-Object { ($_ -split '\|')[2] })
   $freed = Get-ChildItem -LiteralPath (Join-Path $phone "sdcard") -Recurse -File | Where-Object { $_.FullName -match 'mcg-prova' -and $editedLabels -notcontains $_.Name -and $_.Extension -ne '.mp4' } | Select-Object -First 1

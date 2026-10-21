@@ -492,6 +492,168 @@ class BackupAreaRunnerTest {
     assertThat(BackupAreaVerifier.versionsRootOf(SharePath.of("Famiglia")).value).isEqualTo("Versioni")
   }
 
+  // --- D-14 delle prove sul campo: la verifica con le modifiche nel manifesto ----------------------------------------------------------------
+
+  private val usualFoto = "mcg-campo/Backup/S25/2026/10/foto0.jpg"
+  private val archivedFoto = "mcg-campo/Versioni/Backup/S25/2026/10/foto0 (originale).jpg"
+
+  /** Un manifesto con le modifiche di [catena] (originale, v1, v2…) di una foto sola; [pre] se la copia al solito percorso c'era gia' prima del backup. */
+  private fun manifestWithEdits(catena: List<ByteArray>, pre: Boolean = false, others: List<BackupAreaManifest.Pre> = emptyList()): BackupAreaManifest =
+    BackupAreaManifest(
+      runId, BackupChaosWorld.DEVICE, listOf("test" to SharePath.of("mcg-campo")), listOf("test" to null),
+      listOf(BackupAreaManifest.PhoneFile(Sha256.of(catena.first()), catena.first().size.toLong(), "foto0")),
+      (if (pre) listOf(BackupAreaManifest.Pre(Sha256.of(catena.first()), "test", usualFoto)) else emptyList()) + others,
+      edits = catena.zipWithNext { a, b -> BackupAreaManifest.Edit(Sha256.of(a), Sha256.of(b), "foto0") },
+    )
+
+  /**
+   * D-14, la causa: con le righe `edit=` il verificatore legge anche `Versioni/`, ma la guardia della lettura (`readRoots`) ammetteva soltanto
+   * `Versioni/` alla radice della share. Con la recinzione D13 le versioni stanno in `mcg-campo/Versioni/` (`VersionPaths.mirrorOf`): la guardia
+   * fermava tutta la verifica con "percorso fuori dall'area di prova". Le cartelle ammesse ora le calcola il verificatore, le stesse che percorre.
+   */
+  @Test
+  fun laGuardiaDellaLetturaAmmetteLaVersioniDovePercorreIlVerificatore(): Unit = runBlocking {
+    val old = Random(31).nextBytes(2_000)
+    val edited = Random(32).nextBytes(2_100)
+    val m = manifestWithEdits(listOf(old, edited))
+    val roots = BackupAreaVerifier.readRootsOf(m).map { it.value }
+    assertThat(roots).containsExactly("mcg-campo/Backup", ".mycloudgallery/tmp", "mcg-campo/Versioni")
+    // Senza modifiche nel manifesto la Versioni/ non si legge; con la destinazione alla radice della share e' la Versioni/ della radice.
+    assertThat(BackupAreaVerifier.readRootsOf(manifest(Sha256.of(old) to 1L)).map { it.value }).containsExactly("mcg-campo/Backup", ".mycloudgallery/tmp")
+    val atRoot = BackupAreaManifest(runId, null, listOf("test" to null), listOf("test" to null), emptyList(), emptyList(), edits = m.edits)
+    assertThat(BackupAreaVerifier.readRootsOf(atRoot).map { it.value }).containsExactly("Backup", ".mycloudgallery/tmp", "Versioni")
+
+    val guard = BackupAreaGuard.of(credentials(), runId)
+    val world = FakeNasTarget().openWorld(0)
+    world.nas.pcPut("test", usualFoto, edited, 1_000L)
+    world.nas.pcPut("test", archivedFoto, old, 1_000L)
+    // Con le cartelle del verificatore la verifica arriva in fondo, senza che la guardia la fermi, e dice che e' tutto in ordine.
+    val reader = GuardedReader(world.nas.reader, guard, readRoots = BackupAreaVerifier.readRootsOf(m))
+    val fine = BackupAreaVerifier.verify(reader, m, settled = true)
+    assertWithMessage(fine.text()).that(fine.violations).isEmpty()
+    assertThat(fine.filesHashed).isEqualTo(2)
+    // Le cartelle di prima (`Versioni/` alla radice della share) fermano la verifica, come sul campo: e' il difetto, qui provato.
+    val before = GuardedReader(world.nas.reader, guard, readRoots = listOf(SharePath.of("mcg-campo", "Backup"), SharePath.of(".mycloudgallery", "tmp"), SharePath.of("Versioni")))
+    assertThrows(AreaViolation::class.java) { runBlocking { BackupAreaVerifier.verify(before, m, settled = true) } }
+    // La guardia non si allarga: la `Versioni/` alla radice della share, fuori da `mcg-campo/`, resta vietata.
+    assertThrows(AreaViolation::class.java) { runBlocking { reader.list("test", SharePath.of("Versioni"), Purpose.BACKGROUND) { } } }
+    assertThrows(AreaViolation::class.java) { runBlocking { reader.list("test", SharePath.of("mcg-campo", "Altro"), Purpose.BACKGROUND) { } } }
+    world.close()
+  }
+
+  /** D-14: le righe `edit=` di un file modificato piu' volte sono una catena (la vecchia impronta di una e' la nuova della precedente). */
+  @Test
+  fun leModificheDelloStessoFileSonoUnaCatena() {
+    val edits = listOf(
+      BackupAreaManifest.Edit(sha(1), sha(2), "a"),
+      BackupAreaManifest.Edit(sha(10), sha(11), "b"),
+      BackupAreaManifest.Edit(sha(2), sha(3), "a"),
+      BackupAreaManifest.Edit(sha(3), sha(4), "a"),
+    )
+    assertThat(BackupAreaVerifier.editChains(edits)).containsExactly(listOf(sha(1), sha(2), sha(3), sha(4)), listOf(sha(10), sha(11)))
+    assertThat(BackupAreaVerifier.editChains(emptyList())).isEmpty()
+    // Un giro chiuso non si ripete all'infinito: ogni impronta una volta sola.
+    val loop = listOf(BackupAreaManifest.Edit(sha(1), sha(2), "a"), BackupAreaManifest.Edit(sha(2), sha(1), "a"))
+    assertThat(BackupAreaVerifier.editChains(loop).flatten().toSet()).containsExactly(sha(1), sha(2))
+  }
+
+  /**
+   * D-14, il manifesto "a stato finale": un file che c'era prima del backup (`pre=`) e che il telefono ha poi modificato. Il backup lo aveva
+   * collegato alla copia sul NAS, quindi la modifica e' andata a **quel** percorso e l'originale in `Versioni/` (15 file sul campo). Non e' una
+   * sostituzione, ma solo se i byte di adesso sono quelli di una modifica del telefono e l'originale e' ancora in `Versioni/`: l'invariante 3 non
+   * si allenta per nessun altro file.
+   */
+  @Test
+  fun unFileDiPrimaAggiornatoDaUnaModificaDelTelefonoEAmmessoSoloConLOriginaleInVersioni(): Unit = runBlocking {
+    val old = Random(41).nextBytes(2_000)
+    val edited = Random(42).nextBytes(2_100)
+    val m = manifestWithEdits(listOf(old, edited), pre = true)
+    suspend fun verdict(settled: Boolean = true, manifest: BackupAreaManifest = m, build: suspend (BackupChaosWorld) -> Unit): List<Invariant> {
+      val world = FakeNasTarget().openWorld(0)
+      build(world)
+      val result = BackupAreaVerifier.verify(world.nas.reader, manifest, settled)
+      world.close()
+      return result.violations.map { it.invariant }
+    }
+    // La modifica al solito percorso (che era una copia di prima) e l'originale in Versioni/: in ordine.
+    assertThat(verdict { it.nas.pcPut("test", usualFoto, edited, 1_000L); it.nas.pcPut("test", archivedFoto, old, 1_000L) }).isEmpty()
+    // Il file di prima ha altri byte e l'originale non e' in Versioni/: e' una sostituzione (3), e l'originale e' perso (13).
+    assertThat(verdict { it.nas.pcPut("test", usualFoto, edited, 1_000L) }).containsAtLeast(Invariant.REPLACED, Invariant.VERSIONS_KEPT)
+    // Altri byte che non sono di nessuna modifica: sostituzione anche con l'originale al sicuro.
+    val other = Random(43).nextBytes(2_000)
+    assertThat(verdict { it.nas.pcPut("test", usualFoto, other, 1_000L); it.nas.pcPut("test", archivedFoto, old, 1_000L) }).contains(Invariant.REPLACED)
+    // Il solito percorso vuoto a lavoro finito (la modifica non e' arrivata, l'originale e' in Versioni/): non e' in ordine.
+    assertThat(verdict { it.nas.pcPut("test", archivedFoto, old, 1_000L) }).containsAtLeast(Invariant.REPLACED, Invariant.USUAL_PATH)
+    // A meta' (fra l'archiviazione e la pubblicazione il percorso e' vuoto un istante) e' lecito solo con l'originale gia' in Versioni/.
+    assertThat(verdict(settled = false) { it.nas.pcPut("test", archivedFoto, old, 1_000L) }).isEmpty()
+    assertThat(verdict(settled = false) { }).contains(Invariant.REPLACED)
+    // Dopo "Ripristina originale" (scambio) il solito percorso ha di nuovo il file di prima: nessuna sostituzione.
+    assertThat(verdict { it.nas.pcPut("test", usualFoto, old, 1_000L); it.nas.pcPut("test", archivedFoto, edited, 1_000L) }).isEmpty()
+    // La modifica non e' ancora arrivata a meta' prova: il file di prima e' com'era.
+    assertThat(verdict(settled = false) { it.nas.pcPut("test", usualFoto, old, 1_000L) }).isEmpty()
+    // Un altro file di prima, che nessuna modifica spiega, cambiato: sostituzione, anche con modifiche nel manifesto.
+    val old2 = Random(44).nextBytes(900)
+    val withOther = manifestWithEdits(listOf(old, edited), pre = true, others = listOf(BackupAreaManifest.Pre(Sha256.of(old2), "test", "mcg-campo/Backup/vecchia.jpg")))
+    assertThat(
+      verdict(manifest = withOther) {
+        it.nas.pcPut("test", usualFoto, edited, 1_000L)
+        it.nas.pcPut("test", archivedFoto, old, 1_000L)
+        it.nas.pcPut("test", "mcg-campo/Backup/vecchia.jpg", old2.copyOf(899), 1_000L)
+      },
+    ).contains(Invariant.REPLACED)
+    // Senza nessuna riga edit= il file di prima cambiato resta una sostituzione (come prima di D-14).
+    val noEdits = manifestWithEdits(listOf(old), pre = true)
+    assertThat(verdict(manifest = noEdits) { it.nas.pcPut("test", usualFoto, edited, 1_000L) }).contains(Invariant.REPLACED)
+  }
+
+  /**
+   * D-14: un file modificato piu' volte (sul campo 3 foto due volte e una tre volte) e' una catena: una sola versione al solito percorso, le altre in
+   * `Versioni/`; l'originale e l'ultima ci sono sempre. Una versione di mezzo che il backup non ha mai visto (due modifiche fra un giro e l'altro) non e'
+   * una perdita.
+   */
+  @Test
+  fun unFileModificatoPiuVolteEUnaCatenaDiVersioni(): Unit = runBlocking {
+    val v0 = Random(51).nextBytes(2_000)
+    val v1 = Random(52).nextBytes(2_024)
+    val v2 = Random(53).nextBytes(2_048)
+    val m = manifestWithEdits(listOf(v0, v1, v2), pre = true)
+    fun archive(label: String) = "mcg-campo/Versioni/Backup/S25/2026/10/foto0 ($label).jpg"
+    suspend fun verdict(settled: Boolean = true, build: suspend (BackupChaosWorld) -> Unit): List<Invariant> {
+      val world = FakeNasTarget().openWorld(0)
+      build(world)
+      val result = BackupAreaVerifier.verify(world.nas.reader, m, settled)
+      world.close()
+      return result.violations.map { it.invariant }
+    }
+    // Ultima al solito percorso, originale e versione di mezzo in Versioni/: in ordine (anche se il file di prima e' la copia al solito percorso).
+    assertThat(
+      verdict {
+        it.nas.pcPut("test", usualFoto, v2, 1_000L)
+        it.nas.pcPut("test", archive("originale"), v0, 1_000L)
+        it.nas.pcPut("test", archive("versione del 21 ottobre 2026 05.58"), v1, 1_000L)
+      },
+    ).isEmpty()
+    // La versione di mezzo non e' mai arrivata sul NAS: nessuna perdita.
+    assertThat(verdict { it.nas.pcPut("test", usualFoto, v2, 1_000L); it.nas.pcPut("test", archive("originale"), v0, 1_000L) }).isEmpty()
+    // L'ultima non e' arrivata (12), anche se una versione di mezzo c'e'.
+    assertThat(verdict { it.nas.pcPut("test", usualFoto, v1, 1_000L); it.nas.pcPut("test", archive("originale"), v0, 1_000L) }).contains(Invariant.USUAL_PATH)
+    assertThat(verdict { it.nas.pcPut("test", usualFoto, v0, 1_000L) }).contains(Invariant.USUAL_PATH)
+    // Tutte in Versioni/ e il solito percorso vuoto (12).
+    assertThat(verdict { it.nas.pcPut("test", archive("originale"), v0, 1_000L); it.nas.pcPut("test", archive("versione"), v2, 1_000L) }).contains(Invariant.USUAL_PATH)
+    // Due versioni della catena al solito percorso (12): c'e' un solo solito percorso.
+    assertThat(verdict { it.nas.pcPut("test", usualFoto, v2, 1_000L); it.nas.pcPut("test", "mcg-campo/Backup/S25/2026/10/foto0 (2).jpg", v1, 1_000L) }).contains(Invariant.USUAL_PATH)
+    // L'originale perso (13): la catena ha l'ultima al solito percorso ma non l'originale in nessun posto.
+    assertThat(verdict { it.nas.pcPut("test", usualFoto, v2, 1_000L); it.nas.pcPut("test", archive("versione"), v1, 1_000L) }).contains(Invariant.VERSIONS_KEPT)
+    // La stessa versione due volte in Versioni/ (13).
+    assertThat(
+      verdict {
+        it.nas.pcPut("test", usualFoto, v2, 1_000L)
+        it.nas.pcPut("test", archive("originale"), v0, 1_000L)
+        it.nas.pcPut("test", archive("originale (2)"), v0, 1_000L)
+      },
+    ).contains(Invariant.VERSIONS_KEPT)
+  }
+
   // --- Il cancello per il NAS vero ---------------------------------------------------------------------------------------------------
 
   @Test

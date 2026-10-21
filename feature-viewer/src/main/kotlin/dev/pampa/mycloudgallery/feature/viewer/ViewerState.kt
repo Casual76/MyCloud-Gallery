@@ -94,6 +94,9 @@ internal enum class ViewerMessage(@StringRes val title: Int, @StringRes val deta
   /** Lo scaricamento non e' riuscito: nessun file a meta' sul telefono. */
   DownloadFailed(R.string.viewer_msg_download_failed_title, R.string.viewer_msg_download_failed_detail),
   DownloadNasUnreachable(R.string.viewer_msg_download_nas_title, R.string.viewer_msg_download_nas_detail),
+
+  /** D-15: fuori casa con la VPN spenta: il NAS non si raggiunge, nemmeno con i dati mobili. */
+  DownloadVpnOff(R.string.viewer_msg_download_vpn_title, R.string.viewer_msg_download_vpn_detail),
   DownloadPhoneFull(R.string.viewer_msg_download_full_title, R.string.viewer_msg_download_full_detail),
   DownloadIntegrity(R.string.viewer_msg_download_integrity_title, R.string.viewer_msg_download_integrity_detail),
   DownloadCancelled(R.string.viewer_msg_download_cancelled_title, R.string.viewer_msg_download_cancelled_detail),

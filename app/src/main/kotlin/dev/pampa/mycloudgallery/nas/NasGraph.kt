@@ -2,6 +2,8 @@ package dev.pampa.mycloudgallery.nas
 
 import android.app.ActivityManager
 import android.content.Context
+import android.os.Build
+import dev.pampa.mycloudgallery.BuildConfig
 import dev.pampa.mycloudgallery.core.common.featureflags.TestShares
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.database.GalleryDatabase
@@ -88,6 +90,7 @@ import dev.pampa.mycloudgallery.core.nasmedia.contract.ScanSettings
 import dev.pampa.mycloudgallery.core.nasmedia.contract.UserGesture
 import dev.pampa.mycloudgallery.core.nasmedia.detect.NasDetector
 import dev.pampa.mycloudgallery.core.nasmedia.scan.DefaultNasScanner
+import dev.pampa.mycloudgallery.core.nasmedia.scan.FileNotMediaMemory
 import dev.pampa.mycloudgallery.core.network.contract.NasRoute
 import dev.pampa.mycloudgallery.core.prepare.contract.PrepBudget
 import dev.pampa.mycloudgallery.core.prepare.contract.PrepControl
@@ -208,7 +211,8 @@ class NasGraph(
 
   /** Le conferme "dati mobili" per media e per sessione (E-V2): una per l'app, condivisa da foto, video e "Scarica". */
   val consent: MobileDataConsent = MobileDataConsent()
-  val link: NasLink = NasLink { inputs.metered() }
+  /** D-15: il collegamento verso il NAS con la rete di adesso (percorso, consumo) e i suoi cambiamenti: il viewer li segue invece di valutarli una volta. */
+  val link: NasLink = AppNasLink(inputs.route, inputs.metered, inputs.meteredChanges)
   val counters: IndexCounters = IndexCounters()
   /** Il lettore dei media della sessione (uno per processo, come la sessione). */
   private val reader: NasMediaReader by lazy { inputs.session.mediaReader() }
@@ -594,6 +598,9 @@ class NasGraph(
         acceptances = freezeAcceptances,
         // Fase 5B (P14, D32): i file che le versioni hanno messo o spostato (franchigia del diario delle versioni) non sono "cambiati".
         ownChanges = OwnChanges { s -> ownChanges.fileIds(s) },
+        // D-16 (prove sul campo): i file gia' riconosciuti "non media" si ricordano anche fra un processo e l'altro. Prima la verifica a freddo
+        // li riapriva tutti (61,7 MB e 87-91 s su 1.429 documenti); un file cambiato (dimensione o data) si rilegge comunque.
+        notMediaMemory = FileNotMediaMemory(File(File(noBackup, REPLICA_DIR), NOT_MEDIA_FILE_PREFIX + area.area.name.lowercase(Locale.ROOT)), notMediaGeneration()),
       )
     }
     val rt = Runtime(account, deviceId, areas, replica, quality, sync, publisher, remote, workSource, workUnits, preparer, scanners)
@@ -837,6 +844,13 @@ class NasGraph(
     return PrepBudget(memoryClassMb = memory.coerceAtLeast(MIN_MEMORY_CLASS_MB), cores = java.lang.Runtime.getRuntime().availableProcessors().coerceAtLeast(1))
   }
 
+  /**
+   * D-16: chi ha riconosciuto i "non media" ricordati su file. Un'app piu' nuova, un sistema piu' nuovo o un riconoscitore cambiato
+   * ([NasDetector.CLASSIFIER_REVISION]) potrebbero riconoscere un formato che prima non si leggeva: con un'altra generazione i file si rileggono una volta.
+   */
+  private fun notMediaGeneration(): String =
+    "${BuildConfig.VERSION_NAME}+${BuildConfig.VERSION_CODE}/sdk${Build.VERSION.SDK_INT}/c${NasDetector.CLASSIFIER_REVISION}"
+
   private fun isShareName(share: String): Boolean = share.isNotBlank() && share.none { it == '/' || it == '\\' || it.code < 0x20 }
 
   companion object {
@@ -855,6 +869,9 @@ class NasGraph(
 
     /** NA-4: la franchigia di "Ho controllato, continua", sotto `replica/` (l'azzeramento la toglie). */
     const val FREEZE_ACCEPT_FILE = "nas-freeze-accept"
+
+    /** D-16: i file riconosciuti "non media", uno per area (`nas-notmedia-private`, `nas-notmedia-common`), sotto `replica/` (l'azzeramento li toglie). */
+    const val NOT_MEDIA_FILE_PREFIX = "nas-notmedia-"
     private const val VERIFY_EVERY_MS = 15 * 60 * 1000L
 
     /** NA-12: l'attesa del NAS agganciato per il lavoro delle operazioni in un processo appena nato. */

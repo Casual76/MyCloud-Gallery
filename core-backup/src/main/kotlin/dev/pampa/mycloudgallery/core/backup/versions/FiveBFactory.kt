@@ -188,6 +188,8 @@ class VersionedBackupEngine(
     val stop = when {
       u == null -> v.stoppedBy
       v.stoppedBy == RunStop.BUDGET && u.stoppedBy == RunStop.COMPLETE -> RunStop.BUDGET
+      // O-8: una versione che aspetta un file occupato sul NAS non rende "completo" il giro, anche se il caricamento ha finito.
+      v.stoppedBy == RunStop.BUSY && u.stoppedBy == RunStop.COMPLETE -> RunStop.BUSY
       else -> u.stoppedBy
     }
     return BackupRunResult(
@@ -206,7 +208,10 @@ class VersionedBackupEngine(
   private companion object {
     const val TAG = "BackupVersioned"
 
-    /** Le versioni sono finite o hanno finito il loro tempo: il caricamento va avanti (con il tempo che resta). */
-    val GO_ON: Set<RunStop> = setOf(RunStop.COMPLETE, RunStop.BUDGET)
+    /**
+     * Le versioni sono finite, hanno finito il loro tempo o aspettano un file occupato sul NAS (O-8): il caricamento va avanti (con il tempo che
+     * resta), un file occupato non ferma gli altri.
+     */
+    val GO_ON: Set<RunStop> = setOf(RunStop.COMPLETE, RunStop.BUDGET, RunStop.BUSY)
   }
 }

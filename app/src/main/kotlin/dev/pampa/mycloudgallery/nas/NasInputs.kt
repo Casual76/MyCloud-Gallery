@@ -15,8 +15,10 @@ import dev.pampa.mycloudgallery.core.rules.traffic.TrafficLedger
 import dev.pampa.mycloudgallery.core.trust.crypto.Signer
 import dev.pampa.mycloudgallery.core.trust.registry.DeviceStatus
 import dev.pampa.mycloudgallery.core.trust.registry.RegistryState
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.emptyFlow
 
 /** Un'area del NAS di questo dispositivo: la share e se e' l'area privata o quella comune. */
 data class NasShareArea(val share: String, val area: NasArea) {
@@ -31,6 +33,8 @@ data class NasShareArea(val share: String, val area: NasArea) {
  * @property shares le aree configurate (privata e comune), vuoto finche' l'onboarding non le ha scelte.
  * @property commonExclusions le cartelle dell'area comune escluse (configurazione firmata, D11), percorsi di media.
  * @property metered il collegamento verso il NAS e' a consumo (dati mobili, hotspot): D23, E-V2.
+ * @property meteredChanges D-15: [metered] a ogni suo cambiamento (la rete sottostante cambia da Wi-Fi a dati mobili e viceversa): il viewer segue la
+ *   rete di adesso invece di tenere quella di quando ha calcolato il suo stato. Di serie nessun cambiamento.
  */
 class NasInputs(
   val flags: FeatureFlags,
@@ -50,6 +54,7 @@ class NasInputs(
   val metered: () -> Boolean,
   val freezeSignal: MutableNasFreezeSignal,
   val lastDiskTouchAt: StateFlow<Long?>,
+  val meteredChanges: Flow<Boolean> = emptyFlow(),
 ) {
   /** Lo stato di un dispositivo nel registro accettato (E-I15): i dati di revocati, persi e sconosciuti spariscono. */
   fun standing(deviceId: String): DeviceStanding = when (registry()?.registry?.device(deviceId)?.status) {

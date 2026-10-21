@@ -16,6 +16,8 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryDismissSpec
 import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryViewerTransitionState
+import dev.pampa.mycloudgallery.core.imaging.contract.UnavailableReason
+import dev.pampa.mycloudgallery.core.imaging.viewer.NasNetwork
 import dev.pampa.mycloudgallery.core.library.contract.PixelRect
 import dev.pampa.mycloudgallery.core.library.contract.TimelineView
 import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
@@ -24,10 +26,12 @@ import dev.pampa.mycloudgallery.core.model.GeoPoint
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.MediaRef
+import dev.pampa.mycloudgallery.feature.viewer.download.DownloadState
 import dev.pampa.mycloudgallery.feature.viewer.gesture.VerticalIntent
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoPanelState
 import dev.pampa.mycloudgallery.feature.viewer.page.fitRect
 import dev.pampa.mycloudgallery.feature.viewer.video.MotionVideo
+import dev.pampa.mycloudgallery.feature.viewer.video.PlaybackProblem
 import dev.pampa.mycloudgallery.feature.viewer.video.PlaybackSource
 import dev.pampa.mycloudgallery.feature.viewer.video.ViewerPlayback
 import kotlinx.coroutines.CoroutineScope
@@ -271,6 +275,34 @@ internal class ViewerController(
   }
 
   /**
+   * D-15 (prove sul campo): la rete verso il NAS e' cambiata ([network] e' quella di adesso). Quello che una pagina dice per colpa della rete ("Servono
+   * i dati mobili", "NAS non raggiungibile fuori casa", "Nessuna rete", "Il NAS non risponde") non e' piu' vero com'era: si rifa il caricamento delle
+   * pagine in quello stato, come dopo un "Riprova" (un video riparte da solo, una foto riprende la sua sorgente), cosi' lo stato segue la rete di adesso
+   * invece di restare quello di quando e' stato calcolato (sul campo: dopo il ritorno del Wi-Fi il viewer restava su "Servono i dati mobili").
+   *
+   * Una pagina che funziona (un video che va, una foto nitida) non si tocca: un cambio di rete non la rilancia. Un video fermo da un errore di rete
+   * riparte solo se adesso il NAS si puo' provare. Un download in attesa dei dati mobili si scarta: la prossima richiesta lo rivaluta con la rete di adesso.
+   */
+  fun networkChanged(network: NasNetwork) {
+    if (closing) return
+    val stale = LinkedHashSet<MediaId>()
+    for ((id, original) in state.originals) if (original is OriginalProgress.Blocked && original.reason in NETWORK_REASONS) stale += id
+    for ((id, image) in state.images) if (image.unavailable?.reason in NETWORK_REASONS) stale += id
+    val id = state.currentId
+    val reachable = network == NasNetwork.OPEN || network == NasNetwork.METERED
+    if (reachable && playback.videoFor == id && playback.player?.state?.value?.problem == PlaybackProblem.NAS_UNREACHABLE) stale += id
+    for (page in stale) {
+      state.originals.remove(page)
+      // Il video che era in errore va rifatto da capo: il lettore libera la sorgente e la pagina lo riavvia.
+      if (playback.videoFor == page) playback.clear()
+      state.retries[page] = (state.retries[page] ?: 0) + 1
+    }
+    services.download?.let { downloads ->
+      for ((locationId, download) in downloads.states.value) if (download is DownloadState.NeedsMobileData) downloads.acknowledge(locationId)
+    }
+  }
+
+  /**
    * L'utente accetta i dati mobili per [ref] (E-V2): :app registra la conferma (`onConfirmMobileData`) e la pagina riparte da
    * sola, come dopo un "Riprova". Senza il collegamento di :app la nota non propone il tasto.
    */
@@ -417,5 +449,14 @@ internal class ViewerController(
     const val FallbackFraction = 0.3f
     const val MILLI = 1000f
     const val INFO_REST = 0.01f
+
+    /** D-15: i motivi per cui una pagina non mostra l'originale che dipendono dalla rete di quel momento (non il volume tolto). */
+    val NETWORK_REASONS: Set<UnavailableReason> = setOf(
+      UnavailableReason.NAS_UNREACHABLE,
+      UnavailableReason.NOT_ALLOWED_HERE,
+      UnavailableReason.NEEDS_MOBILE_DATA_CONFIRMATION,
+      UnavailableReason.VPN_OFF_AWAY,
+      UnavailableReason.OFFLINE,
+    )
   }
 }

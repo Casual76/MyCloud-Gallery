@@ -259,8 +259,12 @@ class NasVersionEngine(
   private sealed interface Step {
     class Next(val job: VersionJob) : Step
 
-    /** Il lavoro aspetta: [retryAfterMs] null = il prossimo giro; [held] = fermo per una ragione del lavoro (`SOURCE_CHANGED`). */
-    class Wait(val retryAfterMs: Long? = null, val held: Boolean = false) : Step
+    /**
+     * Il lavoro aspetta: [retryAfterMs] null = il prossimo giro; [held] = fermo per una ragione del lavoro (`SOURCE_CHANGED`). [busy] (O-8 delle prove
+     * sul campo, come D-13 per il caricamento): aspetta un file che il NAS tiene occupato (di solito il proprio temporaneo, tenuto per conto di una
+     * connessione caduta); se il giro finisce cosi' non e' "completo" ([RunStop.BUSY]) e si riprova presto, non al prossimo giro periodico.
+     */
+    class Wait(val retryAfterMs: Long? = null, val held: Boolean = false, val busy: Boolean = false) : Step
 
     class Stop(val stop: RunStop, val problem: BackupProblemCode?) : Step
   }
@@ -296,6 +300,8 @@ class NasVersionEngine(
           if (retry == null || clock.monotonicMs() + retry >= round.deadline) {
             round.waiting++
             if (step.held) round.held++
+            // O-8: il lavoro esce dal giro ad aspettare un file occupato sul NAS: il giro non e' "completo".
+            if (step.busy) round.busy++
             return
           }
           sleep(retry)
@@ -579,8 +585,9 @@ class NasVersionEngine(
         }
         is NasResult.Err -> {
           if (r.error != NasError.Exists) return Pumped.Then(stopFor(start, r.error))
-          // "Da capo" nel diario: il temporaneo rimasto e' solo nostro e si toglie, poi si ricrea.
-          return Pumped.Then(dropTemp(start, temp) ?: Step.Next(start))
+          // "Da capo" nel diario: il temporaneo rimasto e' solo nostro e si toglie, poi si ricrea. Se il NAS lo tiene ancora occupato (O-8: l'handle
+          // di una connessione caduta, con la rete gia' giu') si aspetta con attese crescenti e il giro non finisce "completo".
+          return Pumped.Then(dropTemp(start, temp, round) ?: Step.Next(start))
         }
       }
     }
@@ -676,7 +683,7 @@ class NasVersionEngine(
           verifyFailed(saveJob(job.copy(verifyAttempts = attempts)))
         } else {
           val again = saveJob(job.copy(state = UploadState.UPLOADING, resumeAt = 0, resumeId = null, verifyAttempts = attempts))
-          dropTemp(again, temp) ?: Step.Next(again)
+          dropTemp(again, temp, round) ?: Step.Next(again)
         }
       }
     }
@@ -1041,11 +1048,16 @@ class NasVersionEngine(
     return dropTemp(job, temp)
   }
 
-  private suspend fun dropTemp(job: VersionJob, temp: SharePath): Step? = when (val d = ops.deleteOwnTemp(job.share, temp, purpose)) {
+  /**
+   * Toglie il **proprio** temporaneo; null = tolto o assente. Occupato sul NAS (O-8: il temporaneo di una connessione caduta con la rete gia' giu', che
+   * il NAS tiene finche' non se ne accorge): con il [round] attese crescenti nello stesso giro ([lockedWait]), senza (uscite del lavoro) il prossimo giro;
+   * in ogni caso il lavoro e' **occupato** e il giro non e' "completo".
+   */
+  private suspend fun dropTemp(job: VersionJob, temp: SharePath, round: Round? = null): Step? = when (val d = ops.deleteOwnTemp(job.share, temp, purpose)) {
     is NasResult.Err -> stopFor(job, d.error)
     is NasResult.Ok -> when (d.value) {
       DeleteOutcome.Deleted, DeleteOutcome.Missing -> null
-      DeleteOutcome.Locked -> Step.Wait()
+      DeleteOutcome.Locked -> if (round != null) lockedWait(round, job) else Step.Wait(busy = true)
       DeleteOutcome.NotAFile, is DeleteOutcome.SizeChanged -> Step.Wait()
     }
   }
@@ -1072,13 +1084,14 @@ class NasVersionEngine(
     }
   }
 
+  /** E-N13, O-8: un file occupato sul NAS. Attese crescenti nello stesso giro, poi il prossimo giro; il lavoro e' **occupato** ([RunStop.BUSY]). */
   private fun lockedWait(round: Round, job: VersionJob): Step {
     val n = round.lockedWaits(job)
-    return if (n >= config.lockedRetries) Step.Wait() else Step.Wait(config.lockedFirstWaitMs shl n)
+    return if (n >= config.lockedRetries) Step.Wait(busy = true) else Step.Wait(config.lockedFirstWaitMs shl n, busy = true)
   }
 
   private fun stopFor(job: VersionJob, error: NasError): Step =
-    if (error == NasError.FileBusy) Step.Wait() else Step.Stop(RunStop.NAS, UploadNames.problemFor(error))
+    if (error == NasError.FileBusy) Step.Wait(busy = true) else Step.Stop(RunStop.NAS, UploadNames.problemFor(error))
 
   /** Lo stesso file (la risposta persa di una rinomina): stesso `fileId` e stessa dimensione; senza identita', dimensione e data. */
   private fun sameIdentity(found: NasStamp, expected: NasStamp): Boolean {
@@ -1165,6 +1178,9 @@ class NasVersionEngine(
     var failed = 0
     var waiting = 0
     var held = 0
+
+    /** O-8: i lavori usciti dal giro ad aspettare un file che il NAS tiene occupato. */
+    var busy = 0
     var uploaded = 0L
     var halt: Pair<RunStop, BackupProblemCode?>? = null
     private val locked = HashMap<Long, Int>()
@@ -1230,7 +1246,9 @@ class NasVersionEngine(
 
     fun finish(gateState: BackupGateState?): VersionRunResult {
       gateState?.let { stopForGate(it) }
-      val (stop, problem) = halt ?: (RunStop.COMPLETE to null)
+      // O-8, come D-13 per il caricamento: un lavoro che aspetta un file occupato sul NAS non lascia il giro "completo" (prima: "aperti=1 · stop=complete",
+      // il lavoro finiva e la versione restava in coda fino al giro periodico dopo, 17 minuti).
+      val (stop, problem) = halt ?: ((if (busy > 0) RunStop.BUSY else RunStop.COMPLETE) to null)
       return VersionRunResult(done, gone, failed, waiting, held, uploaded, stop, problem)
     }
   }

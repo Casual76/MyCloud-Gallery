@@ -8,10 +8,12 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.BaseDataSource
 import androidx.media3.datasource.DataSourceException
 import androidx.media3.datasource.DataSpec
+import dev.pampa.mycloudgallery.core.imaging.contract.UnavailableReason
 import dev.pampa.mycloudgallery.core.imaging.viewer.MobileDataConsent
 import dev.pampa.mycloudgallery.core.imaging.viewer.NasLink
 import dev.pampa.mycloudgallery.core.imaging.viewer.NasMediaLocation
 import dev.pampa.mycloudgallery.core.imaging.viewer.NasMediaLocator
+import dev.pampa.mycloudgallery.core.imaging.viewer.blockedReason
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.nas.contract.NasError
 import dev.pampa.mycloudgallery.core.nas.contract.NasIoException
@@ -36,6 +38,12 @@ sealed interface NasVideoGate {
   /** Dati mobili da confermare per quel video: "Questo video pesa 1,2 GB. Guardarlo con i dati mobili?" (E-V2). */
   data class NeedsMobileData(val sizeBytes: Long) : NasVideoGate
 
+  /**
+   * D-15 delle prove sul campo: da questa rete il NAS non si raggiunge ([reason]: VPN spenta fuori casa, nessuna rete, rete non consentita). Non si
+   * propongono i dati mobili: non servirebbero a niente. Il viewer lo dice e riprova da solo quando la rete cambia.
+   */
+  data class Unreachable(val reason: UnavailableReason) : NasVideoGate
+
   /** Il media non e' piu' nel catalogo (E-V6). */
   data object Missing : NasVideoGate
 }
@@ -58,11 +66,17 @@ class NasVideoSource(
   private val purpose: Purpose = Purpose.INTERACTIVE,
 ) {
 
-  /** Puo' partire? Dai dati mobili senza conferma si ferma qui, prima di aprire il NAS. */
+  /**
+   * Puo' partire? Si ferma qui, prima di aprire il NAS, se la rete di adesso non lo permette: D-15, prima il percorso (VPN spenta fuori casa,
+   * nessuna rete, rete non consentita: [NasVideoGate.Unreachable]), poi i dati mobili senza conferma ([NasVideoGate.NeedsMobileData]).
+   */
   suspend fun check(ref: MediaRef.Nas): NasVideoGate {
     val location = locator.locate(ref) ?: return NasVideoGate.Missing
-    if (link.isMetered() && !consent.isConfirmed(ref.locationId)) return NasVideoGate.NeedsMobileData(location.sizeBytes)
-    return NasVideoGate.Ready(location.sizeBytes)
+    return when (val reason = link.blockedReason(consent.isConfirmed(ref.locationId))) {
+      null -> NasVideoGate.Ready(location.sizeBytes)
+      UnavailableReason.NEEDS_MOBILE_DATA_CONFIRMATION -> NasVideoGate.NeedsMobileData(location.sizeBytes)
+      else -> NasVideoGate.Unreachable(reason)
+    }
   }
 
   /** La sorgente da dare al lettore per [ref]: un'etichetta senza percorsi, con l'estensione che aiuta l'estrattore. */

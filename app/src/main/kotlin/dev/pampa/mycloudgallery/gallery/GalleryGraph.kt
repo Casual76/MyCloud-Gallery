@@ -580,6 +580,8 @@ class GalleryGraph(
       originals = nas?.imageOrigin,
       nasVideo = nas?.video,
       download = nas?.downloader,
+      // D-15: il viewer segue la rete di adesso (VPN spenta fuori casa, ritorno del Wi-Fi) invece di restare su uno stato calcolato una volta.
+      link = nas?.link,
       // Fase 4B (P16): "Sposta", "Rinomina", "Elimina…" per i media del NAS (il viewer non scrive mai da solo, D24).
       nasActions = nas?.organizer?.mediaActions,
       dispatchers = dispatchers,

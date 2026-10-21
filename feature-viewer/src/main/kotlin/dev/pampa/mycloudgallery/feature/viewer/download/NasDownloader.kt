@@ -2,9 +2,11 @@ package dev.pampa.mycloudgallery.feature.viewer.download
 
 import android.webkit.MimeTypeMap
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
+import dev.pampa.mycloudgallery.core.imaging.contract.UnavailableReason
 import dev.pampa.mycloudgallery.core.imaging.viewer.MobileDataConsent
 import dev.pampa.mycloudgallery.core.imaging.viewer.NasLink
 import dev.pampa.mycloudgallery.core.imaging.viewer.NasMediaLocator
+import dev.pampa.mycloudgallery.core.imaging.viewer.blockedReason
 import dev.pampa.mycloudgallery.core.mediastore.contract.PendingCopy
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneMediaWriter
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneSaveSource
@@ -106,7 +108,9 @@ class NasDownloader(
 
   override fun acknowledge(locationId: Long) {
     mutableStates.update { current ->
-      if (current[locationId]?.isTerminal == true) current - locationId else current
+      // D-15: anche "servono i dati mobili" si scarta: e' un'attesa di conferma, non un lavoro; se la rete cambia non e' piu' vera.
+      val state = current[locationId]
+      if (state?.isTerminal == true || state is DownloadState.NeedsMobileData) current - locationId else current
     }
   }
 
@@ -129,7 +133,14 @@ class NasDownloader(
 
   private suspend fun save(ref: MediaRef.Nas): DownloadState {
     val location = locator.locate(ref) ?: return DownloadState.Failed(DownloadFailure.NOT_FOUND)
-    if (link.isMetered() && !consent.isConfirmed(ref.locationId)) return DownloadState.NeedsMobileData(location.sizeBytes)
+    // D-15: prima il percorso (senza VPN fuori casa i dati mobili non servono a niente), poi i dati mobili senza conferma.
+    when (link.blockedReason(consent.isConfirmed(ref.locationId))) {
+      null -> Unit
+      UnavailableReason.NEEDS_MOBILE_DATA_CONFIRMATION -> return DownloadState.NeedsMobileData(location.sizeBytes)
+      UnavailableReason.VPN_OFF_AWAY -> return DownloadState.Failed(DownloadFailure.VPN_OFF_AWAY)
+      UnavailableReason.NOT_ALLOWED_HERE -> return DownloadState.Failed(DownloadFailure.NOT_ALLOWED_HERE)
+      else -> return DownloadState.Failed(DownloadFailure.NAS_UNREACHABLE)
+    }
     val file = when (val opened = reader.open(location.share, location.path, purpose)) {
       is NasResult.Err -> return DownloadState.Failed(failureOf(opened.error))
       is NasResult.Ok -> opened.value

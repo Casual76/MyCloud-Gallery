@@ -724,7 +724,7 @@ class AppGalleryDownloads(
       is DownloadState.Done -> phoneRefOf(cat, mediaId)?.let { GalleryDownload.Saved(it) } ?: GalleryDownload.Unavailable
       is DownloadState.NeedsMobileData -> GalleryDownload.Unreachable
       is DownloadState.Failed -> when (end.reason) {
-        DownloadFailure.NAS_UNREACHABLE, DownloadFailure.NOT_ALLOWED_HERE -> GalleryDownload.Unreachable
+        DownloadFailure.NAS_UNREACHABLE, DownloadFailure.NOT_ALLOWED_HERE, DownloadFailure.VPN_OFF_AWAY -> GalleryDownload.Unreachable
         DownloadFailure.PHONE_FULL -> GalleryDownload.Full
         DownloadFailure.NOT_FOUND, DownloadFailure.INTEGRITY, DownloadFailure.OTHER -> GalleryDownload.Unavailable
       }

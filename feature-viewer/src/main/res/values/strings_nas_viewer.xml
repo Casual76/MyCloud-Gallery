@@ -30,6 +30,8 @@
   <string name="viewer_msg_download_failed_detail">Riprova fra poco. Sul telefono non è rimasto nessun file a metà.</string>
   <string name="viewer_msg_download_nas_title">Il NAS non risponde</string>
   <string name="viewer_msg_download_nas_detail">Lo scaricamento si è fermato. Riprova quando il NAS è raggiungibile.</string>
+  <string name="viewer_msg_download_vpn_title">NAS non raggiungibile fuori casa</string>
+  <string name="viewer_msg_download_vpn_detail">VPN spenta: per scaricare serve la VPN di casa, anche con i dati mobili. Accendila e riprova.</string>
   <string name="viewer_msg_download_full_title">Il telefono è pieno</string>
   <string name="viewer_msg_download_full_detail">Libera spazio e riprova. Non è rimasto nessun file a metà.</string>
   <string name="viewer_msg_download_integrity_title">Il file è cambiato sul NAS</string>

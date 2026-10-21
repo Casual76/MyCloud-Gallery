@@ -28,6 +28,8 @@ import dev.pampa.mycloudgallery.core.nasmedia.detect.NasDetector
 import dev.pampa.mycloudgallery.core.nasmedia.freeze.InMemoryFreezeAcceptances
 import dev.pampa.mycloudgallery.core.nasmedia.scan.ArrivalWatch
 import dev.pampa.mycloudgallery.core.nasmedia.scan.DefaultNasScanner
+import dev.pampa.mycloudgallery.core.nasmedia.scan.InMemoryNotMediaMemory
+import dev.pampa.mycloudgallery.core.nasmedia.scan.NotMediaMemory
 import dev.pampa.mycloudgallery.core.nasmedia.scan.ScanConfig
 import dev.pampa.mycloudgallery.core.nasmedia.testing.CatalogNasScanStore
 import dev.pampa.mycloudgallery.core.nasmedia.testing.HeadSniffingExtractor
@@ -121,6 +123,8 @@ internal class ScanHarness(
   private val clockSource: ScanHarness? = null,
   readerWrap: (NasMediaReader) -> NasMediaReader = { it },
   writeMetadata: Boolean = true,
+  /** D-16: la memoria dei "non media" di ogni scanner nuovo (un processo nuovo): di serie solo del processo, come prima. Con un file sopravvive a [restartScanner]. */
+  private val notMediaMemory: () -> NotMediaMemory = { InMemoryNotMediaMemory() },
 ) {
   val me = AccountId("test")
 
@@ -166,6 +170,7 @@ internal class ScanHarness(
     ownRemovals = OwnRemovals { share -> ownRemovals.fileIds(share) },
     acceptances = acceptances,
     ownChanges = OwnChanges { share -> ownChanges.fileIds(share) },
+    notMediaMemory = notMediaMemory(),
   )
 
   var scanner: DefaultNasScanner = newScanner()

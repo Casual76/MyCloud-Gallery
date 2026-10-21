@@ -4,7 +4,9 @@ import android.app.Application
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.imaging.viewer.testing.ScriptedNasReader
 import dev.pampa.mycloudgallery.core.imaging.viewer.MobileDataConsent
+import dev.pampa.mycloudgallery.core.imaging.viewer.NasLink
 import dev.pampa.mycloudgallery.core.imaging.viewer.NasMediaLocation
+import dev.pampa.mycloudgallery.core.imaging.viewer.NasNetwork
 import dev.pampa.mycloudgallery.core.mediastore.contract.PendingCopy
 import dev.pampa.mycloudgallery.core.mediastore.testing.FakePhoneMediaWriter
 import dev.pampa.mycloudgallery.core.model.MediaRef
@@ -59,7 +61,7 @@ class NasDownloaderTest {
    * Lo scope e' quello del test stesso, non `backgroundScope`: `advanceUntilIdle` non aspetta i lavori in background, e un
    * download che parte da `start` e' proprio il lavoro che il test vuole veder finire.
    */
-  private fun TestScope.downloader() = NasDownloader(
+  private fun TestScope.downloader(network: NasLink = NasLink { metered }) = NasDownloader(
     scope = this,
     reader = reader,
     locator = { locations[it.locationId] },
@@ -69,7 +71,7 @@ class NasDownloaderTest {
       linked += Triple(ref.locationId, copy, writer.visible.keys.toSet())
       if (linkFails) error("catalogo non scrive")
     },
-    link = { metered },
+    link = network,
     consent = consent,
   )
 
@@ -304,6 +306,52 @@ class NasDownloaderTest {
 
     consent.confirm(ref)
     downloader.acknowledge(1)
+    downloader.start(ref)
+    advanceUntilIdle()
+    assertThat(downloader.states.value.getValue(1)).isInstanceOf(DownloadState.Done::class.java)
+  }
+
+  /**
+   * D-15: con la VPN spenta fuori casa il NAS non si raggiunge: il download lo dice (non "servono i dati mobili", che non servirebbero a niente) e non
+   * apre il NAS. Con i dati mobili e la VPN accesa chiede la conferma, con il Wi-Fi parte; "servono i dati mobili" rimasto si scarta con `acknowledge`.
+   */
+  @Test
+  fun d15_ilDownloadSegueLaReteDiAdessoEPrimaVieneIlPercorso() = runTest {
+    val ref = add(1, size = 700_000)
+    val link = ChangingLink(NasNetwork.VPN_OFF)
+    val downloader = downloader(link)
+
+    downloader.start(ref)
+    advanceUntilIdle()
+    assertThat(downloader.states.value.getValue(1)).isEqualTo(DownloadState.Failed(DownloadFailure.VPN_OFF_AWAY))
+    consent.confirm(ref)
+    downloader.acknowledge(1)
+    downloader.start(ref)
+    advanceUntilIdle()
+    assertThat(downloader.states.value.getValue(1)).isEqualTo(DownloadState.Failed(DownloadFailure.VPN_OFF_AWAY))
+    link.value = NasNetwork.OFFLINE
+    downloader.acknowledge(1)
+    downloader.start(ref)
+    advanceUntilIdle()
+    assertThat(downloader.states.value.getValue(1)).isEqualTo(DownloadState.Failed(DownloadFailure.NAS_UNREACHABLE))
+    link.value = NasNetwork.NOT_ALLOWED
+    downloader.acknowledge(1)
+    downloader.start(ref)
+    advanceUntilIdle()
+    assertThat(downloader.states.value.getValue(1)).isEqualTo(DownloadState.Failed(DownloadFailure.NOT_ALLOWED_HERE))
+    assertThat(reader.opens.get()).isEqualTo(0)
+    assertThat(writer.visible).isEmpty()
+
+    // Sui dati mobili senza conferma: la dimensione e l'attesa. Il Wi-Fi torna: l'attesa si scarta e il download riparte senza conferma.
+    consent.reset()
+    link.value = NasNetwork.METERED
+    downloader.acknowledge(1)
+    downloader.start(ref)
+    advanceUntilIdle()
+    assertThat(downloader.states.value.getValue(1)).isEqualTo(DownloadState.NeedsMobileData(700_000))
+    link.value = NasNetwork.OPEN
+    downloader.acknowledge(1)
+    assertThat(downloader.states.value).doesNotContainKey(1L)
     downloader.start(ref)
     advanceUntilIdle()
     assertThat(downloader.states.value.getValue(1)).isInstanceOf(DownloadState.Done::class.java)

@@ -17,6 +17,15 @@ enum class UnavailableReason {
   /** Il percorso verso il NAS non e' consentito qui (rete sconosciuta, VPN non di casa). */
   NOT_ALLOWED_HERE,
 
+  /**
+   * D-15 delle prove sul campo: fuori casa con la VPN di casa spenta. Il NAS non si raggiunge proprio, nemmeno con i dati mobili: il viewer non
+   * propone di "usare i dati mobili" (non servirebbero a niente) e dice che serve la VPN.
+   */
+  VPN_OFF_AWAY,
+
+  /** D-15: nessuna rete. Il NAS si raggiungera' quando tornera'. */
+  OFFLINE,
+
   /** Servono i dati mobili e l'utente non ha ancora confermato: il viewer mostra la dimensione (E-V2). */
   NEEDS_MOBILE_DATA_CONFIRMATION,
 

@@ -11,6 +11,7 @@ import androidx.compose.material.icons.rounded.NetworkCell
 import androidx.compose.material.icons.rounded.ReportProblem
 import androidx.compose.material.icons.rounded.SdCardAlert
 import androidx.compose.material.icons.rounded.VideocamOff
+import androidx.compose.material.icons.rounded.VpnKeyOff
 import androidx.compose.material.icons.rounded.WifiOff
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -37,6 +38,15 @@ internal sealed interface PageNoticeKind {
   data object NasUnreachable : PageNoticeKind
 
   data object NotAllowedHere : PageNoticeKind
+
+  /**
+   * D-15: fuori casa con la VPN di casa spenta. Il NAS non si raggiunge, nemmeno con i dati mobili: la nota non propone di usarli. Gli stessi
+   * parole della Diagnostica ("VPN spenta fuori casa") e dell'indicatore di stato ("VPN spenta · Apri WireGuard").
+   */
+  data object VpnOffAway : PageNoticeKind
+
+  /** D-15: nessuna rete (come l'indicatore di stato: "Offline"). */
+  data object Offline : PageNoticeKind
 
   /**
    * Servono i dati mobili: [sizeBytes] e' il peso dell'originale, se noto (E-V2). [what] dice cosa si sta per leggere: la
@@ -78,6 +88,8 @@ internal sealed interface PageNoticeKind {
       image.unavailable != null -> when (image.unavailable.reason) {
         UnavailableReason.NAS_UNREACHABLE -> NasUnreachable
         UnavailableReason.NOT_ALLOWED_HERE -> NotAllowedHere
+        UnavailableReason.VPN_OFF_AWAY -> VpnOffAway
+        UnavailableReason.OFFLINE -> Offline
         UnavailableReason.NEEDS_MOBILE_DATA_CONFIRMATION ->
           MobileData(image.unavailable.sizeBytes, if (isVideo) MobileDataFor.VIDEO else MobileDataFor.ORIGINAL)
         UnavailableReason.VOLUME_UNMOUNTED -> VolumeUnmounted
@@ -94,6 +106,8 @@ internal sealed interface PageNoticeKind {
       is OriginalProgress.Blocked -> when (original.reason) {
         UnavailableReason.NAS_UNREACHABLE -> NasUnreachable
         UnavailableReason.NOT_ALLOWED_HERE -> NotAllowedHere
+        UnavailableReason.VPN_OFF_AWAY -> VpnOffAway
+        UnavailableReason.OFFLINE -> Offline
         UnavailableReason.NEEDS_MOBILE_DATA_CONFIRMATION ->
           MobileData(original.sizeBytes, if (isVideo) MobileDataFor.VIDEO else MobileDataFor.ORIGINAL)
         UnavailableReason.VOLUME_UNMOUNTED -> VolumeUnmounted
@@ -143,6 +157,24 @@ internal fun BoxScope.PageNotice(
       icon = Icons.Rounded.WifiOff
       title = stringResource(R.string.viewer_notice_not_allowed_title)
       detail = stringResource(R.string.viewer_notice_not_allowed_detail)
+    }
+    PageNoticeKind.VpnOffAway -> {
+      icon = Icons.Rounded.VpnKeyOff
+      title = stringResource(R.string.viewer_notice_vpn_title)
+      detail = stringResource(R.string.viewer_notice_vpn_detail)
+      if (onRetry != null) {
+        actionLabel = stringResource(R.string.viewer_notice_retry)
+        onAction = onRetry
+      }
+    }
+    PageNoticeKind.Offline -> {
+      icon = Icons.Rounded.WifiOff
+      title = stringResource(R.string.viewer_notice_offline_title)
+      detail = stringResource(R.string.viewer_notice_offline_detail)
+      if (onRetry != null) {
+        actionLabel = stringResource(R.string.viewer_notice_retry)
+        onAction = onRetry
+      }
     }
     is PageNoticeKind.MobileData -> {
       icon = Icons.Rounded.NetworkCell

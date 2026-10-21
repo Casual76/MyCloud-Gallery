@@ -3393,3 +3393,41 @@ feature-viewer 485, core-database 164, core-library 162, nessuno fallito.
    senza il quarto d'ora (nel log di `UserResumeWorker` nessun "NAS non pronto entro 30 s").
 4. *D-11.* Durante una campagna lunga (molti media in coda) il processo ucciso (`adb shell am kill`) o un "Fai ora": il conteggio riprende da dove era
    ("213 di 216"), non dal lotto ("0 di 3").
+
+## Prove sul campo, blocco A (resto): D-14, D-15, D-16 e O-8 (21/10)
+Fonte: `docs/prove-campo-esiti.md`, "Blocco A, resto (21/10)". Niente telefono e niente NAS: tutto su JVM, con la correzione tolta per vedere il rosso.
+
+1. **D-14, verifica dal PC con le modifiche nel manifesto.** (a) `BackupNasIntegrationTest` dava alla guardia della lettura (`readRoots`) una `Versioni/` alla radice
+   della share, mentre il verificatore (punto 7 di `2a4bc4a`) legge `VersionPaths.mirrorOf`, cioe' `mcg-campo/Versioni/` con D13: la guardia fermava tutto. Ora le
+   cartelle le calcola il verificatore (`BackupAreaVerifier.readRootsOf`), le stesse che percorre; la guardia non si allarga (la `Versioni/` alla radice resta vietata).
+   (b) Manifesto "a stato finale": un file di prima (`pre=`) collegato a una foto poi modificata e' aggiornato al suo percorso, con l'originale in `Versioni/`. L'invariante 3
+   lo ammette solo se i byte di adesso sono quelli di una modifica **successiva** nella catena `edit=` di quel file **e** i byte di prima stanno in `Versioni/`; per ogni altro
+   file o caso e' una sostituzione come prima. (c) Le righe `edit=` di un file modificato piu' volte (sul campo 95 catene: 91 da 2, 3 da 3, una da 4) davano falsi rossi
+   sugli invarianti 12 e 13: ora sono una catena, giudicata una volta per file (`editChains`). Test: `BackupAreaRunnerTest`; `s25-finto.ps1` prova la seconda tornata di `-Step edit`.
+2. **D-15, il viewer resta su "Servono i dati mobili".** I cancelli del viewer (`NasVideoSource.check`, `NasImageOrigin`, `NasDownloader`) leggevano `isMetered()` una volta e il
+   risultato stava in `ViewerState.originals`: niente lo rifaceva, e senza VPN offrivano i dati mobili anche col NAS irraggiungibile. Ora `NasLink` dice la rete di adesso
+   (`NasNetwork`: libera, a consumo, VPN spenta, nessuna rete, non consentita) e i suoi cambiamenti (`AppNasLink`: percorso del cancello di rete e consumo); `blockedReason`
+   guarda prima il percorso (nemmeno la conferma dei dati mobili supera una VPN spenta). Il viewer segue `link.changes` (`ViewerController.networkChanged`): le pagine ferme per
+   la rete si rifanno da sole come dopo "Riprova", una pagina che funziona non si tocca, l'attesa dei dati mobili di un download si scarta (non parte da sola). Testi come in
+   Diagnostica e indicatore di stato: "NAS non raggiungibile fuori casa · VPN spenta…", "Nessuna rete". Test: `ViewerReteTest`, `NasVideoSourceTest`, `NasDownloaderTest`,
+   `NasImageOriginTest`, `AppNasLinkTest`.
+3. **D-16, i "non media" si rileggono a ogni processo nuovo.** `DefaultNasScanner` li ricordava solo in memoria. Ora `NotMediaMemory`: nell'app `FileNotMediaMemory`, un file per
+   area sotto `replica/` (tolto con l'azzeramento), con l'impronta SHA-256 dell'identificativo (niente nomi su disco), dimensione e data; si salva a fine scansione, anche
+   interrotta. Un file cambiato (dimensione o data) si rilegge, un "non media" diventato foto entra in Libreria e il ricordo cade, un file illeggibile vale "non ricordo". La
+   **generazione** (app, SDK, `NasDetector.CLASSIFIER_REVISION`, da alzare se cambia cio' che si riconosce come media) fa rileggere tutto una volta con un'app o un sistema nuovi.
+   Test: `ProveCampoD16Test`.
+4. **O-8, la versione in coda 17 minuti.** Stesso schema di D-13. Dopo la caduta del Wi-Fi il NAS teneva il temporaneo della versione (nessun punto di ripresa: `openTemp`
+   `Exists`, `deleteOwnTemp` `Locked`); `NasVersionEngine` aspettava con `Step.Wait()`, senza attese nel giro e senza dirlo: il giro finiva `COMPLETE` ("aperti=1") e niente lo
+   riprovava prima del lavoro periodico (05:58 → 06:15; la seconda `Exists` nel log e' il tentativo che l'ha chiusa in un secondo, a NAS libero). Un lavoro che esce dal giro ad
+   aspettare un file occupato e' ora `busy`: il giro finisce `BUSY` (attese crescenti nel giro), `VersionedBackupEngine` lo fonde senza fermare il caricamento e
+   `BackupFollowUp.Busy` lo riprova presto. **Non fatto**: la ripartenza su un temporaneo nuovo dopo 10 minuti (D-13 vale solo per copie nuove e file in arrivo): servirebbero il
+   tentativo prima nel diario delle versioni e la sua pulizia. Test: `ProveCampoO8VersioniTest`.
+
+**Esiti.** `tools\check.ps1` verde, con `GRADLE_OPTS=-Dorg.gradle.workers.max=2` (la prima esecuzione e' caduta per un crash del compilatore C2 della JVM in un test di `core-library`,
+non toccato: `hs_err` rimosso, la seconda e' verde). Test: core-backup 599, core-nasmedia 165, core-imaging 223, feature-viewer 496, app 562, nessuno fallito; `s25-finto.ps1` passa. Rosso
+senza la correzione: O-8 (3 test su 4), la guardia di D-14 con le vecchie cartelle, `ViewerReteTest` senza il `LaunchedEffect` che segue la rete (5 su 9).
+
+**Da provare sul telefono.** D-14: niente (rifare `area.ps1 -Mode backup -Stage verify` con il manifesto di F43-tel e le sue righe `edit=`). D-15 (F10): Wi-Fi spento 40 s col viewer
+di un video solo-NAS, senza VPN: "NAS non raggiungibile fuori casa", non i dati mobili; riacceso il Wi-Fi il viewer riprova da solo; con la VPN sui dati mobili: "Servono i dati mobili"
+con la dimensione. D-16 (F3): tre verifiche a freddo a 4 minuti l'una dall'altra: la prima (APK nuovo) rilegge i 61,7 MB, le altre no (`NAS_SCAN ... bytes` vicino a 0). O-8 (F43-tel):
+con un temporaneo di versione occupato `stop=busy` nel log e "riprovo tra poco" nella pagina; la versione si chiude pochi minuti dopo il rilascio del NAS.

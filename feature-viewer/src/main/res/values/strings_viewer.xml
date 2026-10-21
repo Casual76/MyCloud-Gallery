@@ -62,6 +62,12 @@
   <string name="viewer_notice_nas_detail">Vedi l’anteprima. L’originale arriverà quando il NAS sarà di nuovo raggiungibile.</string>
   <string name="viewer_notice_not_allowed_title">Qui non si aprono i file del NAS</string>
   <string name="viewer_notice_not_allowed_detail">Questa rete non è tra quelle consentite. L’anteprima resta qui.</string>
+  <!-- D-15 (prove sul campo): il viewer segue la rete di adesso. Senza la VPN fuori casa il NAS non si raggiunge, nemmeno con i dati mobili:
+       gli stessi termini della Diagnostica («VPN spenta fuori casa», «Nessuna rete») e dell’indicatore di stato. -->
+  <string name="viewer_notice_vpn_title">NAS non raggiungibile fuori casa</string>
+  <string name="viewer_notice_vpn_detail">VPN spenta: per raggiungere il NAS fuori casa serve la VPN di casa, anche con i dati mobili. L’anteprima resta qui.</string>
+  <string name="viewer_notice_offline_title">Nessuna rete</string>
+  <string name="viewer_notice_offline_detail">Il NAS si raggiunge solo con una rete. L’anteprima resta qui.</string>
   <string name="viewer_notice_mobile_title">Servono i dati mobili</string>
   <string name="viewer_notice_mobile_detail_size">L’originale pesa %1$s e non è sul telefono.</string>
   <string name="viewer_notice_mobile_detail">L’originale non è sul telefono.</string>

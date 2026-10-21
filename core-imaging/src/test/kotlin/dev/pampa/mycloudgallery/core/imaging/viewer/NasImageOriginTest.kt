@@ -68,12 +68,12 @@ class NasImageOriginTest {
     }
   }
 
-  private fun TestScope.origin(max: Long = NasImageOrigin.DEFAULT_MAX_ORIGINAL_BYTES) = NasImageOrigin(
+  private fun TestScope.origin(max: Long = NasImageOrigin.DEFAULT_MAX_ORIGINAL_BYTES, link: NasLink = NasLink { metered }) = NasImageOrigin(
     reader = reader,
     locator = { locations[it.locationId] },
     store = store,
     replica = replica,
-    link = { metered },
+    link = link,
     consent = consent,
     dispatchers = dispatchers(),
     maxOriginalBytes = max,
@@ -335,6 +335,84 @@ class NasImageOriginTest {
     metered = true
 
     assertThat(origin.open(ref)).isInstanceOf(OriginResult.Opened::class.java)
+  }
+
+  // --- D-15: la rete di adesso, non solo "a consumo" ----------------------------------------------------------------------
+
+  /** Un collegamento il cui percorso si decide dal test (e che e' a consumo solo se la rete e' [NasNetwork.METERED]). */
+  private class FixedNetwork(var value: NasNetwork) : NasLink {
+    override fun isMetered(): Boolean = value == NasNetwork.METERED
+
+    override fun network(): NasNetwork = value
+  }
+
+  /**
+   * D-15 delle prove sul campo: fuori casa con la VPN spenta e sui dati mobili l'app proponeva "Servono i dati mobili", ma il NAS non si raggiunge
+   * proprio e i dati mobili non servirebbero a niente. Prima il percorso: il motivo e' la VPN (o la rete assente, o non consentita), la dimensione
+   * resta, il NAS non si tocca nemmeno con la conferma dei dati mobili.
+   */
+  @Test
+  fun d15_senzaVpnFuoriCasaNonSiProponeroIDatiMobiliEIlNasNonSiTocca() = runTest {
+    val ref = add(41, size = 2_000_000)
+    val link = FixedNetwork(NasNetwork.VPN_OFF)
+    metered = true // i dati mobili sono accesi, ma non e' quello il punto
+    val origin = origin(link = link)
+
+    val blocked = origin.open(ref) as OriginResult.Unreachable
+    assertThat(blocked.reason).isEqualTo(UnavailableReason.VPN_OFF_AWAY)
+    assertThat(blocked.sizeBytes).isEqualTo(2_000_000L)
+    assertThat(origin.fetch(ref).toList().last()).isEqualTo(OriginalFetch.Blocked(UnavailableReason.VPN_OFF_AWAY, 2_000_000L))
+    // Confermare i dati mobili non cambia niente: il NAS non si raggiunge.
+    consent.confirm(ref)
+    assertThat((origin.open(ref) as OriginResult.Unreachable).reason).isEqualTo(UnavailableReason.VPN_OFF_AWAY)
+    assertThat(reader.opens.get()).isEqualTo(0)
+
+    for ((network, reason) in listOf(
+      NasNetwork.OFFLINE to UnavailableReason.OFFLINE,
+      NasNetwork.NOT_ALLOWED to UnavailableReason.NOT_ALLOWED_HERE,
+    )) {
+      link.value = network
+      assertThat((origin.open(ref) as OriginResult.Unreachable).reason).isEqualTo(reason)
+    }
+    assertThat(reader.opens.get()).isEqualTo(0)
+  }
+
+  /** D-15: tornata la rete l'originale si legge (con i dati mobili solo dopo la conferma, come prima); lo stato e' quello di adesso. */
+  @Test
+  fun d15_tornataLaReteLOriginaleSiLegge() = runTest {
+    val ref = add(42, size = 300_000)
+    val link = FixedNetwork(NasNetwork.VPN_OFF)
+    val origin = origin(link = link)
+    assertThat((origin.open(ref) as OriginResult.Unreachable).reason).isEqualTo(UnavailableReason.VPN_OFF_AWAY)
+
+    // La VPN si accende, ma sui dati mobili: servono la conferma e la dimensione (E-V2).
+    link.value = NasNetwork.METERED
+    assertThat((origin.open(ref) as OriginResult.Unreachable).reason).isEqualTo(UnavailableReason.NEEDS_MOBILE_DATA_CONFIRMATION)
+    assertThat(reader.opens.get()).isEqualTo(0)
+
+    // Torna il Wi-Fi: si legge, senza nessuna conferma.
+    link.value = NasNetwork.OPEN
+    assertThat(origin.open(ref)).isInstanceOf(OriginResult.Opened::class.java)
+    assertThat(reader.opens.get()).isEqualTo(1)
+  }
+
+  /** D-15: la tabella di `blockedReason` (prima il percorso, poi il consumo) e i valori di serie di un `NasLink` di prima. */
+  @Test
+  fun d15_ilMotivoDelBloccoSegueLaRete() {
+    fun reason(network: NasNetwork, confirmed: Boolean) = FixedNetwork(network).blockedReason(confirmed)
+    assertThat(reason(NasNetwork.OPEN, confirmed = false)).isNull()
+    assertThat(reason(NasNetwork.METERED, confirmed = false)).isEqualTo(UnavailableReason.NEEDS_MOBILE_DATA_CONFIRMATION)
+    assertThat(reason(NasNetwork.METERED, confirmed = true)).isNull()
+    for (confirmed in listOf(false, true)) {
+      assertThat(reason(NasNetwork.VPN_OFF, confirmed)).isEqualTo(UnavailableReason.VPN_OFF_AWAY)
+      assertThat(reason(NasNetwork.OFFLINE, confirmed)).isEqualTo(UnavailableReason.OFFLINE)
+      assertThat(reason(NasNetwork.NOT_ALLOWED, confirmed)).isEqualTo(UnavailableReason.NOT_ALLOWED_HERE)
+    }
+    // Un NasLink scritto come prima (solo `isMetered`) vale "a consumo o libera" e non avvisa di cambiamenti.
+    assertThat(NasLink { true }.network()).isEqualTo(NasNetwork.METERED)
+    assertThat(NasLink { false }.network()).isEqualTo(NasNetwork.OPEN)
+    assertThat(NasLink.Unmetered.blockedReason(confirmed = false)).isNull()
+    assertThat(kotlinx.coroutines.runBlocking { NasLink { true }.changes.toList() }).isEmpty()
   }
 
   // --- Casi limite -------------------------------------------------------------------------------------------------------

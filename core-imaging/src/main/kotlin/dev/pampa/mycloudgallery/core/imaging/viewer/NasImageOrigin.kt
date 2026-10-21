@@ -231,9 +231,9 @@ class NasImageOrigin(
 
   private suspend fun fetchOriginal(nas: MediaRef.Nas, location: NasMediaLocation, onProgress: (Float?) -> Unit): Fetched {
     if (location.sizeBytes > maxOriginalBytes) return Fetched.Failed(ImageFailure.OUT_OF_MEMORY)
-    if (link.isMetered() && !consent.isConfirmed(nas.locationId)) {
-      return Fetched.Blocked(UnavailableReason.NEEDS_MOBILE_DATA_CONFIRMATION, location.sizeBytes)
-    }
+    // D-15: prima il percorso (VPN spenta fuori casa, nessuna rete, rete non consentita), poi i dati mobili: il NAS che non si raggiunge non si
+    // raggiunge nemmeno con la conferma.
+    link.blockedReason(consent.isConfirmed(nas.locationId))?.let { return Fetched.Blocked(it, location.sizeBytes) }
     return locks.withLock(nas.locationId) {
       // Se un'altra richiesta l'ha finito mentre si aspettava, non si legge un'altra volta.
       store.get(nas.locationId, location.stamp)?.let { return@withLock Fetched.Done(it) }

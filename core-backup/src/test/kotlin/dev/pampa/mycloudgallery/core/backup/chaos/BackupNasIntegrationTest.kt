@@ -5,8 +5,6 @@ import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.common.log.LogLevel
 import dev.pampa.mycloudgallery.core.nas.smb.SmbjTransport
-import dev.pampa.mycloudgallery.core.trust.nas.NasLayout
-import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import java.io.File
 import java.security.SecureRandom
 import java.time.ZoneOffset
@@ -103,11 +101,10 @@ class BackupNasIntegrationTest {
     val ready = ready(manifest.runId)
     val binding = SmbBackupArea(transport = { SmbjTransport() })
     try {
-      // Solo la lettura, e solo le cartelle del manifesto: Backup/ sotto la destinazione e i temporanei della cartella dell'app.
-      val roots = manifest.dest.map { (_, dir) -> dir?.child("Backup") ?: SharePath.of("Backup") } +
-        manifest.app.map { (_, dir) -> dir?.child(NasLayout.ROOT.name)?.child("tmp") ?: NasLayout.ROOT.child("tmp") } +
-        // 5B: le versioni stanno in `Versioni/` alla radice della share (sola lettura, solo se il manifesto ha modifiche).
-        (if (manifest.edits.isNotEmpty()) listOf(SharePath.of("Versioni")) else emptyList())
+      // Solo la lettura, e solo le cartelle del manifesto: Backup/ sotto la destinazione, i temporanei della cartella dell'app e, con le modifiche,
+      // la `Versioni/` dove la mette l'app (D-14: sotto `mcg-campo/` con la recinzione D13, non alla radice della share). Le stesse che percorre
+      // il verificatore: le calcola lui.
+      val roots = BackupAreaVerifier.readRootsOf(manifest)
       val reader = GuardedReader(binding.openReader(ready.credentials, ready.guard), ready.guard, readRoots = roots)
       val settled = System.getenv("MCG_BACKUP_SETTLED")?.lowercase() != "false"
       val verification = BackupAreaVerifier.verify(reader, manifest, settled)

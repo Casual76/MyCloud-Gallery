@@ -85,6 +85,7 @@ import dev.pampa.mycloudgallery.core.imaging.contract.ImageFailure
 import dev.pampa.mycloudgallery.core.imaging.contract.UnavailableReason
 import dev.pampa.mycloudgallery.core.imaging.contract.ViewerImageSource
 import dev.pampa.mycloudgallery.core.imaging.noop.NoViewerImageSource
+import dev.pampa.mycloudgallery.core.imaging.viewer.NasNetwork
 import dev.pampa.mycloudgallery.core.library.contract.TimelineView
 import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
 import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
@@ -134,6 +135,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -204,9 +206,13 @@ private fun ViewerHost(
   val state = rememberSaveable(saver = ViewerState.Saver) { ViewerState(request.start) }
   // Gli esiti di scaricamenti conclusi prima che il viewer si aprisse non sono una notizia: si scartano in silenzio (Fase 4).
   // (`also`: una volta per servizio, prima della prima lettura degli esiti; `remember` non deve restituire Unit.)
+  // D-15: nemmeno un "servono i dati mobili" rimasto da prima, se la rete di adesso non e' a consumo: non e' piu' vero.
   remember(services.download) {
     services.download?.also { downloads ->
-      downloads.states.value.filterValues { it.isTerminal }.keys.forEach(downloads::acknowledge)
+      val network = services.link?.network()
+      downloads.states.value
+        .filterValues { it.isTerminal || (it is DownloadState.NeedsMobileData && network != null && network != NasNetwork.METERED) }
+        .keys.forEach(downloads::acknowledge)
     }
   }
   val transition = remember { GalleryViewerTransitionState() }
@@ -227,6 +233,12 @@ private fun ViewerHost(
   controller.view = view
   controller.reducedMotion = reducedMotion
   controller.density = density.density
+  // D-15 (prove sul campo): lo stato delle pagine segue la rete di adesso. Il primo valore e' la rete di quando si apre (niente da rifare); da li' in
+  // poi ogni cambiamento rifa le pagine ferme per colpa della rete (dati mobili, VPN spenta, nessuna rete): non restano su un avviso non piu' vero.
+  val link = services.link
+  LaunchedEffect(link) {
+    link?.changes?.drop(1)?.collect { network -> controller.networkChanged(network) }
+  }
 
   val format = remember(context) { ViewerFormat(context) }
   val backdrop = rememberGlassBackdrop()
@@ -1056,6 +1068,7 @@ private fun messageOf(state: DownloadState): ViewerMessage? = when (state) {
   DownloadState.Cancelled -> ViewerMessage.DownloadCancelled
   is DownloadState.Failed -> when (state.reason) {
     DownloadFailure.NAS_UNREACHABLE, DownloadFailure.NOT_ALLOWED_HERE -> ViewerMessage.DownloadNasUnreachable
+    DownloadFailure.VPN_OFF_AWAY -> ViewerMessage.DownloadVpnOff
     DownloadFailure.NOT_FOUND -> ViewerMessage.ItemGone
     DownloadFailure.PHONE_FULL -> ViewerMessage.DownloadPhoneFull
     DownloadFailure.INTEGRITY -> ViewerMessage.DownloadIntegrity
@@ -1097,6 +1110,9 @@ private suspend fun startNasVideo(
     }
     is NasVideoGate.NeedsMobileData ->
       state.originals[id] = OriginalProgress.Blocked(UnavailableReason.NEEDS_MOBILE_DATA_CONFIRMATION, gate.sizeBytes)
+    // D-15: da questa rete il NAS non si raggiunge (VPN spenta fuori casa, nessuna rete): la nota lo dice, senza proporre i dati mobili, e la pagina
+    // riparte da sola quando la rete cambia ([ViewerController.networkChanged]).
+    is NasVideoGate.Unreachable -> state.originals[id] = OriginalProgress.Blocked(gate.reason, null)
     NasVideoGate.Missing -> state.message = ViewerMessage.ItemGone
   }
 }

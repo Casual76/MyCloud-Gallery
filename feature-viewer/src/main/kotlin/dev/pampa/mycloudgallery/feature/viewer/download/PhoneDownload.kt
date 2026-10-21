@@ -15,6 +15,9 @@ enum class DownloadFailure {
   /** Questa rete non e' tra quelle ammesse. */
   NOT_ALLOWED_HERE,
 
+  /** D-15: fuori casa con la VPN di casa spenta: il NAS non si raggiunge, nemmeno con i dati mobili. */
+  VPN_OFF_AWAY,
+
   /** Il media non c'e' piu' (catalogo o NAS). */
   NOT_FOUND,
 
@@ -72,6 +75,6 @@ interface PhoneDownload {
   /** Annulla il download di [ref], in coda o in corso: il temporaneo si toglie. */
   fun cancel(ref: MediaRef.Nas)
 
-  /** L'utente ha visto l'esito di [locationId]: lo stato terminale esce dalla mappa. */
+  /** L'utente ha visto l'esito di [locationId]: lo stato terminale esce dalla mappa. D-15: anche "servono i dati mobili", che con la rete cambiata non e' piu' vero. */
   fun acknowledge(locationId: Long)
 }

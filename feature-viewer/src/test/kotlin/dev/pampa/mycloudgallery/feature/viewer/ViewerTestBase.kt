@@ -87,6 +87,7 @@ abstract class ViewerTestBase {
     download: PhoneDownload? = null,
     backup: dev.pampa.mycloudgallery.feature.viewer.info.MediaBackupStates? = null,
     backupActions: dev.pampa.mycloudgallery.feature.viewer.menu.BackupMediaActions? = null,
+    link: dev.pampa.mycloudgallery.core.imaging.viewer.NasLink? = null,
   ): ViewerServices = ViewerServices(
     animated = animatedLoader,
     images = imageSource,
@@ -117,6 +118,7 @@ abstract class ViewerTestBase {
     dispatchers = ImmediateDispatchers,
     backup = backup,
     backupActions = backupActions,
+    link = link,
   )
 
   internal fun show(

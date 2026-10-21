@@ -418,6 +418,7 @@ class AppGraph(
       stateProvider = stateProvider,
       ledger = trafficLedger,
       metered = { environment.snapshot.value.underlying?.metered == true },
+      meteredChanges = environment.snapshot.map { it.underlying?.metered == true },
       freezeSignal = nasFreeze,
       lastDiskTouchAt = session.lastDiskTouchAt,
     )

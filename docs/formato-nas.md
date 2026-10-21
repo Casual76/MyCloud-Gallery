@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| **Stato** | Fase 1.4, 12/10/2026, **aggiornato dopo la revisione di sicurezza e la sua verifica** (`docs/review/1.4-core-trust.md`, due giri) e **esteso nella Fase 2 (pacchetto P3)**: configurazione di famiglia completa (§5.3), segnalazione "perso" (tipo 7, §5.9), stato del dispositivo (tipo 8, §5.10), rifondazione dopo un reset (§4.10), residui N2, R2, R3, R4 della revisione chiusi (§2.3, §4.4). **Completato nella Fase 4 (P0, 14/10/2026)** con le modifiche M1–M12 di `docs/fase4-progetto.md` §0.3: classi dei segmenti nelle teste (§5.5), contenuto dei segmenti (§5.5-bis), regole di pubblicazione (§5.5), unita' di lavoro (§5.6), campi nuovi del cestino (§5.7), pulizia dei propri file (§2.3), dati personali (§5.5), salto dell'ora (§6.1), tetti nuovi (§7), modulo unico delle operazioni distruttive (§9), involucro dei file cestinati (§2.1), mappa (§14). Formato **versione 1**. **Fase 5 (avvio, 16/10/2026)**: N1–N5 di `docs/fase5-progetto.md` §0.3, **nessun file firmato cambia** (il backup scrive media, non dati del formato): temporanei del backup e cartelle `Backup/` e `Versioni/` (§2.1, §2.2), pulizia dei propri file (§2.3), record `meta` delle versioni (§5.5-bis), il backup che scrive ma non toglie (§9, punto 8). Nessun dato e' ancora stato scritto sul NAS. L'uso da parte dell'app: `docs/famiglia-dispositivi.md`. |
+| **Stato** | Fase 1.4, 12/10/2026, **aggiornato dopo la revisione di sicurezza e la sua verifica** (`docs/review/1.4-core-trust.md`, due giri) e **esteso nella Fase 2 (pacchetto P3)**: configurazione di famiglia completa (§5.3), segnalazione "perso" (tipo 7, §5.9), stato del dispositivo (tipo 8, §5.10), rifondazione dopo un reset (§4.10), residui N2, R2, R3, R4 della revisione chiusi (§2.3, §4.4). **Completato nella Fase 4 (P0, 14/10/2026)** con le modifiche M1–M12 di `docs/fase4-progetto.md` §0.3: classi dei segmenti nelle teste (§5.5), contenuto dei segmenti (§5.5-bis), regole di pubblicazione (§5.5), unita' di lavoro (§5.6), campi nuovi del cestino (§5.7), pulizia dei propri file (§2.3), dati personali (§5.5), salto dell'ora (§6.1), tetti nuovi (§7), modulo unico delle operazioni distruttive (§9), involucro dei file cestinati (§2.1), mappa (§14). Formato **versione 1**. **Fase 5 (avvio, 16/10/2026)**: N1–N5 di `docs/fase5-progetto.md` §0.3, **nessun file firmato cambia** (il backup scrive media, non dati del formato): temporanei del backup e cartelle `Backup/` e `Versioni/` (§2.1, §2.2), pulizia dei propri file (§2.3), record `meta` delle versioni (§5.5-bis), il backup che scrive ma non toglie (§9, punto 8). **Fase 6 (avvio, 21/10/2026)**: A1–A8 di `docs/fase6-progetto.md` §0.3, **versione 2 del formato solo per i file `ai`**: testa `ai` con le sole classi `vec` (7) e `ocr` (8) in `devices/<id>/ai/` (§2.2, §5.5, §5.5-bis), attestazione e fusione dei dati derivati (§5.5-bis), unita' di lavoro `ai` (§5.6), tetti nuovi (§7), versioni accettate 1..2 (§10), copie dei modelli in `devices/<id>/models/` (§2.1, §2.2); §9 invariato. I file della versione 1 non cambiano. Nessun dato e' ancora stato scritto sul NAS. L'uso da parte dell'app: `docs/famiglia-dispositivi.md`. |
 | **Codice** | modulo `:core-trust` (`dev.pampa.mycloudgallery.core.trust`); la mappa sezione → file → test e' al §14. |
-| **Sigle** | `E-xx` = casi limite del piano; `C1`…`C23`, `L1`…`L17`, `S1`…`S12` = `docs/sicurezza.md`; `A1`…`I10` = voci della revisione. |
+| **Sigle** | `E-xx` = casi limite del piano; `C1`…`C23`, `L1`…`L17`, `S1`…`S12` = `docs/sicurezza.md`; `A1`…`I10` = voci della revisione. `F6-Dn` = decisione di `docs/fase6-progetto.md` §0.1 (le `Dn` senza prefisso sono quelle della Fase 4 o 5 indicate nel testo); `A1`…`A8` con "Fase 6" = le modifiche di `docs/fase6-progetto.md` §0.3. |
 | **Regola** | Ogni costante citata qui esiste identica nel codice (`TrustFormat`, `TrustLimits`). Cambiarne una vuol dire cambiare questo documento. Le righe del §7 che nominano una costante tra apici inversi sono confrontate con il codice da un test (`IndexSegmentTypesTest`). |
 
 ---
@@ -58,6 +58,11 @@ Ogni share usata dall'app contiene **una** cartella `.mycloudgallery/`:
   (`trash/<id>/files/`) sono le foto e i video cestinati, rinominati senza estensione, e conservano i loro
   byte; li nascondono solo il punto iniziale della cartella e l'assenza di estensione. Se in Fase 4.5 si
   scopre che un servizio del NAS riconosce i media dal contenuto, quei file si avvolgono in un contenitore.
+- **Seconda eccezione dichiarata (Fase 6, A1, F6-D18).** Le copie dei modelli sul NAS (`devices/<id dispositivo>/models/<sha256>`,
+  §2.2) sono i file dei modelli come arrivano da Internet: grezzi, **senza busta, senza firma e senza estensione**, con il nome
+  uguale al loro SHA-256. Non sono dati del formato: le protegge la dimensione con l'SHA-256 fissati nell'app e controllati da chi le
+  legge a ogni caricamento (F6-D16), non una firma; una copia con il nome giusto e byte diversi e' scartata e basta. Le nascondono solo
+  il punto iniziale della cartella e l'assenza di estensione, come per il cestino.
 
 **Prova E-I13 (Fase 4, M11).** La prova sul campo F14 (`docs/fase4-progetto.md` §5.7: Twonky e Plex con
 `test-comune` aggiunta per la prova, Foto di Windows sulla share) dice se l'indice o il cestino compaiono. **Esito: da
@@ -92,6 +97,9 @@ sta solo nell'**area comune**, perche' tutti devono leggerlo.
 │   ├── status/<versione>                 [8] stato del dispositivo (§5.10), solo nell'area comune
 │   ├── index/head/<versione>             [3] testa dell'indice di questa share
 │   ├── index/seg/<impronta>              segmenti (contenitori MCGB), nome = impronta
+│   ├── ai/head/<versione>                [3] testa dei dati AI di questa share (Fase 6, versione 2 del formato)
+│   ├── ai/seg/<impronta>                 segmenti vec e ocr (contenitori MCGB versione 2), nome = impronta
+│   ├── models/<sha256>                   copia di un modello (Fase 6, F6-D18): solo nell'area comune, file grezzo (§2.1)
 │   ├── personal/head/<versione>          [3] dati personali: SOLO nell'area privata del proprietario
 │   └── personal/seg/<impronta>
 ├── leases/<impronta risorsa>/<gruppo>/<generazione>   [4] prenotazioni, gruppi di 256 generazioni
@@ -108,6 +116,14 @@ sta solo nell'**area comune**, perche' tutti devono leggerlo.
 
 `[n]` e' il tipo del file firmato (§5.1). Ogni dispositivo scrive **solo sotto i propri id** (piu' le
 richieste e le prenotazioni); l'admin scrive il registro.
+
+**Dati AI e copie dei modelli (Fase 6, A1).**
+- `ai/head/` e `ai/seg/` stanno **in ogni share indicizzata**, accanto a `index/`: vettori e testo letto di un file stanno nella
+  share di quel file, con gli stessi permessi (C19). Una testa `ai` e' una testa di tipo 3 con `kind` = `ai`, in una serie propria
+  (§5.5); una build senza la Fase 6 non apre mai `ai/` e non vede altro che `index/` e `personal/` (E-I3, E-I22).
+- `models/<sha256>` esiste **solo nell'area comune** (`devices/<id dispositivo>/models/`), e solo nella cartella del dispositivo che
+  l'ha pubblicata: un file per modello, scritto una volta (scrittura esclusiva, nessuna sostituzione), mai nelle aree private.
+  File grezzo senza estensione: eccezione dichiarata al §2.1.
 
 **Fuori da `.mycloudgallery/` (Fase 5, N1).** Le cartelle che l'app crea nelle aree degli utenti. Sono file normali con la
 loro estensione, **non firmati** e visibili dal PC (non fanno parte del formato: nessuna firma, nessuna versione):
@@ -129,6 +145,10 @@ loro estensione, **non firmati** e visibili dal PC (non fanno parte del formato:
 - `Backup/` sta nell'area privata dell'utente; `Versioni/` sta alla **radice di ogni share** e ne rispecchia i
   percorsi (D17, Q2): un solo posto da documentare e da escludere in Twonky e Plex.
 - Il nome del dispositivo in `Backup/<dispositivo>/` e' scelto una volta (D7) e validato con `SharePath` (§8.1).
+- **`MyCloud Gallery/Modelli/` (Fase 6, A1, F6-D17).** Cartella visibile dell'**area comune**, fuori da `.mycloudgallery/`:
+  `<area comune>/MyCloud Gallery/Modelli/<nome del file>`. **Non fa parte del formato**: nessuna firma, nessuna versione, nessuna
+  busta. La crea l'utente e vi copia a mano dal PC i file dei modelli (sorgente "dal PC" dello scaricamento); l'app la **legge** e
+  non la scrive mai, e usa solo un file con il nome e la dimensione del catalogo, verificandone l'SHA-256 (come per ogni modello).
 
 ### 2.3 Come si scrive e come si legge (l'interfaccia `NasFileSystem`)
 
@@ -669,15 +689,17 @@ busta, `device` il suo id, e il file deve chiamarsi `requests/<device>`.
 
 ### 5.5 Testa di un dispositivo (tipo 3) e segmenti
 
-`family`, `device`, `share`, `kind` (`index` o `personal`), `version`, `registryVersion`, `createdAt`,
+`family`, `device`, `share`, `kind` (`index`, `personal` o, dalla Fase 6, `ai`), `version`, `registryVersion`, `createdAt`,
 `segments` (al massimo 8192 elementi `{class, hash, size}`, in ordine crescente di impronta, ognuno al massimo
 16 MiB). Il file deve stare in `devices/<device>/<kind>/head/<version>` della share `share`. Le teste sono una
 serie numerata con le stesse regole del registro (§2.3: primo nome libero, lettura per nome, spazzatura
 scavalcata).
 
 - **Classi dei segmenti (Fase 4, M1).** `class` e' una fra `meta`, `thumbS`, `thumbM`, `analysis`, `hq`, `frames`,
-  `personal` (`SegmentClass`); `vec`, `ocr` e `faces` sono **riservate** e una testa che le elenca e' rifiutata
-  (`INVALID_FIELD`) finche' una versione del formato non le definisce (E-I4). Una testa `personal` elenca solo segmenti
+  `personal` (`SegmentClass`); `faces` e' **riservata** e una testa che la elenca e' rifiutata
+  (`INVALID_FIELD`) finche' una versione del formato non la definisce (E-I4). **Fase 6 (A2):** `vec` (7) e `ocr` (8) sono
+  definite dalla versione 2 e valgono **solo in una testa `ai`**, che elenca solo segmenti `vec` e `ocr`; una testa `index` o
+  `personal` non le elenca mai (se lo fa e' rifiutata, `INVALID_FIELD`). Una testa `personal` elenca solo segmenti
   `personal`; una testa `index` mai. Ogni dispositivo scarica solo le classi che gli servono (D16); la classe sta anche
   nel primo byte del contenuto del segmento (§5.5-bis) e i due valori devono coincidere.
 - **Regole di pubblicazione (Fase 4, M3).** Un dispositivo pubblica nell'indice di una share **solo dati ricavati da
@@ -694,6 +716,17 @@ scavalcata).
   `MAX_INDEX_DEVICES_PER_SHARE` (256) dispositivi per share. Si tengono solo i dispositivi approvati o dismessi del
   registro accettato.
 
+- **Testa `ai` (Fase 6, A2, A4, F6-D6, F6-D8).** `devices/<device>/ai/head/<version>`: stessa busta (tipo 3), stessa serie numerata e
+  stessa lettura per nome e stesso anti-rollback delle altre teste (qui sotto), ma una serie **propria** (la cartella `ai/head/`:
+  una testa `ai` non si confonde con una `index`) e la **versione 2** del formato nel quinto byte della busta e dei segmenti; elenca solo segmenti
+  `vec` e `ocr` (§5.5-bis). **Regole di pubblicazione:** la regola M3 qui sopra vale con le **chiavi di contenuto**: una voce `vec`
+  o `ocr` si pubblica solo per la chiave di contenuto di un file **di quella share** presente nel catalogo locale, con timbro e `qh1`
+  ancora freschi (niente di un file privato nell'indice dell'area comune; un test di proprieta' lo verifica). Valgono gli stessi
+  cancelli dell'indice (nessuna pubblicazione sulle share vere finche' vale D31, area in sola lettura, congelamento, emergenza,
+  salto dell'ora, fiducia), al massimo una testa `ai` ogni `HEAD_MIN_INTERVAL_MILLIS` per share salvo la chiusura di un'unita' di
+  lavoro (§5.6), segmenti chiusi a `SEGMENT_TARGET_BYTES`. Sotto un blocco permanente (D31 su una share vera, area in sola lettura)
+  i risultati restano nel dispositivo e si pubblicano **dopo**, quando la share si apre, senza ricalcolarli. I propri segmenti `ai`
+  si compattano come quelli dell'indice (`Compactor` della Fase 4).
 - **Anti-rollback per dispositivo**: chi legge ricorda per (share, dispositivo, tipo) l'ultima versione e
   l'impronta del contenuto firmato accettati (`HeadMark`); versione piu' bassa → `ROLLBACK`, stessa versione
   con contenuto diverso → `EQUIVOCATION`. La stessa testa con un'altra firma valida non e' un'equivocazione
@@ -719,7 +752,7 @@ tipi in `data/IndexSegment.kt` (`SegmentClass`, `MetaRecord`, `MetaFile`, `Segme
 
 ```
 offset  byte    contenuto
-0       1       classe (1 meta, 2 thumbS, 3 thumbM, 4 analysis, 5 hq, 6 frames, 16 personal; 7–15 e 17–31 riservate)
+0       1       classe (1 meta, 2 thumbS, 3 thumbM, 4 analysis, 5 hq, 6 frames, 7 vec, 8 ocr, 16 personal; 9–15 e 17–31 riservate)
 1       3       riservati = 0
 4       4       N voci, 1 ≤ N ≤ MAX_SEGMENT_ENTRIES (4096), big endian
 8       N×36    tabella: chiave (32 byte) + lunghezza del corpo (4 byte, big endian); chiavi strettamente crescenti
@@ -729,7 +762,7 @@ offset  byte    contenuto
 - **Chiavi** (32 byte):
   - `meta`: `SHA-256("mcg-path" ‖ 0x00 ‖ percorso)`, con il percorso relativo alla share in UTF-8, forma **NFC** e
     **minuscolo** (`Locale.ROOT`): due nomi diversi solo per maiuscole sono lo stesso posto per Samba (E-N7);
-  - `thumbS`, `thumbM`, `analysis`, `hq`, `frames`: la **chiave di contenuto** `SHA-256("mcg-ck" ‖ 0x00 ‖ qh1 ‖
+  - `thumbS`, `thumbM`, `analysis`, `hq`, `frames` e, dalla Fase 6, `vec` e `ocr`: la **chiave di contenuto** `SHA-256("mcg-ck" ‖ 0x00 ‖ qh1 ‖
     dimensione)`, con `qh1` come 32 byte grezzi (`QuickHashAlgorithm`) e la dimensione come 8 byte big endian
     (`ContentKey` in `core-model`). Una rinomina dal PC cambia il record ma non la chiave: la preparazione non si
     rifa' (D4). Due file diversi solo nel mezzo hanno la stessa chiave (L32): la chiave decide cosa **mostrare**, mai
@@ -742,7 +775,9 @@ offset  byte    contenuto
     `MAX_BLOB_BYTES` (1 MiB). Le dimensioni si leggono dall'intestazione e si controllano con `ImageBounds` **prima** di
     qualunque decodifica; un altro formato o dimensioni oltre il tetto = segmento rifiutato;
   - `frames`: conteggio (1 byte, da 1 a `MAX_FRAMES_PER_MEDIA` = 9) e, per ogni fotogramma, istante nel video in ms
-    (4 byte) + lunghezza (4 byte) + JPEG; al massimo `MAX_FRAMES_BODY_BYTES` (2 MiB) per media.
+    (4 byte) + lunghezza (4 byte) + JPEG; al massimo `MAX_FRAMES_BODY_BYTES` (2 MiB) per media;
+  - `vec` e `ocr` (Fase 6, versione 2): corpi **binari** con i loro tetti, descritti per intero sotto, in "Dati AI: i corpi `vec` e
+    `ocr`".
 - **Ordine della lettura**: dimensione e impronta uguali alla testa (`Segments.unwrap`) → classe uguale a quella della
   testa → `N` entro il tetto → tabella coerente (chiavi crescenti, somma delle lunghezze = resto del file esatto) → ogni
   corpo con i suoi tetti. **Nessuna allocazione da lunghezze dichiarate**: i corpi si leggono come finestre del
@@ -823,6 +858,76 @@ l'impronta di **entrambi** i media, quella del soggetto in `fp` e quella dell'al
   li' finche' non si aggiorna), senza scartare le altre voci. L'impronta sta nel corpo, quindi la copre l'impronta del segmento
   elencata nella testa firmata, come ogni altro byte della voce.
 
+**Dati AI: i corpi `vec` e `ocr` (Fase 6, versione 2, A3, F6-D6).** Dopo `"MCGB" | versione 2` il contenuto ha la stessa tabella
+di sopra (classe 7 o 8, N voci, chiavi strettamente crescenti, lunghezze), con la **chiave di contenuto** come chiave. Il corpo e'
+binario, big endian come il resto del formato. Una voce `vec` o `ocr` descrive **un contenuto** (non un percorso).
+
+*Corpo `vec`* (il vettore di una foto, o i vettori dei fotogrammi di un video):
+
+```
+offset  byte        contenuto
+0       1           versione del corpo (1)
+1       1           spazio (1 = embeddinggemma2-float-v1; altri rifiutati)
+2       2           dimensione (768 per lo spazio 1)
+4       1           precisione (2 = float16; altre rifiutate)
+5       1           ricetta (1..255)
+6       1           sorgente (1 anteprima di analisi, 2 fotogrammi, 3 byte originali del telefono)
+7       1           N vettori (1..9; esattamente 1 per le sorgenti 1 e 3)
+8       N × 4       istante del fotogramma in ms (solo sorgente 2)
+...     N × 768 × 2 componenti float16
+```
+
+Lunghezza esatta; ogni componente finita (niente NaN, niente infiniti); norma ricalcolata in float32 fra 0,99 e 1,01; spazio, precisione,
+dimensione o ricetta sconosciuti rifiutano il segmento. Il corpo piu' grande possibile (9 vettori con gli istanti) e' di **13.868 byte**,
+sotto il tetto di **14 KiB** del §7.
+
+*Corpo `ocr`* (il testo letto in un'immagine, con la posizione delle righe e delle parole):
+
+```
+offset  byte        contenuto
+0       1           versione del corpo (1)
+1       1           motore (1 = ML Kit Text Recognition v2, script latino)
+2       1           ricetta OCR (1..255)
+3       1           sorgente (1 analisi, 2 HQ, 3 fotogrammi, 4 byte originali del telefono)
+4       2           N righe (0..400; 0 = "analizzata, nessun testo")
+6       ...         per riga: riquadro (4 × 2 byte, x0 y0 x1 y1 in 1/65535 dell'immagine raddrizzata, x0 ≤ x1, y0 ≤ y1),
+                    inclinazione (1 byte con segno, gradi da −90 a 90, dall'angolo della riga di ML Kit),
+                    M parole (1 byte, 1..64),
+                    M × (2 + 2 byte): inizio e fine di ogni parola lungo la riga, in 1/65535 della lunghezza della riga,
+                    non decrescenti,
+                    lunghezza del testo (2 byte, 1..1024), testo UTF-8 (le parole sono i pezzi separati da uno spazio: devono
+                    essere M)
+```
+
+Testo: UTF-8 valido (niente forme lunghe ne' surrogati), in forma NFC, senza caratteri di controllo C0 e C1, senza i caratteri di
+direzione (U+200E, U+200F, U+202A–U+202E, U+2066–U+2069) e senza U+FEFF. Corpo al massimo **64 KiB**, al massimo 400 righe, ogni
+riga al massimo 1.024 byte di testo e 64 parole. Inclinazione ed estremi delle parole servono al testo dal vivo nel viewer: costano
+circa 4 byte a parola (una schermata fitta da 400 parole, 1,6 KB in piu') e permettono di selezionare e copiare il testo anche dove
+ML Kit non gira. "Nessun testo" (0 righe) e' un risultato valido: dice che l'immagine e' stata letta.
+
+**Regole di chi legge** (come sopra: dimensione e impronta uguali alla testa, classe uguale, tabella coerente, ogni corpo nei suoi
+tetti, nessuna allocazione da lunghezze dichiarate). Ogni errore scarta **il segmento intero** (`AI_SEGMENT_REJECTED` in
+Diagnostica), non ferma gli altri segmenti; i dati gia' nella replica restano (E-I17, E-I20). I nomi `AI_SEGMENT_REJECTED` e
+`AI_VECTOR_DISAGREE` sono codici della Diagnostica, non costanti del formato.
+
+**Attestazione e fusione dei dati derivati (Fase 6, A4, F6-D7).**
+- Una voce `vec` o `ocr` vale solo se, **nella stessa share**, c'e' un record `meta` **presente** (di qualunque dispositivo
+  approvato: il vincitore della regola D6 della Fase 4) con la **stessa chiave di contenuto intera** (32 byte, non i primi 64 bit:
+  R1 della 4A). Il dispositivo che pubblica la voce **non deve avere un record suo**: il calcolo lo fa chi indicizza, non chi ha
+  preparato, quindi la regola "stesso dispositivo" dei blob dell'indice qui non vale. Senza il record la voce resta in attesa (E-I21)
+  e si riattesta a ogni testa applicata.
+- Teste `ai` di dispositivi revocati, persi o sconosciuti: ignorate e dimenticate (come per le teste `index`); area persa (E-I8): le
+  voci di quella share escono dalla replica.
+- Fra piu' voci valide per (share, chiave di contenuto, classe) vince la **ricetta piu' alta**, a parita' l'id del dispositivo
+  minore; `vec` e `ocr` si scelgono separatamente. Due vettori della stessa ricetta che non concordano (coseno < 0,95): vince
+  comunque la regola qui sopra e il disaccordo si conta in Diagnostica (`AI_VECTOR_DISAGREE`). Un dispositivo approvato compromesso
+  puo' far trovare male una foto, non toccare file (L45 di `docs/sicurezza.md`).
+- **Pubblicazione:** la regola M3 del §5.5 (solo chiavi di file di quella share, timbro e `qh1` freschi), gli stessi cancelli
+  dell'indice, una testa `ai` al piu' ogni 5 minuti per share salvo la chiusura di un'unita' (§5.6).
+
+**Compatibilita'** (E-I3, E-I22): la versione 2 vale solo per teste e segmenti `ai`; chi legge accetta 1..2 (§10); un'app senza
+la Fase 6 non apre `ai/`, non rifiuta le altre teste e i suoi dati `index` e `personal` restano validi.
+
 ### 5.6 Prenotazione (tipo 4)
 
 `family`, `device`, `share`, `resource` (chiave del lavoro, al massimo 256 caratteri), `generation`,
@@ -836,6 +941,15 @@ mese di scatto e numero della parte, **mai nomi di cartelle o di file** (la chia
 Una parte e' al massimo `WORK_UNIT_MAX_ITEMS` (200) media del mese, ordinati per chiave di contenuto. Durata 1 ora;
 **rinnovo ogni `LEASE_RENEW_MILLIS` (20 minuti)** con una generazione nuova; fine = generazione con durata 0. Si prenota
 l'unita', mai il singolo media (`docs/fase4-progetto.md` D13).
+
+**Unita' del calcolo AI (Fase 6, A5, F6-D9).** Stessa chiave, stessa durata, stesso rinnovo, nuovo passaggio: `work/1/ai/<aaaa-mm>/<parte>`
+(es. `work/1/ai/2024-03/2`; `0000-00` per i media senza data), al massimo `WORK_UNIT_MAX_ITEMS` (200) media del mese per parte, ordinati per
+chiave di contenuto. Nessun campo nuovo e nessuna versione del formato: una prenotazione e' un file del tipo 4 come le altre.
+Un contenuto e' "fatto" **per classe**: quando una testa `ai` attestata (§5.5-bis) di **qualunque** dispositivo approvato ha la voce
+della ricetta corrente. `vec` lo cerca ogni indicizzatore; `ocr` solo un indicizzatore con la lettura del testo attiva; per gli
+altri un `ocr` mancante non e' lavoro da fare. All'inizio di ogni unita' si rileggono le teste `ai` della share e si salta cio'
+che altri hanno gia' pubblicato (due indicizzatori non fanno lo stesso lavoro, E-I1; uno che muore libera l'unita' entro l'ora,
+E-I2). Per i dati `ai` non c'e' la prova "ha pubblicato la miniatura S" (evidenza `THUMB_S`) delle unita' di preparazione.
 
 ### 5.7 Record del cestino (tipo 5)
 
@@ -1016,6 +1130,15 @@ insieme, il risultato resta coerente.
 | Propri file tolti per giro (`MAX_OWN_FILES_PER_ROUND`) | 500 |
 | Salto dell'ora del NAS che sospende (`NAS_CLOCK_JUMP_MILLIS`) | 300000 ms (5 minuti) |
 | Ora stabile per riprendere dopo un salto (`NAS_CLOCK_STABLE_RESUME_MILLIS`) | 86400000 ms (24 ore) |
+| Corpo `vec` di una voce (Fase 6, A6) | 14 KiB (14336 byte): da 1 a 9 vettori da 768 componenti float16, lunghezza esatta (il corpo piu' grande, 9 vettori con gli istanti, e' di 13868 byte) |
+| Vettore `vec` (Fase 6, A6) | componenti tutte finite; norma ricalcolata in float32 fra 0,99 e 1,01 |
+| Corpo `ocr` di una voce (Fase 6, A6) | 65536 byte (64 KiB) e al massimo 400 righe |
+| Riga di un corpo `ocr` (Fase 6, A6) | testo da 1 a 1024 byte UTF-8 e da 1 a 64 parole (con inclinazione ed estremi delle parole) |
+| Teste `ai` (Fase 6) | come le altre teste: 8192 segmenti, 4096 voci per segmento, segmenti chiusi a 12 MiB, una testa ogni 5 minuti per share salvo la chiusura di un'unita' |
+| Copia di un modello sul NAS (Fase 6) | la dimensione fissata nell'app per quel modello (oggi 164626432 e 387710976 byte), mai un byte in piu' |
+
+Le righe della Fase 6 non nominano ancora una costante tra apici inversi: quando P2 aggiunge i tetti a `TrustLimits`, ne scrive il
+nome qui (e `IndexSegmentTypesTest` li confronta).
 
 Superare un tetto vuol dire rifiutare il dato (o l'elenco), contarlo in Diagnostica e proseguire con cio'
 che si ha. **Mai un crash** (E-I14): ogni eccezione di un parser diventa un rifiuto.
@@ -1193,6 +1316,13 @@ partono solo da azioni locali confermate**, con tetti per giro. Come la garantis
      `core-nas`: ognuno fallisce reintroducendo la violazione); la prova delle 500 interruzioni del backup (`docs/prova-500.md`,
      invarianti 1–11 del §5.4 di `docs/fase5-progetto.md`, piu' 12–14 nella 5B).
 
+9. **I dati AI e le copie dei modelli non decidono nessuna azione (Fase 6, A8): questo paragrafo non cambia.** Le teste e i segmenti
+   `ai` mostrano (cosa si trova cercando) e coordinano (chi calcola cosa): come l'indice, non spostano e non cancellano nessun
+   file, e un dato `ai` falso o ostile costa al piu' un risultato di ricerca sbagliato (L45 di `docs/sicurezza.md`). Le copie dei
+   modelli sul NAS (§2.1, §2.2) le legge chiunque, ma un dispositivo toglie **solo le proprie**, e **solo nella propria cartella**
+   `devices/<io>/models/`, quando il suo catalogo non elenca piu' quel modello (mai per un dato letto dal NAS); la copia di un altro
+   dispositivo non si tocca. `core-trust` resta con le tre operazioni del §2.3.
+
 Le operazioni distruttive vere vivranno in moduli e interfacce separate (Fasi 2.4, 4.5, 5, 7), ciascuna con
 il suo diario locale e i suoi test "dato remoto ostile → nessuna azione".
 
@@ -1201,7 +1331,12 @@ il suo diario locale e i suoi test "dato remoto ostile → nessuna azione".
 ## 10. Versione del formato e compatibilita' (E-I3)
 
 - La versione sta nel quinto byte di ogni file firmato, del kit e dei segmenti. Questa build scrive la **1**
-  e legge l'intervallo `OLDEST_READABLE_VERSION..CURRENT_VERSION` (oggi 1..1).
+  e legge l'intervallo `OLDEST_READABLE_VERSION..CURRENT_VERSION` (oggi 1..1; **dalla Fase 6 1..2**, vedi sotto).
+- **Fase 6 (A7, F6-D6): la versione 2 esiste solo per i file `ai`.** Teste e segmenti `ai` (§2.2, §5.5, §5.5-bis) portano la
+  **2**; registro, richieste, teste `index` e `personal`, prenotazioni, cestino, stato e kit restano alla **1**, e una build della
+  Fase 6 li scrive e li legge come prima. Chi legge accetta **1..2**. Un'app senza la Fase 6 trova `ai/` come una cartella
+  qualunque che non apre mai (non la elenca e non la legge: E-I3, E-I22), non rifiuta le altre teste e non perde niente; se per
+  caso aprisse un file `ai`, una versione piu' nuova della sua e' `NEWER_FORMAT` ("aggiorna l'app"), mai un errore del dato.
 - Un file con versione **piu' nuova** non si interpreta: `NEWER_FORMAT` → "aggiorna l'app". Non e' un
   errore del dato e non si cancella nulla.
 - **Un'app vecchia non rompe i dati di una nuova**: ogni dispositivo scrive solo i propri file; un admin con
@@ -1361,6 +1496,7 @@ e C23 hanno ora codice e test; L11 e i limiti del §12 vanno riportati li' alla 
 | §5.7 (M5) | `data/Trash.kt` (campi nuovi nella 4B, P12) | `TrashTest` |
 | §6.1 (M8) | `TrustLimits.NAS_CLOCK_JUMP_MILLIS`; `SessionNasClock` in `core-nas` | `IndexSegmentTypesTest` (§7); in `core-nas` i test dell'orologio |
 | §9 (M10) | `core-nasops` (4B), `core-nas/ops` (`NasFileOps`, 4B) | `Phase4ArchitectureTest` (`core-common`, P0); P12: test "dato remoto ostile" |
+| §2.2, §5.5 (testa `ai`), §5.5-bis (`vec`, `ocr`, attestazione e fusione), §5.6 (unita' `ai`), §7, §10 (Fase 6, **da scrivere**) | `data/AiSegments.kt` (P2, da scrivere; piu' le righe minime in `data/IndexSegment.kt`, `data/DeviceHead.kt`, `nas/NasLayout.kt`, `TrustFormat.kt`); fusione e pubblicazione in `core-index/.../ai/` | P2: test ostili per ogni campo dei corpi, un lettore della versione 1 che ignora `ai/`, attestazione, fusione, proprieta' M3; `IndexSegmentTypesTest` per i tetti nominati |
 
 I test JVM usano un NAS finto volutamente scomodo: elenchi in ordine casuale e nomi senza distinzione di
 maiuscole (I3).

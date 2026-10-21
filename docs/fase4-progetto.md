@@ -95,6 +95,12 @@
 | D31 | **Pubblicazione solo sulle share di prova finché l'utente non chiude la 4A** (`FeatureFlags.indexPublishTestSharesOnly = true`): sulle share vere la 4A lavora **in solo locale** (scansione e preparazione restano sul telefono). Lo stesso interruttore è l'"emergenza" in Diagnostica | La prima scrittura su `alessio`/`NAS` avviene dopo una tappa approvata |
 | D32 | **Ora**: prenotazioni, cestino, stabilità dei file, ordinamento dei dati personali e ogni istante firmato usano l'ora del NAS. Un salto dell'ora del NAS oltre 5 minuti fra due sessioni (`SessionNasClock.lastJumpMs`) **sospende** prenotazioni, pulizia del cestino, compattazione e pulizia dei propri file fino al gesto dell'utente o a 24 ore di ora stabile | Il NAS è avanti di ~55 s e deriva: quando l'NTP verrà sistemato l'ora tornerà indietro di colpo; sotto i 5 minuti le tolleranze esistenti (2 minuti nel futuro) bastano |
 
+> **Nota (Fase 6, 21/10/2026), a D16:** «le anteprime di analisi le scaricano solo gli Indicizzatori (Fase 6), in un buffer» è
+> realizzato dalla Fase 6 (`docs/fase6-progetto.md`, D10 e §2.2): buffer locale in `noBackupFilesDir/ai-buffer/` (al massimo 500 MB,
+> svuotato per ciò che è già calcolato, fermo sotto 1 GiB libero), riempito dall'indice della share (solo blob attestati, a lotti) o,
+> sugli Indicizzatori, direttamente dalla preparazione e dal backup (vedi la nota alla politica R2 in §2.4). I livelli di qualità non
+> cambiano: il buffer è una via a parte, fuori dalla replica, che continua a non tenere `analysis` e `frames`.
+
 ### 0.2 Nuovi edge case proposti (da aggiungere al §6 del piano)
 - **E-N16**: cartelle di sistema e cestini del NAS (`.recycle`, `.Recycle Bin`, `$RECYCLE.BIN`, `.wdmc`, `@eaDir`, `.AppleDouble`, `.mycloudgallery` e ogni cartella che inizia con un punto): mai scansionate, mai mostrate.
 - **E-N17**: l'ora del NAS salta (NTP sistemato o batteria dell'orologio): oltre 5 minuti si sospendono prenotazioni, cestino e pulizie; sotto, si prosegue.
@@ -428,6 +434,13 @@ contenuto v1:
 | Pubblicazione | outbox | `IndexPublisher.stage`, poi `flush` a fine unità; con D31 attivo restano solo nella replica locale |
 | Errori | codici | `DECODE_FAILED` (5 tentativi poi `GAVE_UP`, E-M10), `DECODER_MISSING` (D14), `TOO_LARGE`, `NAS_UNREACHABLE` (si riprova senza contare) |
 
+> **Nota (Fase 6, 21/10/2026), alla politica R2 della 4A** (`docs/decisioni.md`, «Revisione di sicurezza della 4A: correzioni»: su una
+> share non pubblicabile la preparazione lavora solo in locale, senza outbox, e la replica non tiene mai l'anteprima di analisi né i
+> fotogrammi, quindi con D31 acceso quelle anteprime si buttavano): **sugli Indicizzatori `analysis` e `frames` vanno al buffer**
+> (`AnalysisSink` di `core-prepare`, implementata da `core-ai`), sia dalla preparazione sia dal backup (D10 della Fase 5), così non si
+> rileggono gli originali e il calcolo AI le trova. Sulle share pubblicabili non cambia niente (vanno all'indice, `IndexPublisher`);
+> sui dispositivi che non sono Indicizzatori non cambia niente. Fonte: `docs/fase6-progetto.md`, D10.
+
 **Velocità e risorse**: due media in parallelo al massimo (la CPU del NAS è il collo di bottiglia: 16 MB/s in lettura cifrata con 4 flussi); `Pace.REDUCED` con il telefono caldo; tappe da 8 minuti che salvano l'unità a ogni media.
 
 | Edge case | Comportamento |
@@ -611,6 +624,12 @@ Due Preparatori insieme **non** dimezzano il tempo: il limite è la CPU del NAS.
 | **Standard** | + S + M | **~380 MB** | ~3 GB | ~1 minuto |
 | **Alta** | + S + M + HQ | **~5,6 GB** | ~43 GB | ~6 minuti |
 | Indicizzatori (Fase 6) | anteprime di analisi in un buffer, mai tenute | buffer ≤ 500 MB | | |
+
+> **Nota (Fase 6, 21/10/2026):** il buffer degli Indicizzatori è realizzato dalla Fase 6 (`docs/fase6-progetto.md`, D10 e §2.2): al
+> massimo 500 MB in `noBackupFilesDir/ai-buffer/`, svuotato man mano per ciò che è già calcolato e fermo sotto 1 GiB libero.
+> «Mai tenute» vale per la replica: nel buffer le anteprime stanno solo finché il calcolo non è fatto. Non si aggiunge nessuna riga
+> ai livelli di qualità. I dati che il calcolo produce (vettori e testo letto, `ai_vector` e `ai_text` sul dispositivo; teste `ai` sul
+> NAS) sono fuori da questa tabella: circa 60 MB sul NAS per l'archivio di famiglia (§2.8 del progetto della Fase 6).
 
 ### 2.11 Cosa la Fase 4 predispone per la Fase 5
 | Pezzo della Fase 4 | Come lo usa la Fase 5 |

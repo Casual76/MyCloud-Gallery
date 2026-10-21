@@ -73,6 +73,24 @@ Verifica: `gradlew.bat :core-rules:testDebugUnitTest :core-rules:lintDebug`.
 
 "Pesante" significa: con `heavyOnlyAtHome` (proposta 1) gira solo sul Wi-Fi di casa.
 
+**Calcolo AI (Fase 6, `docs/fase6-progetto.md` §2.2 e §2.7).** Nessuna attività nuova: il calcolo di vettori e testo, la lettura del
+testo (OCR) in background e lo scaricamento dei modelli girano tutti dentro `AI_COMPUTE`.
+* **Legge dal NAS e il traffico si registra.** Il calcolo scarica dall'indice della share le anteprime di analisi, i fotogrammi dei
+  video e, per il testo fitto, le anteprime HQ (a lotti): quel traffico va nel `TrafficLedger` con `TrafficSource.AI_COMPUTE` e la
+  rete **effettivamente usata**, subito, prima del punto di ripresa (`StagedRun`). Essendo pesante, scarica solo sul Wi-Fi di casa
+  (proposta 1).
+* **Lavora sul buffer senza rete.** Ciò che sta già nel buffer locale degli indicizzatori si elabora senza rete: se gli unici
+  ostacoli sono di rete o di NAS (fuori casa, tetto raggiunto, NAS spento) il verdetto è `Run` con `LOCAL_BUFFER_ONLY` e il lavoro
+  si ferma con lo stato "Fatto ciò che c'era in locale" (E-A6).
+* **Il ruolo e la lettura del testo.** Serve il ruolo Indicizzatore (scelto da ogni utente per i propri dispositivi). L'OCR gira
+  solo su un indicizzatore con la **lettura del testo** attiva: è una funzione dell'account, non un ruolo né un'attività (D41).
+* **Scaricamento dei modelli.** In background segue le regole di `AI_COMPUTE` (pesante: fascia e alimentazione del preset, solo sul
+  Wi-Fi di casa), con la rete validata e non a consumo per HTTPS e il cancello di rete del NAS per le copie sul NAS; mai dati
+  mobili né roaming. "Scarica ora" e "Indicizza ora" sono `UserInitiated(AI_COMPUTE)` (scavalcano fascia e carica, non la
+  temperatura; sui dati mobili chiedono conferma con la dimensione).
+* **Senza regole**: la ricerca, il testo dal vivo, il ritaglio e la lettura del testo al volo (in primo piano, su un tocco, tutto
+  locale); le teste `ai` si sincronizzano dentro `INDEX_SYNC` (leggera).
+
 ---
 
 ## 3. Preset × attività
@@ -244,6 +262,12 @@ batteria al giorno a regime, dati mobili e Wi-Fi al mese, dati mobili nel primo 
 | Rilettura di verifica del backup (`verifyReadBytesPerSecond`) | **16e6** B/s (16 MB/s) | Fase 5, D4: stessa misura della lettura SMB cifrata a 4 flussi (`inventario-nas.md` §4); **ipotesi** per la rilettura del temporaneo appena scritto, da misurare a M2 |
 | Costo per file del backup (`perFileOverheadSeconds`) | **0,12** s | Fase 5, `docs/fase5-progetto.md` §2.9: circa 12 viaggi SMB (creazione del temporaneo, scritture, `flush`, chiusura, apertura e lettura di verifica, rinomina, `stat`) a circa 10 ms l'uno in casa; **ipotesi**, da misurare in F22 |
 | Caricamenti paralleli (`uploadStreams`) | **1** | Fase 5: i 9 MB/s della scrittura sono la misura con un flusso; due caricamenti paralleli **non sono misurati** (la CPU del NAS fa da tetto: in lettura 4 flussi rendono 2,2 volte uno); si misurano con 1 e 2 flussi in F22 |
+| Calcolo AI dalle anteprime (`aiItemsPerSecond`, **ricalibrata**) | **3,6** foto/s di partenza (**2,8** col caldo, che è anche il valore prudente di oggi) | Fase 6, `docs/fase6-progetto.md` §2.8: 440M generico su GPU, 4,4 foto/s di solo embedding (Fase 0); dalle anteprime da 1024 px la decodifica pesa meno che dagli originali (il 2,8 della Fase 0 era con la decodifica degli originali), col caldo −26%. **Ipotesi, da misurare in P4 e P5 (F52)**, anche sul Tab S9, che non ha misure |
+| Batteria Calcolo AI (`aiBatteryPercentPerThousandItems`) | 4% ogni 1000 foto (invariata) | Fase 0, GPU; da confermare in F52 |
+| Lettura del testo (`ocrSecondsPerItem`, **nuova**) | **0,1–0,25** s a immagine (si parte dal limite alto, 0,25 s, per una stima prudente); seconda passata sull'HQ su circa il 15% delle immagini | Fase 6 §2.8: ML Kit su CPU, in parallelo all'embedding, solo con la lettura attiva; **ipotesi, mai misurata**, da misurare in P4 e P5 (F52) |
+| Fotogrammi per video (`framesPerVideo`, **nuova**) | circa **4** a video (al massimo 9: copertina e fino a 8, uno ogni 30 s); un vettore per fotogramma | Fase 6 §2.8: porta l'archivio di famiglia (circa 22.000 foto e 2.600 video) a circa 32.000 vettori; da verificare con il backlog vero (P5) |
+| Anteprime scaricate dal NAS per il calcolo (`analysisPreviewBytes` e simili) | analisi **150 KB**, fotogrammi **450 KB** a video, HQ **400 KB** | Fase 4 §2.10 e Fase 6 §2.8; il commento di `analysisPreviewBytes` dice "~768 px", il codice produce 1024 px (lo corregge P1) |
+| Scaricamento dei modelli (`modelBytes`, **nuova**) | 270M **164.626.432** B (157 MiB), 440M **387.710.976** B (370 MiB); dal NAS a 16 MB/s, da Internet di casa il 270M in circa 30 s | Fase 6 §2.1: catalogo fissato nell'app. Spazio libero richiesto = dimensione mancante + 300 MB (E-A3). **Ipotesi per la velocità da Internet**, da misurare in P3 (F46) |
 
 `UsageProfile` (ipotesi, nessuna misura in Fase 0): 8 h/giorno collegato, 14 h sul Wi-Fi di casa, 1 h su altro
 Wi-Fi, 8 h sui dati mobili, efficienza 0,8 (risvegli del NAS, ripartenze, riavvii notturni E-P13).
@@ -289,6 +313,28 @@ definitivo (D4). Per questo:
   di traffico al mese.
 
 Le tre costanti nuove sono **ipotesi** come le altre: si ricalibrano con le misure di M2 e del primo backup vero (F22, F32).
+
+### Calcolo AI e lettura del testo (Fase 6, `docs/fase6-progetto.md` §2.8)
+
+Un "elemento" del calcolo è un **vettore**: una foto, o un fotogramma di un video (`framesPerVideo`). `BacklogFacts.toAnalyze` lo
+alimenta il catalogo (celle senza il vettore della ricetta corrente). La lettura del testo non cambia il numero di elementi: si
+somma al tempo di ogni immagine solo dove è attiva.
+
+* **Tempo** del calcolo di `N` elementi: `T = N / aiItemsPerSecond`. Con la lettura del testo attiva, che lavora in parallelo
+  all'embedding sulla stessa anteprima (CPU contro GPU), la proposta per P5 è `T = max(N / aiItemsPerSecond, N · ocrSecondsPerItem)`:
+  conta la fase più lenta.
+* **Traffico**: le anteprime lette dal NAS si registrano come `AI_COMPUTE` (§2, §5); lo scaricamento dei modelli, una volta per
+  famiglia, anche (527 MB da Internet, poi dal NAS).
+* **Prima indicizzazione** dell'archivio di famiglia (ipotesi, un indicizzatore, S25): circa 32.000 vettori a 2,8 al secondo ≈ 3,2
+  ore (con due indicizzatori circa 1,6 ore ciascuno); circa 5,7 GB di anteprime (foto, video e HQ per il testo fitto) ≈ 6 minuti a
+  16 MB/s, in parallelo al calcolo; circa 4% di batteria ogni 1000 foto ≈ 130%, quindi una notte dalla presa con il preset Notte.
+* **A regime** (200 foto e 10 video al mese): circa 250 vettori al mese, circa 2 minuti di calcolo e l'1% di batteria al mese,
+  dentro l'obiettivo del 2% al giorno.
+* **Dispositivo lento** (E-A4 senza NPU): `DeviceProbe` misura 20 immagini sintetiche e la stima ("Analizzare 18.000 media richiede
+  circa 2 notti") nasce da `aiItemsPerSecond` misurato qui, non dal valore di partenza.
+
+Le costanti nuove o ricalibrate di questo paragrafo (`aiItemsPerSecond` dalle anteprime, `ocrSecondsPerItem`, `framesPerVideo`,
+`modelBytes`) sono **ipotesi** da sostituire con le misure di P4 e P5 (F52, F46).
 
 
 ---

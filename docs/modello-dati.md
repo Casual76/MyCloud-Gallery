@@ -228,6 +228,14 @@ entita' (il build esporta `N.json`), scrivere `Migration(N-1, N)` in `GalleryMig
   (`media_store_cursor`, §10).
 - **OCR, FTS, volti**: tabelle nelle Fasi 6 e 8 (i volti nell'area privata, proposta 13). Il test delle
   referenze obblighera' ad aggiungerle all'unione.
+  - **OCR e FTS: fatti nella Fase 6** (progetto del 21/10, `docs/fase6-progetto.md` D23, D25, D37; schema **v5**, §13, scritto da
+    P1): testo letto in `ai_text` con la tabella FTS `ai_text_fts` e il vocabolario `ai_vocabulary`, vettori in `ai_vector`.
+    Sono tabelle **per chiave di contenuto**, non per media: lo stesso contenuto in tre posti (telefono, area privata, area
+    comune) si calcola e si conserva una volta, e nessuna punta a `media` (non entrano nell'unione d'identita').
+  - **La tabella `embedding` della v1 resta vuota e superata** (D23): nessuno la scrive o la legge (`MediaCatalog.putEmbedding` non
+    ha chiamanti) e `ai_vector` e `ai_text`, per chiave di contenuto, la sostituiscono. Non si toglie: la migrazione 4→5 non e'
+    distruttiva.
+  - I **volti** restano alla Fase 8.
 - **Album completi, album smart e condivisi**: Fase 7, con migrazione.
 - **Dimensione dei vettori** (MRL) e risoluzione delle anteprime: misure 0.3/6.1 ancora aperte.
 - **Dove vivono le versioni precedenti sul NAS** (punto aperto 5.4): il modello le tratta come posizioni

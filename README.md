@@ -84,6 +84,10 @@ segnaposto e almeno un test.
 | `:core-backup` | Fase 5A (5B: versioni, correzioni, "Libera spazio", attivita' in sospeso, caricamenti in arrivo): backup dei media del telefono nell'area privata (piano e destinazioni, caricamento con diario e macchina a stati, rilettura completa prima del nome definitivo, deduplica byte per byte, guardiano delle copie private, "al sicuro", stato). Vede il NAS **solo** con `NasBackupOps`, una vista in sola aggiunta di `core-nas` (`@AppendOnlyNasAccess`): non puo' togliere ne' sostituire un file | model, common, trust, nas (lettura e `NasBackupOps`), database (porte), index (publisher), prepare, metadata, rules. **Non vede** `core-nasops`, `NasFileOps`, `DestructiveNasAccess` ne' `core-mediastore` |
 | `:feature-backup` | Fase 5A e 5B: impostazioni e pagina Backup, primo backup, stato nel piede e nel viewer; nella 5B Versioni, "Libera spazio", "Da decidere". Stati e contratti, composable con i soli componenti G2. **Cieca a `core-nas` e `core-nasops`** | backup (contratti), library, imaging, designsystem |
 | `:feature-integrations` | Fase 5B: selettore per le altre app (`PickerActivity`), provider di documenti (`MediaDocumentsProvider`), ricezione delle condivisioni ("Salva sul NAS"), sessioni di "Modifica con…", condivisione senza posizione. **Cieca a `core-nas` e `core-nasops`** | backup, library, imaging, mediastore (contratti), designsystem |
+| `:core-models` | Fase 6: catalogo dei modelli fissato nell'app (id, dimensione, SHA-256), sorgenti (NAS, HTTPS, cartella dal PC), scaricamento con ripresa, verifica a ogni caricamento, spazio e rimozione, copia sul NAS. **L'unico modulo dell'app che apre connessioni HTTPS** (pacchetto `download/https/`, solo host ammessi) | common, model, trust (`SharePath`, `NasLayout`, `NasFileSystem`), nas (lettura; pubblicazione esclusiva nella propria cartella), rules. **Non vede** index, ai, search, database |
+| `:core-ai` | Fase 6: motori on-device (vettori di testo e immagini con LiteRT-LM; OCR con ML Kit solo con la lettura del testo attiva; ritaglio del soggetto con MagicTouch su LiteRT) e calcolo AI (unita', prenotazioni, buffer degli indicizzatori, ripresa, pubblicazione). **L'unico modulo che vede `litertlm`, `litert` e ML Kit** | common, model, trust, index (contratti), prepare (solo per i media del telefono), models (solo `ModelFiles`), rules. **Non vede** nas (i byte del NAS arrivano dalle porte di core-index), nasops, backup, search |
+| `:core-search` | Fase 6: indice locale (vettori e testo), analizzatore delle query italiane, fusione e soglie di convinzione, "Trova simili", copertura, cronologia. **Nessuna rete, nessun NAS** | common, model, database (porte), library, places, ai (solo contratti). **Non vede** nas, index, models, prepare, nasops, backup |
+| `:feature-search` | Fase 6: schermata Cerca e pagina Ricerca e modelli. Stati e contratti, composable con i soli componenti G2. **Cieca a `core-nas`, `core-index`, `core-nasops`, `core-backup`** | search, library, imaging, designsystem; ai e models solo nei contratti di stato |
 
 Nessun ciclo: `core-common` e `core-model` sono le foglie. I `feature-*` non si conoscono fra loro: ogni
 passaggio da una funzione all'altra e' una callback scritta da `:app` (`navigation/AppNavHost.kt`).
@@ -116,6 +120,27 @@ temporanei del backup). `Phase4ArchitectureTest` e' esteso a queste regole.
 (`archiveVersion` e `restoreVersion`, con il timbro obbligatorio, una estremita' sotto `Versioni/`); una `PhoneConfirmation` nasce solo da un tocco su un
 foglio della UI. `Phase5BArchitectureTest` tiene il perimetro. Le prove guidate T-09, T-14, T-15 e T-16 sono una schermata della sola build debug
 (Impostazioni → Sviluppo), assente dalla release; il loro resoconto, di soli numeri, va in `docs/android.md`.
+
+**Fase 6: chi vede chi** (`docs/fase6-progetto.md` §1.1). Nascono `core-models`, `core-ai`, `core-search` e `feature-search` (P0 ne
+scrive i contratti, i null-object e i fake). Le regole:
+- `core-models` e' l'**unico** modulo con codice HTTPS (pacchetto `download/https/`, classi `internal`): ogni altro modulo e ogni altro
+  pacchetto ha `NoNetworkSourcesTest`, e un test d'architettura prova che nessun altro nomina un client HTTP o TLS (`javax.net.ssl`,
+  `java.net.URL`, le `URLConnection`, i socket SSL, le librerie di rete; i socket verso il NAS di `core-network` e `core-nas` restano).
+  Il resto dell'app riceve solo `ModelManager` e `ModelFiles`;
+- `litertlm`, `litert` e ML Kit compaiono **solo** nel `build.gradle` di `core-ai`, e `com.google.mlkit` (con `MlKit.initialize`) solo
+  in `core-ai/.../ocr/`, dietro il cancello della lettura del testo (spenta di default);
+- `core-search` e `feature-search` non vedono ne' rete ne' NAS: `core-search` non vede `core-models`, `core-index` ne' `core-nas`, e
+  `feature-search` non vede `core-nas`, `core-index`, `core-nasops` ne' `core-backup`;
+- `feature-viewer` non vede `core-ai` ne' `core-search`: il testo dal vivo e il ritaglio passano da porte sue, che `:app` lega;
+- chi legge il NAS o mostra la Libreria (`core-index`, `core-nasmedia`, `core-prepare`, `core-library`, `core-imaging`) **non vede**
+  `core-ai`, `core-models` ne' `core-search`; `core-prepare` riceve una porta `AnalysisSink` definita da lui;
+- restano le regole delle Fasi 4 e 5: `core-ai` e `core-models` non vedono `NasFileOps`, `DestructiveNasAccess`, `NasBackupOps`,
+  `core-nasops` ne' `core-backup`.
+
+`Phase6ArchitectureTest` (`core-common`, P0) tiene queste regole, con il grafo senza cicli e tutti i moduli in `galleryModules`; ogni
+violazione reintrodotta lo fa fallire. Le aggiunte ai moduli esistenti (classi `vec` e `ocr` in `core-trust`, testa `ai` in
+`core-index`, schema v5 in `core-database`, ruoli modificabili in `core-family`, impostazioni sincronizzate in `core-personal`,
+testo dal vivo, ritaglio e foto in movimento in `feature-viewer`) sono nel §1.3 del progetto.
 
 Dalla Fase 2 ogni modulo nuovo ha tre package fissi (docs/fase2-progetto.md, D6):
 - `contract`: le interfacce e i tipi che gli altri moduli usano (con KDoc che spiega il perche');

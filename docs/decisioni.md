@@ -3431,3 +3431,231 @@ senza la correzione: O-8 (3 test su 4), la guardia di D-14 con le vecchie cartel
 di un video solo-NAS, senza VPN: "NAS non raggiungibile fuori casa", non i dati mobili; riacceso il Wi-Fi il viewer riprova da solo; con la VPN sui dati mobili: "Servono i dati mobili"
 con la dimensione. D-16 (F3): tre verifiche a freddo a 4 minuti l'una dall'altra: la prima (APK nuovo) rilegge i 61,7 MB, le altre no (`NAS_SCAN ... bytes` vicino a 0). O-8 (F43-tel):
 con un temporaneo di versione occupato `stop=busy` nel log e "riprovo tra poco" nella pagina; la versione si chiude pochi minuti dopo il rilascio del NAS.
+
+## Fase 6 (Ricerca): decisioni del progetto (21/10)
+Fonte: `docs/fase6-progetto.md` (§0.1 decisioni D1–D51, §9 domande, §11 risposte). Le decisioni valgono come scritte lì; qui il
+riassunto in una o due righe ciascuna (cosa e perché), con il rimando alla sezione. Le modifiche agli altri documenti (§0.3 del
+progetto) sono in `docs/formato-nas.md` (A1–A8), `docs/sicurezza.md` (C9, C19, C21, C22, §1, §4-bis, L45–L56, checklist, §8),
+`docs/modello-dati.md` (§9), `docs/regole-attivita.md` (§2, §6), `docs/fase4-progetto.md` (D16, §2.10, politica R2),
+`docs/android.md` ("Fase 6", da misurare), `docs/research/embeddinggemma2.md`, `docs/grafica-progetto.md` (§12.12) e `README.md`
+(moduli e grafo), più il piano (edge case, proposta 9, glossario). Lo schema v5 (`docs/modello-dati.md` §13) lo scrive P1. Le
+decisioni di implementazione di P0 (`kotlin-reflect`, coroutines, dimensioni dell'APK) si aggiungono qui dopo.
+
+Una fase sola (nessuna divisione 6A/6B), **quindici pacchetti** (P0–P14; opus per P0, P2, P5, P6, sonnet per gli altri undici; P12 e
+P13 nati dalla risposta Q9, P14 dalla Q14) e tre tappe: **M1** (modelli e calcolo sull'S25, una ricerca minima), **M2** (area di
+prova indicizzata una volta sola con due indicizzatori, Cerca completa, testo dal vivo, ritaglio e foto in movimento nel viewer),
+**M3** (obiettivi del §4 del piano misurati). Prove sul campo F46–F71 (§5.6). Chiusura: revisione di sicurezza e verifica
+funzionale in parallelo; con il consenso (Q7) la pubblicazione sulle share vere (F64).
+
+**Risposte dell'utente alle domande del §9 (21/10)** (tre tornate: Q1–Q10, Q11–Q14, Q15–Q16; il dettaglio è nel §11 del progetto)
+| # | Domanda | Risposta | Effetto |
+|---|---|---|---|
+| Q1 | Da dove scaricare i modelli (157 MB per tutti, 370 MB in più per chi analizza) | (a) dal sito ufficiale (Hugging Face), una volta per la famiglia; poi dal NAS; sempre possibile dal PC | D17, D18; il primo scaricamento da Internet ha il consenso |
+| Q2 | Un elenco online firmato degli indirizzi dei modelli | (a) no per ora: gli indirizzi stanno nell'app | D19: il manifest firmato arriva con la Fase 10; la voce "manifest manomesso = ignorato" passa alla checklist della Fase 10 |
+| Q3 | Quali dispositivi analizzano le foto | **diversa dalle opzioni**: lo sceglie ogni utente; nel suo caso l'S25 fa tutto | **D15 riscritta**: ruolo per dispositivo, proposto all'onboarding e modificabile in Impostazioni (oggi manca); M2 e F50 usano due indicizzatori solo per provare E-I1 |
+| Q4 | ML Kit manda a Google statistiche d'uso (mai foto né testo) | **diversa dalle opzioni**: accettato così com'è, informando l'utente | **D41, D42, D49 nuove; D12 e D38 riscritte**: lettura del testo da attivare, spenta di default, per account; spenta, ML Kit non si inizializza; cade il blocco delle statistiche; F56 riscritta, F69 nuova; L49 |
+| Q5 | Ricerche recenti | (a) ultime 50, solo sul telefono, cancellabili | D32 |
+| Q6 | Foto nascoste analizzate | (a) sì, mai mostrate | D29; un ritaglio salvato dai Nascosti nasce nascosto (D47) |
+| Q7 | Quando pubblicare i risultati sulle share vere | (a) a fine Fase 6, con l'APK di release e il consenso | F64 alla chiusura |
+| Q8 | Chi prepara le 50 query di valutazione | (a) l'utente, con uno strumento dell'app; nulla nel repository | §5.3 e P9; lo stesso set tara l'ordine "Pertinenti" |
+| Q9 | Il testo letto nelle info con "Copia testo" | **diversa dalle opzioni**: come su Samsung e Apple, tenendo premuto si copia il testo o si ritaglia il soggetto | **D43–D47, §2.10, P12 e P13**: testo dal vivo e ritaglio con MagicTouch su LiteRT; una dipendenza in più (`litert` 2.3.0); prove F65–F67 |
+| Q10 | Ordine dei risultati sicuri | **diversa dalle opzioni**: "Recenti" di default, "Pertinenti" a scelta; l'altro criterio pesa poco | **D48** e la formula del §2.4; cambiano D28, §2.6, P6, P8, P9; prova F68 |
+| Q11 | Dove tenere il modello del ritaglio (6 MB) | (a) dentro l'app | D38, D44: asset dell'APK con l'impronta fissata, nessun host in più |
+| Q12 | Dove va "Salva come nuova foto" | (a) `Pictures/MyCloud Gallery/Ritagli` e poi nel backup | D47; sorgente "Ritagli" del backup accesa di default |
+| Q13 | La lettura del testo vale per tutti i miei dispositivi o per ognuno | (a) per l'account, con l'esclusione di un dispositivo | D41: avviso una tantum sugli altri dispositivi, "Non su questo dispositivo" |
+| Q14 | Pressione prolungata sulle foto in movimento | **diversa dalle opzioni**: il video parte da un pulsante; tenendo premuto si copia il testo o si ritaglia il soggetto; all'apertura una piccola animazione fino al momento della foto | **D45 riscritta, D50, D51, §2.11, P14**; prove F70 e F71 |
+| Q15 | Il video avviato dal badge "Movimento" ha l'audio | (a) sì, al volume dei contenuti multimediali (l'animazione d'apertura resta muta) | D51, §2.11 |
+| Q16 | Un interruttore per l'animazione d'apertura | (b) sì: nelle Impostazioni della Libreria, "Animazione delle foto in movimento", acceso di default, sincronizzato fra i dispositivi dell'utente | **D50 riscritta**; campo `motion_animation` e interfaccia `MotionPersonalSettings` in `core-personal` (P0 le firme, P14 `SyncedMotionSettings` e l'interruttore); "Mai" vale anche con l'interruttore spento, il badge funziona sempre |
+
+**Decisioni D1–D51** (rimando: `docs/fase6-progetto.md`, sezione indicata; stato: *deciso* = confermato o senza alternative aperte)
+| # | In breve | Rimando | Stato |
+|---|---|---|---|
+| D1 | Una fase sola, tre tappe: nulla toglie o sposta un media, sul NAS si scrivono solo file nuovi nell'area dell'app, dietro i cancelli dell'indice (F4-D31, congelamento, emergenza, salto dell'ora, fiducia, sola lettura) | §0.1, §4.2 | Deciso |
+| D2 | Runtime: `litertlm-android` 0.18.1 con `EmbeddingEngine` diretto, dietro `TextEmbedder` e `ImageEmbedder`; `-Xskip-metadata-version-check` solo in `core-ai`; P0 decide con un test se tenere `kotlin-reflect` 2.4.0 e coroutines 1.11.0. È la strada più leggera e la 0.18.1 corregge un difetto ABI di EmbeddingGemma 2 | §0.1, §7 | Deciso; libreria da approvare |
+| D3 | 440M generico su GPU per indicizzare (ripiego su CPU), 270M su CPU per le query su ogni dispositivo (E-Q8); niente NPU né librerie Qualcomm; `uses-native-library` facoltative; `abiFilters` `arm64-v8a` e `x86_64` | §0.1 | Deciso (Fase 0) |
+| D4 | Spazio `embeddinggemma2-float-v1`: 768 dimensioni calcolate in float32 e salvate in float16; la ricetta (intero, oggi 1) descrive gli ingressi: ricetta nuova = stesso spazio, ricalcolo piano; uno spazio nuovo non si mescola mai | §0.1 | Deciso |
+| D5 | Ingresso del modello sempre preparato da noi (`ImageBounds`, `ImageDecoder`, 768 px, JPEG q95): mai byte remoti al decodificatore nativo; testo a 128 token, query troncata a 200 caratteri, nessun prefisso (P9 li rimisura) | §0.1 | Deciso |
+| D6 | Testa `ai` separata (`devices/<id>/ai/head/…`, `ai/seg/…`) con le sole classi `vec` (7) e `ocr` (8), chiave di contenuto; versione 2 del formato solo per i file `ai`; un'app vecchia non apre `ai/` | §0.1, §2.3 | Deciso |
+| D7 | Una voce `vec` o `ocr` vale se la stessa share ha un record `meta` presente con la stessa chiave intera (di qualunque dispositivo approvato); più voci: ricetta più alta, poi id minore; disaccordi contati | §0.1, §2.3 | Deciso |
+| D8 | Pubblicazione dei dati AI con outbox e pubblicatore propri, regola M3 per chiavi di contenuto e gli stessi cancelli dell'indice; sotto un blocco permanente i risultati restano locali e si pubblicano dopo, senza ricalcolo | §0.1, §2.3 | Deciso |
+| D9 | `WorkPass.AI`, unità `work/1/ai/<mese>/<parte>` da 200 media, prenotazione di 1 ora; un contenuto è "fatto" per classe se una testa `ai` attestata ha la voce; a inizio unità si rileggono le teste e si salta il già fatto | §0.1, §2.2 | Deciso |
+| D10 | Ingressi del calcolo: buffer locale (≤ 500 MB, fermo sotto 1 GiB libero), anteprime scaricate dall'indice (attestate), preparazione dai byte del telefono; sugli indicizzatori `analysis` e `frames` vanno anche al buffer | §0.1, §2.2 | Deciso |
+| D11 | Video: un vettore per fotogramma di `frames` (al massimo 9), punteggio = massimo, "Trova simili" = media normalizzata; OCR sulla copertina e sul fotogramma centrale | §0.1 | Deciso |
+| D12 | OCR con ML Kit Text Recognition v2 integrata (`text-recognition` 16.0.1), solo dove la lettura del testo è attiva; seconda passata sull'HQ per il testo fitto; le statistiche non si bloccano | §0.1, §2.2 | Deciso (Q4) |
+| D13 | Testo letto pubblicato con riquadro, inclinazione ed estremi delle parole (UTF-8 NFC, senza caratteri di controllo né di direzione); normalizzato (minuscolo, senza accenti) solo in locale | §0.1, §2.3 | Deciso |
+| D14 | Un indicizzatore lavora solo sull'area privata del suo account, sull'area comune e sui media del proprio telefono; le aree senza indicizzatori sono solo un'informazione, mai un'azione | §0.1, §2.6 | Deciso |
+| D15 | Ruolo Indicizzatore scelto da ogni utente per i propri dispositivi, all'onboarding e in Impostazioni → Ricerca e modelli; accenderlo propone il 440M e lancia una misura breve con la stima ("circa 2 notti"); spegnerlo rilascia le prenotazioni | §0.1, §2.6 | Deciso (Q3) |
+| D16 | Modelli fissati nell'app (`ModelCatalog`: dimensione e SHA-256) in `noBackupFilesDir/models/<sha256>`; verifica a ogni caricamento sullo stesso descrittore; un file diverso è rifiutato e tolto | §0.1, §2.1 | Deciso |
+| D17 | Sorgenti in ordine: NAS, HTTPS dagli host ammessi (Hugging Face: `huggingface.co`, `.huggingface.co`, `.hf.co`), cartella `MyCloud Gallery/Modelli/` dell'area comune; ripresa con `Range` e `If-Range`; lavoro accelerato di WorkManager | §0.1, §2.1 | Deciso (Q1) |
+| D18 | Il NAS distribuisce i modelli in famiglia: il primo dispositivo che ha un modello verificato lo pubblica in `devices/<id>/models/<sha256>` (scrittura esclusiva, solo la propria cartella); un dispositivo toglie solo le proprie copie | §0.1, §2.1 | Deciso (Q1) |
+| D19 | Nessun manifest remoto nella Fase 6: gli indirizzi stanno nell'app; il manifest firmato arriva con la Fase 10 e potrà solo aggiungere indirizzi per modelli già elencati | §0.1, §2.1 | Deciso (Q2) |
+| D20 | Spazio e rimozione: la pagina mostra dimensione, stato, origine e ultima verifica; "Rimuovi" dice la conseguenza; un modello non più elencato si toglie da solo | §0.1 | Deciso |
+| D21 | Reindicizzazione graduale: ricetta nuova ricalcolata dal più recente (il vecchio vale finché non arriva il nuovo); spazio nuovo: i due convivono finché il nuovo non copre quanto il vecchio, poi vecchi tolti dopo 30 giorni | §0.1 | Deciso |
+| D22 | `AiComputeWorker` con `AI_COMPUTE` e `StagedRun` (tappe da 8 minuti), ritmo ridotto col caldo, `LOCAL_BUFFER_ONLY`; ogni risultato si salva subito; "Indicizza ora" è una richiesta dell'utente | §0.1, §2.2, §2.7 | Deciso |
+| D23 | Indice locale per chiave di contenuto (`ai_vector`, `ai_text`); la tabella `embedding` della v1 resta vuota e superata | §0.1 | Deciso |
+| D24 | Indice vettoriale a due passate, in memoria e mappato (int8 a 256 dimensioni, poi i migliori 1.000 a 768 float16); niente HNSW né libreria nativa | §0.1, §2.4 | Deciso |
+| D25 | Indice del testo FTS4 sul testo normalizzato, refusi con un vocabolario locale; termini sempre letterali (nessuna sintassi `MATCH` dall'utente) | §0.1, §2.4 | Deciso |
+| D26 | Analizzatore italiano delle query, a regole e deterministico (date, feste, stagioni, luoghi dal dizionario della Libreria, tipi e sorgenti); il resto va al contenuto e al testo; le virgolette chiedono il testo esatto | §0.1, §2.5 | Deciso |
+| D27 | Soglia di convinzione relativa alla query (punteggio standardizzato): "sicuri" e "meno probabili", fusione RRF; `Zc` e `Zl` tarati in P9 (precisione dei sicuri ≥ 90%, ≥ 80% delle attese fra i primi 20) | §0.1, §2.4 | Deciso; valori da calibrare |
+| D28 | Una cella per gruppo; sicuri poi meno probabili, nell'ordine scelto (D48); il viewer usa una vista ordinata nuova; in Cerca solo miniature locali | §0.1, §2.4 | Deciso |
+| D29 | Nascosti mai, in tre punti (candidati, filtro finale, test su ogni superficie); i nascosti si calcolano comunque | §0.1 | Deciso (Q6) |
+| D30 | "Trova simili" dal viewer e dalla selezione, soglia calibrata a parte, chip "Simili a"; non per un media senza vettore né nei Nascosti | §0.1 | Deciso |
+| D31 | Copertura dichiarata: avviso in Cerca solo sotto il 98%; la lettura del testo ha una copertura sua, detta una volta nella pagina | §0.1, §2.4 | Deciso |
+| D32 | Cronologia locale: tabella `search_history`, mai sincronizzata né esportata, al massimo 50 voci, cancellabile | §0.1 | Deciso (Q5) |
+| D33 | Nessuna rete durante la ricerca: l'unico codice HTTPS dell'app è in `core-models/.../download/https/` (test d'architettura); `core-search` non vede `core-models`; testo dal vivo e ritaglio non usano la rete | §0.1, §1.1 | Deciso |
+| D34 | Filtro "Documenti" (bit locale `CellFlags.DOCUMENT`): testo letto con almeno 6 righe o 200 caratteri, o vettore vicino a frasi prototipo; aggiornato a lotti di 500 | §0.1 | Deciso; soglia da calibrare |
+| D35 | Ricerca sempre utilizzabile: senza il modello delle query funzionano filtri e testo; offline tutto; il motore si carica all'apertura di Cerca e si rilascia 3 minuti dopo | §0.1 | Deciso |
+| D36 | UI come stati e contratti (come F4-D27 e F5-D30): composable solo con i componenti G2, nessuno stile nuovo | §0.1, §1.5 | Deciso |
+| D37 | Schema v5 in una sola migrazione (4→5 mai distruttiva): `ai_vector`, `ai_text` con FTS4, `ai_vocabulary`, `ai_pending_publish`, `ai_replica_entry`, `search_history`; nessuna tabella nuova punta a `media` | §0.1 | Deciso; lo scrive P1 |
+| D38 | Nessun permesso né componente esportato nuovo; `MlKitInitProvider` tolto; elenco chiuso dei componenti di ML Kit e DataTransport; tre dipendenze nuove con checksum (`litertlm-android` 0.18.1, `text-recognition` 16.0.1, `litert` 2.3.0); un host nuovo (Hugging Face); MagicTouch come asset dell'APK | §0.1, §6.4 | Proposta: librerie da approvare (ML Kit già accettato con Q4) |
+| D39 | "Oggi" e "ieri" dalla data del telefono (mostrata nel chip); prenotazioni e teste con l'ora del NAS; durate con l'orologio monotono | §0.1 | Deciso |
+| D40 | Log e Diagnostica: mai testo delle query, testo letto o copiato, luoghi, vettori, chiavi di contenuto, nomi di file; solo numeri e codici | §0.1, §2.6 | Deciso |
+| D41 | Lettura del testo: funzione da attivare, spenta di default, per account con "Non su questo dispositivo"; pagina che dice cosa manda ML Kit; spenta, ML Kit non si inizializza; allo spegnimento pulizia di DataTransport | §0.1, §2.6 | Deciso (Q4, Q13) |
+| D42 | Il testo letto è un dato della famiglia: un dispositivo con la lettura spenta usa il testo pubblicato da un altro; l'OCR in background e al volo solo dove la lettura è attiva | §0.1 | Deciso (Q4) |
+| D43 | Testo dal vivo nel viewer: pressione prolungata su una riga, maniglie, "Copia · Seleziona tutto · Condividi testo", appunti sensibili, pulsante "Testo"; le posizioni vengono dall'indice, quindi anche senza ML Kit e sui media solo-NAS | §0.1, §2.10 | Deciso (Q9) |
+| D44 | Ritaglio del soggetto: MagicTouch (Apache 2.0, 6 MB) su LiteRT e non MediaPipe Tasks (annuncia statistiche d'uso); "Copia · Condividi · Salva come nuova foto"; piano B MobileSAM con ONNX Runtime | §0.1, §2.10 | Deciso (Q9, Q11) |
+| D45 | La pressione prolungata decide dove cade il dito: testo dal vivo su una riga letta, ritaglio altrove; le foto in movimento come le altre (il video non parte più con la pressione ma dal badge) | §0.1, §2.10 | Deciso (Q9, Q14) |
+| D46 | Accessibilità: azioni di TalkBack "Testo nella foto" e "Ritaglia il soggetto"; il foglio "Testo nella foto" prende il posto del "Copia testo" nelle info; maniglie da 48 dp | §0.1, §2.10 | Deciso (Q9) |
+| D47 | "Salva come nuova foto": PNG in `Pictures/MyCloud Gallery/Ritagli/`, data di adesso, nessuna posizione; sorgente di backup accesa di default; dai Nascosti nasce nascosta | §0.1, §2.10 | Deciso (Q12) |
+| D48 | Ordine dei risultati: "Recenti" (predefinito) e "Pertinenti", scelta ricordata come impostazione personale sincronizzata; in ciascuno l'altro criterio pesa poco | §0.1, §2.4 | Deciso (Q10) |
+| D49 | La regola "niente SDK che parli con internet" resta, con tre eccezioni scritte accanto (`litertlm-android`, `litert`, ML Kit `text-recognition`); la proposta 9 del piano diventa "salvo la lettura del testo nelle foto se l'utente la attiva" | §0.1 | Deciso (Q4) |
+| D50 | Animazione d'apertura delle foto in movimento: ~1,2 s muti fino all'istante della foto, dopo ~150 ms di pager fermo; mai con "Rimuovi animazioni", risparmio energetico, interruttore spento, scorrimento o pizzico; un decoder solo; interruttore "Animazione delle foto in movimento" nelle Impostazioni della Libreria, acceso di default e sincronizzato | §0.1, §2.11 | Deciso (Q14, Q16) |
+| D51 | Badge "Movimento": un tocco riproduce il video intero una volta, con l'audio; solo-NAS: coda letta a intervalli, animazione solo se ≤ 16 MB sul Wi-Fi e pronta in 1,5 s, conferma sui dati mobili; cache `cacheDir/motion/` (64 MB) | §0.1, §2.11 | Deciso (Q14, Q15) |
+
+**Dubbi grafici** (per il filone grafico): schermata Cerca, chip, selettore dell'ordine, avviso di copertura, pagina Ricerca e
+modelli, pagina di attivazione della lettura del testo, testo dal vivo, animazione del soggetto che si stacca, badge "Movimento",
+animazione d'apertura e interruttore: in `docs/grafica-progetto.md` §12.12.
+
+## Fase 6 P0: fondamenta e contratti (21/10)
+
+Il pacchetto P0 della Fase 6 (`docs/fase6-progetto.md` §4.4): i quattro moduli nuovi (`core-models`, `core-ai`, `core-search`,
+`feature-search`), le tre librerie dei motori, i contratti del §1.2 con null-object, fake fedeli ed esecutori di riferimento, le firme
+nei moduli esistenti, i recinti (`Phase6ArchitectureTest`, `verifyReleaseManifest`, `tools/check.ps1`) e i documenti del §0.3. Qui le
+scelte di implementazione che il progetto lasciava a P0 e quelle nate dal codice.
+
+**Scaricamenti** (approvati dall'utente il 21/10; nient'altro scaricato):
+- le tre librerie dal Maven di Google con le loro dipendenze, impronte SHA-256 in `gradle/verification-metadata.xml` confrontate una
+  per una con quelle pubblicate dai repository (Google Maven e Maven Central): 83 artefatti nuovi, tutte uguali (82 con l'impronta
+  pubblicata accanto all'artefatto, `guava-33.5.0-jre.jar` confrontata a parte con quella di Maven Central). Nel grafo di ML Kit entra
+  `com.google.android.odml:image` **1.0.0-beta1** (dipendenza di `vision-common`, la usa `InputImage`): l'unica beta del grafo,
+  transitiva e non dichiarata da noi; toglierla romperebbe l'OCR, quindi resta (punto aperto qui sotto);
+- **EmbeddingGemma 2 270M** (`litert-community/embeddinggemma-2-text-270m-litert-lm`, commit `9be6e8b9…`): 164.626.432 byte, SHA-256
+  `2d079ee2…` verificato. **Fuori dal repository**, in `%USERPROFILE%\.mycloudgallery\models\embeddinggemma-2-text-270m\` (con un
+  `LEGGIMI.txt`), solo per il test strumentato; sul dispositivo di prova va in `/data/local/tmp/mcg-models/` con `adb push`. Il 440M
+  non e' scaricato (non approvato);
+- **MagicTouch versione 1** (float32, 512x512) da `storage.googleapis.com/mediapipe-models/interactive_segmenter/magic_touch/float32/1/`
+  (6.227.884 byte, SHA-256 `e24338a7…`, MD5 uguale a quello dichiarato dal server): asset di `core-ai` (`assets/cutout/`) con il testo
+  della licenza Apache 2.0 e un `NOTICE.txt`. **La versione 2** (int8 768x768) oggi e' un pacchetto `.task` di MediaPipe da 30,5 MB,
+  non il file da circa 6 MB approvato: non scaricata. Se P13 la volesse dopo le misure, serve un consenso nuovo (e va estratto il
+  `.tflite` dal pacchetto).
+
+**kotlin-reflect e coroutines** (D2, il "decide con un test" di P0). `litertlm-android` 0.18.1 porta a runtime kotlin-reflect 2.4.0
+(che tira kotlin-stdlib **2.4.0** per tutta l'app: il compilatore 2.2.20 dell'engine non ne legge i metadati, servirebbe
+`-Xskip-metadata-version-check` in ogni modulo) e kotlinx-coroutines 1.11.0. Letti i riferimenti del bytecode della libreria:
+- **kotlin-reflect: tolto** (`exclude` in `core-ai/build.gradle`). Lo usano solo `ToolKt` e `ReflectionTool`, l'API degli strumenti
+  per i modelli di linguaggio, che l'app non usa; `Phase6ArchitectureTest` la vieta nei sorgenti, `consumer-rules.pro` di core-ai
+  dice a R8 di non fermarsi sui due pacchetti mancanti. kotlin-stdlib resta la 2.2.20 dell'engine.
+- **coroutines: fermate alla versione dell'app** (1.10.2: `exclude group: 'org.jetbrains.kotlinx'` sulla libreria). La libreria usa
+  solo `withContext`, `Dispatchers.Default`, `asExecutor`, `callbackFlow`, `awaitClose` e `ProducerScope.close`, tutte gia' nella
+  1.10.2; alzare le coroutines di tutta l'app per una libreria non serviva.
+- La prova: `TransitiveVersionsTest` (JVM: stdlib 2.2.20, nessun kotlin-reflect, coroutines 1.10.2 sul classpath vero di core-ai) e
+  `EnginesTogetherDeviceTest` (strumentato: il motore 270M si inizializza e calcola con queste versioni): **verde**
+  sull'emulatore (Medium_Phone x86_64, API 37.1, pagine da 16 KB). Il 270M su CPU si avvia a freddo in 445 ms, da' 768 valori
+  finiti e normalizzati, lo stesso vettore a ogni chiamata, coseno 0,665 fra due testi diversi; MagicTouch (ingresso
+  `[1, 512, 512, 4]`, una sola uscita) gira prima e dopo il 270M nello stesso processo. Il modello va copiato con `adb push` in
+  `/data/local/tmp/mcg-models/` (senza, il test si salta); l'emulatore con i 2 GB dell'AVD non basta (il processo del test
+  muore per memoria): con `-memory 3584` si'.
+- Scoperta: le classi di `litertlm-android` 0.18.1 sono **bytecode Java 21** (versione 65). Sul dispositivo le converte D8; la JVM 17
+  dei test JVM non le carica (`UnsupportedClassVersionError`): i motori veri si provano solo strumentati (P4), i test JVM usano i fake.
+- Per P3 e P4: `EmbeddingEngineConfig` della 0.18.1 ha un parametro **`modelFd`** (descrittore del file del modello): D16 ("verifica
+  sullo stesso descrittore che si passa al motore") e' possibile.
+
+**LiteRT 2.3.0 e Play AI Delivery** (D44). `litert-api` 2.3.0 porta `com.google.android.play:ai-delivery` **0.1.1-alpha01** (alpha: la
+regola delle versioni la vieta) e con lei Play Asset Delivery, che nel manifest fuso aggiunge un servizio e un receiver **esportati**,
+il permesso FOREGROUND_SERVICE_DATA_SYNC e parla con il Play Store per scaricare pacchetti di modelli. Serve solo ad
+`AiPackModelProvider` (modelli consegnati da Play), che l'app non usa. **Tolta** (`exclude`); il test strumentato carica LiteRT ed
+esegue MagicTouch senza. L'AAR di litert porta anche l'API classica `org.tensorflow.lite.Interpreter`: le regole R8 di core-ai tengono
+`com.google.ai.edge.litert.**`, `org.tensorflow.lite.**` e `com.google.ai.edge.litertlm.**` (l'AAR di LiteRT-LM non porta regole e la
+parte nativa chiama classi Kotlin per nome).
+
+**Manifest** (D3, D38, D41):
+- `MlKitInitProvider` tolto con `tools:node="remove"` nel manifest di core-ai: funziona (rapporto del fusore: `REJECTED`).
+- `litert-api` dichiara FOREGROUND_SERVICE_DATA_SYNC e `android.hardware.npu`: tolti dallo stesso manifest.
+- `litert-api` dichiara anche **31** `uses-native-library` (varianti OpenCL, DSP Qualcomm, Edge TPU, MediaTek). Il fusore dei
+  manifest di AGP 8.13 **non** da' una chiave a quell'elemento e ignora `tools:node="remove"` (le accoda tutte, con doppioni). Le
+  toglie `FilterNativeLibraries` (`gradle/verify-release-manifest.gradle`), una trasformazione del manifest fuso di ogni variante
+  legata da `app/build.gradle`: restano solo `libOpenCL.so` e `libvndksupport.so`, facoltative.
+- Componenti di ML Kit e DataTransport nel manifest fuso (elenco chiuso, `releaseManifestPolicy.allowedThirdPartyComponents`):
+  `MlKitComponentDiscoveryService`, `GoogleApiActivity`, `TransportBackendDiscovery`, `JobInfoSchedulerService`,
+  `AlarmManagerSchedulerBroadcastReceiver`, tutti non esportati.
+- Il test strumentato `MlKitOffAtStartupDeviceTest` (app debug vera, processo vero): **verde**; con `MlKitInitProvider` rimesso
+  nel manifest (prova in una copia) **fallisce**: provider installato, 36 classi `com.google.mlkit`, 40
+  `com.google.android.gms.internal.mlkit_*` e 41 `com.google.firebase.components` caricate all'avvio.
+- Scoperta: su ART `ClassLoader.findLoadedClass`, se la classe non c'e' ancora, la cerca nei dex del PathClassLoader e **la
+  carica**: la prima stesura del test produceva da sola la violazione che cercava. Il test legge invece le classi caricate da
+  un'istantanea HPROF del processo (record LOAD CLASS). Per P4 e P5: il controllo vede anche classi di ML Kit solo *caricate*
+  (una classe nostra che le nomina, caricata all'avvio, puo' trascinarle con la verifica del bytecode): il codice OCR resta
+  dietro il cancello, raggiunto solo con un `Provider`/`Lazy` quando la lettura e' attiva.
+
+**APK** (release non firmata della verifica, R8 attivo): **prima** (2445d9e, l'ultimo codice della Fase 5) 19.760.802 byte; **dopo**
+113.634.543 byte (la debug da 124,0 a 216,7 MB). Quasi tutta la differenza sono le librerie native non compresse e allineate a 16 KB (per arm64-v8a e x86_64:
+`liblitertlm_jni.so` 22,2 e 26,4 MB, `libmlkit_google_ocr_pipeline.so` 11,1 e 11,6 MB, `libLiteRt.so` 5,6 e 7,8 MB, `liblitert_jni.so`
+0,5 MB), piu' i modelli di ML Kit (circa 1,3 MB) e MagicTouch (6,2 MB). D3 tiene anche `x86_64` (gli emulatori dei test): una
+release solo `arm64-v8a` peserebbe 46,3 MB in meno (punto aperto). Tutte le librerie native sono allineate a 16 KB, nel file e
+nei segmenti LOAD (`tools/check.ps1` lo controlla; l'emulatore dei test strumentati ha le pagine da 16 KB).
+
+**Test d'architettura** (`Phase6ArchitectureTest`, 14 test) e **la prova che falliscono**, in una copia isolata del repository:
+- primo giro, una violazione per regola, tutte insieme (librerie dei motori nominate dal `build.gradle` di core-search, ML Kit
+  fuori da `ocr/`, `MlKit.initialize` fuori dal cancello, `TextReadingConsent` costruita fuori dalla pagina, codice HTTP fuori
+  dal pacchetto HTTPS, `VerifiedModel` costruito fuori da core-models, core-search che dipende da core-index, feature-search che
+  nomina il NAS, feature-viewer e core-prepare che raggiungono core-ai, Hilt in core-models, `-Xskip-metadata-version-check`
+  fuori da core-ai): **13 test rossi** col messaggio atteso; il quattordicesimo (`ilControlloVedeIModuliDellaFase6`) e' il
+  controllo positivo che il test veda i moduli, e passa;
+- altri quattro giri per le parti di ogni regola che un'asserzione ferma al primo errore non mostrava (componente nel manifest di
+  core-search, esclusione di kotlin-reflect tolta, import di un'implementazione di core-ai da core-search, classe pubblica nel
+  pacchetto HTTPS, un test che nomina LiteRT fuori da core-ai, core-search che nomina core-models, `violationsExcept` usata
+  fuori dal test di core-models, API degli strumenti di LiteRT-LM, feature-search che nomina il pacchetto `download`): ognuna
+  rossa con la sua regola;
+- tolte le violazioni: 14 verdi.
+I controlli nuovi di `tools/check.ps1` (passo 7e) sono provati sull'APK di release vero con ingressi falsati: allineamento
+richiesto a 32 KB invece di 16 (16 librerie fuori regola), elenco chiuso privato di una voce (1 componente fuori), `libOpenCL.so`
+non ammessa (1 libreria fuori); lo scanner del dex trova le chiamate di un bersaglio che il codice SMB usa di sicuro.
+Il passo gia' esistente "nessuna classe di misura" (D21 della Fase 3) trovava nella release `BenchmarkInfo` e `BenchmarkKt` di
+LiteRT-LM: tipi dell'API della libreria (le statistiche di un motore), non codice di misura, e non si possono togliere (la parte
+nativa nomina `BenchmarkInfo` per JNI). Hanno un'eccezione **nominata** in `check.ps1` (elenco chiuso di due tipi), provata: APK
+vero 0 classi, senza l'eccezione le 2, un APK finto con una `Bench*` nostra e un'altra `Benchmark*` della libreria le trova entrambe.
+
+**Contratti: scostamenti dalle firme indicative del §1.2** (le firme del progetto erano indicative; gli altri pacchetti partono da
+quelle vere):
+- `vec` e `ocr` **non** sono ancora valori di `SegmentClass` (aggiungerli farebbe accettare le due classi a una testa `index`): P0
+  definisce `AiClass` (core-trust) e i corpi `VecBody`, `OcrBody`, `OcrLine` (con inclinazione ed estremi delle parole), `ShortBox`,
+  `WordSpan`, `AiLimits` in `core-trust/.../data/AiBodies.kt`; il codec, le righe in `SegmentClass` e la testa `ai` sono di P2, che da
+  qui tiene anche quel file.
+- Il buffer degli indicizzatori e' `AiBuffer` in core-ai; core-index lo vede come porta `AiBufferSink` (niente cicli). `AnalysisFetcher`
+  scarica in un `AiBufferSink`. Il "fatto" per classe e' `AiDoneClasses` (core-index/ai).
+- `AiComputeRun.run(scope, budget)` senza `RunScope`: le regole le passa `StagedRun` di :app (P11).
+- Le impostazioni personali nuove sono due interfacce: `SearchPersonalSettings` (`text_reading` come numero: 0 spenta, n = versione
+  del testo accettato; `search_order`) e `MotionPersonalSettings` (`motion_animation`, risposta Q16 (b)); `SearchOrderSetting` in
+  core-personal, `ResultOrder` in core-search (:app li lega per codice).
+- `TextReadingConsent` ha il costruttore pubblico (la pagina di attivazione sta in feature-search, un altro modulo): che la costruisca
+  solo la pagina `TextReadingActivation*.kt` lo tiene `Phase6ArchitectureTest`.
+- Le porte del viewer si chiamano `ViewerTextSource`, `ViewerTextReader`, `ViewerSubjectCutter` (non `SubjectCutter`, che e' il
+  ritagliatore di core-ai) e `CutoutSaver`; stati `LiveTextState` e `CutoutState`.
+- `Float16` (core-model): una sola conversione float32/float16 per indice locale, codec e fake.
+- `LibraryFilter.DOCUMENTS` esiste; la Libreria non propone il chip finche' P8 non lo accende (una riga in `LibraryScreen`).
+- `DiagSection.SEARCH` con la voce di stato `SEARCH_STATE` (un test vuole almeno una voce per sezione); i codici del §2.6 sono nei
+  contratti (`ModelDiag`, `AiDiag`, `SearchDiag`), il catalogo della Diagnostica li raccoglie in P11.
+
+**Punti aperti** (per l'orchestratore):
+- **Peso dell'APK** (D3): la release passa da 19,8 a 113,6 MB; 46,3 MB sono le librerie `x86_64`, che servono solo agli
+  emulatori. Proposta: release solo `arm64-v8a` (`x86_64` in debug e nei test strumentati). Oggi D3 le tiene entrambe: P0 non cambia.
+- **`com.google.android.odml:image` 1.0.0-beta1**: la regola delle versioni ("mai alpha, beta, rc") parla delle nostre; questa e'
+  una transitiva di ML Kit che non si puo' togliere. Tenuta e scritta qui; se la regola deve valere anche per le transitive, serve
+  una riga in D49.
+- **MagicTouch versione 2** non scaricata (sopra): la riga di P13 nel §4.4 ("misura di v1 e v2") richiede un consenso nuovo.
+- **Regole R8 larghe**: core-ai tiene interi i pacchetti di LiteRT-LM e LiteRT (la parte nativa chiama classi per nome). Prudente;
+  P4 e P13 possono restringerle dopo le misure dell'APK.
+- **Test strumentati**: l'AVD dei test serve con almeno 3,5 GB (`-memory 3584`) e il modello 270M in `/data/local/tmp/mcg-models/`
+  (non nel repository). Le classi di `litertlm-android` sono Java 21: i motori veri si provano solo sul dispositivo.
+- **`tools/check.ps1` e' girato in una copia isolata** del repository (stessi file, impronta per impronta, e stesso engine): nel
+  repository principale alcuni `classes.jar` restavano bloccati da un daemon Kotlin che le regole non permettono di fermare.

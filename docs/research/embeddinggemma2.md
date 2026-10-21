@@ -391,6 +391,33 @@ immagini/s a regime (p50/p95, GPU, NPU, CPU) a 70 e 140 token; latenza query tes
 
 ---
 
+## 11. Nota del 21/10/2026 (progetto della Fase 6)
+
+Verifiche rifatte il 21/10/2026 per il progetto della Fase 6 (`docs/fase6-progetto.md`, §2.1 e §10). **[V]** su fonte, salvo dove
+indicato.
+
+- **Libreria**: `litertlm-android` e ora alla **0.18.1** (20/10/2026). Corregge un'incompatibilita ABI di EmbeddingGemma 2 nelle
+  build da sorgente. La scelta del §1 (strada A, `EmbeddingEngine` diretto) non cambia: la 0.18.1 e la versione che l'app fissa
+  (D2 della Fase 6), al posto della 0.18.0 su cui e scritto questo documento.
+- **File dei modelli invariati dal 6/10/2026**: commit del 270M `9be6e8b9…` (`9be6e8b90982095dc05c2bd162e4b954ee4dbac7`) e del
+  440M `e301f74d…` (`e301f74d5551b0c2641bd5cb4652a76239d5c5f8`), stesse dimensioni e stessi SHA-256 del §2.2, licenza Apache 2.0,
+  non "gated". Sono i commit che il catalogo dell'app fissa.
+- **Gli host di scaricamento di Hugging Face cambiano.** `huggingface.co` risponde con una redirezione verso un CDN il cui nome
+  varia nel tempo: `cdn-lfs*.hf.co` (per esempio `cdn-lfs.hf.co`, `cdn-lfs-us-1.hf.co`), `cas-bridge.xethub.hf.co` (l'archivio
+  Xet) e altri. Per questo l'app ammette per i modelli i **suffissi** `.hf.co` e `.huggingface.co` (piu `huggingface.co` stesso) e
+  non nomi esatti: un elenco di nomi esatti si romperebbe al primo cambio di CDN. L'integrita non dipende dall'host: la danno
+  dimensione e SHA-256 fissati nell'app e verificati a ogni caricamento; le redirezioni si seguono a mano, al massimo 5, solo verso
+  host ammessi e solo `https`. Fonti: §10 di `docs/fase6-progetto.md`.
+- **Scaricamento del 270M del 21/10/2026**, dall'indirizzo
+  `https://huggingface.co/litert-community/embeddinggemma-2-text-270m-litert-lm/resolve/9be6e8b90982095dc05c2bd162e4b954ee4dbac7/embeddinggemma-2-text-270m.litertlm`:
+  **164.626.432 byte**, **SHA-256 `2d079ee2f6f066b1f368e8d7c819f55214eaef1d0513b312321901f30ab286fb` verificato** (coincide con il
+  §2.2). Il file e tenuto **fuori dal repository**, in `%USERPROFILE%\.mycloudgallery\models\embeddinggemma-2-text-270m\`, solo per
+  il test strumentato di P0 (quello che inizializza il motore 270M); non entra nell'APK.
+- **Il 440M non e stato scaricato** (non approvato): valgono i valori del §2.2, verificati con l'API di Hugging Face, e il suo
+  primo scaricamento aspetta il consenso.
+
+---
+
 ## Appendice: fonti principali
 
 - Scheda LiteRT 740M: https://huggingface.co/litert-community/embeddinggemma-2-740m-litert-lm (e [440M](https://huggingface.co/litert-community/embeddinggemma-2-text-vision-440m-litert-lm), [270M](https://huggingface.co/litert-community/embeddinggemma-2-text-270m-litert-lm))

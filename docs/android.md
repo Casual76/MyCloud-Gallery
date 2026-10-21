@@ -902,3 +902,55 @@ Decisione: configurazione del manifest (1.5) e testo per E-O8.
 ```
 
 **Esiti da riportare** nelle tabelle di 4.2 bis, 5.2 bis e nelle decisioni di 4.3 e 5.3 dopo le prove: finestra di tolleranza di E-P11 (T-09 a, b, c), necessità di `MANAGE_MEDIA` (T-09 f), forma della risposta per i media solo-NAS (T-14), strategia di copia delle condivisioni (T-15), algoritmo delle versioni (T-16).
+
+### Fase 6: ricerca (da misurare, 21/10/2026)
+
+**Stato: da misurare.** Tre prove della Fase 6 (`docs/fase6-progetto.md` §5.6, §7) che solo un'app installata sull'S25 e sul Tab S9
+può fare. **Nessun esito è stato raccolto e qui non se ne scrive nessuno**: per ciascuna prova stanno scritti cosa si misura, dove
+si scrive l'esito e chi la fa. Valgono le regole del resto della sezione: i comandi `adb` che *scrivono* flag o impostazioni sono
+per il dispositivo di prova e a cura dell'utente.
+
+**F62 — Limitatore di memoria di Android 17 durante il calcolo AI** (estende T-23, E-A16).
+- *Cosa si misura.* Sull'S25 (Android 17), con la build debug e l'account di prova: il calcolo AI per 30 minuti con il 440M su GPU
+  (PSS stimato circa 850 MB; il motore delle query in Cerca, 270M su CPU, circa 330 MB) e `adb shell am memory-limiter status`; poi,
+  con il limitatore attivato in prova (`am memory-limiter manual <pid> <limite>`), il motivo registrato da `ApplicationExitInfo`
+  (descrizione `MemoryLimiter:AnonSwap`) e il comportamento dopo la chiusura: ripresa dal media successivo senza ricalcolo e codice
+  `AI_KILLED_MEMORY` in Diagnostica. Sul Tab S9 (Android 16) lo stesso calcolo, per il confronto della memoria.
+- *Cosa decide.* Il tetto di RAM del calcolo AI e la ripresa dopo una chiusura; se il limitatore interrompe troppo, le uscite del
+  progetto: lotti più piccoli su CPU oppure un processo separato `:ai` (componente nuovo, da approvare).
+- *Dove si scrive l'esito.* Qui, accanto a T-23 (sezione «Android 17 e trasferimento dati»), e in `docs/decisioni.md` con i numeri;
+  la riga F62 di `docs/fase6-progetto.md` §5.6 si segna come superata.
+- *Chi la fa.* L'utente, sull'S25 di prova (P5 prepara il calcolo e la ripresa; P10 la prova delle interruzioni). Esito: **da misurare**.
+
+**GPU e OpenCL su S25 e Tab S9** (D3 del progetto della Fase 6, E-A12).
+- *Cosa si misura.* Che la dichiarazione facoltativa delle due librerie native di sistema (`uses-native-library` per `libOpenCL.so` e
+  `libvndksupport.so`, `required="false"`) basti a far partire la GPU di LiteRT-LM sull'S25 (Android 17) e sul Tab S9 (Android 16):
+  backend GPU inizializzato; coseno GPU–CPU di almeno 0,99 su 20 immagini e 20 testi sintetici; foto al secondo (p50 e p95), PSS,
+  avvio a freddo e a caldo, calo col caldo; e, togliendo o rendendo inutilizzabili le librerie in prova, che l'installazione riesca e
+  il ripiego su CPU funzioni (`AI_GPU_FALLBACK`). Sul Tab S9 non c'è nessuna misura della Fase 0: il confronto salvato 270M contro
+  440M va fatto anche lì.
+- *Cosa decide.* Se le due `uses-native-library` restano come sono o servono altre; i valori di partenza di `aiItemsPerSecond` e
+  `ocrSecondsPerItem` in `docs/regole-attivita.md` §6.
+- *Dove si scrive l'esito.* Qui e in `docs/decisioni.md` (misure di P4: foto/s, PSS, avvio, verifica dell'hash); F52 del progetto.
+- *Chi la fa.* P4 scrive i test strumentati (emulatore, S25, Tab S9, `core-ai/src/androidTest`); l'esecuzione sui due dispositivi è
+  dell'utente (sul tablet, il profilo Prova). Esito: **da misurare**.
+
+**Traffico di ML Kit con la lettura del testo spenta, accesa e di nuovo spenta** (F56 e F69, D41; L49 di `docs/sicurezza.md`).
+- *Cosa si misura.* Con PCAPdroid sull'S25 (WireGuard spento): (a) installazione nuova con la lettura **spenta**, un'ora d'uso e
+  d'indicizzazione: nessun pacchetto verso host di Google, nessuna classe di ML Kit caricata, nessun lavoro di DataTransport
+  pianificato (`dumpsys jobscheduler`); (b) lettura **attivata** dopo la pagina di consenso, un'ora di indicizzazione: l'elenco degli
+  host e la frequenza degli invii, da confrontare con il testo della pagina (se dice di meno, la pagina si corregge e la versione del
+  testo sale); (c) lettura **spenta di nuovo** e telefono riavviato, un'ora: come (a), con la coda di DataTransport vuota
+  (`TEXT_READING_OFF_CLEANUP` in Diagnostica). Da ripetere a ogni aggiornamento di ML Kit.
+- *Cosa decide.* Se il testo della pagina di attivazione è completo; se serve togliere un altro componente dal manifest fuso; se
+  L49 e il registro delle decisioni (`docs/sicurezza.md` §8) restano come scritti.
+- *Dove si scrive l'esito.* Qui, in `docs/sicurezza.md` (§8 e checklist della Fase 6) e nel report della prova sul campo; il
+  testo approvato della pagina porta una versione.
+- *Chi la fa.* L'utente (attiva la lettura sull'S25 di prova e installa PCAPdroid); P4 prepara il test strumentato per la parte (a) e
+  (c). Esito: **da misurare**.
+
+Resoconto (da compilare, con data e telefono):
+
+```
+(nessuna misura ancora eseguita)
+```

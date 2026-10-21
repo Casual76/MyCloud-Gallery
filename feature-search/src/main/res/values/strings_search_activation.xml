@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 6 (P8, docs/fase6-progetto.md §2.6, D41, Q4, Q13): la pagina di attivazione della lettura del testo nelle foto.
+       Il testo ha una VERSIONE (TextReadingSwitch.CURRENT_TEXT_VERSION): se cambia, la funzione si richiede. -->
+  <string name="activation_title">Leggere il testo nelle foto</string>
+  <string name="activation_changed">Il testo di questa pagina è cambiato dall’ultima volta che l’hai letto. Per continuare a usare la funzione serve la tua conferma.</string>
+
+  <string name="activation_what_pre">"Per cercare le parole dentro le foto (scontrini, cartelli, screenshot) e per copiarle, l’app usa ML Kit di Google, che lavora sul telefono: "</string>
+  <string name="activation_what_bold">le foto e il testo non escono mai dal telefono</string>
+  <string name="activation_what_post">.</string>
+
+  <string name="activation_sends_pre">"Quando è attiva, ML Kit manda a Google "</string>
+  <string name="activation_sends_bold">statistiche tecniche</string>
+  <string name="activation_sends_post">: marca e modello del telefono, versione di Android, nome e versione dell’app, un codice di questa installazione, tempi ed eventuali errori. Lo decide Google e non si può spegnere: per questo la funzione è spenta finché non la attivi.</string>
+
+  <string name="activation_scope_pre">"Vale per i dispositivi del tuo account; su ognuno puoi dire "</string>
+  <string name="activation_scope_bold">«Non su questo dispositivo»</string>
+  <string name="activation_scope_post">. La spegni quando vuoi: da quel momento ML Kit non parte più.</string>
+
+  <string name="activation_others">Anche spenta, puoi cercare e copiare il testo che un altro dispositivo della famiglia ha già letto.</string>
+
+  <string name="activation_enable">Attiva</string>
+  <string name="activation_not_now">Non ora</string>
+  <string name="activation_enable_description">Attiva la lettura del testo nelle foto per il tuo account</string>
+  <string name="activation_not_now_description">Non ora: la lettura del testo resta spenta</string>
+</resources>

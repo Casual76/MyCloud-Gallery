@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!--
+      Solo per l'APK dei test strumentati di :core-ai (mai nell'app, mai nella release).
+
+      OffProbeService gira in un PROCESSO NUOVO (`:mlkitoff`): la prova "con la lettura spenta nessuna classe di ML Kit si carica e
+      nulla si pianifica" (TextReadingOffDeviceTest) ha senso solo in un processo che non ha eseguito prima nessun altro test. Il
+      processo dei test strumentati e' uno solo per tutte le classi: se un test di OCR e' girato prima, ML Kit e' gia' caricato.
+  -->
+  <application>
+    <service
+      android:name="dev.pampa.mycloudgallery.core.ai.OffProbeService"
+      android:exported="false"
+      android:process=":mlkitoff" />
+
+    <!-- Un lavoro che non e' di DataTransport: la pulizia dello spegnimento non lo deve toccare (TextReadingShutdownDeviceTest). -->
+    <service
+      android:name="dev.pampa.mycloudgallery.core.ai.OtherProbeJobService"
+      android:exported="false"
+      android:permission="android.permission.BIND_JOB_SERVICE" />
+  </application>
+
+</manifest>

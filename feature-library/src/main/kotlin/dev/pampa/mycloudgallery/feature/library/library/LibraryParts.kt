@@ -209,6 +209,9 @@ internal fun positionSaver(grid: MediaGridState): Saver<PositionKeeper, Any> = S
 // Stati (§2.4)
 // ---------------------------------------------------------------------------------------------
 
+/** I filtri rapidi del menu della vista, nell'ordine in cui compaiono: tutti, "Documenti" compreso (Fase 6, P8, D34). */
+internal val QuickFilters: List<LibraryFilter> = LibraryFilter.entries.toList()
+
 @Composable
 internal fun filterLabel(filter: LibraryFilter): String = stringResource(
   when (filter) {

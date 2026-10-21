@@ -1,12 +1,15 @@
 package dev.pampa.mycloudgallery.feature.search.testing
 
 import dev.pampa.mycloudgallery.core.ai.contract.AiBackend
+import dev.pampa.mycloudgallery.core.ai.contract.AiDiag
 import dev.pampa.mycloudgallery.core.ai.contract.AiStatus
+import dev.pampa.mycloudgallery.core.ai.contract.ProbeResult
 import dev.pampa.mycloudgallery.core.ai.contract.TextReadingState
 import dev.pampa.mycloudgallery.core.ai.contract.TextReadingSwitch
 import dev.pampa.mycloudgallery.core.library.contract.OrderedTimelineView
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.models.contract.ModelCatalog
+import dev.pampa.mycloudgallery.core.models.contract.ModelFailCode
 import dev.pampa.mycloudgallery.core.models.contract.ModelSourceKind
 import dev.pampa.mycloudgallery.core.models.contract.ModelState
 import dev.pampa.mycloudgallery.core.search.contract.CoverageReason
@@ -45,6 +48,51 @@ object SearchSamples {
     coverage = SearchCoverage.Partial(covered = 12_300, total = 15_000, reasons = mapOf(CoverageReason.PREPARATION to 2_700)),
     historyCount = 12,
   )
+
+  /** Con la lettura del testo attiva per l'account e su questo dispositivo, il modello delle query pronto e il 440M scaricato. */
+  val settingsReadingOn: SearchSettingsState = settingsIndexer.copy(
+    textReading = TextReadingPageState(TextReadingState.OnForAccount(thisDevice = true), TextReadingSwitch.CURRENT_TEXT_VERSION, needsConsent = false),
+    coverage = SearchCoverage.Complete,
+    indexer = settingsIndexer.indexer.copy(status = AiStatus.Idle(null), toAnalyze = 0, nights = null, areasWithoutIndexer = emptyList()),
+  )
+
+  /** La lettura attiva per l'account ma questo dispositivo si e' escluso, e il testo della spiegazione e' cambiato: va riletto. */
+  val settingsReadingChanged: SearchSettingsState = settingsIndexer.copy(
+    textReading = TextReadingPageState(TextReadingState.OnForAccount(thisDevice = false), TextReadingSwitch.CURRENT_TEXT_VERSION, needsConsent = true),
+  )
+
+  /** Un telefono che non analizza, con i problemi dei modelli e del calcolo (codici del §2.6). */
+  val settingsProblems: SearchSettingsState = settingsIndexer.copy(
+    indexer = settingsIndexer.indexer.copy(
+      indexer = true,
+      status = AiStatus.Problem(AiDiag.AI_STORAGE_LOW),
+      probe = ProbeResult(imagesPerSecond = 2.8, backend = AiBackend.CPU, coldStartMs = 3_600),
+      nights = 2,
+    ),
+    models = settingsIndexer.models.copy(
+      models = listOf(
+        ModelRow(ModelCatalog.QUERY_270M.id, ModelState.Failed(ModelFailCode.FETCH_FAILED), ModelCatalog.QUERY_270M.sizeBytes, null, removable = true),
+        ModelRow(ModelCatalog.INDEX_440M.id, ModelState.Failed(ModelFailCode.NO_SPACE), ModelCatalog.INDEX_440M.sizeBytes, null, removable = true),
+        ModelRow(ModelCatalog.CUTOUT_MAGICTOUCH.id, ModelState.Ready(ModelCatalog.CUTOUT_MAGICTOUCH.sizeBytes, ModelSourceKind.BUNDLED, 0), ModelCatalog.CUTOUT_MAGICTOUCH.sizeBytes, ModelSourceKind.BUNDLED, removable = false),
+      ),
+    ),
+    coverage = SearchCoverage.ModelMissing(ModelCatalog.QUERY_270M.sizeBytes),
+    historyCount = 0,
+  )
+
+  /** Un tablet che non analizza e ha il modello delle query da scaricare. */
+  val settingsAbsent: SearchSettingsState = settingsIndexer.copy(
+    indexer = IndexerState(indexer = false, status = AiStatus.Off, probe = null, toAnalyze = 0, nights = null, areasWithoutIndexer = emptyList()),
+    models = settingsIndexer.models.copy(
+      models = listOf(
+        ModelRow(ModelCatalog.QUERY_270M.id, ModelState.Absent, ModelCatalog.QUERY_270M.sizeBytes, null, removable = true),
+        ModelRow(ModelCatalog.INDEX_440M.id, ModelState.Absent, ModelCatalog.INDEX_440M.sizeBytes, null, removable = true),
+        ModelRow(ModelCatalog.CUTOUT_MAGICTOUCH.id, ModelState.Ready(ModelCatalog.CUTOUT_MAGICTOUCH.sizeBytes, ModelSourceKind.BUNDLED, 0), ModelCatalog.CUTOUT_MAGICTOUCH.sizeBytes, ModelSourceKind.BUNDLED, removable = false),
+      ),
+    ),
+    coverage = SearchCoverage.ModelMissing(ModelCatalog.QUERY_270M.sizeBytes),
+    historyCount = 3,
+  )
 }
 
 /** Le azioni registrate (per i test di P8). */
@@ -69,5 +117,9 @@ class RecordingSearchActions : SearchActions {
 
   override fun requestMediaAccess() {
     calls += "access"
+  }
+
+  override fun openFreeSpace() {
+    calls += "freeSpace"
   }
 }

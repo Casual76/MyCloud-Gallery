@@ -41,6 +41,8 @@ import dev.pampa.mycloudgallery.feature.viewer.menu.NasMediaActions
 import dev.pampa.mycloudgallery.feature.viewer.motion.MotionAnimationSetting
 import dev.pampa.mycloudgallery.feature.viewer.motion.PowerSaving
 import dev.pampa.mycloudgallery.feature.viewer.video.BytesMotionVideoLocator
+import dev.pampa.mycloudgallery.feature.viewer.menu.NoViewerSimilarSearch
+import dev.pampa.mycloudgallery.feature.viewer.menu.ViewerSimilarSearch
 import dev.pampa.mycloudgallery.feature.viewer.video.MotionVideoLocator
 import dev.pampa.mycloudgallery.feature.viewer.video.NasMotionSource
 import dev.pampa.mycloudgallery.feature.viewer.video.NasVideoSource
@@ -100,6 +102,8 @@ import kotlinx.coroutines.withContext
  * @property subjectPress Fase 6 (P12, D45): dove va la pressione prolungata su una foto **fuori dal testo** (il ritaglio del soggetto, P13). Null =
  *   il ritaglio non c'e' (D13): la pressione fuori dal testo non fa niente. Riceve il punto normalizzato (0..1) sull'immagine raddrizzata, gia' passato
  *   dalla trasformazione dello zoom.
+ * @property similarSearch la voce "Trova simili" del menu ⋮ (Fase 6, P8, D30, E-Q14): presente, spiegata (media senza vettore) o assente (nascosti). Di
+ *   serie nessuna ricerca, quindi nessuna voce (D13); `:app` la lega al motore di ricerca (P11).
  * @property dispatchers i thread di lavoro (letture di dettagli ed EXIF): nei test sono uno solo, senza attese.
  */
 @Immutable
@@ -134,6 +138,7 @@ class ViewerServices(
   val textSource: ViewerTextSource? = null,
   val textReader: ViewerTextReader? = null,
   val subjectPress: ViewerSubjectPress? = null,
+  val similarSearch: ViewerSimilarSearch = NoViewerSimilarSearch,
 )
 
 /** Decodifica un'immagine animata (GIF, WebP animato) in un `Drawable` che si anima da solo (E-M11). */

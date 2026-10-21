@@ -94,6 +94,9 @@ internal enum class ViewerMessage(@StringRes val title: Int, @StringRes val deta
   /** La foto in movimento non ha una parte video che sappiamo riprodurre (E-M16). */
   MotionUnplayable(R.string.viewer_msg_motion_title, R.string.viewer_msg_motion_detail),
 
+  /** "Trova simili" su un media senza vettore (Fase 6, P8, E-Q14): la voce spiega perche' non si puo'. */
+  SimilarUnavailable(R.string.viewer_msg_similar_title, R.string.viewer_msg_similar_detail),
+
   /** "Scarica sul telefono" e' riuscito (Fase 4, D20). */
   Downloaded(R.string.viewer_msg_downloaded_title, R.string.viewer_msg_downloaded_detail),
 

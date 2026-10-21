@@ -67,6 +67,7 @@ import dev.pampa.mycloudgallery.feature.viewer.ViewerServices
 import dev.pampa.mycloudgallery.feature.viewer.ViewerState
 import dev.pampa.mycloudgallery.feature.viewer.R
 import dev.pampa.mycloudgallery.feature.viewer.gesture.onTouchDown
+import dev.pampa.mycloudgallery.feature.viewer.gesture.touchMovement
 import dev.pampa.mycloudgallery.feature.viewer.gesture.viewerLongPress
 import dev.pampa.mycloudgallery.feature.viewer.livetext.LiveTextController
 import dev.pampa.mycloudgallery.feature.viewer.livetext.LiveTextOverlay
@@ -235,7 +236,14 @@ internal fun ViewerPage(
   val textActionLabel = stringResource(R.string.livetext_action)
   val density = LocalDensity.current.density
   val textActionOn = isCurrent && liveText != null && spec.kind != MediaKind.VIDEO && liveText.canOpenSheet(id)
-  val pageTap: () -> Unit = { if (liveText != null && liveText.canDismiss) liveText.dismiss() else onTap() }
+  // Un trascinamento che nessuno consuma Compose lo conta come tocco: con qualcosa di aperto non deve chiuderlo.
+  val pageTap: () -> Unit = {
+    if (liveText != null && liveText.canDismiss) {
+      if (!liveText.touchMoved) liveText.dismiss()
+    } else {
+      onTap()
+    }
+  }
   val doubleTapOn = liveText?.active != true
   Box(
     modifier = modifier
@@ -250,6 +258,7 @@ internal fun ViewerPage(
         if (actions.isNotEmpty()) customActions = actions
       }
       .onTouchDown(enabled = { motionEnabled }, onTouch = onMotionTouch)
+      .touchMovement(onDown = { liveText?.touchDown() }, onMoved = { liveText?.touchMoved = true })
       // L'arbitro della pressione prolungata (D45): testo letto sotto il dito = testo dal vivo; altrove su una foto = ritaglio (P13).
       .viewerLongPress(
         enabled = { isCurrent && liveText != null && liveText.wantsLongPress(id) },

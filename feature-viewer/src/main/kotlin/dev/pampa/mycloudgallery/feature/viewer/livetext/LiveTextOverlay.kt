@@ -66,13 +66,16 @@ internal fun LiveTextOverlay(
     val selected = MaterialTheme.colorScheme.primary.copy(alpha = SELECTED_ALPHA)
     val density = androidx.compose.ui.platform.LocalDensity.current.density
     val pad = mapping.pxToImageHeights(PAD_DP * density)
-    when (state) {
-      is LiveTextState.Highlighted -> Canvas(Modifier.fillMaxSize()) {
+    if (state is LiveTextState.Highlighted) {
+      Canvas(Modifier.fillMaxSize()) {
         for (line in state.layout.lines.indices) fillQuad(geometry.lineQuad(line, pad), mapping, veil)
       }
-      is LiveTextState.Selecting -> SelectionLayer(controller, geometry, state.selection, mapping, aspect, selected, backdrop, showBar = false)
-      is LiveTextState.Actions -> SelectionLayer(controller, geometry, state.selection, mapping, aspect, selected, backdrop, showBar = true)
-      else -> Unit
+    }
+    // Un solo punto di chiamata per "maniglie in movimento" e "barra": se cambiasse il punto di chiamata, la maniglia che si sta
+    // trascinando verrebbe ricreata a meta' gesto e il trascinamento si perderebbe.
+    val selection = controller.selection
+    if (selection != null) {
+      SelectionLayer(controller, geometry, selection, mapping, aspect, selected, backdrop, showBar = state is LiveTextState.Actions)
     }
   }
 }
@@ -126,7 +129,7 @@ private fun LiveTextHandle(side: HandleSide, handle: LiveTextGeometry.Handle, ma
   val color = MaterialTheme.colorScheme.primary
   Box(
     modifier = Modifier
-      .offset { IntOffset((tip.x - HANDLE_TARGET.toPx() / 2f).roundToInt(), (tip.y + HANDLE_GAP.toPx() - HANDLE_TARGET.toPx() / 2f).roundToInt()) }
+      .offset { IntOffset((tip.x - HANDLE_TARGET.toPx() / 2f).roundToInt(), (tip.y + HANDLE_GAP.toPx()).roundToInt()) }
       .size(HANDLE_TARGET)
       .semantics { contentDescription = label }
       .pointerInput(side) {
@@ -149,7 +152,8 @@ private fun LiveTextHandle(side: HandleSide, handle: LiveTextGeometry.Handle, ma
       },
   ) {
     Canvas(Modifier.fillMaxSize()) {
-      val center = Offset(size.width / 2f, size.height / 2f)
+      // La goccia sta in cima al bersaglio, subito sotto il bordo del testo: il resto del quadrato da 48 dp e' per il dito.
+      val center = Offset(size.width / 2f, HANDLE_RADIUS.toPx() + HANDLE_GAP.toPx())
       drawCircle(color, radius = HANDLE_RADIUS.toPx(), center = center)
     }
   }

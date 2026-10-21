@@ -149,3 +149,37 @@ internal fun Modifier.onTouchDown(
     }
   }
 }
+
+/**
+ * Osserva ogni gesto sulla pagina **senza consumare niente** (passaggio `Initial`) e dice se il dito si e' mosso: [onDown] a ogni primo dito
+ * giu', [onMoved] la prima volta che nello stesso gesto si supera la soglia di movimento o arriva un secondo dito (un pizzico).
+ *
+ * Serve al testo dal vivo (D45, E-V13): Compose conta come tocco anche un trascinamento che nessuno consuma, e con una selezione aperta
+ * quel "tocco" chiuderebbe la selezione. Chi decide cosa fare di un tocco chiede prima se il gesto era un movimento.
+ */
+@Composable
+internal fun Modifier.touchMovement(
+  onDown: () -> Unit,
+  onMoved: () -> Unit,
+): Modifier {
+  val onDownNow by rememberUpdatedState(onDown)
+  val onMovedNow by rememberUpdatedState(onMoved)
+  val slop = LocalViewConfiguration.current.touchSlop
+  return pointerInput(slop) {
+    awaitEachGesture {
+      val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+      onDownNow()
+      var moved = false
+      do {
+        val event = awaitPointerEvent(PointerEventPass.Initial)
+        if (!moved) {
+          val change = event.changes.firstOrNull { it.id == down.id }
+          if (event.changes.count { it.pressed } > 1 || (change != null && (change.position - down.position).getDistance() > slop)) {
+            moved = true
+            onMovedNow()
+          }
+        }
+      } while (event.changes.any { it.pressed })
+    }
+  }
+}

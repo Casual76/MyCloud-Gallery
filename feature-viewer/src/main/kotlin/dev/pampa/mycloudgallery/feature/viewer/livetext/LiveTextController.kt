@@ -65,6 +65,16 @@ internal class LiveTextController(
   var dragging: HandleSide? by mutableStateOf(null)
     private set
 
+  /**
+   * Il gesto di adesso si e' mosso oltre la soglia (un trascinamento, un pizzico): se Compose lo legge come tocco non deve chiudere cio' che e'
+   * aperto (D45, E-V13). Lo imposta `touchMovement` della pagina; [touchDown] lo azzera a ogni primo dito.
+   */
+  var touchMoved: Boolean = false
+
+  fun touchDown() {
+    touchMoved = false
+  }
+
   private val layouts = mutableStateMapOf<MediaId, ViewerTextLayout>()
   private var bound: MediaId? = null
   private var fixed: TextPosition = TextPosition(0, 0)

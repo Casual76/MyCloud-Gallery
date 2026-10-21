@@ -44,6 +44,7 @@ internal object QueryRenderer {
   fun chip(chip: SearchChip): String = when (chip) {
     is SearchChip.DateRange ->
       if (chip.everyYear) "Y ${md(chip.from)}..${md(chip.to)} ${chip.label}" else "D ${chip.from}..${chip.to} ${chip.label}"
+    is SearchChip.DateSet -> chip.days.sorted().let { "E ${it.first()}..${it.last()} #${it.size} ${chip.label}" }
     is SearchChip.Place -> {
       val alt = if (chip.alternatives.isEmpty()) "" else " alt=" + chip.alternatives.joinToString(",") { "${it.label}#${ids(it.ids)}" }
       "P ${chip.option.label} #${ids(chip.option.ids)} ${chip.option.level} word=${chip.word}$alt"

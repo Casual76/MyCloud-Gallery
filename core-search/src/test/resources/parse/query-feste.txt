@@ -1,6 +1,6 @@
 # Feste (§2.5): senza anno "tutti gli anni"; con anno o "scorso" il periodo preciso. Oggi = 21 ottobre 2026.
-# Pasqua e Pasquetta senza anno: il contratto DateRange non sa dire "tutti gli anni" per una data mobile, si prende l'ultima
-# gia' cominciata (vedi REPORT.md). Pasqua e Pasquetta 2015-2035 sono in pasqua-2015-2035.txt.
+# Pasqua e Pasquetta senza anno: tutte, dal 1900 a quella di quest'anno (un insieme di giorni, SearchChip.DateSet, aggiunto da P6);
+# "scorsa" e' l'ultima gia' passata. Pasqua e Pasquetta 2015-2035 sono in pasqua-2015-2035.txt.
 
 natale => Y 12-24..12-26 Natale (24–26 dicembre, tutti gli anni)
 Natale => Y 12-24..12-26 Natale (24–26 dicembre, tutti gli anni)
@@ -32,8 +32,8 @@ San Valentino 2020 => D 2020-02-14..2020-02-14 San Valentino 2020 (14 febbraio)
 cena di San Valentino => Y 02-14..02-14 San Valentino (14 febbraio, tutti gli anni) => cena => cena
 
 # --- Pasqua e Pasquetta (calcolate per anno)
-Pasqua => D 2026-04-05..2026-04-05 Pasqua 2026 (5 aprile)
-Pasquetta => D 2026-04-06..2026-04-06 Pasquetta 2026 (6 aprile)
+Pasqua => E 1900-04-15..2026-04-05 #127 Pasqua (tutti gli anni)
+Pasquetta => E 1900-04-16..2026-04-06 #127 Pasquetta (tutti gli anni)
 Pasqua scorsa => D 2026-04-05..2026-04-05 Pasqua 2026 (5 aprile)
 Pasqua 2024 => D 2024-03-31..2024-03-31 Pasqua 2024 (31 marzo)
 Pasquetta 2024 => D 2024-04-01..2024-04-01 Pasquetta 2024 (1 aprile)
@@ -41,9 +41,10 @@ Pasqua 2019 => D 2019-04-21..2019-04-21 Pasqua 2019 (21 aprile)
 Pasqua dell'anno scorso => D 2025-04-20..2025-04-20 Pasqua 2025 (20 aprile)
 pasqua 2024 uova => D 2024-03-31..2024-03-31 Pasqua 2024 (31 marzo) => uova => uova
 @oggi 2026-02-01
-Pasqua => D 2025-04-20..2025-04-20 Pasqua 2025 (20 aprile)
+Pasqua => E 1900-04-15..2026-04-05 #127 Pasqua (tutti gli anni)
+Pasqua scorsa => D 2025-04-20..2025-04-20 Pasqua 2025 (20 aprile)
 @oggi 2026-04-05
-Pasqua => D 2026-04-05..2026-04-05 Pasqua 2026 (5 aprile)
+Pasqua => E 1900-04-15..2026-04-05 #127 Pasqua (tutti gli anni)
 Pasqua scorsa => D 2025-04-20..2025-04-20 Pasqua 2025 (20 aprile)
 @oggi 2025-12-30
 Capodanno scorso => D 2024-12-31..2025-01-01 Capodanno 2025 (31 dicembre 2024–1 gennaio 2025)

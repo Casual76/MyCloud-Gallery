@@ -44,7 +44,7 @@ natle => Y 12-24..12-26 Natale (24–26 dicembre, tutti gli anni) => - => - => -
 video di natle => T VIDEO Video ; Y 12-24..12-26 Natale (24–26 dicembre, tutti gli anni) => - => - => - => natale<-natle
 vidio di Natale 2023 => T VIDEO Video ; D 2023-12-24..2023-12-26 Natale 2023 (24–26 dicembre) => - => - => - => video<-vidio
 screeshot natle => T SCREENSHOT Screenshot ; Y 12-24..12-26 Natale (24–26 dicembre, tutti gli anni) => - => - => - => screenshot<-screeshot ; natale<-natle
-pasqa => D 2026-04-05..2026-04-05 Pasqua 2026 (5 aprile) => - => - => - => pasqua<-pasqa
+pasqa => E 1900-04-15..2026-04-05 #127 Pasqua (tutti gli anni) => - => - => - => pasqua<-pasqa
 pasqueta 2024 => D 2024-04-01..2024-04-01 Pasquetta 2024 (1 aprile) => - => - => - => pasquetta<-pasqueta
 feragosto => Y 08-15..08-15 Ferragosto (15 agosto, tutti gli anni) => - => - => - => ferragosto<-feragosto
 capodano => Y 12-31..01-01 Capodanno (31 dicembre–1 gennaio, tutti gli anni) => - => - => - => capodanno<-capodano

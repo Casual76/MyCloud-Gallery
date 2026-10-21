@@ -50,6 +50,7 @@ object ChipMatching {
 
   fun accepts(chip: SearchChip, snapshot: TimelineSnapshot, i: Int): Boolean = when (chip) {
     is SearchChip.DateRange -> inRange(chip, dayOf(snapshot.localDayAt(i)))
+    is SearchChip.DateSet -> dayOf(snapshot.localDayAt(i))?.let { it in chip.days } == true
     is SearchChip.Place -> snapshot.placeAt(i) in chip.option.ids
     is SearchChip.MediaType -> when (chip.type) {
       SearchMediaType.PHOTO -> snapshot.kindAt(i) != MediaKind.VIDEO

@@ -39,6 +39,27 @@ sealed interface SearchChip {
     }
   }
 
+  /**
+   * Un **insieme di giorni** (P6, richiesta di P7): una festa mobile "tutti gli anni" ("Pasqua" senza anno = ogni domenica di
+   * Pasqua dal [FIRST_YEAR] a oggi). Come [DateRange], i giorni **nell'ora del posto dello scatto**. Mai vuoto, al piu' [MAX_DAYS].
+   */
+  data class DateSet(val days: Set<LocalDate>, override val label: String) : SearchChip {
+    init {
+      require(days.isNotEmpty()) { "Insieme di giorni vuoto." }
+      require(days.size <= MAX_DAYS) { "Troppi giorni." }
+    }
+
+    /** Mai i giorni (sono tanti): solo quanti. */
+    override fun toString(): String = "DateSet(${days.size} giorni, $label)"
+
+    companion object {
+      const val MAX_DAYS: Int = 1_000
+
+      /** Il primo anno delle feste mobili "tutti gli anni" (le foto scansionate possono essere vecchie). */
+      const val FIRST_YEAR: Int = 1900
+    }
+  }
+
   /** Un luogo, una regione o un paese; [alternatives] sono gli omonimi e "Cerca come parola" (E-Q10) lo propone la UI. */
   data class Place(val option: PlaceOption, val alternatives: List<PlaceOption>, val word: String) : SearchChip {
     override val label: String get() = option.label

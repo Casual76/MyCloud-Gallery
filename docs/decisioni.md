@@ -3714,3 +3714,84 @@ scaricati, come E-I17 per le teste `index`: oggi un segmento non piu' elencato e
 vecchie come le altre) ma non i segmenti (non sono nel diario: restano); la riattestazione di ogni giro tiene in memoria le chiavi della
 share (circa 40 MB a 100 mila media con vettore e testo), da spostare in SQL quando c'e' lo schema v5; letture a blocchi con
 `NasMediaReader.readAll` per i segmenti grandi (oggi `NasFileSystem.read`, come la Fase 4).
+
+## Fase 6 P3: modelli, sorgenti e verifica (21/10)
+
+Il pacchetto P3 della Fase 6 (`docs/fase6-progetto.md` §2.1, D16–D20, E-A1–E-A3, E-A11, E-S16, §5.2, §6.1; riga P3 del §4.4), tutto in
+`core-models`. Il catalogo è quello di P0 e non cambia: `CatalogMatchesDesignTest` lo confronta con la tabella del §2.1 (file,
+repository, commit, dimensione, impronta, indirizzo) e con le regole scritte lì (host, 5 redirezioni, 15 e 30 s, blocchi da 1 MiB, margine
+di 300 MB, cartella dal PC).
+
+**Cosa c'è** (`LocalModels` monta tutto su una cartella `models/`; `ModelFetchers.create` monta i fetcher; P11 ne costruisce uno per profilo)
+- `verify/` `ModelVerifier` e `LocalModelFiles` (`ModelFiles`); `manager/` `LocalModelManager` (`ModelManager`) e `SourceStrikes`;
+  `store/` `ModelStore` (la geografia dei file e lo stato); `shelf/` `NasModelShelf` (`ModelShelf`); `traffic/` `LedgerModelTraffic`.
+- Sorgenti: `source/NasModelFetcher` (copia di un dispositivo e cartella dal PC, sul `NasMediaReader`), `source/BundledModelFetcher`
+  (l'asset del ritaglio), `source/RoutingModelFetcher`, e **`download/https/HttpsModelFetcher`** con `RedirectPolicy`, `HttpsConnections`
+  e `ETags`: **le sole classi con HTTPS dell'app, tutte `internal`**. `download/PartialFile` e `FileDigest` li usano tutti.
+- Cartella: `models/<sha256>` (solo file verificati), `partial/<sha256>.part` con `.part.etag` (validatore) e `.part.src` (da dove arriva),
+  `meta/<sha256>` (provenienza) e `meta/strikes`, `cache/<sha256>-<backend>/` (la riempie core-ai).
+
+**Come un file alterato è sempre rifiutato**
+- L'unica via verso `models/<sha256>` è `ModelStore.promote`, chiamata solo dopo `ModelVerifier.matches`: dimensione esatta e SHA-256
+  **ricalcolato sul file finito su disco** e rinomina atomica. Nessuna intestazione, nota del NAS o sorgente può dire "è a posto".
+  Differenza dal §2.1 ("calcolato durante la scrittura e ricalcolato"): il calcolo sul flusso non c'è, perché non aggiungerebbe una
+  garanzia (conta il file su disco) e costerebbe uno stato da riprendere dopo una morte del processo; il costo è una rilettura locale.
+- Ogni `ModelFiles.open` rilegge il file intero e ricalcola dimensione e SHA-256 **sullo stesso descrittore che consegna**
+  (`VerifiedModel.descriptor`, riportato all'inizio; `channel` per lo scaffale). Un file che non torna si toglie subito (con i programmi
+  compilati), lo stato diventa `Failed(VERIFY_FAILED)` e il prossimo `ensure` lo riprende (E-A11). Un `ensure` su un modello pronto
+  ricontrolla l'impronta, ma non apre la rete.
+- Un file sbagliato allo scaricamento (E-A2): parziale tolto, errore contato (`ModelCounters.mismatch`), sorgente dopo; la ripresa da una
+  sorgente diversa è lecita (stessi byte per impronta). Dopo due errori della stessa sorgente in un giorno (ora del NAS, ricordati su
+  disco in `meta/strikes`) i lavori automatici la saltano; "Scarica ora" no, e la cartella dal PC e l'APK non si bloccano mai.
+
+**Scelte di sicurezza da rivedere** (valori in `ModelLimits`, `FetchRefusal`, `ModelHosts`)
+- *Host*: `huggingface.co`, `*.huggingface.co`, `*.hf.co` (P0), controllati a **ogni** salto, mai un indirizzo IP né un nome col punto finale.
+- *Redirezioni*: a mano, al più 5; solo `https`, senza utente, frammento o porta diversa da 443; `Location` fino a 4.096 caratteri, anche
+  relativa (si risolve sull'host corrente). La **query della redirezione si accetta** (la firma del CDN di Hugging Face la richiede): la
+  scrive il server, mai noi; la prima richiesta non ne ha (`PinnedUrl`).
+- *Richieste*: solo `User-Agent: MyCloudGallery`, `Accept`, `Accept-Encoding: identity`, `Connection: close` e, in ripresa, `Range` e `If-Range`
+  (ETag forte salvato; debole o assente = solo `Range`). Cache spenta (il JDK scrive `Pragma`/`Cache-Control: no-cache`). Nessun cookie: se un
+  `CookieHandler` globale esiste non si parte (`COOKIE_HANDLER`, fail-closed). Fiducia di sistema, nessun pinning: un certificato non fidato è
+  `NetworkError` senza un byte.
+- *Tempi*: connessione 15 s, lettura 30 s; ogni chiamata HTTPS dura al più 30 s (poi il gestore rilegge il cancello di rete); il tempo del
+  chiamante si rispetta ai confini di blocco; annullare ritorna subito (il lavoro bloccato sul socket finisce da solo entro la scadenza).
+- *Tetti*: mai più byte della dimensione fissata (si legge un byte in più per accorgersi di un flusso più lungo); `Content-Length` o
+  `Content-Range` incoerenti si rifiutano prima di leggere; blocchi da 1 MiB sincronizzati su disco; margine disco 300 MiB; al più 256
+  cartelle di dispositivo lette dal NAS, 1.024 copie proprie elencate, 512 voci di errori delle sorgenti.
+- *NAS come sorgente non fidata*: solo file normali (mai cartelle né collegamenti), dimensione esatta controllata prima di leggere, id di
+  dispositivo con la forma di un id (`TrustIds.isValid`): un nome letto dal NAS non diventa mai un percorso.
+- *Scaffale*: solo `devices/<io>/models/<sha256>`; scrittura esclusiva; solo da un file verificato in quel momento; cancello di scrittura
+  (F4-D31); `pruneOwn` solo su nomi-impronta, mai con l'elenco da tenere vuoto, con la dimensione ricontrollata.
+
+**Contratti** (la modifica minima, tutta in `core-models`)
+- `VerifiedModel` ha in più `descriptor` (pubblico) e `channel` (interno): additivo, il costruttore resta interno. P4 duplica il descrittore
+  (`ParcelFileDescriptor.dup`) per `modelFd` invece di riaprire il file.
+- Nuove porte in `contract/ModelPorts.kt`: `ModelTraffic`, `ModelNasArea`, `ModelFreeSpace`, `BundledAssets`, `ModelShelfGate`, `ShelfSource`,
+  `ShelfWriter`; `ModelCounters`; `ModelLimits`; `FetchRefusal`. Il cancello di rete per HTTPS lo guarda il **gestore** (conosce il
+  `ModelTrigger`), non il fetcher come nella firma indicativa del §1.2. Gli stati: un file presente è `Verifying` finché `refresh()`,
+  `ensure` o `open` non lo verificano. `FakeModelFetcher` ora dà `Mismatch` anche per un file più corto.
+
+**Prove** (`core-models`, JVM): server HTTPS di prova del JDK (`com.sun.net.httpserver`) pilotato per riflessione — il modulo `jdk.httpserver`
+non è visibile né a Kotlin né a javac con il bootclasspath di Android — e certificato autofirmato generato al volo con il `keytool` del JDK,
+fidato solo dai test (nessun `.p12` nel repository, `check.ps1` li vieta). Ripresa a ogni blocco, `Range`/`If-Range`, `200` al posto di `206`,
+`416`, lunghezze false, `Content-Range` incoerente, redirezioni (fuori elenco, `http`, utente/porta/frammento, troppe, relative), cookie,
+richieste ispezionate, scadenze, annullamento; NAS con `FaultPlan` a ogni chiamata (prima e dopo, tre guasti); morte del processo a ogni
+salvataggio; fake e vero con la stessa suite di contratto (file, fetcher, scaffale); da un capo all'altro con i fetcher veri. 247 test. **Prova che mordono**: 35 mutazioni del codice di produzione, un controllo alla volta tolto (SHA-256 all'apertura e alla promozione, dimensione,
+host, schema, utente e frammento delle redirezioni, tetto di 5, gestore dei cookie, byte in piu', tetto delle letture, `Content-Length`,
+`Content-Range`, `If-Range`, codifica, allineamento al blocco, id di dispositivo, collegamenti, `pruneOwn` e i suoi cancelli, spazio, errori
+delle sorgenti e quarantena, scadenza, parziale cattivo, cancello di rete, asset): **33 fanno diventare rosso almeno un test**; le due che
+restano verdi sono equivalenti (la dimensione del NAS si controlla due volte, sull'elenco e sul file aperto; `position(0)` del canale e'
+ridondante con le letture per posizione). Le sopravvissute non equivalenti hanno dato test nuovi.
+
+**Punti aperti**
+- **`ShelfWriter` vero**: serve una scrittura a flusso (temporaneo in `tmp/`, lunghezza controllata, rinomina senza sostituire) dentro
+  `.mycloudgallery/devices/<io>/models/` e la rimozione di una copia propria con la dimensione controllata. `NasFileSystem.publishExclusive`
+  prende un `ByteArray` (370 MiB non ci stanno), `NasFileOps`/`NasBackupOps` lavorano fuori da `.mycloudgallery/` e solo core-nasops e
+  core-backup li vedono: va aggiunta una primitiva in core-nas (con il suo marcatore e il test d'architettura). Finché non c'è, lo scaffale è
+  provato con `InMemoryShelfWriter`.
+- P11 lega: `ModelTraffic` (`LedgerModelTraffic` con la rete effettiva), `ModelNasArea`, `ModelNetworkGate`, `ModelShelfGate` (da
+  `IndexWriteRules`), `NasClock`, `BundledAssets` (gli asset di core-ai), `ShelfWriter`; chiama `LocalModels.refresh()` all'avvio.
+- Il passo 7e di `check.ps1` (HTTPS solo da `download/https/` nel dex) è vuoto finché `:app` non nomina `ModelFetchers`: R8 toglie il codice
+  non raggiunto. Il comportamento di `HttpURLConnection` su Android (OkHttp: `Connection: close`, `Accept-Encoding: identity`, redirezioni
+  a mano, `disconnect()`) e il tempo di verifica di 370 MiB si provano sul dispositivo (F46–F49, P4).
+- Una copia propria sul NAS con la dimensione sbagliata (modificata da fuori) resta `AlreadyThere`: gli altri la scartano per dimensione.

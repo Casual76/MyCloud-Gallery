@@ -136,7 +136,8 @@ class FakeModelFetcher(private val chunk: Int = Int.MAX_VALUE) : ModelFetcher {
   override suspend fun fetch(spec: ModelSpec, source: ModelSource, partial: File, budget: Duration): FetchResult {
     calls += source
     val bytes = served[source] ?: return FetchResult.NotFound
-    if (bytes.size.toLong() > spec.sizeBytes) return FetchResult.Mismatch
+    // Un file di un'altra lunghezza non e' il modello fissato (piu' lungo o piu' corto): come il fetcher vero.
+    if (bytes.size.toLong() != spec.sizeBytes) return FetchResult.Mismatch
     partial.parentFile?.mkdirs()
     val have = if (partial.isFile) partial.length().toInt() else 0
     if (have > bytes.size) return FetchResult.Mismatch

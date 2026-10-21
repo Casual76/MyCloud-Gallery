@@ -4,6 +4,9 @@ import dev.pampa.mycloudgallery.core.common.diagnostics.DiagCode
 import dev.pampa.mycloudgallery.core.model.Sha256
 import java.io.Closeable
 import java.io.File
+import java.io.FileDescriptor
+import java.nio.channels.FileChannel
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration
 import kotlinx.coroutines.flow.StateFlow
 
@@ -124,8 +127,21 @@ class VerifiedModel internal constructor(
   /** L'orologio monotono della verifica appena fatta. */
   val verifiedAtMonotonicNanos: Long,
   private val onClose: () -> Unit = {},
+  /**
+   * P3 (D16): il descrittore del file aperto in sola lettura **sul quale** sono stati calcolati dimensione e SHA-256, riportato
+   * all'inizio; vale finche' il modello non si chiude. Chi carica il motore lo duplica (`ParcelFileDescriptor.dup`) invece di riaprire
+   * [file]: la finestra fra verifica e uso e' chiusa (un file sostituito dopo la verifica non e' piu' quello che il motore legge).
+   * Null nei fake. Non lo si chiude: lo chiude [close].
+   */
+  val descriptor: FileDescriptor? = null,
+  /** Lo stesso file come canale, per le letture per posizione dello scaffale (copia sul NAS dei byte verificati). */
+  internal val channel: FileChannel? = null,
 ) : Closeable {
-  override fun close() = onClose()
+  private val closed = AtomicBoolean(false)
+
+  override fun close() {
+    if (closed.compareAndSet(false, true)) onClose()
+  }
 
   override fun toString(): String = "VerifiedModel(${spec.id})"
 }

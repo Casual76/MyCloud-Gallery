@@ -468,7 +468,6 @@ private fun ViewerHost(
               panelPx = panelPx,
               atRest = { atRest },
               format = format,
-              backdrop = backdrop,
             )
             if (!atRest) {
               TransitionPhoto(controller = controller, services = services, origin = originRect)
@@ -505,7 +504,6 @@ private fun PagerLayer(
   panelPx: Float,
   atRest: () -> Boolean,
   format: ViewerFormat,
-  backdrop: dev.antigravity.fluidengine.ui.fluid.GlassBackdropState,
 ) {
   val state = controller.state
   val pager = controller.pager
@@ -603,7 +601,6 @@ private fun PagerLayer(
           onMotionTouch = controller::onMotionTouch,
           onPlayMotion = if (controller.motionAvailable(id)) controller::playMotion else null,
           liveText = controller.liveText,
-          backdrop = backdrop,
         )
       }
     }

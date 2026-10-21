@@ -49,7 +49,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.viewinterop.AndroidView
 import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
 import dev.antigravity.fluidengine.ui.fluid.FluidMotion
-import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryOnPhoto
 import dev.pampa.mycloudgallery.core.imaging.contract.AnimatedSpec
@@ -117,7 +116,6 @@ internal class PageSpec(
  * @param onPlayMotion il video intero della foto in movimento (azione di TalkBack); null = la pagina non ne ha una da proporre.
  * @param liveText il testo dal vivo (Fase 6, P12, D43, D45): l'arbitro della pressione prolungata su questa pagina (testo o ritaglio),
  *   la selezione disegnata sopra la foto e l'azione di TalkBack "Testo nella foto". Null = la pagina non li ha.
- * @param backdrop il fondale di vetro per la barra "Copia · Seleziona tutto · Condividi testo".
  */
 @Composable
 internal fun ViewerPage(
@@ -133,7 +131,6 @@ internal fun ViewerPage(
   modifier: Modifier = Modifier,
   onPlayMotion: (() -> Unit)? = null,
   liveText: LiveTextController? = null,
-  backdrop: GlassBackdropState? = null,
 ) {
   val id = spec.id
   val image = state.images[id] ?: PageImage()
@@ -330,8 +327,8 @@ internal fun ViewerPage(
     }
     }
     // La selezione del testo, le maniglie e la barra: sopra la foto, fuori dallo zoom (D43).
-    if (isCurrent && liveText != null && backdrop != null) {
-      LiveTextOverlay(controller = liveText, id = id, zoom = zoom, aspect = drawAspect, backdrop = backdrop)
+    if (isCurrent && liveText != null) {
+      LiveTextOverlay(controller = liveText, id = id, zoom = zoom, aspect = drawAspect)
     }
   }
 }

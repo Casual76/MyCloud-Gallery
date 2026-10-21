@@ -51,8 +51,8 @@ abstract class LiveTextViewerBase : ViewerTestBase() {
   )
 
   /** Apre il viewer sul media [startIndex] con i servizi dati. */
-  internal fun showText(services: ViewerServices = textServices(), dark: Boolean = true) {
-    val request = fixture.request(startIndex = startIndex)
+  internal fun showText(services: ViewerServices = textServices(), dark: Boolean = true, secure: Boolean = false) {
+    val request = fixture.request(startIndex = startIndex, secure = secure)
     composeRule.setContent { ViewerTestHost(dark = dark) { ViewerOverlay(request = request, onClosed = { closed++ }, services = services) } }
     composeRule.waitForIdle()
   }

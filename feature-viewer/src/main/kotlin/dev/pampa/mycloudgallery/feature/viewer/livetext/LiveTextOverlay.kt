@@ -2,7 +2,15 @@ package dev.pampa.mycloudgallery.feature.viewer.livetext
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Icon
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
@@ -22,15 +30,15 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
-import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryActionBar
+import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
+import dev.antigravity.fluidengine.ui.fluid.fluidPressable
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryBarAction
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.viewer.R
@@ -52,7 +60,6 @@ internal fun LiveTextOverlay(
   id: MediaId,
   zoom: ZoomableMediaState,
   aspect: Float,
-  backdrop: GlassBackdropState,
   modifier: Modifier = Modifier,
 ) {
   if (controller.owner != id) return
@@ -75,7 +82,7 @@ internal fun LiveTextOverlay(
     // trascinando verrebbe ricreata a meta' gesto e il trascinamento si perderebbe.
     val selection = controller.selection
     if (selection != null) {
-      SelectionLayer(controller, geometry, selection, mapping, aspect, selected, backdrop, showBar = state is LiveTextState.Actions)
+      SelectionLayer(controller, geometry, selection, mapping, aspect, selected, showBar = state is LiveTextState.Actions)
     }
   }
 }
@@ -88,7 +95,6 @@ private fun SelectionLayer(
   mapping: ContentMapping,
   aspect: Float,
   color: androidx.compose.ui.graphics.Color,
-  backdrop: GlassBackdropState,
   showBar: Boolean,
 ) {
   val density = androidx.compose.ui.platform.LocalDensity.current.density
@@ -103,7 +109,7 @@ private fun SelectionLayer(
       val bounds = androidx.compose.ui.geometry.Rect(
         screen.minOf { it.x }, screen.minOf { it.y }, screen.maxOf { it.x }, screen.maxOf { it.y },
       )
-      LiveTextBar(controller, aspect, bounds, mapping.size, backdrop)
+      LiveTextBar(controller, aspect, bounds, mapping.size)
     }
   }
 }
@@ -166,7 +172,6 @@ private fun LiveTextBar(
   aspect: Float,
   bounds: androidx.compose.ui.geometry.Rect,
   page: Size,
-  backdrop: GlassBackdropState,
 ) {
   val clipLabel = stringResource(R.string.livetext_clip_label)
   val copy = stringResource(R.string.livetext_bar_copy)
@@ -183,25 +188,58 @@ private fun LiveTextBar(
   val gap = BAR_GAP.value * density
   val margin = BAR_MARGIN.value * density
   val handleRoom = (HANDLE_GAP + HANDLE_TARGET).value * density
-  GalleryActionBar(
-    actions = actions,
-    backdrop = backdrop,
-    onPhoto = true,
-    modifier = Modifier.layout { measurable, constraints ->
-      val placeable = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
-      val x = (bounds.center.x - placeable.width / 2f).coerceIn(margin, max(margin, page.width - placeable.width - margin))
-      val above = bounds.top - placeable.height - gap
-      val y = if (above >= margin) above else min(bounds.bottom + handleRoom, page.height - placeable.height - margin)
-      layout(constraints.maxWidth, constraints.maxHeight) { placeable.place(x.roundToInt(), y.roundToInt()) }
-    },
-  )
+  // La barra e' un figlio normale: a decidere dove va e' il contenitore, che misura la barra e la mette sopra la selezione (o sotto, se
+  // sopra non c'e' posto). Un `layout` sulla barra stessa la farebbe grande quanto la pagina per il vetro.
+  Layout(
+    content = { LiveTextBarContent(actions) },
+    modifier = Modifier.fillMaxSize(),
+  ) { measurables, constraints ->
+    val placeable = measurables.first().measure(constraints.copy(minWidth = 0, minHeight = 0))
+    val x = (bounds.center.x - placeable.width / 2f).coerceIn(margin, max(margin, page.width - placeable.width - margin))
+    val above = bounds.top - placeable.height - gap
+    val y = if (above >= margin) above else min(bounds.bottom + handleRoom, page.height - placeable.height - margin)
+    layout(constraints.maxWidth, constraints.maxHeight) { placeable.place(x.roundToInt(), y.roundToInt()) }
+  }
 }
 
-/** Il bersaglio di una maniglia: 48 dp (D43, D46). */
+/**
+ * La capsula con le tre azioni: come `GalleryActionBar` (bersagli da 48 dp, etichetta per TalkBack) ma **senza vetro**. Il vetro campiona lo
+ * sfondo, e questa barra sta dentro la pagina, che e' essa stessa la sorgente dello sfondo: il vetro dentro la sua sorgente si ridisegna
+ * all'infinito. Una tinta piena dello schema, leggibile su qualunque foto.
+ */
+@Composable
+private fun LiveTextBarContent(actions: List<GalleryBarAction>) {
+  val scheme = MaterialTheme.colorScheme
+  Row(
+    modifier = Modifier
+      .clip(FluidCapsuleShape)
+      .background(scheme.surfaceContainerHigh)
+      .padding(horizontal = BAR_PADDING),
+    horizontalArrangement = Arrangement.spacedBy(BAR_SPACING),
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    actions.forEach { action ->
+      Box(
+        modifier = Modifier
+          .size(HANDLE_TARGET)
+          .semantics { contentDescription = action.contentDescription }
+          .fluidPressable(onClick = action.onClick, role = Role.Button, focusShape = FluidCapsuleShape),
+        contentAlignment = Alignment.Center,
+      ) {
+        Icon(imageVector = action.icon, contentDescription = null, modifier = Modifier.size(BAR_GLYPH), tint = scheme.onSurface)
+      }
+    }
+  }
+}
+
+/** Il bersaglio di una maniglia e di un'azione della barra: 48 dp (D43, D46). */
 internal val HANDLE_TARGET: Dp = 48.dp
 private val HANDLE_GAP: Dp = 4.dp
 private val HANDLE_RADIUS: Dp = 7.dp
 private val BAR_GAP: Dp = 12.dp
+private val BAR_PADDING: Dp = 6.dp
+private val BAR_SPACING: Dp = 4.dp
+private val BAR_GLYPH: Dp = 24.dp
 private val BAR_MARGIN: Dp = 8.dp
 private const val PAD_DP = 2f
 private const val VEIL_ALPHA = 0.16f

@@ -37,6 +37,8 @@ import dev.pampa.mycloudgallery.core.family.contract.StaleReason
 import dev.pampa.mycloudgallery.core.family.contract.TrustStatus
 import dev.pampa.mycloudgallery.feature.settings.backup.BackupEntryRow
 import dev.pampa.mycloudgallery.feature.settings.backup.BackupEntryViewModel
+import dev.pampa.mycloudgallery.feature.settings.library.MotionAnimationRow
+import dev.pampa.mycloudgallery.feature.settings.library.MotionAnimationViewModel
 import dev.pampa.mycloudgallery.feature.settings.sharing.SharingEntryRow
 import dev.pampa.mycloudgallery.feature.settings.sharing.SharingEntryViewModel
 import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
@@ -88,6 +90,8 @@ internal fun SettingsRoute(
   val backup by backupViewModel.status.collectAsStateWithLifecycle()
   val sharingViewModel: SharingEntryViewModel = hiltViewModel()
   val removeLocation by sharingViewModel.removeLocation.collectAsStateWithLifecycle()
+  val motionViewModel: MotionAnimationViewModel = hiltViewModel()
+  val motionAnimation by motionViewModel.enabled.collectAsStateWithLifecycle()
   SettingsScreen(
     state = state,
     onBack = onBack,
@@ -97,6 +101,8 @@ internal fun SettingsRoute(
     links = links,
     backupStatus = backup,
     removeLocation = removeLocation,
+    motionAnimation = motionAnimation,
+    onMotionAnimation = motionViewModel::set,
   )
 }
 
@@ -118,6 +124,8 @@ fun SettingsScreen(
   links: SettingsLinks = SettingsLinks.None,
   backupStatus: BackupStatus? = null,
   removeLocation: Boolean = false,
+  motionAnimation: Boolean? = null,
+  onMotionAnimation: (Boolean) -> Unit = {},
 ) {
   val family = familyHero(state)
   FluidScreen(
@@ -200,6 +208,13 @@ fun SettingsScreen(
           onClick = links.openRules,
         )
       }
+    }
+
+    // Fase 6 (P14, D50, Q16 (b)): "Animazione delle foto in movimento", impostazione personale sincronizzata. Null = `:app` non l'ha collegata: niente sezione.
+    if (motionAnimation != null) {
+      item { FluidSectionHeader(title = stringResource(R.string.settings_section_library)) }
+      item { FluidListGroup { MotionAnimationRow(on = motionAnimation, onToggle = onMotionAnimation) } }
+      item { FluidSectionFootnote(text = stringResource(R.string.library_motion_animation_footnote)) }
     }
 
     item { FluidSectionHeader(title = stringResource(R.string.settings_section_protection)) }

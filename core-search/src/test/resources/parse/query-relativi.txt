@@ -1,0 +1,77 @@
+# Giorni relativi, periodi relativi e "fa" (§2.5). Oggi = mercoledi' 21 ottobre 2026.
+
+# --- Giorni relativi
+oggi => D 2026-10-21..2026-10-21 Oggi · 21 ottobre 2026
+ieri => D 2026-10-20..2026-10-20 Ieri · 20 ottobre 2026
+Ieri => D 2026-10-20..2026-10-20 Ieri · 20 ottobre 2026
+l'altro ieri => D 2026-10-19..2026-10-19 L'altro ieri · 19 ottobre 2026
+altro ieri => D 2026-10-19..2026-10-19 L'altro ieri · 19 ottobre 2026
+avantieri => D 2026-10-19..2026-10-19 L'altro ieri · 19 ottobre 2026
+foto di ieri => T PHOTO Foto ; D 2026-10-20..2026-10-20 Ieri · 20 ottobre 2026
+screenshot di ieri => T SCREENSHOT Screenshot ; D 2026-10-20..2026-10-20 Ieri · 20 ottobre 2026
+video di oggi => T VIDEO Video ; D 2026-10-21..2026-10-21 Oggi · 21 ottobre 2026
+cane di ieri => D 2026-10-20..2026-10-20 Ieri · 20 ottobre 2026 => cane => cane
+cane in spiaggia oggi => D 2026-10-21..2026-10-21 Oggi · 21 ottobre 2026 => cane in spiaggia => cane, spiaggia
+sabato scorso => D 2026-10-17..2026-10-17 Sabato scorso · 17 ottobre 2026
+domenica scorsa => D 2026-10-18..2026-10-18 Domenica scorsa · 18 ottobre 2026
+lunedì scorso => D 2026-10-19..2026-10-19 Lunedì scorso · 19 ottobre 2026
+martedì scorso => D 2026-10-20..2026-10-20 Martedì scorso · 20 ottobre 2026
+mercoledì scorso => D 2026-10-14..2026-10-14 Mercoledì scorso · 14 ottobre 2026
+giovedì scorso => D 2026-10-15..2026-10-15 Giovedì scorso · 15 ottobre 2026
+venerdì scorso => D 2026-10-16..2026-10-16 Venerdì scorso · 16 ottobre 2026
+sabato => D 2026-10-17..2026-10-17 Sabato · 17 ottobre 2026
+sabato passato => D 2026-10-17..2026-10-17 Sabato scorso · 17 ottobre 2026
+foto di sabato scorso => T PHOTO Foto ; D 2026-10-17..2026-10-17 Sabato scorso · 17 ottobre 2026
+venerdì 13 marzo 2026 => D 2026-03-13..2026-03-13 13 marzo 2026
+
+# --- Periodi relativi
+questa settimana => D 2026-10-19..2026-10-25 Questa settimana · 19–25 ottobre 2026
+la settimana scorsa => D 2026-10-12..2026-10-18 Settimana scorsa · 12–18 ottobre 2026
+settimana scorsa => D 2026-10-12..2026-10-18 Settimana scorsa · 12–18 ottobre 2026
+scorsa settimana => D 2026-10-12..2026-10-18 Settimana scorsa · 12–18 ottobre 2026
+settimana passata => D 2026-10-12..2026-10-18 Settimana scorsa · 12–18 ottobre 2026
+il mese scorso => D 2026-09-01..2026-09-30 Mese scorso · settembre 2026
+questo mese => D 2026-10-01..2026-10-31 Questo mese · ottobre 2026
+quest'anno => D 2026-01-01..2026-12-31 Quest'anno · 2026
+questo anno => D 2026-01-01..2026-12-31 Quest'anno · 2026
+l'anno scorso => D 2025-01-01..2025-12-31 L'anno scorso · 2025
+anno scorso => D 2025-01-01..2025-12-31 L'anno scorso · 2025
+scorso anno => D 2025-01-01..2025-12-31 L'anno scorso · 2025
+il weekend scorso => D 2026-10-17..2026-10-18 Weekend scorso · 17–18 ottobre 2026
+weekend scorso => D 2026-10-17..2026-10-18 Weekend scorso · 17–18 ottobre 2026
+scorso weekend => D 2026-10-17..2026-10-18 Weekend scorso · 17–18 ottobre 2026
+fine settimana scorso => D 2026-10-17..2026-10-18 Weekend scorso · 17–18 ottobre 2026
+questo weekend => D 2026-10-24..2026-10-25 Questo weekend · 24–25 ottobre 2026
+foto della settimana scorsa => T PHOTO Foto ; D 2026-10-12..2026-10-18 Settimana scorsa · 12–18 ottobre 2026
+video dell'anno scorso => T VIDEO Video ; D 2025-01-01..2025-12-31 L'anno scorso · 2025
+foto di questo mese => T PHOTO Foto ; D 2026-10-01..2026-10-31 Questo mese · ottobre 2026
+
+# --- Fa
+3 giorni fa => D 2026-10-18..2026-10-18 3 giorni fa · 18 ottobre 2026
+un giorno fa => D 2026-10-20..2026-10-20 Un giorno fa · 20 ottobre 2026
+20 giorni fa => D 2026-10-01..2026-10-01 20 giorni fa · 1 ottobre 2026
+2 settimane fa => D 2026-10-05..2026-10-11 2 settimane fa · 5–11 ottobre 2026
+una settimana fa => D 2026-10-12..2026-10-18 Una settimana fa · 12–18 ottobre 2026
+un mese fa => D 2026-09-01..2026-09-30 Un mese fa · settembre 2026
+3 mesi fa => D 2026-07-01..2026-07-31 3 mesi fa · luglio 2026
+tre mesi fa => D 2026-07-01..2026-07-31 3 mesi fa · luglio 2026
+10 mesi fa => D 2025-12-01..2025-12-31 10 mesi fa · dicembre 2025
+2 anni fa => D 2024-01-01..2024-12-31 2 anni fa · 2024
+un anno fa => D 2025-01-01..2025-12-31 Un anno fa · 2025
+cinque anni fa => D 2021-01-01..2021-12-31 5 anni fa · 2021
+foto di 3 giorni fa => T PHOTO Foto ; D 2026-10-18..2026-10-18 3 giorni fa · 18 ottobre 2026
+150 anni fa => - => 150 anni fa => 150, anni, fa
+3 giorni => - => 3 giorni => 3, giorni
+
+# --- "Oggi" arriva solo dal parametro: stesse query, altri giorni
+@oggi 2026-01-05
+ieri => D 2026-01-04..2026-01-04 Ieri · 4 gennaio 2026
+questa settimana => D 2026-01-05..2026-01-11 Questa settimana · 5–11 gennaio 2026
+la settimana scorsa => D 2025-12-29..2026-01-04 Settimana scorsa · 29 dicembre 2025–4 gennaio 2026
+il mese scorso => D 2025-12-01..2025-12-31 Mese scorso · dicembre 2025
+l'anno scorso => D 2025-01-01..2025-12-31 L'anno scorso · 2025
+sabato scorso => D 2026-01-03..2026-01-03 Sabato scorso · 3 gennaio 2026
+lunedì scorso => D 2025-12-29..2025-12-29 Lunedì scorso · 29 dicembre 2025
+@oggi 2024-03-01
+ieri => D 2024-02-29..2024-02-29 Ieri · 29 febbraio 2024
+un mese fa => D 2024-02-01..2024-02-29 Un mese fa · febbraio 2024

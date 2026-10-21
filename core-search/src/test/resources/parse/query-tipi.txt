@@ -1,0 +1,76 @@
+# Tipi, sorgenti, stati, presenza, testo esatto e "il resto" (§2.5). Oggi = 21 ottobre 2026.
+
+# --- Tipi
+foto => T PHOTO Foto
+fotografie => T PHOTO Foto
+video => T VIDEO Video
+filmati => T VIDEO Video
+screenshot => T SCREENSHOT Screenshot
+screenshots => T SCREENSHOT Screenshot
+schermate => T SCREENSHOT Screenshot
+schermata => T SCREENSHOT Screenshot
+panorami => T PANORAMA Panorami
+panoramiche => T PANORAMA Panorami
+foto in movimento => T MOTION_PHOTO Foto in movimento
+foto animate => T MOTION_PHOTO Foto in movimento
+motion photo => T MOTION_PHOTO Foto in movimento
+documenti => T DOCUMENT Documenti
+documento => T DOCUMENT Documenti
+foto di cane in spiaggia => T PHOTO Foto => di cane in spiaggia => cane, spiaggia
+foto di cani => T PHOTO Foto => di cani => cani
+cane video => T VIDEO Video => cane => cane
+video e screenshot => T VIDEO Video ; T SCREENSHOT Screenshot
+foto e video => - => - => -
+foto e video di Natale => Y 12-24..12-26 Natale (24–26 dicembre, tutti gli anni)
+
+# --- Sorgenti
+WhatsApp => S WHATSAPP WhatsApp
+whatsapp => S WHATSAPP WhatsApp
+da WhatsApp => S WHATSAPP WhatsApp
+foto di WhatsApp => T PHOTO Foto ; S WHATSAPP WhatsApp
+screenshot WhatsApp 2024 => T SCREENSHOT Screenshot ; S WHATSAPP WhatsApp ; D 2024-01-01..2024-12-31 2024
+Quick Share => S QUICK_SHARE Quick Share
+quickshare => S QUICK_SHARE Quick Share
+
+# --- Stati
+preferiti => F FAVORITE Preferiti
+i preferiti => F FAVORITE Preferiti
+preferite => F FAVORITE Preferiti
+foto preferite => T PHOTO Foto ; F FAVORITE Preferiti
+modificate => F EDITED Modificate
+foto modificate => T PHOTO Foto ; F EDITED Modificate
+video preferiti di Natale => T VIDEO Video ; F FAVORITE Preferiti ; Y 12-24..12-26 Natale (24–26 dicembre, tutti gli anni)
+
+# --- Presenza
+sul telefono => L ON_PHONE Sul telefono
+nel telefono => L ON_PHONE Sul telefono
+sul NAS => L ON_NAS Sul NAS
+nel nas => L ON_NAS Sul NAS
+solo sul NAS => L NAS_ONLY Solo sul NAS
+soltanto sul nas => L NAS_ONLY Solo sul NAS
+solo nel NAS => L NAS_ONLY Solo sul NAS
+video solo sul NAS => T VIDEO Video ; L NAS_ONLY Solo sul NAS
+foto sul telefono 2023 => T PHOTO Foto ; L ON_PHONE Sul telefono ; D 2023-01-01..2023-12-31 2023
+solo sul mare => - => solo sul mare => solo, mare
+
+# --- Testo esatto (fra virgolette)
+"Via Roma 12" => W exact Via Roma 12 => - => - => Via Roma 12
+scontrino "Via Roma 12" => W exact Via Roma 12 => scontrino => scontrino => Via Roma 12
+"Via Roma 12" Firenze => W exact Via Roma 12 ; P Firenze #1 PLACE word=firenze => - => - => Via Roma 12
+“Via Po” => W exact Via Po => - => - => Via Po
+«Corso Italia» => W exact Corso Italia => - => - => Corso Italia
+"cane" "gatto" => W exact cane ; W exact gatto => - => - => cane ; gatto
+"ieri" => W exact ieri => - => - => ieri
+cane "in spiaggia" ieri => W exact in spiaggia ; D 2026-10-20..2026-10-20 Ieri · 20 ottobre 2026 => cane => cane => in spiaggia
+"cane in spiaggia => - => cane in spiaggia => cane, spiaggia
+cane" in spiaggia => - => cane in spiaggia => cane, spiaggia
+
+# --- Il resto: contenuto (con le parole vuote) e parole (senza)
+cane in spiaggia => - => cane in spiaggia => cane, spiaggia
+scontrino Esselunga => - => scontrino Esselunga => scontrino, esselunga
+scontrino dell'Esselunga => - => scontrino dell'Esselunga => scontrino, esselunga
+tramonto sul mare => - => tramonto sul mare => tramonto, mare
+una torta di compleanno => - => una torta di compleanno => torta, compleanno
+gatto => - => gatto => gatto
+€ 25 => - => € 25 => euro, 25
+cane cane => - => cane cane => cane

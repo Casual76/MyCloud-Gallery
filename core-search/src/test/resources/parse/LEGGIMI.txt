@@ -1,0 +1,24 @@
+La tabella pubblica delle query italiane (Fase 6, P7; docs/fase6-progetto.md §2.5)
+=================================================================================
+
+I file query-*.txt sono eseguiti da QueryTableTest, una riga per test. "Oggi" di partenza e' 2026-10-21 (un mercoledi', come
+FixedToday); la direttiva `@oggi aaaa-mm-gg` lo cambia per le righe che seguono. Il dizionario dei luoghi e' TestPlaces (luoghi
+generici e inventati, nessun dato personale).
+
+Una riga:  query => chip => contenuto => parole => testo esatto => correzioni
+  "-" = vuoto;  <vuota> e <spazio> = query vuota o fatta di spazi;  # = commento.
+
+I chip si separano con " ; ", nell'ordine in cui compaiono nella query:
+  D aaaa-mm-gg..aaaa-mm-gg etichetta      periodo con l'anno
+  Y mm-gg..mm-gg etichetta                 periodo "tutti gli anni" (conta solo mese e giorno)
+  P etichetta #ids LIVELLO word=parola [alt=etichetta#ids,...]   luogo, regione o paese (con gli omonimi)
+  T TIPO etichetta       tipo di media (PHOTO, VIDEO, SCREENSHOT, PANORAMA, MOTION_PHOTO, DOCUMENT)
+  S SORGENTE etichetta   sorgente
+  F STATO etichetta      FAVORITE, EDITED
+  L PRESENZA etichetta   ON_PHONE, ON_NAS, NAS_ONLY
+  W exact testo          testo esatto fra virgolette
+Le correzioni sono "cercato<-scritto" ("screenshot<-screeshot": «Ho cercato screenshot invece di screeshot»), anche per le date
+impossibili ("29 febbraio 2024<-31 febbraio").
+
+Pasqua e Pasquetta dal 2015 al 2035 stanno in pasqua-2015-2035.txt: date scritte a mano, confrontate dal test PasquaTest con il
+risultato del parser (non con un secondo calcolo).

@@ -1,0 +1,82 @@
+# Refusi (E-Q5, §2.5): sul dizionario (mesi, giorni, feste, stagioni, tipi, luoghi) distanza 1 da 4 a 7 lettere e 2 da 8 in su, solo se il
+# migliore e' unico; l'avviso e' "cercato<-scritto". Sotto le 4 lettere mai. Oggi = 21 ottobre 2026.
+
+# --- Tipi (distanza 1 e 2)
+screeshot => T SCREENSHOT Screenshot => - => - => - => screenshot<-screeshot
+screnshot => T SCREENSHOT Screenshot => - => - => - => screenshot<-screnshot
+scrensot => T SCREENSHOT Screenshot => - => - => - => screenshot<-scrensot
+screeshot di ieri => T SCREENSHOT Screenshot ; D 2026-10-20..2026-10-20 Ieri · 20 ottobre 2026 => - => - => - => screenshot<-screeshot
+vidio => T VIDEO Video => - => - => - => video<-vidio
+vdeo => T VIDEO Video => - => - => - => video<-vdeo
+documneti => T DOCUMENT Documenti => - => - => - => documenti<-documneti
+schermte => T SCREENSHOT Screenshot => - => - => - => schermate<-schermte
+panoraimi => T PANORAMA Panorami => - => - => - => panorami<-panoraimi
+preferti => F FAVORITE Preferiti => - => - => - => preferiti<-preferti
+modificte => F EDITED Modificate => - => - => - => modificate<-modificte
+whatsap => S WHATSAPP WhatsApp => - => - => - => whatsapp<-whatsap
+wathsapp => S WHATSAPP WhatsApp => - => - => - => whatsapp<-wathsapp
+
+# --- Mesi
+agosot => Y 08-01..08-31 Agosto (tutti gli anni) => - => - => - => agosto<-agosot
+aggosto => Y 08-01..08-31 Agosto (tutti gli anni) => - => - => - => agosto<-aggosto
+ottbre => Y 10-01..10-31 Ottobre (tutti gli anni) => - => - => - => ottobre<-ottbre
+settmbre => Y 09-01..09-30 Settembre (tutti gli anni) => - => - => - => settembre<-settmbre
+sattambre => Y 09-01..09-30 Settembre (tutti gli anni) => - => - => - => settembre<-sattambre
+febraio => Y 02-01..02-29 Febbraio (tutti gli anni) => - => - => - => febbraio<-febraio
+dicmbre => Y 12-01..12-31 Dicembre (tutti gli anni) => - => - => - => dicembre<-dicmbre
+novemre => Y 11-01..11-30 Novembre (tutti gli anni) => - => - => - => novembre<-novemre
+genaio => Y 01-01..01-31 Gennaio (tutti gli anni) => - => - => - => gennaio<-genaio
+giugnio => Y 06-01..06-30 Giugno (tutti gli anni) => - => - => - => giugno<-giugnio
+luglo => Y 07-01..07-31 Luglio (tutti gli anni) => - => - => - => luglio<-luglo
+maggo => Y 05-01..05-31 Maggio (tutti gli anni) => - => - => - => maggio<-maggo
+foto agosot 2023 => T PHOTO Foto ; D 2023-08-01..2023-08-31 Agosto 2023 => - => - => - => agosto<-agosot
+ottbre 2023 => D 2023-10-01..2023-10-31 Ottobre 2023 => - => - => - => ottobre<-ottbre
+febraio 2024 => D 2024-02-01..2024-02-29 Febbraio 2024 => - => - => - => febbraio<-febraio
+
+# --- Giorni
+ierri => D 2026-10-20..2026-10-20 Ieri · 20 ottobre 2026 => - => - => - => ieri<-ierri
+oggj => D 2026-10-21..2026-10-21 Oggi · 21 ottobre 2026 => - => - => - => oggi<-oggj
+sabbato => D 2026-10-17..2026-10-17 Sabato · 17 ottobre 2026 => - => - => - => sabato<-sabbato
+mercoeldì scorso => D 2026-10-14..2026-10-14 Mercoledì scorso · 14 ottobre 2026 => - => - => - => mercoledi<-mercoeldi
+
+# --- Feste e stagioni
+natle => Y 12-24..12-26 Natale (24–26 dicembre, tutti gli anni) => - => - => - => natale<-natle
+video di natle => T VIDEO Video ; Y 12-24..12-26 Natale (24–26 dicembre, tutti gli anni) => - => - => - => natale<-natle
+vidio di Natale 2023 => T VIDEO Video ; D 2023-12-24..2023-12-26 Natale 2023 (24–26 dicembre) => - => - => - => video<-vidio
+screeshot natle => T SCREENSHOT Screenshot ; Y 12-24..12-26 Natale (24–26 dicembre, tutti gli anni) => - => - => - => screenshot<-screeshot ; natale<-natle
+pasqa => D 2026-04-05..2026-04-05 Pasqua 2026 (5 aprile) => - => - => - => pasqua<-pasqa
+pasqueta 2024 => D 2024-04-01..2024-04-01 Pasquetta 2024 (1 aprile) => - => - => - => pasquetta<-pasqueta
+feragosto => Y 08-15..08-15 Ferragosto (15 agosto, tutti gli anni) => - => - => - => ferragosto<-feragosto
+capodano => Y 12-31..01-01 Capodanno (31 dicembre–1 gennaio, tutti gli anni) => - => - => - => capodanno<-capodano
+epifnia => Y 01-06..01-06 Epifania (6 gennaio, tutti gli anni) => - => - => - => epifania<-epifnia
+vigiia => Y 12-24..12-24 Vigilia di Natale (24 dicembre, tutti gli anni) => - => - => - => vigilia<-vigiia
+estae => Y 06-01..08-31 Giugno–agosto (tutti gli anni) => - => - => - => estate<-estae
+invenro 2023 => D 2023-12-01..2024-02-29 Inverno 2023–24 => - => - => - => inverno<-invenro
+primavra => Y 03-01..05-31 Marzo–maggio (tutti gli anni) => - => - => - => primavera<-primavra
+autnno => Y 09-01..11-30 Settembre–novembre (tutti gli anni) => - => - => - => autunno<-autnno
+
+# --- Luoghi (almeno 5 lettere)
+Firenzze => P Firenze #1 PLACE word=firenzze => - => - => - => firenze<-firenzze
+Firnze => P Firenze #1 PLACE word=firnze => - => - => - => firenze<-firnze
+Toscna => P Toscana #1+10+15+17 REGION word=toscna => - => - => - => toscana<-toscna
+Pissa => P Pisa #15 PLACE word=pissa => - => - => - => pisa<-pissa
+Reggio Emila => P Reggio Emilia #4 PLACE word=reggio emila => - => - => - => reggio emilia<-reggio emila
+foto a Firenzze => T PHOTO Foto ; P Firenze #1 PLACE word=firenzze => - => - => - => firenze<-firenzze
+
+# --- Dove NON si corregge: troppo corte, distanza oltre la tolleranza, migliore non unico, parole comuni
+ogi => - => ogi => ogi
+vid => - => vid => vid
+setmbre => - => setmbre => setmbre
+settmbe => - => settmbe => settmbe
+marcledi => - => marcledi => marcledi
+dectembre => - => dectembre => dectembre
+santa marco => - => santa marco => santa, marco
+Rona => - => Rona => rona
+fotto => - => fotto => fotto
+Mario => - => Mario => mario
+foto di Mario e Marco => T PHOTO Foto => di Mario e Marco => mario, marco
+Gennaro => - => Gennaro => gennaro
+mazzo di fiori => - => mazzo di fiori => mazzo, fiori
+Domenico => - => Domenico => domenico
+ogni anno => - => ogni anno => ogni, anno
+casa => - => casa => casa

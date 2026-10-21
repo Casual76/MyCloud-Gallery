@@ -1,0 +1,46 @@
+# Stagioni meteorologiche (§2.5): estate giugno-agosto; l'inverno comincia a dicembre e il chip dice l'anno doppio. Oggi = 21 ottobre 2026.
+
+estate 2023 => D 2023-06-01..2023-08-31 Giugno–agosto 2023
+primavera 2023 => D 2023-03-01..2023-05-31 Marzo–maggio 2023
+autunno 2023 => D 2023-09-01..2023-11-30 Settembre–novembre 2023
+inverno 2023 => D 2023-12-01..2024-02-29 Inverno 2023–24
+inverno 2022 => D 2022-12-01..2023-02-28 Inverno 2022–23
+inverno 2019 => D 2019-12-01..2020-02-29 Inverno 2019–20
+inverno 1999 => D 1999-12-01..2000-02-29 Inverno 1999–00
+inverno 2099 => D 2099-12-01..2100-02-28 Inverno 2099–00
+estate '23 => D 2023-06-01..2023-08-31 Giugno–agosto 2023
+nell'estate del 2023 => D 2023-06-01..2023-08-31 Giugno–agosto 2023
+estate del 2023 => D 2023-06-01..2023-08-31 Giugno–agosto 2023
+video estate 2022 => T VIDEO Video ; D 2022-06-01..2022-08-31 Giugno–agosto 2022
+estate 1999 => D 1999-06-01..1999-08-31 Giugno–agosto 1999
+estate 2023 al mare => D 2023-06-01..2023-08-31 Giugno–agosto 2023 => al mare => mare
+primavera 2024 fiori => D 2024-03-01..2024-05-31 Marzo–maggio 2024 => fiori => fiori
+
+# --- Senza anno: tutti gli anni
+in primavera => Y 03-01..05-31 Marzo–maggio (tutti gli anni)
+estate => Y 06-01..08-31 Giugno–agosto (tutti gli anni)
+autunno => Y 09-01..11-30 Settembre–novembre (tutti gli anni)
+inverno => Y 12-01..02-29 Dicembre–febbraio (tutti gli anni)
+foto in estate => T PHOTO Foto ; Y 06-01..08-31 Giugno–agosto (tutti gli anni)
+
+# --- Relative: l'ultima finita ("scorso") o l'ultima cominciata ("questo")
+l'inverno scorso => D 2025-12-01..2026-02-28 Inverno 2025–26
+inverno scorso => D 2025-12-01..2026-02-28 Inverno 2025–26
+scorso inverno => D 2025-12-01..2026-02-28 Inverno 2025–26
+estate scorsa => D 2026-06-01..2026-08-31 Giugno–agosto 2026
+primavera scorsa => D 2026-03-01..2026-05-31 Marzo–maggio 2026
+autunno scorso => D 2025-09-01..2025-11-30 Settembre–novembre 2025
+questa estate => D 2026-06-01..2026-08-31 Giugno–agosto 2026
+quest'estate => D 2026-06-01..2026-08-31 Giugno–agosto 2026
+quest'inverno => D 2025-12-01..2026-02-28 Inverno 2025–26
+questo autunno => D 2026-09-01..2026-11-30 Settembre–novembre 2026
+
+# --- Inverni a cavallo d'anno, con altri "oggi"
+@oggi 2027-01-15
+l'inverno scorso => D 2025-12-01..2026-02-28 Inverno 2025–26
+quest'inverno => D 2026-12-01..2027-02-28 Inverno 2026–27
+questo inverno => D 2026-12-01..2027-02-28 Inverno 2026–27
+@oggi 2026-07-15
+questa estate => D 2026-06-01..2026-08-31 Giugno–agosto 2026
+estate scorsa => D 2025-06-01..2025-08-31 Giugno–agosto 2025
+@oggi 2026-10-21

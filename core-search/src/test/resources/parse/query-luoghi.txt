@@ -1,0 +1,68 @@
+# Luoghi dal dizionario finto TestPlaces (§2.5): nomi di piu' parole, omonimi, regioni, paesi, preposizioni, parole che sono anche luoghi.
+# Omonimi: vince il piu' frequente, gli altri sono nelle alternative (alt=). Oggi = 21 ottobre 2026.
+
+# --- Luoghi, regioni e paesi
+Firenze => P Firenze #1 PLACE word=firenze
+FIRENZE => P Firenze #1 PLACE word=firenze
+a Firenze => P Firenze #1 PLACE word=firenze
+da Firenze => P Firenze #1 PLACE word=firenze
+Pisa => P Pisa #15 PLACE word=pisa
+Lucca => P Lucca #17 PLACE word=lucca
+Roma => P Roma #16 PLACE word=roma
+in Toscana => P Toscana #1+10+15+17 REGION word=toscana
+in Italia => P Italia #1+4+5+10+11+12+13+14+15+16+17+18+19 COUNTRY word=italia
+Germania => P Germania #2 COUNTRY word=germania
+dalla Germania => P Germania #2 COUNTRY word=germania
+Baviera => P Baviera #2 REGION word=baviera
+Emilia-Romagna => P Emilia-Romagna #4 REGION word=emilia romagna
+in Emilia Romagna => P Emilia-Romagna #4 REGION word=emilia romagna
+
+# --- Nomi di piu' parole: vince la corrispondenza piu' lunga
+Monaco di Baviera => P Monaco di Baviera #2 PLACE word=monaco di baviera
+a Monaco di Baviera => P Monaco di Baviera #2 PLACE word=monaco di baviera
+Monaco => P Monaco #3 COUNTRY word=monaco
+foto Monaco => T PHOTO Foto ; P Monaco #3 COUNTRY word=monaco
+monaco baviera => P Monaco #3 COUNTRY word=monaco ; P Baviera #2 REGION word=baviera
+monaco di => P Monaco #3 COUNTRY word=monaco
+Reggio Emilia => P Reggio Emilia #4 PLACE word=reggio emilia
+Reggio Calabria => P Reggio Calabria #5 PLACE word=reggio calabria
+Reggio => - => Reggio => reggio
+Cortina d'Ampezzo => P Cortina d'Ampezzo #18 PLACE word=cortina d ampezzo
+a Cortina d'Ampezzo => P Cortina d'Ampezzo #18 PLACE word=cortina d ampezzo
+
+# --- Omonimi in regioni diverse
+San Marco => P San Marco (Veneto) #11 PLACE word=san marco alt=San Marco (Toscana)#10
+a San Marco => P San Marco (Veneto) #11 PLACE word=san marco alt=San Marco (Toscana)#10
+Santa Maria => P Santa Maria (Lazio) #13 PLACE word=santa maria alt=Santa Maria (Campania)#12,Santa Maria (Puglia)#14
+Santa Maria 2020 => P Santa Maria (Lazio) #13 PLACE word=santa maria alt=Santa Maria (Campania)#12,Santa Maria (Puglia)#14 ; D 2020-01-01..2020-12-31 2020
+
+# --- Luogo e altro (la parola consumata esce dal contenuto)
+foto di Firenze => T PHOTO Foto ; P Firenze #1 PLACE word=firenze
+Firenze estate 2023 => P Firenze #1 PLACE word=firenze ; D 2023-06-01..2023-08-31 Giugno–agosto 2023
+Firenze agosto 2023 => P Firenze #1 PLACE word=firenze ; D 2023-08-01..2023-08-31 Agosto 2023
+video a Pisa => T VIDEO Video ; P Pisa #15 PLACE word=pisa
+foto a Roma => T PHOTO Foto ; P Roma #16 PLACE word=roma
+cena a Lucca => P Lucca #17 PLACE word=lucca => cena => cena
+cane in spiaggia a Pisa => P Pisa #15 PLACE word=pisa => cane in spiaggia => cane, spiaggia
+mare in Toscana => P Toscana #1+10+15+17 REGION word=toscana => mare => mare
+Firenze Pisa => P Firenze #1 PLACE word=firenze ; P Pisa #15 PLACE word=pisa
+a Firenze in Toscana => P Firenze #1 PLACE word=firenze ; P Toscana #1+10+15+17 REGION word=toscana
+tra Pisa e Lucca => P Pisa #15 PLACE word=pisa ; P Lucca #17 PLACE word=lucca
+Monaco di Baviera 2019 => P Monaco di Baviera #2 PLACE word=monaco di baviera ; D 2019-01-01..2019-12-31 2019
+Natale a Firenze => Y 12-24..12-26 Natale (24–26 dicembre, tutti gli anni) ; P Firenze #1 PLACE word=firenze
+Natale a Monaco di Baviera => Y 12-24..12-26 Natale (24–26 dicembre, tutti gli anni) ; P Monaco di Baviera #2 PLACE word=monaco di baviera
+Roma ieri => P Roma #16 PLACE word=roma ; D 2026-10-20..2026-10-20 Ieri · 20 ottobre 2026
+Italia 2023 => P Italia #1+4+5+10+11+12+13+14+15+16+17+18+19 COUNTRY word=italia ; D 2023-01-01..2023-12-31 2023
+Germania estate => P Germania #2 COUNTRY word=germania ; Y 06-01..08-31 Giugno–agosto (tutti gli anni)
+
+# --- Una parola che e' anche un luogo (E-Q10): il chip propone "Cerca come parola" (word=)
+Bianchi => P Bianchi #19 PLACE word=bianchi
+foto di Bianchi => T PHOTO Foto ; P Bianchi #19 PLACE word=bianchi
+
+# --- Luoghi che il dizionario non conosce: contenuto e testo
+Parigi => - => Parigi => parigi
+Londra 2022 => D 2022-01-01..2022-12-31 2022 => Londra => londra
+cena a Parigi => - => cena a Parigi => cena, parigi
+
+# --- Fra virgolette: testo esatto, mai luogo
+"Firenze" => W exact Firenze => - => - => Firenze

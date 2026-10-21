@@ -258,7 +258,7 @@ selettore, provider, ricezione -> EntryGate: famiglia pronta e blocco dell'app v
 - **Lavori**: i file in arrivo con `IncomingUploadWorker` (o, per una condivisione grande, `BackupJobService` con l'id `1_000_104`).
 - **Prove**: `FiveBIntegrationTest` (sei percorsi interi sul grafo vero, finti solo NAS e telefono), `FiveBButtonsTest`, `AppEntryGateTest`.
 
-Il Fluid Engine e' in `engine/` (submodule, agganciato al tag **engine-2.13.0**); entrano nel build solo
+Il Fluid Engine e' in `engine/` (submodule, agganciato al tag **engine-2.13.1**); entrano nel build solo
 `engine-foundation` e `engine-ui`. Per aggiungerne altri: `engine\tools\engine-install.ps1 -AppRoot . -Modules
 engine-ui,engine-storage` (e rigenerare i checksum).
 

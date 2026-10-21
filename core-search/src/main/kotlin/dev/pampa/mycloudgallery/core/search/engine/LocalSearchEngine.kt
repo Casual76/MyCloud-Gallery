@@ -1,0 +1,143 @@
+package dev.pampa.mycloudgallery.core.search.engine
+
+import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
+import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.search.contract.ChipMatching
+import dev.pampa.mycloudgallery.core.search.contract.QueryParser
+import dev.pampa.mycloudgallery.core.search.contract.RankParams
+import dev.pampa.mycloudgallery.core.search.contract.ResultOrder
+import dev.pampa.mycloudgallery.core.search.contract.SearchChip
+import dev.pampa.mycloudgallery.core.search.contract.SearchCoverage
+import dev.pampa.mycloudgallery.core.search.contract.SearchData
+import dev.pampa.mycloudgallery.core.search.contract.SearchEngine
+import dev.pampa.mycloudgallery.core.search.contract.SearchNotice
+import dev.pampa.mycloudgallery.core.search.contract.SearchReadiness
+import dev.pampa.mycloudgallery.core.search.contract.SearchRequest
+import dev.pampa.mycloudgallery.core.search.contract.SearchResults
+import dev.pampa.mycloudgallery.core.search.contract.SearchText
+import dev.pampa.mycloudgallery.core.search.contract.SearchThresholds
+import dev.pampa.mycloudgallery.core.search.contract.Today
+import dev.pampa.mycloudgallery.core.search.coverage.CoverageTracker
+import dev.pampa.mycloudgallery.core.search.index.CellKeys
+import dev.pampa.mycloudgallery.core.search.index.LocalAiIndex
+import dev.pampa.mycloudgallery.core.search.index.TextRowStore
+import dev.pampa.mycloudgallery.core.search.index.TextSearch
+import dev.pampa.mycloudgallery.core.search.index.TwoPassIndex
+import dev.pampa.mycloudgallery.core.search.parse.ItalianQueryParser
+import dev.pampa.mycloudgallery.core.search.similar.SimilarSearch
+import kotlinx.coroutines.flow.StateFlow
+
+/**
+ * IL MOTORE DI RICERCA LOCALE (docs/fase6-progetto.md §2.4, D23-D31, D35, D48). Una query, passo per passo:
+ * 1. analisi (P7, [ItalianQueryParser]) con il dizionario dei luoghi **visibili** ([LibraryPlaces]);
+ * 2. candidati = le celle dell'istantanea della Libreria (mai nascosti ne' membri di gruppo) che passano i chip ([ChipMatching]);
+ * 3. contenuto: vettore della query ([QueryEmbedding]; senza, solo filtri e testo, E-Q11), indice a due passate e soglia relativa
+ *    ([ContentScorer]);
+ * 4. testo: FTS4 di P1 con i refusi del vocabolario ([TextSearch]), riportato alle celle; un refuso corretto si dice solo se trova
+ *    qualcosa fra le celle visibili (il vocabolario ha anche le parole dei nascosti);
+ * 5. classi, filtro finale dei nascosti, ordine "Recenti" o "Pertinenti" ([SearchCore.finish]).
+ *
+ * Mai un'eccezione per un indice incompleto: risponde con cio' che ha e lo dice ([coverage]). Le stesse regole dell'esecutore di
+ * riferimento (`InMemorySearchEngine`): la suite di parita' li confronta.
+ */
+class LocalSearchEngine(
+  data: SearchData,
+  index: LocalAiIndex,
+  keys: CellKeys,
+  texts: TextRowStore,
+  private val embedding: QueryEmbedding,
+  private val today: Today,
+  private val places: LibraryPlaces,
+  private val parser: QueryParser = ItalianQueryParser(),
+  params: RankParams = RankParams(),
+  coverageTracker: CoverageTracker = CoverageTracker(),
+  currentRecipe: Int = 1,
+) : SearchEngine {
+
+  private val core = SearchCore(data, index, keys, today, params, coverageTracker, currentRecipe)
+  private val text = TextSearch(texts)
+  private val similarSearch = SimilarSearch(core)
+
+  init {
+    index.textListener = text::learn
+  }
+
+  override val coverage: StateFlow<SearchCoverage> get() = core.coverage.state
+
+  override val readiness: StateFlow<SearchReadiness> get() = embedding.readiness
+
+  override suspend fun search(request: SearchRequest): SearchResults {
+    val snapshot = core.data.snapshot.value ?: return core.empty(emptyList(), request.order)
+    core.prepare()
+    val parsed = parser.parse(request.text.take(QueryParser.MAX_QUERY_CHARS), today.date(), places.dictionary(snapshot))
+    val chips = request.editedChips ?: parsed.chips
+    val wordChips = chips.filterIsInstance<SearchChip.Word>()
+    val words = if (request.editedChips != null) wordChips.filter { !it.exact }.flatMap { SearchText.words(it.text) } else parsed.words
+    val exact = if (request.editedChips != null) wordChips.filter { it.exact }.map { it.text } else parsed.exact
+    val filters = chips.filter { it.isFilter }
+    val candidates = candidates(snapshot, filters)
+    val notices = ArrayList<SearchNotice>()
+    parsed.corrections.forEach { (from, to) -> notices += SearchNotice.TypoCorrected(from, to) }
+
+    var content: ContentScores? = null
+    if (parsed.semantic != null) {
+      val query = embedding.vector(parsed.semantic)
+      if (query == null) {
+        notices += if (embedding.readiness.value is SearchReadiness.PreparingContent) SearchNotice.PreparingContentSearch else SearchNotice.OnlyFiltersAndText
+      } else {
+        content = core.withMap(snapshot) { map -> ContentScorer.score(query, candidates, map, TwoPassIndex(core.index, map), SearchThresholds.ZL) }
+      }
+    }
+    val hits = text.hits(words, exact)
+    val onlyFilters = parsed.semantic == null && words.isEmpty() && exact.isEmpty()
+    val (map, scored) = core.withMap(snapshot) { map ->
+      val t = FloatArray(snapshot.size)
+      if (hits != null) {
+        val isCandidate = BooleanArray(snapshot.size).also { a -> candidates.forEach { a[it] = true } }
+        val textIndex = map.textIndex(core.index)
+        val keysHit = HashSet(hits.exact.keys).apply { addAll(hits.loose.keys); hits.phrases?.let { addAll(it) } }
+        for (key in keysHit) {
+          val score = hits.score(key)
+          if (score > 0f) textIndex[key]?.forEach { p -> if (isCandidate[p] && score > t[p]) t[p] = score }
+        }
+        // Un refuso corretto si dice solo se la parola corretta e' in una cella visibile fra i candidati (D29).
+        hits.corrected.forEachIndexed { i, (typed, fixed) ->
+          val visible = hits.corrections[i].second.any { k -> textIndex[k]?.any { isCandidate[it] } == true }
+          if (visible) notices += SearchNotice.TypoCorrected(fixed, typed)
+        }
+      }
+      map to buildScored(candidates, content, t, onlyFilters, hits != null)
+    }
+    core.refreshCoverage(snapshot)
+    return core.finish(
+      snapshot, map, chips, scored, onlyFilters, Thresholds(SearchThresholds.ZC, SearchThresholds.ZL, SearchThresholds.S_MIN),
+      request.order, notices.distinct(),
+    )
+  }
+
+  override suspend fun similar(media: MediaId, order: ResultOrder): SearchResults = similarSearch.similar(media, order)
+
+  /** Le posizioni (crescenti) delle celle che passano i filtri. */
+  private fun candidates(snapshot: TimelineSnapshot, filters: List<SearchChip>): IntArray {
+    if (filters.isEmpty()) return IntArray(snapshot.size) { it }
+    val out = IntArray(snapshot.size)
+    var n = 0
+    for (i in 0 until snapshot.size) if (ChipMatching.accepts(filters, snapshot, i)) out[n++] = i
+    return out.copyOf(n)
+  }
+
+  /** Le celle con un punteggio, nell'ordine dell'istantanea (come il riferimento: conta per i pareggi dei meno probabili). */
+  private fun buildScored(candidates: IntArray, content: ContentScores?, t: FloatArray, onlyFilters: Boolean, withText: Boolean): List<Scored> {
+    if (onlyFilters) return candidates.map { Scored(it, null, null, 0f, -1) }
+    val byPosition = HashMap<Int, Int>((content?.size ?: 0) * 2)
+    content?.positions?.forEachIndexed { i, p -> byPosition[p] = i }
+    val out = ArrayList<Scored>()
+    for (p in candidates) {
+      val i = byPosition[p]
+      val tp = if (withText) t[p] else 0f
+      if (i == null && tp == 0f) continue
+      out += if (i == null) Scored(p, null, null, tp, -1) else Scored(p, content!!.z[i], content.scores[i], tp, content.members[i])
+    }
+    return out
+  }
+}

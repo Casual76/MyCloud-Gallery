@@ -3839,3 +3839,56 @@ uguale.
 `TextRowStore` e `HistoryStore` sopra `AiIndexCatalog`, `IndexRepair` verso la replica e il calcolo, `AiReplicaSink` di P2 come adattatore
 su `applyReplica`/`withdraw`/`forgetDevice`/`forgetShare`, `AiResults` di P5 = `LocalAiIndex`, `QueryEmbedding` sopra il 270M,
 `CoverageReasons`, `PlaceLookup`, `SearchIndexCounters` in Diagnostica (`SEARCH_INDEX_REBUILT`), `LiveResults.follow` per il viewer.
+
+## Fase 6 P5: calcolo AI (22/10)
+
+Il pacchetto P5 (`docs/fase6-progetto.md` §2.2, D9–D11, D14, D21, D22; riga P5 del §4.4), in `core-ai/.../compute/`, piu' l'uso della
+porta `AnalysisSink` in `core-prepare` e le misure del calcolo in `core-rules/.../estimate/`. Le scelte che il codice ha imposto:
+
+- **`AiComputeEngine`** implementa `AiComputeRun` sopra le porte di P0 e P2 (raccolte in `AiComputeParts`). Una tappa per ambito:
+  `AiScope.Share` **solo** se la share e' fra `AiRoles.shares()` (D14: altrimenti nessuna porta viene chiamata, `foreignScopes` si conta),
+  sulle unita' `WorkUnits`/`WorkPass.AI`; con le regole in `LOCAL_BUFFER_ONLY` solo cio' che sta nel buffer (E-A6, stato `BufferOnlyDone`);
+  `AiScope.PhoneOnly` dai byte del telefono con il `Preparer`, risultati solo locali. `runAll` fa privata, comune, telefono.
+- **Ordine fisso**: salvare (`AiResults`) e poi l'outbox (`AiIndexPublisher.stage`); `flush(PERIODIC)` dopo ogni lotto, `UNIT_FINISHED` a
+  fine unita'. Cio' che e' salvato qui ma non e' fatto nella share si **rimette nell'outbox** da `AiLocalBodies` (P6: i corpi dell'origine
+  locale) senza ricalcolo: copre lo stesso contenuto in area privata e comune e la morte fra salvataggio e outbox. Per questo
+  **`AiWorkCatalog.settled` (P11) deve contare solo le classi fatte nella share** (vincitori della replica, anche i propri, o "non
+  supportato"), non quelle salvate solo in locale: altrimenti un media salvato e mai pubblicato non tornerebbe piu' in un'unita'.
+- **Unita'**: tutte lasciate (`finish`) a fine tappa, cosi' un'unita' con media "in attesa della preparazione" non torna nello stesso giro
+  e non blocca le altre; dopo una morte restano prenotate fino alla scadenza (E-I2, nessun `finally`). `keepAlive` ogni 20 minuti
+  monotoni; prenotazione persa = si pubblica il fatto e si cambia unita'.
+- **Regole**: una porta `AiRunControl` (in :app `StageScopeControl` sopra `StageScope`, lotto `AiStageBatch` per `StagedRun`), chiesta
+  **una volta per lotto** (20 media, 5 col caldo con 2 s di pausa: E-A5); `Halt(RULES)` per `SEVERE`. Ruolo e tempo si guardano a ogni
+  media (E-A13).
+- **Ingressi** (D5, D10): buffer → scaricamento attestato (`AnalysisFetcher`, lotti di 50) → telefono (`AiPhoneMedia` + `Preparer`, l'uscita
+  va anche nel buffer) → "in attesa". Le immagini dei motori passano dalla porta `AiInputs` (P4: `ModelInputs`). HQ solo per screenshot e
+  testo fitto, scaricato al primo bisogno.
+- **Lettura del testo** (D41): il lettore arriva **solo** come provider `() -> TextReader`, chiamato dopo il controllo della lettura e
+  ricontrollato prima di ogni lettura (E-A18). Con la lettura spenta il provider non si chiama mai (test). Righe pulite con `OcrText` e
+  corpo nei tetti di `AiSegments.admits` (si tolgono le ultime righe se serve). Video: copertina e centrale, righe senza doppioni.
+- **Controlli dei vettori**: 768 componenti finite, norma 1 ± 0,01 dopo float16, una seconda prova, poi `AI_VECTOR_INVALID` e
+  `AiUnsupported.mark` (il catalogo lo considera a posto: non si riprova a ogni giro). Modello assente o rifiutato = `MODEL_MISSING`.
+- **Buffer** `DiskAiBuffer`: un file per (chiave, classe) solo `analysis`/`frames`/`hq`, scrittura in temporaneo e rinomina, riconteggio
+  e pulizia degli orfani all'apertura, 500 MB, rifiuto sotto 1 GiB libero; sotto 1 GiB la tappa svuota il buffer e si ferma (E-A17). I
+  fotogrammi stanno nel buffer come corpo `frames` (`FramesBlob`, riletto con i tetti del formato).
+- **Aree senza indicizzatori** (`IndexerAreas.uncovered`, E-I12): solo informazione, 7 giorni d'ora del NAS.
+- **Stime** (§2.8): `DeviceMeasures` ha `ocrSecondsPerItem` 0,2 s (ipotesi), `framesPerVideo` 4, `modelBytes` 370 MiB, `ocrDenseShare` 15%;
+  `aiItemsPerSecond` resta 2,8 (prudente, finche' P4/F52 non misurano). `AiWork` e `AiComputeCosts` (tempo = maggiore fra vettori su GPU e
+  OCR su CPU; traffico solo per le anteprime non nel buffer); `BacklogFacts.analyze` e `MonthlyArrivals.analyze` (se presenti valgono al
+  posto di `toAnalyze`); `AiBacklog` (core-ai) li conta con le stesse porte del calcolo.
+
+**Prove** (JVM, 52 test in core-ai di cui 31 nuovi; 2 in core-prepare; 5 in core-rules): NAS finto con piu' dispositivi (`SimNas`:
+prenotazioni con l'ora del NAS, attestazione, M3, blocchi permanenti, guasti prima e dopo), la tabella "una volta per tutta la famiglia"
+riga per riga, due indicizzatori in parallelo, morte del processo dopo **ogni** salvataggio e guasto a **ogni** chiamata del NAS (nessun
+media ricalcolato, tutto pubblicato), proprieta' "mai un'altra area privata" su 120 famiglie casuali. **Prova che mordono**: togliere il
+controllo delle aree o il "gia' salvato" fa diventare rossi 5 test.
+
+**Da collegare (P11)**: `AiComputeParts` in `AiGraph` (`units` = `LeasedWorkUnits` con `AiWorkSource`/`AiPublishedClasses`, `results` e
+`localBodies` = `LocalAiIndex`, `inputs` = `ModelInputs`, `reader` = provider del motore OCR solo con la lettura attiva, `buffer` =
+`DiskAiBuffer(noBackupFilesDir/ai-buffer)`, `phone`, `sources`, `unsupported`, `freeSpace`, `modelReady` da `ModelFiles`);
+`AiComputeWorker` con `StagedRun(WorkRequest.Background(AI_COMPUTE, writesToNas = true))` e `AiStageBatch`; `BufferAnalysisSink` come
+`analysisSink` di `DefaultPreparationRun` (e nella preparazione del backup, core-backup); `AiBacklog` in `BacklogFactsReader`.
+
+**Punti aperti**: la preparazione del backup (core-backup, fuori dal perimetro) non consegna ancora al buffer; `AiStatus.Running.total`
+e' il totale dell'unita' in corso, non dell'archivio (la pagina usi `AiBacklog`); il ritmo col caldo usa la pausa del calcolo dentro un
+lotto di `StagedRun`, che ne aggiunge una sua fra i lotti (uno per tappa: trascurabile).

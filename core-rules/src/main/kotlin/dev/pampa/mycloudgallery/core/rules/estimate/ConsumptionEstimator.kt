@@ -59,11 +59,15 @@ data class LibraryBacklog(
  * |---|---|---|
  * | [smbWriteBytesPerSecond] | 9,0 MB/s | docs/inventario-nas.md §4, S25, scrittura con cifratura (tablet 7,3) |
  * | [smbReadBytesPerSecond] | 16,0 MB/s | idem, lettura cifrata con 4 flussi (S25 16,3, tablet 15,8) |
- * | [aiItemsPerSecond] | 2,8 foto/s | docs/decisioni.md, GPU, con decodifica dagli originali (700 foto) |
+ * | [aiItemsPerSecond] | 2,8 vettori/s | Fase 0, GPU con decodifica dagli originali (700 foto); dalle anteprime da 1024 px ~3,6, col caldo (−26%) ~2,8: si tiene il valore prudente finche' P4 e F52 non misurano (fase6-progetto.md §2.8) |
  * | [aiBatteryPercentPerThousandItems] | 4 % | idem, ~4% di batteria ogni 1000 foto su GPU |
  * | [transferBatteryPercentPerGigabyte] | 0,5 % | IPOTESI (non misurata in Fase 0): Wi-Fi attivo + cifratura SMB + hash |
  * | [mobileEnergyFactor] | 2,0 | IPOTESI: la radio cellulare costa ~2x il Wi-Fi a parita' di byte |
- * | [analysisPreviewBytes] | 150 KB | docs/decisioni.md, anteprima di analisi ~768 px (E-I11) |
+ * | [analysisPreviewBytes] | 150 KB | docs/fase4-progetto.md §2.10, anteprima di analisi da 1024 px, JPEG q90 (E-I11) |
+ * | [ocrSecondsPerItem] | 0,2 s | Fase 6 §2.8: IPOTESI (ML Kit su CPU non misurato, 0,1–0,25 s a immagine), in parallelo ai vettori su GPU; P4 la misura |
+ * | [framesPerVideo] | 4 | Fase 6 §2.8: ~4 fotogrammi a video (un vettore ciascuno, al piu' 9: D11) |
+ * | [modelBytes] | 370 MiB | Fase 6 §2.1: EmbeddingGemma 2 440M, il modello degli indicizzatori (da scaricare una volta) |
+ * | [ocrDenseShare] | 15 % | Fase 6 §2.8: quota di media con la seconda passata sull'HQ (screenshot e testo fitto, D12) |
  * | [verifyReadBytesPerSecond] | 16,0 MB/s | Fase 5, D4: la rilettura di verifica del backup; stessa misura della lettura cifrata a 4 flussi. IPOTESI per il temporaneo appena scritto (da misurare a M2) |
  * | [perFileOverheadSeconds] | 0,12 s | Fase 5, `fase5-progetto.md` §2.9: ~12 viaggi SMB per file a ~10 ms l'uno. IPOTESI (da misurare in F22) |
  * | [uploadStreams] | 1 | Fase 5: i 9 MB/s di [smbWriteBytesPerSecond] sono la misura con **un** flusso; due caricamenti paralleli non sono misurati (F22) |
@@ -79,8 +83,14 @@ data class DeviceMeasures(
   val verifyReadBytesPerSecond: Double = 16.0e6,
   val perFileOverheadSeconds: Double = 0.12,
   val uploadStreams: Int = 1,
+  val ocrSecondsPerItem: Double = 0.2,
+  val framesPerVideo: Double = 4.0,
+  val modelBytes: Long = 370L * 1024 * 1024,
+  val ocrDenseShare: Double = 0.15,
 ) {
   init {
+    require(ocrSecondsPerItem >= 0 && framesPerVideo >= 1.0 && modelBytes >= 0) { "Misure del calcolo AI non valide." }
+    require(ocrDenseShare in 0.0..1.0) { "La quota del testo fitto e' una frazione." }
     require(smbWriteBytesPerSecond > 0 && smbReadBytesPerSecond > 0 && aiItemsPerSecond > 0) {
       "Le velocita' misurate devono essere positive."
     }

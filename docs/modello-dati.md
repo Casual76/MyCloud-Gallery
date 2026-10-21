@@ -609,3 +609,162 @@ il piano di ogni query e' nei test.
 | Un gruppo di copie simili senza una colonna "copertina scelta" | La scelta dell'utente e' un dato personale sincronizzato (P15): il catalogo tiene solo la copertina attuale in `media_group.cover_media_id` |
 | Candidati e firme per versione corrente | Una firma per media: una correzione di data o una modifica cambiano i pixel, e la firma di una versione e' immutabile |
 | Il pianificatore: `CROSS JOIN` e `+` nelle query del backup | `ANALYZE` sul telefono: nessuno lo esegue, e le statistiche invecchiano |
+
+## 13. Schema v5 (Fase 6: la ricerca per contenuto e per testo)
+
+Progetto: `docs/fase6-progetto.md` §0.1 (D23, D25, D32, D34, D37), §1.3 (riga `core-database`), §2.3, §2.4, §4.3, riga P1 del §4.4, §5.2.
+Pacchetto P1. La v5 e' **una sola migrazione sul campo per tutta la Fase 6** (D37): le tabelle dell'indice condiviso `ai` che P2 si
+aspetta (`AiStores.kt` di core-index) ci sono gia', vuote, cosi' non serve una v6.
+
+**Nessuna tabella nuova punta a `media` ne' a `media_version`** (D37): vettori e testo stanno per **chiave di contenuto**
+(`ContentKey.hex`, 64 cifre: SHA-256 di `qh1` e dimensione), da qualunque origine (telefono, area privata, area comune), e il
+collegamento a un media passa dalle versioni (`size`, `quick_hash`). Per questo l'unione di due media e la rinomina d'identita' non le
+toccano: stanno tutte in `MediaCatalog.TABLES_WITHOUT_MEDIA_IDS` (`MergeReferencesTest`).
+
+### 13.1 Tipi in `core-model`
+
+Nessuna modifica: i codici stabili (`SpaceCode`, `VecSource`, `OcrSource`, `OcrEngineCode`), `CellFlags.DOCUMENT` (bit 16) e `Float16`
+sono di P0. Le tabelle scrivono i **codici** (`StableCode.code`) come testo; una riga con un codice che questa versione non conosce
+(scritta da un'altra app) e' "non per me" e si salta in lettura (E-I20). I tipi di P1 stanno in `core-database` (`AiCatalogTypes.kt`):
+`CellContent`, `AiVectorRow`, `AiTextRecord`, `TextMatchCounts`, `SearchHistoryRecord`.
+
+### 13.2 Tabelle
+
+Indice locale e cronologia (per chiave di contenuto):
+
+| Tabella | Chiave | Colonne | Note |
+|---|---|---|---|
+| `ai_vector` | `content_key`, `space`, `recipe`, `frame` | `source`, `instant_ms`, `byte_offset`, `byte_length`, `crc`, `created_at` | la **riga di indice** di un vettore float16 che sta nel file in sola aggiunta `noBackupFilesDir/search/vectors-<spazio>.bin` (e' l'unica copia dei vettori: Room tiene dove sta e il CRC32 del record, D24). Due spazi convivono (D21); per chiave vince la ricetta piu' alta; un video ha fino a 9 fotogrammi. Indice (`space`, `recipe`) |
+| `ai_text` | `text_id` (rowid) | `content_key` (unico), `recipe`, `engine`, `source`, `text`, `lines`, `chars`, `layout` (BLOB), `created_at` | una riga per chiave. `text` e' il testo **gia' normalizzato** (`SearchText.normalize`); `lines` e `chars` misurano il testo **letto** (regola del bit `DOCUMENT`); `layout` e' il testo con righe e riquadri per il testo dal vivo, **opaco** per il database |
+| `ai_text_fts` | rowid = `ai_text.text_id` | `text` | FTS4 a contenuto esterno su `ai_text.text`, tokenizzatore `simple` (D25); Room crea i quattro trigger che lo tengono allineato |
+| `ai_vocabulary` | `word` | `docs` | per ogni parola letta, in quanti testi compare (una parola conta una volta per testo, al piu' 64 lettere); una parola a 0 esce. Per i refusi e i completamenti: **mai** proposte nella schermata Cerca (D29) |
+| `search_history` | `id` (`AUTOINCREMENT`) | `text`, `chips` (etichette separate da `\n`) | D32: mai sincronizzata ne' esportata; al massimo 50 righe; niente orario (l'id non si riusa e dice l'ordine); indice su `text` |
+
+Le nove tabelle dell'indice condiviso (porte `AiPublishStore` e `AiReplicaStore` di P2). `share` e' gia' una chiave (minuscolo); `cls` e'
+il codice di `AiClass` (7 `vec`, 8 `ocr`, quelli di `SegmentClass`); `body` e' il corpo come pubblicato:
+
+| Tabella | Chiave | Colonne | Note |
+|---|---|---|---|
+| `ai_pending_publish` | `id` (`AUTOINCREMENT`) | `share`, `state` (`outbox`/`held`), `cls`, `content_key`, `recipe`, `body`, `digest` | outbox e voci in attesa di una share pubblicabile (D8) in una tabella sola: spostare una voce e' un `UPDATE`. Indici (`share`, `state`, `id`) e (`share`, `cls`, `content_key`) |
+| `ai_own_head` | `share` | `version`, `head_hash`, `published_at` | la testa `ai` propria (ora del NAS, M3) |
+| `ai_own_segment` | `share`, `hash` | `cls`, `size`, `entries` | i segmenti elencati dalla testa propria (e' la colonna `segments` del commento di P2: le righe di questa tabella, in ordine di impronta) |
+| `ai_own_live` | `share`, `cls`, `content_key` | `recipe`, `digest`, `segment` | la voce viva di ogni (classe, chiave): per non ripubblicare un corpo identico. Indice (`share`, `segment`) |
+| `ai_replica_head` | `share`, `device` | `version`, `content_hash`, `registry_version`, `created_at` | l'anti-rollback (E-I5) |
+| `ai_replica_segment` | `share`, `device`, `hash` | `cls`, `size`, `state`, `entries` | `state` = `SegmentState.code`; `entries` e' il tetto delle voci per dispositivo e share |
+| `ai_replica_entry` | `share`, `device`, `segment`, `cls`, `content_key` | `recipe`, `digest`, `body` | i **candidati della fusione** (D7). Indice (`share`, `cls`, `content_key`) |
+| `ai_replica_applied` | `share`, `cls`, `content_key` | `device`, `recipe`, `digest` | il vincitore consegnato all'indice locale |
+| `ai_replica_dirty` | `share`, `cls`, `content_key` | | le chiavi da rifondere |
+
+La tabella `embedding` per media della v1 resta **vuota e superata** (D23): nessuno la scrive o la legge (`putEmbedding` non ha
+chiamanti) e la migrazione non la tocca.
+
+### 13.3 Operazioni del catalogo
+
+In `MediaCatalog`, perche' toccano il grafo dei media (e annunciano `changes`):
+
+| Operazione | Cosa |
+|---|---|
+| `cellContentKeys(afterSeq, limit)` | le chiavi di contenuto delle celle della Libreria, a pagine (§13.4) |
+| `cellContentKeysOf(ids)` | le stesse per le celle di un `CatalogChange` |
+| `setDerivedFlags(ids, flags, on, batch)` | il bit `DOCUMENT` a lotti (§13.6) |
+
+In `MediaCatalog.aiIndex` (`AiIndexCatalog`), che non annuncia niente (l'indice della timeline non cambia): `putVectors`, `vectors`
+(la ricetta piu' alta per chiave), `vectorPage` (per costruire l'indice in memoria), `keysWithVector`, `countVectorKeys`,
+`removeVectors`, `removeVectorSpace`, `removeSupersededVectors`; `putText`, `text`, `texts`, `keysWithText`, `textStats`,
+`removeTexts`, `clearTexts`; `textMatches`; `wordCounts`, `vocabularyPage`, `completeWords`; `recordSearch`, `searchHistory`,
+`searchHistoryChanges` (vivo), `deleteSearch`, `clearSearchHistory`. Le tabelle `ai_*` dell'indice condiviso si leggono e scrivono
+con i DAO `AiPublishDao` e `AiReplicaDao`: gli adattatori delle porte di core-index (P11) usano `GalleryDatabase.transaction`, **una
+transazione per metodo della porta**.
+
+### 13.4 Le chiavi di contenuto delle celle
+
+Per ogni **cella** dell'istantanea (visibile, non nascosta, non dietro la copertina del suo gruppo: gli stessi predicati
+dell'indice della timeline) `cellContentKeys` da' le chiavi delle versioni del suo media (la **corrente** per prima, poi le
+precedenti dalla piu' recente: se la nuova non ha ancora il vettore vale una precedente, E-A10) e, per ogni **altro membro
+visibile e non nascosto** del suo gruppo, le sue (D29: un membro nascosto non porta mai il suo contenuto nella cella).
+
+- **Cursore**: `afterSeq` e' il `rowid` di inserimento di `media` (0 = dall'inizio); `CellContentPage.next` e' il cursore della
+  pagina dopo, null alla fine. Un media nuovo ha sempre un `rowid` piu' alto: chi ha letto fino a `afterSeq` trova i **media nuovi**
+  nelle pagine dopo e i cambiamenti delle celle esistenti con `cellContentKeysOf(ids)` e gli id di `changes`. Il `rowid` e'
+  stabile finche' nessuno esegue `VACUUM` (Room non lo fa).
+- **Piano**: `ORDER BY m.rowid` e' l'ordine dell'albero di `media`, quindi **nessun `USE TEMP B-TREE`**, senza statistiche e con
+  (`CellContentKeysTest`, `EXPLAIN QUERY PLAN`). Il join e' in ordine fisso (`CROSS JOIN`: sul telefono nessuno esegue
+  `ANALYZE`): dal media (per `rowid`), giu' per `media_id` alle versioni e a `media_personal`.
+- **Fette**: dentro una pagina si legge a fette di 4.096 media. Una fetta sta in una finestra del cursore di SQLite (2 MB): un
+  risultato piu' grande la riempie piu' volte e ogni riempimento rilegge la query dall'inizio (quadratico: 1,4 s invece di 0,4 s su
+  100.000 media). Le chiavi (SHA-256) di una fetta si calcolano su `Dispatchers.Default` mentre si legge la fetta dopo.
+- **Chiave veloce**: `ContentKey.of` formatta ogni byte con `String.format` (su 100.000 media e' da solo piu' del tetto): `FastContentKey`
+  da' lo stesso risultato con una tabella di cifre; `CellContentKeysTest` prova la parita' su 300 impronte casuali e fallisce se la
+  definizione della chiave cambia in `core-model`.
+
+### 13.5 Testo, FTS4 e vocabolario
+
+- `putText` salva una riga per chiave: una **ricetta piu' bassa** di quella salvata non la sostituisce (D7), a parita' o piu' alta si.
+  Cambia con `UPDATE` (mai `INSERT OR REPLACE`: con `recursive_triggers` spento la cancellazione implicita non scatterebbe sui
+  trigger e l'indice del testo resterebbe sporco). Nella stessa transazione cambiano l'indice FTS4 (i trigger di Room) e il
+  vocabolario (+1 alle parole nuove, -1 a quelle tolte, via le parole a 0).
+- Il testo **deve** essere normalizzato (solo `a-z`, `0-9` e singoli spazi): `AiTextRecord` rifiuta il resto, perche' indice e
+  vocabolario si fidano. Un testo vuoto e' valido ("letto, nessun testo": non si rilegge).
+- `textMatches(terms)`: ogni termine e' l'elenco delle sue **alternative** (la parola, la parola corretta dal vocabolario, una
+  frase fra virgolette); una chiave risponde a un termine se contiene una qualunque alternativa. `TextMatchCounts.all` (tutti i
+  termini: "sicuro") e `.atLeastHalf` ("meno probabile", D27). **Mai sintassi `MATCH` dall'utente** (E-Q9): ogni alternativa si
+  riduce a `[a-z0-9 ]` in minuscolo e va al database come **una frase fra virgolette**, quindi senza operatori (`OR`, `NEAR`,
+  `-`), colonne (`text:`), prefissi (`*`); le alternative si uniscono in Kotlin, non con `OR`. Tetti: 16 termini, 8 alternative,
+  200 caratteri.
+- Il tokenizzatore `simple` cerca parole **intere**: i refusi li copre il vocabolario (`wordCounts`, `vocabularyPage` per costruire
+  l'indice a cancellazioni di P6, `completeWords` per prefisso).
+
+### 13.6 Il bit `DOCUMENT` (D34)
+
+`setDerivedFlags(ids, CellFlags.DOCUMENT)` accende (o con `on = false` spegne) il bit sui media, **a lotti di 500, una transazione per
+lotto**: ogni lotto che cambia qualcosa annuncia **un solo** `CatalogChange` (un `change_seq` in piu', non uno per media, non
+strutturale) e l'indice della timeline si aggiorna una volta; un lotto senza cambiamenti non annuncia niente. Gli id assorbiti da
+un'unione si risolvono, quelli spariti si saltano. Accetta solo i bit di `MediaCatalog.AI_DERIVED_MASK` (oggi `DOCUMENT`). Il bit non
+lo calcolano le regole: il ricalcolo dei derivati (`derive`) **lo conserva**, altrimenti ogni scrittura lo spegnerebbe.
+
+### 13.7 Cronologia (D32)
+
+`recordSearch(text, chipLabels)`: la stessa ricerca (stesso testo, tagliato) resta una volta sola e passa in cima; al massimo
+**50 righe** (`SEARCH_HISTORY_MAX`, come `SearchHistory.MAX_ENTRIES` di core-search); testo vuoto = niente; testo a 200 caratteri e
+al piu' 16 etichette da 80. Le etichette non portano a capo. Stesso comportamento di `InMemorySearchHistory` (P0).
+
+### 13.8 Migrazione 4 -> 5
+
+`Migration4To5`: **solo tabelle nuove**, tutte vuote (le SQL sono copiate da `5.json`). Non tocca una riga ne' una colonna: nessun dato si
+perde. Il bit `DOCUMENT` non si calcola qui (non c'e' ancora testo letto). Room valida colonne e indici dopo la migrazione ma **non i
+trigger** dell'FTS4: `ExportedSchemaTest.loSchemaMigratoCoincideConQuelloCheRoomCreaDaZero` confronta il testo di `sqlite_master`
+(tabelle, indici, trigger) di ogni versione migrata con quello che Room crea da zero.
+
+### 13.9 Invarianti e prove
+
+| Invarianti | Prova |
+|---|---|
+| 1 -> 5, 2 -> 5, 3 -> 5 e 4 -> 5 (con `seedV4`) si aprono e non perdono nulla; una v5 con una riga per tabella si riapre | `ExportedSchemaTest` |
+| 4 -> 5 non cambia **nessuna riga** delle tabelle esistenti e le nuove nascono vuote | `laMigrazioneDalla4NonCambiaNessunaRigaEsistente` |
+| lo schema migrato (compresi i trigger) e' quello che Room crea | `loSchemaMigratoCoincideConQuelloCheRoomCreaDaZero` |
+| nessuna tabella nuova punta a `media`; tutte fra quelle senza id di media | `MergeReferencesTest` |
+| chiavi delle celle: versioni, gruppi, nascosti, pagine, media nuovi, piano senza ordinamento, prestazioni | `CellContentKeysTest` |
+| vettori, testo e FTS4, frasi sempre letterali, vocabolario, cronologia | `AiIndexCatalogTest` |
+| `setDerivedFlags`: un cambiamento per lotto, il bit sopravvive ai ricalcoli | `DerivedFlagsTest` |
+| i DAO `ai_*` bastano alle sequenze delle porte di P2, anche con la morte a meta' transazione | `AiShareTablesTest` |
+
+### 13.10 Misure (JVM, Robolectric; il dispositivo si misura a M2)
+
+| Misura | Esito |
+|---|---|
+| `cellContentKeys`, 100.000 media (98.167 celle, 1.000 gruppi), pagine da 5.000 | **ogni pagina 24-29 ms** (21 pagine, mediana 24 ms), 482 ms in tutto |
+| `cellContentKeys`, 100.000 media in **una chiamata sola** (`limit` = 100.000) | 420-530 ms (lettura ~300 ms: il cursore di Robolectric costa ~3 us a riga; chiavi ~160 ms, in parte in parallelo alla lettura) |
+| piano di `cellContentKeys` | `SEARCH m USING INTEGER PRIMARY KEY (rowid>? AND rowid<?)`, `SEARCH v USING INDEX index_media_version_media_id_version_id`, `SEARCH p USING INDEX sqlite_autoindex_media_personal_1 LEFT-JOIN`; nessun `TEMP B-TREE` |
+
+### 13.11 Scelte e scarti della v5
+
+| Scelta | Alternative scartate e perche' |
+|---|---|
+| Righe di indice in `ai_vector`, vettori nel file | I vettori in un BLOB: 100.000 x 1,5 KB in Room, nessuna scansione mappata; D24 vuole il file |
+| `ai_text` con `text_id` e `UPDATE` | `content_key` come chiave con `INSERT OR REPLACE`: l'FTS4 a contenuto esterno non vede la cancellazione implicita |
+| Termini sempre frasi letterali, alternative in Kotlin | Passare la query a `MATCH` ripulita: ogni operatore dimenticato (`NEAR`, `OR`, `col:`) sarebbe un'iniezione |
+| Vocabolario tenuto da `putText` nella stessa transazione | Ricostruirlo a ogni avvio da tutto il testo: 100.000 testi letti per correggere un refuso |
+| `afterSeq` = `rowid` | Un `change_seq` per riga: richiederebbe una colonna in piu' in `media`; `(sort_time, media_id)`: ordine della timeline ma un cursore a due valori |
+| Fette da 4.096 media | Una query sola: il riempimento ripetuto delle finestre del cursore e' quadratico |
+| `FastContentKey` locale con test di parita' | Ottimizzare `ContentKey.of` (e' di core-model: proposta nel report) |
+| Tabelle `ai_*` con DAO semplici, adattatori a P11 | Gli adattatori in `core-database`: non vede core-index |

@@ -1,0 +1,34 @@
+# Query vuote, di una lettera, troppo lunghe e con sintassi strana (E-Q1, E-Q9). Oggi = 21 ottobre 2026.
+
+# --- Vuote o di una lettera: nessun chip, nessuna ricerca (E-Q1)
+<vuota> => - => - => - => - => -
+<spazio> => - => - => - => - => -
+a => - => - => - => - => -
+x => - => - => - => - => -
+? => - => - => - => - => -
+* => - => - => - => - => -
+7 => - => - => - => - => -
+ab => - => ab => ab
+** => - => - => -
+"" => - => - => -
+" " => - => - => -
+😀 => - => - => -
+di => - => - => -
+foto di => T PHOTO Foto => - => -
+dal 3 => - => dal 3 => 3
+il cane => - => il cane => cane
+
+# --- Sintassi strana: niente viene interpretato, tutto e' letterale (E-Q9)
+cane 🐕 in spiaggia => - => cane 🐕 in spiaggia => cane, spiaggia
+NEAR(cane, gatto) => - => NEAR(cane, gatto) => near, cane, gatto
+cane* => - => cane* => cane
+cane OR gatto => - => cane OR gatto => cane, or, gatto
+"cane AND gatto" => W exact cane AND gatto => - => - => cane AND gatto
+
+# --- Oltre 200 caratteri: troncata (E-Q9)
+cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole l => - => cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare so => cane, gatto, mare, sole, luna, so
+cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare solx => - => cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare so => cane, gatto, mare, sole, luna, so
+cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare ieri => - => cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare ie => cane, gatto, mare, sole, luna, ie
+Firenze estate 2023 cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto m => P Firenze #1 PLACE word=firenze ; D 2023-06-01..2023-08-31 Giugno–agosto 2023 => cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole lun => cane, gatto, mare, sole, luna, lun
+cane "cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna ca" fine => - => cane cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto m => cane, gatto, mare, sole, luna, m
+cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto ma ieri => D 2026-10-20..2026-10-20 Ieri · 20 ottobre 2026 => cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto mare sole luna cane gatto ma => cane, gatto, mare, sole, luna, ma

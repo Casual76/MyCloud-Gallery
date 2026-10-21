@@ -3892,3 +3892,160 @@ controllo delle aree o il "gia' salvato" fa diventare rossi 5 test.
 **Punti aperti**: la preparazione del backup (core-backup, fuori dal perimetro) non consegna ancora al buffer; `AiStatus.Running.total`
 e' il totale dell'unita' in corso, non dell'archivio (la pagina usi `AiBacklog`); il ritmo col caldo usa la pausa del calcolo dentro un
 lotto di `StagedRun`, che ne aggiunge una sua fra i lotti (uno per tappa: trascurabile).
+
+## Fase 6 P4: motori on-device, vettori e OCR (22/10)
+
+Il pacchetto P4 (`docs/fase6-progetto.md` D2, D3, D5, D11 (ingressi), D12, D15 (misura), D41 (cancello di ML Kit); riga P4 del §4.4):
+`core-ai/.../runtime/` (LiteRT-LM: vettori del testo e delle immagini, preparazione degli ingressi, misura breve), `core-ai/.../ocr/` (ML Kit
+dietro il cancello, righe del formato, pulizia allo spegnimento) e i test: JVM in `core-ai/src/test/.../runtime/` e `.../ocr/` (fuori dall'elenco
+del perimetro ma dentro i pacchetti suoi), strumentati in `core-ai/src/androidTest/` (con i vettori di riferimento in `assets/golden/`).
+
+**Scaricamenti** (approvati dall'utente; nient'altro scaricato): il **440M** (`litert-community/embeddinggemma-2-text-vision-440m-litert-lm`,
+commit `e301f74d...`), 387.710.976 byte, SHA-256 `92dcbea1...` uguale a quello del catalogo, **fuori dal repository** in
+`%USERPROFILE%\.mycloudgallery\models\embeddinggemma-2-text-vision-440m\` (con un `LEGGIMI.txt`). Sui dispositivi di prova i due modelli vanno
+in `/data/local/tmp/mcg-models/` con `adb push` (con `MSYS_NO_PATHCONV=1` da Git Bash) e si tolgono alla fine; `-e mcgConsumeModels true` fa
+togliere l'originale dopo la copia nell'APK di prova (l'emulatore ha 2 GB liberi).
+
+**Cosa c'e'**
+- `runtime/`: `ImageHeaders` (formato e dimensioni di JPEG e WebP senza decodificare), `ModelInputs` (`fromAnalysis`, `fromFrames`,
+  `forOcr`), `VectorChecks`, `LiteRtLmTextEmbedder` (270M, CPU) e `LiteRtLmImageEmbedder` (440M, GPU con ripiego su CPU) con la politica;
+  `VectorSessions` (sessione, fabbrica, thread del motore, errori come codici) e `LiteRtLmSessions` (la sola classe che nomina LiteRT-LM);
+  `ProbeImages`/`ProbeImageSet` (le 20 scene sintetiche) e `RealDeviceProbe` (D15).
+- `ocr/`: `MlKitBootstrap` (il cancello), `MlKitTextReader` (il motore), `GatedTextReader` (+ `create`: il modo di montarlo), `OcrLayout` e
+  `OcrDensity` (righe del formato e testo fitto), `TextReadingCleanup` (`MlKitTraces`, `DataTransportCleanup`, `TextReadingShutdown`).
+
+**Scelte**
+- **La politica e' separata dal motore nativo.** Le classi di LiteRT-LM sono Java 21 e sulla JVM dei test non si caricano: i due motori parlano con
+  una `VectorSession` (interfaccia) e solo `LiteRtLmSessions` e' attaccata alla libreria. Cosi' ripiego, serializzazione, errori e rilascio si
+  provano sulla JVM con sessioni finte (`EmbedderPolicyTest`, 24 test) e il motore vero sul dispositivo con la stessa suite di contratto.
+- **`modelFd`, D16.** Il motore legge dal **descrittore verificato** (`ParcelFileDescriptor.dup` di `VerifiedModel.descriptor`, `modelPath`
+  vuoto: la libreria vieta di darli tutti e due), non dal nome del file. Provato con il motore vero: il file `models/<sha256>` sostituito con uno
+  falso dopo la verifica non cambia niente (il motore parte e da' gli stessi vettori). **Misurato: LiteRT-LM non chiude il descrittore**
+  (6 copie, 6 chiuse da noi, nessuna gia' chiusa dalla libreria; 105 descrittori aperti prima e dopo cinque cicli di carico e rilascio). Resta
+  la guardia `FdOwnership` (si chiude solo se dispositivo e inode sono ancora quelli della copia): costa una `fstat` e protegge da una versione
+  futura della libreria che ne prenda possesso. La cartella dei programmi compilati e' `<cacheRoot>/<sha256>-<backend>/` (la CPU non la riempie).
+- **Ripiego su CPU, E-A12.** GPU che non si inizializza, inferenza GPU che lancia, vettore GPU non valido: si chiude il motore, si riapre su CPU e
+  **si ripete la stessa immagine**; da li' fino alla fine del processo si resta su CPU e la Diagnostica riceve `AI_GPU_FALLBACK` una volta per
+  ripiego. Senza il modello (`MODEL_UNAVAILABLE`) non si prova la CPU e il ripiego non si segna. Sulla CPU un vettore non valido e' `NON_FINITE`.
+  Una norma sbagliata di pochi centesimi (fra 0,90 e 1,10, l'errore tipico di un'attivazione float16) **non e' un guasto**: il vettore si
+  rinormalizza in float32 (`VectorChecks.normalizedOrNull`); finito ma lontano da 1, o non finito, o della dimensione sbagliata, e' un guasto.
+- **Errori come codici** (D40): `INIT_FAILED` (apertura che fallisce, libreria nativa che non carica), `OUT_OF_MEMORY`, `NON_FINITE`,
+  `BAD_INPUT` (testo vuoto; un'inferenza che lancia su un ingresso valido), `MODEL_UNAVAILABLE`, `TEXT_READING_OFF`. La cancellazione del chiamante
+  passa com'e'; chiudere e aprire sono non annullabili (altrimenti un annullamento a meta' caricamento lascerebbe un motore da centinaia di MB che
+  nessuno possiede). `AI_ENGINE_INIT_FAILED` solo per i guasti veri, non per il modello assente (lo dice la pagina dei modelli, E-Q11).
+- **Query, D5, E-Q9.** Troncata a `maxQueryChars` (200) senza spezzare una coppia di surrogati, controlli ISO e separatori di riga sostituiti da uno
+  spazio, nessun prefisso; vuota o solo spazi = `BAD_INPUT` senza chiamare il motore. Provata una query da 200 caratteri che supera i 128 token
+  (emoji, sillabe senza senso): o un vettore o un `AiEngineException`, mai un crollo, e il motore resta buono.
+- **`ModelInputs`, D5.** Mai byte non verificati al decodificatore: tetto di 4 MiB, intestazione letta **senza decodificare** (`ImageHeaders`),
+  poi `ImageDecoder` della piattaforma gia' ridotto alla taglia dell'ingresso, controllando che le dimensioni che la piattaforma legge siano
+  quelle dichiarate (o scambiate, per l'orientamento EXIF); trasparenza composta sul bianco; JPEG baseline nostro (q95, 768 px per il modello, 1024
+  o 2048 per l'OCR, mai ingrandito). `ImageHeaders` rifiuta: formati non JPEG/WebP; JPEG senza SOF, con SOF doppio, con lunghezze che escono dal
+  file, con codifica aritmetica, senza perdita o differenziale, a 12 bit, con 2 o 4 componenti (CMYK), con campionamenti fuori da 1..4, con DNL, con
+  piu' di 512 marcatori; WebP con RIFF o chunk che mentono, senza chunk di immagine per primo, senza fotogramma chiave o codice di avvio, con firma o
+  versione VP8L sbagliate, animati (bit di VP8X o ANIM/ANMF), con la tela diversa dall'immagine; dimensioni fuori da `ImageBounds` (16 mila pixel per lato,
+  16,7 milioni di pixel). Un contatore (`decodeAttempts`) prova che un ingresso ostile **non arriva mai a `ImageDecoder`** (22 ingressi ostili, ognuno con `fromAnalysis` e con `forOcr`: 0
+  decodifiche; con il controllo dell'intestazione tolto: 40); 30.000 mutazioni delle intestazioni sulla JVM non fanno mai eccezioni e passano solo dentro i tetti. `fromAnalysis` e `fromFrames` ammettono solo
+  JPEG (le anteprime lo sono), `forOcr` anche WebP (l'HQ). `fromFrames` salta un fotogramma cattivo e ne prende uno dei successivi al suo posto
+  (al piu' 9, ne esamina al piu' 18), con l'istante in `frameMs`.
+- **OCR e righe del formato, D12, D13, D43.** `OcrLayout` e' puro (nessuna classe di ML Kit, provato sulla JVM con righe scritte a mano, ostili
+  comprese): l'angolo viene dagli **angoli** della riga (la direzione della linea di base: nessuna ambiguita' di segno, e coincide con quello dichiarato da
+  ML Kit entro un grado), riportato fra -90 e 90 (un testo capovolto di 180 gradi diventa 0 e **gli estremi delle parole restano nell'ordine di lettura**,
+  cioe' non decrescenti come vuole il formato: P12 non puo' assumere che gli estremi stiano sempre da sinistra a destra); gli estremi di ogni parola sono la
+  proiezione dei suoi angoli sulla direzione della riga, in 1/65535 della lunghezza della riga; senza angoli per parola, in proporzione ai caratteri; parole
+  pulite con `OcrText.cleanWord` (NFC, niente caratteri vietati, mai vuote, un elemento con spazi diventa piu' parole), al piu' 64 parole e 1.024 byte per
+  riga e 400 righe; riga senza testo utile o senza geometria scartata, le altre restano.
+- **Il cancello, D41.** `MlKitBootstrap.ensureInitialized` e' l'unico che avvia ML Kit, solo con `TextReadingState.activeHere`; lo stato dell'avvio e' **per
+  processo** (la libreria lancia `IllegalStateException` se la si avvia due volte: scoperto dalla prova strumentata, che costruiva piu' istanze); il flag sta in `MlKitProcess`, una classe
+  senza riferimenti a ML Kit, perche' lo legge anche la pulizia di avvio con la lettura spenta e nominare `MlKitBootstrap` trascinerebbe le classi della libreria. Il lettore si monta
+  **solo** con `GatedTextReader.create(context, stato)`: da spenti non crea il motore (la lambda non viene chiamata) e nessuna classe di ML Kit si carica. La
+  prova lo mostra anche al contrario: costruire `MlKitTextReader` a freddo, fuori dalla lambda, carica 13 classi di ML Kit (le API della libreria, per la verifica del
+  bytecode) anche senza avviarla.
+- **Misura breve, D15.** `RealDeviceProbe`: una immagine per l'avvio (compresa verifica e inizializzazione, e il tentativo GPU se fallisce), poi le 20 in una chiamata
+  ripetuta due volte; vale il giro piu' veloce. Il motore resta caldo (chi lo possiede lo rilascia).
+
+**I nomi di DataTransport** (letti dal manifest fuso e dalla libreria, transport-runtime 2.2.6; sono in `MlKitTraces`):
+- componenti (manifest fuso, tutti non esportati): servizio `com.google.android.datatransport.runtime.scheduling.jobscheduling.JobInfoSchedulerService`
+  (il JobService che spedisce la coda), servizio `com.google.android.datatransport.runtime.backends.TransportBackendDiscovery` (registro dei backend, non
+  pianifica), receiver `com.google.android.datatransport.runtime.scheduling.jobscheduling.AlarmManagerSchedulerBroadcastReceiver` (la stessa cosa con
+  AlarmManager, solo sotto API 21: l'app ha minSdk 29, non parte mai); in piu' `com.google.mlkit.common.internal.MlKitComponentDiscoveryService`;
+- lavori: da API 21 `SchedulingModule.workScheduler` sceglie `JobInfoScheduler`: un lavoro di `JobScheduler` per (backend, priorita') sul componente
+  `JobInfoSchedulerService` dell'app (id = Adler32 di pacchetto, nome del backend, priorita' ed extra). Osservati dopo una lettura vera: **2 lavori**
+  di `JobInfoSchedulerService`; si annullano passando in rassegna `getAllPendingJobs()` e filtrando per nome del servizio;
+- coda: il database SQLite **`com.google.android.datatransport.events`** (tabelle `events`, `event_metadata`, `event_payloads`, `transport_contexts`) in `databases/`,
+  con i suoi file ausiliari; `Context.deleteDatabase` li toglie tutti. Presente dopo una lettura vera;
+- identificativo per installazione di ML Kit: le preferenze **`com.google.mlkit.internal`** (`shared_prefs/com.google.mlkit.internal.xml`, `SharedPrefManager.PREF_FILE`).
+  Presenti dopo una lettura vera; si tolgono anch'esse (una lettura riaccesa parte da un id nuovo). Non e' richiesto da D41: e' una scelta di P4, facile da togliere.
+- Dopo una lettura vera ML Kit non ha lasciato altro: `no_backup/` vuota, nessun altro database.
+**Come funziona** (`TextReadingShutdown`): `onTurnedOff()` allo spegnimento o all'esclusione di questo dispositivo rilascia il motore e annulla i lavori;
+la coda e le preferenze si tolgono subito solo se ML Kit non e' partito in questo processo (altrimenti DataTransport tiene aperta la coda); `atStartup(stato)`
+a ogni avvio del processo con la lettura non attiva qui, **prima di ogni altra cosa**, annulla i lavori e toglie coda e preferenze (una interrogazione di
+JobScheduler e due controlli di file, puo' girare sempre); segnala `TEXT_READING_OFF_CLEANUP` solo se ha tolto qualcosa.
+
+**Cosa ha mostrato il dispositivo** (emulatore Medium_Phone, x86_64, Android 17 / API 37, pagine da 16 KB, 3,5 GB, 22/10/2026)
+- Le sedici prove di `ModelInputs` e quelle degli altri motori sono passate al primo colpo, salvo `MlKit.initialize` due volte (corretto, sopra).
+- La **GPU non c'e'** sull'emulatore: `Backend.GPU` lancia `LiteRtLmJniException` all'inizializzazione (nessun crollo nativo), il ripiego su CPU e `AI_GPU_FALLBACK` partono
+  da soli. Il confronto GPU-CPU (coseno >= 0,99 su 20 immagini e 20 testi) si salta qui e si fa sull'S25 e sul Tab S9.
+- I vettori di riferimento (`core-ai/src/androidTest/assets/golden/`, 3 file da 30 KB: 20 immagini 440M, 20 frasi 270M, 20 frasi 440M) sono registrati su CPU; i vettori di
+  oggi hanno coseno 1,0 con loro (stesso dispositivo). Su un dispositivo con GPU lo stesso confronto e' il confronto GPU-CPU.
+- **Gli spazi del 270M (query) e del 440M (immagini) sono allineati**: per 10 query italiane ("un tramonto", "uno scontrino", "dei fiori"...) la scena sintetica attesa e' la prima
+  su 20 in tutte e 10.
+- **OCR**, errore per carattere sulle fixture pulite (`OcrFixtures`: 24 righe italiane con accenti, euro, cifre; carattere in pixel dell'immagine letta; riga letta = altezza
+  mediana del riquadro):
+
+  | carattere | 8 px | 10 px | 12 px | 14 px | 16 px | 20 px | 24 px | 28 px | 32 px | 40 px |
+  |---|---|---|---|---|---|---|---|---|---|---|
+  | a 1024 px (JPEG q90) | 100% (0 righe) | 2,5% | 1,7% | 1,8% | 1,3% | 0,9% | 1,2% | 0,9% | 2,0% | 2,4% |
+  | a 2048 px (WebP q90) | 21,9% | 2,3% | 1,1% | 1,5% | 1,4% | 1,1% | 0,9% | 0,9% | 0,8% | 0,7% |
+
+  Altezza mediana letta a 1024: 11, 11, 13, 14 px per i caratteri da 10, 12, 14, 16 (fitto: si', si', si', si'), 19 px per il 20 (fitto: no). **La soglia del testo fitto resta
+  quella di D12: almeno 6 righe con altezza mediana sotto 16 px** (`OcrDensity`, fissata da un test). Perche': sulle fixture pulite il vero salto e' sotto i 10 px (a 8 px
+  il 1024 non legge niente e il 2048 sbaglia un carattere su cinque); fra 10 e 16 px il 2048 guadagna circa un punto (2,5% -> 1,1%), ma sulle foto vere (sfocatura, JPEG,
+  prospettiva) il 1024 peggiora prima: 16 px e' il margine che le copre, e costa una seconda passata solo sulle pagine con almeno 6 righe. P9 lo riconferma con le
+  fixture degradate. **Limite noto**: se a 1024 ML Kit non vede nessuna riga (testo da 8 px o meno) la regola non scatta mai ("zero righe" non e' "fitto"); per quei casi la
+  seconda passata la decide chi conosce il media (sorgente `SCREENSHOT`, o il vettore che dice "documento", P5).
+- Angolo e posizioni: righe disegnate a -20, -8, 0, 8, 20 gradi: letti -20, -7, 1, 8, 20; gli estremi delle parole stanno entro il 2% della larghezza dell'immagine (§5.2); le
+  stesse righe a 1024 (JPEG) e a 2048 (WebP) hanno le stesse posizioni entro il 2%. Il corpo `ocr` che ne esce passa `AiSegments.admits` e si rilegge uguale.
+- Con la lettura **spenta**, in un processo nuovo (`:mlkitoff`, `OffProbeService`): 0 classi di ML Kit, DataTransport, API interne di Google o Firebase Components caricate
+  prima e dopo una lettura rifiutata; `MlKitInitProvider` non installato; 0 lavori di DataTransport, 0 dopo la pulizia di avvio; nessuna coda. La prova **morde**: costruire il
+  motore a freddo ne carica 13; con `ModelInputs` che non controlla l'intestazione la prova degli ostili fallisce (40 decodifiche); con `cancelScheduledJobs` che non annulla la
+  prova dello spegnimento fallisce (2 lavori rimasti); con il motore che riapre il file per nome invece di usare il descrittore la prova della sostituzione fallisce.
+
+**Misure** (`EngineMeasurementsDeviceTest`, una riga JSON per misura nel log `P4Measure`; sull'emulatore la CPU e' quella del PC, **non** del telefono)
+| Misura | Emulatore (CPU x86_64, 22/10) | S25 | Tab S9 |
+|---|---|---|---|
+| Verifica SHA-256 a ogni apertura, 157 MiB / 370 MiB | p50 112 ms / 336 ms (cache di sistema calda) | da misurare | da misurare |
+| 270M su CPU: avvio a freddo / a caldo | 398 ms / 367 ms | da misurare | da misurare |
+| 270M: `embed` p50 / p95 | 42 ms / 56 ms | da misurare | da misurare |
+| 270M: PSS prima / caricato / dopo il rilascio | 166 / 409 / 167 MB | da misurare | da misurare |
+| 440M su CPU: avvio a freddo (verifica + init) / a caldo | 672 (281 + 389) ms / 624 (232 + 391) ms | da misurare | da misurare |
+| 440M su CPU: foto/s (3 giri), p50 / p95 per immagine | 2,5 / 2,6 / 2,6; 380 / 413 ms | da misurare | da misurare |
+| 440M su CPU: PSS prima / caricato / in lavoro / dopo il rilascio | 146 / 842 / 986 / 169 MB | da misurare | da misurare |
+| 440M su GPU: foto/s, avvio a freddo e a caldo, PSS | non disponibile (`LiteRtLmJniException`, ripiego su CPU) | da misurare | da misurare |
+| Misura breve D15 (20 immagini) | 2,6 foto/s su CPU, avvio 1,9-2,2 s (con il tentativo GPU fallito); 18.000 media = 1 notte | da misurare | da misurare |
+| OCR di ML Kit: prima lettura (con l'avvio della libreria) / p50 a 1024 / p50 a 2048 | 1.359 ms / 800 ms / 863 ms; PSS +60 MB | da misurare | da misurare |
+
+**Punti aperti**
+- **GPU e norma dei vettori**: sull'S25 va visto che il 440M resti su GPU (`AI_GPU_FALLBACK` assente), che i vettori GPU abbiano coseno >= 0,99 con i riferimenti su CPU e
+  quale sia la loro norma (se la banda 0,90-1,10 non bastasse, il motore tornerebbe su CPU a ogni immagine: lo si vedrebbe dal backend).
+- **`embed(images)` e' tutto o niente**: un'immagine che fa lanciare il motore fa perdere il lotto. P5 chiama con una immagine alla volta o ritenta una per una. Il motore ha anche
+  `computeEmbeddingBatch`: non usato, da misurare se rende di piu' sulla GPU.
+- **`ModelInputs` non costruisce `CutoutImage`** (P13: il costruttore e' `internal` a core-ai, lo puo' chiamare dalla sua cartella `cutout/`, con i suoi controlli di intestazione per i
+  formati originali: HEIC, PNG, DNG...).
+- **Possibile rinforzo, non fatto**: allo spegnimento disabilitare i componenti di DataTransport con `PackageManager.setComponentEnabledSetting` (e riabilitarli prima di
+  `MlKit.initialize`) chiuderebbe anche il caso, raro, di un tentativo di invio gia' in corso mentre si spegne. Oggi un lavoro rimesso in coda da un invio fallito nello stesso
+  processo si annulla al prossimo avvio.
+- **Fixture degradate**: le pagine di P4 sono pulite (testo nero antialias su bianco); sfocatura, rumore, artefatti JPEG e prospettiva sono di P9.
+- L'emulatore non ha la GPU e le sue cifre non sono quelle del telefono: S25 e Tab S9 (quest'ultimo non c'e') restano da fare.
+
+**Per chi usa questo pacchetto**
+- **P5** (calcolo): `LiteRtLmImageEmbedder(files, cacheRoot, recipe, diag)` come `ImageEmbedder` (`cacheRoot` = `noBackupFilesDir/models/cache`); `ModelInputs.fromAnalysis/fromFrames/forOcr`
+  sono bloccanti (dispatcher di lavoro, mai il principale) e danno `null`/lista corta per un ingresso da non usare ("non supportato"); i vettori escono float32 normalizzati: si
+  passano per `Float16.encode` per il `VecBody`; `embed` una immagine alla volta o ritentando una per una; `GatedTextReader.create(...)` per l'OCR, con `OcrResult.dense` per la
+  seconda passata su HQ (`OcrSource.HQ`); `RealDeviceProbe(embedder)` per D15.
+- **P11** (integrazione): `LiteRtLmTextEmbedder(files, cacheRoot)` per le query (rilasciarlo 3 minuti dopo l'uscita da Cerca o a memoria bassa: D35); `GatedTextReader.create(context,
+  { switch.state.value })` e **niente altro modo di costruire `MlKitTextReader`**; `TextReadingShutdown.create(context, gated)`: `atStartup(stato)` nel primo punto dell'`Application`, `onTurnedOff()` quando la lettura si spegne o questo dispositivo si esclude; i codici
+  `AI_ENGINE_INIT_FAILED`, `AI_GPU_FALLBACK`, `OCR_FAILED`, `TEXT_READING_OFF_CLEANUP` arrivano dai callback `diag`.
+- **P12** (testo dal vivo): le righe sono quelle del formato; l'angolo e' in gradi fra -90 e 90, **positivo in senso orario sullo schermo**; gli estremi delle parole sono lungo la
+  direzione di lettura: per un testo capovolto (angolo ripiegato di 180 gradi) corrono in senso opposto alla direzione dell'angolo.
+- **P13** (ritaglio): `EngineThread`, `FdOwnership` e il modo di dare un descrittore verificato al motore (`ParcelFileDescriptor.dup`) valgono anche per LiteRT; non c'e' un costruttore
+  di `CutoutImage` in `ModelInputs`.

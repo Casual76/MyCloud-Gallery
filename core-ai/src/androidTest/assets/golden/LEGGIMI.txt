@@ -1,0 +1,13 @@
+Vettori di riferimento dei motori (Fase 6, P4; docs/fase6-progetto.md §5.2). Solo numeri: nessun dato personale.
+
+  images-440m-v1.f16   le 20 immagini sintetiche di core-ai/.../runtime/ProbeImages.kt (versione 1), 440M (testo e visione)
+  texts-270m-v1.f16    le 20 frasi di EngineVectorsDeviceTest, 270M (il motore delle query)
+  texts-440m-v1.f16    le stesse 20 frasi, 440M
+
+Formato: "MCGG" | versione (4) | n vettori (4) | dimensione (4) | n x dimensione componenti float16, big endian.
+Registrati il 21/10/2026 sull'emulatore Medium_Phone (x86_64, API 37, CPU), litertlm-android 0.18.1, modelli del catalogo
+(270M 2d079ee2..., 440M 92dcbea1...). Su un dispositivo con GPU il confronto con questi file e' il confronto GPU-CPU (coseno >= 0,99).
+
+Per rifarli (dopo un cambio voluto di libreria, modello, scene o ricetta): vedi il commento di EngineVectorsDeviceTest
+(-Pandroid.testInstrumentationRunnerArguments.mcgRecordGolden=true), poi sostituire questi file e fare salire VERSION in
+EngineVectorsDeviceTest (Golden) e in ProbeImages se le scene sono cambiate.

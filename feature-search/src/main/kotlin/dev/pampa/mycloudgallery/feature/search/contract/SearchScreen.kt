@@ -117,4 +117,7 @@ interface SearchActions {
   fun openDiagnostics()
 
   fun requestMediaAccess()
+
+  /** "Libera spazio" (P8, §2.6: `AI_MODEL_NO_SPACE`, `AI_STORAGE_LOW`, `CUTOUT_SAVE_FAILED`): la pagina di :app che libera spazio. Di serie non fa niente. */
+  fun openFreeSpace() = Unit
 }

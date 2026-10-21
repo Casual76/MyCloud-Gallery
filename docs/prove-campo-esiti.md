@@ -466,3 +466,46 @@ verifica dal PC, -NotSettled: 2 VIOLAZIONI [11. il NAS si legge] ... apertura no
 - **Da rifare dopo la correzione di D-13 e D-12:**
   - F30 completa, con la verifica "a lavoro finito";
   - la ripresa dopo una caduta lunga.
+
+
+---
+
+# Riprova con `e5f3c7f` (21/10/2026, 01:21–04:20)
+
+| | |
+|---|---|
+| **Ambiente** | APK di debug di `e5f3c7f` (contiene anche `9e0372a`), installato dall'orchestratore con `install -r` alle 01:21:20. Account `test`. "Attiva Wi-Fi automaticamente" spento. Batteria dal 79% al 67–71% (carica lenta sul cavo). |
+| **Nuova semina** | `clean` alle 01:23, poi `seed` con il giro `20261021-012342-3f111b8b`, `-Seed 43 -Photos 520 -BigVideos 3 -BigVideoMb 3072`, fixture senza i tre finti: 528 file, 9,66 GB. Nel manifesto della verifica ci sono anche **729 righe `pre=`**: tutti i file che erano già in `test/mcg-campo/Backup/` (296 del primo giro e 433 del secondo), con percorso e impronta presi dal catalogo dell'app. I manifesti stanno nella cartella di appoggio della sessione. |
+| **Esito in breve** | **Tutte le prove richieste sono passate, F30 compresa.** Il backup con 100 interruzioni miste è arrivato in fondo **senza nessun tocco** (03:55:36, "campagna chiusa (niente in coda)"). La verifica dal PC a lavoro finito (un tentativo, login accettato) dice **TUTTI GLI INVARIANTI RISPETTATI** su 1.162 file riletti (24,1 GB), nessun temporaneo rimasto. Il telefono è invariato. Due note, non difetti: durante le interruzioni il backup quasi non avanza, e un video ha perso 0,9 GB per ripartire su un temporaneo nuovo. I due video fermi della volta scorsa non si sono potuti riprovare: si erano già chiusi da soli durante la notte. |
+
+## E.1 Esiti
+
+| Id | Esito | Misure e note |
+|---|---|---|
+| 1. I due video fermi di F30 | **non provabile con il nuovo APK** | Si erano già chiusi durante la notte con l'APK vecchio (`6c19a33`): elemento 513 `done` alle 00:28:21, 514 alle 00:38:35 ("campagna chiusa (niente in coda)" alle 00:37:20). I loro temporanei erano occupati dalle 22:24–22:25: **il NAS li ha tenuti occupati circa 2 ore**, poi li ha rilasciati e il motore vecchio ha ripreso da solo con i giri di ripresa. Coerente con le misure sul NAS di cui parli. Quei temporanei sono spariti con la pubblicazione (00:28 e 00:38). La strada nuova "temporaneo occupato → temporaneo nuovo" l'ho vista però dal vivo nelle prove 4 e 3 (sotto). |
+| 2. D-7 a monte (3 avvii a freddo) | **passata** | 3 cicli `force-stop`/`am start`, 6 schermate ciascuno fra 0,5 e 3,2 s dall'avvio: si vedono solo il logo, una Libreria vuota per un attimo e poi la Libreria con le celle. **Mai** il benvenuto, "non configurato", "fuori dalla famiglia" o la pagina delle chiavi. `TrustSyncWorker: controllo del registro: DONE` 3 volte su 3, mai `NOT_CONFIGURED`. |
+| D-2 (di passaggio) | **passata** | 0 `NasScanWorker: tappa non riuscita` su 64 avvii del processo in tutta la sessione. |
+| 4. D-12 (Wi-Fi giù più di 10 minuti durante un lavoro dell'utente) | **passata** | Lavoro dell'utente ottenuto con "Ferma" → "Riprendi" (01:26). Sei stacchi da 120 s (01:26:45–01:38:54). Durante lo stacco il lavoro non finisce "DONE": chiude 3 volte con `RESCHEDULE` (01:29, 01:32, 01:36) e Android lo riprova; non si arriva ad `AWAIT_NETWORK`. Wi-Fi riacceso alle 01:38:54: giro alle 01:38:54, "sessione pronta" alle 01:38:58, e alle 01:38:59 `BackupUpload: temporaneo occupato sul NAS da 12 min: si riparte da capo su un temporaneo nuovo (tentativo 1)`. **Ripresa in circa 5 s**; il caricamento riprende subito (12–15 MB/s). |
+| D-13 (temporaneo occupato) | **passata** | Due volte: alle 01:38:59 (video 1160, occupato da 12 min) e alle 02:04:43 (video 1161, occupato da 16 min; aveva 0,91 GB caricati, persi) il motore riparte su un temporaneo nuovo (`-bk-1160-1`, `-bk-1161-1`). Il terzo video (1162) aveva il temporaneo occupato dalle 01:57: alle 03:31 risultava di nuovo libero e il caricamento è ripreso sullo stesso temporaneo. Mai più "stop=complete" con video fermi: dopo F30 i giri dei video finiscono con `stop=budget` e `aperti` che scende da 3 a 1 fino alla chiusura. Nel log la parola `stop=busy` non compare: le attese per i file occupati non producono una riga di giro. |
+| 5. D-11 (conteggio dopo una morte) | **passata** | Durante la campagna la pagina diceva "Video: 428 di 431 · 134 MB di 9,7 GB · circa 37 min": il conteggio è cumulativo dall'inizio (428 = foto e media già fatti). Dopo le morti di F30 la capsula diceva "3 in coda" con lo stato del momento ("Al prossimo giro", "Attesa Wi-Fi"), mai "0 di 3". |
+| 3. F30 (100 interruzioni miste, seme 7, 01:41–02:32) | **passata** | 58 morti e 42 cadute vere del Wi-Fi (3–20 s). 59 avvii del processo, nessun crash, nessun "lavoro del backup finito: DONE". **Durante le interruzioni il backup quasi non avanza**: in 51 minuti il video 1160 è passato da 0 a 128 MiB, un altro è ripartito da capo. Ogni morte fa ripartire il lavoro dell'utente con la coda di Android, che lo rimanda sempre di più ("Num failures: 3", ritardo crescente); ogni caduta del Wi-Fi lascia temporanei occupati. Finite le interruzioni Android ha fatto ripartire il lavoro da solo alle 02:37:49, dopo il suo ritardo (+5 min), **senza tocchi**. Caricamento e verifica dei tre video da 3 GB: 1160 e 1161 chiusi fra le 03:12 e le 03:31, 1162 (il suo vecchio temporaneo era tornato libero) caricato alle 03:39, verificato alle 03:49 e chiuso alle 03:55:36 con "campagna chiusa (niente in coda)" e "lavoro del backup finito: DONE". Dall'avvio della semina alla fine: 2 h 31 min, di cui 51 min di interruzioni. **Nessun tocco su "Fai ora"** in tutta F30 e dopo. |
+| F30, verifica dal PC (un tentativo, a lavoro finito) | **passata** | `area.ps1 -Mode backup -Stage verify` con il manifesto nuovo e le 729 righe `pre=`: "file riletti con SHA-256: **1162** (24.117.430 KiB) · **TUTTI GLI INVARIANTI RISPETTATI**". Nessun file a metà, nessun doppione, nessun file dei giri precedenti cambiato, ogni file del telefono sul NAS. Login accettato al primo tentativo. Rapporto: `core-backup/build/chaos/backup-verify-20261021-012342.txt` |
+| F30, telefono | **passata** | `s25.ps1 -Step verify -SkipNas`: 528 file, impronte uguali al manifesto, nessun file liberato o cambiato |
+| F30, `.mycloudgallery/tmp/` | **pulita** | L'invariante 6 "a lavoro finito" della verifica (nessun temporaneo `-bk-` del backup) è rispettato. Quindi anche i due temporanei abbandonati di D-13 (`-bk-1160`, `-bk-1161`) non c'erano più alle 04:00 circa. Il momento esatto in cui sono spariti non l'ho visto: dal telefono non si guarda il NAS |
+
+## E.2 Osservazioni
+
+- **Velocità sotto interruzioni.** Con un'interruzione ogni 6–40 s il backup dei video in pratica si ferma. Il lavoro dell'utente riparte a ogni morte, ma il ritardo crescente di Android, l'attesa della sessione e i temporanei occupati dopo le cadute del Wi-Fi mangiano il tempo fra due colpi. Dopo le interruzioni si riprende bene, ma l'utente vede un backup lungo il doppio. Non è un difetto di correttezza.
+- **Video ricaricati da capo.** Il video 1161 ha perso 0,91 GB caricati quando il suo temporaneo era occupato da 16 minuti. È la regola di D-13 (oltre 10 minuti si riparte da capo). Con le cadute del Wi-Fi che tengono occupato un temporaneo per ore è la scelta giusta, ma costa traffico.
+- **Temporanei abbandonati.** I vecchi temporanei occupati (`-bk-1160`, `-bk-1161`) restano in `.mycloudgallery/tmp` finché il NAS non li rilascia; poi la pulizia dei propri file li deve togliere. Alla fine della prova non c'erano più (riga di `.mycloudgallery/tmp/` in E.1).
+- **Traffico di altre app.** Durante la sessione un'altra app del telefono ha caricato a 10–15 MB/s per lunghi tratti: rallenta il backup e falsa i contatori di `wlan0`. I tempi qui sopra vengono dal diario dell'app.
+
+## E.3 Stato lasciato
+- **Wi-Fi:** acceso.
+- **Batteria:** 71%.
+- **App:** in primo piano. Capsula "Tutto al sicuro · Oggi alle 03:55", nessuna pausa.
+- **Telefono:** `mcg-prova` con 528 file (giro `20261021-012342-3f111b8b`), nessuno nel cestino da questo giro.
+- **NAS:** `test/mcg-campo/Backup/Telefono di test/` con 1.162 file dei tre giri. Le due cartelle vuote `prova-4b-rinominata` e `sotto` (§V.2) restano. `.mycloudgallery/tmp` senza temporanei del backup.
+- **Accessi al NAS dal PC:** uno solo, la verifica finale.
+- **Niente commit.**
+

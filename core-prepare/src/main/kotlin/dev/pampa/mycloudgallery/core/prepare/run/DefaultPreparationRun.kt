@@ -15,6 +15,7 @@ import dev.pampa.mycloudgallery.core.index.contract.WorkPass
 import dev.pampa.mycloudgallery.core.index.contract.WorkUnits
 import dev.pampa.mycloudgallery.core.metadata.contract.MediaBytes
 import dev.pampa.mycloudgallery.core.model.ContentKey
+import dev.pampa.mycloudgallery.core.prepare.contract.AnalysisSink
 import dev.pampa.mycloudgallery.core.prepare.contract.PrepAttempts
 import dev.pampa.mycloudgallery.core.prepare.contract.PrepBudget
 import dev.pampa.mycloudgallery.core.prepare.contract.PrepClock
@@ -90,6 +91,11 @@ class DefaultPreparationRun(
   private val dispatcher: CoroutineDispatcher = Dispatchers.Default,
   /** R2: lo spazio libero del telefono; sotto [PrepStorage.MIN_FREE_BYTES] il giro si ferma con [PrepStop.STORAGE]. */
   private val storage: PrepStorage? = null,
+  /**
+   * Fase 6 (D10, P5): dove vanno `analysis` e `frames` appena preparati quando questo dispositivo e' Indicizzatore (il buffer di
+   * core-ai, legato da :app). [AnalysisSink.NONE] = nessun buffer. Non blocca e non fa fallire mai la preparazione.
+   */
+  private val analysisSink: AnalysisSink = AnalysisSink.NONE,
 ) : PreparationRun {
 
   private class Tally {
@@ -328,6 +334,23 @@ class DefaultPreparationRun(
     stageLock.withLock { publisher.stage(share, listOf(MetaChange.Put(item.path, PrepRecords.merge(base, done))), blobs) }
     unit.prepared.incrementAndGet()
     tally.prepared.incrementAndGet()
+    deliverAnalysis(item.contentKey, done.outputs)
+  }
+
+  /**
+   * D10: le anteprime di analisi e i fotogrammi vanno anche al buffer degli indicizzatori (con F4-D31 acceso la pubblicazione li
+   * butterebbe, R2 della 4A). Dopo la messa in outbox: un errore del buffer non tocca cio' che si pubblica.
+   */
+  private suspend fun deliverAnalysis(contentKey: ContentKey, outputs: List<PrepOutput>) {
+    val wanted = outputs.filter { it.cls == SegmentClass.ANALYSIS || it.cls == SegmentClass.FRAMES }
+    if (wanted.isEmpty() || analysisSink === AnalysisSink.NONE) return
+    try {
+      analysisSink.deliver(contentKey, wanted)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      GalleryLog.w("prepare") { "buffer di analisi: consegna fallita (${e.javaClass.simpleName})" }
+    }
   }
 
   private suspend fun handleFailure(share: String, item: WorkItem, base: MetaFile, failed: PrepResult.Failed, unit: UnitState, tally: Tally, stageLock: Mutex) {

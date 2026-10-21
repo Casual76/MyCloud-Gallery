@@ -110,6 +110,8 @@ data class MonthlyArrivals(
   val onPhoneToProtect: MediaVolume = MediaVolume.NONE,
   /** Media nuovi da analizzare (Fase 6). */
   val toAnalyze: Long = 0L,
+  /** Fase 6 (P5): i media nuovi del mese da analizzare per tipo e classe; se c'e', vale al posto di [toAnalyze]. */
+  val analyze: AiWork? = null,
 )
 
 /**
@@ -127,6 +129,9 @@ data class MonthlyArrivals(
  *   collegare, §2.11 punto 5; le copie private non ancora verificate): costano la sola rilettura e il suo traffico.
  * @property toFullHash dal catalogo (`WorkStage.FULL_HASH`): video del NAS in attesa dell'hash completo, byte da rileggere.
  * @property toAnalyze dal catalogo: media in attesa dell'anteprima di analisi (Fase 6).
+ * @property analyze Fase 6 (P5): il backlog vero del calcolo AI, contato dal calcolo stesso (`AiBacklog` di core-ai sopra le stesse
+ *   porte dei candidati): foto, video e testi da leggere. Se c'e', vale al posto di [toAnalyze] (tempo dai vettori e dall'OCR,
+ *   traffico solo per le anteprime non ancora nel buffer: [AiComputeCosts]).
  */
 data class BacklogFacts(
   val replica: Workload = Workload.NONE,
@@ -138,6 +143,7 @@ data class BacklogFacts(
   val toAnalyze: Long = 0L,
   val monthly: MonthlyArrivals = MonthlyArrivals(),
   val toVerify: MediaVolume = MediaVolume.NONE,
+  val analyze: AiWork? = null,
 ) {
   init {
     require(toAnalyze >= 0 && monthly.toAnalyze >= 0) { "Un conteggio non puo' essere negativo." }
@@ -152,11 +158,16 @@ data class BacklogFacts(
    *  - `PHOTO_BACKUP` / `VIDEO_BACKUP` = media del telefono da mettere al sicuro (`pending`: byte dei media, il traffico e' il doppio
    *    perche' si rileggono, Fase 5); le copie gia' sul NAS da rileggere ([toVerify], e per i video gli hash completi [toFullHash])
    *    stanno in `verify` e costano la sola rilettura;
-   *  - `AI_COMPUTE` = le anteprime di analisi da scaricare (Fase 6).
+   *  - `AI_COMPUTE` = le anteprime di analisi da scaricare (Fase 6); con [analyze] il lavoro vero del calcolo ([AiComputeCosts]:
+   *    vettori, fotogrammi e testo con le misure [measures]).
    *
    * Il flusso mensile usa gli stessi costi sui media nuovi di un mese ([MonthlyArrivals]).
    */
-  fun toLibraryBacklog(depth: ReplicaDepth, costs: NasCosts = NasCosts.DOC_2_10): LibraryBacklog {
+  fun toLibraryBacklog(
+    depth: ReplicaDepth,
+    costs: NasCosts = NasCosts.DOC_2_10,
+    measures: DeviceMeasures = DeviceMeasures.PHASE_0,
+  ): LibraryBacklog {
     val newOnNas = monthly.onNas
     val pending =
       mapOf(
@@ -165,7 +176,7 @@ data class BacklogFacts(
         BackgroundActivity.HQ_PREVIEWS to hq,
         BackgroundActivity.PHOTO_BACKUP to toProtect.photos,
         BackgroundActivity.VIDEO_BACKUP to toProtect.videos,
-        BackgroundActivity.AI_COMPUTE to costs.analysis(toAnalyze),
+        BackgroundActivity.AI_COMPUTE to (analyze?.let { AiComputeCosts.workload(it, measures, costs) } ?: costs.analysis(toAnalyze)),
       )
     val monthlyNew =
       mapOf(
@@ -174,7 +185,7 @@ data class BacklogFacts(
         BackgroundActivity.HQ_PREVIEWS to costs.hq(newOnNas.items, depth),
         BackgroundActivity.PHOTO_BACKUP to monthly.onPhoneToProtect.photos,
         BackgroundActivity.VIDEO_BACKUP to monthly.onPhoneToProtect.videos,
-        BackgroundActivity.AI_COMPUTE to costs.analysis(monthly.toAnalyze),
+        BackgroundActivity.AI_COMPUTE to (monthly.analyze?.let { AiComputeCosts.workload(it, measures, costs) } ?: costs.analysis(monthly.toAnalyze)),
       )
     val verify =
       mapOf(
@@ -198,8 +209,9 @@ class FactsBacklogSource(
   private val reader: BacklogFactsReader,
   private val depth: () -> ReplicaDepth,
   private val costs: NasCosts = NasCosts.DOC_2_10,
+  private val measures: () -> DeviceMeasures = { DeviceMeasures.PHASE_0 },
 ) : BacklogSource {
-  override suspend fun current(): LibraryBacklog = reader.read().toLibraryBacklog(depth(), costs)
+  override suspend fun current(): LibraryBacklog = reader.read().toLibraryBacklog(depth(), costs, measures())
 }
 
 internal operator fun Workload.plus(other: Workload): Workload = Workload(items + other.items, bytes + other.bytes)

@@ -290,6 +290,9 @@ internal object DiagCatalogEntries {
     DiagEntry(DiagCodes.BACKUP_SIMILAR_COPIES, DiagSection.BACKUP, DiagSeverity.INFO, R.string.diag_backup_similar_copies_title, R.string.diag_backup_similar_copies_guide, null),
     DiagEntry(DiagCodes.INTEGRATIONS_COUNTERS, DiagSection.BACKUP, DiagSeverity.INFO, R.string.diag_integrations_counters_title, R.string.diag_integrations_counters_guide, null),
 
+    // --- La ricerca (Fase 6, P0: la voce di stato; i codici del §2.6 li aggiunge P11) -----------------------------------
+    DiagEntry(DiagCodes.SEARCH_STATE, DiagSection.SEARCH, DiagSeverity.INFO, R.string.diag_search_state_title, R.string.diag_search_state_guide, null),
+
     // --- Rete e NAS --------------------------------------------------------
     DiagEntry(DiagCodes.DIAG_SECTION_UNAVAILABLE, DiagSection.NETWORK_AND_NAS, DiagSeverity.WARNING, R.string.diag_diag_section_unavailable_title, R.string.diag_diag_section_unavailable_guide, null),
   )

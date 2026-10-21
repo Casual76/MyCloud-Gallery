@@ -1,0 +1,78 @@
+// La schermata Cerca e la pagina "Ricerca e modelli" della Fase 6 (docs/fase6-progetto.md §1.1, §1.5, §2.6; D15, D20, D30-D36,
+// D41, D48; riga P8 del §4.4). Scheletro di P0 (modulo, stati sigillati del §1.5 come contratto, azioni come porta, stati di
+// esempio per i test); le schermate sono di P8.
+//
+// **Aspetto: linguaggio grafico G2** (D36): le composable usano solo i componenti esistenti di `core-designsystem`, nessuno stile
+// nuovo; il filone grafico rifinisce senza toccare la logica.
+//
+// La schermata Cerca usa SOLO core-search. Di core-ai e core-models vede soltanto i contratti di stato e di comando della pagina
+// Ricerca e modelli (`AiStatus`, `ModelManager`, `TextReadingSwitch`), mai il codice HTTPS (`internal`). Cieca a core-nas,
+// core-index, core-nasops e core-backup (Phase6ArchitectureTest, anche per inferenza). Nessuna lettura del NAS in Cerca: le
+// miniature sono solo locali (D28). I `feature-*` non si conoscono fra loro.
+//
+// D7 della Fase 2: @HiltViewModel (KSP). D33: nessuna rete in questo modulo (NoNetworkSourcesTest). D39: nessun orologio del
+// telefono (NoWallClockSourcesTest). Stringhe in `values/strings_search_*.xml` e `values/strings_models_*.xml`.
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+  id 'org.jetbrains.kotlin.plugin.compose'
+  id 'org.jetbrains.kotlin.plugin.serialization'
+  id 'com.google.devtools.ksp'
+  id 'com.google.dagger.hilt.android'
+  id 'io.github.takahirom.roborazzi'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.feature.search'
+
+  buildFeatures {
+    compose = true
+  }
+
+  testOptions {
+    unitTests.all {
+      maxHeapSize = '2g'
+    }
+  }
+}
+
+dependencies {
+  // api: i contratti della ricerca (chip, risultati, copertura, ordine) e i componenti (core-designsystem) compaiono negli stati.
+  api project(':core-search')
+  api project(':core-designsystem')
+
+  // La Libreria e le miniature locali (stessa cella della Libreria, D28).
+  implementation project(':core-library')
+  implementation project(':core-imaging')
+  // Solo i contratti di stato e di comando della pagina Ricerca e modelli (§1.1).
+  implementation project(':core-ai')
+  implementation project(':core-models')
+
+  implementation project(':core-common')
+  implementation project(':core-model')
+
+  implementation appDeps.hiltAndroid
+  ksp appDeps.hiltCompiler
+  implementation appDeps.hiltNavigationCompose
+  implementation appDeps.navigationCompose
+  implementation appDeps.lifecycleViewModelCompose
+  implementation appDeps.lifecycleRuntimeCompose
+  implementation appDeps.coroutinesAndroid
+  implementation appDeps.serializationCore
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+  testImplementation appDeps.androidxTestExtJunit
+  testImplementation platform("androidx.compose:compose-bom:${engine.composeBom}")
+  testImplementation appDeps.composeUiTestJunit4
+  testImplementation appDeps.composeUiTestManifest
+  testImplementation appDeps.roborazzi
+  testImplementation appDeps.roborazziCompose
+  testImplementation appDeps.roborazziJunitRule
+}

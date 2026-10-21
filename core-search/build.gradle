@@ -1,0 +1,37 @@
+// Il motore di ricerca locale della Fase 6 (docs/fase6-progetto.md §1.1, §1.2 "core-search", §2.4, §2.5; D23-D32, D35, D39, D48):
+// indice vettoriale a due passate e indice del testo, analizzatore italiano delle query, fusione e soglie, "Trova simili",
+// copertura, cronologia, ordine dei risultati. Contratti, null-object, fake ed esecutore di riferimento (`InMemorySearchEngine`)
+// di P0; il motore e' di P6, l'analizzatore di P7.
+//
+// **Nessuna rete e nessun NAS, per costruzione** (D33): non vede core-nas, core-index, core-models, core-prepare, core-nasops ne'
+// core-backup (Phase6ArchitectureTest: nemmeno per inferenza). Di core-ai vede solo i contratti (`TextEmbedder`): il motore delle
+// query lo lega :app. core-ai e' `implementation`: i suoi tipi non arrivano a chi dipende da qui.
+//
+// D33: NoNetworkSourcesTest. D39: la data di oggi arriva dalla porta `Today` (NoWallClockSourcesTest).
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.core.search'
+}
+
+dependencies {
+  api project(':core-common')
+  api project(':core-model')
+  // api: `OrderedTimelineView` e `TimelineSnapshot` (le viste dei risultati) compaiono nelle firme.
+  api project(':core-library')
+
+  // Porte del catalogo (vettori, testo, cronologia: P1), nomi dei luoghi, contratti del motore delle query.
+  implementation project(':core-database')
+  implementation project(':core-places')
+  implementation project(':core-ai')
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+}

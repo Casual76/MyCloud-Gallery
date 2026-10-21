@@ -78,6 +78,25 @@ object PersonalFields {
   /** Vero se [field] e' il campo di una cartella esclusa. */
   fun isPrivateExclusion(field: String): Boolean = field.startsWith("$SETTING_PRIVATE_EXCLUSIONS:")
 
+  // --- Fase 6 (docs/fase6-progetto.md §1.3 "core-personal", D41, D48, D50; risposte Q4, Q10, Q13, Q16). Firme di P0: le voci
+  // si leggono e si scrivono con `SearchPersonalSettings` e `MotionPersonalSettings` (contract/SearchPersonalSettings.kt).
+
+  /**
+   * La lettura del testo nelle foto **per l'account** (D41, Q13): un [PersonalValue.Number]: 0 = spenta, n > 0 = attiva con la
+   * versione n del testo della pagina di attivazione accettato (se il testo cambia, si richiede). Voce assente = spenta (default).
+   * L'esclusione di un singolo dispositivo ("Non su questo dispositivo") e' **locale**, non una voce.
+   */
+  const val SETTING_TEXT_READING: String = "text_reading"
+
+  /** L'ordine dei risultati (D48, Q10): un [PersonalValue.Text], `recent` (default) o `relevant`. */
+  const val SETTING_SEARCH_ORDER: String = "search_order"
+
+  /**
+   * "Animazione delle foto in movimento" nelle Impostazioni della Libreria (D50, risposta Q16 (b)): un [PersonalValue.Flag].
+   * Voce assente = **accesa** (default). Si somma alle condizioni gia' decise ("Rimuovi animazioni", risparmio energetico).
+   */
+  const val SETTING_MOTION_ANIMATION: String = "motion_animation"
+
   /** Vero se [field] e' un elemento di un album ([albumItem]). */
   fun isAlbumItem(field: String): Boolean = field.startsWith("item:")
 

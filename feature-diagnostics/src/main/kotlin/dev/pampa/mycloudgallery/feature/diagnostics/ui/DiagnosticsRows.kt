@@ -15,6 +15,7 @@ import androidx.compose.material.icons.rounded.NetworkCheck
 import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.VerifiedUser
 import androidx.compose.material.icons.rounded.Warning
@@ -77,6 +78,7 @@ internal fun DiagSection.icon(): ImageVector = when (this) {
   DiagSection.PHONE_LIBRARY -> Icons.Rounded.PhotoLibrary
   DiagSection.NAS_LIBRARY -> Icons.Rounded.Dns
   DiagSection.BACKUP -> Icons.Rounded.Backup
+  DiagSection.SEARCH -> Icons.Rounded.Search
   DiagSection.STORAGE -> Icons.Rounded.Storage
   DiagSection.MONTHLY_TRAFFIC -> Icons.Rounded.DataUsage
   DiagSection.ANDROID_WARNINGS -> Icons.Rounded.PhoneAndroid
@@ -92,6 +94,7 @@ internal fun DiagSection.titleRes(): Int = when (this) {
   DiagSection.PHONE_LIBRARY -> R.string.diagnostics_section_phone_library
   DiagSection.NAS_LIBRARY -> R.string.diagnostics_section_nas_library
   DiagSection.BACKUP -> R.string.diagnostics_section_backup
+  DiagSection.SEARCH -> R.string.diagnostics_section_search
   DiagSection.STORAGE -> R.string.diagnostics_section_storage
   DiagSection.MONTHLY_TRAFFIC -> R.string.diagnostics_section_traffic
   DiagSection.ANDROID_WARNINGS -> R.string.diagnostics_section_android
@@ -107,6 +110,7 @@ internal fun DiagSection.hintRes(): Int = when (this) {
   DiagSection.PHONE_LIBRARY -> R.string.diagnostics_hint_phone_library
   DiagSection.NAS_LIBRARY -> R.string.diagnostics_hint_nas_library
   DiagSection.BACKUP -> R.string.diagnostics_hint_backup
+  DiagSection.SEARCH -> R.string.diagnostics_hint_search
   DiagSection.STORAGE -> R.string.diagnostics_hint_storage
   DiagSection.MONTHLY_TRAFFIC -> R.string.diagnostics_hint_traffic
   DiagSection.ANDROID_WARNINGS -> R.string.diagnostics_hint_android

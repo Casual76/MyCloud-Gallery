@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Sezione «Ricerca» (Fase 6, docs/fase6-progetto.md §2.6). Titolo e spiegazione della sezione (P0); le voci e i codici della
+       ricerca li aggiunge P11. Solo numeri e codici nelle esportazioni: mai testo delle query, testo letto, luoghi, vettori, chiavi
+       di contenuto, nomi di file, share o account (D40). -->
+  <string name="diagnostics_section_search">Ricerca</string>
+  <string name="diagnostics_hint_search">Modelli della ricerca, analisi delle foto, testo letto e indice di ricerca su questo dispositivo: stato, avanzamento e problemi da risolvere.</string>
+  <string name="diag_search_state_title">Stato della ricerca</string>
+  <string name="diag_search_state_guide">I modelli presenti e verificati, quanti media sono analizzati e quanti aspettano, se la lettura del testo è attiva su questo dispositivo. Le ricerche non escono mai dal telefono.</string>
+</resources>

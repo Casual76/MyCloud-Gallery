@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+  xmlns:tools="http://schemas.android.com/tools">
+
+  <!--
+      :core-ai (Fase 6, P0): nessun permesso e nessun componente proprio. Nel manifest fuso porta due cose, decise in
+      docs/fase6-progetto.md D3, D38, D41 e controllate da verifyReleaseManifest e da tools/check.ps1:
+
+      1. le librerie native della GPU per LiteRT-LM, FACOLTATIVE (`required="false"`: senza, il motore va su CPU, E-A12). Sono le
+         uniche due `uses-native-library` ammesse in releaseManifestPolicy.
+      2. il provider con cui ML Kit si avvia DA SOLO all'avvio del processo (`MlKitInitProvider`), TOLTO con tools:node="remove":
+         e' la via documentata da Google per l'avvio manuale. Con la lettura del testo spenta ML Kit non si inizializza e non manda
+         niente; `MlKit.initialize` lo chiama solo il cancello di core-ai/.../ocr/ con la lettura attiva su questo dispositivo (D41).
+         Gli altri componenti di ML Kit e di DataTransport restano nel manifest fuso, non esportati e inerti: l'elenco chiuso e'
+         in releaseManifestPolicy (un componente nuovo di una versione nuova della libreria fa fallire la verifica, L49).
+
+      3. cio' che litert-api 2.3.0 (runtime del ritaglio, D44) dichiara per acceleratori e servizi che l'app non usa, TOLTO: il
+         permesso FOREGROUND_SERVICE_DATA_SYNC (nessun permesso Android nuovo, D38) e la NPU (`android.hardware.npu`: niente NPU,
+         D3). Le sue altre 29 `uses-native-library` (varianti OpenCL, DSP Qualcomm, Edge TPU, MediaTek: il ritaglio gira su CPU)
+         NON si possono togliere da qui: il fusore dei manifest di AGP 8.13 non da' una chiave a quell'elemento e ignora
+         tools:node="remove". Le toglie `filter<Variante>NativeLibraries` (gradle/verify-release-manifest.gradle, legato da
+         app/build.gradle) sul manifest fuso di ogni variante, tenendo solo le due qui sotto.
+
+      Un permesso o un componente nuovo si chiede all'orchestratore: prima la riga in docs/sicurezza.md 4-bis, poi quella in
+      releaseManifestPolicy.
+  -->
+
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" tools:node="remove" />
+  <uses-feature android:name="android.hardware.npu" tools:node="remove" />
+
+  <application>
+    <uses-native-library android:name="libOpenCL.so" android:required="false" />
+    <uses-native-library android:name="libvndksupport.so" android:required="false" />
+
+    <provider
+      android:name="com.google.mlkit.common.internal.MlKitInitProvider"
+      tools:node="remove" />
+  </application>
+
+</manifest>

@@ -1,0 +1,75 @@
+// I motori on-device e il calcolo AI della Fase 6 (docs/fase6-progetto.md §1.1, §1.2 "core-ai", §2.2, §2.10; D2-D5, D9-D15,
+// D22, D41-D44): vettori del testo e delle immagini (EmbeddingGemma 2 con LiteRT-LM), lettura del testo (ML Kit, SOLO se attiva),
+// ritaglio del soggetto (MagicTouch su LiteRT), preparazione degli ingressi, calcolo coordinato con le prenotazioni. Contratti,
+// null-object, fake ed esecutore di riferimento (`FakeAiCompute`) di P0; i motori sono di P4 (`runtime/`, `ocr/`), il calcolo di P5
+// (`compute/`), il ritaglio di P13 (`cutout/`).
+//
+// **L'unico modulo che vede `litertlm`, `litert` e ML Kit** (Phase6ArchitectureTest): nessun altro build.gradle le nomina, e
+// `com.google.mlkit` compare solo in core-ai/.../ocr/ (D41: con la lettura del testo spenta ML Kit non si inizializza, e
+// `MlKit.initialize` lo chiama solo il cancello `MlKitBootstrap`).
+//
+// Non vede core-nas, core-nasops, core-backup ne' core-search (§1.1): i byte del NAS arrivano dalle porte di core-index
+// (`AnalysisFetcher`), i modelli solo da `ModelFiles` di core-models (file verificati). core-index, core-prepare, core-models e
+// core-rules sono `implementation`: nei contratti compaiono solo core-common, core-model e core-trust (classi, corpi `ocr`).
+//
+// D33: nessuna rete in questo modulo (NoNetworkSourcesTest). D39: nessun orologio del telefono (NoWallClockSourcesTest).
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.core.ai'
+
+  kotlinOptions {
+    // D2: litertlm-android 0.18.1 e' compilata con Kotlin 2.4, il compilatore dell'app e' il 2.2.20 (quello dell'engine). SOLO qui,
+    // come nello spike (spike/embed-probe): nessun altro modulo legge classi di quella libreria (Phase6ArchitectureTest).
+    freeCompilerArgs += ['-Xskip-metadata-version-check']
+  }
+}
+
+dependencies {
+  api project(':core-common')
+  api project(':core-model')
+  // api: SegmentClass e i corpi `vec`/`ocr` (OcrLine) compaiono nelle firme dei contratti.
+  api project(':core-trust')
+
+  implementation project(':core-index')
+  implementation project(':core-prepare')
+  implementation project(':core-models')
+  implementation project(':core-rules')
+
+  // D2, scelta di P0 (docs/decisioni.md, "Fase 6 P0: kotlin-reflect e coroutines"): litertlm-android porta a runtime kotlin-reflect
+  // 2.4.0 (che tira kotlin-stdlib 2.4.0 per TUTTA l'app: il compilatore 2.2.20 non legge i suoi metadati) e coroutines 1.11.0.
+  //  - kotlin-reflect TOLTO: lo usa solo l'API degli strumenti di LiteRT-LM (`ToolKt`, `ReflectionTool`: chiamate di funzioni per un
+  //    modello di linguaggio), che l'app non usa e che Phase6ArchitectureTest vieta. kotlin-stdlib resta quella dell'engine (2.2.20).
+  //  - coroutines FERMATE alla versione dell'app (appVersions.coroutines): la libreria usa solo withContext, Dispatchers.Default,
+  //    asExecutor, callbackFlow, awaitClose e ProducerScope.close, tutte gia' nella 1.10.2.
+  //  TransitiveVersionsTest (JVM) e il test strumentato del motore 270M (androidTest) provano entrambe le cose.
+  implementation(appDeps.litertlmAndroid) {
+    exclude group: 'org.jetbrains.kotlin', module: 'kotlin-reflect'
+    exclude group: 'org.jetbrains.kotlinx'
+  }
+  implementation appDeps.mlkitTextRecognition
+  // D44: litert-api 2.3.0 porta `com.google.android.play:ai-delivery` 0.1.1-alpha01 (versione alpha: regola "mai alpha") e con lei
+  // Play Asset Delivery, che nel manifest fuso aggiunge un servizio e un receiver ESPORTATI e il permesso FOREGROUND_SERVICE_DATA_SYNC,
+  // e che parla con il Play Store per scaricare pacchetti di modelli. Serve solo a `AiPackModelProvider` (modelli consegnati da Play),
+  // che l'app non usa: il modello del ritaglio sta nell'APK (Q11). TOLTO; il test strumentato carica LiteRT ed esegue MagicTouch senza.
+  implementation(appDeps.litert) {
+    exclude group: 'com.google.android.play', module: 'ai-delivery'
+  }
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+
+  // I test strumentati dei motori veri (emulatore x86_64, S25, Tab S9): P0 prova che LiteRT e LiteRT-LM convivono e che il 270M parte
+  // (EnginesTogetherDeviceTest); P4 ci aggiunge la suite di contratto e i vettori di riferimento.
+  androidTestImplementation appDeps.androidxTestCore
+  androidTestImplementation appDeps.androidxTestExtJunit
+  androidTestImplementation appDeps.androidxTestRunner
+  androidTestImplementation appDeps.junit
+}

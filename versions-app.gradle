@@ -11,6 +11,14 @@
 //   - ogni versione nuova richiede di rigenerare gradle/verification-metadata.xml (vedi README);
 //   - NIENTE librerie che non siano in questo elenco senza una riga in docs/sicurezza.md: niente
 //     analytics, niente crash reporting, niente Qualcomm/NPU, niente SDK che parli con internet.
+//     Eccezioni scritte (Fase 6, D49 di docs/fase6-progetto.md), tutte SOLO in :core-ai (test d'architettura):
+//       * `litertlm-android` e `litert`: runtime on-device, nessuna rete attesa (lo verificano le catture F55 e F67);
+//       * ML Kit `text-recognition` (versione integrata, modello nell'APK, niente Play Services): manda a Google
+//         statistiche tecniche SOLO con la lettura del testo attiva, una funzione spenta di default che l'utente sceglie
+//         dopo una pagina che dice cosa esce (risposta Q4, D41). Spenta, ML Kit non si inizializza: `MlKitInitProvider`
+//         tolto dal manifest fuso, `MlKit.initialize` solo nel cancello di core-ai/.../ocr/.
+//     L'unico codice HTTPS dell'app resta NOSTRO (`HttpsURLConnection` della piattaforma, nessuna libreria), in
+//     core-models/.../download/https/ (D33): solo per scaricare i modelli fissati nell'app.
 //
 // Questo file si applica DOPO engine/versions.gradle (usa la mappa `engine`).
 
@@ -100,6 +108,19 @@ ext.appVersions = [
   baselineProfile        : '1.4.1',
   // Lo legge il plugin del profilo (e Compose lo porta gia' a runtime): lo dichiariamo noi alla versione stabile.
   profileInstaller       : '1.4.1',
+
+  // --- Fase 6 (P0, docs/fase6-progetto.md D2, D12, D38, D44, D49; righe in docs/sicurezza.md §8) ----------------------------
+  // Tutte e tre SOLO in :core-ai (Phase6ArchitectureTest): nessun altro build.gradle le nomina. Approvate dall'utente il 21/10.
+  // Motore dei vettori (EmbeddingGemma 2), Apache 2.0, nativo (`liblitertlm_jni.so`, arm64-v8a e x86_64). La 0.18.1 (20/10/2026)
+  // corregge un'incompatibilita' ABI di EmbeddingGemma 2. E' compilata con Kotlin 2.4: :core-ai la legge con
+  // `-Xskip-metadata-version-check` (solo li') e le sue transitive (kotlin-reflect, coroutines) sono decise in core-ai/build.gradle.
+  litertlm               : '0.18.1',
+  // OCR (lettura del testo nelle foto), versione integrata con il modello latino nell'APK, niente Play Services (D12). Termini ML
+  // Kit. 16.0.1 (07/08/2024) e' ancora l'ultima. Parla con Google SOLO con la lettura del testo attiva (D41, eccezione D49).
+  mlkitTextRecognition   : '16.0.1',
+  // Runtime LiteRT (ex TensorFlow Lite) per il ritaglio del soggetto con MagicTouch (D44), Apache 2.0, nativo. NON MediaPipe Tasks
+  // (statistiche d'uso annunciate senza modo di spegnerle). Convive con litertlm-android nello stesso processo (test strumentato di P0).
+  litert                 : '2.3.0',
 ]
 
 ext.appSdk = [
@@ -167,6 +188,11 @@ ext.appDeps = [
   benchmarkMacroJunit4     : "androidx.benchmark:benchmark-macro-junit4:${appVersions.benchmarkMacro}",
   uiautomator              : "androidx.test.uiautomator:uiautomator:${appVersions.uiautomator}",
   profileInstaller         : "androidx.profileinstaller:profileinstaller:${appVersions.profileInstaller}",
+
+  // --- Fase 6: motori on-device (SOLO :core-ai, Phase6ArchitectureTest) ---------------------------------------------------
+  litertlmAndroid          : "com.google.ai.edge.litertlm:litertlm-android:${appVersions.litertlm}",
+  mlkitTextRecognition     : "com.google.mlkit:text-recognition:${appVersions.mlkitTextRecognition}",
+  litert                   : "com.google.ai.edge.litert:litert:${appVersions.litert}",
 
   // --- Test ---------------------------------------------------------------------------------------
   junit                    : "junit:junit:${engine.junit}",

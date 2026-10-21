@@ -1,0 +1,41 @@
+// I modelli on-device della Fase 6 (docs/fase6-progetto.md §1.1, §1.2 "core-models", §2.1; D16-D20): catalogo fissato nell'app
+// (dimensione e SHA-256), sorgenti in ordine (NAS, HTTPS, cartella dal PC), scaricamento con ripresa, verifica a OGNI apertura,
+// spazio, rimozione e copia sul NAS nella propria cartella. Contratti, null-object e fake di P0; la logica e' di P3.
+//
+// **L'unico modulo dell'app che apre una connessione HTTPS** (D33), e solo dal pacchetto `download/https/` (classi `internal`):
+// NoNetworkSourcesTest vale in tutti gli altri pacchetti di questo modulo (eccezione `NoNetworkSources.violationsExcept`)
+// e in ogni altro modulo; Phase6ArchitectureTest prova che nessun altro pacchetto o modulo nomina un client HTTP o TLS
+// (`javax.net.ssl`, `java.net.URL`, le `URLConnection`, i socket SSL, le librerie di rete) e che il resto dell'app riceve solo
+// `ModelManager` e `ModelFiles`. HttpsURLConnection della piattaforma: nessuna libreria di rete.
+//
+// Non vede core-index, core-ai, core-search ne' core-database (§1.1). core-nas e' `implementation`: nessun suo tipo nei contratti,
+// cosi' feature-search (che vede i contratti di stato di questo modulo) resta cieca a core-nas.
+//
+// D39: nessun orologio del telefono (NoWallClockSourcesTest): orologio monotono per durate e verifiche, ora del NAS per cio' che
+// si scrive sul NAS.
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.core.models'
+}
+
+dependencies {
+  api project(':core-common')
+  api project(':core-model')
+  // api: SharePath compare nelle firme delle sorgenti (copia sul NAS, cartella dal PC).
+  api project(':core-trust')
+
+  // Lettura del NAS e pubblicazione esclusiva nella cartella del proprio dispositivo (D18); regole e traffico (TrafficLedger).
+  implementation project(':core-nas')
+  implementation project(':core-rules')
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+}

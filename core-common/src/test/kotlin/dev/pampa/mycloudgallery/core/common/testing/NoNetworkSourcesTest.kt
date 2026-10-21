@@ -66,6 +66,26 @@ class NoNetworkSourcesTest {
     }
   }
 
+  /** Fase 6 (D33): l'eccezione vale solo per i file sotto il pacchetto ammesso, mai per i vicini ne' per un nome che gli somiglia. */
+  @Test
+  fun ilPacchettoAmmessoSiSaltaIlRestoNo() {
+    val root = Files.createTempDirectory("nonet").toFile()
+    try {
+      File(root, "kotlin/x/download/https/Fetcher.kt").apply { parentFile?.mkdirs() }.writeText("import javax.net.ssl.HttpsURLConnection\n")
+      File(root, "kotlin/x/download/Other.kt").apply { parentFile?.mkdirs() }.writeText("import java.net.URL\n")
+      File(root, "kotlin/x/download/https2/Near.kt").apply { parentFile?.mkdirs() }.writeText("import java.net.URL\n")
+      val violations = NoNetworkSources.violationsExcept(root, allowedPackages = listOf("kotlin/x/download/https/"))
+      assertThat(violations).hasSize(2)
+      assertThat(violations.joinToString()).doesNotContain("Fetcher.kt")
+      // Senza eccezione anche il pacchetto HTTPS conta (due nomi vietati sulla stessa riga: javax.net e HttpsURLConnection).
+      assertThat(NoNetworkSources.violations(root)).hasSize(4)
+      assertThrows(IllegalArgumentException::class.java) { NoNetworkSources.violationsExcept(root, listOf("kotlin/x/download/https")) }
+      assertThrows(IllegalArgumentException::class.java) { NoNetworkSources.violationsExcept(root, listOf("../x/")) }
+    } finally {
+      root.deleteRecursively()
+    }
+  }
+
   @Test
   fun inumeriDiRigaRestanoQuelliDelFileDopoIcommentiDiPiuRighe() {
     val source = "/*\n  uno\n  due\n*/\nimport java.net.URI\n"

@@ -61,6 +61,8 @@ class TimelineTypesTest {
       "ON_PHONE", 1024, "ON_NAS", 2048, "SAFE", 4096, "TO_VERIFY", 8192,
       // Fase 5 (P0): problema del backup (D15) e copertina di copie simili (D36).
       "BACKUP_PROBLEM", 16384, "SIMILAR_COPIES", 32768,
+      // Fase 6 (P0): documento (D34).
+      "DOCUMENT", 65536,
     ).inOrder()
     assertThat(CellFlags.has(CellFlags.FAVORITE or CellFlags.MOTION, CellFlags.MOTION)).isTrue()
     assertThat(CellFlags.has(CellFlags.FAVORITE, CellFlags.MOTION)).isFalse()

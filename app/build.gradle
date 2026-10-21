@@ -45,6 +45,13 @@ android {
     targetSdk = appSdk.targetSdk
     versionCode = 1
     versionName = '0.1.0'
+
+    // Fase 6 (P0, docs/fase6-progetto.md D3): le librerie native dei motori on-device (LiteRT-LM, LiteRT, ML Kit) solo per
+    // arm64-v8a (S25, Tab S9) e x86_64 (gli emulatori dei test strumentati). `liblitertlm_jni.so` esiste solo per queste due;
+    // armeabi-v7a e x86 di ML Kit e LiteRT non entrerebbero che come peso. Allineamento a 16 KB controllato da tools/check.ps1.
+    ndk {
+      abiFilters 'arm64-v8a', 'x86_64'
+    }
   }
 
   signingConfigs {
@@ -114,6 +121,17 @@ android {
       // Screenshot dello scaffold (Roborazzi), come in core-designsystem.
       maxHeapSize = '3g'
     }
+  }
+}
+
+// Fase 6 (P0, D38): nel manifest fuso di OGNI variante restano solo le `uses-native-library` ammesse (le due della GPU): litert-api
+// ne dichiara 31 e il fusore di AGP non sa toglierle (gradle/verify-release-manifest.gradle, `FilterNativeLibraries`). Prima del
+// controllo qui sotto, che legge l'artefatto gia' trasformato e lo ricontrolla.
+androidComponents {
+  onVariants(selector().all()) { variant ->
+    variant.artifacts.use(registerNativeLibraryFilter(variant))
+      .wiredWithFiles({ it.mergedManifest }, { it.updatedManifest })
+      .toTransform(SingleArtifact.MERGED_MANIFEST.INSTANCE)
   }
 }
 
@@ -211,6 +229,13 @@ dependencies {
   // finche' P10 e P11 non li riempiono; l'elenco e' chiuso in `releaseManifestPolicy` e in docs/sicurezza.md §4-bis. `:app` lega le porte
   // (EntryGate, MediaDocuments) e lo sblocco dell'app alle activity d'ingresso in P14.
   implementation project(':feature-integrations')
+  // Fase 6 (docs/fase6-progetto.md §1.1, §1.4, P0): la ricerca. `:app` cabla `AiGraph` e `SearchGraph` (P11): modelli, motori, calcolo
+  // AI, motore di ricerca, la scheda Cerca al posto del segnaposto. litertlm, litert e ML Kit restano dentro core-ai (`:app` non le
+  // nomina); il codice HTTPS resta dentro core-models (`internal`). Il manifest di core-ai toglie `MlKitInitProvider` dal manifest fuso.
+  implementation project(':core-models')
+  implementation project(':core-ai')
+  implementation project(':core-search')
+  implementation project(':feature-search')
 
   // --- Il design system (engine-ui porta Compose, Material 3, activity-compose e lifecycle) ----------
   implementation project(':engine-ui')
@@ -259,4 +284,11 @@ dependencies {
   testImplementation appDeps.roborazzi
   testImplementation appDeps.roborazziCompose
   testImplementation appDeps.roborazziJunitRule
+
+  // Fase 6 (P0, D41): il test strumentato che prova, nel processo dell'app vera, che con la lettura del testo spenta ML Kit non si
+  // inizializza (`MlKitOffAtStartupDeviceTest`). Solo l'APK di prova, mai l'app.
+  androidTestImplementation appDeps.androidxTestCore
+  androidTestImplementation appDeps.androidxTestExtJunit
+  androidTestImplementation appDeps.androidxTestRunner
+  androidTestImplementation appDeps.junit
 }

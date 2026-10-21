@@ -45,11 +45,21 @@ object NoNetworkSources {
    * cartella di lavoro dei test): una riga `percorso:riga: perche'` per ognuna. Vuoto = nessuna rete.
    * Una cartella che non esiste da' un errore: un controllo che non vede i sorgenti non controlla niente.
    */
-  fun violations(sourceRoot: File): List<String> {
+  fun violations(sourceRoot: File): List<String> = violationsExcept(sourceRoot, allowedPackages = emptyList())
+
+  /**
+   * Fase 6 (D33): come [violations], con un nome suo (facile da cercare), ma i file sotto uno dei pacchetti di [allowedPackages] (percorsi relativi a [sourceRoot] con
+   * le barre `/`, es. `kotlin/dev/pampa/mycloudgallery/core/models/download/https/`) non si controllano. Serve a UN solo modulo,
+   * core-models, il cui pacchetto `download/https/` e' l'unico codice HTTPS dell'app: `Phase6ArchitectureTest` vieta che un altro
+   * modulo usi un'eccezione e che la eccezione di core-models sia un'altra.
+   */
+  fun violationsExcept(sourceRoot: File, allowedPackages: List<String>): List<String> {
     require(sourceRoot.isDirectory) { "Non trovo i sorgenti da controllare: ${sourceRoot.path}" }
+    require(allowedPackages.all { it.endsWith("/") && !it.startsWith("/") && ".." !in it }) { "Pacchetto ammesso non valido." }
     val found = mutableListOf<String>()
     sourceRoot.walkTopDown()
       .filter { it.isFile && (it.extension == "kt" || it.extension == "java") }
+      .filter { file -> allowedPackages.none { file.relativeTo(sourceRoot).invariantSeparatorsPath.startsWith(it) } }
       .sortedBy { it.path }
       .forEach { file ->
         val code = stripComments(file.readText())

@@ -47,7 +47,14 @@
                                 E (LA-5 della verifica funzionale della 5B) il SECONDO cancello, quello dei file in arrivo ("Salva sul
                                 NAS", `IncomingGate.stateOf`, la share di destinazione): stessa prova, cioe' chiama `backupMayWriteTo` e
                                 `backupMayWriteAs`, risponde `TEST_ONLY` dopo ognuna ed e' istanziato da una classe del backup
-    7c. niente servizi         l'APK di release non ha nessun `META-INF/services/dev.pampa.*` (ne' un file di servizio che
+    7e. motori on-device        (Fase 6, P0; docs/fase6-progetto.md D3, D33, D38, D41) sull'APK di release vero: librerie
+                                native solo arm64-v8a e x86_64, non compresse, allineate a 16 KB nel file e nei segmenti LOAD;
+                                nel manifest niente `MlKitInitProvider`, i componenti di ML Kit e DataTransport esattamente
+                                l'elenco chiuso di `releaseManifestPolicy` (non esportati), le `uses-native-library` solo le due
+                                ammesse e facoltative; nel bytecode (dexdump) `MlKit.initialize` chiamato da codice nostro solo
+                                dal cancello `core-ai/.../ocr/MlKitBootstrap` e i client HTTPS (`HttpsURLConnection`,
+                                `URL.openConnection`) solo da `core-models/.../download/https/`. FALLISCE se non legge l'APK
+    7c. niente servizi        l'APK di release non ha nessun `META-INF/services/dev.pampa.*` (ne' un file di servizio che
                                 nomini una classe `dev.pampa.*`): le varianti di misura legano le loro classi con Hilt, mai
                                 con `ServiceLoader` (R6)
     8. niente fake in release   nessuna classe di un package `testing` nel dex dell'APK di release (D6 di
@@ -436,8 +443,13 @@ function Get-TestingClassesInApk([string]$apk) {
 
 # La misura (Fase 3, D21): classi `Bench*` (l'inizializzatore del dataset sintetico della variante benchmarkRelease),
 # un package `benchmark`, androidx.benchmark e UiAutomator. Nessuna deve stare nella release.
+# Eccezione nominata (Fase 6, P0): due tipi dell'API di `litertlm-android` 0.18.1 che hanno "Benchmark" nel nome ma non sono codice
+# di misura (le statistiche di un motore e il file Kotlin che le espone). Restano per forza: la parte nativa della libreria nomina
+# `BenchmarkInfo` per JNI e la regola keep di core-ai tiene la libreria intera. Elenco chiuso: ogni altra classe fa fallire il passo.
+$script:allowedLibraryBenchmarkTypes = @("Lcom/google/ai/edge/litertlm/BenchmarkInfo;", "Lcom/google/ai/edge/litertlm/BenchmarkKt;")
 function Get-BenchmarkClassesInApk([string]$apk) {
-  return Get-DexClassesMatching $apk 'L(?:[A-Za-z0-9_$]+/)*(?:Bench[A-Za-z0-9_$]*;|benchmark/[A-Za-z0-9_$/]*;)|Landroidx/test/uiautomator/[A-Za-z0-9_$/]*;'
+  $found = Get-DexClassesMatching $apk 'L(?:[A-Za-z0-9_$]+/)*(?:Bench[A-Za-z0-9_$]*;|benchmark/[A-Za-z0-9_$/]*;)|Landroidx/test/uiautomator/[A-Za-z0-9_$/]*;'
+  return @($found | Where-Object { $script:allowedLibraryBenchmarkTypes -notcontains $_ })
 }
 
 # I permessi documentati in docs/sicurezza.md 4-bis: i nomi in maiuscolo tra apici inversi (es. `VIBRATE`),
@@ -799,6 +811,266 @@ Step "D12 e R2 nella release: FeatureFlags.backupTestSharesOnly, backupMayWriteT
     (($gate.Instantiators | Select-Object -Unique) -join ", "), @($gate.DecisionCallers | Select-Object -Unique).Count, @($gate.AccountDecisionCallers | Select-Object -Unique).Count, $gate.Lines) -ForegroundColor DarkGray
   Write-Host ("        cancello dei file in arrivo (LA-5) provato nel bytecode: IncomingGate.stateOf -> backupMayWriteTo/backupMayWriteAs -> TEST_ONLY, istanziato da {0}" -f
     (($gate.IncomingInstantiators | Select-Object -Unique) -join ", ")) -ForegroundColor DarkGray
+}
+
+# --- Fase 6 (P0): i motori on-device nell'APK di release (docs/fase6-progetto.md D3, D33, D38, D41, L47, L49) -------------------------
+# Tre letture dell'APK vero: (1) le librerie native (ABI, compressione, allineamento a 16 KB nel file e nei segmenti LOAD dell'ELF:
+# Android 15+ su pagine da 16 KB); (2) il manifest (aapt2): niente MlKitInitProvider, i componenti delle librerie di Google
+# esattamente l'elenco chiuso di releaseManifestPolicy e non esportati, solo le uses-native-library ammesse e facoltative; (3) il
+# bytecode (dexdump): chi chiama MlKit.initialize e chi usa i client HTTPS, fra le classi nostre. Ogni lettura che non riesce FALLISCE.
+
+# Un elenco di stringhe fra apici di `name : [ ... ]` in gradle\verify-release-manifest.gradle (stessa fonte di verifyReleaseManifest).
+function Get-PolicyList([string]$name) {
+  $gradle = Read-TextFile (Join-Path $root "gradle\verify-release-manifest.gradle")
+  $list = [regex]::Match($gradle, "(?s)$name\s*:\s*\[(.*?)\n\s*\],")
+  if (-not $list.Success) { throw "non trovo $name in gradle\verify-release-manifest.gradle" }
+  $values = @()
+  foreach ($line in ($list.Groups[1].Value -split '\r?\n')) {
+    $code = ($line -replace '//.*$', '').Trim()
+    foreach ($m in [regex]::Matches($code, "'([^']+)'")) { $values += $m.Groups[1].Value }
+  }
+  if ($values.Count -eq 0) { throw "$name e' vuoto in gradle\verify-release-manifest.gradle" }
+  return $values
+}
+
+$script:apkInspectLoaded = $false
+function Initialize-ApkInspect {
+  if ($script:apkInspectLoaded) { return }
+  Add-Type -Language CSharp -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Text;
+using System.Text.RegularExpressions;
+
+public class NativeLibFact {
+  public string Name;
+  public int Method;
+  public long DataOffset;
+  public long Size;
+  public List<long> LoadAligns = new List<long>();
+  public string Problem;
+}
+
+public static class ApkInspect {
+  // Le voci lib/<abi>/*.so dell'APK dalla directory centrale dello zip: metodo di compressione, posizione dei dati nel file e
+  // allineamento dei segmenti LOAD dell'ELF (solo per le voci non compresse, che il sistema mappa cosi' come sono).
+  public static List<NativeLibFact> NativeLibs(string apk) {
+    var result = new List<NativeLibFact>();
+    byte[] data = File.ReadAllBytes(apk);
+    int eocd = -1;
+    for (int i = data.Length - 22; i >= Math.Max(0, data.Length - 65557); i--) {
+      if (BitConverter.ToUInt32(data, i) == 0x06054b50) { eocd = i; break; }
+    }
+    if (eocd < 0) throw new InvalidOperationException("fine della directory centrale non trovata");
+    int count = BitConverter.ToUInt16(data, eocd + 10);
+    long cd = BitConverter.ToUInt32(data, eocd + 16);
+    long p = cd;
+    for (int e = 0; e < count; e++) {
+      if (BitConverter.ToUInt32(data, (int)p) != 0x02014b50) throw new InvalidOperationException("directory centrale non valida");
+      int method = BitConverter.ToUInt16(data, (int)p + 10);
+      long csize = BitConverter.ToUInt32(data, (int)p + 20);
+      long usize = BitConverter.ToUInt32(data, (int)p + 24);
+      int nameLen = BitConverter.ToUInt16(data, (int)p + 28);
+      int extraLen = BitConverter.ToUInt16(data, (int)p + 30);
+      int commentLen = BitConverter.ToUInt16(data, (int)p + 32);
+      long local = BitConverter.ToUInt32(data, (int)p + 42);
+      string name = Encoding.UTF8.GetString(data, (int)p + 46, nameLen);
+      p += 46 + nameLen + extraLen + commentLen;
+      if (!name.StartsWith("lib/") || !name.EndsWith(".so")) continue;
+      var fact = new NativeLibFact { Name = name, Method = method, Size = usize };
+      int localName = BitConverter.ToUInt16(data, (int)local + 26);
+      int localExtra = BitConverter.ToUInt16(data, (int)local + 28);
+      fact.DataOffset = local + 30 + localName + localExtra;
+      if (method == 0) {
+        long b = fact.DataOffset;
+        if (data[b] != 0x7f || data[b + 1] != (byte)'E' || data[b + 2] != (byte)'L' || data[b + 3] != (byte)'F' || data[b + 4] != 2) {
+          fact.Problem = "non e' un ELF a 64 bit";
+        } else {
+          long phoff = BitConverter.ToInt64(data, (int)(b + 0x20));
+          int phentsize = BitConverter.ToUInt16(data, (int)(b + 0x36));
+          int phnum = BitConverter.ToUInt16(data, (int)(b + 0x38));
+          for (int h = 0; h < phnum; h++) {
+            long ph = b + phoff + (long)h * phentsize;
+            if (BitConverter.ToUInt32(data, (int)ph) == 1) fact.LoadAligns.Add(BitConverter.ToInt64(data, (int)(ph + 0x30)));
+          }
+        }
+      }
+      result.Add(fact);
+    }
+    return result;
+  }
+}
+
+public class DexCallFacts {
+  public bool SawMainActivity;
+  public int Lines;
+  // "bersaglio|classe.metodo" del chiamante, per ogni invocazione di un bersaglio.
+  public List<string> Calls = new List<string>();
+}
+
+public static class DexCallScanner {
+  static readonly Regex ClassLine = new Regex(@"^\s*Class descriptor\s*:\s*'([^']+)'", RegexOptions.Compiled);
+  static readonly Regex NameLine = new Regex(@"^\s*name\s*:\s*'([^']*)'", RegexOptions.Compiled);
+  static readonly Regex InsnLine = new Regex(@"\|[0-9a-fA-F]{4}:\s+(\S+)\s*(.*)$", RegexOptions.Compiled);
+
+  public static void Scan(string dexdump, string dexPath, string[] targets, DexCallFacts facts) {
+    var info = new ProcessStartInfo(dexdump, "-d \"" + dexPath + "\"") {
+      UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
+      StandardOutputEncoding = Encoding.GetEncoding(28591),
+    };
+    using (var process = Process.Start(info)) {
+      string cls = "", method = "";
+      var errors = process.StandardError.ReadToEndAsync();
+      string line;
+      while ((line = process.StandardOutput.ReadLine()) != null) {
+        facts.Lines++;
+        var m = ClassLine.Match(line);
+        if (m.Success) {
+          cls = m.Groups[1].Value; method = "";
+          if (cls == "Ldev/pampa/mycloudgallery/MainActivity;") facts.SawMainActivity = true;
+          continue;
+        }
+        m = NameLine.Match(line);
+        if (m.Success) { method = m.Groups[1].Value; continue; }
+        var insn = InsnLine.Match(line);
+        if (!insn.Success || !insn.Groups[1].Value.StartsWith("invoke")) continue;
+        string rest = insn.Groups[2].Value;
+        foreach (var target in targets) {
+          if (rest.Contains(target)) facts.Calls.Add(target + "|" + cls + "." + method);
+        }
+      }
+      process.WaitForExit();
+      if (process.ExitCode != 0) throw new InvalidOperationException("dexdump ha fallito: " + errors.Result);
+    }
+  }
+}
+'@
+  $script:apkInspectLoaded = $true
+}
+
+# Le uses-native-library e i componenti (nome, esportato) del manifest DENTRO l'APK.
+function Get-ApkPhase6ManifestFacts([string]$aapt2, [string]$apk) {
+  $dump = Invoke-Native -File $aapt2 -Arguments @("dump", "xmltree", "--file", "AndroidManifest.xml", $apk)
+  if ($dump.Code -ne 0) { throw "aapt2 dump xmltree fallito: " + ($dump.Lines -join " | ") }
+  $facts = [ordered]@{ NativeLibs = @(); Components = @() }
+  $current = $null
+  foreach ($line in $dump.Lines) {
+    if ($line -match '^\s*E: ([\w\-]+) ') {
+      $element = $Matches[1]
+      if ($element -eq "uses-native-library") {
+        $current = @{ Kind = $element; Name = ""; Required = $true }
+        $facts.NativeLibs += , $current
+      } elseif (@("activity", "activity-alias", "service", "receiver", "provider") -contains $element) {
+        $current = @{ Kind = $element; Name = ""; Exported = $false }
+        $facts.Components += , $current
+      } else {
+        $current = $null
+      }
+      continue
+    }
+    if ($current -and $line -match '^\s*A: .*android:([A-Za-z]+)\(0x[0-9a-fA-F]+\)=(.*)$') {
+      $attr = $Matches[1]
+      $value = $Matches[2].Trim()
+      if ($attr -eq "name" -and $value -match '^"([^"]*)"') { $current.Name = $Matches[1] }
+      if ($attr -eq "required") { $current.Required = ($value -match '^true' -or $value -match '0xffffffff') }
+      if ($attr -eq "exported") { $current.Exported = ($value -match '^true' -or $value -match '0xffffffff') }
+    }
+  }
+  return $facts
+}
+
+Step "motori on-device nella release: librerie native (ABI, 16 KB), manifest (ML Kit, elenco chiuso, uses-native-library), bytecode (MlKit.initialize, HTTPS)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
+  $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if (-not $apk) { return "nessun APK di release in app\build\outputs\apk\release" }
+  $aapt2 = Get-Aapt2
+  if (-not $aapt2) { return "aapt2 non trovato: controlla sdk.dir in local.properties e le build-tools dell'SDK" }
+  Initialize-ApkInspect
+  $problems = @()
+
+  # (1) Le librerie native.
+  $libs = @([ApkInspect]::NativeLibs($apk.FullName))
+  if ($libs.Count -eq 0) { return "nessuna libreria nativa nell'APK di release: la lettura non e' affidabile (LiteRT-LM, LiteRT e ML Kit ne portano)" }
+  foreach ($expected in @("liblitertlm_jni.so", "libLiteRt.so", "liblitert_jni.so", "libmlkit_google_ocr_pipeline.so")) {
+    foreach ($abi in @("arm64-v8a", "x86_64")) {
+      if (-not ($libs | Where-Object { $_.Name -eq "lib/$abi/$expected" })) { $problems += "manca lib/$abi/$expected" }
+    }
+  }
+  foreach ($lib in $libs) {
+    $abi = ($lib.Name -split '/')[1]
+    if (@("arm64-v8a", "x86_64") -notcontains $abi) { $problems += "$($lib.Name): ABI non ammessa (solo arm64-v8a e x86_64, D3)" ; continue }
+    if ($lib.Method -ne 0) { $problems += "$($lib.Name) e' compressa nell'APK (va mappata cosi' com'e')"; continue }
+    if ($lib.DataOffset % 16384 -ne 0) { $problems += "$($lib.Name) non e' allineata a 16 KB nel file (scostamento $($lib.DataOffset))" }
+    if ($lib.Problem) { $problems += "$($lib.Name): $($lib.Problem)"; continue }
+    if (@($lib.LoadAligns).Count -eq 0) { $problems += "$($lib.Name): nessun segmento LOAD letto" }
+    foreach ($align in $lib.LoadAligns) {
+      if ($align -lt 16384) { $problems += "$($lib.Name): segmento LOAD allineato a $align byte (servono 16 KB)" }
+    }
+  }
+  Write-Host ("        librerie native: {0}, tutte non compresse e allineate a 16 KB" -f $libs.Count) -ForegroundColor DarkGray
+
+  # (2) Il manifest dell'APK.
+  $manifest = Get-ApkPhase6ManifestFacts $aapt2 $apk.FullName
+  $allowedNative = @(Get-PolicyList "allowedNativeLibraries")
+  $nativeNames = @($manifest.NativeLibs | ForEach-Object { $_.Name })
+  foreach ($native in $manifest.NativeLibs) {
+    if ($allowedNative -notcontains $native.Name) { $problems += "uses-native-library non ammessa nell'APK: $($native.Name)" }
+    elseif ($native.Required) { $problems += "uses-native-library $($native.Name) non facoltativa" }
+  }
+  if (@($nativeNames | Select-Object -Unique).Count -ne $nativeNames.Count) { $problems += "uses-native-library ripetute: $($nativeNames -join ', ')" }
+  if (@($manifest.Components | Where-Object { $_.Name -eq "com.google.mlkit.common.internal.MlKitInitProvider" }).Count -gt 0) {
+    $problems += "MlKitInitProvider e' nel manifest dell'APK: ML Kit partirebbe da solo all'avvio (D41)"
+  }
+  $prefixes = @(Get-PolicyList "thirdPartyComponentPrefixes")
+  $closed = @(Get-PolicyList "allowedThirdPartyComponents")
+  $thirdParty = @($manifest.Components | Where-Object { $name = $_.Name; @($prefixes | Where-Object { $name.StartsWith($_) }).Count -gt 0 })
+  foreach ($component in $thirdParty) {
+    if ($closed -notcontains $component.Name) { $problems += "componente di una libreria di Google fuori dall'elenco chiuso: <$($component.Kind)> $($component.Name)" }
+    if ($component.Exported) { $problems += "componente di una libreria di Google esportato: $($component.Name)" }
+  }
+  foreach ($name in $closed) {
+    if (-not ($thirdParty | Where-Object { $_.Name -eq $name })) { $problems += "il componente dell'elenco chiuso $name non e' piu' nell'APK: aggiornare releaseManifestPolicy e docs/sicurezza.md 4-bis" }
+  }
+  Write-Host ("        manifest: uses-native-library {0}; componenti delle librerie di Google {1} (elenco chiuso)" -f ($nativeNames -join ", "), $thirdParty.Count) -ForegroundColor DarkGray
+
+  # (3) Il bytecode: MlKit.initialize e i client HTTPS chiamati da classi nostre.
+  $dexdump = Get-DexDump
+  if (-not $dexdump) { return "dexdump.exe non trovato accanto ad aapt2 (build-tools)" }
+  $initialize = "Lcom/google/mlkit/common/MlKit;.initialize:"
+  $https = @("Ljavax/net/ssl/HttpsURLConnection;.", "Ljava/net/URL;.openConnection:", "Ljava/net/HttpURLConnection;.")
+  $facts = New-Object DexCallFacts
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $temp = Join-Path ([System.IO.Path]::GetTempPath()) ("mcg-dex6-" + [guid]::NewGuid().ToString("N"))
+  New-Item -ItemType Directory -Path $temp | Out-Null
+  $zip = [System.IO.Compression.ZipFile]::OpenRead($apk.FullName)
+  try {
+    foreach ($entry in @($zip.Entries | Where-Object { $_.FullName -match '^classes\d*\.dex$' })) {
+      $target = Join-Path $temp $entry.FullName
+      [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $target, $true)
+      [DexCallScanner]::Scan($dexdump, $target, [string[]](@($initialize) + $https), $facts)
+    }
+  } finally {
+    $zip.Dispose()
+    Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
+  }
+  if ($facts.Lines -lt 1000 -or -not $facts.SawMainActivity) { return "lettura del bytecode non affidabile ($($facts.Lines) righe, MainActivity vista: $($facts.SawMainActivity))" }
+  foreach ($call in $facts.Calls) {
+    $parts = $call -split '\|', 2
+    $caller = $parts[1]
+    if (-not $caller.StartsWith("Ldev/pampa/")) { continue }
+    if ($parts[0] -eq $initialize) {
+      if (-not ($caller.StartsWith("Ldev/pampa/mycloudgallery/core/ai/ocr/MlKitBootstrap;") -or $caller.StartsWith("Ldev/pampa/mycloudgallery/core/ai/ocr/MlKitBootstrap$"))) {
+        $problems += "MlKit.initialize chiamato fuori dal cancello: $caller"
+      }
+    } elseif (-not $caller.StartsWith("Ldev/pampa/mycloudgallery/core/models/download/https/")) {
+      $problems += "client HTTPS fuori da core-models/.../download/https/: $caller ($($parts[0]))"
+    }
+  }
+  $ourCalls = @($facts.Calls | Where-Object { ($_ -split '\|', 2)[1].StartsWith("Ldev/pampa/") })
+  Write-Host ("        bytecode: {0} chiamate nostre a MlKit.initialize o ai client HTTPS, tutte al loro posto ({1} righe di dexdump)" -f $ourCalls.Count, $facts.Lines) -ForegroundColor DarkGray
+  if ($problems.Count -gt 0) { return ($problems -join "; ") }
 }
 
 # R6: nessun file di servizio nostro nell'APK di release. `ServiceLoader` e' un canale dichiarativo e invisibile: un file in

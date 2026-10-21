@@ -81,6 +81,16 @@ object CellFlags {
    */
   const val SIMILAR_COPIES: Int = 1 shl 15
 
+  // --- Fase 6: ricerca (`docs/fase6-progetto.md` D34). Bit fissato da P0, calcolato da P1 (`setDerivedFlags`, a lotti) ---------
+
+  /**
+   * Il media e' un **documento** (D34): il testo letto ha almeno 6 righe o 200 caratteri, oppure il vettore e' vicino alle frasi
+   * prototipo ("un documento", "uno scontrino", ...) oltre la soglia calibrata in P9. Bit **derivato e locale**: ogni dispositivo lo
+   * ricava dagli stessi dati (testo e vettori dell'indice), niente si pubblica. Lo leggono il filtro rapido "Documenti" della
+   * Libreria (`LibraryFilter.DOCUMENTS`) e il tipo "documenti" delle query.
+   */
+  const val DOCUMENT: Int = 1 shl 16
+
   /** Tutti i flag con il loro nome, per i test di stabilita' e la Diagnostica (solo numeri). */
   val ALL: Map<String, Int> = linkedMapOf(
     "EDITED" to EDITED,
@@ -99,6 +109,7 @@ object CellFlags {
     "TO_VERIFY" to TO_VERIFY,
     "BACKUP_PROBLEM" to BACKUP_PROBLEM,
     "SIMILAR_COPIES" to SIMILAR_COPIES,
+    "DOCUMENT" to DOCUMENT,
   )
 
   fun has(flags: Int, flag: Int): Boolean = flags and flag == flag

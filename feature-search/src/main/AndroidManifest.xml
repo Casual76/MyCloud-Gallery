@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!--
+      :feature-search: nessun permesso e nessun componente (Fase 6, P0). La scheda Cerca e la pagina Ricerca e modelli sono
+      schermate di :app (MainScaffold, P11). Nessuna rete (D33).
+      Un permesso o un componente nuovo si chiede all'orchestratore: prima la riga in docs/sicurezza.md 4-bis, poi
+      quella in releaseManifestPolicy.
+  -->
+
+</manifest>

@@ -1,0 +1,21 @@
+MagicTouch (Interactive Segmenter), versione 1, float32, ingresso 512x512
+Copyright Google LLC.
+
+Modello distribuito con licenza Apache 2.0 (testo completo in LICENSE-Apache-2.0.txt, in questa
+cartella), secondo la scheda del modello "Model Card MagicTouch" pubblicata da Google
+(https://storage.googleapis.com/mediapipe-assets/Model%20Card%20MagicTouch.pdf, 13/03/2023).
+
+Provenienza del file in questa cartella:
+  indirizzo:  https://storage.googleapis.com/mediapipe-models/interactive_segmenter/magic_touch/float32/1/magic_touch.tflite
+  scaricato:  21/10/2026, con il consenso dell'utente (docs/fase6-progetto.md, risposta Q11 (a))
+  dimensione: 6227884 byte
+  SHA-256:    e24338a717c1b7ad8d159666677ef400babb7f33b8ad60c4d96db4ecf694cd25
+  MD5:        uguale a quello dichiarato dal server (x-goog-hash md5=OxKV+RVhwTlWy0IvcU4tBw==)
+
+Il file non e' modificato. MyCloud Gallery lo esegue sul dispositivo con il runtime LiteRT
+(com.google.ai.edge.litert, Apache 2.0) per ritagliare il soggetto toccato nel viewer; non lo
+manda mai fuori dal dispositivo. L'impronta e' fissata nell'app (ModelCatalog.CUTOUT_MAGICTOUCH)
+e si verifica a ogni caricamento.
+
+Limiti dichiarati dalla scheda: bordi non sempre precisi, dettagli sottili (dita, capelli) a
+volte persi; una persona ritagliata e' una foto nuova da condividere con il suo permesso.

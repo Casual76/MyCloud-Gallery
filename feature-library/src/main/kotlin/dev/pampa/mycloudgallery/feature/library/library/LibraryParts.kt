@@ -218,6 +218,7 @@ internal fun filterLabel(filter: LibraryFilter): String = stringResource(
     LibraryFilter.WHATSAPP -> R.string.library_filter_whatsapp
     LibraryFilter.VIDEOS -> R.string.library_filter_videos
     LibraryFilter.FAVORITES -> R.string.library_filter_favorites
+    LibraryFilter.DOCUMENTS -> R.string.library_filter_documents
   },
 )
 
@@ -280,6 +281,7 @@ internal fun LibraryFilterEmptyState(filter: LibraryFilter, onShowAll: () -> Uni
       LibraryFilter.WHATSAPP -> R.string.library_filter_empty_whatsapp
       LibraryFilter.VIDEOS -> R.string.library_filter_empty_videos
       LibraryFilter.FAVORITES -> R.string.library_filter_empty_favorites
+      LibraryFilter.DOCUMENTS -> R.string.library_filter_empty_documents
       LibraryFilter.WITHOUT_SCREENSHOTS_AND_WHATSAPP, LibraryFilter.ALL -> R.string.library_filter_empty_no_screenshots_whatsapp
     },
   )

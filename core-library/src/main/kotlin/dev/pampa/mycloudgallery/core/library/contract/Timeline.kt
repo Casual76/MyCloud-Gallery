@@ -118,6 +118,12 @@ enum class LibraryFilter(val code: String) {
   VIDEOS("videos"),
 
   FAVORITES("favorites"),
+
+  /**
+   * Fase 6 (D34): i documenti, dal bit derivato locale `CellFlags.DOCUMENT` (testo letto o vettore vicino alle frasi prototipo).
+   * Firma di P0; il chip nel filtro rapido della Libreria lo accende P8 (finche' P8 non lo fa la Libreria non lo propone).
+   */
+  DOCUMENTS("documents"),
   ;
 
   /**
@@ -131,6 +137,7 @@ enum class LibraryFilter(val code: String) {
     WHATSAPP -> source == MediaSource.WHATSAPP
     VIDEOS -> kind == MediaKind.VIDEO
     FAVORITES -> CellFlags.has(flags, CellFlags.FAVORITE)
+    DOCUMENTS -> CellFlags.has(flags, CellFlags.DOCUMENT)
   }
 
   companion object {
@@ -157,6 +164,24 @@ interface TimelineView {
 
   /** La posizione di [id] nella vista, o -1 se non c'e' (o non passa il filtro). */
   fun viewIndexOf(id: MediaId): Int
+}
+
+/**
+ * Fase 6 (docs/fase6-progetto.md D28, §1.2 "core-library"): una vista in un **ordine qualunque**, non quello della timeline: i
+ * risultati di una ricerca ("Pertinenti", o "Recenti" con la pertinenza dentro il periodo, D48). La griglia e il viewer la scorrono
+ * come ogni [TimelineView] (stessi indici di vista, stessa [snapshot]); cambia solo cio' che nessuno deve dare per scontato:
+ *
+ * - le posizioni di vista **non** crescono con le posizioni dell'indice: [viewIndexOf] passa da una mappa, **mai** dalla ricerca
+ *   binaria (che [FilteredTimelineView] usa perche' li' l'ordine e' quello del tempo);
+ * - non c'e' un filtro: [filter] e' [LibraryFilter.ALL] e la vista contiene esattamente le celle scelte da chi la costruisce;
+ * - **mai un nascosto**: la [snapshot] non li contiene (E-H1), quindi nemmeno la vista.
+ *
+ * Chi la costruisce (il motore di ricerca, P6) la ricostruisce quando l'indice cambia, cosi' un media nascosto o eliminato altrove
+ * esce dai risultati (E-Q13). `IndexOrderedTimelineView` (core-library/index) e' l'implementazione di riferimento.
+ */
+@Stable
+interface OrderedTimelineView : TimelineView {
+  override val filter: LibraryFilter get() = LibraryFilter.ALL
 }
 
 /**

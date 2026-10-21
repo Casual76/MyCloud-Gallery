@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!--
+      :core-models: nessun permesso e nessun componente (Fase 6, P0). Lo scaricamento dei modelli e' un lavoro accelerato di
+      WorkManager (`ModelFetchWorker` in :app, D17): nessun servizio nuovo. INTERNET c'e' gia' (Fase 2): HTTPS solo da
+      core-models/.../download/https/, verso gli host ammessi scritti nell'app (D17, D33).
+      Un permesso o un componente nuovo si chiede all'orchestratore: prima la riga in docs/sicurezza.md 4-bis, poi
+      quella in releaseManifestPolicy.
+  -->
+
+</manifest>

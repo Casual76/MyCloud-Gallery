@@ -50,6 +50,8 @@
   <string name="library_filter_whatsapp">WhatsApp</string>
   <string name="library_filter_videos">Video</string>
   <string name="library_filter_favorites">Preferiti</string>
+  <!-- Fase 6 (D34): il chip lo accende P8. -->
+  <string name="library_filter_documents">Documenti</string>
   <string name="library_style_square">Quadrata</string>
   <string name="library_style_justified">Proporzioni originali</string>
 
@@ -58,6 +60,7 @@
   <string name="library_filter_empty_whatsapp">Nessuna foto di WhatsApp</string>
   <string name="library_filter_empty_videos">Nessun video</string>
   <string name="library_filter_empty_favorites">Nessun preferito</string>
+  <string name="library_filter_empty_documents">Nessun documento</string>
   <string name="library_filter_empty_no_screenshots_whatsapp">Solo screenshot e WhatsApp</string>
   <string name="library_filter_empty_detail">Con questo filtro non c’è niente da mostrare. Il resto della Libreria è sempre lì.</string>
   <string name="library_filter_show_all">Mostra tutto</string>

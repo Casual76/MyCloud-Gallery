@@ -90,6 +90,11 @@ ext.galleryModules = [
   ':feature-backup',
   // Fase 5B (docs/fase5-progetto.md §1.1, P0-B)
   ':feature-integrations',
+  // Fase 6 (docs/fase6-progetto.md §1.1, P0)
+  ':core-models',
+  ':core-ai',
+  ':core-search',
+  ':feature-search',
 ]
 
 tasks.register('galleryTest') {

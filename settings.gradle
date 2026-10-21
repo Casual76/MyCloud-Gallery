@@ -70,6 +70,14 @@ include ':feature-backup'    // impostazioni e pagina del backup, primo backup (
 // quattro componenti approvati (Q5): PickerActivity, ShareReceiverActivity, MediaDocumentsProvider e FileProvider, come scheletri.
 include ':feature-integrations' // selettore per le altre app, provider dei documenti, ricezione delle condivisioni, "Modifica con..."
 
+// Fase 6 (docs/fase6-progetto.md §1.1, P0): la ricerca. core-models e' l'UNICO modulo con codice HTTPS (solo download/https/, per
+// i modelli fissati nell'app); litertlm, litert e ML Kit stanno SOLO in core-ai; core-search non vede ne' rete ne' NAS. Chi legge il
+// NAS o mostra la Libreria non vede nessuno dei quattro.
+include ':core-models'       // catalogo dei modelli, sorgenti, scaricamento con ripresa, verifica, spazio, copia sul NAS
+include ':core-ai'           // motori on-device (vettori, OCR solo se attivo, ritaglio), ingressi, calcolo AI coordinato
+include ':core-search'       // indice locale, analizzatore delle query, fusione e soglie, simili, copertura, cronologia
+include ':feature-search'    // la schermata Cerca e la pagina Ricerca e modelli
+
 // --- fluid-engine (inizio) ---
 def engineDir = file('engine')
 if (engineDir.exists()) {

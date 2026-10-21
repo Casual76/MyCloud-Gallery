@@ -104,9 +104,15 @@ class Phase5BArchitectureTest {
       .filter { it.nodeType == Node.ELEMENT_NODE && it.nodeName == tag }
       .map { it as Element }
 
+  /**
+   * I componenti DICHIARATI. Fase 6 (P0): un elemento con `tools:node="remove"` non dichiara niente, toglie un componente di una
+   * libreria dal manifest fuso (core-ai toglie cosi' `MlKitInitProvider` di ML Kit, D41): non conta. Phase6ArchitectureTest vuole
+   * che core-ai abbia quella rimozione e nessun altro elemento di componente.
+   */
   private fun components(module: String): List<Pair<String, Element>> {
     val app = children(manifest(module), "application").firstOrNull() ?: return emptyList()
     return COMPONENT_TAGS.flatMap { tag -> children(app, tag).map { tag to it } }
+      .filter { (_, element) -> element.getAttributeNS(TOOLS, "node") != "remove" }
   }
 
   @Test
@@ -366,6 +372,7 @@ class Phase5BArchitectureTest {
     val PRODUCTION_CONFIG = Regex("""^(\w*?)(api|Api|implementation|Implementation|compileOnly|CompileOnly|runtimeOnly|RuntimeOnly)$""")
 
     const val ANDROID = "http://schemas.android.com/apk/res/android"
+    const val TOOLS = "http://schemas.android.com/tools"
     const val BACKUP = "core-backup"
     const val FEATURE_INTEGRATIONS = "feature-integrations"
     const val NASOPS = "core-nasops"

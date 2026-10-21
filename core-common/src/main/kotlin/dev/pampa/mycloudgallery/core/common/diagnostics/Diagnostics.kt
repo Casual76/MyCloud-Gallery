@@ -70,6 +70,14 @@ enum class DiagSection {
    */
   BACKUP,
 
+  /**
+   * La ricerca (Fase 6, `docs/fase6-progetto.md` §2.6, D40): modelli (stato, dimensione, verifiche fallite), calcolo AI (ruolo,
+   * avanzamento, ripiego su CPU, buffer), dati AI dell'indice (voci rifiutate, disaccordi, in attesa di pubblicazione), indice locale
+   * di ricerca, lettura del testo (attiva o spenta, pulizia allo spegnimento). Solo codici e numeri: **mai** testo delle query, testo
+   * letto, nomi di luoghi, vettori, chiavi di contenuto, nomi di file, share o account.
+   */
+  SEARCH,
+
   /** I consumi del mese (TrafficLedger). */
   MONTHLY_TRAFFIC,
 

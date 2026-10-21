@@ -8,3 +8,5 @@ gradlew text eol=lf
 *.jar binary
 *.png binary
 *.webp binary
+# Fase 6: il modello del ritaglio dentro l'APK (core-ai/src/main/assets/cutout/), impronta fissata in ModelCatalog.
+*.tflite binary

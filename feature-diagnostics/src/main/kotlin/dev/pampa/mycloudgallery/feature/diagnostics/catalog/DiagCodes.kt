@@ -286,6 +286,12 @@ object DiagCodes {
   /** Fase 5B (P14): i contatori delle integrazioni (selettore, documenti, ricevuti, modifica, condivisioni), solo codici e numeri. */
   @JvmField val INTEGRATIONS_COUNTERS = DiagCode("INTEGRATIONS_COUNTERS", setOf("C17", "D23", "D24"))
 
+  // --- La ricerca (Fase 6) -------------------------------------------------------------------------------------------
+  // P0 aggiunge solo il codice di stato che tiene viva la sezione SEARCH (un test vuole almeno una voce per sezione), come per BACKUP
+  // nella Fase 5. I codici del §2.6 di docs/fase6-progetto.md (AI_MODEL_*, AI_*, OCR_FAILED, SEARCH_INDEX_REBUILT, CUTOUT_*...) li
+  // aggiunge P11.
+  @JvmField val SEARCH_STATE = DiagCode("SEARCH_STATE")
+
   // I codici di `PhoneLibraryDiagnostics` (core-mediastore, P2): stessi id e stessi edge case di
   // `PhoneLibraryDiagCodes`, scritti come letterali perche' questo modulo non dipende da core-mediastore.
   // `Fase3CatalogTest` verifica la tabella qui sotto e un test di :app (P11) verifica l'uguaglianza con

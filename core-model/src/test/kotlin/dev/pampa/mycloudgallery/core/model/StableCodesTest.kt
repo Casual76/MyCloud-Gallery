@@ -26,6 +26,11 @@ class StableCodesTest {
     "SafetyStatus" to SafetyStatus.entries,
     "MediaTrait" to MediaTrait.entries,
     "FreezeReason" to FreezeReason.entries,
+    // Fase 6 (P0): i codici dei dati AI (salvati da P1, pubblicati da P2).
+    "SpaceCode" to SpaceCode.entries,
+    "VecSource" to VecSource.entries,
+    "OcrSource" to OcrSource.entries,
+    "OcrEngineCode" to OcrEngineCode.entries,
   )
 
   @Test

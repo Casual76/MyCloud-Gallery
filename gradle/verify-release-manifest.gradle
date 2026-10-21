@@ -15,7 +15,12 @@
 //     (`forbiddenPermissions`, dalla Fase 5B: `MANAGE_MEDIA` e l'accesso a tutti i file, D19);
 //   - un permesso con un tetto di SDK (`permissionMaxSdk`) non dichiara quel `android:maxSdkVersion`;
 //   - un servizio il cui nome finisce per `JobService` non e' protetto da `android.permission.BIND_JOB_SERVICE` (Fase 4B, D29: il
-//     JobService delle operazioni lunghe sui file del NAS non e' esportato e solo il sistema puo' legarlo).
+//     JobService delle operazioni lunghe sui file del NAS non e' esportato e solo il sistema puo' legarlo);
+//   - (Fase 6, D38, D41) c'e' una `uses-native-library` che non e' fra le due della GPU (`allowedNativeLibraries`), o una di quelle
+//     non e' facoltativa; c'e' `MlKitInitProvider` (ML Kit partirebbe da solo all'avvio del processo); un componente di ML Kit, di
+//     DataTransport, dei Play services, di Firebase, di Play o di LiteRT (`thirdPartyComponentPrefixes`) non e' nell'elenco chiuso
+//     `allowedThirdPartyComponents` o e' esportato: una versione nuova di una libreria che aggiunge un componente (che potrebbe
+//     avviarsi da solo e mandare statistiche con la lettura del testo spenta, L49) fa fallire il build.
 //
 // `assembleRelease` dipende dal controllo: un APK che non lo passa non si produce nemmeno.
 //
@@ -117,8 +122,90 @@ ext.releaseManifestPolicy = [
     // solo al Macrobenchmark (variante benchmarkRelease, `app/src/benchmarkRelease/`, P9): non e' un punto d'ingresso
     // che la release deve avere. AndroidManifest.xml lo toglie con tools:node="remove".
     'androidx.profileinstaller.ProfileInstallReceiver',
+    // Fase 6 (P0, D41, risposta Q4): il provider con cui ML Kit si inizializza da solo all'avvio del processo. Lo toglie il manifest di
+    // core-ai con tools:node="remove" (la via documentata da Google per l'avvio manuale): con la lettura del testo spenta ML Kit non
+    // deve partire. `MlKit.initialize` lo chiama solo il cancello di core-ai/.../ocr/ (Phase6ArchitectureTest, tools/check.ps1).
+    'com.google.mlkit.common.internal.MlKitInitProvider',
+  ],
+  // Fase 6 (P0, D3, D38): le sole librerie native del sistema che l'app puo' chiedere, tutte FACOLTATIVE (android:required="false"):
+  // la GPU di LiteRT-LM (OpenCL). Senza, il motore va su CPU (E-A12). Le altre che litert-api 2.3.0 dichiara (DSP Qualcomm, Edge TPU,
+  // MediaTek, varianti OpenCL) le toglie `filter<Variante>NativeLibraries` qui sotto: il ritaglio gira su CPU. docs/sicurezza.md 4-bis.
+  allowedNativeLibraries: [
+    'libOpenCL.so',
+    'libvndksupport.so',
+  ],
+  // Fase 6 (P0, D38, D41, L49): i componenti che ML Kit (text-recognition 16.0.1 e le sue dipendenze: Play services, DataTransport,
+  // Firebase Components) porta nel manifest fuso. Elenco CHIUSO, per nome: tutti NON esportati e inerti finche' ML Kit non parte (con
+  // la lettura del testo spenta non parte mai: `MlKitInitProvider` e' tolto). Un componente con uno di questi prefissi che non e' qui
+  // fa fallire la verifica: una versione nuova della libreria potrebbe portarne uno che si avvia da solo. Lo stesso elenco lo controlla
+  // tools/check.ps1 sull'APK vero (anche nell'altra direzione: un componente sparito va tolto da qui). docs/sicurezza.md 4-bis.
+  thirdPartyComponentPrefixes: [
+    'com.google.mlkit.',
+    'com.google.android.datatransport.',
+    'com.google.android.gms.',
+    'com.google.firebase.',
+    'com.google.android.play.',
+    'com.google.ai.edge.',
+  ],
+  allowedThirdPartyComponents: [
+    // ML Kit: il registro dei suoi componenti interni (Firebase Components). Lo legge MlKitContext quando ML Kit si inizializza.
+    'com.google.mlkit.common.internal.MlKitComponentDiscoveryService',
+    // Play services (play-services-base): l'activity che mostra i dialoghi di risoluzione dei Play services. Mai avviata dall'app.
+    'com.google.android.gms.common.api.GoogleApiActivity',
+    // DataTransport (le statistiche di ML Kit): registro dei backend (voce `cct`), JobService e receiver che inviano la coda.
+    // Partono solo dopo che ML Kit ha messo qualcosa in coda, cioe' solo con la lettura del testo attiva (D41).
+    'com.google.android.datatransport.runtime.backends.TransportBackendDiscovery',
+    'com.google.android.datatransport.runtime.scheduling.jobscheduling.JobInfoSchedulerService',
+    'com.google.android.datatransport.runtime.scheduling.jobscheduling.AlarmManagerSchedulerBroadcastReceiver',
   ],
 ]
+
+// Fase 6 (P0): toglie dal manifest fuso le `uses-native-library` che non sono in `allowedNativeLibraries` e i doppioni. Il fusore dei
+// manifest di AGP 8.13 non da' una chiave a quell'elemento (le accoda tutte, anche ripetute) e ignora tools:node="remove": litert-api
+// 2.3.0 ne dichiara 31. E' una trasformazione dell'artefatto MERGED_MANIFEST di ogni variante (app/build.gradle la lega), quindi vale
+// per l'APK e per `verifyReleaseManifest`, che ricontrolla l'esito. Lavora sul testo: tocca solo gli elementi `uses-native-library`.
+abstract class FilterNativeLibraries extends DefaultTask {
+
+  @InputFile
+  @PathSensitive(PathSensitivity.NONE)
+  abstract RegularFileProperty getMergedManifest()
+
+  @OutputFile
+  abstract RegularFileProperty getUpdatedManifest()
+
+  @Input
+  abstract ListProperty<String> getAllowed()
+
+  @TaskAction
+  void filter() {
+    String text = mergedManifest.get().asFile.getText('UTF-8')
+    def seen = new HashSet<String>()
+    def element = ~/(?s)[ \t]*<uses-native-library\b[^>]*?\/>[ \t]*\r?\n?/
+    String out = text.replaceAll(element) { String match ->
+      def name = (match =~ /android:name\s*=\s*"([^"]*)"/)
+      String library = name.find() ? name.group(1) : ''
+      (library in allowed.get() && seen.add(library)) ? match : ''
+    }
+    updatedManifest.get().asFile.setText(out, 'UTF-8')
+  }
+}
+
+// Lo lega app/build.gradle per ogni variante (lo script non vede le classi di AGP):
+//
+//   androidComponents {
+//     onVariants(selector().all()) { variant ->
+//       variant.artifacts.use(registerNativeLibraryFilter(variant))
+//         .wiredWithFiles({ it.mergedManifest }, { it.updatedManifest })
+//         .toTransform(SingleArtifact.MERGED_MANIFEST.INSTANCE)
+//     }
+//   }
+ext.registerNativeLibraryFilter = { variant ->
+  return tasks.register("filter${variant.name.capitalize()}NativeLibraries", FilterNativeLibraries) {
+    group = 'build'
+    description = "Tiene nel manifest fuso di ${variant.name} solo le uses-native-library ammesse (Fase 6, D38)."
+    allowed.set(releaseManifestPolicy.allowedNativeLibraries)
+  }
+}
 
 abstract class VerifyReleaseManifest extends DefaultTask {
 
@@ -146,6 +233,15 @@ abstract class VerifyReleaseManifest extends DefaultTask {
 
   @Input
   abstract ListProperty<String> getForbiddenComponents()
+
+  @Input
+  abstract ListProperty<String> getAllowedNativeLibraries()
+
+  @Input
+  abstract ListProperty<String> getThirdPartyComponentPrefixes()
+
+  @Input
+  abstract ListProperty<String> getAllowedThirdPartyComponents()
 
   // Il manifest fuso usa sempre il prefisso `android:`, quindi si legge senza risolvere i namespace.
   static String attr(Object node, String name) {
@@ -198,6 +294,24 @@ abstract class VerifyReleaseManifest extends DefaultTask {
           if (required != null && exported != 'false' && attr(component, 'permission') != required) {
             problems << "<${kind}> ${name} e' esportato senza il permesso ${required}".toString()
           }
+          // Fase 6 (D41, L49): i componenti delle librerie di Google portate da ML Kit e da LiteRT: elenco chiuso, mai esportati.
+          if (name != null && thirdPartyComponentPrefixes.get().any { name.startsWith(it) }) {
+            if (!(name in allowedThirdPartyComponents.get())) {
+              problems << "componente di una libreria di Google NON nell'elenco chiuso: <${kind}> ${name} (potrebbe avviarsi da solo: docs/sicurezza.md 4-bis)".toString()
+            } else if (exported == 'true') {
+              problems << "<${kind}> ${name} e' nell'elenco chiuso ma e' ESPORTATO".toString()
+            }
+          }
+        }
+      }
+
+      // Fase 6 (D3, D38): solo le librerie native della GPU, facoltative.
+      application.'uses-native-library'.each { library ->
+        String name = attr(library, 'name')
+        if (!(name in allowedNativeLibraries.get())) {
+          problems << "uses-native-library non ammessa: ${name} (solo ${allowedNativeLibraries.get().join(', ')})".toString()
+        } else if (attr(library, 'required') != 'false') {
+          problems << "uses-native-library ${name} deve essere facoltativa (android:required=\"false\")".toString()
         }
       }
     }
@@ -249,6 +363,9 @@ ext.registerVerifyReleaseManifest = { variant, mergedManifestArtifact ->
     forbiddenPermissions.set(releaseManifestPolicy.forbiddenPermissions)
     permissionMaxSdk.set(releaseManifestPolicy.permissionMaxSdk)
     forbiddenComponents.set(releaseManifestPolicy.forbiddenComponents)
+    allowedNativeLibraries.set(releaseManifestPolicy.allowedNativeLibraries)
+    thirdPartyComponentPrefixes.set(releaseManifestPolicy.thirdPartyComponentPrefixes)
+    allowedThirdPartyComponents.set(releaseManifestPolicy.allowedThirdPartyComponents)
   }
   // Un APK che non passa il controllo non si produce nemmeno.
   tasks.configureEach { task ->

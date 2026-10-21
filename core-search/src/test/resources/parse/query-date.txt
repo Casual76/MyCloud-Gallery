@@ -1,0 +1,122 @@
+# Mesi, mese e anno, anni, decenni, date, date impossibili, intervalli (§2.5). Oggi = 21 ottobre 2026.
+
+# --- Mesi (senza anno: tutti gli anni)
+gennaio => Y 01-01..01-31 Gennaio (tutti gli anni)
+febbraio => Y 02-01..02-29 Febbraio (tutti gli anni)
+marzo => Y 03-01..03-31 Marzo (tutti gli anni)
+aprile => Y 04-01..04-30 Aprile (tutti gli anni)
+maggio => Y 05-01..05-31 Maggio (tutti gli anni)
+giugno => Y 06-01..06-30 Giugno (tutti gli anni)
+luglio => Y 07-01..07-31 Luglio (tutti gli anni)
+agosto => Y 08-01..08-31 Agosto (tutti gli anni)
+settembre => Y 09-01..09-30 Settembre (tutti gli anni)
+ottobre => Y 10-01..10-31 Ottobre (tutti gli anni)
+novembre => Y 11-01..11-30 Novembre (tutti gli anni)
+dicembre => Y 12-01..12-31 Dicembre (tutti gli anni)
+ago => Y 08-01..08-31 Agosto (tutti gli anni)
+ad agosto => Y 08-01..08-31 Agosto (tutti gli anni)
+in agosto => Y 08-01..08-31 Agosto (tutti gli anni)
+set => Y 09-01..09-30 Settembre (tutti gli anni)
+dic => Y 12-01..12-31 Dicembre (tutti gli anni)
+foto di agosto => T PHOTO Foto ; Y 08-01..08-31 Agosto (tutti gli anni)
+agosto scorso => D 2026-08-01..2026-08-31 Agosto 2026
+ottobre scorso => D 2025-10-01..2025-10-31 Ottobre 2025
+dicembre scorso => D 2025-12-01..2025-12-31 Dicembre 2025
+
+# --- Mese e anno
+agosto 2023 => D 2023-08-01..2023-08-31 Agosto 2023
+ago 23 => D 2023-08-01..2023-08-31 Agosto 2023
+8/2023 => D 2023-08-01..2023-08-31 Agosto 2023
+08/2023 => D 2023-08-01..2023-08-31 Agosto 2023
+agosto del 2023 => D 2023-08-01..2023-08-31 Agosto 2023
+agosto di quest'anno => D 2026-08-01..2026-08-31 Agosto 2026
+agosto dell'anno scorso => D 2025-08-01..2025-08-31 Agosto 2025
+febbraio 2024 => D 2024-02-01..2024-02-29 Febbraio 2024
+febbraio 2023 => D 2023-02-01..2023-02-28 Febbraio 2023
+dicembre 1999 => D 1999-12-01..1999-12-31 Dicembre 1999
+ott 98 => D 1998-10-01..1998-10-31 Ottobre 1998
+gen 05 => D 2005-01-01..2005-01-31 Gennaio 2005
+foto di agosto 2023 => T PHOTO Foto ; D 2023-08-01..2023-08-31 Agosto 2023
+video luglio 2022 => T VIDEO Video ; D 2022-07-01..2022-07-31 Luglio 2022
+
+# --- Anni
+2023 => D 2023-01-01..2023-12-31 2023
+nel 2023 => D 2023-01-01..2023-12-31 2023
+del 2019 => D 2019-01-01..2019-12-31 2019
+foto 2015 => T PHOTO Foto ; D 2015-01-01..2015-12-31 2015
+2099 => D 2099-01-01..2099-12-31 2099
+1999 => D 1999-01-01..1999-12-31 1999
+scontrino 2019 => D 2019-01-01..2019-12-31 2019 => scontrino => scontrino
+1899 => - => 1899 => 1899
+3000 => - => 3000 => 3000
+
+# --- Decenni
+anni 90 => D 1990-01-01..1999-12-31 Anni 90 · 1990–1999
+anni '90 => D 1990-01-01..1999-12-31 Anni 90 · 1990–1999
+gli anni 90 => D 1990-01-01..1999-12-31 Anni 90 · 1990–1999
+anni novanta => D 1990-01-01..1999-12-31 Anni Novanta · 1990–1999
+anni ottanta => D 1980-01-01..1989-12-31 Anni Ottanta · 1980–1989
+anni 70 => D 1970-01-01..1979-12-31 Anni 70 · 1970–1979
+anni 2000 => D 2000-01-01..2009-12-31 Anni 2000 · 2000–2009
+anni 2010 => D 2010-01-01..2019-12-31 Anni 2010 · 2010–2019
+anni 10 => D 2010-01-01..2019-12-31 Anni 10 · 2010–2019
+anni 20 => D 2020-01-01..2029-12-31 Anni 20 · 2020–2029
+anni 30 => D 1930-01-01..1939-12-31 Anni 30 · 1930–1939
+anni duemila => D 2000-01-01..2009-12-31 Anni Duemila · 2000–2009
+anni 55 => - => anni 55 => anni, 55
+
+# --- Date (giorno/mese all'italiana)
+12 agosto => Y 08-12..08-12 12 agosto (tutti gli anni)
+12 ago => Y 08-12..08-12 12 agosto (tutti gli anni)
+12/8 => Y 08-12..08-12 12 agosto (tutti gli anni)
+12/08 => Y 08-12..08-12 12 agosto (tutti gli anni)
+12/08/2023 => D 2023-08-12..2023-08-12 12 agosto 2023
+12-08-2023 => D 2023-08-12..2023-08-12 12 agosto 2023
+12.08.2023 => D 2023-08-12..2023-08-12 12 agosto 2023
+12/8/23 => D 2023-08-12..2023-08-12 12 agosto 2023
+12 agosto 2023 => D 2023-08-12..2023-08-12 12 agosto 2023
+1 gennaio 2020 => D 2020-01-01..2020-01-01 1 gennaio 2020
+primo maggio => Y 05-01..05-01 1 maggio (tutti gli anni)
+29 febbraio => Y 02-29..02-29 29 febbraio (tutti gli anni)
+29 febbraio 2024 => D 2024-02-29..2024-02-29 29 febbraio 2024
+31 dicembre => Y 12-31..12-31 31 dicembre (tutti gli anni)
+foto del 12 agosto => T PHOTO Foto ; Y 08-12..08-12 12 agosto (tutti gli anni)
+3 8 => - => 3 8 => 3, 8
+32 agosto => Y 08-01..08-31 Agosto (tutti gli anni) => 32 => 32
+0 agosto => Y 08-01..08-31 Agosto (tutti gli anni) => 0 => 0
+31/13 => - => 31/13 => 31, 13
+
+# --- Date impossibili: corrette e dichiarate (E-Q2)
+31 febbraio => D 2024-02-29..2024-02-29 29 febbraio 2024 => - => - => - => 29 febbraio 2024<-31 febbraio
+30 febbraio => D 2024-02-29..2024-02-29 29 febbraio 2024 => - => - => - => 29 febbraio 2024<-30 febbraio
+31 aprile => Y 04-30..04-30 30 aprile (tutti gli anni) => - => - => - => 30 aprile<-31 aprile
+31 giugno => Y 06-30..06-30 30 giugno (tutti gli anni) => - => - => - => 30 giugno<-31 giugno
+31 settembre => Y 09-30..09-30 30 settembre (tutti gli anni) => - => - => - => 30 settembre<-31 settembre
+31 novembre => Y 11-30..11-30 30 novembre (tutti gli anni) => - => - => - => 30 novembre<-31 novembre
+31 febbraio 2023 => D 2023-02-28..2023-02-28 28 febbraio 2023 => - => - => - => 28 febbraio 2023<-31 febbraio 2023
+29 febbraio 2023 => D 2023-02-28..2023-02-28 28 febbraio 2023 => - => - => - => 28 febbraio 2023<-29 febbraio 2023
+31/2 => D 2024-02-29..2024-02-29 29 febbraio 2024 => - => - => - => 29 febbraio 2024<-31 febbraio
+31/04/2025 => D 2025-04-30..2025-04-30 30 aprile 2025 => - => - => - => 30 aprile 2025<-31 aprile 2025
+@oggi 2024-02-10
+31 febbraio => D 2020-02-29..2020-02-29 29 febbraio 2020 => - => - => - => 29 febbraio 2020<-31 febbraio
+@oggi 2024-03-01
+31 febbraio => D 2024-02-29..2024-02-29 29 febbraio 2024 => - => - => - => 29 febbraio 2024<-31 febbraio
+@oggi 2026-10-21
+
+# --- Intervalli
+dal 3 al 10 agosto 2023 => D 2023-08-03..2023-08-10 Dal 3 al 10 agosto 2023
+dal 3 al 10 agosto => Y 08-03..08-10 Dal 3 al 10 agosto (tutti gli anni)
+dal 3 agosto al 10 agosto 2023 => D 2023-08-03..2023-08-10 Dal 3 al 10 agosto 2023
+dal 28 luglio al 3 agosto 2023 => D 2023-07-28..2023-08-03 Dal 28 luglio al 3 agosto 2023
+dal 28 luglio al 3 agosto => Y 07-28..08-03 Dal 28 luglio al 3 agosto (tutti gli anni)
+tra il 3 e il 10 agosto 2023 => D 2023-08-03..2023-08-10 Dal 3 al 10 agosto 2023
+da 3 a 10 agosto => Y 08-03..08-10 Dal 3 al 10 agosto (tutti gli anni)
+tra marzo e maggio => Y 03-01..05-31 Marzo–maggio (tutti gli anni)
+tra marzo e maggio 2023 => D 2023-03-01..2023-05-31 Marzo–maggio 2023
+da marzo a maggio => Y 03-01..05-31 Marzo–maggio (tutti gli anni)
+tra novembre e febbraio 2024 => D 2023-11-01..2024-02-29 Novembre 2023–febbraio 2024
+tra novembre e febbraio => Y 11-01..02-29 Novembre–febbraio (tutti gli anni)
+dal 2019 al 2021 => D 2019-01-01..2021-12-31 2019–2021
+tra il 2019 e il 2021 => D 2019-01-01..2021-12-31 2019–2021
+foto dal 3 al 10 agosto 2023 => T PHOTO Foto ; D 2023-08-03..2023-08-10 Dal 3 al 10 agosto 2023
+dal 10 al 3 agosto => Y 08-01..08-31 Agosto (tutti gli anni) => dal 10 al 3 => 10, 3

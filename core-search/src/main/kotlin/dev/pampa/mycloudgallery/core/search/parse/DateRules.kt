@@ -32,7 +32,8 @@ internal class DateRules(private val c: RuleContext) {
     }
     val scorso = c.w(i + 1)?.let { it in QueryVocabulary.SCORSO } == true
     val date = lastWeekday(dow)
-    val name = ItalianCalendar.capitalize(ItalianCalendar.dayName(dow)) + if (scorso) " scorso" else ""
+    val name = ItalianCalendar.capitalize(ItalianCalendar.dayName(dow)) +
+      if (!scorso) "" else if (dow == DayOfWeek.SUNDAY) " scorsa" else " scorso"
     return day(if (scorso) 2 else 1, date, name)
   }
 

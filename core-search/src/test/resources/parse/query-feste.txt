@@ -1,0 +1,53 @@
+# Feste (§2.5): senza anno "tutti gli anni"; con anno o "scorso" il periodo preciso. Oggi = 21 ottobre 2026.
+# Pasqua e Pasquetta senza anno: il contratto DateRange non sa dire "tutti gli anni" per una data mobile, si prende l'ultima
+# gia' cominciata (vedi REPORT.md). Pasqua e Pasquetta 2015-2035 sono in pasqua-2015-2035.txt.
+
+natale => Y 12-24..12-26 Natale (24–26 dicembre, tutti gli anni)
+Natale => Y 12-24..12-26 Natale (24–26 dicembre, tutti gli anni)
+video di Natale => T VIDEO Video ; Y 12-24..12-26 Natale (24–26 dicembre, tutti gli anni)
+regali di Natale => Y 12-24..12-26 Natale (24–26 dicembre, tutti gli anni) => regali => regali
+Natale 2023 => D 2023-12-24..2023-12-26 Natale 2023 (24–26 dicembre)
+Natale del 2022 => D 2022-12-24..2022-12-26 Natale 2022 (24–26 dicembre)
+Natale scorso => D 2025-12-24..2025-12-26 Natale 2025 (24–26 dicembre)
+Natale dell'anno scorso => D 2025-12-24..2025-12-26 Natale 2025 (24–26 dicembre)
+Natale quest'anno => D 2026-12-24..2026-12-26 Natale 2026 (24–26 dicembre)
+Natale 2023 neve => D 2023-12-24..2023-12-26 Natale 2023 (24–26 dicembre) => neve => neve
+vigilia => Y 12-24..12-24 Vigilia di Natale (24 dicembre, tutti gli anni)
+Vigilia di Natale => Y 12-24..12-24 Vigilia di Natale (24 dicembre, tutti gli anni)
+vigilia di Capodanno => Y 12-31..12-31 Vigilia di Capodanno (31 dicembre, tutti gli anni)
+Vigilia di Natale 2023 => D 2023-12-24..2023-12-24 Vigilia di Natale 2023 (24 dicembre)
+Santo Stefano => Y 12-26..12-26 Santo Stefano (26 dicembre, tutti gli anni)
+S. Stefano => Y 12-26..12-26 Santo Stefano (26 dicembre, tutti gli anni)
+Santo Stefano 2022 => D 2022-12-26..2022-12-26 Santo Stefano 2022 (26 dicembre)
+Capodanno => Y 12-31..01-01 Capodanno (31 dicembre–1 gennaio, tutti gli anni)
+Capodanno 2024 => D 2023-12-31..2024-01-01 Capodanno 2024 (31 dicembre 2023–1 gennaio 2024)
+Capodanno scorso => D 2025-12-31..2026-01-01 Capodanno 2026 (31 dicembre 2025–1 gennaio 2026)
+Epifania => Y 01-06..01-06 Epifania (6 gennaio, tutti gli anni)
+Epifania 2025 => D 2025-01-06..2025-01-06 Epifania 2025 (6 gennaio)
+Ferragosto => Y 08-15..08-15 Ferragosto (15 agosto, tutti gli anni)
+Ferragosto 2021 => D 2021-08-15..2021-08-15 Ferragosto 2021 (15 agosto)
+Ferragosto scorso => D 2026-08-15..2026-08-15 Ferragosto 2026 (15 agosto)
+San Valentino => Y 02-14..02-14 San Valentino (14 febbraio, tutti gli anni)
+San Valentino 2020 => D 2020-02-14..2020-02-14 San Valentino 2020 (14 febbraio)
+cena di San Valentino => Y 02-14..02-14 San Valentino (14 febbraio, tutti gli anni) => cena => cena
+
+# --- Pasqua e Pasquetta (calcolate per anno)
+Pasqua => D 2026-04-05..2026-04-05 Pasqua 2026 (5 aprile)
+Pasquetta => D 2026-04-06..2026-04-06 Pasquetta 2026 (6 aprile)
+Pasqua scorsa => D 2026-04-05..2026-04-05 Pasqua 2026 (5 aprile)
+Pasqua 2024 => D 2024-03-31..2024-03-31 Pasqua 2024 (31 marzo)
+Pasquetta 2024 => D 2024-04-01..2024-04-01 Pasquetta 2024 (1 aprile)
+Pasqua 2019 => D 2019-04-21..2019-04-21 Pasqua 2019 (21 aprile)
+Pasqua dell'anno scorso => D 2025-04-20..2025-04-20 Pasqua 2025 (20 aprile)
+pasqua 2024 uova => D 2024-03-31..2024-03-31 Pasqua 2024 (31 marzo) => uova => uova
+@oggi 2026-02-01
+Pasqua => D 2025-04-20..2025-04-20 Pasqua 2025 (20 aprile)
+@oggi 2026-04-05
+Pasqua => D 2026-04-05..2026-04-05 Pasqua 2026 (5 aprile)
+Pasqua scorsa => D 2025-04-20..2025-04-20 Pasqua 2025 (20 aprile)
+@oggi 2025-12-30
+Capodanno scorso => D 2024-12-31..2025-01-01 Capodanno 2025 (31 dicembre 2024–1 gennaio 2025)
+@oggi 2026-10-21
+
+# --- Parole che somigliano a feste ma sono altro
+halloween => - => halloween => halloween

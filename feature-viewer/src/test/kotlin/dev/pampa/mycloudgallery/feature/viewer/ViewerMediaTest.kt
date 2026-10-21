@@ -9,6 +9,8 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.center
 import androidx.compose.ui.test.down
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -141,7 +143,7 @@ class ViewerMediaTest : ViewerTestBase() {
     composeRule.mainClock.advanceTimeBy(1_000)
     composeRule.waitForIdle()
     assertThat(player.loads).isEmpty()
-    composeRule.onNodeWithText("Movimento").assertDoesNotExist()
+    composeRule.onAllNodesWithContentDescription("Riproduci il movimento").assertCountEquals(0)
     // E nelle informazioni resta scritto.
     pager().performTouchInput { swipeUp() }
     composeRule.waitForIdle()

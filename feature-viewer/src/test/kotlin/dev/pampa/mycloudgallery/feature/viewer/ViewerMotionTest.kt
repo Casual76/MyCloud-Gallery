@@ -15,7 +15,13 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.centerX
+import androidx.compose.ui.test.centerY
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.pinch
+import androidx.compose.ui.test.swipeDown
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.up
 import androidx.compose.ui.unit.dp
@@ -219,6 +225,54 @@ class ViewerMotionTest : ViewerTestBase() {
     pager().performTouchInput { doubleClick() }
     composeRule.waitForIdle()
     assertThat(player.calls).contains(PlayerCall.Stop)
+    assertThat(player.loads).hasSize(1)
+  }
+
+  @Test
+  fun unPizzico_FermaSubitoLAnimazione() {
+    showMotion()
+    settle()
+    assertThat(player.loads).hasSize(1)
+    pager().performTouchInput {
+      pinch(
+        start0 = androidx.compose.ui.geometry.Offset(centerX - 40f, centerY),
+        end0 = androidx.compose.ui.geometry.Offset(centerX - 160f, centerY),
+        start1 = androidx.compose.ui.geometry.Offset(centerX + 40f, centerY),
+        end1 = androidx.compose.ui.geometry.Offset(centerX + 160f, centerY),
+      )
+    }
+    composeRule.waitForIdle()
+    assertThat(player.calls).contains(PlayerCall.Stop)
+    assertThat(player.loads).hasSize(1)
+  }
+
+  @Test
+  fun unoScorrimentoVeloceFermaLAnimazione_ENonNeFaPartireAltreSulleCartellePagine() {
+    showMotion()
+    settle()
+    assertThat(player.loads).hasSize(1)
+    repeat(3) {
+      pager().performTouchInput { swipeLeft() }
+      composeRule.waitForIdle()
+    }
+    assertThat(player.calls).contains(PlayerCall.Stop)
+    // Nessuna animazione e' partita mentre si scorreva: ne' per le pagine attraversate ne' per la prima dopo i 150 ms (qui la pagina e' una foto).
+    assertThat(player.loads.size).isAtMost(2)
+    assertThat(playersCreated).isEqualTo(1)
+  }
+
+  @Test
+  fun chiudereLeInfoNonRifaLAnimazione_E_V14() {
+    showMotion()
+    settle()
+    assertThat(player.loads).hasSize(1)
+    // Le informazioni si aprono (swipe verso l'alto) e si richiudono (verso il basso): la pagina e' sempre la stessa, l'animazione non si rifa.
+    pager().performTouchInput { swipeUp() }
+    composeRule.mainClock.advanceTimeBy(1_000)
+    composeRule.waitForIdle()
+    pager().performTouchInput { swipeDown() }
+    composeRule.mainClock.advanceTimeBy(1_000)
+    composeRule.waitForIdle()
     assertThat(player.loads).hasSize(1)
   }
 

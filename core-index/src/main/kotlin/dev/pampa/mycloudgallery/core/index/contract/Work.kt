@@ -13,9 +13,16 @@ import kotlinx.coroutines.flow.StateFlow
 // docs/formato-nas.md §5.6, M4). Contratto di P0, implementazione di P3 (`work/`, sopra `LeaseManager`). La usa la
 // preparazione (P6, `PreparationRun`).
 
-/** Il passaggio di lavoro di un'unita'. Nella 4A c'e' solo la preparazione; il nome finisce nella chiave (M4). */
+/** Il passaggio di lavoro di un'unita'. Il nome finisce nella chiave (M4). */
 enum class WorkPass(val wire: String) {
+  /** La preparazione della Fase 4 (miniature, anteprime, fotogrammi). */
   PREP("prep"),
+
+  /**
+   * Fase 6 (D9, formato-nas.md §5.6 A5): il calcolo dei dati AI, `work/1/ai/<mese>/<parte>`. Stesse parti da 200 media per chiave
+   * di contenuto, stessa prenotazione di 1 ora rinnovata ogni 20 minuti; "fatto" per classe da `AiPublishedClasses`.
+   */
+  AI("ai"),
 }
 
 /**

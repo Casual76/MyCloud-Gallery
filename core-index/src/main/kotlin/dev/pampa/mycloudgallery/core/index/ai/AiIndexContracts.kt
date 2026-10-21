@@ -78,12 +78,25 @@ class AiWinner(val share: String, val entry: AiEntry, val recipe: Int, val devic
   override fun toString(): String = "AiWinner(${entry.cls.wire}, r$recipe)"
 }
 
+/** Una (chiave di contenuto intera, classe) dei dati AI di una share. */
+data class AiKey(val contentKey: ContentKey, val cls: AiClass) {
+  override fun toString(): String = "AiKey(${cls.wire})"
+}
+
 /**
  * Dove finiscono le voci AI lette dalle teste `ai` degli altri (e le proprie): l'indice locale di ricerca (P1/P6, legato da :app). Le
  * teste `ai` si leggono nello stesso giro di `IndexSyncEngine`, dopo le teste `index` (§1.4).
+ *
+ * La replica (`AiShareSync`, P2) tiene l'indice locale **esattamente** uguale ai vincitori correnti: [apply] per un vincitore nuovo o
+ * cambiato (sostituisce quello di prima della stessa (share, chiave, classe)), [withdraw] per una voce che non ha piu' un vincitore
+ * (record `meta` sparito, E-I21; dispositivo dimenticato senza altri candidati). Tutte le chiamate sono idempotenti: dopo una morte
+ * del processo la replica le ripete.
  */
 interface AiReplicaSink {
   suspend fun apply(share: String, winners: List<AiWinner>)
+
+  /** P2: le voci di [share] che non hanno piu' un vincitore valido escono (nessun vettore o testo senza attestazione, D7). */
+  suspend fun withdraw(share: String, keys: List<AiKey>)
 
   /** Un dispositivo revocato, perso o sconosciuto: le sue voci escono (§2.3). */
   suspend fun forgetDevice(device: String)

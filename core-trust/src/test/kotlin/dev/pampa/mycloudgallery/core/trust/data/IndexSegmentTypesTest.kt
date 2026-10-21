@@ -20,12 +20,20 @@ class IndexSegmentTypesTest {
   @Test
   fun leClassiHannoCodiciENomiDelFormato() {
     assertThat(SegmentClass.entries.associate { it.wire to it.code }).containsExactly(
-      "meta", 1, "thumbS", 2, "thumbM", 3, "analysis", 4, "hq", 5, "frames", 6, "personal", 16,
+      "meta", 1, "thumbS", 2, "thumbM", 3, "analysis", 4, "hq", 5, "frames", 6, "vec", 7, "ocr", 8, "personal", 16,
     )
-    // Nessuna classe riservata e' definita (E-I4): i loro nomi non si decodificano.
+    // Nessuna classe riservata e' definita (E-I4): i loro nomi non si decodificano. `vec` e `ocr` li definisce la versione 2.
     SegmentClass.RESERVED_WIRE.forEach { assertThat(SegmentClass.fromWire(it)).isNull() }
-    (7..15).forEach { assertThat(SegmentClass.fromCode(it)).isNull() }
+    assertThat(SegmentClass.RESERVED_WIRE).containsExactly("faces")
+    (9..15).forEach { assertThat(SegmentClass.fromCode(it)).isNull() }
     assertThat(SegmentClass.INDEX_CLASSES).doesNotContain(SegmentClass.PERSONAL)
+    // Fase 6 (D6): `vec` e `ocr` solo nelle teste `ai`, mai nell'indice; non sono immagini e non stanno nella maschera `prep`.
+    assertThat(SegmentClass.INDEX_CLASSES).containsNoneOf(SegmentClass.VEC, SegmentClass.OCR)
+    assertThat(SegmentClass.AI_CLASSES).containsExactly(SegmentClass.VEC, SegmentClass.OCR)
+    assertThat(SegmentClass.VEC.isContentBlob || SegmentClass.OCR.isContentBlob).isFalse()
+    assertThat(MetaRecords.PREP_MASK_ALLOWED and (SegmentClass.VEC.mask or SegmentClass.OCR.mask)).isEqualTo(0)
+    assertThat(HeadKind.AI.classes).isEqualTo(SegmentClass.AI_CLASSES)
+    assertThat(AiClass.entries.map { it.segmentClass }).containsExactly(SegmentClass.VEC, SegmentClass.OCR).inOrder()
     val mask = SegmentClass.maskOf(listOf(SegmentClass.THUMB_S, SegmentClass.HQ))
     assertThat(SegmentClass.fromMask(mask)).containsExactly(SegmentClass.THUMB_S, SegmentClass.HQ)
   }

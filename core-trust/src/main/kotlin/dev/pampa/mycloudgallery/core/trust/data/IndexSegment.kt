@@ -47,8 +47,9 @@ import java.util.Locale
 /**
  * La classe di un segmento (M1, §5.5-bis): ogni segmento contiene voci di **una** classe, e un dispositivo scarica solo
  * le classi che gli servono (D4, D16). [wire] e' il nome nella testa firmata, [code] il byte all'inizio del contenuto
- * del segmento. Codici 7–15 e 17–31 riservati: `vec`, `ocr`, `faces` (Fase 6/8) sono **rifiutati** finche' una versione
- * del formato non li definisce (E-I4).
+ * del segmento. Codici 9–15 e 17–31 riservati: `faces` (Fase 8) e' **rifiutato** finche' una versione del formato non lo
+ * definisce (E-I4). `vec` (7) e `ocr` (8) li definisce la versione 2 (Fase 6, D6): valgono **solo** nelle teste `ai`
+ * ([AI_CLASSES]), mai in una testa `index` ([INDEX_CLASSES]) o `personal`, e il loro codec e' `AiSegments`, non [IndexSegments].
  */
 enum class SegmentClass(val wire: String, val code: Int) {
   /** Record dei file (JSON canonico, chiave = impronta del percorso). */
@@ -69,6 +70,12 @@ enum class SegmentClass(val wire: String, val code: Int) {
   /** Fotogrammi chiave di un video: copertina e uno ogni 30 s, al massimo 9 immagini JPEG. */
   FRAMES("frames", 6),
 
+  /** Fase 6 (D6): i vettori di un contenuto (corpo binario `vec`, §2.3). Solo nelle teste `ai`, versione 2 del formato. */
+  VEC("vec", 7),
+
+  /** Fase 6 (D6, D13, D43): il testo letto in un contenuto (corpo binario `ocr`, §2.3). Solo nelle teste `ai`, versione 2. */
+  OCR("ocr", 8),
+
   /** Dati personali (4B, §2.9): solo nelle teste `personal`, solo nell'area privata dell'account. */
   PERSONAL("personal", 16),
   ;
@@ -76,15 +83,24 @@ enum class SegmentClass(val wire: String, val code: Int) {
   /** Il bit nella maschera `prep` di un record (le classi pubblicate per quella chiave di contenuto). */
   val mask: Int get() = 1 shl code
 
+  /** Una classe dei dati AI (Fase 6): `vec` o `ocr`, solo nelle teste `ai`. */
+  val isAi: Boolean get() = this == VEC || this == OCR
+
   /** Le voci sono immagini per chiave di contenuto (JPEG o WebP, dimensioni lette prima di decodificare). */
-  val isContentBlob: Boolean get() = this != META && this != PERSONAL
+  val isContentBlob: Boolean get() = this != META && this != PERSONAL && !isAi
 
   companion object {
     /** Nomi riservati: una testa che li elenca e' rifiutata (nessuna classe "sconosciuta ma accettata"). */
-    val RESERVED_WIRE: Set<String> = setOf("vec", "ocr", "faces")
+    val RESERVED_WIRE: Set<String> = setOf("faces")
 
-    /** Le classi che una testa `index` puo' elencare (una testa `personal` elenca solo [PERSONAL]). */
-    val INDEX_CLASSES: Set<SegmentClass> = entries.filter { it != PERSONAL }.toSet()
+    /**
+     * Le classi che una testa `index` puo' elencare: mai [PERSONAL] (solo nelle teste `personal`) e mai `vec` e `ocr` (solo
+     * nelle teste `ai`, [AI_CLASSES]): un'app senza la Fase 6 rifiuterebbe la testa intera, miniature comprese (D6).
+     */
+    val INDEX_CLASSES: Set<SegmentClass> = entries.filter { it != PERSONAL && !it.isAi }.toSet()
+
+    /** Fase 6 (D6): le sole classi di una testa `ai`. */
+    val AI_CLASSES: Set<SegmentClass> = setOf(VEC, OCR)
 
     fun fromWire(wire: String): SegmentClass? = entries.firstOrNull { it.wire == wire }
 
@@ -781,6 +797,8 @@ object IndexSegments {
   fun maxBodyBytes(cls: SegmentClass): Int = when (cls) {
     SegmentClass.META, SegmentClass.PERSONAL -> TrustLimits.MAX_META_RECORD_BYTES
     SegmentClass.FRAMES -> TrustLimits.MAX_FRAMES_BODY_BYTES
+    SegmentClass.VEC -> TrustLimits.MAX_VEC_BODY_BYTES
+    SegmentClass.OCR -> TrustLimits.MAX_OCR_BODY_BYTES
     else -> TrustLimits.MAX_BLOB_BYTES
   }
 
@@ -789,7 +807,7 @@ object IndexSegments {
    * invece di produrre un segmento che gli altri rifiuterebbero intero.
    */
   fun admits(cls: SegmentClass, body: ByteArray): Boolean =
-    cls != SegmentClass.META && cls != SegmentClass.PERSONAL && body.isNotEmpty() && body.size <= maxBodyBytes(cls) &&
+    cls.isContentBlob && body.isNotEmpty() && body.size <= maxBodyBytes(cls) &&
       verdictOf { checkBody(cls, null, body, 0, body.size) } is Verdict.Accepted
 
   /**
@@ -799,6 +817,7 @@ object IndexSegments {
    */
   fun encode(cls: SegmentClass, entries: List<SegmentEntry>): EncodedSegment {
     require(cls != SegmentClass.PERSONAL) { "La classe personal non e' ancora definita (4B)." }
+    require(!cls.isAi) { "I segmenti vec e ocr li scrive AiSegments (versione 2)." }
     require(entries.size in 1..TrustLimits.MAX_SEGMENT_ENTRIES) { "Da 1 a ${TrustLimits.MAX_SEGMENT_ENTRIES} voci." }
     val sorted = entries.sortedWith { a, b -> IndexKeys.compare(a.key, b.key) }
     for (i in 1 until sorted.size) require(IndexKeys.compare(sorted[i - 1].key, sorted[i].key) < 0) { "Chiavi ripetute." }
@@ -851,6 +870,8 @@ object IndexSegments {
     val code = own[base].toInt() and 0xff
     ensure(code == expected.code, RejectReason.WRONG_TYPE, "segmento: classe diversa da quella della testa")
     ensure(expected != SegmentClass.PERSONAL, RejectReason.INVALID_FIELD, "segmento: classe non ancora definita in questa build")
+    // Fase 6: `vec` e `ocr` si leggono solo con AiSegments (versione 2, corpi binari); qui sarebbero un segmento `index` falso.
+    ensure(!expected.isAi, RejectReason.INVALID_FIELD, "segmento: classe dei dati AI fuori dalla testa ai")
     ensure(
       own[base + 1].toInt() == 0 && own[base + 2].toInt() == 0 && own[base + 3].toInt() == 0,
       RejectReason.MALFORMED,
@@ -911,6 +932,7 @@ object IndexSegments {
       }
       SegmentClass.FRAMES -> FramesBody.parse(b, off, len)
       SegmentClass.PERSONAL -> violation(RejectReason.INVALID_FIELD, "classe non ancora definita")
+      SegmentClass.VEC, SegmentClass.OCR -> violation(RejectReason.INVALID_FIELD, "classe dei dati AI fuori dalla testa ai")
       else -> IndexImages.check(b, off, len, TrustLimits.MAX_BLOB_BYTES, IndexImages.ANY)
     }
   }

@@ -21,10 +21,28 @@ import dev.pampa.mycloudgallery.core.trust.registry.ShareNames
 import dev.pampa.mycloudgallery.core.trust.verdictOf
 import dev.pampa.mycloudgallery.core.trust.violation
 
-/** Che cosa descrive una testa: l'indice della share o i dati personali dell'account (solo area privata). */
+/**
+ * Che cosa descrive una testa: l'indice della share, i dati personali dell'account (solo area privata) o, dalla Fase 6, i dati
+ * AI della share (`vec` e `ocr`, D6). Ogni tipo ha la sua serie (`devices/<id>/<tipo>/head/`) e le sue classi.
+ */
 enum class HeadKind(val wire: String) {
   INDEX("index"),
   PERSONAL("personal"),
+
+  /** Fase 6 (D6): vettori e testo letto; la versione 2 del formato ([TrustFormat.AI_VERSION]), solo `vec` e `ocr`. */
+  AI("ai"),
+  ;
+
+  /** Le classi dei segmenti che una testa di questo tipo puo' elencare. */
+  val classes: Set<SegmentClass>
+    get() = when (this) {
+      INDEX -> SegmentClass.INDEX_CLASSES
+      PERSONAL -> setOf(SegmentClass.PERSONAL)
+      AI -> SegmentClass.AI_CLASSES
+    }
+
+  /** La versione del formato della busta di una testa di questo tipo (Fase 6, A7: la 2 solo per le teste `ai`). */
+  val formatVersion: Int get() = if (this == AI) TrustFormat.AI_VERSION else TrustFormat.CURRENT_VERSION
 }
 
 /** Un segmento elencato da una testa: il nome del file e' la sua impronta. */
@@ -52,7 +70,7 @@ data class DeviceHead(
   /**
    * In ordine crescente di impronta, senza doppioni, ognuno con la sua classe (Fase 4, M1: `{class, hash, size}`). Una
    * testa `index` elenca solo le classi dell'indice ([SegmentClass.INDEX_CLASSES]), una testa `personal` solo
-   * [SegmentClass.PERSONAL].
+   * [SegmentClass.PERSONAL], una testa `ai` solo `vec` e `ocr` ([SegmentClass.AI_CLASSES], Fase 6).
    */
   val segments: List<ClassedSegment>,
 ) {
@@ -62,7 +80,7 @@ data class DeviceHead(
     ensure(version in 1..TrustLimits.MAX_VERSION && registryVersion in 1..TrustLimits.MAX_VERSION, RejectReason.INVALID_FIELD, "testa: versione")
     ensure(segments.size <= TrustLimits.MAX_HEAD_SEGMENTS, RejectReason.TOO_LARGE, "testa: troppi segmenti")
     ensure(segments.zipWithNext().all { (a, b) -> a.ref.hash < b.ref.hash }, RejectReason.INVALID_FIELD, "testa: segmenti non ordinati o ripetuti")
-    val allowed = if (kind == HeadKind.INDEX) SegmentClass.INDEX_CLASSES else setOf(SegmentClass.PERSONAL)
+    val allowed = kind.classes
     ensure(segments.all { it.cls in allowed }, RejectReason.INVALID_FIELD, "testa: classe di segmento fuori posto")
   }
 
@@ -83,7 +101,7 @@ data class DeviceHead(
         jsonObject("class" to it.cls.wire.json(), "hash" to it.ref.hash.json(), "size" to it.ref.size.json())
       }.json(),
     )
-    return Envelope.seal(DocType.DEVICE_HEAD, payload, signer)
+    return Envelope.seal(DocType.DEVICE_HEAD, payload, signer, kind.formatVersion)
   }
 }
 
@@ -133,7 +151,8 @@ object HeadVerifier {
         createdAt = f.time("createdAt"),
         segments = f.array("segments", TrustLimits.MAX_HEAD_SEGMENTS).map { item ->
           Fields.read(item) { s ->
-            // M1: una classe sconosciuta o riservata (`vec`, `ocr`, `faces`, E-I4) rifiuta la testa intera.
+            // M1: una classe sconosciuta o riservata (`faces`, E-I4) rifiuta la testa intera; una classe fuori posto (`vec` e
+            // `ocr` in una testa che non e' `ai`, una classe dell'indice in una testa `ai`) la rifiuta il costruttore.
             val cls = SegmentClass.fromWire(s.string("class", TrustLimits.MAX_ENUM_CHARS))
               ?: violation(RejectReason.INVALID_FIELD, "testa: classe di segmento sconosciuta o riservata")
             ClassedSegment(cls, SegmentRef(s.string("hash", Hashes.NAME_LENGTH), s.long("size", 1..TrustLimits.MAX_SEGMENT_BYTES.toLong())))
@@ -146,6 +165,9 @@ object HeadVerifier {
       RejectReason.WRONG_LOCATION,
       "testa: non corrisponde al posto in cui si trova",
     )
+    // Fase 6 (A7): la versione 2 solo per una testa `ai`, e una testa `ai` solo con la versione 2. Una testa `index` alla versione 2
+    // la rifiuterebbero le app senza la Fase 6 (miniature comprese): non la accetta nemmeno chi la capisce.
+    ensure(signed.envelope.version == head.kind.formatVersion, RejectReason.INVALID_FIELD, "testa: versione del formato diversa da quella del tipo")
     if (head.kind == HeadKind.PERSONAL) {
       ensure(TextRules.sameAccount(signed.signer.nasUser, readerAccount), RejectReason.NOT_OWNER, "dati personali di un altro account")
       ensure(!head.share.equals(registry.registry.config.commonShare, ignoreCase = true), RejectReason.WRONG_LOCATION, "dati personali nell'area comune")

@@ -4,6 +4,7 @@ import dev.pampa.mycloudgallery.core.index.ai.AiBufferSink
 import dev.pampa.mycloudgallery.core.index.ai.AiDoneClasses
 import dev.pampa.mycloudgallery.core.index.ai.AiEntry
 import dev.pampa.mycloudgallery.core.index.ai.AiIndexPublisher
+import dev.pampa.mycloudgallery.core.index.ai.AiKey
 import dev.pampa.mycloudgallery.core.index.ai.AiPendingCounts
 import dev.pampa.mycloudgallery.core.index.ai.AiReplicaSink
 import dev.pampa.mycloudgallery.core.index.ai.AiWinner
@@ -36,6 +37,8 @@ object NoAiIndexPublisher : AiIndexPublisher {
 /** Nessuna replica dei dati AI. */
 object NoAiReplicaSink : AiReplicaSink {
   override suspend fun apply(share: String, winners: List<AiWinner>) = Unit
+
+  override suspend fun withdraw(share: String, keys: List<AiKey>) = Unit
 
   override suspend fun forgetDevice(device: String) = Unit
 

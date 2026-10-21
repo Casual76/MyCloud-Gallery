@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.core.index.sync
 
+import dev.pampa.mycloudgallery.core.index.ai.AiSyncHook
 import dev.pampa.mycloudgallery.core.index.contract.HeadFetch
 import dev.pampa.mycloudgallery.core.index.contract.IndexHeadView
 import dev.pampa.mycloudgallery.core.index.contract.IndexSync
@@ -55,6 +56,10 @@ import kotlinx.coroutines.sync.withLock
  *    database: un giro interrotto dal [budget] riprende da li'.
  * 7. **Qualita'**: un passo di convergenza ([ReplicaQualityController.converge]).
  *
+ * **Fase 6 (§1.4, P2)**: con [ai] le teste `ai` di ogni share si leggono nello stesso giro, **dopo** le teste `index` e la loro
+ * fusione (l'attestazione dei dati AI guarda i record `meta` appena applicati), con gli stessi dispositivi e lo stesso budget di
+ * tempo; una share tolta (E-I8) toglie anche i suoi dati AI. Senza [ai] il giro e' quello della Fase 4: nessuna lettura in `ai/`.
+ *
  * Il tempo del budget si misura con l'orologio monotono ([ticker]); le date con l'ora del NAS ([nasClock]).
  */
 class IndexSyncEngine(
@@ -67,6 +72,7 @@ class IndexSyncEngine(
   private val quality: ReplicaQualityController? = null,
   val counters: IndexCounters = IndexCounters(),
   private val ticker: () -> Long = System::nanoTime,
+  private val ai: AiSyncHook? = null,
 ) : IndexSync {
 
   private val access = ShareAccessPolicy(store, nasClock)
@@ -116,9 +122,15 @@ class IndexSyncEngine(
           complete = false
           break
         }
-        syncShare(key, name)
+        val listed = syncShare(key, name)
         // Una fusione per share, dopo tutte le teste: D6 e D7 vedono tutti i dispositivi insieme.
         countConflicts(replica.flush(key).identityConflicts)
+        // Fase 6: le teste `ai` della share, dopo le `index` (l'attestazione vede i record appena applicati).
+        if (ai != null && listed != null && !timeUp()) {
+          val outcome = ai.afterIndex(name, listed, ::timeUp)
+          outcome.failure?.let { fail(it) }
+          if (!outcome.complete) complete = false
+        }
       }
       downloadImages()
       if (!scope.visibleOnly) skipUnwanted()
@@ -158,15 +170,20 @@ class IndexSyncEngine(
 
     // --- Teste ----------------------------------------------------------------------------------------------------
 
-    private suspend fun syncShare(key: String, name: String) {
+    /**
+     * Le teste `index` di una share. Restituisce i dispositivi elencati in `devices/` se la share ha risposto fino in fondo (per le
+     * teste `ai`, Fase 6), null se la rete e' caduta, il tempo e' finito o la share non ha risposto.
+     */
+    private suspend fun syncShare(key: String, name: String): List<String>? {
       val devices = when (val listing = remote.devices(name)) {
         is RemoteResult.Failed -> {
           fail(listing.failure)
           if (access.onFailure(key, listing.failure) == ShareAccessPolicy.Verdict.DROP) {
             replica.forgetShare(key)
             counters.sharesDropped.incrementAndGet()
+            ai?.shareDropped(name)
           }
-          return
+          return null
         }
         is RemoteResult.Ok -> listing.value
       }
@@ -177,7 +194,7 @@ class IndexSyncEngine(
       for (device in listed) {
         if (timeUp()) {
           complete = false
-          return
+          return null
         }
         val state = known[device]
         if (device == replica.ownDeviceId && state?.head != null) continue
@@ -185,12 +202,12 @@ class IndexSyncEngine(
         when (val read = remote.latestHead(name, device, state?.head?.mark)) {
           is RemoteResult.Failed -> {
             fail(read.failure)
-            if (read.failure == RemoteFailure.UNREACHABLE) return
+            if (read.failure == RemoteFailure.UNREACHABLE) return null
           }
           is RemoteResult.Ok -> when (val fetch = read.value) {
             HeadFetch.NoChange, HeadFetch.None -> Unit
             is HeadFetch.Rejected -> onRejected(key, device, fetch.reason, state)
-            is HeadFetch.Accepted -> if (!applyAccepted(key, fetch.head, state)) return
+            is HeadFetch.Accepted -> if (!applyAccepted(key, fetch.head, state)) return null
           }
         }
       }
@@ -202,6 +219,7 @@ class IndexSyncEngine(
           DeviceStanding.REVOKED, DeviceStanding.LOST, DeviceStanding.UNKNOWN -> forget(key, device)
         }
       }
+      return listed
     }
 
     private suspend fun onRejected(key: String, device: String, reason: RejectReason, state: DeviceState?) {

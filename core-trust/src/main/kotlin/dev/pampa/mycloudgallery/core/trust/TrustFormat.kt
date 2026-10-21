@@ -16,6 +16,17 @@ object TrustFormat {
   /** La versione piu' vecchia che questa build sa ancora leggere. */
   const val OLDEST_READABLE_VERSION: Int = 1
 
+  /**
+   * Fase 6 (A7, D6): la versione dei **soli** file `ai` (teste di tipo `ai` e segmenti `vec` e `ocr`). Tutto il resto resta alla
+   * [CURRENT_VERSION] e si legge come prima: un'app senza la Fase 6 non apre `ai/`, e se per caso aprisse un file `ai` lo
+   * troverebbe "piu' nuovo" ([RejectReason.NEWER_FORMAT]), mai un errore del dato (E-I3, E-I22).
+   */
+  const val AI_VERSION: Int = 2
+
+  /** La versione piu' nuova che questa build sa leggere (1..2): la 2 vale solo per i file `ai`. */
+  const val NEWEST_READABLE_VERSION: Int = AI_VERSION
+
+  /** Le versioni dei file che non sono `ai` (registro, richieste, teste `index` e `personal`, segmenti, kit...). */
   fun isReadable(version: Int): Boolean = version in OLDEST_READABLE_VERSION..CURRENT_VERSION
 
   /** Nome della cartella dell'app in ogni share: nascosta (punto iniziale) e senza estensione. */
@@ -200,6 +211,26 @@ object TrustLimits {
 
   /** Dopo un salto, le funzioni sospese ripartono da sole dopo 24 ore di ora stabile (o con il gesto dell'utente). */
   const val NAS_CLOCK_STABLE_RESUME_MILLIS: Long = 24L * 60 * 60 * 1000
+
+  // --- Fase 6: corpi dei dati AI (§5.5-bis "Dati AI", §7, A6). Il codec e' `AiSegments` (data/AiSegments.kt) -------------------
+
+  /** Un corpo `vec`: da 1 a [MAX_VEC_VECTORS] vettori da 768 componenti float16; il piu' grande possibile e' di 13.868 byte. */
+  const val MAX_VEC_BODY_BYTES: Int = 14 * 1024
+
+  /** Vettori per corpo `vec`: copertina + 8 fotogrammi (D11); esattamente 1 per le sorgenti d'immagine. */
+  const val MAX_VEC_VECTORS: Int = 9
+
+  /** Un corpo `ocr` (righe con riquadro, inclinazione, estremi delle parole e testo). */
+  const val MAX_OCR_BODY_BYTES: Int = 64 * 1024
+
+  /** Righe di testo per corpo `ocr` (0 = "analizzata, nessun testo"). */
+  const val MAX_OCR_LINES: Int = 400
+
+  /** Byte UTF-8 del testo di una riga. */
+  const val MAX_OCR_LINE_BYTES: Int = 1024
+
+  /** Parole per riga (gli estremi servono al testo dal vivo, D43). */
+  const val MAX_OCR_WORDS_PER_LINE: Int = 64
 }
 
 /**

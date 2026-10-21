@@ -719,7 +719,8 @@ scavalcata).
 - **Testa `ai` (Fase 6, A2, A4, F6-D6, F6-D8).** `devices/<device>/ai/head/<version>`: stessa busta (tipo 3), stessa serie numerata e
   stessa lettura per nome e stesso anti-rollback delle altre teste (qui sotto), ma una serie **propria** (la cartella `ai/head/`:
   una testa `ai` non si confonde con una `index`) e la **versione 2** del formato nel quinto byte della busta e dei segmenti; elenca solo segmenti
-  `vec` e `ocr` (§5.5-bis). **Regole di pubblicazione:** la regola M3 qui sopra vale con le **chiavi di contenuto**: una voce `vec`
+  `vec` e `ocr` (§5.5-bis). La versione della busta deve corrispondere al tipo (P2): una testa `ai` alla versione 1 o una testa `index` o
+  `personal` alla versione 2 sono rifiutate (`INVALID_FIELD`), e nessun altro tipo di file firmato accetta la versione 2 (`NEWER_FORMAT`). **Regole di pubblicazione:** la regola M3 qui sopra vale con le **chiavi di contenuto**: una voce `vec`
   o `ocr` si pubblica solo per la chiave di contenuto di un file **di quella share** presente nel catalogo locale, con timbro e `qh1`
   ancora freschi (niente di un file privato nell'indice dell'area comune; un test di proprieta' lo verifica). Valgono gli stessi
   cancelli dell'indice (nessuna pubblicazione sulle share vere finche' vale D31, area in sola lettura, congelamento, emergenza,
@@ -900,7 +901,10 @@ offset  byte        contenuto
 ```
 
 Testo: UTF-8 valido (niente forme lunghe ne' surrogati), in forma NFC, senza caratteri di controllo C0 e C1, senza i caratteri di
-direzione (U+200E, U+200F, U+202A–U+202E, U+2066–U+2069) e senza U+FEFF. Corpo al massimo **64 KiB**, al massimo 400 righe, ogni
+direzione (U+200E, U+200F, U+202A–U+202E, U+2066–U+2069) e senza U+FEFF: in pratica (P2) nessuno dei caratteri che `TextRules` vieta in
+ogni testo letto dal NAS (anche gli invisibili, i separatori di riga U+2028 e U+2029 e i non caratteri), un elenco esplicito che non
+dipende dalla versione di Unicode del dispositivo. Le parole sono i pezzi del testo separati da uno spazio e **nessuna e' vuota** (niente
+spazi ai bordi o doppi: una parola vuota non ha estremi utili al testo dal vivo). Corpo al massimo **64 KiB**, al massimo 400 righe, ogni
 riga al massimo 1.024 byte di testo e 64 parole. Inclinazione ed estremi delle parole servono al testo dal vivo nel viewer: costano
 circa 4 byte a parola (una schermata fitta da 400 parole, 1,6 KB in piu') e permettono di selezionare e copiare il testo anche dove
 ML Kit non gira. "Nessun testo" (0 righe) e' un risultato valido: dice che l'immagine e' stata letta.
@@ -919,7 +923,8 @@ Diagnostica), non ferma gli altri segmenti; i dati gia' nella replica restano (E
 - Teste `ai` di dispositivi revocati, persi o sconosciuti: ignorate e dimenticate (come per le teste `index`); area persa (E-I8): le
   voci di quella share escono dalla replica.
 - Fra piu' voci valide per (share, chiave di contenuto, classe) vince la **ricetta piu' alta**, a parita' l'id del dispositivo
-  minore; `vec` e `ocr` si scelgono separatamente. Due vettori della stessa ricetta che non concordano (coseno < 0,95): vince
+  minore; `vec` e `ocr` si scelgono separatamente. A parita' anche di dispositivo (lo stesso dispositivo ha ripubblicato la stessa
+  ricetta con un corpo diverso, in due segmenti) vince il corpo con l'impronta SHA-256 minore: arbitrario ma uguale per tutti (P2). Due vettori della stessa ricetta che non concordano (coseno < 0,95): vince
   comunque la regola qui sopra e il disaccordo si conta in Diagnostica (`AI_VECTOR_DISAGREE`). Un dispositivo approvato compromesso
   puo' far trovare male una foto, non toccare file (L45 di `docs/sicurezza.md`).
 - **Pubblicazione:** la regola M3 del §5.5 (solo chiavi di file di quella share, timbro e `qh1` freschi), gli stessi cancelli
@@ -1130,15 +1135,18 @@ insieme, il risultato resta coerente.
 | Propri file tolti per giro (`MAX_OWN_FILES_PER_ROUND`) | 500 |
 | Salto dell'ora del NAS che sospende (`NAS_CLOCK_JUMP_MILLIS`) | 300000 ms (5 minuti) |
 | Ora stabile per riprendere dopo un salto (`NAS_CLOCK_STABLE_RESUME_MILLIS`) | 86400000 ms (24 ore) |
-| Corpo `vec` di una voce (Fase 6, A6) | 14 KiB (14336 byte): da 1 a 9 vettori da 768 componenti float16, lunghezza esatta (il corpo piu' grande, 9 vettori con gli istanti, e' di 13868 byte) |
+| Corpo `vec` di una voce (`MAX_VEC_BODY_BYTES`, Fase 6, A6) | 14336 byte (14 KiB): da 1 a 9 vettori da 768 componenti float16, lunghezza esatta (il corpo piu' grande, 9 vettori con gli istanti, e' di 13868 byte) |
+| Vettori per corpo `vec` (`MAX_VEC_VECTORS`, Fase 6, A6) | 9 (copertina + 8 fotogrammi); esattamente 1 per le sorgenti d'immagine |
 | Vettore `vec` (Fase 6, A6) | componenti tutte finite; norma ricalcolata in float32 fra 0,99 e 1,01 |
-| Corpo `ocr` di una voce (Fase 6, A6) | 65536 byte (64 KiB) e al massimo 400 righe |
-| Riga di un corpo `ocr` (Fase 6, A6) | testo da 1 a 1024 byte UTF-8 e da 1 a 64 parole (con inclinazione ed estremi delle parole) |
+| Corpo `ocr` di una voce (`MAX_OCR_BODY_BYTES`, Fase 6, A6) | 65536 byte (64 KiB) |
+| Righe per corpo `ocr` (`MAX_OCR_LINES`, Fase 6, A6) | 400 (0 = "analizzata, nessun testo") |
+| Testo di una riga `ocr` (`MAX_OCR_LINE_BYTES`, Fase 6, A6) | 1024 byte UTF-8 al massimo (almeno 1) |
+| Parole di una riga `ocr` (`MAX_OCR_WORDS_PER_LINE`, Fase 6, A6) | 64 al massimo (almeno 1), con inclinazione ed estremi delle parole |
 | Teste `ai` (Fase 6) | come le altre teste: 8192 segmenti, 4096 voci per segmento, segmenti chiusi a 12 MiB, una testa ogni 5 minuti per share salvo la chiusura di un'unita' |
 | Copia di un modello sul NAS (Fase 6) | la dimensione fissata nell'app per quel modello (oggi 164626432 e 387710976 byte), mai un byte in piu' |
 
-Le righe della Fase 6 non nominano ancora una costante tra apici inversi: quando P2 aggiunge i tetti a `TrustLimits`, ne scrive il
-nome qui (e `IndexSegmentTypesTest` li confronta).
+Le righe della Fase 6 con una costante tra apici inversi la nominano come sta in `TrustLimits` (P2): `IndexSegmentTypesTest` le
+confronta come le altre. Ricetta (1..255), norma e inclinazione sono intervalli del codec (`AiSegments`, `AiLimits`).
 
 Superare un tetto vuol dire rifiutare il dato (o l'elenco), contarlo in Diagnostica e proseguire con cio'
 che si ha. **Mai un crash** (E-I14): ogni eccezione di un parser diventa un rifiuto.
@@ -1331,7 +1339,9 @@ il suo diario locale e i suoi test "dato remoto ostile → nessuna azione".
 ## 10. Versione del formato e compatibilita' (E-I3)
 
 - La versione sta nel quinto byte di ogni file firmato, del kit e dei segmenti. Questa build scrive la **1**
-  e legge l'intervallo `OLDEST_READABLE_VERSION..CURRENT_VERSION` (oggi 1..1; **dalla Fase 6 1..2**, vedi sotto).
+  (`CURRENT_VERSION`) e legge l'intervallo `OLDEST_READABLE_VERSION..CURRENT_VERSION` (1..1) per tutto cio' che non e' `ai`; **dalla
+  Fase 6** scrive e legge la **2** (`AI_VERSION`) solo per i file `ai`: le teste accettano 1..2 con la versione legata al tipo, i segmenti
+  `vec` e `ocr` solo la 2 (vedi sotto).
 - **Fase 6 (A7, F6-D6): la versione 2 esiste solo per i file `ai`.** Teste e segmenti `ai` (§2.2, §5.5, §5.5-bis) portano la
   **2**; registro, richieste, teste `index` e `personal`, prenotazioni, cestino, stato e kit restano alla **1**, e una build della
   Fase 6 li scrive e li legge come prima. Chi legge accetta **1..2**. Un'app senza la Fase 6 trova `ai/` come una cartella

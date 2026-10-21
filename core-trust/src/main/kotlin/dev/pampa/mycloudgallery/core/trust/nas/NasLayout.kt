@@ -46,6 +46,28 @@ object NasLayout {
   fun segmentFile(deviceId: String, kind: String, hash: String): SharePath =
     ROOT.child("devices").child(deviceId).child(kind).child("seg").child(hash)
 
+  // --- Fase 6: dati AI e copie dei modelli (A1, D6, D18) -------------------------------------------------------------------
+
+  /** Il tipo (e la cartella) delle teste dei dati AI: `devices/<id>/ai/` (D6). */
+  const val AI_KIND: String = "ai"
+
+  /** Una testa `ai`: `devices/<id>/ai/head/<versione>` (versione 2 del formato, serie propria). */
+  fun aiHead(deviceId: String, version: Long): SharePath = headFile(deviceId, AI_KIND, version)
+
+  /** Un segmento `vec` o `ocr`: `devices/<id>/ai/seg/<impronta>`. */
+  fun aiSegment(deviceId: String, hash: String): SharePath = segmentFile(deviceId, AI_KIND, hash)
+
+  /**
+   * La copia di un modello pubblicata da un dispositivo nell'area comune (D18): `devices/<id>/models/<sha256>`, file grezzo senza
+   * busta ne' estensione (eccezione dichiarata al §2.1). [sha256] in esadecimale minuscolo (64 cifre), come nel catalogo dei modelli.
+   */
+  fun modelCopy(deviceId: String, sha256: String): SharePath {
+    require(SHA256_HEX.matches(sha256)) { "Impronta del modello non valida." }
+    return ROOT.child("devices").child(deviceId).child("models").child(sha256)
+  }
+
+  private val SHA256_HEX = Regex("^[0-9a-f]{64}$")
+
   // --- Prenotazioni ---------------------------------------------------------------------------------------
   /** `leases/<impronta della risorsa>/<gruppo>/<generazione>`: gruppi di 256 generazioni (revisione 1.4, M6). */
   fun leaseDir(resource: String): SharePath = ROOT.child("leases").child(resourceName(resource))

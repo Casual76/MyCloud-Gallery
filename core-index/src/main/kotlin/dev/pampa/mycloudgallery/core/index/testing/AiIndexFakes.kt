@@ -4,6 +4,7 @@ import dev.pampa.mycloudgallery.core.index.ai.AiBufferSink
 import dev.pampa.mycloudgallery.core.index.ai.AiDoneClasses
 import dev.pampa.mycloudgallery.core.index.ai.AiEntry
 import dev.pampa.mycloudgallery.core.index.ai.AiIndexPublisher
+import dev.pampa.mycloudgallery.core.index.ai.AiKey
 import dev.pampa.mycloudgallery.core.index.ai.AiPendingCounts
 import dev.pampa.mycloudgallery.core.index.ai.AiReplicaSink
 import dev.pampa.mycloudgallery.core.index.ai.AiWinner
@@ -115,7 +116,20 @@ class FakeAiReplicaSink : AiReplicaSink {
   val forgottenShares: MutableList<String> = mutableListOf()
 
   override suspend fun apply(share: String, winners: List<AiWinner>) {
-    synchronized(this) { applied += winners }
+    synchronized(this) {
+      // Un vincitore nuovo sostituisce quello di prima della stessa (share, chiave, classe), come l'indice locale vero.
+      for (winner in winners) {
+        applied.removeAll { it.share.equals(winner.share, ignoreCase = true) && it.entry.contentKey == winner.entry.contentKey && it.entry.cls == winner.entry.cls }
+        applied += winner
+      }
+    }
+  }
+
+  override suspend fun withdraw(share: String, keys: List<AiKey>) {
+    synchronized(this) {
+      val gone = keys.toSet()
+      applied.removeAll { it.share.equals(share, ignoreCase = true) && AiKey(it.entry.contentKey, it.entry.cls) in gone }
+    }
   }
 
   override suspend fun forgetDevice(device: String) {
@@ -181,7 +195,10 @@ class FakeAnalysisFetcher : AnalysisFetcher {
   }
 }
 
-/** Il lavoro gia' fatto da altri, scelto dal test (per share, chiave e ricetta). */
+/**
+ * Il lavoro gia' fatto da altri, scelto dal test (per share, chiave e ricetta). Come `AiPublishedClasses` (P2): una voce di una ricetta
+ * **piu' nuova** di quella chiesta conta come fatta (vincerebbe comunque, D7).
+ */
 class FakeAiDoneClasses : AiDoneClasses {
   private val done = HashMap<Triple<String, ContentKey, Int>, MutableSet<AiClass>>()
 
@@ -189,6 +206,13 @@ class FakeAiDoneClasses : AiDoneClasses {
     done.getOrPut(Triple(share.lowercase(Locale.ROOT), key, recipe)) { LinkedHashSet() } += classes
   }
 
-  override suspend fun done(share: String, keys: Collection<ContentKey>, recipe: Int): Map<ContentKey, Set<AiClass>> =
-    keys.mapNotNull { key -> done[Triple(share.lowercase(Locale.ROOT), key, recipe)]?.let { key to it.toSet() } }.toMap()
+  override suspend fun done(share: String, keys: Collection<ContentKey>, recipe: Int): Map<ContentKey, Set<AiClass>> {
+    val wanted = keys.toSet()
+    val out = HashMap<ContentKey, MutableSet<AiClass>>()
+    for ((at, classes) in done) {
+      if (at.first != share.lowercase(Locale.ROOT) || at.second !in wanted || at.third < recipe) continue
+      out.getOrPut(at.second) { LinkedHashSet() } += classes
+    }
+    return out
+  }
 }

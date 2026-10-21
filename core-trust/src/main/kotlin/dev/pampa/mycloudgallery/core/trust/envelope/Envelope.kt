@@ -58,6 +58,11 @@ internal class SignedEnvelope(
   val signer: EcPublicKey,
   val payload: ByteArray,
   /**
+   * La versione del formato nel quinto byte (firmata). Fase 6: la 2 solo per una testa di tipo `ai`; chi interpreta il contenuto
+   * controlla che versione e tipo vadano insieme (`HeadVerifier`).
+   */
+  val version: Int,
+  /**
    * SHA-256 (base32) dei soli byte FIRMATI (intestazione + contenuto, senza la firma): l'identita' di
    * questa versione. Non dipende dai byte della firma, che non sono firmati (revisione 1.4, A3): due firme
    * valide dello stesso contenuto sono lo stesso dato.
@@ -98,12 +103,21 @@ internal object Envelope {
 
   fun maxFileBytes(type: DocType): Int = HEADER_BYTES + type.maxPayload + 1 + TrustAlgorithms.MAX_SIGNATURE_BYTES
 
-  fun seal(type: DocType, payload: JsonObject, signer: Signer): ByteArray {
+  /**
+   * La versione piu' nuova ammessa per [type]: la [TrustFormat.AI_VERSION] solo per le teste (tipo 3, perche' una testa `ai` e'
+   * una testa), la [TrustFormat.CURRENT_VERSION] per tutti gli altri tipi (Fase 6, A7: la versione 2 esiste solo per i file `ai`).
+   */
+  fun newestVersion(type: DocType): Int = if (type == DocType.DEVICE_HEAD) TrustFormat.AI_VERSION else TrustFormat.CURRENT_VERSION
+
+  fun seal(type: DocType, payload: JsonObject, signer: Signer, version: Int = TrustFormat.CURRENT_VERSION): ByteArray {
+    require(version == TrustFormat.CURRENT_VERSION || (version == TrustFormat.AI_VERSION && type == DocType.DEVICE_HEAD)) {
+      "Versione del formato non ammessa per questo tipo."
+    }
     val body = CanonicalJson.encode(payload)
     require(body.size <= type.maxPayload) { "Payload oltre il tetto del tipo." }
     val signed = ByteBuffer.allocate(HEADER_BYTES + body.size)
       .put(MAGIC)
-      .put(TrustFormat.CURRENT_VERSION.toByte())
+      .put(version.toByte())
       .put(type.code.toByte())
       .put(signer.publicKey.encoded)
       .putInt(body.size)
@@ -125,8 +139,8 @@ internal object Envelope {
     ensure(bytes.size >= HEADER_BYTES + 1 + 1 + MIN_SIGNATURE_BYTES, RejectReason.MALFORMED, "busta: troppo corta")
     for (i in MAGIC.indices) ensure(bytes[i] == MAGIC[i], RejectReason.MALFORMED, "busta: firma del formato")
     val version = bytes[4].toInt() and 0xff
-    if (version > TrustFormat.CURRENT_VERSION) violation(RejectReason.NEWER_FORMAT, "busta: formato piu' nuovo")
-    ensure(TrustFormat.isReadable(version), RejectReason.MALFORMED, "busta: versione")
+    if (version > newestVersion(expected)) violation(RejectReason.NEWER_FORMAT, "busta: formato piu' nuovo")
+    ensure(version >= TrustFormat.OLDEST_READABLE_VERSION, RejectReason.MALFORMED, "busta: versione")
     val type = DocType.fromCode(bytes[5].toInt() and 0xff) ?: violation(RejectReason.MALFORMED, "busta: tipo sconosciuto")
     ensure(type == expected, RejectReason.WRONG_TYPE, "busta: tipo inatteso")
     val signer = EcPublicKey.fromSpki(bytes.copyOfRange(6, 6 + EcPublicKey.SPKI_BYTES))
@@ -145,6 +159,7 @@ internal object Envelope {
       type = type,
       signer = signer,
       payload = bytes.copyOfRange(HEADER_BYTES, signatureLengthAt),
+      version = version,
       contentHash = Hashes.sha256Name(bytes.copyOfRange(0, signatureLengthAt)),
     )
   }

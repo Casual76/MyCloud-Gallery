@@ -11,6 +11,7 @@ import androidx.media3.datasource.DataSpec
 import dev.pampa.mycloudgallery.core.imaging.contract.UnavailableReason
 import dev.pampa.mycloudgallery.core.imaging.viewer.MobileDataConsent
 import dev.pampa.mycloudgallery.core.imaging.viewer.NasLink
+import dev.pampa.mycloudgallery.core.imaging.viewer.NasNetwork
 import dev.pampa.mycloudgallery.core.imaging.viewer.NasMediaLocation
 import dev.pampa.mycloudgallery.core.imaging.viewer.NasMediaLocator
 import dev.pampa.mycloudgallery.core.imaging.viewer.blockedReason
@@ -78,6 +79,15 @@ class NasVideoSource(
       else -> NasVideoGate.Unreachable(reason)
     }
   }
+
+  /** La rete di adesso rispetto al NAS (D-15): per la parte video delle foto in movimento, che si legge solo dove la rete lo permette (D51). */
+  internal fun network(): NasNetwork = link.network()
+
+  /** La posizione di [ref] sul NAS, o null se non e' piu' nel catalogo. Non tocca la rete. */
+  internal suspend fun locate(ref: MediaRef.Nas): NasMediaLocation? = locator.locate(ref)
+
+  /** Apre il file in [location] per letture a intervalli (la parte video di una foto in movimento). Chi chiama ha gia' guardato [check]. */
+  internal suspend fun openFile(location: NasMediaLocation): NasResult<NasRandomFile> = reader.open(location.share, location.path, purpose)
 
   /** La sorgente da dare al lettore per [ref]: un'etichetta senza percorsi, con l'estensione che aiuta l'estrattore. */
   fun playbackSource(ref: MediaRef.Nas): PlaybackSource.Nas =

@@ -15,6 +15,7 @@ import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.IosShare
+import androidx.compose.material.icons.rounded.MotionPhotosOn
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryBarAction
@@ -81,6 +82,8 @@ internal class ViewerActionHandlers(
  * @param nasDelete la voce "Elimina…" di un media del NAS: in fondo, con l'altra voce che cancella.
  * @param backupActions le voci del backup (Fase 5B, P12): Versioni, Ripristina originale, Correggi, Ruota, Modifica con…, nel gruppo di Condividi.
  * @param shareWithoutLocation "Rimuovi la posizione" e' acceso: la voce Condividi lo dice ("Condividi senza posizione").
+ * @param onPlayMotion la voce "Riproduci il movimento" di una foto in movimento (Fase 6, D51): null = la pagina non e' una foto in
+ *   movimento o il suo video non si riproduce (E-M16).
  */
 internal fun viewerMenuEntries(
   resources: Resources,
@@ -92,6 +95,7 @@ internal fun viewerMenuEntries(
   nasDelete: List<GalleryMenuEntry> = emptyList(),
   backupActions: List<GalleryMenuEntry> = emptyList(),
   shareWithoutLocation: Boolean = false,
+  onPlayMotion: (() -> Unit)? = null,
 ): List<GalleryMenuEntry> {
   val groups = mutableListOf<List<GalleryMenuEntry>>()
   groups.add(buildList<GalleryMenuEntry> {
@@ -115,6 +119,9 @@ internal fun viewerMenuEntries(
     }
   })
   groups.add(buildList<GalleryMenuEntry> {
+    if (onPlayMotion != null) {
+      add(GalleryMenuEntry.Item(resources.getString(R.string.motion_play), onPlayMotion, Icons.Rounded.MotionPhotosOn))
+    }
     if (capabilities.share) {
       val shareLabel = if (shareWithoutLocation) R.string.viewer_backup_action_share_no_location else R.string.viewer_action_share
       add(GalleryMenuEntry.Item(resources.getString(shareLabel), handlers.onShare, Icons.Rounded.IosShare))

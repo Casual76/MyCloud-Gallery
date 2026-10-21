@@ -40,6 +40,18 @@ sealed interface PlaybackSource {
   }
 }
 
+/**
+ * Il tratto di una sorgente da riprodurre, in millisecondi: la sorgente si **taglia** a `[startMs, endMs]` e il lettore finisce
+ * a [endMs] (stato `ended`). Lo usa l'animazione d'apertura delle foto in movimento (D50): il tratto che precede l'istante della foto.
+ */
+data class PlaybackClip(val startMs: Long, val endMs: Long) {
+  init {
+    require(startMs >= 0 && endMs > startMs) { "Tratto non valido." }
+  }
+
+  val durationMs: Long get() = endMs - startMs
+}
+
 /** Perche' il video non parte. */
 enum class PlaybackProblem {
   /** Il decoder non c'e' o non regge il formato (8K, APV, un profilo HDR): "Questo dispositivo non riesce a riprodurre il video". */
@@ -86,10 +98,15 @@ interface ViewerPlayer {
   fun bind(surface: SurfaceView?)
 
   /**
-   * Prepara [source] e, con [autoplay], parte. Sostituisce cio' che c'era. [muted] spegne l'audio (la motion photo si
-   * guarda in silenzio); un video normale parte con l'audio e prende il focus audio.
+   * Prepara [source] e, con [autoplay], parte. Sostituisce cio' che c'era. [muted] spegne l'audio (l'animazione d'apertura di
+   * una motion photo e' muta); un video normale, e il video intero dal badge "Movimento", partono con l'audio al volume dei
+   * contenuti multimediali e prendono il focus audio.
+   *
+   * Con [clip] la sorgente e' **tagliata** a `[clip.startMs, clip.endMs]` (D50): la riproduzione comincia dal fotogramma chiave
+   * che precede `clip.startMs` se ce n'e' uno entro 2 secondi, altrimenti dal fotogramma esatto, e finisce a `clip.endMs`.
+   * Le posizioni dello stato restano quelle della sorgente intera.
    */
-  fun load(source: PlaybackSource, autoplay: Boolean, muted: Boolean, startPositionMs: Long = 0L)
+  fun load(source: PlaybackSource, autoplay: Boolean, muted: Boolean, startPositionMs: Long = 0L, clip: PlaybackClip? = null)
 
   fun play()
 

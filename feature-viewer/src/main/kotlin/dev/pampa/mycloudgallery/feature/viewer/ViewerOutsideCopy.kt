@@ -93,8 +93,7 @@ internal fun OutsideCopyLayer(id: MediaId, services: ViewerServices, playback: V
         services = services,
         playback = playback,
         onTap = {},
-        onMotionHold = {},
-        onMotionRelease = {},
+        onMotionTouch = {},
       )
     } else if (lookedUp) {
       Text(

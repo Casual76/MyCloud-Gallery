@@ -123,9 +123,14 @@ import dev.pampa.mycloudgallery.feature.viewer.info.buildInfoSections
 import dev.pampa.mycloudgallery.feature.viewer.info.rememberBackupState
 import dev.pampa.mycloudgallery.feature.viewer.info.rememberSimilarCopiesPanel
 import dev.pampa.mycloudgallery.feature.viewer.info.sheetHeight
+import dev.pampa.mycloudgallery.feature.viewer.motion.MotionBadge
+import dev.pampa.mycloudgallery.feature.viewer.motion.MotionNotice
+import dev.pampa.mycloudgallery.feature.viewer.motion.MotionNoticeView
+import dev.pampa.mycloudgallery.feature.viewer.motion.PageSettle
 import dev.pampa.mycloudgallery.feature.viewer.page.PageSpec
 import dev.pampa.mycloudgallery.feature.viewer.page.ViewerPage
 import dev.pampa.mycloudgallery.feature.viewer.video.Media3ViewerPlayer
+import dev.pampa.mycloudgallery.feature.viewer.video.MotionMode
 import dev.pampa.mycloudgallery.feature.viewer.video.NasVideoGate
 import dev.pampa.mycloudgallery.feature.viewer.video.PlaybackSource
 import dev.pampa.mycloudgallery.feature.viewer.video.ViewerPlayback
@@ -157,7 +162,7 @@ internal object ViewerTags {
  *
  * **Dentro.** Un pager orizzontale sulla stessa vista della Libreria, con precarico di una pagina per lato; la foto si
  * ingrandisce con tasselli fino a 200 MP e passa al pager dal bordo; i video partono quando la pagina si ferma, con un
- * solo lettore; la motion photo si anima tenendo premuto; GIF e WebP si animano. Un tocco nasconde le barre (e quelle
+ * solo lettore; la motion photo si anima quando la pagina si ferma e col badge "Movimento" (D50, D51); GIF e WebP si animano. Un tocco nasconde le barre (e quelle
  * di sistema), uno swipe verso l'alto apre le informazioni (foglio a meta' sul telefono, pannello laterale da 840 dp).
  *
  * @param images da dove arrivano i pixel, per chi non passa [services] (compatibilita' con P0).
@@ -326,9 +331,19 @@ private fun ViewerHost(
     }
   }
   LaunchedEffect(currentId) {
+    controller.motion.state.notice = null
     // Cambio pagina: il video di prima si ferma e libera il decoder.
     if (playback.videoFor != null && playback.videoFor != currentId) playback.clear()
     if (playback.motionFor != null && playback.motionFor != currentId) playback.stopMotion()
+  }
+  // Foto in movimento (D50): l'animazione d'apertura parte quando il pager sta fermo da ~150 ms; ogni movimento (scorrimento, espansione,
+  // trascinamento verso il basso, chiusura) la ferma. Il flusso emette solo i cambiamenti: chiudere le info o tornare dallo zoom non la rifa.
+  LaunchedEffect(controller) {
+    controller.motion.watch(
+      snapshotFlow {
+        PageSettle(state.currentId, moving = !atRest || controller.closing || pager.isScrollInProgress || pager.currentPage != pager.settledPage)
+      },
+    )
   }
   LaunchedEffect(currentId, atRest, currentKind, state.retries[currentId]) {
     if (currentKind != MediaKind.VIDEO) return@LaunchedEffect
@@ -576,8 +591,8 @@ private fun PagerLayer(
           services = services,
           playback = controller.playback,
           onTap = controller::toggleChrome,
-          onMotionHold = controller::onMotionHold,
-          onMotionRelease = controller::onMotionRelease,
+          onMotionTouch = controller::onMotionTouch,
+          onPlayMotion = if (controller.motionAvailable(id)) controller::playMotion else null,
         )
       }
     }
@@ -757,6 +772,7 @@ private fun ViewerOverlays(
     nasDelete = nasEntries?.delete.orEmpty(),
     backupActions = backupEntries,
     shareWithoutLocation = shareWithoutLocation,
+    onPlayMotion = if (controller.motionAvailable(currentId)) controller::playMotion else null,
   )
   val barActions = viewerBarActions(resources, baseCapabilities, isFavorite, handlers)
   val nasNotice = nasController?.notice?.collectAsState()?.value
@@ -827,6 +843,15 @@ private fun ViewerOverlays(
     onClose = controller::close,
     bottomVisible = chromeShown && (sidePanel || infoClosed),
     topActions = {
+      // Il badge "Movimento" (D51): visibile con le barre, accanto al menu ⋮. Funziona sempre, anche con l'interruttore spento.
+      if (controller.motionAvailable(currentId)) {
+        MotionBadge(
+          playing = playback.motionFor == currentId && playback.motionMode == MotionMode.FULL,
+          unavailable = controller.motion.state.isUnavailable(currentId),
+          onClick = controller::playMotion,
+          backdrop = backdrop,
+        )
+      }
       if (menu.isNotEmpty()) GalleryMenuButton(entries = menu, backdrop = backdrop)
     },
     bottomActions = barActions,
@@ -872,6 +897,25 @@ private fun ViewerOverlays(
           onConfirmMobileData = confirmMobileData,
           onRetry = if (nasRef != null) controller::retry else null,
           onCancelDownload = if (downloadState is DownloadState.Queued || downloadState is DownloadState.Running) controller::cancelDownload else null,
+        )
+      }
+    }
+    // Foto in movimento del NAS (E-V15, D51): i dati mobili da confermare, o "non disponibile ora".
+    val motionNotice = controller.motion.state.notice
+    if (motionNotice != null && atRest) {
+      val noticeId = when (motionNotice) {
+        is MotionNotice.NeedsMobileData -> motionNotice.id
+        is MotionNotice.Unavailable -> motionNotice.id
+      }
+      LaunchedEffect(motionNotice) {
+        delay(MessageMillis)
+        if (controller.motion.state.notice == motionNotice) controller.motion.state.notice = null
+      }
+      Box(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = NoticeBottomInset)) {
+        MotionNoticeView(
+          notice = motionNotice,
+          backdrop = backdrop,
+          onConfirmMobileData = if (services.onConfirmMobileData != null) ({ controller.confirmMotionMobileData(noticeId) }) else null,
         )
       }
     }

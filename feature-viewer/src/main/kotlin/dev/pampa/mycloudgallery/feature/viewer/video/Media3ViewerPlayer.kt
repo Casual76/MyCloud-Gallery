@@ -19,6 +19,7 @@ import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.TransferListener
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.SeekParameters
+import androidx.media3.exoplayer.source.ClippingMediaSource
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.extractor.DefaultExtractorsFactory
@@ -97,7 +98,7 @@ class Media3ViewerPlayer(context: Context, private val nasVideo: NasVideoSource?
     if (surface == null) player.clearVideoSurface() else player.setVideoSurfaceView(surface)
   }
 
-  override fun load(source: PlaybackSource, autoplay: Boolean, muted: Boolean, startPositionMs: Long) {
+  override fun load(source: PlaybackSource, autoplay: Boolean, muted: Boolean, startPositionMs: Long, clip: PlaybackClip?) {
     if (released) return
     val factory = dataSourceFactoryFor(source)
     if (factory == null) {
@@ -105,15 +106,19 @@ class Media3ViewerPlayer(context: Context, private val nasVideo: NasVideoSource?
       mutableState.value = PlayerUiState(source = source, muted = muted, problem = PlaybackProblem.NAS_UNREACHABLE)
       return
     }
-    val mediaSource = ProgressiveMediaSource.Factory(factory, DefaultExtractorsFactory())
+    val progressive = ProgressiveMediaSource.Factory(factory, DefaultExtractorsFactory())
       .createMediaSource(MediaItem.fromUri(source.uri))
+    val mediaSource: MediaSource = if (clip == null) progressive else cut(progressive, clip)
     player.setAudioAttributes(
       AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),
       /* handleAudioFocus = */ !muted,
     )
     player.volume = if (muted) 0f else 1f
     mutableState.value = PlayerUiState(source = source, muted = muted)
-    player.setMediaSource(mediaSource, startPositionMs.coerceAtLeast(0L))
+    // Il tratto tagliato parte dal fotogramma chiave che precede l'inizio se ce n'e' uno entro 2 s, altrimenti dal fotogramma esatto
+    // (tolleranza prima, nessuna dopo): la ricerca iniziale e' una ricerca come le altre e rispetta questi parametri.
+    player.setSeekParameters(if (clip != null) SeekParameters(KEYFRAME_TOLERANCE_US, 0L) else SeekParameters.DEFAULT)
+    player.setMediaSource(mediaSource, (clip?.startMs ?: startPositionMs).coerceAtLeast(0L))
     player.prepare()
     player.playWhenReady = autoplay
   }
@@ -165,6 +170,12 @@ class Media3ViewerPlayer(context: Context, private val nasVideo: NasVideoSource?
     is PlaybackSource.Nas -> nasVideo?.let { nas -> DataSource.Factory { nas.newDataSource(source) } }
   }
 
+  /** La sorgente tagliata a [clip]: finisce alla fine del tratto, senza il salto iniziale che un ritaglio dentro un file aggiunge. */
+  private fun cut(source: MediaSource, clip: PlaybackClip): MediaSource = ClippingMediaSource.Builder(source)
+    .setEndPositionMs(clip.endMs)
+    .setEnableInitialDiscontinuity(false)
+    .build()
+
   private fun publish() {
     if (released) return
     val duration = player.duration.takeIf { it != C.TIME_UNSET && it >= 0 } ?: 0L
@@ -179,6 +190,9 @@ class Media3ViewerPlayer(context: Context, private val nasVideo: NasVideoSource?
 
   private companion object {
     const val PositionPollMs = 250L
+
+    /** Quanto prima dell'inizio del tratto puo' stare il fotogramma chiave da cui si parte (D50): oltre, ricerca esatta. */
+    const val KEYFRAME_TOLERANCE_US = 2_000_000L
 
     fun contentOnly(context: Context): DataSource.Factory = DataSource.Factory { ContentDataSource(context) }
   }

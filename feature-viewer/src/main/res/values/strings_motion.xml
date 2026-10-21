@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fase 6 (P14): foto in movimento nel viewer. Badge "Movimento", video intero con l'audio, animazione d'apertura (D50, D51, §2.11). -->
+<resources>
+  <string name="motion_badge">Movimento</string>
+  <!-- Etichetta del badge, della voce ⋮ e dell'azione di TalkBack. -->
+  <string name="motion_play">Riproduci il movimento</string>
+  <string name="motion_stop">Ferma il movimento</string>
+  <string name="motion_state_playing">In riproduzione</string>
+  <string name="motion_state_loading">In caricamento</string>
+  <string name="motion_state_unavailable">Non disponibile ora</string>
+
+  <!-- Avvisi del badge sui media del NAS (E-V15, D51). -->
+  <string name="motion_notice_unavailable_title">Movimento non disponibile ora</string>
+  <string name="motion_notice_unavailable_detail">Il video di questa foto non si raggiunge da questa rete. Riprova più tardi.</string>
+  <string name="motion_notice_mobile_title">Servono i dati mobili</string>
+  <string name="motion_notice_mobile_detail_size">Il file di questa foto in movimento pesa %1$s. Guardare il movimento con i dati mobili?</string>
+  <string name="motion_notice_mobile_action">Guarda con i dati mobili</string>
+</resources>

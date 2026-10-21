@@ -35,8 +35,11 @@ import dev.pampa.mycloudgallery.feature.viewer.download.PhoneDownload
 import dev.pampa.mycloudgallery.feature.viewer.info.MediaBackupStates
 import dev.pampa.mycloudgallery.feature.viewer.menu.BackupMediaActions
 import dev.pampa.mycloudgallery.feature.viewer.menu.NasMediaActions
+import dev.pampa.mycloudgallery.feature.viewer.motion.MotionAnimationSetting
+import dev.pampa.mycloudgallery.feature.viewer.motion.PowerSaving
 import dev.pampa.mycloudgallery.feature.viewer.video.BytesMotionVideoLocator
 import dev.pampa.mycloudgallery.feature.viewer.video.MotionVideoLocator
+import dev.pampa.mycloudgallery.feature.viewer.video.NasMotionSource
 import dev.pampa.mycloudgallery.feature.viewer.video.NasVideoSource
 import dev.pampa.mycloudgallery.feature.viewer.video.ViewerPlayerFactory
 import kotlin.math.max
@@ -82,6 +85,11 @@ import kotlinx.coroutines.withContext
  * @property backupActions Fase 5B (P12, §1.3 "viewer"): le voci del backup nel menu ⋮ (Versioni, Vedi originale, Ripristina originale, Correggi data e luogo, Ruota,
  *   Modifica con…), "Condividi" con "Rimuovi la posizione" e "Elimina solo dal telefono" con la sua verifica. Il viewer chiede, `:app` apre i fogli di
  *   feature-backup sopra di lui: senza, le voci non compaiono (D13) e "Condividi" ed "Elimina dal telefono" restano come prima.
+ * @property motionAnimation l'interruttore "Animazione delle foto in movimento" (Fase 6, P14, D50, Q16): di serie acceso. `:app` lo lega a
+ *   `MotionPersonalSettings` (P11); spento, l'animazione d'apertura non parte mai, il badge "Movimento" funziona sempre.
+ * @property powerSaving il risparmio energetico (D50): null = quello di sistema (`PowerManager`); nei test lo sceglie il test.
+ * @property nasMotion la parte video delle foto in movimento solo-NAS (Fase 6, P14, D51): letta a intervalli e tenuta in `cacheDir/motion/`.
+ *   Senza, una foto in movimento del NAS resta ferma e senza badge (D13). `:app` lo costruisce sopra [nasVideo] e la cartella di cache (P11).
  * @property dispatchers i thread di lavoro (letture di dettagli ed EXIF): nei test sono uno solo, senza attese.
  */
 @Immutable
@@ -110,6 +118,9 @@ class ViewerServices(
   val outsideCopy: OutsideCopyLookup? = null,
   val backupActions: BackupMediaActions? = null,
   val link: NasLink? = null,
+  val motionAnimation: MotionAnimationSetting = MotionAnimationSetting.On,
+  val powerSaving: PowerSaving? = null,
+  val nasMotion: NasMotionSource? = null,
 )
 
 /** Decodifica un'immagine animata (GIF, WebP animato) in un `Drawable` che si anima da solo (E-M11). */

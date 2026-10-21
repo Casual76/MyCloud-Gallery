@@ -3659,3 +3659,58 @@ quelle vere):
   (non nel repository). Le classi di `litertlm-android` sono Java 21: i motori veri si provano solo sul dispositivo.
 - **`tools/check.ps1` e' girato in una copia isolata** del repository (stessi file, impronta per impronta, e stesso engine): nel
   repository principale alcuni `classes.jar` restavano bloccati da un daemon Kotlin che le regole non permettono di fermare.
+
+## Fase 6 P2: formato `ai` e indice condiviso (21/10)
+
+Il pacchetto P2 (`docs/fase6-progetto.md` §2.3, D6–D9, parte di D10): codec ostile `AiSegments` (core-trust), testa `ai` alla versione 2,
+pubblicatore `OutboxAiIndexPublisher`, replica `AiShareSync` con attestazione e fusione (`AiFusion`), `AiPublishedClasses` e
+`AiWorkSource` per `LeasedWorkUnits` con `WorkPass.AI`, `IndexAnalysisFetcher`, l'aggancio delle teste `ai` in `IndexSyncEngine`. Le
+scelte che il progetto lasciava aperte o che il codice ha imposto:
+
+- **`vec` (7) e `ocr` (8) sono valori di `SegmentClass`** (come nel §1.2), con `isAi`: fuori da `INDEX_CLASSES`, da `isContentBlob` e
+  dalla maschera `prep`; `RESERVED_WIRE` resta solo `faces`. `HeadKind.AI` porta le sue classi (`classes`) e la sua versione
+  (`formatVersion`); `IndexSegments` rifiuta le classi AI in lettura e in scrittura. `AiClass.segmentClass` lega le due viste.
+- **Versione**: `CURRENT_VERSION` resta 1 per tutto il resto; `AI_VERSION` = 2. **Modifica minima fuori dall'elenco del perimetro**:
+  `envelope/Envelope.kt` (stesso modulo) accetta la versione 2 **solo** per le teste (`DocType.DEVICE_HEAD`), espone la versione
+  letta (`SignedEnvelope.version`) e `seal` prende la versione; `HeadVerifier` lega versione e tipo (testa `ai` alla 1 o `index`/
+  `personal` alla 2: `INVALID_FIELD`). Senza, una testa `ai` non si poteva firmare ne' leggere.
+- **Testo `ocr` piu' stretto del §2.3**: oltre all'elenco del progetto, tutti i caratteri vietati da `TextRules` (invisibili, U+2028/29,
+  non caratteri) e **nessuna parola vuota** (anche in `OcrLine`, contratto di P0). `OcrText.cleanWord` serve a P4/P5 per pulire le
+  parole di ML Kit. Scritto in formato-nas.md §5.5-bis; i tetti interi stanno ora in `TrustLimits` e sono nominati nel §7 (il test li
+  confronta).
+- **Spareggio**: a parita' di ricetta e di dispositivo vince l'impronta del corpo minore (deterministico, E-I7). Il disaccordo
+  (coseno < 0,95, `AI_VECTOR_DISAGREE`) si conta solo per le voci appena arrivate, non a ogni giro.
+- **Attestazione** dietro una porta (`AiAttestation`): `ReplicaAttestation` e' il riferimento sopra la replica della Fase 4 (vincitore D6
+  di ogni percorso, lettura di tutti i record della share una volta per share e per giro). Si **riattesta a ogni giro** (anche un
+  record proprio arrivato da `OwnIndexSink` cambia l'attestazione, e il motore non lo vede).
+- **Indice locale esatto**: aggiunto `AiReplicaSink.withdraw` (contratto di P0, fake e null-object aggiornati): una voce che perde il
+  record o l'ultimo candidato esce. La replica conferma la consegna dopo il sink (`commitApplied`): una morte in mezzo si ripete.
+- **M3 con le chiavi** dietro la porta `AiShareContent` (P11: `Location.Nas` della share con `qh1` del timbro corrente). Una voce per
+  una chiave che non e' (piu') della share **si scarta e si conta** (`foreign`), non e' un'eccezione: P5 puo' incrociare una scansione.
+- **Pubblicatore senza pacco**: i corpi (al piu' 14 e 64 KiB) stanno nelle righe di `AiPublishStore` (outbox e `ai_pending_publish` in
+  una tabella, stato `outbox`/`held`); un corpo identico a quello pubblicato o gia' in fila non si ripete; al piu' 16.384 righe per
+  pubblicazione. Con un blocco permanente `flush` risponde `Blocked` anche se l'outbox e' vuota (le voci aspettano).
+- **Tetti della replica** (politica di chi legge, non del formato): 128 MiB di segmenti `ai` per share e per giro (il resto "in attesa"
+  e si riprende senza teste nuove), 2 GiB elencati e 524.288 voci per dispositivo e share.
+- **Scaricamento delle anteprime**: segmenti interi (una parte non si verifica), prima l'HQ della replica locale, R1 per dispositivo,
+  l'ultimo segmento in memoria per il lotto dopo; traffico nella porta `AiTraffic`.
+- **"Fatto"** = vincitore consegnato con ricetta **uguale o piu' nuova** (vincerebbe comunque); `FakeAiDoneClasses` allineato.
+- Le teste `ai` di un dispositivo **dismesso** valgono solo se congelate (come le `index`): oggi nessun flusso dell'app congela teste.
+
+**Prove**: core-trust `AiSegmentsTest` (ogni campo del §2.3 con byte ostili, 3.000 mutazioni) e `AiHeadTest`; core-index
+`AiPublisherTest`, `AiPublisherCrashTest` (morte prima e dopo l'effetto e errore del NAS a ogni chiamata), `AiReplicaTest`, `AiWorkTest`,
+`AnalysisFetcherTest`, `AiParityTest` (le stesse suite su fake di P0 e implementazioni vere) e `AiBenchTest` (3 semi x 200 giri, con un
+oracolo che rilegge il NAS da zero). Prova che i test mordono: attestazione e M3 spente → 3 rossi; ordine dei dispositivi invertito → il
+banco rosso.
+
+**Da collegare (P1/P11)**: adattatori Room di `AiPublishStore` e `AiReplicaStore` (tabelle attese nel KDoc di `ai/AiStores.kt`; le
+suite si rifanno su Room con `AiTestStores`), `AiShareContent`, `AiAttestation` (meglio una query del catalogo), `AiWorkCatalog`,
+`AiTraffic`, `AiReplicaSink` (con `withdraw`) sull'indice locale, i titoli di `AiIndexDiagnostics`, e in `NasGraph`/`AiGraph`
+l'aggancio `IndexSyncEngine(ai = AiShareSync(...))` e `startRound` di `NasAiRemoteIndex` per giro.
+
+**Punti aperti**: compattazione dei propri segmenti `ai` (§2.3; un segmento per classe e per pubblicazione: 8.192 segmenti per testa
+bastano per anni, ma vanno uniti; quando ci sara', la replica dovra' tenere le voci dei segmenti tolti finche' quelli nuovi non sono
+scaricati, come E-I17 per le teste `index`: oggi un segmento non piu' elencato esce subito); la pulizia dei propri file (`OwnFilesCleaner`, core-nasops) ora vede le teste `ai` (toglie quelle
+vecchie come le altre) ma non i segmenti (non sono nel diario: restano); la riattestazione di ogni giro tiene in memoria le chiavi della
+share (circa 40 MB a 100 mila media con vettore e testo), da spostare in SQL quando c'e' lo schema v5; letture a blocchi con
+`NasMediaReader.readAll` per i segmenti grandi (oggi `NasFileSystem.read`, come la Fase 4).

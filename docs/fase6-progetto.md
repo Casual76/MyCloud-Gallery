@@ -25,8 +25,8 @@
 > - fonti pubbliche consultate il 21/10/2026 (elenco al §10).
 >
 > Sigle: `Dn` = decisione di questo documento (§0.1); `F5-Dn` e `F4-Dn` = decisioni delle Fasi 5 e 4; "R1 della 4A" = voce della
-> revisione di sicurezza; `Fn` = prova sul campo (la Fase 5 arriva a F45, qui F46–F69); `Qn` = domanda del §9; `Pn` = pacchetto
-> del §4.4; `Ln` = limite di `docs/sicurezza.md` (qui L45–L55).
+> revisione di sicurezza; `Fn` = prova sul campo (la Fase 5 arriva a F45, qui F46–F71); `Qn` = domanda del §9; `Pn` = pacchetto
+> del §4.4; `Ln` = limite di `docs/sicurezza.md` (qui L45–L56).
 >
 > Contesto:
 > - **La Fase 5 è implementata e revisionata** (5A e 5B: revisione di sicurezza e verifica funzionale, correzioni fino al 21/10). Il
@@ -102,8 +102,11 @@
 > - **In parallelo**: il filone grafico (G3 del viewer). La Fase 6 consegna stati e contratti con composable funzionali (D36).
 > - **Le risposte dell'utente del 21/10 a Q1–Q10 sono integrate** in decisioni, flussi, pacchetti, prove e sicurezza; le risposte
 >   diverse dalle opzioni (Q3, Q4, Q9, Q10) hanno cambiato il progetto: lettura del testo da attivare (D41, D42), testo dal vivo e
->   ritaglio del soggetto nel viewer (D43–D47, §2.10), due ordini dei risultati (D48). Il riepilogo è al §11; le domande nuove sono
->   Q11–Q14.
+>   ritaglio del soggetto nel viewer (D43–D47, §2.10), due ordini dei risultati (D48). Il riepilogo è al §11.
+> - **Seconda tornata del 21/10 (Q11–Q14) integrata**: MagicTouch dentro l'app, ritagli in `Pictures/MyCloud Gallery/Ritagli/` e nel
+>   backup, lettura del testo per account con esclusione di un dispositivo; **foto in movimento** (Q14, risposta diversa dalle
+>   opzioni): la pressione prolungata diventa testo dal vivo o ritaglio anche su di loro, il video parte dal badge "Movimento", e
+>   all'apertura una breve animazione arriva fino all'istante della foto (D45, D50, D51, §2.11, P14). Domande nuove: Q15, Q16.
 
 ## 0. Sintesi
 
@@ -125,7 +128,8 @@
   filtro rapido **Documenti** in Libreria (D32–D36).
 - **Nel viewer, come su Samsung e Apple** (Q9): **testo dal vivo** (pressione prolungata sul testo, selezione con le maniglie,
   Copia) e **ritaglio del soggetto** (pressione prolungata sul soggetto, Copia, Condividi, Salva come nuova foto), on-device, senza
-  Play Services né servizi esterni (D43–D47, §2.10).
+  Play Services né servizi esterni (D43–D47, §2.10). Le **foto in movimento** si animano per un istante all'apertura fino al momento
+  della foto e il video intero parte dal badge "Movimento" (Q14, D50, D51, §2.11).
 
 **Moduli nuovi**
 - `core-models`: catalogo dei modelli fissato nell'app, sorgenti (NAS, HTTPS, cartella dal PC), scaricamento con ripresa, verifica,
@@ -147,17 +151,17 @@
   salvati), `feature-settings`, `feature-viewer` (testo dal vivo, ritaglio, "Trova simili"), `feature-library`,
   `feature-diagnostics`, `benchmark`, `:app`.
 
-**Quattordici pacchetti** (§4.4; P12 e P13 aggiunti con le risposte del 21/10). Opus per i quattro fondanti o difficili: P0
-(fondamenta e contratti), P2 (formato `ai` e indice condiviso), P5 (calcolo AI), P6 (motore di ricerca); sonnet per gli altri
-dieci.
+**Quindici pacchetti** (§4.4; P12 e P13 aggiunti con le risposte del 21/10, P14 con la risposta Q14). Opus per i quattro fondanti o
+difficili: P0 (fondamenta e contratti), P2 (formato `ai` e indice condiviso), P5 (calcolo AI), P6 (motore di ricerca); sonnet per
+gli altri undici.
 
 **Tappe**
 - **M1**: sull'S25 (build debug, account di prova) i due modelli scaricati e verificati, l'area di prova indicizzata, una ricerca
   per contenuto e una per testo trovano le foto giuste.
 - **M2**: l'area di prova indicizzata **una volta sola** con due indicizzatori (prova di E-I1; nella famiglia l'utente farà fare tutto
-  all'S25, Q3); Cerca completa (chip, testo, filtri, "Trova simili", copertura, cronologia, i due ordini); testo dal vivo e
-  ritaglio nel viewer; il tablet non indicizzatore e con la lettura spenta cerca come il telefono (E-Q8) e usa il testo letto
-  dall'S25 (D42).
+  all'S25, Q3); Cerca completa (chip, testo, filtri, "Trova simili", copertura, cronologia, i due ordini); testo dal vivo,
+  ritaglio e foto in movimento nel viewer; il tablet non indicizzatore e con la lettura spenta cerca come il telefono (E-Q8) e usa
+  il testo letto dall'S25 (D42).
 - **M3**: obiettivi del §4 del piano misurati: p95 sotto 300 ms con 100 mila elementi su S25 e Tab S9, ≥ 80% al primo 20 sulle 50
   query italiane, nessun traffico durante le ricerche.
 - Chiusura: revisione di sicurezza e verifica funzionale; con il consenso (Q7) la pubblicazione sulle share vere.
@@ -206,22 +210,24 @@ dispositivo (§5.2).
 | D35 | **Ricerca sempre utilizzabile**: senza il modello delle query (non scaricato, rimosso, in verifica, in caricamento) funzionano filtri e testo, con "Scarica il modello per cercare per contenuto (157 MB)"; offline funziona tutto (nessuna rete serve); il motore si **carica quando si apre Cerca** e si rilascia 3 minuti dopo l'uscita o quando Android chiede memoria | 6.3 e §4 del piano: anche offline; il 270M su CPU occupa ~330 MB |
 | D36 | **UI come stati e contratti** (come F4-D27, F5-D30): `feature-search` e le voci nuove di Impostazioni e viewer consegnano ViewModel e stati sigillati (§1.5), composable fatte **solo** con i componenti G2 esistenti; nessuno stile nuovo | Il filone grafico rifinisce senza toccare la logica |
 | D37 | **Schema v5** (migrazione 4→5 mai distruttiva; `ExportedSchemaTest` 1→5 … 4→5): `ai_vector`, `ai_text` con la tabella FTS4 `ai_text_fts`, `ai_vocabulary`, `ai_pending_publish` (risultati in attesa di una share pubblicabile), `ai_replica_entry` (voci delle teste `ai` per la fusione), `search_history`; bit `DOCUMENT`; nessuna tabella nuova punta a `media` (tutte per chiave di contenuto: `TABLES_WITHOUT_MEDIA_IDS`) | Una sola migrazione sul campo per la fase |
-| D38 | **Permessi, componenti, dipendenze, host.** Nessun permesso Android nuovo (`INTERNET` c'è già: la sua riga del §4-bis cambia). Nessun componente esportato né servizio nuovo; i componenti non esportati che ML Kit e DataTransport portano nel manifest fuso si elencano e si controllano; **`MlKitInitProvider` si toglie** (D41). **Tre dipendenze nuove**, con checksum in `verification-metadata.xml` e righe in `docs/sicurezza.md` §8: `litertlm-android` 0.18.1 (Apache 2.0), `text-recognition` 16.0.1 (termini ML Kit) e `com.google.ai.edge.litert:litert` 2.3.0 (Apache 2.0, runtime del ritaglio, D44). **Un host nuovo**: Hugging Face (solo `core-models`, solo per scaricare i modelli; il modello del ritaglio sta nell'APK se Q11 è (a)). `verifyReleaseManifest` controlla anche `uses-native-library` | Piano §7.9 e checklist "per ogni fase": ogni libreria, host o voce del manifest è una decisione visibile |
+| D38 | **Permessi, componenti, dipendenze, host.** Nessun permesso Android nuovo (`INTERNET` c'è già: la sua riga del §4-bis cambia). Nessun componente esportato né servizio nuovo; i componenti non esportati che ML Kit e DataTransport portano nel manifest fuso si elencano e si controllano; **`MlKitInitProvider` si toglie** (D41). Il modello del ritaglio sta nell'APK (risposta Q11 (a)). **Tre dipendenze nuove**, con checksum in `verification-metadata.xml` e righe in `docs/sicurezza.md` §8: `litertlm-android` 0.18.1 (Apache 2.0), `text-recognition` 16.0.1 (termini ML Kit) e `com.google.ai.edge.litert:litert` 2.3.0 (Apache 2.0, runtime del ritaglio, D44). **Un host nuovo**: Hugging Face (solo `core-models`, solo per scaricare i modelli; il modello del ritaglio sta nell'APK, risposta Q11 (a)). `verifyReleaseManifest` controlla anche `uses-native-library` | Piano §7.9 e checklist "per ogni fase": ogni libreria, host o voce del manifest è una decisione visibile |
 | D39 | **Ora.** "Oggi" e "ieri" nelle query vengono dalla data del telefono (un'interpretazione da mostrare nel chip, mai una scadenza); prenotazioni e teste con l'ora del NAS; durate, attese del motore e validità dei caricamenti con l'orologio monotono (`NoWallClockSourcesTest` in `core-ai`, `core-models` e `core-search`: la data di oggi arriva dalla porta `Today`, implementata in `:app`) | E-P9: l'orologio sbagliato si vede nei chip e non fa scadere niente |
 | D40 | **Log e Diagnostica**: mai testo delle query, testo letto o copiato, nomi di luoghi, vettori, chiavi di contenuto, nomi di file; solo numeri e codici (§2.6, catalogo della Diagnostica) | C21, come le fasi precedenti |
 
 **Decisioni nate dalle risposte del 21/10** (§11)
 | # | Decisione | Perché |
 |---|---|---|
-| D41 | **Lettura del testo nelle foto: una funzione da attivare, spenta di default** (risposta Q4; l'ambito per account è la raccomandazione di Q13). Si attiva per l'**account** (impostazione personale sincronizzata fra i propri dispositivi, 4.7) dopo una pagina che dice **cosa ML Kit manda a Google**: produttore e modello del telefono, versione di Android, nome e versione dell'app, identificativi per installazione, tempi, configurazione e codici d'errore; contatti per correzioni e compatibilità; **mai foto né testo** (termini e pagina dei dati di ML Kit, §10). Ogni altro dispositivo dell'account lo dice una volta e si può escludere ("Non su questo dispositivo"). **Spenta = ML Kit non si inizializza e non manda niente**: `com.google.mlkit.common.internal.MlKitInitProvider` tolto dal manifest fuso con `tools:node="remove"` (la via documentata da Google per l'avvio manuale); `MlKit.initialize(context)` lo chiama **solo** il motore OCR di `core-ai` quando la funzione è attiva su quel dispositivo; nessun'altra classe nomina `com.google.mlkit` (test d'architettura); DataTransport, che ML Kit avvia al primo uso, resta inerte. **Allo spegnimento**: motore rilasciato, lavori pianificati di DataTransport annullati; al primo avvio successivo, prima di qualunque altra cosa, si tolgono gli eventi che DataTransport ha in coda (nomi di componenti e file da leggere in P0 sul manifest fuso e nella libreria). **Accesa**: DataTransport resta com'è e le statistiche partono come le manda ML Kit | "Nessuna telemetria" resta la regola; l'eccezione è dichiarata, spenta di default e scelta da chi sa cosa esce (risposta Q4, proposta 9 aggiornata: D49) |
+| D41 | **Lettura del testo nelle foto: una funzione da attivare, spenta di default** (risposte Q4 e Q13 (a): per l'account, con l'esclusione di un dispositivo). Si attiva per l'**account** (impostazione personale sincronizzata fra i propri dispositivi, 4.7) dopo una pagina che dice **cosa ML Kit manda a Google**: produttore e modello del telefono, versione di Android, nome e versione dell'app, identificativi per installazione, tempi, configurazione e codici d'errore; contatti per correzioni e compatibilità; **mai foto né testo** (termini e pagina dei dati di ML Kit, §10). Ogni altro dispositivo dell'account lo dice una volta e si può escludere ("Non su questo dispositivo"). **Spenta = ML Kit non si inizializza e non manda niente**: `com.google.mlkit.common.internal.MlKitInitProvider` tolto dal manifest fuso con `tools:node="remove"` (la via documentata da Google per l'avvio manuale); `MlKit.initialize(context)` lo chiama **solo** il motore OCR di `core-ai` quando la funzione è attiva su quel dispositivo; nessun'altra classe nomina `com.google.mlkit` (test d'architettura); DataTransport, che ML Kit avvia al primo uso, resta inerte. **Allo spegnimento**: motore rilasciato, lavori pianificati di DataTransport annullati; al primo avvio successivo, prima di qualunque altra cosa, si tolgono gli eventi che DataTransport ha in coda (nomi di componenti e file da leggere in P0 sul manifest fuso e nella libreria). **Accesa**: DataTransport resta com'è e le statistiche partono come le manda ML Kit | "Nessuna telemetria" resta la regola; l'eccezione è dichiarata, spenta di default e scelta da chi sa cosa esce (risposta Q4, proposta 9 aggiornata: D49) |
 | D42 | **Il testo letto è un dato della famiglia.** Un dispositivo con la lettura spenta usa, per la ricerca e per il testo dal vivo, il testo letto e pubblicato nell'indice da un altro dispositivo (dello stesso account per l'area privata, di qualunque familiare per l'area comune): lì ML Kit non gira e non manda niente. L'OCR in background lo fanno solo gli indicizzatori con la lettura attiva; quello "al volo" (testo dal vivo su un media non ancora letto) solo i dispositivi con la lettura attiva, e il risultato segue il percorso normale (salvato, pubblicato se il file è in una share pubblicabile). Un'area il cui account non ha la lettura attiva non ha testo letto: la copertura lo dice (D31) | Coerente con Q4: le statistiche nascono dove ML Kit gira, non dai dati; il testo resta nella share del file, con i suoi permessi (C19, L46) |
 | D43 | **Testo dal vivo nel viewer** (risposta Q9). Pressione prolungata su una riga di testo letto → si seleziona la parola sotto il dito, con due maniglie che si agganciano alle parole e scorrono sulle righe riconosciute (anche su più righe) → barra "Copia · Seleziona tutto · Condividi testo". Appunti segnati come sensibili (`ClipDescription.EXTRA_IS_SENSITIVE`, Android 13+). Un pulsante **"Testo"** compare nella barra del viewer quando la foto ha testo letto: evidenzia tutte le righe e apre il foglio "Testo nella foto" (D46). **Le posizioni vengono dall'indice**: il corpo `ocr` pubblica per ogni riga il riquadro normalizzato, l'inclinazione e gli estremi delle parole (§2.3), così il testo dal vivo funziona sui dispositivi con la lettura spenta e sui media solo-NAS, senza ML Kit; al volo solo dove la lettura è attiva (D42). **Niente "Copia testo" nelle info** (D46) | Come Samsung e Apple, richiesta dell'utente; pubblicare le posizioni costa ~4 byte per parola e risparmia una lettura per ogni dispositivo |
 | D44 | **Ritaglio del soggetto** (risposta Q9). Pressione prolungata su un soggetto (fuori dal testo) → il soggetto si stacca con un'animazione → "Copia · Condividi · Salva come nuova foto" (PNG trasparente; interruttore "Contorno" per l'effetto adesivo). **Modello: MagicTouch di Google** (Interactive Segmenter: maschera da un punto per oggetti, animali e persone; **Apache 2.0**, 6 MB), eseguito con il runtime **LiteRT** (`com.google.ai.edge.litert:litert` 2.3.0) su CPU, **non** con MediaPipe Tasks (Google ha annunciato statistiche d'uso "per tutte le piattaforme" senza modo di spegnerle, §10). Fra la versione 1 (512×512, float) e la 2 (768×768, int8) sceglie P13 con le misure. Maschera riportata alla risoluzione dell'immagine con un filtro guidato (bordi), soglia e sfumatura di 1–2 px; nessun soggetto chiaro (maschera sotto l'1% o sopra il 90% dell'immagine, o confidenza bassa) = niente, con una vibrazione leggera. Sorgente dell'immagine: la migliore già sul dispositivo (originale del telefono, originale già aperto nel viewer, altrimenti l'HQ), al più 4096 px sul lato lungo. Piano B: MobileSAM (Apache 2.0) con ONNX Runtime (§2.10) | Licenza permissiva, piccolo, pensato proprio per "tocca il soggetto"; niente Play Services né servizi esterni (richiesta dell'utente) |
-| D45 | **Gesti del viewer** (risposta Q9; per le foto in movimento la raccomandazione di Q14). La pressione prolungata decide **dove** cade il dito: su una riga di testo letto → testo dal vivo; altrove su una foto → ritaglio; su una **foto in movimento** il video parte come oggi (Q14, raccomandata (a)), e il ritaglio si apre dal menu ⋮ "Ritaglia il soggetto"; sui video nessuno dei due. Un secondo dito o un movimento oltre la soglia annullano (come `holdToPlay`, `ViewerGestures.kt`); funziona a ogni livello di zoom (il punto passa per la trasformazione di telephoto). Con una selezione o un ritaglio aperti: il tocco fuori chiude, pager e trascinamento verso il basso sono fermi, il pizzico resta; doppio tocco e tocco singolo invariati quando non c'è niente di aperto | Un solo gesto, deciso dal contenuto sotto il dito; le funzioni esistenti non cambiano |
+| D45 | **Gesti del viewer** (risposte Q9 e Q14). La pressione prolungata decide **dove** cade il dito: su una riga di testo letto → testo dal vivo; altrove su una foto → ritaglio; **le foto in movimento si comportano come le altre foto** (Q14): la pressione prolungata **non** fa più partire il video (oggi lo fa: `holdToPlay` in `ViewerGestures.kt`, `ViewerController.onMotionHold`, `ViewerPlayback.playMotion`), che parte dal badge "Movimento" (D51); sui video nessuno dei due. Un secondo dito o un movimento oltre la soglia annullano (come `holdToPlay`, `ViewerGestures.kt`); funziona a ogni livello di zoom (il punto passa per la trasformazione di telephoto). Con una selezione o un ritaglio aperti: il tocco fuori chiude, pager e trascinamento verso il basso sono fermi, il pizzico resta; doppio tocco e tocco singolo invariati quando non c'è niente di aperto | Un solo gesto, deciso dal contenuto sotto il dito; le funzioni esistenti non cambiano |
 | D46 | **Accessibilità**: sull'immagine due azioni di TalkBack, "Testo nella foto" e "Ritaglia il soggetto" (punto: il soggetto più grande fra cinque punti di prova: centro e quattro punti a un terzo); "Testo nella foto" apre un **foglio** con il testo letto come testo normale (TalkBack lo legge, la selezione di sistema funziona) e "Copia tutto"; lo stesso foglio si apre dal pulsante "Testo". Maniglie con bersagli da 48 dp; annunci "Testo copiato", "Soggetto ritagliato". **Il "Copia testo" nelle info non c'è**: l'alternativa accessibile è il foglio, raggiungibile da un'azione dell'immagine | Le maniglie su un'immagine non si usano con TalkBack, un foglio di testo sì; le info restano leggere (risposta Q9: "metterlo nelle info è scomodo") |
-| D47 | **Salvataggio del ritaglio** (raccomandazione di Q12). "Salva come nuova foto" scrive un PNG nel telefono in `Pictures/MyCloud Gallery/Ritagli/` (riga propria con `IS_PENDING`, come F4-D20), con la **data di adesso** e **nessuna posizione** né altro metadato, collegato al catalogo prima che la lettura del telefono lo veda. La cartella "Ritagli" è una sorgente del backup accesa di default (sul NAS `Backup/<dispositivo>/Ritagli/AAAA/MM/`, Q8 della Fase 5). Dai Nascosti la foto nuova nasce **nascosta**. Copia e Condividi passano da `cacheDir/share/` del `FileProvider` esistente (nessun percorso nuovo). Nella build debug con un account di prova si salva in `Pictures/mcg-prova/Ritagli/` (recinzione F5-D13) | Una foto nuova, come uno screenshot; nessuna posizione in un'immagine fatta per essere condivisa |
+| D47 | **Salvataggio del ritaglio** (risposta Q12 (a)). "Salva come nuova foto" scrive un PNG nel telefono in `Pictures/MyCloud Gallery/Ritagli/` (riga propria con `IS_PENDING`, come F4-D20), con la **data di adesso** e **nessuna posizione** né altro metadato, collegato al catalogo prima che la lettura del telefono lo veda. La cartella "Ritagli" è una sorgente del backup accesa di default (sul NAS `Backup/<dispositivo>/Ritagli/AAAA/MM/`, Q8 della Fase 5). Dai Nascosti la foto nuova nasce **nascosta**. Copia e Condividi passano da `cacheDir/share/` del `FileProvider` esistente (nessun percorso nuovo). Nella build debug con un account di prova si salva in `Pictures/mcg-prova/Ritagli/` (recinzione F5-D13) | Una foto nuova, come uno screenshot; nessuna posizione in un'immagine fatta per essere condivisa |
 | D48 | **Ordine dei risultati** (risposta Q10): due ordini, **"Recenti" (predefinito) e "Pertinenti"**, con un selettore sopra i risultati, **ricordati** come impostazione personale sincronizzata (vale su tutti i propri dispositivi); valgono per sicuri e meno probabili. In ciascuno domina il criterio scelto e l'altro pesa poco: in "Pertinenti" il punteggio è la pertinenza più un piccolo premio di recenza a decadimento (a pari pertinenza vince il più recente, uno molto vecchio scende un poco); in "Recenti" i risultati vanno per periodo (giorno, mese o anno secondo l'età) e dentro il periodo per pertinenza. Formula e taratura con il set di Q8 al §2.4 | Risposta Q10: un risultato poco pertinente non sta mai sopra uno molto pertinente dello stesso periodo; vince la scelta dell'utente |
 | D49 | **Telemetria e regola delle dipendenze.** La regola "niente SDK che parli con internet" di `versions-app.gradle` resta, con eccezioni scritte accanto: `litertlm-android` e `litert` (nessuna rete attesa, verificata con le catture F55 e F67), ML Kit `text-recognition` (rete solo con la lettura attiva: eccezione dichiarata e scelta dall'utente). La **proposta 9** del piano diventa: "nessuna telemetria e nessun crash reporting esterno, **salvo la lettura del testo nelle foto se l'utente la attiva**: ML Kit manda a Google statistiche tecniche, mai foto né testo" | Risposta Q4 |
+| D50 | **Animazione d'apertura delle foto in movimento** (risposta Q14). Quando una foto in movimento diventa la pagina ferma del viewer (aperta dalla griglia o raggiunta scorrendo, dopo ~150 ms di pager fermo) si riproduce **in silenzio** il tratto del suo video che **precede l'istante della foto**, **1,2 s** (fra 1 e 1,5 s), poi l'immagine si ferma sulla foto con una dissolvenza di ~200 ms. Il video si disegna **nello stesso riquadro** della foto (con proporzioni diverse oltre il 3%: niente animazione). **Istante della foto** (§2.11): `Camera:MotionPhotoPresentationTimestampUs` per il formato Google (già letto da `XmpFacts`, −1 = assente); `MicroVideoPresentationTimestampUs` per il vecchio MicroVideo; per il trailer SEF di Samsung nessun campo documentato: vale l'XMP se il file lo porta, altrimenti la regola della specifica Android, **metà del video**, sostituita solo se le misure di P14 sui file dell'S25 mostrano dove sta davvero la foto. Il tratto finisce all'istante (sorgente tagliata) e comincia dal fotogramma chiave precedente (al più 2 s prima, altrimenti ricerca esatta). **Mai**: con "Rimuovi animazioni" (`LocalFluidMotionPolicy.reducedMotion`), con il risparmio energetico, durante uno scorrimento o un pizzico, su una pagina che non è quella ferma; ogni tocco la ferma subito e mostra la foto; lo zoom resta sulla foto. **Un decoder solo** (`ViewerPlayback`): l'animazione usa il lettore condiviso; il precarico ±1 prepara solo i **byte** (intervallo, istante e, per i solo-NAS, la coda), mai un secondo decoder. Nessun interruttore in più (raccomandazione di Q16) | Risposta Q14: l'effetto delle Live Photo di Apple e delle gallerie Samsung, un istante senza attese e senza rubare i gesti |
+| D51 | **Badge "Movimento" e video delle foto in movimento** (risposta Q14). Sulle foto in movimento un badge "Movimento" (icona e scritta; l'aspetto lo decide G3) nella barra in alto del viewer, visibile con le barre: un tocco riproduce **il video intero una volta** (con l'audio, raccomandazione di Q15) e torna alla foto con la stessa dissolvenza; un altro tocco lo ferma. Anche dal menu ⋮ ("Riproduci il movimento") e come azione di TalkBack. **Media solo-NAS** (oggi la parte video non si riproduce: `onMotionHold` lavora solo sui media del telefono): la parte video, in coda al file e di pochi MB, si legge a intervalli dal NAS. Per l'animazione automatica **solo** se è ≤ 16 MB, sul Wi-Fi di casa o su un Wi-Fi via VPN (mai dati mobili né roaming) e se è pronta entro 1,5 s dalla pagina ferma; altrimenti niente animazione e nessuna attesa. Con il badge sui dati mobili si chiede conferma con la dimensione (come E-V2). Cache `cacheDir/motion/` (64 MB, la più vecchia esce per prima, tolta dall'azzeramento); traffico come `VISIBLE_CONTENT` | Un pulsante come nelle altre gallerie; il NAS non costa dati mobili senza un sì |
 
 ### 0.2 Nuovi edge case proposti (da aggiungere al §6 del piano)
 - **E-A11**: il file del modello si altera dopo la verifica (memoria rovinata, ripristino da un backup di sistema): la verifica al
@@ -262,11 +268,21 @@ dispositivo (§5.2).
 - **E-V10** (21/10): pressione prolungata dove non c'è un soggetto chiaro (cielo, muro, foto sfocata): nessun ritaglio, vibrazione
   leggera, nessun messaggio d'errore.
 - **E-V11** (21/10): ritaglio di una foto nascosta salvato come nuova foto: la foto nuova nasce nascosta (D47, E-H1).
-- **E-V12** (21/10): pressione prolungata su una foto in movimento: sul testo il testo dal vivo, altrove il video come oggi; il
-  ritaglio dal menu (D45, Q14).
+- **E-V12** (21/10): pressione prolungata su una foto in movimento: testo dal vivo o ritaglio come su ogni foto; il video **non**
+  parte; parte solo dal badge "Movimento" (D45, D51, risposta Q14).
 - **E-V13** (21/10): selezione del testo aperta e gesti del viewer (scorrimento al media dopo, trascinamento verso il basso, pizzico,
   doppio tocco): il tocco fuori chiude la selezione; pager e chiusura fermi finché è aperta; il pizzico funziona e le maniglie
   seguono lo zoom.
+- **E-V14** (21/10): animazione d'apertura di una foto in movimento e gesti: nessuna animazione sulle pagine attraversate da uno
+  scorrimento veloce; un tocco, un pizzico o un trascinamento la fermano subito e mostrano la foto; si ripete arrivando da un'altra
+  pagina, non chiudendo le info o tornando dallo zoom (D50).
+- **E-V15** (21/10): foto in movimento solo-NAS: sul Wi-Fi di casa la coda video arriva e l'animazione parte se è pronta in tempo;
+  sui dati mobili niente animazione e nessun traffico, il badge chiede conferma; con il NAS irraggiungibile foto ferma e badge "non
+  disponibile ora" (D51).
+- **E-V16** (21/10): istante della foto assente, −1 o fuori dalla durata del video: metà del video (regola della specifica Android);
+  formato non riconosciuto (E-M16): niente animazione né badge, la nota nelle info come oggi (D50).
+- **E-V17** (21/10): video della foto in movimento ruotato o con proporzioni diverse dalla foto: rotazione dalla traccia; oltre il 3%
+  di differenza niente animazione, il badge lo riproduce nel suo riquadro (D50).
 
 ### 0.3 Modifiche da fare in P0 (agli altri documenti)
 **`docs/formato-nas.md`** (versione 2 del formato **solo** per i file `ai`)
@@ -290,9 +306,9 @@ manda con ML Kit statistiche tecniche a Google solo se l'utente la attiva; spent
 durante le ricerche, durante il testo dal vivo e durante il ritaglio; primo traffico Internet solo per i modelli: D41, D49), C22
 (catena di fornitura realizzata: D16–D19); §1 "Che cosa fa l'app" (la frase "un dubbio su una libreria di Google è ancora da
 chiarire" diventa la scelta dell'utente); §4-bis: riga `INTERNET` aggiornata, `uses-native-library`, `MlKitInitProvider` tolto,
-componenti non esportati di ML Kit e DataTransport, appunti sensibili; §6 L45–L55 (§6.2, L49 riscritto); §7 checklist della Fase 6
+componenti non esportati di ML Kit e DataTransport, appunti sensibili; §6 L45–L56 (§6.2, L49 riscritto); §7 checklist della Fase 6
 estesa (§6.3); §8: la riga del 12/10 "Dubbio su ML Kit … Aperto" si chiude con la risposta Q4, più le righe per D2, D3, D12,
-D16–D19, D33, D38, D41, D44, D49.
+D16–D19, D33, D38, D41, D44, D49, D51.
 
 **`docs/modello-dati.md`**: nuovo §13 "Schema v5" (lo scrive P1); nota al §9 (OCR e FTS fatti; `embedding` superata).
 
@@ -346,6 +362,8 @@ feature-settings + voce "Ricerca e modelli" (apre la pagina di feature-search, c
 feature-viewer  + voce ⋮ "Trova simili" come dato (azione verso :app, nessuna dipendenza da search)    (P8)
                 + livetext/ e cutout/: testo dal vivo e ritaglio, con porte definite dal viewer
                   (ViewerTextSource, ViewerTextReader, SubjectCutter, CutoutSaver) legate da :app   (P12, P13)
+                + motion/: badge "Movimento", animazione d'apertura; video/: istante della foto, tratto
+                  tagliato, coda dei solo-NAS (nessuna dipendenza nuova: Media3 e core-metadata ci sono) (P14)
 core-personal   + impostazioni sincronizzate: lettura del testo (account), ordine dei risultati        (P8)
 core-mediastore + salvataggio dei ritagli con PhoneMediaWriter (cartella Ritagli, IS_PENDING)           (P13)
 app → tutti
@@ -446,7 +464,8 @@ ordine di tempo (test sul `ViewerItems` di prova).
 | `core-common` | `DiagSection.SEARCH`; test d'architettura del §1.1; eccezione di `NoNetworkSources` per `core-models/.../download/https/` | P0 |
 | `feature-settings` | voce "Ricerca e modelli" (apre la pagina di `feature-search`) | P8 |
 | `feature-viewer` | voce ⋮ "Trova simili" come dato (`viewerMenuEntries`), azione verso `:app` | P8 |
-| `feature-viewer` | `livetext/`: evidenziazione, selezione con le maniglie, barra delle azioni, pulsante "Testo", foglio "Testo nella foto", azioni di TalkBack; `cutout/`: animazione del soggetto, barra "Copia · Condividi · Salva come nuova foto", voce ⋮ "Ritaglia il soggetto"; arbitro della pressione prolungata accanto a `holdToPlay` (D45) | P12, P13 |
+| `feature-viewer` | `livetext/`: evidenziazione, selezione con le maniglie, barra delle azioni, pulsante "Testo", foglio "Testo nella foto", azioni di TalkBack; `cutout/`: animazione del soggetto, barra "Copia · Condividi · Salva come nuova foto", voce ⋮ "Ritaglia il soggetto"; arbitro della pressione prolungata al posto di `holdToPlay` (D45) | P12, P13 |
+| `feature-viewer` | `motion/`: badge "Movimento", dissolvenza, condizioni dell'animazione (D50, D51); `video/MotionPhotos.kt`: `MotionVideo.Found(range, stillUs)` (oggi l'istante c'è in `core-metadata`, `MotionPart.stillPresentationUs`, ma non arriva al viewer); `video/ViewerPlayback.kt` e `Media3ViewerPlayer.kt`: tratto tagliato e muto, video intero dal badge, sorgente NAS a intervalli, sempre un solo lettore; `ViewerController.kt`: niente più `onMotionHold` | P14 |
 | `feature-library` | chip "Documenti" nel filtro rapido | P8 |
 | `feature-diagnostics` | codici del §2.6, sezione Ricerca, modelli e indice in `StorageContributor`, `DiagJob` per scaricamento e calcolo | P11 |
 | `benchmark` | `SearchBenchmark` e scenario `ricerca` in `soglie.json` | P9 |
@@ -501,14 +520,16 @@ esistenti.
 | `LibraryFilter.DOCUMENTS` | chip "Documenti" | filtro rapido della Libreria | G2 |
 | Azione "Trova simili" | presente, assente (nascosto), spiegata (senza vettore) | viewer ⋮ | G3 |
 | Azioni "Testo nella foto" e "Ritaglia il soggetto" | presenti, assenti (nessun testo letto; video), spiegate | viewer ⋮ e azioni di TalkBack | G3 |
+| `MotionState` | `Still`, `Opening(progress)` (animazione d'apertura), `Playing` (dal badge), `Fetching(bytes, total)` (solo-NAS), `Unavailable(reason)`; badge "Movimento" con il suo stato | viewer, barra in alto | G3 |
 
 **Chi tocca cosa**
 - La Fase 6 **non** modifica `core-designsystem`, la chrome, il vetro, la pillola, la cella; il filone grafico non modifica contratti e
   ViewModel qui sopra.
 - File condivisi a rischio: `app/.../main/MainScaffold.kt` (solo P11 sostituisce il segnaposto), il menu del viewer
   (`viewerMenuEntries`: P8 la voce "Trova simili", P13 "Ritaglia il soggetto", P12 "Testo nella foto", in quest'ordine o con
-  l'orchestratore che serializza), `feature-viewer/.../page/ViewerPage.kt` e `gesture/ViewerGestures.kt` (l'arbitro della pressione
-  prolungata: P12 lo scrive, P13 si aggancia), `LibraryFilter` (P0 la firma, P8 il chip).
+  l'orchestratore che serializza; P14 "Riproduci il movimento"), `feature-viewer/.../page/ViewerPage.kt`, `ViewerController.kt` e
+  `gesture/ViewerGestures.kt` (prima P14: toglie la riproduzione con la pressione lunga, aggiunge badge e animazione; poi l'arbitro
+  della pressione prolungata: P12 lo scrive, P13 si aggancia), `LibraryFilter` (P0 la firma, P8 il chip).
 - Stringhe in file propri: `strings_search_*.xml`, `strings_models_*.xml`.
 
 ## 2. Flussi
@@ -960,11 +981,13 @@ pochi KB); i modelli una volta da Internet per famiglia (527 MB), poi dal NAS; n
 | Dove cade il dito | Foto | Foto in movimento | Video |
 |---|---|---|---|
 | Su una riga di testo letto | testo dal vivo | testo dal vivo | — |
-| Altrove | ritaglio | il video della foto in movimento, come oggi (Q14, raccomandata (a)); ritaglio dal menu ⋮ | — (i controlli del video) |
+| Altrove | ritaglio | ritaglio (il video parte solo dal badge "Movimento", D51; risposta Q14) | — (i controlli del video) |
+| Durante l'animazione d'apertura (D50) | — | qualunque tocco la ferma subito e mostra la foto; poi il gesto vale come sopra | — |
 | Con una selezione o un ritaglio aperti | tocco fuori = chiudi; pager e trascinamento verso il basso fermi; pizzico e spostamento dello zoom attivi; doppio tocco ignorato | come la foto | — |
 
-L'arbitro sta accanto a `holdToPlay` (`ViewerGestures.kt`): osserva nel passaggio `Initial` senza consumare finché non scade il tempo
-della pressione lunga di sistema; un secondo dito o un movimento oltre la soglia annullano, come oggi.
+L'arbitro **prende il posto** di `holdToPlay` (`ViewerGestures.kt`), con la stessa tecnica: osserva nel passaggio `Initial` senza
+consumare finché non scade il tempo della pressione lunga di sistema; un secondo dito o un movimento oltre la soglia annullano, come
+oggi. `holdToPlay` e `onMotionHold`/`onMotionRelease` si tolgono (P12 il gesto, P14 la riproduzione).
 
 **Accessibilità** (D46): azioni di TalkBack sull'immagine "Testo nella foto" (foglio con il testo selezionabile e "Copia tutto") e
 "Ritaglia il soggetto" (il soggetto più grande fra cinque punti di prova); il foglio è la via accessibile al testo, perciò il "Copia
@@ -992,10 +1015,37 @@ runtime LiteRT, librerie native con nomi diversi).
 | E-V9 | Nessun testo letto e lettura spenta qui: niente testo dal vivo, la pressione prolungata va al ritaglio |
 | E-V10 | Nessun soggetto chiaro: niente, vibrazione leggera |
 | E-V11 | Ritaglio dai Nascosti salvato: foto nuova nascosta |
-| E-V12 | Foto in movimento: testo dal vivo sul testo, video altrove, ritaglio dal menu |
+| E-V12 | Foto in movimento: testo dal vivo o ritaglio come le altre foto; il video dal badge "Movimento" |
 | E-V13 | Selezione aperta e gesti del viewer: §0.2 |
 | E-M1–M4 | Foto da 200 MP o panorami: ritaglio su un'immagine ridotta a 4096 px; nessun errore di memoria |
 | E-H1 | Il testo dal vivo e il ritaglio non mostrano mai nulla di un altro media; nei Nascosti la schermata resta protetta (`FLAG_SECURE`) |
+
+### 2.11 Foto in movimento nel viewer (risposta Q14; P14)
+**Il flusso** (D50, D51)
+| Momento | Cosa | Dettagli |
+|---|---|---|
+| Riconoscimento | il catalogo sa che è una foto in movimento (`MediaKind.MOTION_PHOTO`); per la pagina corrente e le ±1 `MotionVideoLocator` trova **intervallo e istante della foto** | legge 256 KiB di testa e 128 KiB di coda del file (come oggi); per i solo-NAS con letture a intervalli |
+| Pagina ferma | ~150 ms senza movimento del pager, pagina corrente | se si scorre via prima, niente animazione (E-V14) |
+| Condizioni | niente "Rimuovi animazioni", niente risparmio energetico, proporzioni compatibili (≤ 3%), byte già disponibili (telefono; NAS secondo D51) | altrimenti foto ferma; il badge resta |
+| Animazione | lettore condiviso, muto, sorgente tagliata a [istante − 1,2 s, istante], partenza dal fotogramma chiave precedente; il video sta nello stesso riquadro della foto, la foto sparisce solo al primo fotogramma (niente lampo nero, come oggi) e riappare con una dissolvenza di ~200 ms all'ultimo | costa circa un secondo di decodifica; nessuna attesa visibile |
+| Interruzione | tocco, pizzico, doppio tocco, scorrimento, chiusura, uscita dall'app | `playback.clear()`, foto subito; i gesti valgono normalmente |
+| Badge "Movimento" | tocco: video intero, una volta, con l'audio (Q15), poi la foto; anche nel ⋮ e come azione di TalkBack | solo-NAS sui dati mobili: conferma con la dimensione |
+| Ripetizione | l'animazione si rifà arrivando da un'altra pagina; non chiudendo le info né tornando dallo zoom | — |
+| Precarico | pagine ±1: solo i byte (intervallo, istante; per i solo-NAS la coda nella cache, solo sul Wi-Fi) | mai un secondo decoder: `ViewerPlayback.created` resta 1 |
+
+**Dove sta l'istante della foto** (verificato nel codice di `core-metadata` e nella specifica Android, §10)
+| Formato | Campo | Ripiego |
+|---|---|---|
+| Google Motion Photo (v1) | `Camera:MotionPhotoPresentationTimestampUs` nell'XMP: "il fotogramma del video che corrisponde alla foto"; −1 = non impostato | la specifica: "il fotogramma subito prima della metà del video" |
+| MicroVideo (Google, formato vecchio) | `MicroVideoPresentationTimestampUs` (la specifica nuova lo toglie e dice di ignorarlo; serve solo per i file vecchi che hanno solo quello: `XmpFacts` lo legge già, dopo il campo nuovo) | metà del video |
+| Trailer SEF di Samsung (`MotionPhoto_Data`, il formato dell'S25) | nel trailer nessun istante; l'XMP dei file Samsung può avere `MotionPhotoPresentationTimestampUs` (facoltativo): se c'è, vale quello | metà del video; P14 misura sui file dell'S25 dove cade la foto (confrontando alcuni fotogrammi con la foto) e, solo se i numeri lo mostrano, fissa una regola per il SEF (per esempio "fine del video") |
+| HEIC di Samsung e formati non riconosciuti (E-M16) | — | niente animazione né badge; la nota "parte video non riproducibile" nelle info, come oggi |
+
+**Accessibilità**: TalkBack legge "Foto in movimento"; il badge ha l'etichetta "Riproduci il movimento" e c'è l'azione equivalente
+sull'immagine; l'animazione non si annuncia e non parte con "Rimuovi animazioni"; il badge da 48 dp.
+
+**Costi**: un secondo di video decodificato per apertura, sul lettore che c'è già; per i solo-NAS al più 16 MB letti sul Wi-Fi,
+una volta (cache); nessun costo sui dati mobili senza conferma.
 
 ## 3. Alternative scartate
 | Tema | Opzioni | Scelta e motivo |
@@ -1029,8 +1079,10 @@ runtime LiteRT, librerie native con nomi diversi).
 | Copia del testo | "Copia testo" nelle info; testo dal vivo con le maniglie; foglio di testo | **Testo dal vivo, più il foglio come via accessibile** (D43, D46, risposta Q9): le info restano leggere; con TalkBack le maniglie non si usano, un foglio sì |
 | Modello del ritaglio | MagicTouch; MobileSAM; U²-Net; BiRefNet; RMBG; ML Kit Subject Segmentation | **MagicTouch** (D44, §2.10): Apache 2.0, 6 MB, si sceglie il soggetto col dito; MobileSAM piano B; gli altri pesanti, senza scelta del soggetto, non commerciali o legati ai Play Services |
 | Runtime del ritaglio | MediaPipe Tasks (`tasks-vision`); LiteRT; ONNX Runtime | **LiteRT** (D44): MediaPipe ha annunciato statistiche d'uso su tutte le piattaforme, senza spegnimento; ONNX Runtime serve solo al piano B |
-| Dove si ripete la pressione prolungata delle foto in movimento | ritaglio al posto del video; video al posto del ritaglio | **Video come oggi, ritaglio dal menu** (D45, Q14 raccomandata): non si toglie una funzione che c'è già |
-| Lettura del testo: ambito | per dispositivo; per account con esclusione di un dispositivo | **Per account con esclusione** (D41, Q13 raccomandata): una scelta sola per la persona, ma ogni telefono può restare fuori |
+| Pressione prolungata delle foto in movimento | video (come oggi); testo e ritaglio come le altre foto, video da un pulsante | **Testo e ritaglio, video dal badge "Movimento"** (D45, D51, risposta Q14): come le altre gallerie; un gesto solo per tutte le foto |
+| Movimento all'apertura delle foto in movimento | nessuno; il video intero ogni volta; il breve tratto che precede la foto, senza audio | **Il breve tratto prima della foto** (D50, risposta Q14): è l'effetto delle altre gallerie, costa un secondo di decodifica e nessuna attesa |
+| Istante della foto senza metadati | metà del video (regola della specifica Android); fine del video; stima confrontando fotogrammi e foto | **Metà del video**, con una regola diversa per il formato SEF solo se le misure di P14 sui file dell'S25 la giustificano (D50) |
+| Lettura del testo: ambito | per dispositivo; per account con esclusione di un dispositivo | **Per account con esclusione** (D41, risposta Q13 (a)): una scelta sola per la persona, ma ogni telefono può restare fuori |
 
 ## 4. Pacchetti di lavoro
 
@@ -1047,6 +1099,7 @@ P0 fondamenta, contratti, dipendenze, documenti ──┬── P1 database v5 �
                                                    ├── P9 valutazione, calibrazione, benchmark ──────┤
                                                    ├── P10 prova delle interruzioni ─────────────────┤
                                                    ├── P12 testo dal vivo nel viewer ────────────────┤
+                                                   ├── P14 foto in movimento nel viewer ─────────────┤
                                                    └── P13 ritaglio del soggetto ────────────────────┴── P11 integrazione ── M2 ── M3
                                                         ── check.ps1 (-Bench) + security-review + verifica funzionale ── (Q7) F64
 ```
@@ -1059,6 +1112,9 @@ P0 fondamenta, contratti, dipendenze, documenti ──┬── P1 database v5 �
 - P12 parte con il testo letto finto (righe, inclinazione, parole) e passa a quello vero quando P2 e P4 consegnano; P13 parte con un
   ritagliatore finto e misura MagicTouch sui dispositivi appena P0 ha portato LiteRT. P12 scrive l'arbitro della pressione
   prolungata, P13 vi si aggancia (file condivisi, §1.5).
+- **P14** (foto in movimento) non dipende dalla ricerca: parte subito dopo P0, in parallelo a tutto. Su `page/ViewerPage.kt` e
+  `ViewerController.kt` lavora **prima** di P12 (toglie la riproduzione con la pressione lunga, aggiunge badge e animazione); P12 poi
+  mette l'arbitro al posto di `holdToPlay`. L'orchestratore serializza i due su quei file.
 - **Prima di M1**: l'S25 con la build debug e l'account di prova (rifatta con `test` il 20/10) e il consenso al
   primo scaricamento da Internet (Q1).
 
@@ -1066,7 +1122,7 @@ P0 fondamenta, contratti, dipendenze, documenti ──┬── P1 database v5 �
 | Tappa | Cosa si vede | Come si prova | Pacchetti |
 |---|---|---|---|
 | **M1** | Sull'S25 (debug, account di prova) i due modelli scaricati e verificati, l'area di prova indicizzata, "cane" (o un soggetto dell'area di prova) e una parola di uno scontrino trovano le foto giuste | F46, F50 (parziale); confronto dal PC delle teste `ai` pubblicate in `test` | P0, P1, P2, P3, P4, P5 (+ integrazione minima) |
-| **M2** | Area di prova indicizzata **una volta sola** con S25 e Tab S9 (prova di E-I1); Cerca completa: chip, testo, filtri, i due ordini, "Trova simili", copertura, cronologia, Documenti; lettura del testo attivata sull'S25 con la pagina di consenso; testo dal vivo e ritaglio nel viewer; il tablet non indicizzatore e con la lettura spenta cerca come il telefono e usa il testo letto dall'S25 | F47–F51, F57–F60, F65, F66, F68, F69 | + P6, P7, P8, P11, P12, P13 |
+| **M2** | Area di prova indicizzata **una volta sola** con S25 e Tab S9 (prova di E-I1); Cerca completa: chip, testo, filtri, i due ordini, "Trova simili", copertura, cronologia, Documenti; lettura del testo attivata sull'S25 con la pagina di consenso; testo dal vivo, ritaglio e foto in movimento (animazione d'apertura, badge, solo-NAS) nel viewer; il tablet non indicizzatore e con la lettura spenta cerca come il telefono e usa il testo letto dall'S25 | F47–F51, F57–F60, F65, F66, F68–F71 | + P6, P7, P8, P11, P12, P13, P14 |
 | **M3** | Obiettivi del §4 del piano misurati: p95 < 300 ms con 100 mila elementi su S25 e Tab S9; ≥ 80% delle attese fra i primi 20 sulle 50 query italiane; precisione dei sicuri ≥ 90%; nessun traffico durante le ricerche | F53, F54, F55 | + P9, P10 |
 | Chiusura | Revisione di sicurezza e verifica funzionale; checklist (§6.3); screenshot approvati; con il consenso (Q7) pubblicazione sulle share vere | `check.ps1`, `check.ps1 -Bench`, `security-review`, agente di verifica funzionale, F56, F61, F62, F63, F67; F64 con Q7 | — |
 
@@ -1100,7 +1156,7 @@ P0 fondamenta, contratti, dipendenze, documenti ──┬── P1 database v5 �
 ### 4.4 I pacchetti
 | ID | Obiettivo | Perimetro esclusivo | Dipende da | Fatto quando | Modello | Campo |
 |---|---|---|---|---|---|---|
-| **P0 Fondamenta e contratti** | Moduli, contratti, dipendenze, recinti, documenti | `settings.gradle`, `build.gradle` (`galleryModules`, `abiFilters`), `versions-app.gradle` (`litertlm-android` 0.18.1, `text-recognition` 16.0.1, `litert` 2.3.0, regola con le eccezioni di D49), `gradle/verification-metadata.xml`, `gradle/verify-release-manifest.gradle` (`uses-native-library`, `MlKitInitProvider` tolto, elenco chiuso dei componenti di ML Kit e DataTransport), `tools/check.ps1` (gli stessi controlli sul manifest fuso, `MlKit.initialize` solo nel cancello, HTTPS solo nel pacchetto ammesso); l'asset MagicTouch con la sua impronta (se Q11 (a)); creazione di `core-models`, `core-ai`, `core-search`, `feature-search` (build, manifest, `contract/`, `noop/`, `testing/`, `NoNetworkSourcesTest`, `NoWallClockSourcesTest`); **contratti** del §1.2 con fake e null-object; esecutori di riferimento `InMemorySearchEngine` e `FakeAiCompute`; firme in `core-model` (`CellFlags.DOCUMENT`, codici), `core-library` (`OrderedTimelineView`, `LibraryFilter.DOCUMENTS`), `core-family` (`RolesSettings`), `core-personal` (`text_reading`, `search_order`), `core-prepare` (`AnalysisSink`), `core-common` (`DiagSection.SEARCH`, `Phase6ArchitectureTest`); porte del viewer per testo dal vivo e ritaglio; documenti del §0.3 | Fase 5 chiusa nel codice | `check.ps1` verde; APK debug e release con R8 e le regole `keep` delle tre librerie (allineamento a 16 KB delle librerie native controllato; `litert` e `litertlm-android` caricate insieme in un test strumentato); `-Xskip-metadata-version-check` solo in `core-ai`; scelta motivata su `kotlin-reflect` 2.4.0 e coroutines 1.11.0 con un test strumentato che inizializza il motore 270M (modello scaricato con il consenso, Q1); ogni test d'architettura fallisce reintroducendo la violazione (litertlm, litert o ML Kit fuori da `core-ai`; `com.google.mlkit` fuori da `core-ai/.../ocr/`; `MlKit.initialize` fuori dal cancello; `TextReadingConsent` costruita fuori dalla pagina di attivazione; `java.net` fuori dal pacchetto HTTPS; `core-search` che vede `core-models`, `core-index` o `core-nas`; `feature-viewer` che vede `core-ai` o `core-search`; chi legge il NAS che vede `core-ai`); `MlKitInitProvider` assente dal manifest fuso e componenti di ML Kit e DataTransport elencati per nome; con la lettura spenta ML Kit non si inizializza (test strumentato: nessuna classe di ML Kit caricata, nessun lavoro di DataTransport pianificato); `OrderedTimelineView` aperta nel viewer di prova | opus | no |
+| **P0 Fondamenta e contratti** | Moduli, contratti, dipendenze, recinti, documenti | `settings.gradle`, `build.gradle` (`galleryModules`, `abiFilters`), `versions-app.gradle` (`litertlm-android` 0.18.1, `text-recognition` 16.0.1, `litert` 2.3.0, regola con le eccezioni di D49), `gradle/verification-metadata.xml`, `gradle/verify-release-manifest.gradle` (`uses-native-library`, `MlKitInitProvider` tolto, elenco chiuso dei componenti di ML Kit e DataTransport), `tools/check.ps1` (gli stessi controlli sul manifest fuso, `MlKit.initialize` solo nel cancello, HTTPS solo nel pacchetto ammesso); l'asset MagicTouch con la sua impronta (risposta Q11 (a)); creazione di `core-models`, `core-ai`, `core-search`, `feature-search` (build, manifest, `contract/`, `noop/`, `testing/`, `NoNetworkSourcesTest`, `NoWallClockSourcesTest`); **contratti** del §1.2 con fake e null-object; esecutori di riferimento `InMemorySearchEngine` e `FakeAiCompute`; firme in `core-model` (`CellFlags.DOCUMENT`, codici), `core-library` (`OrderedTimelineView`, `LibraryFilter.DOCUMENTS`), `core-family` (`RolesSettings`), `core-personal` (`text_reading`, `search_order`), `core-prepare` (`AnalysisSink`), `core-common` (`DiagSection.SEARCH`, `Phase6ArchitectureTest`); porte del viewer per testo dal vivo e ritaglio; documenti del §0.3 | Fase 5 chiusa nel codice | `check.ps1` verde; APK debug e release con R8 e le regole `keep` delle tre librerie (allineamento a 16 KB delle librerie native controllato; `litert` e `litertlm-android` caricate insieme in un test strumentato); `-Xskip-metadata-version-check` solo in `core-ai`; scelta motivata su `kotlin-reflect` 2.4.0 e coroutines 1.11.0 con un test strumentato che inizializza il motore 270M (modello scaricato con il consenso, Q1); ogni test d'architettura fallisce reintroducendo la violazione (litertlm, litert o ML Kit fuori da `core-ai`; `com.google.mlkit` fuori da `core-ai/.../ocr/`; `MlKit.initialize` fuori dal cancello; `TextReadingConsent` costruita fuori dalla pagina di attivazione; `java.net` fuori dal pacchetto HTTPS; `core-search` che vede `core-models`, `core-index` o `core-nas`; `feature-viewer` che vede `core-ai` o `core-search`; chi legge il NAS che vede `core-ai`); `MlKitInitProvider` assente dal manifest fuso e componenti di ML Kit e DataTransport elencati per nome; con la lettura spenta ML Kit non si inizializza (test strumentato: nessuna classe di ML Kit caricata, nessun lavoro di DataTransport pianificato); `OrderedTimelineView` aperta nel viewer di prova | opus | no |
 | **P1 Database v5** | Schema v5 (D37), operazioni del catalogo | `core-database/**`, `core-model/**` (codici, commenti corretti), `docs/modello-dati.md` §13 | P0 | `5.json` esportato; `ExportedSchemaTest` 1→5 … 4→5 con `seedV4`; `MergeReferencesTest` con le tabelle nuove fra quelle senza id di media; `cellContentKeys` su 100 mila media sotto 300 ms senza `USE TEMP B-TREE`; FTS4 sul testo normalizzato (Robolectric); `setDerivedFlags` a lotti (un cambiamento dell'indice della timeline per lotto); cronologia con il tetto di 50 | sonnet | no |
 | **P2 Formato `ai` e indice condiviso** | §2.3, D6–D9, parte di D10 (scaricamento delle anteprime) | `core-trust/.../data/AiSegments.kt` (più le righe minime in `IndexSegment.kt`, `DeviceHead.kt`, `NasLayout.kt`, `TrustFormat.kt`), `core-index/.../ai/**`, `core-index/.../contract/Work.kt` (`WorkPass.AI`), l'aggancio delle teste `ai` in `IndexSyncEngine` | P0 (P1 per gli adattatori Room) | test ostili per ogni campo del §2.3 (NaN, infiniti, norma, spazio, ricetta, lunghezze, UTF-8 non valido, controllo e direzione, righe e corpi oltre i tetti, inclinazione fuori intervallo, parole che non tornano col testo o con estremi decrescenti, classi nella testa sbagliata); un lettore della versione 1 ignora `ai/`; attestazione (record di un altro dispositivo = valida; nessun record = in attesa; altra share = no; chiave intera, non i primi 64 bit); fusione deterministica; proprietà M3 (nessuna voce per contenuti di un'altra share); `FaultPlan` a ogni chiamata della pubblicazione; con F4-D31 i risultati restano locali e si pubblicano dopo **senza ricalcolo**; `AiPublishedClasses` riconosce il lavoro di un altro indicizzatore; `AnalysisFetcher` usa solo blob attestati e registra il traffico; 200 giri del banco | opus | sì (F50) |
 | **P3 Modelli** | §2.1, D16–D20 | `core-models/**` | P0 | catalogo uguale al §2.1; un byte cambiato nel file = rifiutato (E-A2) e alla verifica di ogni apertura (E-A11); ripresa a ogni blocco da 1 MiB con un server HTTPS di prova del JDK (`com.sun.net.httpserver`, certificato di prova fidato solo nei test): `Range` e `If-Range`, `200` al posto di `206`, lunghezze false, redirezione verso un host non ammesso, `http`, file oltre la dimensione fissata; nessun cookie né parametro nelle richieste (il server di prova le ispeziona); sorgente NAS con `FaultPlan`; cartella dal PC; pubblicazione esclusiva sul NAS con le collisioni; spazio; rimozione; `pruneOwn` solo nella propria cartella; `NoNetworkSourcesTest` fuori da `download/https/` | sonnet (revisione opus mirata alla chiusura) | sì (F46–F49) |
@@ -1111,22 +1167,23 @@ P0 fondamenta, contratti, dipendenze, documenti ──┬── P1 database v5 �
 | **P8 Schermata Cerca e UI** | §1.5, §2.6, D15 (pagina e ruolo, Q3), D20, D30 (voce), D32, D34, D36, D41 (pagina di attivazione), D48 (selettore dell'ordine) | `feature-search/**`, `feature-settings/.../search/SearchEntry*`, `feature-viewer/.../menu/` (voce "Trova simili"), `feature-library/.../library/` (chip Documenti), `core-family/.../roles/**` (`RolesSettings`), `core-personal/.../settings/` (`text_reading`, `search_order`) | P0 (fake di P3, P5, P6) | ogni stato del §1.5 composto; pagina di attivazione con il testo del §2.6 (versione del testo salvata col consenso), esclusione di un dispositivo, spegnimento; selettore "Recenti · Pertinenti" ricordato e sincronizzato; ogni codice del §2.6 con messaggio e azione (test che legge l'elenco dal contratto); nessuna lettura del NAS in Cerca (caricatore di miniature finto: solo sorgenti locali); nascosti mai in suggerimenti, completamenti, recenti e luoghi; TalkBack, 1,3x, 48 dp; screenshot `6-P8` | sonnet | sì |
 | **P9 Valutazione, calibrazione, benchmark** | §5.3, §5.4, calibrazione di D27 e D34 | `core-search/src/test/.../eval/**` (metriche), `app/src/debug/.../eval/**` (strumento di etichettatura e corsa, solo debug), `benchmark/.../SearchBenchmark.kt`, `benchmark/soglie.json` (scenario `ricerca`), `tools/fixtures/**` (generatore del set OCR sintetico) | P6, P7 (P4 sui dispositivi) | recall@5, @10, @20, MRR e precisione dei sicuri calcolati; set OCR sintetico con il resoconto dell'errore per carattere; strumento di etichettatura solo in debug (assente dal dex di release, `check.ps1`); **nessuna etichetta né query del set privato nel repository** (test su git); `Zc`, `Zl`, `Smin`, la soglia di Documenti e i parametri dell'ordine (`H`, `β`, §2.4) scelti e scritti in `docs/decisioni.md` con i numeri; benchmark p50 e p95 su S25 e Tab S9 registrati; guardia `-Bench` | sonnet | sì (F53, F54) |
 | **P10 Prova delle interruzioni** | §5.5 | `core-ai/src/test/.../chaos/**`, `core-models/src/test/.../chaos/**`, `tools/chaos/**` (modo `ai` di `s25.ps1`), `docs/prova-500.md` (sezione della Fase 6) | P0 (esecutore di riferimento), poi P3, P5 | invarianti del §5.5; 2.000 giri JVM; 600 sul simulatore SMB (modelli e anteprime letti dal NAS con le vere `SmbNasFileOps`); ≥ 100 interruzioni sull'S25 durante l'indicizzazione; `ChaosMutationTest` (caricare prima di verificare, accettare un parziale, pubblicare prima di salvare, salvare dopo aver pubblicato: rossi con l'invariante giusto) | sonnet | sì (F61) |
-| **P11 Integrazione** | §1.4 | `app/**` (`AiGraph`, `SearchGraph`, lavori, navigazione, `MainScaffold`, azzeramento, manifest, cancello della lettura del testo all'avvio, porte del viewer), `feature-diagnostics/**`, `README.md`, `docs/sicurezza.md` (checklist), `docs/decisioni.md` | P0–P10, P12, P13 | test d'integrazione sul NAS finto, sul telefono finto e con i motori finti: foto caricata → preparata → anteprima nel buffer → vettore e testo → pubblicati in una share di prova → un secondo dispositivo li riceve → la ricerca la trova su entrambi; tablet non indicizzatore con gli stessi risultati (E-Q8); share vera con F4-D31 → solo locale e in attesa; un dispositivo con la lettura spenta cerca e seleziona il testo letto da un altro senza inizializzare ML Kit (D42); ritaglio salvato → riga del telefono → backup "Ritagli"; azzeramento completo; codici della Diagnostica nel catalogo; `check.ps1` verde; APK debug e release | sonnet | sì |
-| **P12 Testo dal vivo nel viewer** | §2.10, D43, D45, D46 | `feature-viewer/.../livetext/**`, l'arbitro della pressione prolungata in `feature-viewer/.../gesture/` e il suo aggancio in `page/ViewerPage.kt`, il foglio "Testo nella foto", la voce ⋮ | P0 (porte, testo finto), poi P2 e P4 | selezione su fixture con righe dritte, inclinate e su più righe; maniglie agganciate alle parole; copia con `EXTRA_IS_SENSITIVE` (test Robolectric sul `ClipData`); a ogni livello di zoom; nessuna chiamata all'OCR con la lettura spenta (porta finta che fallisce se chiamata); al volo solo con la lettura attiva; gesti: pager, trascinamento verso il basso, pizzico, doppio tocco, foto in movimento (E-V12, E-V13) senza regressioni sui test del viewer; TalkBack: azione "Testo nella foto" e foglio leggibile; 48 dp; screenshot `6-P12` | sonnet | sì (F65) |
+| **P11 Integrazione** | §1.4 | `app/**` (`AiGraph`, `SearchGraph`, lavori, navigazione, `MainScaffold`, azzeramento, manifest, cancello della lettura del testo all'avvio, porte del viewer), `feature-diagnostics/**`, `README.md`, `docs/sicurezza.md` (checklist), `docs/decisioni.md` | P0–P10, P12, P13, P14 | test d'integrazione sul NAS finto, sul telefono finto e con i motori finti: foto caricata → preparata → anteprima nel buffer → vettore e testo → pubblicati in una share di prova → un secondo dispositivo li riceve → la ricerca la trova su entrambi; tablet non indicizzatore con gli stessi risultati (E-Q8); share vera con F4-D31 → solo locale e in attesa; un dispositivo con la lettura spenta cerca e seleziona il testo letto da un altro senza inizializzare ML Kit (D42); ritaglio salvato → riga del telefono → backup "Ritagli"; azzeramento completo; codici della Diagnostica nel catalogo; `check.ps1` verde; APK debug e release | sonnet | sì |
+| **P12 Testo dal vivo nel viewer** | §2.10, D43, D45, D46 | `feature-viewer/.../livetext/**`, l'arbitro della pressione prolungata in `feature-viewer/.../gesture/` e il suo aggancio in `page/ViewerPage.kt`, il foglio "Testo nella foto", la voce ⋮ | P0 (porte, testo finto), poi P2 e P4; su `page/ViewerPage.kt` e `ViewerController.kt` dopo P14 | selezione su fixture con righe dritte, inclinate e su più righe; maniglie agganciate alle parole; copia con `EXTRA_IS_SENSITIVE` (test Robolectric sul `ClipData`); a ogni livello di zoom; nessuna chiamata all'OCR con la lettura spenta (porta finta che fallisce se chiamata); al volo solo con la lettura attiva; gesti: pager, trascinamento verso il basso, pizzico, doppio tocco, foto in movimento (E-V12, E-V13) senza regressioni sui test del viewer; TalkBack: azione "Testo nella foto" e foglio leggibile; 48 dp; screenshot `6-P12` | sonnet | sì (F65) |
 | **P13 Ritaglio del soggetto** | §2.10, D44, D45, D47 | `core-ai/.../cutout/**` (MagicTouch su LiteRT, maschera, filtro guidato, PNG), `feature-viewer/.../cutout/**` (animazione, barra, "Contorno", voce ⋮), `core-mediastore` (cartella `Ritagli/` di `PhoneMediaWriter`), `core-backup` (sorgente "Ritagli") | P0 (LiteRT, asset, porte), P12 (arbitro) | misura su S25 e Tab S9 di MagicTouch v1 e v2 (latenza p50 e p95, PSS) e scelta scritta con l'impronta fissata; maschere sulle fixture sintetiche (forme e sagome su sfondi diversi: IoU sopra una soglia fissata prima di misurare); nessun soggetto = niente (E-V10); PNG con trasparenza e **senza metadati** (test che rilegge il file); salvataggio con `IS_PENDING`, collegamento al catalogo prima della lettura del telefono, nascosto dai Nascosti (E-V11), `mcg-prova/Ritagli` in debug; 200 MP senza errori di memoria; `NoNetworkSourcesTest`; screenshot `6-P13` | sonnet | sì (F66, F67) |
+| **P14 Foto in movimento nel viewer** | §2.11, D45 (la parte del video), D50, D51 | `feature-viewer/.../motion/**` (badge "Movimento", dissolvenza, condizioni dell'animazione, `MotionState`), `feature-viewer/.../video/**` (`MotionPhotos.kt`: `MotionVideo.Found(range, stillUs)` e localizzatore anche per i solo-NAS; `ViewerPlayback.kt`: tratto tagliato e muto, video intero dal badge; `Media3ViewerPlayer.kt`: taglio della sorgente; coda dei solo-NAS in `cacheDir/motion/`), in `ViewerController.kt` e `page/ViewerPage.kt` solo la riproduzione delle foto in movimento (via `onMotionHold`/`onMotionRelease`, dentro badge e animazione), la voce ⋮ "Riproduci il movimento"; `core-metadata` solo in lettura | P0; prima di P12 sui due file condivisi | istante per formato sulle fixture di `core-metadata` (Google con il campo, senza, −1, oltre la durata; MicroVideo; SEF con e senza XMP; HEIC Samsung non riconosciuto): lo stesso del localizzatore vero; con il lettore finto: taglio [istante − 1,2 s, istante], muto, una partenza per ogni arrivo sulla pagina ferma, nessuna sulle pagine attraversate da uno scorrimento veloce (pager finto), tocco, pizzico e doppio tocco la fermano subito; "Rimuovi animazioni" e risparmio energetico = nessuna chiamata al lettore; proporzioni oltre il 3% = niente; la pressione lunga non chiama mai il lettore; `ViewerPlayback.created` resta 1 dopo 50 pagine e il precarico ±1 non crea decoder; solo-NAS: con `NasNetwork.OPEN` coda letta a intervalli e animazione solo se pronta entro 1,5 s (orologio finto), oltre 16 MB niente; con `METERED` nessuna lettura (contatore del NAS finto) e il badge chiede conferma (`NasVideoGate.NeedsMobileData`); `VPN_OFF` e `OFFLINE`: badge "non disponibile ora"; cache col tetto; traffico in `VISIBLE_CONTENT`; istante dei SEF misurato sulle foto in movimento dell'area di prova e scritto in `docs/decisioni.md` con i numeri (o "metà del video"); TalkBack: badge e azione; 48 dp; tutti i test del viewer verdi; screenshot `6-P14` | sonnet | sì (F70, F71) |
 
-> Nota sui crediti: opus per 4 pacchetti su 14 (P12 e P13, nati dalla risposta Q9, sono sonnet: interfaccia e un modello piccolo,
-> con le prove sul campo F65–F67), quelli fondanti o difficili: P0 (i contratti e i recinti: rete, librerie, nascosti),
+> Nota sui crediti: opus per 4 pacchetti su 15 (P12 e P13, nati dalla risposta Q9, e P14, nato dalla risposta Q14, sono sonnet:
+> interfaccia, un modello piccolo e il lettore che c'è già, con le prove sul campo F65–F67, F70 e F71), quelli fondanti o difficili: P0 (i contratti e i recinti: rete, librerie, nascosti),
 > P2 (formato ostile e regole dell'indice condiviso, da cui dipende la fiducia fra dispositivi), P5 (il calcolo "una volta per tutta
 > la famiglia", riprendibile), P6 (il motore che deve rispettare latenza, qualità e nascosti). P3 tocca la catena di fornitura ma è
 > ben delimitato: sonnet con il brief completo e una revisione opus mirata nella `security-review`.
 
 ### 4.5 Chiusura della fase
 - `check.ps1` verde; `check.ps1 -Bench` su S25 e Tab S9 dentro le guardie delle Fasi 3–5 **e** dentro lo scenario `ricerca` nuovo;
-  F46–F63 e F65–F69 superate (F64 con il consenso, Q7).
+  F46–F63 e F65–F71 superate (F64 con il consenso, Q7).
 - `security-review` (opus) con revisione mirata di `core-models` (catena di fornitura), del codec `ai` di `core-trust` e degli ingressi
-  di `core-ai`; **in parallelo un agente di verifica funzionale** dei flussi (scaricamento, calcolo, ricerca, nascosti), come per la
-  Fase 5.
+  di `core-ai`; **in parallelo un agente di verifica funzionale** dei flussi (scaricamento, calcolo, ricerca, nascosti; gesti del
+  viewer e foto in movimento con la rete), come per la Fase 5.
 - Checklist della Fase 6 spuntata (§6.3); `docs/sicurezza.md` aggiornato; screenshot di Cerca e di Ricerca e modelli approvati;
   risposte del §9 registrate.
 
@@ -1155,6 +1212,7 @@ P0 fondamenta, contratti, dipendenze, documenti ──┬── P1 database v5 �
 | `InMemorySearchEngine` (riferimento) | forza bruta float32, stesse regole di fusione e d'ordine (D48) | su 1.000 query con i motori finti il motore vero dà la stessa classe (sicuro, meno probabile, fuori) per ogni cella, salvo i casi a ± 1e-4 dalla soglia, e lo stesso ordine nei due criteri |
 | `FakeTextReader` con le posizioni | righe con riquadro, inclinazione ed estremi delle parole dalle fixture; stato del cancello (spenta = eccezione) | lo stesso testo e le stesse posizioni (entro 2% della dimensione dell'immagine) li dà ML Kit vero sulle fixture |
 | `FakeSubjectCutter` | maschere disegnate dalle fixture sintetiche, "nessun soggetto", latenza | MagicTouch vero sulle stesse fixture: IoU sopra la soglia di P13 |
+| `FakeMotionVideoLocator` e lettore finto | intervalli **e istanti** scelti dal test; il lettore finto registra taglio, silenzio, posizione di partenza e quanti lettori esistono | le fixture di `core-metadata` (Google con e senza il campo, −1, MicroVideo, SEF) danno gli stessi istanti con il localizzatore vero |
 | NAS finto e simulatore | come nelle Fasi 4 e 5 | invariati |
 
 ### 5.3 Set di valutazione: 50 query italiane senza dati personali nel repository
@@ -1228,7 +1286,9 @@ P0 fondamenta, contratti, dipendenze, documenti ──┬── P1 database v5 �
 3. Il consenso al primo scaricamento da Internet (Q1, già dato) e lo spazio sui due dispositivi (~530 MB per un indicizzatore).
 4. PCAPdroid sull'S25 e sul Tab S9 per le catture (usa una VPN locale: con WireGuard spento, cioè a casa).
 5. Per F56, F65, F69: la lettura del testo **attivata dall'utente** sull'S25 di prova dopo la pagina di consenso (sul tablet resta
-   spenta); per F66: due o tre foto con un soggetto chiaro (un oggetto, una pianta o un animale) e una senza soggetto (cielo, muro).
+   spenta); per F66: due o tre foto con un soggetto chiaro (un oggetto, una pianta o un animale) e una senza soggetto (cielo, muro);
+   per F70 e F71: cinque o sei foto in movimento non personali scattate con l'S25 (con e senza testo), in `mcg-prova` e, caricate dal
+   backup di prova, anche come solo-NAS sul tablet.
 6. Per F54: le 50 query etichettate dall'utente con lo strumento dell'app (Q8).
 7. Per F64: l'APK di release con l'account vero e il consenso (Q7).
 
@@ -1259,6 +1319,8 @@ P0 fondamenta, contratti, dipendenze, documenti ──┬── P1 database v5 �
 | F67 | Nessun traffico durante il ritaglio e il testo dal vivo: cattura di 10 minuti d'uso (runtime LiteRT) | nessun pacchetto dell'app verso Internet; se LiteRT manda qualcosa → piano B del ritaglio (§2.10, §7) |
 | F68 | Ordine dei risultati (D48): 10 query in "Recenti" e in "Pertinenti"; scelta cambiata sul telefono | in "Pertinenti" a pertinenza simile sopra il più recente, uno molto pertinente di anni fa sopra uno poco pertinente di ieri; in "Recenti" per periodo e, dentro, per pertinenza; la scelta si ritrova sul tablet dello stesso account dopo la sincronizzazione dei dati personali |
 | F69 | Attivazione e spegnimento della lettura del testo (D41, E-A18, E-A19): attivazione dall'S25; l'altro dispositivo dello stesso account mostra l'avviso e si esclude; spegnimento | pagina con il testo approvato; avviso una volta sola sull'altro dispositivo; escluso = ML Kit mai inizializzato lì; dopo lo spegnimento e il riavvio ML Kit non riparte e la coda di DataTransport è vuota (`TEXT_READING_OFF_CLEANUP` in Diagnostica) |
+| F70 | Foto in movimento del telefono (D50, D51, E-V14): apertura dalla griglia e arrivo scorrendo; scorrimento veloce fra dieci foto in movimento; tocco e pizzico durante l'animazione; "Rimuovi animazioni" e risparmio energetico; badge e ⋮; pressione lunga; TalkBack | animazione di ~1–1,5 s che si ferma sulla foto senza salti d'inquadratura; nessuna durante lo scorrimento veloce; il tocco la ferma subito; niente animazione con le due impostazioni; il badge riproduce il video intero e torna alla foto; la pressione lunga dà testo dal vivo o ritaglio, mai il video; un solo lettore (contatore della build debug) |
+| F71 | Foto in movimento solo-NAS (E-V15) sul tablet: a casa, sull'hotspot del telefono (dati mobili), con il NAS spento | a casa animazione se la coda arriva in tempo, altrimenti foto ferma senza attesa; sui dati mobili niente animazione e nessun traffico (contatore), il badge chiede conferma con la dimensione; NAS spento: foto ferma, badge "non disponibile ora"; un secondo arrivo usa la cache |
 
 **I "Fatto quando" del piano, prova per prova**
 | Sottofase | Fatto quando (piano) | Dove si prova |
@@ -1268,6 +1330,7 @@ P0 fondamenta, contratti, dipendenze, documenti ──┬── P1 database v5 �
 | 6.3 | Soglie di qualità e latenza del §4 del piano | P6, P9, F53, F54 |
 | 6.4 | Screenshot approvati; nessun traffico di rete durante le ricerche | P8, F55 |
 | Risposta Q9 (21/10) | Testo dal vivo e ritaglio come su Samsung e Apple, senza Play Services | P12, P13, F65, F66, F67 |
+| Risposta Q14 (21/10) | La pressione lunga sulle foto in movimento diventa testo o ritaglio; il video dal badge; animazione d'apertura fino alla foto | P12, P14, F70, F71 |
 | Risposta Q4 (21/10) | Lettura del testo spenta di default; spenta, ML Kit non parte né manda nulla | P0, P4, F56, F69 |
 
 ### 5.7 Verifica funzionale di fine fase
@@ -1279,6 +1342,7 @@ contro questo documento e scrive `docs/review/funzionale-6.md` con voci "percors
   testo degli altri usato da spenta);
 - viewer (testo dal vivo, ritaglio, gesti e precedenze, accessibilità, salvataggio e backup dei ritagli, Nascosti);
 - ordine dei risultati (due criteri, ricordo sincronizzato);
+- foto in movimento (istante della foto per formato, animazione d'apertura e sue condizioni, badge, solo-NAS e rete, un solo lettore);
 - calcolo (unità, buffer, `LOCAL_BUFFER_ONLY`, caldo, ripresa, pubblicazione, attesa sotto F4-D31 e rilascio);
 - replica (attestazione, fusione, revoca, area persa);
 - ricerca (analizzatore, candidati, soglie, "Mostra anche", gruppi, ordine, viewer, cronologia, copertura, "Trova simili", Documenti);
@@ -1297,6 +1361,7 @@ Le voci confermate si correggono prima della chiusura (come le correzioni della 
 | Runtime nuovo del ritaglio (LiteRT) che parla con Internet | nessuna telemetria nota; MediaPipe Tasks escluso perché la annuncia; cattura F67; piano B ONNX Runtime con MobileSAM (D44) | P13, F67 |
 | Testo o ritaglio copiati negli appunti, letti da altre app | appunti segnati come sensibili; nessun testo copiato nei log; il ritaglio non porta posizione né metadati (D43, D47) | P12, P13; L53 |
 | Un ritaglio da una foto nascosta che finisce in Libreria | la foto nuova nasce nascosta; nei Nascosti la schermata resta protetta (D47, E-V11) | P13, F66 |
+| Animazione di una foto in movimento solo-NAS sui dati mobili | mai senza conferma; solo Wi-Fi, tetto di 16 MB, cache tolta dall'azzeramento, traffico registrato (D51) | P14, F71 |
 | Byte ostili ai decodificatori nativi (`stb_image` di LiteRT-LM, ML Kit) | ingressi sempre preparati da noi: `ImageBounds`, `ImageDecoder`, ricodifica (D5) | P4 |
 | Segmenti `ai` ostili (valori non finiti, norme, lunghezze, testo enorme, caratteri di controllo e di direzione) | codec ostile con tetti, segmento rifiutato intero, contatori (§2.3, E-I20) | P2 |
 | Dispositivo approvato compromesso che pubblica vettori o testo falsi | attestazione per share e chiave intera, fusione deterministica, disaccordi contati, revoca = dati ignorati (D7) | P2; L45 |
@@ -1335,6 +1400,9 @@ Le voci confermate si correggono prima della chiusura (come le correzioni della 
   MagicTouch). Una persona ritagliata è una foto nuova da condividere con il suo permesso.
 - **L55. LiteRT** (il runtime del ritaglio) non dichiara telemetria e le catture non ne trovano, ma non c'è un'opzione ufficiale
   che lo garantisca per le versioni future: la cattura si ripete a ogni aggiornamento della libreria.
+- **L56. Nelle foto in movimento di Samsung l'istante della foto non è sempre scritto** (il campo dell'XMP è facoltativo e il trailer
+  SEF non lo ha): senza, l'animazione d'apertura si ferma su un istante stimato (metà del video o la regola misurata), e la
+  dissolvenza copre la piccola differenza con la foto.
 
 ### 6.3 Checklist della Fase 6 (da aggiungere a `sicurezza.md` §7, oltre alle quattro voci esistenti)
 - [ ] Verifica di dimensione e SHA-256 prima di **ogni** caricamento, sullo stesso descrittore (test e revisione del codice).
@@ -1344,6 +1412,7 @@ Le voci confermate si correggono prima della chiusura (come le correzioni della 
   anche dopo il riavvio (F69).
 - [ ] Ritaglio e testo dal vivo senza traffico (F67); ritagli PNG senza metadati; appunti segnati come sensibili; un ritaglio dai
   Nascosti nasce nascosto.
+- [ ] Foto in movimento solo-NAS: nessun byte sui dati mobili senza conferma (F71).
 - [ ] Segmenti `ai` ostili rifiutati senza crash; dati di dispositivi revocati ignorati.
 - [ ] Nessun byte letto dal NAS o da altre app arriva ai decodificatori nativi dei motori.
 - [ ] Nascosti mai in risultati, suggerimenti, completamenti, luoghi, conteggi, "Trova simili" (F58).
@@ -1381,14 +1450,17 @@ Le voci confermate si correggono prima della chiusura (come le correzioni della 
 | Due runtime LiteRT nello stesso processo (`litert` e `litertlm-android`) | crash o conflitti delle librerie native | test strumentato in P0 che li carica insieme | ritaglio con ONNX Runtime e MobileSAM (§2.10) |
 | LiteRT manda statistiche | eccezione alla "nessuna telemetria" non scelta | cattura F67 | ONNX Runtime e MobileSAM |
 | Qualità del ritaglio di MagicTouch | bordi brutti, parti mancanti | filtro guidato; scelta fra v1 e v2 con le misure (P13) | MobileSAM |
-| Gesti del viewer in conflitto (pressione prolungata, zoom, pager, foto in movimento) | regressioni del viewer | un solo arbitro accanto a `holdToPlay`; i test del viewer esistenti; F65 | testo dal vivo solo dal pulsante "Testo" e ritaglio solo dal menu |
+| Gesti del viewer in conflitto (pressione prolungata, zoom, pager, foto in movimento) | regressioni del viewer | un solo arbitro al posto di `holdToPlay` (P12); il video delle foto in movimento solo dal badge (P14); i test del viewer esistenti; F65, F70 | testo dal vivo solo dal pulsante "Testo" e ritaglio solo dal menu |
+| Istante della foto delle foto in movimento Samsung (SEF) non dichiarato | l'animazione si ferma su un fotogramma diverso dalla foto | metà del video, misura in P14, dissolvenza | niente animazione automatica per i SEF senza istante (solo il badge) |
+| Foto Ultra HDR e video SDR | salto di luminosità alla fine dell'animazione | dissolvenza più lunga (~300 ms) sulle foto con `ULTRA_HDR` | niente animazione automatica su quelle foto |
+| Taglio della sorgente di Media3 sopra le letture a intervalli (telefono e NAS) | il tratto non finisce all'istante | test con video di prova in P14 | fermare il lettore alla posizione, con un controllo a ogni fotogramma |
 | Hugging Face cambia indirizzi o CDN | scaricamento rotto | suffissi ammessi; NAS e PC come sorgenti | aggiornamento dell'app; manifest firmato (Fase 10) |
 | F4-D31 acceso a lungo | ogni indicizzatore calcola per sé; i non indicizzatori senza vettori sulle share vere | risultati locali tenuti e pubblicati dopo (D8) | Q7 |
 | Allineamento a 16 KB delle librerie native | crash su dispositivi futuri | controllo in P0 sull'APK | versione successiva della libreria |
 | Soglie senza il set privato | troppi o troppo pochi sicuri | valori di partenza prudenti, "Mostra anche…" | calibrare quando l'utente etichetta (Q8) |
 | Viewer e griglia legati all'ordine di tempo | risultati non navigabili | `OrderedTimelineView` provata in P0 | provvisoriamente solo "Recenti" senza riordino dentro il periodo (l'ordine della timeline) |
 | Conflitti con il filone grafico | merge rotti | voci come dati, perimetri esclusivi | l'orchestratore serializza |
-| Crediti | costo alto | opus su 4 pacchetti su 14 | P6 su sonnet con una revisione opus del risultato |
+| Crediti | costo alto | opus su 4 pacchetti su 15 | P6 su sonnet con una revisione opus del risultato |
 
 ### File cruciali
 - `core-trust/.../data/IndexSegment.kt` (`SegmentClass`, `IndexSegments`, `checkBody`), `data/DeviceHead.kt` (`HeadVerifier`, classi per
@@ -1412,27 +1484,32 @@ Le voci confermate si correggono prima della chiusura (come le correzioni della 
 - `spike/embed-probe/.../EngineManager.kt`, `ModelStore.kt`, `Photos.kt` (configurazione misurata del motore e scaricamento con
   ripresa da cui partire).
 - Per il viewer (P12, P13): `feature-viewer/.../gesture/ViewerGestures.kt` (`holdToPlay`, la pressione lunga delle foto in
-  movimento), `page/ViewerPage.kt`, `page/ZoomableMedia.kt` (telephoto e la trasformazione dello zoom), `menu/` (voci del ⋮);
+  movimento, che l'arbitro sostituisce), `page/ViewerPage.kt`, `page/ZoomableMedia.kt` (telephoto e la trasformazione dello zoom), `menu/` (voci del ⋮);
   `core-mediastore` (`PhoneMediaWriter` della Fase 4, F4-D20); `core-personal/.../settings/SyncedPersonalSettings.kt` (impostazioni
   sincronizzate); `core-backup` (sorgenti del backup).
+- Per le foto in movimento (P14): `feature-viewer/.../video/MotionPhotos.kt` (`MotionVideo`, `BytesMotionVideoLocator`),
+  `video/ViewerPlayback.kt` (`playMotion`, un solo lettore), `video/Media3ViewerPlayer.kt` (sorgenti `Range` e `Nas`),
+  `ViewerController.kt` (`onMotionHold`, oggi solo per i media del telefono), `page/ViewerPage.kt` (la foto che sparisce al primo
+  fotogramma); `core-metadata/.../format/Motion.kt`, `format/XmpFacts.kt`, `contract/Details.kt` (`MotionPart.stillPresentationUs`).
 
 ## 8. Cose che richiedono l'utente
 | Cosa | Perché | Nel frattempo |
 |---|---|---|
-| Rispondere alle domande nuove Q11–Q14 (Q1–Q10 hanno risposta del 21/10) | cambiano P0, P8, P12, P13 | valgono le raccomandazioni |
+| Rispondere alle domande nuove Q15 e Q16 (Q1–Q14 hanno risposta del 21/10) | cambiano P14 | valgono le raccomandazioni |
 | Primo scaricamento da Internet (Q1 (a), consenso dato il 21/10) | è il primo traffico Internet dell'app | sviluppo con i motori finti; modelli copiati dal PC (sorgente 3) |
 | Approvare le tre librerie nuove (LiteRT-LM, ML Kit integrato, LiteRT per il ritaglio) | `versions-app.gradle` oggi vieta gli SDK che parlano con Internet; righe in `sicurezza.md` §8; ML Kit è già accettato con la risposta Q4 | contratti e fake senza librerie |
 | Attivare la lettura del testo sull'S25 di prova leggendo la pagina di consenso | F56, F65, F69 | il testo finto dei test |
+| Scattare cinque o sei foto in movimento non personali con l'S25 per l'area di prova | F70, F71 | le fixture di `core-metadata` |
 | Mettere nell'area di prova alcune foto non personali con soggetti e testo riconoscibili, e una senza soggetto | M1, F50, F57, F66 | fixture sintetiche |
 | Etichettare le 50 query (Q8, circa un'ora e mezza) | F54, la misura che conta | soglie prudenti |
 | Installare PCAPdroid sull'S25 | F46, F55, F56 | — |
 | Profilo "Prova" del tablet con `test2` e il ruolo Indicizzatore per F50 | E-I1 sul campo | due dispositivi simulati |
-| Revisione degli screenshot (Cerca con i due ordini, Ricerca e modelli, pagina di attivazione della lettura, testo dal vivo, ritaglio, Documenti) | gate grafico | generati in anticipo |
+| Revisione degli screenshot (Cerca con i due ordini, Ricerca e modelli, pagina di attivazione della lettura, testo dal vivo, ritaglio, badge "Movimento", Documenti) | gate grafico | generati in anticipo |
 | Consenso alla pubblicazione sulle share vere (Q7) | F64 | solo locale |
 
 ## 9. Domande per l'utente
-Q1–Q10 hanno avuto risposta il 21/10 (ultima colonna; il dettaglio di cosa cambia è al §11). Q11–Q14 sono nuove, nate da quelle
-risposte: finché non rispondi valgono le raccomandazioni.
+Q1–Q14 hanno avuto risposta il 21/10 (ultima colonna: Q1–Q10 nella prima tornata, Q11–Q14 nella seconda; il dettaglio di cosa
+cambia è al §11). Q15 e Q16 sono nuove, nate dalla risposta Q14: finché non rispondi valgono le raccomandazioni.
 
 | # | Domanda | Opzioni | Raccomandazione | Risposta (21/10) |
 |---|---|---|---|---|
@@ -1446,10 +1523,12 @@ risposte: finché non rispondi valgono le raccomandazioni.
 | Q8 | Per misurare la qualità servono 50 ricerche "con le risposte giuste" sulle tue foto. Chi le prepara? | (a) Tu, sul telefono, con uno strumento dell'app: scrivi le ricerche e segni le foto giuste (circa un'ora e mezza). Nulla finisce nel repository. (b) Nessuno: solo prove con immagini artificiali (misurano bene il testo, male il contenuto) | **(a)**: è l'unico modo di sapere se il "80% fra i primi 20" è vero | **(a)** |
 | Q9 | Mostrare nelle info della foto il testo letto, con "Copia testo"? | (a) Sì. (b) No | **(a)**: utile per numeri e indirizzi negli screenshot; costa poco (P8). Gli appunti si marcano come sensibili | **Diversa dalle opzioni**: come su Samsung e Apple, tenendo premuto si copia il testo o si ritaglia il soggetto; nelle info è scomodo → testo dal vivo e ritaglio (D43–D47, §2.10, P12, P13) |
 | Q10 | In che ordine vedere i risultati sicuri? | (a) Dal più recente, come la Libreria. (b) Dal più pertinente | **(a)**: i sicuri sono quasi tutti giusti, e per data si ritrova ciò che si ricorda; i "meno probabili" restano dal più pertinente | **Diversa dalle opzioni**: di default dal più recente, con la scelta del più pertinente; in ciascuno l'altro criterio pesa poco; vince la scelta dell'utente → D48, §2.4 |
-| Q11 | Il ritaglio usa un piccolo modello di Google (6 MB, licenza libera). Dove lo teniamo? | (a) Dentro l'app: l'app cresce di 6 MB, il ritaglio funziona subito, senza scaricare niente e senza contattare un sito in più. (b) Come gli altri modelli: scaricato una volta dal sito di Google, poi dagli altri dispositivi dal NAS | **(a)**: è piccolo, funziona anche fuori casa e senza NAS, e l'app non deve parlare con un altro sito | da rispondere |
-| Q12 | Quando scegli "Salva come nuova foto" su un ritaglio, dove va la foto? | (a) Sul telefono, nella cartella "MyCloud Gallery/Ritagli", e poi nel backup sul NAS come le altre foto. (b) Solo sul telefono, senza backup. (c) Direttamente sul NAS | **(a)**: è una foto tua come le altre: la trovi subito sul telefono e il backup la protegge | da rispondere |
-| Q13 | La lettura del testo, quando la attivi, vale per tutti i tuoi dispositivi o la scegli su ognuno? (Ogni familiare decide per sé) | (a) Per tutti i tuoi dispositivi, con la possibilità di escluderne uno ("Non su questo dispositivo"). (b) Dispositivo per dispositivo: la attivi su ognuno | **(a)**: una scelta sola, ma ogni telefono o tablet può restare fuori; l'avviso compare una volta su ognuno | da rispondere |
-| Q14 | Sulle foto in movimento (quelle con un breve video dentro) oggi tenere premuto fa partire il video. Con il ritaglio, cosa deve succedere? | (a) Resta così: tenendo premuto parte il video; se premi su una scritta si seleziona il testo; il ritaglio lo scegli dal menu ⋮. (b) Tenendo premuto si ritaglia il soggetto; il video parte con un pulsante | **(a)**: non si toglie una cosa che usi già; ritagliare una foto in movimento capita più di rado | da rispondere |
+| Q11 | Il ritaglio usa un piccolo modello di Google (6 MB, licenza libera). Dove lo teniamo? | (a) Dentro l'app: l'app cresce di 6 MB, il ritaglio funziona subito, senza scaricare niente e senza contattare un sito in più. (b) Come gli altri modelli: scaricato una volta dal sito di Google, poi dagli altri dispositivi dal NAS | **(a)**: è piccolo, funziona anche fuori casa e senza NAS, e l'app non deve parlare con un altro sito | **(a)** |
+| Q12 | Quando scegli "Salva come nuova foto" su un ritaglio, dove va la foto? | (a) Sul telefono, nella cartella "MyCloud Gallery/Ritagli", e poi nel backup sul NAS come le altre foto. (b) Solo sul telefono, senza backup. (c) Direttamente sul NAS | **(a)**: è una foto tua come le altre: la trovi subito sul telefono e il backup la protegge | **(a)** |
+| Q13 | La lettura del testo, quando la attivi, vale per tutti i tuoi dispositivi o la scegli su ognuno? (Ogni familiare decide per sé) | (a) Per tutti i tuoi dispositivi, con la possibilità di escluderne uno ("Non su questo dispositivo"). (b) Dispositivo per dispositivo: la attivi su ognuno | **(a)**: una scelta sola, ma ogni telefono o tablet può restare fuori; l'avviso compare una volta su ognuno | **(a)** |
+| Q14 | Sulle foto in movimento (quelle con un breve video dentro) oggi tenere premuto fa partire il video. Con il ritaglio, cosa deve succedere? | (a) Resta così: tenendo premuto parte il video; se premi su una scritta si seleziona il testo; il ritaglio lo scegli dal menu ⋮. (b) Tenendo premuto si ritaglia il soggetto; il video parte con un pulsante | **(a)**: non si toglie una cosa che usi già; ritagliare una foto in movimento capita più di rado | **Diversa dalle opzioni**: il video parte dal pulsante; tenendo premuto si copia il testo o si ritaglia il soggetto; all'apertura una piccola animazione fino al momento della foto, come nelle altre gallerie → D45, D50, D51, §2.11, P14 |
+| Q15 | Quando tocchi "Movimento" per vedere il video di una foto in movimento, si sente l'audio? | (a) Sì, come un video, al volume dei contenuti multimediali. (b) No, senza audio come l'animazione d'apertura | **(a)**: è quello che fanno le altre gallerie quando lo chiedi tu; l'animazione automatica all'apertura resta sempre muta | da rispondere |
+| Q16 | Vuoi un interruttore per spegnere l'animazione d'apertura delle foto in movimento? | (a) No: si spegne già da sola con "Rimuovi animazioni" del telefono e con il risparmio energetico. (b) Sì, in Impostazioni, accesa di default | **(a)**: meno impostazioni; se poi ti dà fastidio, l'interruttore si aggiunge in un attimo | da rispondere |
 
 ## 10. Fonti consultate il 21/10/2026
 - LiteRT-LM su Google Maven, versioni (0.18.1 del 20/10/2026):
@@ -1484,6 +1563,11 @@ risposte: finché non rispondi valgono le raccomandazioni.
 - Host di scaricamento di Hugging Face che cambiano (CDN `cdn-lfs*.hf.co`, Xet `cas-bridge.xethub.hf.co`):
   <https://discuss.huggingface.co/t/how-to-get-a-list-of-all-huggingface-download-redirections-to-whitelist/30486>,
   <https://docs.cloudera.com/machine-learning/1.5.5/model-hub/topics/ml-model-hub-air-gap-installation.html>.
+- Foto in movimento, formato Android (`Camera:MotionPhotoPresentationTimestampUs`: il fotogramma del video che corrisponde alla foto,
+  −1 se non impostato, assente = il fotogramma subito prima della metà della traccia video; gli attributi MicroVideo tolti, da
+  ignorare): <https://developer.android.com/media/platform/motion-photo-format>. Formato di Samsung (trailer `MotionPhoto_Data` in
+  fondo al file con la sezione SEF; `MotionPhotoPresentationTimestampUs` facoltativo nei metadati; descrizione non ufficiale):
+  <https://github.com/doodspav/motionphoto>.
 - API di `EmbeddingEngine`, token visivi, preprocessamento, prefissi: ricerca 0.3 e i sorgenti citati lì (LiteRT-LM e Edge Gallery su
   GitHub).
 
@@ -1500,17 +1584,24 @@ risposte: finché non rispondi valgono le raccomandazioni.
 | Q8 | (a) Le 50 query le prepara l'utente con lo strumento dell'app | Confermato §5.3 e P9; lo stesso set tara anche l'ordine "Pertinenti" (D48) |
 | Q9 | Come Samsung e Apple: tenendo premuto si copia il testo o si ritaglia il soggetto; nelle info è scomodo | **Nuove D43–D47 e §2.10**: testo dal vivo con maniglie e appunti sensibili (posizioni delle righe e delle parole pubblicate nel corpo `ocr`, così funziona senza ML Kit e sui media solo-NAS: §2.3); ritaglio con **MagicTouch** (Apache 2.0, 6 MB) su **LiteRT**, non MediaPipe Tasks (telemetria annunciata), piano B MobileSAM; gesti e precedenze, accessibilità con il foglio "Testo nella foto" al posto del "Copia testo" nelle info; ritagli salvati in `Pictures/MyCloud Gallery/Ritagli/` e nel backup. **Nuovi pacchetti P12 e P13** (sonnet), una dipendenza in più (`litert` 2.3.0), prove F65–F67, domande Q11, Q12, Q14 |
 | Q10 | Recenti di default, Pertinenti a scelta; l'altro criterio pesa poco; vince la scelta dell'utente | **Nuova D48 e formula al §2.4**: "Pertinenti" = pertinenza + β · recenza a decadimento (mezza vita H); "Recenti" = per periodo e, dentro, per pertinenza; parametri tarati con il set di Q8; scelta ricordata come impostazione personale sincronizzata. Cambiano D28, §2.6, P6, P8, P9; prova F68 |
+| Q11 | (a) MagicTouch dentro l'app | D38, D44, §2.1 e §6.4: asset dell'APK con l'impronta fissata, nessun host in più; P0 lo porta, P13 sceglie la versione e fissa l'impronta |
+| Q12 | (a) Ritagli in `Pictures/MyCloud Gallery/Ritagli/` e poi nel backup | D47 confermata; sorgente "Ritagli" accesa di default (P13) |
+| Q13 | (a) Lettura del testo per l'account, con l'esclusione di un dispositivo | D41 confermata (avviso una tantum sugli altri dispositivi, "Non su questo dispositivo") |
+| Q14 | Il video dal pulsante; tenendo premuto testo o ritaglio; all'apertura una piccola animazione fino al momento della foto | **D45 riscritta, nuove D50 e D51, §2.11, nuovo pacchetto P14** (sonnet, parallelo dopo P0): la pressione lunga non fa più partire il video (oggi lo fa: `holdToPlay`, `onMotionHold`, `playMotion`); badge "Movimento"; animazione silenziosa di ~1,2 s fino all'istante della foto (Google `MotionPhotoPresentationTimestampUs`, MicroVideo, SEF con ripiego a metà del video come dice la specifica Android), mai con "Rimuovi animazioni", risparmio energetico o scorrimento; solo-NAS solo sul Wi-Fi e senza attese; un solo decoder. Prove F70, F71; domande Q15, Q16 |
 
 **Impatto su pacchetti e tempi**
-- Da 12 a **14 pacchetti**: P12 (testo dal vivo) e P13 (ritaglio), entrambi sonnet; opus resta su 4 (P0, P2, P5, P6).
+- Da 12 a **15 pacchetti**: P12 (testo dal vivo), P13 (ritaglio) e P14 (foto in movimento), tutti sonnet; opus resta su 4 (P0, P2,
+  P5, P6).
 - Crescono: P0 (cancello di ML Kit nel manifest e nei test d'architettura, terza libreria, asset del ritaglio, firme nuove), P4 (motore
   OCR dietro il cancello, pulizia allo spegnimento), P8 (pagina di attivazione, ruolo in Impostazioni, selettore dell'ordine), P11
   (cancello all'avvio, porte del viewer, sorgente "Ritagli"); poco P2 (corpo `ocr` con le parole), P5 (OCR solo se attivo) e P9
   (taratura dell'ordine).
-- P12 e P13 corrono in parallelo agli altri dopo P0 e non stanno sul cammino critico del calcolo e della ricerca (M1 non cambia);
-  entrano in M2. Stima: circa un quinto di lavoro in più sulla fase, soprattutto nell'interfaccia del viewer e nelle prove sul campo
-  (F65–F69, cinque in più).
+- P12, P13 e P14 corrono in parallelo agli altri dopo P0 e non stanno sul cammino critico del calcolo e della ricerca (M1 non cambia);
+  entrano in M2. P14 non dipende da niente della ricerca, ma condivide due file del viewer con P12 (P14 prima). Stima: circa un quarto
+  di lavoro in più sulla fase rispetto al progetto di partenza, quasi tutto nell'interfaccia del viewer e nelle prove sul campo
+  (F65–F71, sette in più).
 - Prove nuove: F65 (testo dal vivo), F66 (ritaglio), F67 (nessun traffico del ritaglio), F68 (ordine), F69 (attivazione e
-  spegnimento della lettura); F56 riscritta (traffico di ML Kit con la lettura spenta, accesa e di nuovo spenta).
+  spegnimento della lettura), F70 e F71 (foto in movimento, del telefono e solo-NAS); F56 riscritta (traffico di ML Kit con la
+  lettura spenta, accesa e di nuovo spenta).
 
 <!-- fine del documento -->

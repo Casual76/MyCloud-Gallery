@@ -10,6 +10,7 @@ import dagger.hilt.components.SingletonComponent
 import dev.pampa.mycloudgallery.core.security.device.ScreenLockCheck
 import dev.pampa.mycloudgallery.core.security.lock.AppLockSettings
 import dev.pampa.mycloudgallery.core.security.lock.AppLockSettingsStore
+import dev.pampa.mycloudgallery.feature.settings.library.MotionAnimationSettings
 import dev.pampa.mycloudgallery.feature.settings.port.AppLockPreferences
 import dev.pampa.mycloudgallery.feature.settings.port.NasAccountSettings
 import dev.pampa.mycloudgallery.feature.settings.port.ScreenLockProbe
@@ -46,6 +47,10 @@ abstract class SettingsOptionalBindingsModule {
   /** La qualita' delle anteprime del NAS (Fase 4A, P11): `:app` la lega al grafo del NAS. */
   @BindsOptionalOf
   abstract fun previewQualitySettings(): PreviewQualitySettings
+
+  /** "Animazione delle foto in movimento" (Fase 6, P14): `:app` la lega a `MotionPersonalSettings` di core-personal (P11). Senza, la sezione non compare. */
+  @BindsOptionalOf
+  abstract fun motionAnimationSettings(): MotionAnimationSettings
 }
 
 /** [AppLockPreferences] sopra l'unico archivio del processo (`AppLockSettingsStore.getInstance`). */

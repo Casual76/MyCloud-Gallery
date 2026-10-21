@@ -13,7 +13,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalViewConfiguration
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.abs
 import kotlin.math.sign
 
@@ -124,50 +123,29 @@ internal fun Modifier.viewerVerticalDrag(
 }
 
 /**
- * La pressione lunga della motion photo: [onHold] quando il dito e' rimasto fermo per il tempo della pressione lunga di
- * sistema, [onRelease] quando si alza (o quando un secondo dito arriva: da li' e' un pizzico).
+ * Ogni dito che si appoggia sulla pagina, osservato **senza consumare niente** (passaggio `Initial`): [onTouch] a ogni primo dito
+ * giu' mentre [enabled]. Lo usa l'animazione d'apertura delle foto in movimento (D50, E-V14): un tocco, un pizzico, un doppio tocco o
+ * l'inizio di un trascinamento la fermano subito, e poi il gesto vale come sempre (tocco singolo, doppio tocco e zoom restano di
+ * telephoto, il pager e il trascinamento verso il basso restano del loro gesto).
  *
- * **Non consuma niente**: lo osserva soltanto, nel passaggio `Initial`. Il tocco singolo (barre) e il doppio tocco
- * (zoom) restano di telephoto, e un dito che si muove oltre la soglia non e' mai una pressione lunga (e' un trascinamento
- * del pager o dello zoom). Per questo la pressione lunga di telephoto (`onLongClick`) non basta: non dice quando il dito
- * si alza, e la motion photo si ferma proprio li'.
+ * **Non e' una pressione lunga**: D45 toglie la riproduzione dalla pressione lunga, che resta libera per il testo dal vivo e il
+ * ritaglio (P12, P13). Qui non si misura nessun tempo.
  */
 @Composable
-internal fun Modifier.holdToPlay(
+internal fun Modifier.onTouchDown(
   enabled: () -> Boolean,
-  onHold: () -> Unit,
-  onRelease: () -> Unit,
+  onTouch: () -> Unit,
 ): Modifier {
   val enabledNow by rememberUpdatedState(enabled)
-  val onHoldNow by rememberUpdatedState(onHold)
-  val onReleaseNow by rememberUpdatedState(onRelease)
-  val configuration = LocalViewConfiguration.current
-  val slop = configuration.touchSlop
-  val timeout = configuration.longPressTimeoutMillis
-  return pointerInput(slop, timeout) {
+  val onTouchNow by rememberUpdatedState(onTouch)
+  return pointerInput(Unit) {
     awaitEachGesture {
-      val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-      if (!enabledNow()) return@awaitEachGesture
-      val held = withTimeoutOrNull(timeout) {
-        while (true) {
-          val event = awaitPointerEvent(PointerEventPass.Initial)
-          val change = event.changes.firstOrNull { it.id == down.id } ?: return@withTimeoutOrNull true
-          if (!change.pressed || event.changes.count { it.pressed } > 1) return@withTimeoutOrNull true
-          if ((change.position - down.position).getDistance() > slop) return@withTimeoutOrNull true
-        }
-      }
-      // withTimeoutOrNull restituisce null solo allo scadere del tempo: il dito e' ancora li', fermo.
-      if (held != null) return@awaitEachGesture
-      onHoldNow()
-      try {
-        while (true) {
-          val event = awaitPointerEvent(PointerEventPass.Initial)
-          val change = event.changes.firstOrNull { it.id == down.id }
-          if (change == null || !change.pressed || event.changes.count { it.pressed } > 1) break
-        }
-      } finally {
-        onReleaseNow()
-      }
+      awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+      if (enabledNow()) onTouchNow()
+      // Si aspetta che tutte le dita si alzino: un secondo dito (il pizzico) e' lo stesso gesto, non ne comincia un altro.
+      do {
+        val event = awaitPointerEvent(PointerEventPass.Initial)
+      } while (event.changes.any { it.pressed })
     }
   }
 }

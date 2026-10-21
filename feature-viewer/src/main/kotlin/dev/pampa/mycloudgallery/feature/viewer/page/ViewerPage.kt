@@ -37,7 +37,10 @@ import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
@@ -60,7 +63,8 @@ import dev.pampa.mycloudgallery.feature.viewer.OriginalProgress
 import dev.pampa.mycloudgallery.feature.viewer.PageImage
 import dev.pampa.mycloudgallery.feature.viewer.ViewerServices
 import dev.pampa.mycloudgallery.feature.viewer.ViewerState
-import dev.pampa.mycloudgallery.feature.viewer.gesture.holdToPlay
+import dev.pampa.mycloudgallery.feature.viewer.R
+import dev.pampa.mycloudgallery.feature.viewer.gesture.onTouchDown
 import dev.pampa.mycloudgallery.feature.viewer.video.ViewerPlayback
 import dev.pampa.mycloudgallery.feature.viewer.video.ViewerPlayer
 import dev.pampa.mycloudgallery.feature.viewer.video.collectPlayerState
@@ -99,7 +103,12 @@ internal class PageSpec(
  * **Carica solo se serve** ([loadActive]): la pagina corrente e le due vicine. Una pagina che scorre via in un fling
  * non avvia nessuna decodifica, e una che esce dalla finestra annulla la sua (E-V5).
  *
- * @param isCurrent la pagina assestata: l'unica con i gesti dello zoom, i tasselli, il video e la pressione lunga.
+ * **Foto in movimento** (D50, D51): il video sta SOTTO la foto, che si toglie solo al primo fotogramma (niente lampo nero) e torna con
+ * una dissolvenza alla fine. La pressione lunga non lo avvia piu' (D45): lo avviano l'animazione d'apertura, il badge "Movimento" e
+ * l'azione di TalkBack ([onPlayMotion]); un tocco sulla pagina ferma subito l'animazione ([onMotionTouch]).
+ *
+ * @param isCurrent la pagina assestata: l'unica con i gesti dello zoom, i tasselli e il video.
+ * @param onPlayMotion il video intero della foto in movimento (azione di TalkBack); null = la pagina non ne ha una da proporre.
  */
 @Composable
 internal fun ViewerPage(
@@ -111,9 +120,9 @@ internal fun ViewerPage(
   services: ViewerServices,
   playback: ViewerPlayback,
   onTap: () -> Unit,
-  onMotionHold: () -> Unit,
-  onMotionRelease: () -> Unit,
+  onMotionTouch: () -> Unit,
   modifier: Modifier = Modifier,
+  onPlayMotion: (() -> Unit)? = null,
 ) {
   val id = spec.id
   val image = state.images[id] ?: PageImage()
@@ -194,27 +203,35 @@ internal fun ViewerPage(
     }
   }
 
-  // La motion photo tenuta premuta: il video sta SOTTO la foto, che si toglie solo al primo fotogramma (niente lampo nero).
+  // La motion photo che si muove: il video sta SOTTO la foto, che si toglie solo al primo fotogramma (niente lampo nero).
   val motionPlayer = playback.player
   val motionActive = spec.kind == MediaKind.MOTION_PHOTO && playback.motionFor == spec.id && motionPlayer != null
   val motionUi = playback.collectPlayerState()
   val reducedMotion = LocalFluidMotionPolicy.current.reducedMotion
   val imageAlpha by animateFloatAsState(
-    targetValue = if (motionActive && motionUi.firstFrame) 0f else 1f,
-    animationSpec = if (reducedMotion || !motionActive) androidx.compose.animation.core.snap() else FluidMotion.instant(),
+    targetValue = if (motionActive && motionUi.firstFrame && !playback.motionFading) 0f else 1f,
+    // Fermata da un tocco, dal cambio pagina o dalla chiusura: la foto torna subito. Arrivata alla fine: dissolvenza.
+    animationSpec = when {
+      reducedMotion || !motionActive -> androidx.compose.animation.core.snap()
+      playback.motionFading -> FluidMotion.fadeOut()
+      else -> FluidMotion.instant()
+    },
     label = "motion photo",
   )
 
   val motionEnabled = isCurrent && spec.kind == MediaKind.MOTION_PHOTO
+  val playMotionLabel = stringResource(R.string.motion_play)
   Box(
     modifier = modifier
       .fillMaxSize()
-      .semantics { contentDescription = spec.description }
-      .holdToPlay(
-        enabled = { motionEnabled && !zoom.isZoomed },
-        onHold = onMotionHold,
-        onRelease = onMotionRelease,
-      ),
+      .semantics {
+        contentDescription = spec.description
+        // TalkBack: l'azione equivalente al badge "Movimento" (D51), sull'immagine.
+        if (motionEnabled && onPlayMotion != null) {
+          customActions = listOf(CustomAccessibilityAction(playMotionLabel) { onPlayMotion(); true })
+        }
+      }
+      .onTouchDown(enabled = { motionEnabled }, onTouch = onMotionTouch),
   ) {
     if (motionActive && motionPlayer != null) {
       VideoSurface(player = motionPlayer, aspect = motionUi.aspect ?: drawAspect)

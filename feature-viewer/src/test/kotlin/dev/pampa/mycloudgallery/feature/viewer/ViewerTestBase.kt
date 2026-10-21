@@ -20,7 +20,10 @@ import dev.pampa.mycloudgallery.feature.viewer.download.PhoneDownload
 import dev.pampa.mycloudgallery.feature.viewer.testing.FakeMediaDetailsSource
 import dev.pampa.mycloudgallery.feature.viewer.testing.FakeMotionVideoLocator
 import dev.pampa.mycloudgallery.feature.viewer.testing.FakeViewerPlayer
+import dev.pampa.mycloudgallery.feature.viewer.motion.MotionAnimationSetting
+import dev.pampa.mycloudgallery.feature.viewer.motion.PowerSaving
 import dev.pampa.mycloudgallery.feature.viewer.video.MotionVideoLocator
+import dev.pampa.mycloudgallery.feature.viewer.video.NasMotionSource
 import dev.pampa.mycloudgallery.feature.viewer.video.NasVideoSource
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -88,6 +91,9 @@ abstract class ViewerTestBase {
     backup: dev.pampa.mycloudgallery.feature.viewer.info.MediaBackupStates? = null,
     backupActions: dev.pampa.mycloudgallery.feature.viewer.menu.BackupMediaActions? = null,
     link: dev.pampa.mycloudgallery.core.imaging.viewer.NasLink? = null,
+    motionAnimation: MotionAnimationSetting = MotionAnimationSetting.On,
+    powerSaving: PowerSaving? = PowerSaving { false },
+    nasMotion: NasMotionSource? = null,
   ): ViewerServices = ViewerServices(
     animated = animatedLoader,
     images = imageSource,
@@ -119,6 +125,9 @@ abstract class ViewerTestBase {
     backup = backup,
     backupActions = backupActions,
     link = link,
+    motionAnimation = motionAnimation,
+    powerSaving = powerSaving,
+    nasMotion = nasMotion,
   )
 
   internal fun show(

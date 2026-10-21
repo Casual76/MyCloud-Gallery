@@ -23,6 +23,8 @@ import dev.pampa.mycloudgallery.core.metadata.contract.ByteRange
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.feature.viewer.testing.FakeMotionVideoLocator
+import dev.pampa.mycloudgallery.feature.viewer.motion.MotionAnimationSetting
+import dev.pampa.mycloudgallery.feature.viewer.video.MotionVideo
 import dev.pampa.mycloudgallery.feature.viewer.video.PlaybackProblem
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -288,7 +290,11 @@ class ViewerScreenshotTest(private val dark: Boolean) : ViewerTestBase() {
   }
 }
 
-/** La motion photo premuta: serve una Libreria piu' grande, perche' in quella di 50 elementi non ce n'e'. */
+/**
+ * La foto in movimento (Fase 6, P14, docs/screenshots/6-P14): il badge "Movimento" nella barra in alto, pronto e mentre il video intero gira, chiaro
+ * e scuro, telefono e tablet. Serve una Libreria piu' grande, perche' in quella di 50 elementi non ce n'e'. Si scrivono con
+ * `gradlew :feature-viewer:recordRoborazziDebug`.
+ */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 class ViewerMotionScreenshotTest(private val dark: Boolean) : ViewerTestBase() {
 
@@ -300,19 +306,68 @@ class ViewerMotionScreenshotTest(private val dark: Boolean) : ViewerTestBase() {
     fun data(): List<Array<Any>> = listOf(arrayOf(true), arrayOf(false))
   }
 
-  @Test
-  fun motionPhotoPremuta() {
+  private fun shot(name: String, device: String = "telefono") {
+    composeRule.onRoot().captureRoboImage("../docs/screenshots/6-P14/viewer-$name-${if (dark) "scuro" else "chiaro"}-$device.png")
+  }
+
+  private fun showMotion(): Int {
     val motion = fixture.indicesOf(MediaKind.MOTION_PHOTO).first()
     val ref = fixture.items.ref(fixture.idAt(motion))
+    val found = MotionVideo.Found(ByteRange(1_000L, 5_000L), stillUs = 2_000_000L, durationUs = 4_000_000L)
+    // L'animazione d'apertura e' spenta: lo screenshot fissa la pagina ferma con il suo badge.
     show(
       request = fixture.request(startIndex = motion),
-      services = services(motion = FakeMotionVideoLocator(mapOf(ref to ByteRange(1_000L, 5_000L)))),
+      services = services(motion = FakeMotionVideoLocator(mapOf(ref to found)), motionAnimation = MotionAnimationSetting { false }),
       dark = dark,
     )
-    composeRule.onNodeWithTag(ViewerTags.Pager).performTouchInput { down(center) }
-    composeRule.mainClock.advanceTimeBy(900)
+    composeRule.mainClock.advanceTimeBy(500)
     composeRule.waitForIdle()
-    composeRule.onRoot().captureRoboImage("../docs/screenshots/3-P8/viewer-motion-photo-premuta-${if (dark) "scuro" else "chiaro"}-telefono.png")
-    composeRule.onNodeWithTag(ViewerTags.Pager).performTouchInput { up() }
+    return motion
+  }
+
+  @Test
+  fun badgeMovimentoPronto() {
+    showMotion()
+    composeRule.onNodeWithContentDescription("Riproduci il movimento").assertExists()
+    shot("movimento-badge")
+  }
+
+  @Test
+  fun badgeMovimentoInRiproduzione() {
+    showMotion()
+    composeRule.onNodeWithContentDescription("Riproduci il movimento").performClick()
+    composeRule.waitForIdle()
+    composeRule.onNodeWithContentDescription("Ferma il movimento").assertExists()
+    shot("movimento-in-riproduzione")
+  }
+}
+
+/** Lo stesso badge sul tablet: la barra e' piu' larga, il pannello informazioni e' laterale. */
+@RunWith(ParameterizedRobolectricTestRunner::class)
+@Config(qualifiers = TABLET)
+class ViewerMotionTabletScreenshotTest(private val dark: Boolean) : ViewerTestBase() {
+
+  override val fixture: ViewerFixture = ViewerFixture(count = 400)
+
+  companion object {
+    @JvmStatic
+    @ParameterizedRobolectricTestRunner.Parameters(name = "{0}")
+    fun data(): List<Array<Any>> = listOf(arrayOf(true), arrayOf(false))
+  }
+
+  @Test
+  fun badgeMovimentoSulTablet() {
+    val motion = fixture.indicesOf(MediaKind.MOTION_PHOTO).first()
+    val ref = fixture.items.ref(fixture.idAt(motion))
+    val found = MotionVideo.Found(ByteRange(1_000L, 5_000L), stillUs = 2_000_000L, durationUs = 4_000_000L)
+    show(
+      request = fixture.request(startIndex = motion),
+      services = services(motion = FakeMotionVideoLocator(mapOf(ref to found)), motionAnimation = MotionAnimationSetting { false }),
+      dark = dark,
+    )
+    composeRule.mainClock.advanceTimeBy(500)
+    composeRule.waitForIdle()
+    composeRule.onNodeWithContentDescription("Riproduci il movimento").assertExists()
+    composeRule.onRoot().captureRoboImage("../docs/screenshots/6-P14/viewer-movimento-badge-${if (dark) "scuro" else "chiaro"}-tablet.png")
   }
 }

@@ -29,13 +29,13 @@ import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.feature.viewer.download.DownloadState
 import dev.pampa.mycloudgallery.feature.viewer.gesture.VerticalIntent
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoPanelState
+import dev.pampa.mycloudgallery.feature.viewer.motion.MotionDirector
+import dev.pampa.mycloudgallery.feature.viewer.motion.MotionHost
+import dev.pampa.mycloudgallery.feature.viewer.motion.PowerSaving
 import dev.pampa.mycloudgallery.feature.viewer.page.fitRect
-import dev.pampa.mycloudgallery.feature.viewer.video.MotionVideo
 import dev.pampa.mycloudgallery.feature.viewer.video.PlaybackProblem
-import dev.pampa.mycloudgallery.feature.viewer.video.PlaybackSource
 import dev.pampa.mycloudgallery.feature.viewer.video.ViewerPlayback
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -100,12 +100,37 @@ internal class ViewerController(
    */
   var changingVisibility: Int = 0
 
-  private var motionJob: Job? = null
-
   /** Gli id per cui la parte video di una motion photo non e' stata riconosciuta (E-M16). */
   val motionUnplayable: MutableSet<MediaId> = HashSet()
   var motionUnplayableVersion: Int by mutableIntStateOf(0)
     private set
+
+  private val systemPowerSaving: PowerSaving by lazy(LazyThreadSafetyMode.NONE) { PowerSaving.system(context) }
+
+  /**
+   * Le foto in movimento (D50, D51): l'animazione d'apertura quando la pagina si ferma e il video intero dal badge. Dice al lettore
+   * condiviso cosa riprodurre; non ne crea altri.
+   */
+  val motion: MotionDirector = MotionDirector(
+    playback = playback,
+    scope = scope,
+    host = MotionHost(
+      services = { services },
+      refOf = ::refOf,
+      kindOf = ::kindOf,
+      photoAspect = { id ->
+        val index = view.snapshot.indexOf(id)
+        if (index >= 0) view.snapshot.aspectMilliAt(index) / MILLI else 0f
+      },
+      reducedMotion = { reducedMotion },
+      powerSaving = { (services.powerSaving ?: systemPowerSaving).isOn() },
+      onUnrecognized = { id -> if (motionUnplayable.add(id)) motionUnplayableVersion++ },
+      neighborsOf = { id ->
+        val page = view.viewIndexOf(id)
+        listOf(page - 1, page + 1).filter { it in 0 until view.size && page >= 0 }.map { view.snapshot.idAt(view.snapshotIndex(it)) }
+      },
+    ),
+  )
 
   // --- Geometria -----------------------------------------------------------------------------------------------------
 
@@ -158,8 +183,7 @@ internal class ViewerController(
   }
 
   private suspend fun closeNow() {
-    motionJob?.cancel()
-    playback.stopMotion()
+    motion.stopAll()
     sheet = null
     // Il pannello e lo zoom tornano a riposo prima: l'espansione alla rovescia parte dalla foto intera.
     if (state.zoomed) state.zoomReset?.invoke()
@@ -237,30 +261,34 @@ internal class ViewerController(
 
   // --- Motion photo -------------------------------------------------------------------------------------------------
 
-  /** Pressione lunga su una motion photo: cerca la parte video e la riproduce in silenzio finche' il dito sta giu'. */
-  fun onMotionHold() {
-    val id = state.currentId
-    val ref = refOf(id) ?: return
-    val phone = ref as? MediaRef.Phone ?: return
-    val uri = services.intents?.uriOf(phone)
-    motionJob?.cancel()
-    motionJob = scope.launch {
-      when (val found = services.motion.locate(ref)) {
-        is MotionVideo.Found -> {
-          val range = found.range
-          if (uri != null) playback.playMotion(id, PlaybackSource.Range(uri, range.start, range.length))
-        }
-        MotionVideo.Unrecognized -> {
-          if (motionUnplayable.add(id)) motionUnplayableVersion++
-          state.message = ViewerMessage.MotionUnplayable
-        }
-      }
-    }
+  /**
+   * Il badge "Movimento", la voce ⋮ "Riproduci il movimento" e l'azione di TalkBack (D51): il video intero, una volta, con l'audio al
+   * volume dei contenuti multimediali; poi torna la foto. Un altro tocco lo ferma. **La pressione lunga non c'entra piu'** (D45): resta
+   * libera per il testo dal vivo e il ritaglio.
+   */
+  fun playMotion() {
+    if (!closing) motion.playFull(state.currentId)
   }
 
-  fun onMotionRelease() {
-    motionJob?.cancel()
-    playback.stopMotion()
+  /** Un tocco, un pizzico, un doppio tocco o un trascinamento sulla pagina: l'animazione d'apertura si ferma subito (D50). */
+  fun onMotionTouch() = motion.interruptOpening()
+
+  /** L'utente accetta i dati mobili per la parte video di [id] (E-V15, D51): `:app` registra la conferma e il video parte. */
+  fun confirmMotionMobileData(id: MediaId) {
+    val ref = refOf(id) ?: return
+    services.onConfirmMobileData?.invoke(ref)
+    motion.state.notice = null
+    motion.playFull(id)
+  }
+
+  /** Il badge si vede: una foto in movimento il cui video si trova; per un media del NAS solo con la lettura a intervalli collegata (D13). */
+  fun motionAvailable(id: MediaId): Boolean {
+    if (motionUnplayableVersion < 0 || kindOf(id) != MediaKind.MOTION_PHOTO || id in motionUnplayable) return false
+    return when (refOf(id)) {
+      is MediaRef.Phone -> true
+      is MediaRef.Nas -> services.nasMotion != null
+      else -> false
+    }
   }
 
   // --- Media del NAS (Fase 4) ----------------------------------------------------------------------------------------
@@ -288,6 +316,7 @@ internal class ViewerController(
     val stale = LinkedHashSet<MediaId>()
     for ((id, original) in state.originals) if (original is OriginalProgress.Blocked && original.reason in NETWORK_REASONS) stale += id
     for ((id, image) in state.images) if (image.unavailable?.reason in NETWORK_REASONS) stale += id
+    motion.networkChanged()
     val id = state.currentId
     val reachable = network == NasNetwork.OPEN || network == NasNetwork.METERED
     if (reachable && playback.videoFor == id && playback.player?.state?.value?.problem == PlaybackProblem.NAS_UNREACHABLE) stale += id

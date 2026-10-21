@@ -17,8 +17,9 @@ import kotlinx.coroutines.flow.StateFlow
  * un'opzione: i decoder video sono poche istanze per telefono, e due colonne sonore sono un difetto, non una funzione.
  *
  * Il lettore e' di una pagina alla volta: [videoFor] e' il video che si sta guardando (parte da solo quando la pagina
- * si ferma, D19) e [motionFor] la motion photo tenuta premuta (in silenzio). Cambiare pagina, chiudere o uscire
- * dall'app liberano il decoder.
+ * si ferma, D19) e [motionFor] la motion photo che si muove, in uno dei due modi di [MotionMode]: il tratto d'apertura, muto
+ * (D50), o il video intero dal badge "Movimento", con l'audio (D51). Cambiare pagina, chiudere o uscire dall'app liberano
+ * il decoder.
  */
 @Stable
 internal class ViewerPlayback(private val factory: ViewerPlayerFactory) {
@@ -31,8 +32,16 @@ internal class ViewerPlayback(private val factory: ViewerPlayerFactory) {
   var videoFor: MediaId? by mutableStateOf(null)
     private set
 
-  /** La motion photo che si sta riproducendo (dito premuto). */
+  /** La motion photo che si sta riproducendo (animazione d'apertura o video dal badge). */
   var motionFor: MediaId? by mutableStateOf(null)
+    private set
+
+  /** Come si sta riproducendo [motionFor]; null se non si riproduce. */
+  var motionMode: MotionMode? by mutableStateOf(null)
+    private set
+
+  /** La riproduzione di [motionFor] e' finita e la foto sta tornando con la dissolvenza: il video resta sotto fino al suo termine. */
+  var motionFading: Boolean by mutableStateOf(false)
     private set
 
   /** Numero di lettori creati in tutta la vita di questo oggetto: deve restare 1 (un solo player). */
@@ -43,21 +52,32 @@ internal class ViewerPlayback(private val factory: ViewerPlayerFactory) {
   fun playVideo(id: MediaId, source: PlaybackSource, startPositionMs: Long = 0L) {
     obtain().load(source, autoplay = true, muted = false, startPositionMs = startPositionMs)
     videoFor = id
-    motionFor = null
+    clearMotion()
   }
 
-  /** Riproduce la parte video della motion photo [id], in silenzio. */
-  fun playMotion(id: MediaId, source: PlaybackSource) {
-    obtain().load(source, autoplay = true, muted = true)
+  /**
+   * Riproduce la parte video della motion photo [id]. [MotionMode.OPENING]: il tratto [clip] (tagliato), **muto**, senza
+   * prendere il focus audio. [MotionMode.FULL]: il video intero, **con l'audio** al volume dei contenuti multimediali.
+   */
+  fun playMotion(id: MediaId, source: PlaybackSource, mode: MotionMode, clip: PlaybackClip? = null) {
+    require((mode == MotionMode.OPENING) == (clip != null)) { "Il tratto tagliato e' solo dell'animazione d'apertura." }
+    obtain().load(source, autoplay = true, muted = mode == MotionMode.OPENING, clip = clip)
     motionFor = id
+    motionMode = mode
+    motionFading = false
     videoFor = null
   }
 
-  /** La motion photo non e' piu' premuta: si ferma e la foto torna ferma. */
+  /** La riproduzione e' arrivata alla fine: la foto torna con la dissolvenza, il decoder si libera con [stopMotion]. */
+  fun fadeMotion() {
+    if (motionFor != null) motionFading = true
+  }
+
+  /** La motion photo non si muove piu': si ferma e la foto torna ferma. */
   fun stopMotion() {
     if (motionFor == null) return
     player?.stop()
-    motionFor = null
+    clearMotion()
   }
 
   /** Cambio pagina o uscita: ferma tutto e libera il decoder, tenendo il lettore. */
@@ -65,7 +85,7 @@ internal class ViewerPlayback(private val factory: ViewerPlayerFactory) {
     if (videoFor == null && motionFor == null) return
     player?.stop()
     videoFor = null
-    motionFor = null
+    clearMotion()
   }
 
   fun pause() {
@@ -77,7 +97,13 @@ internal class ViewerPlayback(private val factory: ViewerPlayerFactory) {
     player?.release()
     player = null
     videoFor = null
+    clearMotion()
+  }
+
+  private fun clearMotion() {
     motionFor = null
+    motionMode = null
+    motionFading = false
   }
 
   private fun obtain(): ViewerPlayer {
@@ -87,6 +113,15 @@ internal class ViewerPlayback(private val factory: ViewerPlayerFactory) {
       created++
     }
   }
+}
+
+/** Come si muove una foto in movimento (D50, D51). */
+internal enum class MotionMode {
+  /** L'animazione d'apertura: il tratto che precede la foto, muto. */
+  OPENING,
+
+  /** Il video intero dal badge "Movimento": una volta, con l'audio. */
+  FULL,
 }
 
 private val Idle: StateFlow<PlayerUiState> = MutableStateFlow(PlayerUiState())

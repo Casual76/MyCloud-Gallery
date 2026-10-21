@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fase 6 (P14): Impostazioni della Libreria, "Animazione delle foto in movimento" (D50, risposta Q16 (b)). -->
+<resources>
+  <string name="settings_section_library">Libreria</string>
+  <string name="library_motion_animation">Animazione delle foto in movimento</string>
+  <string name="library_motion_animation_detail">Aprendo una foto in movimento, si muove per un istante e poi si ferma sulla foto. Il tasto Movimento resta sempre.</string>
+  <string name="library_motion_animation_footnote">Vale su tutti i tuoi dispositivi. Si ferma da sola con Rimuovi animazioni e con il risparmio energetico.</string>
+</resources>

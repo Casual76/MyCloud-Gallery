@@ -10,6 +10,7 @@ import dev.pampa.mycloudgallery.feature.viewer.details.MediaDetailsSource
 import dev.pampa.mycloudgallery.feature.viewer.details.ViewerBytes
 import dev.pampa.mycloudgallery.feature.viewer.video.MotionVideo
 import dev.pampa.mycloudgallery.feature.viewer.video.MotionVideoLocator
+import dev.pampa.mycloudgallery.feature.viewer.video.PlaybackClip
 import dev.pampa.mycloudgallery.feature.viewer.video.PlaybackProblem
 import dev.pampa.mycloudgallery.feature.viewer.video.PlaybackSource
 import dev.pampa.mycloudgallery.feature.viewer.video.PlayerUiState
@@ -24,7 +25,14 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /** Una chiamata registrata dal lettore finto, nell'ordine in cui e' arrivata. */
 sealed interface PlayerCall {
-  data class Load(val source: PlaybackSource, val autoplay: Boolean, val muted: Boolean, val startMs: Long) : PlayerCall
+  data class Load(
+    val source: PlaybackSource,
+    val autoplay: Boolean,
+    val muted: Boolean,
+    val startMs: Long,
+    /** Il taglio chiesto (D50), o null per la sorgente intera. */
+    val clip: PlaybackClip? = null,
+  ) : PlayerCall
 
   data class Seek(val positionMs: Long, val exact: Boolean) : PlayerCall
 
@@ -70,9 +78,17 @@ class FakeViewerPlayer : ViewerPlayer {
     boundSurface = surface
   }
 
-  override fun load(source: PlaybackSource, autoplay: Boolean, muted: Boolean, startPositionMs: Long) {
-    calls += PlayerCall.Load(source, autoplay, muted, startPositionMs)
-    mutable.value = PlayerUiState(source = source, playing = autoplay, positionMs = startPositionMs, muted = muted, durationMs = DEFAULT_DURATION_MS)
+  override fun load(source: PlaybackSource, autoplay: Boolean, muted: Boolean, startPositionMs: Long, clip: PlaybackClip?) {
+    calls += PlayerCall.Load(source, autoplay, muted, startPositionMs, clip)
+    mutable.value = PlayerUiState(
+      source = source,
+      playing = autoplay,
+      positionMs = clip?.startMs ?: startPositionMs,
+      muted = muted,
+      durationMs = DEFAULT_DURATION_MS,
+      // Il video di prova ha una traccia audio: si sente se non e' spento.
+      hasAudio = !muted,
+    )
   }
 
   override fun play() {
@@ -127,13 +143,25 @@ class FakeViewerBytes(private val files: Map<MediaRef, MediaBytes> = emptyMap())
   override suspend fun open(ref: MediaRef): MediaBytes? = files[ref]
 }
 
-/** Un localizzatore di motion photo scelto dal test: l'intervallo di un id, o il formato non riconosciuto (E-M16). */
-class FakeMotionVideoLocator(private val ranges: Map<MediaRef, ByteRange> = emptyMap()) : MotionVideoLocator {
+/**
+ * Un localizzatore di motion photo scelto dal test (§5.2): per ogni media l'intervallo **e l'istante** della foto, o il formato non
+ * riconosciuto (E-M16). Registra le richieste e puo' far attendere ([latencyMs], sul tempo virtuale del test).
+ */
+class FakeMotionVideoLocator(
+  private val found: Map<MediaRef, MotionVideo.Found> = emptyMap(),
+  private val latencyMs: Long = 0L,
+) : MotionVideoLocator {
   val requests: MutableList<MediaRef> = mutableListOf()
 
   override suspend fun locate(ref: MediaRef): MotionVideo {
     requests += ref
-    val range = ranges[ref] ?: return MotionVideo.Unrecognized
-    return MotionVideo.Found(range)
+    if (latencyMs > 0L) kotlinx.coroutines.delay(latencyMs)
+    return found[ref] ?: MotionVideo.Unrecognized
+  }
+
+  companion object {
+    /** Come prima di P14: solo gli intervalli, senza istante della foto ne' durata del video. */
+    fun ofRanges(ranges: Map<MediaRef, ByteRange>): FakeMotionVideoLocator =
+      FakeMotionVideoLocator(ranges.mapValues { (_, range) -> MotionVideo.Found(range, stillUs = null) })
   }
 }

@@ -9,7 +9,8 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.center
 import androidx.compose.ui.test.down
-import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -21,9 +22,7 @@ import androidx.compose.ui.test.up
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.imaging.contract.AnimatedKind
 import dev.pampa.mycloudgallery.core.imaging.contract.AnimatedSpec
-import dev.pampa.mycloudgallery.core.metadata.contract.ByteRange
 import dev.pampa.mycloudgallery.core.model.MediaKind
-import dev.pampa.mycloudgallery.feature.viewer.testing.FakeMotionVideoLocator
 import dev.pampa.mycloudgallery.feature.viewer.testing.PlayerCall
 import dev.pampa.mycloudgallery.feature.viewer.video.PlaybackProblem
 import dev.pampa.mycloudgallery.feature.viewer.video.PlaybackSource
@@ -31,8 +30,8 @@ import org.junit.Test
 
 /**
  * I contenuti che non sono una foto ferma: il video (un solo lettore, parte quando la pagina si ferma, scorrimento
- * `CLOSEST_SYNC` e poi esatto, codec non supportato spiegato), la motion photo (pressione lunga, E-M16) e le immagini
- * animate (E-M11).
+ * `CLOSEST_SYNC` e poi esatto, codec non supportato spiegato), la motion photo di formato sconosciuto (E-M16: il resto, badge e animazione,
+ * sta in `ViewerMotionTest`) e le immagini animate (E-M11).
  */
 class ViewerMediaTest : ViewerTestBase() {
 
@@ -125,26 +124,6 @@ class ViewerMediaTest : ViewerTestBase() {
   }
 
   @Test
-  fun laMotionPhotoSiRiproduceTenendoPremutoEInSilenzio() {
-    val index = motions.first()
-    val ref = fixture.items.ref(fixture.idAt(index))
-    show(request = fixture.request(startIndex = index), services = services(motion = FakeMotionVideoLocator(mapOf(ref to ByteRange(1_000L, 5_000L)))))
-    assertThat(player.loads).isEmpty()
-    pager().performTouchInput { down(center) }
-    composeRule.mainClock.advanceTimeBy(900)
-    composeRule.waitForIdle()
-    assertThat(player.loads).hasSize(1)
-    val load = player.loads.single()
-    assertThat(load.source).isEqualTo(PlaybackSource.Range(uriOf(index), start = 1_000L, length = 4_000L))
-    assertThat(load.muted).isTrue()
-    assertThat(load.autoplay).isTrue()
-    // Alzando il dito la foto torna ferma.
-    pager().performTouchInput { up() }
-    composeRule.waitForIdle()
-    assertThat(player.calls.last()).isEqualTo(PlayerCall.Stop)
-  }
-
-  @Test
   fun unTocco_BrevenonAvviaLaMotionPhoto() {
     val index = motions.first()
     show(request = fixture.request(startIndex = index))
@@ -157,17 +136,14 @@ class ViewerMediaTest : ViewerTestBase() {
   }
 
   @Test
-  fun e_M16_unaMotionPhotoDiFormatoSconosciutoRestaFermaEloDice() {
+  fun e_M16_unaMotionPhotoDiFormatoSconosciutoRestaFermaSenzaBadgeELoDiceNelleInfo() {
     val index = motions.first()
-    // Il localizzatore non riconosce il formato (default del fake).
+    // Il localizzatore non riconosce il formato (default del fake): niente animazione ne' badge (D50, E-V16).
     show(request = fixture.request(startIndex = index))
-    pager().performTouchInput { down(center) }
-    composeRule.mainClock.advanceTimeBy(900)
-    composeRule.waitForIdle()
-    pager().performTouchInput { up() }
+    composeRule.mainClock.advanceTimeBy(1_000)
     composeRule.waitForIdle()
     assertThat(player.loads).isEmpty()
-    composeRule.onAllNodesWithText("Parte video non riproducibile").assertCountAtLeast(1)
+    composeRule.onAllNodesWithContentDescription("Riproduci il movimento").assertCountEquals(0)
     // E nelle informazioni resta scritto.
     pager().performTouchInput { swipeUp() }
     composeRule.waitForIdle()
@@ -204,8 +180,4 @@ class ViewerMediaTest : ViewerTestBase() {
 
     override fun isRunning(): Boolean = running
   }
-}
-
-private fun androidx.compose.ui.test.SemanticsNodeInteractionCollection.assertCountAtLeast(min: Int) {
-  assertThat(fetchSemanticsNodes().size).isAtLeast(min)
 }

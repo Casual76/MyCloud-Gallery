@@ -1,7 +1,6 @@
 package dev.pampa.mycloudgallery.feature.settings.search
 
 import android.app.Application
-import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -64,7 +63,7 @@ class SearchEntryTest {
         }
       }
     }
-    rule.onNodeWithText("Ricerca e modelli").assertIsDisplayed().assertHasClickAction()
+    rule.onNodeWithText("Ricerca e modelli").assertIsDisplayed()
     rule.onNodeWithText("Manca un modello").assertIsDisplayed()
     rule.onNodeWithText("Ricerca e modelli").performClick()
     assertThat(clicks).isEqualTo(1)

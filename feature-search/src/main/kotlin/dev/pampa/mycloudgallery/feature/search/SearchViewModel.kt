@@ -47,7 +47,7 @@ class SearchViewModel @Inject constructor(
     suggestions = suggestions.orElse(NoSuggestions),
     history = history.orElse(NoSearchHistory),
     data = data.orElse(null),
-    today = today.orElse(Today { LocalDate.EPOCH }),
+    today = today.orElse(Today { LocalDate.of(1970, 1, 1) }),
     orderStore = order.orElse(MemorySearchOrderStore()),
     models = models.orElse(null),
     indexer = indexer.orElse(null),

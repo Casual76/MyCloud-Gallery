@@ -26,7 +26,7 @@ monaco baviera => P Monaco #3 COUNTRY word=monaco ; P Baviera #2 REGION word=bav
 monaco di => P Monaco #3 COUNTRY word=monaco
 Reggio Emilia => P Reggio Emilia #4 PLACE word=reggio emilia
 Reggio Calabria => P Reggio Calabria #5 PLACE word=reggio calabria
-Reggio => - => reggio => reggio
+Reggio => - => Reggio => reggio
 Cortina d'Ampezzo => P Cortina d'Ampezzo #18 PLACE word=cortina d ampezzo
 a Cortina d'Ampezzo => P Cortina d'Ampezzo #18 PLACE word=cortina d ampezzo
 

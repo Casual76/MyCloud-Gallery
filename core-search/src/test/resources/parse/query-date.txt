@@ -119,4 +119,4 @@ tra novembre e febbraio => Y 11-01..02-29 Novembre–febbraio (tutti gli anni)
 dal 2019 al 2021 => D 2019-01-01..2021-12-31 2019–2021
 tra il 2019 e il 2021 => D 2019-01-01..2021-12-31 2019–2021
 foto dal 3 al 10 agosto 2023 => T PHOTO Foto ; D 2023-08-03..2023-08-10 Dal 3 al 10 agosto 2023
-dal 10 al 3 agosto => Y 08-01..08-31 Agosto (tutti gli anni) => dal 10 al 3 => 10, 3
+dal 10 al 3 agosto => Y 08-03..08-03 3 agosto (tutti gli anni) => dal 10 => 10

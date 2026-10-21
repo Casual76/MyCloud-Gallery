@@ -3,7 +3,7 @@ package dev.pampa.mycloudgallery.core.search.parse
 import java.time.LocalDate
 
 /** Una riga della tabella pubblica: la query, "oggi" e le cinque colonne attese (chip, contenuto, parole, testo esatto, correzioni). */
-internal data class QueryRow(val file: String, val line: Int, val today: LocalDate, val query: String, val expected: List<String>) {
+data class QueryRow(val file: String, val line: Int, val today: LocalDate, val query: String, val expected: List<String>) {
   override fun toString(): String = "$file:$line «${query.take(60)}»"
 }
 

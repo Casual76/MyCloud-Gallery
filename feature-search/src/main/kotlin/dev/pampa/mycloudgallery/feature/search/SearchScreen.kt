@@ -19,6 +19,7 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -69,28 +70,31 @@ fun SearchScreen(
   modifier: Modifier = Modifier,
   gridState: LazyGridState = rememberLazyGridState(),
 ) {
-  Column(modifier = modifier.fillMaxSize().statusBarsPadding()) {
-    SearchField(query = query, handlers = handlers)
-    Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-      when (state) {
-        is SearchScreenState.Idle -> SearchIdleContent(state, readiness, queryModel, handlers)
-        is SearchScreenState.Typing -> SearchTypingContent(state, handlers)
-        is SearchScreenState.Searching -> SearchingContent(state.chips, thumbnails, handlers)
-        is SearchScreenState.Results -> SearchResultsGrid(
-          results = state,
-          today = today,
-          thumbnails = thumbnails,
-          onOpen = { media: MediaId -> handlers.onOpen(SearchGridEntries.openingView(state), media) },
-          onShowLikely = handlers::onShowLikely,
-          gridState = gridState,
-        ) {
-          ResultsHeader(state, readiness, queryModel, thumbnails, handlers)
+  // Lo sfondo e' della schermata (non di chi la ospita): chiaro e scuro si vedono uguali nella scheda, nei test e negli screenshot.
+  Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background, contentColor = MaterialTheme.colorScheme.onBackground) {
+    Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+      SearchField(query = query, handlers = handlers)
+      Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+        when (state) {
+          is SearchScreenState.Idle -> SearchIdleContent(state, readiness, queryModel, handlers)
+          is SearchScreenState.Typing -> SearchTypingContent(state, handlers)
+          is SearchScreenState.Searching -> SearchingContent(state.chips, thumbnails, handlers)
+          is SearchScreenState.Results -> SearchResultsGrid(
+            results = state,
+            today = today,
+            thumbnails = thumbnails,
+            onOpen = { media: MediaId -> handlers.onOpen(SearchGridEntries.openingView(state), media) },
+            onShowLikely = handlers::onShowLikely,
+            gridState = gridState,
+          ) {
+            ResultsHeader(state, readiness, queryModel, thumbnails, handlers)
+          }
+          is SearchScreenState.NoResults -> Column(verticalArrangement = Arrangement.spacedBy(SearchDimens.BlockGap)) {
+            SearchChipBar(state.chips, null, thumbnails, handlers)
+            SearchNoResultsState(query = query.trim(), state = state, handlers = handlers)
+          }
+          is SearchScreenState.Unavailable -> SearchUnavailableState(state.reason, handlers)
         }
-        is SearchScreenState.NoResults -> Column(verticalArrangement = Arrangement.spacedBy(SearchDimens.BlockGap)) {
-          SearchChipBar(state.chips, null, thumbnails, handlers)
-          SearchNoResultsState(query = query.trim(), state = state, handlers = handlers)
-        }
-        is SearchScreenState.Unavailable -> SearchUnavailableState(state.reason, handlers)
       }
     }
   }

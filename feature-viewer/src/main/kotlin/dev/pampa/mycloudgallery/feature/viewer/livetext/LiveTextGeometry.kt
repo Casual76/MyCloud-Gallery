@@ -23,7 +23,7 @@ import kotlin.math.sqrt
 /**
  * Il telaio di una riga: centro, direzione, lunghezza e spessore, ricavati dal riquadro e dall'inclinazione. Il rettangolo ruotato di
  * lunghezza L e spessore T ha un riquadro dritto di larghezza `L·|cos| + T·|sin|` e altezza `L·|sin| + T·|cos|`: si risolve il
- * sistema; vicino a 45 gradi e' mal condizionato e si ripiega sul segmento per il centro tagliato dal riquadro.
+ * sistema; vicino a 45 gradi e' mal condizionato e si ripiega sulla dimensione del riquadro piu' vicina alla direzione.
  */
 internal class LineFrame(box: ViewerTextBox, angleDegrees: Int, aspect: Float) {
   private val boxWidth = (box.right - box.left).coerceAtLeast(MIN_SIDE) * aspect
@@ -52,9 +52,15 @@ internal class LineFrame(box: ViewerTextBox, angleDegrees: Int, aspect: Float) {
       solvedThickness = (boxHeight * c - boxWidth * s) / det
     }
     if (solvedLength <= 0f || solvedThickness <= 0f) {
-      val clipped = min(if (c > EPSILON) boxWidth / c else Float.MAX_VALUE, if (s > EPSILON) boxHeight / s else Float.MAX_VALUE)
-      solvedLength = clipped
-      solvedThickness = max(((boxWidth + boxHeight) / (c + s)) - clipped, clipped * MIN_THICKNESS_RATIO)
+      // Ripiego (vicino a 45 gradi, o un riquadro troppo basso per quell'inclinazione): la riga prende la dimensione del riquadro piu'
+      // vicina alla sua direzione, proiettata; lo spessore e' il resto, mai meno di un quarto dell'altra dimensione.
+      if (c >= s) {
+        solvedLength = boxWidth / max(c, EPSILON)
+        solvedThickness = max(boxHeight - solvedLength * s, boxHeight * MIN_THICKNESS_RATIO)
+      } else {
+        solvedLength = boxHeight / max(s, EPSILON)
+        solvedThickness = max(boxWidth - solvedLength * c, boxWidth * MIN_THICKNESS_RATIO)
+      }
     }
     length = max(solvedLength, MIN_SIDE)
     thickness = max(solvedThickness, MIN_SIDE)
@@ -73,7 +79,7 @@ internal class LineFrame(box: ViewerTextBox, angleDegrees: Int, aspect: Float) {
     const val MIN_SIDE = 1e-4f
     const val WELL_CONDITIONED = 0.25f
     const val EPSILON = 1e-4f
-    const val MIN_THICKNESS_RATIO = 0.1f
+    const val MIN_THICKNESS_RATIO = 0.25f
   }
 }
 

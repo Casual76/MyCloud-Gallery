@@ -16,6 +16,7 @@ import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.MotionPhotosOn
+import androidx.compose.material.icons.rounded.TextFields
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryBarAction
@@ -84,6 +85,7 @@ internal class ViewerActionHandlers(
  * @param shareWithoutLocation "Rimuovi la posizione" e' acceso: la voce Condividi lo dice ("Condividi senza posizione").
  * @param onPlayMotion la voce "Riproduci il movimento" di una foto in movimento (Fase 6, D51): null = la pagina non e' una foto in
  *   movimento o il suo video non si riproduce (E-M16).
+ * @param onText la voce "Testo nella foto" (Fase 6, P12, D46): il foglio con il testo letto; null = la foto non ha testo da mostrare (D13).
  */
 internal fun viewerMenuEntries(
   resources: Resources,
@@ -96,6 +98,7 @@ internal fun viewerMenuEntries(
   backupActions: List<GalleryMenuEntry> = emptyList(),
   shareWithoutLocation: Boolean = false,
   onPlayMotion: (() -> Unit)? = null,
+  onText: (() -> Unit)? = null,
 ): List<GalleryMenuEntry> {
   val groups = mutableListOf<List<GalleryMenuEntry>>()
   groups.add(buildList<GalleryMenuEntry> {
@@ -121,6 +124,9 @@ internal fun viewerMenuEntries(
   groups.add(buildList<GalleryMenuEntry> {
     if (onPlayMotion != null) {
       add(GalleryMenuEntry.Item(resources.getString(R.string.motion_play), onPlayMotion, Icons.Rounded.MotionPhotosOn))
+    }
+    if (onText != null) {
+      add(GalleryMenuEntry.Item(resources.getString(R.string.livetext_action), onText, Icons.Rounded.TextFields))
     }
     if (capabilities.share) {
       val shareLabel = if (shareWithoutLocation) R.string.viewer_backup_action_share_no_location else R.string.viewer_action_share
@@ -154,13 +160,20 @@ internal fun viewerMenuEntries(
   }
 }
 
-/** Le azioni rapide della capsula in basso: condividi, preferito, informazioni, elimina. */
+/**
+ * Le azioni rapide della capsula in basso: condividi, preferito, informazioni, elimina; e, con testo letto nella foto, il pulsante "Testo"
+ * ([onText], Fase 6, P12, D43): il primo tocco evidenzia le righe, il secondo apre il foglio "Testo nella foto".
+ */
 internal fun viewerBarActions(
   resources: Resources,
   capabilities: ViewerCapabilities,
   isFavorite: Boolean,
   handlers: ViewerActionHandlers,
+  onText: (() -> Unit)? = null,
 ): List<GalleryBarAction> = buildList {
+  if (onText != null) {
+    add(GalleryBarAction(Icons.Rounded.TextFields, resources.getString(R.string.livetext_action), onText))
+  }
   if (capabilities.share) {
     add(GalleryBarAction(Icons.Rounded.IosShare, resources.getString(R.string.viewer_action_share), handlers.onShare))
   }

@@ -32,6 +32,7 @@ import dev.pampa.mycloudgallery.feature.viewer.details.NoMediaDetails
 import dev.pampa.mycloudgallery.feature.viewer.details.NoViewerBytes
 import dev.pampa.mycloudgallery.feature.viewer.details.ViewerBytes
 import dev.pampa.mycloudgallery.feature.viewer.download.PhoneDownload
+import dev.pampa.mycloudgallery.feature.viewer.gesture.ViewerSubjectPress
 import dev.pampa.mycloudgallery.feature.viewer.info.MediaBackupStates
 import dev.pampa.mycloudgallery.feature.viewer.livetext.ViewerTextReader
 import dev.pampa.mycloudgallery.feature.viewer.livetext.ViewerTextSource
@@ -96,6 +97,9 @@ import kotlinx.coroutines.withContext
  *   e' spenta (ML Kit non gira mai da qui). Senza, non ci sono testo dal vivo, pulsante "Testo" ne' voce ⋮ (D13). `:app` lo lega a `MediaText` (P11).
  * @property textReader la lettura al volo (D42, E-V9): solo dove la lettura del testo e' attiva su questo dispositivo ([ViewerTextReader.available]). Null o
  *   non disponibile = il viewer non la chiama mai (D41). `:app` lo lega al motore OCR di `core-ai` (P11).
+ * @property subjectPress Fase 6 (P12, D45): dove va la pressione prolungata su una foto **fuori dal testo** (il ritaglio del soggetto, P13). Null =
+ *   il ritaglio non c'e' (D13): la pressione fuori dal testo non fa niente. Riceve il punto normalizzato (0..1) sull'immagine raddrizzata, gia' passato
+ *   dalla trasformazione dello zoom.
  * @property dispatchers i thread di lavoro (letture di dettagli ed EXIF): nei test sono uno solo, senza attese.
  */
 @Immutable
@@ -129,6 +133,7 @@ class ViewerServices(
   val nasMotion: NasMotionSource? = null,
   val textSource: ViewerTextSource? = null,
   val textReader: ViewerTextReader? = null,
+  val subjectPress: ViewerSubjectPress? = null,
 )
 
 /** Decodifica un'immagine animata (GIF, WebP animato) in un `Drawable` che si anima da solo (E-M11). */

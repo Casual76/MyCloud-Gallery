@@ -11,6 +11,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.unit.IntSize
+import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.feature.viewer.livetext.TextPosition
 import kotlinx.coroutines.withTimeoutOrNull
@@ -21,9 +22,17 @@ import kotlinx.coroutines.withTimeoutOrNull
 // ritaglio del soggetto (P13); su un video niente. Le foto in movimento si comportano come le altre foto (E-V12): il video parte solo
 // dal badge "Movimento" (D51). La decisione e' pura ([LongPressArbiter.decide]); il tempo e le dita li misura [viewerLongPress].
 //
-// **Come si aggancia P13.** `ViewerController.onSubjectLongPress` e' vuoto: P13 lo imposta (punto normalizzato 0..1 sull'immagine
-// raddrizzata, dopo la trasformazione dello zoom) e l'arbitro gli passa tutte le pressioni prolungate su una foto che non cadono sul
-// testo. Non serve toccare questo file.
+// **Come si aggancia P13.** `ViewerServices.subjectPress` e' vuoto: P13 lo imposta ([ViewerSubjectPress]: punto normalizzato 0..1
+// sull'immagine raddrizzata, dopo la trasformazione dello zoom) e l'arbitro gli passa tutte le pressioni prolungate su una foto che non
+// cadono sul testo (anche su una foto in movimento). Non serve toccare questo file ne' la pagina.
+
+/**
+ * L'aggancio del ritaglio del soggetto (D44, P13): la pressione prolungata su una foto, fuori dal testo letto. [x] e [y] sono il punto
+ * normalizzato (0..1) sull'immagine raddrizzata, dopo la trasformazione dello zoom. Chi lo implementa decide cosa mostrare (velo, barra).
+ */
+fun interface ViewerSubjectPress {
+  fun onPress(id: MediaId, x: Float, y: Float)
+}
 
 /** Cosa fa una pressione prolungata. */
 internal sealed interface LongPressOutcome {

@@ -20,6 +20,9 @@ import dev.pampa.mycloudgallery.feature.viewer.download.PhoneDownload
 import dev.pampa.mycloudgallery.feature.viewer.testing.FakeMediaDetailsSource
 import dev.pampa.mycloudgallery.feature.viewer.testing.FakeMotionVideoLocator
 import dev.pampa.mycloudgallery.feature.viewer.testing.FakeViewerPlayer
+import dev.pampa.mycloudgallery.feature.viewer.gesture.ViewerSubjectPress
+import dev.pampa.mycloudgallery.feature.viewer.livetext.ViewerTextReader
+import dev.pampa.mycloudgallery.feature.viewer.livetext.ViewerTextSource
 import dev.pampa.mycloudgallery.feature.viewer.motion.MotionAnimationSetting
 import dev.pampa.mycloudgallery.feature.viewer.motion.PowerSaving
 import dev.pampa.mycloudgallery.feature.viewer.video.MotionVideoLocator
@@ -94,6 +97,9 @@ abstract class ViewerTestBase {
     motionAnimation: MotionAnimationSetting = MotionAnimationSetting.On,
     powerSaving: PowerSaving? = PowerSaving { false },
     nasMotion: NasMotionSource? = null,
+    textSource: ViewerTextSource? = null,
+    textReader: ViewerTextReader? = null,
+    subjectPress: ViewerSubjectPress? = null,
   ): ViewerServices = ViewerServices(
     animated = animatedLoader,
     images = imageSource,
@@ -128,6 +134,9 @@ abstract class ViewerTestBase {
     motionAnimation = motionAnimation,
     powerSaving = powerSaving,
     nasMotion = nasMotion,
+    textSource = textSource,
+    textReader = textReader,
+    subjectPress = subjectPress,
   )
 
   internal fun show(

@@ -45,9 +45,11 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.viewinterop.AndroidView
 import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
 import dev.antigravity.fluidengine.ui.fluid.FluidMotion
+import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryOnPhoto
 import dev.pampa.mycloudgallery.core.imaging.contract.AnimatedSpec
@@ -65,6 +67,9 @@ import dev.pampa.mycloudgallery.feature.viewer.ViewerServices
 import dev.pampa.mycloudgallery.feature.viewer.ViewerState
 import dev.pampa.mycloudgallery.feature.viewer.R
 import dev.pampa.mycloudgallery.feature.viewer.gesture.onTouchDown
+import dev.pampa.mycloudgallery.feature.viewer.gesture.viewerLongPress
+import dev.pampa.mycloudgallery.feature.viewer.livetext.LiveTextController
+import dev.pampa.mycloudgallery.feature.viewer.livetext.LiveTextOverlay
 import dev.pampa.mycloudgallery.feature.viewer.video.ViewerPlayback
 import dev.pampa.mycloudgallery.feature.viewer.video.ViewerPlayer
 import dev.pampa.mycloudgallery.feature.viewer.video.collectPlayerState
@@ -109,6 +114,9 @@ internal class PageSpec(
  *
  * @param isCurrent la pagina assestata: l'unica con i gesti dello zoom, i tasselli e il video.
  * @param onPlayMotion il video intero della foto in movimento (azione di TalkBack); null = la pagina non ne ha una da proporre.
+ * @param liveText il testo dal vivo (Fase 6, P12, D43, D45): l'arbitro della pressione prolungata su questa pagina (testo o ritaglio),
+ *   la selezione disegnata sopra la foto e l'azione di TalkBack "Testo nella foto". Null = la pagina non li ha.
+ * @param backdrop il fondale di vetro per la barra "Copia · Seleziona tutto · Condividi testo".
  */
 @Composable
 internal fun ViewerPage(
@@ -123,6 +131,8 @@ internal fun ViewerPage(
   onMotionTouch: () -> Unit,
   modifier: Modifier = Modifier,
   onPlayMotion: (() -> Unit)? = null,
+  liveText: LiveTextController? = null,
+  backdrop: GlassBackdropState? = null,
 ) {
   val id = spec.id
   val image = state.images[id] ?: PageImage()
@@ -221,17 +231,35 @@ internal fun ViewerPage(
 
   val motionEnabled = isCurrent && spec.kind == MediaKind.MOTION_PHOTO
   val playMotionLabel = stringResource(R.string.motion_play)
+  // Il testo dal vivo (P12, D45, D46): la pressione prolungata, l'azione di TalkBack e il tocco che chiude la selezione.
+  val textActionLabel = stringResource(R.string.livetext_action)
+  val density = LocalDensity.current.density
+  val textActionOn = isCurrent && liveText != null && spec.kind != MediaKind.VIDEO && liveText.canOpenSheet(id)
+  val pageTap: () -> Unit = { if (liveText != null && liveText.canDismiss) liveText.dismiss() else onTap() }
+  val doubleTapOn = liveText?.active != true
   Box(
     modifier = modifier
       .fillMaxSize()
       .semantics {
         contentDescription = spec.description
-        // TalkBack: l'azione equivalente al badge "Movimento" (D51), sull'immagine.
-        if (motionEnabled && onPlayMotion != null) {
-          customActions = listOf(CustomAccessibilityAction(playMotionLabel) { onPlayMotion(); true })
+        // TalkBack: l'azione equivalente al badge "Movimento" (D51) e il foglio "Testo nella foto" (D46), sull'immagine.
+        val actions = buildList {
+          if (motionEnabled && onPlayMotion != null) add(CustomAccessibilityAction(playMotionLabel) { onPlayMotion(); true })
+          if (textActionOn && liveText != null) add(CustomAccessibilityAction(textActionLabel) { liveText.openSheet(id); true })
         }
+        if (actions.isNotEmpty()) customActions = actions
       }
-      .onTouchDown(enabled = { motionEnabled }, onTouch = onMotionTouch),
+      .onTouchDown(enabled = { motionEnabled }, onTouch = onMotionTouch)
+      // L'arbitro della pressione prolungata (D45): testo letto sotto il dito = testo dal vivo; altrove su una foto = ritaglio (P13).
+      .viewerLongPress(
+        enabled = { isCurrent && liveText != null && liveText.wantsLongPress(id) },
+        onLongPress = { position, size ->
+          if (liveText != null) {
+            val mapping = zoom.contentMapping(Size(size.width.toFloat(), size.height.toFloat()), drawAspect)
+            liveText.onLongPress(id, drawAspect, mapping.screenToImage(position), mapping.pxToImageHeights(TEXT_TOUCH_DP * density))
+          }
+        },
+      ),
   ) {
     if (motionActive && motionPlayer != null) {
       VideoSurface(player = motionPlayer, aspect = motionUi.aspect ?: drawAspect)
@@ -250,7 +278,8 @@ internal fun ViewerPage(
         state = zoom,
         contentSize = Size(animated.width.toFloat(), animated.height.toFloat()),
         gesturesEnabled = isCurrent,
-        onTap = onTap,
+        onTap = pageTap,
+        doubleTapEnabled = doubleTapOn,
       ) {
         AnimatedMedia(
           ref = spec.ref!!,
@@ -273,8 +302,9 @@ internal fun ViewerPage(
           state = zoom,
           contentSize = contentSize,
           gesturesEnabled = isCurrent,
-          onTap = onTap,
+          onTap = pageTap,
           locationKey = useTiles,
+          doubleTapEnabled = doubleTapOn,
         ) {
           if (useTiles && phoneUri != null && sharp != null) {
             TiledMedia(uri = phoneUri, preview = sharp, zoom = zoom, onFailed = { tilesFailed = true })
@@ -289,6 +319,10 @@ internal fun ViewerPage(
       }
       else -> Box(Modifier.fillMaxSize())
     }
+    }
+    // La selezione del testo, le maniglie e la barra: sopra la foto, fuori dallo zoom (D43).
+    if (isCurrent && liveText != null && backdrop != null) {
+      LiveTextOverlay(controller = liveText, id = id, zoom = zoom, aspect = drawAspect, backdrop = backdrop)
     }
   }
 }
@@ -488,5 +522,7 @@ private fun PlayBadge(modifier: Modifier = Modifier) {
 
 private val BadgeSize: Dp = 64.dp
 private val BadgeGlyph: Dp = 36.dp
+/** Quanto puo' distare il dito da una parola perche' la si consideri toccata (D43). */
+private const val TEXT_TOUCH_DP = 12f
 private const val REFERENCE_SIDE = 1000f
 private const val DEFAULT_VIDEO_ASPECT = 16f / 9f

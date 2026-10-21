@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.feature.viewer
 
 import android.view.accessibility.AccessibilityManager
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
@@ -118,6 +119,10 @@ import dev.pampa.mycloudgallery.feature.viewer.info.InfoPanelState
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoSectionModel
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoSections
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoSheet
+import dev.pampa.mycloudgallery.feature.viewer.livetext.LiveTextReadingNotice
+import dev.pampa.mycloudgallery.feature.viewer.livetext.LiveTextSheet
+import dev.pampa.mycloudgallery.feature.viewer.livetext.LiveTextState
+import dev.pampa.mycloudgallery.feature.viewer.livetext.TextSelections
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoSidePanel
 import dev.pampa.mycloudgallery.feature.viewer.info.buildInfoSections
 import dev.pampa.mycloudgallery.feature.viewer.info.rememberBackupState
@@ -463,6 +468,7 @@ private fun ViewerHost(
               panelPx = panelPx,
               atRest = { atRest },
               format = format,
+              backdrop = backdrop,
             )
             if (!atRest) {
               TransitionPhoto(controller = controller, services = services, origin = originRect)
@@ -499,6 +505,7 @@ private fun PagerLayer(
   panelPx: Float,
   atRest: () -> Boolean,
   format: ViewerFormat,
+  backdrop: dev.antigravity.fluidengine.ui.fluid.GlassBackdropState,
 ) {
   val state = controller.state
   val pager = controller.pager
@@ -523,7 +530,8 @@ private fun PagerLayer(
     modifier = Modifier
       .fillMaxSize()
       .viewerVerticalDrag(
-        enabled = { atRest() && !state.zoomed && !controller.closing },
+        // Con una selezione del testo aperta il trascinamento verso il basso e' fermo (D45, E-V13).
+        enabled = { atRest() && !state.zoomed && !controller.closing && !controller.liveText.active },
         intentFor = controller::intentFor,
         onStart = {},
         onDrag = controller::onVerticalDrag,
@@ -558,7 +566,8 @@ private fun PagerLayer(
       modifier = Modifier.fillMaxSize().testTag(ViewerTags.Pager),
       pageSpacing = PageSpacing,
       beyondViewportPageCount = if (neighbors) 1 else 0,
-      userScrollEnabled = atRest() && !controller.closing,
+      // ... e con una selezione aperta il pager non scorre: si chiude prima (E-V13).
+      userScrollEnabled = atRest() && !controller.closing && !controller.liveText.active,
       flingBehavior = PagerDefaults.flingBehavior(state = pager, snapAnimationSpec = FluidMotion.smooth()),
       key = { index -> if (index < view.size) view.snapshot.idAt(view.snapshotIndex(index)).value else "gone-$index" },
     ) { page ->
@@ -593,6 +602,8 @@ private fun PagerLayer(
           onTap = controller::toggleChrome,
           onMotionTouch = controller::onMotionTouch,
           onPlayMotion = if (controller.motionAvailable(id)) controller::playMotion else null,
+          liveText = controller.liveText,
+          backdrop = backdrop,
         )
       }
     }
@@ -739,6 +750,10 @@ private fun ViewerOverlays(
   val capabilities = baseCapabilities.copy(trash = baseCapabilities.trash && !phoneAndNas, copy = baseCapabilities.copy && !shareWithoutLocation)
   val isFavorite = controller.isFavorite(currentId)
   val copyLabel = stringResource(R.string.viewer_copy_label)
+  // Il testo dal vivo (Fase 6, P12, D42, D43): il testo letto dell'indice, da qualunque dispositivo, anche con la lettura spenta qui.
+  val liveText = controller.liveText
+  LaunchedEffect(currentId, services.textSource) { liveText.bind(currentId) }
+  val hasLiveText = currentKind != MediaKind.VIDEO && liveText.hasText(currentId)
   val handlers = ViewerActionHandlers(
     onToggleFavorite = controller::toggleFavorite,
     onToggleHidden = controller::toggleHidden,
@@ -773,8 +788,9 @@ private fun ViewerOverlays(
     backupActions = backupEntries,
     shareWithoutLocation = shareWithoutLocation,
     onPlayMotion = if (controller.motionAvailable(currentId)) controller::playMotion else null,
+    onText = if (hasLiveText) ({ liveText.openSheet(currentId) }) else null,
   )
-  val barActions = viewerBarActions(resources, baseCapabilities, isFavorite, handlers)
+  val barActions = viewerBarActions(resources, baseCapabilities, isFavorite, handlers, onText = if (hasLiveText) ({ liveText.toggleHighlight(currentId) }) else null)
   val nasNotice = nasController?.notice?.collectAsState()?.value
   if (nasController != null && nasNotice != null) {
     LaunchedEffect(nasNotice) {
@@ -921,6 +937,11 @@ private fun ViewerOverlays(
     }
     // Un avviso breve (E-V6, nascosto, copiato) in alto, sotto la barra.
     val message = state.message
+    if (message == null && liveText.state is LiveTextState.ReadingNow && liveText.owner == currentId) {
+      Box(Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = MessageTopInset)) {
+        LiveTextReadingNotice(backdrop = backdrop)
+      }
+    }
     if (message != null) {
       Box(
         Modifier
@@ -1028,6 +1049,18 @@ private fun ViewerOverlays(
     }
   }
 
+  // Il testo dal vivo: Indietro chiude la selezione prima del viewer; il foglio "Testo nella foto" (D46).
+  BackHandler(enabled = liveText.canDismiss && !controller.closing && controller.sheet == null) { liveText.dismiss() }
+  val sheetLayout = (liveText.state as? LiveTextState.Sheet)?.layout
+  val sheetText = remember { mutableStateOf("") }
+  if (sheetLayout != null) sheetText.value = remember(sheetLayout) { TextSelections.allText(sheetLayout) }
+  val clipLabel = stringResource(R.string.livetext_clip_label)
+  LiveTextSheet(
+    visible = sheetLayout != null && liveText.owner == currentId,
+    text = sheetText.value,
+    onCopyAll = { liveText.copyAll(clipLabel) },
+    onClose = liveText::closeSheet,
+  )
   DeleteSheet(
     visible = controller.sheet == ViewerSheet.Delete,
     isVideo = isVideo,

@@ -65,9 +65,6 @@ internal class LiveTextController(
   var dragging: HandleSide? by mutableStateOf(null)
     private set
 
-  /** P13 (ritaglio): cosa fare con una pressione prolungata su una foto fuori dal testo. Null = il ritaglio non c'e' (D13). */
-  var onSubjectLongPress: ((id: MediaId, x: Float, y: Float) -> Unit)? = null
-
   private val layouts = mutableStateMapOf<MediaId, ViewerTextLayout>()
   private var bound: MediaId? = null
   private var fixed: TextPosition = TextPosition(0, 0)
@@ -100,7 +97,7 @@ internal class LiveTextController(
 
   /** La pressione prolungata ha qualcosa da fare su questo media (E-V9): testo, lettura al volo o ritaglio. */
   fun wantsLongPress(id: MediaId): Boolean =
-    host.kindOf(id) != MediaKind.VIDEO && (host.services().textSource != null || readerAvailable() || onSubjectLongPress != null)
+    host.kindOf(id) != MediaKind.VIDEO && (host.services().textSource != null || readerAvailable() || host.services().subjectPress != null)
 
   /** La geometria del testo di [id] alla proporzione [aspect], tenuta finche' non cambiano. */
   fun geometry(id: MediaId, aspect: Float): LiveTextGeometry? {
@@ -173,7 +170,7 @@ internal class LiveTextController(
   fun onLongPress(id: MediaId, aspect: Float, point: Offset, tolerance: Float) {
     scope.launch {
       val claim = TextClaim { p -> claim(id, aspect, p, tolerance) }
-      val outcome = LongPressArbiter.decide(host.kindOf(id), point, claim, subject = onSubjectLongPress != null)
+      val outcome = LongPressArbiter.decide(host.kindOf(id), point, claim, subject = host.services().subjectPress != null)
       if (id != host.currentId()) return@launch
       when (outcome) {
         is LongPressOutcome.Text -> {
@@ -182,7 +179,7 @@ internal class LiveTextController(
         }
         is LongPressOutcome.Subject -> {
           if (state !is LiveTextState.ReadingNow) dismiss()
-          onSubjectLongPress?.invoke(id, outcome.x, outcome.y)
+          host.services().subjectPress?.onPress(id, outcome.x, outcome.y)
         }
         LongPressOutcome.None -> if (state is LiveTextState.ReadingNow) reset()
       }

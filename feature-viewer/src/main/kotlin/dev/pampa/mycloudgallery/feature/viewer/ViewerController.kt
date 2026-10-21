@@ -29,6 +29,8 @@ import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.feature.viewer.download.DownloadState
 import dev.pampa.mycloudgallery.feature.viewer.gesture.VerticalIntent
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoPanelState
+import dev.pampa.mycloudgallery.feature.viewer.livetext.LiveTextController
+import dev.pampa.mycloudgallery.feature.viewer.livetext.LiveTextHost
 import dev.pampa.mycloudgallery.feature.viewer.motion.MotionDirector
 import dev.pampa.mycloudgallery.feature.viewer.motion.MotionHost
 import dev.pampa.mycloudgallery.feature.viewer.motion.PowerSaving
@@ -129,6 +131,22 @@ internal class ViewerController(
         val page = view.viewIndexOf(id)
         listOf(page - 1, page + 1).filter { it in 0 until view.size && page >= 0 }.map { view.snapshot.idAt(view.snapshotIndex(it)) }
       },
+    ),
+  )
+
+  /**
+   * Il testo dal vivo (Fase 6, P12, D43, D45, D46): selezione con le maniglie, foglio "Testo nella foto", lettura al volo. Porta anche
+   * l'aggancio del ritaglio (`liveText.onSubjectLongPress`, P13): l'arbitro della pressione prolungata gli passa cio' che non e' testo.
+   */
+  val liveText: LiveTextController = LiveTextController(
+    scope = scope,
+    context = context,
+    host = LiveTextHost(
+      services = { services },
+      refOf = ::refOf,
+      kindOf = ::kindOf,
+      currentId = { state.currentId },
+      announce = { state.message = it },
     ),
   )
 

@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import dev.pampa.mycloudgallery.feature.viewer.livetext.ContentMapping
 import me.saket.telephoto.zoomable.DoubleClickToZoomListener
 import me.saket.telephoto.zoomable.ZoomSpec
 import me.saket.telephoto.zoomable.ZoomableContentLocation
@@ -50,6 +51,7 @@ internal fun ZoomableMedia(
   gesturesEnabled: Boolean = true,
   onTap: (() -> Unit)? = null,
   locationKey: Any? = null,
+  doubleTapEnabled: Boolean = true,
   content: @Composable BoxScope.() -> Unit,
 ) {
   val zoomable = state.zoomable
@@ -67,11 +69,15 @@ internal fun ZoomableMedia(
         state = zoomable,
         enabled = gesturesEnabled,
         onClick = if (onTap != null) ({ _: Offset -> onTap() }) else null,
-        onDoubleClick = DoubleClickToZoomListener.cycle(maxZoomFactor = state.doubleTapZoom),
+        // Con una selezione del testo aperta il doppio tocco e' ignorato (D45, E-V13); il pizzico e lo spostamento restano attivi.
+        onDoubleClick = if (doubleTapEnabled) DoubleClickToZoomListener.cycle(maxZoomFactor = state.doubleTapZoom) else IgnoredDoubleTap,
       ),
     content = content,
   )
 }
+
+/** Il doppio tocco che non fa niente: con una selezione del testo aperta (D45). */
+private val IgnoredDoubleTap = DoubleClickToZoomListener { _, _ -> }
 
 /**
  * Lo stato dello zoom di una pagina. [isZoomed] e' vero appena la foto e' piu' grande di come entra nello schermo: da li'
@@ -87,6 +93,23 @@ internal class ZoomableMediaState(
   val zoomFraction: Float get() = zoomable.zoomFraction ?: 0f
 
   val isZoomed: Boolean get() = zoomFraction > ZoomedThreshold
+
+  /**
+   * Il passaggio immagine / contenuto / schermo a questo livello di zoom, per il testo dal vivo (D45): la trasformazione che telephoto
+   * applica al contenuto (scala intorno al perno, poi spostamento). [size] e' la pagina; [aspect] la proporzione con cui si disegna la foto.
+   */
+  fun contentMapping(size: Size, aspect: Float): ContentMapping {
+    val transformation = zoomable.contentTransformation
+    val origin = transformation.transformOrigin
+    return ContentMapping(
+      size = size,
+      aspect = aspect,
+      scaleX = transformation.scale.scaleX,
+      scaleY = transformation.scale.scaleY,
+      offset = transformation.offset,
+      pivot = Offset(origin.pivotFractionX * size.width, origin.pivotFractionY * size.height),
+    )
+  }
 
   /** Riporta la foto interamente nello schermo; senza animazione quando la pagina e' fuori vista. */
   suspend fun reset(animated: Boolean) {

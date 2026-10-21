@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fase 6 (P12): testo dal vivo nel viewer. Selezione con le maniglie, barra, foglio "Testo nella foto", lettura al volo (D42, D43, D46, §2.10). -->
+<resources>
+  <!-- Pulsante "Testo" nella barra, voce ⋮ e azione di TalkBack: la stessa etichetta. -->
+  <string name="livetext_action">Testo nella foto</string>
+  <string name="livetext_sheet_title">Testo nella foto</string>
+  <string name="livetext_copy_all">Copia tutto</string>
+  <string name="livetext_close">Chiudi</string>
+
+  <!-- La barra sopra la selezione: tre azioni da 48 dp, a icona. -->
+  <string name="livetext_bar_copy">Copia</string>
+  <string name="livetext_bar_select_all">Seleziona tutto</string>
+  <string name="livetext_bar_share">Condividi testo</string>
+
+  <!-- Le maniglie: TalkBack le legge, ma il foglio è la via accessibile (D46). -->
+  <string name="livetext_handle_start">Inizio della selezione</string>
+  <string name="livetext_handle_end">Fine della selezione</string>
+
+  <!-- Etichetta degli appunti e avvisi (annunciati da TalkBack). -->
+  <string name="livetext_clip_label">Testo dalla foto</string>
+  <string name="livetext_msg_copied_title">Testo copiato</string>
+  <string name="livetext_msg_none_title">Nessun testo in questa foto</string>
+  <string name="livetext_msg_none_detail">Non c\'è testo da selezionare qui.</string>
+  <string name="livetext_reading">Leggo il testo…</string>
+</resources>

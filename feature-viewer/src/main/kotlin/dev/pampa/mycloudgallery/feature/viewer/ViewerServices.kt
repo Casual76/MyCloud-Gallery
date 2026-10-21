@@ -33,6 +33,8 @@ import dev.pampa.mycloudgallery.feature.viewer.details.NoViewerBytes
 import dev.pampa.mycloudgallery.feature.viewer.details.ViewerBytes
 import dev.pampa.mycloudgallery.feature.viewer.download.PhoneDownload
 import dev.pampa.mycloudgallery.feature.viewer.info.MediaBackupStates
+import dev.pampa.mycloudgallery.feature.viewer.livetext.ViewerTextReader
+import dev.pampa.mycloudgallery.feature.viewer.livetext.ViewerTextSource
 import dev.pampa.mycloudgallery.feature.viewer.menu.BackupMediaActions
 import dev.pampa.mycloudgallery.feature.viewer.menu.NasMediaActions
 import dev.pampa.mycloudgallery.feature.viewer.motion.MotionAnimationSetting
@@ -90,6 +92,10 @@ import kotlinx.coroutines.withContext
  * @property powerSaving il risparmio energetico (D50): null = quello di sistema (`PowerManager`); nei test lo sceglie il test.
  * @property nasMotion la parte video delle foto in movimento solo-NAS (Fase 6, P14, D51): letta a intervalli e tenuta in `cacheDir/motion/`.
  *   Senza, una foto in movimento del NAS resta ferma e senza badge (D13). `:app` lo costruisce sopra [nasVideo] e la cartella di cache (P11).
+ * @property textSource Fase 6 (P12, D42, D43): il testo letto gia' nell'indice locale, da qualunque dispositivo della famiglia, anche dove la lettura
+ *   e' spenta (ML Kit non gira mai da qui). Senza, non ci sono testo dal vivo, pulsante "Testo" ne' voce ⋮ (D13). `:app` lo lega a `MediaText` (P11).
+ * @property textReader la lettura al volo (D42, E-V9): solo dove la lettura del testo e' attiva su questo dispositivo ([ViewerTextReader.available]). Null o
+ *   non disponibile = il viewer non la chiama mai (D41). `:app` lo lega al motore OCR di `core-ai` (P11).
  * @property dispatchers i thread di lavoro (letture di dettagli ed EXIF): nei test sono uno solo, senza attese.
  */
 @Immutable
@@ -121,6 +127,8 @@ class ViewerServices(
   val motionAnimation: MotionAnimationSetting = MotionAnimationSetting.On,
   val powerSaving: PowerSaving? = null,
   val nasMotion: NasMotionSource? = null,
+  val textSource: ViewerTextSource? = null,
+  val textReader: ViewerTextReader? = null,
 )
 
 /** Decodifica un'immagine animata (GIF, WebP animato) in un `Drawable` che si anima da solo (E-M11). */

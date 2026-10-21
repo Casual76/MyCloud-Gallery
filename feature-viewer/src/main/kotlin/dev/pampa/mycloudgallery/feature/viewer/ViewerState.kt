@@ -73,6 +73,12 @@ internal enum class ViewerMessage(@StringRes val title: Int, @StringRes val deta
   /** Copiato negli appunti. */
   Copied(R.string.viewer_msg_copied_title, null),
 
+  /** Il testo selezionato e' negli appunti (testo dal vivo, D43): annunciato da TalkBack. */
+  TextCopied(R.string.livetext_msg_copied_title, null),
+
+  /** "Testo nella foto" su una foto senza testo da mostrare (E-V9). */
+  NoText(R.string.livetext_msg_none_title, R.string.livetext_msg_none_detail),
+
   /** Un'azione non e' riuscita (nessuna app per aprire la posizione, nessuna app per condividere). */
   ActionFailed(R.string.viewer_msg_failed_title, R.string.viewer_msg_failed_detail),
 

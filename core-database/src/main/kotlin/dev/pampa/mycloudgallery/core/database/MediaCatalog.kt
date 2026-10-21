@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.core.database
 
 import androidx.room.withTransaction
 import dev.pampa.mycloudgallery.core.database.dao.BackupQueries
+import dev.pampa.mycloudgallery.core.database.dao.CellVersionRow
 import dev.pampa.mycloudgallery.core.database.dao.TimelineIndexDao
 import dev.pampa.mycloudgallery.core.database.entity.BackupCandidateRow
 import dev.pampa.mycloudgallery.core.database.entity.BackupProblemEntity
@@ -83,7 +84,13 @@ import dev.pampa.mycloudgallery.core.model.domain.VersionPlan
 import dev.pampa.mycloudgallery.core.model.domain.VersionRules
 import dev.pampa.mycloudgallery.core.model.domain.WorkRules
 import dev.pampa.mycloudgallery.core.model.enumByCode
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -138,6 +145,13 @@ class MediaCatalog(
   private val backupQueryDao = database.backupQueryDao()
   private val similarDao = database.similarDao()
   private val correctionDao = database.metadataCorrectionDao()
+  private val cellContentDao = database.cellContentDao()
+
+  /**
+   * Fase 6 (P1, schema v5): l'indice locale dei dati AI per chiave di contenuto (vettori, testo letto con FTS4, vocabolario) e la
+   * cronologia della ricerca. Non tocca il grafo dei media e non annuncia [changes].
+   */
+  val aiIndex: AiIndexCatalog = AiIndexCatalog(database)
 
   private val writeLock = Mutex()
   private val changeFlow = MutableSharedFlow<CatalogChange>(
@@ -1658,6 +1672,87 @@ class MediaCatalog(
     return similarDao.groupIds(after?.value.orEmpty(), limit).map { MediaGroupId(it.groupId) }
   }
 
+  // --- Fase 6 (P1): le celle per la ricerca e i bit derivati dall'indice AI (schema v5; docs/modello-dati.md §13) -------------------
+
+  /**
+   * Le chiavi di contenuto delle celle della Libreria dopo [afterSeq] (il `rowid` di inserimento del media: 0 = dall'inizio), in ordine
+   * di [CellContent.seq], di al piu' [limit] media per pagina (le celle di una pagina possono essere meno: nascosti e membri di
+   * gruppo non lo sono). [CellContentPage.next] e' il cursore della pagina dopo: si legge finche' e' null. Per ogni cella le versioni
+   * del suo media e quelle dei membri visibili del suo gruppo (la mappa delle celle di P6, §2.4).
+   *
+   * L'ordine e' quello dell'albero di `media` (nessun `USE TEMP B-TREE`) e un media nuovo ha sempre un `seq` piu' alto: chi ha letto
+   * fino a [afterSeq] trova i **media nuovi** nelle pagine dopo, e i cambiamenti delle celle esistenti in [cellContentKeysOf] (con gli id di
+   * [changes]). Il `rowid` e' stabile finche' nessuno esegue `VACUUM`: Room non lo fa.
+   */
+  suspend fun cellContentKeys(
+    afterSeq: Long = 0,
+    limit: Int = CELL_KEYS_PAGE,
+    compute: CoroutineDispatcher = Dispatchers.Default,
+  ): CellContentPage {
+    require(afterSeq >= 0) { "Cursore negativo." }
+    require(limit in 1..MAX_CELL_KEYS_PAGE) { "Pagina fuori misura." }
+    // A fette di [CELL_KEYS_SLICE] media: una fetta sta in una finestra del cursore di SQLite (2 MB). Un risultato piu' grande la
+    // riempirebbe piu' volte e ogni riempimento rilegge la query dall'inizio (quadratico). Le chiavi (SHA-256) di una fetta si calcolano
+    // su [compute] mentre si legge la fetta dopo.
+    return coroutineScope {
+      val slices = ArrayList<Deferred<List<CellContent>>>()
+      var cursor = afterSeq
+      var remaining = limit
+      while (remaining > 0) {
+        val bound = cellContentDao.seqBound(cursor, minOf(remaining, CELL_KEYS_SLICE)) ?: break
+        val rows = cellContentDao.cellVersions(cursor, bound)
+        val members = rows.mapNotNullTo(LinkedHashSet()) { it.groupId }.chunked(TimelineIndexDao.MAX_IDS)
+          .flatMap { cellContentDao.memberVersions(it) }
+        slices += async(compute) { CellContentAssembler.assemble(rows, members) }
+        remaining -= minOf(remaining, CELL_KEYS_SLICE)
+        cursor = bound
+      }
+      if (slices.isEmpty()) CellContentPage(emptyList(), null) else CellContentPage(slices.awaitAll().flatten(), cursor)
+    }
+  }
+
+  /**
+   * Le chiavi di contenuto delle celle [ids] (solo dove sono ancora celle: gli altri non ci sono nel risultato), in ordine di `seq`:
+   * per rileggere le celle di un [CatalogChange].
+   */
+  suspend fun cellContentKeysOf(ids: Collection<MediaId>): List<CellContent> {
+    val rows = ids.map { it.value }.distinct().chunked(TimelineIndexDao.MAX_IDS).flatMap { cellContentDao.cellVersionsOf(it) }
+      .sortedBy { it.seq }
+    val groups = rows.mapNotNullTo(LinkedHashSet()) { it.groupId }
+    val members = groups.chunked(TimelineIndexDao.MAX_IDS).flatMap { cellContentDao.memberVersions(it) }
+    return CellContentAssembler.assemble(rows, members)
+  }
+
+  /**
+   * Accende (o con [on] = false spegne) i bit **derivati dall'indice AI** [flags] (oggi solo `CellFlags.DOCUMENT`, D34) sui media
+   * [ids], a lotti di [batch] (500) in **una transazione per lotto**: ogni lotto che cambia qualcosa annuncia **un** [CatalogChange]
+   * (un `change_seq` in piu', non uno per media) e l'indice della timeline si aggiorna una volta sola. Un lotto che non cambia nulla non
+   * annuncia niente. Gli id uniti a un altro media si risolvono; quelli spariti si saltano. Quanti media sono cambiati.
+   *
+   * Il bit e' **locale**: ogni dispositivo lo ricava dagli stessi dati e niente si pubblica. Sopravvive ai ricalcoli dei derivati
+   * (`derive` lo conserva: [AI_DERIVED_MASK]).
+   */
+  suspend fun setDerivedFlags(ids: Collection<MediaId>, flags: Int, on: Boolean = true, batch: Int = DERIVED_FLAGS_BATCH): Int {
+    require(flags != 0 && flags and AI_DERIVED_MASK.inv() == 0) { "Solo i bit derivati dall'indice AI." }
+    require(batch in 1..MAX_DERIVED_FLAGS_BATCH) { "Lotto fuori misura." }
+    var changed = 0
+    for (chunk in ids.distinct().chunked(batch)) {
+      changed += write { tx ->
+        var n = 0
+        for (id in chunk) {
+          val row = mediaDao.get((resolve(id) ?: continue).value) ?: continue
+          val updated = if (on) row.cellFlags or flags else row.cellFlags and flags.inv()
+          if (updated == row.cellFlags) continue
+          mediaDao.setCellFlags(row.mediaId, updated, clock())
+          tx.markChanged(MediaId(row.mediaId), structural = false)
+          n++
+        }
+        n
+      }
+    }
+    return changed
+  }
+
   // --- Letture ---------------------------------------------------------------------------------------
 
   /** L'identita' attuale di [id]: se stessa, o il sopravvissuto se e' stata assorbita da un'unione. */
@@ -2477,7 +2572,9 @@ class MediaCatalog(
         metadata = metadata,
         favorite = personal?.favorite == true,
         unreadable = unreadable,
-      ) or TimelineRules.presenceFlags(media, safety, probableDuplicate) or TimelineRules.backupProblemFlags(markedProblem, safety),
+      ) or TimelineRules.presenceFlags(media, safety, probableDuplicate) or TimelineRules.backupProblemFlags(markedProblem, safety) or
+        // v5: i bit derivati dall'indice AI li scrive `setDerivedFlags`, non le regole: il ricalcolo li conserva.
+        (row.cellFlags and AI_DERIVED_MASK),
       thumbHash = metadataRow?.thumbHash,
       hidden = personal?.hidden == true,
       backupTodo = TimelineRules.backupTodo(presence, safety, markedProblem),
@@ -2626,6 +2723,23 @@ class MediaCatalog(
       // v4 (Fase 5): il giro di "Libera spazio" (i suoi elementi puntano ai media, lui no) e un file in arrivo (non e' ancora un media)
       "free_space_run",
       "incoming_item",
+      // v5 (Fase 6, D37): tutte per chiave di contenuto, nessuna punta a `media` ne' a `media_version`. Il collegamento ai media passa
+      // dalle versioni (`size`, `quick_hash`: `cellContentKeys`), quindi l'unione e la rinomina d'identita' non le toccano.
+      // `ai_text_fts` e' la tabella FTS4 di `ai_text` (le sue tabelle d'appoggio `ai_text_fts_*` le crea SQLite).
+      "ai_vector",
+      "ai_text",
+      "ai_text_fts",
+      "ai_vocabulary",
+      "search_history",
+      "ai_pending_publish",
+      "ai_own_head",
+      "ai_own_segment",
+      "ai_own_live",
+      "ai_replica_head",
+      "ai_replica_segment",
+      "ai_replica_entry",
+      "ai_replica_applied",
+      "ai_replica_dirty",
     )
 
     /**
@@ -2638,6 +2752,23 @@ class MediaCatalog(
       "index_record",
       "index_outbox_record",
     )
+
+    /**
+     * I bit di `cell_flags` che non si calcolano dalle regole ma dall'indice AI (`setDerivedFlags`) e che il ricalcolo dei derivati
+     * conserva: oggi `CellFlags.DOCUMENT` (D34).
+     */
+    const val AI_DERIVED_MASK: Int = CellFlags.DOCUMENT
+
+    /** Quanti media per pagina di [cellContentKeys] (e quanti al massimo). */
+    const val CELL_KEYS_PAGE: Int = 5_000
+    const val MAX_CELL_KEYS_PAGE: Int = 200_000
+
+    /** Quanti media si leggono con una query sola dentro una pagina (una finestra del cursore: vedi [cellContentKeys]). */
+    const val CELL_KEYS_SLICE: Int = 4_096
+
+    /** Il lotto di [setDerivedFlags] (D34: lotti di 500, un cambiamento dell'indice della timeline per lotto) e il suo massimo. */
+    const val DERIVED_FLAGS_BATCH: Int = 500
+    const val MAX_DERIVED_FLAGS_BATCH: Int = 5_000
 
     /** Tetto di posizioni per transazione delle operazioni su una share intera ([markShareUnavailable]). */
     const val DEFAULT_NAS_CAP: Int = 500

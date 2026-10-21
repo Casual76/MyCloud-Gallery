@@ -5,8 +5,12 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.withTransaction
+import dev.pampa.mycloudgallery.core.database.dao.AiIndexDao
+import dev.pampa.mycloudgallery.core.database.dao.AiPublishDao
+import dev.pampa.mycloudgallery.core.database.dao.AiReplicaDao
 import dev.pampa.mycloudgallery.core.database.dao.AlbumDao
 import dev.pampa.mycloudgallery.core.database.dao.BackupDiaryDao
+import dev.pampa.mycloudgallery.core.database.dao.CellContentDao
 import dev.pampa.mycloudgallery.core.database.dao.BackupProblemDao
 import dev.pampa.mycloudgallery.core.database.dao.BackupQueryDao
 import dev.pampa.mycloudgallery.core.database.dao.CatalogMetaDao
@@ -26,6 +30,7 @@ import dev.pampa.mycloudgallery.core.database.dao.NasOpsDao
 import dev.pampa.mycloudgallery.core.database.dao.NasScanDao
 import dev.pampa.mycloudgallery.core.database.dao.NasShareDao
 import dev.pampa.mycloudgallery.core.database.dao.PendingTaskDao
+import dev.pampa.mycloudgallery.core.database.dao.SearchHistoryDao
 import dev.pampa.mycloudgallery.core.database.dao.PersonalDao
 import dev.pampa.mycloudgallery.core.database.dao.ReplicaDao
 import dev.pampa.mycloudgallery.core.database.dao.SimilarDao
@@ -34,6 +39,19 @@ import dev.pampa.mycloudgallery.core.database.dao.TimelineIndexDao
 import dev.pampa.mycloudgallery.core.database.dao.VersionDao
 import dev.pampa.mycloudgallery.core.database.dao.VisualSignatureDao
 import dev.pampa.mycloudgallery.core.database.dao.WorkStateDao
+import dev.pampa.mycloudgallery.core.database.entity.AiOwnHeadEntity
+import dev.pampa.mycloudgallery.core.database.entity.AiOwnLiveEntity
+import dev.pampa.mycloudgallery.core.database.entity.AiOwnSegmentEntity
+import dev.pampa.mycloudgallery.core.database.entity.AiPendingPublishEntity
+import dev.pampa.mycloudgallery.core.database.entity.AiReplicaAppliedEntity
+import dev.pampa.mycloudgallery.core.database.entity.AiReplicaDirtyEntity
+import dev.pampa.mycloudgallery.core.database.entity.AiReplicaEntryEntity
+import dev.pampa.mycloudgallery.core.database.entity.AiReplicaHeadEntity
+import dev.pampa.mycloudgallery.core.database.entity.AiReplicaSegmentEntity
+import dev.pampa.mycloudgallery.core.database.entity.AiTextEntity
+import dev.pampa.mycloudgallery.core.database.entity.AiTextFtsEntity
+import dev.pampa.mycloudgallery.core.database.entity.AiVectorEntity
+import dev.pampa.mycloudgallery.core.database.entity.AiVocabularyEntity
 import dev.pampa.mycloudgallery.core.database.entity.AlbumEntity
 import dev.pampa.mycloudgallery.core.database.entity.AlbumItemEntity
 import dev.pampa.mycloudgallery.core.database.entity.BackupItemEntity
@@ -69,6 +87,7 @@ import dev.pampa.mycloudgallery.core.database.entity.NasScanStateEntity
 import dev.pampa.mycloudgallery.core.database.entity.NasShareEntity
 import dev.pampa.mycloudgallery.core.database.entity.NasTrashEntryEntity
 import dev.pampa.mycloudgallery.core.database.entity.PendingTaskEntity
+import dev.pampa.mycloudgallery.core.database.entity.SearchHistoryEntity
 import dev.pampa.mycloudgallery.core.database.entity.ReplicaBlobEntity
 import dev.pampa.mycloudgallery.core.database.entity.ReplicaDirtyEntity
 import dev.pampa.mycloudgallery.core.database.entity.ReplicaPackEntity
@@ -138,6 +157,22 @@ import dev.pampa.mycloudgallery.core.database.entity.WorkStateEntity
     IncomingItemEntity::class,
     // v4, P14 (prima del rilascio della v4): le correzioni solo nell'app (Q6 (a))
     MetadataCorrectionEntity::class,
+    // v5 (Fase 6, D37): l'indice locale dei dati AI per chiave di contenuto (vettori, testo con FTS4, vocabolario), la cronologia della
+    // ricerca e le tabelle `ai_*` dell'indice condiviso (pubblicazione e replica della testa `ai`). Nessuna punta a `media`.
+    AiVectorEntity::class,
+    AiTextEntity::class,
+    AiTextFtsEntity::class,
+    AiVocabularyEntity::class,
+    SearchHistoryEntity::class,
+    AiPendingPublishEntity::class,
+    AiOwnHeadEntity::class,
+    AiOwnSegmentEntity::class,
+    AiOwnLiveEntity::class,
+    AiReplicaHeadEntity::class,
+    AiReplicaSegmentEntity::class,
+    AiReplicaEntryEntity::class,
+    AiReplicaAppliedEntity::class,
+    AiReplicaDirtyEntity::class,
   ],
   version = GalleryDatabase.VERSION,
   exportSchema = true,
@@ -206,12 +241,24 @@ abstract class GalleryDatabase : RoomDatabase() {
 
   abstract fun metadataCorrectionDao(): MetadataCorrectionDao
 
+  // --- v5 (Fase 6) ---
+
+  abstract fun cellContentDao(): CellContentDao
+
+  abstract fun aiIndexDao(): AiIndexDao
+
+  abstract fun searchHistoryDao(): SearchHistoryDao
+
+  abstract fun aiPublishDao(): AiPublishDao
+
+  abstract fun aiReplicaDao(): AiReplicaDao
+
   companion object {
     /** Nome del file del database nella cartella privata dell'app. */
     const val NAME: String = "gallery.db"
 
     /** Versione dello schema. Alzarla richiede una migrazione in [GalleryMigrations] (mai distruttiva). */
-    const val VERSION: Int = 4
+    const val VERSION: Int = 5
 
     /**
      * Il database con tutte le migrazioni. **Mai** `fallbackToDestructiveMigration`: una migrazione

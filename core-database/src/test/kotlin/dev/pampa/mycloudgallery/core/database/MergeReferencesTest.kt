@@ -26,6 +26,9 @@ class MergeReferencesTest {
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' " +
           "AND name NOT IN ('android_metadata', 'room_master_table')",
       ).use { buildList { while (it.moveToNext()) add(it.getString(0)) } }
+        // Le tabelle d'appoggio che SQLite crea per l'FTS4 (`ai_text_fts_content`, `_segments`, `_segdir`, `_docsize`, `_stat`) non sono
+        // tabelle dello schema: le classifica la tabella virtuale `ai_text_fts` (v5).
+        .filterNot { it.startsWith("ai_text_fts_") }
 
       val references = tables.flatMap { table ->
         sql.query("PRAGMA foreign_key_list(`$table`)").use { cursor ->
@@ -70,6 +73,15 @@ class MergeReferencesTest {
         "free_space_item.version_id",
       )
       assertThat(MediaCatalog.TABLES_WITHOUT_MEDIA_IDS).containsAtLeast("free_space_run", "incoming_item", "nas_copy_mismatch")
+      // Schema v5 (Fase 6, D37): nessuna tabella nuova punta a `media` (tutte per chiave di contenuto): stanno fra quelle senza id di
+      // media, e nessuna colonna `ai_*`/`search_*` e' fra i riferimenti da unire o rinominare.
+      val v5 = setOf(
+        "ai_vector", "ai_text", "ai_text_fts", "ai_vocabulary", "search_history", "ai_pending_publish", "ai_own_head", "ai_own_segment",
+        "ai_own_live", "ai_replica_head", "ai_replica_segment", "ai_replica_entry", "ai_replica_applied", "ai_replica_dirty",
+      )
+      assertThat(MediaCatalog.TABLES_WITHOUT_MEDIA_IDS).containsAtLeastElementsIn(v5)
+      assertThat(tables).containsAtLeastElementsIn(v5)
+      assertThat((MediaCatalog.MEDIA_REFERENCES + MediaCatalog.VERSION_REFERENCES).filter { it.substringBefore('.') in v5 }).isEmpty()
       assertThat(tables).containsAtLeastElementsIn(MediaCatalog.TABLES_WITHOUT_MEDIA_IDS)
       assertThat(tables).containsAtLeastElementsIn(MediaCatalog.TABLES_WITH_INDEX_IDS)
       assertThat(MediaCatalog.TABLES_WITHOUT_MEDIA_IDS.intersect(MediaCatalog.TABLES_WITH_INDEX_IDS)).isEmpty()

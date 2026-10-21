@@ -77,6 +77,10 @@ interface MediaDao {
     now: Long,
   )
 
+  /** Fase 6 (P1): solo i bit di `cell_flags` che non si ricalcolano dalle regole (`MediaCatalog.setDerivedFlags`). */
+  @Query("UPDATE media SET cell_flags = :cellFlags, updated_at = :now WHERE media_id = :mediaId")
+  suspend fun setCellFlags(mediaId: String, cellFlags: Int, now: Long)
+
   @Query("UPDATE media SET kind = :kind, updated_at = :now WHERE media_id = :mediaId")
   suspend fun setKind(mediaId: String, kind: String, now: Long)
 

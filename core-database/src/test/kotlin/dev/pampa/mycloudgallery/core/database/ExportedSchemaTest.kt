@@ -6,10 +6,12 @@ import android.database.sqlite.SQLiteDatabase
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.model.AccountId
 import dev.pampa.mycloudgallery.core.model.AlbumId
 import dev.pampa.mycloudgallery.core.model.CaptureTimeSource
 import dev.pampa.mycloudgallery.core.model.CellFlags
+import dev.pampa.mycloudgallery.core.model.ContentKey
 import dev.pampa.mycloudgallery.core.model.FreezeReason
 import dev.pampa.mycloudgallery.core.model.Location
 import dev.pampa.mycloudgallery.core.model.LocationState
@@ -96,6 +98,93 @@ class ExportedSchemaTest {
     }
   }
 
+  /**
+   * Lo schema **migrato** (da ogni versione esportata) e' identico a quello che Room crea da zero: tabelle, indici, tabelle FTS4 e
+   * i loro trigger (Room valida colonne e indici, **non** i trigger: li confronta questo test, con il testo di `sqlite_master`).
+   */
+  @Test
+  fun loSchemaMigratoCoincideConQuelloCheRoomCreaDaZero() {
+    context.deleteDatabase("da-room-zero.db")
+    val fresh = GalleryDatabase.build(context, "da-room-zero.db")
+    val expected = try {
+      schemaOf(fresh.openHelper.readableDatabase.query(SCHEMA_SQL))
+    } finally {
+      fresh.close()
+    }
+    for (version in exportedVersions().filter { it < GalleryDatabase.VERSION }) {
+      val name = "schema-migrato-da-v$version.db"
+      createFromSchema(version, name) { SchemaSeeds.seed(version, it) }
+      val migrated = GalleryDatabase.build(context, name)
+      try {
+        assertWithMessage("Migrazione dalla v$version").that(schemaOf(migrated.openHelper.writableDatabase.query(SCHEMA_SQL))).isEqualTo(expected)
+      } finally {
+        migrated.close()
+      }
+    }
+  }
+
+  /**
+   * 4 -> 5 non distrugge **mai** dati: ogni riga di ogni tabella della v4 (con `seedV4`) e' identica dopo la migrazione, colonna per
+   * colonna, e le tabelle nuove nascono vuote (le tabelle FTS4 comprese).
+   */
+  @Test
+  fun laMigrazioneDalla4NonCambiaNessunaRigaEsistente() {
+    val name = "migrazione-4-5-righe.db"
+    val file = createFromSchema(4, name) { SchemaSeeds.seed(4, it) }
+    val before = SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY).use { dumpOf(it, userTables(it)) }
+    assertThat(before.getValue("media")).isNotEmpty()
+    assertThat(before.getValue("backup_item")).isNotEmpty()
+
+    val database = GalleryDatabase.build(context, name)
+    try {
+      val sql = database.openHelper.writableDatabase
+      assertThat(dumpOf(sql, before.keys)).isEqualTo(before)
+      sql.query("PRAGMA foreign_key_check").use { assertThat(it.count).isEqualTo(0) }
+      val added = userTables(sql) - before.keys
+      assertThat(added).containsAtLeast(
+        "ai_vector", "ai_text", "ai_text_fts", "ai_vocabulary", "search_history", "ai_pending_publish", "ai_own_head", "ai_own_segment",
+        "ai_own_live", "ai_replica_head", "ai_replica_segment", "ai_replica_entry", "ai_replica_applied", "ai_replica_dirty",
+      )
+      added.forEach { table -> sql.query("SELECT COUNT(*) FROM `$table`").use { assertThat(it.moveToFirst() && it.getInt(0) == 0).isTrue() } }
+    } finally {
+      database.close()
+    }
+  }
+
+  private fun userTables(db: SQLiteDatabase): Set<String> = db.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '%\\_fts\\_%' ESCAPE '\\' " +
+      "AND name NOT IN ('android_metadata', 'room_master_table') ORDER BY name",
+    null,
+  ).use { c -> buildSet { while (c.moveToNext()) add(c.getString(0)) } }
+
+  private fun userTables(db: androidx.sqlite.db.SupportSQLiteDatabase): Set<String> = db.query(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '%\\_fts\\_%' ESCAPE '\\' " +
+      "AND name NOT IN ('android_metadata', 'room_master_table') ORDER BY name",
+  ).use { c -> buildSet { while (c.moveToNext()) add(c.getString(0)) } }
+
+  private fun dumpOf(db: SQLiteDatabase, tables: Collection<String>): Map<String, List<String>> =
+    tables.associateWith { table -> rowsOf(db.rawQuery("SELECT * FROM `$table`", null)) }
+
+  private fun dumpOf(db: androidx.sqlite.db.SupportSQLiteDatabase, tables: Collection<String>): Map<String, List<String>> =
+    tables.associateWith { table -> rowsOf(db.query("SELECT * FROM `$table`")) }
+
+  /** Ogni riga come testo (i blob in esadecimale), in ordine di lettura: una riga cambiata o persa cambia il testo. */
+  private fun rowsOf(cursor: Cursor): List<String> = cursor.use { c ->
+    buildList {
+      while (c.moveToNext()) {
+        add(
+          (0 until c.columnCount).joinToString("|") { i ->
+            when (c.getType(i)) {
+              Cursor.FIELD_TYPE_NULL -> "null"
+              Cursor.FIELD_TYPE_BLOB -> c.getBlob(i).joinToString("") { "%02x".format(it) }
+              else -> c.getString(i)
+            }
+          },
+        )
+      }
+    }.sorted()
+  }
+
   /** Un database di una versione futura (app tornata indietro) non si apre e non viene cancellato. */
   @Test
   fun unDatabaseDiUnaVersioneFuturaNonVieneMaiCancellato() {
@@ -173,9 +262,16 @@ class ExportedSchemaTest {
           val entity = entities.getJSONObject(i)
           val table = entity.getString("tableName")
           db.execSQL(entity.getString("createSql").replace(TABLE_PLACEHOLDER, table))
-          val indices = entity.optJSONArray("indices") ?: continue
-          for (j in 0 until indices.length()) {
-            db.execSQL(indices.getJSONObject(j).getString("createSql").replace(TABLE_PLACEHOLDER, table))
+          val indices = entity.optJSONArray("indices")
+          if (indices != null) {
+            for (j in 0 until indices.length()) {
+              db.execSQL(indices.getJSONObject(j).getString("createSql").replace(TABLE_PLACEHOLDER, table))
+            }
+          }
+          // v5: le tabelle FTS4 a contenuto esterno portano i trigger che le tengono allineate (Room li crea alla creazione).
+          val triggers = entity.optJSONArray("contentSyncTriggers")
+          if (triggers != null) {
+            for (j in 0 until triggers.length()) db.execSQL(triggers.getString(j))
           }
         }
         schema.optJSONArray("views")?.let { views ->
@@ -241,7 +337,46 @@ object SchemaSeeds {
     2 -> seedV2(db)
     3 -> seedV3(db)
     4 -> seedV4(db)
+    5 -> seedV5(db)
     else -> error("Manca il seed della versione $version dello schema (vedi SchemaSeeds).")
+  }
+
+  // --- v5 (Fase 6) ---
+  private const val CONTENT_KEY = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+  const val SPACE_CODE = "embeddinggemma2_float_v1"
+
+  /**
+   * La v5: le righe della v4 piu' una riga in ogni tabella nuova (vettore, testo con l'FTS4 e il vocabolario, cronologia, e le nove
+   * tabelle `ai_*` dell'indice condiviso), con i codici scritti a mano. Si apre senza migrazioni: prova che le tabelle nuove
+   * accettano tutti i loro campi.
+   */
+  private fun seedV5(db: SQLiteDatabase) {
+    seedV4(db)
+    db.execSQL(
+      "INSERT INTO ai_vector (content_key, space, recipe, frame, source, instant_ms, byte_offset, byte_length, crc, created_at) VALUES " +
+        "('$CONTENT_KEY', '$SPACE_CODE', 1, 0, 'analysis', NULL, 0, 1536, 4294967295, $T0)",
+    )
+    db.execSQL(
+      "INSERT INTO ai_text (text_id, content_key, recipe, engine, source, text, lines, chars, layout, created_at) VALUES " +
+        "(1, '$CONTENT_KEY', 1, 'mlkit_v2_latin', 'analysis', 'scontrino esselunga totale 12 euro', 3, 40, X'0102', $T0)",
+    )
+    db.execSQL("INSERT INTO ai_vocabulary (word, docs) VALUES ('esselunga', 1), ('scontrino', 1)")
+    db.execSQL("INSERT INTO search_history (id, text, chips) VALUES (1, 'scontrino esselunga', 'Documenti\n2025')")
+    db.execSQL(
+      "INSERT INTO ai_pending_publish (id, share, state, cls, content_key, recipe, body, digest) VALUES " +
+        "(1, 'alessio', 'held', 7, '$CONTENT_KEY', 1, X'0102', '$SEGMENT')",
+    )
+    db.execSQL("INSERT INTO ai_own_head (share, version, head_hash, published_at) VALUES ('alessio', 2, '$SEGMENT', $T0)")
+    db.execSQL("INSERT INTO ai_own_segment (share, hash, cls, size, entries) VALUES ('alessio', '$SEGMENT', 7, 4096, 1)")
+    db.execSQL("INSERT INTO ai_own_live (share, cls, content_key, recipe, digest, segment) VALUES ('alessio', 7, '$CONTENT_KEY', 1, '$SEGMENT', '$SEGMENT')")
+    db.execSQL("INSERT INTO ai_replica_head (share, device, version, content_hash, registry_version, created_at) VALUES ('alessio', 'tablet', 3, '$SEGMENT', 9, $T0)")
+    db.execSQL("INSERT INTO ai_replica_segment (share, device, hash, cls, size, state, entries) VALUES ('alessio', 'tablet', '$SEGMENT', 8, 2048, 'applied', 1)")
+    db.execSQL(
+      "INSERT INTO ai_replica_entry (share, device, segment, cls, content_key, recipe, digest, body) VALUES " +
+        "('alessio', 'tablet', '$SEGMENT', 8, '$CONTENT_KEY', 1, '$RECORD_KEY', X'0A0B')",
+    )
+    db.execSQL("INSERT INTO ai_replica_applied (share, cls, content_key, device, recipe, digest) VALUES ('alessio', 8, '$CONTENT_KEY', 'tablet', 1, '$RECORD_KEY')")
+    db.execSQL("INSERT INTO ai_replica_dirty (share, cls, content_key) VALUES ('alessio', 8, '$CONTENT_KEY')")
   }
 
   // --- v4 (Fase 5) ---
@@ -647,6 +782,43 @@ object SchemaSeeds {
       assertThat(database.incomingDao().get(1)!!.backupItemId).isEqualTo(BACKUP_ITEM_ID)
       // Un problema che marca la cella su un media al sicuro non vale: lo toglie il primo ricalcolo (sotto).
       assertThat(CellFlags.has(row.cellFlags, CellFlags.BACKUP_PROBLEM)).isFalse()
+    }
+
+    // --- v5 (Fase 6) ---
+    // Il media del seed non ha il bit DOCUMENT in nessuna versione di partenza: lo accende solo `setDerivedFlags`.
+    assertThat(CellFlags.has(row.cellFlags, CellFlags.DOCUMENT)).isFalse()
+    val key = ContentKey(CONTENT_KEY)
+    val ai = catalog.aiIndex
+    if (fromVersion < 5) {
+      // Le tabelle nuove nascono vuote; la tabella `embedding` della v1 resta com'era (superata, D23).
+      assertThat(ai.countVectorKeys()).isEqualTo(0)
+      assertThat(ai.countTexts()).isEqualTo(0)
+      assertThat(ai.vocabularySize()).isEqualTo(0)
+      assertThat(ai.searchHistory()).isEmpty()
+      assertThat(ai.textMatches(listOf(listOf("scontrino"))).hits).isEmpty()
+      assertThat(database.aiPublishDao().count("held")).isEqualTo(0)
+      assertThat(database.aiPublishDao().shares()).isEmpty()
+      assertThat(database.aiReplicaDao().shares()).isEmpty()
+    } else {
+      val vector = ai.vectors(listOf(key)).getValue(key).single()
+      assertThat(vector.byteLength).isEqualTo(1536)
+      assertThat(vector.crc).isEqualTo(4_294_967_295L)
+      assertThat(ai.text(key)!!.text).isEqualTo("scontrino esselunga totale 12 euro")
+      assertThat(ai.text(key)!!.layout!!.toList()).containsExactly(1.toByte(), 2.toByte()).inOrder()
+      // L'indice FTS4 e' allineato dai trigger che il seed ha creato come Room.
+      assertThat(ai.textMatches(listOf(listOf("esselunga"))).all).containsExactly(key)
+      assertThat(ai.wordCounts(listOf("esselunga", "scontrino"))).containsExactly("esselunga", 1, "scontrino", 1)
+      assertThat(ai.searchHistory().single().chipLabels).containsExactly("Documenti", "2025").inOrder()
+      assertThat(database.aiPublishDao().rows("alessio", "held", 10).single().cls).isEqualTo(7)
+      assertThat(database.aiPublishDao().ownHead("alessio")!!.version).isEqualTo(2)
+      assertThat(database.aiPublishDao().ownSegments("alessio").single().entries).isEqualTo(1)
+      assertThat(database.aiPublishDao().ownLive("alessio", 7, listOf(CONTENT_KEY)).single().segment).isEqualTo(SEGMENT)
+      assertThat(database.aiReplicaDao().heads("alessio").single().registryVersion).isEqualTo(9)
+      assertThat(database.aiReplicaDao().segments("alessio", "tablet").single().state).isEqualTo("applied")
+      assertThat(database.aiReplicaDao().candidates("alessio", 8, listOf(CONTENT_KEY)).single().device).isEqualTo("tablet")
+      assertThat(database.aiReplicaDao().body("alessio", "tablet", SEGMENT, 8, CONTENT_KEY)!!.toList()).containsExactly(10.toByte(), 11.toByte()).inOrder()
+      assertThat(database.aiReplicaDao().allApplied("alessio").single().device).isEqualTo("tablet")
+      assertThat(database.aiReplicaDao().dirty("alessio").single().contentKey).isEqualTo(CONTENT_KEY)
     }
 
     // I derivati scritti dalla migrazione (o dal seed) sono quelli che il catalogo calcola: ricalcolarli

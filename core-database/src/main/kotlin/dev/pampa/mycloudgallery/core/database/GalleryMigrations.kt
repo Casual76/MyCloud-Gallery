@@ -30,7 +30,7 @@ import java.time.ZoneId
  */
 object GalleryMigrations {
 
-  val ALL: Array<Migration> get() = arrayOf(migration1To2(), MIGRATION_2_3, MIGRATION_3_4)
+  val ALL: Array<Migration> get() = arrayOf(migration1To2(), MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
 
   /** [zone]: il fuso del telefono adesso, per il giorno provvisorio dei media senza data letta. */
   fun migration1To2(zone: () -> ZoneId = ZoneId::systemDefault): Migration = Migration1To2(zone)
@@ -40,6 +40,9 @@ object GalleryMigrations {
 
   /** v3 -> v4 (Fase 5): vedi [Migration3To4]. */
   val MIGRATION_3_4: Migration = Migration3To4
+
+  /** v4 -> v5 (Fase 6): vedi [Migration4To5]. */
+  val MIGRATION_4_5: Migration = Migration4To5
 }
 
 /**

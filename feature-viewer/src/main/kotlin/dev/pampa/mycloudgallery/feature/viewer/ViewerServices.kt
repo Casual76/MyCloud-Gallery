@@ -38,6 +38,8 @@ import dev.pampa.mycloudgallery.feature.viewer.menu.NasMediaActions
 import dev.pampa.mycloudgallery.feature.viewer.motion.MotionAnimationSetting
 import dev.pampa.mycloudgallery.feature.viewer.motion.PowerSaving
 import dev.pampa.mycloudgallery.feature.viewer.video.BytesMotionVideoLocator
+import dev.pampa.mycloudgallery.feature.viewer.menu.NoViewerSimilarSearch
+import dev.pampa.mycloudgallery.feature.viewer.menu.ViewerSimilarSearch
 import dev.pampa.mycloudgallery.feature.viewer.video.MotionVideoLocator
 import dev.pampa.mycloudgallery.feature.viewer.video.NasMotionSource
 import dev.pampa.mycloudgallery.feature.viewer.video.NasVideoSource
@@ -90,6 +92,8 @@ import kotlinx.coroutines.withContext
  * @property powerSaving il risparmio energetico (D50): null = quello di sistema (`PowerManager`); nei test lo sceglie il test.
  * @property nasMotion la parte video delle foto in movimento solo-NAS (Fase 6, P14, D51): letta a intervalli e tenuta in `cacheDir/motion/`.
  *   Senza, una foto in movimento del NAS resta ferma e senza badge (D13). `:app` lo costruisce sopra [nasVideo] e la cartella di cache (P11).
+ * @property similarSearch la voce "Trova simili" del menu ⋮ (Fase 6, P8, D30, E-Q14): presente, spiegata (media senza vettore) o assente (nascosti). Di
+ *   serie nessuna ricerca, quindi nessuna voce (D13); `:app` la lega al motore di ricerca (P11).
  * @property dispatchers i thread di lavoro (letture di dettagli ed EXIF): nei test sono uno solo, senza attese.
  */
 @Immutable
@@ -121,6 +125,7 @@ class ViewerServices(
   val motionAnimation: MotionAnimationSetting = MotionAnimationSetting.On,
   val powerSaving: PowerSaving? = null,
   val nasMotion: NasMotionSource? = null,
+  val similarSearch: ViewerSimilarSearch = NoViewerSimilarSearch,
 )
 
 /** Decodifica un'immagine animata (GIF, WebP animato) in un `Drawable` che si anima da solo (E-M11). */

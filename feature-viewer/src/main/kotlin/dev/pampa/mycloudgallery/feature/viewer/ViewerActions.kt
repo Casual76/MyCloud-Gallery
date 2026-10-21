@@ -84,6 +84,7 @@ internal class ViewerActionHandlers(
  * @param shareWithoutLocation "Rimuovi la posizione" e' acceso: la voce Condividi lo dice ("Condividi senza posizione").
  * @param onPlayMotion la voce "Riproduci il movimento" di una foto in movimento (Fase 6, D51): null = la pagina non e' una foto in
  *   movimento o il suo video non si riproduce (E-M16).
+ * @param similarActions la voce "Trova simili" (Fase 6, P8, D30): vuota se il media e' nascosto o il viewer non ha la ricerca; vedi `similarMenuEntries`.
  */
 internal fun viewerMenuEntries(
   resources: Resources,
@@ -96,6 +97,7 @@ internal fun viewerMenuEntries(
   backupActions: List<GalleryMenuEntry> = emptyList(),
   shareWithoutLocation: Boolean = false,
   onPlayMotion: (() -> Unit)? = null,
+  similarActions: List<GalleryMenuEntry> = emptyList(),
 ): List<GalleryMenuEntry> {
   val groups = mutableListOf<List<GalleryMenuEntry>>()
   groups.add(buildList<GalleryMenuEntry> {
@@ -134,6 +136,7 @@ internal fun viewerMenuEntries(
     }
     addAll(nasActions)
     addAll(backupActions)
+    addAll(similarActions)
     add(GalleryMenuEntry.Item(resources.getString(R.string.viewer_action_info), handlers.onInfo, Icons.Rounded.Info))
   })
   groups.add(buildList<GalleryMenuEntry> {

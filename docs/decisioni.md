@@ -3795,3 +3795,47 @@ ridondante con le letture per posizione). Le sopravvissute non equivalenti hanno
   non raggiunto. Il comportamento di `HttpURLConnection` su Android (OkHttp: `Connection: close`, `Accept-Encoding: identity`, redirezioni
   a mano, `disconnect()`) e il tempo di verifica di 370 MiB si provano sul dispositivo (F46–F49, P4).
 - Una copia propria sul NAS con la dimensione sbagliata (modificata da fuori) resta `AlreadyThere`: gli altri la scartano per dimensione.
+
+## Fase 6 P6: motore di ricerca locale (21/10)
+
+Il pacchetto P6 (`docs/fase6-progetto.md` §2.4, D23, D24, D27–D31, D35, D48; riga P6 del §4.4), tutto in `core-search`: `index/`
+(indice locale), `engine/` (motore, suggerimenti, vista viva), `coverage/`, `similar/`, `history/`. Le scelte che il codice ha imposto:
+
+- **Registro delle origini** (richieste di P1 e P2). `ai_vector` non sa dire chi ha dato un vettore, quindi le righe dei vettori (posizione
+  nel file, ricetta) e l'origine di ogni dato (questo dispositivo o il vincitore di una share) stanno in `search/ledger.log`, un giornale
+  con cornici a CRC e `force`. `withdraw`, `forgetDevice` e `forgetShare` tolgono solo le origini di replica: un dato calcolato qui resta.
+  Per chiave vale la ricetta piu' alta, poi questo dispositivo, poi share e dispositivo minori. `ai_vector` resta vuota (P1/P11: toglierla
+  in una versione futura o darle una colonna dell'origine); `ai_text` (FTS4) segue sempre l'origine scelta. Ordine delle scritture: file
+  dei vettori, testo nel database, registro (conferma). Il testo di ogni origine e' anche nel registro, per tornare a quello locale senza
+  ricalcolo.
+- **File**: `vectors-<spazio>-<generazione>.bin` little-endian (copia dei float16 senza scambi), un CRC per record verificato alla prima
+  lettura nel processo; `coarse-<spazio>.bin` e' una cache (CRC, generazione) che si ricostruisce se manca o e' rovinata. Un record rovinato
+  si toglie e si chiede di riaverlo (`IndexRepair`: la replica riconsegna, il calcolo rifa' perche' `AiResults.saved` non lo dice piu'); un
+  registro rotto in mezzo chiede di riavere tutto. Compattazione oltre il 20% di record morti in una generazione nuova (`maintain`).
+- **Soglia relativa**: fino a 4.096 celle con vettore il coseno e' esatto per tutte; oltre, mediana e MAD vengono dal coseno **esatto** di un
+  campione fisso di 8.192 celle (la prima passata int8 a 256 dimensioni ha una scala sua e le soglie sono sul coseno vero: deviazione
+  voluta dal §2.4, che le prendeva dalla prima passata). Seconda passata sulle prime 1.000, poi su blocchi doppi solo finche' il blocco e'
+  fitto di sicuri (almeno l'1%): le ricerche con migliaia di risultati veri li trovano tutti, le code del rumore non fanno rileggere la
+  Libreria. Oltre 8.192 celle un "meno probabile" isolato nel rumore puo' mancare (D24: "esatto quanto basta").
+- **Testo**: parole esatte = sicuro; con un refuso (vocabolario a cancellazioni: distanza 1 da 4 a 7 lettere, 2 da 8) solo meno probabile;
+  frasi fra virgolette obbligatorie; punteggio **per membro** del gruppo (il riferimento unisce i testi dei membri: diverso solo per gruppi
+  con piu' testi). "Ho cercato…" si dice solo se la parola corretta e' in un risultato **mostrato**: il vocabolario ha anche i nascosti (il
+  test dei nascosti lo ha trovato).
+- **Nascosti**: candidati = istantanea; filtro finale sulle celle **e sui membri che hanno dato il punteggio** (un membro nascosto non
+  porta il suo contenuto, la sua copertina si rilegge); luoghi solo dall'istantanea; nessuna parola letta nei completamenti; cronologia
+  senza il chip "Simili a".
+- **Contratti** (aggiunte minime): `SearchChip.DateSet(days, label)` e il suo caso in `ChipMatching` (richiesta di P7: "Pasqua" senza anno =
+  ogni Pasqua dal 1900 a quest'anno; `ItalianQueryParser` e la tabella aggiornati). `TextIndex` (sincrono) non e' implementato: l'FTS4 di
+  P1 e' sospendibile; il testo passa da `TextRowStore`.
+
+**Misure** (JVM, PC di sviluppo, condiviso): due passate contro la forza bruta float32 su 100 mila vettori sintetici a gruppi (200 x 10 x 50),
+40 query: **100% dei primi 20 uguali**. Ricerca intera su 100 mila candidati, escluso il vettore della query, dopo 25 query di
+riscaldamento: **17 ms il turno migliore, 23 ms la mediana** (prima passata 5 ms a 4 thread, 8.192 coseni esatti 2 ms). Parita' con
+`InMemorySearchEngine`: 1.000 query su 2.000 celle e 200 su 6.000 con le stesse classi e lo stesso ordine nei due criteri; "Trova simili"
+uguale.
+
+**Da collegare (P11)**: `SearchGraph` con `LocalAiIndex` (cartella `noBackupFilesDir/search/`, `open()` all'avvio, `maintain()` in
+`LibraryMaintenanceWorker`), `CellKeys` (porta `CellKeySource` sopra `cellContentKeys`/`cellContentKeysOf`, `invalidate` dai `CatalogChange`),
+`TextRowStore` e `HistoryStore` sopra `AiIndexCatalog`, `IndexRepair` verso la replica e il calcolo, `AiReplicaSink` di P2 come adattatore
+su `applyReplica`/`withdraw`/`forgetDevice`/`forgetShare`, `AiResults` di P5 = `LocalAiIndex`, `QueryEmbedding` sopra il 270M,
+`CoverageReasons`, `PlaceLookup`, `SearchIndexCounters` in Diagnostica (`SEARCH_INDEX_REBUILT`), `LiveResults.follow` per il viewer.

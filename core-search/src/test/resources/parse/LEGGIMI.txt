@@ -11,6 +11,7 @@ Una riga:  query => chip => contenuto => parole => testo esatto => correzioni
 I chip si separano con " ; ", nell'ordine in cui compaiono nella query:
   D aaaa-mm-gg..aaaa-mm-gg etichetta      periodo con l'anno
   Y mm-gg..mm-gg etichetta                 periodo "tutti gli anni" (conta solo mese e giorno)
+  E aaaa-mm-gg..aaaa-mm-gg #n etichetta    insieme di n giorni (festa mobile tutti gli anni: primo e ultimo giorno)
   P etichetta #ids LIVELLO word=parola [alt=etichetta#ids,...]   luogo, regione o paese (con gli omonimi)
   T TIPO etichetta       tipo di media (PHOTO, VIDEO, SCREENSHOT, PANORAMA, MOTION_PHOTO, DOCUMENT)
   S SORGENTE etichetta   sorgente

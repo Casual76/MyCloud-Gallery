@@ -1,11 +1,12 @@
 package dev.pampa.mycloudgallery.core.search.parse
 
+import dev.pampa.mycloudgallery.core.search.contract.SearchChip
 import java.time.LocalDate
 import java.time.YearMonth
 
 // Le regole di calendario (P7, §2.5): mesi, stagioni meteorologiche e feste. Senza anno valgono "tutti gli anni"; con l'anno (o
-// "scorso", "quest'anno") un periodo preciso. Pasqua e Pasquetta cambiano ogni anno: senza anno si prende l'ultima gia' iniziata
-// (il contratto `DateRange` non sa dire "tutti gli anni" per una data mobile: vedi REPORT.md).
+// "scorso", "quest'anno") un periodo preciso. Pasqua e Pasquetta cambiano ogni anno: senza anno sono tutte (un `SearchChip.DateSet`
+// con il giorno di ogni anno, aggiunto da P6), con "scorsa" l'ultima gia' passata.
 
 internal class CalendarRules(private val c: RuleContext) {
   private val today = c.today
@@ -169,9 +170,12 @@ internal class CalendarRules(private val c: RuleContext) {
     val (year, last, extra) = suffix(i + base)
     var y = year ?: today.year
     fun day(yy: Int) = ItalianCalendar.easter(yy).plusDays(shift)
-    if (year == null) {
-      if (last) while (!day(y).isBefore(today)) y-- else while (day(y).isAfter(today)) y--
+    if (year == null && !last) {
+      // Senza anno: tutte le Pasque (P6, richiesta di P7), dal primo anno delle feste mobili fino a quella di quest'anno.
+      val days = (SearchChip.DateSet.FIRST_YEAR..today.year).mapTo(LinkedHashSet()) { day(it) }
+      return RuleMatch(base + extra, SearchChip.DateSet(days, "$name (tutti gli anni)"))
     }
+    if (year == null) while (!day(y).isBefore(today)) y--
     val d = day(y)
     return RuleMatch(base + extra, c.dayChip(d, "$name $y (${d.dayOfMonth} ${ItalianCalendar.MONTHS[d.monthValue - 1]})"))
   }

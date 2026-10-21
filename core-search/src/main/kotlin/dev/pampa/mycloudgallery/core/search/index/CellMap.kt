@@ -140,6 +140,9 @@ internal class CellMap(
   companion object {
     /** Costruisce la mappa (sotto `index.lock` in lettura). */
     fun build(snapshot: TimelineSnapshot, keys: CellKeys, index: LocalAiIndex, contentsFor: Array<CellContent?>? = null): CellMap {
+      // Le versioni si leggono prima del contenuto: se cambiano durante la costruzione, la mappa risulta vecchia e si rifa'.
+      val keysVersion = keys.version
+      val indexVersion = index.version.value
       val n = snapshot.size
       val contents = contentsFor ?: Array(n) { keys[snapshot.idAt(it)] }
       val start = IntArray(n + 1)
@@ -167,7 +170,7 @@ internal class CellMap(
         }
       }
       start[n] = count
-      return CellMap(snapshot, index.version.value, keys.version, contents, start, slots, member)
+      return CellMap(snapshot, indexVersion, keysVersion, contents, start, slots, member)
     }
 
     /** Le versioni di ogni membro: la cella stessa, poi gli altri membri del gruppo (P1: la corrente per prima). */

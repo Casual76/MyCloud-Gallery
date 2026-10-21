@@ -273,16 +273,17 @@ class LocalAiIndex(
 
   private suspend fun openLocked() {
     dir.mkdirs()
-    vectorFile?.close()
     val report = ledger.open()
-    vectorFile = VectorFile(vectorFileFor(ledger.generation), dimension)
-    deleteOtherGenerations()
     val coarse = CoarseFile.read(coarseFile(), ledger.generation)
     val byOffset = HashMap<Long, Int>((coarse?.size ?: 0) * 2)
     coarse?.offsets?.forEachIndexed { i, off -> byOffset[off] = i }
     val bad = ArrayList<LedgerOp>()
     val lostKeys = HashSet<ContentKey>()
     lock.write {
+      // File e slot cambiano insieme sotto il lucchetto in scrittura: nessuna ricerca legge posizioni vecchie nel file nuovo
+      // (compattazione con Cerca aperta).
+      vectorFile?.close()
+      vectorFile = VectorFile(vectorFileFor(ledger.generation), dimension)
       resetSlots()
       for ((key, holders) in ledger.vectors) {
         for ((origin, h) in holders.entries.sortedWith(PREFERENCE)) {
@@ -298,6 +299,7 @@ class LocalAiIndex(
       for ((key, holders) in ledger.texts) best(holders)?.let { (o, h) -> chosenTexts[key] = Chosen(o, h.recipe, IntArray(0), h) }
       changes.value++
     }
+    deleteOtherGenerations()
     if (bad.isNotEmpty()) ledger.commit(bad)
     // Le rimozioni dal database lasciate a meta' da una morte del processo (idempotenti).
     val gone = ledger.dropped.filter { !ledger.texts.containsKey(it) }

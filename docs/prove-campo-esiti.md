@@ -607,3 +607,34 @@ Inoltre, mentre la capsula dice "VPN spenta", offrire i dati mobili non serve: s
 3. **F13**: il sì a installare (e poi togliere) la variante `.bench` e l'APK di test, e lo schermo a 120 Hz.
 4. **Esportazione della Diagnostica** (30 s) se servono i numeri di F3 (tocco dei dischi) e F6a.
 5. **Pulizia** quando avrà finito di guardare: le 10 copie di F11 in `Pictures/MyCloud Gallery`; `mcg-campo/Versioni` e il backup in `test`.
+
+---
+
+# Blocco A, PC (21/10, seconda parte)
+
+| | |
+|---|---|
+| **Quando** | 21/10/2026, 08:15–12:24. Solo dal PC: il telefono non c'era e non è stato usato. |
+| **Dove** | Worktree `C:\VibeCoded Projects\mcg-campo-build` portato a `aded0e2` (`git checkout --detach`: stesso codice di `e5f3c7f` più i documenti; `local.properties` con il solo `sdk.dir`). L'albero principale non l'ho toccato, salvo questo file. Gradle sempre con `--max-workers=2` (copia di `area.ps1` in `build\campo\area2.ps1` del worktree, cambia solo quello), una build alla volta, RAM libera controllata prima di ognuna (minimo 2,45 GB). Uscite in `build\campo\pc2\` del worktree. |
+| **Credenziali** | `nas-it.properties` sistemato dall'utente, non aperto. Nessuna autenticazione rifiutata: il login di prova è stato accettato a ogni corsa. |
+| **Esito in breve** | **Tutto passato.** Suite di `core-nas` verde, anche `t07` e `t12` (le copie fra le due share). **`test-comune/mcg-it` pulita**: i 3 giri del 19/10 sono stati tolti con `test`, e non resta niente da elencare. **F16-PC, F30-PC e F43-PC: 400 interruzioni ciascuna, zero giri con violazioni.** Alla fine `mcg-it` è vuota e tolta su tutte e due le share. |
+
+## P.1 Esiti
+
+| Id | Esito | Misure e note |
+|---|---|---|
+| A.13 suite `core-nas` | **passata** | 08:15–08:24, 8 min 22 s. 18 test: 17 passati, 1 saltato (`t10`, M9 senza consenso), 0 falliti, nessun `Auth`. **`t07`**: copia lato server di 64 MiB nella share in 1,4 s (49 MB/s), **fra le share in 1,7 s (39 MB/s)**, SHA-256 uguale. **`t12`**: spostamento fra share di 64 MiB in 5,3 s (copia lato server 46 MB/s, verifica SHA-256 18 MB/s, pubblicazione 16 ms, sorgente nel cestino 31 ms, fileId conservato nel cestino). Altre misure: 1.500 file creati in 10,8 s, elenco a pagine in 156 ms; file da 64 MiB scritto a 11,0 MB/s, letto a 11,8 MB/s con un flusso e a 18,0 MB/s con quattro. |
+| A.13 pulizia di `test-comune/mcg-it` | **fatta** | Tolti con `test` i 3 giri del 19/10: `20261019-181432-f635fa3d` (182 voci), `20261019-181746-a64a8f3c` (2.439), `20261019-210256-fbc56869` (2.286): **4.907 voci** fra file e cartelle. La suite conta anche le cartelle interne e i file nascosti: per questo il numero è più alto delle 1.854 cartelle e 1.429 file visti dalla scansione del telefono. Poi `mcg-it` è stata tolta da `test` e da `test-comune`. Riepilogo: "sotto mcg-it delle 2 share di prova non resta niente (verificato con 2 account)". **Nessun avanzo senza permesso**: niente da elencare. |
+| F16-PC (A.14) | **passata** | 08:24–10:32 (Gradle 2 h 7 min). **491 giri, 0 con violazioni**, 400 interruzioni: 240 morti del processo, 106 connessioni cadute, 30 sessioni scadute, 24 socket fermi (231 prima della chiamata, 169 con la risposta persa). 1.213 passi (243 elimina, 232 sposta fra share, 183 rinomina, 171 sposta, 144 crea cartella, 86 rinomina solo maiuscole, 66 file creati dal PC, 46 ripristina, 42 elimina subito), 358 riavvii, 7.769 file riletti con SHA-256 (50,2 GiB). Rapporto: `core-nasops/build/chaos/area-report-20261021-062518.txt` del worktree. |
+| F30-PC (A.14) | **passata** | 10:32–11:24 (51 min 51 s). **300 giri, 0 con violazioni**, 400 interruzioni: 206 morti del processo, 90 connessioni cadute, 26 letture del telefono fallite, 24 sessioni scadute, 20 socket fermi, 18 scritture con byte alterati, 10 "NAS pieno", 6 file aperti dal PC. 738 passi, 206 riavvii, 2.492 file riletti (5,1 GiB). Rapporto: `core-backup/build/chaos/backup-area-report-20261021-083303.txt` del worktree. |
+| F43-PC (A.14) | **passata** | 11:24–12:12 (47 min 31 s), `run5b` (solo la fase 5B). **537 giri, 0 con violazioni**, 400 interruzioni: 282 morti del processo, 65 connessioni cadute, 15 sessioni scadute, 13 socket fermi, 11 scritture con byte alterati, 7 letture del telefono fallite, 4 "NAS pieno", 3 file aperti dal PC. 1.877 passi, 328 riavvii, 6.798 file riletti (5,7 GiB). Contatori della 5B: 678 versioni fatte (99 "gone"), 212 scambi, 152 copie del guardiano; "Libera spazio": 636 elementi liberati, 122 rimasti, 31 in dubbio, 30 dialoghi rifiutati. **D-14 non ha bloccato niente**: il banco verifica le sue versioni sotto `mcg-it/<giro>/`, non con il verificatore del manifesto del telefono. Rapporto: `core-backup/build/chaos/backup-area-report-20261021-092459.txt` del worktree. |
+| Pulizia dopo A.14 (suite di nuovo) | **fatta, suite verde** | 12:12–12:24 (11 min 33 s), 0 falliti. Tolti i giri delle tre prove: in `test` 4.889 voci (F16-PC), 3.850 (F30-PC) e 10.543 (F43-PC); in `test-comune` 5.100, 1.147 e 2.487; più il giro della suite. `mcg-it` tolta da tutte e due le share. In questa corsa: copia fra le share a 27 MB/s, spostamento fra share in 5,6 s. |
+
+## P.2 Note
+- **Il secondo account c'è ancora.** Nel file delle credenziali ci sono ancora un secondo account e la sua password, e il NAS lo accetta: `t09` passa ("secondo account: la sua area ok; l'area privata del primo: PermissionDenied") e la pulizia dice "verificato con 2 account". La seconda share ora è quella giusta. Se `test2` doveva essere cancellato, va controllato dalla dashboard del WD.
+- **Nessun difetto nuovo.** Le prove dal PC non hanno trovato violazioni.
+- **Stato lasciato.**
+  - `mcg-it` è vuota e tolta su `test` e su `test-comune`.
+  - Nessun Gradle né banco lanciato da me ancora acceso: c'è solo il demone Gradle di ieri, che non è mio.
+  - Nel worktree solo file sotto `build\` (ignorati da git). Il worktree resta a `aded0e2`, staccato.
+  - Telefono non toccato. Niente commit.

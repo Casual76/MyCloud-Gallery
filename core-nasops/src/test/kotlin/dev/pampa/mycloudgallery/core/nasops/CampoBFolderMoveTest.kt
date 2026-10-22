@@ -22,8 +22,9 @@ import org.junit.Test
 
 /**
  * O-B18 delle prove sul campo (gruppo B): dopo lo spostamento di una cartella intera fra aree la cartella restava, vuota, nell'area di partenza.
- * Il progetto (D24, Q3): la sorgente di ogni file va nel cestino della sua share e la cartella d'origine, svuotata, non resta. La toglie
- * `rmdirIfEmpty` (una richiesta, mai ricorsiva: se e' arrivato un file nuovo il NAS rifiuta e la cartella resta con lui).
+ * Il progetto (D24, Q3) mette nel cestino la sorgente di ogni file; la cartella d'origine, svuotata, li segue: l'esecutore ha un elemento per la
+ * cartella, dopo il suo contenuto, che la toglie con `rmdirIfEmpty` (una richiesta, mai ricorsiva: se e' arrivato un file nuovo il NAS rifiuta e la
+ * cartella resta con lui).
  *
  * Qui, sul NAS finto con l'esecutore vero: la cartella se ne va; un blocco passeggero non la lascia li' per sempre; un blocco che non passa o
  * un file arrivato dal PC non fanno fallire lo spostamento e non tolgono niente; la morte del processo prima di quel passo non cambia l'esito.

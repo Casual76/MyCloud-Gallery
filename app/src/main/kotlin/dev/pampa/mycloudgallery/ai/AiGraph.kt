@@ -26,20 +26,25 @@ import dev.pampa.mycloudgallery.core.backup.contract.PhoneBytes
 import dev.pampa.mycloudgallery.core.database.GalleryDatabase
 import dev.pampa.mycloudgallery.core.database.MediaCatalog
 import dev.pampa.mycloudgallery.core.family.contract.RolesSettings
+import dev.pampa.mycloudgallery.core.index.ai.AiEntry
 import dev.pampa.mycloudgallery.core.index.ai.AiIndexCounters
 import dev.pampa.mycloudgallery.core.index.ai.AiTraffic
+import dev.pampa.mycloudgallery.core.index.contract.FlushReason
 import dev.pampa.mycloudgallery.core.index.contract.VideoFrame
+import dev.pampa.mycloudgallery.core.model.ContentKey
 import dev.pampa.mycloudgallery.core.model.OcrSource
 import dev.pampa.mycloudgallery.core.models.contract.ModelCatalog
 import dev.pampa.mycloudgallery.core.models.contract.ModelFiles
 import dev.pampa.mycloudgallery.core.models.contract.ModelManager
 import dev.pampa.mycloudgallery.core.trust.data.AiClass
 import dev.pampa.mycloudgallery.core.trust.data.DeviceRole
+import dev.pampa.mycloudgallery.core.trust.data.OcrBody
 import dev.pampa.mycloudgallery.nas.NasAiHooks
 import dev.pampa.mycloudgallery.nas.NasAiRuntime
 import dev.pampa.mycloudgallery.nas.NoUnitPriority
 import dev.pampa.mycloudgallery.search.SearchGraph
 import java.io.File
+import java.io.IOException
 import kotlin.time.Duration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -197,6 +202,38 @@ class AiGraph(
     override fun frames(frames: List<VideoFrame>, recipe: AiRecipe): List<ModelImage> = ModelInputs.fromFrames(frames, recipe)
 
     override fun ocr(bytes: ByteArray, source: OcrSource): OcrImage? = ModelInputs.forOcr(bytes, source)
+  }
+
+  /** L'immagine per l'OCR da dei byte (D5): la stessa strada del calcolo, anche per la lettura al volo del viewer (P11b). */
+  fun ocrImage(bytes: ByteArray, source: OcrSource): OcrImage? = inputs.ocr(bytes, source)
+
+  /**
+   * Il testo letto al volo dal viewer (D42, §2.10) segue il percorso normale: **salvato** subito nell'indice locale (e nelle righe per il
+   * testo dal vivo), poi messo nell'outbox `ai` di ogni share che contiene il file (M3: una chiave di un file solo del telefono non va in
+   * nessuna) e pubblicato in coda (`PERIODIC`: al piu' ogni 5 minuti per share; il resto lo fa il giro periodico del NAS). F4-D31: sulle
+   * share vere resta in attesa, come i risultati del calcolo. Mai un errore: il testo e' gia' sullo schermo.
+   */
+  suspend fun keepReadText(key: ContentKey, body: OcrBody) {
+    try {
+      results.saveText(key, body)
+    } catch (e: IOException) {
+      return
+    }
+    val rt = parts.nas() ?: return
+    val staged = ArrayList<String>()
+    for (share in runCatching { parts.shares() }.getOrDefault(emptyList())) {
+      if (key !in rt.content.owned(share, listOf(key))) continue
+      try {
+        rt.publisher.stage(share, listOf(AiEntry.Text(key, body)))
+        staged += share
+      } catch (e: IOException) {
+        // Resta salvato qui: la prossima tappa del calcolo lo rimette nell'outbox senza rileggerlo (`restage`).
+      }
+    }
+    if (staged.isEmpty()) return
+    graphScope.launch {
+      for (share in staged) runCatching { rt.publisher.flush(share, FlushReason.PERIODIC) }
+    }
   }
 
   private val statusFlow = MutableStateFlow<AiStatus>(AiStatus.Off)

@@ -852,6 +852,9 @@ class NasGraph(
   suspend fun flushOutbox() {
     val rt = runtimeFlow.value ?: return
     for (area in rt.areas) runCatching { rt.publisher.flush(area.share, dev.pampa.mycloudgallery.core.index.contract.FlushReason.PERIODIC) }
+    // Fase 6 (P11b): anche cio' che aspetta nell'outbox `ai` (il testo letto al volo dal viewer, che nessuna tappa del calcolo pubblica).
+    val aiPublisher = rt.ai?.publisher ?: return
+    for (area in rt.areas) runCatching { aiPublisher.flush(area.share, dev.pampa.mycloudgallery.core.index.contract.FlushReason.PERIODIC) }
   }
 
   /** "Qualita' delle anteprime" (Impostazioni, E-L6). */

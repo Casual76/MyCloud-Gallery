@@ -100,7 +100,7 @@ class AiStack(
   val similar: SimilarRequests = SimilarRequests(),
 ) {
   /**
-   * Le porte del viewer della ricerca (testo dal vivo, "Trova simili", foto in movimento, ritaglio del soggetto), legate
+   * Le porte del viewer della ricerca (testo dal vivo e lettura al volo, "Trova simili", foto in movimento, ritaglio del soggetto), legate
    * all'avvio sulla galleria. [share] e' dove Copia e Condividi del ritaglio mettono il PNG (la cartella del `FileProvider` che c'e' gia'):
    * senza, il ritaglio c'e' e "Salva come nuova foto" funziona, Copia e Condividi no.
    */
@@ -108,11 +108,23 @@ class AiStack(
     graph: AppGraph,
     gallery: GalleryGraph,
     share: CutoutShareEnv? = null,
+    textTimeoutMs: Long = GatedViewerTextReader.READ_TIMEOUT_MS,
   ): GalleryGraph.SearchViewerHooks {
     val catalog: suspend () -> MediaCatalog? = { gallery.coreIfReady()?.catalog }
     val diag = { code: DiagCode -> graph.events.code(code) }
     val nas = gallery.nas
     val hq = nas?.let { ReplicaHq(it.blobs, it.locations) }
+
+    // Lettura al volo (D42, §2.10): dall'immagine mostrata, solo con la lettura attiva qui.
+    val textReader = GatedViewerTextReader(
+      switch = textSwitch,
+      reader = ai.parts.reader,
+      images = ViewerOcrImages(catalog, ai.buffer, ai.phone, { gallery.nas?.preparer }, { ref -> hq?.bytes(ref) }, { ref -> nas?.imageOrigin?.localFile(ref) }),
+      ocr = ai::ocrImage,
+      keep = ai::keepReadText,
+      recipe = ai.recipe,
+      timeoutMs = textTimeoutMs,
+    )
 
     // Ritaglio del soggetto (D44, D45, D47): la migliore immagine che il dispositivo ha gia', mai uno scaricamento.
     val sources = CutoutSources(context.contentResolver, gallery.intents::uriOf, nas?.imageOrigin, hq)
@@ -120,7 +132,7 @@ class AiStack(
     val files = share?.let { CutoutFiles(it.cache, it.uris) } ?: CutoutShareFiles { null }
     return GalleryGraph.SearchViewerHooks(
       textSource = IndexViewerTextSource(search.mediaText),
-      textReader = GatedViewerTextReader(textSwitch, ai.parts.reader, catalog, ai.buffer),
+      textReader = textReader,
       similarSearch = SearchViewerSimilar(search.keys, similar),
       motionAnimation = dev.pampa.mycloudgallery.feature.viewer.motion.MotionAnimationSetting { personal.motion.value?.motionAnimation?.value ?: true },
       motionTraffic = dev.pampa.mycloudgallery.feature.viewer.video.MotionTraffic { bytes, _ ->

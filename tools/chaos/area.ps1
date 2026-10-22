@@ -23,14 +23,22 @@
                       mcg-it/<giro>/ (il caricamento della 5A non gira). Con -WithUpload il giro fa prima anche il caricamento;
               verify  verifica l'area di prova dal manifesto del telefono (tools\chaos\s25.ps1 -Mode backup), in sola lettura;
               state   verifica DA SOLO uno stato salvato da un giro rosso (core-backup\build\chaos\backup-state-<giro>.txt) con -Manifest <file>.
+    ai      la prova delle interruzioni dello scaricamento e del calcolo AI (Fase 6, P10, docs/fase6-progetto.md par. 5.5), solo sulla JVM, a livelli
+            (-Stage), in due moduli (core-models: scaricamento; core-ai: calcolo), con --max-workers=2 e DOPO aver aspettato 2 GB di RAM libera:
+              jvm     2.000 giri dello scaricamento (NAS finto, server HTTPS di prova) e 2.000 del calcolo (NAS finto, motori finti);
+              smb     600 giri dello scaricamento sul simulatore SMB con la sessione e la lettura vere;
+              mutants i quattro errori introdotti apposta (caricare prima di verificare, accettare un parziale, pubblicare prima di salvare,
+                      salvare dopo aver pubblicato): ognuno deve far diventare rosso il banco con l'invariante giusto;
+              known   le riproduzioni minime dei difetti noti del codice di produzione trovati dal banco (diventano rosse quando si correggono).
+            Il telefono e' un'altra cosa: tools\chaos\s25.ps1 -Mode ai.
 
   Con -DryRun stampa cosa farebbe (variabili e comando) e non lancia niente.
 
   Tutto cio' che tocca il NAS vero resta sotto mcg-it/<giro>/ delle share di prova (test, test-comune, test2). Mai alessio, pampa, NAS, Public.
   La pulizia dell'area la fa NasIntegrationSuiteTest di core-nas al giro dopo (gradlew :core-nas:testDebugUnitTest -PnasIntegration).
 
-.PARAMETER Mode           jvm | run | seed | verify | backup
-.PARAMETER Stage          Per backup: jvm | smb | run | run5b | verify | state (default jvm).
+.PARAMETER Mode           jvm | run | seed | verify | backup | ai
+.PARAMETER Stage          Per backup: jvm | smb | run | run5b | verify | state (default jvm). Per ai: jvm | smb | mutants | known (default jvm).
 .PARAMETER Interruptions  Per run (e backup/run, backup/run5b): le interruzioni da far cadere. Default 400. Per il backup e' anche il TETTO: il valore di
                           backup.rounds del file delle credenziali non lo supera mai (una prova da 20 non diventa per sbaglio quella da 400).
 .PARAMETER Rounds         Per jvm (e backup/jvm, backup/smb): i giri (default 2000; 600 per backup/smb).
@@ -57,8 +65,8 @@
 #>
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory = $true)][ValidateSet("jvm", "run", "seed", "verify", "backup")][string]$Mode,
-  [ValidateSet("jvm", "smb", "run", "run5b", "verify", "state")][string]$Stage = "jvm",
+  [Parameter(Mandatory = $true)][ValidateSet("jvm", "run", "seed", "verify", "backup", "ai")][string]$Mode,
+  [ValidateSet("jvm", "smb", "run", "run5b", "verify", "state", "mutants", "known")][string]$Stage = "jvm",
   [int]$Interruptions = 400,
   [int]$Rounds = 2000,
   [int]$FirstRound = 0,
@@ -86,6 +94,60 @@ if ($Rounds -lt 1 -or $Rounds -gt 1000000) { Fail "-Rounds fuori misura." }
 if ($Files -lt 1 -or $Files -gt 100000) { Fail "-Files fuori misura." }
 if ($TimeoutMinutes -lt 20 -or $TimeoutMinutes -gt 600) { Fail "-TimeoutMinutes fuori misura (20-600)." }
 if ($Run -and $Run -notmatch '^[0-9]{8}-[0-9]{6}-[0-9a-f]{8}$') { Fail "-Run deve avere la forma aaaammgg-hhmmss-<8 esadecimali>." }
+# --- Modo ai (Fase 6, P10): solo la JVM, due moduli, poca RAM (il PC e' condiviso con altre build) ------------------------------------
+if ($Mode -eq "ai") {
+  if ($Stage -notin @("jvm", "smb", "mutants", "known")) { Fail "Il modo ai ha i livelli jvm, smb, mutants e known." }
+  $aiRounds = if ($PSBoundParameters.ContainsKey("Rounds")) { $Rounds } else { if ($Stage -eq "smb") { 600 } else { 2000 } }
+  $seedEnv = [ordered]@{}
+  if ($Seed -ne 0) { $seedEnv["MCG_MODELS_CHAOS_SEED"] = "$Seed"; $seedEnv["MCG_AI_CHAOS_SEED"] = "$Seed" }
+  $runs = switch ($Stage) {
+    "jvm" {
+      @(
+        @{ Module = ":core-models"; Test = "*ModelChaosBenchTest.duemilaGiriSullaJvm"; Env = @{ MCG_MODELS_CHAOS_ROUNDS = "$aiRounds" }; Report = "core-models" },
+        @{ Module = ":core-ai"; Test = "*AiChaosBenchTest.duemilaGiriSullaJvm"; Env = @{ MCG_AI_CHAOS_ROUNDS = "$aiRounds" }; Report = "core-ai" }
+      )
+    }
+    "smb" { @(@{ Module = ":core-models"; Test = "*ModelChaosBenchTest.seicentoGiriSulSimulatoreSmb"; Env = @{ MCG_MODELS_CHAOS_SMB_ROUNDS = "$aiRounds" }; Report = "core-models" }) }
+    "mutants" {
+      @(
+        @{ Module = ":core-models"; Test = "*ModelChaosMutationTest*"; Env = @{}; Report = "core-models" },
+        @{ Module = ":core-ai"; Test = "*AiChaosMutationTest*"; Env = @{}; Report = "core-ai" }
+      )
+    }
+    "known" { @(@{ Module = ":core-ai"; Test = "*AiChaosKnownDefectsTest*"; Env = @{}; Report = "core-ai" }) }
+  }
+  if ($DryRun) {
+    Write-Host "=== A SECCO: non lancio niente ===" -ForegroundColor Yellow
+    foreach ($r in $runs) {
+      foreach ($name in $r.Env.Keys) { Write-Host ("  {0}={1}" -f $name, $r.Env[$name]) }
+      foreach ($name in $seedEnv.Keys) { Write-Host ("  {0}={1}" -f $name, $seedEnv[$name]) }
+      Write-Host ("  (prima: aspetto almeno 2 GB di RAM libera) gradlew.bat {0}:testDebugUnitTest --tests {1} --max-workers=2 --console=plain --rerun -PmcgTestTimeoutMinutes={2}" -f $r.Module, $r.Test, $TimeoutMinutes)
+    }
+    exit 0
+  }
+  $exitAi = 0
+  foreach ($r in $runs) {
+    # Il PC e' condiviso con altre build: prima di ogni comando Gradle almeno 2 GB di RAM libera (FreePhysicalMemory e' in KB).
+    while ((Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory -lt 2097152) {
+      Write-Host "RAM libera sotto i 2 GB: aspetto 20 secondi." -ForegroundColor DarkGray
+      Start-Sleep -Seconds 20
+    }
+    foreach ($name in $r.Env.Keys) { Set-Item -Path "Env:$name" -Value $r.Env[$name] }
+    foreach ($name in $seedEnv.Keys) { Set-Item -Path "Env:$name" -Value $seedEnv[$name] }
+    $env:ANDROID_SERIAL = "none"
+    Push-Location $root
+    try {
+      & (Join-Path $root "gradlew.bat") "$($r.Module):testDebugUnitTest" "--tests" $r.Test "--max-workers=2" "--console=plain" "--rerun" "-PmcgTestTimeoutMinutes=$TimeoutMinutes"
+      if ($LASTEXITCODE -ne 0) { $exitAi = $LASTEXITCODE }
+    } finally {
+      Pop-Location
+    }
+    $dir = Join-Path $root "$($r.Report)\build\chaos"
+    if (Test-Path -LiteralPath $dir) { Write-Host "Rapporti: $dir" }
+  }
+  exit $exitAi
+}
+
 $needsManifest = ($Mode -eq "verify") -or ($Mode -eq "backup" -and ($Stage -eq "verify" -or $Stage -eq "state"))
 if ($needsManifest -and -not $Manifest) { Fail "Questo modo vuole -Manifest." }
 if ($Manifest -and $needsManifest -and -not $DryRun -and -not (Test-Path -LiteralPath $Manifest)) { Fail "File non trovato: $Manifest" }

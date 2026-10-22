@@ -27,12 +27,40 @@ switch ($cmd) {
     Write-Output "1 file pushed"
     exit 0
   }
+  "exec-out" {
+    # Modo ai: `exec-out run-as <pacchetto> cat <percorso relativo alla cartella dell'app>`: i byte del file, senza conversioni.
+    if (($rest -join " ") -match '^run-as (\S+) cat (\S+)$') {
+      $file = Join-Path $root ("data\data\" + $Matches[1] + "\" + $Matches[2].Replace('/', '\'))
+      if (-not (Test-Path -LiteralPath $file)) { Write-Output "cat: $($Matches[2]): No such file or directory"; exit 1 }
+      $bytes = [System.IO.File]::ReadAllBytes($file)
+      $out = [Console]::OpenStandardOutput()
+      $out.Write($bytes, 0, $bytes.Length)
+      $out.Flush()
+      exit 0
+    }
+    Write-Output "fake adb: exec-out non previsto: $($rest -join ' ')"
+    exit 7
+  }
   "shell" {
     $line = ($rest -join " ")
     if ($line -match '^pm path (.+)$') { Write-Output "package:/data/app/fake/base.apk"; exit 0 }
     if ($line -match '^pidof ') { exit 0 }
     if ($line -match '^svc wifi') { exit 0 }
     if ($line -match '^mkdir -p (.+)$') { foreach ($d in ($Matches[1] -split '\s+')) { New-Item -ItemType Directory -Force -Path (Map-Path $d) | Out-Null }; exit 0 }
+    if ($line -match "^run-as (\S+) find (\S+) -type f -exec (stat -c '%s %n'|sha256sum) \{\} \+$") {
+      # Modo ai: la cartella dell'app finta e' <FAKE_PHONE>\data\data\<pacchetto>; i percorsi stampati sono relativi ad essa, come `run-as`.
+      $app = Join-Path $root ("data\data\" + $Matches[1])
+      $dir = $Matches[2]
+      $wantsHash = ($Matches[3] -eq "sha256sum")
+      $full = Join-Path $app ($dir.Replace('/', '\'))
+      if (-not (Test-Path -LiteralPath $full)) { Write-Output "find: '$dir': No such file or directory"; exit 1 }
+      foreach ($f in (Get-ChildItem -LiteralPath $full -Recurse -File)) {
+        $rel = $f.FullName.Substring($app.Length).Replace('\', '/').TrimStart('/')
+        if ($wantsHash) { Write-Output ("{0}  {1}" -f (Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $rel) }
+        else { Write-Output ("{0} {1}" -f $f.Length, $rel) }
+      }
+      exit 0
+    }
     if ($line -match '^cp (\S+) (\S+)$') { Copy-Item -LiteralPath (Map-Path $Matches[1]) -Destination (Map-Path $Matches[2]) -Force; exit 0 }
     if ($line -match "^sh -c '?dd if=/dev/urandom bs=(\d+) count=(\d+) >> (\S+?)'?$") {
       # Il megabyte vale 16 byte: il telefono finto non tiene i GB. Una modifica (24 byte) e' vera, con byte che cambiano a ogni chiamata.

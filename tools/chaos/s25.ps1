@@ -1,9 +1,11 @@
 <#
 .SYNOPSIS
-  Interruzioni casuali sul telefono: la prova delle 500 interruzioni lato telefono. Due modi:
+  Interruzioni casuali sul telefono: la prova delle 500 interruzioni lato telefono. Tre modi:
     move    (default) durante una mossa di massa sul NAS (Fase 4B, docs/fase4-progetto.md par. 5.5, P15);
     backup  durante il primo backup di `mcg-prova` (Fase 5A, docs/fase5-progetto.md par. 5.3 e 5.4, P6) e, dalla 5B (P13, F43), durante le
             VERSIONI: foto di `mcg-prova` modificate dopo il primo backup (`-Step edit`, come Samsung "Salva") e salvate di nuovo.
+    ai      durante lo scaricamento dei modelli e l'indicizzazione AI (Fase 6, docs/fase6-progetto.md par. 5.5, P10): almeno 100
+            interruzioni (`kill -9` e Wi-Fi spento per 3-20 s), poi il verificatore dei dati sul telefono (`-Step verify`).
   Come si usa e come si legge il risultato: docs/prova-500.md.
 
 .DESCRIPTION
@@ -33,6 +35,29 @@
     clean      toglie `mcg-prova` dal telefono (solo quelle due cartelle, con -Yes).
   Lo script non scrive sul NAS e non legge altro dal telefono che `mcg-prova`. Il verificatore dal PC sta in core-backup (BackupAreaVerifier).
 
+  --- Modo ai (-Mode ai, Fase 6, P10; -Step interrupt | verify) ---
+  Prima, a mano: l'S25 con la build DEBUG e l'account di prova ha gia' fatto il primo backup di `mcg-prova` (modo backup) e nell'app il
+  ruolo Indicizzatore e' acceso (Ricerca e modelli); i modelli si scaricano da soli (con -KillMode force-stop si prova anche la ripresa dal
+  rilancio). Poi:
+    interrupt  l'utente ha gia' fatto partire lo scaricamento o l'indicizzazione ("Indicizza ora"); lo script uccide il processo (`kill -9`
+               dalla build debug) o spegne il Wi-Fi per 3-20 s a tempi casuali (come nel modo move), rilancia l'app, aspetta che la ripresa
+               finisca e, con -Verify, passa a `verify`. Servono almeno 100 interruzioni (par. 5.5): meno si fanno, ma lo script lo dice.
+    verify     il verificatore dei dati sul telefono, in SOLA LETTURA e solo nella cartella dell'app di debug (`run-as`, mai altre app):
+                 - models/: ogni file ha il nome, la dimensione e lo SHA-256 del catalogo (I2: nessun parziale promosso; I1: niente di
+                   non verificato da caricare); models/partial/ vuota a ripresa finita (I9);
+                 - ai-buffer/: nessun temporaneo orfano (`*.tmp`) e al massimo 500 MB (I9);
+                 - search/: i record del file dei vettori hanno il CRC giusto (I5): un'interruzione puo' rovinare al piu' i record di UNA
+                   scrittura (fino a 9, un video); di piu' e' un errore. Il file si copia in build\chaos\ (nessun dato esce dal PC).
+               Il verificatore dei dati sul NAS (teste `ai` sotto devices/<io>/ai/, invarianti 5 e 6) non e' di questo script: sta nel modulo
+               che vede il NAS (vedi docs/prova-500.md, sezione della Fase 6). Con -NotSettled la prova non e' ancora ferma: i parziali non
+               contano come errore.
+  Guardie del modo ai (le stesse degli altri modi, un po' piu' strette): un solo telefono, RFCY61FZDHW (con un adb finto, MCG_ADB, vale il
+  numero che si vuole); solo l'app di debug dev.pampa.mycloudgallery.debug; il Wi-Fi si spegne solo con `svc wifi disable` di questo script,
+  per al massimo 120 s, e si riaccende SEMPRE (anche se lo script e' interrotto); sul telefono si leggono solo file della cartella dell'app.
+  Con -DryRun si vede il calendario senza telefono; con -SelfTest si provano, senza telefono, il controllo del file dei vettori (record
+  buoni, rovinati nel mezzo, troncati in coda), la lettura del catalogo dei modelli e le guardie; tools\chaos\s25-ai-finto.ps1 prova i passi
+  contro l'adb finto.
+
   Il calendario delle interruzioni (quando e che cosa) dipende solo dal seme: lo stesso -Seed rifa' la stessa prova. Con -DryRun lo script
   stampa il calendario (o il piano della semina) e i comandi adb che userebbe e NON ESEGUE NIENTE (nemmeno adb): e' il modo di controllarlo
   senza il telefono. Con -SelfTest prova solo la conversione dell'uscita di `sha256sum` nel manifesto, su un testo finto.
@@ -43,8 +68,8 @@
   (ANDROID_SERIAL=none vale "nessun dispositivo": solo -DryRun e -SelfTest); il Wi-Fi viene SEMPRE riacceso, anche se lo script e' interrotto.
   Funziona sulla build debug (run-as) con gli account di prova (par. 5.7); il modo backup rifiuta un pacchetto che non sia di debug.
 
-.PARAMETER Mode                move | backup (default move).
-.PARAMETER Step                Per backup: seed | edit | interrupt | verify | clean (default interrupt).
+.PARAMETER Mode                move | backup | ai (default move).
+.PARAMETER Step                Per backup: seed | edit | interrupt | verify | clean (default interrupt). Per ai: interrupt | verify.
 .PARAMETER Serial              Numero di serie del telefono (`adb devices`). Default: ANDROID_SERIAL.
 .PARAMETER Package             Il pacchetto dell'app (default: la build debug, dev.pampa.mycloudgallery.debug).
 .PARAMETER Interruptions       Quante interruzioni (default 100, come chiede il par. 5.5 / 5.4 per il telefono).
@@ -76,7 +101,11 @@
 .PARAMETER SkipNas             Per backup/verify: controlla solo le impronte del telefono, senza lanciare il verificatore sul NAS.
 .PARAMETER Yes                 Per backup/clean: serve per togliere `mcg-prova` dal telefono.
 .PARAMETER DryRun              Stampa il calendario/il piano e i comandi, non esegue niente.
-.PARAMETER SelfTest            Prova la conversione dell'uscita di sha256sum nel manifesto, su un testo finto (nessun adb).
+.PARAMETER CatalogFile         Per ai/verify: il file Kotlin da cui leggere il catalogo dei modelli (default: ModelCatalog.kt di core-models). Serve solo
+                               a provare lo script con l'adb finto, che non puo' tenere file da centinaia di MB.
+.PARAMETER NotSettled          Per ai/verify: la prova non e' ancora ferma, un parziale in models/partial/ non e' un errore.
+.PARAMETER SelfTest            Prova la conversione dell'uscita di sha256sum nel manifesto, su un testo finto (nessun adb); con -Mode ai prova anche il
+                               verificatore dei dati (file dei vettori, catalogo dei modelli) e le guardie.
 
 .EXAMPLE
   # Controllo a secco, senza telefono:
@@ -94,7 +123,7 @@
 #>
 [CmdletBinding()]
 param(
-  [ValidateSet("move", "backup")][string]$Mode = "move",
+  [ValidateSet("move", "backup", "ai")][string]$Mode = "move",
   [ValidateSet("seed", "edit", "interrupt", "verify", "clean")][string]$Step = "interrupt",
   [string]$Serial = $env:ANDROID_SERIAL,
   [string]$Package = "dev.pampa.mycloudgallery.debug",
@@ -124,6 +153,8 @@ param(
   [string]$Run,
   [switch]$Yes,
   [switch]$SkipNas,
+  [switch]$NotSettled,
+  [string]$CatalogFile,
   [switch]$DryRun,
   [switch]$SelfTest
 )
@@ -131,6 +162,7 @@ param(
 $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $isBackup = ($Mode -eq "backup")
+$isAi = ($Mode -eq "ai")
 
 function Fail([string]$message, [int]$code = 1) {
   Write-Host $message -ForegroundColor Red
@@ -177,6 +209,178 @@ function New-BackupManifestText([string]$runId, [string]$deviceId, [string]$dest
   return ($lines -join "`n") + "`n"
 }
 
+# =================================================================================================================================
+# Modo ai (Fase 6, P10): le parti che non toccano il telefono (guardie, catalogo dei modelli, controllo del file dei vettori)
+# =================================================================================================================================
+
+# Le guardie del modo ai: un solo telefono, solo la nostra app di debug, il Wi-Fi al massimo 120 s. Valori scritti qui, mai da un parametro.
+$AiSerial = "RFCY61FZDHW"
+$AiPackage = "dev.pampa.mycloudgallery.debug"
+$AiWifiMaxSeconds = 120
+$AiRecommendedInterruptions = 100
+
+# Le cartelle dell'app di debug (relative alla sua cartella, `run-as`): `noBackupFilesDir/...`. Se P11 le sposta, si cambiano solo qui.
+$AiModelsDir = "no_backup/models"
+$AiBufferDir = "no_backup/ai-buffer"
+$AiSearchDir = "no_backup/search"
+$AiBufferMaxBytes = 500MB          # AiBuffer.MAX_BYTES (core-ai, contract/Compute.kt)
+$AiVectorDimension = 768           # spazio 1, embeddinggemma2-float-v1 (core-trust, SpaceCode)
+$AiMaxBadRecordsPerKill = 9        # una scrittura e' un media: al piu' 9 vettori (video, D11); piu' di cosi' per morte non si spiega
+
+function Get-AiGuardErrors([string]$serial, [string]$package, [int]$wifiMax, [bool]$fakeAdb, [bool]$dryRun) {
+  $errors = @()
+  # Un adb finto (MCG_ADB) o il controllo a secco senza telefono non toccano un telefono vero: il numero di serie non conta.
+  if (-not $fakeAdb) {
+    if ($serial -and $serial -ne $AiSerial) { $errors += "Il modo ai tocca un solo telefono, $AiSerial (-Serial)." }
+    if (-not $serial -and -not $dryRun) { $errors += "Il modo ai vuole -Serial $AiSerial (o ANDROID_SERIAL)." }
+  }
+  if ($serial -and $serial -notmatch '^[A-Za-z0-9]{3,40}$') { $errors += "Numero di serie non valido." }
+  if ($package -ne $AiPackage) { $errors += "Il modo ai vale solo per l'app di debug $AiPackage (-Package)." }
+  if ($wifiMax -gt $AiWifiMaxSeconds) { $errors += "Il Wi-Fi resta spento al massimo $AiWifiMaxSeconds secondi (-WifiOffMaxSeconds)." }
+  return $errors
+}
+
+# Il catalogo dei modelli letto dal sorgente (ModelCatalog.kt, in questa cartella): nome del file, dimensione e SHA-256 di ogni modello.
+function ConvertTo-ModelCatalog([string]$source) {
+  $names = @([regex]::Matches($source, 'fileName\s*=\s*"([^"]+)"') | ForEach-Object { $_.Groups[1].Value })
+  $sizes = @([regex]::Matches($source, 'sizeBytes\s*=\s*([0-9_]+)L') | ForEach-Object { [long]($_.Groups[1].Value -replace '_', '') })
+  $shas = @([regex]::Matches($source, 'sha256\s*=\s*Sha256\("([0-9a-f]{64})"\)') | ForEach-Object { $_.Groups[1].Value })
+  if ($names.Count -eq 0 -or $names.Count -ne $sizes.Count -or $names.Count -ne $shas.Count) { throw "Il catalogo dei modelli non si legge (nomi $($names.Count), dimensioni $($sizes.Count), impronte $($shas.Count))." }
+  $catalog = @()
+  for ($i = 0; $i -lt $names.Count; $i++) { $catalog += [pscustomobject]@{ Name = $names[$i]; Size = $sizes[$i]; Sha = $shas[$i] } }
+  return $catalog
+}
+
+# Il controllo del file dei vettori (core-search, VectorFile.kt): record `MCGV` (4) versione (1) ricetta (1) fotogramma (1) bit (1) chiave (32)
+# istante (4) `dim` float16 CRC32 (4, little-endian) dei byte precedenti. In C# perche' in PowerShell 16 MB di CRC durerebbero minuti.
+function Initialize-VectorChecker {
+  if ('McgVectorCheck' -as [type]) { return }
+  Add-Type -TypeDefinition @'
+using System;
+public static class McgVectorCheck {
+  static readonly uint[] Table = MakeTable();
+  static uint[] MakeTable() {
+    uint[] t = new uint[256];
+    for (uint i = 0; i < 256; i++) { uint c = i; for (int k = 0; k < 8; k++) c = ((c & 1) != 0) ? (0xEDB88320u ^ (c >> 1)) : (c >> 1); t[i] = c; }
+    return t;
+  }
+  public static uint Crc32(byte[] b, int off, int len) {
+    uint c = 0xFFFFFFFFu;
+    for (int i = off; i < off + len; i++) c = Table[(c ^ b[i]) & 0xFF] ^ (c >> 8);
+    return c ^ 0xFFFFFFFFu;
+  }
+  static bool Magic(byte[] b, int p) { return p + 4 <= b.Length && b[p] == 0x4D && b[p + 1] == 0x43 && b[p + 2] == 0x47 && b[p + 3] == 0x56; }
+  static bool Good(byte[] b, int p, int size) {
+    return p + size <= b.Length && Magic(b, p) && Crc32(b, p, size - 4) == BitConverter.ToUInt32(b, p + size - 4);
+  }
+  // Restituisce { buoni, rovinati, coda troncata (byte), byte scartati }. Un record rovinato nel mezzo (CRC) e' contato e si riparte dal
+  // primo record buono dopo; una coda piu' corta di un record e' una scrittura interrotta (se comincia con MCGV) o spazzatura.
+  public static int[] Check(byte[] data, int dimension) {
+    int size = 44 + 2 * dimension + 4;
+    int pos = 0, valid = 0, bad = 0, torn = 0, garbage = 0;
+    while (pos < data.Length) {
+      if (data.Length - pos < size) {
+        if (Magic(data, pos)) torn = data.Length - pos; else garbage += data.Length - pos;
+        break;
+      }
+      if (Good(data, pos, size)) { valid++; pos += size; continue; }
+      bool header = Magic(data, pos);
+      int next = pos + 1;
+      while (next + size <= data.Length && !Good(data, next, size)) next++;
+      if (next + size > data.Length) { int rest = data.Length - pos; if (header && rest < size * 2) torn = rest; else garbage += rest; break; }
+      // Una zona rovinata lunga n record conta n (e non uno): un record a meta' seguito da altri conta uno.
+      if (header) bad += Math.Max(1, (next - pos + size / 2) / size);
+      garbage += next - pos;
+      pos = next;
+    }
+    return new int[] { valid, bad, torn, garbage };
+  }
+}
+'@
+}
+
+function Test-VectorFile([byte[]]$bytes, [int]$dimension) {
+  Initialize-VectorChecker
+  $r = [McgVectorCheck]::Check($bytes, $dimension)
+  return [pscustomobject]@{ Valid = $r[0]; Bad = $r[1]; TornTail = $r[2]; GarbageBytes = $r[3] }
+}
+
+# Un record sintetico per l'autotest: stessa forma di VectorFile.kt, chiave e componenti dal seme.
+function New-VectorRecord([int]$dimension, [int]$seed) {
+  Initialize-VectorChecker
+  $size = 44 + 2 * $dimension + 4
+  $record = New-Object byte[] $size
+  [byte[]]$magic = 0x4D, 0x43, 0x47, 0x56
+  [Array]::Copy($magic, 0, $record, 0, 4)
+  $record[4] = 1; $record[5] = 1; $record[6] = 0; $record[7] = 0
+  $random = New-Object System.Random($seed)
+  $filler = New-Object byte[] ($size - 8 - 4)
+  $random.NextBytes($filler)
+  [Array]::Copy($filler, 0, $record, 8, $filler.Length)
+  $crc = [McgVectorCheck]::Crc32($record, 0, $size - 4)
+  [Array]::Copy([BitConverter]::GetBytes([uint32]$crc), 0, $record, $size - 4, 4)
+  return , $record
+}
+
+function Join-Bytes([object[]]$parts) {
+  $stream = New-Object System.IO.MemoryStream
+  foreach ($part in $parts) { $stream.Write([byte[]]$part, 0, ([byte[]]$part).Length) }
+  return , $stream.ToArray()
+}
+
+function Invoke-AiSelfTest {
+  $failed = 0
+  function Check-Ai([string]$what, [bool]$ok) {
+    if ($ok) { Write-Host ("  OK    {0}" -f $what) -ForegroundColor Green } else { Write-Host ("  FAIL  {0}" -f $what) -ForegroundColor Red; $script:aiSelfTestFailed++ }
+  }
+  $script:aiSelfTestFailed = 0
+  $dim = 8
+  $r = @(1..6 | ForEach-Object { , (New-VectorRecord $dim $_) })
+  $size = $r[0].Length
+  # 1. Cinque record buoni.
+  $x = Test-VectorFile (Join-Bytes $r[0..4]) $dim
+  Check-Ai "cinque record buoni: nessun rovinato, nessuna coda" (($x.Valid -eq 5) -and ($x.Bad -eq 0) -and ($x.TornTail -eq 0) -and ($x.GarbageBytes -eq 0))
+  # 2. Un record con un byte cambiato nel mezzo (l'intestazione c'e', il CRC no): contato, gli altri si leggono.
+  $broken = [byte[]]$r[2].Clone(); $broken[30] = $broken[30] -bxor 1
+  $x = Test-VectorFile (Join-Bytes @($r[0], $r[1], $broken, $r[3], $r[4])) $dim
+  Check-Ai "un record rovinato nel mezzo: contato, i quattro buoni si leggono" (($x.Valid -eq 4) -and ($x.Bad -eq 1) -and ($x.TornTail -eq 0))
+  # 3. Una scrittura interrotta in coda: mezzo record.
+  $half = [byte[]]$r[5][0..($size / 2 - 1)]
+  $x = Test-VectorFile (Join-Bytes @($r[0], $r[1], $r[2], $half)) $dim
+  Check-Ai "una scrittura interrotta in coda: coda troncata, nessun rovinato" (($x.Valid -eq 3) -and ($x.Bad -eq 0) -and ($x.TornTail -eq $half.Length))
+  # 4. Mezzo record e poi altri record (il processo e' morto e uno nuovo ha continuato a scrivere in fondo).
+  $x = Test-VectorFile (Join-Bytes @($r[0], $half, $r[1], $r[2])) $dim
+  Check-Ai "mezzo record seguito da altri: i buoni si leggono, il mezzo e' contato" (($x.Valid -eq 3) -and ($x.Bad -ge 1))
+  # 5. Un file vuoto e uno di spazzatura.
+  $x = Test-VectorFile (New-Object byte[] 0) $dim
+  Check-Ai "file vuoto: niente" (($x.Valid -eq 0) -and ($x.Bad -eq 0) -and ($x.TornTail -eq 0) -and ($x.GarbageBytes -eq 0))
+  $x = Test-VectorFile ([byte[]](1..200 | ForEach-Object { 7 })) $dim
+  Check-Ai "spazzatura senza intestazioni: nessun record" (($x.Valid -eq 0) -and ($x.Bad -eq 0))
+  # 6. Il catalogo dei modelli dal sorgente di questa cartella.
+  $catalogFile = Join-Path $root "core-models\src\main\kotlin\dev\pampa\mycloudgallery\core\models\contract\ModelCatalog.kt"
+  $catalog = @(ConvertTo-ModelCatalog (Get-Content -LiteralPath $catalogFile -Raw))
+  Check-Ai "il catalogo ha almeno due modelli con nome, dimensione e impronta" (($catalog.Count -ge 2) -and (@($catalog | Where-Object { ($_.Size -le 0) -or ($_.Sha -notmatch '^[0-9a-f]{64}$') -or (-not $_.Name) }).Count -eq 0))
+  Check-Ai "il catalogo letto ha il 270M da 164.626.432 byte" (@($catalog | Where-Object { ($_.Size -eq 164626432) -and ($_.Sha -eq "2d079ee2f6f066b1f368e8d7c819f55214eaef1d0513b312321901f30ab286fb") }).Count -eq 1)
+  # 7. Le guardie.
+  Check-Ai "guardie: il telefono giusto, l'app di debug, Wi-Fi 20 s passano" ((Get-AiGuardErrors $AiSerial $AiPackage 20 $false $false).Count -eq 0)
+  Check-Ai "guardie: un altro telefono e' rifiutato" ((Get-AiGuardErrors "R5CX1234567" $AiPackage 20 $false $false).Count -ge 1)
+  Check-Ai "guardie: un altro telefono con l'adb finto passa" ((Get-AiGuardErrors "FAKE123" $AiPackage 20 $true $false).Count -eq 0)
+  Check-Ai "guardie: l'app di release e' rifiutata" ((Get-AiGuardErrors $AiSerial "dev.pampa.mycloudgallery" 20 $false $false).Count -ge 1)
+  Check-Ai "guardie: un'altra app di debug e' rifiutata" ((Get-AiGuardErrors $AiSerial "com.example.altra.debug" 20 $false $false).Count -ge 1)
+  Check-Ai "guardie: Wi-Fi spento oltre 120 s e' rifiutato" ((Get-AiGuardErrors $AiSerial $AiPackage 121 $false $false).Count -ge 1)
+  Check-Ai "guardie: senza telefono servono -DryRun o l'adb finto" ((Get-AiGuardErrors "" $AiPackage 20 $false $false).Count -ge 1)
+  Check-Ai "guardie: a secco senza telefono passa" ((Get-AiGuardErrors "" $AiPackage 20 $false $true).Count -eq 0)
+  return $script:aiSelfTestFailed
+}
+
+if ($SelfTest -and $isAi) {
+  Write-Host "SelfTest del modo ai (nessun telefono, nessun adb):"
+  $failedChecks = Invoke-AiSelfTest
+  if ($failedChecks -gt 0) { Fail "SelfTest ai: $failedChecks controlli non passano." 3 }
+  Write-Host "SelfTest ai: il verificatore dei dati e le guardie funzionano." -ForegroundColor Green
+  exit 0
+}
+
 if ($SelfTest) {
   $hash = @(
     "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  /sdcard/DCIM/mcg-prova/vuoto.jpg",
@@ -204,7 +408,13 @@ if ($MinGapSeconds -lt 1 -or $MaxGapSeconds -lt $MinGapSeconds -or $MaxGapSecond
 if ($WifiPercent -lt 0 -or $WifiPercent -gt 100) { Fail "-WifiPercent deve stare fra 0 e 100." }
 if ($WifiOffMinSeconds -lt 1 -or $WifiOffMaxSeconds -lt $WifiOffMinSeconds -or $WifiOffMaxSeconds -gt 120) { Fail "Il Wi-Fi spento dura da 1 a 120 secondi, il massimo non sotto il minimo." }
 if ($Package -notmatch '^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$') { Fail "Nome del pacchetto non valido." }
-if ($Verify -and -not $Manifest) { Fail "-Verify vuole -Manifest (il file scritto da area.ps1 -Mode seed, o da questo script con -Mode backup -Step seed)." }
+if ($Verify -and -not $Manifest -and -not $isAi) { Fail "-Verify vuole -Manifest (il file scritto da area.ps1 -Mode seed, o da questo script con -Mode backup -Step seed)." }
+if ($isAi) {
+  # Il modo ai: solo interrupt e verify (la semina e' quella del modo backup), e le guardie sul telefono, l'app e il Wi-Fi.
+  if ($Step -notin @("interrupt", "verify")) { Fail "Il modo ai ha solo i passi interrupt e verify (la semina di mcg-prova e il primo backup sono del modo backup)." }
+  $aiErrors = @(Get-AiGuardErrors $Serial $Package $WifiOffMaxSeconds ([bool]$env:MCG_ADB) ([bool]$DryRun))
+  if ($aiErrors.Count -gt 0) { Fail ($aiErrors -join " ") 2 }
+}
 if ($isBackup) {
   if ($Package -notmatch '\.debug$') { Fail "Il modo backup vale solo per la build debug con gli account di prova (D13): il pacchetto deve finire con .debug." }
   if ($Photos -lt 1 -or $Photos -gt 5000) { Fail "-Photos deve stare fra 1 e 5000." }
@@ -559,6 +769,122 @@ function Invoke-Clean {
   [void](Invoke-Adb @("shell", $scanCommand))
 }
 
+# =================================================================================================================================
+# Modo ai: il verificatore dei dati sul telefono (sola lettura, solo la cartella dell'app di debug, via `run-as`)
+# =================================================================================================================================
+
+# I file di una cartella dell'app (percorso relativo alla cartella dell'app) con la dimensione: solo `find` e `stat`. Una cartella che non
+# c'e' e' vuota. Sul telefono non si scrive, non si cancella e non si legge altro: i nomi vengono dall'elenco e non entrano in nessun comando.
+function Get-AppFiles([string]$dir) {
+  $result = Invoke-Adb @("shell", "run-as $Package find $dir -type f -exec stat -c '%s %n' {} +")
+  $files = @()
+  foreach ($line in $result.Lines) {
+    if ($line -match '^\s*(\d+)\s+(.+?)\s*$') { $files += [pscustomobject]@{ Path = $Matches[2]; Size = [long]$Matches[1]; Name = ($Matches[2] -split '/')[-1] } }
+  }
+  return $files
+}
+
+function Get-AppHashes([string]$dir) {
+  $result = Invoke-Adb @("shell", "run-as $Package find $dir -type f -exec sha256sum {} +")
+  $map = @{}
+  foreach ($line in $result.Lines) { if ($line -match '^([0-9a-fA-F]{64})\s+\*?(.+?)\s*$') { $map[$Matches[2]] = $Matches[1].ToLowerInvariant() } }
+  return $map
+}
+
+# Copia un file dell'app sul PC (build\chaos\): `exec-out` porta i byte senza conversioni e li si scrive direttamente. Solo un nome che passa
+# la forma di un nome di file dell'indice (lettere, cifre, punto, trattino) si copia.
+function Save-AppFile([string]$relative, [string]$destination) {
+  if (($relative -split '/')[-1] -notmatch '^[A-Za-z0-9._-]+$') { throw "Nome di file dell'app non ammesso." }
+  $info = New-Object System.Diagnostics.ProcessStartInfo
+  $info.FileName = $script:adb
+  $info.Arguments = "-s $Serial exec-out run-as $Package cat $relative"
+  $info.RedirectStandardOutput = $true
+  $info.UseShellExecute = $false
+  $process = [System.Diagnostics.Process]::Start($info)
+  $out = [System.IO.File]::Create($destination)
+  try { $process.StandardOutput.BaseStream.CopyTo($out) } finally { $out.Close() }
+  $process.WaitForExit()
+}
+
+function Invoke-VerifyAi {
+  Initialize-Adb
+  Assert-Debug-App
+  $problems = New-Object System.Collections.Generic.List[string]
+  $catalogFile = if ($CatalogFile) { $CatalogFile } else { Join-Path $root "core-models\src\main\kotlin\dev\pampa\mycloudgallery\core\models\contract\ModelCatalog.kt" }
+  $catalog = @(ConvertTo-ModelCatalog (Get-Content -LiteralPath $catalogFile -Raw))
+  $bySha = @{}
+  foreach ($model in $catalog) { $bySha[$model.Sha] = $model }
+
+  # I2 e I1: in models/ solo file con nome, dimensione e SHA-256 del catalogo (un parziale promosso o un file alterato si vedono qui).
+  $inModels = @(Get-AppFiles $AiModelsDir)
+  $ready = @($inModels | Where-Object { $_.Path -match ('^' + [regex]::Escape($AiModelsDir) + '/[^/]+$') })
+  $hashes = if ($ready.Count -gt 0) { Get-AppHashes $AiModelsDir } else { @{} }
+  $good = 0
+  foreach ($file in $ready) {
+    $model = $bySha[$file.Name]
+    if (-not $model) { $problems.Add("I2: in models/ un file che non e' del catalogo ($($file.Size) byte)"); continue }
+    if ($file.Size -ne $model.Size) { $problems.Add("I2: un modello in models/ lungo $($file.Size) byte invece di $($model.Size)"); continue }
+    if ($hashes[$file.Path] -ne $file.Name) { $problems.Add("I2: un modello in models/ con l'impronta diversa dal catalogo"); continue }
+    $good++
+  }
+  Write-Log ("models/: {0} file del catalogo verificati (dimensione e SHA-256), {1} problemi" -f $good, @($problems | Where-Object { $_ -like "I2*" }).Count)
+
+  # I9: a ripresa finita niente parziali di modelli, niente temporanei nel buffer, buffer sotto il tetto.
+  $partials = @($inModels | Where-Object { $_.Path -like "$AiModelsDir/partial/*" -and $_.Name -match '\.part$' })
+  if ($partials.Count -gt 0 -and -not $NotSettled) { $problems.Add("I9: $($partials.Count) parziali di modelli rimasti in models/partial/ (alzare -SettleSeconds, o -NotSettled se la ripresa non e' finita)") }
+  $buffer = @(Get-AppFiles $AiBufferDir)
+  $orphans = @($buffer | Where-Object { $_.Name -like "*.tmp" }).Count
+  $bufferBytes = [long]($buffer | Measure-Object -Property Size -Sum).Sum
+  if ($orphans -gt 0) { $problems.Add("I9: $orphans temporanei orfani in ai-buffer/") }
+  if ($bufferBytes -gt $AiBufferMaxBytes) { $problems.Add("I9: il buffer pesa $([math]::Round($bufferBytes / 1MB)) MB, oltre il tetto di $([math]::Round($AiBufferMaxBytes / 1MB)) MB") }
+  Write-Log ("ai-buffer/: {0} file, {1} MB, {2} temporanei orfani" -f $buffer.Count, [math]::Round($bufferBytes / 1MB, 1), $orphans)
+
+  # I5: il file dei vettori. Un'interruzione rovina al piu' i record di UNA scrittura (fino a 9); il processo nuovo li toglie e li rifa.
+  $kills = if ($killCount -gt 0) { $killCount } else { $Interruptions }
+  $allowedBad = [math]::Max(1, $kills) * $AiMaxBadRecordsPerKill
+  $stamp2 = Get-Date -Format "yyyyMMdd-HHmmss"
+  $pulled = Join-Path $root "build\chaos\ai-$stamp2"
+  New-Item -ItemType Directory -Force -Path $pulled | Out-Null
+  $vectorFiles = @(Get-AppFiles $AiSearchDir | Where-Object { $_.Name -match '^vectors-[0-9]+-[0-9]+\.bin$' })
+  $valid = 0
+  $bad = 0
+  foreach ($file in $vectorFiles) {
+    $local = Join-Path $pulled $file.Name
+    Save-AppFile $file.Path $local
+    $check = Test-VectorFile ([System.IO.File]::ReadAllBytes($local)) $AiVectorDimension
+    $valid += $check.Valid
+    $bad += $check.Bad
+    Write-Log ("search/: un file di vettori, {0} record buoni, {1} rovinati, coda troncata {2} byte, {3} byte scartati" -f $check.Valid, $check.Bad, $check.TornTail, $check.GarbageBytes)
+  }
+  if ($vectorFiles.Count -eq 0) { Write-Log "search/: nessun file di vettori (l'indicizzazione non ha ancora salvato niente?)." }
+  if ($bad -gt $allowedBad) { $problems.Add("I5: $bad record dei vettori rovinati, piu' di quelli che $kills interruzioni possono spiegare (al piu' $allowedBad)") }
+  Remove-Item -LiteralPath $pulled -Recurse -Force -ErrorAction SilentlyContinue
+
+  foreach ($problem in $problems) { Write-Log ("ERRORE  " + $problem) }
+  Write-Log "Non verificato qui (nel modulo che vede il NAS): teste ai sotto devices/<io>/ai/, M3, prenotazioni (invarianti 5, 6, 7 sul NAS)."
+  if ($problems.Count -gt 0) {
+    Write-Host ("`n{0} problemi: vedi il racconto." -f $problems.Count) -ForegroundColor Red
+    return 4
+  }
+  Write-Log ("Verifica dei dati sul telefono: tutto a posto ({0} record dei vettori buoni, {1} rovinati su {2} ammessi)." -f $valid, $bad, $allowedBad)
+  return 0
+}
+
+if ($isAi -and $Step -eq "verify") {
+  if ($DryRun) {
+    Write-Host "=== A SECCO: non lancio niente ===" -ForegroundColor Yellow
+    Write-Host ("Telefono: {0}   App: {1}   (sola lettura, solo la cartella dell'app, via run-as)" -f $serialText, $Package)
+    Write-Host ("adb -s {0} shell run-as {1} find {2} -type f -exec stat -c '%s %n' {{}} +     (modelli: nome e dimensione)" -f $serialText, $Package, $AiModelsDir)
+    Write-Host ("adb -s {0} shell run-as {1} find {2} -type f -exec sha256sum {{}} +     (modelli: impronta contro ModelCatalog.kt)" -f $serialText, $Package, $AiModelsDir)
+    Write-Host ("adb -s {0} shell run-as {1} find {2} -type f -exec stat -c '%s %n' {{}} +     (buffer: temporanei e peso)" -f $serialText, $Package, $AiBufferDir)
+    Write-Host ("adb -s {0} shell run-as {1} find {2} -type f -exec stat -c '%s %n' {{}} +     (file dei vettori)" -f $serialText, $Package, $AiSearchDir)
+    Write-Host ("adb -s {0} exec-out run-as {1} cat {2}/vectors-<spazio>-<generazione>.bin     (copiato in build\chaos\, CRC dei record)" -f $serialText, $Package, $AiSearchDir)
+    exit 0
+  }
+  try { $code = Invoke-VerifyAi } finally { Save-Log }
+  exit $code
+}
+
 if ($isBackup -and $Step -eq "seed") {
   if ($DryRun) { Write-SeedPlan; exit 0 }
   try { Invoke-Seed } finally { Save-Log }
@@ -607,8 +933,16 @@ if ($DryRun) {
   Write-Host ""
   Write-Host "Comandi adb che userebbe:"
   foreach ($name in $commandPlan.Keys) { Write-Host ("  {0,-24} {1}" -f $name, $commandPlan[$name]) }
+  if ($isAi -and $Interruptions -lt $AiRecommendedInterruptions) {
+    Write-Host ("ATTENZIONE: il par. 5.5 chiede almeno {0} interruzioni sul telefono; questa prova ne fa {1}." -f $AiRecommendedInterruptions, $Interruptions) -ForegroundColor Yellow
+  }
+  if ($isAi) {
+    Write-Host "Prima: backup di mcg-prova gia' fatto, ruolo Indicizzatore acceso, scaricamento/indicizzazione partiti nell'app. Le interruzioni cadono durante l'uno e l'altra." -ForegroundColor Cyan
+  }
   if ($Verify) {
-    if ($isBackup) {
+    if ($isAi) {
+      Write-Host "A fine prova: s25.ps1 -Mode ai -Step verify   (sola lettura, solo la cartella dell'app: models/, ai-buffer/, search/)"
+    } elseif ($isBackup) {
       Write-Host ("A fine prova: s25.ps1 -Mode backup -Step verify -Manifest {0}   (impronte del telefono, poi area.ps1 -Mode backup -Stage verify)" -f $Manifest)
     } else {
       Write-Host ("A fine prova: powershell -File tools\chaos\area.ps1 -Mode verify -Manifest {0}" -f $Manifest)
@@ -622,6 +956,9 @@ if ($DryRun) {
 # --- La prova vera ---------------------------------------------------------------------------------------------------------------
 Initialize-Adb
 Assert-Debug-App
+if ($isAi -and $Interruptions -lt $AiRecommendedInterruptions) {
+  Write-Log ("ATTENZIONE: il par. 5.5 chiede almeno {0} interruzioni sul telefono; questa prova ne fa {1}." -f $AiRecommendedInterruptions, $Interruptions)
+}
 if ($isBackup -and (Test-Path -LiteralPath $Manifest)) {
   $count = @(Get-Content -LiteralPath $Manifest | Where-Object { $_ -like "phone=*" }).Count
   Write-Log "Manifesto: $count file del telefono. Il primo backup deve essere gia' partito nell'app."
@@ -662,7 +999,10 @@ try {
 }
 
 if ($exitCode -eq 0 -and $Verify) {
-  if ($isBackup) {
+  if ($isAi) {
+    Write-Log "Verifica dei dati sul telefono (sola lettura)..."
+    try { $exitCode = Invoke-VerifyAi } finally { Save-Log }
+  } elseif ($isBackup) {
     Write-Log "Verifica del backup: impronte del telefono e invarianti sull'area di prova..."
     $exitCode = Invoke-VerifyBackup
   } else {

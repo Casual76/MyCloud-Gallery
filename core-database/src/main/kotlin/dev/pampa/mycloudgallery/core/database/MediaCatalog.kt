@@ -1104,8 +1104,9 @@ class MediaCatalog(
 
   /**
    * D9 (`BackupCatalog.onlyCommonCopies`): i media propri la cui sola copia sul NAS e' nell'area **comune**, una riga per versione
-   * da proteggere senza copia privata e con una copia comune presente. [ids] null = tutti, altrimenti solo questi media.
-   * Mai una share di area sconosciuta: potrebbe essere un'area privata altrui.
+   * da proteggere senza copia privata e con una copia comune presente. [ids] null = tutti quelli che questo telefono ha avuto (campo, gruppo
+   * A, D2, Q4 (b): `BackupQueries.onlyCommonCopies`), altrimenti solo questi media. Mai una share di area sconosciuta: potrebbe essere
+   * un'area privata altrui.
    */
   suspend fun onlyCommonCopies(ids: Collection<MediaId>?, limit: Int): List<CatalogGuardCandidate> {
     require(limit > 0) { "Il tetto e' positivo." }

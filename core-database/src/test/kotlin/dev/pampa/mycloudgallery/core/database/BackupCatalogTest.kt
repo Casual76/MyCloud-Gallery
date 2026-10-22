@@ -738,6 +738,31 @@ class BackupCatalogTest : CatalogTestBase() {
     assertThat(candidates().map { it.mediaId }).contains(id)
   }
 
+  /**
+   * Campo, gruppo A (D2, B-S6 O-B14, Q4 (b)): il guardiano di sottofondo (`ids` null) aveva fatto 76 copie private di file messi sul NAS dal PC e poi
+   * spostati nell'area comune: media mai stati sul telefono, la cui copia del telefono non puo' "sparire". Adesso vede solo i media che il telefono ha
+   * avuto (qui una foto salvata, tolta dal telefono e poi spostata nell'area comune: la condizione di Q4 (b) e' gia' vera). Chiesti per nome (prima di
+   * "Libera spazio") ci sono tutti e due.
+   */
+  @Test
+  fun d2_ilGuardianoDiSottofondoVedeSoloIMediaCheIlTelefonoHaAvuto() = runBlocking<Unit> {
+    // Un file messo dal PC nell'area privata, poi spostato dall'app nell'area comune: mai stato sul telefono.
+    val fromPc = catalog.recordAll(listOf(nasObservation("campioni/IMG_9.jpg", smallFull(9), fileId = 9)), seenAt = T0).single()
+    val fromPcId = fromPc.mediaId!!
+    catalog.relocateNas(listOf(NasRelocation(fromPc.locationId!!, nasLocation("Z16/campioni/IMG_9.jpg", share = "NAS", fileId = 9), NasStamp(2_000, T0, 9))), T0 + 1)
+    assertThat(catalog.safety(fromPcId)!!.status).isEqualTo(SafetyStatus.ONLY_COMMON_COPY)
+    // Una foto del telefono con la copia privata, cancellata dal telefono e poi spostata nell'area comune.
+    val phoneId = addPhone(1)
+    val privateCopy = addPrivateCopy(1)
+    assertThat(catalog.markVanished(Db.phone("IMG_1.jpg", 101).key)).isTrue()
+    catalog.relocateNas(listOf(NasRelocation(privateCopy, nasLocation("Z16/IMG_1.jpg", share = "NAS", fileId = 1), NasStamp(2_000, T0, 1))), T0 + 2)
+    assertThat(catalog.safety(phoneId)!!.status).isEqualTo(SafetyStatus.ONLY_COMMON_COPY)
+
+    assertThat(catalog.onlyCommonCopies(null, 10).map { it.common.mediaId }).containsExactly(phoneId)
+    assertThat(catalog.onlyCommonCopies(setOf(fromPcId), 10).map { it.common.mediaId }).containsExactly(fromPcId)
+    assertThat(catalog.onlyCommonCopies(setOf(fromPcId, phoneId), 10)).hasSize(2)
+  }
+
   @Test
   fun leCopieInCodaFullHashAncheDelleAreaComuneSiRileggonoMaNonFannoMaiAlSicuro() = runBlocking<Unit> {
     // Una copia nell'area comune di un file che nessuno ha ancora letto per intero, e una nell'area privata.

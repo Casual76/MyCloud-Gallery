@@ -4251,3 +4251,24 @@ caricato e verificato:
   il finto), perche' la causa sta li'.
 - Test: `ShareReceiverActivityTest.d1_*`, `ManifestComponentsTest` (`singleTop`), `DefaultIncomingUploadsTest.d1_*`, `CampoAIncomingTest.d1_*` (`:app`, Room vero e
   copia immediata vera).
+
+**2. Il guardiano e le 76 copie "Backup/Area comune" (B-S6, O-B14).** *Perche' e' partito*: le 76 copie sono di file messi sul NAS dal PC
+(`campioni`, `mille`, `F9`, `F15`, `F16`, 701 B) e spostati dall'app nell'area comune con F15/F16: media propri (la prima posizione presente era nell'area
+privata), stato `only_common_copy`, **mai stati sul telefono**. Il lavoro e' `SafetyVerifyWorker` (la tappa `BackupStages.safety`, preset "Massimo", 23:44,
+dopo la scansione delle 23:38 che ha visto lo spostamento): `BackupGraph.guardianHasWork` vedeva i candidati e il guardiano con `GuardScope.All` copiava
+ogni media per cui `phoneStillHas` era falso; per un media senza nessuna riga del telefono `phoneRefOf` e' null e "non e' sul telefono" valeva come "la copia
+del telefono e' sparita" (`BackupPrivateCopyGuardian.plan`/`phoneStillHas`, `BackupQueries.onlyCommonCopies`).
+- **Che cosa vuol dire Q4 (b)** (decisione di questa correzione, coerente con la Fase 7 D28 e con L44): la copia privata nasce quando **la copia del telefono
+  non c'e' piu'**, cioe' per un media che il telefono **ha avuto** e non ha piu'. Non importa l'ordine: se la copia del telefono sparisce dopo lo spostamento,
+  il guardiano parte allora; se era gia' sparita prima (liberata con "Libera spazio", cancellata in Galleria dopo il backup) la condizione e' gia' vera e il
+  guardiano parte **subito dopo** lo spostamento, al primo giro delle verifiche. Un media che **non e' mai stato** sul telefono (messo sul NAS dal PC, o
+  di un'altra fonte) non ha una copia del telefono che possa sparire: nessuna copia privata in sottofondo, resta la protezione dei 30 giorni del cestino del
+  NAS (limite L44, gia' dichiarato). Prima di "Libera spazio" e di "Elimina solo dal telefono" (`GuardScope.Media`) il guardiano parte sempre, come prima.
+- "Il telefono l'ha avuto" si legge dal catalogo locale, mai dal NAS (E-S11): una posizione del telefono del media (presente o assente) **o** un elemento
+  `new_copy` del diario (il backup l'ha caricato da qui: resta anche dopo che la posizione assente si dimentica, 60 giorni). Correzione in
+  `BackupQueries.onlyCommonCopies` (con `ids` null, cioe' `GuardScope.All`, che usano il guardiano di sottofondo e `guardianHasWork`); contratto
+  `BackupCatalog.onlyCommonCopies` e finto `InMemoryBackupCatalog` (`Media.wasOnPhone`) allineati. Nessuno schema nuovo.
+- Il caso della Fase 7 ("il guardiano non parte mai per un media gia' assente dal telefono che viene spostato"): con questa regola parte, appena il
+  catalogo sa dello spostamento (la scansione dopo, o subito con il punto 7 qui sotto).
+- Test: `BackupCatalogTest.d2_*` (Room vero: il file del PC spostato non c'e' con `null`, c'e' se chiesto; la foto liberata e spostata c'e'),
+  `PrivateCopyGuardianTest.d2_*` (guardiano vero: una copia sola, quella del media che il telefono ha avuto).

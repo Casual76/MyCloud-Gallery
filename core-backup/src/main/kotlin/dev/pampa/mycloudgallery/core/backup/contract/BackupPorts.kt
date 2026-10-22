@@ -259,7 +259,11 @@ interface BackupCatalog {
   /** L'esito di una rilettura: vero se torna (la copia e' "verificata" adesso); falso toglie "al sicuro" (E-B8). */
   suspend fun markVerified(location: LocationId, readBack: Sha256, atMillis: Long): Boolean
 
-  /** I media propri con la sola copia nell'area comune (D9). */
+  /**
+   * I media propri con la sola copia nell'area comune (D9). Con [GuardScope.All] (campo, gruppo A, D2, Q4 (b)) solo quelli che **questo telefono ha
+   * avuto** (una posizione del telefono, anche assente, o un caricamento dal telefono): un media mai stato sul telefono non ha una copia del telefono
+   * che possa sparire. Con [GuardScope.Media] i media chiesti, comunque.
+   */
   suspend fun onlyCommonCopies(scope: GuardScope, limit: Int): List<GuardCandidate>
 
   // --- Stato (P5, P7) ---------------------------------------------------------------------------------------------------------

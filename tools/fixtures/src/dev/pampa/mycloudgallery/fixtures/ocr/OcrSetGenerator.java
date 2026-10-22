@@ -93,9 +93,14 @@ public final class OcrSetGenerator {
   private static String readme(int count) {
     return "Set OCR sintetico di MyCloud Gallery (" + count + " immagini): tutto il testo e' inventato, nessun dato personale.\n"
         + "manifest.tsv: id, file, genere, larghezza, px (altezza del carattere nell'immagine), degradazione, testo atteso (a capo = \\n).\n"
-        + "Sul telefono (build debug): adb push MCG-ocr /sdcard/Android/data/<id>.debug/files/MCG-ocr, poi Diagnostica > Sviluppo >\n"
-        + "Valutazione della ricerca > Lettura di prova. Il risultato (letto.tsv, id<TAB>testo letto) si copia sul PC con adb pull e si\n"
-        + "passa a generate-ocr.ps1 -Resoconto. Il set si cancella dal telefono alla fine.\n";
+        + "Sul telefono (solo build debug, id dev.pampa.mycloudgallery.debug; Git Bash: MSYS_NO_PATHCONV=1 davanti ai comandi adb):\n"
+        + "  adb push MCG-ocr /data/local/tmp/MCG-ocr\n"
+        + "  adb shell run-as dev.pampa.mycloudgallery.debug sh -c \"mkdir -p no_backup/eval && rm -rf no_backup/eval/ocr && cp -r /data/local/tmp/MCG-ocr no_backup/eval/ocr\"\n"
+        + "  adb shell rm -rf /data/local/tmp/MCG-ocr\n"
+        + "poi Diagnostica > Sviluppo > Valutazione della ricerca > Lettura di prova (serve la lettura del testo attiva). Il risultato\n"
+        + "(letto.tsv: id<TAB>testo letto) si copia sul PC e si passa a generate-ocr.ps1 -Resoconto:\n"
+        + "  adb exec-out run-as dev.pampa.mycloudgallery.debug cat no_backup/eval/ocr/letto.tsv > letto.tsv\n"
+        + "A fine misura: adb shell run-as dev.pampa.mycloudgallery.debug rm -rf no_backup/eval/ocr\n";
   }
 
   /** Il formato delle colonne del manifesto e del testo letto: tab e a capo come {@code \t} e {@code \n}, il backslash raddoppiato. */

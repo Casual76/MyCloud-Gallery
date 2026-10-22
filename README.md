@@ -150,6 +150,23 @@ condiviso nasce con il motore del NAS (`NasAiRuntime`: replica `AiShareSync` agg
 `WorkPass.AI`). All'avvio `TextReadingStartup` gira **prima di Hilt** (D41). L'azzeramento ferma AI e ricerca per prime. La prova della
 catena intera e' `SearchChainIntegrationTest`.
 
+**Il completamento della Fase 6 in `:app` (P11b).** Tre pezzi che P11 aveva lasciato fuori:
+- **Il ritaglio del soggetto (P13)** e' collegato. `CutoutRuntime` tiene `SubjectCutting` con MagicTouch (`MagicTouchCutter.create` sui file
+  verificati; il modello e' nell'APK e la prima volta si copia fra i modelli, senza rete), costruito al primo ritaglio e rilasciato dopo 3 minuti,
+  a memoria bassa (`AiStack.onTrimMemory`) e all'azzeramento (`AiGraph.stop`). `ai/CutoutWiring.kt` ha gli adattatori delle porte del viewer:
+  `AppViewerSubjectCutter` (sorgente = la migliore immagine che il dispositivo ha gia': la riga del telefono, l'originale portato dal viewer o
+  l'HQ della replica; mai uno scaricamento), `AppCutoutPng`, `CutoutFiles` (Copia e Condividi nella cartella `cacheDir/share/` del
+  `FileProvider` che c'e' gia'), `AppCutoutNewPhoto` ("Salva come nuova foto" in `Pictures/MyCloud Gallery/Ritagli/`, in debug con un conto di prova
+  `Pictures/mcg-prova/Ritagli/`) e `DiagCutoutSaver` (`CUTOUT_FAILED`, `CUTOUT_SAVE_FAILED`). La sorgente "Ritagli" del backup arriva dal passo 6
+  dell'onboarding (`BackupSourceCodec.fromOnboarding`) e, una volta sola, alle installazioni di prima (`DataStoreBackupSettingsStorage.offerCutoutsOnce`).
+  La prova e' `CutoutIntegrationTest`.
+- **I media del solo telefono si analizzano** (§2.2, D10, D14). `AppAiPhone` elenca i media senza copia sul NAS (`MediaCatalog.phoneOnlyWork`),
+  apre i loro byte (`MediaStorePhoneBytes`, con la recinzione di D13) e il `Preparer` della preparazione del NAS ne fa le anteprime, che vanno nel
+  buffer; il calcolo gira nella stessa tappa e con le stesse regole, e i risultati restano solo locali. La prova e' `PhoneOnlyAiTest`.
+- **La lettura al volo del viewer** legge l'immagine mostrata (anteprima nel buffer, byte del telefono, HQ della replica) solo con la lettura del
+  testo attiva qui, entro 2 secondi; il testo si salva nell'indice locale e si mette nell'outbox `ai` delle share che contengono il file (`AiGraph.keepReadText`).
+  La prova e' `ViewerTextOnTheFlyTest`.
+
 Dalla Fase 2 ogni modulo nuovo ha tre package fissi (docs/fase2-progetto.md, D6):
 - `contract`: le interfacce e i tipi che gli altri moduli usano (con KDoc che spiega il perche');
 - `noop`: i null-object che falliscono chiusi (nessuna rete, nessuna autenticazione, dispositivo mai configurato).

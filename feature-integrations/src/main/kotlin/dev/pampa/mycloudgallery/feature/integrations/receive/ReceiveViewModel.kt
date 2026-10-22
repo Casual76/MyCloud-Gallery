@@ -9,6 +9,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.IncomingSavePlan
 import dev.pampa.mycloudgallery.core.backup.contract.IncomingStage
 import dev.pampa.mycloudgallery.core.backup.contract.IncomingStream
 import dev.pampa.mycloudgallery.core.backup.contract.IncomingUploads
+import dev.pampa.mycloudgallery.core.backup.contract.NasDestination
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneConfirmationSheet
 import dev.pampa.mycloudgallery.feature.integrations.contract.EntryDecision
 import dev.pampa.mycloudgallery.feature.integrations.contract.EntryGate
@@ -19,12 +20,14 @@ import java.util.concurrent.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 // Fase 5B (P11, docs/fase5-progetto.md §1.5 `IncomingState`, §2.7, D24, C17, E-X2, E-X7, E-X8, E-S11): lo stato di "Salva sul NAS". Decide cosa si
 // vede e quando qualcosa puo' succedere; non sa niente di Compose.
@@ -36,7 +39,11 @@ import kotlinx.coroutines.launch
 //      con i tetti; la schermata mostra solo numeri e tipi, mai i nomi dei file;
 //   3. la **scelta della cartella** dalle Cartelle NAS (area comune con l'avviso "lo vedranno tutti i familiari");
 //   4. un **tocco** su "Salva sul NAS": solo allora nasce la conferma ([PhoneConfirmationSheet] sul [IncomingSavePlan]) e la condivisione va in
-//      coda. Mai niente da solo (E-S11). Annullare o chiudere toglie le copie.
+//      coda. Mai niente da solo (E-S11). Annullare o chiudere toglie le copie;
+//   5. una **condivisione nuova** mentre la schermata e' aperta (`onNewIntent`, campo A, D1 e CA-2): prende il posto della vecchia **nella stessa schermata**
+//      ([replaceRequest]). Prima la schermata lanciava la nuova in un task suo e chiudeva la vecchia: se Android bloccava l'avvio in silenzio la nuova si
+//      perdeva e la vecchia spariva comunque. Adesso la nuova si copia per prima (il permesso di lettura che porta `onNewIntent` vale per questa activity);
+//      la vecchia, se non era salvata, si toglie solo dopo che la nuova e' al sicuro, e una gia' in coda resta del diario.
 
 /** Che cosa mostra la schermata. */
 enum class ReceiveScreenState {
@@ -166,8 +173,8 @@ enum class ReceiveOutcome { FINISHED }
 
 class ReceiveViewModel(
   /** Da dove vengono i flussi: l'activity li costruisce dall'intento (`IncomingStreams`), la prova da una lista. */
-  private val streams: suspend () -> List<IncomingStream>,
-  private val overflow: Int,
+  streams: suspend () -> List<IncomingStream>,
+  overflow: Int,
   private val gate: EntryGate,
   private val uploads: IncomingUploads,
   private val destinations: IncomingDestinations,
@@ -191,11 +198,24 @@ class ReceiveViewModel(
   /** Quando non e' null la schermata ha finito: l'activity si chiude. */
   val outcome: StateFlow<ReceiveOutcome?> = _outcome.asStateFlow()
 
+  /** I flussi della condivisione di adesso: cambiano solo con [replaceRequest]. */
+  private var streams: suspend () -> List<IncomingStream> = streams
+  private var overflow: Int = overflow
+
   private var started = false
   private var saved = false
   private var stagingJob: Job? = null
   private var savingJob: Job? = null
   private var loadingJob: Job? = null
+
+  /** Una condivisione nuova arrivata mentre c'era gia' lavoro in corso (CA-2): parte appena la copia o il salvataggio di prima finiscono. */
+  private class Request(val streams: suspend () -> List<IncomingStream>, val overflow: Int)
+
+  private var pending: Request? = null
+
+  @Volatile private var staging = false
+
+  @Volatile private var saving = false
 
   /** Se il cancello e' chiuso dopo la partenza, che cosa copre la schermata; lo stato vero sta in [hiddenState]. */
   private var hiddenBy: ReceiveScreenState? = null
@@ -224,6 +244,7 @@ class ReceiveViewModel(
       EntryDecision.ALLOWED -> {
         reveal()
         begin()
+        tryRunPending()
       }
       EntryDecision.NEEDS_UNLOCK -> cover(ReceiveScreenState.LOCKED, ReceiveCounter.LOCKED)
       EntryDecision.NOT_READY -> cover(ReceiveScreenState.NOT_READY, ReceiveCounter.NOT_READY)
@@ -282,48 +303,117 @@ class ReceiveViewModel(
     if (started) return
     started = true
     mutate { it.copy(screen = ReceiveScreenState.STAGING, unlockFailed = false) }
+    startStaging(streams, overflow, previous = null, previousSaved = false)
+  }
+
+  /**
+   * La copia di una condivisione ([source], [extra] indirizzi oltre il tetto). [previous] e' la condivisione che questa sostituisce (CA-2): si toglie **dopo**,
+   * quando la nuova e' al sicuro (copiata, o rifiutata con il suo motivo), e solo se non era gia' in coda ([previousSaved]: quella e' del diario).
+   */
+  private fun startStaging(source: suspend () -> List<IncomingStream>, extra: Int, previous: IncomingStage?, previousSaved: Boolean) {
+    staging = true
     stagingJob = scope.launch {
-      // IN-6: il backup in prova non scrive sul NAS: si dice subito, senza copiare niente (prima: fino a 4 GiB copiati, poi un messaggio sbagliato).
-      if (blockedByTrial()) {
-        mutate { it.copy(screen = ReceiveScreenState.TEST_ONLY) }
-        return@launch
-      }
-      val stage = try {
-        uploads.stage(streams())
-      } catch (e: CancellationException) {
-        throw e
-      } catch (_: Exception) {
-        null
-      }
-      if (stage == null) {
-        mutate { it.copy(screen = ReceiveScreenState.NOTHING, rejected = mapOf(IncomingReject.UNREADABLE to 1)) }
-        return@launch
-      }
-      // Gli indirizzi oltre il tetto non si sono nemmeno guardati: si contano fra i "troppi".
-      val rejected = if (overflow > 0) stage.rejected + (IncomingReject.TOO_MANY to ((stage.rejected[IncomingReject.TOO_MANY] ?: 0) + overflow)) else stage.rejected
-      val photos = stage.accepted.count { it.mime.startsWith("image/") }
-      val roots = if (stage.accepted.isEmpty()) emptyList() else destinations.roots()
-      if (stage.accepted.isEmpty() || roots.isEmpty()) {
-        // Niente di buono, o nessuna cartella dove salvare: le copie, se ci sono, si tolgono subito.
-        val noFolder = stage.accepted.isNotEmpty()
-        if (noFolder) uploads.discard(stage.id)
-        mutate { it.copy(screen = ReceiveScreenState.NOTHING, rejected = rejected, stage = null, noFolder = noFolder) }
-        return@launch
-      }
-      mutate {
-        it.copy(
-          screen = ReceiveScreenState.READY,
-          stage = stage,
-          photos = photos,
-          videos = stage.accepted.size - photos,
-          bytes = stage.totalBytes,
-          rejected = rejected,
-          choices = roots,
-          trail = emptyList(),
-          selected = roots.first(),
-        )
+      try {
+        stageRequest(source, extra)
+      } finally {
+        if (previous != null && !previousSaved) withContext(NonCancellable) { uploads.discard(previous.id) }
+        staging = false
+        tryRunPending()
       }
     }
+  }
+
+  private suspend fun stageRequest(source: suspend () -> List<IncomingStream>, extra: Int) {
+    // IN-6: il backup in prova non scrive sul NAS: si dice subito, senza copiare niente (prima: fino a 4 GiB copiati, poi un messaggio sbagliato).
+    if (blockedByTrial()) {
+      mutate { it.copy(screen = ReceiveScreenState.TEST_ONLY) }
+      return
+    }
+    val stage = try {
+      uploads.stage(source())
+    } catch (e: CancellationException) {
+      throw e
+    } catch (_: Exception) {
+      null
+    }
+    if (stage == null) {
+      mutate { it.copy(screen = ReceiveScreenState.NOTHING, rejected = mapOf(IncomingReject.UNREADABLE to 1)) }
+      return
+    }
+    // Gli indirizzi oltre il tetto non si sono nemmeno guardati: si contano fra i "troppi".
+    val rejected = if (extra > 0) stage.rejected + (IncomingReject.TOO_MANY to ((stage.rejected[IncomingReject.TOO_MANY] ?: 0) + extra)) else stage.rejected
+    val photos = stage.accepted.count { it.mime.startsWith("image/") }
+    val roots = if (stage.accepted.isEmpty()) emptyList() else destinations.roots()
+    if (stage.accepted.isEmpty() || roots.isEmpty()) {
+      // Niente di buono, o nessuna cartella dove salvare: le copie, se ci sono, si tolgono subito.
+      val noFolder = stage.accepted.isNotEmpty()
+      if (noFolder) uploads.discard(stage.id)
+      mutate { it.copy(screen = ReceiveScreenState.NOTHING, rejected = rejected, stage = null, noFolder = noFolder) }
+      return
+    }
+    mutate {
+      it.copy(
+        screen = ReceiveScreenState.READY,
+        stage = stage,
+        photos = photos,
+        videos = stage.accepted.size - photos,
+        bytes = stage.totalBytes,
+        rejected = rejected,
+        choices = roots,
+        trail = emptyList(),
+        selected = roots.first(),
+      )
+    }
+  }
+
+  // --- Una condivisione nuova a schermata aperta (CA-2) -----------------------------------------------------------------------------
+
+  /**
+   * Una condivisione nuova (`onNewIntent`, `singleTop`) prende il posto di quella di adesso **in questa schermata**. Cio' che fa dipende da dove si e':
+   *  - il cancello non ha ancora aperto (controllo, sblocco, app non pronta): i flussi vecchi non sono mai stati letti, si cambiano e basta;
+   *  - il cancello si e' richiuso dopo la partenza (E-X7): niente si copia finche' non si riapre; poi la nuova parte;
+   *  - una copia o un salvataggio sono in corso: finiscono prima (un salvataggio non si interrompe a meta'), poi parte la nuova;
+   *  - altrimenti (scelta della cartella, errore, "In coda"): parte subito. La vecchia, se non era in coda, si toglie quando la nuova e' al sicuro.
+   * Due condivisioni nuove di fila: vale l'ultima.
+   */
+  fun replaceRequest(source: suspend () -> List<IncomingStream>, extra: Int) {
+    if (_outcome.value != null) return
+    synchronized(this) { pending = Request(source, extra) }
+    tryRunPending()
+  }
+
+  private fun tryRunPending() {
+    val request = synchronized(this) {
+      val next = pending ?: return
+      if (_outcome.value != null) {
+        pending = null
+        return
+      }
+      if (!started) {
+        // Mai letta niente: la condivisione nuova prende semplicemente il posto della vecchia.
+        streams = next.streams
+        overflow = next.overflow
+        pending = null
+        return
+      }
+      if (hiddenBy != null || staging || saving) return
+      pending = null
+      next
+    }
+    startReplacement(request)
+  }
+
+  private fun startReplacement(request: Request) {
+    val previous = core().stage
+    val previousSaved = saved
+    saved = false
+    savingJob = null
+    streams = request.streams
+    overflow = request.overflow
+    // La schermata riparte dalla copia della nuova; lo stato della vecchia non si vede piu'.
+    mutate { ReceiveUi(screen = ReceiveScreenState.STAGING) }
+    FlowCounters.receive.add(ReceiveCounter.OPENED)
+    startStaging(request.streams, request.overflow, previous, previousSaved)
   }
 
   // --- La cartella ---------------------------------------------------------------------------------------------------------
@@ -377,7 +467,19 @@ class ReceiveViewModel(
       return
     }
     mutate { it.copy(screen = ReceiveScreenState.SAVING) }
+    saving = true
     savingJob = scope.launch {
+      try {
+        runSave(stage, destination)
+      } finally {
+        saving = false
+        tryRunPending()
+      }
+    }
+  }
+
+  private suspend fun runSave(stage: IncomingStage, destination: NasDestination) {
+    run {
       val plan = IncomingSavePlan(stage, destination)
       val confirmation = PhoneConfirmationSheet(plan).tap(monotonicMs())
       val outcome = if (confirmation == null) {

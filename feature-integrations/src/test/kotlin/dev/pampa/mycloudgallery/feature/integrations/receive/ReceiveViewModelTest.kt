@@ -492,4 +492,160 @@ class ReceiveViewModelTest {
 
     assertThat(stageDirs()).hasSize(1)
   }
+
+  // --- CA-2: una condivisione nuova a schermata aperta -------------------------------------------------------------------------------
+
+  private fun freshStreams(seed: Int, size: Int = 2_000 + seed): List<IncomingStream> = listOf(incomingStream(ReceiveSamples.jpeg(size, seed)))
+
+  /** Un flusso che non si apre finche' il test non apre il [latch]: la copia di quella condivisione e' "in corso". */
+  private fun gatedStream(latch: java.util.concurrent.CountDownLatch, bytes: ByteArray): IncomingStream =
+    IncomingStream(IncomingOrigin.CONTENT_OF_ANOTHER_APP, "g.jpg", null, bytes.size.toLong()) {
+      latch.await()
+      java.io.ByteArrayInputStream(bytes)
+    }
+
+  /**
+   * CA-2: una condivisione nuova prende il posto della vecchia **nella stessa schermata**, senza un'altra activity. La nuova si copia per prima; la vecchia,
+   * non in coda, si toglie solo dopo. Prima la schermata rilanciava la nuova in un task suo e chiudeva la vecchia: se Android bloccava l'avvio la nuova si
+   * perdeva e la vecchia spariva lo stesso.
+   */
+  @Test
+  fun unaCondivisioneNuovaPrendeIlPostoDellaVecchiaNellaStessaSchermata_CA2() {
+    val model = model()
+    model.refreshGate()
+    waitFor(model, ReceiveScreenState.READY)
+    val old = model.ui.value.stage!!
+    assertThat(stageDirs()).hasSize(1)
+
+    model.replaceRequest({ freshStreams(7) }, extra = 0)
+    waitUntil { model.ui.value.screen == ReceiveScreenState.READY && model.ui.value.stage?.id != old.id }
+
+    val ui = model.ui.value
+    assertThat(ui.photos).isEqualTo(1)
+    assertThat(ui.videos).isEqualTo(0)
+    assertThat(ui.bytes).isEqualTo(2_007L)
+    // La vecchia, mai salvata, e' stata tolta dopo che la nuova era al sicuro: sul disco c'e' solo la nuova.
+    waitUntil { stageDirs().size == 1 }
+    assertThat(stageDirs()).doesNotContain(old.id.value)
+    assertThat(queue.enqueued).isEmpty()
+    assertThat(model.outcome.value).isNull()
+  }
+
+  /** CA-2: la copia di prima e' in corso: la nuova aspetta che finisca (le copie fatte non si buttano a meta'), poi prende il suo posto. */
+  @Test
+  fun laNuovaAspettaCheLaCopiaDiPrimaFinisca_CA2() {
+    val latch = java.util.concurrent.CountDownLatch(1)
+    val model = model(listOf(gatedStream(latch, ReceiveSamples.jpeg(3_000, 1))))
+    model.refreshGate()
+    waitUntil { asked == 1 }
+    assertThat(model.ui.value.screen).isEqualTo(ReceiveScreenState.STAGING)
+
+    var askedFresh = 0
+    model.replaceRequest({ askedFresh++; freshStreams(8) }, extra = 0)
+    Thread.sleep(150)
+    assertThat(askedFresh).isEqualTo(0)
+    assertThat(model.ui.value.screen).isEqualTo(ReceiveScreenState.STAGING)
+
+    latch.countDown()
+    waitUntil { model.ui.value.screen == ReceiveScreenState.READY && model.ui.value.bytes == 2_008L }
+    assertThat(askedFresh).isEqualTo(1)
+    waitUntil { stageDirs().size == 1 }
+  }
+
+  /** CA-2: due condivisioni nuove di fila mentre si copia: vale l'ultima; la prima non si legge nemmeno. */
+  @Test
+  fun dueCondivisioniNuoveDiFilaValeLUltima_CA2() {
+    val latch = java.util.concurrent.CountDownLatch(1)
+    val model = model(listOf(gatedStream(latch, ReceiveSamples.jpeg(3_000, 1))))
+    model.refreshGate()
+    waitUntil { asked == 1 }
+    var askedFirst = 0
+    var askedLast = 0
+    model.replaceRequest({ askedFirst++; freshStreams(8) }, extra = 0)
+    model.replaceRequest({ askedLast++; freshStreams(9) }, extra = 0)
+    latch.countDown()
+    waitUntil { model.ui.value.screen == ReceiveScreenState.READY && model.ui.value.bytes == 2_009L }
+    assertThat(askedFirst).isEqualTo(0)
+    assertThat(askedLast).isEqualTo(1)
+  }
+
+  /** CA-2: la vecchia era gia' in coda ("In coda"): e' del diario e resta; la schermata riparte con la nuova. */
+  @Test
+  fun unaVecchiaGiaInCodaResta_LaSchermataRipartePerLaNuova_CA2() {
+    val model = model()
+    model.refreshGate()
+    waitFor(model, ReceiveScreenState.READY)
+    model.save()
+    waitFor(model, ReceiveScreenState.DONE)
+    val queued = model.ui.value.stage!!
+
+    model.replaceRequest({ freshStreams(5) }, extra = 0)
+    waitUntil { model.ui.value.screen == ReceiveScreenState.READY && model.ui.value.stage?.id != queued.id }
+
+    assertThat(model.ui.value.bytes).isEqualTo(2_005L)
+    assertThat(model.ui.value.queued).isEqualTo(0)
+    // Le copie del diario non si toccano: la cartella vecchia c'e' ancora, accanto alla nuova.
+    assertThat(stageDirs()).contains(queued.id.value)
+    assertThat(stageDirs()).hasSize(2)
+    assertThat(queue.enqueued).hasSize(1)
+    // Salvare la nuova mette in coda la nuova, non la vecchia di nuovo.
+    model.save()
+    waitFor(model, ReceiveScreenState.DONE)
+    assertThat(queue.enqueued).hasSize(2)
+    assertThat(queue.enqueued.last().second).hasSize(1)
+  }
+
+  /** CA-2, E-X7: con l'app richiusa nel frattempo la nuova non si copia finche' non si sblocca; poi parte. */
+  @Test
+  fun conLAppRichiusaLaNuovaAspettaLoSblocco_CA2() {
+    val model = model()
+    model.refreshGate()
+    waitFor(model, ReceiveScreenState.READY)
+    gate.decision = EntryDecision.NEEDS_UNLOCK
+    model.refreshGate()
+    assertThat(model.ui.value.screen).isEqualTo(ReceiveScreenState.LOCKED)
+
+    var askedFresh = 0
+    model.replaceRequest({ askedFresh++; freshStreams(6) }, extra = 0)
+    Thread.sleep(150)
+    assertThat(askedFresh).isEqualTo(0)
+    assertThat(model.ui.value.screen).isEqualTo(ReceiveScreenState.LOCKED)
+
+    gate.decision = EntryDecision.ALLOWED
+    model.refreshGate()
+    waitUntil { model.ui.value.screen == ReceiveScreenState.READY && model.ui.value.bytes == 2_006L }
+    assertThat(askedFresh).isEqualTo(1)
+    waitUntil { stageDirs().size == 1 }
+  }
+
+  /** CA-2: se il cancello non si era ancora aperto, i flussi vecchi non sono mai stati letti: la nuova prende il posto e basta. */
+  @Test
+  fun primaDelCancelloLaNuovaPrendeIlPostoSenzaLeggereLaVecchia_CA2() {
+    gate.decision = EntryDecision.NOT_READY
+    val model = model()
+    model.refreshGate()
+    assertThat(model.ui.value.screen).isEqualTo(ReceiveScreenState.NOT_READY)
+    model.replaceRequest({ freshStreams(4) }, extra = 0)
+    gate.decision = EntryDecision.ALLOWED
+    model.refreshGate()
+    waitFor(model, ReceiveScreenState.READY)
+    assertThat(asked).isEqualTo(0)
+    assertThat(model.ui.value.bytes).isEqualTo(2_004L)
+  }
+
+  /** CA-2: la nuova non ha niente di salvabile: la schermata dice perche' e la vecchia, non salvata, si toglie comunque (la nuova e' "al sicuro": rifiutata). */
+  @Test
+  fun unaNuovaTuttaRifiutataDiceIlMotivoELaVecchiaSiToglie_CA2() {
+    val model = model()
+    model.refreshGate()
+    waitFor(model, ReceiveScreenState.READY)
+    val old = model.ui.value.stage!!
+
+    model.replaceRequest({ listOf(incomingStream(ReceiveSamples.fakeJpegThatIsHtml())) }, extra = 0)
+    waitUntil { model.ui.value.screen == ReceiveScreenState.NOTHING }
+
+    assertThat(model.ui.value.rejected).containsExactly(IncomingReject.NOT_MEDIA, 1)
+    waitUntil { stageDirs().isEmpty() }
+    assertThat(stageDirs()).doesNotContain(old.id.value)
+  }
 }

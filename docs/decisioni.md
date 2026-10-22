@@ -4180,3 +4180,39 @@ la maschera dalle fixture quando l'immagine e' una di esse (`failNext`, `release
 - **Backup**: `BackupSources.withCutouts(fenced)` una volta per le installazioni che c'erano (e `AppGraph` che costruisce le sorgenti dalle scelte dell'onboarding: aggiungere `CutoutBackup.source()`); con la recinzione la sorgente e'
   `CutoutBackup.source(fenced = true)`.
 - **Manifest, permessi, dipendenze**: niente di nuovo.
+
+### Misure sull'S25 e scelta fra v1 e v2 (22/10)
+
+Telefono: **Samsung SM-S931B (S25)**, Android 17, arm64-v8a, 8 core, 4 thread per il modello, **in carica via USB** (batteria 77%, 33,8 °C all'inizio, 35,1 °C fra una versione e l'altra, 36,4 °C alla fine; stato
+termico 0, nessun limite). Prova fatta con l'APK di prova di `core-ai` (`dev.pampa.mycloudgallery.core.ai.test`, sul telefono solo questo) e, per la v2, il pacchetto `.task` in `/data/local/tmp/mcg-models/`; **alla fine
+tolti tutti e due** (anche la cartella), l'app `dev.pampa.mycloudgallery.debug` non e' stata toccata. Le stesse 17 fixture, le stesse soglie, 5 giri a motore caldo (55 passaggi sulle fixture), foto da 12,6 MP
+(4096x3072, il tetto del viewer sull'S25) per la pressione. **La Tab S9 non c'e': le sue misure mancano** (annotato come lacuna, non come risultato).
+
+| S25 | v1 (float32, 512) | v2 (int8, 768) |
+|---|---|---|
+| IoU medio sulle 11 fixture | **0,949** | 0,931 |
+| IoU minimo | 0,743 (persona) | 0,822 (persona) |
+| Vuoti respinti | 6 su 6 | 6 su 6 |
+| Contratto sulle fixture (soglie fissate prima) | passa | passa |
+| Apertura del modello / riapertura | 60 / 42 ms | 131 / 117 ms |
+| Primo ritaglio dopo l'apertura | 616 ms | 1163 ms |
+| Fixture 640x480: quadro + modello + maschera, p50 / p95 | 249 / 254 ms | 819 / 828 ms |
+| ...su 4096x3072 (codificatore gia' calcolato nella v2), p50 / p95 | 645 / 649 ms | 702 / 706 ms |
+| **Pressione -> soggetto** (decodifica JPEG 12,6 MP + ritaglio), p50 / p95 | **674 / 675 ms** | 1263 / 1270 ms |
+| PNG di un 12,6 MP: senza / con contorno (p50) | 397 / 594 ms (201 / 216 KB) | 419 / 624 ms (215 / 233 KB) |
+| PSS: prima / modello caricato / dopo un 12,6 MP / dopo il rilascio | 109 / 241 / 320 / 182 MB | 109 / 676 / 713 / 269 MB |
+| Pipeline intera (PNG riletto senza metadati, EXIF, 200 MP, panorama, riduzione al budget) | 8 test su 8 | non provata (la pipeline usa la v1 dell'APK) |
+
+**Scelta: v1** (`magictouch-v1-float32`), con la regola scritta prima di misurare. Dei tre requisiti per la v2 non ne passa nessuno: (a) l'IoU medio e' **piu' basso** di 0,018 invece che piu' alto di 0,03 (0,931
+contro 0,949: la v2 migliora il caso peggiore, la sagoma di persona da 0,743 a 0,822, ma la media resta piu' bassa); (b) la pressione -> soggetto ha p50 di 1263 ms e p95 di 1270 ms, sopra il secondo (e il
+codificatore da 28 MB si ripaga solo se si ritaglia due volte la stessa foto); (c) il PSS a modello caricato e' di 676 MB (713 MB dopo una foto da 12,6 MP), contro il limite di 400 MB. La v1 ha p50 674 ms e p95 675 ms
+sulla foto piu' grande che il viewer apre, 241 MB a modello caricato (320 MB al picco) e 6 MB nell'APK. Tutte e due respingono i sei vuoti.
+
+**Impronta fissata** (nessun cambiamento all'asset, quindi niente da aggiornare nel catalogo, nella licenza o nel `NOTICE`): `ModelCatalog.CUTOUT_MAGICTOUCH` = `magictouch-v1-float32`, `magic_touch.tflite`, **6.227.884 byte**,
+SHA-256 `e24338a717c1b7ad8d159666677ef400babb7f33b8ad60c4d96db4ecf694cd25`, Apache 2.0, dentro l'APK come `cutout/magic_touch.tflite` (Q11). Il file e' quello che c'e' in `core-ai/src/main/assets/cutout/`
+(ricalcolato oggi: stesso SHA-256 e stessa dimensione). La v2 resta solo sul PC, **fuori dal repository**, in `%USERPROFILE%\.mycloudgallery\models\magictouch-v2\` (30.525.312 byte, SHA-256 `38431bc6...b03`): non
+entra nell'APK, non si scarica da nessuna parte e si puo' cancellare. Il codice della v2 (`V2Session`, `TaskBundle`) resta in `core-ai` perche' i banchi sul dispositivo lo usano; se si volesse riaprire la scelta
+(un'altra versione del modello, un telefono piu' lento) basta rimisurare con `CutoutFixturesDeviceTest` e `CutoutMeasurementsDeviceTest` (`core-ai/src/androidTest`); la regola e' sopra.
+
+**Limiti di questa misura**: fixture solo sintetiche (nessuna foto vera: i bordi su capelli, pelo e vetro si giudicano nella prova F66 a occhio); il telefono era in carica e la batteria e' salita di circa 2,6 °C
+(l'AP a 51,7 °C alla fine) senza che il sistema limitasse niente; un solo telefono. Per F66 resta da vedere a mano quanto il papero piccolo e il manico della tazza (le parti staccate dal soggetto) disturbano.

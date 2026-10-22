@@ -157,6 +157,67 @@
       "regressione": [
         { "metrica": "libraryPssKb", "statistica": "max", "aumentoMassimo": 0.15 }
       ]
+    },
+    {
+      "id": "ricerca",
+      "descrizione": "NUOVA (Fase 6, par. 5.4, P9): le 50 query pubbliche a motore caldo (30 per contenuto, 10 di soli filtri, 10 di testo) sulla libreria mista da 100 mila elementi con l'indice di ricerca (vettori a gruppi, testo sul 10%) e il motore 270M vero; dall'invio della query al primo fotogramma con i risultati (sezione di traccia search.firstResults), 5 iterazioni. Il dataset con i vettori lo prepara P11: senza, la prova si salta",
+      "prove": "^searchWarm$",
+      "proveAttese": ["searchWarm"],
+      "classi": ["SearchBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "validita": { "metrica": "searchSections", "statistica": "min", "minimo": 45, "spiega": "almeno 45 delle 50 sezioni search.firstResults nella traccia di ogni iterazione: se mancano la sezione non e' emessa dall'app o il buffer di Perfetto ha perso pacchetti, e il percentile non vale" },
+      "assolute": [
+        { "metrica": "searchWarmP95Ms", "statistica": "max", "massimo": 300.0, "spiega": "par. 5.4: p95 a caldo sotto i 300 ms con 100 mila elementi; la statistica e' la peggiore delle iterazioni (ogni iterazione e' il p95 delle sue 50 query)" }
+      ],
+      "regressione": [
+        { "metrica": "searchWarmP95Ms", "statistica": "median", "aumentoMassimo": 0.15, "arrotondaSu": 1 }
+      ]
+    },
+    {
+      "id": "ricerca-freddo-contenuto",
+      "descrizione": "NUOVA (Fase 6, par. 5.4, P9): la prima query per contenuto dopo un avvio a freddo, con il motore 270M da caricare e inizializzare (D35), 8 iterazioni",
+      "prove": "^searchColdContent$",
+      "proveAttese": ["searchColdContent"],
+      "classi": ["SearchBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "validita": { "metrica": "searchSections", "statistica": "min", "minimo": 1, "spiega": "almeno una sezione search.firstResults nella traccia: altrimenti l'app non la emette (P8, P11)" },
+      "assolute": [
+        { "metrica": "searchFirstMs", "statistica": "max", "massimo": 4000.0, "spiega": "par. 5.4: primo risultato a freddo per contenuto entro 4 s (motore caricato e inizializzato); la peggiore delle iterazioni" }
+      ],
+      "regressione": [
+        { "metrica": "searchFirstMs", "statistica": "median", "aumentoMassimo": 0.15, "arrotondaSu": 1 }
+      ]
+    },
+    {
+      "id": "ricerca-freddo-filtri",
+      "descrizione": "NUOVA (Fase 6, par. 5.4, P9): la prima query di soli filtri dopo un avvio a freddo: risponde dall'istantanea mentre il motore si carica (E-Q11), 8 iterazioni",
+      "prove": "^searchColdFilters$",
+      "proveAttese": ["searchColdFilters"],
+      "classi": ["SearchBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "validita": { "metrica": "searchSections", "statistica": "min", "minimo": 1, "spiega": "almeno una sezione search.firstResults nella traccia: altrimenti l'app non la emette (P8, P11)" },
+      "assolute": [
+        { "metrica": "searchFirstMs", "statistica": "max", "massimo": 300.0, "spiega": "par. 5.4: primo risultato a freddo per filtri e testo entro 300 ms; la peggiore delle iterazioni" }
+      ],
+      "regressione": [
+        { "metrica": "searchFirstMs", "statistica": "median", "aumentoMassimo": 0.15, "arrotondaSu": 1 }
+      ]
+    },
+    {
+      "id": "ricerca-memoria",
+      "descrizione": "NUOVA (Fase 6, par. 5.4, P9): memoria dell'app (PSS) con Cerca aperta dopo le 50 query, sulla libreria mista con l'indice di ricerca, 3 iterazioni. Nessun tetto assoluto: la prima corsa buona e' il riferimento",
+      "prove": "^searchMemory$",
+      "proveAttese": ["searchMemory"],
+      "classi": ["SearchBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "assolute": [],
+      "regressione": [
+        { "metrica": "searchPssKb", "statistica": "max", "aumentoMassimo": 0.15 }
+      ]
     }
   ]
 }

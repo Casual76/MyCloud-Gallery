@@ -3918,12 +3918,18 @@ togliere l'originale dopo la copia nell'APK di prova (l'emulatore ha 2 GB liberi
 - **La politica e' separata dal motore nativo.** Le classi di LiteRT-LM sono Java 21 e sulla JVM dei test non si caricano: i due motori parlano con
   una `VectorSession` (interfaccia) e solo `LiteRtLmSessions` e' attaccata alla libreria. Cosi' ripiego, serializzazione, errori e rilascio si
   provano sulla JVM con sessioni finte (`EmbedderPolicyTest`, 24 test) e il motore vero sul dispositivo con la stessa suite di contratto.
-- **`modelFd`, D16.** Il motore legge dal **descrittore verificato** (`ParcelFileDescriptor.dup` di `VerifiedModel.descriptor`, `modelPath`
-  vuoto: la libreria vieta di darli tutti e due), non dal nome del file. Provato con il motore vero: il file `models/<sha256>` sostituito con uno
-  falso dopo la verifica non cambia niente (il motore parte e da' gli stessi vettori). **Misurato: LiteRT-LM non chiude il descrittore**
-  (6 copie, 6 chiuse da noi, nessuna gia' chiusa dalla libreria; 105 descrittori aperti prima e dopo cinque cicli di carico e rilascio). Resta
-  la guardia `FdOwnership` (si chiude solo se dispositivo e inode sono ancora quelli della copia): costa una `fstat` e protegge da una versione
-  futura della libreria che ne prenda possesso. La cartella dei programmi compilati e' `<cacheRoot>/<sha256>-<backend>/` (la CPU non la riempie).
+- **Come il motore riceve il modello, D16 (`ModelAccess`).** Due modi, entrambi provati sul dispositivo:
+  `DESCRIPTOR` (`ParcelFileDescriptor.dup` di `VerifiedModel.descriptor`, `modelPath` vuoto: la libreria vieta di darli tutti e due) e
+  `PATH_CHECKED` (il predefinito: il percorso `models/<sha256>`, privato dell'app e in sola lettura, **dopo** che `ModelFiles.open` ha
+  verificato dimensione e SHA-256; il file per nome si confronta per dispositivo, inode e dimensione con il descrittore verificato, prima e dopo
+  l'inizializzazione, e il descrittore resta aperto finche' il motore vive, cosi' l'inode non si puo' riusare: un file rinominato o sostituito
+  nel frattempo e' `MODEL_UNAVAILABLE`, provato con il motore vero). **Perche' il predefinito e' il percorso**: misurato sull'S25, LiteRT-LM salva i programmi
+  compilati e i pesi preparati **solo** quando il modello arriva per percorso (con il descrittore la cartella della cache resta vuota): il 440M su
+  GPU riparte a caldo in 2,2 s invece di 5,1-5,7 s, il 270M su CPU in 0,39-0,53 s invece di 0,73-1,0 s e occupa 130 MB di PSS in meno (318-328 contro 447-462 MB).
+  Il costo e' disco: `models/cache/<sha256>-<backend>/` pesa 68 MB per il 270M su CPU, 6 MB per il 440M su GPU, 277 MB per il 440M su CPU (solo nel ripiego).
+  Con `DESCRIPTOR`: il file sostituito dopo la verifica non cambia niente (il motore ha il suo descrittore); **LiteRT-LM non chiude il descrittore** (15 copie, 15
+  chiuse da noi, nessuna gia' chiusa dalla libreria; 127 descrittori aperti prima e dopo cinque cicli di carico e rilascio); resta la guardia `FdOwnership`
+  (si chiude solo se dispositivo e inode sono ancora quelli della copia: una `fstat` contro una versione futura che ne prenda possesso).
 - **Ripiego su CPU, E-A12.** GPU che non si inizializza, inferenza GPU che lancia, vettore GPU non valido: si chiude il motore, si riapre su CPU e
   **si ripete la stessa immagine**; da li' fino alla fine del processo si resta su CPU e la Diagnostica riceve `AI_GPU_FALLBACK` una volta per
   ripiego. Senza il modello (`MODEL_UNAVAILABLE`) non si prova la CPU e il ripiego non si segna. Sulla CPU un vettore non valido e' `NON_FINITE`.
@@ -3981,10 +3987,13 @@ la coda e le preferenze si tolgono subito solo se ML Kit non e' partito in quest
 a ogni avvio del processo con la lettura non attiva qui, **prima di ogni altra cosa**, annulla i lavori e toglie coda e preferenze (una interrogazione di
 JobScheduler e due controlli di file, puo' girare sempre); segnala `TEXT_READING_OFF_CLEANUP` solo se ha tolto qualcosa.
 
-**Cosa ha mostrato il dispositivo** (emulatore Medium_Phone, x86_64, Android 17 / API 37, pagine da 16 KB, 3,5 GB, 22/10/2026)
+**Cosa ha mostrato il dispositivo** (emulatore Medium_Phone, x86_64, Android 17 / API 37, pagine da 16 KB, 3,5 GB; S25 SM-S931B, Snapdragon 8 Elite SM8750, Android 17, 22/10/2026; sull'S25 tutta la suite: 56 test verdi in 297 s)
 - Le sedici prove di `ModelInputs` e quelle degli altri motori sono passate al primo colpo, salvo `MlKit.initialize` due volte (corretto, sopra).
 - La **GPU non c'e'** sull'emulatore: `Backend.GPU` lancia `LiteRtLmJniException` all'inizializzazione (nessun crollo nativo), il ripiego su CPU e `AI_GPU_FALLBACK` partono
-  da soli. Il confronto GPU-CPU (coseno >= 0,99 su 20 immagini e 20 testi) si salta qui e si fa sull'S25 e sul Tab S9.
+  da soli. **Sull'S25 la GPU parte**: il 440M resta su GPU, nessun `AI_GPU_FALLBACK`, 20 immagini su 20 valide, **norma grezza dei vettori 0,9999993-1,0000001** (anche la CPU:
+  0,9999997-1,0000005): la banda di rinormalizzazione 0,90-1,10 non scatta mai. **Coseno GPU-CPU sullo stesso modello: immagini min 0,9926 / media 0,9965, testi
+  min 0,9990 / media 0,9996** (soglia 0,99, rispettata di poco sulle immagini: lo diceva anche la Fase 0, 0,997). Contro i riferimenti registrati sull'emulatore (CPU x86_64):
+  immagini su GPU min 0,9931, frasi del 270M su CPU arm min 0,9993.
 - I vettori di riferimento (`core-ai/src/androidTest/assets/golden/`, 3 file da 30 KB: 20 immagini 440M, 20 frasi 270M, 20 frasi 440M) sono registrati su CPU; i vettori di
   oggi hanno coseno 1,0 con loro (stesso dispositivo). Su un dispositivo con GPU lo stesso confronto e' il confronto GPU-CPU.
 - **Gli spazi del 270M (query) e del 440M (immagini) sono allineati**: per 10 query italiane ("un tramonto", "uno scontrino", "dei fiori"...) la scena sintetica attesa e' la prima
@@ -4003,6 +4012,8 @@ JobScheduler e due controlli di file, puo' girare sempre); segnala `TEXT_READING
   prospettiva) il 1024 peggiora prima: 16 px e' il margine che le copre, e costa una seconda passata solo sulle pagine con almeno 6 righe. P9 lo riconferma con le
   fixture degradate. **Limite noto**: se a 1024 ML Kit non vede nessuna riga (testo da 8 px o meno) la regola non scatta mai ("zero righe" non e' "fitto"); per quei casi la
   seconda passata la decide chi conosce il media (sorgente `SCREENSHOT`, o il vettore che dice "documento", P5).
+- **Sull'S25 (arm64) l'errore per carattere e' lo stesso della tabella entro 0,2 punti** (1024: 2,7 / 1,7 / 1,8 / 1,3 / 0,9 / 1,2 / 0,9 / 1,7 / 2,4%; 2048 a 8 px 22,0%): stessi modelli, stesso
+  esito. I tempi sono un altro mondo: una pagina da 24 righe si legge in 61-154 ms a 1024 e 110-214 ms a 2048 (emulatore: 0,6-1,4 s).
 - Angolo e posizioni: righe disegnate a -20, -8, 0, 8, 20 gradi: letti -20, -7, 1, 8, 20; gli estremi delle parole stanno entro il 2% della larghezza dell'immagine (§5.2); le
   stesse righe a 1024 (JPEG) e a 2048 (WebP) hanno le stesse posizioni entro il 2%. Il corpo `ocr` che ne esce passa `AiSegments.admits` e si rilegge uguale.
 - Con la lettura **spenta**, in un processo nuovo (`:mlkitoff`, `OffProbeService`): 0 classi di ML Kit, DataTransport, API interne di Google o Firebase Components caricate
@@ -4010,42 +4021,55 @@ JobScheduler e due controlli di file, puo' girare sempre); segnala `TEXT_READING
   motore a freddo ne carica 13; con `ModelInputs` che non controlla l'intestazione la prova degli ostili fallisce (40 decodifiche); con `cancelScheduledJobs` che non annulla la
   prova dello spegnimento fallisce (2 lavori rimasti); con il motore che riapre il file per nome invece di usare il descrittore la prova della sostituzione fallisce.
 
-**Misure** (`EngineMeasurementsDeviceTest`, una riga JSON per misura nel log `P4Measure`; sull'emulatore la CPU e' quella del PC, **non** del telefono)
-| Misura | Emulatore (CPU x86_64, 22/10) | S25 | Tab S9 |
+**Misure** (`EngineMeasurementsDeviceTest`, una riga JSON per misura nel log `P4Measure`; sull'emulatore la CPU e' quella del PC, **non** del telefono; S25: due corse,
+si danno gli estremi; il telefono si e' scaldato da 31 a 39 gradi di batteria, `Thermal Status` 1 alla fine, e la seconda corsa e' stata un po' piu' lenta)
+| Misura | Emulatore (CPU x86_64) | S25 (SM8750) | Tab S9 |
 |---|---|---|---|
-| Verifica SHA-256 a ogni apertura, 157 MiB / 370 MiB | p50 112 ms / 336 ms (cache di sistema calda) | da misurare | da misurare |
-| 270M su CPU: avvio a freddo / a caldo | 398 ms / 367 ms | da misurare | da misurare |
-| 270M: `embed` p50 / p95 | 42 ms / 56 ms | da misurare | da misurare |
-| 270M: PSS prima / caricato / dopo il rilascio | 166 / 409 / 167 MB | da misurare | da misurare |
-| 440M su CPU: avvio a freddo (verifica + init) / a caldo | 672 (281 + 389) ms / 624 (232 + 391) ms | da misurare | da misurare |
-| 440M su CPU: foto/s (3 giri), p50 / p95 per immagine | 2,5 / 2,6 / 2,6; 380 / 413 ms | da misurare | da misurare |
-| 440M su CPU: PSS prima / caricato / in lavoro / dopo il rilascio | 146 / 842 / 986 / 169 MB | da misurare | da misurare |
-| 440M su GPU: foto/s, avvio a freddo e a caldo, PSS | non disponibile (`LiteRtLmJniException`, ripiego su CPU) | da misurare | da misurare |
-| Misura breve D15 (20 immagini) | 2,6 foto/s su CPU, avvio 1,9-2,2 s (con il tentativo GPU fallito); 18.000 media = 1 notte | da misurare | da misurare |
-| OCR di ML Kit: prima lettura (con l'avvio della libreria) / p50 a 1024 / p50 a 2048 | 1.359 ms / 800 ms / 863 ms; PSS +60 MB | da misurare | da misurare |
+| Verifica SHA-256 a ogni apertura, 157 MiB / 370 MiB | p50 112 / 336 ms (cache di sistema calda) | p50 169-172 ms / 404-406 ms (circa 915 MiB/s) | da misurare |
+| 270M su CPU, per percorso: avvio a freddo / a caldo | 398 / 367 ms (senza cache) | 828-1127 ms / **394-529 ms** | da misurare |
+| 270M su CPU, per descrittore: avvio a freddo / a caldo | - | 752-977 ms / 732-1026 ms | da misurare |
+| 270M: `embed` p50 / p95 | 42 / 56 ms | 60-86 / 61-91 ms | da misurare |
+| 270M: PSS prima / caricato / dopo il rilascio (per percorso; per descrittore) | 166 / 409 / 167 MB | 196-214 / 318-328 / 195-210 MB (447-462 MB caricato) | da misurare |
+| 440M su GPU, per percorso: avvio a freddo / a caldo (verifica + init) | non disponibile | 4400-6127 ms / **2624-2644 ms** (408-430 + 2193-2234) | da misurare |
+| 440M su GPU, per descrittore: avvio a freddo / a caldo | non disponibile | 6057-6133 ms / 5381-6102 ms | da misurare |
+| 440M su GPU: foto/s (3 giri), p50 / p95 per immagine | non disponibile | **5,6-5,9** foto/s; 169-177 / 174-187 ms | da misurare |
+| 440M su GPU: PSS prima / caricato / in lavoro / dopo il rilascio | non disponibile | 178-226 / 828-859 / 842-874 / 215-246 MB | da misurare |
+| 440M su CPU (il ripiego): foto/s, p50 / p95 per immagine | 2,5-2,6; 380 / 413 ms | 1,16-1,35 foto/s; 799-858 / 872-896 ms | da misurare |
+| 440M su CPU: avvio a freddo / a caldo, per percorso | 672 / 624 ms | 1861-1955 / 896-915 ms | da misurare |
+| 440M su CPU: PSS prima / caricato / in lavoro / dopo il rilascio (per percorso) | 146 / 842 / 986 / 169 MB | 189-214 / 375-399 / 795-819 / 219-243 MB | da misurare |
+| Misura breve D15 (20 immagini) | 2,6 foto/s su CPU, avvio 1,9-2,2 s (con il tentativo GPU fallito) | **5,5-5,9 foto/s su GPU**, avvio 2,0-4,5 s; 18.000 media = 1 notte (0,9 ore) | da misurare |
+| OCR di ML Kit: prima lettura (con l'avvio della libreria) / p50 a 1024 / p50 a 2048 | 1359 / 800 / 863 ms; PSS +60 MB | 224-264 / 83-98 / 130-153 ms; PSS +30 MB | da misurare |
+
+Lettura: a 5,7 foto/s l'S25 fa 18.000 media in circa 53 minuti di solo calcolo (la Fase 0 misurava 2,8 foto/s con la decodifica degli originali: qui le anteprime sono gia'
+pronte); la stima della pagina deve contare l'avvio del motore (2,2 s a caldo, 4-6 s la prima volta) una volta per tappa. Il caldo costa: -26% in Fase 0.
 
 **Punti aperti**
-- **GPU e norma dei vettori**: sull'S25 va visto che il 440M resti su GPU (`AI_GPU_FALLBACK` assente), che i vettori GPU abbiano coseno >= 0,99 con i riferimenti su CPU e
-  quale sia la loro norma (se la banda 0,90-1,10 non bastasse, il motore tornerebbe su CPU a ogni immagine: lo si vedrebbe dal backend).
+- **Tab S9**: non c'e'. Restano da fare le sue misure della tabella e il confronto GPU-CPU (il codice e i test sono gli stessi: `connectedDebugAndroidTest` con i due modelli in
+  `/data/local/tmp/mcg-models/`).
+- **Disco della cache dei programmi**: `models/cache/` pesa fino a 68 MB (270M) + 6 MB (440M su GPU) + 277 MB (440M su CPU, se il ripiego scatta). La pagina Ricerca e modelli
+  (D20) deve contarla nello spazio dei modelli, e la rimozione di un modello deve togliere `cache/<sha256>-*` (P3 lo fa; P11 lo verifica).
+- **Il coseno GPU-CPU delle immagini e' 0,9926 al minimo**: sopra la soglia di 0,99 di 0,003; un aggiornamento di libreria o di driver che lo sposti lo fanno vedere il test
+  (`gpuECpuConcordanoSuVenteImmaginiEVenteTesti`) e i vettori di riferimento.
 - **`embed(images)` e' tutto o niente**: un'immagine che fa lanciare il motore fa perdere il lotto. P5 chiama con una immagine alla volta o ritenta una per una. Il motore ha anche
-  `computeEmbeddingBatch`: non usato, da misurare se rende di piu' sulla GPU.
+  `computeEmbeddingBatch`: non usato, da misurare se rende di piu' sulla GPU (5,7 foto/s a una a una).
 - **`ModelInputs` non costruisce `CutoutImage`** (P13: il costruttore e' `internal` a core-ai, lo puo' chiamare dalla sua cartella `cutout/`, con i suoi controlli di intestazione per i
   formati originali: HEIC, PNG, DNG...).
 - **Possibile rinforzo, non fatto**: allo spegnimento disabilitare i componenti di DataTransport con `PackageManager.setComponentEnabledSetting` (e riabilitarli prima di
   `MlKit.initialize`) chiuderebbe anche il caso, raro, di un tentativo di invio gia' in corso mentre si spegne. Oggi un lavoro rimesso in coda da un invio fallito nello stesso
   processo si annulla al prossimo avvio.
 - **Fixture degradate**: le pagine di P4 sono pulite (testo nero antialias su bianco); sfocatura, rumore, artefatti JPEG e prospettiva sono di P9.
-- L'emulatore non ha la GPU e le sue cifre non sono quelle del telefono: S25 e Tab S9 (quest'ultimo non c'e') restano da fare.
+- **Cosa ha lasciato ML Kit dopo una lettura vera**: sull'emulatore il database `com.google.android.datatransport.events`, le preferenze `com.google.mlkit.internal` e 2 lavori; sull'S25,
+  nella corsa completa, 1 lavoro (in quella corsa le prove di OCR avevano gia' ripulito coda e preferenze nello stesso processo); la prova pianta quello che manca, con i nomi veri.
 
 **Per chi usa questo pacchetto**
-- **P5** (calcolo): `LiteRtLmImageEmbedder(files, cacheRoot, recipe, diag)` come `ImageEmbedder` (`cacheRoot` = `noBackupFilesDir/models/cache`); `ModelInputs.fromAnalysis/fromFrames/forOcr`
+- **P5** (calcolo): `LiteRtLmImageEmbedder(files, cacheRoot, recipe, diag)` come `ImageEmbedder` (`cacheRoot` = `noBackupFilesDir/models/cache`; modello per percorso verificato, `ModelAccess.PATH_CHECKED`); `ModelInputs.fromAnalysis/fromFrames/forOcr`
   sono bloccanti (dispatcher di lavoro, mai il principale) e danno `null`/lista corta per un ingresso da non usare ("non supportato"); i vettori escono float32 normalizzati: si
   passano per `Float16.encode` per il `VecBody`; `embed` una immagine alla volta o ritentando una per una; `GatedTextReader.create(...)` per l'OCR, con `OcrResult.dense` per la
   seconda passata su HQ (`OcrSource.HQ`); `RealDeviceProbe(embedder)` per D15.
-- **P11** (integrazione): `LiteRtLmTextEmbedder(files, cacheRoot)` per le query (rilasciarlo 3 minuti dopo l'uscita da Cerca o a memoria bassa: D35); `GatedTextReader.create(context,
+- **P11** (integrazione): `LiteRtLmTextEmbedder(files, cacheRoot)` per le query (rilasciarlo 3 minuti dopo l'uscita da Cerca o a memoria bassa: D35; ricaricarlo a caldo costa 0,4-0,5 s sull'S25); lo spazio dei modelli deve contare `models/cache` (68 MB per il 270M); `GatedTextReader.create(context,
   { switch.state.value })` e **niente altro modo di costruire `MlKitTextReader`**; `TextReadingShutdown.create(context, gated)`: `atStartup(stato)` nel primo punto dell'`Application`, `onTurnedOff()` quando la lettura si spegne o questo dispositivo si esclude; i codici
   `AI_ENGINE_INIT_FAILED`, `AI_GPU_FALLBACK`, `OCR_FAILED`, `TEXT_READING_OFF_CLEANUP` arrivano dai callback `diag`.
 - **P12** (testo dal vivo): le righe sono quelle del formato; l'angolo e' in gradi fra -90 e 90, **positivo in senso orario sullo schermo**; gli estremi delle parole sono lungo la
   direzione di lettura: per un testo capovolto (angolo ripiegato di 180 gradi) corrono in senso opposto alla direzione dell'angolo.
-- **P13** (ritaglio): `EngineThread`, `FdOwnership` e il modo di dare un descrittore verificato al motore (`ParcelFileDescriptor.dup`) valgono anche per LiteRT; non c'e' un costruttore
+- **P13** (ritaglio): `EngineThread`, `FdOwnership` e il modo di dare un descrittore verificato al motore (`ParcelFileDescriptor.dup`) valgono anche per LiteRT, ma va controllato se anche li' la cache dei programmi compilati si salva solo per percorso (per LiteRT-LM e' cosi', `ModelAccess`); non c'e' un costruttore
   di `CutoutImage` in `ModelInputs`.

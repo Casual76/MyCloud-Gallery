@@ -15,6 +15,7 @@ import dev.pampa.mycloudgallery.core.ai.ocr.TextReadingShutdown
 import dev.pampa.mycloudgallery.core.ai.runtime.LiteRtLmImageEmbedder
 import dev.pampa.mycloudgallery.core.ai.runtime.LiteRtLmSessions
 import dev.pampa.mycloudgallery.core.ai.runtime.LiteRtLmTextEmbedder
+import dev.pampa.mycloudgallery.core.ai.runtime.ModelAccess
 import dev.pampa.mycloudgallery.core.ai.runtime.ModelInputs
 import dev.pampa.mycloudgallery.core.ai.runtime.OpenTimings
 import dev.pampa.mycloudgallery.core.ai.runtime.ProbeImageSet
@@ -79,10 +80,14 @@ class EngineMeasurementsDeviceTest {
   @Test
   fun motoreDelleQuery270SuCpu() = runBlocking<Unit> {
     TestModels.require(TestModels.query270m)
+    for (access in ModelAccess.entries) measureQuery(access)
+  }
+
+  private suspend fun measureQuery(access: ModelAccess) {
     val spec = TestModels.query270m
     val cacheDir = File(TestModels.cacheRoot, "${spec.sha256.hex}-cpu")
     cacheDir.deleteRecursively()
-    val embedder = LiteRtLmTextEmbedder(TestModels.files, TestModels.cacheRoot)
+    val embedder = LiteRtLmTextEmbedder(TestModels.files, TestModels.cacheRoot, access = access)
     val pssBefore = Probes.pssMb()
     val cold = (embedder.warmUp() as WarmUpResult.Ready).coldStartMs
     val pssLoaded = Probes.pssMb()
@@ -95,7 +100,7 @@ class EngineMeasurementsDeviceTest {
       ms(System.nanoTime() - start)
     }.sorted()
     embedder.release()
-    record("query_270m_cpu") {
+    record("query_270m_cpu_${access.name.lowercase()}") {
       put("avvio_a_freddo_ms", cold)
       put("avvio_a_caldo_ms", warm)
       put("embed_ms_p50", percentile(latencies, 0.5))
@@ -109,10 +114,10 @@ class EngineMeasurementsDeviceTest {
 
   // --- 440M (le immagini) --------------------------------------------------------------------------------------------------------
 
-  private suspend fun measureImages(spec: ModelSpec, backend: AiBackend) {
+  private suspend fun measureImages(spec: ModelSpec, backend: AiBackend, access: ModelAccess) {
     val cacheDir = File(TestModels.cacheRoot, "${spec.sha256.hex}-${backend.name.lowercase()}")
     val timings = OpenTimings()
-    val sessions = LiteRtLmSessions(TestModels.files, spec, TestModels.cacheRoot, AiRecipe.CURRENT, withVision = true, timings = timings)
+    val sessions = LiteRtLmSessions(TestModels.files, spec, TestModels.cacheRoot, AiRecipe.CURRENT, withVision = true, timings = timings, access = access)
     val images = ProbeImageSet.modelImages()
 
     cacheDir.deleteRecursively()
@@ -121,7 +126,7 @@ class EngineMeasurementsDeviceTest {
     val session = try {
       sessions.open(backend)
     } catch (t: Throwable) {
-      record("immagini_440m_${backend.name.lowercase()}") { put("disponibile", false); put("errore", t.javaClass.simpleName) }
+      record("immagini_440m_${backend.name.lowercase()}_${access.name.lowercase()}") { put("disponibile", false); put("errore", t.javaClass.simpleName) }
       return
     }
     val coldMs = ms(System.nanoTime() - coldStart)
@@ -130,12 +135,14 @@ class EngineMeasurementsDeviceTest {
     val pssLoaded = Probes.pssMb()
     val perImage = ArrayList<Double>()
     val rounds = ArrayList<Double>()
+    val norms = ArrayList<Double>() // la norma GREZZA dei vettori, prima di ogni controllo: dice se la GPU sta nella banda 1 +- 0,01
     repeat(3) {
       val roundStart = System.nanoTime()
       for (image in images) {
         val start = System.nanoTime()
-        session.embedImage(image.jpeg)
+        val raw = session.embedImage(image.jpeg)
         perImage += ms(System.nanoTime() - start)
+        norms += Math.sqrt(raw.sumOf { it.toDouble() * it })
       }
       rounds += images.size / ((System.nanoTime() - roundStart) / 1e9)
     }
@@ -151,7 +158,7 @@ class EngineMeasurementsDeviceTest {
     warm.close()
 
     val sorted = perImage.sorted()
-    record("immagini_440m_${backend.name.lowercase()}") {
+    record("immagini_440m_${backend.name.lowercase()}_${access.name.lowercase()}") {
       put("disponibile", true)
       put("avvio_a_freddo_ms", coldMs)
       put("avvio_a_freddo_verifica_ms", coldVerify)
@@ -163,6 +170,8 @@ class EngineMeasurementsDeviceTest {
       put("foto_al_secondo_mediana", rounds.sorted()[rounds.size / 2])
       put("immagine_ms_p50", percentile(sorted, 0.5))
       put("immagine_ms_p95", percentile(sorted, 0.95))
+      put("norma_grezza_min", norms.min())
+      put("norma_grezza_max", norms.max())
       put("pss_mb_prima", pssBefore)
       put("pss_mb_caricato", pssLoaded)
       put("pss_mb_in_lavoro", pssWorking)
@@ -174,13 +183,13 @@ class EngineMeasurementsDeviceTest {
   @Test
   fun motoreDelleImmagini440SuCpu() = runBlocking<Unit> {
     TestModels.require(TestModels.index440m)
-    measureImages(TestModels.index440m, AiBackend.CPU)
+    for (access in ModelAccess.entries) measureImages(TestModels.index440m, AiBackend.CPU, access)
   }
 
   @Test
   fun motoreDelleImmagini440SuGpu() = runBlocking<Unit> {
     TestModels.require(TestModels.index440m)
-    measureImages(TestModels.index440m, AiBackend.GPU)
+    for (access in ModelAccess.entries) measureImages(TestModels.index440m, AiBackend.GPU, access)
   }
 
   @Test

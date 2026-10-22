@@ -48,8 +48,9 @@ class LiteRtLmImageEmbedder internal constructor(
     cacheRoot: File,
     recipe: AiRecipe = AiRecipe.CURRENT,
     diag: (DiagCode) -> Unit = {},
+    access: ModelAccess = ModelAccess.PATH_CHECKED,
   ) : this(
-    sessions = LiteRtLmSessions(files, ModelCatalog.INDEX_440M, cacheRoot, recipe, withVision = true),
+    sessions = LiteRtLmSessions(files, ModelCatalog.INDEX_440M, cacheRoot, recipe, withVision = true, access = access),
     diag = diag,
   )
 

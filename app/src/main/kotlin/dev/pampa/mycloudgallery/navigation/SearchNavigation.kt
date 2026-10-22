@@ -9,6 +9,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
@@ -40,8 +41,8 @@ import dev.pampa.mycloudgallery.feature.settings.SettingsGraphRoute
 import dev.pampa.mycloudgallery.gallery.GalleryGraph
 import dev.pampa.mycloudgallery.main.CollectionsSlot
 import dev.pampa.mycloudgallery.main.ViewerHostState
+import dev.pampa.mycloudgallery.search.liveResultsView
 import javax.inject.Inject
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.Serializable
 
@@ -65,21 +66,28 @@ fun NavGraphBuilder.searchGraph(nav: NavController, actions: SearchActions) {
 @HiltViewModel
 class SearchHostViewModel @Inject constructor(private val gallery: GalleryGraph, private val stack: AiStack) : ViewModel() {
 
-  /** Le miniature di Cerca: solo dal telefono (`LocalOnlyRefs` scarta il NAS, D28, D33). */
+  /**
+   * Le miniature di Cerca: come la Libreria (`thumbRefAt`: il telefono se c'e', altrimenti il NAS), ma senza mai leggere il NAS (D28, D33). Un media solo sul NAS
+   * (sul tablet, quasi tutti) ha la miniatura nella replica locale: `SearchThumbnails` lo chiede al caricatore come richiesta "in arrivo", e la sorgente del NAS
+   * non legge l'originale se la richiesta non e' visibile (CE-5).
+   */
   val thumbnails = SearchThumbnails(
     loader = gallery.thumbnails,
     placeholders = gallery.placeholders,
-    refs = SearchRefs { snapshot, index -> (snapshot as? ColumnarTimelineSnapshot)?.refAt(index) },
+    refs = SearchRefs { snapshot, index -> (snapshot as? ColumnarTimelineSnapshot)?.thumbRefAt(index) },
   )
 
   val similar get() = stack.similar
 
   val services get() = gallery.viewerServices
 
-  /** Gli elementi del viewer per una vista dei risultati: la vista ordinata di Cerca, i byte dal repository della Libreria. */
+  /**
+   * Gli elementi del viewer per una vista dei risultati: la vista ordinata di Cerca, **viva** (E-Q13, CE-4: un media nascosto o eliminato altrove esce anche dal
+   * viewer aperto, come dalla griglia), i byte dal repository della Libreria.
+   */
   fun itemsOf(results: OrderedTimelineView): ViewerItems = object : ViewerItems {
     private val delegate = TimelineViewerItems(gallery.repository, LibraryFilter.ALL)
-    override val view: StateFlow<TimelineView> = MutableStateFlow(results)
+    override val view: StateFlow<TimelineView> = liveResultsView(results, stack.search.data, viewModelScope)
 
     override fun ref(id: MediaId): MediaRef = delegate.ref(id)
 
@@ -123,11 +131,17 @@ class AppSearchActions(
 
 /** La scheda Cerca nello scaffold (al posto del segnaposto): consegna alla pillola il suo fondale, come le altre schede. */
 @Composable
-fun SearchTab(slot: CollectionsSlot, actions: SearchActions, host: SearchHostViewModel, findSimilar: MediaId?) {
+fun SearchTab(
+  slot: CollectionsSlot,
+  actions: SearchActions,
+  host: SearchHostViewModel,
+  findSimilar: MediaId?,
+  onFindSimilarHandled: () -> Unit,
+) {
   val backdrop = rememberGlassBackdrop()
   SideEffect { slot.backdropOut(backdrop) }
   Box(modifier = Modifier.fillMaxSize().glassBackdropSource(backdrop).padding(slot.contentPadding)) {
-    SearchRoute(actions = actions, thumbnails = host.thumbnails, findSimilar = findSimilar)
+    SearchRoute(actions = actions, thumbnails = host.thumbnails, findSimilar = findSimilar, onFindSimilarHandled = onFindSimilarHandled)
   }
 }
 

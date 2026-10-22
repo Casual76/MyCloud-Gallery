@@ -8,6 +8,7 @@ import dev.pampa.mycloudgallery.core.index.TestStores
 import dev.pampa.mycloudgallery.core.index.p3.CompactorTest
 import dev.pampa.mycloudgallery.core.index.p3.OutboxCrashTest
 import dev.pampa.mycloudgallery.core.index.p3.PublisherTest
+import dev.pampa.mycloudgallery.core.index.quality.ReplicaQualityEstimateTest
 import dev.pampa.mycloudgallery.core.index.quality.ReplicaQualityTest
 import dev.pampa.mycloudgallery.core.index.replica.store.ReplicaStore
 import dev.pampa.mycloudgallery.core.index.replica.store.RoomProvisionalStore
@@ -136,6 +137,18 @@ class RoomIndexSyncEngineTest : IndexSyncEngineTest() {
 
 @RunWith(RobolectricTestRunner::class)
 class RoomReplicaQualityTest : ReplicaQualityTest() {
+  @After fun closeDatabases() = RoomStores.finishTest()
+
+  companion object {
+    @JvmStatic @BeforeClass fun install() = RoomStores.install()
+
+    @JvmStatic @AfterClass fun uninstall() = RoomStores.uninstall()
+  }
+}
+
+/** F12 (campo, gruppo B): lo spazio occupato segue la stima a ogni cambio di qualita', anche sull'archivio Room della replica. */
+@RunWith(RobolectricTestRunner::class)
+class RoomReplicaQualityEstimateTest : ReplicaQualityEstimateTest() {
   @After fun closeDatabases() = RoomStores.finishTest()
 
   companion object {

@@ -74,19 +74,30 @@ class IndexAiResults(
   private val index: LocalAiIndex,
   private val layouts: OcrLayoutStore,
   private val local: LocalBodyStore,
+  /** L'indice aperto (`SearchGraph.open`, idempotente): un lavoro in un processo appena nato puo' arrivare prima dell'apertura. */
+  private val ready: suspend () -> Boolean = { true },
 ) : AiResults, AiLocalBodies {
+  private suspend fun opened() {
+    if (!ready()) throw IOException("indice di ricerca non aperto")
+  }
+
   override suspend fun saveVectors(key: ContentKey, body: VecBody) {
+    opened()
     local.put(key, AiClass.VEC, body)
     index.saveVectors(key, body)
   }
 
   override suspend fun saveText(key: ContentKey, body: OcrBody) {
+    opened()
     local.put(key, AiClass.OCR, body)
     layouts.put(key, body)
     index.saveText(key, body)
   }
 
-  override suspend fun saved(key: ContentKey, recipe: Int): Set<AiClass> = index.saved(key, recipe)
+  override suspend fun saved(key: ContentKey, recipe: Int): Set<AiClass> {
+    opened()
+    return index.saved(key, recipe)
+  }
 
   override suspend fun vectors(key: ContentKey): VecBody? =
     if (AiClass.VEC in index.saved(key, 1)) local.get(key, AiClass.VEC) as? VecBody else null
@@ -103,8 +114,15 @@ class IndexAiResults(
 class IndexReplicaSink(
   private val index: LocalAiIndex,
   private val layouts: OcrLayoutStore,
+  /** L'indice aperto: senza (catalogo non ancora pronto) la replica non conferma la consegna e la ripete al giro dopo. */
+  private val ready: suspend () -> Boolean = { true },
 ) : AiReplicaSink {
+  private suspend fun opened() {
+    if (!ready()) throw IOException("indice di ricerca non aperto")
+  }
+
   override suspend fun apply(share: String, winners: List<AiWinner>) {
+    opened()
     val items = winners.map { w ->
       when (val e = w.entry) {
         is AiEntry.Vector -> LocalAiIndex.ReplicaItem.Vectors(e.contentKey, w.device, e.body)
@@ -118,10 +136,17 @@ class IndexReplicaSink(
   }
 
   override suspend fun withdraw(share: String, keys: List<AiKey>) {
+    opened()
     if (keys.isNotEmpty()) index.withdraw(share, keys.map { it.contentKey to it.cls })
   }
 
-  override suspend fun forgetDevice(device: String) = index.forgetDevice(device)
+  override suspend fun forgetDevice(device: String) {
+    opened()
+    index.forgetDevice(device)
+  }
 
-  override suspend fun forgetShare(share: String) = index.forgetShare(share)
+  override suspend fun forgetShare(share: String) {
+    opened()
+    index.forgetShare(share)
+  }
 }

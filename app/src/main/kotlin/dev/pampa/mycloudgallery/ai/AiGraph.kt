@@ -65,6 +65,10 @@ class AiGraphParts(
   val nas: () -> NasAiRuntime?,
   val traffic: (Long) -> Unit,
   val images: ImageEmbedder,
+  /** Gli ingressi dei motori: di serie `ModelInputs` (D5); i test d'integrazione ne danno di finti, con i motori finti. */
+  val inputs: AiInputs? = null,
+  /** Il modello del calcolo c'e' ed e' verificato: di serie `ModelFiles.open` (D16); i test, con i motori finti, senza file. */
+  val modelReady: (suspend () -> Boolean)? = null,
 )
 
 /** I modelli di questo dispositivo (P3): il gestore e i file verificati, con `refresh()` da chiamare all'avvio. */
@@ -101,17 +105,22 @@ class AiGraph(
     .stateIn(graphScope, SharingStarted.Eagerly, parts.textSwitch.state.value.activeHere)
 
   /** Il buffer di analisi degli indicizzatori (D10): `noBackupFilesDir/ai-buffer`. */
-  val buffer = DiskAiBuffer(File(noBackup, BUFFER_DIR))
+  val buffer = DiskAiBuffer(
+    File(noBackup, BUFFER_DIR),
+    // Lo spazio del volume di `noBackupFilesDir`: `File.usableSpace` di una cartella che non c'e' ancora vale 0, e il buffer rifiuterebbe
+    // tutto (trovato dal test della catena, P11).
+    AiFreeSpace { noBackup.usableSpace },
+  )
 
   /** Dove la preparazione (del NAS e del backup) consegna `analysis` e `frames` sugli indicizzatori (D10, P5). */
   val analysisSink = BufferAnalysisSink(buffer) { indexer.value }
 
   val unsupported = FileAiUnsupported(File(noBackup, FileAiUnsupported.FILE))
   private val localBodies = LocalBodyStore(File(search.dir, LOCAL_BODIES_DIR))
-  val results = IndexAiResults(search.index, search.layouts, localBodies)
+  val results = IndexAiResults(search.index, search.layouts, localBodies) { search.open() }
   val replicaStore = RoomAiReplicaStore(database)
   val publishStore = RoomAiPublishStore(database)
-  val replicaSink = IndexReplicaSink(search.index, search.layouts)
+  val replicaSink = IndexReplicaSink(search.index, search.layouts) { search.open() }
   val indexCounters = AiIndexCounters()
 
   /** Le porte che il grafo del NAS usa per le teste `ai` (P2). */
@@ -156,7 +165,7 @@ class AiGraph(
     override suspend fun shares(): List<String> = parts.shares()
   }
 
-  private val inputs = object : AiInputs {
+  private val inputs: AiInputs = parts.inputs ?: object : AiInputs {
     override fun image(analysis: ByteArray, recipe: AiRecipe): ModelImage? = ModelInputs.fromAnalysis(analysis, recipe)
 
     override fun frames(frames: List<VideoFrame>, recipe: AiRecipe): List<ModelImage> = ModelInputs.fromFrames(frames, recipe)
@@ -204,7 +213,8 @@ class AiGraph(
   private val noBackupDir = noBackup
 
   /** Il modello del calcolo (440M) c'e' ed e' verificato (`ModelFiles.open`: dimensione e SHA-256 a ogni apertura, D16). */
-  private suspend fun modelReady(): Boolean = parts.models.files.open(ModelCatalog.INDEX_440M.id)?.use { true } ?: false
+  private suspend fun modelReady(): Boolean =
+    parts.modelReady?.invoke() ?: (parts.models.files.open(ModelCatalog.INDEX_440M.id)?.use { true } ?: false)
 
   /**
    * Una tappa del calcolo (D22): tutti gli ambiti di questo dispositivo in ordine (area privata propria, comune, solo telefono) con le
@@ -217,6 +227,8 @@ class AiGraph(
       return emptyList()
     }
     val rt = parts.nas() ?: return null
+    // L'indice locale e' dove il calcolo salva: in un processo nato per il lavoro si apre qui (idempotente).
+    if (!search.open()) return null
     return engineFor(rt).runAll(budget, control)
   }
 

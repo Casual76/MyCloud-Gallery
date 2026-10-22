@@ -106,6 +106,9 @@ object AiWiring {
     queryEmbedder: ((LocalModels) -> TextEmbedder)? = null,
     reader: ((() -> dev.pampa.mycloudgallery.core.ai.contract.TextReadingState) -> GatedTextReader)? = null,
     fetcher: ModelFetcher? = null,
+    /** Solo i test d'integrazione (motori finti, nessun file di modello): gli ingressi e la prontezza dei modelli. */
+    inputs: dev.pampa.mycloudgallery.core.ai.compute.AiInputs? = null,
+    modelReady: (suspend (dev.pampa.mycloudgallery.core.models.contract.ModelId) -> Boolean)? = null,
   ): AiStack {
     val scope = graph.scope
     val noBackup = context.noBackupFilesDir
@@ -131,7 +134,10 @@ object AiWiring {
     // --- Ricerca (P6) -------------------------------------------------------------------------------------------------------
     val query = LazyQueryEmbedding(
       scope = scope,
-      modelReady = { models.manager.states.value[ModelCatalog.QUERY_270M.id] is ModelState.Ready || models.files.open(ModelCatalog.QUERY_270M.id)?.use { true } == true },
+      modelReady = {
+        modelReady?.invoke(ModelCatalog.QUERY_270M.id)
+          ?: (models.manager.states.value[ModelCatalog.QUERY_270M.id] is ModelState.Ready || models.files.open(ModelCatalog.QUERY_270M.id)?.use { true } == true)
+      },
       factory = { queryEmbedder?.invoke(models) ?: LiteRtLmTextEmbedder(models.files, cacheRoot, diag = diag) },
     )
     val search = SearchGraph(
@@ -143,7 +149,7 @@ object AiWiring {
       places = GeocoderPlaceLookup(gallery.places),
       embedding = query,
       queryModelBytes = ModelCatalog.QUERY_270M.sizeBytes,
-      modelMissing = { models.manager.states.value[ModelCatalog.QUERY_270M.id] !is ModelState.Ready },
+      modelMissing = { modelReady == null && models.manager.states.value[ModelCatalog.QUERY_270M.id] !is ModelState.Ready },
     )
 
     // --- Lettura del testo (D41) ---------------------------------------------------------------------------------------------
@@ -193,6 +199,8 @@ object AiWiring {
         nas = { gallery.nas?.runtime?.ai },
         traffic = { bytes -> scope.launch { graph.trafficLedger.record(TrafficSource.AI_COMPUTE, trafficNetworkOf(graph.environment.snapshot.value), bytes) } },
         images = images,
+        inputs = inputs,
+        modelReady = modelReady?.let { ready -> { ready(ModelCatalog.INDEX_440M.id) } },
       ),
     )
     // Il riparatore dell'indice: la replica `ai` riconsegna (la rifusione la rifa' il prossimo giro di sincronizzazione).

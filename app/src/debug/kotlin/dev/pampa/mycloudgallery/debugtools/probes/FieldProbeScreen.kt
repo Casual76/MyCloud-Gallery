@@ -57,7 +57,7 @@ data object FieldProbesRoute
 private enum class Pending { TRASH, TRASH_MANY, RESTORE, WRITE, VIEW, EDIT }
 
 /** Le sezioni della schermata: l'avviso di un tocco compare in fondo alla sezione del tocco, non in cima (LA-8). */
-private enum class Section { ENV, T09, T14, T15, T16, REPORT }
+private enum class Section { ENV, T09, T14, T15, T16, JOBS, REPORT }
 
 private class Notice(val section: Section, @StringRes val text: Int)
 
@@ -382,6 +382,35 @@ internal fun FieldProbeScreen(onBack: () -> Unit) {
     }
     noticeItem(Section.T16)
 
+    // --- Lavori periodici (gruppo B, punto 9) -----------------------------------------------------------------------------
+    item { FluidSectionHeader(title = stringResource(R.string.probe_section_jobs)) }
+    item {
+      FluidListGroup {
+        FieldProbePeriodicJob.ALL.forEachIndexed { index, job ->
+          if (index > 0) FluidListDivider()
+          FluidListRow(
+            title = stringResource(jobTitle(job)),
+            subtitle = stringResource(jobDetail(job)),
+            onClick = {
+              FieldProbePeriodicJobs.enqueue(context, listOf(job))
+              say(Section.JOBS, R.string.probe_jobs_queued)
+            },
+          )
+        }
+        FluidListDivider()
+        FluidListRow(
+          title = stringResource(R.string.probe_jobs_all_title),
+          subtitle = stringResource(R.string.probe_jobs_all_detail),
+          onClick = {
+            FieldProbePeriodicJobs.enqueue(context, FieldProbePeriodicJob.ALL)
+            say(Section.JOBS, R.string.probe_jobs_queued)
+          },
+        )
+      }
+    }
+    item { FluidSectionFootnote(text = stringResource(R.string.probe_jobs_footnote)) }
+    noticeItem(Section.JOBS)
+
     // --- Resoconto --------------------------------------------------------------------------------------------------------
     item { FluidSectionHeader(title = stringResource(R.string.probe_section_report)) }
     item {
@@ -431,4 +460,25 @@ private fun copy(context: Context, report: String) {
 private fun save(context: Context, report: String) {
   val dir = context.getExternalFilesDir(null) ?: return
   File(dir, "field-probe-report.txt").writeText(report + "\n")
+}
+
+/** I testi di una riga di "Lavori periodici". */
+@StringRes
+private fun jobTitle(job: FieldProbePeriodicJob): Int = when (job) {
+  FieldProbePeriodicJob.TRASH -> R.string.probe_job_trash
+  FieldProbePeriodicJob.HQ -> R.string.probe_job_hq
+  FieldProbePeriodicJob.PREPARATION -> R.string.probe_job_prep
+  FieldProbePeriodicJob.SYNC -> R.string.probe_job_sync
+  FieldProbePeriodicJob.SCAN -> R.string.probe_job_scan
+  FieldProbePeriodicJob.BACKUP -> R.string.probe_job_backup
+}
+
+@StringRes
+private fun jobDetail(job: FieldProbePeriodicJob): Int = when (job) {
+  FieldProbePeriodicJob.TRASH -> R.string.probe_job_trash_detail
+  FieldProbePeriodicJob.HQ -> R.string.probe_job_hq_detail
+  FieldProbePeriodicJob.PREPARATION -> R.string.probe_job_prep_detail
+  FieldProbePeriodicJob.SYNC -> R.string.probe_job_sync_detail
+  FieldProbePeriodicJob.SCAN -> R.string.probe_job_scan_detail
+  FieldProbePeriodicJob.BACKUP -> R.string.probe_job_backup_detail
 }

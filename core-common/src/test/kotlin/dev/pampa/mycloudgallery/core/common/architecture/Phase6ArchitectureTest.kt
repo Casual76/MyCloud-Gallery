@@ -375,7 +375,8 @@ class Phase6ArchitectureTest {
     val ALLOWED_DEPENDENTS: Map<String, Set<String>> = mapOf(
       MODELS to setOf(AI, FEATURE_SEARCH, "app"),
       AI to setOf(SEARCH, FEATURE_SEARCH, "app"),
-      SEARCH to setOf(FEATURE_SEARCH, "app"),
+      // Fase 7 (P0): core-albums usa i soli contratti di core-search (QueryParser, SearchEngine, Today); Phase7ArchitectureTest.
+      SEARCH to setOf(FEATURE_SEARCH, "app", "core-albums"),
       FEATURE_SEARCH to setOf("app"),
     )
 

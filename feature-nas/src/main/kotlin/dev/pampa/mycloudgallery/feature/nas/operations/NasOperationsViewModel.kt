@@ -18,9 +18,10 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 // Operazioni in corso (docs/fase4-progetto.md §1.5 "NasOperationState", §2.7): l'avanzamento di cio' che il diario sta facendo e
-// "Ferma". Il ViewModel non decide niente: mostra gli stati di `NasOperations.operations` e inoltra "Ferma". "Ferma" non vuole
-// una conferma perche' non distrugge: ferma prima dell'elemento successivo, toglie i propri temporanei e lascia fatto cio' che e'
-// fatto (annullare e' ammesso solo prima che una copia venga pubblicata, `OpStateMachine.cancellable`).
+// "Annulla il resto" (il tasto si chiamava "Ferma"). Il ViewModel non decide niente: mostra gli stati di `NasOperations.operations` e inoltra
+// il tocco. Per il progetto (R9 della 4B) fermare un'operazione la **annulla**: non c'e' una pausa dell'utente e non c'e' un "Riprendi" (correzioni
+// dal campo, gruppo B). Non vuole una conferma perche' non distrugge: ferma prima dell'elemento successivo, toglie i propri temporanei e
+// lascia fatto cio' che e' fatto (annullare e' ammesso solo prima che una copia venga pubblicata, `OpStateMachine.cancellable`).
 
 /** Lo stato della pagina: le operazioni non chiuse e, sotto, le ultime chiuse (la piu' recente prima). */
 @Immutable

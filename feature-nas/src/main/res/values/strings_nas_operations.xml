@@ -96,7 +96,7 @@
     <item quantity="one">%1$s file è aperto su un altro dispositivo: riprovo da solo, con attese sempre più lunghe, fino a 24 ore.</item>
     <item quantity="other">%1$s file sono aperti su un altro dispositivo: riprovo da soli, con attese sempre più lunghe, fino a 24 ore.</item>
   </plurals>
-  <string name="nas_ops_detail_cancelled">Fermata dopo %1$s di %2$s. Quello che era già fatto resta fatto.</string>
+  <string name="nas_ops_detail_cancelled">Annullata dopo %1$s di %2$s: il resto non è stato fatto. Quello che era già fatto resta fatto.</string>
   <string name="nas_ops_detail_failed">%1$s</string>
   <string name="nas_ops_detail_failed_progress">%1$s Fatti %2$s di %3$s: quelli fatti restano fatti.</string>
 
@@ -106,10 +106,10 @@
   <string name="nas_ops_pause_frozen">Questa area è ferma per cambiamenti anomali: serve un tuo controllo in Diagnostica.</string>
   <string name="nas_ops_pause_clock_jump">L\'ora del NAS è cambiata di colpo: aspetto che si stabilizzi.</string>
   <string name="nas_ops_pause_writes_stopped">Le scritture sul NAS sono ferme (interruttore di emergenza in Diagnostica).</string>
-  <string name="nas_ops_pause_user">L\'hai messa in pausa tu.</string>
+  <string name="nas_ops_pause_user">Hai chiesto di annullare il resto: mi fermo prima del prossimo elemento.</string>
 
-  <!-- Ferma -->
-  <string name="nas_ops_stop">Ferma</string>
-  <string name="nas_ops_stop_for">Ferma: %1$s</string>
-  <string name="nas_ops_stop_note">Quello che è già stato fatto resta fatto.</string>
+  <!-- "Annulla il resto" (prima "Ferma"): per il progetto (R9 della 4B) fermare un'operazione sul NAS la annulla, non la mette in pausa e non c'è un "Riprendi". -->
+  <string name="nas_ops_stop">Annulla il resto</string>
+  <string name="nas_ops_stop_for">Annulla il resto: %1$s</string>
+  <string name="nas_ops_stop_note">Quello che resta da fare non si farà. Quello che è già stato fatto resta fatto.</string>
 </resources>

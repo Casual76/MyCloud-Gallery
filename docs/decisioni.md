@@ -4289,3 +4289,18 @@ del telefono e' sparita" (`BackupPrivateCopyGuardian.plan`/`phoneStillHas`, `Bac
 - Test: `CorrectionsTest.d3_*` (il telefono con la versione di prima: dialogo chiesto, riga riscritta, NAS e `Versioni/` giusti, metadati letti dai byte
   corretti; la versione del telefono non al sicuro: `NEEDS_SAFE_FIRST`), `CampoAAppTest.d3_*` (grafo vero: dopo "Correggi" la data della versione e
   l'ordine della cella sono quelli nuovi).
+
+**4. D-B3 / F26: la foto cancellata in Galleria prima del backup spariva senza avviso.** Causa: `lost_before_backup` lo scriveva solo il motore
+(`SafeUploadEngine.gone(..., lost = true)`), per un candidato che sparisce **a giro in corso**; una foto cancellata prima del giro diventava `lost`
+(nessuna copia), usciva dai candidati (`backup_todo` = 0), dalla Libreria e dai conteggi, e nessuno segnava niente (`MediaCatalog.derive`/`store`).
+- Correzione nel catalogo, nell'unico posto dove si ricalcola lo stato: un media che **era un candidato del backup** (`backup_todo` di prima: presente sul
+  telefono, proprio, non al sicuro, senza un problema) e che il ricalcolo trova `lost` riceve la riga `lost_before_backup` (segna la cella), nella stessa
+  transazione della lettura del telefono che lo vede sparire. Se la riga torna (ripristino dal cestino di Galleria, anche con un altro `_ID`) la regola che
+  c'era (`releaseRecoveredLostMedia`) toglie il segno e il media torna candidato. Nessuno schema nuovo.
+- Non si segna: una foto al sicuro (diventa "solo NAS", E-P11), una foto di un altro account, una gia' persa o con un altro problema. Le foto delle
+  cartelle **non** salvate (le immagini di WhatsApp di B-S2) ricevono la riga anche loro (il catalogo non conosce le sorgenti), ma i conteggi della pagina
+  Backup, del piede e della Diagnostica sono per sorgente (`problemsByCode(sources)`): non le contano, e la cella non si vede (`presence` = `none`).
+- Anche "Elimina dal telefono" di una foto **non** al sicuro (con il foglio che avvisa) la fa "persa prima del backup" con il suggerimento del cestino di
+  Galleria: e' lo stesso caso per l'utente (E-B4 non distingue chi cancella).
+- Test: `BackupCatalogTest.d4_*` (sparita prima del giro: segnata, contata, la foto al sicuro no; ripristinata con un `_ID` nuovo: segno tolto, di nuovo
+  candidata); `iConteggiDellaSicurezza...` aggiornato (diceva "persa senza problema", il comportamento di prima).

@@ -2466,6 +2466,8 @@ class MediaCatalog(
     val backupTodo: Boolean,
     /** v4: il media e' tornato al sicuro e un problema del backup di prima non vale piu': la riga si toglie. */
     val staleProblem: Boolean,
+    /** Campo, gruppo A (D4): il candidato del backup e' rimasto senza copie: la riga `lost_before_backup` si scrive (E-B4). */
+    val lostBeforeBackup: Boolean = false,
   ) {
     val visible: Boolean get() = presence != Presence.NONE && !hidden
   }
@@ -2552,7 +2554,12 @@ class MediaCatalog(
     val probableDuplicate = row.groupId?.let { groupKind(tx, it) } == MediaGroupKind.PROBABLE_DUPLICATE.code
     // v4: il problema che il backup ha registrato; vale finche' il media non e' di nuovo al sicuro.
     val problem = problemDao.get(row.mediaId)
-    val markedProblem = problem?.marksCell == true && safety != SafetyStatus.SAFE
+    // Campo, gruppo A (D4, F26, E-B4): un candidato del backup (`backup_todo` di prima: presente sul telefono, proprio, non al sicuro) che resta senza
+    // nessuna copia e' "perso prima del backup", anche se la foto e' sparita **prima** che un giro la prendesse in lista (prima lo segnava solo il
+    // motore, per un candidato sparito a giro in corso, e la foto usciva dalla Libreria in silenzio). Se la riga torna, la regola di
+    // [releaseRecoveredLostMedia] toglie il segno.
+    val lostBeforeBackup = problem == null && row.backupTodo && safety == SafetyStatus.LOST
+    val markedProblem = (problem?.marksCell == true || lostBeforeBackup) && safety != SafetyStatus.SAFE
     val presence = SafetyRules.presence(media)
     return Derived(
       row = row,
@@ -2580,6 +2587,7 @@ class MediaCatalog(
       hidden = personal?.hidden == true,
       backupTodo = TimelineRules.backupTodo(presence, safety, markedProblem),
       staleProblem = problem != null && safety == SafetyStatus.SAFE,
+      lostBeforeBackup = lostBeforeBackup,
     )
   }
 
@@ -2591,6 +2599,7 @@ class MediaCatalog(
     if (d.owner?.value != row.ownerAccount) mediaDao.setOwner(row.mediaId, d.owner?.value, now)
     // Un problema del backup di prima, e il media e' di nuovo al sicuro: non vale piu' (stessa transazione).
     if (d.staleProblem) problemDao.delete(row.mediaId)
+    if (d.lostBeforeBackup) problemDao.upsert(BackupProblemEntity(row.mediaId, LOST_BEFORE_BACKUP, true, now))
     val same = row.presence == d.presence.code && row.safety == d.safety.code && row.sortTime == d.sortTime &&
       row.localDay == d.localDay && row.aspectMilli == d.aspectMilli && row.durationMs == d.durationMs &&
       row.placeId == d.placeId && row.cellFlags == d.cellFlags && row.thumbHash.contentEquals(d.thumbHash) &&

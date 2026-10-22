@@ -78,6 +78,12 @@ include ':core-ai'           // motori on-device (vettori, OCR solo se attivo, r
 include ':core-search'       // indice locale, analizzatore delle query, fusione e soglie, simili, copertura, cronologia
 include ':feature-search'    // la schermata Cerca e la pagina Ricerca e modelli
 
+// Fase 7 (docs/fase7-progetto.md §1.1, P0): album, album smart, condivisione, Raccolte. core-albums NON vede core-nasops, core-backup,
+// core-nas ne' la rete: sposta, carica e pubblica solo da porte sue che :app lega, e solo con una ShareConfirmation emessa dal foglio.
+// feature-albums e' cieca a core-nas, core-nasops, core-backup, core-index e core-trust (Phase7ArchitectureTest).
+include ':core-albums'       // album personali e smart, viaggi, album condivisi (replica, permessi), orchestratore della condivisione
+include ':feature-albums'    // elenco e pagina degli album, editor delle regole, fogli di condivisione e chiusura, proposte di viaggio
+
 // --- fluid-engine (inizio) ---
 def engineDir = file('engine')
 if (engineDir.exists()) {

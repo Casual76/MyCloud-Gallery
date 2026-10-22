@@ -29,6 +29,9 @@ object ModelChaosRound {
       violations += ModelViolation(ModelInvariant.REACHES_END, CheckPoint.END, "eccezione non prevista: ${t.javaClass.simpleName}: ${t.message}")
     } finally {
       world.stats.mismatches = world.counters.mismatch
+      world.stats.nasOpens = world.log.opens.get()
+      world.stats.nasReads = world.log.reads.get()
+      world.stats.nasFaultsFired = world.nas.firedFaults
       world.close()
     }
     return ModelRoundReport(plan, violations, world.stats)

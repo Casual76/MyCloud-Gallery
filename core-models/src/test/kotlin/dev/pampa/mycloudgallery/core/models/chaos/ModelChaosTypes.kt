@@ -120,8 +120,14 @@ class ModelRoundStats {
   var shelfPublications = 0
   var tampered = 0
   var checks = 0
+  var nasOpens = 0
+  var nasReads = 0
+  var nasFaultsFired = 0
 }
 
 class ModelRoundReport(val plan: ModelRoundPlan, val violations: List<ModelViolation>, val stats: ModelRoundStats) {
-  fun describe(): String = "$plan\n" + violations.joinToString("\n") { "  - $it" }
+  /** L'indice del giro nel banco (per rifarlo con `-FirstRound`); -1 se il giro e' stato lanciato da solo. */
+  var index: Int = -1
+
+  fun describe(): String = (if (index >= 0) "indice $index, " else "") + "$plan\n" + violations.joinToString("\n") { "  - $it" }
 }

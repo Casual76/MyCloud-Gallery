@@ -719,3 +719,139 @@ La prova della 5B (F43) è **superata** quando, tutte insieme:
 ## C12. Tempi
 
 2.000 giri a stack sul NAS finto con la 5B: ~41 s a stack (~235.000 file riletti con SHA-256, ~8,5 GiB). 600 giri a stack sul simulatore SMB: ~25 s. L'intero modulo `core-backup` (511 test, 6 saltati: 3 del NAS vero e 3 `@Ignore` dei difetti noti): ~4 minuti con `--max-workers=2`; dopo le correzioni di F1-F3 (19/10) 520 test, 3 saltati (solo quelli del NAS vero), ~4 minuti. Il runner `run5b` sul NAS vero: ~5,7 s per giro e ~0,8 interruzioni per giro, quindi **400 interruzioni sono ~500 giri e ~48 minuti** (il giro da 20 interruzioni: 32 giri, 155 s). Nessun test usa il tempo vero: le ore della 5B fanno avanzare un orologio finto.
+
+---
+
+# Parte D. La prova delle interruzioni dello scaricamento e del calcolo AI (Fase 6, P10)
+
+Il banco della Fase 6 (`docs/fase6-progetto.md` §5.5, riga P10 del §4.4). Stesso impianto delle Parti A-C: un mondo, un piano di guasti deciso dal seme, un verificatore, un banco che somma i giri, `Mutation` che rompe il codice sotto prova, e un modo `ai` di `s25.ps1` per il telefono. Il codice di produzione non si tocca: dove un invariante non regge, il banco lo dice con il seme (§D6).
+
+## D1. Che cosa promette
+
+I 10 invarianti del §5.5, controllati **dopo ogni morte del processo, a fine di ogni passo, a fine giro e in una rilettura da un processo nuovo**. Il numero è quello del §5.5; due moduli, perché `core-ai` non vede `core-nas` e `core-models` non vede `core-index`:
+
+| N. | Invariante | Dove si controlla |
+|---|---|---|
+| 1 | nessun modello non verificato caricato | `core-models` (`ModelFiles.open` consegna solo file con dimensione e SHA-256 del catalogo, sul suo descrittore); `core-ai` (il motore delle immagini non gira senza un caricamento verificato di quella vita) |
+| 2 | nessun parziale promosso | `core-models`: in `models/` solo file con dimensione e SHA-256 del catalogo, dopo ogni morte e ogni passo |
+| 3 | ripresa vera | `core-models`: ogni richiesta (HTTPS con `Range`, lettura del NAS) riparte dal confine di blocco sotto il parziale buono; i byte salvati superano la dimensione di un blocco per interruzione (più una dimensione per ogni ripartenza imposta: `200`, impronta sbagliata, file manomesso) |
+| 4 | nessun calcolo perso | `core-ai`: un media salvato non si salva due volte; un processo nuovo a lavoro finito non ricalcola niente |
+| 5 | dati coerenti | `core-ai`: ogni riga dell'indice locale ha il suo record nel file con il CRC giusto; ogni voce pubblicata ha la sua riga (e si mette in fila e si pubblica solo dopo averla salvata); ogni voce in attesa ha il corpo con cui è nata |
+| 6 | nessuna voce fuori posto | `core-ai`: M3 (nessuna voce per contenuti di un'altra share), nessuna area privata altrui toccata; `core-models`: sul NAS solo `devices/<io>/models/<sha256>` interi, oltre ai file messi dal banco |
+| 7 | prenotazioni | `core-ai`: mai oltre un'ora, mai la stessa unità a due dispositivi insieme |
+| 8 | il lavoro arriva in fondo | `core-ai`: a rete sana ogni contenuto in ambito ha `vec` e `ocr` o è "non supportato" (e solo le anteprime davvero rotte lo sono); `core-models`: il modello è pronto e la copia sul NAS pubblicata |
+| 9 | buffer e temporanei | `core-ai`: buffer sotto il tetto, nessun `*.tmp` orfano, nulla di già fatto rimasto (difetto AI-D1, §D6); `core-models`: niente in `partial/`, niente temporanei sul NAS |
+| 10 | nascosti | `core-ai`: i nascosti si calcolano (E-H1) e una ricerca di riferimento a fine giro non ne mostra nessuno (limite al §D8) |
+
+## D2. I banchi
+
+| Dove | Cosa | Giri |
+|---|---|---|
+| `core-models/src/test/.../chaos/` | `ModelChaosBenchTest`: il gestore vero (`LocalModels`) con `NasModelFetcher` e `HttpsModelFetcher` veri, il server HTTPS di prova del JDK (certificato di prova fidato solo dal banco), il NAS finto con `FaultPlan` sulle letture | **2.000** |
+| `core-models/src/test/.../chaos/` | lo stesso con il **simulatore SMB**: sessione di produzione (`SmbNasSessionManager`), lettura vera (`SmbNasMediaReader`, blocchi da 1 MiB), copia propria scritta con il vero `SmbNasFileSystem.publishExclusive` | **600** |
+| `core-ai/src/test/.../chaos/` | `AiChaosBenchTest`: il vero `AiComputeEngine` sul NAS finto di P5 (`SimNas`, unità con prenotazioni), motori finti, il vero `DiskAiBuffer`, il vero `LocalModels` per il modello, un indice locale con file dei vettori e CRC | **2.000** |
+| `core-models/.../chaos/ModelChaosMutationTest`, `core-ai/.../chaos/AiChaosMutationTest` | i quattro errori introdotti apposta (§D5) | 400 giri per difetto, si ferma al primo rosso |
+| `core-ai/.../chaos/AiChaosKnownDefectsTest` | la riproduzione minima dei difetti noti (§D6) | 2 test |
+| `tools/chaos/s25.ps1 -Mode ai` | il telefono (§D8) | ≥ 100 interruzioni |
+
+File: `ModelChaosTypes` (invarianti e piano del giro), `ModelChaosNas`/`ModelChaosSmb` (le due facce del NAS), `ModelChaosWorld`, `ModelChaosVerifier`, `ModelChaosRound`, `ModelChaosBench`, `ModelChaosMutants` e le prove; in `core-ai` `AiChaosTypes`, `AiChaosIndex` (indice locale), `AiChaosPorts` (guasti e pubblicatore con la cronaca), `AiChaosModel`, `AiChaosWorld`, `AiChaosVerifier`, `AiChaosRound`, `AiChaosBench`, `AiChaosMutants` e le prove.
+
+## D3. Come si lancia
+
+```powershell
+# Tutto sulla JVM, due moduli, --max-workers=2, DOPO aver aspettato 2 GB di RAM libera (il PC e' condiviso):
+powershell -ExecutionPolicy Bypass -File tools\chaos\area.ps1 -Mode ai -Stage jvm        # 2.000 + 2.000 giri
+powershell -ExecutionPolicy Bypass -File tools\chaos\area.ps1 -Mode ai -Stage smb        # 600 giri sul simulatore SMB
+powershell -ExecutionPolicy Bypass -File tools\chaos\area.ps1 -Mode ai -Stage mutants    # i quattro errori introdotti apposta
+powershell -ExecutionPolicy Bypass -File tools\chaos\area.ps1 -Mode ai -Stage known      # i difetti noti (rossi quando si correggono)
+# Rifare UN giro rosso (il rapporto dice "indice 163, ... seme di base 6103"): stesso seme di base, un solo giro, a partire da quell'indice
+powershell -ExecutionPolicy Bypass -File tools\chaos\area.ps1 -Mode ai -Stage jvm -Rounds 1 -Seed 6103 -FirstRound 163
+# Il telefono: vedi §D8. Il piano a secco e l'autotest non vogliono ne' telefono ne' adb:
+powershell -ExecutionPolicy Bypass -File tools\chaos\s25.ps1 -Mode ai -DryRun -Interruptions 100
+powershell -ExecutionPolicy Bypass -File tools\chaos\s25.ps1 -Mode ai -SelfTest
+powershell -ExecutionPolicy Bypass -File tools\chaos\s25-ai-finto.ps1
+```
+
+Variabili che i test leggono (come `MCG_BACKUP_CHAOS_*`): `MCG_MODELS_CHAOS_ROUNDS` (2.000), `MCG_MODELS_CHAOS_SMB_ROUNDS` (600), `MCG_AI_CHAOS_ROUNDS` (2.000), `MCG_MODELS_CHAOS_SEED` (6101 sulla JVM, 6102 sull'SMB), `MCG_AI_CHAOS_SEED` (6103), `MCG_MODELS_CHAOS_FIRST_ROUND` e `MCG_AI_CHAOS_FIRST_ROUND`. I rapporti vanno in `core-models/build/chaos/` (`modelli-jvm.txt`, `modelli-smb.txt`) e `core-ai/build/chaos/` (`calcolo-jvm.txt`). Con `gradlew :core-models:testDebugUnitTest :core-ai:testDebugUnitTest` i giri sono quelli di default.
+
+## D4. Come funziona un giro
+
+**Scaricamento** (`ModelChaosRound`). Un modello di prova (da 2 a 4 blocchi da 1 MiB, byte dal seme), una cartella `models/` vera su disco e le "vite" del processo una dopo l'altra, ognuna con un `LocalModels` nuovo sulla stessa cartella. Il piano decide, dal seme:
+- la **morte** dopo il blocco salvato *n* (il traffico si registra dopo la scrittura sincronizzata: li' muore), prima o dopo la chiamata *n* a un fetcher;
+- il **server HTTPS** che risponde `200` anche con `Range`, che taglia il corpo a *k* byte, che cambia il validatore (`If-Range` non torna) o serve un file con un byte cambiato;
+- il **NAS**: letture che cadono prima o dopo la risposta (`FaultPlan`), la copia che **cambia a meta'** (byte diversi, stessa lunghezza), la cartella dal PC;
+- il file pronto **manomesso** (un byte), poco spazio, il cancello di rete chiuso una volta, la copia sul NAS che fallisce la prima volta.
+
+Dopo ogni morte e ogni passo: invarianti 2 e 3 sulla cartella e sulle richieste; un caricamento per l'1. A fine giro la rete torna, "Scarica ora" porta in fondo, si pubblica la copia sul NAS e si controllano 8, 9, 6 e il tetto dei byte (3). Poi un processo nuovo rilegge tutto (`refresh`, caricamento, verifica).
+
+**Calcolo** (`AiChaosRound`). Una famiglia sul NAS finto di P5 (aree private di Anna e Bruno, area comune, video, anteprime rotte, nascosti, lo stesso contenuto in area privata e comune, media del solo telefono), il telefono di Anna con il vero motore e quello di Bruno che lavora sulle stesse unita'. Il piano fa:
+- **morire il processo dentro ogni salvataggio**: prima del file, a meta' del record (CRC sbagliato, nessuna riga), dopo il record e prima della riga, dopo la riga (P6, "Ordine delle scritture");
+- cadere la **rete** alla chiamata *n* del NAS (unita', anteprime, pubblicazione, "gia' fatto"), prima o dopo l'effetto, con sessione scaduta e stallo;
+- far prendere le unita' da un **altro dispositivo** a meta' (l'ora del NAS salta oltre l'ora della prenotazione e l'altro lavora), **chiudere e riaprire** la pubblicazione (F4-D31: voci in attesa, poi ripubblicate senza ricalcolo);
+- **uccidere e manomettere il modello** (`LocalModels` vero con un fetcher a pezzi), una copia sul NAS con un byte cambiato, un temporaneo lasciato nel buffer dalla morte.
+
+## D5. Il banco ha i denti
+
+Quattro errori, ognuno scritto come uno stack rotto che avvolge le porte del codice sano e ne riproduce l'effetto (come B7 e C7): il codice di produzione non si tocca.
+
+| Errore | Dove | Invariante che diventa rosso | Giro in cui lo vede (400 al massimo, seme 4242) |
+|---|---|---|---|
+| caricare prima di verificare (`open` consegna `models/<sha>` senza ricalcolare) | `ModelMutants.loadBeforeVerify` | **1** (dimensione e impronta del file consegnato non tornano) | 4 |
+| accettare un parziale (un `finally` lo promuove quando il passo finisce senza modello o il processo muore) | `ModelMutants.acceptPartial` | **2** (in `models/` un file che non e' del catalogo) | 10 |
+| pubblicare prima di salvare (la voce si mette in fila e si pubblica prima di scrivere la riga) | `AiMutants.publishBeforeSave` | **5** (voce messa in fila e pubblicata senza la sua riga locale) | 1 |
+| salvare dopo aver pubblicato (le righe si scrivono a fine unita', dopo la pubblicazione) | `AiMutants.saveAfterPublish` | **5** (idem) | 1 |
+
+Lo stack sano con gli stessi semi resta verde (150 giri per lo scaricamento, 200 per il calcolo), cosi' il rosso viene dal difetto. Gli ultimi due errori hanno lo stesso invariante perché la regola e' una sola ("si salva, poi si mette in fila, poi si pubblica"): il banco la controlla nel momento in cui la voce entra in fila e in cui esce, non solo dopo una morte.
+
+## D6. Difetti trovati nel codice di produzione
+
+**AI-D1 (invariante 9, "buffer"): una morte fra il salvataggio di un media e lo svuotamento di fine tappa lascia le sue anteprime nel buffer per sempre.** `ComputeSession` svuota il buffer con `evict(tally.finished)` a fine unita' e a fine tappa dei media del telefono; `tally.finished` contiene solo i media che QUELLA tappa ha toccato. Se il processo muore dopo il salvataggio di un media e prima dello svuotamento, il processo nuovo non lo ritocca: un media salvato non e' piu' un candidato (`phoneOnly`) e l'unita' di un media gia' fatto non si prende piu' (`WorkUnits.next` salta le unita' senza lavoro). `DiskAiBuffer` all'apertura toglie i temporanei e i nomi estranei, ma non i blob di lavoro finito. Effetto: ogni morte lascia fino a un'unita' (200 media, ~30 MB) di anteprime nel buffer, che pesa sul tetto di 500 MB (`put` falso = pieno: lo scaricamento si ferma) finche' non si svuota tutto per spazio basso (E-A17). Non e' una perdita di dati e non rompe nessuna garanzia degli altri invarianti: il banco lo conta a parte (`KnownDefect.BUFFER_ORPHAN_BLOBS`: non fa rosso) e lo riproduce `AiChaosKnownDefectsTest.aiD1_laMorteLasciaLeAnteprimeNelBuffer` (due media del solo telefono, morte dopo il primo salvataggio); nel banco grande compare in 312 giri su 2.000, il primo e' l'indice 8 con seme di base 6103 (seme del giro 6103081690). **Correzione suggerita** (a chi ha il perimetro, P5/P11): all'apertura del buffer, o a inizio tappa, togliere i blob dei media che `AiResults.saved` dice finiti; quando la si fa, il test di riproduzione diventa rosso e si toglie l'etichetta dal verificatore.
+
+Per lo scaricamento il banco non ha trovato difetti: 2.000 giri sulla JVM e 600 sull'SMB verdi.
+
+## D7. Il telefono (`tools/chaos/s25.ps1 -Mode ai`)
+
+**Pronto, non eseguito** (niente telefono e niente NAS in questo pacchetto). Prima, a mano: l'S25 con la build debug e l'account di prova ha fatto il primo backup di `mcg-prova` (modo backup) e nell'app il ruolo Indicizzatore e' acceso; poi:
+
+```powershell
+# 1. nell'app: Ricerca e modelli -> si scaricano i modelli / "Indicizza ora"
+# 2. almeno 100 interruzioni: kill -9 (run-as) e Wi-Fi spento per 3-20 s, a tempi casuali; l'app si rilancia dopo ogni morte
+powershell -ExecutionPolicy Bypass -File tools\chaos\s25.ps1 -Mode ai -Serial RFCY61FZDHW -Interruptions 100 -Seed 61 -SettleSeconds 300 -Verify
+# 3. (o a parte) il verificatore dei dati sul telefono
+powershell -ExecutionPolicy Bypass -File tools\chaos\s25.ps1 -Mode ai -Step verify -Serial RFCY61FZDHW -Interruptions 100
+```
+
+Il verificatore (`-Step verify`) lavora in **sola lettura** e solo nella cartella dell'app di debug, via `run-as` (`find`, `stat`, `sha256sum`, `exec-out ... cat`): in `models/` ogni file ha nome, dimensione e SHA-256 del catalogo (letto da `ModelCatalog.kt`; invarianti 2 e 1), `models/partial/` e' vuota a ripresa finita (9); in `ai-buffer/` nessun `*.tmp` e al massimo 500 MB (9); in `search/` i record del file dei vettori hanno il CRC giusto (5): una morte puo' rovinare al piu' i record di una scrittura (fino a 9), di piu' e' un errore. Il file dei vettori si copia in `build\chaos\` e si cancella a fine controllo. Esce con 4 se qualcosa non torna, come il modo backup.
+
+**Guardie** (come gli altri modi, un po' piu' strette): un solo telefono, `RFCY61FZDHW` (con un adb finto, `MCG_ADB`, vale il numero che si vuole); solo `dev.pampa.mycloudgallery.debug`; il Wi-Fi si spegne solo con `svc wifi disable` dello script, al massimo 120 s, e si riaccende SEMPRE (anche se lo script e' interrotto); sul telefono si leggono solo file della cartella dell'app. Il calendario dipende solo dal seme; `-DryRun` lo stampa. `-Mode ai` ha solo i passi `interrupt` e `verify`: la semina di `mcg-prova` e il primo backup sono del modo backup. I modi `move` e `backup` non cambiano.
+
+**Provato senza telefono**: `s25.ps1 -Mode ai -SelfTest` (record dei vettori buoni, rovinati nel mezzo, troncati in coda, spazzatura; catalogo dei modelli letto dal sorgente; guardie accettate e rifiutate) e `s25-ai-finto.ps1` (stile di `s25-finto.ps1`, contro `fake-adb/`, che ora capisce anche `run-as <pacchetto> find` e `exec-out run-as <pacchetto> cat`): verificatore verde su un telefono in ordine, rosso per un modello con un byte cambiato, un file estraneo, un modello piu' corto, un parziale rimasto (verde con `-NotSettled`), un temporaneo orfano, troppi record rovinati; interruzioni con Wi-Fi riacceso e adb che riceve solo comandi previsti, solo `run-as` dell'app di debug, solo percorsi `no_backup/(models|ai-buffer|search)`; guardie. **Non provato**: `kill -9` e `svc wifi` veri, `run-as` sul telefono vero, l'indicizzazione e lo scaricamento veri dell'app (P11).
+
+## D8. Che cosa non copre (e chi lo copre)
+
+- **Le anteprime lette dall'SMB**: `core-ai` non vede `core-nas` (e `core-models` non vede `core-index`), quindi `IndexAnalysisFetcher` e `NasRemoteIndex` non si possono montare sul simulatore SMB da questi due moduli, senza toccare i `build.gradle`. I 600 giri SMB leggono i **modelli** con la lettura vera; per le anteprime serve `testImplementation project(':core-nas')` in `core-ai` (P11, o P0) oppure un test in `:app`/`core-index` che monti `IndexAnalysisFetcher` sul simulatore e lanci questo mondo. Resta aperto.
+- **Le primitive `SmbNasFileOps`**: i modelli si leggono con `SmbNasMediaReader` e la copia propria si scrive con il vero `SmbNasFileSystem.publishExclusive` (`ShelfWriter` vero e' un punto aperto di P3: scrittura a flusso). `SmbNasFileOps` (cestino, rinomine) non e' sul percorso dei modelli.
+- **L'indice locale vero** (`LocalAiIndex`, in `core-search`, che `core-ai` non vede): il banco mette alla prova il **contratto** che l'indice deve rispettare (record con CRC, riga di conferma, coda rovinata che un processo nuovo butta) con una sua implementazione in `AiChaosIndex`. La stessa verifica (`AiChaosVerifier`: righe contro record) va ripetuta sull'indice vero in un test di `:app` (P11), dove si vedono tutti i moduli.
+- **I nascosti (10)**: nel banco di `core-ai` non c'e' un motore di ricerca. Il banco controlla che i nascosti si calcolino (E-H1) e che una ricerca di riferimento (dati pubblicati + bandierine del catalogo) non ne mostri: e' la meta' che sta nel calcolo. L'altra meta' (`InMemorySearchEngine`/`SearchEngine` dopo le interruzioni) e' nei test di proprieta' di `core-search` (P6) e va ripetuta a fine giro in un test di `:app`.
+- **Il vero HTTPS di Hugging Face**: il server di prova e' del JDK con un certificato fidato solo dal banco; redirezioni verso host non ammessi, `http`, intestazioni e cookie sono di `HttpsModelFetcherTest` (P3). Il CDN vero, il TLS di sistema e `HttpURLConnection` di Android sono del telefono (F46-F49).
+- **Il tempo del NAS vero e le ore**: le prenotazioni di un'ora e l'ora del NAS fanno avanzare un orologio finto.
+
+## D9. Come collegare il banco a `check.ps1` (P11)
+
+Il banco gira gia' con `gradlew :core-models:testDebugUnitTest :core-ai:testDebugUnitTest` (le sue classi stanno nei moduli, con i loro giri di default). **Non e' collegato a `check.ps1`**, che tocca solo P11:
+1. nessuna riga nuova se `check.ps1` lancia i test unitari di tutti i moduli (lo fa gia' per le Fasi 4 e 5): i 2.000 giri a ogni giro di `check.ps1` sono i default del banco; `-PmcgTestTimeoutMinutes` resta quello (20 minuti: il banco del calcolo dura ~4 minuti con le mutazioni e `core-models` ~3,5 minuti in tutto: 2.000 giri, 600 SMB e mutazioni);
+2. se `check.ps1` filtra i test per modulo, aggiungere `core-models` e `core-ai` ai moduli con i banchi, accanto a `core-nasops` e `core-backup`;
+3. facoltativo, per un passo a se': `tools\chaos\area.ps1 -Mode ai -Stage jvm` e `-Stage mutants` (aspettano da soli 2 GB di RAM libera), e `tools\chaos\s25-ai-finto.ps1` + `s25.ps1 -Mode ai -SelfTest` accanto al passo che prova `s25-finto.ps1`;
+4. `AiChaosKnownDefectsTest` e' un test che diventa rosso quando AI-D1 viene corretto: va letto come un avviso, non come una regressione (§D6).
+
+## D10. Che cosa conta come superata
+
+1. **JVM**: 2.000 giri dello scaricamento e 2.000 del calcolo, 600 dello scaricamento sull'SMB, **zero violazioni** (i difetti noti del §D6 non contano, sono nel report).
+2. **Mutazioni**: i quattro errori rossi con l'invariante giusto, lo stack sano verde.
+3. **Difetti noti**: ognuno ha la sua riproduzione minima (verde fino alla correzione) e il suo seme.
+4. **Telefono** (F61, a mano dall'orchestratore): `s25.ps1 -Mode ai` con ≥ 100 interruzioni durante lo scaricamento e l'indicizzazione e il verificatore dei dati verde; poi, in un modulo che vede il NAS, il controllo delle teste `ai` (invarianti 5-7 sul NAS) e in Diagnostica nessun elemento fermo.
+5. Un giro rosso **si rifa'** dal suo seme (§D3).
+
+## D11. Tempi
+
+Sul PC di sviluppo, condiviso: 2.000 giri dello scaricamento sulla JVM ~2,5 minuti (~5,4 GiB di blocchi salvati, ~11.500 caricamenti controllati, ~750 guasti di lettura del NAS); 600 giri SMB ~47 secondi (~480 aperture e ~1.100 blocchi letti dal simulatore con la lettura vera, ~180 guasti di lettura); 2.000 giri del calcolo ~4 minuti (~27.000 salvataggi, ~3.400 morti); mutazioni ~35 secondi (lo stack sano 150-200 giri: ~10-23 secondi). Nessun test usa il tempo vero.

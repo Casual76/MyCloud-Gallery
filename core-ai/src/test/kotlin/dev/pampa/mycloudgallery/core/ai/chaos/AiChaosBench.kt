@@ -54,6 +54,7 @@ object AiChaosBench {
     factory: AiStackFactory = AiStackFactory.REAL,
     stackName: String = "calcolo di produzione",
     stopAtFirstFailure: Boolean = false,
+    firstRound: Int = 0,
   ): AiBenchResult {
     val started = System.nanoTime()
     val failures = ArrayList<AiRoundReport>()
@@ -61,8 +62,9 @@ object AiChaosBench {
     val byInvariant = LinkedHashMap<AiInvariant, Int>()
     val known = LinkedHashMap<KnownDefect, MutableList<Long>>()
     var done = 0
-    for (i in 0 until rounds) {
+    for (i in firstRound until firstRound + rounds) {
       val report = AiChaosRound.run(AiRoundPlan.generate(seedOf(baseSeed, i)), factory)
+      report.index = i
       done++
       add(totals, report.stats)
       report.knownDefects.forEach { known.getOrPut(it) { ArrayList() } += report.plan.seed }

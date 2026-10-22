@@ -25,6 +25,7 @@ class ModelBenchResult(
     appendLine("durata: ${millis / 1000.0} s; giri con violazioni: ${failures.size}")
     appendLine("vite del processo: ${totals.lives}; morti: ${totals.deaths}; passi: ${totals.steps}; caricamenti controllati: ${totals.loads}; controlli degli invarianti: ${totals.checks}")
     appendLine("richieste HTTPS con Range: ${totals.rangedRequests}; risposte 200 al posto di 206: ${totals.serverRestarts}; corpi tagliati: ${totals.cuts}; file scartati per impronta o lunghezza: ${totals.mismatches}")
+    appendLine("letture del NAS dei modelli: ${totals.nasOpens} aperture, ${totals.nasReads} blocchi letti a intervalli; guasti di lettura scattati: ${totals.nasFaultsFired}")
     appendLine("blocchi salvati: ${totals.savedBlocks} (${totals.recordedBytes / (1024 * 1024)} MiB); file manomessi: ${totals.tampered}; copie sul NAS pubblicate: ${totals.shelfPublications}")
     appendLine("violazioni per invariante:")
     for (inv in ModelInvariant.entries) appendLine("  I${inv.number} ${inv.text}: ${byInvariant[inv] ?: 0}")
@@ -50,6 +51,7 @@ object ModelChaosBench {
     factory: ModelStackFactory = ModelStackFactory.REAL,
     stackName: String = "gestore e fetcher di produzione (LocalModels, NasModelFetcher, HttpsModelFetcher)",
     stopAtFirstFailure: Boolean = false,
+    firstRound: Int = 0,
   ): ModelBenchResult {
     val started = System.nanoTime()
     val failures = ArrayList<ModelRoundReport>()
@@ -57,8 +59,9 @@ object ModelChaosBench {
     val byInvariant = LinkedHashMap<ModelInvariant, Int>()
     var done = 0
     HttpsTestServer().use { server ->
-      for (i in 0 until rounds) {
+      for (i in firstRound until firstRound + rounds) {
         val report = ModelChaosRound.run(ModelRoundPlan.generate(seedOf(baseSeed, i), backend), server, factory)
+        report.index = i
         done++
         add(totals, report.stats)
         if (report.violations.isNotEmpty()) {
@@ -85,5 +88,8 @@ object ModelChaosBench {
     sum.shelfPublications += s.shelfPublications
     sum.tampered += s.tampered
     sum.checks += s.checks
+    sum.nasOpens += s.nasOpens
+    sum.nasReads += s.nasReads
+    sum.nasFaultsFired += s.nasFaultsFired
   }
 }

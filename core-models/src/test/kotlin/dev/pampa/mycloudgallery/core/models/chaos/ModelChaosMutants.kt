@@ -7,6 +7,7 @@ import dev.pampa.mycloudgallery.core.models.contract.ModelManager
 import dev.pampa.mycloudgallery.core.models.contract.ModelTrigger
 import dev.pampa.mycloudgallery.core.models.contract.VerifiedModel
 import java.io.File
+import java.io.FileInputStream
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 import kotlin.time.Duration
@@ -17,10 +18,10 @@ import kotlin.time.Duration
 // Gli altri due difetti della riga P10 (pubblicare prima di salvare, salvare dopo aver pubblicato) riguardano il calcolo e stanno nel banco
 // di core-ai (`core.ai.chaos.AiChaosMutants`).
 //
-//  1. CARICARE PRIMA DI VERIFICARE: `open` consegna `models/<sha256>` senza ricalcolare dimensione e impronta (e senza il descrittore su cui
-//     la verifica e' stata fatta): un file alterato dopo la promozione arriva al motore;
-//  2. ACCETTARE UN PARZIALE: quando un passo finisce senza il modello (rete caduta, tempo finito), il file parziale viene promosso a
-//     `models/<sha256>` com'e', senza controllare niente.
+//  1. CARICARE PRIMA DI VERIFICARE: `open` consegna `models/<sha256>` senza ricalcolare dimensione e impronta: un file alterato dopo la
+//     promozione arriva al motore;
+//  2. ACCETTARE UN PARZIALE: quando un passo finisce senza il modello (rete caduta, tempo finito, processo morto), il file parziale viene
+//     promosso a `models/<sha256>` com'e', senza controllare niente.
 
 /** Uno stack rotto: lo stack sano con le porte avvolte da [wrap]. */
 class ModelMutant(private val base: ModelStackFactory, val label: String, private val wrap: (ModelChaosWorld, ModelStack) -> ModelStack) : ModelStackFactory {
@@ -38,9 +39,10 @@ object ModelMutants {
     }
 
   private class UnverifiedFiles(private val world: ModelChaosWorld) : ModelFiles {
-    // Effetto: il file che c'e' in models/ si consegna com'e'. Niente descrittore: nessuna verifica e' stata fatta su quello che si carica.
+    // Effetto: il file che c'e' in models/ si consegna com'e', con un descrittore che sembra buono ma su cui nessuno ha controllato niente.
+    // Il banco lo vede quando il file e' stato alterato (un byte cambiato dopo la promozione): dimensione e impronta rilette non tornano.
     override suspend fun open(id: ModelId): VerifiedModel? =
-      world.finalFile.takeIf { it.isFile }?.let { VerifiedModel(world.spec, it, System.nanoTime()) }
+      world.finalFile.takeIf { it.isFile }?.let { VerifiedModel(world.spec, it, System.nanoTime(), descriptor = FileInputStream(it).fd) }
   }
 
   /** 2. Accettare un parziale. */
@@ -50,12 +52,16 @@ object ModelMutants {
     }
 
   private class PromotingManager(private val inner: ModelManager, private val partial: File, private val final: File) : ModelManager by inner {
+    // Effetto: un `finally` che promuove il parziale quando il passo finisce senza il modello (tempo finito, rete caduta) o viene interrotto
+    // (la morte del processo attraversa il gestore come un'eccezione). Il file che ne esce non e' mai stato verificato.
     override suspend fun ensure(id: ModelId, trigger: ModelTrigger, budget: Duration): EnsureResult {
-      val result = inner.ensure(id, trigger, budget)
-      if (result !is EnsureResult.Ready && partial.isFile && partial.length() > 0 && !final.exists()) {
-        Files.move(partial.toPath(), final.toPath(), StandardCopyOption.ATOMIC_MOVE)
+      try {
+        return inner.ensure(id, trigger, budget)
+      } finally {
+        if (partial.isFile && partial.length() > 0 && !final.exists()) {
+          Files.move(partial.toPath(), final.toPath(), StandardCopyOption.ATOMIC_MOVE)
+        }
       }
-      return result
     }
   }
 }

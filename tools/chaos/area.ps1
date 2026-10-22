@@ -100,6 +100,7 @@ if ($Mode -eq "ai") {
   $aiRounds = if ($PSBoundParameters.ContainsKey("Rounds")) { $Rounds } else { if ($Stage -eq "smb") { 600 } else { 2000 } }
   $seedEnv = [ordered]@{}
   if ($Seed -ne 0) { $seedEnv["MCG_MODELS_CHAOS_SEED"] = "$Seed"; $seedEnv["MCG_AI_CHAOS_SEED"] = "$Seed" }
+  if ($FirstRound -ne 0) { $seedEnv["MCG_MODELS_CHAOS_FIRST_ROUND"] = "$FirstRound"; $seedEnv["MCG_AI_CHAOS_FIRST_ROUND"] = "$FirstRound" }
   $runs = switch ($Stage) {
     "jvm" {
       @(

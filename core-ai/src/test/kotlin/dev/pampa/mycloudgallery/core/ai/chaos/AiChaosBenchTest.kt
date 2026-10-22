@@ -8,14 +8,17 @@ import org.junit.Test
  * I giri del banco del calcolo (§5.5): 2.000 giri sulla JVM con il NAS finto di P5, i motori finti, il `FaultPlan` del giro (rete prima e
  * dopo, sessione scaduta, stallo), la morte del processo a ogni salvataggio (prima del file, nel mezzo del record, prima della riga,
  * dopo la riga), le unita' prese da un altro dispositivo a meta', la pubblicazione chiusa e riaperta, il modello ucciso e manomesso.
- * `MCG_AI_CHAOS_ROUNDS` cambia i giri, `MCG_AI_CHAOS_SEED` il seme di base. Il rapporto va in `build/chaos/`.
+ * `MCG_AI_CHAOS_ROUNDS` cambia i giri, `MCG_AI_CHAOS_SEED` il seme di base (default 6103). Il rapporto va in `build/chaos/`.
  */
 class AiChaosBenchTest {
   private fun env(name: String, default: Long): Long = System.getenv(name)?.toLongOrNull() ?: default
 
   @Test
   fun duemilaGiriSullaJvm() {
-    val result = AiChaosBench.run(env("MCG_AI_CHAOS_ROUNDS", 2_000).toInt(), env("MCG_AI_CHAOS_SEED", 6101) + 2)
+    // Con MCG_AI_CHAOS_FIRST_ROUND=N e un solo giro si rifa' il giro N di un rapporto rosso (stesso seme di base).
+    val result = AiChaosBench.run(
+      env("MCG_AI_CHAOS_ROUNDS", 2_000).toInt(), env("MCG_AI_CHAOS_SEED", 6103), firstRound = env("MCG_AI_CHAOS_FIRST_ROUND", 0).toInt(),
+    )
     result.writeReport(File("build/chaos/calcolo-jvm.txt"))
     println(result.summary())
     assertWithMessage("giri con violazioni\n${result.summary()}\n${result.failureText()}").that(result.ok).isTrue()

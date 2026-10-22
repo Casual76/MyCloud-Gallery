@@ -180,10 +180,13 @@ class AiRoundStats {
 }
 
 class AiRoundReport(val plan: AiRoundPlan, val violations: List<AiViolation>, val stats: AiRoundStats) {
+  /** L'indice del giro nel banco (per rifarlo con `-FirstRound`); -1 se il giro e' stato lanciato da solo. */
+  var index: Int = -1
+
   /** Le violazioni che fanno rosso il banco: quelle senza un difetto noto. */
   val failures: List<AiViolation> get() = violations.filter { it.known == null }
 
   val knownDefects: Set<KnownDefect> get() = violations.mapNotNull { it.known }.toSet()
 
-  fun describe(): String = "$plan\n" + violations.joinToString("\n") { "  - $it" }
+  fun describe(): String = (if (index >= 0) "indice $index, " else "") + "$plan\n" + violations.joinToString("\n") { "  - $it" }
 }

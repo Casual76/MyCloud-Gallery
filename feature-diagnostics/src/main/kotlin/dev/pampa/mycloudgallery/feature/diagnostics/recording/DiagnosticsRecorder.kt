@@ -35,6 +35,10 @@ enum class DiagJob {
 
   /** Fase 5B (P14, D24): il caricamento dei file ricevuti da un'altra app ("Salva sul NAS"). */
   BACKUP_INCOMING,
+
+  /** Fase 6 (P11): lo scaricamento dei modelli della ricerca e il calcolo AI. */
+  MODEL_FETCH,
+  AI_COMPUTE,
 }
 
 /** Com'e' finita una tappa di un lavoro (`StageOutcome` in parole fisse). */
@@ -180,6 +184,14 @@ class DiagnosticsRecorder(
   /** L'avvio non ha potuto leggere lo stato salvato (`AppGraph.start`). */
   fun startFailed() {
     record(DiagCodes.EVT_START_FAILED, DiagSeverity.WARNING, emptyMap(), key = "start", quiet = QUIET)
+  }
+
+  /**
+   * Fase 6 (P11): un codice dei motori, del calcolo, dei modelli o della ricerca (`AiDiag`, `ModelDiag`, `SearchDiag`, `AiIndexDiag`), con
+   * la gravita' del catalogo. Solo il codice, mai testo, vettori o chiavi (D40); lo stesso codice al piu' una volta ogni dieci minuti.
+   */
+  fun code(code: DiagCode) {
+    record(code, severityOf(code, DiagSeverity.WARNING), emptyMap(), key = "f6.${code.id}", quiet = STOP_QUIET)
   }
 
   private fun severityOf(code: DiagCode, fallback: DiagSeverity): DiagSeverity = DiagCatalog.entry(code)?.severity ?: fallback

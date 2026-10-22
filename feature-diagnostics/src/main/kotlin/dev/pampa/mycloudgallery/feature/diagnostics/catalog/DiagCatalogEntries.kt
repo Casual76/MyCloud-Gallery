@@ -292,6 +292,26 @@ internal object DiagCatalogEntries {
 
     // --- La ricerca (Fase 6, P0: la voce di stato; i codici del §2.6 li aggiunge P11) -----------------------------------
     DiagEntry(DiagCodes.SEARCH_STATE, DiagSection.SEARCH, DiagSeverity.INFO, R.string.diag_search_state_title, R.string.diag_search_state_guide, null),
+    // P11: i codici del §2.6 (modelli, motori, calcolo, dati AI dell'indice, indice di ricerca, ritaglio).
+    DiagEntry(DiagCodes.AI_MODEL_MISSING, DiagSection.SEARCH, DiagSeverity.INFO, R.string.diag_ai_model_missing_title, R.string.diag_ai_model_missing_guide, null),
+    DiagEntry(DiagCodes.AI_MODEL_FETCH_FAILED, DiagSection.SEARCH, DiagSeverity.WARNING, R.string.diag_ai_model_fetch_failed_title, R.string.diag_ai_model_fetch_failed_guide, null),
+    DiagEntry(DiagCodes.AI_MODEL_MISMATCH, DiagSection.SEARCH, DiagSeverity.WARNING, R.string.diag_ai_model_mismatch_title, R.string.diag_ai_model_mismatch_guide, null),
+    DiagEntry(DiagCodes.AI_MODEL_NO_SPACE, DiagSection.SEARCH, DiagSeverity.WARNING, R.string.diag_ai_model_no_space_title, R.string.diag_ai_model_no_space_guide, null),
+    DiagEntry(DiagCodes.AI_ENGINE_INIT_FAILED, DiagSection.SEARCH, DiagSeverity.WARNING, R.string.diag_ai_engine_init_failed_title, R.string.diag_ai_engine_init_failed_guide, null),
+    DiagEntry(DiagCodes.AI_GPU_FALLBACK, DiagSection.SEARCH, DiagSeverity.INFO, R.string.diag_ai_gpu_fallback_title, R.string.diag_ai_gpu_fallback_guide, null),
+    DiagEntry(DiagCodes.AI_VECTOR_INVALID, DiagSection.SEARCH, DiagSeverity.INFO, R.string.diag_ai_vector_invalid_title, R.string.diag_ai_vector_invalid_guide, null),
+    DiagEntry(DiagCodes.AI_NO_INDEXER_AREA, DiagSection.SEARCH, DiagSeverity.INFO, R.string.diag_ai_no_indexer_area_title, R.string.diag_ai_no_indexer_area_guide, null),
+    DiagEntry(DiagCodes.AI_STORAGE_LOW, DiagSection.SEARCH, DiagSeverity.WARNING, R.string.diag_ai_storage_low_title, R.string.diag_ai_storage_low_guide, null),
+    DiagEntry(DiagCodes.AI_KILLED_MEMORY, DiagSection.SEARCH, DiagSeverity.WARNING, R.string.diag_ai_killed_memory_title, R.string.diag_ai_killed_memory_guide, null),
+    DiagEntry(DiagCodes.AI_PENDING_PUBLISH, DiagSection.SEARCH, DiagSeverity.INFO, R.string.diag_ai_pending_publish_title, R.string.diag_ai_pending_publish_guide, null),
+    DiagEntry(DiagCodes.OCR_FAILED, DiagSection.SEARCH, DiagSeverity.INFO, R.string.diag_ocr_failed_title, R.string.diag_ocr_failed_guide, null),
+    DiagEntry(DiagCodes.TEXT_READING_OFF_CLEANUP, DiagSection.SEARCH, DiagSeverity.INFO, R.string.diag_text_reading_off_cleanup_title, R.string.diag_text_reading_off_cleanup_guide, null),
+    DiagEntry(DiagCodes.CUTOUT_FAILED, DiagSection.SEARCH, DiagSeverity.INFO, R.string.diag_cutout_failed_title, R.string.diag_cutout_failed_guide, null),
+    DiagEntry(DiagCodes.CUTOUT_SAVE_FAILED, DiagSection.SEARCH, DiagSeverity.WARNING, R.string.diag_cutout_save_failed_title, R.string.diag_cutout_save_failed_guide, null),
+    DiagEntry(DiagCodes.AI_SEGMENT_REJECTED, DiagSection.SEARCH, DiagSeverity.WARNING, R.string.diag_ai_segment_rejected_title, R.string.diag_ai_segment_rejected_guide, null),
+    DiagEntry(DiagCodes.AI_VECTOR_DISAGREE, DiagSection.SEARCH, DiagSeverity.INFO, R.string.diag_ai_vector_disagree_title, R.string.diag_ai_vector_disagree_guide, null),
+    DiagEntry(DiagCodes.AI_INDEX_STATE, DiagSection.SEARCH, DiagSeverity.INFO, R.string.diag_ai_index_state_title, R.string.diag_ai_index_state_guide, null),
+    DiagEntry(DiagCodes.SEARCH_INDEX_REBUILT, DiagSection.SEARCH, DiagSeverity.INFO, R.string.diag_search_index_rebuilt_title, R.string.diag_search_index_rebuilt_guide, null),
 
     // --- Rete e NAS --------------------------------------------------------
     DiagEntry(DiagCodes.DIAG_SECTION_UNAVAILABLE, DiagSection.NETWORK_AND_NAS, DiagSeverity.WARNING, R.string.diag_diag_section_unavailable_title, R.string.diag_diag_section_unavailable_guide, null),

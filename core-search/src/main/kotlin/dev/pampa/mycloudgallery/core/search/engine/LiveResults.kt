@@ -29,6 +29,18 @@ object LiveResults {
     }
   }
 
+  /**
+   * Come [follow], per **una** vista ordinata: la lista che il viewer scorre quando si apre un risultato di Cerca (CE-4, E-Q13). A ogni istantanea nuova
+   * la vista si rifa' con gli stessi media nello stesso ordine, senza quelli usciti dall'istantanea o nascosti adesso: il viewer aperto non li mostra piu'.
+   */
+  fun followView(view: OrderedTimelineView, data: SearchData): Flow<OrderedTimelineView> {
+    val ids = ids(view)
+    return data.snapshot.filterNotNull().distinctUntilChanged { a, b -> a === b }.map { snapshot ->
+      if (snapshot === view.snapshot) return@map view
+      rebuild(snapshot, ids, data.hidden(ids))
+    }
+  }
+
   private fun ids(view: OrderedTimelineView): List<MediaId> = (0 until view.size).map { view.snapshot.idAt(view.snapshotIndex(it)) }
 
   private fun rebuild(snapshot: TimelineSnapshot, ids: List<MediaId>, hidden: Set<MediaId>): OrderedTimelineView =

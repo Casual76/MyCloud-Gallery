@@ -72,6 +72,7 @@ import dev.pampa.mycloudgallery.integrations.ShareHostEffect
 import dev.pampa.mycloudgallery.main.LibraryCommandHostEffect
 import dev.pampa.mycloudgallery.main.LocalViewerHost
 import dev.pampa.mycloudgallery.main.MainScaffold
+import dev.pampa.mycloudgallery.main.ViewerHostState
 import dev.pampa.mycloudgallery.root.BlockedScreen
 import dev.pampa.mycloudgallery.root.KeystoreUi
 import dev.pampa.mycloudgallery.root.KeystoreUnavailableScreen
@@ -162,6 +163,10 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
   if (gallery != null) ShareHostEffect(gallery.shares)
   // Fase 6 (P11): le azioni di Cerca (viewer sui risultati, pagine della ricerca), anche per la pagina Ricerca e modelli.
   val searchActions = if (destination == RootDestination.Main) rememberSearchActions(nav, viewer) else null
+  // Fase 6 (TS-3): "Trova simili" da un viewer aperto fuori dalla schermata principale (Raccolte, Cartelle NAS) si consuma qui, alla radice: il viewer
+  // si chiude, si torna alla schermata principale e Cerca parte dai simili. Prima lo consumava la schermata principale, che durante le Raccolte non c'e'.
+  var findSimilar by remember { mutableStateOf<MediaId?>(null) }
+  if (destination == RootDestination.Main) SimilarRequestEffect(nav, viewer) { findSimilar = it }
   NavHost(
     navController = nav,
     startDestination = startRoute(destination),
@@ -175,7 +180,14 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
       when (destination) {
         RootDestination.Main -> {
           composable<MainRoute> {
-            MainDestination(nav = nav, status = status, openWireGuard = actions.openWireGuard, nasOpener = nasOpener)
+            MainDestination(
+              nav = nav,
+              status = status,
+              openWireGuard = actions.openWireGuard,
+              nasOpener = nasOpener,
+              findSimilar = findSimilar,
+              onFindSimilarHandled = { findSimilar = null },
+            )
           }
           // Fase 3 (P10): le pagine delle Raccolte sul telefono (griglie filtrate, Nascosti, Eliminati di recente).
           collectionsGraph(nav = nav, onOpenViewer = { request -> gallery?.let { viewer?.open(request, it.viewerServices) } })
@@ -334,7 +346,15 @@ internal fun diagnosticsRouteOf(action: DiagAction): Any? = when (action) {
  * con le loro rotte, il viewer sull'host della galleria.
  */
 @Composable
-private fun MainDestination(nav: NavHostController, status: GlobalStatus, openWireGuard: () -> Boolean, nasOpener: NasFileOpener) {
+private fun MainDestination(
+  nav: NavHostController,
+  status: GlobalStatus,
+  openWireGuard: () -> Boolean,
+  nasOpener: NasFileOpener,
+  /** "Trova simili" chiesto da un viewer (TS-2, TS-3): il media di cui cercare i simili, finche' Cerca non l'ha preso. */
+  findSimilar: MediaId?,
+  onFindSimilarHandled: () -> Unit,
+) {
   var tab by rememberSaveable { mutableStateOf(GalleryTab.Library) }
   val library: LibraryViewModel = hiltViewModel()
   val gallery: GalleryHostViewModel = hiltViewModel()
@@ -352,14 +372,7 @@ private fun MainDestination(nav: NavHostController, status: GlobalStatus, openWi
   // Fase 6 (P11): la scheda Cerca e "Trova simili" dal viewer (la richiesta chiude il viewer e porta a Cerca con il chip "Simili a").
   val searchHost: SearchHostViewModel = hiltViewModel()
   val searchActions = rememberSearchActions(nav, viewer, searchHost)
-  var findSimilar by remember { mutableStateOf<MediaId?>(null) }
-  val similarRequest by searchHost.similar.pending.collectAsStateWithLifecycle()
-  LaunchedEffect(similarRequest) {
-    val id = searchHost.similar.consume() ?: return@LaunchedEffect
-    viewer?.close()
-    findSimilar = id
-    tab = GalleryTab.Search
-  }
+  LaunchedEffect(findSimilar) { if (findSimilar != null) tab = GalleryTab.Search }
 
   LibraryCommandHostEffect(state.commands, onAccessChanged = gallery::refreshAccess)
   ReportLibraryDrawn(state)
@@ -402,8 +415,24 @@ private fun MainDestination(nav: NavHostController, status: GlobalStatus, openWi
         },
       )
     },
-    search = { slot -> SearchTab(slot, searchActions, searchHost, findSimilar) },
+    search = { slot -> SearchTab(slot, searchActions, searchHost, findSimilar, onFindSimilarHandled) },
   )
+}
+
+/**
+ * TS-2, TS-3: la richiesta di "Trova simili" di un viewer, consumata alla radice. Chiude il viewer, riporta alla schermata principale (chiude Raccolte o
+ * Cartelle NAS, se il viewer era stato aperto da li') e consegna il media a chi tiene la scheda Cerca ([onTarget]).
+ */
+@Composable
+private fun SimilarRequestEffect(nav: NavHostController, viewer: ViewerHostState?, onTarget: (MediaId) -> Unit) {
+  val host: SearchHostViewModel = hiltViewModel()
+  val request by host.similar.pending.collectAsStateWithLifecycle()
+  LaunchedEffect(request) {
+    val id = host.similar.consume() ?: return@LaunchedEffect
+    viewer?.close()
+    nav.popBackStack<MainRoute>(inclusive = false)
+    onTarget(id)
+  }
 }
 
 /**

@@ -59,9 +59,16 @@ class InMemorySearchEngine(
     val parsed = parser.parse(request.text.take(QueryParser.MAX_QUERY_CHARS), today.date(), places())
     val chips = request.editedChips ?: parsed.chips
     val wordChips = chips.filterIsInstance<SearchChip.Word>()
-    val words = if (request.editedChips != null) wordChips.filter { !it.exact }.flatMap { SearchText.words(it.text) } else parsed.words
+    // CE-2: come il motore vero, le parole libere della query restano quando si modifica un chip.
+    val words = if (request.editedChips != null) {
+      (parsed.words + wordChips.filter { !it.exact }.flatMap { SearchText.words(it.text) }).distinct()
+    } else {
+      parsed.words
+    }
     val exact = if (request.editedChips != null) wordChips.filter { it.exact }.map { it.text } else parsed.exact
     val filters = chips.filter { it.isFilter }
+    val freeText = parsed.semantic != null || parsed.words.isNotEmpty()
+    if (request.editedChips != null && filters.isEmpty() && !freeText && wordChips.isEmpty()) return empty(chips, request.order)
     val cells = visibleCells(snapshot) { ChipMatching.accepts(filters, snapshot, it) }
     val notices = mutableListOf<SearchNotice>()
     parsed.corrections.forEach { (from, to) -> notices += SearchNotice.TypoCorrected(from, to) }
@@ -79,7 +86,7 @@ class InMemorySearchEngine(
     val confident = mutableListOf<ResultRanking.Ranked>()
     val likely = mutableListOf<ResultRanking.Ranked>()
     for (cell in cells) {
-      val day = ChipMatching.dayOf(snapshot.localDayAt(cell.index)) ?: today.date()
+      val day = ChipMatching.dayOf(snapshot.localDayAt(cell.index))
       if (onlyFilters) {
         confident += ResultRanking.Ranked(cell.index, 1f, day, snapshot.sortTimeAt(cell.index))
         continue
@@ -104,6 +111,7 @@ class InMemorySearchEngine(
       coverage = coverage.value,
       notices = notices,
       order = request.order,
+      freeText = freeText,
     )
   }
 
@@ -122,7 +130,7 @@ class InMemorySearchEngine(
     val likely = mutableListOf<ResultRanking.Ranked>()
     for (cell in cells) {
       val zc = z[cell.id] ?: continue
-      val day = ChipMatching.dayOf(snapshot.localDayAt(cell.index)) ?: today.date()
+      val day = ChipMatching.dayOf(snapshot.localDayAt(cell.index))
       val ranked = ResultRanking.Ranked(cell.index, ResultRanking.relevance(zc, 0f), day, snapshot.sortTimeAt(cell.index))
       when {
         zc >= SearchThresholds.ZS -> confident += ranked

@@ -128,6 +128,62 @@ class MotionDirectorTest {
     assertThat(h.created).isEqualTo(1)
   }
 
+  /**
+   * VM-1: un tocco prima che l'animazione sia partita (nei 150 ms di attesa) la annulla. Prima `interruptOpening()` fermava solo un'animazione gia'
+   * partita: nessun segno ricordava il tocco, e l'animazione partiva comunque sulla foto toccata.
+   */
+  @Test
+  fun unToccoNellAttesaDiAssestamentoImpediscePerLaPaginaLAnimazione_VM1() = runTest {
+    val h = MotionHarness(backgroundScope)
+    val pager = start(h)
+    pager.settle(h, 0)
+    advanceTimeBy(MotionDirector.SETTLE_MS / 2)
+    runCurrent()
+    h.director.interruptOpening()
+    advanceTimeBy(MotionDirector.SETTLE_MS * 2)
+    runCurrent()
+    assertThat(h.player.loads).isEmpty()
+    assertThat(h.created).isEqualTo(0)
+    assertThat(h.playback.motionFor).isNull()
+
+    // Una pagina nuova ricomincia da capo: andata via e tornata (il pager si e' mosso), l'animazione parte.
+    pager.move(h, 0)
+    runCurrent()
+    pager.settle(h, 0)
+    arrive(h)
+    assertThat(h.player.loads).hasSize(1)
+    // E il tocco su un'altra pagina non conta per questa.
+    pager.move(h, 1)
+    runCurrent()
+    pager.settle(h, 1)
+    runCurrent()
+    h.director.interruptOpening()
+    pager.move(h, 2)
+    runCurrent()
+    pager.settle(h, 2)
+    arrive(h)
+    assertThat(h.playback.motionFor).isEqualTo(h.ids[2])
+  }
+
+  /** VM-1: una pagina gia' ingrandita (pizzico prima dei 150 ms, o zoom di accessibilita') non anima. */
+  @Test
+  fun unaPaginaIngrandita_NonAnima_VM1() = runTest {
+    val h = MotionHarness(backgroundScope)
+    h.zoomed = true
+    val pager = start(h)
+    pager.settle(h, 0)
+    arrive(h)
+    assertThat(h.player.loads).isEmpty()
+    assertThat(h.created).isEqualTo(0)
+    // Rimessa a posto la foto, la pagina dopo si anima.
+    h.zoomed = false
+    pager.move(h, 1)
+    runCurrent()
+    pager.settle(h, 1)
+    arrive(h)
+    assertThat(h.playback.motionFor).isEqualTo(h.ids[1])
+  }
+
   @Test
   fun ilTocco_NonFermaIlVideoIntero_DelBadge() = runTest {
     val h = MotionHarness(backgroundScope)

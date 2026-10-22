@@ -127,11 +127,15 @@ class FakeCutoutSaver : CutoutSaver {
   var saveFails: Boolean = false
   var latencyMs: Long = 0
 
+  /** Se c'e', ogni azione lancia questo (anche un `OutOfMemoryError`, R20). */
+  var failWith: Throwable? = null
+
   /** Se c'e', il salvataggio aspetta che lo si apra: lo stato "Salvo la foto nuova..." si cattura finche' il PNG si scrive. */
   var gate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
 
   override suspend fun copy(id: MediaId, ref: MediaRef, cutout: ViewerCutout.Subject, outline: Boolean): Boolean {
     if (latencyMs > 0) kotlinx.coroutines.delay(latencyMs)
+    failWith?.let { throw it }
     outlines += outline
     if (copyFails) return false
     copies += id
@@ -140,6 +144,7 @@ class FakeCutoutSaver : CutoutSaver {
 
   override suspend fun share(id: MediaId, ref: MediaRef, cutout: ViewerCutout.Subject, outline: Boolean): Boolean {
     if (latencyMs > 0) kotlinx.coroutines.delay(latencyMs)
+    failWith?.let { throw it }
     outlines += outline
     if (shareFails) return false
     shares += id
@@ -149,6 +154,7 @@ class FakeCutoutSaver : CutoutSaver {
   override suspend fun saveAsNewPhoto(id: MediaId, ref: MediaRef, cutout: ViewerCutout.Subject, outline: Boolean, fromHidden: Boolean): CutoutSaveResult {
     if (latencyMs > 0) kotlinx.coroutines.delay(latencyMs)
     gate?.await()
+    failWith?.let { throw it }
     outlines += outline
     if (saveFails) return CutoutSaveResult.Failed
     saved += id to fromHidden

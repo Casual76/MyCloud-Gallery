@@ -219,4 +219,72 @@ class MotionNasDirectorTest {
       assertThat(h.player.calls).isEmpty()
     }
   }
+
+  /**
+   * VM-1: un solo-NAS aspetta fino a 1,5 s la coda video; un tocco in quell'attesa vale. Prima nessun segno lo ricordava e l'animazione partiva sulla foto
+   * toccata (la foto a trasparenza zero e il video a pagina intera per circa un secondo).
+   */
+  @Test
+  fun unToccoDuranteLAttesaDellaCodaVideoImpedisceLAnimazione_VM1() = runTest {
+    val (nas, h) = rig()
+    nas.reader.openDelayMs = 1_000L
+    val pages = watch(h)
+    pages.emit(PageSettle(h.ids[0], moving = false))
+    advanceTimeBy(MotionDirector.SETTLE_MS + 1)
+    runCurrent()
+    assertThat(h.player.calls).isEmpty()
+    h.director.interruptOpening()
+    advanceTimeBy(1_100L)
+    runCurrent()
+    assertThat(h.player.loads).isEmpty()
+    assertThat(h.created).isEqualTo(0)
+    assertThat(h.playback.motionFor).isNull()
+  }
+
+  /**
+   * VM-3: mentre il badge legge il video dal NAS (fino a 64 MB, col NAS lento anche secondi) lo dice, e un secondo tocco non annulla la lettura per
+   * ricominciare da capo (prima non c'era nessun segno e ogni tocco apriva il file di nuovo).
+   */
+  @Test
+  fun ilBadgeDiceCheStaLeggendoEUnSecondoToccoNonRicomincia_VM3() = runTest {
+    val (nas, h) = rig()
+    nas.reader.openDelayMs = 2_000L
+    val id = h.ids[0]
+    h.director.playFull(id)
+    advanceTimeBy(500L)
+    runCurrent()
+    assertThat(h.director.state.isLoading(id)).isTrue()
+    assertThat(nas.reader.opens.get()).isEqualTo(1)
+
+    // Il secondo tocco, e il terzo: ignorati finche' la lettura non ha finito.
+    h.director.playFull(id)
+    advanceTimeBy(300L)
+    runCurrent()
+    h.director.playFull(id)
+    assertThat(nas.reader.opens.get()).isEqualTo(1)
+
+    advanceTimeBy(5_000L)
+    runCurrent()
+    assertThat(h.director.state.isLoading(id)).isFalse()
+    assertThat(nas.reader.opens.get()).isEqualTo(1)
+    assertThat(h.player.loads.single().muted).isFalse()
+    assertThat(h.playback.motionMode).isEqualTo(MotionMode.FULL)
+  }
+
+  /** VM-3: cambiando pagina la lettura si ferma e il badge non resta "in caricamento". */
+  @Test
+  fun cambiandoPaginaIlCaricamentoFinisce_VM3() = runTest {
+    val (nas, h) = rig()
+    nas.reader.openDelayMs = 5_000L
+    val pages = watch(h)
+    pages.emit(PageSettle(h.ids[0], moving = false))
+    runCurrent()
+    h.director.playFull(h.ids[0])
+    advanceTimeBy(500L)
+    runCurrent()
+    assertThat(h.director.state.isLoading(h.ids[0])).isTrue()
+    pages.emit(PageSettle(h.ids[1], moving = true))
+    runCurrent()
+    assertThat(h.director.state.isLoading(h.ids[0])).isFalse()
+  }
 }

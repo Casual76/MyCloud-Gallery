@@ -103,6 +103,8 @@ class AiStack(
   val cutoutPhotos: AppCutoutNewPhoto,
   /** D13: dove stanno i ritagli e la loro sorgente del backup (recinzione delle prove, solo in debug). */
   val cutoutFence: CutoutFence,
+  /** I modelli verificati del ritaglio, con l'ultimo esito dello spazio (VR-2): il ritagliatore dice "Spazio insufficiente" invece di "riprova". */
+  val cutoutModels: EnsuringModelFiles,
   private val context: Context,
   /** "Trova simili" dal viewer verso la scheda Cerca. */
   val similar: SimilarRequests = SimilarRequests(),
@@ -141,7 +143,9 @@ class AiStack(
     // Ritaglio del soggetto (D44, D45, D47): la migliore immagine che il dispositivo ha gia', mai uno scaricamento.
     val sources = CutoutSources(context.contentResolver, gallery.intents::uriOf, nas?.imageOrigin, hq)
     val names = RememberedSourceName()
-    val files = share?.let { CutoutFiles(it.cache, it.uris) } ?: CutoutShareFiles { null }
+    // R18, VR-3: un solo ritaglio negli appunti, che scade; e gli appunti con un ritaglio nostro di un processo morto (il file e' stato tolto) si svuotano.
+    val clipboard = share?.let { CutoutClipboard(context, graph.scope).also { CutoutClipboard.clearIfOurs(context) } }
+    val files = share?.let { CutoutFiles(it.cache, it.uris, holder = it.holder, revoker = it.revoker, clipboard = clipboard) } ?: CutoutShareFiles { null }
     return GalleryGraph.SearchViewerHooks(
       // VT-2: il viewer rilegge il media aperto quando l'indice cambia (testo arrivato, ritirato, tolto con una revoca).
       textSource = IndexViewerTextSource(search.mediaText, search.index.version.drop(1).map { }.conflate()),
@@ -153,7 +157,7 @@ class AiStack(
           graph.trafficLedger.record(TrafficSource.VISIBLE_CONTENT, trafficNetworkOf(graph.environment.snapshot.value), bytes)
         }
       },
-      subjectCutter = AppViewerSubjectCutter(cutout, sources, catalog, names, diag),
+      subjectCutter = AppViewerSubjectCutter(cutout, sources, catalog, names, diag, noSpace = { cutoutModels.lastNoSpace }),
       cutoutSaver = DiagCutoutSaver(AndroidCutoutSaver(context, AppCutoutPng(cutout, sources), files, cutoutPhotos, names::nameOf), diag),
     )
   }
@@ -336,8 +340,10 @@ object AiWiring {
       writerFor = cutoutWriter ?: { path -> MediaStorePhoneMediaWriter(context, relativePath = path) },
       folder = cutoutFence::folder,
       nowMillis = gallery.clock,
+      // VR-1, R19: il segno "nascosto" di un ritaglio dai Nascosti viaggia ai miei dispositivi subito, come ogni "Nascondi".
+      onHiddenSaved = { gallery.nas?.organizer?.personalChanged() },
     )
-    return AiStack(models, search, ai, personal, roles, switch, mobileConfirmed, cutout, cutoutPhotos, cutoutFence, context)
+    return AiStack(models, search, ai, personal, roles, switch, mobileConfirmed, cutout, cutoutPhotos, cutoutFence, cutoutModels, context)
   }
 
   /** PR-1: le aree di questo account (la privata, se l'account e' noto) e l'area comune, dall'istantanea dell'onboarding. */

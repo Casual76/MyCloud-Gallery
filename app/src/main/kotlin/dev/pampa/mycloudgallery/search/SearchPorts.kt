@@ -60,8 +60,16 @@ class CatalogCellKeySource(private val catalog: suspend () -> MediaCatalog?) : C
   override suspend fun cellsOf(ids: Collection<MediaId>): List<CellContent> = catalog()?.cellContentKeysOf(ids).orEmpty()
 }
 
-/** La cronologia locale (D32): `search_history` del catalogo. Mai sincronizzata; l'azzeramento la toglie con il database. */
-class CatalogHistoryStore(private val catalog: suspend () -> MediaCatalog?) : HistoryStore {
+/**
+ * La cronologia locale (D32): `search_history` del catalogo. Mai sincronizzata; l'azzeramento la toglie con il database.
+ *
+ * [ready] dice quando il catalogo c'e' (la ricerca si e' aperta con la famiglia pronta): l'elenco delle ricerche recenti aspetta quel momento invece di
+ * finire subito con un elenco vuoto se il catalogo non c'era alla nascita del processo (CE-10: dopo l'onboarding la cronologia restava vuota fino al riavvio).
+ */
+class CatalogHistoryStore(
+  private val catalog: suspend () -> MediaCatalog?,
+  private val ready: suspend () -> Unit = {},
+) : HistoryStore {
   override suspend fun record(text: String, chipLabels: List<String>) {
     catalog()?.aiIndex?.recordSearch(text, chipLabels)
   }
@@ -75,8 +83,10 @@ class CatalogHistoryStore(private val catalog: suspend () -> MediaCatalog?) : Hi
   }
 
   override fun changes(limit: Int): Flow<List<SearchHistoryRecord>> = flow {
+    emit(emptyList())
+    ready()
     val index = catalog()?.aiIndex
-    if (index == null) emit(emptyList()) else emitAll(index.searchHistoryChanges(limit))
+    if (index != null) emitAll(index.searchHistoryChanges(limit))
   }
 }
 

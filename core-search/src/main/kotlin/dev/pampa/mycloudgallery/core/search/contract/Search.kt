@@ -100,6 +100,11 @@ data class SearchResults(
   val coverage: SearchCoverage,
   val notices: List<SearchNotice>,
   val order: ResultOrder,
+  /**
+   * Della query, oltre ai [chips], resta qualcosa da cercare (contenuto, parole libere): togliere l'ultimo chip non deve buttare via la query
+   * (CE-2). Falso per una query di soli filtri ("video di ieri"): senza chip non resta niente, e Cerca torna a riposo.
+   */
+  val freeText: Boolean = false,
 )
 
 /** Il motore (D23-D31). Mai un'eccezione per un indice incompleto: risponde con cio' che ha e lo dice ([SearchResults.coverage]). */
@@ -112,6 +117,9 @@ interface SearchEngine {
   val coverage: StateFlow<SearchCoverage>
 
   val readiness: StateFlow<SearchReadiness>
+
+  /** Cerca si apre (D35, E-Q11, CE-9): il motore delle query comincia a caricarsi, cosi' la prima ricerca non lo aspetta. Di serie niente. */
+  fun warmUp() {}
 }
 
 /**
@@ -152,11 +160,20 @@ object ResultRanking {
   fun recency(ageDays: Int, params: RankParams = RankParams()): Float =
     Math.pow(2.0, -ageDays.coerceAtLeast(0).toDouble() / params.halfLifeDays).toFloat()
 
+  /** La recenza di uno scatto del giorno [day] visto [today]; uno scatto **senza data** non e' recente per niente: 0 (CE-12). */
+  fun recency(day: LocalDate?, today: LocalDate, params: RankParams = RankParams()): Float =
+    if (day == null) 0f else recency(java.time.temporal.ChronoUnit.DAYS.between(day, today).toInt(), params)
+
+  /** Il periodo di uno scatto senza data valida: piu' vecchio di ogni altro, quindi in fondo a "Recenti" (CE-12). */
+  const val UNDATED_PERIOD: Long = Long.MIN_VALUE
+
   /**
    * Il periodo di "Recenti" di uno scatto del giorno [day] visto [today], come il giorno in cui il periodo comincia (crescente col
    * tempo anche fra granularita' diverse: un periodo di un mese o di un anno comincia sempre prima dei giorni degli ultimi 31).
+   * Senza data ([day] null): [UNDATED_PERIOD], il piu' vecchio di tutti (prima valeva "oggi" e le foto senza data stavano in cima).
    */
-  fun period(day: LocalDate, today: LocalDate): Long {
+  fun period(day: LocalDate?, today: LocalDate): Long {
+    if (day == null) return UNDATED_PERIOD
     val age = java.time.temporal.ChronoUnit.DAYS.between(day, today)
     return when {
       age <= 31 -> day.toEpochDay()
@@ -170,15 +187,15 @@ object ResultRanking {
    */
   fun comparator(order: ResultOrder, today: LocalDate, params: RankParams = RankParams()): Comparator<Ranked> = when (order) {
     ResultOrder.RELEVANT -> compareByDescending<Ranked> {
-      it.relevance + params.recencyWeight * recency(java.time.temporal.ChronoUnit.DAYS.between(it.day, today).toInt(), params)
+      it.relevance + params.recencyWeight * recency(it.day, today, params)
     }.thenByDescending { it.sortTime }
     ResultOrder.RECENT -> compareByDescending<Ranked> { period(it.day, today) }
       .thenByDescending { it.relevance }
       .thenByDescending { it.sortTime }
   }
 
-  /** Una cella da ordinare. */
-  data class Ranked(val index: Int, val relevance: Float, val day: LocalDate, val sortTime: Long)
+  /** Una cella da ordinare; [day] null = scatto senza data valida (CE-12). */
+  data class Ranked(val index: Int, val relevance: Float, val day: LocalDate?, val sortTime: Long)
 
   /** La pertinenza (§2.4) dal punteggio standardizzato del contenuto [z] (o null) e dal testo [textScore] (1, 0,6, 0). */
   fun relevance(z: Float?, textScore: Float): Float {

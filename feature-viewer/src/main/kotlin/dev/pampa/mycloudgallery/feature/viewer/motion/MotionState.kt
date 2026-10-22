@@ -25,12 +25,24 @@ internal sealed interface MotionNotice {
 internal class MotionState {
 
   private val unavailable = mutableStateMapOf<MediaId, Boolean>()
+  private val loading = mutableStateMapOf<MediaId, Boolean>()
 
   /** L'avviso aperto dal tocco sul badge, se c'e'. Si chiude da solo, cambiando pagina o con un altro tocco. */
   var notice: MotionNotice? by mutableStateOf(null)
 
   /** Il badge di [id] e' "non disponibile ora": la rete non lo permette o la lettura non e' riuscita. Passa quando la rete cambia. */
   fun isUnavailable(id: MediaId): Boolean = unavailable[id] == true
+
+  /** Il video di [id] si sta leggendo dal NAS (VM-3): il badge mostra "In caricamento" e ignora altri tocchi. */
+  fun isLoading(id: MediaId): Boolean = loading[id] == true
+
+  fun markLoading(id: MediaId) {
+    loading[id] = true
+  }
+
+  fun clearLoading(id: MediaId) {
+    loading.remove(id)
+  }
 
   fun markUnavailable(id: MediaId) {
     unavailable[id] = true

@@ -43,6 +43,7 @@ import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryConfirmSheet
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetScaffold
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetTone
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
+import dev.pampa.mycloudgallery.core.imaging.contract.ThumbRequest
 import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
 import dev.pampa.mycloudgallery.core.search.contract.SearchChip
 import dev.pampa.mycloudgallery.core.search.contract.SearchFlag
@@ -112,7 +113,14 @@ internal fun SearchChipBar(
 
 private fun chipKey(chip: SearchChip): String = "${chip::class.simpleName}-${chip.label}"
 
-/** Il glifo del chip; per "Simili a" la miniatura del media (solo locale, D28), se c'e'. */
+/** Le richieste di miniatura dei chip "Simili a" (D28): il media del chip non e' fra i risultati, quindi la griglia non la chiederebbe (TS-5). */
+internal fun similarChipRequests(chips: List<SearchChip>, snapshot: TimelineSnapshot, thumbnails: SearchThumbnails): List<ThumbRequest> =
+  chips.filterIsInstance<SearchChip.Similar>().mapNotNull { chip ->
+    val index = snapshot.indexOf(chip.media)
+    if (index >= 0) thumbRequestOf(thumbnails, snapshot, index) else null
+  }
+
+/** Il glifo del chip; per "Simili a" la miniatura del media (solo cio' che e' sul dispositivo, D28), se c'e'. */
 @Composable
 private fun ChipGlyph(chip: SearchChip, snapshot: TimelineSnapshot?, thumbnails: SearchThumbnails) {
   if (chip is SearchChip.Similar && snapshot != null) {

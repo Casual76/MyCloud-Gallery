@@ -57,6 +57,9 @@ internal class AiRig(private val app: Application, private val root: File) {
   val time = TestTime()
   val backend = TestNas.backend(time)
 
+  /** Un ritagliatore al posto di quello finto (R20: uno che esaurisce la memoria); si imposta prima di montare il dispositivo. */
+  var cutterOverride: dev.pampa.mycloudgallery.core.ai.contract.SubjectCutter? = null
+
   /** L'anello della Diagnostica di tutti i dispositivi: i test guardano quali codici ci sono finiti. */
   val ring = RingDiagnosticsLog()
   private val devices = mutableListOf<TestDevice>()
@@ -114,7 +117,7 @@ internal class AiRig(private val app: Application, private val root: File) {
       inputs = Inputs,
       modelReady = { true },
       fence = fence,
-      cutter = { cutter },
+      cutter = { cutterOverride ?: cutter },
       cutoutWriter = { path -> FakePhoneMediaWriter(path).also { writers += it } },
     )
     reader.readingHere = { stack.textSwitch.state.value.activeHere }

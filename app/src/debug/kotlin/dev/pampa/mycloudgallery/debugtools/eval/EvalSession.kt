@@ -8,8 +8,10 @@ import dev.pampa.mycloudgallery.core.search.contract.SearchRequest
 import dev.pampa.mycloudgallery.core.search.contract.SearchText
 import java.time.LocalDate
 import java.util.Random
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.withContext
 
 /** Una cella della Libreria che si puo' etichettare: il media che la rappresenta, la sua chiave di contenuto e il giorno. */
 class EvalCell(val id: MediaId, val key: String, val day: LocalDate?) {
@@ -161,7 +163,12 @@ class EvalSession(private val env: EvalEnvironment, private val store: EvalStore
     if (labelled.values.count { it } < MIN_DOC_EACH || labelled.values.count { !it } < MIN_DOC_EACH) return null
     val embedder = env.embedder ?: return null
     val snapshot = env.data.snapshot.value ?: return null
-    val prototypes = DocumentPrototypes.PHRASES.map { embedder.embed(it).values }
+    // DB-3: il motore del testo pesa circa 330 MB; serve solo per le frasi prototipo e si rilascia subito, anche se la lettura fallisce.
+    val prototypes = try {
+      DocumentPrototypes.PHRASES.map { embedder.embed(it).values }
+    } finally {
+      withContext(NonCancellable) { embedder.release() }
+    }
     val index = positionsByKey(snapshot)
     val samples = labelled.mapNotNull { (key, isDocument) ->
       val position = index[key] ?: return@mapNotNull null

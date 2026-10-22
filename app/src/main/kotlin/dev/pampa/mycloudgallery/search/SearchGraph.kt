@@ -36,9 +36,12 @@ import java.io.File
 import java.time.LocalDate
 import java.util.concurrent.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.conflate
@@ -47,6 +50,7 @@ import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /**
  * Il GRAFO DELLA RICERCA (docs/fase6-progetto.md §1.4, P11): motore di ricerca locale (P6), indice locale per chiave di contenuto,
@@ -73,9 +77,13 @@ class SearchGraph(
   modelMissing: () -> Boolean = { false },
   /** PR-1 (revisione A): aree senza indicizzatori e lettura del testo non attiva, per Cerca e per la pagina. */
   val coverageNotices: CoverageNotices = CoverageNotices.NONE,
+  /** Dove gira il lavoro delle ricerche (CE-7): fuori dal thread principale. I test ne scelgono uno loro. */
+  private val compute: CoroutineDispatcher = Dispatchers.Default,
 ) {
   private val job = SupervisorJob(scope.coroutineContext[Job])
   private val graphScope = CoroutineScope(scope.coroutineContext + job)
+
+  private val opened = CompletableDeferred<Boolean>()
 
   private val texts = CatalogTextRowStore(catalog)
   val repair = DelegatingIndexRepair()
@@ -91,32 +99,40 @@ class SearchGraph(
 
   val coverage = CoverageTracker(coverageReasons, queryModelBytes, modelMissing, coverageNotices)
   private val libraryPlaces = LibraryPlaces(places)
-  val history: SearchHistory = LocalSearchHistory(CatalogHistoryStore(catalog), graphScope)
+  // CE-10: la cronologia aspetta che l'indice si apra con il catalogo (dopo l'onboarding, nello stesso processo) invece di restare vuota per sempre.
+  val history: SearchHistory = LocalSearchHistory(CatalogHistoryStore(catalog) { opened.await() }, graphScope)
   val suggestions: Suggestions = LibrarySuggestions(base, libraryPlaces, history)
 
   private val local =
     LocalSearchEngine(base, index, keys, texts, embedding, today, libraryPlaces, coverageTracker = coverage, coverageNotices = coverageNotices)
-  private val opened = CompletableDeferred<Boolean>()
   private val lifecycle = Mutex()
 
   @Volatile private var stopped = false
 
-  /** Il motore: aspetta [open]; dopo [stop] lancia (la schermata dice "La ricerca non ha funzionato"). */
-  val engine: SearchEngine = object : SearchEngine {
-    override suspend fun search(request: SearchRequest): SearchResults {
-      ready()
-      return local.search(request)
-    }
+  /**
+   * Il motore: aspetta [open]; dopo [stop] lancia (la schermata dice "La ricerca non ha funzionato"). Il lavoro gira su [compute], mai sul thread
+   * principale (CE-7): candidati, mappa delle celle, punteggi e ordine di 100 mila celle non devono bloccare la Libreria.
+   */
+  val engine: SearchEngine = OffMainSearchEngine(
+    object : SearchEngine {
+      override suspend fun search(request: SearchRequest): SearchResults {
+        ready()
+        return local.search(request)
+      }
 
-    override suspend fun similar(media: MediaId, order: ResultOrder): SearchResults {
-      ready()
-      return local.similar(media, order)
-    }
+      override suspend fun similar(media: MediaId, order: ResultOrder): SearchResults {
+        ready()
+        return local.similar(media, order)
+      }
 
-    override val coverage: StateFlow<SearchCoverage> get() = local.coverage
+      override val coverage: StateFlow<SearchCoverage> get() = local.coverage
 
-    override val readiness: StateFlow<SearchReadiness> get() = local.readiness
-  }
+      override val readiness: StateFlow<SearchReadiness> get() = local.readiness
+
+      override fun warmUp() = local.warmUp()
+    },
+    compute,
+  )
 
   /**
    * CE-1 (revisione A): il bit `CellFlags.DOCUMENT` (filtro "Documenti" della Libreria, tipo "documenti" di Cerca) dalla regola di D34
@@ -133,8 +149,12 @@ class SearchGraph(
   /** Il testo letto di un media per il viewer (`ViewerTextSource`, D43): le righe dell'origine che vince nell'indice (revisione A, R4). */
   val mediaText: MediaText = StoredMediaText(catalog, index)
 
+  /**
+   * Le ricerche aspettano [open]. Se la ricerca e' ferma (azzeramento) o l'indice non si apre, **lanciano un errore vero**, non una
+   * `CancellationException`: quella la prende per "la mia ricerca e' stata annullata" chi aspetta, e la schermata resterebbe su "Sto cercando…" (CE-11).
+   */
   private suspend fun ready() {
-    if (stopped || !opened.await() || stopped) throw CancellationException("Ricerca ferma.")
+    if (stopped || !opened.await() || stopped) throw IllegalStateException("Ricerca ferma.")
   }
 
   /** Apre l'indice e comincia a seguire il catalogo. Idempotente; falso se non si e' potuto aprire (catalogo assente, fermata). */
@@ -153,7 +173,7 @@ class SearchGraph(
       GalleryLog.w(TAG) { "indice di ricerca non aperto: ${e.javaClass.simpleName}" }
       false
     }
-    if (ok) graphScope.launch { cat.changes.collect { keys.invalidate(it.ids) } }
+    if (ok) followCatalog(cat)
     if (ok) graphScope.launch { followDocuments() }
     opened.complete(ok)
     ok
@@ -171,6 +191,34 @@ class SearchGraph(
         GalleryLog.w(TAG) { "documenti non aggiornati: ${e.javaClass.simpleName}" }
       }
     }
+  }
+
+  /**
+   * Le chiavi di contenuto delle celle (`CellKeys`) seguono il catalogo da subito, non dalla prima ricerca (TS-1): "Trova simili" nel menu del viewer le
+   * legge per sapere se la voce c'e', e dopo un avvio a freddo mancava finche' l'utente non faceva una ricerca qualunque. Una sincronizzazione appena aperto
+   * l'indice e una a ogni cambiamento del catalogo (accorpate: una raffica di scritture ne fa una sola).
+   */
+  private fun followCatalog(cat: MediaCatalog) {
+    val dirty = Channel<Unit>(Channel.CONFLATED)
+    graphScope.launch {
+      for (ignored in dirty) {
+        delay(SYNC_DEBOUNCE_MS)
+        try {
+          keys.sync()
+        } catch (e: CancellationException) {
+          throw e
+        } catch (e: Exception) {
+          GalleryLog.w(TAG) { "chiavi delle celle non aggiornate: ${e.javaClass.simpleName}" }
+        }
+      }
+    }
+    graphScope.launch {
+      cat.changes.collect {
+        keys.invalidate(it.ids)
+        dirty.trySend(Unit)
+      }
+    }
+    dirty.trySend(Unit)
   }
 
   /** La manutenzione dell'indice (in `LibraryMaintenanceWorker`): record rovinati, compattazione e bit dei documenti (CE-1). */
@@ -203,6 +251,9 @@ class SearchGraph(
   companion object {
     private const val TAG = "SearchGraph"
 
+    /** Quanto si aspetta, dopo un cambiamento del catalogo, prima di aggiornare le chiavi delle celle (una raffica di scritture ne fa una sola). */
+    const val SYNC_DEBOUNCE_MS: Long = 250
+
     /** `noBackupFilesDir/search`: indice, registro delle origini e righe del testo letto. */
     const val DIR = "search"
     const val INDEX_DIR = "index"
@@ -214,4 +265,14 @@ class SearchGraph(
     /** CE-1: il bit dei documenti si ricalcola al piu' una volta ogni 15 secondi mentre indice e Libreria cambiano. */
     const val DOCUMENTS_DELAY_MS: Long = 15_000L
   }
+}
+
+/**
+ * Un motore che fa il suo lavoro su [dispatcher] (CE-7): chi lo chiama (la schermata Cerca, sul thread principale) aspetta senza bloccarlo. Copertura e
+ * stato sono flussi: non lavorano e passano com'e'.
+ */
+class OffMainSearchEngine(private val inner: SearchEngine, private val dispatcher: CoroutineDispatcher) : SearchEngine by inner {
+  override suspend fun search(request: SearchRequest): SearchResults = withContext(dispatcher) { inner.search(request) }
+
+  override suspend fun similar(media: MediaId, order: ResultOrder): SearchResults = withContext(dispatcher) { inner.similar(media, order) }
 }

@@ -134,7 +134,26 @@ class ViewerCutoutTest : CutoutViewerBase() {
     showCutout(cutoutServices(saver = saver), secure = true)
     pressRobot()
     tap(SAVE)
+    // I6: dai Nascosti il salvataggio chiede prima conferma (il ritaglio sara' una foto pubblica del telefono, con il nome generico) e parte dal tocco su "Salva".
+    assertThat(hasText("Salvare il ritaglio nel telefono?")).isTrue()
+    assertThat(saver.saved).isEmpty()
+    composeRule.onNodeWithText("Salva").performClick()
+    composeRule.waitForIdle()
     assertThat(saver.saved).containsExactly(shown to true)
+  }
+
+  @Test
+  fun daiNascostiAnnullareLaConfermaNonSalvaNiente_I6() {
+    val saver = FakeCutoutSaver()
+    showCutout(cutoutServices(saver = saver), secure = true)
+    pressRobot()
+    tap(SAVE)
+    composeRule.onNodeWithText("Annulla").performClick()
+    composeRule.waitForIdle()
+    assertThat(saver.saved).isEmpty()
+    assertThat(hasText("Salvare il ritaglio nel telefono?")).isFalse()
+    // Il soggetto resta staccato: si puo' ancora salvare.
+    assertThat(hasNode(SAVE)).isTrue()
   }
 
   @Test

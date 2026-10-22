@@ -7,7 +7,6 @@ import dev.pampa.mycloudgallery.core.search.contract.ResultOrder
 import dev.pampa.mycloudgallery.core.search.contract.ResultRanking
 import dev.pampa.mycloudgallery.core.search.contract.SearchThresholds
 import java.time.LocalDate
-import java.time.temporal.ChronoUnit
 
 /**
  * L'ORDINE DEI RISULTATI (D48, §2.4) con la formula condivisa di `ResultRanking` (la stessa dell'esecutore di riferimento): "Recenti"
@@ -18,8 +17,9 @@ import java.time.temporal.ChronoUnit
 internal object Ranking {
   private const val PRECOMPUTE_FROM = 2_048
 
-  fun ranked(snapshot: TimelineSnapshot, position: Int, relevance: Float, today: LocalDate): ResultRanking.Ranked =
-    ResultRanking.Ranked(position, relevance, ChipMatching.dayOf(snapshot.localDayAt(position)) ?: today, snapshot.sortTimeAt(position))
+  /** Una foto senza data valida non vale "oggi": e' la piu' vecchia e senza recenza (CE-12). */
+  fun ranked(snapshot: TimelineSnapshot, position: Int, relevance: Float): ResultRanking.Ranked =
+    ResultRanking.Ranked(position, relevance, ChipMatching.dayOf(snapshot.localDayAt(position)), snapshot.sortTimeAt(position))
 
   /** Le posizioni di [items] nell'ordine da mostrare. */
   fun order(items: List<ResultRanking.Ranked>, order: ResultOrder, today: LocalDate, params: RankParams): IntArray {
@@ -31,7 +31,7 @@ internal object Ranking {
       val it = items[i]
       when (order) {
         ResultOrder.RELEVANT ->
-          primary[i] = it.relevance + params.recencyWeight * ResultRanking.recency(ChronoUnit.DAYS.between(it.day, today).toInt(), params)
+          primary[i] = it.relevance + params.recencyWeight * ResultRanking.recency(it.day, today, params)
         ResultOrder.RECENT -> {
           period[i] = ResultRanking.period(it.day, today)
           primary[i] = it.relevance

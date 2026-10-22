@@ -760,6 +760,34 @@ class ModelManagerTest {
     assertThat(runBlocking { rig.files.open(spec.id) }).isNull()
   }
 
+  /**
+   * VR-2: il ritaglio sta nell'APK (6 MB): per metterlo fra i modelli verificati basta un margine piccolo, non i 300 MB di un modello da scaricare. Prima con
+   * meno di circa 306 MB liberi il ritaglio non funzionava affatto ("Ritaglio non riuscito").
+   */
+  @Test
+  fun ilRitaglioDellApkNonVuoleIlMargineDiUnModelloDaScaricare_VR2() {
+    val bytes = TestModels.bytes(40_000, seed = 13)
+    val spec = ModelCatalog.CUTOUT_MAGICTOUCH.copy(sizeBytes = bytes.size.toLong(), sha256 = Sha256.of(bytes))
+    val asset = ModelSource.Bundled(spec.bundledAsset!!)
+    val needed = bytes.size + ModelLimits.BUNDLED_SPACE_MARGIN_BYTES
+    assertThat(ModelLimits.BUNDLED_SPACE_MARGIN_BYTES).isLessThan(ModelLimits.SPACE_MARGIN_BYTES)
+
+    val short = ModelRig(bytes, spec = spec)
+    short.fake.serve(asset, bytes)
+    short.freeBytes = needed - 1
+    assertThat(short.ensure()).isEqualTo(EnsureResult.Failed(ModelFailCode.NO_SPACE, needed))
+    assertThat(short.fake.calls).isEmpty()
+
+    // Con 20 MB liberi (molto meno dei 300 del margine dei modelli da scaricare) il ritaglio si mette a posto.
+    val rig = ModelRig(bytes, spec = spec)
+    rig.fake.serve(asset, bytes)
+    rig.freeBytes = needed
+    assertThat(rig.ensure()).isEqualTo(EnsureResult.Ready)
+    // Un modello da scaricare vuole sempre il margine grande.
+    assertThat(ModelLimits.spaceMargin(ModelCatalog.QUERY_270M)).isEqualTo(ModelLimits.SPACE_MARGIN_BYTES)
+    assertThat(ModelLimits.spaceMargin(spec)).isEqualTo(ModelLimits.BUNDLED_SPACE_MARGIN_BYTES)
+  }
+
   // --- La cartella come l'ha lasciata un processo morto ---------------------------------------------------------------------------
 
   @Test

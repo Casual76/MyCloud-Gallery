@@ -51,12 +51,19 @@
                Il verificatore dei dati sul NAS (teste `ai` sotto devices/<io>/ai/, invarianti 5 e 6) non e' di questo script: sta nel modulo
                che vede il NAS (vedi docs/prova-500.md, sezione della Fase 6). Con -NotSettled la prova non e' ancora ferma: i parziali non
                contano come errore.
+    eval-push  (DB-4, F54) porta il set OCR sintetico (-EvalSource: la cartella MCG-ocr di tools\fixtures\generate-ocr.ps1, con manifest.tsv e
+               immagini\) dentro la cartella dell'app di debug, dove lo strumento "Valutazione della ricerca" lo cerca (no_backup/eval/ocr/): `adb push` in
+               /data/local/tmp (la shell la scrive), poi `run-as <pacchetto> cp` (l'app di debug e' l'unica che puo' scrivere nella sua cartella), poi si
+               toglie la copia temporanea. Da shell la cartella dell'app non si scrive senza `run-as`.
+    eval-pull  (DB-4, F54) porta sul PC cio' che la valutazione ha scritto: le etichette (labels.mcgeval), i resoconti (report-NN.txt) e la lettura di
+               prova (ocr/letto.tsv, ocr/ocr-resoconto.txt), con `exec-out run-as <pacchetto> cat`, in -EvalDir (default build\chaos\eval-<data>).
+               Le etichette sono dati privati: mai nel repository (la cartella di default e' sotto build\, ignorata da git).
   Guardie del modo ai (le stesse degli altri modi, un po' piu' strette): un solo telefono, RFCY61FZDHW (con un adb finto, MCG_ADB, vale il
   numero che si vuole); solo l'app di debug dev.pampa.mycloudgallery.debug; il Wi-Fi si spegne solo con `svc wifi disable` di questo script,
   per al massimo 120 s, e si riaccende SEMPRE (anche se lo script e' interrotto); sul telefono si leggono solo file della cartella dell'app.
   Con -DryRun si vede il calendario senza telefono; con -SelfTest si provano, senza telefono, il controllo del file dei vettori (record
-  buoni, rovinati nel mezzo, troncati in coda), la lettura del catalogo dei modelli e le guardie; tools\chaos\s25-ai-finto.ps1 prova i passi
-  contro l'adb finto.
+  buoni, rovinati nel mezzo, troncati in coda, nel formato e con il nome che scrive l'app), la lettura del catalogo dei modelli e le guardie;
+  tools\chaos\s25-ai-finto.ps1 prova i passi contro l'adb finto, compresa la morte del processo (`pidof`, `kill -9`, rilancio).
 
   Il calendario delle interruzioni (quando e che cosa) dipende solo dal seme: lo stesso -Seed rifa' la stessa prova. Con -DryRun lo script
   stampa il calendario (o il piano della semina) e i comandi adb che userebbe e NON ESEGUE NIENTE (nemmeno adb): e' il modo di controllarlo
@@ -104,6 +111,8 @@
 .PARAMETER CatalogFile         Per ai/verify: il file Kotlin da cui leggere il catalogo dei modelli (default: ModelCatalog.kt di core-models). Serve solo
                                a provare lo script con l'adb finto, che non puo' tenere file da centinaia di MB.
 .PARAMETER NotSettled          Per ai/verify: la prova non e' ancora ferma, un parziale in models/partial/ non e' un errore.
+.PARAMETER EvalSource          Per ai/eval-push: la cartella del set OCR (manifest.tsv e immagini\), uscita di tools\fixtures\generate-ocr.ps1.
+.PARAMETER EvalDir             Per ai/eval-pull: dove mettere cio' che la valutazione ha scritto (default build\chaos\eval-<data>).
 .PARAMETER SelfTest            Prova la conversione dell'uscita di sha256sum nel manifesto, su un testo finto (nessun adb); con -Mode ai prova anche il
                                verificatore dei dati (file dei vettori, catalogo dei modelli) e le guardie.
 
@@ -124,7 +133,7 @@
 [CmdletBinding()]
 param(
   [ValidateSet("move", "backup", "ai")][string]$Mode = "move",
-  [ValidateSet("seed", "edit", "interrupt", "verify", "clean")][string]$Step = "interrupt",
+  [ValidateSet("seed", "edit", "interrupt", "verify", "clean", "eval-push", "eval-pull")][string]$Step = "interrupt",
   [string]$Serial = $env:ANDROID_SERIAL,
   [string]$Package = "dev.pampa.mycloudgallery.debug",
   [int]$Interruptions = 100,
@@ -155,6 +164,8 @@ param(
   [switch]$SkipNas,
   [switch]$NotSettled,
   [string]$CatalogFile,
+  [string]$EvalSource,
+  [string]$EvalDir,
   [switch]$DryRun,
   [switch]$SelfTest
 )
@@ -226,6 +237,11 @@ $AiSearchDir = "no_backup/search"
 $AiBufferMaxBytes = 500MB          # AiBuffer.MAX_BYTES (core-ai, contract/Compute.kt)
 $AiVectorDimension = 768           # spazio 1, embeddinggemma2-float-v1 (core-trust, SpaceCode)
 $AiMaxBadRecordsPerKill = 9        # una scrittura e' un media: al piu' 9 vettori (video, D11); piu' di cosi' per morte non si spiega
+$AiSpaceCodeFile = Join-Path $root "core-model\src\main\kotlin\dev\pampa\mycloudgallery\core\model\AiCodes.kt"
+$AiEvalDir = "no_backup/eval"      # EvalStore: noBackupFilesDir/eval
+$AiEvalTemp = "/data/local/tmp/mcg-eval"
+# Cio' che la valutazione scrive e che si porta sul PC: solo questi nomi (percorso relativo a no_backup/eval/).
+$AiEvalPullNames = '^(labels\.mcgeval|report-[0-9]{2,}\.txt|ocr/letto\.tsv|ocr/ocr-resoconto\.txt)$'
 
 function Get-AiGuardErrors([string]$serial, [string]$package, [int]$wifiMax, [bool]$fakeAdb, [bool]$dryRun) {
   $errors = @()
@@ -240,6 +256,16 @@ function Get-AiGuardErrors([string]$serial, [string]$package, [int]$wifiMax, [bo
   return $errors
 }
 
+# DB-2: il file dei vettori si chiama `vectors-<codice dello spazio>-<generazione>.bin` (LocalAiIndex.vectorFileFor); il codice dello spazio corrente e'
+# quello di `SpaceCode.EMBEDDINGGEMMA2_FLOAT_V1` in AiCodes.kt (core-model). Letto dal sorgente come il catalogo dei modelli: se cambia, lo script lo segue.
+function Get-AiSpaceCode([string]$source) {
+  $m = [regex]::Match($source, 'EMBEDDINGGEMMA2_FLOAT_V1\(\s*1\s*,\s*"([a-z0-9_]+)"')
+  if (-not $m.Success) { throw "Il codice dello spazio dei vettori non si legge (AiCodes.kt)." }
+  return $m.Groups[1].Value
+}
+
+function Get-AiVectorNamePattern([string]$spaceCode) { return '^vectors-' + [regex]::Escape($spaceCode) + '-[0-9]+\.bin$' }
+
 # Il catalogo dei modelli letto dal sorgente (ModelCatalog.kt, in questa cartella): nome del file, dimensione e SHA-256 di ogni modello.
 function ConvertTo-ModelCatalog([string]$source) {
   $names = @([regex]::Matches($source, 'fileName\s*=\s*"([^"]+)"') | ForEach-Object { $_.Groups[1].Value })
@@ -253,6 +279,7 @@ function ConvertTo-ModelCatalog([string]$source) {
 
 # Il controllo del file dei vettori (core-search, VectorFile.kt): record `MCGV` (4) versione (1) ricetta (1) fotogramma (1) bit (1) chiave (32)
 # istante (4) `dim` float16 CRC32 (4, little-endian) dei byte precedenti. In C# perche' in PowerShell 16 MB di CRC durerebbero minuti.
+# DB-2: il file e' little-endian (`ByteBuffer.order(LITTLE_ENDIAN)`), quindi `putInt(0x4D434756)` scrive i byte `56 47 43 4D`, non `4D 43 47 56`.
 function Initialize-VectorChecker {
   if ('McgVectorCheck' -as [type]) { return }
   Add-Type -TypeDefinition @'
@@ -269,7 +296,8 @@ public static class McgVectorCheck {
     for (int i = off; i < off + len; i++) c = Table[(c ^ b[i]) & 0xFF] ^ (c >> 8);
     return c ^ 0xFFFFFFFFu;
   }
-  static bool Magic(byte[] b, int p) { return p + 4 <= b.Length && b[p] == 0x4D && b[p + 1] == 0x43 && b[p + 2] == 0x47 && b[p + 3] == 0x56; }
+  public static byte[] MagicBytes() { return new byte[] { 0x56, 0x47, 0x43, 0x4D }; }
+  static bool Magic(byte[] b, int p) { return p + 4 <= b.Length && b[p] == 0x56 && b[p + 1] == 0x47 && b[p + 2] == 0x43 && b[p + 3] == 0x4D; }
   static bool Good(byte[] b, int p, int size) {
     return p + size <= b.Length && Magic(b, p) && Crc32(b, p, size - 4) == BitConverter.ToUInt32(b, p + size - 4);
   }
@@ -305,21 +333,40 @@ function Test-VectorFile([byte[]]$bytes, [int]$dimension) {
   return [pscustomobject]@{ Valid = $r[0]; Bad = $r[1]; TornTail = $r[2]; GarbageBytes = $r[3] }
 }
 
-# Un record sintetico per l'autotest: stessa forma di VectorFile.kt, chiave e componenti dal seme.
+# Un record sintetico per l'autotest e per l'adb finto: la stessa forma che scrive `VectorFile.append` (DB-2), byte per byte.
+# `MCGV` come `putInt(0x4D434756)` in little-endian (56 47 43 4D), versione 1, ricetta 1, fotogramma 0, nessun istante (bit 0), chiave di 32 byte dal seme,
+# istante -1 (FF FF FF FF), `dim` float16 (small-endian: un valore vicino a 1,0), CRC32 little-endian dei byte precedenti.
 function New-VectorRecord([int]$dimension, [int]$seed) {
   Initialize-VectorChecker
   $size = 44 + 2 * $dimension + 4
   $record = New-Object byte[] $size
-  [byte[]]$magic = 0x4D, 0x43, 0x47, 0x56
+  [byte[]]$magic = 0x56, 0x47, 0x43, 0x4D
   [Array]::Copy($magic, 0, $record, 0, 4)
   $record[4] = 1; $record[5] = 1; $record[6] = 0; $record[7] = 0
   $random = New-Object System.Random($seed)
-  $filler = New-Object byte[] ($size - 8 - 4)
-  $random.NextBytes($filler)
-  [Array]::Copy($filler, 0, $record, 8, $filler.Length)
+  $key = New-Object byte[] 32
+  $random.NextBytes($key)
+  [Array]::Copy($key, 0, $record, 8, 32)
+  $record[40] = 0xFF; $record[41] = 0xFF; $record[42] = 0xFF; $record[43] = 0xFF
+  for ($i = 0; $i -lt $dimension; $i++) {
+    $half = 0x3000 + $random.Next(0, 0x400)
+    $record[44 + 2 * $i] = [byte]($half -band 0xFF)
+    $record[45 + 2 * $i] = [byte](($half -shr 8) -band 0xFF)
+  }
   $crc = [McgVectorCheck]::Crc32($record, 0, $size - 4)
   [Array]::Copy([BitConverter]::GetBytes([uint32]$crc), 0, $record, $size - 4, 4)
   return , $record
+}
+
+# DB-2: i problemi di UN file dei vettori. Un'interruzione rovina al piu' i record di una scrittura (se ne occupa il totale, in Invoke-VerifyAi), ma un
+# file NON vuoto senza nemmeno un record buono non e' una scrittura interrotta: e' un file che l'app non sa leggere (nome giusto, formato sbagliato).
+# Fa eccezione la sola coda di una scrittura interrotta (il processo e' morto durante il primo `append`: il file e' meno di un record, con l'intestazione).
+function Get-VectorFileProblems($check, [long]$size) {
+  $problems = @()
+  if ($size -gt 0 -and $check.Valid -eq 0 -and $check.TornTail -ne $size) {
+    $problems += "I5: un file dei vettori di $size byte senza nessun record riconoscibile (nome giusto, formato sbagliato?)"
+  }
+  return $problems
 }
 
 function Join-Bytes([object[]]$parts) {
@@ -356,6 +403,35 @@ function Invoke-AiSelfTest {
   Check-Ai "file vuoto: niente" (($x.Valid -eq 0) -and ($x.Bad -eq 0) -and ($x.TornTail -eq 0) -and ($x.GarbageBytes -eq 0))
   $x = Test-VectorFile ([byte[]](1..200 | ForEach-Object { 7 })) $dim
   Check-Ai "spazzatura senza intestazioni: nessun record" (($x.Valid -eq 0) -and ($x.Bad -eq 0))
+  # 5-bis. DB-2: il nome e l'ordine dei byte sono quelli che scrive l'app, non quelli che lo script si aspettava.
+  $spaceCode = Get-AiSpaceCode (Get-Content -LiteralPath $AiSpaceCodeFile -Raw)
+  $pattern = Get-AiVectorNamePattern $spaceCode
+  Check-Ai "il codice dello spazio letto da AiCodes.kt e' embeddinggemma2_float_v1" ($spaceCode -eq "embeddinggemma2_float_v1")
+  Check-Ai "il file dei vettori vero (vectors-<spazio>-<generazione>.bin) e' riconosciuto" ("vectors-$spaceCode-7.bin" -match $pattern)
+  Check-Ai "il vecchio nome che lo script si aspettava (vectors-1-1.bin) non e' un file dell'app" (-not ("vectors-1-1.bin" -match $pattern))
+  $vectorSource = Get-Content -LiteralPath (Join-Path $root "core-search\src\main\kotlin\dev\pampa\mycloudgallery\core\search\index\VectorFile.kt") -Raw
+  $magicMatch = [regex]::Match($vectorSource, 'const val MAGIC: Int = 0x([0-9A-Fa-f]{8})')
+  Check-Ai "VectorFile.kt ha il segno MAGIC letto dal sorgente" $magicMatch.Success
+  if ($magicMatch.Success) {
+    $big = [Convert]::ToUInt32($magicMatch.Groups[1].Value, 16)
+    $little = [BitConverter]::GetBytes([uint32]$big)   # little-endian, come ByteBuffer.order(LITTLE_ENDIAN)
+    $ours = [McgVectorCheck]::MagicBytes()
+    Check-Ai "il segno cercato dallo script e' MAGIC scritto little-endian (56 47 43 4D)" (($little -join ",") -eq ($ours -join ","))
+    Check-Ai "un record vero comincia con quei byte" (($r[0][0..3] -join ",") -eq ($little -join ","))
+  }
+  Check-Ai "VectorFile.kt ha l'intestazione di 44 byte che lo script usa" ($vectorSource -match 'const val HEADER: Int = 44')
+  $reversed = [byte[]]$r[0].Clone(); $reversed[0] = 0x4D; $reversed[1] = 0x43; $reversed[2] = 0x47; $reversed[3] = 0x56
+  $x = Test-VectorFile $reversed $dim
+  Check-Ai "un record con il segno nell'ordine sbagliato non e' riconosciuto" ($x.Valid -eq 0)
+  $x = Test-VectorFile (Join-Bytes $r[0..2]) $dim
+  Check-Ai "tre record veri: nessun problema" ((Get-VectorFileProblems $x (3 * $size)).Count -eq 0)
+  $garbage = [byte[]](1..4000 | ForEach-Object { 7 })
+  $x = Test-VectorFile $garbage $dim
+  Check-Ai "un file non vuoto senza nessun record riconoscibile e' un problema" ((Get-VectorFileProblems $x $garbage.Length).Count -eq 1)
+  $x = Test-VectorFile $half $dim
+  Check-Ai "la sola coda di una scrittura interrotta (il primo append) non e' un problema" ((Get-VectorFileProblems $x $half.Length).Count -eq 0)
+  $x = Test-VectorFile (New-Object byte[] 0) $dim
+  Check-Ai "un file vuoto non e' un problema" ((Get-VectorFileProblems $x 0).Count -eq 0)
   # 6. Il catalogo dei modelli dal sorgente di questa cartella.
   $catalogFile = Join-Path $root "core-models\src\main\kotlin\dev\pampa\mycloudgallery\core\models\contract\ModelCatalog.kt"
   $catalog = @(ConvertTo-ModelCatalog (Get-Content -LiteralPath $catalogFile -Raw))
@@ -409,9 +485,10 @@ if ($WifiPercent -lt 0 -or $WifiPercent -gt 100) { Fail "-WifiPercent deve stare
 if ($WifiOffMinSeconds -lt 1 -or $WifiOffMaxSeconds -lt $WifiOffMinSeconds -or $WifiOffMaxSeconds -gt 120) { Fail "Il Wi-Fi spento dura da 1 a 120 secondi, il massimo non sotto il minimo." }
 if ($Package -notmatch '^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$') { Fail "Nome del pacchetto non valido." }
 if ($Verify -and -not $Manifest -and -not $isAi) { Fail "-Verify vuole -Manifest (il file scritto da area.ps1 -Mode seed, o da questo script con -Mode backup -Step seed)." }
+if ($Step -in @("eval-push", "eval-pull") -and -not $isAi) { Fail "I passi eval-push ed eval-pull sono solo del modo ai (-Mode ai)." 2 }
 if ($isAi) {
   # Il modo ai: solo interrupt e verify (la semina e' quella del modo backup), e le guardie sul telefono, l'app e il Wi-Fi.
-  if ($Step -notin @("interrupt", "verify")) { Fail "Il modo ai ha solo i passi interrupt e verify (la semina di mcg-prova e il primo backup sono del modo backup)." }
+  if ($Step -notin @("interrupt", "verify", "eval-push", "eval-pull")) { Fail "Il modo ai ha solo i passi interrupt, verify, eval-push ed eval-pull (la semina di mcg-prova e il primo backup sono del modo backup)." }
   $aiErrors = @(Get-AiGuardErrors $Serial $Package $WifiOffMaxSeconds ([bool]$env:MCG_ADB) ([bool]$DryRun))
   if ($aiErrors.Count -gt 0) { Fail ($aiErrors -join " ") 2 }
 }
@@ -840,23 +917,32 @@ function Invoke-VerifyAi {
   Write-Log ("ai-buffer/: {0} file, {1} MB, {2} temporanei orfani" -f $buffer.Count, [math]::Round($bufferBytes / 1MB, 1), $orphans)
 
   # I5: il file dei vettori. Un'interruzione rovina al piu' i record di UNA scrittura (fino a 9); il processo nuovo li toglie e li rifa.
-  $kills = if ($killCount -gt 0) { $killCount } else { $Interruptions }
+  # Le morti di questa prova (calendario dello stesso lancio); da solo, `-Step verify` non sa quante ce ne sono state: vale -Interruptions (un tetto, non un
+  # numero a caso dal calendario di un seme casuale: prima la tolleranza cambiava da un lancio all'altro).
+  $kills = if ($Step -eq "interrupt" -and $killCount -gt 0) { $killCount } else { $Interruptions }
   $allowedBad = [math]::Max(1, $kills) * $AiMaxBadRecordsPerKill
   $stamp2 = Get-Date -Format "yyyyMMdd-HHmmss"
   $pulled = Join-Path $root "build\chaos\ai-$stamp2"
   New-Item -ItemType Directory -Force -Path $pulled | Out-Null
-  $vectorFiles = @(Get-AppFiles $AiSearchDir | Where-Object { $_.Name -match '^vectors-[0-9]+-[0-9]+\.bin$' })
+  # DB-2: il nome e l'ordine dei byte sono quelli che scrive l'app (vedi Get-AiSpaceCode e McgVectorCheck); i file stanno in search/index/.
+  $namePattern = Get-AiVectorNamePattern (Get-AiSpaceCode (Get-Content -LiteralPath $AiSpaceCodeFile -Raw))
+  $vectorFiles = @(Get-AppFiles $AiSearchDir | Where-Object { $_.Name -match $namePattern })
   $valid = 0
   $bad = 0
   foreach ($file in $vectorFiles) {
     $local = Join-Path $pulled $file.Name
     Save-AppFile $file.Path $local
-    $check = Test-VectorFile ([System.IO.File]::ReadAllBytes($local)) $AiVectorDimension
+    $bytes = [System.IO.File]::ReadAllBytes($local)
+    $check = Test-VectorFile $bytes $AiVectorDimension
+    foreach ($problem in (Get-VectorFileProblems $check $bytes.Length)) { $problems.Add($problem) }
     $valid += $check.Valid
     $bad += $check.Bad
     Write-Log ("search/: un file di vettori, {0} record buoni, {1} rovinati, coda troncata {2} byte, {3} byte scartati" -f $check.Valid, $check.Bad, $check.TornTail, $check.GarbageBytes)
   }
   if ($vectorFiles.Count -eq 0) { Write-Log "search/: nessun file di vettori (l'indicizzazione non ha ancora salvato niente?)." }
+  if ($vectorFiles.Count -eq 0 -and @(Get-AppFiles $AiSearchDir | Where-Object { $_.Name -like 'vectors-*' }).Count -gt 0) {
+    $problems.Add("I5: in search/ ci sono file `vectors-*` ma nessuno ha il nome che scrive l'app (vectors-<spazio>-<generazione>.bin)")
+  }
   if ($bad -gt $allowedBad) { $problems.Add("I5: $bad record dei vettori rovinati, piu' di quelli che $kills interruzioni possono spiegare (al piu' $allowedBad)") }
   Remove-Item -LiteralPath $pulled -Recurse -Force -ErrorAction SilentlyContinue
 
@@ -868,6 +954,78 @@ function Invoke-VerifyAi {
   }
   Write-Log ("Verifica dei dati sul telefono: tutto a posto ({0} record dei vettori buoni, {1} rovinati su {2} ammessi)." -f $valid, $bad, $allowedBad)
   return 0
+}
+
+function Write-EvalPushPlan {
+  Write-Host "=== A SECCO: non lancio niente ===" -ForegroundColor Yellow
+  Write-Host ("Telefono: {0}   App: {1}   Set OCR: {2}" -f $serialText, $Package, $(if ($EvalSource) { $EvalSource } else { "<-EvalSource>" }))
+  Write-Host ("adb -s {0} shell rm -rf {1}     (la copia temporanea, se c'era)" -f $serialText, $AiEvalTemp)
+  Write-Host ("adb -s {0} push <set OCR> {1}     (la shell scrive in /data/local/tmp)" -f $serialText, $AiEvalTemp)
+  Write-Host ("adb -s {0} shell chmod -R a+rX {1}     (leggibile dall'app)" -f $serialText, $AiEvalTemp)
+  Write-Host ("adb -s {0} shell run-as {1} mkdir -p {2}/ocr" -f $serialText, $Package, $AiEvalDir)
+  Write-Host ("adb -s {0} shell run-as {1} cp -r {2}/. {3}/ocr/     (l'app di debug scrive nella sua cartella)" -f $serialText, $Package, $AiEvalTemp, $AiEvalDir)
+  Write-Host ("adb -s {0} shell rm -rf {1}     (la copia temporanea si toglie)" -f $serialText, $AiEvalTemp)
+}
+
+# DB-4 (F54): il set OCR sintetico dentro la cartella dell'app di debug, dove lo strumento "Valutazione della ricerca" lo cerca (EvalStore.ocrDir).
+function Invoke-EvalPush {
+  if (-not $EvalSource -or -not (Test-Path -LiteralPath (Join-Path $EvalSource "manifest.tsv"))) {
+    Fail "-EvalSource deve essere la cartella del set OCR (manifest.tsv e immagini\), uscita di tools\fixtures\generate-ocr.ps1." 2
+  }
+  Initialize-Adb
+  Assert-Debug-App
+  [void](Invoke-Adb @("shell", "rm", "-rf", $AiEvalTemp))
+  $push = Invoke-Adb @("push", $EvalSource, $AiEvalTemp)
+  if ($push.Code -ne 0) { Fail "adb push non e' riuscito (adb dice: '$($push.Text)')." 4 }
+  [void](Invoke-Adb @("shell", "chmod", "-R", "a+rX", $AiEvalTemp))
+  $mk = Invoke-Adb @("shell", "run-as $Package mkdir -p $AiEvalDir/ocr")
+  if ($mk.Code -ne 0) { Fail "run-as mkdir non e' riuscito (e' la build di debug? adb dice: '$($mk.Text)')." 4 }
+  $cp = Invoke-Adb @("shell", "run-as $Package cp -r $AiEvalTemp/. $AiEvalDir/ocr/")
+  if ($cp.Code -ne 0) { Fail "run-as cp non e' riuscito (adb dice: '$($cp.Text)')." 4 }
+  [void](Invoke-Adb @("shell", "rm", "-rf", $AiEvalTemp))
+  $files = @(Get-AppFiles "$AiEvalDir/ocr")
+  $images = @($files | Where-Object { $_.Path -match '/immagini/' }).Count
+  Write-Log ("Set OCR sul telefono: {0} file ({1} immagini) in {2}/ocr/. Ora: Impostazioni > Sviluppo > Valutazione della ricerca > Lettura di prova." -f $files.Count, $images, $AiEvalDir)
+  if (-not ($files | Where-Object { $_.Name -eq "manifest.tsv" })) { Fail "Il set OCR copiato non ha manifest.tsv." 4 }
+  return 0
+}
+
+function Write-EvalPullPlan {
+  Write-Host "=== A SECCO: non lancio niente ===" -ForegroundColor Yellow
+  Write-Host ("Telefono: {0}   App: {1}   Destinazione: {2}" -f $serialText, $Package, $(if ($EvalDir) { $EvalDir } else { "build\chaos\eval-<data>" }))
+  Write-Host ("adb -s {0} shell run-as {1} find {2} -type f -exec stat -c '%s %n' {{}} +     (l'elenco)" -f $serialText, $Package, $AiEvalDir)
+  Write-Host ("adb -s {0} exec-out run-as {1} cat {2}/<labels.mcgeval | report-NN.txt | ocr/letto.tsv | ocr/ocr-resoconto.txt>     (uno per file)" -f $serialText, $Package, $AiEvalDir)
+}
+
+# DB-4 (F54): le etichette e i resoconti della valutazione sul PC. Solo i nomi dell'elenco $AiEvalPullNames; le etichette sono dati privati (mai nel repository).
+function Invoke-EvalPull {
+  Initialize-Adb
+  Assert-Debug-App
+  $dest = if ($EvalDir) { $EvalDir } else { Join-Path $root "build\chaos\eval-$stamp" }
+  $prefix = "$AiEvalDir/"
+  $found = @(Get-AppFiles $AiEvalDir | Where-Object { $_.Path.StartsWith($prefix) -and ($_.Path.Substring($prefix.Length) -match $AiEvalPullNames) })
+  if ($found.Count -eq 0) { Write-Log "Niente da portare: la valutazione non ha scritto etichette ne' resoconti (lo strumento e' stato usato?)."; return 0 }
+  New-Item -ItemType Directory -Force -Path $dest | Out-Null
+  foreach ($file in $found) {
+    $relative = $file.Path.Substring($prefix.Length)
+    $local = Join-Path $dest ($relative.Replace('/', '\'))
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $local) | Out-Null
+    Save-AppFile $file.Path $local
+    Write-Log ("portato {0} ({1} byte)" -f $relative, (Get-Item -LiteralPath $local).Length)
+  }
+  Write-Log ("{0} file in {1}. Le etichette sono dati privati: non vanno nel repository." -f $found.Count, $dest)
+  return 0
+}
+
+if ($isAi -and $Step -eq "eval-push") {
+  if ($DryRun) { Write-EvalPushPlan; exit 0 }
+  try { $code = Invoke-EvalPush } finally { Save-Log }
+  exit $code
+}
+if ($isAi -and $Step -eq "eval-pull") {
+  if ($DryRun) { Write-EvalPullPlan; exit 0 }
+  try { $code = Invoke-EvalPull } finally { Save-Log }
+  exit $code
 }
 
 if ($isAi -and $Step -eq "verify") {

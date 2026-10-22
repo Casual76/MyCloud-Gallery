@@ -121,6 +121,12 @@ internal fun CutoutOverlay(
       LiftedSubject(controller, art, bitmap, mapping, reduced)
       CutoutBar(controller)
     }
+    // I6: dai Nascosti "Salva come nuova foto" chiede prima conferma.
+    CutoutHiddenSaveSheet(
+      visible = controller.confirmingHiddenSave,
+      onConfirm = controller::confirmHiddenSave,
+      onCancel = controller::cancelHiddenSave,
+    )
   }
 }
 

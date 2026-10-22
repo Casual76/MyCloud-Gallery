@@ -16,6 +16,16 @@ interface QueryEmbedding {
   val readiness: StateFlow<SearchReadiness>
 
   suspend fun vector(text: String): FloatArray?
+
+  /**
+   * Come [vector], ma **senza aspettare** che il motore si carichi (CE-9, E-Q11): se non e' ancora in memoria comincia a caricarlo e risponde
+   * null subito ([readiness] dice `PreparingContent`), cosi' filtri e testo rispondono senza aspettare i secondi di un avvio a freddo e il
+   * contenuto arriva alla ricerca dopo. Di serie aspetta, come [vector] (i motori che non si caricano al bisogno).
+   */
+  suspend fun vectorIfLoaded(text: String): FloatArray? = vector(text)
+
+  /** Comincia a caricare il motore senza aspettarlo (all'apertura di Cerca, D35). Di serie niente. */
+  fun preload() {}
 }
 
 /**

@@ -12,6 +12,7 @@ import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.MotionPhotosOn
 import androidx.compose.material.icons.rounded.SignalCellularAlt
 import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -50,6 +51,8 @@ import dev.pampa.mycloudgallery.feature.viewer.R
  *
  * @param playing il video intero sta girando: il tocco lo ferma.
  * @param unavailable il video non si puo' avere adesso (rete): il badge e' attenuato e il tocco ci riprova.
+ * @param loading il video di un media del NAS si sta leggendo (VM-3): il badge lo dice con un indicatore e lo stato "In caricamento", e il tocco non fa niente
+ *   finche' non ha finito (prima non c'era nessun segno e un secondo tocco ricominciava la lettura da capo).
  */
 @Composable
 internal fun MotionBadge(
@@ -58,10 +61,12 @@ internal fun MotionBadge(
   onClick: () -> Unit,
   modifier: Modifier = Modifier,
   backdrop: GlassBackdropState = currentGlassBackdrop(),
+  loading: Boolean = false,
 ) {
   val label = stringResource(if (playing) R.string.motion_stop else R.string.motion_play)
   val state = when {
     playing -> stringResource(R.string.motion_state_playing)
+    loading -> stringResource(R.string.motion_state_loading)
     unavailable -> stringResource(R.string.motion_state_unavailable)
     else -> null
   }
@@ -87,12 +92,16 @@ internal fun MotionBadge(
       verticalAlignment = Alignment.CenterVertically,
       horizontalArrangement = if (showLabel) Arrangement.spacedBy(BadgeGap) else Arrangement.Center,
     ) {
-      Icon(
-        imageVector = if (playing) Icons.Rounded.Stop else Icons.Rounded.MotionPhotosOn,
-        contentDescription = null,
-        tint = galleryBarInk(),
-        modifier = Modifier.size(BadgeGlyph),
-      )
+      if (loading) {
+        CircularProgressIndicator(modifier = Modifier.size(BadgeGlyph), strokeWidth = 2.dp, color = galleryBarInk())
+      } else {
+        Icon(
+          imageVector = if (playing) Icons.Rounded.Stop else Icons.Rounded.MotionPhotosOn,
+          contentDescription = null,
+          tint = galleryBarInk(),
+          modifier = Modifier.size(BadgeGlyph),
+        )
+      }
       if (showLabel) {
         Text(
           text = stringResource(R.string.motion_badge),

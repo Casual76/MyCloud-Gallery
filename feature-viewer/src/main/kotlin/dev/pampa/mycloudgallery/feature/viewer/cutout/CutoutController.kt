@@ -69,6 +69,13 @@ internal class CutoutController(
   var working: Boolean by mutableStateOf(false)
     private set
 
+  /**
+   * Dai Nascosti "Salva come nuova foto" chiede prima conferma (I6): nel telefono il ritaglio e' una foto pubblica (la vedono Galleria di Samsung e le altre
+   * app che leggono le foto), anche se quella da cui viene e' nascosta. Il foglio lo dice e propone "Salva" o "Annulla".
+   */
+  var confirmingHiddenSave: Boolean by mutableStateOf(false)
+    private set
+
   /** La vista per le vibrazioni e gli annunci di TalkBack: la imposta la schermata. */
   var view: View? = null
 
@@ -116,6 +123,7 @@ internal class CutoutController(
     owner = null
     origin = null
     working = false
+    confirmingHiddenSave = false
     art?.release()
     art = null
   }
@@ -172,6 +180,9 @@ internal class CutoutController(
         throw cancelled
       } catch (_: Exception) {
         ViewerCutout.Failed(CODE_FAILED)
+      } catch (_: OutOfMemoryError) {
+        // R20: una foto grande con poca memoria non fa cadere l'app: il ritaglio non riesce e lo dice.
+        ViewerCutout.Failed(CODE_FAILED, CutoutFailure.LOW_MEMORY)
       }
       // Cambiato media o chiuso nel frattempo: il risultato di una foto non si mostra mai su un'altra (E-H1).
       if (owner != id || id != host.currentId()) return@launch
@@ -185,13 +196,20 @@ internal class CutoutController(
         }
         is ViewerCutout.Failed -> {
           reset()
-          host.announce(ViewerMessage.CutoutFailed)
+          host.announce(
+            when (result.reason) {
+              CutoutFailure.LOW_MEMORY -> ViewerMessage.CutoutLowMemory
+              CutoutFailure.NO_SPACE -> ViewerMessage.CutoutNoSpace
+              CutoutFailure.OTHER -> ViewerMessage.CutoutFailed
+            },
+          )
         }
       }
     }
   }
 
   private suspend fun lift(id: MediaId, subject: ViewerCutout.Subject) {
+    var lowMemory = false
     val built = try {
       withContext(host.work()) { CutoutArt.build(subject) }
     } catch (cancelled: CancellationException) {
@@ -199,6 +217,7 @@ internal class CutoutController(
     } catch (_: Exception) {
       null
     } catch (_: OutOfMemoryError) {
+      lowMemory = true
       null
     }
     if (owner != id || id != host.currentId()) {
@@ -207,7 +226,7 @@ internal class CutoutController(
     }
     if (built == null) {
       reset()
-      host.announce(ViewerMessage.CutoutFailed)
+      host.announce(if (lowMemory) ViewerMessage.CutoutLowMemory else ViewerMessage.CutoutFailed)
       return
     }
     art = built
@@ -232,16 +251,20 @@ internal class CutoutController(
     if (working) return
     working = true
     scope.launch {
+      var lowMemory = false
       val ok = try {
         saver.copy(id, ref, lifted.cutout, lifted.outline)
       } catch (cancelled: CancellationException) {
         throw cancelled
       } catch (_: Exception) {
         false
+      } catch (_: OutOfMemoryError) {
+        lowMemory = true
+        false
       }
       working = false
       if (owner != id) return@launch
-      host.announce(if (ok) ViewerMessage.CutoutCopied else ViewerMessage.ActionFailed)
+      host.announce(if (ok) ViewerMessage.CutoutCopied else if (lowMemory) ViewerMessage.CutoutLowMemory else ViewerMessage.ActionFailed)
       if (ok) reset()
     }
   }
@@ -255,20 +278,48 @@ internal class CutoutController(
     if (working) return
     working = true
     scope.launch {
+      var lowMemory = false
       val ok = try {
         saver.share(id, ref, lifted.cutout, lifted.outline)
       } catch (cancelled: CancellationException) {
         throw cancelled
       } catch (_: Exception) {
         false
+      } catch (_: OutOfMemoryError) {
+        lowMemory = true
+        false
       }
       working = false
-      if (owner == id && !ok) host.announce(ViewerMessage.ActionFailed)
+      if (owner == id && !ok) host.announce(if (lowMemory) ViewerMessage.CutoutLowMemory else ViewerMessage.ActionFailed)
     }
   }
 
-  /** "Salva come nuova foto": un PNG in `Pictures/MyCloud Gallery/Ritagli/`; dai Nascosti la foto nuova nasce nascosta (D47, E-V11). */
+  /**
+   * "Salva come nuova foto": un PNG in `Pictures/MyCloud Gallery/Ritagli/`; dai Nascosti la foto nuova nasce nascosta (D47, E-V11), ma prima si chiede
+   * conferma (I6): nel telefono e' una foto pubblica, con un nome generico.
+   */
   fun save() {
+    if (state !is CutoutState.Lifted || working) return
+    if (host.hidden()) {
+      confirmingHiddenSave = true
+      return
+    }
+    startSaving()
+  }
+
+  /** "Salva" nel foglio dei Nascosti (I6). */
+  fun confirmHiddenSave() {
+    if (!confirmingHiddenSave) return
+    confirmingHiddenSave = false
+    startSaving()
+  }
+
+  /** "Annulla" nel foglio dei Nascosti: il soggetto resta staccato, non si salva niente. */
+  fun cancelHiddenSave() {
+    confirmingHiddenSave = false
+  }
+
+  private fun startSaving() {
     val lifted = state as? CutoutState.Lifted ?: return
     val saver = host.services().cutoutSaver ?: return
     val id = owner ?: return
@@ -277,11 +328,15 @@ internal class CutoutController(
     working = true
     state = CutoutState.Saving
     scope.launch {
+      var lowMemory = false
       val result = try {
         saver.saveAsNewPhoto(id, ref, lifted.cutout, lifted.outline, fromHidden = host.hidden())
       } catch (cancelled: CancellationException) {
         throw cancelled
       } catch (_: Exception) {
+        CutoutSaveResult.Failed
+      } catch (_: OutOfMemoryError) {
+        lowMemory = true
         CutoutSaveResult.Failed
       }
       working = false
@@ -296,7 +351,7 @@ internal class CutoutController(
         CutoutSaveResult.Failed -> {
           // Non salvato (spazio o permesso, CUTOUT_SAVE_FAILED): il soggetto resta staccato, si puo' riprovare.
           state = lifted
-          host.announce(ViewerMessage.CutoutSaveFailed)
+          host.announce(if (lowMemory) ViewerMessage.CutoutLowMemory else ViewerMessage.CutoutSaveFailed)
         }
       }
     }

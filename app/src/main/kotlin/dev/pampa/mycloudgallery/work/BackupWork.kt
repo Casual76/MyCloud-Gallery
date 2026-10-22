@@ -61,6 +61,12 @@ object BackupWorkScheduling {
   const val QUICK_WORK = "backup-quick-photos"
   const val SAFETY_WORK = "backup-safety"
   const val INCOMING_WORK = "backup-incoming"
+
+  /**
+   * Campo, gruppo A (D5, O-B19): la ripresa dei file ricevuti che aspettano la rete o il NAS. Un nome suo: un "Salva sul NAS" nuovo ([incoming],
+   * `KEEP` su [INCOMING_WORK]) non resta mai dietro un tentativo programmato (prima i file nuovi aspettavano il quarto d'ora di quello vecchio).
+   */
+  const val INCOMING_RETRY_WORK = "backup-incoming-retry"
   const val USER_RESUME_WORK = "backup-user-resume"
   const val PHOTOS_PERIODIC_WORK = "backup-photos-periodic"
   const val VIDEOS_PERIODIC_WORK = "backup-videos-periodic"
@@ -69,6 +75,9 @@ object BackupWorkScheduling {
 
   /** D-6: il trigger del lavoro dell'utente ripreso con il Wi-Fi ([userResume]), negli input del lavoro. */
   const val INPUT_TRIGGER = "trigger"
+
+  /** Campo, gruppo A (D5): la ripresa dei file ricevuti dopo un'attesa della rete ([incomingAfterWait]), negli input del lavoro. */
+  const val INPUT_RESUMED = "resumed"
 
   /** Il giro periodico di chi non e' sveglio: ogni sei ore, le regole decidono se si parte. */
   val PERIOD: kotlin.time.Duration = NasWorkScheduling.PERIOD
@@ -95,6 +104,7 @@ object BackupWorkScheduling {
     QUICK(QUICK_WORK),
     SAFETY(SAFETY_WORK),
     INCOMING(INCOMING_WORK),
+    INCOMING_RETRY(INCOMING_RETRY_WORK),
     USER_RESUME(USER_RESUME_WORK),
   }
 
@@ -153,19 +163,20 @@ object BackupWorkScheduling {
   fun waitsForHomeNetwork(wait: WaitReason): Boolean =
     wait == WaitReason.Offline || wait is WaitReason.NetworkNotAllowed || wait == WaitReason.NetworkNotTrusted || wait == WaitReason.Roaming
 
-  fun request(kind: Kind, wait: WaitReason? = null, delayMs: Long = 0L, onWifi: Boolean = false): OneTimeWorkRequest {
+  fun request(kind: Kind, wait: WaitReason? = null, delayMs: Long = 0L, onWifi: Boolean = false, resumed: Boolean = false): OneTimeWorkRequest {
     val builder = when (kind) {
       Kind.PHOTOS -> OneTimeWorkRequestBuilder<PhotoBackupWorker>()
       Kind.VIDEOS -> OneTimeWorkRequestBuilder<VideoBackupWorker>()
       Kind.QUICK -> OneTimeWorkRequestBuilder<QuickPhotoWorker>()
       Kind.SAFETY -> OneTimeWorkRequestBuilder<SafetyVerifyWorker>()
-      Kind.INCOMING -> OneTimeWorkRequestBuilder<IncomingUploadWorker>()
+      Kind.INCOMING, Kind.INCOMING_RETRY -> OneTimeWorkRequestBuilder<IncomingUploadWorker>()
       Kind.USER_RESUME -> OneTimeWorkRequestBuilder<UserResumeWorker>()
     }
     return builder
       .setConstraints(if (onWifi) LanConstraints.unmetered() else constraintsFor(wait))
       .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_MS, TimeUnit.MILLISECONDS)
       .apply { if (delayMs > 0L) setInitialDelay(delayMs, TimeUnit.MILLISECONDS) }
+      .apply { if (resumed) setInputData(Data.Builder().putBoolean(INPUT_RESUMED, true).build()) }
       .addTag(TAG)
       .build()
   }
@@ -183,9 +194,31 @@ object BackupWorkScheduling {
     // IN-5: lo stesso per i file ricevuti ("Salva sul NAS" e' un gesto dell'utente): fuori casa, o col NAS spento, il file aspetta e riparte da solo.
     if (kind == Kind.QUICK && waitsForHomeNetwork(wait)) {
       enqueue(context, request(kind, wait, HOME_RETRY_MS, onWifi = true), kind, ExistingWorkPolicy.APPEND_OR_REPLACE)
-    } else if (kind == Kind.INCOMING && (waitsForHomeNetwork(wait) || wait == WaitReason.NasUnreachable)) {
-      enqueue(context, request(kind, wait, HOME_RETRY_MS, onWifi = true), kind, ExistingWorkPolicy.APPEND_OR_REPLACE)
+    } else if (kind == Kind.INCOMING || kind == Kind.INCOMING_RETRY) {
+      incomingAfterWait(context, wait, resumed = kind == Kind.INCOMING_RETRY)
     }
+  }
+
+  /**
+   * Campo, gruppo A (D5, O-B19): i file ricevuti ("Salva sul NAS") che aspettano la rete (fuori casa, Wi-Fi spento, dati mobili) o il NAS. Prima si
+   * riprovavano dopo un quarto d'ora fisso, anche se il Wi-Fi tornava subito: sul campo il file e' salito 13 minuti dopo il ritorno della rete. Adesso
+   * come la ripresa del lavoro dell'utente (D-6, D-12): la prima attesa mette in coda una ripresa **senza ritardo** su una rete non a consumo, che
+   * WorkManager avvia appena il Wi-Fi c'e', e la ripresa aspetta al piu' 30 s il percorso, il NAS e la sessione ([awaitNasReady]); solo se anche la
+   * ripresa trova il NAS che non risponde (a casa col NAS spento, o un Wi-Fi che non e' casa) si riprova dopo un quarto d'ora (niente polling). Un nome
+   * suo ([INCOMING_RETRY_WORK]): i file salvati dopo partono subito con il loro lavoro. Le altre attese seguono [afterWait] (fascia, carica: vincoli
+   * esatti; congelamento e il resto: niente). Mai i dati mobili senza la conferma.
+   */
+  fun incomingAfterWait(context: Context, wait: WaitReason, resumed: Boolean, now: LocalDateTime = LocalDateTime.now()) {
+    if (waitsForHomeNetwork(wait) || wait == WaitReason.NasUnreachable || wait == WaitReason.PoorNetwork) {
+      if (resumed) {
+        enqueue(context, request(Kind.INCOMING_RETRY, wait, HOME_RETRY_MS, onWifi = true, resumed = true), Kind.INCOMING_RETRY, ExistingWorkPolicy.APPEND_OR_REPLACE)
+      } else {
+        enqueue(context, request(Kind.INCOMING_RETRY, wait, onWifi = true, resumed = true), Kind.INCOMING_RETRY, ExistingWorkPolicy.REPLACE)
+      }
+      return
+    }
+    val delay = delayFor(wait, now) ?: return
+    enqueue(context, request(Kind.INCOMING, wait, delay), Kind.INCOMING, ExistingWorkPolicy.APPEND_OR_REPLACE)
   }
 
   /**
@@ -482,7 +515,18 @@ class IncomingUploadWorker @AssistedInject constructor(
   override val kind = BackupWorkScheduling.Kind.INCOMING
   override val diagJob: DiagJob = DiagJob.BACKUP_INCOMING
 
-  override suspend fun stage(stages: BackupStages): BackupFollowUp? = stages.incoming()?.let { outcome ->
+  /** Campo, gruppo A (D5): questo lavoro e' la ripresa dopo un'attesa della rete ([BackupWorkScheduling.incomingAfterWait]). */
+  private val resumed: Boolean get() = inputData.getBoolean(BackupWorkScheduling.INPUT_RESUMED, false)
+
+  override fun afterWait(reason: WaitReason) = BackupWorkScheduling.incomingAfterWait(applicationContext, reason, resumed)
+
+  override suspend fun stage(stages: BackupStages): BackupFollowUp? {
+    // D5 (come D-12): la ripresa parte appena WorkManager vede un Wi-Fi, prima che il percorso verso il NAS e la sessione siano pronti: si aspettano.
+    if (resumed) awaitNasReady(graph)
+    return incomingStage(stages)
+  }
+
+  private suspend fun incomingStage(stages: BackupStages): BackupFollowUp? = stages.incoming()?.let { outcome ->
     // IN-5: sui dati mobili o in roaming le regole chiedono la conferma dell'utente e il file ricevuto aspetta il Wi-Fi: lo si riprova su una rete non
     // a consumo (come "Proteggi subito", BK-2). Gli altri lavori lo lasciano alla pagina; qui l'utente aveva solo condiviso un file.
     if (outcome.stage is StageOutcome.NeedsConfirmation) BackupFollowUp.Wait(WaitReason.NetworkNotTrusted) else BackupFollowUp.of(outcome)

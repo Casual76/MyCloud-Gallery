@@ -4304,3 +4304,15 @@ del telefono e' sparita" (`BackupPrivateCopyGuardian.plan`/`phoneStillHas`, `Bac
   Galleria: e' lo stesso caso per l'utente (E-B4 non distingue chi cancella).
 - Test: `BackupCatalogTest.d4_*` (sparita prima del giro: segnata, contata, la foto al sicuro no; ripristinata con un `_ID` nuovo: segno tolto, di nuovo
   candidata); `iConteggiDellaSicurezza...` aggiornato (diceva "persa senza problema", il comportamento di prima).
+
+**5. La coda di "Salva sul NAS" ripartiva 13-15 minuti dopo il ritorno del Wi-Fi (B-S14, O-B19).** Causa: `BackupWorkScheduling.afterWait`, per un
+lavoro dei file ricevuti in attesa della rete o del NAS, rimetteva in coda `IncomingUploadWorker` con un **ritardo fisso di 15 minuti**
+(`HOME_RETRY_MS`) e il vincolo del Wi-Fi: il vincolo era soddisfatto al ritorno della rete, ma il ritardo no. E il lavoro aveva lo stesso nome unico di
+"Salva sul NAS" (`KEEP`): i file salvati dopo restavano dietro quel tentativo.
+- Correzione (le attese di D-6/D-12): la prima attesa della rete o del NAS mette in coda una **ripresa senza ritardo** su una rete non a consumo
+  (`INCOMING_RETRY_WORK`, un nome suo, con l'input `resumed`): WorkManager la avvia appena c'e' un Wi-Fi, e la ripresa aspetta al piu' 30 s il percorso,
+  la sonda del NAS e la sessione (`awaitNasReady`, la stessa di `UserResumeWorker`). Solo se anche la ripresa trova il NAS che non risponde (a casa col NAS
+  spento, un Wi-Fi che non e' casa) si riprova fra un quarto d'ora: nessun ciclo. Un "Salva sul NAS" nuovo usa sempre il suo lavoro e parte subito. Le
+  altre attese come prima (fascia e carica con un vincolo esatto, congelamento e il resto niente); mai i dati mobili senza la conferma.
+- Test: `BackupSchedulingTest.in5_d5_*` (prima diceva "almeno 10 minuti di ritardo": ora nessuno, su una rete non a consumo),
+  `d5_laRipresaCheNonTrovaIlNas...` (il quarto d'ora solo per la ripresa; il file nuovo non aspetta).

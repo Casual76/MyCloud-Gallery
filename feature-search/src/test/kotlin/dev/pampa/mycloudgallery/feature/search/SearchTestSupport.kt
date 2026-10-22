@@ -42,6 +42,7 @@ internal fun SyntheticLibrary.results(
   order: ResultOrder = ResultOrder.RECENT,
   notices: List<SearchNotice> = emptyList(),
   coverage: SearchCoverage = SearchCoverage.Complete,
+  freeText: Boolean = false,
 ): SearchResults = SearchResults(
   chips = chips,
   confident = IndexOrderedTimelineView(snapshot, confident.toList().toIntArray()),
@@ -49,12 +50,15 @@ internal fun SyntheticLibrary.results(
   coverage = coverage,
   notices = notices,
   order = order,
+  freeText = freeText,
 )
 
 /** Un motore "a copione": risponde con [script], registra le richieste e puo' guastarsi (errore interno, E-Q). */
 internal class ScriptedEngine(var script: (SearchRequest) -> SearchResults) : SearchEngine {
   val requests: MutableList<SearchRequest> = mutableListOf()
   val similarCalls: MutableList<Pair<MediaId, ResultOrder>> = mutableListOf()
+  var warmUps: Int = 0
+    private set
   var failure: Exception? = null
   var similarScript: (MediaId, ResultOrder) -> SearchResults = { _, order -> script(SearchRequest("", order = order)) }
 
@@ -71,6 +75,10 @@ internal class ScriptedEngine(var script: (SearchRequest) -> SearchResults) : Se
     similarCalls += media to order
     failure?.let { throw it }
     return similarScript(media, order)
+  }
+
+  override fun warmUp() {
+    warmUps++
   }
 }
 

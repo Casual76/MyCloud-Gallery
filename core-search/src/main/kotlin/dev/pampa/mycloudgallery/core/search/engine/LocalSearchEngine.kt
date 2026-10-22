@@ -66,22 +66,34 @@ class LocalSearchEngine(
 
   override val readiness: StateFlow<SearchReadiness> get() = embedding.readiness
 
+  override fun warmUp() = embedding.preload()
+
   override suspend fun search(request: SearchRequest): SearchResults {
     val snapshot = core.data.snapshot.value ?: return core.empty(emptyList(), request.order)
     core.prepare()
     val parsed = parser.parse(request.text.take(QueryParser.MAX_QUERY_CHARS), today.date(), places.dictionary(snapshot))
     val chips = request.editedChips ?: parsed.chips
     val wordChips = chips.filterIsInstance<SearchChip.Word>()
-    val words = if (request.editedChips != null) wordChips.filter { !it.exact }.flatMap { SearchText.words(it.text) } else parsed.words
+    // CE-2: modificare un chip cambia solo quel filtro. Le parole libere della query non hanno un chip che le porti e restano; le frasi esatte e le
+    // parole "come parola" stanno nei chip `Word` (toglierne uno le toglie).
+    val words = if (request.editedChips != null) {
+      (parsed.words + wordChips.filter { !it.exact }.flatMap { SearchText.words(it.text) }).distinct()
+    } else {
+      parsed.words
+    }
     val exact = if (request.editedChips != null) wordChips.filter { it.exact }.map { it.text } else parsed.exact
     val filters = chips.filter { it.isFilter }
+    val freeText = parsed.semantic != null || parsed.words.isNotEmpty()
+    // Tolti tutti i chip e senza testo non resta niente da cercare: nessun risultato (non "tutta la Libreria").
+    if (request.editedChips != null && filters.isEmpty() && !freeText && wordChips.isEmpty()) return core.empty(chips, request.order, freeText = false)
     val candidates = candidates(snapshot, filters)
     val notices = ArrayList<SearchNotice>()
     parsed.corrections.forEach { (from, to) -> notices += SearchNotice.TypoCorrected(from, to) }
 
     var content: ContentScores? = null
     if (parsed.semantic != null) {
-      val query = embedding.vector(parsed.semantic)
+      // CE-9: il motore delle query non si aspetta: se si sta ancora caricando, filtri e testo rispondono subito e il contenuto arriva dopo.
+      val query = embedding.vectorIfLoaded(parsed.semantic)
       if (query == null) {
         notices += if (embedding.readiness.value is SearchReadiness.PreparingContent) SearchNotice.PreparingContentSearch else SearchNotice.OnlyFiltersAndText
       } else {
@@ -113,7 +125,7 @@ class LocalSearchEngine(
     core.refreshCoverage(snapshot)
     val results = core.finish(
       snapshot, map, chips, scored, onlyFilters, Thresholds(SearchThresholds.ZC, SearchThresholds.ZL, SearchThresholds.S_MIN),
-      request.order, notices.distinct(),
+      request.order, notices.distinct(), freeText,
     )
     if (corrections.isEmpty()) return results
     val shown = HashSet<Int>()

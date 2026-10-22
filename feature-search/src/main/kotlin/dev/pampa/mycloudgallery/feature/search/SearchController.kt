@@ -38,6 +38,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
@@ -94,6 +95,23 @@ class SearchController(
 
   init {
     scope.launch { history.entries.collect { if (mutableState.value is SearchScreenState.Idle) refreshIdle() } }
+    // CE-8, CE-9: il contenuto che mancava (modello scaricato, motore delle query caricato) si aggiunge ai risultati senza che l'utente ripeta la ricerca.
+    scope.launch {
+      var wasReady = queryModel.value is ModelState.Ready
+      queryModel.collect { model ->
+        val ready = model is ModelState.Ready
+        if (ready && !wasReady) refreshContent()
+        wasReady = ready
+      }
+    }
+    scope.launch {
+      var wasReady = readiness.value == SearchReadiness.Ready
+      readiness.collect { now ->
+        val ready = now == SearchReadiness.Ready
+        if (ready && !wasReady) refreshContent()
+        wasReady = ready
+      }
+    }
     data?.let { source ->
       scope.launch {
         source.snapshot.collect { snapshot ->
@@ -110,6 +128,11 @@ class SearchController(
 
   /** La data di oggi, per le intestazioni di periodo di "Recenti" (la stessa del motore, D39). */
   fun todayDate(): LocalDate = today.date()
+
+  /** La scheda Cerca si apre (D35, CE-9): il motore delle query comincia a caricarsi, cosi' la prima ricerca non lo aspetta. */
+  fun onOpened() {
+    engine.warmUp()
+  }
 
   // --- Testo ---------------------------------------------------------------------------------------------------------------------------
 
@@ -191,7 +214,8 @@ class SearchController(
   override fun onRemoveChip(chip: SearchChip) {
     val current = results ?: return
     val remaining = current.chips - chip
-    if (chip is SearchChip.Similar || remaining.isEmpty()) {
+    // CE-2: tolto l'ultimo chip la ricerca continua con le parole libere della query; Cerca torna a riposo solo se non resta niente da cercare.
+    if (chip is SearchChip.Similar || (remaining.isEmpty() && !current.freeText)) {
       mutableQuery.value = ""
       onQueryChange("")
       return
@@ -265,13 +289,14 @@ class SearchController(
 
   // --- Motore --------------------------------------------------------------------------------------------------------------------------
 
-  private fun launch(request: Last, orderOverride: ResultOrder? = null) {
+  /** [quiet]: la ricerca di prima si rifa' senza passare da "Sto cercando…" (i risultati restano in vista finche' non arrivano quelli nuovi). */
+  private fun launch(request: Last, orderOverride: ResultOrder? = null, quiet: Boolean = false) {
     searchJob?.cancel()
     typingJob?.cancel()
     liveJob?.cancel()
     last = request
-    if (orderOverride == null) showLikely = false
-    mutableState.value = SearchScreenState.Searching((request as? Last.Query)?.edited.orEmpty())
+    if (orderOverride == null && !quiet) showLikely = false
+    if (!quiet) mutableState.value = SearchScreenState.Searching((request as? Last.Query)?.edited.orEmpty())
     searchJob = scope.launch {
       val found = try {
         val order = orderOverride ?: orderStore.order.value
@@ -280,7 +305,11 @@ class SearchController(
           is Last.Similar -> engine.similar(request.media, order)
         }
       } catch (e: CancellationException) {
-        throw e
+        // Annullata davvero (una ricerca nuova, la schermata chiusa): si esce. Una cancellazione che arriva dal motore mentre noi siamo vivi non e'
+        // la nostra (CE-11, motore fermo o indice non aperto): sarebbe "Sto cercando…" per sempre.
+        if (!isActive) throw e
+        mutableState.value = SearchScreenState.Unavailable(SearchUnavailableReason.INTERNAL_ERROR)
+        return@launch
       } catch (e: Exception) {
         mutableState.value = SearchScreenState.Unavailable(SearchUnavailableReason.INTERNAL_ERROR)
         return@launch
@@ -293,6 +322,20 @@ class SearchController(
       }
       follow(found)
     }
+  }
+
+  /**
+   * CE-8, CE-9: il modello delle query e' diventato pronto, o il motore ha finito di caricarsi. Se i risultati in vista erano senza il contenuto
+   * (l'avviso "serve il modello" o "sto preparando"), la stessa ricerca si rifa' da sola, senza far sparire cio' che si vede.
+   */
+  private fun refreshContent() {
+    val again = last as? Last.Query ?: return
+    val shown = results ?: return
+    val state = mutableState.value
+    if (state !is SearchScreenState.Results && state !is SearchScreenState.NoResults) return
+    if (shown.notices.none { it == SearchNotice.PreparingContentSearch || it == SearchNotice.OnlyFiltersAndText }) return
+    recordNext = false
+    launch(again, quiet = true)
   }
 
   private fun follow(found: SearchResults) {

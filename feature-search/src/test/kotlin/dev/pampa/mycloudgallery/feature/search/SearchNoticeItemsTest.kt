@@ -104,4 +104,18 @@ class SearchNoticeItemsTest {
     assertThat(typo.searched).isEqualTo("esselunga")
     assertThat(typo.typed).isEqualTo("eselunga")
   }
+
+  /**
+   * CE-8: con il modello delle query pronto "serve il modello" non e' piu' vero, anche se i risultati in vista (o lo stato del motore) sono di prima che
+   * finisse lo scaricamento. Prima l'avviso con "Scarica" restava finche' non si faceva un'altra ricerca.
+   */
+  @Test
+  fun conIlModelloProntoLAvvisoServeIlModelloSiToglie_CE8() {
+    val ready = ModelState.Ready(ModelCatalog.QUERY_270M.sizeBytes, ModelSourceKind.HTTPS, 1)
+    assertThat(items(notices = listOf(SearchNotice.OnlyFiltersAndText), model = ready)).isEmpty()
+    assertThat(items(coverage = SearchCoverage.ModelMissing(ModelCatalog.QUERY_270M.sizeBytes), model = ready)).isEmpty()
+    assertThat(items(readiness = SearchReadiness.FiltersAndTextOnly(modelMissing = true), model = ready)).isEmpty()
+    // Senza il modello pronto l'avviso c'e' come prima.
+    assertThat(items(notices = listOf(SearchNotice.OnlyFiltersAndText), model = ModelState.Absent)).hasSize(1)
+  }
 }

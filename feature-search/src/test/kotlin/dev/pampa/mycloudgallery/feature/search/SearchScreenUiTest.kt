@@ -282,16 +282,33 @@ class SearchScreenUiTest {
     assertTouchTargets()
   }
 
+  /**
+   * D28, D33, CE-5: in Cerca non si legge mai il NAS. Un media solo sul NAS (sul tablet, quasi tutti) ha la miniatura della replica locale: il suo riferimento
+   * va al caricatore, ma **mai come richiesta visibile**: solo "in arrivo". La sorgente del NAS legge l'originale solo per il contenuto visibile (D17), quindi in
+   * Cerca risponde con la replica o la miniatura provvisoria e basta. Prima il riferimento del NAS si scartava e questi media restavano sul segnaposto.
+   */
   @Test
-  fun inCercaNonSiLeggeMaiIlNas_SoloMiniatureLocali() {
+  fun inCercaNonSiLeggeMaiIlNas_ISoloNasPassanoComeRichiesteInArrivo() {
     val thumbs = TestThumbnails(lib, nasEvery = 2)
     show(results(confident = 0..19), thumbs = thumbs)
     rule.waitForIdle()
-    assertThat(thumbs.asked).isNotEmpty()
-    assertThat(thumbs.asked.filterIsInstance<MediaRef.Nas>()).isEmpty()
-    val requested: List<ThumbRequest> = thumbs.loader.windows.flatMap { it.first + it.second }
-    assertThat(requested).isNotEmpty()
-    assertThat(requested.map { it.ref }.filterIsInstance<MediaRef.Nas>()).isEmpty()
+    val visible: List<ThumbRequest> = thumbs.loader.windows.flatMap { it.first }
+    val ahead: List<ThumbRequest> = thumbs.loader.windows.flatMap { it.second }
+    assertThat(visible).isNotEmpty()
+    assertThat(visible.map { it.ref }.filterIsInstance<MediaRef.Nas>()).isEmpty()
+    assertThat(ahead).isNotEmpty()
+    assertThat(ahead.map { it.ref }.all { it is MediaRef.Nas }).isTrue()
+  }
+
+  /** TS-5: il chip "Simili a" chiede la miniatura del suo media alla finestra del caricatore (il media e' escluso dai risultati: nessuna cella lo chiedeva). */
+  @Test
+  fun ilChipSimiliAChiedeLaSuaMiniatura_TS5() {
+    val thumbs = TestThumbnails(lib)
+    val similar = SearchChip.Similar(lib.id(40), "Simili")
+    show(results(confident = 0..9, chips = listOf(similar)), thumbs = thumbs)
+    rule.waitForIdle()
+    val requested = thumbs.loader.windows.flatMap { it.first + it.second }
+    assertThat(requested.map { it.key.mediaId }).contains(lib.id(40))
   }
 
   private companion object {

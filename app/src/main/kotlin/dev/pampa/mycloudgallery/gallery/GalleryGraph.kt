@@ -161,6 +161,8 @@ class GalleryParts(
   val onNasOperationsClosed: () -> Unit = {},
   val backup: BackupInputs? = null,
   val similarSignatures: ((MediaCatalog) -> SignatureSource)? = null,
+  /** Fase 6 (P11): la parte `ai` dell'indice condiviso per il NAS (`AiGraph.hooks`), letta quando il NAS parte; null = niente AI. */
+  val ai: () -> dev.pampa.mycloudgallery.nas.NasAiHooks? = { null },
 )
 
 /** Il catalogo e la lettura del telefono: esistono solo quando l'account del dispositivo e' noto (vedi [GalleryGraph]). */
@@ -255,6 +257,7 @@ class GalleryGraph(
       // Fase 5A (D33): i temporanei del diario del backup non si puliscono finche' qualcuno li cita. Se la porta fallisce, nessun
       // temporaneo si toglie in quel giro (lo garantisce la pulizia dei propri file).
       citedTemps = CitedTemps { backup?.citedTemps().orEmpty() },
+      aiHooks = parts.ai,
     )
   }
 

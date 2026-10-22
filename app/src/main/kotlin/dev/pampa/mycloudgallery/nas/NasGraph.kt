@@ -53,6 +53,9 @@ import dev.pampa.mycloudgallery.core.index.replica.store.RoomProvisionalStore
 import dev.pampa.mycloudgallery.core.index.replica.store.RoomReplicaStore
 import dev.pampa.mycloudgallery.core.index.store.FileOutboxBlobStore
 import dev.pampa.mycloudgallery.core.index.store.RoomIndexPublishStore
+import dev.pampa.mycloudgallery.core.index.ai.AiShareSync
+import dev.pampa.mycloudgallery.core.index.ai.NasAiRemoteIndex
+import dev.pampa.mycloudgallery.core.index.ai.ReplicaAttestation
 import dev.pampa.mycloudgallery.core.index.sync.IndexCounters
 import dev.pampa.mycloudgallery.core.index.sync.IndexSyncEngine
 import dev.pampa.mycloudgallery.core.index.sync.SyncBlock
@@ -171,7 +174,15 @@ class NasGraph(
   private val onOperationsClosed: () -> Unit = {},
   /** Fase 5A (P7, D33): i temporanei citati dal diario del backup (lo compone `GalleryGraph`: il backup nasce dopo il NAS). */
   private val citedTemps: CitedTemps = CitedTemps.NONE,
+  /**
+   * Fase 6 (P11): i dati AI dell'indice condiviso (teste `ai`, pubblicatore, unita' del calcolo, anteprime per il buffer). Null = niente
+   * AI (varianti senza ricerca, test della Fase 4): la sincronizzazione resta quella delle sole teste `index`. Si legge in [start]: `AiGraph`
+   * nasce dopo la galleria (dipende da lei) e si lega prima che il NAS parta.
+   */
+  private val aiHooks: () -> NasAiHooks? = { null },
 ) {
+  private val ai: NasAiHooks? get() = aiHooks()
+
 
   /**
    * Fase 5B (P14, D32): la franchigia delle versioni per la guardia dei cambiamenti di massa della scansione (i file che il backup ha messo o
@@ -234,6 +245,8 @@ class NasGraph(
     val workUnits: LeasedWorkUnits,
     val preparer: DefaultPreparer,
     val scanners: Map<String, DefaultNasScanner>,
+    /** Fase 6 (P11): la parte `ai` dell'indice condiviso, se c'e' ([NasAiHooks]). */
+    val ai: NasAiRuntime? = null,
   ) {
     fun scannerOf(share: String): DefaultNasScanner? = scanners[share.lowercase(Locale.ROOT)]
   }
@@ -538,6 +551,22 @@ class NasGraph(
     )
     val quality = ReplicaQualityController(replicaStore, replica)
     val remote = NasRemoteIndex({ share -> inputs.session.fileSystem(share) }, { inputs.registry() }, user)
+    val replicaPort = CatalogReplicaPort(catalog, { account }, shareName)
+    // Fase 6 (P2, P11): le teste `ai` lette nello stesso giro, dopo le `index` (§1.4).
+    val ai = this.ai
+    val aiSync = ai?.let { hooks ->
+      val aiRemote = NasAiRemoteIndex({ share -> inputs.session.fileSystem(share) }, { inputs.registry() }, user)
+      AiShareSync(
+        remote = aiRemote,
+        store = hooks.replicaStore,
+        attestation = ReplicaAttestation(replicaStore, replicaPort),
+        sink = hooks.sink(),
+        standings = { inputs.standing(it) },
+        counters = hooks.counters,
+        listDevices = { share -> remote.devices(share) },
+        startRound = aiRemote::startRound,
+      )
+    }
     val sync = IndexSyncEngine(
       remote = remote,
       replica = replica,
@@ -547,6 +576,7 @@ class NasGraph(
       nasClock = inputs.nasClock,
       quality = quality,
       counters = counters,
+      ai = aiSync,
     )
     val identity = IndexIdentity(signer, user) { inputs.registry() }
     val rules = IndexWriteRules(inputs.flags, writeGate)
@@ -603,7 +633,26 @@ class NasGraph(
         notMediaMemory = FileNotMediaMemory(File(File(noBackup, REPLICA_DIR), NOT_MEDIA_FILE_PREFIX + area.area.name.lowercase(Locale.ROOT)), notMediaGeneration()),
       )
     }
-    val rt = Runtime(account, deviceId, areas, replica, quality, sync, publisher, remote, workSource, workUnits, preparer, scanners)
+    val aiRuntime = if (ai != null && aiSync != null) {
+      NasAiRuntime.build(
+        hooks = ai,
+        sync = aiSync,
+        identity = identity,
+        nasClock = inputs.nasClock,
+        fileSystem = { share -> inputs.session.fileSystem(share) },
+        catalog = { catalog },
+        account = { account },
+        rules = rules,
+        locks = locks,
+        leases = TrustWorkLeases({ share -> inputs.session.fileSystem(share) }, signer, inputs.nasClock, { inputs.registry() }),
+        remote = remote,
+        replicaStore = replicaStore,
+        blobs = blobs,
+      )
+    } else {
+      null
+    }
+    val rt = Runtime(account, deviceId, areas, replica, quality, sync, publisher, remote, workSource, workUnits, preparer, scanners, aiRuntime)
     try {
       replica.open()
       quality.load()
@@ -757,6 +806,8 @@ class NasGraph(
       control = control,
       // R2 (revisione 4A): sotto 1 GiB libero sul telefono la preparazione aspetta.
       storage = PrepStorage { noBackup.usableSpace },
+      // Fase 6 (P5, D10): sugli indicizzatori `analysis` e `frames` vanno anche al buffer del calcolo (mai bloccante).
+      analysisSink = ai?.analysisSink()?.let { sink -> sink } ?: dev.pampa.mycloudgallery.core.prepare.contract.AnalysisSink.NONE,
     )
     val started = monotonicMs()
     var total = RunResult(0, 0, 0, 0, 0, null)
@@ -785,6 +836,10 @@ class NasGraph(
     lastPrep.value = total
     total
   }
+
+  /** Fase 6 (P5, D10): il buffer degli indicizzatori per la preparazione del backup; nessuno se questo dispositivo non indicizza. */
+  fun analysisSink(): dev.pampa.mycloudgallery.core.prepare.contract.AnalysisSink =
+    ai?.analysisSink?.invoke() ?: dev.pampa.mycloudgallery.core.prepare.contract.AnalysisSink.NONE
 
   /** Pubblica cio' che aspetta nell'outbox (fine giro, periodico): nelle share di prova, mai sulle vere (D31). */
   suspend fun flushOutbox() {

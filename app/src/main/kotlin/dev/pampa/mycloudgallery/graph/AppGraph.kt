@@ -161,6 +161,16 @@ class AppGraph(
   @Volatile
   var galleryStopper: GalleryStopper? = null
 
+  /**
+   * Fase 6 (P11): chi ferma `AiGraph` e `SearchGraph` **per primi** all'azzeramento (§1.4), e la parte `ai` dell'indice per il NAS. Nascono
+   * dopo la galleria (dipendono da lei): si registrano da soli (`AiModule`). Nei test senza AI restano null.
+   */
+  @Volatile
+  var aiStopper: GalleryStopper? = null
+
+  @Volatile
+  var aiHooks: dev.pampa.mycloudgallery.nas.NasAiHooks? = null
+
   // --- Archivi locali (DataStore e file in noBackupFilesDir: fuori da backup e trasferimenti) ---------------------
   val accountStore = DataStoreNasAccountStore(SetupDataStores.account(context, scope))
   val account: StateFlow<NasAccount?> = accountStore.observe().stateIn(scope, SharingStarted.Eagerly, null)

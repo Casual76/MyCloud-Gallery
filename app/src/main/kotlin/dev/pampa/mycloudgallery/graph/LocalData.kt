@@ -1,7 +1,12 @@
 package dev.pampa.mycloudgallery.graph
 
 import android.content.Context
+import dev.pampa.mycloudgallery.ai.AiGraph
+import dev.pampa.mycloudgallery.ai.FileAiUnsupported
+import dev.pampa.mycloudgallery.ai.TextReadingMemory
 import dev.pampa.mycloudgallery.backup.BackupRunMemory
+import dev.pampa.mycloudgallery.search.SearchGraph
+import dev.pampa.mycloudgallery.work.AiStages
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.database.GalleryDatabase
 import dev.pampa.mycloudgallery.core.family.contract.LocalDataEraser
@@ -108,6 +113,14 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
     steps.run("vpn") { graph.vpnConfigStore.save(VpnControlConfig.OFF) }
     steps.run("battito") { graph.heartbeat.clear() }
     eraseGalleryData(steps, stopGallery = true, allDatabases = true)
+    // Fase 6 (P11): i modelli verificati, i parziali e i programmi compilati (sono pubblici, ma di questo dispositivo si toglie tutto).
+    // Le copie gia' sul NAS restano (gli altri le possono usare, l'impronta le rende sicure): si tolgono dal PC (§1.4).
+    steps.run("modelli") {
+      withContext(Dispatchers.IO) {
+        val models = File(context.noBackupFilesDir, AiGraph.MODELS_DIR)
+        if (models.exists() && !models.deleteRecursively()) steps.ok = false
+      }
+    }
     return steps.ok
   }
 
@@ -132,6 +145,9 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
   }
 
   private suspend fun eraseGalleryData(steps: Steps, stopGallery: Boolean, allDatabases: Boolean) {
+    // Fase 6 (P11, §1.4): `AiGraph.stop()` e `SearchGraph.stop()` PER PRIMI (motori rilasciati, indice di ricerca chiuso), poi la galleria.
+    val aiStopped = if (stopGallery) steps.run("ai") { graph.aiStopper?.stop() } else true
+    if (!aiStopped) return
     // R7: la galleria viva si ferma (e si aspetta) PRIMA di toccare i suoi file; se non si ferma, i file restano.
     val stopped = if (stopGallery) steps.run("galleria") { graph.galleryStopper?.stop() } else true
     if (!stopped) return
@@ -156,7 +172,7 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
         // preparate qui, in attesa di pubblicazione): si toglie con i piccoli file di stato (tentativi, emergenza, battiti).
         // Fase 4B (P16): il registro locale dei dati personali (`personal/`). Il diario delle operazioni e del cestino sta nel
         // database (tolto qui sopra); le operazioni in corso e i loro lavori li ha gia' fermati la galleria (NasOrganizer.stop).
-        for (name in NAS_FILES) {
+        for (name in NAS_FILES + AI_FILES) {
           val target = File(context.noBackupFilesDir, name)
           if (target.exists() && !target.deleteRecursively()) steps.ok = false
         }
@@ -198,6 +214,19 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
       NasStages.HEARTBEAT_SYNC,
       NasStages.HEARTBEAT_PREP,
     ) + BackupRunMemory.FILES
+
+    /**
+     * Fase 6 (P11): il buffer di analisi, l'indice di ricerca (vettori, registro delle origini, righe del testo letto, corpi propri), i
+     * media "non supportati", la memoria della lettura del testo e il battito del calcolo. Le tabelle `ai_*` e la cronologia stanno nel
+     * database della galleria (tolto con lui). I modelli li toglie solo l'azzeramento completo ([eraseAll]).
+     */
+    val AI_FILES = listOf(
+      AiGraph.BUFFER_DIR,
+      SearchGraph.DIR,
+      FileAiUnsupported.FILE,
+      TextReadingMemory.FILE,
+      AiStages.HEARTBEAT_AI,
+    )
   }
 }
 

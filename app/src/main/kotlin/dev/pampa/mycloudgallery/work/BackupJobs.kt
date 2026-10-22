@@ -41,6 +41,12 @@ interface BackupJobs {
   fun versionWork(kind: BackupKind) = Unit
 
   /**
+   * Campo, gruppo A (D6): una lettura del telefono con l'app aperta ha trovato foto appena scattate da proteggere subito (D34): il lavoro rapido (unico,
+   * `KEEP`), con le sue regole. Per le foto e i video (anche una modifica fatta ad app chiusa) vale [versionWork]. Di norma niente.
+   */
+  fun quickWork() = Unit
+
+  /**
    * Correzioni 5B (LS-2): la verifica di "Libera spazio" come lavoro avviato dall'utente (UIDT su Android 14+, con la sua notifica), chiesto dal
    * tocco di conferma o dalla pagina che ritrova un giro a meta' (l'app e' davanti all'utente, come vuole Android). Ospita il giro del processo e,
    * dopo la morte del processo, lo riprende dal diario. Vero se e' in coda (o lo era gia'); di norma falso (test, varianti senza NAS): il giro va
@@ -101,6 +107,10 @@ class JobSchedulerBackupJobs(context: Context) : BackupJobs {
 
   override fun versionWork(kind: BackupKind) {
     BackupWorkScheduling.versionWork(app, kind)
+  }
+
+  override fun quickWork() {
+    BackupWorkScheduling.quickWork(app)
   }
 
   /** LS-2: il lavoro che ospita la verifica di "Libera spazio". Se c'e' gia' (in coda o in corso) non si riprogramma: lo sostituirebbe. */

@@ -99,6 +99,29 @@ class PrivateCopyGuardianTest {
     assertClean(before)
   }
 
+  /**
+   * Campo, gruppo A (D2, B-S6 O-B14): un media mai stato sul telefono (messo sul NAS dal PC e spostato nell'area comune) non ha una copia del telefono
+   * che possa sparire: con l'ambito "tutti" il guardiano non lo copia (prima: 76 copie `Backup/Area comune` in sottofondo). Uno che il telefono ha avuto
+   * e non ha piu' si copia subito (la condizione di Q4 (b) e' gia' vera). Chiesto per nome (prima di "Libera spazio") si copia comunque.
+   */
+  @Test
+  fun d2_conLAmbitoTuttiMaiIMediaCheNonSonoMaiStatiSulTelefono() = runTest {
+    val fromPc = bench.commonOnly("IMG_PC.jpg", SafetyBench.bytes(20_000, 21), wasOnPhone = false)
+    val gone = bench.commonOnly("IMG_GONE.jpg", SafetyBench.bytes(20_000, 22))
+    val before = kit.snapshot()
+
+    val all = bench.guardian().ensure(GuardScope.All, 1.hours)
+    assertThat(all.created).isEqualTo(1)
+    assertThat(kit.catalog.isSafe(gone.mediaId)).isTrue()
+    assertThat(kit.catalog.isSafe(fromPc.mediaId)).isFalse()
+    assertThat(bench.guardItems().map { it.mediaId }).containsExactly(gone.mediaId)
+
+    val asked = bench.guardian().ensure(GuardScope.Media(setOf(fromPc.mediaId)), 1.hours)
+    assertThat(asked.created).isEqualTo(1)
+    assertThat(kit.catalog.isSafe(fromPc.mediaId)).isTrue()
+    assertClean(before)
+  }
+
   /** §2.3: senza l'hash della versione si rilegge qui la sorgente, valida solo con timbro e `qh1` della versione; l'hash entra nel catalogo. */
   @Test
   fun senzaHashDellaVersioneSiRileggeLaSorgente() = runTest {

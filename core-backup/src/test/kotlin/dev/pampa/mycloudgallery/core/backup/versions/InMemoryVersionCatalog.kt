@@ -299,6 +299,13 @@ class InMemoryVersionCatalog(private val areas: Map<String, NasArea>) : VersionC
       v
     }
 
+  /** Campo, gruppo A (D3): le versioni corrette i cui metadati sono stati letti dai byte corretti (versione, SHA-256 del file letto). */
+  val correctedReads: MutableList<Pair<VersionId, Sha256>> = java.util.concurrent.CopyOnWriteArrayList()
+
+  override suspend fun readCorrected(mediaId: MediaId, versionId: VersionId, file: java.io.File, mime: String) {
+    correctedReads += versionId to Sha256.of(file.readBytes())
+  }
+
   override suspend fun correctInApp(mediaId: MediaId, versionId: VersionId, change: MetadataChange): Boolean = synchronized(lock) {
     if (media[mediaId] == null) return false
     inAppCorrections += Triple(mediaId, versionId, change)

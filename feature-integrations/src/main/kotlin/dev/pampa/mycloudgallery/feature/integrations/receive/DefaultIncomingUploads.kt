@@ -15,6 +15,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.PhoneConfirmationRules
 import dev.pampa.mycloudgallery.feature.integrations.share.FlowCounters
 import dev.pampa.mycloudgallery.feature.integrations.share.ReceiveCounter
 import java.io.IOException
+import kotlin.coroutines.cancellation.CancellationException
 
 // Fase 5B (P11, docs/fase5-progetto.md §1.2 "Arrivi (5B)", §2.7, D24, E-X8, E-S11; contratto `IncomingUploads` di P0-B): l'implementazione di
 // riferimento dei file in arrivo. `stage` e' la copia immediata ([IncomingStager]); `save` e' il gesto dell'utente.
@@ -36,6 +37,13 @@ interface IncomingQueue {
    * cita i file locali di [files] finche' non sono caricati. Restituisce quanti elementi ha messo in coda.
    */
   suspend fun enqueue(stage: IncomingStage, dest: NasDestination, files: IncomingFiles): Int
+
+  /**
+   * Campo, gruppo A (D1): la condivisione [stage] e' citata da righe del diario che aspettano ancora (in coda, o con un problema da decidere)? Allora le
+   * sue copie sono del diario: [DefaultIncomingUploads.discard] non le toglie (le toglie il caricamento a lavoro finito, o "Scarta" dell'utente). Di
+   * norma no (nessun diario legato).
+   */
+  suspend fun cites(stage: IncomingStageId): Boolean = false
 }
 
 /** Nessun diario legato: non si accetta niente. */
@@ -79,6 +87,17 @@ class DefaultIncomingUploads(
   }
 
   override suspend fun discard(stage: IncomingStageId) {
+    // Campo, gruppo A (D1): una condivisione gia' in coda non si toglie da qui, nemmeno se la schermata la crede "non salvata" (il salvataggio
+    // annullato dopo che le righe erano gia' nel diario, la schermata chiusa a meta'). Nel dubbio (il diario non risponde) si tiene: la pulizia
+    // dell'avvio la togliera' se nessuna riga la cita.
+    val cited = try {
+      queue.cites(stage)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (_: Exception) {
+      true
+    }
+    if (cited) return
     stager.discard(stage)
     FlowCounters.receive.add(ReceiveCounter.DISCARDED)
   }

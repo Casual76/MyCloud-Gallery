@@ -99,7 +99,7 @@ class DefaultCorrections(
     val media = catalog.media(mediaId)
       ?: return CorrectionPlan(mediaId, change, null, CorrectionRoute.NAS_ONLY, CorrectionReadiness.NOT_AVAILABLE, emptyList())
     val current = media.current
-    val rows = current.phone.filter { it.present }.map { it.ref }
+    val rows = phoneRows(media)
     val route = if (rows.isNotEmpty()) CorrectionRoute.PHONE else CorrectionRoute.NAS_ONLY
     return CorrectionPlan(mediaId, change, current.versionId, route, readiness(media, route, change), if (route == CorrectionRoute.PHONE) rows else emptyList())
   }
@@ -129,11 +129,33 @@ class DefaultCorrections(
     }
     // D19: prima al sicuro (l'originale sul NAS, riletto qui): la copia privata verificata della versione e il suo SHA-256.
     if (current.fullHash == null || ownCopies.none { it.verifiedAtMillis != null }) return CorrectionReadiness.NEEDS_SAFE_FIRST
+    // Campo, gruppo A (D3): una riga del telefono che tiene un'altra versione (piu' vecchia: modificata dal PC, E-E6) si riscrive con la correzione
+    // solo se anche quella versione e' al sicuro (hash noto e una copia privata verificata, anche in `Versioni/`): mai l'unica copia di qualcosa.
+    if (media.versions.any { v -> v.versionId != current.versionId && v.phone.any { it.present } && !isSafe(v) }) return CorrectionReadiness.NEEDS_SAFE_FIRST
     if (usualCopy(current) == null) return CorrectionReadiness.NOT_AVAILABLE
     // Un'altra versione dello stesso media in corso: prima finisce quella (VE-7: lo dice).
     if (journal.forMedia(media.mediaId).any { !it.state.terminal }) return CorrectionReadiness.BUSY
     return if (route == CorrectionRoute.PHONE || ownCopies.isNotEmpty()) CorrectionReadiness.READY else CorrectionReadiness.NOT_AVAILABLE
   }
+
+  /**
+   * Campo, gruppo A (D3, F36): le righe del telefono del media, di **ogni** versione, quelle dell'attuale per prime. Prima contavano solo quelle
+   * dell'attuale: un media il cui telefono tiene la versione di prima (l'attuale e' una modifica fatta dal PC, o le copie identiche dei fixture)
+   * passava per "solo sul NAS", la correzione andava solo sul NAS senza il dialogo di Android e il telefono restava com'era.
+   */
+  private fun phoneRows(media: VersionedMedia): List<PhoneRef> {
+    val current = media.current
+    val others = media.versions.filter { it.versionId != current.versionId }
+    return (current.phone.filter { it.present } + others.flatMap { v -> v.phone.filter { it.present } }).map { it.ref }.distinct()
+  }
+
+  /** La versione ha l'hash e una copia privata propria verificata e presente (anche in `Versioni/`). */
+  private fun isSafe(version: VersionFacts): Boolean =
+    version.fullHash != null && version.nas.any { VersionPlanning.isOwnPrivate(it, share) && it.present && it.verifiedAtMillis != null }
+
+  /** Lo SHA-256 dei byte che la riga [ref] deve avere adesso (quelli della sua versione), null se la riga non e' del media. */
+  private fun heldBy(media: VersionedMedia, ref: PhoneRef): Sha256? =
+    media.versions.firstOrNull { v -> v.phone.any { it.present && it.ref == ref } }?.fullHash
 
   private fun usualCopy(version: VersionFacts) =
     version.nas.firstOrNull { VersionPlanning.isOwnPrivate(it, share) && !VersionPaths.isInVersions(it.path) && it.verifiedAtMillis != null }
@@ -151,10 +173,13 @@ class DefaultCorrections(
     val original = staged.newWorkFile()
     var corrected: File? = null
     try {
-      // 2. I byte dell'attuale, con lo SHA-256 della versione.
-      val copied = when (fresh.route) {
-        CorrectionRoute.PHONE -> copyFromPhone(current, fresh.phoneRows.first(), original)
-        CorrectionRoute.NAS_ONLY -> copyFromNas(current, original)
+      // 2. I byte dell'attuale, con lo SHA-256 della versione: dal telefono se il telefono ha l'attuale, altrimenti dalla copia privata verificata
+      //    (campo, gruppo A, D3: il telefono puo' tenere solo una versione di prima, che si riscrive al passo 6).
+      val phoneCurrent = current.phone.firstOrNull { it.present && it.ref in fresh.phoneRows }
+      val copied = if (fresh.route == CorrectionRoute.PHONE && phoneCurrent != null) {
+        copyFromPhone(current, phoneCurrent.ref, original)
+      } else {
+        copyFromNas(current, original)
       }
       when (copied) {
         is Copied.Ok -> if (copied.sha256 != expected) return CorrectionOutcome.PlanChanged
@@ -192,6 +217,14 @@ class DefaultCorrections(
         staged.discard(facts.sha256)
         return CorrectionOutcome.PlanChanged
       }
+      // Campo, gruppo A (D3): i metadati della versione nuova dai byte corretti, subito (la Libreria mostra la data nuova).
+      try {
+        catalog.readCorrected(fresh.mediaId, newVersion, kept, mime)
+      } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        GalleryLog.w(TAG) { "metadati della versione corretta non letti (${e.javaClass.simpleName}): li rilegge la lettura dopo" }
+      }
       // 5. Il lavoro VERSION, prima di toccare il telefono.
       val job = engine.planStaged(fresh.mediaId, newVersion, facts.sha256, facts.size)
       if (job == null) GalleryLog.w(TAG) { "versione corretta senza solito percorso: resta nell'app finche' il backup non la porta" }
@@ -199,8 +232,10 @@ class DefaultCorrections(
       var outcome: CorrectionOutcome = CorrectionOutcome.Done(newVersion)
       if (fresh.route == CorrectionRoute.PHONE) {
         for (ref in fresh.phoneRows) {
-          // R3: ogni riga (non solo la prima, gia' riletta) deve avere ancora i byte della versione al sicuro, [expected].
-          val failure = rewrite(ref, mime, kept, facts.sha256, expected) ?: continue
+          // R3: ogni riga (non solo la prima, gia' riletta) deve avere ancora i byte della versione al sicuro che tiene: [expected] per l'attuale,
+          // quelli della sua versione per una riga che tiene una versione di prima (D3; la prontezza ha gia' voluto anche quella al sicuro).
+          val held = heldBy(media, ref) ?: expected
+          val failure = rewrite(ref, mime, kept, facts.sha256, held) ?: continue
           outcome = CorrectionOutcome.Failed(failure)
           break
         }

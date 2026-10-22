@@ -113,6 +113,68 @@ class CorrectionsTest {
     assertThat(w.violations(before, final = true)).isEmpty()
   }
 
+  /**
+   * Campo, gruppo A (D3, F36, `exif-05-gps-ora-utc.jpg`): il telefono tiene la versione di **prima** (l'originale, al sicuro in `Versioni/`) e
+   * l'attuale e' una modifica che sta sul NAS. Prima la correzione passava per "solo sul NAS": "Fatto" senza il dialogo di Android, il telefono com'era e
+   * la Libreria con la data di prima (la versione nuova nasceva senza metadati). Adesso la riga del telefono conta: serve il permesso del dialogo, la
+   * riga si riscrive con la correzione (dai byte dell'attuale letti dal NAS) e i metadati della versione nuova si leggono subito dai byte corretti.
+   */
+  @Test
+  fun d3_unMediaCheIlTelefonoTieneInUnaVersioneDiPrimaSiCorreggeAncheSulTelefono() = runTest {
+    val k = kit()
+    val w = k.w
+    val seed = w.seedSafe()
+    // Il PC ha modificato il file al solito percorso; l'originale e' gia' al sicuro in Versioni/ (come i fixture di F43-tel sul campo).
+    val edited = w.bytes(seed.content.size + 500)
+    w.knownContents += Sha256.of(edited)
+    w.catalog.nasVanished(seed.mediaId, share, seed.usualPath)
+    val archived = dev.pampa.mycloudgallery.core.trust.nas.SharePath.parse("$versions/IMG_1234 (originale).jpg")
+    w.nas.putFile(share, archived.value, NasContent.of(seed.content))
+    w.catalog.putNasCopy(seed.mediaId, seed.original, share, archived, w.statOf(share, archived), verifiedAt = w.clock.nasNow)
+    w.nas.putFile(share, seed.usualPath.value, NasContent.of(edited))
+    val current = w.catalog.addVersion(seed.mediaId, VersionKind.EDITED, edited.size.toLong(), Sha256.of(edited))
+    w.catalog.putNasCopy(seed.mediaId, current, share, seed.usualPath, w.statOf(share, seed.usualPath), verifiedAt = w.clock.nasNow)
+    val before = w.snapshot()
+
+    val plan = k.corrections.plan(seed.mediaId, change)
+    assertThat(plan.readiness).isEqualTo(CorrectionReadiness.READY)
+    assertThat(plan.route).isEqualTo(CorrectionRoute.PHONE)
+    val ref = w.phone.ref(seed.phoneId!!)!!
+    assertThat(plan.phoneRows).containsExactly(ref)
+    val confirmation = TestConfirmations.confirm(plan, w.clock.monotonic)
+    // Il dialogo di Android si chiede; negato, niente si tocca (la pagina lo dice).
+    assertThat(k.corrections.apply(plan, confirmation, null)).isEqualTo(CorrectionOutcome.NeedsWriteGrant(listOf(ref)))
+    assertThat(w.phone.sha256(seed.phoneId)).isEqualTo(Sha256.of(seed.content))
+    assertThat(w.files()).isEqualTo(before.files.getValue(share))
+
+    k.rewriter.granted += seed.phoneId
+    val outcome = k.corrections.apply(plan, confirmation, PhoneWriteGrant(setOf(ref))) as CorrectionOutcome.Done
+    val corrected = edited + "\nMCG-FAKE-WRITE date\n".toByteArray(Charsets.US_ASCII)
+    assertThat(w.catalog.currentOf(seed.mediaId)).isEqualTo(outcome.version)
+    assertThat(w.phone.sha256(seed.phoneId)).isEqualTo(Sha256.of(corrected))
+    assertThat(w.sha(share, seed.usualPath.value)).isEqualTo(Sha256.of(corrected))
+    assertThat(w.sha(share, archived.value)).isEqualTo(Sha256.of(seed.content))
+    // I metadati della versione nuova dai byte corretti, subito.
+    assertThat(w.catalog.correctedReads).containsExactly(outcome.version to Sha256.of(corrected))
+    assertThat(w.violations(before, final = true)).isEmpty()
+  }
+
+  /** Campo, gruppo A (D3): la versione di prima che il telefono tiene non e' al sicuro: niente si corregge (mai l'unica copia di qualcosa). */
+  @Test
+  fun d3_seLaVersioneDelTelefonoNonEAlSicuroPrimaLaMetteAlSicuro() = runTest {
+    val k = kit()
+    val w = k.w
+    val seed = w.seedSafe()
+    val edited = w.bytes(seed.content.size + 500)
+    w.knownContents += Sha256.of(edited)
+    w.catalog.nasVanished(seed.mediaId, share, seed.usualPath)
+    w.nas.putFile(share, seed.usualPath.value, NasContent.of(edited))
+    val current = w.catalog.addVersion(seed.mediaId, VersionKind.EDITED, edited.size.toLong(), Sha256.of(edited))
+    w.catalog.putNasCopy(seed.mediaId, current, share, seed.usualPath, w.statOf(share, seed.usualPath), verifiedAt = w.clock.nasNow)
+
+    assertThat(k.corrections.plan(seed.mediaId, change).readiness).isEqualTo(CorrectionReadiness.NEEDS_SAFE_FIRST)
+  }
+
   @Test
   fun unSoloNasSiCorreggeDallaCopiaPrivataLettaInCache() = runTest {
     val k = kit()

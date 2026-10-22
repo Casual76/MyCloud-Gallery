@@ -222,6 +222,12 @@ object BackupQueries {
   /**
    * D9: i media propri con la sola copia nell'area **comune** (`only_common_copy`), una riga per versione da proteggere senza
    * copia privata (esistente) e con una copia comune presente (la piu' vecchia per identita'). [ids] null = tutti.
+   *
+   * Campo, gruppo A (D2, risposta Q4 (b)): con [ids] null (il guardiano di sottofondo, `GuardScope.All`) solo i media che **questo telefono ha
+   * avuto**: una posizione del telefono (presente o assente) o un elemento `new_copy` del diario (il backup li ha caricati da qui). La copia
+   * privata nasce "quando sparisce la copia del telefono": un media che non e' mai stato sul telefono (messo sul NAS dal PC e poi spostato
+   * nell'area comune) non ha una copia del telefono che possa sparire, e resta protetto dai 30 giorni del cestino (L44). Con [ids] (prima di
+   * "Libera spazio" e di "Elimina solo dal telefono") si chiede per quei media e basta.
    */
   fun onlyCommonCopies(me: String, ids: List<String>?, limit: Int): SupportSQLiteQuery {
     require(ids == null || ids.size <= MAX_IDS) { "Troppi identificativi per una sola query." }
@@ -239,13 +245,19 @@ object BackupQueries {
         "JOIN nas_share cs ON cs.account_id = c.account_id AND cs.share_key = c.share_key " +
         "WHERE c.version_id = v.version_id AND c.location_type = 'nas' AND c.state = 'present' AND cs.area = 'common') " +
         "WHERE m.safety = 'only_common_copy' AND m.owner_account = ? " +
-        (if (ids != null) "AND m.media_id IN (${ids.joinToString(",") { "?" }}) " else "") +
+        (if (ids != null) "AND m.media_id IN (${ids.joinToString(",") { "?" }}) " else FORMER_PHONE_MEDIA) +
         "AND NOT EXISTS (SELECT 1 FROM media_location p JOIN nas_share ps ON ps.account_id = p.account_id AND ps.share_key = p.share_key " +
         "WHERE p.version_id = v.version_id AND p.location_type = 'nas' AND p.state != 'absent' AND ps.area = 'private' " +
         "AND p.account_id = ?) LIMIT ?",
       args.toTypedArray(),
     )
   }
+
+  /** Campo, gruppo A (D2): il media e' stato su questo telefono (una sua posizione del telefono, anche assente, o un suo caricamento dal telefono). */
+  private const val FORMER_PHONE_MEDIA: String =
+    "AND (EXISTS (SELECT 1 FROM media_version pv JOIN media_location pl ON pl.version_id = pv.version_id " +
+      "WHERE pv.media_id = m.media_id AND pl.location_type = 'phone') " +
+      "OR EXISTS (SELECT 1 FROM backup_item pb WHERE pb.media_id = m.media_id AND pb.kind = 'new_copy')) "
 
   /**
    * Le copie private di una share mai rilette, con l'hash della versione noto. **Mai** quelle la cui rilettura non e' tornata (segnate

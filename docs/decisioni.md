@@ -4271,6 +4271,134 @@ entra nell'APK, non si scarica da nessuna parte e si puo' cancellare. Il codice 
 **Limiti di questa misura**: fixture solo sintetiche (nessuna foto vera: i bordi su capelli, pelo e vetro si giudicano nella prova F66 a occhio); il telefono era in carica e la batteria e' salita di circa 2,6 °C
 (l'AP a 51,7 °C alla fine) senza che il sistema limitasse niente; un solo telefono. Per F66 resta da vedere a mano quanto il papero piccolo e il manico della tazza (le parti staccate dal soggetto) disturbano.
 
+## Correzioni dal campo, gruppo A (22/10)
+Fonte: `docs/prove-campo-esiti.md`, "Riepilogo del blocco B" e le sezioni B-S2 (F26), B-S5, B-S7, B-S12 (F36), B-S14 (T-15, F40, la ripresa delle 02:24);
+`docs/fase5-progetto.md` D9, §2.2-§2.7, Q4 (b); `docs/fase7-progetto.md` §0 punti 11 e 12, D28. Branch `fix/campo-a`, un commit per difetto. Niente telefono,
+niente NAS: tutto su JVM, ogni test rosso togliendo la correzione.
+
+**1. Un file in coda di "Salva sul NAS" sparito (`IMG_mcg_0106`, 02:31).** Strade guardate, una per una, per un elemento che esce dalla coda senza essere
+caricato e verificato:
+- *Il diario* (`incoming_item`): una riga si toglie solo con "Scarta" (`AppReceivedQueue.discard`, dopo la conferma dell'utente); il motore la segna `uploaded`,
+  `gone` o `failed` (`AppIncomingLocalFiles.finished`) e non la toglie mai; `backup_item` non ha cascate verso `incoming_item` (`SET_NULL`); l'unione del catalogo non
+  la tocca (`TABLES_WITHOUT_MEDIA_IDS`). Scartata: sul campo nessuno ha toccato "Scarta".
+- *La pulizia dell'avvio* (`IncomingStager.sweep`): tiene le condivisioni di questo processo (IN-1) e quelle citate da righe in `queued`/`failed`/`gone`; il
+  catalogo e l'integrazione sono uno per processo (Hilt `@Singleton`). Toglie i file solo di una condivisione che nessuna riga cita: non spiega una riga sparita.
+- *Il motore*: copia locale assente = `GONE` con la riga che resta (`ReceivedStatus.COPY_MISSING`, "Ricevuti in coda" lo dice). Non spiega.
+- *La morte del processo*: provata sul campo alle 05:23 (`kill -9`), riga e file restano. Alle 02:32 il log dice `PROCESS_STOPPED`, cioe' l'app in secondo piano, non
+  una morte.
+- **La causa piu' probabile**: la condivisione non e' mai arrivata all'app. `ShareReceiverActivity` ha `taskAffinity=""` e `launchMode` standard; `am start`
+  (e ogni app che condivide con `NEW_TASK`, come Quick Share) cerca un task con la stessa radice: un intento `SEND` con lo stesso tipo e un altro `EXTRA_STREAM`
+  e' "uguale" per Android (gli extra non contano), quindi il task della condivisione di prima (`IMG_mcg_0105`, schermata "1 file in coda" lasciata aperta) torna
+  davanti e l'intento nuovo si butta ("Activity not started, its current task has been brought to the front"). Tutti i segni tornano: la schermata diceva
+  "1 file in coda" (era quella di prima), nessuna riga, nessun file in `incoming`, niente sul NAS, e con il processo ucciso non si riproduce.
+  Correzione: la ricezione e' `singleTop` e ha `onNewIntent`: una condivisione nuova davanti a una vecchia si apre in una schermata sua, in un task suo
+  (`NEW_TASK | MULTIPLE_TASK`, con il permesso di lettura che ha portato); quella vecchia si chiude come con "Annulla". Resta nel task di chi la chiede e non
+  e' `singleTask` (il risultato a chi condivide resta).
+- **Due strade vere trovate guardando** (non quelle del campo, ma perdono la copia di un file gia' in coda): (a) `AppIncomingQueue.enqueue` scriveva una
+  transazione per file: una cancellazione (schermata chiusa durante il salvataggio) o un errore al secondo file lasciavano il primo in coda, la schermata lo
+  credeva "non salvato" e ne toglieva la copia, e il motore lo chiudeva "copia sparita". Ora i media si preparano prima e tutte le righe entrano in **una**
+  transazione non interrompibile (tutto o niente). (b) `DefaultIncomingUploads.discard` toglieva la cartella anche se il diario la citava: ora chiede
+  `IncomingQueue.cites` (righe in `queued`/`failed`/`gone`) e, citata o nel dubbio, non tocca niente.
+- **La difesa**: un file in coda non sparisce mai senza un esito registrato. La riga nasce prima della frase "in coda", non si toglie che con "Scarta", e la sua
+  copia la tolgono solo il caricamento verificato (`uploaded`) o "Scarta".
+- Toccato fuori dall'elenco dei moduli del brief, con il minimo: `feature-integrations` (manifest della ricezione, `onNewIntent`, `cites` con il suo default,
+  il finto), perche' la causa sta li'.
+- Test: `ShareReceiverActivityTest.d1_*`, `ManifestComponentsTest` (`singleTop`), `DefaultIncomingUploadsTest.d1_*`, `CampoAIncomingTest.d1_*` (`:app`, Room vero e
+  copia immediata vera).
+
+**2. Il guardiano e le 76 copie "Backup/Area comune" (B-S6, O-B14).** *Perche' e' partito*: le 76 copie sono di file messi sul NAS dal PC
+(`campioni`, `mille`, `F9`, `F15`, `F16`, 701 B) e spostati dall'app nell'area comune con F15/F16: media propri (la prima posizione presente era nell'area
+privata), stato `only_common_copy`, **mai stati sul telefono**. Il lavoro e' `SafetyVerifyWorker` (la tappa `BackupStages.safety`, preset "Massimo", 23:44,
+dopo la scansione delle 23:38 che ha visto lo spostamento): `BackupGraph.guardianHasWork` vedeva i candidati e il guardiano con `GuardScope.All` copiava
+ogni media per cui `phoneStillHas` era falso; per un media senza nessuna riga del telefono `phoneRefOf` e' null e "non e' sul telefono" valeva come "la copia
+del telefono e' sparita" (`BackupPrivateCopyGuardian.plan`/`phoneStillHas`, `BackupQueries.onlyCommonCopies`).
+- **Che cosa vuol dire Q4 (b)** (decisione di questa correzione, coerente con la Fase 7 D28 e con L44): la copia privata nasce quando **la copia del telefono
+  non c'e' piu'**, cioe' per un media che il telefono **ha avuto** e non ha piu'. Non importa l'ordine: se la copia del telefono sparisce dopo lo spostamento,
+  il guardiano parte allora; se era gia' sparita prima (liberata con "Libera spazio", cancellata in Galleria dopo il backup) la condizione e' gia' vera e il
+  guardiano parte **subito dopo** lo spostamento, al primo giro delle verifiche. Un media che **non e' mai stato** sul telefono (messo sul NAS dal PC, o
+  di un'altra fonte) non ha una copia del telefono che possa sparire: nessuna copia privata in sottofondo, resta la protezione dei 30 giorni del cestino del
+  NAS (limite L44, gia' dichiarato). Prima di "Libera spazio" e di "Elimina solo dal telefono" (`GuardScope.Media`) il guardiano parte sempre, come prima.
+- "Il telefono l'ha avuto" si legge dal catalogo locale, mai dal NAS (E-S11): una posizione del telefono del media (presente o assente) **o** un elemento
+  `new_copy` del diario (il backup l'ha caricato da qui: resta anche dopo che la posizione assente si dimentica, 60 giorni). Correzione in
+  `BackupQueries.onlyCommonCopies` (con `ids` null, cioe' `GuardScope.All`, che usano il guardiano di sottofondo e `guardianHasWork`); contratto
+  `BackupCatalog.onlyCommonCopies` e finto `InMemoryBackupCatalog` (`Media.wasOnPhone`) allineati. Nessuno schema nuovo.
+- Il caso della Fase 7 ("il guardiano non parte mai per un media gia' assente dal telefono che viene spostato"): con questa regola parte, appena il
+  catalogo sa dello spostamento (la scansione dopo, o subito con il punto 7 qui sotto).
+- Test: `BackupCatalogTest.d2_*` (Room vero: il file del PC spostato non c'e' con `null`, c'e' se chiesto; la foto liberata e spostata c'e'),
+  `PrivateCopyGuardianTest.d2_*` (guardiano vero: una copia sola, quella del media che il telefono ha avuto).
+
+**3. F36, "Correggi data e luogo" scriveva solo il NAS.** Due cause, tutte e due nel percorso della correzione:
+- *Nessun dialogo, telefono com'era* (`DefaultCorrections.plan`): la strada `PHONE` contava solo le righe del telefono **della versione attuale**. Il
+  fixture del campo (`exif-05-gps-ora-utc.jpg`, uno dei 16 modificati da F43-tel nei giri vecchi) ha sul telefono l'originale (979 B, al sicuro in
+  `Versioni/… (originale).jpg`) e come attuale la modifica che sta al solito percorso: per l'app era "solo sul NAS", la correzione partiva dai byte del
+  NAS e il telefono non si toccava. Ora contano le righe di **ogni** versione (quelle dell'attuale per prime): serve il permesso del dialogo di Android, i
+  byte si leggono dal telefono se ha l'attuale, altrimenti dalla copia privata verificata, e ogni riga si riscrive con la correzione controllando che
+  abbia ancora i byte **della sua versione** (R3). Una riga che tiene una versione di prima si riscrive solo se anche quella e' al sicuro (hash noto e
+  copia privata verificata, anche in `Versioni/`): altrimenti `NEEDS_SAFE_FIRST` ("Prima lo metto al sicuro"), mai l'unica copia di qualcosa. Negato il
+  dialogo, niente si tocca e la pagina lo dice (`CorrectionMessage.PERMISSION_REFUSED`, come E-E10).
+- *La Libreria con la data di prima*: `CatalogVersionCatalog.correct` creava la versione `CORRECTED` **senza metadati** (`MediaCatalog.correct(..., null)`):
+  la cella restava con l'ordine e la data di prima finche' una lettura del telefono o del NAS non rileggeva il file (sul campo mai, per un media "solo
+  NAS"). Ora, appena la versione nasce, i suoi metadati si leggono **dai byte corretti** con l'estrattore della Libreria (`VersionCatalog.readCorrected`,
+  default niente; nell'app lo stesso lettore dei file in arrivo, IN-8, che segna fatta la fase META della versione).
+- Test: `CorrectionsTest.d3_*` (il telefono con la versione di prima: dialogo chiesto, riga riscritta, NAS e `Versioni/` giusti, metadati letti dai byte
+  corretti; la versione del telefono non al sicuro: `NEEDS_SAFE_FIRST`), `CampoAAppTest.d3_*` (grafo vero: dopo "Correggi" la data della versione e
+  l'ordine della cella sono quelli nuovi).
+
+**4. D-B3 / F26: la foto cancellata in Galleria prima del backup spariva senza avviso.** Causa: `lost_before_backup` lo scriveva solo il motore
+(`SafeUploadEngine.gone(..., lost = true)`), per un candidato che sparisce **a giro in corso**; una foto cancellata prima del giro diventava `lost`
+(nessuna copia), usciva dai candidati (`backup_todo` = 0), dalla Libreria e dai conteggi, e nessuno segnava niente (`MediaCatalog.derive`/`store`).
+- Correzione nel catalogo, nell'unico posto dove si ricalcola lo stato: un media che **era un candidato del backup** (`backup_todo` di prima: presente sul
+  telefono, proprio, non al sicuro, senza un problema) e che il ricalcolo trova `lost` riceve la riga `lost_before_backup` (segna la cella), nella stessa
+  transazione della lettura del telefono che lo vede sparire. Se la riga torna (ripristino dal cestino di Galleria, anche con un altro `_ID`) la regola che
+  c'era (`releaseRecoveredLostMedia`) toglie il segno e il media torna candidato. Nessuno schema nuovo.
+- Non si segna: una foto al sicuro (diventa "solo NAS", E-P11), una foto di un altro account, una gia' persa o con un altro problema. Le foto delle
+  cartelle **non** salvate (le immagini di WhatsApp di B-S2) ricevono la riga anche loro (il catalogo non conosce le sorgenti), ma i conteggi della pagina
+  Backup, del piede e della Diagnostica sono per sorgente (`problemsByCode(sources)`): non le contano, e la cella non si vede (`presence` = `none`).
+- Anche "Elimina dal telefono" di una foto **non** al sicuro (con il foglio che avvisa) la fa "persa prima del backup" con il suggerimento del cestino di
+  Galleria: e' lo stesso caso per l'utente (E-B4 non distingue chi cancella).
+- Test: `BackupCatalogTest.d4_*` (sparita prima del giro: segnata, contata, la foto al sicuro no; ripristinata con un `_ID` nuovo: segno tolto, di nuovo
+  candidata); `iConteggiDellaSicurezza...` aggiornato (diceva "persa senza problema", il comportamento di prima).
+
+**5. La coda di "Salva sul NAS" ripartiva 13-15 minuti dopo il ritorno del Wi-Fi (B-S14, O-B19).** Causa: `BackupWorkScheduling.afterWait`, per un
+lavoro dei file ricevuti in attesa della rete o del NAS, rimetteva in coda `IncomingUploadWorker` con un **ritardo fisso di 15 minuti**
+(`HOME_RETRY_MS`) e il vincolo del Wi-Fi: il vincolo era soddisfatto al ritorno della rete, ma il ritardo no. E il lavoro aveva lo stesso nome unico di
+"Salva sul NAS" (`KEEP`): i file salvati dopo restavano dietro quel tentativo.
+- Correzione (le attese di D-6/D-12): la prima attesa della rete o del NAS mette in coda una **ripresa senza ritardo** su una rete non a consumo
+  (`INCOMING_RETRY_WORK`, un nome suo, con l'input `resumed`): WorkManager la avvia appena c'e' un Wi-Fi, e la ripresa aspetta al piu' 30 s il percorso,
+  la sonda del NAS e la sessione (`awaitNasReady`, la stessa di `UserResumeWorker`). Solo se anche la ripresa trova il NAS che non risponde (a casa col NAS
+  spento, un Wi-Fi che non e' casa) si riprova fra un quarto d'ora: nessun ciclo. Un "Salva sul NAS" nuovo usa sempre il suo lavoro e parte subito. Le
+  altre attese come prima (fascia e carica con un vincolo esatto, congelamento e il resto niente); mai i dati mobili senza la conferma.
+- Test: `BackupSchedulingTest.in5_d5_*` (prima diceva "almeno 10 minuti di ritardo": ora nessuno, su una rete non a consumo),
+  `d5_laRipresaCheNonTrovaIlNas...` (il quarto d'ora solo per la ripresa; il file nuovo non aspetta).
+
+**6. Una modifica fatta ad app chiusa diventava versione dopo circa 70 minuti (VE-10, B-S7).** Causa: i lavori del backup dopo una lettura del telefono
+li chiede `BackupWorkScheduling.afterPhoneRead`, chiamata solo dal lavoro di fondo (`PhoneSyncWorker`, legato ai cambiamenti del MediaStore) e dai lavori
+del backup. Con `am force-stop` Android toglie i lavori dell'app; alla riapertura WorkManager li rimette, ma il cambiamento c'e' gia' stato: la riga
+cambiata la vede solo la lettura **di primo piano**, e alla sua fine `GalleryGraph` chiamava `BackupGraph.afterPhoneRead`, che risolveva gli esiti di
+"Libera spazio" e basta. La versione nasceva nel catalogo ("1 in coda · Al prossimo giro") e aspettava il giro periodico. Con l'app aperta funzionava
+perche' il lavoro di fondo del MediaStore c'era (le due "Salva" delle 05:17).
+- Correzione: `BackupGraph.afterPhoneRead` chiede anche i lavori che servono (`nextAll`: foto nuove da proteggere subito, foto, video, i lavori delle
+  versioni aperti), con i lavori a tappe di WorkManager, unici (`KEEP`) e con le loro regole (`BackupJobs.versionWork`, `quickWork` nuovo): niente
+  polling, niente parte se le regole dicono di aspettare (fascia, carica, rete).
+- Test: `CampoAAppTest.d6_*` (grafo vero: foto al sicuro, "Salva" sul telefono, lettura: la fine della lettura di primo piano chiede il lavoro delle
+  foto).
+
+**7. Dopo uno spostamento tra share il catalogo non si aggiornava subito (Fase 7, §0 punto 11).** Causa: l'esecutore delle operazioni
+(`NasOpsEngine.moveFileAcross`) copia, verifica, pubblica e mette la sorgente nel cestino senza dire niente al catalogo; la posizione nuova la scopriva la
+scansione dopo (che per uno spostamento **fra share** non riconosce nemmeno lo spostamento: vede un file nuovo e uno sparito). Fino ad allora il
+catalogo puntava alla sorgente, gia' nel cestino, e un media spostato dall'area privata a quella comune risultava ancora "al sicuro" nell'area privata
+(e il guardiano, punto 2, non lo vedeva).
+- Correzione (il minimo che chiede il brief; la "porta di completamento" vera, D29, e' della Fase 7): una porta nuova di core-nasops,
+  `MoveCompletions`, che l'esecutore chiama per ogni file **dopo** `PUBLISHED` e **prima** di scrivere la voce del cestino e di spostare la sorgente, con
+  il timbro della destinazione letto adesso. Nell'app `CatalogMoveCompletions` (legata in `NasOrganizer`) sposta la posizione della sorgente (presente)
+  alla destinazione, stessa posizione, stesso media e stessa versione (`MediaCatalog.relocate`, "uno spostamento fatto dall'app"), **senza** la verifica:
+  la copia e' un altro file e la rilegge il backup quando serve. Idempotente (una ripresa del passo non trova piu' la sorgente; una destinazione gia'
+  nota non si tocca). Un errore del catalogo o una lettura del timbro che non riesce non fermano lo spostamento: la sorgente va nel cestino come prima e
+  la scansione rimette a posto. Se poi la sorgente non va nel cestino (cambiata dal PC, E-D13), resta sul NAS e la scansione la ritrova: niente si perde.
+- Test: `CampoAMovesTest` (core-nasops, esecutore vero: l'annuncio arriva per ogni file con la copia gia' pubblicata e la sorgente ancora al suo posto; un
+  catalogo che lancia non ferma niente), `CampoAMoveCompletionsTest` (`:app`, Room vero: la posizione e' alla destinazione, dello stesso media, senza
+  verifica; la ripresa non cambia niente).
+
 ## Fase 6 P11b: completamento dell'integrazione in `:app` (22/10)
 
 Il completamento di P11 (`docs/fase6-progetto.md` §1.4, §2.2, §2.10; righe P11 e P13 del §4.4), con i punti che il resoconto di P11 aveva lasciato aperti: il

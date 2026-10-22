@@ -93,7 +93,16 @@ class FakeIncomingQueue : IncomingQueue {
   val enqueued: MutableList<Pair<NasDestination, List<String>>> = ArrayList()
   var lastStage: IncomingStage? = null
 
+  /** Campo, gruppo A (D1): le condivisioni che il diario cita ancora (le loro copie non si scartano); [citesFails] = il diario non risponde. */
+  val cited: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+  var citesFails: Boolean = false
+
   override suspend fun destinationAllowed(dest: NasDestination): Boolean = allowed
+
+  override suspend fun cites(stage: dev.pampa.mycloudgallery.core.backup.contract.IncomingStageId): Boolean {
+    if (citesFails) throw java.io.IOException("diario non disponibile")
+    return stage.value in cited
+  }
 
   override suspend fun enqueue(stage: IncomingStage, dest: NasDestination, files: IncomingFiles): Int {
     failWith?.let { throw it }

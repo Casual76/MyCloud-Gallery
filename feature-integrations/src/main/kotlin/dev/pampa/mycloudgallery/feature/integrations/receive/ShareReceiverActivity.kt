@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.integrations.receive
 
+import android.content.Intent
 import android.os.Bundle
 import android.os.SystemClock
 import androidx.activity.OnBackPressedCallback
@@ -135,6 +136,28 @@ class ShareReceiverActivity : FragmentActivity() {
 
   /** La finestra non prende tocchi attraverso una sovrapposizione: un'app che disegna sopra non fa premere "Salva sul NAS" al posto dell'utente. */
   private fun protectFromOverlays() = OverlayShield.protect(window)
+
+  /**
+   * Campo, gruppo A (D1, `IMG_mcg_0106`): una condivisione nuova lanciata con `NEW_TASK` (Quick Share, `am start`) mentre questa schermata e' ancora in
+   * cima al suo task. Prima Android riportava davanti la schermata vecchia ("1 file in coda" della condivisione di prima) e quella nuova non arrivava
+   * mai all'app: niente copiato, nessuna riga, nessun avviso. Con `singleTop` arriva qui e si apre in una schermata sua, in un task suo, con il permesso
+   * di lettura che ha portato; questa si chiude come con "Annulla" (le copie non salvate si tolgono, quelle gia' in coda sono del diario e restano; un
+   * salvataggio in corso non si interrompe).
+   */
+  override fun onNewIntent(intent: Intent) {
+    super.onNewIntent(intent)
+    if (ReceiveRequest.from(intent) == null) return
+    val forward = Intent(intent)
+      .setClass(this, ShareReceiverActivity::class.java)
+      .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+    try {
+      startActivity(forward)
+    } catch (_: RuntimeException) {
+      // Nessuna schermata nuova (permesso, activity non trovata): questa resta com'e', e la condivisione nuova non si copia.
+      return
+    }
+    viewModel?.cancel() ?: finish()
+  }
 
   override fun onResume() {
     super.onResume()

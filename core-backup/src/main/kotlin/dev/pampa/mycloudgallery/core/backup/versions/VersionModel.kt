@@ -305,6 +305,13 @@ interface VersionCatalog {
   suspend fun correct(mediaId: MediaId, fields: Set<CorrectionField>, size: Long, quickHash: QuickHash, sha256: Sha256): VersionId?
 
   /**
+   * Campo, gruppo A (D3, F36): i metadati della versione corretta [versionId] letti dai byte corretti [file] (di tipo [mime]) e scritti nel catalogo,
+   * subito: la Libreria e il viewer mostrano la data e il luogo nuovi senza aspettare che la lettura del telefono o del NAS rilegga il file (prima la
+   * versione nasceva senza metadati e la Libreria restava sulla data di prima). Non lancia; di norma niente.
+   */
+  suspend fun readCorrected(mediaId: MediaId, versionId: VersionId, file: File, mime: String) = Unit
+
+  /**
    * Q6 (a), L40: la correzione di un formato che non si scrive (HEIC, RAW, video) resta **nell'app e nell'indice**: il file non si tocca.
    * Falso se non si e' potuta registrare.
    */

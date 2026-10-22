@@ -135,6 +135,8 @@ internal class SafetyBench(val kit: BackupTestKit = BackupTestKit()) {
     claimedHash: Sha256? = null,
     /** Il file c'e' gia' nell'area comune (messo da uno spostamento): il catalogo lo registra com'e'. */
     fileAlreadyThere: Boolean = false,
+    /** Campo, gruppo A (D2): falso per un media mai stato sul telefono (messo sul NAS dal PC). */
+    wasOnPhone: Boolean = true,
   ): Start {
     val content = NasContent.of(data)
     var ref: dev.pampa.mycloudgallery.core.backup.contract.PhoneRef? = null
@@ -147,7 +149,7 @@ internal class SafetyBench(val kit: BackupTestKit = BackupTestKit()) {
       mediaId = MediaId.random(), versionId = VersionId.random(), kind = MediaKind.PHOTO, size = sizeOverride ?: data.size.toLong(),
       quickHash = if (quickKnown) QuickHashAlgorithm.ofContent(data) else null, phone = ref,
       phoneStamp = phoneId?.let { kit.phone.stamp(it) }, source = BackupSource.Camera, localDay = localDay, fileName = name,
-      sortTime = nextSort--, fullHash = claimedHash ?: if (hashKnown) Sha256.of(data) else null,
+      sortTime = nextSort--, fullHash = claimedHash ?: if (hashKnown) Sha256.of(data) else null, wasOnPhone = wasOnPhone,
     )
     catalog.put(m)
     val path = SharePath.parse("$commonDir/$name")

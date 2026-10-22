@@ -146,6 +146,31 @@ class ShareReceiverActivityTest {
     assertThat(FlowCounters.receive.get(ReceiveCounter.OPENED)).isEqualTo(0L)
   }
 
+  /**
+   * Campo, gruppo A (D1, `IMG_mcg_0106`): una condivisione nuova che trova davanti la schermata di una vecchia (lanciata con `NEW_TASK`) arriva in
+   * `onNewIntent` e si apre in una schermata sua, in un task suo, con il suo flusso; la vecchia si chiude. Prima l'intento nuovo si perdeva: la
+   * schermata vecchia restava con "1 file in coda" e il file nuovo non veniva nemmeno copiato.
+   */
+  @Test
+  fun d1_unaCondivisioneNuovaDavantiAUnaVecchiaSiApreInUnaSchermataSua() {
+    install()
+    val first = shared("a.jpg", ReceiveSamples.jpeg(3_000, 1))
+    val second = shared("b.jpg", ReceiveSamples.jpeg(3_000, 2))
+    val controller = Robolectric.buildActivity(ShareReceiverActivity::class.java, send(first)).setup()
+    val old = controller.get()
+
+    controller.newIntent(send(second))
+    shadowOf(android.os.Looper.getMainLooper()).idle()
+
+    val started = checkNotNull(shadowOf(context as Application).nextStartedActivity) { "nessuna schermata nuova" }
+    assertThat(started.component?.className).isEqualTo(ShareReceiverActivity::class.java.name)
+    @Suppress("DEPRECATION")
+    assertThat(started.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)).isEqualTo(second)
+    assertThat(started.flags and Intent.FLAG_ACTIVITY_NEW_TASK).isNotEqualTo(0)
+    assertThat(started.flags and Intent.FLAG_ACTIVITY_MULTIPLE_TASK).isNotEqualTo(0)
+    assertThat(old.isFinishing).isTrue()
+  }
+
   // --- Porte non installate e app bloccata -------------------------------------------------------------------------------------------------------
 
   @Test

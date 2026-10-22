@@ -439,6 +439,36 @@ class BackupCatalogTest : CatalogTestBase() {
     assertThat(catalog.changeSeq()).isEqualTo(seq)
   }
 
+  /**
+   * Campo, gruppo A (D4, F26, D-B3): una foto mai salvata cancellata in Galleria **prima** che un giro la prenda in lista. Prima il catalogo la segnava
+   * `lost` senza nessun problema (lo segnava solo il motore, a giro in corso): spariva dalla Libreria e dai conteggi senza l'avviso "Cancellati prima del
+   * backup". Adesso la lettura del telefono che la vede sparire la segna `lost_before_backup`; ripristinata, il segno se ne va. Una foto gia' al sicuro
+   * o una che non era un candidato (in un'altra transazione gia' persa, o di un altro account) non si segna.
+   */
+  @Test
+  fun d4_unaFotoMaiSalvataCancellataPrimaDelGiroEPersaPrimaDelBackup() = runBlocking<Unit> {
+    val id = addPhone(1)
+    val safe = addPhone(2)
+    assertThat(catalog.markVerified(addPrivateCopy(2), smallFull(2).fullHash!!, T0)).isTrue()
+    assertThat(catalog.safety(safe)!!.status).isEqualTo(SafetyStatus.SAFE)
+    assertThat(db.mediaDao().get(id.value)!!.backupTodo).isTrue()
+
+    catalog.markVanished(seenAgain(1).location.key)
+    catalog.markVanished(seenAgain(2).location.key)
+
+    assertThat(catalog.safety(id)!!.status).isEqualTo(SafetyStatus.LOST)
+    assertThat(db.backupProblemDao().get(id.value)?.code).isEqualTo("lost_before_backup")
+    assertThat(catalog.mediaSafety(id)!!.problem).isEqualTo("lost_before_backup")
+    assertThat(catalog.safetyCounts(camera).problems).isEqualTo(mapOf("lost_before_backup" to 1))
+    // La foto al sicuro e' "solo NAS", non persa.
+    assertThat(db.backupProblemDao().get(safe.value)).isNull()
+
+    // Ripristinata dal cestino di Galleria (un `_ID` nuovo): di nuovo candidata, senza il segno.
+    catalog.recordAll(listOf(seenAgain(1, mediaStoreId = 555)), seenAt = T0 + 10)
+    assertThat(db.backupProblemDao().get(id.value)).isNull()
+    assertThat(candidates().map { it.mediaId }).contains(id)
+  }
+
   @Test
   fun ilSegnoDiPersaRestaSeNonRicompareUnaPosizioneDelTelefonoDiQuelMedia() = runBlocking<Unit> {
     val lost = addPhone(1)
@@ -476,10 +506,11 @@ class BackupCatalogTest : CatalogTestBase() {
     catalog.recordAll(listOf(nasObservation("Famiglia/Altri.jpg", smallFull(60), share = "NAS")), seenAt = T0)
 
     val counts = catalog.safetyCounts(camera)
-    assertThat(counts).isEqualTo(CatalogSafetyCounts(safe = 1, unverified = 1, onlyCommonCopy = 1, noNasCopy = 2, lost = 1, problems = emptyMap()))
+    // Campo, gruppo A (D4): la foto sparita dal telefono prima del backup e' "persa prima del backup" (prima nessun problema).
+    assertThat(counts).isEqualTo(CatalogSafetyCounts(safe = 1, unverified = 1, onlyCommonCopy = 1, noNasCopy = 2, lost = 1, problems = mapOf("lost_before_backup" to 1)))
     val withScreenshots = catalog.safetyCounts(setOf(CatalogSource.Camera, CatalogSource.Screenshots))
     assertThat(withScreenshots.noNasCopy).isEqualTo(3)
-    assertThat(withScreenshots.problems).containsExactly("verify_failed", 1)
+    assertThat(withScreenshots.problems).containsExactly("verify_failed", 1, "lost_before_backup", 1)
     assertThat(catalog.safetyCounts(emptySet())).isEqualTo(CatalogSafetyCounts.ZERO)
     assertThat(catalog.safetyCounts(setOf(CatalogSource.Folder("external_primary", "Pictures/Telegram/")))).isEqualTo(CatalogSafetyCounts.ZERO)
     assertThat(listOf(safe, unverified, common, lost)).hasSize(4)
@@ -736,6 +767,31 @@ class BackupCatalogTest : CatalogTestBase() {
     catalog.markVerified(privateCopy, smallFull(77).fullHash!!, T0 + 5)
     assertThat(catalog.safety(id)!!.status).isEqualTo(SafetyStatus.PRIVATE_COPY_UNVERIFIED)
     assertThat(candidates().map { it.mediaId }).contains(id)
+  }
+
+  /**
+   * Campo, gruppo A (D2, B-S6 O-B14, Q4 (b)): il guardiano di sottofondo (`ids` null) aveva fatto 76 copie private di file messi sul NAS dal PC e poi
+   * spostati nell'area comune: media mai stati sul telefono, la cui copia del telefono non puo' "sparire". Adesso vede solo i media che il telefono ha
+   * avuto (qui una foto salvata, tolta dal telefono e poi spostata nell'area comune: la condizione di Q4 (b) e' gia' vera). Chiesti per nome (prima di
+   * "Libera spazio") ci sono tutti e due.
+   */
+  @Test
+  fun d2_ilGuardianoDiSottofondoVedeSoloIMediaCheIlTelefonoHaAvuto() = runBlocking<Unit> {
+    // Un file messo dal PC nell'area privata, poi spostato dall'app nell'area comune: mai stato sul telefono.
+    val fromPc = catalog.recordAll(listOf(nasObservation("campioni/IMG_9.jpg", smallFull(9), fileId = 9)), seenAt = T0).single()
+    val fromPcId = fromPc.mediaId!!
+    catalog.relocateNas(listOf(NasRelocation(fromPc.locationId!!, nasLocation("Z16/campioni/IMG_9.jpg", share = "NAS", fileId = 9), NasStamp(2_000, T0, 9))), T0 + 1)
+    assertThat(catalog.safety(fromPcId)!!.status).isEqualTo(SafetyStatus.ONLY_COMMON_COPY)
+    // Una foto del telefono con la copia privata, cancellata dal telefono e poi spostata nell'area comune.
+    val phoneId = addPhone(1)
+    val privateCopy = addPrivateCopy(1)
+    assertThat(catalog.markVanished(Db.phone("IMG_1.jpg", 101).key)).isTrue()
+    catalog.relocateNas(listOf(NasRelocation(privateCopy, nasLocation("Z16/IMG_1.jpg", share = "NAS", fileId = 1), NasStamp(2_000, T0, 1))), T0 + 2)
+    assertThat(catalog.safety(phoneId)!!.status).isEqualTo(SafetyStatus.ONLY_COMMON_COPY)
+
+    assertThat(catalog.onlyCommonCopies(null, 10).map { it.common.mediaId }).containsExactly(phoneId)
+    assertThat(catalog.onlyCommonCopies(setOf(fromPcId), 10).map { it.common.mediaId }).containsExactly(fromPcId)
+    assertThat(catalog.onlyCommonCopies(setOf(fromPcId, phoneId), 10)).hasSize(2)
   }
 
   @Test

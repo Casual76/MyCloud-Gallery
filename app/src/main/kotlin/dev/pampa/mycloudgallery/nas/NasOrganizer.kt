@@ -54,6 +54,7 @@ import dev.pampa.mycloudgallery.core.nasops.contract.UserConfirmation
 import dev.pampa.mycloudgallery.core.nasops.engine.CatalogPresence
 import dev.pampa.mycloudgallery.core.nasops.engine.HeavyWorkPolicy
 import dev.pampa.mycloudgallery.core.nasops.engine.KnownHashes
+import dev.pampa.mycloudgallery.core.nasops.engine.MoveCompletions
 import dev.pampa.mycloudgallery.core.nasops.engine.ShareAccessView
 import dev.pampa.mycloudgallery.core.nasops.noop.NoNasFolders
 import dev.pampa.mycloudgallery.core.nasops.noop.NoNasOperations
@@ -376,6 +377,8 @@ class NasOrganizer(
       catalogPresence = CatalogPresenceSql(database, runtime.account),
       trashRetentionMillis = trashRetentionMillis() ?: dev.pampa.mycloudgallery.core.trust.TrustLimits.TRASH_RETENTION_MILLIS,
       citedTemps = citedTemps,
+      // Campo, gruppo A (D7): la posizione nuova di uno spostamento tra share nel catalogo, prima che la sorgente vada nel cestino.
+      moves = CatalogMoveCompletions(catalog, runtime.account),
     )
     val services = NasOpsWiring.build(inputs.session, opsStore, config)
 
@@ -856,6 +859,24 @@ class CatalogPresenceSql(private val database: GalleryDatabase, private val acco
       }
       out
     }
+}
+
+/**
+ * Campo, gruppo A (D7; Fase 7 §0 punto 11): uno spostamento tra share ha pubblicato la copia verificata e la sorgente sta per andare nel cestino. La
+ * posizione del catalogo della sorgente (presente) **diventa** quella della destinazione, dello stesso media e della stessa versione
+ * (`MediaCatalog.relocate`, "uno spostamento fatto dall'app"), **senza la verifica** (la copia e' un altro file: la rilegge il backup quando serve);
+ * prima il catalogo puntava alla sorgente gia' nel cestino fino alla scansione dopo, e un media spostato nell'area comune risultava ancora "al sicuro"
+ * nell'area privata. Idempotente: una sorgente che il catalogo non ha (gia' spostata, mai vista) o una destinazione gia' nota (la scansione l'ha gia'
+ * vista) non cambiano niente. Solo il catalogo locale, mai il NAS.
+ */
+class CatalogMoveCompletions(private val catalog: MediaCatalog, private val account: AccountId) : MoveCompletions {
+  override suspend fun moved(srcShare: String, srcPath: SharePath, dstShare: String, dstPath: SharePath, stamp: NasStamp) {
+    val from = catalog.nasLocationAt(Location.Nas(account, srcShare, NasPath.of(srcPath.value))) ?: return
+    if (from.state == LocationState.ABSENT) return
+    val to = Location.Nas(account, dstShare, NasPath.of(dstPath.value), stamp.fileId)
+    if (catalog.nasLocationAt(to) != null) return
+    catalog.relocate(from.locationId, to, stamp.toFileStamp(), verifiedAtMillis = null)
+  }
 }
 
 /** R11, P16: i nascosti dell'utente letti dal catalogo (dati personali proiettati, `media_personal`). Sola lettura, solo da mostrare. */

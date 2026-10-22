@@ -83,31 +83,55 @@ class BackupSchedulingTest {
     }
   }
 
+  private val incomingNetworkWaits = listOf(
+    WaitReason.NetworkNotAllowed(NetworkClass.MOBILE),
+    WaitReason.Offline,
+    WaitReason.NetworkNotTrusted,
+    WaitReason.Roaming,
+    WaitReason.NasUnreachable,
+  )
+
   /**
    * IN-5 della verifica funzionale 5B: "Salva sul NAS" e' un gesto dell'utente. Un file ricevuto mentre si e' fuori casa, o col NAS spento, aspettava
    * per sempre (nessun evento lo faceva ripartire se non la prossima lettura del telefono o il periodico di 6 ore). Come "Proteggi subito" (BK-2):
    * il lavoro si rimette in coda su una rete non a consumo.
+   *
+   * Campo, gruppo A (D5, O-B19): **senza ritardo**. Prima la ripresa aspettava un quarto d'ora fisso anche col Wi-Fi tornato dopo due minuti (sul campo
+   * il file e' salito 13 minuti dopo il ritorno della rete): adesso WorkManager la avvia appena c'e' un Wi-Fi, e la ripresa aspetta la sessione (D-12).
    */
   @Test
-  fun in5_unFileRicevutoFuoriCasaOColNasSpentoAspettaUnaReteENonLaProssimaNotte() {
-    val waits = listOf(
-      WaitReason.NetworkNotAllowed(NetworkClass.MOBILE),
-      WaitReason.Offline,
-      WaitReason.NetworkNotTrusted,
-      WaitReason.Roaming,
-      WaitReason.NasUnreachable,
-    )
-    for (wait in waits) {
+  fun in5_d5_unFileRicevutoFuoriCasaOColNasSpentoRiparteAppenaTornaIlWifi() {
+    for (wait in incomingNetworkWaits) {
       workManager.cancelAllWork().result.get()
 
       BackupWorkScheduling.afterWait(context, BackupWorkScheduling.Kind.INCOMING, wait)
 
-      val work = waiting(BackupWorkScheduling.INCOMING_WORK).single()
+      val work = waiting(BackupWorkScheduling.INCOMING_RETRY_WORK).single()
       val network = checkNotNull(work.constraints.requiredNetworkRequest) { "$wait: nessun vincolo di rete" }
       assertWithMessage("$wait: rete non a consumo").that(network.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)).isTrue()
       assertWithMessage("$wait: mai i dati mobili").that(network.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)).isFalse()
+      assertWithMessage("$wait: nessun ritardo").that(work.initialDelayMillis).isEqualTo(0L)
+    }
+  }
+
+  /**
+   * D5: la ripresa che trova di nuovo la rete o il NAS che non va (a casa col NAS spento, un Wi-Fi che non e' casa) riprova dopo un quarto d'ora: niente
+   * ciclo continuo. E un file salvato mentre una ripresa aspetta parte subito con il suo lavoro, non resta dietro.
+   */
+  @Test
+  fun d5_laRipresaCheNonTrovaIlNasRiprovaDopoUnQuartoDOraEIFileNuoviNonAspettano() {
+    for (wait in incomingNetworkWaits) {
+      workManager.cancelAllWork().result.get()
+      BackupWorkScheduling.incomingAfterWait(context, wait, resumed = true)
+      val work = waiting(BackupWorkScheduling.INCOMING_RETRY_WORK).single()
       assertWithMessage("$wait: un ritardo").that(work.initialDelayMillis).isAtLeast(10 * 60_000L)
     }
+
+    // Un "Salva sul NAS" nuovo mentre la ripresa aspetta il suo quarto d'ora: il suo lavoro c'e', subito.
+    BackupWorkScheduling.incoming(context)
+    val fresh = workManager.getWorkInfosForUniqueWork(BackupWorkScheduling.INCOMING_WORK).get().single()
+    assertThat(fresh.initialDelayMillis).isEqualTo(0L)
+    assertThat(waiting(BackupWorkScheduling.INCOMING_RETRY_WORK)).hasSize(1)
   }
 
   @Test

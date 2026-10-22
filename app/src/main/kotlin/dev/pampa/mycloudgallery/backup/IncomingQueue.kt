@@ -8,6 +8,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupItemId
 import dev.pampa.mycloudgallery.core.backup.contract.DestinationArea
 import dev.pampa.mycloudgallery.core.backup.contract.IncomingItem
 import dev.pampa.mycloudgallery.core.backup.contract.IncomingStage
+import dev.pampa.mycloudgallery.core.backup.contract.IncomingStageId
 import dev.pampa.mycloudgallery.core.backup.contract.NasDestination
 import dev.pampa.mycloudgallery.core.backup.contract.NewBackupItem
 import dev.pampa.mycloudgallery.core.backup.contract.UploadKind
@@ -40,6 +41,7 @@ import java.io.IOException
 import java.io.RandomAccessFile
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 
 // I FILE IN ARRIVO nel diario del backup (Fase 5B, P14; docs/fase5-progetto.md §2.7 "Ricevere condivisioni", D24, E-X8, E-S11). La coda che
@@ -155,10 +157,15 @@ class AppIncomingQueue(
     return NasDestination(share, folder, area)
   }
 
+  /**
+   * Campo, gruppo A (D1): **tutto o niente**. Prima ogni file aveva la sua transazione: una cancellazione (la schermata chiusa durante il salvataggio) o
+   * un errore al secondo file lasciavano il primo in coda mentre la schermata lo credeva "non salvato" e ne toglieva la copia. Adesso i media si
+   * preparano prima (lettura dell'impronta e dei metadati, che si possono interrompere: niente e' ancora in coda) e poi tutte le righe entrano in
+   * **una** transazione che non si interrompe a meta'.
+   */
   override suspend fun enqueue(stage: IncomingStage, dest: NasDestination, files: IncomingFiles): Int {
     val cat = catalog() ?: return 0
-    var queued = 0
-    var bytes = 0L
+    val ready = ArrayList<Ready>(stage.accepted.size)
     for (item in stage.accepted) {
       val file = files.fileOf(stage.id, item) ?: continue
       val quick = withContext(Dispatchers.IO) { quickHashOf(file, item.size) } ?: continue
@@ -167,45 +174,60 @@ class AppIncomingQueue(
       val arrivedAt = IncomingArrival.provisionalMs(clock.nasNowMs(), file)
       val media = cat.incomingMedia(Fingerprint(item.size, quick, item.sha256), kindOf(item.mime), arrivedAt)
       if (media.created) readMetadata(media, file, item.mime, item.displayName, arrivedAt)
-      val planned = dest.folder.child(IncomingNames.of(item))
-      database.transaction {
-        val created = store.createIncoming(
-          NewBackupItem(
-            kind = UploadKind.INCOMING,
-            mediaId = media.mediaId,
-            versionId = media.versionId,
-            size = item.size,
-            phone = null,
-            expected = null,
-            share = dest.share,
-            planned = planned,
-            quickHash = quick,
-            sha256 = item.sha256,
-          ),
-        )
-        val now = clock.nasNowMs() ?: 0L
-        database.incomingDao().insert(
-          IncomingItemEntity(
-            stageId = stage.id.value,
-            state = IncomingStates.QUEUED,
-            fileName = item.name,
-            displayName = item.displayName,
-            sha256 = item.sha256.hex,
-            size = item.size,
-            mime = item.mime,
-            destShare = dest.share,
-            destFolder = dest.folder.value,
-            backupItemId = created.id.value,
-            createdAt = now,
-            updatedAt = now,
-          ),
-        )
-      }
-      queued++
-      bytes += item.size
+      ready += Ready(item, quick, media, dest.folder.child(IncomingNames.of(item)))
     }
-    if (queued > 0) onQueued(bytes >= dev.pampa.mycloudgallery.core.backup.contract.IncomingLimits.USER_INITIATED_JOB_BYTES)
-    return queued
+    if (ready.isEmpty()) return 0
+    withContext(NonCancellable) {
+      database.transaction {
+        for (r in ready) insertQueued(stage, dest, r)
+      }
+    }
+    onQueued(ready.sumOf { it.item.size } >= dev.pampa.mycloudgallery.core.backup.contract.IncomingLimits.USER_INITIATED_JOB_BYTES)
+    return ready.size
+  }
+
+  /** Campo, gruppo A (D1): la condivisione [stage] ha righe che aspettano ancora ([IncomingStates.KEEP]): le sue copie sono del diario. */
+  override suspend fun cites(stage: IncomingStageId): Boolean = withContext(Dispatchers.IO) {
+    database.incomingDao().ofStage(stage.value).any { it.state in IncomingStates.KEEP }
+  }
+
+  /** Un file pronto per la coda: il media (gia' trovato o nato invisibile) e il nome previsto. */
+  private class Ready(val item: IncomingItem, val quick: QuickHash, val media: CatalogIncomingMedia, val planned: SharePath)
+
+  /** L'elemento `INCOMING` e la sua riga di `incoming_item`, dentro la transazione di [enqueue]. */
+  private suspend fun insertQueued(stage: IncomingStage, dest: NasDestination, ready: Ready) {
+    val item = ready.item
+    val created = store.createIncoming(
+      NewBackupItem(
+        kind = UploadKind.INCOMING,
+        mediaId = ready.media.mediaId,
+        versionId = ready.media.versionId,
+        size = item.size,
+        phone = null,
+        expected = null,
+        share = dest.share,
+        planned = ready.planned,
+        quickHash = ready.quick,
+        sha256 = item.sha256,
+      ),
+    )
+    val now = clock.nasNowMs() ?: 0L
+    database.incomingDao().insert(
+      IncomingItemEntity(
+        stageId = stage.id.value,
+        state = IncomingStates.QUEUED,
+        fileName = item.name,
+        displayName = item.displayName,
+        sha256 = item.sha256.hex,
+        size = item.size,
+        mime = item.mime,
+        destShare = dest.share,
+        destFolder = dest.folder.value,
+        backupItemId = created.id.value,
+        createdAt = now,
+        updatedAt = now,
+      ),
+    )
   }
 
   /**

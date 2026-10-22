@@ -69,8 +69,10 @@ import kotlinx.coroutines.CancellationException
  * l'area privata, scrive **solo** nell'area privata e toglie solo i propri temporanei (D2: `NasBackupOps` non sa fare altro).
  *
  * **Quando** (risposta Q4 (b)): con [GuardScope.Media] per i media chiesti (prima di "Libera spazio" e di "Elimina solo dal telefono",
- * 5B), anche se il telefono li ha ancora; con [GuardScope.All] (il lavoro dopo la lettura del telefono, E-B13) solo i media la cui
- * versione **non** e' piu' sul telefono: non subito dopo uno spostamento nell'area comune.
+ * 5B), anche se il telefono li ha ancora; con [GuardScope.All] (il lavoro dopo la lettura del telefono, E-B13) solo i media che il
+ * telefono **ha avuto** e la cui versione **non** e' piu' sul telefono: non subito dopo uno spostamento nell'area comune, mai per un media
+ * che non e' mai stato sul telefono (campo, gruppo A, D2: le 76 copie di `campioni`), **subito** per uno che il telefono non ha gia' piu'
+ * (la condizione di Q4 (b) e' gia' vera, Fase 7 D28).
  *
  * Tetto di [capBytes] (20 GB) per giro: un elemento si comincia solo se ci sta; un solo media piu' grande del tetto parte da solo, come
  * primo del giro (altrimenti non partirebbe mai). Il budget e' di tempo, con l'orologio monotono. Nessuna eccezione per un errore del NAS

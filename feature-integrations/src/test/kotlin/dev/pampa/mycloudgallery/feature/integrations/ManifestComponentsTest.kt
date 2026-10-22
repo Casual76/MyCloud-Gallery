@@ -89,14 +89,17 @@ class ManifestComponentsTest {
       assertThat(types).containsExactly("image/*", "video/*")
       assertThat(categories).containsExactly("android.intent.category.DEFAULT")
     }
-    assertEntryActivity(receiver)
+    assertEntryActivity(receiver, launchMode = "singleTop")
   }
 
-  /** Le due activity d'ingresso: l'affinita' vuota come la MainActivity (StrandHogg), mai `singleTask` (non restituirebbe un risultato). */
-  private fun assertEntryActivity(activity: Element) {
+  /**
+   * Le due activity d'ingresso: l'affinita' vuota come la MainActivity (StrandHogg), mai `singleTask` (non restituirebbe un risultato). La ricezione e'
+   * `singleTop` (campo, gruppo A, D1): resta nel task di chi la chiede, ma una condivisione nuova davanti a una vecchia arriva in `onNewIntent`.
+   */
+  private fun assertEntryActivity(activity: Element, launchMode: String = "") {
     assertThat(activity.hasAttributeNS(ANDROID, "taskAffinity")).isTrue()
     assertThat(attr(activity, "taskAffinity")).isEmpty()
-    assertThat(attr(activity, "launchMode")).isEmpty() // il default (standard): nel task di chi le ha chieste
+    assertThat(attr(activity, "launchMode")).isEqualTo(launchMode) // il default (standard): nel task di chi le ha chieste
     assertThat(attr(activity, "excludeFromRecents")).isEqualTo("true")
   }
 

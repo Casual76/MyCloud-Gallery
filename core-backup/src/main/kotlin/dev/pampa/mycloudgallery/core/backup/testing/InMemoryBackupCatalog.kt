@@ -53,6 +53,11 @@ class InMemoryBackupCatalog(val privateShare: String, val commonShare: String? =
     val sortTime: Long,
     var fullHash: Sha256?,
     val mine: Boolean = true,
+    /**
+     * Campo, gruppo A (D2, Q4 (b)): il media e' stato su questo telefono (come il catalogo vero: una posizione del telefono, anche assente, o un
+     * caricamento dal telefono). Falso per un media messo sul NAS dal PC: il guardiano di sottofondo non lo vede.
+     */
+    val wasOnPhone: Boolean = true,
   ) {
     override fun toString(): String = "Media(${kind.code})"
   }
@@ -243,7 +248,8 @@ class InMemoryBackupCatalog(val privateShare: String, val commonShare: String? =
 
   override suspend fun onlyCommonCopies(scope: GuardScope, limit: Int): List<GuardCandidate> = synchronized(lock) {
     val common = commonShare ?: return emptyList()
-    media.values.filter { m -> m.mine && (scope !is GuardScope.Media || m.mediaId in scope.ids) && statusLocked(m) == SafetyStatus.ONLY_COMMON_COPY }
+    media.values.filter { m -> m.mine && (scope is GuardScope.Media && m.mediaId in scope.ids || scope is GuardScope.All && (m.wasOnPhone || m.phone != null)) }
+      .filter { m -> statusLocked(m) == SafetyStatus.ONLY_COMMON_COPY }
       .mapNotNull { m ->
         val c = copies.firstOrNull { it.mediaId == m.mediaId && key(it.share) == key(common) } ?: return@mapNotNull null
         GuardCandidate(NasCopyRef(c.locationId, c.mediaId, c.versionId, c.share, c.path, c.stamp), m.size, m.fullHash, m.quickHash, m.localDay, m.fileName)

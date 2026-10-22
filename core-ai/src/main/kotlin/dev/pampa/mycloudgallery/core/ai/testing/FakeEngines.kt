@@ -191,16 +191,30 @@ class FakeTextReader(var readingHere: () -> Boolean = { true }, var latencyMs: L
 }
 
 /**
- * Il ritagliatore finto (§5.2): il soggetto e' la regione **connessa** dei pixel dello stesso colore di quello toccato (le fixture
- * sintetiche sono forme piene su sfondi diversi). Sotto l'1% o sopra il 90% dell'immagine = nessun soggetto chiaro (E-V10).
+ * Il ritagliatore finto (§5.2): su un'immagine di [CutoutFixtures] **disegna la maschera dalla fixture** (la verita' del soggetto
+ * toccato; "nessun soggetto" per le fixture vuote), cosi' passa [SubjectCutterContract] con IoU 1; su un'immagine qualunque il soggetto
+ * e' la regione **connessa** dei pixel dello stesso colore di quello toccato (forme piene su sfondi uniformi). Sotto l'1% o sopra il 90%
+ * dell'immagine = nessun soggetto chiaro (E-V10). [latencyMs] di attesa (tempo virtuale nei test), un guasto alla volta con [failNext].
  */
 class FakeSubjectCutter(var latencyMs: Long = 0, private val tolerance: Int = 24) : SubjectCutter {
   var cuts: Int = 0
     private set
 
+  /** Quante volte e' stato rilasciato. */
+  var releases: Int = 0
+    private set
+
+  /** Il guasto della prossima chiamata (poi torna a funzionare). */
+  var failNext: AiEngineError? = null
+
   override suspend fun cut(image: CutoutImage, point: NormalizedPoint): CutoutResult {
     cuts++
     if (latencyMs > 0) delay(latencyMs)
+    failNext?.let {
+      failNext = null
+      return CutoutResult.Failed(it)
+    }
+    fromFixture(image, point)?.let { return it }
     val w = image.width
     val h = image.height
     val sx = (point.x * (w - 1)).toInt()
@@ -235,7 +249,39 @@ class FakeSubjectCutter(var latencyMs: Long = 0, private val tolerance: Int = 24
     return CutoutResult.Subject(mask, PixelBox(left, top, right + 1, bottom + 1))
   }
 
-  override suspend fun release() = Unit
+  override suspend fun release() {
+    releases++
+  }
+
+  /** La risposta "disegnata" se [image] e' una fixture e il punto e' sul suo soggetto (o la fixture e' vuota); altrimenti null. */
+  private fun fromFixture(image: CutoutImage, point: NormalizedPoint): CutoutResult? {
+    val fixture = CutoutFixtures.truthFor(image) ?: return null
+    if (!fixture.hasSubject) return CutoutResult.NoClearSubject
+    val truth = fixture.truth ?: return null
+    val w = image.width
+    val h = image.height
+    val sx = (point.x * (w - 1)).toInt()
+    val sy = (point.y * (h - 1)).toInt()
+    if (!truth[sy * w + sx]) return null
+    var left = w
+    var top = h
+    var right = -1
+    var bottom = -1
+    val alpha = ByteArray(w * h)
+    for (i in truth.indices) {
+      if (!truth[i]) continue
+      alpha[i] = 0xff.toByte()
+      val x = i % w
+      val y = i / w
+      if (x < left) left = x
+      if (x > right) right = x
+      if (y < top) top = y
+      if (y > bottom) bottom = y
+    }
+    val mask = AlphaMask(w, h, alpha)
+    if (mask.coverage < CutoutResult.MIN_COVERAGE || mask.coverage > CutoutResult.MAX_COVERAGE) return CutoutResult.NoClearSubject
+    return CutoutResult.Subject(mask, PixelBox(left, top, right + 1, bottom + 1))
+  }
 
   private fun close(a: Int, b: Int): Boolean {
     val dr = ((a shr 16) and 0xff) - ((b shr 16) and 0xff)

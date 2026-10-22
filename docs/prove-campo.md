@@ -193,6 +193,14 @@ function Net-Between([datetime]$from, [datetime]$to) {                          
 
 `-NotSettled` si usa a lavoro ancora in corso (controlla solo gli invarianti che valgono sempre). Esito buono: `TUTTI GLI INVARIANTI RISPETTATI`. Il rapporto non contiene nomi di file.
 
+**Verifica del backup con i giri vecchi alle spalle (D-14).** Il verificatore (`-Mode backup -Stage verify`) legge sempre anche la `Versioni/` **dentro l'area recintata** (`mcg-campo/Versioni/`; mai quella alla radice della share). Gli originali che i giri precedenti hanno già archiviato lì (le 15-16 fixture che F43-tel aveva modificato) non sono una perdita: il rapporto li conta come **previsti** («originali già in Versioni/ contati come previsti: N»). Senza righe `edit=` nel manifesto la `Versioni/` serve solo a questo; con le righe `edit=` valgono gli invarianti 12 e 13 come prima.
+
+**Fai ora i lavori periodici (solo build debug).** Per le prove che prima chiedevano di modificare il database di WorkManager (F20, F12, le scansioni) c'è un'azione che accoda **subito** gli stessi lavori del giro periodico: pulizia del cestino (`trash`), anteprime HQ (`hq`), preparazione (`prep`), sincronizzazione dell'indice (`sync`), scansione (`scan`, poi indice e dati personali), backup (`backup`: foto, video e verifica «al sicuro»):
+```powershell
+A shell am broadcast -a dev.pampa.mycloudgallery.debug.PERIODIC_NOW -p $pkg --es jobs all          # oppure: trash,hq,prep,sync,scan,backup
+```
+Risponde con i lavori accodati (o con `result=2` se un nome non esiste). Si può anche fare dall'app: Impostazioni → Sviluppo → Prove guidate → «Lavori periodici · Fai ora». Non scavalca niente: i lavori sono quelli veri e passano dalle regole delle attività (preset, rete, carica, fascia), dal cancello del backup e dalle recinzioni delle share di prova (D33) e del telefono (D13); se le regole dicono di aspettare, aspettano. Il ricevitore è protetto dal permesso `android.permission.DUMP` (lo ha la shell di `adb`, non un'altra app) e nella release non esiste (`tools/check.ps1`, resti di debug: `FieldProbe`, `debugtools/probes`).
+
 ### 2.2 APK da installare
 
 | Cosa | Dove | Nota |
@@ -397,7 +405,7 @@ Gradle non deve essere in uso da altri.
 
 **Passi.**
 1. Dopo F1, con l'app in primo piano e il Wi-Fi acceso.
-2. Tre volte, a distanza di 4 minuti: `Log-Clear`; `Key KEYCODE_HOME`; `A shell dumpsys jobscheduler $pkg | Set-Content "$out\jobs.txt"`; lanciare uno per volta i lavori elencati (`A shell cmd jobscheduler run -f $pkg <id>`) e vedere nel log (`A logcat -d -v time | Select-String 'MyCloud/'`) quale è la verifica del NAS; `Log-Save "F3-n"`; riaprire l'app.
+2. Tre volte, a distanza di 4 minuti: `Log-Clear`; `Key KEYCODE_HOME`; `A shell dumpsys jobscheduler $pkg | Set-Content "$out\jobs.txt"`; lanciare uno per volta i lavori elencati (`A shell cmd jobscheduler run -f $pkg <id>`) e vedere nel log (`A logcat -d -v time | Select-String 'MyCloud/'`) quale è la verifica del NAS; `Log-Save "F3-n"`; riaprire l'app. (In alternativa, senza cercare gli id: `A shell am broadcast -a dev.pampa.mycloudgallery.debug.PERIODIC_NOW -p $pkg --es jobs scan`.)
 3. Dal log di ogni giro: ora di inizio e di fine di `NasScanWorker` (la durata), e quante volte compare `NasSession: sessione pronta` (ogni apertura di sessione tocca i dischi).
 4. Il "tocco dei dischi" (`lastDiskTouchAt`) è un numero della Diagnostica: non sta sullo schermo, lo si legge dall'esportazione E1 (fine di A.9) e lo si confronta con le ore delle verifiche.
 5. Lasciare il resto della giornata: a ogni ritorno nell'app, le righe `NasSession` del log dicono se si sono aperte sessioni senza motivo.
@@ -632,7 +640,7 @@ powershell -ExecutionPolicy Bypass -File tools\chaos\s25.ps1 -Mode backup -Step 
 1. `A shell am force-stop $pkg` (nessun processo: `A shell pidof $pkg` vuoto). Wi-Fi acceso. `Log-Clear`.
 2. **D-2.** `Start-Ours`; guardare nel log l'ordine di `MyCloud/NasScanWorker` e `MyCloud/NasSession: sessione pronta`. Se `NasScanWorker: tappa non riuscita` viene **prima** di "sessione pronta" e poi per 5 minuti, con l'app in primo piano, non compare nessun altro `NasScanWorker`: D-2 è ancora presente (annotarlo con le ore). Poi `Key KEYCODE_HOME`, 5 secondi, `Start-Ours`: la scansione riparte (come il 20/10).
 3. `A shell dumpsys jobscheduler $pkg | Set-Content "$out\jobs-freddo.txt"`: annotare gli id dei lavori di WorkManager (`SystemJobService`).
-4. `A shell am force-stop $pkg` di nuovo; uno per volta: `A shell cmd jobscheduler run -f $pkg <id>`; ogni volta `Log-Save "FF-8-<id>"` e guardare in `MyCloud/` che il lavoro abbia fatto qualcosa (o dica un motivo vero di attesa), non "Offline" con il Wi-Fi acceso.
+4. `A shell am force-stop $pkg` di nuovo; uno per volta: `A shell cmd jobscheduler run -f $pkg <id>`; ogni volta `Log-Save "FF-8-<id>"` e guardare in `MyCloud/` che il lavoro abbia fatto qualcosa (o dica un motivo vero di attesa), non "Offline" con il Wi-Fi acceso. (Un lavoro per volta anche senza gli id: `A shell am broadcast -a dev.pampa.mycloudgallery.debug.PERIODIC_NOW -p $pkg --es jobs sync`, poi `prep`, `scan`, `trash`; il ricevitore fa nascere il processo.)
 5. `Start-Ours`; Diagnostica → "Ultimi esiti ed errori": il lavoro di prima c'è, con il suo titolo.
 6. La parte NA-12 (il servizio delle operazioni dopo la morte del processo) è dentro B-S5 (F16-tel); NA-7 (riepilogo con un congelamento) dentro B-S3 (F9).
 
@@ -828,9 +836,11 @@ Se alla prima verifica il file "diverso" risulta "byte che non sono di nessun fi
 **Prima (orchestratore).** F1 finita. Cartelle `mille`, `campioni`, `F9` sul NAS (2.8). Segnare come preferito una foto della cartella `mille` (viewer → cuore). Annotare il numero di foto in Libreria. I contatori di rilevamento e di preparazione non sono sullo schermo: l'utente salva l'**esportazione** della Diagnostica (ricetta ESPORTA, §2.1) prima di cominciare (P1) e dopo F5 (P2); si confrontano i due file. Scegliere due foto di `campioni` (una da modificare, una da cancellare) e dirne i nomi.
 
 **Istruzioni per l'utente.**
-1. (F4) "In Esplora risorse apri `\\<indirizzo del NAS>\test\mcg-campo\`. **Rinomina** la cartella `mille` in `mille-rinominata`. Poi aspetta 3 minuti senza fare altro."
-2. (F5) "Nella cartella `campioni` apri la foto **<nome 1>** con Paint, **ruotala** e salva con Salva. Poi **cancella** la foto **<nome 2>**. Aspetta 3 minuti."
-3. (F9) "Apri PowerShell e incolla questo comando: `Get-ChildItem '\\<indirizzo del NAS>\test\mcg-campo\F9' -File | Select-Object -First 500 | Rename-Item -NewName { $_.Name + '.locked' }`. È solo nella cartella F9. Dimmi quando ha finito. Aspetta 5 minuti."
+1. (F4) "In Esplora risorse apri `\\<indirizzo del NAS>\test\mcg-campo\`. **Rinomina** la cartella `mille` in `mille-rinominata`. Poi dimmi quando hai finito."
+2. (F5) "Nella cartella `campioni` apri la foto **<nome 1>** con Paint, **ruotala** e salva con Salva. Poi **cancella** la foto **<nome 2>**. Dimmi quando hai finito."
+3. (F9) "Apri PowerShell e incolla questo comando: `Get-ChildItem '\\<indirizzo del NAS>\test\mcg-campo\F9' -File | Select-Object -First 500 | Rename-Item -NewName { $_.Name + '.locked' }`. È solo nella cartella F9. Dimmi quando ha finito."
+
+**Dopo ogni modifica dell'utente (l'orchestratore).** L'app **non** guarda da sola il NAS «dopo 3 minuti»: la verifica parte a ogni apertura dell'app se l'ultima ha più di 15 minuti, nella fascia notte e quando i dischi sono svegli; in background al massimo ogni 6 ore (E-R15, per non svegliare i dischi del NAS: `fase4-progetto.md` §2.3; l'esito del 21/10 è in `docs/prove-campo-esiti.md`, O-B4). Quindi: **riapri l'app** (se l'ultima verifica ha più di 15 minuti; un avvio a freddo parte comunque: `A shell am force-stop $pkg ; Start-Ours`) **oppure aspetta la fascia notte**. Nella build debug puoi anche chiedere la verifica subito: `A shell am broadcast -a dev.pampa.mycloudgallery.debug.PERIODIC_NOW -p $pkg --es jobs scan` (vedi «Fai ora i lavori periodici» in §2.1): le regole delle attività valgono lo stesso.
 
 **Poi l'orchestratore** (dopo ogni passo, `Ui-Texts`, `Shot`, Diagnostica):
 - F4: i contatori di rilevamento e preparazione (P1 contro P2) non salgono per le 1.000 foto; il preferito c'è ancora; il numero di foto in Libreria uguale; nessun "assente".
@@ -885,14 +895,18 @@ A shell "echo 5 > /sdcard/Android/data/$pkg/files/debug-trash-retention-minutes.
 A shell am force-stop $pkg ; Start-Ours                # il marcatore si legge all'avvio della parte NAS
 ```
 **Utente.** "In Cartelle NAS, dentro `mcg-it/<giro>/r0/sorgente`, **elimina 5 file** (non Elimina subito: Elimina nel cestino)." *(3 minuti)*
-**Poi.** L'orchestratore aspetta 6-8 minuti (mentre l'utente fa F12). In "Eliminati di recente" del NAS le 5 voci sono scadute e sparite; i file non sono più nel cestino. Rimuovere il marcatore e riavviare:
+**Poi.** Passati 6 minuti (mentre l'utente fa F12) l'orchestratore **fa partire la pulizia ora**, senza toccare il database di WorkManager: il lavoro è giornaliero e WorkManager rifiuta di anticiparlo («being executed before schedule»); il 22/10 si era dovuto modificare `last_enqueue_time` a mano.
+```powershell
+A shell am broadcast -a dev.pampa.mycloudgallery.debug.PERIODIC_NOW -p $pkg --es jobs trash     # risponde con i lavori accodati
+```
+In "Eliminati di recente" del NAS le 5 voci sono scadute e sparite; i file non sono più nel cestino. Rimuovere il marcatore e riavviare:
 ```powershell
 A shell rm /sdcard/Android/data/$pkg/files/debug-trash-retention-minutes.txt
 A shell am force-stop $pkg ; Start-Ours
 ```
 **Atteso.** Sparite solo le 5 voci del diario; nient'altro (anche altre voci più vecchie di 5 minuti dello stesso diario, quelle di B-S4, sono di prova). **Può far emergere.** 4b-R1, 4b-R3, 4b-R4, 4b-R5.
 
-**F12 · Scopo.** Cambiando la qualità delle anteprime, lo spazio sul NAS converge alla stima, ±15%. **Passi (6 minuti dell'utente).** L'orchestratore annota la stima in Impostazioni → Anteprime e cambia Standard → Alta (poi Risparmio, poi rimette com'era), aspettando ogni volta che Diagnostica dica "preparate". L'utente, dopo ogni cambio: "In Esplora risorse (con 'Mostra elementi nascosti') guarda le **Proprietà** della cartella `\\<indirizzo del NAS>\test\.mycloudgallery` e dimmi la dimensione." **Atteso.** La dimensione segue la stima ±15%; se l'area di prova è piccola, i costi fissi dominano: si annota e basta. **Può far emergere.** 4a-R2, RE-8.
+**F12 · Scopo.** Cambiando la qualità delle anteprime, lo spazio sul NAS converge alla stima, ±15%. **Passi (6 minuti dell'utente).** L'orchestratore annota la stima in Impostazioni → Anteprime e cambia Standard → Alta (poi Risparmio, poi rimette com'era), aspettando ogni volta che la pagina smetta di dire «sta adattando lo spazio». Dal 22/10 il cambio di qualità accoda **subito** la sincronizzazione dell'indice (e, salendo ad «Alta», lo scaricamento dell'HQ), con le regole delle attività; per anticiparla o rifarla: `A shell am broadcast -a dev.pampa.mycloudgallery.debug.PERIODIC_NOW -p $pkg --es jobs sync,hq`. Con «Alta» la Diagnostica **non** deve più dire `ACT_DISABLED` per `HQ_PREVIEWS`. L'utente, dopo ogni cambio: "In Esplora risorse (con 'Mostra elementi nascosti') guarda le **Proprietà** della cartella `\\<indirizzo del NAS>\test\.mycloudgallery` e dimmi la dimensione." **Atteso.** La dimensione segue la stima ±15%; se l'area di prova è piccola, i costi fissi dominano: si annota e basta. **Può far emergere.** 4a-R2, RE-8.
 
 **F16-tel · Scopo.** Almeno 100 interruzioni (processo ucciso o Wi-Fi spento) durante una mossa di massa tra due share, poi gli invarianti (§5.5 di `fase4-progetto.md`).
 
@@ -908,7 +922,7 @@ powershell -ExecutionPolicy Bypass -File tools\chaos\s25.ps1 -Interruptions 100 
 3. "Appena parte (vedi la notifica 'Operazioni sul NAS') dimmi **'partita'**. Poi **non toccare più il telefono** per un'ora: lascialo acceso, sbloccato e in carica."
 
 **Poi l'orchestratore** (R9 della 4B, poi il ciclo):
-- subito: `Tap-Text "Ferma"` nelle Operazioni in corso e entro 3 secondi `TAGLIO-MORTE force-stop`; riaprire: l'operazione è **ferma** e non riparte da sola; `Tap-Text "Riprendi"`. *(O3, 4b-R9)*
+- subito: `Tap-Text "Annulla il resto"` nelle Operazioni in corso (il pulsante si chiamava «Ferma») e entro 3 secondi `TAGLIO-MORTE force-stop`; riaprire: l'operazione è **annullata** («Annullata dopo N di M: il resto non è stato fatto»), quello che era già fatto resta fatto e **non riparte da sola**. Per le operazioni sul NAS **non c'è «Riprendi»**: per il progetto (R9 della 4B) fermare un'operazione la annulla; «Ferma» e «Riprendi» sono del **backup** (R4 della 5A). Per finire il lavoro si rifà l'operazione sul resto. *(O3, 4b-R9; decisione del 22/10 in `decisioni.md`)*
 - poi il ciclo vero:
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\chaos\s25.ps1 -Serial RFCY61FZDHW -Interruptions 100 -Seed 5 -Manifest build\chaos\manifest-$giro16.txt -Verify | Tee-Object "$out\f16-tel.log"
@@ -958,7 +972,7 @@ Poi `Tap-Text "Fai ora"`, aspettare "Tutto al sicuro", e **una sola** verifica f
 **Atteso.** Il PC che cambia il file non fa perdere niente (il temporaneo resta, dopo la scansione la versione va in `Versioni/`); scambi e versioni ferme ripartono alla riapertura.
 **Può far emergere.** VE-9, VE-10, 5b-R16.
 
-**F27 · Scopo.** Rinominare il dispositivo (E-B6) non cambia la cartella sul NAS. **Passi (4 minuti).** L'orchestratore: Impostazioni → Backup → rinomina il dispositivo ("S25 prova"), poi `s25.ps1 -Step edit -Edits 1 -Seed 203` e `Tap-Text "Fai ora"`; aspetta "Tutto al sicuro". L'utente: "In Esplora risorse apri `\\<indirizzo del NAS>\test\mcg-campo\Backup\` e dimmi **quante cartelle di dispositivo** ci sono." **Atteso.** Una sola, la stessa di prima. (Il secondo dispositivo con lo stesso account è C-10.) **Può far emergere.** BK-9, 5a-R7.
+**F27 · Scopo.** Rinominare il dispositivo (E-B6) non cambia la cartella sul NAS. **Passi (4 minuti).** L'orchestratore: Impostazioni → Dispositivi → «Telefono di test» (questo dispositivo, sull'admin) → **«Rinomina questo dispositivo»** ("S25 prova"; dal 22/10 la voce c'è: il nome sta nel registro firmato e lo firma l'admin; da Backup non si rinomina, la cartella lì dice «Rinominare il dispositivo non cambia la cartella»), poi `s25.ps1 -Step edit -Edits 1 -Seed 203` e `Tap-Text "Fai ora"`; aspetta "Tutto al sicuro". L'utente: "In Esplora risorse apri `\\<indirizzo del NAS>\test\mcg-campo\Backup\` e dimmi **quante cartelle di dispositivo** ci sono." **Atteso.** Una sola, la stessa di prima. (Il secondo dispositivo con lo stesso account è C-10.) **Può far emergere.** BK-9, 5a-R7.
 
 ### B-S8 · F29: 20 foto proprie spostate nell'area comune; poi `test2` le cancella (10 minuti)
 

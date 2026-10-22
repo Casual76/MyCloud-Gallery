@@ -4344,3 +4344,126 @@ catalogo puntava alla sorgente, gia' nel cestino, e un media spostato dall'area 
 - Test: `CampoAMovesTest` (core-nasops, esecutore vero: l'annuncio arriva per ogni file con la copia gia' pubblicata e la sorgente ancora al suo posto; un
   catalogo che lancia non ferma niente), `CampoAMoveCompletionsTest` (`:app`, Room vero: la posizione e' alla destinazione, dello stesso media, senza
   verifica; la ripresa non cambia niente).
+
+## Correzioni dal campo, gruppo B (22/10)
+Fonte: `docs/prove-campo-esiti.md`, "Riepilogo del blocco B" (21-22/10) e le sezioni B-S1, B-S4, B-S5, B-S7, B-S14, D-14;
+`docs/fase4-progetto.md` §2.7, D10 con la risposta Q6 (b), D24; `docs/review/4b-fase4b.md` R9; `docs/fase5-progetto.md` E-B7, E-D14;
+`docs/regole-attivita.md`. Branch `fix/campo-b`, un commit per punto. Niente telefono, niente NAS vero: tutto su JVM (Robolectric dove serve);
+i test dei punti 1-6, 8 e 10 sono stati provati **rossi** togliendo a mano la correzione (poi rimessa) e verdi con; per i punti 7 e 9, che sono funzioni
+nuove, il test non compila senza. Fuori elenco dei moduli del brief ma con il minimo: `core-nas` (una riga di
+log, punto 6), `core-designsystem` (il KDoc di `PhoneTrash`, punto 2). Nessuno schema nuovo, nessun formato firmato cambiato.
+
+**1. D-B1: il foglio "Elimina dal telefono" diceva sempre "Non c'e' ancora una copia sul NAS".** Causa: `LibraryDeleteSheet` usava una stringa fissa
+(`library_delete_location_phone_detail`) senza guardare lo stato dei media scelti (D14). Ora l'avviso guarda il segno `CellFlags.SAFE` della cella,
+lo stesso del badge "al sicuro sul NAS" (`MediaGridState.unsafeAmong`): tutti al sicuro = lo dice ("hanno una copia al sicuro sul NAS, che resta
+dov'e'"), nessuno al sicuro = l'avviso di prima con "prima mettili al sicuro" (E-D14), misti = con i numeri ("2 di 5 non hanno ancora una copia sul
+NAS"). Un media che non e' nell'indice conta come non al sicuro: nel dubbio l'avviso c'e'. L'azione "Prima mettilo al sicuro" vera (backup e
+verifica, poi il cestino) resta in "Libera spazio" e nel viewer; in Libreria il foglio non ne ha una sua e lo dice a parole ("lascia finire il
+backup"). Test: `LibraryDeleteSafetyTest` (tutta al sicuro, tutta non al sicuro, mista, singolare, conteggio dai segni della cella).
+
+**2. D-B2: il banner di "Eliminati di recente" su Samsung negava quello che la pagina fa.** Verificato nel codice e nelle prove (B-S1, O-B2):
+`createTrashRequest` lascia la riga nel MediaStore con `IS_TRASHED = 1` (fuori dalla sua cartella) e il file compare **anche** nel Cestino di
+Galleria; `AndroidRecentlyDeletedSource` la elenca (`MATCH_ONLY`) e "Ripristina" la riporta con il dialogo di sistema. Quello che l'utente cestina
+**da Galleria** esce invece dal MediaStore (`Android/.Trash/com.sec.android.gallery3d`): l'app non lo vede e non lo ripristina. Il banner, il titolo,
+il testo del cestino vuoto e il sottotitolo della raccolta dicono ora questo ("compare qui e anche nel Cestino di Galleria: lo ripristini da qui, con
+una conferma del telefono. Quello che elimini da Galleria invece l'app non lo vede: lo ripristini da Galleria → Cestino"). Le altre frasi `_gallery`
+("va nel Cestino di Galleria, la ripristini da Galleria → Cestino") sono vere e restano. Test: `RecentlyDeletedScreenTest.d_b2_*`, con
+`LocalPhoneTrash = GALLERY`.
+
+**3. "Ferma" nelle operazioni sul NAS annulla il resto, il copione diceva "Riprendi".** Cosa decide il progetto: **l'annullamento**. R9 della 4B
+(`decisioni.md`, "«Ferma» vale anche se l'app muore subito dopo: alla riapertura l'operazione si annulla, non riparte") e `fase4-progetto.md` §2.7
+("«Annulla» ferma prima dell'elemento successivo, toglie i propri temporanei e lascia fatti quelli fatti; «Riporta indietro» e' un'operazione
+nuova"). Il codice lo fa gia' (`NasOpsEngine.cancel` scrive subito `PAUSED/STOPPED_BY_USER` per la morte del processo, `resumeAll` annulla). **Scelta:**
+l'app ha ragione e il copione no. Il pulsante e la notifica si chiamano "Annulla il resto", il dettaglio dice "Annullata dopo N di M: il resto non e'
+stato fatto. Quello che era gia' fatto resta fatto", e il motivo transitorio "Hai chiesto di annullare il resto". "Ferma" e "Riprendi" restano del
+**backup** (R4 della 5A, una pausa che dura). Una pausa vera delle operazioni sul NAS esiste solo per cause che non sono dell'utente (NAS, regole,
+congelamento, file aperti) e riparte da sola. `prove-campo.md` (F16-tel) e' allineato. Test: `NasAccessibilityTest` (il pulsante dice cosa fa e non
+c'e' ne' "Ferma" ne' "Riprendi"); la morte dopo "Ferma" e' gia' coperta da `Review4bFixesTest.r9_*`.
+
+**4. O-B9: una cartella nuova dentro la scelta della destinazione di "Sposta" chiudeva la scelta.** Causa: `NasFoldersViewModel.confirmed` riportava sempre a
+`FoldersMode.Browse` e svuotava la selezione, anche per `CREATE_FOLDER`. Ora, con la scelta aperta, la creazione la lascia aperta con gli stessi
+elementi da spostare (`PickDestination`) e, se la cartella e' nata (operazione chiusa, nessun elemento fermo), ci si entra: "Sposta qui" porta li' gli
+elementi. Fuori dalla scelta non cambia niente. Test: `NasFoldersViewModelTest.o_b9_*`.
+
+**5. O-B18: la cartella vuota nell'area di partenza dopo lo spostamento di una cartella intera.** Cosa dice il progetto: la sorgente di ogni file va nel cestino della sua share (D24, Q3); sulla cartella d'origine vuota non c'e' una frase
+scritta, ma l'esecutore ha gia' un elemento per la cartella, dopo il suo contenuto, che la toglie con `rmdirIfEmpty` (una sola richiesta, che il NAS
+accetta solo se la cartella e' vuota in quel momento, mai ricorsiva), e la regola dei nascosti («lascia», sopra) dice che la cartella d'origine
+**resta** solo se qualcosa e' stato lasciato li': "una cartella davvero vuota si sposta come sempre". L'idea del brief (la cartella segue i suoi
+file) e' quella del progetto. **Decisione:** la cartella vuota non passa dal cestino come una voce a se' (non
+ha byte da proteggere, il ripristino dei suoi file la ricrea, E-D3, e sarebbe una voce da 0 byte in "Eliminati di recente"): si toglie con la stessa
+richiesta atomica, che e' anche l'unico modo di non togliere una cartella in cui e' arrivato un file nuovo. Cosa non andava: se il NAS rispondeva
+"in uso" (`Locked`: un handle nostro o di un altro client) o "non vuota", l'esito era ignorato e il passo si chiudeva, quindi la cartella restava li' per
+sempre senza dirlo. Ora un blocco si riprova con le attese brevi di `OwnFolderBackoff` (tetto per giro condiviso con le cartelle in uso dall'app); se
+alla fine e' ancora in uso o non e' vuota **resta com'e'** e lo spostamento si chiude lo stesso (una cartella lasciata non e' un errore) con una riga di
+log, solo numeri, che dice quante voci l'elenco vede ("0 voci viste" con "non vuota" = file che il server nasconde). Vale per la ripresa dopo una
+morte: l'elemento e' al passo `SOURCE_RECORDED` e la ripresa rifa' la richiesta (una cartella gia' tolta risponde `Missing`). Il banco (`-Mode jvm`)
+ha un invariante in piu': a fine spostamento tra share di una cartella, finito bene, la cartella d'origine e le sue sottocartelle non ci sono piu',
+salvo che qualcosa le abbia ricreate dopo (`goneDirs` nel modello); vale solo per lo stack vero (`removesEmptySourceFolders`), non per
+l'esecutore di riferimento, che non ha l'elemento della cartella. Un mutante (`rmdirIfEmpty` che mente) lo prova. **Non riprodotto in JVM:** sul NAS
+finto la cartella se ne andava gia'; la causa vera sul S25 (un handle aperto, o file nascosti dal server) va confermata con il log nuovo. Test:
+`CampoBFolderMoveTest`, `ChaosVerifierTest.o_b18_*`, `ChaosMutationTest`.
+
+**6. O-B11: `Failure(NotFound, FINAL)` due volte nel log di uno spostamento da 941 elementi.** Il log e' del livello sessione
+(`SmbNasSessionManager.attemptOnce`), che racconta come "operazione fallita" ogni eccezione, anche quelle che chi chiama si aspetta. Passi guardati,
+uno per uno: nell'esecutore di uno spostamento uninterrotto nessuno lancia `NotFound` (le letture di stato rispondono `null`, il temporaneo si toglie
+con `Missing`, la cartella con `Missing`); quelli che lo lanciano (`reader.open` di un file assente, l'elenco di una cartella assente, la rinomina verso
+una cartella che manca) sono tutti gestiti dal chiamante. Le due righe, a 125 secondi una dall'altra, sono quasi certamente aperture di file che l'app
+stessa aveva appena spostato (miniature della Libreria, preparazione): una risposta normale. Nessun difetto nascosto trovato: la correzione e' nel
+log, che le chiama "voce assente (risposta normale)" e lascia "operazione fallita" ai guasti veri. Test: `SessionNotFoundLogTest`.
+
+**7. F27: non c'era un modo di rinominare il dispositivo.** Dove vive il nome: nella voce **firmata** del registro (`DeviceEntry.name`, firmata
+dalla chiave di famiglia); il profilo locale (`LocalDeviceProfile.deviceName`) e' solo il nome di partenza del modello. La cartella del backup non lo
+guarda mai (`DeviceFolderPolicy`, scelta una volta, E-B7: lo prova `DefaultBackupSettingsTest`). **Decisione:** "Rinomina questo dispositivo" sta in
+Impostazioni → Dispositivi → questo dispositivo (il progetto non dice altro) ed e' una **modifica firmata del registro**, con le regole che ci sono
+(`FamilyAuthority.renameDevice` → `commit`, una versione nuova firmata dall'admin): cambia solo il campo `name`, chiave, id, account, ruolo e stato
+restano quelli di prima e la regola anti-regressione, che non guarda il nome, accetta la versione; nessun formato nuovo. Un nome uguale o che "sembra
+uguale" a quello di un altro dispositivo (`LookAlike`) e' rifiutato. La voce c'e' per l'admin sul dispositivo in uso. **Cosa manca:** un familiare non admin non puo' firmare il registro, quindi per lui la voce
+non c'e'; la strada (un documento nuovo firmato dal dispositivo e approvato dall'admin, come le richieste d'ingresso) cambia il formato firmato e va
+decisa a parte. Per ora anche l'admin non puo' rinominare gli altri dispositivi: la voce c'e' solo per il dispositivo in uso. Test: `RenameDeviceTest` (`core-trust`: versione firmata accettata, nomi non
+validi, solo la chiave di famiglia; `core-family`: admin, non admin, sosia, stesso nome, dispositivo revocato), `DeviceDetailViewModelTest.f27_*`.
+
+**8. F12, O-B16, O-B17: qualita' delle anteprime.**
+- *(a) La convergenza non partiva da sola (O-B16).* Causa: `setQuality` ricorda il livello e mostra "sta adattando lo spazio", ma scaricare le classi
+  nuove e rilasciare le vecchie lo fa `syncIndex`, che girava solo nel giro periodico di 6 ore. Ora il cambio accoda subito `IndexSyncWorker` (e,
+  salendo ad "Alta", `HqPreviewsWorker`): gli **stessi lavori** del giro periodico, quindi con le regole delle attivita' (`StagedRun`), che decidono se
+  partono adesso o aspettano; in coda dopo uno gia' in corso (`APPEND_OR_REPLACE`, un giro iniziato con le classi di prima non vale per il livello
+  nuovo). La preparazione sul NAS non converge niente della qualita' e non si accoda. Tutto in `ConvergingPreviewQuality` (decoratore, nuovo file) e
+  `NasWorkScheduling.convergeNow`; `GalleryModule` cambia di una riga.
+- *(b) "Risparmio" a +27,6% sulla stima.* Controllato con `ReplicaQualityEstimateTest`, in memoria **e su Room** (6 cambi di livello in su e in giu', a
+  convergenza finita, e con un pacco grande per giro): lo spazio occupato e' dentro il ±15% della stima a ogni livello e le anteprime fuori livello
+  sono tutte rilasciate, quindi le anteprime in piu' **si rilasciano** e la stima **non dimentica** costi fissi (i `meta` sono nella stima e
+  nello spazio occupato). Il +27,6% (e il -7,7% di "Standard di nuovo") erano misure prese **durante** la convergenza che nessuno faceva partire
+  (a): 750 kB di Alta meno 231 kB gia' rilasciati, e il resto da rilasciare. Nessuna correzione al conteggio; da rimisurare sul telefono con (a).
+- *(c) `ACT_DISABLED` per `HQ_PREVIEWS` con "Alta" (O-B17): era un errore.* Per `docs/regole-attivita.md` l'attivita' si spegne solo se la qualita'
+  non e' "Alta" (`disabledActivities`), ma la accendeva o spegneva solo l'onboarding (`DefaultOnboardingCoordinator.preset`): chi passava ad "Alta" dalle
+  Impostazioni la trovava spenta per sempre e `HqPreviewsWorker` non partiva mai. Ora `ConvergingPreviewQuality` accende `HQ_PREVIEWS` salendo ad
+  "Alta" e la spegne scendendo, senza toccare le altre impostazioni delle regole. Test: `ConvergingPreviewQualityTest`, `QualityConvergenceSchedulingTest`.
+
+**9. "Fai ora i lavori periodici" (solo build debug).** `FieldProbePeriodicJobs` (`app/src/debug/.../probes/`, nome e cartella dei resti di debug gia'
+cercati da `check.ps1`, nessun controllo nuovo da aggiungere): accoda subito, uno per uno, pulizia del cestino (`trash`), anteprime HQ (`hq`),
+preparazione (`prep`), sincronizzazione dell'indice (`sync`), scansione (`scan`) e backup (`backup`: foto, video e verifica "al sicuro"), con gli
+**stessi lavori** (stessa classe, stessi vincoli di rete, stesso tag) del giro periodico, un lavoro unico per tipo. Non scavalca niente: i lavori
+passano dalle regole delle attivita', dal cancello del backup e dalle recinzioni D33 e D13. Due strade: `adb shell am broadcast -a
+dev.pampa.mycloudgallery.debug.PERIODIC_NOW -p dev.pampa.mycloudgallery.debug --es jobs all` (ricevitore esportato nel manifest di debug **protetto da
+`android.permission.DUMP`**, che ha la shell di adb e nessuna app normale) e la sezione "Lavori periodici · Fai ora" di Impostazioni → Sviluppo → Prove
+guidate. Test: `FieldProbePeriodicJobsTest` (nomi, lavori accodati con i vincoli di sempre, ricevitore, permesso nel manifest),
+`Phase5BArchitectureTest`.
+
+**10. D-14, seconda parte: il verificatore del backup dal PC e gli originali gia' in `Versioni/`.** La prima parte (la guardia che si fermava con le
+righe `edit=`) era gia' corretta il 21/10: le versioni si leggono in `mcg-campo/Versioni/`, dentro l'area recintata. Restava il caso B-S2: manifesto
+**senza** righe `edit=` e 16 file del telefono (15 contenuti) le cui versioni modificate dei giri vecchi stanno al solito percorso (righe `pre=`) e gli
+originali in `Versioni/`: il verificatore guardava solo `Backup/` e diceva "16 file del telefono non sono sul NAS". Ora la `Versioni/` dell'area si
+legge **sempre** (`readRootsOf` la ammette sempre); senza `edit=` serve solo a contare gli originali come **previsti** (il rapporto dice "originali
+gia' in Versioni/ contati come previsti: N") e niente altro: i byte e i doppioni di `Versioni/` non si giudicano (ci stanno anche le versioni
+intermedie dei giri vecchi, che il manifesto non elenca). Con `edit=` valgono gli invarianti 1, 2, 12 e 13 come prima. Una perdita vera (un contenuto
+che non sta ne' in `Backup/` ne' in `Versioni/`) resta una perdita; il recinto non si allarga (la `Versioni/` alla radice della share resta vietata).
+Test: `BackupAreaRunnerTest.d14_*`.
+
+**11. Documenti.** `fase4-progetto.md` (riga 269) allineata a Q6 (b); `prove-campo.md`: «aspetta 3 minuti» della scansione del NAS diventa «riapri l'app
+(se l'ultima verifica ha piu' di 15 minuti) oppure aspetta la fascia notte» (E-R15, O-B4), il passo Ferma/Riprendi delle operazioni sul NAS e' quello del
+punto 3, F20 e F12 usano l'azione del punto 9 al posto delle modifiche al database di WorkManager, F27 ha la voce nuova.
+
+**Punti aperti.** (1) F27 per i familiari non admin: richiesta firmata dal dispositivo e approvata dall'admin (documento firmato nuovo). (2) O-B18 sul
+telefono: il log nuovo dice perche' una cartella resta; da riprovare con uno spostamento di cartelle (F16-tel) guardando `NasOpsEngine`. (3) F12 da
+rimisurare sul telefono ora che la convergenza parte da sola. (4) `check.ps1`: nessun controllo nuovo da aggiungere (i nomi del punto 9 sono gia' nei
+resti di debug); lo scorrimento di `scroll_days_square` (F13) e i nomi dei nascosti (I8, Fase 7 P9) restano fuori da questo gruppo.

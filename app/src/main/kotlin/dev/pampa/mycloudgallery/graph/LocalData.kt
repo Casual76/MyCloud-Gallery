@@ -115,7 +115,8 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
     eraseGalleryData(steps, stopGallery = true, allDatabases = true)
     // Fase 6 (P11): i modelli verificati, i parziali e i programmi compilati (sono pubblici, ma di questo dispositivo si toglie tutto).
     // Le copie gia' sul NAS restano (gli altri le possono usare, l'impronta le rende sicure): si tolgono dal PC (§1.4).
-    steps.run("modelli") {
+    // Solo con l'AI ferma (motori rilasciati): altrimenti si riprova al prossimo avvio con il resto.
+    if (steps.ok) steps.run("modelli") {
       withContext(Dispatchers.IO) {
         val models = File(context.noBackupFilesDir, AiGraph.MODELS_DIR)
         if (models.exists() && !models.deleteRecursively()) steps.ok = false

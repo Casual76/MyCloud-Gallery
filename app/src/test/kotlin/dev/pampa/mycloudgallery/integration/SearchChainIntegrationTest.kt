@@ -214,7 +214,74 @@ class SearchChainIntegrationTest {
     assertThat(similar.chips).isNotEmpty()
   }
 
+  /**
+   * F4-D31 su una **share vera** (`famiglia`, non di prova): il calcolo salva vettore e testo in locale (la ricerca li usa subito) ma niente
+   * si pubblica: le voci restano "in attesa" (`ai_pending_publish`, stato `held`) e sul NAS non c'e' nessuna testa `ai`. Si pubblicheranno
+   * dopo il consenso (Q7), senza ricalcolo (P2, P5).
+   */
+  @Test
+  fun shareVeraConF4D31RisultatiSoloLocaliEInAttesa() = runBlocking {
+    val realBackend = dev.pampa.mycloudgallery.core.nas.testing.InMemorySmbBackend(nasTime = time::now).apply {
+      addUser(REAL_USER, REAL_PASSWORD)
+      addShare(REAL_COMMON, mapOf(REAL_USER to dev.pampa.mycloudgallery.core.nas.testing.SimAccess.READ_WRITE))
+      addShare(REAL_USER, mapOf(REAL_USER to dev.pampa.mycloudgallery.core.nas.testing.SimAccess.READ_WRITE))
+    }
+    val phoneDevice = TestDevice(app, File(temp.root, "vero"), TestPlatform(time, realBackend)).also { devices += it }
+    phoneDevice.graph.start()
+    phoneDevice.graph.foundFamilyOn(REAL_USER, REAL_PASSWORD, REAL_COMMON, REAL_USER)
+    val photos = (1..2).associate { n -> "Foto/2024/IMG_100$n.jpg" to jpeg(tone = n * 70) }
+    photos.forEach { (path, bytes) -> realBackend.put(REAL_COMMON, path, bytes, lastWriteMs = time.now() - 2 * DAY) }
+
+    val phone = mount(phoneDevice, REAL_USER)
+    phone.gallery.startWhenReady()
+    withTimeout(TIMEOUT) { phone.gallery.started.first { it } }
+    val nas = checkNotNull(phone.gallery.nas)
+    assertThat(nas.start()).isTrue()
+    assertThat(nas.localOnly()).isTrue()
+    checkNotNull(nas.scan(ScanMode.Full, 5.minutes))
+    phoneDevice.graph.trustGuard.preflight(Purpose.BACKGROUND)
+    checkNotNull(nas.prepare(5.minutes, PrepControl.ALWAYS))
+    checkNotNull(phone.stack.ai.runStage(5.minutes, AiRunControl.ALWAYS))
+
+    assertWithMessage("vettori salvati in locale").that(phone.stack.search.index.sizes.first).isEqualTo(photos.size)
+    assertWithMessage("voci in attesa della share pubblicabile").that(phone.stack.ai.publishStore.pending().waitingForShare).isEqualTo(photos.size)
+    val devicesDir = ".mycloudgallery/devices"
+    val written = if (realBackend.exists(REAL_COMMON, devicesDir)) realBackend.children(REAL_COMMON, devicesDir) else emptyList()
+    for (device in written) assertThat(realBackend.exists(REAL_COMMON, "$devicesDir/$device/ai")).isFalse()
+    photos.forEach { (path, bytes) -> assertThat(realBackend.bytes(REAL_COMMON, path)).isEqualTo(bytes) }
+  }
+
+  private suspend fun dev.pampa.mycloudgallery.graph.AppGraph.foundFamilyOn(user: String, password: String, common: String, private: String) {
+    settle(coordinator.submit(dev.pampa.mycloudgallery.core.family.contract.StepInput.ChoosePath(dev.pampa.mycloudgallery.core.family.contract.OnboardingPath.FOUND_FAMILY)))
+    loop@ for (attempt in 0 until 20) {
+      when (coordinator.progress.value.current) {
+        dev.pampa.mycloudgallery.core.family.contract.OnboardingStep.NAS_ADDRESS -> {
+          settle(coordinator.submit(dev.pampa.mycloudgallery.core.family.contract.StepInput.ConfirmHome(true)))
+          settle(coordinator.submit(dev.pampa.mycloudgallery.core.family.contract.StepInput.NasAddressChosen(TEST_NAS_ADDRESS)))
+        }
+        dev.pampa.mycloudgallery.core.family.contract.OnboardingStep.ACCOUNT ->
+          settle(coordinator.submit(dev.pampa.mycloudgallery.core.family.contract.StepInput.Credentials(user, password.toCharArray())))
+        dev.pampa.mycloudgallery.core.family.contract.OnboardingStep.AREAS -> {
+          coordinator.proposeAreas(listOf(common))
+          settle(coordinator.submit(dev.pampa.mycloudgallery.core.family.contract.StepInput.Areas(common, private)))
+        }
+        dev.pampa.mycloudgallery.core.family.contract.OnboardingStep.FOLDERS ->
+          settle(coordinator.submit(dev.pampa.mycloudgallery.core.family.contract.StepInput.Folders(emptySet())))
+        dev.pampa.mycloudgallery.core.family.contract.OnboardingStep.FAMILY_KEY -> familyKey()
+        else -> break@loop
+      }
+    }
+    localSteps(until = dev.pampa.mycloudgallery.core.family.contract.OnboardingStep.FAMILY_KEY)
+    familyKey()
+    localSteps(until = dev.pampa.mycloudgallery.core.family.contract.OnboardingStep.SUMMARY)
+    settle(coordinator.submit(dev.pampa.mycloudgallery.core.family.contract.StepInput.Finish))
+    awaitSetup { it is SetupState.Ready }
+  }
+
   private companion object {
+    const val REAL_USER = "mario"
+    const val REAL_PASSWORD = "Chiave-Di-Mario-Uno-7"
+    const val REAL_COMMON = "famiglia"
     const val DAY = 24L * 60 * 60 * 1000
     const val RECEIPT = "scontrino"
     val TIMEOUT = 2.minutes

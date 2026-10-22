@@ -4,6 +4,7 @@ import android.content.ComponentCallbacks2
 import android.content.Context
 import dev.pampa.mycloudgallery.backup.CutoutFence
 import dev.pampa.mycloudgallery.backup.FencedCutouts
+import dev.pampa.mycloudgallery.backup.MediaStorePhoneBytes
 import dev.pampa.mycloudgallery.core.ai.contract.SubjectCutter
 import dev.pampa.mycloudgallery.core.ai.contract.TextEmbedder
 import dev.pampa.mycloudgallery.core.ai.contract.TextReadingSwitch
@@ -18,6 +19,7 @@ import dev.pampa.mycloudgallery.core.database.MediaCatalog
 import dev.pampa.mycloudgallery.core.family.contract.RolesSettings
 import dev.pampa.mycloudgallery.core.family.roles.OnboardingRolesSettings
 import dev.pampa.mycloudgallery.core.family.roles.RolesRepublisher
+import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneAccess
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneMediaWriter
 import dev.pampa.mycloudgallery.core.mediastore.write.MediaStorePhoneMediaWriter
 import dev.pampa.mycloudgallery.core.model.NasArea
@@ -265,6 +267,16 @@ object AiWiring {
         images = images,
         inputs = inputs,
         modelReady = modelReady?.let { ready -> { ready(ModelCatalog.INDEX_440M.id) } },
+        // P11b (§2.2, D10): i byte del telefono per i media del solo telefono, con la recinzione di D13 (debug con un account di prova).
+        phoneBytes = MediaStorePhoneBytes(
+          rows = { gallery.coreOrNull?.phone?.rows },
+          access = { gallery.coreOrNull?.phone?.access?.state?.value ?: PhoneAccess.NONE },
+          fence = fence,
+          account = { graph.account.value?.user },
+        ),
+        catalog = { gallery.coreIfReady()?.catalog },
+        fence = fence,
+        account = { graph.account.value?.user },
         releaseCutout = cutout::stop,
       ),
     )

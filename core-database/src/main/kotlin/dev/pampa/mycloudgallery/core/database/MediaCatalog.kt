@@ -642,6 +642,7 @@ class MediaCatalog(
         kind = enumByCode(row.kind),
         localDay = row.localDay,
         mime = row.mime,
+        source = enumByCode(row.source),
       )
     }
 
@@ -1193,6 +1194,30 @@ class MediaCatalog(
     require(limit > 0) { "Il tetto e' positivo." }
     val rows = if (after == null) backupQueryDao.phoneMediaFirst(limit) else backupQueryDao.phoneMediaAfter(after.sortTime, after.mediaId.value, limit)
     return rows.map { CatalogPhoneMedia(MediaId(it.mediaId), it.sortTime, it.localDay.takeIf { day -> day != 0 }) }
+  }
+
+  /**
+   * Fase 6 (§2.2, D14): una pagina dei media del **solo telefono** (nessuna copia sul NAS, nascosti compresi), dal piu' recente, dopo [after],
+   * con la chiave di contenuto della versione corrente. Una versione con un'impronta non valida si salta. Il calcolo AI li prende da qui:
+   * i risultati restano locali, perche' il file non e' in nessuna share.
+   */
+  suspend fun phoneOnlyWork(after: CatalogPhoneCursor?, limit: Int): List<CatalogPhoneOnly> {
+    require(limit > 0) { "Il tetto e' positivo." }
+    val rows = if (after == null) cellContentDao.phoneOnlyFirst(limit) else cellContentDao.phoneOnlyAfter(after.sortTime, after.mediaId.value, limit)
+    return rows.mapNotNull { row ->
+      val key = FastContentKey.of(row.quickHash, row.size) ?: return@mapNotNull null
+      CatalogPhoneOnly(
+        mediaId = MediaId(row.mediaId),
+        versionId = VersionId(row.versionId),
+        contentKey = key,
+        kind = enumByCode(row.kind),
+        source = enumByCode(row.source),
+        size = row.size,
+        quickHash = QuickHash(row.quickHash),
+        sortTime = row.sortTime,
+        localDay = row.localDay.takeIf { it != 0 },
+      )
+    }
   }
 
   /**

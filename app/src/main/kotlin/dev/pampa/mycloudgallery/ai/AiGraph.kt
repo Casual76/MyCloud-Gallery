@@ -5,6 +5,7 @@ import dev.pampa.mycloudgallery.core.ai.compute.AiComputeEngine
 import dev.pampa.mycloudgallery.core.ai.compute.AiComputeParts
 import dev.pampa.mycloudgallery.core.ai.compute.AiFreeSpace
 import dev.pampa.mycloudgallery.core.ai.compute.AiInputs
+import dev.pampa.mycloudgallery.core.ai.compute.AiPhoneMedia
 import dev.pampa.mycloudgallery.core.ai.compute.AiRunControl
 import dev.pampa.mycloudgallery.core.ai.compute.BufferAnalysisSink
 import dev.pampa.mycloudgallery.core.ai.compute.DiskAiBuffer
@@ -20,7 +21,10 @@ import dev.pampa.mycloudgallery.core.ai.contract.TextReader
 import dev.pampa.mycloudgallery.core.ai.contract.TextReadingSwitch
 import dev.pampa.mycloudgallery.core.ai.ocr.TextReadingShutdown
 import dev.pampa.mycloudgallery.core.ai.runtime.ModelInputs
+import dev.pampa.mycloudgallery.core.backup.contract.BackupFence
+import dev.pampa.mycloudgallery.core.backup.contract.PhoneBytes
 import dev.pampa.mycloudgallery.core.database.GalleryDatabase
+import dev.pampa.mycloudgallery.core.database.MediaCatalog
 import dev.pampa.mycloudgallery.core.family.contract.RolesSettings
 import dev.pampa.mycloudgallery.core.index.ai.AiIndexCounters
 import dev.pampa.mycloudgallery.core.index.ai.AiTraffic
@@ -69,6 +73,20 @@ class AiGraphParts(
   val inputs: AiInputs? = null,
   /** Il modello del calcolo c'e' ed e' verificato: di serie `ModelFiles.open` (D16); i test, con i motori finti, senza file. */
   val modelReady: (suspend () -> Boolean)? = null,
+  /**
+   * Cio' che il catalogo ha detto dei contenuti elencati (chiave -> media, versione, sorgente): lo riempiono l'elenco dei mesi del NAS e quello
+   * dei media del solo telefono, lo leggono i byte del telefono ([phoneBytes]) e la sorgente degli screenshot (D12).
+   */
+  val facts: ContentFacts = ContentFacts(),
+  /**
+   * I byte del telefono per il calcolo (P11b, §2.2): i media del solo telefono e quelli del NAS che sono anche qui. Null = nessuno dei due
+   * (i montaggi senza la lettura del telefono): i media del solo telefono non si calcolano. [catalog], [fence] (D13) e [account] sono quelli
+   * della galleria.
+   */
+  val phoneBytes: PhoneBytes? = null,
+  val catalog: suspend () -> MediaCatalog? = { null },
+  val fence: BackupFence? = null,
+  val account: () -> String? = { null },
   /** L'azzeramento rilascia anche il ritagliatore del soggetto (P13): il modello occupa circa 240 MB. */
   val releaseCutout: suspend () -> Unit = {},
 )
@@ -125,6 +143,11 @@ class AiGraph(
   val replicaSink = IndexReplicaSink(search.index, search.layouts) { search.open() }
   val indexCounters = AiIndexCounters()
 
+  /** Il telefono per il calcolo (P11b): i media del solo telefono da fare e l'apertura dei byte; null senza `parts.phoneBytes`. */
+  val phone: AppAiPhone? = parts.phoneBytes?.let { bytes ->
+    AppAiPhone(parts.catalog, bytes, results, unsupported, parts.facts, recipe, parts.fence, parts.account)
+  }
+
   /** Le porte che il grafo del NAS usa per le teste `ai` (P2). */
   val hooks = NasAiHooks(
     replicaStore = replicaStore,
@@ -136,6 +159,7 @@ class AiGraph(
     analysisSink = { analysisSink.takeIf { indexer.value } },
     counters = indexCounters,
     recipe = recipe,
+    facts = parts.facts,
   )
 
   init {
@@ -192,7 +216,7 @@ class AiGraph(
       roles = roles,
       units = rt.units,
       priority = NoUnitPriority,
-      candidates = CatalogAiCandidates(rt.work) { textReadingHere.value },
+      candidates = CatalogAiCandidates(rt.work, { textReadingHere.value }, phone),
       buffer = buffer,
       fetcher = rt.fetcher,
       doneByOthers = rt.classes,
@@ -201,6 +225,11 @@ class AiGraph(
       images = parts.images,
       reader = { parts.reader },
       inputs = inputs,
+      // P11b (§2.2, D10): le anteprime dai byte del telefono per i media del solo telefono (e per quelli del NAS che sono anche qui); la
+      // preparazione controlla che i byte siano quelli del catalogo (D8). La sorgente degli screenshot (D12) viene dall'elenco dei mesi.
+      preparer = phone?.let { p -> CheckedPreparer(rt.preparer, p::expectedQuickHash) },
+      phone = phone ?: AiPhoneMedia.NONE,
+      sources = parts.facts,
       localBodies = results,
       unsupported = unsupported,
       freeSpace = AiFreeSpace { noBackupDir.usableSpace },
@@ -237,7 +266,7 @@ class AiGraph(
   /** Il lavoro che resta su questo dispositivo (§2.8, `AiBacklog`): null senza NAS. */
   suspend fun backlog(): dev.pampa.mycloudgallery.core.rules.estimate.AiWork? {
     val rt = parts.nas() ?: return null
-    return dev.pampa.mycloudgallery.core.ai.compute.AiBacklog(roles, CatalogAiCandidates(rt.work) { textReadingHere.value }, buffer, recipe).count()
+    return dev.pampa.mycloudgallery.core.ai.compute.AiBacklog(roles, CatalogAiCandidates(rt.work, { textReadingHere.value }, phone), buffer, recipe).count()
   }
 
   /** Il contatore dei contatori del calcolo di adesso (Diagnostica). */

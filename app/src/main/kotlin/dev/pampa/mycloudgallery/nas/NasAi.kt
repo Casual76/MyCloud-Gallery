@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.nas
 
 import dev.pampa.mycloudgallery.ai.CatalogAiShareContent
 import dev.pampa.mycloudgallery.ai.CatalogAiWorkCatalog
+import dev.pampa.mycloudgallery.ai.ContentFacts
 import dev.pampa.mycloudgallery.ai.FileAiUnsupported
 import dev.pampa.mycloudgallery.core.ai.contract.AiRecipe
 import dev.pampa.mycloudgallery.core.database.MediaCatalog
@@ -10,6 +11,7 @@ import dev.pampa.mycloudgallery.core.index.ai.AiPublishStore
 import dev.pampa.mycloudgallery.core.index.ai.AiPublishedClasses
 import dev.pampa.mycloudgallery.core.index.ai.AiReplicaSink
 import dev.pampa.mycloudgallery.core.index.ai.AiReplicaStore
+import dev.pampa.mycloudgallery.core.index.ai.AiShareContent
 import dev.pampa.mycloudgallery.core.index.ai.AiShareSync
 import dev.pampa.mycloudgallery.core.index.ai.AiTraffic
 import dev.pampa.mycloudgallery.core.index.ai.AiWorkSource
@@ -24,10 +26,11 @@ import dev.pampa.mycloudgallery.core.index.replica.store.ReplicaStore
 import dev.pampa.mycloudgallery.core.index.work.LeasedWorkUnits
 import dev.pampa.mycloudgallery.core.index.work.WorkLeases
 import dev.pampa.mycloudgallery.core.model.AccountId
+import dev.pampa.mycloudgallery.core.prepare.contract.AnalysisSink
+import dev.pampa.mycloudgallery.core.prepare.contract.Preparer
+import dev.pampa.mycloudgallery.core.trust.data.AiClass
 import dev.pampa.mycloudgallery.core.trust.nas.NasClock
 import dev.pampa.mycloudgallery.core.trust.nas.NasFileSystem
-import dev.pampa.mycloudgallery.core.prepare.contract.AnalysisSink
-import dev.pampa.mycloudgallery.core.trust.data.AiClass
 
 /**
  * Cio' che il grafo del NAS riceve per i dati AI dell'indice condiviso (Fase 6, P2 e P11): gli archivi Room (`ai_*`, P1), l'indice locale
@@ -45,13 +48,17 @@ class NasAiHooks(
   val analysisSink: () -> AnalysisSink?,
   val counters: AiIndexCounters = AiIndexCounters(),
   val recipe: AiRecipe = AiRecipe.CURRENT,
+  /** Cio' che si elenca per il calcolo (chiave di contenuto -> media, versione, sorgente), per le porte che ricevono solo la chiave (P11b). */
+  val facts: ContentFacts? = null,
 )
 
 /**
  * La parte `ai` del motore del NAS (nasce in `NasGraph.start` con account, chiave del dispositivo e aree): la replica delle teste `ai`
  * ([sync], agganciata a `IndexSyncEngine`), il pubblicatore della testa `ai` propria ([publisher], con gli stessi cancelli dell'indice:
  * F4-D31 sulle share vere = solo locale e in attesa), le unita' del calcolo con prenotazione ([units], `WorkPass.AI`), il lavoro gia' fatto
- * dagli altri ([classes]) e lo scaricamento delle anteprime attestate nel buffer ([fetcher]).
+ * dagli altri ([classes]) e lo scaricamento delle anteprime attestate nel buffer ([fetcher]). [preparer] e' quello della preparazione (uno per
+ * processo: le decodifiche pesanti restano una alla volta) e prepara le anteprime dai byte del telefono (D10, P11b); [content] e' la regola M3
+ * ([CatalogAiShareContent]) per chi vuole sapere se una chiave e' di un file di una share prima di metterla nell'outbox.
  */
 class NasAiRuntime(
   val sync: AiShareSync,
@@ -60,6 +67,8 @@ class NasAiRuntime(
   val units: LeasedWorkUnits,
   val fetcher: IndexAnalysisFetcher,
   val work: CatalogAiWorkCatalog,
+  val preparer: Preparer,
+  val content: AiShareContent,
 ) {
   companion object {
     fun build(
@@ -76,20 +85,22 @@ class NasAiRuntime(
       remote: NasRemoteIndex,
       replicaStore: ReplicaStore,
       blobs: ReplicaBlobs,
+      preparer: Preparer,
     ): NasAiRuntime {
+      val content = CatalogAiShareContent(catalog, account)
       val publisher = OutboxAiIndexPublisher(
         identity = identity,
         clock = nasClock,
         fileSystem = fileSystem,
         store = hooks.publishStore,
-        content = CatalogAiShareContent(catalog, account),
+        content = content,
         rules = rules,
         counters = hooks.counters,
         locks = locks,
       )
       val recipe = hooks.recipe
       val classes = AiPublishedClasses(sync, hooks.replicaStore) { cls -> if (cls == AiClass.VEC) recipe.version else recipe.ocrVersion }
-      val work = CatalogAiWorkCatalog(catalog, account, hooks.replicaStore, hooks.unsupported, recipe)
+      val work = CatalogAiWorkCatalog(catalog, account, hooks.replicaStore, hooks.unsupported, recipe, hooks.facts)
       val units = LeasedWorkUnits(
         identity = identity,
         source = AiWorkSource(work, hooks.wanted),
@@ -98,7 +109,7 @@ class NasAiRuntime(
         rules = rules,
       )
       val fetcher = IndexAnalysisFetcher(remote, replicaStore, hooks.traffic, local = blobs)
-      return NasAiRuntime(sync, publisher, classes, units, fetcher, work)
+      return NasAiRuntime(sync, publisher, classes, units, fetcher, work, preparer, content)
     }
   }
 }

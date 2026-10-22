@@ -113,6 +113,8 @@ class CatalogAiWorkCatalog(
   private val replica: AiReplicaStore,
   private val unsupported: FileAiUnsupported,
   private val recipe: AiRecipe = AiRecipe.CURRENT,
+  /** Cio' che si elenca si ricorda per chiave (i byte del telefono per i media del NAS che sono anche qui, la sorgente degli screenshot). */
+  private val facts: ContentFacts? = null,
 ) : AiWorkCatalog {
 
   private suspend fun rows(share: String): List<Pair<ContentKey, NasWorkItem>> {
@@ -129,6 +131,7 @@ class CatalogAiWorkCatalog(
   override suspend fun monthMedia(share: String, month: String): List<WorkItem> = rows(share).mapNotNull { (key, row) ->
     if (monthOf(row.localDay) != month) return@mapNotNull null
     val path = runCatching { SharePath.parseMediaPath(row.path.value) }.getOrNull() ?: return@mapNotNull null
+    facts?.put(key, ContentFact(row.mediaId, row.versionId, row.stamp.size, row.source, row.quickHash))
     WorkItem(key, path, row.stamp, row.kind, row.mime, row.mediaId, row.versionId, emptySet())
   }
 
@@ -147,12 +150,13 @@ class CatalogAiWorkCatalog(
 
 /**
  * I candidati del calcolo dal catalogo locale (contratto `AiCandidates`): per una share (il calcolo con il solo buffer, E-A6) i media
- * presenti dal piu' recente con le classi che mancano nella share; i media del solo telefono non hanno ancora una sorgente di byte in
- * :app (vedi `docs/decisioni.md`, sezione P11): nessun candidato.
+ * presenti dal piu' recente con le classi che mancano nella share; i media del solo telefono da [phone] (P11b: dai byte del telefono, risultati
+ * solo locali). Senza [phone] (i montaggi che non lo danno) nessuno.
  */
 class CatalogAiCandidates(
   private val work: CatalogAiWorkCatalog,
   private val readingHere: () -> Boolean,
+  private val phone: AppAiPhone? = null,
 ) : AiCandidates {
   override suspend fun forShare(share: String, recipe: Int, limit: Int): List<AiCandidate> {
     val months = work.months(share)
@@ -170,5 +174,5 @@ class CatalogAiCandidates(
     return out
   }
 
-  override suspend fun phoneOnly(recipe: Int, limit: Int): List<AiCandidate> = emptyList()
+  override suspend fun phoneOnly(recipe: Int, limit: Int): List<AiCandidate> = phone?.candidates(readingHere(), limit).orEmpty()
 }

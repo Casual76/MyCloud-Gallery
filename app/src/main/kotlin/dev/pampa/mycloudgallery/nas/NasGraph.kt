@@ -229,6 +229,12 @@ class NasGraph(
   private val reader: NasMediaReader by lazy { inputs.session.mediaReader() }
   private val phoneWriter: PhoneMediaWriter by lazy { writer() }
 
+  /**
+   * Il preparatore: **uno per processo**, della preparazione del NAS, dell'anteprima dei byte del telefono per il calcolo AI e della lettura al
+   * volo del viewer (Fase 6, P11b). Le decodifiche pesanti restano una alla volta qualunque cosa le chieda (E-M1-M4).
+   */
+  val preparer: DefaultPreparer by lazy { DefaultPreparer(prepBudget(), File(context.cacheDir, PREP_DIR)) }
+
   // --- Il motore, quando il NAS c'e' (start) ------------------------------------------------------------------------
 
   /** Cio' che nasce in [start]: tutto legato a un account, a una chiave del dispositivo e alle aree scelte. */
@@ -608,7 +614,7 @@ class NasGraph(
       unpublished = publisher::hasPending,
       ownDecoderFamily = dev.pampa.mycloudgallery.core.prepare.codec.DecoderFamily.ofDevice(),
     )
-    val preparer = DefaultPreparer(prepBudget(), File(context.cacheDir, PREP_DIR))
+    val preparer = this.preparer
     val store = MediaCatalogScanStore(catalog)
     val detector = NasDetector(extractor())
     val scanners = areas.associate { area ->
@@ -648,6 +654,7 @@ class NasGraph(
         remote = remote,
         replicaStore = replicaStore,
         blobs = blobs,
+        preparer = preparer,
       )
     } else {
       null

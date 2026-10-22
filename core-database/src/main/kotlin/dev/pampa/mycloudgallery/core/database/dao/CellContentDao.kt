@@ -35,6 +35,18 @@ interface CellContentDao {
   @Query(MEMBER_VERSIONS_SQL)
   suspend fun memberVersions(groupIds: List<String>): List<CellVersionRow>
 
+  /**
+   * I media del **solo telefono** (presenza derivata `phone_only`, nascosti compresi: si calcolano, non si mostrano, D29) dal piu' recente
+   * (`sort_time`, poi identita', decrescenti), con la versione corrente: la prima pagina. Per l'analisi AI dei media che non sono sul NAS
+   * (§2.2, D14): la chiave di contenuto la ricava `MediaCatalog.phoneOnlyWork`.
+   */
+  @Query(PHONE_ONLY_FIRST_SQL)
+  suspend fun phoneOnlyFirst(limit: Int): List<PhoneOnlyRow>
+
+  /** La pagina dopo il cursore ([sortTime], [mediaId]) di [phoneOnlyFirst]. */
+  @Query(PHONE_ONLY_AFTER_SQL)
+  suspend fun phoneOnlyAfter(sortTime: Long, mediaId: String, limit: Int): List<PhoneOnlyRow>
+
   companion object {
     private const val INDEXED: String =
       "m.presence != 'none' AND COALESCE(p.hidden, 0) = 0 AND (m.cell_flags & ${CellFlags.GROUP_MEMBER}) = 0"
@@ -61,6 +73,17 @@ interface CellContentDao {
       "SELECT $COLUMNS FROM media m CROSS JOIN media_version v ON v.media_id = m.media_id " +
         "LEFT JOIN media_personal p ON p.media_id = m.media_id WHERE m.media_id IN (:ids) AND $INDEXED ORDER BY m.rowid"
 
+    private const val PHONE_ONLY_COLUMNS: String =
+      "SELECT m.media_id AS media_id, m.current_version_id AS version_id, m.kind AS kind, m.source AS source, m.sort_time AS sort_time, " +
+        "m.local_day AS local_day, v.size AS size, v.quick_hash AS quick_hash " +
+        "FROM media m JOIN media_version v ON v.version_id = m.current_version_id WHERE m.presence = 'phone_only'"
+
+    const val PHONE_ONLY_FIRST_SQL: String = "$PHONE_ONLY_COLUMNS ORDER BY m.sort_time DESC, m.media_id DESC LIMIT :limit"
+
+    const val PHONE_ONLY_AFTER_SQL: String =
+      "$PHONE_ONLY_COLUMNS AND (m.sort_time < :sortTime OR (m.sort_time = :sortTime AND m.media_id < :mediaId)) " +
+        "ORDER BY m.sort_time DESC, m.media_id DESC LIMIT :limit"
+
     const val MEMBER_VERSIONS_SQL: String =
       "SELECT $COLUMNS FROM media m CROSS JOIN media_version v ON v.media_id = m.media_id " +
         "LEFT JOIN media_personal p ON p.media_id = m.media_id " +
@@ -75,6 +98,18 @@ data class CellVersionRow(
   @ColumnInfo(name = "group_id") val groupId: String?,
   /** `Long.MAX_VALUE` per la versione corrente, altrimenti il `created_at` della versione: ordinando in modo decrescente la corrente e' la prima. */
   @ColumnInfo(name = "version_rank") val rank: Long,
+  @ColumnInfo(name = "size") val size: Long,
+  @ColumnInfo(name = "quick_hash") val quickHash: String,
+)
+
+/** Un media del solo telefono con la sua versione corrente ([CellContentDao.phoneOnlyFirst]). */
+data class PhoneOnlyRow(
+  @ColumnInfo(name = "media_id") val mediaId: String,
+  @ColumnInfo(name = "version_id") val versionId: String,
+  @ColumnInfo(name = "kind") val kind: String,
+  @ColumnInfo(name = "source") val source: String,
+  @ColumnInfo(name = "sort_time") val sortTime: Long,
+  @ColumnInfo(name = "local_day") val localDay: Int,
   @ColumnInfo(name = "size") val size: Long,
   @ColumnInfo(name = "quick_hash") val quickHash: String,
 )

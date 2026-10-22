@@ -2,10 +2,14 @@ package dev.pampa.mycloudgallery.core.database
 
 import dev.pampa.mycloudgallery.core.model.ContentKey
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.model.MediaKind
+import dev.pampa.mycloudgallery.core.model.MediaSource
 import dev.pampa.mycloudgallery.core.model.OcrEngineCode
 import dev.pampa.mycloudgallery.core.model.OcrSource
+import dev.pampa.mycloudgallery.core.model.QuickHash
 import dev.pampa.mycloudgallery.core.model.SpaceCode
 import dev.pampa.mycloudgallery.core.model.VecSource
+import dev.pampa.mycloudgallery.core.model.VersionId
 
 // I tipi delle operazioni del catalogo della Fase 6 (P1, schema v5): l'indice locale dei dati AI per chiave di contenuto, le chiavi delle
 // celle e la cronologia della ricerca. Nessuno e' un'identita' di media salvata: i dati stanno per chiave di contenuto (D23).
@@ -29,6 +33,29 @@ class CellContent(val seq: Long, val mediaId: MediaId, val own: List<ContentKey>
   }
 
   override fun toString(): String = "CellContent($seq, ${own.size} versioni, ${members.size} membri)"
+}
+
+/**
+ * Un media che sta **solo sul telefono** (nessuna copia sul NAS), per l'analisi AI (§2.2, D14): la chiave di contenuto della versione
+ * corrente, con cio' che serve a ritrovarne la riga del telefono ([MediaCatalog.phoneRefOf]) e a sceglierne gli ingressi (tipo e sorgente,
+ * D12). [sortTime] e il [mediaId] sono il cursore della pagina dopo ([CatalogPhoneCursor]).
+ */
+class CatalogPhoneOnly(
+  val mediaId: MediaId,
+  val versionId: VersionId,
+  val contentKey: ContentKey,
+  val kind: MediaKind,
+  val source: MediaSource,
+  val size: Long,
+  /** L'impronta rapida della versione: chi prepara i suoi byte controlla che siano quelli (D8). */
+  val quickHash: QuickHash,
+  val sortTime: Long,
+  val localDay: Int?,
+) {
+  /** Il cursore per la pagina dopo questo media. */
+  val cursor: CatalogPhoneCursor get() = CatalogPhoneCursor(sortTime, mediaId)
+
+  override fun toString(): String = "CatalogPhoneOnly($kind)"
 }
 
 /** Le versioni di un membro di gruppo (la corrente per prima). */

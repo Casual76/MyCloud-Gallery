@@ -12,6 +12,7 @@ import dev.pampa.mycloudgallery.core.model.LocationState
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.MediaMetadata
+import dev.pampa.mycloudgallery.core.model.MediaSource
 import dev.pampa.mycloudgallery.core.model.NasPath
 import dev.pampa.mycloudgallery.core.model.NasStamp
 import dev.pampa.mycloudgallery.core.model.VersionId
@@ -240,6 +241,8 @@ data class NasWorkItem(
   val kind: MediaKind,
   val localDay: Int?,
   val mime: String?,
+  /** Da dove viene il media (D12: per gli screenshot l'OCR del calcolo AI va subito sull'HQ). */
+  val source: MediaSource = MediaSource.OTHER,
 ) {
   override fun toString(): String = "NasWorkItem($locationId, $kind)"
 }

@@ -97,6 +97,21 @@ internal enum class ViewerMessage(@StringRes val title: Int, @StringRes val deta
   /** "Trova simili" su un media senza vettore (Fase 6, P8, E-Q14): la voce spiega perche' non si puo'. */
   SimilarUnavailable(R.string.viewer_msg_similar_title, R.string.viewer_msg_similar_detail),
 
+  /** Il ritaglio del soggetto e' negli appunti (Fase 6, P13, D47): annunciato da TalkBack. */
+  CutoutCopied(R.string.cutout_msg_copied_title, null),
+
+  /** "Salva come nuova foto" e' riuscito: la foto sta in `Ritagli` (dai Nascosti, nascosta). */
+  CutoutSaved(R.string.cutout_msg_saved_title, R.string.cutout_msg_saved_detail),
+
+  /** Nessun soggetto chiaro (E-V10): detto solo quando il ritaglio e' chiesto dal menu o da TalkBack; con il dito basta una vibrazione. */
+  CutoutNone(R.string.cutout_msg_none_title, R.string.cutout_msg_none_detail),
+
+  /** Il ritaglio non e' riuscito (`CUTOUT_FAILED`). */
+  CutoutFailed(R.string.cutout_msg_failed_title, R.string.cutout_msg_failed_detail),
+
+  /** Il ritaglio non si e' potuto salvare (`CUTOUT_SAVE_FAILED`): spazio o permesso. */
+  CutoutSaveFailed(R.string.cutout_msg_save_failed_title, R.string.cutout_msg_save_failed_detail),
+
   /** "Scarica sul telefono" e' riuscito (Fase 4, D20). */
   Downloaded(R.string.viewer_msg_downloaded_title, R.string.viewer_msg_downloaded_detail),
 

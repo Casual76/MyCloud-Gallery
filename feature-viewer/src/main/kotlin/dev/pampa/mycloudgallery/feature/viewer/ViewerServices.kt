@@ -27,6 +27,8 @@ import dev.pampa.mycloudgallery.core.places.contract.PlaceNames
 import dev.pampa.mycloudgallery.core.places.contract.ReverseGeocoder
 import dev.pampa.mycloudgallery.core.places.noop.NoPlaceNames
 import dev.pampa.mycloudgallery.core.places.noop.NoReverseGeocoder
+import dev.pampa.mycloudgallery.feature.viewer.cutout.CutoutSaver
+import dev.pampa.mycloudgallery.feature.viewer.cutout.ViewerSubjectCutter
 import dev.pampa.mycloudgallery.feature.viewer.details.MediaDetailsSource
 import dev.pampa.mycloudgallery.feature.viewer.details.NoMediaDetails
 import dev.pampa.mycloudgallery.feature.viewer.details.NoViewerBytes
@@ -102,6 +104,11 @@ import kotlinx.coroutines.withContext
  * @property subjectPress Fase 6 (P12, D45): dove va la pressione prolungata su una foto **fuori dal testo** (il ritaglio del soggetto, P13). Null =
  *   il ritaglio non c'e' (D13): la pressione fuori dal testo non fa niente. Riceve il punto normalizzato (0..1) sull'immagine raddrizzata, gia' passato
  *   dalla trasformazione dello zoom.
+ * @property subjectCutter Fase 6 (P13, D44, D45): il ritagliatore del soggetto, dal punto toccato sulla migliore immagine gia' sul dispositivo. Senza, il
+ *   ritaglio non c'e' (D13): la pressione prolungata fuori dal testo non fa niente e la voce "Ritaglia il soggetto" non compare. `:app` lo lega a
+ *   `SubjectCutting` di `core-ai` (P11). Il viewer non vede `core-ai`.
+ * @property cutoutSaver Fase 6 (P13, D47): Copia, Condividi e "Salva come nuova foto" del ritaglio. Senza, il soggetto si stacca ma la barra non ha le tre
+ *   azioni (D13). `:app` lo costruisce con `AndroidCutoutSaver` (PNG di `core-ai`, `FileProvider` esistente, `CutoutPhoneSaver` di `core-mediastore`).
  * @property similarSearch la voce "Trova simili" del menu ⋮ (Fase 6, P8, D30, E-Q14): presente, spiegata (media senza vettore) o assente (nascosti). Di
  *   serie nessuna ricerca, quindi nessuna voce (D13); `:app` la lega al motore di ricerca (P11).
  * @property dispatchers i thread di lavoro (letture di dettagli ed EXIF): nei test sono uno solo, senza attese.
@@ -139,6 +146,8 @@ class ViewerServices(
   val textReader: ViewerTextReader? = null,
   val subjectPress: ViewerSubjectPress? = null,
   val similarSearch: ViewerSimilarSearch = NoViewerSimilarSearch,
+  val subjectCutter: ViewerSubjectCutter? = null,
+  val cutoutSaver: CutoutSaver? = null,
 )
 
 /** Decodifica un'immagine animata (GIF, WebP animato) in un `Drawable` che si anima da solo (E-M11). */

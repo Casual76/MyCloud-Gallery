@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fase 6 (P13): ritaglio del soggetto nel viewer. Pressione prolungata fuori dal testo, barra "Copia · Condividi · Salva come nuova foto", interruttore "Contorno" (D44, D45, D46, D47, §2.10). -->
+<resources>
+  <!-- La voce ⋮ e l'azione di TalkBack sull'immagine: la stessa etichetta. -->
+  <string name="cutout_action">Ritaglia il soggetto</string>
+
+  <!-- La barra sotto il soggetto: le tre azioni e l'interruttore. -->
+  <string name="cutout_bar_copy">Copia</string>
+  <string name="cutout_bar_share">Condividi</string>
+  <string name="cutout_bar_save">Salva come nuova foto</string>
+  <string name="cutout_outline">Contorno</string>
+  <string name="cutout_outline_on">Contorno acceso: adesivo con il bordo bianco</string>
+  <string name="cutout_outline_off">Contorno spento</string>
+  <string name="cutout_saving">Salvo…</string>
+  <string name="cutout_saved">Salvata</string>
+
+  <!-- Mentre il modello lavora e appena il soggetto si stacca (annunciati da TalkBack). -->
+  <string name="cutout_lifting">Cerco il soggetto…</string>
+  <string name="cutout_lifted_announce">Soggetto ritagliato</string>
+  <string name="cutout_subject_desc">Soggetto ritagliato dalla foto. Tocca fuori per chiudere.</string>
+
+  <!-- Etichetta degli appunti. -->
+  <string name="cutout_clip_label">Soggetto dalla foto</string>
+
+  <!-- Avvisi brevi (§2.6: CUTOUT_FAILED, CUTOUT_SAVE_FAILED). -->
+  <string name="cutout_msg_copied_title">Soggetto ritagliato e copiato</string>
+  <string name="cutout_msg_saved_title">Salvata come nuova foto</string>
+  <string name="cutout_msg_saved_detail">La trovi nella cartella Ritagli.</string>
+  <string name="cutout_msg_none_title">Nessun soggetto chiaro</string>
+  <string name="cutout_msg_none_detail">Prova a toccare un oggetto, una persona o un animale.</string>
+  <string name="cutout_msg_failed_title">Ritaglio non riuscito</string>
+  <string name="cutout_msg_failed_detail">Riprova. Se capita ancora, guarda la Diagnostica.</string>
+  <string name="cutout_msg_save_failed_title">Ritaglio non salvato</string>
+  <string name="cutout_msg_save_failed_detail">Controlla lo spazio sul telefono e riprova.</string>
+</resources>

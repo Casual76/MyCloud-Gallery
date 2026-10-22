@@ -100,6 +100,8 @@ abstract class ViewerTestBase {
     textSource: ViewerTextSource? = null,
     textReader: ViewerTextReader? = null,
     subjectPress: ViewerSubjectPress? = null,
+    subjectCutter: dev.pampa.mycloudgallery.feature.viewer.cutout.ViewerSubjectCutter? = null,
+    cutoutSaver: dev.pampa.mycloudgallery.feature.viewer.cutout.CutoutSaver? = null,
   ): ViewerServices = ViewerServices(
     animated = animatedLoader,
     images = imageSource,
@@ -137,6 +139,8 @@ abstract class ViewerTestBase {
     textSource = textSource,
     textReader = textReader,
     subjectPress = subjectPress,
+    subjectCutter = subjectCutter,
+    cutoutSaver = cutoutSaver,
   )
 
   internal fun show(

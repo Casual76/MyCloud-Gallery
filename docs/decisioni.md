@@ -4127,3 +4127,146 @@ lettura del testo all'avvio, porte del viewer, azzeramento, Diagnostica, `tools/
   (`AiDiagnostics`, solo numeri) e i lavori `MODEL_FETCH` e `AI_COMPUTE`.
 - **Ritaglio (P13)**: non collegato. Le porte restano sui null-object (`ViewerServices.subjectPress = null`, nessun `CutoutSaver`), vedi
   il REPORT di P11 per come agganciarlo.
+
+## Fase 6 P13: ritaglio del soggetto (22/10)
+
+Il pacchetto P13 (`docs/fase6-progetto.md` §2.10, D44, D45, D47, risposte Q11 e Q12, E-V10, E-V11; riga P13 del §4.4): `core-ai/.../cutout/` (MagicTouch su LiteRT, maschera, filtro
+guidato, PNG), `feature-viewer/.../cutout/` (soggetto che si stacca, barra, "Contorno", voce ⋮), la cartella `Ritagli/` e il salvataggio in `core-mediastore`, la sorgente "Ritagli" in
+`core-backup`, e i test (JVM, Robolectric, strumentati). Le **misure sull'S25** e la scelta fra v1 e v2 sono nella fase 2 (sezione "Misure" in fondo).
+
+**Scaricamenti** (approvati dall'utente; nient'altro scaricato): **MagicTouch v2** una volta, dall'host ufficiale
+`storage.googleapis.com/mediapipe-models/interactive_segmenter_v2/magic_touch/int8/1/interactive_segmentation.task` (la cartella `latest` e' lo stesso file): 30.525.312 byte,
+SHA-256 `38431bc66b883404e8397f74c3579404315b9b52b04a46c6346fe906a7309b03`, MD5 uguale a quello dichiarato dal server (`7/lZM2KQakcRKIYxHG00xg==`, `x-goog-hash`), **fuori dal repository** in
+`%USERPROFILE%\.mycloudgallery\models\magictouch-v2\` (il pacchetto) e `...\extracted\` (i membri). E' un archivio ZIP **senza compressione** con quattro file: il codificatore
+`interactive_segmentation_encoder.int8.tflite` (28.256.696 B, SHA-256 `0edbceec...`), il decodificatore `interactive_segmentation_decoder.int8.tflite` (2.268.000 B, SHA-256 `140d3697...`),
+`manifest.pb` e `metadata.pb`. Serve **solo per misurare**: nell'APK entra una versione sola, quella scelta (sotto). L'elenco del bucket (`storage/v1/b/mediapipe-models/o`, metadati, nessun file)
+mostra solo queste due cartelle per MagicTouch: `interactive_segmenter/.../float32/1` (la v1, 6.227.884 B) e `interactive_segmenter_v2/.../int8/1`.
+
+**Cosa sono i due modelli** (letti dai file con un lettore minimo di FlatBuffers; nessun interprete installato sul PC):
+- **v1**: un solo modello (MobileNet con decodificatore, 211 operatori, pesi float16 con `DEQUANTIZE`), ingresso `[1, 512, 512, 4]` float32, uscita `[1, 512, 512, 1]` float32 con una **sigmoide**
+  in fondo (valori fra 0 e 1: il "softmax in uscita" del progetto era una sigmoide a un canale).
+- **v2**: **due** modelli (pesi int8, ingressi e uscite float32). Il codificatore `[1, 768, 768, 3]` -> cinque mappe (`384x384x16`, `192x192x24`, `96x96x40`, `48x48x80`, `24x24x192`); il decodificatore
+  prende **la mappa del punto `[1, 768, 768, 3]`** e le cinque mappe e da' `[1, 768, 768, 1]`. Il codificatore dipende solo dall'immagine: con lo stesso quadro si salta e si rifa il decodificatore.
+
+**Come si dice al modello dove si e' toccato** (provato sul dispositivo con le fixture, non scritto nelle schede; `MagicTouchTuning`):
+- v1: RGB in 0..1 (`/255`) nei primi tre canali e un **disco pieno di raggio 1,5% del lato, valore 1** nel quarto. Un disco da 3% da' gli stessi soggetti ma il muro di mattoni (vedi E-V10) dava un mattone intero; da 5% anche
+  il papero si allarga (IoU 0,64). La gaussiana e' peggiore del disco (papero 0,49).
+- v2: lo stesso disco nel **canale 0** della mappa del punto (positivo); nel canale 1 il decodificatore risponde "niente" (e' il canale dei punti negativi, non usato); zero nel canale 2.
+
+**Soglie fissate PRIMA di misurare** (`CutoutQuality`, scritte alle 02:48 del 22/10, prima di qualunque misura sui modelli veri; non cambiate dopo): IoU di ogni fixture con un soggetto >= 0,70;
+IoU medio >= 0,85; almeno il 75% delle fixture "vuote" (cielo, muro, sfocato, prato, parete, notte) deve dare "nessun soggetto". Le fixture (`CutoutFixtures`) sono 17 scene sintetiche disegnate con
+distanze con segno (11 con un soggetto: disco, rettangolo, stella, ellisse, sagoma di persona, sagoma di animale, tazza con manico, casa, due oggetti con il punto su uno, papero piccolo, pallone in una panoramica;
+6 vuote), su sfondi diversi (cielo con nuvole, prato a rumore, muro di mattoni, sfocato, ufficio, neve, legno, sabbia, montagne, notte). Nessun dato personale. La stessa suite (`SubjectCutterContract`) la
+passa il ritagliatore finto (IoU 1) e MagicTouch vero.
+
+**Risultati sulle fixture** (emulatore Medium_Phone, x86_64; l'IoU non dipende dal dispositivo salvo differenze numeriche minime):
+| | v1 (float32, 512) | v2 (int8, 768) |
+|---|---|---|
+| IoU medio sulle 11 fixture | **0,949** | 0,929 |
+| IoU minimo | 0,743 (persona: lo stesso vestito, i pantaloni sono "un'altra cosa") | 0,814 (persona) |
+| Vuoti respinti | 6 su 6 (grazie alla regola del contrasto, sotto) | 6 su 6 (il modello da' l'immagine intera o niente) |
+| Piccolo papero (1,3% dell'immagine) | 0,966 | 0,932 (a 1% di raggio 0,983) |
+Entrambe sopra le soglie. Il tazza perde il manico (0,886 v1, 0,922 v2): il dito e' sul corpo, il manico e' un'altra parte.
+
+**Nessun soggetto chiaro, E-V10** (`SubjectRules`). MagicTouch v1, toccato su un cielo, un muro o uno sfondo sfocato, non risponde "niente": disegna una macchia **sicura di se'** (confidenza 0,92-0,98) di
+circa 1-3% dell'immagine intorno al dito. La regola "sotto l'1% o sopra il 90%" del progetto non basta (il papero e' all'1,3%). Si aggiunge il **contrasto del bordo**: per ogni punto del contorno si confronta il
+colore appena dentro (3 px, finestra 5x5) e appena fuori (4 px) lungo la normale; **la mediana** delle differenze sotto 0,06 = nessun soggetto. Sulle fixture: soggetti veri 0,36-1,05, vuoti 0,003-0,028 (il muro
+di mattoni con il punto raggiunto da un mattone intero, 0,255, e' un oggetto vero per il modello: con il raggio del punto a 1,5% il blob resta sotto il mattone e si respinge). Anche: il punto deve stare
+dentro la maschera (tolleranza 1,2% del lato), si tiene la componente connessa del punto piu' le altre almeno al 2% di quella (le macchie staccate spariscono), confidenza media >= 0,72.
+
+**Post-elaborazione** (`MaskRefiner`): probabilita' del modello -> **filtro guidato veloce** (He e Sun: i coefficienti `a` e `b` su una griglia di al piu' 1024 px con la luminanza dell'immagine come guida, raggio 2 px del
+modello, `eps` 1e-3, applicati alla guida a piena risoluzione; il filtro lavora solo dove la probabilita' non e' decisa e nei dintorni, il resto e' 0 o 255) -> soglia morbida con transizione di +-0,18
+(sfumatura di 1-2 px). Una foto da 12 megapixel: circa 220-240 ms di maschera sull'emulatore. **Panorami**: sopra proporzione 1,9:1 il modello non vede l'immagine intera (un 4096x572 ridotto a 512 sarebbe un
+quadro di 512x71) ma una **finestra di proporzione 1,5:1** centrata sul dito (858x572): sei volte i dettagli; un soggetto piu' largo della finestra viene tagliato. Le proporzioni normali (fino a 16:9) si
+deformano nel quadro come fa MediaPipe.
+
+**Sorgente e memoria** (E-M1-M4, tetti di `ImagingBudget`): `CutoutImages` decodifica con `ImageDecoder` **gia' ridotto** (lato lungo al piu' 4096 e pixel entro il tetto del viewer di `ImagingBudget`, 12,8 MP sull'S25 e meno con
+`memoryClass` piu' piccola; `SubjectCutting(maxPixels)`), in sRGB, raddrizzata, la trasparenza composta sul bianco; le dimensioni dichiarate dall'intestazione si controllano prima di allocare (oltre 2^28 pixel o
+65.535 px di lato non si apre). Provato sul dispositivo: PNG da **200 MP** (16320x12240) -> 4096x3072 in meno di 1 s, nessun errore di memoria; panorama 30000x1500 ritagliato. `CutoutImage` e `AlphaMask` hanno
+un accesso interno senza copia (12,6 MB e 50 MB per una foto da 12 MP: due copie in meno nel punto piu' stretto).
+
+**PNG** (`PngEncoder`, `CutoutRender`): un codificatore nostro che scrive **solo** `IHDR`, `IDAT` e `IEND` (RGBA a 8 bit, filtro scelto per riga fra nessuno, Sub e Up, Deflate): nessun `tEXt`, `eXIf`, `iCCP`, `gAMA`,
+`pHYs`, `tIME`. Il codificatore di sistema (`Bitmap.compress`) sceglie da solo i blocchi: qui il contenuto lo decidiamo noi e due test **rileggono** il file (JVM con un lettore indipendente che controlla anche il CRC
+di ogni blocco, e sul dispositivo con `BitmapFactory`). Ritagliato sul rettangolo del soggetto, i pixel completamente trasparenti sono 0,0,0,0 (niente della foto sotto lo sfondo tolto). **Contorno**: la maschera dilatata di
+circa l'1,2% del lato lungo del soggetto (almeno 3 px), distanza euclidea esatta su una griglia di al piu' 1024 px, bordo bianco opaco con antialias; il viewer disegna lo stesso bordo con lo stesso raggio in proporzione.
+
+**Salvataggio e backup** (D47, Q12): `CutoutPhoneSaver` (core-mediastore) usa il writer di "Scarica sul telefono": riga con `IS_PENDING`, SHA-256 mentre i byte arrivano, e **nel `beforePublish`** il media nuovo nel
+catalogo (osservazione del telefono con la data di adesso) e, dai Nascosti, `hidden = true`: la foto e' collegata e nascosta prima che sia visibile (E-V11); la lettura del telefono trova `SameFile`. Lo stesso PNG salvato
+due volte e' lo stesso media (due posizioni); se la seconda volta viene dai Nascosti il media diventa nascosto (E-H1, dal lato della riservatezza). Cartella `Pictures/MyCloud Gallery/Ritagli/`, in debug con un account
+di prova `Pictures/mcg-prova/Ritagli/` (`PhoneMediaFolders`), nome `<file di origine>-ritaglio.png` (i conflitti diventano "(2)"). **Backup**: la sorgente "Ritagli" e' una `BackupSource.Folder` del volume principale
+(`CutoutBackup`: nessun tipo nuovo nel tipo sigillato, cosi' feature-backup e :app compilano com'erano), accesa di default (`BackupSources.DEFAULT`; `fromOnboarding` la aggiunge se c'e' almeno una scelta); sul NAS
+`Backup/<dispositivo>/Ritagli/AAAA/MM/` (test). Le installazioni di prima dei ritagli non la hanno: `BackupSources.withCutouts()`, una volta, da :app (P11).
+
+**Viewer**: `CutoutController` (stato `CutoutState` di P0, il media a cui appartiene, i cinque punti di prova di D46 saltando quelli che cadono su un soggetto gia' trovato), `CutoutOverlay` (velo che pulsa con il respiro del
+design system, scrim, soggetto che si solleva con il bagliore, barra "Copia · Condividi · Salva come nuova foto" e interruttore "Contorno" da 48 dp, senza vetro, con "Rimuovi animazioni" niente movimento), `CutoutArt`
+(maschera, bagliore e contorno a risoluzione di schermo, bianco con alfa: nessuna dipendenza dal trattamento delle bitmap ALPHA_8), `AndroidCutoutSaver` (Copia con `ClipData` **sensibile** e l'indirizzo del `FileProvider` in
+`cacheDir/share/`; Condividi con `ACTION_SEND`, `FLAG_GRANT_READ_URI_PERMISSION` e `ClipData` anche sul selettore; salvataggio). Gesti: l'arbitro di P12 passa al ritaglio cio' che non e' testo (il suo `LiveTextHost` ha una
+porta `subject`, di serie quella dei servizi); con il soggetto staccato pager, trascinamento verso il basso e doppio tocco sono fermi, il tocco fuori e Indietro lo chiudono, la pressione prolungata e' ferma, il chrome si
+toglie (niente controlli uno sopra l'altro). Senza ritagliatore la funzione non c'e' (D13). Un "niente" con il dito: solo una vibrazione leggera; dal menu o da TalkBack si dice "Nessun soggetto chiaro".
+
+**Misure sull'emulatore** (CPU del PC, **non** del telefono; riferimento, non numeri del campo):
+| | v1 | v2 |
+|---|---|---|
+| Apertura del modello a freddo / a caldo | 110-130 / 56 ms | 190-200 / 160 ms |
+| Quadro + modello + maschera, fixture 640x480, p50 / p95 | 147 / 164 ms | 745 / 761 ms |
+| ...su 3664x2748 (10 MP, tetto di questo emulatore) | 334 / 345 ms | 432 / 434 ms (codificatore gia' calcolato) |
+| Pressione -> soggetto (decodifica JPEG + ritaglio, 10 MP), p50 / p95 | 429 / 686 ms | 1042 / 1353 ms |
+| PNG di un 10 MP: senza / con contorno | 216 / 378 ms | 208 / 363 ms |
+| PSS: prima / modello caricato / dopo un 10 MP / dopo il rilascio | 109 / 224 / 274 / 165 MB | 109 / 626 / 671 / 217 MB |
+Il v2 ha il codificatore da 28 MB che costa quasi tutto il tempo e 400 MB di PSS in piu'; ritagliare due volte la stessa foto lo ripaga (il codificatore si salta), ma la pressione sul viewer e' quasi sempre una.
+
+**Regola di scelta fra v1 e v2, scritta PRIMA di misurare sull'S25**: si sceglie la **v2** solo se, sull'S25, (a) l'IoU medio sulle fixture supera quello della v1 di almeno 0,03, (b) pressione -> soggetto (decodifica
++ ritaglio di una foto da 12 MP) ha p50 e p95 sotto 1 s, e (c) il PSS a modello caricato resta sotto 400 MB; altrimenti la **v1** (6 MB nell'APK, gia' li', un quinto della memoria). La scelta e i numeri sono in fondo.
+
+**Contratti: modifiche di P13** (solo `internal` o con valori di serie, nessuna firma pubblica rotta): `CutoutImage.raw()`/`adopt` e `AlphaMask.raw()`/`adopt` (accesso senza copia dentro core-ai); `ViewerServices.subjectCutter`
+e `cutoutSaver` (in fondo, `null` di serie); `ViewerMask.at`/`raw`, `ViewerCutout.Subject.area`/`contains`; `LiveTextHost.subject`; `viewerMenuEntries(onCutout)`; `ViewerMessage` con cinque voci nuove; `FakeSubjectCutter` disegna
+la maschera dalle fixture quando l'immagine e' una di esse (`failNext`, `releases`); `FakeViewerSubjectCutter` e `FakeCutoutSaver` con guasti, latenze e un cancello.
+
+**Per chi usa questo pacchetto (P11, in `:app`)**
+- **Ritagliatore**: `MagicTouchCutter.create(files)` (il modello del catalogo, verificato a ogni apertura, `ModelFiles.open`), dentro un `SubjectCutting(cutter, maxPixels = ImagingBudget.of(context).viewerMaxPixels)`; rilasciarlo
+  (`release()`) un po' dopo che si esce dal viewer o a memoria bassa (`onTrimMemory`: `clear()` dimentica anche l'immagine trattenuta).
+- **`ViewerSubjectCutter`**: `cut(id, ref, x, y)` = `subjectCutting.cut(key = id.value, source, x, y)` con `source` = `CutoutSource.OfUri(resolver, uriOf(ref))` per `MediaRef.Phone`, `CutoutSource.OfFile(file)` per un media del NAS di cui
+  si ha gia' l'originale in cache o l'HQ della replica (mai uno scaricamento solo per ritagliare); `CutoutResult.Subject(mask, bounds)` -> `ViewerCutout.Subject(ViewerMask(w, h, mask.alpha()), ViewerRect(bounds / dimensioni))`;
+  `NoClearSubject` -> `NoSubject`; `Failed` -> `Failed("CUTOUT_FAILED")` (e la voce della Diagnostica).
+- **`CutoutSaver`** = `AndroidCutoutSaver(context, png, files, newPhoto, sourceName)`: `png` = `subjectCutting.png(id.value, source, AlphaMask(w, h, mask.alpha()), outline)` (la stessa chiave di `cut`); `files` scrive il PNG in
+  `ShareCache.newShareDir()` come `ritaglio.png` e da' l'indirizzo con `FileProviderUris` (nessun percorso nuovo del provider; la pulizia all'avvio toglie i file); `newPhoto` = `PhoneCutoutNewPhoto(CutoutPhoneSaver(writer, catalog)) { nowMillis }`
+  con `writer = MediaStorePhoneMediaWriter(context, relativePath = PhoneMediaFolders.cutouts(fenced))` (fenced = debug con un account di prova) e, all'avvio, `purgeOrphans()` anche su questo writer.
+- **Backup**: `BackupSources.withCutouts(fenced)` una volta per le installazioni che c'erano (e `AppGraph` che costruisce le sorgenti dalle scelte dell'onboarding: aggiungere `CutoutBackup.source()`); con la recinzione la sorgente e'
+  `CutoutBackup.source(fenced = true)`.
+- **Manifest, permessi, dipendenze**: niente di nuovo.
+
+### Misure sull'S25 e scelta fra v1 e v2 (22/10)
+
+Telefono: **Samsung SM-S931B (S25)**, Android 17, arm64-v8a, 8 core, 4 thread per il modello, **in carica via USB** (batteria 77%, 33,8 °C all'inizio, 35,1 °C fra una versione e l'altra, 36,4 °C alla fine; stato
+termico 0, nessun limite). Prova fatta con l'APK di prova di `core-ai` (`dev.pampa.mycloudgallery.core.ai.test`, sul telefono solo questo) e, per la v2, il pacchetto `.task` in `/data/local/tmp/mcg-models/`; **alla fine
+tolti tutti e due** (anche la cartella), l'app `dev.pampa.mycloudgallery.debug` non e' stata toccata. Le stesse 17 fixture, le stesse soglie, 5 giri a motore caldo (55 passaggi sulle fixture), foto da 12,6 MP
+(4096x3072, il tetto del viewer sull'S25) per la pressione. **La Tab S9 non c'e': le sue misure mancano** (annotato come lacuna, non come risultato).
+
+| S25 | v1 (float32, 512) | v2 (int8, 768) |
+|---|---|---|
+| IoU medio sulle 11 fixture | **0,949** | 0,931 |
+| IoU minimo | 0,743 (persona) | 0,822 (persona) |
+| Vuoti respinti | 6 su 6 | 6 su 6 |
+| Contratto sulle fixture (soglie fissate prima) | passa | passa |
+| Apertura del modello / riapertura | 60 / 42 ms | 131 / 117 ms |
+| Primo ritaglio dopo l'apertura | 616 ms | 1163 ms |
+| Fixture 640x480: quadro + modello + maschera, p50 / p95 | 249 / 254 ms | 819 / 828 ms |
+| ...su 4096x3072 (codificatore gia' calcolato nella v2), p50 / p95 | 645 / 649 ms | 702 / 706 ms |
+| **Pressione -> soggetto** (decodifica JPEG 12,6 MP + ritaglio), p50 / p95 | **674 / 675 ms** | 1263 / 1270 ms |
+| PNG di un 12,6 MP: senza / con contorno (p50) | 397 / 594 ms (201 / 216 KB) | 419 / 624 ms (215 / 233 KB) |
+| PSS: prima / modello caricato / dopo un 12,6 MP / dopo il rilascio | 109 / 241 / 320 / 182 MB | 109 / 676 / 713 / 269 MB |
+| Pipeline intera (PNG riletto senza metadati, EXIF, 200 MP, panorama, riduzione al budget) | 8 test su 8 | non provata (la pipeline usa la v1 dell'APK) |
+
+**Scelta: v1** (`magictouch-v1-float32`), con la regola scritta prima di misurare. Dei tre requisiti per la v2 non ne passa nessuno: (a) l'IoU medio e' **piu' basso** di 0,018 invece che piu' alto di 0,03 (0,931
+contro 0,949: la v2 migliora il caso peggiore, la sagoma di persona da 0,743 a 0,822, ma la media resta piu' bassa); (b) la pressione -> soggetto ha p50 di 1263 ms e p95 di 1270 ms, sopra il secondo (e il
+codificatore da 28 MB si ripaga solo se si ritaglia due volte la stessa foto); (c) il PSS a modello caricato e' di 676 MB (713 MB dopo una foto da 12,6 MP), contro il limite di 400 MB. La v1 ha p50 674 ms e p95 675 ms
+sulla foto piu' grande che il viewer apre, 241 MB a modello caricato (320 MB al picco) e 6 MB nell'APK. Tutte e due respingono i sei vuoti.
+
+**Impronta fissata** (nessun cambiamento all'asset, quindi niente da aggiornare nel catalogo, nella licenza o nel `NOTICE`): `ModelCatalog.CUTOUT_MAGICTOUCH` = `magictouch-v1-float32`, `magic_touch.tflite`, **6.227.884 byte**,
+SHA-256 `e24338a717c1b7ad8d159666677ef400babb7f33b8ad60c4d96db4ecf694cd25`, Apache 2.0, dentro l'APK come `cutout/magic_touch.tflite` (Q11). Il file e' quello che c'e' in `core-ai/src/main/assets/cutout/`
+(ricalcolato oggi: stesso SHA-256 e stessa dimensione). La v2 resta solo sul PC, **fuori dal repository**, in `%USERPROFILE%\.mycloudgallery\models\magictouch-v2\` (30.525.312 byte, SHA-256 `38431bc6...b03`): non
+entra nell'APK, non si scarica da nessuna parte e si puo' cancellare. Il codice della v2 (`V2Session`, `TaskBundle`) resta in `core-ai` perche' i banchi sul dispositivo lo usano; se si volesse riaprire la scelta
+(un'altra versione del modello, un telefono piu' lento) basta rimisurare con `CutoutFixturesDeviceTest` e `CutoutMeasurementsDeviceTest` (`core-ai/src/androidTest`); la regola e' sopra.
+
+**Limiti di questa misura**: fixture solo sintetiche (nessuna foto vera: i bordi su capelli, pelo e vetro si giudicano nella prova F66 a occhio); il telefono era in carica e la batteria e' salita di circa 2,6 °C
+(l'AP a 51,7 °C alla fine) senza che il sistema limitasse niente; un solo telefono. Per F66 resta da vedere a mano quanto il papero piccolo e il manico della tazza (le parti staccate dal soggetto) disturbano.

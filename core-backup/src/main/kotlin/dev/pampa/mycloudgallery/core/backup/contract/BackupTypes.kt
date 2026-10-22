@@ -86,17 +86,48 @@ sealed interface BackupSource {
   }
 }
 
+/**
+ * La sorgente "Ritagli" (Fase 6, P13, D47, risposta Q12): la cartella `Pictures/MyCloud Gallery/Ritagli/` dove "Salva come nuova foto" scrive i
+ * ritagli del soggetto. E' una [BackupSource.Folder] del volume principale (la cartella e' sua: nome e destinazione vengono da li', sul NAS
+ * `Backup/<dispositivo>/Ritagli/AAAA/MM/` come D47 vuole) **accesa di default**, come gli screenshot: [BackupSources.DEFAULT] la contiene e
+ * `BackupSourceCodec.fromOnboarding` la aggiunge. Nessuna sorgente nuova nel tipo sigillato: chi lo legge (pagina del backup, impostazioni,
+ * catalogo) la tratta come ogni altra cartella.
+ *
+ * In debug con un account di prova (recinzione F5-D13) i ritagli stanno in `Pictures/mcg-prova/Ritagli/` ([FENCED_RELATIVE_PATH]): la
+ * sorgente giusta la sceglie chi ha la recinzione.
+ */
+object CutoutBackup {
+
+  /** Il volume principale del MediaStore. */
+  const val VOLUME: String = "external_primary"
+
+  /** La cartella dei ritagli (D47), come la scrive il MediaStore (`RELATIVE_PATH`, con la barra finale). */
+  const val RELATIVE_PATH: String = "Pictures/MyCloud Gallery/Ritagli/"
+
+  /** La cartella dei ritagli con la recinzione delle prove (F5-D13, `mcg-prova`). */
+  const val FENCED_RELATIVE_PATH: String = "Pictures/mcg-prova/Ritagli/"
+
+  fun source(fenced: Boolean = false): BackupSource.Folder = BackupSource.Folder(VOLUME, if (fenced) FENCED_RELATIVE_PATH else RELATIVE_PATH)
+
+  /** [source] e' la cartella dei ritagli (di serie o recintata). */
+  fun isCutouts(source: BackupSource): Boolean =
+    source is BackupSource.Folder && source.volume == VOLUME && (source.relativePath == RELATIVE_PATH || source.relativePath == FENCED_RELATIVE_PATH)
+}
+
 /** Le sorgenti scelte (impostazione del dispositivo, non personale: ogni telefono ha le sue cartelle). */
 data class BackupSources(val sources: Set<BackupSource>) {
   val isEmpty: Boolean get() = sources.isEmpty()
 
   operator fun contains(source: BackupSource): Boolean = source in sources
 
+  /** Le stesse sorgenti con la cartella dei ritagli ([CutoutBackup]) accesa: per chi aveva scelto prima dei ritagli (Fase 6). */
+  fun withCutouts(fenced: Boolean = false): BackupSources = BackupSources(sources + CutoutBackup.source(fenced))
+
   companion object {
     val NONE: BackupSources = BackupSources(emptySet())
 
-    /** Quelle che il passo 6 dell'onboarding propone gia': fotocamera e screenshot. */
-    val DEFAULT: BackupSources = BackupSources(setOf(BackupSource.Camera, BackupSource.Screenshots))
+    /** Quelle accese di serie: fotocamera, screenshot e (Fase 6, D47) i ritagli del soggetto. */
+    val DEFAULT: BackupSources = BackupSources(setOf(BackupSource.Camera, BackupSource.Screenshots, CutoutBackup.source()))
   }
 }
 

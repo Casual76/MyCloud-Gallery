@@ -6,6 +6,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupSetupStep
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSource
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSources
 import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
+import dev.pampa.mycloudgallery.core.backup.contract.CutoutBackup
 import dev.pampa.mycloudgallery.core.backup.contract.DeviceFolder
 import dev.pampa.mycloudgallery.core.backup.testing.FakeBackupSettings
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupScreen
@@ -152,7 +153,8 @@ class BackupViewModelsTest {
     assertThat(settings.sources.value.sources).doesNotContain(BackupSource.Camera)
     // Spegnerla due volte non cambia niente.
     vm.setSource(BackupSource.Camera, false)
-    assertThat(settings.sources.value.sources).containsExactly(BackupSource.Screenshots, telegram)
+    // Restano gli screenshot, i ritagli (sorgente accesa di default, Fase 6 P13, D47) e la cartella appena scelta.
+    assertThat(settings.sources.value.sources).containsExactly(BackupSource.Screenshots, CutoutBackup.source(), telegram)
   }
 
   @Test
@@ -163,7 +165,9 @@ class BackupViewModelsTest {
     assertThat(ids.take(2)).containsExactly(BackupSource.Camera.id, BackupSource.Screenshots.id).inOrder()
     // Poi le cartelle aggiuntive, dalla piu' grande: WhatsApp (2.105), poi DCIM (1.088), Quick Share (654), Telegram (224).
     assertThat(vm.state.value.choices.drop(2).map { it.media }).isInOrder(compareByDescending<Int?> { it })
-    assertThat(vm.state.value.choices).hasSize(BackupSamples.phoneFolders.size)
+    // In piu' la riga dei ritagli: accesa di default (D47), resta in lista anche se il telefono non la elenca ancora (E-B12).
+    assertThat(vm.state.value.choices).hasSize(BackupSamples.phoneFolders.size + 1)
+    assertThat(vm.state.value.choices.single { it.source == CutoutBackup.source() }.chosen).isTrue()
   }
 
   @Test

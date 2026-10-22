@@ -71,6 +71,13 @@ object CutoutNames {
  * La stessa immagine salvata due volte ha gli stessi byte: il catalogo la ritrova come lo stesso media (con un secondo posto). Se il
  * secondo salvataggio viene dai Nascosti, il media diventa nascosto (si sbaglia dal lato della riservatezza, E-H1).
  *
+ * **Il "nascosto" nasce con il media** (VR-1, R19): il catalogo registra il posto e il segno nella **stessa transazione** (`record(hidden = true)`), quindi
+ * l'indice della Libreria non vede mai la foto senza il suo "nascosto" e c'e' un cambiamento solo da annunciare, non due. Chi chiama (`:app`) avvia poi la
+ * sincronizzazione dei dati personali, come per ogni "Nascondi": il segno raggiunge i dispositivi dello stesso account senza aspettare il giro periodico.
+ *
+ * **Dai Nascosti il nome e' generico** (I6): "Ritaglio.png", non quello del file d'origine. Nel MediaStore il ritaglio e' una foto pubblica (la vedono Galleria
+ * di Samsung e le sincronizzazioni delle altre app): un nome come "Passaporto-ritaglio.png" direbbe cos'e' la foto nascosta da cui viene.
+ *
  * Mai nei log: il nome del file, il percorso, l'identita' del media (D40).
  */
 class CutoutPhoneSaver(
@@ -92,7 +99,7 @@ class CutoutPhoneSaver(
 
   /**
    * @param png i byte del file (gia' senza metadati, `CutoutRender.png`).
-   * @param sourceName il nome del media da cui viene il ritaglio, per dare il nome al file; null = `Ritaglio.png`.
+   * @param sourceName il nome del media da cui viene il ritaglio, per dare il nome al file; null = `Ritaglio.png`. Dai Nascosti ([hidden]) non si usa mai (I6).
    * @param hidden il ritaglio viene da un media nascosto: la foto nuova nasce nascosta (E-V11).
    * @param nowMillis la data di adesso (la porta dell'app, mai l'orologio di qui): data del file e di scatto della foto nuova.
    */
@@ -110,7 +117,7 @@ class CutoutPhoneSaver(
       }
     }
     val result = writer.saveToPictures(
-      request = SaveRequest(CutoutNames.displayName(sourceName), "image/png", png.size.toLong()),
+      request = SaveRequest(CutoutNames.displayName(if (hidden) null else sourceName), "image/png", png.size.toLong()),
       source = source,
       expectedSha256 = fingerprint.fullHash,
     ) { copy -> linked = link(copy, fingerprint, hidden, nowMillis) }
@@ -135,6 +142,7 @@ class CutoutPhoneSaver(
           source = source,
           captureTimeHintMillis = nowMillis,
         ),
+        hidden = hidden,
       )
     } catch (e: CancellationException) {
       throw e
@@ -142,9 +150,7 @@ class CutoutPhoneSaver(
       GalleryLog.d(TAG) { "collegamento del ritaglio non riuscito: ${e.javaClass.simpleName}" }
       throw e
     }
-    val id = outcome.mediaId ?: throw IOException("Il catalogo non ha registrato il ritaglio.")
-    if (hidden) catalog.setPersonalFlags(listOf(id)) { it.copy(hidden = true) }
-    return id
+    return outcome.mediaId ?: throw IOException("Il catalogo non ha registrato il ritaglio.")
   }
 
   private companion object {

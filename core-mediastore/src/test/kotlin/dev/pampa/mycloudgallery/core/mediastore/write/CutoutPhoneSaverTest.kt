@@ -225,8 +225,34 @@ class CutoutPhoneSaverTest : PhoneSyncTestBase() {
   fun ilFintoScriveNellaCartellaDiSerieEPassaLeStesseRegole() = runBlocking<Unit> {
     val fake = FakePhoneMediaWriter()
     val out = CutoutPhoneSaver(fake, catalog).save(png, "f.jpg", hidden = true, nowMillis = T0) as CutoutPhoneSaver.Outcome.Saved
-    assertThat(fake.visible.keys).containsExactly("f-ritaglio.png")
+    // I6: dai Nascosti il nome e' generico, non quello del file d'origine.
+    assertThat(fake.visible.keys).containsExactly("Ritaglio.png")
     assertThat(db.personalDao().get(out.mediaId.value)!!.hidden).isTrue()
     assertThat(fake.pendingLeft).isEqualTo(0)
+  }
+
+  /**
+   * VR-1, R19: dai Nascosti il media nasce nascosto **con una sola scrittura del catalogo**. Prima erano due (il media, poi il segno): l'indice della
+   * Libreria vedeva la foto per un attimo senza il suo "nascosto", e il segno non era mai annunciato con il media. Le scritture si contano sul numero
+   * d'ordine dei cambiamenti del catalogo.
+   */
+  @Test
+  fun dalNascostoIlMediaEIlSegnoSonoUnaScritturaSola() = runBlocking<Unit> {
+    val before = catalog.changeSeq()
+    val saved = saver().save(png, "segreta.jpg", hidden = true, nowMillis = T0) as CutoutPhoneSaver.Outcome.Saved
+    assertThat(catalog.changeSeq() - before).isEqualTo(1)
+    val personal = db.personalDao().get(saved.mediaId.value)!!
+    assertThat(personal.hidden).isTrue()
+    // L'istante del cambio e' scritto (la sincronizzazione dei dati personali lo vede).
+    assertThat(personal.hiddenChangedAt).isGreaterThan(0L)
+  }
+
+  /** I6: dai Nascosti il nome non porta quello del file d'origine; in chiaro si', come prima. */
+  @Test
+  fun dalNascostoIlNomeEGenerico_I6() = runBlocking<Unit> {
+    val hidden = saver().save(png, "Passaporto.jpg", hidden = true, nowMillis = T0) as CutoutPhoneSaver.Outcome.Saved
+    assertThat(hidden.displayName).isEqualTo("Ritaglio.png")
+    assertThat(provider.visibleRows().map { it.second }).containsExactly("Ritaglio.png")
+    assertThat(CutoutNames.displayName("Passaporto.jpg")).isEqualTo("Passaporto-ritaglio.png")
   }
 }

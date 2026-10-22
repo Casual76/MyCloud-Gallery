@@ -124,7 +124,7 @@ internal class LocalModelManager(
     // 3. Spazio (E-A3): quanto manca piu' il margine.
     val missing = spec.sizeBytes - have
     if (missing > 0) {
-      val needed = missing + ModelLimits.SPACE_MARGIN_BYTES
+      val needed = missing + ModelLimits.spaceMargin(spec)
       val usable = withContext(io) {
         store.root.mkdirs()
         freeSpace.usableBytes(store.root)
@@ -238,7 +238,7 @@ internal class LocalModelManager(
             if (!FetchRefusal.isHostile(result.reason)) return SourceOutcome.Next(Why.ABSENT)
             return rejected(spec, key, discardPartial = false)
           }
-          FetchResult.NoSpace -> return SourceOutcome.NoSpace(spec.sizeBytes - length + ModelLimits.SPACE_MARGIN_BYTES)
+          FetchResult.NoSpace -> return SourceOutcome.NoSpace(spec.sizeBytes - length + ModelLimits.spaceMargin(spec))
           FetchResult.NetworkError -> return SourceOutcome.Next(Why.TRANSIENT)
         }
       }

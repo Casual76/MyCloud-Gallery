@@ -112,6 +112,12 @@ internal enum class ViewerMessage(@StringRes val title: Int, @StringRes val deta
   /** Il ritaglio non si e' potuto salvare (`CUTOUT_SAVE_FAILED`): spazio o permesso. */
   CutoutSaveFailed(R.string.cutout_msg_save_failed_title, R.string.cutout_msg_save_failed_detail),
 
+  /** La memoria e' finita durante il ritaglio, la copia o il salvataggio (R20): niente cade, si dice di chiudere qualche app. */
+  CutoutLowMemory(R.string.cutout_msg_memory_title, R.string.cutout_msg_memory_detail),
+
+  /** Manca lo spazio anche per il piccolo modello del ritaglio (VR-2): lo si dice, non e' un "riprova". */
+  CutoutNoSpace(R.string.cutout_msg_space_title, R.string.cutout_msg_space_detail),
+
   /** "Scarica sul telefono" e' riuscito (Fase 4, D20). */
   Downloaded(R.string.viewer_msg_downloaded_title, R.string.viewer_msg_downloaded_detail),
 

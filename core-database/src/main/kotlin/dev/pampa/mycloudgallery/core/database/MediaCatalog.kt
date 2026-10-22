@@ -207,9 +207,24 @@ class MediaCatalog(
 
   // --- Osservazioni delle scansioni ------------------------------------------------------------------
 
-  /** Registra cio' che una scansione ha visto in un posto (piano 3.1, 4.2). */
-  suspend fun record(observation: Observation, whenUndecided: WhenUndecided = WhenUndecided.WAIT): RecordOutcome =
-    write { tx -> recordOne(tx, observation, whenUndecided, seenAt = null) }
+  /**
+   * Registra cio' che una scansione ha visto in un posto (piano 3.1, 4.2).
+   *
+   * [hidden]: il media nasce **nascosto**, nella stessa transazione che lo registra (il ritaglio salvato dai Nascosti, E-V11, VR-1). Nessun istante in cui
+   * il media e' visibile e nessun cambiamento intermedio da annunciare: l'indice della Libreria non lo vede mai senza il suo "nascosto". Se il media
+   * c'era gia' (stessi byte) diventa nascosto, come `setPersonalFlags` (si sbaglia dal lato della riservatezza, E-H1).
+   */
+  suspend fun record(observation: Observation, whenUndecided: WhenUndecided = WhenUndecided.WAIT, hidden: Boolean = false): RecordOutcome =
+    write { tx ->
+      val outcome = recordOne(tx, observation, whenUndecided, seenAt = null)
+      if (hidden) {
+        outcome.mediaId?.let { id ->
+          val current = personalDao.get(id.value)?.toDomain() ?: PersonalFlags()
+          writePersonal(tx, id, current.copy(hidden = true))
+        }
+      }
+      outcome
+    }
 
   /**
    * Registra un lotto di osservazioni (un lotto di 500 righe del MediaStore) in **una** transazione, con un

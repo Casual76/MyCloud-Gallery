@@ -11,14 +11,22 @@ import dev.pampa.mycloudgallery.core.model.MediaRef
 data class ViewerRect(val left: Float, val top: Float, val right: Float, val bottom: Float)
 
 /** La maschera del soggetto: alfa (0..255) per pixel, grande come l'immagine su cui si e' ritagliato. */
-class ViewerMask(val width: Int, val height: Int, alpha: ByteArray) {
-  private val data: ByteArray = alpha.copyOf()
+class ViewerMask private constructor(val width: Int, val height: Int, private val data: ByteArray, @Suppress("UNUSED_PARAMETER") owned: Unit) {
+
+  /** Copia [alpha]. */
+  constructor(width: Int, height: Int, alpha: ByteArray) : this(width, height, alpha.copyOf(), Unit)
 
   init {
     require(width > 0 && height > 0 && data.size == width * height) { "Maschera non valida." }
   }
 
   fun alpha(): ByteArray = data.copyOf()
+
+  /**
+   * Presta l'alfa a [block] **senza copiarlo** (R20): chi lo riceve lo legge soltanto e non lo tiene. Una foto da 12 megapixel pesa 12,6 MB per copia, e con poca
+   * memoria ogni copia in meno conta (il ritaglio dava un `OutOfMemoryError` proprio qui).
+   */
+  fun <T> readAlpha(block: (ByteArray) -> T): T = block(data)
 
   /** L'alfa (0..255) del pixel ([x], [y]) senza copiare la maschera (P13): fuori dai bordi 0. */
   fun at(x: Int, y: Int): Int = if (x in 0 until width && y in 0 until height) data[y * width + x].toInt() and 0xff else 0
@@ -27,6 +35,11 @@ class ViewerMask(val width: Int, val height: Int, alpha: ByteArray) {
   internal fun raw(): ByteArray = data
 
   override fun toString(): String = "ViewerMask(${width}x$height)"
+
+  companion object {
+    /** La maschera che prende possesso di [alpha] senza copiarlo (chi la chiama non lo tocca piu'): il ritagliatore di `:app` (R20). */
+    fun adopting(width: Int, height: Int, alpha: ByteArray): ViewerMask = ViewerMask(width, height, alpha, Unit)
+  }
 }
 
 /** L'esito di un ritaglio per il viewer. */
@@ -42,8 +55,23 @@ sealed interface ViewerCutout {
   /** Nessun soggetto chiaro (E-V10): niente, vibrazione leggera, nessun messaggio d'errore. */
   data object NoSubject : ViewerCutout
 
-  /** Un guasto, con il codice stabile per la Diagnostica (`CUTOUT_FAILED`). */
-  data class Failed(val code: String) : ViewerCutout
+  /**
+   * Un guasto, con il codice stabile per la Diagnostica (`CUTOUT_FAILED`). [reason] dice **perche'**, quando lo si sa, cosi' il viewer lo dice (VR-2, R20):
+   * poca memoria o poco spazio non sono "riprova e basta".
+   */
+  data class Failed(val code: String, val reason: CutoutFailure = CutoutFailure.OTHER) : ViewerCutout
+}
+
+/** Perche' un ritaglio non e' riuscito, quando lo si sa. */
+enum class CutoutFailure {
+  /** Non si sa, o niente da dire all'utente oltre a "riprova". */
+  OTHER,
+
+  /** La memoria e' finita (una foto grande, molte app aperte): chiudere qualche app e riprovare (R20). */
+  LOW_MEMORY,
+
+  /** Lo spazio del telefono non basta nemmeno per il piccolo modello del ritaglio (VR-2). */
+  NO_SPACE,
 }
 
 /**

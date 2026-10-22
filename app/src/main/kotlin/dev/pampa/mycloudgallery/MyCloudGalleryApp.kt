@@ -89,7 +89,7 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
     gallery.shares = integrations.shares
     fiveB.ifPresent { ui -> gallery.fiveB = GalleryGraph.FiveBHooks(ui.mediaActions) { ids -> ui.openFreeSpace(ids) } }
     // Fase 6 (P11): testo dal vivo, "Trova simili" e foto in movimento nel viewer, prima di qualunque schermata.
-    gallery.searchViewer = ai.viewerHooks(graph, gallery, CutoutShareEnv(integrations.shareCache, integrations.uris))
+    gallery.searchViewer = ai.viewerHooks(graph, gallery, CutoutShareEnv(integrations.shareCache, integrations.uris, integrations.shareHolder, integrations.revoker))
     // Fase 6 (P9): lo strumento di valutazione della ricerca, solo in debug (in release la funzione e' vuota).
     dev.pampa.mycloudgallery.debugtools.DeveloperTools.installSearch(ai, gallery, this)
     ProcessWatcher(

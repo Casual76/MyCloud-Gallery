@@ -281,6 +281,7 @@ internal fun MessageNotice(message: ViewerMessage, backdrop: GlassBackdropState,
       ViewerMessage.ActionFailed, ViewerMessage.HideFailed, ViewerMessage.UnhideFailed, ViewerMessage.FavoriteFailed,
       ViewerMessage.DownloadFailed, ViewerMessage.DownloadNasUnreachable, ViewerMessage.DownloadPhoneFull,
       ViewerMessage.DownloadIntegrity, ViewerMessage.CutoutFailed, ViewerMessage.CutoutSaveFailed,
+      ViewerMessage.CutoutLowMemory, ViewerMessage.CutoutNoSpace,
       -> Icons.Rounded.ReportProblem
       else -> Icons.Rounded.Info
     },

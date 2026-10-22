@@ -46,11 +46,12 @@ class EvalScoring(
     val cells = positions.filter { snapshot.idAt(it) !in hidden }
     val ids = cells.map { snapshot.idAt(it) }
 
-    val vector = if (parsed.semantic != null) embedding.vector(parsed.semantic) else null
+    val semantic = parsed.semantic
+    val vector = if (semantic != null) embedding.vector(semantic) else null
     val scores: Map<MediaId, Float> = if (vector == null) emptyMap() else contentScores(ids, vector)
     val z = standardize(scores)
     val text = textScores(ids, parsed.words, parsed.exact)
-    val onlyFilters = parsed.semantic == null && parsed.words.isEmpty() && parsed.exact.isEmpty()
+    val onlyFilters = semantic == null && parsed.words.isEmpty() && parsed.exact.isEmpty()
 
     val out = ArrayList<ScoredCell>()
     for (p in cells) {
@@ -67,7 +68,7 @@ class EvalScoring(
       if (zi == null && ti == 0f) continue
       out += ScoredCell(key, zi, scores[id], ti, age)
     }
-    return Table(ScoreTable.of(query.id, query.category, expected, out), contentAvailable = vector != null || parsed.semantic == null, cells = cells.size)
+    return Table(ScoreTable.of(query.id, query.category, expected, out), contentAvailable = vector != null || semantic == null, cells = cells.size)
   }
 
   /** La tabella e se il contenuto c'era (il motore delle query poteva rispondere); [cells] sono le celle candidate (senza nascosti). */

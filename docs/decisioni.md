@@ -4091,3 +4091,39 @@ lettura del testo all'avvio, porte del viewer, azzeramento, Diagnostica, `tools/
   indicizzatore ha gia' fatto (un'unita' finita da lui non torna piu' da noi: il banco lo ha mostrato dopo la prima correzione, 58 giri
   su 2.000); le anteprime di un media "non supportato" si tolgono **prima** di segnarlo (una morte in mezzo fa solo riprovare il
   media). `AiChaosKnownDefectsTest` ora prova la correzione e `AiChaosVerifier` non ha piu' l'etichetta: 2.000 giri, 0 violazioni.
+- **Grafi**: `AiStack` (Hilt, `AiModule`; i test d'integrazione lo montano uguale con `AiWiring.build` e i motori finti) tiene `LocalModels`,
+  `SearchGraph` e `AiGraph`. `SearchGraph` nasce con la galleria e vive anche senza NAS: indice locale (`noBackupFilesDir/search/index`),
+  `CellKeys` aggiornate dai `CatalogChange`, motore, suggerimenti, cronologia (`search_history`), testo dal vivo. La parte `ai`
+  dell'indice condiviso nasce **dentro** `NasGraph.start` (`NasAiRuntime`), perche' ha bisogno di identita', regole, prenotazioni e
+  `NasRemoteIndex` del motore del NAS: `AiShareSync` agganciata a `IndexSyncEngine(ai = ...)`, `OutboxAiIndexPublisher` (stessi
+  `IndexWriteRules` e `ShareLocks` dell'indice), `LeasedWorkUnits` con `AiWorkSource` e `AiPublishedClasses`, `IndexAnalysisFetcher`.
+- **Adattatori Room** di `AiPublishStore` e `AiReplicaStore` in `:app` (`ai/RoomAiStores.kt`, `ai/RoomAiReplicaStore.kt`), una transazione
+  per metodo, provati contro le implementazioni in memoria di P2 (`RoomAiStoresTest`). `AiReplicaSink` sopra `LocalAiIndex`
+  (`IndexReplicaSink`); il riparatore dell'indice segna le chiavi "da rifondere" nella replica.
+- **`AiWorkCatalog.settled` (richiesta di P5)**: conta solo i vincitori della replica con la ricetta corrente (anche i propri, una volta
+  pubblicati e riletti) e i "non supportati" (`FileAiUnsupported`, `noBackupFilesDir/ai-unsupported`); mai cio' che e' salvato solo qui.
+- **Righe del testo letto per il viewer** (`MediaText`, P12): l'indice di P6 tiene solo il testo normalizzato; `:app` salva il corpo `ocr`
+  per chiave (`search/ocr-layout/`, riletto con `AiSegments`) dal calcolo e dalla replica. Il calcolo tiene anche i propri corpi
+  (`search/local-bodies/`) per `AiLocalBodies` (ripubblicare senza ricalcolo): prima il corpo, poi l'indice.
+- **Preparazione del backup** (`PreparingUploadIndexing`, core-backup, richiesta di P5): consegna `analysis` e `frames` al buffer degli
+  indicizzatori dopo la pubblicazione, mai bloccante.
+- **Lettura del testo**: `AppTextReadingSwitch` sopra `text_reading` (sincronizzata, arriva con il NAS) e l'esclusione locale;
+  `TextReadingMemory` ricorda l'ultima scelta (`noBackupFilesDir/text-reading`) per l'avvio, dove `TextReadingStartup` chiama
+  `TextReadingShutdown.atStartup` **prima** di `super.onCreate()` (prima dell'iniezione). Ogni passaggio da "attiva qui" a non attiva
+  (anche da un altro dispositivo) chiama `onTurnedOff`. La lettura al volo del viewer usa solo l'anteprima di analisi gia' nel buffer.
+- **Modelli**: `ModelNetworkGate` di :app (rete validata, mai roaming; in background solo reti non a consumo; "Scarica ora" sui dati
+  mobili dopo la conferma); traffico con `LedgerModelTraffic` (`AI_COMPUTE`); `ModelShelfGate` da `IndexWriteRules` pronto ma lo scaffale
+  resta `NoModelShelf` (manca la scrittura a flusso in core-nas, punto aperto di P3). `LocalModels.refresh()` all'avvio e a ogni giro di
+  `ModelFetchWorker`. Il motore delle query si carica alla prima query e si rilascia 3 minuti dopo l'ultima o a memoria bassa (D35).
+- **Lavori**: `ModelFetchWorker` (periodico su rete non a consumo; accelerato per "Scarica ora" e per il ruolo acceso), `AiComputeWorker`
+  (`StagedRun` con `AI_COMPUTE`, `writesToNas`; "Indicizza ora" come `UserInitiated`; un giro dopo `IndexSyncWorker` e
+  `PreparationWorker`, lavoro unico `KEEP`), compattazione dell'indice in `LibraryMaintenanceWorker`.
+- **Difetti trovati dal test della catena** (`SearchChainIntegrationTest`): `DiskAiBuffer` con lo spazio libero letto dalla sua cartella
+  (`File.usableSpace` di una cartella che non c'e' vale 0: rifiutava tutto) ora riceve lo spazio di `noBackupFilesDir`; calcolo e replica
+  scrivevano nell'indice prima che fosse aperto (ora si apre al primo uso, idempotente).
+- **Azzeramento**: `aiStopper` (AI e ricerca) prima della galleria; poi buffer, `search/`, "non supportati", memoria della lettura, battito;
+  i modelli solo nell'azzeramento completo e solo con l'AI ferma. Tabelle `ai_*` e cronologia vanno con il database.
+- **Diagnostica**: i 19 codici del §2.6 nel catalogo (stessi id ed edge case dei contratti, `Phase6DiagCatalogTest`), la sezione "Ricerca"
+  (`AiDiagnostics`, solo numeri) e i lavori `MODEL_FETCH` e `AI_COMPUTE`.
+- **Ritaglio (P13)**: non collegato. Le porte restano sui null-object (`ViewerServices.subjectPress = null`, nessun `CutoutSaver`), vedi
+  il REPORT di P11 per come agganciarlo.

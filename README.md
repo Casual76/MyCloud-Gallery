@@ -52,7 +52,7 @@ segnaposto e almeno un test.
 
 | Modulo | Cosa contiene | Vede |
 |---|---|---|
-| `:app` | `MainActivity`, blocco app, navigazione, il grafo della Fase 2 (`graph/AppGraph`), quello della galleria (`gallery/GalleryGraph`) e, dalla 4A, quello del NAS nella Libreria (`nas/NasGraph`) esposti a Hilt, `TrustSyncWorker`, `PhoneSyncWorker` e `LibraryMaintenanceWorker` (`work/GalleryWork.kt`), i lavori del NAS (`work/NasWork.kt`), notifiche e riepilogo giornaliero, ciclo di vita del processo; applicationId `dev.pampa.mycloudgallery` (debug: `.debug`; variante di misura: `.bench`) | tutti + `engine-ui` |
+| `:app` | `MainActivity`, blocco app, navigazione, il grafo della Fase 2 (`graph/AppGraph`), quello della galleria (`gallery/GalleryGraph`) e, dalla 4A, quello del NAS nella Libreria (`nas/NasGraph`) esposti a Hilt, `TrustSyncWorker`, `PhoneSyncWorker` e `LibraryMaintenanceWorker` (`work/GalleryWork.kt`), i lavori del NAS (`work/NasWork.kt`), notifiche e riepilogo giornaliero, ciclo di vita del processo; dalla Fase 6 (P11) `ai/AiGraph` (modelli, motori, lettura del testo dietro il cancello, calcolo AI, adattatori Room dei dati `ai`), `search/SearchGraph` (indice locale e motore di ricerca, vive anche senza NAS), `nas/NasAi` (teste `ai` nel giro dell'indice), `work/AiWork.kt` (`ModelFetchWorker`, `AiComputeWorker`), la scheda Cerca e le pagine della ricerca (`navigation/SearchNavigation.kt`); la release porta solo `arm64-v8a`; applicationId `dev.pampa.mycloudgallery` (debug: `.debug`; variante di misura: `.bench`) | tutti + `engine-ui` |
 | `:core-common` | logger interno (in release non scrive nulla), `Redacted`, `DispatcherProvider` | nessuno |
 | `:core-model` | tipi di dominio (media, posizioni, versioni, dispositivi) | nessuno |
 | `:core-database` | Room + KSP: replica locale dell'indice | model, common |
@@ -141,6 +141,14 @@ scrive i contratti, i null-object e i fake). Le regole:
 violazione reintrodotta lo fa fallire. Le aggiunte ai moduli esistenti (classi `vec` e `ocr` in `core-trust`, testa `ai` in
 `core-index`, schema v5 in `core-database`, ruoli modificabili in `core-family`, impostazioni sincronizzate in `core-personal`,
 testo dal vivo, ritaglio e foto in movimento in `feature-viewer`) sono nel §1.3 del progetto.
+
+**Fase 6 in `:app` (P11).** `AiModule` monta tutto una volta per processo (`AiWiring.build`): `LocalModels` (cartella
+`noBackupFilesDir/models`, sorgenti di `ModelFetchers`, cancello di rete per l'HTTPS; la copia sul NAS resta spenta finche' `core-nas` non
+ha la scrittura a flusso), `SearchGraph` (`noBackupFilesDir/search`: indice locale, righe del testo letto, cronologia nel database),
+`AiGraph` (buffer `noBackupFilesDir/ai-buffer`, calcolo, lettura del testo con `GatedTextReader.create`). La parte `ai` dell'indice
+condiviso nasce con il motore del NAS (`NasAiRuntime`: replica `AiShareSync` agganciata a `IndexSyncEngine`, pubblicatore, unita' con
+`WorkPass.AI`). All'avvio `TextReadingStartup` gira **prima di Hilt** (D41). L'azzeramento ferma AI e ricerca per prime. La prova della
+catena intera e' `SearchChainIntegrationTest`.
 
 Dalla Fase 2 ogni modulo nuovo ha tre package fissi (docs/fase2-progetto.md, D6):
 - `contract`: le interfacce e i tipi che gli altri moduli usano (con KDoc che spiega il perche');

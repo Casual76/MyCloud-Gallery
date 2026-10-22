@@ -416,6 +416,16 @@ Esteso con il §6.3 di `docs/fase6-progetto.md`: le prime quattro voci sono quel
 - [ ] Nascosti mai in risultati, suggerimenti, completamenti, luoghi, conteggi, "Trova simili" (F58).
 - [ ] Log e Diagnostica senza query, testo letto, luoghi, vettori, chiavi di contenuto.
 
+*Stato dopo l'integrazione (P11, 22/10), in attesa delle prove sul campo:* il lettore del testo si costruisce solo con
+`GatedTextReader.create` e all'avvio del processo, **prima dell'iniezione di Hilt**, `TextReadingStartup` annulla i lavori di DataTransport
+e ne toglie coda e identificativo se la lettura non e' attiva qui (l'ultima scelta vista sta in `noBackupFilesDir/text-reading`: nel dubbio,
+spenta); spegnere o escludere il dispositivo chiama `TextReadingShutdown.onTurnedOff`. `ModelFetchers` e' montato da `:app` e `check.ps1`
+(passo 7e) ora pretende di vedere le chiamate HTTPS di `download/https/` nel dex di release, e nessun'altra. Il cancello di rete dei modelli
+rifiuta reti non validate e il roaming, in background i dati mobili; "Scarica ora" sui dati mobili chiede conferma. Cerca usa solo
+miniature locali (`LocalOnlyRefs`). Il tablet con la lettura spenta cerca e legge il testo letto da un altro senza mai chiamare il lettore
+(`SearchChainIntegrationTest`). Su una share vera (F4-D31) i risultati restano locali e in attesa. La Diagnostica della ricerca esporta solo
+numeri e codici (`AiDiagnostics`). Le caselle si spuntano con le prove sul campo (F46-F71) e la revisione di chiusura.
+
 ### Fase 7: album e condivisione
 - [ ] Un elemento nascosto non compare in nessuna schermata né nel widget di prova (test automatico).
 - [ ] Condivisione di un album: conferma esplicita con conteggio; lo spostamento parte solo da quella azione locale.
@@ -511,6 +521,8 @@ Esteso con il §6.3 di `docs/fase6-progetto.md`: le prime quattro voci sono quel
 | 21/10/2026 | **Ritaglio del soggetto** (Fase 6, D44): **MagicTouch** di Google (Interactive Segmenter, Apache 2.0, ~6 MB, asset dell'APK) eseguito con `com.google.ai.edge.litert:litert` 2.3.0 su CPU, **non** con MediaPipe Tasks, che ha annunciato statistiche d'uso "per tutte le piattaforme" senza modo di spegnerle. Piano B: MobileSAM con ONNX Runtime. | Licenza permissiva, piccolo, pensato per "tocca il soggetto"; niente Play Services né servizi esterni (richiesta dell'utente). Per LiteRT nessuna telemetria è nota (L55). | Deciso (Q9, Q11 (a)); cattura F67, da ripetere a ogni aggiornamento della libreria |
 | 21/10/2026 | **Telemetria e regola delle dipendenze** (Fase 6, D49): la regola "niente SDK che parli con Internet" di `versions-app.gradle` resta, con tre eccezioni scritte accanto: `litertlm-android` e `litert` (nessuna rete attesa, verificata con le catture F55 e F67) e ML Kit `text-recognition` (rete solo con la lettura attiva). La proposta 9 del piano diventa: "nessuna telemetria e nessun crash reporting esterno, salvo la lettura del testo nelle foto se l'utente la attiva: ML Kit manda a Google statistiche tecniche, mai foto né testo". | Risposta Q4: l'eccezione è dichiarata dove si vede, accanto alla regola. | Deciso (Q4); codice in P0 |
 | 21/10/2026 | **Foto in movimento solo-NAS** (Fase 6, D51): la parte video, in coda al file e di pochi MB, si legge a intervalli dal NAS; per l'animazione automatica solo se è al massimo 16 MB, sul Wi-Fi di casa o su un Wi-Fi via VPN (mai dati mobili né roaming) e pronta entro 1,5 s dalla pagina ferma; con il badge "Movimento" sui dati mobili si chiede conferma con la dimensione. Cache `cacheDir/motion/` (64 MB, tolta dall'azzeramento), traffico registrato come `VISIBLE_CONTENT`. Il video avviato dal badge ha l'audio (risposta Q15). | Un pulsante come nelle altre gallerie; il NAS non costa dati mobili senza un sì (E-V2). | Deciso (Q14, Q15 (a)); prova F71 |
+| 22/10/2026 | **Release solo `arm64-v8a`** (Fase 6, P11; modifica a D3, decisione dell'orchestratore): la release e la `benchmarkRelease` tolgono le librerie native `x86_64` all'impacchettamento; la debug le tiene per gli emulatori. `tools/check.ps1` rifiuta ogni ABI diversa da `arm64-v8a` nella release e controlla ancora l'allineamento a 16 KB. | Tutti i dispositivi della famiglia sono arm64; 46 MB in meno nell'APK di release (da 113,8 a 67,3 MB). Meno codice nativo installato = meno superficie. | Deciso |
+| 22/10/2026 | **Lettura del testo all'avvio e allo spegnimento** (Fase 6, P11, D41): la pulizia di DataTransport gira nell'`Application` prima dell'iniezione di Hilt, con l'ultima scelta ricordata in locale (nel dubbio spenta); lo spegnimento per l'account, da questo o da un altro dispositivo, e l'esclusione di questo dispositivo chiamano `onTurnedOff`. | Le impostazioni personali arrivano solo con il NAS: senza una memoria locale, all'avvio la lettura sembrerebbe sempre spenta (pulizia inutile) o sempre accesa (pericoloso). | Deciso; prove F56 e F69 |
 
 ---
 

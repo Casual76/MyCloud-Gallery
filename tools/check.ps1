@@ -54,7 +54,8 @@
                                 l'elenco chiuso di `releaseManifestPolicy` (non esportati), le `uses-native-library` solo le due
                                 ammesse e facoltative; nel bytecode (dexdump) `MlKit.initialize` chiamato da codice nostro solo
                                 dal cancello `core-ai/.../ocr/MlKitBootstrap` e i client HTTPS (`HttpsURLConnection`,
-                                `URL.openConnection`) solo da `core-models/.../download/https/`. FALLISCE se non legge l'APK
+                                `URL.openConnection`) solo da `core-models/.../download/https/` e (P11) almeno una da li'
+                                (`ModelFetchers` montato da `:app`). FALLISCE se non legge l'APK
     7c. niente servizi        l'APK di release non ha nessun `META-INF/services/dev.pampa.*` (ne' un file di servizio che
                                 nomini una classe `dev.pampa.*`): le varianti di misura legano le loro classi con Hilt, mai
                                 con `ServiceLoader` (R6)
@@ -1107,6 +1108,10 @@ Step "motori on-device nella release: librerie native (ABI, 16 KB), manifest (ML
       $problems += "client HTTPS fuori da core-models/.../download/https/: $caller ($($parts[0]))"
     }
   }
+  # P11: da quando `:app` monta `ModelFetchers` il client HTTPS dei modelli e' raggiunto e R8 lo tiene: il controllo deve vederlo (controllo
+  # positivo: un passo che non vede niente non prova niente).
+  $httpsOk = @($facts.Calls | Where-Object { ($_ -split '\|', 2)[1].StartsWith("Ldev/pampa/mycloudgallery/core/models/download/https/") })
+  if ($httpsOk.Count -eq 0) { $problems += "nessuna chiamata HTTPS da core-models/.../download/https/ nel dex: ModelFetchers non e' montato da :app (o la lettura non e' affidabile)" }
   $ourCalls = @($facts.Calls | Where-Object { ($_ -split '\|', 2)[1].StartsWith("Ldev/pampa/") })
   Write-Host ("        bytecode: {0} chiamate nostre a MlKit.initialize o ai client HTTPS, tutte al loro posto ({1} righe di dexdump)" -f $ourCalls.Count, $facts.Lines) -ForegroundColor DarkGray
   if ($problems.Count -gt 0) { return ($problems -join "; ") }

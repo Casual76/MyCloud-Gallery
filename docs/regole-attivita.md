@@ -336,6 +336,21 @@ somma al tempo di ogni immagine solo dove è attiva.
 Le costanti nuove o ricalibrate di questo paragrafo (`aiItemsPerSecond` dalle anteprime, `ocrSecondsPerItem`, `framesPerVideo`,
 `modelBytes`) sono **ipotesi** da sostituire con le misure di P4 e P5 (F52, F46).
 
+### Album, viaggi e condivisione (Fase 7, `docs/fase7-progetto.md` §1.4, §2.2, §2.3, §2.5, D16, D25, D28)
+
+Costanti nuove (ipotesi di partenza, da misurare in F91):
+* `smartAlbumRecomputeBudget`: il ricalcolo di un album smart a lotti di 2.000 candidati, obiettivo < 2 s per album su 100 mila elementi
+  (`SmartLimits.RECOMPUTE_BATCH`); gira dentro `LibraryMaintenanceWorker` dopo le scansioni con novita', solo per gli album non congelati
+  che coprono i giorni toccati.
+* `tripDetectionNightly`: la rilevazione di casa, viaggi ed eventi una volta per notte (e dopo un primo backup o una prima scansione),
+  obiettivo < 5 s sulla Libreria intera.
+* `similarDuplicatesWindow`: i doppioni "simili" si cercano a gruppi di 10 minuti nello stesso giorno, solo media con vettore o firma.
+
+**Attivita' pesanti** (Wi-Fi di casa, come il backup, F5-D9): gli **spostamenti in condivisione** (`ShareWorker`: copia lato server e
+verifica completa nell'area comune, anche come lavoro avviato dall'utente, UIDT come le operazioni della 4B) e il **guardiano dopo una
+condivisione** (D28: copia privata dei media propri rimasti con la sola copia comune). Il traffico degli spostamenti si conta come quello
+delle operazioni del NAS; i caricamenti dal telefono verso la cartella dell'album come `INCOMING`.
+
 
 ---
 

@@ -4485,3 +4485,261 @@ dal testo -> il soggetto si stacca; "Salva come nuova foto" -> la foto compare i
 nascosta; Copia e Condividi; foto da 12 MP e panorami; la cattura di rete di F67 non deve vedere traffico del ritaglio. **Media del solo telefono**: con una foto che non e' sul NAS, "Indicizza
 ora" (o la notte) la analizza, la Ricerca la trova dal contenuto e dal testo, e dal tablet NON la trova (e' solo del telefono); verificare il tempo per foto (preparazione + vettore + testo) e che
 con il telefono caldo il ritmo cali.
+
+## Fase 7 (Album, condivisione, Raccolte): decisioni del progetto (21-22/10)
+Fonte: `docs/fase7-progetto.md` (§0.1 decisioni D1–D39, §0.2 edge case nuovi, §9 domande, §11 risposte del 22/10). Le decisioni valgono come
+scritte lì; qui il riassunto in una riga ciascuna (cosa e perché), con il rimando. Le modifiche agli altri documenti (§0.3 del progetto) le
+ha fatte P0 il 22/10: `docs/formato-nas.md` (A1–A7: albero, §4.6, §5.8, §5.5-bis, §7, §9, §10), `docs/sicurezza.md` (S5, S11, C10, C14,
+C19, C24–C27, L57–L66, checklist della Fase 7, §8), `docs/modello-dati.md` (§5, §9), `docs/fase4-progetto.md` (D24, Q10),
+`docs/fase5-progetto.md` (D9, §2.3, D24, D35), `docs/fase6-progetto.md` (§2.9 e le due aggiunte a P6), `docs/regole-attivita.md` (§6),
+`docs/grafica-progetto.md` (§12.13) e `README.md` (moduli e grafo). Il **piano** non e' nel repository: gli edge case del §0.2, le
+proposte 5, 6 e 7, il "7.4 al sicuro garantito" e E-SH11 precisato li riporta l'orchestratore. Lo schema v6 (`docs/modello-dati.md` §14)
+lo scrive P1.
+
+Una fase sola con tre tappe (M1 album personali, Nascosti e Utility; M2 album condivisi con il banco delle 500 interruzioni; M3 album
+smart, viaggi, Raccolte), **quattordici pacchetti** (P0–P13; opus per P0, P2, P4, sonnet per gli altri undici). Prove sul campo F72–F93.
+Chiusura: revisione di sicurezza e verifica funzionale in parallelo; con il consenso (Q7) gli album condivisi sulle share vere (F93).
+
+**Risposte dell'utente alle domande del §9 (22/10)**
+| # | Domanda | Risposta | Effetto |
+|---|---|---|---|
+| Q1 | Dove mettere la cartella di un album condiviso | (a) "Album condivisi/<nome>" nell'area comune | D12, §2.5; `SharedAlbumLimits.FOLDER_ROOT` |
+| Q2 | Il permesso proposto alla creazione | (a) "Gli altri aggiungono" | `ShareLevel.DEFAULT` |
+| Q3 | Le foto nascoste in un album che si condivide | (a) restano fuori con l'avviso; si possono condividere a scelta | `HiddenChoice.LEAVE_OUT` preselezionata, E-SH9 |
+| Q4 | Le foto nuove di uno smart condiviso | (a) in "Da condividere", condivise con un tocco | D17 |
+| Q5 | Cosa vedono gli altri quando si smette di condividere | **diversa dalle opzioni: lo decide chi lo fa** (smettere o eliminare): (a) l'album sparisce dalle loro Raccolte con un avviso, o (b) ognuno tiene una copia personale con le stesse foto, finche' le foto restano | **D31 adeguata in P0** (sotto, "Fase 7 P0") |
+| Q6 | Mostrare chi ha aggiunto ogni foto | (a) si', nelle informazioni | `addedBy` nella voce `item:` (serve comunque ai permessi) |
+| Q7 | Quando accendere gli album condivisi sulle cartelle vere | (a) a fine Fase 7, con l'app definitiva e il consenso | D30: `sharedAlbumsTestSharesOnly` acceso fino ad allora |
+
+Conferma collegata (22/10, correzioni dal campo A, D2): la copia privata automatica vale solo per i media che sono stati sul telefono; le foto
+spostate nell'area comune dalle Cartelle NAS, mai state sul telefono, restano protette dal cestino del NAS (L44, L62).
+
+**Decisioni D1–D39** (rimando: `docs/fase7-progetto.md` §0.1)
+| # | In breve | Stato |
+|---|---|---|
+| D1 | Una fase, tre tappe; tutto cio' che sposta o toglie file passa da `core-nasops` con una `UserConfirmation`; i file `albums/` solo con `publishExclusive` | Deciso |
+| D2 | Moduli `core-albums` (non vede nasops, backup, nas, index, ai, models, rete) e `feature-albums`; porte legate da `:app` | Deciso (P0) |
+| D3 | Album personali (manuali e smart) nei dati personali, voci `ALBUM`; mai un file spostato per un album personale | Deciso |
+| D4 | Campi nuovi dentro `ALBUM`, `SETTING`, `MEDIA_FLAG`; nessun `PersonalKind` nuovo; impronta su `item:`, `exclude:`, `accept:`, `smart:example:` | Deciso (P0: costanti e test d'architettura) |
+| D5 | Proiezione `CatalogAlbumProjection` sulle tabelle v6, derivate e ricostruibili; elementi non risolti in attesa | Deciso (P3) |
+| D6 | Album condiviso: un contributo per album e per dispositivo nell'area comune, classe `album` (17), versione 3 solo per `albums/` | Deciso (P2) |
+| D7 | Voci per chiave, ultima scrittura vince; id dell'album legato all'account del creatore (`AlbumId.derived`) | Deciso (P0: la derivazione; P2: codec) |
+| D8 | Regole di chi legge (firma, registro, anti-rollback, account = `nasUser`, tetti, campi sconosciuti): ogni violazione rifiuta il contributo | Deciso (P2) |
+| D9 | Gli elementi li attesta il catalogo di chi legge (file nell'area comune con la stessa chiave); mai un'azione da un elemento | Deciso |
+| D10 | Permessi a tre livelli imposti dall'app, doppio controllo con la stessa tabella; dichiarazione su ogni schermata | Deciso (P0: tabella; P2: lettura) |
+| D11 | Il creatore e' un account; eredita' dell'admin solo con il creatore uscito dal registro | Deciso |
+| D12 | Condividere = spostare nell'area comune, solo da un'azione locale confermata, piano unico con conteggi e impronta; nascosti fuori di default | Deciso (P0: contratti e conferma; P4) |
+| D13 | Il nome diventa regole con `ItalianQueryParser`; periodo raffinato sulle foto | Deciso (P6) |
+| D14 | Sicuri (A, B, C) e dubbi (S1–S5); mai nascosti, esclusi, membri di gruppo | Deciso (P6) |
+| D15 | Descrizione ed esempi dai contratti della Fase 6; senza motore le altre regole funzionano e l'editor lo dice | Deciso (P6) |
+| D16 | Esclusioni per sempre, ricalcolo incrementale, "Congela"; regole troppo larghe oltre 3.000 o il 20% | Deciso (P6) |
+| D17 | Smart condiviso: regole personali, foto nuove in "Da condividere" (Q4) | Deciso |
+| D18 | "Casa" dedotta solo in locale (`home_estimate`, solo `trips/`) | Deciso (P0: test d'architettura; P7) |
+| D19 | Viaggi e eventi con regole deterministiche; titoli dalla Fase 6 | Deciso (P7; P0 fissa l'interpretazione del "ritmo" in `TripRules`) |
+| D20 | Proposte nella sezione Viaggi; "Crea album" o "Non mi interessa" sincronizzato; nessuna notifica | Deciso |
+| D21 | Ordine dell'elenco e dentro l'album, copertina scelta o automatica; una copertina non mostrabile diventa automatica | Deciso |
+| D22 | Nascosti mai, da una sola fonte (`VisibleMedia`, `HiddenMask`), registro delle superfici, widget di prova sopra `WidgetFeed` | Deciso (P0: firme; P9) |
+| D23 | Nascosti dietro lo stesso cancello, avviso E-H2, riga senza nomi in Cartelle NAS | Deciso (P9) |
+| D24 | Utility: Screenshot, Video, Modificate (`LibraryFilter.EDITED`), WhatsApp, Doppioni, Eliminati di recente, Libera spazio | Deciso (P0: il filtro; P8) |
+| D25 | Doppioni identici dalla stessa parte e simili; pulizia guidata nei cestini | Deciso (P8) |
+| D26 | Eliminati di recente unificati (telefono e NAS), D-3 dichiarato | Deciso (P8) |
+| D27 | Hash completo dei video del NAS di notte, interruttore spento (`full_hash_nightly`) | Deciso (P8) |
+| D28 | "Al sicuro" garantito: guardiano subito per i media propri gia' assenti dal telefono (`SafeCopyRequests`) | Deciso (P0: firma; P4) |
+| D29 | Identita' stabile: diario della condivisione e porta di completamento `MoveCompletionSink` prima della sorgente nel cestino | Deciso (P0: firma; P4) |
+| D30 | Recinzione `sharedAlbumsTestSharesOnly`, accesa anche in release fino al consenso (Q7) | Deciso (P0) |
+| D31 | Smetti di condividere, Elimina, Riporta; **adeguata a Q5**: la scelta per gli altri (sparisce o copia personale) la fa chi chiude ed e' firmata nella definizione | Deciso (P0: contratti e documenti; P2, P4) |
+| D32 | UI come stati e contratti, composable solo G2 | Deciso (P0: stati di `feature-albums`) |
+| D33 | Raccolte ordinabili e nascondibili, scelte sincronizzate | Deciso (P11) |
+| D34 | Schema v6 con una sola migrazione non distruttiva | Deciso (P1) |
+| D35 | "Aggiungi ad album" ovunque; verso un condiviso sempre il foglio di conferma | Deciso (P10) |
+| D36 | Ora del NAS per le voci, giorni locali dello scatto per i periodi, monotono per le durate, `Today` per "oggi" | Deciso |
+| D37 | Log e Diagnostica solo con numeri e codici (`AlbumDiag`) | Deciso |
+| D38 | Gli album scrivono dietro gli stessi cancelli delle teste; gli spostamenti si fermano con `FROZEN` | Deciso |
+| D39 | Togliere da un album non e' eliminare; un file aggiunto dal PC non entra da solo | Deciso |
+
+**Dubbi grafici** (per il filone grafico): elenco e pagina degli album, editor delle regole, "Suggerite" e "Da condividere", foglio di
+condivisione, permessi e chiusura (con la scelta di Q5), proposte di viaggio, Doppioni e "Modifica Raccolte": in `docs/grafica-progetto.md`
+§12.13.
+
+## Fase 7 P0: fondamenta, contratti, recinti e documenti (22/10)
+
+Il pacchetto P0 della Fase 7 (`docs/fase7-progetto.md` §4.4, riga P0; §1.1–§1.5, §2.4, §4.3, §5.2, §6, §11). Consegna i due moduli nuovi, i
+contratti del §1.2 con null-object, fake fedeli ed esecutori di riferimento, le suite di contratto, le firme nei moduli esistenti, i recinti
+(`Phase7ArchitectureTest`, R8 e `tools/check.ps1` per D30) e i documenti del §0.3. **Nessuna dipendenza esterna nuova**, nessun permesso o
+componente Android nuovo, `:app` non toccato (lo lega P13). Branch `fase7/p0`.
+Commit: `c382e765` (firme nei moduli esistenti), `fa4fa463` (moduli, contratti, esecutori, suite), `a6cf6cd2` (recinti) e quello
+dei documenti.
+
+**Moduli nuovi**
+- `core-albums` (`api` common, model, library; `implementation` trust, database, personal, places, search): `contract/` (`AlbumModel`,
+  `Albums`, `Smart`, `SharedAlbums`, `AlbumPermissions`, `Publishing`, `Share`, `ShareDiary`, `ShareConfirmation`, `Ports`, `Catalog`,
+  `Trips`, `AlbumDiag`), `noop/` (tutti i contratti, chiusi), `testing/` (Libreria finta, mondo comune finto, fake di porte, pubblicatore e
+  album condivisi, esecutori di riferimento), `NoNetworkSourcesTest`, `NoWallClockSourcesTest`. Nessun Hilt.
+- `feature-albums` (`api` core-albums, core-designsystem; `implementation` library, imaging, common, model; Compose, Hilt, Roborazzi come
+  `feature-search`): `contract/AlbumScreens.kt` (gli stati del §1.5 suoi: `AlbumListState`, `AlbumPageState`, `AlbumBanner`,
+  `SmartEditorState`, `SuggestionsState`, `ShareSheetState`, `PermissionInfo`, `CloseSheetState`, `TripsState`, `AlbumActions`), `noop/`,
+  `testing/AlbumSamples` (un esempio per caso), test di guardia. `UtilityState`, `RecentlyDeletedState` e `CollectionsLayoutState` sono di
+  feature-library (P8, P11).
+- `settings.gradle` e `galleryModules`; `tools/check.ps1` li conta da solo ("test eseguiti in ogni modulo" legge `settings.gradle`).
+
+**Firme nei moduli esistenti** (solo quelle della riga P0, piu' `AlbumId.derived` del §1.3)
+- `core-model`: `ShareLevel` (`all`, `add`, `view`; predefinito `ADD` per Q2), `AlbumKind` (`manual`, `smart`), `AlbumSort` (`oldest`,
+  `newest`, `custom`, con il predefinito per tipo di D21), `TripKind` (`trip`, `event`); `AlbumId.derived(creator, nonce)` (D7: i primi
+  128 bit di `SHA-256("mcg-album-id\0" ‖ account ‖ nonce)` in forma di UUID). Il §1.3 lo dava a P0, la riga del §4.4 no: e' qui perche'
+  serve insieme a P2 (codec, core-trust) e P3 (album personali) che partono in parallelo; una sola derivazione per tutti.
+- `core-personal`: le costanti dei campi D4 in `PersonalFields` (`kind`, `sort`, `smart:*`, `exclude:`, `accept:`, `frozen`, `shared`,
+  `collections_order`, `collections_hidden:`, `albums_sort`, `trip_dismissed:`, `shared_album_left:`, `full_hash_nightly`, `shared_origin`)
+  e, per Q5, **`copy_of`**; nessun `PersonalKind` nuovo. Test: il codec di oggi rilegge identiche le voci con i campi nuovi.
+- `core-library`: `LibraryFilter.EDITED` (fuori dai filtri rapidi della Libreria: e' una pagina dell'Utility; due stringhe in
+  feature-library per i `when` esaustivi), `contract/Visibility.kt` (`VisibleMedia`, `HiddenMask`, `WidgetFeed`), null-object (niente
+  visibile, tutto nascosto) e fake (`FakeVisibility`, `FakeWidgetFeed`).
+- `core-nasops`: `contract/Completions.kt` (`MoveCompletionSink`, `NasFileRef`) e `NoMoveCompletionSink`. La chiamata nel motore e' di P4.
+- `core-backup`: `contract/AlbumSharing.kt` (`IncomingDestination.Chosen`/`AlbumFolder`, `SafeCopyRequests`) e `NoSafeCopyRequests` (lancia:
+  la richiesta non e' registrata).
+- `core-common`: `FeatureFlags.sharedAlbumsTestSharesOnly` (costante accesa in release **e in debug**, nessun parametro in `forBuild`, come
+  D12) e `sharedAlbumsMayUse(share)`; regola R8 in `consumer-rules.pro`; `DiagSection.ALBUMS` (con la voce di stato `ALBUMS_STATE` in
+  feature-diagnostics: un test vuole una voce per sezione, come `SEARCH_STATE` nella Fase 6); `Phase7ArchitectureTest`.
+  `Phase6ArchitectureTest`: core-albums fra chi puo' dipendere da core-search (solo contratti).
+- `tools/check.ps1`: passo nuovo "D30 nella release" (campo e decisione nel dex e in `mapping.txt`); il cancello che li usa lo aggiunge P13.
+
+**L'adeguamento di D31 alla risposta Q5** ("lo decide chi elimina l'album")
+- Il foglio "Smetti di condividere" e quello "Elimina l'album" chiedono a chi chiude (creatore o erede) **cosa succede agli altri**:
+  `OthersAfterClose.REMOVE` (l'album sparisce dalle loro Raccolte con l'avviso) o `KEEP_COPY` (ognuno tiene una copia personale con le
+  stesse foto finche' restano nell'area comune). Nessuna preselezione: `CloseSheetState.forOthers` e' null e la conferma e' spenta finche'
+  non si sceglie; `SharedAlbums.close(id, mode, forOthers)` non ha un valore di default.
+- La scelta **viaggia nella definizione firmata**: `SharedAlbumChange.Definition.afterClose` (codice `remove`/`keep_copy`; presente solo con
+  `closed`/`deleted`, il tipo lo impone; un codice sconosciuto vale `remove`), campo `afterClose` di `definition` in `docs/formato-nas.md`
+  §5.8 (P2 lo scrive nel codec).
+- La copia e' un **album personale** di chi la tiene (dati personali, area privata, voce `copy_of`), con id deterministico per account
+  (`SharedAlbumCopies.copyIdFor(album, account)`): i dispositivi dello stesso account che leggono la chiusura scrivono le stesse voci, nessun
+  doppione; l'id e' diverso da quello dell'album condiviso. La ricevono solo i familiari che non avevano lasciato l'album; contiene gli
+  elementi che il **loro** catalogo attesta (D9). Una copia eliminata non si ricrea (P3/P4: la lapide della definizione non si riscrive).
+- Per il creatore nulla cambia rispetto a D31: dopo "Smetti" l'album resta suo come personale, dopo "Elimina" sparisce.
+- Chiuso o eliminato e' **definitivo** per quell'id (chi legge ignora un `active` successivo): condividere di nuovo crea un album nuovo.
+- "Riporta nelle mie cartelle" resta a parte; con `KEEP_COPY` il foglio avvisa che i media riportati spariscono anche dalle copie degli altri
+  (`ClosePreview.bringBackHurtsCopies`, `CloseSheetState.warnCopiesLoseBroughtBack`).
+- Avvisi: `SharedAlbumNotice.Closed(album, title, mode, keptCopy)`. Scritto in `docs/fase7-progetto.md` (D31, §1.2, §1.5, §2.6, §11), in
+  `docs/formato-nas.md` §5.8, in `docs/sicurezza.md` (L60, L61, L66, §7, §8) e nella tabella delle risposte qui sopra.
+
+**Contratti: scostamenti dalle firme indicative del §1.2** (i pacchetti dopo partono da quelle vere)
+- `Albums.items(id)` diventa `content(id): Flow<AlbumContent?>` con `items`, `suggested`, `toShare`, `incoming` (viste `OrderedTimelineView` di
+  core-library: nessuna `AlbumTimelineView` nuova). Le modifiche restituiscono esiti (`CreateOutcome`, `EditOutcome`, `AddOutcome` con
+  `NeedsShareConfirmation(plan)`), mai eccezioni per i casi previsti; in piu' `setListSort` e `moveInList` (ordine dell'elenco, `AlbumListSort`
+  in core-albums, predefinito "Aggiornati di recente": D21 non lo fissava). Regole dei titoli in `AlbumTitles` (1-64 caratteri, niente
+  controllo ne' direzione del testo; i caratteri vietati nei file si', la cartella si corregge da se').
+- `SharedAlbums`: `create` restituisce il piano (`ShareRunner.plan`); `rename`, `remove`, `setCover`, `setSort` (le modifiche di un condiviso
+  passano da qui, con la tabella), `closePreview` e `close(id, mode, forOthers)` (Q5), `leave`/`rejoin`/`left`, `notices`/`dismissNotice`.
+- `AlbumPermissions` e' la **tabella come dati** (righe del §2.4 per `AlbumOp`, celle per livello con ruoli `CREATOR`/`ADDER`/`OTHER`/`ADMIN`,
+  condizioni `ADDED_WHILE_PERMITTED` e `CREATOR_LEFT_FAMILY`, chi controlla, campo letto) con `rolesOf` e `admits`. La logica sulle voci
+  lette (`check(entry, levels, creator, heir, previous)`) la scrive P2 in shared/ come **estensione** `AlbumPermissions.check`: `AlbumEntry`
+  e' un tipo di core-trust che P2 scrive.
+- Il pubblicatore lavora su **`SharedAlbumChange`** (le modifiche come le pensa chi le fa; ora del NAS, autore e account li mette lui):
+  core-albums non definisce il formato. `stage` restituisce `StageTicket`, `publishedUpTo` dice fin dove e' pubblicato (ENTRY_STAGED →
+  PUBLISHED nel diario), `PublishOutcome` (`Published`, `NothingToPublish`, `TooSoon`, `Blocked`, `Failed`), `PublishRules` (5 minuti, 30 s),
+  `AlbumWriteGate.blockFor(share)` con `AlbumWriteBlock` (D30, D38, ShareFence).
+- La condivisione: `ShareRequest` ha `NewAlbum`, `FromPersonal`, `AddToShared`, `BringBack`, `FolderAdoption`; `SharePlan` porta impronta,
+  conteggi, byte, spazio richiesto (+1 GiB), etichetta della cartella, nonce (album nuovo), esclusi per motivo; `SharePlanOutcome` (anche
+  `InvalidTitle`), `ShareStartOutcome` (anche `AlreadyStarted` e `PlanChanged`: lo `start` ricalcola il piano sul catalogo). **Nuovi**: il
+  diario come contratto (`ShareDiary`, `ShareOpRecord`, `ShareItemRecord`) e la macchina a stati (`ShareStateMachine`: `PLANNED`,
+  `TRANSFERRING`, `IN_COMMON`/`IN_PRIVATE`, `ENTRY_STAGED`, `PUBLISHED`, `DONE`, `FAILED`, `CANCELLED`), cosi' P1 (tabelle), P4
+  (orchestratore) e P5 (invarianti) parlano della stessa cosa.
+- Le porte: `AlbumMover.move(key, items, dest, leave, confirmation)` e `AlbumUploader.upload(key, media, dest, confirmation)` vogliono **la
+  conferma** (anche il caricamento: e' un passo del piano confermato) e una **chiave** scritta nel diario prima della chiamata (idempotenza;
+  `TicketStatus.find(key)` ritrova il trasferimento avviato da un processo morto); restituiscono `TransferStart`; `TicketState` con un esito
+  per file. Nuove: `SharedOrigins` (`shared_origin`, registrata prima dello spostamento), `SharedAlbumFacts` (cartella, membri, stato dalla
+  replica), `AlbumFamily` (account, aree, admin, uscita dal registro), `AlbumClocks` (monotono e ora del NAS). `CatalogFacts` ha `facts` e
+  `attest` (D9, con l'hash completo se c'e'); `AlbumCandidates` (nuova) e' la porta delle query di P1 per smart/ e trips/.
+- La conferma della condivisione dopo la morte del processo: vive solo in memoria (come la `UserConfirmation`); un trasferimento mai partito
+  diventa `FAILED(NOT_STARTED)` ("Riprova" fa un piano nuovo), uno partito si ritrova per chiave.
+- Smart: il periodo e' `SmartPeriod` (`Ranges` per le serie di giorni di E-AL12, `EveryYear` per "ogni estate", `Days` per le feste mobili),
+  il luogo `PlaceRule` con `PlaceScope` (attorno, regione, paese), gli esempi sono `MediaId` (l'impronta la mette P3 nella voce); `SmartLimits`.
+- Viaggi: `TripProposals(proposals, homeKnown)`, `TripAcceptOutcome`, `TripId.of(kind, giorni, luoghi)`, `TripProposal.placeIds`;
+  `TripRules` con l'**interpretazione del "ritmo" degli eventi** (D19 non la fissava): almeno max(30, 5 x media dei media per giorno con foto)
+  in al piu' 4 ore. P7 la conferma sui dati sintetici di P12.
+- `VisibleMedia.visible` e' `suspend` (una query sul catalogo non va fatta sul thread principale).
+- `MoveCompletionSink.published(op, index, source: NasFileRef, dest: NasFileRef, stamp, sha256)` (l'elemento e' `OpItemRecord.index`).
+- **Condividere un album personale crea un album condiviso con un id suo** (nonce nuovo), collegato dalla voce personale `shared` (D4): la
+  voce personale non conserva il nonce, quindi l'id legato al creatore non si potrebbe ricalcolare. Sostituisce l'inciso di §2.1 ("un album
+  nato personale si puo' condividere senza cambiare id"), aggiornato.
+
+**Esecutori di riferimento e fake fedeli** (in `testing/`, src/main: mai nella release)
+- `InMemoryAlbums` (album personali manuali e smart con le scelte, album condivisi del finto, copie personali di Q5; membri smart dati da chi
+  lo costruisce, il motore e' di P6), `InMemoryShareRunner` con `ReferenceSharePlanner` e `ReferenceShareSteps` (tutti i passi del §2.5 e del
+  §2.6, il diario prima di ogni azione, la chiave prima della porta, `shared_origin` prima dello spostamento, la voce solo per un file
+  nell'area comune, il guardiano solo per i miei spostati senza telefono), `InMemoryTrips` (D18/D19 a forza bruta su `AlbumCandidates`), piu'
+  `InMemoryShareDiary` (con la morte simulata a un salvataggio, `SimulatedDeath`).
+- Fake: `FakeAlbumLibrary` (una sola fonte per visibilita', fatti e candidati; la porta di completamento come `move` con lo stesso `MediaId`),
+  `FakeSharedWorld` (l'area comune fusa, con le regole di chi legge: id legato al creatore, permessi con la tabella, chiusura definitiva,
+  eredita'), `FakeSharedAlbums` (un dispositivo), `FakeAlbumPublisher` (coda durevole, idempotente, ritmi di D6, cancello), `FakeShareTransfers`
+  (porte idempotenti per chiave, attese, esiti per file, morte dopo l'avvio), `FailingAlbumPorts` (falliscono se chiamate: §4.3), orologi,
+  famiglia, cancello, guardiano, cartelle d'origine, motore e interprete smart finti, replica finta.
+
+**Suite di contratto** (`core-albums/src/test/.../contract/`; le implementazioni vere le estendono): `AlbumsContract` (10 prove, P3),
+`ShareRunnerContract` (12, P4: invarianti 1-9 del §5.5 che si possono vedere sul finto), `TripsContract` (5, P7), `AlbumPublisherContract`
+(3, P2), `SharedAlbumsContract` (7, P2/P4; la prima generata dalla tabella: `allowed` coincide con cio' che chi legge accetta, per ogni
+livello, riga con voce e ruolo). Le passano `InMemoryAlbums`, `InMemoryShareRunner`, `InMemoryTrips`, `FakeAlbumPublisher` e
+`FakeSharedAlbums` (`ReferenceContractTests.kt`, mondo condiviso `ReferenceWorld`).
+
+**Cosa trovano pronto i pacchetti P1–P13, e cosa devono collegare**
+| Pacchetto | Trova pronto | Deve collegare o scrivere |
+|---|---|---|
+| P1 database v6 | i codici `ShareLevel`, `AlbumKind`, `AlbumSort`, `TripKind`, `SharedState`, `ShareItemState`, `ShareItemAction`, `SharePlanKind`, `ShareFailure`, `ShareWait` (stabili); le forme delle righe in `ShareOpRecord`/`ShareItemRecord`, `AlbumCandidate`, `MediaFacts`, `AttestRequest` | le tabelle del D34 e le query che riempiono `AlbumCandidates` (giorno locale, ora locale, GPS, `place_id`, `origin_device`, sorgente, tipo, schermo, pixel; solo celle visibili), `CatalogFacts.facts`/`attest`, `attachMoved` per `MoveCompletionSink`; `home_estimate` solo per trips/ (`Phase7ArchitectureTest` lascia core-database e `core-albums/.../trips/`) |
+| P2 formato e permessi | `AlbumId.derived`, la tabella `AlbumPermissions`, `SharedAlbumChange` (anche `afterClose` di Q5), `AlbumPublisher`/`PublishRules`/`AlbumWriteGate`, `SharedAlbumSync`/`AlbumSyncReport`, `SharedAlbumFacts`, `SharedAlbumCopies`, le suite `AlbumPublisherContract` e `SharedAlbumsContract`, `FakeSharedWorld` come specifica eseguibile delle regole di chi legge | `AlbumDocs` in core-trust (classe 17, versione 3, `afterClose`), `AlbumPermissions.check` come estensione in shared/, replica, fusione, attestazione via `CatalogFacts.attest`, pubblicatore vero; far passare le due suite alle classi vere; `NasFileSystem` solo in shared/ |
+| P3 album personali | `Albums` e `AlbumsContract`, `InMemoryAlbums` come riferimento, i campi D4 (anche `copy_of`), `SharedAlbumCopies` | `CatalogAlbumProjection`, i lettori dei campi in `Personal.kt`, `PersonalAlbums.addItem` con l'impronta, le copie personali di Q5 (dal lato dei dati personali) e la regola "copia eliminata non si ricrea"; far passare `AlbumsContract` |
+| P4 condivisione | `ShareRunner`, `ShareDiary`, `ShareStateMachine`, porte e conferma, `ReferenceSharePlanner`/`ReferenceShareSteps` come riferimento, `ShareRunnerContract`, `MoveCompletionSink` e `SafeCopyRequests` come firme, `FakeAlbumPublisher` finche' P2 non consegna | l'orchestratore in share/ con il diario Room di P1, la chiamata di `MoveCompletionSink` in `NasOpsEngine` (e la scelta su `MoveCompletions`), `IncomingDestination.AlbumFolder` in `INCOMING`, `SafeCopyRequests` nel guardiano, la chiusura con `afterClose` e le copie (con P3); far passare `ShareRunnerContract` |
+| P5 banco | `InMemoryShareRunner` sopra `InMemoryShareDiary` (morte a ogni salvataggio, `SimulatedDeath`) e `FakeShareTransfers` (morte dopo l'avvio, attese, esiti per file, `started` con l'impronta del piano per l'invariante 7) | gli invarianti del §5.5 sul riferimento subito, poi sul vero di P4 |
+| P6 album smart | `SmartRules`, `SmartPeriod`, `PlaceRule`, `SmartNameInterpreter`, `SmartAlbumEngine`, `SmartChoices`, `SmartLimits`, `AlbumCandidates`, i fake | smart/ (interprete con `ItalianQueryParser`, classi D14, ricalcolo, congela); la richiesta a P6 della Fase 6 (`similarToAll`, `within`) e' nel §2.9 della Fase 6 |
+| P7 viaggi | `Trips`, `TripProposal`, `TripId`, `TripRules` (con l'interpretazione del ritmo), `InMemoryTrips`, `TripsContract`, `AlbumCandidates` | trips/ con `home_estimate` (solo li'), etichette con `PlaceNames.summary`, `trip_dismissed`; far passare `TripsContract` |
+| P8 Utility | `LibraryFilter.EDITED` (gia' con nome e stato vuoto, fuori dai filtri rapidi), `VisibleMedia`/`HiddenMask`, `full_hash_nightly` | le pagine dell'Utility, Doppioni, Eliminati di recente, `UtilityState` e `RecentlyDeletedState` in feature-library |
+| P9 Nascosti | `VisibleMedia`, `HiddenMask`, `WidgetFeed` con null-object e fake | le implementazioni sul catalogo, `HiddenSurfaces`, il widget di prova, l'avviso E-H2 |
+| P10 schermate | gli stati di `feature-albums` (con `CloseSheetState` di Q5), `AlbumSamples`, `ShareConfirmationSheet`, i fake e gli esecutori di riferimento per i ViewModel | ViewModel e composable G2, il foglio che emette la conferma, le voci del viewer e la ricezione |
+| P11 Raccolte | le costanti `collections_order`, `collections_hidden:` | `SyncedCollectionsSettings`, `CollectionsLayoutState`, le sezioni |
+| P12 valutazione | `AlbumCandidates`, `InMemoryTrips` come riferimento | generatore e metriche |
+| P13 integrazione | tutto il resto: null-object per ogni contratto, `DiagSection.ALBUMS` con `ALBUMS_STATE`, `AlbumDiag` (codici del §2.8), il passo D30 di `check.ps1` | `AlbumsGraph`, le porte verso `NasOperations` (con `ConfirmationIssuer` sullo stesso piano), `IncomingUploads`, guardiano e catalogo; `AlbumWriteGate` = `IndexWriteRules` + `sharedAlbumsMayUse` + `ShareFence`, e la prova del cancello nel passo D30; le dipendenze di `:app` dai due moduli nuovi; i codici nel catalogo della Diagnostica |
+
+**Test d'architettura** (`Phase7ArchitectureTest`, 10 prove) **e la prova che falliscono**, reintroducendo le violazioni nel repository e
+togliendole (quattro giri, `:core-common:testDebugUnitTest --tests "*ArchitectureTest"`):
+- giro 1, **11 rossi**: un file in `core-albums/src/main` che nomina `core.nasops` e `java.net`, un `NasFileSystem`, `"home_estimate"`, una
+  `ShareConfirmation(...)` e una `UserConfirmation(...)` costruite; `TRIP` in `PersonalKind`; `AlbumUploader.upload` senza la conferma;
+  feature-albums che dipende da core-trust; D30 tolta da `tools/check.ps1`. Rossi con il loro messaggio: core-albums che nomina i moduli
+  vietati, `NasFileSystem` fuori da `shared/`, `home_estimate` fuori da `trips/`, `ShareConfirmation` costruita fuori dal suo file, la firma
+  del caricamento senza conferma, il `PersonalKind` nuovo, feature-albums che vede core-trust, la dipendenza fuori dal §1.1, D30 non cercata
+  nella release; in piu' `Phase4ArchitectureTest` (`UserConfirmation` costruita fuori dal file della conferma) e `Phase6ArchitectureTest`
+  (codice HTTP fuori dal pacchetto ammesso);
+- giro 2, **8 rossi**: core-albums che dipende da core-nasops (e quindi feature-albums che lo raggiunge, e la regola della 4B "chi dipende da
+  core-nasops"), `ShareConfirmation` con il costruttore pubblico, `home_estimate` in core-library, `InMemoryNasFileSystem` in un test di
+  core-albums fuori da `shared/`, il codice di `MEDIA_FLAG` cambiato;
+- giro 3, **4 rossi**: `java.net` in un test di core-albums; feature-albums che nomina `core.albums.shared` e `UserConfirmation`; un permesso
+  nel manifest di feature-albums;
+- giro 4, **2 rossi**: il foglio della conferma usato in core-library (fuori dalla UI); Hilt in core-albums;
+- tolte le violazioni (`git checkout`, file temporanei cancellati): tutte verdi. La decima prova (`ilControlloVedeIModuliDellaFase7`) e' il
+  controllo positivo che il test veda i moduli.
+
+**`tools/check.ps1 -NoDaemon`**: **verde** (22/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, dopo i quattro giri): assembleDebug, assembleRelease, galleryTest e
+galleryLint in 32 minuti; test eseguiti in ogni modulo (core-albums 52, feature-albums 4, core-common 92 con `Phase7ArchitectureTest`);
+passo nuovo "D30 nella release" OK (campo e decisione nel dex e in `mapping.txt`); nessuna classe `testing` nel dex di release; benchmark su
+dispositivo saltato (senza `-Bench`).
+
+**Modifiche ai contratti che i pacchetti dopo potrebbero chiedere** (le scoperte scrivendo fake ed esecutori di riferimento)
+- Alla Fase 6 (P6): `similarToAll(examples, within)` e `SearchRequest.within` (gia' nel §2.9 della Fase 6).
+- P1: campi in piu' in `AlbumCandidate` o `MediaFacts` se le query li danno a costo zero (versione, gruppo).
+- P2: la chiave di contenuto in `SharedAlbumFacts.members` (oggi solo chi ha aggiunto) e la storia dei livelli con l'ora nel pubblicatore.
+- P4: l'esito per file con la destinazione in `TicketState.Ended`; una ripresa con una conferma nuova per gli elementi `NOT_STARTED` (oggi
+  "Riprova" fa un piano nuovo); la scelta fra `MoveCompletions` (campo A) e `MoveCompletionSink`.
+- P6: i giorni toccati come ingresso del ricalcolo incrementale (oggi `evaluate(id, budget)`).
+- P7: la paginazione di "Mostra piu' vecchi" in `TripProposals`.
+- P10: una scorciatoia "azioni permesse su questo elemento" per costruire `PermissionInfo` senza chiamare `allowed` per ogni operazione.
+
+**Punti aperti**
+- `MoveCompletions` ("al meglio", campo A) e `MoveCompletionSink` (vincolante) convivono in core-nasops: P4 decide come, senza due
+  aggiornamenti diversi del catalogo per lo stesso file.
+- `AlbumId` in app e' un UUID, nei percorsi `albums/<id>/` e' in base32: la conversione dei 128 bit la scrive P2.
+- Condividere un album personale crea un album condiviso con un id nuovo: cambia l'inciso del §2.1, aggiornato; da confermare.
+- L'interpretazione del "ritmo" degli eventi in `TripRules`: P7 la conferma sulle storie di P12.
+- Scelte di P0 che l'utente o il filone grafico possono rivedere: ordine predefinito dell'elenco ("Aggiornati di recente"), nessuna
+  preselezione nel foglio di chiusura (Q5), "Modificate" fuori dai filtri rapidi della Libreria.
+- Il piano non e' nel repository: gli edge case del §0.2, le proposte 5, 6 e 7, "7.4 al sicuro garantito" e E-SH11 li riporta l'orchestratore.
+- `:app` non dipende ancora dai due moduli; il passo D30 di `check.ps1` prova campo e decisione, il cancello degli album (P13) va aggiunto li'.
+- Un trasferimento rifiutato per spazio **prima** di partire aspetta solo finche' vale la conferma (10 minuti), poi e' `NOT_STARTED`: P4
+  avvii comunque l'operazione di core-nasops, che con lo spazio finito si mette in pausa da se' e riprende (F81).
+- `REPORT.md`: l'ambiente degli agenti non lascia scrivere file di resoconto; questa sezione ne fa le veci.

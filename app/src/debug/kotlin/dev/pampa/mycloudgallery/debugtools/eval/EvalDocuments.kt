@@ -1,18 +1,21 @@
 package dev.pampa.mycloudgallery.debugtools.eval
 
+import dev.pampa.mycloudgallery.core.search.engine.DocumentRule
 import java.util.Locale
 
-// LA SOGLIA DI "DOCUMENTI" (D34): `CellFlags.DOCUMENT` e' acceso se il testo letto ha almeno 6 righe o 200 caratteri **oppure** il vettore e'
-// vicino a una delle frasi prototipo oltre una soglia, da calibrare. Stesso file in core-search (test) e in :app (debug).
+// LA SOGLIA DI "DOCUMENTI" (D34): `CellFlags.DOCUMENT` e' acceso se il testo letto ha almeno tante righe o tanti caratteri **oppure** il
+// vettore e' vicino a una delle frasi prototipo oltre una soglia, da calibrare. Stesso file in core-search (test) e in :app (debug).
 // Il campione e' etichettato dall'utente: per ogni foto mostrata "e' un documento" si' o no (sotto "Documenti" dello strumento di debug).
+// Revisione A (CE-1): frasi e soglie del testo sono quelle che l'app usa davvero ([DocumentRule]); la soglia trovata qui va in
+// `DocumentRule.VECTOR_THRESHOLD`.
 
 /** Le frasi prototipo (D34), nello spazio del testo: il punteggio di una cella e' il coseno piu' alto fra il suo vettore e queste. */
 object DocumentPrototypes {
-  val PHRASES: List<String> = listOf("un documento", "uno scontrino", "una ricevuta", "un foglio con del testo")
+  val PHRASES: List<String> = DocumentRule.PHRASES
 
   /** Le righe e i caratteri di testo letto da cui una cella e' un documento senza guardare il vettore. */
-  const val TEXT_LINES: Int = 6
-  const val TEXT_CHARS: Int = 200
+  const val TEXT_LINES: Int = DocumentRule.TEXT_LINES
+  const val TEXT_CHARS: Int = DocumentRule.TEXT_CHARS
 }
 
 /** Una foto del campione: il suo punteggio sui prototipi (null: nessun vettore), il testo letto e l'etichetta dell'utente. */

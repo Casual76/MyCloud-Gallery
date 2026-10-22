@@ -17,6 +17,7 @@ import dev.pampa.mycloudgallery.core.search.contract.SearchResults
 import dev.pampa.mycloudgallery.core.search.contract.SearchText
 import dev.pampa.mycloudgallery.core.search.contract.SearchThresholds
 import dev.pampa.mycloudgallery.core.search.contract.Today
+import dev.pampa.mycloudgallery.core.search.coverage.CoverageNotices
 import dev.pampa.mycloudgallery.core.search.coverage.CoverageTracker
 import dev.pampa.mycloudgallery.core.search.index.CellKeys
 import dev.pampa.mycloudgallery.core.search.index.LocalAiIndex
@@ -25,6 +26,7 @@ import dev.pampa.mycloudgallery.core.search.index.TextSearch
 import dev.pampa.mycloudgallery.core.search.index.TwoPassIndex
 import dev.pampa.mycloudgallery.core.search.parse.ItalianQueryParser
 import dev.pampa.mycloudgallery.core.search.similar.SimilarSearch
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -52,6 +54,8 @@ class LocalSearchEngine(
   params: RankParams = RankParams(),
   coverageTracker: CoverageTracker = CoverageTracker(),
   currentRecipe: Int = 1,
+  /** PR-1: le aree senza indicizzatori e la lettura del testo non attiva, dette sopra i risultati (E-I12, D31). */
+  private val coverageNotices: CoverageNotices = CoverageNotices.NONE,
 ) : SearchEngine {
 
   private val core = SearchCore(data, index, keys, today, params, coverageTracker, currentRecipe)
@@ -90,6 +94,7 @@ class LocalSearchEngine(
     }
     val hits = text.hits(words, exact)
     val onlyFilters = parsed.semantic == null && words.isEmpty() && exact.isEmpty()
+    if (!onlyFilters) notices += coverageNoticesFor(words.isNotEmpty() || exact.isNotEmpty())
     val corrections = ArrayList<Pair<SearchNotice, Set<Int>>>()
     val (map, scored) = core.withMap(snapshot) { map ->
       val t = FloatArray(snapshot.size)
@@ -123,6 +128,23 @@ class LocalSearchEngine(
   }
 
   override suspend fun similar(media: MediaId, order: ResultOrder): SearchResults = similarSearch.similar(media, order)
+
+  /**
+   * PR-1 (E-I12, D31): una ricerca per contenuto o per parole dice le aree che nessun dispositivo analizza (prima l'area comune) e, se si
+   * cercano parole, che la lettura del testo non e' attiva (la schermata lo mostra una volta). Un errore qui non ferma la ricerca.
+   */
+  private suspend fun coverageNoticesFor(withWords: Boolean): List<SearchNotice> {
+    val out = ArrayList<SearchNotice>()
+    try {
+      coverageNotices.areasWithoutIndexer().distinct().sortedDescending().forEach { out += SearchNotice.NoIndexerForArea(it) }
+      if (withWords && coverageNotices.textReadingOff()) out += SearchNotice.TextReadingOff
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      // Gli avvisi sono solo un'informazione: senza, la ricerca risponde lo stesso.
+    }
+    return out
+  }
 
   /** Le posizioni (crescenti) delle celle che passano i filtri. */
   private fun candidates(snapshot: TimelineSnapshot, filters: List<SearchChip>): IntArray {

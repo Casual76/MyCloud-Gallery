@@ -28,6 +28,9 @@ interface TextRowStore {
   suspend fun wordCounts(words: Collection<String>): Map<String, Int>
 
   suspend fun vocabularyPage(after: String, limit: Int): List<VocabularyWord>
+
+  /** Svuota il testo e il vocabolario (`AiIndexCatalog.clearTexts`): l'indice si ricostruisce da capo (revisione A, R1). */
+  suspend fun clear() = Unit
 }
 
 /**
@@ -64,4 +67,13 @@ class SearchIndexCounters {
   val rebuilt: AtomicInteger = AtomicInteger()
   val corruptRecords: AtomicInteger = AtomicInteger()
   val compactions: AtomicInteger = AtomicInteger()
+
+  /** Revisione A (R1, R3): voci d'altri scartate perche' la loro origine (dispositivo e share) avrebbe superato i tetti. */
+  val overCap: AtomicInteger = AtomicInteger()
+
+  /** R1: compattazioni fatte subito (record morti oltre i vivi), non dalla manutenzione notturna. */
+  val earlyCompactions: AtomicInteger = AtomicInteger()
+
+  /** R1: aperture fallite, con l'indice ricostruito da capo. */
+  val resets: AtomicInteger = AtomicInteger()
 }

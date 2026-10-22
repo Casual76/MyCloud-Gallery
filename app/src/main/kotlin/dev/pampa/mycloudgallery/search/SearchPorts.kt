@@ -45,6 +45,11 @@ class CatalogTextRowStore(private val catalog: suspend () -> MediaCatalog?) : Te
 
   override suspend fun vocabularyPage(after: String, limit: Int): List<VocabularyWord> =
     catalog()?.aiIndex?.vocabularyPage(after, limit).orEmpty()
+
+  /** Revisione A (R1): l'indice locale si ricostruisce da capo (testo e vocabolario via). */
+  override suspend fun clear() {
+    catalog()?.aiIndex?.clearTexts()
+  }
 }
 
 /** Le chiavi di contenuto delle celle, a pagine (P1: `cellContentKeys`, `cellContentKeysOf`). */
@@ -88,14 +93,14 @@ class CatalogSearchData(
 
   override suspend fun texts(ids: Collection<MediaId>): Map<MediaId, String> = emptyMap()
 
-  /** Un media e' nascosto se lo e' lui o il media in cui e' stato unito; senza catalogo, per prudenza, tutti (fail closed). */
+  /**
+   * Un media e' nascosto se lo e' lui o il media in cui e' stato unito; senza catalogo, per prudenza, tutti (fail closed). Revisione A
+   * (CE-6): due letture per blocco di id ([MediaCatalog.hiddenAmong]), non tre per ogni risultato.
+   */
   override suspend fun hidden(ids: Collection<MediaId>): Set<MediaId> {
     val cat = catalog() ?: return ids.toSet()
-    val personal = database.personalDao()
-    return ids.filterTo(HashSet()) { id ->
-      val resolved = cat.resolve(id) ?: id
-      personal.get(resolved.value)?.hidden == true || personal.get(id.value)?.hidden == true
-    }
+    if (ids.isEmpty()) return emptySet()
+    return cat.hiddenAmong(ids)
   }
 }
 

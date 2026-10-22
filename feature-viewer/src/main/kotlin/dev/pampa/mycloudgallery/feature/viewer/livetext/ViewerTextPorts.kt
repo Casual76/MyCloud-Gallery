@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.feature.viewer.livetext
 
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaRef
+import kotlinx.coroutines.flow.Flow
 
 // Il TESTO DAL VIVO nel viewer (docs/fase6-progetto.md §2.10, D42, D43, D45, D46; risposta Q9). Porte e stati di P0; la UI
 // (evidenziazione, maniglie, barra, pulsante "Testo", foglio "Testo nella foto", azioni di TalkBack, arbitro della pressione
@@ -31,9 +32,15 @@ data class ViewerTextLayout(val lines: List<ViewerTextLine>) {
 /**
  * Il testo letto gia' nell'indice locale (D42, D43): da QUALUNQUE dispositivo della famiglia, anche dove la lettura e' spenta. Null
  * = nessun testo letto per quel media (non ancora analizzato, o nessun dispositivo con la lettura attiva).
+ *
+ * Revisione A (VT-2): [changes] avvisa quando il testo dell'indice puo' essere cambiato (arrivato da un altro dispositivo, ritirato, tolto
+ * con una revoca): il viewer rilegge il media aperto, cosi' le righe ritirate escono e il pulsante "Testo" compare anche a foto aperta.
+ * Null = la sorgente non avvisa (il testo si legge solo entrando nel media).
  */
 fun interface ViewerTextSource {
   suspend fun layout(id: MediaId): ViewerTextLayout?
+
+  val changes: Flow<Unit>? get() = null
 }
 
 /**

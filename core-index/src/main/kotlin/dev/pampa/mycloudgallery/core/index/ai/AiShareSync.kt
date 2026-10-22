@@ -19,6 +19,7 @@ import dev.pampa.mycloudgallery.core.trust.data.OcrBody
 import dev.pampa.mycloudgallery.core.trust.data.SegmentRef
 import dev.pampa.mycloudgallery.core.trust.data.VecBody
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -47,6 +48,17 @@ import kotlinx.coroutines.sync.withLock
  * **Ripresa**: ogni testa si applica in una transazione che segna "da rifondere" le chiavi toccate; la consegna all'indice locale si
  * conferma dopo ([AiReplicaStore.commitApplied]): una morte del processo in mezzo si recupera al giro dopo (le chiamate di [sink] sono
  * idempotenti).
+ *
+ * **Revisione A della Fase 6:**
+ * - R2: un errore qualunque (non un annullamento) resta qui: si conta (`syncErrors`) e la share risulta incompleta, ma il giro
+ *   dell'indice, le miniature e le tappe del calcolo vanno avanti; le consegne all'indice locale vanno a pezzi da al piu'
+ *   [APPLY_BATCH_BYTES] byte di corpi, e ogni segmento scaricato si salva da solo (in memoria al piu' un segmento);
+ * - E-I17 per le teste `ai` (R14): i segmenti che una testa nuova non elenca piu' (compattati) restano finche' quelli nuovi non sono
+ *   scaricati tutti: chi legge non perde le voci a meta' strada;
+ * - R16: le ricette oltre [knownRecipe] valgono come quella nella fusione;
+ * - I10: una testa rifiutata perche' di un altro account (area privata) toglie cio' che quel dispositivo aveva qui;
+ * - R5: un dispositivo revocato, perso o sconosciuto si dimentica anche nell'indice locale ([AiReplicaSink.forgetDevice]): via anche cio'
+ *   che questo dispositivo ha calcolato sulle sue anteprime.
  */
 class AiShareSync(
   private val remote: AiRemoteIndex,
@@ -62,12 +74,31 @@ class AiShareSync(
   private val maxBytesPerShare: Long = DEFAULT_MAX_BYTES_PER_SHARE,
   private val maxBytesPerDevice: Long = MAX_BYTES_PER_DEVICE_SHARE,
   private val maxEntriesPerDevice: Int = MAX_ENTRIES_PER_DEVICE_SHARE,
+  /** R16: la ricetta piu' alta che quest'app conosce per ogni classe; di serie nessun tetto. */
+  private val knownRecipe: (AiClass) -> Int = { AiFusion.ANY_RECIPE },
 ) : AiSyncHook {
 
   private val mutex = Mutex()
 
   override suspend fun afterIndex(share: String, devices: List<String>, timeUp: () -> Boolean): AiSyncOutcome =
-    mutex.withLock { syncLocked(share, devices, timeUp) }
+    mutex.withLock { guarded { syncLocked(share, devices, timeUp) } ?: AiSyncOutcome(null, complete = false) }
+
+  /**
+   * R2: un errore che non e' un annullamento (indice locale che non accetta, database, un dato che non ci si aspettava) non esce di qui:
+   * si conta e il giro prosegue con le altre share, le miniature e il calcolo; le chiavi restano "da rifondere" e si riprovano al giro
+   * dopo. Null = errore.
+   */
+  private inline fun <T> guarded(block: () -> T): T? = try {
+    block()
+  } catch (e: CancellationException) {
+    throw e
+  } catch (e: Exception) {
+    counters.syncErrors.incrementAndGet()
+    null
+  } catch (e: OutOfMemoryError) {
+    counters.syncErrors.incrementAndGet()
+    null
+  }
 
   /**
    * Rilegge le teste `ai` di [share] (di solito una richiesta per dispositivo) e consegna i vincitori: per [AiPublishedClasses]
@@ -81,21 +112,32 @@ class AiShareSync(
         is RemoteResult.Failed -> return r
       }
     }
-    val outcome = mutex.withLock { syncLocked(share, devices) { false } }
+    val outcome = mutex.withLock { guarded { syncLocked(share, devices) { false } } } ?: return RemoteResult.Failed(RemoteFailure.OTHER)
     return outcome.failure?.let { RemoteResult.Failed(it) } ?: RemoteResult.Ok(Unit)
   }
 
   /** E-I8: la share e' stata tolta dalla replica dell'indice: via anche i suoi dati AI, qui e nell'indice locale. */
   override suspend fun shareDropped(share: String) {
     mutex.withLock {
-      store.forgetShare(share.lowercase(Locale.ROOT))
-      sink.forgetShare(share)
+      guarded {
+        store.forgetShare(share.lowercase(Locale.ROOT))
+        sink.forgetShare(share)
+      }
     }
   }
 
   /** Solo la fusione (senza NAS): dopo un cambiamento locale dei record `meta` (per esempio un file nuovo visto qui). */
   suspend fun reattest(share: String) {
-    mutex.withLock { fuse(share, share.lowercase(Locale.ROOT), emptySet()) }
+    mutex.withLock { guarded { fuse(share, share.lowercase(Locale.ROOT), emptySet()) } }
+  }
+
+  /**
+   * R15: l'indice locale ha perso [keys] (record rovinato, registro rotto): il segno "consegnato" di quelle chiavi si toglie in ogni share,
+   * cosi' la fusione del giro dopo le riconsegna anche se il vincitore e' lo stesso di prima (prima passava oltre e il media restava fuori
+   * dalla ricerca). Null = tutte le chiavi.
+   */
+  suspend fun redeliver(keys: Collection<dev.pampa.mycloudgallery.core.model.ContentKey>?) {
+    mutex.withLock { AiRedelivery(store).redeliver(keys) }
   }
 
   // --- Teste --------------------------------------------------------------------------------------------------------------
@@ -128,7 +170,7 @@ class AiShareSync(
           HeadFetch.None -> Unit
           HeadFetch.NoChange -> if (head != null) resume(round, head)
           is HeadFetch.Rejected -> onRejected(round, device, fetch.reason, known = head != null)
-          is HeadFetch.Accepted -> apply(round, fetch.head)
+          is HeadFetch.Accepted -> apply(round, fetch.head, head)
         }
       }
       if (round.failure == RemoteFailure.UNREACHABLE) break
@@ -154,16 +196,27 @@ class AiShareSync(
       RejectReason.ROLLBACK, RejectReason.EQUIVOCATION -> counters.rollbacks.incrementAndGet()
       else -> counters.reject(reason)
     }
-    if (known && (reason == RejectReason.SIGNER_REVOKED || reason == RejectReason.SIGNER_NOT_APPROVED)) forget(round, device)
+    if (!known) return
+    when (reason) {
+      RejectReason.SIGNER_REVOKED, RejectReason.SIGNER_NOT_APPROVED -> forget(round, device)
+      // I10: una testa `ai` di un altro account in un'area privata: via i suoi dati da questa share (solo qui: altrove puo' valere).
+      RejectReason.NOT_OWNER -> forget(round, device, everywhere = false)
+      else -> Unit
+    }
   }
 
-  private suspend fun forget(round: Round, device: String) {
+  /**
+   * I dati di [device] in questa share escono (le chiavi toccate si rifondono). Con [everywhere] (revocato, perso, sconosciuto: R5) il
+   * dispositivo si dimentica anche nell'indice locale, con cio' che questo dispositivo ha calcolato sulle sue anteprime.
+   */
+  private suspend fun forget(round: Round, device: String, everywhere: Boolean = true) {
     round.touched += store.forgetDevice(round.key, device)
     counters.devicesForgotten.incrementAndGet()
+    if (everywhere) sink.forgetDevice(device)
   }
 
   /** Una testa nuova: i segmenti elencati non ancora applicati si scaricano nel budget, gli altri restano in attesa. */
-  private suspend fun apply(round: Round, head: IndexHeadView) {
+  private suspend fun apply(round: Round, head: IndexHeadView, known: HeadRow?) {
     val listed = head.segments.filter { AiClass.of(it.cls) != null }.distinctBy { it.ref.hash }
     if (listed.sumOf { it.ref.size } > maxBytesPerDevice) {
       // Oltre il tetto per dispositivo: la testa non si applica (si tiene lo stato di prima), come un record di troppo (M9).
@@ -171,11 +224,14 @@ class AiShareSync(
       return
     }
     val previous = store.segments(round.key, head.deviceId).associateBy { it.hash }
+    val hashes = listed.mapTo(HashSet()) { it.ref.hash }
     val rows = listed.map { segment ->
       val before = previous[segment.ref.hash]
       if (before?.state == SegmentState.APPLIED) before else AiSegmentRow(head.deviceId, segment.ref.hash, AiClass.of(segment.cls)!!, segment.ref.size, SegmentState.PENDING)
     }
-    download(round, headRow(round.key, head), head, rows, retryUnavailable = true)
+    // E-I17 (R14): i segmenti applicati che la testa nuova non elenca piu' (una compattazione) restano finche' i nuovi non ci sono tutti.
+    val retired = previous.values.filter { it.hash !in hashes && it.state == SegmentState.APPLIED }
+    download(round, headRow(round.key, head), known, head, rows, retired, retryUnavailable = true)
   }
 
   /**
@@ -195,26 +251,36 @@ class AiShareSync(
       segments = rows.map { ClassedSegment(it.cls.segmentClass, SegmentRef(it.hash, it.size)) }.sortedBy { it.ref.hash },
       registryBehind = false,
     )
-    download(round, head, view, rows, retryUnavailable = false)
+    download(round, head, head, view, rows, emptyList(), retryUnavailable = false)
   }
 
   /**
-   * Scarica i segmenti [rows] in attesa di [view] (con [retryUnavailable] anche quelli assenti o rifiutati) nel budget e applica in
-   * una transazione. Il tetto delle voci per dispositivo conta quelle dei segmenti che restano applicati piu' quelle appena scaricate.
+   * Scarica i segmenti [rows] in attesa di [view] (con [retryUnavailable] anche quelli assenti o rifiutati) nel budget. Ogni segmento
+   * scaricato si salva subito con le sue voci (R3: in memoria al piu' un segmento); finche' qualcuno resta in attesa, la testa salvata
+   * resta [known] (quella di prima) e i segmenti [retired] restano con le loro voci (E-I17). Il tetto delle voci per dispositivo conta
+   * quelle dei segmenti che restano applicati piu' quelle appena scaricate.
    */
-  private suspend fun download(round: Round, row: HeadRow, view: IndexHeadView, rows: List<AiSegmentRow>, retryUnavailable: Boolean) {
+  private suspend fun download(
+    round: Round,
+    row: HeadRow,
+    known: HeadRow?,
+    view: IndexHeadView,
+    rows: List<AiSegmentRow>,
+    retired: List<AiSegmentRow>,
+    retryUnavailable: Boolean,
+  ) {
     var count = rows.filter { it.state == SegmentState.APPLIED }.sumOf { it.entries.toLong() }
-    val out = ArrayList<AiSegmentRow>(rows.size)
-    val entries = HashMap<String, List<AiReplicaEntry>>()
+    val states = LinkedHashMap<String, AiSegmentRow>()
+    rows.forEach { states[it.hash] = it }
+    // La testa da salvare finche' qualcosa resta in attesa: quella di prima, se c'era (il giro dopo rilegge la nuova e riprende).
+    val provisional = known ?: row
+    fun listedNow(): List<AiSegmentRow> = states.values.toList() + retired
     var stop = false
     for (segment in rows.sortedBy { it.hash }) {
-      if (segment.state == SegmentState.APPLIED || (!retryUnavailable && segment.state != SegmentState.PENDING)) {
-        out += segment
-        continue
-      }
+      if (segment.state == SegmentState.APPLIED || (!retryUnavailable && segment.state != SegmentState.PENDING)) continue
       if (stop || round.timeUp() || segment.size > round.bytesLeft) {
         round.complete = false
-        out += segment.copy(state = SegmentState.PENDING)
+        states[segment.hash] = segment.copy(state = SegmentState.PENDING)
         continue
       }
       val classed = ClassedSegment(segment.cls.segmentClass, SegmentRef(segment.hash, segment.size))
@@ -223,7 +289,7 @@ class AiShareSync(
           round.failure = read.failure
           round.complete = false
           stop = true
-          out += segment.copy(state = SegmentState.PENDING)
+          states[segment.hash] = segment.copy(state = SegmentState.PENDING)
         }
         is RemoteResult.Ok -> when (val fetch = read.value) {
           is AiSegmentFetch.Ok -> {
@@ -231,27 +297,33 @@ class AiShareSync(
             val content = fetch.content
             if (content.cls != segment.cls || count + content.entries.size > maxEntriesPerDevice) {
               counters.reject(if (content.cls != segment.cls) RejectReason.WRONG_TYPE else RejectReason.TOO_LARGE)
-              out += segment.copy(state = SegmentState.REJECTED)
+              states[segment.hash] = segment.copy(state = SegmentState.REJECTED)
             } else {
               count += content.entries.size
-              entries[segment.hash] = content.entries.map {
+              val entries = content.entries.map {
                 AiReplicaEntry(view.deviceId, segment.hash, AiKey(it.contentKey, content.cls), it.body.recipe, it.digest, it.bodyBytes)
               }
-              out += segment.copy(state = SegmentState.APPLIED, entries = content.entries.size)
+              states[segment.hash] = segment.copy(state = SegmentState.APPLIED, entries = content.entries.size)
+              round.touched += store.applyHead(AiHeadApplication(provisional, listedNow(), mapOf(segment.hash to entries)))
             }
           }
           AiSegmentFetch.Missing -> {
             counters.segmentsMissing.incrementAndGet()
-            out += segment.copy(state = SegmentState.MISSING)
+            states[segment.hash] = segment.copy(state = SegmentState.MISSING)
           }
           is AiSegmentFetch.Rejected -> {
             counters.reject(fetch.reason)
-            out += segment.copy(state = SegmentState.REJECTED)
+            states[segment.hash] = segment.copy(state = SegmentState.REJECTED)
           }
         }
       }
     }
-    round.touched += store.applyHead(AiHeadApplication(row, out, entries))
+    val done = states.values.none { it.state == SegmentState.PENDING }
+    round.touched += if (done || known == null) {
+      store.applyHead(AiHeadApplication(row, states.values.toList(), emptyMap()))
+    } else {
+      store.applyHead(AiHeadApplication(provisional, listedNow(), emptyMap()))
+    }
   }
 
   private fun headRow(key: String, head: IndexHeadView) =
@@ -278,12 +350,14 @@ class AiShareSync(
     for (chunk in ordered.chunked(FUSION_BATCH)) {
       val candidates = store.candidates(key, chunk).groupBy { it.key }
       val toApply = ArrayList<AiWinner>()
+      var applyBytes = 0L
       val toWithdraw = ArrayList<AiKey>()
       val marks = ArrayList<AiAppliedMark>()
       for (k in chunk) {
         val list = candidates[k].orEmpty()
         val old = applied[k]
-        val winner = AiFusion.winner(list, k.contentKey in attested)
+        val known = knownRecipe(k.cls)
+        val winner = AiFusion.winner(list, k.contentKey in attested, known)
         if (winner == null) {
           if (old != null) toWithdraw += k
           continue
@@ -294,15 +368,25 @@ class AiShareSync(
           marks += mark
           continue
         }
-        val body = bodyOf(key, winner)
+        val bytes = store.body(key, winner)
+        val body = bytes?.let { AiSegments.decodeBody(winner.key.cls, it).acceptedOrNull() }
         if (body == null) {
           // Mai, salvo un database rovinato: niente vincitore e la voce esce.
           if (old != null) toWithdraw += k
           continue
         }
-        if (countDisagreement) countDisagreements(key, winner, body as VecBody, list)
+        if (countDisagreement) countDisagreements(key, winner, body as VecBody, list, known)
         marks += mark
-        if (mark != old) toApply += AiWinner(share, entryOf(k, body), winner.recipe, winner.deviceId)
+        if (mark != old) {
+          toApply += AiWinner(share, entryOf(k, body), winner.recipe, winner.deviceId)
+          applyBytes += bytes.size
+          // R2: all'indice locale a pezzi di al piu' APPLY_BATCH_BYTES di corpi (mai un blocco di testi da centinaia di MB).
+          if (applyBytes >= APPLY_BATCH_BYTES) {
+            sink.apply(share, toApply.toList())
+            toApply.clear()
+            applyBytes = 0
+          }
+        }
       }
       if (toApply.isNotEmpty()) sink.apply(share, toApply)
       if (toWithdraw.isNotEmpty()) sink.withdraw(share, toWithdraw)
@@ -313,8 +397,8 @@ class AiShareSync(
   private suspend fun bodyOf(key: String, candidate: AiCandidate): AiBody? =
     store.body(key, candidate)?.let { AiSegments.decodeBody(candidate.key.cls, it).acceptedOrNull() }
 
-  private suspend fun countDisagreements(key: String, winner: AiCandidate, body: VecBody, candidates: List<AiCandidate>) {
-    for (rival in AiFusion.rivals(winner, candidates)) {
+  private suspend fun countDisagreements(key: String, winner: AiCandidate, body: VecBody, candidates: List<AiCandidate>, known: Int) {
+    for (rival in AiFusion.rivals(winner, candidates, known)) {
       val other = bodyOf(key, rival) as? VecBody ?: continue
       if (AiFusion.disagree(body, other)) counters.disagree.incrementAndGet()
     }
@@ -340,5 +424,28 @@ class AiShareSync(
 
     /** Chiavi rifuse per transazione. */
     const val FUSION_BATCH: Int = 2_000
+
+    /** R2: byte di corpi al piu' per consegna all'indice locale (un pezzo di una transazione della fusione). */
+    const val APPLY_BATCH_BYTES: Long = 4L * 1024 * 1024
+  }
+}
+
+/**
+ * R15: chi ripara l'indice locale chiede di riavere delle chiavi. La fusione consegna solo cio' che cambia rispetto al segno "consegnato"
+ * (`ai_replica_applied`): se il vincitore e' lo stesso di prima non consegnerebbe niente e il dato perso non tornerebbe piu'. Qui si
+ * toglie il segno (e il "da rifondere": la chiave attestata senza segno si rifonde comunque) in ogni share: il giro dopo riconsegna.
+ */
+class AiRedelivery(private val store: AiReplicaStore) {
+  /** [keys] null = tutte le chiavi di ogni share (il registro dell'indice e' andato perso). */
+  suspend fun redeliver(keys: Collection<dev.pampa.mycloudgallery.core.model.ContentKey>?) {
+    for (share in store.shares()) {
+      val wanted = if (keys == null) {
+        store.allApplied(share).map { it.key }
+      } else {
+        keys.flatMap { k -> AiClass.entries.map { AiKey(k, it) } }
+      }
+      if (wanted.isEmpty()) continue
+      for (chunk in wanted.chunked(AiShareSync.FUSION_BATCH)) store.commitApplied(share, chunk, emptyList())
+    }
   }
 }

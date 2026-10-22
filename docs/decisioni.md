@@ -4866,3 +4866,125 @@ dispositivo saltato (senza `-Bench`).
 - Un trasferimento rifiutato per spazio **prima** di partire aspetta solo finche' vale la conferma (10 minuti), poi e' `NOT_STARTED`: P4
   avvii comunque l'operazione di core-nasops, che con lo spazio finito si mette in pausa da se' e riprende (F81).
 - `REPORT.md`: l'ambiente degli agenti non lascia scrivere file di resoconto; questa sezione ne fa le veci.
+
+## Fase 6, correzioni dopo le revisioni: pacchetto A (22/10)
+
+Il pacchetto A delle correzioni della Fase 6 (branch `fase6/rev-a`): la **fiducia fra dispositivi e l'indice `ai`**, dalla replica fino a cio' che
+l'utente vede o che questo dispositivo ripubblica. Voci di `docs/review/6-fase6.md` (R1-R5, R14-R16, R21, I10, I12, I13) e di
+`docs/review/funzionale-6.md` (PR-1, PR-2, PR-3, IX-6, IX-7, LT-3 con I7, VT-1, VT-2, CE-1, CE-6, DG-1). Lo stato di ogni voce, le prove e cosa
+provare sul telefono stanno nel resoconto del pacchetto; qui le decisioni.
+
+### L'indice locale (`core-search`)
+- **Origini.** Ogni dato dell'indice ha un'origine: `Local` (calcolato qui dai propri byte), `Derived(share, dispositivo)` (calcolato qui
+  sull'anteprima di un altro dispositivo, nuova) e `Replica(share, dispositivo)`. I nomi delle share si scrivono **in minuscolo** in tutte le
+  origini (I13: Samba non distingue le maiuscole). Per ogni chiave vince, nell'ordine: la ricetta piu' alta **ridotta a quella che quest'app
+  conosce** (R16: una ricetta 255 vale come la corrente), poi `Local`, poi `Derived`, poi `Replica` (R4), poi share e dispositivo. La stessa
+  scelta vale per la ricerca, per il testo dal vivo e per "Testo nella foto".
+- **Il corpo `ocr` sta nell'indice** (R4, R5, VT-2): il registro delle origini tiene, per ogni origine, il corpo `ocr` com'e' (le righe del testo
+  dal vivo) e la sorgente dei vettori (per ricostruire il corpo `vec` da ripubblicare). Le cartelle per chiave `ocr-layout/` e `local-bodies/`
+  (l'ultimo arrivato vinceva, e la revoca non le toglieva) si tolgono all'apertura. **Formato del registro:** due operazioni nuove
+  (`OP_VEC2` con la sorgente, `OP_TEXT2` con il corpo); le voci di prima si leggono ancora, ma senza corpo non contano come "calcolate qui"
+  (`savedFor`): il calcolo le rifa' una volta.
+- **Tetti per origine** (R1, R3; `IndexLimits`): 262.144 record di vettori (quanti un dispositivo ne puo' avere in una share, M9) e 128 MiB di
+  testo (testo normalizzato e corpi). Oltre, le voci d'altri si scartano (`overCap` in Diagnostica), **mai** quelle calcolate qui. Il
+  vocabolario dei refusi tiene al piu' 50.000 parole (le piu' frequenti; quelle nuove solo sotto il tetto, la coda d'attesa al piu' 4.096).
+  Sotto 256 MiB liberi la replica non si applica e si riprova al giro dopo.
+- **File dei vettori oltre 2 GiB** (R1): la mappatura e' **a finestre** (al piu' 1 GiB, 262.144 record l'una), le scritture a pezzi da 4 MiB;
+  nessun limite a 2 GiB. **Compattazione senza aspettare la notte:** dopo ogni cambio, se i record morti superano quelli vivi (e almeno 65.536)
+  il file si riscrive subito; il registro da solo quando i byte morti superano i vivi (e almeno 32 MiB). Un'apertura che fallisce
+  ricostruisce l'indice da capo e chiede alla replica di riconsegnare tutto (R15).
+- **R21** (corsa fra mappa e dimensione): verificata nel codice, non riprodotta in modo deterministico. Lo scrittore aggiornava la mappa e poi
+  la dimensione mappata, il lettore le leggeva separate: un lettore poteva usare la mappa vecchia con la dimensione nuova. Ora ogni finestra e'
+  un oggetto immutabile (copia alla scrittura) e il lettore controlla la capacita' della finestra che legge. La prova di stress
+  (`VectorFileFinestreTest`) passa anche sul codice di prima: e' una correzione strutturale, non riprodotta.
+- **Cornici del registro** (R2): una scrittura si divide in cornici da al piu' 4 MiB (un `force` solo); chi rilegge accetta cornici fino a
+  64 MiB. Prima un lotto di corpi `ocr` grandi superava il tetto della cornice e l'eccezione fermava il giro della replica.
+- **Revoca** (R5): `forgetDevice` toglie le voci `Replica(*, d)` e `Derived(*, d)` e quelle derivate da un'anteprima di dispositivo non noto
+  (l'HQ della replica). `forgetShare` toglie le une e le altre della share.
+
+### La replica e la pubblicazione `ai` (`core-index`, `core-trust`)
+- **R2: errori isolati.** Un errore locale nella replica di una share (indice pieno, disco, corpo che non si salva) chiude solo quella share per il
+  giro (`syncErrors`, `AI_INDEX_STATE` in avviso); le altre share, le miniature e il calcolo vanno avanti. I vincitori si consegnano
+  all'indice a lotti di al piu' 4 MiB di corpi.
+- **R16.** La fusione ordina per ricetta ridotta alla nota (`knownRecipe`) e poi per dispositivo; "fatto" vuol dire **la ricetta corrente**,
+  non una piu' alta: cambia il contratto di P2 (`AiDoneClasses`, `AiPublishedClasses`: prima "almeno", ora "uguale").
+- **I10.** Una testa `ai` di un'area che non e' quella comune vale solo se il firmatario e' dello **stesso account** di chi legge
+  (`HeadVerifier.accept`, `NOT_OWNER`). Difesa in profondita': SMB lo garantisce gia'. Il banco P10 (`AiBenchTest`) e' stato adattato: un
+  dispositivo di un altro account non sincronizza piu' l'area privata altrui (prima la leggeva perche' il banco non applica i permessi SMB).
+- **E-I17 per chi legge.** Le voci di un segmento che la testa nuova toglie restano finche' i segmenti nuovi non sono scaricati: una testa
+  compattata non svuota la ricerca per un giro.
+- **R15.** Chi ripara l'indice locale chiede alla replica di riconsegnare (`AiRedelivery`: tolti i segni "consegnato" di quelle chiavi in ogni
+  share; tutti, dopo una ricostruzione): la fusione del giro dopo le consegna anche se il vincitore e' lo stesso.
+- **R14: compattazione delle teste `ai` proprie** (`AiOwnCompaction`). Toglie le voci che non sono piu' di un file della share (M3) e, dopo
+  una revoca, quelle che questo dispositivo non sostiene piu' (il corpo calcolato qui per quella share non c'e' o e' cambiato: per esempio era
+  nato dall'anteprima del revocato); riscrive solo i segmenti non del tutto vivi. Quando: subito dopo una revoca, con 512 segmenti o piu', e
+  una volta al giorno (ora del NAS, file `ai-compaction` in `noBackupFilesDir`, tolto con l'azzeramento). La compattazione di ogni giorno
+  **non** guarda i corpi: un indice locale ricostruito da capo non deve svuotare la testa (il calcolo rifa' cio' che manca); se i corpi non si
+  sanno leggere (indice non aperto) non si toglie niente e si riprova. I **file** dei segmenti vecchi restano sul NAS finche' `core-nasops` non li
+  toglie (punto aperto, sotto).
+
+### Il calcolo (`core-ai/compute`) e le porte di `:app`
+- **R5: la provenienza degli ingressi.** Ogni blob del buffer degli indicizzatori comincia con un'intestazione (`MCGP`, versione, proprio o
+  anteprima con share e dispositivo); i file di prima, senza, si tolgono all'apertura (e' una cache). Un risultato calcolato sull'anteprima di
+  un altro dispositivo e' `Derived(share, dispositivo)`: vale solo per quella share (`savedFor`, i corpi da ripubblicare), si pubblica solo li'
+  e mai come "proprio" altrove. La lettura al volo del viewer usa dal buffer solo anteprime proprie; il testo letto sull'HQ della replica vale
+  solo nella share del media, se e' una sola. La revoca toglie dal buffer le anteprime del dispositivo.
+- **Segni "non supportato"** (R5, IX-7; `FileAiUnsupported`): ricordano la provenienza (propri = ovunque; da un'anteprima = solo in quella
+  share, tolti con la revoca), **scadono dopo 30 giorni** e le righe di prima non valgono piu'. Le share si scrivono come impronta, mai per nome.
+- **IX-7.** Un errore passeggero del motore (memoria, errore interno, lettura OCR non riuscita) non e' un rifiuto: il media si riprova
+  (`ItemEnd.RETRY`) e diventa "non supportato" solo dopo **3** errori nello stesso processo (memoria per chiave, al piu' 4.096). Modello
+  assente o motore che non parte restano "modello assente"; un vettore non finito resta un tentativo non valido (E-A12).
+- **IX-6.** Con F4-D31 le voci gia' in fila per la share (outbox o in attesa) contano come a posto; le righe della share si leggono una volta
+  per tappa (al piu' 10 secondi, finche' il catalogo non cambia) e le voci da rimettere in fila si mettono **a lotto** (una chiamata per lotto).
+- **PR-2.** Il giro periodico del NAS (`NasGraph.flushOutbox`) rilascia anche le voci in attesa di una share diventata pubblicabile: su un
+  dispositivo che non indicizza nessuna tappa del calcolo lo faceva.
+- **PR-3.** Le unita' del calcolo si rilasciano solo se niente di loro aspetta nell'outbox (`hasPending`, legato in `NasAiRuntime.build`).
+
+### Viewer, lettura del testo, Cerca, Diagnostica
+- **VT-1, I12.** Il testo dal vivo e la lettura al volo leggono le chiavi del media **anche se nascosto o membro di un gruppo**
+  (`MediaCatalog.mediaContentKeysOf`, solo per il viewer): nel viewer dei Nascosti funzionano, come dice D29. Le celle (Libreria, Cerca) restano
+  senza nascosti.
+- **VT-2.** `ViewerTextSource.changes` avvisa quando l'indice cambia: il viewer rilegge il media aperto, le righe ritirate escono (e cio' che era
+  aperto su di loro si chiude) e il pulsante "Testo" compare anche se il testo arriva a foto aperta. Un testo letto al volo qui resta finche'
+  l'indice non ne da' un altro.
+- **LT-3, I7.** Una versione del testo accettata **piu' vecchia** di quella dell'app non accende la lettura qui: lo stato e' "attiva per
+  l'account, non su questo dispositivo" (motore, lettura al volo e ML Kit fermi, anche all'avvio) e la pagina dice che il testo e' cambiato;
+  riaccettando la si riaccende. Il pulsante "Includi questo dispositivo" della pagina, in quello stato, non basta: serve riaccettare (la pagina
+  e' del pacchetto della scheda Cerca).
+- **CE-1: il bit `DOCUMENT`** (`DocumentRule`, `DocumentFlags`). Una cella e' un documento se e' una **foto che non e' uno screenshot** e il
+  testo letto ha almeno **9 righe o 250 caratteri**, oppure il vettore e' vicino alle frasi prototipo oltre una soglia. **Soglie provvisorie:**
+  sul set OCR sintetico di P9 (`tools/fixtures/generate-ocr.ps1`, 216 immagini: scontrini, chat, schermate, cartelli) i numeri di D34
+  (6 righe o 200 caratteri) prendono tutti i cartelli (precisione 0,50 sulle foto; chat e schermate sono screenshot ed escono per sorgente),
+  7 righe o 200 caratteri danno 0,90, 9 righe o 250 caratteri prendono tutti gli scontrini e nessun cartello. La soglia sul **vettore** non si
+  misura su quel set (testo senza modelli): finche' P9 non la calibra sul telefono e' "nessuna" (`Float.POSITIVE_INFINITY`) e i prototipi non
+  si calcolano nemmeno. **Ricalibrazione:** lo strumento di debug "Valutazione della ricerca, Documenti" etichetta un campione e
+  `EvalDocuments.calibrate` (precisione almeno 0,90) da' la soglia; le due copie di `EvalDocuments` ora prendono frasi e soglie del testo da
+  `DocumentRule`, e i valori nuovi vanno in `DocumentRule` e qui. Il bit si ricalcola al piu' ogni 15 secondi dopo i cambi dell'indice e
+  della Libreria e nella manutenzione notturna, accendendo e spegnendo (`MediaCatalog.setDerivedFlags`, lotti di 500), e resta locale.
+- **CE-6.** Il filtro finale dei nascosti legge a blocchi (`MediaCatalog.hiddenAmong`: due letture per blocco di id, nascosti e alias di un
+  media nascosto) invece di tre per risultato; stessa risposta di prima.
+- **PR-1: la copertura detta all'utente** (`AppCoverage`). Le aree senza indicizzatori vengono dagli stati firmati dei dispositivi approvati
+  (ruolo e ultima volta visto, entro 7 giorni) e dal registro; questo dispositivo vale con il ruolo di adesso; finche' gli stati non si sono
+  letti, o manca l'ora del NAS, nessuna area si dice scoperta. Arrivano in Cerca (`SearchNotice.NoIndexerForArea`, prima l'area comune), nella
+  pagina Ricerca e modelli e una volta in Diagnostica (`AI_NO_INDEXER_AREA`). I motivi di una cella senza vettore, nell'ordine: formato non
+  supportato; solo sul telefono di un dispositivo che non analizza; solo sul telefono di un indicizzatore senza il modello; tutte le sue share
+  senza indicizzatori; altrimenti in preparazione. **Lettura del testo non attiva** (D42): quando la lettura non e' attiva per questo account
+  e nell'indice non c'e' testo letto da nessuno; e' un motivo della copertura (con le celle senza testo) e un avviso in Cerca quando si cercano
+  parole (la schermata lo mostra una volta). Lo spazio del testo nella pagina e' ora il registro dell'indice.
+- **DG-1.** `AiIndexDiagnostics` e' nella Diagnostica (`AiModule`, `@IntoSet`): `AI_SEGMENT_REJECTED` per motivo, `AI_VECTOR_DISAGREE` (informazione,
+  come nel catalogo) e `AI_INDEX_STATE` con la pubblicazione, gli errori della replica, le compattazioni e i tetti dell'indice locale. Solo numeri.
+
+### File di `:app` toccati fuori dall'elenco del pacchetto (modifiche minime)
+`ai/AiGraph.kt` (montaggio dei nuovi adattatori, `keepReadText` con la provenienza), `ai/AiWiring.kt` (copertura, viewer, avvisi dell'indice),
+`ai/ViewerPorts.kt` (VT-1, VT-2, R5), `ai/TextReading.kt` (LT-3), `ai/SearchScreenPorts.kt` (aree e spazio della pagina), `di/AiModule.kt`
+(DG-1), `nas/NasGraph.kt` (replica `ai` da `NasAiHooks`, PR-2), `search/SearchGraph.kt` (righe del testo dall'indice, copertura, documenti),
+`search/SearchPorts.kt` (CE-6, ricostruzione del testo), `search/TextLayouts.kt` (R4, VT-1), `graph/LocalData.kt` (`ai-compaction`
+all'azzeramento), e le due copie di `EvalDocuments` (frasi e soglie da `DocumentRule`).
+
+### Punti aperti
+- **R14, i file sul NAS.** La compattazione toglie le voci dalle teste `ai` proprie, ma i file dei segmenti non piu' elencati restano nella
+  cartella del dispositivo: li toglie solo `core-nasops` (`OwnFilesCleaner`), che oggi non conosce i segmenti `ai` (va insegnato a considerare
+  "nel diario" i segmenti elencati dalle teste `ai` valide). Fuori dal perimetro del pacchetto.
+- **CE-1.** La soglia sul vettore e quella definitiva del testo aspettano la misura di P9 sul set privato.
+- **PR-1.** "Lettura del testo non attiva" per l'area comune e' una stima prudente (l'account di questo dispositivo e il testo che c'e'): gli
+  stati dei dispositivi non dicono se la lettura e' attiva. Per saperlo davvero servirebbe un campo nuovo nello stato firmato (formato).

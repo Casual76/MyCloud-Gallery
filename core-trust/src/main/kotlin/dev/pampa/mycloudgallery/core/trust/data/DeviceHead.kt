@@ -172,6 +172,12 @@ object HeadVerifier {
       ensure(TextRules.sameAccount(signed.signer.nasUser, readerAccount), RejectReason.NOT_OWNER, "dati personali di un altro account")
       ensure(!head.share.equals(registry.registry.config.commonShare, ignoreCase = true), RejectReason.WRONG_LOCATION, "dati personali nell'area comune")
     }
+    // Fase 6, revisione A (I10, D42 "dello stesso account per l'area privata"): i dati AI di un'area privata valgono solo se li firma un
+    // dispositivo dell'account proprietario, cioe' di chi legge (un dispositivo legge solo la propria area privata, D14). Oggi lo
+    // garantiscono i permessi SMB; questa e' la difesa in profondita'. Il formato non cambia.
+    if (head.kind == HeadKind.AI && !head.share.equals(registry.registry.config.commonShare, ignoreCase = true)) {
+      ensure(TextRules.sameAccount(signed.signer.nasUser, readerAccount), RejectReason.NOT_OWNER, "dati AI di un altro account in un'area privata")
+    }
     if (previous != null) {
       if (head.version < previous.version) violation(RejectReason.ROLLBACK, "testa: versione piu' vecchia")
       if (head.version == previous.version && signed.envelope.contentHash != previous.contentHash) {

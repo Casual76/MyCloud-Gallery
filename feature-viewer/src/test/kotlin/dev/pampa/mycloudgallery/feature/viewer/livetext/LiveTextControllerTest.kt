@@ -251,4 +251,69 @@ class LiveTextControllerTest {
     assertThat(Rig(this, reader = FakeViewerTextReader(available = false)).controller.wantsLongPress(a)).isFalse()
     assertThat(Rig(this, reader = FakeViewerTextReader(available = true)).controller.wantsLongPress(a)).isTrue()
   }
+
+  // --- Revisione A, VT-2: il testo che cambia a foto aperta -----------------------------------------------------------------------
+
+  @Test
+  fun vt2_ilTestoCheArrivaAFotoApertaFaComparireIlPulsante() = runTest {
+    val source = FakeViewerTextSource()
+    val rig = Rig(this, source = source)
+    rig.controller.bind(a)
+    assertThat(rig.controller.hasText(a)).isFalse()
+    source.layouts[a] = layout
+    rig.controller.refresh(a)
+    assertThat(rig.controller.hasText(a)).isTrue()
+  }
+
+  @Test
+  fun vt2_ilTestoRitiratoEsceEChiudeLaSelezioneSulleSueRighe() = runTest {
+    val source = FakeViewerTextSource(mutableMapOf(a to layout))
+    val rig = Rig(this, source = source)
+    rig.controller.bind(a)
+    press(rig, wordPoint(layout, 0, 1))
+    assertThat(rig.controller.state).isInstanceOf(LiveTextState.Actions::class.java)
+    source.layouts.remove(a)
+    rig.controller.refresh(a)
+    assertThat(rig.controller.hasText(a)).isFalse()
+    assertThat(rig.controller.layoutOf(a)).isNull()
+    assertThat(rig.controller.state).isEqualTo(LiveTextState.Idle)
+    assertThat(rig.controller.owner).isNull()
+  }
+
+  @Test
+  fun vt2_ritornandoSulMediaIlTestoSiRilegge_eUnTestoCambiatoChiudeCioCheEraAperto() = runTest {
+    val source = FakeViewerTextSource(mutableMapOf(a to layout))
+    val rig = Rig(this, source = source)
+    rig.controller.bind(a)
+    rig.controller.bind(b)
+    source.layouts.remove(a)
+    rig.controller.bind(a)
+    assertThat(rig.controller.hasText(a)).isFalse()
+
+    val other = LiveTextTestLines.centered
+    source.layouts[a] = layout
+    rig.controller.refresh(a)
+    rig.controller.toggleHighlight(a)
+    assertThat(rig.controller.state).isInstanceOf(LiveTextState.Highlighted::class.java)
+    rig.controller.refresh(a)
+    assertThat(rig.controller.state).isInstanceOf(LiveTextState.Highlighted::class.java) // stesso testo: niente si chiude
+    source.layouts[a] = other
+    rig.controller.refresh(a)
+    assertThat(rig.controller.layoutOf(a)).isEqualTo(other)
+    assertThat(rig.controller.state).isEqualTo(LiveTextState.Idle)
+  }
+
+  @Test
+  fun vt2_ilTestoLettoAlVoloQuiNonSparisceAUnaRilettura() = runTest {
+    val reader = FakeViewerTextReader(available = true, result = layout)
+    val source = FakeViewerTextSource()
+    val rig = Rig(this, source = source, reader = reader)
+    rig.controller.bind(a)
+    press(rig, wordPoint(layout, 0, 0))
+    assertThat(rig.controller.hasText(a)).isTrue()
+    rig.controller.refresh(a)
+    assertThat(rig.controller.hasText(a)).isTrue()
+    assertThat(rig.controller.state).isInstanceOf(LiveTextState.Actions::class.java)
+    assertThat(reader.reads).isEqualTo(1)
+  }
 }

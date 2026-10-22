@@ -50,5 +50,16 @@ class BufferAnalysisSink(
   }
 }
 
-/** Il buffer visto da core-index (`AiBufferSink`): dove lo scaricamento delle anteprime mette i blob attestati. */
-fun AiBuffer.asFetchSink(): AiBufferSink = AiBufferSink { key, cls, bytes -> put(key, cls, bytes) }
+/**
+ * Il buffer visto da core-index (`AiBufferSink`): dove lo scaricamento delle anteprime mette i blob attestati, con la loro provenienza
+ * se il buffer la ricorda (revisione A, R5: [AiOriginBuffer]).
+ */
+fun AiBuffer.asFetchSink(): AiBufferSink {
+  val buffer = this
+  return object : AiBufferSink {
+    override suspend fun put(key: ContentKey, cls: SegmentClass, bytes: ByteArray): Boolean = buffer.put(key, cls, bytes)
+
+    override suspend fun putFrom(key: ContentKey, cls: SegmentClass, bytes: ByteArray, share: String, device: String?): Boolean =
+      (buffer as? AiOriginBuffer)?.putFrom(key, cls, bytes, AiInputOrigin.Preview(share, device)) ?: buffer.put(key, cls, bytes)
+  }
+}

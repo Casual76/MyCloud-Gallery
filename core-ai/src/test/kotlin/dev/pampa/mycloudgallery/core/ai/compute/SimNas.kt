@@ -61,6 +61,9 @@ class SimShare(val name: String, val owner: String?) {
   /** Anteprime attestate (record `meta` presente di chi le ha pubblicate). */
   val previews = HashMap<Pair<ContentKey, SegmentClass>, ByteArray>()
 
+  /** Revisione A (R5): chi ha preparato un'anteprima attestata (di serie "preparatore"). */
+  val previewBy = HashMap<Pair<ContentKey, SegmentClass>, String>()
+
   /** Le anteprime NON attestate (un dispositivo che non ha il record): non si consegnano mai. */
   val stray = HashMap<Pair<ContentKey, SegmentClass>, ByteArray>()
 
@@ -146,7 +149,8 @@ class SimFetcher(private val nas: SimNas, private val device: String) : Analysis
     for ((k, c, b) in found) {
       nas.bytesRead += b.size
       bytes += b.size
-      if (!into.put(k, c, b.copyOf())) return FetchReport(fetched, 0, bytes, stoppedEarly = true)
+      val by = nas.of(share).previewBy[k to c] ?: "preparatore"
+      if (!into.putFrom(k, c, b.copyOf(), share, by)) return FetchReport(fetched, 0, bytes, stoppedEarly = true)
       fetched++
     }
     return FetchReport(fetched, keys.size * classes.size - found.size, bytes, stoppedEarly = false)
@@ -175,9 +179,14 @@ class SimPublisher(private val nas: SimNas, private val device: String, val gate
   var heads = 0
     private set
 
+  /** Revisione A (IX-6): quante volte il calcolo ha chiamato [stage] (M3 una volta per lotto). */
+  var stageCalls = 0
+    private set
+
   override val pending = MutableStateFlow(AiPendingCounts.EMPTY)
 
   override suspend fun stage(share: String, entries: List<AiEntry>) {
+    stageCalls++
     nas.touch(device, share)
     val s = nas.of(share)
     for (e in entries) {
@@ -227,6 +236,9 @@ class SimPublisher(private val nas: SimNas, private val device: String, val gate
   }
 
   fun waiting(share: String): Int = held[nas.key(share)]?.size ?: 0
+
+  /** Revisione A (R5): le voci di [share] in fila o in attesa (non ancora pubblicate). */
+  fun queued(share: String): Set<Pair<ContentKey, AiClass>> = outbox[nas.key(share)].orEmpty().keys + held[nas.key(share)].orEmpty().keys
 
   fun hasPending(share: String, keys: Set<ContentKey>): Boolean = outbox[nas.key(share)]?.keys?.any { it.first in keys } == true
 

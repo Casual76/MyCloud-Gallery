@@ -97,9 +97,17 @@ class RoomAiPublishStore(private val database: GalleryDatabase) : AiPublishStore
     out
   }
 
+  override suspend fun liveAll(share: String): List<AiLiveEntry> = dao.ownLiveAll(key(share)).mapNotNull { row ->
+    AiKeyRow(row.cls, row.contentKey).toKey()?.let { AiLiveEntry(it, row.recipe, row.digest, row.segment) }
+  }
+
   override suspend fun commit(share: String, commit: AiPublishCommit) = database.transaction {
     val s = key(share)
     val head = commit.head
+    // Revisione A (R14): le voci tolte da una compattazione escono dalle voci vive (prima delle nuove: una chiave tolta non torna).
+    for ((cls, ofClass) in commit.dropped.groupBy { it.cls }) {
+      chunks(ofClass.map { it.contentKey.hex }.distinct()) { dao.deleteOwnLive(s, cls.code, it) }
+    }
     dao.saveOwnHead(AiOwnHeadEntity(s, head.version, head.mark.contentHash, head.publishedAtNas))
     if (commit.newSegments.isNotEmpty()) {
       dao.saveOwnSegments(commit.newSegments.map { AiOwnSegmentEntity(s, it.hash, it.segment.cls.code, it.segment.ref.size, it.entries) })

@@ -1750,6 +1750,43 @@ class MediaCatalog(
   }
 
   /**
+   * Revisione A (VT-1, D29): le chiavi di contenuto delle versioni dei media [ids] **anche se nascosti o membri di un gruppo** (senza i
+   * membri del gruppo), la corrente per prima. Solo per il viewer: il testo dal vivo e la lettura al volo funzionano anche nei Nascosti.
+   */
+  suspend fun mediaContentKeysOf(ids: Collection<MediaId>): List<CellContent> {
+    val rows = ids.map { it.value }.distinct().chunked(TimelineIndexDao.MAX_IDS).flatMap { cellContentDao.mediaVersionsOf(it) }.sortedBy { it.seq }
+    return CellContentAssembler.assemble(rows, emptyList())
+  }
+
+  /**
+   * Revisione A (PR-1, D31): per ogni media di [ids] le share (chiave piegata, come `Location.Nas.shareKey`) in cui ha una copia presente
+   * sul NAS; un media senza copie sul NAS non c'e'. A blocchi, una lettura per blocco.
+   */
+  suspend fun nasSharesOf(ids: Collection<MediaId>): Map<MediaId, Set<String>> {
+    val out = HashMap<MediaId, MutableSet<String>>()
+    for (chunk in ids.map { it.value }.distinct().chunked(TimelineIndexDao.MAX_IDS)) {
+      for (row in cellContentDao.nasSharesOf(chunk)) {
+        val share = row.shareKey ?: continue
+        out.getOrPut(MediaId(row.mediaId)) { LinkedHashSet() } += share
+      }
+    }
+    return out
+  }
+
+  /**
+   * Revisione A (CE-6, D29): dei media [ids], quelli nascosti adesso (o uniti a un media nascosto), con due letture per blocco di id invece
+   * di tre per media. Il filtro finale dei nascosti della ricerca.
+   */
+  suspend fun hiddenAmong(ids: Collection<MediaId>): Set<MediaId> {
+    val out = HashSet<MediaId>()
+    for (chunk in ids.map { it.value }.distinct().chunked(TimelineIndexDao.MAX_IDS)) {
+      cellContentDao.hiddenAmong(chunk).mapTo(out, ::MediaId)
+      cellContentDao.hiddenAliasesAmong(chunk).mapTo(out, ::MediaId)
+    }
+    return out
+  }
+
+  /**
    * Accende (o con [on] = false spegne) i bit **derivati dall'indice AI** [flags] (oggi solo `CellFlags.DOCUMENT`, D34) sui media
    * [ids], a lotti di [batch] (500) in **una transazione per lotto**: ogni lotto che cambia qualcosa annuncia **un** [CatalogChange]
    * (un `change_seq` in piu', non uno per media) e l'indice della timeline si aggiorna una volta sola. Un lotto che non cambia nulla non

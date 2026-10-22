@@ -20,6 +20,27 @@ fun interface CoverageReasons {
 }
 
 /**
+ * Revisione A (PR-1; D14, D31, D42, E-I12): cio' che :app sa dire, oltre ai conteggi, sopra i risultati di Cerca e nella pagina Ricerca e
+ * modelli. Solo il tipo dell'area, mai il nome di una share.
+ */
+interface CoverageNotices {
+  /** Le aree senza un indicizzatore vivo adesso: `true` = l'area comune, `false` = l'area privata di questo account. Vuoto = coperte, o non si sa. */
+  suspend fun areasWithoutIndexer(): List<Boolean>
+
+  /** Nessun dispositivo che conta ha la lettura del testo attiva (D42): le parole non si cercano dentro le foto. */
+  suspend fun textReadingOff(): Boolean
+
+  companion object {
+    /** Nessun avviso (i montaggi senza :app, i test). */
+    val NONE: CoverageNotices = object : CoverageNotices {
+      override suspend fun areasWithoutIndexer(): List<Boolean> = emptyList()
+
+      override suspend fun textReadingOff(): Boolean = false
+    }
+  }
+}
+
+/**
  * I conteggi di una copertura: celle candidate (l'istantanea della Libreria: **senza nascosti**), con un vettore, con un vettore della
  * ricetta corrente, con il testo letto, e le celle senza vettore.
  */
@@ -40,6 +61,8 @@ class CoverageTracker(
   private val reasons: CoverageReasons = CoverageReasons.PREPARATION,
   private val queryModelBytes: Long = 0,
   private val modelMissing: () -> Boolean = { false },
+  /** PR-1: la lettura del testo non attiva (D42) diventa un motivo della copertura, con le celle senza testo letto. */
+  private val notices: CoverageNotices = CoverageNotices.NONE,
 ) {
   private val content = MutableStateFlow<SearchCoverage>(SearchCoverage.Complete)
 
@@ -51,13 +74,19 @@ class CoverageTracker(
   suspend fun update(counts: CoverageCounts): SearchCoverage {
     val value = when {
       modelMissing() -> SearchCoverage.ModelMissing(queryModelBytes)
-      counts.withVector < counts.total ->
-        SearchCoverage.Partial(counts.withVector, counts.total, if (counts.missing.isEmpty()) emptyMap() else reasons.reasons(counts.missing))
+      counts.withVector < counts.total -> SearchCoverage.Partial(counts.withVector, counts.total, reasonsOf(counts))
       counts.currentRecipe < counts.total -> SearchCoverage.Updating(if (counts.total == 0) 100 else counts.currentRecipe * 100 / counts.total)
       else -> SearchCoverage.Complete
     }
     content.value = value
     report = CoverageReport(value, counts.withText, counts.total)
     return value
+  }
+
+  private suspend fun reasonsOf(counts: CoverageCounts): Map<CoverageReason, Int> {
+    val out = LinkedHashMap<CoverageReason, Int>()
+    if (counts.missing.isNotEmpty()) out += reasons.reasons(counts.missing)
+    if (counts.withText < counts.total && notices.textReadingOff()) out[CoverageReason.TEXT_READING_OFF] = counts.total - counts.withText
+    return out
   }
 }

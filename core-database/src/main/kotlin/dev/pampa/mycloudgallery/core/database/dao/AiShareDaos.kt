@@ -100,6 +100,14 @@ interface AiPublishDao {
   @Upsert
   suspend fun saveOwnLive(rows: List<AiOwnLiveEntity>)
 
+  /** Revisione A (R14): tutte le voci vive di una share (la compattazione delle teste proprie). */
+  @Query("SELECT * FROM ai_own_live WHERE share = :share")
+  suspend fun ownLiveAll(share: String): List<AiOwnLiveEntity>
+
+  /** Revisione A (R14): le voci vive tolte da una compattazione. */
+  @Query("DELETE FROM ai_own_live WHERE share = :share AND cls = :cls AND content_key IN (:keys)")
+  suspend fun deleteOwnLive(share: String, cls: Int, keys: List<String>)
+
   /** Le voci vive di una share che stanno in un segmento che la testa non elenca piu' (compattazione). */
   @Query("SELECT * FROM ai_own_live WHERE share = :share AND segment = :segment")
   suspend fun ownLiveInSegment(share: String, segment: String): List<AiOwnLiveEntity>

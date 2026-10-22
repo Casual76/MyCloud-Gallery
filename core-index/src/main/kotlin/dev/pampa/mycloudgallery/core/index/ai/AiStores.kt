@@ -87,6 +87,8 @@ class AiPublishCommit(
   val consumed: Set<Long>,
   val newSegments: List<OwnSegment>,
   val live: List<AiLiveEntry>,
+  /** Revisione A (R14): le voci vive tolte da una compattazione (non piu' di un file della share, o non piu' sostenute qui). */
+  val dropped: Collection<AiKey> = emptyList(),
 )
 
 /** Lo stato della pubblicazione dei dati AI di questo dispositivo, per share. */
@@ -114,6 +116,9 @@ interface AiPublishStore {
 
   /** Le voci vive di [keys] nelle teste proprie di [share]. */
   suspend fun live(share: String, keys: Collection<AiKey>): Map<AiKey, AiLiveEntry>
+
+  /** Revisione A (R14): tutte le voci vive di [share] (per la compattazione delle teste proprie). */
+  suspend fun liveAll(share: String): List<AiLiveEntry>
 
   /** Applica [commit] in una transazione. */
   suspend fun commit(share: String, commit: AiPublishCommit)
@@ -183,10 +188,13 @@ class InMemoryAiPublishStore : AiPublishStore {
     keys.mapNotNull { k -> s.live[k]?.let { k to it } }.toMap()
   }
 
+  override suspend fun liveAll(share: String): List<AiLiveEntry> = synchronized(lock) { state(share).live.values.toList() }
+
   override suspend fun commit(share: String, commit: AiPublishCommit): Unit = synchronized(lock) {
     val s = state(share)
     commit.consumed.forEach { s.rows.remove(it) }
     s.head = commit.head
+    commit.dropped.forEach { s.live.remove(it) }
     commit.live.forEach { s.live[it.key] = it }
     transactions++
   }

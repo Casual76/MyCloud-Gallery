@@ -32,6 +32,10 @@ internal class MediaInput(
   val fromPhone: Boolean,
   /** L'HQ (2048 px) solo quando serve: chiamata al piu' una volta. */
   val hq: suspend () -> ByteArray?,
+  /** R5: da dove viene [primary]. */
+  val from: AiInputOrigin = AiInputOrigin.Own,
+  /** R5: da dove viene l'HQ (dopo che [hq] l'ha portato), o null. */
+  val hqFrom: () -> AiInputOrigin? = { null },
 )
 
 /** Com'e' andato il vettore di un media. */
@@ -43,6 +47,9 @@ internal sealed interface VectorOutcome {
 
   /** Vettore non valido due volte (E-A12): `AI_VECTOR_INVALID`, media saltato. */
   data object Invalid : VectorOutcome
+
+  /** IX-7: un errore passeggero del motore (memoria, un guasto della libreria): il media resta da fare, non e' "non supportato". */
+  data object Failed : VectorOutcome
 
   /** Il modello manca o non parte: il calcolo si ferma (`MODEL_MISSING`). */
   data object ModelMissing : VectorOutcome
@@ -98,11 +105,10 @@ internal class MediaComputer(
       } catch (e: AiEngineException) {
         when (e.error) {
           AiEngineError.MODEL_UNAVAILABLE, AiEngineError.INIT_FAILED -> return VectorOutcome.ModelMissing
-          AiEngineError.BAD_INPUT -> {
-            counters.inputsRefused.incrementAndGet()
-            return VectorOutcome.Refused
-          }
-          else -> null
+          // Un vettore non finito (anche dopo il ripiego su CPU): un tentativo non valido (E-A12).
+          AiEngineError.NON_FINITE -> null
+          // IX-7: il resto (memoria, un errore qualunque della libreria che il motore chiama BAD_INPUT dopo `ModelInputs`) e' passeggero.
+          else -> return VectorOutcome.Failed
         }
       }
       if (before == AiBackend.GPU && images.backend.value == AiBackend.CPU) counters.gpuFallbacks.incrementAndGet()
@@ -181,7 +187,7 @@ internal class MediaComputer(
       throw e
     } catch (e: AiEngineException) {
       if (e.error == AiEngineError.TEXT_READING_OFF) return null
-      if (e.error == AiEngineError.BAD_INPUT) return Result.failure(Refusal())
+      // IX-7: anche `BAD_INPUT` del motore (l'immagine e' gia' passata da `ModelInputs`) e' un errore passeggero: si riprova.
       counters.ocrFailed.incrementAndGet()
       Result.failure(e)
     } catch (e: Exception) {

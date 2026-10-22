@@ -21,6 +21,10 @@ import java.util.Locale
  * - [AiDoneClasses] per il calcolo (P5), dalla replica senza rete.
  *
  * Le classi "fatte" sono i vincitori consegnati all'indice locale ([AiReplicaStore.allApplied]): gli stessi che la ricerca usa.
+ *
+ * Revisione A (R16): "fatto" vuol dire la ricetta **corrente** ([recipe], la piu' alta che quest'app conosce). Una ricetta piu' nuova di
+ * quella che l'app conosce (anche la 255 di un dispositivo compromesso) non conta come fatta: si calcola con la ricetta corrente, e dopo
+ * un aggiornamento dell'app la ricetta vecchia non conta piu' (D21).
  */
 class AiPublishedClasses(
   private val sync: AiShareSync,
@@ -42,7 +46,7 @@ class AiPublishedClasses(
   private suspend fun load(share: String) {
     val map = HashMap<ContentKey, MutableSet<SegmentClass>>()
     for (mark in store.allApplied(share.lowercase(Locale.ROOT))) {
-      if (mark.recipe < recipe(mark.key.cls)) continue
+      if (mark.recipe != recipe(mark.key.cls)) continue
       map.getOrPut(mark.key.contentKey) { LinkedHashSet() } += mark.key.cls.segmentClass
     }
     synchronized(lock) { done[share.lowercase(Locale.ROOT)] = map }
@@ -57,7 +61,7 @@ class AiPublishedClasses(
     val wanted = keys.flatMap { k -> AiClass.entries.map { AiKey(k, it) } }
     val out = HashMap<ContentKey, MutableSet<AiClass>>()
     for ((key, mark) in store.applied(share.lowercase(Locale.ROOT), wanted)) {
-      if (mark.recipe >= recipe) out.getOrPut(key.contentKey) { LinkedHashSet() } += key.cls
+      if (mark.recipe == recipe) out.getOrPut(key.contentKey) { LinkedHashSet() } += key.cls
     }
     return out
   }

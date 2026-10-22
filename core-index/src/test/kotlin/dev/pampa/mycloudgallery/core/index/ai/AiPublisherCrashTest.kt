@@ -31,6 +31,8 @@ class DyingAiPublishStore(private val delegate: AiPublishStore, private val plan
 
   override suspend fun live(share: String, keys: Collection<AiKey>) = plan.aroundSuspend { delegate.live(share, keys) }
 
+  override suspend fun liveAll(share: String) = plan.aroundSuspend { delegate.liveAll(share) }
+
   override suspend fun commit(share: String, commit: AiPublishCommit) = plan.aroundSuspend { delegate.commit(share, commit) }
 
   override suspend fun shares() = plan.aroundSuspend { delegate.shares() }

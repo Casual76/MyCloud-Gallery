@@ -70,6 +70,10 @@ class RoomAiStoresTest {
     store.commit("test-comune", AiPublishCommit(head, setOf(rows[0].id), listOf(segment), listOf(AiLiveEntry(AiKey(key(1), AiClass.VEC), 1, rows[0].staged.digest, hash(1)))))
     out.add(store.ownHead("test-comune"))
     out.add(store.live("test-comune", listOf(AiKey(key(1), AiClass.VEC), AiKey(key(2), AiClass.VEC))))
+    // Revisione A (R14): tutte le voci vive, e una compattazione che ne toglie una.
+    out.add(store.liveAll("test-comune").sortedBy { it.key.contentKey.hex })
+    store.commit("test-comune", AiPublishCommit(head, emptySet(), emptyList(), emptyList(), dropped = listOf(AiKey(key(1), AiClass.VEC))))
+    out.add(store.liveAll("test-comune"))
     store.discard("test-comune", setOf(rows[2].id))
     out.add(store.pending())
     out.add(store.shares().sorted())

@@ -23,7 +23,11 @@ import kotlinx.coroutines.launch
  * Q13), che e' **locale** e non si sincronizza. Due righe in un file di `noBackupFilesDir`; nel dubbio (file assente o rovinato) la
  * lettura e' spenta e il dispositivo non e' escluso.
  */
-class TextReadingMemory(private val file: File) {
+class TextReadingMemory(
+  private val file: File,
+  /** La versione del testo della pagina di quest'app (LT-3): una accettata piu' vecchia non accende la lettura qui. */
+  private val current: Int = TextReadingSwitch.CURRENT_TEXT_VERSION,
+) {
   private val lock = Any()
 
   @Volatile var choice: TextReadingChoice = TextReadingChoice.Off
@@ -36,7 +40,10 @@ class TextReadingMemory(private val file: File) {
     read()
   }
 
-  fun state(): TextReadingState = stateOf(choice, excluded)
+  fun state(): TextReadingState = stateOf(choice, excluded, current)
+
+  /** Lo stato di [choice] e [excluded] con la versione del testo di quest'app (LT-3). */
+  fun stateFor(choice: TextReadingChoice, excluded: Boolean): TextReadingState = stateOf(choice, excluded, current)
 
   fun save(choice: TextReadingChoice, excluded: Boolean) = synchronized(lock) {
     if (choice == this.choice && excluded == this.excluded && file.exists()) return
@@ -72,10 +79,16 @@ class TextReadingMemory(private val file: File) {
     const val FILE = "text-reading"
     private const val VERSION = "1"
 
-    fun stateOf(choice: TextReadingChoice, excluded: Boolean): TextReadingState = when (choice) {
-      TextReadingChoice.Off -> TextReadingState.Off
-      is TextReadingChoice.OnForAccount -> TextReadingState.OnForAccount(thisDevice = !excluded)
-    }
+    /**
+     * Lo stato da scelta ed esclusione. Revisione A (LT-3, I7; D41): una versione del testo accettata **piu' vecchia** di quella di
+     * quest'app ([current]) non basta: la lettura resta "attiva per l'account" ma **non qui** (motore, lettura al volo e ML Kit fermi)
+     * finche' il testo nuovo non si riaccetta sulla pagina, che lo dice ("Il testo e' cambiato").
+     */
+    fun stateOf(choice: TextReadingChoice, excluded: Boolean, current: Int = TextReadingSwitch.CURRENT_TEXT_VERSION): TextReadingState =
+      when (choice) {
+        TextReadingChoice.Off -> TextReadingState.Off
+        is TextReadingChoice.OnForAccount -> TextReadingState.OnForAccount(thisDevice = !excluded && choice.acceptedTextVersion >= current)
+      }
   }
 }
 
@@ -101,7 +114,7 @@ class AppTextReadingSwitch(
   override val state: StateFlow<TextReadingState> = combine(choice, excluded, disabling) { c, ex, off ->
     val known = c ?: memory.choice
     memory.save(known, ex)
-    if (off) TextReadingState.Disabling else TextReadingMemory.stateOf(known, ex)
+    if (off) TextReadingState.Disabling else memory.stateFor(known, ex)
   }.stateIn(scope, SharingStarted.Eagerly, memory.state())
 
   init {

@@ -22,6 +22,7 @@ import dev.pampa.mycloudgallery.core.metadata.write.WrittenCheck
 import dev.pampa.mycloudgallery.core.metadata.write.WrittenFileCheck
 import dev.pampa.mycloudgallery.core.model.Location
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.nasmedia.contract.ScanMode
 import dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags
 import dev.pampa.mycloudgallery.di.FiveBModule
 import dev.pampa.mycloudgallery.integrations.AppIncomingMetadata
@@ -29,6 +30,8 @@ import dev.pampa.mycloudgallery.work.BackupJobs
 import java.io.File
 import java.time.Instant
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlin.time.Duration.Companion.minutes
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -68,6 +71,11 @@ class CampoAAppTest {
   /** I lavori chiesti dal grafo (WorkManager e JobScheduler non ci sono): quelli a tappe del tipo di un media. */
   private class RecordingJobs : BackupJobs {
     val versionWork = CopyOnWriteArrayList<BackupKind>()
+    val quickWork = java.util.concurrent.atomic.AtomicInteger()
+
+    override fun quickWork() {
+      quickWork.incrementAndGet()
+    }
 
     override fun userInitiated(trigger: BackupTrigger, confirmed: Boolean) = Unit
 
@@ -78,12 +86,13 @@ class CampoAAppTest {
     override fun cancelAll() = Unit
   }
 
-  private suspend fun openRig(jobs: BackupJobs = RecordingJobs(), rows: (FakeMediaStore) -> Unit): BackupRig {
+  /** Un telefono con la galleria montata e la famiglia pronta, **senza** avviare ne' il NAS ne' il backup (CA-1 li fa partire a mano, in ordine). */
+  private suspend fun newRig(jobs: BackupJobs = RecordingJobs()): BackupRig {
     val backend = TestNas.backend(time)
     val phone = TestDevice(app, File(temp.root, "telefono-${devices.size}"), TestPlatform(time, backend), DEBUG_LIKE).also { devices += it }
     phone.graph.start()
     phone.graph.foundFamily()
-    val rig = BackupRig(
+    return BackupRig(
       app = app,
       device = phone,
       account = TestNas.ADMIN_USER,
@@ -98,6 +107,10 @@ class CampoAAppTest {
         )
       },
     ).also { rigs += it }
+  }
+
+  private suspend fun openRig(jobs: BackupJobs = RecordingJobs(), rows: (FakeMediaStore) -> Unit): BackupRig {
+    val rig = newRig(jobs)
     rows(rig.store)
     rig.open()
     rig.chooseFolder("Pixel di prova")
@@ -175,6 +188,48 @@ class CampoAAppTest {
 
     assertThat(jobs.versionWork).contains(BackupKind.PHOTOS)
     assertThat(jobs.versionWork).doesNotContain(BackupKind.VIDEOS)
+  }
+
+  /**
+   * CA-1 (D6, a freddo): la lettura del telefono di primo piano puo' finire PRIMA che il backup sia partito (il backup parte dopo il NAS). Allora
+   * `afterPhoneRead` usciva senza fare niente e nessuno richiedeva i lavori: la versione aspettava il giro periodico, proprio nel caso che D6 voleva coprire
+   * (`force-stop`, modifica, apertura a freddo). Adesso la chiamata si ricorda e si ripete appena il backup e' partito.
+   */
+  @Test
+  fun d6_laLetturaFinitaPrimaCheIlBackupPartaChiedeComunqueIlLavoro_CA1() = runBlocking<Unit> {
+    val jobs = RecordingJobs()
+    val rig = newRig(jobs)
+    BackupRig.photo(rig.store, id = 1, bytes = BackupRig.jpeg(tone = 40), takenAt = time.now() - 3 * DAY)
+    // A freddo: parte il NAS, la lettura del telefono finisce, e SOLO DOPO parte il backup.
+    check(rig.nas.start()) { "il NAS non parte" }
+    rig.readPhone()
+    checkNotNull(rig.nas.scan(ScanMode.Full, 5.minutes))
+    rig.chooseFolder("Pixel di prova")
+
+    rig.backup.afterPhoneRead()
+    assertThat(jobs.versionWork).isEmpty()
+    assertThat(jobs.quickWork.get()).isEqualTo(0)
+
+    check(rig.backup.start()) { "il backup non parte" }
+    withTimeout(30_000) { while (jobs.versionWork.isEmpty()) delay(50) }
+    assertThat(jobs.versionWork).contains(BackupKind.PHOTOS)
+    assertThat(jobs.versionWork).doesNotContain(BackupKind.VIDEOS)
+  }
+
+  /** CA-1: se nessuna lettura e' finita prima della partenza, `start()` non chiede lavori da solo (niente polling, niente lavori a vuoto). */
+  @Test
+  fun d6_senzaUnaLetturaFinitaPrimaIlBackupCheParteNonChiedeNiente_CA1() = runBlocking<Unit> {
+    val jobs = RecordingJobs()
+    val rig = newRig(jobs)
+    BackupRig.photo(rig.store, id = 1, bytes = BackupRig.jpeg(tone = 40), takenAt = time.now() - 3 * DAY)
+    check(rig.nas.start())
+    rig.readPhone()
+    checkNotNull(rig.nas.scan(ScanMode.Full, 5.minutes))
+    rig.chooseFolder("Pixel di prova")
+    check(rig.backup.start())
+    delay(500)
+    assertThat(jobs.versionWork).isEmpty()
+    assertThat(jobs.quickWork.get()).isEqualTo(0)
   }
 
   private companion object {

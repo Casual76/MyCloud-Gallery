@@ -1079,3 +1079,16 @@ Poche, solo quelle che decidono cosa vede la famiglia e cosa resta privato. Se n
 | Q5 | Se smetti di condividere un album, cosa vedono gli altri? (Le foto restano comunque nell'area comune, a meno che tu non le riporti nelle tue cartelle.) | (a) L'album sparisce dalle loro Raccolte, con un avviso. Le foto le trovano ancora nelle cartelle del NAS. (b) Ognuno si tiene una copia personale dell'album con le stesse foto, finché le foto restano. | **(a)**: "smetti di condividere" deve voler dire che l'album non è più loro. |
 | Q6 | Negli album condivisi mostriamo chi ha aggiunto ogni foto ("Aggiunta da Marco")? | (a) Sì, nelle informazioni della foto. (b) No. | **(a)**: aiuta a capire chi ha messo cosa, e serve per i permessi ("ognuno toglie le sue"). |
 | Q7 | Gli album condivisi spostano davvero le foto nell'area comune. Quando li accendiamo sulle cartelle vere (oggi funzionano solo su quelle di prova)? | (a) A fine Fase 7, dopo tutte le prove, con l'app definitiva e il tuo sì. (b) Più avanti, insieme alla pubblicazione dell'indice sulle cartelle vere (Fase 6). | **(a)**: le prove con le cartelle di prova e il tablet bastano; per le cartelle vere serve comunque il tuo sì. |
+
+## 11. Risposte del 22/10 e cosa cambiano
+| # | Risposta | Cosa cambia |
+|---|---|---|
+| Q1 | **(a)** "Album condivisi/<nome>" | Come raccomandato |
+| Q2 | **(a)** "Gli altri aggiungono" come permesso proposto | Come raccomandato |
+| Q3 | **(a)** Le foto nascoste restano fuori, con l'avviso; si possono condividere a scelta | Come raccomandato |
+| Q4 | **(a)** Le foto nuove di un album smart condiviso vanno in "Da condividere" | Come raccomandato |
+| Q5 | **Diversa dalle opzioni: "lo decide chi elimina l'album"** | Il foglio "Smetti di condividere" / "Elimina l'album" chiede a chi lo fa di scegliere tra (a) l'album sparisce dalle Raccolte degli altri, con un avviso, e (b) ognuno si tiene una copia personale dell'album con le stesse foto, finché le foto restano. In entrambi i casi le foto restano nell'area comune, salvo "Riporta nelle mie cartelle". La scelta viaggia nella definizione firmata (D31 da adeguare in P0/P2/P4) |
+| Q6 | **(a)** Si mostra chi ha aggiunto ogni foto | Come raccomandato |
+| Q7 | **(a)** Album condivisi sulle cartelle vere a fine Fase 7, con il consenso | Come raccomandato |
+
+Conferma collegata (Fase 5, guardiano D9 e Q4 (b) della 5): la copia privata automatica di sottofondo vale solo per i media che sono stati sul telefono; le foto spostate nell'area comune dalle Cartelle NAS, mai state sul telefono, restano protette dal cestino del NAS (30 giorni). Confermato dall'utente il 22/10 (correzioni dal campo, gruppo A, D2).

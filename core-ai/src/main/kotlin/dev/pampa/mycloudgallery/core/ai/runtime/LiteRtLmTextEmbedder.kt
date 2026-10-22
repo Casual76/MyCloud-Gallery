@@ -51,8 +51,9 @@ class LiteRtLmTextEmbedder internal constructor(
     cacheRoot: File,
     recipe: AiRecipe = AiRecipe.CURRENT,
     diag: (DiagCode) -> Unit = {},
+    access: ModelAccess = ModelAccess.PATH_CHECKED,
   ) : this(
-    sessions = LiteRtLmSessions(files, ModelCatalog.QUERY_270M, cacheRoot, recipe, withVision = false),
+    sessions = LiteRtLmSessions(files, ModelCatalog.QUERY_270M, cacheRoot, recipe, withVision = false, access = access),
     recipe = recipe,
     nanos = System::nanoTime,
     diag = diag,

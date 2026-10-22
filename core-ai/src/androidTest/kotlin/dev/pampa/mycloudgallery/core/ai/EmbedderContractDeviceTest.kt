@@ -8,6 +8,7 @@ import dev.pampa.mycloudgallery.core.ai.contract.AiEngineException
 import dev.pampa.mycloudgallery.core.ai.contract.WarmUpResult
 import dev.pampa.mycloudgallery.core.ai.runtime.LiteRtLmImageEmbedder
 import dev.pampa.mycloudgallery.core.ai.runtime.LiteRtLmTextEmbedder
+import dev.pampa.mycloudgallery.core.ai.runtime.ModelAccess
 import dev.pampa.mycloudgallery.core.ai.runtime.ProbeImageSet
 import dev.pampa.mycloudgallery.core.ai.runtime.RealDeviceProbe
 import dev.pampa.mycloudgallery.core.ai.testing.EmbedderContract
@@ -150,13 +151,52 @@ class EmbedderContractDeviceTest {
           var used = false
           override suspend fun open(id: ModelId): VerifiedModel? = if (used) null else real.also { used = true }
         }
-        val embedder = LiteRtLmTextEmbedder(once, TestModels.cacheRoot)
+        val embedder = LiteRtLmTextEmbedder(once, TestModels.cacheRoot, access = ModelAccess.DESCRIPTOR)
         assertTrue(embedder.warmUp() is WarmUpResult.Ready)
         val v = embedder.embed("un cane che corre sulla spiaggia").values
         assertEquals(768, v.size)
         // Il motore e' sopravvissuto alla sostituzione perche' possiede il descrittore: chiuderlo non chiude due volte lo stesso numero.
         embedder.release()
         embedder.release()
+      } finally {
+        file.delete()
+        assertTrue(parked.renameTo(file))
+      }
+    } finally {
+      runCatching { real!!.close() }
+    }
+  }
+
+  /** Il modello dato come descrittore (D16 alla lettera, senza cache) passa la stessa suite di contratto del predefinito (per percorso). */
+  @Test
+  fun ilMotoreSuDescrittorePassaLaSuiteDiContratto() = runBlocking<Unit> {
+    TestModels.require(TestModels.query270m)
+    val embedder = LiteRtLmTextEmbedder(TestModels.files, TestModels.cacheRoot, access = ModelAccess.DESCRIPTOR)
+    try {
+      EmbedderContract.verifyText(embedder)
+    } finally {
+      embedder.release()
+    }
+  }
+
+  /** Per percorso, un file rinominato o sostituito fra la verifica e il caricamento e' rifiutato (E-A11): non e' piu' il file verificato. */
+  @Test
+  fun suPercorsoUnFileSostituitoDopoLaVerificaERifiutato() = runBlocking<Unit> {
+    TestModels.require(TestModels.query270m)
+    val spec = TestModels.query270m
+    val real = TestModels.files.open(spec.id)
+    assertNotNull(real)
+    try {
+      val file = real!!.file
+      val parked = File(file.parentFile, file.name + ".parked")
+      assertTrue(file.renameTo(parked))
+      try {
+        parked.copyTo(file) // gli stessi byte, un altro file (un altro inode)
+        val once = object : ModelFiles {
+          override suspend fun open(id: ModelId): VerifiedModel? = real
+        }
+        val embedder = LiteRtLmTextEmbedder(once, TestModels.cacheRoot, access = ModelAccess.PATH_CHECKED)
+        assertEquals(WarmUpResult.Failed(AiEngineError.MODEL_UNAVAILABLE), embedder.warmUp())
       } finally {
         file.delete()
         assertTrue(parked.renameTo(file))

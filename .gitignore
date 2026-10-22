@@ -52,3 +52,11 @@ docs/screenshots/2-P7/
 docs/screenshots/2-P9/
 docs/screenshots/3-*/
 docs/screenshots/4-*/
+
+# Valutazione della ricerca (Fase 6, P9): etichette e query del set privato. Stanno solo sul telefono (noBackupFilesDir/eval/) e nella
+# cartella .mycloudgallery\eval\ dell'utente, MAI nel repository (NoPrivateEvalDataInGitTest, docs/fase6-progetto.md par. 5.3).
+*.mcgeval
+etichette*
+query-private*
+eval-privato/
+.mycloudgallery/

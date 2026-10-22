@@ -67,7 +67,14 @@ import java.io.File
 class CatalogVersionCatalog(
   private val catalog: MediaCatalog,
   private val account: () -> AccountId?,
+  /** Campo, gruppo A (D3): chi legge i metadati da un file locale (lo stesso estrattore dei file in arrivo, IN-8); null = la versione nasce senza. */
+  private val metadata: () -> IncomingMetadata? = { null },
 ) : VersionCatalog {
+
+  override suspend fun readCorrected(mediaId: MediaId, versionId: VersionId, file: File, mime: String) {
+    // La data di ripiego (se il file non ne avesse una) e' quella di adesso del catalogo: la correzione ne ha appena scritta una nel file.
+    metadata()?.read(mediaId, versionId, file, mime, null, System.currentTimeMillis())
+  }
 
   override suspend fun media(mediaId: MediaId): VersionedMedia? {
     val media = catalog.media(mediaId) ?: return null

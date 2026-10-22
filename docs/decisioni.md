@@ -4272,3 +4272,20 @@ del telefono e' sparita" (`BackupPrivateCopyGuardian.plan`/`phoneStillHas`, `Bac
   catalogo sa dello spostamento (la scansione dopo, o subito con il punto 7 qui sotto).
 - Test: `BackupCatalogTest.d2_*` (Room vero: il file del PC spostato non c'e' con `null`, c'e' se chiesto; la foto liberata e spostata c'e'),
   `PrivateCopyGuardianTest.d2_*` (guardiano vero: una copia sola, quella del media che il telefono ha avuto).
+
+**3. F36, "Correggi data e luogo" scriveva solo il NAS.** Due cause, tutte e due nel percorso della correzione:
+- *Nessun dialogo, telefono com'era* (`DefaultCorrections.plan`): la strada `PHONE` contava solo le righe del telefono **della versione attuale**. Il
+  fixture del campo (`exif-05-gps-ora-utc.jpg`, uno dei 16 modificati da F43-tel nei giri vecchi) ha sul telefono l'originale (979 B, al sicuro in
+  `Versioni/… (originale).jpg`) e come attuale la modifica che sta al solito percorso: per l'app era "solo sul NAS", la correzione partiva dai byte del
+  NAS e il telefono non si toccava. Ora contano le righe di **ogni** versione (quelle dell'attuale per prime): serve il permesso del dialogo di Android, i
+  byte si leggono dal telefono se ha l'attuale, altrimenti dalla copia privata verificata, e ogni riga si riscrive con la correzione controllando che
+  abbia ancora i byte **della sua versione** (R3). Una riga che tiene una versione di prima si riscrive solo se anche quella e' al sicuro (hash noto e
+  copia privata verificata, anche in `Versioni/`): altrimenti `NEEDS_SAFE_FIRST` ("Prima lo metto al sicuro"), mai l'unica copia di qualcosa. Negato il
+  dialogo, niente si tocca e la pagina lo dice (`CorrectionMessage.PERMISSION_REFUSED`, come E-E10).
+- *La Libreria con la data di prima*: `CatalogVersionCatalog.correct` creava la versione `CORRECTED` **senza metadati** (`MediaCatalog.correct(..., null)`):
+  la cella restava con l'ordine e la data di prima finche' una lettura del telefono o del NAS non rileggeva il file (sul campo mai, per un media "solo
+  NAS"). Ora, appena la versione nasce, i suoi metadati si leggono **dai byte corretti** con l'estrattore della Libreria (`VersionCatalog.readCorrected`,
+  default niente; nell'app lo stesso lettore dei file in arrivo, IN-8, che segna fatta la fase META della versione).
+- Test: `CorrectionsTest.d3_*` (il telefono con la versione di prima: dialogo chiesto, riga riscritta, NAS e `Versioni/` giusti, metadati letti dai byte
+  corretti; la versione del telefono non al sicuro: `NEEDS_SAFE_FIRST`), `CampoAAppTest.d3_*` (grafo vero: dopo "Correggi" la data della versione e
+  l'ordine della cella sono quelli nuovi).

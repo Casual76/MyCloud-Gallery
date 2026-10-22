@@ -289,7 +289,8 @@ class FiveBGraph(
     val rewriter = AppPhoneRewriter(inputs.rewriter(), PhoneRowFence(fence, account) { volume, id -> catalog.phoneRowFolder(volume, id) })
     val ports = FiveBPorts(
       journal = journal,
-      catalog = CatalogVersionCatalog(catalog, ::accountId),
+      // Campo, gruppo A (D3): i metadati della versione corretta con l'estrattore dei file in arrivo (lo lega `IntegrationsGraph`).
+      catalog = CatalogVersionCatalog(catalog, ::accountId) { incomingQueue.metadata },
       phone = phone,
       staged = staged,
       gate = gate,

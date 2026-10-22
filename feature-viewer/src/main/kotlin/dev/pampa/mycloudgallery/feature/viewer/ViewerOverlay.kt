@@ -751,7 +751,11 @@ private fun ViewerOverlays(
   val copyLabel = stringResource(R.string.viewer_copy_label)
   // Il testo dal vivo (Fase 6, P12, D42, D43): il testo letto dell'indice, da qualunque dispositivo, anche con la lettura spenta qui.
   val liveText = controller.liveText
-  LaunchedEffect(currentId, services.textSource) { liveText.bind(currentId) }
+  LaunchedEffect(currentId, services.textSource) {
+    liveText.bind(currentId)
+    // VT-2: il testo che arriva, cambia o si ritira a foto aperta si vede subito (righe e pulsante "Testo").
+    services.textSource?.changes?.collect { liveText.refresh(currentId) }
+  }
   val hasLiveText = currentKind != MediaKind.VIDEO && liveText.hasText(currentId)
   // Il ritaglio del soggetto (Fase 6, P13, D44, D46): la voce ⋮ e l'azione di TalkBack; il ritaglio di un media si chiude cambiando media (E-H1).
   val cutout = controller.cutout

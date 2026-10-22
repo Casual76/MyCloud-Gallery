@@ -14,13 +14,24 @@ import dev.pampa.mycloudgallery.feature.viewer.livetext.ViewerTextLine
 import dev.pampa.mycloudgallery.feature.viewer.livetext.ViewerTextReader
 import dev.pampa.mycloudgallery.feature.viewer.livetext.ViewerTextSource
 import dev.pampa.mycloudgallery.feature.viewer.livetext.ViewerWordSpan
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 
 // I fake del testo dal vivo e del ritaglio (Fase 6, P0): P12 e P13 partono da qui (testo letto finto con righe dritte, inclinate e
 // su piu' righe; ritagliatore finto). Mai nella release (tools/check.ps1). Nessun dato personale: testi di prova generici.
 
-/** Il testo letto finto, per media. */
+/** Il testo letto finto, per media; [changed] avvisa il viewer che il testo e' cambiato (VT-2). */
 class FakeViewerTextSource(val layouts: MutableMap<MediaId, ViewerTextLayout> = HashMap()) : ViewerTextSource {
+  private val signals = MutableSharedFlow<Unit>(extraBufferCapacity = 16)
+
   override suspend fun layout(id: MediaId): ViewerTextLayout? = layouts[id]
+
+  override val changes: Flow<Unit> get() = signals
+
+  /** Il testo dell'indice e' cambiato (arrivato, ritirato): il viewer rilegge il media aperto. */
+  fun changed() {
+    signals.tryEmit(Unit)
+  }
 }
 
 /**

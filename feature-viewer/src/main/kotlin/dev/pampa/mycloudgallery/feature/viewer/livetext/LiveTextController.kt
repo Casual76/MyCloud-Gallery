@@ -82,6 +82,9 @@ internal class LiveTextController(
   }
 
   private val layouts = mutableStateMapOf<MediaId, ViewerTextLayout>()
+
+  /** I media il cui testo e' stato letto al volo qui e che l'indice non ha (ancora) dato: una rilettura non li toglie (VT-2). */
+  private val readHere = HashSet<MediaId>()
   private var bound: MediaId? = null
   private var fixed: TextPosition = TextPosition(0, 0)
   private var cachedGeometry: LiveTextGeometry? = null
@@ -127,13 +130,47 @@ internal class LiveTextController(
 
   // --- Il media corrente --------------------------------------------------------------------------------------------------
 
-  /** Il viewer e' sul media [id]: la selezione del media di prima si chiude e si legge il testo gia' nell'indice (D42). */
+  /**
+   * Il viewer e' sul media [id]: la selezione del media di prima si chiude e si legge il testo gia' nell'indice (D42). Revisione A (VT-2):
+   * si rilegge ogni volta (il testo puo' essere cambiato mentre si guardava un altro media).
+   */
   suspend fun bind(id: MediaId) {
     if (bound != id) {
       bound = id
       if (owner != id) reset()
     }
-    if (layouts[id] == null) host.services().textSource?.layout(id)?.let { layouts[id] = it }
+    reload(id)
+  }
+
+  /**
+   * VT-2: il testo dell'indice e' cambiato ([ViewerTextSource.changes]): il media [id] si rilegge. Un testo arrivato fa comparire il
+   * pulsante "Testo"; uno ritirato (o di un dispositivo revocato) esce, e cio' che era aperto su quelle righe si chiude. Il testo letto
+   * al volo qui resta finche' l'indice non ne da' un altro (se il salvataggio non e' riuscito non c'e' altro da mostrare).
+   */
+  suspend fun refresh(id: MediaId) = reload(id)
+
+  private suspend fun reload(id: MediaId) {
+    val source = host.services().textSource ?: return
+    val fresh = try {
+      source.layout(id)
+    } catch (cancelled: CancellationException) {
+      throw cancelled
+    } catch (_: Exception) {
+      // Una lettura dell'indice che fallisce non cambia cio' che si vede.
+      return
+    }
+    val old = layouts[id]
+    when {
+      fresh != null -> {
+        readHere -= id
+        if (fresh == old) return
+        layouts[id] = fresh
+      }
+      old != null && id !in readHere -> layouts.remove(id)
+      else -> return
+    }
+    // Cio' che era aperto valeva per le righe di prima: si chiude (una lettura al volo in corso continua).
+    if (owner == id && state !is LiveTextState.ReadingNow) reset()
   }
 
   private fun reset() {
@@ -228,7 +265,10 @@ internal class LiveTextController(
     } finally {
       if (state is LiveTextState.ReadingNow && owner == id) reset()
     }
-    if (read != null) layouts[id] = read
+    if (read != null) {
+      layouts[id] = read
+      readHere += id
+    }
     return read
   }
 

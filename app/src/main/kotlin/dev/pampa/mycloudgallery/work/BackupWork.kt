@@ -297,6 +297,11 @@ object BackupWorkScheduling {
     enqueue(context, request(work), work, ExistingWorkPolicy.KEEP)
   }
 
+  /** Campo, gruppo A (D6): le foto appena scattate trovate dalla lettura del telefono con l'app aperta: il lavoro rapido (unico, `KEEP`). */
+  fun quickWork(context: Context) {
+    enqueue(context, request(Kind.QUICK), Kind.QUICK, ExistingWorkPolicy.KEEP)
+  }
+
   private fun enqueue(context: Context, request: OneTimeWorkRequest, kind: Kind, policy: ExistingWorkPolicy) {
     WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(kind.workName, policy, request)
   }

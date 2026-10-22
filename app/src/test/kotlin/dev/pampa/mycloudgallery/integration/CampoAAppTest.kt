@@ -154,7 +154,31 @@ class CampoAAppTest {
     assertWithMessage("ordine in Libreria").that(checkNotNull(rig.gallery.database.mediaDao().get(id.value)).sortTime).isEqualTo(corrected)
   }
 
+  // --- D6 (VE-10, B-S7): una modifica fatta ad app chiusa -------------------------------------------------------------------------
+
+  /**
+   * VE-10 sul campo: "Salva" in Galleria con l'app chiusa (`force-stop`), poi l'app si apre. La lettura del telefono di primo piano vede la riga
+   * cambiata e la versione nasce nel catalogo, ma nessuno chiedeva il lavoro delle foto: la versione aspettava il giro periodico (70 minuti). Adesso la
+   * fine della lettura di primo piano (`BackupGraph.afterPhoneRead`, chiamata da `GalleryGraph`) chiede il lavoro del tipo giusto.
+   */
+  @Test
+  fun d6_unaModificaVistaDallaLetturaDiPrimoPianoChiedeIlLavoroDelleFoto() = runBlocking<Unit> {
+    val jobs = RecordingJobs()
+    val rig = openRig(jobs) { store -> BackupRig.photo(store, id = 1, bytes = BackupRig.jpeg(tone = 40), takenAt = time.now() - 3 * DAY) }
+    assertWithMessage("foto").that(checkNotNull(rig.round(BackupKind.PHOTOS)).last?.done).isEqualTo(1)
+    val old = checkNotNull(rig.store.row(BackupRig.PRIMARY, 1))
+    rig.store.rewrite(BackupRig.PRIMARY, 1, BackupRig.jpeg(tone = 200), old.dateModifiedMs + 60_000)
+    rig.readPhone()
+    jobs.versionWork.clear()
+
+    rig.backup.afterPhoneRead()
+
+    assertThat(jobs.versionWork).contains(BackupKind.PHOTOS)
+    assertThat(jobs.versionWork).doesNotContain(BackupKind.VIDEOS)
+  }
+
   private companion object {
+    const val DAY = 24L * 3_600_000L
     val DEBUG_LIKE: FeatureFlags = FeatureFlags.forBuild(debugBuild = true, nasLibrary = true)
   }
 }

@@ -385,10 +385,26 @@ class BackupGraph(
     fiveB.atStart(catalog)
   }
 
-  /** P14: dopo ogni lettura del telefono (app aperta o lavoro di fondo) gli esiti in dubbio di "Libera spazio" si risolvono con il telefono. */
+  /**
+   * P14: dopo ogni lettura del telefono (app aperta o lavoro di fondo) gli esiti in dubbio di "Libera spazio" si risolvono con il telefono.
+   *
+   * Campo, gruppo A (D6, VE-10, B-S7): con l'app aperta (la lettura del telefono di primo piano, `GalleryGraph`) si chiedono anche i lavori del backup
+   * che servono, come fa `PhoneSyncWorker` in background. Prima nessuno li chiedeva: una modifica fatta in Galleria **ad app chiusa** (dopo un
+   * `force-stop` i lavori di Android legati ai cambiamenti del MediaStore non ci sono piu', e il cambiamento e' gia' avvenuto quando l'app riparte) la
+   * vedeva solo la lettura di primo piano, e la versione aspettava il giro periodico (sul campo 70 minuti). I lavori sono quelli a tappe di
+   * WorkManager, unici (`KEEP`), con le regole di sempre: nessun polling, niente parte se le regole dicono di aspettare.
+   */
   suspend fun afterPhoneRead() {
     if (parts == null) return
     fiveB.settle()
+    for (next in nextAll()) {
+      when (next) {
+        Next.Quick -> inputs.jobs.quickWork()
+        Next.Photos -> inputs.jobs.versionWork(BackupKind.PHOTOS)
+        Next.Videos -> inputs.jobs.versionWork(BackupKind.VIDEOS)
+        Next.Nothing -> Unit
+      }
+    }
   }
 
   /** L'azzeramento (R7): niente parte piu' in questo processo; il giro in corso si ferma prima del file successivo. Prima di ogni cancellazione. */

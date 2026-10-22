@@ -4316,3 +4316,15 @@ lavoro dei file ricevuti in attesa della rete o del NAS, rimetteva in coda `Inco
   altre attese come prima (fascia e carica con un vincolo esatto, congelamento e il resto niente); mai i dati mobili senza la conferma.
 - Test: `BackupSchedulingTest.in5_d5_*` (prima diceva "almeno 10 minuti di ritardo": ora nessuno, su una rete non a consumo),
   `d5_laRipresaCheNonTrovaIlNas...` (il quarto d'ora solo per la ripresa; il file nuovo non aspetta).
+
+**6. Una modifica fatta ad app chiusa diventava versione dopo circa 70 minuti (VE-10, B-S7).** Causa: i lavori del backup dopo una lettura del telefono
+li chiede `BackupWorkScheduling.afterPhoneRead`, chiamata solo dal lavoro di fondo (`PhoneSyncWorker`, legato ai cambiamenti del MediaStore) e dai lavori
+del backup. Con `am force-stop` Android toglie i lavori dell'app; alla riapertura WorkManager li rimette, ma il cambiamento c'e' gia' stato: la riga
+cambiata la vede solo la lettura **di primo piano**, e alla sua fine `GalleryGraph` chiamava `BackupGraph.afterPhoneRead`, che risolveva gli esiti di
+"Libera spazio" e basta. La versione nasceva nel catalogo ("1 in coda · Al prossimo giro") e aspettava il giro periodico. Con l'app aperta funzionava
+perche' il lavoro di fondo del MediaStore c'era (le due "Salva" delle 05:17).
+- Correzione: `BackupGraph.afterPhoneRead` chiede anche i lavori che servono (`nextAll`: foto nuove da proteggere subito, foto, video, i lavori delle
+  versioni aperti), con i lavori a tappe di WorkManager, unici (`KEEP`) e con le loro regole (`BackupJobs.versionWork`, `quickWork` nuovo): niente
+  polling, niente parte se le regole dicono di aspettare (fascia, carica, rete).
+- Test: `CampoAAppTest.d6_*` (grafo vero: foto al sicuro, "Salva" sul telefono, lettura: la fine della lettura di primo piano chiede il lavoro delle
+  foto).

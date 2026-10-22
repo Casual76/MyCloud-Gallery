@@ -367,6 +367,7 @@ class DiagnosticsScreensTest {
     DiagSection.NAS_LIBRARY -> R.string.diagnostics_section_nas_library
     DiagSection.BACKUP -> R.string.diagnostics_section_backup
     DiagSection.SEARCH -> R.string.diagnostics_section_search
+    DiagSection.ALBUMS -> R.string.diagnostics_section_albums
     DiagSection.STORAGE -> R.string.diagnostics_section_storage
     DiagSection.MONTHLY_TRAFFIC -> R.string.diagnostics_section_traffic
     DiagSection.ANDROID_WARNINGS -> R.string.diagnostics_section_android

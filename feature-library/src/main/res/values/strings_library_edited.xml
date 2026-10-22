@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 7 (P0, D24): il filtro "Modificate" (LibraryFilter.EDITED) e' una pagina dell'Utility (P8), non un chip della Libreria. Nome e
+       stato vuoto servono alle schermate che lo mostrano. -->
+  <string name="library_filter_edited">Modificate</string>
+  <string name="library_filter_empty_edited">Nessuna foto modificata</string>
+</resources>

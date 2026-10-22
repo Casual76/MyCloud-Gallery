@@ -209,8 +209,11 @@ internal fun positionSaver(grid: MediaGridState): Saver<PositionKeeper, Any> = S
 // Stati (§2.4)
 // ---------------------------------------------------------------------------------------------
 
-/** I filtri rapidi del menu della vista, nell'ordine in cui compaiono: tutti, "Documenti" compreso (Fase 6, P8, D34). */
-internal val QuickFilters: List<LibraryFilter> = LibraryFilter.entries.toList()
+/**
+ * I filtri rapidi del menu della vista, nell'ordine in cui compaiono: tutti, "Documenti" compreso (Fase 6, P8, D34). Fase 7 (P0, D24):
+ * "Modificate" ([LibraryFilter.EDITED]) e' una pagina dell'Utility, non un chip della Libreria: resta fuori (lo decide P8).
+ */
+internal val QuickFilters: List<LibraryFilter> = LibraryFilter.entries.filter { it != LibraryFilter.EDITED }
 
 @Composable
 internal fun filterLabel(filter: LibraryFilter): String = stringResource(
@@ -222,6 +225,7 @@ internal fun filterLabel(filter: LibraryFilter): String = stringResource(
     LibraryFilter.VIDEOS -> R.string.library_filter_videos
     LibraryFilter.FAVORITES -> R.string.library_filter_favorites
     LibraryFilter.DOCUMENTS -> R.string.library_filter_documents
+    LibraryFilter.EDITED -> R.string.library_filter_edited
   },
 )
 
@@ -285,6 +289,7 @@ internal fun LibraryFilterEmptyState(filter: LibraryFilter, onShowAll: () -> Uni
       LibraryFilter.VIDEOS -> R.string.library_filter_empty_videos
       LibraryFilter.FAVORITES -> R.string.library_filter_empty_favorites
       LibraryFilter.DOCUMENTS -> R.string.library_filter_empty_documents
+      LibraryFilter.EDITED -> R.string.library_filter_empty_edited
       LibraryFilter.WITHOUT_SCREENSHOTS_AND_WHATSAPP, LibraryFilter.ALL -> R.string.library_filter_empty_no_screenshots_whatsapp
     },
   )

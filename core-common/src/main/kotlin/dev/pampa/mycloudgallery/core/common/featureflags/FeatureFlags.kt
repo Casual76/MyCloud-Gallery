@@ -30,6 +30,11 @@ package dev.pampa.mycloudgallery.core.common.featureflags
  *   caricherebbe tutta la libreria vera del telefono nella share di prova. Vale `true` in [RELEASE] e `false` nelle build di debug, dove la
  *   recinzione c'e'. Come D12 e' una protezione: in release non si spegne, `forBuild` non ha un parametro per lui. La decisione e'
  *   [backupMayWriteAs].
+ * @property sharedAlbumsTestSharesOnly Fase 7, D30 (`docs/fase7-progetto.md` §0.1): gli album condivisi (definizioni firmate in
+ *   `.mycloudgallery/albums/` e spostamenti verso l'area comune avviati da un album) **solo** fra le share di prova ([TestShares]:
+ *   `test`/`test2` verso `test-comune`); sulle share vere il comando "Condividi" dice "Arriva dopo le prove". Come D12 vale in release
+ *   **e in debug** e [forBuild] non ha un parametro per lui: lo spegne solo l'utente con il consenso di Q7 (a), a fine Fase 7, cambiando
+ *   questo file. La decisione per share e' [sharedAlbumsMayUse]. Gli album personali, smart, i viaggi e l'Utility non hanno recinzione.
  */
 class FeatureFlags private constructor(
   val wol: Boolean,
@@ -37,6 +42,7 @@ class FeatureFlags private constructor(
   val indexPublishTestSharesOnly: Boolean,
   val backupTestSharesOnly: Boolean,
   val backupBlocksTestAccounts: Boolean,
+  val sharedAlbumsTestSharesOnly: Boolean,
 ) {
 
   /**
@@ -54,18 +60,27 @@ class FeatureFlags private constructor(
    */
   fun backupMayWriteAs(account: String?): Boolean = !backupBlocksTestAccounts || (account != null && !TestShares.isTestAccount(account))
 
+  /**
+   * D30: un album condiviso puo' usare la share [share] (l'area comune dove si pubblica la definizione e arrivano i file, e ogni area
+   * privata da cui un media si sposta)? Con [sharedAlbumsTestSharesOnly] solo le share di prova scritte nel codice
+   * ([TestShares.isTestShare]: nome esatto, mai una share di famiglia). Lo legge il cancello degli album (`AlbumWriteGate`, P13) e la
+   * release lo tiene anche prima che il cancello sia legato (consumer-rules.pro; `tools/check.ps1` lo cerca nel dex di release).
+   */
+  fun sharedAlbumsMayUse(share: String): Boolean = !sharedAlbumsTestSharesOnly || TestShares.isTestShare(share)
+
   override fun equals(other: Any?): Boolean =
     other is FeatureFlags && other.wol == wol && other.nasLibrary == nasLibrary &&
       other.indexPublishTestSharesOnly == indexPublishTestSharesOnly && other.backupTestSharesOnly == backupTestSharesOnly &&
-      other.backupBlocksTestAccounts == backupBlocksTestAccounts
+      other.backupBlocksTestAccounts == backupBlocksTestAccounts && other.sharedAlbumsTestSharesOnly == sharedAlbumsTestSharesOnly
 
   override fun hashCode(): Int =
-    (((wol.hashCode() * 31 + nasLibrary.hashCode()) * 31 + indexPublishTestSharesOnly.hashCode()) * 31 + backupTestSharesOnly.hashCode()) * 31 +
-      backupBlocksTestAccounts.hashCode()
+    ((((wol.hashCode() * 31 + nasLibrary.hashCode()) * 31 + indexPublishTestSharesOnly.hashCode()) * 31 + backupTestSharesOnly.hashCode()) * 31 +
+      backupBlocksTestAccounts.hashCode()) * 31 + sharedAlbumsTestSharesOnly.hashCode()
 
   override fun toString(): String =
     "FeatureFlags(wol=$wol, nasLibrary=$nasLibrary, indexPublishTestSharesOnly=$indexPublishTestSharesOnly, " +
-      "backupTestSharesOnly=$backupTestSharesOnly, backupBlocksTestAccounts=$backupBlocksTestAccounts)"
+      "backupTestSharesOnly=$backupTestSharesOnly, backupBlocksTestAccounts=$backupBlocksTestAccounts, " +
+      "sharedAlbumsTestSharesOnly=$sharedAlbumsTestSharesOnly)"
 
   companion object {
     /**
@@ -74,6 +89,12 @@ class FeatureFlags private constructor(
      */
     private const val BACKUP_TEST_SHARES_ONLY: Boolean = true
 
+    /**
+     * D30: gli album condivisi solo fra le share di prova. Una costante, non un parametro: nessuna build (nemmeno debug) la spegne da
+     * fuori. Si cambia qui, a mano, solo con il consenso dell'utente (Q7 (a): a fine Fase 7, con l'app definitiva).
+     */
+    private const val SHARED_ALBUMS_TEST_SHARES_ONLY: Boolean = true
+
     /** I valori di ogni build di release: funzioni sperimentali spente, protezioni accese. */
     val RELEASE: FeatureFlags = FeatureFlags(
       wol = false,
@@ -81,6 +102,7 @@ class FeatureFlags private constructor(
       indexPublishTestSharesOnly = true,
       backupTestSharesOnly = BACKUP_TEST_SHARES_ONLY,
       backupBlocksTestAccounts = true,
+      sharedAlbumsTestSharesOnly = SHARED_ALBUMS_TEST_SHARES_ONLY,
     )
 
     /**
@@ -105,6 +127,9 @@ class FeatureFlags private constructor(
           backupTestSharesOnly = BACKUP_TEST_SHARES_ONLY,
           // R2: in debug la recinzione del telefono di D13 c'e' (DeveloperTools di debug): un account di prova puo' provare il backup.
           backupBlocksTestAccounts = false,
+          // D30: nessun parametro, di proposito. Anche la debug condivide gli album solo fra le share di prova (con gli account di
+          // prova vale in piu' ShareFence, F4-D33).
+          sharedAlbumsTestSharesOnly = SHARED_ALBUMS_TEST_SHARES_ONLY,
         )
       }
   }

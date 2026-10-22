@@ -89,6 +89,16 @@ object AiModule {
   @Provides fun deviceProbe(stack: AiStack): DeviceProbe = RealDeviceProbe(stack.ai.parts.images)
 
   @Provides
+  @Singleton
+  fun motionAnimationSettings(stack: AiStack, graph: AppGraph): dev.pampa.mycloudgallery.feature.settings.library.MotionAnimationSettings =
+    dev.pampa.mycloudgallery.ai.PersonalMotionAnimationSettings(stack.personal, graph.scope)
+
+  @Provides
+  @Singleton
+  fun searchEntryStatus(stack: AiStack, graph: AppGraph): dev.pampa.mycloudgallery.feature.settings.search.SearchEntryStatus =
+    dev.pampa.mycloudgallery.ai.AppSearchEntryStatus(stack, graph.scope)
+
+  @Provides
   @IntoSet
   fun aiDiagnostics(stack: AiStack): DiagnosticsContributor = AiDiagnostics(stack)
 }

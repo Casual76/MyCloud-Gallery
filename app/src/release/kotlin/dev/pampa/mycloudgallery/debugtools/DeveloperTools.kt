@@ -44,4 +44,8 @@ internal object DeveloperTools {
   fun NavGraphBuilder.destinations(nav: NavController) = Unit
 
   fun settingsSection(nav: NavController): (@Composable () -> Unit)? = null
+
+  /** Fase 6 (P11): lo strumento di valutazione della ricerca (P9) esiste solo in debug. */
+  @Suppress("UNUSED_PARAMETER")
+  fun installSearch(stack: dev.pampa.mycloudgallery.ai.AiStack, gallery: dev.pampa.mycloudgallery.gallery.GalleryGraph, context: Context) = Unit
 }

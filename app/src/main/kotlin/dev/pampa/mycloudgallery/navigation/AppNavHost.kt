@@ -160,6 +160,8 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
   if (gallery != null) FiveBHostEffect(gallery.fiveB, nav)
   // Correzioni 5B (R4, MC-1, MC-2): la scelta dell'app di "Condividi" (viewer e selezione della Libreria), anche senza backup.
   if (gallery != null) ShareHostEffect(gallery.shares)
+  // Fase 6 (P11): le azioni di Cerca (viewer sui risultati, pagine della ricerca), anche per la pagina Ricerca e modelli.
+  val searchActions = if (destination == RootDestination.Main) rememberSearchActions(nav, viewer) else null
   NavHost(
     navController = nav,
     startDestination = startRoute(destination),
@@ -196,7 +198,11 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
             developerSection = DeveloperTools.settingsSection(nav),
             // Fase 5A (D16): la voce "Backup" delle Impostazioni, solo se il backup c'e'.
             openBackup = if (gallery?.backupAvailable == true) ({ nav.openBackupPage() }) else null,
+            // Fase 6 (P11): "Ricerca e modelli".
+            openSearch = { nav.navigate(SearchSettingsPageRoute) },
           )
+          // Fase 6 (P11): la pagina Ricerca e modelli e quella di attivazione della lettura del testo.
+          searchActions?.let { searchGraph(nav, it) }
           diagnosticsGraph(
             nav = nav,
             appActions = DIAGNOSTICS_APP_ACTIONS,
@@ -343,6 +349,18 @@ private fun MainDestination(nav: NavHostController, status: GlobalStatus, openWi
   val nasConfigured by gallery.nasConfigured.collectAsStateWithLifecycle()
   val nasGroups = nasCollectionGroups(nasConfigured) + utilityCollectionGroups(gallery.fiveB != null)
 
+  // Fase 6 (P11): la scheda Cerca e "Trova simili" dal viewer (la richiesta chiude il viewer e porta a Cerca con il chip "Simili a").
+  val searchHost: SearchHostViewModel = hiltViewModel()
+  val searchActions = rememberSearchActions(nav, viewer, searchHost)
+  var findSimilar by remember { mutableStateOf<MediaId?>(null) }
+  val similarRequest by searchHost.similar.pending.collectAsStateWithLifecycle()
+  LaunchedEffect(similarRequest) {
+    val id = searchHost.similar.consume() ?: return@LaunchedEffect
+    viewer?.close()
+    findSimilar = id
+    tab = GalleryTab.Search
+  }
+
   LibraryCommandHostEffect(state.commands, onAccessChanged = gallery::refreshAccess)
   ReportLibraryDrawn(state)
   RestoreLibraryViewer(state, libraryViewer)
@@ -384,6 +402,7 @@ private fun MainDestination(nav: NavHostController, status: GlobalStatus, openWi
         },
       )
     },
+    search = { slot -> SearchTab(slot, searchActions, searchHost, findSimilar) },
   )
 }
 

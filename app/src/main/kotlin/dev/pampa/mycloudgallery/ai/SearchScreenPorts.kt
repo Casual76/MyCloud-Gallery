@@ -49,6 +49,37 @@ class PersonalTextReadingAccepted(personal: PersonalSettingsHub, scope: Coroutin
     .stateIn(scope, SharingStarted.Eagerly, 0)
 }
 
+/** "Animazione delle foto in movimento" (D50, Q16 (b)) sopra `motion_animation`: acceso finche' le impostazioni personali non ci sono. */
+@OptIn(ExperimentalCoroutinesApi::class)
+class PersonalMotionAnimationSettings(
+  private val personal: PersonalSettingsHub,
+  scope: CoroutineScope,
+) : dev.pampa.mycloudgallery.feature.settings.library.MotionAnimationSettings {
+  override val enabled: StateFlow<Boolean> = personal.motion
+    .flatMapLatest { m -> m?.motionAnimation ?: flowOf(true) }
+    .stateIn(scope, SharingStarted.Eagerly, true)
+
+  override suspend fun setEnabled(on: Boolean) {
+    personal.motion.value?.setMotionAnimation(on)
+  }
+}
+
+/** Lo stato della voce "Ricerca e modelli" delle Impostazioni: ruolo, lettura del testo qui, un modello che manca. */
+class AppSearchEntryStatus(stack: AiStack, scope: CoroutineScope) : dev.pampa.mycloudgallery.feature.settings.search.SearchEntryStatus {
+  override val summary: StateFlow<dev.pampa.mycloudgallery.feature.settings.search.SearchEntrySummary> =
+    combine(stack.ai.indexer, stack.ai.textReadingHere, stack.localModels.manager.states) { indexer, reading, states ->
+      val wanted = listOfNotNull(
+        dev.pampa.mycloudgallery.core.models.contract.ModelCatalog.QUERY_270M.id,
+        dev.pampa.mycloudgallery.core.models.contract.ModelCatalog.INDEX_440M.id.takeIf { indexer },
+      )
+      dev.pampa.mycloudgallery.feature.settings.search.SearchEntrySummary(
+        indexer = indexer,
+        textReadingHere = reading,
+        modelMissing = wanted.any { states[it] !is dev.pampa.mycloudgallery.core.models.contract.ModelState.Ready },
+      )
+    }.stateIn(scope, SharingStarted.Eagerly, dev.pampa.mycloudgallery.feature.settings.search.SearchEntrySummary(false, false, false))
+}
+
 /**
  * Il ruolo Indicizzatore di QUESTO dispositivo e lo stato del calcolo (D15, D22): ruoli dall'istantanea dell'onboarding (ripubblicati nello
  * stato firmato), stato dal calcolo, lavoro che resta da `AiBacklog`, spazio dell'indice dalla cartella della ricerca. "Indicizza ora"

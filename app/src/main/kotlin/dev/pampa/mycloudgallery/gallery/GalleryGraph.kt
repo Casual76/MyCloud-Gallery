@@ -362,6 +362,32 @@ class GalleryGraph(
   @Volatile
   var shares: dev.pampa.mycloudgallery.integrations.AppShares? = null
 
+  /**
+   * Fase 6 (P11): le porte del viewer della ricerca (testo dal vivo, "Trova simili", animazione delle foto in movimento e foto in movimento
+   * del NAS). Le lega l'applicazione all'avvio, prima di qualunque schermata, come [fiveB]; null = nessuna (test, varianti di misura).
+   */
+  class SearchViewerHooks(
+    val textSource: dev.pampa.mycloudgallery.feature.viewer.livetext.ViewerTextSource?,
+    val textReader: dev.pampa.mycloudgallery.feature.viewer.livetext.ViewerTextReader?,
+    val similarSearch: dev.pampa.mycloudgallery.feature.viewer.menu.ViewerSimilarSearch,
+    val motionAnimation: dev.pampa.mycloudgallery.feature.viewer.motion.MotionAnimationSetting,
+    val motionTraffic: dev.pampa.mycloudgallery.feature.viewer.video.MotionTraffic,
+  )
+
+  @Volatile
+  var searchViewer: SearchViewerHooks? = null
+
+  /** Fase 6 (P14): la coda dei video delle foto in movimento del NAS (`cacheDir/motion/`), una per processo. */
+  val nasMotion: dev.pampa.mycloudgallery.feature.viewer.video.NasMotionSource? by lazy {
+    nas?.let { n ->
+      dev.pampa.mycloudgallery.feature.viewer.video.NasMotionSource(
+        n.video,
+        context.applicationContext.cacheDir,
+        searchViewer?.motionTraffic ?: dev.pampa.mycloudgallery.feature.viewer.video.MotionTraffic.None,
+      )
+    }
+  }
+
   /** Le porte delle schermate del backup (pagina, impostazioni, viewer, Impostazioni): adattatori sul grafo del backup. */
   val backupUi: BackupUi? = backup?.let { b -> BackupUi(b, database, galleryScope, context, parts.nas?.account ?: { null }) }
 
@@ -595,6 +621,12 @@ class GalleryGraph(
       // Fase 5B (P14): Versioni, Ripristina originale, Correggi, Ruota, "Modifica con…", "Condividi" con o senza posizione, "Ovunque".
       // Correzioni 5B (R4): senza backup restano le voci di "Condividi" (con "Rimuovi la posizione"), non il percorso di prima con l'originale.
       backupActions = fiveB?.mediaActions ?: shares?.viewerActions(),
+      // Fase 6 (P11): testo dal vivo (P12), "Trova simili" (P8), foto in movimento (P14). Il ritaglio (P13) resta senza porta.
+      motionAnimation = searchViewer?.motionAnimation ?: dev.pampa.mycloudgallery.feature.viewer.motion.MotionAnimationSetting.On,
+      nasMotion = nasMotion,
+      textSource = searchViewer?.textSource,
+      textReader = searchViewer?.textReader,
+      similarSearch = searchViewer?.similarSearch ?: dev.pampa.mycloudgallery.feature.viewer.menu.NoViewerSimilarSearch,
     )
   }
 

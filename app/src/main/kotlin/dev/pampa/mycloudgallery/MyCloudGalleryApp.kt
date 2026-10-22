@@ -86,6 +86,10 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
     // Correzioni 5B (R4, MC-2): "Condividi" con l'impostazione per il viewer (anche senza backup) e per la selezione della Libreria.
     gallery.shares = integrations.shares
     fiveB.ifPresent { ui -> gallery.fiveB = GalleryGraph.FiveBHooks(ui.mediaActions) { ids -> ui.openFreeSpace(ids) } }
+    // Fase 6 (P11): testo dal vivo, "Trova simili" e foto in movimento nel viewer, prima di qualunque schermata.
+    gallery.searchViewer = ai.viewerHooks(graph, gallery)
+    // Fase 6 (P9): lo strumento di valutazione della ricerca, solo in debug (in release la funzione e' vuota).
+    dev.pampa.mycloudgallery.debugtools.DeveloperTools.installSearch(ai, gallery, this)
     ProcessWatcher(
       graph = graph,
       notifications = notifications,

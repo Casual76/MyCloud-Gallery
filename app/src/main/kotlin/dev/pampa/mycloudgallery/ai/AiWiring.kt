@@ -72,7 +72,22 @@ class AiStack(
   val textSwitch: TextReadingSwitch,
   /** "Scarica ora" sui dati mobili: la conferma data dall'utente per lo scaricamento in corso (D17, §2.7). */
   val mobileConfirmed: AtomicBoolean,
-)
+  /** "Trova simili" dal viewer verso la scheda Cerca. */
+  val similar: SimilarRequests = SimilarRequests(),
+) {
+  /** Le porte del viewer della ricerca (testo dal vivo, "Trova simili", foto in movimento), legate all'avvio sulla galleria. */
+  fun viewerHooks(graph: AppGraph, gallery: GalleryGraph): GalleryGraph.SearchViewerHooks = GalleryGraph.SearchViewerHooks(
+    textSource = IndexViewerTextSource(search.mediaText),
+    textReader = GatedViewerTextReader(textSwitch, ai.parts.reader, { gallery.coreIfReady()?.catalog }, ai.buffer),
+    similarSearch = SearchViewerSimilar(search.keys, similar),
+    motionAnimation = dev.pampa.mycloudgallery.feature.viewer.motion.MotionAnimationSetting { personal.motion.value?.motionAnimation?.value ?: true },
+    motionTraffic = dev.pampa.mycloudgallery.feature.viewer.video.MotionTraffic { bytes, _ ->
+      graph.scope.launch {
+        graph.trafficLedger.record(TrafficSource.VISIBLE_CONTENT, trafficNetworkOf(graph.environment.snapshot.value), bytes)
+      }
+    },
+  )
+}
 
 /**
  * Il MONTAGGIO della Fase 6 (P11) sopra il grafo dell'app ([graph]) e la galleria ([gallery]): modelli (P3) con le loro porte, lettura

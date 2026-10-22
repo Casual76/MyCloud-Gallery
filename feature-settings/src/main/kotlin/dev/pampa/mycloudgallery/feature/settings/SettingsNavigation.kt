@@ -131,6 +131,8 @@ fun NavGraphBuilder.settingsGraph(
   resumeStep: (OnboardingStep) -> Unit,
   developerSection: (@Composable () -> Unit)? = null,
   openBackup: (() -> Unit)? = null,
+  /** Fase 6 (P11): la pagina Ricerca e modelli di feature-search (la scrive `:app`); null = la voce non c'e'. */
+  openSearch: (() -> Unit)? = null,
 ) {
   val back: () -> Unit = { nav.popBackStack() }
   navigation<SettingsGraphRoute>(startDestination = SettingsHomeRoute) {
@@ -150,6 +152,7 @@ fun NavGraphBuilder.settingsGraph(
             openRules = { nav.navigate(SettingsRulesRoute) },
             openBackup = openBackup,
             openSharing = { nav.navigate(SettingsSharingRoute) },
+            openSearch = openSearch,
           ),
           openDiagnostics = openDiagnostics,
           resumeStep = resumeStep,

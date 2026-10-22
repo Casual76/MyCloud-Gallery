@@ -877,6 +877,7 @@ private fun ViewerOverlays(
           unavailable = controller.motion.state.isUnavailable(currentId),
           onClick = controller::playMotion,
           backdrop = backdrop,
+          loading = controller.motion.state.isLoading(currentId),
         )
       }
       if (menu.isNotEmpty()) GalleryMenuButton(entries = menu, backdrop = backdrop)

@@ -16,6 +16,9 @@ import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import kotlinx.coroutines.async
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 
 /**
  * La parte video delle foto in movimento solo-NAS (D51, E-V15): coda letta a intervalli, tetto di 16 MB per la lettura automatica, nessuna
@@ -222,5 +225,80 @@ class NasMotionSourceTest {
   private companion object {
     /** Le letture per la durata: al piu' 64 box da 16 byte e il corpo di `mvhd`. */
     const val SMALL_READS = 64L * 16L + 32L
+  }
+
+  private suspend fun TestScope.untilDelivered(rig: MotionNasRig, bytes: Long) {
+    var guard = 0
+    while (rig.reader.bytesDelivered.get() < bytes && guard++ < 200) {
+      advanceTimeBy(500L)
+      runCurrent()
+    }
+    assertThat(rig.reader.bytesDelivered.get()).isAtLeast(bytes)
+  }
+
+  /**
+   * I9: la rete si ricontrolla durante la lettura. Un passaggio dal Wi-Fi ai dati mobili (con la VPN accesa) a meta' lettura automatica la ferma al blocco
+   * dopo: il parziale si butta e l'esito e' "serve la conferma", invece di portare fino a 16 MB senza chiedere (prima si decideva una volta sola, all'inizio).
+   */
+  @Test
+  fun seLaReteDiventaAConsumoAMetaLetturaAutomaticaLaLetturaSiFerma_I9() = runTest {
+    val rig = rig()
+    rig.reader.chunkDelayMs = 1_000L
+    val length = 12L * 1024 * 1024
+    val head = MotionTestFiles.googleHead(length, declaredUs = 1_500_000L)
+    val ref = rig.addVirtual(6, head, size = head.size + length)
+    val result = async { rig.source.fetch(ref, NasMotionSource.AUTOMATIC_MAX_BYTES, automatic = true) }
+
+    untilDelivered(rig, 3L * 1024 * 1024)
+    val atChange = rig.reader.bytesDelivered.get()
+    rig.link.value = NasNetwork.METERED
+    advanceTimeBy(60_000L)
+    runCurrent()
+
+    val outcome = result.await()
+    assertThat(outcome).isInstanceOf(NasMotionResult.Blocked::class.java)
+    assertThat((outcome as NasMotionResult.Blocked).gate).isInstanceOf(NasVideoGate.NeedsMobileData::class.java)
+    // Al piu' il blocco in corso (1 MiB) dopo il cambio, non i 12 MB del video.
+    assertThat(rig.reader.bytesDelivered.get()).isAtMost(atChange + 2L * 1024 * 1024)
+    assertThat(rig.cacheFiles).isEmpty()
+  }
+
+  /** I9: una lettura chiesta con il badge e gia' confermata per i dati mobili non si ferma quando la rete passa a consumo: il "si" dell'utente vale. */
+  @Test
+  fun unaLetturaConfermataNonSiFermaAlCambioDiRete_I9() = runTest {
+    val rig = rig()
+    rig.reader.chunkDelayMs = 1_000L
+    val length = 6L * 1024 * 1024
+    val head = MotionTestFiles.googleHead(length, declaredUs = 1_500_000L)
+    val ref = rig.addVirtual(7, head, size = head.size + length)
+    rig.consent.confirm(ref)
+    val result = async { rig.source.fetch(ref, Long.MAX_VALUE, automatic = false) }
+
+    untilDelivered(rig, 2L * 1024 * 1024)
+    rig.link.value = NasNetwork.METERED
+    advanceTimeBy(60_000L)
+    runCurrent()
+
+    assertThat(result.await()).isInstanceOf(NasMotionResult.Ready::class.java)
+  }
+
+  /** I9: con la VPN che si spegne a meta' (il NAS non si raggiunge piu') la lettura finisce con "non disponibile ora", senza lasciare il parziale. */
+  @Test
+  fun seLaVpnSiSpegneAMetaLetturaNonRestaIlParziale_I9() = runTest {
+    val rig = rig()
+    rig.reader.chunkDelayMs = 1_000L
+    val length = 6L * 1024 * 1024
+    val head = MotionTestFiles.googleHead(length, declaredUs = 1_500_000L)
+    val ref = rig.addVirtual(8, head, size = head.size + length)
+    val result = async { rig.source.fetch(ref, Long.MAX_VALUE, automatic = false) }
+
+    untilDelivered(rig, 2L * 1024 * 1024)
+    rig.link.value = NasNetwork.VPN_OFF
+    advanceTimeBy(60_000L)
+    runCurrent()
+
+    val outcome = result.await() as NasMotionResult.Blocked
+    assertThat(outcome.gate).isEqualTo(NasVideoGate.Unreachable(UnavailableReason.VPN_OFF_AWAY))
+    assertThat(rig.cacheFiles).isEmpty()
   }
 }

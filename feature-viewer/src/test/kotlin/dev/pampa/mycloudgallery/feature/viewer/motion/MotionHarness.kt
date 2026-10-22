@@ -50,6 +50,7 @@ internal class MotionHarness(
   var reducedMotion = false
   var powerSaving = false
   var photoAspect = 0f
+  var zoomed = false
   val unrecognized: MutableList<MediaId> = mutableListOf()
 
   var services: ViewerServices = ViewerServices(
@@ -68,6 +69,7 @@ internal class MotionHarness(
     reducedMotion = { reducedMotion },
     powerSaving = { powerSaving },
     onUnrecognized = { unrecognized += it },
+    zoomed = { zoomed },
     neighborsOf = { id -> ids.indexOf(id).let { at -> listOf(at - 1, at + 1).filter { it in ids.indices }.map(ids::get) } },
   )
 

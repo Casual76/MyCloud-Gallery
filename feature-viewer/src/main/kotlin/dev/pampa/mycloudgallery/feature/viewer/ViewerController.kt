@@ -130,6 +130,7 @@ internal class ViewerController(
       reducedMotion = { reducedMotion },
       powerSaving = { (services.powerSaving ?: systemPowerSaving).isOn() },
       onUnrecognized = { id -> if (motionUnplayable.add(id)) motionUnplayableVersion++ },
+      zoomed = { state.zoomed },
       neighborsOf = { id ->
         val page = view.viewIndexOf(id)
         listOf(page - 1, page + 1).filter { it in 0 until view.size && page >= 0 }.map { view.snapshot.idAt(view.snapshotIndex(it)) }

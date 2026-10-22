@@ -40,6 +40,8 @@ internal class MotionHost(
   val onUnrecognized: (MediaId) -> Unit,
   /** Le pagine vicine (precarico ±1): per loro si preparano solo i byte. */
   val neighborsOf: (MediaId) -> List<MediaId>,
+  /** La pagina corrente e' ingrandita (VM-1): l'animazione d'apertura non parte sotto uno zoom. */
+  val zoomed: () -> Boolean = { false },
 )
 
 /**
@@ -65,6 +67,11 @@ internal class MotionDirector(
 ) {
 
   private var fullJob: Job? = null
+
+  /** La pagina ferma di adesso, e se l'utente l'ha gia' toccata, pizzicata o ingrandita da quando si e' fermata (VM-1, D50, E-V14). */
+  @Volatile private var currentPage: MediaId? = null
+
+  @Volatile private var touchedPage: MediaId? = null
   private val located = LinkedHashMap<MediaId, Pair<MediaRef, MotionVideo>>()
   private val inflight = HashMap<Pair<MediaId, Boolean>, Deferred<NasMotionResult>>()
 
@@ -75,6 +82,9 @@ internal class MotionDirector(
    */
   suspend fun watch(pages: Flow<PageSettle>) {
     pages.collectLatest { page ->
+      // Una pagina nuova, o il pager che si muove, ricomincia da capo: un tocco su un'altra pagina non conta per questa.
+      currentPage = page.id
+      touchedPage = null
       if (page.moving || (playback.motionFor != null && playback.motionFor != page.id)) stopAll()
       if (page.moving) return@collectLatest
       delay(settleMs)
@@ -82,10 +92,20 @@ internal class MotionDirector(
     }
   }
 
-  /** Un tocco, un pizzico, un doppio tocco, un trascinamento: l'animazione si ferma subito e si vede la foto (D50). Il video dal badge no. */
+  /**
+   * Un tocco, un pizzico, un doppio tocco, un trascinamento: l'animazione si ferma subito e si vede la foto (D50). Il video dal badge no.
+   *
+   * VM-1: il tocco si **ricorda** per la pagina. Prima fermava solo un'animazione gia' partita: un tocco durante i 150 ms di attesa, o durante l'attesa fino a
+   * 1,5 s della coda video di un solo-NAS, non lasciava traccia, e l'animazione partiva comunque sulla foto toccata o ingrandita (la foto andava a trasparenza
+   * zero e per un secondo c'era il video a pagina intera). Adesso una pagina toccata non parte piu', prima di `playMotion` e di nuovo dopo l'attesa.
+   */
   fun interruptOpening() {
+    touchedPage = currentPage
     if (playback.motionFor != null && playback.motionMode == MotionMode.OPENING) playback.stopMotion()
   }
+
+  /** L'utente ha gia' toccato la pagina, o e' ingrandita: niente animazione d'apertura (D50, E-V14). */
+  private fun touched(id: MediaId): Boolean = touchedPage == id || host.zoomed()
 
   /** Il viewer si chiude, la pagina cambia o l'app esce: ogni movimento si ferma, il decoder si libera. */
   fun stopAll() {
@@ -104,6 +124,8 @@ internal class MotionDirector(
       stopAll()
       return
     }
+    // VM-3: la lettura dal NAS e' in corso (il badge lo mostra): un altro tocco non la annulla per ricominciare da capo.
+    if (state.isLoading(id)) return
     fullJob?.cancel()
     fullJob = scope.launch { playFullNow(id) }
   }
@@ -114,6 +136,8 @@ internal class MotionDirector(
     if (host.kindOf(id) != MediaKind.MOTION_PHOTO) return
     val ref = host.refOf(id) ?: return
     val services = host.services()
+    // VM-1: toccata o ingrandita mentre si aspettava, non parte.
+    if (touched(id)) return
     val skip = MotionConditions.skip(services.motionAnimation.isOn(), host.reducedMotion(), host.powerSaving())
     val source: PlaybackSource
     val found: MotionVideo.Found
@@ -146,6 +170,8 @@ internal class MotionDirector(
       else -> return
     }
     val clip = found.openingClip ?: return
+    // VM-1: di nuovo dopo l'attesa della coda video di un solo-NAS (fino a 1,5 s), in cui l'utente puo' aver toccato o pizzicato.
+    if (touched(id)) return
     playback.playMotion(id, source, MotionMode.OPENING, clip)
     follow(id, MotionMode.OPENING)
   }
@@ -165,7 +191,14 @@ internal class MotionDirector(
       }
       is MediaRef.Nas -> {
         val nas = services.nasMotion ?: return
-        when (val result = nas.fetch(ref, maxVideoBytes = Long.MAX_VALUE, automatic = false)) {
+        // VM-3: finche' legge dal NAS (fino a 64 MB) il badge lo dice ("In caricamento") e un altro tocco non ricomincia da capo.
+        state.markLoading(id)
+        val result = try {
+          nas.fetch(ref, maxVideoBytes = Long.MAX_VALUE, automatic = false)
+        } finally {
+          state.clearLoading(id)
+        }
+        when (result) {
           is NasMotionResult.Ready -> {
             state.clearUnavailable(id)
             playback.playMotion(id, result.clip.source, MotionMode.FULL)

@@ -71,6 +71,9 @@ sealed interface NasMotionResult {
  * precarico) vuole di piu': solo `NasNetwork.OPEN` (Wi-Fi di casa o VPN su Wi-Fi), mai i dati mobili nemmeno se confermati per
  * il badge. Un file gia' in cache si usa sempre, senza rete.
  *
+ * **La rete si ricontrolla durante la lettura** (I9): a ogni blocco da 1 MiB. Un passaggio dal Wi-Fi ai dati mobili con la VPN accesa a meta' lettura la ferma
+ * al blocco dopo (il parziale si butta, l'esito e' `Blocked` come all'inizio) invece di portare fino a 16 MB senza conferma.
+ *
  * Il lettore del video resta uno solo (`ViewerPlayback`): da qui escono solo byte.
  *
  * @param nasVideo il NAS del viewer: stesso collegamento, stesse conferme dei dati mobili, stesso lettore dei video.
@@ -116,13 +119,13 @@ class NasMotionSource(
     val location = nasVideo.locate(ref) ?: return@withContext NasMotionResult.Blocked(NasVideoGate.Missing)
     val prefix = prefixOf(ref, location)
     cache.find(prefix)?.let { file -> parse(file)?.let { return@withContext NasMotionResult.Ready(it, fromCache = true) } }
-    val gate = nasVideo.check(ref)
-    if (gate !is NasVideoGate.Ready) return@withContext NasMotionResult.Blocked(gate)
-    if (automatic && nasVideo.network() != NasNetwork.OPEN) return@withContext NasMotionResult.Blocked(NasVideoGate.NeedsMobileData(location.sizeBytes))
+    networkGate(ref, automatic, location.sizeBytes)?.let { return@withContext NasMotionResult.Blocked(it) }
     try {
-      read(ref, location, prefix, minOf(maxVideoBytes, capBytes))
+      read(ref, location, prefix, minOf(maxVideoBytes, capBytes), automatic)
     } catch (cancelled: CancellationException) {
       throw cancelled
+    } catch (changed: NetworkChanged) {
+      NasMotionResult.Blocked(changed.gate)
     } catch (_: NasIoException) {
       NasMotionResult.Failed
     } catch (_: IOException) {
@@ -130,7 +133,21 @@ class NasMotionSource(
     }
   }
 
-  private suspend fun read(ref: MediaRef.Nas, location: NasMediaLocation, prefix: String, maxVideoBytes: Long): NasMotionResult {
+  /**
+   * Se la rete di adesso non permette la lettura: [NasVideoGate.NeedsMobileData], `Unreachable` o `Missing`; null se si puo' leggere. Una lettura automatica
+   * (animazione, precarico) vuole la rete aperta; una chiesta con il badge puo' essere a consumo se l'utente ha confermato per quel media.
+   */
+  private suspend fun networkGate(ref: MediaRef.Nas, automatic: Boolean, sizeBytes: Long): NasVideoGate? {
+    val gate = nasVideo.check(ref)
+    if (gate !is NasVideoGate.Ready) return gate
+    if (automatic && nasVideo.network() != NasNetwork.OPEN) return NasVideoGate.NeedsMobileData(sizeBytes)
+    return null
+  }
+
+  /** La rete e' cambiata a lettura iniziata (I9): [gate] dice cosa non permette piu'. */
+  private class NetworkChanged(val gate: NasVideoGate) : IOException("La rete non permette piu' la lettura.")
+
+  private suspend fun read(ref: MediaRef.Nas, location: NasMediaLocation, prefix: String, maxVideoBytes: Long, automatic: Boolean): NasMotionResult {
     val metered = nasVideo.network() == NasNetwork.METERED
     val file = when (val opened = nasVideo.openFile(location)) {
       is NasResult.Ok -> opened.value
@@ -149,6 +166,8 @@ class NasMotionSource(
           var position = found.range.start
           while (position < found.range.endExclusive) {
             currentCoroutineContext().ensureActive()
+            // I9: la rete di adesso, a ogni blocco. Se non permette piu' di leggere il parziale si butta (sotto) e la lettura finisce qui.
+            networkGate(ref, automatic, location.sizeBytes)?.let { throw NetworkChanged(it) }
             val want = minOf(buffer.size.toLong(), found.range.endExclusive - position).toInt()
             val got = remote.read(position, buffer, 0, want)
             // Il file si e' accorciato mentre lo leggevamo: non e' piu' quello che il catalogo conosce.

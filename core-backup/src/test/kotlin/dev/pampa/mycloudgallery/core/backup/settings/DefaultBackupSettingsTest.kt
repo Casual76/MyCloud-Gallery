@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.core.backup.settings
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSource
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSources
+import dev.pampa.mycloudgallery.core.backup.contract.CutoutBackup
 import dev.pampa.mycloudgallery.core.backup.contract.DeviceFolder
 import dev.pampa.mycloudgallery.core.backup.plan.ProvaFence
 import kotlinx.coroutines.test.TestScope
@@ -44,8 +45,9 @@ class DefaultBackupSettingsTest {
   @Test
   fun leSorgentiDellOnboarding_sonoFotocameraEScreenshotSeSpuntate() {
     assertThat(BackupSourceCodec.fromOnboarding(camera = true, screenshots = true)).isEqualTo(BackupSources.DEFAULT)
-    assertThat(BackupSourceCodec.fromOnboarding(camera = true, screenshots = false).sources).containsExactly(BackupSource.Camera)
-    assertThat(BackupSourceCodec.fromOnboarding(camera = false, screenshots = true).sources).containsExactly(BackupSource.Screenshots)
+    // I ritagli del soggetto (Fase 6, D47) sono accesi di serie con almeno una scelta; senza scelte niente.
+    assertThat(BackupSourceCodec.fromOnboarding(camera = true, screenshots = false).sources).containsExactly(BackupSource.Camera, CutoutBackup.source())
+    assertThat(BackupSourceCodec.fromOnboarding(camera = false, screenshots = true).sources).containsExactly(BackupSource.Screenshots, CutoutBackup.source())
     assertThat(BackupSourceCodec.fromOnboarding(camera = false, screenshots = false)).isEqualTo(BackupSources.NONE)
   }
 
@@ -236,11 +238,13 @@ class DefaultBackupSettingsTest {
     account = "alessio"
     settings.refresh()
 
-    assertThat(settings.sources.value).isEqualTo(BackupSources.DEFAULT)
+    // Quello che era salvato (un'installazione di prima dei ritagli: nessuna cartella dei ritagli, la porta `withCutouts` di P11).
+    val saved = BackupSources(setOf(BackupSource.Camera, BackupSource.Screenshots))
+    assertThat(settings.sources.value).isEqualTo(saved)
     val noFence = DefaultBackupSettings(storage, backgroundScope, null) { null }
     noFence.awaitLoaded()
     noFence.refresh()
-    assertThat(noFence.sources.value).isEqualTo(BackupSources.DEFAULT)
+    assertThat(noFence.sources.value).isEqualTo(saved)
   }
 
   /** Il finto fa quello che fa il vero (stesse regole di D13, `BackupSourceFence`): stesso account in ritardo, stesse sorgenti in ogni momento. */

@@ -32,6 +32,6 @@ class BackupSourceCodecTest {
     for (id in listOf("", "boh", "camera ", "Camera", "folder", "folder:", "folder:vol", "folder::path", "folder:vol:", "folder:vol: ", "folder:: ")) {
       assertThat(BackupSourceCodec.decodeOne(id)).isNull()
     }
-    assertThat(BackupSourceCodec.decode(setOf("camera", "boh", "screenshots"))).isEqualTo(BackupSources.DEFAULT)
+    assertThat(BackupSourceCodec.decode(setOf("camera", "boh", "screenshots"))).isEqualTo(BackupSources(setOf(BackupSource.Camera, BackupSource.Screenshots)))
   }
 }

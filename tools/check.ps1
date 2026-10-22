@@ -69,6 +69,12 @@
                                 assets/dexopt/baseline.prof e AGP ha fuso le regole del profilo
     +  benchmark compilano      (Fase 3, P9) gli scenari di :benchmark e il dataset di app/src/benchmarkRelease
                                 compilano: senza dispositivo e' tutto cio' che si puo' verificare
+    +  etichette private        (Fase 6, P9/P11) nessun file di etichette o query del set privato nel repository (nomi,
+                                cartelle, intestazione MCGEVAL1) e le cinque regole nel .gitignore; nel dex di release
+                                nessun resto dello strumento di valutazione (`debugtools/eval`, `EvalEntry`)
+    +  scenari della ricerca    (Fase 6, P9/P11) gli scenari `ricerca*` in benchmark\soglie.json e `SearchBenchmark`
+                                nel modulo; i banchi delle interruzioni di P10 girano dentro galleryTest (core-models,
+                                core-ai: 2.000 + 600 + 2.000 giri)
     +  -Bench                   (Fase 3, P9) le misure su dispositivo, SKIP senza dispositivo (vedi -Bench)
 
 .PARAMETER SkipGradle
@@ -519,6 +525,37 @@ Step "repo senza segreti (chiavi di firma, local.properties)" {
   }
 }
 
+# Fase 6 (P9, P11; docs/fase6-progetto.md par. 5.3): le etichette e le query del set privato della valutazione stanno solo sul telefono e
+# nella cartella dell'utente, MAI nel repository. Come `NoPrivateEvalDataInGitTest` di core-search: nomi, cartelle, intestazione del
+# formato dei file tracciati e regole del .gitignore.
+Step "nessuna etichetta ne' query privata della valutazione nel repository (P9)" {
+  $files = Invoke-Native -File "git" -Arguments @("ls-files", "--cached", "--others", "--exclude-standard")
+  if ($files.Code -ne 0) { return "git ls-files non risponde" }
+  $problems = @()
+  foreach ($path in @($files.Lines | Where-Object { $_.Trim().Length -gt 0 })) {
+    $segments = $path -split '/'
+    $name = $segments[-1].ToLowerInvariant()
+    if ($name.EndsWith(".mcgeval") -or $name.StartsWith("etichette") -or $name.StartsWith("query-private")) { $problems += "file di etichette: $path"; continue }
+    $folders = @($segments | Select-Object -First ($segments.Count - 1))
+    if (@($folders | Where-Object { $_ -ieq "eval-privato" -or $_ -ieq ".mycloudgallery" }).Count -gt 0) { $problems += "file in una cartella privata: $path"; continue }
+    $full = Join-Path $root $path
+    if (Test-Path -LiteralPath $full -PathType Leaf) {
+      $stream = [System.IO.File]::OpenRead($full)
+      try {
+        $buffer = New-Object byte[] 8
+        $read = $stream.Read($buffer, 0, 8)
+      } finally { $stream.Dispose() }
+      if ($read -eq 8 -and [System.Text.Encoding]::ASCII.GetString($buffer) -eq "MCGEVAL1") { $problems += "file nel formato delle etichette: $path" }
+    }
+  }
+  $ignore = Read-TextFile (Join-Path $root ".gitignore")
+  foreach ($rule in @("*.mcgeval", "etichette*", "query-private*", "eval-privato/", ".mycloudgallery/")) {
+    if (-not ($ignore -split '\r?\n' | Where-Object { $_.Trim() -eq $rule })) { $problems += ".gitignore senza la regola $rule" }
+  }
+  Write-Host ("        file guardati: {0}" -f @($files.Lines).Count) -ForegroundColor DarkGray
+  if ($problems.Count -gt 0) { return ($problems -join "; ") }
+}
+
 # --- 4. verifica dei checksum -----------------------------------------------------------------------------
 Step "verifica checksum delle dipendenze attiva" {
   $metadata = Join-Path $root "gradle\verification-metadata.xml"
@@ -696,9 +733,11 @@ $debugRemnants = @(
   # Fase 5B (P0-B): le prove guidate T-09, T-14, T-15 e T-16 (schermata, selettore e ricezione di prova, provider di file e di documenti di
   # prova, resoconto di soli numeri): classi `FieldProbe*` in app/src/debug, componenti nel manifest di debug, cartella `field-probe`.
   # In release DeveloperTools torna senza la rotta e niente di questo deve esistere (ne' nel dex ne' nel manifest).
-  "FieldProbe", "debugtools/probes", "field-probe", "fieldprobe"
+  "FieldProbe", "debugtools/probes", "field-probe", "fieldprobe",
+  # Fase 6 (P9): lo strumento di valutazione della ricerca (app/src/debug/.../debugtools/eval): classi, porta e nome del file di etichette.
+  "debugtools/eval", "EvalEnvironmentHolder", "EvalSession", "EvalEntry", "labels.mcgeval", "MCGEVAL1"
 )
-Step "nessun resto degli strumenti di debug nel dex di release (Libreria e NAS sintetici, famiglia pronta, sink di logcat, ShareFence D33, cestino corto F20, recinzione del telefono D13, prove guidate 5B)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
+Step "nessun resto degli strumenti di debug nel dex di release (Libreria e NAS sintetici, famiglia pronta, sink di logcat, ShareFence D33, cestino corto F20, recinzione del telefono D13, prove guidate 5B, valutazione della ricerca P9)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
   $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
   if (-not $apk) { return "nessun APK di release in app\build\outputs\apk\release" }
@@ -1271,6 +1310,24 @@ Step "benchmark: gli scenari (:benchmark) e il dataset (app/src/benchmarkRelease
   }
 }
 
+# Fase 6 (P9, P11; docs/fase6-progetto.md par. 5.4): la guardia -Bench della ricerca. Senza dispositivo si controlla almeno che gli scenari
+# della ricerca ci siano in benchmark\soglie.json (letti da compare.ps1) e che la prova che li misura (`SearchBenchmark`) sia nel modulo.
+Step "benchmark: scenari della ricerca (ricerca, ricerca-freddo-contenuto, ricerca-freddo-filtri, ricerca-memoria) in soglie.json" {
+  $soglie = Join-Path $root "benchmark\soglie.json"
+  if (-not (Test-Path -LiteralPath $soglie)) { return "manca benchmark\soglie.json" }
+  $json = (Read-TextFile $soglie) | ConvertFrom-Json
+  $ids = @($json.scenari | ForEach-Object { $_.id })
+  if ($ids.Count -eq 0) { $ids = @(([regex]::Matches((Read-TextFile $soglie), '"id"\s*:\s*"([^"]+)"')) | ForEach-Object { $_.Groups[1].Value }) }
+  $problems = @()
+  foreach ($id in @("ricerca", "ricerca-freddo-contenuto", "ricerca-freddo-filtri", "ricerca-memoria")) {
+    if ($ids -notcontains $id) { $problems += "scenario $id assente" }
+  }
+  $bench = @(Get-ChildItem (Join-Path $root "benchmark\src") -Recurse -Filter "SearchBenchmark.kt" -ErrorAction SilentlyContinue)
+  if ($bench.Count -eq 0) { $problems += "manca benchmark/.../SearchBenchmark.kt" }
+  Write-Host ("        scenari in soglie.json: {0}" -f $ids.Count) -ForegroundColor DarkGray
+  if ($problems.Count -gt 0) { return ($problems -join "; ") }
+}
+
 # -Bench: le misure del par. 2.6 su un dispositivo collegato. Senza -Bench o senza dispositivo il passo e' SKIP (non fallisce).
 $benchAdb = $null
 $benchTarget = $null
@@ -1339,6 +1396,9 @@ Step "benchmark su dispositivo (-Bench): scenari del par. 2.6 contro benchmark\s
     $hint = "vedi build\check-bench.log"
     if (@($run.Lines | Where-Object { $_ -match 'INSTALL_FAILED_UPDATE_INCOMPATIBLE' }).Count -gt 0) {
       $hint = "la release firmata e' installata con un'altra firma: disinstallarla prima (docs/bench/README.md)"
+    }
+    if (@($run.Lines | Where-Object { $_ -match 'INSTALL_FAILED_NO_MATCHING_ABIS' }).Count -gt 0) {
+      $hint = "la benchmarkRelease porta solo arm64-v8a (Fase 6, P11, D3): sugli emulatori x86_64 non si installa, si misura su S25 e Tab S9"
     }
     return "il benchmark e' fallito (codice $($run.Code)): $hint"
   }

@@ -7,8 +7,8 @@ import org.junit.Test
 /**
  * I giri del banco dello scaricamento (§5.5). I numeri sono quelli del brief di P10: 2.000 giri sulla JVM (NAS finto con `FaultPlan`,
  * server HTTPS di prova, morte del processo a ogni salvataggio, `200` al posto di `206`, file cambiato sul NAS a meta') e 600 sul simulatore
- * SMB con la sessione e la lettura vere. `MCG_CHAOS_ROUNDS_JVM` e `MCG_CHAOS_ROUNDS_SMB` li cambiano per una prova piu' corta o piu' lunga;
- * il seme di base si cambia con `MCG_CHAOS_SEED`. Il rapporto va in `build/chaos/`.
+ * SMB con la sessione e la lettura vere. `MCG_MODELS_CHAOS_ROUNDS` e `MCG_MODELS_CHAOS_SMB_ROUNDS` li cambiano per una prova piu' corta o piu' lunga;
+ * il seme di base si cambia con `MCG_MODELS_CHAOS_SEED` (stessi nomi dei banchi delle fasi 4 e 5: `MCG_BACKUP_CHAOS_ROUNDS`, ...). Il rapporto va in `build/chaos/`.
  */
 class ModelChaosBenchTest {
   private fun env(name: String, default: Long): Long = System.getenv(name)?.toLongOrNull() ?: default
@@ -22,12 +22,12 @@ class ModelChaosBenchTest {
 
   @Test
   fun duemilaGiriSullaJvm() {
-    runBench(ModelBackend.MEMORY, env("MCG_CHAOS_ROUNDS_JVM", 2_000).toInt(), env("MCG_CHAOS_SEED", 6101), "modelli-jvm.txt")
+    runBench(ModelBackend.MEMORY, env("MCG_MODELS_CHAOS_ROUNDS", 2_000).toInt(), env("MCG_MODELS_CHAOS_SEED", 6101), "modelli-jvm.txt")
   }
 
   @Test
   fun seicentoGiriSulSimulatoreSmb() {
-    runBench(ModelBackend.SMB, env("MCG_CHAOS_ROUNDS_SMB", 600).toInt(), env("MCG_CHAOS_SEED", 6101) + 1, "modelli-smb.txt")
+    runBench(ModelBackend.SMB, env("MCG_MODELS_CHAOS_SMB_ROUNDS", 600).toInt(), env("MCG_MODELS_CHAOS_SEED", 6101) + 1, "modelli-smb.txt")
   }
 
   /** Lo stesso seme, lo stesso piano: un giro che fallisce si rilancia dal suo seme. */

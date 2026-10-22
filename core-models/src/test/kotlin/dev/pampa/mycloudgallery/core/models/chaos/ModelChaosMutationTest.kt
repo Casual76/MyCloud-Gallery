@@ -11,11 +11,12 @@ import org.junit.Test
  * Con gli stessi semi lo stack sano deve restare verde: cosi' il rosso viene dal difetto e non dal banco.
  */
 class ModelChaosMutationTest {
-  private fun run(factory: ModelStackFactory, rounds: Int = 400, name: String = "sano"): ModelBenchResult =
-    ModelChaosBench.run(rounds, baseSeed = 4242L, backend = ModelBackend.MEMORY, factory = factory, stackName = name)
+  private fun run(factory: ModelStackFactory, rounds: Int = 400, name: String = "sano", stop: Boolean = false): ModelBenchResult =
+    ModelChaosBench.run(rounds, baseSeed = 4242L, backend = ModelBackend.MEMORY, factory = factory, stackName = name, stopAtFirstFailure = stop)
 
   private fun assertDetects(result: ModelBenchResult, expected: ModelInvariant) {
     assertWithMessage("il banco non ha visto il difetto in ${result.rounds} giri\n${result.summary()}").that(result.failures).isNotEmpty()
+    println("difetto visto al giro ${result.rounds} di 400: ${result.stackName}")
     val seen = result.failures.flatMap { it.violations }.map { it.invariant }.toSet()
     assertWithMessage("invarianti violati: $seen, atteso $expected\n${result.failureText(2)}").that(seen).contains(expected)
   }
@@ -29,12 +30,12 @@ class ModelChaosMutationTest {
   @Test
   fun caricarePrimaDiVerificareViolaLInvariante1() {
     val mutant = ModelMutants.loadBeforeVerify()
-    assertDetects(run(mutant, name = mutant.toString()), ModelInvariant.VERIFIED_LOAD)
+    assertDetects(run(mutant, name = mutant.toString(), stop = true), ModelInvariant.VERIFIED_LOAD)
   }
 
   @Test
   fun accettareUnParzialeViolaLInvariante2() {
     val mutant = ModelMutants.acceptPartial()
-    assertDetects(run(mutant, name = mutant.toString()), ModelInvariant.NO_PARTIAL)
+    assertDetects(run(mutant, name = mutant.toString(), stop = true), ModelInvariant.NO_PARTIAL)
   }
 }

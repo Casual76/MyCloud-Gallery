@@ -142,7 +142,8 @@ class AiChaosVerifier(private val w: AiChaosWorld) {
     val files = w.bufferPath.listFiles().orEmpty()
     files.filter { it.name.endsWith(".tmp") }.forEach { out += v(AiInvariant.BUFFER, at, "temporaneo orfano nel buffer a lavoro finito") }
     if (a.buffer.keys().isNotEmpty()) {
-      out += AiViolation(AiInvariant.BUFFER, at, "${a.buffer.keys().size} contenuti gia' fatti ancora nel buffer", KnownDefect.BUFFER_ORPHAN_BLOBS)
+      // AI-D1 corretto da P11: non e' piu' un difetto noto, e' un errore vero.
+      out += v(AiInvariant.BUFFER, at, "${a.buffer.keys().size} contenuti gia' fatti ancora nel buffer")
     }
     if (files.sumOf { it.length() } != a.buffer.usedBytes.value) out += v(AiInvariant.BUFFER, at, "il buffer dice ${a.buffer.usedBytes.value} byte, sul disco ce ne sono ${files.sumOf { it.length() }}")
     out += hidden(at)

@@ -26,6 +26,8 @@ enum class AiCheckPoint { AFTER_DEATH, AFTER_STEP, END, REREAD }
  * Un difetto del codice di produzione che il banco ha trovato e che P10 non corregge (non e' nel suo perimetro): e' riferito nel REPORT con
  * il seme che lo riproduce, il banco lo conta a parte e [AiChaosKnownDefectsTest] verifica che sia ancora li'. Quando lo si corregge quel
  * test diventa rosso: si toglie l'etichetta da `AiChaosVerifier` e il banco lo vede come un errore vero.
+ *
+ * [BUFFER_ORPHAN_BLOBS] (AI-D1) e' corretto da P11: il verificatore non lo usa piu' come etichetta, resta qui per la storia dei semi.
  */
 enum class KnownDefect(val id: String, val text: String) {
   BUFFER_ORPHAN_BLOBS(

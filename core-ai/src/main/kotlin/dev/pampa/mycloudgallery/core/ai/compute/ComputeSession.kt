@@ -88,8 +88,27 @@ internal class ComputeSession(
 
   // ---- Share -----------------------------------------------------------------------------------------------------------
 
+  /**
+   * AI-D1 (trovato da P10): una morte fra il salvataggio di un media e lo svuotamento di fine unita' (o di fine tappa del telefono)
+   * lasciava le sue anteprime nel buffer per sempre, perche' [Tally.finished] conosce solo i media di questa tappa e un media salvato
+   * non torna piu' candidato. A inizio tappa si tolgono quindi i blob dei media che [AiComputeParts.results] dice finiti qui; in una
+   * share con la rete anche quelli che un altro indicizzatore ha gia' fatto (un'unita' finita da lui non torna piu' da noi).
+   */
+  private suspend fun pruneFinished(share: String?) {
+    val buffer = parts.buffer as? DiskAiBuffer ?: return
+    val done = try {
+      val keys = buffer.keys().toList()
+      val others = if (share == null || keys.isEmpty()) emptyMap() else othersOf(share, keys)
+      keys.filter { worker.finishedHere(it, others[it].orEmpty()) }
+    } catch (e: IOException) {
+      return
+    }
+    if (done.isNotEmpty()) buffer.evict(done)
+  }
+
   suspend fun share(share: String): AiRunResult {
     gate()?.let { return finish(it) }
+    pruneFinished(share.takeUnless { pace.localOnly })
     if (pace.localOnly) return bufferOnly(share)
     releasePending(share)
     // Le unita' si lasciano tutte a fine tappa (cosi' un'unita' con media ancora in attesa non torna in questo giro e non blocca le
@@ -263,6 +282,7 @@ internal class ComputeSession(
   /** I media del solo telefono: dai byte del telefono, risultati solo locali (nessuna pubblicazione). */
   suspend fun phoneOnly(): AiRunResult {
     gate()?.let { return finish(it) }
+    pruneFinished(null)
     val list = parts.candidates.phoneOnly(recipe.version, config.localBatchLimit)
     return finish(local(null, list, emptyMap()) { true })
   }

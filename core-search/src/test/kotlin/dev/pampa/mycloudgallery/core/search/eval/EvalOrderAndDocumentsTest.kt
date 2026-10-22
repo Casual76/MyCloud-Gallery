@@ -112,7 +112,8 @@ class EvalOrderAndDocumentsTest {
   @Test
   fun leFrasiPrototipoSonoQuelleDelProgetto() {
     assertThat(DocumentPrototypes.PHRASES).containsExactly("un documento", "uno scontrino", "una ricevuta", "un foglio con del testo").inOrder()
-    assertThat(DocumentPrototypes.TEXT_LINES).isEqualTo(6)
-    assertThat(DocumentPrototypes.TEXT_CHARS).isEqualTo(200)
+    // Revisione A (CE-1): le soglie del testo sono quelle provvisorie dell'app (set OCR sintetico di P9; D34 diceva 6 righe o 200 caratteri).
+    assertThat(DocumentPrototypes.TEXT_LINES).isEqualTo(9)
+    assertThat(DocumentPrototypes.TEXT_CHARS).isEqualTo(250)
   }
 }

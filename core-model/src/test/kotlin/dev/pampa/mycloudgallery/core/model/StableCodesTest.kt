@@ -31,6 +31,11 @@ class StableCodesTest {
     "VecSource" to VecSource.entries,
     "OcrSource" to OcrSource.entries,
     "OcrEngineCode" to OcrEngineCode.entries,
+    // Fase 7 (P0): i codici degli album (salvati da P1 e P3, pubblicati da P2).
+    "ShareLevel" to ShareLevel.entries,
+    "AlbumKind" to AlbumKind.entries,
+    "AlbumSort" to AlbumSort.entries,
+    "TripKind" to TripKind.entries,
   )
 
   @Test

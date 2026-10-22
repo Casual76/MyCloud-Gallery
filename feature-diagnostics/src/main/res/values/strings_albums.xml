@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Sezione «Album» (Fase 7, docs/fase7-progetto.md §2.8, D37). Titolo e spiegazione della sezione e voce di stato (P0); le voci e i
+       codici degli album (ALBUM_*, SHARE_*, SMART_*, TRIP_*) li aggiunge P13. Solo numeri e codici nelle esportazioni: mai titoli
+       d'album, cartelle, luoghi, casa, coordinate, descrizioni, id di media o account. -->
+  <string name="diagnostics_section_albums">Album</string>
+  <string name="diagnostics_hint_albums">Album condivisi, condivisioni in corso, album smart e viaggi su questo dispositivo: stato, avanzamento e problemi da risolvere.</string>
+  <string name="diag_albums_state_title">Stato degli album</string>
+  <string name="diag_albums_state_guide">Quanti album ci sono, quante condivisioni sono in corso o in pausa e se gli album smart si stanno aggiornando. I titoli degli album e i luoghi non escono mai dal telefono.</string>
+</resources>

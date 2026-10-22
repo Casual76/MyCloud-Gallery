@@ -88,6 +88,8 @@ segnaposto e almeno un test.
 | `:core-ai` | Fase 6: motori on-device (vettori di testo e immagini con LiteRT-LM; OCR con ML Kit solo con la lettura del testo attiva; ritaglio del soggetto con MagicTouch su LiteRT) e calcolo AI (unita', prenotazioni, buffer degli indicizzatori, ripresa, pubblicazione). **L'unico modulo che vede `litertlm`, `litert` e ML Kit** | common, model, trust, index (contratti), prepare (solo per i media del telefono), models (solo `ModelFiles`), rules. **Non vede** nas (i byte del NAS arrivano dalle porte di core-index), nasops, backup, search |
 | `:core-search` | Fase 6: indice locale (vettori e testo), analizzatore delle query italiane, fusione e soglie di convinzione, "Trova simili", copertura, cronologia. **Nessuna rete, nessun NAS** | common, model, database (porte), library, places, ai (solo contratti). **Non vede** nas, index, models, prepare, nasops, backup |
 | `:feature-search` | Fase 6: schermata Cerca e pagina Ricerca e modelli. Stati e contratti, composable con i soli componenti G2. **Cieca a `core-nas`, `core-index`, `core-nasops`, `core-backup`** | search, library, imaging, designsystem; ai e models solo nei contratti di stato |
+| `:core-albums` | Fase 7: album personali (manuali e smart, nei dati personali), regole degli album smart, viaggi ed eventi con la "casa" solo locale, replica, fusione e permessi degli album condivisi, orchestratore della condivisione e del "Riporta" (diario proprio). **Non sposta, non carica, non cancella da se'**: porte sue (`AlbumMover`, `AlbumUploader`, `SafeCopyRequester`, `AlbumPublisher`) legate da `:app`, solo con una `ShareConfirmation` emessa dal foglio | common, model, library (viste e visibilita'), trust (`NasFileSystem` solo in `shared/`), database, personal, places, search (solo contratti). **Non vede** nasops, backup, nas, nasmedia, index, ai, models, rete |
+| `:feature-albums` | Fase 7: elenco e pagina degli album, editor delle regole, "Suggerite" e "Da condividere", fogli di condivisione, permessi e chiusura (con la scelta di Q5), proposte di viaggio. Stati e contratti, composable con i soli componenti G2. **Cieca a `core-nas`, `core-nasops`, `core-backup`, `core-index`, `core-trust`** | albums (contratti), library, imaging, designsystem |
 
 Nessun ciclo: `core-common` e `core-model` sono le foglie. I `feature-*` non si conoscono fra loro: ogni
 passaggio da una funzione all'altra e' una callback scritta da `:app` (`navigation/AppNavHost.kt`).
@@ -141,6 +143,27 @@ scrive i contratti, i null-object e i fake). Le regole:
 violazione reintrodotta lo fa fallire. Le aggiunte ai moduli esistenti (classi `vec` e `ocr` in `core-trust`, testa `ai` in
 `core-index`, schema v5 in `core-database`, ruoli modificabili in `core-family`, impostazioni sincronizzate in `core-personal`,
 testo dal vivo, ritaglio e foto in movimento in `feature-viewer`) sono nel §1.3 del progetto.
+
+**Fase 7: chi vede chi** (`docs/fase7-progetto.md` §1.1). Nascono `core-albums` e `feature-albums` (P0 ne scrive i contratti, i
+null-object, i fake e gli esecutori di riferimento `InMemoryAlbums`, `InMemoryShareRunner`, `InMemoryTrips`, con le suite di contratto
+che le implementazioni vere dei pacchetti dopo devono passare). Le regole:
+- `core-albums` **non vede** `core-nasops`, `core-backup`, `core-nas`, `core-nasmedia`, `core-index`, `core-ai`, `core-models` ne' la
+  rete, nemmeno per nome nel codice di produzione: sposta, carica, chiede il guardiano e pubblica solo da porte sue, che `:app` lega
+  a `NasOperations` (con `ConfirmationIssuer` sullo stesso piano), a `IncomingUploads` e al guardiano;
+- una `ShareConfirmation` (costruttore `internal`) la emette solo il foglio (`ShareConfirmationSheet`/`ShareConfirmationIssuer` in
+  `feature-albums` e `:app`); `ShareRunner.start`, `AlbumMover.move` e `AlbumUploader.upload` la pretendono nella firma;
+- `NasFileSystem` solo in `core-albums/.../shared/` (i file `albums/`, con la sola `publishExclusive`); `home_estimate` solo in
+  `core-database` e `core-albums/.../trips/`; nessun `PersonalKind` nuovo (i campi degli album stanno dentro `ALBUM`, `SETTING`,
+  `MEDIA_FLAG`);
+- `feature-albums` vede di `core-albums` solo contratti, null-object e fake, e non vede `core-nas`, `core-nasops`, `core-backup`,
+  `core-index` ne' `core-trust`; `core-search` non vede `core-albums`.
+
+`Phase7ArchitectureTest` (`core-common`, P0) tiene queste regole; ogni violazione reintrodotta lo fa fallire. La recinzione D30
+(`FeatureFlags.sharedAlbumsTestSharesOnly`, album condivisi solo sulle share di prova finche' l'utente non dice di si', Q7) e' accesa in
+release e in debug e `tools/check.ps1` la cerca nel dex di release. Le aggiunte ai moduli esistenti (codici degli album in `core-model`,
+campi D4 in `core-personal`, `LibraryFilter.EDITED`, `VisibleMedia`, `HiddenMask` e `WidgetFeed` in `core-library`, `MoveCompletionSink`
+in `core-nasops`, `IncomingDestination.AlbumFolder` e `SafeCopyRequests` in `core-backup`, `DiagSection.ALBUMS`) sono nel §1.3 del
+progetto e in `docs/decisioni.md` ("Fase 7 P0").
 
 **Fase 6 in `:app` (P11).** `AiModule` monta tutto una volta per processo (`AiWiring.build`): `LocalModels` (cartella
 `noBackupFilesDir/models`, sorgenti di `ModelFetchers`, cancello di rete per l'HTTPS; la copia sul NAS resta spenta finche' `core-nas` non

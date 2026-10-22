@@ -1,0 +1,49 @@
+// Gli album della Fase 7 (docs/fase7-progetto.md §1.1, §1.2 "core-albums", D1-D39): album personali (manuali e smart), regole degli
+// album smart, viaggi ed eventi con la "casa" solo locale, replica, fusione e permessi degli album condivisi, orchestratore della
+// condivisione e del "Riporta". Contratti, null-object, fake ed esecutori di riferimento (`InMemoryAlbums`, `InMemoryShareRunner`,
+// `InMemoryTrips`) di P0; personal/ e' di P3, shared/ di P2, share/ di P4, smart/ di P6, trips/ di P7.
+//
+// **Nessuna strada nuova verso operazioni distruttive** (D1, D2): non vede core-nasops, core-backup, core-nas, core-nasmedia,
+// core-index, core-ai, core-models ne' la rete (Phase7ArchitectureTest: dipendenze, compilazione e nomi nei sorgenti di produzione).
+// Sposta, carica, chiede il guardiano e pubblica attraverso porte sue (`AlbumMover`, `AlbumUploader`, `SafeCopyRequester`,
+// `AlbumPublisher`), legate da :app, e solo con una `ShareConfirmation` emessa dal foglio. Di core-trust usa `NasFileSystem` SOLO in
+// shared/ (i file `albums/`, con la sola `publishExclusive`); `home_estimate` lo legge e scrive SOLO trips/.
+//
+// D2: core-trust, core-database, core-personal, core-places e core-search sono `implementation`: feature-albums (cieca a core-trust,
+// §1.1) vede di questo modulo solo i contratti, la Libreria (`api`) e le fondamenta. Di core-search solo i contratti (QueryParser,
+// SearchEngine, Today): core-search non vede core-albums.
+//
+// NoNetworkSourcesTest: nessuna rete. NoWallClockSourcesTest (D36): ora del NAS per le voci, orologio monotono per le durate, "oggi" dalla
+// porta `Today`.
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.core.albums'
+}
+
+dependencies {
+  api project(':core-common')
+  api project(':core-model')
+  // api: le viste degli album (`OrderedTimelineView`, `TimelineSnapshot`) e la visibilita' (`VisibleMedia`, `HiddenMask`) compaiono nei
+  // contratti che feature-albums usa.
+  api project(':core-library')
+
+  // implementation: nessun loro tipo nei contratti che vede feature-albums. core-trust: `SharePath` nelle porte che lega :app, codec e
+  // `NasFileSystem` per i file `albums/` (solo shared/, P2). core-database: tabelle v6 (P1). core-personal: dati personali (P3, P11).
+  // core-places: nomi dei luoghi (P7). core-search: solo contratti (P6).
+  implementation project(':core-trust')
+  implementation project(':core-database')
+  implementation project(':core-personal')
+  implementation project(':core-places')
+  implementation project(':core-search')
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+}

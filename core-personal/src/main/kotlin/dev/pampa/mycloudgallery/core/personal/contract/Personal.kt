@@ -97,6 +97,98 @@ object PersonalFields {
    */
   const val SETTING_MOTION_ANIMATION: String = "motion_animation"
 
+  // --- Fase 7 (docs/fase7-progetto.md D4, D20, D21, D27, D31, D33, risposta Q5 del 22/10). Firme di P0: **campi nuovi dentro i tipi
+  // esistenti** `ALBUM`, `SETTING` e `MEDIA_FLAG`, nessun `PersonalKind` nuovo (un tipo nuovo farebbe scartare il segmento intero alle
+  // app vecchie: Phase7ArchitectureTest lo vieta). Nessuna versione nuova del formato: un'app della Fase 6 legge e conserva questi campi
+  // senza capirli. I lettori (dal valore al tipo dell'album) sono di P3, le impostazioni delle Raccolte di P11, le scritture di P3, P4,
+  // P6, P7, P8. **Ogni voce `item:`, `exclude:`, `accept:`, `smart:example:` porta l'impronta** (`PersonalEntry.fingerprint`, D4).
+
+  /** `ALBUM`: `manual` o `smart` (`AlbumKind.code`); assente = `manual` (gli album della Fase 4). */
+  const val ALBUM_KIND: String = "kind"
+
+  /** `ALBUM`: l'ordine dentro l'album (`AlbumSort.code`); assente = il predefinito del tipo (D21). */
+  const val ALBUM_SORT: String = "sort"
+
+  /** `ALBUM` smart: il periodo (giorni locali dello scatto, D13, D36), un testo nel formato di P6. */
+  const val SMART_PERIOD: String = "smart:period"
+
+  /** `ALBUM` smart: il luogo (id GeoNames, centro, raggio, etichetta), un testo nel formato di P6. */
+  const val SMART_PLACE: String = "smart:place"
+
+  /** `ALBUM` smart: la descrizione per la ricerca per contenuto (D15). */
+  const val SMART_TEXT: String = "smart:text"
+
+  /** `ALBUM` smart: le sorgenti ammesse (`SmartSource`), un testo con i codici. */
+  const val SMART_SOURCES: String = "smart:sources"
+
+  /** `ALBUM` smart: i tipi ammessi (foto, video), un testo con i codici. */
+  const val SMART_TYPES: String = "smart:types"
+
+  /** Prefisso di una foto d'esempio (al piu' 6, D13): vedi [smartExample]. */
+  const val SMART_EXAMPLE: String = "smart:example"
+
+  /** Prefisso di un'esclusione per sempre (E-AL5): vedi [albumExclude]. */
+  const val ALBUM_EXCLUDE: String = "exclude"
+
+  /** Prefisso di un'accettazione di un suggerito (D14): vedi [albumAccept]. */
+  const val ALBUM_ACCEPT: String = "accept"
+
+  /** `ALBUM` smart: "Congela" (D16), un [PersonalValue.Flag]. */
+  const val ALBUM_FROZEN: String = "frozen"
+
+  /** `ALBUM`: l'id dell'album condiviso nato da questo album personale (D4, D17), un testo. */
+  const val ALBUM_SHARED: String = "shared"
+
+  /**
+   * `ALBUM`: l'id dell'album condiviso di cui questo album personale e' la **copia** (risposta Q5 (b) del 22/10, D31 adeguata): quando
+   * il creatore smette di condividere o elimina l'album scegliendo "ognuno tiene una copia", ogni familiare (e il creatore dopo
+   * "Smetti di condividere") ha un album personale con gli stessi elementi, finche' i file restano nell'area comune. Un testo.
+   */
+  const val ALBUM_COPY_OF: String = "copy_of"
+
+  /** Una foto d'esempio di un album smart: `smart:example:<id del media>` (con l'impronta, D4). */
+  fun smartExample(mediaId: String): String = "$SMART_EXAMPLE:$mediaId"
+
+  /** Un'esclusione per sempre da un album smart: `exclude:<id del media>` (con l'impronta). */
+  fun albumExclude(mediaId: String): String = "$ALBUM_EXCLUDE:$mediaId"
+
+  /** Un suggerito accettato in un album smart: `accept:<id del media>` (con l'impronta). */
+  fun albumAccept(mediaId: String): String = "$ALBUM_ACCEPT:$mediaId"
+
+  /** `SETTING`: l'ordine delle sezioni delle Raccolte (D33), un testo con i codici delle sezioni. */
+  const val SETTING_COLLECTIONS_ORDER: String = "collections_order"
+
+  /** Prefisso della visibilita' di una sezione delle Raccolte (D33, E-L14): vedi [collectionsHidden]. */
+  const val SETTING_COLLECTIONS_HIDDEN: String = "collections_hidden"
+
+  /** `SETTING`: l'ordine dell'elenco degli album (`AlbumListSort.code`, D21). */
+  const val SETTING_ALBUMS_SORT: String = "albums_sort"
+
+  /** Prefisso di una proposta di viaggio scartata ("Non mi interessa", D20): vedi [tripDismissed]. */
+  const val SETTING_TRIP_DISMISSED: String = "trip_dismissed"
+
+  /** Prefisso di un album condiviso lasciato ("Non mostrare piu'", E-SH21): vedi [sharedAlbumLeft]. */
+  const val SETTING_SHARED_ALBUM_LEFT: String = "shared_album_left"
+
+  /** `SETTING`: l'hash completo dei video del NAS "per tutti, di notte" (D27, Q10 della Fase 4), un [PersonalValue.Flag]; assente = spento. */
+  const val SETTING_FULL_HASH_NIGHTLY: String = "full_hash_nightly"
+
+  /** Una sezione delle Raccolte nascosta (valore [PersonalValue.Flag]): `collections_hidden:<codice della sezione>`. */
+  fun collectionsHidden(section: String): String = "$SETTING_COLLECTIONS_HIDDEN:$section"
+
+  /** Una proposta scartata: `trip_dismissed:<impronta di inizio, fine e luoghi>` (`TripId`), sincronizzata (una scartata non torna). */
+  fun tripDismissed(tripId: String): String = "$SETTING_TRIP_DISMISSED:$tripId"
+
+  /** Un album condiviso lasciato: `shared_album_left:<id dell'album>` (E-SH21: non si vede piu' su nessun dispositivo dell'account). */
+  fun sharedAlbumLeft(albumId: String): String = "$SETTING_SHARED_ALBUM_LEFT:$albumId"
+
+  /**
+   * `MEDIA_FLAG`: la cartella d'origine (area privata, percorso relativo alla share) di un media **proprio** spostato in un album
+   * condiviso (D31): serve a "Riporta nelle mie cartelle". Sta nei dati personali (area privata), **mai** nella definizione comune
+   * (privacy dei percorsi, L60). Un testo.
+   */
+  const val SHARED_ORIGIN: String = "shared_origin"
+
   /** Vero se [field] e' un elemento di un album ([albumItem]). */
   fun isAlbumItem(field: String): Boolean = field.startsWith("item:")
 

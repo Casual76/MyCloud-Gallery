@@ -12,3 +12,10 @@
     public boolean getBackupBlocksTestAccounts();
     public boolean backupMayWriteAs(java.lang.String);
 }
+
+# Fase 7, D30 (docs/fase7-progetto.md §0.1): "album condivisi solo sulle share di prova" e' una protezione che deve stare nell'APK di
+# release anche prima che il cancello degli album sia legato in :app (P13). Come D12: tools/check.ps1 la cerca nel dex e in mapping.txt.
+-keepclassmembers class dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags {
+    public boolean getSharedAlbumsTestSharesOnly();
+    public boolean sharedAlbumsMayUse(java.lang.String);
+}

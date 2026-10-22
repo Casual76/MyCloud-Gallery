@@ -95,6 +95,26 @@ value class AlbumId(val value: String) {
 
   companion object {
     fun random(): AlbumId = AlbumId(UUID.randomUUID().toString())
+
+    /** La lunghezza del nonce dell'id legato al creatore (D7). */
+    const val NONCE_BYTES: Int = 16
+
+    /**
+     * Fase 7 (D7, `docs/fase7-progetto.md` §1.3): l'id **legato al creatore**, i primi 128 bit di
+     * `SHA-256("mcg-album-id\0" ‖ account del creatore ‖ nonce di 16 byte)`, nella forma canonica di un UUID (le cifre esadecimali dei
+     * 16 byte con i trattini: non e' un UUID "di versione", e' un nome da 128 bit). Chi legge una definizione d'album la ricalcola
+     * dall'account e dal nonce che porta: un altro familiare non puo' "rivendicare" un album esistente (E-SH14). Vale anche per gli
+     * album personali, cosi' un album nato personale si condivide senza cambiare id. Sul NAS lo stesso id compare in base32 (P2).
+     */
+    fun derived(creator: AccountId, nonce: ByteArray): AlbumId {
+      require(nonce.size == NONCE_BYTES) { "Il nonce di un album sono $NONCE_BYTES byte." }
+      val digest = java.security.MessageDigest.getInstance("SHA-256")
+      digest.update("mcg-album-id\u0000".toByteArray(Charsets.UTF_8))
+      digest.update(creator.value.toByteArray(Charsets.UTF_8))
+      digest.update(nonce)
+      val hex = digest.digest().copyOf(16).joinToString("") { "%02x".format(it.toInt() and 0xff) }
+      return AlbumId("${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}")
+    }
   }
 }
 

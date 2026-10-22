@@ -23,6 +23,9 @@ internal class TypoIndex {
 
   val size: Int get() = words.size
 
+  /** Vero se [word] e' gia' nel vocabolario (per contarla di nuovo anche quando il vocabolario e' pieno). */
+  fun knows(word: String): Boolean = word in known
+
   fun add(word: String, count: Int = 1) {
     if (word.length !in MIN_LENGTH..MAX_LENGTH) return
     val id = known[word]
@@ -108,17 +111,30 @@ internal class TextHits(
   }
 }
 
-/** La ricerca nel testo letto (D25) sopra `ai_text` e l'FTS4 di P1 ([TextRowStore]): termini sempre letterali (E-Q9). */
-internal class TextSearch(private val store: TextRowStore) {
+/**
+ * La ricerca nel testo letto (D25) sopra `ai_text` e l'FTS4 di P1 ([TextRowStore]): termini sempre letterali (E-Q9).
+ *
+ * Revisione A (R3): il vocabolario dei refusi in memoria ha un tetto, [maxWords] parole: si caricano le **piu' frequenti** (a pagine, con
+ * un mucchio di [maxWords] voci: la memoria non dipende da quante parole ha il database) e le parole dei testi nuovi entrano solo finche'
+ * c'e' posto. Un dispositivo che pubblica milioni di parole a caso non fa cadere il processo dell'interfaccia alla prima parola sconosciuta.
+ */
+internal class TextSearch(private val store: TextRowStore, private val maxWords: Int = MAX_WORDS) {
   private val mutex = Mutex()
   private val typos = TypoIndex()
-  private var loaded = false
+  @Volatile private var loaded = false
   private val learned = ConcurrentLinkedQueue<String>()
 
   /** Le parole di un testo appena salvato entrano nel vocabolario dei refusi (senza rileggerlo tutto). */
   fun learn(normalizedText: String) {
-    learned += normalizedText
+    // Prima del caricamento il testo e' gia' nel database: non serve tenerlo (e non cresce senza fine).
+    // E i testi in attesa hanno un tetto: oltre, le parole arrivano al prossimo avvio dal database (R3).
+    if (loaded && waiting.get() < MAX_WAITING_TEXTS) {
+      learned += normalizedText
+      waiting.incrementAndGet()
+    }
   }
+
+  private val waiting = java.util.concurrent.atomic.AtomicInteger()
 
   suspend fun hits(words: List<String>, exact: List<String>): TextHits? {
     val wanted = words.map { SearchText.normalize(it) }.filter { it.isNotEmpty() }.distinct().take(MAX_TERMS)
@@ -140,25 +156,42 @@ internal class TextSearch(private val store: TextRowStore) {
 
   private suspend fun <T> vocabulary(block: (TypoIndex) -> T): T = mutex.withLock {
     if (!loaded) {
+      // Le [maxWords] parole piu' frequenti (a parita', in ordine alfabetico): un mucchio che tiene solo le migliori.
+      val top = java.util.PriorityQueue<dev.pampa.mycloudgallery.core.database.VocabularyWord>(
+        compareBy<dev.pampa.mycloudgallery.core.database.VocabularyWord> { it.docs }.thenByDescending { it.word },
+      )
       var after = ""
       while (true) {
         val page = store.vocabularyPage(after, VOCABULARY_PAGE)
-        page.forEach { typos.add(it.word, it.docs) }
+        for (w in page) {
+          top += w
+          if (top.size > maxWords) top.poll()
+        }
         if (page.size < VOCABULARY_PAGE) break
         after = page.last().word
       }
-      loaded = true
+      top.sortedWith(compareByDescending<dev.pampa.mycloudgallery.core.database.VocabularyWord> { it.docs }.thenBy { it.word })
+        .forEach { typos.add(it.word, it.docs) }
       learned.clear()
+      waiting.set(0)
+      loaded = true
     }
     while (true) {
       val text = learned.poll() ?: break
-      text.split(' ').toSet().forEach { typos.add(it) }
+      waiting.decrementAndGet()
+      text.split(' ').toSet().forEach { if (typos.size < maxWords || typos.knows(it)) typos.add(it) }
     }
     block(typos)
   }
 
-  private companion object {
-    const val MAX_TERMS = 16
-    const val VOCABULARY_PAGE = 2_000
+  companion object {
+    private const val MAX_TERMS = 16
+    private const val VOCABULARY_PAGE = 2_000
+
+    /** R3: parole al piu' nel vocabolario dei refusi in memoria (circa 30 MB). */
+    const val MAX_WORDS: Int = 50_000
+
+    /** Testi nuovi in attesa di entrare nel vocabolario (si svuotano alla prima parola sconosciuta). */
+    private const val MAX_WAITING_TEXTS = 4_096
   }
 }

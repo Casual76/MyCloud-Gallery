@@ -40,39 +40,57 @@ internal object HalfTable {
  * `dim` float16 · CRC32 dei byte precedenti (4). Tutti i record di uno spazio hanno la stessa lunghezza ([recordSize]).
  *
  * Scritture serializzate da chi lo possiede ([LocalAiIndex]); letture concorrenti sulla mappatura (solo letture assolute).
+ *
+ * **Revisione A (R1, R21).** Il file si mappa a **finestre** di [windowRecords] record (al piu' 1 GiB l'una), non intero: nessun tetto di
+ * 2 GiB, una lettura oltre la fine risponde null. Ogni finestra e' una mappatura immutabile pubblicata da sola (un riferimento
+ * `@Volatile` a un array copiato a ogni cambio): chi legge prende la mappatura e ne guarda la **capacita'**, mai una dimensione scritta a
+ * parte, quindi nessuna corsa fra mappa e dimensione.
  */
-internal class VectorFile(val file: File, val dimension: Int) : Closeable {
+internal class VectorFile(val file: File, val dimension: Int, windowRecords: Int = DEFAULT_WINDOW_RECORDS) : Closeable {
 
   val recordSize: Int = HEADER + 2 * dimension + 4
+
+  /** I byte di una finestra: un multiplo intero dei record, mai oltre `Int.MAX_VALUE`. */
+  private val windowBytes: Long
+
+  init {
+    require(windowRecords > 0) { "Finestra vuota." }
+    windowBytes = recordSize.toLong() * minOf(windowRecords.toLong(), MAX_WINDOW_BYTES / recordSize)
+  }
 
   private val raf = RandomAccessFile(file, "rw")
   private val channel: FileChannel = raf.channel
 
-  @Volatile private var map: MappedByteBuffer? = null
-
-  @Volatile private var mapped: Long = 0
+  /** Le finestre mappate (null = non ancora); l'array non cambia mai: si sostituisce intero (R21). */
+  @Volatile private var windows: Array<MappedByteBuffer?> = arrayOfNulls(0)
 
   val length: Long get() = channel.size()
 
-  /** Aggiunge [records] in fondo (una scrittura, poi `force`): le posizioni di ognuno. Prima di ogni riga dell'indice (D22). */
+  /**
+   * Aggiunge [records] in fondo (a pezzi da al piu' [APPEND_CHUNK_BYTES], poi `force`): le posizioni di ognuno. Prima di ogni riga
+   * dell'indice (D22).
+   */
   fun append(records: List<VectorRecord>): LongArray {
-    val buffer = ByteBuffer.allocate(recordSize * records.size).order(ByteOrder.LITTLE_ENDIAN)
-    val crc = CRC32()
-    for (r in records) {
-      require(r.halves.size == dimension) { "Dimensione diversa da quella dello spazio." }
-      val start = buffer.position()
-      buffer.putInt(MAGIC).put(VERSION).put(r.recipe.toByte()).put(r.frame.toByte()).put(if (r.instantMs != null) 1 else 0)
-      buffer.put(r.key.bytes()).putInt(r.instantMs ?: -1)
-      for (h in r.halves) buffer.putShort(h)
-      crc.reset()
-      crc.update(buffer.array(), start, buffer.position() - start)
-      buffer.putInt(crc.value.toInt())
-    }
     // Un record lasciato a meta' da una morte del processo resta in coda: si riparte dal primo multiplo intero.
     val base = (length / recordSize) * recordSize
-    buffer.flip()
+    val perChunk = maxOf(1, APPEND_CHUNK_BYTES / recordSize)
     var at = base
-    while (buffer.hasRemaining()) at += channel.write(buffer, at)
+    val crc = CRC32()
+    for (chunk in records.chunked(perChunk)) {
+      val buffer = ByteBuffer.allocate(recordSize * chunk.size).order(ByteOrder.LITTLE_ENDIAN)
+      for (r in chunk) {
+        require(r.halves.size == dimension) { "Dimensione diversa da quella dello spazio." }
+        val start = buffer.position()
+        buffer.putInt(MAGIC).put(VERSION).put(r.recipe.toByte()).put(r.frame.toByte()).put(if (r.instantMs != null) 1 else 0)
+        buffer.put(r.key.bytes()).putInt(r.instantMs ?: -1)
+        for (h in r.halves) buffer.putShort(h)
+        crc.reset()
+        crc.update(buffer.array(), start, buffer.position() - start)
+        buffer.putInt(crc.value.toInt())
+      }
+      buffer.flip()
+      while (buffer.hasRemaining()) at += channel.write(buffer, at)
+    }
     channel.force(false)
     return LongArray(records.size) { base + it.toLong() * recordSize }
   }
@@ -118,32 +136,41 @@ internal class VectorFile(val file: File, val dimension: Int) : Closeable {
   fun offsets(): LongSequence = LongSequence(length / recordSize, recordSize.toLong())
 
   override fun close() {
-    map = null
+    windows = arrayOfNulls(0)
     runCatching { channel.close() }
     runCatching { raf.close() }
   }
 
+  /** Il record a [offset] in sola lettura (posizione 0), o null se e' fuori dal file o non allineato. */
   private fun slice(offset: Long): ByteBuffer? {
     if (offset < 0 || offset % recordSize != 0L) return null
-    var m = map
-    // La dimensione del file (una chiamata al sistema) si chiede solo oltre la parte gia' mappata.
-    if (m == null || offset + recordSize > mapped) {
-      synchronized(this) {
-        m = map
-        if (m == null || offset + recordSize > mapped) {
-          val size = length
-          if (offset + recordSize > size) return null
-          require(size <= Int.MAX_VALUE) { "File dei vettori oltre 2 GiB: va compattato." }
-          m = channel.map(FileChannel.MapMode.READ_ONLY, 0, size)
-          map = m
-          mapped = size
-        }
-      }
+    val index = offset / windowBytes
+    if (index > Int.MAX_VALUE) return null
+    val w = index.toInt()
+    val inWindow = (offset - index * windowBytes).toInt()
+    var map = windows.getOrNull(w)
+    // La capacita' della mappatura presa e' l'unica misura che conta (R21): mai una dimensione letta a parte.
+    if (map == null || inWindow + recordSize > map.capacity()) {
+      map = synchronized(this) { remap(w, inWindow) } ?: return null
     }
-    val dup = m!!.duplicate()
-    dup.position(offset.toInt())
-    dup.limit((offset + recordSize).toInt())
+    val dup = map.duplicate()
+    dup.position(inWindow)
+    dup.limit(inWindow + recordSize)
     return dup.slice().order(ByteOrder.LITTLE_ENDIAN)
+  }
+
+  /** Mappa (di nuovo) la finestra [w] fino alla fine del file, se il record a [inWindow] c'e'. Sotto il lucchetto. */
+  private fun remap(w: Int, inWindow: Int): MappedByteBuffer? {
+    windows.getOrNull(w)?.takeIf { inWindow + recordSize <= it.capacity() }?.let { return it }
+    val start = w.toLong() * windowBytes
+    val size = length
+    if (start + inWindow + recordSize > size) return null
+    val bytes = minOf(windowBytes, size - start)
+    val mapped = channel.map(FileChannel.MapMode.READ_ONLY, start, bytes)
+    val next = if (w < windows.size) windows.copyOf() else windows.copyOf(w + 1)
+    next[w] = mapped
+    windows = next
+    return mapped
   }
 
   private fun checksumOk(buf: ByteBuffer): Boolean {
@@ -171,6 +198,15 @@ internal class VectorFile(val file: File, val dimension: Int) : Closeable {
     const val MAGIC: Int = 0x4D434756 // "MCGV"
     const val VERSION: Byte = 1
     const val HEADER: Int = 44
+
+    /** Le finestre di serie: 262.144 record (circa 415 MB per lo spazio da 768). */
+    const val DEFAULT_WINDOW_RECORDS: Int = 262_144
+
+    /** Una finestra non supera 1 GiB (R1). */
+    const val MAX_WINDOW_BYTES: Long = 1L shl 30
+
+    /** I record si scrivono a pezzi da al piu' 4 MiB (niente buffer enormi per una consegna grande). */
+    const val APPEND_CHUNK_BYTES: Int = 4 * 1024 * 1024
 
     private val HEX = "0123456789abcdef".toCharArray()
 

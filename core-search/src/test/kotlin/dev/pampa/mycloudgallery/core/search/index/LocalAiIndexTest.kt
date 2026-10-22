@@ -20,9 +20,10 @@ class LocalAiIndexTest {
   private val repair = RecordingRepair()
   private lateinit var dir: File
 
-  private suspend fun index(): LocalAiIndex {
+  /** [known]: la ricetta piu' alta che l'app conosce (R16); di serie quella corrente (1). */
+  private suspend fun index(known: Int = 1): LocalAiIndex {
     if (!::dir.isInitialized) dir = tmp.newFolder("search")
-    return LocalAiIndex(dir, texts, repair).also { it.open() }
+    return LocalAiIndex(dir, texts, repair, knownRecipe = { known }).also { it.open() }
   }
 
   private fun v(seed: Long): FloatArray = FloatArray(768).also { FastNoise.fill(seed, it) }
@@ -64,7 +65,8 @@ class LocalAiIndexTest {
   /** Richiesta di P2: `withdraw`, `forgetDevice` e `forgetShare` di una replica non tolgono mai cio' che e' stato calcolato qui. */
   @Test
   fun laReplicaNonToglieMaiIDatiCalcolatiQui() = runTest {
-    val idx = index()
+    // Un'app che conosce le ricette fino a 3: una ricetta piu' alta e nota vince (D7, D21).
+    val idx = index(known = 3)
     idx.saveVectors(key(1), vecBody(v(1)))
     idx.saveText(key(1), ocrBody("testo locale"))
     idx.applyReplica("comune", listOf(LocalAiIndex.ReplicaItem.Vectors(key(1), "dev-b", vecBody(v(9), recipe = 2))))
@@ -84,7 +86,7 @@ class LocalAiIndexTest {
     assertThat(idx.saved(key(1), 1)).containsExactly(AiClass.VEC, AiClass.OCR)
     // E dopo una riapertura e' ancora cosi'.
     idx.close()
-    val again = index()
+    val again = index(known = 3)
     assertThat(again.text(key(1))).isEqualTo("testo locale")
     assertThat(cos(again.vectors(key(1)).single(), normalized(v(1)))).isGreaterThan(0.999f)
   }

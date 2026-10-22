@@ -4073,3 +4073,21 @@ pronte); la stima della pagina deve contare l'avvio del motore (2,2 s a caldo, 4
   direzione di lettura: per un testo capovolto (angolo ripiegato di 180 gradi) corrono in senso opposto alla direzione dell'angolo.
 - **P13** (ritaglio): `EngineThread`, `FdOwnership` e il modo di dare un descrittore verificato al motore (`ParcelFileDescriptor.dup`) valgono anche per LiteRT, ma va controllato se anche li' la cache dei programmi compilati si salva solo per percorso (per LiteRT-LM e' cosi', `ModelAccess`); non c'e' un costruttore
   di `CutoutImage` in `ModelInputs`.
+
+## Fase 6 P11: integrazione in `:app` (22/10)
+
+Il pacchetto P11 (`docs/fase6-progetto.md` §1.4, §2.7, riga P11 del §4.4): `AiGraph` e `SearchGraph` in `:app`, lavori, navigazione,
+lettura del testo all'avvio, porte del viewer, azzeramento, Diagnostica, `tools/check.ps1`. Le scelte che il codice ha imposto:
+
+- **D3 modificata: release solo `arm64-v8a`** (decisione dell'orchestratore). Tutti i dispositivi della famiglia sono arm64; `x86_64`
+  (46 MB di librerie native) serve solo agli emulatori. La debug e la `nonMinifiedRelease` (generazione del profilo, anche
+  sull'emulatore) tengono le due ABI (`abiFilters`); la release e la `benchmarkRelease` tolgono `x86_64` all'impacchettamento
+  (`androidComponents.onVariants` con `packaging.jniLibs.excludes`). `tools/check.ps1` (passo 7e) vuole le quattro librerie dei motori
+  in `lib/arm64-v8a/` e rifiuta ogni altra ABI nella release; l'allineamento a 16 KB resta controllato. APK di release non firmato:
+  **113.769.659 byte prima, 67.336.743 dopo** (solo questo cambio). Conseguenza: `check.ps1 -Bench` sugli emulatori x86_64 non puo'
+  piu' installare la `benchmarkRelease`; le misure si fanno su S25 e Tab S9, come chiede il §5.4.
+- **AI-D1 corretto** (trovato da P10, l'unica eccezione al perimetro di `core-ai`): a inizio tappa (`ComputeSession.pruneFinished`) si
+  tolgono dal buffer i blob dei media che `AiResults.saved` dice finiti qui e, in una share con la rete, quelli che un altro
+  indicizzatore ha gia' fatto (un'unita' finita da lui non torna piu' da noi: il banco lo ha mostrato dopo la prima correzione, 58 giri
+  su 2.000); le anteprime di un media "non supportato" si tolgono **prima** di segnarlo (una morte in mezzo fa solo riprovare il
+  media). `AiChaosKnownDefectsTest` ora prova la correzione e `AiChaosVerifier` non ha piu' l'etichetta: 2.000 giri, 0 violazioni.

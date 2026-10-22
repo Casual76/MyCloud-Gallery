@@ -48,7 +48,8 @@
                                 NAS", `IncomingGate.stateOf`, la share di destinazione): stessa prova, cioe' chiama `backupMayWriteTo` e
                                 `backupMayWriteAs`, risponde `TEST_ONLY` dopo ognuna ed e' istanziato da una classe del backup
     7e. motori on-device        (Fase 6, P0; docs/fase6-progetto.md D3, D33, D38, D41) sull'APK di release vero: librerie
-                                native solo arm64-v8a e x86_64, non compresse, allineate a 16 KB nel file e nei segmenti LOAD;
+                                native solo arm64-v8a (P11: x86_64 solo nella debug, per gli emulatori), non compresse,
+                                allineate a 16 KB nel file e nei segmenti LOAD;
                                 nel manifest niente `MlKitInitProvider`, i componenti di ML Kit e DataTransport esattamente
                                 l'elenco chiuso di `releaseManifestPolicy` (non esportati), le `uses-native-library` solo le due
                                 ammesse e facoltative; nel bytecode (dexdump) `MlKit.initialize` chiamato da codice nostro solo
@@ -994,13 +995,12 @@ Step "motori on-device nella release: librerie native (ABI, 16 KB), manifest (ML
   $libs = @([ApkInspect]::NativeLibs($apk.FullName))
   if ($libs.Count -eq 0) { return "nessuna libreria nativa nell'APK di release: la lettura non e' affidabile (LiteRT-LM, LiteRT e ML Kit ne portano)" }
   foreach ($expected in @("liblitertlm_jni.so", "libLiteRt.so", "liblitert_jni.so", "libmlkit_google_ocr_pipeline.so")) {
-    foreach ($abi in @("arm64-v8a", "x86_64")) {
-      if (-not ($libs | Where-Object { $_.Name -eq "lib/$abi/$expected" })) { $problems += "manca lib/$abi/$expected" }
-    }
+    # P11 (modifica a D3): la release porta solo arm64-v8a; x86_64 resta nella debug per gli emulatori.
+    if (-not ($libs | Where-Object { $_.Name -eq "lib/arm64-v8a/$expected" })) { $problems += "manca lib/arm64-v8a/$expected" }
   }
   foreach ($lib in $libs) {
     $abi = ($lib.Name -split '/')[1]
-    if (@("arm64-v8a", "x86_64") -notcontains $abi) { $problems += "$($lib.Name): ABI non ammessa (solo arm64-v8a e x86_64, D3)" ; continue }
+    if ($abi -ne "arm64-v8a") { $problems += "$($lib.Name): ABI non ammessa nella release (solo arm64-v8a, D3 modificata da P11)" ; continue }
     if ($lib.Method -ne 0) { $problems += "$($lib.Name) e' compressa nell'APK (va mappata cosi' com'e')"; continue }
     if ($lib.DataOffset % 16384 -ne 0) { $problems += "$($lib.Name) non e' allineata a 16 KB nel file (scostamento $($lib.DataOffset))" }
     if ($lib.Problem) { $problems += "$($lib.Name): $($lib.Problem)"; continue }

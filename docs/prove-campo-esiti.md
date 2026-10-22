@@ -638,3 +638,382 @@ Inoltre, mentre la capsula dice "VPN spenta", offrire i dati mobili non serve: s
   - Nessun Gradle né banco lanciato da me ancora acceso: c'è solo il demone Gradle di ieri, che non è mio.
   - Nel worktree solo file sotto `build\` (ignorati da git). Il worktree resta a `aded0e2`, staccato.
   - Telefono non toccato. Niente commit.
+
+
+---
+
+# Blocco B (21/10)
+
+| | |
+|---|---|
+| **Quando** | 21/10/2026, dalle 16:50. Sessioni con l'utente (altre app, dialoghi di sistema) e l'orchestratore che comanda la nostra app con `adb` e `uiautomator`. |
+| **Ambiente** | S25 `RFCY61FZDHW`, Android SDK 37, APK di debug di `2445d9e` (`install -r` alle 16:46, dati conservati). Account `test`, area comune `test-comune`, D13 attiva. "Attiva Wi-Fi automaticamente" spento, schermo a 120 Hz. Preset "Massimo" e qualità "Standard" all'inizio (annotati). Batteria 79% (cavo USB). Registro e file in `build\campo\20261021-165146-8c4811b9\` (fuori da git). |
+| **Funzioni di appoggio** | Le funzioni di `h.ps1` non le ho usate: ho ripreso gli aiutanti in bash di `build\campo\h.sh` (stessi controlli: nostra app in primo piano, nessuna finestra estranea sopra, 4 s dopo ogni dump). |
+
+## B-S1 · T-09 (cestino di Samsung Gallery e di Android) e GA-7
+
+Fatti i passi 1-8 sulle 528 foto del giro precedente (tutte già al sicuro). Il passo 9 (F26, una foto lasciata nel cestino) si fa dopo una semina nuova, perché F26 vuole una foto non ancora salvata: vedi B-S2.
+
+| Passo | Esito | Misure e note |
+|---|---|---|
+| Controlli e "Controlla l'ambiente" | **ok** | `env.sdk`=37, `env.rows`=528 (520 immagini, 8 video). App per `GET_CONTENT` 12, `PICK` 5, `SEND` 62 (47 per più file), `VIEW` 10, `EDIT` 3. Cestino di Samsung Gallery vuoto all'inizio (nessun file in `Android/.Trash/com.sec.android.gallery3d`), quindi "Seleziona tutto → Ripristina" non toccava altro |
+| 1-2. Due foto cestinate in Galleria, poi una ripristinata | **ok, con una anomalia** | I file persi dal telefono sono 2 (`IMG_20240312_101534.jpg`, `exif-12-solo-digitized.jpg`) e finiscono sotto `Android/.Trash/com.sec.android.gallery3d/uuid/<n>/storage/emulated/0/DCIM/mcg-prova/`. Confronto 1: `diff_missing`=3, `diff_new`=1, `diff_other_id_back`=1, `diff_same_id_present`=525, `diff_trashed`=0, `diff_deleted_files`=3, `diff_generation_delta`=13: **la prova conta 3 righe sparite per 2 file persi**. Dopo il ripristino di una foto: `missing`=3, `new`=2, `other_id_back`=2: il file ripristinato torna con **un altro `_ID`** (riga nuova) |
+| 3. Rotazione (LA-7) | **passata** | Orientamento 0, poi 1 per 7 s, poi 0 (registro dell'orientamento ogni secondo). La schermata e il riferimento ci sono ancora: `Confronta` dà gli stessi numeri di prima |
+| 4. Cestino di Galleria svuotato | **ok** | Il file tolto è `IMG_20240312_101534.jpg` (tolto dal manifesto del vecchio giro). Confronto 4: `missing`=3, `new`=2, `same_id`=525 |
+| 5. (d, e) "Cestina 5 foto con l'app" | **passata** | Dialogo di Android confermato dall'utente: `trash_requested`=5, `trash_result`=-1, `trash_is_trashed`=0, `trash_visible_default`=0, `trash_out_of_folders`=5, `trash_elsewhere_is_trashed`=5 (contatore nuovo rispetto al 20/10), `trash_in_gallery_trash`=0, `trash_gone`=0. Risposta dell'utente "le mostra" (`trash_in_samsung`=1). Dal telefono i 5 file **non si trovano sotto `/sdcard`** (diversamente da quelli cestinati dalla Galleria): il cestino di Samsung li tiene in un posto che la shell non vede |
+| 5. "4 · Ripristina quelle foto" | **passata (D-3 corretto nel testo)** | Non dice più "Niente da fare": dice "Le foto sono nel Cestino di Galleria: l'app non le può ripristinare. Ripristinale da Galleria → Cestino, poi tocca di nuovo «4 · Ripristina…»". Dopo il ripristino fatto dall'utente: `untrash_back_same_id`=5 e "Le foto sono già tornate al loro posto con lo stesso _ID". `s25.ps1 -Step verify -SkipNas -AllowFreed`: impronte uguali al manifesto |
+| 6. (f) "Cestina fino a 500 foto" | **passata** | `many_requested`=500, `many_result`=-1 (quindi `MANAGE_MEDIA` **non serve**), `many_is_trashed`=0. L'utente ha ripristinato tutto da Galleria (Seleziona tutto → Ripristina): `untrash_back_same_id`=500, 527 file in `mcg-prova`, impronte uguali al manifesto (circa 17 s per rileggere 9,6 GB) |
+| 7. Permesso di scrittura e riscrittura | **passata** | `write_dialog`=-1, `write_code`=0, `write_ms`=28, `write_size_before` e `write_size_after`=677, `write_generation_delta`=0. Impronte uguali dopo la prova |
+| 8. GA-7: Libreria, 3 foto, "Elimina dal telefono" | **passata, con due difetti** (D-B1, D-B2) | Tre foto di `mcg-prova` scelte dalle celle "non leggibile, al sicuro sul NAS": `IMG_mcg_0351`, `IMG_mcg_0228`, `IMG_mcg_0338`. Foglio "Eliminare 3 foto?", poi dialogo di Android confermato dall'utente: i 3 file escono dal telefono. Raccolte, "Eliminati di recente" chiede lo sblocco del telefono (impronta o PIN, fatto dall'utente), poi elenca **3 elementi, "restano 29 giorni"**. "Seleziona tutto", poi "Ripristina 3 elementi" apre un dialogo di Android; confermato dall'utente, i 3 file tornano nella cartella. La pagina ha lo schermo protetto (screenshot nero): le miniature non si vedono da qui, ma i file sono da 44 B e non ne hanno comunque |
+
+**D-3 oggi.** Il comportamento di Samsung non è cambiato (il cestino di sistema sposta i file nel cestino di Galleria, `IS_TRASHED`=0 nella cartella), ma l'app ora lo dice nei testi e `trash_elsewhere_is_trashed`=5 mostra che le righe si ritrovano fuori dalla cartella. Resta da dire con il codice se "Libera spazio" ne beneficia (B-S9 non è stata rifatta: F37 e F38 sono già passate il 20-21/10).
+
+### Difetti e osservazioni di B-S1
+
+**D-B1 (bassa, testo): il foglio "Elimina dal telefono" della Libreria dice sempre "Non c'è ancora una copia sul NAS".**
+- **Passi.**
+  1. Libreria, Seleziona, 3 celle che dicono "al sicuro sul NAS" (qui foto `IMG_mcg_*` da 44 B del backup).
+  2. "Elimina dal telefono".
+  3. Il foglio "Eliminare 3 foto?" dice: "Non c'è ancora una copia sul NAS: dopo 30 giorni nel cestino di sistema non si potrà recuperare."
+- **Cosa non torna.** Nel catalogo tutte e 3 hanno `media.safety`=`safe`, `presence`=`nas_only` dopo l'eliminazione e una posizione NAS `present` con `verified_at`. La pagina Backup dice "519 media al sicuro sul NAS". L'avviso è quindi falso per queste foto.
+- **Causa probabile.** Il testo è fisso: `LibraryDeleteSheet` in `feature-library/src/main/kotlin/dev/pampa/mycloudgallery/feature/library/library/LibraryParts.kt` (righe 498-519) usa sempre `R.string.library_delete_location_phone_detail` (`strings_library.xml`, riga 76); il commento sopra dice "l'avviso che sul NAS non c'è ancora una copia" (D14). Non guarda lo stato di sicurezza della selezione.
+
+**D-B2 (bassa, testo): il banner di "Eliminati di recente" dice che l'app non può ripristinare, ma può.**
+- **Passi.**
+  1. Raccolte, "Eliminati di recente" (sblocco del telefono).
+  2. Il banner dice: "Su questo telefono quello che elimini da MyCloud Gallery va nel Cestino di Galleria, non qui: l'app non lo vede e non lo può ripristinare."
+  3. Le 3 foto eliminate dall'app sono invece elencate (3 elementi, "restano 29 giorni") e "Ripristina 3 elementi" le riporta nella cartella con un dialogo di sistema.
+- Va riscritto il banner, oppure il pulsante è fuori luogo.
+
+**O-B1 (strumento, da guardare a mano): la griglia della Libreria non scorre con `adb input swipe`.** Un trascinamento da 1.500 px la sposta di circa 50 px. Il cursore "Scorri la timeline" a destra funziona. Nelle altre pagine (Impostazioni, Prove guidate) lo scorrimento da `adb` va. Può essere un limite dei gesti sintetici su una griglia da 8.000 elementi: da provare con il dito.
+
+**O-B2.** Il cestino della Galleria usato a mano si vede dalla shell, quello dell'app (`createTrashRequest`) no. Per ripristinare serve sempre un dialogo di sistema o l'utente.
+
+**O-B3 (privacy).** Una cella in cima alla Libreria che diceva "solo sul telefono, data stimata" risultava, dalle Informazioni, un'immagine di WhatsApp dell'utente: ho letto solo le Informazioni in testo e non l'ho fotografata. Le foto vere sono in cima alla Libreria (stessa data di oggi): le foto di prova si trovano con le celle che dicono "al sicuro sul NAS".
+
+
+## B-S2 · F25 (file messi dal PC prima del backup) e F26 (foto cancellata e ripristinata)
+
+**Semina nuova.** Il primo backup di `mcg-prova` era già stato fatto, quindi per F25 e F26 ho rifatto la semina: `s25.ps1 -Step clean -Yes` (17:25), poi `-Step seed -Run 20261021-172617-22967a70 -Seed 44 -Photos 600 -BigVideos 1 -BigVideoMb 3072` con i fixture senza i tre finti: **606 file, 3,22 GB** (un solo video grande, perché le prove lunghe sono già fatte; serve ancora per F40). Preset cambiato da "Massimo" a **"Notte"** per tenere fermo il backup (la capsula dice "511 in coda. Attesa della notte"; `PhotoBackupWorker: tappa: Wait`) e rimesso a "Massimo" alle 18:14 (controllato nel file `rule_settings`: `rule.preset` = `MAXIMUM`). Il manifesto di verifica ha le 606 righe `phone=` e **1.164 righe `pre=`**: le 1.162 copie già sul NAS dei tre giri precedenti, prese dal catalogo dell'app (`backup_item`, `final_path` e `sha256`, con le 95 foto modificate da F43-tel a stato finale), più le 2 righe di F25. Percorso di una copia: `mcg-campo/Backup/Telefono di test/mcg-prova/AAAA/MM/` (con `mcg-prova` in mezzo: il copione non lo scrive).
+
+**F25 · preparazione.** Nomi mai usati sul NAS (i giri vecchi arrivavano a `IMG_mcg_0430`, il nuovo a `IMG_mcg_0509`): `IMG_mcg_0508.jpg` "diverso" (stessi nome e primi 44 byte, più 24 byte in coda, 68 B) e `IMG_mcg_0507.jpg` "identica" (copia esatta di 44 B). L'utente li ha copiati in `\\<NAS>\test\mcg-campo\Backup\Telefono di test\mcg-prova\2026\10\` da Esplora risorse, nessuna richiesta di sostituzione.
+
+| Passo | Esito | Misure e note |
+|---|---|---|
+| F25 · "diverso" | **passata** | Nel catalogo l'elemento di `IMG_mcg_0508.jpg` ha `planned_path` `…/IMG_mcg_0508.jpg` e `final_path` `…/IMG_mcg_0508 (2).jpg` (`name_attempt` 1): il nostro arriva come "(2)" e quello dell'utente resta com'è |
+| F25 · "identica" | **passata** | Elemento `new_copy` di `IMG_mcg_0507.jpg` in stato `linked_existing`: `final_path` è il file dell'utente, collegato **senza caricamento** (nessun "(2)") |
+| Primo backup ("Fai ora", 17:46) | **ok** | Foto: in 2 minuti dall'avvio 88 media già al sicuro per copie identiche dei vecchi giri (fixture), il resto caricato; alla fine le due sorgenti dicono 344 su 344 e 255 su 255 al sicuro. Video da 3 GB (3.221.227.552 B): in caricamento 17:49-17:56 (circa 10 MB/s), poi `uploaded`, rilettura 17:59-18:07, `publishing` fino alle 18:07:50, `done` alle 18:07:55; il giro dei video è chiuso una volta per budget di tempo (`stop=budget`, 17:59 e 18:07) e poi `complete`. Totale elementi nuovi: 510 `done` + 1 `linked_existing`. Traffico del Wi-Fi (`wlan0`, altre app comprese): da 3,58 a 6,95 GB inviati e da 0,78 a 13,49 GB ricevuti in 23 minuti (la rilettura del video da 3 GB conta per 3 GB di ricevuti) |
+| F26 · foto cancellata prima del backup | **non passata (D-B3)** | L'utente ha cestinato `IMG_mcg_0509.jpg` (una foto con data 21 ottobre 2026, 17:26, mai salvata). Dopo la Galleria: il catalogo la dà `safety`=`lost`, `presence`=`none`, `backup_todo`=0; la tabella `backup_problem` è **vuota**; la pagina Backup, il piede della Libreria e Diagnostica → Backup **non dicono niente**; la foto sparisce dalla Libreria (8.106 → 8.105 foto) e dai conteggi della sorgente (344 media, 342 al sicuro, 1 in coda). Il messaggio "Cancellati prima del backup · Foto o video: apri il cestino di Galleria" (`backup_footer_lost_before_backup_*`) non compare mai |
+| F26 · foto ripristinata | **passata, con una nota** | L'utente l'ha ripristinata dal Cestino della Galleria alle 17:52, mentre il backup caricava il video. Il catalogo la rivede (`present`, `no_nas_copy`, `backup_todo`=1) ma **la prima corsa dell'utente non la prende**: aveva già chiuso il giro delle foto alle 17:48 e il lavoro finisce `DONE` alle 18:07:55; la capsula dice "1 in coda. Attesa della notte". Con un secondo "Fai ora" (18:11) il giro delle foto fa `fatti=1`: **un solo elemento** `done` (id 1773), al solito percorso, **nessuna copia "(2)"**, `safe`/`phone_and_nas` |
+| F26 · il suggerimento | **non verificabile** | Il messaggio del suggerimento non è mai comparso (D-B3) |
+
+### Difetto di B-S2
+
+**D-B3 (media): una foto cancellata in Galleria prima del backup sparisce senza nessun avviso.**
+- **Passi.**
+  1. Telefono con foto nuove non ancora salvate (qui una semina nuova, preset "Notte"), app aperta.
+  2. In Samsung Gallery cestinare una foto mai salvata.
+  3. Guardare la pagina Backup, il piede della Libreria, Diagnostica → Backup.
+- **Cosa si vede.**
+  - Nessun problema: `backup_problem` vuota, nessun "Cancellati prima del backup".
+  - Il media nel catalogo è `lost` con `presence` `none`: sparisce dalla Libreria e dai conteggi, come se non fosse mai esistito.
+  - Anche due immagini di WhatsApp cancellate dall'utente sono `lost` senza nessun segno (sorgente non salvata: qui non conta).
+- **Atteso (copione, F26).** "Persa prima del backup" con il suggerimento e poi tutto al sicuro.
+- **Causa probabile.** `MediaCatalog.markBackupProblem(.., "lost_before_backup")` lo chiama il motore quando un candidato sparisce **dopo** essere entrato in lista; se la riga sparisce prima, il media `lost` non è più candidato (`backup_todo`=0) e nessuno segna il problema. Cfr. `MediaCatalog.kt` (righe 1076-1092 e 2423) e `BackupCatalogTest` (righe 320-453), che provano solo il caso "sparita durante il giro".
+- **Nota collegata.** Dopo il ripristino la foto non entra nel giro in corso se questo ha già chiuso la fase delle foto: aspetta il giro dopo (qui "Attesa della notte") o un altro "Fai ora". Non perde niente.
+
+### B-S2 · verifica dal PC (un solo tentativo, sola lettura)
+
+`area2.ps1 -Mode backup -Stage verify -Manifest <606 righe phone= + 1.164 righe pre=>`, avviata alle 18:16 e finita alle 18:52 (Gradle 36 min 5 s, `--max-workers=2`, RAM libera 6-7 GB prima dell'avvio; lettura del NAS a circa 17 MB/s). Login accettato al primo tentativo. Le impronte del telefono prima della verifica: uguali al manifesto (606 file).
+
+| | |
+|---|---|
+| **Risultato** | "file riletti con SHA-256: **1.674** (27.263.185 KiB) · **1 VIOLAZIONE**: [4. nessuna perdita] **16 file del telefono non sono sul NAS**". Nessun file a metà, nessuna sostituzione, nessun doppione, nessun temporaneo `-bk-`; i file `pre=` (1.164, compresi i due messi dall'utente per F25) hanno ancora i loro byte |
+| **Le 16** | Sono 15 contenuti dei fixture (`20240312_122000.heic` e `.jpg` hanno gli stessi byte): `20240312_112000_001`, `20240312_114000_002`, `20240312_122000`, `exif-03`, `exif-04`, `exif-05`, `exif-07`, `exif-11`, `exif-12`, `exif-13`, `IMG_20240312_101535`, `motion-google-v1-specifica`, `orientamento-7`, `tratto-panorama-ruotato`, `orientamento-1`. **Non è una perdita**: sono i fixture che F43-tel aveva modificato nei giri vecchi. Sul NAS, al solito percorso, c'è la versione modificata (le righe `pre=` hanno la sua impronta) e l'originale sta in `mcg-campo/Versioni/Backup/Telefono di test/mcg-prova/2024/03/<nome> (originale).jpg`. Il catalogo lo sa: tutti e 16 sono `present` sul telefono e hanno la posizione NAS in `Versioni/`; per tutti e 16 l'impronta del telefono è quella di un vecchio `new_copy` `done` il cui percorso ha poi una versione con `archive_path` (controllato nel database: 16 su 16) |
+| **Causa** | Stessa famiglia di D-14: il verificatore guarda `Backup/` e non `Versioni/` finché il manifesto non ha righe `edit=`, quindi non sa che l'originale è lì. L'app, giustamente, considera al sicuro un contenuto che ha già un originale archiviato. Per il manifesto di prova la correzione è mettere in `pre=` anche i file di `Versioni/` (o ignorare l'invariante 4 per i 15 contenuti) |
+| **F25 e F26** | Confermate dalla verifica: `IMG_mcg_0508 (2).jpg` ha i byte del telefono, `IMG_mcg_0508.jpg` (dell'utente) è invariato, `IMG_mcg_0509.jpg` c'è una volta sola |
+
+Rapporto: `core-backup/build/chaos/backup-verify-20261021-172617.txt` (copia in `build\campo\20261021-165146-8c4811b9\backup-verify-b-s2.txt`).
+
+
+## B-S3 · F4, F5, F9: le modifiche dal PC
+
+**Preparazione.** Mancavano i campioni sul NAS (§2.8 del copione). Ho preparato sul PC `build\campo\campioni\MCG-prova\` (99 fixture, ognuno con 24 byte casuali in coda per renderli unici: senza, sarebbero stati copie identiche dei file del telefono e del backup, non "solo NAS"), `build\campo\mille\mille\` (1.000 JPEG da 701 B) e `...\F9\` (600 JPEG), più `F9extra\` (altri 200, per avere 800 file in `F9`: i 300 rinominati nella seconda parte di 4a-R9 non c'erano). L'utente li ha copiati in `test\mcg-campo\` (`campioni` 99, `mille` 1.000, `F9`) e in `test-comune\mcg-campo\campioni\` (99; la cartella `mcg-campo` in `test-comune` non c'era e l'ha creata lui). Nessun errore di Windows.
+
+**Prima scansione dopo la copia** (avvio a freddo, 18:26): `test` = 3.478 file, 1.780 invariati, **1.698 rilevati** (1.000 + 600 + 98 di `campioni`: un file dei 99 non è stato preso come media, `NAS_SCAN_NOT_MEDIA` dice 2 in tutto); `test-comune` = 98 rilevati. Libreria da 8.107 foto e 404 video a 9.891 foto e 414 video. Segnata come preferita `IMG_mille_0003.jpg`. Esportazione P1 salvata dall'utente (`diag-P1.json`): `NAS_SCAN_STATE` `detected`=1796, `files`=3576, `folders`=29, `unchanged`=1780.
+
+| Prova | Esito | Misure e note |
+|---|---|---|
+| **F4** rinomina di `mille` in `mille-rinominata` (18:57) | **passata** | Il Verify del 19:02 dice `spostati`=1000, `rilevati`=1 (la modifica di F5), `spariti`=1 (la cancellazione di F5): le 1.000 foto **non** sono state riscoperte come nuove. Nel catalogo 1.000 posizioni `present` sotto `mcg-campo/mille-rinominata/`, nessuna `absent`; il preferito è ancora lì (Raccolte → Preferiti "1 elemento", percorso aggiornato a `mille-rinominata/IMG_mille_0003.jpg`); Libreria 9.891 → 9.890 (la sola foto cancellata). Il **contatore di preparazione** non è nell'esportazione e non l'ho confrontato (P2 non fatta: il log del Verify dà gli stessi numeri) |
+| **F5** foto ruotata con Paint e foto cancellata | **passata** | `IMG_20240312_101535.jpg` passa da 817 a 1.790 B sulla stessa riga (nuova versione, stato `unverified`, `nas_only`); `PXL_20240312_101535123.jpg` diventa `absent`/`lost` e **esce dalla Libreria** (9.891 → 9.890); la copia in `test-comune` (`not_mine`) non cambia |
+| **F9** 500 file rinominati `.locked` (19:07) | **passata** | Alla scansione (19:07:52) `stop=FROZEN`: i file visti scendono da 3.677 a 3.177 e nessuno è segnato sparito. Nel piede della Libreria: "**Lavori fermi: cambiamenti anomali.** Sul NAS sono spariti molti file insieme. Finché non controlli, sul NAS non si scrive e non si cancella niente" e "**Backup fermo: cambiamenti anomali. Controlla nella Diagnostica.**". La Libreria resta a 10.090 foto (**nessuna assenza segnata**). Toccare la capsula apre la Diagnostica (**NA-9**); in "NAS nella Libreria" c'è la scheda `NAS_SCAN_FROZEN` ("Cambiamenti anomali sul NAS", "Le scritture automatiche sono ferme e nessun file è stato segnato come sparito") con "Ho controllato, continua" |
+| **F9** gesto "Ho controllato, continua" | **passata** | Il dialogo chiede di riscrivere il numero: "Sul NAS sono cambiati in modo anomalo **501** file" (500 più la modifica di F5). Scritto 501, confermato: il giro dopo (19:10:57) ha `spariti`=500 e `stop`=null; le 500 foto escono dalla Libreria (9.590) |
+| **F9** processo nuovo (NA-4, NA-5) | **passata** | `force-stop` e riapertura (19:11): `spariti`=0, `stop`=null, nessun nuovo congelamento con lo stesso numero (**NA-4**); il piede non dice più "Lavori fermi" (**NA-5**) |
+| **F9** altri 300 file rinominati (19:13), 4a-R9 | **passata** | Avvio a freddo 19:13:36: `stop=FROZEN` di nuovo (file visti 2.877); il dialogo dice "300 file": la conferma di prima valeva solo per il numero visto. Piede "Lavori fermi" e "Backup fermo" di nuovo |
+
+### Osservazioni di B-S3
+
+**O-B4 (copione): l'app non guarda da sola il NAS entro 3-4 minuti.**
+- **Cosa ho visto.** Dopo F4 + F5 (modifiche alle 18:57) e quattro minuti di attesa con l'app aperta, nessuna scansione: l'ultima era delle 18:55. Il Verify è partito solo con un **avvio a freddo** (`am force-stop` e riapertura), anche a 7 minuti dall'ultimo. Lo stesso per F9 (due volte). Le scansioni finite di oggi (`events.log`): 05:48, 07:09, 13:26, 13:54, 16:52; poi, dalla mia sessione, solo avvii a freddo (18:26, 19:02, 19:05, 19:07, 19:11, 19:13) e il giro dopo il gesto (19:10). Gli intervalli in background sono di ore (+324, +28, +177 minuti), non di minuti.
+- **Cosa prevede il progetto.** `fase4-progetto.md` (righe 262 e 365): la verifica parte "a ogni apertura dell'app se l'ultima ha più di 15 minuti, di notte, e quando i dischi sono svegli"; in background con `lastDiskTouchAt` recente (10 minuti), "altrimenti al massimo ogni 6 ore e nella fascia notte". È la regola E-R15: controlli limitati per non svegliare i dischi (`fase2-progetto.md` riga 254: la sonda è solo TCP 445, mai `list`).
+- **Conclusione.** Il comportamento è quello previsto; è il copione a sbagliare ("aspetta 3 minuti"). Va riscritto come "riapri l'app (se l'ultima verifica ha più di 15 minuti) oppure aspetta la fascia notte". Nessun difetto dell'app. Un avvio a freddo parte comunque, senza guardare i 15 minuti (comportamento di `MyCloudGalleryApp` che accoda `scanNow`, già visto in D-2).
+
+**O-B5 (notifica del congelamento): nessuna notifica sul momento, solo il piede della Libreria e la Diagnostica.**
+- **Cosa ho visto.** Al congelamento (19:07 e 19:13) non è arrivata nessuna notifica con il testo del congelamento (cercata con `dumpsys notification`: nessuna voce dell'app con quel testo). L'avviso c'è nel piede, nella scheda `NAS_SCAN_FROZEN` e in "Backup fermo". Il riepilogo giornaliero non l'ho aspettato.
+- **Cosa prevedono i documenti.** `fase4-progetto.md` riga 269 dice ancora "congelamento **subito** (eccezione alla proposta 12, domanda Q6)", ma la risposta a Q6 è **(b)**: "nel riepilogo giornaliero, non con una notifica immediata. D10 cambia: il congelamento resta immediato, l'avviso va nel riepilogo giornaliero (proposta 12) e in evidenza nella Libreria e in Diagnostica" (`fase4-progetto.md` riga 991, `decisioni.md` righe 318 e 335). Quindi il comportamento **è quello deciso**; la riga 269 del progetto è rimasta con la vecchia (a).
+
+**O-B6 (chi ha dato il consenso).** Il gesto "Ho controllato, continua" del primo congelamento (con il numero 501 riscritto) **l'ho dato io dalla nostra app, non l'utente**: l'utente aveva fatto lui le rinomine dal PC, ma il gesto serve a dire "ho controllato dal PC". Vale per NA-4 e per il giro successivo: i numeri qui sopra descrivono il comportamento dell'app, non una conferma dell'utente. La seconda conferma (300 file) è stata lasciata all'utente.
+
+**O-B7 (strumento).** Con il campo del numero in primo piano, dopo `input text` compare sopra la nostra app il riquadro "Registrazione KeyVoice" di `com.keyvoice.app` (si vede nella schermata; sta nella parte bassa, sulla tastiera). Non l'ho toccato: ho premuto il pulsante del dialogo, che sta più in alto. La guardia a coordinate (`guard_touch`) si è fermata a ragione; ho dovuto confermare a mano la posizione con uno screenshot. Il riquadro stava registrando: l'impostazione è dell'utente.
+
+
+## B-S4 · F15: operazioni sui file dall'app (parziale: fermata alle 20:05 per una pausa chiesta dal coordinatore)
+
+**Adattamento alle regole di questa sessione** (approvato dal coordinatore). Il copione vuole la semina dal PC con `area.ps1 -Mode seed` sotto `mcg-it/<giro>/`; qui il PC non scrive sul NAS e l'app scrive solo dentro `mcg-campo/`. Quindi: l'utente ha copiato `build\campo\F15\sorgente` (300 JPEG da 701 B) in `test\mcg-campo\F15\sorgente`; le operazioni dell'app sono in `mcg-campo/F15/…` e la destinazione nell'area comune è `test-comune/mcg-campo/F15/dest` (cartelle create dall'app). La verifica di fine sessione con `area.ps1 -Mode verify` non si può usare (legge il layout di `mcg-it`): al suo posto il catalogo dell'app (`nas_op`, `nas_trash_entry`, conteggi dei percorsi) e Diagnostica. Guida dell'app: l'ho fatto io con `uiautomator`, per tutti i passi tranne quelli che richiedono lo sblocco del telefono o il PC. Prima dell'inizio l'app era sbloccata dal congelamento di B-S3 (conferma dell'utente alle 19:16:53).
+
+**Dove mi sono fermato.** Nessuna operazione sul NAS in corso: tutte e 14 le operazioni del diario (`nas_op`) sono `done`, nessun dialogo aperto, app in background (tasto Home), Wi-Fi acceso, preset "Massimo", nessun comando `adb`, `logcat` o script mio in esecuzione (resta solo il processo `adb` del server di sistema).
+
+| Passo del copione | Esito | Misure e note |
+|---|---|---|
+| 2. Crea `prova-a`, rinomina in `Prova-A` (solo maiuscole), crea `prova-b` | **fatto, ok** | `create_folder` `done` (0,1 s), `rename` `done` (0,2 s: la rinomina "solo maiuscole" passa), `create_folder` `done`. La cartella ora si chiama `Prova-A` |
+| 3. 5 file in `prova-b` | **fatto, ok** | Scelta della destinazione, riepilogo "Spostare 5 elementi? 3,5 kB", `move` `done` in 7,5 s (5 elementi, 3.505 B) |
+| 4. 20 file nell'area comune | **fatto, ok** | Riepilogo "Le vedranno tutti i familiari" e "Prima copio, poi controllo… l'originale va nel cestino del NAS per 30 giorni". `move` `done` in **8,4 s** (20 elementi, 14.020 B). In `dest` 20 elementi. Sorgenti nel cestino del NAS (`nas_trash_entry`, motivo `move`). **Vedi O-B9** |
+| 5. Elimina 2 file | **fatto, ok** | Foglio "Eliminare 2 elementi? Vanno nel cestino del NAS per 30 giorni… li trovi in Eliminati di recente del NAS". `trash` `done` in 0,55 s (2 elementi, 1.402 B); due voci `trashed` (motivo `delete`) |
+| 5. "Eliminati di recente", ripristino di uno (GA-7, miniature) | **non fatto** | Serve lo sblocco del telefono dell'utente (impronta o PIN) per aprire la pagina |
+| 6. Nome in conflitto | **fatto, ok** | Rinominando `F15_0030.jpg` in `F15_0031.jpg` il campo diventa rosso, "**Esiste già qualcosa con questo nome.**", il pulsante "Rinomina" è spento e nessuna operazione parte |
+| 7. Cartella intera (`prova-b` in `dest`, fra aree) | **fatto, ok** | Riepilogo "6 elementi, 1 cartella e 5 file, 3,5 kB", `move` `done` in 2,0 s |
+| 8. "Elimina subito" e doppio tocco (4b-R6) | **non fatto** | Nel foglio "Eliminare…" della cartella (`sorgente`) **non c'è** "Elimina subito": ci sono solo "Elimina" e "Annulla". Probabilmente sta in "Eliminati di recente del NAS" per le voci già nel cestino: da guardare lì, dopo lo sblocco |
+| 9. File aperto in Paint sul PC (E-N13, NA-2) | **non fatto** | Serve l'utente al PC |
+| 10. (R2 della 4B) elimina `mille-rinominata` e annulla | **fatto, ok** | Il foglio dice "1 elemento, **1 cartella e 1.000 file, 701 kB**" (non "0 B"), "**Sono molti file** · Nel cestino del NAS vanno 1.000 file. Controlla che sia la cartella giusta", "Le cartelle vanno nel cestino intere"; annullato, niente è partito |
+| 11. (R8 della 4B) 60 foto di `mille-rinominata` in `test-comune/mcg-campo` | **fatto** | Scelte `IMG_mille_0001`-`0060`; riepilogo "Spostare 60 elementi?"; `move` `done` in **22,1 s** (60 elementi, 42.060 B). **Non ho guardato il piede della Libreria** dopo questo spostamento (né dopo gli altri): "Lavori fermi" non verificato |
+| 11. Tutta la cartella da 1.000 (ora 940 file) | **non fatto** | Le navigazioni della mia ultima sequenza non hanno trovato i pulsanti (ero uscito dalla cartella) e non è partita nessuna operazione |
+| Operazioni in corso, NA-1 ("In coda" se ne parte una nuova mentre una lunga è in corso) e `NAS_OPS_*` in Diagnostica | **non fatto** | |
+| Verifica di fine sessione | **non fatta** | Vedi sopra: serve un adattamento del verificatore o il confronto dei conteggi dal catalogo |
+
+**Stato del NAS lasciato da B-S4** (da controllare con la prossima scansione):
+- `test/mcg-campo/F15/sorgente`: la cartella `Prova-A` (vuota) e i file `F15_0028`-`0300`: 273 file = 300 − 5 (in `prova-b`, poi spostata) − 20 (a `dest`) − 2 (eliminati: `F15_0026` e `F15_0027`). Il foglio di eliminazione di `F15_0033` l'ho annullato, quindi quel file c'è ancora.
+- `test-comune/mcg-campo/F15/dest`: 20 file `F15_0006`-`0025` e la cartella `prova-b` con 5 file (`F15_0001`-`0005`).
+- `test/mcg-campo/mille-rinominata`: 940 file (`IMG_mille_0061` e seguenti). In `test-comune/mcg-campo/`: 60 file `IMG_mille_0001`-`0060` e `F15/`.
+- Cestino del NAS di `test`: 2 voci `delete` e le voci `move` dei file spostati fra aree (20, 60 e la cartella `prova-b` con i suoi 5 file; da contare dal catalogo).
+- Nei fatti: `Prova-A` vuota, la sorgente della cartella `prova-b` spostata è sparita da `sorgente`.
+
+**Da dove riprendere.** (1) L'utente sblocca "Eliminati di recente" (impronta o PIN): ripristino di una voce, "Elimina subito" con il doppio tocco. (2) Spostare tutta `mille-rinominata` in `test-comune/mcg-campo` e guardare il piede ("Lavori fermi" non deve comparire, neanche dopo gli spostamenti di prima). (3) Il passo con Paint: l'utente apre un file di `F15\sorgente` su `\\<NAS>\test\mcg-campo\F15\sorgente\` e io provo a rinominarlo dall'app. (4) Operazioni in corso e Diagnostica `NAS_OPS_*`. Poi B-S5.
+
+### Osservazioni di B-S4
+
+**O-B8 (strumento, importante per le prove): `uiautomator dump` con il campo di testo attivo fa partire la registrazione di KeyVoice, che scrive nel campo.** Con la tastiera aperta in un campo (nome di una cartella, numero del congelamento) dopo un `dump` compare il riquadro "Registrazione KeyVoice" di `com.keyvoice.app` e nel campo è finito "Grazie per la visione!" (testo scritto da KeyVoice, non da me): `prova-a Grazie per la visione!`. Ho annullato il foglio. Per il resto della sessione scrivo nei campi **senza** lanciare `uiautomator` mentre la tastiera è aperta: tocco del campo, `input text`, tocco del pulsante a coordinate (con uno screenshot per vederle). Il riquadro registra dal microfono: l'utente può spegnere l'aggancio di KeyVoice per le prove.
+
+**O-B9 (da confermare): creare una cartella dentro la schermata "Sposta" chiude la scelta della destinazione.** Passi: Cartelle NAS, selezionare 20 file, "Sposta", in un'area comune toccare "Nuova cartella" nella scelta della destinazione, scrivere un nome, "Crea cartella". La cartella nasce, ma la scelta della destinazione si chiude (resta la schermata normale della cartella) e la selezione non viene più spostata: ho dovuto rifare la selezione. Il copione (passo 4) chiede proprio di crearle lì. Visto una volta sola.
+
+**O-B10.** Lo spostamento fra aree è lento rispetto a uno nella stessa area: 20 file 8,4 s (0,42 s a file), 60 file 22 s (0,37 s a file), contro i 5 file spostati dentro la stessa share, che hanno impiegato 7,5 s (non ne ho indagato la causa: forse la prima apertura della cartella), e la cartella da 6 elementi fra aree in 2,0 s. Con 940 file sarebbero circa 6 minuti.
+
+
+### B-S4 · ripresa (21:00-22:20) e chiusura
+
+Il telefono è tornato disponibile alle 20:51. Da qui in poi nei campi di testo scrivo alla cieca (tocco del campo, `input text`, tocco del pulsante a coordinate, schermata per controllare) e non lancio `uiautomator` con la tastiera aperta (richiesta del coordinatore, O-B8).
+
+| Passo | Esito | Misure e note |
+|---|---|---|
+| 11. Tutta la cartella `mille-rinominata` (941 elementi: 1 cartella e 940 file, 659 kB) in `test-comune/mcg-campo` | **passata** | `move` `done` in **8 min 15 s** (0,53 s a file), tutti i 941 elementi `done`, nessun errore, nessuna perdita di file. Il piede della Libreria **non** dice "Lavori fermi" dopo questo né dopo gli spostamenti di 20 e 60 file (**4b-R8**); dopo la fine "NAS aggiornato" alle 21:04 |
+| NA-1 (operazioni nuove mentre una lunga è in corso) | **passata** | Operazioni in corso: "Sposto 941 elementi · In corso · 31% · 293 di 941 elementi · 205 kB di 659 kB" e, sotto, "Creo una cartella · **In coda** · 1 elemento · 0 B, in coda". La cartella (`coda-na1`) e un ripristino messi in coda sono partiti da soli a fine spostamento: `create_folder` dopo 389 s, `restore` dopo 122 s dal tocco |
+| 5. "Eliminati di recente del NAS" e ripristino di uno | **passata** | È una pagina **diversa** da "Eliminati di recente" del telefono e **non chiede lo sblocco**. Raccolte, "Eliminati di recente del NAS": "Cestino del NAS · 581 elementi" (poi 1.026), per ogni voce il nome, "Da mcg-campo / F15 / sorgente · 701 B" e "Restano 30 giorni · Copia di partenza di uno spostamento" oppure "Eliminato da questo dispositivo". Nessuna miniatura: icona generica di immagine (**GA-7 per il NAS**). Ripristinata `F15_0026.jpg` ("Ripristinare 1 elemento? Tornano dove erano. Niente viene sostituito… se il nome è occupato aggiungo (2)"): `restore` `done`, partito dopo 122 s perché in coda dietro lo spostamento |
+| 8. "Elimina subito" e doppio tocco (**4b-R6**) | **passata (non confermata fino in fondo)** | Il pannello 1 "Eliminare subito 1 elemento? Non passano dal cestino del NAS… Non si possono ripristinare… Hai un backup esterno?" ha "Continua"; un doppio tocco rapido (due `input tap` di fila) porta al pannello 2 "**Ultima conferma** · Dopo questo tocco non si torna indietro" e **non** conferma da solo. Ho annullato: l'eliminazione definitiva di una voce dal cestino sta in `.mycloudgallery/trash/`, fuori da `mcg-campo/`, e per le regole non la confermo io |
+| 9. File aperto sul PC (**E-N13, NA-2**), con Paint | **non riprodotto** | Con `F15_0100.jpg` aperto in Paint sul PC la rinomina dall'app va a buon fine subito (`rename` `done` in 0,1 s): Paint non tiene il file bloccato |
+| 9. File aperto sul PC, con un blocco esclusivo | **passata** | L'utente ha aperto `F15_0101.jpg` con PowerShell (`FileShare None`, sola lettura). Rinomina dall'app: `rename` in **pausa**, `error_code=locked`, elemento `renaming` con tentativi 1, 2, 3; il lavoro delle operazioni risponde "Later" a 22:11:30 e 22:13:31 (ogni circa 2 minuti), poi la prossima partenza è a 5 minuti (22:19). Esportazione E2 salvata dall'utente durante il blocco (22:13): `NAS_OPS_STATE` = `opsActive` 1, `opsLocked` 1, `reason.LOCKED` 1. L'utente ha sbloccato (`$f.Close()`) verso le 22:14: **la rinomina riparte da sola** e finisce alle **22:18:34** (circa 4 minuti e mezzo dopo lo sblocco, `fatti 1, fermi 0`), `done` con 3 tentativi, senza toccare niente |
+| 4. Diagnostica (`NAS_OPS_*`) | **passata** | Nell'E2: nessun errore; `NAS_OPS_STATE` `opsClosed` 18, `opsRunning` 0. Dopo lo sblocco il diario è tutto `done` (18 operazioni chiuse + la rinomina) |
+
+### Altre osservazioni
+
+**O-B11 (da guardare): `Failure(NotFound, FINAL)` due volte durante lo spostamento da 941 elementi** (20:59:52 e 21:01:57, `NasSession: operazione fallita`). Nessun elemento `nas_op_item` in errore e lo spostamento finisce `done`: probabilmente un passo interno (temporaneo o cartella già tolta) che il motore tollera. Non indagato.
+
+**O-B12 (strumento): i tempi di backoff di un'operazione bloccata (2, 2, poi 5 minuti)** vanno tenuti presenti nel copione ("entro qualche minuto": qui 4,5 minuti dopo lo sblocco).
+
+**O-B13 (esportazione E2).** `BACKUP_STATE`: `backupStatus` `UP_TO_DATE`, `queued` 2.068, `safe` 602, `folderChosen` `true`, `gate` `OPEN`: il numero "in coda" (2.068) è molto più alto dei media da salvare (le due sorgenti `mcg-prova` sono al sicuro): probabilmente comprende anche le cartelle non salvate, quindi non va letto come arretrato del backup (da capire con il codice). `BACKUP_SIMILAR_COPIES`: `pending` 59.
+
+**Stato lasciato da B-S4.** NAS `test`: `mcg-campo/F15/sorgente` con `Prova-A` (vuota), la cartella `coda-na1` in `F15`, `F15_0026` ripristinata, `F15_0100_nuovo.jpg` e `F15_0101_blocco.jpg`; `mille-rinominata` sparita da `test/mcg-campo` e ora in `test-comune/mcg-campo/mille-rinominata` (940 file) con 60 file `IMG_mille_00xx` e `F15/dest` (20 file e `prova-b` con 5 file). Il cestino del NAS di `test` ha 1.026 voci. Niente di tutto questo tocca il backup di `mcg-prova` né `Backup/`. Resta da togliere a fine blocco B (dall'utente): `test/mcg-campo/F15`, `F9`, `campioni`; `test-comune/mcg-campo/*` (compresa `mille-rinominata`) e le voci del cestino del NAS.
+
+
+---
+
+## Da qui in poi: l'utente non è più disponibile (22:30 del 21/10)
+
+Cambio di regole deciso dall'utente (riferito dal coordinatore alle 22:3x): non chiedo più niente all'utente; **posso confermare io i dialoghi di sistema di Android aperti dalla nostra app** (cestino, modifica, ripristino, scrittura, un semplice "Continua") solo per file di prova, mai quelli che cancellano per sempre; **posso usare la Galleria Samsung e "Il mio file" solo su file di prova** di `mcg-prova` (cestinare e ripristinare dal Cestino della Galleria solo file di prova, "Modifica", "Salva", "Salva copia", "Ripristina originale", "Modifica con…"); mai Gmail, WhatsApp, Telegram, Chrome o altre app (T-14, T-15, F39-F42 simulate con le prove guidate o con intent `adb shell am start` verso la nostra app); le scritture "dal PC" solo dentro `mcg-campo/` e solo con uno strumento del banco già esistente, altrimenti saltate e annotate. Sblocchi con PIN o impronta: li salto. Restano valide le altre regole (niente impostazioni del telefono salvo il Wi-Fi con `s25.ps1`, niente `pm clear`, niente installazioni, stop al primo `Auth`, batteria minima 35%). F20 e F12 approvati (con il conteggio dei file fuori dal cestino prima e dopo). Fermarsi prima delle 7:30.
+
+## B-S5 · F16-tel: mossa di massa tra due share con 100 interruzioni
+
+**Adattamento.** Niente `area.ps1 -Mode seed` (scrive dal PC sotto `mcg-it`): i 300 file `F16_0001`-`0300` (JPEG da 701 B) li ha copiati l'utente in `test\mcg-campo\F16\sorgente`; destinazione `test-comune/mcg-campo/F16/dest` (creata dall'app, in una schermata normale, vedi O-B9). Senza `-Verify` (il verificatore legge il layout di `mcg-it`): le invarianti le ho controllate dal catalogo dell'app, dal diario delle operazioni (`nas_op`, `nas_op_item`, `nas_trash_entry`) e dalle scansioni del NAS.
+
+| Passo | Esito | Misure e note |
+|---|---|---|
+| R9 della 4B / O3: "Ferma", poi morte del processo | **passata, con una differenza dal copione** | Spostamento di 300 file (17% a 22:33), "Ferma" nelle Operazioni in corso: l'operazione passa a **"Annullata · Fermata dopo 91 di 300. Quello che era già fatto resta fatto."** (non c'è "Riprendi": "Ferma" annulla il resto, `nas_op` `cancelled`, 91 elementi `done` e 209 `cancelled`). Poi `am force-stop` e riapertura: l'operazione resta `cancelled`, **non riparte da sola** (controllato per un minuto). Il copione ("Riprendi") descrive un comportamento diverso: da annotare come differenza fra copione e app |
+| 1ª corsa: 209 file rimasti (22:42-22:56), 100 interruzioni chieste, fermate alla 27ª | **ok** | 14 morti del processo (`kill -9`) e 13 cadute del Wi-Fi (3-20 s). Lo spostamento da 209 elementi finisce (`done`, 209 `done`) durante le interruzioni; le altre sono state inutili e ho fermato lo script |
+| 2ª corsa: mossa di massa da **1.179 elementi** (6 cartelle e 1.173 file, 901 kB) `F9` + `F15` + `campioni` da `test/mcg-campo` a `test-comune/mcg-campo/Z16` (23:01:24-23:37:52), seme 5, 100 interruzioni chieste | **passata** | **44 morti del processo e 33 cadute del Wi-Fi in 36 minuti** (77 interruzioni vere, 76 durante lo spostamento e la 77ª appena dopo la fine; ho fermato lo script a quel punto, ma il Wi-Fi era rimasto spento: l'ho riacceso con una chiamata breve di `s25.ps1`, l'unico modo ammesso. Da ricordare: non fermare lo script a metà di un taglio). Durata 2.168 s (36 min 8 s), contro 8 min 15 s di uno spostamento da 941 senza interruzioni: 3,3 volte più lento. In totale circa **103 interruzioni** (27 + 76) su spostamenti di massa fra aree; le prime 27 in parte dopo la fine dello spostamento da 209 |
+| Invarianti (dal catalogo e dal diario) | **passate** | `nas_op` `done`, 1.179 elementi tutti `done`, **0 con errore**, **1.179 percorsi di destinazione distinti** (nessun doppione), 1.173 voci di cestino `move` per i 1.173 file (copia di partenza di ogni file, "prima copio, poi controllo"), massimo 2 tentativi per un elemento. L'operazione è passata una volta da `paused` (caduta del Wi-Fi) e da `running`. Scansione del NAS a freddo dopo la prova (23:38): `test` = 1.780 file, tutti invariati, `spariti` 0 e `rilevati` 0; `test-comune` = 1.794 file. Il catalogo ha in `test` solo `Backup/…/mcg-prova` 1.674, `Versioni` 100 e 6 file alla radice (niente più in `F9`, `F15`, `F16`, `campioni`) e in `test-comune` 1.792 file: `Z16/F15/sorgente` 274, `Z16/campioni` 96, `F16/dest` 300, `F15/dest` 20 (+5 in `prova-b`), `mille-rinominata` 940, `campioni` 97, 60 file alla radice. Non ho potuto guardare il NAS dal PC (nessun verificatore di sola lettura per questo layout): file a metà e temporanei non verificati dal lato NAS |
+| NA-12 (la mossa avanza a fette vicine) | **non misurato** | |
+
+**Cosa resta da vedere (F16-tel).** Un controllo del NAS dal PC con il verificatore dopo uno spostamento di massa (usa `mcg-it`, quindi non applicabile qui); i 6 cartelle e i 1.173 file sono nel catalogo ma non ho confrontato le impronte.
+
+
+## B-S6 · F34 e T-16 (a): "Salva", "Salva una copia", "Torna all'originale" in Samsung Gallery (23:43-23:55, da solo)
+
+**Come.** Dalle Prove guidate T-16 "1 · Apri una foto in Samsung Gallery": la prova apre sempre la stessa foto di `mcg-prova`, `DCIM/mcg-prova/20240312_101533.jpg` (un fixture da 677 B, immagine sintetica blu 64×48). Nell'editor di Samsung (`SPEActivity`) ho ruotato e toccato "Salva"; poi "Salva una copia" dal menu a tre punti; poi, nel visualizzatore della Galleria, "Torna all'originale" dal menu a tre punti. Samsung chiede "Aumentare la risoluzione dell'immagine?": scelto "Mantieni risoluz. corrente". Solo su questa foto di prova.
+
+| Passo | Esito | Misure e note |
+|---|---|---|
+| 1. "Salva" (rotazione) | **ok** | Il file `20240312_101533.jpg` è riscritto **sul posto**: 677 → **2.832 B**. T-16 (a), confronto 1: `view_row_changed`=1, `view_same_id`=1, `view_rows_new`=0, `view_size_delta`=+2155, `view_generation_delta`=1140. Stesso `_ID`, riga cambiata |
+| 2. "Salva una copia" | **ok** | Nasce `20240312_101533(1).jpg` (971 B) nella stessa cartella, un **media nuovo** nel MediaStore: confronto 2: `view_rows_new`=1, `view_new_same_taken`=1 (**stesso `DATE_TAKEN`** dell'originale), `view_row_changed`=0. Per F41 la copia è quindi un media nuovo con la stessa data, non una versione |
+| 3. "Torna all'originale" | **ok, ma non torna ai byte di prima** | Il file diventa di **907 B** (impronta `a37fbd…`), **non** i 677 B originali (`1d4ac9…`): Samsung ricodifica l'immagine. Confronto 3: `view_row_changed`=1, `view_same_id`=1, `view_size_delta`=−1925. Quindi "Ripristina originale" della Galleria **non può** essere uno "scambio senza traffico": per l'app è una nuova modifica (altri byte) |
+| Backup dopo le tre operazioni ("Fai ora", 23:51) | **ok, con due note** | Giro finito in meno di 25 secondi, "Tutto al sicuro". Nel diario: la **versione** (elemento 1850: `version`, 907 B, l'originale archiviato in `mcg-campo/Versioni/Backup/Telefono di test/mcg-prova/2024/03/signal-2024-03-12-101536 (originale).jpg`) e la copia come **nuovo media** (elemento 1851: `new_copy` `…/2026/10/20240312_101533(1).jpg`, 971 B). La versione intermedia da 2.832 B non è mai arrivata sul NAS: il backup è partito dopo il ritorno all'originale. Nota 1: la versione è finita sul percorso `signal-2024-03-12-101536.jpg` perché `20240312_101533.jpg` e quel file hanno gli stessi byte originali e l'app li tratta come **un solo media** (le 6 copie identiche dei fixture): la modifica di uno ha riscritto il file del gruppo sul NAS. Nota 2: guardare O-B14 |
+| 4. 5b-R3: due "Salva" di fila, poi "Ripristina originale" dall'app prima di "Fai ora" | **non fatta** | Serve aprire il visualizzatore di quella foto nella nostra Libreria: nella Libreria da 9.890 foto non ho trovato un modo sicuro di raggiungerla (la griglia non scorre con `adb`, O-B1) e la cartella `2024/03` del NAS non mostra quel nome (il file del gruppo è `signal-…`). Da rifare a mano |
+
+### Osservazioni di B-S6
+
+**O-B14 (da confermare, riguarda F29 e Q4): il guardiano ha fatto 76 copie private "Backup/Area comune" senza un backup in corso.**
+- **Cosa ho visto.** Dopo gli spostamenti di F16 (alle 23:38 la scansione del NAS vede `campioni` e altro nell'area comune) il diario del backup contiene, a 23:44, **76 elementi `guard_copy` `done`** (110.389 B in tutto): copie in `test/mcg-campo/Backup/Area comune/AAAA/MM/<nome>` dei media propri la cui sola copia sul NAS è nell'area comune (`campioni`, 701 B l'uno). Le ha fatte il lavoro in background (preset "Massimo"), non un "Fai ora".
+- **Perché conta.** Il copione (§5, B-S8) dice che con la risposta Q4 **(b)** non ci sono copie private subito dopo lo spostamento nell'area comune, ma solo la protezione dei 30 giorni del cestino. Qui invece compaiono dopo pochi minuti. Quindi il comportamento osservato assomiglia a Q4 (a) ("copie private in `Backup/Area comune/`"): da confrontare con `docs/decisioni.md` (D9, Q4) e con `fase5-progetto.md`.
+- **Passi per rifarlo.** Spostare dall'app file propri (media, anche non salvati dal telefono) dalla share privata a quella comune; attendere il giro del backup in background; guardare `backup_item` `guard_copy` o `Backup/Area comune/` nel NAS privato.
+
+
+## B-S5 · F20 (cestino del NAS in minuti) e F12 (qualità delle anteprime), da solo (22/10, 00:19-01:05)
+
+### F20 · la pulizia del cestino con la ritenzione a 5 minuti
+
+L'utente ha consentito F20 e F12, solo sulle share di prova. Il coordinatore ha chiesto di contare i file **fuori** da `.mycloudgallery/trash/` prima e dopo e di fermarmi se l'app avesse provato a togliere altro. Non posso leggere il NAS dal PC: i file fuori dal cestino li conto con le scansioni dell'app (`giro Verify`: cartelle e file visti, escluse le cartelle di sistema `.mycloudgallery`).
+
+| | Prima (00:19) | Dopo (00:41) |
+|---|---|---|
+| Scansione `test` (file fuori dal cestino) | 34 cartelle, **1.859 file** | 34 cartelle, **1.859 file** |
+| Scansione `test-comune` | 16 cartelle, **1.794 file** | 16 cartelle, **1.794 file** |
+| Cestino di `test` (diario dell'app, `nas_trash_entry`) | 2.499 voci `trashed` (1 di eliminazione, 2.498 "copia di partenza" di spostamenti) più 1 `restored` | **2.299** `trashed`, **200 `purged`**, 1 `restored` |
+
+- **Esito: passata, con un adattamento.** Dopo la purga i file fuori dal cestino sono **identici** in entrambe le share (stesse cartelle e stessi file, nessuno `spariti`). L'app ha tolto **200 voci** del cestino di `test`, le **più vecchie** (19:45-20:57 del 21/10, ora dell'app) e solo quelle: le 2.299 rimaste hanno data dalle 20:57 in poi (fino alle 23:38). Il tetto è quello di E-D4: 200 voci per giro. Dal log: "cestino: 200 voci scadute eliminate". La parte "con il loro record firmato" non l'ho potuta verificare dal NAS (nessuna lettura delle cartelle di sistema dal PC). Nessun tentativo di togliere qualcosa fuori da `.mycloudgallery/trash/`.
+- **Marcatore** `debug-trash-retention-minutes.txt` scritto con 5 alle 00:19 e **tolto** alle 00:41.
+- **O-B15 (copione sbagliato: la pulizia non gira "in minuti").** La pulizia è il lavoro periodico `NasTrashPurgeWorker`, **una volta al giorno** (`NasWork.kt`, `DAILY_PERIOD`, `TRASH_PURGE_WORK`); la prossima era fra 17 h 45 min. Per 10 minuti con la ritenzione a 5 minuti non è successo niente (2.499 voci invariate). Un lavoro forzato con `cmd jobscheduler run -f` viene rifiutato da WorkManager: "Delaying execution for NasTrashPurgeWorker because it is being executed before schedule". Il copione ("aspetta 6-8 minuti") non può funzionare così.
+- **Come l'ho fatto.** Sul database di WorkManager della **nostra app di debug** (`no_backup/androidx.work.workdb`, con l'app ferma) ho messo `last_enqueue_time` di 25 ore fa per quel lavoro (copia di sicurezza prima), poi ho riaperto l'app: il lavoro è partito da solo all'avvio (00:32:06). Un primo tentativo di rimettere il file con `run-as sh -c 'cat >'` ha troncato il file a 4 KB: l'ho riscritto con `adb push` in `/data/local/tmp` e `run-as cp` (controllato con l'impronta). Per le prove future conviene un pulsante o un'azione di debug "pulisci ora".
+- **Dopo il primo giro** il lavoro periodico si riprogramma a +23 h 50 min e la "continuazione" (`nas-trash-purge-now`) non è partita: nei 10 minuti seguenti non sono state tolte altre voci. Le 2.299 rimaste le toglierà la pulizia dei prossimi giorni (con il marcatore tolto, a 30 giorni: quindi restano).
+
+### F12 · qualità delle anteprime Standard, Alta, Risparmio
+
+Le misure le ho prese con le esportazioni della Diagnostica (`INDEX_REPLICA_STATE.bytes`, ricetta ESPORTA) che ho salvato io (il dialogo di sistema "Salva" della nostra app). **Non** ho misurato la cartella `.mycloudgallery` del NAS con Esplora risorse (cestino da 2.000+ voci e altri costi fissi la renderebbero inutile, vedi sopra).
+
+| Passo | Stima in Impostazioni | `INDEX_REPLICA_STATE.bytes` | Scarto | Note |
+|---|---|---|---|---|
+| Standard (all'inizio, 00:44) | circa 660 kB | **659.758** | 0% | 157 anteprime per questo livello |
+| Alta | circa 750 kB | **750.017** | 0% | `converging` falso, `level` `HIGH` |
+| Risparmio | circa 407 kB | **519.277** | **+27,6%** | fuori dal ±15%: dopo Alta le anteprime in più non sono state tutte rilasciate o ci sono costi fissi |
+| Standard (di nuovo) | circa 660 kB | **609.104** | −7,7% | messa di nuovo come era all'inizio |
+
+- **O-B16 (la convergenza non parte da sola).** Dopo ogni cambio la pagina dice "Ora le anteprime occupano 660 kB: il telefono sta adattando lo spazio, un po' alla volta" e **per 8 minuti non cambia niente**: l'adattamento lo fanno i lavori periodici (`HqPreviewsWorker`, `PreparationWorker`, `IndexSyncWorker`, ogni 6 ore), che nessuno avvia quando si cambia qualità. Con gli stessi lavori resi "dovuti" (stesso metodo di F20) l'adattamento è finito in meno di un minuto.
+- **O-B17.** Con la qualità Alta la Diagnostica dice ancora `ACT_DISABLED` per `HQ_PREVIEWS` (`rule.disabled` ha `HQ_PREVIEWS`): l'anteprima HQ **sul NAS** non si prepara con le regole attuali; la misura "Alta" riguarda solo la replica sul telefono. Quindi la domanda "lo spazio sul NAS segue la stima" non è provata (la stima della pagina è per il telefono: "Qualità sul telefono").
+- Nella cartella Download del telefono restano 4 file `mycloudgallery-diagnostica (2..5).json` (esportazioni di F12, solo numeri) più il primo e l'E2: li toglie l'utente.
+
+
+## B-S7, B-S12, B-S14, B-S18 (da solo, 22/10 dalle 23:56): parti fatte
+
+### B-S7 · F34-bis (VE-10) e F27
+
+| Prova | Esito | Misure e note |
+|---|---|---|
+| F34-bis, VE-9 (il PC cambia il file durante una versione) | **saltata** | Serve scrivere dal PC un file in `Backup/`; fuori dalle regole (le scritture dal PC sono solo dentro `mcg-campo/` con uno strumento esistente del banco, che qui non c'è) |
+| VE-10: modifica in Galleria con l'app chiusa, poi apertura dell'app (scambi e versioni ripartono entro 2-3 minuti) | **non confermata** | `am force-stop`, in Galleria "Salva" (la foto `20240312_101533.jpg` passa a 2.832 B, impronta nuova), poi apertura dell'app alle 23:57:03 (preset "Massimo", Wi-Fi di casa). Dopo **12 minuti** (fino alle 00:10) nessuna versione è partita: `backup_item` senza elementi nuovi, `media.backup_todo`=1, la capsula dice "1 in coda · Al prossimo giro", nel log nessun `PhotoBackupWorker` dopo l'apertura (solo le scansioni del NAS). Le versioni delle modifiche fatte a app chiusa aspettano quindi il giro successivo del backup, non partono alla riapertura. Nota: "Proteggi subito le foto nuove" riguarda le foto nuove, non le modifiche; lo "scambio" di "Ripristina originale" non è provabile con la Galleria Samsung (vedi B-S6: i byte tornano diversi) |
+| F27, rinomina del dispositivo | **non fatta** | Non trovo nella nostra app dove si rinomina il dispositivo: Impostazioni, Dispositivi, dettaglio ("Telefono di test") non ha un campo; Impostazioni del backup, "Cartella del dispositivo" non è modificabile e dice "Rinominare il dispositivo non cambia la cartella". Nel codice c'è `DeviceFolderPolicy.folderFor` (`DefaultBackupSettingsTest`), ma non ho una strada dalla UI |
+
+### B-S12 · F36 (correzione di data, luogo e rotazione): parziale
+
+| Passo | Esito | Misure e note |
+|---|---|---|
+| JPEG con GPS (`exif-05-gps-ora-utc.jpg`), "Correggi data e luogo" con data 13/03/2024 | **da verificare** | Visualizzatore (aperto dalla cartella `Backup/Telefono di test/mcg-prova/2024/03` del NAS) → menu → "Correggi data e luogo" (data e ora, Luogo: Lascia com'è / Cambia / Togli). Cambiato il giorno, "Correggi": dice "**Fatto** · La versione corretta è al sicuro sul NAS. L'originale resta nella cartella Versioni" **senza nessun dialogo di Android**. Nel diario: `version` `done` (elemento 1852), il file al solito percorso sul NAS passa a **1.175 B**, la versione precedente va in `Versioni/…/exif-05-gps-ora-utc (versione del 2026-10-21 05.50).jpg` e l'originale (979 B) in `(originale)`. **Il file sul telefono resta com'era**: 979 B, stessa impronta (`d9fee2…`), data EXIF 2024:03:12 10:15:30 (prima e dopo uguali, 7 tag GPS), e il visualizzatore continua a dire "12 marzo 2024, 10:15, Oslo"; `metadata_correction` è vuota e `taken_at_utc` non cambia. Quindi la correzione sembra scritta solo sul NAS, mentre il copione (§5, B-S12) si aspetta il file del telefono riscritto dopo il dialogo di sistema. Da vedere con `exiftool` sul file del NAS |
+| Ruota su PNG/WebP, HEIC senza "Ruota", solo-NAS "Metti al sicuro" | **non fatti** | Il fixture `.heic` ha gli stessi byte del JPG (un media solo) e non c'è nella cartella; per gli altri serviva raggiungere il visualizzatore di quei file |
+
+### B-S14 · T-15 e F40, simulati con `adb shell am start` verso la nostra app
+
+Il comando: `am start -a android.intent.action.SEND -t <tipo> --eu android.intent.extra.STREAM content://media/external/images/media/<id> --grant-read-uri-permission -n dev.pampa.mycloudgallery.debug/<attività>`, con foto e video di `mcg-prova` (indirizzi `content://` veri, non `file://`).
+
+| Prova | Esito | Misure e note |
+|---|---|---|
+| T-15: ricezione di prova (`FieldProbeShareActivity`), "Legge subito" | **passata** | `t15.received`=1, `scheme_content`=1, `scheme_file`=0, `open_ok`=1, `open_ms_avg`=5, `bytes`=44, `grant_flag`=1, `perm_granted`=0 (il permesso arriva dal flag, non da altro) |
+| F40: "Salva sul NAS" con una foto (`ShareReceiverActivity`) | **passata** | Schermata "Da salvare: 1 foto · 44 B", destinazioni "Area privata · Ricevute" e "Area comune · Ricevute", "Non carico niente finché non tocchi «Salva sul NAS»"; la copia parte subito (cartella `incoming` con un file). Dopo il tocco: "1 file in coda · Li carico sul NAS e controllo che arrivino interi. Puoi chiudere"; poco dopo `IncomingUploadWorker` carica e svuota `incoming`. Nel NAS: `test/mcg-campo/Ricevute/IMG_mcg_0101.jpg` (44 B), **data 22 ottobre 2026** (non 1970). Il pulsante "Salva sul NAS" va toccato alle coordinate: il testo del titolo ha lo stesso nome |
+| F40: video da 3 GB (`VID_mcg_grande_1.mp4`) | **passata** | "Niente da salvare · Nessuno dei file ricevuti si può salvare sul NAS · **1 troppo grandi (al massimo 2,1 GB per file)**", subito, e `incoming` vuota |
+| F40: NAS non raggiungibile (Wi-Fi spento 90 s con `s25.ps1`) | **passata, ma la coda riparte tardi (O-B19)** | Con il Wi-Fi spento, "Salva sul NAS" dice "1 file in coda · Il NAS non risponde adesso: tengo i file sul telefono e li carico appena risponde"; `incoming_item` `queued`. `IncomingUploadWorker` risponde "Wait" alle 01:11:29 e si riprogramma **fra 9 min 39 s** (backoff, non al ritorno della rete: il vincolo di rete è soddisfatto alle 01:13); alle 01:26 (15 minuti dopo) l'elemento è ancora `queued` e non ho visto il carico: la regola del copione "Wi-Fi tornato: salgono e spariscono" non è confermata |
+| IN-5: preset "Notte" di giorno, "Salva sul NAS" una foto (`IMG_mcg_0103.jpg`) | **non confermata** | Con "Notte" (messo alle 01:17, rimesso "Massimo" alle 01:27) la foto è finita in coda e non è salita nei 9 minuti successivi (alle 01:26 `queued`): IN-5 ("sale subito") non provata; da rifare con la coda vuota, perché l'altra foto in coda dal Wi-Fi spento era in attesa dello stesso lavoro |
+| 100 immagini, un video da 1 GB, Chrome/WhatsApp/Quick Share, "Indietro a metà" | **non fatti** | Servono altre app o più file per `am start` (nessun modo di passare 100 indirizzi `content://` dalla riga di comando) |
+
+**O-B18.** Spostando una cartella intera fra aree l'app lascia nell'area di partenza la cartella **vuota** (`mille-rinominata`, `F15`, `F16`, `F9`, `campioni` in `test/mcg-campo` con 0 elementi): i file vanno nel cestino del NAS, la cartella no. Non è per forza un difetto (il progetto non dice che vada tolta), ma "Sposta" di una cartella lascia sempre un guscio.
+
+### B-S18 · FF-4: la VPN con WireGuard
+
+`pm path com.wireguard.android` non risponde nulla (WireGuard non è installato): la prova passa al blocco C (C-24), come dice il copione.
+
+### Saltate o non fatte da solo
+
+B-S8 (F29: serve `test2` dal PC), B-S9 e B-S10 (già passate il 20-21/10), B-S11 (F35: video modificato in Galleria: non provato), B-S13 (T-14 con Gmail, WhatsApp, Telegram, OneDrive, I miei file: altre app), B-S15 (T-16 b: Google Foto è un'altra app; "Modifica con…" verso Samsung Gallery è già provato in B-S6), B-S16 (F42: serve un'app che riceve), B-S17 (permessi di Android: impostazioni del telefono).
+
+
+### Ripresa dopo la pausa (02:24-03:05): correzioni a B-S14 e B-S11
+
+Il telefono è tornato mio alle 02:24 (batteria 79%, Wi-Fi acceso, preset "Massimo"). Alle 02:24 i due file in coda di "Salva sul NAS" (`IMG_mcg_0102`, `0103`) risultavano già caricati.
+
+**Correzione a B-S14 (nota di prima: "IN-5 non confermata" e "la coda riparte tardi").** Le due prove di prima erano **confuse** fra loro: il lavoro dei file ricevuti era già in attesa di un nuovo tentativo programmato e io ho messo "Notte" a metà. Ripetute una alla volta, con la coda vuota:
+
+| Prova | Esito | Misure e note |
+|---|---|---|
+| **IN-5**: preset "Notte" di giorno, coda vuota, "Salva sul NAS" `IMG_mcg_0104.jpg` (02:26:15) | **passata** | La foto è `uploaded` e in `mcg-campo/Ricevute/` entro 13 secondi, senza toccare altro. Il preset è tornato "Massimo" alle 02:29 |
+| Caduta del Wi-Fi: "Salva sul NAS" con il Wi-Fi spento (`s25.ps1` 120 s) e coda vuota, `IMG_mcg_0107.jpg` (02:44:23) | **in parte: la coda riparte tardi** | Subito: "1 file in coda · Il NAS non risponde adesso: tengo i file sul telefono e li carico appena risponde", file in `no_backup/incoming`, `incoming_item` `queued`. `IncomingUploadWorker` risponde "Wait" (02:44:23) e si riprogramma. **Wi-Fi tornato alle 02:46:10, il file sale alle 02:59:24**: **13 minuti e 14 secondi** dopo il ritorno della rete, circa 15 minuti dopo il salvataggio. Il copione dice "Wi-Fi tornato: salgono e spariscono". Lo stesso schema di D-12 (un tentativo programmato che non si sveglia al ritorno della rete). Nel frattempo (e per la prova di prima) altri file ricevuti **restano dietro** a quel tentativo: sono saliti insieme alle 01:27:49 |
+| Una foto in coda che **sparisce** (`IMG_mcg_0106.jpg`, 02:31:56) | **da indagare, non riprodotta** | Stessa procedura con il Wi-Fi spento: la schermata dice "1 file in coda" ma poi `no_backup/incoming` è vuota, non c'è nessuna riga in `incoming_item` e il file non arriva mai in `Ricevute` (5 file: da `0101` a `0105`). Nel log, alle 02:32:08 "sessione chiusa: PROCESS_STOPPED" (processo fermato, per il mio tasto Home o dal sistema). Con `0107` (stessa procedura, ma con il processo rimasto vivo) il file è rimasto. Se si conferma, è una **perdita** del file ricevuto quando il processo muore con la coda in attesa: da rifare con `kill -9` fra "Salva sul NAS" e il ritorno del Wi-Fi |
+
+**B-S11 · F35 (video modificato in Galleria): non fatta.** I fixture video di `mcg-prova` (`VID_20240312_101534.mp4`, `Screen_Recording…`, `VID-20240312-WA0003.mp4`, `registrazione-interrotta.mp4`, `troncato.mp4`) pesano circa 2 kB e sono volutamente non riproducibili: aperti in Samsung Gallery danno la miniatura "immagine rotta", **nessun tasto di modifica**, e `durata 0:00`. L'altro video (`VID_mcg_grande_1.mp4`, 3 GB) è un MP4 più byte casuali: non si apre. Serve un video vero di prova.
+
+
+## F13 · benchmark con la libreria mista (S25, 22/10, 03:00-04:46)
+
+**Come.** Autorizzato dal coordinatore ("poi F13, con la variante di misura che poi togli"). Telefono a 120 Hz (letto: 120 Hz) con "Fluidità movimento: Adattiva" impostata dall'utente, schermo acceso e sbloccato, in carica (79-78%), nessun altro uso durante la misura. Al posto di `tools\check.ps1 -SkipGradle -Bench` ho lanciato **gli stessi argomenti di Gradle** a mano per aggiungere `--max-workers=2` (RAM libera sul PC da 7 GB a meno di 1 GB durante la compilazione, per le altre sessioni che girano): `gradlew --console=plain --max-workers=2 :benchmark:connectedBenchmarkReleaseAndroidTest -Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=macrobenchmark`, poi `tools\bench\compare.ps1 -RefreshHz 120`. **Build riuscita in 1 h 45 min 8 s** (26 prove, 6 saltate, 0 fallite); le due app di misura (`dev.pampa.mycloudgallery.bench` e `.benchmark`) sono state tolte da AGP: sul telefono resta solo la debug (`pm list packages`). Nessuna installazione di altro, la debug non è stata toccata.
+
+**Risultato di `compare.ps1`:** **OK 33, FAIL 1, MANCA 4, NUOVO 3, NOTO 1.**
+
+| Prova | Metrica | Valore | Soglia / riferimento (13/10) | Esito |
+|---|---|---|---|---|
+| `coldStart` | `timeToFullDisplayMs` p90 | **659 ms** | < 1000; ≤ 750 (ref 681 + 10%) | OK (TTFD ≤ 750 ms) |
+| `viewerOpen` | `viewerOpenMs` p90 | **18,0 ms** | < 100; ≤ 25 (ref 21,1 + 15%) | OK |
+| `viewerOpen` | fotogramma più lungo (`viewerOpenMaxFrameMs`) | 63,3 ms | ≤ 16,7 (già fuori nel riferimento: 97,3); guardia ≤ 107 | NOTO, dentro la guardia (meglio del riferimento) |
+| `scroll_*` (8 prove) `jankPercent` medio | | 0,18-0,53% | ≤ 1% | OK le 8 |
+| `scroll_*` `frameDurationCpuMs` P95 | | 8,7-12,9 ms | ref + 10% | OK le 8 |
+| `pinch` | `jankPercent` medio e P95 CPU | 0,41% e 12,5 ms | ≤ 1%, ref + 10% | OK |
+| `scroll_days_square` | guardia: `jankPercent` medio | **0,489%** | ≤ **0,331** (riferimento 0,181 + 0,15 di rumore) | **FAIL** (sotto il tetto assoluto di 1%, sopra la guardia di 0,158) |
+| `scroll_all_square` | guardia `jankPercent` | 0,185 | ≤ 0,226 (ref 0,076 + 0,15) | OK, ma vicino al limite |
+| `coldStartNasFirst` | TTFD p90 | 728,6 ms | < 1000 | OK, senza riferimento (NUOVO) |
+| `viewerOpenNas` | `viewerOpenMs` p90 | 15,5 ms | < 100 | OK, senza riferimento (NUOVO) |
+| `libraryMemory` | `libraryPssKb` max | 306.130 | senza riferimento | NUOVO |
+| `searchWarm`, `searchColdContent`, `searchColdFilters`, `searchMemory` | | | | MANCA (la ricerca è della Fase 6, non c'è ancora) |
+| `zoom200Mp` | | | solo tablet | N/A |
+
+- **Il FAIL.** Una sola prova supera la guardia della Fase 4A: `scroll_days_square` (jank 0,489% contro un riferimento del 13/10 di 0,181%). Tutte le soglie assolute sono rispettate. Il rumore di una sola misura sui 0,15 punti non è noto. Ho provato a rifare la sola prova (`…LibraryScrollBenchmark#scroll_days_square`), ma alle 04:47, a Gradle appena partito e prima di installare qualunque cosa, un'altra sessione ha chiesto il telefono in esclusiva e l'ho fermata: **da rifare** (circa 15-20 minuti con la compilazione già in cache). I risultati della prima corsa sono copiati in `build/campo/20261021-165146-8c4811b9/f13-run1/`.
+- **Per le altre misure** i numeri sono dentro i riferimenti: TTFD (659 ms) e apertura del viewer (18 ms) migliori o uguali a quelli del 13/10, jank di scorrimento fra 0,18% e 0,53%.
+
+**Rerun di `scroll_days_square` (22/10, 04:53-05:10, 16 min 49 s di Gradle, stessa procedura).** `jankPercent` medio **0,399%** (prima corsa 0,489%), `frameDurationCpuMs` P95 **11,3 ms** (≤ 12,85: ref 11,68 + 10%), tetto assoluto (≤ 1%) rispettato. **Sempre sopra la guardia della Fase 4A** (≤ 0,331 = riferimento 0,181 + 0,15 di rumore): due misure indipendenti (0,489 e 0,399) dicono che non è rumore, è un peggioramento di circa 0,2-0,3 punti di jank rispetto al 13/10 per quel livello (giorni, celle quadrate) sulla libreria mista da 100 mila righe; la durata CPU dei fotogrammi invece è migliorata. Le altre 25 misure della prima corsa sono dentro le soglie. Variante di misura tolta (`pm list packages`: solo `dev.pampa.mycloudgallery.debug`).
+
+
+### Completamenti e correzioni (05:10-05:30)
+
+- **VE-10 (corretto).** La versione della modifica fatta a app chiusa (alle 23:56) è comparsa sul NAS solo alle **01:09** ("Versione intermedia, 22 ottobre 2026 alle 01:09" nel foglio Versioni di quella foto), cioè circa **70 minuti** dopo la riapertura delle 23:57 (app in primo piano, preset "Massimo"), non entro 2-3 minuti. Con l'app **aperta** invece, due "Salva" di fila in Galleria (05:17:09 e 05:17:30) sono diventati versioni sul NAS e il backup ha chiuso "Tutto al sicuro" alle 05:17: la versione "di adesso" era già "sul telefono e sul NAS, al sicuro" quando ho aperto il foglio, cinque minuti dopo. La differenza sta nell'app aperta o chiusa quando si salva.
+- **"Ripristina originale" dalla nostra app (scambio): passata.** Sulla foto `20240312_101533.jpg` (versione di adesso già al sicuro): dal visualizzatore del file del NAS → menu → Versioni (elenca "Versione di adesso", tre "Versione intermedia" e l'originale; "Ripristina originale", "Elimina le intermedie…") → "Ripristina originale". Il foglio dice "L'originale torna al suo posto sul NAS e la versione di adesso, che ha già una copia controllata, va nella cartella Versioni. **Non si carica niente.**"; dialogo di Android "Consentire all'app MyCloud Dev di modificare questa foto?" confermato da me (foto di prova); risultato "Fatto · L'originale è tornato al suo posto sul NAS. Non è stato caricato niente." **Sul telefono il file torna a 677 B con l'impronta originale `1d4ac9…`**: quindi lo scambio dell'app riporta i byte esatti, a differenza di "Torna all'originale" di Samsung (907 B). 5b-R3 (due "Salva" di fila prima di "Ripristina originale") non provata nella forma "backup non ancora fatto": il backup aveva già messo al sicuro la versione.
+- **O-6 di nuovo (Wi-Fi automatico).** Nelle ultime prove un taglio di "120 s" con `s25.ps1` è durato circa 30 secondi (sessione NAS di nuovo pronta alle 05:13:35, `wifi_on` tornato a 1 senza `s25.ps1`): "Attiva Wi-Fi automaticamente" è di nuovo attivo (impostazione dell'utente o di un'altra sessione): le prove con un Wi-Fi spento a lungo non sono affidabili finché non viene spento. Per questo la prova "una foto in coda che sparisce con `kill -9`" non l'ho potuta riprodurre (ho solo il caso del 02:31, `IMG_mcg_0106.jpg`).
+- **F13, rerun** in fondo alla sezione F13.
+
+## Riepilogo del blocco B (21-22/10, in testa il quadro generale)
+
+**Fatte e passate.** T-09 (a-f e scrittura) con D-3 corretto nei testi; GA-7; LA-7 (rotazione); F25 (nome diverso → "(2)", identico collegato senza traffico); F26 (ripristino: una sola volta); F4, F5, F9 (con 4a-R9: il congelamento torna per un numero nuovo; NA-4, NA-5, NA-9); F15 (crea, rinomina anche solo maiuscole, sposta nella share e fra share, elimina, ripristina, nome in conflitto, cartella intera, fogli di eliminazione con numeri veri, doppio tocco su "Elimina subito" senza conferma da solo, NA-1, 4b-R8, file bloccato dal PC con riparto da solo); F16-tel (circa 103 interruzioni su spostamenti di massa da 1.179 elementi, 0 errori, nessun doppione); F20 (200 voci, nessun file fuori dal cestino toccato); F12 (misure, con lo scarto sul Risparmio); F34/T-16 (a) (Salva, Salva una copia, Torna all'originale, "Ripristina originale" dell'app); F40 e T-15 simulate (ricezione, "Salva sul NAS", rifiuto del file da 3 GB, IN-5); F13 (33 su 34, 1 FAIL ripetibile).
+
+**Difetti, dalla gravità più alta.**
+1. **Alta, da confermare:** un file messo in coda da "Salva sul NAS" a NAS non raggiungibile può sparire (visto una volta, `IMG_mcg_0106.jpg`, 02:31): nessuna riga, nessun file in `incoming`, mai arrivato.
+2. **Media:** F36, "Correggi data e luogo" dice "Fatto" ma scrive solo il NAS (1.175 B), il telefono resta com'era e la data in Libreria non cambia, senza dialogo di Android.
+3. **Media:** D-B3 (F26), una foto cancellata in Galleria prima del backup sparisce dalla Libreria senza nessun avviso "Persa prima del backup" (il catalogo la segna `lost`, nessuna riga di problema).
+4. **Media:** O-B14, il guardiano fa copie private `Backup/Area comune` (76) senza un backup in corso, in contrasto con Q4 (b); e O-B19, la coda di "Salva sul NAS" riparte circa 13-15 minuti dopo il ritorno del Wi-Fi (backoff), con gli altri file ricevuti bloccati dietro.
+5. **Media:** F13, `scroll_days_square` supera la guardia della Fase 4A in due misure (0,489 e 0,399% contro 0,331); VE-10, una modifica fatta a app chiusa diventa versione dopo circa 70 minuti.
+6. **Bassa:** F12, "Risparmio" +27,6% sulla stima (la convergenza non parte da sola: servono i lavori periodici); D-B1 e D-B2 (testi dei fogli); "Ferma" annulla invece di mettere in pausa (il copione dice "Riprendi"); O-B9 (nuova cartella dentro "Sposta" chiude la scelta, visto una volta); cartelle vuote lasciate dopo uno spostamento fra aree; F27 senza voce per rinominare il dispositivo; `Failure(NotFound)` nel log di uno spostamento.
+7. **Differenze fra copione e app (non difetti):** la scansione del NAS non guarda da sola in pochi minuti (E-R15); Paint non blocca il file (serve un blocco esclusivo); la pulizia del cestino è giornaliera; Samsung "Torna all'originale" non ridà i byte esatti.
+
+**Da vedere con le app vere.** T-14 (Gmail, WhatsApp, Telegram, OneDrive, I miei file, Drive, il selettore di sistema, blocco dell'app e tolleranza dei 2 minuti, "nascondi con il selettore aperto"); T-15 da Galleria, I miei file, Chrome, Quick Share e WhatsApp (`t15.caller`, `scheme_*`), 100 immagini, un video da 1 GB, "Indietro a metà"; F42 (condividere senza posizione verso Gmail/WhatsApp/Telegram, con `exiftool`); F41 con Google Foto; F29 con `test2` dal PC; F35 (un video vero tagliato); 5b-R3 nella forma "due Salva e Ripristina prima del backup"; VE-9 (il PC cambia il file durante la versione); permessi parziali di Android (B-S17); WireGuard (C-24); `exiftool` sul file corretto di F36; la prova dell'avviso di "Persa prima del backup" con un file che sparisce durante un giro.
+
+**In sospeso.** F27 (come rinominare il dispositivo); la verifica dal NAS di F16 (nessun verificatore di sola lettura per quel layout); il verificatore del NAS per i manifesti con righe `edit=` (D-14), anche per le 16 "originali in Versioni/" di B-S2; la pulizia finale dell'utente (NAS di prova: `test/mcg-campo/F15`, `F16`, `F9`, `campioni`, `mille-rinominata`, `Prova-A`, `coda-na1`, `Ricevute`, `prova-4b-rinominata`, `sotto`, `Backup/Area comune`; `test-comune/mcg-campo/*` compreso `Z16`; le oltre 2.000 voci del cestino del NAS; sul telefono `mcg-prova` e le 6 esportazioni in Download); il preset e il Wi-Fi di Android lasciati come all'inizio.
+
+**Nota finale su "Salva sul NAS" a NAS non raggiungibile (05:23-05:38).** Prova ripetuta con la morte del processo: Wi-Fi spento da `s25.ps1`, `IMG_mcg_0109.jpg` messa in coda alle 05:23:35 (`IncomingUploadWorker: Wait`), `kill -9` dell'app alle 05:23:39, Wi-Fi tornato alle 05:25:30 (quindi il taglio è durato circa 2 minuti). Il file e la riga `queued` **sono rimasti** dopo la morte del processo e il file è salito alle **05:38:36**: 15 minuti dopo il salvataggio, 13 dopo il ritorno della rete (lo stesso ritardo di 15 minuti di prima). Quindi con `kill -9` **non si perde niente**: il caso di `IMG_mcg_0106.jpg` (02:31, file e riga spariti) resta unico e non spiegato; lo declasso da "alta" a "da indagare" (media) nel quadro qui sopra.

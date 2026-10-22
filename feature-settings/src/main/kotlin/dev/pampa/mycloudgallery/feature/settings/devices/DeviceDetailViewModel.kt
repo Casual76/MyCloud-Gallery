@@ -9,8 +9,14 @@ import dev.pampa.mycloudgallery.core.family.contract.DeviceView
 import dev.pampa.mycloudgallery.core.family.contract.LostReporting
 import dev.pampa.mycloudgallery.core.family.contract.RegistryService
 import dev.pampa.mycloudgallery.core.family.contract.TrustStatus
+import dev.pampa.mycloudgallery.core.nas.contract.NasError
 import dev.pampa.mycloudgallery.core.nas.contract.NasSessionManager
+import dev.pampa.mycloudgallery.core.trust.TrustLimits
+import dev.pampa.mycloudgallery.core.trust.codec.TextRules
+import dev.pampa.mycloudgallery.core.trust.registry.LookAlike
 import dev.pampa.mycloudgallery.core.trust.registry.DeviceStatus
+import dev.antigravity.fluidengine.ui.theme.FluidTone
+import dev.pampa.mycloudgallery.feature.settings.R
 import dev.pampa.mycloudgallery.feature.settings.port.SettingsClock
 import dev.pampa.mycloudgallery.feature.settings.ui.Feedback
 import dev.pampa.mycloudgallery.feature.settings.ui.toFeedback
@@ -62,6 +68,12 @@ internal enum class PendingChange(val target: DeviceStatus) {
   REVOKE(DeviceStatus.REVOKED),
 }
 
+/** Perche' il nome scritto non si puo' usare ancora ("Rinomina questo dispositivo", F27). */
+internal enum class RenameProblem { EMPTY, TOO_LONG, INVALID, TAKEN, SAME }
+
+/** Il foglio "Rinomina questo dispositivo": il testo scritto, cosa non va (null = si puo' confermare) e se la scrittura e' in corso. */
+internal data class RenameDraft(val text: String, val problem: RenameProblem?, val saving: Boolean = false)
+
 /** Lo stato del dettaglio di un dispositivo. */
 internal data class DeviceDetailUiState(
   val device: DeviceUi?,
@@ -77,6 +89,9 @@ internal data class DeviceDetailUiState(
   val reportedByOwner: Boolean = false,
   val pendingChange: PendingChange? = null,
   val feedback: Feedback? = null,
+  /** F27: questo e' il dispositivo in uso e chi lo guarda e' l'admin, che firma il nome nuovo nel registro. */
+  val canRename: Boolean = false,
+  val rename: RenameDraft? = null,
 ) {
   /** Il prossimo passo della guida ancora da fare, o null se e' finita. */
   val nextGuideStep: GuideStep? get() = GuideStep.ordered.firstOrNull { it !in guideDone }
@@ -125,6 +140,8 @@ internal class DeviceDetailViewModel @Inject constructor(
       reportedByOwner = local.reportedByOwner,
       pendingChange = local.pendingChange,
       feedback = local.feedback,
+      canRename = rights.canRename,
+      rename = local.rename,
     )
   }.stateIn(
     scope = viewModelScope,
@@ -227,6 +244,68 @@ internal class DeviceDetailViewModel @Inject constructor(
     local.update { it.copy(feedback = null) }
   }
 
+  // --- rinomina questo dispositivo (F27, E-B7) ------------------------------------------------------
+
+  /**
+   * Apre il foglio con il nome di adesso. Solo per l'admin sul dispositivo in uso: il nome sta nella voce firmata del registro e lo cambia chi
+   * tiene la chiave di famiglia (`RegistryService.renameDevice`). Non cambia la cartella del backup (E-B7).
+   */
+  fun startRename() {
+    if (!rights().canRename) return
+    val current = registry.devices.value.firstOrNull { it.id == deviceId }?.name ?: return
+    local.update { it.copy(rename = RenameDraft(current, RenameProblem.SAME), feedback = null) }
+  }
+
+  /** Il testo cambia: si ricontrolla subito, cosi' il pulsante dice se si puo' confermare. */
+  fun onRenameText(text: String) {
+    local.update { current ->
+      val draft = current.rename ?: return@update current
+      if (draft.saving) current else current.copy(rename = draft.copy(text = text, problem = renameProblem(text)))
+    }
+  }
+
+  fun cancelRename() {
+    local.update { if (it.rename?.saving == true) it else it.copy(rename = null) }
+  }
+
+  /**
+   * Scrive il nome nel registro firmato. Solo da un foglio aperto, con il nome valido e diverso da quello di adesso, e una volta per volta (un
+   * secondo tocco mentre scrive non riparte). Fatto o no, il foglio si chiude e la pagina dice com'e' andata.
+   */
+  fun confirmRename() {
+    val draft = local.value.rename ?: return
+    if (draft.saving || draft.problem != null || !rights().canRename) return
+    local.update { it.copy(rename = draft.copy(saving = true)) }
+    viewModelScope.launch {
+      val result = registry.renameDevice(deviceId, draft.text.trim())
+      local.update {
+        it.copy(
+          rename = null,
+          feedback = when {
+            result == AdminActionResult.Done -> Feedback(R.string.fb_done_title, R.string.rename_done, FluidTone.Success)
+            result is AdminActionResult.Failed && result.error == NasError.Exists -> Feedback(R.string.fb_failed_title, R.string.rename_err_taken, FluidTone.Danger)
+            else -> result.toFeedback()
+          },
+        )
+      }
+    }
+  }
+
+  /** Cosa non va in [text] come nome del dispositivo; null se va bene. Lo stesso controllo del registro: testo da mostrare, nessun sosia. */
+  private fun renameProblem(text: String): RenameProblem? {
+    val name = text.trim()
+    val devices = registry.devices.value
+    val mine = devices.firstOrNull { it.id == deviceId }
+    return when {
+      name.isEmpty() -> RenameProblem.EMPTY
+      name.length > TrustLimits.MAX_DISPLAY_TEXT_CHARS -> RenameProblem.TOO_LONG
+      TextRules.hasForbidden(name) -> RenameProblem.INVALID
+      devices.any { it.id != deviceId && LookAlike.key(it.name) == LookAlike.key(name) } -> RenameProblem.TAKEN
+      mine != null && mine.name == name -> RenameProblem.SAME
+      else -> null
+    }
+  }
+
   /** Cosa puo' fare questo dispositivo su quello aperto, riletto dal registro adesso (non da uno stato in cache). */
   private fun rights(): Rights = rightsFor(registry.status.value, registry.devices.value)
 
@@ -238,10 +317,11 @@ internal class DeviceDetailViewModel @Inject constructor(
     return Rights(
       canManage = admin && approved && !device.isThisDevice,
       canReportOwn = !admin && approved && !device.isThisDevice && mine != null && mine.nasUser.equals(device.nasUser, ignoreCase = true),
+      canRename = admin && approved && device.isThisDevice,
     )
   }
 
-  private class Rights(val canManage: Boolean, val canReportOwn: Boolean)
+  private class Rights(val canManage: Boolean, val canReportOwn: Boolean, val canRename: Boolean = false)
 
   private data class Local(
     val lostStage: LostStage = LostStage.NONE,
@@ -250,6 +330,7 @@ internal class DeviceDetailViewModel @Inject constructor(
     val reportedByOwner: Boolean = false,
     val pendingChange: PendingChange? = null,
     val feedback: Feedback? = null,
+    val rename: RenameDraft? = null,
   )
 
   companion object {

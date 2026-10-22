@@ -8,9 +8,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Help
 import androidx.compose.material.icons.rounded.Inventory2
 import androidx.compose.material.icons.rounded.LockClock
@@ -30,6 +32,8 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.state.ToggleableState
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -48,6 +52,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidSwitch
+import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -80,6 +85,10 @@ internal class DeviceDetailActions(
   val onAskChange: (PendingChange) -> Unit,
   val onCancelChange: () -> Unit,
   val onConfirmChange: () -> Unit,
+  val onStartRename: () -> Unit = {},
+  val onRenameText: (String) -> Unit = {},
+  val onCancelRename: () -> Unit = {},
+  val onConfirmRename: () -> Unit = {},
 ) {
   companion object {
     val None = DeviceDetailActions({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {})
@@ -105,6 +114,10 @@ internal fun DeviceDetailRoute(onBack: () -> Unit) {
       onAskChange = viewModel::askChange,
       onCancelChange = viewModel::cancelChange,
       onConfirmChange = viewModel::confirmChange,
+      onStartRename = viewModel::startRename,
+      onRenameText = viewModel::onRenameText,
+      onCancelRename = viewModel::cancelRename,
+      onConfirmRename = viewModel::confirmRename,
     ),
   )
 }
@@ -175,6 +188,22 @@ internal fun DeviceDetailScreen(state: DeviceDetailUiState, actions: DeviceDetai
 
     item { FluidSectionHeader(title = stringResource(R.string.device_info_section)) }
     item { FluidListGroup { DeviceInfoRows(device) } }
+
+    // F27: il nome di questo dispositivo lo cambia l'admin (e' nella voce firmata del registro); la cartella del backup non cambia (E-B7).
+    if (state.canRename) {
+      item { FluidSectionHeader(title = stringResource(R.string.device_actions_section)) }
+      item {
+        FluidListGroup {
+          FluidListRow(
+            title = stringResource(R.string.rename_row),
+            subtitle = stringResource(R.string.rename_row_detail),
+            tone = FluidTone.Neutral,
+            leading = { RowGlyph(Icons.Rounded.Edit) },
+            onClick = actions.onStartRename,
+          )
+        }
+      }
+    }
 
     val canAct = state.canManage || state.canReportOwn
     if (canAct) {
@@ -252,6 +281,32 @@ internal fun DeviceDetailScreen(state: DeviceDetailUiState, actions: DeviceDetai
     confirmEnabled = state.acknowledged,
     body = { AcknowledgeRow(checked = state.acknowledged, onChange = actions.onAcknowledge) },
   )
+  val renaming = state.rename
+  ConfirmSheet(
+    visible = renaming != null,
+    onDismiss = actions.onCancelRename,
+    icon = Icons.Rounded.Edit,
+    tone = GallerySheetTone.Brand,
+    title = stringResource(R.string.rename_title),
+    message = stringResource(R.string.rename_message),
+    confirmLabel = stringResource(R.string.rename_confirm),
+    onConfirm = actions.onConfirmRename,
+    confirmStyle = FluidButtonStyle.Filled,
+    confirmEnabled = renaming != null && renaming.problem == null && !renaming.saving,
+    body = {
+      if (renaming != null) {
+        FluidTextField(
+          value = renaming.text,
+          onValueChange = actions.onRenameText,
+          label = stringResource(R.string.rename_field),
+          enabled = !renaming.saving,
+          isError = renaming.problem != null && renaming.problem != RenameProblem.SAME,
+          supportingText = stringResource(renaming.problem?.messageRes() ?: R.string.rename_help),
+          keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Done),
+        )
+      }
+    },
+  )
   val change = state.pendingChange
   ConfirmSheet(
     visible = change != null,
@@ -264,6 +319,16 @@ internal fun DeviceDetailScreen(state: DeviceDetailUiState, actions: DeviceDetai
     onConfirm = actions.onConfirmChange,
     confirmStyle = if (change == PendingChange.REVOKE) FluidButtonStyle.Destructive else FluidButtonStyle.Filled,
   )
+}
+
+/** La frase sotto il campo del nome quando qualcosa non va (F27). */
+@androidx.annotation.StringRes
+private fun RenameProblem.messageRes(): Int = when (this) {
+  RenameProblem.EMPTY -> R.string.rename_err_empty
+  RenameProblem.TOO_LONG -> R.string.rename_err_long
+  RenameProblem.INVALID -> R.string.rename_err_invalid
+  RenameProblem.TAKEN -> R.string.rename_err_taken
+  RenameProblem.SAME -> R.string.rename_err_same
 }
 
 /** L'identita' del dispositivo in cima al dettaglio: icona grande, nome, modello e stato. */

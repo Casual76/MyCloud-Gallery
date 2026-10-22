@@ -172,4 +172,14 @@ interface RegistryService {
    * dall'impronta confermata dall'utente; quelli che non sono un /48 ULA non entrano, e senza nessun prefisso valido non si firma niente.
    */
   suspend fun updateHomeUla(prefixes: Set<String>): AdminActionResult
+
+  /**
+   * "Rinomina questo dispositivo" (F27 delle prove sul campo, E-B7): il nome che gli altri dispositivi e la lista dei dispositivi mostrano sta nella
+   * voce **firmata** del registro, quindi lo cambia solo chi tiene la chiave di famiglia: si firma e si pubblica una versione nuova del registro
+   * (`FamilyAuthority.renameDevice` → `commit`), senza campi ne' formati nuovi. [AdminActionResult.NotAdmin] su un dispositivo che non la tiene (la
+   * richiesta firmata dal dispositivo e approvata dall'admin sarebbe un documento nuovo: resta da decidere). Un nome uguale o che "sembra uguale"
+   * (`LookAlike`) a quello di un altro dispositivo e' rifiutato ([AdminActionResult.Failed] con `NasError.Exists`); lo stesso nome di prima non
+   * firma niente. **Non cambia la cartella del backup** (E-B7: si sceglie una volta sola).
+   */
+  suspend fun renameDevice(deviceId: String, name: String): AdminActionResult = AdminActionResult.NotAdmin
 }

@@ -113,6 +113,12 @@ class NasRegistryService(
     result
   }
 
+  override suspend fun renameDevice(deviceId: String, name: String): AdminActionResult = mutex.withLock {
+    val result = writer.renameDevice(deviceId, name)
+    if (result == AdminActionResult.Done) rebuildDevices()
+    result
+  }
+
   override suspend fun updateCommonExclusions(excluded: Set<String>): AdminActionResult = mutex.withLock {
     writer.updateCommonExclusions(excluded)
   }

@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.core.trust.registry
 import dev.pampa.mycloudgallery.core.trust.RejectReason
 import dev.pampa.mycloudgallery.core.trust.TrustLimits
 import dev.pampa.mycloudgallery.core.trust.Verdict
+import dev.pampa.mycloudgallery.core.trust.codec.TextRules
 import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKey
 import dev.pampa.mycloudgallery.core.trust.envelope.DocType
 import dev.pampa.mycloudgallery.core.trust.envelope.Envelope
@@ -181,6 +182,21 @@ class FamilyAuthority(private val familyKey: FamilyKey, private val clock: NasCl
     require(status != DeviceStatus.RETIRED) { "La dismissione si prepara da sola (teste congelate)." }
     val updated = entry.copy(status = status, since = clock.nowMillis(), frozenHeads = emptyList())
     return RegistryDraft(draft.base, content.copy(devices = content.devices.map { if (it.id == deviceId) updated else it }), draft.acknowledgedForks)
+  }
+
+  /**
+   * Cambia il nome da mostrare di un dispositivo approvato (F27 delle prove sul campo, E-B7). Non e' un formato nuovo: `name` e' gia' un campo
+   * della voce del registro e la versione che esce e' firmata come ogni altra dalla chiave di famiglia. Restano identici chiave, id, account,
+   * ruolo e stato (e la loro regola anti-regressione, che non guarda il nome): il dispositivo e' lo stesso, ha solo un'etichetta diversa.
+   * Il nome deve essere un testo da mostrare valido ([TextRules.displayText]); un nome uguale a quello di prima non firma niente.
+   */
+  fun renameDevice(state: RegistryState, deviceId: String, name: String): RegistryDraft {
+    val current = authorized(state)
+    val entry = requireNotNull(current.device(deviceId)) { "Dispositivo assente dal registro." }
+    require(entry.status == DeviceStatus.APPROVED) { "Si rinomina solo un dispositivo approvato." }
+    TextRules.displayText(name, TrustLimits.MAX_DISPLAY_TEXT_CHARS)
+    val updated = entry.copy(name = name)
+    return RegistryDraft(state, current.copy(devices = current.devices.map { if (it.id == deviceId) updated else it }))
   }
 
   /**

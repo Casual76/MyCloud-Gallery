@@ -328,8 +328,10 @@ private fun Centered(topPadding: Dp, bottomPadding: Dp, content: @Composable () 
 }
 
 /**
- * La frase che distingue questo cestino da quello della Galleria di Samsung (E-P11). D-3 (prove sul campo): su One UI quello che l'app
- * elimina va nel Cestino di Galleria e qui non compare: la pagina lo dice e manda a Galleria → Cestino, invece di promettere un ripristino.
+ * La frase che distingue questo cestino da quello della Galleria di Samsung (E-P11). D-3 e D-B2 (prove sul campo): su One UI quello che l'app
+ * elimina (`createTrashRequest`) compare **qui** (la riga resta nel MediaStore con `IS_TRASHED`, fuori dalla sua cartella) e anche nel Cestino
+ * di Galleria: l'app lo elenca e lo ripristina con il dialogo di sistema. Quello che l'utente cestina da Galleria invece l'app non lo vede
+ * (il file esce dal MediaStore): la frase lo dice e manda a Galleria → Cestino.
  */
 @Composable
 private fun Explainer(hiddenNote: Boolean) {

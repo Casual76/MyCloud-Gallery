@@ -63,11 +63,13 @@ switch ($cmd) {
     $local = $rest[0]
     $remote = $rest[1].TrimEnd('/')
     $dest = Map-Path $remote
-    New-Item -ItemType Directory -Force -Path $dest | Out-Null
-    if (Test-Path -LiteralPath $local -PathType Container) {
-      # Come `adb push cartella destinazione-che-non-c'e'`: la destinazione e' la cartella, con il contenuto dentro.
+    if ((Test-Path -LiteralPath $local -PathType Container) -and -not (Test-Path -LiteralPath $dest -PathType Container)) {
+      # Come `adb push cartella destinazione-che-non-c'e'`: la destinazione E' la cartella, con il contenuto dentro (modo ai, eval-push).
+      New-Item -ItemType Directory -Force -Path $dest | Out-Null
       Copy-Item -Path (Join-Path $local "*") -Destination $dest -Recurse -Force
     } else {
+      # Come `adb push cartella destinazione-esistente` (la semina del modo backup) o un file in una cartella: va DENTRO la destinazione.
+      New-Item -ItemType Directory -Force -Path $dest | Out-Null
       Copy-Item -LiteralPath $local -Destination $dest -Recurse -Force
     }
     Write-Output "1 file pushed"

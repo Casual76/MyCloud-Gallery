@@ -209,11 +209,19 @@ class GatedViewerTextReader(
 }
 
 /**
- * "Trova simili" (D30): la voce c'e' per le celle della Libreria (mai i Nascosti, che non sono celle: D29) e porta a Cerca con il chip
- * "Simili a" ([requests], che la navigazione segue). Se il media non ha ancora un vettore, la ricerca lo dice con i suoi stati.
+ * "Trova simili" (D30, E-Q14): la voce c'e' per le celle della Libreria (mai i Nascosti, che non sono celle: D29). Con un vettore ([hasVectors]
+ * per una delle chiavi della cella) porta a Cerca con il chip "Simili a" ([requests], che la navigazione segue); senza (il media non e' ancora
+ * stato analizzato) la voce c'e' lo stesso e al tocco dice perche' non si puo' (`SimilarAvailability.EXPLAINED`), invece di aprire una ricerca vuota.
  */
-class SearchViewerSimilar(private val keys: CellKeys, private val requests: SimilarRequests) : ViewerSimilarSearch {
-  override fun availability(id: MediaId): SimilarAvailability = if (keys[id] == null) SimilarAvailability.HIDDEN else SimilarAvailability.AVAILABLE
+class SearchViewerSimilar(
+  private val keys: CellKeys,
+  private val requests: SimilarRequests,
+  private val hasVectors: (ContentKey) -> Boolean = { true },
+) : ViewerSimilarSearch {
+  override fun availability(id: MediaId): SimilarAvailability {
+    val cell = keys[id] ?: return SimilarAvailability.HIDDEN
+    return if (cell.keys.any(hasVectors)) SimilarAvailability.AVAILABLE else SimilarAvailability.EXPLAINED
+  }
 
   override fun findSimilar(id: MediaId) = requests.request(id)
 }

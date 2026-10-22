@@ -133,7 +133,7 @@ class AiStack(
     return GalleryGraph.SearchViewerHooks(
       textSource = IndexViewerTextSource(search.mediaText),
       textReader = textReader,
-      similarSearch = SearchViewerSimilar(search.keys, similar),
+      similarSearch = SearchViewerSimilar(search.keys, similar) { key -> search.index.hasVectors(key) },
       motionAnimation = dev.pampa.mycloudgallery.feature.viewer.motion.MotionAnimationSetting { personal.motion.value?.motionAnimation?.value ?: true },
       motionTraffic = dev.pampa.mycloudgallery.feature.viewer.video.MotionTraffic { bytes, _ ->
         graph.scope.launch {

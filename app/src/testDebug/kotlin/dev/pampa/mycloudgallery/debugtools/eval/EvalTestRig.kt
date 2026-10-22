@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.debugtools.eval
 import androidx.compose.ui.graphics.ImageBitmap
 import dev.pampa.mycloudgallery.core.ai.contract.TextEmbedder
 import dev.pampa.mycloudgallery.core.ai.contract.TextReader
+import dev.pampa.mycloudgallery.core.ai.contract.TextVector
 import dev.pampa.mycloudgallery.core.ai.testing.FakeConcepts
 import dev.pampa.mycloudgallery.core.ai.testing.FakeTextEmbedder
 import dev.pampa.mycloudgallery.core.library.testing.SyntheticLibrary
@@ -42,7 +43,10 @@ internal class EvalTestRig(withoutKeyBelow: Int = 0) : EvalEnvironment {
   override val data: SearchData = fakeData
   override val engine: SearchEngine = InMemorySearchEngine(fakeData, embedderValue, ItalianQueryParser(), fixedToday)
   override val embedding: QueryEmbedding = EmbedderQueryEmbedding(embedderValue)
-  override val embedder: TextEmbedder? = embedderValue
+
+  /** Il motore del testo di "Documenti", con il conto dei rilasci (DB-3): chi lo usa lo deve rilasciare. */
+  val documentEmbedder = CountingEmbedder(embedderValue)
+  override val embedder: TextEmbedder? = documentEmbedder
   override val parser: QueryParser = ItalianQueryParser()
   override val today: Today = fixedToday
   override fun places(): PlaceDictionary = PlaceDictionary.EMPTY
@@ -57,6 +61,28 @@ internal class EvalTestRig(withoutKeyBelow: Int = 0) : EvalEnvironment {
 
   /** Le chiavi delle celle con il concetto [concept]. */
   fun keysOf(concept: String): Set<String> = (0 until 300).filter { CONCEPTS[it % CONCEPTS.size] == concept }.map { keyHex(it) }.toSet()
+
+  /** Un motore del testo che conta quante volte e' stato usato e rilasciato. */
+  class CountingEmbedder(private val inner: TextEmbedder) : TextEmbedder by inner {
+    var embeds: Int = 0
+      private set
+    var releases: Int = 0
+      private set
+
+    /** Se vero, la prossima frase non si legge (il motore si e' rotto a meta'). */
+    var failing: Boolean = false
+
+    override suspend fun embed(text: String): TextVector {
+      check(!failing) { "motore del testo rotto" }
+      embeds++
+      return inner.embed(text)
+    }
+
+    override suspend fun release() {
+      releases++
+      inner.release()
+    }
+  }
 
   companion object {
     val CONCEPTS = listOf("cane", "gatto", "spiaggia", "documento", "scontrino", "auto")

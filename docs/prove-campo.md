@@ -1314,3 +1314,38 @@ Da leggere prima di cominciare. I numeri sono quelli richiamati nel resto del fi
 23. **`docs/android.md` e la pagina delle prove guidate** dicono di seminare con `s25.ps1 -Mode seed` e che la semina fa circa 300 righe: il comando giusto è `-Mode backup -Step seed`, con `-Photos 520` per le 500 righe di T-09 (f). (Anche D-5 del 20/10.) Inoltre F1–F20 stanno nel §5.7 di `fase4-progetto.md`, non nel §5.6.
 24. **I file finti dei fixture e due screenshot (O-1, O-2 del 20/10).** `casuali.png`, `testo.jpg` e `video-falso.mp4` non entrano mai nel catalogo: qui sono tolti dalla semina (2.4). Due `Screenshot_*.png` non risultano in nessuna sorgente con D13: se il backup non li salva, F30 darà `LOSS` di 2 file. Decidere se è voluto (screenshot fuori dalla sorgente `mcg-prova`) o un difetto.
 
+
+## 9. Fase 6, revisione C: gli strumenti per le prove F54 e F61
+
+Questa sezione dice come si usano due strumenti sul telefono che la revisione C ha corretto (DB-2, DB-4). Le prove F46–F71 stanno nel §5 di `docs/fase6-progetto.md`; qui ci sono solo i comandi.
+
+### 9.1 F61 · il verificatore dei dati dell'AI (`s25.ps1 -Mode ai`)
+
+```powershell
+# a secco: il calendario e i comandi, senza telefono
+powershell -ExecutionPolicy Bypass -File tools\chaos\s25.ps1 -Mode ai -DryRun -Interruptions 100 -Seed 61
+# la prova: almeno 100 interruzioni (kill -9 e Wi-Fi spento), poi il verificatore
+powershell -ExecutionPolicy Bypass -File tools\chaos\s25.ps1 -Mode ai -Serial RFCY61FZDHW -Interruptions 100 -Seed 61 -SettleSeconds 300 -Verify | Tee-Object "$out\f61.log"
+# o a parte, a prova finita (i record rovinati ammessi sono 9 per ogni morte: qui al massimo 100 morti)
+powershell -ExecutionPolicy Bypass -File tools\chaos\s25.ps1 -Mode ai -Step verify -Serial RFCY61FZDHW -Interruptions 100
+```
+
+Cosa cambia rispetto a prima (DB-2): il file dei vettori si chiama `vectors-embeddinggemma2_float_v1-<generazione>.bin` e sta in `no_backup/search/index/`; è little-endian (il segno `MCGV` è `56 47 43 4D`). Prima lo script cercava un altro nome e un altro ordine dei byte, non trovava niente e diceva sempre "tutto a posto". Adesso nel racconto (`build\chaos\s25-*.log`) deve comparire la riga `search/: un file di vettori, N record buoni, M rovinati, coda troncata K byte`: **se manca, la verifica non ha letto niente e F61 non è passata**. Un file `vectors-*` con un nome che l'app non scrive, o non vuoto senza nemmeno un record riconoscibile, fa fallire la verifica (codice 4). Una morte durante la scrittura lascia una coda troncata (meno di un record): è normale e il verificatore la accetta.
+
+### 9.2 F54 · il set OCR dentro l'app e le etichette fuori (DB-4)
+
+Dalla shell di `adb` la cartella dell'app non si scrive (serve `run-as`, che c'è solo per la build di debug): per questo ci sono due passi dello script, che toccano **solo** `no_backup/eval/` dell'app di debug.
+
+```powershell
+# 1. il set OCR sintetico sul PC (testi inventati, nessun dato personale; non va committato)
+powershell -ExecutionPolicy Bypass -File tools\fixtures\generate-ocr.ps1
+# 2. dentro l'app: adb push in /data/local/tmp, poi `run-as <pacchetto> cp` in no_backup/eval/ocr/, poi la copia temporanea si toglie
+powershell -ExecutionPolicy Bypass -File tools\chaos\s25.ps1 -Mode ai -Step eval-push -Serial RFCY61FZDHW -EvalSource tools\fixtures\out\MCG-ocr -DryRun
+powershell -ExecutionPolicy Bypass -File tools\chaos\s25.ps1 -Mode ai -Step eval-push -Serial RFCY61FZDHW -EvalSource tools\fixtures\out\MCG-ocr
+# 3. nell'app: Impostazioni > Sviluppo > Valutazione della ricerca (le foto locali si vedono: DB-1), poi "Lettura di prova" per il set OCR
+# 4. i risultati sul PC: labels.mcgeval, report-NN.txt, ocr\letto.tsv e ocr\ocr-resoconto.txt (e nient'altro) in build\chaos\eval-<data>\
+powershell -ExecutionPolicy Bypass -File tools\chaos\s25.ps1 -Mode ai -Step eval-pull -Serial RFCY61FZDHW
+powershell -ExecutionPolicy Bypass -File tools\fixtures\generate-ocr.ps1 -Resoconto build\chaos\eval-<data>\ocr\letto.tsv -Etichetta "ML Kit su S25"
+```
+
+Le **etichette sono dati privati**: la cartella di arrivo è sotto `build\` (ignorata da git) e non vanno mai nel repository; per tenerle si copiano a mano in `%USERPROFILE%\.mycloudgallery\eval\`. I resoconti (`report-NN.txt`) hanno solo numeri e si possono copiare in `docs/decisioni.md`. `eval-push` ed `eval-pull` valgono solo con `-Mode ai` e la build di debug; da soli non toccano il Wi-Fi.

@@ -11,6 +11,7 @@ import dev.pampa.mycloudgallery.core.nasops.contract.NasFolderEntry
 import dev.pampa.mycloudgallery.core.nasops.contract.NasFolderState
 import dev.pampa.mycloudgallery.core.nasops.contract.NasFolders
 import dev.pampa.mycloudgallery.core.nasops.contract.NasItem
+import dev.pampa.mycloudgallery.core.nasops.contract.NasOperationState
 import dev.pampa.mycloudgallery.core.nasops.contract.NasOperations
 import dev.pampa.mycloudgallery.core.nasops.contract.OpClocks
 import dev.pampa.mycloudgallery.core.nasops.contract.OpKind
@@ -18,6 +19,7 @@ import dev.pampa.mycloudgallery.core.nasops.contract.OpPlan
 import dev.pampa.mycloudgallery.core.nasops.contract.OpRequest
 import dev.pampa.mycloudgallery.core.nasops.contract.PlanOutcome
 import dev.pampa.mycloudgallery.core.nasops.contract.PlanRejection
+import dev.pampa.mycloudgallery.core.nasops.contract.StartOutcome
 import dev.pampa.mycloudgallery.core.nasops.contract.UserConfirmation
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import dev.pampa.mycloudgallery.feature.nas.confirm.NameCheck
@@ -322,11 +324,30 @@ class NasFoldersViewModel @Inject constructor(
 
   internal fun dismissConfirm() = mutable.update { it.copy(confirm = null, confirmHidden = 0, confirmLeave = null) }
 
-  /** L'utente ha confermato [plan] con un tocco: l'operazione parte (o l'esito dice perche' no). */
+  /**
+   * L'utente ha confermato [plan] con un tocco: l'operazione parte (o l'esito dice perche' no).
+   *
+   * O-B9 (prove sul campo): "Nuova cartella" dentro la scelta della destinazione di "Sposta" non e' la fine dello spostamento. La scelta resta
+   * aperta con gli stessi elementi da spostare ([FoldersMode.PickDestination]) e, se la cartella e' nata, la destinazione proposta e' lei
+   * (si entra nella cartella nuova: "Sposta qui" porta li' gli elementi). Prima il gesto riportava a sfogliare e la scelta andava rifatta.
+   */
   internal fun confirmed(plan: OpPlan, confirmation: UserConfirmation) {
+    val picking = mutable.value.mode as? FoldersMode.PickDestination
+    val createdWhilePicking = picking != null && plan.kind == OpKind.CREATE_FOLDER
     mutable.update { it.copy(confirm = null, confirmHidden = 0, confirmLeave = null, name = null) }
     viewModelScope.launch {
       val outcome = operations.start(plan, confirmation)
+      if (createdWhilePicking) {
+        mutable.update { it.copy(notice = noticeFor(outcome)) }
+        val created = plan.items.firstOrNull()
+        if (created != null && folderIsThere(outcome)) {
+          // Si entra nella cartella nuova (`goTo` rilegge l'elenco): la scelta e gli elementi da spostare restano quelli di prima.
+          goTo(FolderWhere(created.srcShare, created.srcPath))
+        } else {
+          refresh()
+        }
+        return@launch
+      }
       mutable.update {
         it.copy(
           notice = noticeFor(outcome),
@@ -338,6 +359,13 @@ class NasFoldersViewModel @Inject constructor(
       }
       refresh()
     }
+  }
+
+  /** La creazione di una cartella e' riuscita (l'operazione e' chiusa e senza elementi fermi): solo allora si entra nella cartella nuova. */
+  private fun folderIsThere(outcome: StartOutcome): Boolean {
+    val id = (outcome as? StartOutcome.Started)?.id ?: return false
+    val done = operations.operations.value.firstOrNull { it.id == id } as? NasOperationState.Done ?: return false
+    return done.summary.failed == 0 && done.summary.done > 0
   }
 
   internal fun dismissNotice() = mutable.update { it.copy(notice = null) }

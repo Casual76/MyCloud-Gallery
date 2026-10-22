@@ -455,6 +455,86 @@ class NasFoldersViewModelTest {
     assertThat(vm.state.value.mode).isEqualTo(FoldersMode.Browse)
   }
 
+  // --- O-B9: una cartella nuova dentro la scelta della destinazione ------------------------------------------------------------
+
+  /** Crea [name] nella cartella aperta, passando dal nome controllato e dal foglio come fa l'utente. */
+  private fun TestScope.createFolderHere(vm: NasFoldersViewModel, name: String) {
+    vm.openNewFolder()
+    vm.onNameChanged(name)
+    advanceTimeBy(300)
+    settle()
+    val plan = (vm.state.value.name?.check as NameCheck.Ready).plan
+    vm.confirmed(plan, checkNotNull(ConfirmationSheet(plan).tap(vm.monotonicMs())))
+    settle()
+    // Entrare nella cartella nuova rilegge l'elenco: un altro giro.
+    settle()
+  }
+
+  @Test
+  fun o_b9_creareUnaCartellaDentroLaSceltaLaTieneAperta() = runTest(dispatcher) {
+    populate()
+    val vm = viewModel()
+    vm.goTo(FolderWhere("test", null))
+    settle()
+    vm.toggle(SharePath.of("nota.txt"))
+    vm.startMove()
+    val picking = vm.state.value.mode as FoldersMode.PickDestination
+    vm.goTo(FolderWhere("test-comune", null))
+    settle()
+
+    createFolderHere(vm, "Scuola")
+
+    // La cartella e' nata e la scelta non si e' chiusa: gli stessi elementi da spostare, la stessa modalita'.
+    assertThat(kit.exists("test-comune", "Scuola")).isTrue()
+    assertThat(vm.state.value.mode).isEqualTo(picking)
+    assertThat((vm.state.value.mode as FoldersMode.PickDestination).items.map { it.path.value }).containsExactly("nota.txt")
+    assertThat(vm.state.value.picking).isTrue()
+    assertThat(vm.state.value.name).isNull()
+  }
+
+  @Test
+  fun o_b9_laCartellaNuovaEDiventataLaDestinazioneProposta() = runTest(dispatcher) {
+    populate()
+    val vm = viewModel()
+    vm.goTo(FolderWhere("test", null))
+    settle()
+    vm.toggle(SharePath.of("nota.txt"))
+    vm.startMove()
+    vm.goTo(FolderWhere("test-comune", null))
+    settle()
+
+    createFolderHere(vm, "Scuola")
+
+    // Si e' dentro la cartella nuova: "Sposta qui" e' attivo e porta li' gli elementi.
+    assertThat(vm.state.value.where).isEqualTo(FolderWhere("test-comune", SharePath.of("Scuola")))
+    assertThat(vm.state.value.canMoveHere).isTrue()
+    vm.moveHere()
+    settle()
+    val plan = checkNotNull(vm.state.value.confirm)
+    assertThat(plan.kind).isEqualTo(OpKind.MOVE)
+    vm.confirmed(plan, checkNotNull(ConfirmationSheet(plan).tap(vm.monotonicMs())))
+    settle()
+    assertThat(kit.exists("test-comune", "Scuola/nota.txt")).isTrue()
+    assertThat(kit.exists("test", "nota.txt")).isFalse()
+    // Finito lo spostamento si torna a sfogliare, come sempre.
+    assertThat(vm.state.value.mode).isEqualTo(FoldersMode.Browse)
+  }
+
+  @Test
+  fun o_b9_creareUnaCartellaSfogliandoNonCambiaModalita() = runTest(dispatcher) {
+    populate()
+    val vm = viewModel()
+    vm.goTo(FolderWhere("test", null))
+    settle()
+
+    createFolderHere(vm, "Scuola")
+
+    // Fuori dalla scelta una cartella nuova e' solo una cartella nuova: si resta dove si e' (nessun ingresso automatico).
+    assertThat(vm.state.value.mode).isEqualTo(FoldersMode.Browse)
+    assertThat(vm.state.value.where).isEqualTo(FolderWhere("test", null))
+    assertThat(vm.state.value.entries.map { it.name }).contains("Scuola")
+  }
+
   // --- Il nome -----------------------------------------------------------------------------------------------------------
 
   @Test

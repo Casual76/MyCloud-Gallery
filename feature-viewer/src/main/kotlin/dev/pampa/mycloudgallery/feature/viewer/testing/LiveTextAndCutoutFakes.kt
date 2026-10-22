@@ -67,12 +67,31 @@ object LiveTextFixtures {
   )
 }
 
-/** Il ritagliatore finto: un rettangolo intorno al punto, o nessun soggetto se il test lo chiede. */
-class FakeViewerSubjectCutter(var noSubject: Boolean = false) : ViewerSubjectCutter {
+/**
+ * Il ritagliatore finto: un rettangolo intorno al punto, o nessun soggetto se il test lo chiede. Per le prove piu' fini: [result] decide cosa
+ * rispondere a ogni punto (un soggetto disegnato, un guasto, nessun soggetto), [latencyMs] fa aspettare (il velo che pulsa), [failWith] fa lanciare
+ * un'eccezione come un motore che si rompe, [gate] lo tiene fermo finche' non lo si apre.
+ */
+class FakeViewerSubjectCutter(
+  var noSubject: Boolean = false,
+  var latencyMs: Long = 0,
+  var failWith: Throwable? = null,
+  var result: ((x: Float, y: Float) -> ViewerCutout)? = null,
+  /** Se c'e', il ritagliatore aspetta che lo si apra prima di rispondere: il velo che pulsa si cattura finche' il modello "lavora". */
+  var gate: kotlinx.coroutines.CompletableDeferred<Unit>? = null,
+) : ViewerSubjectCutter {
   val calls: MutableList<Pair<Float, Float>> = mutableListOf()
+
+  /** Le foto su cui si e' ritagliato, nell'ordine delle chiamate. */
+  val ids: MutableList<MediaId> = mutableListOf()
 
   override suspend fun cut(id: MediaId, ref: MediaRef, x: Float, y: Float): ViewerCutout {
     calls += x to y
+    ids += id
+    if (latencyMs > 0) kotlinx.coroutines.delay(latencyMs)
+    gate?.await()
+    failWith?.let { throw it }
+    result?.let { return it(x, y) }
     if (noSubject) return ViewerCutout.NoSubject
     val w = 64
     val h = 64
@@ -81,24 +100,45 @@ class FakeViewerSubjectCutter(var noSubject: Boolean = false) : ViewerSubjectCut
   }
 }
 
-/** Il salvataggio finto: registra cosa e' stato chiesto (copia, condivisione, nuova foto e se nasce nascosta). */
+/**
+ * Il salvataggio finto: registra cosa e' stato chiesto (copia, condivisione, nuova foto e se nasce nascosta, con il Contorno acceso o no).
+ * [copyFails], [shareFails], [saveFails] simulano un'azione che non riesce; [latencyMs] fa aspettare ("Salvo la foto nuova...").
+ */
 class FakeCutoutSaver : CutoutSaver {
   val copies: MutableList<MediaId> = mutableListOf()
   val shares: MutableList<MediaId> = mutableListOf()
   val saved: MutableList<Pair<MediaId, Boolean>> = mutableListOf()
+
+  /** Il Contorno com'era a ogni azione, nell'ordine delle chiamate. */
+  val outlines: MutableList<Boolean> = mutableListOf()
+  var copyFails: Boolean = false
+  var shareFails: Boolean = false
   var saveFails: Boolean = false
+  var latencyMs: Long = 0
+
+  /** Se c'e', il salvataggio aspetta che lo si apra: lo stato "Salvo la foto nuova..." si cattura finche' il PNG si scrive. */
+  var gate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
 
   override suspend fun copy(id: MediaId, ref: MediaRef, cutout: ViewerCutout.Subject, outline: Boolean): Boolean {
+    if (latencyMs > 0) kotlinx.coroutines.delay(latencyMs)
+    outlines += outline
+    if (copyFails) return false
     copies += id
     return true
   }
 
   override suspend fun share(id: MediaId, ref: MediaRef, cutout: ViewerCutout.Subject, outline: Boolean): Boolean {
+    if (latencyMs > 0) kotlinx.coroutines.delay(latencyMs)
+    outlines += outline
+    if (shareFails) return false
     shares += id
     return true
   }
 
   override suspend fun saveAsNewPhoto(id: MediaId, ref: MediaRef, cutout: ViewerCutout.Subject, outline: Boolean, fromHidden: Boolean): CutoutSaveResult {
+    if (latencyMs > 0) kotlinx.coroutines.delay(latencyMs)
+    gate?.await()
+    outlines += outline
     if (saveFails) return CutoutSaveResult.Failed
     saved += id to fromHidden
     return CutoutSaveResult.Saved(newMedia = null)

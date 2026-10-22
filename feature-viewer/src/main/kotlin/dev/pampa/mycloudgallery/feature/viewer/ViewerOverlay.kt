@@ -529,8 +529,8 @@ private fun PagerLayer(
     modifier = Modifier
       .fillMaxSize()
       .viewerVerticalDrag(
-        // Con una selezione del testo aperta il trascinamento verso il basso e' fermo (D45, E-V13).
-        enabled = { atRest() && !state.zoomed && !controller.closing && !controller.liveText.active },
+        // Con una selezione del testo o un soggetto staccato aperti il trascinamento verso il basso e' fermo (D45, E-V13).
+        enabled = { atRest() && !state.zoomed && !controller.closing && !controller.liveText.active && !controller.cutout.active },
         intentFor = controller::intentFor,
         onStart = {},
         onDrag = controller::onVerticalDrag,
@@ -565,8 +565,8 @@ private fun PagerLayer(
       modifier = Modifier.fillMaxSize().testTag(ViewerTags.Pager),
       pageSpacing = PageSpacing,
       beyondViewportPageCount = if (neighbors) 1 else 0,
-      // ... e con una selezione aperta il pager non scorre: si chiude prima (E-V13).
-      userScrollEnabled = atRest() && !controller.closing && !controller.liveText.active,
+      // ... e con una selezione o un soggetto staccato aperti il pager non scorre: si chiude prima (E-V13).
+      userScrollEnabled = atRest() && !controller.closing && !controller.liveText.active && !controller.cutout.active,
       flingBehavior = PagerDefaults.flingBehavior(state = pager, snapAnimationSpec = FluidMotion.smooth()),
       key = { index -> if (index < view.size) view.snapshot.idAt(view.snapshotIndex(index)).value else "gone-$index" },
     ) { page ->
@@ -602,6 +602,7 @@ private fun PagerLayer(
           onMotionTouch = controller::onMotionTouch,
           onPlayMotion = if (controller.motionAvailable(id)) controller::playMotion else null,
           liveText = controller.liveText,
+          cutout = controller.cutout,
         )
       }
     }
@@ -752,6 +753,10 @@ private fun ViewerOverlays(
   val liveText = controller.liveText
   LaunchedEffect(currentId, services.textSource) { liveText.bind(currentId) }
   val hasLiveText = currentKind != MediaKind.VIDEO && liveText.hasText(currentId)
+  // Il ritaglio del soggetto (Fase 6, P13, D44, D46): la voce ⋮ e l'azione di TalkBack; il ritaglio di un media si chiude cambiando media (E-H1).
+  val cutout = controller.cutout
+  LaunchedEffect(currentId) { cutout.bind(currentId) }
+  val canCutout = currentKind != MediaKind.VIDEO && cutout.available
   val handlers = ViewerActionHandlers(
     onToggleFavorite = controller::toggleFavorite,
     onToggleHidden = controller::toggleHidden,
@@ -787,6 +792,7 @@ private fun ViewerOverlays(
     shareWithoutLocation = shareWithoutLocation,
     onPlayMotion = if (controller.motionAvailable(currentId)) controller::playMotion else null,
     onText = if (hasLiveText) ({ liveText.openSheet(currentId) }) else null,
+    onCutout = if (canCutout) ({ cutout.cutLargest(currentId) }) else null,
     similarActions = similarMenuEntries(
       resources,
       services.similarSearch.availability(currentId),
@@ -851,7 +857,8 @@ private fun ViewerOverlays(
     null
   }
 
-  val chromeShown = atRest && !controller.closing && (state.chromeVisible || touchExploration)
+  // Con il soggetto staccato i controlli sono i suoi (la barra del ritaglio): niente chrome sotto, niente controlli uno sopra l'altro.
+  val chromeShown = atRest && !controller.closing && !controller.cutout.active && (state.chromeVisible || touchExploration)
   val infoClosed by remember { derivedStateOf { info.progress.value < INFO_CLOSED } }
   val chromeModifier = if (sidePanel) Modifier.shrinkEnd { (panelPx * info.progress.value).roundToInt() } else Modifier
 
@@ -1055,6 +1062,8 @@ private fun ViewerOverlays(
 
   // Il testo dal vivo: Indietro chiude la selezione prima del viewer; il foglio "Testo nella foto" (D46).
   BackHandler(enabled = liveText.canDismiss && !controller.closing && controller.sheet == null) { liveText.dismiss() }
+  // ... e il ritaglio: Indietro chiude il soggetto staccato prima del viewer (D45).
+  BackHandler(enabled = cutout.canDismiss && !controller.closing && controller.sheet == null) { cutout.dismiss() }
   val sheetLayout = (liveText.state as? LiveTextState.Sheet)?.layout
   val sheetText = remember { mutableStateOf("") }
   if (sheetLayout != null) sheetText.value = remember(sheetLayout) { TextSelections.allText(sheetLayout) }

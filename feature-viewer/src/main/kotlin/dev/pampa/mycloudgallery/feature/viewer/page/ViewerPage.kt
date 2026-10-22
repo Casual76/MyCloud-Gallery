@@ -65,6 +65,8 @@ import dev.pampa.mycloudgallery.feature.viewer.PageImage
 import dev.pampa.mycloudgallery.feature.viewer.ViewerServices
 import dev.pampa.mycloudgallery.feature.viewer.ViewerState
 import dev.pampa.mycloudgallery.feature.viewer.R
+import dev.pampa.mycloudgallery.feature.viewer.cutout.CutoutController
+import dev.pampa.mycloudgallery.feature.viewer.cutout.CutoutOverlay
 import dev.pampa.mycloudgallery.feature.viewer.gesture.onTouchDown
 import dev.pampa.mycloudgallery.feature.viewer.gesture.touchMovement
 import dev.pampa.mycloudgallery.feature.viewer.gesture.viewerLongPress
@@ -116,6 +118,8 @@ internal class PageSpec(
  * @param onPlayMotion il video intero della foto in movimento (azione di TalkBack); null = la pagina non ne ha una da proporre.
  * @param liveText il testo dal vivo (Fase 6, P12, D43, D45): l'arbitro della pressione prolungata su questa pagina (testo o ritaglio),
  *   la selezione disegnata sopra la foto e l'azione di TalkBack "Testo nella foto". Null = la pagina non li ha.
+ * @param cutout il ritaglio del soggetto (Fase 6, P13, D44, D45, D46): il soggetto staccato disegnato sopra la foto, il tocco che lo chiude e l'azione di
+ *   TalkBack "Ritaglia il soggetto". Null = la pagina non lo ha.
  */
 @Composable
 internal fun ViewerPage(
@@ -131,6 +135,7 @@ internal fun ViewerPage(
   modifier: Modifier = Modifier,
   onPlayMotion: (() -> Unit)? = null,
   liveText: LiveTextController? = null,
+  cutout: CutoutController? = null,
 ) {
   val id = spec.id
   val image = state.images[id] ?: PageImage()
@@ -233,15 +238,19 @@ internal fun ViewerPage(
   val textActionLabel = stringResource(R.string.livetext_action)
   val density = LocalDensity.current.density
   val textActionOn = isCurrent && liveText != null && spec.kind != MediaKind.VIDEO && liveText.canOpenSheet(id)
+  val cutoutActionLabel = stringResource(R.string.cutout_action)
+  val cutoutActionOn = isCurrent && cutout != null && spec.kind != MediaKind.VIDEO && cutout.available
   // Un trascinamento che nessuno consuma Compose lo conta come tocco: con qualcosa di aperto non deve chiuderlo.
   val pageTap: () -> Unit = {
     if (liveText != null && liveText.canDismiss) {
       if (!liveText.touchMoved) liveText.dismiss()
+    } else if (cutout != null && cutout.canDismiss) {
+      if (!cutout.touchMoved) cutout.dismiss()
     } else {
       onTap()
     }
   }
-  val doubleTapOn = liveText?.active != true
+  val doubleTapOn = liveText?.active != true && cutout?.active != true
   Box(
     modifier = modifier
       .fillMaxSize()
@@ -251,14 +260,25 @@ internal fun ViewerPage(
         val actions = buildList {
           if (motionEnabled && onPlayMotion != null) add(CustomAccessibilityAction(playMotionLabel) { onPlayMotion(); true })
           if (textActionOn && liveText != null) add(CustomAccessibilityAction(textActionLabel) { liveText.openSheet(id); true })
+          if (cutoutActionOn && cutout != null) add(CustomAccessibilityAction(cutoutActionLabel) { cutout.cutLargest(id); true })
         }
         if (actions.isNotEmpty()) customActions = actions
       }
       .onTouchDown(enabled = { motionEnabled }, onTouch = onMotionTouch)
-      .touchMovement(onDown = { liveText?.touchDown() }, onMoved = { liveText?.touchMoved = true })
+      .touchMovement(
+        onDown = {
+          liveText?.touchDown()
+          cutout?.touchDown()
+        },
+        onMoved = {
+          liveText?.touchMoved = true
+          if (cutout != null) cutout.touchMoved = true
+        },
+      )
       // L'arbitro della pressione prolungata (D45): testo letto sotto il dito = testo dal vivo; altrove su una foto = ritaglio (P13).
       .viewerLongPress(
-        enabled = { isCurrent && liveText != null && liveText.wantsLongPress(id) },
+        // Con un soggetto staccato la pressione prolungata e' ferma (i tasti della barra, premuti a lungo, non devono rifare il ritaglio).
+        enabled = { isCurrent && liveText != null && liveText.wantsLongPress(id) && cutout?.active != true },
         onLongPress = { position, size ->
           if (liveText != null) {
             val mapping = zoom.contentMapping(Size(size.width.toFloat(), size.height.toFloat()), drawAspect)
@@ -329,6 +349,10 @@ internal fun ViewerPage(
     // La selezione del testo, le maniglie e la barra: sopra la foto, fuori dallo zoom (D43).
     if (isCurrent && liveText != null) {
       LiveTextOverlay(controller = liveText, id = id, zoom = zoom, aspect = drawAspect)
+    }
+    // Il soggetto staccato e la sua barra (P13, D44): sopra la foto e sopra la selezione, fuori dallo zoom.
+    if (isCurrent && cutout != null) {
+      CutoutOverlay(controller = cutout, id = id, zoom = zoom, aspect = drawAspect, bitmap = best)
     }
   }
 }

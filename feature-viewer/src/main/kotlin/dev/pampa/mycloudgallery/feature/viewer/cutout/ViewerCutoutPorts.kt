@@ -20,12 +20,24 @@ class ViewerMask(val width: Int, val height: Int, alpha: ByteArray) {
 
   fun alpha(): ByteArray = data.copyOf()
 
+  /** L'alfa (0..255) del pixel ([x], [y]) senza copiare la maschera (P13): fuori dai bordi 0. */
+  fun at(x: Int, y: Int): Int = if (x in 0 until width && y in 0 until height) data[y * width + x].toInt() and 0xff else 0
+
+  /** L'alfa senza copiarlo, per chi lo legge soltanto (la preparazione del disegno). */
+  internal fun raw(): ByteArray = data
+
   override fun toString(): String = "ViewerMask(${width}x$height)"
 }
 
 /** L'esito di un ritaglio per il viewer. */
 sealed interface ViewerCutout {
-  data class Subject(val mask: ViewerMask, val bounds: ViewerRect) : ViewerCutout
+  data class Subject(val mask: ViewerMask, val bounds: ViewerRect) : ViewerCutout {
+    /** Quanto e' grande il soggetto: l'area del suo rettangolo in frazione dell'immagine (0..1), per scegliere "il piu' grande" (D46). */
+    val area: Float get() = (bounds.right - bounds.left).coerceAtLeast(0f) * (bounds.bottom - bounds.top).coerceAtLeast(0f)
+
+    /** Il punto normalizzato ([x], [y]) cade sul soggetto (alfa >= 128). */
+    fun contains(x: Float, y: Float): Boolean = mask.at((x * mask.width).toInt().coerceIn(0, mask.width - 1), (y * mask.height).toInt().coerceIn(0, mask.height - 1)) >= 128
+  }
 
   /** Nessun soggetto chiaro (E-V10): niente, vibrazione leggera, nessun messaggio d'errore. */
   data object NoSubject : ViewerCutout

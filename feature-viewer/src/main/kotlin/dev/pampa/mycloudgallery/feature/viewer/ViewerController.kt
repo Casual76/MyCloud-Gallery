@@ -29,6 +29,9 @@ import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.feature.viewer.download.DownloadState
 import dev.pampa.mycloudgallery.feature.viewer.gesture.VerticalIntent
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoPanelState
+import dev.pampa.mycloudgallery.feature.viewer.cutout.CutoutController
+import dev.pampa.mycloudgallery.feature.viewer.cutout.CutoutHost
+import dev.pampa.mycloudgallery.feature.viewer.gesture.ViewerSubjectPress
 import dev.pampa.mycloudgallery.feature.viewer.livetext.LiveTextController
 import dev.pampa.mycloudgallery.feature.viewer.livetext.LiveTextHost
 import dev.pampa.mycloudgallery.feature.viewer.motion.MotionDirector
@@ -135,8 +138,31 @@ internal class ViewerController(
   )
 
   /**
-   * Il testo dal vivo (Fase 6, P12, D43, D45, D46): selezione con le maniglie, foglio "Testo nella foto", lettura al volo. Porta anche
-   * l'aggancio del ritaglio (`liveText.onSubjectLongPress`, P13): l'arbitro della pressione prolungata gli passa cio' che non e' testo.
+   * Il ritaglio del soggetto (Fase 6, P13, D44, D45, D46, D47): il soggetto che si stacca, la barra "Copia · Condividi · Salva come nuova
+   * foto", l'interruttore "Contorno". Lo avvia l'arbitro della pressione prolungata ([liveText]), la voce ⋮ e l'azione di TalkBack.
+   */
+  val cutout: CutoutController = CutoutController(
+    scope = scope,
+    host = CutoutHost(
+      services = { services },
+      refOf = ::refOf,
+      kindOf = ::kindOf,
+      currentId = { state.currentId },
+      announce = { state.message = it },
+      hidden = { request.secure },
+      work = { services.dispatchers.default },
+    ),
+  )
+
+  /** La pressione prolungata fuori dal testo: il ritaglio, e la porta dei servizi se qualcuno ne ha messa una (le prove dell'arbitro). */
+  private val subjectPress = ViewerSubjectPress { id, x, y ->
+    services.subjectPress?.onPress(id, x, y)
+    if (cutout.available) cutout.onPress(id, x, y)
+  }
+
+  /**
+   * Il testo dal vivo (Fase 6, P12, D43, D45, D46): selezione con le maniglie, foglio "Testo nella foto", lettura al volo. L'arbitro della
+   * pressione prolungata gli e' dentro: cio' che non e' testo lo passa al ritaglio ([cutout], P13).
    */
   val liveText: LiveTextController = LiveTextController(
     scope = scope,
@@ -147,6 +173,7 @@ internal class ViewerController(
       kindOf = ::kindOf,
       currentId = { state.currentId },
       announce = { state.message = it },
+      subject = { if (services.subjectPress != null || cutout.available) subjectPress else null },
     ),
   )
 

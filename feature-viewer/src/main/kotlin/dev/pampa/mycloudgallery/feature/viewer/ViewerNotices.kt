@@ -275,10 +275,12 @@ internal fun BoxScope.PageNotice(
 internal fun MessageNotice(message: ViewerMessage, backdrop: GlassBackdropState, modifier: Modifier = Modifier) {
   GalleryViewerNotice(
     icon = when (message) {
-      ViewerMessage.Copied, ViewerMessage.TextCopied, ViewerMessage.Hidden, ViewerMessage.Unhidden, ViewerMessage.Downloaded -> Icons.Rounded.CheckCircle
+      ViewerMessage.Copied, ViewerMessage.TextCopied, ViewerMessage.Hidden, ViewerMessage.Unhidden, ViewerMessage.Downloaded,
+      ViewerMessage.CutoutCopied, ViewerMessage.CutoutSaved,
+      -> Icons.Rounded.CheckCircle
       ViewerMessage.ActionFailed, ViewerMessage.HideFailed, ViewerMessage.UnhideFailed, ViewerMessage.FavoriteFailed,
       ViewerMessage.DownloadFailed, ViewerMessage.DownloadNasUnreachable, ViewerMessage.DownloadPhoneFull,
-      ViewerMessage.DownloadIntegrity,
+      ViewerMessage.DownloadIntegrity, ViewerMessage.CutoutFailed, ViewerMessage.CutoutSaveFailed,
       -> Icons.Rounded.ReportProblem
       else -> Icons.Rounded.Info
     },

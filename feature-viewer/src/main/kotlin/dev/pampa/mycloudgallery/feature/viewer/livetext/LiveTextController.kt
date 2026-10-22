@@ -17,6 +17,7 @@ import dev.pampa.mycloudgallery.feature.viewer.findActivity
 import dev.pampa.mycloudgallery.feature.viewer.gesture.LongPressArbiter
 import dev.pampa.mycloudgallery.feature.viewer.gesture.LongPressOutcome
 import dev.pampa.mycloudgallery.feature.viewer.gesture.TextClaim
+import dev.pampa.mycloudgallery.feature.viewer.gesture.ViewerSubjectPress
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -29,6 +30,11 @@ internal class LiveTextHost(
   val kindOf: (MediaId) -> MediaKind?,
   val currentId: () -> MediaId,
   val announce: (ViewerMessage) -> Unit,
+  /**
+   * Dove va la pressione prolungata fuori dal testo (D45): il ritaglio del soggetto (Fase 6, P13). Di serie la porta dei servizi
+   * (`ViewerServices.subjectPress`); il viewer vero la unisce al suo ritagliatore. Null = il ritaglio non c'e': la pressione non fa niente (D13).
+   */
+  val subject: () -> ViewerSubjectPress? = { services().subjectPress },
 )
 
 /** Quale delle due maniglie si trascina. */
@@ -107,7 +113,7 @@ internal class LiveTextController(
 
   /** La pressione prolungata ha qualcosa da fare su questo media (E-V9): testo, lettura al volo o ritaglio. */
   fun wantsLongPress(id: MediaId): Boolean =
-    host.kindOf(id) != MediaKind.VIDEO && (host.services().textSource != null || readerAvailable() || host.services().subjectPress != null)
+    host.kindOf(id) != MediaKind.VIDEO && (host.services().textSource != null || readerAvailable() || host.subject() != null)
 
   /** La geometria del testo di [id] alla proporzione [aspect], tenuta finche' non cambiano. */
   fun geometry(id: MediaId, aspect: Float): LiveTextGeometry? {
@@ -180,7 +186,7 @@ internal class LiveTextController(
   fun onLongPress(id: MediaId, aspect: Float, point: Offset, tolerance: Float) {
     scope.launch {
       val claim = TextClaim { p -> claim(id, aspect, p, tolerance) }
-      val outcome = LongPressArbiter.decide(host.kindOf(id), point, claim, subject = host.services().subjectPress != null)
+      val outcome = LongPressArbiter.decide(host.kindOf(id), point, claim, subject = host.subject() != null)
       if (id != host.currentId()) return@launch
       when (outcome) {
         is LongPressOutcome.Text -> {
@@ -189,7 +195,7 @@ internal class LiveTextController(
         }
         is LongPressOutcome.Subject -> {
           if (state !is LiveTextState.ReadingNow) dismiss()
-          host.services().subjectPress?.onPress(id, outcome.x, outcome.y)
+          host.subject()?.onPress(id, outcome.x, outcome.y)
         }
         LongPressOutcome.None -> if (state is LiveTextState.ReadingNow) reset()
       }

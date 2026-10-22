@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.PersistableBundle
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.ContentCut
 import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Favorite
@@ -86,6 +87,7 @@ internal class ViewerActionHandlers(
  * @param onPlayMotion la voce "Riproduci il movimento" di una foto in movimento (Fase 6, D51): null = la pagina non e' una foto in
  *   movimento o il suo video non si riproduce (E-M16).
  * @param onText la voce "Testo nella foto" (Fase 6, P12, D46): il foglio con il testo letto; null = la foto non ha testo da mostrare (D13).
+ * @param onCutout la voce "Ritaglia il soggetto" (Fase 6, P13, D44, D46): il soggetto piu' grande fra cinque punti di prova; null = il ritaglio non c'e' (D13).
  * @param similarActions la voce "Trova simili" (Fase 6, P8, D30): vuota se il media e' nascosto o il viewer non ha la ricerca; vedi `similarMenuEntries`.
  */
 internal fun viewerMenuEntries(
@@ -100,6 +102,7 @@ internal fun viewerMenuEntries(
   shareWithoutLocation: Boolean = false,
   onPlayMotion: (() -> Unit)? = null,
   onText: (() -> Unit)? = null,
+  onCutout: (() -> Unit)? = null,
   similarActions: List<GalleryMenuEntry> = emptyList(),
 ): List<GalleryMenuEntry> {
   val groups = mutableListOf<List<GalleryMenuEntry>>()
@@ -129,6 +132,9 @@ internal fun viewerMenuEntries(
     }
     if (onText != null) {
       add(GalleryMenuEntry.Item(resources.getString(R.string.livetext_action), onText, Icons.Rounded.TextFields))
+    }
+    if (onCutout != null) {
+      add(GalleryMenuEntry.Item(resources.getString(R.string.cutout_action), onCutout, Icons.Rounded.ContentCut))
     }
     if (capabilities.share) {
       val shareLabel = if (shareWithoutLocation) R.string.viewer_backup_action_share_no_location else R.string.viewer_action_share

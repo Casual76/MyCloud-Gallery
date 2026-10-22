@@ -33,7 +33,11 @@ class CountingEmbedder(private val inner: FakeImageEmbedder = FakeImageEmbedder(
   val perImage = HashMap<String, Int>()
   override val backend get() = inner.backend
 
+  /** Revisione A (IX-7): gli errori del motore delle prossime chiamate, in ordine (vuoto = nessuno). */
+  val failNext = ArrayDeque<dev.pampa.mycloudgallery.core.ai.contract.AiEngineError>()
+
   override suspend fun embed(images: List<ModelImage>): List<FloatArray> {
+    failNext.removeFirstOrNull()?.let { throw dev.pampa.mycloudgallery.core.ai.contract.AiEngineException(it) }
     images.forEach {
       val k = String(it.jpeg, Charsets.UTF_8)
       perImage[k] = (perImage[k] ?: 0) + 1
@@ -124,6 +128,10 @@ class SimDevice(
     }.take(limit)
   }
 
+  /** Revisione A (R5): risultati e corpi che ricordano la provenienza, al posto di quelli finti (null = quelli finti). */
+  var resultsOverride: dev.pampa.mycloudgallery.core.ai.contract.AiResults? = null
+  var bodiesOverride: AiLocalBodies? = null
+
   /** La morte del processo **dopo** il salvataggio numero [dieAfterSave] (contati dall'inizio del mondo); -1 = mai. */
   var dieAfterSave: Int = -1
   var saves: Int = 0
@@ -166,7 +174,7 @@ class SimDevice(
       fetcher = fetcher,
       doneByOthers = SimDone(nas, id),
       publisher = publisher,
-      results = crashing,
+      results = resultsOverride ?: crashing,
       images = images,
       reader = {
         readerAsked++
@@ -179,7 +187,7 @@ class SimDevice(
         PrepOpen.Ready(PrepareSource.Bytes(ByteArrayMediaBytes(p.second.toByteArray()), p.first, null)) {}
       },
       sources = AiMediaSources { keys -> keys.mapNotNull { k -> nas.shares.values.firstNotNullOfOrNull { it.media[k] }?.let { k to it.source } }.toMap() },
-      localBodies = localBodies,
+      localBodies = bodiesOverride ?: localBodies,
       unsupported = AiUnsupported { key, cls -> unsupported += key to cls },
       freeSpace = AiFreeSpace { freeBytes },
     )

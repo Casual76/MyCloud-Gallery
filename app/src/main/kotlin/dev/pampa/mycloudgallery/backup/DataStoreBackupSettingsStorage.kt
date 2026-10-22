@@ -2,9 +2,11 @@ package dev.pampa.mycloudgallery.backup
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
+import dev.pampa.mycloudgallery.core.backup.contract.BackupSource
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSources
 import dev.pampa.mycloudgallery.core.backup.settings.BackupSettingsStorage
 import dev.pampa.mycloudgallery.core.backup.settings.BackupSourceCodec
@@ -50,6 +52,28 @@ class DataStoreBackupSettingsStorage(
     return saved
   }
 
+  /**
+   * Fase 6 (P13, D47): le installazioni di prima dei ritagli del soggetto non hanno la sorgente "Ritagli"; **una volta sola** la si aggiunge a
+   * quelle che l'utente aveva scelto (`BackupSources.withCutouts`). Chi non aveva scelto niente (nessuna chiave: vale l'onboarding, che i
+   * ritagli li ha gia') o aveva spento tutto (insieme vuoto: "il backup non e' voluto") non cambia, e chi poi la spegne non la rivede: la
+   * proposta e' ricordata, anche se non ha cambiato niente. [cutouts] e' la sorgente "Ritagli" (in debug con un account di prova quella
+   * recintata di D13: `CutoutFence.sourceFor`); [isCutouts] riconosce una cartella dei ritagli fra quelle scelte (`CutoutFence.isCutouts`: la sorgente
+   * di serie e quella recintata, ma senza nominare quest'ultima in release). Vero se ha aggiunto la sorgente.
+   */
+  suspend fun offerCutoutsOnce(cutouts: BackupSource.Folder, isCutouts: (BackupSource) -> Boolean = { it == cutouts }): Boolean {
+    var added = false
+    dataStore.edit { preferences ->
+      if (preferences[CUTOUTS_OFFERED] == true) return@edit
+      preferences[CUTOUTS_OFFERED] = true
+      val ids = preferences[SOURCES] ?: return@edit
+      val sources = BackupSourceCodec.decode(ids)
+      if (sources.isEmpty || sources.sources.any(isCutouts)) return@edit
+      preferences[SOURCES] = BackupSourceCodec.encode(BackupSources(sources.sources + cutouts))
+      added = true
+    }
+    return added
+  }
+
   /** L'azzeramento: la cartella del dispositivo e le sorgenti scelte appartengono alla famiglia che si lascia. */
   suspend fun clear() {
     dataStore.edit { it.clear() }
@@ -70,5 +94,8 @@ class DataStoreBackupSettingsStorage(
   private companion object {
     val SOURCES = stringSetPreferencesKey("backup_source_ids")
     val DEVICE_FOLDER = stringPreferencesKey("backup_device_folder")
+
+    /** La proposta dei ritagli e' gia' stata fatta (una volta per installazione, [offerCutoutsOnce]). */
+    val CUTOUTS_OFFERED = booleanPreferencesKey("backup_cutouts_offered")
   }
 }

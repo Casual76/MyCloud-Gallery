@@ -372,6 +372,9 @@ class GalleryGraph(
     val similarSearch: dev.pampa.mycloudgallery.feature.viewer.menu.ViewerSimilarSearch,
     val motionAnimation: dev.pampa.mycloudgallery.feature.viewer.motion.MotionAnimationSetting,
     val motionTraffic: dev.pampa.mycloudgallery.feature.viewer.video.MotionTraffic,
+    /** Il ritaglio del soggetto (P13, D44): il ritagliatore e le tre azioni della barra. Null = nessun ritaglio (D13). */
+    val subjectCutter: dev.pampa.mycloudgallery.feature.viewer.cutout.ViewerSubjectCutter? = null,
+    val cutoutSaver: dev.pampa.mycloudgallery.feature.viewer.cutout.CutoutSaver? = null,
   )
 
   @Volatile
@@ -621,12 +624,14 @@ class GalleryGraph(
       // Fase 5B (P14): Versioni, Ripristina originale, Correggi, Ruota, "Modifica con…", "Condividi" con o senza posizione, "Ovunque".
       // Correzioni 5B (R4): senza backup restano le voci di "Condividi" (con "Rimuovi la posizione"), non il percorso di prima con l'originale.
       backupActions = fiveB?.mediaActions ?: shares?.viewerActions(),
-      // Fase 6 (P11): testo dal vivo (P12), "Trova simili" (P8), foto in movimento (P14). Il ritaglio (P13) resta senza porta.
+      // Fase 6 (P11, P11b): testo dal vivo e lettura al volo (P12), "Trova simili" (P8), foto in movimento (P14), ritaglio del soggetto (P13).
       motionAnimation = searchViewer?.motionAnimation ?: dev.pampa.mycloudgallery.feature.viewer.motion.MotionAnimationSetting.On,
       nasMotion = nasMotion,
       textSource = searchViewer?.textSource,
       textReader = searchViewer?.textReader,
       similarSearch = searchViewer?.similarSearch ?: dev.pampa.mycloudgallery.feature.viewer.menu.NoViewerSimilarSearch,
+      subjectCutter = searchViewer?.subjectCutter,
+      cutoutSaver = searchViewer?.cutoutSaver,
     )
   }
 

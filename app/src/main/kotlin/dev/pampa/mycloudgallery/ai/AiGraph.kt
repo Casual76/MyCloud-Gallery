@@ -69,6 +69,8 @@ class AiGraphParts(
   val inputs: AiInputs? = null,
   /** Il modello del calcolo c'e' ed e' verificato: di serie `ModelFiles.open` (D16); i test, con i motori finti, senza file. */
   val modelReady: (suspend () -> Boolean)? = null,
+  /** L'azzeramento rilascia anche il ritagliatore del soggetto (P13): il modello occupa circa 240 MB. */
+  val releaseCutout: suspend () -> Unit = {},
 )
 
 /** I modelli di questo dispositivo (P3): il gestore e i file verificati, con `refresh()` da chiamare all'avvio. */
@@ -250,6 +252,7 @@ class AiGraph(
     stopped = true
     job.cancel()
     runCatching { parts.images.release() }
+    runCatching { parts.releaseCutout() }
     runCatching { parts.shutdown().onTurnedOff() }
     runCatching { buffer.clear() }
   }

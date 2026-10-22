@@ -1,24 +1,35 @@
 package dev.pampa.mycloudgallery.ai
 
+import android.content.ComponentCallbacks2
 import android.content.Context
-import dev.pampa.mycloudgallery.core.ai.contract.TextReadingSwitch
+import dev.pampa.mycloudgallery.backup.CutoutFence
+import dev.pampa.mycloudgallery.backup.FencedCutouts
+import dev.pampa.mycloudgallery.core.ai.contract.SubjectCutter
 import dev.pampa.mycloudgallery.core.ai.contract.TextEmbedder
+import dev.pampa.mycloudgallery.core.ai.contract.TextReadingSwitch
+import dev.pampa.mycloudgallery.core.ai.cutout.MagicTouchCutter
 import dev.pampa.mycloudgallery.core.ai.ocr.GatedTextReader
 import dev.pampa.mycloudgallery.core.ai.ocr.TextReadingShutdown
 import dev.pampa.mycloudgallery.core.ai.runtime.LiteRtLmImageEmbedder
 import dev.pampa.mycloudgallery.core.ai.runtime.LiteRtLmTextEmbedder
+import dev.pampa.mycloudgallery.core.backup.contract.BackupFence
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagCode
+import dev.pampa.mycloudgallery.core.database.MediaCatalog
 import dev.pampa.mycloudgallery.core.family.contract.RolesSettings
 import dev.pampa.mycloudgallery.core.family.roles.OnboardingRolesSettings
 import dev.pampa.mycloudgallery.core.family.roles.RolesRepublisher
+import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneMediaWriter
+import dev.pampa.mycloudgallery.core.mediastore.write.MediaStorePhoneMediaWriter
 import dev.pampa.mycloudgallery.core.model.NasArea
 import dev.pampa.mycloudgallery.core.models.LocalModels
 import dev.pampa.mycloudgallery.core.models.ModelFetchers
 import dev.pampa.mycloudgallery.core.models.contract.BundledAssets
 import dev.pampa.mycloudgallery.core.models.contract.ModelCatalog
 import dev.pampa.mycloudgallery.core.models.contract.ModelFetcher
+import dev.pampa.mycloudgallery.core.models.contract.ModelFiles
 import dev.pampa.mycloudgallery.core.models.contract.ModelNasArea
 import dev.pampa.mycloudgallery.core.models.contract.ModelState
+import dev.pampa.mycloudgallery.core.models.contract.ModelTrigger
 import dev.pampa.mycloudgallery.core.models.traffic.LedgerModelTraffic
 import dev.pampa.mycloudgallery.core.nas.contract.Purpose
 import dev.pampa.mycloudgallery.core.personal.contract.MotionPersonalSettings
@@ -28,6 +39,9 @@ import dev.pampa.mycloudgallery.core.personal.settings.SyncedMotionSettings
 import dev.pampa.mycloudgallery.core.personal.settings.SyncedSearchSettings
 import dev.pampa.mycloudgallery.core.personal.store.LedgerPersonalStore
 import dev.pampa.mycloudgallery.core.rules.traffic.TrafficSource
+import dev.pampa.mycloudgallery.debugtools.DeveloperTools
+import dev.pampa.mycloudgallery.feature.viewer.cutout.AndroidCutoutSaver
+import dev.pampa.mycloudgallery.feature.viewer.cutout.CutoutShareFiles
 import dev.pampa.mycloudgallery.gallery.GalleryGraph
 import dev.pampa.mycloudgallery.graph.AppGraph
 import dev.pampa.mycloudgallery.graph.snapshotOrNull
@@ -36,6 +50,7 @@ import dev.pampa.mycloudgallery.search.LazyQueryEmbedding
 import dev.pampa.mycloudgallery.search.SearchGraph
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
@@ -72,21 +87,55 @@ class AiStack(
   val textSwitch: TextReadingSwitch,
   /** "Scarica ora" sui dati mobili: la conferma data dall'utente per lo scaricamento in corso (D17, §2.7). */
   val mobileConfirmed: AtomicBoolean,
+  /** Il ritagliatore del soggetto (P13, D44): costruito al primo ritaglio, rilasciato a riposo, a memoria bassa e all'azzeramento. */
+  val cutout: CutoutRuntime,
+  /** "Salva come nuova foto" del ritaglio (D47): le foto nuove in `Ritagli/`; `purgeOrphans()` all'avvio. */
+  val cutoutPhotos: AppCutoutNewPhoto,
+  /** D13: dove stanno i ritagli e la loro sorgente del backup (recinzione delle prove, solo in debug). */
+  val cutoutFence: CutoutFence,
+  private val context: Context,
   /** "Trova simili" dal viewer verso la scheda Cerca. */
   val similar: SimilarRequests = SimilarRequests(),
 ) {
-  /** Le porte del viewer della ricerca (testo dal vivo, "Trova simili", foto in movimento), legate all'avvio sulla galleria. */
-  fun viewerHooks(graph: AppGraph, gallery: GalleryGraph): GalleryGraph.SearchViewerHooks = GalleryGraph.SearchViewerHooks(
-    textSource = IndexViewerTextSource(search.mediaText),
-    textReader = GatedViewerTextReader(textSwitch, ai.parts.reader, { gallery.coreIfReady()?.catalog }, ai.buffer),
-    similarSearch = SearchViewerSimilar(search.keys, similar),
-    motionAnimation = dev.pampa.mycloudgallery.feature.viewer.motion.MotionAnimationSetting { personal.motion.value?.motionAnimation?.value ?: true },
-    motionTraffic = dev.pampa.mycloudgallery.feature.viewer.video.MotionTraffic { bytes, _ ->
-      graph.scope.launch {
-        graph.trafficLedger.record(TrafficSource.VISIBLE_CONTENT, trafficNetworkOf(graph.environment.snapshot.value), bytes)
-      }
-    },
-  )
+  /**
+   * Le porte del viewer della ricerca (testo dal vivo, "Trova simili", foto in movimento, ritaglio del soggetto), legate
+   * all'avvio sulla galleria. [share] e' dove Copia e Condividi del ritaglio mettono il PNG (la cartella del `FileProvider` che c'e' gia'):
+   * senza, il ritaglio c'e' e "Salva come nuova foto" funziona, Copia e Condividi no.
+   */
+  fun viewerHooks(
+    graph: AppGraph,
+    gallery: GalleryGraph,
+    share: CutoutShareEnv? = null,
+  ): GalleryGraph.SearchViewerHooks {
+    val catalog: suspend () -> MediaCatalog? = { gallery.coreIfReady()?.catalog }
+    val diag = { code: DiagCode -> graph.events.code(code) }
+    val nas = gallery.nas
+    val hq = nas?.let { ReplicaHq(it.blobs, it.locations) }
+
+    // Ritaglio del soggetto (D44, D45, D47): la migliore immagine che il dispositivo ha gia', mai uno scaricamento.
+    val sources = CutoutSources(context.contentResolver, gallery.intents::uriOf, nas?.imageOrigin, hq)
+    val names = RememberedSourceName()
+    val files = share?.let { CutoutFiles(it.cache, it.uris) } ?: CutoutShareFiles { null }
+    return GalleryGraph.SearchViewerHooks(
+      textSource = IndexViewerTextSource(search.mediaText),
+      textReader = GatedViewerTextReader(textSwitch, ai.parts.reader, catalog, ai.buffer),
+      similarSearch = SearchViewerSimilar(search.keys, similar),
+      motionAnimation = dev.pampa.mycloudgallery.feature.viewer.motion.MotionAnimationSetting { personal.motion.value?.motionAnimation?.value ?: true },
+      motionTraffic = dev.pampa.mycloudgallery.feature.viewer.video.MotionTraffic { bytes, _ ->
+        graph.scope.launch {
+          graph.trafficLedger.record(TrafficSource.VISIBLE_CONTENT, trafficNetworkOf(graph.environment.snapshot.value), bytes)
+        }
+      },
+      subjectCutter = AppViewerSubjectCutter(cutout, sources, catalog, names, diag),
+      cutoutSaver = DiagCutoutSaver(AndroidCutoutSaver(context, AppCutoutPng(cutout, sources), files, cutoutPhotos, names::nameOf), diag),
+    )
+  }
+
+  /** `onTrimMemory`: il motore delle query (D35) e il ritagliatore (P13) si rilasciano a memoria bassa. */
+  fun onTrimMemory(level: Int) {
+    if (level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND) search.onTrimMemory()
+    cutout.trim(level)
+  }
 }
 
 /**
@@ -109,6 +158,13 @@ object AiWiring {
     /** Solo i test d'integrazione (motori finti, nessun file di modello): gli ingressi e la prontezza dei modelli. */
     inputs: dev.pampa.mycloudgallery.core.ai.compute.AiInputs? = null,
     modelReady: (suspend (dev.pampa.mycloudgallery.core.models.contract.ModelId) -> Boolean)? = null,
+    /** D13: la recinzione del telefono (debug con un account di prova); in release null. I test la scelgono. */
+    fence: BackupFence? = DeveloperTools.backupFence(),
+    /** D13: le cartelle recintate dei ritagli (solo debug, come [fence]); in release null. */
+    fencedCutouts: FencedCutouts? = DeveloperTools.fencedCutouts(),
+    /** Solo i test d'integrazione: il ritagliatore (finto) e lo scrittore di `Ritagli/` (finto) al posto di MagicTouch e del MediaStore. */
+    cutter: ((ModelFiles) -> SubjectCutter)? = null,
+    cutoutWriter: ((relativePath: String) -> PhoneMediaWriter)? = null,
   ): AiStack {
     val scope = graph.scope
     val noBackup = context.noBackupFilesDir
@@ -178,6 +234,14 @@ object AiWiring {
       scope,
     )
 
+    // --- Ritaglio del soggetto (P13, D44, D47) ------------------------------------------------------------------------------
+    // Il modello e' nell'APK: la prima volta si mette fra i modelli verificati (copia locale, senza rete) e MagicTouch lo apre dai file verificati.
+    val cutoutModels = EnsuringModelFiles(models.files) { id -> models.manager.ensure(id, ModelTrigger.USER_NOW, 30.seconds) }
+    val cutout = CutoutRuntime(
+      scope = scope,
+      factory = { cutter?.invoke(cutoutModels) ?: MagicTouchCutter.create(cutoutModels) },
+      maxPixels = gallery.imagingBudget.viewerMaxPixels,
+    )
     // --- AI (P4, P5, P2) -----------------------------------------------------------------------------------------------------
     val images = imageEmbedder?.invoke(models) ?: LiteRtLmImageEmbedder(models.files, cacheRoot, diag = diag)
     val ai = AiGraph(
@@ -201,10 +265,18 @@ object AiWiring {
         images = images,
         inputs = inputs,
         modelReady = modelReady?.let { ready -> { ready(ModelCatalog.INDEX_440M.id) } },
+        releaseCutout = cutout::stop,
       ),
     )
-    // Il riparatore dell'indice: la replica `ai` riconsegna (la rifusione la rifa' il prossimo giro di sincronizzazione).
-    return AiStack(models, search, ai, personal, roles, switch, mobileConfirmed)
+
+    val cutoutFence = CutoutFence(fence, fencedCutouts) { graph.account.value?.user }
+    val cutoutPhotos = AppCutoutNewPhoto(
+      catalog = { gallery.coreIfReady()?.catalog },
+      writerFor = cutoutWriter ?: { path -> MediaStorePhoneMediaWriter(context, relativePath = path) },
+      folder = cutoutFence::folder,
+      nowMillis = gallery.clock,
+    )
+    return AiStack(models, search, ai, personal, roles, switch, mobileConfirmed, cutout, cutoutPhotos, cutoutFence, context)
   }
 
   /** Le aree di questo dispositivo come le vede la pagina (solo il tipo, mai il nome della share). */

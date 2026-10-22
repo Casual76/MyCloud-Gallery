@@ -145,6 +145,12 @@ internal object DeveloperTools {
    */
   fun backupFence(): BackupFence? = DebugBackupFence
 
+  /**
+   * D13 (Fase 6, P13): le cartelle recintate dei ritagli del soggetto con gli account di prova (`Pictures/mcg-prova/Ritagli/` e la sua sorgente del
+   * backup), solo qui: in release non esistono e la stringa `mcg-prova` non e' nel dex (tools/check.ps1).
+   */
+  fun fencedCutouts(): dev.pampa.mycloudgallery.backup.FencedCutouts? = DebugFencedCutouts
+
   /** Il nome del marcatore della famiglia pronta (lo scrive solo `adb`). */
   const val FAMILY_READY_MARKER: String = "debug-family-ready.marker"
 

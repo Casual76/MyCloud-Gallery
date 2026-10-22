@@ -5,11 +5,13 @@ import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
 import dev.pampa.mycloudgallery.ai.AiStack
+import dev.pampa.mycloudgallery.ai.CutoutShareEnv
 import dev.pampa.mycloudgallery.ai.TextReadingStartup
 import dev.pampa.mycloudgallery.backup.FiveBUi
 import dev.pampa.mycloudgallery.core.models.contract.ModelTrigger
 import dev.pampa.mycloudgallery.work.AiWorkScheduling
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import dev.pampa.mycloudgallery.gallery.GalleryGraph
 import dev.pampa.mycloudgallery.integrations.IntegrationsGraph
@@ -87,7 +89,7 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
     gallery.shares = integrations.shares
     fiveB.ifPresent { ui -> gallery.fiveB = GalleryGraph.FiveBHooks(ui.mediaActions) { ids -> ui.openFreeSpace(ids) } }
     // Fase 6 (P11): testo dal vivo, "Trova simili" e foto in movimento nel viewer, prima di qualunque schermata.
-    gallery.searchViewer = ai.viewerHooks(graph, gallery)
+    gallery.searchViewer = ai.viewerHooks(graph, gallery, CutoutShareEnv(integrations.shareCache, integrations.uris))
     // Fase 6 (P9): lo strumento di valutazione della ricerca, solo in debug (in release la funzione e' vuota).
     dev.pampa.mycloudgallery.debugtools.DeveloperTools.installSearch(ai, gallery, this)
     ProcessWatcher(
@@ -102,8 +104,8 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
   override fun onTrimMemory(level: Int) {
     super.onTrimMemory(level)
     if (::gallery.isInitialized) gallery.onTrimMemory(level)
-    // Fase 6 (D35): il motore delle query si rilascia a memoria bassa (si ricarica alla prossima ricerca).
-    if (::ai.isInitialized && level >= android.content.ComponentCallbacks2.TRIM_MEMORY_BACKGROUND) ai.search.onTrimMemory()
+    // Fase 6 (D35, P13): il motore delle query e il ritagliatore del soggetto si rilasciano a memoria bassa (si ricaricano all'uso).
+    if (::ai.isInitialized) ai.onTrimMemory(level)
   }
 
   private fun galleryLifecycle(): GalleryLifecycle = object : GalleryLifecycle {
@@ -126,6 +128,15 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
         graph.scope.launch {
           runCatching { ai.search.open() }
           runCatching { ai.localModels.refresh() }
+          // P13: una riga in attesa lasciata da un "Salva come nuova foto" interrotto dalla morte del processo si toglie (IS_PENDING).
+          runCatching { ai.cutoutPhotos.purgeOrphans() }
+        }
+        // P13 (D47): le installazioni di prima dei ritagli ricevono, una volta sola, la sorgente "Ritagli" del backup (con la recinzione di D13 in debug).
+        graph.scope.launch {
+          runCatching {
+            val user = graph.accountStore.observe().first()?.user
+            graph.backupSettingsStorage.offerCutoutsOnce(ai.cutoutFence.sourceFor(user), ai.cutoutFence::isCutouts)
+          }
         }
         // D15: accendere Indicizzatore chiede subito il modello del calcolo (lavoro accelerato).
         graph.scope.launch {

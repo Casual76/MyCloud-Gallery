@@ -191,6 +191,8 @@ class ModelFetchWorker @AssistedInject constructor(
       runCatching { stack.localModels.refresh() }
       val wanted = buildList {
         add(ModelCatalog.QUERY_270M.id)
+        // Il ritaglio del soggetto (P13): il modello e' nell'APK, una copia locale fra i modelli verificati, senza rete.
+        add(ModelCatalog.CUTOUT_MAGICTOUCH.id)
         if (stack.ai.indexer.value) add(ModelCatalog.INDEX_440M.id)
       }
       wanted.map { id -> stack.localModels.manager.ensure(id, trigger, BUDGET) }

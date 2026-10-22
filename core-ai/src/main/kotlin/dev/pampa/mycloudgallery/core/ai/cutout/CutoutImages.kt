@@ -9,6 +9,7 @@ import dev.pampa.mycloudgallery.core.ai.contract.AiEngineError
 import dev.pampa.mycloudgallery.core.ai.contract.CutoutImage
 import java.io.File
 import java.io.IOException
+import java.nio.ByteBuffer
 import kotlin.math.max
 
 // LA SORGENTE DEL RITAGLIO (docs/fase6-progetto.md D44, §2.10 "Sorgente dell'immagine", E-M1-M4): l'immagine migliore GIA' sul
@@ -97,6 +98,10 @@ object CutoutImages {
   /** Dal file (l'originale o l'HQ gia' sul dispositivo). */
   internal fun decode(file: File, maxSide: Int = CutoutImage.MAX_SIDE, maxPixels: Long = MAX_RESULT_PIXELS): CutoutDecode =
     decode(ImageDecoder.createSource(file), maxSide, maxPixels)
+
+  /** Da dei byte gia' in memoria (l'HQ della replica). */
+  internal fun decode(bytes: ByteArray, maxSide: Int = CutoutImage.MAX_SIDE, maxPixels: Long = MAX_RESULT_PIXELS): CutoutDecode =
+    decode(ImageDecoder.createSource(ByteBuffer.wrap(bytes)), maxSide, maxPixels)
 
   /** Da un `content://` (una riga del MediaStore del telefono). */
   internal fun decode(resolver: ContentResolver, uri: Uri, maxSide: Int = CutoutImage.MAX_SIDE, maxPixels: Long = MAX_RESULT_PIXELS): CutoutDecode =

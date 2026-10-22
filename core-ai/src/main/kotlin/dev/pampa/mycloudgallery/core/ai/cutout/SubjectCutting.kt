@@ -23,6 +23,14 @@ sealed interface CutoutSource {
 
   /** Una riga del MediaStore del telefono (`content://media/...`). */
   class OfUri(val resolver: ContentResolver, val uri: Uri) : CutoutSource
+
+  /**
+   * I byte di un'immagine gia' in memoria: l'HQ della replica di un media del NAS (2.048 px, qualche centinaio di KB), copiata dal pacco
+   * perche' la decodifica non dipenda da un file mappato che la replica potrebbe chiudere (P11b).
+   */
+  class OfBytes(val bytes: ByteArray) : CutoutSource {
+    override fun toString(): String = "OfBytes(${bytes.size} B)"
+  }
 }
 
 /**
@@ -115,6 +123,7 @@ class SubjectCutting(
       when (source) {
         is CutoutSource.OfFile -> CutoutImages.decode(source.file, maxPixels = maxPixels)
         is CutoutSource.OfUri -> CutoutImages.decode(source.resolver, source.uri, maxPixels = maxPixels)
+        is CutoutSource.OfBytes -> CutoutImages.decode(source.bytes, maxPixels = maxPixels)
       }
     }
     return when (decoded) {

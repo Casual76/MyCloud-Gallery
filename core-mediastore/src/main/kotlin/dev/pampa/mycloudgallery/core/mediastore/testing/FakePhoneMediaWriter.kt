@@ -16,7 +16,10 @@ import java.security.MessageDigest
  * "nome (2).jpg", SHA-256 calcolato mentre arriva, [PhoneMediaWriter.saveToPictures] chiama `beforePublish` **prima** di
  * rendere visibile il file ([visible]). Una sorgente che si interrompe non lascia niente di visibile.
  */
-class FakePhoneMediaWriter : PhoneMediaWriter {
+class FakePhoneMediaWriter(
+  /** La cartella dove scrive (`RELATIVE_PATH`): di serie "Scarica sul telefono"; i ritagli del soggetto (P13) usano `Ritagli/`. */
+  private val relativePath: String = RELATIVE_PATH,
+) : PhoneMediaWriter {
 
   /** I file pubblicati (`IS_PENDING = 0`), per nome. */
   val visible: MutableMap<String, ByteArray> = LinkedHashMap()
@@ -53,7 +56,7 @@ class FakePhoneMediaWriter : PhoneMediaWriter {
       pendingLeft--
       return SaveResult.Failed("HASH_MISMATCH")
     }
-    val copy = PendingCopy(Location.Phone("external_primary", RELATIVE_PATH, name, mediaStoreId = nextId++), sha, out.size().toLong())
+    val copy = PendingCopy(Location.Phone("external_primary", relativePath, name, mediaStoreId = nextId++), sha, out.size().toLong())
     beforePublish(copy)
     visible[name] = out.toByteArray()
     pendingLeft--

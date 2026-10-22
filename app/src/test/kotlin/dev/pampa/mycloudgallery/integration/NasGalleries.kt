@@ -18,6 +18,7 @@ import dev.pampa.mycloudgallery.gallery.GalleryGraph
 import dev.pampa.mycloudgallery.gallery.GalleryParts
 import dev.pampa.mycloudgallery.gallery.PhoneInputs
 import dev.pampa.mycloudgallery.gallery.PhoneLibrary
+import dev.pampa.mycloudgallery.gallery.PhoneRowsSource
 import dev.pampa.mycloudgallery.nas.NasAiHooks
 import java.io.File
 
@@ -25,8 +26,16 @@ import java.io.File
 internal object NasGalleries {
   private const val PRIMARY = "external_primary"
 
-  fun galleryOf(device: TestDevice, account: String, time: TestTime, ai: () -> NasAiHooks? = { null }): GalleryGraph {
-    val store = FakeMediaStore().apply { addVolume(PRIMARY) }
+  /** Un MediaStore finto con il volume principale. */
+  fun newStore(): FakeMediaStore = FakeMediaStore().apply { addVolume(PRIMARY) }
+
+  fun galleryOf(
+    device: TestDevice,
+    account: String,
+    time: TestTime,
+    ai: () -> NasAiHooks? = { null },
+    store: FakeMediaStore = newStore(),
+  ): GalleryGraph {
     val access = FakePhoneAccessReader(PhoneAccess(MediaAccess.FULL, mediaLocation = true, volumes = setOf(PRIMARY)))
     fun phone(inputs: PhoneInputs): PhoneLibrary {
       val reads = RoomPhoneCatalogReads(inputs.database)
@@ -41,6 +50,8 @@ internal object NasGalleries {
         stats = stats,
         diagnostics = PhoneLibraryDiagnostics(sync, access, stats) { inputs.catalog.mediaStoreCursors() },
         deferredHashes = DeferredFullHashes(store, access, inputs.catalog, inputs.database),
+        // Fase 6 (P11b): i byte del telefono per il calcolo AI dei media del solo telefono (e per le anteprime dal telefono).
+        rows = PhoneRowsSource(store, store),
       )
     }
     return GalleryGraph(

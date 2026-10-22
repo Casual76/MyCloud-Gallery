@@ -319,7 +319,7 @@ interface LocationDao {
     const val NAS_WORK_ROWS_SQL: String =
       "SELECT l.location_id AS locationId, l.nas_path AS path, l.size AS size, l.modified_at AS modifiedAt, " +
         "l.file_id AS fileId, v.version_id AS versionId, v.media_id AS mediaId, v.quick_hash AS quickHash, m.kind AS kind, " +
-        "m.local_day AS localDay, vm.mime_type AS mime FROM media_location l " +
+        "m.source AS source, m.local_day AS localDay, vm.mime_type AS mime FROM media_location l " +
         "JOIN media_version v ON v.version_id = l.version_id JOIN media m ON m.media_id = v.media_id " +
         "LEFT JOIN version_metadata vm ON vm.version_id = v.version_id " +
         "WHERE l.account_id = :account AND l.share_key = :shareKey AND l.state = 'present' AND m.current_version_id = v.version_id"
@@ -354,6 +354,7 @@ data class NasWorkRow(
   val mediaId: String,
   val quickHash: String?,
   val kind: String,
+  val source: String,
   val localDay: Int?,
   val mime: String?,
 )

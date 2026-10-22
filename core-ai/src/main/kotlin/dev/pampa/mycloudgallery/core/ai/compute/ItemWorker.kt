@@ -74,6 +74,15 @@ internal class ItemWorker(
     return Planned(key, kind, source, wanted - saved - others)
   }
 
+  /**
+   * Vero se per [key] qui non resta niente da calcolare: il vettore e' salvato con la ricetta corrente (o fatto da altri, [others]) e,
+   * con la lettura attiva qui, anche il testo (AI-D1: le sue anteprime nel buffer non servono piu').
+   */
+  suspend fun finishedHere(key: ContentKey, others: Set<AiClass> = emptySet()): Boolean {
+    val done = saved(key) + others
+    return AiClass.VEC in done && (AiClass.OCR in done || !roles.textReadingHere.value)
+  }
+
   private suspend fun saved(key: ContentKey): Set<AiClass> {
     val forVec = parts.results.saved(key, recipe.version)
     val forOcr = if (recipe.ocrVersion == recipe.version) forVec else parts.results.saved(key, recipe.ocrVersion)
@@ -132,6 +141,9 @@ internal class ItemWorker(
           did = true
         }
         VectorOutcome.Refused, VectorOutcome.Invalid -> {
+          // AI-D1: le anteprime di un media "non supportato" non servono piu'. Prima si tolgono, poi si segna: una morte in mezzo
+          // fa solo riprovare il media (nessun blob orfano).
+          parts.buffer.evict(listOf(key))
           parts.unsupported.mark(key, AiClass.VEC)
           return ItemEnd.FAILED
         }
@@ -145,7 +157,10 @@ internal class ItemWorker(
           if (share != null) parts.publisher.stage(share, listOf(AiEntry.Text(key, outcome.body)))
           did = true
         }
-        TextOutcome.Refused -> parts.unsupported.mark(key, AiClass.OCR)
+        TextOutcome.Refused -> {
+          parts.buffer.evict(listOf(key))
+          parts.unsupported.mark(key, AiClass.OCR)
+        }
         TextOutcome.Failed, TextOutcome.Off -> Unit
       }
     }

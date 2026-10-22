@@ -46,6 +46,21 @@ class LocalAiIndexTest {
     assertThat(cos(b.vectors(key(1)).single(), normalized(v(1)))).isGreaterThan(0.999f)
   }
 
+  /** P11b: il menu del viewer chiede senza attese se una chiave ha un vettore ("Trova simili" spiegato per un media non ancora analizzato, E-Q14). */
+  @Test
+  fun hasVectorsDiceSeUnaChiaveHaUnVettoreESegueLaRiapertura() = runTest {
+    val a = index()
+    assertThat(a.hasVectors(key(1))).isFalse()
+    a.saveVectors(key(1), vecBody(v(1)))
+    a.saveText(key(2), ocrBody("solo testo"))
+
+    assertThat(a.hasVectors(key(1))).isTrue()
+    // Un testo senza vettore non basta: i simili partono dai vettori.
+    assertThat(a.hasVectors(key(2))).isFalse()
+    a.close()
+    assertThat(index().hasVectors(key(1))).isTrue()
+  }
+
   /** Richiesta di P2: `withdraw`, `forgetDevice` e `forgetShare` di una replica non tolgono mai cio' che e' stato calcolato qui. */
   @Test
   fun laReplicaNonToglieMaiIDatiCalcolatiQui() = runTest {

@@ -112,6 +112,8 @@ object GalleryModule {
       onNasOperationsClosed = { if (measurement == null) NasWorkScheduling.scanNow(context) },
       // Fase 5A (P7): il backup; mai nelle varianti di misura. La recinzione di D13 e' di `DeveloperTools`: in release vale null.
       backup = if (measurement == null) backupInputs(context, graph) else null,
+      // Fase 6 (P11): le teste `ai` e il buffer del calcolo, legati da `AiModule` prima che il NAS parta.
+      ai = { graph.aiHooks },
     )
     return GalleryGraph(
       context = context,

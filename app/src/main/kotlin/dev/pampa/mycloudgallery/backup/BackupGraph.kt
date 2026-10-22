@@ -326,7 +326,8 @@ class BackupGraph(
       existing = PrivateCopyFinder(session.mediaReader(), backupCatalog, clock),
       facts = CatalogUploadFacts(catalog),
       // D10: chi carica prepara. L'indice dei media caricati rispetta D31 (sulle share vere solo locale) e i cancelli dell'indice.
-      indexing = PreparingUploadIndexing(runtime.preparer, runtime.publisher, CatalogUploadRecords(catalog)),
+      // Fase 6 (P5, P11, D10): sugli indicizzatori `analysis` e `frames` vanno anche al buffer del calcolo.
+      indexing = PreparingUploadIndexing(runtime.preparer, runtime.publisher, CatalogUploadRecords(catalog), analysisSink = { nas.analysisSink() }),
       foreground = foreground,
       incoming = fiveB.incomingPorts(),
     )

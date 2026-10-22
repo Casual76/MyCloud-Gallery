@@ -91,6 +91,9 @@ class LocalAiIndex(
 
   internal fun vectorSlots(key: ContentKey): IntArray? = chosenVectors[key]?.slots
 
+  /** Vero se per [key] c'e' un vettore scelto (dalla memoria, senza attese: lo chiede il menu del viewer a ogni composizione). */
+  fun hasVectors(key: ContentKey): Boolean = lock.read { chosenVectors.containsKey(key) }
+
   internal fun vectorRecipe(key: ContentKey): Int = chosenVectors[key]?.recipe ?: 0
 
   internal fun hasText(key: ContentKey): Boolean = chosenTexts.containsKey(key)

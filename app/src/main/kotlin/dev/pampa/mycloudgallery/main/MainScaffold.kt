@@ -72,8 +72,8 @@ class CollectionsSlot(
  *
  * **Fase 3: la Libreria e' a tutto schermo e il viewer sta sopra la pillola** (docs/fase3-progetto.md §1.4, D12).
  * - La scheda Libreria non usa `FluidScreen`: la griglia e' la sua lista, con la propria chrome di vetro adattivo (G2,
- *   docs/grafica-progetto.md §12) e lo stato della rete e del NAS in fondo. La pillola si ripiega scorrendo la Libreria. Le Raccolte ([collections], P10) sono un `FluidScreen` (o le due colonne sul tablet); Cerca resta
- *   un segnaposto fino alla Fase 6.
+ *   docs/grafica-progetto.md §12) e lo stato della rete e del NAS in fondo. La pillola si ripiega scorrendo la Libreria. Le Raccolte ([collections], P10) sono un `FluidScreen` (o le due colonne sul tablet); Cerca
+ *   ([search], Fase 6, P11) e' la schermata di feature-search (senza Hilt, negli screenshot, resta il segnaposto).
  * - La pillola e' **una sola** e sta fuori dalle schede, cosi' la lente che scivola sotto la scheda scelta non si
  *   ricrea passando dalla Libreria alle altre. Il fondale che rifrange arriva dalla scheda in primo piano.
  * - **In selezione la pillola si nasconde** (nota di P7, §2.4: "barra delle azioni in vetro al posto della pillola") e
@@ -101,6 +101,8 @@ fun MainScaffold(
   libraryState: LibraryTabState = rememberEmptyLibraryTabState(),
   libraryViewer: ViewerServices? = null,
   collections: (@Composable (CollectionsSlot) -> Unit)? = null,
+  /** Fase 6 (P11): la scheda Cerca; null = il segnaposto (gli screenshot dello scaffold, senza Hilt). */
+  search: (@Composable (CollectionsSlot) -> Unit)? = null,
 ) {
   var backdrop by remember { mutableStateOf<GlassBackdropState?>(null) }
   val rootViewer = LocalViewerHost.current
@@ -150,6 +152,13 @@ fun MainScaffold(
           contentPadding = PaddingValues(bottom = GalleryTabBarDefaults.ContentInset),
           backdropOut = { backdrop = it },
           // Lo stesso stato della rete, nello stesso linguaggio, come prima riga dell'elenco (G2).
+          statusHeader = { NetworkStatusEntry(status = status, onClick = onStatusClick, alignment = Alignment.Start) },
+        ),
+      )
+      selectedTab == GalleryTab.Search && search != null -> search(
+        CollectionsSlot(
+          contentPadding = PaddingValues(bottom = GalleryTabBarDefaults.ContentInset),
+          backdropOut = { backdrop = it },
           statusHeader = { NetworkStatusEntry(status = status, onClick = onStatusClick, alignment = Alignment.Start) },
         ),
       )

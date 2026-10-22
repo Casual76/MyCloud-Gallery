@@ -4074,6 +4074,60 @@ pronte); la stima della pagina deve contare l'avvio del motore (2,2 s a caldo, 4
 - **P13** (ritaglio): `EngineThread`, `FdOwnership` e il modo di dare un descrittore verificato al motore (`ParcelFileDescriptor.dup`) valgono anche per LiteRT, ma va controllato se anche li' la cache dei programmi compilati si salva solo per percorso (per LiteRT-LM e' cosi', `ModelAccess`); non c'e' un costruttore
   di `CutoutImage` in `ModelInputs`.
 
+## Fase 6 P11: integrazione in `:app` (22/10)
+
+Il pacchetto P11 (`docs/fase6-progetto.md` §1.4, §2.7, riga P11 del §4.4): `AiGraph` e `SearchGraph` in `:app`, lavori, navigazione,
+lettura del testo all'avvio, porte del viewer, azzeramento, Diagnostica, `tools/check.ps1`. Le scelte che il codice ha imposto:
+
+- **D3 modificata: release solo `arm64-v8a`** (decisione dell'orchestratore). Tutti i dispositivi della famiglia sono arm64; `x86_64`
+  (46 MB di librerie native) serve solo agli emulatori. La debug e la `nonMinifiedRelease` (generazione del profilo, anche
+  sull'emulatore) tengono le due ABI (`abiFilters`); la release e la `benchmarkRelease` tolgono `x86_64` all'impacchettamento
+  (`androidComponents.onVariants` con `packaging.jniLibs.excludes`). `tools/check.ps1` (passo 7e) vuole le quattro librerie dei motori
+  in `lib/arm64-v8a/` e rifiuta ogni altra ABI nella release; l'allineamento a 16 KB resta controllato. APK di release non firmato:
+  **113.769.659 byte prima, 67.336.743 dopo** (solo questo cambio). Conseguenza: `check.ps1 -Bench` sugli emulatori x86_64 non puo'
+  piu' installare la `benchmarkRelease`; le misure si fanno su S25 e Tab S9, come chiede il §5.4.
+- **AI-D1 corretto** (trovato da P10, l'unica eccezione al perimetro di `core-ai`): a inizio tappa (`ComputeSession.pruneFinished`) si
+  tolgono dal buffer i blob dei media che `AiResults.saved` dice finiti qui e, in una share con la rete, quelli che un altro
+  indicizzatore ha gia' fatto (un'unita' finita da lui non torna piu' da noi: il banco lo ha mostrato dopo la prima correzione, 58 giri
+  su 2.000); le anteprime di un media "non supportato" si tolgono **prima** di segnarlo (una morte in mezzo fa solo riprovare il
+  media). `AiChaosKnownDefectsTest` ora prova la correzione e `AiChaosVerifier` non ha piu' l'etichetta: 2.000 giri, 0 violazioni.
+- **Grafi**: `AiStack` (Hilt, `AiModule`; i test d'integrazione lo montano uguale con `AiWiring.build` e i motori finti) tiene `LocalModels`,
+  `SearchGraph` e `AiGraph`. `SearchGraph` nasce con la galleria e vive anche senza NAS: indice locale (`noBackupFilesDir/search/index`),
+  `CellKeys` aggiornate dai `CatalogChange`, motore, suggerimenti, cronologia (`search_history`), testo dal vivo. La parte `ai`
+  dell'indice condiviso nasce **dentro** `NasGraph.start` (`NasAiRuntime`), perche' ha bisogno di identita', regole, prenotazioni e
+  `NasRemoteIndex` del motore del NAS: `AiShareSync` agganciata a `IndexSyncEngine(ai = ...)`, `OutboxAiIndexPublisher` (stessi
+  `IndexWriteRules` e `ShareLocks` dell'indice), `LeasedWorkUnits` con `AiWorkSource` e `AiPublishedClasses`, `IndexAnalysisFetcher`.
+- **Adattatori Room** di `AiPublishStore` e `AiReplicaStore` in `:app` (`ai/RoomAiStores.kt`, `ai/RoomAiReplicaStore.kt`), una transazione
+  per metodo, provati contro le implementazioni in memoria di P2 (`RoomAiStoresTest`). `AiReplicaSink` sopra `LocalAiIndex`
+  (`IndexReplicaSink`); il riparatore dell'indice segna le chiavi "da rifondere" nella replica.
+- **`AiWorkCatalog.settled` (richiesta di P5)**: conta solo i vincitori della replica con la ricetta corrente (anche i propri, una volta
+  pubblicati e riletti) e i "non supportati" (`FileAiUnsupported`, `noBackupFilesDir/ai-unsupported`); mai cio' che e' salvato solo qui.
+- **Righe del testo letto per il viewer** (`MediaText`, P12): l'indice di P6 tiene solo il testo normalizzato; `:app` salva il corpo `ocr`
+  per chiave (`search/ocr-layout/`, riletto con `AiSegments`) dal calcolo e dalla replica. Il calcolo tiene anche i propri corpi
+  (`search/local-bodies/`) per `AiLocalBodies` (ripubblicare senza ricalcolo): prima il corpo, poi l'indice.
+- **Preparazione del backup** (`PreparingUploadIndexing`, core-backup, richiesta di P5): consegna `analysis` e `frames` al buffer degli
+  indicizzatori dopo la pubblicazione, mai bloccante.
+- **Lettura del testo**: `AppTextReadingSwitch` sopra `text_reading` (sincronizzata, arriva con il NAS) e l'esclusione locale;
+  `TextReadingMemory` ricorda l'ultima scelta (`noBackupFilesDir/text-reading`) per l'avvio, dove `TextReadingStartup` chiama
+  `TextReadingShutdown.atStartup` **prima** di `super.onCreate()` (prima dell'iniezione). Ogni passaggio da "attiva qui" a non attiva
+  (anche da un altro dispositivo) chiama `onTurnedOff`. La lettura al volo del viewer usa solo l'anteprima di analisi gia' nel buffer.
+- **Modelli**: `ModelNetworkGate` di :app (rete validata, mai roaming; in background solo reti non a consumo; "Scarica ora" sui dati
+  mobili dopo la conferma); traffico con `LedgerModelTraffic` (`AI_COMPUTE`); `ModelShelfGate` da `IndexWriteRules` pronto ma lo scaffale
+  resta `NoModelShelf` (manca la scrittura a flusso in core-nas, punto aperto di P3). `LocalModels.refresh()` all'avvio e a ogni giro di
+  `ModelFetchWorker`. Il motore delle query si carica alla prima query e si rilascia 3 minuti dopo l'ultima o a memoria bassa (D35).
+- **Lavori**: `ModelFetchWorker` (periodico su rete non a consumo; accelerato per "Scarica ora" e per il ruolo acceso), `AiComputeWorker`
+  (`StagedRun` con `AI_COMPUTE`, `writesToNas`; "Indicizza ora" come `UserInitiated`; un giro dopo `IndexSyncWorker` e
+  `PreparationWorker`, lavoro unico `KEEP`), compattazione dell'indice in `LibraryMaintenanceWorker`.
+- **Difetti trovati dal test della catena** (`SearchChainIntegrationTest`): `DiskAiBuffer` con lo spazio libero letto dalla sua cartella
+  (`File.usableSpace` di una cartella che non c'e' vale 0: rifiutava tutto) ora riceve lo spazio di `noBackupFilesDir`; calcolo e replica
+  scrivevano nell'indice prima che fosse aperto (ora si apre al primo uso, idempotente).
+- **Azzeramento**: `aiStopper` (AI e ricerca) prima della galleria; poi buffer, `search/`, "non supportati", memoria della lettura, battito;
+  i modelli solo nell'azzeramento completo e solo con l'AI ferma. Tabelle `ai_*` e cronologia vanno con il database.
+- **Diagnostica**: i 19 codici del §2.6 nel catalogo (stessi id ed edge case dei contratti, `Phase6DiagCatalogTest`), la sezione "Ricerca"
+  (`AiDiagnostics`, solo numeri) e i lavori `MODEL_FETCH` e `AI_COMPUTE`.
+- **Ritaglio (P13)**: non collegato. Le porte restano sui null-object (`ViewerServices.subjectPress = null`, nessun `CutoutSaver`), vedi
+  il REPORT di P11 per come agganciarlo.
+
 ## Fase 6 P13: ritaglio del soggetto (22/10)
 
 Il pacchetto P13 (`docs/fase6-progetto.md` §2.10, D44, D45, D47, risposte Q11 e Q12, E-V10, E-V11; riga P13 del §4.4): `core-ai/.../cutout/` (MagicTouch su LiteRT, maschera, filtro
@@ -4344,6 +4398,93 @@ catalogo puntava alla sorgente, gia' nel cestino, e un media spostato dall'area 
 - Test: `CampoAMovesTest` (core-nasops, esecutore vero: l'annuncio arriva per ogni file con la copia gia' pubblicata e la sorgente ancora al suo posto; un
   catalogo che lancia non ferma niente), `CampoAMoveCompletionsTest` (`:app`, Room vero: la posizione e' alla destinazione, dello stesso media, senza
   verifica; la ripresa non cambia niente).
+
+## Fase 6 P11b: completamento dell'integrazione in `:app` (22/10)
+
+Il completamento di P11 (`docs/fase6-progetto.md` §1.4, §2.2, §2.10; righe P11 e P13 del §4.4), con i punti che il resoconto di P11 aveva lasciato aperti: il
+**ritaglio del soggetto** (P13) collegato, i **media che stanno solo sul telefono** analizzati, la **lettura al volo** del viewer e la voce **"Trova
+simili"** spiegata. Le scelte che il codice ha imposto:
+
+- **Ritaglio del soggetto (D44, D45, D47).** `CutoutRuntime` (`ai/CutoutWiring.kt`) tiene `SubjectCutting(MagicTouchCutter.create(files), maxPixels =
+  ImagingBudget.of(context).viewerMaxPixels)`, costruito **al primo ritaglio** (le classi di LiteRT non si caricano prima) e **rilasciato** 3 minuti dopo l'ultimo uso (la
+  regola del motore delle query, D35), a `onTrimMemory` da `TRIM_MEMORY_RUNNING_LOW` in su (il modello v1 pesa circa 240 MB di PSS: si lascia appena la memoria stringe) e
+  da `AiGraph.stop()` (azzeramento, dopo il quale non ritaglia piu'). `AiStack.onTrimMemory` chiama anche il motore delle query. Il modello e' un asset dell'APK:
+  `EnsuringModelFiles` lo mette fra i modelli verificati alla prima apertura (`ModelManager.ensure`, copia locale, **senza rete**) e `ModelFetchWorker` lo include nei
+  modelli voluti; il verificatore resta quello di sempre (dimensione e SHA-256 a ogni apertura, D16).
+  - **Sorgente (D44).** La migliore immagine che il dispositivo ha **gia'**, mai uno scaricamento: per un media del telefono la sua riga del MediaStore
+    (`CutoutSource.OfUri`); per uno del NAS l'originale che il viewer ha gia' portato (`OriginalFetcher.localFile`, `OfFile`) e altrimenti l'HQ della replica
+    (qualita' "Alta"), copiata in memoria da `ReplicaHq` nel perimetro del media (R1 della 4A) e decodificata come `CutoutSource.OfBytes` (aggiunta di
+    `core-ai`: la copia evita che la decodifica dipenda da un pacco mappato che la replica potrebbe chiudere). Senza nessuna delle due il ritaglio **non
+    parte** e il viewer dice che non e' riuscito (`CUTOUT_FAILED`). `ViewerServices.subjectPress` resta null: il `ViewerController` passa gia' la pressione
+    fuori dal testo al ritagliatore quando `subjectCutter` c'e' (il REPORT di P11 diceva di impostarlo, ma non serve).
+  - **Adattatori** (`feature-viewer` non vede `core-ai`): `AppViewerSubjectCutter` (`CutoutResult.Subject` -> `ViewerCutout.Subject` con maschera alfa e rettangolo in
+    frazioni, `NoClearSubject` -> `NoSubject`, guasto -> `Failed("CUTOUT_FAILED")`), `AppCutoutPng` (la stessa chiave e la stessa sorgente del ritaglio),
+    `CutoutFiles` (Copia e Condividi: `cacheDir/share/<token>/ritaglio.png` con `ShareCache.newShareDir()` e `FileProviderUris`, nessun percorso nuovo del provider;
+    il file lo toglie la pulizia all'avvio), `AppCutoutNewPhoto` ("Salva come nuova foto": `PhoneCutoutNewPhoto(CutoutPhoneSaver(writer, catalog))` con
+    `MediaStorePhoneMediaWriter(relativePath = CutoutFence.folder())`, uno scrittore per cartella, e `purgeOrphans()` all'avvio della galleria) e
+    `DiagCutoutSaver`. Il nome del ritaglio (`<file di origine>-ritaglio.png`) viene dal file del media su cui si e' ritagliato (ricordato dal ritaglio, dato
+    dell'utente: mai nei log).
+  - **D13 (debug con un account di prova).** `CutoutFence` (`backup/`, la stessa logica di `DefaultBackupSettings.fenced`: con la recinzione e senza account si fallisce
+    chiusi) sceglie la cartella dei ritagli e la sua sorgente del backup. Le cartelle **recintate** (`Pictures/mcg-prova/Ritagli/`, `CutoutBackup.source(fenced = true)`) sono
+    dietro `FencedCutouts`, implementata **solo in debug** (`DebugFencedCutouts`, ottenuta da `DeveloperTools.fencedCutouts()`; in release e' `null`): nessun codice di release
+    nomina `mcg-prova`, e `tools/check.ps1` (7b) lo verifica nel dex (R8 piega le costanti: una `PhoneMediaFolders.cutouts(fenced)` nel main ce l'avrebbe lasciato, e anche `CutoutBackup.isCutouts` di `core-backup`, che nomina la
+    cartella recintata, inlinerebbe il letterale: `:app` usa `CutoutFence.isCutouts`). In release
+    vale sempre `Pictures/MyCloud Gallery/Ritagli/`. `core-backup` non cambia (`BackupSourceCodec.fromOnboarding` com'era).
+  - **Diagnostica.** `CUTOUT_FAILED` per un ritaglio, una copia o una condivisione che non riescono (o senza immagine locale), `CUTOUT_SAVE_FAILED` per un
+    salvataggio che non riesce; solo il codice (D40), il catalogo c'era gia'.
+  - **Sorgente "Ritagli" del backup.** Dal passo 6 dell'onboarding (`BackupSourceCodec.fromOnboarding(camera, screenshots)`: con almeno una scelta anche i ritagli; `AppGraph`
+    passa le sorgenti per `CutoutFence.adapt`, che in debug con un account di prova mette al suo posto quella recintata) e,
+    **una volta sola**, alle installazioni di prima: `DataStoreBackupSettingsStorage.offerCutoutsOnce(CutoutFence.sourceFor(account))` (a ogni avvio della galleria, ricordata da una
+    chiave) aggiunge la sorgente "Ritagli" (quella di `BackupSources.withCutouts`, o la recintata in debug) a chi aveva scelto delle sorgenti. Chi non aveva scelto niente (valgono quelle dell'onboarding, che i ritagli li hanno gia') o
+    aveva spento tutto (il backup non e' voluto) non cambia, e chi poi la spegne non la rivede.
+  - **Prova:** `CutoutIntegrationTest` (pressione fuori dal testo -> ritaglio -> "Salva come nuova foto" -> riga del telefono nella cartella dei ritagli, la stessa
+    della sorgente del backup ammessa dalla recinzione; dai Nascosti la foto nuova nasce nascosta; Copia e Condividi; i due codici in Diagnostica; nessuno scaricamento
+    senza sorgente locale; rilascio a memoria bassa e all'azzeramento; la proposta una tantum), `CutoutRuntimeTest` (tempo virtuale).
+- **Media del solo telefono (§2.2, D10, D14).** Prima `AiPhoneMedia` e `phoneOnly` erano vuoti: una foto che non e' sul NAS non aveva mai un vettore, un testo letto o un
+  posto nei risultati della ricerca. Adesso `AppAiPhone` (`ai/AiPhone.kt`): **elenca** i media senza copia sul NAS (`MediaCatalog.phoneOnlyWork`, presenza derivata
+  `phone_only`, nascosti compresi: si calcolano e non si mostrano, D29) dal piu' recente, con le sole classi che mancano con la ricetta corrente (salvate qui o segnate
+  "non supportate", come il catalogo del NAS); li **apre** con `MediaStorePhoneBytes` (i byte originali del MediaStore, mai quelli oscurati) e il `Preparer` della
+  preparazione del NAS (`NasGraph.preparer`, **uno per processo**: le decodifiche pesanti restano una alla volta) ne fa le anteprime di analisi, che finiscono nel buffer
+  degli indicizzatori (`ItemWorker.preparePhone`, quindi una ripresa non le rifa'). Il calcolo gira nella stessa tappa e con le stesse regole degli altri ambiti (`AiScope.PhoneOnly`
+  dopo le share): fascia, carica e caldo fermano o rallentano anche questi, e con `LOCAL_BUFFER_ONLY` (notte senza NAS, E-A6) si calcolano lo stesso, perche' i byte sono sul
+  telefono. I risultati restano **solo locali**: il file non e' in nessuna share (M3), niente in `ai_pending_publish` e niente sul NAS.
+  - **D8.** I byte aperti devono essere quelli della versione del catalogo: la dimensione si confronta all'apertura e l'impronta rapida dell'uscita della preparazione
+    (`CheckedPreparer`); se differiscono (file cambiato dopo l'elenco) il media si salta (`SOURCE_CHANGED`), mai un vettore per byte altrui.
+  - **D13.** Con la recinzione del telefono (debug con un account di prova) si calcolano e si aprono solo le righe di `DCIM/mcg-prova/` e `Pictures/mcg-prova/`; senza account,
+    nessuna. Le altre non sono mai candidate.
+  - **Anche per i media del NAS che sono sul telefono (backup).** L'elenco dei mesi del NAS ricorda per chiave media, versione, dimensione e sorgente (`ContentFacts`, tetto
+    di 16.384 voci): se l'anteprima di un media non e' nel buffer e non si scarica, il calcolo la prepara dai byte del telefono se il file e' li' (D10). Stessa tabella
+    per la **sorgente** (`AiMediaSources`): per gli screenshot l'OCR del calcolo va subito sull'HQ (D12), cosa che le unita' del NAS non sapevano (`NasWorkItem.source`).
+  - **Stima.** `AiBacklog` conta anche questi (pagina "Ricerca e modelli": "N media da analizzare").
+  - **Prova:** `PhoneOnlyAiTest` (una foto dentro la recinzione si analizza e si trova con la ricerca, una fuori no; secondo giro senza rifare niente; regole: `Halt` ferma, ritmo ridotto e
+    `LOCAL_BUFFER_ONLY` calcolano; lettura spenta = solo il vettore e il lettore finto mai chiamato; la stima), `PhoneOnlyWorkTest` (catalogo).
+- **Lettura al volo del viewer (§2.10, D41, D42, E-V9).** `GatedViewerTextReader` legge **l'immagine mostrata** e **solo con la lettura attiva qui** (`available`; da spenti il
+  lettore, anche quello finto, non e' mai chiamato), entro 2 secondi, da (1) l'anteprima di analisi nel buffer degli indicizzatori, (2) per un media del telefono l'anteprima
+  preparata ora dai suoi byte (la strada di sopra, sorgente `phone_original`), (3) per un media del NAS l'HQ della replica (solo con la qualita' "Alta") e, se non c'e', l'originale che
+  il viewer ha gia' portato per mostrarlo, preparato come ogni anteprima e controllato sulla chiave (D8). **Mai uno scaricamento solo per leggere**, e mai un nascosto (non e' una cella).
+  Il corpo `ocr` lo costruisce `OcrBodies` (estratto da `MediaComputer`: stesse regole del calcolo), il viewer mostra il testo **salvato**, e `AiGraph.keepReadText` lo **salva**
+  nell'indice locale (e nelle righe per il testo dal vivo) e lo mette nell'**outbox `ai`** di ogni share che contiene il file (M3: per un file solo del telefono, nessuna), con la
+  pubblicazione in coda; il giro periodico del NAS (`NasGraph.flushOutbox`) ora pubblica anche l'outbox `ai`, cosi' un dispositivo non indicizzatore, che non ha tappe del calcolo, lo
+  pubblica lo stesso (D42: "pubblicato se il file e' in una share pubblicabile"; sulle share vere resta in attesa, F4-D31). Tempo scaduto o errore del motore: niente si salva.
+  **Prova:** `ViewerTextOnTheFlyTest` (lettura spenta mai chiamata; foto del telefono letta e salvata; tempo scaduto; foto del NAS letta dall'HQ, pubblicata e ricevuta dal tablet senza
+  lettura; l'originale gia' qui si prepara solo se e' quello della chiave).
+- **"Trova simili" spiegata (E-Q14).** Un media senza vettore ha la voce lo stesso, e al tocco il viewer dice perche' non si puo' (`SimilarAvailability.EXPLAINED`); prima la
+  voce apriva una ricerca vuota. `LocalAiIndex.hasVectors(key)` (lettura dalla memoria, senza attese: il menu la chiede a ogni composizione); la voce c'e' se **una** delle chiavi della
+  cella (versioni e membri del gruppo, come la ricerca) ha un vettore. `SearchViewerSimilarTest`.
+- **Altri ritocchi.** `NasGraph.preparer` e' uno per processo (prima uno per avvio del motore del NAS); `NasAiRuntime` porta il preparatore e la regola M3
+  (`content`); `AiGraphParts` porta `facts`, i byte del telefono e il rilascio del ritagliatore; l'attrezzatura dei test d'integrazione e' `AiRig` (la catena di P11 con il telefono).
+
+**Cosa resta.** (1) La strada dell'**originale** (`CutoutSource.OfFile`, e la preparazione per la lettura al volo) non si prova sulla JVM: Robolectric non decodifica da un `File`; la provano
+`CutoutPipelineDeviceTest` e la prova F66 sul telefono. (2) Un media del NAS senza HQ nella replica e senza originale portato dal viewer non si legge ne' si ritaglia (nessuno scaricamento): e'
+voluto, ma con la qualita' "Standard" il testo dal vivo di una foto del NAS mai aperta dipende dagli indicizzatori. (3) La copia dei modelli sul NAS resta spenta (`NoModelShelf`, punto aperto
+di P3). (4) Bit `DOCUMENT` (D34), benchmark, selezione multipla in Cerca e `IndexerAreas`: invariati, vedi P11.
+
+**Da provare sul telefono** (S25 e Tab S9; niente e' stato provato su dispositivo in questo pacchetto). **F65**: testo dal vivo su una foto del telefono mai letta (la pressione lunga mostra "Leggo il
+testo…" e poi le righe, poi il pulsante "Testo"; la seconda volta e' subito), con la lettura attiva; con la lettura spenta nessuna riga e il lettore non parte (D41). **F66 e F67**: pressione fuori
+dal testo -> il soggetto si stacca; "Salva come nuova foto" -> la foto compare in `Pictures/MyCloud Gallery/Ritagli/` e, dopo il backup, in `Backup/<dispositivo>/Ritagli/`; dai Nascosti nasce
+nascosta; Copia e Condividi; foto da 12 MP e panorami; la cattura di rete di F67 non deve vedere traffico del ritaglio. **Media del solo telefono**: con una foto che non e' sul NAS, "Indicizza
+ora" (o la notte) la analizza, la Ricerca la trova dal contenuto e dal testo, e dal tablet NON la trova (e' solo del telefono); verificare il tempo per foto (preparazione + vettore + testo) e che
+con il telefono caldo il ritmo cali.
 
 ## Correzioni dal campo, gruppo B (22/10)
 Fonte: `docs/prove-campo-esiti.md`, "Riepilogo del blocco B" (21-22/10) e le sezioni B-S1, B-S4, B-S5, B-S7, B-S14, D-14;

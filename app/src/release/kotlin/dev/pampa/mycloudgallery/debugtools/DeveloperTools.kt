@@ -41,7 +41,14 @@ internal object DeveloperTools {
   /** Nessuna recinzione del telefono (D13 vale solo in debug con gli account di prova): in release valgono D12 e le sorgenti scelte. */
   fun backupFence(): BackupFence? = null
 
+  /** Nessuna cartella recintata dei ritagli (D13 vale solo in debug): in release `Pictures/MyCloud Gallery/Ritagli/` e basta. */
+  fun fencedCutouts(): dev.pampa.mycloudgallery.backup.FencedCutouts? = null
+
   fun NavGraphBuilder.destinations(nav: NavController) = Unit
 
   fun settingsSection(nav: NavController): (@Composable () -> Unit)? = null
+
+  /** Fase 6 (P11): lo strumento di valutazione della ricerca (P9) esiste solo in debug. */
+  @Suppress("UNUSED_PARAMETER")
+  fun installSearch(stack: dev.pampa.mycloudgallery.ai.AiStack, gallery: dev.pampa.mycloudgallery.gallery.GalleryGraph, context: Context) = Unit
 }

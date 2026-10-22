@@ -133,10 +133,13 @@ class LibraryMaintenanceWorker @AssistedInject constructor(
   @Assisted appContext: Context,
   @Assisted params: WorkerParameters,
   private val gallery: GalleryGraph,
+  /** Fase 6 (P11, §1.4): la compattazione dei file dell'indice di ricerca e i record rovinati da riavere. */
+  private val search: dev.pampa.mycloudgallery.search.SearchGraph,
 ) : CoroutineWorker(appContext, params) {
 
   override suspend fun doWork(): Result {
     if (!gallery.backgroundWorkAllowed) return Result.success()
+    gallery.runIfActive { search.maintain() }
     val done = gallery.runIfActive { core ->
       val phone = core.phone
       val report = phone.sync.runWithin(SyncReason.MAINTENANCE, SYNC_BUDGET)

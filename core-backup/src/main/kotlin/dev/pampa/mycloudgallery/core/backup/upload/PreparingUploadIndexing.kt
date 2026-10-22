@@ -12,6 +12,7 @@ import dev.pampa.mycloudgallery.core.model.NasStamp
 import dev.pampa.mycloudgallery.core.model.QuickHash
 import dev.pampa.mycloudgallery.core.model.Sha256
 import dev.pampa.mycloudgallery.core.model.VersionId
+import dev.pampa.mycloudgallery.core.prepare.contract.AnalysisSink
 import dev.pampa.mycloudgallery.core.prepare.contract.PrepOutput
 import dev.pampa.mycloudgallery.core.prepare.contract.PrepResult
 import dev.pampa.mycloudgallery.core.prepare.contract.PrepSpec
@@ -19,6 +20,7 @@ import dev.pampa.mycloudgallery.core.prepare.contract.PrepareSource
 import dev.pampa.mycloudgallery.core.prepare.contract.Preparer
 import dev.pampa.mycloudgallery.core.prepare.run.PrepRecords
 import dev.pampa.mycloudgallery.core.trust.data.MetaFile
+import dev.pampa.mycloudgallery.core.trust.data.SegmentClass
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import kotlinx.coroutines.CancellationException
 
@@ -47,6 +49,11 @@ class PreparingUploadIndexing(
   private val publisher: IndexPublisher,
   private val records: UploadRecords,
   private val spec: PrepSpec = PrepSpec(),
+  /**
+   * Fase 6 (P5, P11; D10): il buffer degli indicizzatori, che riceve `analysis` e `frames` appena preparati dai byte del telefono (come
+   * la preparazione del NAS). Letto a ogni pubblicazione: `AnalysisSink.NONE` se questo dispositivo non e' Indicizzatore.
+   */
+  private val analysisSink: () -> AnalysisSink = { AnalysisSink.NONE },
 ) : UploadIndexing {
 
   override val enabled: Boolean = true
@@ -89,6 +96,17 @@ class PreparingUploadIndexing(
       // M3: il catalogo dell'indice non conosce ancora il file (la scansione non e' passata): lo adottera' la scansione, le immagini le
       // rifara' la preparazione. Mai un errore del caricamento.
       GalleryLog.i(TAG) { "record non pubblicato: il file non e' ancora nel catalogo della share" }
+    }
+    // D10: sugli indicizzatori le anteprime di analisi e i fotogrammi vanno anche al buffer del calcolo. Mai bloccante, mai un errore.
+    val forBuffer = done?.outputs.orEmpty().filter { it is PrepOutput.Frames || (it is PrepOutput.Image && it.cls == SegmentClass.ANALYSIS) }
+    if (forBuffer.isNotEmpty()) {
+      try {
+        analysisSink().deliver(key, forBuffer)
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        GalleryLog.w(TAG) { "anteprime non consegnate al buffer (${e::class.java.simpleName})" }
+      }
     }
   }
 

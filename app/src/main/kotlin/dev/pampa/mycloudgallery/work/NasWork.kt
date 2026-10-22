@@ -346,6 +346,10 @@ abstract class NasWorker(
     GalleryLog.d(tag) { "tappa: ${outcome?.javaClass?.simpleName}" }
     outcome?.let { graph.events.stage(diagJob, it) }
     if (triggersSimilarCopies && outcome != null) gallery.similarCopies?.requestRun()
+    // Fase 6 (P11, §1.4): dopo la sincronizzazione e la preparazione un giro del calcolo AI (lavoro unico, KEEP; senza il ruolo finisce subito).
+    if (outcome is StageOutcome.Finished && (diagJob == DiagJob.INDEX_SYNC || diagJob == DiagJob.PREPARATION)) {
+      AiWorkScheduling.afterNews(applicationContext)
+    }
     if (outcome is StageOutcome.Yielded) continuation()?.let { (name, request) -> NasWorkScheduling.continueLater(applicationContext, name, request) }
     return Result.success()
   }

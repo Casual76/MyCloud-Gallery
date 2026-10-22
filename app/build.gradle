@@ -49,6 +49,7 @@ android {
     // Fase 6 (P0, docs/fase6-progetto.md D3): le librerie native dei motori on-device (LiteRT-LM, LiteRT, ML Kit) solo per
     // arm64-v8a (S25, Tab S9) e x86_64 (gli emulatori dei test strumentati). `liblitertlm_jni.so` esiste solo per queste due;
     // armeabi-v7a e x86 di ML Kit e LiteRT non entrerebbero che come peso. Allineamento a 16 KB controllato da tools/check.ps1.
+    // P11: la release e la benchmarkRelease tolgono x86_64 al momento dell'impacchettamento (vedi `androidComponents` qui sotto).
     ndk {
       abiFilters 'arm64-v8a', 'x86_64'
     }
@@ -132,6 +133,17 @@ androidComponents {
     variant.artifacts.use(registerNativeLibraryFilter(variant))
       .wiredWithFiles({ it.mergedManifest }, { it.updatedManifest })
       .toTransform(SingleArtifact.MERGED_MANIFEST.INSTANCE)
+  }
+}
+
+// Fase 6 (P11, decisione dell'orchestratore, modifica a D3): la release e la `benchmarkRelease` portano solo `arm64-v8a` (tutti i
+// dispositivi della famiglia sono arm64); `x86_64` (46 MB di librerie native) serve solo agli emulatori e resta nella debug e nella
+// `nonMinifiedRelease` (generazione del profilo, anche sull'emulatore). tools/check.ps1 (passo 7e) lo controlla sull'APK di release.
+androidComponents {
+  onVariants(selector().all()) { variant ->
+    if (variant.name in ['release', 'benchmarkRelease']) {
+      variant.packaging.jniLibs.excludes.add('**/x86_64/**')
+    }
   }
 }
 

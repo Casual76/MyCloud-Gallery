@@ -292,6 +292,29 @@ object DiagCodes {
   // aggiunge P11.
   @JvmField val SEARCH_STATE = DiagCode("SEARCH_STATE")
 
+  // P11: i codici del §2.6 (stessi id e stessi edge case di `ModelDiag`, `AiDiag`, `AiIndexDiag` e `SearchDiag`, scritti come letterali
+  // perche' questo modulo non vede core-models, core-ai, core-index ne' core-search). `Phase6DiagCatalogTest` di :app verifica che ogni
+  // codice dei contratti sia qui, con lo stesso id e gli stessi edge case.
+  @JvmField val AI_MODEL_MISSING = DiagCode("AI_MODEL_MISSING", setOf("E-Q11"))
+  @JvmField val AI_MODEL_FETCH_FAILED = DiagCode("AI_MODEL_FETCH_FAILED", setOf("E-A1"))
+  @JvmField val AI_MODEL_MISMATCH = DiagCode("AI_MODEL_MISMATCH", setOf("E-A2", "E-S16"))
+  @JvmField val AI_MODEL_NO_SPACE = DiagCode("AI_MODEL_NO_SPACE", setOf("E-A3"))
+  @JvmField val AI_ENGINE_INIT_FAILED = DiagCode("AI_ENGINE_INIT_FAILED")
+  @JvmField val AI_GPU_FALLBACK = DiagCode("AI_GPU_FALLBACK", setOf("E-A12"))
+  @JvmField val AI_VECTOR_INVALID = DiagCode("AI_VECTOR_INVALID", setOf("E-A12"))
+  @JvmField val AI_NO_INDEXER_AREA = DiagCode("AI_NO_INDEXER_AREA", setOf("E-I12"))
+  @JvmField val AI_STORAGE_LOW = DiagCode("AI_STORAGE_LOW", setOf("E-A17"))
+  @JvmField val AI_KILLED_MEMORY = DiagCode("AI_KILLED_MEMORY", setOf("E-A16"))
+  @JvmField val AI_PENDING_PUBLISH = DiagCode("AI_PENDING_PUBLISH", setOf("E-A15"))
+  @JvmField val OCR_FAILED = DiagCode("OCR_FAILED")
+  @JvmField val TEXT_READING_OFF_CLEANUP = DiagCode("TEXT_READING_OFF_CLEANUP", setOf("E-A18"))
+  @JvmField val CUTOUT_FAILED = DiagCode("CUTOUT_FAILED")
+  @JvmField val CUTOUT_SAVE_FAILED = DiagCode("CUTOUT_SAVE_FAILED")
+  @JvmField val AI_SEGMENT_REJECTED = DiagCode("AI_SEGMENT_REJECTED", setOf("E-I20", "C9"))
+  @JvmField val AI_VECTOR_DISAGREE = DiagCode("AI_VECTOR_DISAGREE", setOf("E-A14"))
+  @JvmField val AI_INDEX_STATE = DiagCode("AI_INDEX_STATE", setOf("E-A15"))
+  @JvmField val SEARCH_INDEX_REBUILT = DiagCode("SEARCH_INDEX_REBUILT")
+
   // I codici di `PhoneLibraryDiagnostics` (core-mediastore, P2): stessi id e stessi edge case di
   // `PhoneLibraryDiagCodes`, scritti come letterali perche' questo modulo non dipende da core-mediastore.
   // `Fase3CatalogTest` verifica la tabella qui sotto e un test di :app (P11) verifica l'uguaglianza con

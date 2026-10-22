@@ -6,9 +6,9 @@ import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
+import dev.pampa.mycloudgallery.backup.CutoutFence
 import dev.pampa.mycloudgallery.backup.DataStoreBackupSettingsStorage
-import dev.pampa.mycloudgallery.core.backup.contract.BackupSource
-import dev.pampa.mycloudgallery.core.backup.contract.BackupSources
+import dev.pampa.mycloudgallery.core.backup.settings.BackupSourceCodec
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagHasher
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagnosticsLog
 import dev.pampa.mycloudgallery.core.common.diagnostics.NoDiagnosticsLog
@@ -82,6 +82,7 @@ import dev.pampa.mycloudgallery.core.rules.settings.DataStoreRuleSettingsStore
 import dev.pampa.mycloudgallery.core.rules.traffic.DataStoreTrafficLedger
 import dev.pampa.mycloudgallery.core.security.credentials.NasCredentials
 import dev.pampa.mycloudgallery.core.security.credentials.SaveResult
+import dev.pampa.mycloudgallery.debugtools.DeveloperTools
 import dev.pampa.mycloudgallery.feature.diagnostics.recording.DiagnosticsRecorder
 import dev.pampa.mycloudgallery.nas.MutableNasFreezeSignal
 import dev.pampa.mycloudgallery.nas.NasInputs
@@ -98,6 +99,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.filterNotNull
@@ -161,6 +163,16 @@ class AppGraph(
   @Volatile
   var galleryStopper: GalleryStopper? = null
 
+  /**
+   * Fase 6 (P11): chi ferma `AiGraph` e `SearchGraph` **per primi** all'azzeramento (§1.4), e la parte `ai` dell'indice per il NAS. Nascono
+   * dopo la galleria (dipendono da lei): si registrano da soli (`AiModule`). Nei test senza AI restano null.
+   */
+  @Volatile
+  var aiStopper: GalleryStopper? = null
+
+  @Volatile
+  var aiHooks: dev.pampa.mycloudgallery.nas.NasAiHooks? = null
+
   // --- Archivi locali (DataStore e file in noBackupFilesDir: fuori da backup e trasferimenti) ---------------------
   val accountStore = DataStoreNasAccountStore(SetupDataStores.account(context, scope))
   val account: StateFlow<NasAccount?> = accountStore.observe().stateIn(scope, SharingStarted.Eagerly, null)
@@ -175,15 +187,19 @@ class AppGraph(
   val trafficLedger = DataStoreTrafficLedger(preferences(context, scope, TRAFFIC_FILE))
   val heartbeat = HeartbeatStore(File(noBackup, HEARTBEAT_FILE))
 
+  /** D13: dove stanno i ritagli del soggetto e la loro sorgente del backup (la recinzione esiste solo in debug). */
+  private val cutoutFence = CutoutFence(DeveloperTools.backupFence(), DeveloperTools.fencedCutouts()) { account.value?.user }
+
   /**
    * Le impostazioni del backup (Fase 5A, P7; D7): del dispositivo, in `noBackupFilesDir/datastore`. Finche' l'utente non sceglie, le sorgenti
    * sono quelle del passo 6 dell'onboarding (fotocamera e screenshot, come le ha scelte); l'azzeramento le cancella.
    */
   val backupSettingsStorage = DataStoreBackupSettingsStorage(
     dataStore = preferences(context, scope, BACKUP_FILE),
-    initialSources = onboardingStore.state.filterIsInstance<StoreState.Ready>().map { state ->
+    // Fase 6 (P13, D47): con almeno una scelta anche la cartella dei ritagli (in debug con un account di prova, quella recintata di D13).
+    initialSources = combine(onboardingStore.state.filterIsInstance<StoreState.Ready>(), account) { state, nasAccount ->
       val choices = state.snapshot.choices
-      BackupSources(setOfNotNull(BackupSource.Camera.takeIf { choices.camera }, BackupSource.Screenshots.takeIf { choices.screenshots }))
+      cutoutFence.adapt(BackupSourceCodec.fromOnboarding(choices.camera, choices.screenshots), nasAccount?.user)
     },
   )
 

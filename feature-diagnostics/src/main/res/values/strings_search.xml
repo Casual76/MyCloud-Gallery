@@ -7,4 +7,44 @@
   <string name="diagnostics_hint_search">Modelli della ricerca, analisi delle foto, testo letto e indice di ricerca su questo dispositivo: stato, avanzamento e problemi da risolvere.</string>
   <string name="diag_search_state_title">Stato della ricerca</string>
   <string name="diag_search_state_guide">I modelli presenti e verificati, quanti media sono analizzati e quanti aspettano, se la lettura del testo è attiva su questo dispositivo. Le ricerche non escono mai dal telefono.</string>
+
+  <!-- P11: i codici del §2.6. -->
+  <string name="diag_ai_model_missing_title">Modello della ricerca assente</string>
+  <string name="diag_ai_model_missing_guide">Si cerca con filtri e testo. Il modello arriva dal NAS o da Internet sul Wi-Fi; per averlo subito apri Impostazioni → Ricerca e modelli e tocca «Scarica ora».</string>
+  <string name="diag_ai_model_fetch_failed_title">Scaricamento del modello non riuscito</string>
+  <string name="diag_ai_model_fetch_failed_guide">Si riprova da solo al prossimo giro, anche da un\'altra sorgente. Se continua, controlla la rete o copia il modello dal PC nella cartella «MyCloud Gallery/Modelli» dell\'area comune.</string>
+  <string name="diag_ai_model_mismatch_title">File del modello diverso dall\'atteso</string>
+  <string name="diag_ai_model_mismatch_guide">Il file non corrispondeva all\'impronta fissata nell\'app ed è stato tolto senza usarlo. Si riprende da un\'altra sorgente.</string>
+  <string name="diag_ai_model_no_space_title">Poco spazio per i modelli</string>
+  <string name="diag_ai_model_no_space_guide">Libera spazio sul telefono: i modelli della ricerca occupano fino a 600 MB.</string>
+  <string name="diag_ai_engine_init_failed_title">Motore della ricerca non avviato</string>
+  <string name="diag_ai_engine_init_failed_guide">Si cerca con filtri e testo e si riprova al prossimo uso. Se continua, riavvia il telefono.</string>
+  <string name="diag_ai_gpu_fallback_title">Analisi sulla CPU</string>
+  <string name="diag_ai_gpu_fallback_guide">La GPU non era disponibile: l\'analisi continua sulla CPU, più lenta.</string>
+  <string name="diag_ai_vector_invalid_title">Foto non analizzabili</string>
+  <string name="diag_ai_vector_invalid_guide">Alcune foto non hanno dato un risultato valido due volte e sono segnate «non supportate»: si trovano con filtri e testo.</string>
+  <string name="diag_ai_no_indexer_area_title">Area senza dispositivo che analizza</string>
+  <string name="diag_ai_no_indexer_area_guide">Nessun dispositivo con il ruolo Indicizzatore lavora su quest\'area da 7 giorni. Scegli un indicizzatore in Impostazioni → Ricerca e modelli.</string>
+  <string name="diag_ai_storage_low_title">Analisi ferma per poco spazio</string>
+  <string name="diag_ai_storage_low_guide">Sotto 1 GB libero l\'analisi si ferma e svuota il suo buffer. Riprende da sola quando c\'è spazio.</string>
+  <string name="diag_ai_killed_memory_title">Analisi interrotta da Android</string>
+  <string name="diag_ai_killed_memory_guide">Android ha chiuso l\'app per memoria: l\'analisi riprende dal punto in cui era, senza rifare il lavoro salvato.</string>
+  <string name="diag_ai_pending_publish_title">Risultati in attesa di pubblicazione</string>
+  <string name="diag_ai_pending_publish_guide">I risultati sono salvati su questo dispositivo e si pubblicano per la famiglia quando l\'area lo permette, senza rifare l\'analisi.</string>
+  <string name="diag_ocr_failed_title">Lettura del testo non riuscita</string>
+  <string name="diag_ocr_failed_guide">Alcune foto restano senza testo letto: si riprova al prossimo giro.</string>
+  <string name="diag_text_reading_off_cleanup_title">Pulizia della lettura del testo</string>
+  <string name="diag_text_reading_off_cleanup_guide">Con la lettura del testo spenta l\'app ha tolto le statistiche in coda e i lavori pianificati del lettore di Google.</string>
+  <string name="diag_cutout_failed_title">Ritaglio non riuscito</string>
+  <string name="diag_cutout_failed_guide">Riprova tenendo premuto sul soggetto. Il ritaglio funziona solo sul telefono, senza rete.</string>
+  <string name="diag_cutout_save_failed_title">Ritaglio non salvato</string>
+  <string name="diag_cutout_save_failed_guide">Controlla lo spazio libero e riprova «Salva come nuova foto».</string>
+  <string name="diag_ai_segment_rejected_title">Dati di ricerca rifiutati</string>
+  <string name="diag_ai_segment_rejected_guide">Alcuni dati di analisi di un altro dispositivo non erano validi e sono stati ignorati: gli altri valgono. Se continua, aggiorna l\'app su quel dispositivo.</string>
+  <string name="diag_ai_vector_disagree_title">Analisi che non concordano</string>
+  <string name="diag_ai_vector_disagree_guide">Due dispositivi hanno dato risultati diversi per le stesse foto: vale una regola fissa, uguale per tutti. Non serve fare niente.</string>
+  <string name="diag_ai_index_state_title">Dati di ricerca condivisi</string>
+  <string name="diag_ai_index_state_guide">Quanti risultati sono pubblicati per la famiglia e quanti aspettano.</string>
+  <string name="diag_search_index_rebuilt_title">Indice di ricerca ricostruito</string>
+  <string name="diag_search_index_rebuilt_guide">Una parte dell\'indice era rovinata ed è stata ripresa dai dati della famiglia o rifatta. Non serve fare niente.</string>
 </resources>

@@ -36,6 +36,7 @@ import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
 import dev.pampa.mycloudgallery.core.family.contract.StaleReason
 import dev.pampa.mycloudgallery.core.family.contract.TrustStatus
 import dev.pampa.mycloudgallery.feature.settings.backup.BackupEntryRow
+import dev.pampa.mycloudgallery.feature.settings.search.SearchEntryRow
 import dev.pampa.mycloudgallery.feature.settings.backup.BackupEntryViewModel
 import dev.pampa.mycloudgallery.feature.settings.library.MotionAnimationRow
 import dev.pampa.mycloudgallery.feature.settings.library.MotionAnimationViewModel
@@ -70,6 +71,11 @@ class SettingsLinks(
    * null (il default dello scaffold) = la voce non c'e'.
    */
   val openSharing: (() -> Unit)? = null,
+  /**
+   * Fase 6 (P8, P11): la voce "Ricerca e modelli" porta alla pagina di feature-search, che le Impostazioni non conoscono (la callback la
+   * scrive `:app`). Null = la voce non c'e'.
+   */
+  val openSearch: (() -> Unit)? = null,
 ) {
   companion object {
     val None = SettingsLinks()
@@ -92,6 +98,8 @@ internal fun SettingsRoute(
   val removeLocation by sharingViewModel.removeLocation.collectAsStateWithLifecycle()
   val motionViewModel: MotionAnimationViewModel = hiltViewModel()
   val motionAnimation by motionViewModel.enabled.collectAsStateWithLifecycle()
+  val searchViewModel: dev.pampa.mycloudgallery.feature.settings.search.SearchEntryViewModel = hiltViewModel()
+  val searchSummary by searchViewModel.summary.collectAsStateWithLifecycle()
   SettingsScreen(
     state = state,
     onBack = onBack,
@@ -103,6 +111,7 @@ internal fun SettingsRoute(
     removeLocation = removeLocation,
     motionAnimation = motionAnimation,
     onMotionAnimation = motionViewModel::set,
+    searchSummary = searchSummary,
   )
 }
 
@@ -126,6 +135,7 @@ fun SettingsScreen(
   removeLocation: Boolean = false,
   motionAnimation: Boolean? = null,
   onMotionAnimation: (Boolean) -> Unit = {},
+  searchSummary: dev.pampa.mycloudgallery.feature.settings.search.SearchEntrySummary? = null,
 ) {
   val family = familyHero(state)
   FluidScreen(
@@ -207,6 +217,11 @@ fun SettingsScreen(
           leading = { RowGlyph(Icons.Rounded.Schedule) },
           onClick = links.openRules,
         )
+        // Fase 6 (P8, P11): "Ricerca e modelli" (ruolo, modelli, lettura del testo), solo se `:app` ha scritto dove porta.
+        links.openSearch?.let { openSearch ->
+          FluidListDivider()
+          SearchEntryRow(summary = searchSummary, onClick = openSearch)
+        }
       }
     }
 

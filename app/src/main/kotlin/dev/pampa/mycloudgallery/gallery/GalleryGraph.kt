@@ -161,6 +161,8 @@ class GalleryParts(
   val onNasOperationsClosed: () -> Unit = {},
   val backup: BackupInputs? = null,
   val similarSignatures: ((MediaCatalog) -> SignatureSource)? = null,
+  /** Fase 6 (P11): la parte `ai` dell'indice condiviso per il NAS (`AiGraph.hooks`), letta quando il NAS parte; null = niente AI. */
+  val ai: () -> dev.pampa.mycloudgallery.nas.NasAiHooks? = { null },
 )
 
 /** Il catalogo e la lettura del telefono: esistono solo quando l'account del dispositivo e' noto (vedi [GalleryGraph]). */
@@ -255,6 +257,7 @@ class GalleryGraph(
       // Fase 5A (D33): i temporanei del diario del backup non si puliscono finche' qualcuno li cita. Se la porta fallisce, nessun
       // temporaneo si toglie in quel giro (lo garantisce la pulizia dei propri file).
       citedTemps = CitedTemps { backup?.citedTemps().orEmpty() },
+      aiHooks = parts.ai,
     )
   }
 
@@ -358,6 +361,35 @@ class GalleryGraph(
    */
   @Volatile
   var shares: dev.pampa.mycloudgallery.integrations.AppShares? = null
+
+  /**
+   * Fase 6 (P11): le porte del viewer della ricerca (testo dal vivo, "Trova simili", animazione delle foto in movimento e foto in movimento
+   * del NAS). Le lega l'applicazione all'avvio, prima di qualunque schermata, come [fiveB]; null = nessuna (test, varianti di misura).
+   */
+  class SearchViewerHooks(
+    val textSource: dev.pampa.mycloudgallery.feature.viewer.livetext.ViewerTextSource?,
+    val textReader: dev.pampa.mycloudgallery.feature.viewer.livetext.ViewerTextReader?,
+    val similarSearch: dev.pampa.mycloudgallery.feature.viewer.menu.ViewerSimilarSearch,
+    val motionAnimation: dev.pampa.mycloudgallery.feature.viewer.motion.MotionAnimationSetting,
+    val motionTraffic: dev.pampa.mycloudgallery.feature.viewer.video.MotionTraffic,
+    /** Il ritaglio del soggetto (P13, D44): il ritagliatore e le tre azioni della barra. Null = nessun ritaglio (D13). */
+    val subjectCutter: dev.pampa.mycloudgallery.feature.viewer.cutout.ViewerSubjectCutter? = null,
+    val cutoutSaver: dev.pampa.mycloudgallery.feature.viewer.cutout.CutoutSaver? = null,
+  )
+
+  @Volatile
+  var searchViewer: SearchViewerHooks? = null
+
+  /** Fase 6 (P14): la coda dei video delle foto in movimento del NAS (`cacheDir/motion/`), una per processo. */
+  val nasMotion: dev.pampa.mycloudgallery.feature.viewer.video.NasMotionSource? by lazy {
+    nas?.let { n ->
+      dev.pampa.mycloudgallery.feature.viewer.video.NasMotionSource(
+        n.video,
+        context.applicationContext.cacheDir,
+        searchViewer?.motionTraffic ?: dev.pampa.mycloudgallery.feature.viewer.video.MotionTraffic.None,
+      )
+    }
+  }
 
   /** Le porte delle schermate del backup (pagina, impostazioni, viewer, Impostazioni): adattatori sul grafo del backup. */
   val backupUi: BackupUi? = backup?.let { b -> BackupUi(b, database, galleryScope, context, parts.nas?.account ?: { null }) }
@@ -592,6 +624,14 @@ class GalleryGraph(
       // Fase 5B (P14): Versioni, Ripristina originale, Correggi, Ruota, "Modifica con…", "Condividi" con o senza posizione, "Ovunque".
       // Correzioni 5B (R4): senza backup restano le voci di "Condividi" (con "Rimuovi la posizione"), non il percorso di prima con l'originale.
       backupActions = fiveB?.mediaActions ?: shares?.viewerActions(),
+      // Fase 6 (P11, P11b): testo dal vivo e lettura al volo (P12), "Trova simili" (P8), foto in movimento (P14), ritaglio del soggetto (P13).
+      motionAnimation = searchViewer?.motionAnimation ?: dev.pampa.mycloudgallery.feature.viewer.motion.MotionAnimationSetting.On,
+      nasMotion = nasMotion,
+      textSource = searchViewer?.textSource,
+      textReader = searchViewer?.textReader,
+      similarSearch = searchViewer?.similarSearch ?: dev.pampa.mycloudgallery.feature.viewer.menu.NoViewerSimilarSearch,
+      subjectCutter = searchViewer?.subjectCutter,
+      cutoutSaver = searchViewer?.cutoutSaver,
     )
   }
 

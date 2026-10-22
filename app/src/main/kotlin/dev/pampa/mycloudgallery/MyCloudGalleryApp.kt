@@ -4,7 +4,15 @@ import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
+import dev.pampa.mycloudgallery.ai.AiStack
+import dev.pampa.mycloudgallery.ai.CutoutShareEnv
+import dev.pampa.mycloudgallery.ai.TextReadingStartup
 import dev.pampa.mycloudgallery.backup.FiveBUi
+import dev.pampa.mycloudgallery.core.models.contract.ModelTrigger
+import dev.pampa.mycloudgallery.work.AiWorkScheduling
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import dev.pampa.mycloudgallery.gallery.GalleryGraph
 import dev.pampa.mycloudgallery.integrations.IntegrationsGraph
 import java.util.Optional
@@ -56,6 +64,10 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
   @Inject
   lateinit var fiveB: Optional<FiveBUi>
 
+  /** Fase 6 (P11): modelli, lettura del testo, calcolo AI e motore di ricerca (`AiModule`). */
+  @Inject
+  lateinit var ai: AiStack
+
   override val workManagerConfiguration: Configuration
     get() = Configuration.Builder()
       .setWorkerFactory(workerFactory)
@@ -64,6 +76,9 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
       .build()
 
   override fun onCreate() {
+    // Fase 6 (D41): PRIMA di ogni altra cosa, anche dell'iniezione di Hilt: con la lettura del testo non attiva qui si annullano i lavori
+    // di DataTransport e se ne tolgono coda e identificativo. Nessuna classe di ML Kit si carica (MlKitOffAtStartupDeviceTest).
+    TextReadingStartup.run(this)
     super.onCreate()
     // Nella build release questa funzione e' vuota: vedi src/release/.../AppLogging.kt.
     installLogging()
@@ -73,6 +88,10 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
     // Correzioni 5B (R4, MC-2): "Condividi" con l'impostazione per il viewer (anche senza backup) e per la selezione della Libreria.
     gallery.shares = integrations.shares
     fiveB.ifPresent { ui -> gallery.fiveB = GalleryGraph.FiveBHooks(ui.mediaActions) { ids -> ui.openFreeSpace(ids) } }
+    // Fase 6 (P11): testo dal vivo, "Trova simili" e foto in movimento nel viewer, prima di qualunque schermata.
+    gallery.searchViewer = ai.viewerHooks(graph, gallery, CutoutShareEnv(integrations.shareCache, integrations.uris))
+    // Fase 6 (P9): lo strumento di valutazione della ricerca, solo in debug (in release la funzione e' vuota).
+    dev.pampa.mycloudgallery.debugtools.DeveloperTools.installSearch(ai, gallery, this)
     ProcessWatcher(
       graph = graph,
       notifications = notifications,
@@ -85,6 +104,8 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
   override fun onTrimMemory(level: Int) {
     super.onTrimMemory(level)
     if (::gallery.isInitialized) gallery.onTrimMemory(level)
+    // Fase 6 (D35, P13): il motore delle query e il ritagliatore del soggetto si rilasciano a memoria bassa (si ricaricano all'uso).
+    if (::ai.isInitialized) ai.onTrimMemory(level)
   }
 
   private fun galleryLifecycle(): GalleryLifecycle = object : GalleryLifecycle {
@@ -100,6 +121,28 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
           }
           // Fase 5A (P7): i lavori del backup (foto, video, verifiche). Le regole decidono quando; i trigger sono la lettura del telefono.
           if (gallery.backup != null) BackupWorkScheduling.ensure(this@MyCloudGalleryApp)
+          // Fase 6 (P11): modelli e calcolo AI (le regole di AI_COMPUTE decidono quando; senza il ruolo il calcolo finisce subito).
+          AiWorkScheduling.ensure(this@MyCloudGalleryApp)
+        }
+        // Fase 6 (P11): l'indice di ricerca si apre con il catalogo (vive anche senza NAS), i modelli presenti si verificano (P3).
+        graph.scope.launch {
+          runCatching { ai.search.open() }
+          runCatching { ai.localModels.refresh() }
+          // P13: una riga in attesa lasciata da un "Salva come nuova foto" interrotto dalla morte del processo si toglie (IS_PENDING).
+          runCatching { ai.cutoutPhotos.purgeOrphans() }
+        }
+        // P13 (D47): le installazioni di prima dei ritagli ricevono, una volta sola, la sorgente "Ritagli" del backup (con la recinzione di D13 in debug).
+        graph.scope.launch {
+          runCatching {
+            val user = graph.accountStore.observe().first()?.user
+            graph.backupSettingsStorage.offerCutoutsOnce(ai.cutoutFence.sourceFor(user), ai.cutoutFence::isCutouts)
+          }
+        }
+        // D15: accendere Indicizzatore chiede subito il modello del calcolo (lavoro accelerato).
+        graph.scope.launch {
+          ai.ai.indexer.drop(1).collect { on ->
+            if (on && gallery.backgroundWorkAllowed) AiWorkScheduling.fetchNow(this@MyCloudGalleryApp, ModelTrigger.ROLE_CHANGED)
+          }
         }
       }
     }

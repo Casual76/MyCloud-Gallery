@@ -79,6 +79,14 @@ internal object DeveloperTools {
     composable<FieldProbesRoute> {
       FieldProbeScreen(onBack = { nav.popBackStack() })
     }
+    // Fase 6 (P9, P11): lo strumento di valutazione della ricerca.
+    with(dev.pampa.mycloudgallery.debugtools.eval.EvalEntry) { destination(nav) }
+  }
+
+  /** Fase 6 (P11): la porta dello strumento di valutazione della ricerca (P9) sopra il grafo della ricerca vero. Solo debug. */
+  fun installSearch(stack: dev.pampa.mycloudgallery.ai.AiStack, gallery: dev.pampa.mycloudgallery.gallery.GalleryGraph, context: Context) {
+    dev.pampa.mycloudgallery.debugtools.eval.EvalEnvironmentHolder.current =
+      dev.pampa.mycloudgallery.debugtools.eval.AppEvalEnvironment(stack, gallery, context.noBackupFilesDir)
   }
 
   fun settingsSection(nav: NavController): (@Composable () -> Unit)? = {
@@ -112,6 +120,8 @@ internal object DeveloperTools {
         subtitle = stringResource(R.string.probe_entry_detail),
         onClick = { nav.navigate(FieldProbesRoute) },
       )
+      FluidListDivider()
+      dev.pampa.mycloudgallery.debugtools.eval.EvalEntry.row(nav)
     }
   }
 
@@ -134,6 +144,12 @@ internal object DeveloperTools {
    * destinazioni). In release non esiste (tools/check.ps1 la cerca nel dex di release).
    */
   fun backupFence(): BackupFence? = DebugBackupFence
+
+  /**
+   * D13 (Fase 6, P13): le cartelle recintate dei ritagli del soggetto con gli account di prova (`Pictures/mcg-prova/Ritagli/` e la sua sorgente del
+   * backup), solo qui: in release non esistono e la stringa `mcg-prova` non e' nel dex (tools/check.ps1).
+   */
+  fun fencedCutouts(): dev.pampa.mycloudgallery.backup.FencedCutouts? = DebugFencedCutouts
 
   /** Il nome del marcatore della famiglia pronta (lo scrive solo `adb`). */
   const val FAMILY_READY_MARKER: String = "debug-family-ready.marker"

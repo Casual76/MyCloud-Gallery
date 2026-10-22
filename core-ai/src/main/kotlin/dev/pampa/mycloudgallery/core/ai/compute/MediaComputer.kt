@@ -11,7 +11,6 @@ import dev.pampa.mycloudgallery.core.ai.contract.TextReader
 import dev.pampa.mycloudgallery.core.model.Float16
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.MediaSource
-import dev.pampa.mycloudgallery.core.model.OcrEngineCode
 import dev.pampa.mycloudgallery.core.model.OcrSource
 import dev.pampa.mycloudgallery.core.model.SpaceCode
 import dev.pampa.mycloudgallery.core.model.VecSource
@@ -19,7 +18,6 @@ import dev.pampa.mycloudgallery.core.trust.data.AiLimits
 import dev.pampa.mycloudgallery.core.trust.data.AiSegments
 import dev.pampa.mycloudgallery.core.trust.data.OcrBody
 import dev.pampa.mycloudgallery.core.trust.data.OcrLine
-import dev.pampa.mycloudgallery.core.trust.data.OcrText
 import dev.pampa.mycloudgallery.core.trust.data.VecBody
 import dev.pampa.mycloudgallery.core.trust.data.VecItem
 import kotlinx.coroutines.CancellationException
@@ -192,30 +190,6 @@ internal class MediaComputer(
     }
   }
 
-  private fun finish(source: OcrSource, raw: List<OcrLine>): TextOutcome {
-    val lines = raw.mapNotNull(::clean).take(AiLimits.MAX_OCR_LINES).toMutableList()
-    while (true) {
-      val body = OcrBody(OcrEngineCode.MLKIT_V2_LATIN, recipe.ocrVersion, source, lines)
-      if (AiSegments.admits(body)) return TextOutcome.Done(body)
-      // Oltre il tetto dei byte del corpo: si tolgono le ultime righe (le prime sono quelle in alto).
-      if (lines.isEmpty()) return TextOutcome.Failed
-      lines.removeAt(lines.lastIndex)
-    }
-  }
-
-  /** Una riga com'e' nel formato: parole pulite (`OcrText.cleanWord`), le parole nulle tolte con i loro estremi. */
-  private fun clean(line: OcrLine): OcrLine? {
-    val pieces = line.text.split(' ')
-    if (pieces.size != line.words.size) return null
-    val kept = pieces.zip(line.words).mapNotNull { (word, span) -> OcrText.cleanWord(word)?.let { it to span } }
-      .take(AiLimits.MAX_WORDS_PER_LINE)
-    if (kept.isEmpty()) return null
-    var text = kept.joinToString(" ") { it.first }
-    var spans = kept.map { it.second }
-    while (text.toByteArray(Charsets.UTF_8).size > AiLimits.MAX_LINE_BYTES && spans.size > 1) {
-      spans = spans.dropLast(1)
-      text = text.substringBeforeLast(' ')
-    }
-    return runCatching { OcrLine(line.box, line.angle, spans, text) }.getOrNull()?.takeIf { OcrText.isAllowed(it.text) }
-  }
+  private fun finish(source: OcrSource, raw: List<OcrLine>): TextOutcome =
+    OcrBodies.of(source, raw, recipe)?.let { TextOutcome.Done(it) } ?: TextOutcome.Failed
 }

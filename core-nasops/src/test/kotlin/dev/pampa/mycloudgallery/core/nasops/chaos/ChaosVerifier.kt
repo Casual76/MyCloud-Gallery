@@ -330,6 +330,12 @@ class Expectation(
   val dirs: Set<Place>,
   /** Le voci del cestino attese: id -> gli originali e il loro percorso relativo. Null = non si controlla. */
   val slots: Map<String, Map<Sha256, String>>?,
+  /**
+   * O-B18 (prove sul campo, gruppo B): le cartelle d'origine di uno spostamento di cartella tra share finito bene, svuotate: non devono esserci
+   * piu' (D24, Q3: i loro file sono nel cestino della loro share e la cartella li segue; mai una cancellazione ricorsiva: se ne trovasse con
+   * dentro un file, questo e' un file visibile non previsto e lo dicono gia' gli altri invarianti).
+   */
+  val goneDirs: Set<Place> = emptySet(),
 )
 
 /** Tutto cio' che il verificatore ha in mano oltre alla scansione. */
@@ -508,6 +514,9 @@ object Verifier {
     val dirKeys = s.dirs.map { it.key }.toSet()
     for (dir in e.dirs) {
       if (dir.key !in dirKeys) v += Violation(Invariant.CATALOG, "la cartella $dir doveva esistere")
+    }
+    for (dir in e.goneDirs) {
+      if (dir.key in dirKeys) v += Violation(Invariant.CATALOG, "la cartella d'origine $dir di uno spostamento tra share e' rimasta, vuota")
     }
     // Maiuscole: un posto atteso con maiuscole diverse da quello trovato (rinomina solo di maiuscole) e' gia' un errore di "place".
     for (dir in e.dirs) {

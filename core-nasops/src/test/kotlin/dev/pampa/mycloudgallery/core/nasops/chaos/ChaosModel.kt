@@ -107,14 +107,29 @@ class FsModel {
   /** Le voci del cestino che una eliminazione definitiva sta portando via: il loro contenuto puo' mancare dal NAS senza che sia una perdita. */
   val pendingPurge: MutableSet<String> = HashSet()
 
+  /**
+   * Le cartelle che a operazione finita NON devono piu' esserci (O-B18): le cartelle d'origine, svuotate, di uno spostamento tra share. Una
+   * cartella ricreata dopo (nuova, rinominata, ripristinata, o con un file spostato dentro) torna a "puo' esserci" ([addDir]).
+   */
+  val goneDirs: LinkedHashMap<String, Place> = LinkedHashMap()
+
   /** Registra [place] (e le cartelle sopra) fra quelle che esistono; con [assert] dice che [place] deve esserci anche vuota. */
   fun addDir(place: Place, assert: Boolean = false) {
     var current: Place? = place
     while (current != null) {
       dirs.putIfAbsent(current.key, current)
+      goneDirs.remove(current.key)
       current = current.parent()
     }
     if (assert) asserted += place.key
+  }
+
+  /** [dir] e le cartelle che il modello conosce sotto di lei non devono piu' esserci (vedi [goneDirs]). */
+  fun expectGone(dir: Place) {
+    dirs.values.filter { it.isWithin(dir) }.forEach {
+      asserted.remove(it.key)
+      goneDirs[it.key] = it
+    }
   }
 
   fun originalAt(place: Place): Int? = visible.entries.firstOrNull { it.value.key == place.key }?.key

@@ -27,6 +27,8 @@ object ProductionChaosStackFactory : ChaosStackFactory {
 
   override fun newStore(world: ChaosWorld): OpsStore = InMemoryOpsStore()
 
+  override val removesEmptySourceFolders: Boolean = true
+
   override fun create(env: StackEnv): ChaosStack {
     val lock = NasOpsLock()
     val access = ShareAccessView { share -> env.readOnly(share) }

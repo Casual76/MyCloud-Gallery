@@ -196,8 +196,8 @@ class FakeAnalysisFetcher : AnalysisFetcher {
 }
 
 /**
- * Il lavoro gia' fatto da altri, scelto dal test (per share, chiave e ricetta). Come `AiPublishedClasses` (P2): una voce di una ricetta
- * **piu' nuova** di quella chiesta conta come fatta (vincerebbe comunque, D7).
+ * Il lavoro gia' fatto da altri, scelto dal test (per share, chiave e ricetta). Come `AiPublishedClasses` (revisione A, R16): conta come
+ * fatta solo una voce della ricetta chiesta (quella corrente); una piu' nuova di quella che l'app conosce, 255 compresa, no.
  */
 class FakeAiDoneClasses : AiDoneClasses {
   private val done = HashMap<Triple<String, ContentKey, Int>, MutableSet<AiClass>>()
@@ -210,7 +210,7 @@ class FakeAiDoneClasses : AiDoneClasses {
     val wanted = keys.toSet()
     val out = HashMap<ContentKey, MutableSet<AiClass>>()
     for ((at, classes) in done) {
-      if (at.first != share.lowercase(Locale.ROOT) || at.second !in wanted || at.third < recipe) continue
+      if (at.first != share.lowercase(Locale.ROOT) || at.second !in wanted || at.third != recipe) continue
       out.getOrPut(at.second) { LinkedHashSet() } += classes
     }
     return out

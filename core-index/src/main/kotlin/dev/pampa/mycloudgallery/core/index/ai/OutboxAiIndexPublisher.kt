@@ -50,6 +50,10 @@ import kotlinx.coroutines.sync.withLock
  * si apre, **senza ricalcolarle** (D8), se la loro chiave e' ancora di un file della share con timbro fresco. Diversamente dalle
  * miniature (R2 della 4A) non si buttano: costano una notte di calcolo, non una rilettura.
  *
+ * **Compattazione** (revisione A, R14; [AiOwnCompaction]): a ogni pubblicazione permessa, se e' il momento (una volta al giorno d'ora del
+ * NAS, troppi segmenti, voci superate, o una richiesta dopo la revoca di un dispositivo: [requestCompaction]) la testa si riscrive con le
+ * sole voci vive di file della share che questo dispositivo sostiene ancora; quelle tolte escono dalla replica di chi legge.
+ *
  * **Morte del processo a ogni passo.** [stage] e' una transazione. [flush]: si leggono le righe (niente si toglie) → segmenti con
  * nome = impronta (una ripetizione trova "esiste gia'" con gli stessi byte) → testa `version + 1` con **tutti** i segmenti propri →
  * una transazione con testa, righe consumate e voci vive. Una morte prima del commit lascia l'outbox intatta: il giro dopo ricostruisce
@@ -67,11 +71,31 @@ class OutboxAiIndexPublisher(
   private val io: CoroutineDispatcher = Dispatchers.IO,
   /** Righe dell'outbox al massimo per pubblicazione (4 segmenti pieni): il resto alla pubblicazione dopo. */
   private val maxRowsPerFlush: Int = DEFAULT_MAX_ROWS_PER_FLUSH,
+  /** R14: i corpi che questo dispositivo sostiene ancora (null = si tolgono solo le voci superate e quelle di file non piu' della share). */
+  ownBodies: AiOwnBodies? = null,
+  /** R14: quando si e' compattata ogni share. */
+  private val compactions: AiCompactionMemory = AiCompactionMemory.inMemory(),
+  /** R14: ogni quanto (ora del NAS) si controllano le voci vive; null = solo su richiesta o per troppi segmenti e voci superate. */
+  private val compactEveryMillis: Long? = null,
 ) : AiIndexPublisher {
 
   override val pending: MutableStateFlow<AiPendingCounts> = MutableStateFlow(AiPendingCounts.EMPTY)
 
   private val heads = AiHeadWriter(identity, io)
+
+  private val compaction = AiOwnCompaction(identity, store, content, ownBodies, counters, io)
+
+  /** Le richieste di compattazione (un numero che cresce) e, per share, l'ultima soddisfatta: solo in memoria (si ripete a ogni revoca). */
+  private val requests = java.util.concurrent.atomic.AtomicLong()
+  private val satisfied = HashMap<String, Long>()
+
+  /**
+   * R5, R14: un dispositivo e' stato revocato (o perso): alla prossima pubblicazione permessa di ogni share la testa propria si
+   * ricontrolla subito, cosi' le voci calcolate sulle sue anteprime escono anche per chi legge.
+   */
+  fun requestCompaction() {
+    requests.incrementAndGet()
+  }
 
   /** [stage], [releasePending] e [purge] non si sovrappongono (le righe si leggono e si scrivono a gruppi). */
   private val stageLock = Mutex()
@@ -181,7 +205,9 @@ class OutboxAiIndexPublisher(
     if (rows.isEmpty()) {
       // Solo voci in attesa di una share pubblicabile: chi chiama sa perche' non esce niente (D8).
       val held = store.refs(share, AiRowState.HELD).isNotEmpty()
-      return rules.blockFor(share)?.takeIf { held }?.let { PublishOutcome.Blocked(it) } ?: PublishOutcome.NothingPending
+      rules.blockFor(share)?.takeIf { held }?.let { return PublishOutcome.Blocked(it) }
+      // Niente da pubblicare: e' il momento giusto per ricontrollare la testa propria (R14).
+      return compactIfDue(share)?.let { PublishOutcome.Published(it.version, 0, 0) } ?: PublishOutcome.NothingPending
     }
     rules.blockFor(share)?.let { block ->
       // Un blocco permanente arrivato dopo [stage] (sola lettura scoperta adesso, D31): le voci vanno in attesa, non si perdono.
@@ -245,10 +271,38 @@ class OutboxAiIndexPublisher(
     if (spaceFailure == null) consumed += consumedOnly
     store.commit(share, AiPublishCommit(OwnHead(head.version, head.mark, now, listed), consumed, fresh, live))
     counters.published.addAndGet(live.size)
-    if (spaceFailure == null) return PublishOutcome.Published(head.version, fresh.size, bytes)
+    if (spaceFailure == null) {
+      val compacted = compactIfDue(share)
+      return PublishOutcome.Published(compacted?.version ?: head.version, fresh.size, bytes)
+    }
     val complete = done.map { it.first.cls.segmentClass }.toSet() - plan.first.drop(done.size).map { it.cls.segmentClass }.toSet()
     val left = store.refs(share, AiRowState.OUTBOX).size
     return PublishOutcome.Partial(complete, PendingCounts(records = 0, blobs = left, bytes = 0), spaceFailure)
+  }
+
+  /**
+   * R14: la compattazione della testa propria di [share], se e' il momento: richiesta (revoca), troppi segmenti o l'ultimo controllo piu'
+   * vecchio di [compactEveryMillis] (che toglie anche le voci superate: lo stesso contenuto ripubblicato in un segmento piu' nuovo). Stessi
+   * cancelli della pubblicazione. Null = niente di nuovo (o il NAS non ha risposto: si riprova dopo).
+   */
+  private suspend fun compactIfDue(share: String): OwnHead? {
+    if (rules.blockFor(share) != null) return null
+    val own = store.ownHead(share) ?: return null
+    val registry = identity.writableRegistry() ?: return null
+    val now = clock.nowMillis()
+    val asked = requests.get()
+    val requested = synchronized(satisfied) { (satisfied[share.lowercase(Locale.ROOT)] ?: 0L) < asked }
+    val segments = own.segments.size
+    val last = compactions.last(share)
+    val every = compactEveryMillis
+    val due = requested || segments >= COMPACT_SEGMENTS || (every != null && (last == null || now - last >= every || now < last))
+    if (!due) return null
+    // I corpi si guardano solo dopo una revoca (R5): la compattazione di ogni giorno toglie le voci non piu' della share e le superate.
+    val result = compaction.compact(share, fileSystem(share), registry, own, heads, now, mergeAll = segments >= COMPACT_SEGMENTS, checkBodies = requested)
+    if (result is AiOwnCompaction.Result.Failed) return null
+    compactions.done(share, now)
+    synchronized(satisfied) { satisfied[share.lowercase(Locale.ROOT)] = asked }
+    return (result as? AiOwnCompaction.Result.Done)?.head
   }
 
   /**
@@ -301,5 +355,12 @@ class OutboxAiIndexPublisher(
 
   companion object {
     const val DEFAULT_MAX_ROWS_PER_FLUSH: Int = 4 * TrustLimits.MAX_SEGMENT_ENTRIES
+
+    /** R14: le voci vive si ricontrollano al piu' una volta al giorno (ora del NAS) per share. */
+    const val DEFAULT_COMPACT_EVERY_MILLIS: Long = 24L * 60 * 60 * 1000
+
+    /** R14: oltre questi segmenti si uniscono anche quelli mezzi vuoti (il formato ne ammette 8.192 per testa). */
+    const val COMPACT_SEGMENTS: Int = 512
+
   }
 }

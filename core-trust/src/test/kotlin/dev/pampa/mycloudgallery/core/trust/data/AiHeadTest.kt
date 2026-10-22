@@ -143,4 +143,24 @@ class AiHeadTest {
     assertThat((OwnFile.classify(NasLayout.aiHead(id, 2)) as OwnFile.Head).kind).isEqualTo(HeadKind.AI)
     assertThat(OwnFile.classify(NasLayout.modelCopy(id, sha))).isNull()
   }
+
+  /**
+   * Revisione A, I10: in un'area privata la testa `ai` vale solo se la firma un dispositivo dell'account di chi legge (il proprietario);
+   * nell'area comune vale quella di qualunque dispositivo approvato.
+   */
+  @Test
+  fun i10_unaTestaAiInUnAreaPrivataValeSoloSeDelloStessoAccount() {
+    val other = family.approveNewDevice(name = "Telefono di papa'", nasUser = "papa")
+    fun head(share: String, signer: Signer) =
+      DeviceHead(family.familyId, signer.deviceId, share, HeadKind.AI, 1, family.state.registry.version, family.clock.nowMillis(), listOf(vec.classed)).sign(signer)
+    fun accept(bytes: ByteArray, share: String, signer: Signer, reader: String) =
+      HeadVerifier.accept(bytes, family.state, HeadLocation(share, signer.deviceId, HeadKind.AI, 1), null, reader)
+
+    // L'area privata di mamma: una testa di papa' si rifiuta, una di mamma vale.
+    assertThat(accept(head("mamma", other), "mamma", other, reader = "mamma").rejectionOrNull()).isEqualTo(RejectReason.NOT_OWNER)
+    assertThat(accept(head("mamma", tablet), "mamma", tablet, reader = "mamma").acceptedOrNull()).isNotNull()
+    // L'area comune: di chiunque sia approvato.
+    assertThat(accept(head("Public", other), "Public", other, reader = "mamma").acceptedOrNull()).isNotNull()
+    assertThat(accept(head("public", other), "public", other, reader = "mamma").acceptedOrNull()).isNotNull()
+  }
 }

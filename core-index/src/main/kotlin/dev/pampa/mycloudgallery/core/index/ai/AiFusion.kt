@@ -16,19 +16,28 @@ import kotlin.math.sqrt
  *   diverso, in due segmenti), l'**impronta del corpo minore**: arbitraria ma uguale per tutti.
  * - Due vettori della stessa ricetta di dispositivi diversi che non concordano (coseno < [DISAGREE_BELOW]) si contano
  *   (`AI_VECTOR_DISAGREE`, E-A14): vince comunque la regola.
+ * - **Revisione A (R16):** una ricetta oltre la piu' alta che quest'app conosce ([order] con `known`) vale come quella: un dispositivo
+ *   compromesso non vince la fusione pubblicando la ricetta 255 (serve l'id minore, come per chiunque). Una ricetta nuova e legittima
+ *   vale come la corrente finche' l'app non si aggiorna (D21: si ricalcola piano).
  */
 object AiFusion {
 
   /** Sotto questo coseno due vettori della stessa ricetta "non concordano" (D7). */
   const val DISAGREE_BELOW: Float = 0.95f
 
-  /** L'ordine D7: il primo vince. */
-  val ORDER: Comparator<AiCandidate> =
-    compareByDescending<AiCandidate> { it.recipe }.thenBy { it.deviceId }.thenBy { it.digest }.thenBy { it.segment }
+  /** Il formato ammette le ricette 1..255: senza un tetto noto nessuna si riduce. */
+  const val ANY_RECIPE: Int = 255
 
-  /** Il vincitore fra [candidates] della stessa (chiave, classe), se la chiave e' attestata. */
-  fun winner(candidates: Collection<AiCandidate>, attested: Boolean): AiCandidate? =
-    if (!attested) null else candidates.minWithOrNull(ORDER)
+  /** L'ordine D7 con le ricette ridotte a [known] (R16): il primo vince. */
+  fun order(known: Int): Comparator<AiCandidate> =
+    compareByDescending<AiCandidate> { minOf(it.recipe, known) }.thenBy { it.deviceId }.thenBy { it.digest }.thenBy { it.segment }
+
+  /** L'ordine D7 senza tetto (le ricette come sono). */
+  val ORDER: Comparator<AiCandidate> = order(ANY_RECIPE)
+
+  /** Il vincitore fra [candidates] della stessa (chiave, classe), se la chiave e' attestata; [known] la ricetta piu' alta nota (R16). */
+  fun winner(candidates: Collection<AiCandidate>, attested: Boolean, known: Int = ANY_RECIPE): AiCandidate? =
+    if (!attested) null else candidates.minWithOrNull(order(known))
 
   /** I vincitori di ogni (chiave, classe) fra [candidates], con le sole chiavi in [attested]. */
   fun winners(candidates: Collection<AiCandidate>, attested: Set<ContentKey>): Map<AiKey, AiCandidate> =
@@ -38,8 +47,8 @@ object AiFusion {
    * I candidati che vanno confrontati con il vincitore per il disaccordo: stessa ricetta, altro dispositivo. Vuoto quasi sempre (un
    * solo indicizzatore per contenuto): i corpi si leggono solo in quel caso.
    */
-  fun rivals(winner: AiCandidate, candidates: Collection<AiCandidate>): List<AiCandidate> =
-    candidates.filter { it.recipe == winner.recipe && it.deviceId != winner.deviceId }.distinctBy { it.deviceId to it.digest }
+  fun rivals(winner: AiCandidate, candidates: Collection<AiCandidate>, known: Int = ANY_RECIPE): List<AiCandidate> =
+    candidates.filter { minOf(it.recipe, known) == minOf(winner.recipe, known) && it.deviceId != winner.deviceId }.distinctBy { it.deviceId to it.digest }
 
   /**
    * Vero se i due corpi `vec` non concordano: spazio diverso, numero di vettori diverso, o un coseno sotto [DISAGREE_BELOW] fra due

@@ -17,6 +17,7 @@ import dev.pampa.mycloudgallery.core.nasops.contract.PlanOutcome
 import dev.pampa.mycloudgallery.core.nasops.contract.StartOutcome
 import dev.pampa.mycloudgallery.core.nasops.contract.TrashReason
 import dev.pampa.mycloudgallery.core.nasops.contract.UserConfirmation
+import dev.pampa.mycloudgallery.core.nasops.engine.MoveCompletions
 import dev.pampa.mycloudgallery.core.nasops.engine.NasOpsEngine
 import dev.pampa.mycloudgallery.core.nasops.engine.NasOpsLock
 import dev.pampa.mycloudgallery.core.nasops.engine.ShareAccessView
@@ -64,6 +65,8 @@ class NasOpsTestKit(
   val engine: KitEngine = KitEngine.REFERENCE,
   /** Solo con [KitEngine.PRODUCTION]: firma dei record del cestino (scritti nel NAS finto); null = nessun record. */
   private val signing: TrashSigningIdentity? = null,
+  /** Solo con [KitEngine.PRODUCTION] (campo, gruppo A, D7): chi riceve gli spostamenti tra share pubblicati, prima del cestino. */
+  private val moves: MoveCompletions = MoveCompletions.NONE,
 ) {
   val clocks = FakeOpClocks()
   private var nasMs: Long = FakeOpClocks.DEFAULT_NAS_NOW
@@ -133,6 +136,7 @@ class NasOpsTestKit(
       records = records(),
       lock = lock,
       newId = idSource(),
+      moves = moves,
     )
   }
 

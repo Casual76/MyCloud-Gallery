@@ -4328,3 +4328,19 @@ perche' il lavoro di fondo del MediaStore c'era (le due "Salva" delle 05:17).
   polling, niente parte se le regole dicono di aspettare (fascia, carica, rete).
 - Test: `CampoAAppTest.d6_*` (grafo vero: foto al sicuro, "Salva" sul telefono, lettura: la fine della lettura di primo piano chiede il lavoro delle
   foto).
+
+**7. Dopo uno spostamento tra share il catalogo non si aggiornava subito (Fase 7, §0 punto 11).** Causa: l'esecutore delle operazioni
+(`NasOpsEngine.moveFileAcross`) copia, verifica, pubblica e mette la sorgente nel cestino senza dire niente al catalogo; la posizione nuova la scopriva la
+scansione dopo (che per uno spostamento **fra share** non riconosce nemmeno lo spostamento: vede un file nuovo e uno sparito). Fino ad allora il
+catalogo puntava alla sorgente, gia' nel cestino, e un media spostato dall'area privata a quella comune risultava ancora "al sicuro" nell'area privata
+(e il guardiano, punto 2, non lo vedeva).
+- Correzione (il minimo che chiede il brief; la "porta di completamento" vera, D29, e' della Fase 7): una porta nuova di core-nasops,
+  `MoveCompletions`, che l'esecutore chiama per ogni file **dopo** `PUBLISHED` e **prima** di scrivere la voce del cestino e di spostare la sorgente, con
+  il timbro della destinazione letto adesso. Nell'app `CatalogMoveCompletions` (legata in `NasOrganizer`) sposta la posizione della sorgente (presente)
+  alla destinazione, stessa posizione, stesso media e stessa versione (`MediaCatalog.relocate`, "uno spostamento fatto dall'app"), **senza** la verifica:
+  la copia e' un altro file e la rilegge il backup quando serve. Idempotente (una ripresa del passo non trova piu' la sorgente; una destinazione gia'
+  nota non si tocca). Un errore del catalogo o una lettura del timbro che non riesce non fermano lo spostamento: la sorgente va nel cestino come prima e
+  la scansione rimette a posto. Se poi la sorgente non va nel cestino (cambiata dal PC, E-D13), resta sul NAS e la scansione la ritrova: niente si perde.
+- Test: `CampoAMovesTest` (core-nasops, esecutore vero: l'annuncio arriva per ogni file con la copia gia' pubblicata e la sorgente ancora al suo posto; un
+  catalogo che lancia non ferma niente), `CampoAMoveCompletionsTest` (`:app`, Room vero: la posizione e' alla destinazione, dello stesso media, senza
+  verifica; la ripresa non cambia niente).

@@ -113,6 +113,8 @@ class NasOpsEngine internal constructor(
   private val presence: CatalogPresence = CatalogPresence.NONE,
   /** L'attesa breve di [OwnFolderBackoff] (millisecondi): di norma un `delay`; i test la fanno passare sull'orologio finto. */
   private val waitShortly: suspend (Long) -> Unit = { delay(it) },
+  /** Campo, gruppo A (D7): il catalogo collega la posizione nuova di uno spostamento tra share prima che la sorgente vada nel cestino. */
+  private val moves: MoveCompletions = MoveCompletions.NONE,
 ) : NasOperations {
 
   init {
@@ -755,10 +757,31 @@ class NasOpsEngine internal constructor(
     if (cur.state == OpItemState.COPYING) cur = copyPhase(cur, temp, ctx)
     if (cur.state == OpItemState.COPIED) cur = verifyPhase(cur, temp, ctx)
     if (cur.state == OpItemState.VERIFIED) cur = publishPhase(cur, temp, ctx)
-    if (cur.state == OpItemState.PUBLISHED) cur = recordSourcePhase(cur)
+    if (cur.state == OpItemState.PUBLISHED) {
+      // Campo, gruppo A (D7): la copia verificata e' al suo posto; il catalogo la collega allo stesso media prima che la sorgente esca.
+      announceMoved(cur, ctx)
+      cur = recordSourcePhase(cur)
+    }
     if (cur.state == OpItemState.SOURCE_RECORDED) cur = trashSourcePhase(cur, ctx)
     if (cur.state == OpItemState.SOURCE_TRASHED) cur = dateAndFinish(cur, ctx)
     return cur
+  }
+
+  /**
+   * Campo, gruppo A (D7): [MoveCompletions] con il timbro della destinazione letto adesso. Una lettura che non riesce o un errore del catalogo non
+   * fermano lo spostamento: la sorgente va nel cestino come sempre e la scansione dopo rimette a posto il catalogo (com'era prima).
+   */
+  private suspend fun announceMoved(cur: OpItemRecord, ctx: RunCtx) {
+    val dstShare = cur.dstShare ?: return
+    val dst = cur.dstPath ?: return
+    try {
+      val stamp = (reader.stat(dstShare, dst, ctx.purpose) as? NasResult.Ok)?.value?.stamp ?: return
+      moves.moved(cur.srcShare, cur.srcPath, dstShare, dst, stamp)
+    } catch (e: kotlinx.coroutines.CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      GalleryLog.w(TAG) { "catalogo non aggiornato dopo uno spostamento (${e.javaClass.simpleName}): lo fara' la scansione" }
+    }
   }
 
   /**

@@ -18,6 +18,7 @@ import dev.pampa.mycloudgallery.core.nasops.contract.OwnFilesCleaning
 import dev.pampa.mycloudgallery.core.nasops.engine.CatalogPresence
 import dev.pampa.mycloudgallery.core.nasops.engine.HeavyWorkPolicy
 import dev.pampa.mycloudgallery.core.nasops.engine.KnownHashes
+import dev.pampa.mycloudgallery.core.nasops.engine.MoveCompletions
 import dev.pampa.mycloudgallery.core.nasops.engine.NasOpsEngine
 import dev.pampa.mycloudgallery.core.nasops.engine.NasOpsLock
 import dev.pampa.mycloudgallery.core.nasops.engine.ShareAccessView
@@ -45,6 +46,7 @@ import dev.pampa.mycloudgallery.core.trust.registry.RegistryState
  * @property trashRetentionMillis quanto resta una voce nel cestino: 30 giorni; solo la build debug lo accorcia (F20).
  * @property citedTemps Fase 5A, D33: i temporanei citati dal diario del backup (`BackupStore.citedTemps`, composto da `:app`, P7): la
  *   pulizia dei propri file li lascia come quelli delle operazioni.
+ * @property moves Campo, gruppo A (D7): il catalogo collega la posizione nuova di uno spostamento tra share prima che la sorgente vada nel cestino.
  */
 class NasOpsConfig(
   val deviceId: String,
@@ -67,6 +69,7 @@ class NasOpsConfig(
   val catalogPresence: CatalogPresence = CatalogPresence.NONE,
   val trashRetentionMillis: Long = TrustLimits.TRASH_RETENTION_MILLIS,
   val citedTemps: CitedTemps = CitedTemps.NONE,
+  val moves: MoveCompletions = MoveCompletions.NONE,
 ) {
   override fun toString(): String = "NasOpsConfig"
 }
@@ -108,6 +111,7 @@ object NasOpsWiring {
       heavy = config.heavyWork,
       lock = lock,
       presence = config.catalogPresence,
+      moves = config.moves,
     )
     val trash = NasTrashService(
       deviceId = config.deviceId,

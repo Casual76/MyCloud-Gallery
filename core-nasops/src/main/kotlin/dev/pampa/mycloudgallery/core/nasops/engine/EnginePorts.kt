@@ -105,3 +105,19 @@ fun interface ShareAccessView {
     val ALL_WRITABLE: ShareAccessView = ShareAccessView { false }
   }
 }
+
+/**
+ * Campo, gruppo A (D7; Fase 7 §0 punto 11): uno spostamento tra share ha **pubblicato** la copia verificata di un file a [dstPath] di [dstShare] (con il
+ * timbro [stamp] letto adesso) e la sorgente [srcPath] di [srcShare] sta per andare nel cestino. Chi lega la porta (`:app`) collega la posizione nuova allo
+ * stesso media del catalogo **prima** che la sorgente esca: prima il catalogo lo scopriva solo alla scansione dopo e intanto puntava alla sorgente gia'
+ * nel cestino. Si chiama a ogni ripresa del passo (idempotente per chi la lega); un errore non ferma lo spostamento (il catalogo lo rimette a posto la
+ * scansione). Mai un'azione sul NAS: solo il catalogo locale. La "porta di completamento" vera e' della Fase 7 (D29).
+ */
+fun interface MoveCompletions {
+  suspend fun moved(srcShare: String, srcPath: SharePath, dstShare: String, dstPath: SharePath, stamp: NasStamp)
+
+  companion object {
+    /** Nessun catalogo (test, banco): il catalogo lo aggiorna la scansione. */
+    val NONE: MoveCompletions = MoveCompletions { _, _, _, _, _ -> }
+  }
+}

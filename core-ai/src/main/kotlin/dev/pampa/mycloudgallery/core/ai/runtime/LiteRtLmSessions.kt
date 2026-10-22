@@ -58,6 +58,25 @@ internal interface EngineHooks {
   object None : EngineHooks
 }
 
+/**
+ * Come il motore riceve il modello gia' verificato da `ModelFiles.open` (D16). Misurato sull'S25 (docs/decisioni.md, "Fase 6 P4"):
+ * LiteRT-LM salva i programmi compilati e i pesi preparati solo quando il modello gli arriva **per percorso**; con il descrittore la
+ * cartella della cache resta vuota e ogni caricamento ricompila (440M su GPU: avvio a caldo 5,1 s invece di 2,2 s; 270M su CPU: 0,77 s
+ * invece di 0,39 s e 130 MB di PSS in piu'). Per questo il predefinito e' [PATH_CHECKED].
+ */
+enum class ModelAccess {
+  /** Il descrittore verificato (`dup`), senza cache dei programmi compilati: D16 alla lettera, piu' lento e piu' pesante in memoria. */
+  DESCRIPTOR,
+
+  /**
+   * Il percorso del file dell'app (`noBackupFilesDir/models/<sha256>`, in sola lettura, privato dell'app) con la cache. Il file che il
+   * motore apre per nome si confronta (dispositivo, inode, dimensione) con il descrittore su cui sono stati calcolati dimensione e
+   * SHA-256, **prima e dopo** l'inizializzazione, e il descrittore resta aperto finche' il motore vive (cosi' l'inode non si puo'
+   * riusare): un file rinominato o sostituito fra la verifica e l'uso e' rifiutato (`MODEL_UNAVAILABLE`, E-A11).
+   */
+  PATH_CHECKED,
+}
+
 internal class LiteRtLmSessions(
   private val files: ModelFiles,
   private val spec: ModelSpec,
@@ -67,6 +86,7 @@ internal class LiteRtLmSessions(
   private val nanos: () -> Long = System::nanoTime,
   private val hooks: EngineHooks = EngineHooks.None,
   val timings: OpenTimings = OpenTimings(),
+  private val access: ModelAccess = ModelAccess.PATH_CHECKED,
 ) : SessionFactory {
 
   override suspend fun open(backend: AiBackend): VectorSession {
@@ -79,7 +99,7 @@ internal class LiteRtLmSessions(
       // L'inizializzazione nativa non si interrompe: se il chiamante viene annullato nel frattempo, la sessione nasce comunque e si
       // chiude qui sotto (altrimenti resterebbe un motore da centinaia di MB che nessuno possiede).
       withContext(NonCancellable) {
-        withContext(thread.dispatcher) { RealSession.create(model, spec, backend, withVision, cacheRoot, recipe, hooks, thread) }
+        withContext(thread.dispatcher) { RealSession.create(model, spec, backend, withVision, cacheRoot, recipe, hooks, thread, access) }
       }
     } catch (t: Throwable) {
       model.close()
@@ -143,6 +163,18 @@ private class RealSession(
   companion object {
     private val NORMALIZED = EmbeddingOptions(normalize = true)
 
+    /** Il file `file` e' ancora quello verificato ([verified], da `fstat` del descrittore): stesso dispositivo, stesso inode, stessa dimensione. */
+    private fun checkSameFile(file: File, verified: android.system.StructStat) {
+      val now = try {
+        Os.stat(file.path)
+      } catch (e: ErrnoException) {
+        throw AiEngineException(AiEngineError.MODEL_UNAVAILABLE, e)
+      }
+      if (now.st_dev != verified.st_dev || now.st_ino != verified.st_ino || now.st_size != verified.st_size) {
+        throw AiEngineException(AiEngineError.MODEL_UNAVAILABLE)
+      }
+    }
+
     /** Bloccante: da chiamare sul thread del motore. In caso d'errore chiude cio' che ha aperto (non il modello, che e' del chiamante). */
     fun create(
       model: VerifiedModel,
@@ -153,16 +185,22 @@ private class RealSession(
       recipe: AiRecipe,
       hooks: EngineHooks,
       thread: EngineThread,
+      access: ModelAccess,
     ): RealSession {
       val native = hooks.nativeBackend(backend)
       val litertBackend: Backend = if (native == AiBackend.GPU) Backend.GPU() else Backend.CPU()
       val cache = File(cacheRoot, "${spec.sha256.hex}-${native.name.lowercase()}").apply { mkdirs() }
 
-      // D16: il motore legge dallo stesso descrittore su cui il verificatore ha calcolato dimensione e SHA-256 (riportato all'inizio),
-      // duplicato perche' il motore lo tiene finche' vive e `VerifiedModel` ne e' il proprietario. I fake non hanno il descrittore:
-      // in quel caso (solo test) si passa il percorso.
-      val dup: ParcelFileDescriptor? = model.descriptor?.let { ParcelFileDescriptor.dup(it) }
+      // D16, DESCRIPTOR: il motore legge dallo stesso descrittore su cui il verificatore ha calcolato dimensione e SHA-256 (riportato
+      // all'inizio), duplicato perche' il motore lo tiene finche' vive e `VerifiedModel` ne e' il proprietario. I fake non hanno il
+      // descrittore: in quel caso (solo test) si passa il percorso.
+      val byDescriptor = access == ModelAccess.DESCRIPTOR && model.descriptor != null
+      val dup: ParcelFileDescriptor? = if (byDescriptor) ParcelFileDescriptor.dup(model.descriptor) else null
       val identity = dup?.let { d -> Os.fstat(d.fileDescriptor).let { it.st_dev to it.st_ino } }
+
+      // PATH_CHECKED: il file per nome deve essere quello verificato, adesso e dopo l'inizializzazione.
+      val verified = if (!byDescriptor) model.descriptor?.let { Os.fstat(it) } else null
+      if (verified != null) checkSameFile(model.file, verified)
 
       val config = EmbeddingEngineConfig(
         modelPath = if (dup == null) model.file.path else "",
@@ -178,6 +216,7 @@ private class RealSession(
       try {
         hooks.beforeInit(backend)
         engine.initialize()
+        if (verified != null) checkSameFile(model.file, verified)
       } catch (t: Throwable) {
         runCatching { engine.close() }
         FdOwnership.closeIfOurs(dup, identity)

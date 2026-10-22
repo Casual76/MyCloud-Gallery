@@ -12,6 +12,7 @@ import dev.pampa.mycloudgallery.core.ai.runtime.FdOwnership
 import dev.pampa.mycloudgallery.core.ai.runtime.LiteRtLmImageEmbedder
 import dev.pampa.mycloudgallery.core.ai.runtime.LiteRtLmSessions
 import dev.pampa.mycloudgallery.core.ai.runtime.LiteRtLmTextEmbedder
+import dev.pampa.mycloudgallery.core.ai.runtime.ModelAccess
 import dev.pampa.mycloudgallery.core.ai.runtime.ProbeImageSet
 import dev.pampa.mycloudgallery.core.ai.runtime.VectorChecks
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagCode
@@ -229,7 +230,7 @@ class EngineVectorsDeviceTest {
   @Test
   fun aprireERilasciareNonPerdeDescrittori() = runBlocking<Unit> {
     TestModels.require(TestModels.query270m)
-    val embedder = LiteRtLmTextEmbedder(TestModels.files, TestModels.cacheRoot)
+    val embedder = LiteRtLmTextEmbedder(TestModels.files, TestModels.cacheRoot, access = ModelAccess.DESCRIPTOR) // la copia c'e' solo cosi'
     embedder.warmUp()
     embedder.embed("cane")
     embedder.release()

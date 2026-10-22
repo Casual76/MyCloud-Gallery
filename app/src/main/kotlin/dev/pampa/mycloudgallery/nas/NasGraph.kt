@@ -53,7 +53,6 @@ import dev.pampa.mycloudgallery.core.index.replica.store.RoomProvisionalStore
 import dev.pampa.mycloudgallery.core.index.replica.store.RoomReplicaStore
 import dev.pampa.mycloudgallery.core.index.store.FileOutboxBlobStore
 import dev.pampa.mycloudgallery.core.index.store.RoomIndexPublishStore
-import dev.pampa.mycloudgallery.core.index.ai.AiShareSync
 import dev.pampa.mycloudgallery.core.index.ai.NasAiRemoteIndex
 import dev.pampa.mycloudgallery.core.index.ai.ReplicaAttestation
 import dev.pampa.mycloudgallery.core.index.sync.IndexCounters
@@ -562,13 +561,11 @@ class NasGraph(
     val ai = this.ai
     val aiSync = ai?.let { hooks ->
       val aiRemote = NasAiRemoteIndex({ share -> inputs.session.fileSystem(share) }, { inputs.registry() }, user)
-      AiShareSync(
+      // Revisione A (R5, R16): la replica `ai` la monta `NasAiHooks` (ricette note, cio' che una revoca toglie anche qui).
+      hooks.shareSync(
         remote = aiRemote,
-        store = hooks.replicaStore,
         attestation = ReplicaAttestation(replicaStore, replicaPort),
-        sink = hooks.sink(),
         standings = { inputs.standing(it) },
-        counters = hooks.counters,
         listDevices = { share -> remote.devices(share) },
         startRound = aiRemote::startRound,
       )
@@ -853,8 +850,13 @@ class NasGraph(
     val rt = runtimeFlow.value ?: return
     for (area in rt.areas) runCatching { rt.publisher.flush(area.share, dev.pampa.mycloudgallery.core.index.contract.FlushReason.PERIODIC) }
     // Fase 6 (P11b): anche cio' che aspetta nell'outbox `ai` (il testo letto al volo dal viewer, che nessuna tappa del calcolo pubblica).
+    // Revisione A (PR-2): prima le voci in attesa di una share che ora si puo' pubblicare (F4-D31 spento): su un dispositivo che non indicizza
+    // nessuna tappa del calcolo le rilascerebbe mai.
     val aiPublisher = rt.ai?.publisher ?: return
-    for (area in rt.areas) runCatching { aiPublisher.flush(area.share, dev.pampa.mycloudgallery.core.index.contract.FlushReason.PERIODIC) }
+    for (area in rt.areas) {
+      runCatching { aiPublisher.releasePending(area.share) }
+      runCatching { aiPublisher.flush(area.share, dev.pampa.mycloudgallery.core.index.contract.FlushReason.PERIODIC) }
+    }
   }
 
   /** "Qualita' delle anteprime" (Impostazioni, E-L6). */

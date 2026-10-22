@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.graph
 import android.content.Context
 import dev.pampa.mycloudgallery.ai.AiGraph
 import dev.pampa.mycloudgallery.ai.FileAiUnsupported
+import dev.pampa.mycloudgallery.ai.FileCompactionMemory
 import dev.pampa.mycloudgallery.ai.TextReadingMemory
 import dev.pampa.mycloudgallery.backup.BackupRunMemory
 import dev.pampa.mycloudgallery.search.SearchGraph
@@ -219,7 +220,8 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
     /**
      * Fase 6 (P11): il buffer di analisi, l'indice di ricerca (vettori, registro delle origini, righe del testo letto, corpi propri), i
      * media "non supportati", la memoria della lettura del testo e il battito del calcolo. Le tabelle `ai_*` e la cronologia stanno nel
-     * database della galleria (tolto con lui). I modelli li toglie solo l'azzeramento completo ([eraseAll]).
+     * database della galleria (tolto con lui). I modelli li toglie solo l'azzeramento completo ([eraseAll]). Revisione A (R14): anche
+     * quando si sono compattate le teste `ai` proprie.
      */
     val AI_FILES = listOf(
       AiGraph.BUFFER_DIR,
@@ -227,6 +229,7 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
       FileAiUnsupported.FILE,
       TextReadingMemory.FILE,
       AiStages.HEARTBEAT_AI,
+      FileCompactionMemory.FILE,
     )
   }
 }

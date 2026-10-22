@@ -4,6 +4,7 @@ import android.content.Context
 import dev.pampa.mycloudgallery.core.ai.compute.AiComputeEngine
 import dev.pampa.mycloudgallery.core.ai.compute.AiComputeParts
 import dev.pampa.mycloudgallery.core.ai.compute.AiFreeSpace
+import dev.pampa.mycloudgallery.core.ai.compute.AiInputOrigin
 import dev.pampa.mycloudgallery.core.ai.compute.AiInputs
 import dev.pampa.mycloudgallery.core.ai.compute.AiPhoneMedia
 import dev.pampa.mycloudgallery.core.ai.compute.AiRunControl
@@ -141,11 +142,12 @@ class AiGraph(
   val analysisSink = BufferAnalysisSink(buffer) { indexer.value }
 
   val unsupported = FileAiUnsupported(File(noBackup, FileAiUnsupported.FILE))
-  private val localBodies = LocalBodyStore(File(search.dir, LOCAL_BODIES_DIR))
-  val results = IndexAiResults(search.index, search.layouts, localBodies) { search.open() }
+
+  /** Revisione A (R4, R5): il dato, la provenienza e il corpo da ripubblicare stanno insieme nell'indice locale. */
+  val results = IndexAiResults(search.index) { search.open() }
   val replicaStore = RoomAiReplicaStore(database)
   val publishStore = RoomAiPublishStore(database)
-  val replicaSink = IndexReplicaSink(search.index, search.layouts) { search.open() }
+  val replicaSink = IndexReplicaSink(search.index) { search.open() }
   val indexCounters = AiIndexCounters()
 
   /** Il telefono per il calcolo (P11b): i media del solo telefono da fare e l'apertura dei byte; null senza `parts.phoneBytes`. */
@@ -165,21 +167,16 @@ class AiGraph(
     counters = indexCounters,
     recipe = recipe,
     facts = parts.facts,
+    // Revisione A: la revoca toglie anche le anteprime del revocato dal buffer (R5); la compattazione delle teste proprie (R14).
+    buffer = buffer,
+    ownBodies = IndexOwnBodies(search.index) { search.open() },
+    compactions = FileCompactionMemory(File(noBackup, FileCompactionMemory.FILE)),
   )
 
   init {
-    // L'indice che perde un dato (record rovinato, registro rotto) lo chiede di nuovo alla replica `ai`: le chiavi tornano "da rifondere"
-    // e il prossimo giro di sincronizzazione le riconsegna. Cio' che era calcolato qui lo rifa' il calcolo (`saved` non lo dice piu').
-    search.repair.target = object : dev.pampa.mycloudgallery.core.search.index.IndexRepair {
-      override suspend fun redeliver(keys: Collection<dev.pampa.mycloudgallery.core.model.ContentKey>) {
-        val marks = keys.flatMap { k -> AiClass.entries.map { dev.pampa.mycloudgallery.core.index.ai.AiKey(k, it) } }
-        for (share in replicaStore.shares()) replicaStore.markDirty(share, marks)
-      }
-
-      override suspend fun redeliverAll() {
-        for (share in replicaStore.shares()) replicaStore.markDirty(share, replicaStore.keys(share))
-      }
-    }
+    // L'indice che perde un dato (record rovinato, registro rotto) lo chiede di nuovo alla replica `ai`; R15: si toglie il segno
+    // "consegnato", cosi' il giro dopo riconsegna anche lo stesso vincitore. Cio' che era calcolato qui lo rifa' il calcolo.
+    search.repair.target = ReplicaIndexRepair(replicaStore)
   }
 
   /** Le classi che servono qui (D41): `vec` su un indicizzatore, `ocr` solo con la lettura attiva qui. */
@@ -213,15 +210,17 @@ class AiGraph(
    * nessuna) e pubblicato in coda (`PERIODIC`: al piu' ogni 5 minuti per share; il resto lo fa il giro periodico del NAS). F4-D31: sulle
    * share vere resta in attesa, come i risultati del calcolo. Mai un errore: il testo e' gia' sullo schermo.
    */
-  suspend fun keepReadText(key: ContentKey, body: OcrBody) {
+  suspend fun keepReadText(key: ContentKey, body: OcrBody, from: AiInputOrigin = AiInputOrigin.Own) {
     try {
-      results.saveText(key, body)
+      results.saveText(key, body, from)
     } catch (e: IOException) {
       return
     }
     val rt = parts.nas() ?: return
     val staged = ArrayList<String>()
     for (share in runCatching { parts.shares() }.getOrDefault(emptyList())) {
+      // R5: un testo letto sull'anteprima di un altro dispositivo si pubblica solo nella share di quell'anteprima.
+      if (!from.validFor(share)) continue
       if (key !in rt.content.owned(share, listOf(key))) continue
       try {
         rt.publisher.stage(share, listOf(AiEntry.Text(key, body)))
@@ -327,6 +326,5 @@ class AiGraph(
     /** `noBackupFilesDir/models`: modelli verificati, parziali, programmi compilati (P3, P4). */
     const val MODELS_DIR = "models"
     const val BUFFER_DIR = "ai-buffer"
-    const val LOCAL_BODIES_DIR = "local-bodies"
   }
 }

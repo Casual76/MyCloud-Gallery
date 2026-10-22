@@ -1,5 +1,7 @@
 package dev.pampa.mycloudgallery.ai
 
+import dev.pampa.mycloudgallery.core.ai.compute.AiInputOrigin
+import dev.pampa.mycloudgallery.core.ai.compute.AiOriginBuffer
 import dev.pampa.mycloudgallery.core.ai.compute.OcrBodies
 import dev.pampa.mycloudgallery.core.ai.contract.AiBuffer
 import dev.pampa.mycloudgallery.core.ai.contract.AiEngineException
@@ -39,6 +41,7 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -60,14 +63,20 @@ internal fun TextLayout.toViewer(): ViewerTextLayout = ViewerTextLayout(
   },
 )
 
-/** Il testo dal vivo dall'indice (D43): anche con la lettura spenta e sui media solo-NAS, senza ML Kit (D42). */
-class IndexViewerTextSource(private val text: MediaText) : ViewerTextSource {
+/**
+ * Il testo dal vivo dall'indice (D43): anche con la lettura spenta e sui media solo-NAS, senza ML Kit (D42). Revisione A (VT-2): [changes]
+ * dice al viewer quando l'indice e' cambiato (un testo arrivato, ritirato o di un revocato), cosi' le righe e il pulsante "Testo" seguono.
+ */
+class IndexViewerTextSource(private val text: MediaText, override val changes: Flow<Unit>? = null) : ViewerTextSource {
   override suspend fun layout(id: MediaId): ViewerTextLayout? = text.layout(id)?.toViewer()
 }
 
-/** Un'immagine da leggere al volo: i byte (anteprima di analisi o HQ), la chiave di contenuto cui appartiene il testo e da dove vengono. */
-class OnTheFlyImage(val key: ContentKey, val bytes: ByteArray, val source: OcrSource) {
-  override fun toString(): String = "OnTheFlyImage($source)"
+/**
+ * Un'immagine da leggere al volo: i byte (anteprima di analisi o HQ), la chiave di contenuto cui appartiene il testo, da dove vengono e
+ * (revisione A, R5) di chi sono: i propri byte, o l'anteprima di un altro dispositivo in una share (il testo letto vale solo li').
+ */
+class OnTheFlyImage(val key: ContentKey, val bytes: ByteArray, val source: OcrSource, val from: AiInputOrigin = AiInputOrigin.Own) {
+  override fun toString(): String = "OnTheFlyImage($source, $from)"
 }
 
 /**
@@ -82,8 +91,10 @@ fun interface OnTheFlyImages {
  * Le immagini della lettura al volo, nell'ordine: (1) l'anteprima di analisi gia' nel buffer degli indicizzatori; (2) per un media del
  * telefono, l'anteprima preparata adesso dai suoi byte ([AppAiPhone.analysisOf], la stessa strada del calcolo, D10); (3) per un media del NAS,
  * l'HQ della replica ([hq], 2.048 px, solo con la qualita' "Alta") e, se non c'e', l'originale che il viewer ha gia' portato sul dispositivo per
- * mostrarlo ([original]), preparato come ogni anteprima di analisi. Mai uno scaricamento solo per leggere. Solo per le celle della Libreria: un
- * nascosto non e' una cella (D29) e non si legge qui.
+ * mostrarlo ([original]), preparato come ogni anteprima di analisi. Mai uno scaricamento solo per leggere.
+ *
+ * Revisione A: anche i nascosti e i membri di un gruppo, nel loro viewer (VT-1, D29); dal buffer solo un'anteprima propria, e l'HQ della
+ * replica (preparato da un altro dispositivo) da' un testo che vale solo nella sua share e mai "proprio" (R5).
  */
 class ViewerOcrImages(
   private val catalog: suspend () -> MediaCatalog?,
@@ -92,12 +103,21 @@ class ViewerOcrImages(
   private val preparer: () -> Preparer?,
   private val hq: suspend (MediaRef.Nas) -> ByteArray?,
   private val original: (MediaRef.Nas) -> File? = { null },
+  /**
+   * R5: la share dell'HQ della replica di [MediaRef.Nas], se e' una sola (l'anteprima e' di chi l'ha preparata, non nota: il testo letto
+   * vale solo li'); null = non si sa, e il testo resta solo su questo dispositivo.
+   */
+  private val hqShare: suspend (MediaRef.Nas) -> String? = { null },
 ) : OnTheFlyImages {
   override suspend fun image(id: MediaId, ref: MediaRef): OnTheFlyImage? {
     val cat = catalog() ?: return null
-    val cell = cat.cellContentKeysOf(listOf(id)).firstOrNull { it.mediaId == id } ?: return null
+    // VT-1 (D29): anche un nascosto o un membro di un gruppo (il viewer dei Nascosti).
+    val cell = cat.mediaContentKeysOf(listOf(id)).firstOrNull { it.mediaId == id } ?: return null
     for (key in cell.own) {
-      buffer.get(key, SegmentClass.ANALYSIS)?.let { return OnTheFlyImage(key, it, OcrSource.ANALYSIS) }
+      // R5: dal buffer solo un'anteprima propria (una di un altro dispositivo farebbe "proprio" il testo letto su di lei).
+      val blob = (buffer as? AiOriginBuffer)?.getFor(key, SegmentClass.ANALYSIS, null)?.bytes
+        ?: buffer.takeIf { it !is AiOriginBuffer }?.get(key, SegmentClass.ANALYSIS)
+      blob?.let { return OnTheFlyImage(key, it, OcrSource.ANALYSIS) }
     }
     return when (ref) {
       is MediaRef.Phone -> {
@@ -107,7 +127,7 @@ class ViewerOcrImages(
       is MediaRef.Nas -> {
         // La chiave del testo e' quella della versione che il NAS mostra (la forma ridotta della chiave e' quella del riferimento).
         val key = cell.own.firstOrNull { it.short == ref.contentKey } ?: return null
-        hq(ref)?.let { return OnTheFlyImage(key, it, OcrSource.HQ) }
+        hq(ref)?.let { return OnTheFlyImage(key, it, OcrSource.HQ, AiInputOrigin.Preview(hqShare(ref).orEmpty(), null)) }
         originalAnalysis(cat, id, ref, key)
       }
       else -> null
@@ -145,7 +165,7 @@ class GatedViewerTextReader(
   private val reader: TextReader,
   private val images: OnTheFlyImages,
   private val ocr: (ByteArray, OcrSource) -> OcrImage?,
-  private val keep: suspend (ContentKey, OcrBody) -> Unit,
+  private val keep: suspend (ContentKey, OcrBody, AiInputOrigin) -> Unit,
   private val recipe: AiRecipe = AiRecipe.CURRENT,
   private val timeoutMs: Long = READ_TIMEOUT_MS,
   /** Dove si prepara l'immagine e si costruisce il corpo (CPU: mai sul thread del viewer). */
@@ -170,7 +190,7 @@ class GatedViewerTextReader(
     // Salvato e in coda per la pubblicazione: non si interrompe a meta' (il tempo del viewer non lo riguarda piu').
     withContext(NonCancellable) {
       try {
-        keep(read.key, read.body)
+        keep(read.key, read.body, read.from)
       } catch (e: IOException) {
         // Il testo e' gia' sullo schermo; il calcolo lo rileggera' se serve.
       }
@@ -178,7 +198,7 @@ class GatedViewerTextReader(
     return ViewerTextLayout(read.body.lines.map { it.toViewer() })
   }
 
-  private class Read(val key: ContentKey, val body: OcrBody)
+  private class Read(val key: ContentKey, val body: OcrBody, val from: AiInputOrigin)
 
   private suspend fun read(id: MediaId, ref: MediaRef): Read? {
     val input = images.image(id, ref) ?: return null
@@ -190,7 +210,7 @@ class GatedViewerTextReader(
     } catch (e: AiEngineException) {
       return null
     }
-    return OcrBodies.of(input.source, result.lines, recipe)?.let { Read(input.key, it) }
+    return OcrBodies.of(input.source, result.lines, recipe)?.let { Read(input.key, it, input.from) }
   }
 
   private fun OcrLine.toViewer(): ViewerTextLine {

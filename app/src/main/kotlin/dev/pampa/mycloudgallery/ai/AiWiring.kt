@@ -5,8 +5,12 @@ import android.content.Context
 import dev.pampa.mycloudgallery.backup.CutoutFence
 import dev.pampa.mycloudgallery.backup.FencedCutouts
 import dev.pampa.mycloudgallery.backup.MediaStorePhoneBytes
+import dev.pampa.mycloudgallery.core.ai.compute.AreaView
+import dev.pampa.mycloudgallery.core.ai.compute.DeviceRoleView
+import dev.pampa.mycloudgallery.core.ai.contract.AiDiag
 import dev.pampa.mycloudgallery.core.ai.contract.SubjectCutter
 import dev.pampa.mycloudgallery.core.ai.contract.TextEmbedder
+import dev.pampa.mycloudgallery.core.ai.contract.TextReadingState
 import dev.pampa.mycloudgallery.core.ai.contract.TextReadingSwitch
 import dev.pampa.mycloudgallery.core.ai.cutout.MagicTouchCutter
 import dev.pampa.mycloudgallery.core.ai.ocr.GatedTextReader
@@ -41,6 +45,8 @@ import dev.pampa.mycloudgallery.core.personal.settings.SyncedMotionSettings
 import dev.pampa.mycloudgallery.core.personal.settings.SyncedSearchSettings
 import dev.pampa.mycloudgallery.core.personal.store.LedgerPersonalStore
 import dev.pampa.mycloudgallery.core.rules.traffic.TrafficSource
+import dev.pampa.mycloudgallery.core.trust.data.DeviceRole
+import dev.pampa.mycloudgallery.core.trust.registry.DeviceStatus
 import dev.pampa.mycloudgallery.debugtools.DeveloperTools
 import dev.pampa.mycloudgallery.feature.viewer.cutout.AndroidCutoutSaver
 import dev.pampa.mycloudgallery.feature.viewer.cutout.CutoutShareFiles
@@ -57,6 +63,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -119,7 +127,11 @@ class AiStack(
     val textReader = GatedViewerTextReader(
       switch = textSwitch,
       reader = ai.parts.reader,
-      images = ViewerOcrImages(catalog, ai.buffer, ai.phone, { gallery.nas?.preparer }, { ref -> hq?.bytes(ref) }, { ref -> nas?.imageOrigin?.localFile(ref) }),
+      images = ViewerOcrImages(
+        catalog, ai.buffer, ai.phone, { gallery.nas?.preparer }, { ref -> hq?.bytes(ref) }, { ref -> nas?.imageOrigin?.localFile(ref) },
+        // R5: l'HQ e' l'anteprima di chi l'ha preparata; il testo letto su di lei vale solo nella share del media, se e' una sola.
+        hqShare = { ref -> runCatching { nas?.locations?.scopeOf(ref) }.getOrNull()?.shareKeys?.singleOrNull() },
+      ),
       ocr = ai::ocrImage,
       keep = ai::keepReadText,
       recipe = ai.recipe,
@@ -131,7 +143,8 @@ class AiStack(
     val names = RememberedSourceName()
     val files = share?.let { CutoutFiles(it.cache, it.uris) } ?: CutoutShareFiles { null }
     return GalleryGraph.SearchViewerHooks(
-      textSource = IndexViewerTextSource(search.mediaText),
+      // VT-2: il viewer rilegge il media aperto quando l'indice cambia (testo arrivato, ritirato, tolto con una revoca).
+      textSource = IndexViewerTextSource(search.mediaText, search.index.version.drop(1).map { }.conflate()),
       textReader = textReader,
       similarSearch = SearchViewerSimilar(search.keys, similar) { key -> search.index.hasVectors(key) },
       motionAnimation = dev.pampa.mycloudgallery.feature.viewer.motion.MotionAnimationSetting { personal.motion.value?.motionAnimation?.value ?: true },
@@ -210,6 +223,24 @@ object AiWiring {
       },
       factory = { queryEmbedder?.invoke(models) ?: LiteRtLmTextEmbedder(models.files, cacheRoot, diag = diag) },
     )
+    // --- Copertura (revisione A, PR-1): aree senza indicizzatori e motivi, dai dati che questo dispositivo ha gia' -------------------
+    var aiRef: AiGraph? = null
+    var searchRef: SearchGraph? = null
+    var readingRef: AppTextReadingSwitch? = null
+    val coverage = AppCoverage(
+      areas = { areasOf(graph) },
+      devices = { familyRoles(graph, aiRef?.indexer?.value == true) },
+      nasNow = { graph.nasClock.nowMillisOrNull() },
+      catalog = { gallery.coreIfReady()?.catalog },
+      indexerHere = { aiRef?.indexer?.value == true },
+      modelReadyHere = {
+        modelReady?.invoke(ModelCatalog.INDEX_440M.id) ?: (models.manager.states.value[ModelCatalog.INDEX_440M.id] is ModelState.Ready)
+      },
+      unsupported = { aiRef?.hooks?.unsupported },
+      // D42: nessun testo letto da nessuno e la lettura non attiva per questo account.
+      readingOff = { readingRef?.state?.value !is TextReadingState.OnForAccount && (searchRef?.index?.sizes?.second ?: 0) == 0 },
+      told = { diag(AiDiag.AI_NO_INDEXER_AREA) },
+    )
     val search = SearchGraph(
       scope = scope,
       dir = File(noBackup, SearchGraph.DIR),
@@ -220,7 +251,10 @@ object AiWiring {
       embedding = query,
       queryModelBytes = ModelCatalog.QUERY_270M.sizeBytes,
       modelMissing = { modelReady == null && models.manager.states.value[ModelCatalog.QUERY_270M.id] !is ModelState.Ready },
+      coverageReasons = coverage,
+      coverageNotices = coverage,
     )
+    searchRef = search
 
     // --- Lettura del testo (D41) ---------------------------------------------------------------------------------------------
     val organizerParts = gallery.nas?.organizer?.partsState
@@ -240,6 +274,7 @@ object AiWiring {
       memory = memory,
       shutdown = { shutdown },
     )
+    readingRef = switch
 
     // --- Ruoli (D15) ---------------------------------------------------------------------------------------------------------
     val roles = OnboardingRolesSettings(
@@ -293,6 +328,8 @@ object AiWiring {
       ),
     )
 
+    aiRef = ai
+
     val cutoutFence = CutoutFence(fence, fencedCutouts) { graph.account.value?.user }
     val cutoutPhotos = AppCutoutNewPhoto(
       catalog = { gallery.coreIfReady()?.catalog },
@@ -301,6 +338,34 @@ object AiWiring {
       nowMillis = gallery.clock,
     )
     return AiStack(models, search, ai, personal, roles, switch, mobileConfirmed, cutout, cutoutPhotos, cutoutFence, context)
+  }
+
+  /** PR-1: le aree di questo account (la privata, se l'account e' noto) e l'area comune, dall'istantanea dell'onboarding. */
+  private fun areasOf(graph: AppGraph): List<AreaView> {
+    val snapshot = graph.onboardingStore.snapshotOrNull() ?: return emptyList()
+    val account = snapshot.nasUser ?: graph.account.value?.user
+    return listOfNotNull(
+      snapshot.privateShare?.takeIf { account != null }?.let { AreaView(it, account) },
+      snapshot.commonShare?.let { AreaView(it, null) },
+    ).distinctBy { it.share.lowercase(java.util.Locale.ROOT) }
+  }
+
+  /**
+   * PR-1 (D14, E-I12): i dispositivi approvati del registro con il ruolo e l'ultima volta visto dei loro stati firmati; questo dispositivo
+   * con il ruolo di adesso ([indexerHere]). Null finche' gli stati non si sono letti: nessuna area si dice scoperta per ipotesi.
+   */
+  private fun familyRoles(graph: AppGraph, indexerHere: Boolean): List<DeviceRoleView>? {
+    val registry = graph.engine.state?.registry ?: return null
+    val statuses = graph.statuses.latest.value
+    if (statuses.isEmpty()) return null
+    val me = graph.engine.myDeviceId()
+    val out = registry.devices.filter { it.status == DeviceStatus.APPROVED && it.id != me }.mapNotNull { d ->
+      statuses[d.id]?.let { DeviceRoleView(d.nasUser, DeviceRole.INDEXER in it.roles, it.lastSeenAt) }
+    }.toMutableList()
+    val account = registry.devices.firstOrNull { it.id == me }?.nasUser ?: graph.account.value?.user
+    val now = graph.nasClock.nowMillisOrNull()
+    if (account != null && now != null) out += DeviceRoleView(account, indexerHere, now)
+    return out
   }
 
   /** Le aree di questo dispositivo come le vede la pagina (solo il tipo, mai il nome della share). */

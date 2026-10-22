@@ -43,12 +43,15 @@
       </intent-filter>
     </activity>
 
-    <!-- La ricezione delle condivisioni (D24): `SEND` e `SEND_MULTIPLE` di immagini e video, e nient'altro. Nessuna azione senza "Salva sul NAS". -->
+    <!-- La ricezione delle condivisioni (D24): `SEND` e `SEND_MULTIPLE` di immagini e video, e nient'altro. Nessuna azione senza "Salva sul NAS".
+         `singleTop` (campo, gruppo A, D1): una condivisione nuova che trova davanti la schermata di una vecchia (lanciata con NEW_TASK) arriva in
+         `onNewIntent` e apre la sua schermata; prima Android riportava davanti la vecchia ("1 file in coda") e la nuova si perdeva in silenzio. -->
     <activity
         android:name="dev.pampa.mycloudgallery.feature.integrations.receive.ShareReceiverActivity"
         android:excludeFromRecents="true"
         android:exported="true"
         android:label="@string/integrations_receiver_label"
+        android:launchMode="singleTop"
         android:taskAffinity=""
         android:theme="@style/Theme.MyCloudGallery.Integrations">
       <intent-filter>

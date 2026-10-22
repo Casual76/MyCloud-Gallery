@@ -4216,3 +4216,38 @@ entra nell'APK, non si scarica da nessuna parte e si puo' cancellare. Il codice 
 
 **Limiti di questa misura**: fixture solo sintetiche (nessuna foto vera: i bordi su capelli, pelo e vetro si giudicano nella prova F66 a occhio); il telefono era in carica e la batteria e' salita di circa 2,6 °C
 (l'AP a 51,7 °C alla fine) senza che il sistema limitasse niente; un solo telefono. Per F66 resta da vedere a mano quanto il papero piccolo e il manico della tazza (le parti staccate dal soggetto) disturbano.
+
+## Correzioni dal campo, gruppo A (22/10)
+Fonte: `docs/prove-campo-esiti.md`, "Riepilogo del blocco B" e le sezioni B-S2 (F26), B-S5, B-S7, B-S12 (F36), B-S14 (T-15, F40, la ripresa delle 02:24);
+`docs/fase5-progetto.md` D9, §2.2-§2.7, Q4 (b); `docs/fase7-progetto.md` §0 punti 11 e 12, D28. Branch `fix/campo-a`, un commit per difetto. Niente telefono,
+niente NAS: tutto su JVM, ogni test rosso togliendo la correzione.
+
+**1. Un file in coda di "Salva sul NAS" sparito (`IMG_mcg_0106`, 02:31).** Strade guardate, una per una, per un elemento che esce dalla coda senza essere
+caricato e verificato:
+- *Il diario* (`incoming_item`): una riga si toglie solo con "Scarta" (`AppReceivedQueue.discard`, dopo la conferma dell'utente); il motore la segna `uploaded`,
+  `gone` o `failed` (`AppIncomingLocalFiles.finished`) e non la toglie mai; `backup_item` non ha cascate verso `incoming_item` (`SET_NULL`); l'unione del catalogo non
+  la tocca (`TABLES_WITHOUT_MEDIA_IDS`). Scartata: sul campo nessuno ha toccato "Scarta".
+- *La pulizia dell'avvio* (`IncomingStager.sweep`): tiene le condivisioni di questo processo (IN-1) e quelle citate da righe in `queued`/`failed`/`gone`; il
+  catalogo e l'integrazione sono uno per processo (Hilt `@Singleton`). Toglie i file solo di una condivisione che nessuna riga cita: non spiega una riga sparita.
+- *Il motore*: copia locale assente = `GONE` con la riga che resta (`ReceivedStatus.COPY_MISSING`, "Ricevuti in coda" lo dice). Non spiega.
+- *La morte del processo*: provata sul campo alle 05:23 (`kill -9`), riga e file restano. Alle 02:32 il log dice `PROCESS_STOPPED`, cioe' l'app in secondo piano, non
+  una morte.
+- **La causa piu' probabile**: la condivisione non e' mai arrivata all'app. `ShareReceiverActivity` ha `taskAffinity=""` e `launchMode` standard; `am start`
+  (e ogni app che condivide con `NEW_TASK`, come Quick Share) cerca un task con la stessa radice: un intento `SEND` con lo stesso tipo e un altro `EXTRA_STREAM`
+  e' "uguale" per Android (gli extra non contano), quindi il task della condivisione di prima (`IMG_mcg_0105`, schermata "1 file in coda" lasciata aperta) torna
+  davanti e l'intento nuovo si butta ("Activity not started, its current task has been brought to the front"). Tutti i segni tornano: la schermata diceva
+  "1 file in coda" (era quella di prima), nessuna riga, nessun file in `incoming`, niente sul NAS, e con il processo ucciso non si riproduce.
+  Correzione: la ricezione e' `singleTop` e ha `onNewIntent`: una condivisione nuova davanti a una vecchia si apre in una schermata sua, in un task suo
+  (`NEW_TASK | MULTIPLE_TASK`, con il permesso di lettura che ha portato); quella vecchia si chiude come con "Annulla". Resta nel task di chi la chiede e non
+  e' `singleTask` (il risultato a chi condivide resta).
+- **Due strade vere trovate guardando** (non quelle del campo, ma perdono la copia di un file gia' in coda): (a) `AppIncomingQueue.enqueue` scriveva una
+  transazione per file: una cancellazione (schermata chiusa durante il salvataggio) o un errore al secondo file lasciavano il primo in coda, la schermata lo
+  credeva "non salvato" e ne toglieva la copia, e il motore lo chiudeva "copia sparita". Ora i media si preparano prima e tutte le righe entrano in **una**
+  transazione non interrompibile (tutto o niente). (b) `DefaultIncomingUploads.discard` toglieva la cartella anche se il diario la citava: ora chiede
+  `IncomingQueue.cites` (righe in `queued`/`failed`/`gone`) e, citata o nel dubbio, non tocca niente.
+- **La difesa**: un file in coda non sparisce mai senza un esito registrato. La riga nasce prima della frase "in coda", non si toglie che con "Scarta", e la sua
+  copia la tolgono solo il caricamento verificato (`uploaded`) o "Scarta".
+- Toccato fuori dall'elenco dei moduli del brief, con il minimo: `feature-integrations` (manifest della ricezione, `onNewIntent`, `cites` con il suo default,
+  il finto), perche' la causa sta li'.
+- Test: `ShareReceiverActivityTest.d1_*`, `ManifestComponentsTest` (`singleTop`), `DefaultIncomingUploadsTest.d1_*`, `CampoAIncomingTest.d1_*` (`:app`, Room vero e
+  copia immediata vera).

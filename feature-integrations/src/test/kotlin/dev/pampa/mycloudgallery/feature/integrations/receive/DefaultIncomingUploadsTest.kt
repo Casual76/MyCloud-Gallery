@@ -162,6 +162,30 @@ class DefaultIncomingUploadsTest {
     assertThat(runBlocking { uploads.save(stage, dest, confirmationFor(stage)) }).isEqualTo(IncomingSaveOutcome.StageGone)
   }
 
+  /**
+   * Campo, gruppo A (D1): una condivisione che il diario cita (le righe sono gia' in coda: il salvataggio e' stato annullato dopo averle scritte, o la
+   * schermata si e' chiusa a meta') non si toglie scartando dalla schermata, e nemmeno se il diario non risponde. Prima `discard` toglieva la cartella e il
+   * file in coda restava senza copia: il motore lo chiudeva "copia sparita".
+   */
+  @Test
+  fun d1_unaCondivisioneCheIlDiarioCitaNonSiScarta() {
+    val stage = stage(3_000)
+    queue.cited += stage.id.value
+
+    runBlocking { uploads.discard(stage.id) }
+    assertThat(stager.isIntact(stage)).isTrue()
+
+    queue.cited.clear()
+    queue.citesFails = true
+    runBlocking { uploads.discard(stage.id) }
+    assertThat(stager.isIntact(stage)).isTrue()
+
+    // Non piu' citata: si toglie come sempre.
+    queue.citesFails = false
+    runBlocking { uploads.discard(stage.id) }
+    assertThat(File(folder.root, "incoming/${stage.id.value}").exists()).isFalse()
+  }
+
   @Test
   fun iRifiutiSiContanoPerMotivoESoloComeNumeri() {
     val counter = OpenCounter()

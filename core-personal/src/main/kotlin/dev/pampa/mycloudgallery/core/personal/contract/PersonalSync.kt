@@ -98,6 +98,14 @@ interface PersonalStore {
   /** Lo stato unito, per chiave. */
   val entries: StateFlow<Map<PersonalKey, PersonalEntry>>
 
+  /**
+   * Come [entries], ma con sopra le modifiche locali ancora "da datare" (senza l'ora del NAS): **il flusso** di [effective]. E' lo stato
+   * che l'utente vede su QUESTO dispositivo, quello che le impostazioni personali devono leggere: una scelta fatta fuori casa, senza ora
+   * del NAS, vale subito anche se non e' ancora nello stato che si pubblica (R6 della revisione di sicurezza della Fase 6, LT-1, CE-3,
+   * VM-2). Di serie [entries] (gli store che datano sempre non hanno niente da aggiungere).
+   */
+  val effectiveEntries: StateFlow<Map<PersonalKey, PersonalEntry>> get() = entries
+
   suspend fun get(key: PersonalKey): PersonalEntry?
 
   /** Una modifica dell'utente su questo dispositivo. */

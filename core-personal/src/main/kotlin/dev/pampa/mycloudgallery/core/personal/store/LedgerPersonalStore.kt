@@ -57,6 +57,10 @@ class LedgerPersonalStore(
   private val state = MutableStateFlow<Map<PersonalKey, PersonalEntry>>(emptyMap())
   override val entries: StateFlow<Map<PersonalKey, PersonalEntry>> = state
 
+  /** Lo stato unito con sopra le modifiche ancora da datare (vedi [effectiveEntries]): si riemette a ogni cambio dell'uno o delle altre. */
+  private val effectiveState = MutableStateFlow<Map<PersonalKey, PersonalEntry>>(emptyMap())
+  override val effectiveEntries: StateFlow<Map<PersonalKey, PersonalEntry>> = effectiveState
+
   /** Legge il registro locale (una volta). */
   suspend fun open() {
     lock.withLock { ensureLoaded() }
@@ -79,6 +83,7 @@ class LedgerPersonalStore(
         if (at == null) {
           // Senza ora del NAS: se si torna al valore che lo stato gia' ha, non c'e' piu' niente da datare.
           if (known?.value == value) pending.remove(key) else pending[key] = PendingChange(value, fp)
+          emitEffective()
         } else {
           pending.remove(key)
           val next = HashMap(current)
@@ -242,7 +247,10 @@ class LedgerPersonalStore(
       adopted++
     }
     next?.let(::publishState)
-    if (adopted > 0) persist()
+    if (adopted > 0) {
+      emitEffective()
+      persist()
+    }
     adopted
   }
 
@@ -257,6 +265,7 @@ class LedgerPersonalStore(
     marks.putAll(snapshot.marks)
     published = snapshot.published
     state.value = current
+    emitEffective()
     loaded = true
   }
 
@@ -271,6 +280,12 @@ class LedgerPersonalStore(
   private fun publishState(next: Map<PersonalKey, PersonalEntry>) {
     current = next
     state.value = next
+    emitEffective()
+  }
+
+  /** Riemette [effectiveEntries]: lo stato unito, o (con modifiche da datare) lo stato unito con sopra le modifiche. Sempre sotto [lock]. */
+  private fun emitEffective() {
+    effectiveState.value = effectiveNow()
   }
 
   private suspend fun persist() {

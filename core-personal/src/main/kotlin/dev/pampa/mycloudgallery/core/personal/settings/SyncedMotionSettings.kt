@@ -23,6 +23,9 @@ import kotlinx.coroutines.flow.stateIn
  * un [PersonalValue.Flag] (una voce di una versione piu' nuova o ostile) vale come assente, cioe' acceso: l'animazione non si spegne per
  * un valore che non si capisce. Il viewer non legge questo modulo: `:app` lo lega a `MotionAnimationSetting` del viewer (P11).
  *
+ * Legge [PersonalStore.effectiveEntries]: la scelta vale subito anche senza l'ora del NAS (VM-2 della verifica funzionale della Fase 6), come
+ * `text_reading` e `search_order` di [SyncedSearchSettings].
+ *
  * File a parte da [SyncedPersonalSettings] (`text_reading` e `search_order`, di P8): le due implementazioni non si toccano.
  */
 class SyncedMotionSettings(
@@ -30,10 +33,10 @@ class SyncedMotionSettings(
   scope: CoroutineScope,
 ) : MotionPersonalSettings {
 
-  override val motionAnimation: StateFlow<Boolean> = store.entries
+  override val motionAnimation: StateFlow<Boolean> = store.effectiveEntries
     .map { animationOf(it) }
     .distinctUntilChanged()
-    .stateIn(scope, SharingStarted.Eagerly, animationOf(store.entries.value))
+    .stateIn(scope, SharingStarted.Eagerly, animationOf(store.effectiveEntries.value))
 
   override suspend fun setMotionAnimation(on: Boolean) {
     store.set(KEY, PersonalValue.Flag(on))

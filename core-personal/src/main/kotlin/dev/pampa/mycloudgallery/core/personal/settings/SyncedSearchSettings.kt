@@ -25,6 +25,12 @@ import kotlinx.coroutines.flow.stateIn
  *   parte. L'esclusione di un solo dispositivo non e' una voce: e' locale.
  * - **`search_order`**: [PersonalValue.Text], `recent` o `relevant`; assente o sconosciuto (una versione piu' nuova) = "Recenti".
  *
+ * **Valgono subito, anche senza l'ora del NAS.** Si legge [PersonalStore.effectiveEntries]: lo stato unito con sopra le modifiche locali
+ * ancora "da datare" (fuori casa, senza VPN e senza un accesso SMB nel processo la modifica non ha l'ora e non e' nello stato che si
+ * pubblica). Con `entries` "Spegni" della lettura del testo non spegneva finche' il telefono non tornava a casa (R6 della revisione di
+ * sicurezza della Fase 6): la promessa "da quel momento ML Kit non parte piu'" deve valere qui, adesso. La sincronizzazione con gli altri
+ * dispositivi viene dopo: la modifica prende l'ora del NAS alla prima sincronizzazione ([PersonalStore.stamp]) e conserva l'ordine.
+ *
  * File a parte da [SyncedPersonalSettings] e da [SyncedMotionSettings]: le tre implementazioni non si toccano.
  */
 class SyncedSearchSettings(
@@ -32,19 +38,19 @@ class SyncedSearchSettings(
   scope: CoroutineScope,
 ) : SearchPersonalSettings {
 
-  override val textReading: StateFlow<TextReadingChoice> = store.entries
+  override val textReading: StateFlow<TextReadingChoice> = store.effectiveEntries
     .map { readingOf(it) }
     .distinctUntilChanged()
-    .stateIn(scope, SharingStarted.Eagerly, readingOf(store.entries.value))
+    .stateIn(scope, SharingStarted.Eagerly, readingOf(store.effectiveEntries.value))
 
   override suspend fun setTextReading(choice: TextReadingChoice) {
     store.set(READING, TextReadingChoice.toValue(choice))
   }
 
-  override val searchOrder: StateFlow<SearchOrderSetting> = store.entries
+  override val searchOrder: StateFlow<SearchOrderSetting> = store.effectiveEntries
     .map { orderOf(it) }
     .distinctUntilChanged()
-    .stateIn(scope, SharingStarted.Eagerly, orderOf(store.entries.value))
+    .stateIn(scope, SharingStarted.Eagerly, orderOf(store.effectiveEntries.value))
 
   override suspend fun setSearchOrder(order: SearchOrderSetting) {
     store.set(ORDER, PersonalValue.Text(order.code))

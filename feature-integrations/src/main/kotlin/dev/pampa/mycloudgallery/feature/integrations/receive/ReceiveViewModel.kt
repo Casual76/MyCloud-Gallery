@@ -137,6 +137,15 @@ class ReceiveUi(
   val notQueued: Int = 0,
   /** IN-11: la cartella scelta non ha altre cartelle (che la Libreria conosca): "Apri la cartella scelta" lo dice invece di mostrare una lista vuota. */
   val noSubfolders: Boolean = false,
+  /** Fase 7 (P10, D35): gli album dove "Aggiungi ad album" puo' mettere i file; vuoto = la voce non compare. */
+  val albums: List<IncomingAlbumChoice> = emptyList(),
+  /** La scelta dell'album e' aperta al posto della scelta della cartella. */
+  val albumPick: Boolean = false,
+  val selectedAlbum: IncomingAlbumChoice? = null,
+  /** Dopo "In coda": l'album in cui andranno i file appena sono nel catalogo (D35), o null se non e' una richiesta di album. */
+  val addedToAlbum: IncomingAlbumChoice? = null,
+  /** "Aggiungi ad album": la promessa non si e' potuta registrare (i file sono comunque in coda). */
+  val albumNotRegistered: Boolean = false,
 ) {
   fun copy(
     screen: ReceiveScreenState = this.screen,
@@ -157,9 +166,14 @@ class ReceiveUi(
     noFolder: Boolean = this.noFolder,
     notQueued: Int = this.notQueued,
     noSubfolders: Boolean = this.noSubfolders,
+    albums: List<IncomingAlbumChoice> = this.albums,
+    albumPick: Boolean = this.albumPick,
+    selectedAlbum: IncomingAlbumChoice? = this.selectedAlbum,
+    addedToAlbum: IncomingAlbumChoice? = this.addedToAlbum,
+    albumNotRegistered: Boolean = this.albumNotRegistered,
   ): ReceiveUi = ReceiveUi(
     screen, stage, photos, videos, bytes, rejected, trail, choices, selected, queued, nasWait, failure, unlocking, unlockFailed, unlockFailure, noFolder,
-    notQueued, noSubfolders,
+    notQueued, noSubfolders, albums, albumPick, selectedAlbum, addedToAlbum, albumNotRegistered,
   )
 
   /** Il foglio avvisa "Lo vedranno tutti i familiari" quando la cartella scelta e' dell'area comune (D24). */
@@ -181,6 +195,8 @@ class ReceiveViewModel(
   /** Orologio monotono per la conferma (`SystemClock.elapsedRealtime`); mai l'ora del telefono. */
   private val monotonicMs: () -> Long,
   scope: CoroutineScope? = null,
+  /** "Aggiungi ad album" (Fase 7, P10, D35): di serie nessun album, quindi nessuna voce. */
+  private val albums: IncomingAlbums = NoIncomingAlbums,
 ) : ViewModel() {
 
   private val scope: CoroutineScope = scope ?: viewModelScope
@@ -351,6 +367,14 @@ class ReceiveViewModel(
       mutate { it.copy(screen = ReceiveScreenState.NOTHING, rejected = rejected, stage = null, noFolder = noFolder) }
       return
     }
+    // D35: gli album dove si puo' aggiungere. Una porta che non risponde vale come nessun album (D13: niente voce morta); il salvataggio non ne dipende.
+    val offered = try {
+      albums.albums()
+    } catch (e: CancellationException) {
+      throw e
+    } catch (_: Exception) {
+      emptyList()
+    }
     mutate {
       it.copy(
         screen = ReceiveScreenState.READY,
@@ -362,6 +386,11 @@ class ReceiveViewModel(
         choices = roots,
         trail = emptyList(),
         selected = roots.first(),
+        albums = offered,
+        albumPick = false,
+        selectedAlbum = null,
+        addedToAlbum = null,
+        albumNotRegistered = false,
       )
     }
   }
@@ -452,10 +481,40 @@ class ReceiveViewModel(
     }
   }
 
+  // --- "Aggiungi ad album" (Fase 7, P10, D35) ------------------------------------------------------------------------------------
+
+  /** Apre la scelta dell'album al posto della scelta della cartella (c'e' solo se `:app` ha degli album). */
+  fun openAlbumPicker() {
+    if (_ui.value.screen != ReceiveScreenState.READY || _ui.value.albums.isEmpty()) return
+    mutate { it.copy(albumPick = true, selectedAlbum = it.selectedAlbum ?: it.albums.firstOrNull()) }
+  }
+
+  fun closeAlbumPicker() {
+    if (_ui.value.screen != ReceiveScreenState.READY) return
+    mutate { it.copy(albumPick = false) }
+  }
+
+  fun selectAlbum(choice: IncomingAlbumChoice) {
+    if (_ui.value.screen != ReceiveScreenState.READY || !_ui.value.albumPick) return
+    mutate { it.copy(selectedAlbum = choice) }
+  }
+
+  /**
+   * Il tocco su "Salva e aggiungi all'album": e' **"Salva sul NAS"** nella cartella scelta, con la sua conferma che nasce dal tocco (E-S11), piu' la promessa
+   * che i file andranno nell'album. La promessa si registra solo se il salvataggio e' andato in coda; senza album scelto non si salva.
+   */
+  fun saveToAlbum() {
+    val album = _ui.value.selectedAlbum ?: return
+    if (!_ui.value.albumPick) return
+    save(album)
+  }
+
   // --- "Salva sul NAS" (E-S11) --------------------------------------------------------------------------------------------
 
   /** Il tocco dell'utente su "Salva sul NAS": la conferma nasce **qui**, dal piano di adesso, e solo da questo gesto. */
-  fun save() {
+  fun save() = save(null)
+
+  private fun save(album: IncomingAlbumChoice?) {
     val current = _ui.value
     val stage = current.stage ?: return
     val destination = current.selected?.destination ?: return
@@ -470,7 +529,7 @@ class ReceiveViewModel(
     saving = true
     savingJob = scope.launch {
       try {
-        runSave(stage, destination)
+        runSave(stage, destination, album)
       } finally {
         saving = false
         tryRunPending()
@@ -478,7 +537,7 @@ class ReceiveViewModel(
     }
   }
 
-  private suspend fun runSave(stage: IncomingStage, destination: NasDestination) {
+  private suspend fun runSave(stage: IncomingStage, destination: NasDestination, album: IncomingAlbumChoice?) {
     run {
       val plan = IncomingSavePlan(stage, destination)
       val confirmation = PhoneConfirmationSheet(plan).tap(monotonicMs())
@@ -497,8 +556,15 @@ class ReceiveViewModel(
       when (outcome) {
         is IncomingSaveOutcome.Queued -> {
           saved = true
+          // D35: la promessa dell'album si registra solo ora che i file sono in coda; se non si registra i file restano in coda e la schermata lo dice.
+          val registered = album != null && registerAlbum(stage, album)
           // IN-11: "In coda" subito; la prova del NAS (fino a 5 s col NAS spento) non fa piu' aspettare la schermata, corregge la frase dopo.
-          mutate { it.copy(screen = ReceiveScreenState.DONE, queued = outcome.items, notQueued = (stage.accepted.size - outcome.items).coerceAtLeast(0)) }
+          mutate {
+            it.copy(
+              screen = ReceiveScreenState.DONE, queued = outcome.items, notQueued = (stage.accepted.size - outcome.items).coerceAtLeast(0),
+              addedToAlbum = album.takeIf { registered }, albumNotRegistered = album != null && !registered, albumPick = false,
+            )
+          }
           checkNasWait()
         }
         is IncomingSaveOutcome.Rejected -> fail(ReceiveFailure.CONFIRMATION)
@@ -507,6 +573,15 @@ class ReceiveViewModel(
         IncomingSaveOutcome.Unavailable -> fail(ReceiveFailure.UNAVAILABLE)
       }
     }
+  }
+
+  /** La promessa "questi file andranno in [album]": falso se la porta non risponde o rifiuta (i file sono comunque in coda). */
+  private suspend fun registerAlbum(stage: IncomingStage, album: IncomingAlbumChoice): Boolean = try {
+    albums.willAdd(stage.id, album)
+  } catch (e: CancellationException) {
+    throw e
+  } catch (_: Exception) {
+    false
   }
 
   /** Il backup in prova (D12, R2) non scrive da nessuna parte; un errore della porta non lo dice (si prova a salvare e basta). */

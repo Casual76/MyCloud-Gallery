@@ -1,0 +1,111 @@
+package dev.pampa.mycloudgallery.feature.albums.nav
+
+import androidx.navigation.NavController
+import androidx.navigation.NavGraphBuilder
+import androidx.navigation.compose.composable
+import dev.pampa.mycloudgallery.core.model.AlbumId
+import dev.pampa.mycloudgallery.feature.albums.contract.AlbumActions
+import dev.pampa.mycloudgallery.feature.albums.contract.AlbumThumbnails
+import dev.pampa.mycloudgallery.feature.albums.editor.SmartEditorRoute
+import dev.pampa.mycloudgallery.feature.albums.list.AlbumListRoute
+import dev.pampa.mycloudgallery.feature.albums.page.AlbumPageExits
+import dev.pampa.mycloudgallery.feature.albums.page.AlbumPageRoute
+import dev.pampa.mycloudgallery.feature.albums.page.SuggestionKind
+import dev.pampa.mycloudgallery.feature.albums.page.SuggestionsRoute
+import dev.pampa.mycloudgallery.feature.albums.sections.AlbumEntryTarget
+import dev.pampa.mycloudgallery.feature.albums.trips.TripsRoute
+import kotlinx.serialization.Serializable
+
+// LE ROTTE DEGLI ALBUM (Fase 7, P10): un grafo da agganciare, come `utilityGraph` e `collectionsGraph`. **Non** tocca `MainScaffold` ne' `AppNavHost`
+// (sono di P13): P13 chiama [albumsGraph] dentro il `NavHost` e apre le rotte con le funzioni `open...` di sotto. Il viewer non e' una rotta (D12):
+// [AlbumActions.openViewer] manda la richiesta a `:app`, che lo ospita sopra la pagina corrente. "Aggiungi ad album" non e' una rotta: i media da
+// aggiungere possono essere migliaia, e `:app` mostra `AddToAlbumHost` sopra la schermata che l'ha chiesto.
+
+/** "Tutti gli album" (e la sezione Album oltre i primi 6). */
+@Serializable
+data object AlbumListDestination
+
+/** La pagina di un album. [id] e' l'`AlbumId` come testo (stabile, mai un titolo). */
+@Serializable
+data class AlbumPageDestination(val id: String)
+
+/** "Suggerite" ([toShare] falso) o "Da condividere" ([toShare] vero) di un album. */
+@Serializable
+data class SuggestionsDestination(val id: String, val toShare: Boolean = false)
+
+/** L'editor delle regole: [title] per un album smart nuovo (parte dal nome), [album] per cambiare le regole di uno che c'e'. */
+@Serializable
+data class SmartEditorDestination(val title: String? = null, val album: String? = null)
+
+/** Le proposte di viaggio. */
+@Serializable
+data object TripsDestination
+
+fun NavController.openAlbums() = navigate(AlbumListDestination)
+
+fun NavController.openAlbum(id: AlbumId) = navigate(AlbumPageDestination(id.value))
+
+fun NavController.openSuggestions(id: AlbumId, kind: SuggestionKind) = navigate(SuggestionsDestination(id.value, toShare = kind == SuggestionKind.TO_SHARE))
+
+/** Crea un album smart dal nome [title]: l'editor interpreta il nome e propone le regole. */
+fun NavController.openSmartEditor(title: String) = navigate(SmartEditorDestination(title = title))
+
+/** Cambia le regole dello smart [id]. */
+fun NavController.openRules(id: AlbumId) = navigate(SmartEditorDestination(album = id.value))
+
+fun NavController.openTrips() = navigate(TripsDestination)
+
+/** Apre la destinazione di una voce delle sezioni delle Raccolte ([AlbumEntryTarget.parse]); `NewAlbum` la gestisce chi ha il foglio "Nuovo album". */
+fun NavController.openEntry(target: AlbumEntryTarget) {
+  when (target) {
+    is AlbumEntryTarget.Album -> openAlbum(target.id)
+    is AlbumEntryTarget.SmartAlbum -> openAlbum(target.id)
+    AlbumEntryTarget.AllAlbums -> openAlbums()
+    is AlbumEntryTarget.Trip -> openTrips()
+    AlbumEntryTarget.NewAlbum -> openAlbums()
+  }
+}
+
+/**
+ * Le pagine degli album nel grafo di navigazione: l'elenco, la pagina di un album, "Suggerite" e "Da condividere", l'editor delle regole e le proposte di
+ * viaggio. [actions] sono le uscite verso `:app` (viewer, selettore dei media, Diagnostica); [thumbnails] le miniature locali della Libreria.
+ */
+fun NavGraphBuilder.albumsGraph(nav: NavController, actions: AlbumActions, thumbnails: AlbumThumbnails) {
+  val back: () -> Unit = { nav.popBackStack() }
+
+  composable<AlbumListDestination> {
+    AlbumListRoute(
+      thumbnails = thumbnails,
+      onOpenAlbum = nav::openAlbum,
+      onNewSmart = nav::openSmartEditor,
+      onBack = back,
+    )
+  }
+  composable<AlbumPageDestination> {
+    AlbumPageRoute(
+      actions = actions,
+      thumbnails = thumbnails,
+      exits = AlbumPageExits(
+        onBack = back,
+        onBackToList = back,
+        onOpenAlbum = nav::openAlbum,
+        onOpenRules = nav::openRules,
+        onOpenSuggestions = nav::openSuggestions,
+      ),
+    )
+  }
+  composable<SuggestionsDestination> { SuggestionsRoute(actions = actions, thumbnails = thumbnails, onBack = back) }
+  composable<SmartEditorDestination> {
+    SmartEditorRoute(
+      actions = actions,
+      thumbnails = thumbnails,
+      onBack = back,
+      // Salvato: si va alla pagina dell'album e l'editor esce dalla pila (indietro non riporta alle regole).
+      onSaved = { id ->
+        nav.popBackStack()
+        nav.openAlbum(id)
+      },
+    )
+  }
+  composable<TripsDestination> { TripsRoute(thumbnails = thumbnails, onBack = back, onOpenAlbum = nav::openAlbum) }
+}

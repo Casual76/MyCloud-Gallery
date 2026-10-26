@@ -78,6 +78,11 @@ class ReceiveActions(
   val onClose: () -> Unit = {},
   val onRetry: () -> Unit = {},
   val onUnlock: () -> Unit = {},
+  /** Fase 7 (P10, D35): "Aggiungi ad album" e la scelta dell'album. */
+  val onPickAlbum: () -> Unit = {},
+  val onSelectAlbum: (IncomingAlbumChoice) -> Unit = {},
+  val onSaveToAlbum: () -> Unit = {},
+  val onBackFromAlbums: () -> Unit = {},
 )
 
 @Composable
@@ -200,7 +205,8 @@ private fun ReceiveReady(ui: ReceiveUi, actions: ReceiveActions) {
       ReceiveSummary(ui)
       val lines = rejectedLines(ui.rejected)
       if (lines.isNotEmpty()) ReceiveRejected(lines)
-      ReceiveDestinations(ui, actions)
+      // D35: la scelta dell'album prende il posto di quella della cartella (la cartella scelta resta quella dove si salva).
+      if (ui.albumPick) ReceiveAlbums(ui, actions) else ReceiveDestinations(ui, actions)
     }
     ReceiveBottomBar(ui, actions)
   }
@@ -294,6 +300,43 @@ private fun ReceiveDestinations(ui: ReceiveUi, actions: ReceiveActions) {
   }
 }
 
+/** La scelta dell'album (Fase 7, P10, D35): le righe sono album, la scelta e' una sola; il nome di un album e' un dato dell'utente e sta solo qui. */
+@Composable
+private fun ReceiveAlbums(ui: ReceiveUi, actions: ReceiveActions) {
+  Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      GalleryChromeIconButton(
+        icon = Icons.Rounded.ArrowBack,
+        contentDescription = stringResource(R.string.integrations_receive_album_back),
+        onClick = actions.onBackFromAlbums,
+      )
+      Text(
+        text = stringResource(R.string.integrations_receive_album_where),
+        modifier = Modifier.weight(1f),
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.onSurface,
+      )
+    }
+    FluidListGroup {
+      ui.albums.forEachIndexed { index, choice ->
+        if (index > 0) FluidListDivider()
+        FluidListRow(
+          title = choice.name,
+          subtitle = stringResource(if (choice.shared) R.string.integrations_receive_album_shared else R.string.integrations_receive_album_mine),
+          selected = choice == ui.selectedAlbum,
+          disclosure = false,
+          onClick = { actions.onSelectAlbum(choice) },
+        )
+      }
+    }
+    Text(
+      text = stringResource(R.string.integrations_receive_album_hint),
+      style = MaterialTheme.typography.bodyMedium,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+  }
+}
+
 @Composable
 private fun ReceiveBottomBar(ui: ReceiveUi, actions: ReceiveActions) {
   val scheme = MaterialTheme.colorScheme
@@ -313,14 +356,37 @@ private fun ReceiveBottomBar(ui: ReceiveUi, actions: ReceiveActions) {
       )
     }
     Text(text = stringResource(R.string.integrations_receive_save_hint), style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
-    FluidButton(
-      text = stringResource(R.string.integrations_receive_save),
-      onClick = actions.onSave,
-      size = FluidButtonSize.Large,
-      style = FluidButtonStyle.Filled,
-      fillWidth = true,
-      enabled = ui.selected != null,
-    )
+    if (ui.albumPick) {
+      // D35: salvare e aggiungere all'album e' "Salva sul NAS" nella cartella scelta piu' la promessa dell'album: il tocco e' uno solo e la conferma nasce da li'.
+      FluidButton(
+        text = stringResource(R.string.integrations_receive_album_save),
+        onClick = actions.onSaveToAlbum,
+        size = FluidButtonSize.Large,
+        style = FluidButtonStyle.Filled,
+        fillWidth = true,
+        enabled = ui.selected != null && ui.selectedAlbum != null,
+      )
+    } else {
+      FluidButton(
+        text = stringResource(R.string.integrations_receive_save),
+        onClick = actions.onSave,
+        size = FluidButtonSize.Large,
+        style = FluidButtonStyle.Filled,
+        fillWidth = true,
+        enabled = ui.selected != null,
+      )
+      // D13: la voce c'e' solo se ci sono album dove aggiungere.
+      if (ui.albums.isNotEmpty()) {
+        FluidButton(
+          text = stringResource(R.string.integrations_receive_album_open),
+          onClick = actions.onPickAlbum,
+          size = FluidButtonSize.Large,
+          style = FluidButtonStyle.Tinted,
+          fillWidth = true,
+          enabled = ui.selected != null,
+        )
+      }
+    }
     FluidButton(
       text = stringResource(R.string.integrations_receive_cancel),
       onClick = actions.onCancel,
@@ -426,7 +492,12 @@ private fun doneDetail(ui: ReceiveUi): String {
       NasWait.METERED -> R.string.integrations_receive_done_metered
     },
   )
-  return if (ui.notQueued > 0) base + "\n" + pluralStringResource(R.plurals.integrations_receive_done_not_queued, ui.notQueued, ui.notQueued) else base
+  val withAlbum = when {
+    ui.addedToAlbum != null -> base + "\n" + stringResource(if (ui.addedToAlbum.shared) R.string.integrations_receive_done_album_shared else R.string.integrations_receive_done_album, ui.addedToAlbum.name)
+    ui.albumNotRegistered -> base + "\n" + stringResource(R.string.integrations_receive_done_album_failed)
+    else -> base
+  }
+  return if (ui.notQueued > 0) withAlbum + "\n" + pluralStringResource(R.plurals.integrations_receive_done_not_queued, ui.notQueued, ui.notQueued) else withAlbum
 }
 
 private fun failureText(failure: ReceiveFailure?): Int = when (failure) {

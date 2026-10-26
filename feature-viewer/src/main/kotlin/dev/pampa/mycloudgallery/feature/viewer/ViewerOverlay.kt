@@ -97,6 +97,7 @@ import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.security.screen.SecureScreen
 import dev.pampa.mycloudgallery.feature.viewer.details.ViewerFormat
 import dev.pampa.mycloudgallery.feature.viewer.download.DownloadFailure
+import dev.pampa.mycloudgallery.feature.viewer.menu.AlbumMenuResult
 import dev.pampa.mycloudgallery.feature.viewer.menu.BackupActionsController
 import dev.pampa.mycloudgallery.feature.viewer.menu.BackupMenuHandlers
 import dev.pampa.mycloudgallery.feature.viewer.menu.BackupNoticeView
@@ -104,6 +105,7 @@ import dev.pampa.mycloudgallery.feature.viewer.menu.BackupShareNotice
 import dev.pampa.mycloudgallery.feature.viewer.menu.BackupShareRefusedSheet
 import dev.pampa.mycloudgallery.feature.viewer.menu.BackupShareUi
 import dev.pampa.mycloudgallery.feature.viewer.menu.EverywhereSummary
+import dev.pampa.mycloudgallery.feature.viewer.menu.albumMenuEntries
 import dev.pampa.mycloudgallery.feature.viewer.menu.NasActionCapabilities
 import dev.pampa.mycloudgallery.feature.viewer.menu.NasActionHandlers
 import dev.pampa.mycloudgallery.feature.viewer.menu.NasActionSheets
@@ -803,6 +805,13 @@ private fun ViewerOverlays(
       onFind = { services.similarSearch.findSimilar(currentId) },
       onExplain = { state.message = ViewerMessage.SimilarUnavailable },
     ),
+    albumActions = albumMenuEntries(
+      resources,
+      services.albums.menu(currentId),
+      onAdd = { services.albums.addToAlbum(currentId) },
+      onCover = { scope.launch { state.message = albumMessage(services.albums.setAsCover(currentId), ViewerMessage.AlbumCoverSet) } },
+      onRemove = { scope.launch { state.message = albumMessage(services.albums.removeFromAlbum(currentId), ViewerMessage.AlbumRemoved) } },
+    ),
   )
   val barActions = viewerBarActions(resources, baseCapabilities, isFavorite, handlers, onText = if (hasLiveText) ({ liveText.toggleHighlight(currentId) }) else null)
   val nasNotice = nasController?.notice?.collectAsState()?.value
@@ -1158,6 +1167,13 @@ private const val NeighborsAtProgress = 0.5f
 private val NoDownloads: Map<Long, DownloadState> = emptyMap()
 
 /** L'avviso breve per l'esito di un download concluso, o null se non c'e' niente da dire (stati non terminali). */
+/** L'avviso breve di una voce degli album (Fase 7, P10): quello del successo, o perche' la tabella dei permessi non lo permette, o che non e' riuscito. */
+private fun albumMessage(result: AlbumMenuResult, done: ViewerMessage): ViewerMessage = when (result) {
+  AlbumMenuResult.DONE -> done
+  AlbumMenuResult.NOT_ALLOWED -> ViewerMessage.AlbumDenied
+  AlbumMenuResult.FAILED -> ViewerMessage.AlbumFailed
+}
+
 private fun messageOf(state: DownloadState): ViewerMessage? = when (state) {
   is DownloadState.Done -> ViewerMessage.Downloaded
   DownloadState.Cancelled -> ViewerMessage.DownloadCancelled

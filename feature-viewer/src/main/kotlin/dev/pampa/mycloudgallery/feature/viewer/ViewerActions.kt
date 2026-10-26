@@ -89,6 +89,8 @@ internal class ViewerActionHandlers(
  * @param onText la voce "Testo nella foto" (Fase 6, P12, D46): il foglio con il testo letto; null = la foto non ha testo da mostrare (D13).
  * @param onCutout la voce "Ritaglia il soggetto" (Fase 6, P13, D44, D46): il soggetto piu' grande fra cinque punti di prova; null = il ritaglio non c'e' (D13).
  * @param similarActions la voce "Trova simili" (Fase 6, P8, D30): vuota se il media e' nascosto o il viewer non ha la ricerca; vedi `similarMenuEntries`.
+ * @param albumActions le voci degli album (Fase 7, P10, D35, D39): "Aggiungi ad album", "Imposta come copertina", "Rimuovi dall'album"; vuota senza album o se la tabella
+ *   dei permessi non le da' per questo media; vedi `albumMenuEntries`.
  */
 internal fun viewerMenuEntries(
   resources: Resources,
@@ -104,6 +106,7 @@ internal fun viewerMenuEntries(
   onText: (() -> Unit)? = null,
   onCutout: (() -> Unit)? = null,
   similarActions: List<GalleryMenuEntry> = emptyList(),
+  albumActions: List<GalleryMenuEntry> = emptyList(),
 ): List<GalleryMenuEntry> {
   val groups = mutableListOf<List<GalleryMenuEntry>>()
   groups.add(buildList<GalleryMenuEntry> {
@@ -149,6 +152,7 @@ internal fun viewerMenuEntries(
     addAll(nasActions)
     addAll(backupActions)
     addAll(similarActions)
+    addAll(albumActions)
     add(GalleryMenuEntry.Item(resources.getString(R.string.viewer_action_info), handlers.onInfo, Icons.Rounded.Info))
   })
   groups.add(buildList<GalleryMenuEntry> {

@@ -1,0 +1,344 @@
+package dev.pampa.mycloudgallery.feature.albums.page
+
+import dev.pampa.mycloudgallery.core.albums.contract.AddOutcome
+import dev.pampa.mycloudgallery.core.albums.contract.Album
+import dev.pampa.mycloudgallery.core.albums.contract.AlbumContent
+import dev.pampa.mycloudgallery.core.albums.contract.Albums
+import dev.pampa.mycloudgallery.core.albums.contract.AlbumsStatus
+import dev.pampa.mycloudgallery.core.albums.contract.EditOutcome
+import dev.pampa.mycloudgallery.core.albums.contract.InheritOutcome
+import dev.pampa.mycloudgallery.core.albums.contract.ShareOpState
+import dev.pampa.mycloudgallery.core.albums.contract.ShareRequest
+import dev.pampa.mycloudgallery.core.albums.contract.ShareRunner
+import dev.pampa.mycloudgallery.core.albums.contract.SharedAlbumNotice
+import dev.pampa.mycloudgallery.core.albums.contract.SharedAlbums
+import dev.pampa.mycloudgallery.core.albums.contract.SmartChoices
+import dev.pampa.mycloudgallery.core.model.AccountId
+import dev.pampa.mycloudgallery.core.model.AlbumId
+import dev.pampa.mycloudgallery.core.model.AlbumSort
+import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.model.ShareLevel
+import dev.pampa.mycloudgallery.feature.albums.contract.AlbumAction
+import dev.pampa.mycloudgallery.feature.albums.contract.AlbumBanner
+import dev.pampa.mycloudgallery.feature.albums.contract.AlbumMembers
+import dev.pampa.mycloudgallery.feature.albums.contract.AlbumMessage
+import dev.pampa.mycloudgallery.feature.albums.contract.AlbumPending
+import dev.pampa.mycloudgallery.feature.albums.contract.AlbumPageState
+import dev.pampa.mycloudgallery.feature.albums.contract.AlbumPeople
+import dev.pampa.mycloudgallery.feature.albums.contract.AlbumPolicy
+import dev.pampa.mycloudgallery.feature.albums.contract.AlbumScreensClock
+import dev.pampa.mycloudgallery.feature.albums.contract.AlbumUnavailableReason
+import dev.pampa.mycloudgallery.feature.albums.contract.ItemActions
+import dev.pampa.mycloudgallery.feature.albums.contract.PermissionInfo
+import dev.pampa.mycloudgallery.feature.albums.contract.SuggestionsState
+import dev.pampa.mycloudgallery.feature.albums.contract.WhyBlocked
+import dev.pampa.mycloudgallery.feature.albums.share.CloseSheetController
+import dev.pampa.mycloudgallery.feature.albums.share.ShareSheetController
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
+// LA PAGINA DELL'ALBUM (Fase 7, P10; docs/fase7-progetto.md §1.5 `AlbumPageState`, `PermissionInfo`, `SuggestionsState`, §2.1, §2.4, §2.5, D9, D17,
+// D21, D22, D35, D39). Non sa niente di Compose. Compone l'album (`Albums.content`), le operazioni di condivisione in corso, gli avvisi e i
+// permessi, e dice **quali azioni si offrono** con la stessa tabella di chi legge ([AlbumPolicy]): un'azione che la tabella non da' a me non
+// c'e' (C25). Ogni scrittura passa dai contratti `Albums` e `SharedAlbums`, che rispondono con un esito: nessun caso previsto e' un'eccezione.
+//
+// Mai un nascosto: le viste vengono da `Albums.content`, che nasce dall'istantanea (senza nascosti) e dal filtro finale. Questa classe non
+// le allarga e non ne costruisce altre. **Nessuna azione sui file**: l'unico modo di spostarne uno e' il foglio di conferma ([share]).
+
+/** L'azione di un elemento, offerta con la pressione prolungata su una cella (e da TalkBack): cosa si puo' fare e di chi e'. */
+data class ItemMenu(
+  val media: MediaId,
+  val actions: ItemActions,
+  /** Chi l'ha aggiunto (Q6: "Aggiunta da Marco"); null per un album personale o se non si sa. */
+  val addedBy: AccountId?,
+  val isCover: Boolean,
+  /** Per uno smart: un elemento automatico non si "rimuove", si "toglie" (diventa un'esclusione che dura per sempre, E-AL5). */
+  val removeIsExclude: Boolean,
+)
+
+/** Tutto cio' che la pagina mostra: lo stato del §1.5, le azioni del menu, i due blocchi di "dubbi" e i messaggi. */
+data class AlbumPageUi(
+  /** Null prima della prima lettura: la pagina mostra solo il titolo che le arriva dal chiamante. */
+  val page: AlbumPageState? = null,
+  val actions: List<AlbumAction> = emptyList(),
+  /** "Suggerite" (uno smart, D14). */
+  val suggested: SuggestionsState = SuggestionsState.None,
+  /** "Da condividere" (uno smart condiviso, D17). */
+  val toShare: SuggestionsState = SuggestionsState.None,
+  val creatorName: String? = null,
+  val message: AlbumMessage? = null,
+  /** "Scegli copertina": il tocco su una cella la sceglie invece di aprirla. */
+  val pickingCover: Boolean = false,
+  val itemMenu: ItemMenu? = null,
+)
+
+class AlbumPageController(
+  val id: AlbumId,
+  private val albums: Albums,
+  private val shared: SharedAlbums,
+  private val choices: SmartChoices,
+  runner: ShareRunner,
+  private val people: AlbumPeople,
+  private val members: AlbumMembers,
+  private val pending: AlbumPending,
+  clock: AlbumScreensClock,
+  private val scope: CoroutineScope,
+) {
+  /** Il foglio di condivisione di questa pagina ("Condividi", "Aggiungi", "Da condividere", "Riporta", file dal PC). */
+  val share: ShareSheetController = ShareSheetController(runner, clock, scope)
+
+  /** I fogli di chiusura di questa pagina ("Smetti di condividere", "Elimina l'album"). */
+  val close: CloseSheetController = CloseSheetController(shared, share, scope)
+
+  private data class Local(val message: AlbumMessage? = null, val pickingCover: Boolean = false, val itemMenu: ItemMenu? = null)
+
+  private val local = MutableStateFlow(Local())
+  private val _deleted = MutableStateFlow(false)
+
+  /** Vero dopo "Elimina l'album" personale: la pagina non ha piu' niente da mostrare e la schermata torna indietro. */
+  val deleted: StateFlow<Boolean> = _deleted.asStateFlow()
+
+  val ui: StateFlow<AlbumPageUi> = combine(
+    combine(albums.content(id), albums.status, albums.all) { content, status, list -> Triple(content, status, list.byId(id)) },
+    combine(runner.operations, shared.notices, shared.left) { ops, notices, left -> Triple(ops, notices, left) },
+    local,
+  ) { (content, status, listed), (ops, notices, left), loc -> build(content, status, listed, ops, notices, left, loc) }
+    .stateIn(scope, SharingStarted.Eagerly, AlbumPageUi())
+
+  private fun build(
+    content: AlbumContent?,
+    status: AlbumsStatus,
+    listed: Album?,
+    ops: List<ShareOpState>,
+    notices: List<SharedAlbumNotice>,
+    left: List<Album.Shared>,
+    loc: Local,
+  ): AlbumPageUi {
+    val mine = notices.filter { it.album == id }
+    val closed = mine.filterIsInstance<SharedAlbumNotice.Closed>().firstOrNull()
+    if (content == null) {
+      val page: AlbumPageState? = when {
+        closed != null -> AlbumPageState.Closed(closed)
+        left.any { it.id == id } -> AlbumPageState.Unavailable(AlbumUnavailableReason.LEFT)
+        // Il catalogo non ha ancora la vista (l'album c'e' nell'elenco): ancora in lettura, non "non trovato".
+        listed != null -> null
+        else -> AlbumPageState.Unavailable(AlbumUnavailableReason.NOT_FOUND)
+      }
+      return AlbumPageUi(page = page, message = loc.message)
+    }
+    val album = content.album
+    val shown = album as? Album.Shared
+    val allowedOps = if (shown != null) shared.allowedOps(id) else emptySet()
+    val permissions = shown?.let { PermissionInfo(it.level, it.creator, it.mine, allowedOps) }
+    val page: AlbumPageState =
+      if (status is AlbumsStatus.Recomputing && album is Album.Smart && content.items.size == 0) {
+        AlbumPageState.Recomputing(album, status.done, status.total)
+      } else {
+        AlbumPageState.Ready(content, album.sort, permissions, banners(content, mine, ops))
+      }
+    val suggested = content.suggested?.takeIf { it.size > 0 }?.let { SuggestionsState.Some(it.size, it) } ?: SuggestionsState.None
+    val toShare = content.toShare?.takeIf { it.size > 0 }?.let { SuggestionsState.ToShare(it.size, it) } ?: SuggestionsState.None
+    return AlbumPageUi(
+      page = page,
+      actions = AlbumPolicy.pageActions(album, allowedOps),
+      suggested = suggested,
+      toShare = toShare,
+      creatorName = shown?.let { people.nameOf(it.creator) },
+      message = loc.message,
+      pickingCover = loc.pickingCover,
+      itemMenu = loc.itemMenu,
+    )
+  }
+
+  private fun banners(content: AlbumContent, notices: List<SharedAlbumNotice>, ops: List<ShareOpState>): List<AlbumBanner> = buildList {
+    // Prima cio' che e' in corso, poi cio' che chiede un gesto, poi le informazioni.
+    ops.filter { it.album == id && it !is ShareOpState.Done }.forEach { add(AlbumBanner.Sharing(it)) }
+    if (content.incoming > 0) add(AlbumBanner.Incoming(content.incoming))
+    val toShare = content.toShare?.size ?: 0
+    if (toShare > 0) add(AlbumBanner.ToShare(toShare))
+    notices.forEach { notice ->
+      when (notice) {
+        is SharedAlbumNotice.FilesAddedFromPc -> add(AlbumBanner.FilesFromPc(notice.count))
+        is SharedAlbumNotice.FolderChanged -> add(AlbumBanner.FolderChanged)
+        is SharedAlbumNotice.NotAddedLevelChanged -> add(AlbumBanner.NotAdded(notice.count))
+        is SharedAlbumNotice.Inherited -> add(AlbumBanner.Inherited)
+        is SharedAlbumNotice.Closed -> Unit
+      }
+    }
+    val smart = content.album as? Album.Smart
+    if (smart != null && smart.newSinceSeen > 0) add(AlbumBanner.NewItems(smart.newSinceSeen))
+  }
+
+  // --- Messaggi e modalita' -----------------------------------------------------------------------------------------------------
+
+  fun dismissMessage() = local.update { it.copy(message = null) }
+
+  private fun say(message: AlbumMessage?) = local.update { it.copy(message = message) }
+
+  /** Un esito di modifica diventa, se non e' andata, un messaggio sotto l'intestazione. */
+  private fun report(out: EditOutcome): Boolean {
+    when (out) {
+      EditOutcome.Done -> return true
+      EditOutcome.NotFound -> say(AlbumMessage.NotFound)
+      is EditOutcome.NotAllowed -> say(AlbumMessage.NotAllowed)
+      is EditOutcome.Invalid -> say(if (out.problem != null) AlbumMessage.InvalidTitle(out.problem) else AlbumMessage.NotInAlbum)
+      is EditOutcome.Blocked -> say(AlbumMessage.Blocked(WhyBlocked.of(out.reason)))
+    }
+    return false
+  }
+
+  fun startPickingCover() = local.update { it.copy(pickingCover = true, itemMenu = null, message = null) }
+
+  fun stopPickingCover() = local.update { it.copy(pickingCover = false) }
+
+  // --- Azioni sull'album --------------------------------------------------------------------------------------------------------
+
+  fun rename(title: String) {
+    scope.launch { report(albums.rename(id, title)) }
+  }
+
+  fun setSort(sort: AlbumSort) {
+    scope.launch { report(albums.setSort(id, sort)) }
+  }
+
+  /** La copertina scelta (da "Scegli copertina" o dal menu di una cella); null = automatica. */
+  fun setCover(media: MediaId?) {
+    scope.launch {
+      if (report(albums.setCover(id, media))) local.update { it.copy(pickingCover = false, itemMenu = null) }
+    }
+  }
+
+  fun setLevel(level: ShareLevel) {
+    scope.launch { report(shared.setLevel(id, level)) }
+  }
+
+  fun leave() {
+    scope.launch { report(shared.leave(id)) }
+  }
+
+  fun inherit() {
+    scope.launch {
+      when (val out = shared.inherit(id)) {
+        is InheritOutcome.Blocked -> say(AlbumMessage.Blocked(WhyBlocked.of(out.reason)))
+        InheritOutcome.Inherited -> Unit
+        else -> say(AlbumMessage.NotAllowed)
+      }
+    }
+  }
+
+  /** "Elimina l'album" di un album personale: i media restano dove sono (D39). Un condiviso si chiude dal foglio del creatore. */
+  fun deletePersonal() {
+    scope.launch { if (report(albums.delete(id))) _deleted.value = true }
+  }
+
+  fun freeze() {
+    scope.launch { report(choices.freeze(id)) }
+  }
+
+  fun unfreeze() {
+    scope.launch { report(choices.unfreeze(id)) }
+  }
+
+  /**
+   * Aggiunge [media] (scelti dal selettore, che non offre mai i nascosti). Un album personale li prende subito; uno condiviso apre il
+   * foglio di conferma di D12 (mai un'aggiunta diretta, D35).
+   */
+  fun add(media: List<MediaId>) {
+    if (media.isEmpty()) return
+    scope.launch {
+      val out = albums.add(id, media)
+      when (out) {
+        is AddOutcome.Added -> Unit
+        is AddOutcome.NeedsShareConfirmation, is AddOutcome.Blocked -> share.onAddOutcome(out)
+        is AddOutcome.NothingToAdd -> say(AlbumMessage.NothingToAdd(out.excluded))
+        is AddOutcome.NotAllowed -> say(AlbumMessage.NotAllowed)
+        AddOutcome.NotFound -> say(AlbumMessage.NotFound)
+      }
+    }
+  }
+
+  /** "Condividi...": un album personale diventa un album condiviso nuovo (livello di partenza Q2, nascosti lasciati fuori, Q3). */
+  fun shareThisAlbum() {
+    share.request(ShareRequest.FromPersonal(id, ShareLevel.DEFAULT))
+  }
+
+  /** Dal banner "Da condividere" (D17, Q4 a): le foto nuove di uno smart condiviso, con un tocco che apre la conferma col conteggio. */
+  fun shareNew(media: List<MediaId>) {
+    if (media.isEmpty()) return
+    share.request(ShareRequest.AddToShared(id, media))
+  }
+
+  /** Dal banner "N file nuovi nella cartella" (D39): adotta i file aggiunti dal PC, con la conferma. I file li dice la porta [AlbumPending]. */
+  fun adoptFolderFiles() {
+    scope.launch {
+      val media = pending.filesFromFolder(id)
+      if (media.isNotEmpty()) share.request(ShareRequest.FolderAdoption(id, media))
+    }
+  }
+
+  /** Dal banner "Non aggiunte: l'album ora e' in sola visione" (E-SH13): "Riporta nelle mie cartelle", con la conferma. */
+  fun bringBackRejected() {
+    scope.launch {
+      val media = pending.notAdded(id)
+      if (media.isNotEmpty()) share.request(ShareRequest.BringBack(id, media))
+    }
+  }
+
+  /** Dall'ordine personalizzato (D21): [media] in cima o in fondo all'album. */
+  fun moveToStart(media: MediaId) {
+    local.update { it.copy(itemMenu = null) }
+    scope.launch { report(albums.reorder(id, media, null)) }
+  }
+
+  fun moveToEnd(media: MediaId) {
+    local.update { it.copy(itemMenu = null) }
+    val view = (ui.value.page as? AlbumPageState.Ready)?.content?.items ?: return
+    val last = (view.size - 1 downTo 0).map { view.snapshot.idAt(view.snapshotIndex(it)) }.firstOrNull { it != media } ?: return
+    scope.launch { report(albums.reorder(id, media, last)) }
+  }
+
+  /** "Riporta nelle mie cartelle" per un elemento solo (D31): un piano, e il foglio. */
+  fun bringBack(media: MediaId) {
+    local.update { it.copy(itemMenu = null) }
+    share.request(ShareRequest.BringBack(id, listOf(media)))
+  }
+
+  /** Toglie [media] dall'album (D39: il file resta dov'e'; su uno smart un automatico diventa un'esclusione). */
+  fun remove(media: MediaId) {
+    local.update { it.copy(itemMenu = null) }
+    scope.launch { report(albums.remove(id, listOf(media))) }
+  }
+
+  fun dismissNotice(notice: SharedAlbumNotice) {
+    scope.launch { shared.dismissNotice(notice) }
+  }
+
+  // --- Il menu di un elemento --------------------------------------------------------------------------------------------------
+
+  /** Apre il menu di [media]: cosa se ne puo' fare secondo la tabella, e chi l'ha aggiunto (Q6). */
+  fun openItemMenu(media: MediaId) {
+    val content = ui.value.page.let { (it as? AlbumPageState.Ready)?.content } ?: return
+    // D22: il menu si apre solo per un elemento che la vista dell'album mostra; un id che non c'e' (un nascosto, uno tolto) non apre niente.
+    if (content.items.viewIndexOf(media) < 0) return
+    val album = content.album
+    scope.launch {
+      val albumOps = if (album is Album.Shared) shared.allowedOps(id) else emptySet()
+      val itemOps = if (album is Album.Shared) shared.allowedOps(id, media) else emptySet()
+      val actions = AlbumPolicy.itemActions(album, albumOps, itemOps)
+      if (!actions.any) return@launch
+      val addedBy = if (album is Album.Shared) members.addedBy(id, media) else null
+      local.update {
+        it.copy(itemMenu = ItemMenu(media, actions, addedBy, isCover = album.cover.media == media, removeIsExclude = album is Album.Smart && !album.frozen), message = null)
+      }
+    }
+  }
+
+  fun closeItemMenu() = local.update { it.copy(itemMenu = null) }
+}

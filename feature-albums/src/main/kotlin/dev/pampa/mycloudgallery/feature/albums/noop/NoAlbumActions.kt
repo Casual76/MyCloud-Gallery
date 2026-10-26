@@ -11,7 +11,7 @@ object NoAlbumActions : AlbumActions {
 
   override fun openAlbum(id: AlbumId) = Unit
 
-  override fun pickMedia(forAlbum: AlbumId) = Unit
+  override fun pickMedia(forAlbum: AlbumId?, max: Int, onPicked: (List<MediaId>) -> Unit) = Unit
 
   override fun openDiagnostics() = Unit
 }

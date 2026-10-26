@@ -205,4 +205,27 @@ abstract class AlbumsContract {
     val manual = w.create("Manuale")
     assertThat(choices.freeze(manual)).isInstanceOf(EditOutcome.NotAllowed::class.java)
   }
+
+  /** P10 (richiesta di P3): le regole di uno smart si cambiano dall'editor; le esclusioni restano; una regola troppo lunga si dice, senza scrivere niente. */
+  @Test
+  fun leRegoleDiUnoSmartSiCambianoEUnaRegolaTroppoLungaSiDice() = run {
+    val w = world()
+    val choices = w.choices ?: return@run
+    w.library.put(media(1), media(2), media(3))
+    w.setSmart(confident = listOf(media(1).id, media(2).id), suggested = emptyList())
+    val id = w.create("Oslo 2026", AlbumKind.SMART, SmartRules(null, null, "neve"))
+    assertThat(choices.exclude(id, listOf(media(1).id))).isEqualTo(EditOutcome.Done)
+    // Il cambio vale e non cancella le esclusioni (E-AL13).
+    assertThat(w.albums.setRules(id, SmartRules(null, null, "mare", sources = setOf(SmartSource.MY_PHONE)))).isEqualTo(EditOutcome.Done)
+    assertThat(w.items(id)).containsExactly(media(2).id)
+    // Un album manuale non ha regole; uno che non c'e' non si trova.
+    val manual = w.create("Manuale")
+    assertThat(w.albums.setRules(manual, SmartRules(null, null, "x"))).isInstanceOf(EditOutcome.NotAllowed::class.java)
+    assertThat(w.albums.setRules(AlbumId("00000000-0000-4000-8000-000000000777"), SmartRules(null, null, "x"))).isEqualTo(EditOutcome.NotFound)
+    // Una descrizione che non sta in una voce (1.024 caratteri): non si scrive a meta' e il caso e' quello delle regole, non del titolo.
+    val tooLong = SmartRules(null, null, "a".repeat(2_000))
+    assertThat(w.albums.setRules(id, tooLong)).isInstanceOf(EditOutcome.Invalid::class.java)
+    assertThat(w.albums.create("Troppo", AlbumKind.SMART, tooLong)).isEqualTo(CreateOutcome.RulesTooLong)
+    assertThat(w.items(id)).containsExactly(media(2).id)
+  }
 }

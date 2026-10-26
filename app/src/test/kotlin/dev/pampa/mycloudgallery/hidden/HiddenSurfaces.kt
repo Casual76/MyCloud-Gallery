@@ -105,6 +105,7 @@ internal object HiddenSurfaces {
   /** La classe di test del widget di prova (solo testDebug). */
   const val WIDGET_TEST: String = "Field" + "ProbeWidgetTest"
   private const val ALBUMS = "core-albums/src/main/kotlin/dev/pampa/mycloudgallery/core/albums"
+  private const val FEATURE_ALBUMS = "feature-albums/src/main/kotlin/dev/pampa/mycloudgallery/feature/albums"
 
   /** Le superfici. L'ordine e' quello del §2.1. */
   val entries: List<SurfaceEntry> = listOf(
@@ -220,9 +221,17 @@ internal object HiddenSurfaces {
       probe = HiddenProbes.duplicates, live = true,
       alsoProvedBy = listOf("CatalogIdenticalDuplicatesTest", "CatalogSimilarShotsTest", "FullHashNightlyTest"),
     ),
+    // --- Il codice vero di P10 (schermate degli album): integrazione del 27/10 -------------------------------------------------------------------------------
     SurfaceEntry(
-      id = "add-to-album", title = "Aggiungi ad album: la scelta dell'album e dei media", row = SpecRow.ADD_TO_ALBUM, owner = "P10", backing = Backing.PENDING,
-      landedWhen = listOf("feature-albums/src/main/kotlin/dev/pampa/mycloudgallery/feature/albums/ui"),
+      id = "add-to-album", title = "Aggiungi ad album: la scelta dell'album e dei media (il chooser vero di feature-albums)", row = SpecRow.ADD_TO_ALBUM, owner = "P10",
+      backing = Backing.PRODUCTION, sources = listOf("$FEATURE_ALBUMS/choose/AddToAlbumController.kt"), probe = RealAlbumScreensProbes.addToAlbum, live = true,
+      alsoProvedBy = listOf("AddToAlbumAndSuggestionsTest"),
+    ),
+    SurfaceEntry(
+      id = "album-pages", title = "Pagine degli album e Suggerite (i controllori veri di feature-albums sullo stack vero): elementi, copertine, menu di un elemento",
+      row = SpecRow.ALBUMS, owner = "P10", backing = Backing.PRODUCTION,
+      sources = listOf("$FEATURE_ALBUMS/page/AlbumPageController.kt", "$FEATURE_ALBUMS/page/SuggestionsController.kt"), probe = RealAlbumScreensProbes.albumPages, live = true,
+      alsoProvedBy = listOf("AlbumPageControllerTest"),
     ),
   )
 
@@ -236,7 +245,11 @@ internal object HiddenSurfaces {
    * I file che **legano** i contratti (`VisibleMedia`, `HiddenMask`, `WidgetFeed`) al catalogo senza mostrare niente: non sono superfici. Il registro li
    * ammette fra i file che nominano quei contratti.
    */
-  val wiring: List<String> = listOf("app/src/main/kotlin/dev/pampa/mycloudgallery/gallery/GalleryGraph.kt")
+  val wiring: List<String> = listOf(
+    "app/src/main/kotlin/dev/pampa/mycloudgallery/gallery/GalleryGraph.kt",
+    // Le porte facoltative di feature-albums (la visibilita' per "Aggiungi ad album"): le raccoglie e le passa ai controllori, non mostra niente.
+    "feature-albums/src/main/kotlin/dev/pampa/mycloudgallery/feature/albums/nav/AlbumDependencies.kt",
+  )
 
   /** I contratti da cui ogni superficie deve passare per i nascosti. */
   val contractNames: List<String> = listOf("VisibleMedia", "HiddenMask", "WidgetFeed")

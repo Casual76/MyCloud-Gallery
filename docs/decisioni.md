@@ -6643,3 +6643,119 @@ Fuori dal perimetro: **una riga di test in `core-albums/build.gradle`** (`testIm
 6. Per i media di una condivisione (area comune) "mio" dipende da `ownedByMe` di P1 (P6-3): se P1 lo calcola male, i propri media spostati restano suggeriti; la sonda del registro non lo vede.
 
 **Verifica**: `tools\check.ps1 -NoDaemon` verde al primo giro (26/10, ramo `fase7/p6` col codice di `501079c2`, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, struttura di build normale, `app\build\outputs\apk\release` cancellata prima, slot `f7-p6` preso e rilasciato): assemble di debug e release, test di tutti i moduli (`core-albums` 512, `:app` 771, nessuno a zero, nessuno fallito), lint, controlli sul dex e sul manifest di release (nessun fake di test nel dex, permessi dell'APK tutti elencati in `docs/sicurezza.md`).
+
+---
+
+## Fase 7 P10: schermate degli album (27/10)
+
+Pacchetto P10 (`fase7/p10`, da `main` 8aac52c): le schermate di `feature-albums` sopra i contratti di P0 e i riferimenti di P2, P3, P4, P6, P7 (finti dove il codice vero non c'era), le tre voci del viewer,
+"Aggiungi ad album" nella condivisione in arrivo. Nessuna rotta e nessun `MainScaffold`/`AppNavHost` toccati (sono di P13): le rotte sono un grafo da agganciare. Niente e' stato provato su dispositivo in questo pacchetto.
+
+**Stile (la critica sulla Libreria: vetro poco leggibile, controlli impilati e sovrapposti).** Regole che le schermate si sono date, e che i test fanno rispettare:
+- **mai testo sopra una foto**: le schede degli album hanno la copertina quadrata e *sotto* il nome e il conto; le celle della pagina sono foto e basta; i fogli non hanno miniature;
+- **niente galleggia sopra le foto**: i controlli stanno nel layout (barra in alto con indietro e un solo tasto ⋮ da 48 dp; barra in fondo per "Accetta/Escludi" e per "Crea l'album"), mai in sovrimpressione;
+- **le strisce della pagina sono un gruppo solo** (`FluidListGroup` + `FluidListDivider`): in corso, da decidere, permessi, una sotto l'altra, mai sovrapposte; il colore sta sulla piastrella dell'icona;
+- **fogli sul guscio dei fogli di conferma** (`GalleryConfirmSheet` + `GallerySheetScaffold`): un titolo, una frase, un bottone da 50 dp che fa la cosa e uno per rinunciare;
+- **a 1,3x niente si stringe**: i due bottoni di una proposta di viaggio stanno uno sotto l'altro a tutta larghezza; l'elenco e la pagina scorrono, i bersagli restano da 48 dp (`AlbumsBehaviourTest`);
+- solo componenti esistenti (G2): nessun colore, raggio, dimensione di testo o movimento scritto a mano (`NoHandWrittenStyleTest`, i `dp` letterali solo in `AlbumDimens.kt`).
+
+**Decisioni di P10**
+- **P10-1. Le azioni mostrate sono una funzione pura della tabella dei permessi** (`AlbumPolicy.pageActions/itemActions`, C25): per un album condiviso si prendono le `AlbumOp` che `SharedAlbums.allowedOps` da' a me e si
+  filtra l'elenco fisso delle azioni; per i personali e gli smart l'elenco e' fisso. `AlbumPolicyTableTest` rigenera dalla tabella `AlbumPermissions.rows` ogni livello e ogni ruolo (creatore, altro, admin, creatore
+  uscito) e confronta; `PermissionSummaryTest` fa lo stesso per il foglio "Permessi" (nessuna tabella propria). Un album condiviso non attivo non offre azioni.
+- **P10-2. La conferma di una condivisione nasce in un posto solo**: `ShareSheetController.confirm()`, dal tocco sul bottone del foglio (`ShareConfirmationSheet(plan, shownAt).tap(now)`, il costruttore di `ShareConfirmation`
+  e' `internal` a core-albums). Il foglio resta quello di prima durante `Confirming`; se il catalogo e' cambiato (`PlanChanged`) o il foglio e' scaduto (10 minuti) si rifa' il piano e il foglio dice perche' (`ShareSheetNotice`),
+  senza partire. `NoHandWrittenStyleTest.leSchermateNonCostruisconoLaConfermaDiUnaCondivisione` vieta `.tap(` fuori da quel file; `Phase7ArchitectureTest` vieta il resto.
+- **P10-3. Chiusura (Q5): nessuna scelta di partenza**. Le due risposte ("Sparisce per gli altri", "Ognuno tiene una copia") sono entrambe vuote all'apertura e il bottone resta spento finche' chi chiude non ne tocca una. "Riporta
+  nelle mie cartelle" e' un'opzione a parte, spenta; con le copie per gli altri il foglio avvisa che i media riportati spariscono anche dalle loro copie. **L'ordine con "Riporta"**: prima il foglio di conferma del
+  trasferimento col conteggio (se l'utente rinuncia l'album non si e' chiuso e niente e' cambiato), poi la chiusura. Chiudere non sposta mai un file da sola.
+- **P10-4. "Aggiungi ad album" fallisce chiuso e non sposta mai da solo** (`AddToAlbumController`): i media passano da `VisibleMedia` prima di contare e di aggiungere (D22; senza la porta non se ne offre nessuno; dai Nascosti si
+  offre tutto, ed e' una richiesta esplicita di chi chiama). Un album personale riceve subito; uno condiviso apre **sempre** il foglio di conferma col conteggio (D12), anche dalla pagina dell'album e da "Da condividere".
+  Il foglio non mostra miniature dei media da aggiungere: solo il numero.
+- **P10-5. Niente trascinamento e niente selezione multipla sulla pagina di un album**. Il menu dell'elemento (pressione prolungata, e le stesse azioni a TalkBack) offre copertina, "porta in cima/in fondo" (con l'ordine
+  personalizzato), "Rimuovi dall'album" (per uno smart "Togli", che diventa un'esclusione per sempre, E-AL5) e "Riporta" dove la tabella lo da'. L'elenco degli album con l'ordine personalizzato ha la pressione prolungata su una scheda che apre il foglio
+  "Sposta su / Sposta giu'" (due righe da 48 dp, il foglio resta aperto per piu' mosse, una riga che non si puo' fare e' spenta; un'indicazione in cima dice "Tieni premuto un album per spostarlo"), e le stesse mosse come azioni di TalkBack. Il trascinamento a mano e' un'aggiunta del filone grafico (vedi punti aperti); la selezione multipla c'e' dove serve decidere (Suggerite, Da condividere).
+- **P10-6. Il menu di un elemento si apre solo per un elemento che la vista mostra** (`AlbumPageController.openItemMenu` controlla `viewIndexOf`): un id che la vista non ha (un nascosto, uno tolto) non apre niente, nemmeno
+  chiedendolo per id (provato sul codice vero dalla sonda `album-pages`).
+- **P10-7. Le sezioni delle Raccolte sono dati con la forma di `CollectionEntryGroup`** (`SectionData`/`SectionEntry`, `AlbumsSectionSources`): i `feature-*` non si conoscono (`Phase4ArchitectureTest`), quindi `feature-albums` non puo'
+  implementare `CollectionsSectionProvider`. `:app` (P13) lo fa con sei righe (`toGroup()`); `CollectionsSectionBindingTest` (vede `feature-library` solo nei test: `testImplementation`) prova che i codici sono quelli di
+  `CollectionSections`, che il gruppo vero accetta i dati e che il fornitore vero li consegna. I codici delle voci sono `album/<id>`, `smart/<id>`, `albums/all`, `albums/new`, `trips/all`, `trip/<impronta>`: mai un titolo.
+- **P10-8. Nessun orologio del telefono e nessuna rete** (`NoWallClockSourcesTest`, `NoNetworkSourcesTest`): "oggi" e il monotono delle conferme vengono da una porta (`AlbumScreensClock`); senza quella vera l'orologio e' fermo e
+  nessun foglio conferma mai (fallisce chiuso). Le miniature sono solo quelle gia' sul dispositivo (`AlbumThumbnails`).
+- **P10-9. L'editor delle regole mostra tutto prima di creare** (D13-D16): periodo (serie di giorni, date a mano `gg/mm/aaaa` validate in `DateInput`), luogo con gli omonimi e il raggio, descrizione, fino a 6 foto d'esempio, sorgenti, tipi;
+  l'anteprima si rifa' a ogni cambio (quanti sicuri, quanti suggeriti, 12 miniature); "troppo larghe" (oltre 3.000 o il 20% della Libreria) e "descrizione senza motore di ricerca" sono schede in evidenza, e il bottone dice quante
+  foto entrano. Il salvataggio scrive solo nei dati personali (`Albums.create/setRules`); regole che non stanno in una voce danno `CreateOutcome.RulesTooLong`/`EditOutcome.Invalid` e l'editor chiede di restringerle.
+- **P10-10. Il viewer e la ricezione non conoscono gli album**: il viewer ha tre voci ⋮ come dati (`albumMenuEntries`) e una porta `ViewerAlbumActions` (di serie `NoViewerAlbumActions`); la ricezione ha `IncomingAlbums`
+  (`ReceivePorts.install(..., albums)`, di serie nessun album: la voce non compare). "Aggiungi ad album" in arrivo e' **"Salva sul NAS" nella cartella scelta, col suo tocco, piu' la promessa** che i file andranno
+  nell'album; la promessa si registra solo dopo che i file sono in coda, e se la porta non risponde i file restano in coda e la schermata lo dice. Chi aggiunge davvero quando i file sono nel catalogo (e per un album condiviso
+  apre il foglio di conferma) e' `:app`.
+- **P10-11. Il registro dei Nascosti** (`HiddenSurfaces`): la riga `add-to-album` passa da `PENDING` a `PRODUCTION` con la sonda sul **chooser vero** sullo stack vero di P3 (offre esattamente `VisibleMedia`; senza la porta niente;
+  dai Nascosti tutto; l'album dopo l'aggiunta non mostra un nascosto); nuova riga `album-pages` (i controllori veri della pagina e di "Suggerite": elementi, copertine, menu di un elemento chiesto per id di un nascosto).
+  `AlbumDependencies.kt` (le porte facoltative) e' fra i file che "legano" i contratti, come `GalleryGraph.kt`.
+
+**Contratti toccati (piccoli, da riportare nei riepiloghi)**
+- `core-albums` (commit `ef300d94`): `Albums.setRules(id, rules): EditOutcome` (richiesta di P3: cambiare le regole di uno smart senza ricrearlo; `NotAllowed` se non e' smart, `Invalid` se non sta in una voce), nuovo caso
+  `CreateOutcome.RulesTooLong` (prima il caso usava `TitleProblem.TOO_LONG`, che parlava del titolo; `CatalogAlbumsTest` aggiornato), `SharedAlbums.allowedOps(id, item?)` (metodo con corpo, nessun implementatore da cambiare).
+  `InMemoryAlbums`, `NoAlbums`, `CatalogAlbums`, `AlbumEditor` e la suite di contratto adeguati.
+- `core-albums/testing/SharedWorldFixtures.kt` (nuovo, solo test): `FakeSharedWorld.createAlbum/addItems/closeAlbum`. I percorsi dell'area comune (`SharePath`) sono di core-trust e `feature-albums` non puo' nominarlo
+  nemmeno nei test (Phase7ArchitectureTest, regola 6): i test delle schermate riempiono l'area comune finta da li'.
+- `feature-albums/contract/AlbumScreens.kt` (file di P0): `ShareSheetState` ha tre casi in piu' (`NothingToShare`, `Refused`, `InvalidTitle`) e `Plan.notice`; `AlbumBanner.Inherited` (D11); `AlbumActions.pickMedia(forAlbum, max, onPicked)`
+  (prima senza risposta: le schermate non avrebbero saputo cosa e' stato scelto).
+- `app/build.gradle`: `testImplementation project(':feature-albums')` (le sonde dei Nascosti fanno girare i controllori veri); `feature-albums/build.gradle`: `testImplementation project(':feature-library')` (solo il test del legame).
+  Nessuna dipendenza di produzione nuova: il grafo dei moduli e' quello del §1.1.
+
+**Stati composti** (ogni caso del §1.5, chiaro e scuro, telefono 412 dp e tablet 1280 dp; il testo a 1,3x sul telefono): `AlbumListState` (Loading, Ready con avvisi di chiusura e album lasciati, personalizzato, Empty), `AlbumPageState`
+(manuale, vuota, smart con Suggerite e "Nuove", condiviso mio con avanzamento e "In arrivo", in pausa per lo spazio, di un altro, in sola visione con "Non aggiunte", ereditato, "Scegli copertina", Recomputing, Closed con e senza copia,
+Unavailable nelle tre ragioni, in lettura), `SmartEditorState` (Interpreting, Proposal, TooBroad, NoSearch, modifica, problema), `SuggestionsState` (Suggerite, in selezione, Da condividere, vuote), `ShareSheetState` (Plan con livello
+e con i nascosti e l'avviso di E-SH9, aggiunta, "Riporta", file dal PC, rifatto per catalogo cambiato e per scadenza, Blocked "Arriva dopo le prove", scritture ferme, NothingToShare, Refused, InvalidTitle), `ShareProgress` (in corso, in pausa, finita con problemi, finita), `PermissionInfo` (creatore, altro a "aggiungono", altro a "guardano"), `CloseSheetState` (stop e elimina, senza scelta, con scelta, con copie e "Riporta"), `TripsState` (proposte, durante la creazione, senza posizione, vuoto),
+piu' "Aggiungi ad album" (scelta, fatto, niente), "Nuovo album", il menu di un elemento (tre album), ordine, nome, conferme, "Sposta" (l'ordine personalizzato dell'elenco) e la ricezione con la scelta dell'album.
+
+**Prove** (tutte sulla JVM)
+- `feature-albums` (485): `AlbumPolicyTableTest` 10 (generato dalla tabella: ogni livello, ogni ruolo, creatore uscito), `PermissionSummaryTest` 6, `ShareSheetControllerTest` 13 (la conferma nasce solo dal tocco, tocco troppo vicino,
+  scadenza, piano cambiato, un tocco = un solo `start`, "Arriva dopo le prove", nascosti, livello), `CloseSheetControllerTest` 7 (Q5 senza scelta di partenza, Riporta prima della chiusura, chi non puo' chiudere), `AlbumPageControllerTest` 14,
+  `AlbumListAndTripsControllerTest` 10, `SmartEditorControllerTest` 12, `AddToAlbumAndSuggestionsTest` 11 (nascosti mai offerti, fallisce chiuso, condiviso apre sempre il foglio), `AlbumStripsTest` 8, `SmallPartsTest` 8 (date, codici delle voci),
+  `CollectionsSectionBindingTest` 7 (sul gruppo e sul fornitore veri di `feature-library`), `AlbumRoutesTest` 10 (ViewModel e rotte sul mondo di riferimento: elenco, pagina, permessi, Suggerite, editor, viaggi, "Aggiungi ad album"),
+  `AlbumsBehaviourTest` 30 (bersagli >= 48 dp, nessuna sovrapposizione a 1,3x, azioni di TalkBack, conferma spenta senza scelta, dichiarazione, avviso di E-SH9, foglio "Sposta"), `NoHandWrittenStyleTest` 11, `NoNetworkSourcesTest`,
+  `NoWallClockSourcesTest`, `AlbumSamplesTest` 2, e 324 prove di composizione e screenshot (`ListAndPage*`, `Sheets*`, `EditorSuggestionsTrips*`: ogni scena compone e dice le parole giuste, chiaro e scuro, telefono e tablet).
+- `feature-viewer`: `AlbumMenuTest` 8 (le voci vengono dai tre booleani decisi dalla tabella; senza album nessuna voce; l'esito diventa un avviso). `feature-integrations`: `ReceiveAlbumTest` 11 (la promessa solo dopo la coda, una porta che
+  non risponde non toglie niente, niente con l'app bloccata), `ReceiveAlbumLayoutTest` 6, `ReceiveAlbum*ScreenshotTest` 24. `core-albums`: `CatalogAlbumsTest` 11 (adeguato), `AlbumsContract` con `setRules`.
+- `app` (registro dei Nascosti): `HiddenSurfacesRegistryTest` 9 e `HiddenSurfacesPropertyTest` 5 con le righe `add-to-album` e `album-pages` sul codice vero (anche nei mondi tutti nascosti).
+- Screenshot: `docs/screenshots/7-P10/` (220 immagini, 34 MB: tessere piatte al posto delle foto sintetiche per tenere leggere le pareti; il tablet ha le scene principali, il testo grande solo il telefono).
+
+**`tools\check.ps1 -NoDaemon`** (`GRADLE_OPTS=-Dorg.gradle.workers.max=2`, 27/10): **verde** ("OK: tutto a posto", 14 minuti: assembleDebug, assembleRelease, `galleryTest` e `galleryLint` con i test di ogni modulo: `feature-albums` 485, `feature-viewer` 838, `feature-integrations` 567, `core-albums` 223, `core-common` 94,
+`app` 777; l'APK di release non ha classi di un package `testing` e `feature-albums` non e' ancora nel grafo di produzione dell'app). Prima del giro intero: un primo `lintDebug` aveva due errori in `AlbumRoutesTest` (ViewModel costruito dentro
+un composable), corretti; un test di P3 (`CatalogAlbumsTest`) aspettava ancora `CreateOutcome.Invalid` per le regole troppo lunghe, adeguato a `RulesTooLong`.
+
+
+**Agganci per P13 (`:app`)**
+- **Rotte**: `NavGraphBuilder.albumsGraph(nav, actions: AlbumActions, thumbnails: AlbumThumbnails)` dentro il `NavHost`; destinazioni `AlbumListDestination`, `AlbumPageDestination(id)`, `SuggestionsDestination(id, toShare)`,
+  `SmartEditorDestination(title?, album?)`, `TripsDestination`; aperture `NavController.openAlbums/openAlbum/openSuggestions/openSmartEditor/openRules/openTrips/openEntry(AlbumEntryTarget)`.
+- **`AlbumActions`** (le uscite): `openViewer(view, start)` ospita il viewer sopra la pagina; `pickMedia(forAlbum, max, onPicked)` il selettore (mai nascosti); `openAlbum`; `openDiagnostics`.
+- **Porte, tutte opzionali** (`@BindsOptionalOf` in `AlbumPortsModule`; senza fallisce chiuso con i null-object): `Albums`, `SharedAlbums`, `SmartChoices`, `ShareRunner`, `SmartNameInterpreter`, `SmartAlbumEngine`, `Trips`,
+  `VisibleMedia` (senza, "Aggiungi ad album" non offre niente), `AlbumPeople` (nome del familiare dall'account), `AlbumMembers` (chi ha aggiunto un elemento, Q6), `AlbumPending` (file nuovi nella cartella dell'album, D39, e foto
+  non aggiunte per il livello), `AlbumScreensClock` (`today()`, `monotonicMs()`: **senza quello vero nessun foglio conferma**). Le miniature: `AlbumThumbnails(loader, placeholders, refs: AlbumRefs)`.
+- **"Aggiungi ad album" da fuori**: `AddToAlbumHost(request: AddToAlbumRequest(media, fromHidden), onDismiss, onOpenAlbum)` si mostra sopra la schermata che l'ha chiesto (selezione in Libreria, viewer, Cerca, Nascosti con
+  `fromHidden = true`); i media possono essere migliaia, quindi non e' una rotta.
+- **Raccolte**: `AlbumsSectionSources(resources, albums, trips, people, clock, scope)` espone `albums`, `smart`, `trips` (`StateFlow<SectionData?>`); in `:app` un `CollectionsSectionProvider` per codice con `toGroup()` (vedi
+  `CollectionsSectionBindingTest`); `AlbumEntryTarget.parse(code)` dice dove portare una voce.
+- **Viewer**: `ViewerServices.albums = ViewerAlbumActions` (aggiungi, rimuovi, copertina; `AlbumMenuResult` dice l'esito); **ricezione**: `ReceivePorts.install(uploads, destinations, unlock, albums = IncomingAlbums)`; `willAdd(stage, album)`
+  registra la promessa, e quando i file sono nel catalogo `:app` li aggiunge (per un condiviso, col foglio di conferma).
+
+**Da provare sul telefono (F72, F79, F83, F86, F90; niente e' stato provato su dispositivo)**
+- **F72** Album personali: l'elenco a schede (copertine, nomi leggibili anche a 1,3x), "Sposta su/giu'" con TalkBack, la pagina (strisce incolonnate, tasto ⋮ in alto a destra), "Porta in cima", copertina dal menu, "Rimuovi"
+  e che il file resti dov'e'.
+- **F79** Album condiviso "Prova Oslo": il foglio con i conteggi, la cartella, il livello e i nascosti (lasciati fuori di partenza; con "Condividi anche i nascosti" l'avviso), "i permessi li fa rispettare l'app"; "Arriva dopo le prove"
+  se la recinzione e' accesa; la striscia di avanzamento e la pausa per lo spazio.
+- **F83** "Smetti di condividere": le due risposte vuote all'apertura, il bottone spento finche' non si sceglie, "Riporta" con il suo foglio prima della chiusura; l'avviso agli altri (Q5) sul secondo dispositivo.
+- **F86** (tablet): i tre livelli dal foglio "Permessi"; a "Gli altri guardano" non ci sono "Aggiungi foto", "Rinomina", "Copertina"; il foglio "Permessi" di un familiare dice cosa puo' fare.
+- **F90** Raccolte: le tre sezioni (Album, Album smart, Viaggi) con i conteggi; "Nuovo album"; "Aggiungi ad album" dalla selezione, dal viewer e dalla condivisione in arrivo.
+- **Scelte grafiche da far vedere all'utente**: schede con testo sotto la copertina, strisce raggruppate, barre di decisione in fondo ("Accetta tutte (12)"), bottoni dei viaggi impilati, foglio di chiusura con le due risposte vuote.
+
+**Punti aperti**
+- **Niente trascinamento a mano dell'ordine** (ne' per gli album ne' per le foto): "Sposta su/giu'" e "Porta in cima/in fondo" bastano per l'accessibilita' e per l'ordine personalizzato, ma il gesto e' una rifinitura grafica.
+- **Niente selezione multipla sulla pagina di un album** (si agisce su una foto per volta dal menu, o su tutte le Suggerite): il contratto `Albums` ha `remove(id, media)` a lista, quindi e' solo UI.
+- **E-SH16** (cartella cambiata dal PC): la striscia lo dice (`AlbumBanner.FolderChanged`) ma l'azione "usa la nuova cartella" non ha ancora un comando nel contratto `SharedAlbums`.
+- **Album di familiari usciti e "Ripristina gli elementi" (E-SH20)**: l'elenco di P4 (`RevokedItemsRestore`) non ha un contratto di stato in `AlbumScreens.kt`; quando ce l'avra', e' una riga della pagina.
+- **Le sezioni delle Raccolte sono dati** (P10-7): P11/P13 le legano con `toGroup()`; se il filone grafico vuole un fornitore dentro il modulo, il grafo dei moduli deve cambiare.
+- **La tastiera nei fogli** (nuovo album, nome, "Aggiungi ad album" con un nome nuovo): il guscio dei fogli dell'engine ha `imePadding`, quindi il foglio dovrebbe salire con la tastiera; non si e' potuto vedere su un dispositivo (Robolectric non ha la tastiera), va guardato a 1,3x.
+- **Nomi dei familiari**: `AlbumPeople` e' una porta; senza, si legge l'id dell'account (`AccountNamesAsIs`).

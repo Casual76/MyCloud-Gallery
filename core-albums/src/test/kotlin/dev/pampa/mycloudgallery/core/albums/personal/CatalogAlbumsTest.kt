@@ -311,7 +311,8 @@ class CatalogAlbumsTest {
 
     val tooLong = SmartRules(SmartPeriod.Days((0 until 300).map { LocalDate.parse("2020-01-01").plusDays(it * 2L) }.toSet()), null, null)
     val refused = device.albums.create("Troppi giorni", AlbumKind.SMART, tooLong)
-    assertThat(refused).isInstanceOf(CreateOutcome.Invalid::class.java)
+    // Regole che non stanno in una voce: un esito proprio (prima era «titolo troppo lungo», che parlava del titolo).
+    assertThat(refused).isEqualTo(CreateOutcome.RulesTooLong)
     assertThat(device.albums.all.value.albums).hasSize(1)
   }
 

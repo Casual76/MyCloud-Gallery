@@ -63,6 +63,9 @@ dependencies {
   implementation appDeps.coroutinesAndroid
   implementation appDeps.serializationCore
 
+  // Solo per CollectionsSectionBindingTest (P10): prova che i dati delle sezioni Album, Album smart e Viaggi entrano nel gruppo e nel fornitore veri delle Raccolte.
+  // E' una dipendenza di prova: in produzione i feature non si conoscono (Phase4ArchitectureTest guarda solo le dipendenze di produzione).
+  testImplementation project(':feature-library')
   testImplementation appDeps.coroutinesTest
   testImplementation appDeps.turbine
   testImplementation appDeps.robolectric

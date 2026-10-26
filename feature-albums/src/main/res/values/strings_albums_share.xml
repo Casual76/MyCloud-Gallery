@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 7, P10: il foglio di condivisione (D12), i fogli di chiusura (D31 con Q5) e "Aggiungi ad album" (D35). -->
+
+  <!-- Il foglio di condivisione -->
+  <string name="share_sheet_title">Condividi con la famiglia</string>
+  <string name="share_sheet_title_add">Aggiungi all’album condiviso</string>
+  <string name="share_sheet_title_bring_back">Riporta nelle tue cartelle</string>
+  <string name="share_sheet_title_adopt">Aggiungi i file della cartella</string>
+
+  <plurals name="share_photos">
+    <item quantity="one">%1$d foto</item>
+    <item quantity="other">%1$d foto</item>
+  </plurals>
+  <plurals name="share_videos">
+    <item quantity="one">%1$d video</item>
+    <item quantity="other">%1$d video</item>
+  </plurals>
+  <string name="share_counts_both">%1$s e %2$s</string>
+  <string name="share_counts_with_size">%1$s (%2$s)</string>
+
+  <string name="share_message_share">%1$s verranno spostati nell’area comune, nella cartella «%2$s», e li vedranno tutti i familiari.</string>
+  <string name="share_message_share_reference">%1$s entreranno nell’album, nella cartella «%2$s»: sono già nell’area comune e restano dove sono. Li vedranno tutti i familiari.</string>
+  <string name="share_message_bring_back">%1$s verranno riportati nelle tue cartelle. Spariranno dall’album per gli altri familiari.</string>
+  <string name="share_message_adopt">%1$s entreranno nell’album. Non si sposta niente: sono già nella cartella.</string>
+
+  <string name="share_row_album">Album</string>
+  <string name="share_row_folder">Cartella</string>
+  <string name="share_row_space">Spazio richiesto</string>
+  <string name="share_row_move">Si spostano dalla tua area privata</string>
+  <string name="share_row_upload">Si caricano dal telefono</string>
+  <string name="share_row_reference">Sono già nell’area comune</string>
+  <string name="share_row_move_out">Tornano nelle tue cartelle</string>
+  <string name="share_row_adopt">Aggiunti dal computer</string>
+  <string name="share_group_level">Chi può fare cosa</string>
+  <string name="share_group_level_note">Lo puoi cambiare quando vuoi: lo decidi solo tu.</string>
+  <string name="share_group_hidden">Foto nascoste</string>
+  <string name="share_group_excluded">Restano fuori</string>
+  <string name="share_space_value">%1$s (con 1 GB di margine)</string>
+
+  <plurals name="share_hidden_leave">
+    <item quantity="one">Lascia fuori il nascosto</item>
+    <item quantity="other">Lascia fuori i %1$d nascosti</item>
+  </plurals>
+  <string name="share_hidden_leave_detail">Restano nascosti e al loro posto.</string>
+  <string name="share_hidden_include">Condividi anche i nascosti</string>
+  <string name="share_hidden_include_detail">Entrano nell’album insieme alle altre.</string>
+  <plurals name="share_hidden_warning">
+    <item quantity="one">Il nascosto diventerà visibile ai familiari. Nascosti protegge solo dentro l’app.</item>
+    <item quantity="other">I %1$d nascosti diventeranno visibili ai familiari. Nascosti protegge solo dentro l’app.</item>
+  </plurals>
+
+  <string name="share_excluded_others_area">%1$d nell’area privata di un altro familiare</string>
+  <string name="share_excluded_hidden">%1$d nascoste, lasciate fuori</string>
+  <string name="share_excluded_already">%1$d già nell’album</string>
+  <string name="share_excluded_unavailable">%1$d non disponibili adesso</string>
+  <string name="share_excluded_not_mine">%1$d non sono tue o non hanno la cartella d’origine</string>
+  <string name="share_excluded_not_in_common">%1$d non sono più nell’area comune</string>
+
+  <string name="share_notice_changed">Qualcosa è cambiato mentre guardavi. Ecco il foglio aggiornato: rileggi i conteggi.</string>
+  <string name="share_notice_expired">Il foglio era aperto da troppo tempo. Ecco quello nuovo: controlla e conferma di nuovo.</string>
+
+  <string name="share_confirm">Sposta e condividi</string>
+  <string name="share_confirm_add">Aggiungi all’album</string>
+  <string name="share_confirm_bring_back">Riporta</string>
+  <string name="share_confirm_adopt">Aggiungi all’album</string>
+  <string name="share_confirming">Avvio…</string>
+  <string name="share_cancel">Annulla</string>
+  <string name="share_close">Chiudi</string>
+
+  <string name="share_blocked_title">Non si può condividere adesso</string>
+  <string name="share_blocked_tests_title">Arriva dopo le prove</string>
+  <string name="share_blocked_tests_detail">Gli album condivisi spostano davvero le foto nell’area comune. Li accendo sulle cartelle vere a fine prove, con il tuo sì.</string>
+  <string name="share_nothing_title">Niente da aggiungere</string>
+  <string name="share_nothing_detail">Nessuna di queste foto si può aggiungere:</string>
+  <string name="share_refused_title">L’album non lo permette più</string>
+  <string name="share_refused_detail">Chi l’ha creato ha cambiato i permessi: adesso non puoi aggiungere foto.</string>
+  <string name="share_invalid_title">Il nome non va bene</string>
+
+  <!-- I fogli di chiusura (Q5: lo decide chi chiude) -->
+  <string name="close_title_stop">Smetti di condividere «%1$s»</string>
+  <string name="close_title_delete">Elimina «%1$s»</string>
+  <string name="close_message_stop">L’album non sarà più condiviso. Per te resta un album tuo, con le stesse foto.</string>
+  <string name="close_message_delete">L’album sparisce anche per te.</string>
+  <string name="close_files_stay">I file restano nell’area comune: dal NAS si vedono ancora.</string>
+  <plurals name="close_members">
+    <item quantity="one">Lo vede ancora %1$d altro familiare.</item>
+    <item quantity="other">Lo vedono ancora %1$d altri familiari.</item>
+  </plurals>
+  <string name="close_others_header">Cosa succede agli altri familiari?</string>
+  <string name="close_others_hint">Scegli tu, ogni volta: non c’è una scelta di partenza.</string>
+  <string name="close_others_remove">Sparisce per gli altri</string>
+  <string name="close_others_remove_detail">L’album sparisce dalle loro Raccolte, con un avviso. Le foto le trovano ancora nelle cartelle del NAS.</string>
+  <string name="close_others_keep">Ognuno tiene una copia</string>
+  <string name="close_others_keep_detail">Ognuno si tiene una copia personale dell’album con le stesse foto, finché le foto restano nell’area comune.</string>
+  <plurals name="close_bring_back">
+    <item quantity="one">Riporta nelle mie cartelle (%1$d mia)</item>
+    <item quantity="other">Riporta nelle mie cartelle (%1$d mie)</item>
+  </plurals>
+  <string name="close_bring_back_detail">Rimetto le foto che hai aggiunto tu nelle cartelle da cui le avevi prese. Ti chiedo conferma col conteggio.</string>
+  <string name="close_warn_copies">Le foto che riporti spariscono anche dalle copie degli altri.</string>
+  <string name="close_choose_hint">Scegli cosa succede agli altri per continuare.</string>
+  <string name="close_confirm_stop">Smetti di condividere</string>
+  <string name="close_confirm_delete">Elimina l’album</string>
+  <string name="close_working">Un attimo…</string>
+  <string name="close_cancel">Annulla</string>
+
+  <!-- Aggiungi ad album -->
+  <string name="add_title">Aggiungi ad album</string>
+  <plurals name="add_count">
+    <item quantity="one">%1$d elemento da aggiungere</item>
+    <item quantity="other">%1$d elementi da aggiungere</item>
+  </plurals>
+  <string name="add_nothing_title">Niente da aggiungere</string>
+  <string name="add_nothing_detail">Le foto nascoste non si aggiungono agli album da qui. Aprile dai Nascosti per aggiungerle.</string>
+  <string name="add_new_album">Nuovo album</string>
+  <string name="add_new_shared">Nuovo album condiviso</string>
+  <string name="add_new_shared_detail">Sposta le foto nell’area comune: lo confermi nel foglio dopo.</string>
+  <string name="add_choose_header">Scegli un album</string>
+  <string name="add_no_albums">Non hai ancora album dove aggiungere. Creane uno qui sotto.</string>
+  <string name="add_name_hint">Nome del nuovo album</string>
+  <string name="add_name_create">Crea e aggiungi</string>
+  <string name="add_name_create_shared">Continua</string>
+  <string name="add_shared_row_detail">Condiviso · %1$s</string>
+  <plurals name="add_done">
+    <item quantity="one">Aggiunto: %1$d elemento</item>
+    <item quantity="other">Aggiunti: %1$d elementi</item>
+  </plurals>
+  <string name="add_done_already">Erano già nell’album: %1$d</string>
+  <string name="add_done_close">Fatto</string>
+  <string name="add_done_open">Apri l’album</string>
+  <string name="add_sharing_started">La condivisione è partita. Si sposta in background.</string>
+</resources>

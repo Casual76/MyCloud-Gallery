@@ -80,4 +80,16 @@
   <string name="integrations_receive_failed_gone">I file copiati non ci sono più. Condividili di nuovo.</string>
   <string name="integrations_receive_failed_unavailable">Il salvataggio sul NAS non è disponibile adesso. Riprova più tardi.</string>
   <string name="integrations_receive_retry">Riprova</string>
+
+  <!-- Fase 7, P10: "Aggiungi ad album" dalla condivisione in arrivo (D35). -->
+  <string name="integrations_receive_album_open">Aggiungi ad album…</string>
+  <string name="integrations_receive_album_where">In quale album</string>
+  <string name="integrations_receive_album_back">Torna alla scelta della cartella</string>
+  <string name="integrations_receive_album_mine">Il tuo album</string>
+  <string name="integrations_receive_album_shared">Album condiviso: ti chiedo conferma quando i file sono sul NAS</string>
+  <string name="integrations_receive_album_hint">I file si salvano sul NAS nella cartella scelta, e appena arrivano li metto nell’album. Un album condiviso mi chiede una conferma col conteggio: non sposto niente da solo.</string>
+  <string name="integrations_receive_album_save">Salva e aggiungi all’album</string>
+  <string name="integrations_receive_done_album">Appena sono sul NAS li aggiungo all’album «%1$s».</string>
+  <string name="integrations_receive_done_album_shared">Appena sono sul NAS ti chiedo se aggiungerli all’album condiviso «%1$s».</string>
+  <string name="integrations_receive_done_album_failed">Non sono riuscito a segnare l’album: i file sono comunque in coda, li aggiungi tu dopo.</string>
 </resources>

@@ -37,7 +37,7 @@ internal object Migration5To6 : Migration(5, 6) {
   private fun fillAlbumItemFingerprints(db: SupportSQLiteDatabase) {
     db.execSQL(
       "UPDATE `album_item` SET `fp` = (SELECT v.`quick_hash` || ':' || v.`size` FROM `media` m " +
-        "JOIN `media_version` v ON v.`version_id` = m.`current_version_id` WHERE m.`media_id` = `album_item`.`media_id`)",
+        "CROSS JOIN `media_version` v ON v.`version_id` = m.`current_version_id` WHERE m.`media_id` = `album_item`.`media_id`)",
     )
   }
 
@@ -45,12 +45,15 @@ internal object Migration5To6 : Migration(5, 6) {
    * `origin_device`: `phone` per chi ha una copia non assente sul telefono (un `UPDATE` solo); poi, per gli altri, la cartella
    * `Backup/<dispositivo>/` di un'area privata, con [OriginDevice.ofNasKey]. Si leggono prima tutte le righe e poi si scrive: aggiornare
    * una tabella mentre un cursore la scorre non e' affidabile con le finestre dei cursori di Android.
+   *
+   * **Mai una sottoquery correlata fra `media` e le posizioni**: senza statistiche (sul telefono nessuno esegue `ANALYZE`) SQLite puo'
+   * scegliere di scorrere le posizioni per ogni media (quadratico: 10.000 media erano minuti). Le sottoquery sono indipendenti dalla riga
+   * che si aggiorna (si valutano una volta) e il loro ordine e' fisso con `CROSS JOIN`: dalle posizioni, giu' per chiave primaria.
    */
   private fun fillOriginDevice(db: SupportSQLiteDatabase) {
     db.execSQL(
-      "UPDATE `media` SET `origin_device` = '${OriginDevice.PHONE}' WHERE EXISTS (SELECT 1 FROM `media_version` v " +
-        "JOIN `media_location` l ON l.`version_id` = v.`version_id` WHERE v.`media_id` = `media`.`media_id` " +
-        "AND l.`location_type` = 'phone' AND l.`state` != 'absent')",
+      "UPDATE `media` SET `origin_device` = '${OriginDevice.PHONE}' WHERE `media_id` IN (SELECT v.`media_id` FROM `media_location` l " +
+        "CROSS JOIN `media_version` v ON v.`version_id` = l.`version_id` WHERE l.`location_type` = 'phone' AND l.`state` != 'absent')",
     )
     val labels = HashMap<String, String>()
     db.query(BACKUP_KEYS).use { cursor ->
@@ -75,17 +78,15 @@ internal object Migration5To6 : Migration(5, 6) {
   private fun fillCopyAreas(db: SupportSQLiteDatabase) {
     for ((area, bit) in listOf("private" to CopyAreas.PRIVATE, "common" to CopyAreas.COMMON)) {
       db.execSQL(
-        "UPDATE `media` SET `copy_areas` = `copy_areas` | $bit WHERE EXISTS (SELECT 1 FROM `media_version` v " +
-          "JOIN `media_location` l ON l.`version_id` = v.`version_id` JOIN `nas_share` s ON s.`account_id` = l.`account_id` " +
-          "AND s.`share_key` = l.`share_key` WHERE v.`media_id` = `media`.`media_id` AND l.`location_type` = 'nas' " +
-          "AND l.`state` = 'present' AND s.`area` = '$area')",
+        "UPDATE `media` SET `copy_areas` = `copy_areas` | $bit WHERE `media_id` IN (SELECT v.`media_id` FROM `media_location` l " +
+          "CROSS JOIN `media_version` v ON v.`version_id` = l.`version_id` CROSS JOIN `nas_share` s ON s.`account_id` = l.`account_id` " +
+          "AND s.`share_key` = l.`share_key` WHERE l.`location_type` = 'nas' AND l.`state` = 'present' AND s.`area` = '$area')",
       )
     }
     db.execSQL(
-      "UPDATE `media` SET `copy_areas` = `copy_areas` | ${CopyAreas.OTHER} WHERE EXISTS (SELECT 1 FROM `media_version` v " +
-        "JOIN `media_location` l ON l.`version_id` = v.`version_id` WHERE v.`media_id` = `media`.`media_id` " +
-        "AND l.`location_type` = 'nas' AND l.`state` = 'present' AND NOT EXISTS (SELECT 1 FROM `nas_share` s " +
-        "WHERE s.`account_id` = l.`account_id` AND s.`share_key` = l.`share_key`))",
+      "UPDATE `media` SET `copy_areas` = `copy_areas` | ${CopyAreas.OTHER} WHERE `media_id` IN (SELECT v.`media_id` FROM `media_location` l " +
+        "CROSS JOIN `media_version` v ON v.`version_id` = l.`version_id` WHERE l.`location_type` = 'nas' AND l.`state` = 'present' " +
+        "AND NOT EXISTS (SELECT 1 FROM `nas_share` s WHERE s.`account_id` = l.`account_id` AND s.`share_key` = l.`share_key`))",
     )
   }
 
@@ -94,9 +95,9 @@ internal object Migration5To6 : Migration(5, 6) {
    * decisione e' di [OriginDevice.ofNasKey]), dei media che non hanno gia' una copia sul telefono.
    */
   private const val BACKUP_KEYS: String =
-    "SELECT v.`media_id`, l.`location_key` FROM `media_location` l JOIN `media_version` v ON v.`version_id` = l.`version_id` " +
-      "JOIN `nas_share` s ON s.`account_id` = l.`account_id` AND s.`share_key` = l.`share_key` " +
-      "JOIN `media` m ON m.`media_id` = v.`media_id` " +
+    "SELECT v.`media_id`, l.`location_key` FROM `media_location` l CROSS JOIN `media_version` v ON v.`version_id` = l.`version_id` " +
+      "CROSS JOIN `nas_share` s ON s.`account_id` = l.`account_id` AND s.`share_key` = l.`share_key` " +
+      "CROSS JOIN `media` m ON m.`media_id` = v.`media_id` " +
       "WHERE l.`location_type` = 'nas' AND l.`state` != 'absent' AND s.`area` = 'private' AND m.`origin_device` IS NULL " +
       "AND (instr(l.`location_key`, ':backup/') > 0 OR instr(l.`location_key`, ':mcg-campo/backup/') > 0)"
 

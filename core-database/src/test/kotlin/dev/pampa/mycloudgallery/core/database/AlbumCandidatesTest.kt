@@ -13,6 +13,8 @@ import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.MediaMetadata
 import dev.pampa.mycloudgallery.core.model.MediaSource
+import dev.pampa.mycloudgallery.core.model.NasArea
+import dev.pampa.mycloudgallery.core.model.NasShare
 import dev.pampa.mycloudgallery.core.model.PersonalFlags
 import dev.pampa.mycloudgallery.core.model.PlaceRef
 import kotlinx.coroutines.runBlocking
@@ -227,6 +229,27 @@ class AlbumCandidatesTest : CatalogTestBase() {
     val candidate = allCandidates(CandidateQuery(), 5).single()
     assertThat(candidate.originDevice).isEqualTo(OriginDevice.backup("s25"))
     assertThat(candidate.source).isEqualTo(CandidateSource.MY_PRIVATE)
+  }
+
+  /** Le colonne derivate di v6 non sono nell'indice della timeline: se cambiano da sole (un'area che cambia tipo) niente si annuncia. */
+  @Test
+  fun unaColonnaDerivataCheCambiaDaSolaNonAnnunciaNiente() = runBlocking<Unit> {
+    val id = phone(1, LocalDate.of(2026, 3, 4))
+    // Una copia in una share di cui non si conosce l'area: non e' privata (nel dubbio), quindi il media non e' al sicuro; quando l'area si
+    // scopre comune lo stato di sicurezza resta "solo copia comune": cambia `copy_areas` e basta.
+    catalog.attachCopy(id, catalog.versionOf(id), nasLocation("Foto/IMG_1.jpg", share = "ignota"), stampOf(id), null)
+    assertThat(db.mediaDao().get(id.value)!!.copyAreas).isEqualTo(CopyAreas.OTHER)
+    val seq = catalog.changeSeq()
+
+    catalog.registerShare(NasShare(Db.ME, "ignota", NasArea.COMMON))
+
+    assertThat(db.mediaDao().get(id.value)!!.copyAreas).isEqualTo(CopyAreas.COMMON)
+    assertThat(catalog.changeSeq()).isEqualTo(seq)
+    assertThat(allCandidates(CandidateQuery(), 5).single().source).isEqualTo(CandidateSource.MY_PHONE)
+    // Passare da area comune ad area privata cambia lo stato di sicurezza: quello si annuncia (il bit `SAFE` e il badge dipendono da li').
+    catalog.registerShare(NasShare(Db.ME, "ignota", NasArea.PRIVATE))
+    assertThat(db.mediaDao().get(id.value)!!.copyAreas).isEqualTo(CopyAreas.PRIVATE)
+    assertThat(catalog.changeSeq()).isEqualTo(seq + 1)
   }
 
   private suspend fun stampOf(id: MediaId) = FileStamp(catalog.media(id)!!.currentVersion.fingerprint.size, T0)

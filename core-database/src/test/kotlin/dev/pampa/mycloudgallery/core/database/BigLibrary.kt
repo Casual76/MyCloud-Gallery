@@ -31,34 +31,44 @@ internal class BigLibrary(val count: Int) {
   /** Quanti doppioni identici ci sono (media con due copie dalla stessa parte, visibili). */
   var duplicates = 0
 
-  fun insertInto(sql: androidx.sqlite.db.SupportSQLiteDatabase) {
+  /** Le aree delle copie attese di ogni media (bit di [CopyAreas]), come le calcolerebbe il catalogo dalle posizioni. */
+  val copyAreas = IntArray(count)
+
+  /** Scrive la Libreria nel database v6 (con le colonne derivate gia' piene) del catalogo di prova. */
+  fun insertInto(sql: androidx.sqlite.db.SupportSQLiteDatabase) = insert(SupportBulk(sql), derived = true)
+
+  /** Scrive la stessa Libreria in un database v5 (senza le colonne derivate): la migrazione le ricavera' dalle posizioni. */
+  fun insertIntoV5(sql: android.database.sqlite.SQLiteDatabase) = insert(FrameworkBulk(sql), derived = false)
+
+  private fun insert(sql: Bulk, derived: Boolean) {
     val random = Random(7)
-    sql.beginTransaction()
+    sql.begin()
     try {
-      val media = sql.compileStatement(
+      val media = sql.compile(
         "INSERT INTO media (media_id, kind, source, owner_account, group_id, current_version_id, created_at, updated_at, sort_time, " +
-          "presence, safety, local_day, aspect_milli, duration_ms, place_id, cell_flags, thumb_hash, backup_todo, origin_device, copy_areas) " +
-          "VALUES (?, ?, ?, ?, NULL, ?, 0, 0, ?, ?, 'no_nas_copy', ?, 1333, NULL, ?, ?, NULL, 0, ?, ?)",
+          "presence, safety, local_day, aspect_milli, duration_ms, place_id, cell_flags, thumb_hash, backup_todo" +
+          (if (derived) ", origin_device, copy_areas" else "") + ") " +
+          "VALUES (?, ?, ?, ?, NULL, ?, 0, 0, ?, ?, 'no_nas_copy', ?, 1333, NULL, ?, ?, NULL, 0" + (if (derived) ", ?, ?" else "") + ")",
       )
-      val version = sql.compileStatement(
+      val version = sql.compile(
         "INSERT INTO media_version (version_id, media_id, kind, parent_version_id, size, quick_hash, full_hash, corrections, created_at) " +
           "VALUES (?, ?, 'original', NULL, ?, ?, ?, '', 0)",
       )
-      val metadata = sql.compileStatement(
+      val metadata = sql.compile(
         "INSERT INTO version_metadata (version_id, mime_type, width, height, orientation, duration_ms, taken_at_utc, taken_offset_min, " +
           "taken_confidence, taken_source, latitude, longitude, altitude, updated_at) VALUES (?, 'image/jpeg', 4000, 3000, 0, NULL, ?, 120, " +
           "'exact', 'exif_offset', ?, ?, NULL, 0)",
       )
-      val phone = sql.compileStatement(
+      val phone = sql.compile(
         "INSERT INTO media_location (version_id, location_type, location_key, folder_key, state, volume, relative_path, display_name, " +
           "media_store_id, media_store_version, generation, size, modified_at, last_seen_at) VALUES (?, 'phone', ?, " +
           "'phone:external_primary:dcim/camera/', 'present', 'external_primary', 'DCIM/Camera/', ?, ?, 'store-v1', 7, ?, 0, 0)",
       )
-      val nas = sql.compileStatement(
+      val nas = sql.compile(
         "INSERT INTO media_location (version_id, location_type, location_key, folder_key, state, account_id, share_name, share_key, " +
           "nas_path, size, modified_at, last_seen_at, verified_at) VALUES (?, 'nas', ?, ?, 'present', 'alessio', ?, ?, ?, ?, 0, 0, ?)",
       )
-      val hidden = sql.compileStatement("INSERT INTO media_personal (media_id, favorite, hidden, updated_at) VALUES (?, 0, 1, 0)")
+      val hidden = sql.compile("INSERT INTO media_personal (media_id, favorite, hidden, updated_at) VALUES (?, 0, 1, 0)")
       val firstDay = LocalDate.of(2023, 1, 1)
       for (i in 0 until count) {
         val mediaId = UUID(random.nextLong(), random.nextLong()).toString()
@@ -104,8 +114,11 @@ internal class BigLibrary(val count: Int) {
         media.bindLong(8, day[i].toLong())
         if (place[i] != NO_PLACE) media.bindLong(9, place[i].toLong()) else media.bindNull(9)
         media.bindLong(10, flags.toLong())
-        device[i]?.let { media.bindString(11, it) } ?: media.bindNull(11)
-        media.bindLong(12, areas.toLong())
+        copyAreas[i] = areas
+        if (derived) {
+          device[i]?.let { media.bindString(11, it) } ?: media.bindNull(11)
+          media.bindLong(12, areas.toLong())
+        }
         media.executeInsert()
         version.clearBindings()
         version.bindString(1, versionId)
@@ -142,13 +155,13 @@ internal class BigLibrary(val count: Int) {
           hidden.executeInsert()
         }
       }
-      sql.setTransactionSuccessful()
+      sql.commit()
     } finally {
-      sql.endTransaction()
+      sql.end()
     }
   }
 
-  private fun insertPhone(statement: androidx.sqlite.db.SupportSQLiteStatement, versionId: String, i: Int, name: String) {
+  private fun insertPhone(statement: Stmt, versionId: String, i: Int, name: String) {
     statement.clearBindings()
     statement.bindString(1, versionId)
     statement.bindString(2, "phone:external_primary:dcim/camera/$name")
@@ -159,7 +172,7 @@ internal class BigLibrary(val count: Int) {
   }
 
   private fun insertNas(
-    statement: androidx.sqlite.db.SupportSQLiteStatement,
+    statement: Stmt,
     versionId: String,
     i: Int,
     shareName: String,
@@ -178,6 +191,67 @@ internal class BigLibrary(val count: Int) {
     statement.bindLong(7, 1_000L + i)
     if (verified) statement.bindLong(8, 1L) else statement.bindNull(8)
     statement.executeInsert()
+  }
+
+  /** Un'istruzione preparata: i metodi che servono, uguali per il database di Room e per quello del framework. */
+  internal interface Stmt {
+    fun clearBindings()
+
+    fun bindString(index: Int, value: String)
+
+    fun bindLong(index: Int, value: Long)
+
+    fun bindDouble(index: Int, value: Double)
+
+    fun bindNull(index: Int)
+
+    fun executeInsert(): Long
+  }
+
+  internal interface Bulk {
+    fun compile(sql: String): Stmt
+
+    fun begin()
+
+    fun commit()
+
+    fun end()
+  }
+
+  private class SupportBulk(private val db: androidx.sqlite.db.SupportSQLiteDatabase) : Bulk {
+    override fun compile(sql: String): Stmt = object : Stmt {
+      private val s = db.compileStatement(sql)
+      override fun clearBindings() = s.clearBindings()
+      override fun bindString(index: Int, value: String) = s.bindString(index, value)
+      override fun bindLong(index: Int, value: Long) = s.bindLong(index, value)
+      override fun bindDouble(index: Int, value: Double) = s.bindDouble(index, value)
+      override fun bindNull(index: Int) = s.bindNull(index)
+      override fun executeInsert(): Long = s.executeInsert()
+    }
+
+    override fun begin() = db.beginTransaction()
+
+    override fun commit() = db.setTransactionSuccessful()
+
+    override fun end() = db.endTransaction()
+  }
+
+  private class FrameworkBulk(private val db: android.database.sqlite.SQLiteDatabase) : Bulk {
+    override fun compile(sql: String): Stmt = object : Stmt {
+      private val s = db.compileStatement(sql)
+      override fun clearBindings() = s.clearBindings()
+      override fun bindString(index: Int, value: String) = s.bindString(index, value)
+      override fun bindLong(index: Int, value: Long) = s.bindLong(index, value)
+      override fun bindDouble(index: Int, value: Double) = s.bindDouble(index, value)
+      override fun bindNull(index: Int) = s.bindNull(index)
+      override fun executeInsert(): Long = s.executeInsert()
+    }
+
+    override fun begin() = db.beginTransaction()
+
+    override fun commit() = db.setTransactionSuccessful()
+
+    override fun end() = db.endTransaction()
   }
 
   companion object {

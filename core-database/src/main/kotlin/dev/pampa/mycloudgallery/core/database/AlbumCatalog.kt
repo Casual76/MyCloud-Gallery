@@ -46,7 +46,7 @@ class AlbumCatalog internal constructor(private val database: GalleryDatabase, p
    * Una pagina di candidati di [query], dopo il cursore [after] (null = dall'inizio), di al piu' [limit] celle. In ordine (giorno,
    * istante, id); con piu' luoghi in [CandidateQuery.placeIds] prima per luogo (id crescente) e dentro il luogo per (giorno, istante, id).
    * [CatalogCandidatePage.next] e' il cursore della pagina dopo, null all'ultima. Dall'indice, senza ordinare in memoria
-   * (`AlbumQueriesTest`): 100 mila media, una pagina in meno di 50 ms.
+   * (`AlbumQueriesPerformanceTest`): 100 mila media, una pagina in meno di 50 ms.
    */
   suspend fun candidates(query: CandidateQuery, after: CandidateKey? = null, limit: Int = CANDIDATE_PAGE): CatalogCandidatePage {
     require(limit in 1..MAX_CANDIDATE_PAGE) { "Pagina fuori misura." }
@@ -223,7 +223,7 @@ class AlbumCatalog internal constructor(private val database: GalleryDatabase, p
    * stessa parte** ([DuplicatePart]: due sul telefono, o due sul NAS, area privata e comune insieme), in ordine di `version_id`, dopo il
    * cursore [after]. Al piu' [limit] gruppi per pagina; [DuplicatePage.next] e' il cursore della pagina dopo, null alla fine. Una versione con
    * due copie sul telefono e due sul NAS da' due gruppi. Dall'indice delle posizioni per versione, senza ordinare: Libreria da 100 mila
-   * media in meno di 200 ms (`AlbumQueriesTest`).
+   * media in meno di 200 ms (`AlbumQueriesPerformanceTest`).
    */
   suspend fun duplicates(after: String? = null, limit: Int = DUPLICATE_PAGE): DuplicatePage {
     require(limit in 1..MAX_DUPLICATE_PAGE) { "Pagina fuori misura." }

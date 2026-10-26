@@ -66,7 +66,7 @@ import androidx.room.RoomWarnings
     // in memoria (`MediaCatalog.backupCandidates`).
     Index(value = ["backup_todo", "sort_time", "media_id"]),
     // v6 (Fase 7, D34): i candidati degli album smart e dei viaggi per giorno locale, per luogo e per dispositivo d'origine, nell'ordine
-    // (giorno, istante, id) e senza ordinare in memoria (`AlbumQueries`, `AlbumQueriesTest` con `EXPLAIN QUERY PLAN`).
+    // (giorno, istante, id) e senza ordinare in memoria (`AlbumQueries`, `AlbumQueriesPerformanceTest` con `EXPLAIN QUERY PLAN`).
     Index(value = ["local_day", "sort_time", "media_id"]),
     Index(value = ["place_id", "local_day", "sort_time", "media_id"]),
     Index(value = ["origin_device", "local_day", "sort_time", "media_id"]),

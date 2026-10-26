@@ -17,8 +17,10 @@ import org.junit.Test
  *    LiteRT fuori da `core-ai/.../cutout/`;
  * 3. `MlKit.initialize` fuori dal cancello `core-ai/.../ocr/MlKitBootstrap.kt`;
  * 4. un `TextReadingConsent` costruito fuori dalla pagina di attivazione di `feature-search` (`TextReadingActivation*.kt`);
- * 5. codice HTTP/TLS (`javax.net.ssl`, `java.net.URL`, `URLConnection`, `SSLSocket`, `android.net.http`, librerie) fuori da
- *    `core-models/.../download/https/`; un altro modulo che nomina quel pacchetto; una sua classe non `internal`; un'eccezione a
+ * 5. codice HTTP/TLS (`javax.net.ssl`, `java.net.URL`, `URLConnection`, `SSLSocket`, `android.net.http`, librerie; I3 della revisione:
+ *    anche `Network.openConnection`, `DownloadManager`, `WebView`, `HttpEngine`, `java.net.http`) fuori da
+ *    `core-models/.../download/https/`, **nei moduli dell'engine compresi** (`engine-foundation`, `engine-ui`: l'APK li contiene ma
+ *    `settings.gradle` li include con un ciclo); un altro modulo che nomina quel pacchetto; una sua classe non `internal`; un'eccezione a
  *    `NoNetworkSources` usata da un altro modulo o diversa da quella;
  * 6. `core-search` che vede `core-models`, `core-index`, `core-nas` (o `core-prepare`, `core-nasops`, `core-backup`), anche solo
  *    nominandone i pacchetti; di `core-ai` solo i contratti; `feature-search` che vede `core-nas`, `core-index`, `core-nasops` o
@@ -82,6 +84,16 @@ class Phase6ArchitectureTest {
   }
 
   /** I sorgenti Kotlin/Java di [module] negli insiemi [sets] (`main`, `test`, `androidTest`, `debug`...). */
+  /**
+   * I3: i moduli dell'engine che entrano nell'APK, come percorsi dalla radice (`engine/engine-ui`). `settings.gradle` li include con un
+   * ciclo (`include ":$name"`), quindi [modules] non li vede: si leggono dal blocco "fluid-engine".
+   */
+  private val engineModules: List<String> by lazy {
+    val text = File(root, "settings.gradle").readText()
+    val block = text.substringAfter("fluid-engine (inizio)", "").substringBefore("fluid-engine (fine)")
+    ENGINE_NAME.findAll(block).map { "engine/${it.groupValues[1]}" }.toList()
+  }
+
   private fun sources(module: String, sets: List<String>): Sequence<File> =
     sets.asSequence().map { File(root, "$module/src/$it") }.filter { it.isDirectory }
       .flatMap { dir -> dir.walkTopDown().filter { it.isFile && (it.extension == "kt" || it.extension == "java") } }
@@ -92,7 +104,7 @@ class Phase6ArchitectureTest {
 
   /** I file di produzione (tutti i moduli, `main` e le varianti) che contengono [pattern], come percorsi dalla radice. */
   private fun productionMentions(pattern: Regex, sets: List<String> = PRODUCTION_SETS): List<String> =
-    modules.flatMap { module -> sources(module, sets).filter { pattern.containsMatchIn(code(it)) }.map { rel(it) }.toList() }
+    (modules + engineModules).flatMap { module -> sources(module, sets).filter { pattern.containsMatchIn(code(it)) }.map { rel(it) }.toList() }
 
   private fun buildText(module: String): String {
     val file = File(root, "$module/build.gradle")
@@ -146,6 +158,47 @@ class Phase6ArchitectureTest {
         .toList()
     }
     assertWithMessage("TextReadingConsent costruito fuori dalla pagina di attivazione").that(outside).isEmpty()
+  }
+
+  /** I3: il controllo vede i moduli dell'engine (un controllo che non li legge non prova niente su di loro). */
+  @Test
+  fun ilControlloHttpsVedeAncheLEngine() {
+    assertThat(engineModules).containsExactly("engine/engine-foundation", "engine/engine-ui")
+    for (module in engineModules) {
+      assertWithMessage("$module senza sorgenti").that(sources(module, PRODUCTION_SETS).count()).isGreaterThan(0)
+    }
+    // Il difetto di prima: un file dell'engine che apriva una connessione non era controllato da nessuno. Ora un suo file e' tra quelli letti.
+    val file = sources("engine/engine-ui", PRODUCTION_SETS).first()
+    assertThat(productionMentions(Regex("""\bpackage\b"""))).contains(rel(file))
+  }
+
+  /** I3: i nomi del client HTTPS vietati fuori dal pacchetto ammesso coprono i buchi della revisione, e non toccano i nomi innocui. */
+  @Test
+  fun iNomiDelClientHttpsVietatiCoprono_IBuchiDellaRevisione() {
+    val banned = listOf(
+      "URL(url).open" + "Connection()",
+      "val c = u as javax.net.s" + "sl.HttpsURLConnection",
+      "java.net.U" + "RL(u).openStream()",
+      "import java.net.URL" + "Connection",
+      "network.open" + "Connection(url)",
+      "getSystemService(Download" + "Manager::class.java)",
+      "Web" + "View(context).loadUrl(u)",
+      "import android.net.ht" + "tp.HttpEngine",
+      "import android.web" + "kit.Web" + "View",
+      "import java.net.ht" + "tp.HttpClient",
+      "okht" + "tp3.OkHttpClient()",
+      "val s: SSL" + "Socket",
+    )
+    for (line in banned) assertWithMessage(line).that(HTTP_CLIENT.containsMatchIn(line)).isTrue()
+    // I nomi di casa (un `openStream` di una sorgente di byte nostra, MimeTypeMap, i socket del NAS) non si toccano.
+    val harmless = listOf(
+      "image.openStream().use { }",
+      "import android.webkit.MimeTypeMap",
+      "network.socketFactory.createSocket()",
+      "val s = Socket()",
+      "val openConnectionState = 1",
+    )
+    for (line in harmless) assertWithMessage(line).that(HTTP_CLIENT.containsMatchIn(line)).isFalse()
   }
 
   /** 5. D33: l'unico codice HTTPS sta in core-models/.../download/https/, con classi `internal`, e nessuno lo nomina da fuori. */
@@ -290,6 +343,7 @@ class Phase6ArchitectureTest {
   }
 
   private companion object {
+    val ENGINE_NAME = Regex("""'(engine-[a-z\-]+)'""")
     val INCLUDE = Regex("""^\s*include\s+['"]:([A-Za-z0-9\-]+)['"]""")
     val PROJECT_DEP = Regex("""^\s*(\w+)\s*\(?\s*project\(\s*['"]:([A-Za-z0-9\-]+)['"]\s*\)""")
     val PRODUCTION_CONFIG = Regex("""^(\w*?)(api|Api|implementation|Implementation|compileOnly|CompileOnly|runtimeOnly|RuntimeOnly)$""")
@@ -326,7 +380,11 @@ class Phase6ArchitectureTest {
 
     /** Client HTTP/TLS: cio' che serve per parlare con un server web (i socket di core-network e core-nas restano permessi). */
     val HTTP_CLIENT = Regex(
-      """\bjavax\.net\.s""" + """sl\b|\bjava\.net\.U""" + """RL\b|\b(Http|Https)?URL""" + """Connection\b|\bSSL""" + """Socket\w*\b|\bandroid\.net\.ht""" + """tp\b|\bokht""" + """tp3\b|\bretro""" + """fit2\b|\bio\.kt""" + """or\b|\bCro""" + """net\w*\b""",
+      """\bjavax\.net\.s""" + """sl\b|\bjava\.net\.U""" + """RL\b|\b(Http|Https)?URL""" + """Connection\b|\bSSL""" + """Socket\w*\b|\bandroid\.net\.ht""" + """tp\b|\bokht""" + """tp3\b|\bretro""" + """fit2\b|\bio\.kt""" + """or\b|\bCro""" + """net\w*\b""" +
+        // I3 (revisione di Fase 6): `Network.openConnection` (la rete scelta dal sistema, senza `java.net.URL` in vista), il gestore dei
+        // download di sistema, le pagine web, `HttpEngine` per nome e il client di `java.net.http`. `openStream` da solo non si vieta: e' il
+        // nome di una nostra sorgente di byte (core-imaging); chi apre un URL deve comunque nominare `java.net.URL`, gia' vietato.
+        """|\.open""" + """Connection\s*\(|\bDownload""" + """Manager\b|\bWeb""" + """View\w*\b|\bandroid\.web""" + """kit\.Web\w*|\bHttp""" + """Engine\b|\bjava\.net\.ht""" + """tp\b|\bUrl""" + """Request\b""",
     )
 
     /** Il file che DEFINISCE la regola "nessuna rete" (le stringhe con i nomi vietati sono il suo contenuto). */

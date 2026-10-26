@@ -54,8 +54,13 @@
                                 l'elenco chiuso di `releaseManifestPolicy` (non esportati), le `uses-native-library` solo le due
                                 ammesse e facoltative; nel bytecode (dexdump) `MlKit.initialize` chiamato da codice nostro solo
                                 dal cancello `core-ai/.../ocr/MlKitBootstrap` e i client HTTPS (`HttpsURLConnection`,
-                                `URL.openConnection`) solo da `core-models/.../download/https/` e (P11) almeno una da li'
-                                (`ModelFetchers` montato da `:app`). FALLISCE se non legge l'APK
+                                `URL.openConnection`/`openStream`/`getContent`, ogni `URLConnection`, `Network.openConnection`,
+                                `HttpEngine`, `DownloadManager`, `WebView`, i socket TLS; I3 della revisione di Fase 6: anche dal
+                                codice dell'engine, `Ldev/antigravity/fluidengine/`) solo da `core-models/.../download/https/` e
+                                (P11) almeno una da li' (`ModelFetchers` montato da `:app`); I2: la variante "Play services" di ML Kit non
+                                entra nella release (nessun meta-data `com.google.mlkit.*DEPENDENCIES`, i tre registri di ML Kit noti, i due
+                                descrittori `dynamite` del testo, il modello OCR integrato nell'APK, soli artefatti noti nei metadati di
+                                verifica). FALLISCE se non legge l'APK
     7c. niente servizi        l'APK di release non ha nessun `META-INF/services/dev.pampa.*` (ne' un file di servizio che
                                 nomini una classe `dev.pampa.*`): le varianti di misura legano le loro classi con Hilt, mai
                                 con `ServiceLoader` (R6)
@@ -949,6 +954,10 @@ public class DexCallFacts {
   public int Lines;
   // "bersaglio|classe.metodo" del chiamante, per ogni invocazione di un bersaglio.
   public List<string> Calls = new List<string>();
+  // I2 (revisione di Fase 6): i descrittori delle classi che cominciano con uno dei [ClassPrefixes] (es. i descrittori `dynamite` dei moduli
+  // consegnati da Google Play services): chi li guarda sa quali moduli di Play services sono nell'APK.
+  public string[] ClassPrefixes = new string[0];
+  public List<string> ClassHits = new List<string>();
 }
 
 public static class DexCallScanner {
@@ -971,6 +980,7 @@ public static class DexCallScanner {
         if (m.Success) {
           cls = m.Groups[1].Value; method = "";
           if (cls == "Ldev/pampa/mycloudgallery/MainActivity;") facts.SawMainActivity = true;
+          foreach (var prefix in facts.ClassPrefixes) { if (cls.StartsWith(prefix)) facts.ClassHits.Add(cls); }
           continue;
         }
         m = NameLine.Match(line);
@@ -995,7 +1005,7 @@ public static class DexCallScanner {
 function Get-ApkPhase6ManifestFacts([string]$aapt2, [string]$apk) {
   $dump = Invoke-Native -File $aapt2 -Arguments @("dump", "xmltree", "--file", "AndroidManifest.xml", $apk)
   if ($dump.Code -ne 0) { throw "aapt2 dump xmltree fallito: " + ($dump.Lines -join " | ") }
-  $facts = [ordered]@{ NativeLibs = @(); Components = @() }
+  $facts = [ordered]@{ NativeLibs = @(); Components = @(); MetaData = @() }
   $current = $null
   foreach ($line in $dump.Lines) {
     if ($line -match '^\s*E: ([\w\-]+) ') {
@@ -1006,6 +1016,10 @@ function Get-ApkPhase6ManifestFacts([string]$aapt2, [string]$apk) {
       } elseif (@("activity", "activity-alias", "service", "receiver", "provider") -contains $element) {
         $current = @{ Kind = $element; Name = ""; Exported = $false }
         $facts.Components += , $current
+      } elseif ($element -eq "meta-data") {
+        # I2: il nome dei meta-data (i registri di ML Kit, l'eventuale `com.google.mlkit.vision.DEPENDENCIES` dei Play services).
+        $current = @{ Kind = $element; Name = "" }
+        $facts.MetaData += , $current
       } else {
         $current = $null
       }
@@ -1075,12 +1089,72 @@ Step "motori on-device nella release: librerie native (ABI, 16 KB), manifest (ML
   }
   Write-Host ("        manifest: uses-native-library {0}; componenti delle librerie di Google {1} (elenco chiuso)" -f ($nativeNames -join ", "), $thirdParty.Count) -ForegroundColor DarkGray
 
+  # (2b) I2 (revisione di Fase 6): la variante "Play services" di ML Kit non entra nella release. `com.google.android.gms:play-services-mlkit-text-
+  # recognition` (e `-common`) sono dipendenze obbligatorie della versione integrata (`com.google.mlkit:text-recognition`), quindi i loro file
+  # sono nell'APK (due descrittori `dynamite` e poco altro); quello che farebbe lavorare ML Kit tramite Google Play services non ci deve essere:
+  #  - nessun meta-data `com.google.mlkit.*.DEPENDENCIES` (chiede a Play services di scaricare il modello OCR all'installazione);
+  #  - i registri dei componenti di ML Kit sono i tre noti (testo, visione comune, comune): un quarto e' un altro modulo ML Kit;
+  #  - i descrittori `dynamite` (i moduli che Play services consegna) sono solo i due del testo;
+  #  - il modello OCR integrato e' nell'APK (`assets/mlkit-google-ocr-models/`, `libmlkit_google_ocr_pipeline.so` sopra): e' lui che legge;
+  #  - `gradle/verification-metadata.xml` elenca per ML Kit e Play services di ML Kit solo gli artefatti noti.
+  $allowedMlKitRegistrars = @(
+    "com.google.mlkit.vision.text.internal.TextRegistrar",
+    "com.google.mlkit.vision.common.internal.VisionCommonRegistrar",
+    "com.google.mlkit.common.internal.CommonComponentRegistrar"
+  )
+  if (@($manifest.MetaData).Count -lt 1) { $problems += "nessun meta-data letto dal manifest dell'APK: la lettura non e' affidabile (I2)" }
+  foreach ($meta in $manifest.MetaData) {
+    if ($meta.Name -like "com.google.mlkit.*DEPENDENCIES") {
+      $problems += "meta-data $($meta.Name) nel manifest dell'APK: Play services scaricherebbe i modelli di ML Kit al posto del modello integrato (I2)"
+    }
+    $registryPrefix = "com.google.firebase.components:com.google.mlkit."
+    if ($meta.Name.StartsWith($registryPrefix)) {
+      $registrar = $meta.Name.Substring("com.google.firebase.components:".Length)
+      if ($allowedMlKitRegistrars -notcontains $registrar) { $problems += "registro di un componente di ML Kit fuori dall'elenco: $registrar (I2: un altro modulo di ML Kit)" }
+    }
+  }
+  $mlKitRegistrarsSeen = @($manifest.MetaData | Where-Object { $_.Name.StartsWith("com.google.firebase.components:com.google.mlkit.") })
+  if ($mlKitRegistrarsSeen.Count -ne $allowedMlKitRegistrars.Count) {
+    $problems += "registri di ML Kit nel manifest: $($mlKitRegistrarsSeen.Count), attesi $($allowedMlKitRegistrars.Count) (I2; aggiornare l'elenco e docs/sicurezza.md 4-bis)"
+  }
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $apkZip = [System.IO.Compression.ZipFile]::OpenRead($apk.FullName)
+  try {
+    $ocrModels = @($apkZip.Entries | Where-Object { $_.FullName -like "assets/mlkit-google-ocr-models/*" -and -not $_.FullName.EndsWith("/") })
+  } finally {
+    $apkZip.Dispose()
+  }
+  if ($ocrModels.Count -lt 1) { $problems += "il modello OCR integrato di ML Kit (assets/mlkit-google-ocr-models/) non e' nell'APK: ML Kit lo chiederebbe a Play services (I2)" }
+  $verificationFile = Join-Path $root "gradle\verification-metadata.xml"
+  [xml]$verification = Get-Content -LiteralPath $verificationFile -Raw
+  function Get-VerifiedNames([xml]$doc, [string]$group, [string]$prefix) {
+    return @($doc.SelectNodes("//*[local-name()='component']") | Where-Object { $_.GetAttribute("group") -eq $group -and $_.GetAttribute("name").StartsWith($prefix) } |
+      ForEach-Object { $_.GetAttribute("name") } | Sort-Object -Unique)
+  }
+  $knownPlay = @("play-services-mlkit-text-recognition", "play-services-mlkit-text-recognition-common")
+  $knownMlKit = @("common", "text-recognition", "text-recognition-bundled-common", "vision-common", "vision-interfaces")
+  $playNames = @(Get-VerifiedNames $verification "com.google.android.gms" "play-services-mlkit")
+  $mlKitNames = @(Get-VerifiedNames $verification "com.google.mlkit" "")
+  foreach ($name in $playNames) { if ($knownPlay -notcontains $name) { $problems += "verification-metadata: artefatto Play services di ML Kit nuovo: $name (I2: la variante Play services non entra nella release)" } }
+  foreach ($name in $mlKitNames) { if ($knownMlKit -notcontains $name) { $problems += "verification-metadata: artefatto ML Kit nuovo: com.google.mlkit:$name (I2)" } }
+  Write-Host ("        ML Kit (I2): {0} registri noti, {1} file del modello OCR integrato, nessun meta-data DEPENDENCIES; metadati: {2} artefatti Play services, {3} ML Kit" -f $mlKitRegistrarsSeen.Count, $ocrModels.Count, $playNames.Count, $mlKitNames.Count) -ForegroundColor DarkGray
+
   # (3) Il bytecode: MlKit.initialize e i client HTTPS chiamati da classi nostre.
   $dexdump = Get-DexDump
   if (-not $dexdump) { return "dexdump.exe non trovato accanto ad aapt2 (build-tools)" }
   $initialize = "Lcom/google/mlkit/common/MlKit;.initialize:"
-  $https = @("Ljavax/net/ssl/HttpsURLConnection;.", "Ljava/net/URL;.openConnection:", "Ljava/net/HttpURLConnection;.")
+  # I3 (revisione di Fase 6): prima i bersagli erano tre e i chiamanti solo `Ldev/pampa/`. Ora anche `URL.openStream`/`getContent`, ogni
+  # `URLConnection`, `Network.openConnection` (la rete scelta dal sistema), `HttpEngine` (android.net.http), `DownloadManager`, `WebView`,
+  # i socket TLS e gli stessi client in codice dell'engine (engine-foundation, engine-ui: `Ldev/antigravity/fluidengine/`).
+  $https = @(
+    "Ljavax/net/ssl/HttpsURLConnection;.", "Ljava/net/URL;.openConnection:", "Ljava/net/HttpURLConnection;.",
+    "Ljava/net/URL;.openStream:", "Ljava/net/URL;.getContent:", "Ljava/net/URLConnection;.", "Landroid/net/Network;.openConnection:",
+    "Landroid/net/http/HttpEngine", "Landroid/net/http/UrlRequest", "Landroid/app/DownloadManager;.", "Landroid/webkit/WebView;.",
+    "Ljavax/net/ssl/SSLSocket", "Ljavax/net/ssl/SSLEngine;.", "Ljava/net/http/HttpClient", "Lokhttp3/OkHttpClient;."
+  )
+  $ownPrefixes = @("Ldev/pampa/", "Ldev/antigravity/fluidengine/")
   $facts = New-Object DexCallFacts
+  $facts.ClassPrefixes = [string[]]@("Lcom/google/android/gms/dynamite/descriptors/")
   Add-Type -AssemblyName System.IO.Compression.FileSystem
   $temp = Join-Path ([System.IO.Path]::GetTempPath()) ("mcg-dex6-" + [guid]::NewGuid().ToString("N"))
   New-Item -ItemType Directory -Path $temp | Out-Null
@@ -1099,7 +1173,7 @@ Step "motori on-device nella release: librerie native (ABI, 16 KB), manifest (ML
   foreach ($call in $facts.Calls) {
     $parts = $call -split '\|', 2
     $caller = $parts[1]
-    if (-not $caller.StartsWith("Ldev/pampa/")) { continue }
+    if (@($ownPrefixes | Where-Object { $caller.StartsWith($_) }).Count -eq 0) { continue }
     if ($parts[0] -eq $initialize) {
       if (-not ($caller.StartsWith("Ldev/pampa/mycloudgallery/core/ai/ocr/MlKitBootstrap;") -or $caller.StartsWith("Ldev/pampa/mycloudgallery/core/ai/ocr/MlKitBootstrap$"))) {
         $problems += "MlKit.initialize chiamato fuori dal cancello: $caller"
@@ -1112,7 +1186,15 @@ Step "motori on-device nella release: librerie native (ABI, 16 KB), manifest (ML
   # positivo: un passo che non vede niente non prova niente).
   $httpsOk = @($facts.Calls | Where-Object { ($_ -split '\|', 2)[1].StartsWith("Ldev/pampa/mycloudgallery/core/models/download/https/") })
   if ($httpsOk.Count -eq 0) { $problems += "nessuna chiamata HTTPS da core-models/.../download/https/ nel dex: ModelFetchers non e' montato da :app (o la lettura non e' affidabile)" }
-  $ourCalls = @($facts.Calls | Where-Object { ($_ -split '\|', 2)[1].StartsWith("Ldev/pampa/") })
+  # I2: i moduli che Play services consegnerebbe (descrittori `dynamite`): solo i due del testo (insieme alle loro librerie obbligatorie).
+  $knownDescriptors = @(
+    "Lcom/google/android/gms/dynamite/descriptors/com/google/mlkit/dynamite/text/common/ModuleDescriptor;",
+    "Lcom/google/android/gms/dynamite/descriptors/com/google/mlkit/dynamite/text/latin/ModuleDescriptor;"
+  )
+  foreach ($descriptor in @($facts.ClassHits | Sort-Object -Unique)) {
+    if ($knownDescriptors -notcontains $descriptor) { $problems += "modulo di Play services fuori dall'elenco nel dex: $descriptor (I2)" }
+  }
+  $ourCalls = @($facts.Calls | Where-Object { $caller = ($_ -split '\|', 2)[1]; @($ownPrefixes | Where-Object { $caller.StartsWith($_) }).Count -gt 0 })
   Write-Host ("        bytecode: {0} chiamate nostre a MlKit.initialize o ai client HTTPS, tutte al loro posto ({1} righe di dexdump)" -f $ourCalls.Count, $facts.Lines) -ForegroundColor DarkGray
   if ($problems.Count -gt 0) { return ($problems -join "; ") }
 }

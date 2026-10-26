@@ -65,8 +65,8 @@ internal class PlaceResolver(
   private val geocoder: ReverseGeocoder?,
 ) {
 
-  /** La regola per [option], o null se la Libreria non ha piu' foto con GPS per quel luogo. */
-  suspend fun rule(option: PlaceOption): PlaceRule? {
+  /** La regola per [option] ([label] e' il nome da mostrare: per gli omonimi porta anche il paese o la regione), o null senza foto col GPS. */
+  suspend fun rule(option: PlaceOption, label: String = option.label): PlaceRule? {
     val points = samplePoints(option.ids)
     val center = SmartGeo.medianCenter(points) ?: return null
     val scope = when (option.level) {
@@ -75,17 +75,17 @@ internal class PlaceResolver(
       PlaceLevel.COUNTRY -> PlaceScope.COUNTRY
     }
     val radius = if (scope == PlaceScope.AROUND) radiusFor(center, option.ids) else SmartLimits.MAX_RADIUS_KM
-    return PlaceRule(option.ids.sorted(), center, radius, option.label, scope)
+    return PlaceRule(option.ids.sorted(), center, radius, label, scope)
   }
 
   /**
    * La regola per piu' luoghi dello stesso titolo ("Roma e Firenze"): un cerchio che li contiene tutti (centro in mezzo, raggio fino al piu'
    * lontano piu' il suo raggio), se sta nei 300 km; altrimenti il primo. Regioni e paesi: il primo, e basta.
    */
-  suspend fun rule(options: List<PlaceOption>): PlaceRule? {
-    val first = rule(options.first()) ?: return null
+  suspend fun rule(options: List<PlaceOption>, firstLabel: String = options.first().label): PlaceRule? {
+    val first = rule(options.first(), firstLabel) ?: return null
     if (options.size == 1 || options.any { it.level != PlaceLevel.PLACE }) return first
-    val rules = options.mapNotNull { rule(it) }
+    val rules = listOf(first) + options.drop(1).mapNotNull { rule(it) }
     if (rules.size < 2) return first
     val middle = SmartGeo.middle(rules.map { it.center })
     val radius = ceil(rules.maxOf { SmartGeo.distanceKm(middle, it.center) + it.radiusKm }).toInt()

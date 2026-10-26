@@ -1,0 +1,23 @@
+# Mesi, intervalli e stagioni a cavallo d'anno (E-AL1): una serie che attraversa il 31 dicembre resta una. Oggi = 20 dicembre 2026.
+
+dicembre 2024 => R 2024-12-01..2024-12-31 => - => - => - => NO_PLACE
+dicembre 2024 Stoccolma => R 2024-12-19..2024-12-24 ; 2024-12-28..2025-01-01 => around Stoccolma r25 #6014 => - => - => SEVERAL_SERIES,serie=2
+gennaio 2025 Stoccolma => R 2024-12-31..2025-01-04 => around Stoccolma r25 #6014 => - => - => serie=1
+Stoccolma dicembre => R 2024-12-19..2024-12-24 ; 2024-12-28..2025-01-01 => around Stoccolma r25 #6014 => - => - => SEVERAL_SERIES,serie=2
+inverno Stoccolma => R 2024-12-19..2024-12-24 ; 2024-12-28..2025-01-04 => around Stoccolma r25 #6014 => - => - => SEVERAL_SERIES,serie=2
+tra novembre e febbraio 2024 => R 2023-11-01..2024-02-29 => - => - => - => NO_PLACE
+tra novembre e febbraio => Y 11-01..02-29 => - => - => - => NO_PLACE
+tra novembre e febbraio Stoccolma => R 2024-12-19..2024-12-24 ; 2024-12-28..2025-01-04 => around Stoccolma r25 #6014 => - => - => SEVERAL_SERIES,serie=2
+dal 28 dicembre al 3 gennaio 2025 => R 2024-12-28..2025-01-03 => - => - => - => NO_PLACE
+dal 28 dicembre al 3 gennaio 2025 Stoccolma => R 2024-12-28..2025-01-03 => around Stoccolma r25 #6014 => - => - => -
+dal 20 dicembre al 5 gennaio => Y 12-20..01-05 => - => - => - => NO_PLACE
+dal 20 dicembre al 5 gennaio Stoccolma => R 2024-12-19..2024-12-24 ; 2024-12-28..2025-01-04 => around Stoccolma r25 #6014 => - => - => SEVERAL_SERIES,serie=2
+dicembre => Y 12-01..12-31 => - => - => - => NO_PLACE
+gennaio => Y 01-01..01-31 => - => - => - => NO_PLACE
+inverno 2023 => R 2023-12-01..2024-02-29 => - => - => - => NO_PLACE
+febbraio 2024 => R 2024-02-01..2024-02-29 => - => - => - => NO_PLACE
+febbraio 2023 => R 2023-02-01..2023-02-28 => - => - => - => NO_PLACE
+ottobre 2024 Firenze => R 2024-10-24..2024-10-28 => around Firenze r25 #3176959 => - => - => serie=1
+Firenze ottobre 2024 => R 2024-10-24..2024-10-28 => around Firenze r25 #3176959 => - => - => serie=1
+novembre 2024 febbraio 2025 => R 2024-11-01..2024-11-30 ; 2025-02-01..2025-02-28 => - => - => - => NO_PLACE
+Capodanno 2024 e Capodanno 2025 => R 2023-12-31..2024-01-01 ; 2024-12-31..2025-01-01 => - => - => - => NO_PLACE

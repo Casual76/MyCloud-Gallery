@@ -1,0 +1,26 @@
+La tabella pubblica dei titoli degli album smart (Fase 7, P6; docs/fase7-progetto.md §2.2 passi 1-3, D13)
+==========================================================================================================
+
+I file titoli-*.txt sono eseguiti da TitleTableTest, una riga per test. "Oggi" di partenza e' 2026-12-20 (una domenica); la direttiva
+`@oggi aaaa-mm-gg` lo cambia per le righe che seguono. La Libreria e' TitleLibrary (src/test): luoghi pubblici e viaggi inventati con le
+foto proprie col GPS nei giorni scritti la'; nessun dato personale. Il motore di ricerca per contenuto non c'e' (NoSmartContentSearch):
+una descrizione porta sempre la nota NO_SEARCH.
+
+Una riga:  titolo => periodo => luogo => descrizione => tipi => note
+  "-" = vuoto;  <vuoto> e <spazi> = titolo vuoto o fatto di spazi;  # = commento.
+
+periodo     -                                          nessun periodo
+            R aaaa-mm-gg..aaaa-mm-gg [ ; ...]         una o piu' serie di giorni (SmartPeriod.Ranges, estremi compresi)
+            Y mm-gg..mm-gg                             ogni anno (SmartPeriod.EveryYear; se il secondo viene prima attraversa il capodanno)
+            E #n aaaa-mm-gg..aaaa-mm-gg                un insieme di n giorni (SmartPeriod.Days: primo e ultimo)
+luogo       -                                          nessun luogo
+            <scope> <etichetta> r<km> #<id>[+<id>] [alt=<etichetta>#<id>[+<id>]:<media visibili>[,...]]
+            scope = around | region | country; r* nel raggio = un numero qualunque (centri da calcolare); alt = gli omonimi (E-AL2)
+descrizione il testo che resta (le frasi fra virgolette restano fra virgolette), o "-"
+tipi        -  (foto e video)  |  PHOTO  |  VIDEO
+note        le note della proposta (ProposalNote) in ordine alfabetico, separate da ",", e serie=N se il periodo e' stato raffinato in N
+            serie di giorni; "-" se non ce ne sono
+
+Il raffinamento (D13): con un luogo e un periodo piu' lungo di 14 giorni, il periodo diventa la serie di giorni con foto proprie nel luogo
+(due giorni nella stessa serie se distano al piu' 3 giorni), ogni serie piu' o meno un giorno, le serie che si toccano fuse. Senza foto nel
+luogo resta il periodo del titolo, con la nota NO_PHOTOS_IN_PLACE. "Natale <anno>" e' il periodo delle feste: dal 24 dicembre al 6 gennaio.

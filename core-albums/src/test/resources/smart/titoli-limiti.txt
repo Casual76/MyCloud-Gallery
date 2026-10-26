@@ -1,0 +1,10 @@
+# Limiti: titoli vuoti o di una lettera, frasi esatte fra virgolette, piu' luoghi troppo lontani. Oggi = 20 dicembre 2026.
+
+<vuoto> => - => - => - => - => NO_DATE,NO_PLACE
+<spazi> => - => - => - => - => NO_DATE,NO_PLACE
+x => - => - => - => - => NO_DATE,NO_PLACE
+"Oslo" 2026 => R 2026-01-01..2026-12-31 => - => "Oslo" => - => NO_PLACE,NO_SEARCH
+Oslo "Holmenkollen" 2026 => R 2026-03-13..2026-03-19 ; 2026-12-02..2026-12-06 => around Oslo (Norvegia) r25 #3143244 alt=Oslo (Stati Uniti)#5036001:3 => "Holmenkollen" => - => NO_SEARCH,SEVERAL_SERIES,serie=2
+Gatto "a pois" 2025 => R 2025-01-01..2025-12-31 => - => Gatto "a pois" => - => NO_PLACE,NO_SEARCH
+Lisbona Oslo 2025 => R 2025-08-02..2025-08-10 => around Lisbona r25 #2267057 => - => - => serie=1
+Oslo Parigi => - => around Oslo (Norvegia) r25 #3143244 alt=Oslo (Stati Uniti)#5036001:3 => - => - => NO_DATE

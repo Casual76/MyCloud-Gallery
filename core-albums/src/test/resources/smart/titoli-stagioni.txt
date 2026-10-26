@@ -1,0 +1,25 @@
+# Stagioni (meteorologiche: estate giugno-agosto, inverno da dicembre a febbraio), con e senza anno, con un luogo (raffinate) e senza. Oggi = 20 dicembre 2026.
+
+estate 2025 => R 2025-06-01..2025-08-31 => - => - => - => NO_PLACE
+estate 2025 Lisbona => R 2025-08-02..2025-08-10 => around Lisbona r25 #2267057 => - => - => serie=1
+Lisbona estate 2024 => R 2024-06-01..2024-08-31 => around Lisbona r25 #2267057 => - => - => NO_PHOTOS_IN_PLACE
+Estate in Puglia => R 2021-06-30..2021-07-02 ; 2024-08-09..2024-08-18 ; 2025-07-19..2025-07-24 => region Puglia r300 #6003+3173435+3174530+3182351 => - => - => SEVERAL_SERIES,serie=3
+Puglia estate 2024 => R 2024-08-09..2024-08-18 => region Puglia r300 #6003+3173435+3174530+3182351 => - => - => serie=1
+primavera 2025 Toscana => R 2025-04-01..2025-04-06 => region Toscana r300 #6004+3170647+3176959 => - => - => serie=1
+primavera 2024 Firenze => R 2024-03-01..2024-05-31 => around Firenze r25 #3176959 => - => - => NO_PHOTOS_IN_PLACE
+autunno 2024 Firenze => R 2024-10-24..2024-10-28 => around Firenze r25 #3176959 => - => - => serie=1
+autunno 2025 Madrid => R 2025-09-11..2025-09-15 => around Madrid r25 #6012 => - => - => serie=1
+inverno 2024 => R 2024-12-01..2025-02-28 => - => - => - => NO_PLACE
+inverno 2024 Stoccolma => R 2024-12-19..2024-12-24 ; 2024-12-28..2025-01-04 => around Stoccolma r25 #6014 => - => - => SEVERAL_SERIES,serie=2
+autunno scorso => R 2026-09-01..2026-11-30 => - => - => - => NO_PLACE
+estate scorsa => R 2026-06-01..2026-08-31 => - => - => - => NO_PLACE
+quest'inverno => R 2026-12-01..2027-02-28 => - => - => - => NO_PLACE
+l'inverno scorso => R 2025-12-01..2026-02-28 => - => - => - => NO_PLACE
+estate => Y 06-01..08-31 => - => - => - => NO_PLACE
+inverno => Y 12-01..02-29 => - => - => - => NO_PLACE
+in primavera => Y 03-01..05-31 => - => - => - => NO_PLACE
+Cena in estate => Y 06-01..08-31 => - => Cena => - => NO_PLACE,NO_SEARCH
+mare estate 2024 => R 2024-06-01..2024-08-31 => - => mare => - => NO_PLACE,NO_SEARCH
+Sicilia estate 2024 => R 2024-06-09..2024-06-18 => region Sicilia r300 #6015+6016 => - => - => serie=1
+Lecce estate 2025 => R 2025-07-19..2025-07-24 => around Lecce r25 #3174530 => - => - => serie=1
+Lecce estate => R 2024-08-09..2024-08-15 ; 2025-07-19..2025-07-24 => around Lecce r25 #3174530 => - => - => SEVERAL_SERIES,serie=2

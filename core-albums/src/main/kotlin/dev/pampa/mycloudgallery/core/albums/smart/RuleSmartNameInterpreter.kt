@@ -15,7 +15,9 @@ import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
 import dev.pampa.mycloudgallery.core.library.contract.VisibleMedia
 import dev.pampa.mycloudgallery.core.places.contract.ReverseGeocoder
 import dev.pampa.mycloudgallery.core.search.contract.PlaceDictionary
+import dev.pampa.mycloudgallery.core.search.contract.PlaceLevel
 import dev.pampa.mycloudgallery.core.search.contract.PlaceLookup
+import dev.pampa.mycloudgallery.core.search.contract.PlaceOption
 import dev.pampa.mycloudgallery.core.search.contract.QueryParser
 import dev.pampa.mycloudgallery.core.search.contract.SearchChip
 import dev.pampa.mycloudgallery.core.search.contract.SearchMediaType
@@ -61,9 +63,12 @@ class RuleSmartNameInterpreter(
     val alternatives = ArrayList<PlaceAlternative>()
     if (placeChips.isNotEmpty()) {
       val first = placeChips.first()
-      place = resolver.rule(listOf(first.option) + placeChips.drop(1).map { it.option })
+      // Gli omonimi veri: un'interpretazione con gli stessi luoghi (la regione "Oslo" di Oslo) e' la stessa cosa, non un'alternativa.
+      val others = first.alternatives.filter { it.ids != first.option.ids }.distinctBy { it.ids }
+      val labels = labelsOf(listOf(first.option) + others)
+      place = resolver.rule(listOf(first.option) + placeChips.drop(1).map { it.option }, labels.getValue(first.option))
       if (place != null) {
-        for (other in first.alternatives) resolver.rule(other)?.let { alternatives += PlaceAlternative(it, dictionary.countOf(other)) }
+        for (other in others) resolver.rule(other, labels.getValue(other))?.let { alternatives += PlaceAlternative(it, dictionary.countOf(other)) }
       }
     }
     if (place == null) notes += ProposalNote.NO_PLACE
@@ -85,6 +90,31 @@ class RuleSmartNameInterpreter(
     if (text != null && !search.ready) notes += ProposalNote.NO_SEARCH
     val rules = SmartRules(period = rulesPeriod, place = place, text = text, types = typesOf(parsed.chips))
     return RuleProposal(rules, alternatives, series, notes)
+  }
+
+  /**
+   * I nomi da mostrare per gli omonimi (E-AL2): "Oslo (Norvegia)" e "Oslo (Stati Uniti)", o la regione se il paese e' lo stesso ("San Marco
+   * (Veneto)"), o il tipo se uno e' un luogo e l'altro un paese ("Panama (luogo)"). Un luogo senza omonimi ha il suo nome.
+   */
+  private fun labelsOf(group: List<PlaceOption>): Map<PlaceOption, String> {
+    if (group.size < 2) return group.associateWith { it.label }
+    val info = group.associateWith { option -> option.ids.minOrNull()?.let { lookup.place(it) } }
+    val levels = group.map { it.level }.distinct()
+    val countries = info.values.mapNotNull { it?.country }.distinct()
+    val regions = info.values.mapNotNull { it?.admin1 }.distinct()
+    return group.associateWith { option ->
+      val qualifier = when {
+        levels.size > 1 -> when (option.level) {
+          PlaceLevel.PLACE -> "luogo"
+          PlaceLevel.REGION -> "regione"
+          PlaceLevel.COUNTRY -> "paese"
+        }
+        countries.size > 1 -> info[option]?.country
+        regions.size > 1 -> info[option]?.admin1
+        else -> null
+      }
+      if (qualifier == null) option.label else "${option.label} ($qualifier)"
+    }
   }
 
   /** Il testo che resta al titolo: il contenuto e le frasi fra virgolette (che la ricerca rilegge come frasi esatte). */

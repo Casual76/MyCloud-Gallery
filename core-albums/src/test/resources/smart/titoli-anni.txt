@@ -1,0 +1,26 @@
+# Anni e luoghi: un anno intero con un luogo diventa le serie di giorni del viaggio (D13). Oggi = 20 dicembre 2026.
+# Le serie sono i giorni con foto proprie nel luogo, un giorno in piu' per parte: vedi TitleLibrary.
+
+Oslo 2026 => R 2026-03-13..2026-03-19 ; 2026-12-02..2026-12-06 => around Oslo (Norvegia) r25 #3143244 alt=Oslo (Stati Uniti)#5036001:3 => - => - => SEVERAL_SERIES,serie=2
+Bergen 2025 => R 2025-07-09..2025-07-14 => around Bergen r25 #3161732 => - => - => serie=1
+Roma 2025 => R 2025-12-23..2025-12-29 => around Roma r25 #3169070 => - => - => serie=1
+Roma 2024 => R 2024-03-07..2024-03-11 => around Roma r25 #3169070 => - => - => serie=1
+Lisbona 2025 => R 2025-08-02..2025-08-10 => around Lisbona r25 #2267057 => - => - => serie=1
+New York 2023 => R 2023-07-01..2023-07-10 => around New York r25 #5128581 => - => - => serie=1
+Parigi 2024 => R 2024-06-13..2024-06-17 => around Parigi r25 #6011 => - => - => serie=1
+Madrid 2025 => R 2025-09-11..2025-09-15 => around Madrid r25 #6012 => - => - => serie=1
+Palermo 2024 => R 2024-06-09..2024-06-15 => around Palermo r25 #6015 => - => - => serie=1
+Catania 2024 => R 2024-06-14..2024-06-18 => around Catania r25 #6016 => - => - => serie=1
+Barcellona 2025 => R 2025-09-14..2025-09-17 => around Barcellona r25 #6013 => - => - => serie=1
+Stoccolma 2024 => R 2024-12-19..2024-12-24 ; 2024-12-28..2025-01-01 => around Stoccolma r25 #6014 => - => - => SEVERAL_SERIES,serie=2
+Stoccolma 2025 => R 2024-12-31..2025-01-04 => around Stoccolma r25 #6014 => - => - => serie=1
+Milano 2025 => R 2024-12-31..2025-12-31 => around Milano r25 #6017 => - => - => serie=1
+2023 Lisbona => R 2023-01-01..2023-12-31 => around Lisbona r25 #2267057 => - => - => NO_PHOTOS_IN_PLACE
+2025 => R 2025-01-01..2025-12-31 => - => - => - => NO_PLACE
+nel 2023 => R 2023-01-01..2023-12-31 => - => - => - => NO_PLACE
+1999 => R 1999-01-01..1999-12-31 => - => - => - => NO_PLACE
+foto del 2024 => R 2024-01-01..2024-12-31 => - => - => PHOTO => NO_PLACE
+dal 2019 al 2021 => R 2019-01-01..2021-12-31 => - => - => - => NO_PLACE
+anni 90 => R 1990-01-01..1999-12-31 => - => - => - => NO_PLACE
+anni 2000 => R 2000-01-01..2009-12-31 => - => - => - => NO_PLACE
+Gatto 2024 => R 2024-01-01..2024-12-31 => - => Gatto => - => NO_PLACE,NO_SEARCH

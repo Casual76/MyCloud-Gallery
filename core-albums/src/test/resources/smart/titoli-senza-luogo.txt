@@ -1,0 +1,17 @@
+# Nessun luogo (E-AL9): un nome fatto solo di descrizione, o di descrizione e data. Senza il motore di ricerca l'editor lo dice (NO_SEARCH). Oggi = 20 dicembre 2026.
+
+Gatto => - => - => Gatto => - => NO_DATE,NO_PLACE,NO_SEARCH
+Cane => - => - => Cane => - => NO_DATE,NO_PLACE,NO_SEARCH
+Compleanni => - => - => Compleanni => - => NO_DATE,NO_PLACE,NO_SEARCH
+Compleanno di Marco => - => - => Compleanno di Marco => - => NO_DATE,NO_PLACE,NO_SEARCH
+Compleanno di Marco 2024 => R 2024-01-01..2024-12-31 => - => Compleanno di Marco => - => NO_PLACE,NO_SEARCH
+Tramonti sul mare => - => - => Tramonti sul mare => - => NO_DATE,NO_PLACE,NO_SEARCH
+Pizza con gli amici => - => - => Pizza con gli amici => - => NO_DATE,NO_PLACE,NO_SEARCH
+Torta di compleanno => - => - => Torta di compleanno => - => NO_DATE,NO_PLACE,NO_SEARCH
+Montagna => - => - => Montagna => - => NO_DATE,NO_PLACE,NO_SEARCH
+Sci in famiglia => - => - => Sci in famiglia => - => NO_DATE,NO_PLACE,NO_SEARCH
+Bambini al parco => - => - => Bambini al parco => - => NO_DATE,NO_PLACE,NO_SEARCH
+Gatto 2025 => R 2025-01-01..2025-12-31 => - => Gatto => - => NO_PLACE,NO_SEARCH
+Tramonti estate => Y 06-01..08-31 => - => Tramonti => - => NO_PLACE,NO_SEARCH
+Cena di Natale => Y 12-24..01-06 => - => Cena => - => NO_PLACE,NO_SEARCH
+Mare agosto 2025 => R 2025-08-01..2025-08-31 => - => Mare => - => NO_PLACE,NO_SEARCH

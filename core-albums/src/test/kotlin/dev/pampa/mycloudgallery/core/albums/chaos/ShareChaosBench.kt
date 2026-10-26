@@ -12,14 +12,17 @@ class ShareChaosResult(
   val millis: Long,
   val baseSeed: Long,
   val targetName: String,
+  /** Perche' il banco si e' fermato prima del tempo (un login rifiutato sul NAS vero), se e' successo. */
+  val stoppedBecause: String? = null,
 ) {
-  val ok: Boolean get() = failures.isEmpty()
+  val ok: Boolean get() = failures.isEmpty() && stoppedBecause == null
 
   /** Il riassunto: giri, interruzioni per tipo e momento, copertura per punto. */
   fun summary(): String = buildString {
     appendLine("=== Banco delle interruzioni della condivisione: $rounds giri, seme di base $baseSeed ===")
     appendLine("NAS: $targetName")
     appendLine("durata: ${millis / 1000.0} s; giri con violazioni: ${failures.size}")
+    stoppedBecause?.let { appendLine("FERMATO: $it") }
     appendLine("passi eseguiti: ${stats.steps}; verifiche dopo una morte o a meta': ${stats.midChecks}; verifiche a lavoro finito: ${stats.quiescentChecks}; riavvii: ${stats.restarts}; riprese a vuoto: ${stats.idleRestarts}")
     appendLine("file riletti con SHA-256: ${stats.filesHashed} (${stats.bytesHashed / 1024} KiB); eventi guardati dagli osservatori: ${stats.observed}")
     appendLine("elementi finiti: fatti ${stats.itemsDone}, falliti con un motivo ${stats.itemsFailed}, annullati ${stats.itemsCancelled}")
@@ -67,6 +70,8 @@ object ShareChaosBench {
     stopAfterInterruptions: Int? = null,
     hooks: ShareChaosHooks = ShareChaosHooks(),
     stopOnFirstFailure: Boolean = false,
+    /** Chiesto dopo ogni giro: un motivo = ci si ferma (un login rifiutato sul NAS vero, mai un nuovo tentativo). */
+    stopReason: () -> String? = { null },
     onFailure: (RoundReport) -> Unit = {},
     /** Dopo ogni giro (giri fatti, giri rossi): l'avanzamento di una prova lunga sul NAS vero. */
     onRound: (Int, Int) -> Unit = { _, _ -> },
@@ -74,6 +79,7 @@ object ShareChaosBench {
     val started = System.nanoTime()
     val failures = ArrayList<RoundReport>()
     var done = 0
+    var stopped: String? = null
     for (index in firstRound until firstRound + rounds) {
       if (stopAfterInterruptions != null && stats.totalFired >= stopAfterInterruptions) break
       val report = ShareChaosRound(index, seedOf(baseSeed, index), factory, config, stats, hooks).run()
@@ -84,7 +90,9 @@ object ShareChaosBench {
       }
       onRound(done, failures.size)
       if (stopOnFirstFailure && failures.isNotEmpty()) break
+      stopped = stopReason()
+      if (stopped != null) break
     }
-    return ShareChaosResult(done, failures, stats, (System.nanoTime() - started) / 1_000_000, baseSeed, factory.name)
+    return ShareChaosResult(done, failures, stats, (System.nanoTime() - started) / 1_000_000, baseSeed, factory.name, stopped)
   }
 }

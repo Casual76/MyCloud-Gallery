@@ -5980,6 +5980,11 @@ sull'adattatore di `NasOperations`.
 - **F77** Doppioni simili: raffiche a mano (scatti a 2 s), foto ritagliate, una preferita: gruppi giusti, la preferita da tenere, le altre nel cestino dopo la scelta. **Riconfermare `Sdup`** sui coseni veri.
 - **F78** Eliminati di recente: media eliminati dal telefono con l'app e dal NAS: una pagina con entrambi, giorni rimasti, ripristino, "Elimina subito" con i due tocchi; su Samsung l'avviso D-3.
 
+**`tools\check.ps1 -NoDaemon`** (`GRADLE_OPTS=-Dorg.gradle.workers.max=2`, 26/10): **verde** ("tutto a posto"; `feature-library` 810 test, `core-library` 260, `core-personal` 172, `core-common` 94, `app` 777). Il primo giro era rosso
+per `Phase4ArchitectureTest` (la guardia di `DoubleTapConfirmTest` scriveva interi i nomi delle conferme: ora in due pezzi); il secondo ha girato su `fase7/p8` **piu' il commit `e54ce26e` di P9** (ramo di prova, poi
+buttato): senza quel commit `HiddenSurfacesRegistryTest` ha due prove rosse che non sono mie (`albums-shared` ancora `REFERENCE` con `core-albums/.../shared` presente, e `ReplicaSharedAlbums.kt` non elencato), perche' la base
+`a51b131a` e' prima della correzione di P9. Il commit di P9 si innesta sul mio senza conflitti nel registro (`HiddenSurfaces.kt` si fonde da solo; solo i documenti, che finiscono tutti in fondo, vanno uniti a mano).
+
 **Punti aperti e richieste ai contratti degli altri pacchetti**
 - **`core-database` (P1), nessuna e' bloccante**: (a) `AlbumCatalog.albumMembers(ids): Set<MediaId>` (`SELECT DISTINCT media_id FROM album_item WHERE media_id IN (...)`, a blocchi da 500) al posto
   dell'adattatore di `AlbumMembership`; (b) un elenco dei video del NAS senza hash completo (oggi `FullHashNightly` fa una lettura per ogni video del NAS dell'istantanea a ogni giro acceso: accettabile, ma una query sola sarebbe meglio).

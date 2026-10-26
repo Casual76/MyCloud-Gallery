@@ -5385,3 +5385,147 @@ proiezione) e quello dei documenti. Nessuna dipendenza nuova, nessun permesso o 
 - Un salto indietro dell'ora del NAS oltre 2 minuti fa aspettare le mie teste agli altri finche' l'ora non torna: lo evita il cancello
   `CLOCK_JUMP` (D38), che P13 deve legare.
 - Da provare sul campo (F79, F84, F86): album sulle share di prova, finti album dal PC, i tre livelli fra telefono e tablet.
+
+## Fase 7 P4: condivisione e spostamento nell'area comune (26/10)
+
+Il pacchetto P4 della Fase 7 (`docs/fase7-progetto.md` §4.4, riga P4; D12, D28, D29, D31, D38, D39, §2.5, §2.6, §4.3, §5.2, §5.5, §6, §11 Q5 e la
+conferma di Q4 (b)). Branch `fase7/p4` da `main` (`d699e70`). E' l'unica parte della Fase 7 che toglie file da un posto: valgono le garanzie delle
+fasi prima (nessun file perso, doppio o a meta'; la sorgente nel cestino solo dopo la verifica e dopo che il catalogo conosce la destinazione;
+nessuna azione da dati letti dal NAS; "al sicuro" anche nell'area comune; ripresa dopo la morte del processo a ogni salvataggio del diario).
+Nessuna dipendenza nuova, nessun permesso o componente Android; `:app`, `core-database`, `core-library`, `core-trust` e `core-albums/shared/` non
+toccati.
+Commit: `8f0737d7` (porta di completamento), `411c1908` (spazio nel kit delle operazioni), `42f77f55` (orchestratore), `a33f630e` (media in
+viaggio e porte finte), `b3a439e6` (core-backup), piu' quello di questi documenti.
+
+**Cosa c'e'**
+- `core-nasops`: la chiamata della porta di completamento in `NasOpsEngine` e in `InMemoryNasOperations` (riferimento, stesse chiamate, §5.2);
+  `completionPortOf` e `MoveCompletions.asSink` in `engine/EnginePorts.kt`; `NasOpsConfig.completions`; nel kit `completions` e
+  `setCallerFreeBytes` (E-SH8).
+- `core-albums/.../share/`: `ShareOrchestrator` (il `ShareRunner` vero), `SharePlanner`, `ShareSteps`, `ShareOrchestratorPorts`,
+  `AlbumFolderNames` (E-SH22), `ShareTransferKeys`, `ShareRules`; `BringBackCandidates` e `FolderAdoptions` (proposte, D31 e D39);
+  `ClosedAlbumCopies` con `KeptCopyStore`/`PersonalKeptCopyStore` (Q5); `RevokedItemsRestore` (E-SH20).
+- `core-backup`: `upload/AlbumFolderUploads.kt` (`IncomingDestination.AlbumFolder` in `INCOMING`, E-SH1) con il registro `AlbumUploadJournal`; il
+  cammino `INCOMING` di `SafeUploadEngine` che legge dal telefono un media con la riga del telefono; `IncomingUploadPorts.albumRoot`/`allowsAlbum`;
+  `createIncoming` dei due diari che accetta il media del telefono; `safety/GuardianSafeCopyRequests.kt` (il `SafeCopyRequests` vero) con il
+  registro `SafeCopyRequestLog`.
+
+**Decisioni**
+1. **La porta di completamento: una sola, `MoveCompletionSink`, vincolante.** P0 lasciava la scelta fra `MoveCompletions` (campo A, D7: un annuncio
+   "al meglio", il cui errore non fermava niente) e `MoveCompletionSink` (P0: vincolante). Il motore chiama **solo** `MoveCompletionSink`, per ogni
+   file spostato tra share, dopo `PUBLISHED` e prima di `SOURCE_RECORDED`, a ogni ripresa, con il timbro della destinazione letto adesso e
+   l'impronta verificata. `MoveCompletions` resta come forma per chi la lega gia' (`CatalogMoveCompletions` di :app in `NasOpsConfig.moves`) e
+   `asSink` la trasforma nella porta, **con le stesse regole**; legarle tutte e due e' un errore (`completionPortOf`, anche nel costruttore di
+   `NasOpsConfig`): il catalogo non si aggiorna mai due volte in due modi. Cambia il comportamento del campo A: un errore del catalogo ora **ferma**
+   l'elemento in `PUBLISHED` con la sorgente al suo posto (prima la sorgente andava nel cestino comunque e la scansione rimetteva a posto);
+   l'operazione va in pausa con "condizioni" (nessun `PauseReason` nuovo: feature-nas ha un `when` su tutti) e **non ferma le altre** (come l'ora
+   del NAS sospetta, R1). Una destinazione sparita fra la pubblicazione e la porta: niente da collegare, e la sorgente non va nel cestino (la stessa
+   occhiata la rifa' `copyStillThere`). Limite L74.
+2. **Il guardiano (D28, Q4 (b), conferma del 22/10).** L'orchestratore lo chiede per i miei media **spostati davvero** dall'area privata (non un
+   riferimento, non un E-SH12 senza copia, non un caricamento dal telefono) che il catalogo dice **senza copia sul telefono**, appena il file e'
+   nell'area comune; l'elemento si chiude solo con la richiesta registrata (un guardiano che non la registra fa riprovare). `GuardianSafeCopyRequests`
+   registra la richiesta su un registro durevole prima del ritorno e sveglia il lavoro; il giro chiesto e' quello di sempre, **`GuardScope.All`**:
+   la copia privata nasce solo per i media che il telefono ha avuto e non ha piu', mai per un media messo sul NAS dal PC (resta il cestino, L44,
+   L62). `GuardScope.Media` non si usa mai qui (copierebbe anche quelli). Le richieste si tolgono solo a giro finito.
+3. **"Riporta nelle mie cartelle" (D31).** Solo media **miei** (catalogo), nell'area comune, con la cartella d'origine (`shared_origin`, registrata
+   prima di ogni spostamento verso l'area comune) e, se sono elementi vivi di un album attivo, aggiunti dal mio account e permessi dalla tabella
+   (anche a "Gli altri guardano" per cio' che avevo aggiunto quando si poteva). La destinazione si scrive nel diario allo `start` (una ripresa non ne
+   sceglie un'altra): la cartella d'origine (la pubblicazione la ricrea se non c'e' piu'); se l'area privata e' cambiata, `Backup/<dispositivo>/AAAA/MM/`
+   del mese di adesso (la data di scatto non e' fra i fatti del catalogo della condivisione). La lapide `item:` solo se l'album e' attivo e il media e'
+   un elemento vivo (l'id pubblicato, `publishedId`); con l'album chiuso o un elemento mai pubblicato (E-SH13) niente lapide. `BringBackCandidates`
+   restringe i candidati del foglio di chiusura di P2 a chi ha la cartella d'origine. Un file alla radice dell'area privata non ha una cartella
+   d'origine: "Riporta" non si offre (L72).
+4. **Q5 con i file.** `REMOVE` e `KEEP_COPY` **non muovono mai file** (provato sul NAS finto e sul simulatore SMB: nessuna operazione, nessun
+   caricamento, i file uguali prima e dopo). `ClosedAlbumCopies` scrive nei dati personali le copie che la replica dice di tenere
+   (`ReplicaSharedAlbums.keptCopies`): voci `kind` manuale, `copy_of`, poi `definition` (per ultima: finche' manca l'album non si vede) e gli
+   elementi attestati con la posizione. Una copia eliminata dall'utente (lapide della definizione) non si ricrea; un elemento tolto non si rimette;
+   un elemento attestato dopo (la scansione arrivata dopo la chiusura) si aggiunge. Il creatore dopo "Smetti" che aveva condiviso un suo album
+   personale (voce `shared`) ritrova quello: nessuna copia. L'impronta degli elementi la aggiunge P3 con `addItem(..., fp)`: fino ad allora si
+   ritrovano per id. "Riporta" resta a parte, solo per i propri media.
+5. **Adozione dei file aggiunti dal PC (D39).** `FolderAdoptions.pending(album)`: i media che il catalogo vede nella cartella dell'album
+   (`folderContents`, una query del catalogo che lega P13) e che non sono elementi, tolti i nascosti e quelli che una mia operazione sta ancora
+   portando li'; solo per un album attivo in cui posso adottare. L'adozione e' un piano `FolderAdoption` (elementi `ADOPT`, nessun trasferimento)
+   con il suo foglio e la sua conferma; il piano vuole il file nell'area comune e, se il catalogo lo sa, nella cartella.
+6. **E-SH12 allo spostamento.** Prima di chiamare la porta, un elemento il cui contenuto il catalogo vede **gia'** nell'area comune non si copia:
+   passa a `IN_COMMON` con quel file (la voce cita lui), la sorgente resta dov'e', un file solo. Contratto: `ShareStateMachine` ammette `PLANNED` ->
+   `IN_COMMON` per spostamenti e caricamenti.
+7. **Un media in una sola operazione.** Il piano lascia fuori i media che una mia operazione aperta sta ancora portando (un "Riporta" mentre la voce
+   non e' pubblicata la lascerebbe senza file: trovato dal test di proprieta').
+8. **E-SH1, il caricamento dal telefono.** Un elemento `INCOMING` con la riga del telefono: il motore lo legge dal telefono come una copia nuova
+   (timbro uguale prima e dopo, E-B15; niente preparazione dell'indice), lo pubblica nella cartella dell'album solo sotto
+   `IncomingUploadPorts.albumRoot` ("Album condivisi", indipendente dalla radice D13 di "Salva sul NAS"), "nome (2)" se occupato, collegato se lo
+   stesso file c'e' gia', e lo collega allo **stesso** media. `AlbumFolderUploads` scrive l'**intenzione** sul registro prima di creare gli elementi
+   (una chiave gia' vista non crea mai un secondo caricamento; `find` ritrova quello di un processo morto). Un caricamento avviato non si annulla
+   (L75).
+9. **La conferma** vive solo in memoria (come P0): un trasferimento rifiutato prima di partire (spazio, scritture, rete) si riprova finche' la
+   conferma ha meno di 10 minuti; dopo, o dopo la morte del processo, `NOT_STARTED` (niente si e' mosso) e "Riprova" fa un foglio nuovo (L73). Lo
+   spazio (E-SH8) lo controlla `core-nasops` al piano (dimensione + 1 GiB): pausa prima del primo file.
+10. **Attese, non errori.** La replica che non conosce ancora l'album (processo appena ripartito) fa aspettare la voce, non la scarta come "non
+    permessa"; un pubblicatore bloccato (D38) mette l'elemento in pausa con il motivo; "troppo presto" (5 minuti fra due teste) non e' una pausa.
+11. **Cartelle e posizioni.** La cartella di un album nuovo e' "Album condivisi/<nome corretto>" (E-SH22: caratteri vietati, punti e spazi finali,
+    64 caratteri e 200 byte, `_` prima del primo punto di un nome riservato), libera fra le cartelle degli album che conosco ("(2)", "(3)"...). Un
+    elemento nuovo va in fondo (posizione piu' alta + 1.000).
+12. **E-SH20.** `RevokedItemsRestore`: in un album attivo i miei elementi che stavano solo nei contributi esclusi di un mio dispositivo revocato
+    (memoria della replica, P2) e i cui file il catalogo vede ancora tornano come mie voci; un album mio rimasto senza definizione torna con la
+    stessa definizione (stesso id), la storia dei livelli, l'ordine e gli elementi attestati. Dietro i cancelli delle scritture (D30, D38). Nessun
+    file si muove.
+
+**Contratti cambiati**
+- `core-nasops`: `NasOpsEngine` prende `completions: MoveCompletionSink` (non piu' `moves: MoveCompletions`); `NasOpsConfig.completions` (accanto a
+  `moves`, che resta); `completionPortOf`, `MoveCompletions.asSink`; `NasOpsTestKit(completions = ...)`, `setCallerFreeBytes`;
+  `InMemoryNasOperations(completions = ...)`. Il comportamento di `CatalogMoveCompletions` cambia (vincolante, decisione 1); `RunStop` e
+  `PauseReason` invariati.
+- `core-albums`: `ShareStateMachine` ammette `PLANNED` -> `IN_COMMON` per `MOVE_IN` e `UPLOAD` (E-SH12). Nient'altro nel contratto di P0.
+- `core-backup`: `IncomingUploadPorts.albumRoot` (null di norma: nessun caricamento verso un album) e `allowsAlbum`; `BackupStore.createIncoming`
+  accetta anche un media del telefono (riga del telefono e timbro atteso, senza SHA-256); `SafeUploadEngine` legge dal telefono un elemento
+  `INCOMING` con la riga del telefono. I caricamenti `INCOMING` dai file del PC e della condivisione di Android (Fase 5) sono invariati.
+
+**Prove** (tutte sulla JVM; i media sono finti)
+- `core-albums/share` (51): `ShareNasRowsTest` (13, ogni prova sul NAS finto **e** sul simulatore SMB con le vere `SmbNasFileOps`: F79 completa
+  con area privata, telefono e area comune, con E-SH1, E-SH2 controllato a ogni giro ed E-SH3; E-SH4 nomi occupati; E-SH8 spazio; E-SH9 nascosti con la scelta; E-SH12; E-SH18 file cambiato dal PC;
+  E-SH19 congelamento a meta' e recinzione D30; E-SH22; "Riporta"; Q5; D39; "Lasciare"); `ShareInterruptionsTest` (morte del processo prima e dopo
+  ognuno dei 30 salvataggi del diario: 60 morti per bersaglio; un guasto prima e dopo ognuna delle 49 chiamate alle porte: 98 guasti per bersaglio;
+  0 violazioni degli invarianti del §2.5/§5.5 su entrambi); `ShareEntriesPropertyTest` (400 storie casuali con guasti e morti: 3.625 voci
+  controllate, 102 morti, nessuna voce per un file fuori dall'area comune); `ShareOrchestratorTest` (16: piano solo dal catalogo locale, conteggi
+  del foglio, tetto, diario e chiave prima della porta, E-SH13, E-SH20, Q5 con le scelte personali, guardiano solo per i miei spostati senza copia
+  sul telefono, un media in viaggio fuori da un altro piano, replica non pronta); `ShareRemoteDataTest` (6: album veri e falsi letti dal NAS, voci di
+  media privati, porte finte che falliscono a ogni chiamata: nessuna parte); `OrchestratorContractTest` (13: il contratto di P0 sull'orchestratore
+  vero).
+- `core-nasops`: `CompletionSinkEngineTest` (5: chiamata dopo `PUBLISHED` e prima del cestino su entrambi gli esecutori; una porta che non
+  risponde ferma l'elemento ma non le altre operazioni; una sola porta; un guasto a ogni chiamata e la morte a ogni passo, porta compresa: la
+  sorgente mai nel cestino prima della porta, niente perso); `CampoAMovesTest` (il secondo test riscritto per D29);
+  `CompletionChaosAreaTest` (il runner di F16 con la porta che risponde "persa" a caso: 401 interruzioni sul NAS finto, 400 sul simulatore SMB,
+  0 violazioni; 650 e 615 chiamate alla porta).
+- `core-backup`: `AlbumFolderUploadsTest` (6: E-SH1 con "(2)" e con lo stesso file gia' li', E-B15, destinazioni non ammesse, intenzione senza
+  elementi, un guasto a ogni chiamata al NAS, la morte a ogni scrittura del diario e del registro); `SafeCopyRequestsTest` (2).
+- Banchi di prima, con il motore cambiato: `ChaosBenchTest` 2.000 giri sulle operazioni vere (7.315 interruzioni) e 2.000 sul riferimento
+  (7.221), `SmbPrimitivesChaosBenchTest` 600 giri sul simulatore SMB (2.174 interruzioni), 0 violazioni; `ChaosMutationTest` verde (6, le
+  mutazioni restano rosse). `core-backup` intero verde (623, con i banchi 5A e 5B).
+- `tools\check.ps1 -NoDaemon` (`GRADLE_OPTS=-Dorg.gradle.workers.max=2`): verde al primo giro ("tutto a posto"; `core-albums` 143 test,
+  `core-nasops` 322, `core-backup` 623).
+
+**Cosa trovano pronto**
+- **P5** (banco delle 500): l'orchestratore vero (`ShareOrchestrator` con `ShareOrchestratorPorts`) e, nei test di `core-albums/share`, il banco
+  `ShareBench` (due dispositivi di due account, il pubblicatore di P2, `violations()` con gli invarianti del §5.5, riavvio, guasti per porta e morte a
+  ogni salvataggio) sopra `ShareNasTarget` (NAS finto o simulatore SMB) con i legami `NasAlbumMover`, `PhoneUploader`, `LibraryCompletions`,
+  `BenchTickets`; in `core-nasops` lo stack `CompletingStack` del runner di F16 con la porta di completamento, per `tools/chaos/share-pc`.
+- **P10** (schermate): `SharePlanner` (conteggi ed esclusioni del foglio), `BringBackCandidates.restrict` per il foglio di chiusura, `FolderAdoptions`
+  per l'avviso D39, `RevokedItemsRestore` per E-SH20, `ShareOrchestrator.stateOf` e gli esiti per elemento con il motivo della pausa,
+  `AlbumFolderNames` per l'anteprima della cartella.
+- **P13** (integrazione): da legare in :app `AlbumMover` -> `NasOperations` (con la tabella chiave -> piano di `core-nasops` e `ConfirmationIssuer`
+  sullo stesso piano), `TicketStatus`, `MoveCompletionSink` -> il collegamento nel catalogo (`attachMoved`, al posto di `CatalogMoveCompletions`
+  in `moves`), `AlbumUploader` -> `AlbumFolderUploads` con `IncomingUploadPorts.albumRoot` = "Album condivisi", `SafeCopyRequester` ->
+  `GuardianSafeCopyRequests` (con il lavoro della tappa `safety` come `wake` e `runRequested` nel giro), `afterStage` ->
+  `SharedAlbumReplica.recompute`, `publishedId`/`knownFolders`/`lastPosition`/`folderContents` dalla replica e dal catalogo, `ClosedAlbumCopies`
+  dopo ogni giro di sincronizzazione; gli adattatori Room di `ShareDiary`, `AlbumUploadJournal`, `SafeCopyRequestLog` (L76).
+
+**Da provare sul campo (F79-F83)**: F79 completa (20 dall'area privata, 3 solo sul telefono, 1 gia' nell'area comune, 1 nascosta); F80 (con P5);
+F81 con il tetto di spazio simulato; F82 (nome occupato, stesso media in due album; la cartella rinominata dal PC aspetta E-SH16); F83 "Smetti" e
+"Riporta". Prima, F29 della Fase 5 (stesso cammino).
+
+**Punti aperti**
+- E-SH16 (la cartella dell'album rinominata dal PC: l'album propone la nuova) non c'e': serve la scansione della cartella (P13, con l'avviso
+  `FolderChanged` di P2).
+- Gli adattatori su disco del diario della condivisione e dei due registri (L76): finche' mancano, gli album condivisi non si legano in :app.
+- L'impronta degli elementi delle copie di Q5 (P3, `addItem(..., fp)`).
+- E-SH12 riconosce il contenuto gia' nell'area comune dalla chiave del contenuto del catalogo; con lo SHA-256 nei fatti del catalogo (P13) il
+  confronto sarebbe sui byte.

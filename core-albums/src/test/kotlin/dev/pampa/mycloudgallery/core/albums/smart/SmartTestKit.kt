@@ -180,7 +180,7 @@ class MemoryCandidates(items: Collection<SmartCandidate>) : SmartCandidates {
  * [VisibleMedia], [HiddenMask] e dei candidati: come il catalogo vero, e come lui i candidati **non** conoscono il contagio dei gruppi (lo fa
  * `VisibleMedia`).
  */
-class MemoryWorld(items: Collection<SmartCandidate> = emptyList(), private val lookup: Map<Int, PlaceName> = Spots.PLACES) : VisibleMedia, HiddenMask {
+class MemoryWorld(items: Collection<SmartCandidate> = emptyList(), private val lookup: Map<Int, PlaceName> = Spots.PLACES) : VisibleMedia, HiddenMask, SmartCandidates {
   private val all = LinkedHashMap<MediaId, SmartCandidate>().apply { items.forEach { put(it.media, it) } }
   val hidden = LinkedHashSet<MediaId>()
 
@@ -191,18 +191,28 @@ class MemoryWorld(items: Collection<SmartCandidate> = emptyList(), private val l
 
   override val snapshot: MutableStateFlow<TimelineSnapshot?> = MutableStateFlow(null)
 
+  private var cache: MemoryCandidates? = null
+
   fun put(vararg more: SmartCandidate) {
     more.forEach { all[it.media] = it }
+    cache = null
   }
 
   fun remove(media: Collection<MediaId>) {
     media.forEach { all.remove(it) }
+    cache = null
   }
 
   fun remove(media: MediaId) = remove(listOf(media))
 
   fun hide(media: Collection<MediaId>) {
     hidden += media
+    cache = null
+  }
+
+  fun unhide(media: Collection<MediaId>) {
+    hidden -= media.toSet()
+    cache = null
   }
 
   fun hide(media: MediaId) = hide(listOf(media))
@@ -210,7 +220,18 @@ class MemoryWorld(items: Collection<SmartCandidate> = emptyList(), private val l
   fun items(): List<SmartCandidate> = all.values.toList()
 
   /** I candidati come li darebbe il catalogo: tutti quelli che non sono nascosti da soli (il contagio dei gruppi non c'e'). */
-  fun candidates(): MemoryCandidates = MemoryCandidates(all.values.filter { it.media !in hidden })
+  fun candidates(): MemoryCandidates = cache ?: MemoryCandidates(all.values.filter { it.media !in hidden }).also { cache = it }
+
+  override suspend fun page(filter: CandidateFilter, after: CandidateCursor?, limit: Int): SmartCandidatePage = candidates().page(filter, after, limit)
+
+  override suspend fun placePage(places: Set<Int>, after: CandidateCursor?, limit: Int): SmartCandidatePage = candidates().placePage(places, after, limit)
+
+  override suspend fun candidatesOf(media: Collection<MediaId>): List<SmartCandidate> = candidates().candidatesOf(media)
+
+  /** Come il catalogo: il giorno di un media c'e' anche se e' nascosto (e' proprio il giorno da ricalcolare). */
+  override suspend fun daysOf(media: Collection<MediaId>): Map<MediaId, LocalDate> = media.mapNotNull { m -> all[m]?.let { m to it.c.day } }.toMap()
+
+  override suspend fun visibleTotal(): Int = candidates().visibleTotal()
 
   private fun hiddenWithGroups(): Set<MediaId> = hidden + groups.filter { g -> g.any { it in hidden } }.flatten()
 

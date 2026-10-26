@@ -236,7 +236,14 @@ internal object HiddenSurfaces {
    * I file che **legano** i contratti (`VisibleMedia`, `HiddenMask`, `WidgetFeed`) al catalogo senza mostrare niente: non sono superfici. Il registro li
    * ammette fra i file che nominano quei contratti.
    */
-  val wiring: List<String> = listOf("app/src/main/kotlin/dev/pampa/mycloudgallery/gallery/GalleryGraph.kt")
+  val wiring: List<String> = listOf(
+    "app/src/main/kotlin/dev/pampa/mycloudgallery/gallery/GalleryGraph.kt",
+    // Fase 7 (P12): lo strumento di valutazione degli album (solo debug, `app/src/debug/.../eval/albums/`) passa `VisibleMedia` e `HiddenMask` alla corsa degli album
+    // smart di P6 (che li usa gia') e filtra con loro le celle che mostra. Non e' una superficie del prodotto (nessuna riga del §2.1): la prova che un nascosto non esce
+    // mai e' `AppAlbumsEvalEnvironmentTest` (catalogo vero, mondi casuali) e `AlbumsEvalSessionTest`.
+    "app/src/debug/kotlin/dev/pampa/mycloudgallery/debugtools/eval/albums/AlbumsEvalRunner.kt",
+    "app/src/debug/kotlin/dev/pampa/mycloudgallery/debugtools/eval/albums/AppAlbumsEvalEnvironment.kt",
+  )
 
   /** I contratti da cui ogni superficie deve passare per i nascosti. */
   val contractNames: List<String> = listOf("VisibleMedia", "HiddenMask", "WidgetFeed")

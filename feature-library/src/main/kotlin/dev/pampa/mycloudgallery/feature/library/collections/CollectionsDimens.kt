@@ -41,4 +41,11 @@ internal object CollectionsDimens {
 
   /** Lo spazio sotto la spiegazione del cestino, prima della griglia. */
   val ExplainerGap: Dp = 8.dp
+
+  /** "Modifica Raccolte": il rientro e lo spazio verticale delle frasi sopra e sotto l'elenco delle sezioni. */
+  val NoteInset: Dp = 4.dp
+  val NoteGap: Dp = 8.dp
+
+  /** "Modifica Raccolte": quanto si solleva la riga che il dito trascina (l'ombra la stacca dalle altre: nessuna riga ne copre un'altra). */
+  val DragElevation: Dp = 8.dp
 }

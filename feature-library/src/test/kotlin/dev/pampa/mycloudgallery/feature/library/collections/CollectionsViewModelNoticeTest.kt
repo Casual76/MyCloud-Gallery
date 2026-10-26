@@ -2,7 +2,6 @@ package dev.pampa.mycloudgallery.feature.library.collections
 
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.library.contract.LocalMediaActions
-import dev.pampa.mycloudgallery.core.mediastore.testing.FakePhoneMediaIntents
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.library.ActionNotice
 import dev.pampa.mycloudgallery.feature.library.collections.testing.FakeCollectionsWorld
@@ -43,7 +42,7 @@ class CollectionsViewModelNoticeTest {
   }
 
   private fun viewModel(actions: LocalMediaActions) =
-    CollectionsViewModel(world.source, FakePhoneMediaIntents(), actions, fakeGridEnvironment())
+    CollectionsViewModel(world.source, actions, fakeGridEnvironment())
 
   @Test
   fun nascondiCheNonRiesceDaUnAvviso() {

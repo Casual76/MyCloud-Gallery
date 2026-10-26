@@ -22,6 +22,7 @@ import dev.antigravity.fluidengine.ui.theme.FluidTone
  * @property title il nome della riga (gia' scritto, nella lingua dell'app).
  * @property subtitle la frase sotto il nome.
  * @property badge quante cose chiedono un'occhiata adesso (le operazioni in corso); 0 = niente da segnalare, nessun numero sulla riga.
+ * @property trailing una parola breve a destra ("Condiviso" su un album di famiglia), solo se non c'e' un [badge]; null = niente.
  */
 @Immutable
 data class CollectionEntry(
@@ -31,6 +32,7 @@ data class CollectionEntry(
   val icon: ImageVector,
   val tone: FluidTone,
   val badge: Int = 0,
+  val trailing: String? = null,
 ) {
   init {
     require(code.isNotBlank()) { "Una voce ha un codice." }
@@ -40,15 +42,39 @@ data class CollectionEntry(
   override fun toString(): String = "CollectionEntry($code, badge=$badge)"
 }
 
-/** Un gruppo di righe con la sua intestazione ("Sul NAS"): come "Dal telefono" e "Da tenere al sicuro". */
+/**
+ * Una **sezione** delle Raccolte come dato (D33, §2.7): un'intestazione e le sue righe, costruita da chi la possiede (Album: P3 e P10,
+ * Album smart: P6, Viaggi: P7, Utility: P8, Nascosti: P9, Persone e Ricordi: Fasi 8 e 9, Cartelle NAS e Utility ancora da `:app`) e
+ * consegnata a `CollectionsTab`, che non sa che cosa ci sia dietro: disegna le righe, dice a `:app` quale e' stata toccata e le mette
+ * nell'ordine che l'utente ha scelto. Si registra con un [CollectionsSectionProvider]; vedi anche [CollectionsGroup].
+ *
+ * @property code il codice stabile della sezione ([CollectionSections]): finisce nelle voci `collections_order` e
+ *   `collections_hidden:<codice>` sincronizzate fra i dispositivi, quindi non cambia mai e non e' mai un dato dell'utente. Null solo per i
+ *   gruppi di prima di P11 (`:app` li passa ancora come `extraGroups`): il codice si ricava dalle loro voci ([CollectionSections.codeOf]).
+ * @property title il nome della sezione, scritto, nella lingua dell'app.
+ * @property hideable se l'utente la puo' nascondere; falso per Album (e' il modo di arrivare agli album): la schermata non offre
+ *   l'interruttore e una scelta arrivata da fuori si ignora.
+ * @property hint una frase che la schermata "Modifica Raccolte" scrive sotto il nome quando la sezione e' nascosta ("Si apre da
+ *   Impostazioni → Privacy"): dice dove si ritrova.
+ */
 @Immutable
-data class CollectionEntryGroup(val title: String, val entries: List<CollectionEntry>) {
+data class CollectionEntryGroup(
+  val title: String,
+  val entries: List<CollectionEntry>,
+  val code: String? = null,
+  val hideable: Boolean = true,
+  val hint: String? = null,
+) {
   init {
     require(entries.map { it.code }.toSet().size == entries.size) { "I codici delle voci di un gruppo sono unici." }
+    require(code == null || CollectionSections.isValidCode(code)) { "Il codice di una sezione e' scrivibile nelle impostazioni." }
   }
 
   val isEmpty: Boolean get() = entries.isEmpty()
 }
+
+/** Il nome della sezione del §2.7 e del §1.5: lo stesso tipo di [CollectionEntryGroup], con il suo codice e i suoi diritti. */
+typealias CollectionsGroup = CollectionEntryGroup
 
 /** Le funzioni pure sui gruppi: provate su JVM (`CollectionEntriesTest`). */
 object CollectionEntries {

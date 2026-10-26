@@ -38,14 +38,13 @@ class CollectionsExtraGroupsPhoneTest : ComposeScreenTest() {
     val opened = mutableListOf<String>()
     show {
       CollectionsScreen(
-        state = collectionsUiState(world.source.countsNow(), canTrash = true),
+        state = layoutOf(world, extra = listOf(nasGroup)),
         contentPadding = PaddingValues(),
         backdropOut = {},
         onOpenCollection = {},
         onOpenSettings = {},
         statusHeader = {},
         detail = { kind -> Text("dettaglio ${kind.code}") },
-        extraGroups = listOf(nasGroup),
         onOpenEntry = { opened += it.code },
         entryDetail = { entry -> Text("pagina ${entry.code}") },
       )
@@ -67,14 +66,13 @@ class CollectionsExtraGroupsPhoneTest : ComposeScreenTest() {
   fun senzaVociIlGruppoNonCe() {
     show {
       CollectionsScreen(
-        state = collectionsUiState(world.source.countsNow(), canTrash = true),
+        state = layoutOf(world, extra = listOf(CollectionEntryGroup("Sul NAS", emptyList()))),
         contentPadding = PaddingValues(),
         backdropOut = {},
         onOpenCollection = {},
         onOpenSettings = {},
         statusHeader = {},
         detail = {},
-        extraGroups = listOf(CollectionEntryGroup("Sul NAS", emptyList())),
       )
     }
 
@@ -92,14 +90,13 @@ class CollectionsExtraGroupsTabletTest : ComposeScreenTest() {
     val opened = mutableListOf<String>()
     show {
       CollectionsScreen(
-        state = collectionsUiState(world.source.countsNow(), canTrash = true),
+        state = layoutOf(world, extra = listOf(nasGroup)),
         contentPadding = PaddingValues(),
         backdropOut = {},
         onOpenCollection = {},
         onOpenSettings = {},
         statusHeader = {},
         detail = { kind -> Text("dettaglio ${kind.code}") },
-        extraGroups = listOf(nasGroup),
         onOpenEntry = { opened += it.code },
         entryDetail = { entry -> Text("pagina ${entry.code}") },
       )

@@ -19,9 +19,10 @@ import kotlinx.coroutines.flow.map
 data class CollectionRow(val kind: CollectionKind, val count: Int?)
 
 /**
- * Lo stato dell'elenco: due gruppi, come una pagina di Impostazioni (regola 2 del design system). Il primo ha le
- * quattro raccolte-filtro; il secondo i due posti protetti, e gli Eliminati di recente solo dove il cestino di
- * sistema esiste (Android 11+: nessuna voce morta, D13).
+ * Le righe che la scheda fa da sola, prima di diventare sezioni ([builtinSections], D33): le quattro raccolte-filtro (Telefono) e i due
+ * posti protetti, cioe' i Nascosti (sezione Nascosti) e gli Eliminati di recente (sezione Da tenere al sicuro), questi solo dove il
+ * cestino di sistema esiste (Android 11+: nessuna voce morta, D13). Lo stato della scheda intera, con le sezioni dei fornitori,
+ * l'ordine e la visibilita', e' [CollectionsLayoutState].
  */
 @Immutable
 data class CollectionsUiState(

@@ -10,6 +10,8 @@ import dev.pampa.mycloudgallery.core.model.GeoPoint
 import dev.pampa.mycloudgallery.core.model.MediaId
 import java.time.LocalDate
 import kotlin.time.Duration
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 
@@ -303,6 +305,33 @@ class SmartEngineTest {
     // Non riprende il caricamento di prima (periodo diverso): ricomincia, e con un solo giorno in meno di una pagina finisce.
     assertThat(outcome).isInstanceOf(SmartOutcome.Done::class.java)
     assertThat(rig.sure().size).isEqualTo(3_000 / 40 * 6)
+  }
+
+  @Test
+  fun unCambiamentoDelCatalogoDuranteUnaValutazioneFermaLaFaRicominciare() = runTest {
+    val rig = Rig(SmartRules(ranges(d1 to d1.plusDays(60)), null, null))
+    rig.world.put(*(0 until 5_000).map { cand(it + 1, d1.plusDays((it % 40).toLong()), minutes = 600 + it % 300) }.toTypedArray())
+    assertThat(rig.engine.evaluate(rig.id, Duration.ZERO)).isInstanceOf(SmartOutcome.Partial::class.java)
+    // Arriva un media in un giorno gia' letto, e il ricalcolo dei giorni toccati lo prende: la valutazione ferma non riprende da una pagina vecchia.
+    rig.world.put(cand(9_999, d1.plusDays(1), minutes = 700))
+    rig.engine.reevaluate(rig.id, listOf(d1.plusDays(1)))
+    assertThat(rig.sure()).contains(id(9_999))
+    var outcome: SmartOutcome = SmartOutcome.NotFound
+    repeat(3) { outcome = rig.engine.evaluate(rig.id, Duration.ZERO) }
+    assertThat(outcome).isEqualTo(SmartOutcome.Done(5_001, 0, 0))
+    assertThat(rig.sure()).contains(id(9_999))
+  }
+
+  @Test
+  fun dueValutazioniContemporaneeDelloStessoAlbumNonSiIntrecciano() = runTest {
+    val rig = Rig(SmartRules(trip, oslo, null)).also { it.fill() }
+    val both = listOf(
+      async { rig.engine.evaluate(rig.id, Duration.INFINITE) },
+      async { rig.engine.reevaluate(rig.id, listOf(d1, d2, d3)) },
+      async { rig.engine.evaluate(rig.id, Duration.INFINITE) },
+    ).awaitAll()
+    assertThat(both).containsExactly(SmartOutcome.Done(12, 12, 0), SmartOutcome.Done(12, 12, 0), SmartOutcome.Done(12, 12, 0))
+    assertThat(rig.sure()).hasSize(12)
   }
 
   // --- L'anteprima (E-AL6) -----------------------------------------------------------------------------------------------------------

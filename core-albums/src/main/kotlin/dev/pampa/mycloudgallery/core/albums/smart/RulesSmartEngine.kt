@@ -17,6 +17,8 @@ import dev.pampa.mycloudgallery.core.search.contract.PlaceLookup
 import java.time.LocalDate
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.time.Duration
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 // IL MOTORE DEGLI ALBUM SMART (docs/fase7-progetto.md §2.2, D14-D16; E-AL1-E-AL17). Valuta uno smart: legge le regole e le scelte dell'utente, carica i
 // candidati (solo **visibili**: `VisibleMedia` e il filtro finale `HiddenMask`, mai un nascosto, E-AL8), li classifica ([SmartClassifier]: A, B, C
@@ -51,9 +53,16 @@ class RulesSmartEngine(
 
   private val pending = ConcurrentHashMap<AlbumId, Pending>()
 
+  /** Un lucchetto per album: due valutazioni dello stesso album (regole cambiate mentre un ricalcolo lavora) non si intrecciano mai. */
+  private val locks = ConcurrentHashMap<AlbumId, Mutex>()
+
+  private suspend fun <T> exclusive(id: AlbumId, block: suspend () -> T): T = locks.getOrPut(id) { Mutex() }.withLock { block() }
+
   // --- La valutazione intera ---------------------------------------------------------------------------------------------------
 
-  override suspend fun evaluate(id: AlbumId, budget: Duration): SmartOutcome {
+  override suspend fun evaluate(id: AlbumId, budget: Duration): SmartOutcome = exclusive(id) { evaluateLocked(id, budget) }
+
+  private suspend fun evaluateLocked(id: AlbumId, budget: Duration): SmartOutcome {
     val state = rows.state(id) ?: return SmartOutcome.NotFound
     if (state.frozen) return SmartOutcome.Frozen
     val rules = state.rules
@@ -82,11 +91,17 @@ class RulesSmartEngine(
    * giorni. Un album con una descrizione o foto d'esempio si rivaluta intero (la soglia della ricerca e' relativa all'insieme che cerca: un media
    * nuovo puo' cambiare la classe di altri lontani).
    */
-  suspend fun reevaluate(id: AlbumId, days: Collection<LocalDate>): SmartOutcome {
+  suspend fun reevaluate(id: AlbumId, days: Collection<LocalDate>): SmartOutcome = exclusive(id) {
+    // Una valutazione intera ferma a meta' ha letto il catalogo di prima: riprenderla ora perderebbe i media di questo cambiamento.
+    pending.remove(id)
+    reevaluateLocked(id, days)
+  }
+
+  private suspend fun reevaluateLocked(id: AlbumId, days: Collection<LocalDate>): SmartOutcome {
     val state = rows.state(id) ?: return SmartOutcome.NotFound
     if (state.frozen) return SmartOutcome.Frozen
     val rules = state.rules
-    if (!rules.text.isNullOrBlank() || rules.examples.isNotEmpty()) return evaluate(id, Duration.INFINITE)
+    if (!rules.text.isNullOrBlank() || rules.examples.isNotEmpty()) return evaluateLocked(id, Duration.INFINITE)
     val classifier = classifierOf(rules, ContentMatches.NONE, state)
     if (!classifier.hasConstraints || days.isEmpty()) return counts(id, state.auto, state.suggestions)
     val affected = days.flatMapTo(sortedSetOf<LocalDate>()) { listOf(it.minusDays(1), it, it.plusDays(1)) }

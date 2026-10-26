@@ -17,10 +17,15 @@ import java.util.concurrent.ConcurrentHashMap
 // `album_suggestion`. Mai una riga `manual` o `accepted`, mai le regole, mai le esclusioni.
 
 /** Una riga automatica di `album_item`: la posizione (l'istante di scatto, cosi' "Personalizzato" li tiene in ordine di data) e quando e' entrata. */
-data class AutoRow(val position: Long, val addedAt: Long)
+data class AutoRow(val position: Long, val addedAt: Long) {
+  /** Mai l'istante di scatto ne' di arrivo nei log (D37). */
+  override fun toString(): String = "AutoRow"
+}
 
 /** Un suggerito: il codice della regola ([SmartReason.code]) e quando e' stato proposto (per "Nuove: 12"). */
-data class SuggestionRow(val reason: String, val addedAt: Long)
+data class SuggestionRow(val reason: String, val addedAt: Long) {
+  override fun toString(): String = "SuggestionRow($reason)"
+}
 
 /** Tutto cio' che serve per valutare uno smart: le regole e le scelte dell'utente, e le righe che il motore ha scritto. */
 class SmartAlbumState(

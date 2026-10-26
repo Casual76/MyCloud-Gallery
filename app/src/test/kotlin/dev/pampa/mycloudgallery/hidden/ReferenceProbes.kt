@@ -80,5 +80,4 @@ internal object ReferenceProbes {
   private fun leak(name: String, shown: Collection<MediaId>, forbidden: Set<MediaId>): String? =
     if (shown.any { it in forbidden }) "$name mostra un nascosto" else null
 
-  }
 }

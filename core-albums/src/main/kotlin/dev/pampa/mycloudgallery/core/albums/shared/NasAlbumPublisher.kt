@@ -88,6 +88,8 @@ class NasAlbumPublisher(
         }
         else -> fieldValue(change)
       }
+      // Una storia dei livelli non ha mai un cambio dopo la voce che la porta: la voce prende almeno l'ora dell'ultimo cambio.
+      val entryAt = (value as? AlbumValue.Levels)?.history?.lastOrNull()?.at?.let { last -> maxOf(nasNow ?: last, last) } ?: nasNow
       val key = AlbumKey.of(album, field)
       val staged = state.staged[key]
       val published = state.published[key]
@@ -95,10 +97,10 @@ class NasAlbumPublisher(
         staged != null && staged.value == value -> last = maxOf(last, staged.seq)
         staged == null && published != null && published.entry.value == value -> last = maxOf(last, published.seq)
         else -> {
-          val probe = AlbumEntry(album, field, nasNow ?: PROBE_AT, identity.deviceId, account, value)
+          val probe = AlbumEntry(album, field, entryAt ?: PROBE_AT, identity.deviceId, account, value)
           require(AlbumDocs.admits(probe)) { "Modifica non ammessa dal formato (titolo, percorso o tetti)." }
           val seq = state.seq + 1
-          state = state.copy(seq = seq, staged = state.staged + (key to StagedEntry(seq, field, value, nasNow)))
+          state = state.copy(seq = seq, staged = state.staged + (key to StagedEntry(seq, field, value, entryAt)))
           last = seq
         }
       }

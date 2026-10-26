@@ -208,11 +208,16 @@ object AlbumTitles {
 
   private val BIDI = setOf(0x061C, 0x200E, 0x200F, 0x202A, 0x202B, 0x202C, 0x202D, 0x202E, 0x2066, 0x2067, 0x2068, 0x2069)
 
-  /** Il problema di [title], o null se va bene. */
+  /**
+   * Il problema di [title], o null se va bene. P2: oltre ai controlli e alla direzione del testo, ogni carattere che il codec degli album
+   * rifiuta in lettura (`TextRules` di core-trust: invisibili, non caratteri, separatori di riga...): un titolo che la UI accetta non fa mai
+   * rifiutare la definizione a chi legge.
+   */
   fun problem(title: String): TitleProblem? {
     val t = title.trim()
     if (t.isEmpty()) return TitleProblem.EMPTY
     if (t.codePointCount(0, t.length) > MAX_CHARS) return TitleProblem.TOO_LONG
+    if (dev.pampa.mycloudgallery.core.trust.codec.TextRules.hasForbidden(t)) return TitleProblem.FORBIDDEN_CHARS
     var i = 0
     while (i < t.length) {
       val cp = t.codePointAt(i)

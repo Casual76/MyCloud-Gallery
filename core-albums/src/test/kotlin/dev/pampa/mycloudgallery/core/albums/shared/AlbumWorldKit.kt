@@ -160,3 +160,31 @@ class RawWriter(private val world: AlbumWorld, val owner: AccountId, private val
     return keys.mapNotNull { published[it]?.entry }
   }
 }
+
+/**
+ * Teste e segmenti scritti **a mano** sul NAS con la chiave di un dispositivo (vero, revocato, dismesso o sconosciuto): i contributi che un
+ * dispositivo compromesso o un'app difettosa potrebbe pubblicare, senza i controlli del pubblicatore.
+ */
+object RawHeads {
+  /** Pubblica i segmenti di [entries] e la testa [version] di [signer] per [album], creata all'ora [createdAt]. Restituisce il segno. */
+  fun write(
+    world: AlbumWorld,
+    signer: dev.pampa.mycloudgallery.core.trust.crypto.Signer,
+    album: AlbumId,
+    entries: List<AlbumEntry>,
+    version: Long,
+    createdAt: Long = world.clocks.nas!!,
+    segments: List<dev.pampa.mycloudgallery.core.trust.data.EncodedSegment>? = null,
+  ): dev.pampa.mycloudgallery.core.trust.data.HeadMark {
+    val device = TrustIds.deviceIdOf(signer.publicKey)
+    val text = dev.pampa.mycloudgallery.core.trust.data.AlbumIds.text(album)
+    val encoded = segments ?: AlbumSegmentPlan.plan(album, entries)
+    for (s in encoded) world.nas.publishExclusive(dev.pampa.mycloudgallery.core.trust.nas.NasLayout.albumSegment(text, device, s.ref.hash), s.bytes)
+    val head = dev.pampa.mycloudgallery.core.trust.data.AlbumHead(
+      world.family.familyId, album, device, version, world.family.state.registry.version, createdAt, encoded.map { it.ref }.sortedBy { it.hash },
+    )
+    val signed = dev.pampa.mycloudgallery.core.trust.data.AlbumDocs.encodeHead(head, signer)
+    world.nas.publishExclusive(dev.pampa.mycloudgallery.core.trust.nas.NasLayout.albumHead(text, device, version), signed.bytes)
+    return signed.mark
+  }
+}

@@ -98,7 +98,14 @@ class NasSharedAlbumSync(
     val nasNow = clocks.nasNowMs() ?: return@withLock report(null, incomplete = true)
     val round = Round(registry, fileSystem(share), nasNow, timeUp, limits.maxHeadReads)
     registryBehind = false
-    val albums = guarded { albumsToRead(round) }
+    // L'elenco di `albums/`: un errore del NAS non e' un errore dei dati (si riprova al giro dopo), il resto si conta.
+    val albums = guarded {
+      try {
+        albumsToRead(round)
+      } catch (e: IOException) {
+        null
+      }
+    }
     if (albums == null) {
       round.incomplete = true
     } else {

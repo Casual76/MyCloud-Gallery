@@ -82,14 +82,20 @@ class SharedAlbumReplica(
     listeners += listener
   }
 
+  /** La proiezione e' in memoria: dopo la morte del processo il primo ricalcolo la ricostruisce tutta dallo store. */
+  private var loaded = false
+
   /**
    * Ricalcola [albums] (null = tutti: replica, viste attuali e album con voci mie in coda). Da chiamare dopo un giro della replica, dopo una
-   * modifica accodata e dopo un cambiamento del catalogo che tocca l'area comune (una scansione con novita': l'attestazione cambia).
+   * modifica accodata e dopo un cambiamento del catalogo che tocca l'area comune (una scansione con novita': l'attestazione cambia). Il primo
+   * ricalcolo di un processo li fa tutti.
    */
   suspend fun recompute(albums: Collection<AlbumId>? = null) {
     val done = mutex.withLock {
       val registry = identity.registry() ?: return@withLock false
-      val ids = albums?.toSet() ?: (store.albums() + state.value.keys + orphanState.value.keys + unresolvedState.value + local.albums())
+      val all = albums == null || !loaded
+      val ids = if (!all) albums!!.toSet() else store.albums() + state.value.keys + orphanState.value.keys + unresolvedState.value + local.albums()
+      loaded = true
       val next = state.value.toMutableMap()
       val nextOrphans = orphanState.value.toMutableMap()
       val nextUnresolved = unresolvedState.value.toMutableSet()

@@ -63,6 +63,17 @@ interface IndexerControl {
 
   /** "Indicizza ora": una richiesta dell'utente, con le regole del calcolo (D22). */
   fun indexNow()
+
+  /**
+   * Rilegge il lavoro che resta, lo spazio e lo stato (IX-3): la pagina lo chiama a ogni apertura e dopo ogni tappa. Prima si leggevano una
+   * volta sola, alla nascita del controllo. Di serie non fa niente.
+   */
+  fun refresh() = Unit
+
+  /** L'ultima misura breve del dispositivo (D15), ricordata fra una visita e l'altra: senza, la stima delle notti restava "in misura" per sempre (IX-3). */
+  fun savedProbe(): dev.pampa.mycloudgallery.core.ai.contract.ProbeResult? = null
+
+  fun saveProbe(result: dev.pampa.mycloudgallery.core.ai.contract.ProbeResult) = Unit
 }
 
 /**

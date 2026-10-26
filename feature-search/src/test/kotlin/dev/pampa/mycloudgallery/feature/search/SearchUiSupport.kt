@@ -96,7 +96,11 @@ internal class RecordingSettingsHandlers : SearchSettingsHandlers {
 
   override fun onDownloadModel(id: ModelId) { calls += "download:${id.value}" }
 
+  override fun onConfirmMobileDownload(id: ModelId) { calls += "confirmMobile:${id.value}" }
+
   override fun onRemoveModel(id: ModelId) { calls += "remove:${id.value}" }
+
+  override fun onKeepIndexModel() { calls += "keepIndexModel" }
 
   override fun onClearHistory() { calls += "clearHistory" }
 

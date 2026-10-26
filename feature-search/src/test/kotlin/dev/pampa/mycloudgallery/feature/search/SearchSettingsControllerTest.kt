@@ -57,7 +57,9 @@ class SearchSettingsControllerTest {
     c.setIndexer(true)
     runCurrent()
     assertThat(indexer.changes).containsExactly(true)
-    assertThat(models.ensured).containsExactly(ModelCatalog.INDEX_440M.id to ModelTrigger.ROLE_CHANGED)
+    // MO-1: la pagina non scarica nel proprio scope (uscire dalla pagina fermerebbe lo scaricamento): il 440M lo chiede `IndexerControl.setIndexer`
+    // dell'app, come lavoro accelerato (AiWorkSchedulingTest). Qui la pagina non chiama il gestore dei modelli.
+    assertThat(models.ensured).isEmpty()
     assertThat(probe.measures).isEqualTo(1)
     val state = c.state.value.indexer
     assertThat(state.indexer).isTrue()
@@ -207,5 +209,125 @@ class SearchSettingsControllerTest {
     runCurrent()
     assertThat(indexer.changes).isEmpty()
     assertThat(reading.consents).isEmpty()
+  }
+  // --- Revisione B: i difetti della pagina Ricerca e modelli (MO-2, MO-6, IX-3, IX-8, LT-2) ------------------------------------------------
+
+  /** MO-2: il "Si'" alla conferma sui dati mobili porta con se' la conferma (un trigger), non una bandiera condivisa. */
+  @Test
+  fun mo2_ilSiAllaConfermaChiedeIlModelloConLaConfermaNelTrigger() = runTest {
+    val c = controller()
+    c.confirmMobileDownload(ModelCatalog.INDEX_440M.id)
+    runCurrent()
+    assertThat(models.ensured).containsExactly(ModelCatalog.INDEX_440M.id to ModelTrigger.USER_CONFIRMED)
+  }
+
+  /** MO-6: il ritaglio sta nell'APK; il gestore lo dice `Absent` fino alla prima apertura e la pagina non deve mostrare "Da scaricare". */
+  @Test
+  fun mo6_ilRitaglioEProntoFinoAQuandoNonEInErrore() = runTest {
+    val id = ModelCatalog.CUTOUT_MAGICTOUCH.id
+    val c = controller()
+    for (reported in listOf(ModelState.Absent, ModelState.Queued(ModelTrigger.RULES), ModelState.Verifying)) {
+      models.set(id, reported)
+      runCurrent()
+      assertThat(c.state.value.models.models.last().state).isInstanceOf(ModelState.Ready::class.java)
+    }
+    models.set(id, ModelState.Failed(dev.pampa.mycloudgallery.core.models.contract.ModelFailCode.VERIFY_FAILED))
+    runCurrent()
+    assertThat(c.state.value.models.models.last().state).isInstanceOf(ModelState.Failed::class.java)
+  }
+
+  /** IX-8: spegnere il ruolo con il modello di analisi sul telefono (370 MiB) chiede se toglierlo. */
+  @Test
+  fun ix8_spegnereIlRuoloConIl440MProntoProponeDiTogliereIlModello() = runTest {
+    indexer.indexer.value = true
+    models.set(ModelCatalog.INDEX_440M.id, ModelState.Ready(ModelCatalog.INDEX_440M.sizeBytes, ModelSourceKind.HTTPS, 0))
+    val c = controller()
+    assertThat(c.state.value.offerRemoveIndexModel).isFalse()
+
+    c.setIndexer(false)
+    runCurrent()
+    assertThat(c.state.value.offerRemoveIndexModel).isTrue()
+
+    // "Tienilo": il modello resta e la domanda sparisce.
+    c.dismissRemoveOffer()
+    runCurrent()
+    assertThat(c.state.value.offerRemoveIndexModel).isFalse()
+    assertThat(models.removed).isEmpty()
+
+    // "Togli": si toglie il modello e la domanda sparisce.
+    indexer.indexer.value = true
+    c.setIndexer(false)
+    runCurrent()
+    assertThat(c.state.value.offerRemoveIndexModel).isTrue()
+    c.removeModel(ModelCatalog.INDEX_440M.id)
+    runCurrent()
+    assertThat(models.removed).containsExactly(ModelCatalog.INDEX_440M.id)
+    assertThat(c.state.value.offerRemoveIndexModel).isFalse()
+  }
+
+  @Test
+  fun ix8_senzaIlModelloProntoSpegnereIlRuoloNonChiedeNiente() = runTest {
+    indexer.indexer.value = true
+    val c = controller()
+    c.setIndexer(false)
+    runCurrent()
+    assertThat(c.state.value.offerRemoveIndexModel).isFalse()
+  }
+
+  /** IX-3: la misura si ricorda fra una visita e l'altra (prima la stima delle notti restava "in misura" per sempre). */
+  @Test
+  fun ix3_laMisuraSiSalvaESiRitrovaAllaVisitaDopoSenzaRifarla() = runTest {
+    val first = controller()
+    first.setIndexer(true)
+    runCurrent()
+    assertThat(probe.measures).isEqualTo(1)
+    assertThat(indexer.saved).isEqualTo(probe.result)
+
+    val again = controller()
+    assertThat(again.state.value.indexer.probe).isEqualTo(probe.result)
+    assertThat(probe.measures).isEqualTo(1)
+  }
+
+  /** IX-3: se il modello del calcolo non c'era alla prima misura, la misura si rifa' quando diventa pronto. */
+  @Test
+  fun ix3_laMisuraSiRifaQuandoIlModelloDelCalcoloDiventaPronto() = runTest {
+    indexer.indexer.value = true
+    val c = controller()
+    assertThat(probe.measures).isEqualTo(0)
+    models.set(ModelCatalog.INDEX_440M.id, ModelState.Ready(ModelCatalog.INDEX_440M.sizeBytes, ModelSourceKind.HTTPS, 0))
+    runCurrent()
+    assertThat(probe.measures).isEqualTo(1)
+    assertThat(c.state.value.indexer.probe).isEqualTo(probe.result)
+  }
+
+  @Test
+  fun ix3_ognAperturaDellaPaginaRileggeLoStato() = runTest {
+    val c = controller()
+    c.refresh()
+    c.refresh()
+    assertThat(indexer.refreshCalls).isEqualTo(2)
+  }
+
+  /** LT-2: con la lettura accesa altrove la pagina non la da' per attiva qui: serve l'avviso (e ci si puo' escludere). */
+  @Test
+  fun lt2_conLAccountAccesoAltroveServeLAvvisoAQuestoDispositivo() = runTest {
+    reading.state.value = TextReadingState.AwaitingNotice(TextReadingSwitch.CURRENT_TEXT_VERSION)
+    accepted.acceptedVersion.value = TextReadingSwitch.CURRENT_TEXT_VERSION
+    val c = controller()
+    val page = c.state.value.textReading
+    assertThat(page.state).isInstanceOf(TextReadingState.AwaitingNotice::class.java)
+    assertThat(page.state.activeHere).isFalse()
+    assertThat(page.needsConsent).isTrue()
+  }
+
+  /** LT-1 / I8: l'esclusione e lo spegnimento ancora da consegnare agli altri si vedono nella pagina. */
+  @Test
+  fun lt1_lEsclusioneELoSpegnimentoDaConsegnareArrivanoAllaPagina() = runTest {
+    val c = controller()
+    reading.excludedHere.value = true
+    reading.syncPending.value = true
+    runCurrent()
+    assertThat(c.state.value.textReading.excludedHere).isTrue()
+    assertThat(c.state.value.textReading.syncPending).isTrue()
   }
 }

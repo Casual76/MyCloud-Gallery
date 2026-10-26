@@ -35,6 +35,11 @@ data class SearchEntrySummary(
   val textReadingHere: Boolean,
   /** Manca un modello che serve: lo dice una pillola. */
   val modelMissing: Boolean,
+  /**
+   * La lettura del testo e' accesa per l'account ma questo dispositivo non ha ancora visto l'avviso (LT-2, R8): ML Kit qui non parte finche'
+   * non si conferma o ci si esclude. La voce lo segnala, cosi' l'avviso si vede senza cercarlo.
+   */
+  val readingNeedsNotice: Boolean = false,
 )
 
 /** Lo stato per la voce. `:app` lo lega a `IndexerControl`, `TextReadingSwitch` e `ModelManager`. **Opzionale per Dagger** ([SearchEntryOptionalModule]). */
@@ -69,10 +74,14 @@ internal fun SearchEntryRow(summary: SearchEntrySummary?, onClick: () -> Unit) {
     subtitle = SearchEntryTexts.subtitleOf(LocalContext.current, summary),
     tone = tone,
     leading = { RowGlyph(Icons.Rounded.ImageSearch) },
-    badge = if (summary?.modelMissing == true) {
-      { StatusPill(stringResource(R.string.settings_search_pill_model), FluidTone.Warning) }
-    } else {
-      null
+    badge = when {
+      summary?.modelMissing == true -> {
+        { StatusPill(stringResource(R.string.settings_search_pill_model), FluidTone.Warning) }
+      }
+      summary?.readingNeedsNotice == true -> {
+        { StatusPill(stringResource(R.string.settings_search_pill_notice), FluidTone.Warning) }
+      }
+      else -> null
     },
     onClick = onClick,
   )
@@ -81,7 +90,7 @@ internal fun SearchEntryRow(summary: SearchEntrySummary?, onClick: () -> Unit) {
 /** Quanto la riga chiede attenzione: un modello mancante in giallo, un dispositivo che analizza in azzurro, il resto in neutro. */
 internal fun searchEntryTone(summary: SearchEntrySummary?): FluidTone = when {
   summary == null -> FluidTone.Primary
-  summary.modelMissing -> FluidTone.Warning
+  summary.modelMissing || summary.readingNeedsNotice -> FluidTone.Warning
   summary.indexer -> FluidTone.Info
   else -> FluidTone.Neutral
 }
@@ -93,7 +102,13 @@ internal object SearchEntryTexts {
     val res = context.resources
     if (summary == null) return res.getString(R.string.settings_search_detail)
     val role = res.getString(if (summary.indexer) R.string.settings_search_indexer_on else R.string.settings_search_indexer_off)
-    val reading = res.getString(if (summary.textReadingHere) R.string.settings_search_reading_on else R.string.settings_search_reading_off)
+    val reading = res.getString(
+      when {
+        summary.textReadingHere -> R.string.settings_search_reading_on
+        summary.readingNeedsNotice -> R.string.settings_search_reading_notice
+        else -> R.string.settings_search_reading_off
+      },
+    )
     return res.getString(R.string.settings_search_summary, role, reading)
   }
 }

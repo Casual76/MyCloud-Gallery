@@ -69,6 +69,18 @@ class SearchEntryTest {
     assertThat(clicks).isEqualTo(1)
   }
 
+  /** LT-2 / R8: con l'account acceso da un altro dispositivo la voce lo segnala ("Da confermare") invece di dire "lettura del testo spenta". */
+  @Test
+  fun conLAvvisoDaConfermareLaVoceLoDiceCoseLaPillola() {
+    val summary = SearchEntrySummary(indexer = false, textReadingHere = false, modelMissing = false, readingNeedsNotice = true)
+    assertThat(SearchEntryTexts.subtitleOf(context, summary)).isEqualTo("Questo dispositivo non analizza le foto · lettura del testo da confermare")
+    assertThat(searchEntryTone(summary)).isEqualTo(FluidTone.Warning)
+    rule.setContent {
+      MyCloudGalleryTheme { FluidListGroup { SearchEntryRow(summary) {} } }
+    }
+    rule.onNodeWithText("Da confermare").assertIsDisplayed()
+  }
+
   @Test
   fun senzaModelloMancanteNonCeLaPillola() {
     rule.setContent {

@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.ai.contract.TextReadingConsent
@@ -46,7 +47,9 @@ class TextReadingActivationTest {
     assertThat(text).contains("un codice di questa installazione, tempi ed eventuali errori")
     assertThat(text).contains("Lo decide Google e non si può spegnere: per questo la funzione è spenta finché non la attivi.")
     assertThat(text).contains("Vale per i dispositivi del tuo account; su ognuno puoi dire «Non su questo dispositivo»")
-    assertThat(text).contains("La spegni quando vuoi: da quel momento ML Kit non parte più.")
+    // La promessa vale subito su questo dispositivo; sugli altri quando arriva la scelta (I8: detto, non lasciato intendere).
+    assertThat(text).contains("La spegni quando vuoi: da quel momento ML Kit non parte più su questo dispositivo")
+    assertThat(text).contains("sugli altri si ferma appena ricevono la tua scelta")
     assertThat(text).contains("Anche spenta, puoi cercare e copiare il testo che un altro dispositivo della famiglia ha già letto.")
   }
 
@@ -119,6 +122,8 @@ class TextReadingActivationTest {
     val density = rule.density.density
     // I due pulsanti della pagina (la barra del titolo e' dell'engine).
     for (label in listOf("Attiva", "Non ora")) {
+      // Con il carattere grande la pagina scorre: i pulsanti si portano in vista prima di misurarli (la misura e' ritagliata da cio' che si vede).
+      rule.onNodeWithText(label).performScrollTo()
       assertThat(rule.onNodeWithText(label).fetchSemanticsNode().boundsInRoot.height / density).isAtLeast(47.5f)
     }
   }

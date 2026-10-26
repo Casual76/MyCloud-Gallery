@@ -8,5 +8,7 @@
   <string name="settings_search_indexer_off">Questo dispositivo non analizza le foto</string>
   <string name="settings_search_reading_on">lettura del testo attiva</string>
   <string name="settings_search_reading_off">lettura del testo spenta</string>
+  <string name="settings_search_reading_notice">lettura del testo da confermare</string>
   <string name="settings_search_pill_model">Manca un modello</string>
+  <string name="settings_search_pill_notice">Da confermare</string>
 </resources>

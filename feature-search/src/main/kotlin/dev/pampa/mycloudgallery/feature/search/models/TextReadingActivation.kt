@@ -58,7 +58,8 @@ object TextReadingActivationText {
 }
 
 /**
- * La pagina. [versionChanged]: l'account l'aveva gia' attivata ma il testo e' cambiato: in testa una nota dice di rileggerlo. "Attiva" costruisce il
+ * La pagina. [versionChanged]: l'account l'aveva gia' attivata ma il testo e' cambiato: in testa una nota dice di rileggerlo. [awaitingNotice]: l'ha
+ * attivata un altro dispositivo e questo non ha ancora visto l'avviso (D41, "ogni altro dispositivo lo dice una volta"). "Attiva" costruisce il
  * consenso con la **versione del testo di questa pagina** ([TextReadingSwitch.CURRENT_TEXT_VERSION]) e l'istante monotono in cui la pagina e' sullo
  * schermo; "Non ora" non fa niente e non spegne niente.
  */
@@ -69,6 +70,8 @@ fun TextReadingActivationScreen(
   onBack: () -> Unit,
   modifier: Modifier = Modifier,
   versionChanged: Boolean = false,
+  /** LT-2, R8: l'account l'ha gia' attivata da un altro dispositivo e qui l'avviso non e' ancora stato visto: la nota in testa lo dice. */
+  awaitingNotice: Boolean = false,
 ) {
   val resources = LocalContext.current.resources
   val paragraphs = remember(resources) { TextReadingActivationText.paragraphs(resources) }
@@ -79,6 +82,16 @@ fun TextReadingActivationScreen(
   val enableDescription = stringResource(R.string.activation_enable_description)
   val notNowDescription = stringResource(R.string.activation_not_now_description)
   FluidScreen(title = stringResource(R.string.activation_title), modifier = modifier, onBack = onBack) {
+    if (awaitingNotice) {
+      item(key = "notice") {
+        FluidInlineMessage(
+          message = stringResource(R.string.activation_notice),
+          title = stringResource(R.string.activation_title),
+          tone = FluidTone.Info,
+          modifier = Modifier.padding(bottom = SearchDimens.BlockGap),
+        )
+      }
+    }
     if (versionChanged) {
       item(key = "changed") {
         FluidInlineMessage(

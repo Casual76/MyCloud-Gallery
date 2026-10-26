@@ -43,6 +43,7 @@ import dev.pampa.mycloudgallery.core.models.contract.ModelId
 import dev.pampa.mycloudgallery.core.models.contract.ModelRole
 import dev.pampa.mycloudgallery.core.models.contract.ModelSourceKind
 import dev.pampa.mycloudgallery.core.models.contract.ModelState
+import dev.pampa.mycloudgallery.core.models.contract.ModelWait
 import dev.pampa.mycloudgallery.feature.search.R
 import dev.pampa.mycloudgallery.feature.search.contract.ModelRow
 import dev.pampa.mycloudgallery.feature.search.contract.ModelsState
@@ -63,7 +64,7 @@ internal fun modelTone(state: ModelState): FluidTone = when (state) {
   ModelState.Absent -> FluidTone.Neutral
   is ModelState.Queued, is ModelState.Fetching, ModelState.Verifying -> FluidTone.Info
   is ModelState.Ready -> FluidTone.Success
-  is ModelState.Failed -> FluidTone.Warning
+  is ModelState.Failed, is ModelState.NeedsConfirmation -> FluidTone.Warning
 }
 
 private fun glyphOf(role: ModelRole?): ImageVector = when (role) {
@@ -94,7 +95,15 @@ private fun sourceText(resources: Resources, kind: ModelSourceKind?): String? = 
 private fun stateLabel(state: ModelState): String = stringResource(
   when (state) {
     ModelState.Absent -> R.string.models_state_absent
-    is ModelState.Queued -> R.string.models_state_queued
+    // MO-8: un rifiuto della rete e' "in coda" con il suo motivo, non "non riuscito".
+    is ModelState.Queued -> when (state.waiting) {
+      ModelWait.NETWORK -> R.string.models_state_wait_network
+      ModelWait.WIFI -> R.string.models_state_wait_wifi
+      ModelWait.ROAMING -> R.string.models_state_wait_roaming
+      null -> R.string.models_state_queued
+    }
+    // MO-2: sui dati mobili serve la conferma con la dimensione.
+    is ModelState.NeedsConfirmation -> R.string.models_state_confirm
     is ModelState.Fetching -> R.string.models_state_fetching_short
     ModelState.Verifying -> R.string.models_state_verifying
     is ModelState.Ready -> R.string.models_state_ready
@@ -142,6 +151,17 @@ private fun ModelBlock(row: ModelRow, handlers: SearchSettingsHandlers) {
         FluidSectionFootnote(text = stringResource(R.string.models_state_fetching, sizeText(state.done), sizeText(state.total)))
       }
       is ModelState.Failed -> FailureNote(row.id, failureCode(state.code), state.code, row.sizeBytes, handlers)
+      is ModelState.NeedsConfirmation -> {
+        FluidSectionFootnote(text = stringResource(R.string.models_confirm_note, sizeText(state.bytes)))
+        ActionRow {
+          FluidButton(
+            text = stringResource(R.string.models_confirm_action),
+            onClick = { handlers.onConfirmMobileDownload(row.id) },
+            style = FluidButtonStyle.Tinted,
+            size = FluidButtonSize.Large,
+          )
+        }
+      }
       ModelState.Absent -> ActionRow { Download(row.id, handlers) }
       is ModelState.Ready -> if (row.removable) ActionRow { Remove { removing = true } }
       else -> Unit

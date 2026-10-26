@@ -17,6 +17,7 @@ import dev.pampa.mycloudgallery.core.search.contract.SearchCoverage
 import dev.pampa.mycloudgallery.core.search.contract.SearchEngine
 import dev.pampa.mycloudgallery.core.search.contract.SearchHistory
 import dev.pampa.mycloudgallery.feature.search.contract.IndexSpace
+import dev.pampa.mycloudgallery.feature.search.contract.IndexerChange
 import dev.pampa.mycloudgallery.feature.search.contract.IndexerBacklog
 import dev.pampa.mycloudgallery.feature.search.contract.IndexerControl
 import dev.pampa.mycloudgallery.feature.search.contract.IndexerState
@@ -32,6 +33,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -59,12 +62,16 @@ class SearchSettingsController(
   /** La misura breve e' in corso: la pagina dice "Sto misurando il dispositivo…". */
   val measuring: MutableStateFlow<Boolean> = MutableStateFlow(false)
 
+  /** IX-8: spento il ruolo, la pagina propone di togliere il modello di analisi. */
+  private val removeOffer = MutableStateFlow(false)
+
   private val offIndexer: StateFlow<Boolean> = MutableStateFlow(false)
   private val offStatus: StateFlow<AiStatus> = MutableStateFlow(AiStatus.Off)
   private val noBacklog: StateFlow<IndexerBacklog> = MutableStateFlow(IndexerBacklog.NONE)
   private val noSpace: StateFlow<IndexSpace> = MutableStateFlow(IndexSpace.NONE)
   private val noModels: StateFlow<Map<ModelId, ModelState>> = MutableStateFlow(emptyMap())
   private val offReading: StateFlow<TextReadingState> = MutableStateFlow(TextReadingState.Off)
+  private val notExcluded: StateFlow<Boolean> = MutableStateFlow(false)
   // Senza la porta della versione accettata non si puo' dire che il testo e' cambiato: vale quello di adesso.
   private val noVersion: StateFlow<Int> = MutableStateFlow(TextReadingSwitch.CURRENT_TEXT_VERSION)
 
@@ -80,6 +87,9 @@ class SearchSettingsController(
       history.entries,
       textReading?.state ?: offReading,
       accepted?.acceptedVersion ?: noVersion,
+      textReading?.excludedHere ?: notExcluded,
+      textReading?.syncPending ?: notExcluded,
+      removeOffer,
     ),
   ) { values ->
     @Suppress("UNCHECKED_CAST")
@@ -94,6 +104,9 @@ class SearchSettingsController(
       historyCount = (values[7] as List<*>).size,
       reading = values[8] as TextReadingState,
       acceptedVersion = values[9] as Int,
+      excludedHere = values[10] as Boolean,
+      syncPending = values[11] as Boolean,
+      removeOffer = values[12] as Boolean,
     )
   }.stateIn(scope, SharingStarted.Eagerly, compose(false, AiStatus.Off, IndexerBacklog.NONE, IndexSpace.NONE, null, emptyMap(), SearchCoverage.Complete, 0, TextReadingState.Off, TextReadingSwitch.CURRENT_TEXT_VERSION))
 
@@ -113,15 +126,27 @@ class SearchSettingsController(
     historyCount: Int,
     reading: TextReadingState,
     acceptedVersion: Int,
+    excludedHere: Boolean = false,
+    syncPending: Boolean = false,
+    removeOffer: Boolean = false,
   ): SearchSettingsState {
     val nights = probeResult?.nightsFor(backlog.toAnalyze)?.takeIf { backlog.toAnalyze > 0 }
     val current = TextReadingSwitch.CURRENT_TEXT_VERSION
     return SearchSettingsState(
       indexer = IndexerState(isIndexer, status, probeResult, backlog.toAnalyze, nights, backlog.areasWithoutIndexer),
-      textReading = TextReadingPageState(reading, current, needsConsent = reading == TextReadingState.Off || acceptedVersion < current),
+      textReading = TextReadingPageState(
+        reading,
+        current,
+        needsConsent = reading == TextReadingState.Off || reading is TextReadingState.AwaitingNotice || acceptedVersion < current,
+        excludedHere = excludedHere,
+        syncPending = syncPending,
+      ),
       models = ModelsState(
         models = ModelCatalog.ALL.map { spec ->
-          val state = states[spec.id] ?: if (spec.role == ModelRole.CUTOUT) ModelState.Ready(spec.sizeBytes, ModelSourceKind.BUNDLED, 0) else ModelState.Absent
+          // MO-6: il modello del ritaglio sta nell'APK: finche' non e' in errore e' "pronto" (il gestore lo dice `Absent` fino alla prima apertura).
+          val reported = states[spec.id]
+          val bundled = spec.role == ModelRole.CUTOUT && (reported == null || reported == ModelState.Absent || reported is ModelState.Queued || reported == ModelState.Verifying)
+          val state = if (bundled) ModelState.Ready(spec.sizeBytes, ModelSourceKind.BUNDLED, 0) else reported ?: ModelState.Absent
           ModelRow(spec.id, state, spec.sizeBytes, (state as? ModelState.Ready)?.source, removable = spec.role != ModelRole.CUTOUT)
         },
         vectorBytes = space.vectorBytes,
@@ -129,7 +154,27 @@ class SearchSettingsController(
       ),
       coverage = coverage,
       historyCount = historyCount,
+      offerRemoveIndexModel = removeOffer,
     )
+  }
+
+  init {
+    // IX-3: l'ultima misura si ritrova, e si rifa' quando il modello del calcolo diventa pronto (la prima falliva se mancava).
+    indexer?.savedProbe()?.let { probeResult.value = it }
+    val control = indexer
+    val manager = models
+    if (control != null && manager != null) {
+      scope.launch {
+        manager.states.map { it[ModelCatalog.INDEX_440M.id] is ModelState.Ready }.distinctUntilChanged().collect { ready ->
+          if (ready && control.indexer.value && probeResult.value == null) measure()
+        }
+      }
+    }
+  }
+
+  /** La pagina si apre: il lavoro che resta, lo spazio e lo stato si rileggono (IX-3). */
+  fun refresh() {
+    indexer?.refresh()
   }
 
   // --- Ruolo Indicizzatore (D15, Q3) ----------------------------------------------------------------------------------------------------
@@ -141,10 +186,19 @@ class SearchSettingsController(
   fun setIndexer(on: Boolean) {
     val control = indexer ?: return
     scope.launch {
-      guarded { control.setIndexer(on) }
+      val change = try {
+        control.setIndexer(on)
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        null
+      }
+      // Il 440M lo chiede l'app all'accensione del ruolo (lavoro accelerato, D15); la misura parte quando il modello e' pronto (vedi `init`).
       if (on) {
-        guarded { models?.ensure(ModelCatalog.INDEX_440M.id, ModelTrigger.ROLE_CHANGED, DOWNLOAD_BUDGET) }
         measure()
+      } else if (change == IndexerChange.SAVED && models?.states?.value?.get(ModelCatalog.INDEX_440M.id) is ModelState.Ready) {
+        // IX-8: spegnere il ruolo chiede se togliere anche il modello (370 MiB).
+        removeOffer.value = true
       }
     }
   }
@@ -156,7 +210,11 @@ class SearchSettingsController(
     measuring.value = true
     scope.launch {
       try {
-        guarded { probeResult.value = device.measure() }
+        guarded {
+          val result = device.measure()
+          probeResult.value = result
+          indexer?.saveProbe(result)
+        }
       } finally {
         measuring.value = false
       }
@@ -170,12 +228,25 @@ class SearchSettingsController(
 
   // --- Modelli (D20) ---------------------------------------------------------------------------------------------------------------
 
+  /** "Scarica ora": una richiesta di lavoro (non scarica nel proprio scope: la pagina puo' chiudersi e lo scaricamento continua, MO-1). */
   fun downloadModel(id: ModelId) {
     val manager = models ?: return
     scope.launch { guarded { manager.ensure(id, ModelTrigger.USER_NOW, DOWNLOAD_BUDGET) } }
   }
 
+  /** Il "Si'" alla conferma sui dati mobili (MO-2): la richiesta ripetuta porta la conferma con se'. */
+  fun confirmMobileDownload(id: ModelId) {
+    val manager = models ?: return
+    scope.launch { guarded { manager.ensure(id, ModelTrigger.USER_CONFIRMED, DOWNLOAD_BUDGET) } }
+  }
+
+  /** "Tienilo": il modello di analisi resta (IX-8). */
+  fun dismissRemoveOffer() {
+    removeOffer.value = false
+  }
+
   fun removeModel(id: ModelId) {
+    removeOffer.value = false
     val manager = models ?: return
     val spec = ModelCatalog.byId(id) ?: return
     // Il ritaglio sta nell'APK e non si toglie (D44).

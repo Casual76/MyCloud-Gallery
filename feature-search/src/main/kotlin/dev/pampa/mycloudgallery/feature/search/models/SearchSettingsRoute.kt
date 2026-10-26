@@ -48,6 +48,11 @@ class SearchSettingsViewModel @Inject constructor(
     probe = probe.orElse(null),
     scope = viewModelScope,
   )
+
+  init {
+    // IX-3: a ogni apertura della pagina il lavoro che resta, lo spazio e lo stato si rileggono.
+    controller.refresh()
+  }
 }
 
 /** Le richieste della pagina: quelle del [controller] e, per le uscite (Diagnostica, pagina di attivazione, "Libera spazio"), le [SearchActions] di `:app`. */
@@ -69,7 +74,11 @@ internal class ActionSettingsHandlers(
 
   override fun onDownloadModel(id: ModelId) = controller.downloadModel(id)
 
+  override fun onConfirmMobileDownload(id: ModelId) = controller.confirmMobileDownload(id)
+
   override fun onRemoveModel(id: ModelId) = controller.removeModel(id)
+
+  override fun onKeepIndexModel() = controller.dismissRemoveOffer()
 
   override fun onClearHistory() = controller.clearHistory()
 
@@ -114,5 +123,6 @@ fun TextReadingActivationRoute(onClose: () -> Unit, viewModel: SearchSettingsVie
     onNotNow = onClose,
     onBack = onClose,
     versionChanged = reading.state is TextReadingState.OnForAccount && reading.needsConsent,
+    awaitingNotice = reading.state is TextReadingState.AwaitingNotice,
   )
 }

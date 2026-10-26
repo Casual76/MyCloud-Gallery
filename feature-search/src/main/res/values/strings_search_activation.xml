@@ -15,7 +15,9 @@
 
   <string name="activation_scope_pre">"Vale per i dispositivi del tuo account; su ognuno puoi dire "</string>
   <string name="activation_scope_bold">«Non su questo dispositivo»</string>
-  <string name="activation_scope_post">. La spegni quando vuoi: da quel momento ML Kit non parte più.</string>
+  <string name="activation_scope_post">. La spegni quando vuoi: da quel momento ML Kit non parte più su questo dispositivo; sugli altri si ferma appena ricevono la tua scelta (a casa o con la VPN accesa).</string>
+
+  <string name="activation_notice">Il tuo account ha già attivato la lettura del testo da un altro dispositivo. Su questo ML Kit non parte finché non confermi: leggi qui sotto cosa succede e scegli.</string>
 
   <string name="activation_others">Anche spenta, puoi cercare e copiare il testo che un altro dispositivo della famiglia ha già letto.</string>
 

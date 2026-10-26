@@ -17,6 +17,7 @@ import androidx.compose.ui.res.stringResource
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
+import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
@@ -41,7 +42,7 @@ internal fun ReadingBlock(state: SearchSettingsState, handlers: SearchSettingsHa
   FluidListGroup {
     FluidListRow(
       title = stringResource(R.string.models_reading_title),
-      subtitle = stringResource(readingSummary(reading.state)),
+      subtitle = stringResource(readingSummary(reading.state, reading.excludedHere)),
       tone = readingTone(reading.state),
       leading = { Icon(Icons.Rounded.TextFields, contentDescription = null) },
       disclosure = false,
@@ -64,8 +65,18 @@ internal fun ReadingBlock(state: SearchSettingsState, handlers: SearchSettingsHa
     horizontalArrangement = Arrangement.spacedBy(SearchDimens.TightGap),
   ) {
     when (val s = reading.state) {
-      TextReadingState.Off -> Button(R.string.models_reading_off_action, handlers::onOpenActivation)
+      TextReadingState.Off -> {
+        Button(R.string.models_reading_off_action, handlers::onOpenActivation)
+        // R8: l'esclusione si da' anche da spenta, prima che qualcuno accenda la lettura da un altro dispositivo.
+        if (reading.excludedHere) Button(R.string.models_reading_include, handlers::onIncludeThisDevice) else Button(R.string.models_reading_exclude, handlers::onExcludeThisDevice)
+      }
       TextReadingState.Disabling -> Unit
+      // LT-2, R8: l'account l'ha accesa altrove; qui ML Kit non parte finche' non si conferma (o ci si esclude).
+      is TextReadingState.AwaitingNotice -> {
+        Button(R.string.models_reading_notice_action, handlers::onOpenActivation)
+        Button(R.string.models_reading_exclude, handlers::onExcludeThisDevice)
+        Button(R.string.models_reading_disable) { disabling = true }
+      }
       is TextReadingState.OnForAccount -> {
         if (reading.needsConsent) Button(R.string.models_reading_changed_action, handlers::onOpenActivation)
         if (s.thisDevice) Button(R.string.models_reading_exclude, handlers::onExcludeThisDevice) else Button(R.string.models_reading_include, handlers::onIncludeThisDevice)
@@ -73,6 +84,10 @@ internal fun ReadingBlock(state: SearchSettingsState, handlers: SearchSettingsHa
       }
     }
   }
+  // R6: la scelta vale subito qui; se non e' ancora arrivata agli altri dispositivi lo si dice. I8: e un cambio fatto altrove vale qui
+  // quando i dati personali si sincronizzano.
+  if (reading.syncPending) FluidSectionFootnote(text = stringResource(R.string.models_reading_sync_pending))
+  FluidSectionFootnote(text = stringResource(R.string.models_reading_other_devices))
   if (disabling) {
     val title = stringResource(R.string.models_reading_disable_title)
     GalleryConfirmSheet(visible = true, onDismissRequest = { disabling = false }, paneTitle = title) {
@@ -101,14 +116,16 @@ private fun Button(label: Int, onClick: () -> Unit) {
   FluidButton(text = stringResource(label), onClick = onClick, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large)
 }
 
-internal fun readingSummary(state: TextReadingState): Int = when (state) {
-  TextReadingState.Off -> R.string.models_reading_off
+internal fun readingSummary(state: TextReadingState, excludedHere: Boolean = false): Int = when (state) {
+  TextReadingState.Off -> if (excludedHere) R.string.models_reading_off_excluded else R.string.models_reading_off
   TextReadingState.Disabling -> R.string.models_reading_disabling
+  is TextReadingState.AwaitingNotice -> R.string.models_reading_awaiting_notice
   is TextReadingState.OnForAccount -> if (state.thisDevice) R.string.models_reading_on_here else R.string.models_reading_on_not_here
 }
 
 private fun readingTone(state: TextReadingState): FluidTone = when (state) {
   TextReadingState.Off -> FluidTone.Neutral
   TextReadingState.Disabling -> FluidTone.Info
+  is TextReadingState.AwaitingNotice -> FluidTone.Warning
   is TextReadingState.OnForAccount -> if (state.thisDevice) FluidTone.Success else FluidTone.Warning
 }

@@ -89,7 +89,15 @@ data class IndexerState(
 enum class AreaKind { MY_PRIVATE_AREA, COMMON_AREA }
 
 /** La lettura del testo nelle foto (D41): stato, e se la pagina di attivazione va mostrata (testo nuovo da accettare). */
-data class TextReadingPageState(val state: TextReadingState, val textVersion: Int, val needsConsent: Boolean)
+data class TextReadingPageState(
+  val state: TextReadingState,
+  val textVersion: Int,
+  val needsConsent: Boolean,
+  /** Questo dispositivo si e' escluso (locale, vale anche da spenta: R8). */
+  val excludedHere: Boolean = false,
+  /** La scelta fatta qui non e' ancora arrivata agli altri dispositivi (fuori casa, senza l'ora del NAS): vale qui subito (R6, I8). */
+  val syncPending: Boolean = false,
+)
 
 /** La pagina Impostazioni → Ricerca e modelli (§2.6). */
 data class SearchSettingsState(
@@ -98,6 +106,8 @@ data class SearchSettingsState(
   val models: ModelsState,
   val coverage: SearchCoverage,
   val historyCount: Int,
+  /** IX-8: il ruolo e' appena stato spento e il modello di analisi (370 MiB) c'e' ancora: la pagina chiede se toglierlo. */
+  val offerRemoveIndexModel: Boolean = false,
 )
 
 /** La cronologia a riposo (§1.5, D32). */

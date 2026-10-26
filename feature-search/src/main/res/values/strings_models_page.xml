@@ -18,6 +18,7 @@
     <item quantity="one">Analizzare %1$s media richiede circa una notte.</item>
     <item quantity="other">Analizzare %1$s media richiede circa %2$d notti.</item>
   </plurals>
+  <string name="models_indexer_no_estimate">Da analizzare: %1$s media. La stima delle notti arriva appena il modello di analisi è pronto e il dispositivo è stato misurato.</string>
   <string name="models_indexer_nothing">Non c’è niente da analizzare.</string>
   <string name="models_index_now">Indicizza ora</string>
 
@@ -28,6 +29,7 @@
   <string name="models_status_idle">Tutto analizzato, per ora.</string>
   <string name="models_status_running">Analizzati %1$s media su %2$s.</string>
   <string name="models_status_running_eta">Analizzati %1$s media su %2$s, mancano circa %3$d minuti.</string>
+  <string name="models_status_next_stage">Riprendo fra poco: l’analisi continua con la prossima tappa.</string>
   <string name="models_status_waiting_rules">In attesa: lo permettono le regole di rete e batteria.</string>
   <string name="models_status_waiting_network">In attesa di una rete.</string>
   <string name="models_status_waiting_nas">In attesa del NAS.</string>
@@ -60,6 +62,11 @@
   <string name="models_reading_title">Leggi il testo nelle foto</string>
   <string name="models_reading_off">Spenta. Le parole dentro le foto non si cercano.</string>
   <string name="models_reading_off_action">Scopri e attiva</string>
+  <string name="models_reading_off_excluded">Spenta. Questo dispositivo non la userà nemmeno se la accendi altrove.</string>
+  <string name="models_reading_awaiting_notice">Attiva per il tuo account, ma qui aspetta la tua conferma: finché non la dai, ML Kit non parte su questo dispositivo.</string>
+  <string name="models_reading_notice_action">Leggi e conferma</string>
+  <string name="models_reading_sync_pending">La scelta vale già qui. Arriva agli altri dispositivi quando questo si collega al NAS.</string>
+  <string name="models_reading_other_devices">Se la accendi o la spegni da un altro dispositivo, su questo vale quando i dati personali si sincronizzano (a casa o con la VPN accesa).</string>
   <string name="models_reading_on_here">Attiva per il tuo account, anche su questo dispositivo.</string>
   <string name="models_reading_on_not_here">Attiva per il tuo account, ma non su questo dispositivo.</string>
   <string name="models_reading_disabling">Sto spegnendo la lettura del testo…</string>
@@ -80,6 +87,12 @@
   <string name="models_model_detail">%1$s · %2$s</string>
   <string name="models_state_absent">Non scaricato</string>
   <string name="models_state_queued">In coda</string>
+  <string name="models_state_wait_network">In coda: aspetto una rete</string>
+  <string name="models_state_wait_wifi">In coda: aspetto il Wi-Fi</string>
+  <string name="models_state_wait_roaming">In coda: in roaming non scarico</string>
+  <string name="models_state_confirm">Serve la tua conferma</string>
+  <string name="models_confirm_note">Scaricare %1$s con i dati mobili? Sul Wi-Fi non costerebbe niente: in roaming non lo faccio mai.</string>
+  <string name="models_confirm_action">Scarica con i dati mobili</string>
   <string name="models_state_fetching">Scaricamento: %1$s di %2$s</string>
   <string name="models_state_fetching_short">In arrivo</string>
   <string name="models_state_verifying">Verifica in corso</string>
@@ -95,6 +108,9 @@
   <string name="models_remove_message_query">Senza questo modello la ricerca per contenuto si ferma su questo dispositivo: restano le date, i luoghi e il testo già letto. Potrai scaricarlo di nuovo.</string>
   <string name="models_remove_message_index">Senza questo modello questo dispositivo non analizza più le foto. Quelle già analizzate restano. Potrai scaricarlo di nuovo.</string>
   <string name="models_remove_confirm">Rimuovi il modello</string>
+  <string name="models_index_off_title">Togliere anche il modello di analisi?</string>
+  <string name="models_index_off_message">Questo dispositivo non analizza più le foto. Il modello occupa 370 MB: puoi toglierlo, e lo riscaricherai se riaccendi l’analisi.</string>
+  <string name="models_index_off_keep">Tienilo</string>
   <string name="models_cancel">Annulla</string>
   <string name="models_space">Spazio dell’indice: vettori %1$s, testo %2$s.</string>
 

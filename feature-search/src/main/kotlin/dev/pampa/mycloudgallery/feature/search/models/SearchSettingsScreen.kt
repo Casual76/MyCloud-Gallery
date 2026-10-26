@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.TextFields
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -124,9 +125,10 @@ private fun IndexerBlock(state: SearchSettingsState, measuring: Boolean, handler
       FluidListDivider()
       FluidListRow(title = stringResource(R.string.models_status_title), subtitle = statusText(resources, indexer.status), tone = statusTone(indexer.status), disclosure = false, titleMaxLines = 3)
       FluidListDivider()
-      FluidListRow(title = estimateText(resources, indexer.toAnalyze, indexer.nights), subtitle = probeText(resources, indexer, measuring), disclosure = false, titleMaxLines = 4)
+      FluidListRow(title = estimateText(resources, indexer.toAnalyze, indexer.nights, measuring), subtitle = probeText(resources, indexer, measuring), disclosure = false, titleMaxLines = 4)
     }
   }
+  if (state.offerRemoveIndexModel) RemoveIndexModelSheet(handlers)
   if (indexer.indexer) {
     val problem = (indexer.status as? AiStatus.Problem)?.code
     Row(modifier = Modifier.padding(top = SearchDimens.TightGap, start = GalleryDimens.Gutter, end = GalleryDimens.Gutter), horizontalArrangement = Arrangement.spacedBy(SearchDimens.TightGap)) {
@@ -137,6 +139,30 @@ private fun IndexerBlock(state: SearchSettingsState, measuring: Boolean, handler
         }
       }
     }
+  }
+}
+
+/** IX-8: spento il ruolo, "Togliere anche il modello di analisi?" (D15): 370 MB che il dispositivo non usa piu'. */
+@Composable
+private fun RemoveIndexModelSheet(handlers: SearchSettingsHandlers) {
+  val title = stringResource(R.string.models_index_off_title)
+  GalleryConfirmSheet(visible = true, onDismissRequest = handlers::onKeepIndexModel, paneTitle = title) {
+    GallerySheetScaffold(
+      icon = Icons.Rounded.Warning,
+      tone = GallerySheetTone.Caution,
+      title = title,
+      message = stringResource(R.string.models_index_off_message),
+      actions = {
+        FluidButton(
+          text = stringResource(R.string.models_remove_confirm),
+          onClick = { handlers.onRemoveModel(dev.pampa.mycloudgallery.core.models.contract.ModelCatalog.INDEX_440M.id) },
+          style = FluidButtonStyle.Destructive,
+          size = FluidButtonSize.Large,
+          fillWidth = true,
+        )
+        FluidButton(text = stringResource(R.string.models_index_off_keep), onClick = handlers::onKeepIndexModel, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large, fillWidth = true)
+      },
+    )
   }
 }
 
@@ -163,6 +189,7 @@ internal fun statusText(resources: Resources, status: AiStatus): String = when (
       AiWaitReason.STORAGE_LOW -> R.string.models_status_waiting_storage
       AiWaitReason.HOT -> R.string.models_status_waiting_hot
       AiWaitReason.PREPARATION -> R.string.models_status_waiting_preparation
+      AiWaitReason.NEXT_STAGE -> R.string.models_status_next_stage
     },
   )
   is AiStatus.BufferOnlyDone -> resources.getString(R.string.models_status_buffer_only, GalleryNumbers.format(status.items))
@@ -177,10 +204,12 @@ private fun statusTone(status: AiStatus): FluidTone = when (status) {
 }
 
 /** "Analizzare N media richiede circa K notti" (D15): dalla misura e dal lavoro vero che resta. */
-internal fun estimateText(resources: Resources, toAnalyze: Int, nights: Int?): String = when {
+internal fun estimateText(resources: Resources, toAnalyze: Int, nights: Int?, measuring: Boolean = false): String = when {
   toAnalyze <= 0 -> resources.getString(R.string.models_indexer_nothing)
-  nights == null -> resources.getString(R.string.models_indexer_measuring)
-  else -> resources.getQuantityString(R.plurals.models_indexer_estimate, nights, GalleryNumbers.format(toAnalyze), nights)
+  nights != null -> resources.getQuantityString(R.plurals.models_indexer_estimate, nights, GalleryNumbers.format(toAnalyze), nights)
+  // IX-3: "Sto misurando" solo se la misura e' davvero in corso; altrimenti la stima manca e si dice perche' (manca la misura, di solito il modello).
+  measuring -> resources.getString(R.string.models_indexer_measuring)
+  else -> resources.getString(R.string.models_indexer_no_estimate, GalleryNumbers.format(toAnalyze))
 }
 
 private fun probeText(resources: Resources, indexer: dev.pampa.mycloudgallery.feature.search.contract.IndexerState, measuring: Boolean): String {

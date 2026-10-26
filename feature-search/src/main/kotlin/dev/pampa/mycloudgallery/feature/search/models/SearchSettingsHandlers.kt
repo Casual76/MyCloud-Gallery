@@ -20,7 +20,13 @@ interface SearchSettingsHandlers {
 
   fun onDownloadModel(id: ModelId)
 
+  /** "Scarica con i dati mobili": il "Si'" alla conferma con la dimensione (MO-2). */
+  fun onConfirmMobileDownload(id: ModelId)
+
   fun onRemoveModel(id: ModelId)
+
+  /** "Tienilo": il ruolo e' spento ma il modello di analisi resta (IX-8). */
+  fun onKeepIndexModel()
 
   fun onClearHistory()
 
@@ -45,7 +51,11 @@ object NoSearchSettingsHandlers : SearchSettingsHandlers {
 
   override fun onDownloadModel(id: ModelId) = Unit
 
+  override fun onConfirmMobileDownload(id: ModelId) = Unit
+
   override fun onRemoveModel(id: ModelId) = Unit
+
+  override fun onKeepIndexModel() = Unit
 
   override fun onClearHistory() = Unit
 

@@ -117,4 +117,19 @@ internal class FakeIndexerControl(
   override fun indexNow() {
     indexNowCalls++
   }
+
+  /** IX-3: l'ultima misura ricordata fra una visita e l'altra, e quante volte la pagina ha chiesto di rileggere lo stato. */
+  var saved: dev.pampa.mycloudgallery.core.ai.contract.ProbeResult? = null
+  var refreshCalls: Int = 0
+    private set
+
+  override fun refresh() {
+    refreshCalls++
+  }
+
+  override fun savedProbe(): dev.pampa.mycloudgallery.core.ai.contract.ProbeResult? = saved
+
+  override fun saveProbe(result: dev.pampa.mycloudgallery.core.ai.contract.ProbeResult) {
+    saved = result
+  }
 }

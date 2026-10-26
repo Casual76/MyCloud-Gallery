@@ -4,6 +4,7 @@ import dev.pampa.mycloudgallery.core.model.NasStamp
 import dev.pampa.mycloudgallery.core.nas.contract.NasResult
 import dev.pampa.mycloudgallery.core.nas.contract.Purpose
 import dev.pampa.mycloudgallery.core.nas.ops.NasFileOps
+import dev.pampa.mycloudgallery.core.nas.ops.NasSpaceInfo
 import dev.pampa.mycloudgallery.core.nas.testing.InMemoryNasMedia
 import dev.pampa.mycloudgallery.core.nas.testing.NasContent
 import dev.pampa.mycloudgallery.core.nasops.contract.NasFolders
@@ -240,6 +241,18 @@ class NasOpsTestKit(
   fun bytes(share: String, path: String): ByteArray? = nas.bytes(share, path)
 
   fun lock(share: String, path: String) = nas.lock(share, path)
+
+  /**
+   * Fase 7 P4 (E-SH8, F81): lo spazio libero per l'account (tutte le share), come lo dice il NAS; null = quello di serie (1 TiB). Un piano che non
+   * ci sta (dimensione + 1 GiB) si rifiuta prima del primo file.
+   */
+  fun setCallerFreeBytes(bytes: Long?) {
+    nas.spaceOf = if (bytes == null) {
+      { NasSpaceInfo(totalBytes = 2L shl 40, freeBytes = 1L shl 40, callerFreeBytes = 1L shl 40) }
+    } else {
+      { NasSpaceInfo(totalBytes = 2L shl 40, freeBytes = bytes, callerFreeBytes = bytes) }
+    }
+  }
 
   fun unlock(share: String, path: String) = nas.unlock(share, path)
 

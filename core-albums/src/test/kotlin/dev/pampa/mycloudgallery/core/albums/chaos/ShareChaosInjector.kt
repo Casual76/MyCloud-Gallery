@@ -181,13 +181,14 @@ class ShareChaosInjector(val stats: ShareChaosStats = ShareChaosStats()) {
  */
 object DyingOpsStore {
 
-  /** Le scritture del diario: gli unici punti dove cade una morte. */
-  private val WRITES = setOf("create", "updateItem", "setOpState", "recordTrash", "markTrash", "trashEntered", "saveTrashManifest")
+  /** Le scritture del diario: gli unici punti dove cade una morte (`DyingOpsStoreTest` controlla che siano tutte). */
+  val WRITES = setOf("create", "updateItem", "setOpState", "recordTrash", "markTrash", "trashEntered", "saveTrashManifest")
 
   fun wrap(inner: OpsStore, injector: ShareChaosInjector): OpsStore {
     val handler = InvocationHandler { _, method, args ->
       val arguments: Array<Any?> = args ?: emptyArray()
-      if (method.name !in WRITES) return@InvocationHandler invoke(method, inner, arguments)
+      // I metodi che prendono un OpId (un tipo inline) hanno il nome storpiato dal compilatore (`setOpState-<hash>`): si guarda il nome prima del trattino.
+      if (method.name.substringBefore('-') !in WRITES) return@InvocationHandler invoke(method, inner, arguments)
       injector.checkAlive()
       val n = injector.enter(Surface.OPS_STORE)
       injector.due(Surface.OPS_STORE, n, Moment.BEFORE)?.let { injector.realize(it) }

@@ -8,6 +8,7 @@ import dev.pampa.mycloudgallery.core.nas.testing.InMemoryNasMedia
 import dev.pampa.mycloudgallery.core.nas.testing.NasContent
 import dev.pampa.mycloudgallery.core.nasops.contract.NasFolders
 import dev.pampa.mycloudgallery.core.nasops.contract.NasItem
+import dev.pampa.mycloudgallery.core.nasops.contract.MoveCompletionSink
 import dev.pampa.mycloudgallery.core.nasops.contract.NasOperations
 import dev.pampa.mycloudgallery.core.nasops.contract.NasSpace
 import dev.pampa.mycloudgallery.core.nasops.contract.NasTrash
@@ -22,7 +23,9 @@ import dev.pampa.mycloudgallery.core.nasops.engine.NasOpsEngine
 import dev.pampa.mycloudgallery.core.nasops.engine.NasOpsLock
 import dev.pampa.mycloudgallery.core.nasops.engine.ShareAccessView
 import dev.pampa.mycloudgallery.core.nasops.engine.TrashRecordWriter
+import dev.pampa.mycloudgallery.core.nasops.engine.completionPortOf
 import dev.pampa.mycloudgallery.core.nasops.folders.NasFolderService
+import dev.pampa.mycloudgallery.core.nasops.noop.NoMoveCompletionSink
 import dev.pampa.mycloudgallery.core.nasops.space.NasSpaceService
 import dev.pampa.mycloudgallery.core.nasops.trash.NasTrashService
 import dev.pampa.mycloudgallery.core.nasops.trash.RemoteTrashEntry
@@ -65,9 +68,16 @@ class NasOpsTestKit(
   val engine: KitEngine = KitEngine.REFERENCE,
   /** Solo con [KitEngine.PRODUCTION]: firma dei record del cestino (scritti nel NAS finto); null = nessun record. */
   private val signing: TrashSigningIdentity? = null,
-  /** Solo con [KitEngine.PRODUCTION] (campo, gruppo A, D7): chi riceve gli spostamenti tra share pubblicati, prima del cestino. */
+  /** Campo, gruppo A (D7): chi riceve gli spostamenti tra share pubblicati, prima del cestino (Fase 7 P4: come porta di completamento). */
   private val moves: MoveCompletions = MoveCompletions.NONE,
+  /**
+   * Fase 7 (D29, P4): la porta di completamento, per **entrambi** gli esecutori (riferimento e vero: stesse chiamate, §5.2). Al piu' una fra
+   * questa e [moves] (`completionPortOf`).
+   */
+  private val completions: MoveCompletionSink = NoMoveCompletionSink,
 ) {
+  private val completionPort: MoveCompletionSink = completionPortOf(completions, moves)
+
   val clocks = FakeOpClocks()
   private var nasMs: Long = FakeOpClocks.DEFAULT_NAS_NOW
   private var idCounter = 0
@@ -123,6 +133,7 @@ class NasOpsTestKit(
       gate = gate,
       readOnly = { it in readOnlyShares },
       newId = idSource(),
+      completions = completionPort,
     )
     KitEngine.PRODUCTION -> NasOpsEngine(
       deviceId = deviceId,
@@ -136,7 +147,7 @@ class NasOpsTestKit(
       records = records(),
       lock = lock,
       newId = idSource(),
-      moves = moves,
+      completions = completionPort,
     )
   }
 

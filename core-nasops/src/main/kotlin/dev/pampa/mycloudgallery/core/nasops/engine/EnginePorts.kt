@@ -2,7 +2,9 @@ package dev.pampa.mycloudgallery.core.nasops.engine
 
 import dev.pampa.mycloudgallery.core.model.NasStamp
 import dev.pampa.mycloudgallery.core.model.Sha256
+import dev.pampa.mycloudgallery.core.nasops.contract.MoveCompletionSink
 import dev.pampa.mycloudgallery.core.nasops.contract.TrashReason
+import dev.pampa.mycloudgallery.core.nasops.noop.NoMoveCompletionSink
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import kotlinx.coroutines.sync.Mutex
 
@@ -109,9 +111,14 @@ fun interface ShareAccessView {
 /**
  * Campo, gruppo A (D7; Fase 7 §0 punto 11): uno spostamento tra share ha **pubblicato** la copia verificata di un file a [dstPath] di [dstShare] (con il
  * timbro [stamp] letto adesso) e la sorgente [srcPath] di [srcShare] sta per andare nel cestino. Chi lega la porta (`:app`) collega la posizione nuova allo
- * stesso media del catalogo **prima** che la sorgente esca: prima il catalogo lo scopriva solo alla scansione dopo e intanto puntava alla sorgente gia'
- * nel cestino. Si chiama a ogni ripresa del passo (idempotente per chi la lega); un errore non ferma lo spostamento (il catalogo lo rimette a posto la
- * scansione). Mai un'azione sul NAS: solo il catalogo locale. La "porta di completamento" vera e' della Fase 7 (D29).
+ * stesso media del catalogo **prima** che la sorgente esca. Mai un'azione sul NAS: solo il catalogo locale.
+ *
+ * **Fase 7 P4 (D29): unificata con [MoveCompletionSink].** Il motore chiama una porta sola, la porta di completamento ([MoveCompletionSink],
+ * vincolante: un errore ferma l'elemento in `PUBLISHED` e si riprova, la sorgente non va mai nel cestino prima che il catalogo conosca la
+ * destinazione). Questa forma resta per chi la lega gia' (`CatalogMoveCompletions` di :app, legata in `NasOpsConfig.moves`): [asSink] la fa
+ * diventare la porta di completamento, con le **stesse** regole. Prima (campo A) un errore non fermava lo spostamento: adesso lo ferma,
+ * finche' il catalogo non risponde (docs/decisioni.md, "Fase 7 P4"). Due porte legate insieme sono un errore ([completionPortOf]): il catalogo
+ * non si aggiorna mai due volte in due modi diversi.
  */
 fun interface MoveCompletions {
   suspend fun moved(srcShare: String, srcPath: SharePath, dstShare: String, dstPath: SharePath, stamp: NasStamp)
@@ -120,4 +127,25 @@ fun interface MoveCompletions {
     /** Nessun catalogo (test, banco): il catalogo lo aggiorna la scansione. */
     val NONE: MoveCompletions = MoveCompletions { _, _, _, _, _ -> }
   }
+}
+
+/**
+ * Fase 7 P4 (D29): [MoveCompletions] come porta di completamento. Stessi argomenti (sorgente, destinazione, timbro letto adesso), stesse regole
+ * della porta: chiamata dopo `PUBLISHED` e prima di `SOURCE_RECORDED`, a ogni ripresa; un'eccezione ferma l'elemento e si riprova.
+ */
+fun MoveCompletions.asSink(): MoveCompletionSink = if (this === MoveCompletions.NONE) {
+  NoMoveCompletionSink
+} else {
+  MoveCompletionSink { _, _, source, dest, stamp, _ -> moved(source.share, source.path, dest.share, dest.path, stamp) }
+}
+
+/**
+ * Fase 7 P4 (D29): la sola porta di completamento del motore, da quella vera ([sink]) o da quella del campo A ([moves]). Al piu' una delle due
+ * puo' essere legata: con due porte lo stesso spostamento aggiornerebbe il catalogo due volte, in due modi.
+ */
+fun completionPortOf(sink: MoveCompletionSink, moves: MoveCompletions): MoveCompletionSink {
+  require(sink === NoMoveCompletionSink || moves === MoveCompletions.NONE) {
+    "Una sola porta di completamento: MoveCompletionSink oppure MoveCompletions, non entrambe."
+  }
+  return if (sink !== NoMoveCompletionSink) sink else moves.asSink()
 }

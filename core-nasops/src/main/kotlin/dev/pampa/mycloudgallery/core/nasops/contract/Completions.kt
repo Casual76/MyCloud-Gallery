@@ -5,13 +5,14 @@ import dev.pampa.mycloudgallery.core.model.Sha256
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 
 // Fase 7 (docs/fase7-progetto.md D29, §1.2 "core-nasops", §2.5 passo 5; C26): la PORTA DI COMPLETAMENTO degli spostamenti. Firma e
-// null-object di P0; la chiamata dentro `NasOpsEngine` (dopo il passo `PUBLISHED`, prima di `SOURCE_RECORDED`) e il legame in :app
-// (`MediaCatalog.attachMoved`) sono di P4 e P13.
+// null-object di P0; la chiamata dentro `NasOpsEngine` (dopo il passo `PUBLISHED`, prima di `SOURCE_RECORDED`) e' di P4, il legame in :app
+// (`MediaCatalog.attachMoved`) di P13.
 //
-// Rispetto a `engine.MoveCompletions` (correzioni dal campo, gruppo A: un annuncio "al meglio", il cui errore non ferma niente) questa
-// porta e' **vincolante**: un errore ferma l'elemento in `PUBLISHED` e si ritenta, cosi' la sorgente non va mai nel cestino prima che
-// il catalogo conosca la destinazione (E-SH2, invariante 3 e 5 del §5.5). P4 decide se `MoveCompletions` resta (catalogo dei media non
-// condivisi) o diventa un adattatore di questa porta; le due non devono aggiornare il catalogo due volte in modo diverso.
+// **Scelta di P4 (docs/decisioni.md, "Fase 7 P4"): una porta sola, questa.** `engine.MoveCompletions` (correzioni dal campo, gruppo A: un
+// annuncio "al meglio") resta solo come forma per chi la lega gia' (:app, `NasOpsConfig.moves`) e diventa questa porta con `asSink`, con le
+// stesse regole: **vincolante**, un errore ferma l'elemento in `PUBLISHED` e si ritenta, cosi' la sorgente non va mai nel cestino prima che il
+// catalogo conosca la destinazione (E-SH2, invarianti 3 e 5 del §5.5). Legarle tutte e due e' un errore (`completionPortOf`): il catalogo non
+// si aggiorna mai due volte per lo stesso file.
 
 /** Un file del NAS: share e percorso relativo alla share. Dati dell'utente: mai nei log. */
 data class NasFileRef(val share: String, val path: SharePath) {

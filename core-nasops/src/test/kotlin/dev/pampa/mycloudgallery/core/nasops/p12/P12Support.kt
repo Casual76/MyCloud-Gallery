@@ -17,6 +17,7 @@ import dev.pampa.mycloudgallery.core.nas.ops.NasTempWriter
 import dev.pampa.mycloudgallery.core.nas.ops.PublishOutcome
 import dev.pampa.mycloudgallery.core.nas.ops.RenameOutcome
 import dev.pampa.mycloudgallery.core.nas.ops.RmdirOutcome
+import dev.pampa.mycloudgallery.core.nasops.contract.MoveCompletionSink
 import dev.pampa.mycloudgallery.core.nasops.contract.AcceptedPlan
 import dev.pampa.mycloudgallery.core.nasops.contract.LocalTrashRecord
 import dev.pampa.mycloudgallery.core.nasops.contract.OpErrorCode
@@ -27,6 +28,7 @@ import dev.pampa.mycloudgallery.core.nasops.contract.OpState
 import dev.pampa.mycloudgallery.core.nasops.contract.OpsStore
 import dev.pampa.mycloudgallery.core.nasops.contract.PauseReason
 import dev.pampa.mycloudgallery.core.nasops.contract.TrashEntryState
+import dev.pampa.mycloudgallery.core.nasops.noop.NoMoveCompletionSink
 import dev.pampa.mycloudgallery.core.nasops.engine.NasOpsEngine
 import dev.pampa.mycloudgallery.core.nasops.engine.NasOpsLock
 import dev.pampa.mycloudgallery.core.nasops.engine.ShareAccessView
@@ -198,8 +200,15 @@ class DyingReader(private val inner: NasMediaReader, private val death: Death) :
     death.around { inner.readAll(file, sink, progress) }
 }
 
-/** Un esecutore vero sul diario e sul NAS del [kit], con la morte del processo programmata da [death]. */
-fun NasOpsTestKit.engineWith(death: Death, records: TrashRecordWriter = TrashRecordWriter.NONE): NasOpsEngine = NasOpsEngine(
+/**
+ * Un esecutore vero sul diario e sul NAS del [kit], con la morte del processo programmata da [death]. [completions] (Fase 7 P4, D29): la porta di
+ * completamento, senza morte (chi vuole la morte anche li' la avvolge in [Death.around]).
+ */
+fun NasOpsTestKit.engineWith(
+  death: Death,
+  records: TrashRecordWriter = TrashRecordWriter.NONE,
+  completions: MoveCompletionSink = NoMoveCompletionSink,
+): NasOpsEngine = NasOpsEngine(
   deviceId = deviceId,
   accountId = accountId,
   fileOps = DyingFileOps(fileOps, death),
@@ -210,6 +219,7 @@ fun NasOpsTestKit.engineWith(death: Death, records: TrashRecordWriter = TrashRec
   access = ShareAccessView { share -> readOnlyShares.any { it.equals(share, ignoreCase = true) } },
   records = records,
   lock = NasOpsLock(),
+  completions = completions,
 )
 
 // --- Gli invarianti del §5.5 ----------------------------------------------------------------------------------------------------

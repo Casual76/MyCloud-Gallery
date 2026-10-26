@@ -7,6 +7,7 @@ import dev.pampa.mycloudgallery.core.nasops.clean.IndexMaintenance
 import dev.pampa.mycloudgallery.core.nasops.clean.OwnFilesCleaner
 import dev.pampa.mycloudgallery.core.nasops.contract.CitedTemps
 import dev.pampa.mycloudgallery.core.nasops.contract.LargestFile
+import dev.pampa.mycloudgallery.core.nasops.contract.MoveCompletionSink
 import dev.pampa.mycloudgallery.core.nasops.contract.NasFolders
 import dev.pampa.mycloudgallery.core.nasops.contract.NasOperations
 import dev.pampa.mycloudgallery.core.nasops.contract.NasSpace
@@ -22,7 +23,9 @@ import dev.pampa.mycloudgallery.core.nasops.engine.MoveCompletions
 import dev.pampa.mycloudgallery.core.nasops.engine.NasOpsEngine
 import dev.pampa.mycloudgallery.core.nasops.engine.NasOpsLock
 import dev.pampa.mycloudgallery.core.nasops.engine.ShareAccessView
+import dev.pampa.mycloudgallery.core.nasops.engine.completionPortOf
 import dev.pampa.mycloudgallery.core.nasops.folders.NasFolderService
+import dev.pampa.mycloudgallery.core.nasops.noop.NoMoveCompletionSink
 import dev.pampa.mycloudgallery.core.nasops.space.NasSpaceService
 import dev.pampa.mycloudgallery.core.nasops.trash.NasTrashService
 import dev.pampa.mycloudgallery.core.nasops.trash.SignedTrashRecordSource
@@ -47,6 +50,10 @@ import dev.pampa.mycloudgallery.core.trust.registry.RegistryState
  * @property citedTemps Fase 5A, D33: i temporanei citati dal diario del backup (`BackupStore.citedTemps`, composto da `:app`, P7): la
  *   pulizia dei propri file li lascia come quelli delle operazioni.
  * @property moves Campo, gruppo A (D7): il catalogo collega la posizione nuova di uno spostamento tra share prima che la sorgente vada nel cestino.
+ *   Fase 7 P4 (D29): diventa la porta di completamento (`asSink`), vincolante come [completions]: un errore ferma l'elemento finche' il catalogo
+ *   non risponde.
+ * @property completions Fase 7 (D29): la porta di completamento vera (`MediaCatalog.attachMoved`, P13). Al piu' una fra [moves] e
+ *   [completions] (`completionPortOf`): il catalogo non si aggiorna mai due volte per lo stesso file.
  */
 class NasOpsConfig(
   val deviceId: String,
@@ -70,7 +77,13 @@ class NasOpsConfig(
   val trashRetentionMillis: Long = TrustLimits.TRASH_RETENTION_MILLIS,
   val citedTemps: CitedTemps = CitedTemps.NONE,
   val moves: MoveCompletions = MoveCompletions.NONE,
+  val completions: MoveCompletionSink = NoMoveCompletionSink,
 ) {
+  init {
+    // Fase 7 P4 (D29): una sola porta di completamento (lo stesso controllo di `completionPortOf`, prima di aprire qualunque cosa).
+    completionPortOf(completions, moves)
+  }
+
   override fun toString(): String = "NasOpsConfig"
 }
 
@@ -111,7 +124,7 @@ object NasOpsWiring {
       heavy = config.heavyWork,
       lock = lock,
       presence = config.catalogPresence,
-      moves = config.moves,
+      completions = completionPortOf(config.completions, config.moves),
     )
     val trash = NasTrashService(
       deviceId = config.deviceId,

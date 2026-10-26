@@ -73,19 +73,11 @@ class ProcessWatcherTest {
     val activity = Activity()
     watcher.onActivityStarted(activity)
     device.graph.awaitSetup { it is SetupState.Ready }
-    awaitCondition { device.scheduler.soon.contains(SyncReason.APP_OPENED) }
-    awaitCondition { daily.get() == 1 }
+    until("il controllo del registro per l'apertura dell'app") { device.scheduler.soon.contains(SyncReason.APP_OPENED) }
+    until("il riepilogo giornaliero") { daily.get() == 1 }
 
     watcher.onActivityStopped(activity)
     device.graph.session.state.await { it == NasConnState.Idle }
     assertThat(device.graph.appContext.context.value.inForeground).isFalse()
-  }
-
-  private suspend fun awaitCondition(check: () -> Boolean) {
-    val deadline = System.currentTimeMillis() + 10_000
-    while (!check()) {
-      check(System.currentTimeMillis() < deadline) { "condizione non raggiunta" }
-      kotlinx.coroutines.delay(20)
-    }
   }
 }

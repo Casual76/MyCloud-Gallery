@@ -24,14 +24,11 @@ import dev.pampa.mycloudgallery.root.GraphRootPorts
 import dev.pampa.mycloudgallery.work.TrustSyncOutcome
 import dev.pampa.mycloudgallery.work.TrustSyncRun
 import java.io.File
-import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
-import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -93,10 +90,6 @@ class VerificaFunzionaleFamigliaTest {
 
   private fun AppGraph.snapshot(): OnboardingSnapshot = onboardingStore.snapshotOrNull()!!
 
-  private suspend fun until(condition: () -> Boolean) {
-    withTimeout(15.seconds) { while (!condition()) delay(20) }
-  }
-
   /** L'admin vede la richiesta (la finestra di 15 minuti parte da qui) e la approva con il codice del dispositivo. */
   private suspend fun approve(admin: AppGraph, member: AppGraph): AdminActionResult {
     admin.registry.refresh(Purpose.INTERACTIVE)
@@ -121,12 +114,12 @@ class VerificaFunzionaleFamigliaTest {
     t.awaitSetup { it == SetupState.NotConfigured }
     val vm = viewModelOf(tablet)
     vm.choosePath(OnboardingPath.JOIN_QR)
-    until { t.coordinator.progress.value.path == OnboardingPath.JOIN_QR }
+    until("il percorso e' l'ingresso con il QR") { t.coordinator.progress.value.path == OnboardingPath.JOIN_QR }
     // Dalla scansione, "Inserisci a mano": il percorso diventa quello senza QR.
     vm.joinEnterManually()
-    until { t.coordinator.progress.value.path == OnboardingPath.JOIN_MANUAL }
+    until("il percorso e' l'ingresso a mano") { t.coordinator.progress.value.path == OnboardingPath.JOIN_MANUAL }
     vm.confirmManualHome(true)
-    until { t.snapshot().homeConfirmed != null }
+    until("la casa e' confermata") { t.snapshot().homeConfirmed != null }
     vm.submitManualJoin(
       ip = TestNas.IP,
       user = TestNas.MEMBER_USER,
@@ -135,12 +128,12 @@ class VerificaFunzionaleFamigliaTest {
       deviceName = "Tablet di prova",
       commonShare = TestNas.COMMON,
     )
-    until { t.snapshot().nas != null }
+    until("il NAS e' nell'istantanea") { t.snapshot().nas != null }
     vm.submitJoinPassword(TestNas.MEMBER_PASSWORD.toCharArray())
     vm.submitJoinName("Tablet di prova")
-    until { t.snapshot().join?.registered == true }
+    until("la richiesta e' registrata") { t.snapshot().join?.registered == true }
     // Dopo la richiesta il registro si rilegge: il tablet e' "in attesa".
-    until { t.registry.status.value is TrustStatus.Pending }
+    until("il tablet e' in attesa dell'approvazione") { t.registry.status.value is TrustStatus.Pending }
     assertThat(t.snapshot().join!!.manual).isTrue()
     assertThat(t.snapshot().privateShare).isEqualTo(TestNas.MEMBER_USER)
     // L'admin vede la richiesta e la approva: il tablet entra.
@@ -176,7 +169,7 @@ class VerificaFunzionaleFamigliaTest {
     vm.continueJoin()
     vm.submitJoinPassword(TestNas.MEMBER_PASSWORD.toCharArray())
     vm.submitJoinName("Tablet di prova")
-    until { (t.registry.status.value as? TrustStatus.Pending)?.code.let { it != null && it != firstCode } }
+    until("la richiesta rifatta ha un codice nuovo") { (t.registry.status.value as? TrustStatus.Pending)?.code.let { it != null && it != firstCode } }
     assertThat(t.engine.myDeviceId()).isNotEqualTo(stale)
     assertThat(t.snapshot().finished).isTrue()
 

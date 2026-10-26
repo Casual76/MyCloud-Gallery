@@ -40,7 +40,6 @@ import dev.pampa.mycloudgallery.work.BackupJobs
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
-import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -139,7 +138,7 @@ class Correzioni5BVersioniAppTest {
   /** Il media della riga del telefono [rowId]. */
   private suspend fun mediaOfRow(rig: BackupRig, rowId: Long): MediaId {
     val catalog = checkNotNull(rig.gallery.coreIfReady()).catalog
-    val view = withTimeout(60_000) { rig.gallery.repository.view(LibraryFilter.ALL).first { it.size >= 1 } }
+    val view = withTimeout(Attese.TETTO_MS) { rig.gallery.repository.view(LibraryFilter.ALL).first { it.size >= 1 } }
     return (0 until view.size).map { view.snapshot.idAt(view.snapshotIndex(it)) }.first { id ->
       catalog.media(id)?.locations?.any { (it.location as? Location.Phone)?.mediaStoreId == rowId } == true
     }
@@ -227,7 +226,7 @@ class Correzioni5BVersioniAppTest {
     val rig = heldPhoto(RecordingJobs())
     val backup = rig.backup
     backup.kick()
-    val status = withTimeout(20.seconds) {
+    val status = withTimeout(Attese.TETTO) {
       backup.status.first { it is BackupStatus.Problem && it.code == BackupProblemCode.SOURCE_CHANGED }
     }
     assertThat(status).isEqualTo(BackupStatus.Problem(BackupProblemCode.SOURCE_CHANGED, 1))
@@ -262,7 +261,7 @@ class Correzioni5BVersioniAppTest {
     // Samsung "Ripristina originale": la riga torna ai byte dell'originale.
     rig.store.rewrite(BackupRig.PRIMARY, 1, original, old.dateModifiedMs + 120_000)
     rig.readPhone()
-    withTimeout(20.seconds) { while (jobs.versionWork.isEmpty()) delay(50) }
+    withTimeout(Attese.TETTO) { while (jobs.versionWork.isEmpty()) delay(50) }
     assertThat(jobs.versionWork).contains(BackupKind.PHOTOS)
   }
 
@@ -384,7 +383,7 @@ class Correzioni5BVersioniAppTest {
     val catalog = checkNotNull(rig.gallery.coreIfReady()).catalog
     assertThat(checkNotNull(catalog.media(nasOnly)).locations.single { it.isNas }.verifiedAtMillis).isNull()
     assertThat(backup.safeguard(nasOnly)).isEqualTo(SafeguardStart.STARTED)
-    withTimeout(30.seconds) {
+    withTimeout(Attese.TETTO) {
       while (checkNotNull(catalog.media(nasOnly)).locations.single { it.isNas }.verifiedAtMillis == null) delay(50)
     }
   }

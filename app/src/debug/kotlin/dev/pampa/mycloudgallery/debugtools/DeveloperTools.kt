@@ -81,6 +81,8 @@ internal object DeveloperTools {
     }
     // Fase 6 (P9, P11): lo strumento di valutazione della ricerca.
     with(dev.pampa.mycloudgallery.debugtools.eval.EvalEntry) { destination(nav) }
+    // Fase 7 (P12): lo strumento di valutazione degli album smart e dei viaggi (F88, F89).
+    with(dev.pampa.mycloudgallery.debugtools.eval.albums.AlbumsEvalEntry) { destination(nav) }
   }
 
   /**
@@ -94,6 +96,14 @@ internal object DeveloperTools {
   fun installSearch(stack: dev.pampa.mycloudgallery.ai.AiStack, gallery: dev.pampa.mycloudgallery.gallery.GalleryGraph, context: Context) {
     dev.pampa.mycloudgallery.debugtools.eval.EvalEnvironmentHolder.current =
       dev.pampa.mycloudgallery.debugtools.eval.AppEvalEnvironment(stack, gallery, context.noBackupFilesDir)
+    // Fase 7 (P12): la porta dello strumento di valutazione degli album e dei viaggi, sopra la stessa Libreria (sola lettura). P13 puo' passare qui la
+    // cartella `Backup/<dispositivo>/` di questo dispositivo (`ownBackupFolder`).
+    dev.pampa.mycloudgallery.debugtools.eval.albums.AlbumsEvalEnvironmentHolder.current = dev.pampa.mycloudgallery.debugtools.eval.albums.AppAlbumsEvalEnvironment.over(
+      gallery,
+      context.applicationContext,
+      dev.pampa.mycloudgallery.core.albums.smart.EngineContentSearch(stack.search.engine),
+      stack.search.today,
+    )
   }
 
   fun settingsSection(nav: NavController): (@Composable () -> Unit)? = {
@@ -129,6 +139,8 @@ internal object DeveloperTools {
       )
       FluidListDivider()
       dev.pampa.mycloudgallery.debugtools.eval.EvalEntry.row(nav)
+      FluidListDivider()
+      dev.pampa.mycloudgallery.debugtools.eval.albums.AlbumsEvalEntry.row(nav)
     }
   }
 

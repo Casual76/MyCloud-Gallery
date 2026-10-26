@@ -271,7 +271,7 @@ class NasOrganizeIntegrationTest {
     checkNotNull(nas.scan(ScanMode.Full, 5.minutes))
     time.advance(3 * MINUTE)
     val reports = checkNotNull(nas.scan(ScanMode.Full, 5.minutes))
-    val settled = withTimeoutOrNull(30.seconds) { gallery.repository.view(LibraryFilter.ALL).first { it.size == photos.size } }
+    val settled = withTimeoutOrNull(Attese.TETTO) { gallery.repository.view(LibraryFilter.ALL).first { it.size == photos.size } }
     assertWithMessage("Libreria dopo lo spostamento: ${gallery.repository.view(LibraryFilter.ALL).first().size} media, verifica $reports")
       .that(settled).isNotNull()
 
@@ -565,6 +565,6 @@ class NasOrganizeIntegrationTest {
     const val PRIMARY = "external_primary"
     const val DAY = 24L * 60 * 60 * 1000
     const val MINUTE = 60_000L
-    val TIMEOUT = 2.minutes
+    val TIMEOUT = Attese.TETTO
   }
 }

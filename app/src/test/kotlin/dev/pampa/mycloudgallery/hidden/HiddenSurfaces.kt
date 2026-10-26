@@ -256,6 +256,11 @@ internal object HiddenSurfaces {
     // Fase 7 (P13, P8): le pagine dell'Utility in :app passano `visibleMedia`/`hiddenMask` a `CatalogIdenticalDuplicates`, `CatalogSimilarShots` e
     // `FullHashNightly` (le superfici `duplicates` registrate qui sopra), costruite al primo uso; non mostrano niente.
     "app/src/main/kotlin/dev/pampa/mycloudgallery/utility/UtilityGraph.kt",
+    // Fase 7 (P12): lo strumento di valutazione degli album (solo debug, `app/src/debug/.../eval/albums/`) passa `VisibleMedia` e `HiddenMask` alla corsa degli album
+    // smart di P6 (che li usa gia') e filtra con loro le celle che mostra. Non e' una superficie del prodotto (nessuna riga del §2.1): la prova che un nascosto non esce
+    // mai e' `AppAlbumsEvalEnvironmentTest` (catalogo vero, mondi casuali) e `AlbumsEvalSessionTest`.
+    "app/src/debug/kotlin/dev/pampa/mycloudgallery/debugtools/eval/albums/AlbumsEvalRunner.kt",
+    "app/src/debug/kotlin/dev/pampa/mycloudgallery/debugtools/eval/albums/AppAlbumsEvalEnvironment.kt",
   )
 
   /** I contratti da cui ogni superficie deve passare per i nascosti. */

@@ -60,3 +60,10 @@ etichette*
 query-private*
 eval-privato/
 .mycloudgallery/
+
+# Valutazione degli album smart e dei viaggi (Fase 7, P12): le etichette dei viaggi veri (giorni, titoli, foto). Stanno solo sul telefono
+# (noBackupFilesDir/eval/albums/) e nella cartella .mycloudgallery\eval\albums\ dell'utente, MAI nel repository (NoPrivateAlbumsDataInGitTest,
+# docs/fase7-progetto.md par. 5.3). L'uscita del generatore dei viaggi sintetici (tools/fixtures/trips/out) e' gia' coperta dalla regola "out/".
+*.mcgalb
+viaggi-veri*
+eval-album-privato/

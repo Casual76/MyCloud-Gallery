@@ -154,7 +154,7 @@ class FiveBIntegrationTest {
     assertWithMessage("giro: $last").that(last.done).isEqualTo(count)
     // I media del telefono (la Libreria puo' avere anche dei solo-NAS messi dal test): quelli con una copia del telefono.
     val catalog = checkNotNull(rig.gallery.coreIfReady()).catalog
-    val view = withTimeout(60_000) { rig.gallery.repository.view(LibraryFilter.ALL).first { it.size >= count } }
+    val view = withTimeout(Attese.TETTO_MS) { rig.gallery.repository.view(LibraryFilter.ALL).first { it.size >= count } }
     val ids = (0 until view.size).map { view.snapshot.idAt(view.snapshotIndex(it)) }
       .filter { id -> catalog.media(id)?.locations?.any { it.isPhone && it.isPresent } == true }
     assertThat(ids).hasSize(count)
@@ -327,7 +327,7 @@ class FiveBIntegrationTest {
     val visible = mediaAt(rig, "Archivio/vecchia.jpg")
     val hidden = mediaAt(rig, "Archivio/segreta.jpg")
     rig.gallery.actions.setHidden(setOf(hidden), true)
-    withTimeout(30_000) { rig.gallery.repository.view(LibraryFilter.ALL).first { it.snapshot.indexOf(hidden) < 0 && it.snapshot.indexOf(visible) >= 0 } }
+    withTimeout(Attese.TETTO_MS) { rig.gallery.repository.view(LibraryFilter.ALL).first { it.snapshot.indexOf(hidden) < 0 && it.snapshot.indexOf(visible) >= 0 } }
 
     val graph = integrations(rig)
     assertThat(graph.entryGate.decide()).isEqualTo(EntryDecision.ALLOWED)

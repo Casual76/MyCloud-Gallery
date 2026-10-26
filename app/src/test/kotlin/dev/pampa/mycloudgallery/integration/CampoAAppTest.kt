@@ -120,7 +120,7 @@ class CampoAAppTest {
   /** Il media della riga del telefono [rowId]. */
   private suspend fun mediaOfRow(rig: BackupRig, rowId: Long): MediaId {
     val catalog = checkNotNull(rig.gallery.coreIfReady()).catalog
-    val view = withTimeout(60_000) { rig.gallery.repository.view(LibraryFilter.ALL).first { it.size >= 1 } }
+    val view = withTimeout(Attese.TETTO_MS) { rig.gallery.repository.view(LibraryFilter.ALL).first { it.size >= 1 } }
     return (0 until view.size).map { view.snapshot.idAt(view.snapshotIndex(it)) }.first { id ->
       catalog.media(id)?.locations?.any { (it.location as? Location.Phone)?.mediaStoreId == rowId } == true
     }
@@ -211,7 +211,7 @@ class CampoAAppTest {
     assertThat(jobs.quickWork.get()).isEqualTo(0)
 
     check(rig.backup.start()) { "il backup non parte" }
-    withTimeout(30_000) { while (jobs.versionWork.isEmpty()) delay(50) }
+    withTimeout(Attese.TETTO_MS) { while (jobs.versionWork.isEmpty()) delay(50) }
     assertThat(jobs.versionWork).contains(BackupKind.PHOTOS)
     assertThat(jobs.versionWork).doesNotContain(BackupKind.VIDEOS)
   }

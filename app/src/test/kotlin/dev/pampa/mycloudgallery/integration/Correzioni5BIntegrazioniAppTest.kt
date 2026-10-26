@@ -273,13 +273,13 @@ class Correzioni5BIntegrazioniAppTest {
     )
 
     graph.install()
-    waitUntil { resolver.notifiedUris.any { it.uri == rootsUri } }
+    until("le radici sono notificate al sistema") { resolver.notifiedUris.any { it.uri == rootsUri } }
     val before = resolver.notifiedUris.count { it.uri == rootsUri }
 
     // Lo stato si e' letto: la radice ora c'e'.
     loading = false
     changes.emit(Unit)
-    waitUntil { resolver.notifiedUris.count { it.uri == rootsUri } > before }
+    until("le radici sono notificate di nuovo quando l'app e' pronta") { resolver.notifiedUris.count { it.uri == rootsUri } > before }
 
     // All'azzeramento la chiave ruota e le radici si notificano di nuovo.
     val rootBefore = graph.documents.roots().single().rootDocument
@@ -421,12 +421,6 @@ class Correzioni5BIntegrazioniAppTest {
     assertThat(backend.bytes(TestNas.ADMIN_USER, "Ricevute/Gita.mp4")?.toList()).isEqualTo(bytes.toList())
     assertThat(backend.bytes(TestNas.ADMIN_USER, "Viaggi/Gita.mp4")?.toList()).isEqualTo(bytes.toList())
     assertThat(rig.gallery.database.incomingDao().inState(IncomingStates.UPLOADED)).hasSize(2)
-  }
-
-  private fun waitUntil(condition: () -> Boolean) {
-    val deadline = System.nanoTime() + 10_000_000_000L
-    while (!condition() && System.nanoTime() < deadline) Thread.sleep(20)
-    assertThat(condition()).isTrue()
   }
 
   private companion object {

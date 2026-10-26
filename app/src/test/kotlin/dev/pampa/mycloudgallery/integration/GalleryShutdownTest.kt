@@ -67,18 +67,13 @@ class GalleryShutdownTest {
     rigs.forEach { it.close() }
   }
 
-  private suspend fun waitUntil(what: String, condition: () -> Boolean) {
-    withTimeout(GalleryRig.TIMEOUT_MS) { while (!condition()) delay(20) }
-    assertThat(condition()).isTrue()
-  }
-
   @Test
   fun dopoLoShutdownNienteRiscriveLaReplicaNemmenoUnaScritturaInCoda() = runBlocking<Unit> {
     val replica = File(temp.root, "replica")
     val rig = rig(snapshotDelayMs = 1_200L)
     repeat(4) { rig.store.put(photo(it + 1L, minutesAgo = 60L * (it + 1))) }
     rig.startAndSync()
-    waitUntil("la prima istantanea su file") { rig.gallery.repository.snapshotWrites > 0 && File(replica, "timeline.idx").exists() }
+    until("la prima istantanea su file") { rig.gallery.repository.snapshotWrites > 0 && File(replica, "timeline.idx").exists() }
 
     // Una foto nuova: l'indice si aggiorna a pezzi e la riscrittura accorpata dell'istantanea e' in coda (fra 1,2 s).
     rig.store.put(photo(5, minutesAgo = 1))
@@ -121,7 +116,7 @@ class GalleryShutdownTest {
     // Il database e' chiuso, la pipeline delle immagini ferma, la Libreria vuota.
     assertThat(rig.gallery.database.isOpen).isFalse()
     assertThat(rig.gallery.started.value).isFalse()
-    waitUntil("la Libreria vuota") { rig.gallery.visibleTimeline.view(LibraryFilter.ALL).value.size == 0 }
+    until("la Libreria vuota") { rig.gallery.visibleTimeline.view(LibraryFilter.ALL).value.size == 0 }
     // Idempotente.
     rig.gallery.shutdown()
   }

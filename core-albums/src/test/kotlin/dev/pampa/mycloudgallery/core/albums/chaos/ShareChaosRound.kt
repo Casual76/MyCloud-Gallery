@@ -118,6 +118,7 @@ class ShareChaosRound(
       if (made) runCatching { bench.close() }
     }
     stats.rounds++
+    stats.observed += observer.observed
     observer.violations.let { violations += it }
     if (violations.isNotEmpty() && made) {
       runCatching {

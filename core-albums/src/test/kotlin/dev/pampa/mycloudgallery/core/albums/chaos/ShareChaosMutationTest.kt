@@ -24,10 +24,17 @@ class ShareChaosMutationTest {
   }
 
   private fun assertDetects(label: String, result: ShareChaosResult, expected: Set<ShareInvariant>) {
-    println("$label: ${result.failures.size} giri rossi su ${result.rounds}; invarianti ${result.violatedInvariants().entries.joinToString { "${it.key.number} x${it.value}" }}")
+    val first = result.failures.firstOrNull()
+    println(
+      "$label: ${result.failures.size} giri rossi su ${result.rounds}, il primo e' il giro ${first?.index} (seme ${first?.seed}); " +
+        "invarianti ${result.violatedInvariants().entries.joinToString { "${it.key.number} x${it.value}" }}",
+    )
     assertWithMessage("il banco non ha visto l'errore in ${result.rounds} giri\n${result.summary()}").that(result.failures).isNotEmpty()
     val seen = result.violatedInvariants().keys
     assertWithMessage("invarianti violati: $seen, attesi almeno uno fra $expected").that(seen.intersect(expected)).isNotEmpty()
+    // L'invariante giusto c'e' gia' nel PRIMO giro rosso: non compare solo dopo, in giri rossi per un altro motivo.
+    val inFirst = first!!.violations.map { it.invariant }.toSet()
+    assertWithMessage("nel primo giro rosso (${first.index}) gli invarianti sono $inFirst, attesi almeno uno fra $expected").that(inFirst.intersect(expected)).isNotEmpty()
   }
 
   @Test

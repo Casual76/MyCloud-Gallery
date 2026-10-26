@@ -69,6 +69,8 @@ class NasAiRuntime(
   val work: CatalogAiWorkCatalog,
   val preparer: Preparer,
   val content: AiShareContent,
+  /** Il cancello di scrittura dell'indice (F4-D31 e gli altri): lo scaffale dei modelli sul NAS (D18) lo applica prima di scrivere o togliere una copia. */
+  val rules: IndexWriteRules,
 ) {
   companion object {
     fun build(
@@ -109,7 +111,7 @@ class NasAiRuntime(
         rules = rules,
       )
       val fetcher = IndexAnalysisFetcher(remote, replicaStore, hooks.traffic, local = blobs)
-      return NasAiRuntime(sync, publisher, classes, units, fetcher, work, preparer, content)
+      return NasAiRuntime(sync, publisher, classes, units, fetcher, work, preparer, content, rules)
     }
   }
 }

@@ -48,6 +48,9 @@ internal object DeveloperTools {
 
   fun settingsSection(nav: NavController): (@Composable () -> Unit)? = null
 
+  /** Nessuno strumento di debug, quindi nessun dato di debug da azzerare (I11: in debug sono i dati dello strumento di valutazione). */
+  fun erasableDirs(): List<String> = emptyList()
+
   /** Fase 6 (P11): lo strumento di valutazione della ricerca (P9) esiste solo in debug. */
   @Suppress("UNUSED_PARAMETER")
   fun installSearch(stack: dev.pampa.mycloudgallery.ai.AiStack, gallery: dev.pampa.mycloudgallery.gallery.GalleryGraph, context: Context) = Unit

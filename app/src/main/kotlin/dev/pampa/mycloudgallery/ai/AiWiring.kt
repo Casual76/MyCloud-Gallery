@@ -7,7 +7,6 @@ import dev.pampa.mycloudgallery.backup.FencedCutouts
 import dev.pampa.mycloudgallery.backup.MediaStorePhoneBytes
 import dev.pampa.mycloudgallery.core.ai.contract.SubjectCutter
 import dev.pampa.mycloudgallery.core.ai.contract.TextEmbedder
-import dev.pampa.mycloudgallery.core.ai.contract.TextReadingSwitch
 import dev.pampa.mycloudgallery.core.ai.cutout.MagicTouchCutter
 import dev.pampa.mycloudgallery.core.ai.ocr.GatedTextReader
 import dev.pampa.mycloudgallery.core.ai.ocr.TextReadingShutdown
@@ -27,18 +26,17 @@ import dev.pampa.mycloudgallery.core.models.LocalModels
 import dev.pampa.mycloudgallery.core.models.ModelFetchers
 import dev.pampa.mycloudgallery.core.models.contract.BundledAssets
 import dev.pampa.mycloudgallery.core.models.contract.ModelCatalog
+import dev.pampa.mycloudgallery.core.models.contract.FileStatReader
 import dev.pampa.mycloudgallery.core.models.contract.ModelFetcher
 import dev.pampa.mycloudgallery.core.models.contract.ModelFiles
+import dev.pampa.mycloudgallery.core.models.contract.ModelManager
 import dev.pampa.mycloudgallery.core.models.contract.ModelNasArea
 import dev.pampa.mycloudgallery.core.models.contract.ModelState
 import dev.pampa.mycloudgallery.core.models.contract.ModelTrigger
 import dev.pampa.mycloudgallery.core.models.traffic.LedgerModelTraffic
+import dev.pampa.mycloudgallery.core.models.verify.AndroidFileStatReader
+import dev.pampa.mycloudgallery.core.nas.ops.models.NasModelShelfOpsFactory
 import dev.pampa.mycloudgallery.core.nas.contract.Purpose
-import dev.pampa.mycloudgallery.core.personal.contract.MotionPersonalSettings
-import dev.pampa.mycloudgallery.core.personal.contract.SearchPersonalSettings
-import dev.pampa.mycloudgallery.core.personal.contract.TextReadingChoice
-import dev.pampa.mycloudgallery.core.personal.settings.SyncedMotionSettings
-import dev.pampa.mycloudgallery.core.personal.settings.SyncedSearchSettings
 import dev.pampa.mycloudgallery.core.personal.store.LedgerPersonalStore
 import dev.pampa.mycloudgallery.core.rules.traffic.TrafficSource
 import dev.pampa.mycloudgallery.debugtools.DeveloperTools
@@ -50,34 +48,15 @@ import dev.pampa.mycloudgallery.graph.snapshotOrNull
 import dev.pampa.mycloudgallery.search.GeocoderPlaceLookup
 import dev.pampa.mycloudgallery.search.LazyQueryEmbedding
 import dev.pampa.mycloudgallery.search.SearchGraph
+import dev.pampa.mycloudgallery.work.AiWorkScheduling
 import java.io.File
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-
-/**
- * Le impostazioni personali della Fase 6 (`text_reading`, `search_order`, `motion_animation`) sopra il registro dei dati personali del
- * NAS (4B), che c'e' solo quando l'organizzazione del NAS e' agganciata: prima, null (vale l'ultima scelta ricordata o il default).
- */
-@OptIn(ExperimentalCoroutinesApi::class)
-class PersonalSettingsHub(stores: StateFlow<LedgerPersonalStore?>, scope: CoroutineScope) {
-  val search: StateFlow<SearchPersonalSettings?> = stores.map { s -> s?.let { SyncedSearchSettings(it, scope) } }
-    .stateIn(scope, SharingStarted.Eagerly, null)
-
-  val motion: StateFlow<MotionPersonalSettings?> = stores.map { s -> s?.let { SyncedMotionSettings(it, scope) } }
-    .stateIn(scope, SharingStarted.Eagerly, null)
-
-  val textReading: StateFlow<TextReadingChoice?> = search.flatMapLatest { s -> s?.textReading ?: flowOf(null) }
-    .stateIn(scope, SharingStarted.Eagerly, null)
-}
 
 /** Tutto cio' che la Fase 6 aggiunge al processo, montato una volta (Hilt, `AiModule`; i test d'integrazione lo rifanno uguale). */
 class AiStack(
@@ -86,9 +65,12 @@ class AiStack(
   val ai: AiGraph,
   val personal: PersonalSettingsHub,
   val roles: RolesSettings,
-  val textSwitch: TextReadingSwitch,
-  /** "Scarica ora" sui dati mobili: la conferma data dall'utente per lo scaricamento in corso (D17, §2.7). */
-  val mobileConfirmed: AtomicBoolean,
+  val textSwitch: AppTextReadingSwitch,
+  /**
+   * Il gestore dei modelli che il resto dell'app vede (pagine, Cerca, ruolo): chiede un lavoro di WorkManager invece di scaricare nel proprio
+   * scope (MO-1). I lavori e la Diagnostica usano [localModels] direttamente.
+   */
+  val requestingModels: ModelManager,
   /** Il ritagliatore del soggetto (P13, D44): costruito al primo ritaglio, rilasciato a riposo, a memoria bassa e all'azzeramento. */
   val cutout: CutoutRuntime,
   /** "Salva come nuova foto" del ritaglio (D47): le foto nuove in `Ritagli/`; `purgeOrphans()` all'avvio. */
@@ -134,7 +116,7 @@ class AiStack(
       textSource = IndexViewerTextSource(search.mediaText),
       textReader = textReader,
       similarSearch = SearchViewerSimilar(search.keys, similar) { key -> search.index.hasVectors(key) },
-      motionAnimation = dev.pampa.mycloudgallery.feature.viewer.motion.MotionAnimationSetting { personal.motion.value?.motionAnimation?.value ?: true },
+      motionAnimation = dev.pampa.mycloudgallery.feature.viewer.motion.MotionAnimationSetting { personal.motionAnimation.value },
       motionTraffic = dev.pampa.mycloudgallery.feature.viewer.video.MotionTraffic { bytes, _ ->
         graph.scope.launch {
           graph.trafficLedger.record(TrafficSource.VISIBLE_CONTENT, trafficNetworkOf(graph.environment.snapshot.value), bytes)
@@ -149,6 +131,13 @@ class AiStack(
   fun onTrimMemory(level: Int) {
     if (level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND) search.onTrimMemory()
     cutout.trim(level)
+    // IX-5: il motore delle immagini (440M, circa 800 MB) si rilascia quando il sistema ha davvero poca memoria (in primo piano: RUNNING_LOW e
+    // RUNNING_CRITICAL; in cache: MODERATE e COMPLETE), non per il solo passaggio in secondo piano.
+    if (level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW || level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL ||
+      level >= ComponentCallbacks2.TRIM_MEMORY_MODERATE
+    ) {
+      ai.onTrimMemory()
+    }
   }
 }
 
@@ -182,22 +171,40 @@ object AiWiring {
   ): AiStack {
     val scope = graph.scope
     val noBackup = context.noBackupFilesDir
-    val mobileConfirmed = AtomicBoolean(false)
     val realFetcher by lazy {
       fetcher ?: ModelFetchers.create(
         nas = graph.session.mediaReader(),
         assets = BundledAssets { name -> runCatching { context.assets.open(name) }.getOrNull() },
         traffic = LedgerModelTraffic(graph.trafficLedger) { trafficNetworkOf(graph.environment.snapshot.value) },
+        // R12: HTTPS esce dalla rete che il cancello ha giudicato (la stessa su cui si registra il traffico), non da quella predefinita.
+        httpsRoute = AppModelHttpsRoute({ graph.environment.snapshot.value }, graph.platform.networkLookup),
       )
     }
+    // Lo scaffale dei modelli sul NAS (MO-4, D18, I5): copie solo di dispositivi approvati e non dismessi, scrittura a flusso nella propria
+    // cartella, cancello F4-D31 dell'indice (`IndexWriteRules`). Nasce con il motore del NAS (il dispositivo ha il suo id solo allora).
+    val shelfGate = RulesModelShelfGate { gallery.nas?.runtime?.ai?.rules }
+    val shelfDevices = TrustedShelfDevices { graph.nasInputs.registry() }
     val models = LocalModels(
       root = File(noBackup, AiGraph.MODELS_DIR),
       fetcher = ModelFetcher { spec, source, partial, budget -> realFetcher.fetch(spec, source, partial, budget) },
-      networkGate = AppModelNetworkGate({ graph.environment.snapshot.value }, { mobileConfirmed.get() }),
-      // La copia sul NAS (D18) resta spenta: manca lo scrittore a flusso in core-nas (punto aperto di P3). Lo scaffale e' il null-object.
+      networkGate = AppModelNetworkGate { graph.environment.snapshot.value },
+      shelfFor = { files ->
+        AppModelShelf(
+          files = files,
+          deviceId = { gallery.nas?.runtime?.deviceId },
+          reader = { graph.session.mediaReader() },
+          ops = { id -> NasModelShelfOpsFactory.create(graph.session, id) },
+          gate = shelfGate,
+          devices = shelfDevices,
+        )
+      },
       area = ModelNasArea { graph.onboardingStore.snapshotOrNull()?.commonShare },
       clock = graph.nasClock,
+      // I1: lo `stat` del file preso alla verifica, per `PATH_CHECKED`. Un errore del sistema vale "nessuno stat": il motore ripiega sul descrittore.
+      statReader = FileStatReader { fd -> runCatching { AndroidFileStatReader().stat(fd) }.getOrNull() },
     )
+    // MO-1, MO-2: "Scarica" della pagina, di Cerca e l'accensione del ruolo chiedono un lavoro di WorkManager (non scaricano nel loro scope).
+    val requestingModels = RequestingModelManager(models.manager, scope) { id, trigger -> AiWorkScheduling.fetchNow(context, trigger, id) }
     val aiModels = AiModels(models.manager, models.files) { models.refresh() }
     val cacheRoot = File(File(noBackup, AiGraph.MODELS_DIR), "cache")
 
@@ -227,16 +234,21 @@ object AiWiring {
     val stores: StateFlow<LedgerPersonalStore?> =
       organizerParts?.map { it?.personalStore }?.stateIn(scope, SharingStarted.Eagerly, organizerParts.value?.personalStore)
         ?: kotlinx.coroutines.flow.MutableStateFlow(null)
-    val personal = PersonalSettingsHub(stores, scope)
+    val personal = PersonalSettingsHub(stores, scope, PersonalLocalSettings(File(noBackup, PersonalLocalSettings.FILE)))
     val memory = TextReadingMemory(File(noBackup, TextReadingMemory.FILE))
     lateinit var switch: AppTextReadingSwitch
-    // Il lettore si costruisce SOLO cosi' (P4): da spenti la lambda del motore non viene mai chiamata e ML Kit non si carica.
-    val gated = reader?.invoke { switch.state.value } ?: GatedTextReader.create(context, { switch.state.value }, diag)
+    // Il lettore si costruisce SOLO cosi' (P4): da spenti la lambda del motore non viene mai chiamata e ML Kit non si carica. Il cancello
+    // legge lo stato di adesso (`currentState`), non il flusso: lo spegnimento vale prima di qualunque altra lettura (R7).
+    val gated = reader?.invoke { switch.currentState() } ?: GatedTextReader.create(context, { switch.currentState() }, diag)
     val shutdown by lazy { TextReadingShutdown.create(context, gated, diag) }
     switch = AppTextReadingSwitch(
       scope = scope,
       choice = personal.textReading,
-      setChoice = { choice -> personal.search.value?.setTextReading(choice)?.let { true } ?: false },
+      // La scelta dell'utente vale subito qui; al registro dei dati personali arriva quando c'e' (anche "da datare", senza l'ora del NAS).
+      setChoice = { choice ->
+        val settings = personal.search.value
+        if (settings == null) false else { settings.setTextReading(choice); true }
+      },
       memory = memory,
       shutdown = { shutdown },
     )
@@ -300,7 +312,7 @@ object AiWiring {
       folder = cutoutFence::folder,
       nowMillis = gallery.clock,
     )
-    return AiStack(models, search, ai, personal, roles, switch, mobileConfirmed, cutout, cutoutPhotos, cutoutFence, context)
+    return AiStack(models, search, ai, personal, roles, switch, requestingModels, cutout, cutoutPhotos, cutoutFence, context)
   }
 
   /** Le aree di questo dispositivo come le vede la pagina (solo il tipo, mai il nome della share). */

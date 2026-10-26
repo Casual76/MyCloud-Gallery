@@ -151,7 +151,7 @@ class GatedViewerTextReader(
   /** Dove si prepara l'immagine e si costruisce il corpo (CPU: mai sul thread del viewer). */
   private val work: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewerTextReader {
-  override val available: Boolean get() = switch.state.value.activeHere
+  override val available: Boolean get() = switch.currentState().activeHere
 
   override suspend fun readNow(id: MediaId, ref: MediaRef): ViewerTextLayout? {
     if (!available) return null

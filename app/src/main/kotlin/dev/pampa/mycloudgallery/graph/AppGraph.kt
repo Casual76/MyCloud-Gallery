@@ -170,6 +170,15 @@ class AppGraph(
   @Volatile
   var aiStopper: GalleryStopper? = null
 
+  /**
+   * Fase 6, revisione B (AZ-2, I13): chi fa dimenticare all'AI cio' che ricorda **in memoria** di un account (la scelta della lettura del
+   * testo, l'esclusione di questo dispositivo, gli avvisi visti, le scelte personali in sospeso). L'azzeramento lo chiama sempre, anche per i
+   * soli dati di un account (`eraseAccountData(stopGallery = false)`), dove [aiStopper] non c'e': prima il file veniva tolto ma la memoria
+   * restava e valeva per il nuovo account.
+   */
+  @Volatile
+  var aiForgetter: GalleryStopper? = null
+
   @Volatile
   var aiHooks: dev.pampa.mycloudgallery.nas.NasAiHooks? = null
 

@@ -39,11 +39,21 @@ class AiDiagnostics(private val stack: AiStack) : DiagnosticsContributor {
         "vectors" to ExportValue.Num(vectors.toLong()),
         "texts" to ExportValue.Num(texts.toLong()),
         "bufferBytes" to ExportValue.Num(ai.buffer.usedBytes.value),
+        // DG-5: quanto pesano i modelli (con i programmi compilati) e le pagine della ricerca.
+        "modelsBytes" to ExportValue.Num(runCatching { stack.localModels.manager.usage().totalBytes }.getOrDefault(0L)),
         "status" to ExportValue.Enum.of(statusCode(ai.status.value)),
       ),
     )
-    val missing = states.filterValues { it !is ModelState.Ready }.size
+    // DG-5: solo i modelli che servono a questo dispositivo (il 270M sempre, il 440M agli indicizzatori): il ritaglio sta nell'APK e il 440M di un
+    // tablet che non analizza non manca a nessuno (prima "models=2" per sempre).
+    val wanted = listOfNotNull(ModelCatalog.QUERY_270M.id, ModelCatalog.INDEX_440M.id.takeIf { ai.indexer.value })
+    val missing = wanted.count { states[it] !is ModelState.Ready }
     if (missing > 0) items += item(DiagCodes.AI_MODEL_MISSING, DiagSeverity.INFO, mapOf("models" to ExportValue.Num(missing.toLong())))
+    // DG-2: gli esiti dello scaricamento dei modelli (solo conteggi del processo: i codici veri arrivano anche dagli eventi dei lavori).
+    val models = stack.localModels.counters
+    if (models.mismatch + models.verifyFailed > 0) items += count(DiagCodes.AI_MODEL_MISMATCH, models.mismatch + models.verifyFailed, DiagSeverity.WARNING)
+    if (models.fetchFailed > 0) items += count(DiagCodes.AI_MODEL_FETCH_FAILED, models.fetchFailed, DiagSeverity.WARNING)
+    if (models.noSpace > 0) items += count(DiagCodes.AI_MODEL_NO_SPACE, models.noSpace, DiagSeverity.WARNING)
     ai.computeCounters()?.let { c ->
       if (c.gpuFallbacks.get() > 0) items += count(DiagCodes.AI_GPU_FALLBACK, c.gpuFallbacks.get(), DiagSeverity.INFO)
       if (c.vectorsInvalid.get() > 0) items += count(DiagCodes.AI_VECTOR_INVALID, c.vectorsInvalid.get(), DiagSeverity.INFO)

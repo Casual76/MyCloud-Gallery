@@ -4,7 +4,11 @@ import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.ai.AiGraph
+import dev.pampa.mycloudgallery.ai.AiStageMark
+import dev.pampa.mycloudgallery.ai.AiStatusMemory
+import dev.pampa.mycloudgallery.ai.AppIndexerControl
 import dev.pampa.mycloudgallery.ai.FileAiUnsupported
+import dev.pampa.mycloudgallery.ai.PersonalLocalSettings
 import dev.pampa.mycloudgallery.ai.TextReadingMemory
 import dev.pampa.mycloudgallery.graph.GalleryStopper
 import dev.pampa.mycloudgallery.search.SearchGraph
@@ -54,6 +58,11 @@ class AiEraseTest {
       File(noBackup, FileAiUnsupported.FILE),
       File(noBackup, TextReadingMemory.FILE),
       File(noBackup, AiStages.HEARTBEAT_AI),
+      // AZ-1 (verifica funzionale della Fase 6): i file piccoli dell'AI che l'elenco dell'azzeramento non aveva.
+      File(noBackup, PersonalLocalSettings.FILE),
+      File(noBackup, AiStatusMemory.FILE),
+      File(noBackup, AiStageMark.FILE),
+      File(noBackup, AppIndexerControl.PROBE_FILE),
     ).onEach { file ->
       file.parentFile!!.mkdirs()
       file.writeText("x")
@@ -79,6 +88,39 @@ class AiEraseTest {
     files.forEach { assertThat(it.exists()).isFalse() }
     assertThat(File(device.context.noBackupFilesDir, AiGraph.MODELS_DIR).exists()).isFalse()
     assertThat(File(device.context.noBackupFilesDir, SearchGraph.DIR).exists()).isFalse()
+  }
+
+  /** AZ-2: la memoria dell'AI di questo account (scelta della lettura, esclusione, avvisi, scelte in sospeso) si dimentica dopo lo stop e prima della galleria. */
+  @Test
+  fun laMemoriaDellAiSiDimenticaDopoLoStopEPrimaDellaGalleria() = runBlocking<Unit> {
+    val device = device()
+    val order = mutableListOf<String>()
+    device.graph.aiStopper = GalleryStopper { order += "ai" }
+    device.graph.aiForgetter = GalleryStopper { order += "memoria" }
+    device.graph.galleryStopper = GalleryStopper { order += "galleria" }
+
+    assertThat(device.graph.eraser.eraseAll()).isTrue()
+
+    assertThat(order).containsExactly("ai", "memoria", "galleria").inOrder()
+  }
+
+  /** AZ-2: anche un cambio di account (dove non c'e' lo stop dell'AI) fa dimenticare la memoria dell'AI. */
+  @Test
+  fun ancheUnCambioDiAccountFaDimenticareLaMemoriaDellAi() = runBlocking<Unit> {
+    val device = device()
+    var forgotten = 0
+    device.graph.aiForgetter = GalleryStopper { forgotten++ }
+    val eraser = device.graph.eraser as dev.pampa.mycloudgallery.graph.AppLocalDataEraser
+    assertThat(eraser.eraseAccountData(stopGallery = false)).isTrue()
+    assertThat(forgotten).isEqualTo(1)
+  }
+
+  /** Se la memoria non si dimentica, l'azzeramento non e' completo e si riprova (come per ogni altro passo). */
+  @Test
+  fun seLaMemoriaDellAiNonSiDimenticaLAzzeramentoDiceDiNo() = runBlocking<Unit> {
+    val device = device()
+    device.graph.aiForgetter = GalleryStopper { error("non si dimentica") }
+    assertThat(device.graph.eraser.eraseAll()).isFalse()
   }
 
   @Test

@@ -83,6 +83,13 @@ internal object DeveloperTools {
     with(dev.pampa.mycloudgallery.debugtools.eval.EvalEntry) { destination(nav) }
   }
 
+  /**
+   * I dati dello strumento di valutazione (etichette e query del set privato, resoconti, set OCR) stanno in `noBackupFilesDir/eval/`
+   * ([dev.pampa.mycloudgallery.debugtools.eval.EvalStore.of]): l'azzeramento li toglie con il resto (I11 della revisione di sicurezza della
+   * Fase 6). Il nome e' quello di `EvalStore.of`; `DeveloperToolsErasableTest` li tiene allineati.
+   */
+  fun erasableDirs(): List<String> = listOf("eval")
+
   /** Fase 6 (P11): la porta dello strumento di valutazione della ricerca (P9) sopra il grafo della ricerca vero. Solo debug. */
   fun installSearch(stack: dev.pampa.mycloudgallery.ai.AiStack, gallery: dev.pampa.mycloudgallery.gallery.GalleryGraph, context: Context) {
     dev.pampa.mycloudgallery.debugtools.eval.EvalEnvironmentHolder.current =

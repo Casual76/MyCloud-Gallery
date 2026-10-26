@@ -50,8 +50,14 @@ object AiModule {
       // La parte `ai` dell'indice per il NAS (legata prima che parta) e l'arresto per primo all'azzeramento (§1.4).
       graph.aiHooks = stack.ai.hooks
       graph.aiStopper = GalleryStopper {
+        // L'interruttore della lettura per primo (I13): niente piu' emissioni che riscrivano `text-reading` mentre si azzera.
+        stack.textSwitch.stop()
         stack.ai.stop()
         stack.search.stop()
+      }
+      graph.aiForgetter = GalleryStopper {
+        stack.textSwitch.forget()
+        stack.personal.forget()
       }
     }
 
@@ -69,7 +75,7 @@ object AiModule {
 
   @Provides fun today(stack: AiStack): Today = stack.search.today
 
-  @Provides fun modelManager(stack: AiStack): ModelManager = stack.localModels.manager
+  @Provides fun modelManager(stack: AiStack): ModelManager = stack.requestingModels
 
   @Provides fun textReadingSwitch(stack: AiStack): TextReadingSwitch = stack.textSwitch
 
@@ -84,9 +90,9 @@ object AiModule {
   @Provides
   @Singleton
   fun indexerControl(@ApplicationContext context: Context, stack: AiStack, graph: AppGraph): IndexerControl =
-    AppIndexerControl(stack, graph.scope) { AiWorkScheduling.indexNow(context) }
+    AppIndexerControl(stack, graph.scope, java.io.File(context.noBackupFilesDir, AppIndexerControl.PROBE_FILE)) { AiWorkScheduling.indexNow(context) }
 
-  @Provides fun deviceProbe(stack: AiStack): DeviceProbe = RealDeviceProbe(stack.ai.parts.images)
+  @Provides fun deviceProbe(stack: AiStack): DeviceProbe = RealDeviceProbe(stack.ai.images)
 
   @Provides
   @Singleton

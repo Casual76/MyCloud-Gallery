@@ -127,7 +127,7 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
         // Fase 6 (P11): l'indice di ricerca si apre con il catalogo (vive anche senza NAS), i modelli presenti si verificano (P3).
         graph.scope.launch {
           runCatching { ai.search.open() }
-          runCatching { ai.localModels.refresh() }
+          runCatching { ai.localModels.refreshOnce() }
           // P13: una riga in attesa lasciata da un "Salva come nuova foto" interrotto dalla morte del processo si toglie (IS_PENDING).
           runCatching { ai.cutoutPhotos.purgeOrphans() }
         }

@@ -2,7 +2,11 @@ package dev.pampa.mycloudgallery.graph
 
 import android.content.Context
 import dev.pampa.mycloudgallery.ai.AiGraph
+import dev.pampa.mycloudgallery.ai.AiStageMark
+import dev.pampa.mycloudgallery.ai.AiStatusMemory
+import dev.pampa.mycloudgallery.ai.AppIndexerControl
 import dev.pampa.mycloudgallery.ai.FileAiUnsupported
+import dev.pampa.mycloudgallery.ai.PersonalLocalSettings
 import dev.pampa.mycloudgallery.ai.TextReadingMemory
 import dev.pampa.mycloudgallery.backup.BackupRunMemory
 import dev.pampa.mycloudgallery.search.SearchGraph
@@ -13,6 +17,7 @@ import dev.pampa.mycloudgallery.core.family.contract.LocalDataEraser
 import dev.pampa.mycloudgallery.core.family.lifecycle.FileWipeJournal
 import dev.pampa.mycloudgallery.core.family.onboarding.PreviousAccountData
 import dev.pampa.mycloudgallery.core.network.contract.VpnControlConfig
+import dev.pampa.mycloudgallery.debugtools.DeveloperTools
 import dev.pampa.mycloudgallery.feature.diagnostics.contributors.HeartbeatSource
 import dev.pampa.mycloudgallery.nas.NasGraph
 import dev.pampa.mycloudgallery.nas.NasOrganizer
@@ -149,6 +154,9 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
     // Fase 6 (P11, §1.4): `AiGraph.stop()` e `SearchGraph.stop()` PER PRIMI (motori rilasciati, indice di ricerca chiuso), poi la galleria.
     val aiStopped = if (stopGallery) steps.run("ai") { graph.aiStopper?.stop() } else true
     if (!aiStopped) return
+    // Revisione B (AZ-2): cio' che l'AI ricorda in memoria di questo account (scelta della lettura del testo, esclusione, avvisi, scelte
+    // personali in sospeso) si dimentica ora, prima dei file: il prossimo account nello stesso processo non eredita niente.
+    steps.run("memoria dell'AI") { graph.aiForgetter?.stop() }
     // R7: la galleria viva si ferma (e si aspetta) PRIMA di toccare i suoi file; se non si ferma, i file restano.
     val stopped = if (stopGallery) steps.run("galleria") { graph.galleryStopper?.stop() } else true
     if (!stopped) return
@@ -173,7 +181,8 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
         // preparate qui, in attesa di pubblicazione): si toglie con i piccoli file di stato (tentativi, emergenza, battiti).
         // Fase 4B (P16): il registro locale dei dati personali (`personal/`). Il diario delle operazioni e del cestino sta nel
         // database (tolto qui sopra); le operazioni in corso e i loro lavori li ha gia' fermati la galleria (NasOrganizer.stop).
-        for (name in NAS_FILES + AI_FILES) {
+        // I11: in debug anche i dati dello strumento di valutazione della ricerca (`eval/`); in release non ce ne sono.
+        for (name in NAS_FILES + AI_FILES + DeveloperTools.erasableDirs()) {
           val target = File(context.noBackupFilesDir, name)
           if (target.exists() && !target.deleteRecursively()) steps.ok = false
         }
@@ -226,6 +235,10 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
       SearchGraph.DIR,
       FileAiUnsupported.FILE,
       TextReadingMemory.FILE,
+      PersonalLocalSettings.FILE,
+      AiStatusMemory.FILE,
+      AiStageMark.FILE,
+      AppIndexerControl.PROBE_FILE,
       AiStages.HEARTBEAT_AI,
     )
   }

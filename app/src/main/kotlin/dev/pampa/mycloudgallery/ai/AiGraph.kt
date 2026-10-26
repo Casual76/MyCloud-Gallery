@@ -9,11 +9,13 @@ import dev.pampa.mycloudgallery.core.ai.compute.AiPhoneMedia
 import dev.pampa.mycloudgallery.core.ai.compute.AiRunControl
 import dev.pampa.mycloudgallery.core.ai.compute.BufferAnalysisSink
 import dev.pampa.mycloudgallery.core.ai.compute.DiskAiBuffer
+import dev.pampa.mycloudgallery.core.ai.contract.AiBackend
 import dev.pampa.mycloudgallery.core.ai.contract.AiRecipe
 import dev.pampa.mycloudgallery.core.ai.contract.AiRoles
 import dev.pampa.mycloudgallery.core.ai.contract.AiRunResult
 import dev.pampa.mycloudgallery.core.ai.contract.AiScope
 import dev.pampa.mycloudgallery.core.ai.contract.AiStatus
+import dev.pampa.mycloudgallery.core.ai.contract.AiWaitReason
 import dev.pampa.mycloudgallery.core.ai.contract.ImageEmbedder
 import dev.pampa.mycloudgallery.core.ai.contract.ModelImage
 import dev.pampa.mycloudgallery.core.ai.contract.OcrImage
@@ -36,6 +38,7 @@ import dev.pampa.mycloudgallery.core.model.OcrSource
 import dev.pampa.mycloudgallery.core.models.contract.ModelCatalog
 import dev.pampa.mycloudgallery.core.models.contract.ModelFiles
 import dev.pampa.mycloudgallery.core.models.contract.ModelManager
+import dev.pampa.mycloudgallery.core.rules.run.StageOutcome
 import dev.pampa.mycloudgallery.core.trust.data.AiClass
 import dev.pampa.mycloudgallery.core.trust.data.DeviceRole
 import dev.pampa.mycloudgallery.core.trust.data.OcrBody
@@ -48,6 +51,7 @@ import java.io.IOException
 import kotlin.time.Duration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -58,6 +62,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /**
  * Cio' che `AiGraph` riceve dal resto dell'app: modelli e motori (gia' montati, [AiModels]), interruttore e spegnimento della lettura del
@@ -96,6 +101,23 @@ class AiGraphParts(
   val releaseCutout: suspend () -> Unit = {},
 )
 
+/**
+ * Il motore delle immagini con un interruttore: dopo [stopped] ogni `embed` annulla la tappa invece di riaprire il motore (AZ-1). `release` passa
+ * sempre: chiudere e' sempre lecito.
+ */
+internal class StoppableImageEmbedder(private val inner: ImageEmbedder) : ImageEmbedder {
+  @Volatile var stopped = false
+
+  override val backend: StateFlow<AiBackend> get() = inner.backend
+
+  override suspend fun embed(images: List<ModelImage>): List<FloatArray> {
+    if (stopped) throw kotlinx.coroutines.CancellationException("Calcolo fermo: azzeramento.")
+    return inner.embed(images)
+  }
+
+  override suspend fun release() = inner.release()
+}
+
 /** I modelli di questo dispositivo (P3): il gestore e i file verificati, con `refresh()` da chiamare all'avvio. */
 class AiModels(val manager: ModelManager, val files: ModelFiles, val refresh: suspend () -> Unit)
 
@@ -118,6 +140,13 @@ class AiGraph(
 ) {
   private val job = SupervisorJob(scope.coroutineContext[Job])
   private val graphScope = CoroutineScope(scope.coroutineContext + job)
+
+  /**
+   * Il motore delle immagini che il calcolo, la misura breve e la pagina usano: lo stesso di `parts.images`, ma che **dopo [stop] non si riapre
+   * piu'** (AZ-1: una tappa in corso all'azzeramento riapriva il 440M al primo `embed` dopo il rilascio) e che si rilascia a fine tappa
+   * (IX-5).
+   */
+  val images: ImageEmbedder = StoppableImageEmbedder(parts.images)
 
   val models: AiModels get() = parts.models
   val textSwitch: TextReadingSwitch get() = parts.textSwitch
@@ -236,10 +265,34 @@ class AiGraph(
     }
   }
 
-  private val statusFlow = MutableStateFlow<AiStatus>(AiStatus.Off)
+  /** L'ultimo stato visto, anche da un altro processo (IX-2): la pagina non parte piu' da "non analizza le foto". */
+  val statusMemory = AiStatusMemory(File(noBackup, AiStatusMemory.FILE))
 
-  /** Lo stato del calcolo per la pagina Ricerca e modelli (§1.5). */
+  private val statusFlow = MutableStateFlow<AiStatus>(statusMemory.load() ?: AiStatus.Idle(null))
+
+  /**
+   * Lo stato del calcolo per la pagina Ricerca e modelli (§1.5). Parte dall'ultimo stato ricordato, o da "fermo, niente da fare": il ruolo
+   * spento lo dice `AppIndexerControl` (`Off`), non questo flusso.
+   */
   val status: StateFlow<AiStatus> = statusFlow.asStateFlow()
+
+  /**
+   * IX-2: com'e' finita una tappa, in parole della pagina. Le attese delle regole che fermano una tappa **prima** di partire non passano dal
+   * motore e non arrivavano mai alla pagina; il motore dice "regole" anche per il caldo e per il tempo finito. Qui il motivo vero (caldo,
+   * rete, NAS) e "riprendo fra poco" per una tappa finita per tempo. Si ricorda su file: la pagina lo ritrova in un altro processo.
+   */
+  fun noteStage(outcome: StageOutcome) {
+    val note: AiStatus? = when (outcome) {
+      is StageOutcome.Waiting -> AiStatus.Waiting(AiStatusMemory.waitReasonOf(outcome.reason))
+      is StageOutcome.Stopped -> AiStatus.Waiting(AiStatusMemory.waitReasonOf(outcome.reason))
+      is StageOutcome.Yielded -> AiStatus.Waiting(AiWaitReason.NEXT_STAGE)
+      is StageOutcome.NeedsConfirmation -> AiStatus.Waiting(AiWaitReason.RULES)
+      is StageOutcome.Finished -> null
+    }
+    // Un problema del motore o dello spazio resta quello che e' (e' piu' utile di "in attesa").
+    if (note != null && statusFlow.value !is AiStatus.Problem) statusFlow.value = note
+    statusMemory.save(statusFlow.value)
+  }
 
   private val engineLock = Mutex()
   private var engine: Pair<NasAiRuntime, AiComputeEngine>? = null
@@ -259,7 +312,7 @@ class AiGraph(
       doneByOthers = rt.classes,
       publisher = rt.publisher,
       results = results,
-      images = parts.images,
+      images = images,
       reader = { parts.reader },
       inputs = inputs,
       // P11b (§2.2, D10): le anteprime dai byte del telefono per i media del solo telefono (e per quelli del NAS che sono anche qui); la
@@ -274,7 +327,12 @@ class AiGraph(
     )
     val created = AiComputeEngine(computeParts, recipe)
     engine = rt to created
-    graphScope.launch { created.status.collect { statusFlow.value = it } }
+    graphScope.launch {
+      created.status.collect {
+        statusFlow.value = it
+        statusMemory.save(it)
+      }
+    }
     created
   }
 
@@ -297,7 +355,17 @@ class AiGraph(
     val rt = parts.nas() ?: return null
     // L'indice locale e' dove il calcolo salva: in un processo nato per il lavoro si apre qui (idempotente).
     if (!search.open()) return null
-    return engineFor(rt).runAll(budget, control)
+    try {
+      return engineFor(rt).runAll(budget, control)
+    } finally {
+      // IX-5: il 440M su GPU pesa circa 800 MB di PSS e non deve restare nel processo della galleria a tappa finita (la prossima lo riapre).
+      withContext(NonCancellable) { runCatching { images.release() } }
+    }
+  }
+
+  /** Memoria bassa (`onTrimMemory`, IX-5): il motore delle immagini si rilascia (si riapre da solo al prossimo `embed`). */
+  fun onTrimMemory() {
+    graphScope.launch { runCatching { images.release() } }
   }
 
   /** Il lavoro che resta su questo dispositivo (§2.8, `AiBacklog`): null senza NAS. */
@@ -316,8 +384,11 @@ class AiGraph(
   suspend fun stop() {
     if (stopped) return
     stopped = true
+    // AZ-1: da qui il motore delle immagini non si riapre piu' (una tappa in corso si ferma al primo `embed`), poi si rilascia.
+    (images as StoppableImageEmbedder).stopped = true
     job.cancel()
-    runCatching { parts.images.release() }
+    runCatching { images.release() }
+    statusMemory.clear()
     runCatching { parts.releaseCutout() }
     runCatching { parts.shutdown().onTurnedOff() }
     runCatching { buffer.clear() }

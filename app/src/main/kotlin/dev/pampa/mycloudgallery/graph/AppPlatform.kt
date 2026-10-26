@@ -100,6 +100,12 @@ interface AppPlatform {
   /** L'ora del dispositivo (ms): solo per misurare e datare in locale, mai per decidere sulla fiducia. */
   val deviceNow: () -> Long
 
+  /** La `Network` di Android di un id visto dall'osservatore (R12: lo scaricamento dei modelli esce dalla rete approvata). Di serie nessuna. */
+  val networkLookup: NetworkLookup
+    get() = object : NetworkLookup {
+      override fun network(id: String): android.net.Network? = null
+    }
+
   fun discovery(paths: NetworkPathSource): NasDiscovery
 
   fun magicPacketSender(paths: NetworkPathSource): MagicPacketSender
@@ -116,6 +122,7 @@ class AndroidAppPlatform(context: Context) : AppPlatform {
   private val networks: NetworkLookup = observer
 
   override val networkObservation: NetworkObservationSource = observer
+  override val networkLookup: NetworkLookup = networks
   override val bindings: BindingFactory = AndroidBindingFactory(networks)
   override val localNetworkPermission: LocalNetworkPermission = AndroidLocalNetworkPermission(app)
   override val smbTransport: SmbTransport = SmbjTransport()

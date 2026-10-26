@@ -118,8 +118,9 @@ class SearchGraph(
 
   /** Apre l'indice e comincia a seguire il catalogo. Idempotente; falso se non si e' potuto aprire (catalogo assente, fermata). */
   suspend fun open(): Boolean = lifecycle.withLock {
-    if (opened.isCompleted) return@withLock opened.getCompleted()
+    // AZ-1: dopo `stop` mai vero, anche se l'indice si era aperto: una tappa del calcolo ancora in corso non deve scrivere in un indice chiuso.
     if (stopped) return@withLock false
+    if (opened.isCompleted) return@withLock opened.getCompleted()
     val cat = catalog() ?: return@withLock false
     val ok = try {
       index.open()

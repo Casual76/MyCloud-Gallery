@@ -92,6 +92,25 @@ class AlbumsEvalSessionTest {
     assertThat(m.precision).isEqualTo(1.0)
   }
 
+  /** Il motore puo' prendere una foto oltre i giorni scritti dall'utente: e' un sicuro da giudicare, non un "mancante" (i mancanti sono cio' che l'album NON ha preso). */
+  @Test
+  fun unaFotoPresaOltreIGiorniDelViaggioNonEFraIMancanti() = runTest {
+    val rig = AlbumsTestRig.osloTrip()
+    // Il 17 marzo, a Oslo: l'utente ha scritto 14-16 marzo, ma l'album la prende (il periodo si allarga alla serie di giorni con foto nel luogo).
+    val beyond = rig.osloPhotos(302, day(3, 17), count = 1).single()
+    val later = rig.put(303, day(3, 19), 18 * 60)
+    rig.publish()
+    val s = session(rig)
+    val trip = s.addTrip("Oslo marzo 2025", osloFrom, osloTo)
+    s.setInTrip(trip.id, (1..12).map { rig.id(it).value }, true)
+    val run = s.runTrip(trip.id)
+    assertThat(run.sure).contains(beyond.value)
+    assertThat(s.pending(trip.id).sure).containsExactly(beyond.value)
+    val missing = s.missingCells(trip.id).map { it.id }
+    assertThat(missing).doesNotContain(beyond.value)
+    assertThat(missing).contains(later.value)
+  }
+
   @Test
   fun unSicuroNonSegnatoAspettaIlGiudizio() = runTest {
     val rig = AlbumsTestRig.osloTrip()

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 7, P10: le tre voci del menu ⋮ per gli album (D35, D39). -->
+  <string name="viewer_album_add">Aggiungi ad album</string>
+  <string name="viewer_album_cover">Imposta come copertina</string>
+  <string name="viewer_album_remove">Rimuovi dall’album</string>
+  <string name="viewer_album_exclude">Togli dall’album</string>
+
+  <string name="viewer_msg_album_cover_title">Copertina cambiata</string>
+  <string name="viewer_msg_album_cover_detail">Ora questa foto è la copertina dell’album.</string>
+  <string name="viewer_msg_album_removed_title">Tolta dall’album</string>
+  <string name="viewer_msg_album_removed_detail">Il file resta dov’è: l’album non la mostra più.</string>
+  <string name="viewer_msg_album_denied_title">L’album non lo permette</string>
+  <string name="viewer_msg_album_denied_detail">Lo decide chi ha creato l’album.</string>
+  <string name="viewer_msg_album_failed_title">Non è riuscito</string>
+  <string name="viewer_msg_album_failed_detail">Non è cambiato niente nell’album. Riprova fra poco.</string>
+</resources>

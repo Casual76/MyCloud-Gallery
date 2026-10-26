@@ -124,6 +124,18 @@ internal enum class ViewerMessage(@StringRes val title: Int, @StringRes val deta
   /** Manca lo spazio anche per il piccolo modello del ritaglio (VR-2): lo si dice, non e' un "riprova". */
   CutoutNoSpace(R.string.cutout_msg_space_title, R.string.cutout_msg_space_detail),
 
+  /** Fase 7 (P10, D21): "Imposta come copertina" e' riuscito. */
+  AlbumCoverSet(R.string.viewer_msg_album_cover_title, R.string.viewer_msg_album_cover_detail),
+
+  /** Fase 7 (P10, D39): "Rimuovi dall'album" e' riuscito: il file resta dov'e'. */
+  AlbumRemoved(R.string.viewer_msg_album_removed_title, R.string.viewer_msg_album_removed_detail),
+
+  /** Fase 7 (P10, §2.4): la tabella dei permessi non lo permette piu' (il livello e' cambiato mentre il menu era aperto). */
+  AlbumDenied(R.string.viewer_msg_album_denied_title, R.string.viewer_msg_album_denied_detail),
+
+  /** Fase 7 (P10): la voce degli album non e' riuscita; l'album non e' cambiato. */
+  AlbumFailed(R.string.viewer_msg_album_failed_title, R.string.viewer_msg_album_failed_detail),
+
   /** "Scarica sul telefono" e' riuscito (Fase 4, D20). */
   Downloaded(R.string.viewer_msg_downloaded_title, R.string.viewer_msg_downloaded_detail),
 

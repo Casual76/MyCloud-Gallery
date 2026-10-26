@@ -43,7 +43,9 @@ import dev.pampa.mycloudgallery.feature.viewer.menu.NasMediaActions
 import dev.pampa.mycloudgallery.feature.viewer.motion.MotionAnimationSetting
 import dev.pampa.mycloudgallery.feature.viewer.motion.PowerSaving
 import dev.pampa.mycloudgallery.feature.viewer.video.BytesMotionVideoLocator
+import dev.pampa.mycloudgallery.feature.viewer.menu.NoViewerAlbumActions
 import dev.pampa.mycloudgallery.feature.viewer.menu.NoViewerSimilarSearch
+import dev.pampa.mycloudgallery.feature.viewer.menu.ViewerAlbumActions
 import dev.pampa.mycloudgallery.feature.viewer.menu.ViewerSimilarSearch
 import dev.pampa.mycloudgallery.feature.viewer.video.MotionVideoLocator
 import dev.pampa.mycloudgallery.feature.viewer.video.NasMotionSource
@@ -111,6 +113,9 @@ import kotlinx.coroutines.withContext
  *   azioni (D13). `:app` lo costruisce con `AndroidCutoutSaver` (PNG di `core-ai`, `FileProvider` esistente, `CutoutPhoneSaver` di `core-mediastore`).
  * @property similarSearch la voce "Trova simili" del menu ⋮ (Fase 6, P8, D30, E-Q14): presente, spiegata (media senza vettore) o assente (nascosti). Di
  *   serie nessuna ricerca, quindi nessuna voce (D13); `:app` la lega al motore di ricerca (P11).
+ * @property albums Fase 7 (P10, D35, D39): le tre voci ⋮ "Aggiungi ad album", "Imposta come copertina" e "Rimuovi dall'album" (le ultime due solo se il viewer e'
+ *   aperto da un album e la tabella dei permessi lo permette: arrivano gia' decise). Di serie nessun album, quindi nessuna voce (D13); `:app` la lega alle schermate
+ *   degli album (P13). Il viewer non vede core-albums.
  * @property dispatchers i thread di lavoro (letture di dettagli ed EXIF): nei test sono uno solo, senza attese.
  */
 @Immutable
@@ -148,6 +153,7 @@ class ViewerServices(
   val similarSearch: ViewerSimilarSearch = NoViewerSimilarSearch,
   val subjectCutter: ViewerSubjectCutter? = null,
   val cutoutSaver: CutoutSaver? = null,
+  val albums: ViewerAlbumActions = NoViewerAlbumActions,
 )
 
 /** Decodifica un'immagine animata (GIF, WebP animato) in un `Drawable` che si anima da solo (E-M11). */

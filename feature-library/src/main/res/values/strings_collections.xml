@@ -5,7 +5,7 @@
   <!-- Raccolte: l'elenco -->
   <string name="collections_title">Raccolte</string>
   <string name="collections_open_settings">Impostazioni</string>
-  <string name="collections_section_phone">Dal telefono</string>
+  <string name="collections_section_phone">Telefono</string>
   <string name="collections_section_protected">Da tenere al sicuro</string>
 
   <string name="collection_favorites">Preferiti</string>

@@ -33,6 +33,13 @@ fun LazyListScope.collectionEntryItems(
   }
 }
 
+/** Quello che sta a destra di una riga: il numero di cose da guardare, o la parola breve ("Condiviso"); niente se non c'e' nessuno dei due. */
+private fun entryBadge(entry: CollectionEntry): (@Composable () -> Unit)? = when {
+  entry.badge > 0 -> ({ FluidRowValue(text = GalleryNumbers.format(entry.badge)) })
+  entry.trailing != null -> ({ FluidRowValue(text = entry.trailing) })
+  else -> null
+}
+
 /** Un gruppo di righe, come `CollectionGroup` delle raccolte: un contenitore, separatori rientrati, la tinta sulla piastrella. */
 @Composable
 fun CollectionEntryRows(
@@ -44,16 +51,27 @@ fun CollectionEntryRows(
   FluidListGroup {
     group.entries.forEachIndexed { index, entry ->
       if (index > 0) FluidListDivider()
-      FluidListRow(
-        title = entry.title,
-        subtitle = entry.subtitle,
-        tone = entry.tone,
-        leading = { Icon(imageVector = entry.icon, contentDescription = null) },
-        badge = if (entry.badge > 0) ({ FluidRowValue(text = GalleryNumbers.format(entry.badge)) }) else null,
-        selected = twoPane && entry.code == selectedCode,
-        disclosure = !twoPane,
-        onClick = { onSelect(entry) },
-      )
+      CollectionEntryRow(entry, selectedCode, twoPane, onSelect)
     }
   }
+}
+
+/** Una sola riga di una sezione consegnata come dato: la stessa dei gruppi di sempre, con la freccia sul telefono e l'evidenza su due pannelli. */
+@Composable
+internal fun CollectionEntryRow(
+  entry: CollectionEntry,
+  selectedCode: String?,
+  twoPane: Boolean,
+  onSelect: (CollectionEntry) -> Unit,
+) {
+  FluidListRow(
+    title = entry.title,
+    subtitle = entry.subtitle,
+    tone = entry.tone,
+    leading = { Icon(imageVector = entry.icon, contentDescription = null) },
+    badge = entryBadge(entry),
+    selected = twoPane && entry.code == selectedCode,
+    disclosure = !twoPane,
+    onClick = { onSelect(entry) },
+  )
 }

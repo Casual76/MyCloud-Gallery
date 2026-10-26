@@ -160,3 +160,33 @@ abstract class ComposeScreenTest {
 /** Il telefono (412 dp) e il tablet (1280 dp, orizzontale) degli screenshot e dei test di layout. */
 const val PHONE_QUALIFIERS = "w412dp-h915dp-xhdpi"
 const val TABLET_QUALIFIERS = "w1280dp-h800dp-land-xhdpi"
+
+/**
+ * Lo stato della scheda per i test (D33): le sezioni che la scheda fa da sola con i [counts] dati, piu' quelle dei [providers] e i gruppi
+ * di `:app` ([extra]), nell'ordine [saved] (vuoto = quello predefinito) e senza le sezioni [hidden].
+ */
+internal fun layoutOf(
+  counts: Map<CollectionKind, Int>,
+  canTrash: Boolean = true,
+  providers: List<CollectionsSection> = emptyList(),
+  extra: List<CollectionEntryGroup> = emptyList(),
+  saved: List<String> = emptyList(),
+  hidden: Set<String> = emptySet(),
+  editing: Boolean = false,
+  saveFailed: Boolean = false,
+): CollectionsLayoutState {
+  val builtin = builtinSections(collectionsUiState(counts, canTrash))
+  val provided = providers.map { it.code }.toSet()
+  return CollectionsLayout.state(builtin.filter { it.code !in provided } + providers, extra, saved, hidden, editing, saveFailed)
+}
+
+internal fun layoutOf(
+  world: dev.pampa.mycloudgallery.feature.library.collections.testing.FakeCollectionsWorld,
+  canTrash: Boolean = true,
+  providers: List<CollectionsSection> = emptyList(),
+  extra: List<CollectionEntryGroup> = emptyList(),
+  saved: List<String> = emptyList(),
+  hidden: Set<String> = emptySet(),
+  editing: Boolean = false,
+  saveFailed: Boolean = false,
+): CollectionsLayoutState = layoutOf(world.source.countsNow(), canTrash, providers, extra, saved, hidden, editing, saveFailed)

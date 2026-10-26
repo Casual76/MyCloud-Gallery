@@ -134,7 +134,7 @@ class NoHiddenLeakTest : ComposeScreenTest() {
     val surfaces = mutableListOf<Pair<String, @Composable () -> Unit>>()
     surfaces += "elenco delle Raccolte" to {
       CollectionsScreen(
-        state = collectionsUiState(world.source.countsNow(), canTrash = true),
+        state = layoutOf(world),
         contentPadding = PaddingValues(),
         backdropOut = {},
         onOpenCollection = {},

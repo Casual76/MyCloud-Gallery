@@ -35,7 +35,7 @@ class CollectionsListPhoneTest : ComposeScreenTest() {
     onOpen: (CollectionKind) -> Unit = {},
   ) = show {
     CollectionsScreen(
-      state = collectionsUiState(world.source.countsNow(), canTrash),
+      state = layoutOf(world, canTrash),
       contentPadding = PaddingValues(),
       backdropOut = {},
       onOpenCollection = onOpen,
@@ -76,7 +76,7 @@ class CollectionsListPhoneTest : ComposeScreenTest() {
   fun unaRaccoltaSenzaElementiDiceNessunElemento() {
     show {
       CollectionsScreen(
-        state = collectionsUiState(emptyMap(), canTrash = true),
+        state = layoutOf(emptyMap(), canTrash = true),
         contentPadding = PaddingValues(),
         backdropOut = {},
         onOpenCollection = {},
@@ -119,7 +119,7 @@ class CollectionsListTabletTest : ComposeScreenTest() {
 
   private fun showList() = show {
     CollectionsScreen(
-      state = collectionsUiState(world.source.countsNow(), canTrash = true),
+      state = layoutOf(world),
       contentPadding = PaddingValues(),
       backdropOut = {},
       onOpenCollection = { opened += it },

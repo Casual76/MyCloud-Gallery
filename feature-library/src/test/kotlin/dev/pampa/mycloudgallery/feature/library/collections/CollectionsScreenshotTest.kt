@@ -84,7 +84,7 @@ abstract class CollectionsScreenshotBase(private val dark: Boolean, private val 
 
   private fun list(initial: CollectionKind? = null): @Composable () -> Unit = {
     CollectionsScreen(
-      state = collectionsUiState(world.source.countsNow(), canTrash = true),
+      state = layoutOf(world),
       contentPadding = PaddingValues(),
       backdropOut = {},
       onOpenCollection = {},

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Raccolte ordinabili e nascondibili (Fase 7, P11, D33): le sezioni della scheda e "Modifica Raccolte". -->
+
+  <!-- Le sezioni che la scheda fa da sola ("Telefono" e "Da tenere al sicuro" sono in strings_collections.xml) -->
+  <string name="collections_section_hidden">Nascosti</string>
+  <string name="collections_hidden_hint">Si apre da Impostazioni → Privacy</string>
+
+  <!-- Quando non c'e' niente da mostrare -->
+  <string name="collections_all_hidden_title">Nessuna sezione da mostrare</string>
+  <string name="collections_all_hidden_detail">Hai nascosto tutte le sezioni. Le rimostri da «Modifica Raccolte».</string>
+  <string name="collections_detail_empty_title">Scegli una raccolta</string>
+  <string name="collections_detail_empty_message">Quello che apri dall\'elenco compare qui.</string>
+
+  <!-- Modifica Raccolte -->
+  <string name="collections_edit">Modifica Raccolte</string>
+  <string name="collections_edit_title">Modifica Raccolte</string>
+  <string name="collections_edit_done">Fine</string>
+  <string name="collections_edit_intro">Trascina una sezione dalla maniglia per cambiarne l\'ordine. L\'interruttore la mostra o la nasconde nelle Raccolte. Le scelte valgono su tutti i tuoi dispositivi.</string>
+  <string name="collections_edit_note">Le sezioni nascoste si rimostrano da qui. Nascosti resta sempre raggiungibile da Impostazioni → Privacy → Nascosti.</string>
+  <string name="collections_edit_save_failed">Non sono riuscito a salvare la tua scelta. Riprova fra poco.</string>
+  <string name="collections_edit_shown">Mostrata</string>
+  <string name="collections_edit_hidden">Nascosta</string>
+  <string name="collections_edit_always">Sempre visibile</string>
+  <string name="collections_edit_position">posizione %1$s di %2$s</string>
+  <string name="collections_edit_move_up">Sposta su</string>
+  <string name="collections_edit_move_down">Sposta giù</string>
+  <string name="collections_edit_moved">%1$s: posizione %2$s di %3$s</string>
+</resources>

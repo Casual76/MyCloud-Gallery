@@ -1,10 +1,12 @@
 package dev.pampa.mycloudgallery.feature.library.trash.testing
 
+import dev.pampa.mycloudgallery.feature.library.trash.DoubleTapConfirm
 import dev.pampa.mycloudgallery.feature.library.trash.NasTrashFeed
 import dev.pampa.mycloudgallery.feature.library.trash.NasTrashOutcome
 import dev.pampa.mycloudgallery.feature.library.trash.NasTrashPort
 import dev.pampa.mycloudgallery.feature.library.trash.NasTrashRow
 import dev.pampa.mycloudgallery.feature.library.trash.UserTap
+import dev.pampa.mycloudgallery.feature.library.trash.singleTap
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -95,3 +97,17 @@ fun sampleNasRows(): List<NasTrashRow> = listOf(
     key = "tab/b3", name = null, folder = null, sizeBytes = 900_000, daysLeft = 5, withoutValidRecord = true, restorable = false,
   ),
 )
+
+/**
+ * La prova di **un** tocco, per i test di chi lega le porte (`:app`): la prova vera nasce solo nel foglio, e il suo costruttore e' interno a questo modulo
+ * (un test d'architettura lo guarda), quindi `:app` non ne puo' fabbricare una. Mai usata dalle schermate.
+ */
+fun fakeSingleTap(): UserTap = singleTap()
+
+/** La prova di **due tocchi distinti**, come la da' il foglio "Elimina subito" (il secondo oltre i 600 ms dal primo). */
+fun fakeDoubleTap(): UserTap {
+  val confirm = DoubleTapConfirm(shownAtMonotonicMs = 0)
+  check(!confirm.tap(1_000))
+  check(confirm.tap(2_000))
+  return checkNotNull(confirm.proof())
+}

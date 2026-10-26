@@ -5858,3 +5858,133 @@ F81 con il tetto di spazio simulato; F82 (nome occupato, stesso media in due alb
 - L'impronta degli elementi delle copie di Q5 (P3, `addItem(..., fp)`).
 - E-SH12 riconosce il contenuto gia' nell'area comune dalla chiave del contenuto del catalogo; con lo SHA-256 nei fatti del catalogo (P13) il
   confronto sarebbe sui byte.
+
+## Fase 7 P8: Utility, Doppioni, Eliminati di recente (26/10)
+
+Il pacchetto P8 della Fase 7 (`docs/fase7-progetto.md` §4.4, riga P8; D24-D27; §2.1.1; E-U1-E-U5; §1.2-§1.5, §4.3, §5.2). Promessa: le pagine
+dell'Utility (Screenshot, Video, Modificate, WhatsApp, Doppioni, Eliminati di recente), i **doppioni identici e simili** con la pulizia guidata che
+porta solo nei cestini, gli **Eliminati di recente con i due cestini** (telefono e NAS) e l'interruttore dell'**hash completo di notte**. **Nessuna
+dipendenza esterna nuova**, nessun permesso o componente Android nuovo, **nessuna colonna** (`core-database` non si tocca: le query nuove sono nei punti
+aperti). Branch `fase7/p8`, da `a51b131a`. Commit: `a5ab4944` (rilevatore, core-library), `a8ee719e` (l'impostazione `full_hash_nightly`), `e628a02b`
+(Eliminati di recente), `34dc3a5a` (Utility e Doppioni), `2aac1963` (registro dei Nascosti), `6b159809` (screenshot) e quelli dei documenti e della prova
+sull'adattatore di `NasOperations`.
+
+**Cosa c'e'**
+- `core-library/.../duplicates/`: `IdenticalCleanup` (le regole pure: ordine della copia da tenere e "mai"), `CatalogIdenticalDuplicates` (la lettura sul
+  catalogo, a pagine, con il filtro dei nascosti in lettura **e** nel piano), `SimilarShotsPlanner` (finestra, gruppi, scelta della migliore),
+  `ShotAffinities` e `SignatureLayout` (vettori e firma visiva), `CatalogSimilarShots` (la lettura a lotti per giorno e la manutenzione delle firme),
+  `FullHashNightly` (l'interruttore notturno). Il filtro `LibraryFilter.EDITED` (P0) e' provato: `EditedFilterTest`.
+- `core-personal`: `FullHashPersonalSettings` e `SyncedFullHashSettings` (la voce personale `full_hash_nightly`, spenta se assente).
+- `feature-library/.../trash/`: la pagina con i due cestini (`NasTrashPort`, `DoubleTapConfirm`, `PurgeNowSheet`, `NasTrashRows`, `TrashGrid`).
+- `feature-library/.../utility/`: `UtilityPage` e le voci per le Raccolte (`utilityEntryGroup`), le rotte (`utilityGraph`, `openUtility`), le pagine-filtro
+  (`UtilityFilterRoute`, `UtilityPageRoute`), i Doppioni (`DuplicatesController`, `DuplicatesScreen`, `IdenticalSection`, `SimilarSection`,
+  `CleanupSheetUi`, `DuplicatesTabs`), le porte opzionali per Dagger e i fake in `utility/testing`.
+- `app/src/test/.../hidden/`: la superficie `duplicates` passa da `PENDING` a `PRODUCTION` con la sonda sul codice vero.
+
+**Decisioni**
+1. **Porte, non `core-nasops`.** `Phase4ArchitectureTest` vieta a `feature-library` e a `core-library` di raggiungere `core-nasops`, e le conferme
+   (`UserConfirmation`) le costruiscono solo `feature-nas`, `feature-viewer` e `:app`. Quello che tocca il NAS esce quindi da due porte che lega `:app`
+   (P13): `NasTrashPort` (ripristina e "Elimina subito") e `CleanupNasPort` (la pulizia dei doppioni, `OpRequest.Trash`). Ognuna riceve la **prova del tocco**
+   (`UserTap`: il costruttore e' interno a `feature-library`, e un test di sorgenti lo guarda) e **non emette mai la conferma da se'**: la emette l'adattatore,
+   dopo, con i tocchi che la prova dice. Un tocco per il cestino e il ripristino, **due tocchi distinti** per "Elimina subito" (come `PURGE_NOW`).
+2. **Porte opzionali.** `OptionalUtilityBindingsModule` dichiara `@BindsOptionalOf` per ogni porta, come `BackupOptionalBindingsModule` della 5A: `:app`
+   compila prima di P13 e, senza legami, la pagina Doppioni e' vuota e Eliminati di recente mostra solo il cestino del telefono.
+3. **Doppioni identici (D25).** Un gruppo e' una versione con almeno due copie **dalla stessa parte** (telefono, o NAS con area privata e comune insieme); una
+   copia sola per parte resta. La copia da tenere segue l'ordine di D25 (privata verificata, album condiviso, cartella `Backup/<dispositivo>/`, la piu'
+   vecchia, poi l'id della posizione). I **"mai"**: l'area di un altro account (E-U1: si dice "1 copia non si tocca", con il nome del familiare nel foglio),
+   l'ultima copia privata (E-U2), una copia dentro `Album condivisi/<album>/...` (toglierla toglie l'elemento a tutti), e un gruppo **senza hash completo**
+   (D27: "da verificare", non si pulisce). "Rivedi" cambia la copia da tenere; le regole valgono lo stesso, e una scelta che non e' del gruppo o e' di un
+   altro account non cambia niente (la precedente resta).
+4. **La pulizia e' il foglio di eliminazione esistente.** `GalleryDeleteSheet` con "Solo dal telefono" / "Ovunque" (i doppioni identici ne hanno una sola), l'elenco
+   dei posti con l'effetto di ogni scelta e la nota dei 30 giorni. Parte **solo** dal tocco su "Elimina". Prima il NAS (cestino del NAS, un piano `Trash`), poi
+   il telefono (dialogo di sistema `createTrashRequest`): se il NAS non accetta il telefono non si tocca. Mai una cancellazione definitiva (`deleteRequest` non
+   compare nel pacchetto: `UtilityStyleTest`). Un dialogo porta al massimo 2.000 elementi: il resto resta per un altro giro e il foglio lo dice. Le copie del
+   telefono di media senza una copia al sicuro hanno l'avviso E-D14 nel foglio.
+5. **Doppioni simili.** Scatti dello stesso giorno a meno di 10 minuti, di proporzione compatibile (2%), fuori dai gruppi gia' fatti (raffiche, RAW+JPEG, copie
+   simili, "da verificare"); ogni scatto si confronta con i 40 che lo seguono (costo lineare). Nel dubbio non si unisce (`UNKNOWN`) e la pagina conta gli scatti
+   che non ha saputo giudicare. Di ogni gruppo la migliore e' da tenere; **preferite e foto in un album non sono mai preselezionate per l'eliminazione**
+   (E-U3) e, se l'utente le sceglie, la pagina lo dice; **in un gruppo almeno uno scatto resta**. Il foglio e' quello esistente, con "Solo dal telefono" e "Ovunque".
+6. **Schede da 48 dp.** Il controllo a segmenti dell'engine e' alto 32 dp (`SegmentHeight`): "Identici" e "Simili" sono due schede proprie (`DuplicatesTabs`), alte
+   almeno 48 dp e lette da TalkBack come schede scelte o no. Gli scatti sono caselle (`Role.Checkbox`) con la parola dello stato **sotto** la miniatura
+   ("Da tenere" / "Da eliminare": a 96 dp la pillola sopra la foto tagliava "Da eliminare", visto dagli screenshot).
+7. **Le Utility come dati.** `UtilityPage` ha un codice stabile per pagina (`screenshots`, `videos`, `edited`, `whatsapp`, `duplicates`, `recently_deleted`; nella voce
+   delle Raccolte `utility/<codice>`) e `utilityEntryGroup(counts, canTrash)` da' il gruppo "Utility" come `CollectionEntryGroup` (il meccanismo che le Raccolte
+   usano gia' per le voci di `:app`). Non tocco `CollectionKind` ne' `CollectionsTab.kt` (P11): le quattro pagine-filtro riusano `CollectionGridPage`. Doppioni ed
+   Eliminati di recente non dicono mai quanti sono (E-H1). Gli Eliminati di recente tengono la rotta `RecentlyDeletedDestination`: la pagina e' la stessa, adesso con i due cestini.
+8. **Eliminati di recente unificati (D26).** Una pagina: "Dal telefono" (il cestino di Android, con i giorni rimasti) e "Dal NAS" (voci proprie e con il
+   permesso, con giorni rimasti, cartella e chi l'ha eliminata; una voce senza record valido lo dice e non si ripristina). Ripristina e "Elimina subito" (solo voci proprie, share
+   scrivibile, NAS raggiungibile, due tocchi a distanza di almeno 600 ms, con l'avviso sul backup esterno) dietro lo stesso cancello dei Nascosti; D-3 resta dichiarato, con la stringa che c'era gia'.
+9. **L'hash completo di notte (D27).** `full_hash_nightly`: voce personale sincronizzata, spenta se assente. `FullHashNightly.apply(on, budget)` non legge nessun file: acceso mette
+   in coda `FULL_HASH` (`catalog.requestWork`, le stesse righe che l'attivita' esistente consuma, con le sue regole dei video: attivita' pesante, Wi-Fi di casa) per i
+   video con una copia sul NAS e senza hash completo; spento segna `GAVE_UP` le righe ancora da fare e **lascia stare** i gruppi "da verificare" (quelli li mette in coda il
+   catalogo). Ogni passo e' idempotente: se il NAS si spegne a meta' (E-U4) le righe gia' in coda restano e la notte dopo si riprende dal video successivo.
+10. **I nascosti non escono (D22).** Tutto passa da `VisibleMedia` e `HiddenMask`, **anche il piano**: i gruppi letti prima che un media venisse nascosto non entrano nei cestini
+    (`plan()` filtra di nuovo; `CatalogSimilarShots.placesOf` pure). La superficie `duplicates` e' nel registro con la sonda su: gruppi identici, piano, scatti simili, luoghi di
+    un'eliminazione. Per averne da provare il mondo casuale ha le **seconde copie dalla stessa parte** (`WorldSpec.sameSideCopies`, da un generatore a parte: gli altri mondi non cambiano);
+    `HiddenDuplicatesSurfaceTest` controlla che la sonda non giri a vuoto e che un piano di gruppi letti prima di un nascosto lo conterrebbe davvero.
+
+**Calibrazione di `Sdup` e della firma visiva** (`SimilarShotsCalibrationTest`: scrive il resoconto in `p8-calibrazione.txt`, nella cartella temporanea)
+- **Il set sintetico**: le scene generate di `SceneFixtures` (6 normali, 2 di fogliame, 2 al buio) e, per ognuna, le varianti etichettate per costruzione: **206 coppie** =
+  130 "stesso momento" (soggetto che si muove dell'1,5/3/5/20/30%, camera spostata del 2/4%, ritaglio del 2/3%, raddrizzamento di 0,5/1 grado, esposizione ±0,3 EV), 10 "scena
+  diversa" e 66 "zona grigia" (camera spostata del 15/25%, zoom 0,8, ±1,5 EV, bianco e nero, filtro di colore forte). L'etichetta dipende da chi giudica: i vettori guardano il contenuto
+  (una zona grigia puo' essere ancora "lo stesso momento": non si conta ne' giusta ne' sbagliata); la firma guarda i pixel, e per lei 40 delle 66 coppie grigie (camera spostata, ±1,5 EV)
+  sono "diverse": 10 + 40 = **50 coppie che non devono unirsi**.
+- **Firma visiva**: le soglie "copia" della Fase 5 (F5-D36, fatte per file quasi identici) riconoscono **0/130** scatti dello stesso momento. Serve una lettura piu' larga: `SignatureLayout`,
+  la disposizione della luce su 16x16 celle, con la distanza media e la **quota di celle cambiate**. Bande misurate: stesso momento fino a media 0,0441 e cambiate 0,328; scena diversa da
+  media 0,0544 e cambiate 0,4414. **Soglie scelte** (a meta' della banda vuota): media <= **0,049**, cambiate <= **0,38**, e una **struttura minima** di 0,035 (un'immagine quasi piatta, un cielo
+  o un buio, non si giudica: `UNKNOWN`). Risultato: **130/130** riconosciuti, **0/50** unioni sbagliate.
+- **Vettori** (embedder FINTO su JVM, vedi la nota del test: misura dove cadono i coseni su immagini vere, non il coseno del modello vero): stesso momento da cos **0,8471** in su, scena
+  diversa fino a **0,8228**. Per soglia: `Sdup` 0,90 -> 128/130 (98%); 0,92 -> 124/130 (95%); **0,95 -> 113/130 (87%)**; in tutti e tre **0 unioni sbagliate**.
+- **`Sdup` = 0,95** (`SimilarShotsRules.SDUP`, il valore di partenza del progetto): prima la precisione, una pulizia che unisce due scatti diversi toglie una foto che l'utente voleva
+  (e comunque la migliore e le preferite non si propongono mai). Con i vettori veri la banda sara' un'altra: **da riconfermare con F77** sul telefono (raffiche a mano, foto ritagliate)
+  guardando i coseni delle coppie giuste e sbagliate; se le giuste cadono tutte sopra 0,92 conviene abbassarla, ed e' una costante sola.
+
+**Casi limite, per ID**
+- **E-U1**: `IdenticalCleanupTest` (la regola), `CatalogIdenticalDuplicatesTest.e_u1_...` (sul catalogo: non si propone e si conta), `DuplicatesControllerTest.e_u1_...` (foglio con la share dell'altro), `DuplicatesScreenTest.e_u1_...`
+  (la nota e la riga "NAS · area di Marco" nel foglio, "non hai il permesso").
+- **E-U2**: `IdenticalCleanupTest` (anche una proprieta' su 1.000 gruppi casuali: mai l'ultima privata, mai un album condiviso, sempre una copia per parte) e `DuplicatesControllerTest.e_u2_...`.
+- **E-U3**: `SimilarShotsPlannerTest.e_u3_...` (preselezione), `DuplicatesControllerTest.e_u3_...` (due: preselezione, e la scelta dell'utente con l'avviso), `DuplicatesScreenTest.e_u3_...`.
+- **E-U4**: `FullHashNightlyTest` (7: spento non mette in coda niente e acceso solo i video del NAS senza hash completo; le righe sono quelle che prende l'attivita' esistente; un secondo giro non rifa' niente;
+  spegnere toglie dalla coda e riaccendere rimette; i gruppi "da verificare" non si toccano; l'interruzione a meta' e la notte dopo che riprende senza doppioni; senza istantanea niente).
+- **E-U5**: `CatalogIdenticalDuplicatesTest.e_u5_...` (un media tolto esce dall'album, e se torna dal cestino rientra: l'id e' lo stesso).
+- **E-D14**: l'avviso nel foglio (`CleanupSheetUi`, `DuplicatesScreenTest`); **D-3**: l'avviso nella pagina degli Eliminati di recente (`RecentlyDeletedScreenTest`, invariato).
+
+**Prove** (tutte sulla JVM)
+- `core-library/duplicates` (69): `IdenticalCleanupTest` 17, `CatalogIdenticalDuplicatesTest` 9, `SimilarShotsPlannerTest` 14, `ShotAffinitiesTest` 6, `SimilarShotsCalibrationTest` 1,
+  `CatalogSimilarShotsTest` 12, `FullHashNightlyTest` 7, `EditedFilterTest` 3. `core-personal`: `SyncedFullHashSettingsTest` 5.
+- `feature-library/trash` (80 con quelli di P10): `RecentlyDeletedNasTest` 20, `RecentlyDeletedNasScreenTest` 9 (Compose: i due tocchi, il secondo troppo vicino non conta,
+  annullare riparte dal primo pannello), `DoubleTapConfirmTest` 8 (la macchina e le guardie sui sorgenti), `RecentlyDeletedControllerTest` 23 (adeguato: l'unica strada per eliminare davvero e' `purgeNas`, con la prova).
+- `feature-library/utility` (202 con gli screenshot): `DuplicatesControllerTest` 32, `DuplicatesScreenTest` 22 (+22 sul tablet: schede, gruppi, "Rivedi", foglio, interruttore, bersagli >= 48 dp, testo 1,3x, tema
+  scuro), `UtilityPagesTest` 14 (codici, voci, pagina Modificate con i nascosti fuori), `UtilityStyleTest` 12 (regola 1 del design system, niente `core-nasops`, niente cancellazione definitiva,
+  `UserTap(` solo nel suo file), 50 + 50 screenshot di verifica.
+- `app` (registro dei Nascosti): `HiddenSurfacesPropertyTest` con la superficie nuova, `HiddenDuplicatesSurfaceTest` 1; `CleanupOverOperationsTest` 5: **l'adattatore di riferimento** di `CleanupNasPort` sopra le vere
+  `NasOperations` del kit di `core-nasops` (un file con il timbro del catalogo va nel cestino con un tocco; cambiato dal PC non si tocca, E-D13; scritture ferme: non parte; elenco vuoto: niente).
+- Screenshot: `docs/screenshots/7-P8/` (100 immagini: chiaro e scuro, telefono e tablet, testo a 1,3x sulle pagine principali).
+
+**Agganci per P11 e P13**
+- **P11 (Raccolte)**: la sezione "Utility" e' `utilityEntryGroup(counts, canTrash)` (`CollectionEntryGroup`; i `counts` vivi li da' `UtilityViewModel.counts`); il dettaglio sul tablet e' `UtilityPageRoute(page, ...)`
+  (smista pagine-filtro, Doppioni, Eliminati di recente). "Libera spazio" e' la voce di `:app` e va nello stesso gruppo. **La riga "Eliminati di recente" di P10 e' la stessa pagina**: va mostrata una volta, quella
+  dell'Utility. I codici sono `utility/<codice>` (`UtilityPage.fromEntryCode`).
+- **P13 (`:app`)**: (1) `utilityGraph(nav, onOpenViewer)` accanto a `collectionsGraph`; `nav.openUtility(page)`. (2) Legami (un `@Provides` ciascuno, tutte opzionali): `IdenticalDuplicates` <- `CatalogIdenticalDuplicates(catalog,
+  gallery.visibleMedia)`; `SimilarShots` <- `CatalogSimilarShots(catalog, visibleMedia, hiddenMask, vectors, albums, signatures)` (`ShotVectorSource` sull'indice dei vettori, `AlbumMembership` dalle voci degli album,
+  `SignatureSource` la stessa della manutenzione delle firme della Fase 5); `NasTrashPort` <- `NasTrash` (la lista) e `NasOperations` (`OpRequest.Restore` con un tocco, `OpRequest.PurgeNow` con due); `CleanupNasPort` <- l'adattatore
+  di `CleanupOverOperationsTest` (spostarlo in `:app`); `FullHashSwitch` <- `FullHashPersonalSettings` + una chiamata a `FullHashNightly.apply`; `DuplicatesNames` <- il nome del familiare della share (facoltativo).
+  (3) Lavori: il lavoro notturno chiama `FullHashNightly.apply(on, budget)` prima della tappa `FULL_HASH`; `LibraryMaintenanceWorker` chiama `SimilarShots.sign(budget)`. (4) I fake dei test d'integrazione stanno in
+  `utility/testing` e `trash/testing` (`fakeSingleTap`, `fakeDoubleTap` danno la prova del tocco a chi non la puo' costruire).
+
+**Da provare sul telefono (F75-F78)**
+- **F75** Utility: Screenshot, Video, Modificate, WhatsApp: i conteggi nelle Raccolte uguali a quelli delle pagine; Modificate con le versioni seminate.
+- **F76** Doppioni identici: lo stesso file in due cartelle di `test` e in `test-comune`: la proposta segue D25, "Rivedi" cambia la copia da tenere; dopo "Elimina ovunque" una copia per parte, le altre nel cestino
+  del NAS con il record; la copia dell'album condiviso e quella di un altro account restano; ripristino dagli Eliminati di recente. Provare anche "Controlla di notte i video del NAS" acceso e spento.
+- **F77** Doppioni simili: raffiche a mano (scatti a 2 s), foto ritagliate, una preferita: gruppi giusti, la preferita da tenere, le altre nel cestino dopo la scelta. **Riconfermare `Sdup`** sui coseni veri.
+- **F78** Eliminati di recente: media eliminati dal telefono con l'app e dal NAS: una pagina con entrambi, giorni rimasti, ripristino, "Elimina subito" con i due tocchi; su Samsung l'avviso D-3.
+
+**Punti aperti e richieste ai contratti degli altri pacchetti**
+- **`core-database` (P1), nessuna e' bloccante**: (a) `AlbumCatalog.albumMembers(ids): Set<MediaId>` (`SELECT DISTINCT media_id FROM album_item WHERE media_id IN (...)`, a blocchi da 500) al posto
+  dell'adattatore di `AlbumMembership`; (b) un elenco dei video del NAS senza hash completo (oggi `FullHashNightly` fa una lettura per ogni video del NAS dell'istantanea a ogni giro acceso: accettabile, ma una query sola sarebbe meglio).
+- **`core-search`**: `VectorIndex` espone solo `coarse` e `rerank` (punteggi contro una query), non il vettore di una riga: per `ShotVectorSource` serve un accessor `vectorOf(media)`. Finche' manca, i Doppioni simili
+  usano la sola firma visiva e la pagina dice quanti scatti non ha saputo giudicare ("serve la ricerca per contenuto, o il tempo perche' l'app li guardi").
+- **`CollectionKind`** (P11): il §2.1 dice che "diventa la lista dell'Utility"; qui `UtilityPage` lo affianca senza toccarlo. Se P11 lo vuole unico, `UtilityPage` e' il modello (stessi codici, stessi filtri).
+- **`HiddenWorld`/`HiddenWorldBuilder`** (P9): aggiunti `WorldSpec.sameSideCopies` e le costanti degli `_ID`, senza cambiare i mondi esistenti. Il registro di main ha anche la riga `albums-shared` di P9: nel mio ramo
+  `HiddenSurfacesRegistryTest` ha due prove rosse (`albums-shared` ancora `REFERENCE` con `core-albums/.../shared` presente) che nascono dalla base `a51b131a` e passano con il commit `e54ce26e` di P9.
+- Il testo della pagina Doppioni e' in italiano di oggi: il filone grafico puo' rifinire senza toccare la logica (gli stati sono dati puri: `DuplicatesState`).

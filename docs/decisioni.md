@@ -7174,3 +7174,54 @@ violazione nel bytecode richiederebbe una release costruita apposta.
 - Soglie del raggruppamento provvisorie fino alla misura sui dati veri (Q4, L97).
 - Il controllo dei modelli nell'APK (D39) lo aggiunge P1 a `tools/check.ps1`; P0 ha aggiunto D34 e LiteRT nel bytecode.
 - `feature-search` toccata al minimo (due rami di `when` e le stringhe) perché le enum nuove compilassero: il chip vero è di P10.
+
+## Fase 8 P1: modelli dei volti (27/10)
+
+Il pacchetto P1 della Fase 8 (`docs/fase8-progetto.md` §2.2, D6–D9, D39; riga P1 del §4.4): conversione di YuNet e SFace da ONNX a `.tflite`
+sul PC, parità, scelta delle versioni, asset nell'APK, catalogo. Branch `fase8/p1`, partito da `integra/28-10b` (`c2ecc9e`, con P0 della
+Fase 8). La sezione nasce in tre tempi e il commit lo dice: **(1)** le regole di scelta, scritte prima di ogni misura (questo blocco);
+**(2)** strumenti, dati e misure; **(3)** numeri, versioni e consegne.
+
+### Regole di scelta e di parità, scritte il 27/10 alle 00:43, prima di ogni misura (D7)
+Non si cambiano dopo aver visto i numeri. Se una soglia non passa si prova il ripiego scritto qui; se non c'è, ci si ferma e si scrive.
+
+**Condizioni comuni**
+- *Sorgenti*: `opencv/opencv_zoo` al commit `48b10fa505aeb51fbd127fc60a5c660040e823b7` (testa di `main` il 27/10; la ricerca 0.4 aveva
+  verificato le impronte sulle voci Git LFS). Si usano solo se SHA-256 e dimensione tornano con `docs/fase8-progetto.md` §2.2.
+- *Esecuzione*: ONNX Runtime CPU per l'ONNX; l'interprete di LiteRT per Python (`ai-edge-litert`, XNNPACK, 4 thread) per il `.tflite`.
+  Latenza = mediana di 30 inferenze dopo 5 di riscaldamento, sullo stesso PC e a turno fra i candidati (non è la latenza del telefono).
+- *Preprocessing* (da OpenCV `FaceDetectorYN` e `FaceRecognizerSF`, **controllato con la libreria stessa** installata come dipendenza di
+  `onnx2tf`, non solo letto): YuNet riceve BGR 0–255 non normalizzato, immagine ridotta (o ingrandita) a lato lungo 1024 con i bordi a 0
+  in basso e a destra (il riquadro nella forma 1024×1024 è quello che P2 userà); SFace riceve il volto allineato 112×112 in RGB 0–255
+  (la media e la scala stanno già dentro il modello).
+- *Decodifica di YuNet* (nostra, la stessa per ONNX e `.tflite`, come `FaceDetectorYN`): per le scale 8, 16, 32, punteggio
+  √(clamp(cls)·clamp(obj)), centro (colonna + dx)·passo, lato exp(w)·passo, cinque punti (kps + colonna)·passo; soglia 0,6; NMS 0,3.
+- *Dati di prova*: **ritratti** = i dipinti di pubblico dominio di Wikimedia Commons scaricati da P1 (solo con licenza «pubblico
+  dominio» nei metadati di Commons, etichette `ritratto-NN`); **composizioni** = generate da `tools/models/faces/compose.py` con seme
+  fisso, incollando volti dei ritratti (ritagli con margine e bordo sfumato, specchiati e ritoccati) su sfondi senza volti: serie A «gruppo»
+  (3–8 volti, lato 24–160 px), serie B «piccoli» (8 volti per immagine, lato corto del riquadro fra 24 e 47 px, almeno 300 volti in tutto),
+  serie C «senza volti» (almeno 40 immagini). La verità di terra è per costruzione: il riquadro e i cinque punti incollati, presi dal
+  consenso dei due YuNet sul ritratto a piena risoluzione (entrambi ≥ 0,6 e IoU fra loro ≥ 0,8).
+
+**Regola 1, versione di YuNet** (D7; §2.2 punto 5). Candidati `2023mar` e `2026may`, tutti e due convertiti in float32 a ingresso fisso
+1×1024×1024×3 e misurati con la stessa decodifica. *Trovati* = volti di verità con lato corto fra 24 e 47 px (serie B più i ritratti ridotti
+in modo che il volto misuri 28, 36 e 44 px) con almeno un riquadro dopo l'NMS e IoU ≥ 0,3. *Falsi positivi* = riquadri dopo l'NMS che non hanno IoU ≥ 0,3 con nessun volto di verità
+della stessa immagine, sommati sulle serie A, B e C (i ritratti a piena risoluzione non contano: la verità lì è solo il consenso e il resto si guarda a occhio). Si sceglie **`2026may` solo se** (a) trovati(2026may) ≥ 1,05 · trovati(2023mar), **e**
+(b) falsi positivi(2026may) ≤ falsi positivi(2023mar), **e** (c) latenza mediana a 1024 di 2026may ≤ 1,30 · quella di 2023mar. Altrimenti
+`2023mar` (anche a pari merito). YuNet resta in float32: i 230 KB di pesi non giustificano una quantizzazione.
+
+**Regola 2, precisione di SFace** (D7). Di serie **float16** (pesi in mezza precisione, calcolo in float32). Si sceglie **int8 dinamico**
+(pesi a 8 bit, circa 10 MB) **solo se** (a) il coseno fra il vettore int8 e quello dell'ONNX fp32 è ≥ 0,995 su **tutti** i 300 e più
+volti di prova (minimo, non media), **e** (b) la separazione fra coppie vere e false non cala: AUC sulle coppie dei ritratti (stesso soggetto
+contro soggetti diversi, vettori normalizzati) di int8 non più bassa di quella di float16 di oltre 0,005, **e** il numero di coppie sbagliate alla soglia
+del demo di OpenCV (coseno 0,363) non aumenta. La «purezza dei gruppi» del §D7 non si può misurare in P1 (il raggruppamento vero è di P5, le soglie di
+P11 sul telefono): la separazione delle coppie è il rappresentante dichiarato. L'ONNX int8 di OpenCV Zoo (quantizzazione statica) serve
+solo come riferimento di contesto (coseno con fp32), non decide.
+
+**Regola 3, parità** (§2.2 punto 4; D6), sulle stesse immagini per ONNX e `.tflite`:
+- *YuNet*: ogni riquadro dell'ONNX con punteggio ≥ 0,605 ha un riquadro del `.tflite` con **IoU ≥ 0,95** e i **cinque punti entro 1 px**
+  (nelle coordinate dei 1024 px), e viceversa; i riquadri con punteggio fra 0,595 e 0,605 possono cadere da una parte o dall'altra della
+  soglia e si contano a parte. Sono riportati anche lo scarto massimo sulle uscite grezze e i punteggi.
+- *SFace* float16: coseno fra ONNX e `.tflite` **≥ 0,999 per ogni volto** (minimo), su almeno 300 volti delle composizioni più i volti
+  dei ritratti, allineati con il nostro allineamento (similitudine ai cinque punti del modello a 112 px di ArcFace).
+- *Se la parità non passa*: SFace in float32 (38,7 MB, piano del §7); YuNet con un'altra conversione. Se nemmeno questo basta, ci si ferma.

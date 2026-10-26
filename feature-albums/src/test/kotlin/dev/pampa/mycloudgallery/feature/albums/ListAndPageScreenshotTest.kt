@@ -10,6 +10,7 @@ import dev.pampa.mycloudgallery.core.albums.contract.AlbumListSort
 import dev.pampa.mycloudgallery.core.albums.contract.CloseMode
 import dev.pampa.mycloudgallery.core.albums.contract.SharedAlbumNotice
 import dev.pampa.mycloudgallery.core.albums.contract.SharePlanKind
+import dev.pampa.mycloudgallery.core.albums.contract.ShareFailure
 import dev.pampa.mycloudgallery.core.albums.contract.ShareOpId
 import dev.pampa.mycloudgallery.core.albums.contract.ShareOpState
 import dev.pampa.mycloudgallery.core.albums.contract.ShareWait
@@ -118,6 +119,18 @@ abstract class ListAndPageShots(private val dark: Boolean, private val device: S
   fun paginaAlbumCondivisoMioInPausaPerLoSpazio() {
     val paused = ShareOpState.Paused(ShareOpId("op-2"), scenes.osloShared, SharePlanKind.SHARE, ShareWait.NO_SPACE, done = 7, total = 18)
     shoot("pagina-condiviso-pausa", "Vacanza a Oslo", content = page(scenes.pageUi(scenes.osloShared, banners = listOf(AlbumBanner.Sharing(paused)))))
+  }
+
+  @Test
+  fun paginaAlbumCondivisoMioConCondivisioneParziale() {
+    val partly = ShareOpState.PartlyDone(ShareOpId("op-3"), scenes.osloShared, SharePlanKind.SHARE, done = 15, failures = mapOf(ShareFailure.SOURCE_CHANGED to 2), cancelled = 1)
+    shoot("pagina-condiviso-parziale", "Vacanza a Oslo", content = page(scenes.pageUi(scenes.osloShared, banners = listOf(AlbumBanner.Sharing(partly)))))
+  }
+
+  @Test
+  fun paginaAlbumCondivisoMioConCondivisioneFinita() {
+    val done = ShareOpState.Done(ShareOpId("op-4"), scenes.osloShared, SharePlanKind.SHARE, done = 18)
+    shoot("pagina-condiviso-finita", "Vacanza a Oslo", content = page(scenes.pageUi(scenes.osloShared, banners = listOf(AlbumBanner.Sharing(done)))))
   }
 
   @Test

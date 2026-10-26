@@ -287,6 +287,8 @@ dependencies {
   // Fase 7 (P9, D22): le sonde di riferimento di album e viaggi del registro dei Nascosti usano gli esecutori di riferimento di core-albums. Solo le prove:
   // il modulo entra nell'app con P13 (`implementation`), non adesso.
   testImplementation project(':core-albums')
+  // Fase 7 (P10): le sonde dei Nascosti (HiddenSurfaces) fanno girare i controllori veri delle schermate degli album sullo stack vero. Solo test: la dipendenza di produzione la lega P13.
+  testImplementation project(':feature-albums')
   testImplementation appDeps.workTesting
   // Screenshot dello scaffold (docs/screenshots/2-P0/) e test Compose su JVM.
   testImplementation appDeps.robolectric

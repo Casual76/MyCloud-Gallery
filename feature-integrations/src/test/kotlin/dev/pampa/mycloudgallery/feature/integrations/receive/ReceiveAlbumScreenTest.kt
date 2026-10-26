@@ -3,6 +3,8 @@ package dev.pampa.mycloudgallery.feature.integrations.receive
 import android.app.Application
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -45,7 +47,9 @@ abstract class ReceiveAlbumScreenshotBase(private val dark: Boolean, private val
     show(dark = dark, fontScale = fontScale) { ReceiveScreen(ui = ui, actions = ReceiveActions()) }
     assertWithMessage("manca «$expect» nella scena $name").that(composeRule.onAllNodesWithText(expect, substring = true).fetchSemanticsNodes()).isNotEmpty()
     val suffix = if (fontScale != null) "-testo-grande" else ""
-    composeRule.onRoot().captureRoboImage("../docs/screenshots/7-P10/ricezione-$name-$look-$device$suffix.png")
+    // Il telefono ha tutte le scene; il tablet solo la scelta dell'album (le immagini sono grandi); il testo grande solo sul telefono.
+    val capture = device == "telefono" || (fontScale == null && name == "scelta-album")
+    if (capture) composeRule.onRoot().captureRoboImage("../docs/screenshots/7-P10/ricezione-$name-$look-$device$suffix.png")
   }
 
   @Test fun prontaConLaVoceAggiungiAdAlbum() = shoot("pronta", "Aggiungi ad album", ui = ReceiveAlbumSamples.ready())
@@ -126,14 +130,14 @@ class ReceiveAlbumLayoutTest : ReceiveComposeBase() {
   fun senzaAlbumLaVoceAggiungiAdAlbumNonCe() {
     show { ReceiveScreen(ui = ReceiveUiSamples.ready(), actions = ReceiveActions()) }
     assertThat(composeRule.onAllNodesWithText("Aggiungi ad album", substring = true).fetchSemanticsNodes()).isEmpty()
-    composeRule.onNodeWithText("Salva sul NAS").assertExists()
+    composeRule.onNode(hasText("Salva sul NAS") and hasClickAction()).assertExists()
   }
 
   @Test
   fun conGliAlbumLaVoceStaInsiemeASalvaSulNasEIlTocco_ApreLaScelta() {
     var opened = 0
     show { ReceiveScreen(ui = ReceiveAlbumSamples.ready(), actions = ReceiveActions(onPickAlbum = { opened++ })) }
-    composeRule.onNodeWithText("Salva sul NAS").assertExists()
+    composeRule.onNode(hasText("Salva sul NAS") and hasClickAction()).assertExists()
     composeRule.onNodeWithText("Aggiungi ad album…").performClick()
     assertThat(opened).isEqualTo(1)
   }
@@ -148,6 +152,6 @@ class ReceiveAlbumLayoutTest : ReceiveComposeBase() {
     assertThat(saved).isEqualTo(0)
     composeRule.onNodeWithText("Salva e aggiungi all’album").performClick()
     assertThat(saved).isEqualTo(1)
-    assertThat(composeRule.onAllNodesWithText("Salva sul NAS").fetchSemanticsNodes()).isEmpty()
+    assertThat(composeRule.onAllNodes(hasText("Salva sul NAS") and hasClickAction()).fetchSemanticsNodes()).isEmpty()
   }
 }

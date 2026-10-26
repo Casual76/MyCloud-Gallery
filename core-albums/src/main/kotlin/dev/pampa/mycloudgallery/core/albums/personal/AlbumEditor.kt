@@ -88,15 +88,17 @@ internal class AlbumEditor(
     val fresh = real.filter { it.value !in present }
     val already = real.size - fresh.size
     if (fresh.isEmpty()) return AddOutcome.Added(0, already)
+    val smart = kindOf(state) == AlbumKind.SMART
+    val resolution = if (smart) resolver.resolve(AlbumDerivation.refsOf(state)) else MediaResolution.NONE
     if (liveSmart(state)) {
       // D14: in uno smart non congelato un media a mano e' un suggerito accettato; un'esclusione precedente si toglie.
       for (m in fresh) {
         albums.accept(id.value, m.value, on = true)
-        albums.exclude(id.value, m.value, on = false)
+        clearExclusions(state, resolution, m)
       }
     } else {
       write(id, AlbumPositions.append(manualPositions(rows), fresh.map { it.value }))
-      for (m in fresh) albums.exclude(id.value, m.value, on = false)
+      if (smart) for (m in fresh) clearExclusions(state, resolution, m)
     }
     return AddOutcome.Added(fresh.size, already)
   }
@@ -190,21 +192,25 @@ internal class AlbumEditor(
   }
 
   suspend fun exclude(id: AlbumId, media: List<MediaId>): EditOutcome {
-    smartState(id).second?.let { return it }
+    val (state, refusal) = smartState(id)
+    refusal?.let { return it }
+    val resolution = resolver.resolve(AlbumDerivation.refsOf(state!!))
     for (m in media.distinct()) {
       val real = catalog.resolve(m) ?: continue
       albums.exclude(id.value, real.value, on = true)
-      albums.accept(id.value, real.value, on = false)
+      clearAcceptances(state, resolution, real)
     }
     return EditOutcome.Done
   }
 
   suspend fun accept(id: AlbumId, media: List<MediaId>): EditOutcome {
-    smartState(id).second?.let { return it }
+    val (state, refusal) = smartState(id)
+    refusal?.let { return it }
+    val resolution = resolver.resolve(AlbumDerivation.refsOf(state!!))
     for (m in media.distinct()) {
       val real = catalog.resolve(m) ?: continue
       albums.accept(id.value, real.value, on = true)
-      albums.exclude(id.value, real.value, on = false)
+      clearExclusions(state, resolution, real)
     }
     return EditOutcome.Done
   }
@@ -234,6 +240,20 @@ internal class AlbumEditor(
   }
 
   // --- Interni ------------------------------------------------------------------------------------------------------------
+
+  /** Spegne **tutte** le esclusioni vive che qui indicano [real] (un id vecchio e uno nuovo dello stesso file): nessuna resta a vietarlo. */
+  private suspend fun clearExclusions(state: PersonalAlbumState, resolution: MediaResolution, real: MediaId) {
+    for (c in state.excluded) {
+      if (c.on && resolution.of(c.mediaId, c.fingerprint) == real) albums.exclude(state.id, c.mediaId, on = false, fingerprint = c.fingerprint)
+    }
+  }
+
+  /** Come [clearExclusions] per gli accettati. */
+  private suspend fun clearAcceptances(state: PersonalAlbumState, resolution: MediaResolution, real: MediaId) {
+    for (c in state.accepted) {
+      if (c.on && resolution.of(c.mediaId, c.fingerprint) == real) albums.accept(state.id, c.mediaId, on = false, fingerprint = c.fingerprint)
+    }
+  }
 
   /** Gli elementi a mano con il loro posto (le righe `accepted` e `auto` non hanno una voce `item:`: non si riordinano). */
   private fun manualPositions(rows: List<AlbumItemEntity>): List<PositionedItem> =

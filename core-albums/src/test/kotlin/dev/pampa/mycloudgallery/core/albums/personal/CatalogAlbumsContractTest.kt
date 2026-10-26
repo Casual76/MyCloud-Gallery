@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.core.albums.personal
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.albums.contract.AddOutcome
+import dev.pampa.mycloudgallery.core.albums.contract.AlbumListSort
 import dev.pampa.mycloudgallery.core.albums.contract.Albums
 import dev.pampa.mycloudgallery.core.albums.contract.AlbumsContract
 import dev.pampa.mycloudgallery.core.albums.contract.CoverRef
@@ -27,6 +28,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -48,6 +50,26 @@ class CatalogAlbumsContractTest : AlbumsContract() {
   @After
   fun closeWorlds() {
     worlds.forEach { it.close() }
+  }
+
+  /** D21, P3-10: il posto di un album condiviso nell'elenco sta in una voce `order` senza definizione; non crea nessun album personale. */
+  @Test
+  fun ilPostoDiUnAlbumCondivisoNellElencoSiTrascinaComeQuelloDiUnPersonale() = runBlocking<Unit> {
+    val w = world()
+    withTimeout(10_000) {
+      val shared = w.sharedAlbum()!!
+      val mine = (w.albums.create("Mio", AlbumKind.MANUAL, null) as CreateOutcome.Created).id
+      w.albums.setListSort(AlbumListSort.CUSTOM)
+      w.albums.all.first { it.byId(shared) != null && it.byId(mine) != null }
+      assertThat(w.albums.moveInList(shared, null)).isEqualTo(EditOutcome.Done)
+      val first = w.albums.all.first { it.sort == AlbumListSort.CUSTOM && it.byId(shared) != null && it.albums.first().id == shared }
+      assertThat(first.albums.map { it.id }).containsExactly(shared, mine).inOrder()
+      assertThat(w.albums.moveInList(mine, null)).isEqualTo(EditOutcome.Done)
+      val second = w.albums.all.first { it.albums.firstOrNull()?.id == mine }
+      assertThat(second.albums.map { it.id }).containsExactly(mine, shared).inOrder()
+      // Nessun album personale in piu': la voce `order` non ha definizione.
+      assertThat(second.albums).hasSize(2)
+    }
   }
 
   private class RealWorld : AlbumsContract.World {

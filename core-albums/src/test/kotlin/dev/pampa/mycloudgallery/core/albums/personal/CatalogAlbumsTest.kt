@@ -4,6 +4,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.albums.contract.Album
 import dev.pampa.mycloudgallery.core.albums.contract.AddOutcome
+import dev.pampa.mycloudgallery.core.albums.contract.CoverRef
 import dev.pampa.mycloudgallery.core.albums.contract.CreateOutcome
 import dev.pampa.mycloudgallery.core.albums.contract.EditOutcome
 import dev.pampa.mycloudgallery.core.albums.contract.LocalDayRange
@@ -188,6 +189,8 @@ class CatalogAlbumsTest {
     val album = device.createAlbum("Sparisce")
     device.albums.add(album, (0 until 3).map { device.idOf(it) })
     assertThat(device.albums.all.value.byId(album)!!.count).isEqualTo(3)
+    assertThat(device.albums.setCover(album, device.idOf(1))).isEqualTo(EditOutcome.Done)
+    assertThat(device.albums.all.value.byId(album)!!.cover).isEqualTo(CoverRef.Chosen(device.idOf(1)))
 
     val db = device.room.db.openHelper.writableDatabase
     db.beginTransaction()
@@ -200,12 +203,40 @@ class CatalogAlbumsTest {
     }
     device.albums.onCatalogChanged()
     assertThat(device.albums.all.value.byId(album)!!.count).isEqualTo(2)
+    // La copertina scelta e' sparita con il suo media: l'album ne ha una automatica (E-H6, D21).
+    assertThat(device.albums.all.value.byId(album)!!.cover).isInstanceOf(CoverRef.Auto::class.java)
+    assertThat(device.albums.all.value.byId(album)!!.cover.media).isNotEqualTo(device.idOf(1))
 
     // Torna (la scansione lo ritrova, magari con un altro id): l'elemento era rimasto nello stato.
     device.room.insertRaw(MediaId("00000000-0000-4000-8000-0000000000e1"), 5_001L, "%064x".format(2), T0, 20_260_102)
     device.albums.onCatalogChanged(listOf(MediaId("00000000-0000-4000-8000-0000000000e1")))
     assertThat(device.albums.all.value.byId(album)!!.count).isEqualTo(3)
     assertThat(device.albums.projection.pending.value).isEqualTo(0)
+    // E la scelta torna da sola: la voce `cover` e' ancora nello stato, con l'impronta.
+    assertThat(device.albums.all.value.byId(album)!!.cover).isEqualTo(CoverRef.Chosen(MediaId("00000000-0000-4000-8000-0000000000e1")))
+  }
+
+  @Test
+  fun unEsclusioneEUnAccettazioneSuUnIdVecchioNonRestanoDopoL_Unione() = runBlocking<Unit> {
+    val device = device("telefono", 1)
+    val (a, b) = device.room.twins(50)
+    val (c, d) = device.room.twins(51)
+    val id = (device.albums.create("Neve", AlbumKind.SMART, SmartRules(null, null, "neve")) as CreateOutcome.Created).id
+    // Prima dell'unione: un accettato e un escluso, scritti con gli id che poi vengono assorbiti.
+    device.albums.accept(id, listOf(maxOf(a, b)))
+    device.albums.exclude(id, listOf(maxOf(c, d)))
+    device.room.catalog.merge(a, b)
+    device.room.catalog.merge(c, d)
+    device.albums.onCatalogChanged(listOf(a, b, c, d))
+    assertThat(device.rows(id).map { it.mediaId to it.origin }).containsExactly(minOf(a, b).value to "accepted")
+
+    // Escluso con l'id nuovo: l'accettazione scritta con quello vecchio non lo tiene dentro.
+    assertThat(device.albums.exclude(id, listOf(minOf(a, b)))).isEqualTo(EditOutcome.Done)
+    assertThat(device.rows(id)).isEmpty()
+    // Accettato con l'id nuovo: l'esclusione scritta con quello vecchio non lo tiene fuori.
+    assertThat(device.albums.accept(id, listOf(minOf(c, d)))).isEqualTo(EditOutcome.Done)
+    assertThat(device.rows(id).map { it.mediaId to it.origin }).containsExactly(minOf(c, d).value to "accepted")
+    assertThat(device.room.db.albumChoiceDao().exclusions(id.value).map { it.mediaId }).containsExactly(minOf(a, b).value)
   }
 
   // --- Ordine ----------------------------------------------------------------------------------------------------------------

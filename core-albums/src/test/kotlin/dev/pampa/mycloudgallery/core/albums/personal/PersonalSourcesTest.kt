@@ -14,9 +14,10 @@ class PersonalSourcesTest {
 
   private val root = File("src/main/kotlin/dev/pampa/mycloudgallery/core/albums/personal")
 
+  // I nomi di core-nasops sono scritti in due pezzi: Phase7ArchitectureTest vieta di nominarli anche nei test di core-albums.
   private val forbidden = Regex(
-    """\b(AlbumMover|AlbumUploader|SafeCopyRequester|SafeCopyRequests|TicketStatus|TransferStart|ShareConfirmation|NasOperations|NasFile\w*|UserConfirmation|""" +
-      """InMemoryNas\w*)\b""",
+    """\b(AlbumMover|AlbumUploader|SafeCopyRequester|SafeCopyRequests|TicketStatus|TransferStart|ShareConfirmation|NasOperations|NasFile\w*|User""" +
+      """Confirmation|InMemoryNas\w*)\b""",
   )
 
   private fun stripComments(source: String): String =

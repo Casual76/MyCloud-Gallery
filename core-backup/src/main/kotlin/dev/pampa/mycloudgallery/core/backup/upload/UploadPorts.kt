@@ -207,12 +207,36 @@ interface IncomingLocalFiles {
  * @property root D13: con la recinzione di debug, la radice sotto cui si puo' pubblicare (`mcg-campo`); null = tutta la share, fuori
  *   dall'area dell'app e da `Versioni/`.
  */
-class IncomingUploadPorts(val files: IncomingLocalFiles, val gate: BackupGate, val root: SharePath? = null) {
+class IncomingUploadPorts(
+  val files: IncomingLocalFiles,
+  val gate: BackupGate,
+  val root: SharePath? = null,
+  /**
+   * Fase 7 (E-SH1, Q1 (a)): la radice delle cartelle degli album condivisi ("Album condivisi"), sotto cui si pubblicano i media del telefono
+   * caricati in un album (`IncomingDestination.AlbumFolder`); null = nessun caricamento verso un album. Non dipende da [root] (D13): la recinzione
+   * degli album condivisi e' un'altra, D30, e si applica prima (il piano non si offre fuori dalle share di prova).
+   */
+  val albumRoot: SharePath? = null,
+) {
 
   /** [path] e' un file di media dove un arrivo puo' essere pubblicato: fuori dall'area dell'app e da `Versioni/`, dentro [root] se c'e'. */
   fun allows(path: SharePath): Boolean {
-    if (!NasOpsPaths.isMediaPath(path) || VersionPaths.isInVersions(path) || VersionPaths.isVersionsRoot(path)) return false
+    if (!mediaPath(path)) return false
     val r = root?.components ?: return true
+    return under(path, r)
+  }
+
+  /** Fase 7 (E-SH1): [path] e' un file dentro una cartella d'album sotto [albumRoot] (mai la radice stessa, mai l'area dell'app o `Versioni/`). */
+  fun allowsAlbum(path: SharePath): Boolean {
+    val r = albumRoot?.components ?: return false
+    // Almeno <radice>/<album>/<file>.
+    return mediaPath(path) && path.components.size >= r.size + 2 && under(path, r)
+  }
+
+  private fun mediaPath(path: SharePath): Boolean =
+    NasOpsPaths.isMediaPath(path) && !VersionPaths.isInVersions(path) && !VersionPaths.isVersionsRoot(path)
+
+  private fun under(path: SharePath, r: List<String>): Boolean {
     val c = path.components
     return c.size > r.size && r.indices.all { c[it].equals(r[it], ignoreCase = true) }
   }

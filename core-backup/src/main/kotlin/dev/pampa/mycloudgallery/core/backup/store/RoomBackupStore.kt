@@ -52,7 +52,11 @@ class RoomBackupStore(private val database: GalleryDatabase, private val clock: 
   }
 
   override suspend fun createIncoming(item: NewBackupItem): BackupItem = database.transaction {
-    require(item.kind == UploadKind.INCOMING && item.phone == null && item.sha256 != null) { "Un file in arrivo, con il suo SHA-256." }
+    // Un file in arrivo da un'altra app (la copia locale, con il suo SHA-256) o, Fase 7 (E-SH1), un media del telefono verso la cartella di un album
+    // condiviso (la riga del telefono e il suo timbro: l'impronta la legge il motore, come per una copia nuova).
+    require(item.kind == UploadKind.INCOMING && ((item.phone == null && item.sha256 != null) || (item.phone != null && item.expected != null))) {
+      "Un file in arrivo con il suo SHA-256, o un media del telefono con la sua riga."
+    }
     // R14: lo stesso arrivo e' quello della stessa versione **nella stessa share e nella stessa cartella**; una destinazione diversa e' un elemento nuovo.
     dao.openForVersion(item.versionId.value).map { it.toItem() }.firstOrNull { it.kind == UploadKind.INCOMING && it.sameDestinationAs(item) } ?: run {
       val entity = item.toEntity(clock.nasNowMs() ?: 0L)

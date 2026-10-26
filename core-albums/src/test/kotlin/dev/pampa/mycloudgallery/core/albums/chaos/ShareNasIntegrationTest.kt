@@ -24,7 +24,8 @@ import org.junit.Test
  * `mcg-it/<giro>/r<N>/` delle share `test` e `test-comune`; a fine prova la cartella del giro si toglie e il rapporto dice cosa e' rimasto. Un errore di
  * autenticazione ferma tutto subito, senza nuovi tentativi (il NAS blocca l'account).
  *
- * Modi (`MCG_SHARE_MODE`): `run` (di norma) e `clean` (toglie la cartella di un giro rimasto, `MCG_SHARE_RUN=<giro>`, dopo una prova interrotta).
+ * Modi (`MCG_SHARE_MODE`): `run` (di norma), `clean` (toglie la cartella di un giro rimasto, `MCG_SHARE_RUN=<giro>`, dopo una prova interrotta) e `verify`
+ * (verifica in SOLA LETTURA l'area di una condivisione fatta dal telefono, `MCG_SHARE_MANIFEST=<manifesto>`, `MCG_SHARE_SETTLED=false` se non e' ancora ferma).
  * Variabili: `MCG_SHARE_INTERRUPTIONS` (500), `MCG_SHARE_SEED`, `MCG_SHARE_FIRST_ROUND`, `MCG_SHARE_RUN`.
  */
 class ShareNasIntegrationTest {
@@ -34,8 +35,8 @@ class ShareNasIntegrationTest {
   private val runId: String =
     System.getenv("MCG_SHARE_RUN")?.takeIf { ShareAreaGuard.RUN_ID.matches(it) } ?: ShareAreaGuard.newRunId(ZonedDateTime.now(ZoneOffset.UTC), SecureRandom())
 
-  private fun ready(): ShareAreaGate.Outcome.Ready {
-    val outcome = ShareAreaGate.evaluate(runId)
+  private fun ready(forRun: String = runId): ShareAreaGate.Outcome.Ready {
+    val outcome = ShareAreaGate.evaluate(forRun)
     assumeTrue((outcome as? ShareAreaGate.Outcome.Skip)?.reason ?: "pronto", outcome is ShareAreaGate.Outcome.Ready)
     return outcome as ShareAreaGate.Outcome.Ready
   }
@@ -104,6 +105,36 @@ class ShareNasIntegrationTest {
     val report = area.finish()
     println("pulizia del giro $runId: ${report.text()}")
     assertThat(report.clean).isTrue()
+  }
+
+  /**
+   * La condivisione fatta dal telefono (`s25.ps1 -Mode share`): l'area si legge dal PC in SOLA LETTURA, solo le cartelle del manifesto
+   * (`MCG_SHARE_MANIFEST`) e `.mycloudgallery/{tmp,trash}` di `test` e `test-comune`; `MCG_SHARE_SETTLED=false` se la prova non e' ancora ferma.
+   */
+  @Test
+  fun verificaLAreaDellaCondivisioneDelTelefonoDalManifesto(): Unit = runBlocking {
+    assumeTrue("modo $mode", mode == "verify")
+    val path = System.getenv("MCG_SHARE_MANIFEST")
+    assumeTrue("serve MCG_SHARE_MANIFEST", path != null)
+    val manifest = ShareManifest.read(File(path!!))
+    val ready = ready(manifest.runId)
+    val self = ShareAreaSelfTest.run(ready.guard)
+    assertWithMessage(self.failures.joinToString("\n")).that(self.failures).isEmpty()
+    val link = ShareAreas.realLink(ready.credentials, ready.guard)
+    val latch = AreaAuthLatch()
+    val connection = ChaosConnection(ready.credentials.user, ready.credentials.password.copyOf(), ready.credentials.host, link.guid, link.binding)
+    val area = ReadOnlyArea(ReadOnlyAreaTransport(link.transport, ready.guard, ShareManifestVerifier.readable(manifest), latch), connection, latch)
+    val settled = System.getenv("MCG_SHARE_SETTLED")?.lowercase() != "false"
+    try {
+      area.open()
+      val verification = ShareManifestVerifier.verify(area, manifest, settled)
+      println(verification.text())
+      File("build/chaos").mkdirs()
+      File("build/chaos/share-verify-report-${manifest.runId.take(15)}.txt").writeText(verification.text())
+      assertWithMessage(verification.text()).that(verification.violations).isEmpty()
+    } finally {
+      area.close()
+    }
   }
 
   private companion object {

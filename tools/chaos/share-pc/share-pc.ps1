@@ -16,6 +16,9 @@
               delle share `test` e `test-comune`, con l'account `test`, e rifiuta qualunque altra share (anche `test2`). Un errore di autenticazione
               ferma tutto subito, senza nuovi tentativi (il NAS blocca l'account). A fine prova toglie la cartella del giro e dice cosa e' rimasto.
     clean     toglie la cartella di un giro rimasto dopo una prova interrotta (-Run <giro>): solo mcg-it/<giro>/ delle due share di prova.
+    verify    verifica dal PC, in SOLA LETTURA, l'area di una condivisione fatta dal telefono (tools\chaos\s25.ps1 -Mode share, F80): legge solo le cartelle
+              del manifesto (-Manifest) e .mycloudgallery/{tmp,trash} di test e test-comune, e dice se c'e' qualche file a meta', un doppione, una
+              perdita o un temporaneo rimasto. -NotSettled se la prova non e' ancora ferma. Non scrive niente: il lettore non ha nessuna primitiva di scrittura.
 
   Con -DryRun stampa cosa farebbe (variabili e comando) e non lancia niente. Il PC e' condiviso con altre build: prima di ogni comando Gradle lo script aspetta
   2 GB di RAM libera; chi lavora con piu' agenti prende prima un posto con gradle-slot.ps1.
@@ -27,6 +30,8 @@
                           (con lo stesso -Seed di base e tante -Interruptions quante ne aveva il giro, lo rifa' sul NAS vero).
 .PARAMETER Seed           Il seme di base (default: quello del banco; per run, casuale e stampato nel rapporto).
 .PARAMETER Run            Per run: il nome del giro (default: nuovo). Per clean: il giro da pulire (obbligatorio).
+.PARAMETER Manifest       Per verify: il manifesto della condivisione (scritto da s25.ps1 -Mode share -Step seed, piu' le righe freed= del passo verify).
+.PARAMETER NotSettled     Per verify: la prova non e' ancora ferma (temporanei propri e due copie visibili ammessi).
 .PARAMETER TimeoutMinutes Il tetto del task dei test (default 180, da 20 a 600).
 .PARAMETER DryRun         Stampa e basta.
 
@@ -35,15 +40,18 @@
   powershell -ExecutionPolicy Bypass -File tools\chaos\share-pc\share-pc.ps1 -Mode jvm -Rounds 1 -FirstRound 163 -Seed 20261026
   powershell -ExecutionPolicy Bypass -File tools\chaos\share-pc\share-pc.ps1 -Mode run -Interruptions 20 -DryRun
   powershell -ExecutionPolicy Bypass -File tools\chaos\share-pc\share-pc.ps1 -Mode run -Interruptions 500
+  powershell -ExecutionPolicy Bypass -File tools\chaos\share-pc\share-pc.ps1 -Mode verify -Manifest build\chaos\share-verify-20261026-101500-1a2b3c4d.txt
 #>
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory = $true)][ValidateSet("jvm", "smb", "mutants", "known", "area", "run", "clean")][string]$Mode,
+  [Parameter(Mandatory = $true)][ValidateSet("jvm", "smb", "mutants", "known", "area", "run", "clean", "verify")][string]$Mode,
   [int]$Interruptions = 500,
   [int]$Rounds = 0,
   [int]$FirstRound = 0,
   [long]$Seed = 0,
   [string]$Run,
+  [string]$Manifest,
+  [switch]$NotSettled,
   [int]$TimeoutMinutes = 180,
   [switch]$DryRun
 )
@@ -62,8 +70,10 @@ if ($FirstRound -lt 0) { Fail "-FirstRound fuori misura." }
 if ($TimeoutMinutes -lt 20 -or $TimeoutMinutes -gt 600) { Fail "-TimeoutMinutes fuori misura (20-600)." }
 if ($Run -and $Run -notmatch '^[0-9]{8}-[0-9]{6}-[0-9a-f]{8}$') { Fail "-Run deve avere la forma aaaammgg-hhmmss-<8 esadecimali>." }
 if ($Mode -eq "clean" -and -not $Run) { Fail "clean vuole -Run <giro> (il nome della cartella sotto mcg-it/)." }
+if ($Mode -eq "verify" -and -not $Manifest) { Fail "verify vuole -Manifest <il manifesto della condivisione>." }
+if ($Manifest -and $Mode -eq "verify" -and -not $DryRun -and -not (Test-Path -LiteralPath $Manifest)) { Fail "File non trovato: $Manifest" }
 
-$touchesNas = ($Mode -eq "run") -or ($Mode -eq "clean")
+$touchesNas = ($Mode -eq "run") -or ($Mode -eq "clean") -or ($Mode -eq "verify")
 $environment = [ordered]@{}
 $test = $null
 switch ($Mode) {
@@ -97,6 +107,13 @@ switch ($Mode) {
     $environment["MCG_SHARE_MODE"] = "clean"
     $environment["MCG_SHARE_RUN"] = $Run
   }
+  "verify" {
+    $test = "*ShareNasIntegrationTest*"
+    $environment["MCG_NAS_INTEGRATION"] = "true"
+    $environment["MCG_SHARE_MODE"] = "verify"
+    $environment["MCG_SHARE_MANIFEST"] = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Manifest)
+    if ($NotSettled) { $environment["MCG_SHARE_SETTLED"] = "false" }
+  }
 }
 # Nessun dispositivo: questa prova non usa adb.
 $environment["ANDROID_SERIAL"] = "none"
@@ -111,7 +128,11 @@ if ($DryRun) {
     # Solo l'esistenza del file, mai il contenuto.
     $credentials = Join-Path $env:USERPROFILE ".mycloudgallery\nas-it.properties"
     Write-Host ("Il file delle credenziali: {0}. Il test si salta, con il motivo, se manca l'interruttore o il file: nessuna connessione prima della guardia." -f $(if (Test-Path -LiteralPath $credentials) { "presente (non lo leggo)" } else { "assente" })) -ForegroundColor DarkGray
-    Write-Host "Tocca solo mcg-it/<giro>/ delle share di prova test e test-comune; un login rifiutato ferma tutto senza nuovi tentativi." -ForegroundColor DarkGray
+    if ($Mode -eq "verify") {
+      Write-Host "Sola lettura: solo le cartelle del manifesto e .mycloudgallery/{tmp,trash} delle share di prova test e test-comune; nessuna scrittura per costruzione." -ForegroundColor DarkGray
+    } else {
+      Write-Host "Tocca solo mcg-it/<giro>/ delle share di prova test e test-comune; un login rifiutato ferma tutto senza nuovi tentativi." -ForegroundColor DarkGray
+    }
   }
   exit 0
 }

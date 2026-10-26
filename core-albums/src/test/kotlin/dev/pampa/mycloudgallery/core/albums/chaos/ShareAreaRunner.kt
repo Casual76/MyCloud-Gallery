@@ -58,11 +58,21 @@ object ShareAreaGate {
 
 object ShareAreas {
 
-  /** L'area sul NAS vero: smbj, il socket diretto del PC, l'ora vera. Il GUID del file, o dalla NEGOTIATE (senza autenticare). */
-  suspend fun real(credentials: ShareAreaCredentials, guard: ShareAreaGuard, firstRound: Int = 0): ShareArea {
+  /** Smbj, il socket diretto del PC e il GUID del NAS (dal file, o dalla NEGOTIATE senza autenticare): cio' che serve per aprire l'area o per leggerla. */
+  class RealLink(val transport: SmbTransport, val binding: SocketBinding, val guid: String)
+
+  suspend fun realLink(credentials: ShareAreaCredentials, guard: ShareAreaGuard): RealLink {
     val smb = SmbjTransport()
     val binding = DirectSocketBinding("pc-cablato")
-    val guid = credentials.guid ?: negotiateGuid(credentials, guard, smb, binding)
+    return RealLink(smb, binding, credentials.guid ?: negotiateGuid(credentials, guard, smb, binding))
+  }
+
+  /** L'area sul NAS vero: smbj, il socket diretto del PC, l'ora vera. Il GUID del file, o dalla NEGOTIATE (senza autenticare). */
+  suspend fun real(credentials: ShareAreaCredentials, guard: ShareAreaGuard, firstRound: Int = 0): ShareArea {
+    val link = realLink(credentials, guard)
+    val smb = link.transport
+    val binding = link.binding
+    val guid = link.guid
     val clock = MonotonicClock { System.nanoTime() / NANOS_PER_MILLI }
     return ShareArea(
       credentials, guard, smb, binding, guid,

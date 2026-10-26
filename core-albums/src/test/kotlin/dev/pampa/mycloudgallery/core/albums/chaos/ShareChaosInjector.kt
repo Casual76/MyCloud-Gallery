@@ -122,11 +122,10 @@ class ShareChaosInjector(val stats: ShareChaosStats = ShareChaosStats()) {
   }
 
   /** Il colpo che cade alla chiamata [n] di [surface] nel momento [moment], se c'e' (una volta sola). */
-  fun due(surface: Surface, n: Int, moment: Moment, deathOnly: Boolean = false): Blow? {
+  fun due(surface: Surface, n: Int, moment: Moment): Blow? {
     if (n == 0) return null
     val rule = rules.firstOrNull {
-      !it.used && it.blow.surface == surface && it.blow.nth == n && it.blow.moment == moment && !(surface == Surface.NAS && it.blow.kind == ShareFaultKind.NO_SPACE) &&
-        !(deathOnly && it.blow.kind != ShareFaultKind.KILL)
+      !it.used && it.blow.surface == surface && it.blow.nth == n && it.blow.moment == moment && !(surface == Surface.NAS && it.blow.kind == ShareFaultKind.NO_SPACE)
     } ?: return null
     rule.used = true
     return rule.blow
@@ -151,13 +150,12 @@ class ShareChaosInjector(val stats: ShareChaosStats = ShareChaosStats()) {
 
   /**
    * Una chiamata a una porta: i colpi PRIMA e DOPO dell'n-esima. [refuse]: cosa risponde la porta a "spazio finito" (un rifiuto, non
-   * un'eccezione); senza, lo spazio finito e' una connessione caduta. [deathOnly]: su questa chiamata cade solo la morte del processo (un difetto
-   * noto del codice sotto prova che il banco evita, [KnownDefect]).
+   * un'eccezione); senza, lo spazio finito e' una connessione caduta.
    */
-  suspend fun <T> around(surface: Surface, refuse: (() -> T)? = null, deathOnly: Boolean = false, block: suspend () -> T): T {
+  suspend fun <T> around(surface: Surface, refuse: (() -> T)? = null, block: suspend () -> T): T {
     checkAlive()
     val n = enter(surface)
-    due(surface, n, Moment.BEFORE, deathOnly)?.let { blow ->
+    due(surface, n, Moment.BEFORE)?.let { blow ->
       if (blow.kind == ShareFaultKind.NO_SPACE && refuse != null) {
         markFired(blow)
         return refuse()
@@ -166,7 +164,7 @@ class ShareChaosInjector(val stats: ShareChaosStats = ShareChaosStats()) {
     }
     val result = block()
     checkAlive()
-    due(surface, n, Moment.AFTER, deathOnly)?.let { realize(if (it.kind == ShareFaultKind.NO_SPACE) it.copy(kind = ShareFaultKind.DROP) else it) }
+    due(surface, n, Moment.AFTER)?.let { realize(if (it.kind == ShareFaultKind.NO_SPACE) it.copy(kind = ShareFaultKind.DROP) else it) }
     return result
   }
 }

@@ -9,6 +9,7 @@ import dev.pampa.mycloudgallery.core.albums.share.ShareBench
 import dev.pampa.mycloudgallery.core.albums.share.ShareNasTarget
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.nasops.contract.OpErrorCode
+import dev.pampa.mycloudgallery.core.nasops.contract.OpId
 import dev.pampa.mycloudgallery.core.nasops.contract.OpState
 import dev.pampa.mycloudgallery.core.nasops.contract.OpTemps
 import java.security.MessageDigest
@@ -195,11 +196,16 @@ class ShareChaosVerifier(
     return out
   }
 
-  /** Il codice con cui il motore di core-nasops ha fermato il file di [item], se c'e' (si ritrova dal percorso della sorgente). */
+  /**
+   * Il codice con cui il motore di core-nasops ha fermato il file di [item], se c'e' (si ritrova dal percorso della sorgente) **nell'operazione del suo
+   * trasferimento** (il biglietto `op:<id>`): lo stesso file puo' essere stato in un'operazione di prima, fermata per un altro motivo (un passo che il PC
+   * ha disturbato, poi un altro piano con lo stesso media). Senza biglietto, la prima operazione che lo ha.
+   */
   private suspend fun engineErrorOf(item: ShareItemRecord): OpErrorCode? {
     val source = item.source ?: return null
     val store = bench.target.store
-    for (op in store.ops(OpState.entries.toSet())) {
+    val own = item.ticket?.value?.takeIf { it.startsWith("op:") }?.let { store.op(OpId(it.removePrefix("op:"))) }
+    for (op in own?.let { listOf(it) } ?: store.ops(OpState.entries.toSet())) {
       store.items(op.id).firstOrNull { it.srcShare == source.share && it.srcPath == source.path }?.let { return it.errorCode }
     }
     return null

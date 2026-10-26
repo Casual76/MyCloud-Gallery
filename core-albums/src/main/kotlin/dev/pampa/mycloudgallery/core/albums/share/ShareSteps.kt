@@ -22,8 +22,10 @@ import dev.pampa.mycloudgallery.core.albums.contract.SharedAlbumLimits
 import dev.pampa.mycloudgallery.core.albums.contract.SharedState
 import dev.pampa.mycloudgallery.core.albums.contract.TicketState
 import dev.pampa.mycloudgallery.core.albums.contract.TransferItemOutcome
+import dev.pampa.mycloudgallery.core.albums.contract.TransferKey
 import dev.pampa.mycloudgallery.core.albums.contract.TransferRefusal
 import dev.pampa.mycloudgallery.core.albums.contract.TransferStart
+import dev.pampa.mycloudgallery.core.albums.contract.TransferTicket
 import dev.pampa.mycloudgallery.core.albums.contract.AlbumWriteBlock
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.model.ContentKey
@@ -107,12 +109,19 @@ internal class ShareSteps(
    * I trasferimenti degli elementi `PLANNED` con una chiave, per chiave: ritrovati per chiave (un processo morto dopo l'avvio), oppure, se il
    * catalogo vede gia' lo stesso contenuto nell'area comune (E-SH12: un altro familiare l'ha aggiunto), nessuna copia; oppure avviati con la
    * conferma ancora valida. Per uno spostamento verso l'area comune la cartella d'origine si registra **prima** (D31).
+   *
+   * SD-2 (docs/prova-500.md §E6): "mai partito" lo dice solo una risposta di `find` (nessun trasferimento con quella chiave). Un errore di `find`
+   * vale "non so": il gruppo resta `PLANNED` com'e' e si richiede al giro dopo; niente controllo E-SH12, niente avvio, niente `NOT_STARTED`. Un
+   * trasferimento gia' partito (la morte fra l'avvio e il salvataggio) si ritrova cosi' sempre, anche dopo un guasto del diario della porta.
    */
   suspend fun startTransfers(op: ShareOpRecord) {
     val planned = p.diary.items(op.id).filter { it.state == ShareItemState.PLANNED && it.transferKey != null }
     for ((key, unordered) in planned.groupBy { it.transferKey!! }) {
       val group = unordered.sortedBy { it.index }
-      val found = transient { p.tickets.find(key) }
+      val found = when (val lookup = lookUp(key)) {
+        TicketLookup.Unknown -> continue
+        is TicketLookup.Known -> lookup.ticket
+      }
       if (found != null) {
         group.forEach { save(it.copy(state = ShareItemState.TRANSFERRING, ticket = found, wait = null)) }
         continue
@@ -152,8 +161,25 @@ internal class ShareSteps(
     }
   }
 
+  /** La risposta di `TicketStatus.find`: [Known] (un biglietto, o null = nessun trasferimento con quella chiave) o [Unknown] (la porta ha fallito). */
+  sealed interface TicketLookup {
+    class Known(val ticket: TransferTicket?) : TicketLookup
+
+    data object Unknown : TicketLookup
+  }
+
+  /** SD-2: `find` senza ridurre un errore a "non c'e'" (l'annullamento e gli `Error`, la morte del processo nei banchi, passano). */
+  suspend fun lookUp(key: TransferKey): TicketLookup = try {
+    TicketLookup.Known(p.tickets.find(key))
+  } catch (e: CancellationException) {
+    throw e
+  } catch (e: Exception) {
+    GalleryLog.d(TAG) { "biglietto non ritrovabile adesso (${e.javaClass.simpleName}): si richiede al giro dopo" }
+    TicketLookup.Unknown
+  }
+
   /** D31: la cartella d'origine di ogni media nei miei dati personali, poi lo spostamento. Null se non si e' potuto (si riprova). */
-  private suspend fun moveIn(op: ShareOpRecord, items: List<ShareItemRecord>, key: dev.pampa.mycloudgallery.core.albums.contract.TransferKey, confirmation: ShareConfirmation): TransferStart? {
+  private suspend fun moveIn(op: ShareOpRecord, items: List<ShareItemRecord>, key: TransferKey, confirmation: ShareConfirmation): TransferStart? {
     val folder = op.folder ?: return null
     val sources = items.mapNotNull { it.source }
     if (sources.size != items.size) return null
@@ -256,16 +282,42 @@ internal class ShareSteps(
   }
 
   private suspend fun pollTransfers(op: ShareOpRecord) {
-    val transferring = p.diary.items(op.id).filter { it.state == ShareItemState.TRANSFERRING && it.ticket != null }
+    val all = p.diary.items(op.id)
+    val transferring = all.filter { it.state == ShareItemState.TRANSFERRING && it.ticket != null }
     for ((ticket, group) in transferring.groupBy { it.ticket!! }) {
       val ordered = group.sortedBy { it.index }
       when (val state = transient { p.tickets.status(ticket) } ?: continue) {
         is TicketState.InProgress -> ordered.forEach { if (it.wait != null) save(it.copy(wait = null)) }
         is TicketState.Waiting -> ordered.forEach { if (it.wait != state.reason) save(it.copy(wait = state.reason)) }
-        is TicketState.Ended -> ordered.forEachIndexed { i, item -> settle(item, state.outcomes.getOrNull(i) ?: TransferItemOutcome.FAILED) }
+        is TicketState.Ended -> {
+          // Una parte della richiesta e' ancora `PLANNED` (la morte a meta' dei salvataggi dell'avvio, poi `find` senza risposta): prende il
+          // biglietto al giro dopo, e solo allora gli esiti si assegnano, tutti insieme.
+          val key = ordered.first().transferKey
+          if (key != null && all.any { it.state == ShareItemState.PLANNED && it.transferKey == key }) continue
+          settleEnded(all.filter { it.ticket == ticket }, ordered, state.outcomes)
+        }
         TicketState.Unknown -> ordered.forEach { settle(it, TransferItemOutcome.ARRIVED, unknownTicket = true) }
       }
     }
+  }
+
+  /**
+   * SD-1 (docs/prova-500.md §E6): gli esiti di un trasferimento finito sono uno per file **nell'ordine della richiesta**, cioe' di tutti gli
+   * elementi partiti con quel biglietto ([request]: in qualunque stato, per indice; il biglietto resta sull'elemento in ogni passo dopo), non dei
+   * soli rimasti in `TRANSFERRING` ([pending]): se un'interruzione ne ha gia' assestati alcuni, ognuno dei rimasti prende ancora il **suo** esito.
+   * Una lista che non torna con la richiesta (una porta che ne ha perso uno) non si applica per posizione: ogni elemento rimasto si decide sul
+   * catalogo, come per un biglietto sconosciuto (arrivato solo se il catalogo lo vede al suo posto, altrimenti un trasferimento fallito: i file
+   * sono interi dove la porta li ha lasciati).
+   */
+  private suspend fun settleEnded(request: List<ShareItemRecord>, pending: List<ShareItemRecord>, outcomes: List<TransferItemOutcome>) {
+    val ordered = request.sortedBy { it.index }
+    if (outcomes.size != ordered.size) {
+      GalleryLog.w(TAG) { "esiti di un trasferimento che non tornano con la richiesta (${outcomes.size} su ${ordered.size}): decide il catalogo" }
+      pending.forEach { settle(it, TransferItemOutcome.ARRIVED, unknownTicket = true) }
+      return
+    }
+    val slot = ordered.withIndex().associate { (position, item) -> item.index to position }
+    for (item in pending) settle(item, outcomes[slot.getValue(item.index)])
   }
 
   /**
@@ -294,10 +346,38 @@ internal class ShareSteps(
           }
         }
       }
-      TransferItemOutcome.SOURCE_CHANGED -> save(item.copy(state = ShareItemState.FAILED, failure = ShareFailure.SOURCE_CHANGED, wait = null))
-      TransferItemOutcome.SOURCE_GONE -> save(item.copy(state = ShareItemState.FAILED, failure = ShareFailure.SOURCE_GONE, wait = null))
-      TransferItemOutcome.FAILED -> save(item.copy(state = ShareItemState.FAILED, failure = ShareFailure.TRANSFER_FAILED, wait = null))
-      TransferItemOutcome.CANCELLED -> save(item.copy(state = ShareItemState.CANCELLED, wait = null))
+      TransferItemOutcome.SOURCE_CHANGED, TransferItemOutcome.SOURCE_GONE, TransferItemOutcome.FAILED, TransferItemOutcome.CANCELLED -> {
+        // Il motore ferma un file anche DOPO averlo pubblicato e collegato al catalogo: il cestino della sorgente non riesce (spazio finito, la
+        // sorgente cambiata dopo la verifica: E-D13, restano le due copie). Il file e' arrivato e il catalogo lo sa: decide il catalogo (D29),
+        // non l'esito, come per un file arrivato. Mai un elemento fallito o annullato con il suo media gia' dall'altra parte.
+        if (movedByTransfer(item)) {
+          settle(item, TransferItemOutcome.ARRIVED)
+          return
+        }
+        when (outcome) {
+          TransferItemOutcome.SOURCE_CHANGED -> save(item.copy(state = ShareItemState.FAILED, failure = ShareFailure.SOURCE_CHANGED, wait = null))
+          TransferItemOutcome.SOURCE_GONE -> save(item.copy(state = ShareItemState.FAILED, failure = ShareFailure.SOURCE_GONE, wait = null))
+          TransferItemOutcome.CANCELLED -> save(item.copy(state = ShareItemState.CANCELLED, wait = null))
+          else -> save(item.copy(state = ShareItemState.FAILED, failure = ShareFailure.TRANSFER_FAILED, wait = null))
+        }
+      }
+    }
+  }
+
+  /**
+   * Il media dell'elemento sta gia' dove il trasferimento lo doveva portare, secondo il catalogo locale: lo **stesso** `MediaId` nell'area comune
+   * (spostamento o caricamento verso l'album) o nella mia area privata ("Riporta"). Prima del trasferimento stava dall'altra parte, e un media
+   * e' in una sola operazione aperta: ce l'ha portato questo trasferimento (porta di completamento, D29).
+   */
+  private suspend fun movedByTransfer(item: ShareItemRecord): Boolean {
+    val f = p.facts.facts(listOf(item.media))[item.media] ?: return false
+    val nas = f.nas ?: return false
+    return if (item.action == ShareItemAction.MOVE_OUT) {
+      val private = p.family.privateShare() ?: return false
+      f.place == MediaPlace.MY_PRIVATE && nas.share.equals(private, ignoreCase = true)
+    } else {
+      val common = p.family.commonShare() ?: return false
+      f.place == MediaPlace.COMMON && f.contentKey != null && nas.share.equals(common, ignoreCase = true)
     }
   }
 

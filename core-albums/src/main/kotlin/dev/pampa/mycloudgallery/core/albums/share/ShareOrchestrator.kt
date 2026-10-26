@@ -21,6 +21,8 @@ import dev.pampa.mycloudgallery.core.albums.contract.ShareRunner
 import dev.pampa.mycloudgallery.core.albums.contract.ShareStartOutcome
 import dev.pampa.mycloudgallery.core.albums.contract.ShareWait
 import dev.pampa.mycloudgallery.core.albums.contract.ShareFolder
+import dev.pampa.mycloudgallery.core.albums.contract.TransferKey
+import dev.pampa.mycloudgallery.core.albums.contract.TransferTicket
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import java.security.SecureRandom
 import java.util.UUID
@@ -42,7 +44,8 @@ import kotlinx.coroutines.sync.withLock
  *    cambiato, `PlanChanged` (serve un foglio nuovo). Lo stesso piano due volte non parte due volte (`AlreadyStarted`).
  * 3. **Il diario prima di ogni azione**: l'operazione e i suoi elementi (`PLANNED`, con la chiave di ogni trasferimento) in una scrittura; poi la
  *    definizione dell'album nuovo e i trasferimenti, con la conferma. La conferma vive solo in memoria: dopo la morte del processo un
- *    trasferimento mai partito diventa `FAILED(NOT_STARTED)`; uno partito si ritrova per chiave.
+ *    trasferimento mai partito diventa `FAILED(NOT_STARTED)`; uno partito si ritrova per chiave ("mai partito" lo dice solo una risposta di
+ *    `find`: un suo errore vale "non so", SD-2), e i suoi esiti vanno a ogni file per la sua posizione nella richiesta (SD-1).
  * 4. **La sorgente va nel cestino solo dopo la verifica e dopo che il catalogo conosce la destinazione**: lo fa core-nasops (porta di
  *    completamento, D29); qui un file e' "arrivato" solo quando il catalogo locale lo vede nell'area comune con lo stesso `MediaId`.
  * 5. **Nessuna voce per un file che non e' nell'area comune**: la voce `item:` si accoda solo per un file che il catalogo vede li' adesso.
@@ -178,21 +181,44 @@ class ShareOrchestrator(
     ShareRunResult(ops, done, failed, waiting, stop)
   }
 
+  /**
+   * Ferma cio' che non e' partito; un trasferimento partito lo ferma la sua porta (nessun file a meta': l'esito per file arriva alla ripresa).
+   * Come in SD-2, un elemento `PLANNED` con una chiave non e' per forza "mai partito" (la morte fra l'avvio e il salvataggio): lo dice solo
+   * `find`. Ritrovato, diventa `TRANSFERRING` con il suo biglietto e si ferma con gli altri; senza risposta resta com'e', e la conferma
+   * dell'operazione si toglie: niente di nuovo parte, al giro dopo un trasferimento partito si ritrova e uno mai partito chiude "non partito".
+   */
   override suspend fun cancel(op: ShareOpId) = lock.withLock {
+    live.remove(op)
+    val lookups = HashMap<TransferKey, ShareSteps.TicketLookup>()
+    val tickets = LinkedHashSet<TransferTicket>()
     for (item in ports.diary.items(op)) {
       when (item.state) {
-        ShareItemState.PLANNED -> ports.diary.update(item.copy(state = ShareItemState.CANCELLED, wait = null))
-        // Un trasferimento in corso lo ferma la sua porta (nessun file a meta'): l'esito per file arriva alla ripresa.
-        ShareItemState.TRANSFERRING -> item.ticket?.let { ticket ->
-          try {
-            ports.tickets.cancel(ticket)
-          } catch (e: CancellationException) {
-            throw e
-          } catch (e: Exception) {
-            GalleryLog.w(TAG) { "annullamento non arrivato alla porta (${e.javaClass.simpleName})" }
+        ShareItemState.PLANNED -> {
+          val key = item.transferKey
+          when (val lookup = if (key == null) ShareSteps.TicketLookup.Known(null) else lookups.getOrPut(key) { steps.lookUp(key) }) {
+            ShareSteps.TicketLookup.Unknown -> Unit
+            is ShareSteps.TicketLookup.Known -> {
+              val ticket = lookup.ticket
+              if (ticket == null) {
+                ports.diary.update(item.copy(state = ShareItemState.CANCELLED, wait = null))
+              } else {
+                ports.diary.update(item.copy(state = ShareItemState.TRANSFERRING, ticket = ticket, wait = null))
+                tickets += ticket
+              }
+            }
           }
         }
+        ShareItemState.TRANSFERRING -> item.ticket?.let { tickets += it }
         else -> Unit
+      }
+    }
+    for (ticket in tickets) {
+      try {
+        ports.tickets.cancel(ticket)
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        GalleryLog.w(TAG) { "annullamento non arrivato alla porta (${e.javaClass.simpleName})" }
       }
     }
     refresh()

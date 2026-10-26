@@ -57,7 +57,16 @@ internal class ReferenceShareSteps(private val p: ShareRunnerPorts, private val 
   suspend fun startTransfers(op: ShareOpRecord) {
     val planned = p.diary.items(op.id).filter { it.state == ShareItemState.PLANNED && it.transferKey != null }
     for ((key, group) in planned.groupBy { it.transferKey!! }) {
-      val found = transient { p.tickets.find(key) }
+      // SD-2 (docs/prova-500.md §E6): "mai partito" lo dice solo una risposta di `find`; un suo errore vale "non so" (si richiede al giro dopo).
+      val found = try {
+        p.tickets.find(key)
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: SimulatedDeath) {
+        throw e
+      } catch (e: Exception) {
+        continue
+      }
       if (found != null) {
         group.forEach { p.diary.update(it.copy(state = ShareItemState.TRANSFERRING, ticket = found, wait = null)) }
         continue
@@ -142,13 +151,26 @@ internal class ReferenceShareSteps(private val p: ShareRunnerPorts, private val 
   }
 
   private suspend fun pollTransfers(op: ShareOpRecord) {
-    val transferring = p.diary.items(op.id).filter { it.state == ShareItemState.TRANSFERRING && it.ticket != null }
+    val all = p.diary.items(op.id)
+    val transferring = all.filter { it.state == ShareItemState.TRANSFERRING && it.ticket != null }
     for ((ticket, group) in transferring.groupBy { it.ticket!! }) {
       val ordered = group.sortedBy { it.index }
       when (val state = transient { p.tickets.status(ticket) } ?: continue) {
         is TicketState.InProgress -> ordered.forEach { if (it.wait != null) p.diary.update(it.copy(wait = null)) }
         is TicketState.Waiting -> ordered.forEach { if (it.wait != state.reason) p.diary.update(it.copy(wait = state.reason)) }
-        is TicketState.Ended -> ordered.forEachIndexed { i, item -> settle(item, state.outcomes.getOrNull(i) ?: TransferItemOutcome.FAILED) }
+        // SD-1 (docs/prova-500.md §E6): un esito per file nell'ordine della richiesta, cioe' di TUTTI gli elementi con quel biglietto (in qualunque
+        // stato), non dei soli rimasti; con una parte della richiesta ancora `PLANNED` si aspetta; una lista che non torna decide il catalogo.
+        is TicketState.Ended -> {
+          val key = ordered.first().transferKey
+          if (key != null && all.any { it.state == ShareItemState.PLANNED && it.transferKey == key }) continue
+          val request = all.filter { it.ticket == ticket }.sortedBy { it.index }
+          if (state.outcomes.size != request.size) {
+            ordered.forEach { settle(it, TransferItemOutcome.ARRIVED, unknownTicket = true) }
+          } else {
+            val slot = request.withIndex().associate { (position, item) -> item.index to position }
+            ordered.forEach { settle(it, state.outcomes[slot.getValue(it.index)]) }
+          }
+        }
         TicketState.Unknown -> ordered.forEach { settle(it, TransferItemOutcome.ARRIVED, unknownTicket = true) }
       }
     }
@@ -167,10 +189,21 @@ internal class ReferenceShareSteps(private val p: ShareRunnerPorts, private val 
           else -> if (item.wait != ShareWait.RULES) p.diary.update(item.copy(wait = ShareWait.RULES))
         }
       }
-      TransferItemOutcome.SOURCE_CHANGED -> p.diary.update(item.copy(state = ShareItemState.FAILED, failure = ShareFailure.SOURCE_CHANGED, wait = null))
-      TransferItemOutcome.SOURCE_GONE -> p.diary.update(item.copy(state = ShareItemState.FAILED, failure = ShareFailure.SOURCE_GONE, wait = null))
-      TransferItemOutcome.FAILED -> p.diary.update(item.copy(state = ShareItemState.FAILED, failure = ShareFailure.TRANSFER_FAILED, wait = null))
-      TransferItemOutcome.CANCELLED -> p.diary.update(item.copy(state = ShareItemState.CANCELLED, wait = null))
+      TransferItemOutcome.SOURCE_CHANGED, TransferItemOutcome.SOURCE_GONE, TransferItemOutcome.FAILED, TransferItemOutcome.CANCELLED -> {
+        // Un file fermato DOPO la pubblicazione e il collegamento (il cestino della sorgente non riesce) e' arrivato: decide il catalogo (D29).
+        val f = p.facts.facts(listOf(item.media))[item.media]
+        val target = if (item.action == ShareItemAction.MOVE_OUT) MediaPlace.MY_PRIVATE else MediaPlace.COMMON
+        if (f != null && f.place == target) {
+          settle(item, TransferItemOutcome.ARRIVED)
+          return
+        }
+        when (outcome) {
+          TransferItemOutcome.SOURCE_CHANGED -> p.diary.update(item.copy(state = ShareItemState.FAILED, failure = ShareFailure.SOURCE_CHANGED, wait = null))
+          TransferItemOutcome.SOURCE_GONE -> p.diary.update(item.copy(state = ShareItemState.FAILED, failure = ShareFailure.SOURCE_GONE, wait = null))
+          TransferItemOutcome.CANCELLED -> p.diary.update(item.copy(state = ShareItemState.CANCELLED, wait = null))
+          else -> p.diary.update(item.copy(state = ShareItemState.FAILED, failure = ShareFailure.TRANSFER_FAILED, wait = null))
+        }
+      }
     }
   }
 

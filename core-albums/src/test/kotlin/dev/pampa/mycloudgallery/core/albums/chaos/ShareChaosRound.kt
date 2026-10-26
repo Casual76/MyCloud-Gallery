@@ -99,7 +99,7 @@ class ShareChaosRound(
       }
       made = true
       observer.bench = bench
-      val handle = ChaosPorts.install(bench, injector, observer, config.avoid)
+      val handle = ChaosPorts.install(bench, injector, observer)
       verifier = ShareChaosVerifier(bench, observer, stats) { injector.fired.any { it.blow.kind == ShareFaultKind.NO_SPACE } }
       hazards = HazardRunner(bench, verifier, chronicle)
       hooks.ports?.invoke(bench, handle)
@@ -231,8 +231,7 @@ class ShareChaosRound(
     val movable = movers.firstOrNull { bench.library[it]?.hidden != true }
     if (caps.lockedFiles && movable != null && (kind == StepKind.SHARE_NEW || kind == StepKind.ADD)) {
       options += HazardKind.LOCK
-      // SD-1: con esiti diversi nello stesso trasferimento un'interruzione fra due salvataggi sbaglia gli elementi rimasti. Si evita con un file solo.
-      if (KnownDefect.OUTCOMES_MISALIGNED !in config.avoid || movers.size == 1) options += HazardKind.LOCK_AND_MODIFY
+      options += HazardKind.LOCK_AND_MODIFY
     }
     options += HazardKind.FREEZE
     options += HazardKind.ALBUM_GATE

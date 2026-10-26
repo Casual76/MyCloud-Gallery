@@ -18,17 +18,15 @@ import dev.pampa.mycloudgallery.core.albums.testing.SimulatedDeath
 import dev.pampa.mycloudgallery.core.model.ShareLevel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
-import org.junit.Ignore
 import org.junit.Test
 
 /**
- * I DIFETTI DEL CODICE DI PRODUZIONE che il banco ha trovato (docs/prova-500.md Parte E, §E6). Il codice di produzione non si tocca (riga P5 del §4.4): il
- * banco li evita ([KnownDefect], `ShareChaosConfig.avoid`) e li riproduce qui, senza giri casuali, per tre prove ciascuno:
- *  - il comportamento di OGGI (verde): lo scenario riprodotto; quando diventa rosso il difetto e' stato corretto;
- *  - il comportamento GIUSTO, lo stesso scenario con l'asserzione rovesciata, `@Ignore` con il motivo: si riaccende quando il difetto si corregge;
- *  - il banco lo trova quando non lo evita (`avoid = emptySet()`).
- * Come `ChaosKnownDefectsTest` del banco della 5B e `AiChaosKnownDefectsTest` della Fase 6: un test rosso qui e' un avviso ("il difetto e' stato
- * corretto, togli l'evitamento"), non una regressione.
+ * I DIFETTI DEL CODICE DI PRODUZIONE che il banco ha trovato (docs/prova-500.md Parte E, §E6), SD-1 e SD-2, **corretti** in `ShareSteps` (P4, 27/10):
+ * gli esiti di un trasferimento finito vanno a ogni file per la sua posizione nella richiesta (tutti gli elementi con quel biglietto, non i soli rimasti),
+ * e un errore di `TicketStatus.find` vale "non so" (si richiede al giro dopo), mai "mai partito". Il banco non li evita piu' (niente `KnownDefect`):
+ * da qui in poi questo test e' una **regressione**, come `ChaosKnownDefectsTest` di core-nasops dopo P12/P16. Fallisce se uno dei due torna:
+ *  - lo scenario di ciascuno, riprodotto senza giri casuali (la morte a ogni salvataggio del diario);
+ *  - i giri del banco che li avevano trovati (seme di base 20261026: il 221 per SD-1, il 73 e il 739 per SD-2), ora verdi.
  */
 class ShareChaosKnownDefectsTest {
 
@@ -79,16 +77,10 @@ class ShareChaosKnownDefectsTest {
   private fun sd1Bad(): List<Pair<Int, String>> = (1..40).mapNotNull { n -> sd1Outcome(n)?.let { n to it } }
 
   @Test
-  fun sd1_oggiGliEsitiSiApplicanoAgliElementiRimasti() {
-    val bad = sd1Bad()
-    println("SD-1: ${bad.size} morti su 40 sbagliano gli esiti (${bad.take(3).joinToString { "salvataggio ${it.first}: ${it.second}" }})")
-    assertWithMessage("SD-1 non si riproduce piu': e' stato corretto? togli l'evitamento e riaccendi il test giusto").that(bad).isNotEmpty()
-  }
-
-  @Ignore("SD-1 (ShareSteps.pollTransfers): gli esiti di un trasferimento finito si applicano agli elementi rimasti. Si riaccende quando si corregge.")
-  @Test
   fun sd1_giustoUnaMorteNonSbagliaGliEsiti() {
-    assertThat(sd1Bad()).isEmpty()
+    val bad = sd1Bad()
+    println("SD-1: ${bad.size} morti su 40 sbagliano gli esiti")
+    assertThat(bad).isEmpty()
   }
 
   // --- SD-2: un errore di find vale "mai partito" ----------------------------------------------------------------------------------------
@@ -145,31 +137,64 @@ class ShareChaosKnownDefectsTest {
   private fun sd2Bad(): List<Pair<Int, String>> = (1..12).mapNotNull { n -> sd2Outcome(n)?.let { n to it } }
 
   @Test
-  fun sd2_oggiUnErroreDiFindVale_maiPartito() {
-    val bad = sd2Bad()
-    println("SD-2: ${bad.size} morti su 12 danno un elemento 'mai partito' con il file arrivato (${bad.take(2).joinToString { "salvataggio ${it.first}: ${it.second}" }})")
-    assertWithMessage("SD-2 non si riproduce piu': e' stato corretto? togli l'evitamento e riaccendi il test giusto").that(bad).isNotEmpty()
-  }
-
-  @Ignore("SD-2 (ShareSteps.startTransfers): un errore di TicketStatus.find vale 'il trasferimento non e' mai partito'. Si riaccende quando si corregge.")
-  @Test
   fun sd2_giustoUnErroreDiFindNonDiventaMaiPartito() {
-    assertThat(sd2Bad()).isEmpty()
+    val bad = sd2Bad()
+    println("SD-2: ${bad.size} morti su 12 danno un elemento 'mai partito' con il file arrivato")
+    assertThat(bad).isEmpty()
   }
 
-  // --- Il banco li trova quando non li evita ----------------------------------------------------------------------------------------------
+  /**
+   * La stessa radice di SD-2 in "Annulla": un elemento `PLANNED` con la chiave non e' per forza "mai partito". Due file, il secondo tenuto aperto dal
+   * PC; la morte a un salvataggio del diario dopo l'avvio del trasferimento (prima che gli elementi siano `TRANSFERRING`); alla ripresa l'utente
+   * annulla subito, poi il PC chiude il file. Un elemento annullato (o "mai partito") non ha mai il suo file spostato nell'area comune: il
+   * trasferimento si ritrova con `find` e si ferma con la sua porta.
+   */
+  private fun cancelOutcome(deathAtSave: Int): String? = runBlocking {
+    ShareBench(::FakeNasTarget).use { b ->
+      val first = b.privateMedia(1)
+      val second = b.privateMedia(2, folder = "Viaggi")
+      val path = b.library[second]!!.path!!
+      b.target.lock(ShareNasTarget.PRIVATE, path)
+      b.diary.crashAtSave = deathAtSave
+      val before = b.diary.allOps().size
+      try {
+        b.start(b.plan(ShareRequest.NewAlbum("Annulla", ShareLevel.ADD, listOf(first, second), HiddenChoice.LEAVE_OUT)))
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: SimulatedDeath) {
+        b.restart()
+      }
+      b.diary.crashAtSave = null
+      val op = b.diary.allOps().drop(before).firstOrNull() ?: return@use null
+      b.orchestrator.cancel(op.id)
+      b.target.unlock(ShareNasTarget.PRIVATE, path)
+      b.drainTolerant(24)
+      val wrong = b.items().firstOrNull {
+        (it.state == ShareItemState.CANCELLED || it.failure == ShareFailure.NOT_STARTED) && b.library[it.media]!!.place == MediaPlace.COMMON
+      }
+      wrong?.let { "elemento #${it.index} ${it.state.code} con il file nell'area comune" }
+    }
+  }
 
   @Test
-  fun ilBancoTrovaSd1ESd2QuandoNonLiEvita() = run {
-    val config = ShareChaosConfig(FakeChaosTargets.capabilities, avoid = emptySet())
-    val result = ShareChaosBench.run(1_000, 20261026L, FakeChaosTargets, config)
-    val texts = result.failures.flatMap { it.violations }.map { it.text }
-    println("senza evitamenti: ${result.failures.size} giri rossi su ${result.rounds}, seme di base ${result.baseSeed}: " +
-      result.failures.joinToString("; ") { "giro ${it.index} (${it.violations.first().invariant.number}: ${it.violations.first().text.take(80)})" })
-    assertWithMessage("senza gli evitamenti il banco deve trovare i difetti noti").that(result.failures).isNotEmpty()
-    assertWithMessage("le violazioni sono quelle dei difetti noti").that(texts.any { "mai partito" in it || "errore permanente" in it || "non finito" in it }).isTrue()
-    // E con gli evitamenti (di serie) gli stessi giri sono verdi: il rosso viene dal difetto, non dal banco.
-    val avoided = ShareChaosBench.run(300, 20261026L, FakeChaosTargets)
-    assertWithMessage(avoided.failureText()).that(avoided.failures).isEmpty()
+  fun annullareDopoLaMorteFermaIlTrasferimentoGiaPartito() {
+    val bad = (1..12).mapNotNull { n -> cancelOutcome(n)?.let { n to it } }
+    println("Annulla dopo la morte: ${bad.size} morti su 12 chiudono un elemento con il file spostato (${bad.take(2).joinToString { "salvataggio ${it.first}: ${it.second}" }})")
+    assertThat(bad).isEmpty()
+  }
+
+  // --- I giri del banco che li avevano trovati -------------------------------------------------------------------------------------------
+
+  /**
+   * Con il seme di base 20261026 e senza evitamenti (oggi il banco di serie) 1.000 giri ne davano 3 rossi: il 221 (SD-1, un errore permanente
+   * `source_changed` per un file arrivato) e il 73 e il 739 (SD-2, "trasferimento mai partito ma il media ha cambiato posto"). Ora sono verdi.
+   */
+  @Test
+  fun iGiriRossiDiPrimaOraSonoVerdi() = run {
+    for (round in listOf(73, 221, 739)) {
+      val result = ShareChaosBench.run(1, 20261026L, FakeChaosTargets, firstRound = round)
+      println("giro $round (seme di base 20261026): ${if (result.failures.isEmpty()) "verde" else "rosso"}")
+      assertWithMessage("giro $round: " + result.failureText()).that(result.failures).isEmpty()
+    }
   }
 }

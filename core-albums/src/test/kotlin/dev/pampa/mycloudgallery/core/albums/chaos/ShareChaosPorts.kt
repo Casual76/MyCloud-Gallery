@@ -146,7 +146,7 @@ class ChaosPortsHandle {
 /** Avvolge le sette porte dell'orchestratore di un [ShareBench] con gli osservatori e i colpi. */
 object ChaosPorts {
 
-  fun install(bench: ShareBench, injector: ShareChaosInjector, observer: ShareChaosObserver, avoid: Set<KnownDefect> = emptySet()): ChaosPortsHandle {
+  fun install(bench: ShareBench, injector: ShareChaosInjector, observer: ShareChaosObserver): ChaosPortsHandle {
     val handle = ChaosPortsHandle()
     val noSpace = { TransferStart.Refused(TransferRefusal.NO_SPACE) }
 
@@ -166,8 +166,7 @@ object ChaosPorts {
       object : TicketStatus {
         override suspend fun status(ticket: TransferTicket): TicketState = injector.around(Surface.TICKETS) { inner.status(ticket) }
 
-        override suspend fun find(key: TransferKey): TransferTicket? =
-          injector.around(Surface.TICKETS, deathOnly = KnownDefect.FIND_ERROR_IS_ABSENT in avoid) { inner.find(key) }
+        override suspend fun find(key: TransferKey): TransferTicket? = injector.around(Surface.TICKETS) { inner.find(key) }
 
         override suspend fun cancel(ticket: TransferTicket) = injector.around(Surface.TICKETS) { inner.cancel(ticket) }
       }.also { handle.tickets = it }

@@ -46,30 +46,6 @@ enum class HazardKind(val label: String) {
   ALBUM_GATE("scritture degli album ferme"),
 }
 
-/**
- * I difetti del codice di produzione che il banco ha trovato e che NON corregge (il codice di produzione non si tocca: docs/prova-500.md Parte E,
- * §E6). Il banco li evita (come i banchi delle Fasi 4, 5 e 6) e li riproduce uno per uno in `ShareChaosKnownDefectsTest`; evitarli e' una scelta
- * dichiarata del giro (`ShareChaosConfig.avoid`), mai un silenzio.
- */
-enum class KnownDefect(val id: String, val summary: String) {
-  /**
-   * SD-1 (`ShareSteps.pollTransfers`): gli esiti di un trasferimento finito sono una lista nell'ordine della richiesta, ma si applicano agli elementi
-   * ANCORA in `TRANSFERRING`. Se un'interruzione (la morte del processo fra due salvataggi del diario, un errore del catalogo) lascia
-   * assestati solo i primi, i rimasti prendono gli esiti dei primi: un file arrivato diventa `FAILED(source_changed)`, oppure un file fallito resta
-   * `TRANSFERRING` per sempre. Serve un trasferimento con esiti DIVERSI (il PC ha cambiato uno dei file): il banco non lo mette in un gruppo con piu'
-   * di un file quando lo evita.
-   */
-  OUTCOMES_MISALIGNED("SD-1", "gli esiti di un trasferimento finito si applicano agli elementi rimasti, non a quelli giusti"),
-
-  /**
-   * SD-2 (`ShareSteps.startTransfers`): un errore di `TicketStatus.find` vale "il trasferimento non e' mai partito". Dopo la morte del processo
-   * (la conferma in memoria non c'e' piu') gli elementi ancora `PLANNED` di un trasferimento gia' avviato, o finito, diventano `FAILED(not_started)`:
-   * il file e' nell'area comune ma la voce non arriva mai nell'album e l'utente legge "non partito". Il banco evita i guasti passeggeri su `find`
-   * (la morte del processo vi cade lo stesso).
-   */
-  FIND_ERROR_IS_ABSENT("SD-2", "un errore di find vale \"mai partito\" dopo la morte del processo: file arrivato, elemento fallito"),
-}
-
 /** Le misure di un giro. */
 class ShareChaosConfig(
   val capabilities: Capabilities,
@@ -94,8 +70,6 @@ class ShareChaosConfig(
   /** La dimensione dei media: su cento, quanti sono "medi" (decine di KB) e quanti grandi (centinaia di KB, piu' blocchi di copia). */
   val mediumPercent: Int = 12,
   val bigPercent: Int = 3,
-  /** I difetti noti che il banco evita (di serie tutti): senza, li trova (`ShareChaosKnownDefectsTest`). */
-  val avoid: Set<KnownDefect> = KnownDefect.entries.toSet(),
   /**
    * I colpi di un passo scritti a mano invece che sorteggiati: `ShareChaosSweepTest` prova UN colpo a ogni chiamata del passo. Riceve il numero del passo
    * (da 1); null = sorteggia come sempre. Non consuma numeri casuali: il mondo e i passi restano quelli del seme.
@@ -179,7 +153,7 @@ object ShareChaosBlows {
     return options.last().second
   }
 
-  private fun kindFor(rnd: Random, surface: Surface, killBias: Int, mixedOutcomes: Boolean): ShareFaultKind {
+  private fun kindFor(rnd: Random, surface: Surface, killBias: Int): ShareFaultKind {
     if (surface.deathOnly) return ShareFaultKind.KILL
     if (killBias > 0 && rnd.nextInt(100) < killBias) return ShareFaultKind.KILL
     return when (surface) {
@@ -190,12 +164,12 @@ object ShareChaosBlows {
           38 to ShareFaultKind.KILL, 24 to ShareFaultKind.DROP, 10 to ShareFaultKind.EXPIRE_SESSION, 8 to ShareFaultKind.STALL, 20 to ShareFaultKind.NO_SPACE,
         ),
       )
-      // SD-1: lo spazio finito ferma UN file di un trasferimento che ne porta altri: gli esiti sono diversi, e un'interruzione fra due salvataggi li sbaglia.
+      // Lo spazio finito ferma UN file di un trasferimento che ne porta altri: esiti diversi nello stesso trasferimento (SD-1, corretto).
       Surface.NAS -> pick(
         rnd,
         listOf(
           30 to ShareFaultKind.KILL, 28 to ShareFaultKind.DROP, 14 to ShareFaultKind.EXPIRE_SESSION, 12 to ShareFaultKind.STALL,
-          (if (mixedOutcomes) 0 else 16) to ShareFaultKind.NO_SPACE,
+          16 to ShareFaultKind.NO_SPACE,
         ),
       )
       else -> pick(rnd, listOf(40 to ShareFaultKind.KILL, 30 to ShareFaultKind.DROP, 15 to ShareFaultKind.EXPIRE_SESSION, 15 to ShareFaultKind.STALL))
@@ -204,14 +178,13 @@ object ShareChaosBlows {
 
   /** I colpi di un passo di tipo [step]: da 1 a [ShareChaosConfig.maxBlows], sorteggiati (stesso seme, stessi colpi). */
   fun generate(rnd: Random, config: ShareChaosConfig, step: StepKind, movers: Int = 1, uploads: Int = 0): Blows {
-    val mixedOutcomes = KnownDefect.OUTCOMES_MISALIGNED in config.avoid && movers >= 2
     val surfaces = config.weights.filter { (surface, weight) -> weight > 0 && available(surface, config.capabilities, step, movers, uploads) }.map { it.value to it.key }
     val count = pick(rnd, listOf(30 to 1, 30 to 2, 20 to 3, 12 to 4, 8 to 5)).coerceAtMost(config.maxBlows)
     val early = ArrayList<Blow>()
     val late = ArrayList<Blow>()
     repeat(count) {
       val surface = pick(rnd, surfaces)
-      val kind = kindFor(rnd, surface, config.killBias, mixedOutcomes)
+      val kind = kindFor(rnd, surface, config.killBias)
       // Lo spazio finito e' un rifiuto prima della chiamata (porte) o un `DISK_FULL`: mai "dopo" su una porta.
       val moment = if (kind == ShareFaultKind.NO_SPACE && surface != Surface.NAS) Moment.BEFORE else if (rnd.nextBoolean()) Moment.BEFORE else Moment.AFTER
       val blow = Blow(surface, 1 + rnd.nextInt(reach(surface, step)), moment, kind)

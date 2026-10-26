@@ -30,7 +30,8 @@
                                 revisione di sicurezza), ne' (Fase 4A, D33) la recinzione delle prove `ShareFence` e il NAS
                                 sintetico del menu di debug, ne' (revisione 4B, F20) il gancio che accorcia i 30 giorni del
                                 cestino del NAS, ne' (Fase 5A, D13) la recinzione del telefono del backup in debug
-                                (`DebugBackupFence`, le cartelle `mcg-prova` e la radice `mcg-campo`), ne' (Fase 5B, P0-B) le prove
+                                (`DebugBackupFence`, le cartelle `mcg-prova` e la radice `mcg-campo`), ne' (Fase 7, P12) lo strumento di valutazione
+                                degli album (`debugtools/eval/albums`, `viaggi.mcgalb`, `MCGALB01`), ne' (Fase 5B, P0-B) le prove
                                 guidate T-09, T-14, T-15 e T-16 (`FieldProbe*`, `debugtools/probes`, `field-probe`): lettura diretta del dex,
                                 FALLISCE se non lo legge; e (R11 della revisione 4A) gli esiti di R8 della release: `ShareFence`
                                 tolta per intero in usage.txt e assente da mapping.txt (una classe fusa in un'altra non lascia il
@@ -746,9 +747,12 @@ $debugRemnants = @(
   # Fase 6 (P9): lo strumento di valutazione della ricerca (app/src/debug/.../debugtools/eval): classi, porta e nome del file di etichette.
   "debugtools/eval", "EvalEnvironmentHolder", "EvalSession", "EvalEntry", "labels.mcgeval", "MCGEVAL1",
   # Fase 7 (P9, D22, L65): il widget di prova dei Nascosti (app/src/debug/.../debugtools/widget): ricevitore, contenuto e disegno. Solo debug.
-  "debugtools/widget", "FieldProbeHiddenWidget", "FieldProbeWidget"
+  "debugtools/widget", "FieldProbeHiddenWidget", "FieldProbeWidget",
+  # Fase 7 (P12): lo strumento di valutazione degli album smart e dei viaggi (app/src/debug/.../debugtools/eval/albums): classi, porta, nomi del file di etichette
+  # (`viaggi.mcgalb`, intestazione MCGALB01) e del file dei viaggi sintetici (`viaggi-sintetici`, intestazione MCGSINT1). Solo debug.
+  "debugtools/eval/albums", "AlbumsEvalEnvironmentHolder", "AlbumsEvalSession", "AlbumsEvalEntry", "AppAlbumsEvalEnvironment", "viaggi.mcgalb", "MCGALB01", "MCGSINT1", "viaggi-sintetici"
 )
-Step "nessun resto degli strumenti di debug nel dex di release (Libreria e NAS sintetici, famiglia pronta, sink di logcat, ShareFence D33, cestino corto F20, recinzione del telefono D13, prove guidate 5B, valutazione della ricerca P9, widget di prova dei Nascosti)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
+Step "nessun resto degli strumenti di debug nel dex di release (Libreria e NAS sintetici, famiglia pronta, sink di logcat, ShareFence D33, cestino corto F20, recinzione del telefono D13, prove guidate 5B, valutazione della ricerca P9, widget di prova dei Nascosti, valutazione degli album P12)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
   $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
   if (-not $apk) { return "nessun APK di release in app\build\outputs\apk\release" }

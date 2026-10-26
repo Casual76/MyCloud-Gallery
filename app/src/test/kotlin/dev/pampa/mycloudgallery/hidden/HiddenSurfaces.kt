@@ -249,6 +249,11 @@ internal object HiddenSurfaces {
     "app/src/main/kotlin/dev/pampa/mycloudgallery/gallery/GalleryGraph.kt",
     // Le porte facoltative di feature-albums (la visibilita' per "Aggiungi ad album"): le raccoglie e le passa ai controllori, non mostra niente.
     "feature-albums/src/main/kotlin/dev/pampa/mycloudgallery/feature/albums/nav/AlbumDependencies.kt",
+    // Fase 7 (P12): lo strumento di valutazione degli album (solo debug, `app/src/debug/.../eval/albums/`) passa `VisibleMedia` e `HiddenMask` alla corsa degli album
+    // smart di P6 (che li usa gia') e filtra con loro le celle che mostra. Non e' una superficie del prodotto (nessuna riga del §2.1): la prova che un nascosto non esce
+    // mai e' `AppAlbumsEvalEnvironmentTest` (catalogo vero, mondi casuali) e `AlbumsEvalSessionTest`.
+    "app/src/debug/kotlin/dev/pampa/mycloudgallery/debugtools/eval/albums/AlbumsEvalRunner.kt",
+    "app/src/debug/kotlin/dev/pampa/mycloudgallery/debugtools/eval/albums/AppAlbumsEvalEnvironment.kt",
   )
 
   /** I contratti da cui ogni superficie deve passare per i nascosti. */

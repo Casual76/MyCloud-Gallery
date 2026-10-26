@@ -51,4 +51,9 @@ dependencies {
   // (Phase7ArchitectureTest), e nessun test nomina le conferme di core-nasops o le primitive di scrittura (Phase4/Phase7ArchitectureTest).
   testImplementation project(':core-nasops')
   testImplementation project(':core-nas')
+
+  // P3: la proiezione degli album sulle tabelle v6 si prova sul catalogo vero (Room in memoria, come core-personal e core-database).
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+  testImplementation appDeps.androidxTestExtJunit
 }

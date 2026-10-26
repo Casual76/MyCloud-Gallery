@@ -98,6 +98,9 @@ ext.galleryModules = [
   // Fase 7 (docs/fase7-progetto.md §1.1, P0)
   ':core-albums',
   ':feature-albums',
+  // Fase 8 (docs/fase8-progetto.md §1.1, P0)
+  ':core-faces',
+  ':feature-people',
 ]
 
 tasks.register('galleryTest') {

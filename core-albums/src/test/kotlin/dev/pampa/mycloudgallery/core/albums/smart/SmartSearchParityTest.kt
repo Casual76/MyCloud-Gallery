@@ -40,6 +40,8 @@ import java.time.MonthDay
 import kotlin.math.sqrt
 import kotlin.random.Random
 import kotlin.time.Duration
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.runTest
 import org.junit.Rule
 import org.junit.Test
@@ -176,6 +178,26 @@ class SmartSearchParityTest {
       if (views[0].first.isNotEmpty()) different++
     }
     assertThat(different).isGreaterThan(20)
+  }
+
+  @Test
+  fun unMotoreNonProntoNonRispondeEGliAlbumTacciono() = runTest {
+    val bench = bench(count = 400, seed = 8)
+    val found = EngineContentSearch(bench.reference).match("cane", emptyList(), null)
+    assertThat(found.used).isTrue()
+    assertThat(found.sure).isNotEmpty()
+    // Lo stesso motore, ma che si sta ancora caricando (o senza modello): la ricerca per contenuto non risponde, e dice di non aver contato.
+    for (state in listOf(SearchReadiness.PreparingContent, SearchReadiness.FiltersAndTextOnly(modelMissing = true))) {
+      val notReady = object : SearchEngine by bench.reference {
+        override val readiness: StateFlow<SearchReadiness> = MutableStateFlow(state)
+      }
+      val silent = EngineContentSearch(notReady)
+      assertThat(silent.ready).isFalse()
+      val none = silent.match("cane", listOf(bench.world.items()[3].media), null)
+      assertThat(none.used).isFalse()
+      assertThat(none.sure).isEmpty()
+      assertThat(none.likely).isEmpty()
+    }
   }
 
   @Test

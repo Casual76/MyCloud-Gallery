@@ -12,6 +12,7 @@ import dev.pampa.mycloudgallery.core.albums.personal.AlbumsRoom
 import dev.pampa.mycloudgallery.core.albums.personal.SmartRulesText
 import dev.pampa.mycloudgallery.core.albums.testing.FakeAlbumClocks
 import dev.pampa.mycloudgallery.core.database.entity.AlbumEntity
+import dev.pampa.mycloudgallery.core.database.entity.AlbumItemEntity
 import dev.pampa.mycloudgallery.core.database.entity.AlbumRuleEntity
 import dev.pampa.mycloudgallery.core.library.visibility.CatalogHiddenMask
 import dev.pampa.mycloudgallery.core.library.visibility.CatalogVisibleMedia
@@ -200,6 +201,41 @@ class SmartRoomTest {
       assertThat(rows.getValue(id(5).value).position).isEqualTo(1_000)
       assertThat(rows).doesNotContainKey(id(6).value)
       assertThat(rows.values.count { it.origin == "auto" }).isEqualTo(38)
+    }
+  }
+
+  @Test
+  fun leRigheRoomRifiutanoDiSovrascrivereUnaSceltaDellUtenteAncheSeIlChiamanteSbaglia() = runTest {
+    val items = (1..10).map { cand(it, LocalDate.of(2026, 3, 10), minutes = 600 + it * 5) }
+    AlbumsRoom().use { room ->
+      seed(room, items)
+      val id = albumId(1)
+      createAlbum(room, id, SmartRules(null, null, null))
+      val dao = room.db.albumDao()
+      dao.upsertItems(
+        listOf(
+          AlbumItemEntity(id.value, id(1).value, 1_000, 5, origin = "manual"),
+          AlbumItemEntity(id.value, id(2).value, 2_000, 6, origin = "accepted"),
+          AlbumItemEntity(id.value, id(3).value, 3_000, 7, origin = "auto"),
+        ),
+      )
+      // Una richiesta sbagliata (un chiamante che non filtra): scrivere, togliere e suggerire elementi che sono dell'utente.
+      RoomSmartRows(room.db).apply(
+        id,
+        SmartRowsChange(
+          putAuto = mapOf(id(1) to AutoRow(1, 99), id(2) to AutoRow(2, 99), id(3) to AutoRow(33, 99)),
+          removeAuto = setOf(id(1), id(2)),
+          putSuggestions = mapOf(id(1) to SuggestionRow("s1", 99), id(2) to SuggestionRow("s1", 99), id(4) to SuggestionRow("s2", 99)),
+        ),
+      )
+      val after = dao.items(id.value).associateBy { it.mediaId }
+      assertThat(after.getValue(id(1).value).origin).isEqualTo("manual")
+      assertThat(after.getValue(id(1).value).position).isEqualTo(1_000)
+      assertThat(after.getValue(id(2).value).origin).isEqualTo("accepted")
+      assertThat(after.getValue(id(2).value).position).isEqualTo(2_000)
+      // Una riga del motore invece si riscrive.
+      assertThat(after.getValue(id(3).value).position).isEqualTo(33)
+      assertThat(room.db.albumChoiceDao().suggestions(id.value).map { it.mediaId }).containsExactly(id(4).value)
     }
   }
 

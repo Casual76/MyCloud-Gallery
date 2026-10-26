@@ -5349,6 +5349,11 @@ inventata un'altra). La riga c'e' **solo se `:app` ha scritto dove porta** (`nul
 stesso cancello: serve a ritrovarli quando P11 permette di nascondere la sezione Nascosti delle Raccolte. Prova: `SettingsHiddenEntryTest`.
 **Il collegamento in `AppNavHost` e' di P13** (vedi sotto): finche' non c'e', la riga non compare.
 
+**Verifica**: `tools\check.ps1 -NoDaemon` verde (26/10: assemble di debug e release, test di tutti i moduli, lint, i controlli sul dex e sul manifest di
+release, compreso quello dei resti di debug con i tre nomi del widget di prova). La prima corsa ebbe rossi due test d'integrazione a tempo non toccati dal
+pacchetto (`Correzioni5BIntegrazioniAppTest.in2_...` con una `ConcurrentModificationException` e `Correzioni5BVersioniAppTest.ve10_...` con una richiesta di
+lavoro doppia) mentre il PC era carico; rilanciate da sole le due classi sono verdi (10 e 9 test) e la seconda corsa intera e' verde.
+
 **Rosso senza la regola (mutazioni)** — il test di proprieta' deve diventare rosso se si toglie una delle regole, altrimenti non prova niente. Una
 mutazione alla volta sul codice di produzione, il test lanciato, la mutazione tolta:
 - **M1 · contagio del gruppo tolto da `VisibilityQueries`** (un gruppo con un nascosto non nasconde piu' gli altri membri): rossi

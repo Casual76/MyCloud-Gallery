@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    SOLO build debug (Fase 7, P9, D22): il widget di prova dei Nascosti. Quattro celle di foto (le riempie FieldProbeHiddenWidgetProvider con
+    cio' che gli da' WidgetFeed, mai un nascosto) e una frase per "niente da mostrare". Solo viste che RemoteViews ammette.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FF1B1B1F"
+    android:orientation="vertical"
+    android:padding="8dp">
+
+  <TextView
+      android:id="@+id/probe_widget_title"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:text="@string/probe_widget_title"
+      android:textColor="#FFE3E2E6"
+      android:textSize="12sp" />
+
+  <TextView
+      android:id="@+id/probe_widget_empty"
+      android:layout_width="match_parent"
+      android:layout_height="0dp"
+      android:layout_weight="1"
+      android:gravity="center"
+      android:text="@string/probe_widget_empty"
+      android:textColor="#FFE3E2E6"
+      android:textSize="14sp"
+      android:visibility="gone" />
+
+  <LinearLayout
+      android:id="@+id/probe_widget_cells"
+      android:layout_width="match_parent"
+      android:layout_height="0dp"
+      android:layout_marginTop="4dp"
+      android:layout_weight="1"
+      android:orientation="horizontal">
+
+    <ImageView
+        android:id="@+id/probe_widget_cell_0"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_marginEnd="2dp"
+        android:layout_weight="1"
+        android:importantForAccessibility="yes"
+        android:scaleType="centerCrop" />
+
+    <ImageView
+        android:id="@+id/probe_widget_cell_1"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_marginEnd="2dp"
+        android:layout_weight="1"
+        android:importantForAccessibility="yes"
+        android:scaleType="centerCrop" />
+
+    <ImageView
+        android:id="@+id/probe_widget_cell_2"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_marginEnd="2dp"
+        android:layout_weight="1"
+        android:importantForAccessibility="yes"
+        android:scaleType="centerCrop" />
+
+    <ImageView
+        android:id="@+id/probe_widget_cell_3"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:importantForAccessibility="yes"
+        android:scaleType="centerCrop" />
+  </LinearLayout>
+</LinearLayout>

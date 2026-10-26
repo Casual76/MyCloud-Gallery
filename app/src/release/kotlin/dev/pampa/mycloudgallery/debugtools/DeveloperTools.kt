@@ -44,6 +44,10 @@ internal object DeveloperTools {
   /** Nessuna cartella recintata dei ritagli (D13 vale solo in debug): in release `Pictures/MyCloud Gallery/Ritagli/` e basta. */
   fun fencedCutouts(): dev.pampa.mycloudgallery.backup.FencedCutouts? = null
 
+  /** Nessun widget di prova in release (Fase 7, P9): niente da ridisegnare quando si nasconde qualcosa. */
+  @Suppress("UNUSED_PARAMETER")
+  fun hiddenChanged(context: Context) = Unit
+
   fun NavGraphBuilder.destinations(nav: NavController) = Unit
 
   fun settingsSection(nav: NavController): (@Composable () -> Unit)? = null

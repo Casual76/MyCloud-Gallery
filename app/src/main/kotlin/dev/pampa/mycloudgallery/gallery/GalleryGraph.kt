@@ -35,10 +35,14 @@ import dev.pampa.mycloudgallery.core.imaging.placeholder.ThumbHashPlaceholderCac
 import dev.pampa.mycloudgallery.core.imaging.viewer.ContentImageOrigin
 import dev.pampa.mycloudgallery.core.imaging.viewer.PipelineViewerImageSource
 import dev.pampa.mycloudgallery.core.imaging.viewer.RoutingImageOrigin
+import dev.pampa.mycloudgallery.core.library.contract.FamilyExposure
+import dev.pampa.mycloudgallery.core.library.contract.HiddenMask
 import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
 import dev.pampa.mycloudgallery.core.library.contract.LocalMediaActions
 import dev.pampa.mycloudgallery.core.library.contract.TimelineRepository
 import dev.pampa.mycloudgallery.core.library.contract.ViewerItems
+import dev.pampa.mycloudgallery.core.library.contract.VisibleMedia
+import dev.pampa.mycloudgallery.core.library.contract.WidgetFeed
 import dev.pampa.mycloudgallery.core.library.data.CatalogLocalMediaActions
 import dev.pampa.mycloudgallery.core.library.data.CatalogTimelineRepository
 import dev.pampa.mycloudgallery.core.library.data.CatalogTimelineSource
@@ -48,6 +52,10 @@ import dev.pampa.mycloudgallery.core.library.layout.TimelineLayoutEngine
 import dev.pampa.mycloudgallery.core.library.similar.SignatureSource
 import dev.pampa.mycloudgallery.core.library.store.SnapshotStore
 import dev.pampa.mycloudgallery.core.library.store.SnapshotWriter
+import dev.pampa.mycloudgallery.core.library.visibility.CatalogFamilyExposure
+import dev.pampa.mycloudgallery.core.library.visibility.CatalogHiddenMask
+import dev.pampa.mycloudgallery.core.library.visibility.CatalogVisibleMedia
+import dev.pampa.mycloudgallery.core.library.visibility.RotatingWidgetFeed
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess
 import dev.pampa.mycloudgallery.core.mediastore.contract.MetaPriority
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneAccessReader
@@ -67,6 +75,7 @@ import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.nasops.contract.CitedTemps
 import dev.pampa.mycloudgallery.core.places.dataset.PlacesOpenResult
+import dev.pampa.mycloudgallery.debugtools.DeveloperTools
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionItemsSource
 import dev.pampa.mycloudgallery.feature.library.hidden.HiddenLibrary
 import dev.pampa.mycloudgallery.feature.library.library.LibraryPhoneStatus
@@ -488,7 +497,12 @@ class GalleryGraph(
         val core = core()
         writing { core.actions.setHidden(ids, on) }
         nas?.organizer?.personalChanged()
+        // Fase 7 (P9, D22): il widget di prova (solo debug) si ridisegna subito; in release non fa niente.
+        DeveloperTools.hiddenChanged(context)
       }
+
+      // Fase 7 (P9, E-H2): quanti degli elementi nascosti i familiari vedono ancora (area comune, album condivisi).
+      override suspend fun familyStillSees(ids: Set<MediaId>): Int = core().actions.familyStillSees(ids)
     },
   )
 
@@ -579,6 +593,20 @@ class GalleryGraph(
 
   /** Quali elementi del cestino di sistema sono nascosti nell'app (si mostrano col segno, solo da sbloccati). */
   val trashMask: TrashHiddenMask = TrashHiddenMask { refs -> CatalogHidden.hiddenAmong(database, core().catalog, refs) }
+
+  // --- Una sola fonte dei nascosti per le superfici nuove (Fase 7, P9, D22) ---------------------------------------------------
+
+  /**
+   * Il filtro finale dei nascosti (`HiddenMask`): lo chiama ogni superficie nuova subito prima di mostrare. Fallisce chiuso (un errore o un id
+   * sconosciuto = nascosto). Legge solo il database: non aspetta la famiglia pronta, e prima non c'e' niente da mostrare.
+   */
+  val hiddenMask: HiddenMask = CatalogHiddenMask(database)
+
+  /** La vista del catalogo senza nascosti (`VisibleMedia`): l'istantanea della Libreria e "quali di questi si possono mostrare adesso". */
+  val visibleMedia: VisibleMedia = CatalogVisibleMedia(database, visibleTimeline.snapshot)
+
+  /** La sorgente del widget (solo debug oggi, Fase 10 poi): a giro sulla Libreria, mai un nascosto. */
+  val widgetFeed: WidgetFeed = RotatingWidgetFeed(visibleMedia, hiddenMask)
 
   /** I dettagli del pannello informazioni, dal catalogo. */
   val details: MediaDetailsSource = object : MediaDetailsSource {
@@ -836,7 +864,8 @@ class GalleryGraph(
     val core = GalleryCore(
       catalog = catalog,
       timelineSource = source,
-      actions = CatalogLocalMediaActions(catalog, source, repository),
+      // Fase 7 (P9, E-H2): i familiari vedono ancora cio' che sta nell'area comune; senza NAS non c'e' nessuno da avvisare.
+      actions = CatalogLocalMediaActions(catalog, source, repository, if (nas != null) CatalogFamilyExposure(database) else FamilyExposure.None),
       details = CatalogMediaDetailsSource(catalog, database),
       phone = parts.phone(PhoneInputs(context, database, catalog, extractor, clock, metaPriority)),
     )

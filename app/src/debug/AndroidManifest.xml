@@ -100,6 +100,23 @@
       </intent-filter>
     </receiver>
 
+    <!--
+        Fase 7 (P9, D22, L65, F73): il widget di prova dei Nascosti (RemoteViews della piattaforma, niente Glance). NON esportato: l'azione di aggiornamento
+        la manda il sistema dei widget (uid di sistema), nessun'altra app. Sta solo in questo manifest: la release non ha il widget (verifyReleaseManifest e
+        tools/check.ps1 lo controllano sul manifest fuso e sul dex).
+    -->
+    <receiver
+        android:name="dev.pampa.mycloudgallery.debugtools.widget.FieldProbeHiddenWidgetProvider"
+        android:exported="false"
+        android:label="@string/probe_widget_label">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+          android:name="android.appwidget.provider"
+          android:resource="@xml/field_probe_widget_info" />
+    </receiver>
+
     <!-- T-14: i file di prova che il selettore consegna (forme "a richiesta" e "copia in cache"). NON esportato. -->
     <provider
         android:name="dev.pampa.mycloudgallery.debugtools.probes.FieldProbeFilesProvider"

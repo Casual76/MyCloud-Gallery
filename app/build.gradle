@@ -284,6 +284,9 @@ dependencies {
 
   testImplementation appDeps.coroutinesTest
   testImplementation appDeps.turbine
+  // Fase 7 (P9, D22): le sonde di riferimento di album e viaggi del registro dei Nascosti usano gli esecutori di riferimento di core-albums. Solo le prove:
+  // il modulo entra nell'app con P13 (`implementation`), non adesso.
+  testImplementation project(':core-albums')
   testImplementation appDeps.workTesting
   // Screenshot dello scaffold (docs/screenshots/2-P0/) e test Compose su JVM.
   testImplementation appDeps.robolectric

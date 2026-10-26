@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- SOLO build debug (Fase 7, P9, D22): il widget di prova dei Nascosti (F73). Mostra le foto che gli da' WidgetFeed, mai un nascosto. -->
+  <string name="probe_widget_label">MCG prova (Nascosti)</string>
+  <string name="probe_widget_description">Prova dei Nascosti: quattro foto della Libreria, mai una nascosta.</string>
+  <string name="probe_widget_title">MCG prova · Libreria</string>
+  <string name="probe_widget_empty">Niente da mostrare</string>
+  <string name="probe_widget_photo">Foto, %1$s</string>
+  <string name="probe_widget_video">Video, %1$s</string>
+</resources>

@@ -4536,7 +4536,7 @@ fatta senza l'ora del NAS (fuori casa, VPN spenta, nessun accesso SMB nel proces
   WAN basta: F48); per HTTPS si. Un rifiuto non e' un errore: il modello resta **in coda con il motivo** (`ModelWait`: nessuna rete, aspetto il Wi-Fi, roaming; MO-8) e la pagina lo dice.
 - **HTTPS esce dalla rete giudicata (R12).** A casa il Wi-Fi riconosciuto vinceva sul cancello ma `URL.openConnection` usciva sulla rete **predefinita**, che con One UI puo' essere
   quella dei dati mobili. `ModelFetchers.create(..., httpsRoute)` apre le connessioni con `Network.openConnection` sulla `Network` della rete sottostante dell'istantanea di adesso
-  (`AppModelHttpsRoute`, riletta a ogni connessione, cioe' a ogni fetta da 30 s); senza rete approvata la connessione non si apre e **non** si ripiega sulla predefinita. Il registro del
+  (`AppModelHttpsRoute`, riletta a ogni connessione, cioe' a ogni fetta da 30 s); senza rete approvata la connessione non si apre e **non** si ripiega sulla predefinita. Il codice sta dentro `HttpsModelFetcher` e non in una classe a parte: R8 fonde in una sola le classi piccole e simili, e il controllo sul dex di release (che attribuisce la chiamata alla classe che la contiene) la leggeva come proveniente da `backup/SummaryCache`. Il registro del
   traffico segna la stessa rete. Il nome `Network.openConnection` e' ora vietato fuori da `core-models/.../download/https/` come ogni altro client (I3); la porta pubblica porta solo la
   `Network`, non un client.
 - **"Rimuovi" dura (MO-3).** `meta/<sha>.removed`: il giro periodico (`RULES`) non riscarica un modello che l'utente ha tolto; lo riprende solo "Scarica ora" (e l'accensione del ruolo per il

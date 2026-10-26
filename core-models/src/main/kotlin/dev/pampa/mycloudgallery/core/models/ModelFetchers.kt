@@ -5,8 +5,6 @@ import dev.pampa.mycloudgallery.core.models.contract.ModelFetcher
 import dev.pampa.mycloudgallery.core.models.contract.ModelHttpsRoute
 import dev.pampa.mycloudgallery.core.models.contract.ModelTraffic
 import dev.pampa.mycloudgallery.core.models.download.https.HttpsModelFetcher
-import dev.pampa.mycloudgallery.core.models.download.https.NetworkBoundConnections
-import dev.pampa.mycloudgallery.core.models.download.https.PlatformConnections
 import dev.pampa.mycloudgallery.core.models.source.BundledModelFetcher
 import dev.pampa.mycloudgallery.core.models.source.NasModelFetcher
 import dev.pampa.mycloudgallery.core.models.source.RoutingModelFetcher
@@ -27,7 +25,7 @@ object ModelFetchers {
   fun create(nas: NasMediaReader, assets: BundledAssets, traffic: ModelTraffic, httpsRoute: ModelHttpsRoute? = null): ModelFetcher =
     RoutingModelFetcher(
       nas = NasModelFetcher(nas, traffic),
-      https = HttpsModelFetcher(traffic, httpsRoute?.let { NetworkBoundConnections(it) } ?: PlatformConnections),
+      https = HttpsModelFetcher(traffic, route = httpsRoute),
       bundled = BundledModelFetcher(assets),
     )
 }

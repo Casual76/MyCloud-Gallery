@@ -10,7 +10,6 @@ import dev.pampa.mycloudgallery.core.models.contract.ModelTraffic
 import dev.pampa.mycloudgallery.core.models.download.https.ETags
 import dev.pampa.mycloudgallery.core.models.download.https.HttpsConnections
 import dev.pampa.mycloudgallery.core.models.download.https.HttpsModelFetcher
-import dev.pampa.mycloudgallery.core.models.download.https.NetworkBoundConnections
 import dev.pampa.mycloudgallery.core.models.support.FileBehavior
 import dev.pampa.mycloudgallery.core.models.support.HttpsTestServer
 import dev.pampa.mycloudgallery.core.models.support.RecordedRequest
@@ -22,7 +21,6 @@ import dev.pampa.mycloudgallery.core.models.support.TrafficCounter
 import dev.pampa.mycloudgallery.core.models.support.serve
 import java.io.ByteArrayInputStream
 import java.io.File
-import java.io.IOException
 import java.io.InputStream
 import java.net.CookieHandler
 import java.net.CookieManager
@@ -40,7 +38,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.After
-import org.junit.Assert.assertThrows
 import org.junit.Test
 
 /**
@@ -66,7 +63,8 @@ class HttpsModelFetcherTest {
     connections: HttpsConnections = this.connections,
     readTimeoutMs: Int = 5_000,
     nanos: () -> Long = System::nanoTime,
-  ) = HttpsModelFetcher(traffic, connections, Dispatchers.IO, nanos, connectTimeoutMs = 5_000, readTimeoutMs = readTimeoutMs)
+    route: ModelHttpsRoute? = null,
+  ) = HttpsModelFetcher(traffic, connections, Dispatchers.IO, nanos, connectTimeoutMs = 5_000, readTimeoutMs = readTimeoutMs, route = route)
 
   private fun fetch(budget: Duration = 60.seconds, fetcher: HttpsModelFetcher = fetcher()): FetchResult =
     runBlocking { fetcher.fetch(spec, source, partial, budget) }
@@ -658,13 +656,12 @@ class HttpsModelFetcherTest {
       asked++
       null
     }
-    assertThrows(IOException::class.java) { NetworkBoundConnections(route).open("https://huggingface.co/x") }
-    assertThat(asked).isEqualTo(1)
-    asked = 0
-    val result = fetch(fetcher = fetcher(connections = NetworkBoundConnections(route)))
+    val result = fetch(fetcher = fetcher(route = route))
     assertThat(result).isEqualTo(FetchResult.NetworkError)
+    // La rete si e' chiesta alla prima connessione e basta (la fetta e' finita senza niente).
     assertThat(asked).isEqualTo(1)
-    // Il server di prova non ha visto niente: nessun ripiego su un'altra via.
+    // Nessun ripiego su un'altra via: ne' il server di prova ne' la rete predefinita (il banco di prova non ha aperto nessuna connessione).
+    assertThat(connections.opened).isEmpty()
     assertThat(server.requests).isEmpty()
     assertThat(traffic.total).isEqualTo(0)
     assertThat(partial.exists()).isFalse()

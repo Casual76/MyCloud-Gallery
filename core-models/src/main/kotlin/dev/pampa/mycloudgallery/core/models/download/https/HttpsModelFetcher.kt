@@ -4,6 +4,7 @@ import dev.pampa.mycloudgallery.core.models.contract.FetchRefusal
 import dev.pampa.mycloudgallery.core.models.contract.FetchResult
 import dev.pampa.mycloudgallery.core.models.contract.ModelFetcher
 import dev.pampa.mycloudgallery.core.models.contract.ModelHosts
+import dev.pampa.mycloudgallery.core.models.contract.ModelHttpsRoute
 import dev.pampa.mycloudgallery.core.models.contract.ModelLimits
 import dev.pampa.mycloudgallery.core.models.contract.ModelSource
 import dev.pampa.mycloudgallery.core.models.contract.ModelSpec
@@ -12,6 +13,7 @@ import dev.pampa.mycloudgallery.core.models.download.PartialFile
 import java.io.File
 import java.io.IOException
 import java.net.CookieHandler
+import java.net.URL
 import javax.net.ssl.HttpsURLConnection
 import kotlin.coroutines.coroutineContext
 import kotlin.time.Duration
@@ -55,6 +57,12 @@ internal class HttpsModelFetcher(
   private val nanos: () -> Long = System::nanoTime,
   private val connectTimeoutMs: Int = ModelLimits.CONNECT_TIMEOUT_MS,
   private val readTimeoutMs: Int = ModelLimits.READ_TIMEOUT_MS,
+  /**
+   * R12: la rete su cui escono le connessioni (quella approvata dal cancello), riletta a ogni connessione, cioe' a ogni fetta. Senza una rete
+   * approvata la connessione non si apre e **non** si ripiega sulla rete predefinita del sistema (che potrebbe essere quella dei dati mobili).
+   * Null (i test, un telefono senza il registro di rete): la rete predefinita, com'era.
+   */
+  private val route: ModelHttpsRoute? = null,
 ) : ModelFetcher {
 
   /**
@@ -121,7 +129,7 @@ internal class HttpsModelFetcher(
       coroutineContext.ensureActive()
       if (elapsed(start) >= budgetNanos) return progress(partial, total)
       val connection = try {
-        connections.open(url)
+        openConnection(url)
       } catch (e: IOException) {
         return progress(partial, total)
       }
@@ -185,6 +193,18 @@ internal class HttpsModelFetcher(
         connection.disconnect()
       }
     }
+  }
+
+  /**
+   * Apre (senza ancora connettersi) la connessione verso [url]. Con una [route] la apre sulla `Network` approvata (R12); il codice sta qui, in
+   * questa classe e non in una sua a parte, perche' R8 fonde in un'unica classe le classi piccole e simili e il controllo sul dex di release
+   * attribuirebbe la chiamata alla classe sbagliata.
+   */
+  @Throws(IOException::class)
+  private fun openConnection(url: String): HttpsURLConnection {
+    val bound = route ?: return connections.open(url)
+    val network = bound.network() ?: throw IOException("Nessuna rete approvata per lo scaricamento.")
+    return network.openConnection(URL(url)) as? HttpsURLConnection ?: throw IOException("Non e' una connessione HTTPS.")
   }
 
   private fun prepare(connection: HttpsURLConnection, offset: Long, validator: String?) {

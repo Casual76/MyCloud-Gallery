@@ -1,6 +1,5 @@
 package dev.pampa.mycloudgallery.core.models.download.https
 
-import dev.pampa.mycloudgallery.core.models.contract.ModelHttpsRoute
 import java.io.File
 import java.io.IOException
 import java.net.URL
@@ -19,18 +18,6 @@ internal fun interface HttpsConnections {
 internal object PlatformConnections : HttpsConnections {
   override fun open(url: String): HttpsURLConnection =
     URL(url).openConnection() as? HttpsURLConnection ?: throw IOException("Non e' una connessione HTTPS.")
-}
-
-/**
- * R12: le connessioni escono dalla rete **approvata dal cancello** ([route]), non dalla rete predefinita del sistema. La rete si rilegge a ogni
- * connessione (ogni fetta). Senza una rete approvata la connessione non si apre (`IOException`, che il fetcher traduce in "non adesso"): mai un
- * ripiego sulla rete predefinita, che potrebbe essere quella dei dati mobili.
- */
-internal class NetworkBoundConnections(private val route: ModelHttpsRoute) : HttpsConnections {
-  override fun open(url: String): HttpsURLConnection {
-    val network = route.network() ?: throw IOException("Nessuna rete approvata per lo scaricamento.")
-    return network.openConnection(URL(url)) as? HttpsURLConnection ?: throw IOException("Non e' una connessione HTTPS.")
-  }
 }
 
 /**

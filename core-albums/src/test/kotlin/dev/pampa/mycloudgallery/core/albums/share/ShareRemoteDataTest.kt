@@ -194,7 +194,7 @@ class ShareRemoteDataTest {
     world.settle()
     assertThat(bruno.view(mine)).isNull()
     assertThat(bruno.shared.visibleItems(theirs)).isEmpty()
-    val restore = RevokedItemsRestore(tablet.identity, tablet.albumFamily, tablet.replicaStore, tablet.replica, tablet.publisher, tablet.gate, world.clocks) { id, op, m ->
+    val restore = RevokedItemsRestore(tablet.identity, tablet.albumFamily, tablet.replicaStore, tablet.replica, tablet.publisher, tablet.gate, world.clocks, tablet.library) { id, op, m ->
       tablet.shared.allowed(id, op, m)
     }
     assertThat(restore.candidates()).containsExactly(mine, 1, theirs, 1)
@@ -224,11 +224,72 @@ class ShareRemoteDataTest {
     world.devices.remove(phone)
     world.settle()
     tablet.gate.blocks["test-comune"] = dev.pampa.mycloudgallery.core.albums.contract.AlbumWriteBlock.FROZEN
-    val restore = RevokedItemsRestore(tablet.identity, tablet.albumFamily, tablet.replicaStore, tablet.replica, tablet.publisher, tablet.gate, world.clocks) { id, op, m ->
+    val restore = RevokedItemsRestore(tablet.identity, tablet.albumFamily, tablet.replicaStore, tablet.replica, tablet.publisher, tablet.gate, world.clocks, tablet.library) { id, op, m ->
       tablet.shared.allowed(id, op, m)
     }
     assertThat(restore.restore(album)).isEqualTo(RestoreOutcome.Blocked(dev.pampa.mycloudgallery.core.albums.contract.AlbumWriteBlock.FROZEN))
     assertThat(tablet.publisher.pending.value).isEqualTo(0)
+  }
+
+  /**
+   * D22 (Fase 7, P9): un mio elemento **nascosto** non e' fra quelli che il foglio di chiusura propone di riportare, e non si conta: il foglio non
+   * fa trapelare che esiste. Nascondere vale solo per me (E-H4): per gli altri il foglio non cambia perche' non e' il loro.
+   */
+  @Test
+  fun ilFoglioDiChiusuraNonProponeIMieNascosti() = runBlocking<Unit> {
+    val world = AlbumWorld()
+    val a = file(1, MediaPlace.COMMON)
+    val b = file(2, MediaPlace.COMMON)
+    val me = world.device("test", library = FakeAlbumLibrary().apply { put(a, b) })
+    val album = me.createAlbum("Con un nascosto", ShareLevel.ADD)
+    me.publisher.stage(album, listOf(
+      SharedAlbumChange.Item(a.id, null, a.contentKey, SharePath.parse(a.path!!), 1, me.account),
+      SharedAlbumChange.Item(b.id, null, b.contentKey, SharePath.parse(b.path!!), 2, me.account),
+    ))
+    world.settle()
+    val before = (me.shared.closePreview(album, CloseMode.STOP) as dev.pampa.mycloudgallery.core.albums.contract.ClosePreviewOutcome.Ready).preview
+    assertThat(before.bringBackCandidates).containsExactly(a.id, b.id)
+    me.library.hide(b.id)
+    val after = (me.shared.closePreview(album, CloseMode.STOP) as dev.pampa.mycloudgallery.core.albums.contract.ClosePreviewOutcome.Ready).preview
+    assertThat(after.bringBackCandidates).containsExactly(a.id)
+    me.library.hide(a.id)
+    val none = (me.shared.closePreview(album, CloseMode.STOP) as dev.pampa.mycloudgallery.core.albums.contract.ClosePreviewOutcome.Ready).preview
+    assertThat(none.bringBackCandidates).isEmpty()
+    assertThat(none.bringBackHurtsCopies).isFalse()
+  }
+
+  /**
+   * D22 (Fase 7, P9), E-SH20: "Ripristina gli elementi di un dispositivo revocato" non conta ne' ripubblica i miei elementi **nascosti**: la riga
+   * non dice un numero piu' alto di cio' che vedo e l'esito non lo rivela. Se si mostra di nuovo l'elemento, il ripristino lo ritrova.
+   */
+  @Test
+  fun eSh20IlRipristinoNonContaIMieNascosti() = runBlocking<Unit> {
+    val world = AlbumWorld()
+    val a = file(1, MediaPlace.COMMON)
+    val hidden = file(2, MediaPlace.COMMON)
+    fun catalog() = FakeAlbumLibrary().apply { put(a, hidden) }
+    val phone = world.device("test", library = catalog())
+    val tablet = world.device("test", library = catalog())
+    val album = phone.createAlbum("Con un nascosto", ShareLevel.ADD)
+    phone.publisher.stage(album, listOf(
+      SharedAlbumChange.Item(a.id, null, a.contentKey, SharePath.parse(a.path!!), 1, phone.account),
+      SharedAlbumChange.Item(hidden.id, null, hidden.contentKey, SharePath.parse(hidden.path!!), 2, phone.account),
+    ))
+    world.settle()
+    world.family.changeStatus(phone.signer, DeviceStatus.REVOKED)
+    world.devices.remove(phone)
+    world.settle()
+    tablet.library.hide(hidden.id)
+    val restore = RevokedItemsRestore(tablet.identity, tablet.albumFamily, tablet.replicaStore, tablet.replica, tablet.publisher, tablet.gate, world.clocks, tablet.library) { id, op, m ->
+      tablet.shared.allowed(id, op, m)
+    }
+    assertThat(restore.candidates()).containsExactly(album, 1)
+    assertThat(restore.restore(album)).isEqualTo(RestoreOutcome.Restored(1, definition = true))
+    world.settle()
+    assertThat(tablet.shared.visibleItems(album)).containsExactly(a.id)
+    // Mostrato di nuovo, l'elemento torna fra quelli ripristinabili (la memoria del dispositivo revocato non si e' persa).
+    tablet.library.unhide(hidden.id)
+    assertThat(restore.candidates()).containsExactly(album, 1)
   }
 
   /** La chiusura dal foglio del creatore (Q5) non tocca file e il foglio restringe "Riporta" ai media con la cartella d'origine. */

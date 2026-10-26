@@ -147,6 +147,29 @@ internal object HiddenSurfaces {
       id = "nas-folders", title = "Cartelle NAS: la riga dei nascosti senza nomi (I8)", row = SpecRow.NAS_FOLDERS, owner = "P9", backing = Backing.PRODUCTION,
       probe = HiddenProbes.nasFolders, live = true, alsoProvedBy = listOf("NasHiddenFilesTest", "NasHiddenRowScreenTest"),
     ),
+    // --- Il codice vero di P2 (album condivisi) e di P4 (condivisione): integrazione del 26/10 ---------------------------------------------------------------
+    SurfaceEntry(
+      id = "albums-shared", title = "Album condivisi veri: elenco, conteggi, copertine, elementi, lasciati, copie personali, foglio di chiusura (E-H5, E-H6)",
+      row = SpecRow.ALBUMS, owner = "P2", backing = Backing.PRODUCTION, sources = listOf("$ALBUMS/shared/ReplicaSharedAlbums.kt"),
+      probe = RealSharedProbes.sharedAlbums, live = true,
+      alsoProvedBy = listOf("RealSharedAlbumsContractTest", "FakeSharedAlbumsContractTest", "HiddenAlbumsReferenceTest"),
+    ),
+    SurfaceEntry(
+      id = "share-adoptions", title = "Da condividere: i file nuovi nella cartella dell'album (D39)", row = SpecRow.ALBUMS, owner = "P4", backing = Backing.PRODUCTION,
+      sources = listOf("$ALBUMS/share/ShareProposals.kt"), probe = RealSharedProbes.shareAdoptions, live = true,
+    ),
+    SurfaceEntry(
+      id = "share-bring-back", title = "Riporta nelle mie cartelle: i candidati del foglio di chiusura (D31)", row = SpecRow.ALBUMS, owner = "P4", backing = Backing.PRODUCTION,
+      sources = listOf("$ALBUMS/share/ShareProposals.kt"), probe = RealSharedProbes.shareBringBack, live = true,
+    ),
+    SurfaceEntry(
+      id = "closed-copies", title = "Copie personali degli album chiusi (Q5): gli elementi che si scrivono", row = SpecRow.ALBUMS, owner = "P4", backing = Backing.PRODUCTION,
+      sources = listOf("$ALBUMS/share/ClosedAlbumCopies.kt"), probe = RealSharedProbes.closedCopies, live = true,
+    ),
+    SurfaceEntry(
+      id = "revoked-restore", title = "Ripristina gli elementi di un dispositivo revocato: quanti (E-SH20)", row = SpecRow.ALBUMS, owner = "P4", backing = Backing.PRODUCTION,
+      sources = listOf("$ALBUMS/share/RevokedItemsRestore.kt"), probe = RealSharedProbes.revokedRestore, live = true,
+    ),
     SurfaceEntry(
       id = "albums-manual", title = "Album manuali: elenco, conteggi, copertine (E-H6)", row = SpecRow.ALBUMS, owner = "P3", backing = Backing.REFERENCE,
       landedWhen = listOf("$ALBUMS/personal"), probe = ReferenceProbes.manualAlbums, alsoProvedBy = listOf("ReferenceAlbumsContractTest"),
@@ -154,10 +177,6 @@ internal object HiddenSurfaces {
     SurfaceEntry(
       id = "albums-smart", title = "Album smart e Suggerite", row = SpecRow.ALBUMS, owner = "P6", backing = Backing.REFERENCE,
       landedWhen = listOf("$ALBUMS/smart"), probe = ReferenceProbes.smartAlbums,
-    ),
-    SurfaceEntry(
-      id = "albums-shared", title = "Album condivisi, anche con un mio nascosto messo da un altro (E-H5)", row = SpecRow.ALBUMS, owner = "P2/P4",
-      backing = Backing.REFERENCE, landedWhen = listOf("$ALBUMS/shared"), probe = ReferenceProbes.sharedAlbums, alsoProvedBy = listOf("FakeSharedAlbumsContractTest"),
     ),
     SurfaceEntry(
       id = "album-viewer", title = "Viewer aperto da un album: la vista dell'album", row = SpecRow.ALBUM_VIEWER, owner = "P10", backing = Backing.REFERENCE,

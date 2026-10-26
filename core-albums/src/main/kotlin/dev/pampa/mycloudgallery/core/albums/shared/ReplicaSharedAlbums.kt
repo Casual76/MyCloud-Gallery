@@ -234,7 +234,10 @@ class ReplicaSharedAlbums(
     val me = me() ?: return ClosePreviewOutcome.NotFound
     val m = view.merged
     // "Riporta" vale per i miei elementi che il mio catalogo vede nell'area comune; la cartella d'origine la controlla P4 (`shared_origin`).
-    val mine = m.items.values.filter { it.addedBy == me }.sortedBy { it.position }.mapNotNull { view.attested[it.media] }
+    val attested = m.items.values.filter { it.addedBy == me }.sortedBy { it.position }.mapNotNull { view.attested[it.media] }.distinct()
+    // D22: un mio elemento nascosto non si propone ne' si conta fra quelli da riportare: il foglio non ne fa trapelare l'esistenza (Fase 7, P9).
+    val shown = if (attested.isEmpty()) emptySet() else visibility.visible(attested)
+    val mine = attested.filter { it in shown }
     val others = m.winners.values.map { it.account }.toSet() - m.creator
     return ClosePreviewOutcome.Ready(ClosePreview(id, m.title, mode, mine, others.size))
   }

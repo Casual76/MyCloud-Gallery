@@ -13,8 +13,10 @@ import dev.pampa.mycloudgallery.core.albums.shared.AlbumIdentity
 import dev.pampa.mycloudgallery.core.albums.shared.AlbumReplicaStore
 import dev.pampa.mycloudgallery.core.albums.shared.ResolvedItem
 import dev.pampa.mycloudgallery.core.albums.shared.SharedAlbumReplica
+import dev.pampa.mycloudgallery.core.library.contract.VisibleMedia
 import dev.pampa.mycloudgallery.core.model.AccountId
 import dev.pampa.mycloudgallery.core.model.AlbumId
+import dev.pampa.mycloudgallery.core.model.ContentKey
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.trust.data.AlbumField
 import dev.pampa.mycloudgallery.core.trust.data.AlbumValue
@@ -54,9 +56,19 @@ class RevokedItemsRestore(
   private val publisher: AlbumPublisher,
   private val gate: AlbumWriteGate,
   private val clocks: AlbumClocks,
+  /** D22 (Fase 7, P9): un elemento nascosto non si conta ne' si ripristina (la riga "Ripristina N elementi" non fa trapelare i nascosti). */
+  private val visibility: VisibleMedia,
   /** La tabella del §2.4 applicata a me (`SharedAlbums.allowed`). */
   private val allowed: (AlbumId, AlbumOp, MediaId?) -> Boolean,
 ) {
+
+  /** Le chiavi di [items] che il mio catalogo attesta nell'area comune (D9) **e** che si possono mostrare (D22). */
+  private suspend fun shownKeys(items: Collection<ResolvedItem>): Set<ContentKey> {
+    val byKey = replica.attestedMedia(items)
+    if (byKey.isEmpty()) return emptySet()
+    val visible = visibility.visible(byKey.values.distinct())
+    return byKey.filterValues { it in visible }.keys
+  }
 
   private fun me(): AccountId? = identity.registry()?.registry?.device(identity.deviceId)?.nasUser?.let(AccountId::of)
 
@@ -83,7 +95,7 @@ class RevokedItemsRestore(
       }
     }
     if (out.isEmpty()) return emptyList()
-    val attested = replica.attest(out.values)
+    val attested = shownKeys(out.values)
     return out.values.filter { it.contentKey in attested }.sortedWith(compareBy({ it.position }, { it.media.value }))
   }
 
@@ -129,7 +141,7 @@ class RevokedItemsRestore(
       orphan.sort?.let { changes += SharedAlbumChange.Sort(it) }
       // Nella memoria di un album senza definizione valida anche gli elementi "vivi" sono solo dei contributi esclusi: tutti quelli miei attestati.
       val mine = orphan.items.values.filter { it.addedBy == me }
-      val attested = replica.attest(mine)
+      val attested = shownKeys(mine)
       for (item in mine.filter { it.contentKey in attested }) {
         changes += SharedAlbumChange.Item(item.media, item.version, item.contentKey, item.path, item.position, me, item.sha256)
       }

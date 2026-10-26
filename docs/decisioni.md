@@ -5529,8 +5529,9 @@ dei documenti.
   (pagine-filtro Screenshot, Video, Modificate, WhatsApp), `search` (ricerca, suggerimenti, Trova simili: `InMemorySearchEngine` su
   `CatalogSearchData`), `other-apps` (selettore per le altre app, `PickerItems`), `widget` (widget di prova), `visible-media`, `hidden-mask`,
   `nas-folders` (Cartelle NAS).
-- Registrate **con l'esecutore di riferimento**: `albums-manual` (P3, copertine, E-H6), `albums-smart` (P6), `albums-shared` (P2/P4, E-H5),
-  `album-viewer` (P10), `trips` (P7, E-H7). **In attesa**: `duplicates` (P8) e `add-to-album` (P10).
+- Registrate **con l'esecutore di riferimento**: `albums-manual` (P3, copertine, E-H6), `albums-smart` (P6), `album-viewer` (P10), `trips` (P7, E-H7).
+  **In attesa**: `duplicates` (P8) e `add-to-album` (P10). *(Gli album condivisi, `albums-shared` (P2/P4, E-H5), erano qui; con l'integrazione del 26/10 sono
+  passati al codice vero, vedi "Fase 7 P9, integrazione" in fondo.)*
 - Dietro il cancello, **apposta** (`HiddenSurfaces.gated`): la pagina dei Nascosti e gli Eliminati di recente (con il segno): leggono i nascosti
   solo dopo lo sblocco; le loro prove sono i test di `feature-library` (`HiddenControllerTest`, `HiddenAccessGateTest`, `RecentlyDeletedControllerTest`, ...).
 - Il mondo casuale (`HiddenWorld`, `HiddenWorldBuilder`): `WorldSpec.random(seed, size)` genera media, gruppi disgiunti (raffiche e copie simili),
@@ -5858,3 +5859,81 @@ F81 con il tetto di spazio simulato; F82 (nome occupato, stesso media in due alb
 - L'impronta degli elementi delle copie di Q5 (P3, `addItem(..., fp)`).
 - E-SH12 riconosce il contenuto gia' nell'area comune dalla chiave del contenuto del catalogo; con lo SHA-256 nei fatti del catalogo (P13) il
   confronto sarebbe sui byte.
+
+## Fase 7 P9, integrazione: le superfici vere di P2 e P4 nel registro dei Nascosti (26/10)
+
+Con `main` (P1, schema v6; P2, album condivisi) e P4 (condivisione) in un solo ramo, il registro dei Nascosti ha fatto il suo lavoro: due test di `:app` sono
+diventati rossi, `HiddenSurfacesRegistryTest.quandoArrivaIlCodiceVeroLaRigaDiRiferimentoNonBastaPiu` ("albums-shared: il codice vero c'e' ma la superficie e'
+ancora REFERENCE") e `ognFileCheNominaIContrattiDeiNascostiEUnaSuperficieORiconosciuto` (`ReplicaSharedAlbums.kt` non sta nel registro). Questo pacchetto scrive
+le sonde sul **codice vero** e porta le righe a `PRODUCTION`. Nessuna dipendenza nuova, nessun permesso, nessuna colonna.
+
+**Le righe passate a `PRODUCTION`** (tutte nella riga "Album ..." del §2.1, `live = true`: il filtro finale chiede ancora al catalogo, quindi devono escludere anche i
+nascosti dell'ultimo momento)
+- `albums-shared` (P2, prima `REFERENCE`): `ReplicaSharedAlbums` vera (replica, fusione e attestazione vere) sul catalogo vero: elenco e conteggi, copertine (E-H6: una
+  copertina scelta da un altro dispositivo e nascosta per me diventa automatica), elementi di ogni album, album lasciati (E-SH21), copie personali di un album chiuso con
+  "ognuno tiene una copia" (Q5), foglio di chiusura (D31); e, per un altro familiare che non ha nascosto niente, l'album conta tutto (E-H4, E-H5).
+- `share-adoptions` (P4): "file nuovi nella cartella" (D39), `FolderAdoptions` con `VisibleMedia::visible` come filtro.
+- `share-bring-back` (P4): "Riporta nelle mie cartelle" dal foglio di chiusura (D31), `BringBackCandidates.restrict` sul riepilogo di P2.
+- `closed-copies` (P4): le copie personali degli album chiusi (Q5), quello che `ClosedAlbumCopies` scrive nei dati personali.
+- `revoked-restore` (P4): "Ripristina gli elementi di un dispositivo revocato" (E-SH20), il numero che dice.
+Restano `REFERENCE` album manuali (P3), smart (P6), viewer dell'album (P10) e viaggi (P7); in attesa Doppioni (P8) e "Aggiungi ad album" (P10).
+
+**Lo stack vero delle sonde** (`app/src/test/.../hidden/`: `RealFamily`, `RealSharedStack`, `RealSharedProbes`)
+- `RealFamily`: una famiglia vera (chiave, registro firmato) con il mio telefono (`test`), un mio vecchio telefono **revocato**, e i telefoni di `test2` e `test3`; una
+  per processo (le chiavi costano). La share dell'area comune e' in memoria (`MiniNas`, solo per pubblicare il registro).
+- `RealSharedStack`: `SharedAlbumReplica`, `ReplicaSharedAlbums` e le porte di P4 vere sopra il catalogo vero del mondo casuale. Le voci degli album sono le
+  `StoredContribution` che la replica terrebbe dopo un giro (la lettura del NAS e le firme delle teste le provano i test di `core-albums`). Cinque album: "Di famiglia"
+  (di `test2`, con copertina scelta), "Mio" (creato da me, con elementi miei e di `test2` e file nuovi nella cartella), "Chiuso" (di `test2`, con la copia personale),
+  "Lasciato" (E-SH21) e le voci del mio vecchio telefono revocato. Attestazione e fatti sono le **letture vere di P1** (`AlbumCatalog.attestInCommon` e `facts`), con
+  `AlbumCatalogFacts`, lo stesso adattatore senza logica che scrivera' `:app` (P13); la visibilita' e' `CatalogVisibleMedia`.
+- `RealSharedProbes`: cinque sonde. Ognuna confronta cio' che la superficie dice con l'oracolo del mondo: un album mostra **esattamente** i suoi elementi che il mio
+  catalogo attesta nell'area comune (D9) e che non sono nascosti ne' membri di un gruppo con un nascosto (E-L11), contati e con la copertina giusta.
+- La sonda di riferimento `ReferenceProbes.sharedAlbums` e' stata tolta (la proprieta' gira sul codice vero); `HiddenAlbumsReferenceTest` (E-H5, E-H6, E-H7 sugli esecutori
+  di riferimento) resta, perche' dice cosa deve fare il contratto.
+
+**Difetti trovati (due, veri) e corretti nel modo minimo**
+1. **`ReplicaSharedAlbums.closePreview` metteva i miei elementi nascosti fra quelli da riportare** (`bringBackCandidates`: il foglio di chiusura del creatore diceva "Riporta
+   N miei" contando anche i nascosti, e `BringBackCandidates.restrict` di P4 li lasciava passare perche' non guarda la visibilita'). *Correzione:* `closePreview` passa gli
+   elementi attestati da `VisibleMedia.visible` (come `shownItems`). *Conseguenza da sapere:* un mio elemento nascosto non si offre in "Riporta" finche' e' nascosto; il
+   file resta nell'area comune quando l'album si chiude (come tutto il resto: L2). Se il prodotto vuole un'altra regola (riportarlo comunque, senza contarlo) e' una scelta di P4.
+2. **`RevokedItemsRestore` contava e ripristinava i miei elementi nascosti** (la riga "Ripristina N elementi" e l'esito `Restored(N)` dicevano un numero piu' alto di cio' che
+   vedo). *Correzione:* un parametro in piu', `visibility: VisibleMedia`, e `SharedAlbumReplica.attestedMedia` (come `attest`, con il media che attesta ogni chiave): gli
+   elementi nascosti non si contano e non si ripubblicano; rimostrati, tornano fra i ripristinabili (la memoria del dispositivo revocato non si perde). **P13 deve
+   passare `gallery.visibleMedia`** al costruttore; i due test di `core-albums` che lo costruiscono sono adeguati.
+
+**Non sono difetti (e cosa non registro)**
+- `SharePlanner`, `ShareOrchestrator` e i fogli di conferma lavorano sulla **selezione dell'utente** e dicono apposta quanti nascosti ci sono, con la scelta E-SH9
+  ("Lascia fuori i N nascosti", preselezionata): non sono superfici che elencano media. `BringBackCandidates.among` restringe i candidati che riceve (la sonda prova la
+  catena `restrict(closePreview)`); `ReplicaSharedAlbums.inherit` e `RevokedItemsRestore.restore` ripubblicano, non mostrano.
+- `SharedAlbumNotice.NotAddedLevelChanged` conta le **mie** voci scartate perche' il livello non le permette (sono voci del formato, non media attestati): puo' includere una
+  voce di un media che ho poi nascosto. Resta un numero di una mia azione; non l'ho cambiato.
+- `ReplicaSharedAlbums.visible` e `left` sono proiezioni **in memoria**: si ricalcolano con `refresh()` (la replica lo chiama dopo ogni giro e ogni modifica). Un nascosto
+  nuovo cambia cio' che `visibleItems`, `keptCopies` e `closePreview` danno **subito** (leggono il catalogo a ogni chiamata), ma copertina e conteggio dell'elenco restano
+  quelli di prima fino al prossimo `refresh()`: **aggancio per P13** (sotto).
+
+**Rosso senza la regola (mutazioni su `core-albums`, una alla volta, ripristinate)**
+- **N1 · `ReplicaSharedAlbums.shownItems` senza il filtro dei nascosti**: rossi `nessunaSuperficieMostraMaiUnNascosto_suMondiCasuali`,
+  `neiCasiEstremiTuttoNascostoENienteNascosto` e `unaLibreriaPiuGrandeSiComportaAllaStessaManiera`; violazioni su `albums-shared` (339) e `closed-copies` (72).
+- **N2 · il foglio di chiusura senza il filtro** (la correzione 1 tolta): rosso su `albums-shared` (90) e `share-bring-back` (60). Prima della correzione la stessa
+  sonda era gia' rossa su questo (30 mondi su 43) e sul ripristino (27).
+- **N3 · il ripristino conta i nascosti** (la correzione 2 tolta): rosso su `revoked-restore` (27).
+- **N4 · `FolderAdoptions.pending` senza il filtro dei nascosti**: rosso su `share-adoptions` (54).
+- Le quattro mutazioni sono rimesse a posto e controllate con `cmp` contro la copia salvata. Ogni corsa ha avuto la sua cartella di build (vedi "Ambiente").
+
+**Test**: `HiddenSurfacesPropertyTest` (5) e `HiddenSurfacesRegistryTest` (9) sui 14 + 4 + 2 del registro; in `core-albums` `ShareRemoteDataTest` +2
+(`ilFoglioDiChiusuraNonProponeIMieNascosti`, `eSh20IlRipristinoNonContaIMieNascosti`).
+
+**Agganci per P13**
+- `RevokedItemsRestore(..., visibility = gallery.visibleMedia, allowed)`; `FolderAdoptions(ports, visible = gallery.visibleMedia::visible)`.
+- **Chiamare `ReplicaSharedAlbums.refresh()` quando il catalogo cambia per un nascosto**: dove `GalleryGraph.setHidden` chiama `DeveloperTools.hiddenChanged`, e quando
+  arrivano dati personali con un nascosto da un altro dispositivo (oltre a dopo ogni scansione con novita' nell'area comune, come dice `SharedAlbumReplica.recompute`). Senza,
+  la copertina e il numero dell'elenco "Album condivisi" possono mostrare per un po' un media appena nascosto.
+- L'adattatore `CatalogFacts` sopra `MediaCatalog.albums` e' tradotto campo per campo in `AlbumCatalogFacts` (test di `:app`): P13 lo scrive in `:app` senza logica.
+- Una superficie nuova che usa `VisibleMedia`, `HiddenMask` o `WidgetFeed` si registra come prima ("Come si registra una superficie nuova", sezione "Fase 7 P9").
+
+**Ambiente**: come nel pacchetto P9, dopo una corsa con test rossi un demone Gradle condiviso con gli altri agenti tiene aperti i jar di compilazione dei moduli su Windows e
+le corse successive non li possono riscrivere ("utilizzato da un altro processo"). Non ho ucciso ne' fermato nessun processo: le corse delle sonde e delle mutazioni usano, per
+`core-albums` e `app`, una cartella di build diversa in `build/bd-<nome>/` (uno script di inizializzazione locale in `build/`, ignorato da git e non committato); si libera dopo
+una corsa riuscita.
+
+**Verifica**: `tools\check.ps1 -NoDaemon` verde (26/10, ramo `integra/26-10d`: assemble di debug e release, test di tutti i moduli, lint, controlli sul dex e sul manifest di release, compreso quello dei resti di debug con i nomi del widget di prova). `core-albums`: 145 test; `:app`, i 17 del registro e della proprieta'.

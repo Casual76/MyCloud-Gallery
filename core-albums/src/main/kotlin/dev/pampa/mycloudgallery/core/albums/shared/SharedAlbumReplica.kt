@@ -138,9 +138,12 @@ class SharedAlbumReplica(
   }
 
   /** Le chiavi di contenuto di [items] che il mio catalogo attesta nell'area comune (D9). */
-  suspend fun attest(items: Collection<ResolvedItem>): Set<ContentKey> {
-    if (items.isEmpty()) return emptySet()
-    return catalog.attest(items.map { AttestRequest(it.contentKey, it.sha256) }).keys
+  suspend fun attest(items: Collection<ResolvedItem>): Set<ContentKey> = attestedMedia(items).keys
+
+  /** Come [attest], con il media del mio catalogo che attesta ogni chiave: serve a chiedere se si puo' mostrare (D22). */
+  suspend fun attestedMedia(items: Collection<ResolvedItem>): Map<ContentKey, MediaId> {
+    if (items.isEmpty()) return emptyMap()
+    return catalog.attest(items.map { AttestRequest(it.contentKey, it.sha256) })
   }
 
   /** La memoria di un album senza creazione valida: la fusione dei contributi ricordati, esclusi compresi; solo se e' un orfano (sopra). */

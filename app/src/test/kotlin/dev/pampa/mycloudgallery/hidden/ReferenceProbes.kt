@@ -5,8 +5,6 @@ import dev.pampa.mycloudgallery.core.albums.contract.AlbumContent
 import dev.pampa.mycloudgallery.core.albums.contract.CreateOutcome
 import dev.pampa.mycloudgallery.core.albums.contract.LocalDayRange
 import dev.pampa.mycloudgallery.core.albums.contract.MediaPlace
-import dev.pampa.mycloudgallery.core.albums.contract.SharedAlbumChange
-import dev.pampa.mycloudgallery.core.albums.contract.SharedState
 import dev.pampa.mycloudgallery.core.albums.contract.SmartRules
 import dev.pampa.mycloudgallery.core.albums.noop.NoShareRunner
 import dev.pampa.mycloudgallery.core.albums.testing.FakeAlbumClocks
@@ -24,9 +22,7 @@ import dev.pampa.mycloudgallery.core.model.AlbumId
 import dev.pampa.mycloudgallery.core.model.AlbumKind
 import dev.pampa.mycloudgallery.core.model.GeoPoint
 import dev.pampa.mycloudgallery.core.model.MediaId
-import dev.pampa.mycloudgallery.core.model.ShareLevel
 import dev.pampa.mycloudgallery.core.search.contract.Today
-import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import java.time.LocalDate
 import java.time.ZoneOffset
 import kotlin.random.Random
@@ -137,43 +133,6 @@ internal object ReferenceProbes {
     if (album.count != items.size) problems += "il conteggio dell'album smart e' ${album.count}, ne attendeva ${items.size}"
     if (album.suggested != sug.size) problems += "il numero delle Suggerite e' ${album.suggested}, ne attendeva ${sug.size}"
     Probed(shown = items + sug + listOfNotNull(album.cover.media), within = w.showable, problems = problems)
-  }
-
-  /** Album condiviso da un altro familiare (E-H5): per me non c'e' cio' che ho nascosto (elementi, conteggio, copertina); per gli altri si'. */
-  val sharedAlbums = SurfaceProbe { w ->
-    val stack = ReferenceStack(w)
-    val problems = ArrayList<String>()
-    val common = stack.media.filter { it.place == MediaPlace.COMMON }
-    val creator = AccountId("test2")
-    val nonceBytes = ByteArray(16) { (it * 5 + w.spec.seed.toInt()).toByte() }
-    val id = AlbumId.derived(creator, nonceBytes)
-    val nonceHex = nonceBytes.joinToString("") { "%02x".format(it.toInt() and 0xff) }
-    stack.sharedWorld.apply(
-      id, creator,
-      listOf(
-        SharedAlbumChange.Definition("Di famiglia", SharePath.of("Album condivisi", "Di famiglia"), SharedState.ACTIVE, creator, nonceHex, null),
-        SharedAlbumChange.Level(ShareLevel.ADD),
-      ) + common.mapIndexed { i, m -> SharedAlbumChange.Item(m.id, null, m.contentKey, SharePath.parse(checkNotNull(m.path)), (i + 1) * 1_000L, creator) },
-    )
-    // Un terzo familiare, che non ha nascosto niente, guarda lo stesso album dallo stesso mondo comune.
-    val other = ReferenceStack(w, AccountId("test3"), stack.sharedWorld)
-    stack.hideThemAll()
-
-    val shown = LinkedHashSet<MediaId>()
-    if (common.isNotEmpty()) {
-      val mine = common.map { it.id }.filter { it in w.showable }.toSet()
-      val album = checkNotNull(stack.albums.all.value.byId(id)) { "l'album condiviso non c'e'" }
-      val items = stack.idsOf(stack.contentOf(id).items)
-      if (items != mine) problems += "l'album condiviso non mostra esattamente i miei elementi visibili"
-      if (album.count != mine.size) problems += "il conteggio dell'album condiviso e' ${album.count}, ne attendeva ${mine.size}"
-      if (album.cover.media in w.mustNeverShow) problems += "la copertina dell'album condiviso e' un mio nascosto"
-      album.cover.media?.let { shown += it }
-      shown += items
-      // Per gli altri i miei nascosti ci sono: nascondere vale solo per me (E-H4, E-H5).
-      val theirs = checkNotNull(other.albums.all.value.byId(id)) { "l'album condiviso non c'e' per gli altri" }
-      if (theirs.count != common.size) problems += "per gli altri l'album condiviso conta ${theirs.count}, ne attendeva ${common.size}"
-    }
-    Probed(shown = shown, within = w.showable, problems = problems)
   }
 
   /** Il viewer aperto da un album scorre la vista dell'album: nessun nascosto, e non si arriva a un nascosto nemmeno cercandolo per id. */

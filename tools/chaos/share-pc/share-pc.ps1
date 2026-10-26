@@ -7,6 +7,8 @@
   Modi (-Mode):
     jvm       il banco sul NAS finto in memoria (2.000 giri di norma; nessun NAS, nessuna rete). Gira anche in check.ps1.
     smb       il banco sul simulatore SMB con la sessione di produzione e le primitive vere (600 giri di norma; nessuna rete). Gira anche in check.ps1.
+    sweep     UN colpo a OGNI chiamata di un passo (condividere un album nuovo): per ogni punto e ogni chiamata, la morte del processo, la rete caduta,
+              la sessione scaduta, il socket fermo, prima e dopo; sul NAS finto in memoria e sul simulatore SMB (nessuna rete). Gira anche in check.ps1.
     mutants   i quattro errori introdotti apposta (sorgente nel cestino prima della verifica, voce pubblicata prima del completamento, completamento dopo il
               cestino, conferma riusata): ognuno deve far diventare rosso il banco con l'invariante giusto.
     known     le riproduzioni dei difetti noti del codice di produzione trovati dal banco (SD-1, SD-2; rosse quando si correggono) e il banco che li trova.
@@ -23,9 +25,9 @@
   Con -DryRun stampa cosa farebbe (variabili e comando) e non lancia niente. Il PC e' condiviso con altre build: prima di ogni comando Gradle lo script aspetta
   2 GB di RAM libera; chi lavora con piu' agenti prende prima un posto con gradle-slot.ps1.
 
-.PARAMETER Mode           jvm | smb | mutants | known | area | run | clean
+.PARAMETER Mode           jvm | smb | sweep | mutants | known | area | run | clean | verify
 .PARAMETER Interruptions  Per run: le interruzioni da far cadere (default 500; da 1 a 5.000).
-.PARAMETER Rounds         Per jvm e smb: i giri (default 2000 per jvm, 600 per smb).
+.PARAMETER Rounds         Per jvm e smb: i giri (default 2000 per jvm, 600 per smb). Per sweep: i mondi da spazzare (da 1 a 3, default 2).
 .PARAMETER FirstRound     Per jvm e smb: il primo giro; con -Rounds 1 e lo stesso -Seed rifa' esattamente un giro che e' fallito. Per run: il primo giro del banco
                           (con lo stesso -Seed di base e tante -Interruptions quante ne aveva il giro, lo rifa' sul NAS vero).
 .PARAMETER Seed           Il seme di base (default: quello del banco; per run, casuale e stampato nel rapporto).
@@ -44,7 +46,7 @@
 #>
 [CmdletBinding()]
 param(
-  [Parameter(Mandatory = $true)][ValidateSet("jvm", "smb", "mutants", "known", "area", "run", "clean", "verify")][string]$Mode,
+  [Parameter(Mandatory = $true)][ValidateSet("jvm", "smb", "sweep", "mutants", "known", "area", "run", "clean", "verify")][string]$Mode,
   [int]$Interruptions = 500,
   [int]$Rounds = 0,
   [int]$FirstRound = 0,
@@ -88,6 +90,10 @@ switch ($Mode) {
     $environment["MCG_SHARE_CHAOS_SMB_ROUNDS"] = $(if ($Rounds -gt 0) { "$Rounds" } else { "600" })
     if ($Seed -ne 0) { $environment["MCG_SHARE_CHAOS_SEED"] = "$Seed" }
     if ($FirstRound -ne 0) { $environment["MCG_SHARE_CHAOS_FIRST_ROUND"] = "$FirstRound" }
+  }
+  "sweep" {
+    $test = "*ShareChaosSweepTest*"
+    if ($Rounds -gt 0) { $environment["MCG_SHARE_SWEEP_WORLDS"] = "$Rounds" }
   }
   "mutants" { $test = "*ShareChaosMutationTest*" }
   "known" { $test = "*ShareChaosKnownDefectsTest*" }

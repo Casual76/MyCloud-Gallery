@@ -165,7 +165,7 @@ class ShareChaosRound(
     }
     stepsDone += "${kind.label}: ${selected.size} media"
     val hazard = hazardFor(kind, selected)
-    val blows = ShareChaosBlows.generate(
+    val blows = config.scriptedBlows?.invoke(stepNo) ?: ShareChaosBlows.generate(
       rnd, config, kind,
       movers = selected.count { bench.library[it]?.place == MediaPlace.MY_PRIVATE },
       uploads = selected.count { bench.library[it]?.place == MediaPlace.PHONE_ONLY },

@@ -96,6 +96,11 @@ class ShareChaosConfig(
   val bigPercent: Int = 3,
   /** I difetti noti che il banco evita (di serie tutti): senza, li trova (`ShareChaosKnownDefectsTest`). */
   val avoid: Set<KnownDefect> = KnownDefect.entries.toSet(),
+  /**
+   * I colpi di un passo scritti a mano invece che sorteggiati: `ShareChaosSweepTest` prova UN colpo a ogni chiamata del passo. Riceve il numero del passo
+   * (da 1); null = sorteggia come sempre. Non consuma numeri casuali: il mondo e i passi restano quelli del seme.
+   */
+  val scriptedBlows: ((stepNo: Int) -> Blows?)? = null,
 ) {
   companion object {
     val DEFAULT_WEIGHTS: Map<Surface, Int> = mapOf(

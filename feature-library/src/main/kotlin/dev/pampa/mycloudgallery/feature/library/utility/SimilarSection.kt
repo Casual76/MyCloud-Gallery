@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -22,12 +24,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
@@ -185,8 +187,9 @@ private fun tagOf(view: ClusterView, media: MediaId): String? {
 }
 
 /**
- * Uno scatto: la miniatura e, sopra, "Da tenere" o "Da eliminare" (la parola e il segno, mai il solo colore) e un'etichetta se e' la migliore, una
- * preferita o in un album. Si tocca per cambiare; TalkBack lo legge come una casella.
+ * Uno scatto: la miniatura con, sopra, un'etichetta se e' la migliore, una preferita o in un album, e in basso il segno di cosa ne sara' (la spunta
+ * o il cestino); sotto la miniatura la **parola** ("Da tenere" / "Da eliminare"), mai il solo segno o il solo colore. Si tocca per cambiare (tutta la
+ * colonna e' il bersaglio); TalkBack lo legge come una casella.
  */
 @Composable
 private fun ShotTile(
@@ -202,33 +205,51 @@ private fun ShotTile(
   val state = stringResource(if (removed) R.string.duplicates_shot_remove else R.string.duplicates_shot_keep)
   val photo = stringResource(R.string.duplicates_shot_photo, GalleryNumbers.format(index), GalleryNumbers.format(total))
   val description = listOfNotNull(photo, state, tag).joinToString(", ")
-  Box(
+  Column(
     modifier = Modifier
-      .size(UtilityDimens.ThumbLarge)
+      .width(UtilityDimens.ThumbLarge)
       .toggleable(value = removed, role = Role.Checkbox, onValueChange = { onToggle() })
       .semantics { contentDescription = description },
+    verticalArrangement = Arrangement.spacedBy(UtilityDimens.RowGap / 2),
   ) {
-    MediaThumb(media, loader, refOf, UtilityDimens.ThumbLarge)
-    Pill(
+    Box(modifier = Modifier.size(UtilityDimens.ThumbLarge)) {
+      MediaThumb(media, loader, refOf, UtilityDimens.ThumbLarge)
+      Box(
+        modifier = Modifier
+          .align(Alignment.BottomStart)
+          .padding(CollectionsDimens.PillGap)
+          .size(UtilityDimens.ShotBadge)
+          .background(GalleryOnPhoto.scrim(), FluidCapsuleShape),
+        contentAlignment = Alignment.Center,
+      ) {
+        Icon(
+          imageVector = if (removed) Icons.Rounded.Delete else Icons.Rounded.Check,
+          contentDescription = null,
+          modifier = Modifier.size(UtilityDimens.BadgeGlyph),
+          tint = GalleryOnPhoto.Content,
+        )
+      }
+      if (tag != null) Pill(text = tag, modifier = Modifier.align(Alignment.TopStart).padding(CollectionsDimens.PillGap))
+    }
+    Text(
       text = state,
-      icon = if (removed) Icons.Rounded.Delete else Icons.Rounded.Check,
-      modifier = Modifier.align(Alignment.BottomStart).padding(CollectionsDimens.PillGap),
+      modifier = Modifier.fillMaxWidth(),
+      style = MaterialTheme.typography.labelMedium,
+      color = if (removed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+      textAlign = TextAlign.Center,
     )
-    if (tag != null) Pill(text = tag, icon = null, modifier = Modifier.align(Alignment.TopStart).padding(CollectionsDimens.PillGap))
   }
 }
 
-/** Una pillola scura sopra la foto (la coppia fissa "sopra una foto" del design system), con il segno se c'e'. */
+/** Una pillola scura sopra la foto (la coppia fissa "sopra una foto" del design system): l'etichetta di uno scatto. */
 @Composable
-private fun Pill(text: String, icon: ImageVector?, modifier: Modifier = Modifier) {
+private fun Pill(text: String, modifier: Modifier = Modifier) {
   Row(
     modifier = modifier
       .background(GalleryOnPhoto.scrim(), FluidCapsuleShape)
       .padding(horizontal = CollectionsDimens.DaysPillHorizontal, vertical = CollectionsDimens.DaysPillVertical),
-    horizontalArrangement = Arrangement.spacedBy(CollectionsDimens.PillGap),
     verticalAlignment = Alignment.CenterVertically,
   ) {
-    if (icon != null) Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(UtilityDimens.BadgeGlyph), tint = GalleryOnPhoto.Content)
     Text(text = text, style = MaterialTheme.typography.labelSmall, color = GalleryOnPhoto.Content, maxLines = 1)
   }
 }

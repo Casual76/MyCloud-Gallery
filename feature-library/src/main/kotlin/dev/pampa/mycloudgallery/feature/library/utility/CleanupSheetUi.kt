@@ -58,8 +58,8 @@ private fun cleanupLocations(sheet: CleanupSheet, familyName: (String) -> String
   if (plan.phone.isNotEmpty()) {
     val count = plan.phone.size
     var detail = copiesDetail(count, plan.phone.sumOf { it.size })
-    if (plan.unsafePhone > 0) detail += " " + pluralStringResource(R.plurals.duplicates_sheet_unsafe, plan.unsafePhone, GalleryNumbers.format(plan.unsafePhone))
-    if (sheet.phoneLeft > 0) detail += " " + stringResource(R.string.duplicates_sheet_phone_left, GalleryNumbers.format(PhoneMediaIntents.MAX_REQUEST_URIS))
+    if (plan.unsafePhone > 0) detail += "\n" + pluralStringResource(R.plurals.duplicates_sheet_unsafe, plan.unsafePhone, GalleryNumbers.format(plan.unsafePhone))
+    if (sheet.phoneLeft > 0) detail += "\n" + stringResource(R.string.duplicates_sheet_phone_left, GalleryNumbers.format(PhoneMediaIntents.MAX_REQUEST_URIS))
     out += GalleryDeleteLocation(stringResource(R.string.duplicates_sheet_phone), GalleryDeleteLocationKind.Phone, detail)
   }
   val privateCopies = plan.nas.filter { it.area == CopyArea.MY_PRIVATE }

@@ -42,8 +42,9 @@ internal object UtilityDimens {
   /** La larghezza minima di una colonna dei gruppi simili. */
   val ClusterColumn: Dp = 320.dp
 
-  /** Il lato del segno ("Da tenere") sopra una miniatura. */
+  /** Il lato del segno (la spunta o il cestino) sopra una miniatura, e il tondo che lo porta. */
   val BadgeGlyph: Dp = 14.dp
+  val ShotBadge: Dp = 24.dp
 
   /** Il margine fra la pista delle due schede e le schede stesse. */
   val TabInset: Dp = 4.dp

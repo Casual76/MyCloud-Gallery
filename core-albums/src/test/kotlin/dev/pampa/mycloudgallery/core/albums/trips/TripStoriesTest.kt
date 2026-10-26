@@ -31,6 +31,7 @@ class TripStoriesTest {
   @Test
   fun leStorieSonoInteressanti() {
     val stories = TripStories.all()
+    println("STORIE: ${stories.size} storie, ${stories.sumOf { it.shots.size }} scatti, ${stories.sumOf { it.expect.trips.size }} viaggi attesi, ${stories.sumOf { it.expect.events.size }} eventi attesi")
     assertThat(stories.sumOf { it.expect.trips.size }).isAtLeast(70)
     assertThat(stories.sumOf { it.expect.events.size }).isAtLeast(15)
     assertThat(stories.count { it.expect.home == null }).isEqualTo(1)

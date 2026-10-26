@@ -777,3 +777,176 @@ trigger** dell'FTS4: `ExportedSchemaTest.loSchemaMigratoCoincideConQuelloCheRoom
 | Fette da 4.096 media | Una query sola: il riempimento ripetuto delle finestre del cursore e' quadratico |
 | `FastContentKey` locale con test di parita' | Ottimizzare `ContentKey.of` (e' di core-model: proposta nel report) |
 | Tabelle `ai_*` con DAO semplici, adattatori a P11 | Gli adattatori in `core-database`: non vede core-index |
+
+## 14. Schema v6 (Fase 7: album smart e condivisi, condivisione, viaggi)
+
+Progetto: `docs/fase7-progetto.md` D34 (e D4, D5, D9, D12, D18, D19, D25, D28, D29, D31), §1.2-§1.3 (riga `core-database`), §2.1-§2.5, §4.3, riga P1 del
+§4.4, §5.2; decisioni di P0 e di P1 in `docs/decisioni.md` ("Fase 7 P0", "Fase 7 P1"). Pacchetto P1. La v6 e' **una sola migrazione sul campo per tutta
+la Fase 7** (5 -> 6, mai distruttiva). Le tabelle degli album sono **derivate** (D5): lo stato vero sta nei dati personali (album personali) o nei
+contributi firmati dell'area comune (album condivisi) e si ricostruisce; la proiezione sul catalogo e le repliche sono di P3 e P2. Qui lo schema, le
+colonne derivate, le letture del catalogo per gli album e la porta di completamento degli spostamenti.
+
+**Nessun dato dell'utente nei log** (D37): titoli, cartelle, percorsi, luoghi e coordinate stanno solo nelle colonne; i `toString()` delle entita' e dei
+tipi di questo paragrafo non li stampano.
+
+### 14.1 Tipi
+
+I codici stabili (`ShareLevel`, `AlbumKind`, `AlbumSort`, `TripKind`, `SharedState`, `ShareItemState`, ...) sono di P0 (`core-model`, `core-albums`): le tabelle
+scrivono il **codice** (`StableCode.code`) come testo; una riga con un codice che questa versione non conosce (scritta da un'altra app) e' "non per me". I tipi
+di P1 stanno in `core-database` e hanno la **forma** dei contratti di P0 (core-database non vede core-albums): `AlbumCatalogTypes.kt` (`CandidateQuery`,
+`CandidateKey`, `CatalogCandidate`, `CatalogMediaFacts`, `CommonAttestRequest`, `DuplicateGroup`, `AttachMovedOutcome`, ...), `OriginDevice` e `CopyAreas`.
+
+### 14.2 Tabelle e colonne
+
+Colonne **in piu'** di tabelle esistenti (tutte con DEFAULT; `ALTER TABLE ADD COLUMN`):
+
+| Tabella | Colonna | Cosa |
+|---|---|---|
+| `album` | `kind` (`manual`) | `AlbumKind.code`: `manual` o `smart` |
+| `album` | `sort` (`newest`) | `AlbumSort.code`: l'ordine **dentro** l'album (D21); l'ordine dell'elenco e' un'impostazione sincronizzata, non una colonna |
+| `album` | `frozen` (0) | uno smart congelato non applica le regole (D16) |
+| `album` | `shared_id` | l'album condiviso nato da questo (voce personale `shared`, D4), o NULL |
+| `album` | `state` | NULL per un album personale; `SharedState.code` (`active`, `closed`, `deleted`) per la riga di un album **condiviso** (D5: la replica fusa proiettata nella stessa tabella). Titolo, copertina e ordine dei condivisi stanno qui; il resto in `shared_album` |
+| `album_item` | `origin` (`manual`) | come l'elemento e' entrato: `auto` (un "sicuro" di uno smart), `manual` (voce `item:`), `accepted` (un suggerito accettato, voce `accept:`) |
+| `album_item` | `fp` | l'**impronta** `<qh1 esadecimale>:<dimensione>` che la voce porta (D4): serve a ritrovare il media se gli id divergono fra dispositivi (la stessa dimensione e `qh1` di `PersonalFingerprint`, in esadecimale cosi' si confronta con `media_version.quick_hash` e `size`) |
+| `album_item` | `added_by` | l'account di chi l'ha aggiunto (solo album condivisi: "Aggiunta da ...", Q6, e i permessi); NULL per i personali |
+| `media` | `origin_device` | il dispositivo d'origine, **derivato** (§14.3) |
+| `media` | `copy_areas` (0) | dove stanno le copie presenti sul NAS, **derivato** (§14.3) |
+
+Tabelle **nuove**:
+
+| Tabella | Chiave | Colonne | Note |
+|---|---|---|---|
+| `album_rule` | `album_id`, `rule`, `position` | `value`, `media_id` | le regole di uno smart (D13): una riga per regola (`period`, `place`, `text`, `sources`, `types`, `position` 0) e una per ogni foto d'esempio (`rule` = `example`, `position` 0..5, `media_id`). Il **valore** e' un testo che il database non interpreta (lo scrivono P3 e P6). Chiavi esterne: `album` in cascata, `media` in cascata |
+| `album_exclusion` | `album_id`, `media_id` | `fp` | le esclusioni per sempre (voce `exclude:`, E-AL5). Chiavi esterne in cascata |
+| `album_suggestion` | `album_id`, `media_id` | `reason`, `added_at` | i "Suggerite" calcolati dal motore (D14, S1-S5): non e' un dato personale, non si sincronizza. `added_at` serve a "Nuove: 12" (`AlbumChoiceDao.suggestionCounts`) |
+| `shared_album` | `album_id` | `state`, `level`, `creator`, `heir`, `folder`, `after_close`, `updated_at_nas`, `closed_at_nas` | la definizione **fusa** di un album condiviso (D6-D11, Q5). **Senza chiavi esterne** (replica). La cartella e' il percorso nell'area comune (E-SH16: puo' cambiare) |
+| `shared_album_entry` | `album_id`, `device_id`, `entry_key` | `field`, `at`, `account`, `content_key`, `tombstone`, `body` | le voci **verificate** di ogni contributo (`albums/<album>/<dispositivo>/`), su cui `AlbumFusion` rifonde (D7). `entry_key` e' SHA-256("mcg-album\0" \|\| id album \|\| campo), 64 cifre; `field` = `definition`, `level`, `cover`, `sort`, `item`, `heir`; `content_key` solo per `item` (la chiave di contenuto intera, per attestare e per accorgersi di un doppione, E-SH12); `body` e' il corpo canonico (al piu' 4 KiB) **opaco** per il database. Senza chiavi esterne: i `MediaId` dentro il corpo sono quelli di chi ha scritto. Indici (`album_id`, `content_key`) e (`album_id`, `field`) |
+| `shared_album_head_mark` | `album_id`, `device_id` | `version`, `content_hash`, `registry_version`, `created_at` | l'ultima testa accettata di un dispositivo: l'anti-rollback e l'equivocazione (`HeadMark`, D8) e la `createdAt` con cui si rifiuta una voce nuova con `at` troppo vecchia (§2.4) |
+| `album_share_op` | `op_id` | `album_id`, `kind`, `plan_hash` (unico), `title`, `level`, `nonce_hex`, `folder_share`, `folder_path`, `hidden`, `finished`, `created_at`, `updated_at` | il diario della condivisione (D29, §2.5), campo per campo `ShareOpRecord`. **Locale**, mai sincronizzato. Senza chiavi esterne (un album nuovo non ha ancora la sua riga) |
+| `album_share_item` | `op_id`, `item_index` | `media_id`, `action`, `state`, `mine`, `size`, `content_key`, `source_share`, `source_path`, `dest_share`, `dest_path`, `transfer_key`, `ticket`, `stage_seq`, `safe_copy_requested`, `failure`, `wait`, `updated_at` | `ShareItemRecord`. **Ogni valore di un passo si scrive prima della chiamata che lo usa.** Chiavi esterne: `album_share_op` in cascata, `media` senza cascata (come il diario del backup: il media segue le unioni). Indici su `media_id`, `transfer_key`, `state` |
+| `trip_proposal` | `trip_id` (64 cifre) | `kind`, `from_day`, `to_day`, `label`, `media_count`, `cover_media_id`, `place_ids`, `album_id`, `detected_at` | le proposte della sezione Viaggi (D19, D20). **Locale**; la riscrive la rilevazione notturna. `album_id`: l'album nato da "Crea album" (una proposta gia' album non si ripropone). `cover_media_id` in `SET NULL` |
+| `home_estimate` | `slot` | `kind`, `latitude`, `longitude`, `radius_km`, `days`, `total_days`, `estimated_at` | la "casa" (slot 0) e i luoghi abituali (1..) dedotti **solo in locale** dalle foto proprie con GPS (D18, C19): mai sincronizzata, pubblicata, esportata o scritta nei log. La legge e la scrive solo `core-albums/.../trips/` (`Phase7ArchitectureTest`); la toglie l'azzeramento dei dati locali (§1.4 del progetto) |
+
+Indici **in piu'**: su `media` (`local_day`, `sort_time`, `media_id`), (`place_id`, `local_day`, `sort_time`, `media_id`) e (`origin_device`, `local_day`, `sort_time`,
+`media_id`) per i candidati; su `media_location` (`version_id`, `location_type`) per i doppioni. Gli indici delle chiavi esterne delle tabelle nuove.
+
+### 14.3 Le colonne derivate di `media`
+
+Come `backup_todo` (v4) si ricalcolano nella stessa transazione che cambia le posizioni (`MediaCatalog.derive`) e **non** sono nell'indice della timeline:
+cambiarle da sole non annuncia nulla. La **migrazione le calcola con le stesse regole** (`OriginDevice`, `CopyAreas`); `ExportedSchemaTest` e
+`Migration5To6Test` provano che il primo ricalcolo dopo la migrazione non cambia niente.
+
+**`origin_device`** (regola B di D14, "stesso dispositivo"):
+- `phone`: il media ha una copia **non assente** sul telefono di questo dispositivo;
+- altrimenti `backup:<cartella>`: una copia non assente in una cartella `Backup/<cartella>/` di un'area **privata** (la cartella del dispositivo che il backup
+  sceglie una volta, F5-D6; solo la radice vera `Backup/`: la recinzione di prova del debug scrive sotto un'altra radice che la release non ha e che il dex della release
+  non puo' nominare, `check.ps1`; in debug quei media non hanno un dispositivo). `<cartella>` e' la forma di confronto (NFC, minuscolo) delle chiavi delle
+  posizioni. La cartella `Area comune` (le copie del guardiano) non e' un dispositivo; con piu' cartelle vince la prima in ordine alfabetico;
+- altrimenti NULL. **Marca e modello EXIF** (l'ultimo ripiego di §2.2) non stanno nel catalogo (`version_metadata` non li conserva): finche' nessuno li salva
+  quei media non hanno un dispositivo e le foto sono "suggerite" invece che "sicure" (regola S1); il prefisso `cam:` e' riservato a quel ripiego;
+- **due etichette per lo stesso telefono**: un media che perde la copia sul telefono ("Libera spazio") passa da `phone` a `backup:<la cartella di questo
+  dispositivo>`. Chi confronta (P6) tratta `backup:<propria cartella>` come `phone` (la cartella la sa `AlbumFamily.backupFolderName`, il catalogo no e non gli serve).
+
+**`copy_areas`**: maschera di bit delle copie **presenti** sul NAS: 1 = in una share dichiarata area privata, 2 = nell'area comune, 4 = in una share di area
+sconosciuta (non privata, nel dubbio). Da qui le **sorgenti** degli album smart (`SmartSource`), una **partizione** in quest'ordine: `MY_PHONE` se ha una copia
+presente sul telefono (bit `ON_PHONE`); `MY_PRIVATE` se ha il bit 1; `FAMILY` se `owner_account` e' un altro account; `COMMON` altrimenti. Un mio media passato
+nell'area comune e' quindi `COMMON` (lo dice `CatalogCandidate.ownedByMe`, che serve alla "casa"). Una query con piu' sorgenti prende l'unione delle classi.
+
+### 14.4 Le letture del catalogo per gli album (`MediaCatalog.albums`)
+
+`AlbumCatalog` (letture, non annuncia `changes`; **mai un nascosto**: si legge da `media_personal`, D22). Il testo delle query e' pubblico in `AlbumQueries`
+(i test ne guardano il piano con `EXPLAIN QUERY PLAN`, senza statistiche e con `ANALYZE`).
+
+| Lettura | Cosa | Porta di P0 |
+|---|---|---|
+| `candidates(query, after, limit)` | una pagina di **celle visibili** (non nascoste, una per gruppo, con almeno una copia), con giorno e ora locali, GPS, luogo, dispositivo, sorgente, tipo, schermo, pixel. Il criterio **guida** sceglie l'indice: `originDevice` -> (`origin_device`, `local_day`, `sort_time`, `media_id`); `placeIds` -> (`place_id`, ...), un luogo alla volta in ordine di id; altrimenti il giorno -> (`local_day`, `sort_time`, `media_id`). Gli altri criteri (sorgenti, solo GPS, giorni) sono filtri sulle righe. Ordine (giorno, istante, id) (per luogo: luogo, giorno, istante, id); cursore `CandidateKey`; `next` esatto (si legge una riga in piu') | `AlbumCandidates.page` |
+| `candidatesOf(ids)` | le celle visibili fra queste identita', in ordine | rivalutare i media di un `CatalogChange` |
+| `visibleCount()` | quante celle visibili ha la Libreria (E-AL6) | `AlbumCandidates.visibleTotal` |
+| `daysOf(ids)` | il giorno locale di queste identita' | il ricalcolo incrementale di P6 |
+| `visibleAmong(ids)` | i media presenti e non nascosti, alias compresi | `VisibleMedia.visible` (D22) |
+| `facts(ids)` | dove sta ogni media (`PHONE_ONLY`, `MY_PRIVATE`, `COMMON`, `OTHERS_PRIVATE`: con una copia nell'area comune vince `COMMON`, E-SH11), di chi e', nascosto, video, dimensione, chiave di contenuto, versione, il file del NAS da cui si parte, copia sul telefono. Un id assorbito da un'unione si risolve (la chiave della mappa e' l'id chiesto). Anche i nascosti: li filtra il piano (Q3) | `CatalogFacts.facts` |
+| `attestInCommon(requests)` | D9: per ogni chiave di contenuto (e hash completo, se entrambi lo hanno) il media del catalogo di **chi legge** con una copia **presente nell'area comune**; un elemento che rimanda a un file privato, sparito o diverso non c'e' e non avvia nulla. Con due media con la stessa chiave vince l'id piu' basso. Legge a cursore le versioni dell'area comune | `CatalogFacts.attest` |
+| `duplicates(after, limit)` | i **doppioni identici** (D25): le copie presenti di una stessa versione di un media visibile dalla stessa **parte** (`PHONE`, oppure `NAS` = area privata e comune insieme; una versione puo' dare due gruppi), con area di ogni copia (`PHONE`, `MY_PRIVATE`, `COMMON`, `OTHERS`: E-U1), percorso, dimensione, data, ultima verifica e hash completo della versione (senza, "da verificare", D27). Pagine per `version_id` | Utility -> Doppioni (P8) |
+
+Le **chiavi di contenuto** si calcolano da `qh1` e dimensione con `FastContentKey` (stesso risultato di `ContentKey.of`, provato da `CellContentKeysTest`): non c'e'
+una colonna con la chiave nel catalogo, cosi' `media_version` non cambia; `attestInCommon` le calcola mentre scorre le versioni dell'area comune.
+
+### 14.5 La porta di completamento degli spostamenti: `MediaCatalog.attachMoved`
+
+`attachMoved(media, to, stamp, from, sha256, verifiedAtMillis)` collega il file `to` (arrivato nell'area comune, o in un'altra cartella) allo **stesso** media
+(D29, E-SH2), **prima** che la sorgente vada nel cestino:
+- con `from` (uno spostamento) la riga della posizione di partenza **cambia posto** (stessa `location_id`, stessa versione: `nas_adopted_fingerprint` e
+  tutto cio' che la cita restano); se la scansione aveva gia' visto il file nuovo come un'altra posizione dello stesso media, la partenza diventa **assente**
+  (come la scansione farebbe). Senza `from` (un caricamento `INCOMING` dal telefono) la posizione e' nuova e la copia del telefono resta;
+- `sha256` e' l'hash che il motore ha verificato: se la versione ha l'hash completo e **non** coincide, niente si collega (`ContentMismatch`); se coincide la copia
+  e' verificata adesso. La dimensione deve essere quella della versione (`SizeMismatch`). Non insegna l'hash alla versione (lo fa `FULL_HASH`);
+- **idempotente**: il secondo giro con gli stessi argomenti non scrive e non annuncia niente (`AlreadyAttached`); **una transazione e un solo cambiamento**
+  dell'indice della timeline (un `change_seq` in piu') anche se la riga cambia posto e la partenza diventa assente;
+- un file che e' gia' di **un altro** media non si tocca (`DestinationOfOtherMedia`: la scansione lo unira' con le regole d'identita'); un media che non c'e' piu'
+  (`UnknownMedia`); un id assorbito da un'unione vale il sopravvissuto.
+
+### 14.6 Unione e rinomina d'identita'
+
+Le tabelle nuove che puntano a `media` sono in `MediaCatalog.MEDIA_REFERENCES` e l'unione le sposta (`MergeDao`): le foto d'esempio (`album_rule.media_id`), le
+esclusioni, i suggeriti, gli elementi del diario (`album_share_item.media_id`) e la copertina di una proposta; gli elementi degli album passano con **tutte** le
+colonne (come sono entrati, impronta, chi li ha aggiunti). Dove il sopravvissuto ha gia' la riga resta la sua (un solo elemento per (album, media)). Le altre
+(`shared_album`, `shared_album_entry`, `shared_album_head_mark`, `album_share_op`, `home_estimate`) non hanno identita' di media: stanno in
+`TABLES_WITHOUT_MEDIA_IDS` (`MergeReferencesTest`; `MergeV6Test` prova lo spostamento). Nessuna tabella nuova punta a una versione.
+
+### 14.7 Migrazione 5 -> 6
+
+`Migration5To6`, in una transazione (quella di Room), **mai distruttiva**: 1. le colonne in piu' con i DEFAULT; 2. `album_item.fp` dalla versione corrente del
+media (`<qh1>:<dimensione>`, la stessa che `fingerprintOfMedia` di core-personal da' alle voci); 3. `origin_device` (`phone` con un `UPDATE` solo; le cartelle
+`Backup/<dispositivo>/` con `OriginDevice.ofNasKey`, la stessa funzione del catalogo) e `copy_areas` (un `UPDATE` per area); 4. le tabelle nuove, vuote; 5. gli indici,
+**dopo** aver riempito i derivati. Gli album e gli elementi che c'erano diventano album manuali personali (`kind` `manual`, `sort` `newest` il predefinito dei
+manuali D21, `origin` `manual`, `state` NULL). Le SQL sono copiate da `6.json`; `ExportedSchemaTest` confronta le definizioni di `sqlite_master` migrate con
+quelle che Room crea da zero. Su API 29 (SQLite 3.22) niente `UPSERT`, `RETURNING`, `DROP COLUMN`.
+
+**Mai una sottoquery correlata fra `media` e le posizioni** (`UPDATE ... WHERE EXISTS (... v.media_id = media.media_id ...)`): senza statistiche SQLite puo' scorrere le
+posizioni per ogni media e la migrazione diventa quadratica (10.000 media = 90 s). I derivati si scrivono con `WHERE media_id IN (sottoquery indipendente)` e `CROSS JOIN`
+che fissa l'ordine (dalle posizioni, giu' per chiave primaria): 10.000 media = 0,3 s, 100.000 = 7 s. La prova e' `Migration5To6ScaleTest`.
+
+### 14.8 Invarianti e prove
+
+| Invarianti | Prova |
+|---|---|
+| 1 -> 6, 2 -> 6, 3 -> 6, 4 -> 6 e 5 -> 6 (con i seed, `seedV5` per la 5) si aprono e non perdono nulla; una v6 con una riga per tabella si riapre | `ExportedSchemaTest` |
+| 4 -> 6 e 5 -> 6 non cambiano **nessuna riga** delle tabelle esistenti (colonna per colonna fra quelle che c'erano) e le tabelle nuove nascono vuote | `leMigrazioniDalla4EDalla5NonCambianoNessunaRigaEsistente` |
+| lo schema migrato (tabelle, indici, FTS4 e trigger) e' quello che Room crea da zero | `loSchemaMigratoCoincideConQuelloCheRoomCreaDaZero` |
+| `origin_device` e `copy_areas` dalla migrazione = quelli del catalogo, in quattordici situazioni (telefono, `Backup/<dispositivo>/`, una radice che non e' `Backup`, `Area comune`, area comune, share sconosciuta, assenti, non raggiungibili); l'impronta degli elementi e' quella della versione corrente; il ricalcolo li riscrive uguali | `Migration5To6Test` |
+| la stessa migrazione su 100.000 media (in un file vero): derivati giusti per ognuno, nessuna chiave esterna rotta | `Migration5To6ScaleTest` |
+| le tabelle nuove che puntano a `media` sono nell'unione, le altre classificate; la replica non ha colonne con un'identita' locale | `MergeReferencesTest` |
+| l'unione sposta foto d'esempio, esclusioni, suggeriti, diario e copertina di una proposta, e gli elementi con tutte le colonne | `MergeV6Test` |
+| i DAO bastano alle sequenze dei pacchetti dopo (riepiloghi, replica, diario atomico, viaggi, casa), con la cascata e i rifiuti | `AlbumTablesV6Test` |
+| candidati: ordine, pagine esatte, mai un nascosto ne' un membro di gruppo, sorgenti, giorno e ora locali, indici guida | `AlbumCandidatesTest` |
+| fatti, attestazione (chiave, hash, area, stato), doppioni per parte, visibilita', alias | `AlbumFactsTest` |
+| `attachMoved`: stessa riga, secondo giro muto, un solo cambiamento, scansione arrivata prima, rifiuti | `AttachMovedTest` |
+| piani senza `USE TEMP B-TREE`, tempi, risultati uguali al calcolo a mano su 100.000 media | `AlbumQueriesPerformanceTest` |
+| le regole del dispositivo d'origine e delle aree (funzioni pure) | `OriginDeviceTest` |
+
+### 14.9 Misure (JVM, Robolectric; il dispositivo si misura a M2)
+
+Libreria sintetica da 100.000 media (`BigLibrary`: 3 anni di giorni, 200 luoghi, tre dispositivi, le tre aree, nascosti, membri di gruppo, 3.016 doppioni).
+
+| Misura | Esito |
+|---|---|
+| candidati per giorno / luogo / dispositivo, una pagina da 500 | **0-4 ms**; la seconda pagina 4-9 ms; nessun `USE TEMP B-TREE` (senza statistiche e dopo `ANALYZE`) |
+| doppioni identici, 3.016 gruppi in una chiamata | **72-87 ms** |
+| `facts` di 500 media; `candidatesOf` di 500; `attestInCommon` di 1.000 elementi su 10.000 file dell'area comune | 8 ms; 4 ms; 30-47 ms |
+| `visibleCount` | 20 ms |
+| migrazione 5 -> 6 di 100.000 media | **6,7 s** (apertura, migrazione, indici e validazione di Room, file vero); il database passa da 151 a 178 MB (+27 MB) |
+
+### 14.10 Scelte e scarti della v6
+
+| Scelta | Alternative scartate e perche' |
+|---|---|
+| Album condivisi nella tabella `album` (`state` non NULL) | Una tabella `album` per i personali e una per i condivisi: due elenchi, due copertine, due conteggi per le Raccolte |
+| `fp` come testo `<qh1>:<dimensione>` | Due colonne (`fp_size`, `fp_qh`): due indici per ritrovare un media che ne ha gia' uno (`size`, `quick_hash`); base32 come nel formato: non si confronta con le versioni |
+| `album_rule` una riga per regola, valore opaco | Una colonna per regola: ogni regola nuova e' una migrazione; un solo JSON: due modifiche contemporanee di due regole si perdono (D4) |
+| `origin_device` e `copy_areas` derivati nello stesso passo di `derive` | Calcolarli a ogni query unendo le posizioni (un join in piu' per candidato: da 3 ms a decine); una tabella a parte (un'altra chiave esterna da tenere) |
+| Chiave di contenuto senza colonna | Una colonna in `media_version` per ogni versione: riempirla in migrazione e a ogni scrittura per una lettura di 30 ms |
+| `place_id IN (...)` con un ordinamento | `USE TEMP B-TREE`; un luogo alla volta evita l'ordinamento in memoria |
+| Indice (`version_id`, `location_type`) per i doppioni | Leggere le righe di tutte le versioni con piu' posizioni (telefono + NAS e' il caso comune: 271 ms su 100.000); una colonna derivata di conteggio (un altro derivato da tenere) |
+| `attachMoved` sposta la riga | Creare la posizione nuova e lasciare la vecchia (la sorgente in cestino resterebbe "presente" fino alla scansione: il media sembrerebbe al sicuro); `relocate` (non guarda l'altro media ne' l'hash) |
+| Replica senza chiavi esterne | Tabelle con chiavi esterne a `media` per gli elementi dei contributi: i `MediaId` dentro le voci sono di chi ha scritto, non i locali (D9) |

@@ -124,30 +124,42 @@ class ExportedSchemaTest {
   }
 
   /**
-   * 4 -> 5 non distrugge **mai** dati: ogni riga di ogni tabella della v4 (con `seedV4`) e' identica dopo la migrazione, colonna per
-   * colonna, e le tabelle nuove nascono vuote (le tabelle FTS4 comprese).
+   * 4 -> 6 e 5 -> 6 non distruggono **mai** dati: ogni riga di ogni tabella della versione di partenza (con il suo seed) e' identica dopo
+   * la migrazione, colonna per colonna **tra quelle che c'erano** (le colonne nuove hanno i loro valori: `album_item.fp`, `origin_device`,
+   * ... li provano i test della v6), e le tabelle nuove nascono vuote (le tabelle FTS4 comprese).
    */
   @Test
-  fun laMigrazioneDalla4NonCambiaNessunaRigaEsistente() {
-    val name = "migrazione-4-5-righe.db"
-    val file = createFromSchema(4, name) { SchemaSeeds.seed(4, it) }
-    val before = SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY).use { dumpOf(it, userTables(it)) }
-    assertThat(before.getValue("media")).isNotEmpty()
-    assertThat(before.getValue("backup_item")).isNotEmpty()
+  fun leMigrazioniDalla4EDalla5NonCambianoNessunaRigaEsistente() {
+    for (from in listOf(4, 5)) {
+      val name = "migrazione-$from-6-righe.db"
+      val file = createFromSchema(from, name) { SchemaSeeds.seed(from, it) }
+      val (columns, before) = SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+        val tables = userTables(db)
+        val columns = tables.associateWith { columnsOf(db, it) }
+        columns to dumpOf(db, columns)
+      }
+      assertThat(before.getValue("media")).isNotEmpty()
+      assertThat(before.getValue("backup_item")).isNotEmpty()
 
-    val database = GalleryDatabase.build(context, name)
-    try {
-      val sql = database.openHelper.writableDatabase
-      assertThat(dumpOf(sql, before.keys)).isEqualTo(before)
-      sql.query("PRAGMA foreign_key_check").use { assertThat(it.count).isEqualTo(0) }
-      val added = userTables(sql) - before.keys
-      assertThat(added).containsAtLeast(
-        "ai_vector", "ai_text", "ai_text_fts", "ai_vocabulary", "search_history", "ai_pending_publish", "ai_own_head", "ai_own_segment",
-        "ai_own_live", "ai_replica_head", "ai_replica_segment", "ai_replica_entry", "ai_replica_applied", "ai_replica_dirty",
-      )
-      added.forEach { table -> sql.query("SELECT COUNT(*) FROM `$table`").use { assertThat(it.moveToFirst() && it.getInt(0) == 0).isTrue() } }
-    } finally {
-      database.close()
+      val database = GalleryDatabase.build(context, name)
+      try {
+        val sql = database.openHelper.writableDatabase
+        assertWithMessage("Dalla v$from").that(dumpOf(sql, columns)).isEqualTo(before)
+        sql.query("PRAGMA foreign_key_check").use { assertThat(it.count).isEqualTo(0) }
+        val added = userTables(sql) - before.keys
+        val v6 = setOf(
+          "album_rule", "album_exclusion", "album_suggestion", "shared_album", "shared_album_entry", "shared_album_head_mark",
+          "album_share_op", "album_share_item", "trip_proposal", "home_estimate",
+        )
+        val v5 = setOf(
+          "ai_vector", "ai_text", "ai_text_fts", "ai_vocabulary", "search_history", "ai_pending_publish", "ai_own_head", "ai_own_segment",
+          "ai_own_live", "ai_replica_head", "ai_replica_segment", "ai_replica_entry", "ai_replica_applied", "ai_replica_dirty",
+        )
+        assertThat(added).containsAtLeastElementsIn(if (from < 5) v5 + v6 else v6)
+        added.forEach { table -> sql.query("SELECT COUNT(*) FROM `$table`").use { assertThat(it.moveToFirst() && it.getInt(0) == 0).isTrue() } }
+      } finally {
+        database.close()
+      }
     }
   }
 
@@ -162,11 +174,14 @@ class ExportedSchemaTest {
       "AND name NOT IN ('android_metadata', 'room_master_table') ORDER BY name",
   ).use { c -> buildSet { while (c.moveToNext()) add(c.getString(0)) } }
 
-  private fun dumpOf(db: SQLiteDatabase, tables: Collection<String>): Map<String, List<String>> =
-    tables.associateWith { table -> rowsOf(db.rawQuery("SELECT * FROM `$table`", null)) }
+  private fun columnsOf(db: SQLiteDatabase, table: String): List<String> =
+    db.rawQuery("PRAGMA table_info(`$table`)", null).use { c -> buildList { while (c.moveToNext()) add(c.getString(c.getColumnIndexOrThrow("name"))) } }
 
-  private fun dumpOf(db: androidx.sqlite.db.SupportSQLiteDatabase, tables: Collection<String>): Map<String, List<String>> =
-    tables.associateWith { table -> rowsOf(db.query("SELECT * FROM `$table`")) }
+  private fun dumpOf(db: SQLiteDatabase, columns: Map<String, List<String>>): Map<String, List<String>> =
+    columns.mapValues { (table, names) -> rowsOf(db.rawQuery("SELECT ${names.joinToString { "`$it`" }} FROM `$table`", null)) }
+
+  private fun dumpOf(db: androidx.sqlite.db.SupportSQLiteDatabase, columns: Map<String, List<String>>): Map<String, List<String>> =
+    columns.mapValues { (table, names) -> rowsOf(db.query("SELECT ${names.joinToString { "`$it`" }} FROM `$table`")) }
 
   /** Ogni riga come testo (i blob in esadecimale), in ordine di lettura: una riga cambiata o persa cambia il testo. */
   private fun rowsOf(cursor: Cursor): List<String> = cursor.use { c ->
@@ -248,7 +263,31 @@ class ExportedSchemaTest {
 
   // --- Creazione di un database dallo schema esportato ----------------------------------------------
 
-  private fun createFromSchema(version: Int, name: String, seed: (SQLiteDatabase) -> Unit = {}): File {
+  private fun createFromSchema(version: Int, name: String, seed: (SQLiteDatabase) -> Unit = {}): File =
+    SchemaFiles.create(context, schemaDir, version, name, seed)
+
+  private fun schemaOf(cursor: Cursor): List<String> = cursor.use {
+    buildList {
+      while (it.moveToNext()) {
+        add(listOf(it.getString(0), it.getString(1), it.getString(2), it.getString(3)?.replace(Regex("\\s+"), " ")).joinToString(" | "))
+      }
+    }
+  }
+
+  private companion object {
+    const val SCHEMA_SQL =
+      "SELECT type, name, tbl_name, sql FROM sqlite_master " +
+        "WHERE name NOT LIKE 'sqlite_%' AND name NOT IN ('android_metadata', 'room_master_table') ORDER BY type, name"
+  }
+}
+
+/** Un database creato **esattamente** come lo avrebbe creato una versione dell'app, dal suo JSON esportato (non dalle entita' di oggi). */
+internal object SchemaFiles {
+
+  private const val TABLE_PLACEHOLDER = "\${TABLE_NAME}"
+  private const val VIEW_PLACEHOLDER = "\${VIEW_NAME}"
+
+  fun create(context: Context, schemaDir: File, version: Int, name: String, seed: (SQLiteDatabase) -> Unit = {}): File {
     val schema = JSONObject(File(schemaDir, "$version.json").readText()).getJSONObject("database")
     check(schema.getInt("version") == version) { "Il file $version.json non descrive la versione $version." }
     val file = context.getDatabasePath(name)
@@ -291,22 +330,6 @@ class ExportedSchemaTest {
     }
     return file
   }
-
-  private fun schemaOf(cursor: Cursor): List<String> = cursor.use {
-    buildList {
-      while (it.moveToNext()) {
-        add(listOf(it.getString(0), it.getString(1), it.getString(2), it.getString(3)?.replace(Regex("\\s+"), " ")).joinToString(" | "))
-      }
-    }
-  }
-
-  private companion object {
-    const val TABLE_PLACEHOLDER = "\${TABLE_NAME}"
-    const val VIEW_PLACEHOLDER = "\${VIEW_NAME}"
-    const val SCHEMA_SQL =
-      "SELECT type, name, tbl_name, sql FROM sqlite_master " +
-        "WHERE name NOT LIKE 'sqlite_%' AND name NOT IN ('android_metadata', 'room_master_table') ORDER BY type, name"
-  }
 }
 
 /**
@@ -338,7 +361,74 @@ object SchemaSeeds {
     3 -> seedV3(db)
     4 -> seedV4(db)
     5 -> seedV5(db)
+    6 -> seedV6(db)
     else -> error("Manca il seed della versione $version dello schema (vedi SchemaSeeds).")
+  }
+
+  // --- v6 (Fase 7) ---
+  private const val SHARED_ALBUM_ID = "55555555-5555-4555-8555-555555555555"
+  private const val SMART_ALBUM_ID = "66666666-6666-4666-8666-666666666666"
+  private const val SHARE_OP_ID = "77777777-7777-4777-8777-777777777777"
+  private const val TRIP_ID = "99999999999999999999999999999999999999999999999999999999999999ab"
+
+  /**
+   * La v6: le righe della v5 (l'album di Oslo e il suo elemento, con le colonne nuove ai loro DEFAULT) piu' un album smart con regole,
+   * esclusione e suggerito, un album condiviso con la sua replica, un'operazione di condivisione con un elemento, una proposta di
+   * viaggio e la "casa", con i codici scritti a mano. Il media del seed ha una copia sul telefono e una nell'area privata: `origin_device`
+   * `phone` e `copy_areas` 1, come li calcolerebbe il catalogo.
+   */
+  private fun seedV6(db: SQLiteDatabase) {
+    seedV5(db)
+    db.execSQL("UPDATE media SET origin_device = 'phone', copy_areas = 1 WHERE media_id = '$MEDIA_ID'")
+    db.execSQL("UPDATE album_item SET origin = 'manual', fp = '$QUICK:300000', added_by = NULL WHERE album_id = '$ALBUM_ID'")
+    db.execSQL(
+      "INSERT INTO album (album_id, title, cover_media_id, created_at, updated_at, kind, sort, frozen, shared_id, state) VALUES " +
+        "('$SMART_ALBUM_ID', 'Oslo 2026', '$MEDIA_ID', $T0, $T0, 'smart', 'oldest', 1, '$SHARED_ALBUM_ID', NULL), " +
+        "('$SHARED_ALBUM_ID', 'Oslo 2026', NULL, $T0, $T0, 'manual', 'newest', 0, NULL, 'active')",
+    )
+    db.execSQL(
+      "INSERT INTO album_item (album_id, media_id, position, added_at, origin, fp, added_by) VALUES " +
+        "('$SMART_ALBUM_ID', '$MEDIA_ID', 2000, $T0, 'auto', '$QUICK:300000', NULL), " +
+        "('$SHARED_ALBUM_ID', '$MEDIA_ID', 1000, $T0, 'manual', '$QUICK:300000', 'marco')",
+    )
+    db.execSQL(
+      "INSERT INTO album_rule (album_id, rule, position, value, media_id) VALUES " +
+        "('$SMART_ALBUM_ID', 'period', 0, '20260301-20260307', NULL), ('$SMART_ALBUM_ID', 'text', 0, 'tramonto', NULL), " +
+        "('$SMART_ALBUM_ID', 'example', 0, '', '$MEDIA_ID')",
+    )
+    db.execSQL("INSERT INTO album_exclusion (album_id, media_id, fp) VALUES ('$SMART_ALBUM_ID', '$MEDIA_ID', '$QUICK:300000')")
+    db.execSQL("INSERT INTO album_suggestion (album_id, media_id, reason, added_at) VALUES ('$SMART_ALBUM_ID', '$MEDIA_ID', 's1', $T0)")
+    db.execSQL(
+      "INSERT INTO shared_album (album_id, state, level, creator, heir, folder, after_close, updated_at_nas, closed_at_nas) VALUES " +
+        "('$SHARED_ALBUM_ID', 'closed', 'add', 'alessio', 'marco', 'Album condivisi/Oslo 2026', 'keep_copy', $T0, ${T0 + 9})",
+    )
+    db.execSQL(
+      "INSERT INTO shared_album_entry (album_id, device_id, entry_key, field, at, account, content_key, tombstone, body) VALUES " +
+        "('$SHARED_ALBUM_ID', 'tablet', '$RECORD_KEY', 'item', $T0, 'marco', '$CONTENT_KEY', 0, X'7B7D')",
+    )
+    db.execSQL(
+      "INSERT INTO shared_album_head_mark (album_id, device_id, version, content_hash, registry_version, created_at) VALUES " +
+        "('$SHARED_ALBUM_ID', 'tablet', 4, '$SEGMENT', 9, $T0)",
+    )
+    db.execSQL(
+      "INSERT INTO album_share_op (op_id, album_id, kind, plan_hash, title, level, nonce_hex, folder_share, folder_path, hidden, " +
+        "finished, created_at, updated_at) VALUES ('$SHARE_OP_ID', '$SHARED_ALBUM_ID', 'share', '$SEGMENT', 'Oslo 2026', 'add', " +
+        "'00112233445566778899aabbccddeeff', 'NAS', 'Album condivisi/Oslo 2026', 'leave_out', 0, $T0, $T0)",
+    )
+    db.execSQL(
+      "INSERT INTO album_share_item (op_id, item_index, media_id, action, state, mine, size, content_key, source_share, source_path, " +
+        "dest_share, dest_path, transfer_key, ticket, stage_seq, safe_copy_requested, failure, wait, updated_at) VALUES " +
+        "('$SHARE_OP_ID', 0, '$MEDIA_ID', 'move_in', 'transferring', 1, 300000, '$CONTENT_KEY', 'alessio', 'Backup/S25/IMG_0001.jpg', " +
+        "'NAS', 'Album condivisi/Oslo 2026/IMG_0001.jpg', 'k-1', 't-1', 3, 0, NULL, 'locked', $T0)",
+    )
+    db.execSQL(
+      "INSERT INTO trip_proposal (trip_id, kind, from_day, to_day, label, media_count, cover_media_id, place_ids, album_id, detected_at) " +
+        "VALUES ('$TRIP_ID', 'trip', 20260301, 20260307, 'Oslo, marzo 2026', 120, '$MEDIA_ID', '$OSLO,3144000', '$SMART_ALBUM_ID', $T0)",
+    )
+    db.execSQL(
+      "INSERT INTO home_estimate (slot, kind, latitude, longitude, radius_km, days, total_days, estimated_at) VALUES " +
+        "(0, 'home', 45.07, 7.68, 2.5, 80, 200, $T0), (1, 'habitual', 43.7, 10.4, 3.0, 25, 200, $T0)",
+    )
   }
 
   // --- v5 (Fase 6) ---
@@ -819,6 +909,52 @@ object SchemaSeeds {
       assertThat(database.aiReplicaDao().body("alessio", "tablet", SEGMENT, 8, CONTENT_KEY)!!.toList()).containsExactly(10.toByte(), 11.toByte()).inOrder()
       assertThat(database.aiReplicaDao().allApplied("alessio").single().device).isEqualTo("tablet")
       assertThat(database.aiReplicaDao().dirty("alessio").single().contentKey).isEqualTo(CONTENT_KEY)
+    }
+
+    // --- v6 (Fase 7) ---
+    val sql = database.openHelper.readableDatabase
+    // L'album e l'elemento della v1 sono un album manuale personale; il titolo e la copertina non cambiano. `fp` e' l'impronta del
+    // media (qh1 e dimensione della versione corrente): la ricava la migrazione, e la v6 del seed la porta gia'.
+    val album = checkNotNull(database.albumDao().get(ALBUM_ID))
+    assertThat(album.title).isEqualTo("Oslo 2026")
+    assertThat(album.coverMediaId).isEqualTo(MEDIA_ID)
+    assertThat(listOf(album.kind, album.sort, album.frozen, album.sharedId, album.state)).containsExactly("manual", "newest", false, null, null).inOrder()
+    val item = database.albumDao().items(ALBUM_ID).single()
+    assertThat(listOf(item.origin, item.fp, item.addedBy)).containsExactly("manual", "$QUICK:300000", null).inOrder()
+    // Il media del seed ha una copia sul telefono e una nell'area privata: `origin_device` `phone`, `copy_areas` area privata.
+    val fresh = checkNotNull(database.mediaDao().get(MEDIA_ID))
+    assertThat(fresh.originDevice).isEqualTo(OriginDevice.PHONE)
+    assertThat(fresh.copyAreas).isEqualTo(CopyAreas.PRIVATE)
+    val v6Tables = listOf(
+      "album_rule", "album_exclusion", "album_suggestion", "shared_album", "shared_album_entry", "shared_album_head_mark", "album_share_op",
+      "album_share_item", "trip_proposal", "home_estimate",
+    )
+    if (fromVersion < 6) {
+      // Le tabelle nuove nascono vuote (e di album ce n'e' uno solo: quello della v1).
+      v6Tables.forEach { table -> sql.query("SELECT COUNT(*) FROM `$table`").use { assertThat(it.moveToFirst() && it.getInt(0) == 0).isTrue() } }
+      assertThat(database.albumDao().all().map { it.albumId }).containsExactly(ALBUM_ID)
+    } else {
+      assertThat(database.albumDao().all().map { it.albumId }).containsExactly(ALBUM_ID, SMART_ALBUM_ID, SHARED_ALBUM_ID)
+      val smart = checkNotNull(database.albumDao().get(SMART_ALBUM_ID))
+      assertThat(listOf(smart.kind, smart.sort, smart.frozen, smart.sharedId, smart.state)).containsExactly("smart", "oldest", true, SHARED_ALBUM_ID, null).inOrder()
+      assertThat(database.albumDao().get(SHARED_ALBUM_ID)!!.state).isEqualTo("active")
+      assertThat(database.albumDao().items(SHARED_ALBUM_ID).single().addedBy).isEqualTo("marco")
+      assertThat(database.albumDao().items(SMART_ALBUM_ID).single().origin).isEqualTo("auto")
+      assertThat(database.albumRuleDao().rules(SMART_ALBUM_ID).map { it.rule to it.mediaId })
+        .containsExactly("example" to MEDIA_ID, "period" to null, "text" to null).inOrder()
+      assertThat(database.albumChoiceDao().exclusions(SMART_ALBUM_ID).single().fp).isEqualTo("$QUICK:300000")
+      assertThat(database.albumChoiceDao().suggestions(SMART_ALBUM_ID).single().reason).isEqualTo("s1")
+      val shared = checkNotNull(database.sharedAlbumDao().get(SHARED_ALBUM_ID))
+      assertThat(listOf(shared.state, shared.level, shared.creator, shared.heir, shared.afterClose)).containsExactly("closed", "add", "alessio", "marco", "keep_copy").inOrder()
+      assertThat(database.sharedAlbumDao().entries(SHARED_ALBUM_ID).single().contentKey).isEqualTo(CONTENT_KEY)
+      assertThat(database.sharedAlbumDao().mark(SHARED_ALBUM_ID, "tablet")!!.registryVersion).isEqualTo(9)
+      val op = checkNotNull(database.shareDiaryDao().opByPlan(SEGMENT))
+      assertThat(op.opId).isEqualTo(SHARE_OP_ID)
+      assertThat(database.shareDiaryDao().openOps().map { it.opId }).containsExactly(SHARE_OP_ID)
+      val shareItem = database.shareDiaryDao().items(SHARE_OP_ID).single()
+      assertThat(listOf(shareItem.state, shareItem.wait, shareItem.transferKey, shareItem.stageSeq)).containsExactly("transferring", "locked", "k-1", 3L).inOrder()
+      assertThat(database.tripDao().proposals().single().placeIds).isEqualTo("$OSLO,3144000")
+      assertThat(database.tripDao().home().map { it.kind }).containsExactly("home", "habitual").inOrder()
     }
 
     // I derivati scritti dalla migrazione (o dal seed) sono quelli che il catalogo calcola: ricalcolarli

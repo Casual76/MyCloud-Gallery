@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.core.database.dao
 
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
@@ -166,20 +167,51 @@ interface PersonalDao {
   fun observeFavoriteIds(): Flow<List<String>>
 }
 
+/**
+ * Gli album e i loro elementi (v1, estesi dalla v6). Sono tabelle **derivate** (D5): le scrive la proiezione degli album (P3, per i
+ * personali) e la replica degli album condivisi (P2), sempre in una transazione (`GalleryDatabase.transaction`); la lettura per le
+ * schermate passa da [summaries] e dalle viste di `core-library`. I `MediaId` che contiene seguono le unioni d'identita'
+ * ([MergeDao.copyAlbumItems]).
+ */
 @Dao
 interface AlbumDao {
 
   @Insert
   suspend fun insert(album: AlbumEntity)
 
+  /** Crea o riscrive la riga di un album (la proiezione la riscrive tutta a ogni giro). */
+  @Upsert
+  suspend fun upsert(album: AlbumEntity)
+
   @Query("SELECT * FROM album WHERE album_id = :albumId")
   suspend fun get(albumId: String): AlbumEntity?
+
+  @Query("SELECT * FROM album ORDER BY album_id")
+  suspend fun all(): List<AlbumEntity>
+
+  /** Tutti gli album (personali e condivisi) che si aggiornano da soli: l'elenco delle Raccolte. */
+  @Query("SELECT * FROM album ORDER BY album_id")
+  fun observeAll(): Flow<List<AlbumEntity>>
+
+  /** Toglie l'album con tutto cio' che e' suo (elementi, regole, esclusioni, suggeriti: in cascata). */
+  @Query("DELETE FROM album WHERE album_id = :albumId")
+  suspend fun delete(albumId: String)
 
   @Upsert
   suspend fun upsertItem(item: AlbumItemEntity)
 
+  @Upsert
+  suspend fun upsertItems(items: List<AlbumItemEntity>)
+
   @Query("DELETE FROM album_item WHERE album_id = :albumId AND media_id = :mediaId")
   suspend fun removeItem(albumId: String, mediaId: String)
+
+  @Query("DELETE FROM album_item WHERE album_id = :albumId")
+  suspend fun clearItems(albumId: String)
+
+  /** Toglie gli elementi di un album entrati in un certo modo (`auto`: il ricalcolo di uno smart riparte dai manuali e accettati). */
+  @Query("DELETE FROM album_item WHERE album_id = :albumId AND origin = :origin")
+  suspend fun clearItemsByOrigin(albumId: String, origin: String)
 
   @Query("SELECT * FROM album_item WHERE album_id = :albumId ORDER BY position, media_id")
   suspend fun items(albumId: String): List<AlbumItemEntity>
@@ -189,7 +221,34 @@ interface AlbumDao {
 
   @Query("SELECT * FROM album_item WHERE media_id = :mediaId ORDER BY album_id")
   suspend fun itemsOfMedia(mediaId: String): List<AlbumItemEntity>
+
+  /** Gli album personali legati a un album condiviso (voce `shared`, D4): di norma uno. */
+  @Query("SELECT * FROM album WHERE shared_id = :sharedId ORDER BY album_id")
+  suspend fun linkedTo(sharedId: String): List<AlbumEntity>
+
+  /**
+   * Per ogni album: quanti elementi **mostrabili** ha (media visibile, non nascosto, una cella per gruppo: D22, E-H5) e il giorno
+   * locale del piu' recente ("Data dei media"). Un album senza elementi mostrabili non compare. Un solo passaggio sulle righe di
+   * `album_item`; i nascosti si leggono da `media_personal`, mai da un derivato (D22).
+   */
+  @Query(SUMMARIES_SQL)
+  suspend fun summaries(): List<AlbumSummaryRow>
+
+  companion object {
+    const val SUMMARIES_SQL: String =
+      "SELECT ai.album_id AS album_id, COUNT(*) AS visible_count, MAX(m.local_day) AS newest_day FROM album_item ai " +
+        "JOIN media m ON m.media_id = ai.media_id LEFT JOIN media_personal p ON p.media_id = m.media_id " +
+        "WHERE m.presence != 'none' AND COALESCE(p.hidden, 0) = 0 AND (m.cell_flags & ${CellFlags.GROUP_MEMBER}) = 0 " +
+        "GROUP BY ai.album_id"
+  }
 }
+
+/** Una riga di [AlbumDao.summaries]. */
+data class AlbumSummaryRow(
+  @ColumnInfo(name = "album_id") val albumId: String,
+  @ColumnInfo(name = "visible_count") val visibleCount: Int,
+  @ColumnInfo(name = "newest_day") val newestDay: Int?,
+)
 
 /**
  * Le istruzioni dell'unione di due media (`MediaCatalog.merge`): spostano ogni riferimento dal
@@ -215,9 +274,10 @@ interface MergeDao {
   @Query("UPDATE media_version SET media_id = :mediaId, parent_version_id = :parentId WHERE version_id = :versionId")
   suspend fun moveVersion(versionId: String, mediaId: String, parentId: String?)
 
+  /** v6: l'elemento passa al sopravvissuto con **tutte** le sue colonne (come e' entrato, l'impronta, chi l'ha aggiunto). */
   @Query(
-    "INSERT OR IGNORE INTO album_item (album_id, media_id, position, added_at) " +
-      "SELECT album_id, :survivor, position, added_at FROM album_item WHERE media_id = :loser",
+    "INSERT OR IGNORE INTO album_item (album_id, media_id, position, added_at, origin, fp, added_by) " +
+      "SELECT album_id, :survivor, position, added_at, origin, fp, added_by FROM album_item WHERE media_id = :loser",
   )
   suspend fun copyAlbumItems(loser: String, survivor: String)
 
@@ -271,6 +331,32 @@ interface MergeDao {
   /** P14: una sola correzione solo nell'app per versione: se la versione di destinazione ne ha gia' una resta quella. */
   @Query("UPDATE OR IGNORE metadata_correction SET version_id = :to WHERE version_id = :from")
   suspend fun repointMetadataCorrection(from: String, to: String)
+
+  // --- v6 (Fase 7): regole, esclusioni, suggeriti, diario della condivisione e proposte di viaggio --------------------------------
+
+  /** Una foto d'esempio ha una riga per posizione (`album_rule`: la chiave comprende `position`), quindi non c'e' nulla da fondere. */
+  @Query("UPDATE album_rule SET media_id = :survivor WHERE media_id = :loser")
+  suspend fun repointAlbumRules(loser: String, survivor: String)
+
+  /** Una sola esclusione per (album, media): se il sopravvissuto ce l'ha gia' resta la sua. */
+  @Query(
+    "INSERT OR IGNORE INTO album_exclusion (album_id, media_id, fp) " +
+      "SELECT album_id, :survivor, fp FROM album_exclusion WHERE media_id = :loser",
+  )
+  suspend fun copyAlbumExclusions(loser: String, survivor: String)
+
+  @Query(
+    "INSERT OR IGNORE INTO album_suggestion (album_id, media_id, reason, added_at) " +
+      "SELECT album_id, :survivor, reason, added_at FROM album_suggestion WHERE media_id = :loser",
+  )
+  suspend fun copyAlbumSuggestions(loser: String, survivor: String)
+
+  /** Il diario della condivisione non perde nessun elemento: la chiave comprende l'indice, non il media. */
+  @Query("UPDATE album_share_item SET media_id = :survivor WHERE media_id = :loser")
+  suspend fun repointAlbumShareItems(loser: String, survivor: String)
+
+  @Query("UPDATE trip_proposal SET cover_media_id = :survivor WHERE cover_media_id = :loser")
+  suspend fun repointTripCovers(loser: String, survivor: String)
 
   /** P14 (E-X3): cambia il tipo e il genitore di una versione (la copia di un editor diventa una versione `edited`). */
   @Query("UPDATE media_version SET kind = :kind, parent_version_id = :parentId WHERE version_id = :versionId")

@@ -124,8 +124,15 @@ data class MediaPersonalEntity(
 )
 
 /**
- * Un album manuale (dato personale). Minimo: serve a garantire fin dalla v1 che gli album puntino a
- * identita' stabili. La Fase 7 lo estende (ordinamento, album smart, condivisi) con una migrazione.
+ * Un album. Nato nella v1 come album manuale minimo (cosi' gli album puntano a identita' stabili); la v6 (Fase 7, D34) lo estende per
+ * tutti i tipi: **personale** (manuale o smart, `state` NULL; voci `ALBUM` dei dati personali proiettate dal catalogo, D3-D5) e
+ * **condiviso** (`state` non NULL: la replica fusa degli album dell'area comune, D6-D11; il resto e' in `shared_album`). La riga e'
+ * **derivata**: si puo' ricostruire in ogni momento dallo stato (D5). Il perche' e le colonne: `docs/modello-dati.md` §14.
+ *
+ * - `kind`: `AlbumKind.code` (`manual`, `smart`); `sort`: `AlbumSort.code`, l'ordine **dentro** l'album (D21); `frozen`: uno smart
+ *   congelato non applica le regole (D16);
+ * - `shared_id`: l'album condiviso nato da questo (voce personale `shared`, D4), o NULL;
+ * - `state`: NULL per un album personale, `SharedState.code` per la riga di un album condiviso.
  */
 @Entity(
   tableName = "album",
@@ -146,8 +153,23 @@ data class AlbumEntity(
   @ColumnInfo(name = "cover_media_id") val coverMediaId: String?,
   @ColumnInfo(name = "created_at") val createdAt: Long,
   @ColumnInfo(name = "updated_at") val updatedAt: Long,
-)
+  // --- v6 (Fase 7, D34) ---
+  @ColumnInfo(name = "kind", defaultValue = "'manual'") val kind: String = "manual",
+  @ColumnInfo(name = "sort", defaultValue = "'newest'") val sort: String = "newest",
+  @ColumnInfo(name = "frozen", defaultValue = "0") val frozen: Boolean = false,
+  @ColumnInfo(name = "shared_id") val sharedId: String? = null,
+  @ColumnInfo(name = "state") val state: String? = null,
+) {
+  /** Mai il titolo (D37). */
+  override fun toString(): String = "AlbumEntity(kind=$kind, state=$state)"
+}
 
+/**
+ * Un elemento di un album. v6: `origin` dice come c'e' entrato (`auto` = un "sicuro" di uno smart, `manual` = voce `item:`,
+ * `accepted` = un suggerito accettato, voce `accept:`); `fp` e' l'**impronta** `<qh1 esadecimale>:<dimensione>` che la voce porta
+ * (D4: serve a ritrovare il media se gli id divergono fra dispositivi); `added_by` l'account di chi l'ha aggiunto (solo album
+ * condivisi: "Aggiunta da ...", Q6, e i permessi).
+ */
 @Entity(
   tableName = "album_item",
   primaryKeys = ["album_id", "media_id"],
@@ -174,4 +196,8 @@ data class AlbumItemEntity(
   @ColumnInfo(name = "media_id") val mediaId: String,
   @ColumnInfo(name = "position") val position: Long,
   @ColumnInfo(name = "added_at") val addedAt: Long,
+  // --- v6 (Fase 7, D34) ---
+  @ColumnInfo(name = "origin", defaultValue = "'manual'") val origin: String = "manual",
+  @ColumnInfo(name = "fp") val fp: String? = null,
+  @ColumnInfo(name = "added_by") val addedBy: String? = null,
 )

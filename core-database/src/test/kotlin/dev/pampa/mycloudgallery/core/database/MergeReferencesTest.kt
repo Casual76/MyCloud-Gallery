@@ -82,6 +82,18 @@ class MergeReferencesTest {
       assertThat(MediaCatalog.TABLES_WITHOUT_MEDIA_IDS).containsAtLeastElementsIn(v5)
       assertThat(tables).containsAtLeastElementsIn(v5)
       assertThat((MediaCatalog.MEDIA_REFERENCES + MediaCatalog.VERSION_REFERENCES).filter { it.substringBefore('.') in v5 }).isEmpty()
+      // Schema v6 (Fase 7, D34): le tabelle che puntano a un media (foto d'esempio delle regole, esclusioni, suggeriti, diario della
+      // condivisione, copertina di una proposta) sono nell'unione (`MergeV6Test` prova che spostino le righe); la replica degli album
+      // condivisi, l'operazione del diario e la "casa" non hanno identita' di media.
+      assertThat(MediaCatalog.MEDIA_REFERENCES).containsAtLeast(
+        "album_rule.media_id", "album_exclusion.media_id", "album_suggestion.media_id", "album_share_item.media_id", "trip_proposal.cover_media_id",
+      )
+      val v6WithoutMediaIds = setOf("shared_album", "shared_album_entry", "shared_album_head_mark", "album_share_op", "home_estimate")
+      assertThat(MediaCatalog.TABLES_WITHOUT_MEDIA_IDS).containsAtLeastElementsIn(v6WithoutMediaIds)
+      assertThat(tables).containsAtLeastElementsIn(v6WithoutMediaIds)
+      assertThat((MediaCatalog.MEDIA_REFERENCES + MediaCatalog.VERSION_REFERENCES).filter { it.substringBefore('.') in v6WithoutMediaIds }).isEmpty()
+      // La replica porta gli id di media di chi ha scritto dentro il corpo: nessuna colonna col nome di un'identita' locale (D9).
+      assertThat(columnsOf(sql, "shared_album_entry").filter { it.endsWith("media_id") }).isEmpty()
       assertThat(tables).containsAtLeastElementsIn(MediaCatalog.TABLES_WITHOUT_MEDIA_IDS)
       assertThat(tables).containsAtLeastElementsIn(MediaCatalog.TABLES_WITH_INDEX_IDS)
       assertThat(MediaCatalog.TABLES_WITHOUT_MEDIA_IDS.intersect(MediaCatalog.TABLES_WITH_INDEX_IDS)).isEmpty()
@@ -125,4 +137,7 @@ class MergeReferencesTest {
       database.close()
     }
   }
+
+  private fun columnsOf(sql: androidx.sqlite.db.SupportSQLiteDatabase, table: String): List<String> =
+    sql.query("PRAGMA table_info(`$table`)").use { c -> buildList { while (c.moveToNext()) add(c.getString(c.getColumnIndexOrThrow("name"))) } }
 }

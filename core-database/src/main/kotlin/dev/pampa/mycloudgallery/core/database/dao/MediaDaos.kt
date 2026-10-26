@@ -56,11 +56,12 @@ interface MediaDao {
   @Query("UPDATE media SET current_version_id = :versionId, updated_at = :now WHERE media_id = :mediaId")
   suspend fun setCurrentVersion(mediaId: String, versionId: String, now: Long)
 
-  /** Riscrive i campi derivati (v2 e v4 compresi): li calcola solo `MediaCatalog`, con le regole di dominio. */
+  /** Riscrive i campi derivati (v2, v4 e v6 compresi): li calcola solo `MediaCatalog`, con le regole di dominio. */
   @Query(
     "UPDATE media SET presence = :presence, safety = :safety, sort_time = :sortTime, local_day = :localDay, " +
       "aspect_milli = :aspectMilli, duration_ms = :durationMs, place_id = :placeId, cell_flags = :cellFlags, " +
-      "thumb_hash = :thumbHash, backup_todo = :backupTodo, updated_at = :now WHERE media_id = :mediaId",
+      "thumb_hash = :thumbHash, backup_todo = :backupTodo, origin_device = :originDevice, copy_areas = :copyAreas, " +
+      "updated_at = :now WHERE media_id = :mediaId",
   )
   suspend fun updateDerived(
     mediaId: String,
@@ -74,6 +75,8 @@ interface MediaDao {
     cellFlags: Int,
     thumbHash: ByteArray?,
     backupTodo: Boolean,
+    originDevice: String?,
+    copyAreas: Int,
     now: Long,
   )
 

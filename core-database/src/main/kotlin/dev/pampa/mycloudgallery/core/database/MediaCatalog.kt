@@ -153,6 +153,12 @@ class MediaCatalog(
    */
   val aiIndex: AiIndexCatalog = AiIndexCatalog(database)
 
+  /**
+   * Fase 7 (P1, schema v6): le letture degli album (candidati degli smart e dei viaggi, fatti per la condivisione, attestazione degli
+   * elementi condivisi, Doppioni). Solo letture: non scrive il grafo dei media e non annuncia [changes].
+   */
+  val albums: AlbumCatalog = AlbumCatalog(database, localAccount)
+
   private val writeLock = Mutex()
   private val changeFlow = MutableSharedFlow<CatalogChange>(
     extraBufferCapacity = CHANGE_BUFFER,
@@ -788,6 +794,73 @@ class MediaCatalog(
     val mediaId = mediaOf(locationId)
     tx.touch(mediaId)
     tx.refChanged(mediaId)
+  }
+
+  /**
+   * **La porta di completamento degli spostamenti** (Fase 7, D29, E-SH2; `MoveCompletionSink` e fine di un caricamento `INCOMING`):
+   * collega il file [to], appena arrivato nell'area comune (o in un'altra cartella), allo **stesso** [media] (stessa identita',
+   * stessa versione), cosi' preferiti, nascosti, album, vettori e gruppi restano collegati **prima** che la sorgente vada nel cestino.
+   *
+   * - [from] e' la posizione di partenza (uno spostamento): se e' una posizione di questo media la sua riga **passa** al posto nuovo
+   *   (stessa riga, stessa versione); se la destinazione c'era gia' (la scansione l'ha vista per prima) la sorgente diventa assente,
+   *   come la scansione farebbe. Senza [from] (un caricamento dal telefono) la posizione e' nuova e la copia del telefono resta;
+   * - [sha256] e' l'hash verificato dal motore: se la versione ha l'hash completo e **non** coincide, i byte non sono quelli e non si
+   *   collega niente ([AttachMovedOutcome.ContentMismatch]); se coincide la copia e' verificata adesso ([verifiedAtMillis], o l'ora del
+   *   catalogo). Non insegna l'hash alla versione: lo fa il giro `FULL_HASH`;
+   * - **idempotente**: il secondo giro con gli stessi argomenti non scrive niente e non annuncia niente ([AttachMovedOutcome.AlreadyAttached]);
+   * - **una transazione e un solo cambiamento** dell'indice della timeline, anche se la riga cambia posto e la sorgente diventa assente;
+   * - mai niente sul NAS: solo il catalogo locale. Un file che e' gia' di **un altro** media non si tocca (la scansione lo unira' con
+   *   le regole d'identita'): niente e' scritto e l'esito lo dice.
+   */
+  suspend fun attachMoved(
+    media: MediaId,
+    to: Location.Nas,
+    stamp: FileStamp,
+    from: LocationKey? = null,
+    sha256: Sha256? = null,
+    verifiedAtMillis: Long? = null,
+  ): AttachMovedOutcome = write { tx ->
+    val id = resolve(media) ?: return@write AttachMovedOutcome.UnknownMedia
+    val graph = mediaDao.graph(id.value)?.toDomain() ?: return@write AttachMovedOutcome.UnknownMedia
+    val source = from?.let { locationDao.byKey(it.value) }?.takeIf { versionDao.get(it.versionId)?.mediaId == id.value }
+    val dest = locationDao.byKey(to.key.value)
+    if (dest != null && versionDao.get(dest.versionId)?.mediaId != id.value) return@write AttachMovedOutcome.DestinationOfOtherMedia
+    val versionId = VersionId((dest ?: source)?.versionId ?: graph.currentVersionId.value)
+    val version = graph.versions.firstOrNull { it.id == versionId } ?: return@write AttachMovedOutcome.UnknownMedia
+    if (stamp.size != version.fingerprint.size) return@write AttachMovedOutcome.SizeMismatch
+    val full = version.fingerprint.fullHash
+    if (sha256 != null && full != null && full != sha256) return@write AttachMovedOutcome.ContentMismatch
+    val now = clock()
+    val verified = if (sha256 != null && full == sha256) verifiedAtMillis ?: now else null
+    var changed = false
+    val destId: Long
+    if (dest != null) {
+      destId = dest.locationId
+      val needsUpdate = dest.state != LocationState.PRESENT.code || dest.size != stamp.size || dest.modifiedAt != stamp.modifiedAtMillis ||
+        (verified != null && dest.verifiedAt == null) || (to.fileId != null && dest.fileId != to.fileId)
+      if (needsUpdate) {
+        val keep = dest.verifiedAt.takeIf { dest.size == stamp.size && dest.modifiedAt == stamp.modifiedAtMillis }
+        locationDao.update(locationEntity(dest.locationId, versionId, to, stamp, LocationState.PRESENT, null, verified ?: keep, now))
+        changed = true
+      }
+    } else if (source != null) {
+      // La stessa riga cambia posto: location_id, versione e tutto cio' che ci punta (nas_adopted_fingerprint, ...) restano.
+      destId = source.locationId
+      locationDao.update(locationEntity(source.locationId, versionId, to, stamp, LocationState.PRESENT, null, verified, now))
+      changed = true
+    } else {
+      destId = locationDao.insert(locationEntity(0, versionId, to, stamp, LocationState.PRESENT, null, verified, now))
+      changed = true
+    }
+    // Il file e' arrivato anche dove la scansione l'ha visto per prima: la partenza non c'e' piu' (e' nel cestino), come direbbe la scansione.
+    if (dest != null && source != null && source.locationId != destId && source.state != LocationState.ABSENT.code) {
+      locationDao.update(source.copy(state = LocationState.ABSENT.code, absentSince = now, verifiedAt = null))
+      changed = true
+    }
+    if (!changed) return@write AttachMovedOutcome.AlreadyAttached
+    tx.touch(id)
+    tx.refChanged(id)
+    AttachMovedOutcome.Attached
   }
 
   /**
@@ -2356,6 +2429,12 @@ class MediaCatalog(
     mergeDao.copyAlbumItems(loser, survivor)
     mergeDao.repointAlbumCovers(loser, survivor)
     mergeDao.repointGroupCovers(loser, survivor)
+    // v6: foto d'esempio, esclusioni, suggeriti, diario della condivisione e copertine delle proposte restano attaccati al sopravvissuto.
+    mergeDao.repointAlbumRules(loser, survivor)
+    mergeDao.copyAlbumExclusions(loser, survivor)
+    mergeDao.copyAlbumSuggestions(loser, survivor)
+    mergeDao.repointAlbumShareItems(loser, survivor)
+    mergeDao.repointTripCovers(loser, survivor)
     // v4: nessuna riga del diario, del problema o delle attivita' si perde con il perdente.
     mergeDao.repointBackupItemMedia(loser, survivor)
     mergeDao.repointBackupProblem(loser, survivor)
@@ -2545,6 +2624,9 @@ class MediaCatalog(
     val staleProblem: Boolean,
     /** Campo, gruppo A (D4): il candidato del backup e' rimasto senza copie: la riga `lost_before_backup` si scrive (E-B4). */
     val lostBeforeBackup: Boolean = false,
+    /** v6 (Fase 7): il dispositivo d'origine e dove stanno le copie sul NAS ([OriginDevice], [CopyAreas]). */
+    val originDevice: String? = null,
+    val copyAreas: Int = 0,
   ) {
     val visible: Boolean get() = presence != Presence.NONE && !hidden
   }
@@ -2665,6 +2747,8 @@ class MediaCatalog(
       backupTodo = TimelineRules.backupTodo(presence, safety, markedProblem),
       staleProblem = problem != null && safety == SafetyStatus.SAFE,
       lostBeforeBackup = lostBeforeBackup,
+      originDevice = OriginDevice.of(media.locations, areas),
+      copyAreas = CopyAreas.of(media.locations, areas),
     )
   }
 
@@ -2680,7 +2764,7 @@ class MediaCatalog(
     val same = row.presence == d.presence.code && row.safety == d.safety.code && row.sortTime == d.sortTime &&
       row.localDay == d.localDay && row.aspectMilli == d.aspectMilli && row.durationMs == d.durationMs &&
       row.placeId == d.placeId && row.cellFlags == d.cellFlags && row.thumbHash.contentEquals(d.thumbHash) &&
-      row.backupTodo == d.backupTodo
+      row.backupTodo == d.backupTodo && row.originDevice == d.originDevice && row.copyAreas == d.copyAreas
     if (same) return
     mediaDao.updateDerived(
       mediaId = row.mediaId,
@@ -2694,9 +2778,11 @@ class MediaCatalog(
       cellFlags = d.cellFlags,
       thumbHash = d.thumbHash,
       backupTodo = d.backupTodo,
+      originDevice = d.originDevice,
+      copyAreas = d.copyAreas,
       now = now,
     )
-    // `backup_todo` non e' nell'indice della timeline: da solo non annuncia nulla.
+    // `backup_todo`, `origin_device` e `copy_areas` non sono nell'indice della timeline: da soli non annunciano nulla.
     if (row.presence == d.presence.code && row.safety == d.safety.code && row.sortTime == d.sortTime && row.localDay == d.localDay &&
       row.aspectMilli == d.aspectMilli && row.durationMs == d.durationMs && row.placeId == d.placeId && row.cellFlags == d.cellFlags &&
       row.thumbHash.contentEquals(d.thumbHash)
@@ -2745,6 +2831,12 @@ class MediaCatalog(
       "media_group.cover_media_id",
       "album.cover_media_id",
       "album_item.media_id",
+      // v6 (Fase 7): le regole (foto d'esempio), le esclusioni, i suggeriti, il diario della condivisione e la copertina di una proposta
+      "album_rule.media_id",
+      "album_exclusion.media_id",
+      "album_suggestion.media_id",
+      "album_share_item.media_id",
+      "trip_proposal.cover_media_id",
       // v4 (Fase 5): il diario del backup, il problema di un media e le tabelle della 5B che riguardano un media
       "backup_item.media_id",
       "backup_problem.media_id",
@@ -2827,6 +2919,14 @@ class MediaCatalog(
       "ai_replica_entry",
       "ai_replica_applied",
       "ai_replica_dirty",
+      // v6 (Fase 7): la replica degli album condivisi porta gli id di media di chi ha scritto (non quelli locali: si attestano per
+      // chiave di contenuto, D9) e nessuna chiave esterna; il diario ha l'operazione (i suoi elementi puntano ai media, lui no); la
+      // "casa" non e' di nessun media.
+      "shared_album",
+      "shared_album_entry",
+      "shared_album_head_mark",
+      "album_share_op",
+      "home_estimate",
     )
 
     /**

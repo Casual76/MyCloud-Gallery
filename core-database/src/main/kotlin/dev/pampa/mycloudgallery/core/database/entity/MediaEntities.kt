@@ -65,6 +65,11 @@ import androidx.room.RoomWarnings
     // v4 (Fase 5A): i candidati del backup per `sort_time` decrescente, senza scorrere i media che non lo sono e senza ordinare
     // in memoria (`MediaCatalog.backupCandidates`).
     Index(value = ["backup_todo", "sort_time", "media_id"]),
+    // v6 (Fase 7, D34): i candidati degli album smart e dei viaggi per giorno locale, per luogo e per dispositivo d'origine, nell'ordine
+    // (giorno, istante, id) e senza ordinare in memoria (`AlbumQueries`, `AlbumQueriesPerformanceTest` con `EXPLAIN QUERY PLAN`).
+    Index(value = ["local_day", "sort_time", "media_id"]),
+    Index(value = ["place_id", "local_day", "sort_time", "media_id"]),
+    Index(value = ["origin_device", "local_day", "sort_time", "media_id"]),
   ],
 )
 data class MediaEntity(
@@ -97,6 +102,19 @@ data class MediaEntity(
    * timeline (non e' in `IndexRow`): cambiarlo non annuncia nulla da solo.
    */
   @ColumnInfo(name = "backup_todo", defaultValue = "0") val backupTodo: Boolean = false,
+  // --- v6 (Fase 7, D34): derivati per gli album smart e i viaggi ---
+  /**
+   * Il dispositivo d'origine (regola B di D14), **derivato** (`OriginDevice`): `phone` se il media ha una copia (non assente) su questo
+   * telefono, altrimenti `backup:<cartella>` se sta nella cartella `Backup/<cartella>/` di un'area privata, altrimenti NULL. Come
+   * `backup_todo` non e' nell'indice della timeline: cambiarlo da solo non annuncia nulla. Mai nei log (nomina un dispositivo).
+   */
+  @ColumnInfo(name = "origin_device") val originDevice: String? = null,
+  /**
+   * Dove stanno le copie **presenti** sul NAS, derivato (`CopyAreas`): bit 1 = in un'area privata, 2 = nell'area comune, 4 = in una
+   * share di area sconosciuta. Serve alle sorgenti degli album smart (`SmartSource`) senza unire le posizioni a ogni candidato. Come
+   * `origin_device` non e' nell'indice della timeline.
+   */
+  @ColumnInfo(name = "copy_areas", defaultValue = "0") val copyAreas: Int = 0,
 ) {
   // Un ByteArray non ha l'uguaglianza per contenuto: la si scrive a mano.
   override fun equals(other: Any?): Boolean = other is MediaEntity && sameScalars(other) && thumbHash.contentEquals(other.thumbHash)
@@ -107,7 +125,8 @@ data class MediaEntity(
     mediaId == o.mediaId && kind == o.kind && source == o.source && ownerAccount == o.ownerAccount && groupId == o.groupId &&
       currentVersionId == o.currentVersionId && createdAt == o.createdAt && updatedAt == o.updatedAt && sortTime == o.sortTime &&
       presence == o.presence && safety == o.safety && localDay == o.localDay && aspectMilli == o.aspectMilli &&
-      durationMs == o.durationMs && placeId == o.placeId && cellFlags == o.cellFlags && backupTodo == o.backupTodo
+      durationMs == o.durationMs && placeId == o.placeId && cellFlags == o.cellFlags && backupTodo == o.backupTodo &&
+      originDevice == o.originDevice && copyAreas == o.copyAreas
 }
 
 /**
@@ -188,6 +207,9 @@ data class MediaVersionEntity(
     // v4 (Fase 5A): le copie di una share per `verified_at`: la riverifica a rotazione (dalla verifica piu' vecchia, Q10) e le
     // copie non ancora verificate (`verified_at` NULL) senza scorrere le posizioni del telefono ne' quelle di altre share.
     Index(value = ["account_id", "share_key", "verified_at"]),
+    // v6 (Fase 7, D25): i doppioni identici (due copie della stessa versione dalla stessa parte) si trovano dall'indice da solo
+    // (raggruppando per versione e per tipo, in ordine d'indice, senza leggere la tabella e senza ordinare): `AlbumQueries.MULTI_LOCATION_VERSIONS_SQL`.
+    Index(value = ["version_id", "location_type"]),
   ],
 )
 data class MediaLocationEntity(

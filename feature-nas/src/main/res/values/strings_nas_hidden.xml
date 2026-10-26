@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 7 (P9, D23): in Cartelle NAS i file nascosti nella Libreria non si elencano per nome (I8 della revisione 4B). Il numero arriva già scritto. -->
+  <plurals name="nas_hidden_row_title">
+    <item quantity="one">%1$s elemento nascosto</item>
+    <item quantity="other">%1$s elementi nascosti</item>
+  </plurals>
+  <string name="nas_hidden_row_detail">Sono nascosti nella Libreria: qui non se ne mostra il nome.</string>
+  <string name="nas_hidden_unknown_title">Non riesco a controllare i nascosti</string>
+  <string name="nas_hidden_unknown_detail">Per non mostrare per sbaglio un elemento nascosto, qui i file non si elencano. Riprova fra poco.</string>
+</resources>

@@ -20,6 +20,7 @@ import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import dev.pampa.mycloudgallery.feature.nas.folders.FolderWhere
 import dev.pampa.mycloudgallery.feature.nas.folders.FoldersActions
 import dev.pampa.mycloudgallery.feature.nas.folders.FoldersUiState
+import dev.pampa.mycloudgallery.feature.nas.folders.HiddenFiles
 import dev.pampa.mycloudgallery.feature.nas.folders.NasFoldersScreen
 import dev.pampa.mycloudgallery.feature.nas.operations.NasOperationsScreen
 import dev.pampa.mycloudgallery.feature.nas.operations.operationsUi
@@ -66,6 +67,7 @@ class NasAccessibilityTest : ComposeNasTest() {
     listing = NasFolderState.Listing(NasFixtures.tripEntries(), readOnly, null),
     selecting = selecting,
     selection = selection,
+    hidden = HiddenFiles.Known(emptySet()),
   )
 
   @Test

@@ -59,6 +59,19 @@ class FakeNasAreas(areas: List<NasArea> = defaultAreas()) : NasAreas {
     return plan.items.count { !it.isFolder && it.srcPath.value in hiddenPaths }
   }
 
+  /** Fase 7 (P9, I8): le domande sui file di un elenco; il test controlla che il VM chieda e che non mostri i nomi prima della risposta. */
+  val hiddenFileAsks: MutableList<Pair<String, List<dev.pampa.mycloudgallery.core.trust.nas.SharePath>>> = ArrayList()
+
+  /** Se non e' vuoto, la risposta sui file nascosti aspetta questo: l'elenco e' arrivato e `:app` non ha ancora risposto. */
+  var hiddenFilesGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+
+  override suspend fun hiddenFiles(share: String, files: Collection<dev.pampa.mycloudgallery.core.trust.nas.SharePath>): Set<dev.pampa.mycloudgallery.core.trust.nas.SharePath> {
+    hiddenFileAsks += share to files.toList()
+    hiddenFilesGate?.await()
+    check(!failing) { "catalogo non raggiungibile" }
+    return files.filterTo(HashSet()) { it.value in hiddenPaths }
+  }
+
   fun set(areas: List<NasArea>) {
     state.value = areas
   }

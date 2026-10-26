@@ -237,7 +237,6 @@ class NasFoldersViewModelTest {
   fun r11_SpostandoNellaStessaAreaNonSiChiedeDeiNascosti() = runTest(dispatcher) {
     populate()
     areas.hiddenPaths += "Viaggi/Oslo/b.jpg"
-    areas.failing = true // se si chiedesse al catalogo, sarebbe un errore: nella stessa area non serve
     val vm = viewModel()
     vm.goTo(FolderWhere("test", null))
     settle()
@@ -245,6 +244,8 @@ class NasFoldersViewModelTest {
     vm.startMove()
     vm.goTo(FolderWhere("test", SharePath.of("Viaggi")))
     settle()
+    // Se si chiedesse al catalogo dei nascosti per il piano, sarebbe un errore: nella stessa area non serve. (Gli elenchi sono gia' letti.)
+    areas.failing = true
     vm.moveHere()
     settle()
     assertThat(vm.state.value.confirm).isNotNull()
@@ -315,11 +316,13 @@ class NasFoldersViewModelTest {
   @Test
   fun r11_SeTuttoCioCheSiSpostaENascostoLaScelteCeMaLasciandoliNonRestaNiente() = runTest(dispatcher) {
     populate()
-    areas.hiddenPaths += "nota.txt"
+    // Un file nascosto non si elenca (I8), quindi non si sceglie da solo: si sceglie la cartella che contiene soltanto nascosti.
+    kit.putFile("test", "Segreti/s.jpg", byteArrayOf(8, 8))
+    areas.hiddenPaths += "Segreti/s.jpg"
     val vm = viewModel()
     vm.goTo(FolderWhere("test", null))
     settle()
-    vm.toggle(SharePath.of("nota.txt"))
+    vm.toggle(SharePath.of("Segreti"))
     vm.startMove()
     vm.goTo(FolderWhere("test-comune", SharePath.of("Famiglia")))
     settle()

@@ -53,6 +53,18 @@ interface NasAreas {
   suspend fun hiddenItems(plan: OpPlan): Set<Int> = HiddenSearch.find(plan, ::hiddenAmong)
 
   /**
+   * Fase 7 (P9, D23; chiude I8 della revisione 4B): quali fra i [files] di [share] l'utente ha **nascosto** nella Libreria (il file e' di un media
+   * nascosto, o di un gruppo di copie in cui qualcuno lo e'). Cartelle NAS non ne mostra il nome: al loro posto una riga "N elementi nascosti".
+   * Lo sa `:app` (catalogo e dati personali), mai il NAS.
+   *
+   * **Fallisce chiuso.** Se la risposta non c'e' (un'eccezione, o un'implementazione che non la da') la schermata non elenca nessun file: meglio
+   * una cartella che mostra solo le sottocartelle che un nome nascosto per sbaglio. Per questo di serie **lancia**: chi implementa `NasAreas`
+   * deve rispondere, e un fake dei test dice esplicitamente quali file sono nascosti.
+   */
+  suspend fun hiddenFiles(share: String, files: Collection<SharePath>): Set<SharePath> =
+    throw UnsupportedOperationException("Chi implementa NasAreas deve dire quali file sono nascosti.")
+
+  /**
    * NA-10 (E-N15): le cartelle dell'**area privata** che l'utente ha escluso dalla Libreria. E' un'impostazione personale sincronizzata
    * fra i dispositivi dell'account (Q9): le legge la scansione a ogni giro. Escludere non cancella ne' sposta niente sul NAS: le foto
    * della cartella escono dalla Libreria e tornano se la cartella si include di nuovo.

@@ -250,6 +250,9 @@ class NasOrganizer(
 
     override suspend fun hiddenAmong(plan: OpPlan): Int = hiddenIn(plan)
 
+    // Fase 7 (P9, D23, I8): Cartelle NAS non elenca per nome i file nascosti nella Libreria.
+    override suspend fun hiddenFiles(share: String, files: Collection<SharePath>): Set<SharePath> = hiddenFilesIn(share, files)
+
     // NA-10: le cartelle dell'area privata escluse dalla Libreria (impostazione personale sincronizzata, Q9).
     override val privateExclusions: StateFlow<Set<SharePath>> = partsFlow
       .flatMapLatest { p -> p?.personalSettings?.privateAreaExclusions ?: flowOf(emptySet()) }
@@ -715,6 +718,22 @@ class NasOrganizer(
     return CatalogHidden.hiddenAmong(database, keys)
   }
 
+  /**
+   * Fase 7 (P9, D23, I8 della 4B): quali dei [files] di [share] (percorsi dell'elenco di Cartelle NAS) sono di media nascosti nella Libreria. Senza
+   * il NAS pronto non si sa: lancia, e la schermata non elenca nessun file (fallire chiusi). Un file che il catalogo non conosce ancora (nuovo,
+   * non ancora scansionato) non e' nascosto: nessun dato personale lo riguarda.
+   */
+  private suspend fun hiddenFilesIn(share: String, files: Collection<SharePath>): Set<SharePath> {
+    val p = partsFlow.value ?: error("NAS non pronto: nessuna risposta sui nascosti.")
+    val byKey = HashMap<String, SharePath>(files.size * 2)
+    for (file in files) {
+      val key = runCatching { Location.Nas(p.account, share, NasPath.of(file.value)).key.value }.getOrNull() ?: continue
+      byKey[key] = file
+    }
+    val hiddenKeys = CatalogHidden.hiddenLocationKeys(database, byKey.keys)
+    return hiddenKeys.mapNotNullTo(HashSet()) { byKey[it] }
+  }
+
   private fun NasArea.toScope(): NasAreaScope = if (this == NasArea.PRIVATE) NasAreaScope.PRIVATE else NasAreaScope.COMMON
 
   private fun NasShareArea.toScreenArea() = dev.pampa.mycloudgallery.feature.nas.contract.NasArea(
@@ -892,17 +911,28 @@ internal object CatalogHidden {
   }
 
   /** Quante delle posizioni [locationKeys] (`media_location.location_key`) sono di media nascosti. */
-  suspend fun hiddenAmong(database: GalleryDatabase, locationKeys: List<String>): Int {
-    if (locationKeys.isEmpty()) return 0
+  suspend fun hiddenAmong(database: GalleryDatabase, locationKeys: List<String>): Int = hiddenLocationKeys(database, locationKeys).size
+
+  /**
+   * Quali delle posizioni [locationKeys] (`media_location.location_key`) sono di media nascosti: il media e' nascosto, **oppure** lo e' un
+   * altro membro del suo gruppo (copie simili, raffica, RAW+JPEG: il nascosto e' contagioso, F5-D36, E-L11). Prima contava solo il flag del
+   * media: una copia di un gruppo con un solo nascosto, scritto a meta', sarebbe finita nell'area comune e nella riga dei file di Cartelle NAS
+   * (Fase 7, P9, D23). Sola lettura, solo dai dati personali di questo dispositivo: mai dal NAS.
+   */
+  suspend fun hiddenLocationKeys(database: GalleryDatabase, locationKeys: Collection<String>): Set<String> {
+    if (locationKeys.isEmpty()) return emptySet()
     return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-      var hidden = 0
+      val hidden = HashSet<String>()
       for (chunk in locationKeys.distinct().chunked(CHUNK)) {
         val marks = chunk.joinToString(",") { "?" }
         database.openHelper.readableDatabase.query(
-          "SELECT COUNT(*) FROM media_location l JOIN media_version v ON v.version_id = l.version_id " +
-            "JOIN media_personal m ON m.media_id = v.media_id WHERE m.hidden = 1 AND l.location_key IN ($marks)",
+          "SELECT l.location_key FROM media_location l JOIN media_version v ON v.version_id = l.version_id " +
+            "WHERE l.location_key IN ($marks) AND (" +
+            "EXISTS (SELECT 1 FROM media_personal p WHERE p.media_id = v.media_id AND p.hidden = 1) " +
+            "OR EXISTS (SELECT 1 FROM media m JOIN media g ON g.group_id = m.group_id JOIN media_personal gp ON gp.media_id = g.media_id " +
+            "WHERE m.media_id = v.media_id AND m.group_id IS NOT NULL AND gp.hidden = 1))",
           chunk.toTypedArray<Any?>(),
-        ).use { c -> if (c.moveToFirst()) hidden += c.getInt(0) }
+        ).use { c -> while (c.moveToNext()) hidden += c.getString(0) }
       }
       hidden
     }

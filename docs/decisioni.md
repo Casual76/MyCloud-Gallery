@@ -5899,7 +5899,8 @@ sull'adattatore di `NasOperations`.
    dei posti con l'effetto di ogni scelta e la nota dei 30 giorni. Parte **solo** dal tocco su "Elimina". Prima il NAS (cestino del NAS, un piano `Trash`), poi
    il telefono (dialogo di sistema `createTrashRequest`): se il NAS non accetta il telefono non si tocca. Mai una cancellazione definitiva (`deleteRequest` non
    compare nel pacchetto: `UtilityStyleTest`). Un dialogo porta al massimo 2.000 elementi: il resto resta per un altro giro e il foglio lo dice. Le copie del
-   telefono di media senza una copia al sicuro hanno l'avviso E-D14 nel foglio.
+   telefono di media senza una copia al sicuro hanno l'avviso E-D14 nel foglio. Prima di Android 11 (niente cestino di sistema, `canTrash` falso) le copie del telefono non entrano nel foglio, che ha il solo NAS, e la pagina dice
+   perche' (`NO_PHONE_TRASH`); se il dialogo del telefono non si apre dopo che il NAS e' partito, l'avviso non dice "non e' stato toccato niente".
 5. **Doppioni simili.** Scatti dello stesso giorno a meno di 10 minuti, di proporzione compatibile (2%), fuori dai gruppi gia' fatti (raffiche, RAW+JPEG, copie
    simili, "da verificare"); ogni scatto si confronta con i 40 che lo seguono (costo lineare). Nel dubbio non si unisce (`UNKNOWN`) e la pagina conta gli scatti
    che non ha saputo giudicare. Di ogni gruppo la migliore e' da tenere; **preferite e foto in un album non sono mai preselezionate per l'eliminazione**

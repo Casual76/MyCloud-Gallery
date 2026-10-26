@@ -213,16 +213,21 @@ class DuplicatesController(
     scope.launch {
       try {
         val view = mutable.value.identical
-        val plan = identical.plan(view.cleanable)
+        val raw = identical.plan(view.cleanable)
+        val plan = withoutPhoneIfNoTrash(raw)
         if (plan.isEmpty) {
-          mutable.update { it.copy(notice = DuplicatesNotice.NOTHING_TO_CLEAN) }
+          mutable.update { it.copy(notice = if (raw.isEmpty) DuplicatesNotice.NOTHING_TO_CLEAN else DuplicatesNotice.NO_PHONE_TRASH) }
           return@launch
         }
         // I doppioni identici: una sola scelta. Solo telefono se il NAS non c'e'; altrimenti "ovunque" = le copie di ogni posto da togliere.
         val scopeOf = if (plan.nas.isEmpty()) CleanupScope.PHONE_ONLY else CleanupScope.EVERYWHERE
         val (phoneKept, phoneLeft) = limitPhone(plan)
         mutable.update {
-          it.copy(sheet = CleanupSheet(CleanupSource.IDENTICAL, mapOf(scopeOf to phoneKept), scopeOf, othersAreasOf(view.groups), phoneLeft))
+          it.copy(
+            sheet = CleanupSheet(CleanupSource.IDENTICAL, mapOf(scopeOf to phoneKept), scopeOf, othersAreasOf(view.groups), phoneLeft),
+            // Senza il cestino di sistema il foglio ha solo il NAS: la pagina dice perche' le copie del telefono non ci sono.
+            notice = if (plan.phone.size < raw.phone.size) DuplicatesNotice.NO_PHONE_TRASH else it.notice,
+          )
         }
       } catch (e: CancellationException) {
         throw e
@@ -243,10 +248,10 @@ class DuplicatesController(
     scope.launch {
       try {
         val places = similar.placesOf(media)
-        val phoneOnly = places.phoneOnly
-        val everywhere = places.everywhere
+        val phoneOnly = withoutPhoneIfNoTrash(places.phoneOnly)
+        val everywhere = withoutPhoneIfNoTrash(places.everywhere)
         if (everywhere.isEmpty) {
-          mutable.update { it.copy(notice = DuplicatesNotice.NOTHING_TO_CLEAN) }
+          mutable.update { it.copy(notice = if (places.everywhere.isEmpty) DuplicatesNotice.NOTHING_TO_CLEAN else DuplicatesNotice.NO_PHONE_TRASH) }
           return@launch
         }
         val (phoneOnlyKept, left) = limitPhone(phoneOnly)
@@ -256,7 +261,12 @@ class DuplicatesController(
         if (!phoneOnly.isEmpty) plans[CleanupScope.PHONE_ONLY] = phoneOnlyKept
         plans[CleanupScope.EVERYWHERE] = everywhereKept
         val chosen = if (CleanupScope.PHONE_ONLY in plans) CleanupScope.PHONE_ONLY else CleanupScope.EVERYWHERE
-        mutable.update { it.copy(sheet = CleanupSheet(CleanupSource.SIMILAR, plans, chosen, phoneLeft = left)) }
+        mutable.update {
+          it.copy(
+            sheet = CleanupSheet(CleanupSource.SIMILAR, plans, chosen, phoneLeft = left),
+            notice = if (everywhere.phone.size < places.everywhere.phone.size) DuplicatesNotice.NO_PHONE_TRASH else it.notice,
+          )
+        }
       } catch (e: CancellationException) {
         throw e
       } catch (_: Exception) {
@@ -271,6 +281,13 @@ class DuplicatesController(
   private fun othersAreasOf(groups: List<GroupProposal>): List<String?> =
     groups.filter { it.status == IdenticalStatus.CLEANABLE }
       .flatMap { p -> p.blocked.filter { it.reason == BlockReason.OTHER_AREA }.map { it.copy.share } }
+
+  /**
+   * Il cestino di sistema c'e' da Android 11. Prima, le copie del telefono non si possono mandare da qui (e niente le cancellerebbe da sole): restano
+   * dove sono, il foglio ha il solo NAS e la pagina lo dice ([DuplicatesNotice.NO_PHONE_TRASH]).
+   */
+  private fun withoutPhoneIfNoTrash(plan: CleanupPlan): CleanupPlan =
+    if (intents.canTrash || plan.phone.isEmpty()) plan else CleanupPlan(plan.groups, emptyList(), plan.nas, 0, plan.skipped + plan.phone.size)
 
   /** Un dialogo di sistema porta al massimo [PhoneMediaIntents.MAX_REQUEST_URIS] elementi: il resto resta per un altro giro, e il foglio lo dice. */
   private fun limitPhone(plan: CleanupPlan): Pair<CleanupPlan, Int> {
@@ -314,7 +331,10 @@ class DuplicatesController(
       }
       val request = if (plan.phone.isEmpty()) null else intents.trashRequest(plan.phone.map { it.ref }, trash = true)
       if (plan.phone.isNotEmpty() && request == null) {
-        mutable.update { it.copy(sheet = null, notice = DuplicatesNotice.CLEANUP_FAILED) }
+        // Le copie del NAS, se c'erano, sono gia' partite (e restano nei cestini): l'avviso non dice "non e' stato toccato niente".
+        val notice = if (plan.nas.isNotEmpty()) DuplicatesNotice.CLEANUP_STARTED else DuplicatesNotice.CLEANUP_FAILED
+        mutable.update { it.copy(sheet = null, notice = notice) }
+        if (plan.nas.isNotEmpty()) rescan()
         return null
       }
       mutable.update { it.copy(sheet = null) }

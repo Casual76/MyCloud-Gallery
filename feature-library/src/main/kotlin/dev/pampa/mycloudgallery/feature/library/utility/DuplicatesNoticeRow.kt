@@ -18,13 +18,15 @@ internal val DuplicatesNotice.message: Int
     DuplicatesNotice.CLEANUP_FAILED -> R.string.duplicates_notice_cleanup_failed
     DuplicatesNotice.LAST_SHOT_STAYS -> R.string.duplicates_notice_last_shot
     DuplicatesNotice.NOTHING_TO_CLEAN -> R.string.duplicates_notice_nothing
+    DuplicatesNotice.NO_PHONE_TRASH -> R.string.duplicates_notice_no_phone_trash
   }
 
 internal val DuplicatesNotice.tone: FluidTone
   get() = when (this) {
     DuplicatesNotice.CLEANUP_STARTED -> FluidTone.Success
     DuplicatesNotice.CLEANUP_FAILED -> FluidTone.Danger
-    DuplicatesNotice.CLEANUP_REJECTED, DuplicatesNotice.CLEANUP_BLOCKED, DuplicatesNotice.LAST_SHOT_STAYS, DuplicatesNotice.NOTHING_TO_CLEAN -> FluidTone.Warning
+    DuplicatesNotice.CLEANUP_REJECTED, DuplicatesNotice.CLEANUP_BLOCKED, DuplicatesNotice.LAST_SHOT_STAYS, DuplicatesNotice.NOTHING_TO_CLEAN,
+    DuplicatesNotice.NO_PHONE_TRASH -> FluidTone.Warning
   }
 
 /** La riga dell'avviso: si chiude con la X. */

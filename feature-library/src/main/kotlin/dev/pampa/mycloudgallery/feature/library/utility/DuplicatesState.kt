@@ -121,6 +121,9 @@ enum class DuplicatesNotice {
 
   /** Il piano e' vuoto: tutte le copie sono cambiate o sparite nel frattempo. */
   NOTHING_TO_CLEAN,
+
+  /** Il telefono non ha il cestino di sistema (prima di Android 11): le copie del telefono non si possono togliere da qui. */
+  NO_PHONE_TRASH,
 }
 
 /** Lo stato di tutta la pagina Doppioni. */

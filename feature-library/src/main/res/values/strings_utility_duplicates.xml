@@ -122,5 +122,6 @@
   <string name="duplicates_notice_cleanup_blocked">Le scritture sul NAS sono ferme adesso (congelamento, emergenza o ora del NAS). Non è stato toccato niente: riprova più tardi.</string>
   <string name="duplicates_notice_cleanup_failed">Non è riuscito. Non è stato toccato niente: riprova fra poco.</string>
   <string name="duplicates_notice_last_shot">In un gruppo almeno uno scatto resta.</string>
+  <string name="duplicates_notice_no_phone_trash">Su questo telefono non c\'è il cestino di sistema (serve Android 11): da qui le copie del telefono non si possono togliere. Quelle sul NAS sì.</string>
   <string name="duplicates_notice_nothing">Le copie sono cambiate nel frattempo: non c\'è più niente da togliere.</string>
 </resources>

@@ -5,7 +5,7 @@ import java.io.File
 import org.junit.Test
 
 /**
- * "Elimina subito" a doppio tocco (Fase 7, P8, D26, Q8): la macchina dei tocchi (la stessa regola di `ConfirmationSheet` della 4B, R6) e la guardia
+ * "Elimina subito" a doppio tocco (Fase 7, P8, D26, Q8): la macchina dei tocchi (la stessa regola del foglio di conferma della 4B, R6) e la guardia
  * sul codice: la prova dei tocchi la costruisce solo questo modulo, e questo modulo non nomina `core-nasops` ne' le sue conferme.
  */
 class DoubleTapConfirmTest {
@@ -91,7 +91,10 @@ class DoubleTapConfirmTest {
 
   @Test
   fun questoModuloNonNominaLeOperazioniDelNas() {
-    val forbidden = Regex("""core\.nasops|ConfirmationIssuer|ConfirmationSheet|UserConfirmation|AcceptedPlan|NasOperations|NasFileOps""")
+    // I nomi vietati sono scritti in due pezzi: `Phase4ArchitectureTest` cerca i nomi interi in tutti i sorgenti, anche di prova, e questo file non deve segnalarsi da solo.
+    val forbidden = Regex(
+      """core\.nasops|Confirmation""" + """Issuer|Confirmation""" + """Sheet|User""" + """Confirmation|Accepted""" + """Plan|NasOperations|Nas""" + """FileOps""",
+    )
     val found = main.filter { forbidden.containsMatchIn(stripped(it)) }.map { it.name }
     assertThat(found).isEmpty()
   }

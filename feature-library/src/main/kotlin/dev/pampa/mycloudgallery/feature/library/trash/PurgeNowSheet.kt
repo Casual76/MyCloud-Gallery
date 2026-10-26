@@ -22,7 +22,7 @@ import dev.pampa.mycloudgallery.feature.library.utility.UtilityText
 // Fase 7, P8 (D26, F4 Q8): "Elimina subito" a DOPPIO TOCCO. Non e' un cestino: le voci proprie scelte vanno via per sempre dal NAS. Per questo servono
 // due gesti distinti: il primo sul pannello che dice cosa succede, il secondo su un pannello nuovo che dice che senza un backup esterno non c'e'
 // modo di riaverle. Un tocco arrivato meno di mezzo secondo dopo il precedente (un doppio tocco, un tocco registrato due volte) non conta
-// (`DoubleTapConfirm`, la stessa regola di `ConfirmationSheet` della 4B). La prova dei due tocchi ([UserTap]) nasce solo da qui.
+// (`DoubleTapConfirm`, la stessa regola del foglio di conferma della 4B). La prova dei due tocchi ([UserTap]) nasce solo da qui.
 
 /**
  * Il foglio di "Elimina subito" per [count] elementi di [bytes] byte. [monotonicMs] e' l'orologio monotono dei tocchi (mai l'ora del telefono);

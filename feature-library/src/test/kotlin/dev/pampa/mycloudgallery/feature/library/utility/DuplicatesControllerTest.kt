@@ -261,15 +261,65 @@ class DuplicatesControllerTest {
   }
 
   @Test
-  fun senzaIlCestinoDiSistema_LeCopieDelTelefonoNonSiMandano() = runTest(UnconfinedTestDispatcher()) {
+  fun senzaIlCestinoDiSistema_IlFoglioHaIlSoloNas_ELaPaginaDicePerche() = runTest(UnconfinedTestDispatcher()) {
     val c = controller(canTrash = false).opened()
+
     c.prepareIdentical()
+
+    val sheet = c.state.value.sheet!!
+    assertThat(sheet.plan.phone).isEmpty()
+    assertThat(sheet.plan.nas).hasSize(2)
+    assertThat(sheet.plan.unsafePhone).isEqualTo(0)
+    assertThat(c.state.value.notice).isEqualTo(DuplicatesNotice.NO_PHONE_TRASH)
 
     assertThat(c.confirm()).isNull()
 
+    // Il NAS parte; il telefono non si tocca (e mai una richiesta di eliminazione).
+    assertThat(nas.calls).hasSize(1)
     assertThat(system.trashRequests).isEmpty()
     assertThat(system.deleteRequests).isEmpty()
-    assertThat(c.state.value.notice).isEqualTo(DuplicatesNotice.CLEANUP_FAILED)
+    assertThat(c.state.value.notice).isEqualTo(DuplicatesNotice.CLEANUP_STARTED)
+  }
+
+  @Test
+  fun senzaIlCestinoDiSistema_UnGruppoSoloDelTelefonoNonApreIlFoglio() = runTest(UnconfinedTestDispatcher()) {
+    val phoneOnly = FakeIdenticalDuplicates(proposals = identical.proposals.filter { it.group.part == CopyPart.PHONE })
+    val c = controller(id = phoneOnly, canTrash = false).opened()
+
+    c.prepareIdentical()
+
+    assertThat(c.state.value.sheet).isNull()
+    assertThat(c.state.value.notice).isEqualTo(DuplicatesNotice.NO_PHONE_TRASH)
+    assertThat(c.confirm()).isNull()
+    assertThat(system.trashRequests).isEmpty()
+  }
+
+  @Test
+  fun senzaIlCestinoDiSistema_GliScattiSimiliOffronoSoloOvunque() = runTest(UnconfinedTestDispatcher()) {
+    val c = controller(canTrash = false).opened()
+
+    c.prepareSimilar()
+
+    val sheet = c.state.value.sheet!!
+    assertThat(sheet.scopes).containsExactly(CleanupScope.EVERYWHERE)
+    assertThat(sheet.plan.phone).isEmpty()
+    assertThat(sheet.plan.nas).isNotEmpty()
+    assertThat(c.state.value.notice).isEqualTo(DuplicatesNotice.NO_PHONE_TRASH)
+  }
+
+  @Test
+  fun seIlDialogoDelTelefonoNonSiApreDopoIlNas_LAvvisoDiceCheLaPuliziaDelNasEPartita() = runTest(UnconfinedTestDispatcher()) {
+    val c = controller().opened()
+    c.prepareIdentical()
+    // Il cestino di sistema sparisce fra il foglio e il tocco (non succede, ma l'avviso non deve mentire).
+    system.canTrash = false
+
+    assertThat(c.confirm()).isNull()
+
+    assertThat(nas.calls).hasSize(1)
+    assertThat(c.state.value.notice).isEqualTo(DuplicatesNotice.CLEANUP_STARTED)
+    assertThat(c.state.value.sheet).isNull()
+    assertThat(system.trashRequests).isEmpty()
   }
 
   @Test

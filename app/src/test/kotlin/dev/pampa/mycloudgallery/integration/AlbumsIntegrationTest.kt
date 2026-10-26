@@ -124,7 +124,7 @@ class AlbumsIntegrationTest {
     assertWithMessage("avvio: $started").that(started).isInstanceOf(ShareStartOutcome.Started::class.java)
 
     // 2. Lo spostamento (operazioni della 4B), il completamento sul catalogo, la voce e la testa, il guardiano: giri finche' il diario e' chiuso.
-    val done = kotlinx.coroutines.withTimeoutOrNull(2.minutes) {
+    val done = kotlinx.coroutines.withTimeoutOrNull(Attese.TETTO) {
       while (live(phoneAlbums).shared.diary.openOps().isNotEmpty()) {
         // Le operazioni della 4B le riprende il loro lavoro (qui non c'e' JobScheduler): come lo farebbe.
         phoneRig.nas.resumeOperations(30.seconds)
@@ -212,7 +212,7 @@ class AlbumsIntegrationTest {
   }
 
   private companion object {
-    val TIMEOUT = 30.seconds
+    val TIMEOUT = Attese.TETTO
     const val DAY = 24L * 60 * 60 * 1000
   }
 }

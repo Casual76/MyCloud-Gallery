@@ -32,7 +32,7 @@ object AlbumsWiring {
     val inputs = graph.nasInputs
     val nas = gallery.nas
     val monotonic = gallery.parts.monotonicMs
-    val family = AppAlbumFamily(inputs) { gallery.backup?.settings?.deviceFolder?.value?.name }
+    val family = AppAlbumFamily(inputs) { ownBackupFolder(gallery) }
     val clocks = AppAlbumClocks(inputs, monotonic) { nas?.clockGuard?.blocked == true }
     val identity = AppAlbumIdentity(inputs)
     val writeGate = AppAlbumWriteGate(graph.flags, DeveloperTools.shareGuard(), { inputs.account() }, { nas?.writeGate })
@@ -82,9 +82,16 @@ object AlbumsWiring {
           deviceNow = { graph.platform.deviceNow() },
           noticesFile = File(noBackup, "$DIR/notices-seen"),
           seenFile = File(noBackup, "$DIR/smart-seen"),
+          ownBackupFolder = { ownBackupFolder(gallery) },
         ),
       )
     }
     return AlbumsGraph(graph.scope, build, ready, shareWork = { AlbumWorkScheduling.shareNow(context) })
   }
+
+  /**
+   * Il nome della cartella `Backup/<dispositivo>/` di questo telefono (senza il prefisso), null finche' il backup non ha una cartella: la regola B degli
+   * album smart (le foto del proprio backup sono "dello stesso dispositivo") e lo strumento di valutazione di P12 (`ownBackupFolder`).
+   */
+  fun ownBackupFolder(gallery: GalleryGraph): String? = gallery.backup?.settings?.deviceFolder?.value?.name
 }

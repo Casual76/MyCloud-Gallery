@@ -112,6 +112,8 @@ internal class AlbumsInputs(
   val deviceNow: () -> Long,
   val noticesFile: File,
   val seenFile: File,
+  /** La cartella `Backup/<dispositivo>/` di questo telefono (la regola B degli smart: "dello stesso dispositivo"); null se il backup non c'e'. */
+  val ownBackupFolder: () -> String? = { null },
 )
 
 /** Il montaggio, nell'ordine delle dipendenze (condivisi, poi personali e smart, poi viaggi). Nessun I/O qui: lo fanno gli oggetti quando servono. */
@@ -184,7 +186,7 @@ internal fun buildAlbumsLive(scope: CoroutineScope, i: AlbumsInputs): AlbumsLive
   val content = i.search?.let { EngineContentSearch(it) } ?: NoSmartContentSearch
   val lookup = GeocoderPlaceLookup(i.places)
   val smart = RulesSmartEngine(
-    smartRows, smartCandidates, i.visible, i.mask, content, DeviceNormalizer(i.family.backupFolderName()), lookup, i.clocks, FileSmartSeenMarks(i.seenFile),
+    smartRows, smartCandidates, i.visible, i.mask, content, DeviceNormalizer(i.ownBackupFolder()), lookup, i.clocks, FileSmartSeenMarks(i.seenFile),
   )
   val recompute = SmartRecompute(smartRows, smartCandidates, smart, i.clocks)
   val interpreter = RuleSmartNameInterpreter(ItalianQueryParser(), i.visible, i.mask, smartCandidates, lookup, content, i.places)

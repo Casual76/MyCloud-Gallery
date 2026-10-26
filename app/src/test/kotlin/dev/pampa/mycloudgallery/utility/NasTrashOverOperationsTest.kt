@@ -10,6 +10,7 @@ import dev.pampa.mycloudgallery.feature.library.trash.NasTrashOutcome
 import dev.pampa.mycloudgallery.feature.library.trash.NasTrashRow
 import dev.pampa.mycloudgallery.feature.library.trash.testing.fakeDoubleTap
 import dev.pampa.mycloudgallery.feature.library.trash.testing.fakeSingleTap
+import dev.pampa.mycloudgallery.integration.Attese
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -48,7 +49,7 @@ class NasTrashOverOperationsTest {
     return ready().rows.single()
   }
 
-  private suspend fun ready(): NasTrashFeed.Ready = withTimeout(5_000) { port.feed.first { it is NasTrashFeed.Ready } as NasTrashFeed.Ready }
+  private suspend fun ready(): NasTrashFeed.Ready = withTimeout(Attese.TETTO) { port.feed.first { it is NasTrashFeed.Ready } as NasTrashFeed.Ready }
 
   @Test
   fun unaVoceDelCestinoArrivaAllaPaginaComeRiga() = runBlocking<Unit> {

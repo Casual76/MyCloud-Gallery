@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 7, P8 (D26): Eliminati di recente unificati, il cestino di Android e quello del NAS insieme. -->
+
+  <!-- Le due parti -->
+  <string name="trash_phone_section">Dal telefono</string>
+  <string name="trash_nas_section">Dal NAS</string>
+  <string name="trash_nas_section_detail">Restano 30 giorni nel cestino del NAS: li ripristini da qui, con quelli degli altri tuoi dispositivi.</string>
+  <string name="trash_nas_empty">Niente di eliminato dal NAS.</string>
+  <string name="trash_nas_loading">Leggo il cestino del NAS</string>
+
+  <!-- Stati del NAS -->
+  <string name="trash_nas_failed_title">Non riesco a leggere il cestino del NAS</string>
+  <string name="trash_nas_failed_detail">Riprova fra poco. Il cestino del telefono si vede lo stesso.</string>
+  <string name="trash_nas_denied_title">Il cestino del NAS non è accessibile</string>
+  <string name="trash_nas_denied_detail">Con questo account non puoi leggerlo.</string>
+  <string name="trash_nas_offline_title">Il NAS non risponde</string>
+  <string name="trash_nas_offline_detail">Vedi solo quello che hai eliminato da questo dispositivo, senza le voci degli altri. Ripristinare ed eliminare subito servono il NAS.</string>
+  <string name="trash_nas_readonly_title">Sola lettura</string>
+  <string name="trash_nas_readonly_detail">Con questo account non puoi ripristinare né eliminare dal NAS: puoi solo vedere cosa c\'è.</string>
+
+  <!-- Le voci del NAS -->
+  <string name="trash_nas_no_name">Senza nome</string>
+  <string name="trash_nas_from">Da %1$s · %2$s</string>
+  <string name="trash_nas_from_root">Dalla radice dell\'area · %1$s</string>
+  <string name="trash_nas_by">Eliminato da %1$s</string>
+  <string name="trash_nas_by_me">Eliminato da questo dispositivo</string>
+  <string name="trash_nas_invalid_pill">Senza record</string>
+  <string name="trash_nas_invalid_detail">Non posso verificare nome e posto d\'origine di questa voce, quindi non la ripristino da sola. Decidi tu cosa farne dal PC.</string>
+  <string name="trash_nas_folder_word">cartella</string>
+  <string name="trash_nas_folder_files">%1$s · %2$s</string>
+  <plurals name="trash_nas_file_count">
+    <item quantity="one">%1$s file</item>
+    <item quantity="other">%1$s file</item>
+  </plurals>
+  <plurals name="trash_nas_days_left">
+    <item quantity="one">Resta %1$s giorno</item>
+    <item quantity="other">Restano %1$s giorni</item>
+  </plurals>
+  <string name="trash_nas_expires_today">Scade oggi</string>
+  <string name="trash_nas_days_unknown">Scadenza non nota</string>
+  <string name="trash_nas_pill_soon">Scade presto</string>
+  <string name="trash_nas_state_selected">selezionato</string>
+  <string name="trash_nas_state_not_selected">non selezionato</string>
+
+  <!-- Elimina subito: due tocchi (Q8) -->
+  <string name="trash_purge">Elimina subito</string>
+  <string name="trash_purge_only_own_title">Elimina subito non è disponibile</string>
+  <string name="trash_purge_only_own">Puoi eliminare subito solo quello che hai eliminato dal NAS con questo dispositivo. Il resto lo puoi solo ripristinare.</string>
+  <plurals name="trash_purge_title">
+    <item quantity="one">Eliminare subito %1$s elemento?</item>
+    <item quantity="other">Eliminare subito %1$s elementi?</item>
+  </plurals>
+  <string name="trash_purge_message">Vanno via per sempre dal NAS (%1$s): non restano in nessun cestino e non si ripristinano.</string>
+  <string name="trash_purge_confirm">Elimina subito</string>
+  <string name="trash_purge_final_title">Ultima conferma</string>
+  <string name="trash_purge_final_message">Se non hai una copia su un backup esterno non c\'è modo di riaverli. Tocca di nuovo per eliminarli per sempre.</string>
+  <string name="trash_purge_final_confirm">Sì, elimina per sempre</string>
+  <string name="trash_cancel">Annulla</string>
+
+  <!-- Esito dei gesti sul NAS -->
+  <string name="trash_notice_title">Cestino del NAS</string>
+  <string name="trash_notice_restore_started">Ripristino avviato: lo segui in Operazioni in corso. Se un nome è occupato, il file prende un nome alternativo.</string>
+  <string name="trash_notice_purge_started">Eliminazione avviata: lo segui in Operazioni in corso.</string>
+  <string name="trash_notice_rejected">Il NAS non ha accettato l\'operazione: le voci sono cambiate o la share è in sola lettura. Riprova dopo aver riaperto la pagina.</string>
+  <string name="trash_notice_blocked">Le scritture sul NAS sono ferme adesso (congelamento, emergenza o ora del NAS). Riprova più tardi.</string>
+  <string name="trash_notice_failed">Non è riuscito. Riprova fra poco.</string>
+</resources>

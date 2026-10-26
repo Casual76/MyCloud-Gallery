@@ -393,9 +393,13 @@ class RecentlyDeletedControllerTest {
   }
 
   @Test
-  fun nonCeNessunaStradaPerCancellareDavvero() {
-    // D14: l'app non cancella mai da sola. Il controller ha solo il ripristino: nessun metodo che elimini per sempre.
-    val names = RecentlyDeletedController::class.java.declaredMethods.map { it.name.lowercase() }
-    assertThat(names.filter { "delete" in it || "purge" in it || "erase" in it || "empty" in it }).isEmpty()
+  fun nonCeNessunaStradaPerCancellareDavvero_ConLUnicaEccezioneDelNasConLaProvaDeiDueTocchi() {
+    // D14: l'app non cancella mai da sola. Il cestino del TELEFONO ha solo il ripristino. Dalla Fase 7 (D26) la pagina ha anche il cestino del NAS,
+    // e li' "Elimina subito" esiste (F4, Q8): e' l'unico metodo che elimina, vuole la prova dei due tocchi (`UserTap`) e solo per voci proprie.
+    val methods = RecentlyDeletedController::class.java.declaredMethods
+    val risky = methods.filter { m -> m.name.lowercase().let { "delete" in it || "purge" in it || "erase" in it || "empty" in it } }
+    assertThat(risky.map { it.name.substringBefore('$') }.toSet()).containsExactly("purgeNas", "canPurge", "purgeSummary")
+    val purge = methods.first { it.name == "purgeNas" }
+    assertThat(purge.parameterTypes.toList()).contains(UserTap::class.java)
   }
 }

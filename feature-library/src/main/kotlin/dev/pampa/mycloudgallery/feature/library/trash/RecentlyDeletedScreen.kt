@@ -1,98 +1,73 @@
 package dev.pampa.mycloudgallery.feature.library.trash
 
 import android.app.Activity
+import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.SelectAll
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
-import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.antigravity.fluidengine.ui.fluid.glassBackdropSource
 import dev.antigravity.fluidengine.ui.fluid.rememberGlassBackdrop
-import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
 import dev.antigravity.fluidengine.ui.theme.FluidLoading
-import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.designsystem.design.ActionBarHeight
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeDefaults
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeIconButton
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeTextButton
-import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryWall
-import dev.pampa.mycloudgallery.core.designsystem.media.GalleryMediaCell
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
 import dev.pampa.mycloudgallery.core.designsystem.state.phoneTrashText
-import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
-import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryOnPhoto
-import dev.pampa.mycloudgallery.core.imaging.contract.ThumbBucket
-import dev.pampa.mycloudgallery.core.imaging.contract.ThumbKey
-import dev.pampa.mycloudgallery.core.imaging.contract.ThumbRequest
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbnailLoader
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.security.lock.SystemCredentialAuthenticator
 import dev.pampa.mycloudgallery.feature.library.R
-import dev.pampa.mycloudgallery.feature.library.countText
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionEmptyState
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionsDimens
 import dev.pampa.mycloudgallery.feature.library.collections.collectionActionSlot
-import dev.pampa.mycloudgallery.feature.library.grid.gridTopChromeHeight
+import dev.pampa.mycloudgallery.feature.library.countText
 import dev.pampa.mycloudgallery.feature.library.grid.ChromeLabelText
 import dev.pampa.mycloudgallery.feature.library.grid.GridTopChrome
 import dev.pampa.mycloudgallery.feature.library.grid.GridTopEdgeScrim
+import dev.pampa.mycloudgallery.feature.library.grid.gridTopChromeHeight
 import dev.pampa.mycloudgallery.feature.library.hidden.GatedWindow
 import dev.pampa.mycloudgallery.feature.library.hidden.HiddenClosedPage
 import dev.pampa.mycloudgallery.feature.library.hidden.HiddenUiState
 import dev.pampa.mycloudgallery.feature.library.hidden.TrashGateTexts
 import dev.pampa.mycloudgallery.feature.library.hidden.rememberHiddenAuthenticator
 import dev.pampa.mycloudgallery.feature.library.hidden.rememberOpenSecuritySettings
-import kotlin.math.min
-import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 
 /**
- * La pagina degli **Eliminati di recente** (D14, D17): il cestino di sistema di Android (`MATCH_TRASHED`) con i giorni
- * rimasti su ogni cella e "Ripristina", che apre il dialogo di sistema. Una frase in cima chiarisce che **non** e' il
- * cestino di Samsung Gallery.
+ * La pagina degli **Eliminati di recente** (D14, D17, Fase 7 D26): i **due cestini insieme**. Il cestino di sistema di Android (`MATCH_TRASHED`) con
+ * i giorni rimasti su ogni cella e "Ripristina", che apre il dialogo di sistema; il cestino del NAS (30 giorni) in righe, con "Ripristina" e
+ * "Elimina subito" (solo le voci proprie, doppio tocco). Una frase in cima chiarisce che **non** e' il cestino di Samsung Gallery (D-3).
  *
  * @param onBack il tasto indietro; null nel pannello di dettaglio del tablet.
  * @param backdropOut il fondale per la pillola di `:app`; null dove la pillola non c'e'.
@@ -119,7 +94,9 @@ fun RecentlyDeletedRoute(
 
 /**
  * La pagina con tutto cio' che fa con la finestra e con il ciclo di vita ([GatedWindow]: `SecureScreen`, recenti oscurati,
- * ingresso e uscita, sblocco automatico) e il dialogo di sistema del ripristino.
+ * ingresso e uscita, sblocco automatico), il dialogo di sistema del ripristino delle foto del telefono e i gesti sul cestino del NAS.
+ *
+ * @param monotonicMs l'orologio monotono dei tocchi del foglio di "Elimina subito" (mai l'ora del telefono).
  */
 @Composable
 internal fun RecentlyDeletedHost(
@@ -131,9 +108,13 @@ internal fun RecentlyDeletedHost(
   onBack: (() -> Unit)? = null,
   contentPadding: PaddingValues = PaddingValues(),
   backdropOut: ((GlassBackdropState) -> Unit)? = null,
+  monotonicMs: () -> Long = SystemClock::elapsedRealtime,
 ) {
   val state by controller.state.collectAsState()
   val selection by controller.selection.collectAsState()
+  val scope = rememberCoroutineScope()
+  var notice by remember { mutableStateOf<TrashNotice?>(null) }
+  var purging by remember { mutableStateOf(false) }
   val unlock = GatedWindow(
     texts = TrashGateTexts,
     authenticator = authenticator,
@@ -151,6 +132,9 @@ internal fun RecentlyDeletedHost(
     controller.refresh()
   }
   BackHandler(enabled = selection.isNotEmpty()) { controller.clearSelection() }
+  val canPurge = remember(state, selection) { controller.canPurge(selection) }
+  val purgeBlocked = remember(state, selection) { selection.isNotEmpty() && !canPurge && controller.nasEntriesOf(selection).isNotEmpty() }
+  val purge = remember(state, selection) { controller.purgeSummary(selection) }
 
   RecentlyDeletedScreen(
     state = state,
@@ -160,15 +144,34 @@ internal fun RecentlyDeletedHost(
     onSelectAll = controller::selectAll,
     onClearSelection = controller::clearSelection,
     onRestore = {
-      controller.restoreRequest()?.let { restoreDialog.launch(IntentSenderRequest.Builder(it).build()) }
+      // Le foto del telefono: il dialogo di sistema. Le voci del NAS: la porta, dopo questo tocco.
+      val phoneRequest = controller.restoreRequest()
+      scope.launch { controller.restoreNas()?.let { notice = TrashNotice.of(it, purge = false) } }
+      phoneRequest?.let { restoreDialog.launch(IntentSenderRequest.Builder(it).build()) }
     },
     onRetry = controller::refresh,
+    modifier = modifier,
     onUnlock = unlock,
     onOpenSecuritySettings = rememberOpenSecuritySettings(),
-    modifier = modifier,
     onBack = onBack,
     contentPadding = contentPadding,
     backdropOut = backdropOut,
+    canPurge = canPurge,
+    onPurge = { purging = true },
+    purgeBlocked = purgeBlocked,
+    notice = notice,
+    onDismissNotice = { notice = null },
+  )
+  PurgeNowSheet(
+    visible = purging && canPurge,
+    count = purge.first,
+    bytes = purge.second,
+    monotonicMs = monotonicMs,
+    onConfirmed = { proof ->
+      purging = false
+      scope.launch { controller.purgeNas(proof)?.let { notice = TrashNotice.of(it, purge = true) } }
+    },
+    onDismiss = { purging = false },
   )
 }
 
@@ -189,6 +192,11 @@ internal fun RecentlyDeletedScreen(
   onBack: (() -> Unit)? = null,
   contentPadding: PaddingValues = PaddingValues(),
   backdropOut: ((GlassBackdropState) -> Unit)? = null,
+  canPurge: Boolean = false,
+  onPurge: () -> Unit = {},
+  purgeBlocked: Boolean = false,
+  notice: TrashNotice? = null,
+  onDismissNotice: () -> Unit = {},
 ) {
   // Chiusa: la stessa schermata dei Nascosti, con le parole del cestino. Nessun elenco, nessuna miniatura.
   val closed = when (state) {
@@ -225,7 +233,7 @@ internal fun RecentlyDeletedScreen(
   Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
     Box(modifier = Modifier.fillMaxSize().glassBackdropSource(backdrop)) {
       when (state) {
-        is TrashUiState.Loaded -> if (state.entries.isEmpty()) {
+        is TrashUiState.Loaded -> if (state.showsEmptyPage()) {
           Column(modifier = Modifier.fillMaxSize().padding(top = barHeight, bottom = bottomPadding)) {
             Explainer(hiddenNote = false)
             CollectionEmptyState(
@@ -237,9 +245,12 @@ internal fun RecentlyDeletedScreen(
         } else {
           TrashGrid(
             entries = state.entries,
+            nas = state.nas,
             selection = selection,
             loader = loader,
             onToggle = onToggle,
+            onRetry = onRetry,
+            purgeBlocked = purgeBlocked,
             topPadding = barHeight,
             bottomPadding = gridBottom,
           )
@@ -278,19 +289,23 @@ internal fun RecentlyDeletedScreen(
         }
       }
       GridTopEdgeScrim(barHeight, Modifier.align(Alignment.TopCenter))
+      // L'esito dell'ultimo gesto sul NAS sta fermo sotto la barra, non nella lista: si vede anche scorrendo, e si chiude con la X.
+      if (notice != null) {
+        TrashNoticeRow(notice = notice, onDismiss = onDismissNotice, modifier = Modifier.align(Alignment.TopCenter).padding(top = barHeight))
+      }
     }
 
-    // La chrome delle griglie (G2): l'etichetta (il nome e quanti sono, o in selezione quanti sono scelti) e la capsula con
-    // "Seleziona tutto" e, selezionando, "Fine". Le miniature del cestino non hanno ThumbHash: il vetro adattivo vale per
-    // un contenuto qualunque.
-    val canSelectAll = loaded != null && loaded.entries.isNotEmpty() && selection.size < loaded.entries.size
+    // La chrome delle griglie (G2): l'etichetta (il nome e quanti sono nei due cestini, o in selezione quanti sono scelti) e la capsula con
+    // "Seleziona tutto", "Elimina subito" (solo se la selezione lo permette) e, selezionando, "Fine". Le miniature del cestino non hanno
+    // ThumbHash: il vetro adattivo vale per un contenuto qualunque.
+    val canSelectAll = loaded != null && !loaded.isEmpty && selection.size < loaded.total
     GridTopChrome(
       grid = null,
       backdrop = backdrop,
       label = if (selecting) {
         ChromeLabelText(countText(R.plurals.selection_count, selection.size), null)
       } else {
-        ChromeLabelText(stringResource(R.string.trash_title), loaded?.entries?.takeIf { it.isNotEmpty() }?.let { countText(R.plurals.collection_count, it.size) })
+        ChromeLabelText(stringResource(R.string.trash_title), loaded?.takeIf { !it.isEmpty }?.let { countText(R.plurals.collection_count, it.total) })
       },
       topChrome = barHeight,
       modifier = Modifier.align(Alignment.TopStart),
@@ -299,6 +314,9 @@ internal fun RecentlyDeletedScreen(
     ) {
       if (canSelectAll) {
         GalleryChromeIconButton(icon = Icons.Rounded.SelectAll, contentDescription = stringResource(R.string.trash_select_all), onClick = onSelectAll)
+      }
+      if (canPurge) {
+        GalleryChromeIconButton(icon = Icons.Rounded.DeleteForever, contentDescription = stringResource(R.string.trash_purge), onClick = onPurge)
       }
       if (selecting) GalleryChromeTextButton(label = stringResource(R.string.library_done), onClick = onClearSelection)
     }
@@ -316,6 +334,13 @@ internal fun RecentlyDeletedScreen(
   }
 }
 
+/** Non c'e' niente da mostrare nei due cestini (e il NAS, se c'e', ha risposto): lo stato vuoto di sempre. */
+internal fun TrashUiState.Loaded.showsEmptyPage(): Boolean = entries.isEmpty() && when (nas) {
+  NasTrashSection.None -> true
+  is NasTrashSection.Rows -> nas.entries.isEmpty() && !nas.offline
+  else -> false
+}
+
 @Composable
 private fun Centered(topPadding: Dp, bottomPadding: Dp, content: @Composable () -> Unit) {
   Column(
@@ -326,142 +351,3 @@ private fun Centered(topPadding: Dp, bottomPadding: Dp, content: @Composable () 
     content()
   }
 }
-
-/**
- * La frase che distingue questo cestino da quello della Galleria di Samsung (E-P11). D-3 e D-B2 (prove sul campo): su One UI quello che l'app
- * elimina (`createTrashRequest`) compare **qui** (la riga resta nel MediaStore con `IS_TRASHED`, fuori dalla sua cartella) e anche nel Cestino
- * di Galleria: l'app lo elenca e lo ripristina con il dialogo di sistema. Quello che l'utente cestina da Galleria invece l'app non lo vede
- * (il file esce dal MediaStore): la frase lo dice e manda a Galleria → Cestino.
- */
-@Composable
-private fun Explainer(hiddenNote: Boolean) {
-  FluidInlineMessage(
-    message = stringResource(phoneTrashText(R.string.trash_explainer, R.string.trash_explainer_gallery)) +
-      if (hiddenNote) " " + stringResource(R.string.trash_hidden_note) else "",
-    title = stringResource(phoneTrashText(R.string.trash_explainer_title, R.string.trash_explainer_title_gallery)),
-    modifier = Modifier
-      .fillMaxWidth()
-      .padding(horizontal = GalleryDimens.Gutter, vertical = CollectionsDimens.ExplainerGap),
-    tone = FluidTone.Neutral,
-  )
-}
-
-@Composable
-private fun TrashGrid(
-  entries: List<TrashEntry>,
-  selection: Set<MediaId>,
-  loader: ThumbnailLoader,
-  onToggle: (MediaId) -> Unit,
-  topPadding: Dp,
-  bottomPadding: Dp,
-) {
-  val gridState = rememberLazyGridState()
-  val selecting = selection.isNotEmpty()
-
-  // Come la griglia della Libreria: le miniature le chiede la finestra visibile, non la cella (D5).
-  LaunchedEffect(entries, loader, gridState) {
-    val byKey = entries.associateBy { it.id.value }
-    snapshotFlow { gridState.layoutInfo.visibleItemsInfo.mapNotNull { it.key as? String } }
-      .distinctUntilChanged()
-      .collect { keys ->
-        val visible = keys.mapNotNull { byKey[it] }
-        val last = visible.lastOrNull()?.let { entries.indexOf(it) } ?: -1
-        val ahead = entries.subList(min(entries.size, last + 1), min(entries.size, last + 1 + AHEAD))
-        loader.window(visible.map { it.request() }, ahead.map { it.request() })
-      }
-  }
-
-  // La parete di foto delle altre griglie (G2): celle squadrate, fessura di 1 dp.
-  LazyVerticalGrid(
-    columns = GridCells.Adaptive(CollectionsDimens.TrashCellMin),
-    modifier = Modifier.fillMaxSize(),
-    state = gridState,
-    contentPadding = PaddingValues(top = topPadding, bottom = bottomPadding),
-    verticalArrangement = Arrangement.spacedBy(GalleryWall.Gap),
-    horizontalArrangement = Arrangement.spacedBy(GalleryWall.Gap),
-  ) {
-    item(key = "explainer", span = { GridItemSpan(maxLineSpan) }) { Explainer(hiddenNote = entries.any { it.hidden }) }
-    items(entries, key = { it.id.value }) { entry ->
-      TrashCell(entry = entry, loader = loader, selecting = selecting, selected = entry.id in selection, onToggle = onToggle)
-    }
-  }
-}
-
-@Composable
-private fun TrashCell(
-  entry: TrashEntry,
-  loader: ThumbnailLoader,
-  selecting: Boolean,
-  selected: Boolean,
-  onToggle: (MediaId) -> Unit,
-) {
-  val image by loader.image(entry.request().key, entry.item.ref)
-  val base = when {
-    entry.daysLeft <= 0 -> stringResource(if (entry.item.isVideo) R.string.trash_cell_video_today else R.string.trash_cell_photo_today)
-    entry.item.isVideo -> pluralStringResource(R.plurals.trash_cell_video, entry.daysLeft, entry.daysLeft)
-    else -> pluralStringResource(R.plurals.trash_cell_photo, entry.daysLeft, entry.daysLeft)
-  }
-  val description = if (entry.hidden) {
-    base + ", " + stringResource(if (entry.item.isVideo) R.string.trash_hidden_video else R.string.trash_hidden_photo)
-  } else {
-    base
-  }
-  GalleryMediaCell(
-    contentDescription = description,
-    loaded = image != null,
-    selectionMode = selecting,
-    selected = selected,
-    onClick = { onToggle(entry.id) },
-    onLongClick = { onToggle(entry.id) },
-    shape = RectangleShape,
-    topEnd = if (entry.hidden) ({ HiddenPill() }) else null,
-    bottomEnd = { DaysLeftPill(entry.daysLeft) },
-  ) {
-    image?.let { Image(bitmap = it, contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
-  }
-}
-
-/** I giorni che restano, in una pillola scura sopra la foto (la coppia fissa "sopra una foto" del design system). */
-@Composable
-private fun DaysLeftPill(daysLeft: Int) {
-  Text(
-    text = if (daysLeft <= 0) stringResource(R.string.trash_days_left_today) else pluralStringResource(R.plurals.trash_days_left, daysLeft, daysLeft),
-    modifier = Modifier
-      .background(GalleryOnPhoto.scrim(), FluidCapsuleShape)
-      .padding(horizontal = CollectionsDimens.DaysPillHorizontal, vertical = CollectionsDimens.DaysPillVertical),
-    style = MaterialTheme.typography.labelSmall,
-    color = GalleryOnPhoto.Content,
-    maxLines = 1,
-  )
-}
-
-/** Il segno "Nascosto" di un elemento nascosto eliminato: un lucchetto e la parola, sulla stessa coppia fissa sopra la foto. */
-@Composable
-private fun HiddenPill() {
-  Row(
-    modifier = Modifier
-      .background(GalleryOnPhoto.scrim(), FluidCapsuleShape)
-      .padding(horizontal = CollectionsDimens.DaysPillHorizontal, vertical = CollectionsDimens.DaysPillVertical),
-    horizontalArrangement = Arrangement.spacedBy(CollectionsDimens.PillGap),
-    verticalAlignment = Alignment.CenterVertically,
-  ) {
-    Icon(
-      imageVector = Icons.Rounded.Lock,
-      contentDescription = null,
-      modifier = Modifier.size(CollectionsDimens.PillGlyph),
-      tint = GalleryOnPhoto.Content,
-    )
-    Text(
-      text = stringResource(R.string.trash_hidden_badge),
-      style = MaterialTheme.typography.labelSmall,
-      color = GalleryOnPhoto.Content,
-      maxLines = 1,
-    )
-  }
-}
-
-private fun TrashEntry.request(): ThumbRequest =
-  ThumbRequest(ThumbKey(mediaId = id, versionKey = item.trashedAtMs, bucket = ThumbBucket.M), item.ref)
-
-/** Quante miniature si chiedono in anticipo oltre quelle visibili. */
-private const val AHEAD = 12

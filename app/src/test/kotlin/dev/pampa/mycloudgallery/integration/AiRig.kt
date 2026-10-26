@@ -43,7 +43,6 @@ import dev.pampa.mycloudgallery.debugtools.DebugBackupFence
 import dev.pampa.mycloudgallery.gallery.GalleryGraph
 import java.io.ByteArrayOutputStream
 import java.io.File
-import kotlin.time.Duration.Companion.minutes
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -177,7 +176,7 @@ internal class AiRig(private val app: Application, private val root: File) {
   companion object {
     const val RECEIPT = "scontrino"
     const val DAY = 24L * 60 * 60 * 1000
-    val TIMEOUT = 2.minutes
+    val TIMEOUT = Attese.TETTO
 
     /** Una foto di prova (JPEG 640x480): tinta unita, diversa per ogni [tone]. */
     fun jpeg(tone: Int): ByteArray {

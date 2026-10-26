@@ -341,7 +341,7 @@ class CutoutIntegrationTest {
 
     // Memoria bassa in primo piano: il modello (circa 240 MB) e l'immagine trattenuta si rilasciano; il prossimo ritaglio li riapre.
     phone.stack.onTrimMemory(ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW)
-    withTimeout(10_000) { while (phone.cutter.releases == 0) delay(10) }
+    withTimeout(Attese.TETTO_MS) { while (phone.cutter.releases == 0) delay(10) }
     assertThat(cutter.cut(shown.id, shown.ref, 0.5f, 0.5f)).isInstanceOf(ViewerCutout.Subject::class.java)
 
     // L'azzeramento ferma `AiGraph` per primo (§1.4): rilascia anche il ritagliatore, e poi non ritaglia piu'.

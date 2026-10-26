@@ -102,7 +102,7 @@ class SimilarCopiesIntegrationTest {
   }
 
   private suspend fun BackupRig.ids(count: Int): List<MediaId> {
-    val view = withTimeout(60.seconds) { gallery.repository.view(LibraryFilter.ALL).first { it.size == count } }
+    val view = withTimeout(Attese.TETTO) { gallery.repository.view(LibraryFilter.ALL).first { it.size == count } }
     return (0 until view.size).map { view.snapshot.idAt(view.snapshotIndex(it)) }
   }
 
@@ -230,7 +230,7 @@ class SimilarCopiesIntegrationTest {
     // per id o, se non li conosce, per impronta. In tutti e due i casi le sue due copie tornano due celle, subito e per sempre.
     assertWithMessage("tablet: $applied").that(applied.unresolved).isEqualTo(0)
     val rerun = tabletDetector.run(60.seconds)
-    val twoCells = withTimeoutOrNull(30.seconds) { b.gallery.repository.view(LibraryFilter.ALL).first { it.size == 2 } }
+    val twoCells = withTimeoutOrNull(Attese.TETTO) { b.gallery.repository.view(LibraryFilter.ALL).first { it.size == 2 } }
     assertWithMessage("tablet dopo Separa: giro=$rerun; telefono: copertina=$cover altra=$other; tablet: ${b.allIds()}").that(twoCells).isNotNull()
     assertThat(b.groupedCount()).isEqualTo(0)
     // Il confronto non le riunisce piu': separare e' per sempre.

@@ -104,14 +104,6 @@ class VerificaFunzionaleReteTest {
     return phone
   }
 
-  private suspend fun awaitCondition(what: String = "condizione", check: () -> Boolean) {
-    val deadline = System.currentTimeMillis() + 10_000
-    while (!check()) {
-      check(System.currentTimeMillis() < deadline) { "non raggiunta: $what" }
-      delay(20)
-    }
-  }
-
   // --- RE-3 e RE-4: un lavoro in un processo freddo ------------------------------------------------------------------
 
   /**
@@ -182,7 +174,7 @@ class VerificaFunzionaleReteTest {
     val error = phone.graph.session.withShare(TestNas.COMMON, Purpose.INTERACTIVE) { it.browser.list(null, 10) }.errorOrNull()
 
     assertThat(error).isEqualTo(NasError.CredentialsMissing)
-    awaitCondition { ring.snapshot().any { it.code.id == "NAS_CREDENTIALS_MISSING" } }
+    until("l'evento NAS_CREDENTIALS_MISSING nel diario") { ring.snapshot().any { it.code.id == "NAS_CREDENTIALS_MISSING" } }
     val items = RecentEventsContributor(ring).collect()
     assertThat(items.map { it.code.id }).contains("NAS_CREDENTIALS_MISSING")
     // Mai un nome: ne' l'utente del NAS, ne' l'area, ne' l'indirizzo.
@@ -217,7 +209,7 @@ class VerificaFunzionaleReteTest {
     val state = phone.graph.session.state.value
     assertThat(state).isEqualTo(NasConnState.Unavailable(NasError.CredentialsMissing))
     assertThat(GlobalStatus.from(phone.graph.environment.snapshot.value, state)).isEqualTo(GlobalStatus.NEEDS_PASSWORD)
-    awaitCondition("la notifica \"Serve la password\"") { notifications.getNotification(AppNotifications.ID_PASSWORD) != null }
+    until("la notifica \"Serve la password\"") { notifications.getNotification(AppNotifications.ID_PASSWORD) != null }
 
     // Cinque lavori dopo: nessun socket, nessuna autenticazione.
     val tcp = backend.tcpAttempts.get()
@@ -231,7 +223,7 @@ class VerificaFunzionaleReteTest {
     phone.graph.session.invalidate(InvalidateReason.CREDENTIALS_CHANGED)
     assertThat(touch()).isNull()
     assertThat(backend.authenticateCalls.get()).isEqualTo(authentications + 1)
-    awaitCondition("la notifica tolta") { notifications.getNotification(AppNotifications.ID_PASSWORD) == null }
+    until("la notifica tolta") { notifications.getNotification(AppNotifications.ID_PASSWORD) == null }
   }
 
   // --- RE-5: indirizzo del NAS e impronta di casa dell'admin ---------------------------------------------------------
@@ -295,7 +287,7 @@ class VerificaFunzionaleReteTest {
 
       tracker.noteStop(DiagStopCause.QUOTA)
       assertThat(tracker.limits.value.jobQuotaExhausted).isTrue()
-      awaitCondition { !tracker.limits.value.jobQuotaExhausted }
+      until("la quota dei lavori non e' piu' esaurita") { !tracker.limits.value.jobQuotaExhausted }
     } finally {
       scope.cancel()
     }

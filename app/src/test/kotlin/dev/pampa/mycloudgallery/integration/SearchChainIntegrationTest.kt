@@ -284,6 +284,6 @@ class SearchChainIntegrationTest {
     const val REAL_COMMON = "famiglia"
     const val DAY = 24L * 60 * 60 * 1000
     const val RECEIPT = "scontrino"
-    val TIMEOUT = 2.minutes
+    val TIMEOUT = Attese.TETTO
   }
 }

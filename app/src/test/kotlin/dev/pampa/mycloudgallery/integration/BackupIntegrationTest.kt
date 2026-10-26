@@ -35,7 +35,6 @@ import dev.pampa.mycloudgallery.work.BackupJobs
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration.Companion.minutes
-import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -131,9 +130,9 @@ class BackupIntegrationTest {
     val view = first.gallery.repository.view(LibraryFilter.ALL).first { it.size == 2 }
     val ids = (0 until view.size).map { view.snapshot.idAt(view.snapshotIndex(it)) }
     ids.forEach { id -> assertThat(catalog.mediaSafety(id)?.status).isEqualTo(SafetyStatus.SAFE) }
-    withTimeout(20.seconds) { backup.status.first { it is BackupStatus.UpToDate } }
+    withTimeout(Attese.TETTO) { backup.status.first { it is BackupStatus.UpToDate } }
     assertThat((backup.status.value as BackupStatus.UpToDate).safeCount).isEqualTo(2)
-    withTimeout(20.seconds) { backup.libraryStatus.first { it is LibraryBackupStatus.AllSafe } }
+    withTimeout(Attese.TETTO) { backup.libraryStatus.first { it is LibraryBackupStatus.AllSafe } }
 
     // Il secondo dispositivo dello stesso account: le stesse due foto (stesso scatto, stessi byte) e un'altra cartella. Nessun doppione.
     val tablet = device("tablet", backend)
@@ -190,8 +189,8 @@ class BackupIntegrationTest {
 
     assertThat(TestNas.ADMIN_USER).isEqualTo("test")
     assertThat(backup.gate.stateOf(TestNas.ADMIN_USER)).isEqualTo(BackupGateState.TEST_ONLY)
-    withTimeout(20.seconds) { backup.status.first { it == BackupStatus.TestOnly } }
-    withTimeout(20.seconds) { backup.libraryStatus.first { it == LibraryBackupStatus.TestOnly } }
+    withTimeout(Attese.TETTO) { backup.status.first { it == BackupStatus.TestOnly } }
+    withTimeout(Attese.TETTO) { backup.libraryStatus.first { it == LibraryBackupStatus.TestOnly } }
 
     val filesBefore = backend.fileCount(TestNas.ADMIN_USER)
     for (trigger in listOf(BackupTrigger.USER_NOW, BackupTrigger.FIRST_BACKUP)) {
@@ -228,8 +227,8 @@ class BackupIntegrationTest {
 
     // D12: nessuna ragione puo' aprire il cancello. Lo stato dice "in prova" e il piede della Libreria lo ripete.
     assertThat(backup.gate.stateOf(REAL_USER)).isEqualTo(BackupGateState.TEST_ONLY)
-    withTimeout(20.seconds) { backup.status.first { it == BackupStatus.TestOnly } }
-    withTimeout(20.seconds) { backup.libraryStatus.first { it == LibraryBackupStatus.TestOnly } }
+    withTimeout(Attese.TETTO) { backup.status.first { it == BackupStatus.TestOnly } }
+    withTimeout(Attese.TETTO) { backup.libraryStatus.first { it == LibraryBackupStatus.TestOnly } }
 
     val filesBefore = backend.fileCount(REAL_USER)
     val outcome = rig.round(BackupKind.PHOTOS, BackupTrigger.USER_NOW)

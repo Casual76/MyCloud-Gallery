@@ -28,11 +28,8 @@ import dev.pampa.mycloudgallery.nas.NasGraph
 import dev.pampa.mycloudgallery.nas.NasOrganizer
 import dev.pampa.mycloudgallery.root.ProcessRestart
 import java.io.File
-import kotlin.time.Duration.Companion.seconds
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -79,10 +76,6 @@ class CorrezioniConfigurazione5BAppTest {
     devices.forEach { it.close() }
   }
 
-  private suspend fun until(condition: () -> Boolean) {
-    withTimeout(15.seconds) { while (!condition()) delay(20) }
-  }
-
   /** I dati del telefono che appartengono a un account: file e cartelle di ogni parte della 5B, e le impostazioni del backup. */
   private suspend fun seedAccountData(device: TestDevice): List<File> {
     val noBackup = device.context.noBackupFilesDir
@@ -127,7 +120,7 @@ class CorrezioniConfigurazione5BAppTest {
     assertThat(phone.graph.registry.approve(id, ApprovalProof.TypedCode(code))).isEqualTo(AdminActionResult.Done)
     t.registry.refresh(Purpose.INTERACTIVE)
     t.awaitSetup { it is SetupState.Ready }
-    until { t.galleryMayRun() }
+    until("la galleria puo' partire") { t.galleryMayRun() }
     val seeded = seedAccountData(tablet)
     assertThat(phone.graph.registry.changeStatus(id, DeviceStatus.REVOKED)).isEqualTo(AdminActionResult.Done)
     t.registry.refresh(Purpose.INTERACTIVE)

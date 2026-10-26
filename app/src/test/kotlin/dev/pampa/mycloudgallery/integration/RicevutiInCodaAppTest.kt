@@ -50,7 +50,6 @@ import dev.pampa.mycloudgallery.work.BackupStages
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
@@ -167,7 +166,7 @@ class RicevutiInCodaAppTest {
   private suspend fun runIncoming(rig: BackupRig) = checkNotNull(BackupStages(rig.device.graph, rig.backup).incoming()) { "il lavoro dei file ricevuti non e' partito" }
 
   private suspend fun items(rig: BackupRig, until: (List<ReceivedItem>) -> Boolean): List<ReceivedItem> =
-    withTimeout(20_000) { rig.backup.fiveB.receivedQueue.items.first(until) }
+    withTimeout(Attese.TETTO_MS) { rig.backup.fiveB.receivedQueue.items.first(until) }
 
   private fun rowsIn(rig: BackupRig, state: String): List<IncomingItemEntity> = runBlocking { rig.gallery.database.incomingDao().inState(state) }
 
@@ -458,14 +457,14 @@ class RicevutiInCodaAppTest {
     val queue = rig.backup.fiveB.receivedQueue
     val row = failedRow(rig, mp4(13))
     rig.backup.kick()
-    val footer = withTimeout(20_000) {
+    val footer = withTimeout(Attese.TETTO_MS) {
       rig.backup.libraryStatus.first { it is LibraryBackupStatus.Problem && it.code == BackupStatusReducers.INCOMING_FAILED_CODE }
     } as LibraryBackupStatus.Problem
     assertThat(footer.count).isEqualTo(1)
 
     // Lo scarta: il piede si ricalcola da solo (l'azione avvisa il backup) e non dice piu' niente di ricevuto.
     assertThat(queue.discard(ReceivedId(row.incomingId))).isEqualTo(ReceivedDiscard.Discarded)
-    withTimeout(20_000) {
+    withTimeout(Attese.TETTO_MS) {
       rig.backup.libraryStatus.first { !(it is LibraryBackupStatus.Problem && it.code == BackupStatusReducers.INCOMING_FAILED_CODE) }
     }
   }
@@ -494,11 +493,6 @@ class RicevutiInCodaAppTest {
     shareProbe = rig.device.graph.shareProbe,
   )
 
-  private suspend fun waitFor(what: String, condition: () -> Boolean) {
-    withTimeout(20_000) { while (!condition()) delay(20) }
-    assertWithMessage(what).that(condition()).isTrue()
-  }
-
   /**
    * IN-7: un file ricevuto non si salva mentre l'app e' in secondo piano: parte la notifica "N file ricevuti non salvati" (solo il numero), l'app chiede di
    * portare l'utente alla pagina Backup quando torna, e quando il file si scarta la notifica se ne va. All'avvio del processo i problemi di prima non
@@ -520,7 +514,7 @@ class RicevutiInCodaAppTest {
       incomingNotices = notices,
     )
     // La prima lettura (nessun problema) e' il punto di partenza.
-    waitFor("la prima lettura") { notices.events.contains("via") }
+    until("la prima lettura") { notices.events.contains("via") }
     assertThat(ui.receivedRequests.value).isEqualTo(0L)
 
     val bytes = mp4(14, size = 4_000)
@@ -529,11 +523,11 @@ class RicevutiInCodaAppTest {
     checkNotNull(localFileOf(rig, row)).writeBytes(bytes.copyOf().also { it[100] = (it[100] + 1).toByte() })
     check(checkNotNull(runIncoming(rig).last).failed == 1)
 
-    waitFor("la notifica") { "problemi:1" in notices.events }
+    until("la notifica") { "problemi:1" in notices.events }
     assertThat(ui.receivedRequests.value).isGreaterThan(0L)
 
     assertThat(rig.backup.fiveB.receivedQueue.discard(ReceivedId(row.incomingId))).isEqualTo(ReceivedDiscard.Discarded)
-    waitFor("la notifica tolta") { notices.events.last() == "via" }
+    until("la notifica tolta") { notices.events.last() == "via" }
   }
 
   // --- R15 sul grafo vero -------------------------------------------------------------------------------------------------------------------

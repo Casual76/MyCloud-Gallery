@@ -55,6 +55,7 @@ import dev.pampa.mycloudgallery.graph.AppGraph
 import dev.pampa.mycloudgallery.graph.AppPlatform
 import dev.pampa.mycloudgallery.root.ProcessRestart
 import java.io.File
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -225,7 +226,8 @@ class TestPlatform(
 
 /** La pianificazione registrata (WorkManager non c'e'): i test la guardano. */
 class RecordingScheduler : TrustSyncScheduler {
-  val soon: MutableList<SyncReason> = mutableListOf()
+  /** Lo scrive la produzione da un thread del grafo e lo guardano i test da un altro (`until`): una lista che si puo' leggere mentre si scrive. */
+  val soon: MutableList<SyncReason> = CopyOnWriteArrayList()
   var inviteWindowUntil: Long? = null
 
   override fun requestSoon(reason: SyncReason) {
@@ -304,15 +306,14 @@ class TestDevice(
 /** Annulla [scope] e ne aspetta la fine (con un tetto: un lavoro che non si ferma fa fallire il test, non lo blocca). */
 fun closeScope(scope: CoroutineScope) {
   val job = scope.coroutineContext[Job] ?: return scope.cancel()
-  runBlocking { withTimeout(CLOSE_TIMEOUT) { job.cancelAndJoin() } }
+  runBlocking { withTimeout(Attese.TETTO) { job.cancelAndJoin() } }
 }
 
-private val CLOSE_TIMEOUT: Duration = 10.seconds
 
 /** Aspetta (con un tetto) che un flusso arrivi a un valore che soddisfa [predicate]. */
-suspend fun <T> Flow<T>.await(timeout: Duration = 10.seconds, predicate: (T) -> Boolean): T =
+suspend fun <T> Flow<T>.await(timeout: Duration = Attese.TETTO, predicate: (T) -> Boolean): T =
   withTimeout(timeout) { first(predicate) }
 
 /** Aspetta lo stato del dispositivo dato da [predicate]. */
-suspend fun AppGraph.awaitSetup(timeout: Duration = 10.seconds, predicate: (SetupState) -> Boolean): SetupState =
+suspend fun AppGraph.awaitSetup(timeout: Duration = Attese.TETTO, predicate: (SetupState) -> Boolean): SetupState =
   setup.state.await(timeout, predicate)

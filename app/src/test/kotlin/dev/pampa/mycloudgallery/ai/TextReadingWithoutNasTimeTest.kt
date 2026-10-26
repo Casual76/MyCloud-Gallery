@@ -21,6 +21,7 @@ import dev.pampa.mycloudgallery.core.personal.contract.TextReadingChoice
 import dev.pampa.mycloudgallery.core.personal.store.LedgerPersonalStore
 import dev.pampa.mycloudgallery.core.personal.testing.InMemoryPersonalLedger
 import dev.pampa.mycloudgallery.core.trust.codec.Base32
+import dev.pampa.mycloudgallery.integration.until
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -107,14 +108,6 @@ class TextReadingWithoutNasTimeTest {
     suspend fun read(): Result<OcrResult> = runCatching { gated.read(AiTestInputs.ocr("scontrino")) }
   }
 
-  private fun eventually(timeoutMs: Long = 3_000, check: () -> Boolean) {
-    val end = System.currentTimeMillis() + timeoutMs
-    while (!check()) {
-      check(System.currentTimeMillis() < end) { "Condizione non raggiunta in tempo." }
-      Thread.sleep(10)
-    }
-  }
-
   private val consent = TextReadingConsent(1, 0L)
 
   /** Due id di dispositivo veri (26 cifre, l'ultima con i bit giusti): quello di questo telefono e quello dell'altro. */
@@ -148,7 +141,7 @@ class TextReadingWithoutNasTimeTest {
     assertThat(store.entries.value).isEmpty()
     assertThat(store.undated()).containsExactly(reading)
     assertThat(rig.hub.textReading.value).isEqualTo(TextReadingChoice.Off)
-    eventually { rig.switch.state.value == TextReadingState.Off }
+    until("lo stato e' spento") { rig.switch.state.value == TextReadingState.Off }
     // E si ricorda: un nuovo processo parte da spento (nessuna pulizia mancata, "la memoria dice accesa" non e' piu' vero).
     assertThat(TextReadingMemory(rig.file).state()).isEqualTo(TextReadingState.Off)
     assertThat(rig.switch.syncPending.value).isFalse() // consegnata al registro, "da datare"
@@ -169,7 +162,7 @@ class TextReadingWithoutNasTimeTest {
     assertThat(TextReadingMemory(rig.file).unsynced).isTrue()
 
     val store = rig.attachStoreWithoutNasTime()
-    eventually { !rig.switch.syncPending.value }
+    until("la scelta e' consegnata al registro") { !rig.switch.syncPending.value }
     assertThat(store.undated()).containsExactly(reading)
     assertThat(rig.hub.textReading.value).isEqualTo(TextReadingChoice.Off)
     assertThat(rig.switch.currentState()).isEqualTo(TextReadingState.Off)
@@ -183,7 +176,7 @@ class TextReadingWithoutNasTimeTest {
     assertThat(rig.switch.currentState()).isEqualTo(TextReadingState.Off)
     rig.switch.enableForAccount(consent)
     assertThat(rig.switch.currentState()).isEqualTo(TextReadingState.OnForAccount(thisDevice = true))
-    eventually { rig.switch.state.value.activeHere }
+    until("la lettura e' accesa qui") { rig.switch.state.value.activeHere }
     assertThat(rig.read().isSuccess).isTrue()
   }
 
@@ -310,7 +303,7 @@ class TextReadingWithoutNasTimeTest {
 
     // Il registro arriva, senza l'ora del NAS: le scelte vi entrano (da datare) e il file non serve piu'.
     val store = rig.attachStoreWithoutNasTime()
-    eventually { !rig.localFile.exists() }
+    until("il file locale delle scelte non serve piu'") { !rig.localFile.exists() }
     assertThat(store.undated()).hasSize(2)
     assertThat(rig.hub.searchOrder.value).isEqualTo(SearchOrderSetting.RELEVANT)
     assertThat(rig.hub.motionAnimation.value).isFalse()

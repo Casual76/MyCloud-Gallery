@@ -8,7 +8,7 @@
 | **Tipo** | Revisione avversariale in sola lettura. Nessuna correzione al codice di produzione. Niente Gradle, nessun telefono, nessun `adb`, nessun NAS, nessuna rete. |
 | **Data** | 22/10/2026 |
 | **Metodo** | Lettura del codice nel worktree staccato a `263dcc7`, seguendo ogni via che porta byte, testo o vettori da un altro dispositivo fino a cio' che l'utente vede o che questo dispositivo ripubblica, ogni via che apre la rete o avvia ML Kit, e ogni file che l'app scrive o toglie. Tre revisori di supporto, in sola lettura, hanno letto in parallelo: (1) modelli e catena di fornitura; (2) sezione `ai` dell'indice e fiducia; (3) viewer, appunti, ritagli, privacy di ML Kit, ricerca e azzeramento. Il revisore principale ha letto `PATH_CHECKED`, il calcolo (`compute/`), il buffer, gli adattatori di `:app` e il gruppo A. **Ogni voce riportata qui e' stata ricontrollata nel codice**; per ognuna si dice se e' confermata (dal codice) o plausibile (dipende da un comportamento della libreria o del dispositivo che qui non si prova). Nessun test eseguito. Nessun file del repository modificato a parte questo documento. |
-| **Stato** | **Aperta**: tutte le voci. |
+| **Stato** | **Chiusa nel codice il 26/10** con i pacchetti di correzione A (`fase6/rev-a`), B (`fase6/rev-b`) e C (`fase6/rev-c`), uniti in `main` a `f24e1792`: ogni voce ha una correzione con un test, oppure e' motivata come "non un difetto" (I2, I8) nelle sezioni "Fase 6, correzioni dopo le revisioni: pacchetto A/B/C" di `docs/decisioni.md`. Restano da provare sul telefono (F46-F71). |
 
 ## Riepilogo
 

@@ -1,5 +1,7 @@
 # Verifica funzionale: Fase 6, la ricerca (commit `263dcc7`, 22/10/2026)
 
+**Stato (26/10).** Le voci sono corrette nel codice dai pacchetti di correzione A, B e C, uniti in `main` a `f24e1792`: ogni voce ha una correzione con un test, oppure e' motivata nelle sezioni "Fase 6, correzioni dopo le revisioni: pacchetto A/B/C" di `docs/decisioni.md`. Resta aperta **TS-4** ("Trova simili" dalla selezione della Libreria: funzione nuova, da decidere). I flussi del §4 restano da provare sul telefono (F46-F71).
+
 **La domanda.** Ogni funzione della Fase 6 promessa all'utente funziona davvero nell'app installata, da capo a fondo, in debug e in release? Questa non
 e' una revisione di sicurezza: quella sta in un altro file di `docs/review/`.
 
